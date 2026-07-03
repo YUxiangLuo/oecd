@@ -17,6 +17,14 @@ export const api = {
     get<import("./types").SectorPage>(
       `/api/indicators/sector/${year}?page=${page}${country ? `&country=${country}` : ""}`,
     ),
+  shockEvents: () =>
+    get<{ events: import("./types").ShockEvent[]; disclaimer: string }>("/api/shocks/events"),
+  shockSummary: () => get<import("./types").ShockSummary>("/api/shocks/summary"),
+  shockPanel: (year: number, country: string, sector: string, onlyHit: boolean, page: number) =>
+    get<import("./types").SectorPage>(
+      `/api/shocks/panel?year=${year}&only_hit=${onlyHit}&page=${page}` +
+        (country ? `&country=${country}` : "") + (sector ? `&sector=${sector}` : ""),
+    ),
   runRegression: async (step: number, granularity: string) => {
     const resp = await fetch("/api/regression/run", {
       method: "POST",

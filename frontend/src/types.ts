@@ -17,6 +17,34 @@ export interface StepsResponse {
 export interface Meta {
   years: number[];
   countries: string[];
+  sectors: string[];
+}
+
+export interface ShockEvent {
+  name: string;
+  imposer: string;
+  targets: string;
+  exempt: string;
+  announced: string;
+  effective: string;
+  n_sectors: number;
+  top_sectors: string[];
+  peak_rate: number;
+}
+
+export interface ShockSummaryYear {
+  year: number;
+  treated_countries: number;
+  treated_pairs: number;
+  mean_shock_treated: number;
+  max_shock: number;
+  max_shock_target: string;
+}
+
+export interface ShockSummary {
+  years: ShockSummaryYear[];
+  n_countries: number;
+  n_sectors: number;
 }
 
 export interface QcCheck {

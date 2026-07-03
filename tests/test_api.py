@@ -7,14 +7,20 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from gvcsim import shocks
 from gvcsim.api import app
-from gvcsim.config import PROCESSED_DIR, processed_years
+from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
 
 client = TestClient(app)
 
 needs_data = pytest.mark.skipif(
     not (PROCESSED_DIR / "panel_country.csv").exists(),
     reason="缺少预计算产物,请先运行 uv run gvcsim compute",
+)
+
+needs_shocks = pytest.mark.skipif(
+    not (SHOCKS_DIR / shocks.DEMO_FILE).exists(),
+    reason="缺少冲击演示数据,请先运行 uv run gvcsim compute",
 )
 
 
@@ -39,6 +45,8 @@ def test_meta_and_indicators():
     year = meta["years"][-1]
     assert "CHN" in meta["countries"]
 
+    assert len(meta["sectors"]) == 45
+
     rows = client.get(f"/api/indicators/country/{year}").json()
     assert len(rows) > 50
     cols = rows[0].keys()
@@ -60,6 +68,43 @@ def test_qc_and_network():
 
     net = client.get(f"/api/viz/network/{year}").json()
     assert net["nodes"] and net["edges"]
+
+
+def test_shock_events():
+    """事件时间线不依赖预计算产物。"""
+    resp = client.get("/api/shocks/events")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["events"]) >= 8
+    ev = body["events"][0]
+    for key in ["name", "imposer", "targets", "announced", "effective", "peak_rate"]:
+        assert key in ev
+    names = " ".join(e["name"] for e in body["events"])
+    assert "232" in names and "301" in names
+
+
+@needs_shocks
+def test_shock_summary_and_panel():
+    summary = client.get("/api/shocks/summary").json()
+    assert summary["n_countries"] == 77
+    assert summary["n_sectors"] == 45
+    y2019 = next(r for r in summary["years"] if r["year"] == 2019)
+    # 232 覆盖全球:2019 年绝大多数经济体受处理
+    assert y2019["treated_countries"] > 70
+    assert y2019["max_shock"] > 0.05
+
+    panel = client.get("/api/shocks/panel", params={"year": 2019}).json()
+    assert panel["total"] > 100
+    rows = panel["rows"]
+    # 默认按冲击强度降序
+    assert rows[0]["tariff_shock"] >= rows[-1]["tariff_shock"]
+    assert rows[0]["note"]
+
+    chn = client.get(
+        "/api/shocks/panel", params={"year": 2019, "country": "CHN", "only_hit": True}
+    ).json()
+    assert chn["total"] > 10
+    assert all(r["country"] == "CHN" for r in chn["rows"])
 
 
 @needs_data

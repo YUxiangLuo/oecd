@@ -324,6 +324,26 @@ def write_demo(countries: list[str], sectors: list[str], years: list[int]) -> No
     demo_shock_panel(countries, sectors, years).to_csv(SHOCKS_DIR / DEMO_FILE, index=False)
 
 
+def events_metadata() -> list[dict]:
+    """事件表的展示视图(步骤2 前端的事件时间线)。"""
+    out = []
+    for ev in EVENTS:
+        peak = {s: max(by_year.values()) for s, by_year in ev.rates.items()}
+        top_sectors = sorted(peak, key=lambda s: peak[s], reverse=True)
+        out.append({
+            "name": ev.name,
+            "imposer": ev.imposer,
+            "targets": "全部经济体" if ev.targets == "ALL" else "、".join(ev.targets),
+            "exempt": "、".join(ev.exempt),
+            "announced": ev.announced,
+            "effective": ev.effective,
+            "n_sectors": len(ev.rates),
+            "top_sectors": top_sectors[:3],
+            "peak_rate": max(peak.values()),
+        })
+    return out
+
+
 def load_shocks() -> pd.DataFrame:
     """读取 (country, sector, year) 冲击面板。接入真实数据后在这里切换数据源。"""
     path = SHOCKS_DIR / DEMO_FILE

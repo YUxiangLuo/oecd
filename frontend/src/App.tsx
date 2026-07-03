@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
-import { IndicatorLab, QcLab, RegressionLab, ReportLab, VizLab } from "./labs";
+import { IndicatorLab, QcLab, RegressionLab, ReportLab, ShockLab, VizLab } from "./labs";
 import type { Meta, Step, StepsResponse } from "./types";
 
 const ROMAN = ["", "一", "二", "三", "四", "五"];
@@ -21,16 +21,16 @@ const VIZ_COLUMNS: Record<number, string[]> = {
 
 function Lab({ step, meta }: { step: Step; meta: Meta | null }) {
   if (step.lab === "qc") return meta ? <QcLab meta={meta} /> : null;
+  if (step.lab === "shock") return meta ? <ShockLab meta={meta} /> : null;
   if (step.lab === "ind") return meta ? <IndicatorLab meta={meta} /> : null;
   if (step.lab === "viz")
     return meta ? <VizLab meta={meta} columns={VIZ_COLUMNS[step.n] ?? []} /> : null;
   if (step.lab === "rgd" || step.lab === "reg") return <RegressionLab step={step} />;
   if (step.lab === "rep") return meta ? <ReportLab meta={meta} /> : null;
-  // db / shock:纯讲解型步骤
+  // db:纯讲解型步骤
   return (
     <div className="tipbox">
       本步为数据接入决策步骤,详见《供应链仿真系统_完整项目说明.md》第一、四章。
-      {step.lab === "shock" && " 当前系统装载的是风格化演示冲击数据(data/shocks/),待接入 PIIE / WTO / GTA 真实数据。"}
     </div>
   );
 }
@@ -38,12 +38,16 @@ function Lab({ step, meta }: { step: Step; meta: Meta | null }) {
 export default function App() {
   const [stepsData, setStepsData] = useState<StepsResponse | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
-  const [current, setCurrent] = useState(4);
+  // 支持 ?step=N 深链,便于分享/调试某一步
+  const [current, setCurrent] = useState(() => {
+    const n = Number(new URLSearchParams(window.location.search).get("step"));
+    return n >= 1 && n <= 17 ? n : 4;
+  });
   const [fatal, setFatal] = useState<string | null>(null);
 
   useEffect(() => {
     api.steps().then(setStepsData, (e) => setFatal(String(e.message ?? e)));
-    api.meta().then(setMeta, () => setMeta({ years: [], countries: [] }));
+    api.meta().then(setMeta, () => setMeta({ years: [], countries: [], sectors: [] }));
   }, []);
 
   if (fatal)
