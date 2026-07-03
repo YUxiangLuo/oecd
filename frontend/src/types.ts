@@ -44,12 +44,13 @@ export interface CoefStat {
 }
 
 export interface RegressionResponse {
-  design: { depvar: string; depvar_label: string; equation: string };
+  design: { depvar: string; depvar_label: string; granularity: string; equation: string };
   result: {
     coefs: CoefStat[];
     n_obs: number;
     n_entities: number;
     n_times: number;
+    n_clusters: number;
     r2_within: number;
     notes: string[];
   };

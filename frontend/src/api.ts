@@ -17,11 +17,11 @@ export const api = {
     get<import("./types").SectorPage>(
       `/api/indicators/sector/${year}?page=${page}${country ? `&country=${country}` : ""}`,
     ),
-  runRegression: async (step: number) => {
+  runRegression: async (step: number, granularity: string) => {
     const resp = await fetch("/api/regression/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ step }),
+      body: JSON.stringify({ step, granularity }),
     });
     if (!resp.ok) throw new Error((await resp.json()).detail ?? resp.statusText);
     return resp.json() as Promise<import("./types").RegressionResponse>;

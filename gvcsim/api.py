@@ -120,7 +120,7 @@ def viz_network(year: int):
 
 class RegressionRequest(BaseModel):
     step: int = 13                      # 13-16
-    granularity: str = "国家级"
+    granularity: str = "国家–行业级"
     shock_type: str = "关税冲击"
     method: str = "双向固定效应"
 
@@ -139,20 +139,26 @@ def regression_options():
 def regression_run(req: RegressionRequest):
     if req.step not in STEP_DEPVARS:
         raise HTTPException(status_code=400, detail="step 必须是 13-16")
+    if req.granularity not in GRANULARITIES:
+        raise HTTPException(status_code=400, detail=f"granularity 必须是 {GRANULARITIES}")
     design = RegressionDesign(
         step=req.step, granularity=req.granularity,
         shock_type=req.shock_type, method=req.method,
     )
-    panel = _read_csv("panel_country.csv")
-    result = twoway_fe(panel, design.depvar, list(design.regressors))
+    panel = _read_csv(design.panel_file)
+    result = twoway_fe(
+        panel, design.depvar, list(design.regressors),
+        entity=design.entity, cluster=design.cluster,
+    )
     return {
         "design": {
             "depvar": design.depvar,
             "depvar_label": design.depvar_label,
+            "granularity": design.granularity,
             "equation": design.equation(),
         },
         "result": result.to_dict(),
-        "disclaimer": "冲击变量为风格化演示数据,结果仅用于验证系统链路",
+        "disclaimer": "冲击变量为拟真演示面板(全经济体覆盖、行业异质),结果仅用于验证系统链路",
     }
 
 

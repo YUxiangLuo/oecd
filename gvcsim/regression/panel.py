@@ -37,6 +37,7 @@ class RegressionResult:
     n_obs: int
     n_entities: int
     n_times: int
+    n_clusters: int
     r2_within: float
     notes: list[str] = field(default_factory=list)
 
@@ -50,6 +51,7 @@ class RegressionResult:
             "n_obs": self.n_obs,
             "n_entities": self.n_entities,
             "n_times": self.n_times,
+            "n_clusters": self.n_clusters,
             "r2_within": self.r2_within,
             "notes": self.notes,
         }
@@ -75,12 +77,19 @@ def _norm_sf(z: float) -> float:
 
 
 def twoway_fe(df: pd.DataFrame, depvar: str, regressors: list[str],
-              entity: str = "country", time: str = "year") -> RegressionResult:
-    """y_it = β·X_it + α_i + λ_t + ε_it,标准误按 entity 聚类。"""
-    cols = [depvar, *regressors, entity, time]
+              entity: str = "country", time: str = "year",
+              cluster: str | None = None) -> RegressionResult:
+    """y_it = β·X_it + α_i + λ_t + ε_it,标准误按 cluster 聚类(默认=entity)。
+
+    行业级面板用 entity=国家×行业 做固定效应、cluster=国家做聚类:
+    同一国家各行业受同一政策冲击,残差组内相关,必须在更粗层面聚类。
+    """
+    cluster = cluster or entity
+    cols = list(dict.fromkeys([depvar, *regressors, entity, time, cluster]))
     data = df[cols].dropna().reset_index(drop=True)
     ent = data[entity].values
     tim = data[time].values
+    clu = data[cluster].values
 
     demeaned = _twoway_demean(data[[depvar, *regressors]].values, ent, tim)
     y = demeaned[:, 0]
@@ -91,10 +100,10 @@ def twoway_fe(df: pd.DataFrame, depvar: str, regressors: list[str],
 
     # 聚类稳健标准误:V = (X'X)^-1 [Σ_g (X_g'u_g)(X_g'u_g)'] (X'X)^-1,带小样本修正
     XtX_inv = np.linalg.inv(X.T @ X)
-    groups = pd.unique(ent)
+    groups = pd.unique(clu)
     meat = np.zeros((X.shape[1], X.shape[1]))
     for g in groups:
-        mask = ent == g
+        mask = clu == g
         s = X[mask].T @ resid[mask]
         meat += np.outer(s, s)
     n, k, n_g = len(y), X.shape[1], len(groups)
@@ -116,11 +125,12 @@ def twoway_fe(df: pd.DataFrame, depvar: str, regressors: list[str],
         depvar=depvar,
         coefs=coefs,
         n_obs=n,
-        n_entities=n_g,
+        n_entities=len(pd.unique(ent)),
         n_times=len(pd.unique(tim)),
+        n_clusters=n_g,
         r2_within=r2_within,
         notes=[
-            "双向固定效应(entity + time),within 变换后 OLS",
-            "标准误按 entity 聚类(sandwich),p 值为正态近似",
+            f"双向固定效应({entity} + {time}),within 变换后 OLS",
+            f"标准误按 {cluster} 聚类(sandwich,{n_g} 组),p 值为正态近似",
         ],
     )

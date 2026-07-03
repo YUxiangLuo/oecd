@@ -60,6 +60,31 @@ def test_production_autarky(autarky_io):
     assert np.allclose(df["complex_gvc"], 0.0, atol=1e-9)
 
 
+def test_sector_production_adds_up(fake_io):
+    """行业级四段之和 = 行业增加值;按国加总 = 国家级分解。"""
+    arr = build_arrays(fake_io)
+    sec = production.sector_production(arr)
+    parts = sec[["pure_domestic", "traditional", "simple_gvc", "complex_gvc"]].sum(axis=1)
+    assert np.allclose(parts, sec["va_total"])
+
+    country = production.country_production(arr)
+    agg = sec[["va_total", "pure_domestic", "traditional", "simple_gvc", "complex_gvc"]] \
+        .groupby(level=0).sum()
+    assert np.allclose(agg.values, country[agg.columns].values)
+
+    # 行业级占比加总为 1
+    shares = sec[[c for c in sec.columns if c.startswith("share_")]].sum(axis=1)
+    assert np.allclose(shares, 1.0)
+
+
+def test_sector_production_autarky(autarky_io):
+    arr = build_arrays(autarky_io)
+    sec = production.sector_production(arr)
+    assert np.allclose(sec["traditional"], 0.0, atol=1e-9)
+    assert np.allclose(sec["simple_gvc"], 0.0, atol=1e-9)
+    assert np.allclose(sec["complex_gvc"], 0.0, atol=1e-9)
+
+
 def test_length_properties(fake_io, autarky_io):
     arr = build_arrays(fake_io)
     df = length.sector_length(arr)
@@ -88,3 +113,16 @@ def test_network_metrics(fake_io):
     df = network.country_network(arr)
     assert df["degree_centrality"].between(0, 2).all()
     assert (df["eigenvector_centrality"] > 0).all()
+
+
+def test_sector_network(fake_io):
+    """行业级网络:索引齐全,小图走精确介数,数值性质合理。"""
+    arr = build_arrays(fake_io)
+    df = network.sector_network(arr)
+    assert list(df.index.names) == ["country", "sector"]
+    assert len(df) == 4  # 2 国 × 2 行业全覆盖
+    assert not df.isna().any().any()
+    assert df["degree_centrality"].between(0, 2).all()
+    assert (df["betweenness_centrality"] >= 0).all()
+    # fake_io 中所有行业间都有流量,度中心性应处处为正
+    assert (df["degree_centrality"] > 0).all()

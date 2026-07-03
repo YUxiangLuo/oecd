@@ -15,15 +15,22 @@ STEP_DEPVARS = {
     16: ("betweenness_centrality", "生产网络介数中心性"),
 }
 
-GRANULARITIES = ["国家级", "国家–行业级"]
+GRANULARITIES = ["国家–行业级", "国家级"]
 SHOCK_TYPES = ["关税冲击", "制裁清单", "出口管制"]
 METHODS = ["双重差分 (DID)", "双向固定效应", "事件研究"]
+
+# 粒度 → (面板文件, 个体列, 聚类列)。冲击在国家层面高度相关,
+# 行业级回归的标准误也按国家聚类,避免组内相关低估标准误。
+_PANEL_SPECS = {
+    "国家级": ("panel_country.csv", "country", "country"),
+    "国家–行业级": ("panel_sector.csv", "entity_id", "country"),
+}
 
 
 @dataclass
 class RegressionDesign:
     step: int
-    granularity: str = "国家级"
+    granularity: str = "国家–行业级"
     shock_type: str = "关税冲击"
     method: str = "双向固定效应"
     regressors: tuple[str, ...] = ("tariff_shock",)
@@ -35,6 +42,18 @@ class RegressionDesign:
     @property
     def depvar_label(self) -> str:
         return STEP_DEPVARS[self.step][1]
+
+    @property
+    def panel_file(self) -> str:
+        return _PANEL_SPECS[self.granularity][0]
+
+    @property
+    def entity(self) -> str:
+        return _PANEL_SPECS[self.granularity][1]
+
+    @property
+    def cluster(self) -> str:
+        return _PANEL_SPECS[self.granularity][2]
 
     def equation(self) -> str:
         """生成与原型界面一致的回归方程展示文本。"""

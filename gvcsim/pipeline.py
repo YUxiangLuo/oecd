@@ -6,10 +6,11 @@
 产物(每年):
   qc_<year>.json                  质检结果(步骤3)
   indicators_country_<year>.csv   国家级指标汇总(步骤4-7)
-  indicators_sector_<year>.csv    行业级指标(步骤4、6)
+  indicators_sector_<year>.csv    行业级指标(步骤4-7)
   network_edges_<year>.csv        双边贸易流 top 边(步骤8 网络图)
 跨年:
-  panel_country.csv               国家×年份长面板 + 冲击变量(步骤13-16 的回归样本)
+  panel_sector.csv                国家×行业×年份长面板 + 行业异质冲击(步骤13-16 默认回归样本)
+  panel_country.csv               国家×年份长面板(冲击按行业出口额加权聚合)
 """
 
 import json
@@ -45,21 +46,23 @@ def compute_year(year: int, verbose: bool = True) -> None:
     tf_sector = tradeflow.sector_tradeflow(arr)
 
     log(f"[{year}] 步骤5 生产分解...")
-    prod = production.country_production(arr)
+    prod_sector = production.sector_production(arr)
+    prod = production.country_production(arr, prod_sector)
 
     log(f"[{year}] 步骤6 长度分解...")
     len_sector = length.sector_length(arr)
     len_country = length.country_length(arr, len_sector)
 
-    log(f"[{year}] 步骤7 网络指标...")
+    log(f"[{year}] 步骤7 网络指标(行业级介数为抽样近似)...")
     net = network.country_network(arr)
+    net_sector = network.sector_network(arr)
     edges = network.network_edges(arr)
 
     country = tf_country.join(prod).join(len_country).join(net)
     country.insert(0, "year", year)
     country.to_csv(PROCESSED_DIR / f"indicators_country_{year}.csv")
 
-    sector = tf_sector.join(len_sector)
+    sector = tf_sector.join(prod_sector).join(len_sector).join(net_sector)
     sector.insert(0, "year", year)
     sector.to_csv(PROCESSED_DIR / f"indicators_sector_{year}.csv")
 
@@ -69,26 +72,50 @@ def compute_year(year: int, verbose: bool = True) -> None:
 
 
 def build_panel() -> pd.DataFrame:
-    """合并所有已计算年份为长面板,并 merge 冲击数据(演示版)。"""
+    """合并所有已计算年份为长面板,并 merge 冲击数据(演示版)。
+
+    行业级面板(panel_sector.csv)是回归的默认样本;国家级面板的冲击变量
+    由行业级冲击按该国各行业出口额加权聚合而来,保证两个粒度口径一致。
+    返回行业级面板。
+    """
     years = processed_years()
     if not years:
         raise RuntimeError("没有任何已预计算的年份,请先运行 gvcsim compute")
 
-    frames = [
-        pd.read_csv(PROCESSED_DIR / f"indicators_country_{y}.csv")
-        for y in years
-    ]
-    panel = pd.concat(frames, ignore_index=True)
-
-    countries = sorted(panel["country"].unique())
-    shocks.write_demo(countries, years)
+    # ---- 行业级 ----
+    sector = pd.concat(
+        [pd.read_csv(PROCESSED_DIR / f"indicators_sector_{y}.csv") for y in years],
+        ignore_index=True,
+    )
+    countries = sorted(sector["country"].unique())
+    sectors = sorted(sector["sector"].unique())
+    shocks.write_demo(countries, sectors, years)
     shock_df = shocks.load_shocks()
-    panel = panel.merge(
-        shock_df[["country", "year", "tariff_shock", "treated"]],
+
+    sector = sector.merge(
+        shock_df[["country", "sector", "year", "tariff_shock", "treated"]],
+        on=["country", "sector", "year"], how="left",
+    )
+    # 双向FE的个体维度:国家×行业
+    sector["entity_id"] = sector["country"] + "_" + sector["sector"]
+    sector.to_csv(PROCESSED_DIR / "panel_sector.csv", index=False)
+
+    # ---- 国家级:冲击按行业出口额加权聚合 ----
+    country = pd.concat(
+        [pd.read_csv(PROCESSED_DIR / f"indicators_country_{y}.csv") for y in years],
+        ignore_index=True,
+    )
+    w = sector["gross_exports"].clip(lower=0.0)
+    sector_w = sector.assign(_w=w, _ws=w * sector["tariff_shock"])
+    agg = sector_w.groupby(["country", "year"], as_index=False)[["_w", "_ws"]].sum()
+    agg["tariff_shock"] = (agg["_ws"] / agg["_w"]).where(agg["_w"] > 0, 0.0)
+    agg["treated"] = (agg["tariff_shock"] > shocks.TREATED_THRESHOLD).astype(int)
+    country = country.merge(
+        agg[["country", "year", "tariff_shock", "treated"]],
         on=["country", "year"], how="left",
     )
-    panel.to_csv(PROCESSED_DIR / "panel_country.csv", index=False)
-    return panel
+    country.to_csv(PROCESSED_DIR / "panel_country.csv", index=False)
+    return sector
 
 
 def run(years: list[int] | None = None) -> None:
@@ -96,4 +123,5 @@ def run(years: list[int] | None = None) -> None:
     for y in years:
         compute_year(y)
     build_panel()
-    print(f"面板构建完成:{PROCESSED_DIR / 'panel_country.csv'}")
+    print(f"面板构建完成:{PROCESSED_DIR / 'panel_sector.csv'}(行业级,回归默认)")
+    print(f"            {PROCESSED_DIR / 'panel_country.csv'}(国家级)")

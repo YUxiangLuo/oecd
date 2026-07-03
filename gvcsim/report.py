@@ -13,19 +13,26 @@ from gvcsim.regression.design import STEP_DEPVARS, RegressionDesign
 from gvcsim.regression.panel import RegressionResult, twoway_fe
 
 
-def _load_panel() -> pd.DataFrame:
-    path = PROCESSED_DIR / "panel_country.csv"
+def _load_panel(design: RegressionDesign) -> pd.DataFrame:
+    path = PROCESSED_DIR / design.panel_file
     if not path.exists():
-        raise FileNotFoundError("缺少 panel_country.csv,请先运行 gvcsim compute")
+        raise FileNotFoundError(f"缺少 {design.panel_file},请先运行 gvcsim compute")
     return pd.read_csv(path)
 
 
-def run_step_regression(step: int, panel: pd.DataFrame | None = None) -> RegressionResult:
-    """跑步骤13-16 对应的默认设计回归。"""
+def run_step_regression(
+    step: int,
+    panel: pd.DataFrame | None = None,
+    granularity: str = "国家–行业级",
+) -> RegressionResult:
+    """跑步骤13-16 对应的默认设计回归(默认国家–行业级粒度)。"""
+    design = RegressionDesign(step=step, granularity=granularity)
     if panel is None:
-        panel = _load_panel()
-    design = RegressionDesign(step=step)
-    return twoway_fe(panel, design.depvar, list(design.regressors))
+        panel = _load_panel(design)
+    return twoway_fe(
+        panel, design.depvar, list(design.regressors),
+        entity=design.entity, cluster=design.cluster,
+    )
 
 
 def _coef_table(result: RegressionResult) -> str:
@@ -35,18 +42,23 @@ def _coef_table(result: RegressionResult) -> str:
             f"| {c.name} | {c.coef:.4f} | {c.se:.4f} | {c.t:.2f} | {c.p:.3f} | {c.stars} |"
         )
     lines.append(
-        f"\nN = {result.n_obs}({result.n_entities} 国 × {result.n_times} 年),"
-        f"组内 R² = {result.r2_within:.4f},双向固定效应 ✓"
+        f"\nN = {result.n_obs}({result.n_entities} 个国家×行业 × {result.n_times} 年,"
+        f"标准误按 {result.n_clusters} 国聚类),组内 R² = {result.r2_within:.4f},"
+        "双向固定效应 ✓"
     )
     return "\n".join(lines)
 
 
 def generate(year: int | None = None) -> str:
-    """生成报告并返回文件路径。year 为指标摘要引用的截面年份。"""
-    panel = _load_panel()
+    """生成报告并返回文件路径。year 为指标摘要引用的截面年份。
+
+    指标摘要用国家级面板(便于阅读),回归用国家–行业级面板(默认粒度)。
+    """
+    country_panel = pd.read_csv(PROCESSED_DIR / "panel_country.csv")
+    sector_panel = _load_panel(RegressionDesign(step=13))
     years = processed_years()
     year = year or max(years)
-    snap = panel[panel["year"] == year].set_index("country")
+    snap = country_panel[country_panel["year"] == year].set_index("country")
 
     top_backward = snap["backward_fva_share"].nlargest(5)
     top_forward = snap["forward_share"].nlargest(5)
@@ -54,10 +66,11 @@ def generate(year: int | None = None) -> str:
 
     sections = [
         "# 贸易政策冲击对全球价值链结构的影响\n",
-        "> 供应链仿真系统自动生成的实验报告(演示版:冲击数据为风格化演示数据,"
-        "结论仅用于验证系统链路,不构成研究结论)\n",
+        "> 供应链仿真系统自动生成的实验报告(演示版:冲击数据为覆盖全部经济体的"
+        "拟真演示面板,以 2018–2020 全球贸易摩擦为原型,结论仅用于验证系统链路,"
+        "不构成研究结论)\n",
         f"- 数据:OECD ICIO {min(years)}–{max(years)}(指标截面:{year} 年)",
-        "- 方法:双向固定效应面板回归,标准误按国家聚类",
+        "- 方法:国家–行业级双向固定效应面板回归(个体=国家×行业),标准误按国家聚类",
         f"- 生成日期:{date.today().isoformat()}\n",
         "## 一、数据与质检",
         f"覆盖 {snap.shape[0]} 个国家/地区、{len(years)} 个年份。"
@@ -75,7 +88,7 @@ def generate(year: int | None = None) -> str:
 
     for step in sorted(STEP_DEPVARS):
         design = RegressionDesign(step=step)
-        result = run_step_regression(step, panel)
+        result = run_step_regression(step, sector_panel)
         sections += [
             f"### 步骤{step}:{design.depvar_label}",
             f"模型:`{design.equation()}`\n",
@@ -85,8 +98,9 @@ def generate(year: int | None = None) -> str:
 
     sections += [
         "## 四、结论与限制",
-        "- 本报告验证了“数据 → 指标 → 回归 → 报告”闭环可自动运行。",
-        "- 冲击变量目前为风格化演示数据;接入 PIIE/WTO 真实数据后本报告即具备研究意义。",
+        "- 本报告验证了“数据 → 指标 → 回归 → 报告”闭环可自动运行(回归为国家–行业级)。",
+        "- 冲击变量为拟真演示面板(事件与量级参考公开资料的手工编码,出口暴露度为风格化数值);"
+        "接入 PIIE/WTO 真实数据 + 官方 HS→ICIO 映射后本报告即具备研究意义。",
         "- 指标采用简化版分解(详见 README 方法论说明),论文级精度需替换为 KWW/WWYZ 完整分解。",
     ]
 

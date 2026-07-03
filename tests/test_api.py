@@ -64,9 +64,24 @@ def test_qc_and_network():
 
 @needs_data
 def test_regression_run():
+    # 默认粒度:国家–行业级
     resp = client.post("/api/regression/run", json={"step": 13})
     assert resp.status_code == 200
     body = resp.json()
     assert body["design"]["depvar"] == "backward_fva_share"
+    assert body["design"]["granularity"] == "国家–行业级"
     assert body["result"]["coefs"][0]["name"] == "tariff_shock"
-    assert body["result"]["n_obs"] > 0
+    # 行业级个体数远多于国家数;标准误按国家聚类
+    assert body["result"]["n_entities"] > 1000
+    assert body["result"]["n_clusters"] < 100
+
+    # 显式国家级粒度仍可用
+    resp_c = client.post(
+        "/api/regression/run", json={"step": 13, "granularity": "国家级"}
+    )
+    assert resp_c.status_code == 200
+    assert resp_c.json()["result"]["n_entities"] < 100
+
+    # 非法粒度报 400
+    bad = client.post("/api/regression/run", json={"step": 13, "granularity": "城市级"})
+    assert bad.status_code == 400

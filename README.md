@@ -21,7 +21,7 @@ uv sync --group dev
 # 2. 下载原始数据(约 66MB/年;本地已有 2016–2020 则跳过)
 uv run gvcsim download --years 2016 2017 2018 2019 2020
 
-# 3. 预计算指标与回归面板(每年约 1–2 分钟,产物写入 data/processed/)
+# 3. 预计算指标与回归面板(全量约 1 分钟,产物写入 data/processed/)
 uv run gvcsim compute
 
 # 4. 启动 API(http://localhost:8000,交互文档在 /docs)
@@ -35,9 +35,10 @@ cd frontend && bun install && bun run dev
 
 ```bash
 uv run gvcsim validate --year 2018    # 步骤3:数据质检
-uv run gvcsim regress --step 13       # 步骤13-16:演示回归
+uv run gvcsim regress --step 13       # 步骤13-16:演示回归(默认国家–行业级)
+uv run gvcsim regress --step 13 --granularity country   # 国家级粒度
 uv run gvcsim report --year 2020      # 步骤17:生成 reports/experiment_report_2020.md
-uv run pytest                         # 测试(19 个,含 API 集成测试)
+uv run pytest                         # 测试(30 个,含 API 集成测试)
 ```
 
 ## 目录结构
@@ -48,15 +49,15 @@ uv run pytest                         # 测试(19 个,含 API 集成测试)
 │   ├── data/
 │   │   ├── loader.py             #   步骤1:pymrio 下载/解析 OECD ICIO
 │   │   └── quality.py            #   步骤3:结构化质检(维度/缺失值/会计恒等式/矩阵性质)
-│   ├── shocks.py                 #   步骤2:政策冲击数据接入(当前为风格化演示数据)
+│   ├── shocks.py                 #   步骤2:政策冲击数据接入(拟真演示面板:全经济体、行业异质)
 │   ├── indicators/
 │   │   ├── core.py               #   共享底座:IcioArrays(向量化的矩阵切块)
 │   │   ├── tradeflow.py          #   步骤4:贸易流分解(DVA/FVA、前向/后向参与度)
-│   │   ├── production.py         #   步骤5:生产分解(纯国内/传统贸易/简单/复杂GVC)
+│   │   ├── production.py         #   步骤5:生产分解(纯国内/传统贸易/简单/复杂GVC,国家+行业双粒度)
 │   │   ├── length.py             #   步骤6:长度分解(上游度及国内/跨境段)
-│   │   └── network.py            #   步骤7:生产网络中心性(度/介数/特征向量)
+│   │   └── network.py            #   步骤7:生产网络中心性(度/介数/特征向量,国家+行业双粒度)
 │   ├── regression/
-│   │   ├── design.py             #   步骤12:回归设计(粒度/冲击/方法 → 方程)
+│   │   ├── design.py             #   步骤12:回归设计(粒度/冲击/方法 → 面板/个体/聚类/方程)
 │   │   └── panel.py              #   步骤13-16:双向固定效应 + 聚类稳健标准误(纯numpy)
 │   ├── report.py                 #   步骤17:自动生成 Markdown 实验报告
 │   ├── pipeline.py               #   预计算流水线:原始表 → 质检 → 指标 → 面板
@@ -67,7 +68,7 @@ uv run pytest                         # 测试(19 个,含 API 集成测试)
 ├── tests/                        # 合成小矩阵验证指标数学性质;回归系数恢复;API 集成
 ├── prototype/                    # 完整 UI 设计原型(最终形态参考,勿改)
 ├── data/processed/               # 预计算产物(gitignore;由 gvcsim compute 生成)
-├── data/shocks/                  # 冲击数据(当前为自动生成的演示面板)
+├── data/shocks/                  # 冲击数据(自动生成的拟真演示面板,country×sector×year)
 ├── reports/                      # 自动生成的实验报告(gitignore)
 ├── OECD_ICIO/                    # 原始数据(gitignore)
 └── download_icio.py / validate_icio.py / gvc_indicators.py
@@ -82,7 +83,8 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
                               ├─ tradeflow / production
                               │  length / network       → indicators_{country,sector}_<year>.csv
                               │                           network_edges_<year>.csv
-                              └─ pipeline.build_panel() → panel_country.csv(merge 冲击数据)
+                              └─ pipeline.build_panel() → panel_sector.csv(行业级,回归默认)
+                                                          panel_country.csv(冲击按出口额加权聚合)
                                                               │
               FastAPI(gvcsim/api.py,只读预计算产物)◀──────┘
                     │                         │
@@ -96,8 +98,13 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 - **指标全部向量化**:`IcioArrays` 一次性把 IO 系统切成 numpy 块(全球逆矩阵 B、
   各国国内逆 L_rr、出口向量等),77×77 国家对的前向参与度矩阵一次算完,
   每年全套指标约 1 分钟。
-- **回归引擎零依赖**:双向固定效应用迭代去均值 + OLS + 按国聚类的 sandwich 标准误,
+- **回归引擎零依赖**:双向固定效应用迭代去均值 + OLS + 聚类 sandwich 标准误,
   纯 numpy 实现,便于教学展示;将来可无缝换成 `linearmodels.PanelOLS`(接口已隔离)。
+- **回归默认国家–行业级**:个体 = 国家×行业(~3,465 个),固定效应吸收行业异质性,
+  标准误按国家聚类(同国各行业共享政策冲击,残差组内相关);国家级粒度仍可选。
+- **冲击数据拟真 mock**:按 2018–2020 真实事件逐条编码(232 钢铝、301 四批清单、
+  各方反制、空客案),税率量级参考 PIIE/Bown 统计,再乘以风格化的出口暴露度
+  (流向加征方的出口份额),覆盖全部 77 经济体 × 45 行业。
 - **可测性**:指标模块吃 `IcioArrays` 而非 pymrio 对象,单元测试用手工构造的
   2 国 × 2 行业小系统验证数学恒等式(分解加总=GDP、封闭经济跨境项=0、v′B=1 等)。
 
@@ -106,16 +113,16 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 | 阶段 | 步骤 | 状态 |
 |---|---|---|
 | 一、数据接入 | 1 数据库选型 | ✅ OECD ICIO,pymrio 下载解析已验证 |
-| | 2 政策冲击数据 | 🟡 演示数据(风格化中美关税面板);待接 PIIE/WTO/GTA |
+| | 2 政策冲击数据 | 🟡 拟真演示面板(全经济体×行业异质,事件级编码);待接 PIIE/WTO/GTA |
 | | 3 数据质检 | ✅ 5 项结构化检查,CLI/API 共用 |
-| 二、指标计算 | 4 贸易流分解 | ✅ 简化版 KWW(见下方方法论说明) |
-| | 5 生产分解 | ✅ 简化版 WWYZ 四段分解,恒等式经测试验证 |
-| | 6 长度分解 | ✅ Antras-Chor 上游度 + 国内/跨境段拆分 |
-| | 7 网络指标 | ✅ 度/介数/特征向量中心性 |
+| 二、指标计算 | 4 贸易流分解 | ✅ 简化版 KWW(见下方方法论说明),国家+行业双粒度 |
+| | 5 生产分解 | ✅ 简化版 WWYZ 四段分解,恒等式经测试验证,国家+行业双粒度 |
+| | 6 长度分解 | ✅ Antras-Chor 上游度 + 国内/跨境段拆分,国家+行业双粒度 |
+| | 7 网络指标 | ✅ 度/介数/特征向量中心性,国家+行业双粒度(行业级介数为抽样近似) |
 | 三、可视化 | 8–11 | 🟡 最小版(排序数据表);富图表(网络图/堆叠条形图)按原型逐步实现 |
-| 四、回归 | 12 设计确认 | 🟡 设计选项 → 方程生成已实现;粒度目前只支持国家级 |
-| | 13–16 四组回归 | 🟡 引擎与端到端链路已通,基于演示冲击数据 |
-| 五、闭环 | 17 实验报告 | 🟡 Markdown 报告自动生成;PDF 导出待做 |
+| 四、回归 | 12 设计确认 | ✅ 设计选项 → 面板/个体/聚类/方程;支持国家级与国家–行业级双粒度 |
+| | 13–16 四组回归 | 🟡 默认国家–行业级(个体FE+按国聚类SE),端到端链路已通,基于演示冲击数据 |
+| 五、闭环 | 17 实验报告 | 🟡 Markdown 报告自动生成(回归为行业级);PDF 导出待做 |
 
 ## 方法论说明(诚实告知)
 
@@ -131,14 +138,14 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 
 ## 路线图(建议的下一步)
 
-1. **接入真实冲击数据**(步骤2 转正):PIIE 中美关税面板 + HS↔ISIC/ICIO 行业映射表
-   —— 项目说明文档 4.2 节明确指出行业映射是最容易被低估工作量的一环。
-2. **行业级回归**(步骤12 的"国家–行业级"粒度):行业级指标产物已就绪,
-   需把冲击数据映射到 ICIO 45 行业后扩展 `pipeline.build_panel()`。
-3. **宏观控制变量与平减指数**:World Bank WDI / CEPII / IMF IFS,按国家-年份 merge 进面板。
-4. **富可视化**(步骤8-11 对齐原型):交互式网络图、堆叠条形图、中心性热力表。
-5. **DID / 事件研究**:利用冲击数据自带的宣布/生效时间线,替换当前的双向固定效应演示。
-6. **报告导出 PDF**(pandoc 或前端打印样式)。
+1. **接入真实冲击数据**(步骤2 转正):用官方 PIIE 关税面板 + 官方 HS↔ISIC/ICIO
+   行业映射表替换当前手工编码的拟真事件表(`shocks.py` 的 loader 返回同结构
+   country×sector×year 面板即可)—— 项目说明文档 4.2 节明确指出行业映射是最容易
+   被低估工作量的一环。
+2. **宏观控制变量与平减指数**:World Bank WDI / CEPII / IMF IFS,按国家-年份 merge 进面板。
+3. **富可视化**(步骤8-11 对齐原型):交互式网络图、堆叠条形图、中心性热力表。
+4. **DID / 事件研究**:利用冲击数据自带的宣布/生效时间线,替换当前的双向固定效应演示。
+5. **报告导出 PDF**(pandoc 或前端打印样式)。
 
 ## 开发常用命令
 

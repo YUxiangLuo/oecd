@@ -154,6 +154,7 @@ export function VizLab({ meta, columns }: { meta: Meta; columns: string[] }) {
 /** 步骤12-16:回归设计与运行 */
 export function RegressionLab({ step }: { step: Step }) {
   const regStep = step.n === 12 ? 13 : step.n;
+  const [granularity, setGranularity] = useState("国家–行业级");
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -163,7 +164,7 @@ export function RegressionLab({ step }: { step: Step }) {
     setRunning(true);
     setError(null);
     try {
-      setResult(await api.runRegression(regStep));
+      setResult(await api.runRegression(regStep, granularity));
     } catch (e) {
       setError(String((e as Error).message));
     } finally {
@@ -174,7 +175,14 @@ export function RegressionLab({ step }: { step: Step }) {
   return (
     <div>
       <div className="warnbox">
-        ⚠ 冲击变量目前为<b>风格化演示数据</b>(以 2018 中美贸易战为原型),仅用于验证系统链路;接入 PIIE/WTO 真实数据后才具研究意义。
+        ⚠ 冲击变量为<b>拟真演示面板</b>(以 2018–2020 全球贸易摩擦为原型,覆盖全部经济体、行业异质),仅用于验证系统链路;接入 PIIE/WTO 真实数据后才具研究意义。
+      </div>
+      <div className="controls">
+        <label>粒度</label>
+        <select value={granularity} onChange={(e) => setGranularity(e.target.value)}>
+          <option value="国家–行业级">国家–行业级(默认)</option>
+          <option value="国家级">国家级</option>
+        </select>
       </div>
       {result && <div className="eq-box">{result.design.equation}</div>}
       <button className="run-btn" onClick={run} disabled={running}>
@@ -201,8 +209,8 @@ export function RegressionLab({ step }: { step: Step }) {
             </table>
           </div>
           <p className="muted" style={{ marginTop: 10 }}>
-            被解释变量:{result.design.depvar_label}({result.design.depvar})· N = {result.result.n_obs}
-            ({result.result.n_entities} 国 × {result.result.n_times} 年)· 组内 R² = {result.result.r2_within.toFixed(4)}
+            被解释变量:{result.design.depvar_label}({result.design.depvar})· {result.design.granularity} · N = {result.result.n_obs}
+            ({result.result.n_entities} 个体 × {result.result.n_times} 年,{result.result.n_clusters} 国聚类)· 组内 R² = {result.result.r2_within.toFixed(4)}
           </p>
           {result.result.notes.map((n) => <p key={n} className="muted">· {n}</p>)}
         </div>
