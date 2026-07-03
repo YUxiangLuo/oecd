@@ -38,7 +38,7 @@ uv run gvcsim validate --year 2018    # 步骤3:数据质检
 uv run gvcsim regress --step 13       # 步骤13-16:演示回归(默认国家–行业级)
 uv run gvcsim regress --step 13 --granularity country   # 国家级粒度
 uv run gvcsim report --year 2020      # 步骤17:生成 reports/experiment_report_2020.md
-uv run pytest                         # 测试(30 个,含 API 集成测试)
+uv run pytest                         # 测试(32 个,含 API 集成测试)
 ```
 
 ## 目录结构
@@ -62,7 +62,7 @@ uv run pytest                         # 测试(30 个,含 API 集成测试)
 │   ├── report.py                 #   步骤17:自动生成 Markdown 实验报告
 │   ├── pipeline.py               #   预计算流水线:原始表 → 质检 → 指标 → 面板
 │   ├── steps.py                  #   17 步元数据(与原型一致,前端渲染用)
-│   ├── api.py                    #   FastAPI:面板/质检/可视化/回归/报告全部接口
+│   ├── api.py                    #   FastAPI:面板/质检/冲击/可视化/回归/报告全部接口(CSV 按 mtime 缓存)
 │   └── cli.py                    #   gvcsim 命令行入口
 ├── frontend/                     # React + Vite + TS 最小前端(bun)
 ├── tests/                        # 合成小矩阵验证指标数学性质;回归系数恢复;API 集成
@@ -86,9 +86,11 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
                               └─ pipeline.build_panel() → panel_sector.csv(行业级,回归默认)
                                                           panel_country.csv(冲击按出口额加权聚合)
                                                               │
-              FastAPI(gvcsim/api.py,只读预计算产物)◀──────┘
+              FastAPI(gvcsim/api.py,只读预计算产物,按 mtime 缓存)◀──────┘
                     │                         │
-          frontend/(17步教学界面)    regression / report(按需在请求内运行)
+          frontend/(17步教学界面,     regression / report(按需在请求内运行)
+          支持 ?step=N 深链;步骤2 有
+          事件时间线 + 冲击面板浏览)
 ```
 
 设计要点:
@@ -113,7 +115,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 | 阶段 | 步骤 | 状态 |
 |---|---|---|
 | 一、数据接入 | 1 数据库选型 | ✅ OECD ICIO,pymrio 下载解析已验证 |
-| | 2 政策冲击数据 | 🟡 拟真演示面板(全经济体×行业异质,事件级编码);待接 PIIE/WTO/GTA |
+| | 2 政策冲击数据 | 🟡 拟真演示面板(全经济体×行业异质,事件级编码),前端有事件时间线+面板浏览;待接 PIIE/WTO/GTA |
 | | 3 数据质检 | ✅ 5 项结构化检查,CLI/API 共用 |
 | 二、指标计算 | 4 贸易流分解 | ✅ 简化版 KWW(见下方方法论说明),国家+行业双粒度 |
 | | 5 生产分解 | ✅ 简化版 WWYZ 四段分解,恒等式经测试验证,国家+行业双粒度 |
