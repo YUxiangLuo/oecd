@@ -25,11 +25,11 @@ export const api = {
       `/api/shocks/panel?year=${year}&only_hit=${onlyHit}&page=${page}` +
         (country ? `&country=${country}` : "") + (sector ? `&sector=${sector}` : ""),
     ),
-  runRegression: async (step: number, granularity: string) => {
+  runRegression: async (step: number, granularity: string, method: string) => {
     const resp = await fetch("/api/regression/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ step, granularity }),
+      body: JSON.stringify({ step, granularity, method }),
     });
     if (!resp.ok) throw new Error((await resp.json()).detail ?? resp.statusText);
     return resp.json() as Promise<import("./types").RegressionResponse>;

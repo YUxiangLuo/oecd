@@ -265,6 +265,7 @@ export function VizLab({ meta, columns }: { meta: Meta; columns: string[] }) {
 export function RegressionLab({ step }: { step: Step }) {
   const regStep = step.n === 12 ? 13 : step.n;
   const [granularity, setGranularity] = useState("国家–行业级");
+  const [method, setMethod] = useState("双重差分 (DID)");
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -274,7 +275,7 @@ export function RegressionLab({ step }: { step: Step }) {
     setRunning(true);
     setError(null);
     try {
-      setResult(await api.runRegression(regStep, granularity));
+      setResult(await api.runRegression(regStep, granularity, method));
     } catch (e) {
       setError(String((e as Error).message));
     } finally {
@@ -292,6 +293,12 @@ export function RegressionLab({ step }: { step: Step }) {
         <select value={granularity} onChange={(e) => setGranularity(e.target.value)}>
           <option value="国家–行业级">国家–行业级(默认)</option>
           <option value="国家级">国家级</option>
+        </select>
+        <label>方法</label>
+        <select value={method} onChange={(e) => setMethod(e.target.value)}>
+          <option value="双重差分 (DID)">双重差分 (DID,默认)</option>
+          <option value="双向固定效应">双向固定效应(强度法)</option>
+          <option value="事件研究">事件研究(动态效应)</option>
         </select>
       </div>
       {result && <div className="eq-box">{result.design.equation}</div>}
@@ -319,7 +326,7 @@ export function RegressionLab({ step }: { step: Step }) {
             </table>
           </div>
           <p className="muted" style={{ marginTop: 10 }}>
-            被解释变量:{result.design.depvar_label}({result.design.depvar})· {result.design.granularity} · N = {result.result.n_obs}
+            被解释变量:{result.design.depvar_label}({result.design.depvar})· {result.design.granularity} · {result.design.method} · N = {result.result.n_obs}
             ({result.result.n_entities} 个体 × {result.result.n_times} 年,{result.result.n_clusters} 国聚类)· 组内 R² = {result.result.r2_within.toFixed(4)}
           </p>
           {result.result.notes.map((n) => <p key={n} className="muted">· {n}</p>)}

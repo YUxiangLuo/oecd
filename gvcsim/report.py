@@ -10,7 +10,7 @@ import pandas as pd
 
 from gvcsim.config import PROCESSED_DIR, REPORTS_DIR, processed_years
 from gvcsim.regression.design import STEP_DEPVARS, RegressionDesign
-from gvcsim.regression.panel import RegressionResult, twoway_fe
+from gvcsim.regression.panel import RegressionResult, run_design
 
 
 def _load_panel(design: RegressionDesign) -> pd.DataFrame:
@@ -24,15 +24,14 @@ def run_step_regression(
     step: int,
     panel: pd.DataFrame | None = None,
     granularity: str = "国家–行业级",
+    method: str | None = None,
 ) -> RegressionResult:
-    """跑步骤13-16 对应的默认设计回归(默认国家–行业级粒度)。"""
-    design = RegressionDesign(step=step, granularity=granularity)
+    """跑步骤13-16 对应的默认设计回归(默认国家–行业级粒度 + DID)。"""
+    kwargs = {"method": method} if method else {}
+    design = RegressionDesign(step=step, granularity=granularity, **kwargs)
     if panel is None:
         panel = _load_panel(design)
-    return twoway_fe(
-        panel, design.depvar, list(design.regressors),
-        entity=design.entity, cluster=design.cluster,
-    )
+    return run_design(panel, design)
 
 
 def _coef_table(result: RegressionResult) -> str:
@@ -70,7 +69,9 @@ def generate(year: int | None = None) -> str:
         "拟真演示面板,以 2018–2020 全球贸易摩擦为原型,结论仅用于验证系统链路,"
         "不构成研究结论)\n",
         f"- 数据:OECD ICIO {min(years)}–{max(years)}(指标截面:{year} 年)",
-        "- 方法:国家–行业级双向固定效应面板回归(个体=国家×行业),标准误按国家聚类",
+        "- 方法:国家–行业级双重差分(个体=国家×行业,处理组=曾受冲击个体,"
+        "处理期=首个冲击年起),含双向固定效应,标准误按国家聚类;"
+        "双向FE(强度法)与事件研究可在前端切换",
         f"- 生成日期:{date.today().isoformat()}\n",
         "## 一、数据与质检",
         f"覆盖 {snap.shape[0]} 个国家/地区、{len(years)} 个年份。"

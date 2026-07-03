@@ -109,13 +109,14 @@ def test_shock_summary_and_panel():
 
 @needs_data
 def test_regression_run():
-    # 默认粒度:国家–行业级
+    # 默认:国家–行业级 + DID
     resp = client.post("/api/regression/run", json={"step": 13})
     assert resp.status_code == 200
     body = resp.json()
     assert body["design"]["depvar"] == "backward_fva_share"
     assert body["design"]["granularity"] == "国家–行业级"
-    assert body["result"]["coefs"][0]["name"] == "tariff_shock"
+    assert body["design"]["method"] == "双重差分 (DID)"
+    assert body["result"]["coefs"][0]["name"] == "treated×post"
     # 行业级个体数远多于国家数;标准误按国家聚类
     assert body["result"]["n_entities"] > 1000
     assert body["result"]["n_clusters"] < 100
@@ -127,6 +128,23 @@ def test_regression_run():
     assert resp_c.status_code == 200
     assert resp_c.json()["result"]["n_entities"] < 100
 
-    # 非法粒度报 400
+    # 非法粒度/方法报 400
     bad = client.post("/api/regression/run", json={"step": 13, "granularity": "城市级"})
     assert bad.status_code == 400
+    bad = client.post("/api/regression/run", json={"step": 13, "method": "工具变量"})
+    assert bad.status_code == 400
+
+
+@needs_data
+def test_regression_methods():
+    # 双向固定效应(强度法):解释变量为连续冲击
+    fe = client.post("/api/regression/run", json={"step": 14, "method": "双向固定效应"})
+    assert fe.status_code == 200
+    assert fe.json()["result"]["coefs"][0]["name"] == "tariff_shock"
+
+    # 事件研究:基期 k=-1 省略,动态系数逐年一个
+    ev = client.post("/api/regression/run", json={"step": 14, "method": "事件研究"})
+    assert ev.status_code == 200
+    names = [c["name"] for c in ev.json()["result"]["coefs"]]
+    assert names == ["k=-2", "k=0", "k=+1", "k=+2"]
+    assert "T₀=2018" in " ".join(ev.json()["result"]["notes"])

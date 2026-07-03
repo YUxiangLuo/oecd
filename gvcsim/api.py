@@ -20,7 +20,7 @@ from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
 from gvcsim.regression.design import (
     GRANULARITIES, METHODS, SHOCK_TYPES, STEP_DEPVARS, RegressionDesign,
 )
-from gvcsim.regression.panel import twoway_fe
+from gvcsim.regression.panel import run_design
 from gvcsim.steps import STAGE_NAMES, STEPS
 
 app = FastAPI(title="供应链仿真系统 API", version="0.1.0")
@@ -202,7 +202,7 @@ class RegressionRequest(BaseModel):
     step: int = 13                      # 13-16
     granularity: str = "国家–行业级"
     shock_type: str = "关税冲击"
-    method: str = "双向固定效应"
+    method: str = "双重差分 (DID)"
 
 
 @app.get("/api/regression/options")
@@ -221,20 +221,23 @@ def regression_run(req: RegressionRequest):
         raise HTTPException(status_code=400, detail="step 必须是 13-16")
     if req.granularity not in GRANULARITIES:
         raise HTTPException(status_code=400, detail=f"granularity 必须是 {GRANULARITIES}")
+    if req.method not in METHODS:
+        raise HTTPException(status_code=400, detail=f"method 必须是 {METHODS}")
     design = RegressionDesign(
         step=req.step, granularity=req.granularity,
         shock_type=req.shock_type, method=req.method,
     )
     panel = _read_csv(design.panel_file)
-    result = twoway_fe(
-        panel, design.depvar, list(design.regressors),
-        entity=design.entity, cluster=design.cluster,
-    )
+    try:
+        result = run_design(panel, design)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {
         "design": {
             "depvar": design.depvar,
             "depvar_label": design.depvar_label,
             "granularity": design.granularity,
+            "method": design.method,
             "equation": design.equation(),
         },
         "result": result.to_dict(),

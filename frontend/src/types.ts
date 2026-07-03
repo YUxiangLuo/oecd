@@ -72,7 +72,7 @@ export interface CoefStat {
 }
 
 export interface RegressionResponse {
-  design: { depvar: string; depvar_label: string; granularity: string; equation: string };
+  design: { depvar: string; depvar_label: string; granularity: string; method: string; equation: string };
   result: {
     coefs: CoefStat[];
     n_obs: number;
