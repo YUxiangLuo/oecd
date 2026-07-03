@@ -1,0 +1,12 @@
+[project]
+name = "oecd-icio-analysis"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "numpy>=2.5.0",
+    "openpyxl>=3.1.0",
+    "pandas>=3.0.3",
+    "pymrio>=0.6.3",
+]

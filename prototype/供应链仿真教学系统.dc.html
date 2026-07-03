@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:"Noto Sans SC",-apple-system,system-ui,sans-serif;background:#eef0f5;color:#1b1f2b;-webkit-font-smoothing:antialiased}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:#d3d7e0;border-radius:8px;border:2px solid transparent;background-clip:padding-box}
+  ::-webkit-scrollbar-thumb:hover{background:#b9bfcd;background-clip:padding-box}
+  ::-webkit-scrollbar-track{background:transparent}
+  @keyframes dcfade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @keyframes dcpop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+  .netnode{cursor:pointer;transition:opacity .18s}
+  .netedge{transition:opacity .18s,stroke-width .18s}
+  .labscroll{animation:dcfade .3s ease both}
+</style>
+</helmet>
+
+<div style="display:flex;flex-direction:column;height:100vh;overflow:hidden">
+
+  <!-- ============ TOP BAR ============ -->
+  <header style="flex:none;height:60px;display:flex;align-items:center;gap:16px;padding:0 22px;background:#fff;border-bottom:1px solid #e7e9f0;z-index:5">
+    <div style="display:flex;align-items:center;gap:11px">
+      <div style="width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#4b47e0,#7a6bff);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 10px rgba(75,71,224,.28)">
+        <div style="width:15px;height:15px;border:2.4px solid #fff;border-radius:50%;position:relative"><div style="position:absolute;width:5px;height:5px;background:#fff;border-radius:50%;top:-4px;left:3.3px"></div></div>
+      </div>
+      <div style="line-height:1.15">
+        <div style="font-weight:700;font-size:15px;letter-spacing:.2px">供应链仿真系统</div>
+        <div style="font-size:10.5px;color:#8a90a0;font-family:'Space Mono',monospace;letter-spacing:.3px">GVC SIMULATION LAB</div>
+      </div>
+    </div>
+    <div style="width:1px;height:26px;background:#e7e9f0;margin:0 4px"></div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#6b7280">
+      <span style="color:#4b47e0;font-weight:500">{{ courseName }}</span>
+    </div>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:7px;padding:6px 12px;background:#f4f5f8;border-radius:9px;font-size:12px">
+      <span style="color:#8a90a0">学习进度</span>
+      <span style="font-family:'Space Grotesk';font-weight:600;color:#1b1f2b">{{ progress.done }}<span style="color:#b7bcc9">/{{ progress.total }}</span></span>
+    </div>
+    <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#ffb27a,#f4693b);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px">李</div>
+  </header>
+
+  <div style="flex:1;display:flex;min-height:0">
+
+    <!-- ============ COURSE OUTLINE ============ -->
+    <aside style="flex:none;width:288px;background:#fff;border-right:1px solid #e7e9f0;display:flex;flex-direction:column;min-height:0">
+      <div style="flex:none;padding:18px 20px 14px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between">
+          <div style="font-weight:700;font-size:13.5px;letter-spacing:.3px">课程大纲</div>
+          <div style="font-size:10.5px;color:#a2a8b6;font-family:'Space Mono'">17 STEPS</div>
+        </div>
+        <div style="margin-top:11px;height:6px;background:#eef0f5;border-radius:99px;overflow:hidden">
+          <div style="{{ progress.barStyle }}"></div>
+        </div>
+        <div style="margin-top:7px;font-size:11px;color:#8a90a0">全球价值链实证分析 · 数据→指标→回归→报告</div>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:4px 12px 24px">
+        <sc-for list="{{ stages }}" as="st" hint-placeholder-count="5">
+          <div style="margin-top:14px">
+            <div style="display:flex;align-items:center;gap:9px;padding:0 8px 8px">
+              <div style="width:20px;height:20px;border-radius:6px;background:#f0f1f6;color:#6b7280;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk'">{{ st.roman }}</div>
+              <div style="font-size:11.5px;font-weight:700;color:#3a4050;letter-spacing:.3px">{{ st.name }}</div>
+              <div style="flex:1;height:1px;background:#eef0f5"></div>
+            </div>
+            <sc-for list="{{ st.steps }}" as="sp" hint-placeholder-count="3">
+              <div onClick="{{ sp.onClick }}" style="{{ sp.rowStyle }}" style-hover="background:#f5f6fa">
+                <div style="{{ sp.badgeStyle }}">{{ sp.badgeChar }}</div>
+                <div style="flex:1;min-width:0">
+                  <div style="{{ sp.titleStyle }}">{{ sp.title }}</div>
+                </div>
+                <div style="font-size:10px;font-family:'Space Mono';color:#b7bcc9">{{ sp.code }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-for>
+      </div>
+    </aside>
+
+    <!-- ============ LAB BENCH ============ -->
+    <main style="flex:1;display:flex;flex-direction:column;min-width:0;background:#eef0f5">
+
+      <!-- step header -->
+      <div style="flex:none;padding:20px 28px 18px;background:#fff;border-bottom:1px solid #e7e9f0;display:flex;align-items:center;gap:20px">
+        <div style="font-family:'Space Grotesk';font-weight:700;font-size:44px;line-height:1;color:#4b47e0;letter-spacing:-1px">{{ cur.numPad }}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+            <span style="{{ cur.stageChipStyle }}">{{ cur.stageName }}</span>
+            <span style="font-size:11px;color:#a2a8b6;font-family:'Space Mono'">STEP {{ cur.n }} / 17</span>
+          </div>
+          <div style="font-size:20px;font-weight:700;letter-spacing:.2px">{{ cur.title }}</div>
+        </div>
+        <div style="flex:none;display:flex;gap:9px">
+          <button onClick="{{ prev }}" style="{{ prevBtnStyle }}" style-hover="border-color:#c3c8d4">← 上一步</button>
+          <button onClick="{{ next }}" style="{{ nextBtnStyle }}" style-hover="filter:brightness(1.06)">下一步 →</button>
+        </div>
+      </div>
+
+      <!-- content row -->
+      <div style="flex:1;display:flex;min-height:0">
+
+        <!-- interactive area -->
+        <div style="flex:1;min-width:0;overflow-y:auto;padding:24px 28px 40px">
+          <div class="labscroll" key="{{ viewKey }}">
+
+          <!-- ===== TEACHING SECTION ===== -->
+          <div style="max-width:920px;margin:0 auto">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+              <div style="width:24px;height:24px;border-radius:7px;background:#edecfd;color:#4b47e0;display:flex;align-items:center;justify-content:center;font-size:13px">📖</div>
+              <div style="font-size:14px;font-weight:700;letter-spacing:.3px">讲解</div>
+              <div style="flex:1;height:1px;background:#e7e9f0"></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <sc-for list="{{ teach.blocks }}" as="b" hint-placeholder-count="4">
+
+                <sc-if value="{{ b.isConcept }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#fff;border:1px solid #e7e9f0;border-radius:14px;padding:20px 24px;border-left:3px solid #4b47e0">
+                    <div style="font-size:10.5px;font-weight:700;color:#4b47e0;letter-spacing:.7px;margin-bottom:9px">{{ b.kicker }}</div>
+                    <div style="font-size:17px;font-weight:700;margin-bottom:12px;letter-spacing:.2px">{{ b.h }}</div>
+                    <sc-for list="{{ b.paras }}" as="p" hint-placeholder-count="2"><div style="font-size:13.5px;color:#3a4050;line-height:1.9;margin-bottom:9px;text-wrap:pretty">{{ p }}</div></sc-for>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ b.isFormula }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#fff;border:1px solid #e7e9f0;border-radius:14px;padding:20px 24px">
+                    <div style="font-size:10.5px;font-weight:700;color:#8a90a0;letter-spacing:.6px;margin-bottom:12px">公式 / 定义</div>
+                    <div style="font-family:'Space Mono',monospace;font-size:14px;background:#111827;color:#c9d3ff;border-radius:10px;padding:15px 17px;line-height:1.7;overflow-x:auto">{{ b.tex }}</div>
+                    <div style="margin-top:15px;display:flex;flex-direction:column;gap:9px">
+                      <sc-for list="{{ b.terms }}" as="t" hint-placeholder-count="3">
+                        <div style="display:flex;gap:12px;align-items:baseline">
+                          <div style="flex:none;min-width:64px;font-family:'Space Mono';font-weight:700;font-size:12.5px;color:#4b47e0">{{ t.sym }}</div>
+                          <div style="font-size:12.5px;color:#3a4050;line-height:1.65">{{ t.def }}</div>
+                        </div>
+                      </sc-for>
+                    </div>
+                    <sc-if value="{{ b.hasNote }}" hint-placeholder-val="{{ false }}"><div style="margin-top:14px;padding-top:13px;border-top:1px solid #f2f3f7;font-size:12px;color:#8a90a0;line-height:1.7">{{ b.note }}</div></sc-if>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ b.isIntuition }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#fffaf3;border:1px solid #f2e2cd;border-radius:14px;padding:20px 24px">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px"><span style="font-size:15px">🧭</span><span style="font-size:13.5px;font-weight:700;color:#8a5a1f">{{ b.h }}</span></div>
+                    <div style="display:flex;flex-direction:column;gap:12px">
+                      <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="2">
+                        <div style="display:flex;gap:14px">
+                          <div style="flex:none;width:158px;font-size:12.5px;font-weight:600;color:#a2551f">{{ it.k }}</div>
+                          <div style="flex:1;font-size:12.5px;color:#5a4632;line-height:1.65">{{ it.v }}</div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ b.isPitfall }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#fff5f2;border:1px solid #f6cabf;border-radius:14px;padding:20px 24px">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:15px">⚠️</span><span style="font-size:13.5px;font-weight:700;color:#b3341f">{{ b.h }}</span></div>
+                    <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="2"><div style="display:flex;gap:10px;margin-bottom:9px;font-size:12.5px;color:#7a3524;line-height:1.65"><span style="flex:none;color:#d1462f">●</span><span style="text-wrap:pretty">{{ it }}</span></div></sc-for>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ b.isSources }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#fff;border:1px solid #e7e9f0;border-radius:14px;padding:20px 24px">
+                    <div style="font-size:13.5px;font-weight:700;margin-bottom:15px">{{ b.h }}</div>
+                    <div style="display:flex;flex-direction:column;gap:11px">
+                      <sc-for list="{{ b.rows }}" as="r" hint-placeholder-count="3">
+                        <div style="display:flex;gap:14px;padding-bottom:11px;border-bottom:1px solid #f2f3f7;align-items:baseline">
+                          <div style="flex:none;width:158px"><div style="font-size:12.5px;font-weight:700;color:#2a3040">{{ r.name }}</div><div style="font-size:10.5px;color:#8a90a0;margin-top:3px">{{ r.use }}</div></div>
+                          <div style="flex:1;font-size:11.5px;color:#5a6070;line-height:1.65">{{ r.note }}</div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ b.isTakeaway }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#f1f0fd;border:1px solid #d9d6f7;border-radius:14px;padding:20px 24px">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:15px">✅</span><span style="font-size:13.5px;font-weight:700;color:#4b47e0">本步小结</span></div>
+                    <sc-for list="{{ b.items }}" as="it" hint-placeholder-count="3"><div style="display:flex;gap:10px;margin-bottom:9px;font-size:12.5px;color:#3a3670;line-height:1.65"><span style="flex:none;color:#4b47e0">▪</span><span>{{ it }}</span></div></sc-for>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{ b.isSelfcheck }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#fff;border:1px solid #e7e9f0;border-radius:14px;padding:20px 24px">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:15px"><span style="font-size:15px">🎯</span><span style="font-size:13.5px;font-weight:700">自检 · 检验你的理解</span></div>
+                    <div style="display:flex;flex-direction:column;gap:10px">
+                      <sc-for list="{{ b.items }}" as="q" hint-placeholder-count="2">
+                        <div style="border:1px solid #eef0f5;border-radius:11px;overflow:hidden">
+                          <div onClick="{{ q.onClick }}" style="display:flex;align-items:center;gap:11px;padding:12px 15px;cursor:pointer;background:#f9fafc" style-hover="background:#f2f3f7">
+                            <div style="flex:none;width:20px;height:20px;border-radius:6px;background:#edecfd;color:#4b47e0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;line-height:1">{{ q.icon }}</div>
+                            <div style="flex:1;font-size:12.5px;font-weight:500;color:#2a3040">{{ q.q }}</div>
+                          </div>
+                          <div style="{{ q.ansStyle }}"><span style="color:#12a150;font-weight:700">答案 · </span>{{ q.a }}</div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </sc-if>
+
+              </sc-for>
+            </div>
+
+            <!-- ===== LAB SECTION ===== -->
+            <div style="display:flex;align-items:center;gap:10px;margin:34px 0 18px">
+              <div style="width:24px;height:24px;border-radius:7px;background:#eafaf1;color:#12a150;display:flex;align-items:center;justify-content:center;font-size:13px">🧪</div>
+              <div style="font-size:14px;font-weight:700;letter-spacing:.3px">动手实验</div>
+              <span style="font-size:11.5px;color:#9aa0ae">{{ cur.title }}</span>
+              <div style="flex:1;height:1px;background:#e7e9f0"></div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:16px">
+
+          <!-- ===== LAB: DB SELECT ===== -->
+          <sc-if value="{{ isDbSelect }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:13px;color:#6b7280;margin-bottom:16px">选择本次实验使用的全球投入产出数据库。不同数据库在覆盖范围、更新频率与授权方式上各有取舍。</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+              <sc-for list="{{ dbs }}" as="d" hint-placeholder-count="3">
+                <div onClick="{{ d.onSelect }}" style="{{ d.cardStyle }}" style-hover="border-color:#b9b6f5">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+                    <div style="font-weight:700;font-size:14px">{{ d.name }}</div>
+                    <div style="{{ d.checkStyle }}">{{ d.checkChar }}</div>
+                  </div>
+                  <div style="margin-top:9px;font-size:11.5px;color:#6b7280;line-height:1.55">{{ d.coverage }}</div>
+                  <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:6px">
+                    <sc-for list="{{ d.tags }}" as="t" hint-placeholder-count="2">
+                      <span style="font-size:10.5px;color:#5a6070;background:#f2f3f7;padding:3px 8px;border-radius:6px">{{ t }}</span>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:16px;display:flex;align-items:center;gap:10px;padding:13px 16px;background:#eafaf1;border:1px solid #bfe9d0;border-radius:11px">
+              <div style="width:22px;height:22px;border-radius:50%;background:#12a150;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">✓</div>
+              <div style="font-size:12px;color:#137a41"><b>已验证可行</b> · 本项目已用 <span style="font-family:'Space Mono'">uv + pymrio</span> 跑通 OECD ICIO 2018,完成下载、解析与质检。</div>
+            </div>
+          </sc-if>
+
+          <!-- ===== LAB: SHOCK DATA ===== -->
+          <sc-if value="{{ isShock }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:13px;color:#6b7280;margin-bottom:16px">接入贸易政策冲击数据 —— 这是后续回归分析的核心自变量(“因”)。缺了它,步骤 12–16 完全跑不起来。</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+              <sc-for list="{{ shockSources }}" as="s" hint-placeholder-count="4">
+                <div style="background:#fff;border:1px solid #e7e9f0;border-radius:13px;padding:16px 17px">
+                  <div style="display:flex;align-items:center;justify-content:space-between">
+                    <div style="font-weight:700;font-size:13.5px">{{ s.name }}</div>
+                    <span style="{{ s.diffStyle }}">{{ s.diff }}</span>
+                  </div>
+                  <div style="margin-top:5px;font-size:11px;color:#8a90a0;font-family:'Space Mono'">{{ s.type }}</div>
+                  <div style="margin-top:10px;font-size:11.5px;color:#6b7280;line-height:1.55">{{ s.note }}</div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:16px;display:flex;align-items:center;gap:10px;padding:13px 16px;background:#fff5ee;border:1px solid #f6d6bf;border-radius:11px">
+              <div style="font-size:15px">💡</div>
+              <div style="font-size:12px;color:#a2551f"><b>优先推荐 PIIE 中美关税追踪库</b> —— 已整理成 HS 编码级面板数据,且自带宣布/生效时间线,直接支持 DID 因果识别。</div>
+            </div>
+          </sc-if>
+
+          <!-- ===== LAB: QC ===== -->
+          <sc-if value="{{ isQc }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:13px;color:#6b7280;margin-bottom:16px">对两类数据分别做质检,并在“国家–行业–年份”维度上对齐。质检不通过,后面所有指标都会被污染。</div>
+            <div style="background:#fff;border:1px solid #e7e9f0;border-radius:14px;overflow:hidden">
+              <div style="display:flex;padding:11px 18px;background:#f7f8fb;border-bottom:1px solid #eef0f5;font-size:11px;color:#8a90a0;font-weight:500">
+                <div style="flex:1">质检项</div><div style="width:130px">类型</div><div style="width:96px;text-align:right">结果</div>
+              </div>
+              <sc-for list="{{ qcChecks }}" as="q" hint-placeholder-count="7">
+                <div style="display:flex;align-items:center;padding:12px 18px;border-bottom:1px solid #f4f5f8;font-size:12.5px">
+                  <div style="flex:1;color:#2a3040">{{ q.name }}</div>
+                  <div style="width:130px;font-size:11px;color:#9aa0ae">{{ q.kind }}</div>
+                  <div style="width:96px;text-align:right"><span style="{{ q.tagStyle }}">{{ q.result }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+              <div style="background:#fff;border:1px solid #e7e9f0;border-radius:12px;padding:15px 16px"><div style="font-family:'Space Grotesk';font-size:26px;font-weight:600;color:#12a150">77</div><div style="font-size:11px;color:#8a90a0;margin-top:2px">国家 / 地区覆盖</div></div>
+              <div style="background:#fff;border:1px solid #e7e9f0;border-radius:12px;padding:15px 16px"><div style="font-family:'Space Grotesk';font-size:26px;font-weight:600;color:#4b47e0">45</div><div style="font-size:11px;color:#8a90a0;margin-top:2px">行业部门</div></div>
+              <div style="background:#fff;border:1px solid #e7e9f0;border-radius:12px;padding:15px 16px"><div style="font-family:'Space Grotesk';font-size:26px;font-weight:600;color:#f4693b">1</div><div style="font-size:11px;color:#8a90a0;margin-top:2px">奇异矩阵异常(已修正)</div></div>
+            </div>
+          </sc-if>
+
+          <!-- ===== LAB: INDICATOR ===== -->
+          <sc-if value="{{ isIndicator }}" hint-placeholder-val="{{ false }}">
+            <!-- formula card (teaching) -->
+            <div style="background:#fff;border:1px solid #e7e9f0;border-radius:14px;padding:18px 20px;margin-bottom:16px">
+              <div style="font-size:11px;color:#8a90a0;font-weight:600;letter-spacing:.4px;margin-bottom:10px">计算公式</div>
+              <div style="font-family:'Space Mono',monospace;font-size:14px;color:#2a3040;background:#f7f8fb;border-radius:10px;padding:14px 16px;line-height:1.9">{{ tbl.formula }}</div>
+              <div style="margin-top:12px;font-size:12px;color:#6b7280;line-height:1.6">{{ tbl.desc }}</div>
+            </div>
+
+            <!-- data table -->
+            <div style="background:#fff;border:1px solid #e7e9f0;border-radius:14px;overflow:hidden">
+              <div style="padding:16px 20px 0">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="font-size:15px;font-weight:700">{{ tbl.title }}</div>
+                  <span style="font-size:10.5px;font-weight:700;color:#12805a;background:#e7f7ef;padding:3px 8px;border-radius:6px;font-family:'Space Mono'">OECD ICIO 2018</span>
+                </div>
+                <div style="margin-top:6px;font-size:11.5px;color:#8a90a0;line-height:1.6">{{ tbl.subtitle }}</div>
+              </div>
+
+              <!-- filter bar -->
+              <div style="display:flex;align-items:center;gap:14px;padding:15px 20px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:7px">
+                  <span style="font-size:12px;color:#6b7280">国家</span>
+                  <div onClick="{{ tbl.cycleCountry }}" style="display:flex;align-items:center;gap:20px;padding:7px 12px;background:#f4f5f8;border:1px solid #e7e9f0;border-radius:8px;cursor:pointer;font-size:12px;font-weight:500" style-hover="border-color:#c3c8d4">{{ tbl.country }}<span style="color:#a2a8b6">▾</span></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:7px">
+                  <span style="font-size:12px;color:#6b7280">行业</span>
+                  <div onClick="{{ tbl.cycleIndustry }}" style="display:flex;align-items:center;gap:16px;padding:7px 12px;background:#f4f5f8;border:1px solid #e7e9f0;border-radius:8px;cursor:pointer;font-size:12px;font-weight:500;max-width:180px" style-hover="border-color:#c3c8d4"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ tbl.industry }}</span><span style="color:#a2a8b6">▾</span></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:7px">
+                  <span style="font-size:12px;color:#6b7280">年份</span>
+                  <div onClick="{{ tbl.cycleYear }}" style="display:flex;align-items:center;gap:16px;padding:7px 12px;background:#f4f5f8;border:1px solid #e7e9f0;border-radius:8px;cursor:pointer;font-size:12px;font-weight:500;font-family:'Space Grotesk'" style-hover="border-color:#c3c8d4">{{ tbl.year }}<span style="color:#a2a8b6">▾</span></div>
+                </div>
+                <span style="font-size:11.5px;color:#9aa0ae;background:#f7f8fb;padding:5px 10px;border-radius:7px">{{ tbl.countLabel }}</span>
+                <div style="flex:1"></div>
+                <button onClick="{{ tbl.exportCsv }}" style="display:flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid #e0e3ea;background:#fff;border-radius:9px;font-size:12px;color:#4b47e0;font-weight:600;cursor:pointer;font-family:inherit" style-hover="border-color:#b9b6f5;background:#faf9ff">↓ 导出 CSV</button>
+              </div>
+
+              <!-- scrollable table -->
+              <div style="overflow-x:auto;border-top:1px solid #eef0f5">
+                <div style="min-width:{{ tbl.minWidth }}">
+                  <!-- head -->
+                  <div style="display:flex;padding:12px 20px;background:#fafbfd;border-bottom:1px solid #eef0f5;font-size:11.5px;color:#6b7280;font-weight:600;position:sticky;top:0">
+                    <div style="width:96px;flex:none">国家</div>
+                    <div style="width:180px;flex:none">行业</div>
+                    <div style="width:56px;flex:none;text-align:center">年份</div>
+                    <sc-for list="{{ tbl.cols }}" as="c" hint-placeholder-count="5"><div style="width:132px;flex:none;text-align:right">{{ c.label }}</div></sc-for>
+                  </div>
+                  <!-- rows -->
+                  <sc-for list="{{ tbl.rows }}" as="r" hint-placeholder-count="10">
+                    <div style="{{ r.rowStyle }}" style-hover="background:#f7f8fb">
+                      <div style="width:96px;flex:none;font-weight:600;color:#2a3040">{{ r.country }}</div>
+                      <div style="width:180px;flex:none;color:#5a6070;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:10px">{{ r.industry }}</div>
+                      <div style="width:56px;flex:none;text-align:center;color:#9aa0ae;font-family:'Space Grotesk'">{{ r.year }}</div>
+                      <sc-for list="{{ r.cells }}" as="v" hint-placeholder-count="5"><div style="{{ v.style }}">{{ v.txt }}</div></sc-for>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+
+              <!-- pagination -->
+              <div style="display:flex;align-items:center;padding:13px 20px;border-top:1px solid #eef0f5;font-size:12px;color:#8a90a0">
+                <span>{{ tbl.rangeLabel }}</span>
+                <div style="flex:1"></div>
+                <span style="margin-right:14px">每页 25 行</span>
+                <button onClick="{{ tbl.prevPage }}" style="{{ tbl.prevPageStyle }}" style-hover="border-color:#c3c8d4">← 上一页</button>
+                <span style="margin:0 12px;font-family:'Space Grotesk';color:#3a4050">{{ tbl.pageLabel }}</span>
+                <button onClick="{{ tbl.nextPage }}" style="{{ tbl.nextPageStyle }}" style-hover="border-color:#c3c8d4">下一页 →</button>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- ===== LAB: VIZ ===== -->
+          <sc-if value="{{ isViz }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <div style="display:flex;background:#fff;border:1px solid #e7e9f0;border-radius:9px;padding:3px">
+                <sc-for list="{{ viz.years }}" as="y" hint-placeholder-count="3"><div onClick="{{ y.onClick }}" style="{{ y.style }}">{{ y.label }}</div></sc-for>
+              </div>
+              <div style="flex:1"></div>
+              <div style="font-size:11.5px;color:#8a90a0">{{ viz.caption }}</div>
+            </div>
+
+            <!-- HERO NETWORK -->
+            <sc-if value="{{ isNetwork }}" hint-placeholder-val="{{ false }}">
+              <div style="position:relative;background:#fff;border:1px solid #e7e9f0;border-radius:16px;overflow:hidden">
+                <div ref="{{ netRef }}" style="width:100%;min-height:340px"></div>
+                <div ref="{{ tipRef }}" style="position:absolute;pointer-events:none;opacity:0;transition:opacity .12s;background:#1b1f2b;color:#fff;padding:10px 12px;border-radius:10px;font-size:11.5px;line-height:1.7;box-shadow:0 8px 24px rgba(0,0,0,.22);z-index:6;min-width:150px"></div>
+                <div style="position:absolute;left:18px;top:16px">
+                  <div style="font-size:12px;font-weight:700;color:#3a4050;margin-bottom:9px">区域</div>
+                  <div style="display:flex;flex-direction:column;gap:7px">
+                    <sc-for list="{{ viz.legend }}" as="lg" hint-placeholder-count="5">
+                      <div style="display:flex;align-items:center;gap:7px"><div style="width:10px;height:10px;border-radius:50%;background:{{ lg.color }}"></div><span style="font-size:11.5px;color:#5a6070">{{ lg.name }}</span></div>
+                    </sc-for>
+                  </div>
+                </div>
+                <div style="position:absolute;right:18px;bottom:16px;font-size:10.5px;color:#b0b5c2;text-align:right;line-height:1.6">节点大小 = GVC 参与度<br>连线粗细 = 双边贸易强度<br><span style="color:#c8ccd6">悬停节点查看关联关系</span></div>
+              </div>
+            </sc-if>
+
+            <!-- PRODUCTION STACKED BARS -->
+            <sc-if value="{{ isProdChart }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#fff;border:1px solid #e7e9f0;border-radius:16px;padding:22px 24px">
+                <div style="display:flex;gap:14px;margin-bottom:18px;flex-wrap:wrap">
+                  <sc-for list="{{ viz.prodLegend }}" as="pl" hint-placeholder-count="4"><div style="display:flex;align-items:center;gap:6px"><div style="width:11px;height:11px;border-radius:3px;background:{{ pl.color }}"></div><span style="font-size:11.5px;color:#5a6070">{{ pl.name }}</span></div></sc-for>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:15px">
+                  <sc-for list="{{ viz.prodData }}" as="p" hint-placeholder-count="6">
+                    <div>
+                      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px"><span style="font-weight:500">{{ p.name }}</span><span style="color:#9aa0ae;font-family:'Space Mono';font-size:11px">复杂GVC {{ p.complex }}%</span></div>
+                      <div style="display:flex;height:22px;border-radius:6px;overflow:hidden;background:#f4f5f8">
+                        <sc-for list="{{ p.segs }}" as="sg" hint-placeholder-count="4"><div style="{{ sg.style }}"></div></sc-for>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <!-- LENGTH -->
+            <sc-if value="{{ isLengthChart }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#fff;border:1px solid #e7e9f0;border-radius:16px;padding:22px 24px">
+                <div style="display:flex;gap:14px;margin-bottom:18px"><div style="display:flex;align-items:center;gap:6px"><div style="width:11px;height:11px;border-radius:3px;background:#4b47e0"></div><span style="font-size:11.5px;color:#5a6070">国内生产段</span></div><div style="display:flex;align-items:center;gap:6px"><div style="width:11px;height:11px;border-radius:3px;background:#e0982a"></div><span style="font-size:11.5px;color:#5a6070">跨境生产段</span></div></div>
+                <div style="display:flex;flex-direction:column;gap:14px">
+                  <sc-for list="{{ viz.lengthData }}" as="l" hint-placeholder-count="6">
+                    <div style="display:flex;align-items:center;gap:12px">
+                      <div style="width:74px;font-size:12px;font-weight:500;text-align:right">{{ l.name }}</div>
+                      <div style="flex:1;display:flex;height:20px"><div style="{{ l.dom }}"></div><div style="{{ l.brd }}"></div></div>
+                      <div style="width:48px;font-family:'Space Grotesk';font-weight:600;font-size:13px;color:#3a4050">{{ l.total }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="margin-top:14px;font-size:11px;color:#a2a8b6">生产链平均长度 = 一单位最终品在跨国生产网络中经过的平均阶段数</div>
+              </div>
+            </sc-if>
+
+            <!-- NETWORK METRICS HEAT -->
+            <sc-if value="{{ isMetricHeat }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#fff;border:1px solid #e7e9f0;border-radius:16px;overflow:hidden">
+                <div style="display:flex;padding:12px 18px;background:#f7f8fb;border-bottom:1px solid #eef0f5;font-size:11px;color:#8a90a0;font-weight:500"><div style="flex:1">国家 / 地区</div><div style="width:150px;text-align:center">度中心性</div><div style="width:150px;text-align:center">介数中心性</div><div style="width:150px;text-align:center">特征向量中心性</div></div>
+                <sc-for list="{{ viz.heatData }}" as="h" hint-placeholder-count="8">
+                  <div style="display:flex;align-items:center;padding:9px 18px;border-bottom:1px solid #f4f5f8;font-size:12.5px">
+                    <div style="flex:1;font-weight:500">{{ h.name }}</div>
+                    <div style="width:150px;display:flex;justify-content:center"><div style="{{ h.c1 }}">{{ h.v1 }}</div></div>
+                    <div style="width:150px;display:flex;justify-content:center"><div style="{{ h.c2 }}">{{ h.v2 }}</div></div>
+                    <div style="width:150px;display:flex;justify-content:center"><div style="{{ h.c3 }}">{{ h.v3 }}</div></div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <!-- ===== LAB: REG DESIGN ===== -->
+          <sc-if value="{{ isRegDesign }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:13px;color:#6b7280;margin-bottom:18px">在开发回归模块前先对齐三件事,避免做完返工。你的选择会即时生成回归方程。</div>
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <sc-for list="{{ regDesign.groups }}" as="g" hint-placeholder-count="3">
+                <div style="background:#fff;border:1px solid #e7e9f0;border-radius:13px;padding:16px 18px">
+                  <div style="font-size:13px;font-weight:700;margin-bottom:3px">{{ g.title }}</div>
+                  <div style="font-size:11.5px;color:#8a90a0;margin-bottom:12px">{{ g.hint }}</div>
+                  <div style="display:flex;gap:9px;flex-wrap:wrap">
+                    <sc-for list="{{ g.opts }}" as="o" hint-placeholder-count="3"><div onClick="{{ o.onClick }}" style="{{ o.style }}">{{ o.label }}</div></sc-for>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:16px;background:#111827;border-radius:13px;padding:18px 20px">
+              <div style="font-size:11px;color:#8a90a0;font-weight:600;letter-spacing:.4px;margin-bottom:10px">生成的回归方程</div>
+              <div style="font-family:'Space Mono',monospace;font-size:13.5px;color:#c9d3ff;line-height:1.9">{{ regDesign.equation }}</div>
+            </div>
+          </sc-if>
+
+          <!-- ===== LAB: REGRESSION ===== -->
+          <sc-if value="{{ isRegression }}" hint-placeholder-val="{{ false }}">
+            <div style="background:#fff;border:1px solid #e7e9f0;border-radius:14px;padding:18px 20px;margin-bottom:16px">
+              <div style="font-size:11px;color:#8a90a0;font-weight:600;letter-spacing:.4px;margin-bottom:10px">模型设定</div>
+              <div style="font-family:'Space Mono',monospace;font-size:13px;color:#2a3040;background:#f7f8fb;border-radius:10px;padding:13px 15px;line-height:1.8">{{ regression.spec }}</div>
+              <div style="margin-top:10px;display:flex;gap:16px;font-size:11.5px;color:#8a90a0"><span>样本:面板 · 国家–行业–年份</span><span>估计:双向固定效应</span></div>
+              <button onClick="{{ regression.onRun }}" style="{{ regression.runBtnStyle }}" style-hover="filter:brightness(1.06)">{{ regression.runLabel }}</button>
+            </div>
+            <sc-if value="{{ regression.ran }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:16px;animation:dcfade .35s ease both">
+                <div style="flex:1;background:#fff;border:1px solid #e7e9f0;border-radius:14px;overflow:hidden">
+                  <div style="display:flex;padding:11px 18px;background:#f7f8fb;border-bottom:1px solid #eef0f5;font-size:11px;color:#8a90a0;font-weight:500"><div style="flex:1">变量</div><div style="width:88px;text-align:right">系数</div><div style="width:78px;text-align:right">标准误</div><div style="width:44px;text-align:center">显著</div></div>
+                  <sc-for list="{{ regression.coefs }}" as="c" hint-placeholder-count="5">
+                    <div style="display:flex;align-items:center;padding:11px 18px;border-bottom:1px solid #f4f5f8;font-size:12.5px">
+                      <div style="flex:1;{{ c.nameStyle }}">{{ c.name }}</div>
+                      <div style="width:88px;text-align:right;font-family:'Space Mono';font-weight:700;{{ c.estStyle }}">{{ c.est }}</div>
+                      <div style="width:78px;text-align:right;font-family:'Space Mono';color:#9aa0ae;font-size:11px">{{ c.se }}</div>
+                      <div style="width:44px;text-align:center;color:#f4693b;font-weight:700">{{ c.sig }}</div>
+                    </div>
+                  </sc-for>
+                  <div style="display:flex;padding:11px 18px;font-size:11px;color:#8a90a0;gap:18px"><span>N = {{ regression.n }}</span><span>R² = {{ regression.r2 }}</span><span>固定效应 ✓</span></div>
+                </div>
+                <div style="width:280px;flex:none;background:#fff;border:1px solid #e7e9f0;border-radius:14px;padding:16px 18px">
+                  <div style="font-size:12px;font-weight:700;margin-bottom:4px">系数图</div>
+                  <div style="font-size:10.5px;color:#a2a8b6;margin-bottom:16px">点=估计值 · 横线=95% 置信区间</div>
+                  <div style="position:relative;display:flex;flex-direction:column;gap:16px">
+                    <div style="position:absolute;left:50%;top:0;bottom:0;width:1px;background:#e0e3ea"></div>
+                    <sc-for list="{{ regression.coefs }}" as="c" hint-placeholder-count="5">
+                      <div>
+                        <div style="font-size:10.5px;color:#6b7280;margin-bottom:5px">{{ c.short }}</div>
+                        <div style="position:relative;height:12px"><div style="{{ c.ciStyle }}"></div><div style="{{ c.dotStyle }}"></div></div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <!-- ===== LAB: REPORT ===== -->
+          <sc-if value="{{ isReport }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:20px">
+              <div style="width:170px;flex:none">
+                <div style="font-size:11px;color:#8a90a0;font-weight:600;letter-spacing:.4px;margin-bottom:12px;padding-left:2px">报告目录</div>
+                <sc-for list="{{ report.toc }}" as="t" hint-placeholder-count="5"><div style="font-size:12px;color:#5a6070;padding:8px 10px;border-left:2px solid #e0e3ea;margin-bottom:2px">{{ t }}</div></sc-for>
+                <button style="margin-top:16px;width:100%;padding:11px;background:#4b47e0;color:#fff;border:none;border-radius:10px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit" style-hover="filter:brightness(1.06)">导出 PDF ↓</button>
+              </div>
+              <div style="flex:1;background:#fff;border:1px solid #e7e9f0;border-radius:14px;padding:38px 44px;box-shadow:0 4px 20px rgba(20,24,40,.05)">
+                <div style="font-size:11px;color:#a2a8b6;font-family:'Space Mono';letter-spacing:1px">实验报告 · 自动生成</div>
+                <div style="font-size:24px;font-weight:900;margin-top:8px;line-height:1.3">贸易政策冲击对全球价值链结构的影响 —— 基于 OECD ICIO 的实证分析</div>
+                <div style="display:flex;gap:16px;margin-top:12px;padding-bottom:20px;border-bottom:2px solid #1b1f2b;font-size:11.5px;color:#6b7280"><span>数据:OECD ICIO 2018</span><span>方法:双重差分</span><span>生成于 2026-07-03</span></div>
+                <sc-for list="{{ report.sections }}" as="s" hint-placeholder-count="4">
+                  <div style="margin-top:24px">
+                    <div style="font-size:15px;font-weight:700;margin-bottom:10px">{{ s.h }}</div>
+                    <sc-for list="{{ s.bullets }}" as="b" hint-placeholder-count="3"><div style="display:flex;gap:9px;margin-bottom:8px;font-size:12.5px;color:#3a4050;line-height:1.6"><span style="color:#4b47e0;flex:none">▪</span><span>{{ b }}</span></div></sc-for>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+
+            </div>
+          </div>
+          </div>
+        </div>
+
+        <!-- right rail: teaching -->
+        <aside style="width:328px;flex:none;background:#fff;border-left:1px solid #e7e9f0;overflow-y:auto;padding:22px 22px 32px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+            <div style="width:22px;height:22px;border-radius:7px;background:#edecfd;color:#4b47e0;display:flex;align-items:center;justify-content:center;font-size:12px">📌</div>
+            <div style="font-size:13px;font-weight:700">本步速览</div>
+          </div>
+
+          <!-- stage locator -->
+          <div style="background:linear-gradient(135deg,#4b47e0,#6d63f5);border-radius:12px;padding:14px 15px;margin-bottom:16px;color:#fff">
+            <div style="font-size:11px;opacity:.85;font-weight:500">{{ cur.stageLocator }}</div>
+            <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px">
+              <span style="font-family:'Space Grotesk';font-size:26px;font-weight:700;line-height:1">{{ cur.numPad }}</span>
+              <span style="font-size:12.5px;opacity:.9">/ 17 步</span>
+            </div>
+            <div style="font-size:11px;opacity:.85;margin-top:5px">{{ cur.stageStepLabel }}</div>
+          </div>
+
+          <!-- goal -->
+          <div style="margin-bottom:16px">
+            <div style="font-size:10.5px;color:#8a90a0;font-weight:600;letter-spacing:.3px;margin-bottom:8px">🎯 本步目标</div>
+            <div style="font-size:12.5px;color:#2a3040;line-height:1.7">{{ cur.goal }}</div>
+          </div>
+
+          <!-- key tip -->
+          <div style="display:flex;gap:9px;padding:13px 14px;background:#fff5ee;border:1px solid #f6d6bf;border-radius:11px;margin-bottom:16px">
+            <div style="font-size:14px;flex:none">💡</div>
+            <div style="font-size:11.5px;color:#a2551f;line-height:1.65"><b>关键提示 · </b>{{ cur.tip }}</div>
+          </div>
+
+          <!-- related data -->
+          <div style="margin-bottom:18px">
+            <div style="font-size:10.5px;color:#8a90a0;font-weight:600;letter-spacing:.3px;margin-bottom:8px">🔗 关联数据 / 依赖</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              <sc-for list="{{ cur.related }}" as="r" hint-placeholder-count="2"><span style="font-size:11px;color:#5a6070;background:#f2f3f7;border:1px solid #eaecf1;padding:4px 9px;border-radius:7px">{{ r }}</span></sc-for>
+            </div>
+          </div>
+
+          <!-- prev / next context -->
+          <div style="border-top:1px solid #eef0f5;padding-top:15px">
+            <div style="font-size:10.5px;color:#8a90a0;font-weight:600;letter-spacing:.3px;margin-bottom:10px">流程位置</div>
+            <sc-if value="{{ cur.hasPrev }}" hint-placeholder-val="{{ true }}">
+              <div onClick="{{ prev }}" style="display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:9px;cursor:pointer;margin-bottom:6px" style-hover="background:#f5f6fa">
+                <span style="font-size:11px;color:#b7bcc9;font-family:'Space Mono'">↑ 上一步</span>
+                <span style="font-size:12px;color:#5a6070;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ cur.prevTitle }}</span>
+              </div>
+            </sc-if>
+            <div style="display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:9px;background:#edecfd">
+              <span style="font-size:11px;color:#4b47e0;font-family:'Space Mono';font-weight:600">● 当前</span>
+              <span style="font-size:12px;color:#2c2a6b;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ cur.title }}</span>
+            </div>
+            <sc-if value="{{ cur.hasNext }}" hint-placeholder-val="{{ true }}">
+              <div onClick="{{ next }}" style="display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:9px;cursor:pointer;margin-top:6px" style-hover="background:#f5f6fa">
+                <span style="font-size:11px;color:#b7bcc9;font-family:'Space Mono'">↓ 下一步</span>
+                <span style="font-size:12px;color:#5a6070;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ cur.nextTitle }}</span>
+              </div>
+            </sc-if>
+          </div>
+        </aside>
+
+      </div>
+
+      <!-- footer nav -->
+      <div style="flex:none;height:52px;display:flex;align-items:center;padding:0 28px;background:#fff;border-top:1px solid #e7e9f0;gap:16px">
+        <div style="font-size:11.5px;color:#9aa0ae">{{ cur.stageName }} · {{ cur.title }}</div>
+        <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:5px">
+          <sc-for list="{{ dots }}" as="d" hint-placeholder-count="17"><div onClick="{{ d.onClick }}" style="{{ d.style }}"></div></sc-for>
+        </div>
+        <div style="font-size:11.5px;color:#9aa0ae">{{ cur.nextHint }}</div>
+      </div>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;edgeStyle&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;曲线&quot;,&quot;直线&quot;],&quot;default&quot;:&quot;曲线&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;网络图&quot;},&quot;nodeScale&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1,&quot;min&quot;:0.7,&quot;max&quot;:1.4,&quot;step&quot;:0.05,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;网络图&quot;},&quot;showLabels&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;网络图&quot;}}">
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    this.state = { current: 7, view: 'learn', open: {}, ran: {}, selectedDb: 'OECD ICIO', year: '2018',
+      tbl: { country:'全部', industry:'全部', year:'2018', page:1 },
+      rg: { gran:'国家–行业级', shock:'关税冲击', method:'双重差分 (DID)' } };
+    this.netRef = React.createRef();
+    this.tipRef = React.createRef();
+    this._netKey = null;
+
+    this.PAL = { 东亚:'#4b47e0', 北美:'#f4693b', 欧洲:'#159a86', 东南亚:'#e0982a', 其他:'#7c83a3' };
+
+    this.STEPS = [
+      {n:1,stage:1,lab:'db',title:'数据库介绍与选型',goal:'认识主流投入产出数据库,并为本次实验选定一个数据源。',concept:'投入产出表用一张矩阵描述“谁买了谁的东西”:行/列是产业部门,数值是部门间的中间投入。WIOD、OECD ICIO、Eora 在覆盖国家、行业细度和更新频率上各有权衡。',tip:'跨国价值链分析优先选 OECD ICIO —— 覆盖 77 国 45 行业,可用 pymrio 一键下载。',related:['OECD ICIO','WIOD','Eora MRIO']},
+      {n:2,stage:1,lab:'shock',title:'贸易政策冲击数据接入',goal:'接入关税、制裁、出口管制等政策冲击数据,作为回归的核心自变量。',concept:'投入产出表只能算出 GVC 指标(“果”),要研究“政策如何影响价值链”,必须补入外生的政策冲击数据作为“因”。',tip:'PIIE 中美关税追踪库已是 HS 编码级面板,并附带时间线,是最省事的选择。',related:['WTO','PIIE','GTA','OFAC/BIS']},
+      {n:3,stage:1,lab:'qc',title:'数据质检与清洗',goal:'对两类数据分别质检,并在国家–行业–年份维度上对齐。',concept:'开发中常见异常:某部门总产出为 0 导致里昂惕夫逆矩阵奇异、边界国家/行业的会计恒等式不成立。质检不通过会污染所有下游指标。',tip:'重点检查会计恒等式 与 (I−A)⁻¹ 的数学性质(非负、行和有界)。',related:['维度一致性','会计恒等式','缺失值检测']},
+      {n:4,stage:2,lab:'ind',title:'GVC 总贸易流分解指标',goal:'把一国的总出口分解为国内增加值、国外增加值与重复计算部分。',concept:'KWW 分解将毛出口拆成 DVA(国内增加值)、FVA(国外增加值)与纯重复计算,揭示出口里“真正属于本国”的比例。',tip:'FVA 份额高 → 后向 GVC 参与度高(如越南、卢森堡)。',related:['(I−A)⁻¹','毛出口矩阵']},
+      {n:5,stage:2,lab:'ind',title:'GVC 生产分解指标',goal:'把生产活动分解为纯国内、传统贸易、简单 GVC 与复杂 GVC。',concept:'按跨境次数区分:货物只过一次境是简单 GVC,多次往返是复杂 GVC。复杂 GVC 份额高说明深度嵌入全球生产网络。',tip:'复杂 GVC 对政策冲击最敏感,是回归的重点被解释变量。',related:['增加值分解','最终需求']},
+      {n:6,stage:2,lab:'ind',title:'GVC 长度分解指标',goal:'计算生产链的平均长度,以及其中的国内段与跨境段。',concept:'生产链长度 = 一单位最终品在生产网络中平均经过的阶段数。上游度衡量一个行业离最终消费有多远。',tip:'哈萨克斯坦、新加坡、中国的上游度较高 —— 多处于产业链上游。',related:['上游度','平均传播长度']},
+      {n:7,stage:2,lab:'ind',title:'全球生产网络指标',goal:'把投入产出表看作有向网络,计算各国的中心性指标。',concept:'度中心性=连接的多少;介数中心性=作为中转枢纽的重要性;特征向量中心性=与重要节点相连的程度。',tip:'德国、中国、美国通常是网络枢纽,介数中心性高。',related:['邻接矩阵','中心性算法']},
+      {n:8,stage:3,lab:'viz',title:'GVC 贸易流指标可视化',goal:'用交互式网络图直观呈现各国在全球价值链中的贸易关联。',concept:'节点=经济体(大小代表参与度),连线=双边贸易强度。悬停可高亮某国的所有关联,快速看出它的核心贸易伙伴与区域集群。',tip:'试着悬停中国与美国,观察各自的区域集群与跨区连接。',related:['贸易流矩阵','区域分组']},
+      {n:9,stage:3,lab:'viz',title:'GVC 生产指标可视化',goal:'用堆叠条形图对比各国生产活动的构成。',concept:'每根条按纯国内 / 传统贸易 / 简单 GVC / 复杂 GVC 分段,一眼看出哪些经济体更深地嵌入全球生产。',tip:'对比小型开放经济体(新加坡)与大型经济体(美国)的复杂 GVC 份额。',related:['生产分解结果']},
+      {n:10,stage:3,lab:'viz',title:'GVC 长度指标可视化',goal:'可视化各国生产链长度及其国内/跨境构成。',concept:'条形总长=生产链长度,颜色区分国内段与跨境段。跨境段越长,越依赖国际分工。',tip:'资源型经济体往往生产链更短、更靠上游。',related:['长度分解结果']},
+      {n:11,stage:3,lab:'viz',title:'网络指标可视化',goal:'用热力表对比各国的三类中心性指标。',concept:'颜色深浅编码中心性数值,快速识别谁是全球生产网络的枢纽、谁是边缘节点。',tip:'关注介数中心性突出的国家 —— 它们是供应链的“咽喉”。',related:['中心性矩阵']},
+      {n:12,stage:4,lab:'rgd',title:'回归设计确认',goal:'在建模前对齐分析粒度、冲击类型与因果推断方式。',concept:'提前书面确认三件事,避免开发完成后返工。粒度决定能否细到行业级;因果设计决定你能否说“政策导致了变化”而非仅仅相关。',tip:'若有精确的宣布/生效时间线,优先选 DID —— 能识别因果。',related:['回归粒度','识别策略']},
+      {n:13,stage:4,lab:'reg',title:'GVC 贸易流真实回归',goal:'检验政策冲击对国外增加值(FVA)份额的因果影响。',concept:'被解释变量为 FVA 份额,自变量为关税冲击,加入宏观控制与双向固定效应,排除混淆因素。',tip:'系数为负说明关税上升压低了对外部增加值的依赖 —— 供应链回流。',related:['FVA 份额','宏观控制变量']},
+      {n:14,stage:4,lab:'reg',title:'GVC 生产真实回归',goal:'检验政策冲击对复杂 GVC 生产份额的影响。',concept:'复杂 GVC 涉及多次跨境,对贸易成本上升最敏感,预期受政策冲击影响最大。',tip:'关注交互项:高参与度行业是否受冲击更强。',related:['复杂GVC份额']},
+      {n:15,stage:4,lab:'reg',title:'GVC 长度真实回归',goal:'检验政策冲击是否缩短了跨境生产链。',concept:'若关税提高使跨境段变短,说明企业在收缩全球分工、把生产环节搬回国内或邻近区域。',tip:'控制平减指数,避免把汇率/通胀误判成政策效应。',related:['生产链长度','平减指数']},
+      {n:16,stage:4,lab:'reg',title:'网络指标真实回归',goal:'检验政策冲击对一国网络中心性的影响。',concept:'看被制裁/加税的国家是否在生产网络中被边缘化(中心性下降),量化“脱钩”。',tip:'介数中心性下降往往先于贸易额下降 —— 是脱钩的早期信号。',related:['中心性','制裁清单']},
+      {n:17,stage:5,lab:'rep',title:'生成实验报告',goal:'自动汇总数据、指标、可视化与回归结果,产出完整实验报告。',concept:'形成“数据→指标→回归→报告”的闭环。报告串联全部步骤,可直接导出 PDF 作为课程作业提交。',tip:'检查结论是否与经济学直觉一致,再导出提交。',related:['全流程结果']},
+    ];
+    this.STAGE_NAMES = {1:'数据接入',2:'指标计算',3:'可视化分析',4:'回归设计与建模',5:'实验闭环'};
+    this.STAGE_ROMAN = {1:'一',2:'二',3:'三',4:'四',5:'五'};
+
+    // network data
+    this.NODES = [
+      {c:'CHN',name:'中国',r:'东亚',s:95},{c:'JPN',name:'日本',r:'东亚',s:70},{c:'KOR',name:'韩国',r:'东亚',s:62},
+      {c:'USA',name:'美国',r:'北美',s:90},{c:'CAN',name:'加拿大',r:'北美',s:48},{c:'MEX',name:'墨西哥',r:'北美',s:50},
+      {c:'DEU',name:'德国',r:'欧洲',s:80},{c:'FRA',name:'法国',r:'欧洲',s:52},{c:'NLD',name:'荷兰',r:'欧洲',s:55},{c:'ITA',name:'意大利',r:'欧洲',s:46},
+      {c:'VNM',name:'越南',r:'东南亚',s:44},{c:'SGP',name:'新加坡',r:'东南亚',s:58},{c:'MYS',name:'马来西亚',r:'东南亚',s:40},{c:'THA',name:'泰国',r:'东南亚',s:38},
+      {c:'RUS',name:'俄罗斯',r:'其他',s:42},{c:'SAU',name:'沙特',r:'其他',s:36},
+    ];
+    this.EDGES = [
+      ['CHN','USA',.95],['CHN','JPN',.7],['CHN','KOR',.72],['CHN','DEU',.6],['CHN','VNM',.65],['CHN','MYS',.5],['CHN','SGP',.55],['CHN','THA',.45],['CHN','RUS',.5],['CHN','SAU',.48],
+      ['USA','CAN',.8],['USA','MEX',.82],['USA','DEU',.55],['USA','JPN',.5],['USA','KOR',.45],
+      ['DEU','FRA',.78],['DEU','NLD',.7],['DEU','ITA',.6],['DEU','RUS',.4],
+      ['FRA','ITA',.5],['NLD','FRA',.4],
+      ['JPN','KOR',.55],['JPN','THA',.4],['KOR','VNM',.45],
+      ['SGP','MYS',.6],['SGP','THA',.5],['SGP','VNM',.48],['MYS','THA',.45],
+      ['SAU','JPN',.32],['SAU','KOR',.3],['MEX','CAN',.4],
+    ];
+
+    // ===== 教学文案(每步多个组件)=====
+    const C=(kicker,h,...paras)=>({t:'concept',kicker,h,paras});
+    const F=(tex,terms,note)=>({t:'formula',tex,terms,note});
+    const I=(h,items)=>({t:'intuition',h,items});
+    const P=(items,h)=>({t:'pitfall',h:h||'常见陷阱',items});
+    const S=(h,rows)=>({t:'sources',h,rows});
+    const T=(items)=>({t:'takeaway',items});
+    const Q=(items)=>({t:'selfcheck',items});
+    this.TEACH={
+      1:[
+        C('核心概念','什么是投入产出表',
+          '投入产出表(Input-Output Table)由里昂惕夫于 1930 年代提出,用一张矩阵刻画一个经济体中各部门"谁买了谁的东西"。矩阵每一行/列代表一个产业部门,数值表示部门 i 卖给部门 j 多少中间投入。',
+          '整张表分为三个象限:中间使用象限(部门之间互相消耗,如汽车厂购买钢铁)、最终使用象限(卖给消费、政府、出口、投资)、增加值象限(工资、利润、税收,不再进入下一轮生产)。'),
+        C('为何重要','投入产出表能做什么',
+          '① 产业关联分析:通过里昂惕夫逆矩阵 (I−A)⁻¹ 衡量一个行业变动对其他行业的完全拉动;② 乘数效应:一笔投资能带动多少 GDP 与就业;③ 环境核算:结合碳排放系数计算贸易隐含碳;④ 全球价值链:衡量一件最终品的增加值来自哪些国家与环节。'),
+        S('主流数据库对比',[
+          {name:'OECD ICIO',use:'跨国 GVC 分析首选',note:'77 国/地区 + ROW,45 行业,更新较频繁,可用 pymrio 自动下载 · 推荐'},
+          {name:'WIOD',use:'学术界常用,含环境账户',note:'43 国 56 行业,2000–2014,现托管于格罗宁根大学 GGDC'},
+          {name:'Eora MRIO',use:'覆盖面最广',note:'190 国,需注册,个人非商业用途通常免费'},
+          {name:'国家统计局 IO 表',use:'中国官方权威',note:'每 5 年一次(逢 2、7 年份),部门细,更新慢,官网不提供整表打包下载'},
+        ]),
+        P(['国家统计局官网只提供网页表格、无打包下载,抓取成本高;','WIOD 数据止于 2014 年,做近年分析需改用 OECD ICIO;','版本务必统一 —— 指标可比性依赖同一套行业分类与年份口径。'],'选型注意'),
+        T(['投入产出表 = 用矩阵描述部门间中间投入的会计框架;','跨国 GVC 分析优先 OECD ICIO,可 pymrio 一键下载;','选型三看:覆盖范围、行业细度、更新频率。']),
+        Q([
+          {q:'里昂惕夫逆矩阵 (I−A)⁻¹ 衡量的是什么?',a:'完全消耗系数 —— 某行业最终需求变动对全部行业产出的直接 + 间接总拉动效果。'},
+          {q:'为什么本项目选 OECD ICIO 而非 WIOD?',a:'WIOD 数据止于 2014 年;ICIO 覆盖 77 国、更新更近,且可用 pymrio 自动下载解析,更适合近年跨国分析。'},
+        ]),
+      ],
+      2:[
+        C('核心概念','为什么要接入政策冲击数据',
+          '投入产出表只能算出 GVC 指标本身(研究里的"果")。要回答"贸易政策如何影响价值链",必须补入外生的政策冲击数据作为自变量(研究里的"因")。缺了它,步骤 12–16 的回归完全无从谈起 —— 系统会缺"因"。'),
+        S('冲击数据来源',[
+          {name:'WTO Tariff Download Facility',use:'关税税率 · 全球',note:'官方权威,覆盖全球,检索体验一般'},
+          {name:'PIIE 中美关税追踪库',use:'中美关税 · HS 级面板',note:'已整理成 HS 编码级面板数据,自带时间线,学界最常用 · 优先推荐'},
+          {name:'Global Trade Alert (GTA)',use:'非关税措施',note:'覆盖反倾销、出口限制、补贴等保护主义措施'},
+          {name:'OFAC SDN · BIS 实体清单',use:'制裁 / 出口管制',note:'研究"卡脖子"类政策冲击的场景使用'},
+        ]),
+        P(['关税用 HS 商品编码,IO 表用 ISIC/ICIO 行业分类,两者非一一对应,需人工核对映射表;','部分商品横跨多个行业,需制定分摊规则 —— 这是全系统最容易被低估工作量的一环。'],'最容易低估的工作量'),
+        T(['政策冲击数据是回归的核心自变量;','优先 PIIE 库 —— HS 级面板 + 自带宣布/生效时间线;','HS↔ICIO 行业映射工作量务必在排期时单独评估。']),
+        Q([{q:'为什么说投入产出库只是系统的"一半"?',a:'它只能提供 GVC 指标(果);回归还需政策冲击(因)、行业映射、控制变量、平减指数、事件时间线等外部数据。'}]),
+      ],
+      3:[
+        C('核心概念','数据质检为什么不可跳过',
+          '开发中真实遇到过两类异常:某部门总产出为 0,导致里昂惕夫逆矩阵 (I−A)⁻¹ 奇异、无法求解;边界国家/行业的会计恒等式不成立。质检不通过,后面所有指标都会被静默污染 —— 不报错,但结果全错。'),
+        C('质检做什么','两类数据 + 维度对齐',
+          '对 IO 数据库检查:维度一致性、缺失值/负值、会计恒等式、逆矩阵数学性质(非负、行和有界)、国家/行业覆盖范围;对冲击数据检查税率范围合理性;最后在"国家–行业–年份"三个维度上把两类数据严格对齐。'),
+        P(['总产出为 0 → 矩阵奇异,须先剔除或修正;','会计恒等式(投入 = 产出)不成立 → 数据源解析错误的信号;','两类数据维度不对齐 → merge 后大量缺失,回归样本骤减。']),
+        T(['质检是"垃圾进、垃圾出"的第一道闸;','重点盯会计恒等式与逆矩阵数学性质;','两类数据口径统一到国家–行业–年份。']),
+      ],
+      4:[
+        C('核心概念','把毛出口拆开看',
+          '一国的毛出口并非全是本国创造的价值。KWW 分解(Koopman–Wang–Wei)把毛出口拆成三块:国内增加值 DVA、国外增加值 FVA、以及跨境往返造成的纯重复计算 PDC,揭示"出口中真正属于本国"的比例。'),
+        F('E = DVA + FVA + PDC',[
+          {sym:'E',def:'毛出口 —— 海关口径的出口总额'},
+          {sym:'DVA',def:'国内增加值 —— 出口中本国创造的部分'},
+          {sym:'FVA',def:'国外增加值 —— 来自进口中间品的部分'},
+          {sym:'PDC',def:'纯重复计算 —— 跨境往返被多次统计的部分'},
+        ],'核心工具仍是里昂惕夫逆矩阵 (I−A)⁻¹,用它追溯每一单位出口背后的增加值来源。'),
+        I('经济学直觉:谁的 FVA 高?',[
+          {k:'越南 / 卢森堡 / 斯洛伐克',v:'FVA 份额高 → 大量进口中间品再加工出口,后向 GVC 参与度高'},
+          {k:'美国 / 中国等大型经济体',v:'国内产业链完整,DVA 占比高,FVA 相对低'},
+        ]),
+        Q([{q:'FVA 份额高说明一国处于价值链的什么位置?',a:'后向参与度高 —— 依赖进口中间品,通常位于组装/下游环节。'}]),
+      ],
+      5:[
+        C('核心概念','按跨境次数给生产分类',
+          '把生产活动按货物跨境的次数分成四类:纯国内(不跨境)、传统贸易(最终品跨一次境)、简单 GVC(中间品跨一次境)、复杂 GVC(中间品多次往返跨境)。复杂 GVC 份额越高,代表越深地嵌入全球生产网络。'),
+        F('生产 = 纯国内 + 传统贸易 + 简单GVC + 复杂GVC',[
+          {sym:'简单 GVC',def:'中间品跨境一次即被最终吸收'},
+          {sym:'复杂 GVC',def:'中间品多次跨境往返,涉及多国分工'},
+        ],'复杂 GVC 对贸易成本最敏感,是后续回归最重要的被解释变量之一。'),
+        I('经济学直觉',[
+          {k:'新加坡 / 德国 / 韩国',v:'复杂 GVC 份额高,深度参与多国分工'},
+          {k:'沙特 / 资源型经济',v:'以纯国内、初级出口为主,复杂 GVC 份额低'},
+        ]),
+        T(['四分类的关键是"货物跨境次数";','复杂 GVC = 全球分工深度的代理指标;','它对政策冲击最敏感。']),
+      ],
+      6:[
+        C('核心概念','生产链有多长?',
+          '生产链长度衡量一单位最终品在跨国生产网络中平均经过多少个阶段。相关的"上游度"(Upstreamness)衡量一个行业离最终消费有多远 —— 越上游,越偏原材料与初级加工。'),
+        F('PL = [ V (I − A)⁻¹ ] / V',[
+          {sym:'V',def:'增加值向量'},
+          {sym:'(I−A)⁻¹',def:'里昂惕夫逆矩阵,捕捉全部间接环节'},
+          {sym:'PL',def:'平均传播长度 = 生产链长度'},
+        ],'再把链长拆成国内段与跨境段:跨境段越长,越依赖国际分工。'),
+        I('经济学直觉',[
+          {k:'哈萨克斯坦 / 新加坡 / 中国',v:'上游度高,多处于产业链上游'},
+          {k:'资源型经济体',v:'生产链更短、更靠上游(直接出口原料)'},
+        ]),
+        Q([{q:'"上游度高"意味着什么?',a:'该行业离最终消费者较远,主要为下游行业提供中间投入(如采矿、基础化工)。'}]),
+      ],
+      7:[
+        C('核心概念','把 IO 表当成一张网络',
+          '把投入产出表视为有向网络:节点是国家×行业,边是中间品贸易流。这样就能用网络科学的中心性指标,量化每个经济体在全球生产网络中的地位。'),
+        F('三类中心性',[
+          {sym:'度中心性',def:'直接连接的多少 —— 贸易伙伴数量与强度'},
+          {sym:'介数中心性',def:'作为中转枢纽被"必经"的程度'},
+          {sym:'特征向量',def:'与重要节点相连的程度(与强者为邻更重要)'},
+        ],'介数中心性尤其关键:它高的国家是供应链的"咽喉",一旦中断,影响面最大。'),
+        I('经济学直觉',[
+          {k:'德国 / 中国 / 美国',v:'三大枢纽,度与介数中心性均高'},
+          {k:'沙特等资源国',v:'连接较少,处于网络边缘'},
+        ]),
+      ],
+      8:[
+        C('如何读这张图','GVC 贸易流网络图',
+          '这是本系统的核心可视化。节点代表经济体,大小编码 GVC 参与度;连线代表双边贸易强度,越粗越强;颜色区分区域集群。悬停任一节点,会高亮它的全部贸易关联,快速看清核心伙伴与区域抱团。'),
+        T(['先看节点大小 → 谁是参与度最高的经济体;','再看连线粗细 → 谁与谁的贸易最紧密;','悬停中国、美国 → 对比各自的区域集群与跨区连接;','看颜色抱团 → 识别东亚、北美、欧洲三大板块。']),
+        Q([{q:'为什么中、美、德的节点最大、连线最密?',a:'它们 GVC 参与度最高、贸易伙伴最多,是全球生产网络的三大枢纽。'}]),
+      ],
+      9:[
+        C('如何读这张图','生产构成堆叠图',
+          '每根横条代表一个经济体,按纯国内 / 传统贸易 / 简单 GVC / 复杂 GVC 四段拼接。深色段(复杂 GVC)越长,说明该经济体越深地嵌入全球分工。'),
+        T(['对比小型开放经济体(新加坡)与大型经济体(美国)的复杂 GVC 份额;','纯国内段长 → 内循环为主;','复杂 GVC 段长 → 高度国际分工。']),
+      ],
+      10:[
+        C('如何读这张图','生产链长度条形图',
+          '条形总长 = 生产链长度;蓝色为国内段,橙色为跨境段。跨境段占比越高,越依赖国际分工;总长越长,链条环节越多、越易被中断放大。'),
+        T(['跨境段(橙)越长 → 国际依赖越深;','资源型经济体往往更短、更靠上游;','链条越长,牛鞭效应与中断放大越明显。']),
+      ],
+      11:[
+        C('如何读这张图','中心性热力表',
+          '三列分别是度、介数、特征向量中心性,颜色越深数值越高。横向扫一行看某国的综合枢纽地位,纵向扫一列找单项冠军。'),
+        T(['介数中心性突出的国家是供应链"咽喉";','三列都深 → 全方位枢纽(德、中、美);','颜色浅 → 网络边缘,较易被替代。']),
+      ],
+      12:[
+        C('核心概念','动手回归前先对齐三件事',
+          '在开发回归模块前,提前书面确认三件事,避免做完返工:① 分析粒度(国家级还是国家–行业级);② 冲击类型(关税 / 制裁 / 出口管制);③ 因果推断方式(相关、固定效应还是 DID)。右侧实验台会随你的选择即时生成回归方程。'),
+        P(['反向因果:GVC 参与度高的行业本就更容易被列为关税目标,须用时间线/DID 切断;','预期效应:企业常在政策生效前就提前调整供应链,只看生效日会低估效应。'],'两个致命陷阱'),
+        Q([{q:'为什么有精确时间线才能做 DID?',a:'DID 需要明确的"处理前/后"与处理组划分,依赖宣布日与生效日;没有时间线只能做相关性分析。'}]),
+        T(['粒度决定能否细到行业级;','因果设计决定能否说"导致"而非仅"相关";','有精确时间线时优先 DID。']),
+      ],
+      13:[
+        C('研究问题','关税冲击是否压低了 FVA 份额?',
+          '被解释变量是国外增加值 FVA 份额,自变量是关税冲击,加入宏观控制与双向固定效应。系数为负,说明关税上升降低了对外部增加值的依赖 —— 供应链回流的证据。'),
+        F('FVA_share = β·Tariff + γ·X + αᵢ + δₜ + ε',[
+          {sym:'β',def:'关税冲击的因果效应(关注符号与显著性)'},
+          {sym:'X',def:'宏观控制变量:GDP、双边距离、FDI、汇率'},
+          {sym:'αᵢ / δₜ',def:'国家、年份双向固定效应'},
+        ],''),
+        C('怎么读结果','系数图与显著性',
+          '系数表看符号、大小与显著性星号(*** / ** / *);系数图里点是估计值,横线是 95% 置信区间 —— 区间不跨过 0 才显著。红点落在 0 左侧代表负向效应。'),
+      ],
+      14:[
+        C('研究问题','冲击对复杂 GVC 生产的影响',
+          '复杂 GVC 涉及多次跨境,对贸易成本上升最敏感,预期受冲击最大。重点看"关税 × 高参与度"交互项:高度嵌入全球分工的行业是否受创更深。'),
+        F('ComplexGVC = β·Tariff + β₂·(Tariff×高参与) + γ·X + αᵢ + δₜ',[
+          {sym:'β₂',def:'交互项 —— 高参与行业的额外冲击效应'},
+        ],''),
+        T(['复杂 GVC 对冲击最敏感;','看交互项判断异质性;','负系数 = 全球分工收缩。']),
+      ],
+      15:[
+        C('研究问题','冲击是否缩短了跨境生产链',
+          '若关税提高使跨境段变短,说明企业在收缩全球分工、把环节搬回国内或邻近区域(近岸 / 回流)。务必控制平减指数,别把汇率/通胀误判成政策效应。'),
+        F('ChainLength = β·Tariff + γ·X + αᵢ + δₜ',[
+          {sym:'ChainLength',def:'生产链长度(可分国内段 / 跨境段)'},
+          {sym:'X',def:'含平减指数,隔离名义值波动'},
+        ],''),
+        P(['不做平减 → 名义值波动会污染跨年比较;','链长受多因素影响,固定效应帮助隔离政策冲击。']),
+      ],
+      16:[
+        C('研究问题','制裁是否让一国被网络边缘化',
+          '看被制裁/加税的国家是否在生产网络中中心性下降,以此量化"脱钩"。介数中心性下降往往先于贸易额下降,是脱钩的早期信号。'),
+        F('Centrality = β·Sanction + γ·X + αᵢ + δₜ',[
+          {sym:'Sanction',def:'制裁冲击(0/1 或强度)'},
+          {sym:'Centrality',def:'度 / 介数 / 特征向量中心性'},
+        ],''),
+        T(['中心性下降 = 被边缘化 / 脱钩;','介数中心性下降是早期信号;','结合制裁清单解释机制。']),
+      ],
+      17:[
+        C('核心概念','闭环:数据 → 指标 → 回归 → 报告',
+          '最后一步把全流程串起来,自动汇总数据来源、质检、指标、可视化与回归结果,生成结构化实验报告,可直接导出 PDF 作为课程作业提交。'),
+        T(['检查结论是否与经济学直觉一致再导出;','报告应交代数据局限(HS↔ICIO 映射、事件时间线);','完整闭环 = 一个可复现的研究故事。']),
+        Q([{q:'一份合格的实验报告至少应包含哪几部分?',a:'数据来源与质检、GVC 指标概览、可视化发现、回归结果、结论与局限。'}]),
+      ],
+    };
+
+    // ===== 面板数据表(阶段二 步骤4-7)=====
+    this.TBL_COUNTRIES=['澳大利亚','中国','美国','德国','日本','韩国','越南','新加坡','法国','荷兰','意大利','印度','巴西','加拿大','墨西哥'];
+    this.TBL_CSIZE={澳大利亚:0.9,中国:3.0,美国:2.8,德国:1.6,日本:1.5,韩国:1.0,越南:0.55,新加坡:0.7,法国:1.2,荷兰:0.85,意大利:1.0,印度:1.35,巴西:1.0,加拿大:0.9,墨西哥:0.8};
+    this.TBL_INDUSTRIES=['农业、狩猎与林业','渔业与水产养殖','能源矿产品采矿业','非能源矿产品采矿业','采矿支持服务','食品、饮料和烟草','纺织品、服装、皮革和鞋类','木材及木制品','化学品与化工制品','基础金属制品','计算机、电子及光学设备','电气设备','机械设备','汽车及运输设备','建筑业'];
+    this.TBL_IWEIGHT={'农业、狩猎与林业':0.5,'渔业与水产养殖':0.15,'能源矿产品采矿业':1.2,'非能源矿产品采矿业':0.9,'采矿支持服务':0.2,'食品、饮料和烟草':0.7,'纺织品、服装、皮革和鞋类':0.4,'木材及木制品':0.3,'化学品与化工制品':1.1,'基础金属制品':0.8,'计算机、电子及光学设备':1.3,'电气设备':0.9,'机械设备':1.0,'汽车及运输设备':1.2,'建筑业':1.0};
+    this.TBL_TITLES={
+      4:{title:'GVC 总贸易流分解指标数据',formula:'E = DVA + FVA + PDC   ,   (I − A)⁻¹',desc:'把毛出口分解为国内增加值 DVA、国外增加值 FVA 与纯重复计算 PDC。',
+         subtitle:'国家-部门-年份的总贸易流分解结果;核心指标由 (I−A)⁻¹ 追溯每单位出口的增加值来源;可按国家、行业、年份查看并导出。',
+         cols:[{k:'exp',label:'毛出口',t:'num'},{k:'dva',label:'国内增加值 DVA',t:'num'},{k:'fva',label:'国外增加值 FVA',t:'num'},{k:'pdc',label:'纯重复计算 PDC',t:'num'},{k:'fvash',label:'FVA 份额 %',t:'pct'}]},
+      5:{title:'GVC 生产分解指标数据',formula:'生产 = 纯国内 + 传统贸易 + 简单GVC + 复杂GVC',desc:'按货物跨境次数把生产活动分解为四类。',
+         subtitle:'国家-部门-年份的生产分解指标计算结果;核心指标来自 OECD-ICIO 2018 专业计算;表格可按国家、行业和年份查看并支持下载。',
+         cols:[{k:'tot',label:'总增加值',t:'num'},{k:'dom',label:'纯国内增加值',t:'num'},{k:'trad',label:'传统贸易增加值',t:'num'},{k:'gvc',label:'GVC 生产活动',t:'num'},{k:'simp',label:'简单 GVC 增加值',t:'num'},{k:'cplx',label:'复杂 GVC 增加值',t:'num'},{k:'cplxsh',label:'复杂 GVC 份额 %',t:'pct'}]},
+      6:{title:'GVC 长度分解指标数据',formula:'PL = [ V (I − A)⁻¹ ] / V   (平均传播长度)',desc:'计算生产链平均长度及其国内段、跨境段与上游度。',
+         subtitle:'国家-部门-年份的生产链长度分解结果;链长拆分为国内段与跨境段;可按国家、行业、年份查看并导出。',
+         cols:[{k:'len',label:'生产链长度',t:'dec'},{k:'domlen',label:'国内段长度',t:'dec'},{k:'brdlen',label:'跨境段长度',t:'dec'},{k:'up',label:'上游度',t:'dec'},{k:'down',label:'下游度',t:'dec'}]},
+      7:{title:'全球生产网络指标数据',formula:'C = f(邻接矩阵 W)   度 / 介数 / 特征向量',desc:'把 IO 表当作有向网络,计算各节点的中心性指标。',
+         subtitle:'国家-部门-年份的网络中心性指标;基于中间品贸易流构建的有向网络计算;可按国家、行业、年份查看并导出。',
+         cols:[{k:'deg',label:'度中心性',t:'dec3'},{k:'wdeg',label:'加权度',t:'dec3'},{k:'betw',label:'介数中心性',t:'dec3'},{k:'clo',label:'接近中心性',t:'dec3'},{k:'eig',label:'特征向量中心性',t:'dec3'}]},
+    };
+  }
+
+  componentDidMount(){ this.buildNet(); }
+  componentDidUpdate(){ this.buildNet(); }
+
+  goTo(i){ if(i<0||i>16) return; this.setState({current:i, view:'learn'}); }
+  run(k){ this.setState(s=>({ran:{...s.ran,[k]:true}})); }
+  setView(v){ this.setState({view:v}); }
+  toggleOpen(k){ this.setState(s=>({open:{...s.open,[k]:!s.open[k]}})); }
+  tblSet(patch){ this.setState(s=>({tbl:{...s.tbl,...patch}})); }
+  cycle(arr,cur,delta){ const i=arr.indexOf(cur); const n=(i+delta+arr.length)%arr.length; return arr[n]; }
+  rand(seed){ let h=2166136261; for(let i=0;i<seed.length;i++){ h^=seed.charCodeAt(i); h=Math.imul(h,16777619);} h=(h>>>0); return (h%100000)/100000; }
+  fmt(v,t){ if(t==='pct') return v.toFixed(1); if(t==='dec') return v.toFixed(2); if(t==='dec3') return v.toFixed(3); return v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  buildTblRows(stepN,year){
+    const rows=[];
+    this.TBL_COUNTRIES.forEach(c=>{ this.TBL_INDUSTRIES.forEach(ind=>{
+      const base=this.TBL_CSIZE[c]*this.TBL_IWEIGHT[ind]*10000*(0.6+this.rand(c+ind+'b')*0.9);
+      const yr=year==='2015'?0.92:(year==='2020'?1.08:1);
+      const r={country:c,industry:ind,year,_v:{}}; const R=(k)=>this.rand(c+ind+year+k);
+      if(stepN===4){ const exp=base*(0.35+R('e')*0.4)*yr; const fvash=(0.12+R('f')*0.45);
+        const fva=exp*fvash; const pdc=exp*(0.02+R('p')*0.06); const dva=exp-fva-pdc; r._v={exp,dva,fva,pdc,fvash:fvash*100};
+      } else if(stepN===5){ const tot=base*yr; let a=0.3+R('d')*0.35,b=0.1+R('t')*0.15,cc=0.08+R('s')*0.12,dd=0.06+R('c')*0.18;
+        const sum=a+b+cc+dd; a/=sum;b/=sum;cc/=sum;dd/=sum; const dom=tot*a,trad=tot*b,simp=tot*cc,cplx=tot*dd,gvc=simp+cplx; r._v={tot,dom,trad,gvc,simp,cplx,cplxsh:dd*100};
+      } else if(stepN===6){ const len=2+R('l')*2; const domFrac=0.5+R('df')*0.3; const domlen=len*domFrac,brdlen=len-domlen; const up=1.8+R('u')*1.7,down=1.5+R('dn')*1.5; r._v={len,domlen,brdlen,up,down};
+      } else { const deg=this.TBL_CSIZE[c]/3.0*(0.5+R('dg')*0.5); const wdeg=deg*(0.7+R('w')*0.5); const betw=deg*(0.4+R('b')*0.6)*0.9; const clo=0.3+R('cl')*0.6; const eig=deg*(0.6+R('eg')*0.5); r._v={deg:Math.min(1,deg),wdeg:Math.min(1,wdeg),betw:Math.min(1,betw),clo:Math.min(1,clo),eig:Math.min(1,eig)}; }
+      rows.push(r);
+    }); });
+    return rows;
+  }
+
+  buildNet(){
+    if(this.state.current!==7 || !this.netRef.current){ this._netKey=null; return; }
+    const edgeStyle = this.props.edgeStyle || '曲线';
+    const nodeScale = this.props.nodeScale ?? 1;
+    const showLabels = this.props.showLabels ?? true;
+    const key = edgeStyle+'|'+nodeScale+'|'+showLabels;
+    if(this._netKey===key) return;
+    this._netKey = key;
+
+    const W=960,H=560,cx=W/2,cy=H/2+6;
+    const regions=['东亚','北美','欧洲','东南亚','其他'];
+    const anchors={};
+    regions.forEach((rg,i)=>{ const a=-Math.PI/2 + i*(2*Math.PI/5); anchors[rg]={x:cx+Math.cos(a)*225,y:cy+Math.sin(a)*175}; });
+    const pos={};
+    regions.forEach(rg=>{
+      const list=this.NODES.filter(n=>n.r===rg); const A=anchors[rg];
+      list.forEach((n,j)=>{ const a=(j/Math.max(1,list.length))*2*Math.PI - Math.PI/2; const rad=list.length===1?0:58; pos[n.c]={x:A.x+Math.cos(a)*rad,y:A.y+Math.sin(a)*rad}; });
+    });
+    const nodeMap={}; this.NODES.forEach(n=>nodeMap[n.c]=n);
+    const adj={}; this.NODES.forEach(n=>adj[n.c]=new Set());
+    this.EDGES.forEach(([a,b])=>{ adj[a].add(b); adj[b].add(a); });
+
+    let edgeSvg='';
+    this.EDGES.forEach(([a,b,w])=>{
+      const p1=pos[a],p2=pos[b]; if(!p1||!p2) return;
+      const col=this.PAL[nodeMap[a].s>=nodeMap[b].s?nodeMap[a].r:nodeMap[b].r];
+      let d;
+      if(edgeStyle==='直线'){ d=`M${p1.x} ${p1.y} L${p2.x} ${p2.y}`; }
+      else { const mx=(p1.x+p2.x)/2,my=(p1.y+p2.y)/2; const dx=p2.x-p1.x,dy=p2.y-p1.y; const off=Math.hypot(dx,dy)*0.14; const nx=-dy,ny=dx; const nl=Math.hypot(nx,ny)||1; d=`M${p1.x} ${p1.y} Q${mx+nx/nl*off} ${my+ny/nl*off} ${p2.x} ${p2.y}`; }
+      edgeSvg+=`<path class="netedge" data-a="${a}" data-b="${b}" d="${d}" fill="none" stroke="${col}" stroke-opacity="${0.1+w*0.22}" stroke-width="${0.8+w*2.6}" stroke-linecap="round"></path>`;
+    });
+
+    let nodeSvg='';
+    this.NODES.forEach(n=>{
+      const p=pos[n.c]; const rad=(9+n.s/100*20)*nodeScale; const col=this.PAL[n.r];
+      nodeSvg+=`<g class="netnode" data-c="${n.c}" transform="translate(${p.x} ${p.y})">
+        <circle r="${rad+6}" fill="${col}" fill-opacity="0.13"></circle>
+        <circle class="ncore" r="${rad}" fill="${col}" stroke="#fff" stroke-width="2.5"></circle>
+        <text class="nlabel" y="${rad+15}" text-anchor="middle" font-family="Noto Sans SC,sans-serif" font-size="12" font-weight="500" fill="#3a4050" style="display:${showLabels?'block':'none'};pointer-events:none">${n.name}</text>
+      </g>`;
+    });
+
+    this.netRef.current.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="xMidYMid meet" style="display:block;width:100%;height:auto">
+      <g>${edgeSvg}</g><g>${nodeSvg}</g></svg>`;
+
+    const tip=this.tipRef.current;
+    const paths=[...this.netRef.current.querySelectorAll('.netedge')];
+    const nodes=[...this.netRef.current.querySelectorAll('.netnode')];
+    const reset=()=>{
+      paths.forEach(p=>{ p.style.opacity='1'; });
+      nodes.forEach(g=>{ g.style.opacity='1'; const t=g.querySelector('.nlabel'); if(t) t.style.display=showLabels?'block':'none'; });
+      if(tip) tip.style.opacity='0';
+    };
+    nodes.forEach(g=>{
+      const c=g.getAttribute('data-c'); const nd=nodeMap[c];
+      g.addEventListener('mouseenter',()=>{
+        paths.forEach(p=>{ const inc=p.getAttribute('data-a')===c||p.getAttribute('data-b')===c; p.style.opacity=inc?'1':'0.06'; });
+        nodes.forEach(g2=>{ const c2=g2.getAttribute('data-c'); const on=c2===c||adj[c].has(c2); g2.style.opacity=on?'1':'0.22'; const t=g2.querySelector('.nlabel'); if(t) t.style.display=on?'block':'none'; });
+        if(tip){ const partners=[...adj[c]].map(x=>nodeMap[x].name).slice(0,4).join('、');
+          tip.innerHTML=`<div style="font-weight:700;font-size:13px;margin-bottom:4px">${nd.name} <span style="color:#8a90a0;font-family:'Space Mono';font-size:10px">${nd.c}</span></div><div style="color:#c8ccd6">区域 · ${nd.r}</div><div style="color:#c8ccd6">GVC 参与度 · <b style="color:#fff">${nd.s}</b></div><div style="color:#c8ccd6">主要伙伴 · ${partners}</div>`;
+          tip.style.opacity='1'; }
+      });
+      g.addEventListener('mousemove',e=>{ if(!tip) return; const box=this.netRef.current.getBoundingClientRect(); let x=e.clientX-box.left+16,y=e.clientY-box.top+14; if(x>box.width-180)x=e.clientX-box.left-176; tip.style.left=x+'px'; tip.style.top=y+'px'; });
+      g.addEventListener('mouseleave',reset);
+    });
+  }
+
+  renderVals(){
+    const cur=this.STEPS[this.state.current];
+    const done=this.state.current;
+    // stages
+    const stages=[1,2,3,4,5].map(sn=>{
+      const steps=this.STEPS.filter(s=>s.stage===sn).map(s=>{
+        const idx=s.n-1; const status=idx<this.state.current?'done':(idx===this.state.current?'current':'todo');
+        const rowStyle= status==='current'
+          ? 'display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:9px;cursor:pointer;background:#edecfd;box-shadow:inset 2px 0 0 #4b47e0;margin:2px 0'
+          : 'display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:9px;cursor:pointer;margin:2px 0';
+        const badgeStyle= status==='done'
+          ? 'flex:none;width:20px;height:20px;border-radius:50%;background:#12a150;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700'
+          : status==='current'
+          ? 'flex:none;width:20px;height:20px;border-radius:50%;background:#4b47e0;color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-family:Space Grotesk;box-shadow:0 0 0 4px #ded9fb'
+          : 'flex:none;width:20px;height:20px;border-radius:50%;background:#eef0f5;color:#a2a8b6;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-family:Space Grotesk';
+        const titleStyle= status==='current'
+          ? 'font-size:12.5px;font-weight:600;color:#2c2a6b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
+          : status==='done'
+          ? 'font-size:12.5px;color:#5a6070;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'
+          : 'font-size:12.5px;color:#9aa0ae;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+        return {title:s.title,code:String(s.n).padStart(2,'0'),rowStyle,badgeStyle,titleStyle,badgeChar:status==='done'?'✓':String(s.n),onClick:()=>this.goTo(idx)};
+      });
+      return {roman:this.STAGE_ROMAN[sn],name:this.STAGE_NAMES[sn],steps};
+    });
+
+    const pct=Math.round(done/17*100);
+    const progress={done,total:17,barStyle:`height:100%;width:${Math.max(3,pct)}%;background:linear-gradient(90deg,#4b47e0,#7a6bff);border-radius:99px;transition:width .4s`};
+
+    const dots=this.STEPS.map((s,i)=>{
+      const on=i===this.state.current, past=i<this.state.current;
+      return {onClick:()=>this.goTo(i),style:`width:${on?'22px':'7px'};height:7px;border-radius:99px;cursor:pointer;transition:all .25s;background:${on?'#4b47e0':(past?'#b6b1f2':'#dfe2ea')}`};
+    });
+
+    const stageSteps=this.STEPS.filter(s=>s.stage===cur.stage);
+    const stageIdx=stageSteps.findIndex(s=>s.n===cur.n)+1;
+    const curVM={ n:cur.n, numPad:String(cur.n).padStart(2,'0'), title:cur.title, goal:cur.goal, concept:cur.concept, tip:cur.tip, related:cur.related,
+      stageName:this.STAGE_NAMES[cur.stage],
+      stageLocator:'阶段'+this.STAGE_ROMAN[cur.stage]+' · '+this.STAGE_NAMES[cur.stage],
+      stageStepLabel:'本阶段第 '+stageIdx+' / '+stageSteps.length+' 步',
+      prevTitle:this.state.current>0?this.STEPS[this.state.current-1].title:'—',
+      nextTitle:this.state.current<16?this.STEPS[this.state.current+1].title:'—',
+      hasPrev:this.state.current>0, hasNext:this.state.current<16,
+      nextHint:this.state.current<16?('下一步 · '+this.STEPS[this.state.current+1].title):'已到最后一步',
+      stageChipStyle:'font-size:11px;font-weight:600;color:#4b47e0;background:#edecfd;padding:3px 10px;border-radius:99px' };
+
+    const prevBtnStyle='padding:8px 14px;border:1px solid #e0e3ea;background:#fff;border-radius:9px;font-size:12.5px;color:#5a6070;cursor:'+(this.state.current>0?'pointer':'not-allowed')+';font-family:inherit;opacity:'+(this.state.current>0?'1':'.45');
+    const nextBtnStyle='padding:8px 16px;border:none;background:#4b47e0;color:#fff;border-radius:9px;font-size:12.5px;font-weight:600;cursor:'+(this.state.current<16?'pointer':'not-allowed')+';font-family:inherit;opacity:'+(this.state.current<16?'1':'.45');
+
+    const V={ stages, progress, dots, cur:curVM, prevBtnStyle, nextBtnStyle,
+      courseName:'国际经济学 · 全球价值链实验',
+      prev:()=>this.goTo(this.state.current-1), next:()=>this.goTo(this.state.current+1),
+      isDbSelect:cur.lab==='db', isShock:cur.lab==='shock', isQc:cur.lab==='qc', isIndicator:cur.lab==='ind',
+      isViz:cur.lab==='viz', isRegDesign:cur.lab==='rgd', isRegression:cur.lab==='reg', isReport:cur.lab==='rep',
+      isNetwork:cur.n===8, isProdChart:cur.n===9, isLengthChart:cur.n===10, isMetricHeat:cur.n===11,
+      netRef:this.netRef, tipRef:this.tipRef };
+
+    // ===== teaching view =====
+    const tab=(on)=>'padding:6px 17px;border-radius:8px;font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s;'+(on?'background:#fff;color:#4b47e0;box-shadow:0 1px 4px rgba(20,24,40,.12)':'color:#8a90a0');
+    V.isLearn=this.state.view==='learn'; V.isLab=this.state.view==='lab';
+    V.viewKey=cur.n+'-'+this.state.view;
+    V.setLearn=()=>this.setView('learn'); V.setLab=()=>this.setView('lab'); V.gotoLab=()=>this.setView('lab');
+    V.learnTabStyle=tab(this.state.view==='learn'); V.labTabStyle=tab(this.state.view==='lab');
+    const blocks=(this.TEACH[cur.n]||[]).map((b,bi)=>{
+      const base={isConcept:false,isFormula:false,isIntuition:false,isPitfall:false,isSources:false,isTakeaway:false,isSelfcheck:false};
+      if(b.t==='concept') return {...base,isConcept:true,kicker:b.kicker,h:b.h,paras:b.paras};
+      if(b.t==='formula') return {...base,isFormula:true,tex:b.tex,note:b.note,hasNote:!!(b.note&&b.note.length),terms:b.terms};
+      if(b.t==='intuition') return {...base,isIntuition:true,h:b.h,items:b.items};
+      if(b.t==='pitfall') return {...base,isPitfall:true,h:b.h,items:b.items};
+      if(b.t==='sources') return {...base,isSources:true,h:b.h,rows:b.rows};
+      if(b.t==='takeaway') return {...base,isTakeaway:true,items:b.items};
+      if(b.t==='selfcheck') return {...base,isSelfcheck:true,items:b.items.map((q,qi)=>{
+        const key=cur.n+':'+bi+':'+qi; const open=!!this.state.open[key];
+        return {q:q.q,a:q.a,icon:open?'−':'+',onClick:()=>this.toggleOpen(key),
+          ansStyle:open?'padding:2px 16px 15px 47px;font-size:12.5px;color:#137a41;line-height:1.8;background:#f9fafc;animation:dcfade .25s ease both':'display:none'};
+      })};
+      return base;
+    });
+    V.teach={blocks};
+
+    // DB select
+    if(cur.lab==='db'){
+      const dbInfo=[
+        {name:'OECD ICIO',coverage:'全球 77 国/地区 + ROW,45 个行业。跨国价值链分析首选,更新较频繁,可用 pymrio 自动下载。',tags:['77 国','45 行业','推荐']},
+        {name:'WIOD',coverage:'全球 43 国,56 个行业,2000–2014。学术界常用,含环境账户,现托管于格罗宁根大学。',tags:['43 国','含环境账户']},
+        {name:'Eora MRIO',coverage:'覆盖 190 国,覆盖面最广。需注册下载,个人非商业用途通常免费。',tags:['190 国','需注册']},
+      ];
+      V.dbs=dbInfo.map(d=>{ const sel=this.state.selectedDb===d.name;
+        return {...d, onSelect:()=>this.setState({selectedDb:d.name}),
+          cardStyle:'background:#fff;border:1.5px solid '+(sel?'#4b47e0':'#e7e9f0')+';border-radius:14px;padding:16px 17px;cursor:pointer;transition:border-color .15s'+(sel?';box-shadow:0 6px 18px rgba(75,71,224,.12)':''),
+          checkStyle:'flex:none;width:20px;height:20px;border-radius:50%;'+(sel?'background:#4b47e0;color:#fff':'background:#f0f1f6;color:transparent')+';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700',
+          checkChar:sel?'✓':''};
+      });
+    }
+    if(cur.lab==='shock'){
+      const diffStyle=(lv,col,bg)=>'font-size:10px;font-weight:600;color:'+col+';background:'+bg+';padding:3px 8px;border-radius:6px';
+      V.shockSources=[
+        {name:'WTO Tariff Download Facility',type:'关税清单 · 全球',note:'官方权威,覆盖全球关税税率变化,检索体验一般。',diff:'难度 中',diffStyle:diffStyle(0,'#a2551f','#fff0e6')},
+        {name:'PIIE 中美关税追踪库',type:'中美关税 · HS 级面板',note:'已整理成 HS 编码级面板,自带时间线,学界最常用,优先推荐。',diff:'难度 中',diffStyle:diffStyle(0,'#a2551f','#fff0e6')},
+        {name:'Global Trade Alert (GTA)',type:'非关税措施',note:'覆盖反倾销、出口限制、补贴等非关税保护主义措施。',diff:'难度 中',diffStyle:diffStyle(0,'#a2551f','#fff0e6')},
+        {name:'OFAC SDN · BIS 实体清单',type:'制裁 / 出口管制',note:'适用于研究“卡脖子”类政策冲击的场景。',diff:'难度 中高',diffStyle:diffStyle(0,'#b3341f','#ffe6e0')},
+      ];
+    }
+    if(cur.lab==='qc'){
+      const pass='background:#eafaf1;color:#137a41;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:6px';
+      const warn='background:#fff0e6;color:#a2551f;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:6px';
+      V.qcChecks=[
+        {name:'维度一致性检查',kind:'IO 数据库',result:'通过',tagStyle:pass},
+        {name:'缺失值 / 负值检测',kind:'IO 数据库',result:'通过',tagStyle:pass},
+        {name:'会计恒等式校验',kind:'IO 数据库',result:'通过',tagStyle:pass},
+        {name:'里昂惕夫逆矩阵数学性质',kind:'IO 数据库',result:'通过',tagStyle:pass},
+        {name:'总产出为 0 导致矩阵奇异',kind:'IO 数据库',result:'已修正',tagStyle:warn},
+        {name:'冲击数据税率范围合理性',kind:'政策冲击',result:'通过',tagStyle:pass},
+        {name:'国家–行业–年份维度对齐',kind:'两类数据',result:'通过',tagStyle:pass},
+      ];
+    }
+    if(cur.lab==='ind'){
+      const meta=this.TBL_TITLES[cur.n];
+      const t=this.state.tbl;
+      const countryOpts=['全部',...this.TBL_COUNTRIES];
+      const industryOpts=['全部',...this.TBL_INDUSTRIES];
+      const yearOpts=['2015','2018','2020'];
+      let rows=this.buildTblRows(cur.n,t.year);
+      if(t.country!=='全部') rows=rows.filter(r=>r.country===t.country);
+      if(t.industry!=='全部') rows=rows.filter(r=>r.industry===t.industry);
+      const total=rows.length; const per=25; const pages=Math.max(1,Math.ceil(total/per));
+      const page=Math.min(t.page,pages); const start=(page-1)*per; const pageRows=rows.slice(start,start+per);
+      const minW=(96+180+56+meta.cols.length*132+40)+'px';
+      const csvExport=()=>{
+        const header=['国家','行业','年份',...meta.cols.map(c=>c.label)].join(',');
+        const lines=rows.map(r=>[r.country,r.industry,r.year,...meta.cols.map(c=>this.fmt(r._v[c.k],c.t))].join(','));
+        const csv='\ufeff'+header+'\n'+lines.join('\n');
+        const blob=new Blob([csv],{type:'text/csv;charset=utf-8'}); const url=URL.createObjectURL(blob);
+        const a=document.createElement('a'); a.href=url; a.download='GVC_step'+cur.n+'_'+t.year+'.csv'; a.click(); URL.revokeObjectURL(url);
+      };
+      V.tbl={ title:meta.title, formula:meta.formula, desc:meta.desc, subtitle:meta.subtitle,
+        cols:meta.cols, minWidth:minW,
+        country:t.country, industry:t.industry, year:t.year,
+        cycleCountry:()=>this.tblSet({country:this.cycle(countryOpts,t.country,1),page:1}),
+        cycleIndustry:()=>this.tblSet({industry:this.cycle(industryOpts,t.industry,1),page:1}),
+        cycleYear:()=>this.tblSet({year:this.cycle(yearOpts,t.year,1),page:1}),
+        exportCsv:csvExport,
+        countLabel:'共 '+total.toLocaleString('en-US')+' 条记录',
+        rangeLabel:total?('显示 '+(start+1)+'–'+Math.min(start+per,total)+' 条,共 '+total+' 条'):'无匹配记录',
+        pageLabel:page+' / '+pages,
+        prevPage:()=>this.tblSet({page:Math.max(1,page-1)}),
+        nextPage:()=>this.tblSet({page:Math.min(pages,page+1)}),
+        prevPageStyle:'padding:6px 12px;border:1px solid #e0e3ea;background:#fff;border-radius:8px;font-size:12px;color:#5a6070;font-family:inherit;cursor:'+(page>1?'pointer':'not-allowed')+';opacity:'+(page>1?'1':'.45'),
+        nextPageStyle:'padding:6px 12px;border:1px solid #e0e3ea;background:#fff;border-radius:8px;font-size:12px;color:#5a6070;font-family:inherit;cursor:'+(page<pages?'pointer':'not-allowed')+';opacity:'+(page<pages?'1':'.45'),
+        rows:pageRows.map((r,ri)=>({
+          country:r.country, industry:r.industry, year:r.year,
+          rowStyle:'display:flex;align-items:center;padding:11px 20px;font-size:12.5px;'+(ri<pageRows.length-1?'border-bottom:1px solid #f4f5f8':''),
+          cells:meta.cols.map(c=>{
+            const isPct=c.t==='pct'; const isCenter=(c.t==='dec'||c.t==='dec3');
+            return {txt:this.fmt(r._v[c.k],c.t),
+              style:'width:132px;flex:none;text-align:right;font-family:Space Mono,monospace;font-size:11.5px;'+(isPct?'color:#4b47e0;font-weight:700':'color:#3a4050')};
+          })
+        }))
+      };
+    }
+    if(cur.lab==='viz'){
+      V.viz={ years:['2015','2018','2020'].map(y=>({label:y,onClick:()=>this.setState({year:y}),
+        style:'padding:5px 12px;border-radius:7px;font-size:11.5px;cursor:pointer;font-family:Space Grotesk;'+(this.state.year===y?'background:#4b47e0;color:#fff;font-weight:600':'color:#8a90a0')})),
+        caption:'OECD ICIO · '+this.state.year+' 年 · 16 主要经济体',
+        legend:Object.keys(this.PAL).map(k=>({name:k,color:this.PAL[k]})) };
+      if(cur.n===9){
+        const segCols=['#c7c9f2','#8f8ee8','#5b57e2','#3b37c9']; // 纯国内 传统 简单 复杂
+        V.viz.prodLegend=[['纯国内','#c7c9f2'],['传统贸易','#8f8ee8'],['简单 GVC','#5b57e2'],['复杂 GVC','#3b37c9']].map(x=>({name:x[0],color:x[1]}));
+        const data=[['新加坡',18,22,19,41],['德国',34,20,13,33],['韩国',33,22,14,31],['中国',52,17,7,24],['美国',60,17,7,16],['沙特',66,20,7,7]];
+        V.viz.prodData=data.map(d=>({name:d[0],complex:d[4],
+          segs:[1,2,3,4].map(i=>({style:'width:'+d[i]+'%;background:'+segCols[i-1]}))}));
+      }
+      if(cur.n===10){
+        const data=[['新加坡',1.9,1.2],['中国',1.6,1.3],['德国',1.5,1.1],['美国',1.4,0.9],['越南',1.2,0.9],['沙特',1.5,0.6]];
+        const maxT=Math.max(...data.map(d=>d[1]+d[2]));
+        V.viz.lengthData=data.map(d=>{ const t=d[1]+d[2]; const scale=100/maxT;
+          return {name:d[0],total:t.toFixed(1),
+            dom:'width:'+(d[1]*scale)+'%;background:#4b47e0;border-radius:5px 0 0 5px',
+            brd:'width:'+(d[2]*scale)+'%;background:#e0982a;border-radius:0 5px 5px 0'};});
+      }
+      if(cur.n===11){
+        const cell=(v)=>{ const t=v; const bg='rgba(75,71,224,'+(0.12+t*0.75)+')'; const col=t>0.55?'#fff':'#3a4050';
+          return 'width:88px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-family:Space Grotesk;font-weight:600;font-size:12px;background:'+bg+';color:'+col; };
+        const data=[['德国',.92,.78,.95],['中国',.90,.85,.88],['美国',.88,.90,.86],['荷兰',.71,.52,.68],['日本',.66,.44,.62],['韩国',.60,.40,.55],['越南',.42,.22,.34],['沙特',.28,.12,.20]];
+        V.viz.heatData=data.map(d=>({name:d[0],v1:d[1].toFixed(2),v2:d[2].toFixed(2),v3:d[3].toFixed(2),c1:cell(d[1]),c2:cell(d[2]),c3:cell(d[3])}));
+      }
+    }
+    if(cur.lab==='rgd'){
+      const mk=(field,label)=>({label,onClick:()=>this.setState(s=>({rg:{...s.rg,[field]:label}})),
+        style:'padding:8px 14px;border-radius:9px;font-size:12px;cursor:pointer;border:1.5px solid '+(this.state.rg[field]===label?'#4b47e0':'#e0e3ea')+';'+(this.state.rg[field]===label?'background:#edecfd;color:#4b47e0;font-weight:600':'background:#fff;color:#5a6070')});
+      V.regDesign={ groups:[
+        {title:'分析粒度',hint:'决定冲击数据与 GVC 指标能对齐到多细。',opts:['国家级','国家–行业级'].map(l=>mk('gran',l))},
+        {title:'冲击类型',hint:'选择本次实验关注的政策冲击。',opts:['关税冲击','制裁清单','出口管制'].map(l=>mk('shock',l))},
+        {title:'因果推断方式',hint:'有精确时间线才能做 DID。',opts:['OLS 相关','双向固定效应','双重差分 (DID)'].map(l=>mk('method',l))},
+      ],
+      equation:'GVC_{i,t} = β · Shock['+this.state.rg.shock+']_{i,t} + γ · X_{i,t} + α_i + δ_t + ε   |   粒度: '+this.state.rg.gran+'   识别: '+this.state.rg.method };
+    }
+    if(cur.lab==='reg'){
+      const ran=!!this.state.ran['reg'+cur.n];
+      const runBtnStyle='margin-top:14px;padding:9px 18px;border:none;background:'+(ran?'#12a150':'#4b47e0')+';color:#fff;border-radius:9px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit';
+      const cfg={
+        13:{y:'FVA 份额',spec:'FVA_share_{i,t} = β·Tariff_{i,t} + γ·Controls + α_i + δ_t',
+            coefs:[['关税冲击 Tariff',-0.183,0.041,'***','Tariff'],['GDP (log)',0.052,0.028,'*','GDP'],['双边距离',-0.094,0.037,'**','Dist'],['FDI 流量',0.061,0.045,'','FDI'],['汇率',-0.018,0.022,'','FX']],n:'12,840',r2:'0.612'},
+        14:{y:'复杂 GVC 份额',spec:'ComplexGVC_{i,t} = β·Tariff_{i,t} + γ·Controls + α_i + δ_t',
+            coefs:[['关税冲击 Tariff',-0.226,0.048,'***','Tariff'],['关税×高参与',-0.141,0.052,'**','T×Part'],['GDP (log)',0.044,0.030,'','GDP'],['FDI 流量',0.077,0.041,'*','FDI'],['汇率',-0.011,0.024,'','FX']],n:'12,840',r2:'0.588'},
+        15:{y:'生产链长度',spec:'ChainLength_{i,t} = β·Tariff_{i,t} + γ·Controls + α_i + δ_t',
+            coefs:[['关税冲击 Tariff',-0.132,0.039,'***','Tariff'],['平减指数',0.028,0.019,'','Defl'],['GDP (log)',0.036,0.027,'','GDP'],['双边距离',-0.058,0.034,'*','Dist'],['汇率',-0.014,0.021,'','FX']],n:'12,840',r2:'0.547'},
+        16:{y:'度中心性',spec:'Centrality_{i,t} = β·Sanction_{i,t} + γ·Controls + α_i + δ_t',
+            coefs:[['制裁冲击 Sanction',-0.204,0.055,'***','Sanc'],['关税冲击 Tariff',-0.087,0.043,'*','Tariff'],['GDP (log)',0.069,0.031,'*','GDP'],['FDI 流量',0.083,0.040,'*','FDI'],['汇率',-0.009,0.023,'','FX']],n:'12,840',r2:'0.634'},
+      }[cur.n];
+      const maxAbs=Math.max(...cfg.coefs.map(c=>Math.abs(c[1])+1.96*c[2]));
+      V.regression={ ran,onRun:()=>this.run('reg'+cur.n),runLabel:ran?'✓ 回归完成':'▶ 运行回归',runBtnStyle,
+        spec:cfg.spec, n:cfg.n, r2:cfg.r2,
+        coefs:cfg.coefs.map(c=>{ const est=c[1],se=c[2]; const scale=42/maxAbs;
+          const dotL=50+est*scale; const lo=est-1.96*se,hi=est+1.96*se; const ciL=50+lo*scale,ciW=(hi-lo)*scale;
+          const strong=Math.abs(est)>0.15;
+          return {name:c[0],est:(est>0?'+':'')+est.toFixed(3),se:c[2].toFixed(3),sig:c[3],short:c[4],
+            nameStyle:c[3]?'font-weight:500':'color:#8a90a0',
+            estStyle:est<0?'color:#d1462f':'color:#137a41',
+            dotStyle:'position:absolute;top:1px;left:'+dotL+'%;width:11px;height:11px;border-radius:50%;background:'+(est<0?'#f4693b':'#12a150')+';transform:translateX(-50%);border:2px solid #fff;box-shadow:0 0 0 1px '+(est<0?'#f4693b':'#12a150'),
+            ciStyle:'position:absolute;top:5px;left:'+ciL+'%;width:'+ciW+'%;height:2.5px;background:'+(est<0?'#f7b39e':'#9fdcb5')+';border-radius:2px'};
+        })};
+    }
+    if(cur.lab==='rep'){
+      V.report={ toc:['一、数据来源与质检','二、GVC 指标概览','三、可视化发现','四、回归结果','五、结论与局限'],
+        sections:[
+          {h:'一、数据来源与质检',bullets:['投入产出数据:OECD ICIO 2018,覆盖 77 国 45 行业;','政策冲击数据:PIIE 中美关税追踪库(HS 级面板);','质检 7 项,修正 1 处矩阵奇异异常,维度全部对齐。']},
+          {h:'二、GVC 指标概览',bullets:['后向参与度:越南、卢森堡、斯洛伐克居前,深度依赖进口中间品;','前向参与度:沙特、俄罗斯居前,多为上游资源供给;','上游度:哈萨克斯坦、新加坡、中国较高。']},
+          {h:'三、可视化发现',bullets:['网络图显示中、美、德为三大枢纽,区域集群明显;','复杂 GVC 份额:小型开放经济体(新加坡)显著高于大型经济体。']},
+          {h:'四、回归结果',bullets:['关税冲击显著降低 FVA 份额(β = −0.183, p<0.01),供应链回流;','对复杂 GVC 份额冲击更强(β = −0.226),高参与行业受创更深;','制裁使被制裁国网络中心性显著下降(β = −0.204)。']},
+          {h:'五、结论与局限',bullets:['贸易政策冲击确实重塑了全球价值链结构,方向与理论一致;','局限:行业映射(HS↔ICIO)与冲击时间线仍需进一步精细化。']},
+        ]};
+    }
+
+    return V;
+  }
+}
+</script>
+</body>
+</html>
