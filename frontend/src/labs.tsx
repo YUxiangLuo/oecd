@@ -1,0 +1,232 @@
+/**
+ * 各步骤的"动手实验"面板。
+ * 当前为最小可用版:真实数据表格 + 回归运行 + 报告预览;
+ * 网络图/堆叠条形图等富可视化见 prototype/ 原型,列入路线图。
+ */
+import { useEffect, useState } from "react";
+import { api } from "./api";
+import type { Meta, QcCheck, RegressionResponse, SectorPage, Step } from "./types";
+
+const fmt = (v: string | number | null, digits = 3) =>
+  typeof v === "number" ? v.toFixed(digits) : (v ?? "—");
+
+function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
+  const [data, setData] = useState<T | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    setData(null);
+    setError(null);
+    fn().then(
+      (d) => live && setData(d),
+      (e) => live && setError(String(e.message ?? e)),
+    );
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return { data, error };
+}
+
+export function QcLab({ meta }: { meta: Meta }) {
+  const [year, setYear] = useState(meta.years.at(-1)!);
+  const { data, error } = useAsync<QcCheck[]>(() => api.qc(year), [year]);
+  if (error) return <div className="error-box">{error}</div>;
+  return (
+    <div>
+      <YearPicker years={meta.years} year={year} onChange={setYear} />
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr><th>质检项</th><th>类型</th><th>结果</th><th style={{ textAlign: "left" }}>详情</th></tr>
+          </thead>
+          <tbody>
+            {(data ?? []).map((c) => (
+              <tr key={c.name}>
+                <td>{c.name}</td>
+                <td>{c.kind}</td>
+                <td className={c.passed ? "qc-pass" : "qc-fail"}>{c.passed ? "✓ 通过" : "✗ 异常"}</td>
+                <td style={{ textAlign: "left", whiteSpace: "normal" }}>
+                  {c.detail}
+                  {c.warnings.map((w) => (
+                    <div key={w} className="muted">⚠ {w}</div>
+                  ))}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function YearPicker({ years, year, onChange }: { years: number[]; year: number; onChange: (y: number) => void }) {
+  return (
+    <div className="controls">
+      <label>年份</label>
+      <select value={year} onChange={(e) => onChange(Number(e.target.value))}>
+        {years.map((y) => <option key={y} value={y}>{y}</option>)}
+      </select>
+    </div>
+  );
+}
+
+/** 步骤4-7:行业级指标数据表(分页 + 国家/年份筛选) */
+export function IndicatorLab({ meta }: { meta: Meta }) {
+  const [year, setYear] = useState(meta.years.at(-1)!);
+  const [country, setCountry] = useState("CHN");
+  const [page, setPage] = useState(1);
+  const { data, error } = useAsync<SectorPage>(
+    () => api.sectorIndicators(year, country, page),
+    [year, country, page],
+  );
+  if (error) return <div className="error-box">{error}</div>;
+  const cols = data?.rows[0] ? Object.keys(data.rows[0]) : [];
+  const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
+  return (
+    <div>
+      <div className="controls">
+        <label>国家</label>
+        <select value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}>
+          <option value="">全部</option>
+          {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <label>年份</label>
+        <select value={year} onChange={(e) => { setYear(Number(e.target.value)); setPage(1); }}>
+          {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <span className="muted">{data ? `共 ${data.total} 条` : "加载中…"}</span>
+      </div>
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead><tr>{cols.map((c) => <th key={c}>{c}</th>)}</tr></thead>
+          <tbody>
+            {(data?.rows ?? []).map((r, i) => (
+              <tr key={i}>{cols.map((c) => <td key={c}>{typeof r[c] === "number" && !["year"].includes(c) ? fmt(r[c]) : String(r[c] ?? "—")}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="pager">
+        <button disabled={page <= 1} onClick={() => setPage(page - 1)}>← 上一页</button>
+        <span>{page} / {pages}</span>
+        <button disabled={page >= pages} onClick={() => setPage(page + 1)}>下一页 →</button>
+      </div>
+    </div>
+  );
+}
+
+/** 步骤8-11:可视化(最小版 —— 国家级指标排序表,富图表见路线图) */
+export function VizLab({ meta, columns }: { meta: Meta; columns: string[] }) {
+  const [year, setYear] = useState(meta.years.at(-1)!);
+  const { data, error } = useAsync(() => api.countryIndicators(year), [year]);
+  if (error) return <div className="error-box">{error}</div>;
+  const sortCol = columns[0];
+  const rows = (data ?? [])
+    .slice()
+    .sort((a, b) => Number(b[sortCol] ?? 0) - Number(a[sortCol] ?? 0))
+    .slice(0, 15);
+  return (
+    <div>
+      <div className="tipbox">
+        最小版可视化:按 <b>{sortCol}</b> 排序的 Top 15 国家。交互式网络图/堆叠条形图对应 prototype/ 原型,见 README 路线图。
+      </div>
+      <YearPicker years={meta.years} year={year} onChange={setYear} />
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead><tr><th>国家</th>{columns.map((c) => <th key={c}>{c}</th>)}</tr></thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={String(r.country)}>
+                <td>{String(r.country)}</td>
+                {columns.map((c) => <td key={c}>{fmt(r[c])}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/** 步骤12-16:回归设计与运行 */
+export function RegressionLab({ step }: { step: Step }) {
+  const regStep = step.n === 12 ? 13 : step.n;
+  const [result, setResult] = useState<RegressionResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  useEffect(() => { setResult(null); setError(null); }, [step.n]);
+
+  const run = async () => {
+    setRunning(true);
+    setError(null);
+    try {
+      setResult(await api.runRegression(regStep));
+    } catch (e) {
+      setError(String((e as Error).message));
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="warnbox">
+        ⚠ 冲击变量目前为<b>风格化演示数据</b>(以 2018 中美贸易战为原型),仅用于验证系统链路;接入 PIIE/WTO 真实数据后才具研究意义。
+      </div>
+      {result && <div className="eq-box">{result.design.equation}</div>}
+      <button className="run-btn" onClick={run} disabled={running}>
+        {running ? "估计中…" : "▶ 运行回归"}
+      </button>
+      {error && <div className="error-box" style={{ marginTop: 14 }}>{error}</div>}
+      {result && (
+        <div style={{ marginTop: 16 }}>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead><tr><th>变量</th><th>系数</th><th>聚类标准误</th><th>t</th><th>p</th><th>显著</th></tr></thead>
+              <tbody>
+                {result.result.coefs.map((c) => (
+                  <tr key={c.name}>
+                    <td>{c.name}</td>
+                    <td>{c.coef.toFixed(4)}</td>
+                    <td>{c.se.toFixed(4)}</td>
+                    <td>{c.t.toFixed(2)}</td>
+                    <td>{c.p.toFixed(3)}</td>
+                    <td>{c.stars}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="muted" style={{ marginTop: 10 }}>
+            被解释变量:{result.design.depvar_label}({result.design.depvar})· N = {result.result.n_obs}
+            ({result.result.n_entities} 国 × {result.result.n_times} 年)· 组内 R² = {result.result.r2_within.toFixed(4)}
+          </p>
+          {result.result.notes.map((n) => <p key={n} className="muted">· {n}</p>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 步骤17:实验报告 */
+export function ReportLab({ meta }: { meta: Meta }) {
+  const [year, setYear] = useState(meta.years.at(-1)!);
+  const { data, error } = useAsync(() => api.report(year), [year]);
+  if (error) return <div className="error-box">{error}</div>;
+  return (
+    <div>
+      <YearPicker years={meta.years} year={year} onChange={setYear} />
+      {data ? (
+        <>
+          <p className="muted">已写入 {data.path}(Markdown 源文件,可用 pandoc 转 PDF)</p>
+          <div className="report-md">{data.markdown}</div>
+        </>
+      ) : (
+        <p className="muted">正在生成报告…</p>
+      )}
+    </div>
+  );
+}

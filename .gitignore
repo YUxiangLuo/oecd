@@ -48,3 +48,10 @@ Thumbs.db
 OECD_ICIO/
 gvc_indicators_*.csv
 leontief_inverse_*.csv
+/data/
+/reports/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+*.tsbuildinfo

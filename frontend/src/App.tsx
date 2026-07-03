@@ -1,0 +1,130 @@
+import { useEffect, useState } from "react";
+import { api } from "./api";
+import { IndicatorLab, QcLab, RegressionLab, ReportLab, VizLab } from "./labs";
+import type { Meta, Step, StepsResponse } from "./types";
+
+const ROMAN = ["", "一", "二", "三", "四", "五"];
+const STATUS_LABEL: Record<Step["status"], string> = {
+  done: "已实现",
+  demo: "演示数据",
+  partial: "最小版",
+  planned: "规划中",
+};
+
+// 步骤8-11 可视化各自关注的指标列
+const VIZ_COLUMNS: Record<number, string[]> = {
+  8: ["gvc_participation", "backward_fva_share", "forward_share", "gross_exports"],
+  9: ["share_complex_gvc", "share_simple_gvc", "share_traditional", "share_pure_domestic"],
+  10: ["upstreamness", "upstreamness_domestic", "upstreamness_cross"],
+  11: ["betweenness_centrality", "degree_centrality", "eigenvector_centrality"],
+};
+
+function Lab({ step, meta }: { step: Step; meta: Meta | null }) {
+  if (step.lab === "qc") return meta ? <QcLab meta={meta} /> : null;
+  if (step.lab === "ind") return meta ? <IndicatorLab meta={meta} /> : null;
+  if (step.lab === "viz")
+    return meta ? <VizLab meta={meta} columns={VIZ_COLUMNS[step.n] ?? []} /> : null;
+  if (step.lab === "rgd" || step.lab === "reg") return <RegressionLab step={step} />;
+  if (step.lab === "rep") return meta ? <ReportLab meta={meta} /> : null;
+  // db / shock:纯讲解型步骤
+  return (
+    <div className="tipbox">
+      本步为数据接入决策步骤,详见《供应链仿真系统_完整项目说明.md》第一、四章。
+      {step.lab === "shock" && " 当前系统装载的是风格化演示冲击数据(data/shocks/),待接入 PIIE / WTO / GTA 真实数据。"}
+    </div>
+  );
+}
+
+export default function App() {
+  const [stepsData, setStepsData] = useState<StepsResponse | null>(null);
+  const [meta, setMeta] = useState<Meta | null>(null);
+  const [current, setCurrent] = useState(4);
+  const [fatal, setFatal] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.steps().then(setStepsData, (e) => setFatal(String(e.message ?? e)));
+    api.meta().then(setMeta, () => setMeta({ years: [], countries: [] }));
+  }, []);
+
+  if (fatal)
+    return (
+      <div style={{ padding: 40 }}>
+        <div className="error-box">
+          无法连接后端 API:{fatal}
+          <br />请先启动服务:<code>uv run gvcsim serve</code>
+        </div>
+      </div>
+    );
+  if (!stepsData) return <div style={{ padding: 40 }} className="muted">加载中…</div>;
+
+  const steps = stepsData.steps;
+  const step = steps.find((s) => s.n === current)!;
+  const stages = [...new Set(steps.map((s) => s.stage))];
+
+  return (
+    <div className="layout">
+      <header className="topbar">
+        <div className="logo">仿</div>
+        <div>
+          <h1>供应链仿真系统</h1>
+          <div className="sub">GVC SIMULATION LAB · DEV</div>
+        </div>
+        <div style={{ marginLeft: "auto" }} className="muted">
+          数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
+        </div>
+      </header>
+
+      <div className="main">
+        <aside className="sidebar">
+          {stages.map((st) => (
+            <div key={st}>
+              <div className="stage-label">
+                <span className="roman">{ROMAN[st]}</span>
+                {stepsData.stages[String(st)]}
+              </div>
+              {steps.filter((s) => s.stage === st).map((s) => (
+                <div
+                  key={s.n}
+                  className={`step-row${s.n === current ? " active" : ""}`}
+                  onClick={() => setCurrent(s.n)}
+                >
+                  <span className="step-num">{s.n}</span>
+                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {s.title}
+                  </span>
+                  <span className={`status-dot status-${s.status}`}>{STATUS_LABEL[s.status]}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </aside>
+
+        <main className="content">
+          <div className="content-inner">
+            <div className="step-header">
+              <div className="big-num">{String(step.n).padStart(2, "0")}</div>
+              <div>
+                <span className="stage-chip">{stepsData.stages[String(step.stage)]}</span>
+                <span className="muted" style={{ marginLeft: 8 }}>STEP {step.n} / 17</span>
+                <h2>{step.title}</h2>
+              </div>
+              <div className="nav-btns">
+                <button disabled={current <= 1} onClick={() => setCurrent(current - 1)}>← 上一步</button>
+                <button className="primary" disabled={current >= 17} onClick={() => setCurrent(current + 1)}>下一步 →</button>
+              </div>
+            </div>
+
+            <div className="card accent">
+              <div className="kicker">本步目标</div>
+              <p>{step.goal}</p>
+              <p>{step.concept}</p>
+            </div>
+            <div className="tipbox">💡 {step.tip}</div>
+
+            <Lab step={step} meta={meta} />
+          </div>
+        </main>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,90 @@
+"""指标计算的数学性质测试(合成小矩阵,不依赖真实数据)。"""
+
+import numpy as np
+import pytest
+
+from gvcsim.indicators import length, network, production, tradeflow
+from gvcsim.indicators.core import build_arrays
+
+
+def test_build_arrays_basics(fake_io):
+    arr = build_arrays(fake_io)
+    # 增加值恒等式:va = x - 中间投入列和
+    assert np.allclose(arr.va, arr.x - arr.Z.sum(axis=0))
+    # 增加值系数与全球逆矩阵的恒等式:v'B = 1(每单位最终品的增加值总含量为1)
+    assert np.allclose(arr.v @ arr.B, np.ones(4))
+    # AAA-s1 的出口 = 卖给 BBB 的中间品 (4+2) + 卖给 BBB 的最终品 (10)
+    assert arr.E[0] == pytest.approx(16.0)
+
+
+def test_tradeflow_bounds(fake_io):
+    arr = build_arrays(fake_io)
+    df = tradeflow.country_tradeflow(arr)
+    assert (df["dva_in_exports"] <= df["gross_exports"] + 1e-9).all()
+    assert df["backward_fva_share"].between(0, 1).all()
+    assert (df["forward_share"] > 0).all()
+
+    sector = tradeflow.sector_tradeflow(arr)
+    assert sector["dva_share"].between(0, 1).all()
+
+
+def test_tradeflow_autarky(autarky_io):
+    """封闭经济:没有出口,参与度无从谈起(出口为0)。"""
+    arr = build_arrays(autarky_io)
+    assert np.allclose(arr.E, 0)
+
+
+def test_production_decomposition_adds_up(fake_io):
+    """四段分解之和 = 增加值总额(WWYZ 分解的核心恒等式)。"""
+    arr = build_arrays(fake_io)
+    df = production.country_production(arr)
+    parts = df[["pure_domestic", "traditional", "simple_gvc", "complex_gvc"]].sum(axis=1)
+    assert np.allclose(parts, df["va_total"])
+    # 总增加值应等于 va 向量按国加总
+    va_by_country = {
+        r: arr.va[arr.pos[r]].sum() for r in arr.regions
+    }
+    for r in arr.regions:
+        assert df.loc[r, "va_total"] == pytest.approx(va_by_country[r])
+    shares = df[[c for c in df.columns if c.startswith("share_")]].sum(axis=1)
+    assert np.allclose(shares, 1.0)
+
+
+def test_production_autarky(autarky_io):
+    """封闭经济:增加值 100% 是纯国内,GVC 各段为 0。"""
+    arr = build_arrays(autarky_io)
+    df = production.country_production(arr)
+    assert np.allclose(df["share_pure_domestic"], 1.0)
+    assert np.allclose(df["traditional"], 0.0, atol=1e-9)
+    assert np.allclose(df["simple_gvc"], 0.0, atol=1e-9)
+    assert np.allclose(df["complex_gvc"], 0.0, atol=1e-9)
+
+
+def test_length_properties(fake_io, autarky_io):
+    arr = build_arrays(fake_io)
+    df = length.sector_length(arr)
+    # 上游度至少为1(所有产出至少要经过自己这一个阶段)
+    assert (df["upstreamness"] >= 1 - 1e-9).all()
+    assert (df["upstreamness_domestic"] <= df["upstreamness"] + 1e-9).all()
+    assert (df["upstreamness_cross"] >= -1e-9).all()
+
+    # 封闭经济:跨境段为0,总长度=国内段
+    arr_a = build_arrays(autarky_io)
+    df_a = length.sector_length(arr_a)
+    assert np.allclose(df_a["upstreamness_cross"], 0.0, atol=1e-9)
+
+    country = length.country_length(arr, df)
+    assert set(country.index) == {"AAA", "BBB"}
+
+
+def test_network_metrics(fake_io):
+    arr = build_arrays(fake_io)
+    F = network.country_flow_matrix(arr)
+    # 对角线(国内交易)不计入
+    assert np.allclose(np.diag(F.values), 0)
+    # AAA→BBB 总流 = 中间品块 (4+2+2+1) + 最终品 (10+5)
+    assert F.loc["AAA", "BBB"] == pytest.approx(24.0)
+
+    df = network.country_network(arr)
+    assert df["degree_centrality"].between(0, 2).all()
+    assert (df["eigenvector_centrality"] > 0).all()
