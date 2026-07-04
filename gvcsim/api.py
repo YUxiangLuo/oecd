@@ -153,16 +153,6 @@ INDICATOR_SCHEMA = {
         "betweenness_centrality": {"label": "介数中心性", "format": "number"},
         "eigenvector_centrality": {"label": "特征向量中心性", "format": "number"},
     },
-    "default_sort": {
-        "4": "share_trade_gvc_participation",
-        "5": "share_prod_complex_gvc",
-        "6": "upstreamness",
-        "7": "betweenness_centrality",
-        "8": "share_trade_gvc_participation",
-        "9": "share_prod_complex_gvc",
-        "10": "upstreamness",
-        "11": "betweenness_centrality",
-    },
 }
 
 

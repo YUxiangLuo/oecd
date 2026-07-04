@@ -102,8 +102,9 @@ def generate(year: int | None = None) -> str:
         "- 本报告验证了“数据 → 指标 → 回归 → 报告”闭环可自动运行(回归为国家–行业级)。",
         "- 冲击变量为拟真演示面板(事件与量级参考公开资料的手工编码,出口暴露度为风格化数值);"
         "接入 PIIE/WTO 真实数据 + 官方 HS→ICIO 映射后本报告即具备研究意义。",
-        "- 指标采用 KWW 贸易流分解与 WWYZ 生产活动分解的国家/国家–行业聚合口径;"
-        "本报告不输出 exporter-importer-sector 双边矩阵明细。",
+        "- 指标采用 KWW 风格贸易流分解与 WWYZ 生产活动分解的国家/国家–行业聚合口径,"
+        "重复计算项为启发式近似(详见 README 方法论说明),论文级精度需替换为 "
+        "KWW/Borin-Mancini 完整分解;本报告不输出 exporter-importer-sector 双边矩阵明细。",
     ]
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)

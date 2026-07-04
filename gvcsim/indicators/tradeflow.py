@@ -3,6 +3,10 @@
 本模块把一国/一国行业的毛出口拆成国内增加值、返回国内增加值、国内重复
 计算、外国增加值与外国重复计算,并派生前向/后向 GVC 参与度。实现范围是
 国家级与国家-行业级聚合结果;不输出 exporter-importer-sector 双边明细。
+
+⚠ 近似口径:重复计算项按买方节点"未来跨境期望"的启发式折算、最终吸收地
+用马尔可夫吸收链近似,不是 KWW (2014) / Borin-Mancini (2019) 的精确公式;
+"五项加总 = 毛出口"的闭合恒等式由单元测试保证。
 """
 
 import numpy as np
@@ -40,7 +44,17 @@ def _allocation_matrix(arr: IcioArrays) -> np.ndarray:
         return np.where(arr.x[:, None] > 0, arr.Z / arr.x[:, None], 0.0)
 
 
-def _ultimate_absorption(arr: IcioArrays) -> np.ndarray:
+def _absorption_solve(Ad: np.ndarray, rhs: np.ndarray) -> np.ndarray:
+    """求解 (I - Ad)^{-1} · rhs,奇异时退化为最小二乘,并清掉非有限/负值。"""
+    eye = np.eye(Ad.shape[0])
+    try:
+        out = np.linalg.solve(eye - Ad, rhs)
+    except np.linalg.LinAlgError:
+        out, *_ = np.linalg.lstsq(eye - Ad, rhs, rcond=None)
+    return np.clip(np.where(np.isfinite(out), out, 0.0), 0.0, None)
+
+
+def _ultimate_absorption(arr: IcioArrays, Ad: np.ndarray) -> np.ndarray:
     """Rows: producing node, columns: final absorption country shares.
 
     If one unit of node i output is put into the production network, this gives the
@@ -48,25 +62,18 @@ def _ultimate_absorption(arr: IcioArrays) -> np.ndarray:
     Leontief tracing used to separate intermediate exports absorbed by the direct
     importer, re-exported to third markets, or returned home.
     """
-    Ad = _allocation_matrix(arr)
     with np.errstate(divide="ignore", invalid="ignore"):
         final_share = np.where(arr.x[:, None] > 0, arr.Yd / arr.x[:, None], 0.0)
-    eye = np.eye(len(arr.x))
-    try:
-        out = np.linalg.solve(eye - Ad, final_share)
-    except np.linalg.LinAlgError:
-        out, *_ = np.linalg.lstsq(eye - Ad, final_share, rcond=None)
-    out = np.where(np.isfinite(out), out, 0.0)
-    # OECD balancing items can create tiny negative probabilities. Keep the
-    # accounting stable without changing well-behaved rows.
-    out = np.clip(out, 0.0, None)
+    # OECD balancing items can create tiny negative probabilities; _absorption_solve
+    # clips them. Keep the accounting stable without changing well-behaved rows.
+    out = _absorption_solve(Ad, final_share)
     row_sum = out.sum(axis=1)
     good = row_sum > 0
     out[good] = out[good] / row_sum[good, None]
     return out
 
 
-def _future_border_crossings(arr: IcioArrays, node_regions: np.ndarray) -> np.ndarray:
+def _future_border_crossings(Ad: np.ndarray, border: np.ndarray) -> np.ndarray:
     """Expected future cross-border intermediate transactions from each node.
 
     The first border crossing is the observed export itself. Future crossings proxy
@@ -74,15 +81,8 @@ def _future_border_crossings(arr: IcioArrays, node_regions: np.ndarray) -> np.nd
     exported intermediate keeps crossing borders before final absorption, that
     value is repeatedly recorded in gross trade.
     """
-    Ad = _allocation_matrix(arr)
-    border = node_regions[:, None] != node_regions[None, :]
     immediate = (Ad * border).sum(axis=1)
-    eye = np.eye(len(arr.x))
-    try:
-        out = np.linalg.solve(eye - Ad, immediate)
-    except np.linalg.LinAlgError:
-        out, *_ = np.linalg.lstsq(eye - Ad, immediate, rcond=None)
-    return np.clip(np.where(np.isfinite(out), out, 0.0), 0.0, None)
+    return _absorption_solve(Ad, immediate)
 
 
 def _origin_content(arr: IcioArrays) -> np.ndarray:
@@ -96,26 +96,6 @@ def _origin_content(arr: IcioArrays) -> np.ndarray:
         p = arr.pos[r]
         content[i, :] = (arr.v[p, None] * arr.B[p, :]).sum(axis=0)
     return content
-
-
-def _gross_exports_by_node(arr: IcioArrays, node_regions: np.ndarray) -> np.ndarray:
-    gross = np.zeros(len(arr.x))
-    region_col = {r: i for i, r in enumerate(arr.regions)}
-    for r in arr.regions:
-        p = arr.pos[r]
-        foreign_cols = node_regions != r
-        gross[p] = arr.Z[np.ix_(p, foreign_cols)].sum(axis=1)
-        gross[p] += arr.Yd[p, :].sum(axis=1) - arr.Yd[p, region_col[r]]
-    return gross
-
-
-def _forward_va(arr: IcioArrays, gross_by_node: np.ndarray, node_regions: np.ndarray) -> np.ndarray:
-    """Domestic VA from each country-sector embedded in foreign countries' exports."""
-    out = np.zeros(len(arr.x))
-    for i, home in enumerate(node_regions):
-        foreign_export_rows = node_regions != home
-        out[i] = arr.v[i] * (arr.B[i, foreign_export_rows] @ gross_by_node[foreign_export_rows])
-    return out
 
 
 def _add_trade_shares(df: pd.DataFrame) -> pd.DataFrame:
@@ -137,95 +117,80 @@ def _add_trade_shares(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def sector_tradeflow(arr: IcioArrays) -> pd.DataFrame:
-    """国家-行业级 KWW 风格贸易流分解,索引为 (country, sector)。"""
+    """国家-行业级 KWW 风格贸易流分解,索引为 (country, sector)。
+
+    全部按节点向量/矩阵一次算完(N ≈ 3,465 时逐节点双重循环有 ~1200 万次
+    Python 迭代,向量化后每年秒级)。口径:
+
+    - 最终品出口直接在进口国被吸收:国内含量记 DVA,外国含量记 FVA。
+    - 中间品出口先按买方节点的"未来跨境期望"折出重复计算部分
+      (国内含量→DDC,外国含量→FDC),净额再按最终吸收地分类:
+      返回本国→RDV,进口国吸收/再出口→DVA 两个子项,外国含量→FVA。
+    """
     node_regions = _node_regions(arr)
     node_sectors = _node_sectors(arr)
+    n = len(arr.x)
+    idx = np.arange(n)
     region_idx = {r: i for i, r in enumerate(arr.regions)}
-    ultimate = _ultimate_absorption(arr)
-    future_cross = _future_border_crossings(arr, node_regions)
+    home_col = np.array([region_idx[r] for r in node_regions])
+    border = node_regions[:, None] != node_regions[None, :]
+
+    Ad = _allocation_matrix(arr)
+    ultimate = _ultimate_absorption(arr, Ad)
+    future_cross = _future_border_crossings(Ad, border)
     content = _origin_content(arr)
-    gross_by_node = _gross_exports_by_node(arr, node_regions)
-    forward_by_node = _forward_va(arr, gross_by_node, node_regions)
 
-    records = []
-    for i, (home, sector) in enumerate(zip(node_regions, node_sectors)):
-        h = region_idx[home]
-        domestic_share = content[h, i]
-        foreign_share = 1.0 - domestic_share
+    domestic = content[home_col, idx]   # 本节点单位产出中的国内增加值含量
+    foreign = 1.0 - domestic
 
-        trade_dva_final = 0.0
-        trade_dva_intermediate_absorbed = 0.0
-        trade_dva_intermediate_reexported = 0.0
-        trade_rdv = 0.0
-        trade_ddc = 0.0
-        trade_fva = 0.0
-        trade_fdc = 0.0
+    # 最终品出口(剔除本国内销)
+    final_exports = arr.Yd.sum(axis=1) - arr.Yd[idx, home_col]
 
-        # Final goods exports are absorbed directly abroad.
-        for d, dest in enumerate(arr.regions):
-            if dest == home:
-                continue
-            amount = float(arr.Yd[i, d])
-            trade_dva_final += domestic_share * amount
-            trade_fva += foreign_share * amount
+    # 中间品出口:pf_j 是卖给买方 j 的价值中归入纯重复计算的比例
+    pf = future_cross / (1.0 + future_cross)
+    net_w = 1.0 - pf
+    Zf = np.where(border, arr.Z, 0.0)              # 跨境中间品流
+    pdc_in = Zf @ pf                               # Σ_j Z_ij · pf_j
+    net_sum = Zf @ net_w                           # Σ_j 净额
+    # 净额按买方节点的最终吸收地分类:回到出口国 / 进口国自身 / 第三国
+    returned = (Zf @ (net_w[:, None] * ultimate))[idx, home_col]
+    absorbed = Zf @ (net_w * ultimate[idx, home_col])
+    reexported = np.clip(net_sum - returned - absorbed, 0.0, None)
 
-        # Intermediate exports are traced through the buyer's future production
-        # path. A positive future-crossing expectation is assigned to pure double
-        # counting; the remaining net part is classified by ultimate absorption.
-        foreign_buyers = np.where(node_regions != home)[0]
-        for j in foreign_buyers:
-            amount = float(arr.Z[i, j])
-            if amount == 0:
-                continue
-            importer = node_regions[j]
-            importer_idx = region_idx[importer]
-            pdc_factor = future_cross[j] / (1.0 + future_cross[j])
-            pdc_amount = amount * pdc_factor
-            net_amount = amount - pdc_amount
+    trade_dva_final = domestic * final_exports
+    trade_dva_absorbed = domestic * absorbed
+    trade_dva_reexported = domestic * reexported
+    trade_rdv = domestic * returned
+    trade_ddc = domestic * pdc_in
+    trade_fva = foreign * (final_exports + net_sum)
+    trade_fdc = foreign * pdc_in
+    trade_dva = trade_dva_final + trade_dva_absorbed + trade_dva_reexported
+    trade_pdc = trade_ddc + trade_fdc
 
-            trade_ddc += domestic_share * pdc_amount
-            trade_fdc += foreign_share * pdc_amount
-            trade_fva += foreign_share * net_amount
+    gross = arr.E  # 毛出口 = 跨境中间品 + 最终品出口,core 已按同口径算好
+    accounted = trade_dva + trade_rdv + trade_ddc + trade_fva + trade_fdc
+    # 前向:本节点增加值嵌入外国节点毛出口的金额 v_i · Σ_{j 外国} B_ij · E_j
+    forward = arr.v * (np.where(border, arr.B, 0.0) @ arr.E)
 
-            shares = ultimate[j]
-            return_share = shares[h]
-            absorbed_share = shares[importer_idx]
-            reexport_share = max(0.0, 1.0 - return_share - absorbed_share)
-
-            trade_rdv += domestic_share * net_amount * return_share
-            trade_dva_intermediate_absorbed += (
-                domestic_share * net_amount * absorbed_share
-            )
-            trade_dva_intermediate_reexported += (
-                domestic_share * net_amount * reexport_share
-            )
-
-        trade_dva = (
-            trade_dva_final
-            + trade_dva_intermediate_absorbed
-            + trade_dva_intermediate_reexported
-        )
-        trade_pdc = trade_ddc + trade_fdc
-        gross = float(gross_by_node[i])
-        accounted = trade_dva + trade_rdv + trade_ddc + trade_fva + trade_fdc
-        records.append({
-            "country": home,
-            "sector": sector,
+    df = pd.DataFrame(
+        {
             "trade_gross_exports": gross,
             "trade_dva": trade_dva,
             "trade_dva_final": trade_dva_final,
-            "trade_dva_intermediate_absorbed": trade_dva_intermediate_absorbed,
-            "trade_dva_intermediate_reexported": trade_dva_intermediate_reexported,
+            "trade_dva_intermediate_absorbed": trade_dva_absorbed,
+            "trade_dva_intermediate_reexported": trade_dva_reexported,
             "trade_rdv": trade_rdv,
             "trade_ddc": trade_ddc,
             "trade_fva": trade_fva,
             "trade_fdc": trade_fdc,
             "trade_pdc": trade_pdc,
-            "trade_forward_va_in_foreign_exports": float(forward_by_node[i]),
+            "trade_forward_va_in_foreign_exports": forward,
             "trade_balance_error": gross - accounted,
-        })
-
-    df = pd.DataFrame(records).set_index(["country", "sector"])
+        },
+        index=pd.MultiIndex.from_arrays(
+            [node_regions, node_sectors], names=["country", "sector"]
+        ),
+    )
     return _add_trade_shares(df)
 
 

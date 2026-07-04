@@ -86,7 +86,6 @@ export interface IndicatorGroup {
 export interface IndicatorSchema {
   groups: IndicatorGroup[];
   fields: Record<string, IndicatorFieldMeta>;
-  default_sort: Record<string, string>;
 }
 
 export interface SectorPage {
