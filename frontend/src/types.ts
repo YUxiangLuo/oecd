@@ -7,6 +7,7 @@ export interface Step {
   goal: string;
   concept: string;
   tip: string;
+  deps: string[];
 }
 
 export interface StepsResponse {

@@ -19,42 +19,71 @@ button { font-family: inherit; cursor: pointer; }
 .main { flex: 1; display: flex; min-height: 0; }
 
 .sidebar {
-  flex: none; width: 280px; background: #fff; border-right: 1px solid #e7e9f0;
-  overflow-y: auto; padding: 14px 10px 30px;
+  flex: none; width: 288px; background: #fff; border-right: 1px solid #e7e9f0;
+  display: flex; flex-direction: column; min-height: 0;
 }
+.sidebar-head { flex: none; padding: 18px 20px 14px; }
+.sidebar-head-row { display: flex; align-items: baseline; justify-content: space-between; }
+.sidebar-title { font-weight: 700; font-size: 13.5px; letter-spacing: 0.3px; }
+.sidebar-steps { font-size: 10.5px; color: #a2a8b6; font-family: monospace; }
+.progress-track {
+  margin-top: 11px; height: 6px; background: #eef0f5; border-radius: 99px; overflow: hidden;
+}
+.progress-bar {
+  height: 100%; background: linear-gradient(90deg, #4b47e0, #7a6bff);
+  border-radius: 99px; transition: width 0.4s;
+}
+.sidebar-sub { margin-top: 7px; font-size: 11px; color: #8a90a0; }
+.sidebar-list { flex: 1; overflow-y: auto; padding: 0 12px 24px; }
+
 .stage-label {
-  display: flex; align-items: center; gap: 8px; padding: 14px 8px 6px;
-  font-size: 11.5px; font-weight: 700; color: #3a4050;
+  display: flex; align-items: center; gap: 9px; padding: 14px 8px 8px;
+  font-size: 11.5px; font-weight: 700; color: #3a4050; letter-spacing: 0.3px;
 }
 .stage-label .roman {
-  width: 20px; height: 20px; border-radius: 6px; background: #f0f1f6;
-  color: #6b7280; font-size: 11px; display: flex; align-items: center; justify-content: center;
+  flex: none; width: 20px; height: 20px; border-radius: 6px; background: #f0f1f6;
+  color: #6b7280; font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
 }
+.stage-label .stage-rule { flex: 1; height: 1px; background: #eef0f5; }
 .step-row {
-  display: flex; align-items: center; gap: 9px; padding: 8px 10px;
-  border-radius: 9px; cursor: pointer; font-size: 12.5px; color: #3a4050;
+  display: flex; align-items: center; gap: 10px; padding: 8px;
+  border-radius: 9px; cursor: pointer; margin: 2px 0;
 }
 .step-row:hover { background: #f5f6fa; }
-.step-row.active { background: #edecfd; color: #4b47e0; font-weight: 600; }
-.step-num {
-  width: 20px; height: 20px; flex: none; border-radius: 50%; background: #f0f1f6;
-  font-size: 10.5px; display: flex; align-items: center; justify-content: center;
+.step-row.active { background: #edecfd; box-shadow: inset 2px 0 0 #4b47e0; }
+.step-badge {
+  flex: none; width: 20px; height: 20px; border-radius: 50%;
+  font-size: 10.5px; font-weight: 700; font-family: "Space Grotesk", sans-serif;
+  display: flex; align-items: center; justify-content: center;
 }
-.step-row.active .step-num { background: #4b47e0; color: #fff; }
-.status-dot { margin-left: auto; font-size: 9.5px; padding: 2px 6px; border-radius: 5px; flex: none; }
-.status-done { background: #e7f7ef; color: #12805a; }
-.status-demo { background: #fff5ee; color: #a2551f; }
-.status-partial { background: #edecfd; color: #4b47e0; }
-.status-planned { background: #f2f3f7; color: #8a90a0; }
+.step-badge.past { background: #12a150; color: #fff; }
+.step-badge.cur { background: #4b47e0; color: #fff; box-shadow: 0 0 0 4px #ded9fb; }
+.step-badge.future { background: #eef0f5; color: #a2a8b6; }
+.step-row-title {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12.5px; color: #5a6070;
+}
+.step-row.active .step-row-title { color: #2c2a6b; font-weight: 600; }
+.step-code { flex: none; font-size: 10px; font-family: monospace; color: #b7bcc9; }
 
-.content { flex: 1; min-width: 0; overflow-y: auto; padding: 24px 30px 60px; }
+.workarea { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.content-row { flex: 1; display: flex; min-height: 0; }
+.content { flex: 1; min-width: 0; overflow-y: auto; padding: 24px 30px 40px; }
 .content-inner { max-width: 960px; margin: 0 auto; }
 
-.step-header { display: flex; align-items: center; gap: 18px; margin-bottom: 20px; }
-.step-header .big-num {
-  font-size: 42px; font-weight: 700; color: #4b47e0; line-height: 1; letter-spacing: -1px;
+.step-header-bar {
+  flex: none; display: flex; align-items: center; gap: 20px;
+  padding: 18px 28px; background: #fff; border-bottom: 1px solid #e7e9f0;
 }
-.step-header h2 { margin: 4px 0 0; font-size: 20px; }
+.step-header-bar .big-num {
+  flex: none; font-family: "Space Grotesk", sans-serif; font-weight: 700;
+  font-size: 44px; line-height: 1; color: #4b47e0; letter-spacing: -1px;
+}
+.step-header-mid { flex: 1; min-width: 0; }
+.step-header-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.step-header-mid h2 { margin: 0; font-size: 20px; font-weight: 700; }
+.step-count { font-size: 11px; color: #a2a8b6; font-family: monospace; }
 .stage-chip {
   font-size: 11px; font-weight: 600; color: #4b47e0; background: #edecfd;
   padding: 3px 9px; border-radius: 6px;
@@ -391,6 +420,80 @@ button { font-family: inherit; cursor: pointer; }
 .topbar-user button {
   padding: 6px 12px; border-radius: 8px; border: 1px solid #e0e3ea; background: #fff;
   font-size: 12px; color: #5a6070;
+}
+.progress-pill {
+  display: flex; align-items: center; gap: 7px; padding: 6px 12px;
+  background: #f4f5f8; border-radius: 9px; font-size: 12px; color: #8a90a0;
+}
+.progress-pill b { font-family: "Space Grotesk", sans-serif; font-weight: 600; color: #1b1f2b; }
+.progress-pill span { color: #b7bcc9; }
+
+/* ---------- 右栏「本步速览」 ---------- */
+.rightrail {
+  flex: none; width: 300px; background: #fff; border-left: 1px solid #e7e9f0;
+  overflow-y: auto; padding: 22px 20px 32px;
+}
+.rail-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; margin-bottom: 16px; }
+.rail-head-ic {
+  width: 22px; height: 22px; border-radius: 7px; background: #edecfd;
+  display: flex; align-items: center; justify-content: center; font-size: 12px;
+}
+.rail-stage {
+  background: linear-gradient(135deg, #4b47e0, #6d63f5); border-radius: 12px;
+  padding: 14px 15px; margin-bottom: 16px; color: #fff;
+}
+.rail-stage-loc { font-size: 11px; opacity: 0.85; font-weight: 500; }
+.rail-stage-num { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; }
+.rail-stage-num b { font-family: "Space Grotesk", sans-serif; font-size: 26px; font-weight: 700; line-height: 1; }
+.rail-stage-num span { font-size: 12.5px; opacity: 0.9; }
+.rail-stage-sub { font-size: 11px; opacity: 0.85; margin-top: 5px; }
+.rail-sec { margin-bottom: 16px; }
+.rail-label { font-size: 10.5px; color: #8a90a0; font-weight: 600; letter-spacing: 0.3px; margin-bottom: 8px; }
+.rail-goal { font-size: 12.5px; color: #2a3040; line-height: 1.7; }
+.rail-tip {
+  display: flex; gap: 9px; padding: 13px 14px; margin-bottom: 16px;
+  background: #fff5ee; border: 1px solid #f6d6bf; border-radius: 11px;
+}
+.rail-tip > span { font-size: 14px; flex: none; }
+.rail-tip > div { font-size: 11.5px; color: #a2551f; line-height: 1.65; }
+.rail-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rail-chip {
+  font-size: 11px; color: #5a6070; background: #f2f3f7; border: 1px solid #eaecf1;
+  padding: 4px 9px; border-radius: 7px;
+}
+.rail-flow { border-top: 1px solid #eef0f5; padding-top: 15px; }
+.rail-flow-row {
+  display: flex; align-items: center; gap: 9px; padding: 9px 11px;
+  border-radius: 9px; cursor: pointer; margin-bottom: 6px;
+}
+.rail-flow-row:not(.cur):hover { background: #f5f6fa; }
+.rail-flow-row.cur { background: #edecfd; cursor: default; }
+.rail-flow-k { flex: none; font-size: 11px; color: #b7bcc9; font-family: monospace; }
+.rail-flow-row.cur .rail-flow-k { color: #4b47e0; font-weight: 600; }
+.rail-flow-t {
+  font-size: 12px; color: #5a6070; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rail-flow-row.cur .rail-flow-t { color: #2c2a6b; font-weight: 600; }
+
+/* ---------- 底部页脚(流程位置 + 圆点分页) ---------- */
+.stepfooter {
+  flex: none; height: 52px; display: flex; align-items: center; gap: 16px;
+  padding: 0 28px; background: #fff; border-top: 1px solid #e7e9f0;
+}
+.footer-loc, .footer-next { font-size: 11.5px; color: #9aa0ae; white-space: nowrap; }
+.footer-next { margin-left: auto; }
+.footer-dots { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; }
+.fdot {
+  width: 7px; height: 7px; border-radius: 99px; background: #dfe2ea;
+  cursor: pointer; transition: all 0.25s;
+}
+.fdot.past { background: #b6b1f2; }
+.fdot.on { width: 22px; background: #4b47e0; }
+
+/* 窄屏隐藏右栏,主区独占 */
+@media (max-width: 1180px) {
+  .rightrail { display: none; }
 }
 
 /* ---------- 步骤12-16 回归页面(讲解卡 + 设计选择 + 结果区) ---------- */
