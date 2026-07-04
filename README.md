@@ -31,6 +31,17 @@ uv run gvcsim serve
 cd frontend && bun install && bun run dev
 ```
 
+登录演示账号(登录页已预填,点登录即可;登录后有可跳过的交互式系统介绍):
+
+| 账号 | 密码 | 角色 |
+|---|---|---|
+| `student` | `gvclab2026` | 演示学生 |
+| `teacher` | `gvclab2026` | 演示教师 |
+
+认证是真实实现(PBKDF2 口令哈希 + HMAC 签名令牌,12 小时有效,
+`POST /api/auth/login` / `GET /api/auth/me`);数据接口暂不强制鉴权,
+真实部署时用 `auth.verify_token` 加 Bearer 依赖即可。
+
 不起前端也能用 CLI 走完全流程:
 
 ```bash
@@ -64,9 +75,11 @@ uv run pytest                         # 测试(37 个,含 API 集成测试)
 │   ├── report.py                 #   步骤17:自动生成 Markdown 实验报告
 │   ├── pipeline.py               #   预计算流水线:原始表 → 质检 → 指标 → 面板
 │   ├── steps.py                  #   17 步元数据(与原型一致,前端渲染用)
-│   ├── api.py                    #   FastAPI:面板/质检/冲击/可视化/回归/报告全部接口(CSV 按 mtime 缓存)
+│   ├── auth.py                   #   登录认证(演示账号,PBKDF2 + HMAC 签名令牌)
+│   ├── api.py                    #   FastAPI:认证/面板/质检/冲击/可视化/回归/报告全部接口(CSV 按 mtime 缓存)
 │   └── cli.py                    #   gvcsim 命令行入口
-├── frontend/                     # React + Vite + TS 前端(bun);viz.tsx 为步骤8-11
+├── frontend/                     # React + Vite + TS 前端(bun);login.tsx 登录页、
+│                                 #   intro.tsx 登录后交互式系统介绍、viz.tsx 步骤8-11
 │                                 #   富可视化 + 事件研究系数图(纯 SVG,零图表库依赖)
 ├── tests/                        # 合成小矩阵验证指标数学性质;回归系数恢复;API 集成
 ├── prototype/                    # 完整 UI 设计原型(最终形态参考,勿改)

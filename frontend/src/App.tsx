@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
+import { IntroOverlay } from "./intro";
 import { IndicatorLab, QcLab, RegressionLab, ReportLab, ShockLab, VizLab } from "./labs";
-import type { Meta, Step, StepsResponse } from "./types";
+import { LoginPage } from "./login";
+import type { AuthUser, Meta, Step, StepsResponse } from "./types";
+
+const TOKEN_KEY = "gvcsim_token";
 
 const ROMAN = ["", "一", "二", "三", "四", "五"];
 const STATUS_LABEL: Record<Step["status"], string> = {
@@ -44,11 +48,35 @@ export default function App() {
     return n >= 1 && n <= 17 ? n : 4;
   });
   const [fatal, setFatal] = useState<string | null>(null);
+  // 认证:localStorage 里的令牌先经 /api/auth/me 真实校验再放行
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [showIntro, setShowIntro] = useState(false);
 
   useEffect(() => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) { setAuthChecked(true); return; }
+    api.me(token).then(
+      (u) => { setUser(u); setAuthChecked(true); },
+      () => { localStorage.removeItem(TOKEN_KEY); setAuthChecked(true); },
+    );
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
     api.steps().then(setStepsData, (e) => setFatal(String(e.message ?? e)));
     api.meta().then(setMeta, () => setMeta({ years: [], countries: [], sectors: [] }));
-  }, []);
+  }, [user]);
+
+  if (!authChecked) return <div style={{ padding: 40 }} className="muted">加载中…</div>;
+  if (!user)
+    return (
+      <LoginPage onLogin={(r) => {
+        localStorage.setItem(TOKEN_KEY, r.token);
+        setUser(r.user);
+        setShowIntro(true);
+      }} />
+    );
 
   if (fatal)
     return (
@@ -73,10 +101,22 @@ export default function App() {
           <h1>供应链仿真系统</h1>
           <div className="sub">GVC SIMULATION LAB · DEV</div>
         </div>
-        <div style={{ marginLeft: "auto" }} className="muted">
-          数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
+        <div className="topbar-user">
+          <span className="muted">
+            数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
+          </span>
+          <span className="role-chip">{user.name}</span>
+          <button onClick={() => setShowIntro(true)}>ⓘ 系统介绍</button>
+          <button onClick={() => { localStorage.removeItem(TOKEN_KEY); setUser(null); }}>退出</button>
         </div>
       </header>
+
+      {showIntro && (
+        <IntroOverlay user={user} meta={meta} onDone={(gotoStep) => {
+          setShowIntro(false);
+          if (gotoStep) setCurrent(gotoStep);
+        }} />
+      )}
 
       <div className="main">
         <aside className="sidebar">

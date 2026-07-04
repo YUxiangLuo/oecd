@@ -10,10 +10,11 @@ from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from gvcsim import auth
 from gvcsim import report as report_mod
 from gvcsim import shocks
 from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
@@ -59,6 +60,30 @@ def _read_path(path: Path) -> pd.DataFrame:
 
 def _read_csv(name: str) -> pd.DataFrame:
     return _read_path(PROCESSED_DIR / name)
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+@app.post("/api/auth/login")
+def login(req: LoginRequest):
+    user = auth.authenticate(req.username, req.password)
+    if user is None:
+        raise HTTPException(status_code=401, detail="用户名或密码错误")
+    token, exp = auth.issue_token(user)
+    return {"token": token, "user": user, "expires_at": exp}
+
+
+@app.get("/api/auth/me")
+def me(authorization: str | None = Header(default=None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="缺少 Bearer 令牌")
+    payload = auth.verify_token(authorization.removeprefix("Bearer "))
+    if payload is None:
+        raise HTTPException(status_code=401, detail="令牌无效或已过期")
+    return {"username": payload["sub"], "name": payload["name"], "role": payload["role"]}
 
 
 @app.get("/api/meta")

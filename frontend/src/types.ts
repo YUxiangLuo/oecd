@@ -14,6 +14,18 @@ export interface StepsResponse {
   steps: Step[];
 }
 
+export interface AuthUser {
+  username: string;
+  name: string;
+  role: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  user: AuthUser;
+  expires_at: number;
+}
+
 export interface Meta {
   years: number[];
   countries: string[];

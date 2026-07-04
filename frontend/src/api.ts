@@ -8,6 +8,20 @@ async function get<T>(url: string): Promise<T> {
 }
 
 export const api = {
+  login: async (username: string, password: string) => {
+    const resp = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!resp.ok) throw new Error((await resp.json()).detail ?? resp.statusText);
+    return resp.json() as Promise<import("./types").LoginResponse>;
+  },
+  me: async (token: string) => {
+    const resp = await fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } });
+    if (!resp.ok) throw new Error("令牌无效或已过期");
+    return resp.json() as Promise<import("./types").AuthUser>;
+  },
   steps: () => get<import("./types").StepsResponse>("/api/steps"),
   meta: () => get<import("./types").Meta>("/api/meta"),
   qc: (year: number) => get<import("./types").QcCheck[]>(`/api/qc/${year}`),
