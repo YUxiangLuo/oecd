@@ -65,20 +65,27 @@ export const api = {
         (country ? `&country=${country}` : "") + (sector ? `&sector=${sector}` : ""),
     ),
   regressionOptions: () => get<import("./types").RegressionOptions>("/api/regression/options"),
-  regressionDesign: (params: { step: number; granularity: string; shockType?: string; method: string }) => {
+  regressionDesign: (params: {
+    step: number;
+    granularity: string;
+    shockType?: string;
+    method: string;
+    controlMode?: string;
+  }) => {
     const qs = new URLSearchParams({
       step: String(params.step),
       granularity: params.granularity,
       method: params.method,
     });
     if (params.shockType) qs.set("shock_type", params.shockType);
+    if (params.controlMode) qs.set("control_mode", params.controlMode);
     return get<import("./types").RegressionDesignInfo>(`/api/regression/design?${qs.toString()}`);
   },
-  runRegression: async (step: number, granularity: string, method: string) => {
+  runRegression: async (step: number, granularity: string, method: string, controlMode: string) => {
     const resp = await fetch("/api/regression/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ step, granularity, method }),
+      body: JSON.stringify({ step, granularity, method, control_mode: controlMode }),
     });
     if (!resp.ok) throw new Error((await resp.json()).detail ?? resp.statusText);
     return resp.json() as Promise<import("./types").RegressionResponse>;

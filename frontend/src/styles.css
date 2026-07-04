@@ -515,3 +515,11 @@ button { font-family: inherit; cursor: pointer; }
 .coef-stars { color: #f4693b; font-weight: 700; }
 .reg-interp { margin-top: 14px; border-left: 3px solid #12a150; }
 .reg-interp p { font-size: 13px; }
+.benchmark-box {
+  background: #f7f8fb; border: 1px solid #e7e9f0; border-radius: 12px;
+  padding: 13px 16px; margin-top: 14px;
+}
+.benchmark-box p {
+  margin: 0; color: #3a4050; font-size: 12.5px; line-height: 1.8;
+}
+.benchmark-box b { color: #2a3040; font-variant-numeric: tabular-nums; }

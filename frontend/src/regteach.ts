@@ -1,11 +1,11 @@
 /**
- * 步骤12-16 的讲解内容(文案移植自 prototype 原型,公式已修正为真实回归引擎口径:
- * 无宏观控制变量 γ·X,交互项列入路线图)与结果动态解读生成器。
+ * 步骤12-16 的讲解内容(文案移植自 prototype 原型,公式已修正为真实回归引擎口径)
+ * 与结果动态解读生成器。
  */
 import type { TeachBlock } from "./teach";
 import type { RegressionResponse } from "./types";
 
-const ROADMAP_X = "宏观控制变量 γ·X(GDP、双边距离、FDI、汇率)与平减指数在接入 WDI/CEPII 数据后加入 —— 见路线图;当前引擎依靠双向固定效应吸收个体与年份层面的混杂。";
+const ICIO_CONTROLS = "可切换 ICIO 派生控制变量 γ·Controls_ct(增加值规模、出口强度、制造业/服务业份额等);这些变量来自现有 ICIO 指标,用于教学稳健性演示。真实宏观控制与价格平减仍需接入 WDI/IMF/行业价格指数。";
 
 export const REG_TEACH: Record<number, TeachBlock[]> = {
   12: [
@@ -53,7 +53,7 @@ export const REG_TEACH: Record<number, TeachBlock[]> = {
         { sym: "treated×post", def: "处理组(曾受冲击的国家–行业)× 处理期(首个冲击年起)" },
         { sym: "α_ij / λ_t", def: "国家–行业、年份双向固定效应" },
       ],
-      note: "切换方法时解释变量随之变化:强度法用连续冲击 tariff_shock,事件研究用逐年动态系数。" + ROADMAP_X,
+      note: "切换方法时解释变量随之变化:强度法用连续冲击 tariff_shock,事件研究用逐年动态系数。" + ICIO_CONTROLS,
     },
     {
       kind: "concept", kicker: "怎么读结果", title: "系数图与显著性",
@@ -76,7 +76,7 @@ export const REG_TEACH: Record<number, TeachBlock[]> = {
         { sym: "ComplexGVC", def: "WWYZ 生产分解中的复杂 GVC 生产份额(增加值至少两次跨境)" },
         { sym: "β", def: "冲击对复杂全球分工的平均处理效应" },
       ],
-      note: "原型中的异质性交互项 β₂·(Tariff×高参与度) 需要引擎支持交互项后才能检验 —— 见路线图。" + ROADMAP_X,
+      note: "原型中的异质性交互项 β₂·(Tariff×高参与度) 需要引擎支持交互项后才能检验 —— 见路线图。" + ICIO_CONTROLS,
     },
     {
       kind: "takeaway",
@@ -101,12 +101,12 @@ export const REG_TEACH: Record<number, TeachBlock[]> = {
         { sym: "ChainLength", def: "生产链长度的跨境段(上游度分解;国内段是另一个可选因变量)" },
         { sym: "β", def: "冲击对跨境生产链长度的平均处理效应" },
       ],
-      note: ROADMAP_X,
+      note: ICIO_CONTROLS,
     },
     {
       kind: "pitfall",
       items: [
-        "不做平减 → 名义值波动会污染跨年比较(平减指数待接入宏观数据,当前由年份固定效应部分吸收共同的价格趋势);",
+        "未接外部价格指数 → 金额类指标仍是名义口径;当前用年份固定效应吸收共同年度冲击,并提供基期指数用于相对变化展示;",
         "链长受多因素影响,固定效应帮助隔离政策冲击。",
       ],
     },
@@ -125,7 +125,7 @@ export const REG_TEACH: Record<number, TeachBlock[]> = {
         { sym: "Centrality", def: "生产网络介数中心性(本步因变量;度/特征向量中心性见步骤7/11)" },
         { sym: "β", def: "冲击对网络地位的平均处理效应" },
       ],
-      note: "制裁清单冲击尚未接入,当前以关税冲击作为处理变量;" + ROADMAP_X,
+      note: "制裁清单冲击尚未接入,当前以关税冲击作为处理变量;" + ICIO_CONTROLS,
     },
     {
       kind: "takeaway",
@@ -183,11 +183,13 @@ export function interpretResult(step: number, resp: RegressionResponse): string[
   if (!read) return [DISCLAIMER];
   const { method } = resp.design;
   const coefs = resp.result.coefs;
+  const policyCoefs = coefs.filter((c) => !resp.design.controls.includes(c.name));
   const out: string[] = [];
 
   if (method === "事件研究") {
-    const pre = coefs.filter((c) => c.name.startsWith("k=-"));
-    const post = coefs.filter((c) => !c.name.startsWith("k=-"));
+    const eventCoefs = policyCoefs.filter((c) => c.name.startsWith("k="));
+    const pre = eventCoefs.filter((c) => c.name.startsWith("k=-"));
+    const post = eventCoefs.filter((c) => !c.name.startsWith("k=-"));
     const preBad = pre.filter((c) => c.stars !== "");
     out.push(
       preBad.length === 0
@@ -206,7 +208,7 @@ export function interpretResult(step: number, resp: RegressionResponse): string[
       );
     }
   } else {
-    const key = coefs[0];
+    const key = policyCoefs[0];
     if (key) {
       const isDid = method === "双重差分 (DID)";
       const dir = key.coef < 0 ? "下降" : "上升";

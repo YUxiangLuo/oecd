@@ -20,9 +20,9 @@ from gvcsim import shocks
 from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
 from gvcsim.data import icio_browser
 from gvcsim.regression.design import (
-    GRANULARITIES, METHODS, SHOCK_TYPES, STEP_DEPVARS, RegressionDesign,
+    CONTROL_MODES, GRANULARITIES, METHODS, SHOCK_TYPES, STEP_DEPVARS, RegressionDesign,
 )
-from gvcsim.regression.panel import run_design
+from gvcsim.regression.panel import run_design_with_benchmark
 from gvcsim.steps import STAGE_NAMES, STEPS
 
 app = FastAPI(title="供应链仿真系统 API", version="0.1.0")
@@ -361,6 +361,7 @@ class RegressionRequest(BaseModel):
     granularity: str = "国家–行业级"
     shock_type: str = "关税冲击"
     method: str = "双重差分 (DID)"
+    control_mode: str = "不加控制变量"
 
 
 @app.get("/api/regression/options")
@@ -369,11 +370,18 @@ def regression_options():
         "granularities": GRANULARITIES,
         "shock_types": SHOCK_TYPES,
         "methods": METHODS,
+        "control_modes": CONTROL_MODES,
         "steps": {k: v[1] for k, v in STEP_DEPVARS.items()},
     }
 
 
-def _validate_design(step: int, granularity: str, shock_type: str, method: str) -> RegressionDesign:
+def _validate_design(
+    step: int,
+    granularity: str,
+    shock_type: str,
+    method: str,
+    control_mode: str = "不加控制变量",
+) -> RegressionDesign:
     if step not in STEP_DEPVARS:
         raise HTTPException(status_code=400, detail="step 必须是 13-16")
     if granularity not in GRANULARITIES:
@@ -382,7 +390,12 @@ def _validate_design(step: int, granularity: str, shock_type: str, method: str) 
         raise HTTPException(status_code=400, detail=f"shock_type 必须是 {SHOCK_TYPES}")
     if method not in METHODS:
         raise HTTPException(status_code=400, detail=f"method 必须是 {METHODS}")
-    return RegressionDesign(step=step, granularity=granularity, shock_type=shock_type, method=method)
+    if control_mode not in CONTROL_MODES:
+        raise HTTPException(status_code=400, detail=f"control_mode 必须是 {CONTROL_MODES}")
+    return RegressionDesign(
+        step=step, granularity=granularity, shock_type=shock_type,
+        method=method, control_mode=control_mode,
+    )
 
 
 def _design_info(design: RegressionDesign) -> dict:
@@ -393,6 +406,9 @@ def _design_info(design: RegressionDesign) -> dict:
         "granularity": design.granularity,
         "shock_type": design.shock_type,
         "method": design.method,
+        "control_mode": design.control_mode,
+        "controls": list(design.controls),
+        "control_labels": design.control_labels,
         "equation": design.equation(),
         "panel_file": design.panel_file,
         "entity": design.entity,
@@ -406,22 +422,24 @@ def regression_design(
     granularity: str = "国家–行业级",
     shock_type: str = "关税冲击",
     method: str = "双重差分 (DID)",
+    control_mode: str = "不加控制变量",
 ):
     """步骤12 设计确认:不跑回归,只返回方程与面板/个体/聚类等设计信息。"""
-    return _design_info(_validate_design(step, granularity, shock_type, method))
+    return _design_info(_validate_design(step, granularity, shock_type, method, control_mode))
 
 
 @app.post("/api/regression/run")
 def regression_run(req: RegressionRequest):
-    design = _validate_design(req.step, req.granularity, req.shock_type, req.method)
+    design = _validate_design(req.step, req.granularity, req.shock_type, req.method, req.control_mode)
     panel = _read_csv(design.panel_file)
     try:
-        result = run_design(panel, design)
+        result, benchmark = run_design_with_benchmark(panel, design)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {
         "design": _design_info(design),
         "result": result.to_dict(),
+        "benchmark": benchmark,
         "disclaimer": "冲击变量为拟真演示面板(全经济体覆盖、行业异质),结果仅用于验证系统链路",
     }
 

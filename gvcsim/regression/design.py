@@ -7,6 +7,8 @@
 
 from dataclasses import dataclass
 
+from gvcsim.data.controls import CONTROL_COLUMNS, CONTROL_LABELS
+
 # 步骤编号 → (被解释变量, 中文含义)。列名来自 pipeline 产出的国家级面板。
 STEP_DEPVARS = {
     13: ("share_trade_fva", "出口中外国增加值份额(FVA share,KWW)"),
@@ -18,6 +20,9 @@ STEP_DEPVARS = {
 GRANULARITIES = ["国家–行业级", "国家级"]
 SHOCK_TYPES = ["关税冲击", "制裁清单", "出口管制"]
 METHODS = ["双重差分 (DID)", "双向固定效应", "事件研究"]
+CONTROL_MODE_NONE = "不加控制变量"
+CONTROL_MODE_ICIO = "ICIO 派生控制变量"
+CONTROL_MODES = [CONTROL_MODE_NONE, CONTROL_MODE_ICIO]
 
 # 粒度 → (面板文件, 个体列, 聚类列)。冲击在国家层面高度相关,
 # 行业级回归的标准误也按国家聚类,避免组内相关低估标准误。
@@ -35,6 +40,7 @@ class RegressionDesign:
     # 冲击数据自带宣布/生效时间线,默认用能识别因果的 DID(见步骤12 文案)
     method: str = "双重差分 (DID)"
     regressors: tuple[str, ...] = ("tariff_shock",)
+    control_mode: str = CONTROL_MODE_NONE
 
     @property
     def depvar(self) -> str:
@@ -56,16 +62,25 @@ class RegressionDesign:
     def cluster(self) -> str:
         return _PANEL_SPECS[self.granularity][2]
 
+    @property
+    def controls(self) -> tuple[str, ...]:
+        return tuple(CONTROL_COLUMNS) if self.control_mode == CONTROL_MODE_ICIO else ()
+
+    @property
+    def control_labels(self) -> dict[str, str]:
+        return {c: CONTROL_LABELS[c] for c in self.controls}
+
     def equation(self) -> str:
         """生成与原型界面一致的回归方程展示文本(按方法渲染解释变量)。"""
         unit = "it" if self.granularity == "国家级" else "ijt"
         ent = "i" if self.granularity == "国家级" else "ij"
         y = f"{self.depvar}_{unit}"
         fe = f"α_{ent} + λ_t"
+        controls = " + γ·Controls_ct" if self.controls else ""
         if self.method == "双重差分 (DID)":
             x = f"β·(treated_{ent} × post_t)"
         elif self.method == "事件研究":
             x = f"Σ_k β_k·(treated_{ent} × 1[t=T₀+k])"
         else:
             x = " + ".join(f"β·{r}_{unit}" for r in self.regressors)
-        return f"{y} = {x} + {fe} + ε_{unit}"
+        return f"{y} = {x}{controls} + {fe} + ε_{unit}"

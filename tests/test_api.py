@@ -40,7 +40,9 @@ def test_steps_metadata():
 def test_regression_options():
     resp = client.get("/api/regression/options")
     assert resp.status_code == 200
-    assert "双重差分 (DID)" in resp.json()["methods"]
+    body = resp.json()
+    assert "双重差分 (DID)" in body["methods"]
+    assert "ICIO 派生控制变量" in body["control_modes"]
 
 
 def test_regression_design():
@@ -52,7 +54,17 @@ def test_regression_design():
     assert body["panel_file"] == "panel_sector.csv"
     assert body["entity"] == "entity_id"
     assert body["cluster"] == "country"
+    assert body["control_mode"] == "不加控制变量"
+    assert body["controls"] == []
     assert "treated" in body["equation"]
+
+    ctrl = client.get(
+        "/api/regression/design",
+        params={"step": 13, "control_mode": "ICIO 派生控制变量"},
+    )
+    assert ctrl.status_code == 200
+    assert ctrl.json()["controls"]
+    assert "Controls_ct" in ctrl.json()["equation"]
 
     ev = client.get(
         "/api/regression/design",
@@ -68,6 +80,9 @@ def test_regression_design():
     ).status_code == 400
     assert client.get(
         "/api/regression/design", params={"step": 13, "shock_type": "汇率冲击"}
+    ).status_code == 400
+    assert client.get(
+        "/api/regression/design", params={"step": 13, "control_mode": "外部宏观控制"}
     ).status_code == 400
 
 
@@ -208,6 +223,8 @@ def test_regression_run():
     assert body["design"]["granularity"] == "国家–行业级"
     assert body["design"]["method"] == "双重差分 (DID)"
     assert body["result"]["coefs"][0]["name"] == "treated×post"
+    assert "benchmark" in body
+    assert body["benchmark"]["backend"] == "linearmodels.PanelOLS"
     # 行业级个体数远多于国家数;标准误按国家聚类
     assert body["result"]["n_entities"] > 1000
     assert body["result"]["n_clusters"] < 100
@@ -224,6 +241,15 @@ def test_regression_run():
     assert bad.status_code == 400
     bad = client.post("/api/regression/run", json={"step": 13, "method": "工具变量"})
     assert bad.status_code == 400
+
+    ctrl = client.post(
+        "/api/regression/run",
+        json={"step": 13, "granularity": "国家级", "control_mode": "ICIO 派生控制变量"},
+    )
+    assert ctrl.status_code == 200
+    assert ctrl.json()["design"]["controls"]
+    names = [c["name"] for c in ctrl.json()["result"]["coefs"]]
+    assert "treated×post" in names
 
 
 @needs_data

@@ -9,8 +9,8 @@ from datetime import date
 import pandas as pd
 
 from gvcsim.config import PROCESSED_DIR, REPORTS_DIR, processed_years
-from gvcsim.regression.design import STEP_DEPVARS, RegressionDesign
-from gvcsim.regression.panel import RegressionResult, run_design
+from gvcsim.regression.design import CONTROL_MODE_ICIO, STEP_DEPVARS, RegressionDesign
+from gvcsim.regression.panel import RegressionResult, benchmark_linearmodels, run_design
 
 
 def _load_panel(design: RegressionDesign) -> pd.DataFrame:
@@ -25,10 +25,13 @@ def run_step_regression(
     panel: pd.DataFrame | None = None,
     granularity: str = "国家–行业级",
     method: str | None = None,
+    control_mode: str = "不加控制变量",
 ) -> RegressionResult:
     """跑步骤13-16 对应的默认设计回归(默认国家–行业级粒度 + DID)。"""
     kwargs = {"method": method} if method else {}
-    design = RegressionDesign(step=step, granularity=granularity, **kwargs)
+    design = RegressionDesign(
+        step=step, granularity=granularity, control_mode=control_mode, **kwargs
+    )
     if panel is None:
         panel = _load_panel(design)
     return run_design(panel, design)
@@ -44,6 +47,41 @@ def _coef_table(result: RegressionResult) -> str:
         f"\nN = {result.n_obs}({result.n_entities} 个国家×行业 × {result.n_times} 年,"
         f"标准误按 {result.n_clusters} 国聚类),组内 R² = {result.r2_within:.4f},"
         "双向固定效应 ✓"
+    )
+    return "\n".join(lines)
+
+
+def _policy_names(design: RegressionDesign, result: RegressionResult) -> list[str]:
+    if design.method == "双重差分 (DID)":
+        return ["treated×post"]
+    if design.method == "事件研究":
+        return [c.name for c in result.coefs if c.name not in design.controls]
+    return list(design.regressors)
+
+
+def _compare_table(
+    base_design: RegressionDesign,
+    base: RegressionResult,
+    ctrl_design: RegressionDesign,
+    ctrl: RegressionResult,
+) -> str:
+    base_by = {c.name: c for c in base.coefs}
+    ctrl_by = {c.name: c for c in ctrl.coefs}
+    lines = [
+        "| 政策变量 | 基准系数 | 基准 p | 加控制系数 | 加控制 p |",
+        "|---|---:|---:|---:|---:|",
+    ]
+    for name in _policy_names(base_design, base):
+        if name not in base_by or name not in ctrl_by:
+            continue
+        b, c = base_by[name], ctrl_by[name]
+        lines.append(
+            f"| {name} | {b.coef:.4f}{b.stars} | {b.p:.3f} | "
+            f"{c.coef:.4f}{c.stars} | {c.p:.3f} |"
+        )
+    lines.append(
+        f"\n基准:N={base.n_obs},组内 R²={base.r2_within:.4f}; "
+        f"加控制:N={ctrl.n_obs},组内 R²={ctrl.r2_within:.4f}。"
     )
     return "\n".join(lines)
 
@@ -72,6 +110,8 @@ def generate(year: int | None = None) -> str:
         "- 方法:国家–行业级双重差分(个体=国家×行业,处理组=曾受冲击个体,"
         "处理期=首个冲击年起),含双向固定效应,标准误按国家聚类;"
         "双向FE(强度法)与事件研究可在前端切换",
+        "- 稳健性:同时输出基准模型与 ICIO 派生国家-年份控制变量模型;"
+        "控制变量来自现有 ICIO 指标,未接外部宏观数据库或真实价格指数",
         f"- 生成日期:{date.today().isoformat()}\n",
         "## 一、数据与质检",
         f"覆盖 {snap.shape[0]} 个国家/地区、{len(years)} 个年份。"
@@ -89,11 +129,19 @@ def generate(year: int | None = None) -> str:
 
     for step in sorted(STEP_DEPVARS):
         design = RegressionDesign(step=step)
+        ctrl_design = RegressionDesign(step=step, control_mode=CONTROL_MODE_ICIO)
         result = run_step_regression(step, sector_panel)
+        ctrl_result = run_step_regression(step, sector_panel, control_mode=CONTROL_MODE_ICIO)
+        bench = benchmark_linearmodels(sector_panel, ctrl_design, ctrl_result)
         sections += [
             f"### 步骤{step}:{design.depvar_label}",
             f"模型:`{design.equation()}`\n",
-            _coef_table(result),
+            _compare_table(design, result, ctrl_design, ctrl_result),
+            f"\n加控制模型:`{ctrl_design.equation()}`",
+            "控制变量:" + "、".join(ctrl_design.control_labels.values()),
+            f"PanelOLS 对照:最大政策系数差异={bench['max_abs_coef_diff']:.2e},"
+            f"最大标准误差异={bench['max_abs_se_diff']:.2e},"
+            f"{'通过' if bench['passed'] else '需复核'}。",
             "",
         ]
 
@@ -102,6 +150,8 @@ def generate(year: int | None = None) -> str:
         "- 本报告验证了“数据 → 指标 → 回归 → 报告”闭环可自动运行(回归为国家–行业级)。",
         "- 冲击变量为拟真演示面板(事件与量级参考公开资料的手工编码,出口暴露度为风格化数值);"
         "接入 PIIE/WTO 真实数据 + 官方 HS→ICIO 映射后本报告即具备研究意义。",
+        "- 本版控制变量为 ICIO 内生派生变量,用于稳健性演示;金额指数是相对基期变化,"
+        "不是真实平减值。论文级研究仍需接入 WDI/IMF/行业价格指数。",
         "- 指标采用 KWW 风格贸易流分解与 WWYZ 生产活动分解的国家/国家–行业聚合口径,"
         "重复计算项为启发式近似(详见 README 方法论说明),论文级精度需替换为 "
         "KWW/Borin-Mancini 完整分解;本报告不输出 exporter-importer-sector 双边矩阵明细。",

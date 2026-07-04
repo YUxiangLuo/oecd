@@ -60,12 +60,16 @@ function ChoiceCard({ title, hint, children }: {
 
 /** 设计摘要行:面板 / 个体 / 聚类(设计端点返回的真实口径) */
 function DesignMeta({ d }: { d: RegressionDesignInfo }) {
+  const controls = d.controls.length
+    ? d.controls.map((c) => d.control_labels[c] ?? c).join("、")
+    : "不加控制变量";
   return (
     <div className="design-meta">
       <span>被解释变量:{d.depvar_label}</span>
       <span>面板:{d.panel_file}</span>
       <span>个体 = {ENTITY_LABEL[d.entity] ?? d.entity}</span>
       <span>标准误按{ENTITY_LABEL[d.cluster] ?? d.cluster}聚类</span>
+      <span>控制:{controls}</span>
     </div>
   );
 }
@@ -79,11 +83,14 @@ export function RegDesignLab() {
   const [gran, setGran] = useState("国家–行业级");
   const [shock, setShock] = useState("关税冲击");
   const [method, setMethod] = useState("双重差分 (DID)");
+  const [controlMode, setControlMode] = useState("不加控制变量");
   const [depStep, setDepStep] = useState(13);
 
   const { data: design, error: designErr } = useAsync<RegressionDesignInfo>(
-    () => api.regressionDesign({ step: depStep, granularity: gran, shockType: shock, method }),
-    [depStep, gran, shock, method],
+    () => api.regressionDesign({
+      step: depStep, granularity: gran, shockType: shock, method, controlMode,
+    }),
+    [depStep, gran, shock, method, controlMode],
   );
 
   if (optsErr) return <div className="error-box">{optsErr}</div>;
@@ -108,6 +115,13 @@ export function RegDesignLab() {
         </ChoiceCard>
         <ChoiceCard title="因果推断方式" hint="有精确时间线才能做 DID / 事件研究。">
           <Pills options={opts.methods} value={method} onChange={setMethod} />
+        </ChoiceCard>
+        <ChoiceCard title="控制变量" hint="使用现有 ICIO 指标派生国家-年份控制变量。">
+          <Pills
+            options={opts.control_modes ?? ["不加控制变量", "ICIO 派生控制变量"]}
+            value={controlMode}
+            onChange={setControlMode}
+          />
         </ChoiceCard>
         <ChoiceCard title="被解释变量" hint="对应步骤13–16 的四组 GVC 指标回归。">
           <div className="pill-row">
@@ -138,27 +152,28 @@ export function RegDesignLab() {
 export function RegressionRunLab({ step }: { step: Step }) {
   const [gran, setGran] = useState("国家–行业级");
   const [method, setMethod] = useState("双重差分 (DID)");
+  const [controlMode, setControlMode] = useState("不加控制变量");
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
   const { data: opts } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
   const { data: design } = useAsync<RegressionDesignInfo>(
-    () => api.regressionDesign({ step: step.n, granularity: gran, method }),
-    [step.n, gran, method],
+    () => api.regressionDesign({ step: step.n, granularity: gran, method, controlMode }),
+    [step.n, gran, method, controlMode],
   );
 
   // 换步骤/设计时清空旧结果,按钮回到初态
   useEffect(() => {
     setResult(null);
     setError(null);
-  }, [step.n, gran, method]);
+  }, [step.n, gran, method, controlMode]);
 
   const run = async () => {
     setRunning(true);
     setError(null);
     try {
-      setResult(await api.runRegression(step.n, gran, method));
+      setResult(await api.runRegression(step.n, gran, method, controlMode));
     } catch (e) {
       setError(String((e as Error).message));
     } finally {
@@ -167,6 +182,9 @@ export function RegressionRunLab({ step }: { step: Step }) {
   };
 
   const isEvent = method === "事件研究";
+  const policyCoefs = result
+    ? result.result.coefs.filter((c) => !result.design.controls.includes(c.name))
+    : [];
 
   return (
     <div>
@@ -186,6 +204,14 @@ export function RegressionRunLab({ step }: { step: Step }) {
           <div className="model-control">
             <span className="model-control-label">方法</span>
             <Pills options={opts?.methods ?? ["双重差分 (DID)", "双向固定效应", "事件研究"]} value={method} onChange={setMethod} />
+          </div>
+          <div className="model-control">
+            <span className="model-control-label">控制</span>
+            <Pills
+              options={opts?.control_modes ?? ["不加控制变量", "ICIO 派生控制变量"]}
+              value={controlMode}
+              onChange={setControlMode}
+            />
           </div>
         </div>
         <div className="model-eq">{design ? design.equation : "…"}</div>
@@ -230,12 +256,23 @@ export function RegressionRunLab({ step }: { step: Step }) {
                 N = {result.result.n_obs.toLocaleString("zh-CN")} · {result.result.n_entities.toLocaleString("zh-CN")} 个体 × {result.result.n_times} 年 · {result.result.n_clusters} 个聚类 · 组内 R² = {result.result.r2_within.toFixed(4)} · 固定效应 ✓
               </p>
             </div>
-            {!isEvent && <CoefForestChart coefs={result.result.coefs} />}
+            {!isEvent && <CoefForestChart coefs={policyCoefs} />}
           </div>
 
           {isEvent && (
-            <EventStudyChart coefs={result.result.coefs} notes={result.result.notes} />
+            <EventStudyChart coefs={policyCoefs} notes={result.result.notes} />
           )}
+
+          <div className="benchmark-box">
+            <div className="teach-label">标准库对照</div>
+            <p>
+              {result.benchmark.backend}:政策系数最大差异{" "}
+              <b>{result.benchmark.max_abs_coef_diff.toExponential(2)}</b>,
+              标准误最大差异{" "}
+              <b>{result.benchmark.max_abs_se_diff.toExponential(2)}</b>
+              {result.benchmark.passed ? "。系数对照通过。" : "。请复核对照差异。"}
+            </p>
+          </div>
 
           <div className="teach-card reg-interp">
             <div className="teach-label">📋 结果解读(按本次估计自动生成)</div>

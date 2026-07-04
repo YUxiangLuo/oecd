@@ -30,6 +30,8 @@ def main() -> None:
                    help="回归粒度:sector=国家–行业级(默认),country=国家级")
     p.add_argument("--method", default="did", choices=["did", "fe", "event"],
                    help="估计方法:did=双重差分(默认),fe=双向固定效应(强度法),event=事件研究")
+    p.add_argument("--controls", action="store_true",
+                   help="加入 ICIO 派生国家-年份控制变量")
 
     p = sub.add_parser("report", help="生成实验报告")
     p.add_argument("--year", type=int, default=None)
@@ -63,14 +65,21 @@ def main() -> None:
         pipeline.run(args.years)
 
     elif args.command == "regress":
-        from gvcsim.regression.design import RegressionDesign
+        from gvcsim.regression.design import CONTROL_MODE_ICIO, RegressionDesign
         from gvcsim.report import run_step_regression
 
         granularity = "国家–行业级" if args.granularity == "sector" else "国家级"
         method = {"did": "双重差分 (DID)", "fe": "双向固定效应", "event": "事件研究"}[args.method]
-        design = RegressionDesign(step=args.step, granularity=granularity, method=method)
-        result = run_step_regression(args.step, granularity=granularity, method=method)
+        control_mode = CONTROL_MODE_ICIO if args.controls else "不加控制变量"
+        design = RegressionDesign(
+            step=args.step, granularity=granularity, method=method, control_mode=control_mode
+        )
+        result = run_step_regression(
+            args.step, granularity=granularity, method=method, control_mode=control_mode
+        )
         print(f"步骤{args.step}:{design.depvar_label}({granularity} · {method})")
+        if args.controls:
+            print("控制变量:ICIO 派生国家-年份控制变量")
         print(f"模型: {design.equation()}\n")
         print(f"{'变量':<20}{'系数':>12}{'标准误':>12}{'t':>8}{'p':>8}")
         for c in result.coefs:
