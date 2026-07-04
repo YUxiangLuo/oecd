@@ -110,6 +110,13 @@ button { font-family: inherit; cursor: pointer; }
 .data-table tr:hover td { background: #f7f8fb; }
 .table-wrap { overflow-x: auto; border: 1px solid #e7e9f0; border-radius: 12px; background: #fff; }
 
+.seg { display: flex; background: #eef0f5; border-radius: 9px; padding: 3px; gap: 2px; }
+.seg button {
+  padding: 5px 14px; border: none; border-radius: 7px; background: transparent;
+  font-size: 12px; color: #8a90a0; font-weight: 600;
+}
+.seg button.on { background: #fff; color: #4b47e0; box-shadow: 0 1px 4px rgba(20, 24, 40, 0.12); }
+
 .pager { display: flex; align-items: center; gap: 12px; padding: 12px 4px; font-size: 12px; color: #8a90a0; }
 .pager button { padding: 6px 12px; border-radius: 8px; border: 1px solid #e0e3ea; background: #fff; }
 

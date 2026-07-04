@@ -55,6 +55,11 @@ export interface QcCheck {
   warnings: string[];
 }
 
+export interface NetworkData {
+  nodes: Record<string, string | number | null>[];
+  edges: Record<string, string | number | null>[];
+}
+
 export interface SectorPage {
   total: number;
   page: number;

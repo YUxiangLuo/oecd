@@ -24,7 +24,7 @@ function Lab({ step, meta }: { step: Step; meta: Meta | null }) {
   if (step.lab === "shock") return meta ? <ShockLab meta={meta} /> : null;
   if (step.lab === "ind") return meta ? <IndicatorLab meta={meta} /> : null;
   if (step.lab === "viz")
-    return meta ? <VizLab meta={meta} columns={VIZ_COLUMNS[step.n] ?? []} /> : null;
+    return meta ? <VizLab meta={meta} step={step} columns={VIZ_COLUMNS[step.n] ?? []} /> : null;
   if (step.lab === "rgd" || step.lab === "reg") return <RegressionLab step={step} />;
   if (step.lab === "rep") return meta ? <ReportLab meta={meta} /> : null;
   // db:纯讲解型步骤

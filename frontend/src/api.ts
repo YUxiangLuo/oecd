@@ -17,6 +17,7 @@ export const api = {
     get<import("./types").SectorPage>(
       `/api/indicators/sector/${year}?page=${page}${country ? `&country=${country}` : ""}`,
     ),
+  network: (year: number) => get<import("./types").NetworkData>(`/api/viz/network/${year}`),
   shockEvents: () =>
     get<{ events: import("./types").ShockEvent[]; disclaimer: string }>("/api/shocks/events"),
   shockSummary: () => get<import("./types").ShockSummary>("/api/shocks/summary"),

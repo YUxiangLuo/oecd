@@ -6,8 +6,9 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import type {
-  Meta, QcCheck, RegressionResponse, SectorPage, ShockEvent, ShockSummary, Step,
+  Meta, NetworkData, QcCheck, RegressionResponse, SectorPage, ShockEvent, ShockSummary, Step,
 } from "./types";
+import { EventStudyChart, HeatTableViz, LengthViz, NetworkViz, StackedShareViz } from "./viz";
 
 const fmt = (v: string | number | null, digits = 3) =>
   typeof v === "number" ? v.toFixed(digits) : (v ?? "—");
@@ -228,35 +229,62 @@ export function IndicatorLab({ meta }: { meta: Meta }) {
   );
 }
 
-/** 步骤8-11:可视化(最小版 —— 国家级指标排序表,富图表见路线图) */
-export function VizLab({ meta, columns }: { meta: Meta; columns: string[] }) {
+/** 步骤8-11:富可视化(网络图/堆叠条/长度条/热力表),每个图都有表格视图孪生 */
+export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; columns: string[] }) {
   const [year, setYear] = useState(meta.years.at(-1)!);
-  const { data, error } = useAsync(() => api.countryIndicators(year), [year]);
-  if (error) return <div className="error-box">{error}</div>;
+  const [view, setView] = useState<"chart" | "table">("chart");
+  const isNetwork = step.n === 8;
+  const { data: rows, error } = useAsync(
+    () => api.countryIndicators(year),
+    [year],
+  );
+  const { data: net, error: netErr } = useAsync<NetworkData | null>(
+    () => (isNetwork ? api.network(year) : Promise.resolve(null)),
+    [year, isNetwork],
+  );
+  if (error || netErr) return <div className="error-box">{error ?? netErr}</div>;
+
   const sortCol = columns[0];
-  const rows = (data ?? [])
+  const tableRows = (rows ?? [])
     .slice()
     .sort((a, b) => Number(b[sortCol] ?? 0) - Number(a[sortCol] ?? 0))
     .slice(0, 15);
+
+  const chart = () => {
+    if (isNetwork) return net ? <NetworkViz data={net} /> : <p className="muted">加载中…</p>;
+    if (!rows) return <p className="muted">加载中…</p>;
+    if (step.n === 9) return <StackedShareViz rows={rows} />;
+    if (step.n === 10) return <LengthViz rows={rows} />;
+    return <HeatTableViz rows={rows} />;
+  };
+
   return (
     <div>
-      <div className="tipbox">
-        最小版可视化:按 <b>{sortCol}</b> 排序的 Top 15 国家。交互式网络图/堆叠条形图对应 prototype/ 原型,见 README 路线图。
+      <div className="controls">
+        <label>年份</label>
+        <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+          {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <div className="seg">
+          <button className={view === "chart" ? "on" : ""} onClick={() => setView("chart")}>图表</button>
+          <button className={view === "table" ? "on" : ""} onClick={() => setView("table")}>表格</button>
+        </div>
       </div>
-      <YearPicker years={meta.years} year={year} onChange={setYear} />
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead><tr><th>国家</th>{columns.map((c) => <th key={c}>{c}</th>)}</tr></thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={String(r.country)}>
-                <td>{String(r.country)}</td>
-                {columns.map((c) => <td key={c}>{fmt(r[c])}</td>)}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {view === "chart" ? chart() : (
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead><tr><th>国家</th>{columns.map((c) => <th key={c}>{c}</th>)}</tr></thead>
+            <tbody>
+              {tableRows.map((r) => (
+                <tr key={String(r.country)}>
+                  <td>{String(r.country)}</td>
+                  {columns.map((c) => <td key={c}>{fmt(r[c])}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -330,6 +358,9 @@ export function RegressionLab({ step }: { step: Step }) {
             ({result.result.n_entities} 个体 × {result.result.n_times} 年,{result.result.n_clusters} 国聚类)· 组内 R² = {result.result.r2_within.toFixed(4)}
           </p>
           {result.result.notes.map((n) => <p key={n} className="muted">· {n}</p>)}
+          {result.design.method === "事件研究" && (
+            <EventStudyChart coefs={result.result.coefs} notes={result.result.notes} />
+          )}
         </div>
       )}
     </div>
