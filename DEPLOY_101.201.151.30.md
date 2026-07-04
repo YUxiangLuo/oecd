@@ -13,8 +13,8 @@
 - systemd 服务: `gvcsim-api.service`
 - 后端监听: `127.0.0.1:18000`
 - 前端静态文件: `/opt/oecd-icio-analysis/frontend/dist`
-- 当前部署来源分支: `codex/icio-controls-regression`
-- 当前部署来源提交: `69527d3 Add ICIO controls to regression workflow`
+- 当前部署来源分支: `cc`
+- 当前部署来源提交: `27592dd 步骤8-11 探索器加入「趋势图」`
 
 ## 本地准备
 
@@ -32,6 +32,7 @@ cd ..
 rsync -az --delete --info=progress2 \
   --exclude='.git/' \
   --exclude='.venv/' \
+  --exclude='.venv311/' \
   --exclude='frontend/node_modules/' \
   --exclude='__pycache__/' \
   --exclude='*.pyc' \
@@ -40,6 +41,12 @@ rsync -az --delete --info=progress2 \
   --exclude='data/.auth_secret' \
   ./ root@101.201.151.30:/opt/oecd-icio-analysis/
 ```
+
+> ⚠️ **必须排除 `.venv311/`**。它是服务器上的运行时虚拟环境(systemd 的
+> `ExecStart` 指向 `.venv311/bin/uvicorn`),本地并没有这个目录。若不排除,
+> `--delete` 会把它整个删掉,服务一旦重启就起不来。首次部署时 `.venv311`
+> 还不存在所以没暴露这个坑;之后每次同步都必须带上这条 exclude。
+> (2026-07-05 曾因漏掉这条把线上 venv 删了,靠重建 `.venv311` 才恢复。)
 
 说明:
 
