@@ -14,7 +14,7 @@ def test_login_success_and_me():
     resp = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["user"] == {"username": "student", "name": "演示学生", "role": "student"}
+    assert body["user"] == {"username": "student", "name": "同学", "role": "student"}
     assert body["expires_at"] > time.time()
 
     me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {body['token']}"})
@@ -30,7 +30,7 @@ def test_login_rejects_bad_credentials():
 def test_me_rejects_missing_or_tampered_token():
     assert client.get("/api/auth/me").status_code == 401
 
-    token, _ = auth.issue_token({"username": "student", "name": "演示学生", "role": "student"})
+    token, _ = auth.issue_token({"username": "student", "name": "同学", "role": "student"})
     payload, sig = token.split(".", 1)
     tampered = payload + "x." + sig
     assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {tampered}"}).status_code == 401
@@ -38,6 +38,6 @@ def test_me_rejects_missing_or_tampered_token():
 
 def test_expired_token_rejected(monkeypatch):
     monkeypatch.setattr(auth, "TOKEN_TTL_SECONDS", -10)
-    token, _ = auth.issue_token({"username": "student", "name": "演示学生", "role": "student"})
+    token, _ = auth.issue_token({"username": "student", "name": "同学", "role": "student"})
     assert auth.verify_token(token) is None
     assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 401

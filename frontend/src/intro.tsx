@@ -9,6 +9,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
+import { LogoMark } from "./brand";
 import type { AuthUser, Meta, ShockEvent, StepsResponse } from "./types";
 
 const N_SCENES = 5;
@@ -31,6 +32,25 @@ function CountUp({ value, suffix }: { value: number; suffix?: string }) {
   return <span>{v}{suffix ?? ""}</span>;
 }
 
+/** 数据卡左上角的小图标(内联 SVG,替代 emoji) */
+function CardIcon({ kind }: { kind: "icio" | "shock" }) {
+  return (
+    <span className="intro-card-icon" aria-hidden>
+      {kind === "icio" ? (
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7">
+          <circle cx="12" cy="12" r="9" />
+          <ellipse cx="12" cy="12" rx="4.2" ry="9" />
+          <path d="M3.6 9h16.8M3.6 15h16.8" />
+        </svg>
+      ) : (
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+          <path d="M13.2 2.5 5 13.4h5.1L9.6 21.5l8.4-11.3h-5.3l0.5-7.7z" />
+        </svg>
+      )}
+    </span>
+  );
+}
+
 export function IntroOverlay({ user, meta, onDone }: {
   user: AuthUser;
   meta: Meta | null;
@@ -39,7 +59,7 @@ export function IntroOverlay({ user, meta, onDone }: {
   const [scene, setScene] = useState(0);
   const [stepsData, setStepsData] = useState<StepsResponse | null>(null);
   const [events, setEvents] = useState<ShockEvent[]>([]);
-  const [openCard, setOpenCard] = useState<"icio" | "shock" | null>(null);
+  const [openCard, setOpenCard] = useState<"icio" | "shock" | null>("icio");
   const [stage, setStage] = useState(1);
   const [tau, setTau] = useState(0);
 
@@ -73,21 +93,25 @@ export function IntroOverlay({ user, meta, onDone }: {
   const shrink = Math.max(0.25, 1 - tau * 2.6);
   const demoShare = (12.0 * Math.max(0.3, 1 - tau * 1.8)).toFixed(1);
 
+  const roleName = user.role === "teacher" ? "教师" : "学生";
+
   const scenes = [
     /* ---- 1 开场 ---- */
     <div key={0} className="intro-scene">
-      <div className="intro-logo">仿</div>
+      <div className="intro-logo"><LogoMark size={76} /></div>
       <h1 className="intro-title">供应链仿真系统</h1>
       <div className="intro-kicker">GVC SIMULATION LAB</div>
       <p className="intro-lede">
-        把 <b>真实世界数据</b> 变成 <b>可检验的经济学结论</b> ——
+        把<b>真实世界数据</b>变成<b>可检验的经济学结论</b> ——
         一条从数据接入到实验报告的完整闭环。
       </p>
       <div className="intro-pipeline">
-        {["① 数据接入", "② 指标计算", "③ 可视化", "④ 因果回归", "⑤ 实验报告"].map((p, i) => (
-          <span key={p} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span className="intro-chip" style={{ animationDelay: `${0.3 + i * 0.4}s` }}>{p}</span>
-            {i < 4 && <span className="intro-arrow" style={{ animationDelay: `${0.5 + i * 0.4}s` }}>→</span>}
+        {["数据接入", "指标计算", "可视化", "因果回归", "实验报告"].map((p, i) => (
+          <span key={p} style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <span className="intro-chip" style={{ animationDelay: `${0.3 + i * 0.35}s` }}>
+              <span className="intro-chip-num">{i + 1}</span>{p}
+            </span>
+            {i < 4 && <span className="intro-arrow" style={{ animationDelay: `${0.45 + i * 0.35}s` }}>→</span>}
           </span>
         ))}
       </div>
@@ -101,31 +125,50 @@ export function IntroOverlay({ user, meta, onDone }: {
 
     /* ---- 2 数据底座 ---- */
     <div key={1} className="intro-scene">
+      <div className="intro-scene-kicker">第 2 幕 · 数据底座</div>
       <h2 className="intro-h2">两块数据底座</h2>
-      <p className="intro-lede">价值链是"果",政策冲击是"因" —— 点击卡片看看它们分别是什么。</p>
+      <p className="intro-lede">价值链是"果",政策冲击是"因"。点开卡片,看看它们分别是什么。</p>
       <div className="intro-cards">
-        <div className={`intro-card${openCard === "icio" ? " open" : ""}`}
-          onClick={() => setOpenCard(openCard === "icio" ? null : "icio")}>
-          <div className="intro-card-title">🌐 OECD 全球投入产出表</div>
-          <div className="intro-card-sub">谁买了谁的东西 —— 全球生产网络的账本</div>
+        <div
+          className={`intro-card${openCard === "icio" ? " open" : ""}`}
+          onClick={() => setOpenCard(openCard === "icio" ? null : "icio")}
+        >
+          <div className="intro-card-head">
+            <CardIcon kind="icio" />
+            <div>
+              <div className="intro-card-title">OECD 全球投入产出表</div>
+              <div className="intro-card-sub">谁买了谁的东西 —— 全球生产网络的账本</div>
+            </div>
+            <span className="intro-card-toggle">{openCard === "icio" ? "−" : "+"}</span>
+          </div>
           {openCard === "icio" && (
             <div className="intro-card-body">
-              <div>· {meta?.countries.length ?? 77} 经济体 × {meta?.sectors.length ?? 45} 行业,{yearSpan} 逐年</div>
-              <div>· 每年一张 {nodes.toLocaleString()} × {nodes.toLocaleString()} 的中间品流量矩阵</div>
-              <div>· 由此解出里昂惕夫逆矩阵,追踪增加值的跨境路径</div>
+              <div>{meta?.countries.length ?? 77} 经济体 × {meta?.sectors.length ?? 45} 行业,{yearSpan} 逐年</div>
+              <div>每年一张 {nodes.toLocaleString()} × {nodes.toLocaleString()} 的中间品流量矩阵</div>
+              <div>由此解出里昂惕夫逆矩阵,追踪增加值的跨境路径</div>
             </div>
           )}
         </div>
-        <div className={`intro-card${openCard === "shock" ? " open" : ""}`}
-          onClick={() => setOpenCard(openCard === "shock" ? null : "shock")}>
-          <div className="intro-card-title">⚡ 贸易政策冲击面板</div>
-          <div className="intro-card-sub">以 2018–2020 全球贸易摩擦为原型的拟真事件库</div>
+        <div
+          className={`intro-card${openCard === "shock" ? " open" : ""}`}
+          onClick={() => setOpenCard(openCard === "shock" ? null : "shock")}
+        >
+          <div className="intro-card-head">
+            <CardIcon kind="shock" />
+            <div>
+              <div className="intro-card-title">贸易政策冲击面板</div>
+              <div className="intro-card-sub">以 2018–2020 全球贸易摩擦为原型的拟真事件库</div>
+            </div>
+            <span className="intro-card-toggle">{openCard === "shock" ? "−" : "+"}</span>
+          </div>
           {openCard === "shock" && (
             <div className="intro-card-body">
               {events.slice(0, 4).map((e) => (
-                <div key={e.name}>· {e.name}({e.effective} 生效)</div>
+                <div key={e.name}>{e.name}({e.effective} 生效)</div>
               ))}
-              <div style={{ opacity: 0.75, marginTop: 6 }}>共 {events.length} 组事件,行业异质、覆盖全部经济体;宣布/生效时间线支持因果识别</div>
+              <div style={{ opacity: 0.7, marginTop: 8 }}>
+                共 {events.length} 组事件,行业异质、覆盖全部经济体;宣布/生效时间线支持因果识别
+              </div>
             </div>
           )}
         </div>
@@ -134,12 +177,15 @@ export function IntroOverlay({ user, meta, onDone }: {
 
     /* ---- 3 十七步旅程 ---- */
     <div key={2} className="intro-scene">
+      <div className="intro-scene-kicker">第 3 幕 · 实验路线</div>
       <h2 className="intro-h2">五个阶段,十七步</h2>
       <p className="intro-lede">点击各阶段,预览你将亲手完成的每一步。</p>
       <div className="intro-stage-tabs">
         {stages.map((st) => (
-          <button key={st.n} className={`intro-stage-tab${stage === st.n ? " on" : ""}`}
-            onClick={() => setStage(st.n)}>
+          <button
+            key={st.n} className={`intro-stage-tab${stage === st.n ? " on" : ""}`}
+            onClick={() => setStage(st.n)}
+          >
             {st.n}. {st.name}
           </button>
         ))}
@@ -148,7 +194,7 @@ export function IntroOverlay({ user, meta, onDone }: {
         {(stages.find((s) => s.n === stage)?.steps ?? []).map((s) => (
           <div key={s.n} className="intro-step-row">
             <span className="intro-step-num">{String(s.n).padStart(2, "0")}</span>
-            <span style={{ fontWeight: 600 }}>{s.title}</span>
+            <span className="intro-step-title">{s.title}</span>
             <span className="intro-step-goal">{s.goal}</span>
           </div>
         ))}
@@ -157,53 +203,60 @@ export function IntroOverlay({ user, meta, onDone }: {
 
     /* ---- 4 动手示意 ---- */
     <div key={3} className="intro-scene">
+      <div className="intro-scene-kicker">第 4 幕 · 动手预演</div>
       <h2 className="intro-h2">政策冲击如何重塑价值链?</h2>
       <p className="intro-lede">拖动滑块,给跨境环节加征关税,看看链条发生什么。</p>
-      <svg viewBox="0 0 640 190" style={{ width: "min(640px, 90%)", margin: "8px auto 0" }}>
+      <svg viewBox="0 0 640 196" style={{ width: "min(720px, 94%)", margin: "10px auto 0" }}>
         {/* 跨境流:宽度随 τ 收缩 */}
-        <path d={`M118 95 C 200 40, 260 40, 312 88`} fill="none" stroke="#7aa5e8"
+        <path d="M118 95 C 200 40, 260 40, 312 88" fill="none" stroke="#7aa5e8"
           strokeWidth={10 * shrink} strokeLinecap="round" opacity={0.9} />
-        <path d={`M348 88 C 400 40, 460 40, 522 95`} fill="none" stroke="#7aa5e8"
+        <path d="M348 88 C 400 40, 460 40, 522 95" fill="none" stroke="#7aa5e8"
           strokeWidth={9 * shrink} strokeLinecap="round" opacity={0.9} />
         {/* 国内替代环:随 τ 变粗 */}
         <path d="M310 118 C 270 175, 370 175, 330 118" fill="none" stroke="#49c39b"
           strokeWidth={4 + tau * 26} strokeLinecap="round" opacity={0.9} />
-        <text x={320} y={182} textAnchor="middle" fontSize={11} fill="#9fb0d8">国内环节替代</text>
+        <text x={320} y={188} textAnchor="middle" fontSize={12.5} fill="#a8b6da">国内环节替代</text>
         {[["上游资源国", 90, "#eda100"], ["制造枢纽国", 320, "#3987e5"], ["最终消费国", 550, "#e34948"]].map(([label, x, col]) => (
           <g key={String(label)} transform={`translate(${x} 95)`}>
-            <circle r={26} fill={String(col)} opacity={0.16} />
-            <circle r={17} fill={String(col)} stroke="#101528" strokeWidth={3} />
-            <text y={-32} textAnchor="middle" fontSize={12.5} fontWeight={600} fill="#e8ecf8">{label}</text>
+            <circle r={27} fill={String(col)} opacity={0.16} />
+            <circle r={18} fill={String(col)} stroke="#101528" strokeWidth={3} />
+            <text y={-34} textAnchor="middle" fontSize={14} fontWeight={600} fill="#eef1fb">{label}</text>
           </g>
         ))}
-        <text x={215} y={36} textAnchor="middle" fontSize={11} fill="#9fb0d8">中间品出口</text>
-        <text x={435} y={36} textAnchor="middle" fontSize={11} fill="#9fb0d8">最终品出口</text>
+        <text x={215} y={34} textAnchor="middle" fontSize={12.5} fill="#a8b6da">中间品出口</text>
+        <text x={435} y={34} textAnchor="middle" fontSize={12.5} fill="#a8b6da">最终品出口</text>
       </svg>
       <div className="intro-slider-row">
-        <span style={{ fontSize: 13, color: "#9fb0d8" }}>关税冲击 τ</span>
-        <input type="range" min={0} max={25} value={tau * 100}
-          onChange={(e) => setTau(Number(e.target.value) / 100)} style={{ width: 260 }} />
+        <span className="intro-slider-label">关税冲击 τ</span>
+        <input
+          type="range" min={0} max={25} value={tau * 100}
+          onChange={(e) => setTau(Number(e.target.value) / 100)}
+        />
         <span className="intro-tau">{(tau * 100).toFixed(0)}%</span>
-        <span style={{ fontSize: 13, color: "#9fb0d8", marginLeft: 18 }}>复杂 GVC 份额(示意)</span>
-        <span className="intro-tau" style={{ color: tau > 0.02 ? "#ff9d9d" : "#e8ecf8" }}>{demoShare}%</span>
+        <span className="intro-slider-label" style={{ marginLeft: 20 }}>复杂 GVC 份额(示意)</span>
+        <span className="intro-tau" style={{ color: tau > 0.02 ? "#ff9d9d" : "#eef1fb" }}>{demoShare}%</span>
       </div>
       <p className="intro-note">
-        ⚠ 本页为教学示意动画,不是估计结果。真实效应由步骤 13–16 的 DID / 事件研究给出
+        本页为教学示意动画,不是估计结果。真实效应由步骤 13–16 的 DID / 事件研究给出
         (演示数据上:受冲击国家-行业的复杂 GVC 份额在 2018 年后相对下降约 0.4 个百分点)。
       </p>
     </div>,
 
     /* ---- 5 就绪 ---- */
     <div key={4} className="intro-scene">
-      <div className="intro-logo" style={{ fontSize: 30 }}>✓</div>
-      <h2 className="intro-h2">一切就绪,{user.name}</h2>
+      <div className="intro-check" aria-hidden>
+        <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4.5 12.5 10 18 19.5 6.5" />
+        </svg>
+      </div>
+      <h2 className="intro-h2">实验台已就绪</h2>
       <p className="intro-lede">
-        以 <b>{user.role === "teacher" ? "教师" : "学生"}</b> 身份进入。
-        建议从阶段一开始,亲手走完 数据 → 指标 → 回归 → 报告 的闭环;
+        你将以<b>{roleName}</b>身份进入。建议从阶段一开始,
+        亲手走完 数据 → 指标 → 回归 → 报告 的完整闭环;
         每一步都配有概念讲解、动手面板和小贴士。
       </p>
-      <div style={{ display: "flex", gap: 14, marginTop: 26, flexWrap: "wrap", justifyContent: "center" }}>
-        <button className="intro-cta" onClick={() => onDone(1)}>从第 1 步开始实验 →</button>
+      <div className="intro-cta-row">
+        <button className="intro-cta" onClick={() => onDone(1)}>从第 1 步开始实验</button>
         <button className="intro-cta ghost" onClick={() => onDone(8)}>先看看全球生产网络图</button>
       </div>
     </div>,
@@ -211,20 +264,27 @@ export function IntroOverlay({ user, meta, onDone }: {
 
   return (
     <div className="intro-overlay">
-      <button className="intro-skip" onClick={() => onDone()}>跳过介绍 ✕</button>
+      <button className="intro-skip" onClick={() => onDone()}>跳过介绍</button>
       {scenes[scene]}
       <div className="intro-nav">
-        <button className="intro-nav-btn" disabled={scene === 0}
-          onClick={() => setScene(scene - 1)}>←</button>
+        <button
+          className="intro-nav-btn" disabled={scene === 0}
+          onClick={() => setScene(scene - 1)}
+        >
+          ← 上一幕
+        </button>
         <div className="intro-dots">
           {Array.from({ length: N_SCENES }, (_, i) => (
-            <button key={i} className={`intro-dot${i === scene ? " on" : ""}`} onClick={() => setScene(i)} />
+            <button
+              key={i} aria-label={`第 ${i + 1} 幕`}
+              className={`intro-dot${i === scene ? " on" : ""}`} onClick={() => setScene(i)}
+            />
           ))}
         </div>
         {scene < N_SCENES - 1 ? (
-          <button className="intro-nav-btn primary" onClick={() => setScene(scene + 1)}>→</button>
+          <button className="intro-nav-btn primary" onClick={() => setScene(scene + 1)}>下一幕 →</button>
         ) : (
-          <button className="intro-nav-btn primary" onClick={() => onDone(1)}>✓</button>
+          <button className="intro-nav-btn primary" onClick={() => onDone(1)}>开始实验 →</button>
         )}
       </div>
       <div className="intro-keyhint">← → 方向键翻页 · Esc 跳过</div>

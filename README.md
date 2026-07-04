@@ -35,8 +35,8 @@ cd frontend && bun install && bun run dev
 
 | 账号 | 密码 | 角色 |
 |---|---|---|
-| `student` | `gvclab2026` | 演示学生 |
-| `teacher` | `gvclab2026` | 演示教师 |
+| `student` | `gvclab2026` | 同学(学生身份) |
+| `teacher` | `gvclab2026` | 老师(教师身份) |
 
 认证是真实实现(PBKDF2 口令哈希 + HMAC 签名令牌,12 小时有效,
 `POST /api/auth/login` / `GET /api/auth/me`);数据接口暂不强制鉴权,

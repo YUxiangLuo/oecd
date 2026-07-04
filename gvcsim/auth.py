@@ -6,9 +6,10 @@
   - 签名密钥首次使用时生成并持久化到 data/.auth_secret(gitignore),
     重启服务令牌仍有效
 
-演示账号(README 亦有记录,登录页默认预填):
-  student / gvclab2026   演示学生
-  teacher / gvclab2026   演示教师
+演示账号(README 亦有记录,登录页默认预填;name 用于界面称呼,避免
+"演示学生"这类系统腔文案):
+  student / gvclab2026   同学(学生身份)
+  teacher / gvclab2026   老师(教师身份)
 
 ⚠ 当前只有"登录"这一层:数据接口暂不强制鉴权(教学系统单机使用),
 接入真实部署时给 FastAPI 加依赖注入式的 Bearer 校验即可(verify_token 已就绪)。
@@ -36,12 +37,12 @@ def _hash_password(password: str, salt: bytes = _DEMO_SALT) -> str:
 USERS = {
     "student": {
         "password_hash": _hash_password("gvclab2026"),
-        "name": "演示学生",
+        "name": "同学",
         "role": "student",
     },
     "teacher": {
         "password_hash": _hash_password("gvclab2026"),
-        "name": "演示教师",
+        "name": "老师",
         "role": "teacher",
     },
 }

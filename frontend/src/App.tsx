@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
+import { LogoMark } from "./brand";
 import { IntroOverlay } from "./intro";
 import { DbLab, IndicatorLab, QcLab, RegressionLab, ReportLab, ShockLab, VizLab } from "./labs";
 import { LoginPage } from "./login";
@@ -92,10 +93,10 @@ export default function App() {
   return (
     <div className="layout">
       <header className="topbar">
-        <div className="logo">仿</div>
+        <LogoMark size={30} />
         <div>
           <h1>供应链仿真系统</h1>
-          <div className="sub">GVC SIMULATION LAB · DEV</div>
+          <div className="sub">GVC SIMULATION LAB</div>
         </div>
         <div className="topbar-user">
           <span className="muted">
