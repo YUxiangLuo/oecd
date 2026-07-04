@@ -21,16 +21,15 @@ REPORTS_DIR = ROOT / "reports"
 SUPPORTED_YEARS = range(1995, 2021)
 
 
-def available_years() -> list[int]:
-    """扫描本地已下载的原始数据年份。"""
-    years = []
-    for f in sorted(RAW_DATA_DIR.glob("ICIO*_*.csv")):
-        stem = f.stem
+def available_years(raw_dir: Path = RAW_DATA_DIR) -> list[int]:
+    """扫描本地已下载的原始数据年份(升序、去重)。"""
+    years = set()
+    for f in raw_dir.glob("ICIO*_*.csv"):
         try:
-            years.append(int(stem.rsplit("_", 1)[1]))
+            years.add(int(f.stem.rsplit("_", 1)[1]))
         except ValueError:
             continue
-    return years
+    return sorted(years)
 
 
 def processed_years() -> list[int]:

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import { IntroOverlay } from "./intro";
-import { IndicatorLab, QcLab, RegressionLab, ReportLab, ShockLab, VizLab } from "./labs";
+import { DbLab, IndicatorLab, QcLab, RegressionLab, ReportLab, ShockLab, VizLab } from "./labs";
 import { LoginPage } from "./login";
 import type { AuthUser, Meta, Step, StepsResponse } from "./types";
 
@@ -24,6 +24,7 @@ const VIZ_COLUMNS: Record<number, string[]> = {
 };
 
 function Lab({ step, meta }: { step: Step; meta: Meta | null }) {
+  if (step.lab === "db") return <DbLab />;
   if (step.lab === "qc") return meta ? <QcLab meta={meta} /> : null;
   if (step.lab === "shock") return meta ? <ShockLab meta={meta} /> : null;
   if (step.lab === "ind") return meta ? <IndicatorLab meta={meta} step={step} /> : null;
@@ -31,12 +32,7 @@ function Lab({ step, meta }: { step: Step; meta: Meta | null }) {
     return meta ? <VizLab meta={meta} step={step} columns={VIZ_COLUMNS[step.n] ?? []} /> : null;
   if (step.lab === "rgd" || step.lab === "reg") return <RegressionLab step={step} />;
   if (step.lab === "rep") return meta ? <ReportLab meta={meta} /> : null;
-  // db:纯讲解型步骤
-  return (
-    <div className="tipbox">
-      本步为数据接入决策步骤,详见《供应链仿真系统_完整项目说明.md》第一、四章。
-    </div>
-  );
+  return null;
 }
 
 export default function App() {

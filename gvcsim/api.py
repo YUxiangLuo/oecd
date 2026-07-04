@@ -18,6 +18,7 @@ from gvcsim import auth
 from gvcsim import report as report_mod
 from gvcsim import shocks
 from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
+from gvcsim.data import icio_browser
 from gvcsim.regression.design import (
     GRANULARITIES, METHODS, SHOCK_TYPES, STEP_DEPVARS, RegressionDesign,
 )
@@ -206,6 +207,39 @@ def steps():
 @app.get("/api/indicators/schema")
 def indicators_schema():
     return INDICATOR_SCHEMA
+
+
+@app.get("/api/db/meta")
+def db_meta():
+    return icio_browser.meta()
+
+
+@app.get("/api/db/slice")
+def db_slice(
+    year: int,
+    table: str = "z",
+    row_country: str | None = None,
+    col_country: str | None = None,
+    row_sector: str | None = None,
+    col_sector: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=200),
+):
+    try:
+        return icio_browser.slice_table(
+            year=year,
+            table=table,
+            row_country=row_country,
+            col_country=col_country,
+            row_sector=row_sector,
+            col_sector=col_sector,
+            page=page,
+            page_size=page_size,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/api/qc/{year}")
