@@ -42,8 +42,8 @@ def compute_year(year: int, verbose: bool = True) -> None:
     arr = build_arrays(io)
 
     log(f"[{year}] 步骤4 贸易流分解...")
-    tf_country = tradeflow.country_tradeflow(arr)
     tf_sector = tradeflow.sector_tradeflow(arr)
+    tf_country = tradeflow.country_tradeflow(arr, tf_sector)
 
     log(f"[{year}] 步骤5 生产分解...")
     prod_sector = production.sector_production(arr)
@@ -105,7 +105,7 @@ def build_panel() -> pd.DataFrame:
         [pd.read_csv(PROCESSED_DIR / f"indicators_country_{y}.csv") for y in years],
         ignore_index=True,
     )
-    w = sector["gross_exports"].clip(lower=0.0)
+    w = sector["trade_gross_exports"].clip(lower=0.0)
     sector_w = sector.assign(_w=w, _ws=w * sector["tariff_shock"])
     agg = sector_w.groupby(["country", "year"], as_index=False)[["_w", "_ws"]].sum()
     agg["tariff_shock"] = (agg["_ws"] / agg["_w"]).where(agg["_w"] > 0, 0.0)

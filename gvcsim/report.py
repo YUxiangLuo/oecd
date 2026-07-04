@@ -59,8 +59,8 @@ def generate(year: int | None = None) -> str:
     year = year or max(years)
     snap = country_panel[country_panel["year"] == year].set_index("country")
 
-    top_backward = snap["backward_fva_share"].nlargest(5)
-    top_forward = snap["forward_share"].nlargest(5)
+    top_backward = snap["share_trade_backward_gvc"].nlargest(5)
+    top_forward = snap["share_trade_forward_gvc"].nlargest(5)
     top_between = snap["betweenness_centrality"].nlargest(5)
 
     sections = [
@@ -78,9 +78,9 @@ def generate(year: int | None = None) -> str:
         f"质检结果见 data/processed/qc_{year}.json(维度一致性、会计恒等式、"
         "里昂惕夫逆矩阵性质等)。\n",
         "## 二、GVC 指标摘要",
-        f"**后向参与度最高(出口最依赖进口中间品)**:"
+        f"**后向参与度最高(KWW 外国增加值与外国重复计算占毛出口比重)**:"
         + "、".join(f"{c} ({v:.3f})" for c, v in top_backward.items()),
-        f"\n**前向参与度最高(增加值最常被他国转手出口)**:"
+        f"\n**前向参与度最高(本国增加值最常嵌入他国出口)**:"
         + "、".join(f"{c} ({v:.3f})" for c, v in top_forward.items()),
         f"\n**介数中心性最高(供应链枢纽)**:"
         + "、".join(f"{c} ({v:.3f})" for c, v in top_between.items()) + "\n",
@@ -102,7 +102,8 @@ def generate(year: int | None = None) -> str:
         "- 本报告验证了“数据 → 指标 → 回归 → 报告”闭环可自动运行(回归为国家–行业级)。",
         "- 冲击变量为拟真演示面板(事件与量级参考公开资料的手工编码,出口暴露度为风格化数值);"
         "接入 PIIE/WTO 真实数据 + 官方 HS→ICIO 映射后本报告即具备研究意义。",
-        "- 指标采用简化版分解(详见 README 方法论说明),论文级精度需替换为 KWW/WWYZ 完整分解。",
+        "- 指标采用 KWW 贸易流分解与 WWYZ 生产活动分解的国家/国家–行业聚合口径;"
+        "本报告不输出 exporter-importer-sector 双边矩阵明细。",
     ]
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)

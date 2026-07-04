@@ -38,6 +38,14 @@ def test_regression_options():
     assert "双重差分 (DID)" in resp.json()["methods"]
 
 
+def test_indicator_schema():
+    resp = client.get("/api/indicators/schema")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["groups"][0]["key"] == "trade"
+    assert body["fields"]["share_trade_fva"]["label"]
+
+
 @needs_data
 def test_meta_and_indicators():
     meta = client.get("/api/meta").json()
@@ -50,7 +58,7 @@ def test_meta_and_indicators():
     rows = client.get(f"/api/indicators/country/{year}").json()
     assert len(rows) > 50
     cols = rows[0].keys()
-    for col in ["backward_fva_share", "share_complex_gvc", "upstreamness", "betweenness_centrality"]:
+    for col in ["share_trade_fva", "share_prod_complex_gvc", "upstreamness", "betweenness_centrality"]:
         assert col in cols
 
     paged = client.get(
@@ -113,7 +121,7 @@ def test_regression_run():
     resp = client.post("/api/regression/run", json={"step": 13})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["design"]["depvar"] == "backward_fva_share"
+    assert body["design"]["depvar"] == "share_trade_fva"
     assert body["design"]["granularity"] == "国家–行业级"
     assert body["design"]["method"] == "双重差分 (DID)"
     assert body["result"]["coefs"][0]["name"] == "treated×post"

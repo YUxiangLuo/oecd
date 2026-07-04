@@ -15,9 +15,17 @@ SECTORS = ["s1", "s2"]
 class FakeIOSystem:
     """最小化模拟 pymrio.IOSystem 的接口(Z/Y/x/A/L + get_regions/get_sectors)。"""
 
-    def __init__(self, Z: np.ndarray, Y: np.ndarray):
-        index = pd.MultiIndex.from_product([REGIONS, SECTORS], names=["region", "sector"])
-        y_cols = pd.MultiIndex.from_product([REGIONS, ["final"]], names=["region", "category"])
+    def __init__(
+        self,
+        Z: np.ndarray,
+        Y: np.ndarray,
+        regions: list[str] | None = None,
+        sectors: list[str] | None = None,
+    ):
+        self._regions = regions or REGIONS
+        self._sectors = sectors or SECTORS
+        index = pd.MultiIndex.from_product([self._regions, self._sectors], names=["region", "sector"])
+        y_cols = pd.MultiIndex.from_product([self._regions, ["final"]], names=["region", "category"])
 
         x = Z.sum(axis=1) + Y.sum(axis=1)
         A = Z / x[None, :]
@@ -30,10 +38,10 @@ class FakeIOSystem:
         self.L = pd.DataFrame(L, index=index, columns=index)
 
     def get_regions(self):
-        return REGIONS
+        return self._regions
 
     def get_sectors(self):
-        return SECTORS
+        return self._sectors
 
 
 @pytest.fixture
@@ -77,3 +85,25 @@ def autarky_io() -> FakeIOSystem:
         ]
     )
     return FakeIOSystem(Z, Y)
+
+
+@pytest.fixture
+def cycle_io() -> FakeIOSystem:
+    """3 国 × 1 行业循环链条:A→B→C→A,用于检验返回与重复计算项。"""
+    regions = ["AAA", "BBB", "CCC"]
+    sectors = ["s1"]
+    Z = np.array(
+        [
+            [5.0, 20.0, 0.0],
+            [0.0, 5.0, 18.0],
+            [16.0, 0.0, 5.0],
+        ]
+    )
+    Y = np.array(
+        [
+            [30.0, 0.0, 2.0],
+            [2.0, 30.0, 0.0],
+            [0.0, 2.0, 30.0],
+        ]
+    )
+    return FakeIOSystem(Z, Y, regions=regions, sectors=sectors)

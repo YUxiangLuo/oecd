@@ -104,7 +104,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
     const betw: Record<string, number> = {};
     data.nodes.forEach((n) => {
       const c = String(n.country);
-      part[c] = num(n.gvc_participation);
+      part[c] = num(n.share_trade_gvc_participation);
       betw[c] = num(n.betweenness_centrality);
       byRegion[REGION_OF[c] ?? 5].push(c);
     });
@@ -193,14 +193,14 @@ export function NetworkViz({ data }: { data: NetworkData }) {
                   setFocus(c);
                   show(e, [
                     ["", `${c} · ${REGIONS[REGION_OF[c] ?? 5]}`],
-                    ["GVC 参与度", part[c].toFixed(3)],
+                    ["KWW 总参与度", `${(part[c] * 100).toFixed(1)}%`],
                     ["介数中心性", betw[c].toFixed(3)],
                     ["主要伙伴", (neighbors[c] ?? []).slice(0, 4).map((n) => n.c).join("、") || "—"],
                   ]);
                 }}
                 onMouseMove={(e) => focus === c && show(e, [
                   ["", `${c} · ${REGIONS[REGION_OF[c] ?? 5]}`],
-                  ["GVC 参与度", part[c].toFixed(3)],
+                  ["KWW 总参与度", `${(part[c] * 100).toFixed(1)}%`],
                   ["介数中心性", betw[c].toFixed(3)],
                   ["主要伙伴", (neighbors[c] ?? []).slice(0, 4).map((n) => n.c).join("、") || "—"],
                 ])}
@@ -231,7 +231,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
         </div>
       </div>
       <div style={{ position: "absolute", right: 18, bottom: 14, fontSize: 10.5, color: "#b0b5c2", textAlign: "right", lineHeight: 1.6 }}>
-        节点大小 = GVC 参与度 · 连线粗细 = 双边贸易流(Top 120)<br />悬停节点高亮其贸易关联
+        节点大小 = KWW 总 GVC 参与度 · 连线粗细 = 双边贸易流(Top 120)<br />悬停节点高亮其贸易关联
       </div>
       {Tip}
     </div>
@@ -241,15 +241,15 @@ export function NetworkViz({ data }: { data: NetworkData }) {
 /* --------------------------- 步骤9:生产结构堆叠条 --------------------------- */
 
 const PROD_SEGS = [
-  { key: "share_pure_domestic", name: "纯国内" },
-  { key: "share_traditional", name: "传统贸易" },
-  { key: "share_simple_gvc", name: "简单 GVC" },
-  { key: "share_complex_gvc", name: "复杂 GVC" },
+  { key: "share_prod_pure_domestic", name: "纯国内" },
+  { key: "share_prod_traditional", name: "传统贸易" },
+  { key: "share_prod_simple_gvc", name: "简单 GVC" },
+  { key: "share_prod_complex_gvc", name: "复杂 GVC" },
 ];
 
 export function StackedShareViz({ rows }: { rows: Row[] }) {
   const { wrapRef, Tip, show, hide } = useTip();
-  const top = [...rows].sort((a, b) => num(b.share_complex_gvc) - num(a.share_complex_gvc)).slice(0, 15);
+  const top = [...rows].sort((a, b) => num(b.share_prod_complex_gvc) - num(a.share_prod_complex_gvc)).slice(0, 15);
   const tipLines = (r: Row): [string, string][] => [
     ["", String(r.country)],
     ...PROD_SEGS.map((s) => [s.name, `${(num(r[s.key]) * 100).toFixed(1)}%`] as [string, string]),
@@ -274,13 +274,13 @@ export function StackedShareViz({ rows }: { rows: Row[] }) {
               ))}
             </div>
             <div style={{ width: 86, fontSize: 11.5, color: "#8a90a0", fontVariantNumeric: "tabular-nums" }}>
-              复杂 {(num(r.share_complex_gvc) * 100).toFixed(1)}%
+              复杂 {(num(r.share_prod_complex_gvc) * 100).toFixed(1)}%
             </div>
           </div>
         ))}
       </div>
       <div style={{ marginTop: 14, fontSize: 11, color: "#a2a8b6" }}>
-        按复杂 GVC 份额排序的 Top 15;条内四段加总 = 该国增加值的 100%
+        按 WWYZ 复杂 GVC 份额排序的 Top 15;条内四段加总 = 该国增加值的 100%
       </div>
       {Tip}
     </div>

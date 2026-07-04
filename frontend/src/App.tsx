@@ -17,8 +17,8 @@ const STATUS_LABEL: Record<Step["status"], string> = {
 
 // 步骤8-11 可视化各自关注的指标列
 const VIZ_COLUMNS: Record<number, string[]> = {
-  8: ["gvc_participation", "backward_fva_share", "forward_share", "gross_exports"],
-  9: ["share_complex_gvc", "share_simple_gvc", "share_traditional", "share_pure_domestic"],
+  8: ["share_trade_gvc_participation", "share_trade_backward_gvc", "share_trade_forward_gvc", "trade_gross_exports"],
+  9: ["share_prod_complex_gvc", "share_prod_simple_gvc", "share_prod_traditional", "share_prod_pure_domestic"],
   10: ["upstreamness", "upstreamness_domestic", "upstreamness_cross"],
   11: ["betweenness_centrality", "degree_centrality", "eigenvector_centrality"],
 };
@@ -26,7 +26,7 @@ const VIZ_COLUMNS: Record<number, string[]> = {
 function Lab({ step, meta }: { step: Step; meta: Meta | null }) {
   if (step.lab === "qc") return meta ? <QcLab meta={meta} /> : null;
   if (step.lab === "shock") return meta ? <ShockLab meta={meta} /> : null;
-  if (step.lab === "ind") return meta ? <IndicatorLab meta={meta} /> : null;
+  if (step.lab === "ind") return meta ? <IndicatorLab meta={meta} step={step} /> : null;
   if (step.lab === "viz")
     return meta ? <VizLab meta={meta} step={step} columns={VIZ_COLUMNS[step.n] ?? []} /> : null;
   if (step.lab === "rgd" || step.lab === "reg") return <RegressionLab step={step} />;

@@ -24,6 +24,7 @@ export const api = {
   },
   steps: () => get<import("./types").StepsResponse>("/api/steps"),
   meta: () => get<import("./types").Meta>("/api/meta"),
+  indicatorSchema: () => get<import("./types").IndicatorSchema>("/api/indicators/schema"),
   qc: (year: number) => get<import("./types").QcCheck[]>(`/api/qc/${year}`),
   countryIndicators: (year: number) =>
     get<Record<string, string | number | null>[]>(`/api/indicators/country/${year}`),

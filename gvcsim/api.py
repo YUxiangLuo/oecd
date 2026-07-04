@@ -62,6 +62,110 @@ def _read_csv(name: str) -> pd.DataFrame:
     return _read_path(PROCESSED_DIR / name)
 
 
+INDICATOR_SCHEMA = {
+    "groups": [
+        {
+            "key": "trade",
+            "label": "KWW 贸易流分解",
+            "fields": [
+                "trade_gross_exports",
+                "trade_dva",
+                "trade_dva_final",
+                "trade_dva_intermediate_absorbed",
+                "trade_dva_intermediate_reexported",
+                "trade_rdv",
+                "trade_ddc",
+                "trade_fva",
+                "trade_fdc",
+                "trade_pdc",
+                "share_trade_dva",
+                "share_trade_fva",
+                "share_trade_pdc",
+                "share_trade_backward_gvc",
+                "share_trade_forward_gvc",
+                "share_trade_gvc_participation",
+            ],
+        },
+        {
+            "key": "production",
+            "label": "WWYZ 生产分解",
+            "fields": [
+                "prod_va_total",
+                "prod_pure_domestic",
+                "prod_traditional",
+                "prod_simple_gvc",
+                "prod_complex_gvc",
+                "prod_gvc_total",
+                "share_prod_pure_domestic",
+                "share_prod_traditional",
+                "share_prod_simple_gvc",
+                "share_prod_complex_gvc",
+                "share_prod_gvc_total",
+            ],
+        },
+        {
+            "key": "length",
+            "label": "价值链长度",
+            "fields": ["upstreamness", "upstreamness_domestic", "upstreamness_cross"],
+        },
+        {
+            "key": "network",
+            "label": "生产网络中心性",
+            "fields": [
+                "degree_centrality",
+                "betweenness_centrality",
+                "eigenvector_centrality",
+            ],
+        },
+    ],
+    "fields": {
+        "trade_gross_exports": {"label": "毛出口", "format": "amount"},
+        "trade_dva": {"label": "国内增加值 DVA", "format": "amount"},
+        "trade_dva_final": {"label": "DVA:最终品出口", "format": "amount"},
+        "trade_dva_intermediate_absorbed": {"label": "DVA:进口国吸收", "format": "amount"},
+        "trade_dva_intermediate_reexported": {"label": "DVA:再出口吸收", "format": "amount"},
+        "trade_rdv": {"label": "返回国内增加值 RDV", "format": "amount"},
+        "trade_ddc": {"label": "国内重复计算 DDC", "format": "amount"},
+        "trade_fva": {"label": "外国增加值 FVA", "format": "amount"},
+        "trade_fdc": {"label": "外国重复计算 FDC", "format": "amount"},
+        "trade_pdc": {"label": "纯重复计算 PDC", "format": "amount"},
+        "share_trade_dva": {"label": "DVA 份额", "format": "pct"},
+        "share_trade_fva": {"label": "FVA 份额", "format": "pct"},
+        "share_trade_pdc": {"label": "PDC 份额", "format": "pct"},
+        "share_trade_backward_gvc": {"label": "后向 GVC 参与度", "format": "pct"},
+        "share_trade_forward_gvc": {"label": "前向 GVC 参与度", "format": "pct"},
+        "share_trade_gvc_participation": {"label": "总 GVC 参与度", "format": "pct"},
+        "prod_va_total": {"label": "总增加值", "format": "amount"},
+        "prod_pure_domestic": {"label": "纯国内生产", "format": "amount"},
+        "prod_traditional": {"label": "传统贸易生产", "format": "amount"},
+        "prod_simple_gvc": {"label": "简单 GVC 生产", "format": "amount"},
+        "prod_complex_gvc": {"label": "复杂 GVC 生产", "format": "amount"},
+        "prod_gvc_total": {"label": "GVC 生产合计", "format": "amount"},
+        "share_prod_pure_domestic": {"label": "纯国内份额", "format": "pct"},
+        "share_prod_traditional": {"label": "传统贸易份额", "format": "pct"},
+        "share_prod_simple_gvc": {"label": "简单 GVC 份额", "format": "pct"},
+        "share_prod_complex_gvc": {"label": "复杂 GVC 份额", "format": "pct"},
+        "share_prod_gvc_total": {"label": "GVC 生产份额", "format": "pct"},
+        "upstreamness": {"label": "上游度", "format": "number"},
+        "upstreamness_domestic": {"label": "国内段长度", "format": "number"},
+        "upstreamness_cross": {"label": "跨境段长度", "format": "number"},
+        "degree_centrality": {"label": "度中心性", "format": "number"},
+        "betweenness_centrality": {"label": "介数中心性", "format": "number"},
+        "eigenvector_centrality": {"label": "特征向量中心性", "format": "number"},
+    },
+    "default_sort": {
+        "4": "share_trade_gvc_participation",
+        "5": "share_prod_complex_gvc",
+        "6": "upstreamness",
+        "7": "betweenness_centrality",
+        "8": "share_trade_gvc_participation",
+        "9": "share_prod_complex_gvc",
+        "10": "upstreamness",
+        "11": "betweenness_centrality",
+    },
+}
+
+
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -109,6 +213,11 @@ def steps():
     }
 
 
+@app.get("/api/indicators/schema")
+def indicators_schema():
+    return INDICATOR_SCHEMA
+
+
 @app.get("/api/qc/{year}")
 def qc(year: int):
     path = PROCESSED_DIR / f"qc_{year}.json"
@@ -152,7 +261,7 @@ def indicators_sector(
 def viz_network(year: int):
     edges = _read_csv(f"network_edges_{year}.csv")
     nodes = _read_csv(f"indicators_country_{year}.csv")[
-        ["country", "gvc_participation", "betweenness_centrality"]
+        ["country", "share_trade_gvc_participation", "betweenness_centrality"]
     ]
     return {
         "nodes": _clean(nodes.to_dict(orient="records")),

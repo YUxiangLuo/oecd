@@ -72,6 +72,23 @@ export interface NetworkData {
   edges: Record<string, string | number | null>[];
 }
 
+export interface IndicatorFieldMeta {
+  label: string;
+  format: "amount" | "pct" | "number";
+}
+
+export interface IndicatorGroup {
+  key: string;
+  label: string;
+  fields: string[];
+}
+
+export interface IndicatorSchema {
+  groups: IndicatorGroup[];
+  fields: Record<string, IndicatorFieldMeta>;
+  default_sort: Record<string, string>;
+}
+
 export interface SectorPage {
   total: number;
   page: number;

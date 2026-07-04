@@ -6,12 +6,21 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import type {
-  Meta, NetworkData, QcCheck, RegressionResponse, SectorPage, ShockEvent, ShockSummary, Step,
+  IndicatorSchema, Meta, NetworkData, QcCheck, RegressionResponse, SectorPage, ShockEvent, ShockSummary, Step,
 } from "./types";
 import { EventStudyChart, HeatTableViz, LengthViz, NetworkViz, StackedShareViz } from "./viz";
 
-const fmt = (v: string | number | null, digits = 3) =>
-  typeof v === "number" ? v.toFixed(digits) : (v ?? "—");
+function fmtField(v: string | number | null, key: string, schema?: IndicatorSchema | null) {
+  if (typeof v !== "number") return v ?? "—";
+  const format = schema?.fields[key]?.format;
+  if (format === "pct") return `${(v * 100).toFixed(2)}%`;
+  if (format === "amount") return v.toFixed(2);
+  return v.toFixed(3);
+}
+
+function fieldLabel(key: string, schema?: IndicatorSchema | null) {
+  return schema?.fields[key]?.label ?? key;
+}
 
 function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
   const [data, setData] = useState<T | null>(null);
@@ -184,17 +193,31 @@ export function ShockLab({ meta }: { meta: Meta }) {
   );
 }
 
+const STEP_GROUP: Record<number, string> = {
+  4: "trade",
+  5: "production",
+  6: "length",
+  7: "network",
+};
+
 /** 步骤4-7:行业级指标数据表(分页 + 国家/年份筛选) */
-export function IndicatorLab({ meta }: { meta: Meta }) {
+export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
   const [year, setYear] = useState(meta.years.at(-1)!);
   const [country, setCountry] = useState("CHN");
   const [page, setPage] = useState(1);
+  const groupKey = STEP_GROUP[step.n] ?? "trade";
+  const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
   const { data, error } = useAsync<SectorPage>(
     () => api.sectorIndicators(year, country, page),
     [year, country, page],
   );
   if (error) return <div className="error-box">{error}</div>;
-  const cols = data?.rows[0] ? Object.keys(data.rows[0]) : [];
+  const group = schema?.groups.find((g) => g.key === groupKey);
+  const baseCols = ["year", "country", "sector"];
+  const rowKeys = data?.rows[0] ? new Set(Object.keys(data.rows[0])) : new Set<string>();
+  const cols = data?.rows[0]
+    ? [...baseCols, ...(group?.fields ?? []).filter((c) => rowKeys.has(c))]
+    : [];
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
   return (
     <div>
@@ -210,12 +233,19 @@ export function IndicatorLab({ meta }: { meta: Meta }) {
         </select>
         <span className="muted">{data ? `共 ${data.total} 条` : "加载中…"}</span>
       </div>
+      {group && (
+        <div className="tipbox">
+          {group.label}:按 {country || "全部经济体"} · {year} 年展示国家–行业级完整分解字段。
+        </div>
+      )}
       <div className="table-wrap">
         <table className="data-table">
-          <thead><tr>{cols.map((c) => <th key={c}>{c}</th>)}</tr></thead>
+          <thead><tr>{cols.map((c) => <th key={c}>{fieldLabel(c, schema)}</th>)}</tr></thead>
           <tbody>
             {(data?.rows ?? []).map((r, i) => (
-              <tr key={i}>{cols.map((c) => <td key={c}>{typeof r[c] === "number" && !["year"].includes(c) ? fmt(r[c]) : String(r[c] ?? "—")}</td>)}</tr>
+              <tr key={i}>{cols.map((c) => (
+                <td key={c}>{["year", "country", "sector"].includes(c) ? String(r[c] ?? "—") : fmtField(r[c], c, schema)}</td>
+              ))}</tr>
             ))}
           </tbody>
         </table>
@@ -234,6 +264,7 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
   const [year, setYear] = useState(meta.years.at(-1)!);
   const [view, setView] = useState<"chart" | "table">("chart");
   const isNetwork = step.n === 8;
+  const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
   const { data: rows, error } = useAsync(
     () => api.countryIndicators(year),
     [year],
@@ -273,12 +304,12 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
       {view === "chart" ? chart() : (
         <div className="table-wrap">
           <table className="data-table">
-            <thead><tr><th>国家</th>{columns.map((c) => <th key={c}>{c}</th>)}</tr></thead>
+            <thead><tr><th>国家</th>{columns.map((c) => <th key={c}>{fieldLabel(c, schema)}</th>)}</tr></thead>
             <tbody>
               {tableRows.map((r) => (
                 <tr key={String(r.country)}>
                   <td>{String(r.country)}</td>
-                  {columns.map((c) => <td key={c}>{fmt(r[c])}</td>)}
+                  {columns.map((c) => <td key={c}>{fmtField(r[c], c, schema)}</td>)}
                 </tr>
               ))}
             </tbody>

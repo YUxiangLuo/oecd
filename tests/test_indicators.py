@@ -20,12 +20,16 @@ def test_build_arrays_basics(fake_io):
 def test_tradeflow_bounds(fake_io):
     arr = build_arrays(fake_io)
     df = tradeflow.country_tradeflow(arr)
-    assert (df["dva_in_exports"] <= df["gross_exports"] + 1e-9).all()
-    assert df["backward_fva_share"].between(0, 1).all()
-    assert (df["forward_share"] > 0).all()
+    accounted = df[["trade_dva", "trade_rdv", "trade_ddc", "trade_fva", "trade_fdc"]].sum(axis=1)
+    assert np.allclose(accounted, df["trade_gross_exports"])
+    assert np.allclose(df["trade_pdc"], df["trade_ddc"] + df["trade_fdc"])
+    assert df["share_trade_backward_gvc"].between(0, 1).all()
+    assert (df["share_trade_forward_gvc"] > 0).all()
 
     sector = tradeflow.sector_tradeflow(arr)
-    assert sector["dva_share"].between(0, 1).all()
+    accounted_s = sector[["trade_dva", "trade_rdv", "trade_ddc", "trade_fva", "trade_fdc"]].sum(axis=1)
+    assert np.allclose(accounted_s, sector["trade_gross_exports"])
+    assert sector["share_trade_dva"].between(0, 1).all()
 
 
 def test_tradeflow_autarky(autarky_io):
@@ -38,51 +42,67 @@ def test_production_decomposition_adds_up(fake_io):
     """四段分解之和 = 增加值总额(WWYZ 分解的核心恒等式)。"""
     arr = build_arrays(fake_io)
     df = production.country_production(arr)
-    parts = df[["pure_domestic", "traditional", "simple_gvc", "complex_gvc"]].sum(axis=1)
-    assert np.allclose(parts, df["va_total"])
+    parts = df[["prod_pure_domestic", "prod_traditional", "prod_simple_gvc", "prod_complex_gvc"]].sum(axis=1)
+    assert np.allclose(parts, df["prod_va_total"])
+    assert np.allclose(df["prod_gvc_total"], df["prod_simple_gvc"] + df["prod_complex_gvc"])
     # 总增加值应等于 va 向量按国加总
     va_by_country = {
         r: arr.va[arr.pos[r]].sum() for r in arr.regions
     }
     for r in arr.regions:
-        assert df.loc[r, "va_total"] == pytest.approx(va_by_country[r])
+        assert df.loc[r, "prod_va_total"] == pytest.approx(va_by_country[r])
     shares = df[[c for c in df.columns if c.startswith("share_")]].sum(axis=1)
-    assert np.allclose(shares, 1.0)
+    assert np.allclose(shares - df["share_prod_gvc_total"], 1.0)
 
 
 def test_production_autarky(autarky_io):
     """封闭经济:增加值 100% 是纯国内,GVC 各段为 0。"""
     arr = build_arrays(autarky_io)
     df = production.country_production(arr)
-    assert np.allclose(df["share_pure_domestic"], 1.0)
-    assert np.allclose(df["traditional"], 0.0, atol=1e-9)
-    assert np.allclose(df["simple_gvc"], 0.0, atol=1e-9)
-    assert np.allclose(df["complex_gvc"], 0.0, atol=1e-9)
+    assert np.allclose(df["share_prod_pure_domestic"], 1.0)
+    assert np.allclose(df["prod_traditional"], 0.0, atol=1e-9)
+    assert np.allclose(df["prod_simple_gvc"], 0.0, atol=1e-9)
+    assert np.allclose(df["prod_complex_gvc"], 0.0, atol=1e-9)
 
 
 def test_sector_production_adds_up(fake_io):
     """行业级四段之和 = 行业增加值;按国加总 = 国家级分解。"""
     arr = build_arrays(fake_io)
     sec = production.sector_production(arr)
-    parts = sec[["pure_domestic", "traditional", "simple_gvc", "complex_gvc"]].sum(axis=1)
-    assert np.allclose(parts, sec["va_total"])
+    parts = sec[["prod_pure_domestic", "prod_traditional", "prod_simple_gvc", "prod_complex_gvc"]].sum(axis=1)
+    assert np.allclose(parts, sec["prod_va_total"])
 
     country = production.country_production(arr)
-    agg = sec[["va_total", "pure_domestic", "traditional", "simple_gvc", "complex_gvc"]] \
+    agg = sec[["prod_va_total", "prod_pure_domestic", "prod_traditional", "prod_simple_gvc", "prod_complex_gvc"]] \
         .groupby(level=0).sum()
     assert np.allclose(agg.values, country[agg.columns].values)
 
-    # 行业级占比加总为 1
+    # 行业级四分类占比加总为 1;share_prod_gvc_total 是 simple+complex 的汇总列
     shares = sec[[c for c in sec.columns if c.startswith("share_")]].sum(axis=1)
-    assert np.allclose(shares, 1.0)
+    assert np.allclose(shares - sec["share_prod_gvc_total"], 1.0)
 
 
 def test_sector_production_autarky(autarky_io):
     arr = build_arrays(autarky_io)
     sec = production.sector_production(arr)
-    assert np.allclose(sec["traditional"], 0.0, atol=1e-9)
-    assert np.allclose(sec["simple_gvc"], 0.0, atol=1e-9)
-    assert np.allclose(sec["complex_gvc"], 0.0, atol=1e-9)
+    assert np.allclose(sec["prod_traditional"], 0.0, atol=1e-9)
+    assert np.allclose(sec["prod_simple_gvc"], 0.0, atol=1e-9)
+    assert np.allclose(sec["prod_complex_gvc"], 0.0, atol=1e-9)
+
+
+def test_cycle_has_return_and_double_counting(cycle_io):
+    """循环跨境链条应识别出返回国内增加值、重复计算与复杂 GVC。"""
+    arr = build_arrays(cycle_io)
+    tf = tradeflow.country_tradeflow(arr)
+    assert (tf["trade_rdv"] > 0).all()
+    assert (tf["trade_pdc"] > 0).all()
+    assert np.allclose(
+        tf[["trade_dva", "trade_rdv", "trade_ddc", "trade_fva", "trade_fdc"]].sum(axis=1),
+        tf["trade_gross_exports"],
+    )
+
+    prod = production.country_production(arr)
+    assert (prod["prod_complex_gvc"] > 0).all()
 
 
 def test_length_properties(fake_io, autarky_io):

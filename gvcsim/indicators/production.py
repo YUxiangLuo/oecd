@@ -1,10 +1,10 @@
-"""步骤5:GVC 生产分解指标(Wang-Wei-Yu-Zhu 2017 框架的简化实现)。
+"""步骤5:GVC 生产分解指标(Wang-Wei-Yu-Zhu 2017 聚合口径)。
 
 按增加值实现路径把增加值(GDP)拆成四段:
-  pure_domestic   纯国内:国内生产、国内最终消费,不跨境
-  traditional     传统贸易:以最终品形式直接出口,只跨境一次即被消费
-  simple_gvc      简单 GVC:以中间品出口,进口国用于生产其国内消费的产品(跨境一次)
-  complex_gvc     复杂 GVC:其余部分,增加值至少跨境两次(多次往返)
+  prod_pure_domestic   纯国内:国内生产、国内最终消费,不跨境
+  prod_traditional     传统贸易:以最终品形式直接出口,只跨境一次即被消费
+  prod_simple_gvc      简单 GVC:以中间品出口,进口国用于生产其国内消费的产品
+  prod_complex_gvc     复杂 GVC:增加值至少跨境两次(多次往返)
 
 分解按增加值的**来源行业**记账,天然存在行业级版本:国家级 = 行业级按国
 groupby 加总。四段之和恒等于增加值总额(单元测试在两个粒度上都验证)。
@@ -15,14 +15,21 @@ import pandas as pd
 
 from gvcsim.indicators.core import IcioArrays
 
-_AMOUNT_COLS = ["pure_domestic", "traditional", "simple_gvc", "complex_gvc"]
+_AMOUNT_COLS = [
+    "prod_pure_domestic",
+    "prod_traditional",
+    "prod_simple_gvc",
+    "prod_complex_gvc",
+    "prod_gvc_total",
+]
 
 
 def _add_shares(df: pd.DataFrame) -> pd.DataFrame:
+    df["prod_gvc_total"] = df["prod_simple_gvc"] + df["prod_complex_gvc"]
     with np.errstate(divide="ignore", invalid="ignore"):
         for col in _AMOUNT_COLS:
             df[f"share_{col}"] = np.where(
-                df["va_total"] > 0, df[col] / df["va_total"], np.nan
+                df["prod_va_total"] > 0, df[col] / df["prod_va_total"], np.nan
             )
     return df
 
@@ -65,11 +72,11 @@ def sector_production(arr: IcioArrays) -> pd.DataFrame:
 
         parts.append(pd.DataFrame(
             {
-                "va_total": total,
-                "pure_domestic": pure_domestic,
-                "traditional": traditional,
-                "simple_gvc": simple,
-                "complex_gvc": complex_gvc,
+                "prod_va_total": total,
+                "prod_pure_domestic": pure_domestic,
+                "prod_traditional": traditional,
+                "prod_simple_gvc": simple,
+                "prod_complex_gvc": complex_gvc,
             },
             index=pd.MultiIndex.from_product([[r], arr.sectors]),
         ))
@@ -83,6 +90,12 @@ def country_production(arr: IcioArrays, sector_df: pd.DataFrame | None = None) -
     """国家级生产分解 = 行业级金额按国加总,占比重新计算。"""
     if sector_df is None:
         sector_df = sector_production(arr)
-    df = sector_df[["va_total", *_AMOUNT_COLS]].groupby(level=0).sum()
+    df = sector_df[[
+        "prod_va_total",
+        "prod_pure_domestic",
+        "prod_traditional",
+        "prod_simple_gvc",
+        "prod_complex_gvc",
+    ]].groupby(level=0).sum()
     df.index.name = "country"
     return _add_shares(df)

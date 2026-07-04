@@ -53,7 +53,7 @@ def test_drops_missing_rows():
 
 def test_design_equation_text():
     d = RegressionDesign(step=13)
-    assert d.depvar == "backward_fva_share"
+    assert d.depvar == "share_trade_fva"
     assert d.granularity == "国家–行业级"  # 默认粒度已切到行业级
     assert d.method == "双重差分 (DID)"    # 默认方法已切到 DID
     eq = d.equation()
