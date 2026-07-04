@@ -64,6 +64,16 @@ export const api = {
       `/api/shocks/panel?year=${year}&only_hit=${onlyHit}&page=${page}` +
         (country ? `&country=${country}` : "") + (sector ? `&sector=${sector}` : ""),
     ),
+  regressionOptions: () => get<import("./types").RegressionOptions>("/api/regression/options"),
+  regressionDesign: (params: { step: number; granularity: string; shockType?: string; method: string }) => {
+    const qs = new URLSearchParams({
+      step: String(params.step),
+      granularity: params.granularity,
+      method: params.method,
+    });
+    if (params.shockType) qs.set("shock_type", params.shockType);
+    return get<import("./types").RegressionDesignInfo>(`/api/regression/design?${qs.toString()}`);
+  },
   runRegression: async (step: number, granularity: string, method: string) => {
     const resp = await fetch("/api/regression/run", {
       method: "POST",

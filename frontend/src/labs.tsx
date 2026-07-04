@@ -6,10 +6,10 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import type {
-  DbMeta, DbSlice, DbTableKind, IndicatorSchema, Meta, NetworkData, QcCheck, RegressionResponse,
+  DbMeta, DbSlice, DbTableKind, IndicatorSchema, Meta, NetworkData, QcCheck,
   SectorPage, ShockEvent, ShockSummary, Step,
 } from "./types";
-import { EventStudyChart, HeatTableViz, LengthViz, NetworkViz, StackedShareViz } from "./viz";
+import { HeatTableViz, LengthViz, NetworkViz, StackedShareViz } from "./viz";
 
 function fmtField(v: string | number | null, key: string, schema?: IndicatorSchema | null) {
   if (typeof v !== "number") return v ?? "—";
@@ -29,7 +29,7 @@ const fmtDb = (v: string | number | null) => {
   return v.toLocaleString("zh-CN", { maximumFractionDigits: Math.abs(v) < 10 ? 3 : 2 });
 };
 
-function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
+export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -525,84 +525,6 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
               ))}
             </tbody>
           </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** 步骤12-16:回归设计与运行 */
-export function RegressionLab({ step }: { step: Step }) {
-  const regStep = step.n === 12 ? 13 : step.n;
-  const [granularity, setGranularity] = useState("国家–行业级");
-  const [method, setMethod] = useState("双重差分 (DID)");
-  const [result, setResult] = useState<RegressionResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
-  useEffect(() => { setResult(null); setError(null); }, [step.n]);
-
-  const run = async () => {
-    setRunning(true);
-    setError(null);
-    try {
-      setResult(await api.runRegression(regStep, granularity, method));
-    } catch (e) {
-      setError(String((e as Error).message));
-    } finally {
-      setRunning(false);
-    }
-  };
-
-  return (
-    <div>
-      <div className="warnbox">
-        ⚠ 冲击变量为<b>拟真演示面板</b>(以 2018–2020 全球贸易摩擦为原型,覆盖全部经济体、行业异质),仅用于验证系统链路;接入 PIIE/WTO 真实数据后才具研究意义。
-      </div>
-      <div className="controls">
-        <label>粒度</label>
-        <select value={granularity} onChange={(e) => setGranularity(e.target.value)}>
-          <option value="国家–行业级">国家–行业级(默认)</option>
-          <option value="国家级">国家级</option>
-        </select>
-        <label>方法</label>
-        <select value={method} onChange={(e) => setMethod(e.target.value)}>
-          <option value="双重差分 (DID)">双重差分 (DID,默认)</option>
-          <option value="双向固定效应">双向固定效应(强度法)</option>
-          <option value="事件研究">事件研究(动态效应)</option>
-        </select>
-      </div>
-      {result && <div className="eq-box">{result.design.equation}</div>}
-      <button className="run-btn" onClick={run} disabled={running}>
-        {running ? "估计中…" : "▶ 运行回归"}
-      </button>
-      {error && <div className="error-box" style={{ marginTop: 14 }}>{error}</div>}
-      {result && (
-        <div style={{ marginTop: 16 }}>
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead><tr><th>变量</th><th>系数</th><th>聚类标准误</th><th>t</th><th>p</th><th>显著</th></tr></thead>
-              <tbody>
-                {result.result.coefs.map((c) => (
-                  <tr key={c.name}>
-                    <td>{c.name}</td>
-                    <td>{c.coef.toFixed(4)}</td>
-                    <td>{c.se.toFixed(4)}</td>
-                    <td>{c.t.toFixed(2)}</td>
-                    <td>{c.p.toFixed(3)}</td>
-                    <td>{c.stars}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="muted" style={{ marginTop: 10 }}>
-            被解释变量:{result.design.depvar_label}({result.design.depvar})· {result.design.granularity} · {result.design.method} · N = {result.result.n_obs}
-            ({result.result.n_entities} 个体 × {result.result.n_times} 年,{result.result.n_clusters} 国聚类)· 组内 R² = {result.result.r2_within.toFixed(4)}
-          </p>
-          {result.result.notes.map((n) => <p key={n} className="muted">· {n}</p>)}
-          {result.design.method === "事件研究" && (
-            <EventStudyChart coefs={result.result.coefs} notes={result.result.notes} />
-          )}
         </div>
       )}
     </div>

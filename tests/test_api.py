@@ -43,6 +43,31 @@ def test_regression_options():
     assert "双重差分 (DID)" in resp.json()["methods"]
 
 
+def test_regression_design():
+    # 设计预览不跑回归、不依赖预计算面板
+    resp = client.get("/api/regression/design", params={"step": 13})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["depvar"] == "share_trade_fva"
+    assert body["panel_file"] == "panel_sector.csv"
+    assert body["entity"] == "entity_id"
+    assert body["cluster"] == "country"
+    assert "treated" in body["equation"]
+
+    ev = client.get(
+        "/api/regression/design",
+        params={"step": 15, "granularity": "国家级", "method": "事件研究"},
+    )
+    assert ev.status_code == 200
+    assert ev.json()["panel_file"] == "panel_country.csv"
+    assert "Σ_k" in ev.json()["equation"]
+
+    assert client.get("/api/regression/design", params={"step": 12}).status_code == 400
+    assert client.get(
+        "/api/regression/design", params={"step": 13, "method": "工具变量"}
+    ).status_code == 400
+
+
 def test_indicator_schema():
     resp = client.get("/api/indicators/schema")
     assert resp.status_code == 200

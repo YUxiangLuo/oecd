@@ -373,31 +373,52 @@ def regression_options():
     }
 
 
+def _validate_design(step: int, granularity: str, shock_type: str, method: str) -> RegressionDesign:
+    if step not in STEP_DEPVARS:
+        raise HTTPException(status_code=400, detail="step 必须是 13-16")
+    if granularity not in GRANULARITIES:
+        raise HTTPException(status_code=400, detail=f"granularity 必须是 {GRANULARITIES}")
+    if method not in METHODS:
+        raise HTTPException(status_code=400, detail=f"method 必须是 {METHODS}")
+    return RegressionDesign(step=step, granularity=granularity, shock_type=shock_type, method=method)
+
+
+def _design_info(design: RegressionDesign) -> dict:
+    return {
+        "step": design.step,
+        "depvar": design.depvar,
+        "depvar_label": design.depvar_label,
+        "granularity": design.granularity,
+        "shock_type": design.shock_type,
+        "method": design.method,
+        "equation": design.equation(),
+        "panel_file": design.panel_file,
+        "entity": design.entity,
+        "cluster": design.cluster,
+    }
+
+
+@app.get("/api/regression/design")
+def regression_design(
+    step: int = 13,
+    granularity: str = "国家–行业级",
+    shock_type: str = "关税冲击",
+    method: str = "双重差分 (DID)",
+):
+    """步骤12 设计确认:不跑回归,只返回方程与面板/个体/聚类等设计信息。"""
+    return _design_info(_validate_design(step, granularity, shock_type, method))
+
+
 @app.post("/api/regression/run")
 def regression_run(req: RegressionRequest):
-    if req.step not in STEP_DEPVARS:
-        raise HTTPException(status_code=400, detail="step 必须是 13-16")
-    if req.granularity not in GRANULARITIES:
-        raise HTTPException(status_code=400, detail=f"granularity 必须是 {GRANULARITIES}")
-    if req.method not in METHODS:
-        raise HTTPException(status_code=400, detail=f"method 必须是 {METHODS}")
-    design = RegressionDesign(
-        step=req.step, granularity=req.granularity,
-        shock_type=req.shock_type, method=req.method,
-    )
+    design = _validate_design(req.step, req.granularity, req.shock_type, req.method)
     panel = _read_csv(design.panel_file)
     try:
         result = run_design(panel, design)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {
-        "design": {
-            "depvar": design.depvar,
-            "depvar_label": design.depvar_label,
-            "granularity": design.granularity,
-            "method": design.method,
-            "equation": design.equation(),
-        },
+        "design": _design_info(design),
         "result": result.to_dict(),
         "disclaimer": "冲击变量为拟真演示面板(全经济体覆盖、行业异质),结果仅用于验证系统链路",
     }

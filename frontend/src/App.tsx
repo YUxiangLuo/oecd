@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { LogoMark } from "./brand";
 import { IntroOverlay } from "./intro";
-import { DbLab, IndicatorLab, QcLab, RegressionLab, ReportLab, ShockLab, VizLab } from "./labs";
+import { DbLab, IndicatorLab, QcLab, ReportLab, ShockLab, VizLab } from "./labs";
+import { RegDesignLab, RegressionRunLab } from "./regression";
 import { LoginPage } from "./login";
 import type { AuthUser, Meta, Step, StepsResponse } from "./types";
 
@@ -31,7 +32,8 @@ function Lab({ step, meta }: { step: Step; meta: Meta | null }) {
   if (step.lab === "ind") return meta ? <IndicatorLab meta={meta} step={step} /> : null;
   if (step.lab === "viz")
     return meta ? <VizLab meta={meta} step={step} columns={VIZ_COLUMNS[step.n] ?? []} /> : null;
-  if (step.lab === "rgd" || step.lab === "reg") return <RegressionLab step={step} />;
+  if (step.lab === "rgd") return <RegDesignLab />;
+  if (step.lab === "reg") return <RegressionRunLab step={step} />;
   if (step.lab === "rep") return meta ? <ReportLab meta={meta} /> : null;
   return null;
 }
@@ -155,12 +157,17 @@ export default function App() {
               </div>
             </div>
 
-            <div className="card accent">
-              <div className="kicker">本步目标</div>
-              <p>{step.goal}</p>
-              <p>{step.concept}</p>
-            </div>
-            <div className="tipbox">💡 {step.tip}</div>
+            {/* 回归步骤(rgd/reg)自带完整讲解卡片体系,跳过通用卡避免内容重复 */}
+            {step.lab !== "rgd" && step.lab !== "reg" && (
+              <>
+                <div className="card accent">
+                  <div className="kicker">本步目标</div>
+                  <p>{step.goal}</p>
+                  <p>{step.concept}</p>
+                </div>
+                <div className="tipbox">💡 {step.tip}</div>
+              </>
+            )}
 
             <Lab step={step} meta={meta} />
           </div>

@@ -51,7 +51,7 @@ uv run gvcsim regress --step 14 --method event          # 事件研究(动态效
 uv run gvcsim regress --step 13 --method fe             # 双向固定效应(强度法)
 uv run gvcsim regress --step 13 --granularity country   # 国家级粒度
 uv run gvcsim report --year 2020      # 步骤17:生成 reports/experiment_report_2020.md
-uv run pytest                         # 测试(37 个,含 API 集成测试)
+uv run pytest                         # 测试(53 个,含 API 集成测试)
 ```
 
 ## 目录结构
@@ -80,7 +80,9 @@ uv run pytest                         # 测试(37 个,含 API 集成测试)
 │   └── cli.py                    #   gvcsim 命令行入口
 ├── frontend/                     # React + Vite + TS 前端(bun);login.tsx 登录页、
 │                                 #   intro.tsx 登录后交互式系统介绍、viz.tsx 步骤8-11
-│                                 #   富可视化 + 事件研究系数图(纯 SVG,零图表库依赖)
+│                                 #   富可视化 + 事件研究/森林系数图(纯 SVG,零图表库依赖)、
+│                                 #   teach.tsx + regteach.ts + regression.tsx 步骤12-16
+│                                 #   讲解卡片体系与回归实验台(设计确认 + 运行 + 结果动态解读)
 ├── tests/                        # 合成小矩阵验证指标数学性质;回归系数恢复;API 集成
 ├── prototype/                    # 完整 UI 设计原型(最终形态参考,勿改)
 ├── data/processed/               # 预计算产物(gitignore;由 gvcsim compute 生成)
@@ -142,8 +144,8 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 | | 6 长度分解 | ✅ Antras-Chor 上游度 + 国内/跨境段拆分,国家+行业双粒度 |
 | | 7 网络指标 | ✅ 度/介数/特征向量中心性,国家+行业双粒度(行业级介数为抽样近似) |
 | 三、可视化 | 8–11 | ✅ 交互网络图(区域聚类+悬停高亮)/生产结构堆叠条/长度双段条/中心性热力表,均带表格视图与悬停 tooltip |
-| 四、回归 | 12 设计确认 | ✅ 设计选项 → 面板/个体/聚类/方程;双粒度 × 三方法(DID/事件研究/双向FE)全部真实可跑 |
-| | 13–16 四组回归 | 🟡 默认 DID(个体FE+按国聚类SE),事件研究含平行趋势检验;端到端链路已通,基于演示冲击数据 |
+| 四、回归 | 12 设计确认 | ✅ 交互式设计台:粒度/冲击/方法/被解释变量选择卡 → 即时方程与面板/个体/聚类摘要(GET /api/regression/design) |
+| | 13–16 四组回归 | 🟡 讲解卡片体系(概念/公式/陷阱/自检/小结)+ 模型设定卡 + 系数表/森林图/事件研究图 + 按结果自动生成的中文解读;默认 DID(个体FE+按国聚类SE),基于演示冲击数据 |
 | 五、闭环 | 17 实验报告 | 🟡 Markdown 报告自动生成(回归为行业级);PDF 导出待做 |
 
 ## 方法论说明(诚实告知)

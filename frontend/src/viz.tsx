@@ -450,3 +450,58 @@ export function EventStudyChart({ coefs, notes }: {
     </div>
   );
 }
+
+/* --------------------- 步骤13-16:系数森林图(横向 CI) --------------------- */
+
+/** 点=估计值,横条=95% 置信区间,竖线=0 轴;负效应红、正效应绿(与系数表一致)。 */
+export function CoefForestChart({ coefs }: {
+  coefs: { name: string; coef: number; se: number; p: number; stars: string }[];
+}) {
+  const { wrapRef, Tip, show, hide } = useTip();
+  const pts = coefs.map((c) => ({ ...c, lo: c.coef - 1.96 * c.se, hi: c.coef + 1.96 * c.se }));
+  const rowH = 40, padT = 14, padB = 30, labelW = 96, padR = 18;
+  const W = 320, H = padT + pts.length * rowH + padB;
+  const plotW = W - labelW - padR;
+  const ext = Math.max(...pts.map((p) => Math.max(Math.abs(p.lo), Math.abs(p.hi))), 1e-6) * 1.12;
+  const x = (v: number) => labelW + ((v + ext) / (2 * ext)) * plotW;
+  const y = (i: number) => padT + (i + 0.5) * rowH;
+  const fmt = (v: number) => (Math.abs(v) < 0.01 ? v.toFixed(4) : v.toFixed(3));
+  const tip = (p: (typeof pts)[number]): [string, string][] => [
+    ["", p.name],
+    ["系数", `${fmt(p.coef)}${p.stars}`],
+    ["95% CI", `[${fmt(p.lo)}, ${fmt(p.hi)}]`],
+    ["p 值", p.p.toFixed(3)],
+  ];
+  return (
+    <div ref={wrapRef} style={{ ...cardStyle, flex: "1 1 260px", minWidth: 260 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050" }}>系数图</div>
+      <div style={{ fontSize: 11, color: "#a2a8b6", marginBottom: 6 }}>点 = 估计值 · 横线 = 95% 置信区间</div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ display: "block", width: "100%", height: "auto" }}>
+        <line x1={x(0)} x2={x(0)} y1={padT} y2={H - padB} stroke="#e0e3ea" strokeWidth={1} />
+        {[-ext, 0, ext].map((v) => (
+          <text key={v} x={x(v)} y={H - padB + 16} textAnchor="middle" fontSize={10} fill="#b0b5c2"
+            style={{ fontVariantNumeric: "tabular-nums" }}>{v === 0 ? "0" : fmt(v)}</text>
+        ))}
+        {pts.map((p, i) => {
+          const neg = p.coef < 0;
+          const dot = neg ? "#d1462f" : "#137a41";
+          const ci = neg ? "#f0b3a4" : "#a9d9bc";
+          return (
+            <g key={p.name}
+              onMouseEnter={(e) => show(e, tip(p))}
+              onMouseMove={(e) => show(e, tip(p))}
+              onMouseLeave={hide} style={{ cursor: "default" }}>
+              <rect x={labelW} y={y(i) - rowH / 2} width={plotW} height={rowH} fill="transparent" />
+              <text x={labelW - 8} y={y(i) + 3.5} textAnchor="end" fontSize={10.5} fill="#5a6070">
+                {p.name.length > 11 ? `${p.name.slice(0, 10)}…` : p.name}
+              </text>
+              <line x1={x(p.lo)} x2={x(p.hi)} y1={y(i)} y2={y(i)} stroke={ci} strokeWidth={4} strokeLinecap="round" />
+              <circle cx={x(p.coef)} cy={y(i)} r={5.5} fill={dot} stroke="#fff" strokeWidth={2} />
+            </g>
+          );
+        })}
+      </svg>
+      {Tip}
+    </div>
+  );
+}

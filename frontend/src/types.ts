@@ -134,8 +134,28 @@ export interface CoefStat {
   stars: string;
 }
 
+export interface RegressionOptions {
+  granularities: string[];
+  shock_types: string[];
+  methods: string[];
+  steps: Record<string, string>; // 步骤号 → 被解释变量中文名
+}
+
+export interface RegressionDesignInfo {
+  step: number;
+  depvar: string;
+  depvar_label: string;
+  granularity: string;
+  shock_type: string;
+  method: string;
+  equation: string;
+  panel_file: string;
+  entity: string;
+  cluster: string;
+}
+
 export interface RegressionResponse {
-  design: { depvar: string; depvar_label: string; granularity: string; method: string; equation: string };
+  design: RegressionDesignInfo;
   result: {
     coefs: CoefStat[];
     n_obs: number;
