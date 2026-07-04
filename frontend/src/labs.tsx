@@ -8,7 +8,7 @@ import type {
   DbMeta, DbSlice, DbTableKind, IndicatorSchema, Meta, NetworkData, QcCheck,
   SectorPage, ShockEvent, ShockSummary, Step,
 } from "./types";
-import { HeatTableViz, LengthViz, NetworkViz, StackedShareViz } from "./viz";
+import { HeatTableViz, LengthViz, NetworkViz, RankBarChart, ScatterChart, StackedShareViz } from "./viz";
 import { DecompositionDemo, NetworkCentralityDemo } from "./demos";
 
 function fmtField(v: string | number | null, key: string, schema?: IndicatorSchema | null) {
@@ -478,35 +478,68 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
   );
 }
 
-/** 步骤8-11:富可视化(网络图/堆叠条/长度条/热力表),每个图都有表格视图孪生 */
+// 各步散点图默认的 X/Y 指标(学生可再改)
+const SCATTER_DEFAULT: Record<number, [string, string]> = {
+  8: ["share_trade_gvc_participation", "betweenness_centrality"],
+  9: ["share_prod_complex_gvc", "upstreamness"],
+  10: ["upstreamness", "upstreamness_cross"],
+  11: ["degree_centrality", "betweenness_centrality"],
+};
+
+type ViewKind = "signature" | "rank" | "scatter" | "table";
+
+/** 步骤8-11:富可视化(招牌图)+ 自由探索(自选指标 / 排序条 / 散点 / 选国家-TopN) */
 export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; columns: string[] }) {
   const [year, setYear] = useState(meta.years.at(-1)!);
-  const [view, setView] = useState<"chart" | "table">("chart");
+  const [view, setView] = useState<ViewKind>("signature");
+  const [metricX, setMetricX] = useState(SCATTER_DEFAULT[step.n]?.[0] ?? columns[0]);
+  const [metricY, setMetricY] = useState(SCATTER_DEFAULT[step.n]?.[1] ?? columns[1] ?? columns[0]);
+  const [entityMode, setEntityMode] = useState<"topn" | "pick">("topn");
+  const [topN, setTopN] = useState(15);
+  const [picked, setPicked] = useState<string[]>([]);
   const isNetwork = step.n === 8;
+
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
-  const { data: rows, error } = useAsync(
-    () => api.countryIndicators(year),
-    [year],
-  );
+  const { data: rows, error } = useAsync(() => api.countryIndicators(year), [year]);
   const { data: net, error: netErr } = useAsync<NetworkData | null>(
     () => (isNetwork ? api.network(year) : Promise.resolve(null)),
     [year, isNetwork],
   );
   if (error || netErr) return <div className="error-box">{error ?? netErr}</div>;
 
-  const sortCol = columns[0];
-  const tableRows = (rows ?? [])
-    .slice()
-    .sort((a, b) => Number(b[sortCol] ?? 0) - Number(a[sortCol] ?? 0))
-    .slice(0, 15);
+  const fmtOf = (k: string) => schema?.fields[k]?.format;
+  const allRows = rows ?? [];
+  // 选中的对象:Top-N(按当前指标X排序)或手动挑选的国家
+  const selRows =
+    entityMode === "topn"
+      ? [...allRows].sort((a, b) => Number(b[metricX] ?? 0) - Number(a[metricX] ?? 0)).slice(0, topN)
+      : allRows.filter((r) => picked.includes(String(r.country)));
+  const highlight = new Set(picked);
 
-  const chart = () => {
+  const signatureChart = () => {
     if (isNetwork) return net ? <NetworkViz data={net} /> : <p className="muted">加载中…</p>;
     if (!rows) return <p className="muted">加载中…</p>;
     if (step.n === 9) return <StackedShareViz rows={rows} />;
     if (step.n === 10) return <LengthViz rows={rows} />;
     return <HeatTableViz rows={rows} />;
   };
+
+  const metricSelect = (value: string, onChange: (v: string) => void, label: string) => (
+    <>
+      <label>{label}</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {(schema?.groups ?? []).map((g) => (
+          <optgroup key={g.key} label={g.label}>
+            {g.fields.map((f) => <option key={f} value={f}>{schema?.fields[f]?.label ?? f}</option>)}
+          </optgroup>
+        ))}
+      </select>
+    </>
+  );
+
+  const TABS: [ViewKind, string][] = [
+    ["signature", "招牌图"], ["rank", "排序条形图"], ["scatter", "散点图"], ["table", "表格"],
+  ];
 
   return (
     <div>
@@ -516,16 +549,57 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
           {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
         <div className="seg">
-          <button className={view === "chart" ? "on" : ""} onClick={() => setView("chart")}>图表</button>
-          <button className={view === "table" ? "on" : ""} onClick={() => setView("table")}>表格</button>
+          {TABS.map(([k, lab]) => (
+            <button key={k} className={view === k ? "on" : ""} onClick={() => setView(k)}>{lab}</button>
+          ))}
         </div>
       </div>
-      {view === "chart" ? chart() : (
+
+      {/* 自由探索控件条:选指标 + 选对象(招牌图不需要) */}
+      {view !== "signature" && (
+        <div className="controls viz-explore">
+          {view !== "table" && metricSelect(metricX, setMetricX, view === "scatter" ? "X 指标" : "指标")}
+          {view === "scatter" && metricSelect(metricY, setMetricY, "Y 指标")}
+          <div className="seg">
+            <button className={entityMode === "topn" ? "on" : ""} onClick={() => setEntityMode("topn")}>Top-N</button>
+            <button className={entityMode === "pick" ? "on" : ""} onClick={() => setEntityMode("pick")}>选国家</button>
+          </div>
+          {entityMode === "topn" ? (
+            <span className="topn-ctl">
+              前 <input type="range" min={5} max={40} value={topN} onChange={(e) => setTopN(Number(e.target.value))} />
+              <b>{topN}</b> 个(按{view === "scatter" ? "X" : "该"}指标)
+            </span>
+          ) : (
+            <select multiple className="country-multi" value={picked}
+              onChange={(e) => setPicked(Array.from(e.target.selectedOptions, (o) => o.value))}>
+              {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
+        </div>
+      )}
+
+      {view === "signature" && signatureChart()}
+
+      {view === "rank" && (
+        selRows.length
+          ? <RankBarChart rows={selRows} metricKey={metricX} label={fieldLabel(metricX, schema)} format={fmtOf(metricX)} highlight={highlight} />
+          : <p className="muted">请在“选国家”里选择至少一个国家。</p>
+      )}
+
+      {view === "scatter" && (
+        selRows.length
+          ? <ScatterChart rows={selRows} xKey={metricX} yKey={metricY}
+              xLabel={fieldLabel(metricX, schema)} yLabel={fieldLabel(metricY, schema)}
+              xFormat={fmtOf(metricX)} yFormat={fmtOf(metricY)} highlight={highlight} />
+          : <p className="muted">请在“选国家”里选择至少一个国家。</p>
+      )}
+
+      {view === "table" && (
         <div className="table-wrap">
           <table className="data-table">
             <thead><tr><th>国家</th>{columns.map((c) => <th key={c}>{fieldLabel(c, schema)}</th>)}</tr></thead>
             <tbody>
-              {tableRows.map((r) => (
+              {selRows.map((r) => (
                 <tr key={String(r.country)}>
                   <td>{String(r.country)}</td>
                   {columns.map((c) => <td key={c}>{fmtField(r[c], c, schema)}</td>)}

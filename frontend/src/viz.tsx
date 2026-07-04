@@ -394,6 +394,106 @@ export function HeatTableViz({ rows }: { rows: Row[] }) {
   );
 }
 
+/* ---------------- 步骤8-11 自由探索:排序条形图 / 散点图 ---------------- */
+
+export function fmtVal(v: number, format?: string): string {
+  if (format === "pct") return `${(v * 100).toFixed(1)}%`;
+  if (format === "amount") return v.toLocaleString("zh-CN", { maximumFractionDigits: 0 });
+  return v.toFixed(3);
+}
+
+/** 任意指标的排序条形图(学生自选指标 + 对象后驱动) */
+export function RankBarChart({ rows, metricKey, label, format, highlight }: {
+  rows: Row[]; metricKey: string; label: string; format?: string; highlight?: Set<string>;
+}) {
+  const { wrapRef, Tip, show, hide } = useTip();
+  const data = [...rows].sort((a, b) => num(b[metricKey]) - num(a[metricKey]));
+  const max = Math.max(...data.map((r) => num(r[metricKey])), 1e-9);
+  return (
+    <div style={cardStyle} ref={wrapRef}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14 }}>{label} · 排序</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+        {data.map((r) => {
+          const v = num(r[metricKey]);
+          const w = Math.max(1, (v / max) * 100);
+          const hi = highlight?.has(String(r.country));
+          return (
+            <div key={String(r.country)} style={{ display: "flex", alignItems: "center", gap: 10 }}
+              onMouseMove={(e) => show(e, [["", String(r.country)], [label, fmtVal(v, format)]])}
+              onMouseLeave={hide}>
+              <span style={{ width: 46, fontSize: 11.5, color: "#5a6070", fontFamily: "monospace" }}>{String(r.country)}</span>
+              <div style={{ flex: 1, height: 16, background: "#f2f3f7", borderRadius: 5, overflow: "hidden" }}>
+                <div style={{ width: `${w}%`, height: "100%", background: hi ? CAT[5] : CAT[0], transition: "width .4s" }} />
+              </div>
+              <span style={{ width: 76, textAlign: "right", fontSize: 11.5, fontFamily: "'Space Grotesk',sans-serif", color: "#3a4050" }}>{fmtVal(v, format)}</span>
+            </div>
+          );
+        })}
+      </div>
+      {Tip}
+    </div>
+  );
+}
+
+/** X × Y 两指标散点图(学生自选,用于看指标间关系) */
+export function ScatterChart({ rows, xKey, yKey, xLabel, yLabel, xFormat, yFormat, highlight }: {
+  rows: Row[]; xKey: string; yKey: string; xLabel: string; yLabel: string;
+  xFormat?: string; yFormat?: string; highlight?: Set<string>;
+}) {
+  const { wrapRef, Tip, show, hide } = useTip();
+  const W = 660, H = 400, m = { l: 62, r: 18, t: 14, b: 46 };
+  const pts = rows.map((r) => ({ c: String(r.country), x: num(r[xKey]), y: num(r[yKey]) }));
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const spread = (arr: number[]) => {
+    const lo = Math.min(...arr), hi = Math.max(...arr), pad = (hi - lo) * 0.06 || Math.abs(hi) * 0.1 || 1;
+    return [lo - pad, hi + pad] as const;
+  };
+  const [x0, x1] = spread(xs), [y0, y1] = spread(ys);
+  const px = (x: number) => m.l + ((x - x0) / (x1 - x0 || 1)) * (W - m.l - m.r);
+  const py = (y: number) => H - m.b - ((y - y0) / (y1 - y0 || 1)) * (H - m.t - m.b);
+  const ticks = (lo: number, hi: number) => [0, 1, 2, 3, 4].map((i) => lo + ((hi - lo) / 4) * i);
+  const showLabels = pts.length <= 24;
+  return (
+    <div style={cardStyle} ref={wrapRef}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{yLabel} × {xLabel}</div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%">
+        {/* 网格 + 刻度 */}
+        {ticks(y0, y1).map((t, i) => (
+          <g key={`y${i}`}>
+            <line x1={m.l} y1={py(t)} x2={W - m.r} y2={py(t)} stroke="#eef0f5" strokeWidth={1} />
+            <text x={m.l - 8} y={py(t) + 4} textAnchor="end" fontSize="10.5" fill="#8a90a0">{fmtVal(t, yFormat)}</text>
+          </g>
+        ))}
+        {ticks(x0, x1).map((t, i) => (
+          <text key={`x${i}`} x={px(t)} y={H - m.b + 18} textAnchor="middle" fontSize="10.5" fill="#8a90a0">{fmtVal(t, xFormat)}</text>
+        ))}
+        {/* 轴标题 */}
+        <text x={(m.l + W - m.r) / 2} y={H - 6} textAnchor="middle" fontSize="11.5" fill="#5a6070">{xLabel}</text>
+        <text x={14} y={(m.t + H - m.b) / 2} textAnchor="middle" fontSize="11.5" fill="#5a6070"
+          transform={`rotate(-90 14 ${(m.t + H - m.b) / 2})`}>{yLabel}</text>
+        {/* 点 */}
+        {pts.map((p) => {
+          const hi = highlight?.has(p.c);
+          return (
+            <g key={p.c}
+              onMouseMove={(e) => show(e, [["", p.c], [xLabel, fmtVal(p.x, xFormat)], [yLabel, fmtVal(p.y, yFormat)]])}
+              onMouseLeave={hide} style={{ cursor: "pointer" }}>
+              <circle cx={px(p.x)} cy={py(p.y)} r={hi ? 6 : 4.5}
+                fill={hi ? CAT[5] : CAT[0]} fillOpacity={hi ? 0.95 : 0.62}
+                stroke="#fff" strokeWidth={1} />
+              {(showLabels || hi) && (
+                <text x={px(p.x) + 7} y={py(p.y) + 3.5} fontSize="10" fill={hi ? CAT[5] : "#8a90a0"}
+                  fontWeight={hi ? 700 : 400}>{p.c}</text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      {Tip}
+    </div>
+  );
+}
+
 /* --------------------------- 事件研究:系数时间轴 --------------------------- */
 
 export function EventStudyChart({ coefs, notes }: {
