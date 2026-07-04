@@ -446,7 +446,6 @@ button { font-family: inherit; cursor: pointer; }
 .rail-stage-num { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; }
 .rail-stage-num b { font-family: "Space Grotesk", sans-serif; font-size: 26px; font-weight: 700; line-height: 1; }
 .rail-stage-num span { font-size: 12.5px; opacity: 0.9; }
-.rail-stage-sub { font-size: 11px; opacity: 0.85; margin-top: 5px; }
 .rail-sec { margin-bottom: 16px; }
 .rail-label { font-size: 10.5px; color: #8a90a0; font-weight: 600; letter-spacing: 0.3px; margin-bottom: 8px; }
 .rail-goal { font-size: 12.5px; color: #2a3040; line-height: 1.7; }

@@ -86,8 +86,6 @@ export default function App() {
   const step = steps.find((s) => s.n === current)!;
   const stages = [...new Set(steps.map((s) => s.stage))];
   const stageName = stepsData.stages[String(step.stage)];
-  const stageSteps = steps.filter((s) => s.stage === step.stage);
-  const stageIdx = stageSteps.findIndex((s) => s.n === current) + 1;
   const prevStep = steps.find((s) => s.n === current - 1);
   const nextStep = steps.find((s) => s.n === current + 1);
   // 回归步骤(rgd/reg)自带完整讲解卡片体系,主区跳过通用讲解卡避免重复
@@ -193,7 +191,6 @@ export default function App() {
               <div className="rail-stage">
                 <div className="rail-stage-loc">阶段{ROMAN[step.stage]} · {stageName}</div>
                 <div className="rail-stage-num"><b>{String(step.n).padStart(2, "0")}</b><span>/ 17 步</span></div>
-                <div className="rail-stage-sub">本阶段第 {stageIdx} / {stageSteps.length} 步</div>
               </div>
               <div className="rail-sec">
                 <div className="rail-label">🎯 本步目标</div>
