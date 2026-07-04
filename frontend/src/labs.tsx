@@ -9,6 +9,7 @@ import type {
   SectorPage, ShockEvent, ShockSummary, Step,
 } from "./types";
 import { HeatTableViz, LengthViz, NetworkViz, StackedShareViz } from "./viz";
+import { DecompositionDemo, NetworkCentralityDemo } from "./demos";
 
 function fmtField(v: string | number | null, key: string, schema?: IndicatorSchema | null) {
   if (typeof v !== "number") return v ?? "—";
@@ -431,6 +432,14 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
   return (
     <div>
+      {/* 步骤4-6:真实数据拆解演示;步骤7:网络中心性演示 */}
+      {[4, 5, 6].includes(step.n) && <DecompositionDemo step={step.n} meta={meta} />}
+      {step.n === 7 && <NetworkCentralityDemo />}
+
+      <div className="section-head">
+        <span className="section-head-icon">📄</span>完整分解数据表
+        <span className="section-head-line" />
+      </div>
       <div className="controls">
         <label>国家</label>
         <select value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}>

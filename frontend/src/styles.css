@@ -625,3 +625,89 @@ button { font-family: inherit; cursor: pointer; }
   margin: 0; color: #3a4050; font-size: 12.5px; line-height: 1.8;
 }
 .benchmark-box b { color: #2a3040; font-variant-numeric: tabular-nums; }
+
+/* ---------- 步骤4-7 交互式计算演示(demos.tsx) ---------- */
+.demo-card {
+  background: #fff; border: 1px solid #e7e9f0; border-radius: 14px;
+  padding: 18px 20px; margin-bottom: 14px;
+}
+.demo-title { font-size: 13.5px; font-weight: 700; color: #2a3040; margin-bottom: 14px; }
+.demo-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.demo-controls label { font-size: 12px; color: #6b7280; }
+.demo-controls select {
+  padding: 7px 10px; border-radius: 8px; border: 1px solid #e0e3ea;
+  background: #fff; font-size: 12.5px; font-family: inherit;
+}
+.pill-group { display: inline-flex; background: #f0f1f6; border-radius: 9px; padding: 3px; }
+.pill-group button {
+  border: none; background: transparent; padding: 6px 14px; border-radius: 7px;
+  font-size: 12.5px; font-weight: 600; color: #8a90a0; cursor: pointer; font-family: inherit;
+}
+.pill-group button.on { background: #fff; color: #4b47e0; box-shadow: 0 1px 4px rgba(20, 24, 40, 0.12); }
+
+/* 公式条 */
+.decomp-formula {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  background: #1b1f2b; border-radius: 10px; padding: 12px 15px; margin-bottom: 14px;
+  font-family: "Space Mono", monospace; font-size: 13px; color: #d8dbe6;
+}
+.decomp-formula .df-total { color: #fff; font-weight: 700; }
+.decomp-formula .df-eq, .decomp-formula .df-plus { color: #8a90a0; margin: 0 3px; }
+.decomp-formula .df-term {
+  padding: 2px 7px; border-radius: 6px; border: 1px solid transparent; cursor: default; transition: all 0.12s;
+}
+.decomp-formula .df-term.on { background: rgba(255, 255, 255, 0.08); font-weight: 700; }
+
+.decomp-total-line { font-size: 13.5px; color: #3a4050; margin-bottom: 8px; }
+.decomp-total-line b { font-family: "Space Grotesk", sans-serif; font-size: 16px; color: #1b1f2b; }
+
+.decomp-bar {
+  display: flex; height: 42px; border-radius: 9px; overflow: hidden;
+  border: 1px solid #e7e9f0; background: #f7f8fb;
+}
+.decomp-seg { height: 100%; transition: width 0.5s ease, opacity 0.15s; min-width: 2px; cursor: pointer; }
+.decomp-seg.dim { opacity: 0.35; }
+
+.decomp-identity {
+  margin-top: 12px; padding: 10px 14px; border-radius: 10px;
+  font-size: 12.5px; font-family: "Space Mono", monospace;
+}
+.decomp-identity.ok { background: #eafaf1; color: #137a41; border: 1px solid #bfe8d0; }
+.decomp-identity.bad { background: #fff0e6; color: #a2551f; border: 1px solid #f6d6bf; }
+
+.decomp-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12.5px; }
+.decomp-table tr { border-bottom: 1px solid #f2f3f7; }
+.decomp-table tr.on { background: #f7f8fb; }
+.decomp-table td { padding: 9px 8px; vertical-align: top; }
+.dt-name { font-weight: 600; color: #2a3040; white-space: nowrap; }
+.dt-swatch { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 8px; vertical-align: middle; }
+.dt-val { text-align: right; font-family: "Space Grotesk", sans-serif; color: #3a4050; white-space: nowrap; }
+.dt-share { text-align: right; color: #8a90a0; font-variant-numeric: tabular-nums; width: 60px; }
+.dt-desc { color: #6b7280; line-height: 1.6; }
+.decomp-note {
+  margin-top: 12px; font-size: 12px; color: #8a5a1f; background: #fffaf3;
+  border: 1px solid #f2e2cd; border-radius: 10px; padding: 10px 13px; line-height: 1.6;
+}
+
+/* 网络中心性演示 */
+.net-demo-wrap { display: flex; gap: 18px; align-items: stretch; flex-wrap: wrap; }
+.net-demo-svg {
+  flex: 1; min-width: 340px; max-width: 640px; background: #fafbfd;
+  border: 1px solid #eef0f5; border-radius: 12px;
+}
+.net-demo-panel {
+  flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 8px;
+  padding: 4px 0;
+}
+.ndp-node { font-size: 13px; color: #3a4050; }
+.ndp-node b { font-size: 15px; color: #4b47e0; }
+.ndp-formula {
+  font-size: 12px; color: #5a6070; background: #f4f5f8; border-radius: 8px; padding: 8px 11px;
+}
+.ndp-calc { font-family: "Space Mono", monospace; font-size: 13px; color: #2a3040; }
+.ndp-calc b { color: #4b47e0; font-size: 15px; }
+.ndp-note { font-size: 12px; color: #6b7280; line-height: 1.65; margin: 2px 0; }
+.ndp-disclaim {
+  margin-top: auto; font-size: 11px; color: #9aa0ae; line-height: 1.6;
+  border-top: 1px solid #eef0f5; padding-top: 10px;
+}

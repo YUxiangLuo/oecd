@@ -55,6 +55,11 @@ export const api = {
     get<import("./types").SectorPage>(
       `/api/indicators/sector/${year}?page=${page}${country ? `&country=${country}` : ""}`,
     ),
+  // 拉取一个国家全部行业的指标行(用于步骤4-6 的拆解演示,一次取回填充行业下拉)
+  sectorIndicatorsAll: (year: number, country: string) =>
+    get<import("./types").SectorPage>(
+      `/api/indicators/sector/${year}?page=1&page_size=200${country ? `&country=${country}` : ""}`,
+    ),
   network: (year: number) => get<import("./types").NetworkData>(`/api/viz/network/${year}`),
   shockEvents: () =>
     get<{ events: import("./types").ShockEvent[]; disclaimer: string }>("/api/shocks/events"),
