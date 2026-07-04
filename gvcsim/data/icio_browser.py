@@ -13,7 +13,7 @@ from typing import Any
 
 import pandas as pd
 
-from gvcsim.config import RAW_DATA_DIR
+from gvcsim.config import RAW_DATA_DIR, available_years
 
 FINAL_DEMAND_CATEGORIES = ("HFCE", "NPISH", "GGFC", "GFCF", "INVNT", "DPABR")
 ACCOUNT_ROWS = ("TLS", "VA", "OUT")
@@ -25,16 +25,6 @@ def _year_file(year: int, raw_dir: Path = RAW_DATA_DIR) -> Path:
     if not matches:
         raise FileNotFoundError(f"未找到 OECD ICIO 原始文件: ICIO*_{year}.csv")
     return matches[-1]
-
-
-def available_raw_years(raw_dir: Path = RAW_DATA_DIR) -> list[int]:
-    years: list[int] = []
-    for path in sorted(raw_dir.glob("ICIO*_*.csv")):
-        try:
-            years.append(int(path.stem.rsplit("_", 1)[1]))
-        except ValueError:
-            continue
-    return sorted(set(years))
 
 
 def _split_label(label: str) -> tuple[str, str] | None:
@@ -90,8 +80,22 @@ def _meta_for_path(path: Path) -> dict[str, Any]:
     return _metadata(str(path), path.stat().st_mtime_ns)
 
 
+@lru_cache(maxsize=32)
+def _read_columns_cached(path_str: str, mtime_ns: int, usecols: tuple[str, ...]) -> pd.DataFrame:
+    return pd.read_csv(path_str, usecols=list(usecols), keep_default_na=False, na_values=[""])
+
+
+def _read_columns(path: Path, usecols: tuple[str, ...]) -> pd.DataFrame:
+    """按列切片读取原始宽表,并按 (路径, mtime, 列集) 缓存。
+
+    翻页只换行不换列,命中缓存后无需重扫 ~66MB 的原始文件。
+    缓存的 DataFrame 不得原地修改,调用方只能做产生副本的操作。
+    """
+    return _read_columns_cached(str(path), path.stat().st_mtime_ns, usecols)
+
+
 def meta(raw_dir: Path = RAW_DATA_DIR) -> dict[str, Any]:
-    years = available_raw_years(raw_dir)
+    years = available_years(raw_dir)
     files = []
     for year in years:
         path = _year_file(year, raw_dir)
@@ -186,8 +190,7 @@ def slice_table(
         row_labels = _filter_labels(info["industry_columns"], row_country, row_sector)
         col_labels = _filter_labels(info["industry_columns"], col_country, col_sector)
         page_rows = _page(row_labels, page, page_size)
-        usecols = ["V1", *col_labels]
-        df = pd.read_csv(path, usecols=usecols, keep_default_na=False, na_values=[""])
+        df = _read_columns(path, ("V1", *col_labels))
         df = df[df["V1"].isin(page_rows)]
         df = df.rename(columns={"V1": "row"})
         return {
@@ -215,8 +218,7 @@ def slice_table(
                 continue
             fd_cols.append(col)
         page_rows = _page(row_labels, page, page_size)
-        usecols = ["V1", *fd_cols]
-        df = pd.read_csv(path, usecols=usecols, keep_default_na=False, na_values=[""])
+        df = _read_columns(path, ("V1", *fd_cols))
         df = df[df["V1"].isin(page_rows)]
         df = df.rename(columns={"V1": "row"})
         return {
@@ -230,12 +232,12 @@ def slice_table(
         }
 
     # accounts: transpose TLS/VA/OUT rows into country-sector rows.
+    # 读取该行筛选下的全部行业列(≤45 列)并缓存,翻页只在缓存结果上切列。
     industry_cols = _filter_labels(info["industry_columns"], row_country, row_sector)
     page_cols = _page(industry_cols, page, page_size)
-    usecols = ["V1", *page_cols]
-    df = pd.read_csv(path, usecols=usecols, keep_default_na=False, na_values=[""])
+    df = _read_columns(path, ("V1", *industry_cols))
     df = df[df["V1"].isin(info["account_rows"])].set_index("V1")
-    transposed = df.T.reset_index().rename(columns={"index": "row"})
+    transposed = df[page_cols].T.reset_index().rename(columns={"index": "row"})
     return {
         "year": year,
         "table": table,

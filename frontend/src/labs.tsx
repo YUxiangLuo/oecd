@@ -86,9 +86,16 @@ export function DbLab() {
     setColCountry((current) => current || (meta.countries.includes("USA") ? "USA" : meta.countries[0] ?? ""));
   }, [meta]);
 
-  useEffect(() => {
+  // 换筛选条件时在事件里直接回到第 1 页,避免先用旧页码发一次多余请求
+  const withPageReset = <T,>(set: (v: T) => void) => (v: T) => {
+    set(v);
     setPage(1);
-  }, [table, year, rowCountry, colCountry, rowSector, colSector]);
+  };
+  const pickYear = withPageReset(setYear);
+  const pickRowCountry = withPageReset(setRowCountry);
+  const pickColCountry = withPageReset(setColCountry);
+  const pickRowSector = withPageReset(setRowSector);
+  const pickColSector = withPageReset(setColSector);
 
   const ready = Boolean(meta && year && rowCountry && (table === "accounts" || colCountry));
   const { data: slice, error: sliceError } = useAsync<DbSlice | null>(
@@ -160,7 +167,7 @@ export function DbLab() {
 
       <div className="controls">
         <label>年份</label>
-        <select value={year ?? ""} onChange={(e) => setYear(Number(e.target.value))}>
+        <select value={year ?? ""} onChange={(e) => pickYear(Number(e.target.value))}>
           {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
         <div className="seg db-table-seg">
@@ -171,6 +178,7 @@ export function DbLab() {
               onClick={() => {
                 setTable(item.key);
                 setColSector("");
+                setPage(1);
               }}
             >
               {item.label}
@@ -182,22 +190,22 @@ export function DbLab() {
 
       <div className="controls">
         <label>行国家</label>
-        <select value={rowCountry} onChange={(e) => setRowCountry(e.target.value)}>
+        <select value={rowCountry} onChange={(e) => pickRowCountry(e.target.value)}>
           {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
         <label>行行业</label>
-        <select value={rowSector} onChange={(e) => setRowSector(e.target.value)}>
+        <select value={rowSector} onChange={(e) => pickRowSector(e.target.value)}>
           <option value="">全部</option>
           {meta.sectors.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         {table !== "accounts" && (
           <>
             <label>列国家</label>
-            <select value={colCountry} onChange={(e) => setColCountry(e.target.value)}>
+            <select value={colCountry} onChange={(e) => pickColCountry(e.target.value)}>
               {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             <label>{table === "y" ? "最终需求" : "列行业"}</label>
-            <select value={colSector} onChange={(e) => setColSector(e.target.value)}>
+            <select value={colSector} onChange={(e) => pickColSector(e.target.value)}>
               <option value="">全部</option>
               {colOptions.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
