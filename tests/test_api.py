@@ -66,6 +66,9 @@ def test_regression_design():
     assert client.get(
         "/api/regression/design", params={"step": 13, "method": "工具变量"}
     ).status_code == 400
+    assert client.get(
+        "/api/regression/design", params={"step": 13, "shock_type": "汇率冲击"}
+    ).status_code == 400
 
 
 def test_indicator_schema():

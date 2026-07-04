@@ -19,16 +19,17 @@ const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", coun
 // 冲击类型中只有关税真实接入(shocks.py 拟真面板);其余展示为规划中
 const SHOCK_READY = new Set(["关税冲击"]);
 
-function Pills({ options, value, onChange, plannedSet }: {
+function Pills({ options, value, onChange, readySet }: {
   options: string[];
   value: string;
   onChange: (v: string) => void;
-  plannedSet?: Set<string>;
+  /** 传入时,不在集合内的选项显示为禁用的「规划中」 */
+  readySet?: Set<string>;
 }) {
   return (
     <div className="pill-row">
       {options.map((opt) => {
-        const planned = plannedSet ? !plannedSet.has(opt) : false;
+        const planned = readySet ? !readySet.has(opt) : false;
         return (
           <button
             key={opt}
@@ -103,7 +104,7 @@ export function RegDesignLab() {
           <Pills options={opts.granularities} value={gran} onChange={setGran} />
         </ChoiceCard>
         <ChoiceCard title="冲击类型" hint="选择本次实验关注的政策冲击。">
-          <Pills options={opts.shock_types} value={shock} onChange={setShock} plannedSet={SHOCK_READY} />
+          <Pills options={opts.shock_types} value={shock} onChange={setShock} readySet={SHOCK_READY} />
         </ChoiceCard>
         <ChoiceCard title="因果推断方式" hint="有精确时间线才能做 DID / 事件研究。">
           <Pills options={opts.methods} value={method} onChange={setMethod} />

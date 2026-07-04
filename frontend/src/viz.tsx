@@ -493,7 +493,7 @@ export function CoefForestChart({ coefs }: {
               onMouseLeave={hide} style={{ cursor: "default" }}>
               <rect x={labelW} y={y(i) - rowH / 2} width={plotW} height={rowH} fill="transparent" />
               <text x={labelW - 8} y={y(i) + 3.5} textAnchor="end" fontSize={10.5} fill="#5a6070">
-                {p.name.length > 11 ? `${p.name.slice(0, 10)}…` : p.name}
+                {p.name.length > 13 ? `${p.name.slice(0, 12)}…` : p.name}
               </text>
               <line x1={x(p.lo)} x2={x(p.hi)} y1={y(i)} y2={y(i)} stroke={ci} strokeWidth={4} strokeLinecap="round" />
               <circle cx={x(p.coef)} cy={y(i)} r={5.5} fill={dot} stroke="#fff" strokeWidth={2} />

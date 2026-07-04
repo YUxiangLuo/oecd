@@ -378,6 +378,8 @@ def _validate_design(step: int, granularity: str, shock_type: str, method: str) 
         raise HTTPException(status_code=400, detail="step 必须是 13-16")
     if granularity not in GRANULARITIES:
         raise HTTPException(status_code=400, detail=f"granularity 必须是 {GRANULARITIES}")
+    if shock_type not in SHOCK_TYPES:
+        raise HTTPException(status_code=400, detail=f"shock_type 必须是 {SHOCK_TYPES}")
     if method not in METHODS:
         raise HTTPException(status_code=400, detail=f"method 必须是 {METHODS}")
     return RegressionDesign(step=step, granularity=granularity, shock_type=shock_type, method=method)

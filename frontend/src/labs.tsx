@@ -1,7 +1,6 @@
 /**
- * 各步骤的"动手实验"面板。
- * 当前为最小可用版:真实数据表格 + 回归运行 + 报告预览;
- * 网络图/堆叠条形图等富可视化见 prototype/ 原型,列入路线图。
+ * 各步骤的"动手实验"面板(步骤1-11、17)。
+ * 步骤8-11 富可视化在 viz.tsx;步骤12-16 回归页面在 regression.tsx。
  */
 import { useEffect, useState } from "react";
 import { api } from "./api";
