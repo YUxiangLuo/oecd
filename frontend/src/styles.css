@@ -141,6 +141,40 @@ button { font-family: inherit; cursor: pointer; }
 }
 .muted { color: #8a90a0; font-size: 12px; }
 
+.db-source-grid {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px; margin-bottom: 14px;
+}
+.db-source {
+  background: #fff; border: 1px solid #e7e9f0; border-radius: 8px;
+  padding: 12px; min-width: 0;
+}
+.db-source.active { border-color: #1f8a70; box-shadow: inset 0 0 0 1px rgba(31, 138, 112, 0.12); }
+.db-source-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.db-source-head strong { font-size: 13px; color: #252b3a; }
+.db-source-head span {
+  flex: none; padding: 2px 6px; border-radius: 5px;
+  background: #eef7f4; color: #1f8a70; font-size: 10.5px; font-weight: 700;
+}
+.db-source p { margin: 8px 0 0; color: #596173; line-height: 1.6; font-size: 12px; }
+.db-summary {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin: 0 0 14px; color: #596173; font-size: 12px;
+}
+.db-summary span {
+  padding: 5px 8px; border: 1px solid #e7e9f0; border-radius: 7px; background: #fff;
+}
+.db-table-seg button { min-width: 92px; }
+.db-table th, .db-table td { font-size: 12px; }
+
+@media (max-width: 980px) {
+  .db-source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .db-source-grid { grid-template-columns: 1fr; }
+  .db-table-seg { width: 100%; overflow-x: auto; }
+}
+
 /* ===== 登录页 ===== */
 .login-layout { display: flex; height: 100vh; }
 .login-brand {

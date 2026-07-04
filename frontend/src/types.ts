@@ -32,6 +32,36 @@ export interface Meta {
   sectors: string[];
 }
 
+export type DbTableKind = "z" | "y" | "accounts";
+
+export interface DbFile {
+  year: number;
+  file: string;
+  size_bytes: number;
+}
+
+export interface DbMeta {
+  years: number[];
+  default_year: number | null;
+  countries: string[];
+  sectors: string[];
+  final_demand_categories: string[];
+  account_rows: string[];
+  files: DbFile[];
+  n_rows: number;
+  n_columns: number;
+}
+
+export interface DbSlice {
+  year: number;
+  table: DbTableKind;
+  total: number;
+  page: number;
+  page_size: number;
+  columns: string[];
+  rows: Record<string, string | number | null>[];
+}
+
 export interface ShockEvent {
   name: string;
   imposer: string;

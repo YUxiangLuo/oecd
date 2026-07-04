@@ -24,6 +24,29 @@ export const api = {
   },
   steps: () => get<import("./types").StepsResponse>("/api/steps"),
   meta: () => get<import("./types").Meta>("/api/meta"),
+  dbMeta: () => get<import("./types").DbMeta>("/api/db/meta"),
+  dbSlice: (params: {
+    year: number;
+    table: import("./types").DbTableKind;
+    rowCountry?: string;
+    colCountry?: string;
+    rowSector?: string;
+    colSector?: string;
+    page?: number;
+    pageSize?: number;
+  }) => {
+    const qs = new URLSearchParams({
+      year: String(params.year),
+      table: params.table,
+      page: String(params.page ?? 1),
+      page_size: String(params.pageSize ?? 25),
+    });
+    if (params.rowCountry) qs.set("row_country", params.rowCountry);
+    if (params.colCountry) qs.set("col_country", params.colCountry);
+    if (params.rowSector) qs.set("row_sector", params.rowSector);
+    if (params.colSector) qs.set("col_sector", params.colSector);
+    return get<import("./types").DbSlice>(`/api/db/slice?${qs.toString()}`);
+  },
   qc: (year: number) => get<import("./types").QcCheck[]>(`/api/qc/${year}`),
   countryIndicators: (year: number) =>
     get<Record<string, string | number | null>[]>(`/api/indicators/country/${year}`),

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from gvcsim import shocks
 from gvcsim.api import app
-from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
+from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, SHOCKS_DIR, processed_years
 
 client = TestClient(app)
 
@@ -21,6 +21,11 @@ needs_data = pytest.mark.skipif(
 needs_shocks = pytest.mark.skipif(
     not (SHOCKS_DIR / shocks.DEMO_FILE).exists(),
     reason="缺少冲击演示数据,请先运行 uv run gvcsim compute",
+)
+
+needs_raw_icio = pytest.mark.skipif(
+    not any(RAW_DATA_DIR.glob("ICIO*_*.csv")),
+    reason="缺少 OECD ICIO 原始文件",
 )
 
 
@@ -36,6 +41,56 @@ def test_regression_options():
     resp = client.get("/api/regression/options")
     assert resp.status_code == 200
     assert "双重差分 (DID)" in resp.json()["methods"]
+
+
+@needs_raw_icio
+def test_db_meta_endpoint():
+    resp = client.get("/api/db/meta")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["years"]
+    assert body["default_year"] in body["years"]
+    assert "CHN" in body["countries"]
+    assert body["sectors"]
+    assert "HFCE" in body["final_demand_categories"]
+
+
+@needs_raw_icio
+def test_db_slice_endpoint():
+    meta = client.get("/api/db/meta").json()
+    year = meta["default_year"]
+
+    z = client.get(
+        "/api/db/slice",
+        params={
+            "year": year,
+            "table": "z",
+            "row_country": "CHN",
+            "col_country": "USA",
+            "page": 1,
+            "page_size": 5,
+        },
+    )
+    assert z.status_code == 200
+    z_body = z.json()
+    assert z_body["total"] > 0
+    assert z_body["columns"][0] == "row"
+    assert 0 < len(z_body["rows"]) <= 5
+
+    accounts = client.get(
+        "/api/db/slice",
+        params={
+            "year": year,
+            "table": "accounts",
+            "row_country": "CHN",
+            "page": 1,
+            "page_size": 5,
+        },
+    )
+    assert accounts.status_code == 200
+    acc_body = accounts.json()
+    assert {"row", "TLS", "VA", "OUT"}.issubset(acc_body["columns"])
+    assert 0 < len(acc_body["rows"]) <= 5
 
 
 @needs_data
