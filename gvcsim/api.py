@@ -22,7 +22,7 @@ from gvcsim.data import icio_browser
 from gvcsim.regression.design import (
     CONTROL_MODES, GRANULARITIES, METHODS, SHOCK_TYPES, STEP_DEPVARS, RegressionDesign,
 )
-from gvcsim.regression.panel import benchmark_linearmodels, run_design
+from gvcsim.regression.panel import run_design_with_benchmark
 from gvcsim.steps import STAGE_NAMES, STEPS
 
 app = FastAPI(title="供应链仿真系统 API", version="0.1.0")
@@ -433,8 +433,7 @@ def regression_run(req: RegressionRequest):
     design = _validate_design(req.step, req.granularity, req.shock_type, req.method, req.control_mode)
     panel = _read_csv(design.panel_file)
     try:
-        result = run_design(panel, design)
-        benchmark = benchmark_linearmodels(panel, design, result)
+        result, benchmark = run_design_with_benchmark(panel, design)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {

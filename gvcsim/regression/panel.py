@@ -135,8 +135,36 @@ def _norm_sf(z: float) -> float:
     return 0.5 * math.erfc(z / math.sqrt(2))
 
 
-def _within_ols(model: PreparedModel) -> RegressionResult:
-    """within 变换 + OLS + 聚类稳健标准误的共用核心。data 需已 dropna。"""
+def _demean_and_prune(
+    model: PreparedModel,
+) -> tuple[np.ndarray, np.ndarray, list[str], list[str]]:
+    """双向 within 变换 + 共线列剔除,返回 (y, X, 保留列, 剔除列)。
+
+    这是每次估计里最贵的一步(3465 个体的迭代去均值)。自写引擎与
+    PanelOLS 对照共用这份结果:PanelOLS 只需知道"哪些列共线被剔除",
+    不必再单独去均值一次。
+    """
+    demeaned = _twoway_demean(
+        model.data[[model.depvar, *model.xcols]].values.astype(float),
+        model.data[model.entity].values,
+        model.data[model.time].values,
+    )
+    y = demeaned[:, 0]
+    X, xcols, dropped = _drop_collinear_columns(
+        demeaned[:, 1:], list(model.xcols), set(model.policy_xcols)
+    )
+    return y, X, xcols, dropped
+
+
+def _within_ols(
+    model: PreparedModel,
+    prepared: tuple[np.ndarray, np.ndarray, list[str], list[str]] | None = None,
+) -> RegressionResult:
+    """within 变换 + OLS + 聚类稳健标准误的共用核心。data 需已 dropna。
+
+    prepared 可传入 _demean_and_prune 已算好的 (y, X, xcols, dropped),
+    避免与 PanelOLS 对照重复做双向去均值。
+    """
     data, depvar, entity, time, cluster = (
         model.data, model.depvar, model.entity, model.time, model.cluster
     )
@@ -144,11 +172,7 @@ def _within_ols(model: PreparedModel) -> RegressionResult:
     tim = data[time].values
     clu = data[cluster].values
 
-    demeaned = _twoway_demean(data[[depvar, *model.xcols]].values.astype(float), ent, tim)
-    y = demeaned[:, 0]
-    X, xcols, dropped = _drop_collinear_columns(
-        demeaned[:, 1:], list(model.xcols), set(model.policy_xcols)
-    )
+    y, X, xcols, dropped = prepared if prepared is not None else _demean_and_prune(model)
 
     beta, *_ = np.linalg.lstsq(X, y, rcond=None)
     resid = y - X @ beta
@@ -375,21 +399,17 @@ def event_study(df: pd.DataFrame, depvar: str,
     )
 
 
-def linearmodels_panel_ols(df: pd.DataFrame, design) -> RegressionResult:
-    """使用 linearmodels.PanelOLS 估计同一设计,作为标准库对照。"""
-    model = prepare_design_model(df, design)
-    demeaned = _twoway_demean(
-        model.data[[model.depvar, *model.xcols]].values.astype(float),
-        model.data[model.entity].values,
-        model.data[model.time].values,
-    )
-    _, xcols, dropped = _drop_collinear_columns(
-        demeaned[:, 1:], list(model.xcols), set(model.policy_xcols)
-    )
-    data = model.data.copy()
-    data = data.set_index([model.entity, model.time])
+def _panelols_estimate(
+    model: PreparedModel, keep_xcols: list[str], dropped: list[str],
+) -> RegressionResult:
+    """用 linearmodels.PanelOLS 估计标准库对照。
+
+    keep_xcols 为共线剔除后保留的解释变量(与自写引擎同一份),
+    因此这里不再重复做 within 变换判定,只让 PanelOLS 内部吸收固定效应。
+    """
+    data = model.data.set_index([model.entity, model.time])
     y = data[model.depvar].astype(float)
-    X = data[xcols].astype(float)
+    X = data[keep_xcols].astype(float)
     clusters = pd.Series(model.data[model.cluster].values, index=data.index, name=model.cluster)
 
     res = PanelOLS(
@@ -425,11 +445,17 @@ def linearmodels_panel_ols(df: pd.DataFrame, design) -> RegressionResult:
     )
 
 
-def benchmark_linearmodels(df: pd.DataFrame, design, own: RegressionResult | None = None) -> dict:
-    """返回自写引擎与 PanelOLS 的核心政策系数差异摘要。"""
-    own = own or run_design(df, design)
-    lm = linearmodels_panel_ols(df, design)
+def linearmodels_panel_ols(df: pd.DataFrame, design) -> RegressionResult:
+    """使用 linearmodels.PanelOLS 估计同一设计,作为标准库对照(独立入口)。"""
     model = prepare_design_model(df, design)
+    _, _, xcols, dropped = _demean_and_prune(model)
+    return _panelols_estimate(model, xcols, dropped)
+
+
+def _summarize_benchmark(
+    model: PreparedModel, own: RegressionResult, lm: RegressionResult,
+) -> dict:
+    """自写引擎与 PanelOLS 在核心政策系数上的差异摘要。"""
     own_by = {c.name: c for c in own.coefs}
     lm_by = {c.name: c for c in lm.coefs}
     rows = []
@@ -455,3 +481,30 @@ def benchmark_linearmodels(df: pd.DataFrame, design, own: RegressionResult | Non
         "passed": bool(rows) and max_coef < 1e-8,
         "notes": lm.notes,
     }
+
+
+def run_design_with_benchmark(df: pd.DataFrame, design) -> tuple[RegressionResult, dict]:
+    """一次预处理跑出自写引擎结果 + PanelOLS 对照(接口的热路径)。
+
+    prepare_design_model 与双向去均值都只做一次,自写引擎与 PanelOLS
+    共用同一份样本和共线剔除结果——避免此前每个请求重复三次预处理、
+    两次全量去均值。
+    """
+    model = prepare_design_model(df, design)
+    prepared = _demean_and_prune(model)
+    own = _within_ols(model, prepared)
+    lm = _panelols_estimate(model, prepared[2], prepared[3])
+    return own, _summarize_benchmark(model, own, lm)
+
+
+def benchmark_linearmodels(df: pd.DataFrame, design, own: RegressionResult | None = None) -> dict:
+    """自写引擎与 PanelOLS 对照的独立入口(报告/测试用)。
+
+    传入已算好的 own 时复用之,只补算 PanelOLS 一遍。
+    """
+    model = prepare_design_model(df, design)
+    prepared = _demean_and_prune(model)
+    if own is None:
+        own = _within_ols(model, prepared)
+    lm = _panelols_estimate(model, prepared[2], prepared[3])
+    return _summarize_benchmark(model, own, lm)
