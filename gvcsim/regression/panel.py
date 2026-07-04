@@ -1,7 +1,7 @@
 """面板回归引擎(步骤13-16 共用):双向固定效应 / DID / 事件研究。
 
-纯 numpy 实现,零额外依赖,便于单元测试与教学展示。三种方法共用同一个
-within-OLS 核心(_within_ols):
+教学主引擎仍为纯 numpy 实现,便于单元测试与教学展示;同时提供
+linearmodels.PanelOLS 标准库对照。三种方法共用同一个 within-OLS 核心(_within_ols):
   1. 交替去均值(entity / time)做双向 within 变换,直到收敛
      (非平衡面板下一次性去均值不精确,迭代投影可收敛到正确的 within 解)
   2. OLS 估计
@@ -12,8 +12,8 @@ within-OLS 核心(_within_ols):
   did           treated×post(处理组=曾受冲击的个体,处理期=首个冲击年起)
   event_study   treated×各年份哑变量(基期 k=-1,即冲击前一年),动态效应路径
 
-p 值用正态近似(G 较大时与 t 分布几乎一致)。
-以后要换 linearmodels.PanelOLS 时,保持 RegressionResult 接口不变即可。
+p 值用正态近似(G 较大时与 t 分布几乎一致)。PanelOLS 对照使用同一份
+样本与同一组可估计解释变量,只作为结果校验与界面展示。
 """
 
 import math
@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
+from linearmodels.panel import PanelOLS
 
 
 @dataclass
@@ -63,6 +64,58 @@ class RegressionResult:
         }
 
 
+@dataclass
+class PreparedModel:
+    data: pd.DataFrame
+    depvar: str
+    xcols: list[str]
+    policy_xcols: list[str]
+    control_cols: list[str]
+    entity: str
+    time: str
+    cluster: str
+    notes: list[str]
+
+
+def _drop_collinear_columns(
+    X: np.ndarray,
+    xcols: list[str],
+    protected: set[str],
+    tol: float = 1e-10,
+) -> tuple[np.ndarray, list[str], list[str]]:
+    """剔除被固定效应吸收或与已保留变量共线的非核心控制变量。"""
+    dropped: list[str] = []
+    keep = []
+    for i, name in enumerate(xcols):
+        if np.linalg.norm(X[:, i]) > tol:
+            keep.append(i)
+        elif name in protected:
+            raise ValueError(f"核心解释变量 {name} 被固定效应完全吸收,无法估计")
+        else:
+            dropped.append(name)
+    X = X[:, keep]
+    xcols = [xcols[i] for i in keep]
+
+    while X.shape[1] and np.linalg.matrix_rank(X, tol=tol) < X.shape[1]:
+        rank = np.linalg.matrix_rank(X, tol=tol)
+        drop_idx = None
+        for i in range(X.shape[1] - 1, -1, -1):
+            if xcols[i] in protected:
+                continue
+            cand = np.delete(X, i, axis=1)
+            if np.linalg.matrix_rank(cand, tol=tol) == rank:
+                drop_idx = i
+                break
+        if drop_idx is None:
+            raise ValueError("核心解释变量之间存在完全共线性,无法估计")
+        dropped.append(xcols[drop_idx])
+        X = np.delete(X, drop_idx, axis=1)
+        del xcols[drop_idx]
+    if not X.shape[1]:
+        raise ValueError("没有可估计的解释变量")
+    return X, xcols, dropped
+
+
 def _twoway_demean(values: np.ndarray, ent: np.ndarray, tim: np.ndarray,
                    tol: float = 1e-10, max_iter: int = 200) -> np.ndarray:
     """对每一列做 entity/time 交替去均值(Guimarães-Portugal 迭代)。"""
@@ -82,17 +135,20 @@ def _norm_sf(z: float) -> float:
     return 0.5 * math.erfc(z / math.sqrt(2))
 
 
-def _within_ols(data: pd.DataFrame, depvar: str, xcols: list[str],
-                entity: str, time: str, cluster: str,
-                extra_notes: list[str]) -> RegressionResult:
+def _within_ols(model: PreparedModel) -> RegressionResult:
     """within 变换 + OLS + 聚类稳健标准误的共用核心。data 需已 dropna。"""
+    data, depvar, entity, time, cluster = (
+        model.data, model.depvar, model.entity, model.time, model.cluster
+    )
     ent = data[entity].values
     tim = data[time].values
     clu = data[cluster].values
 
-    demeaned = _twoway_demean(data[[depvar, *xcols]].values.astype(float), ent, tim)
+    demeaned = _twoway_demean(data[[depvar, *model.xcols]].values.astype(float), ent, tim)
     y = demeaned[:, 0]
-    X = demeaned[:, 1:]
+    X, xcols, dropped = _drop_collinear_columns(
+        demeaned[:, 1:], list(model.xcols), set(model.policy_xcols)
+    )
 
     beta, *_ = np.linalg.lstsq(X, y, rcond=None)
     resid = y - X @ beta
@@ -106,9 +162,9 @@ def _within_ols(data: pd.DataFrame, depvar: str, xcols: list[str],
         s = X[mask].T @ resid[mask]
         meat += np.outer(s, s)
     n, k, n_g = len(y), X.shape[1], len(groups)
-    correction = (n_g / (n_g - 1)) * ((n - 1) / max(n - k, 1))
+    correction = (n_g / (n_g - 1)) * ((n - 1) / max(n - k, 1)) if n_g > 1 else 1.0
     V = correction * XtX_inv @ meat @ XtX_inv
-    se = np.sqrt(np.diag(V))
+    se = np.sqrt(np.clip(np.diag(V), 0.0, None))
 
     ss_res = float(resid @ resid)
     ss_tot = float(y @ y)
@@ -120,6 +176,9 @@ def _within_ols(data: pd.DataFrame, depvar: str, xcols: list[str],
         coefs.append(CoefStat(name=name, coef=float(b), se=float(s),
                               t=float(t_stat), p=2 * _norm_sf(abs(t_stat))))
 
+    notes = list(model.notes)
+    if dropped:
+        notes.append("控制变量被固定效应吸收/完全共线,已剔除:" + "、".join(dropped))
     return RegressionResult(
         depvar=depvar,
         coefs=coefs,
@@ -129,36 +188,71 @@ def _within_ols(data: pd.DataFrame, depvar: str, xcols: list[str],
         n_clusters=n_g,
         r2_within=r2_within,
         notes=[
-            *extra_notes,
+            *notes,
             f"双向固定效应({entity} + {time}),within 变换后 OLS",
             f"标准误按 {cluster} 聚类(sandwich,{n_g} 组),p 值为正态近似",
         ],
     )
 
 
+def _prepare_fe_model(
+    df: pd.DataFrame,
+    depvar: str,
+    regressors: list[str],
+    entity: str = "country",
+    time: str = "year",
+    cluster: str | None = None,
+    controls: list[str] | tuple[str, ...] = (),
+) -> PreparedModel:
+    cluster = cluster or entity
+    xcols = [*regressors, *controls]
+    cols = list(dict.fromkeys([depvar, *xcols, entity, time, cluster]))
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise ValueError("面板缺少回归变量:" + "、".join(missing))
+    data = df[cols].dropna().reset_index(drop=True)
+    notes = ["连续冲击强度直接进方程(强度法)"]
+    if controls:
+        notes.append("已加入 ICIO 派生国家-年份控制变量")
+    return PreparedModel(
+        data=data,
+        depvar=depvar,
+        xcols=xcols,
+        policy_xcols=list(regressors),
+        control_cols=list(controls),
+        entity=entity,
+        time=time,
+        cluster=cluster,
+        notes=notes,
+    )
+
+
 def twoway_fe(df: pd.DataFrame, depvar: str, regressors: list[str],
               entity: str = "country", time: str = "year",
-              cluster: str | None = None) -> RegressionResult:
+              cluster: str | None = None,
+              controls: list[str] | tuple[str, ...] = ()) -> RegressionResult:
     """y_it = β·X_it + α_i + λ_t + ε_it,标准误按 cluster 聚类(默认=entity)。
 
     行业级面板用 entity=国家×行业 做固定效应、cluster=国家做聚类:
     同一国家各行业受同一政策冲击,残差组内相关,必须在更粗层面聚类。
     """
-    cluster = cluster or entity
-    cols = list(dict.fromkeys([depvar, *regressors, entity, time, cluster]))
-    data = df[cols].dropna().reset_index(drop=True)
-    return _within_ols(data, depvar, list(regressors), entity, time, cluster,
-                       extra_notes=["连续冲击强度直接进方程(强度法)"])
+    return _within_ols(_prepare_fe_model(df, depvar, regressors, entity, time, cluster, controls))
 
 
 def run_design(df: pd.DataFrame, design) -> RegressionResult:
     """按 RegressionDesign 的方法/粒度分发到对应引擎(步骤12 的对齐结果落地)。"""
-    kwargs = dict(entity=design.entity, time="year", cluster=design.cluster)
+    return _within_ols(prepare_design_model(df, design))
+
+
+def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
+    """按 RegressionDesign 构造同一份估计样本,供自写引擎与 PanelOLS 共用。"""
+    kwargs = dict(entity=design.entity, time="year", cluster=design.cluster,
+                  controls=list(design.controls))
     if design.method == "双重差分 (DID)":
-        return did(df, design.depvar, **kwargs)
+        return _prepare_did_model(df, design.depvar, **kwargs)
     if design.method == "事件研究":
-        return event_study(df, design.depvar, **kwargs)
-    return twoway_fe(df, design.depvar, list(design.regressors), **kwargs)
+        return _prepare_event_model(df, design.depvar, **kwargs)
+    return _prepare_fe_model(df, design.depvar, list(design.regressors), **kwargs)
 
 
 def _prep_treatment(data: pd.DataFrame, entity: str, time: str,
@@ -171,9 +265,44 @@ def _prep_treatment(data: pd.DataFrame, entity: str, time: str,
     return ever, t0
 
 
+def _prepare_did_model(
+    df: pd.DataFrame,
+    depvar: str,
+    entity: str = "country",
+    time: str = "year",
+    cluster: str | None = None,
+    treated_col: str = "treated",
+    controls: list[str] | tuple[str, ...] = (),
+) -> PreparedModel:
+    cluster = cluster or entity
+    cols = list(dict.fromkeys([depvar, treated_col, entity, time, cluster, *controls]))
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise ValueError("面板缺少回归变量:" + "、".join(missing))
+    data = df[cols].dropna().reset_index(drop=True)
+    ever, t0 = _prep_treatment(data, entity, time, treated_col)
+    data["treated×post"] = ever * (data[time] >= t0).values
+    n_treated = int(data.loc[ever > 0, entity].nunique())
+    notes = [f"DID:处理组={n_treated} 个曾受冲击个体,处理期=T₀({t0})起"]
+    if controls:
+        notes.append("已加入 ICIO 派生国家-年份控制变量")
+    return PreparedModel(
+        data=data,
+        depvar=depvar,
+        xcols=["treated×post", *controls],
+        policy_xcols=["treated×post"],
+        control_cols=list(controls),
+        entity=entity,
+        time=time,
+        cluster=cluster,
+        notes=notes,
+    )
+
+
 def did(df: pd.DataFrame, depvar: str,
         entity: str = "country", time: str = "year",
-        cluster: str | None = None, treated_col: str = "treated") -> RegressionResult:
+        cluster: str | None = None, treated_col: str = "treated",
+        controls: list[str] | tuple[str, ...] = ()) -> RegressionResult:
     """双重差分:y_it = β·(treated_i × post_t) + α_i + λ_t + ε_it。
 
     treated_i = 该个体在样本期内是否曾受冲击(时间不变);
@@ -181,30 +310,25 @@ def did(df: pd.DataFrame, depvar: str,
     β         = 处理组相对对照组在处理后的平均变化(ATT)。
     处理组/对照组主效应分别被个体/时间固定效应吸收。
     """
-    cluster = cluster or entity
-    cols = list(dict.fromkeys([depvar, treated_col, entity, time, cluster]))
-    data = df[cols].dropna().reset_index(drop=True)
-    ever, t0 = _prep_treatment(data, entity, time, treated_col)
-    data["treated×post"] = ever * (data[time] >= t0).values
-    n_treated = int(data.loc[ever > 0, entity].nunique())
     return _within_ols(
-        data, depvar, ["treated×post"], entity, time, cluster,
-        extra_notes=[
-            f"DID:处理组={n_treated} 个曾受冲击个体,处理期=T₀({t0})起",
-        ],
+        _prepare_did_model(df, depvar, entity, time, cluster, treated_col, controls)
     )
 
 
-def event_study(df: pd.DataFrame, depvar: str,
-                entity: str = "country", time: str = "year",
-                cluster: str | None = None, treated_col: str = "treated") -> RegressionResult:
-    """事件研究:y_it = Σ_{k≠-1} β_k·(treated_i × 1[t = T0+k]) + α_i + λ_t + ε_it。
-
-    以冲击前一年(k=-1)为基期;k<0 的系数应≈0(平行趋势检验),
-    k≥0 的系数刻画处理效应的动态路径。
-    """
+def _prepare_event_model(
+    df: pd.DataFrame,
+    depvar: str,
+    entity: str = "country",
+    time: str = "year",
+    cluster: str | None = None,
+    treated_col: str = "treated",
+    controls: list[str] | tuple[str, ...] = (),
+) -> PreparedModel:
     cluster = cluster or entity
-    cols = list(dict.fromkeys([depvar, treated_col, entity, time, cluster]))
+    cols = list(dict.fromkeys([depvar, treated_col, entity, time, cluster, *controls]))
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise ValueError("面板缺少回归变量:" + "、".join(missing))
     data = df[cols].dropna().reset_index(drop=True)
     ever, t0 = _prep_treatment(data, entity, time, treated_col)
 
@@ -218,11 +342,116 @@ def event_study(df: pd.DataFrame, depvar: str,
         name = f"k={k:+d}" if k != 0 else "k=0"
         data[name] = ever * (data[time] == y).values
         xcols.append(name)
+    notes = [
+        f"事件研究:T₀={t0},基期 k={base - t0:+d}({base} 年);"
+        "k<0 的系数≈0 说明平行趋势成立",
+    ]
+    if controls:
+        notes.append("已加入 ICIO 派生国家-年份控制变量")
+    return PreparedModel(
+        data=data,
+        depvar=depvar,
+        xcols=[*xcols, *controls],
+        policy_xcols=xcols,
+        control_cols=list(controls),
+        entity=entity,
+        time=time,
+        cluster=cluster,
+        notes=notes,
+    )
 
+
+def event_study(df: pd.DataFrame, depvar: str,
+                entity: str = "country", time: str = "year",
+                cluster: str | None = None, treated_col: str = "treated",
+                controls: list[str] | tuple[str, ...] = ()) -> RegressionResult:
+    """事件研究:y_it = Σ_{k≠-1} β_k·(treated_i × 1[t = T0+k]) + α_i + λ_t + ε_it。
+
+    以冲击前一年(k=-1)为基期;k<0 的系数应≈0(平行趋势检验),
+    k≥0 的系数刻画处理效应的动态路径。
+    """
     return _within_ols(
-        data, depvar, xcols, entity, time, cluster,
-        extra_notes=[
-            f"事件研究:T₀={t0},基期 k={base - t0:+d}({base} 年);"
-            "k<0 的系数≈0 说明平行趋势成立",
+        _prepare_event_model(df, depvar, entity, time, cluster, treated_col, controls)
+    )
+
+
+def linearmodels_panel_ols(df: pd.DataFrame, design) -> RegressionResult:
+    """使用 linearmodels.PanelOLS 估计同一设计,作为标准库对照。"""
+    model = prepare_design_model(df, design)
+    demeaned = _twoway_demean(
+        model.data[[model.depvar, *model.xcols]].values.astype(float),
+        model.data[model.entity].values,
+        model.data[model.time].values,
+    )
+    _, xcols, dropped = _drop_collinear_columns(
+        demeaned[:, 1:], list(model.xcols), set(model.policy_xcols)
+    )
+    data = model.data.copy()
+    data = data.set_index([model.entity, model.time])
+    y = data[model.depvar].astype(float)
+    X = data[xcols].astype(float)
+    clusters = pd.Series(model.data[model.cluster].values, index=data.index, name=model.cluster)
+
+    res = PanelOLS(
+        y, X,
+        entity_effects=True,
+        time_effects=True,
+        drop_absorbed=True,
+    ).fit(cov_type="clustered", clusters=clusters)
+
+    coefs = []
+    for name, b in res.params.items():
+        se = float(res.std_errors[name])
+        t_stat = float(res.tstats[name])
+        pval = float(res.pvalues[name])
+        coefs.append(CoefStat(name=name, coef=float(b), se=se, t=t_stat, p=pval))
+
+    notes = list(model.notes)
+    if dropped:
+        notes.append("控制变量被固定效应吸收/完全共线,已剔除:" + "、".join(dropped))
+    return RegressionResult(
+        depvar=model.depvar,
+        coefs=coefs,
+        n_obs=int(res.nobs),
+        n_entities=int(model.data[model.entity].nunique()),
+        n_times=int(model.data[model.time].nunique()),
+        n_clusters=int(model.data[model.cluster].nunique()),
+        r2_within=float(res.rsquared_within),
+        notes=[
+            *notes,
+            f"标准库对照:linearmodels.PanelOLS({model.entity} + {model.time})",
+            f"标准误按 {model.cluster} 聚类",
         ],
     )
+
+
+def benchmark_linearmodels(df: pd.DataFrame, design, own: RegressionResult | None = None) -> dict:
+    """返回自写引擎与 PanelOLS 的核心政策系数差异摘要。"""
+    own = own or run_design(df, design)
+    lm = linearmodels_panel_ols(df, design)
+    model = prepare_design_model(df, design)
+    own_by = {c.name: c for c in own.coefs}
+    lm_by = {c.name: c for c in lm.coefs}
+    rows = []
+    for name in model.policy_xcols:
+        if name not in own_by or name not in lm_by:
+            continue
+        rows.append({
+            "name": name,
+            "own_coef": own_by[name].coef,
+            "panelols_coef": lm_by[name].coef,
+            "coef_diff": own_by[name].coef - lm_by[name].coef,
+            "own_se": own_by[name].se,
+            "panelols_se": lm_by[name].se,
+            "se_diff": own_by[name].se - lm_by[name].se,
+        })
+    max_coef = max((abs(r["coef_diff"]) for r in rows), default=float("nan"))
+    max_se = max((abs(r["se_diff"]) for r in rows), default=float("nan"))
+    return {
+        "backend": "linearmodels.PanelOLS",
+        "policy_coefs": rows,
+        "max_abs_coef_diff": max_coef,
+        "max_abs_se_diff": max_se,
+        "passed": bool(rows) and max_coef < 1e-8,
+        "notes": lm.notes,
+    }

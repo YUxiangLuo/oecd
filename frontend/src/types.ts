@@ -138,6 +138,7 @@ export interface RegressionOptions {
   granularities: string[];
   shock_types: string[];
   methods: string[];
+  control_modes: string[];
   steps: Record<string, string>; // 步骤号 → 被解释变量中文名
 }
 
@@ -148,6 +149,9 @@ export interface RegressionDesignInfo {
   granularity: string;
   shock_type: string;
   method: string;
+  control_mode: string;
+  controls: string[];
+  control_labels: Record<string, string>;
   equation: string;
   panel_file: string;
   entity: string;
@@ -163,6 +167,22 @@ export interface RegressionResponse {
     n_times: number;
     n_clusters: number;
     r2_within: number;
+    notes: string[];
+  };
+  benchmark: {
+    backend: string;
+    policy_coefs: {
+      name: string;
+      own_coef: number;
+      panelols_coef: number;
+      coef_diff: number;
+      own_se: number;
+      panelols_se: number;
+      se_diff: number;
+    }[];
+    max_abs_coef_diff: number;
+    max_abs_se_diff: number;
+    passed: boolean;
     notes: string[];
   };
   disclaimer: string;

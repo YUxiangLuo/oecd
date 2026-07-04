@@ -4,8 +4,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from gvcsim.regression.design import RegressionDesign
-from gvcsim.regression.panel import did, event_study, run_design, twoway_fe
+from gvcsim.data.controls import CONTROL_COLUMNS
+from gvcsim.regression.design import CONTROL_MODE_ICIO, RegressionDesign
+from gvcsim.regression.panel import benchmark_linearmodels, did, event_study, run_design, twoway_fe
 
 rng = np.random.default_rng(42)
 
@@ -51,6 +52,37 @@ def test_drops_missing_rows():
     assert result.n_obs == len(df) - 10
 
 
+def test_controls_recover_policy_effect_with_confounder():
+    rows = []
+    beta, gamma = -0.7, 1.3
+    years = range(2016, 2022)
+    for i in range(50):
+        e = f"C{i:02d}"
+        fe = rng.normal(0, 1)
+        loading = rng.normal(0.5, 0.2)
+        for t, year in enumerate(years):
+            control = loading * t + rng.normal(0, 0.05)
+            x = 0.6 * control + rng.normal(0, 0.2)
+            y = beta * x + gamma * control + fe + 0.2 * t + rng.normal(0, 0.03)
+            rows.append({"country": e, "year": year, "x": x, "control": control, "y": y})
+    df = pd.DataFrame(rows)
+
+    naive = twoway_fe(df, "y", ["x"])
+    controlled = twoway_fe(df, "y", ["x"], controls=["control"])
+
+    assert abs(controlled.coefs[0].coef - beta) < 0.05
+    assert abs(naive.coefs[0].coef - beta) > 0.2
+    assert any(c.name == "control" for c in controlled.coefs)
+
+
+def test_collinear_control_is_dropped_but_policy_kept():
+    df = _simulate_panel(beta=-0.4)
+    df["absorbed_control"] = df["year"] - df["year"].min()
+    result = twoway_fe(df, "y", ["x"], controls=["absorbed_control"])
+    assert [c.name for c in result.coefs] == ["x"]
+    assert any("absorbed_control" in n for n in result.notes)
+
+
 def test_design_equation_text():
     d = RegressionDesign(step=13)
     assert d.depvar == "share_trade_fva"
@@ -65,6 +97,8 @@ def test_design_equation_text():
     assert "tariff_shock" in eq_fe
     eq_ev = RegressionDesign(step=13, method="事件研究").equation()
     assert "Σ_k" in eq_ev and "T₀+k" in eq_ev
+    eq_ctrl = RegressionDesign(step=13, control_mode=CONTROL_MODE_ICIO).equation()
+    assert "Controls_ct" in eq_ctrl
 
 
 def test_design_panel_spec():
@@ -185,3 +219,27 @@ def test_run_design_dispatch():
     assert names("双重差分 (DID)") == ["treated×post"]
     assert names("双向固定效应") == ["tariff_shock"]
     assert names("事件研究") == ["k=-2", "k=0", "k=+1", "k=+2"]
+
+
+def test_run_design_with_controls_and_panelols_benchmark():
+    df = _simulate_panel(beta=-0.35, n_entities=35, n_times=6).rename(
+        columns={"y": "share_trade_fva", "x": "tariff_shock"}
+    )
+    df["entity_id"] = df["country"]
+    for i, col in enumerate(CONTROL_COLUMNS):
+        df[col] = rng.normal(0, 1, len(df)) + 0.02 * i * (df["year"] - df["year"].min())
+
+    design = RegressionDesign(
+        step=13,
+        granularity="国家级",
+        method="双向固定效应",
+        control_mode=CONTROL_MODE_ICIO,
+    )
+    result = run_design(df, design)
+    assert result.coefs[0].name == "tariff_shock"
+    assert any(c.name in CONTROL_COLUMNS for c in result.coefs)
+
+    bench = benchmark_linearmodels(df, design, result)
+    assert bench["backend"] == "linearmodels.PanelOLS"
+    assert bench["passed"]
+    assert bench["max_abs_coef_diff"] < 1e-8

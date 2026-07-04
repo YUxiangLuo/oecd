@@ -11,6 +11,7 @@
 跨年:
   panel_sector.csv                国家×行业×年份长面板 + 行业异质冲击(步骤13-16 默认回归样本)
   panel_country.csv               国家×年份长面板(冲击按行业出口额加权聚合)
+  controls_country.csv            ICIO 派生国家×年份控制变量(步骤13-16 稳健性模型)
 """
 
 import json
@@ -19,7 +20,7 @@ import pandas as pd
 
 from gvcsim import shocks
 from gvcsim.config import PROCESSED_DIR, available_years, processed_years
-from gvcsim.data import loader, quality
+from gvcsim.data import controls, loader, quality
 from gvcsim.indicators import length, network, production, tradeflow
 from gvcsim.indicators.core import build_arrays
 
@@ -82,11 +83,17 @@ def build_panel() -> pd.DataFrame:
     if not years:
         raise RuntimeError("没有任何已预计算的年份,请先运行 gvcsim compute")
 
-    # ---- 行业级 ----
     sector = pd.concat(
         [pd.read_csv(PROCESSED_DIR / f"indicators_sector_{y}.csv") for y in years],
         ignore_index=True,
     )
+    country = pd.concat(
+        [pd.read_csv(PROCESSED_DIR / f"indicators_country_{y}.csv") for y in years],
+        ignore_index=True,
+    )
+    controls_df = controls.write_controls(country, sector)
+
+    # ---- 行业级 ----
     countries = sorted(sector["country"].unique())
     sectors = sorted(sector["sector"].unique())
     shocks.write_demo(countries, sectors, years)
@@ -95,16 +102,15 @@ def build_panel() -> pd.DataFrame:
     sector = sector.merge(
         shock_df[["country", "sector", "year", "tariff_shock", "treated"]],
         on=["country", "sector", "year"], how="left",
+    ).merge(
+        controls_df,
+        on=["country", "year"], how="left",
     )
     # 双向FE的个体维度:国家×行业
     sector["entity_id"] = sector["country"] + "_" + sector["sector"]
     sector.to_csv(PROCESSED_DIR / "panel_sector.csv", index=False)
 
     # ---- 国家级:冲击按行业出口额加权聚合 ----
-    country = pd.concat(
-        [pd.read_csv(PROCESSED_DIR / f"indicators_country_{y}.csv") for y in years],
-        ignore_index=True,
-    )
     w = sector["trade_gross_exports"].clip(lower=0.0)
     sector_w = sector.assign(_w=w, _ws=w * sector["tariff_shock"])
     agg = sector_w.groupby(["country", "year"], as_index=False)[["_w", "_ws"]].sum()
@@ -112,6 +118,9 @@ def build_panel() -> pd.DataFrame:
     agg["treated"] = (agg["tariff_shock"] > shocks.TREATED_THRESHOLD).astype(int)
     country = country.merge(
         agg[["country", "year", "tariff_shock", "treated"]],
+        on=["country", "year"], how="left",
+    ).merge(
+        controls_df,
         on=["country", "year"], how="left",
     )
     country.to_csv(PROCESSED_DIR / "panel_country.csv", index=False)
