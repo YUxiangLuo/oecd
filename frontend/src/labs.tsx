@@ -8,7 +8,7 @@ import type {
   DbMeta, DbSlice, DbTableKind, IndicatorSchema, Meta, NetworkData, QcCheck,
   SectorPage, ShockEvent, ShockSummary, Step,
 } from "./types";
-import { HeatTableViz, LengthViz, NetworkViz, RankBarChart, ScatterChart, StackedShareViz } from "./viz";
+import { HeatTableViz, LengthViz, NetworkViz, RankBarChart, ScatterChart, StackedShareViz, TrendChart } from "./viz";
 import { DecompositionDemo, NetworkCentralityDemo } from "./demos";
 
 function fmtField(v: string | number | null, key: string, schema?: IndicatorSchema | null) {
@@ -486,7 +486,8 @@ const SCATTER_DEFAULT: Record<number, [string, string]> = {
   11: ["degree_centrality", "betweenness_centrality"],
 };
 
-type ViewKind = "signature" | "rank" | "scatter" | "table";
+type ViewKind = "signature" | "rank" | "scatter" | "trend" | "table";
+const num = (v: string | number | null | undefined) => (typeof v === "number" ? v : 0);
 
 /** 步骤8-11:富可视化(招牌图)+ 自由探索(自选指标 / 排序条 / 散点 / 选国家-TopN) */
 export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; columns: string[] }) {
@@ -505,6 +506,11 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
     () => (isNetwork ? api.network(year) : Promise.resolve(null)),
     [year, isNetwork],
   );
+  // 趋势图需要全部年份的国家级指标(按需拉取,服务端 CSV 已按 mtime 缓存)
+  const { data: yearsData } = useAsync<Record<string, string | number | null>[][] | null>(
+    () => (view === "trend" ? Promise.all(meta.years.map((y) => api.countryIndicators(y))) : Promise.resolve(null)),
+    [view === "trend"],
+  );
   if (error || netErr) return <div className="error-box">{error ?? netErr}</div>;
 
   const fmtOf = (k: string) => schema?.fields[k]?.format;
@@ -512,9 +518,22 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
   // 选中的对象:Top-N(按当前指标X排序)或手动挑选的国家
   const selRows =
     entityMode === "topn"
-      ? [...allRows].sort((a, b) => Number(b[metricX] ?? 0) - Number(a[metricX] ?? 0)).slice(0, topN)
+      ? [...allRows].sort((a, b) => num(b[metricX]) - num(a[metricX])).slice(0, topN)
       : allRows.filter((r) => picked.includes(String(r.country)));
   const highlight = new Set(picked);
+
+  // 趋势图折线:Top-N 模式限 6 条以内保证可读,选国家模式用全部选中国家
+  const trendCountries =
+    entityMode === "pick"
+      ? picked
+      : [...allRows].sort((a, b) => num(b[metricX]) - num(a[metricX])).slice(0, Math.min(topN, 6)).map((r) => String(r.country));
+  const trendSeries = trendCountries.map((c) => ({
+    country: c,
+    values: meta.years.map((_, i) => {
+      const r = (yearsData?.[i] ?? []).find((row) => String(row.country) === c);
+      return r ? num(r[metricX]) : NaN;
+    }),
+  }));
 
   const signatureChart = () => {
     if (isNetwork) return net ? <NetworkViz data={net} /> : <p className="muted">加载中…</p>;
@@ -538,7 +557,7 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
   );
 
   const TABS: [ViewKind, string][] = [
-    ["signature", "招牌图"], ["rank", "排序条形图"], ["scatter", "散点图"], ["table", "表格"],
+    ["signature", "招牌图"], ["rank", "排序条形图"], ["scatter", "散点图"], ["trend", "趋势图"], ["table", "表格"],
   ];
 
   return (
@@ -567,7 +586,7 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
           {entityMode === "topn" ? (
             <span className="topn-ctl">
               前 <input type="range" min={5} max={40} value={topN} onChange={(e) => setTopN(Number(e.target.value))} />
-              <b>{topN}</b> 个(按{view === "scatter" ? "X" : "该"}指标)
+              <b>{view === "trend" ? Math.min(topN, 6) : topN}</b> 个(按{view === "scatter" ? "X" : "该"}指标{view === "trend" ? ",趋势最多6条" : ""})
             </span>
           ) : (
             <select multiple className="country-multi" value={picked}
@@ -592,6 +611,13 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
               xLabel={fieldLabel(metricX, schema)} yLabel={fieldLabel(metricY, schema)}
               xFormat={fmtOf(metricX)} yFormat={fmtOf(metricY)} highlight={highlight} />
           : <p className="muted">请在“选国家”里选择至少一个国家。</p>
+      )}
+
+      {view === "trend" && (
+        !yearsData ? <p className="muted">加载多年数据中…</p>
+          : trendSeries.length
+            ? <TrendChart years={meta.years} series={trendSeries} label={fieldLabel(metricX, schema)} format={fmtOf(metricX)} />
+            : <p className="muted">请在“选国家”里选择国家(或切到 Top-N)。</p>
       )}
 
       {view === "table" && (

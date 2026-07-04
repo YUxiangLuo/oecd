@@ -494,6 +494,59 @@ export function ScatterChart({ rows, xKey, yKey, xLabel, yLabel, xFormat, yForma
   );
 }
 
+/** 多国某指标的时间趋势折线图(学生自选指标 + 国家) */
+export function TrendChart({ years, series, label, format }: {
+  years: number[];
+  series: { country: string; values: number[] }[];
+  label: string; format?: string;
+}) {
+  const { wrapRef, Tip, show, hide } = useTip();
+  const W = 660, H = 380, m = { l: 62, r: 92, t: 16, b: 38 };
+  const all = series.flatMap((s) => s.values).filter((v) => Number.isFinite(v));
+  const lo = all.length ? Math.min(...all) : 0, hi = all.length ? Math.max(...all) : 1;
+  const pad = (hi - lo) * 0.08 || Math.abs(hi) * 0.1 || 1;
+  const y0 = lo - pad, y1 = hi + pad;
+  const px = (i: number) => m.l + (years.length === 1 ? 0.5 : i / (years.length - 1)) * (W - m.l - m.r);
+  const py = (v: number) => H - m.b - ((v - y0) / (y1 - y0 || 1)) * (H - m.t - m.b);
+  const yticks = [0, 1, 2, 3, 4].map((i) => y0 + ((y1 - y0) / 4) * i);
+  return (
+    <div style={cardStyle} ref={wrapRef}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{label} · 趋势 {years[0]}–{years.at(-1)}</div>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%">
+        {yticks.map((t, i) => (
+          <g key={`y${i}`}>
+            <line x1={m.l} y1={py(t)} x2={W - m.r} y2={py(t)} stroke="#eef0f5" strokeWidth={1} />
+            <text x={m.l - 8} y={py(t) + 4} textAnchor="end" fontSize="10.5" fill="#8a90a0">{fmtVal(t, format)}</text>
+          </g>
+        ))}
+        {years.map((y, i) => (
+          <text key={y} x={px(i)} y={H - m.b + 18} textAnchor="middle" fontSize="10.5" fill="#8a90a0">{y}</text>
+        ))}
+        {series.map((s, si) => {
+          const color = CAT[si % CAT.length];
+          const pts = s.values.map((v, i) => ({ i, v })).filter((p) => Number.isFinite(p.v));
+          const d = pts.map((p, k) => `${k === 0 ? "M" : "L"}${px(p.i)},${py(p.v)}`).join(" ");
+          const last = pts.at(-1);
+          return (
+            <g key={s.country}>
+              <path d={d} fill="none" stroke={color} strokeWidth={2.2} />
+              {pts.map((p) => (
+                <circle key={p.i} cx={px(p.i)} cy={py(p.v)} r={3.5} fill={color} stroke="#fff" strokeWidth={1}
+                  onMouseMove={(e) => show(e, [["", s.country], ["年份", String(years[p.i])], [label, fmtVal(p.v, format)]])}
+                  onMouseLeave={hide} style={{ cursor: "pointer" }} />
+              ))}
+              {last && (
+                <text x={px(last.i) + 7} y={py(last.v) + 3.5} fontSize="10.5" fill={color} fontWeight={700}>{s.country}</text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      {Tip}
+    </div>
+  );
+}
+
 /* --------------------------- 事件研究:系数时间轴 --------------------------- */
 
 export function EventStudyChart({ coefs, notes }: {
