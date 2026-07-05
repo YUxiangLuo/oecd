@@ -12,7 +12,7 @@ from gvcsim.shocks import SHOCK_SPECS
 
 # 步骤编号 → (被解释变量, 中文含义)。列名来自 pipeline 产出的国家级面板。
 STEP_DEPVARS = {
-    13: ("share_trade_fva", "出口中外国增加值份额(FVA share,KWW)"),
+    13: ("share_trade_fva", "出口中外国增加值份额(FVA share,BM source)"),
     14: ("share_prod_complex_gvc", "复杂GVC生产份额(WWYZ)"),
     15: ("upstreamness_cross", "生产链跨境段长度"),
     16: ("betweenness_centrality", "生产网络介数中心性"),

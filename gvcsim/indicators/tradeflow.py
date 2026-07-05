@@ -1,12 +1,12 @@
-"""步骤4:GVC 总贸易流分解指标(KWW 风格完整聚合口径)。
+"""步骤4:GVC 总贸易流分解指标(Borin-Mancini source-based 口径)。
 
-本模块把一国/一国行业的毛出口拆成国内增加值、返回国内增加值、国内重复
-计算、外国增加值与外国重复计算,并派生前向/后向 GVC 参与度。实现范围是
-国家级与国家-行业级聚合结果;不输出 exporter-importer-sector 双边明细。
+本模块把一国/一国行业的毛出口拆成国内增加值、返回国内增加值(reflection)、
+国内重复计算、外国增加值与外国重复计算,并派生前向/后向 GVC 参与度。
+实现范围是国家级与国家-行业级聚合结果;不输出 exporter-importer-sector
+双边明细。
 
-⚠ 近似口径:重复计算项按买方节点"未来跨境期望"的启发式折算、最终吸收地
-用马尔可夫吸收链近似,不是 KWW (2014) / Borin-Mancini (2019) 的精确公式;
-"五项加总 = 毛出口"的闭合恒等式由单元测试保证。
+核心五项采用 Borin-Mancini (2019) source-based 出口国视角:增加值第一次越过
+出口国边界记为 DVA/FVA,此前已经越过同一出口国边界的部分记为 DDC/FDC。
 """
 
 import numpy as np
@@ -54,6 +54,15 @@ def _absorption_solve(Ad: np.ndarray, rhs: np.ndarray) -> np.ndarray:
     return np.clip(np.where(np.isfinite(out), out, 0.0), 0.0, None)
 
 
+def _solve_square(lhs: np.ndarray, rhs: np.ndarray) -> np.ndarray:
+    """Solve lhs @ X = rhs; fall back to least squares for near-singular toy systems."""
+    try:
+        out = np.linalg.solve(lhs, rhs)
+    except np.linalg.LinAlgError:
+        out, *_ = np.linalg.lstsq(lhs, rhs, rcond=None)
+    return np.where(np.isfinite(out), out, 0.0)
+
+
 def _ultimate_absorption(arr: IcioArrays, Ad: np.ndarray) -> np.ndarray:
     """Rows: producing node, columns: final absorption country shares.
 
@@ -73,29 +82,37 @@ def _ultimate_absorption(arr: IcioArrays, Ad: np.ndarray) -> np.ndarray:
     return out
 
 
-def _future_border_crossings(Ad: np.ndarray, border: np.ndarray) -> np.ndarray:
-    """Expected future cross-border intermediate transactions from each node.
+def _bm_source_coefficients(
+    arr: IcioArrays,
+    country: str,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Return per-unit export content coefficients under BM source-based accounting.
 
-    The first border crossing is the observed export itself. Future crossings proxy
-    the pure double-counted part in a KWW-style aggregate decomposition: when an
-    exported intermediate keeps crossing borders before final absorption, that
-    value is repeatedly recorded in gross trade.
+    For exporter s, DVA uses the domestic Leontief inverse L_ss. The full domestic
+    content V_s B_ss minus that local term is DDC. For foreign content, cutting
+    s's outward intermediate links gives B^cut_fs = B_fs B_ss^-1 L_ss, avoiding a
+    large inverse for every exporter.
     """
-    immediate = (Ad * border).sum(axis=1)
-    return _absorption_solve(Ad, immediate)
+    p = arr.pos[country]
+    mask = np.ones(len(arr.x), dtype=bool)
+    mask[p] = False
+    f = np.where(mask)[0]
 
+    Lss = arr.L_dd[country]
+    Bss = arr.B[np.ix_(p, p)]
+    domestic_source = arr.v[p] @ Lss
+    domestic_full = arr.v[p] @ Bss
 
-def _origin_content(arr: IcioArrays) -> np.ndarray:
-    """Country-of-origin value-added content per unit gross output.
+    if len(f) == 0:
+        foreign_source = np.zeros_like(domestic_source)
+        foreign_full = np.zeros_like(domestic_source)
+    else:
+        cut_bridge = _solve_square(Bss, Lss)
+        Bfs = arr.B[np.ix_(f, p)]
+        foreign_source = arr.v[f] @ (Bfs @ cut_bridge)
+        foreign_full = arr.v[f] @ Bfs
 
-    content[r, j] is the value added generated in country r that is embodied in
-    one unit of gross output from node j. Columns sum to one when v'B=1 holds.
-    """
-    content = np.zeros((arr.n_regions, len(arr.x)))
-    for i, r in enumerate(arr.regions):
-        p = arr.pos[r]
-        content[i, :] = (arr.v[p, None] * arr.B[p, :]).sum(axis=0)
-    return content
+    return domestic_source, domestic_full, foreign_source, foreign_full
 
 
 def _add_trade_shares(df: pd.DataFrame) -> pd.DataFrame:
@@ -117,15 +134,11 @@ def _add_trade_shares(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def sector_tradeflow(arr: IcioArrays) -> pd.DataFrame:
-    """国家-行业级 KWW 风格贸易流分解,索引为 (country, sector)。
+    """国家-行业级 Borin-Mancini source-based 贸易流分解,索引为 (country, sector)。
 
-    全部按节点向量/矩阵一次算完(N ≈ 3,465 时逐节点双重循环有 ~1200 万次
-    Python 迭代,向量化后每年秒级)。口径:
-
-    - 最终品出口直接在进口国被吸收:国内含量记 DVA,外国含量记 FVA。
-    - 中间品出口先按买方节点的"未来跨境期望"折出重复计算部分
-      (国内含量→DDC,外国含量→FDC),净额再按最终吸收地分类:
-      返回本国→RDV,进口国吸收/再出口→DVA 两个子项,外国含量→FVA。
+    五个闭合项(DVA/RDV/DDC/FVA/FDC)使用 BM 精确公式。DVA 的最终吸收
+    子项仍按输出流向追踪拆成最终品、进口国吸收、第三国再出口与返回本国,
+    以保持前端教学字段稳定。
     """
     node_regions = _node_regions(arr)
     node_sectors = _node_sectors(arr)
@@ -137,33 +150,48 @@ def sector_tradeflow(arr: IcioArrays) -> pd.DataFrame:
 
     Ad = _allocation_matrix(arr)
     ultimate = _ultimate_absorption(arr, Ad)
-    future_cross = _future_border_crossings(Ad, border)
-    content = _origin_content(arr)
-
-    domestic = content[home_col, idx]   # 本节点单位产出中的国内增加值含量
-    foreign = 1.0 - domestic
 
     # 最终品出口(剔除本国内销)
     final_exports = arr.Yd.sum(axis=1) - arr.Yd[idx, home_col]
+    Zf = np.where(border, arr.Z, 0.0)
+    intermediate_exports = Zf.sum(axis=1)
+    importer_absorption_share = ultimate[idx, home_col]
 
-    # 中间品出口:pf_j 是卖给买方 j 的价值中归入纯重复计算的比例
-    pf = future_cross / (1.0 + future_cross)
-    net_w = 1.0 - pf
-    Zf = np.where(border, arr.Z, 0.0)              # 跨境中间品流
-    pdc_in = Zf @ pf                               # Σ_j Z_ij · pf_j
-    net_sum = Zf @ net_w                           # Σ_j 净额
-    # 净额按买方节点的最终吸收地分类:回到出口国 / 进口国自身 / 第三国
-    returned = (Zf @ (net_w[:, None] * ultimate))[idx, home_col]
-    absorbed = Zf @ (net_w * ultimate[idx, home_col])
-    reexported = np.clip(net_sum - returned - absorbed, 0.0, None)
+    trade_dva_final = np.zeros(n)
+    trade_dva_absorbed = np.zeros(n)
+    trade_dva_reexported = np.zeros(n)
+    trade_rdv = np.zeros(n)
+    trade_ddc = np.zeros(n)
+    trade_fva = np.zeros(n)
+    trade_fdc = np.zeros(n)
 
-    trade_dva_final = domestic * final_exports
-    trade_dva_absorbed = domestic * absorbed
-    trade_dva_reexported = domestic * reexported
-    trade_rdv = domestic * returned
-    trade_ddc = domestic * pdc_in
-    trade_fva = foreign * (final_exports + net_sum)
-    trade_fdc = foreign * pdc_in
+    for r in arr.regions:
+        p = arr.pos[r]
+        home = region_idx[r]
+        domestic_source, domestic_full, foreign_source, foreign_full = (
+            _bm_source_coefficients(arr, r)
+        )
+
+        returned = (Zf[p, :] * ultimate[:, home][None, :]).sum(axis=1)
+        absorbed = (Zf[p, :] * importer_absorption_share[None, :]).sum(axis=1)
+
+        trade_dva_final[p] = domestic_source * final_exports[p]
+        trade_dva_absorbed[p] = domestic_source * absorbed
+        trade_rdv[p] = domestic_source * returned
+        trade_dva_reexported[p] = (
+            domestic_source * arr.E[p]
+            - trade_dva_final[p]
+            - trade_dva_absorbed[p]
+            - trade_rdv[p]
+        )
+        # Keep the split stable if tiny allocation noise makes the residual negative.
+        small = np.abs(trade_dva_reexported[p]) < 1e-10
+        trade_dva_reexported[p[small]] = 0.0
+
+        trade_ddc[p] = (domestic_full - domestic_source) * arr.E[p]
+        trade_fva[p] = foreign_source * arr.E[p]
+        trade_fdc[p] = (foreign_full - foreign_source) * arr.E[p]
+
     trade_dva = trade_dva_final + trade_dva_absorbed + trade_dva_reexported
     trade_pdc = trade_ddc + trade_fdc
 

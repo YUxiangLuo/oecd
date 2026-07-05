@@ -88,7 +88,7 @@ INDICATOR_SCHEMA = {
     "groups": [
         {
             "key": "trade",
-            "label": "KWW 贸易流分解",
+            "label": "Borin-Mancini 贸易流分解",
             "fields": [
                 "trade_gross_exports",
                 "trade_dva",

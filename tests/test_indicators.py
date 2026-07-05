@@ -33,6 +33,46 @@ def test_tradeflow_bounds(fake_io):
     assert sector["share_trade_dva"].between(0, 1).all()
 
 
+def test_tradeflow_bm_source_coefficients_match_cut_inverse(fake_io):
+    """BM 快速公式应等于显式切断出口国对外中间投入后的 Leontief 逆。"""
+    arr = build_arrays(fake_io)
+    eye = np.eye(len(arr.x))
+    for country in arr.regions:
+        p = arr.pos[country]
+        mask = np.ones(len(arr.x), dtype=bool)
+        mask[p] = False
+        f = np.where(mask)[0]
+
+        A_cut = arr.A.copy()
+        A_cut[np.ix_(p, f)] = 0.0
+        B_cut = np.linalg.inv(eye - A_cut)
+
+        domestic_source, domestic_full, foreign_source, foreign_full = (
+            tradeflow._bm_source_coefficients(arr, country)
+        )
+        assert np.allclose(domestic_source, arr.v[p] @ B_cut[np.ix_(p, p)])
+        assert np.allclose(domestic_full, arr.v[p] @ arr.B[np.ix_(p, p)])
+        assert np.allclose(foreign_source, arr.v[f] @ B_cut[np.ix_(f, p)])
+        assert np.allclose(foreign_full, arr.v[f] @ arr.B[np.ix_(f, p)])
+
+
+def test_tradeflow_bm_source_small_system_values(fake_io, cycle_io):
+    """2国与3国循环小系统的 BM source-based 聚合值固定。"""
+    fake = tradeflow.country_tradeflow(build_arrays(fake_io))
+    assert fake.loc["AAA", "trade_dva"] == pytest.approx(20.401203, abs=1e-6)
+    assert fake.loc["AAA", "trade_rdv"] == pytest.approx(1.698414, abs=1e-6)
+    assert fake.loc["AAA", "trade_ddc"] == pytest.approx(0.187618, abs=1e-6)
+    assert fake.loc["AAA", "trade_fva"] == pytest.approx(1.698346, abs=1e-6)
+    assert fake.loc["AAA", "trade_fdc"] == pytest.approx(0.014418, abs=1e-6)
+
+    cycle = tradeflow.country_tradeflow(build_arrays(cycle_io))
+    assert cycle.loc["BBB", "trade_dva"] == pytest.approx(10.657258, abs=1e-6)
+    assert cycle.loc["BBB", "trade_rdv"] == pytest.approx(1.342742, abs=1e-6)
+    assert cycle.loc["BBB", "trade_ddc"] == pytest.approx(0.580645, abs=1e-6)
+    assert cycle.loc["BBB", "trade_fva"] == pytest.approx(7.076923, abs=1e-6)
+    assert cycle.loc["BBB", "trade_fdc"] == pytest.approx(0.342432, abs=1e-6)
+
+
 def test_tradeflow_autarky(autarky_io):
     """封闭经济:没有出口,参与度无从谈起(出口为0)。"""
     arr = build_arrays(autarky_io)

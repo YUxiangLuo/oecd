@@ -159,7 +159,7 @@ def generate(
         f"质检结果见 data/processed/qc_{year}.json(维度一致性、会计恒等式、"
         "里昂惕夫逆矩阵性质等)。\n",
         "## 二、GVC 指标摘要",
-        f"**后向参与度最高(KWW 外国增加值与外国重复计算占毛出口比重)**:"
+        f"**后向参与度最高(BM 外国增加值与外国重复计算占毛出口比重)**:"
         + "、".join(f"{c} ({v:.3f})" for c, v in top_backward.items()),
         f"\n**前向参与度最高(本国增加值最常嵌入他国出口)**:"
         + "、".join(f"{c} ({v:.3f})" for c, v in top_forward.items()),
@@ -201,9 +201,8 @@ def generate(
         "- 控制变量支持 ICIO 内生派生与 WDI/IMF 风格宏观 mock,用于稳健性演示;"
         "GDP 平减指数为拟真 mock,不是官方价格指数。论文级研究仍需接入真实 WDI/IMF/"
         "行业价格指数。",
-        "- 指标采用 KWW 风格贸易流分解与 WWYZ 生产活动分解的国家/国家–行业聚合口径,"
-        "重复计算项为启发式近似(详见 README 方法论说明),论文级精度需替换为 "
-        "KWW/Borin-Mancini 完整分解;本报告不输出 exporter-importer-sector 双边矩阵明细。",
+        "- 指标采用 Borin-Mancini source-based 贸易流分解与 WWYZ 生产活动分解的"
+        "国家/国家–行业聚合口径;本报告不输出 exporter-importer-sector 双边矩阵明细。",
     ]
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)

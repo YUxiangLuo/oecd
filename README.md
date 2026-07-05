@@ -62,7 +62,7 @@ uv run gvcsim regress --step 13 --interaction           # 加入冲击×基期GV
 uv run gvcsim regress --step 13 --controls --real       # 金额类控制变量切换为实际值口径
 uv run gvcsim regress --step 13 --granularity country   # 国家级粒度
 uv run gvcsim report --year 2020      # 步骤17:生成 reports/experiment_report_2020.md
-uv run pytest                         # 测试(79 个,含 API 集成测试)
+uv run pytest                         # 测试(81 个,含 API 集成测试)
 ```
 
 ## 目录结构
@@ -78,7 +78,7 @@ uv run pytest                         # 测试(79 个,含 API 集成测试)
 │   ├── shocks.py                 #   步骤2:政策冲击数据接入(拟真演示面板:全经济体、行业异质)
 │   ├── indicators/
 │   │   ├── core.py               #   共享底座:IcioArrays(向量化的矩阵切块)
-│   │   ├── tradeflow.py          #   步骤4:KWW 风格贸易流分解(DVA/RDV/DDC/FVA/FDC/PDC)
+│   │   ├── tradeflow.py          #   步骤4:Borin-Mancini source-based 贸易流分解(DVA/RDV/DDC/FVA/FDC/PDC)
 │   │   ├── production.py         #   步骤5:WWYZ 生产分解(纯国内/传统贸易/简单/复杂GVC)
 │   │   ├── length.py             #   步骤6:长度分解(上游度及国内/跨境段)
 │   │   └── network.py            #   步骤7:生产网络中心性(度/介数/特征向量,国家+行业双粒度)
@@ -131,7 +131,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 - **重计算离线化**:解析 66MB 大表与矩阵求逆只在 `compute` 时发生一次,API 只读
   CSV/JSON 产物,毫秒级响应。
 - **指标全部向量化**:`IcioArrays` 一次性把 IO 系统切成 numpy 块(全球逆矩阵 B、
-  各国国内逆 L_rr、出口向量、最终吸收份额等),KWW/WWYZ 聚合分解与网络指标
+  各国国内逆 L_rr、出口向量、最终吸收份额等),BM/WWYZ 聚合分解与网络指标
   都在离线 `compute` 阶段完成。
 - **回归引擎双轨校验**:教学主引擎使用迭代去均值 + OLS + 聚类 sandwich 标准误
   的透明 numpy 实现;同时用 `linearmodels.PanelOLS` 对政策系数做标准库对照。
@@ -150,7 +150,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
   OECD ICIO 双边流向计算。制裁清单与出口管制按 OFAC/BIS 实体清单风格生成
   国家-行业-年份强度列,三类冲击均覆盖全部 77 经济体 × 45 行业。
 - **可测性**:指标模块吃 `IcioArrays` 而非 pymrio 对象,单元测试用手工构造的
-  2 国 × 2 行业与 3 国循环小系统验证数学恒等式(KWW 毛出口闭合、WWYZ 四段加总=GDP、
+  2 国 × 2 行业与 3 国循环小系统验证数学恒等式(BM 毛出口闭合、WWYZ 四段加总=GDP、
   封闭经济跨境项=0、v′B=1 等)。
 
 ## 17 步实现状态
@@ -160,7 +160,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 | 一、数据接入 | 1 数据库选型 | ✅ OECD ICIO,pymrio 下载解析已验证,原始表可在线切片浏览 |
 | | 2 政策冲击数据 | 🟡 关税/制裁/出口管制三类拟真面板(全经济体×行业异质,事件级编码),前端有事件时间线+三类面板浏览,并加入 HS 清单税率→ICIO 行业平均冲击的映射工作流演示 |
 | | 3 数据质检 | ✅ ICIO 5 项结构化检查 + 冲击面板质检(维度对齐、值域、时间线、treated 标记、处理组覆盖比例),CLI/API/前端共用 |
-| 二、指标计算 | 4 贸易流分解 | 🟡 KWW 风格聚合分解(DVA/RDV/DDC/FVA/FDC/PDC),国家+行业双粒度;前端有交互拆解演示(选国家/行业,实时校验五项加总=毛出口);重复计算项为近似口径,精确化在开发计划 M2.1 |
+| 二、指标计算 | 4 贸易流分解 | ✅ Borin-Mancini source-based 聚合分解(DVA/RDV/DDC/FVA/FDC/PDC),国家+行业双粒度;前端有交互拆解演示(选国家/行业,实时校验五项加总=毛出口);五项闭合误差全量重算后 ≤ 7e-10 |
 | | 5 生产分解 | ✅ WWYZ 四段分解,恒等式经测试验证,国家+行业双粒度;拆解演示实时校验四段加总=GDP |
 | | 6 长度分解 | ✅ Antras-Chor 上游度 + 国内/跨境段拆分,国家+行业双粒度;拆解演示实时校验两段加总=上游度 |
 | | 7 网络指标 | ✅ 度/介数/特征向量中心性,国家+行业双粒度(行业级介数默认精确,超大图才抽样;特征向量优先走 scipy 后端);前端有小网络交互演示(浏览器内算度/介数,高亮最短路径) |
@@ -193,14 +193,12 @@ Mock 的质量标准(schema 对齐真实来源、量级锚定公开统计、维�
 
 ## 方法论说明(诚实告知)
 
-- 贸易流分解已升级为 KWW 风格聚合口径:毛出口闭合到 DVA、返回国内增加值(RDV)、
-  国内重复计算(DDC)、外国增加值(FVA)、外国重复计算(FDC)与纯重复计算(PDC),
-  并派生前向/后向/总 GVC 参与度。当前输出国家级与国家–行业级聚合结果,
-  不输出 exporter-importer-sector 双边矩阵明细。
-  **注意仍是近似实现**:重复计算部分按买方节点"未来跨境期望"的启发式折算,
-  最终吸收地用马尔可夫吸收链近似,并非 KWW/Borin-Mancini 的精确公式;
-  五项加总=毛出口的闭合恒等式由单元测试保证,但论文级精度仍需替换为
-  KWW (2014) / Borin-Mancini (2019) 完整分解。
+- 贸易流分解采用 Borin-Mancini (2019) source-based 出口国视角:毛出口闭合到
+  DVA、返回国内增加值(RDV/reflection)、国内重复计算(DDC)、外国增加值(FVA)、
+  外国重复计算(FDC)与纯重复计算(PDC),并派生前向/后向/总 GVC 参与度。
+  当前输出国家级与国家–行业级聚合结果,不输出 exporter-importer-sector 双边矩阵明细。
+  与上一版近似源码在 2016–2020 ICIO 上对比,国家级 DVA/FVA/PDC 份额的毛出口加权
+  平均绝对变化约为 8.06/2.25/10.70 个百分点;全量重算五项闭合最大误差约 7e-10。
 - 生产分解采用 Wang-Wei-Yu-Zhu (2017) 四类生产活动口径:纯国内、传统贸易、
   简单 GVC、复杂 GVC;四段加总恒等于 GDP,由单元测试保证。
 - 长度分解采用 Antràs-Chor 上游度口径(距最终需求的平均生产阶段数),
@@ -211,10 +209,10 @@ Mock 的质量标准(schema 对齐真实来源、量级锚定公开统计、维�
 
 主要参考文献(实现口径的学术出处):
 
-- Koopman, Wang & Wei (2014), *Tracing Value-Added and Double Counting in Gross
-  Exports*, AER —— 步骤4 贸易流分解(KWW)。
 - Borin & Mancini (2019), *Measuring What Matters in Global Value Chains and
-  Value-Added Trade*, World Bank PRWP —— 步骤4 精确分解的升级目标。
+  Value-Added Trade*, World Bank PRWP —— 步骤4 贸易流精确分解(BM source-based)。
+- Koopman, Wang & Wei (2014), *Tracing Value-Added and Double Counting in Gross
+  Exports*, AER —— 步骤4 贸易流分解的经典基准。
 - Wang, Wei, Yu & Zhu (2017), *Measures of Participation in Global Value
   Chains and Global Business Cycles*, NBER WP 23222 —— 步骤5 生产分解(WWYZ)。
 - Antràs, Chor, Fally & Hillberry (2012), *Measuring the Upstreamness of
