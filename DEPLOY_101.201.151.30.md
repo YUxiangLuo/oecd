@@ -14,7 +14,7 @@
 - 后端监听: `127.0.0.1:18000`
 - 前端静态文件: `/opt/oecd-icio-analysis/frontend/dist`
 - 当前部署来源分支: `cc`
-- 当前部署来源提交: `27592dd 步骤8-11 探索器加入「趋势图」`
+- 当前应用代码部署提交: `297b41f docs: update post-merge project status`
 
 ## 本地准备
 
@@ -218,15 +218,17 @@ curl -fsS --max-time 90 \
   http://101.201.151.30:8081/api/regression/run
 ```
 
-本次部署验证结果:
+2026-07-05 更新部署验证结果:
 
 - `/` 返回 `200 OK`
-- `/api/regression/options` 返回 `200 OK`,包含 `control_modes`
+- `/api/regression/options` 携带 Bearer token 返回 `200 OK`,包含 `control_modes`
 - `/docs` 返回 `200 OK`
 - `student / gvclab2026` 登录返回 `200 OK`
 - 国家级加控制变量回归返回 `200 OK`
+- 回归样本量 `n_obs = 385`,聚类数 `n_clusters = 77`
 - `benchmark.backend = linearmodels.PanelOLS`
 - `benchmark.passed = true`
+- agent-browser 打开公网登录页无页面错误
 
 ## 运维命令
 
