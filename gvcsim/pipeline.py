@@ -102,6 +102,9 @@ def build_panel() -> pd.DataFrame:
     exposure_df = exposure.read_export_exposures(years)
     shocks.write_demo(countries, sectors, years, exposure_df)
     shock_df = shocks.load_shocks()
+    shock_checks = quality.run_shock_panel(shock_df, countries, sectors, years, shocks.TREATED_THRESHOLD)
+    with open(PROCESSED_DIR / "qc_shocks.json", "w", encoding="utf-8") as f:
+        json.dump([c.to_dict() for c in shock_checks], f, ensure_ascii=False, indent=2)
 
     sector = sector.merge(
         shock_df[["country", "sector", "year", "tariff_shock", "treated"]],

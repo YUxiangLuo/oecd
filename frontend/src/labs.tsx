@@ -255,10 +255,12 @@ export function DbLab() {
 export function QcLab({ meta }: { meta: Meta }) {
   const [year, setYear] = useState(meta.years.at(-1)!);
   const { data, error } = useAsync<QcCheck[]>(() => api.qc(year), [year]);
+  const { data: shockQc, error: shockErr } = useAsync<QcCheck[]>(() => api.shockQc(), []);
   if (error) return <div className="error-box">{error}</div>;
   return (
     <div>
       <YearPicker years={meta.years} year={year} onChange={setYear} />
+      <h3 style={{ margin: "0 0 10px", fontSize: 15 }}>ICIO 原始表质检</h3>
       <div className="table-wrap">
         <table className="data-table">
           <thead>
@@ -278,6 +280,33 @@ export function QcLab({ meta }: { meta: Meta }) {
                 </td>
               </tr>
             ))}
+          </tbody>
+        </table>
+      </div>
+      <h3 style={{ margin: "22px 0 10px", fontSize: 15 }}>政策冲击面板质检</h3>
+      {shockErr && <div className="error-box" style={{ marginBottom: 12 }}>{shockErr}</div>}
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr><th>质检项</th><th>类型</th><th>结果</th><th style={{ textAlign: "left" }}>详情</th></tr>
+          </thead>
+          <tbody>
+            {(shockQc ?? []).map((c) => (
+              <tr key={c.name}>
+                <td>{c.name}</td>
+                <td>{c.kind}</td>
+                <td className={c.passed ? "qc-pass" : "qc-fail"}>{c.passed ? "✓ 通过" : "✗ 异常"}</td>
+                <td style={{ textAlign: "left", whiteSpace: "normal" }}>
+                  {c.detail}
+                  {c.warnings.map((w) => (
+                    <div key={w} className="muted">⚠ {w}</div>
+                  ))}
+                </td>
+              </tr>
+            ))}
+            {!shockErr && !shockQc && (
+              <tr><td colSpan={4}>正在读取冲击面板质检…</td></tr>
+            )}
           </tbody>
         </table>
       </div>

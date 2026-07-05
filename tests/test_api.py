@@ -176,6 +176,17 @@ def test_qc_and_network():
     assert net["nodes"] and net["edges"]
 
 
+@needs_data
+@needs_shocks
+def test_qc_shocks_endpoint():
+    resp = client.get("/api/qc/shocks")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) >= 4
+    assert any("维度对齐" in c["name"] for c in body)
+    assert all({"name", "kind", "passed", "detail", "warnings"}.issubset(c) for c in body)
+
+
 def test_shock_events():
     """事件时间线不依赖预计算产物。"""
     resp = client.get("/api/shocks/events")

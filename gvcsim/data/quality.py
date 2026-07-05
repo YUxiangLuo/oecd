@@ -8,6 +8,7 @@
 from dataclasses import asdict, dataclass, field
 
 import numpy as np
+import pandas as pd
 
 # 会计恒等式允许的相对误差
 TOLERANCE = 0.01
@@ -131,4 +132,173 @@ def run_all(io) -> list[QcCheck]:
         check_accounting_identity(io),
         check_leontief_inverse(io),
         check_coverage(io),
+    ]
+
+
+def check_shock_dimensions(
+    shock_df: pd.DataFrame,
+    countries: list[str],
+    sectors: list[str],
+    years: list[int],
+) -> QcCheck:
+    """Shock panel must cover exactly the ICIO country-sector-year grid."""
+    required = {"country", "sector", "year"}
+    missing_cols = required - set(shock_df.columns)
+    if missing_cols:
+        return QcCheck(
+            name="冲击面板维度对齐(country×sector×year)",
+            kind="结构",
+            passed=False,
+            detail="缺少字段:" + "、".join(sorted(missing_cols)),
+        )
+
+    expected = pd.MultiIndex.from_product(
+        [countries, sectors, years], names=["country", "sector", "year"]
+    )
+    observed = pd.MultiIndex.from_frame(shock_df[["country", "sector", "year"]])
+    missing = expected.difference(observed)
+    extra = observed.difference(expected)
+    dup = int(observed.duplicated().sum())
+    warnings = []
+    if len(missing):
+        warnings.append(f"缺少组合 {len(missing)} 个,示例:{list(missing[:3])}")
+    if len(extra):
+        warnings.append(f"超出 ICIO 维度组合 {len(extra)} 个,示例:{list(extra[:3])}")
+    if dup:
+        warnings.append(f"重复组合 {dup} 个")
+    return QcCheck(
+        name="冲击面板维度对齐(country×sector×year)",
+        kind="结构",
+        passed=not missing_cols and len(missing) == 0 and len(extra) == 0 and dup == 0,
+        detail=f"期望 {len(expected)} 行,实际 {len(shock_df)} 行",
+        warnings=warnings,
+    )
+
+
+def check_shock_values(
+    shock_df: pd.DataFrame,
+    treated_threshold: float = 0.001,
+    max_shock: float = 0.5,
+) -> QcCheck:
+    required = {"tariff_shock", "treated"}
+    missing_cols = required - set(shock_df.columns)
+    if missing_cols:
+        return QcCheck(
+            name="冲击强度缺失值 / 值域 / treated 一致性",
+            kind="数值",
+            passed=False,
+            detail="缺少字段:" + "、".join(sorted(missing_cols)),
+        )
+    shock = pd.to_numeric(shock_df["tariff_shock"], errors="coerce")
+    treated = pd.to_numeric(shock_df["treated"], errors="coerce")
+    n_nan = int(shock.isna().sum() + treated.isna().sum())
+    out_of_bounds = int((~shock.between(0, max_shock)).sum())
+    mismatch = int(((shock > treated_threshold) != (treated == 1)).sum())
+    warnings = []
+    if n_nan:
+        warnings.append(f"tariff_shock/treated 存在 {n_nan} 个缺失或非数值")
+    if out_of_bounds:
+        warnings.append(f"tariff_shock 超出 [0,{max_shock}] 的记录 {out_of_bounds} 条")
+    if mismatch:
+        warnings.append(f"treated 与阈值 {treated_threshold:.4f} 不一致 {mismatch} 条")
+    return QcCheck(
+        name="冲击强度缺失值 / 值域 / treated 一致性",
+        kind="数值",
+        passed=n_nan == 0 and out_of_bounds == 0 and mismatch == 0,
+        detail=f"tariff_shock 范围 [{shock.min():.4f},{shock.max():.4f}],"
+        f"treated 阈值 {treated_threshold:.4f}",
+        warnings=warnings,
+    )
+
+
+def check_shock_timeline(shock_df: pd.DataFrame) -> QcCheck:
+    required = {"tariff_shock", "announced_date", "effective_date", "note"}
+    missing_cols = required - set(shock_df.columns)
+    if missing_cols:
+        return QcCheck(
+            name="冲击事件时间线完整性",
+            kind="经济含义",
+            passed=False,
+            detail="缺少字段:" + "、".join(sorted(missing_cols)),
+        )
+
+    hit = shock_df[pd.to_numeric(shock_df["tariff_shock"], errors="coerce") > 0].copy()
+    if hit.empty:
+        return QcCheck(
+            name="冲击事件时间线完整性",
+            kind="经济含义",
+            passed=False,
+            detail="没有任何正冲击记录",
+        )
+    ann_missing = int((hit["announced_date"].astype(str) == "").sum())
+    eff_missing = int((hit["effective_date"].astype(str) == "").sum())
+    note_missing = int((hit["note"].astype(str) == "").sum())
+    announced = pd.to_datetime(hit["announced_date"], errors="coerce")
+    effective = pd.to_datetime(hit["effective_date"], errors="coerce")
+    invalid_date = int((announced.isna() | effective.isna()).sum())
+    reversed_date = int((announced > effective).sum())
+    warnings = []
+    if ann_missing or eff_missing or note_missing:
+        warnings.append(
+            f"正冲击记录缺少宣布/生效/事件说明: {ann_missing}/{eff_missing}/{note_missing}"
+        )
+    if invalid_date:
+        warnings.append(f"日期无法解析 {invalid_date} 条")
+    if reversed_date:
+        warnings.append(f"宣布日期晚于生效日期 {reversed_date} 条")
+    return QcCheck(
+        name="冲击事件时间线完整性",
+        kind="经济含义",
+        passed=ann_missing == 0 and eff_missing == 0 and note_missing == 0
+        and invalid_date == 0 and reversed_date == 0,
+        detail=f"正冲击记录 {len(hit)} 条,均应带宣布/生效日期与事件说明",
+        warnings=warnings,
+    )
+
+
+def check_shock_treatment_coverage(shock_df: pd.DataFrame) -> QcCheck:
+    required = {"country", "year", "treated"}
+    missing_cols = required - set(shock_df.columns)
+    if missing_cols:
+        return QcCheck(
+            name="处理组覆盖范围",
+            kind="经济含义",
+            passed=False,
+            detail="缺少字段:" + "、".join(sorted(missing_cols)),
+        )
+    treated = pd.to_numeric(shock_df["treated"], errors="coerce").fillna(0)
+    n_treated = int((treated == 1).sum())
+    n_total = len(shock_df)
+    by_year = (
+        shock_df.assign(_treated=(treated == 1).astype(int))
+        .groupby("year")["_treated"].mean()
+        .sort_index()
+    )
+    warnings = [
+        f"{int(y)} 年处理比例 {share:.1%}"
+        for y, share in by_year.items()
+        if share > 0.6
+    ]
+    return QcCheck(
+        name="处理组覆盖范围",
+        kind="经济含义",
+        passed=0 < n_treated < n_total,
+        detail=f"受处理国家–行业–年份 {n_treated}/{n_total} 条;"
+        f"覆盖 {shock_df.loc[treated == 1, 'country'].nunique()} 个经济体",
+        warnings=warnings,
+    )
+
+
+def run_shock_panel(
+    shock_df: pd.DataFrame,
+    countries: list[str],
+    sectors: list[str],
+    years: list[int],
+    treated_threshold: float = 0.001,
+) -> list[QcCheck]:
+    return [
+        check_shock_dimensions(shock_df, countries, sectors, years),
+        check_shock_values(shock_df, treated_threshold),
+        check_shock_timeline(shock_df),
+        check_shock_treatment_coverage(shock_df),
     ]

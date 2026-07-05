@@ -18,7 +18,7 @@ from gvcsim import auth
 from gvcsim import report as report_mod
 from gvcsim import shocks
 from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
-from gvcsim.data import icio_browser
+from gvcsim.data import icio_browser, quality
 from gvcsim.regression.design import (
     CONTROL_MODES, GRANULARITIES, METHODS, SHOCK_TYPES, STEP_DEPVARS, RegressionDesign,
 )
@@ -240,6 +240,26 @@ def db_slice(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/api/qc/shocks")
+def qc_shocks():
+    path = PROCESSED_DIR / "qc_shocks.json"
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    df = _read_shocks()
+    years = processed_years()
+    if not years:
+        raise HTTPException(status_code=404, detail="缺少预计算年份,请先运行 compute")
+    latest_sector = _read_csv(f"indicators_sector_{years[-1]}.csv")
+    checks = quality.run_shock_panel(
+        df,
+        sorted(latest_sector["country"].unique()),
+        sorted(latest_sector["sector"].unique()),
+        years,
+        shocks.TREATED_THRESHOLD,
+    )
+    return [c.to_dict() for c in checks]
 
 
 @app.get("/api/qc/{year}")

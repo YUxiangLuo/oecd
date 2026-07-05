@@ -70,7 +70,7 @@ uv run pytest                         # 测试(57 个,含 API 集成测试)
 │   ├── data/
 │   │   ├── loader.py             #   步骤1:pymrio 下载/解析 OECD ICIO
 │   │   ├── icio_browser.py       #   步骤1:原始表按需切片浏览(z/y/accounts)
-│   │   ├── quality.py            #   步骤3:结构化质检(维度/缺失值/会计恒等式/矩阵性质)
+│   │   ├── quality.py            #   步骤3:ICIO 与冲击面板结构化质检
 │   │   └── controls.py           #   ICIO 派生国家-年份控制变量(步骤13-16 稳健性)
 │   ├── shocks.py                 #   步骤2:政策冲击数据接入(拟真演示面板:全经济体、行业异质)
 │   ├── indicators/
@@ -112,7 +112,8 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
                               ├─ tradeflow / production
                               │  length / network       → indicators_{country,sector}_<year>.csv
                               │                           network_edges_<year>.csv
-                              └─ pipeline.build_panel() → controls_country.csv(ICIO 派生控制变量)
+                              └─ pipeline.build_panel() → qc_shocks.json(冲击面板质检)
+                                                          controls_country.csv(ICIO 派生控制变量)
                                                           panel_sector.csv(行业级,回归默认)
                                                           panel_country.csv(冲击按出口额加权聚合)
                                                               │
@@ -154,7 +155,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 |---|---|---|
 | 一、数据接入 | 1 数据库选型 | ✅ OECD ICIO,pymrio 下载解析已验证,原始表可在线切片浏览 |
 | | 2 政策冲击数据 | 🟡 关税冲击拟真面板(全经济体×行业异质,事件级编码),前端有事件时间线+面板浏览;制裁/出口管制两类冲击与 HS↔ICIO 映射演示待做(开发计划 M1) |
-| | 3 数据质检 | 🟡 ICIO 5 项结构化检查,CLI/API 共用;冲击面板质检与两类数据维度对齐检查待做(开发计划 M1.4) |
+| | 3 数据质检 | ✅ ICIO 5 项结构化检查 + 冲击面板维度对齐/值域/timeline/处理组覆盖检查,CLI/API/前端共用 |
 | 二、指标计算 | 4 贸易流分解 | 🟡 KWW 风格聚合分解(DVA/RDV/DDC/FVA/FDC/PDC),国家+行业双粒度;前端有交互拆解演示(选国家/行业,实时校验五项加总=毛出口);重复计算项为近似口径,精确化在开发计划 M2.1 |
 | | 5 生产分解 | ✅ WWYZ 四段分解,恒等式经测试验证,国家+行业双粒度;拆解演示实时校验四段加总=GDP |
 | | 6 长度分解 | ✅ Antras-Chor 上游度 + 国内/跨境段拆分,国家+行业双粒度;拆解演示实时校验两段加总=上游度 |

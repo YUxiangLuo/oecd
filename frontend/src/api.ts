@@ -49,6 +49,7 @@ export const api = {
     return get<import("./types").DbSlice>(`/api/db/slice?${qs.toString()}`);
   },
   qc: (year: number) => get<import("./types").QcCheck[]>(`/api/qc/${year}`),
+  shockQc: () => get<import("./types").QcCheck[]>("/api/qc/shocks"),
   countryIndicators: (year: number) =>
     get<Record<string, string | number | null>[]>(`/api/indicators/country/${year}`),
   sectorIndicators: (year: number, country: string, page: number) =>

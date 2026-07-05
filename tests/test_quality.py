@@ -3,6 +3,7 @@
 import numpy as np
 
 from gvcsim.data import quality
+from gvcsim.shocks import TREATED_THRESHOLD, demo_shock_panel
 
 
 def test_all_checks_pass_on_consistent_system(fake_io):
@@ -31,3 +32,23 @@ def test_missing_value_detection(fake_io):
     fake_io.Z.iloc[1, 2] = np.nan
     check = quality.check_missing_and_negative(fake_io)
     assert not check.passed
+
+
+def test_shock_panel_quality_passes_on_complete_demo_panel():
+    countries = ["CHN", "USA", "DEU"]
+    sectors = ["C24", "C26", "A01_02"]
+    years = [2018, 2019, 2020]
+    df = demo_shock_panel(countries, sectors, years)
+    checks = quality.run_shock_panel(df, countries, sectors, years, TREATED_THRESHOLD)
+    assert len(checks) == 4
+    assert all(c.passed for c in checks), [c.to_dict() for c in checks]
+
+
+def test_shock_panel_quality_detects_missing_grid_rows():
+    countries = ["CHN", "USA"]
+    sectors = ["C26"]
+    years = [2019]
+    df = demo_shock_panel(countries, sectors, years).iloc[:-1]
+    check = quality.check_shock_dimensions(df, countries, sectors, years)
+    assert not check.passed
+    assert check.warnings
