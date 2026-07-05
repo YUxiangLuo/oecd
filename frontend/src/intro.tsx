@@ -257,7 +257,6 @@ export function IntroOverlay({ user, meta, onDone }: {
       </p>
       <div className="intro-cta-row">
         <button className="intro-cta" onClick={() => onDone(1)}>从第 1 步开始实验</button>
-        <button className="intro-cta ghost" onClick={() => onDone(8)}>先看看全球生产网络图</button>
       </div>
     </div>,
   ];

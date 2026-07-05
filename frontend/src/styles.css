@@ -483,8 +483,6 @@ button { font-family: inherit; cursor: pointer; }
   box-shadow: 0 10px 30px rgba(75, 71, 224, 0.35); transition: background 0.15s, transform 0.15s;
 }
 .intro-cta:hover { background: #5b57ee; transform: translateY(-1px); }
-.intro-cta.ghost { background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(150, 140, 255, 0.4); box-shadow: none; }
-.intro-cta.ghost:hover { background: rgba(255, 255, 255, 0.12); }
 .intro-skip {
   position: fixed; top: 24px; right: 28px; z-index: 51; padding: 10px 18px; border-radius: 99px;
   background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.16);
