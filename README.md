@@ -46,8 +46,8 @@ cd frontend && bun install && bun run dev
 | `teacher` | `gvclab2026` | 老师(教师身份) |
 
 认证是真实实现(PBKDF2 口令哈希 + HMAC 签名令牌,12 小时有效,
-`POST /api/auth/login` / `GET /api/auth/me`);数据接口暂不强制鉴权,
-真实部署时用 `auth.verify_token` 加 Bearer 依赖即可。
+`POST /api/auth/login` / `GET /api/auth/me`);除登录与令牌校验外,
+所有 `/api/*` 数据接口均强制 Bearer 鉴权。
 
 不起前端也能用 CLI 走完全流程:
 
@@ -59,7 +59,7 @@ uv run gvcsim regress --step 13 --method fe             # 双向固定效应(强
 uv run gvcsim regress --step 13 --controls              # 加入 ICIO 派生国家-年份控制变量
 uv run gvcsim regress --step 13 --granularity country   # 国家级粒度
 uv run gvcsim report --year 2020      # 步骤17:生成 reports/experiment_report_2020.md
-uv run pytest                         # 测试(70 个,含 API 集成测试)
+uv run pytest                         # 测试(71 个,含 API 集成测试)
 ```
 
 ## 目录结构
@@ -224,8 +224,7 @@ Mock 的质量标准(schema 对齐真实来源、量级锚定公开统计、维�
    交互升级;国家–行业级下钻。
 3. **M3 回归层补全**:三类冲击已接入回归设计;WDI 风格宏观控制 mock;平减指数与
    名义/实际切换;交互项;clean/noisy/confounded 三套教学场景;安慰剂检验。
-4. **M4 闭环与工程**:报告参数化(吸收学生的设计选择)、PDF 导出、数据接口
-   Bearer 鉴权、CI。
+4. **M4 闭环与工程**:报告参数化(吸收学生的设计选择)、PDF 导出、CI。
 
 ## 开发常用命令
 

@@ -11,8 +11,7 @@
   student / gvclab2026   同学(学生身份)
   teacher / gvclab2026   老师(教师身份)
 
-⚠ 当前只有"登录"这一层:数据接口暂不强制鉴权(教学系统单机使用),
-接入真实部署时给 FastAPI 加依赖注入式的 Bearer 校验即可(verify_token 已就绪)。
+API 层已对除登录/令牌校验外的 `/api/*` 数据接口强制 Bearer 校验。
 """
 
 import base64

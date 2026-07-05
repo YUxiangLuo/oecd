@@ -12,6 +12,8 @@ from gvcsim.api import app
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, SHOCKS_DIR, processed_years
 
 client = TestClient(app)
+login_resp = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+client.headers.update({"Authorization": f"Bearer {login_resp.json()['token']}"})
 
 needs_data = pytest.mark.skipif(
     not (PROCESSED_DIR / "panel_country.csv").exists(),
@@ -40,6 +42,19 @@ def test_steps_metadata():
     body = resp.json()
     assert len(body["steps"]) == 17
     assert body["stages"]["2"] == "指标计算"
+
+
+def test_data_endpoints_require_bearer():
+    anon = TestClient(app)
+    assert anon.get("/api/steps").status_code == 401
+    assert anon.get("/api/steps", headers={"Authorization": "Bearer bad"}).status_code == 401
+
+    login = anon.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+    assert login.status_code == 200
+    token = login.json()["token"]
+    me = anon.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json()["username"] == "student"
 
 
 def test_regression_options():

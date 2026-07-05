@@ -1,13 +1,11 @@
 import { useEffect, useState } from "react";
-import { api } from "./api";
+import { AUTH_TOKEN_KEY, api } from "./api";
 import { LogoMark } from "./brand";
 import { IntroOverlay } from "./intro";
 import { DbLab, IndicatorLab, QcLab, ReportLab, ShockLab, VizLab } from "./labs";
 import { RegDesignLab, RegressionRunLab } from "./regression";
 import { LoginPage } from "./login";
 import type { AuthUser, Meta, Step, StepsResponse } from "./types";
-
-const TOKEN_KEY = "gvcsim_token";
 
 const ROMAN = ["", "一", "二", "三", "四", "五"];
 
@@ -47,12 +45,23 @@ export default function App() {
   const [showIntro, setShowIntro] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem(TOKEN_KEY);
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (!token) { setAuthChecked(true); return; }
     api.me(token).then(
       (u) => { setUser(u); setAuthChecked(true); },
-      () => { localStorage.removeItem(TOKEN_KEY); setAuthChecked(true); },
+      () => { localStorage.removeItem(AUTH_TOKEN_KEY); setAuthChecked(true); },
     );
+  }, []);
+
+  useEffect(() => {
+    const onExpired = () => {
+      setUser(null);
+      setStepsData(null);
+      setMeta(null);
+      setFatal(null);
+    };
+    window.addEventListener("gvcsim-auth-expired", onExpired);
+    return () => window.removeEventListener("gvcsim-auth-expired", onExpired);
   }, []);
 
   useEffect(() => {
@@ -65,7 +74,7 @@ export default function App() {
   if (!user)
     return (
       <LoginPage onLogin={(r) => {
-        localStorage.setItem(TOKEN_KEY, r.token);
+        localStorage.setItem(AUTH_TOKEN_KEY, r.token);
         setUser(r.user);
         setShowIntro(true);
       }} />
@@ -107,7 +116,7 @@ export default function App() {
           <span className="progress-pill">学习进度 <b>{current}</b><span>/17</span></span>
           <span className="role-chip">{user.name}</span>
           <button onClick={() => setShowIntro(true)}>ⓘ 系统介绍</button>
-          <button onClick={() => { localStorage.removeItem(TOKEN_KEY); setUser(null); }}>退出</button>
+          <button onClick={() => { localStorage.removeItem(AUTH_TOKEN_KEY); setUser(null); }}>退出</button>
         </div>
       </header>
 

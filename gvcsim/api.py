@@ -12,6 +12,8 @@ from pathlib import Path
 import pandas as pd
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.requests import Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from gvcsim import auth
@@ -33,6 +35,24 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+PUBLIC_API_PATHS = {"/api/auth/login", "/api/auth/me"}
+
+
+@app.middleware("http")
+async def require_api_bearer(request: Request, call_next):
+    """除登录/令牌校验外,所有 /api 数据接口都要求 Bearer token。"""
+    if request.method == "OPTIONS" or not request.url.path.startswith("/api/"):
+        return await call_next(request)
+    if request.url.path in PUBLIC_API_PATHS:
+        return await call_next(request)
+
+    authorization = request.headers.get("authorization")
+    if not authorization or not authorization.startswith("Bearer "):
+        return JSONResponse(status_code=401, content={"detail": "缺少 Bearer 令牌"})
+    if auth.verify_token(authorization.removeprefix("Bearer ")) is None:
+        return JSONResponse(status_code=401, content={"detail": "令牌无效或已过期"})
+    return await call_next(request)
 
 
 def _clean(records: list[dict]) -> list[dict]:

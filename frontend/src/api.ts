@@ -1,7 +1,20 @@
+export const AUTH_TOKEN_KEY = "gvcsim_token";
+
+function notifyAuthExpired() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  window.dispatchEvent(new Event("gvcsim-auth-expired"));
+}
+
+function authHeaders(extra?: HeadersInit): HeadersInit {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  return token ? { ...extra, Authorization: `Bearer ${token}` } : (extra ?? {});
+}
+
 async function get<T>(url: string): Promise<T> {
-  const resp = await fetch(url);
+  const resp = await fetch(url, { headers: authHeaders() });
   if (!resp.ok) {
     const body = await resp.json().catch(() => null);
+    if (resp.status === 401) notifyAuthExpired();
     throw new Error(body?.detail ?? `${resp.status} ${resp.statusText}`);
   }
   return resp.json();
@@ -101,9 +114,10 @@ export const api = {
   ) => {
     const resp = await fetch("/api/regression/run", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ step, granularity, shock_type: shockType, method, control_mode: controlMode }),
     });
+    if (resp.status === 401) notifyAuthExpired();
     if (!resp.ok) throw new Error((await resp.json()).detail ?? resp.statusText);
     return resp.json() as Promise<import("./types").RegressionResponse>;
   },
