@@ -385,6 +385,14 @@ class RegressionRequest(BaseModel):
     control_mode: str = "不加控制变量"
 
 
+class ReportRequest(BaseModel):
+    year: int
+    granularity: str = "国家–行业级"
+    shock_type: str = "关税冲击"
+    method: str = "双重差分 (DID)"
+    control_mode: str = "不加控制变量"
+
+
 @app.get("/api/regression/options")
 def regression_options():
     return {
@@ -479,4 +487,19 @@ def report(year: int):
         raise HTTPException(status_code=404, detail=str(e))
     from pathlib import Path
 
+    return {"path": path, "markdown": Path(path).read_text(encoding="utf-8")}
+
+
+@app.post("/api/report")
+def report_param(req: ReportRequest):
+    _validate_design(13, req.granularity, req.shock_type, req.method, req.control_mode)
+    try:
+        path = report_mod.generate(
+            req.year,
+            granularity=req.granularity,
+            method=req.method,
+            control_mode=req.control_mode,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     return {"path": path, "markdown": Path(path).read_text(encoding="utf-8")}

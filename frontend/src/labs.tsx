@@ -671,11 +671,35 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
 /** 步骤17:实验报告 */
 export function ReportLab({ meta }: { meta: Meta }) {
   const [year, setYear] = useState(meta.years.at(-1)!);
-  const { data, error } = useAsync(() => api.report(year), [year]);
+  const { data: opts } = useAsync(() => api.regressionOptions(), []);
+  const [granularity, setGranularity] = useState("国家–行业级");
+  const [method, setMethod] = useState("双重差分 (DID)");
+  const [controlMode, setControlMode] = useState("不加控制变量");
+  const { data, error } = useAsync(
+    () => api.report({ year, granularity, method, controlMode }),
+    [year, granularity, method, controlMode],
+  );
   if (error) return <div className="error-box">{error}</div>;
   return (
     <div>
-      <YearPicker years={meta.years} year={year} onChange={setYear} />
+      <div className="controls">
+        <label>年份</label>
+        <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+          {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <label>粒度</label>
+        <select value={granularity} onChange={(e) => setGranularity(e.target.value)}>
+          {(opts?.granularities ?? ["国家–行业级", "国家级"]).map((g) => <option key={g} value={g}>{g}</option>)}
+        </select>
+        <label>方法</label>
+        <select value={method} onChange={(e) => setMethod(e.target.value)}>
+          {(opts?.methods ?? ["双重差分 (DID)", "双向固定效应", "事件研究"]).map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+        <label>控制</label>
+        <select value={controlMode} onChange={(e) => setControlMode(e.target.value)}>
+          {(opts?.control_modes ?? ["不加控制变量", "ICIO 派生控制变量"]).map((m) => <option key={m} value={m}>{m}</option>)}
+        </select>
+      </div>
       {data ? (
         <>
           <p className="muted">已写入 {data.path}(Markdown 源文件,可用 pandoc 转 PDF)</p>

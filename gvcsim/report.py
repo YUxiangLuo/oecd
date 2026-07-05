@@ -9,7 +9,9 @@ from datetime import date
 import pandas as pd
 
 from gvcsim.config import PROCESSED_DIR, REPORTS_DIR, processed_years
-from gvcsim.regression.design import CONTROL_MODE_ICIO, STEP_DEPVARS, RegressionDesign
+from gvcsim.regression.design import (
+    CONTROL_MODE_ICIO, CONTROL_MODE_NONE, STEP_DEPVARS, RegressionDesign,
+)
 from gvcsim.regression.panel import RegressionResult, benchmark_linearmodels, run_design
 
 
@@ -44,7 +46,7 @@ def _coef_table(result: RegressionResult) -> str:
             f"| {c.name} | {c.coef:.4f} | {c.se:.4f} | {c.t:.2f} | {c.p:.3f} | {c.stars} |"
         )
     lines.append(
-        f"\nN = {result.n_obs}({result.n_entities} 个国家×行业 × {result.n_times} 年,"
+        f"\nN = {result.n_obs}({result.n_entities} 个体 × {result.n_times} 年,"
         f"标准误按 {result.n_clusters} 国聚类),组内 R² = {result.r2_within:.4f},"
         "双向固定效应 ✓"
     )
@@ -86,13 +88,28 @@ def _compare_table(
     return "\n".join(lines)
 
 
-def generate(year: int | None = None) -> str:
+def _report_suffix(granularity: str, method: str, control_mode: str) -> str:
+    gran = "sector" if granularity == "国家–行业级" else "country"
+    meth = {"双重差分 (DID)": "did", "双向固定效应": "fe", "事件研究": "event"}[method]
+    ctrl = "icio_controls" if control_mode == CONTROL_MODE_ICIO else "no_controls"
+    return f"{gran}_{meth}_{ctrl}"
+
+
+def generate(
+    year: int | None = None,
+    granularity: str = "国家–行业级",
+    method: str = "双重差分 (DID)",
+    control_mode: str = CONTROL_MODE_NONE,
+) -> str:
     """生成报告并返回文件路径。year 为指标摘要引用的截面年份。
 
-    指标摘要用国家级面板(便于阅读),回归用国家–行业级面板(默认粒度)。
+    指标摘要用国家级面板(便于阅读),回归按传入设计参数运行。
     """
     country_panel = pd.read_csv(PROCESSED_DIR / "panel_country.csv")
-    sector_panel = _load_panel(RegressionDesign(step=13))
+    first_design = RegressionDesign(
+        step=13, granularity=granularity, method=method, control_mode=control_mode
+    )
+    regression_panel = _load_panel(first_design)
     years = processed_years()
     year = year or max(years)
     snap = country_panel[country_panel["year"] == year].set_index("country")
@@ -107,10 +124,9 @@ def generate(year: int | None = None) -> str:
         "拟真演示面板,以 2018–2020 全球贸易摩擦为原型,结论仅用于验证系统链路,"
         "不构成研究结论)\n",
         f"- 数据:OECD ICIO {min(years)}–{max(years)}(指标截面:{year} 年)",
-        "- 方法:国家–行业级双重差分(个体=国家×行业,处理组=曾受冲击个体,"
-        "处理期=首个冲击年起),含双向固定效应,标准误按国家聚类;"
-        "双向FE(强度法)与事件研究可在前端切换",
-        "- 稳健性:同时输出基准模型与 ICIO 派生国家-年份控制变量模型;"
+        f"- 方法:{granularity} · {method};"
+        f"个体={first_design.entity},标准误按 {first_design.cluster} 聚类",
+        f"- 控制变量:{control_mode};"
         "控制变量来自现有 ICIO 指标,未接外部宏观数据库或真实价格指数",
         f"- 生成日期:{date.today().isoformat()}\n",
         "## 一、数据与质检",
@@ -128,18 +144,22 @@ def generate(year: int | None = None) -> str:
     ]
 
     for step in sorted(STEP_DEPVARS):
-        design = RegressionDesign(step=step)
-        ctrl_design = RegressionDesign(step=step, control_mode=CONTROL_MODE_ICIO)
-        result = run_step_regression(step, sector_panel)
-        ctrl_result = run_step_regression(step, sector_panel, control_mode=CONTROL_MODE_ICIO)
-        bench = benchmark_linearmodels(sector_panel, ctrl_design, ctrl_result)
+        design = RegressionDesign(
+            step=step, granularity=granularity, method=method, control_mode=control_mode
+        )
+        result = run_step_regression(
+            step,
+            regression_panel,
+            granularity=granularity,
+            method=method,
+            control_mode=control_mode,
+        )
+        bench = benchmark_linearmodels(regression_panel, design, result)
         sections += [
             f"### 步骤{step}:{design.depvar_label}",
             f"模型:`{design.equation()}`\n",
-            _compare_table(design, result, ctrl_design, ctrl_result),
-            f"\n加控制模型:`{ctrl_design.equation()}`",
-            "控制变量:" + "、".join(ctrl_design.control_labels.values()),
-            f"PanelOLS 对照:最大政策系数差异={bench['max_abs_coef_diff']:.2e},"
+            _coef_table(result),
+            f"\nPanelOLS 对照:最大政策系数差异={bench['max_abs_coef_diff']:.2e},"
             f"最大标准误差异={bench['max_abs_se_diff']:.2e},"
             f"{'通过' if bench['passed'] else '需复核'}。",
             "",
@@ -147,7 +167,8 @@ def generate(year: int | None = None) -> str:
 
     sections += [
         "## 四、结论与限制",
-        "- 本报告验证了“数据 → 指标 → 回归 → 报告”闭环可自动运行(回归为国家–行业级)。",
+        f"- 本报告验证了“数据 → 指标 → 回归 → 报告”闭环可自动运行"
+        f"(回归设定:{granularity} · {method} · {control_mode})。",
         "- 冲击变量为拟真演示面板(事件与量级参考公开资料的手工编码,出口暴露度为风格化数值);"
         "接入 PIIE/WTO 真实数据 + 官方 HS→ICIO 映射后本报告即具备研究意义。",
         "- 本版控制变量为 ICIO 内生派生变量,用于稳健性演示;金额指数是相对基期变化,"
@@ -158,6 +179,9 @@ def generate(year: int | None = None) -> str:
     ]
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    out = REPORTS_DIR / f"experiment_report_{year}.md"
+    suffix = _report_suffix(granularity, method, control_mode)
+    filename = "experiment_report_{}.md".format(year) if suffix == "sector_did_no_controls" \
+        else f"experiment_report_{year}_{suffix}.md"
+    out = REPORTS_DIR / filename
     out.write_text("\n".join(sections), encoding="utf-8")
     return str(out)

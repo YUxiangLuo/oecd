@@ -282,3 +282,17 @@ def test_regression_methods():
     names = [c["name"] for c in ev.json()["result"]["coefs"]]
     assert names == ["k=-2", "k=0", "k=+1", "k=+2"]
     assert "T₀=2018" in " ".join(ev.json()["result"]["notes"])
+
+
+@needs_data
+def test_parameterized_report_endpoint():
+    year = processed_years()[-1]
+    resp = client.post(
+        "/api/report",
+        json={"year": year, "granularity": "国家级", "method": "双向固定效应"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "country_fe_no_controls" in body["path"]
+    assert "国家级 · 双向固定效应" in body["markdown"]
+    assert "tariff_shock" in body["markdown"]

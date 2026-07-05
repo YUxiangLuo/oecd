@@ -96,5 +96,18 @@ export const api = {
     if (!resp.ok) throw new Error((await resp.json()).detail ?? resp.statusText);
     return resp.json() as Promise<import("./types").RegressionResponse>;
   },
-  report: (year: number) => get<{ path: string; markdown: string }>(`/api/report/${year}`),
+  report: async (params: { year: number; granularity: string; method: string; controlMode: string }) => {
+    const resp = await fetch("/api/report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        year: params.year,
+        granularity: params.granularity,
+        method: params.method,
+        control_mode: params.controlMode,
+      }),
+    });
+    if (!resp.ok) throw new Error((await resp.json()).detail ?? resp.statusText);
+    return resp.json() as Promise<{ path: string; markdown: string }>;
+  },
 };
