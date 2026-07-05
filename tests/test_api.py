@@ -236,6 +236,7 @@ def test_qc_and_network():
 
     net = client.get(f"/api/viz/network/{year}").json()
     assert net["nodes"] and net["edges"]
+    assert "trade_gross_exports" in net["nodes"][0]
 
 
 @needs_shock_qc

@@ -93,22 +93,51 @@ const cardStyle: React.CSSProperties = {
 
 /* ------------------------------ 步骤8:网络图 ------------------------------ */
 
+type NetworkMetric = "share_trade_gvc_participation" | "betweenness_centrality" | "trade_gross_exports";
+type NetworkColorMode = "region" | NetworkMetric;
+
+const NETWORK_METRICS: { key: NetworkMetric; label: string; format: "pct" | "number" | "amount" }[] = [
+  { key: "share_trade_gvc_participation", label: "GVC 参与度", format: "pct" },
+  { key: "betweenness_centrality", label: "介数中心性", format: "number" },
+  { key: "trade_gross_exports", label: "毛出口", format: "amount" },
+];
+
+function fmtNetworkMetric(value: number, format: "pct" | "number" | "amount") {
+  if (format === "pct") return `${(value * 100).toFixed(1)}%`;
+  if (format === "amount") return value.toLocaleString("zh-CN", { maximumFractionDigits: 0 });
+  return value.toFixed(3);
+}
+
+function seqColor(value: number, max: number) {
+  const idx = Math.min(SEQ.length - 1, Math.floor((value / Math.max(max, 1e-9)) * SEQ.length));
+  return SEQ[idx];
+}
+
 export function NetworkViz({ data }: { data: NetworkData }) {
   const { wrapRef, Tip, show, hide } = useTip();
-  const [focus, setFocus] = useState<string | null>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [sizeMetric, setSizeMetric] = useState<NetworkMetric>("share_trade_gvc_participation");
+  const [colorMode, setColorMode] = useState<NetworkColorMode>("region");
+  const [edgeThreshold, setEdgeThreshold] = useState(0);
 
   const model = useMemo(() => {
     const W = 1000, H = 660, cx = W / 2, cy = H / 2;
     const byRegion: string[][] = REGIONS.map(() => []);
-    const part: Record<string, number> = {};
-    const betw: Record<string, number> = {};
+    const metrics: Record<NetworkMetric, Record<string, number>> = {
+      share_trade_gvc_participation: {},
+      betweenness_centrality: {},
+      trade_gross_exports: {},
+    };
     data.nodes.forEach((n) => {
       const c = String(n.country);
-      part[c] = num(n.share_trade_gvc_participation);
-      betw[c] = num(n.betweenness_centrality);
+      NETWORK_METRICS.forEach((m) => {
+        metrics[m.key][c] = num(n[m.key]);
+      });
       byRegion[REGION_OF[c] ?? 5].push(c);
     });
-    byRegion.forEach((list) => list.sort((a, b) => part[b] - part[a]));
+    byRegion.forEach((list) =>
+      list.sort((a, b) => metrics.share_trade_gvc_participation[b] - metrics.share_trade_gvc_participation[a]));
 
     // 每个区域一个锚点,成员沿环排布;记录“朝外”单位向量供标签放射避让
     const pos: Record<string, { x: number; y: number; ox: number; oy: number }> = {};
@@ -130,6 +159,11 @@ export function NetworkViz({ data }: { data: NetworkData }) {
     });
 
     const maxFlow = Math.max(...data.edges.map((e) => num(e.flow)), 1);
+    const maxMetric: Record<NetworkMetric, number> = {
+      share_trade_gvc_participation: Math.max(...Object.values(metrics.share_trade_gvc_participation), 1e-9),
+      betweenness_centrality: Math.max(...Object.values(metrics.betweenness_centrality), 1e-9),
+      trade_gross_exports: Math.max(...Object.values(metrics.trade_gross_exports), 1e-9),
+    };
     // 往返两条有向边合并为一个伙伴(流量相加),避免 tooltip 里同一国家出现两次
     const nbFlow: Record<string, Record<string, number>> = {};
     data.edges.forEach((e) => {
@@ -143,8 +177,6 @@ export function NetworkViz({ data }: { data: NetworkData }) {
         .sort((a, b) => b.flow - a.flow);
     });
 
-    const maxPart = Math.max(...Object.values(part), 1);
-    const radius = (c: string) => 3.5 + (part[c] / maxPart) * 11;
     // 静态标签只给贸易流量最大的节点(区域内前 2),其余悬停时显示,避免密集区碰撞
     const flowSum: Record<string, number> = {};
     Object.entries(neighbors).forEach(([c, l]) => { flowSum[c] = l.reduce((s, n) => s + n.flow, 0); });
@@ -152,60 +184,90 @@ export function NetworkViz({ data }: { data: NetworkData }) {
     byRegion.forEach((list) =>
       [...list].sort((a, b) => (flowSum[b] ?? 0) - (flowSum[a] ?? 0)).slice(0, 2)
         .forEach((c) => topLabeled.add(c)));
-    return { W, H, pos, part, betw, maxFlow, neighbors, radius, topLabeled };
+    return { W, H, pos, metrics, maxMetric, maxFlow, neighbors, topLabeled };
   }, [data]);
 
-  const { W, H, pos, part, betw, maxFlow, neighbors, radius, topLabeled } = model;
+  const { W, H, pos, metrics, maxMetric, maxFlow, neighbors, topLabeled } = model;
+  const focus = hovered ?? selected;
   const adj = focus ? new Set([focus, ...(neighbors[focus] ?? []).map((n) => n.c)]) : null;
+  const visibleEdges = data.edges.filter((e) => num(e.flow) / maxFlow >= edgeThreshold);
+  const metricMeta = Object.fromEntries(NETWORK_METRICS.map((m) => [m.key, m])) as Record<NetworkMetric, typeof NETWORK_METRICS[number]>;
+  const nodeColor = (c: string) =>
+    colorMode === "region"
+      ? CAT[REGION_OF[c] ?? 5]
+      : seqColor(metrics[colorMode][c] ?? 0, maxMetric[colorMode]);
+  const tooltipLines = (c: string): [string, string][] => [
+    ["", `${c} · ${REGIONS[REGION_OF[c] ?? 5]}`],
+    ...NETWORK_METRICS.map((m) => [m.label, fmtNetworkMetric(metrics[m.key][c] ?? 0, m.format)] as [string, string]),
+    ["主要伙伴", (neighbors[c] ?? []).slice(0, 4).map((n) => n.c).join("、") || "—"],
+  ];
+  const selectedNeighbors = selected ? neighbors[selected] ?? [] : [];
 
   return (
-    <div ref={wrapRef} style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ display: "block", width: "100%", height: "auto" }}>
+    <div ref={wrapRef} className="network-card" style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+      <div className="network-toolbar">
+        <label>节点大小</label>
+        <select value={sizeMetric} onChange={(e) => setSizeMetric(e.target.value as NetworkMetric)}>
+          {NETWORK_METRICS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+        </select>
+        <label>节点颜色</label>
+        <select value={colorMode} onChange={(e) => setColorMode(e.target.value as NetworkColorMode)}>
+          <option value="region">区域</option>
+          {NETWORK_METRICS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+        </select>
+        <label>边权阈值</label>
+        <input
+          type="range"
+          min={0}
+          max={0.5}
+          step={0.01}
+          value={edgeThreshold}
+          onChange={(e) => setEdgeThreshold(Number(e.target.value))}
+        />
+        <b>{(edgeThreshold * 100).toFixed(0)}%</b>
+        {selected && <button onClick={() => setSelected(null)}>清除选择</button>}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ display: "block", width: "100%", height: "auto" }} onClick={() => setSelected(null)}>
         <g>
-          {data.edges.map((e, i) => {
+          {visibleEdges.map((e, i) => {
             const s = String(e.source), t = String(e.target);
             const p1 = pos[s], p2 = pos[t];
             if (!p1 || !p2) return null;
             const f = num(e.flow) / maxFlow;
-            const col = CAT[REGION_OF[part[s] >= part[t] ? s : t] ?? 5];
+            const col = colorMode === "region" ? CAT[REGION_OF[s] ?? 5] : nodeColor(s);
             const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
             const dx = p2.x - p1.x, dy = p2.y - p1.y;
             const off = Math.hypot(dx, dy) * 0.14, nl = Math.hypot(-dy, dx) || 1;
-            const active = !adj || (adj.has(s) && adj.has(t) && (s === focus || t === focus));
+            const active = !adj || s === focus || t === focus;
             return (
               <path key={i} fill="none" stroke={col}
                 d={`M${p1.x} ${p1.y} Q${mx - (dy / nl) * off} ${my + (dx / nl) * off} ${p2.x} ${p2.y}`}
-                strokeOpacity={active ? 0.12 + f * 0.42 : 0.03}
-                strokeWidth={0.8 + f * 3.4} strokeLinecap="round" />
+                strokeOpacity={active ? 0.16 + f * 0.48 : 0.025}
+                strokeWidth={0.7 + f * 3.8} strokeLinecap="round" />
             );
           })}
         </g>
         <g>
           {Object.keys(pos).map((c) => {
-            const p = pos[c], r = radius(c);
-            const col = CAT[REGION_OF[c] ?? 5];
+            const p = pos[c];
+            const r = 3.5 + ((metrics[sizeMetric][c] ?? 0) / Math.max(maxMetric[sizeMetric], 1e-9)) * 11;
+            const col = nodeColor(c);
             const dim = adj ? !adj.has(c) : false;
             const labeled = focus ? adj!.has(c) : topLabeled.has(c);
             return (
               <g key={c} transform={`translate(${p.x} ${p.y})`} opacity={dim ? 0.18 : 1}
                 style={{ cursor: "pointer" }}
-                onMouseEnter={(e) => {
-                  setFocus(c);
-                  show(e, [
-                    ["", `${c} · ${REGIONS[REGION_OF[c] ?? 5]}`],
-                    ["KWW 总参与度", `${(part[c] * 100).toFixed(1)}%`],
-                    ["介数中心性", betw[c].toFixed(3)],
-                    ["主要伙伴", (neighbors[c] ?? []).slice(0, 4).map((n) => n.c).join("、") || "—"],
-                  ]);
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelected((current) => current === c ? null : c);
                 }}
-                onMouseMove={(e) => focus === c && show(e, [
-                  ["", `${c} · ${REGIONS[REGION_OF[c] ?? 5]}`],
-                  ["KWW 总参与度", `${(part[c] * 100).toFixed(1)}%`],
-                  ["介数中心性", betw[c].toFixed(3)],
-                  ["主要伙伴", (neighbors[c] ?? []).slice(0, 4).map((n) => n.c).join("、") || "—"],
-                ])}
-                onMouseLeave={() => { setFocus(null); hide(); }}>
-                <circle r={Math.max(12, r + 6)} fill={col} fillOpacity={0.12} />
+                onMouseEnter={(e) => {
+                  setHovered(c);
+                  show(e, tooltipLines(c));
+                }}
+                onMouseMove={(e) => hovered === c && show(e, tooltipLines(c))}
+                onMouseLeave={() => { setHovered(null); hide(); }}>
+                <circle r={Math.max(12, r + 6)} fill={col} fillOpacity={selected === c ? 0.22 : 0.12} />
                 <circle r={r} fill={col} stroke="#fff" strokeWidth={2} />
                 {labeled && (
                   <text x={p.ox * (r + 7)} y={p.oy * (r + 9) + 4}
@@ -219,19 +281,40 @@ export function NetworkViz({ data }: { data: NetworkData }) {
           })}
         </g>
       </svg>
-      <div style={{ position: "absolute", left: 18, top: 16 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050", marginBottom: 8 }}>区域</div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          {REGIONS.map((r, i) => (
-            <div key={r} style={{ display: "flex", alignItems: "center", gap: 7 }}>
-              <div style={{ width: 10, height: 10, borderRadius: "50%", background: CAT[i] }} />
-              <span style={{ fontSize: 11.5, color: "#5a6070" }}>{r}</span>
-            </div>
-          ))}
-        </div>
+      <div style={{ position: "absolute", left: 18, top: 68, maxWidth: 360 }}>
+        <Legend items={
+          colorMode === "region"
+            ? REGIONS.map((r, i) => ({ name: r, color: CAT[i] }))
+            : SEQ.map((color, i) => ({ name: i === 0 ? "低" : i === SEQ.length - 1 ? "高" : "", color })).filter((it) => it.name)
+        } />
       </div>
+      {selected && (
+        <div className="network-detail">
+          <div className="network-detail-head">
+            <strong>{selected}</strong>
+            <button onClick={() => setSelected(null)}>×</button>
+          </div>
+          <div className="network-detail-grid">
+            {NETWORK_METRICS.map((m) => (
+              <div key={m.key}>
+                <span>{m.label}</span>
+                <b>{fmtNetworkMetric(metrics[m.key][selected] ?? 0, m.format)}</b>
+              </div>
+            ))}
+          </div>
+          <table>
+            <thead><tr><th>伙伴</th><th>双边流量</th></tr></thead>
+            <tbody>
+              {selectedNeighbors.slice(0, 8).map((n) => (
+                <tr key={n.c}><td>{n.c}</td><td>{fmtNetworkMetric(n.flow, "amount")}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       <div style={{ position: "absolute", right: 18, bottom: 14, fontSize: 10.5, color: "#b0b5c2", textAlign: "right", lineHeight: 1.6 }}>
-        节点大小 = KWW 总 GVC 参与度 · 连线粗细 = 双边贸易流(Top 120)<br />悬停节点高亮其贸易关联
+        节点大小 = {metricMeta[sizeMetric].label} · 节点颜色 = {colorMode === "region" ? "区域" : metricMeta[colorMode].label}<br />
+        显示 {visibleEdges.length}/{data.edges.length} 条 Top 边;点击节点锁定贸易伙伴明细
       </div>
       {Tip}
     </div>

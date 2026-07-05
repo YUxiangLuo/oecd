@@ -313,7 +313,7 @@ def indicators_sector(
 def viz_network(year: int):
     edges = _read_csv(f"network_edges_{year}.csv")
     nodes = _read_csv(f"indicators_country_{year}.csv")[
-        ["country", "share_trade_gvc_participation", "betweenness_centrality"]
+        ["country", "share_trade_gvc_participation", "betweenness_centrality", "trade_gross_exports"]
     ]
     return {
         "nodes": _clean(nodes.to_dict(orient="records")),
