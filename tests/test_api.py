@@ -211,6 +211,21 @@ def test_shock_events():
     assert "232" in names and "301" in names
 
 
+def test_crosswalk_demo_endpoint():
+    resp = client.get("/api/crosswalk/demo", params={"year": 2019})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["summary"]["n_hs_chapters"] == 97
+    assert body["summary"]["n_crosswalk_rows"] >= 97
+    assert len(body["checks"]) == 4
+    assert all(c["passed"] for c in body["checks"])
+    assert body["hs_rows"]
+    assert body["mapped_rows"][0]["avg_tariff"] >= body["mapped_rows"][-1]["avg_tariff"]
+
+    bad = client.get("/api/crosswalk/demo", params={"year": 2021})
+    assert bad.status_code == 400
+
+
 @needs_shocks
 def test_shock_summary_and_panel():
     summary = client.get("/api/shocks/summary").json()

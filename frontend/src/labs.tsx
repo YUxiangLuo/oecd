@@ -5,7 +5,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 import type {
-  DbMeta, DbSlice, DbTableKind, IndicatorSchema, Meta, NetworkData, QcCheck,
+  CrosswalkHsRow, CrosswalkPayload, DbMeta, DbSlice, DbTableKind, IndicatorSchema, Meta, NetworkData, QcCheck,
   SectorPage, ShockEvent, ShockSummary, Step,
 } from "./types";
 import { HeatTableViz, LengthViz, NetworkViz, RankBarChart, ScatterChart, StackedShareViz, TrendChart } from "./viz";
@@ -312,6 +312,111 @@ function YearPicker({ years, year, onChange }: { years: number[]; year: number; 
 
 const pct = (v: number) => `${(v * 100).toFixed(2)}%`;
 
+const CROSSWALK_YEARS = [2018, 2019, 2020];
+
+function crosswalkRate(row: CrosswalkHsRow, year: number) {
+  if (year === 2018) return row.rate_2018;
+  if (year === 2020) return row.rate_2020;
+  return row.rate_2019;
+}
+
+/** 步骤2 子实验:HS 清单税率 → ICIO 行业平均冲击 */
+function CrosswalkDemo() {
+  const [year, setYear] = useState(2019);
+  const { data, error } = useAsync<CrosswalkPayload>(() => api.crosswalkDemo(year), [year]);
+  const mappedRows = data?.mapped_rows.slice(0, 10) ?? [];
+
+  return (
+    <div>
+      <div className="section-head" style={{ marginTop: 22 }}>
+        <span className="section-head-icon">↔</span>从 HS 清单到 ICIO 行业
+        <span className="section-head-line" />
+      </div>
+      <div className="controls">
+        <label>折算年份</label>
+        <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+          {CROSSWALK_YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+        {data && (
+          <span className="muted">
+            HS {data.summary.n_hs_chapters} 章 → ICIO {data.summary.n_icio_sectors} 个商品相关行业
+          </span>
+        )}
+      </div>
+      {error && <div className="error-box">{error}</div>}
+      {!data ? (
+        <p className="muted">正在读取 HS↔ICIO 映射演示…</p>
+      ) : (
+        <>
+          <div className="tipbox">
+            {data.disclaimer} 当前 301 清单样本覆盖 {pct(data.summary.demo_list_value_coverage)} 的示例贸易额,
+            crosswalk 共 {data.summary.n_crosswalk_rows} 条一对多映射。
+          </div>
+
+          <div className="table-wrap" style={{ marginBottom: 14 }}>
+            <table className="data-table">
+              <thead>
+                <tr><th>映射质检</th><th>结果</th><th style={{ textAlign: "left" }}>详情</th></tr>
+              </thead>
+              <tbody>
+                {data.checks.map((c) => (
+                  <tr key={c.name}>
+                    <td>{c.name}</td>
+                    <td className={c.passed ? "qc-pass" : "qc-fail"}>{c.passed ? "通过" : "异常"}</td>
+                    <td style={{ textAlign: "left", whiteSpace: "normal" }}>
+                      {c.detail}
+                      {c.warnings.map((w) => <div key={w} className="muted">{w}</div>)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="table-wrap" style={{ marginBottom: 14 }}>
+            <table className="data-table">
+              <thead>
+                <tr><th>HS章</th><th>清单</th><th>贸易额权重</th><th>清单覆盖</th><th>{year} 税率</th><th style={{ textAlign: "left" }}>说明</th></tr>
+              </thead>
+              <tbody>
+                {data.hs_rows.map((r) => (
+                  <tr key={r.hs_chapter}>
+                    <td>{r.hs_chapter}</td>
+                    <td>{r.list_name}</td>
+                    <td>{pct(r.value_weight)}</td>
+                    <td>{pct(r.coverage)}</td>
+                    <td>{pct(crosswalkRate(r, year))}</td>
+                    <td style={{ textAlign: "left" }}>{r.note}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr><th>ICIO行业</th><th>行业平均税率</th><th>映射贸易权重</th><th>受影响权重</th><th style={{ textAlign: "left" }}>主要HS章</th></tr>
+              </thead>
+              <tbody>
+                {mappedRows.map((r) => (
+                  <tr key={r.icio_sector}>
+                    <td>{r.icio_sector}</td>
+                    <td>{pct(r.avg_tariff)}</td>
+                    <td>{pct(r.mapped_value_weight)}</td>
+                    <td>{pct(r.affected_value_weight)}</td>
+                    <td style={{ textAlign: "left" }}>{r.top_hs_chapters}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /** 步骤2:政策冲击数据 —— 事件时间线 + 覆盖概览 + 面板浏览 */
 export function ShockLab({ meta }: { meta: Meta }) {
   const [year, setYear] = useState(meta.years.at(-1) ?? 2020);
@@ -363,6 +468,8 @@ export function ShockLab({ meta }: { meta: Meta }) {
           </tbody>
         </table>
       </div>
+
+      <CrosswalkDemo />
 
       <h3 style={{ margin: "22px 0 10px", fontSize: 15 }}>冲击面板浏览</h3>
       <div className="controls">

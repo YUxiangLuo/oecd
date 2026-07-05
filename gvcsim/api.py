@@ -18,7 +18,7 @@ from gvcsim import auth
 from gvcsim import report as report_mod
 from gvcsim import shocks
 from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
-from gvcsim.data import icio_browser
+from gvcsim.data import crosswalk, icio_browser
 from gvcsim.regression.design import (
     CONTROL_MODES, GRANULARITIES, METHODS, SHOCK_TYPES, STEP_DEPVARS, RegressionDesign,
 )
@@ -329,6 +329,14 @@ def shock_events():
         "disclaimer": "拟真演示数据:事件与税率量级参考公开资料手工编码,"
         "出口暴露度由 OECD ICIO 双边流向计算,不能用于研究结论",
     }
+
+
+@app.get("/api/crosswalk/demo")
+def crosswalk_demo(year: int = 2019):
+    try:
+        return crosswalk.demo_payload(year)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/api/shocks/summary")

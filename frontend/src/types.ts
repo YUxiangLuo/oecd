@@ -100,6 +100,51 @@ export interface QcCheck {
   warnings: string[];
 }
 
+export interface CrosswalkSummary {
+  n_hs_chapters: number;
+  n_crosswalk_rows: number;
+  n_icio_sectors: number;
+  demo_list_value_coverage: number;
+}
+
+export interface CrosswalkHsRow {
+  hs_chapter: string;
+  list_name: string;
+  value_weight: number;
+  coverage: number;
+  rate_2018: number;
+  rate_2019: number;
+  rate_2020: number;
+  note: string;
+}
+
+export interface CrosswalkMappedRow {
+  icio_sector: string;
+  mapped_value_weight: number;
+  affected_value_weight: number;
+  tariff_contribution: number;
+  avg_tariff: number;
+  top_hs_chapters: string;
+}
+
+export interface CrosswalkRow {
+  hs_chapter: string;
+  hs_description: string;
+  icio_sector: string;
+  weight: number;
+  note: string;
+}
+
+export interface CrosswalkPayload {
+  year: number;
+  summary: CrosswalkSummary;
+  checks: QcCheck[];
+  hs_rows: CrosswalkHsRow[];
+  mapped_rows: CrosswalkMappedRow[];
+  crosswalk_rows: CrosswalkRow[];
+  disclaimer: string;
+}
+
 export interface NetworkData {
   nodes: Record<string, string | number | null>[];
   edges: Record<string, string | number | null>[];

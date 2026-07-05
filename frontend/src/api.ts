@@ -68,6 +68,8 @@ export const api = {
     get<import("./types").ShockSummary>(
       `/api/shocks/summary?shock_type=${encodeURIComponent(shockType)}`,
     ),
+  crosswalkDemo: (year = 2019) =>
+    get<import("./types").CrosswalkPayload>(`/api/crosswalk/demo?year=${year}`),
   shockPanel: (year: number, shockType: string, country: string, sector: string, onlyHit: boolean, page: number) =>
     get<import("./types").SectorPage>(
       `/api/shocks/panel?year=${year}&shock_type=${encodeURIComponent(shockType)}&only_hit=${onlyHit}&page=${page}` +
