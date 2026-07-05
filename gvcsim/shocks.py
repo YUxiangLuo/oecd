@@ -13,8 +13,8 @@
     · 美国航空补贴案(空客裁决)对德法西英加税
 
   冲击变量定义:tariff_shock[c,s,y] = Σ_事件 双边行业平均加征税率 × 出口暴露度,
-  其中"双边行业平均加征税率"已折算清单覆盖面与年内生效月数,"出口暴露度"是
-  c 国出口流向加征方的份额(风格化数值,量级参考 UN Comtrade 方向别贸易结构)。
+  其中"双边行业平均加征税率"已折算清单覆盖面与年内生效月数,"出口暴露度"优先
+  由 OECD ICIO 的 Z + Y 双边流向计算(c 国出口流向加征方的份额)。
   因此 tariff_shock 可解读为:该国-行业全部出口面对的平均额外关税。
 
 ⚠ 演示数据不能用于真实研究结论。接入真实数据(PIIE 面板 + HS→ICIO 官方
@@ -23,22 +23,26 @@ crosswalk)时,实现一个返回同结构 (country, sector, year) 面板的 load
 
 from dataclasses import dataclass, field
 
+import numpy as np
 import pandas as pd
 
 from gvcsim.config import SHOCKS_DIR
+from gvcsim.indicators.core import IcioArrays
 
 DEMO_FILE = "demo_trade_war_tariffs.csv"
+EXPOSURE_FILE_TEMPLATE = "export_exposure_{year}.csv"
 
 # treated 阈值:全部出口的平均额外关税超过 0.1 个百分点才算受处理,
 # 避免"土耳其对美反制 × 美国微小对土出口份额"这类痕量项污染处理组。
 TREATED_THRESHOLD = 0.001
 
 # ---------------------------------------------------------------------------
-# 出口暴露度(风格化):各经济体货物出口中流向美国的份额。
+# 出口暴露度 fallback:单元测试或没有 ICIO 双边流向时使用。生产面板由
+# export_exposure_from_arrays() 基于真实 ICIO Z + Y 流向生成。
 # 量级参考 2017–2019 UN Comtrade 方向别结构:北美邻国 ~0.75,东亚 0.1–0.2,
 # 欧盟内部国家对美敞口低(0.02–0.1),资源出口国普遍较低。
 # ---------------------------------------------------------------------------
-_EXPOSURE_TO_USA = {
+_FALLBACK_EXPOSURE_TO_USA = {
     # 北美
     "CAN": 0.75, "MEX": 0.77,
     # 东亚 / 东南亚 / 南亚
@@ -68,10 +72,16 @@ _EXPOSURE_TO_USA = {
 }
 
 # 美国出口中流向各反制方的份额(反制事件只打美国,所以只需这一行)。
-_USA_EXPOSURE_TO = {
+_FALLBACK_USA_EXPOSURE_TO = {
     "CHN": 0.08, "EU": 0.19, "CAN": 0.18, "MEX": 0.16,
     "TUR": 0.006, "RUS": 0.004, "IND": 0.02,
 }
+
+_EU_MEMBERS_ICIO = (
+    "AUT", "BEL", "BGR", "CYP", "CZE", "DEU", "DNK", "ESP", "EST",
+    "FIN", "FRA", "GRC", "HRV", "HUN", "IRL", "ITA", "LTU", "LUX",
+    "LVA", "MLT", "NLD", "POL", "PRT", "ROU", "SVK", "SVN", "SWE",
+)
 
 
 @dataclass(frozen=True)
@@ -261,22 +271,101 @@ EVENTS = [
 ]
 
 
-def _exposure(country: str, imposer: str) -> float:
-    """country 的出口中流向 imposer 的份额(冲击的贸易加权系数)。"""
+def export_exposure_from_arrays(arr: IcioArrays, year: int) -> pd.DataFrame:
+    """从 ICIO 双边流向计算 country→imposer 出口暴露度。
+
+    暴露度 = origin 对 destination 的中间品出口(Z)与最终品出口(Y)之和 /
+    origin 对所有外国目的地的总出口。额外生成 imposer="EU" 的聚合列,供
+    欧盟作为整体加征方的事件使用。
+    """
+    regions = arr.regions
+    n = len(regions)
+    flows = np.zeros((n, n), dtype=float)
+    for i, origin in enumerate(regions):
+        p = arr.pos[origin]
+        for j, dest in enumerate(regions):
+            if origin == dest:
+                continue
+            q = arr.pos[dest]
+            flows[i, j] = arr.Z[np.ix_(p, q)].sum() + arr.Yd[p, j].sum()
+
+    totals = flows.sum(axis=1)
+    records = []
+    for i, origin in enumerate(regions):
+        total = float(totals[i])
+        for j, dest in enumerate(regions):
+            bilateral = float(flows[i, j])
+            records.append({
+                "country": origin,
+                "imposer": dest,
+                "year": year,
+                "bilateral_exports": bilateral,
+                "total_exports": total,
+                "export_exposure": bilateral / total if total > 0 else 0.0,
+            })
+
+    eu_idx = [regions.index(c) for c in _EU_MEMBERS_ICIO if c in regions]
+    if eu_idx:
+        for i, origin in enumerate(regions):
+            total = float(totals[i])
+            bilateral = float(flows[i, eu_idx].sum())
+            records.append({
+                "country": origin,
+                "imposer": "EU",
+                "year": year,
+                "bilateral_exports": bilateral,
+                "total_exports": total,
+                "export_exposure": bilateral / total if total > 0 else 0.0,
+            })
+
+    return pd.DataFrame.from_records(records)
+
+
+def _exposure_lookup(export_exposure: pd.DataFrame | None) -> dict[tuple[str, str, int], float]:
+    if export_exposure is None or export_exposure.empty:
+        return {}
+    required = {"country", "imposer", "year", "export_exposure"}
+    missing = required - set(export_exposure.columns)
+    if missing:
+        raise ValueError("出口暴露度表缺少字段:" + "、".join(sorted(missing)))
+    return {
+        (str(r.country), str(r.imposer), int(r.year)): float(r.export_exposure)
+        for r in export_exposure[list(required)].itertuples(index=False)
+    }
+
+
+def _fallback_exposure(country: str, imposer: str) -> float:
     if imposer == "USA":
-        return _EXPOSURE_TO_USA.get(country, 0.10)
+        return _FALLBACK_EXPOSURE_TO_USA.get(country, 0.10)
     # 非美加征方的目标只有美国
-    return _USA_EXPOSURE_TO[imposer] if country == "USA" else 0.0
+    return _FALLBACK_USA_EXPOSURE_TO.get(imposer, 0.0) if country == "USA" else 0.0
+
+
+def _exposure(
+    country: str,
+    imposer: str,
+    year: int,
+    exposure: dict[tuple[str, str, int], float],
+) -> float:
+    """country 的出口中流向 imposer 的份额(冲击的贸易加权系数)。"""
+    value = exposure.get((country, imposer, year))
+    if value is not None:
+        return value
+    return _fallback_exposure(country, imposer)
 
 
 def demo_shock_panel(
-    countries: list[str], sectors: list[str], years: list[int]
+    countries: list[str],
+    sectors: list[str],
+    years: list[int],
+    export_exposure: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """生成覆盖全部 (country, sector, year) 的冲击面板,未受冲击处为 0。
 
     列:tariff_shock(全部出口面对的平均额外关税)、treated、shock_type、
         announced_date / effective_date(取贡献最大事件,支持 DID 时间线)、note。
     """
+    exposure = _exposure_lookup(export_exposure)
     shock: dict[tuple[str, str, int], float] = {}
     main_event: dict[tuple[str, str, int], tuple[float, TariffEvent]] = {}
 
@@ -286,12 +375,12 @@ def demo_shock_panel(
         for c in targets:
             if c in ev.exempt:
                 continue
-            w = _exposure(c, ev.imposer)
-            if w <= 0:
-                continue
             for s, by_year in (ev.overrides.get(c, ev.rates)).items():
                 for y, rate in by_year.items():
                     if y not in years or rate <= 0:
+                        continue
+                    w = _exposure(c, ev.imposer, y, exposure)
+                    if w <= 0:
                         continue
                     contrib = rate * w
                     key = (c, s, y)
@@ -319,9 +408,16 @@ def demo_shock_panel(
     return base
 
 
-def write_demo(countries: list[str], sectors: list[str], years: list[int]) -> None:
+def write_demo(
+    countries: list[str],
+    sectors: list[str],
+    years: list[int],
+    export_exposure: pd.DataFrame | None = None,
+) -> None:
     SHOCKS_DIR.mkdir(parents=True, exist_ok=True)
-    demo_shock_panel(countries, sectors, years).to_csv(SHOCKS_DIR / DEMO_FILE, index=False)
+    demo_shock_panel(countries, sectors, years, export_exposure).to_csv(
+        SHOCKS_DIR / DEMO_FILE, index=False
+    )
 
 
 def events_metadata() -> list[dict]:

@@ -42,6 +42,12 @@ def compute_year(year: int, verbose: bool = True) -> None:
 
     arr = build_arrays(io)
 
+    log(f"[{year}] 计算 ICIO 双边出口暴露度...")
+    shocks.export_exposure_from_arrays(arr, year).to_csv(
+        PROCESSED_DIR / shocks.EXPOSURE_FILE_TEMPLATE.format(year=year),
+        index=False,
+    )
+
     log(f"[{year}] 步骤4 贸易流分解...")
     tf_sector = tradeflow.sector_tradeflow(arr)
     tf_country = tradeflow.country_tradeflow(arr, tf_sector)
@@ -92,11 +98,21 @@ def build_panel() -> pd.DataFrame:
         ignore_index=True,
     )
     controls_df = controls.write_controls(country, sector)
+    exposure_frames = []
+    for y in years:
+        path = PROCESSED_DIR / shocks.EXPOSURE_FILE_TEMPLATE.format(year=y)
+        if path.exists():
+            exposure_frames.append(pd.read_csv(path))
+    export_exposure = (
+        pd.concat(exposure_frames, ignore_index=True)
+        if len(exposure_frames) == len(years)
+        else None
+    )
 
     # ---- 行业级 ----
     countries = sorted(sector["country"].unique())
     sectors = sorted(sector["sector"].unique())
-    shocks.write_demo(countries, sectors, years)
+    shocks.write_demo(countries, sectors, years, export_exposure)
     shock_df = shocks.load_shocks()
 
     sector = sector.merge(

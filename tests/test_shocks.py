@@ -1,8 +1,11 @@
 """冲击演示面板的结构与"拟真性"测试(不依赖真实数据)。"""
 
 import numpy as np
+import pandas as pd
+import pytest
 
-from gvcsim.shocks import TREATED_THRESHOLD, demo_shock_panel
+from gvcsim.indicators.core import build_arrays
+from gvcsim.shocks import TREATED_THRESHOLD, demo_shock_panel, export_exposure_from_arrays
 
 COUNTRIES = ["CHN", "USA", "DEU", "CAN", "AUS", "BRA", "VNM", "TUR"]
 SECTORS = ["A01_02", "C24", "C26", "C28", "C29", "K", "J62_63"]
@@ -13,6 +16,44 @@ def _panel():
     return demo_shock_panel(COUNTRIES, SECTORS, YEARS).set_index(
         ["country", "sector", "year"]
     )
+
+
+def test_export_exposure_from_arrays(fake_io):
+    arr = build_arrays(fake_io)
+    exposure = export_exposure_from_arrays(arr, 2020)
+
+    aaa = exposure[
+        (exposure["country"] == "AAA")
+        & (exposure["imposer"] == "BBB")
+        & (exposure["year"] == 2020)
+    ].iloc[0]
+    assert aaa["bilateral_exports"] == pytest.approx(24.0)
+    assert aaa["total_exports"] == pytest.approx(24.0)
+    assert aaa["export_exposure"] == pytest.approx(1.0)
+
+    same_country = exposure[
+        (exposure["country"] == "AAA")
+        & (exposure["imposer"] == "AAA")
+        & (exposure["year"] == 2020)
+    ].iloc[0]
+    assert same_country["export_exposure"] == 0.0
+
+
+def test_demo_panel_uses_icio_export_exposure():
+    exposure = demo_shock_panel(
+        ["CHN", "USA"], ["C26"], [2019],
+        export_exposure=None,
+    ).set_index(["country", "sector", "year"])["tariff_shock"]
+
+    custom = demo_shock_panel(
+        ["CHN", "USA"], ["C26"], [2019],
+        export_exposure=pd.DataFrame([
+            {"country": "CHN", "imposer": "USA", "year": 2019, "export_exposure": 0.50},
+            {"country": "USA", "imposer": "CHN", "year": 2019, "export_exposure": 0.01},
+        ]),
+    ).set_index(["country", "sector", "year"])["tariff_shock"]
+
+    assert custom["CHN", "C26", 2019] > exposure["CHN", "C26", 2019]
 
 
 def test_full_coverage_and_bounds():

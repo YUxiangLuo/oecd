@@ -320,7 +320,7 @@ export function ShockLab({ meta }: { meta: Meta }) {
     <div>
       <div className="warnbox">
         ⚠ 拟真演示数据:以 2018–2020 全球贸易摩擦真实事件为原型手工编码(税率量级参考
-        PIIE/Bown),乘以风格化出口暴露度;覆盖 {summary ? `${summary.n_countries} 个经济体 × ${summary.n_sectors} 个行业` : "全部经济体与行业"},不能用于研究结论。
+        PIIE/Bown),乘以 OECD ICIO 双边出口流向暴露度;覆盖 {summary ? `${summary.n_countries} 个经济体 × ${summary.n_sectors} 个行业` : "全部经济体与行业"},不能用于研究结论。
       </div>
 
       <h3 style={{ margin: "18px 0 10px", fontSize: 15 }}>事件时间线</h3>
