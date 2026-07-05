@@ -124,6 +124,11 @@ button { font-family: inherit; cursor: pointer; }
   padding: 8px 14px; border-radius: 8px; border: 1px solid #4b47e0;
   background: #4b47e0; color: #fff; font-size: 12.5px; font-weight: 600;
 }
+.controls button.secondary {
+  padding: 8px 14px; border-radius: 8px; border: 1px solid #d7dbe6;
+  background: #fff; color: #4c5568; font-size: 12.5px; font-weight: 600;
+}
+.controls button:disabled { opacity: 0.45; cursor: default; }
 
 .data-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .data-table th {
@@ -197,6 +202,54 @@ button { font-family: inherit; cursor: pointer; }
 @media (max-width: 640px) {
   .db-source-grid { grid-template-columns: 1fr; }
   .db-table-seg { width: 100%; overflow-x: auto; }
+}
+
+@media print {
+  @page { margin: 14mm 12mm; }
+  html, body, #root {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+  body { color: #111827; font-size: 11pt; }
+  .topbar,
+  .sidebar,
+  .step-header-bar,
+  .rightrail,
+  .stepfooter,
+  .card.accent,
+  .report-controls,
+  .report-meta,
+  .error-box {
+    display: none !important;
+  }
+  .layout,
+  .main,
+  .workarea,
+  .content-row,
+  .content,
+  .content-inner,
+  .report-lab {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+  .report-md {
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    background: #fff;
+    color: #111827;
+    font-size: 10.5pt;
+    line-height: 1.55;
+    overflow: visible;
+    white-space: pre-wrap;
+  }
 }
 
 /* ===== 登录页 ===== */

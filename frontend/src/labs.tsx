@@ -788,8 +788,8 @@ export function ReportLab({ meta }: { meta: Meta }) {
     setDraft((current) => ({ ...current, [key]: value }));
   };
   return (
-    <div>
-      <div className="controls">
+    <div className="report-lab">
+      <div className="controls report-controls">
         <label>年份</label>
         <select value={draft.year} onChange={(e) => setField("year", Number(e.target.value))}>
           {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
@@ -807,7 +807,7 @@ export function ReportLab({ meta }: { meta: Meta }) {
           {(opts?.methods ?? ["双重差分 (DID)", "双向固定效应", "事件研究"]).map((v) => <option key={v} value={v}>{v}</option>)}
         </select>
       </div>
-      <div className="controls">
+      <div className="controls report-controls">
         <label>控制变量</label>
         <select value={draft.control_mode} onChange={(e) => setField("control_mode", e.target.value)}>
           {(opts?.control_modes ?? ["不加控制变量", "ICIO 派生控制变量", "模拟宏观控制"]).map((v) => <option key={v} value={v}>{v}</option>)}
@@ -825,12 +825,19 @@ export function ReportLab({ meta }: { meta: Meta }) {
           冲击×基期GVC
         </label>
         <button className="primary" onClick={() => setRequest({ ...draft })}>生成报告</button>
+        <button
+          className="secondary"
+          disabled={!data || Boolean(error)}
+          onClick={() => window.print()}
+        >
+          导出 PDF
+        </button>
       </div>
       {error ? (
         <div className="error-box">{error}</div>
       ) : data ? (
         <>
-          <p className="muted">
+          <p className="muted report-meta">
             已写入 {data.path}(Markdown 源文件,可用 pandoc 转 PDF) ·
             当前设定:{request.granularity} · {request.shock_type} · {request.method} ·
             {request.control_mode} · {request.price_mode}{request.interaction ? " · 交互项" : ""}
