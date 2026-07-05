@@ -1,6 +1,8 @@
 """冲击演示面板的结构与"拟真性"测试(不依赖真实数据)。"""
 
 import numpy as np
+import pandas as pd
+import pytest
 
 from gvcsim.shocks import TREATED_THRESHOLD, demo_shock_panel
 
@@ -72,3 +74,23 @@ def test_event_timeline_columns():
     assert (hit["effective_date"] != "").all()
     assert (hit["note"] != "").all()
     assert (df["shock_type"] == "关税冲击").all()
+
+
+def test_uses_icio_export_exposure_when_provided():
+    exposure_panel = pd.DataFrame([
+        {"country": "CHN", "imposer": "USA", "year": 2019, "export_exposure": 0.50},
+        {"country": "USA", "imposer": "CHN", "year": 2019, "export_exposure": 0.25},
+        {"country": "USA", "imposer": "MEX", "year": 2019, "export_exposure": 0.00},
+        {"country": "USA", "imposer": "IND", "year": 2019, "export_exposure": 0.00},
+    ])
+    df = demo_shock_panel(
+        ["CHN", "USA"],
+        ["C26", "A01_02"],
+        [2019],
+        exposure_panel=exposure_panel,
+    ).set_index(["country", "sector", "year"])
+
+    # 301 C26 rate is 0.16 in 2019, plus the all-partner 201 safeguard rate 0.012.
+    assert df.loc[("CHN", "C26", 2019), "tariff_shock"] == pytest.approx((0.16 + 0.012) * 0.50)
+    # China retaliation on US agriculture is 0.26 in 2019.
+    assert df.loc[("USA", "A01_02", 2019), "tariff_shock"] == pytest.approx(0.26 * 0.25)

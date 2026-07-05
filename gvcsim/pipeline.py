@@ -20,7 +20,7 @@ import pandas as pd
 
 from gvcsim import shocks
 from gvcsim.config import PROCESSED_DIR, available_years, processed_years
-from gvcsim.data import controls, loader, quality
+from gvcsim.data import controls, exposure, loader, quality
 from gvcsim.indicators import length, network, production, tradeflow
 from gvcsim.indicators.core import build_arrays
 
@@ -41,6 +41,9 @@ def compute_year(year: int, verbose: bool = True) -> None:
         json.dump([c.to_dict() for c in checks], f, ensure_ascii=False, indent=2)
 
     arr = build_arrays(io)
+
+    log(f"[{year}] 计算目的国出口暴露度...")
+    exposure.write_export_exposure(arr, year)
 
     log(f"[{year}] 步骤4 贸易流分解...")
     tf_sector = tradeflow.sector_tradeflow(arr)
@@ -96,7 +99,8 @@ def build_panel() -> pd.DataFrame:
     # ---- 行业级 ----
     countries = sorted(sector["country"].unique())
     sectors = sorted(sector["sector"].unique())
-    shocks.write_demo(countries, sectors, years)
+    exposure_df = exposure.read_export_exposures(years)
+    shocks.write_demo(countries, sectors, years, exposure_df)
     shock_df = shocks.load_shocks()
 
     sector = sector.merge(

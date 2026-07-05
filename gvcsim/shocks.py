@@ -261,16 +261,41 @@ EVENTS = [
 ]
 
 
-def _exposure(country: str, imposer: str) -> float:
+def _exposure_lookup(exposure_panel: pd.DataFrame | None) -> dict[tuple[str, str, int], float]:
+    if exposure_panel is None:
+        return {}
+    required = {"country", "imposer", "year", "export_exposure"}
+    missing = required - set(exposure_panel.columns)
+    if missing:
+        raise ValueError("出口暴露度面板缺少字段:" + "、".join(sorted(missing)))
+    return {
+        (str(r.country), str(r.imposer), int(r.year)): float(r.export_exposure)
+        for r in exposure_panel.itertuples(index=False)
+    }
+
+
+def _exposure(
+    country: str,
+    imposer: str,
+    year: int,
+    lookup: dict[tuple[str, str, int], float] | None = None,
+) -> float:
     """country 的出口中流向 imposer 的份额(冲击的贸易加权系数)。"""
+    if lookup:
+        value = lookup.get((country, imposer, year))
+        if value is not None:
+            return value
     if imposer == "USA":
         return _EXPOSURE_TO_USA.get(country, 0.10)
     # 非美加征方的目标只有美国
-    return _USA_EXPOSURE_TO[imposer] if country == "USA" else 0.0
+    return _USA_EXPOSURE_TO.get(imposer, 0.0) if country == "USA" else 0.0
 
 
 def demo_shock_panel(
-    countries: list[str], sectors: list[str], years: list[int]
+    countries: list[str],
+    sectors: list[str],
+    years: list[int],
+    exposure_panel: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """生成覆盖全部 (country, sector, year) 的冲击面板,未受冲击处为 0。
 
@@ -279,6 +304,7 @@ def demo_shock_panel(
     """
     shock: dict[tuple[str, str, int], float] = {}
     main_event: dict[tuple[str, str, int], tuple[float, TariffEvent]] = {}
+    lookup = _exposure_lookup(exposure_panel)
 
     for ev in EVENTS:
         targets = [c for c in countries if c != ev.imposer] if ev.targets == "ALL" \
@@ -286,12 +312,12 @@ def demo_shock_panel(
         for c in targets:
             if c in ev.exempt:
                 continue
-            w = _exposure(c, ev.imposer)
-            if w <= 0:
-                continue
             for s, by_year in (ev.overrides.get(c, ev.rates)).items():
                 for y, rate in by_year.items():
                     if y not in years or rate <= 0:
+                        continue
+                    w = _exposure(c, ev.imposer, y, lookup)
+                    if w <= 0:
                         continue
                     contrib = rate * w
                     key = (c, s, y)
@@ -319,9 +345,16 @@ def demo_shock_panel(
     return base
 
 
-def write_demo(countries: list[str], sectors: list[str], years: list[int]) -> None:
+def write_demo(
+    countries: list[str],
+    sectors: list[str],
+    years: list[int],
+    exposure_panel: pd.DataFrame | None = None,
+) -> None:
     SHOCKS_DIR.mkdir(parents=True, exist_ok=True)
-    demo_shock_panel(countries, sectors, years).to_csv(SHOCKS_DIR / DEMO_FILE, index=False)
+    demo_shock_panel(countries, sectors, years, exposure_panel).to_csv(
+        SHOCKS_DIR / DEMO_FILE, index=False
+    )
 
 
 def events_metadata() -> list[dict]:
