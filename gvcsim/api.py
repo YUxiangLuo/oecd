@@ -10,8 +10,9 @@ from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from gvcsim import auth
@@ -34,6 +35,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+PUBLIC_API_PATHS = {"/api/auth/login", "/api/auth/me"}
+
+
+@app.middleware("http")
+async def require_api_auth(request: Request, call_next):
+    """Protect data/API routes with the demo Bearer token.
+
+    Login and token introspection stay public; everything else under /api
+    requires the HMAC token issued by /api/auth/login.
+    """
+    path = request.url.path
+    if request.method == "OPTIONS" or not path.startswith("/api/") or path in PUBLIC_API_PATHS:
+        return await call_next(request)
+    authorization = request.headers.get("authorization")
+    if not authorization or not authorization.startswith("Bearer "):
+        return JSONResponse(status_code=401, content={"detail": "缺少 Bearer 令牌"})
+    if auth.verify_token(authorization.removeprefix("Bearer ")) is None:
+        return JSONResponse(status_code=401, content={"detail": "令牌无效或已过期"})
+    return await call_next(request)
 
 
 def _clean(records: list[dict]) -> list[dict]:

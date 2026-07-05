@@ -1,5 +1,12 @@
+const TOKEN_KEY = "gvcsim_token";
+
+function authHeaders(headers: Record<string, string> = {}): Record<string, string> {
+  const token = localStorage.getItem(TOKEN_KEY);
+  return token ? { ...headers, Authorization: `Bearer ${token}` } : headers;
+}
+
 async function get<T>(url: string): Promise<T> {
-  const resp = await fetch(url);
+  const resp = await fetch(url, { headers: authHeaders() });
   if (!resp.ok) {
     const body = await resp.json().catch(() => null);
     throw new Error(body?.detail ?? `${resp.status} ${resp.statusText}`);
@@ -90,7 +97,7 @@ export const api = {
   runRegression: async (step: number, granularity: string, method: string, controlMode: string) => {
     const resp = await fetch("/api/regression/run", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ step, granularity, method, control_mode: controlMode }),
     });
     if (!resp.ok) throw new Error((await resp.json()).detail ?? resp.statusText);
@@ -99,7 +106,7 @@ export const api = {
   report: async (params: { year: number; granularity: string; method: string; controlMode: string }) => {
     const resp = await fetch("/api/report", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         year: params.year,
         granularity: params.granularity,

@@ -46,8 +46,8 @@ cd frontend && bun install && bun run dev
 | `teacher` | `gvclab2026` | 老师(教师身份) |
 
 认证是真实实现(PBKDF2 口令哈希 + HMAC 签名令牌,12 小时有效,
-`POST /api/auth/login` / `GET /api/auth/me`);数据接口暂不强制鉴权,
-真实部署时用 `auth.verify_token` 加 Bearer 依赖即可。
+`POST /api/auth/login` / `GET /api/auth/me`);除登录与令牌校验外,
+业务 API 均要求 `Authorization: Bearer <token>`。
 
 不起前端也能用 CLI 走完全流程:
 
@@ -172,7 +172,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 | 数据 | 性质 | 现状 |
 |---|---|---|
 | OECD ICIO 2016–2020 | ✅ 真实 | pymrio 下载的官方 CSV,所有指标由此计算 |
-| 登录认证 | ✅ 真实实现 | PBKDF2 + HMAC 签名令牌(账号是演示账号) |
+| 登录认证 | ✅ 真实实现 | PBKDF2 + HMAC 签名令牌(账号是演示账号);业务 API 强制 Bearer |
 | 关税冲击面板 | 🎭 拟真 mock | 按 2018–2020 真实事件逐条编码(232 钢铝、301 四批清单、各方反制、空客案),税率量级参考 PIIE/Bown,乘以 ICIO 派生出口暴露度 |
 | 制裁 / 出口管制清单 | ⬜ 待 mock | 开发计划 M1.2/M1.3(OFAC SDN / BIS 实体清单风格) |
 | 宏观控制变量 | 🔁 ICIO 内生派生 | 从已算指标派生国家-年份控制变量;外生宏观 mock(WDI 风格)在开发计划 M3.2 |
@@ -224,8 +224,8 @@ Mock 的质量标准(schema 对齐真实来源、量级锚定公开统计、维�
    介数去近似化;网络图交互升级;国家–行业级下钻。
 3. **M3 回归层补全**:三类冲击接入回归设计;WDI 风格宏观控制 mock;平减指数与
    名义/实际切换;交互项;clean/noisy/confounded 三套教学场景;安慰剂检验。
-4. **M4 闭环与工程**:报告参数化(吸收学生的设计选择)、PDF 导出、数据接口
-   Bearer 鉴权、CI。
+4. **M4 闭环与工程**:报告参数化(吸收学生的设计选择)、数据接口 Bearer 鉴权已完成;
+   PDF 导出与 CI 待做。
 
 ## 开发常用命令
 
