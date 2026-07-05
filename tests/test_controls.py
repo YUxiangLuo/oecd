@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from gvcsim.data.controls import ALL_CONTROL_COLUMNS, build_controls
+from gvcsim.data.controls import ALL_CONTROL_COLUMNS, MACRO_CONTROL_COLUMNS, build_controls
 
 
 def _fixtures():
@@ -44,3 +44,11 @@ def test_build_controls_from_processed_indicators_shape_and_values():
 
     assert np.allclose(controls["manufacturing_va_share"], 0.40)
     assert np.allclose(controls["services_va_share"], 0.35)
+
+    assert set(MACRO_CONTROL_COLUMNS).issubset(controls.columns)
+    assert np.allclose(
+        controls["macro_log_gdp_usd"] - controls["macro_log_population"],
+        controls["macro_log_gdp_per_capita"],
+    )
+    assert controls["macro_exchange_rate_change"].between(-0.12, 0.12).all()
+    assert controls["macro_fdi_inflow_gdp"].between(0.0, 0.15).all()

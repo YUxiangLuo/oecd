@@ -7,7 +7,7 @@
 
 from dataclasses import dataclass
 
-from gvcsim.data.controls import CONTROL_COLUMNS, CONTROL_LABELS
+from gvcsim.data.controls import CONTROL_COLUMNS, CONTROL_LABELS, MACRO_CONTROL_COLUMNS
 from gvcsim.shocks import SHOCK_SPECS
 
 # 步骤编号 → (被解释变量, 中文含义)。列名来自 pipeline 产出的国家级面板。
@@ -23,7 +23,8 @@ SHOCK_TYPES = list(SHOCK_SPECS)
 METHODS = ["双重差分 (DID)", "双向固定效应", "事件研究"]
 CONTROL_MODE_NONE = "不加控制变量"
 CONTROL_MODE_ICIO = "ICIO 派生控制变量"
-CONTROL_MODES = [CONTROL_MODE_NONE, CONTROL_MODE_ICIO]
+CONTROL_MODE_MACRO = "模拟宏观控制"
+CONTROL_MODES = [CONTROL_MODE_NONE, CONTROL_MODE_ICIO, CONTROL_MODE_MACRO]
 
 # 粒度 → (面板文件, 个体列, 聚类列)。冲击在国家层面高度相关,
 # 行业级回归的标准误也按国家聚类,避免组内相关低估标准误。
@@ -64,7 +65,11 @@ class RegressionDesign:
 
     @property
     def controls(self) -> tuple[str, ...]:
-        return tuple(CONTROL_COLUMNS) if self.control_mode == CONTROL_MODE_ICIO else ()
+        if self.control_mode == CONTROL_MODE_ICIO:
+            return tuple(CONTROL_COLUMNS)
+        if self.control_mode == CONTROL_MODE_MACRO:
+            return tuple(MACRO_CONTROL_COLUMNS)
+        return ()
 
     @property
     def shock_col(self) -> str:

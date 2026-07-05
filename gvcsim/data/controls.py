@@ -1,8 +1,10 @@
-"""ICIO 派生控制变量。
+"""国家-年份控制变量。
 
-优先级 2 的第一版不接外部 WDI/IMF/价格指数,只从已预计算的 OECD ICIO
-指标产物生成国家-年份级控制变量。金额列仍是名义口径;指数列只表达相对
-基期变化,不等同于真实平减值。
+包含两组口径:
+  1. ICIO 派生控制变量:从已预计算的 OECD ICIO 指标产物生成。
+  2. WDI/IMF 风格宏观 mock:按真实宏观面板 schema 生成确定性拟真列。
+
+金额列仍是名义口径;指数列只表达相对基期变化,不等同于真实平减值。
 """
 
 from __future__ import annotations
@@ -27,7 +29,15 @@ INDEX_COLUMNS = [
     "prod_va_total_index",
 ]
 
-ALL_CONTROL_COLUMNS = [*CONTROL_COLUMNS, *INDEX_COLUMNS]
+MACRO_CONTROL_COLUMNS = [
+    "macro_log_gdp_usd",
+    "macro_log_population",
+    "macro_log_gdp_per_capita",
+    "macro_exchange_rate_change",
+    "macro_fdi_inflow_gdp",
+]
+
+ALL_CONTROL_COLUMNS = [*CONTROL_COLUMNS, *INDEX_COLUMNS, *MACRO_CONTROL_COLUMNS]
 
 CONTROL_LABELS = {
     "log_gdp_proxy": "增加值规模(log, ICIO GDP proxy)",
@@ -37,6 +47,11 @@ CONTROL_LABELS = {
     "export_intensity": "出口强度(毛出口/增加值)",
     "manufacturing_va_share": "制造业增加值份额",
     "services_va_share": "服务业增加值份额",
+    "macro_log_gdp_usd": "GDP规模(log, WDI风格mock)",
+    "macro_log_population": "人口规模(log, WDI风格mock)",
+    "macro_log_gdp_per_capita": "人均收入(log, WDI风格mock)",
+    "macro_exchange_rate_change": "汇率变动率(IMF风格mock)",
+    "macro_fdi_inflow_gdp": "FDI流入/GDP(WDI风格mock)",
 }
 
 MANUFACTURING_PREFIXES = ("C",)
@@ -65,6 +80,12 @@ def _index_to_base(s: pd.Series) -> pd.Series:
     if abs(base) <= 1e-12:
         return pd.Series(np.zeros(len(s)), index=s.index)
     return s / base
+
+
+def _stable_unit(code: str) -> float:
+    """把国家代码稳定映射到 [0, 1],避免 Python hash 随进程变化。"""
+    checksum = sum((i + 1) * ord(ch) for i, ch in enumerate(str(code)))
+    return (checksum % 1000) / 999.0
 
 
 def build_controls(
@@ -109,6 +130,29 @@ def build_controls(
     )
     out["prod_va_total_index"] = (
         country.groupby("country", group_keys=False)["prod_va_total"].apply(_index_to_base).to_numpy()
+    )
+
+    score = country["country"].map(_stable_unit).astype(float)
+    t = country.groupby("country").cumcount().astype(float)
+    gdp_proxy = country["prod_va_total"].clip(lower=0.0).astype(float)
+    # WDI/IMF 风格 mock:锚定 ICIO 规模,但加入国家异质和趋势,避免与 ICIO 控制完全同列。
+    gdp_usd = (gdp_proxy + 1.0) * 1_000_000_000.0 * (0.80 + 0.40 * score) * (1.0 + 0.025 * t)
+    income_usd = 4_000.0 + 45_000.0 * score + 600.0 * t
+    population = gdp_usd / income_usd
+    phase = 2 * np.pi * score + 0.8 * t
+
+    out["macro_log_gdp_usd"] = _safe_log(pd.Series(gdp_usd, index=country.index))
+    out["macro_log_population"] = _safe_log(pd.Series(population, index=country.index))
+    out["macro_log_gdp_per_capita"] = out["macro_log_gdp_usd"] - out["macro_log_population"]
+    out["macro_exchange_rate_change"] = np.clip(
+        (score - 0.5) * 0.04 + np.sin(phase) * 0.025,
+        -0.12,
+        0.12,
+    )
+    out["macro_fdi_inflow_gdp"] = np.clip(
+        0.012 + 0.050 * score + 0.010 * np.cos(phase + 0.3),
+        0.0,
+        0.15,
     )
 
     sector["is_manufacturing"] = sector["sector"].astype(str).str.startswith(MANUFACTURING_PREFIXES)

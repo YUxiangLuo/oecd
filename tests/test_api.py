@@ -63,6 +63,7 @@ def test_regression_options():
     body = resp.json()
     assert "双重差分 (DID)" in body["methods"]
     assert "ICIO 派生控制变量" in body["control_modes"]
+    assert "模拟宏观控制" in body["control_modes"]
 
 
 def test_regression_design():
@@ -87,6 +88,13 @@ def test_regression_design():
     assert ctrl.status_code == 200
     assert ctrl.json()["controls"]
     assert "Controls_ct" in ctrl.json()["equation"]
+
+    macro = client.get(
+        "/api/regression/design",
+        params={"step": 13, "control_mode": "模拟宏观控制"},
+    )
+    assert macro.status_code == 200
+    assert "macro_log_gdp_usd" in macro.json()["controls"]
 
     ev = client.get(
         "/api/regression/design",

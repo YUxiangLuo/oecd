@@ -32,6 +32,8 @@ def main() -> None:
                    help="估计方法:did=双重差分(默认),fe=双向固定效应(强度法),event=事件研究")
     p.add_argument("--controls", action="store_true",
                    help="加入 ICIO 派生国家-年份控制变量")
+    p.add_argument("--macro-controls", action="store_true",
+                   help="加入 WDI/IMF 风格模拟宏观控制变量")
 
     p = sub.add_parser("report", help="生成实验报告")
     p.add_argument("--year", type=int, default=None)
@@ -65,12 +67,18 @@ def main() -> None:
         pipeline.run(args.years)
 
     elif args.command == "regress":
-        from gvcsim.regression.design import CONTROL_MODE_ICIO, RegressionDesign
+        from gvcsim.regression.design import CONTROL_MODE_ICIO, CONTROL_MODE_MACRO, RegressionDesign
         from gvcsim.report import run_step_regression
 
+        if args.controls and args.macro_controls:
+            raise SystemExit("--controls 与 --macro-controls 只能选择一个")
         granularity = "国家–行业级" if args.granularity == "sector" else "国家级"
         method = {"did": "双重差分 (DID)", "fe": "双向固定效应", "event": "事件研究"}[args.method]
-        control_mode = CONTROL_MODE_ICIO if args.controls else "不加控制变量"
+        control_mode = (
+            CONTROL_MODE_MACRO if args.macro_controls
+            else CONTROL_MODE_ICIO if args.controls
+            else "不加控制变量"
+        )
         design = RegressionDesign(
             step=args.step, granularity=granularity, method=method, control_mode=control_mode
         )
@@ -78,8 +86,8 @@ def main() -> None:
             args.step, granularity=granularity, method=method, control_mode=control_mode
         )
         print(f"步骤{args.step}:{design.depvar_label}({granularity} · {method})")
-        if args.controls:
-            print("控制变量:ICIO 派生国家-年份控制变量")
+        if args.controls or args.macro_controls:
+            print(f"控制变量:{control_mode}")
         print(f"模型: {design.equation()}\n")
         print(f"{'变量':<20}{'系数':>12}{'标准误':>12}{'t':>8}{'p':>8}")
         for c in result.coefs:

@@ -4,8 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from gvcsim.data.controls import CONTROL_COLUMNS
-from gvcsim.regression.design import CONTROL_MODE_ICIO, RegressionDesign
+from gvcsim.data.controls import CONTROL_COLUMNS, MACRO_CONTROL_COLUMNS
+from gvcsim.regression.design import CONTROL_MODE_ICIO, CONTROL_MODE_MACRO, RegressionDesign
 from gvcsim.regression.panel import benchmark_linearmodels, did, event_study, run_design, twoway_fe
 
 rng = np.random.default_rng(42)
@@ -99,6 +99,9 @@ def test_design_equation_text():
     assert "Σ_k" in eq_ev and "T₀+k" in eq_ev
     eq_ctrl = RegressionDesign(step=13, control_mode=CONTROL_MODE_ICIO).equation()
     assert "Controls_ct" in eq_ctrl
+    macro = RegressionDesign(step=13, control_mode=CONTROL_MODE_MACRO)
+    assert set(macro.controls) == set(MACRO_CONTROL_COLUMNS)
+    assert "GDP规模" in macro.control_labels["macro_log_gdp_usd"]
     d_sanction = RegressionDesign(step=13, shock_type="制裁清单")
     assert d_sanction.shock_col == "sanction_shock"
     assert d_sanction.treated_col == "sanction_treated"
@@ -247,3 +250,22 @@ def test_run_design_with_controls_and_panelols_benchmark():
     assert bench["backend"] == "linearmodels.PanelOLS"
     assert bench["passed"]
     assert bench["max_abs_coef_diff"] < 1e-8
+
+
+def test_run_design_with_macro_controls():
+    df = _simulate_panel(beta=-0.25, n_entities=30, n_times=6).rename(
+        columns={"y": "share_trade_fva", "x": "tariff_shock"}
+    )
+    for i, col in enumerate(MACRO_CONTROL_COLUMNS):
+        df[col] = rng.normal(0, 1, len(df)) + 0.03 * i * (df["year"] - df["year"].min())
+
+    design = RegressionDesign(
+        step=13,
+        granularity="国家级",
+        method="双向固定效应",
+        control_mode=CONTROL_MODE_MACRO,
+    )
+    result = run_design(df, design)
+
+    assert result.coefs[0].name == "tariff_shock"
+    assert any(c.name in MACRO_CONTROL_COLUMNS for c in result.coefs)

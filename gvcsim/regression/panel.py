@@ -237,7 +237,7 @@ def _prepare_fe_model(
     data = df[cols].dropna().reset_index(drop=True)
     notes = ["连续冲击强度直接进方程(强度法)"]
     if controls:
-        notes.append("已加入 ICIO 派生国家-年份控制变量")
+        notes.append("已加入国家-年份控制变量")
     return PreparedModel(
         data=data,
         depvar=depvar,
@@ -310,7 +310,7 @@ def _prepare_did_model(
     n_treated = int(data.loc[ever > 0, entity].nunique())
     notes = [f"DID:处理组={n_treated} 个曾受冲击个体,处理期=T₀({t0})起"]
     if controls:
-        notes.append("已加入 ICIO 派生国家-年份控制变量")
+        notes.append("已加入国家-年份控制变量")
     return PreparedModel(
         data=data,
         depvar=depvar,
@@ -372,7 +372,7 @@ def _prepare_event_model(
         "k<0 的系数≈0 说明平行趋势成立",
     ]
     if controls:
-        notes.append("已加入 ICIO 派生国家-年份控制变量")
+        notes.append("已加入国家-年份控制变量")
     return PreparedModel(
         data=data,
         depvar=depvar,

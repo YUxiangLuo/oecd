@@ -114,9 +114,9 @@ export function RegDesignLab() {
         <ChoiceCard title="因果推断方式" hint="有精确时间线才能做 DID / 事件研究。">
           <Pills options={opts.methods} value={method} onChange={setMethod} />
         </ChoiceCard>
-        <ChoiceCard title="控制变量" hint="使用现有 ICIO 指标派生国家-年份控制变量。">
+        <ChoiceCard title="控制变量" hint="在 ICIO 派生控制与模拟宏观控制之间切换。">
           <Pills
-            options={opts.control_modes ?? ["不加控制变量", "ICIO 派生控制变量"]}
+            options={opts.control_modes ?? ["不加控制变量", "ICIO 派生控制变量", "模拟宏观控制"]}
             value={controlMode}
             onChange={setControlMode}
           />
@@ -211,7 +211,7 @@ export function RegressionRunLab({ step }: { step: Step }) {
           <div className="model-control">
             <span className="model-control-label">控制</span>
             <Pills
-              options={opts?.control_modes ?? ["不加控制变量", "ICIO 派生控制变量"]}
+              options={opts?.control_modes ?? ["不加控制变量", "ICIO 派生控制变量", "模拟宏观控制"]}
               value={controlMode}
               onChange={setControlMode}
             />
