@@ -50,6 +50,7 @@ gvc_indicators_*.csv
 leontief_inverse_*.csv
 /data/
 /reports/
+dogfood-output/
 
 # Frontend
 frontend/node_modules/
