@@ -5,7 +5,7 @@
  *   3 十七步旅程:五阶段可点击展开(内容来自 /api/steps 真实元数据)
  *   4 动手示意:关税滑块驱动的供应链示意动画(明确标注非真实估计)
  *   5 就绪:以当前登录身份进入实验
- * 统计与文案全部取自后端真实接口;仅第 4 幕为教学示意。
+ * 统计与文案全部取自后端真实接口;仅动手预演为教学示意。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
@@ -51,6 +51,28 @@ function CardIcon({ kind }: { kind: "icio" | "shock" }) {
   );
 }
 
+function NavIcon({ kind }: { kind: "prev" | "next" | "start" | "skip" }) {
+  if (kind === "skip") {
+    return (
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+        <path d="M6 6l12 12M18 6 6 18" />
+      </svg>
+    );
+  }
+  if (kind === "start") {
+    return (
+      <svg viewBox="0 0 24 24" width="19" height="19" fill="currentColor">
+        <path d="M8 5.4v13.2c0 .7.8 1.1 1.4.7l9.4-6.6c.5-.4.5-1.1 0-1.5L9.4 4.7C8.8 4.3 8 4.7 8 5.4z" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      {kind === "prev" ? <path d="M15 18l-6-6 6-6" /> : <path d="M9 6l6 6-6 6" />}
+    </svg>
+  );
+}
+
 export function IntroOverlay({ user, meta, onDone }: {
   user: AuthUser;
   meta: Meta | null;
@@ -89,7 +111,7 @@ export function IntroOverlay({ user, meta, onDone }: {
     }));
   }, [stepsData]);
 
-  // 第 4 幕示意:跨境流宽度随 τ 收缩,复杂 GVC 份额(示意值)随之下降
+  // 动手示意:跨境流宽度随 τ 收缩,复杂 GVC 份额(示意值)随之下降
   const shrink = Math.max(0.25, 1 - tau * 2.6);
   const demoShare = (12.0 * Math.max(0.3, 1 - tau * 1.8)).toFixed(1);
 
@@ -125,7 +147,7 @@ export function IntroOverlay({ user, meta, onDone }: {
 
     /* ---- 2 数据底座 ---- */
     <div key={1} className="intro-scene">
-      <div className="intro-scene-kicker">第 2 幕 · 数据底座</div>
+      <div className="intro-scene-kicker">数据底座</div>
       <h2 className="intro-h2">两块数据底座</h2>
       <p className="intro-lede">价值链是"果",政策冲击是"因"。点开卡片,看看它们分别是什么。</p>
       <div className="intro-cards">
@@ -177,7 +199,7 @@ export function IntroOverlay({ user, meta, onDone }: {
 
     /* ---- 3 十七步旅程 ---- */
     <div key={2} className="intro-scene">
-      <div className="intro-scene-kicker">第 3 幕 · 实验路线</div>
+      <div className="intro-scene-kicker">实验路线</div>
       <h2 className="intro-h2">五个阶段,十七步</h2>
       <p className="intro-lede">点击各阶段,预览你将亲手完成的每一步。</p>
       <div className="intro-stage-tabs">
@@ -203,7 +225,7 @@ export function IntroOverlay({ user, meta, onDone }: {
 
     /* ---- 4 动手示意 ---- */
     <div key={3} className="intro-scene">
-      <div className="intro-scene-kicker">第 4 幕 · 动手预演</div>
+      <div className="intro-scene-kicker">动手预演</div>
       <h2 className="intro-h2">政策冲击如何重塑价值链?</h2>
       <p className="intro-lede">拖动滑块,给跨境环节加征关税,看看链条发生什么。</p>
       <svg viewBox="0 0 640 196" style={{ width: "min(720px, 94%)", margin: "10px auto 0" }}>
@@ -263,27 +285,33 @@ export function IntroOverlay({ user, meta, onDone }: {
 
   return (
     <div className="intro-overlay">
-      <button className="intro-skip" onClick={() => onDone()}>跳过介绍</button>
+      <button className="intro-skip" aria-label="跳过介绍" title="跳过介绍" onClick={() => onDone()}>
+        <NavIcon kind="skip" />
+      </button>
       {scenes[scene]}
       <div className="intro-nav">
         <button
-          className="intro-nav-btn" disabled={scene === 0}
+          className="intro-nav-btn" aria-label="上一页" title="上一页" disabled={scene === 0}
           onClick={() => setScene(scene - 1)}
         >
-          ← 上一幕
+          <NavIcon kind="prev" />
         </button>
         <div className="intro-dots">
           {Array.from({ length: N_SCENES }, (_, i) => (
             <button
-              key={i} aria-label={`第 ${i + 1} 幕`}
+              key={i} aria-label={`介绍页 ${i + 1}`}
               className={`intro-dot${i === scene ? " on" : ""}`} onClick={() => setScene(i)}
             />
           ))}
         </div>
         {scene < N_SCENES - 1 ? (
-          <button className="intro-nav-btn primary" onClick={() => setScene(scene + 1)}>下一幕 →</button>
+          <button className="intro-nav-btn primary" aria-label="下一页" title="下一页" onClick={() => setScene(scene + 1)}>
+            <NavIcon kind="next" />
+          </button>
         ) : (
-          <button className="intro-nav-btn primary" onClick={() => onDone(1)}>开始实验 →</button>
+          <button className="intro-nav-btn primary" aria-label="开始实验" title="开始实验" onClick={() => onDone(1)}>
+            <NavIcon kind="start" />
+          </button>
         )}
       </div>
       <div className="intro-keyhint">← → 方向键翻页 · Esc 跳过</div>

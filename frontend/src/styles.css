@@ -484,9 +484,10 @@ button { font-family: inherit; cursor: pointer; }
 }
 .intro-cta:hover { background: #5b57ee; transform: translateY(-1px); }
 .intro-skip {
-  position: fixed; top: 24px; right: 28px; z-index: 51; padding: 10px 18px; border-radius: 99px;
+  position: fixed; top: 24px; right: 28px; z-index: 51; width: 42px; height: 42px; border-radius: 99px;
   background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.16);
-  color: #b6bcd9; font-size: 13.5px; cursor: pointer; transition: color 0.15s, background 0.15s;
+  color: #b6bcd9; cursor: pointer; transition: color 0.15s, background 0.15s;
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
 }
 .intro-skip:hover { color: #fff; background: rgba(255, 255, 255, 0.1); }
 .intro-nav {
@@ -494,9 +495,10 @@ button { font-family: inherit; cursor: pointer; }
   display: flex; align-items: center; justify-content: center; gap: 26px;
 }
 .intro-nav-btn {
-  height: 48px; padding: 0 24px; min-width: 118px; border-radius: 13px;
+  width: 48px; height: 48px; padding: 0; border-radius: 13px;
   border: 1px solid rgba(150, 140, 255, 0.35); background: rgba(23, 21, 55, 0.75);
-  color: #eef1fb; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.15s;
+  color: #eef1fb; cursor: pointer; transition: background 0.15s;
+  display: inline-flex; align-items: center; justify-content: center;
 }
 .intro-nav-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
 .intro-nav-btn.primary { background: #4b47e0; border-color: #4b47e0; box-shadow: 0 8px 24px rgba(75, 71, 224, 0.4); }
