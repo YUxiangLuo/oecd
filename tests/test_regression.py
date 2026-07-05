@@ -97,6 +97,8 @@ def test_design_equation_text():
     assert "tariff_shock" in eq_fe
     eq_ev = RegressionDesign(step=13, method="事件研究").equation()
     assert "Σ_k" in eq_ev and "T₀+k" in eq_ev
+    eq_inter = RegressionDesign(step=13, interaction=True).equation()
+    assert "BaseGVC" in eq_inter
     eq_ctrl = RegressionDesign(step=13, control_mode=CONTROL_MODE_ICIO).equation()
     assert "Controls_ct" in eq_ctrl
     macro = RegressionDesign(step=13, control_mode=CONTROL_MODE_MACRO)
@@ -226,6 +228,38 @@ def test_run_design_dispatch():
     assert names("双重差分 (DID)") == ["treated×post"]
     assert names("双向固定效应") == ["tariff_shock"]
     assert names("事件研究") == ["k=-2", "k=0", "k=+1", "k=+2"]
+
+
+def test_did_with_baseline_gvc_interaction_recovers_heterogeneity():
+    rows = []
+    beta, theta = -0.35, -0.8
+    years = range(2016, 2021)
+    for i in range(70):
+        c = f"C{i:02d}"
+        treated_group = i < 35
+        base_gvc = 0.15 + 0.7 * (i / 69)
+        fe = rng.normal(0, 0.8)
+        for year in years:
+            post = year >= 2018
+            did_x = float(treated_group and post)
+            y = fe + 0.1 * (year - 2016) + beta * did_x + theta * did_x * base_gvc
+            y += rng.normal(0, 0.02)
+            rows.append({
+                "country": c,
+                "year": year,
+                "share_trade_fva": y,
+                "treated": int(did_x),
+                "share_trade_gvc_participation": base_gvc,
+            })
+    df = pd.DataFrame(rows)
+    design = RegressionDesign(step=13, granularity="国家级", interaction=True)
+
+    result = run_design(df, design)
+    by_name = {c.name: c for c in result.coefs}
+
+    assert by_name["treated×post"].coef == pytest.approx(beta, abs=0.04)
+    assert by_name["treated×post×base_gvc"].coef == pytest.approx(theta, abs=0.08)
+    assert any("基期GVC" in note for note in result.notes)
 
 
 def test_run_design_with_controls_and_panelols_benchmark():

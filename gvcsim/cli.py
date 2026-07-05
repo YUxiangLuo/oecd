@@ -34,6 +34,8 @@ def main() -> None:
                    help="加入 ICIO 派生国家-年份控制变量")
     p.add_argument("--macro-controls", action="store_true",
                    help="加入 WDI/IMF 风格模拟宏观控制变量")
+    p.add_argument("--interaction", action="store_true",
+                   help="加入 冲击×基期GVC参与度 交互项")
 
     p = sub.add_parser("report", help="生成实验报告")
     p.add_argument("--year", type=int, default=None)
@@ -80,14 +82,18 @@ def main() -> None:
             else "不加控制变量"
         )
         design = RegressionDesign(
-            step=args.step, granularity=granularity, method=method, control_mode=control_mode
+            step=args.step, granularity=granularity, method=method,
+            control_mode=control_mode, interaction=args.interaction
         )
         result = run_step_regression(
-            args.step, granularity=granularity, method=method, control_mode=control_mode
+            args.step, granularity=granularity, method=method,
+            control_mode=control_mode, interaction=args.interaction
         )
         print(f"步骤{args.step}:{design.depvar_label}({granularity} · {method})")
         if args.controls or args.macro_controls:
             print(f"控制变量:{control_mode}")
+        if args.interaction:
+            print("交互项:冲击×基期GVC参与度")
         print(f"模型: {design.equation()}\n")
         print(f"{'变量':<20}{'系数':>12}{'标准误':>12}{'t':>8}{'p':>8}")
         for c in result.coefs:

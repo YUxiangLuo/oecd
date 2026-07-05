@@ -77,6 +77,25 @@ class PreparedModel:
     notes: list[str]
 
 
+BASE_GVC_COL = "share_trade_gvc_participation"
+BASELINE_GVC_COL = "base_gvc_participation"
+
+
+def _attach_baseline_gvc(data: pd.DataFrame, entity: str, time: str) -> pd.DataFrame:
+    """给估计样本加基期 GVC 参与度(每个个体可用样本最早两年均值)。"""
+    data = data.sort_values([entity, time]).reset_index(drop=True)
+    base = (
+        data.groupby(entity, group_keys=False).head(2)
+        .groupby(entity)[BASE_GVC_COL]
+        .mean()
+        .rename(BASELINE_GVC_COL)
+    )
+    out = data.merge(base, left_on=entity, right_index=True, how="left")
+    if out[BASELINE_GVC_COL].isna().any():
+        raise ValueError("无法构造基期 GVC 参与度交互项")
+    return out
+
+
 def _drop_collinear_columns(
     X: np.ndarray,
     xcols: list[str],
@@ -227,22 +246,35 @@ def _prepare_fe_model(
     time: str = "year",
     cluster: str | None = None,
     controls: list[str] | tuple[str, ...] = (),
+    interaction: bool = False,
 ) -> PreparedModel:
     cluster = cluster or entity
+    interaction_cols: list[str] = []
     xcols = [*regressors, *controls]
     cols = list(dict.fromkeys([depvar, *xcols, entity, time, cluster]))
+    if interaction:
+        cols.append(BASE_GVC_COL)
     missing = [c for c in cols if c not in df.columns]
     if missing:
         raise ValueError("面板缺少回归变量:" + "、".join(missing))
     data = df[cols].dropna().reset_index(drop=True)
+    if interaction:
+        data = _attach_baseline_gvc(data, entity, time)
+        for reg in regressors:
+            name = f"{reg}×base_gvc"
+            data[name] = data[reg] * data[BASELINE_GVC_COL]
+            interaction_cols.append(name)
+        xcols = [*regressors, *interaction_cols, *controls]
     notes = ["连续冲击强度直接进方程(强度法)"]
+    if interaction:
+        notes.append("已加入冲击×基期GVC参与度交互项")
     if controls:
         notes.append("已加入国家-年份控制变量")
     return PreparedModel(
         data=data,
         depvar=depvar,
         xcols=xcols,
-        policy_xcols=list(regressors),
+        policy_xcols=[*regressors, *interaction_cols],
         control_cols=list(controls),
         entity=entity,
         time=time,
@@ -254,13 +286,16 @@ def _prepare_fe_model(
 def twoway_fe(df: pd.DataFrame, depvar: str, regressors: list[str],
               entity: str = "country", time: str = "year",
               cluster: str | None = None,
-              controls: list[str] | tuple[str, ...] = ()) -> RegressionResult:
+              controls: list[str] | tuple[str, ...] = (),
+              interaction: bool = False) -> RegressionResult:
     """y_it = β·X_it + α_i + λ_t + ε_it,标准误按 cluster 聚类(默认=entity)。
 
     行业级面板用 entity=国家×行业 做固定效应、cluster=国家做聚类:
     同一国家各行业受同一政策冲击,残差组内相关,必须在更粗层面聚类。
     """
-    return _within_ols(_prepare_fe_model(df, depvar, regressors, entity, time, cluster, controls))
+    return _within_ols(_prepare_fe_model(
+        df, depvar, regressors, entity, time, cluster, controls, interaction
+    ))
 
 
 def run_design(df: pd.DataFrame, design) -> RegressionResult:
@@ -271,7 +306,7 @@ def run_design(df: pd.DataFrame, design) -> RegressionResult:
 def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
     """按 RegressionDesign 构造同一份估计样本,供自写引擎与 PanelOLS 共用。"""
     kwargs = dict(entity=design.entity, time="year", cluster=design.cluster,
-                  controls=list(design.controls))
+                  controls=list(design.controls), interaction=design.interaction)
     if design.method == "双重差分 (DID)":
         return _prepare_did_model(df, design.depvar, treated_col=design.treated_col, **kwargs)
     if design.method == "事件研究":
@@ -297,9 +332,12 @@ def _prepare_did_model(
     cluster: str | None = None,
     treated_col: str = "treated",
     controls: list[str] | tuple[str, ...] = (),
+    interaction: bool = False,
 ) -> PreparedModel:
     cluster = cluster or entity
     cols = list(dict.fromkeys([depvar, treated_col, entity, time, cluster, *controls]))
+    if interaction:
+        cols.append(BASE_GVC_COL)
     missing = [c for c in cols if c not in df.columns]
     if missing:
         raise ValueError("面板缺少回归变量:" + "、".join(missing))
@@ -307,15 +345,25 @@ def _prepare_did_model(
     ever, t0 = _prep_treatment(data, entity, time, treated_col)
     did_col = "treated×post" if treated_col == "treated" else f"{treated_col}×post"
     data[did_col] = ever * (data[time] >= t0).values
+    policy_xcols = [did_col]
+    xcols = [did_col]
+    if interaction:
+        data = _attach_baseline_gvc(data, entity, time)
+        interaction_col = f"{did_col}×base_gvc"
+        data[interaction_col] = data[did_col] * data[BASELINE_GVC_COL]
+        policy_xcols.append(interaction_col)
+        xcols.append(interaction_col)
     n_treated = int(data.loc[ever > 0, entity].nunique())
     notes = [f"DID:处理组={n_treated} 个曾受冲击个体,处理期=T₀({t0})起"]
+    if interaction:
+        notes.append("已加入处理效应×基期GVC参与度交互项")
     if controls:
         notes.append("已加入国家-年份控制变量")
     return PreparedModel(
         data=data,
         depvar=depvar,
-        xcols=[did_col, *controls],
-        policy_xcols=[did_col],
+        xcols=[*xcols, *controls],
+        policy_xcols=policy_xcols,
         control_cols=list(controls),
         entity=entity,
         time=time,
@@ -327,7 +375,8 @@ def _prepare_did_model(
 def did(df: pd.DataFrame, depvar: str,
         entity: str = "country", time: str = "year",
         cluster: str | None = None, treated_col: str = "treated",
-        controls: list[str] | tuple[str, ...] = ()) -> RegressionResult:
+        controls: list[str] | tuple[str, ...] = (),
+        interaction: bool = False) -> RegressionResult:
     """双重差分:y_it = β·(treated_i × post_t) + α_i + λ_t + ε_it。
 
     treated_i = 该个体在样本期内是否曾受冲击(时间不变);
@@ -336,7 +385,7 @@ def did(df: pd.DataFrame, depvar: str,
     处理组/对照组主效应分别被个体/时间固定效应吸收。
     """
     return _within_ols(
-        _prepare_did_model(df, depvar, entity, time, cluster, treated_col, controls)
+        _prepare_did_model(df, depvar, entity, time, cluster, treated_col, controls, interaction)
     )
 
 
@@ -348,9 +397,12 @@ def _prepare_event_model(
     cluster: str | None = None,
     treated_col: str = "treated",
     controls: list[str] | tuple[str, ...] = (),
+    interaction: bool = False,
 ) -> PreparedModel:
     cluster = cluster or entity
     cols = list(dict.fromkeys([depvar, treated_col, entity, time, cluster, *controls]))
+    if interaction:
+        cols.append(BASE_GVC_COL)
     missing = [c for c in cols if c not in df.columns]
     if missing:
         raise ValueError("面板缺少回归变量:" + "、".join(missing))
@@ -367,17 +419,29 @@ def _prepare_event_model(
         name = f"k={k:+d}" if k != 0 else "k=0"
         data[name] = ever * (data[time] == y).values
         xcols.append(name)
+    policy_xcols = list(xcols)
+    if interaction:
+        data = _attach_baseline_gvc(data, entity, time)
+        interaction_cols = []
+        for name in xcols:
+            interaction_col = f"{name}×base_gvc"
+            data[interaction_col] = data[name] * data[BASELINE_GVC_COL]
+            interaction_cols.append(interaction_col)
+        xcols = [*xcols, *interaction_cols]
+        policy_xcols = list(xcols)
     notes = [
         f"事件研究:T₀={t0},基期 k={base - t0:+d}({base} 年);"
         "k<0 的系数≈0 说明平行趋势成立",
     ]
+    if interaction:
+        notes.append("已加入动态效应×基期GVC参与度交互项")
     if controls:
         notes.append("已加入国家-年份控制变量")
     return PreparedModel(
         data=data,
         depvar=depvar,
         xcols=[*xcols, *controls],
-        policy_xcols=xcols,
+        policy_xcols=policy_xcols,
         control_cols=list(controls),
         entity=entity,
         time=time,
@@ -389,14 +453,15 @@ def _prepare_event_model(
 def event_study(df: pd.DataFrame, depvar: str,
                 entity: str = "country", time: str = "year",
                 cluster: str | None = None, treated_col: str = "treated",
-                controls: list[str] | tuple[str, ...] = ()) -> RegressionResult:
+                controls: list[str] | tuple[str, ...] = (),
+                interaction: bool = False) -> RegressionResult:
     """事件研究:y_it = Σ_{k≠-1} β_k·(treated_i × 1[t = T0+k]) + α_i + λ_t + ε_it。
 
     以冲击前一年(k=-1)为基期;k<0 的系数应≈0(平行趋势检验),
     k≥0 的系数刻画处理效应的动态路径。
     """
     return _within_ols(
-        _prepare_event_model(df, depvar, entity, time, cluster, treated_col, controls)
+        _prepare_event_model(df, depvar, entity, time, cluster, treated_col, controls, interaction)
     )
 
 

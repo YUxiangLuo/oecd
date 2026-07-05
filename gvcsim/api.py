@@ -425,6 +425,7 @@ class RegressionRequest(BaseModel):
     shock_type: str = "关税冲击"
     method: str = "双重差分 (DID)"
     control_mode: str = "不加控制变量"
+    interaction: bool = False
 
 
 @app.get("/api/regression/options")
@@ -444,6 +445,7 @@ def _validate_design(
     shock_type: str,
     method: str,
     control_mode: str = "不加控制变量",
+    interaction: bool = False,
 ) -> RegressionDesign:
     if step not in STEP_DEPVARS:
         raise HTTPException(status_code=400, detail="step 必须是 13-16")
@@ -457,7 +459,7 @@ def _validate_design(
         raise HTTPException(status_code=400, detail=f"control_mode 必须是 {CONTROL_MODES}")
     return RegressionDesign(
         step=step, granularity=granularity, shock_type=shock_type,
-        method=method, control_mode=control_mode,
+        method=method, control_mode=control_mode, interaction=interaction,
     )
 
 
@@ -472,6 +474,7 @@ def _design_info(design: RegressionDesign) -> dict:
         "treated_col": design.treated_col,
         "method": design.method,
         "control_mode": design.control_mode,
+        "interaction": design.interaction,
         "controls": list(design.controls),
         "control_labels": design.control_labels,
         "equation": design.equation(),
@@ -488,14 +491,17 @@ def regression_design(
     shock_type: str = "关税冲击",
     method: str = "双重差分 (DID)",
     control_mode: str = "不加控制变量",
+    interaction: bool = False,
 ):
     """步骤12 设计确认:不跑回归,只返回方程与面板/个体/聚类等设计信息。"""
-    return _design_info(_validate_design(step, granularity, shock_type, method, control_mode))
+    return _design_info(_validate_design(step, granularity, shock_type, method, control_mode, interaction))
 
 
 @app.post("/api/regression/run")
 def regression_run(req: RegressionRequest):
-    design = _validate_design(req.step, req.granularity, req.shock_type, req.method, req.control_mode)
+    design = _validate_design(
+        req.step, req.granularity, req.shock_type, req.method, req.control_mode, req.interaction
+    )
     panel = _read_csv(design.panel_file)
     try:
         result, benchmark = run_design_with_benchmark(panel, design)

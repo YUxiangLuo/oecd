@@ -96,6 +96,14 @@ def test_regression_design():
     assert macro.status_code == 200
     assert "macro_log_gdp_usd" in macro.json()["controls"]
 
+    inter = client.get(
+        "/api/regression/design",
+        params={"step": 13, "interaction": True},
+    )
+    assert inter.status_code == 200
+    assert inter.json()["interaction"] is True
+    assert "BaseGVC" in inter.json()["equation"]
+
     ev = client.get(
         "/api/regression/design",
         params={"step": 15, "granularity": "国家级", "method": "事件研究"},

@@ -42,6 +42,7 @@ class RegressionDesign:
     # 冲击数据自带宣布/生效时间线,默认用能识别因果的 DID(见步骤12 文案)
     method: str = "双重差分 (DID)"
     control_mode: str = CONTROL_MODE_NONE
+    interaction: bool = False
 
     @property
     def depvar(self) -> str:
@@ -94,10 +95,17 @@ class RegressionDesign:
         y = f"{self.depvar}_{unit}"
         fe = f"α_{ent} + λ_t"
         controls = " + γ·Controls_ct" if self.controls else ""
+        interaction = ""
         if self.method == "双重差分 (DID)":
             x = f"β·({self.treated_col}_{ent} × post_t)"
+            if self.interaction:
+                interaction = f" + θ·({self.treated_col}_{ent} × post_t × BaseGVC_{ent},0)"
         elif self.method == "事件研究":
             x = f"Σ_k β_k·({self.treated_col}_{ent} × 1[t=T₀+k])"
+            if self.interaction:
+                interaction = f" + Σ_k θ_k·({self.treated_col}_{ent} × 1[t=T₀+k] × BaseGVC_{ent},0)"
         else:
             x = " + ".join(f"β·{r}_{unit}" for r in self.regressors)
-        return f"{y} = {x}{controls} + {fe} + ε_{unit}"
+            if self.interaction:
+                interaction = f" + θ·({self.shock_col}_{unit} × BaseGVC_{ent},0)"
+        return f"{y} = {x}{interaction}{controls} + {fe} + ε_{unit}"

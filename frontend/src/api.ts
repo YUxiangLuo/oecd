@@ -95,6 +95,7 @@ export const api = {
     shockType?: string;
     method: string;
     controlMode?: string;
+    interaction?: boolean;
   }) => {
     const qs = new URLSearchParams({
       step: String(params.step),
@@ -103,6 +104,7 @@ export const api = {
     });
     if (params.shockType) qs.set("shock_type", params.shockType);
     if (params.controlMode) qs.set("control_mode", params.controlMode);
+    if (params.interaction) qs.set("interaction", "true");
     return get<import("./types").RegressionDesignInfo>(`/api/regression/design?${qs.toString()}`);
   },
   runRegression: async (
@@ -111,11 +113,19 @@ export const api = {
     shockType: string,
     method: string,
     controlMode: string,
+    interaction: boolean,
   ) => {
     const resp = await fetch("/api/regression/run", {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
-      body: JSON.stringify({ step, granularity, shock_type: shockType, method, control_mode: controlMode }),
+      body: JSON.stringify({
+        step,
+        granularity,
+        shock_type: shockType,
+        method,
+        control_mode: controlMode,
+        interaction,
+      }),
     });
     if (resp.status === 401) notifyAuthExpired();
     if (!resp.ok) throw new Error((await resp.json()).detail ?? resp.statusText);

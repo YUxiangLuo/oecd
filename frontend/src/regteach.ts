@@ -76,14 +76,14 @@ export const REG_TEACH: Record<number, TeachBlock[]> = {
         { sym: "ComplexGVC", def: "WWYZ 生产分解中的复杂 GVC 生产份额(增加值至少两次跨境)" },
         { sym: "β", def: "冲击对复杂全球分工的平均处理效应" },
       ],
-      note: "原型中的异质性交互项 β₂·(Tariff×高参与度) 需要引擎支持交互项后才能检验 —— 见路线图。" + ICIO_CONTROLS,
+      note: "打开“冲击×基期GVC”后可检验高参与度行业是否对政策冲击更敏感;基期取每个个体可用样本最早两年的 GVC 参与度均值,避免坏控制问题。" + ICIO_CONTROLS,
     },
     {
       kind: "takeaway",
       items: [
         "复杂 GVC 对冲击最敏感;",
         "负系数 = 全球分工收缩;",
-        "异质性(关税×高参与度交互项)待引擎支持后检验 —— 见路线图。",
+        "异质性(关税×高参与度交互项)可在模型设定里打开。",
       ],
     },
   ],
@@ -125,7 +125,7 @@ export const REG_TEACH: Record<number, TeachBlock[]> = {
         { sym: "Centrality", def: "生产网络介数中心性(本步因变量;度/特征向量中心性见步骤7/11)" },
         { sym: "β", def: "冲击对网络地位的平均处理效应" },
       ],
-      note: "制裁清单冲击尚未接入,当前以关税冲击作为处理变量;" + ICIO_CONTROLS,
+      note: "冲击类型可在关税、制裁清单、出口管制之间切换;" + ICIO_CONTROLS,
     },
     {
       kind: "takeaway",

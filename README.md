@@ -58,9 +58,10 @@ uv run gvcsim regress --step 14 --method event          # 事件研究(动态效
 uv run gvcsim regress --step 13 --method fe             # 双向固定效应(强度法)
 uv run gvcsim regress --step 13 --controls              # 加入 ICIO 派生国家-年份控制变量
 uv run gvcsim regress --step 13 --macro-controls        # 加入 WDI/IMF 风格模拟宏观控制
+uv run gvcsim regress --step 13 --interaction           # 加入冲击×基期GVC参与度交互项
 uv run gvcsim regress --step 13 --granularity country   # 国家级粒度
 uv run gvcsim report --year 2020      # 步骤17:生成 reports/experiment_report_2020.md
-uv run pytest                         # 测试(72 个,含 API 集成测试)
+uv run pytest                         # 测试(73 个,含 API 集成测试)
 ```
 
 ## 目录结构
@@ -224,8 +225,9 @@ Mock 的质量标准(schema 对齐真实来源、量级锚定公开统计、维�
    出口管制三类 mock、冲击面板质检、HS↔ICIO 映射工作流演示均已接入。
 2. **M2 指标与可视化深化**:贸易流分解升级为 Borin-Mancini 精确公式;网络图
    交互升级;国家–行业级下钻。
-3. **M3 回归层补全**:三类冲击与 WDI/IMF 风格宏观控制 mock 已接入回归设计;
-   平减指数与名义/实际切换;交互项;clean/noisy/confounded 三套教学场景;安慰剂检验。
+3. **M3 回归层补全**:三类冲击、WDI/IMF 风格宏观控制 mock、冲击×基期 GVC
+   参与度交互项已接入回归设计;平减指数与名义/实际切换;clean/noisy/confounded
+   三套教学场景;安慰剂检验。
 4. **M4 闭环与工程**:报告参数化(吸收学生的设计选择)、PDF 导出。
 
 ## 开发常用命令

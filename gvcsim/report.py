@@ -26,11 +26,13 @@ def run_step_regression(
     granularity: str = "国家–行业级",
     method: str | None = None,
     control_mode: str = "不加控制变量",
+    interaction: bool = False,
 ) -> RegressionResult:
     """跑步骤13-16 对应的默认设计回归(默认国家–行业级粒度 + DID)。"""
     kwargs = {"method": method} if method else {}
     design = RegressionDesign(
-        step=step, granularity=granularity, control_mode=control_mode, **kwargs
+        step=step, granularity=granularity, control_mode=control_mode,
+        interaction=interaction, **kwargs
     )
     if panel is None:
         panel = _load_panel(design)

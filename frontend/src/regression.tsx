@@ -68,6 +68,7 @@ function DesignMeta({ d }: { d: RegressionDesignInfo }) {
       <span>个体 = {ENTITY_LABEL[d.entity] ?? d.entity}</span>
       <span>标准误按{ENTITY_LABEL[d.cluster] ?? d.cluster}聚类</span>
       <span>控制:{controls}</span>
+      <span>交互项:{d.interaction ? "冲击×基期GVC" : "未加入"}</span>
     </div>
   );
 }
@@ -82,13 +83,14 @@ export function RegDesignLab() {
   const [shock, setShock] = useState("关税冲击");
   const [method, setMethod] = useState("双重差分 (DID)");
   const [controlMode, setControlMode] = useState("不加控制变量");
+  const [interaction, setInteraction] = useState(false);
   const [depStep, setDepStep] = useState(13);
 
   const { data: design, error: designErr } = useAsync<RegressionDesignInfo>(
     () => api.regressionDesign({
-      step: depStep, granularity: gran, shockType: shock, method, controlMode,
+      step: depStep, granularity: gran, shockType: shock, method, controlMode, interaction,
     }),
-    [depStep, gran, shock, method, controlMode],
+    [depStep, gran, shock, method, controlMode, interaction],
   );
 
   if (optsErr) return <div className="error-box">{optsErr}</div>;
@@ -121,6 +123,16 @@ export function RegDesignLab() {
             onChange={setControlMode}
           />
         </ChoiceCard>
+        <ChoiceCard title="异质性" hint="检验基期 GVC 参与度越高的个体是否更敏感。">
+          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <input
+              type="checkbox"
+              checked={interaction}
+              onChange={(e) => setInteraction(e.target.checked)}
+            />
+            冲击 × 基期 GVC 参与度
+          </label>
+        </ChoiceCard>
         <ChoiceCard title="被解释变量" hint="对应步骤13–16 的四组 GVC 指标回归。">
           <div className="pill-row">
             {stepEntries.map(([n, label]) => (
@@ -152,27 +164,28 @@ export function RegressionRunLab({ step }: { step: Step }) {
   const [shock, setShock] = useState("关税冲击");
   const [method, setMethod] = useState("双重差分 (DID)");
   const [controlMode, setControlMode] = useState("不加控制变量");
+  const [interaction, setInteraction] = useState(false);
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
   const { data: opts } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
   const { data: design } = useAsync<RegressionDesignInfo>(
-    () => api.regressionDesign({ step: step.n, granularity: gran, shockType: shock, method, controlMode }),
-    [step.n, gran, shock, method, controlMode],
+    () => api.regressionDesign({ step: step.n, granularity: gran, shockType: shock, method, controlMode, interaction }),
+    [step.n, gran, shock, method, controlMode, interaction],
   );
 
   // 换步骤/设计时清空旧结果,按钮回到初态
   useEffect(() => {
     setResult(null);
     setError(null);
-  }, [step.n, gran, shock, method, controlMode]);
+  }, [step.n, gran, shock, method, controlMode, interaction]);
 
   const run = async () => {
     setRunning(true);
     setError(null);
     try {
-      setResult(await api.runRegression(step.n, gran, shock, method, controlMode));
+      setResult(await api.runRegression(step.n, gran, shock, method, controlMode, interaction));
     } catch (e) {
       setError(String((e as Error).message));
     } finally {
@@ -216,6 +229,15 @@ export function RegressionRunLab({ step }: { step: Step }) {
               onChange={setControlMode}
             />
           </div>
+          <label className="model-control" style={{ gap: 8 }}>
+            <span className="model-control-label">交互</span>
+            <input
+              type="checkbox"
+              checked={interaction}
+              onChange={(e) => setInteraction(e.target.checked)}
+            />
+            <span>冲击×基期GVC</span>
+          </label>
         </div>
         <div className="model-eq">{design ? design.equation : "…"}</div>
         {design && <DesignMeta d={design} />}

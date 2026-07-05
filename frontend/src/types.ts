@@ -200,6 +200,7 @@ export interface RegressionDesignInfo {
   treated_col: string;
   method: string;
   control_mode: string;
+  interaction: boolean;
   controls: string[];
   control_labels: Record<string, string>;
   equation: string;
