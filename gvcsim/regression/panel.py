@@ -12,8 +12,8 @@ linearmodels.PanelOLS 标准库对照。三种方法共用同一个 within-OLS �
   did           treated×post(处理组=曾受冲击的个体,处理期=首个冲击年起)
   event_study   treated×各年份哑变量(基期 k=-1,即冲击前一年),动态效应路径
 
-p 值用正态近似(G 较大时与 t 分布几乎一致)。PanelOLS 对照使用同一份
-样本与同一组可估计解释变量,只作为结果校验与界面展示。
+p 值按聚类数做 t(G-1) 小样本校正。PanelOLS 对照使用同一份样本与同一组
+可估计解释变量,只作为结果校验与界面展示。
 """
 
 import math
@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 from linearmodels.panel import PanelOLS
+from scipy import stats
 
 from gvcsim.regression.design import PRICE_MODE_REAL
 
@@ -200,9 +201,13 @@ def _twoway_demean(values: np.ndarray, ent: np.ndarray, tim: np.ndarray,
     return out
 
 
-def _norm_sf(z: float) -> float:
-    """标准正态右尾概率(避免引入 scipy)。"""
-    return 0.5 * math.erfc(z / math.sqrt(2))
+def _cluster_t_pvalue(t_stat: float, n_clusters: int) -> float:
+    """双侧 p 值:聚类稳健推断使用 t(G-1) 小样本校正。"""
+    if not math.isfinite(t_stat):
+        return float("nan")
+    if n_clusters <= 1:
+        return 1.0
+    return float(2 * stats.t.sf(abs(t_stat), df=n_clusters - 1))
 
 
 def _demean_and_prune(
@@ -268,7 +273,7 @@ def _within_ols(
     for name, b, s in zip(xcols, beta, se):
         t_stat = b / s if s > 0 else float("nan")
         coefs.append(CoefStat(name=name, coef=float(b), se=float(s),
-                              t=float(t_stat), p=2 * _norm_sf(abs(t_stat))))
+                              t=float(t_stat), p=_cluster_t_pvalue(float(t_stat), n_g)))
 
     notes = list(model.notes)
     if dropped:
@@ -284,7 +289,7 @@ def _within_ols(
         notes=[
             *notes,
             f"双向固定效应({entity} + {time}),within 变换后 OLS",
-            f"标准误按 {cluster} 聚类(sandwich,{n_g} 组),p 值为正态近似",
+            f"标准误按 {cluster} 聚类(sandwich,{n_g} 组),p 值使用 t({max(n_g - 1, 1)}) 小样本校正",
         ],
     )
 
@@ -352,6 +357,89 @@ def twoway_fe(df: pd.DataFrame, depvar: str, regressors: list[str],
 def run_design(df: pd.DataFrame, design) -> RegressionResult:
     """按 RegressionDesign 的方法/粒度分发到对应引擎(步骤12 的对齐结果落地)。"""
     return _within_ols(prepare_design_model(df, design))
+
+
+def placebo_did_distribution(
+    df: pd.DataFrame,
+    design,
+    n_draws: int = 80,
+    seed: int = 2026,
+) -> dict:
+    """DID 安慰剂检验:随机指派伪处理组,重复估计主政策系数。
+
+    保持原始设计的样本、控制变量、交互项和处理组数量不变;每次随机抽取同等
+    数量的个体,并从原始 T0 起置为伪处理组。返回伪系数分布与真系数位置。
+    """
+    if design.method != "双重差分 (DID)":
+        raise ValueError("安慰剂检验当前仅支持双重差分 (DID) 设计")
+    n_draws = max(1, min(int(n_draws), 200))
+    base = _apply_price_mode(df, design)
+    true_model = _prepare_did_model(
+        base,
+        design.depvar,
+        entity=design.entity,
+        time="year",
+        cluster=design.cluster,
+        treated_col=design.treated_col,
+        controls=list(design.controls),
+        interaction=design.interaction,
+    )
+    true_result = _within_ols(true_model)
+    policy_name = true_model.policy_xcols[0]
+    true_coef = next(c.coef for c in true_result.coefs if c.name == policy_name)
+
+    data = true_model.data.copy()
+    ever, t0 = _prep_treatment(data, true_model.entity, true_model.time, design.treated_col)
+    entities = np.array(sorted(pd.unique(data[true_model.entity])))
+    treated_count = int(data.loc[ever > 0, true_model.entity].nunique())
+    if treated_count <= 0 or treated_count >= len(entities):
+        raise ValueError("安慰剂检验需要同时存在处理组和对照组")
+
+    rng = np.random.default_rng(seed)
+    coefs: list[float] = []
+    attempts = 0
+    pseudo_col = "__placebo_treated"
+    while len(coefs) < n_draws and attempts < n_draws * 4:
+        attempts += 1
+        assigned = set(rng.choice(entities, size=treated_count, replace=False))
+        pseudo = data.copy()
+        pseudo[pseudo_col] = (
+            pseudo[true_model.entity].isin(assigned)
+            & (pseudo[true_model.time].astype(int) >= t0)
+        ).astype(int)
+        try:
+            placebo_model = _prepare_did_model(
+                pseudo,
+                design.depvar,
+                entity=true_model.entity,
+                time=true_model.time,
+                cluster=true_model.cluster,
+                treated_col=pseudo_col,
+                controls=true_model.control_cols,
+                interaction=design.interaction,
+            )
+            placebo_result = _within_ols(placebo_model)
+        except ValueError:
+            continue
+        placebo_name = placebo_model.policy_xcols[0]
+        coefs.append(next(c.coef for c in placebo_result.coefs if c.name == placebo_name))
+
+    if not coefs:
+        raise ValueError("无法生成可估计的安慰剂样本")
+    empirical_p = (sum(abs(c) >= abs(true_coef) for c in coefs) + 1) / (len(coefs) + 1)
+    return {
+        "policy_name": policy_name,
+        "true_coef": float(true_coef),
+        "placebo_coefs": [float(c) for c in coefs],
+        "empirical_p": float(empirical_p),
+        "n_draws": len(coefs),
+        "requested_draws": n_draws,
+        "seed": int(seed),
+        "treated_entities": treated_count,
+        "total_entities": int(len(entities)),
+        "t0": int(t0),
+        "note": "随机指派同等数量伪处理个体,从原始 T0 起进入处理期",
+    }
 
 
 def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:

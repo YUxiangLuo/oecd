@@ -24,7 +24,7 @@ from gvcsim.data import crosswalk, icio_browser
 from gvcsim.regression.design import (
     CONTROL_MODES, GRANULARITIES, METHODS, PRICE_MODES, SHOCK_TYPES, STEP_DEPVARS, RegressionDesign,
 )
-from gvcsim.regression.panel import run_design_with_benchmark
+from gvcsim.regression.panel import placebo_did_distribution, run_design_with_benchmark
 from gvcsim.steps import STAGE_NAMES, STEPS
 
 app = FastAPI(title="供应链仿真系统 API", version="0.1.0")
@@ -429,6 +429,11 @@ class RegressionRequest(BaseModel):
     price_mode: str = "名义值"
 
 
+class PlaceboRequest(RegressionRequest):
+    n_draws: int = 80
+    seed: int = 2026
+
+
 class ReportRequest(BaseModel):
     year: int | None = None
     granularity: str = "国家–行业级"
@@ -533,6 +538,24 @@ def regression_run(req: RegressionRequest):
         "result": result.to_dict(),
         "benchmark": benchmark,
         "disclaimer": "冲击变量为拟真演示面板(全经济体覆盖、行业异质),结果仅用于验证系统链路",
+    }
+
+
+@app.post("/api/regression/placebo")
+def regression_placebo(req: PlaceboRequest):
+    design = _validate_design(
+        req.step, req.granularity, req.shock_type, req.method, req.control_mode,
+        req.interaction, req.price_mode,
+    )
+    panel = _read_csv(design.panel_file)
+    try:
+        placebo = placebo_did_distribution(panel, design, n_draws=req.n_draws, seed=req.seed)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {
+        "design": _design_info(design),
+        "placebo": placebo,
+        "disclaimer": "安慰剂检验基于拟真演示冲击数据,用于教学展示随机化反事实分布",
     }
 
 

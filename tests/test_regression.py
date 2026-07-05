@@ -9,7 +9,8 @@ from gvcsim.regression.design import (
     CONTROL_MODE_ICIO, CONTROL_MODE_MACRO, PRICE_MODE_REAL, RegressionDesign,
 )
 from gvcsim.regression.panel import (
-    _apply_price_mode, benchmark_linearmodels, did, event_study, run_design, twoway_fe,
+    _apply_price_mode, benchmark_linearmodels, did, event_study, placebo_did_distribution,
+    run_design, twoway_fe,
 )
 
 rng = np.random.default_rng(42)
@@ -194,6 +195,7 @@ def test_did_recovers_att():
     assert abs(c.coef - (-0.6)) < 0.03
     assert c.p < 0.01
     assert any("T₀(2018)" in n for n in result.notes)
+    assert any("t(" in n and "小样本校正" in n for n in result.notes)
 
 
 def test_did_requires_treated_rows():
@@ -234,6 +236,21 @@ def test_run_design_dispatch():
     assert names("双重差分 (DID)") == ["treated×post"]
     assert names("双向固定效应") == ["tariff_shock"]
     assert names("事件研究") == ["k=-2", "k=0", "k=+1", "k=+2"]
+
+
+def test_placebo_did_distribution_is_reproducible():
+    df = _simulate_did_panel({0: -0.6, 1: -0.6, 2: -0.6})
+    df = df.rename(columns={"y": "share_trade_fva"})
+    design = RegressionDesign(step=13, granularity="国家级", method="双重差分 (DID)")
+
+    result = placebo_did_distribution(df, design, n_draws=12, seed=7)
+    again = placebo_did_distribution(df, design, n_draws=12, seed=7)
+
+    assert result["policy_name"] == "treated×post"
+    assert abs(result["true_coef"] - (-0.6)) < 0.03
+    assert len(result["placebo_coefs"]) == 12
+    assert result["placebo_coefs"] == again["placebo_coefs"]
+    assert 0 < result["empirical_p"] <= 1
 
 
 def test_did_with_baseline_gvc_interaction_recovers_heterogeneity():

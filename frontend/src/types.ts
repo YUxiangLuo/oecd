@@ -241,6 +241,24 @@ export interface RegressionResponse {
   disclaimer: string;
 }
 
+export interface PlaceboResponse {
+  design: RegressionDesignInfo;
+  placebo: {
+    policy_name: string;
+    true_coef: number;
+    placebo_coefs: number[];
+    empirical_p: number;
+    n_draws: number;
+    requested_draws: number;
+    seed: number;
+    treated_entities: number;
+    total_entities: number;
+    t0: number;
+    note: string;
+  };
+  disclaimer: string;
+}
+
 export interface ReportRequest {
   year: number;
   granularity: string;

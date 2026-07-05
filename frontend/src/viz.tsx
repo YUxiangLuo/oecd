@@ -7,7 +7,7 @@
  * (所有数值同时可在表格视图读取);文本一律用文字色,不穿系列色。
  */
 import { useMemo, useRef, useState } from "react";
-import type { NetworkData } from "./types";
+import type { NetworkData, PlaceboResponse } from "./types";
 
 // 固定顺序的类别槽位(经校验的默认调色板,前 6 位)
 export const CAT = ["#2a78d6", "#1baf7a", "#eda100", "#008300", "#4a3aa7", "#e34948"];
@@ -685,6 +685,68 @@ export function EventStudyChart({ coefs, notes }: {
         {notes.find((n) => n.includes("基期")) ?? "基期为冲击前一年(系数归一为 0,不在图中)"}
       </div>
       {Tip}
+    </div>
+  );
+}
+
+/* -------------------------- 步骤13-16:安慰剂分布 -------------------------- */
+
+export function PlaceboChart({ data }: { data: PlaceboResponse["placebo"] }) {
+  const values = data.placebo_coefs;
+  const all = [...values, data.true_coef];
+  const lo0 = Math.min(...all), hi0 = Math.max(...all);
+  const pad = (hi0 - lo0) * 0.08 || Math.abs(hi0) * 0.12 || 0.1;
+  const lo = lo0 - pad, hi = hi0 + pad;
+  const bins = 14;
+  const counts = Array.from({ length: bins }, () => 0);
+  values.forEach((v) => {
+    const idx = Math.min(bins - 1, Math.max(0, Math.floor(((v - lo) / (hi - lo || 1)) * bins)));
+    counts[idx] += 1;
+  });
+  const W = 640, H = 230, m = { l: 48, r: 20, t: 20, b: 38 };
+  const plotW = W - m.l - m.r, plotH = H - m.t - m.b;
+  const maxCount = Math.max(...counts, 1);
+  const x = (v: number) => m.l + ((v - lo) / (hi - lo || 1)) * plotW;
+  const y = (c: number) => m.t + plotH - (c / maxCount) * plotH;
+  const zeroIn = lo < 0 && hi > 0;
+
+  return (
+    <div style={{ ...cardStyle, marginTop: 14 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050", marginBottom: 6 }}>
+        安慰剂检验:随机伪处理组系数分布
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ display: "block", width: "100%", height: "auto" }}>
+        {zeroIn && <line x1={x(0)} x2={x(0)} y1={m.t} y2={H - m.b} stroke="#cfd3dd" strokeDasharray="4 4" />}
+        {counts.map((c, i) => {
+          const x0 = m.l + (i / bins) * plotW + 2;
+          const bw = plotW / bins - 4;
+          return (
+            <rect
+              key={i}
+              x={x0}
+              y={y(c)}
+              width={Math.max(1, bw)}
+              height={H - m.b - y(c)}
+              fill={CAT[0]}
+              fillOpacity={0.68}
+              rx={3}
+            />
+          );
+        })}
+        <line x1={x(data.true_coef)} x2={x(data.true_coef)} y1={m.t - 4} y2={H - m.b} stroke={CAT[5]} strokeWidth={2.5} />
+        <text x={x(data.true_coef)} y={m.t - 8} textAnchor="middle" fontSize={11} fill={CAT[5]} fontWeight={700}>
+          真系数
+        </text>
+        {[lo, 0, hi].filter((v, i, arr) => (i === 0 || v !== arr[i - 1]) && v >= lo && v <= hi).map((v) => (
+          <text key={v} x={x(v)} y={H - 14} textAnchor="middle" fontSize={10.5} fill="#8a90a0">
+            {v.toFixed(3)}
+          </text>
+        ))}
+      </svg>
+      <div style={{ fontSize: 11.5, color: "#5a6070", lineHeight: 1.7 }}>
+        {data.n_draws} 次随机化 · 原处理个体 {data.treated_entities}/{data.total_entities} ·
+        T0={data.t0} · 经验 p={data.empirical_p.toFixed(3)}
+      </div>
     </div>
   );
 }

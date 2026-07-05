@@ -11,8 +11,8 @@ import { api } from "./api";
 import { useAsync } from "./labs";
 import { REG_TEACH, interpretResult } from "./regteach";
 import { SectionHead, TeachCards } from "./teach";
-import type { RegressionDesignInfo, RegressionOptions, RegressionResponse, Step } from "./types";
-import { CoefForestChart, EventStudyChart } from "./viz";
+import type { PlaceboResponse, RegressionDesignInfo, RegressionOptions, RegressionResponse, Step } from "./types";
+import { CoefForestChart, EventStudyChart, PlaceboChart } from "./viz";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
 
@@ -176,8 +176,11 @@ export function RegressionRunLab({ step }: { step: Step }) {
   const [interaction, setInteraction] = useState(false);
   const [priceMode, setPriceMode] = useState("名义值");
   const [result, setResult] = useState<RegressionResponse | null>(null);
+  const [placebo, setPlacebo] = useState<PlaceboResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [placeboError, setPlaceboError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [placeboRunning, setPlaceboRunning] = useState(false);
 
   const { data: opts } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
   const { data: design } = useAsync<RegressionDesignInfo>(
@@ -188,18 +191,34 @@ export function RegressionRunLab({ step }: { step: Step }) {
   // 换步骤/设计时清空旧结果,按钮回到初态
   useEffect(() => {
     setResult(null);
+    setPlacebo(null);
     setError(null);
+    setPlaceboError(null);
   }, [step.n, gran, shock, method, controlMode, interaction, priceMode]);
 
   const run = async () => {
     setRunning(true);
     setError(null);
+    setPlacebo(null);
+    setPlaceboError(null);
     try {
       setResult(await api.runRegression(step.n, gran, shock, method, controlMode, interaction, priceMode));
     } catch (e) {
       setError(String((e as Error).message));
     } finally {
       setRunning(false);
+    }
+  };
+
+  const runPlacebo = async () => {
+    setPlaceboRunning(true);
+    setPlaceboError(null);
+    try {
+      setPlacebo(await api.placeboRegression(step.n, gran, shock, method, controlMode, interaction, priceMode, 40));
+    } catch (e) {
+      setPlaceboError(String((e as Error).message));
+    } finally {
+      setPlaceboRunning(false);
     }
   };
 
@@ -315,6 +334,25 @@ export function RegressionRunLab({ step }: { step: Step }) {
               <b>{result.benchmark.max_abs_se_diff.toExponential(2)}</b>
               {result.benchmark.passed ? "。系数对照通过。" : "。请复核对照差异。"}
             </p>
+          </div>
+
+          <div className="benchmark-box">
+            <div className="teach-label">安慰剂检验</div>
+            {method === "双重差分 (DID)" ? (
+              <>
+                <p>
+                  随机抽取同等数量的伪处理个体并重跑 DID;如果真系数落在伪分布尾部,
+                  说明估计结果不像随机分组偶然产生。
+                </p>
+                <button className="run-btn" onClick={runPlacebo} disabled={placeboRunning}>
+                  {placeboRunning ? "随机化中…" : placebo ? "重新运行安慰剂检验" : "运行安慰剂检验"}
+                </button>
+                {placeboError && <div className="error-box" style={{ marginTop: 12 }}>{placeboError}</div>}
+                {placebo && <PlaceboChart data={placebo.placebo} />}
+              </>
+            ) : (
+              <p className="muted">当前教学版安慰剂检验针对 DID 设计;切换到“双重差分 (DID)”后可运行。</p>
+            )}
           </div>
 
           <div className="teach-card reg-interp">

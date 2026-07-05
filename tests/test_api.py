@@ -348,6 +348,27 @@ def test_regression_run():
 
 
 @needs_data
+def test_regression_placebo_endpoint():
+    resp = client.post(
+        "/api/regression/placebo",
+        json={"step": 13, "granularity": "国家级", "n_draws": 8, "seed": 11},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["design"]["method"] == "双重差分 (DID)"
+    assert body["placebo"]["policy_name"] == "treated×post"
+    assert len(body["placebo"]["placebo_coefs"]) == 8
+    assert 0 < body["placebo"]["empirical_p"] <= 1
+
+    bad = client.post(
+        "/api/regression/placebo",
+        json={"step": 13, "method": "双向固定效应", "n_draws": 4},
+    )
+    assert bad.status_code == 400
+    assert "DID" in bad.json()["detail"]
+
+
+@needs_data
 def test_parameterized_report_endpoint():
     resp = client.post(
         "/api/report",
