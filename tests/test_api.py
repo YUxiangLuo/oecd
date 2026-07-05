@@ -142,6 +142,12 @@ def test_regression_design():
     ).status_code == 400
 
 
+def test_report_request_validation():
+    resp = client.post("/api/report", json={"method": "工具变量"})
+    assert resp.status_code == 400
+    assert "method" in resp.json()["detail"]
+
+
 def test_indicator_schema():
     resp = client.get("/api/indicators/schema")
     assert resp.status_code == 200
@@ -338,6 +344,48 @@ def test_regression_run():
     assert ctrl.json()["design"]["controls"]
     names = [c["name"] for c in ctrl.json()["result"]["coefs"]]
     assert "treated×post" in names
+
+
+@needs_data
+def test_parameterized_report_endpoint():
+    resp = client.post(
+        "/api/report",
+        json={
+            "year": processed_years()[-1],
+            "granularity": "国家–行业级",
+            "shock_type": "出口管制",
+            "method": "双向固定效应",
+            "control_mode": "模拟宏观控制",
+            "interaction": True,
+            "price_mode": "实际值(2016=1)",
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    md = body["markdown"]
+    assert body["path"].endswith(f"experiment_report_{processed_years()[-1]}.md")
+    assert "- 粒度:国家–行业级" in md
+    assert "- 冲击类型:出口管制" in md
+    assert "- 估计方法:双向固定效应" in md
+    assert "- 控制变量:GDP规模(log, WDI风格mock)" in md
+    assert "- 交互项:开启:冲击×基期GVC参与度" in md
+    assert "- 价格口径:实际值(2016=1)" in md
+    assert "export_control_shock" in md
+    assert "macro_log_gdp_usd" in md
+    assert "个国家×行业 ×" in md
+
+    bad = client.post(
+        "/api/report",
+        json={
+            "year": processed_years()[-1],
+            "granularity": "国家级",
+            "shock_type": "出口管制",
+            "method": "双向固定效应",
+            "interaction": True,
+        },
+    )
+    assert bad.status_code == 400
+    assert "共线性" in bad.json()["detail"]
 
 
 @needs_data

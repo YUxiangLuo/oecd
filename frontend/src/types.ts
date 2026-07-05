@@ -240,3 +240,18 @@ export interface RegressionResponse {
   };
   disclaimer: string;
 }
+
+export interface ReportRequest {
+  year: number;
+  granularity: string;
+  shock_type: string;
+  method: string;
+  control_mode: string;
+  interaction: boolean;
+  price_mode: string;
+}
+
+export interface ReportResponse {
+  path: string;
+  markdown: string;
+}

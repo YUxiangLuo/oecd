@@ -5,11 +5,12 @@
 """
 
 from datetime import date
+from functools import lru_cache
 
 import pandas as pd
 
 from gvcsim.config import PROCESSED_DIR, REPORTS_DIR, processed_years
-from gvcsim.regression.design import CONTROL_MODE_ICIO, STEP_DEPVARS, RegressionDesign
+from gvcsim.regression.design import STEP_DEPVARS, RegressionDesign
 from gvcsim.regression.panel import RegressionResult, benchmark_linearmodels, run_design
 
 
@@ -17,6 +18,14 @@ def _load_panel(design: RegressionDesign) -> pd.DataFrame:
     path = PROCESSED_DIR / design.panel_file
     if not path.exists():
         raise FileNotFoundError(f"缺少 {design.panel_file},请先运行 gvcsim compute")
+    return pd.read_csv(path)
+
+
+@lru_cache(maxsize=8)
+def _load_panel_file(name: str) -> pd.DataFrame:
+    path = PROCESSED_DIR / name
+    if not path.exists():
+        raise FileNotFoundError(f"缺少 {name},请先运行 gvcsim compute")
     return pd.read_csv(path)
 
 
@@ -40,18 +49,32 @@ def run_step_regression(
     return run_design(panel, design)
 
 
-def _coef_table(result: RegressionResult) -> str:
+def _coef_table(result: RegressionResult, design: RegressionDesign) -> str:
     lines = ["| 变量 | 系数 | 聚类标准误 | t | p | |", "|---|---|---|---|---|---|"]
     for c in result.coefs:
         lines.append(
             f"| {c.name} | {c.coef:.4f} | {c.se:.4f} | {c.t:.2f} | {c.p:.3f} | {c.stars} |"
         )
+    entity_label = "国家" if design.granularity == "国家级" else "国家×行业"
     lines.append(
-        f"\nN = {result.n_obs}({result.n_entities} 个国家×行业 × {result.n_times} 年,"
+        f"\nN = {result.n_obs}({result.n_entities} 个{entity_label} × {result.n_times} 年,"
         f"标准误按 {result.n_clusters} 国聚类),组内 R² = {result.r2_within:.4f},"
         "双向固定效应 ✓"
     )
     return "\n".join(lines)
+
+
+def _design_summary(design: RegressionDesign) -> str:
+    controls = "、".join(design.control_labels.values()) if design.controls else "不加控制变量"
+    interaction = "开启:冲击×基期GVC参与度" if design.interaction else "未开启"
+    return "\n".join([
+        f"- 粒度:{design.granularity}",
+        f"- 冲击类型:{design.shock_type}",
+        f"- 估计方法:{design.method}",
+        f"- 控制变量:{controls}",
+        f"- 交互项:{interaction}",
+        f"- 价格口径:{design.price_mode}",
+    ])
 
 
 def _policy_names(design: RegressionDesign, result: RegressionResult) -> list[str]:
@@ -89,16 +112,33 @@ def _compare_table(
     return "\n".join(lines)
 
 
-def generate(year: int | None = None) -> str:
+def generate(
+    year: int | None = None,
+    *,
+    granularity: str = "国家–行业级",
+    shock_type: str = "关税冲击",
+    method: str = "双重差分 (DID)",
+    control_mode: str = "不加控制变量",
+    interaction: bool = False,
+    price_mode: str = "名义值",
+) -> str:
     """生成报告并返回文件路径。year 为指标摘要引用的截面年份。
 
     指标摘要用国家级面板(便于阅读),回归用国家–行业级面板(默认粒度)。
     """
-    country_panel = pd.read_csv(PROCESSED_DIR / "panel_country.csv")
-    sector_panel = _load_panel(RegressionDesign(step=13))
+    country_panel = _load_panel_file("panel_country.csv")
     years = processed_years()
     year = year or max(years)
     snap = country_panel[country_panel["year"] == year].set_index("country")
+    design_preview = RegressionDesign(
+        step=13,
+        granularity=granularity,
+        shock_type=shock_type,
+        method=method,
+        control_mode=control_mode,
+        interaction=interaction,
+        price_mode=price_mode,
+    )
 
     top_backward = snap["share_trade_backward_gvc"].nlargest(5)
     top_forward = snap["share_trade_forward_gvc"].nlargest(5)
@@ -110,12 +150,9 @@ def generate(year: int | None = None) -> str:
         "拟真演示面板,以 2018–2020 全球贸易摩擦为原型,结论仅用于验证系统链路,"
         "不构成研究结论)\n",
         f"- 数据:OECD ICIO {min(years)}–{max(years)}(指标截面:{year} 年)",
-        "- 方法:国家–行业级双重差分(个体=国家×行业,处理组=曾受冲击个体,"
-        "处理期=首个冲击年起),含双向固定效应,标准误按国家聚类;"
-        "双向FE(强度法)与事件研究可在前端切换",
-        "- 稳健性:同时输出基准模型与 ICIO 派生国家-年份控制变量模型;"
-        "前端/CLI 另可切换 WDI/IMF 风格模拟宏观控制与名义/实际口径;"
-        "实际值口径使用 GDP 平减指数 mock",
+        "- 方法:本报告使用步骤17中选择的回归设定;四组因变量共用同一套"
+        "粒度/冲击/方法/控制/价格口径,便于横向比较",
+        _design_summary(design_preview),
         f"- 生成日期:{date.today().isoformat()}\n",
         "## 一、数据与质检",
         f"覆盖 {snap.shape[0]} 个国家/地区、{len(years)} 个年份。"
@@ -132,17 +169,22 @@ def generate(year: int | None = None) -> str:
     ]
 
     for step in sorted(STEP_DEPVARS):
-        design = RegressionDesign(step=step)
-        ctrl_design = RegressionDesign(step=step, control_mode=CONTROL_MODE_ICIO)
-        result = run_step_regression(step, sector_panel)
-        ctrl_result = run_step_regression(step, sector_panel, control_mode=CONTROL_MODE_ICIO)
-        bench = benchmark_linearmodels(sector_panel, ctrl_design, ctrl_result)
+        design = RegressionDesign(
+            step=step,
+            granularity=granularity,
+            shock_type=shock_type,
+            method=method,
+            control_mode=control_mode,
+            interaction=interaction,
+            price_mode=price_mode,
+        )
+        panel = _load_panel_file(design.panel_file)
+        result = run_design(panel, design)
+        bench = benchmark_linearmodels(panel, design, result)
         sections += [
             f"### 步骤{step}:{design.depvar_label}",
             f"模型:`{design.equation()}`\n",
-            _compare_table(design, result, ctrl_design, ctrl_result),
-            f"\n加控制模型:`{ctrl_design.equation()}`",
-            "控制变量:" + "、".join(ctrl_design.control_labels.values()),
+            _coef_table(result, design),
             f"PanelOLS 对照:最大政策系数差异={bench['max_abs_coef_diff']:.2e},"
             f"最大标准误差异={bench['max_abs_se_diff']:.2e},"
             f"{'通过' if bench['passed'] else '需复核'}。",
@@ -151,7 +193,8 @@ def generate(year: int | None = None) -> str:
 
     sections += [
         "## 四、结论与限制",
-        "- 本报告验证了“数据 → 指标 → 回归 → 报告”闭环可自动运行(回归为国家–行业级)。",
+        f"- 本报告验证了“数据 → 指标 → 回归 → 报告”闭环可自动运行"
+        f"(本次回归粒度:{granularity})。",
         "- 冲击变量为拟真演示面板(事件与量级参考公开资料的手工编码,"
         "出口暴露度由 OECD ICIO 双边流向计算);"
         "接入 PIIE/WTO 真实数据 + 官方 HS→ICIO 映射后本报告即具备研究意义。",

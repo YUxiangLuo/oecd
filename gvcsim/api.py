@@ -429,6 +429,16 @@ class RegressionRequest(BaseModel):
     price_mode: str = "名义值"
 
 
+class ReportRequest(BaseModel):
+    year: int | None = None
+    granularity: str = "国家–行业级"
+    shock_type: str = "关税冲击"
+    method: str = "双重差分 (DID)"
+    control_mode: str = "不加控制变量"
+    interaction: bool = False
+    price_mode: str = "名义值"
+
+
 @app.get("/api/regression/options")
 def regression_options():
     return {
@@ -532,6 +542,34 @@ def report(year: int):
         path = report_mod.generate(year)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    from pathlib import Path
+
+    return {"path": path, "markdown": Path(path).read_text(encoding="utf-8")}
+
+
+@app.post("/api/report")
+def report_custom(req: ReportRequest):
+    # 复用步骤13的设计校验;报告生成时会把同一套设定应用到 13-16 四个因变量。
+    _validate_design(
+        13, req.granularity, req.shock_type, req.method, req.control_mode,
+        req.interaction, req.price_mode,
+    )
+    try:
+        path = report_mod.generate(
+            year=req.year,
+            granularity=req.granularity,
+            shock_type=req.shock_type,
+            method=req.method,
+            control_mode=req.control_mode,
+            interaction=req.interaction,
+            price_mode=req.price_mode,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     from pathlib import Path
 
     return {"path": path, "markdown": Path(path).read_text(encoding="utf-8")}

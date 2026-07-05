@@ -62,7 +62,7 @@ uv run gvcsim regress --step 13 --interaction           # 加入冲击×基期GV
 uv run gvcsim regress --step 13 --controls --real       # 金额类控制变量切换为实际值口径
 uv run gvcsim regress --step 13 --granularity country   # 国家级粒度
 uv run gvcsim report --year 2020      # 步骤17:生成 reports/experiment_report_2020.md
-uv run pytest                         # 测试(74 个,含 API 集成测试)
+uv run pytest                         # 测试(76 个,含 API 集成测试)
 ```
 
 ## 目录结构
@@ -167,7 +167,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 | 三、可视化 | 8–11 | ✅ 招牌图(网络图/生产堆叠条/长度双段条/中心性热力表)+ 自由探索:自选指标、排序条形图、X×Y 散点图、2016–2020 趋势折线、Top-N/选国家,均带表格视图与悬停 tooltip |
 | 四、回归 | 12 设计确认 | ✅ 交互式设计台:粒度/三类冲击/方法/被解释变量选择卡 → 即时方程与面板/个体/聚类摘要(GET /api/regression/design) |
 | | 13–16 四组回归 | 🟡 讲解卡片体系(概念/公式/陷阱/自检/小结)+ 模型设定卡 + 控制变量切换(ICIO 派生 / 模拟宏观)+ 名义/实际口径切换 + 系数表/森林图/事件研究图 + PanelOLS 对照 + 按结果自动生成的中文解读;默认 DID(个体FE+按国聚类SE),基于演示冲击数据 |
-| 五、闭环 | 17 实验报告 | 🟡 Markdown 报告自动生成(回归为行业级,含基准/加控制并列表);PDF 导出与报告参数化待做(开发计划 M4) |
+| 五、闭环 | 17 实验报告 | 🟡 Markdown 报告自动生成;步骤17 可吸收前端选择的粒度/冲击/方法/控制/交互项/价格口径并生成对应回归表;PDF 导出待做(开发计划 M4.2) |
 
 ## 数据边界与 Mock 策略
 
@@ -230,7 +230,7 @@ Mock 的质量标准(schema 对齐真实来源、量级锚定公开统计、维�
 3. **M3 回归层补全**:三类冲击、WDI/IMF 风格宏观控制 mock、GDP 平减指数、
    名义/实际口径切换、冲击×基期 GVC 参与度交互项已接入回归设计;
    clean/noisy/confounded 三套教学场景;安慰剂检验。
-4. **M4 闭环与工程**:报告参数化(吸收学生的设计选择)、PDF 导出。
+4. **M4 闭环与工程**:报告参数化已完成;PDF 导出。
 
 ## 开发常用命令
 

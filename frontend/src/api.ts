@@ -135,5 +135,14 @@ export const api = {
     if (!resp.ok) throw new Error((await resp.json()).detail ?? resp.statusText);
     return resp.json() as Promise<import("./types").RegressionResponse>;
   },
-  report: (year: number) => get<{ path: string; markdown: string }>(`/api/report/${year}`),
+  report: async (params: import("./types").ReportRequest) => {
+    const resp = await fetch("/api/report", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(params),
+    });
+    if (resp.status === 401) notifyAuthExpired();
+    if (!resp.ok) throw new Error((await resp.json()).detail ?? resp.statusText);
+    return resp.json() as Promise<import("./types").ReportResponse>;
+  },
 };
