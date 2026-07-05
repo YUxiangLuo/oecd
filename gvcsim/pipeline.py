@@ -58,7 +58,7 @@ def compute_year(year: int, verbose: bool = True) -> None:
     len_sector = length.sector_length(arr)
     len_country = length.country_length(arr, len_sector)
 
-    log(f"[{year}] 步骤7 网络指标(行业级介数为抽样近似)...")
+    log(f"[{year}] 步骤7 网络指标(行业级介数精确优先)...")
     net = network.country_network(arr)
     net_sector = network.sector_network(arr)
     edges = network.network_edges(arr)

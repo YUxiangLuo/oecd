@@ -1,6 +1,7 @@
 """指标计算的数学性质测试(合成小矩阵,不依赖真实数据)。"""
 
 import numpy as np
+import networkx as nx
 import pytest
 
 from gvcsim.indicators import length, network, production, tradeflow
@@ -136,7 +137,7 @@ def test_network_metrics(fake_io):
 
 
 def test_sector_network(fake_io):
-    """行业级网络:索引齐全,小图走精确介数,数值性质合理。"""
+    """行业级网络:索引齐全,数值性质合理。"""
     arr = build_arrays(fake_io)
     df = network.sector_network(arr)
     assert list(df.index.names) == ["country", "sector"]
@@ -146,3 +147,34 @@ def test_sector_network(fake_io):
     assert (df["betweenness_centrality"] >= 0).all()
     # fake_io 中所有行业间都有流量,度中心性应处处为正
     assert (df["degree_centrality"] > 0).all()
+
+
+def test_betweenness_is_exact_under_node_limit(fake_io):
+    arr = build_arrays(fake_io)
+    total = float(arr.Z.sum())
+    nodes = list(arr.index)
+    G = nx.DiGraph()
+    G.add_nodes_from(nodes)
+    src, dst = np.where(arr.Z / total > network.SECTOR_EDGE_SHARE_THRESHOLD)
+    for i, j in zip(src, dst):
+        if i != j:
+            w = float(arr.Z[i, j])
+            G.add_edge(nodes[i], nodes[j], weight=w, distance=total / w)
+
+    got = network._betweenness_centrality(G)
+    expected = nx.betweenness_centrality(G, weight="distance", normalized=True)
+
+    for node in nodes:
+        assert got[node] == pytest.approx(expected[node])
+
+
+def test_eigenvector_prefers_numpy_backend_on_connected_graph():
+    G = nx.Graph()
+    G.add_edge("A", "B", weight=2.0)
+    G.add_edge("B", "C", weight=1.0)
+
+    got = network._eigenvector_centrality(G)
+    expected = nx.eigenvector_centrality_numpy(G, weight="weight")
+
+    for node in G.nodes:
+        assert got[node] == pytest.approx(expected[node], abs=1e-9)

@@ -10,6 +10,7 @@ dependencies = [
     "pandas>=3.0.3",
     "pymrio>=0.6.3",
     "networkx>=3.4",
+    "scipy>=1.18.0",
     "fastapi>=0.115",
     "uvicorn>=0.34",
     "linearmodels>=7.0",

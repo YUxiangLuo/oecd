@@ -13,6 +13,7 @@
 import networkx as nx
 import numpy as np
 import pandas as pd
+from scipy.sparse.linalg import ArpackNoConvergence
 
 from gvcsim.indicators.core import IcioArrays
 
@@ -22,9 +23,10 @@ EDGE_SHARE_THRESHOLD = 1e-4
 # 行业级图更稀疏,阈值放低才能保留有意义的国内/跨境链条
 SECTOR_EDGE_SHARE_THRESHOLD = 1e-6
 
-# 行业级图 ~3400 节点,精确介数太慢:用 k 个源点抽样近似(固定 seed 保证可复现);
-# 节点数 ≤ k 时(如单元测试的小图)自动退化为精确计算
-BETWEENNESS_SAMPLE_K = 350
+# 行业级图约 3465 个节点,离线 compute 默认跑精确 Brandes。
+# 若将来接更细粒度行业/企业图,超过该阈值后自动退回固定 seed 的源点抽样。
+BETWEENNESS_EXACT_NODE_LIMIT = 5000
+BETWEENNESS_SAMPLE_K = 1200
 BETWEENNESS_SEED = 12345
 
 
@@ -59,8 +61,7 @@ def country_network(arr: IcioArrays) -> pd.DataFrame:
         for n in G.nodes
     }
     betweenness = nx.betweenness_centrality(G, weight="distance", normalized=True)
-    # 特征向量中心性在有向图上可能不收敛,退化为无向图计算(幂迭代,免 scipy)
-    eigen = nx.eigenvector_centrality(G.to_undirected(), weight="weight", max_iter=1000)
+    eigen = _eigenvector_centrality(G)
 
     df = pd.DataFrame(
         {
@@ -73,11 +74,45 @@ def country_network(arr: IcioArrays) -> pd.DataFrame:
     return df
 
 
+def _eigenvector_centrality(
+    G: nx.Graph | nx.DiGraph,
+    *,
+    max_iter: int = 2000,
+    tol: float = 1e-6,
+) -> dict:
+    """特征向量中心性:优先使用 scipy/ARPACK,断连或不收敛时回退幂迭代。"""
+    H = G.to_undirected()
+    if H.number_of_edges() == 0:
+        return {n: 0.0 for n in H.nodes}
+    if H.number_of_nodes() <= 2:
+        values = nx.eigenvector_centrality(H, weight="weight", max_iter=max_iter, tol=tol)
+        return {n: float(values.get(n, 0.0)) for n in H.nodes}
+    try:
+        values = nx.eigenvector_centrality_numpy(H, weight="weight")
+    except (ArpackNoConvergence, nx.NetworkXException, TypeError, ValueError):
+        values = nx.eigenvector_centrality(H, weight="weight", max_iter=max_iter, tol=tol)
+    return {n: float(values.get(n, 0.0)) for n in H.nodes}
+
+
+def _betweenness_centrality(G: nx.DiGraph) -> dict:
+    """介数中心性:默认精确;超大图时退回抽样,避免 compute 失控。"""
+    k = None
+    if G.number_of_nodes() > BETWEENNESS_EXACT_NODE_LIMIT:
+        k = min(BETWEENNESS_SAMPLE_K, G.number_of_nodes())
+    return nx.betweenness_centrality(
+        G,
+        k=k,
+        weight="distance",
+        normalized=True,
+        seed=BETWEENNESS_SEED,
+    )
+
+
 def sector_network(arr: IcioArrays) -> pd.DataFrame:
     """行业级网络中心性,索引 (country, sector)。
 
     节点 = 国家×行业,边 = 中间品流 Z(去自环、按占比阈值过滤)。
-    介数在超过 BETWEENNESS_SAMPLE_K 个节点时用源点抽样近似。
+    介数默认精确计算;超过 BETWEENNESS_EXACT_NODE_LIMIT 个节点后退回源点抽样。
     被阈值过滤成孤立点的行业中心性记 0。
     """
     total = float(arr.Z.sum())
@@ -96,13 +131,8 @@ def sector_network(arr: IcioArrays) -> pd.DataFrame:
         n: (G.out_degree(n, weight="weight") + G.in_degree(n, weight="weight")) / total
         for n in G.nodes
     }
-    k = BETWEENNESS_SAMPLE_K if G.number_of_nodes() > BETWEENNESS_SAMPLE_K else None
-    betweenness = nx.betweenness_centrality(
-        G, k=k, weight="distance", normalized=True, seed=BETWEENNESS_SEED
-    )
-    eigen = nx.eigenvector_centrality(
-        G.to_undirected(), weight="weight", max_iter=2000, tol=1e-6
-    )
+    betweenness = _betweenness_centrality(G)
+    eigen = _eigenvector_centrality(G)
 
     df = pd.DataFrame(
         {
