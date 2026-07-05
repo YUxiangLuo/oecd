@@ -273,9 +273,9 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
     kwargs = dict(entity=design.entity, time="year", cluster=design.cluster,
                   controls=list(design.controls))
     if design.method == "双重差分 (DID)":
-        return _prepare_did_model(df, design.depvar, **kwargs)
+        return _prepare_did_model(df, design.depvar, treated_col=design.treated_col, **kwargs)
     if design.method == "事件研究":
-        return _prepare_event_model(df, design.depvar, **kwargs)
+        return _prepare_event_model(df, design.depvar, treated_col=design.treated_col, **kwargs)
     return _prepare_fe_model(df, design.depvar, list(design.regressors), **kwargs)
 
 
@@ -305,7 +305,8 @@ def _prepare_did_model(
         raise ValueError("面板缺少回归变量:" + "、".join(missing))
     data = df[cols].dropna().reset_index(drop=True)
     ever, t0 = _prep_treatment(data, entity, time, treated_col)
-    data["treated×post"] = ever * (data[time] >= t0).values
+    did_col = "treated×post" if treated_col == "treated" else f"{treated_col}×post"
+    data[did_col] = ever * (data[time] >= t0).values
     n_treated = int(data.loc[ever > 0, entity].nunique())
     notes = [f"DID:处理组={n_treated} 个曾受冲击个体,处理期=T₀({t0})起"]
     if controls:
@@ -313,8 +314,8 @@ def _prepare_did_model(
     return PreparedModel(
         data=data,
         depvar=depvar,
-        xcols=["treated×post", *controls],
-        policy_xcols=["treated×post"],
+        xcols=[did_col, *controls],
+        policy_xcols=[did_col],
         control_cols=list(controls),
         entity=entity,
         time=time,

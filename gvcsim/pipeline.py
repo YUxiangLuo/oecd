@@ -105,9 +105,14 @@ def build_panel() -> pd.DataFrame:
     shock_checks = quality.check_shock_panel(shock_df, countries, sectors, years)
     with open(PROCESSED_DIR / "qc_shocks.json", "w", encoding="utf-8") as f:
         json.dump([c.to_dict() for c in shock_checks], f, ensure_ascii=False, indent=2)
+    shock_cols = list(dict.fromkeys(
+        col
+        for pair in shocks.SHOCK_SPECS.values()
+        for col in pair
+    ))
 
     sector = sector.merge(
-        shock_df[["country", "sector", "year", "tariff_shock", "treated"]],
+        shock_df[["country", "sector", "year", *shock_cols]],
         on=["country", "sector", "year"], how="left",
     ).merge(
         controls_df,
@@ -119,12 +124,17 @@ def build_panel() -> pd.DataFrame:
 
     # ---- 国家级:冲击按行业出口额加权聚合 ----
     w = sector["trade_gross_exports"].clip(lower=0.0)
-    sector_w = sector.assign(_w=w, _ws=w * sector["tariff_shock"])
-    agg = sector_w.groupby(["country", "year"], as_index=False)[["_w", "_ws"]].sum()
-    agg["tariff_shock"] = (agg["_ws"] / agg["_w"]).where(agg["_w"] > 0, 0.0)
-    agg["treated"] = (agg["tariff_shock"] > shocks.TREATED_THRESHOLD).astype(int)
+    sector_w = sector.assign(_w=w)
+    agg = sector_w.groupby(["country", "year"], as_index=False)["_w"].sum()
+    for _shock_type, (shock_col, treated_col) in shocks.SHOCK_SPECS.items():
+        tmp = sector_w.assign(_ws=sector_w["_w"] * sector_w[shock_col])
+        ws = tmp.groupby(["country", "year"], as_index=False)["_ws"].sum()
+        agg = agg.merge(ws, on=["country", "year"], how="left")
+        agg[shock_col] = (agg["_ws"] / agg["_w"]).where(agg["_w"] > 0, 0.0)
+        agg[treated_col] = (agg[shock_col] > shocks.TREATED_THRESHOLD).astype(int)
+        agg = agg.drop(columns=["_ws"])
     country = country.merge(
-        agg[["country", "year", "tariff_shock", "treated"]],
+        agg[["country", "year", *shock_cols]],
         on=["country", "year"], how="left",
     ).merge(
         controls_df,

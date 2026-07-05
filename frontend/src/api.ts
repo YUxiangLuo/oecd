@@ -64,10 +64,13 @@ export const api = {
   network: (year: number) => get<import("./types").NetworkData>(`/api/viz/network/${year}`),
   shockEvents: () =>
     get<{ events: import("./types").ShockEvent[]; disclaimer: string }>("/api/shocks/events"),
-  shockSummary: () => get<import("./types").ShockSummary>("/api/shocks/summary"),
-  shockPanel: (year: number, country: string, sector: string, onlyHit: boolean, page: number) =>
+  shockSummary: (shockType = "关税冲击") =>
+    get<import("./types").ShockSummary>(
+      `/api/shocks/summary?shock_type=${encodeURIComponent(shockType)}`,
+    ),
+  shockPanel: (year: number, shockType: string, country: string, sector: string, onlyHit: boolean, page: number) =>
     get<import("./types").SectorPage>(
-      `/api/shocks/panel?year=${year}&only_hit=${onlyHit}&page=${page}` +
+      `/api/shocks/panel?year=${year}&shock_type=${encodeURIComponent(shockType)}&only_hit=${onlyHit}&page=${page}` +
         (country ? `&country=${country}` : "") + (sector ? `&sector=${sector}` : ""),
     ),
   regressionOptions: () => get<import("./types").RegressionOptions>("/api/regression/options"),
@@ -87,11 +90,17 @@ export const api = {
     if (params.controlMode) qs.set("control_mode", params.controlMode);
     return get<import("./types").RegressionDesignInfo>(`/api/regression/design?${qs.toString()}`);
   },
-  runRegression: async (step: number, granularity: string, method: string, controlMode: string) => {
+  runRegression: async (
+    step: number,
+    granularity: string,
+    shockType: string,
+    method: string,
+    controlMode: string,
+  ) => {
     const resp = await fetch("/api/regression/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ step, granularity, method, control_mode: controlMode }),
+      body: JSON.stringify({ step, granularity, shock_type: shockType, method, control_mode: controlMode }),
     });
     if (!resp.ok) throw new Error((await resp.json()).detail ?? resp.statusText);
     return resp.json() as Promise<import("./types").RegressionResponse>;

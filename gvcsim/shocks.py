@@ -36,6 +36,12 @@ EXPOSURE_PREFIX = "export_exposure"
 # 避免"土耳其对美反制 × 美国微小对土出口份额"这类痕量项污染处理组。
 TREATED_THRESHOLD = 0.001
 
+SHOCK_SPECS = {
+    "关税冲击": ("tariff_shock", "treated"),
+    "制裁清单": ("sanction_shock", "sanction_treated"),
+    "出口管制": ("export_control_shock", "export_control_treated"),
+}
+
 # ---------------------------------------------------------------------------
 # 出口暴露度 fallback:各经济体货物出口中流向美国的份额。
 # 量级参考 2017–2019 UN Comtrade 方向别结构:北美邻国 ~0.75,东亚 0.1–0.2,
@@ -106,6 +112,32 @@ class TariffEvent:
     def rate(self, country: str, sector: str, year: int) -> float:
         table = self.overrides.get(country, self.rates)
         return table.get(sector, {}).get(year, 0.0)
+
+
+@dataclass(frozen=True)
+class EntityListEvent:
+    """制裁/出口管制实体清单风格的演示事件。
+
+    intensities 是已经从"实体 → 国家-行业暴露"聚合到 ICIO 行业后的强度,
+    可解释为该国家-行业在该类政策下的暴露程度。它是 mock 强度变量,
+    不是关税税率。
+    """
+    name: str
+    shock_type: str
+    targets: tuple[str, ...]
+    announced: str
+    effective: str
+    intensities: dict[str, dict[int, float]]
+    entities: tuple[str, ...]
+    removal: str = ""
+
+    @property
+    def shock_col(self) -> str:
+        return SHOCK_SPECS[self.shock_type][0]
+
+    @property
+    def treated_col(self) -> str:
+        return SHOCK_SPECS[self.shock_type][1]
 
 
 # 232 钢铝的基准年率:25% 钢 + 10% 铝,按 C24 内钢/铝出口结构混合 ≈ 0.20,
@@ -273,6 +305,76 @@ EVENTS = [
     ),
 ]
 
+ENTITY_LIST_EVENTS = [
+    EntityListEvent(
+        name="OFAC SDN 风格:俄铝 RUSAL 制裁",
+        shock_type="制裁清单",
+        targets=("RUS",),
+        announced="2018-04-06",
+        effective="2018-04-06",
+        removal="2019-01-27",
+        entities=("United Company RUSAL", "EN+ Group"),
+        intensities={
+            # 铝/基础金属最直接;2019 解除后保留短期合规摩擦。
+            "C24": {2018: 0.080, 2019: 0.025},
+            "B07_08": {2018: 0.025, 2019: 0.010},
+            "K": {2018: 0.020, 2019: 0.008},
+        },
+    ),
+    EntityListEvent(
+        name="OFAC/二级制裁风格:俄罗斯能源金融限制",
+        shock_type="制裁清单",
+        targets=("RUS",),
+        announced="2017-08-02",
+        effective="2017-08-02",
+        entities=("Russian energy SOEs", "sanctioned financial institutions"),
+        intensities={
+            "B05_06": {2017: 0.018, 2018: 0.026, 2019: 0.026, 2020: 0.026},
+            "B09": {2017: 0.014, 2018: 0.020, 2019: 0.020, 2020: 0.020},
+            "K": {2017: 0.012, 2018: 0.018, 2019: 0.018, 2020: 0.018},
+        },
+    ),
+    EntityListEvent(
+        name="OFAC 风格:涉疆实体与进口限制",
+        shock_type="制裁清单",
+        targets=("CHN",),
+        announced="2020-07-20",
+        effective="2020-07-20",
+        entities=("XPCC", "textile supply-chain entities"),
+        intensities={
+            "C13T15": {2020: 0.030},
+            "A01_02": {2020: 0.012},
+            "C20": {2020: 0.010},
+        },
+    ),
+    EntityListEvent(
+        name="BIS 实体清单:华为及关联公司",
+        shock_type="出口管制",
+        targets=("CHN",),
+        announced="2019-05-16",
+        effective="2019-05-16",
+        entities=("Huawei", "Huawei affiliates"),
+        intensities={
+            "C26": {2019: 0.060, 2020: 0.090},
+            "J62_63": {2019: 0.030, 2020: 0.050},
+            "C27": {2019: 0.020, 2020: 0.030},
+        },
+    ),
+    EntityListEvent(
+        name="BIS 实体清单:中芯国际 SMIC",
+        shock_type="出口管制",
+        targets=("CHN",),
+        announced="2020-12-18",
+        effective="2020-12-18",
+        entities=("SMIC", "SMIC subsidiaries"),
+        intensities={
+            # 年末生效,按年内暴露折算后强度较低。
+            "C26": {2020: 0.020},
+            "C28": {2020: 0.010},
+        },
+    ),
+]
+
 
 def build_export_exposure(arr: IcioArrays, year: int) -> pd.DataFrame:
     """用 ICIO 双边流向计算出口暴露度 exposure[c, imposer, year]。
@@ -419,6 +521,39 @@ def demo_shock_panel(
     base["announced_date"] = [e.announced if e else "" for e in events]
     base["effective_date"] = [e.effective if e else "" for e in events]
     base["note"] = [e.name if e else "" for e in events]
+
+    # 制裁/出口管制 mock:直接按国家-行业-年份暴露强度写入独立列。
+    entity_shock: dict[tuple[str, str, int, str], float] = {}
+    entity_event: dict[tuple[str, str, int, str], tuple[float, EntityListEvent]] = {}
+    for ev in ENTITY_LIST_EVENTS:
+        for c in [t for t in ev.targets if t in countries]:
+            for s, by_year in ev.intensities.items():
+                if s not in sectors:
+                    continue
+                for y, intensity in by_year.items():
+                    if y not in years or intensity <= 0:
+                        continue
+                    key = (c, s, y, ev.shock_col)
+                    entity_shock[key] = entity_shock.get(key, 0.0) + intensity
+                    if key not in entity_event or intensity > entity_event[key][0]:
+                        entity_event[key] = (intensity, ev)
+
+    for shock_type, (shock_col, treated_col) in SHOCK_SPECS.items():
+        if shock_type == "关税冲击":
+            continue
+        base[shock_col] = [
+            entity_shock.get((c, s, y, shock_col), 0.0)
+            for c, s, y in zip(base["country"], base["sector"], base["year"])
+        ]
+        base[treated_col] = (base[shock_col] > TREATED_THRESHOLD).astype(int)
+        evs = [
+            entity_event.get((c, s, y, shock_col), (0.0, None))[1]
+            for c, s, y in zip(base["country"], base["sector"], base["year"])
+        ]
+        prefix = shock_col.removesuffix("_shock")
+        base[f"{prefix}_announced_date"] = [e.announced if e else "" for e in evs]
+        base[f"{prefix}_effective_date"] = [e.effective if e else "" for e in evs]
+        base[f"{prefix}_note"] = [e.name if e else "" for e in evs]
     return base
 
 
@@ -438,6 +573,7 @@ def events_metadata() -> list[dict]:
         top_sectors = sorted(peak, key=lambda s: peak[s], reverse=True)
         out.append({
             "name": ev.name,
+            "shock_type": "关税冲击",
             "imposer": ev.imposer,
             "targets": "全部经济体" if ev.targets == "ALL" else "、".join(ev.targets),
             "exempt": "、".join(ev.exempt),
@@ -446,6 +582,22 @@ def events_metadata() -> list[dict]:
             "n_sectors": len(ev.rates),
             "top_sectors": top_sectors[:3],
             "peak_rate": max(peak.values()),
+        })
+    for ev in ENTITY_LIST_EVENTS:
+        peak = {s: max(by_year.values()) for s, by_year in ev.intensities.items()}
+        top_sectors = sorted(peak, key=lambda s: peak[s], reverse=True)
+        out.append({
+            "name": ev.name,
+            "imposer": "USA",
+            "targets": "、".join(ev.targets),
+            "exempt": "",
+            "announced": ev.announced,
+            "effective": ev.effective,
+            "n_sectors": len(ev.intensities),
+            "top_sectors": top_sectors[:3],
+            "peak_rate": max(peak.values()),
+            "shock_type": ev.shock_type,
+            "entities": "、".join(ev.entities),
         })
     return out
 

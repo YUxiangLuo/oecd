@@ -65,6 +65,7 @@ export interface DbSlice {
 
 export interface ShockEvent {
   name: string;
+  shock_type?: string;
   imposer: string;
   targets: string;
   exempt: string;
@@ -73,6 +74,7 @@ export interface ShockEvent {
   n_sectors: number;
   top_sectors: string[];
   peak_rate: number;
+  entities?: string;
 }
 
 export interface ShockSummaryYear {
@@ -149,6 +151,8 @@ export interface RegressionDesignInfo {
   depvar_label: string;
   granularity: string;
   shock_type: string;
+  shock_col: string;
+  treated_col: string;
   method: string;
   control_mode: string;
   controls: string[];

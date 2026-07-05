@@ -8,6 +8,7 @@
 from dataclasses import dataclass
 
 from gvcsim.data.controls import CONTROL_COLUMNS, CONTROL_LABELS
+from gvcsim.shocks import SHOCK_SPECS
 
 # 步骤编号 → (被解释变量, 中文含义)。列名来自 pipeline 产出的国家级面板。
 STEP_DEPVARS = {
@@ -18,7 +19,7 @@ STEP_DEPVARS = {
 }
 
 GRANULARITIES = ["国家–行业级", "国家级"]
-SHOCK_TYPES = ["关税冲击", "制裁清单", "出口管制"]
+SHOCK_TYPES = list(SHOCK_SPECS)
 METHODS = ["双重差分 (DID)", "双向固定效应", "事件研究"]
 CONTROL_MODE_NONE = "不加控制变量"
 CONTROL_MODE_ICIO = "ICIO 派生控制变量"
@@ -39,7 +40,6 @@ class RegressionDesign:
     shock_type: str = "关税冲击"
     # 冲击数据自带宣布/生效时间线,默认用能识别因果的 DID(见步骤12 文案)
     method: str = "双重差分 (DID)"
-    regressors: tuple[str, ...] = ("tariff_shock",)
     control_mode: str = CONTROL_MODE_NONE
 
     @property
@@ -67,6 +67,18 @@ class RegressionDesign:
         return tuple(CONTROL_COLUMNS) if self.control_mode == CONTROL_MODE_ICIO else ()
 
     @property
+    def shock_col(self) -> str:
+        return SHOCK_SPECS[self.shock_type][0]
+
+    @property
+    def treated_col(self) -> str:
+        return SHOCK_SPECS[self.shock_type][1]
+
+    @property
+    def regressors(self) -> tuple[str, ...]:
+        return (self.shock_col,)
+
+    @property
     def control_labels(self) -> dict[str, str]:
         return {c: CONTROL_LABELS[c] for c in self.controls}
 
@@ -78,9 +90,9 @@ class RegressionDesign:
         fe = f"α_{ent} + λ_t"
         controls = " + γ·Controls_ct" if self.controls else ""
         if self.method == "双重差分 (DID)":
-            x = f"β·(treated_{ent} × post_t)"
+            x = f"β·({self.treated_col}_{ent} × post_t)"
         elif self.method == "事件研究":
-            x = f"Σ_k β_k·(treated_{ent} × 1[t=T₀+k])"
+            x = f"Σ_k β_k·({self.treated_col}_{ent} × 1[t=T₀+k])"
         else:
             x = " + ".join(f"β·{r}_{unit}" for r in self.regressors)
         return f"{y} = {x}{controls} + {fe} + ε_{unit}"

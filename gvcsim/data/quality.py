@@ -25,6 +25,18 @@ SHOCK_COLUMNS = [
     "effective_date",
 ]
 
+SHOCK_VALUE_PAIRS = [
+    ("tariff_shock", "treated"),
+    ("sanction_shock", "sanction_treated"),
+    ("export_control_shock", "export_control_treated"),
+]
+
+SHOCK_DATE_COLUMNS = [
+    ("tariff_shock", "announced_date", "effective_date"),
+    ("sanction_shock", "sanction_announced_date", "sanction_effective_date"),
+    ("export_control_shock", "export_control_announced_date", "export_control_effective_date"),
+]
+
 
 @dataclass
 class QcCheck:
@@ -193,57 +205,81 @@ def check_shock_panel(
         ],
     ))
 
-    shock = pd.to_numeric(df["tariff_shock"], errors="coerce")
-    n_missing = int(shock.isna().sum())
-    out_of_range = df[(shock < 0) | (shock > 0.5)]
+    present_pairs = [(s, t) for s, t in SHOCK_VALUE_PAIRS if s in df.columns and t in df.columns]
+    missing_values = 0
+    out_rows = []
+    numeric_shocks = {}
+    for shock_col, _treated_col in present_pairs:
+        shock = pd.to_numeric(df[shock_col], errors="coerce")
+        numeric_shocks[shock_col] = shock
+        missing_values += int(shock.isna().sum())
+        bad = df[(shock < 0) | (shock > 0.5)].copy()
+        if not bad.empty:
+            bad["_shock_col"] = shock_col
+            out_rows.append(bad)
+    out_of_range = pd.concat(out_rows, ignore_index=True) if out_rows else pd.DataFrame()
     checks.append(QcCheck(
-        name="冲击强度值域(tariff_shock ∈ [0,0.5])",
+        name="冲击强度值域(*_shock ∈ [0,0.5])",
         kind="数值",
-        passed=n_missing == 0 and out_of_range.empty,
-        detail=f"缺失/非数值 {n_missing} 个,越界 {len(out_of_range)} 个",
+        passed=missing_values == 0 and out_of_range.empty,
+        detail=f"检查 {len(present_pairs)} 类冲击;缺失/非数值 {missing_values} 个,越界 {len(out_of_range)} 个",
         warnings=[
-            f"{r.country}-{r.sector}-{r.year}: {r.tariff_shock}"
-            for r in out_of_range.head(5).itertuples(index=False)
+            f"{r['country']}-{r['sector']}-{r['year']}: {r['_shock_col']}={r[r['_shock_col']]}"
+            for _, r in out_of_range.head(5).iterrows()
         ],
     ))
 
-    hit = shock > 0
-    ann = pd.to_datetime(df["announced_date"].replace("", pd.NA), errors="coerce")
-    eff = pd.to_datetime(df["effective_date"].replace("", pd.NA), errors="coerce")
-    missing_dates = hit & (ann.isna() | eff.isna())
-    reversed_dates = hit & ann.notna() & eff.notna() & (ann > eff)
+    missing_dates = pd.Series(False, index=df.index)
+    reversed_dates = pd.Series(False, index=df.index)
+    hit_total = 0
+    for shock_col, ann_col, eff_col in SHOCK_DATE_COLUMNS:
+        if shock_col not in numeric_shocks or ann_col not in df.columns or eff_col not in df.columns:
+            continue
+        hit = numeric_shocks[shock_col] > 0
+        hit_total += int(hit.sum())
+        ann = pd.to_datetime(df[ann_col].replace("", pd.NA), errors="coerce")
+        eff = pd.to_datetime(df[eff_col].replace("", pd.NA), errors="coerce")
+        missing_dates |= hit & (ann.isna() | eff.isna())
+        reversed_dates |= hit & ann.notna() & eff.notna() & (ann > eff)
     checks.append(QcCheck(
         name="冲击事件时间线(宣布日≤生效日)",
         kind="结构",
         passed=not missing_dates.any() and not reversed_dates.any(),
-        detail=f"受冲击记录 {int(hit.sum())} 条;缺少日期 {int(missing_dates.sum())} 条,日期倒置 {int(reversed_dates.sum())} 条",
+        detail=f"受冲击记录 {hit_total} 条;缺少日期 {int(missing_dates.sum())} 条,日期倒置 {int(reversed_dates.sum())} 条",
         warnings=[
             f"{r.country}-{r.sector}-{r.year}: announced={r.announced_date}, effective={r.effective_date}"
             for r in df[missing_dates | reversed_dates].head(5).itertuples(index=False)
         ],
     ))
 
-    treated = pd.to_numeric(df["treated"], errors="coerce")
-    invalid_treated = ~treated.isin([0, 1])
-    mismatch = treated.fillna(-1).astype(int) != (shock > treated_threshold).astype(int)
+    invalid_treated = pd.Series(False, index=df.index)
+    mismatch = pd.Series(False, index=df.index)
+    for shock_col, treated_col in present_pairs:
+        shock = numeric_shocks[shock_col]
+        treated = pd.to_numeric(df[treated_col], errors="coerce")
+        invalid_treated |= ~treated.isin([0, 1])
+        mismatch |= treated.fillna(-1).astype(int) != (shock > treated_threshold).astype(int)
     checks.append(QcCheck(
         name="treated 标记与阈值一致",
         kind="数值",
         passed=not invalid_treated.any() and not mismatch.any(),
         detail=(
             f"非法 treated 值 {int(invalid_treated.sum())} 个;"
-            f"与 tariff_shock>{treated_threshold:g} 不一致 {int(mismatch.sum())} 个"
+            f"与 *_shock>{treated_threshold:g} 不一致 {int(mismatch.sum())} 个"
         ),
         warnings=[
-            f"{r.country}-{r.sector}-{r.year}: shock={r.tariff_shock}, treated={r.treated}"
-            for r in df[invalid_treated | mismatch].head(5).itertuples(index=False)
+            f"{r['country']}-{r['sector']}-{r['year']}: "
+            + "; ".join(f"{s}={r[s]}, {t}={r[t]}" for s, t in present_pairs)
+            for _, r in df[invalid_treated | mismatch].head(5).iterrows()
         ],
     ))
 
     total_pairs = max(len(countries) * len(sectors), 1)
     yearly = []
     bad_years = []
-    for year, g in df.assign(_shock=shock, _treated=treated).groupby("year"):
+    main_shock = numeric_shocks.get("tariff_shock", pd.Series(0.0, index=df.index))
+    main_treated = pd.to_numeric(df["treated"], errors="coerce") if "treated" in df.columns else pd.Series(0, index=df.index)
+    for year, g in df.assign(_shock=main_shock, _treated=main_treated).groupby("year"):
         share = float((g["_treated"] == 1).sum() / total_pairs)
         mean_hit = float(g.loc[g["_treated"] == 1, "_shock"].mean()) if (g["_treated"] == 1).any() else 0.0
         yearly.append(f"{int(year)}:处理组合占比 {share:.2%},受处理均值 {mean_hit:.3%}")

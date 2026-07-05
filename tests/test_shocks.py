@@ -76,6 +76,21 @@ def test_event_timeline_columns():
     assert (df["shock_type"] == "关税冲击").all()
 
 
+def test_entity_list_policy_shocks_are_generated():
+    df = demo_shock_panel(
+        ["CHN", "RUS", "USA"],
+        ["C24", "C26", "J62_63", "K", "B05_06"],
+        YEARS,
+    ).set_index(["country", "sector", "year"])
+
+    assert df.loc[("RUS", "C24", 2018), "sanction_shock"] > 0
+    assert df.loc[("RUS", "C24", 2018), "sanction_treated"] == 1
+    assert df.loc[("CHN", "C26", 2020), "export_control_shock"] > 0
+    assert df.loc[("CHN", "C26", 2020), "export_control_treated"] == 1
+    assert "RUSAL" in df.loc[("RUS", "C24", 2018), "sanction_note"]
+    assert "华为" in df.loc[("CHN", "C26", 2019), "export_control_note"]
+
+
 def test_export_exposure_from_icio_flows(fake_io):
     arr = build_arrays(fake_io)
     exposure = build_export_exposure(arr, 2020)

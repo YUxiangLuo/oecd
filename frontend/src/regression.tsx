@@ -16,9 +16,6 @@ import { CoefForestChart, EventStudyChart } from "./viz";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
 
-// 冲击类型中只有关税真实接入(shocks.py 拟真面板);其余展示为规划中
-const SHOCK_READY = new Set(["关税冲击"]);
-
 function Pills({ options, value, onChange, readySet }: {
   options: string[];
   value: string;
@@ -66,6 +63,7 @@ function DesignMeta({ d }: { d: RegressionDesignInfo }) {
   return (
     <div className="design-meta">
       <span>被解释变量:{d.depvar_label}</span>
+      <span>冲击:{d.shock_type}({d.method === "双向固定效应" ? d.shock_col : d.treated_col})</span>
       <span>面板:{d.panel_file}</span>
       <span>个体 = {ENTITY_LABEL[d.entity] ?? d.entity}</span>
       <span>标准误按{ENTITY_LABEL[d.cluster] ?? d.cluster}聚类</span>
@@ -111,7 +109,7 @@ export function RegDesignLab() {
           <Pills options={opts.granularities} value={gran} onChange={setGran} />
         </ChoiceCard>
         <ChoiceCard title="冲击类型" hint="选择本次实验关注的政策冲击。">
-          <Pills options={opts.shock_types} value={shock} onChange={setShock} readySet={SHOCK_READY} />
+          <Pills options={opts.shock_types} value={shock} onChange={setShock} />
         </ChoiceCard>
         <ChoiceCard title="因果推断方式" hint="有精确时间线才能做 DID / 事件研究。">
           <Pills options={opts.methods} value={method} onChange={setMethod} />
@@ -151,6 +149,7 @@ export function RegDesignLab() {
 
 export function RegressionRunLab({ step }: { step: Step }) {
   const [gran, setGran] = useState("国家–行业级");
+  const [shock, setShock] = useState("关税冲击");
   const [method, setMethod] = useState("双重差分 (DID)");
   const [controlMode, setControlMode] = useState("不加控制变量");
   const [result, setResult] = useState<RegressionResponse | null>(null);
@@ -159,21 +158,21 @@ export function RegressionRunLab({ step }: { step: Step }) {
 
   const { data: opts } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
   const { data: design } = useAsync<RegressionDesignInfo>(
-    () => api.regressionDesign({ step: step.n, granularity: gran, method, controlMode }),
-    [step.n, gran, method, controlMode],
+    () => api.regressionDesign({ step: step.n, granularity: gran, shockType: shock, method, controlMode }),
+    [step.n, gran, shock, method, controlMode],
   );
 
   // 换步骤/设计时清空旧结果,按钮回到初态
   useEffect(() => {
     setResult(null);
     setError(null);
-  }, [step.n, gran, method, controlMode]);
+  }, [step.n, gran, shock, method, controlMode]);
 
   const run = async () => {
     setRunning(true);
     setError(null);
     try {
-      setResult(await api.runRegression(step.n, gran, method, controlMode));
+      setResult(await api.runRegression(step.n, gran, shock, method, controlMode));
     } catch (e) {
       setError(String((e as Error).message));
     } finally {
@@ -200,6 +199,10 @@ export function RegressionRunLab({ step }: { step: Step }) {
           <div className="model-control">
             <span className="model-control-label">粒度</span>
             <Pills options={opts?.granularities ?? ["国家–行业级", "国家级"]} value={gran} onChange={setGran} />
+          </div>
+          <div className="model-control">
+            <span className="model-control-label">冲击</span>
+            <Pills options={opts?.shock_types ?? ["关税冲击", "制裁清单", "出口管制"]} value={shock} onChange={setShock} />
           </div>
           <div className="model-control">
             <span className="model-control-label">方法</span>

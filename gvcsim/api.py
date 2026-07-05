@@ -305,6 +305,22 @@ def _read_shocks() -> pd.DataFrame:
     return _read_path(SHOCKS_DIR / shocks.DEMO_FILE)
 
 
+def _shock_view_columns(shock_type: str) -> tuple[str, str, str, str, str]:
+    if shock_type not in shocks.SHOCK_SPECS:
+        raise HTTPException(status_code=400, detail=f"shock_type 必须是 {list(shocks.SHOCK_SPECS)}")
+    shock_col, treated_col = shocks.SHOCK_SPECS[shock_type]
+    if shock_type == "关税冲击":
+        return shock_col, treated_col, "announced_date", "effective_date", "note"
+    prefix = shock_col.removesuffix("_shock")
+    return (
+        shock_col,
+        treated_col,
+        f"{prefix}_announced_date",
+        f"{prefix}_effective_date",
+        f"{prefix}_note",
+    )
+
+
 @app.get("/api/shocks/events")
 def shock_events():
     """事件时间线(不依赖预计算产物,直接来自事件表)。"""
@@ -316,20 +332,21 @@ def shock_events():
 
 
 @app.get("/api/shocks/summary")
-def shock_summary():
+def shock_summary(shock_type: str = "关税冲击"):
     """按年份的冲击覆盖概览(步骤2 面板头部)。"""
+    shock_col, treated_col, *_ = _shock_view_columns(shock_type)
     df = _read_shocks()
     rows = []
     for y, g in df.groupby("year"):
-        hit = g[g["treated"] == 1]
-        top = g.loc[g["tariff_shock"].idxmax()]
+        hit = g[g[treated_col] == 1]
+        top = g.loc[g[shock_col].idxmax()]
         rows.append({
             "year": int(y),
             "treated_countries": int(hit["country"].nunique()),
             "treated_pairs": int(len(hit)),
-            "mean_shock_treated": float(hit["tariff_shock"].mean()) if len(hit) else 0.0,
-            "max_shock": float(top["tariff_shock"]),
-            "max_shock_target": f"{top['country']}·{top['sector']}" if top["tariff_shock"] > 0 else "",
+            "mean_shock_treated": float(hit[shock_col].mean()) if len(hit) else 0.0,
+            "max_shock": float(top[shock_col]),
+            "max_shock_target": f"{top['country']}·{top['sector']}" if top[shock_col] > 0 else "",
         })
     return {"years": rows, "n_countries": int(df["country"].nunique()),
             "n_sectors": int(df["sector"].nunique())}
@@ -338,6 +355,7 @@ def shock_summary():
 @app.get("/api/shocks/panel")
 def shock_panel(
     year: int,
+    shock_type: str = "关税冲击",
     country: str | None = None,
     sector: str | None = None,
     only_hit: bool = True,
@@ -345,6 +363,7 @@ def shock_panel(
     page_size: int = Query(25, ge=1, le=200),
 ):
     """冲击面板浏览:按冲击强度降序,支持国家/行业筛选与分页。"""
+    shock_col, treated_col, announced_col, effective_col, note_col = _shock_view_columns(shock_type)
     df = _read_shocks()
     df = df[df["year"] == year]
     if country:
@@ -352,8 +371,16 @@ def shock_panel(
     if sector:
         df = df[df["sector"] == sector]
     if only_hit:
-        df = df[df["tariff_shock"] > 0]
-    df = df.sort_values("tariff_shock", ascending=False)
+        df = df[df[shock_col] > 0]
+    df = df.sort_values(shock_col, ascending=False)
+    df = df.assign(
+        tariff_shock=df[shock_col],
+        treated=df[treated_col],
+        announced_date=df[announced_col] if announced_col in df.columns else "",
+        effective_date=df[effective_col] if effective_col in df.columns else "",
+        note=df[note_col] if note_col in df.columns else "",
+        shock_type=shock_type,
+    )
     total = len(df)
     start = (page - 1) * page_size
     return {
@@ -413,6 +440,8 @@ def _design_info(design: RegressionDesign) -> dict:
         "depvar_label": design.depvar_label,
         "granularity": design.granularity,
         "shock_type": design.shock_type,
+        "shock_col": design.shock_col,
+        "treated_col": design.treated_col,
         "method": design.method,
         "control_mode": design.control_mode,
         "controls": list(design.controls),

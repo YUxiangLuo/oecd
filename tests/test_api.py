@@ -61,6 +61,8 @@ def test_regression_design():
     assert body["cluster"] == "country"
     assert body["control_mode"] == "不加控制变量"
     assert body["controls"] == []
+    assert body["shock_col"] == "tariff_shock"
+    assert body["treated_col"] == "treated"
     assert "treated" in body["equation"]
 
     ctrl = client.get(
@@ -86,6 +88,12 @@ def test_regression_design():
     assert client.get(
         "/api/regression/design", params={"step": 13, "shock_type": "汇率冲击"}
     ).status_code == 400
+    sanction = client.get(
+        "/api/regression/design", params={"step": 13, "shock_type": "制裁清单"}
+    )
+    assert sanction.status_code == 200
+    assert sanction.json()["shock_col"] == "sanction_shock"
+    assert "sanction_treated" in sanction.json()["equation"]
     assert client.get(
         "/api/regression/design", params={"step": 13, "control_mode": "外部宏观控制"}
     ).status_code == 400
@@ -226,6 +234,14 @@ def test_shock_summary_and_panel():
     assert chn["total"] > 10
     assert all(r["country"] == "CHN" for r in chn["rows"])
 
+    export_control = client.get(
+        "/api/shocks/panel",
+        params={"year": 2020, "shock_type": "出口管制", "country": "CHN", "only_hit": True},
+    ).json()
+    assert export_control["total"] >= 2
+    assert export_control["rows"][0]["shock_type"] == "出口管制"
+    assert export_control["rows"][0]["tariff_shock"] > 0
+
 
 @needs_data
 def test_regression_run():
@@ -272,6 +288,13 @@ def test_regression_methods():
     fe = client.post("/api/regression/run", json={"step": 14, "method": "双向固定效应"})
     assert fe.status_code == 200
     assert fe.json()["result"]["coefs"][0]["name"] == "tariff_shock"
+
+    fe_export = client.post(
+        "/api/regression/run",
+        json={"step": 14, "method": "双向固定效应", "shock_type": "出口管制"},
+    )
+    assert fe_export.status_code == 200
+    assert fe_export.json()["result"]["coefs"][0]["name"] == "export_control_shock"
 
     # 事件研究:基期 k=-1 省略,动态系数逐年一个
     ev = client.post("/api/regression/run", json={"step": 14, "method": "事件研究"})

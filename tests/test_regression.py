@@ -99,6 +99,10 @@ def test_design_equation_text():
     assert "Σ_k" in eq_ev and "T₀+k" in eq_ev
     eq_ctrl = RegressionDesign(step=13, control_mode=CONTROL_MODE_ICIO).equation()
     assert "Controls_ct" in eq_ctrl
+    d_sanction = RegressionDesign(step=13, shock_type="制裁清单")
+    assert d_sanction.shock_col == "sanction_shock"
+    assert d_sanction.treated_col == "sanction_treated"
+    assert "sanction_treated_ij" in d_sanction.equation()
 
 
 def test_design_panel_spec():

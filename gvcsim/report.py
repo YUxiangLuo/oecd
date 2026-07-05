@@ -53,7 +53,7 @@ def _coef_table(result: RegressionResult) -> str:
 
 def _policy_names(design: RegressionDesign, result: RegressionResult) -> list[str]:
     if design.method == "双重差分 (DID)":
-        return ["treated×post"]
+        return ["treated×post" if design.treated_col == "treated" else f"{design.treated_col}×post"]
     if design.method == "事件研究":
         return [c.name for c in result.coefs if c.name not in design.controls]
     return list(design.regressors)

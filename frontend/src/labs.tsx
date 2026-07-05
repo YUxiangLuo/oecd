@@ -315,16 +315,17 @@ const pct = (v: number) => `${(v * 100).toFixed(2)}%`;
 /** 步骤2:政策冲击数据 —— 事件时间线 + 覆盖概览 + 面板浏览 */
 export function ShockLab({ meta }: { meta: Meta }) {
   const [year, setYear] = useState(meta.years.at(-1) ?? 2020);
+  const [shockType, setShockType] = useState("关税冲击");
   const [country, setCountry] = useState("");
   const [sector, setSector] = useState("");
   const [onlyHit, setOnlyHit] = useState(true);
   const [page, setPage] = useState(1);
 
   const { data: events, error: evErr } = useAsync(() => api.shockEvents(), []);
-  const { data: summary } = useAsync<ShockSummary>(() => api.shockSummary(), []);
+  const { data: summary } = useAsync<ShockSummary>(() => api.shockSummary(shockType), [shockType]);
   const { data: panel, error: panelErr } = useAsync<SectorPage>(
-    () => api.shockPanel(year, country, sector, onlyHit, page),
-    [year, country, sector, onlyHit, page],
+    () => api.shockPanel(year, shockType, country, sector, onlyHit, page),
+    [year, shockType, country, sector, onlyHit, page],
   );
 
   const summaryYear = summary?.years.find((r) => r.year === year);
@@ -342,12 +343,16 @@ export function ShockLab({ meta }: { meta: Meta }) {
       <div className="table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th style={{ textAlign: "left" }}>事件</th><th>加征方 → 目标</th><th>宣布</th><th>生效</th><th>涉及行业</th><th>峰值行业税率</th></tr>
+            <tr><th style={{ textAlign: "left" }}>事件</th><th>类型</th><th>发起方 → 目标</th><th>宣布</th><th>生效</th><th>涉及行业</th><th>峰值强度</th></tr>
           </thead>
           <tbody>
             {(events?.events ?? []).map((e: ShockEvent) => (
               <tr key={e.name}>
-                <td style={{ textAlign: "left", whiteSpace: "normal" }}>{e.name}</td>
+                <td style={{ textAlign: "left", whiteSpace: "normal" }}>
+                  {e.name}
+                  {e.entities && <div className="muted">实体:{e.entities}</div>}
+                </td>
+                <td>{e.shock_type ?? "关税冲击"}</td>
                 <td>{e.imposer} → {e.targets}{e.exempt ? `(豁免:${e.exempt})` : ""}</td>
                 <td>{e.announced}</td>
                 <td>{e.effective}</td>
@@ -361,6 +366,10 @@ export function ShockLab({ meta }: { meta: Meta }) {
 
       <h3 style={{ margin: "22px 0 10px", fontSize: 15 }}>冲击面板浏览</h3>
       <div className="controls">
+        <label>冲击类型</label>
+        <select value={shockType} onChange={(e) => { setShockType(e.target.value); setPage(1); }}>
+          {["关税冲击", "制裁清单", "出口管制"].map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
         <label>年份</label>
         <select value={year} onChange={(e) => { setYear(Number(e.target.value)); setPage(1); }}>
           {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
@@ -392,7 +401,7 @@ export function ShockLab({ meta }: { meta: Meta }) {
       <div className="table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th style={{ textAlign: "left" }}>国家</th><th>行业</th><th>平均额外关税</th><th>受处理</th><th>宣布</th><th>生效</th><th style={{ textAlign: "left" }}>主要事件</th></tr>
+            <tr><th style={{ textAlign: "left" }}>国家</th><th>行业</th><th>冲击强度</th><th>受处理</th><th>宣布</th><th>生效</th><th style={{ textAlign: "left" }}>主要事件</th></tr>
           </thead>
           <tbody>
             {(panel?.rows ?? []).map((r, i) => (
