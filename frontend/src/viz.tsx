@@ -31,7 +31,23 @@ const REGION_OF: Record<string, number> = {};
 
 type Row = Record<string, string | number | null>;
 const num = (v: string | number | null | undefined) => (typeof v === "number" ? v : 0);
-const rowName = (r: Row) => String(r.sector ?? r.country);
+
+/** OECD ICIO 45 行业代码 → 中文名(学生看不懂 C26/H50 这类裸代码,统一映射) */
+export const SECTOR_NAMES: Record<string, string> = {
+  A01_02: "农林牧业", A03: "渔业", B05_06: "能源矿产开采", B07_08: "金属矿开采", B09: "采矿支持服务",
+  C10T12: "食品饮料烟草", C13T15: "纺织服装皮革", C16: "木材制品", C17_18: "造纸印刷", C19: "焦炭与精炼油",
+  C20: "化学品", C21: "医药", C22: "橡胶塑料", C23: "非金属矿物制品", C24: "基本金属", C25: "金属制品",
+  C26: "计算机电子光学", C27: "电气设备", C28: "机械设备", C29: "汽车及零部件", C30: "其他运输设备",
+  C31T33: "家具及其他制造", D: "电力燃气", E: "供水与废弃物", F: "建筑", G: "批发零售",
+  H49: "陆路运输", H50: "水路运输", H51: "航空运输", H52: "仓储与运输辅助", H53: "邮政快递",
+  I: "住宿餐饮", J58T60: "出版影视广播", J61: "电信", J62_63: "IT与信息服务", K: "金融保险",
+  L: "房地产", M: "专业科技服务", N: "行政与支持服务", O: "公共管理与国防", P: "教育",
+  Q: "卫生与社会工作", R: "文体娱乐", S: "其他服务", T: "家庭自用生产",
+};
+/** 行业代码显示名:有映射则 "代码 中文名",否则原样返回;国家代码原样返回 */
+export const sectorLabel = (code: string) => (SECTOR_NAMES[code] ? `${code} ${SECTOR_NAMES[code]}` : code);
+/** 图元实体名:行业行显示中文名,国家行显示代码 */
+const rowName = (r: Row) => (r.sector != null ? sectorLabel(String(r.sector)) : String(r.country));
 
 /** 暗色悬浮 tooltip(增强通道;全部数值同时可在表格视图获得) */
 function useTip() {
@@ -123,7 +139,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
   const [edgeThreshold, setEdgeThreshold] = useState(0);
 
   const model = useMemo(() => {
-    const W = 1000, H = 660, cx = W / 2, cy = H / 2;
+    const W = 1000, H = 560, cx = W / 2, cy = H / 2;
     const byRegion: string[][] = REGIONS.map(() => []);
     const metrics: Record<NetworkMetric, Record<string, number>> = {
       share_trade_gvc_participation: {},
@@ -144,8 +160,8 @@ export function NetworkViz({ data }: { data: NetworkData }) {
     const pos: Record<string, { x: number; y: number; ox: number; oy: number }> = {};
     byRegion.forEach((list, i) => {
       const a = -Math.PI / 2 + (i * 2 * Math.PI) / REGIONS.length;
-      const ax = cx + Math.cos(a) * 300, ay = cy + Math.sin(a) * 208;
-      const ring = Math.min(118, 16 + list.length * 3.1);
+      const ax = cx + Math.cos(a) * 300, ay = cy + Math.sin(a) * 170;
+      const ring = Math.min(108, 16 + list.length * 3.1);
       list.forEach((c, j) => {
         const t = (j / Math.max(1, list.length)) * 2 * Math.PI - Math.PI / 2;
         const inner = list.length > 18 && j % 2 === 1;
@@ -506,7 +522,7 @@ export function RankBarChart({ rows, metricKey, label, format, highlight }: {
             <div key={entity} style={{ display: "flex", alignItems: "center", gap: 10 }}
               onMouseMove={(e) => show(e, [["", entity], [label, fmtVal(v, format)]])}
               onMouseLeave={hide}>
-              <span style={{ width: 58, fontSize: 11.5, color: "#5a6070", fontFamily: "monospace" }}>{entity}</span>
+              <span title={entity} style={{ width: 132, flexShrink: 0, fontSize: 11.5, color: "#5a6070", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entity}</span>
               <div style={{ flex: 1, height: 16, background: "#f2f3f7", borderRadius: 5, overflow: "hidden" }}>
                 <div style={{ width: `${w}%`, height: "100%", background: hi ? CAT[5] : CAT[0], transition: "width .4s" }} />
               </div>
@@ -527,7 +543,11 @@ export function ScatterChart({ rows, xKey, yKey, xLabel, yLabel, xFormat, yForma
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const W = 660, H = 400, m = { l: 62, r: 18, t: 14, b: 46 };
-  const pts = rows.map((r) => ({ c: rowName(r), x: num(r[xKey]), y: num(r[yKey]) }));
+  // c = 完整名(tooltip / 高亮匹配),tag = 图上短标签(行业只标代码,避免中文名越界)
+  const pts = rows.map((r) => ({
+    c: rowName(r), tag: r.sector != null ? String(r.sector) : String(r.country),
+    x: num(r[xKey]), y: num(r[yKey]),
+  }));
   const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
   const spread = (arr: number[]) => {
     const lo = Math.min(...arr), hi = Math.max(...arr), pad = (hi - lo) * 0.06 || Math.abs(hi) * 0.1 || 1;
@@ -568,7 +588,7 @@ export function ScatterChart({ rows, xKey, yKey, xLabel, yLabel, xFormat, yForma
                 stroke="#fff" strokeWidth={1} />
               {(showLabels || hi) && (
                 <text x={px(p.x) + 7} y={py(p.y) + 3.5} fontSize="10" fill={hi ? CAT[5] : "#8a90a0"}
-                  fontWeight={hi ? 700 : 400}>{p.c}</text>
+                  fontWeight={hi ? 700 : 400}>{p.tag}</text>
               )}
             </g>
           );
