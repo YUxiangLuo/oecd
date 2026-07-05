@@ -5,8 +5,12 @@ import pandas as pd
 import pytest
 
 from gvcsim.data.controls import CONTROL_COLUMNS, MACRO_CONTROL_COLUMNS
-from gvcsim.regression.design import CONTROL_MODE_ICIO, CONTROL_MODE_MACRO, RegressionDesign
-from gvcsim.regression.panel import benchmark_linearmodels, did, event_study, run_design, twoway_fe
+from gvcsim.regression.design import (
+    CONTROL_MODE_ICIO, CONTROL_MODE_MACRO, PRICE_MODE_REAL, RegressionDesign,
+)
+from gvcsim.regression.panel import (
+    _apply_price_mode, benchmark_linearmodels, did, event_study, run_design, twoway_fe,
+)
 
 rng = np.random.default_rng(42)
 
@@ -108,6 +112,8 @@ def test_design_equation_text():
     assert d_sanction.shock_col == "sanction_shock"
     assert d_sanction.treated_col == "sanction_treated"
     assert "sanction_treated_ij" in d_sanction.equation()
+    real = RegressionDesign(step=13, price_mode=PRICE_MODE_REAL)
+    assert real.price_mode == PRICE_MODE_REAL
 
 
 def test_design_panel_spec():
@@ -303,3 +309,33 @@ def test_run_design_with_macro_controls():
 
     assert result.coefs[0].name == "tariff_shock"
     assert any(c.name in MACRO_CONTROL_COLUMNS for c in result.coefs)
+
+
+def test_real_price_mode_deflates_amount_controls():
+    df = _simulate_panel(beta=-0.2, n_entities=12, n_times=4).rename(
+        columns={"y": "share_trade_fva", "x": "tariff_shock"}
+    )
+    df["prod_va_total"] = 1000 + 30 * (df["year"] - df["year"].min())
+    df["trade_gross_exports"] = 300 + 12 * (df["year"] - df["year"].min())
+    df["gdp_deflator"] = 1.0 + 0.04 * (df["year"] - df["year"].min())
+    df["log_gdp_proxy"] = np.log(df["prod_va_total"] + 1.0)
+    df["gdp_proxy_growth"] = 0.0
+    df["log_exports_proxy"] = np.log(df["trade_gross_exports"] + 1.0)
+    df["exports_proxy_growth"] = 0.0
+    df["export_intensity"] = df["trade_gross_exports"] / df["prod_va_total"]
+    df["manufacturing_va_share"] = 0.4
+    df["services_va_share"] = 0.35
+
+    design = RegressionDesign(
+        step=13,
+        granularity="国家级",
+        method="双向固定效应",
+        control_mode=CONTROL_MODE_ICIO,
+        price_mode=PRICE_MODE_REAL,
+    )
+    adjusted = _apply_price_mode(df, design)
+    expected = np.log(df["prod_va_total"] / df["gdp_deflator"] + 1.0)
+
+    assert np.allclose(adjusted["log_gdp_proxy"], expected)
+    result = run_design(df, design)
+    assert any("实际值口径" in note for note in result.notes)

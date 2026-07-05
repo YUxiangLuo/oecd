@@ -96,6 +96,7 @@ export const api = {
     method: string;
     controlMode?: string;
     interaction?: boolean;
+    priceMode?: string;
   }) => {
     const qs = new URLSearchParams({
       step: String(params.step),
@@ -105,6 +106,7 @@ export const api = {
     if (params.shockType) qs.set("shock_type", params.shockType);
     if (params.controlMode) qs.set("control_mode", params.controlMode);
     if (params.interaction) qs.set("interaction", "true");
+    if (params.priceMode) qs.set("price_mode", params.priceMode);
     return get<import("./types").RegressionDesignInfo>(`/api/regression/design?${qs.toString()}`);
   },
   runRegression: async (
@@ -114,6 +116,7 @@ export const api = {
     method: string,
     controlMode: string,
     interaction: boolean,
+    priceMode: string,
   ) => {
     const resp = await fetch("/api/regression/run", {
       method: "POST",
@@ -125,6 +128,7 @@ export const api = {
         method,
         control_mode: controlMode,
         interaction,
+        price_mode: priceMode,
       }),
     });
     if (resp.status === 401) notifyAuthExpired();

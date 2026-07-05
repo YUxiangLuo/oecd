@@ -64,6 +64,7 @@ def test_regression_options():
     assert "双重差分 (DID)" in body["methods"]
     assert "ICIO 派生控制变量" in body["control_modes"]
     assert "模拟宏观控制" in body["control_modes"]
+    assert "实际值(2016=1)" in body["price_modes"]
 
 
 def test_regression_design():
@@ -76,6 +77,7 @@ def test_regression_design():
     assert body["entity"] == "entity_id"
     assert body["cluster"] == "country"
     assert body["control_mode"] == "不加控制变量"
+    assert body["price_mode"] == "名义值"
     assert body["controls"] == []
     assert body["shock_col"] == "tariff_shock"
     assert body["treated_col"] == "treated"
@@ -104,6 +106,13 @@ def test_regression_design():
     assert inter.json()["interaction"] is True
     assert "BaseGVC" in inter.json()["equation"]
 
+    real = client.get(
+        "/api/regression/design",
+        params={"step": 13, "price_mode": "实际值(2016=1)"},
+    )
+    assert real.status_code == 200
+    assert real.json()["price_mode"] == "实际值(2016=1)"
+
     ev = client.get(
         "/api/regression/design",
         params={"step": 15, "granularity": "国家级", "method": "事件研究"},
@@ -127,6 +136,9 @@ def test_regression_design():
     assert "sanction_treated" in sanction.json()["equation"]
     assert client.get(
         "/api/regression/design", params={"step": 13, "control_mode": "外部宏观控制"}
+    ).status_code == 400
+    assert client.get(
+        "/api/regression/design", params={"step": 13, "price_mode": "购买力平价"}
     ).status_code == 400
 
 

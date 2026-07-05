@@ -26,6 +26,10 @@ CONTROL_MODE_ICIO = "ICIO 派生控制变量"
 CONTROL_MODE_MACRO = "模拟宏观控制"
 CONTROL_MODES = [CONTROL_MODE_NONE, CONTROL_MODE_ICIO, CONTROL_MODE_MACRO]
 
+PRICE_MODE_NOMINAL = "名义值"
+PRICE_MODE_REAL = "实际值(2016=1)"
+PRICE_MODES = [PRICE_MODE_NOMINAL, PRICE_MODE_REAL]
+
 # 粒度 → (面板文件, 个体列, 聚类列)。冲击在国家层面高度相关,
 # 行业级回归的标准误也按国家聚类,避免组内相关低估标准误。
 _PANEL_SPECS = {
@@ -43,6 +47,7 @@ class RegressionDesign:
     method: str = "双重差分 (DID)"
     control_mode: str = CONTROL_MODE_NONE
     interaction: bool = False
+    price_mode: str = PRICE_MODE_NOMINAL
 
     @property
     def depvar(self) -> str:

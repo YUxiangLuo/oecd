@@ -36,6 +36,8 @@ def main() -> None:
                    help="加入 WDI/IMF 风格模拟宏观控制变量")
     p.add_argument("--interaction", action="store_true",
                    help="加入 冲击×基期GVC参与度 交互项")
+    p.add_argument("--real", action="store_true",
+                   help="使用 GDP 平减指数切换到实际值口径(2016=1)")
 
     p = sub.add_parser("report", help="生成实验报告")
     p.add_argument("--year", type=int, default=None)
@@ -69,7 +71,10 @@ def main() -> None:
         pipeline.run(args.years)
 
     elif args.command == "regress":
-        from gvcsim.regression.design import CONTROL_MODE_ICIO, CONTROL_MODE_MACRO, RegressionDesign
+        from gvcsim.regression.design import (
+            CONTROL_MODE_ICIO, CONTROL_MODE_MACRO, PRICE_MODE_NOMINAL, PRICE_MODE_REAL,
+            RegressionDesign,
+        )
         from gvcsim.report import run_step_regression
 
         if args.controls and args.macro_controls:
@@ -81,15 +86,17 @@ def main() -> None:
             else CONTROL_MODE_ICIO if args.controls
             else "不加控制变量"
         )
+        price_mode = PRICE_MODE_REAL if args.real else PRICE_MODE_NOMINAL
         design = RegressionDesign(
             step=args.step, granularity=granularity, method=method,
-            control_mode=control_mode, interaction=args.interaction
+            control_mode=control_mode, interaction=args.interaction, price_mode=price_mode
         )
         result = run_step_regression(
             args.step, granularity=granularity, method=method,
-            control_mode=control_mode, interaction=args.interaction
+            control_mode=control_mode, interaction=args.interaction, price_mode=price_mode
         )
         print(f"步骤{args.step}:{design.depvar_label}({granularity} · {method})")
+        print(f"价格口径:{price_mode}")
         if args.controls or args.macro_controls:
             print(f"控制变量:{control_mode}")
         if args.interaction:

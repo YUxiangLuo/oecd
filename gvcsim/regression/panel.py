@@ -23,6 +23,8 @@ import numpy as np
 import pandas as pd
 from linearmodels.panel import PanelOLS
 
+from gvcsim.regression.design import PRICE_MODE_REAL
+
 
 @dataclass
 class CoefStat:
@@ -79,6 +81,7 @@ class PreparedModel:
 
 BASE_GVC_COL = "share_trade_gvc_participation"
 BASELINE_GVC_COL = "base_gvc_participation"
+DEFLATOR_COL = "gdp_deflator"
 
 
 def _attach_baseline_gvc(data: pd.DataFrame, entity: str, time: str) -> pd.DataFrame:
@@ -93,6 +96,54 @@ def _attach_baseline_gvc(data: pd.DataFrame, entity: str, time: str) -> pd.DataF
     out = data.merge(base, left_on=entity, right_index=True, how="left")
     if out[BASELINE_GVC_COL].isna().any():
         raise ValueError("无法构造基期 GVC 参与度交互项")
+    return out
+
+
+def _real_amount(s: pd.Series, deflator: pd.Series) -> pd.Series:
+    return (s.astype(float) / deflator.astype(float).replace(0.0, np.nan)).replace(
+        [np.inf, -np.inf], np.nan
+    ).fillna(0.0)
+
+
+def _real_log_from_log(log_s: pd.Series, deflator: pd.Series) -> pd.Series:
+    nominal = np.expm1(log_s.astype(float)).clip(lower=0.0)
+    return np.log(_real_amount(nominal, deflator) + 1.0)
+
+
+def _country_year_real_growth(data: pd.DataFrame, amount_col: str, time: str) -> pd.Series:
+    base = data[["country", time, amount_col, DEFLATOR_COL]].drop_duplicates(["country", time])
+    base = base.sort_values(["country", time]).copy()
+    base["_real_amount"] = _real_amount(base[amount_col], base[DEFLATOR_COL])
+    prev = base.groupby("country")["_real_amount"].shift(1)
+    base["_real_growth"] = ((base["_real_amount"] - prev) / prev.where(prev.abs() > 1e-12)).fillna(0.0)
+    return data[["country", time]].merge(
+        base[["country", time, "_real_growth"]],
+        on=["country", time],
+        how="left",
+    )["_real_growth"].fillna(0.0)
+
+
+def _apply_price_mode(df: pd.DataFrame, design, time: str = "year") -> pd.DataFrame:
+    """实际值模式:用 GDP deflator 平减金额类控制变量。"""
+    if getattr(design, "price_mode", None) != PRICE_MODE_REAL:
+        return df
+    if DEFLATOR_COL not in df.columns:
+        raise ValueError("实际值口径需要面板包含 gdp_deflator,请先重新运行 gvcsim compute")
+    out = df.copy()
+    deflator = out[DEFLATOR_COL].astype(float)
+
+    if "log_gdp_proxy" in out.columns:
+        out["log_gdp_proxy"] = _real_log_from_log(out["log_gdp_proxy"], deflator)
+    if "log_exports_proxy" in out.columns:
+        out["log_exports_proxy"] = _real_log_from_log(out["log_exports_proxy"], deflator)
+    if "macro_log_gdp_usd" in out.columns:
+        out["macro_log_gdp_usd"] = _real_log_from_log(out["macro_log_gdp_usd"], deflator)
+    if {"macro_log_gdp_usd", "macro_log_population"}.issubset(out.columns):
+        out["macro_log_gdp_per_capita"] = out["macro_log_gdp_usd"] - out["macro_log_population"]
+    if {"country", time, "prod_va_total", DEFLATOR_COL}.issubset(out.columns):
+        out["gdp_proxy_growth"] = _country_year_real_growth(out, "prod_va_total", time)
+    if {"country", time, "trade_gross_exports", DEFLATOR_COL}.issubset(out.columns):
+        out["exports_proxy_growth"] = _country_year_real_growth(out, "trade_gross_exports", time)
     return out
 
 
@@ -305,13 +356,18 @@ def run_design(df: pd.DataFrame, design) -> RegressionResult:
 
 def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
     """按 RegressionDesign 构造同一份估计样本,供自写引擎与 PanelOLS 共用。"""
+    df = _apply_price_mode(df, design)
     kwargs = dict(entity=design.entity, time="year", cluster=design.cluster,
                   controls=list(design.controls), interaction=design.interaction)
     if design.method == "双重差分 (DID)":
-        return _prepare_did_model(df, design.depvar, treated_col=design.treated_col, **kwargs)
-    if design.method == "事件研究":
-        return _prepare_event_model(df, design.depvar, treated_col=design.treated_col, **kwargs)
-    return _prepare_fe_model(df, design.depvar, list(design.regressors), **kwargs)
+        model = _prepare_did_model(df, design.depvar, treated_col=design.treated_col, **kwargs)
+    elif design.method == "事件研究":
+        model = _prepare_event_model(df, design.depvar, treated_col=design.treated_col, **kwargs)
+    else:
+        model = _prepare_fe_model(df, design.depvar, list(design.regressors), **kwargs)
+    if getattr(design, "price_mode", None) == PRICE_MODE_REAL:
+        model.notes.append("实际值口径:金额类控制变量已用 GDP 平减指数调整(基期=1)")
+    return model
 
 
 def _prep_treatment(data: pd.DataFrame, entity: str, time: str,

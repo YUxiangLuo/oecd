@@ -5,7 +5,7 @@
 import type { TeachBlock } from "./teach";
 import type { RegressionResponse } from "./types";
 
-const ICIO_CONTROLS = "可切换控制变量 γ·Controls_ct:ICIO 派生控制用于解释增加值规模、出口强度与产业结构;模拟宏观控制按 WDI/IMF 风格提供 GDP、人口、人均收入、汇率变动与 FDI 流入。真实价格平减仍需接入行业价格指数。";
+const ICIO_CONTROLS = "可切换控制变量 γ·Controls_ct:ICIO 派生控制用于解释增加值规模、出口强度与产业结构;模拟宏观控制按 WDI/IMF 风格提供 GDP、人口、人均收入、汇率变动与 FDI 流入。价格口径切到实际值时,金额类控制变量会用 GDP 平减指数 mock 调整。";
 
 export const REG_TEACH: Record<number, TeachBlock[]> = {
   12: [

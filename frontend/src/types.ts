@@ -187,6 +187,7 @@ export interface RegressionOptions {
   shock_types: string[];
   methods: string[];
   control_modes: string[];
+  price_modes: string[];
   steps: Record<string, string>; // 步骤号 → 被解释变量中文名
 }
 
@@ -201,6 +202,7 @@ export interface RegressionDesignInfo {
   method: string;
   control_mode: string;
   interaction: boolean;
+  price_mode: string;
   controls: string[];
   control_labels: Record<string, string>;
   equation: string;

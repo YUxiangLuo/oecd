@@ -69,6 +69,7 @@ function DesignMeta({ d }: { d: RegressionDesignInfo }) {
       <span>标准误按{ENTITY_LABEL[d.cluster] ?? d.cluster}聚类</span>
       <span>控制:{controls}</span>
       <span>交互项:{d.interaction ? "冲击×基期GVC" : "未加入"}</span>
+      <span>价格口径:{d.price_mode}</span>
     </div>
   );
 }
@@ -84,13 +85,14 @@ export function RegDesignLab() {
   const [method, setMethod] = useState("双重差分 (DID)");
   const [controlMode, setControlMode] = useState("不加控制变量");
   const [interaction, setInteraction] = useState(false);
+  const [priceMode, setPriceMode] = useState("名义值");
   const [depStep, setDepStep] = useState(13);
 
   const { data: design, error: designErr } = useAsync<RegressionDesignInfo>(
     () => api.regressionDesign({
-      step: depStep, granularity: gran, shockType: shock, method, controlMode, interaction,
+      step: depStep, granularity: gran, shockType: shock, method, controlMode, interaction, priceMode,
     }),
-    [depStep, gran, shock, method, controlMode, interaction],
+    [depStep, gran, shock, method, controlMode, interaction, priceMode],
   );
 
   if (optsErr) return <div className="error-box">{optsErr}</div>;
@@ -133,6 +135,13 @@ export function RegDesignLab() {
             冲击 × 基期 GVC 参与度
           </label>
         </ChoiceCard>
+        <ChoiceCard title="价格口径" hint="实际值会用 GDP 平减指数调整金额类控制变量。">
+          <Pills
+            options={opts.price_modes ?? ["名义值", "实际值(2016=1)"]}
+            value={priceMode}
+            onChange={setPriceMode}
+          />
+        </ChoiceCard>
         <ChoiceCard title="被解释变量" hint="对应步骤13–16 的四组 GVC 指标回归。">
           <div className="pill-row">
             {stepEntries.map(([n, label]) => (
@@ -165,27 +174,28 @@ export function RegressionRunLab({ step }: { step: Step }) {
   const [method, setMethod] = useState("双重差分 (DID)");
   const [controlMode, setControlMode] = useState("不加控制变量");
   const [interaction, setInteraction] = useState(false);
+  const [priceMode, setPriceMode] = useState("名义值");
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
   const { data: opts } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
   const { data: design } = useAsync<RegressionDesignInfo>(
-    () => api.regressionDesign({ step: step.n, granularity: gran, shockType: shock, method, controlMode, interaction }),
-    [step.n, gran, shock, method, controlMode, interaction],
+    () => api.regressionDesign({ step: step.n, granularity: gran, shockType: shock, method, controlMode, interaction, priceMode }),
+    [step.n, gran, shock, method, controlMode, interaction, priceMode],
   );
 
   // 换步骤/设计时清空旧结果,按钮回到初态
   useEffect(() => {
     setResult(null);
     setError(null);
-  }, [step.n, gran, shock, method, controlMode, interaction]);
+  }, [step.n, gran, shock, method, controlMode, interaction, priceMode]);
 
   const run = async () => {
     setRunning(true);
     setError(null);
     try {
-      setResult(await api.runRegression(step.n, gran, shock, method, controlMode, interaction));
+      setResult(await api.runRegression(step.n, gran, shock, method, controlMode, interaction, priceMode));
     } catch (e) {
       setError(String((e as Error).message));
     } finally {
@@ -238,6 +248,14 @@ export function RegressionRunLab({ step }: { step: Step }) {
             />
             <span>冲击×基期GVC</span>
           </label>
+          <div className="model-control">
+            <span className="model-control-label">口径</span>
+            <Pills
+              options={opts?.price_modes ?? ["名义值", "实际值(2016=1)"]}
+              value={priceMode}
+              onChange={setPriceMode}
+            />
+          </div>
         </div>
         <div className="model-eq">{design ? design.equation : "…"}</div>
         {design && <DesignMeta d={design} />}

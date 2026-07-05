@@ -37,7 +37,17 @@ MACRO_CONTROL_COLUMNS = [
     "macro_fdi_inflow_gdp",
 ]
 
-ALL_CONTROL_COLUMNS = [*CONTROL_COLUMNS, *INDEX_COLUMNS, *MACRO_CONTROL_COLUMNS]
+PRICE_COLUMNS = [
+    "gdp_deflator",
+    "inflation_rate",
+]
+
+ALL_CONTROL_COLUMNS = [
+    *CONTROL_COLUMNS,
+    *INDEX_COLUMNS,
+    *MACRO_CONTROL_COLUMNS,
+    *PRICE_COLUMNS,
+]
 
 CONTROL_LABELS = {
     "log_gdp_proxy": "增加值规模(log, ICIO GDP proxy)",
@@ -140,6 +150,11 @@ def build_controls(
     income_usd = 4_000.0 + 45_000.0 * score + 600.0 * t
     population = gdp_usd / income_usd
     phase = 2 * np.pi * score + 0.8 * t
+    inflation = pd.Series(
+        np.clip(0.012 + 0.025 * score + 0.006 * np.sin(phase + 0.7), 0.0, 0.08),
+        index=country.index,
+    )
+    inflation = inflation.where(t > 0, 0.0)
 
     out["macro_log_gdp_usd"] = _safe_log(pd.Series(gdp_usd, index=country.index))
     out["macro_log_population"] = _safe_log(pd.Series(population, index=country.index))
@@ -153,6 +168,10 @@ def build_controls(
         0.012 + 0.050 * score + 0.010 * np.cos(phase + 0.3),
         0.0,
         0.15,
+    )
+    out["inflation_rate"] = inflation
+    out["gdp_deflator"] = (
+        (1.0 + inflation).groupby(country["country"], group_keys=False).cumprod()
     )
 
     sector["is_manufacturing"] = sector["sector"].astype(str).str.startswith(MANUFACTURING_PREFIXES)

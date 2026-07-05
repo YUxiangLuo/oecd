@@ -22,7 +22,7 @@ from gvcsim import shocks
 from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
 from gvcsim.data import crosswalk, icio_browser
 from gvcsim.regression.design import (
-    CONTROL_MODES, GRANULARITIES, METHODS, SHOCK_TYPES, STEP_DEPVARS, RegressionDesign,
+    CONTROL_MODES, GRANULARITIES, METHODS, PRICE_MODES, SHOCK_TYPES, STEP_DEPVARS, RegressionDesign,
 )
 from gvcsim.regression.panel import run_design_with_benchmark
 from gvcsim.steps import STAGE_NAMES, STEPS
@@ -426,6 +426,7 @@ class RegressionRequest(BaseModel):
     method: str = "双重差分 (DID)"
     control_mode: str = "不加控制变量"
     interaction: bool = False
+    price_mode: str = "名义值"
 
 
 @app.get("/api/regression/options")
@@ -435,6 +436,7 @@ def regression_options():
         "shock_types": SHOCK_TYPES,
         "methods": METHODS,
         "control_modes": CONTROL_MODES,
+        "price_modes": PRICE_MODES,
         "steps": {k: v[1] for k, v in STEP_DEPVARS.items()},
     }
 
@@ -446,6 +448,7 @@ def _validate_design(
     method: str,
     control_mode: str = "不加控制变量",
     interaction: bool = False,
+    price_mode: str = "名义值",
 ) -> RegressionDesign:
     if step not in STEP_DEPVARS:
         raise HTTPException(status_code=400, detail="step 必须是 13-16")
@@ -457,9 +460,12 @@ def _validate_design(
         raise HTTPException(status_code=400, detail=f"method 必须是 {METHODS}")
     if control_mode not in CONTROL_MODES:
         raise HTTPException(status_code=400, detail=f"control_mode 必须是 {CONTROL_MODES}")
+    if price_mode not in PRICE_MODES:
+        raise HTTPException(status_code=400, detail=f"price_mode 必须是 {PRICE_MODES}")
     return RegressionDesign(
         step=step, granularity=granularity, shock_type=shock_type,
         method=method, control_mode=control_mode, interaction=interaction,
+        price_mode=price_mode,
     )
 
 
@@ -475,6 +481,7 @@ def _design_info(design: RegressionDesign) -> dict:
         "method": design.method,
         "control_mode": design.control_mode,
         "interaction": design.interaction,
+        "price_mode": design.price_mode,
         "controls": list(design.controls),
         "control_labels": design.control_labels,
         "equation": design.equation(),
@@ -492,15 +499,19 @@ def regression_design(
     method: str = "双重差分 (DID)",
     control_mode: str = "不加控制变量",
     interaction: bool = False,
+    price_mode: str = "名义值",
 ):
     """步骤12 设计确认:不跑回归,只返回方程与面板/个体/聚类等设计信息。"""
-    return _design_info(_validate_design(step, granularity, shock_type, method, control_mode, interaction))
+    return _design_info(_validate_design(
+        step, granularity, shock_type, method, control_mode, interaction, price_mode
+    ))
 
 
 @app.post("/api/regression/run")
 def regression_run(req: RegressionRequest):
     design = _validate_design(
-        req.step, req.granularity, req.shock_type, req.method, req.control_mode, req.interaction
+        req.step, req.granularity, req.shock_type, req.method, req.control_mode,
+        req.interaction, req.price_mode,
     )
     panel = _read_csv(design.panel_file)
     try:

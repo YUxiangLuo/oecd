@@ -27,12 +27,13 @@ def run_step_regression(
     method: str | None = None,
     control_mode: str = "不加控制变量",
     interaction: bool = False,
+    price_mode: str = "名义值",
 ) -> RegressionResult:
     """跑步骤13-16 对应的默认设计回归(默认国家–行业级粒度 + DID)。"""
     kwargs = {"method": method} if method else {}
     design = RegressionDesign(
         step=step, granularity=granularity, control_mode=control_mode,
-        interaction=interaction, **kwargs
+        interaction=interaction, price_mode=price_mode, **kwargs
     )
     if panel is None:
         panel = _load_panel(design)
@@ -113,7 +114,8 @@ def generate(year: int | None = None) -> str:
         "处理期=首个冲击年起),含双向固定效应,标准误按国家聚类;"
         "双向FE(强度法)与事件研究可在前端切换",
         "- 稳健性:同时输出基准模型与 ICIO 派生国家-年份控制变量模型;"
-        "前端/CLI 另可切换 WDI/IMF 风格模拟宏观控制;未接真实价格指数",
+        "前端/CLI 另可切换 WDI/IMF 风格模拟宏观控制与名义/实际口径;"
+        "实际值口径使用 GDP 平减指数 mock",
         f"- 生成日期:{date.today().isoformat()}\n",
         "## 一、数据与质检",
         f"覆盖 {snap.shape[0]} 个国家/地区、{len(years)} 个年份。"
@@ -154,7 +156,7 @@ def generate(year: int | None = None) -> str:
         "出口暴露度由 OECD ICIO 双边流向计算);"
         "接入 PIIE/WTO 真实数据 + 官方 HS→ICIO 映射后本报告即具备研究意义。",
         "- 控制变量支持 ICIO 内生派生与 WDI/IMF 风格宏观 mock,用于稳健性演示;"
-        "金额指数是相对基期变化,不是真实平减值。论文级研究仍需接入真实 WDI/IMF/"
+        "GDP 平减指数为拟真 mock,不是官方价格指数。论文级研究仍需接入真实 WDI/IMF/"
         "行业价格指数。",
         "- 指标采用 KWW 风格贸易流分解与 WWYZ 生产活动分解的国家/国家–行业聚合口径,"
         "重复计算项为启发式近似(详见 README 方法论说明),论文级精度需替换为 "

@@ -59,9 +59,10 @@ uv run gvcsim regress --step 13 --method fe             # 双向固定效应(强
 uv run gvcsim regress --step 13 --controls              # 加入 ICIO 派生国家-年份控制变量
 uv run gvcsim regress --step 13 --macro-controls        # 加入 WDI/IMF 风格模拟宏观控制
 uv run gvcsim regress --step 13 --interaction           # 加入冲击×基期GVC参与度交互项
+uv run gvcsim regress --step 13 --controls --real       # 金额类控制变量切换为实际值口径
 uv run gvcsim regress --step 13 --granularity country   # 国家级粒度
 uv run gvcsim report --year 2020      # 步骤17:生成 reports/experiment_report_2020.md
-uv run pytest                         # 测试(73 个,含 API 集成测试)
+uv run pytest                         # 测试(74 个,含 API 集成测试)
 ```
 
 ## 目录结构
@@ -137,7 +138,8 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 - **稳健性控制变量**:从现有 ICIO 指标派生国家-年份控制变量(增加值规模/增长、
   出口规模/增长、出口强度、制造业/服务业增加值份额),支持步骤12-17
   展示"基准模型 vs 加控制变量模型";另有 WDI/IMF 风格宏观 mock(GDP、人口、
-  人均收入、汇率变动、FDI 流入)。金额指数只表示相对基期变化,不是真实平减值。
+  人均收入、汇率变动、FDI 流入)。GDP 平减指数 mock 支持名义/实际口径切换;
+  金额指数只表示相对基期变化,不是真实官方平减值。
 - **回归默认国家–行业级**:个体 = 国家×行业(~3,465 个),固定效应吸收行业异质性,
   标准误按国家聚类(同国各行业共享政策冲击,残差组内相关);国家级粒度仍可选。
 - **三种估计方法共用一个 within-OLS 核心**:默认 DID(处理组=曾受冲击个体,
@@ -164,7 +166,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 | | 7 网络指标 | ✅ 度/介数/特征向量中心性,国家+行业双粒度(行业级介数默认精确,超大图才抽样;特征向量优先走 scipy 后端);前端有小网络交互演示(浏览器内算度/介数,高亮最短路径) |
 | 三、可视化 | 8–11 | ✅ 招牌图(网络图/生产堆叠条/长度双段条/中心性热力表)+ 自由探索:自选指标、排序条形图、X×Y 散点图、2016–2020 趋势折线、Top-N/选国家,均带表格视图与悬停 tooltip |
 | 四、回归 | 12 设计确认 | ✅ 交互式设计台:粒度/三类冲击/方法/被解释变量选择卡 → 即时方程与面板/个体/聚类摘要(GET /api/regression/design) |
-| | 13–16 四组回归 | 🟡 讲解卡片体系(概念/公式/陷阱/自检/小结)+ 模型设定卡 + 控制变量切换(ICIO 派生 / 模拟宏观)+ 系数表/森林图/事件研究图 + PanelOLS 对照 + 按结果自动生成的中文解读;默认 DID(个体FE+按国聚类SE),基于演示冲击数据 |
+| | 13–16 四组回归 | 🟡 讲解卡片体系(概念/公式/陷阱/自检/小结)+ 模型设定卡 + 控制变量切换(ICIO 派生 / 模拟宏观)+ 名义/实际口径切换 + 系数表/森林图/事件研究图 + PanelOLS 对照 + 按结果自动生成的中文解读;默认 DID(个体FE+按国聚类SE),基于演示冲击数据 |
 | 五、闭环 | 17 实验报告 | 🟡 Markdown 报告自动生成(回归为行业级,含基准/加控制并列表);PDF 导出与报告参数化待做(开发计划 M4) |
 
 ## 数据边界与 Mock 策略
@@ -179,7 +181,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 | 制裁清单 | 🎭 拟真 mock | OFAC SDN/二级制裁风格实体事件(RUSAL、俄罗斯能源金融限制、涉疆实体),聚合为 `sanction_shock` |
 | 出口管制清单 | 🎭 拟真 mock | BIS 实体清单风格事件(华为、SMIC),聚合为 `export_control_shock` |
 | 宏观控制变量 | 🔁 ICIO 派生 + 🎭 拟真 mock | 从已算指标派生国家-年份控制变量;另有 WDI/IMF 风格模拟宏观控制(GDP、人口、人均收入、汇率变动、FDI 流入) |
-| 平减指数 / 汇率 | ⬜ 待 mock | 现全部为名义值;开发计划 M3.3 |
+| 平减指数 / 汇率 | 🎭 拟真 mock | GDP 平减指数与通胀率支持实际值口径;汇率变动率在模拟宏观控制中提供 |
 | HS↔ICIO 行业映射表 | 🎭 拟真 mock | HS 2 位章→ICIO 商品相关行业一对多权重映射,步骤2 演示 301 清单如何折算到行业平均税率 |
 
 Mock 的质量标准(schema 对齐真实来源、量级锚定公开统计、维度全覆盖、时间线完整、
@@ -225,9 +227,9 @@ Mock 的质量标准(schema 对齐真实来源、量级锚定公开统计、维�
    出口管制三类 mock、冲击面板质检、HS↔ICIO 映射工作流演示均已接入。
 2. **M2 指标与可视化深化**:贸易流分解升级为 Borin-Mancini 精确公式;网络图
    交互升级;国家–行业级下钻。
-3. **M3 回归层补全**:三类冲击、WDI/IMF 风格宏观控制 mock、冲击×基期 GVC
-   参与度交互项已接入回归设计;平减指数与名义/实际切换;clean/noisy/confounded
-   三套教学场景;安慰剂检验。
+3. **M3 回归层补全**:三类冲击、WDI/IMF 风格宏观控制 mock、GDP 平减指数、
+   名义/实际口径切换、冲击×基期 GVC 参与度交互项已接入回归设计;
+   clean/noisy/confounded 三套教学场景;安慰剂检验。
 4. **M4 闭环与工程**:报告参数化(吸收学生的设计选择)、PDF 导出。
 
 ## 开发常用命令
