@@ -12,6 +12,7 @@
   panel_sector.csv                国家×行业×年份长面板 + 行业异质冲击(步骤13-16 默认回归样本)
   panel_country.csv               国家×年份长面板(冲击按行业出口额加权聚合)
   controls_country.csv            ICIO 派生国家×年份控制变量(步骤13-16 稳健性模型)
+  export_exposure_<year>.csv      ICIO 派生出口目的地暴露度(步骤2 冲击加权)
 """
 
 import json
@@ -41,6 +42,9 @@ def compute_year(year: int, verbose: bool = True) -> None:
         json.dump([c.to_dict() for c in checks], f, ensure_ascii=False, indent=2)
 
     arr = build_arrays(io)
+
+    log(f"[{year}] 步骤2 出口暴露度(ICIO 双边流向)...")
+    shocks.write_export_exposure(arr, year)
 
     log(f"[{year}] 步骤4 贸易流分解...")
     tf_sector = tradeflow.sector_tradeflow(arr)
@@ -98,6 +102,9 @@ def build_panel() -> pd.DataFrame:
     sectors = sorted(sector["sector"].unique())
     shocks.write_demo(countries, sectors, years)
     shock_df = shocks.load_shocks()
+    shock_checks = quality.check_shock_panel(shock_df, countries, sectors, years)
+    with open(PROCESSED_DIR / "qc_shocks.json", "w", encoding="utf-8") as f:
+        json.dump([c.to_dict() for c in shock_checks], f, ensure_ascii=False, indent=2)
 
     sector = sector.merge(
         shock_df[["country", "sector", "year", "tariff_shock", "treated"]],

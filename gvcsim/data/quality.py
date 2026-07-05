@@ -8,11 +8,22 @@
 from dataclasses import asdict, dataclass, field
 
 import numpy as np
+import pandas as pd
 
 # 会计恒等式允许的相对误差
 TOLERANCE = 0.01
 # 关键国家:缺了说明解析出了问题
 KEY_REGIONS = ["CHN", "USA", "JPN", "DEU"]
+
+SHOCK_COLUMNS = [
+    "country",
+    "sector",
+    "year",
+    "tariff_shock",
+    "treated",
+    "announced_date",
+    "effective_date",
+]
 
 
 @dataclass
@@ -132,3 +143,118 @@ def run_all(io) -> list[QcCheck]:
         check_leontief_inverse(io),
         check_coverage(io),
     ]
+
+
+def check_shock_panel(
+    shock_df: pd.DataFrame,
+    countries: list[str],
+    sectors: list[str],
+    years: list[int],
+    treated_threshold: float = 0.001,
+) -> list[QcCheck]:
+    """政策冲击面板质检。
+
+    目标是补齐步骤3的第二类数据质检:冲击面板必须覆盖完整
+    country×sector×year,与 ICIO 指标维度严格对齐,且事件时间线与
+    treated 标记可用于 DID / 事件研究。
+    """
+    df = shock_df.copy()
+    checks: list[QcCheck] = []
+
+    missing_cols = [c for c in SHOCK_COLUMNS if c not in df.columns]
+    if missing_cols:
+        return [
+            QcCheck(
+                name="冲击面板 schema",
+                kind="结构",
+                passed=False,
+                detail="缺少必要列:" + "、".join(missing_cols),
+            )
+        ]
+
+    expected = pd.MultiIndex.from_product(
+        [countries, sectors, years], names=["country", "sector", "year"]
+    )
+    actual = pd.MultiIndex.from_frame(df[["country", "sector", "year"]])
+    missing = expected.difference(actual)
+    extra = actual.difference(expected)
+    duplicated = int(actual.duplicated().sum())
+    checks.append(QcCheck(
+        name="冲击面板维度对齐(country×sector×year)",
+        kind="结构",
+        passed=len(missing) == 0 and len(extra) == 0 and duplicated == 0,
+        detail=(
+            f"期望 {len(expected)} 行,实际 {len(df)} 行;"
+            f"缺失组合 {len(missing)} 个,额外组合 {len(extra)} 个,重复组合 {duplicated} 个"
+        ),
+        warnings=[
+            *[f"缺失:{m}" for m in list(missing[:3])],
+            *[f"额外:{m}" for m in list(extra[:3])],
+        ],
+    ))
+
+    shock = pd.to_numeric(df["tariff_shock"], errors="coerce")
+    n_missing = int(shock.isna().sum())
+    out_of_range = df[(shock < 0) | (shock > 0.5)]
+    checks.append(QcCheck(
+        name="冲击强度值域(tariff_shock ∈ [0,0.5])",
+        kind="数值",
+        passed=n_missing == 0 and out_of_range.empty,
+        detail=f"缺失/非数值 {n_missing} 个,越界 {len(out_of_range)} 个",
+        warnings=[
+            f"{r.country}-{r.sector}-{r.year}: {r.tariff_shock}"
+            for r in out_of_range.head(5).itertuples(index=False)
+        ],
+    ))
+
+    hit = shock > 0
+    ann = pd.to_datetime(df["announced_date"].replace("", pd.NA), errors="coerce")
+    eff = pd.to_datetime(df["effective_date"].replace("", pd.NA), errors="coerce")
+    missing_dates = hit & (ann.isna() | eff.isna())
+    reversed_dates = hit & ann.notna() & eff.notna() & (ann > eff)
+    checks.append(QcCheck(
+        name="冲击事件时间线(宣布日≤生效日)",
+        kind="结构",
+        passed=not missing_dates.any() and not reversed_dates.any(),
+        detail=f"受冲击记录 {int(hit.sum())} 条;缺少日期 {int(missing_dates.sum())} 条,日期倒置 {int(reversed_dates.sum())} 条",
+        warnings=[
+            f"{r.country}-{r.sector}-{r.year}: announced={r.announced_date}, effective={r.effective_date}"
+            for r in df[missing_dates | reversed_dates].head(5).itertuples(index=False)
+        ],
+    ))
+
+    treated = pd.to_numeric(df["treated"], errors="coerce")
+    invalid_treated = ~treated.isin([0, 1])
+    mismatch = treated.fillna(-1).astype(int) != (shock > treated_threshold).astype(int)
+    checks.append(QcCheck(
+        name="treated 标记与阈值一致",
+        kind="数值",
+        passed=not invalid_treated.any() and not mismatch.any(),
+        detail=(
+            f"非法 treated 值 {int(invalid_treated.sum())} 个;"
+            f"与 tariff_shock>{treated_threshold:g} 不一致 {int(mismatch.sum())} 个"
+        ),
+        warnings=[
+            f"{r.country}-{r.sector}-{r.year}: shock={r.tariff_shock}, treated={r.treated}"
+            for r in df[invalid_treated | mismatch].head(5).itertuples(index=False)
+        ],
+    ))
+
+    total_pairs = max(len(countries) * len(sectors), 1)
+    yearly = []
+    bad_years = []
+    for year, g in df.assign(_shock=shock, _treated=treated).groupby("year"):
+        share = float((g["_treated"] == 1).sum() / total_pairs)
+        mean_hit = float(g.loc[g["_treated"] == 1, "_shock"].mean()) if (g["_treated"] == 1).any() else 0.0
+        yearly.append(f"{int(year)}:处理组合占比 {share:.2%},受处理均值 {mean_hit:.3%}")
+        if g["_shock"].gt(0).any() and not (0 < share <= 0.25):
+            bad_years.append(int(year))
+    checks.append(QcCheck(
+        name="处理组覆盖比例合理性",
+        kind="经济含义",
+        passed=not bad_years,
+        detail="; ".join(yearly),
+        warnings=[f"{y} 年处理组合占比超出 (0,25%] 合理区间" for y in bad_years],
+    ))
+
+    return checks

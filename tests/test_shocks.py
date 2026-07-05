@@ -1,8 +1,10 @@
 """冲击演示面板的结构与"拟真性"测试(不依赖真实数据)。"""
 
 import numpy as np
+import pandas as pd
 
-from gvcsim.shocks import TREATED_THRESHOLD, demo_shock_panel
+from gvcsim.indicators.core import build_arrays
+from gvcsim.shocks import TREATED_THRESHOLD, build_export_exposure, demo_shock_panel
 
 COUNTRIES = ["CHN", "USA", "DEU", "CAN", "AUS", "BRA", "VNM", "TUR"]
 SECTORS = ["A01_02", "C24", "C26", "C28", "C29", "K", "J62_63"]
@@ -72,3 +74,24 @@ def test_event_timeline_columns():
     assert (hit["effective_date"] != "").all()
     assert (hit["note"] != "").all()
     assert (df["shock_type"] == "关税冲击").all()
+
+
+def test_export_exposure_from_icio_flows(fake_io):
+    arr = build_arrays(fake_io)
+    exposure = build_export_exposure(arr, 2020)
+    by_key = exposure.set_index(["country", "imposer", "year"])["export_exposure"]
+
+    # fake_io 只有两个国家,AAA 的全部出口都流向 BBB。
+    assert by_key["AAA", "BBB", 2020] == 1.0
+    assert by_key["AAA", "AAA", 2020] == 0.0
+    assert by_key["BBB", "AAA", 2020] == 1.0
+
+
+def test_demo_panel_uses_passed_export_exposure():
+    exposure = pd.DataFrame([
+        {"country": "DEU", "imposer": "USA", "year": 2018, "export_exposure": 0.5},
+    ])
+    df = demo_shock_panel(["DEU", "USA"], ["C24"], [2018], export_exposure=exposure)
+    val = df.set_index(["country", "sector", "year"]).loc[("DEU", "C24", 2018), "tariff_shock"]
+    # 232 钢铝 2018 年 C24 基准税率 0.16 × ICIO 暴露度 0.5。
+    assert val == 0.08

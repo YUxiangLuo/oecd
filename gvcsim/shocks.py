@@ -13,8 +13,8 @@
     · 美国航空补贴案(空客裁决)对德法西英加税
 
   冲击变量定义:tariff_shock[c,s,y] = Σ_事件 双边行业平均加征税率 × 出口暴露度,
-  其中"双边行业平均加征税率"已折算清单覆盖面与年内生效月数,"出口暴露度"是
-  c 国出口流向加征方的份额(风格化数值,量级参考 UN Comtrade 方向别贸易结构)。
+  其中"双边行业平均加征税率"已折算清单覆盖面与年内生效月数,"出口暴露度"优先
+  使用 OECD ICIO 真实双边流向计算(c 国出口流向加征方的份额)。
   因此 tariff_shock 可解读为:该国-行业全部出口面对的平均额外关税。
 
 ⚠ 演示数据不能用于真实研究结论。接入真实数据(PIIE 面板 + HS→ICIO 官方
@@ -23,20 +23,24 @@ crosswalk)时,实现一个返回同结构 (country, sector, year) 面板的 load
 
 from dataclasses import dataclass, field
 
+import numpy as np
 import pandas as pd
 
-from gvcsim.config import SHOCKS_DIR
+from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR
+from gvcsim.indicators.core import IcioArrays
 
 DEMO_FILE = "demo_trade_war_tariffs.csv"
+EXPOSURE_PREFIX = "export_exposure"
 
 # treated 阈值:全部出口的平均额外关税超过 0.1 个百分点才算受处理,
 # 避免"土耳其对美反制 × 美国微小对土出口份额"这类痕量项污染处理组。
 TREATED_THRESHOLD = 0.001
 
 # ---------------------------------------------------------------------------
-# 出口暴露度(风格化):各经济体货物出口中流向美国的份额。
+# 出口暴露度 fallback:各经济体货物出口中流向美国的份额。
 # 量级参考 2017–2019 UN Comtrade 方向别结构:北美邻国 ~0.75,东亚 0.1–0.2,
 # 欧盟内部国家对美敞口低(0.02–0.1),资源出口国普遍较低。
+# 生产路径优先使用 export_exposure_<year>.csv,这里只服务小型测试和旧产物回退。
 # ---------------------------------------------------------------------------
 _EXPOSURE_TO_USA = {
     # 北美
@@ -71,6 +75,15 @@ _EXPOSURE_TO_USA = {
 _USA_EXPOSURE_TO = {
     "CHN": 0.08, "EU": 0.19, "CAN": 0.18, "MEX": 0.16,
     "TUR": 0.006, "RUS": 0.004, "IND": 0.02,
+}
+
+# 欧盟作为加征方时按 EU27 聚合。2018 年的欧盟反制事件虽发生在英国脱欧前,
+# 本项目的 ICIO 国家口径与既有 export_exposure_<year>.csv 均按 EU27 口径聚合,
+# 英国相关冲击另在空客案事件中单列。
+EU27 = {
+    "AUT", "BEL", "BGR", "CYP", "CZE", "DEU", "DNK", "ESP", "EST",
+    "FIN", "FRA", "GRC", "HRV", "HUN", "IRL", "ITA", "LTU", "LUX",
+    "LVA", "MLT", "NLD", "POL", "PRT", "ROU", "SVK", "SVN", "SWE",
 }
 
 
@@ -261,16 +274,105 @@ EVENTS = [
 ]
 
 
-def _exposure(country: str, imposer: str) -> float:
-    """country 的出口中流向 imposer 的份额(冲击的贸易加权系数)。"""
+def build_export_exposure(arr: IcioArrays, year: int) -> pd.DataFrame:
+    """用 ICIO 双边流向计算出口暴露度 exposure[c, imposer, year]。
+
+    bilateral_exports = c 卖给 imposer 的中间品 + 最终品(剔除 c 自身);
+    total_exports = c 的全部跨境中间品 + 最终品出口。额外写入一列 imposer=EU,
+    其目的地为 ICIO 中存在的 EU27 成员之和。
+    """
+    rows = []
+    col_of = {r: j for j, r in enumerate(arr.regions)}
+
+    def country_to_dest(exporter: str, dest: str) -> float:
+        if exporter == dest:
+            return 0.0
+        p = arr.pos[exporter]
+        return float(arr.Z[np.ix_(p, arr.pos[dest])].sum() + arr.Yd[p, col_of[dest]].sum())
+
+    for country in arr.regions:
+        total = float(arr.E[arr.pos[country]].sum())
+        for imposer in arr.regions:
+            bilateral = country_to_dest(country, imposer)
+            rows.append({
+                "country": country,
+                "imposer": imposer,
+                "year": year,
+                "bilateral_exports": bilateral,
+                "total_exports": total,
+                "export_exposure": bilateral / total if total > 0 else 0.0,
+            })
+
+        eu_members = [r for r in arr.regions if r in EU27 and r != country]
+        if eu_members:
+            bilateral = sum(country_to_dest(country, dest) for dest in eu_members)
+            rows.append({
+                "country": country,
+                "imposer": "EU",
+                "year": year,
+                "bilateral_exports": bilateral,
+                "total_exports": total,
+                "export_exposure": bilateral / total if total > 0 else 0.0,
+            })
+
+    return pd.DataFrame(rows).sort_values(["country", "imposer", "year"]).reset_index(drop=True)
+
+
+def write_export_exposure(arr: IcioArrays, year: int) -> pd.DataFrame:
+    """计算并落盘某年的 ICIO 出口暴露度。"""
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    df = build_export_exposure(arr, year)
+    df.to_csv(PROCESSED_DIR / f"{EXPOSURE_PREFIX}_{year}.csv", index=False)
+    return df
+
+
+def load_export_exposure(years: list[int] | None = None) -> pd.DataFrame | None:
+    """读取已预计算的出口暴露度;缺少任一年时返回 None 以便测试/旧产物回退。"""
+    if years is None:
+        paths = sorted(PROCESSED_DIR.glob(f"{EXPOSURE_PREFIX}_*.csv"))
+    else:
+        paths = [PROCESSED_DIR / f"{EXPOSURE_PREFIX}_{y}.csv" for y in years]
+        if any(not p.exists() for p in paths):
+            return None
+    if not paths:
+        return None
+    return pd.concat([pd.read_csv(p) for p in paths], ignore_index=True)
+
+
+def _exposure_map(export_exposure: pd.DataFrame | None) -> dict[tuple[str, str, int], float] | None:
+    if export_exposure is None:
+        return None
+    return {
+        (str(r.country), str(r.imposer), int(r.year)): float(r.export_exposure)
+        for r in export_exposure.itertuples(index=False)
+    }
+
+
+def _stylized_exposure(country: str, imposer: str) -> float:
+    """小测试与缺少预计算暴露度时的风格化回退口径。"""
     if imposer == "USA":
         return _EXPOSURE_TO_USA.get(country, 0.10)
     # 非美加征方的目标只有美国
     return _USA_EXPOSURE_TO[imposer] if country == "USA" else 0.0
 
 
+def _exposure(
+    country: str,
+    imposer: str,
+    year: int,
+    exposure_lookup: dict[tuple[str, str, int], float] | None,
+) -> float:
+    """country 的出口中流向 imposer 的份额(冲击的贸易加权系数)。"""
+    if exposure_lookup is not None:
+        return exposure_lookup.get((country, imposer, year), 0.0)
+    return _stylized_exposure(country, imposer)
+
+
 def demo_shock_panel(
-    countries: list[str], sectors: list[str], years: list[int]
+    countries: list[str],
+    sectors: list[str],
+    years: list[int],
+    export_exposure: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """生成覆盖全部 (country, sector, year) 的冲击面板,未受冲击处为 0。
 
@@ -279,6 +381,7 @@ def demo_shock_panel(
     """
     shock: dict[tuple[str, str, int], float] = {}
     main_event: dict[tuple[str, str, int], tuple[float, TariffEvent]] = {}
+    exposure_lookup = _exposure_map(export_exposure)
 
     for ev in EVENTS:
         targets = [c for c in countries if c != ev.imposer] if ev.targets == "ALL" \
@@ -286,12 +389,12 @@ def demo_shock_panel(
         for c in targets:
             if c in ev.exempt:
                 continue
-            w = _exposure(c, ev.imposer)
-            if w <= 0:
-                continue
             for s, by_year in (ev.overrides.get(c, ev.rates)).items():
                 for y, rate in by_year.items():
                     if y not in years or rate <= 0:
+                        continue
+                    w = _exposure(c, ev.imposer, y, exposure_lookup)
+                    if w <= 0:
                         continue
                     contrib = rate * w
                     key = (c, s, y)
@@ -321,7 +424,10 @@ def demo_shock_panel(
 
 def write_demo(countries: list[str], sectors: list[str], years: list[int]) -> None:
     SHOCKS_DIR.mkdir(parents=True, exist_ok=True)
-    demo_shock_panel(countries, sectors, years).to_csv(SHOCKS_DIR / DEMO_FILE, index=False)
+    export_exposure = load_export_exposure(years)
+    demo_shock_panel(countries, sectors, years, export_exposure=export_exposure).to_csv(
+        SHOCKS_DIR / DEMO_FILE, index=False
+    )
 
 
 def events_metadata() -> list[dict]:

@@ -23,6 +23,11 @@ needs_shocks = pytest.mark.skipif(
     reason="缺少冲击演示数据,请先运行 uv run gvcsim compute",
 )
 
+needs_shock_qc = pytest.mark.skipif(
+    not (PROCESSED_DIR / "qc_shocks.json").exists(),
+    reason="缺少冲击质检产物,请先运行 uv run gvcsim compute",
+)
+
 needs_raw_icio = pytest.mark.skipif(
     not any(RAW_DATA_DIR.glob("ICIO*_*.csv")),
     reason="缺少 OECD ICIO 原始文件",
@@ -174,6 +179,15 @@ def test_qc_and_network():
 
     net = client.get(f"/api/viz/network/{year}").json()
     assert net["nodes"] and net["edges"]
+
+
+@needs_shock_qc
+def test_shock_qc_endpoint():
+    resp = client.get("/api/qc/shocks")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 5
+    assert any("维度对齐" in c["name"] for c in body)
 
 
 def test_shock_events():

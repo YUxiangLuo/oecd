@@ -1,6 +1,7 @@
 """数据质检模块测试。"""
 
 import numpy as np
+import pandas as pd
 
 from gvcsim.data import quality
 
@@ -31,3 +32,47 @@ def test_missing_value_detection(fake_io):
     fake_io.Z.iloc[1, 2] = np.nan
     check = quality.check_missing_and_negative(fake_io)
     assert not check.passed
+
+
+def test_shock_panel_quality_passes_on_complete_panel():
+    df = pd.DataFrame([
+        {
+            "country": c,
+            "sector": s,
+            "year": y,
+            "tariff_shock": 0.02 if (c, s, y) == ("AAA", "s1", 2020) else 0.0,
+            "treated": 1 if (c, s, y) == ("AAA", "s1", 2020) else 0,
+            "shock_type": "关税冲击",
+            "announced_date": "2020-01-01" if (c, s, y) == ("AAA", "s1", 2020) else "",
+            "effective_date": "2020-02-01" if (c, s, y) == ("AAA", "s1", 2020) else "",
+            "note": "test" if (c, s, y) == ("AAA", "s1", 2020) else "",
+        }
+        for c in ["AAA", "BBB"]
+        for s in ["s1", "s2"]
+        for y in [2019, 2020]
+    ])
+
+    checks = quality.check_shock_panel(df, ["AAA", "BBB"], ["s1", "s2"], [2019, 2020])
+
+    assert len(checks) == 5
+    assert all(c.passed for c in checks), [(c.name, c.detail, c.warnings) for c in checks]
+
+
+def test_shock_panel_quality_detects_bad_timeline_and_threshold():
+    df = pd.DataFrame([
+        {
+            "country": "AAA",
+            "sector": "s1",
+            "year": 2020,
+            "tariff_shock": 0.02,
+            "treated": 0,
+            "announced_date": "2020-03-01",
+            "effective_date": "2020-02-01",
+        }
+    ])
+
+    checks = quality.check_shock_panel(df, ["AAA"], ["s1"], [2020])
+    by_name = {c.name: c for c in checks}
+
+    assert not by_name["冲击事件时间线(宣布日≤生效日)"].passed
+    assert not by_name["treated 标记与阈值一致"].passed

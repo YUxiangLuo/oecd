@@ -255,32 +255,46 @@ export function DbLab() {
 export function QcLab({ meta }: { meta: Meta }) {
   const [year, setYear] = useState(meta.years.at(-1)!);
   const { data, error } = useAsync<QcCheck[]>(() => api.qc(year), [year]);
+  const { data: shockChecks, error: shockError } = useAsync<QcCheck[]>(() => api.qcShocks(), []);
   if (error) return <div className="error-box">{error}</div>;
+  const table = (rows: QcCheck[] | null) => (
+    <div className="table-wrap">
+      <table className="data-table">
+        <thead>
+          <tr><th>质检项</th><th>类型</th><th>结果</th><th style={{ textAlign: "left" }}>详情</th></tr>
+        </thead>
+        <tbody>
+          {(rows ?? []).map((c) => (
+            <tr key={c.name}>
+              <td>{c.name}</td>
+              <td>{c.kind}</td>
+              <td className={c.passed ? "qc-pass" : "qc-fail"}>{c.passed ? "✓ 通过" : "✗ 异常"}</td>
+              <td style={{ textAlign: "left", whiteSpace: "normal" }}>
+                {c.detail}
+                {c.warnings.map((w) => (
+                  <div key={w} className="muted">⚠ {w}</div>
+                ))}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
   return (
     <div>
       <YearPicker years={meta.years} year={year} onChange={setYear} />
-      <div className="table-wrap">
-        <table className="data-table">
-          <thead>
-            <tr><th>质检项</th><th>类型</th><th>结果</th><th style={{ textAlign: "left" }}>详情</th></tr>
-          </thead>
-          <tbody>
-            {(data ?? []).map((c) => (
-              <tr key={c.name}>
-                <td>{c.name}</td>
-                <td>{c.kind}</td>
-                <td className={c.passed ? "qc-pass" : "qc-fail"}>{c.passed ? "✓ 通过" : "✗ 异常"}</td>
-                <td style={{ textAlign: "left", whiteSpace: "normal" }}>
-                  {c.detail}
-                  {c.warnings.map((w) => (
-                    <div key={w} className="muted">⚠ {w}</div>
-                  ))}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="section-head">
+        <span className="section-head-icon">🧾</span>OECD ICIO 数据质检
+        <span className="section-head-line" />
       </div>
+      {table(data)}
+
+      <div className="section-head" style={{ marginTop: 18 }}>
+        <span className="section-head-icon">🧾</span>政策冲击面板质检
+        <span className="section-head-line" />
+      </div>
+      {shockError ? <div className="error-box">{shockError}</div> : table(shockChecks)}
     </div>
   );
 }
@@ -320,7 +334,7 @@ export function ShockLab({ meta }: { meta: Meta }) {
     <div>
       <div className="warnbox">
         ⚠ 拟真演示数据:以 2018–2020 全球贸易摩擦真实事件为原型手工编码(税率量级参考
-        PIIE/Bown),乘以风格化出口暴露度;覆盖 {summary ? `${summary.n_countries} 个经济体 × ${summary.n_sectors} 个行业` : "全部经济体与行业"},不能用于研究结论。
+        PIIE/Bown),出口暴露度由 OECD ICIO 双边流向计算;覆盖 {summary ? `${summary.n_countries} 个经济体 × ${summary.n_sectors} 个行业` : "全部经济体与行业"},不能用于研究结论。
       </div>
 
       <h3 style={{ margin: "18px 0 10px", fontSize: 15 }}>事件时间线</h3>

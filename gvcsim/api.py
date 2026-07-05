@@ -242,6 +242,14 @@ def db_slice(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
+@app.get("/api/qc/shocks")
+def qc_shocks():
+    path = PROCESSED_DIR / "qc_shocks.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="冲击面板尚未质检,请先运行 compute")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 @app.get("/api/qc/{year}")
 def qc(year: int):
     path = PROCESSED_DIR / f"qc_{year}.json"
@@ -303,7 +311,7 @@ def shock_events():
     return {
         "events": shocks.events_metadata(),
         "disclaimer": "拟真演示数据:事件与税率量级参考公开资料手工编码,"
-        "出口暴露度为风格化数值,不能用于研究结论",
+        "出口暴露度由 OECD ICIO 双边流向计算,不能用于研究结论",
     }
 
 
