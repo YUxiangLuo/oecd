@@ -31,6 +31,7 @@ const REGION_OF: Record<string, number> = {};
 
 type Row = Record<string, string | number | null>;
 const num = (v: string | number | null | undefined) => (typeof v === "number" ? v : 0);
+const rowName = (r: Row) => String(r.sector ?? r.country);
 
 /** 暗色悬浮 tooltip(增强通道;全部数值同时可在表格视图获得) */
 function useTip() {
@@ -499,12 +500,13 @@ export function RankBarChart({ rows, metricKey, label, format, highlight }: {
         {data.map((r) => {
           const v = num(r[metricKey]);
           const w = Math.max(1, (v / max) * 100);
-          const hi = highlight?.has(String(r.country));
+          const entity = rowName(r);
+          const hi = highlight?.has(entity);
           return (
-            <div key={String(r.country)} style={{ display: "flex", alignItems: "center", gap: 10 }}
-              onMouseMove={(e) => show(e, [["", String(r.country)], [label, fmtVal(v, format)]])}
+            <div key={entity} style={{ display: "flex", alignItems: "center", gap: 10 }}
+              onMouseMove={(e) => show(e, [["", entity], [label, fmtVal(v, format)]])}
               onMouseLeave={hide}>
-              <span style={{ width: 46, fontSize: 11.5, color: "#5a6070", fontFamily: "monospace" }}>{String(r.country)}</span>
+              <span style={{ width: 58, fontSize: 11.5, color: "#5a6070", fontFamily: "monospace" }}>{entity}</span>
               <div style={{ flex: 1, height: 16, background: "#f2f3f7", borderRadius: 5, overflow: "hidden" }}>
                 <div style={{ width: `${w}%`, height: "100%", background: hi ? CAT[5] : CAT[0], transition: "width .4s" }} />
               </div>
@@ -525,7 +527,7 @@ export function ScatterChart({ rows, xKey, yKey, xLabel, yLabel, xFormat, yForma
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const W = 660, H = 400, m = { l: 62, r: 18, t: 14, b: 46 };
-  const pts = rows.map((r) => ({ c: String(r.country), x: num(r[xKey]), y: num(r[yKey]) }));
+  const pts = rows.map((r) => ({ c: rowName(r), x: num(r[xKey]), y: num(r[yKey]) }));
   const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
   const spread = (arr: number[]) => {
     const lo = Math.min(...arr), hi = Math.max(...arr), pad = (hi - lo) * 0.06 || Math.abs(hi) * 0.1 || 1;

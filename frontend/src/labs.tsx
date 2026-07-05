@@ -628,33 +628,48 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
   const [entityMode, setEntityMode] = useState<"topn" | "pick">("topn");
   const [topN, setTopN] = useState(15);
   const [picked, setPicked] = useState<string[]>([]);
+  const [granularity, setGranularity] = useState<"country" | "sector">("country");
+  const [drillCountry, setDrillCountry] = useState(meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "");
   const isNetwork = step.n === 8;
 
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
   const { data: rows, error } = useAsync(() => api.countryIndicators(year), [year]);
+  const { data: sectorPage, error: sectorErr } = useAsync<SectorPage | null>(
+    () => (granularity === "sector" && drillCountry
+      ? api.sectorIndicatorsAll(year, drillCountry)
+      : Promise.resolve(null)),
+    [granularity, year, drillCountry],
+  );
   const { data: net, error: netErr } = useAsync<NetworkData | null>(
     () => (isNetwork ? api.network(year) : Promise.resolve(null)),
     [year, isNetwork],
   );
   // 趋势图需要全部年份的国家级指标(按需拉取,服务端 CSV 已按 mtime 缓存)
   const { data: yearsData } = useAsync<Record<string, string | number | null>[][] | null>(
-    () => (view === "trend" ? Promise.all(meta.years.map((y) => api.countryIndicators(y))) : Promise.resolve(null)),
-    [view === "trend"],
+    () => (view === "trend" && granularity === "country"
+      ? Promise.all(meta.years.map((y) => api.countryIndicators(y)))
+      : Promise.resolve(null)),
+    [view === "trend", granularity],
   );
-  if (error || netErr) return <div className="error-box">{error ?? netErr}</div>;
+  if (error || netErr || sectorErr) return <div className="error-box">{error ?? netErr ?? sectorErr}</div>;
 
   const fmtOf = (k: string) => schema?.fields[k]?.format;
-  const allRows = rows ?? [];
+  const allRows = granularity === "sector" ? (sectorPage?.rows ?? []) : (rows ?? []);
+  const sectorLoading = granularity === "sector" && !sectorPage;
   // 选中的对象:Top-N(按当前指标X排序)或手动挑选的国家
   const selRows =
-    entityMode === "topn"
+    granularity === "sector"
+      ? [...allRows].sort((a, b) => num(b[metricX]) - num(a[metricX])).slice(0, topN)
+      : entityMode === "topn"
       ? [...allRows].sort((a, b) => num(b[metricX]) - num(a[metricX])).slice(0, topN)
       : allRows.filter((r) => picked.includes(String(r.country)));
-  const highlight = new Set(picked);
+  const highlight = granularity === "country" ? new Set(picked) : new Set<string>();
 
   // 趋势图折线:Top-N 模式限 6 条以内保证可读,选国家模式用全部选中国家
   const trendCountries =
-    entityMode === "pick"
+    granularity === "sector"
+      ? []
+      : entityMode === "pick"
       ? picked
       : [...allRows].sort((a, b) => num(b[metricX]) - num(a[metricX])).slice(0, Math.min(topN, 6)).map((r) => String(r.country));
   const trendSeries = trendCountries.map((c) => ({
@@ -707,16 +722,36 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
       {/* 自由探索控件条:选指标 + 选对象(招牌图不需要) */}
       {view !== "signature" && (
         <div className="controls viz-explore">
+          <div className="seg">
+            <button className={granularity === "country" ? "on" : ""} onClick={() => setGranularity("country")}>国家级</button>
+            <button
+              className={granularity === "sector" ? "on" : ""}
+              onClick={() => { setGranularity("sector"); setEntityMode("topn"); }}
+            >
+              行业下钻
+            </button>
+          </div>
+          {granularity === "sector" && (
+            <>
+              <label>下钻国家</label>
+              <select value={drillCountry} onChange={(e) => setDrillCountry(e.target.value)}>
+                {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </>
+          )}
           {view !== "table" && metricSelect(metricX, setMetricX, view === "scatter" ? "X 指标" : "指标")}
           {view === "scatter" && metricSelect(metricY, setMetricY, "Y 指标")}
-          <div className="seg">
-            <button className={entityMode === "topn" ? "on" : ""} onClick={() => setEntityMode("topn")}>Top-N</button>
-            <button className={entityMode === "pick" ? "on" : ""} onClick={() => setEntityMode("pick")}>选国家</button>
-          </div>
-          {entityMode === "topn" ? (
+          {granularity === "country" && (
+            <div className="seg">
+              <button className={entityMode === "topn" ? "on" : ""} onClick={() => setEntityMode("topn")}>Top-N</button>
+              <button className={entityMode === "pick" ? "on" : ""} onClick={() => setEntityMode("pick")}>选国家</button>
+            </div>
+          )}
+          {granularity === "sector" || entityMode === "topn" ? (
             <span className="topn-ctl">
               前 <input type="range" min={5} max={40} value={topN} onChange={(e) => setTopN(Number(e.target.value))} />
-              <b>{view === "trend" ? Math.min(topN, 6) : topN}</b> 个(按{view === "scatter" ? "X" : "该"}指标{view === "trend" ? ",趋势最多6条" : ""})
+              <b>{view === "trend" && granularity === "country" ? Math.min(topN, 6) : topN}</b>
+              个(按{view === "scatter" ? "X" : "该"}指标{view === "trend" && granularity === "country" ? ",趋势最多6条" : ""})
             </span>
           ) : (
             <select multiple className="country-multi" value={picked}
@@ -730,13 +765,15 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
       {view === "signature" && signatureChart()}
 
       {view === "rank" && (
-        selRows.length
+        sectorLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p>
+          : selRows.length
           ? <RankBarChart rows={selRows} metricKey={metricX} label={fieldLabel(metricX, schema)} format={fmtOf(metricX)} highlight={highlight} />
           : <p className="muted">请在“选国家”里选择至少一个国家。</p>
       )}
 
       {view === "scatter" && (
-        selRows.length
+        sectorLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p>
+          : selRows.length
           ? <ScatterChart rows={selRows} xKey={metricX} yKey={metricY}
               xLabel={fieldLabel(metricX, schema)} yLabel={fieldLabel(metricY, schema)}
               xFormat={fmtOf(metricX)} yFormat={fmtOf(metricY)} highlight={highlight} />
@@ -744,20 +781,21 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
       )}
 
       {view === "trend" && (
-        !yearsData ? <p className="muted">加载多年数据中…</p>
+        granularity === "sector" ? <p className="muted">趋势图暂使用国家级时间序列;切回“国家级”后可查看 2016–2020 趋势。</p>
+          : !yearsData ? <p className="muted">加载多年数据中…</p>
           : trendSeries.length
             ? <TrendChart years={meta.years} series={trendSeries} label={fieldLabel(metricX, schema)} format={fmtOf(metricX)} />
             : <p className="muted">请在“选国家”里选择国家(或切到 Top-N)。</p>
       )}
 
       {view === "table" && (
-        <div className="table-wrap">
+        sectorLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p> : <div className="table-wrap">
           <table className="data-table">
-            <thead><tr><th>国家</th>{columns.map((c) => <th key={c}>{fieldLabel(c, schema)}</th>)}</tr></thead>
+            <thead><tr><th>{granularity === "sector" ? "行业" : "国家"}</th>{columns.map((c) => <th key={c}>{fieldLabel(c, schema)}</th>)}</tr></thead>
             <tbody>
               {selRows.map((r) => (
-                <tr key={String(r.country)}>
-                  <td>{String(r.country)}</td>
+                <tr key={String(r.sector ?? r.country)}>
+                  <td>{String(r.sector ?? r.country)}</td>
                   {columns.map((c) => <td key={c}>{fmtField(r[c], c, schema)}</td>)}
                 </tr>
               ))}
