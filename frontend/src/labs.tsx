@@ -8,7 +8,7 @@ import type {
   CrosswalkHsRow, CrosswalkPayload, DbMeta, DbSlice, DbTableKind, IndicatorSchema, Meta, NetworkData, QcCheck,
   RegressionOptions, ReportRequest, ReportResponse, SectorPage, ShockEvent, ShockSummary, Step,
 } from "./types";
-import { HeatTableViz, LengthViz, NetworkViz, RankBarChart, ScatterChart, StackedShareViz, TrendChart } from "./viz";
+import { HeatTableViz, LengthViz, NetworkViz, RankBarChart, ScatterChart, sectorLabel, StackedShareViz, TrendChart } from "./viz";
 import { DecompositionDemo, NetworkCentralityDemo } from "./demos";
 
 function fmtField(v: string | number | null, key: string, schema?: IndicatorSchema | null) {
@@ -608,11 +608,17 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
   );
 }
 
-// 各步散点图默认的 X/Y 指标(学生可再改)
+// 各步散点图默认的 X/Y 指标(学生可再改)。
+// 选择原则:两轴在 Top-N 子集里都非退化、量级相近、且构成有教学意义的关系,
+// 避免出现"某轴对被选中的国家全为 0、点全压在坐标轴上"的退化图。
 const SCATTER_DEFAULT: Record<number, [string, string]> = {
-  8: ["share_trade_gvc_participation", "betweenness_centrality"],
-  9: ["share_prod_complex_gvc", "upstreamness"],
-  10: ["upstreamness", "upstreamness_cross"],
+  // 参与度↑ 通常 DVA 份额↓(引进国外中间品换取参与),经典的负相关,全经济体都有值
+  8: ["share_trade_gvc_participation", "share_trade_dva"],
+  // GVC 生产份额 × 复杂 GVC 份额:越深度参与 GVC 的经济体复杂 GVC 占比越高
+  9: ["share_prod_gvc_total", "share_prod_complex_gvc"],
+  // 国内段 × 跨境段:看各国生产链长度的国内/跨境构成权衡
+  10: ["upstreamness_domestic", "upstreamness_cross"],
+  // 度中心性 × 介数中心性:枢纽国两者都高,但并不完全一致
   11: ["degree_centrality", "betweenness_centrality"],
 };
 
@@ -656,13 +662,19 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
   const fmtOf = (k: string) => schema?.fields[k]?.format;
   const allRows = granularity === "sector" ? (sectorPage?.rows ?? []) : (rows ?? []);
   const sectorLoading = granularity === "sector" && !sectorPage;
+  // 出口占比指标对"实际不出口的行业"是缺失(null):排序图/散点图里剔除,避免把它们
+  // 当成 0 画出幽灵条/原点(表格视图保留、以"—"如实显示)。
+  const isFin = (v: string | number | null | undefined) => typeof v === "number" && Number.isFinite(v);
+  const needFilter = view === "rank" || view === "scatter";
+  const metricOk = (r: Record<string, string | number | null>) =>
+    !needFilter || (isFin(r[metricX]) && (view !== "scatter" || isFin(r[metricY])));
   // 选中的对象:Top-N(按当前指标X排序)或手动挑选的国家
   const selRows =
     granularity === "sector"
-      ? [...allRows].sort((a, b) => num(b[metricX]) - num(a[metricX])).slice(0, topN)
+      ? allRows.filter(metricOk).sort((a, b) => num(b[metricX]) - num(a[metricX])).slice(0, topN)
       : entityMode === "topn"
-      ? [...allRows].sort((a, b) => num(b[metricX]) - num(a[metricX])).slice(0, topN)
-      : allRows.filter((r) => picked.includes(String(r.country)));
+      ? allRows.filter(metricOk).sort((a, b) => num(b[metricX]) - num(a[metricX])).slice(0, topN)
+      : allRows.filter((r) => picked.includes(String(r.country)) && metricOk(r));
   const highlight = granularity === "country" ? new Set(picked) : new Set<string>();
 
   // 趋势图折线:Top-N 模式限 6 条以内保证可读,选国家模式用全部选中国家
@@ -689,7 +701,7 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
   };
 
   const metricSelect = (value: string, onChange: (v: string) => void, label: string) => (
-    <>
+    <span className="field">
       <label>{label}</label>
       <select value={value} onChange={(e) => onChange(e.target.value)}>
         {(schema?.groups ?? []).map((g) => (
@@ -698,7 +710,7 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
           </optgroup>
         ))}
       </select>
-    </>
+    </span>
   );
 
   const TABS: [ViewKind, string][] = [
@@ -708,10 +720,12 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
   return (
     <div>
       <div className="controls">
-        <label>年份</label>
-        <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
-          {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
-        </select>
+        <span className="field">
+          <label>年份</label>
+          <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
+            {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </span>
         <div className="seg">
           {TABS.map(([k, lab]) => (
             <button key={k} className={view === k ? "on" : ""} onClick={() => setView(k)}>{lab}</button>
@@ -732,12 +746,12 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
             </button>
           </div>
           {granularity === "sector" && (
-            <>
+            <span className="field">
               <label>下钻国家</label>
               <select value={drillCountry} onChange={(e) => setDrillCountry(e.target.value)}>
                 {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
-            </>
+            </span>
           )}
           {view !== "table" && metricSelect(metricX, setMetricX, view === "scatter" ? "X 指标" : "指标")}
           {view === "scatter" && metricSelect(metricY, setMetricY, "Y 指标")}
@@ -795,7 +809,7 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
             <tbody>
               {selRows.map((r) => (
                 <tr key={String(r.sector ?? r.country)}>
-                  <td>{String(r.sector ?? r.country)}</td>
+                  <td>{r.sector != null ? sectorLabel(String(r.sector)) : String(r.country)}</td>
                   {columns.map((c) => <td key={c}>{fmtField(r[c], c, schema)}</td>)}
                 </tr>
               ))}

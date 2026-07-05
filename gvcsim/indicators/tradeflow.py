@@ -115,18 +115,50 @@ def _bm_source_coefficients(
     return domestic_source, domestic_full, foreign_source, foreign_full
 
 
+# 占比指标除以毛出口,只有当该实体"确实出口"时才有意义。分两档下限:
+_EXPORT_NOISE_FLOOR = 1e-9  # 相对本帧最大毛出口:剔除非贸易行业在小经济体里 ~1e-13 的机器精度噪声
+# 国家-行业级、仅用于前向/总参与度这类"无界"指标的额外相对下限:毛出口不足本国总出口
+# 0.1% 的行业不是"有意义的出口部门"(多为电力/供水/建筑/邮政/公共管理等非贸易品),
+# 其前向参与度会被自身极小的出口分母放大到几十倍,记为缺失比记一个爆表百分数更诚实。
+_EXPORT_SECTOR_FLOOR = 1e-3
+
+
+def _exports_above_noise(gross: pd.Series) -> pd.Series:
+    """毛出口是否高于机器精度噪声(所有占比指标共用的最低门槛)。"""
+    if not len(gross):
+        return gross > 0
+    return gross > float(gross.max()) * _EXPORT_NOISE_FLOOR
+
+
+def _meaningful_exporter(gross: pd.Series) -> pd.Series:
+    """在噪声门槛之上,再要求是本国"有意义的出口部门"(仅用于无界的前向/总参与度)。
+
+    DVA/FVA/PDC/后向占比都是毛出口的组成项,天然 ∈[0,1],即便行业出口很小也有意义、
+    不需要这道相对下限——收窄到前向/总参与度,既修好爆表显示,又不无谓丢弃步骤13
+    (depvar=share_trade_fva)等回归的有效样本。
+    """
+    valid = _exports_above_noise(gross)
+    if isinstance(gross.index, pd.MultiIndex):  # (country, sector) 粒度
+        country_total = gross.groupby(level=0).transform("sum")
+        valid = valid & (gross > country_total * _EXPORT_SECTOR_FLOOR)
+    return valid
+
+
 def _add_trade_shares(df: pd.DataFrame) -> pd.DataFrame:
     gross = df["trade_gross_exports"]
+    noise_ok = _exports_above_noise(gross)       # 有界占比:只剔机器精度噪声
+    export_ok = _meaningful_exporter(gross)      # 无界的前向/总参与度:再加相对下限
     with np.errstate(divide="ignore", invalid="ignore"):
-        df["share_trade_dva"] = np.where(gross > 0, df["trade_dva"] / gross, np.nan)
-        df["share_trade_fva"] = np.where(gross > 0, df["trade_fva"] / gross, np.nan)
-        df["share_trade_pdc"] = np.where(gross > 0, df["trade_pdc"] / gross, np.nan)
+        df["share_trade_dva"] = np.where(noise_ok, df["trade_dva"] / gross, np.nan)
+        df["share_trade_fva"] = np.where(noise_ok, df["trade_fva"] / gross, np.nan)
+        df["share_trade_pdc"] = np.where(noise_ok, df["trade_pdc"] / gross, np.nan)
         df["share_trade_backward_gvc"] = np.where(
-            gross > 0, (df["trade_fva"] + df["trade_fdc"]) / gross, np.nan
+            noise_ok, (df["trade_fva"] + df["trade_fdc"]) / gross, np.nan
         )
         df["share_trade_forward_gvc"] = np.where(
-            gross > 0, df["trade_forward_va_in_foreign_exports"] / gross, np.nan
+            export_ok, df["trade_forward_va_in_foreign_exports"] / gross, np.nan
         )
+    # 总参与度含前向项,前向对非"有意义出口部门"已是缺失,后向 + 缺失 = 缺失,口径自然一致
     df["share_trade_gvc_participation"] = (
         df["share_trade_backward_gvc"] + df["share_trade_forward_gvc"]
     )

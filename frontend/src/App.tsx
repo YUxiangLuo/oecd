@@ -99,6 +99,8 @@ export default function App() {
   const nextStep = steps.find((s) => s.n === current + 1);
   // 回归步骤(rgd/reg)自带完整讲解卡片体系,主区跳过通用讲解卡避免重复
   const isReg = step.lab === "rgd" || step.lab === "reg";
+  // 可视化步骤(viz)图表是主角:讲解卡默认折叠,给图表让出首屏纵向空间(可点开)
+  const isViz = step.lab === "viz";
 
   return (
     <div className="layout">
@@ -186,10 +188,10 @@ export default function App() {
             <main className="content">
               <div className="content-inner">
                 {!isReg && (
-                  <div className="card accent">
-                    <div className="kicker">讲解</div>
+                  <details className="card accent concept-card" open={!isViz}>
+                    <summary className="kicker">讲解</summary>
                     <p>{step.concept}</p>
-                  </div>
+                  </details>
                 )}
                 <Lab step={step} meta={meta} />
               </div>
