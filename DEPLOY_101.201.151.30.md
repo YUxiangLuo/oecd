@@ -5,8 +5,9 @@
 
 ## 当前部署状态
 
-- 访问地址: `http://101.201.151.30:8081/`
-- API 文档: `http://101.201.151.30:8081/docs`
+- 访问地址: `http://101.201.151.30:6363/`
+- API 文档: `http://101.201.151.30:6363/docs`
+- 原 6363 静态服务: `http://101.201.151.30:8181/`(`/etc/nginx/conf.d/supply-chain-sim.conf`)
 - SSH: `ssh root@101.201.151.30`
 - 服务器项目目录: `/opt/oecd-icio-analysis`
 - nginx 配置: `/etc/nginx/conf.d/gvcsim.conf`
@@ -143,7 +144,7 @@ systemctl status gvcsim-api.service --no-pager -l
 
 ```nginx
 server {
-    listen 8081;
+    listen 6363;
     server_name _;
 
     root /opt/oecd-icio-analysis/frontend/dist;
@@ -195,9 +196,9 @@ systemctl reload nginx
 从本地验证公网访问:
 
 ```bash
-curl -fsSI http://101.201.151.30:8081/
-curl -fsS http://101.201.151.30:8081/api/regression/options
-curl -fsSI http://101.201.151.30:8081/docs
+curl -fsSI http://101.201.151.30:6363/
+curl -fsS http://101.201.151.30:6363/api/regression/options
+curl -fsSI http://101.201.151.30:6363/docs
 ```
 
 验证登录:
@@ -206,7 +207,7 @@ curl -fsSI http://101.201.151.30:8081/docs
 curl -fsS \
   -H 'Content-Type: application/json' \
   -d '{"username":"student","password":"gvclab2026"}' \
-  http://101.201.151.30:8081/api/auth/login
+  http://101.201.151.30:6363/api/auth/login
 ```
 
 验证一次国家级加控制变量回归:
@@ -215,14 +216,18 @@ curl -fsS \
 curl -fsS --max-time 90 \
   -H 'Content-Type: application/json' \
   -d '{"step":13,"granularity":"国家级","method":"双重差分 (DID)","control_mode":"ICIO 派生控制变量"}' \
-  http://101.201.151.30:8081/api/regression/run
+  http://101.201.151.30:6363/api/regression/run
 ```
 
 2026-07-05 更新部署验证结果:
 
-- `/` 返回 `200 OK`
+- 公开端口已从 `8081` 改为 `6363`
+- 原 `6363` 静态服务已迁移到 `8181`
+- `http://101.201.151.30:6363/` 返回 `200 OK`
 - `/api/regression/options` 携带 Bearer token 返回 `200 OK`,包含 `control_modes`
 - `/docs` 返回 `200 OK`
+- `http://101.201.151.30:8181/` 返回 `200 OK`
+- `http://101.201.151.30:8081/` 已关闭
 - `student / gvclab2026` 登录返回 `200 OK`
 - 国家级加控制变量回归返回 `200 OK`
 - 回归样本量 `n_obs = 385`,聚类数 `n_clusters = 77`
@@ -255,7 +260,7 @@ nginx -t && systemctl reload nginx
 确认端口:
 
 ```bash
-ss -ltnp | grep -E ':(8081|18000)'
+ss -ltnp | grep -E ':(6363|8181|18000)'
 ```
 
 ## 更新部署
