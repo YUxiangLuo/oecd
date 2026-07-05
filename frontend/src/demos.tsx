@@ -12,6 +12,7 @@
 import { useMemo, useState } from "react";
 import { api } from "./api";
 import { useAsync } from "./labs";
+import { sectorLabel } from "./viz";
 import type { Meta, SectorPage } from "./types";
 
 type Row = Record<string, string | number | null>;
@@ -103,6 +104,12 @@ export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) 
   const err = Math.abs(sum - total);
   const rel = total ? err / Math.abs(total) : err;
   const ok = rel < 1e-6;
+  // 有些行业(家庭雇佣、公共管理、供水等)在该经济体几乎无出口/产出,总量≈0、
+  // 各分项全为 0,分解虽仍"闭合"但无信息量——提示学生换一个活跃行业。
+  const countryTotal = (sectorPage?.rows ?? []).reduce((a, r) => a + Math.abs(num(r[cfg.total])), 0);
+  const negligible =
+    gran === "sector" && row != null &&
+    (total === 0 || (countryTotal > 0 && Math.abs(total) / countryTotal < 1e-4));
 
   return (
     <div className="demo-card">
@@ -121,7 +128,7 @@ export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) 
           <>
             <label>行业</label>
             <select value={effSector} onChange={(e) => setSector(e.target.value)}>
-              {sectors.map((s) => <option key={s} value={s}>{s}</option>)}
+              {sectors.map((s) => <option key={s} value={s}>{sectorLabel(s)}</option>)}
             </select>
           </>
         )}
@@ -181,6 +188,13 @@ export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) 
             与 {cfg.totalLabel} {fmt(total, cfg.unit)} 的误差 {err.toExponential(1)}
             {ok ? "(恒等式成立)" : "(请核对口径)"}
           </div>
+
+          {negligible && (
+            <div className="decomp-hint">
+              ⚠️ {country} · {sectorLabel(effSector)} 的{cfg.totalLabel}≈0,各分项均为 0——
+              这类几乎无出口/产出的行业分解无信息量,换一个活跃行业(如制造业)更能看清口径。
+            </div>
+          )}
 
           <table className="decomp-table">
             <tbody>

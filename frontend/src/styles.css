@@ -795,6 +795,11 @@ button { font-family: inherit; cursor: pointer; }
 }
 .decomp-identity.ok { background: #eafaf1; color: #137a41; border: 1px solid #bfe8d0; }
 .decomp-identity.bad { background: #fff0e6; color: #a2551f; border: 1px solid #f6d6bf; }
+.decomp-hint {
+  margin-top: 10px; padding: 10px 14px; border-radius: 10px;
+  font-size: 12.5px; line-height: 1.7; color: #8a5a1f;
+  background: #fffaf3; border: 1px solid #f2e2cd;
+}
 
 .decomp-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12.5px; }
 .decomp-table tr { border-bottom: 1px solid #f2f3f7; }
