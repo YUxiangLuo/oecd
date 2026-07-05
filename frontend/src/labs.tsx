@@ -593,7 +593,11 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
           <tbody>
             {(data?.rows ?? []).map((r, i) => (
               <tr key={i}>{cols.map((c) => (
-                <td key={c}>{["year", "country", "sector"].includes(c) ? String(r[c] ?? "—") : fmtField(r[c], c, schema)}</td>
+                <td key={c}>{
+                  c === "sector" ? (r.sector != null ? sectorLabel(String(r.sector)) : "—")
+                    : ["year", "country"].includes(c) ? String(r[c] ?? "—")
+                    : fmtField(r[c], c, schema)
+                }</td>
               ))}</tr>
             ))}
           </tbody>
