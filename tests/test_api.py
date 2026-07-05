@@ -43,6 +43,7 @@ def test_regression_options():
     body = resp.json()
     assert "双重差分 (DID)" in body["methods"]
     assert "ICIO 派生控制变量" in body["control_modes"]
+    assert body["ready_shock_types"] == ["关税冲击"]
 
 
 def test_regression_design():
@@ -81,6 +82,11 @@ def test_regression_design():
     assert client.get(
         "/api/regression/design", params={"step": 13, "shock_type": "汇率冲击"}
     ).status_code == 400
+    unsupported = client.get(
+        "/api/regression/design", params={"step": 13, "shock_type": "制裁清单"}
+    )
+    assert unsupported.status_code == 400
+    assert "尚未接入" in unsupported.json()["detail"]
     assert client.get(
         "/api/regression/design", params={"step": 13, "control_mode": "外部宏观控制"}
     ).status_code == 400

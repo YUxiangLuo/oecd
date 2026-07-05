@@ -19,6 +19,7 @@ STEP_DEPVARS = {
 
 GRANULARITIES = ["国家–行业级", "国家级"]
 SHOCK_TYPES = ["关税冲击", "制裁清单", "出口管制"]
+READY_SHOCK_TYPES = ["关税冲击"]
 METHODS = ["双重差分 (DID)", "双向固定效应", "事件研究"]
 CONTROL_MODE_NONE = "不加控制变量"
 CONTROL_MODE_ICIO = "ICIO 派生控制变量"

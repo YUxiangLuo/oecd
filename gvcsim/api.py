@@ -20,7 +20,8 @@ from gvcsim import shocks
 from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
 from gvcsim.data import icio_browser, quality
 from gvcsim.regression.design import (
-    CONTROL_MODES, GRANULARITIES, METHODS, SHOCK_TYPES, STEP_DEPVARS, RegressionDesign,
+    CONTROL_MODES, GRANULARITIES, METHODS, READY_SHOCK_TYPES, SHOCK_TYPES, STEP_DEPVARS,
+    RegressionDesign,
 )
 from gvcsim.regression.panel import run_design_with_benchmark
 from gvcsim.steps import STAGE_NAMES, STEPS
@@ -389,6 +390,7 @@ def regression_options():
     return {
         "granularities": GRANULARITIES,
         "shock_types": SHOCK_TYPES,
+        "ready_shock_types": READY_SHOCK_TYPES,
         "methods": METHODS,
         "control_modes": CONTROL_MODES,
         "steps": {k: v[1] for k, v in STEP_DEPVARS.items()},
@@ -408,6 +410,11 @@ def _validate_design(
         raise HTTPException(status_code=400, detail=f"granularity 必须是 {GRANULARITIES}")
     if shock_type not in SHOCK_TYPES:
         raise HTTPException(status_code=400, detail=f"shock_type 必须是 {SHOCK_TYPES}")
+    if shock_type not in READY_SHOCK_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{shock_type} 尚未接入回归面板;当前可用冲击类型:{READY_SHOCK_TYPES}",
+        )
     if method not in METHODS:
         raise HTTPException(status_code=400, detail=f"method 必须是 {METHODS}")
     if control_mode not in CONTROL_MODES:

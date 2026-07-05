@@ -138,6 +138,7 @@ export interface CoefStat {
 export interface RegressionOptions {
   granularities: string[];
   shock_types: string[];
+  ready_shock_types?: string[];
   methods: string[];
   control_modes: string[];
   steps: Record<string, string>; // 步骤号 → 被解释变量中文名

@@ -16,9 +16,6 @@ import { CoefForestChart, EventStudyChart } from "./viz";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
 
-// 冲击类型中只有关税真实接入(shocks.py 拟真面板);其余展示为规划中
-const SHOCK_READY = new Set(["关税冲击"]);
-
 function Pills({ options, value, onChange, readySet }: {
   options: string[];
   value: string;
@@ -97,6 +94,7 @@ export function RegDesignLab() {
   if (!opts) return <p className="muted">加载设计选项…</p>;
 
   const stepEntries = Object.entries(opts.steps).sort(([a], [b]) => Number(a) - Number(b));
+  const shockReady = new Set(opts.ready_shock_types ?? ["关税冲击"]);
 
   return (
     <div>
@@ -111,7 +109,7 @@ export function RegDesignLab() {
           <Pills options={opts.granularities} value={gran} onChange={setGran} />
         </ChoiceCard>
         <ChoiceCard title="冲击类型" hint="选择本次实验关注的政策冲击。">
-          <Pills options={opts.shock_types} value={shock} onChange={setShock} readySet={SHOCK_READY} />
+          <Pills options={opts.shock_types} value={shock} onChange={setShock} readySet={shockReady} />
         </ChoiceCard>
         <ChoiceCard title="因果推断方式" hint="有精确时间线才能做 DID / 事件研究。">
           <Pills options={opts.methods} value={method} onChange={setMethod} />
