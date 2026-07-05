@@ -6,7 +6,8 @@ import pytest
 
 from gvcsim.data.controls import CONTROL_COLUMNS, MACRO_CONTROL_COLUMNS
 from gvcsim.regression.design import (
-    CONTROL_MODE_ICIO, CONTROL_MODE_MACRO, PRICE_MODE_REAL, RegressionDesign,
+    CONTROL_MODE_ICIO, CONTROL_MODE_MACRO, PRICE_MODE_REAL, SCENARIO_CONFOUNDED,
+    SCENARIO_NOISY, RegressionDesign,
 )
 from gvcsim.regression.panel import (
     _apply_price_mode, benchmark_linearmodels, did, event_study, placebo_did_distribution,
@@ -115,6 +116,8 @@ def test_design_equation_text():
     assert "sanction_treated_ij" in d_sanction.equation()
     real = RegressionDesign(step=13, price_mode=PRICE_MODE_REAL)
     assert real.price_mode == PRICE_MODE_REAL
+    noisy = RegressionDesign(step=13, scenario=SCENARIO_NOISY)
+    assert noisy.scenario_label.startswith("测量误差")
 
 
 def test_design_panel_spec():
@@ -236,6 +239,27 @@ def test_run_design_dispatch():
     assert names("双重差分 (DID)") == ["treated×post"]
     assert names("双向固定效应") == ["tariff_shock"]
     assert names("事件研究") == ["k=-2", "k=0", "k=+1", "k=+2"]
+
+
+def test_teaching_scenarios_add_expected_notes_and_pretrend():
+    df = _simulate_did_panel({0: -0.5, 1: -0.5, 2: -0.5})
+    df = df.rename(columns={"y": "share_trade_fva"})
+
+    noisy = run_design(
+        df,
+        RegressionDesign(step=13, granularity="国家级", scenario=SCENARIO_NOISY),
+    )
+    assert any("noisy" in n for n in noisy.notes)
+
+    confounded = run_design(
+        df,
+        RegressionDesign(
+            step=13, granularity="国家级", method="事件研究", scenario=SCENARIO_CONFOUNDED,
+        ),
+    )
+    pre = next(c for c in confounded.coefs if c.name == "k=-2")
+    assert abs(pre.coef) > 0.05
+    assert any("confounded" in n for n in confounded.notes)
 
 
 def test_placebo_did_distribution_is_reproducible():

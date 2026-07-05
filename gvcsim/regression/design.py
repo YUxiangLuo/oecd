@@ -30,6 +30,16 @@ PRICE_MODE_NOMINAL = "名义值"
 PRICE_MODE_REAL = "实际值(2016=1)"
 PRICE_MODES = [PRICE_MODE_NOMINAL, PRICE_MODE_REAL]
 
+SCENARIO_CLEAN = "clean"
+SCENARIO_NOISY = "noisy"
+SCENARIO_CONFOUNDED = "confounded"
+SCENARIOS = [SCENARIO_CLEAN, SCENARIO_NOISY, SCENARIO_CONFOUNDED]
+SCENARIO_LABELS = {
+    SCENARIO_CLEAN: "基准场景(clean)",
+    SCENARIO_NOISY: "测量误差(noisy)",
+    SCENARIO_CONFOUNDED: "前趋势混杂(confounded)",
+}
+
 # 粒度 → (面板文件, 个体列, 聚类列)。冲击在国家层面高度相关,
 # 行业级回归的标准误也按国家聚类,避免组内相关低估标准误。
 _PANEL_SPECS = {
@@ -48,6 +58,7 @@ class RegressionDesign:
     control_mode: str = CONTROL_MODE_NONE
     interaction: bool = False
     price_mode: str = PRICE_MODE_NOMINAL
+    scenario: str = SCENARIO_CLEAN
 
     @property
     def depvar(self) -> str:
@@ -92,6 +103,10 @@ class RegressionDesign:
     @property
     def control_labels(self) -> dict[str, str]:
         return {c: CONTROL_LABELS[c] for c in self.controls}
+
+    @property
+    def scenario_label(self) -> str:
+        return SCENARIO_LABELS.get(self.scenario, self.scenario)
 
     def equation(self) -> str:
         """生成与原型界面一致的回归方程展示文本(按方法渲染解释变量)。"""

@@ -188,6 +188,8 @@ export interface RegressionOptions {
   methods: string[];
   control_modes: string[];
   price_modes: string[];
+  scenarios: string[];
+  scenario_labels: Record<string, string>;
   steps: Record<string, string>; // 步骤号 → 被解释变量中文名
 }
 
@@ -203,6 +205,8 @@ export interface RegressionDesignInfo {
   control_mode: string;
   interaction: boolean;
   price_mode: string;
+  scenario: string;
+  scenario_label: string;
   controls: string[];
   control_labels: Record<string, string>;
   equation: string;

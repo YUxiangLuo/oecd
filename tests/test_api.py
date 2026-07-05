@@ -65,6 +65,8 @@ def test_regression_options():
     assert "ICIO 派生控制变量" in body["control_modes"]
     assert "模拟宏观控制" in body["control_modes"]
     assert "实际值(2016=1)" in body["price_modes"]
+    assert body["scenarios"] == ["clean", "noisy", "confounded"]
+    assert "前趋势混杂" in body["scenario_labels"]["confounded"]
 
 
 def test_regression_design():
@@ -78,6 +80,8 @@ def test_regression_design():
     assert body["cluster"] == "country"
     assert body["control_mode"] == "不加控制变量"
     assert body["price_mode"] == "名义值"
+    assert body["scenario"] == "clean"
+    assert body["scenario_label"] == "基准场景(clean)"
     assert body["controls"] == []
     assert body["shock_col"] == "tariff_shock"
     assert body["treated_col"] == "treated"
@@ -139,6 +143,9 @@ def test_regression_design():
     ).status_code == 400
     assert client.get(
         "/api/regression/design", params={"step": 13, "price_mode": "购买力平价"}
+    ).status_code == 400
+    assert client.get(
+        "/api/regression/design", params={"step": 13, "scenario": "magic"}
     ).status_code == 400
 
 

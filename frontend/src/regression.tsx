@@ -15,13 +15,19 @@ import type { PlaceboResponse, RegressionDesignInfo, RegressionOptions, Regressi
 import { CoefForestChart, EventStudyChart, PlaceboChart } from "./viz";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
+const SCENARIO_HINT: Record<string, string> = {
+  clean: "基准场景:冲击数据按当前拟真事件面板进入模型,用于观察标准 DID/FE/事件研究链路。",
+  noisy: "测量误差场景:系统给因变量和强度冲击加入确定性噪声,重点观察显著性与置信区间如何变弱。",
+  confounded: "前趋势混杂场景:处理组被注入冲击前趋势,事件研究若出现显著 k<0 系数,应判定 DID 识别不可信。",
+};
 
-function Pills({ options, value, onChange, readySet }: {
+function Pills({ options, value, onChange, readySet, labelMap }: {
   options: string[];
   value: string;
   onChange: (v: string) => void;
   /** 传入时,不在集合内的选项显示为禁用的「规划中」 */
   readySet?: Set<string>;
+  labelMap?: Record<string, string>;
 }) {
   return (
     <div className="pill-row">
@@ -34,7 +40,7 @@ function Pills({ options, value, onChange, readySet }: {
             disabled={planned}
             onClick={() => onChange(opt)}
           >
-            {opt}
+            {labelMap?.[opt] ?? opt}
             {planned && <span className="pill-badge">规划中</span>}
           </button>
         );
@@ -70,6 +76,7 @@ function DesignMeta({ d }: { d: RegressionDesignInfo }) {
       <span>控制:{controls}</span>
       <span>交互项:{d.interaction ? "冲击×基期GVC" : "未加入"}</span>
       <span>价格口径:{d.price_mode}</span>
+      <span>场景:{d.scenario_label}</span>
     </div>
   );
 }
@@ -86,13 +93,14 @@ export function RegDesignLab() {
   const [controlMode, setControlMode] = useState("不加控制变量");
   const [interaction, setInteraction] = useState(false);
   const [priceMode, setPriceMode] = useState("名义值");
+  const [scenario, setScenario] = useState("clean");
   const [depStep, setDepStep] = useState(13);
 
   const { data: design, error: designErr } = useAsync<RegressionDesignInfo>(
     () => api.regressionDesign({
-      step: depStep, granularity: gran, shockType: shock, method, controlMode, interaction, priceMode,
+      step: depStep, granularity: gran, shockType: shock, method, controlMode, interaction, priceMode, scenario,
     }),
-    [depStep, gran, shock, method, controlMode, interaction, priceMode],
+    [depStep, gran, shock, method, controlMode, interaction, priceMode, scenario],
   );
 
   if (optsErr) return <div className="error-box">{optsErr}</div>;
@@ -142,6 +150,14 @@ export function RegDesignLab() {
             onChange={setPriceMode}
           />
         </ChoiceCard>
+        <ChoiceCard title="教学场景" hint="切换测量误差或前趋势混杂,观察识别假设如何失效。">
+          <Pills
+            options={opts.scenarios ?? ["clean", "noisy", "confounded"]}
+            value={scenario}
+            onChange={setScenario}
+            labelMap={opts.scenario_labels}
+          />
+        </ChoiceCard>
         <ChoiceCard title="被解释变量" hint="对应步骤13–16 的四组 GVC 指标回归。">
           <div className="pill-row">
             {stepEntries.map(([n, label]) => (
@@ -175,6 +191,7 @@ export function RegressionRunLab({ step }: { step: Step }) {
   const [controlMode, setControlMode] = useState("不加控制变量");
   const [interaction, setInteraction] = useState(false);
   const [priceMode, setPriceMode] = useState("名义值");
+  const [scenario, setScenario] = useState("clean");
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [placebo, setPlacebo] = useState<PlaceboResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -184,8 +201,8 @@ export function RegressionRunLab({ step }: { step: Step }) {
 
   const { data: opts } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
   const { data: design } = useAsync<RegressionDesignInfo>(
-    () => api.regressionDesign({ step: step.n, granularity: gran, shockType: shock, method, controlMode, interaction, priceMode }),
-    [step.n, gran, shock, method, controlMode, interaction, priceMode],
+    () => api.regressionDesign({ step: step.n, granularity: gran, shockType: shock, method, controlMode, interaction, priceMode, scenario }),
+    [step.n, gran, shock, method, controlMode, interaction, priceMode, scenario],
   );
 
   // 换步骤/设计时清空旧结果,按钮回到初态
@@ -194,7 +211,7 @@ export function RegressionRunLab({ step }: { step: Step }) {
     setPlacebo(null);
     setError(null);
     setPlaceboError(null);
-  }, [step.n, gran, shock, method, controlMode, interaction, priceMode]);
+  }, [step.n, gran, shock, method, controlMode, interaction, priceMode, scenario]);
 
   const run = async () => {
     setRunning(true);
@@ -202,7 +219,7 @@ export function RegressionRunLab({ step }: { step: Step }) {
     setPlacebo(null);
     setPlaceboError(null);
     try {
-      setResult(await api.runRegression(step.n, gran, shock, method, controlMode, interaction, priceMode));
+      setResult(await api.runRegression(step.n, gran, shock, method, controlMode, interaction, priceMode, scenario));
     } catch (e) {
       setError(String((e as Error).message));
     } finally {
@@ -214,7 +231,7 @@ export function RegressionRunLab({ step }: { step: Step }) {
     setPlaceboRunning(true);
     setPlaceboError(null);
     try {
-      setPlacebo(await api.placeboRegression(step.n, gran, shock, method, controlMode, interaction, priceMode, 40));
+      setPlacebo(await api.placeboRegression(step.n, gran, shock, method, controlMode, interaction, priceMode, scenario, 40));
     } catch (e) {
       setPlaceboError(String((e as Error).message));
     } finally {
@@ -273,6 +290,15 @@ export function RegressionRunLab({ step }: { step: Step }) {
               options={opts?.price_modes ?? ["名义值", "实际值(2016=1)"]}
               value={priceMode}
               onChange={setPriceMode}
+            />
+          </div>
+          <div className="model-control">
+            <span className="model-control-label">场景</span>
+            <Pills
+              options={opts?.scenarios ?? ["clean", "noisy", "confounded"]}
+              value={scenario}
+              onChange={setScenario}
+              labelMap={opts?.scenario_labels}
             />
           </div>
         </div>
@@ -334,6 +360,11 @@ export function RegressionRunLab({ step }: { step: Step }) {
               <b>{result.benchmark.max_abs_se_diff.toExponential(2)}</b>
               {result.benchmark.passed ? "。系数对照通过。" : "。请复核对照差异。"}
             </p>
+          </div>
+
+          <div className="benchmark-box">
+            <div className="teach-label">教学场景判读</div>
+            <p>{SCENARIO_HINT[result.design.scenario] ?? result.design.scenario_label}</p>
           </div>
 
           <div className="benchmark-box">

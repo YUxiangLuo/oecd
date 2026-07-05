@@ -24,7 +24,7 @@ import pandas as pd
 from linearmodels.panel import PanelOLS
 from scipy import stats
 
-from gvcsim.regression.design import PRICE_MODE_REAL
+from gvcsim.regression.design import SCENARIO_CONFOUNDED, SCENARIO_NOISY, PRICE_MODE_REAL
 
 
 @dataclass
@@ -83,6 +83,12 @@ class PreparedModel:
 BASE_GVC_COL = "share_trade_gvc_participation"
 BASELINE_GVC_COL = "base_gvc_participation"
 DEFLATOR_COL = "gdp_deflator"
+
+
+def _stable_noise(data: pd.DataFrame, cols: list[str]) -> pd.Series:
+    keys = data[cols].astype(str)
+    hashed = pd.util.hash_pandas_object(keys, index=False).astype("uint64")
+    return ((hashed % 1_000_003).astype(float) / 500_001.5) - 1.0
 
 
 def _attach_baseline_gvc(data: pd.DataFrame, entity: str, time: str) -> pd.DataFrame:
@@ -146,6 +152,44 @@ def _apply_price_mode(df: pd.DataFrame, design, time: str = "year") -> pd.DataFr
     if {"country", time, "trade_gross_exports", DEFLATOR_COL}.issubset(out.columns):
         out["exports_proxy_growth"] = _country_year_real_growth(out, "trade_gross_exports", time)
     return out
+
+
+def _apply_teaching_scenario(
+    df: pd.DataFrame, design, time: str = "year",
+) -> tuple[pd.DataFrame, list[str]]:
+    """为教学目的生成 clean/noisy/confounded 三类回归样本。"""
+    scenario = getattr(design, "scenario", "clean")
+    if scenario not in {SCENARIO_NOISY, SCENARIO_CONFOUNDED}:
+        return df, []
+    if design.depvar not in df.columns:
+        return df, []
+
+    out = df.copy()
+    y_scale = float(out[design.depvar].std(skipna=True) or 0.0)
+    y_scale = max(y_scale, 0.02)
+
+    if scenario == SCENARIO_NOISY:
+        y_noise = _stable_noise(out, [design.entity if design.entity in out.columns else "country", time])
+        out[design.depvar] = out[design.depvar].astype(float) + y_noise * y_scale * 0.35
+        if design.method == "双向固定效应" and design.shock_col in out.columns:
+            x_scale = float(out[design.shock_col].std(skipna=True) or 0.0)
+            x_noise = _stable_noise(out, ["country", "sector" if "sector" in out.columns else time, time])
+            out[design.shock_col] = (
+                out[design.shock_col].astype(float) + x_noise * max(x_scale, 0.01) * 0.55
+            ).clip(lower=0.0)
+        return out, ["教学场景:noisy,已加入确定性测量噪声,用于观察显著性下降"]
+
+    if design.treated_col not in out.columns:
+        return out, []
+    entity = design.entity if design.entity in out.columns else "country"
+    ever = (out.groupby(entity)[design.treated_col].transform("max") > 0).astype(float)
+    years = out[time].astype(float)
+    span = max(float(years.max() - years.min()), 1.0)
+    trend = (years - years.min()) / span
+    out[design.depvar] = out[design.depvar].astype(float) + ever * trend * y_scale * 0.75
+    return out, [
+        "教学场景:confounded,处理组被注入冲击前趋势;事件研究应能暴露平行趋势风险",
+    ]
 
 
 def _drop_collinear_columns(
@@ -374,6 +418,7 @@ def placebo_did_distribution(
         raise ValueError("安慰剂检验当前仅支持双重差分 (DID) 设计")
     n_draws = max(1, min(int(n_draws), 200))
     base = _apply_price_mode(df, design)
+    base, _ = _apply_teaching_scenario(base, design)
     true_model = _prepare_did_model(
         base,
         design.depvar,
@@ -445,6 +490,7 @@ def placebo_did_distribution(
 def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
     """按 RegressionDesign 构造同一份估计样本,供自写引擎与 PanelOLS 共用。"""
     df = _apply_price_mode(df, design)
+    df, scenario_notes = _apply_teaching_scenario(df, design)
     kwargs = dict(entity=design.entity, time="year", cluster=design.cluster,
                   controls=list(design.controls), interaction=design.interaction)
     if design.method == "双重差分 (DID)":
@@ -453,6 +499,7 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
         model = _prepare_event_model(df, design.depvar, treated_col=design.treated_col, **kwargs)
     else:
         model = _prepare_fe_model(df, design.depvar, list(design.regressors), **kwargs)
+    model.notes.extend(scenario_notes)
     if getattr(design, "price_mode", None) == PRICE_MODE_REAL:
         model.notes.append("实际值口径:金额类控制变量已用 GDP 平减指数调整(基期=1)")
     return model
