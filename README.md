@@ -224,7 +224,7 @@ Mock 的质量标准(schema 对齐真实来源、量级锚定公开统计、维�
    交互升级;国家–行业级下钻。
 3. **M3 回归层补全**:三类冲击已接入回归设计;WDI 风格宏观控制 mock;平减指数与
    名义/实际切换;交互项;clean/noisy/confounded 三套教学场景;安慰剂检验。
-4. **M4 闭环与工程**:报告参数化(吸收学生的设计选择)、PDF 导出、CI。
+4. **M4 闭环与工程**:报告参数化(吸收学生的设计选择)、PDF 导出。
 
 ## 开发常用命令
 
@@ -234,6 +234,9 @@ uv run gvcsim compute --years 2018        # 只重算某一年
 uv run uvicorn gvcsim.api:app --reload    # 带热重载起 API
 cd frontend && bun run build              # 前端类型检查 + 构建
 ```
+
+GitHub Actions 已配置 `.github/workflows/ci.yml`,推送或 PR 时运行
+`uv run pytest -q` 与 `bun run build`。
 
 ## 部署
 
