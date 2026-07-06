@@ -773,13 +773,18 @@ def _summarize_benchmark(
         })
     max_coef = max((abs(r["coef_diff"]) for r in rows), default=float("nan"))
     max_se = max((abs(r["se_diff"]) for r in rows), default=float("nan"))
+    coef_check_passed = bool(rows) and max_coef < 1e-8
     return {
         "backend": "linearmodels.PanelOLS",
         "policy_coefs": rows,
         "max_abs_coef_diff": max_coef,
         "max_abs_se_diff": max_se,
-        "passed": bool(rows) and max_coef < 1e-8,
-        "notes": lm.notes,
+        "coef_check_passed": coef_check_passed,
+        "se_check_mode": "informational",
+        "notes": [
+            *lm.notes,
+            "PanelOLS 对照通过/失败仅针对政策系数;标准误差异受聚类小样本修正与自由度处理影响,仅作参考。",
+        ],
     }
 
 

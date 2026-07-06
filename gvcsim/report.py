@@ -185,9 +185,10 @@ def generate(
             f"### 步骤{step}:{design.depvar_label}",
             f"模型:`{design.equation()}`\n",
             _coef_table(result, design),
-            f"PanelOLS 对照:最大政策系数差异={bench['max_abs_coef_diff']:.2e},"
-            f"最大标准误差异={bench['max_abs_se_diff']:.2e},"
-            f"{'通过' if bench['passed'] else '需复核'}。",
+            f"PanelOLS 政策系数对照:{'通过' if bench['coef_check_passed'] else '需复核'},"
+            f"最大政策系数差异={bench['max_abs_coef_diff']:.2e};"
+            f"标准误最大差异={bench['max_abs_se_diff']:.2e},仅作参考"
+            "(不同实现的小样本/自由度修正规则可能不同)。",
             "",
         ]
 

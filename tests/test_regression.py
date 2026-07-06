@@ -361,8 +361,11 @@ def test_run_design_with_controls_and_panelols_benchmark():
 
     bench = benchmark_linearmodels(df, design, result)
     assert bench["backend"] == "linearmodels.PanelOLS"
-    assert bench["passed"]
+    assert "passed" not in bench
+    assert bench["coef_check_passed"]
+    assert bench["se_check_mode"] == "informational"
     assert bench["max_abs_coef_diff"] < 1e-8
+    assert any("仅针对政策系数" in n for n in bench["notes"])
 
 
 def test_run_design_with_macro_controls():
