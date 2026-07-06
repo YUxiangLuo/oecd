@@ -56,10 +56,7 @@ def country_network(arr: IcioArrays) -> pd.DataFrame:
             if r != s and w / total > EDGE_SHARE_THRESHOLD:
                 G.add_edge(r, s, weight=float(w), distance=float(total / w))
 
-    strength = {
-        n: (G.out_degree(n, weight="weight") + G.in_degree(n, weight="weight")) / total
-        for n in G.nodes
-    }
+    strength = {n: (G.out_degree(n, weight="weight") + G.in_degree(n, weight="weight")) / total for n in G.nodes}
     betweenness = nx.betweenness_centrality(G, weight="distance", normalized=True)
     eigen = _eigenvector_centrality(G)
 
@@ -127,20 +124,21 @@ def sector_network(arr: IcioArrays) -> pd.DataFrame:
         w = float(arr.Z[i, j])
         G.add_edge(nodes[i], nodes[j], weight=w, distance=total / w)
 
-    strength = {
-        n: (G.out_degree(n, weight="weight") + G.in_degree(n, weight="weight")) / total
-        for n in G.nodes
-    }
+    strength = {n: (G.out_degree(n, weight="weight") + G.in_degree(n, weight="weight")) / total for n in G.nodes}
     betweenness = _betweenness_centrality(G)
     eigen = _eigenvector_centrality(G)
 
-    df = pd.DataFrame(
-        {
-            "degree_centrality": strength,
-            "betweenness_centrality": betweenness,
-            "eigenvector_centrality": eigen,
-        }
-    ).reindex(nodes).fillna(0.0)
+    df = (
+        pd.DataFrame(
+            {
+                "degree_centrality": strength,
+                "betweenness_centrality": betweenness,
+                "eigenvector_centrality": eigen,
+            }
+        )
+        .reindex(nodes)
+        .fillna(0.0)
+    )
     df.index = pd.MultiIndex.from_tuples(nodes, names=["country", "sector"])
     return df
 
@@ -148,9 +146,6 @@ def sector_network(arr: IcioArrays) -> pd.DataFrame:
 def network_edges(arr: IcioArrays, top_n: int = 120) -> pd.DataFrame:
     """取流量最大的 top_n 条边,供前端网络图渲染(节点太多画不动)。"""
     F = country_flow_matrix(arr)
-    edges = (
-        F.stack().rename("flow").reset_index()
-        .rename(columns={"level_0": "source", "level_1": "target"})
-    )
+    edges = F.stack().rename("flow").reset_index().rename(columns={"level_0": "source", "level_1": "target"})
     edges = edges[edges["source"] != edges["target"]]
     return edges.nlargest(top_n, "flow").reset_index(drop=True)

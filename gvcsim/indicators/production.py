@@ -28,9 +28,7 @@ def _add_shares(df: pd.DataFrame) -> pd.DataFrame:
     df["prod_gvc_total"] = df["prod_simple_gvc"] + df["prod_complex_gvc"]
     with np.errstate(divide="ignore", invalid="ignore"):
         for col in _AMOUNT_COLS:
-            df[f"share_{col}"] = np.where(
-                df["prod_va_total"] > 0, df[col] / df["prod_va_total"], np.nan
-            )
+            df[f"share_{col}"] = np.where(df["prod_va_total"] > 0, df[col] / df["prod_va_total"], np.nan)
     return df
 
 
@@ -39,9 +37,7 @@ def sector_production(arr: IcioArrays) -> pd.DataFrame:
     col_of = {r: j for j, r in enumerate(arr.regions)}
 
     # 每国"国内链条产出向量" L_ss @ Y_ss,简单 GVC 项要用,先算好
-    dom_final = {
-        s: arr.L_dd[s] @ arr.Yd[arr.pos[s], col_of[s]] for s in arr.regions
-    }
+    dom_final = {s: arr.L_dd[s] @ arr.Yd[arr.pos[s], col_of[s]] for s in arr.regions}
 
     # 总增加值(基准):v ⊙ (B @ 全球最终需求),按增加值来源行业逐行记账
     total_by_row = arr.v * (arr.B @ arr.Yd.sum(axis=1))
@@ -52,8 +48,8 @@ def sector_production(arr: IcioArrays) -> pd.DataFrame:
         v_r = arr.v[p]
         L_rr = arr.L_dd[r]
 
-        y_rr = arr.Yd[p, col_of[r]]                       # r 对本国产品的最终需求
-        y_export = arr.Yd[p, :].sum(axis=1) - y_rr        # 最终品出口
+        y_rr = arr.Yd[p, col_of[r]]  # r 对本国产品的最终需求
+        y_export = arr.Yd[p, :].sum(axis=1) - y_rr  # 最终品出口
 
         pure_domestic = v_r * (L_rr @ y_rr)
         traditional = v_r * (L_rr @ y_export)
@@ -70,16 +66,18 @@ def sector_production(arr: IcioArrays) -> pd.DataFrame:
         total = total_by_row[p]
         complex_gvc = total - pure_domestic - traditional - simple
 
-        parts.append(pd.DataFrame(
-            {
-                "prod_va_total": total,
-                "prod_pure_domestic": pure_domestic,
-                "prod_traditional": traditional,
-                "prod_simple_gvc": simple,
-                "prod_complex_gvc": complex_gvc,
-            },
-            index=pd.MultiIndex.from_product([[r], arr.sectors]),
-        ))
+        parts.append(
+            pd.DataFrame(
+                {
+                    "prod_va_total": total,
+                    "prod_pure_domestic": pure_domestic,
+                    "prod_traditional": traditional,
+                    "prod_simple_gvc": simple,
+                    "prod_complex_gvc": complex_gvc,
+                },
+                index=pd.MultiIndex.from_product([[r], arr.sectors]),
+            )
+        )
 
     df = pd.concat(parts)
     df.index.names = ["country", "sector"]
@@ -90,12 +88,18 @@ def country_production(arr: IcioArrays, sector_df: pd.DataFrame | None = None) -
     """国家级生产分解 = 行业级金额按国加总,占比重新计算。"""
     if sector_df is None:
         sector_df = sector_production(arr)
-    df = sector_df[[
-        "prod_va_total",
-        "prod_pure_domestic",
-        "prod_traditional",
-        "prod_simple_gvc",
-        "prod_complex_gvc",
-    ]].groupby(level=0).sum()
+    df = (
+        sector_df[
+            [
+                "prod_va_total",
+                "prod_pure_domestic",
+                "prod_traditional",
+                "prod_simple_gvc",
+                "prod_complex_gvc",
+            ]
+        ]
+        .groupby(level=0)
+        .sum()
+    )
     df.index.name = "country"
     return _add_shares(df)

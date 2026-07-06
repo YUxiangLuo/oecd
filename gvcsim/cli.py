@@ -1,11 +1,11 @@
 """命令行入口:uv run gvcsim <子命令>
 
-  download  下载 OECD ICIO 原始数据(步骤1)
-  validate  对某年数据做质检并打印结果(步骤3)
-  compute   预计算指标与回归面板(步骤4-7 + 面板)
-  regress   跑步骤13-16 的演示回归并打印系数表
-  report    生成实验报告(步骤17)
-  serve     启动 API 服务(供前端使用)
+download  下载 OECD ICIO 原始数据(步骤1)
+validate  对某年数据做质检并打印结果(步骤3)
+compute   预计算指标与回归面板(步骤4-7 + 面板)
+regress   跑步骤13-16 的演示回归并打印系数表
+report    生成实验报告(步骤17)
+serve     启动 API 服务(供前端使用)
 """
 
 import argparse
@@ -26,18 +26,22 @@ def main() -> None:
 
     p = sub.add_parser("regress", help="演示回归(步骤13-16)")
     p.add_argument("--step", type=int, default=13, choices=[13, 14, 15, 16])
-    p.add_argument("--granularity", default="sector", choices=["sector", "country"],
-                   help="回归粒度:sector=国家–行业级(默认),country=国家级")
-    p.add_argument("--method", default="did", choices=["did", "fe", "event"],
-                   help="估计方法:did=双重差分(默认),fe=双向固定效应(强度法),event=事件研究")
-    p.add_argument("--controls", action="store_true",
-                   help="加入 ICIO 派生国家-年份控制变量")
-    p.add_argument("--macro-controls", action="store_true",
-                   help="加入 WDI/IMF 风格模拟宏观控制变量")
-    p.add_argument("--interaction", action="store_true",
-                   help="加入 冲击×基期GVC参与度 交互项")
-    p.add_argument("--real", action="store_true",
-                   help="使用 GDP 平减指数切换到实际值口径(2016=1)")
+    p.add_argument(
+        "--granularity",
+        default="sector",
+        choices=["sector", "country"],
+        help="回归粒度:sector=国家–行业级(默认),country=国家级",
+    )
+    p.add_argument(
+        "--method",
+        default="did",
+        choices=["did", "fe", "event"],
+        help="估计方法:did=双重差分(默认),fe=双向固定效应(强度法),event=事件研究",
+    )
+    p.add_argument("--controls", action="store_true", help="加入 ICIO 派生国家-年份控制变量")
+    p.add_argument("--macro-controls", action="store_true", help="加入 WDI/IMF 风格模拟宏观控制变量")
+    p.add_argument("--interaction", action="store_true", help="加入 冲击×基期GVC参与度 交互项")
+    p.add_argument("--real", action="store_true", help="使用 GDP 平减指数切换到实际值口径(2016=1)")
 
     p = sub.add_parser("report", help="生成实验报告")
     p.add_argument("--year", type=int, default=None)
@@ -62,8 +66,10 @@ def main() -> None:
             print(f"[{'✓' if c.passed else '✗'}] {c.name} —— {c.detail}")
             for w in c.warnings:
                 print(f"      ⚠ {w}")
-        print("\n" + ("数据整体校验通过。" if all(c.passed for c in checks)
-                       else "存在异常项,请查看上方警告后决定是否使用。"))
+        print(
+            "\n"
+            + ("数据整体校验通过。" if all(c.passed for c in checks) else "存在异常项,请查看上方警告后决定是否使用。")
+        )
 
     elif args.command == "compute":
         from gvcsim import pipeline
@@ -72,7 +78,10 @@ def main() -> None:
 
     elif args.command == "regress":
         from gvcsim.regression.design import (
-            CONTROL_MODE_ICIO, CONTROL_MODE_MACRO, PRICE_MODE_NOMINAL, PRICE_MODE_REAL,
+            CONTROL_MODE_ICIO,
+            CONTROL_MODE_MACRO,
+            PRICE_MODE_NOMINAL,
+            PRICE_MODE_REAL,
             RegressionDesign,
         )
         from gvcsim.report import run_step_regression
@@ -82,18 +91,24 @@ def main() -> None:
         granularity = "国家–行业级" if args.granularity == "sector" else "国家级"
         method = {"did": "双重差分 (DID)", "fe": "双向固定效应", "event": "事件研究"}[args.method]
         control_mode = (
-            CONTROL_MODE_MACRO if args.macro_controls
-            else CONTROL_MODE_ICIO if args.controls
-            else "不加控制变量"
+            CONTROL_MODE_MACRO if args.macro_controls else CONTROL_MODE_ICIO if args.controls else "不加控制变量"
         )
         price_mode = PRICE_MODE_REAL if args.real else PRICE_MODE_NOMINAL
         design = RegressionDesign(
-            step=args.step, granularity=granularity, method=method,
-            control_mode=control_mode, interaction=args.interaction, price_mode=price_mode
+            step=args.step,
+            granularity=granularity,
+            method=method,
+            control_mode=control_mode,
+            interaction=args.interaction,
+            price_mode=price_mode,
         )
         result = run_step_regression(
-            args.step, granularity=granularity, method=method,
-            control_mode=control_mode, interaction=args.interaction, price_mode=price_mode
+            args.step,
+            granularity=granularity,
+            method=method,
+            control_mode=control_mode,
+            interaction=args.interaction,
+            price_mode=price_mode,
         )
         print(f"步骤{args.step}:{design.depvar_label}({granularity} · {method})")
         print(f"价格口径:{price_mode}")
@@ -105,8 +120,10 @@ def main() -> None:
         print(f"{'变量':<20}{'系数':>12}{'标准误':>12}{'t':>8}{'p':>8}")
         for c in result.coefs:
             print(f"{c.name:<20}{c.coef:>12.4f}{c.se:>12.4f}{c.t:>8.2f}{c.p:>8.3f} {c.stars}")
-        print(f"\nN={result.n_obs}({result.n_entities}个体×{result.n_times}年, "
-              f"{result.n_clusters}国聚类), 组内R²={result.r2_within:.4f}")
+        print(
+            f"\nN={result.n_obs}({result.n_entities}个体×{result.n_times}年, "
+            f"{result.n_clusters}国聚类), 组内R²={result.r2_within:.4f}"
+        )
         for note in result.notes:
             print(f"  · {note}")
 

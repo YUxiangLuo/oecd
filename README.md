@@ -66,7 +66,9 @@ uv run gvcsim regress --step 13 --interaction           # 加入冲击×基期GV
 uv run gvcsim regress --step 13 --controls --real       # 金额类控制变量切换为实际值口径
 uv run gvcsim regress --step 13 --granularity country   # 国家级粒度
 uv run gvcsim report --year 2020      # 步骤17:生成 reports/experiment_report_2020.md
-uv run pytest                         # 测试(81 个,含 API 集成测试)
+uv run pytest                         # 后端测试(含 synthetic compute 与 API 集成)
+uv run ruff check . && uv run ruff format --check . && uv run mypy
+cd frontend && bun run build && bun run test:e2e
 ```
 
 ## 目录结构
@@ -77,7 +79,7 @@ uv run pytest                         # 测试(81 个,含 API 集成测试)
 │   ├── data/
 │   │   ├── loader.py             #   步骤1:pymrio 下载/解析 OECD ICIO
 │   │   ├── icio_browser.py       #   步骤1:原始表按需切片浏览(z/y/accounts)
-│   │   ├── quality.py            #   步骤3:结构化质检(维度/缺失值/会计恒等式/矩阵性质)
+│   │   ├── quality.py            #   步骤3:结构化质检(ICIO/冲击/控制变量)
 │   │   └── controls.py           #   ICIO 派生 + WDI/IMF 风格 mock 国家-年份控制变量
 │   ├── shocks.py                 #   步骤2:政策冲击数据接入(拟真演示面板:全经济体、行业异质)
 │   ├── indicators/
@@ -101,14 +103,12 @@ uv run pytest                         # 测试(81 个,含 API 集成测试)
 │                                 #   (拆解恒等式校验 + 网络中心性算法)、viz.tsx 富可视化
 │                                 #   (网络/堆叠/长度/热力 + 排序/散点/趋势 + 事件研究/森林图,纯 SVG)、
 │                                 #   teach.tsx + regteach.ts + regression.tsx 步骤12-16 讲解卡与回归台
-├── tests/                        # 合成小矩阵验证指标数学性质;回归系数恢复;API 集成
-├── prototype/                    # 完整 UI 设计原型(最终形态参考,勿改)
+├── tests/                        # 合成小矩阵、synthetic compute、回归/API 集成测试
+├── prototype/                    # 完整 UI 设计原型(最终形态参考,部署时排除)
 ├── data/processed/               # 预计算产物(gitignore;由 gvcsim compute 生成)
 ├── data/shocks/                  # 冲击数据(自动生成的拟真演示面板,country×sector×year)
-├── reports/                      # 自动生成的实验报告(gitignore)
-├── OECD_ICIO/                    # 原始数据(gitignore)
-└── download_icio.py / validate_icio.py / gvc_indicators.py
-                                  # 原型阶段的验证脚本(已被 gvcsim 包取代,保留作参照)
+├── reports/                      # 自动生成的实验报告(gitignore;部署时排除)
+└── OECD_ICIO/                    # 原始数据(gitignore;按需同步到服务器)
 ```
 
 ## 架构与数据流
@@ -120,6 +120,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
                               │  length / network       → indicators_{country,sector}_<year>.csv
                               │                           network_edges_<year>.csv
                               └─ pipeline.build_panel() → controls_country.csv(ICIO 派生控制变量)
+                                                          qc_controls.json / qc_shocks.json
                                                           panel_sector.csv(行业级,回归默认)
                                                           panel_country.csv(冲击按出口额加权聚合)
                                                               │

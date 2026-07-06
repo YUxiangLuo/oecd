@@ -23,6 +23,9 @@ gvcsim = "gvcsim.cli:main"
 dev = [
     "pytest>=8.3",
     "httpx>=0.28",
+    "ruff>=0.15.20",
+    "mypy>=2.1.0",
+    "pytest-cov>=7.1.0",
 ]
 
 [build-system]
@@ -34,3 +37,25 @@ packages = ["gvcsim"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+extend-exclude = ["prototype"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["gvcsim"]
+ignore_missing_imports = true
+warn_unused_configs = true
+# pandas-heavy paths still have gradually typed internals; keep CI typecheck lightweight
+# while preventing future syntax/signature regressions from going unnoticed.
+disable_error_code = ["assignment", "attr-defined", "index", "arg-type"]
+
+[tool.coverage.run]
+source = ["gvcsim"]
+
+[tool.coverage.report]
+fail_under = 60
+show_missing = true
+skip_covered = true

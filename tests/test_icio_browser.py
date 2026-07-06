@@ -7,31 +7,35 @@ from gvcsim.data import icio_browser
 
 def _write_fixture(raw_dir: Path) -> None:
     (raw_dir / "ICIO2023_2020.csv").write_text(
-        "\n".join([
-            "V1,AAA_s1,AAA_s2,BBB_s1,AAA_HFCE,AAA_GFCF,BBB_HFCE,BBB_GFCF,OUT",
-            "AAA_s1,1,2,3,10,11,12,13,39",
-            "AAA_s2,4,5,6,14,15,16,17,77",
-            "BBB_s1,7,8,9,18,19,20,21,111",
-            "TLS,0.1,0.2,0.3,0,0,0,0,0",
-            "VA,30,40,50,0,0,0,0,120",
-            "OUT,40,50,60,0,0,0,0,150",
-        ]),
+        "\n".join(
+            [
+                "V1,AAA_s1,AAA_s2,BBB_s1,AAA_HFCE,AAA_GFCF,BBB_HFCE,BBB_GFCF,OUT",
+                "AAA_s1,1,2,3,10,11,12,13,39",
+                "AAA_s2,4,5,6,14,15,16,17,77",
+                "BBB_s1,7,8,9,18,19,20,21,111",
+                "TLS,0.1,0.2,0.3,0,0,0,0,0",
+                "VA,30,40,50,0,0,0,0,120",
+                "OUT,40,50,60,0,0,0,0,150",
+            ]
+        ),
         encoding="utf-8",
     )
 
 
 def _write_substring_sector_fixture(raw_dir: Path) -> None:
     (raw_dir / "ICIO2023_2020.csv").write_text(
-        "\n".join([
-            "V1,AAA_T,AAA_C10T12,BBB_T,BBB_C10T12,AAA_HFCE,BBB_HFCE,OUT",
-            "AAA_T,1,2,3,4,10,11,31",
-            "AAA_C10T12,5,6,7,8,12,13,51",
-            "BBB_T,9,10,11,12,14,15,71",
-            "BBB_C10T12,13,14,15,16,16,17,91",
-            "TLS,0.1,0.2,0.3,0.4,0,0,0",
-            "VA,30,40,50,60,0,0,180",
-            "OUT,40,50,60,70,0,0,220",
-        ]),
+        "\n".join(
+            [
+                "V1,AAA_T,AAA_C10T12,BBB_T,BBB_C10T12,AAA_HFCE,BBB_HFCE,OUT",
+                "AAA_T,1,2,3,4,10,11,31",
+                "AAA_C10T12,5,6,7,8,12,13,51",
+                "BBB_T,9,10,11,12,14,15,71",
+                "BBB_C10T12,13,14,15,16,16,17,91",
+                "TLS,0.1,0.2,0.3,0.4,0,0,0",
+                "VA,30,40,50,60,0,0,180",
+                "OUT,40,50,60,70,0,0,220",
+            ]
+        ),
         encoding="utf-8",
     )
 

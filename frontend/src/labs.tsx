@@ -256,6 +256,7 @@ export function QcLab({ meta }: { meta: Meta }) {
   const [year, setYear] = useState(meta.years.at(-1)!);
   const { data, error } = useAsync<QcCheck[]>(() => api.qc(year), [year]);
   const { data: shockChecks, error: shockError } = useAsync<QcCheck[]>(() => api.qcShocks(), []);
+  const { data: controlChecks, error: controlError } = useAsync<QcCheck[]>(() => api.qcControls(), []);
   if (error) return <div className="error-box">{error}</div>;
   const table = (rows: QcCheck[] | null) => (
     <div className="table-wrap">
@@ -295,6 +296,12 @@ export function QcLab({ meta }: { meta: Meta }) {
         <span className="section-head-line" />
       </div>
       {shockError ? <div className="error-box">{shockError}</div> : table(shockChecks)}
+
+      <div className="section-head" style={{ marginTop: 18 }}>
+        <span className="section-head-icon">🧾</span>国家-年份控制变量质检
+        <span className="section-head-line" />
+      </div>
+      {controlError ? <div className="error-box">{controlError}</div> : table(controlChecks)}
     </div>
   );
 }

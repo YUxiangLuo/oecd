@@ -41,8 +41,12 @@ def run_step_regression(
     """跑步骤13-16 对应的默认设计回归(默认国家–行业级粒度 + DID)。"""
     kwargs = {"method": method} if method else {}
     design = RegressionDesign(
-        step=step, granularity=granularity, control_mode=control_mode,
-        interaction=interaction, price_mode=price_mode, **kwargs
+        step=step,
+        granularity=granularity,
+        control_mode=control_mode,
+        interaction=interaction,
+        price_mode=price_mode,
+        **kwargs,
     )
     if panel is None:
         panel = _load_panel(design)
@@ -52,9 +56,7 @@ def run_step_regression(
 def _coef_table(result: RegressionResult, design: RegressionDesign) -> str:
     lines = ["| 变量 | 系数 | 聚类标准误 | t | p | |", "|---|---|---|---|---|---|"]
     for c in result.coefs:
-        lines.append(
-            f"| {c.name} | {c.coef:.4f} | {c.se:.4f} | {c.t:.2f} | {c.p:.3f} | {c.stars} |"
-        )
+        lines.append(f"| {c.name} | {c.coef:.4f} | {c.se:.4f} | {c.t:.2f} | {c.p:.3f} | {c.stars} |")
     entity_label = "国家" if design.granularity == "国家级" else "国家×行业"
     lines.append(
         f"\nN = {result.n_obs}({result.n_entities} 个{entity_label} × {result.n_times} 年,"
@@ -67,14 +69,16 @@ def _coef_table(result: RegressionResult, design: RegressionDesign) -> str:
 def _design_summary(design: RegressionDesign) -> str:
     controls = "、".join(design.control_labels.values()) if design.controls else "不加控制变量"
     interaction = "开启:冲击×基期GVC参与度" if design.interaction else "未开启"
-    return "\n".join([
-        f"- 粒度:{design.granularity}",
-        f"- 冲击类型:{design.shock_type}",
-        f"- 估计方法:{design.method}",
-        f"- 控制变量:{controls}",
-        f"- 交互项:{interaction}",
-        f"- 价格口径:{design.price_mode}",
-    ])
+    return "\n".join(
+        [
+            f"- 粒度:{design.granularity}",
+            f"- 冲击类型:{design.shock_type}",
+            f"- 估计方法:{design.method}",
+            f"- 控制变量:{controls}",
+            f"- 交互项:{interaction}",
+            f"- 价格口径:{design.price_mode}",
+        ]
+    )
 
 
 def _policy_names(design: RegressionDesign, result: RegressionResult) -> list[str]:
@@ -101,13 +105,9 @@ def _compare_table(
         if name not in base_by or name not in ctrl_by:
             continue
         b, c = base_by[name], ctrl_by[name]
-        lines.append(
-            f"| {name} | {b.coef:.4f}{b.stars} | {b.p:.3f} | "
-            f"{c.coef:.4f}{c.stars} | {c.p:.3f} |"
-        )
+        lines.append(f"| {name} | {b.coef:.4f}{b.stars} | {b.p:.3f} | {c.coef:.4f}{c.stars} | {c.p:.3f} |")
     lines.append(
-        f"\n基准:N={base.n_obs},组内 R²={base.r2_within:.4f}; "
-        f"加控制:N={ctrl.n_obs},组内 R²={ctrl.r2_within:.4f}。"
+        f"\n基准:N={base.n_obs},组内 R²={base.r2_within:.4f}; 加控制:N={ctrl.n_obs},组内 R²={ctrl.r2_within:.4f}。"
     )
     return "\n".join(lines)
 
@@ -150,8 +150,7 @@ def generate(
         "拟真演示面板,以 2018–2020 全球贸易摩擦为原型,结论仅用于验证系统链路,"
         "不构成研究结论)\n",
         f"- 数据:OECD ICIO {min(years)}–{max(years)}(指标截面:{year} 年)",
-        "- 方法:本报告使用步骤17中选择的回归设定;四组因变量共用同一套"
-        "粒度/冲击/方法/控制/价格口径,便于横向比较",
+        "- 方法:本报告使用步骤17中选择的回归设定;四组因变量共用同一套粒度/冲击/方法/控制/价格口径,便于横向比较",
         _design_summary(design_preview),
         f"- 生成日期:{date.today().isoformat()}\n",
         "## 一、数据与质检",
@@ -159,12 +158,11 @@ def generate(
         f"质检结果见 data/processed/qc_{year}.json(维度一致性、会计恒等式、"
         "里昂惕夫逆矩阵性质等)。\n",
         "## 二、GVC 指标摘要",
-        f"**后向参与度最高(BM 外国增加值与外国重复计算占毛出口比重)**:"
+        "**后向参与度最高(BM 外国增加值与外国重复计算占毛出口比重)**:"
         + "、".join(f"{c} ({v:.3f})" for c, v in top_backward.items()),
-        f"\n**前向参与度最高(本国增加值最常嵌入他国出口)**:"
+        "\n**前向参与度最高(本国增加值最常嵌入他国出口)**:"
         + "、".join(f"{c} ({v:.3f})" for c, v in top_forward.items()),
-        f"\n**介数中心性最高(供应链枢纽)**:"
-        + "、".join(f"{c} ({v:.3f})" for c, v in top_between.items()) + "\n",
+        "\n**介数中心性最高(供应链枢纽)**:" + "、".join(f"{c} ({v:.3f})" for c, v in top_between.items()) + "\n",
         "## 三、回归结果",
     ]
 
@@ -194,8 +192,7 @@ def generate(
 
     sections += [
         "## 四、结论与限制",
-        f"- 本报告验证了“数据 → 指标 → 回归 → 报告”闭环可自动运行"
-        f"(本次回归粒度:{granularity})。",
+        f"- 本报告验证了“数据 → 指标 → 回归 → 报告”闭环可自动运行(本次回归粒度:{granularity})。",
         "- 冲击变量为拟真演示面板(事件与量级参考公开资料的手工编码,"
         "出口暴露度由 OECD ICIO 双边流向计算);"
         "接入 PIIE/WTO 真实数据 + 官方 HS→ICIO 映射后本报告即具备研究意义。",

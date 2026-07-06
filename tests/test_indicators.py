@@ -79,9 +79,7 @@ def test_tradeflow_bm_source_coefficients_match_cut_inverse(fake_io):
         A_cut[np.ix_(p, f)] = 0.0
         B_cut = np.linalg.inv(eye - A_cut)
 
-        domestic_source, domestic_full, foreign_source, foreign_full = (
-            tradeflow._bm_source_coefficients(arr, country)
-        )
+        domestic_source, domestic_full, foreign_source, foreign_full = tradeflow._bm_source_coefficients(arr, country)
         assert np.allclose(domestic_source, arr.v[p] @ B_cut[np.ix_(p, p)])
         assert np.allclose(domestic_full, arr.v[p] @ arr.B[np.ix_(p, p)])
         assert np.allclose(foreign_source, arr.v[f] @ B_cut[np.ix_(f, p)])
@@ -119,9 +117,7 @@ def test_production_decomposition_adds_up(fake_io):
     assert np.allclose(parts, df["prod_va_total"])
     assert np.allclose(df["prod_gvc_total"], df["prod_simple_gvc"] + df["prod_complex_gvc"])
     # 总增加值应等于 va 向量按国加总
-    va_by_country = {
-        r: arr.va[arr.pos[r]].sum() for r in arr.regions
-    }
+    va_by_country = {r: arr.va[arr.pos[r]].sum() for r in arr.regions}
     for r in arr.regions:
         assert df.loc[r, "prod_va_total"] == pytest.approx(va_by_country[r])
     shares = df[[c for c in df.columns if c.startswith("share_")]].sum(axis=1)
@@ -146,8 +142,11 @@ def test_sector_production_adds_up(fake_io):
     assert np.allclose(parts, sec["prod_va_total"])
 
     country = production.country_production(arr)
-    agg = sec[["prod_va_total", "prod_pure_domestic", "prod_traditional", "prod_simple_gvc", "prod_complex_gvc"]] \
-        .groupby(level=0).sum()
+    agg = (
+        sec[["prod_va_total", "prod_pure_domestic", "prod_traditional", "prod_simple_gvc", "prod_complex_gvc"]]
+        .groupby(level=0)
+        .sum()
+    )
     assert np.allclose(agg.values, country[agg.columns].values)
 
     # 行业级四分类占比加总为 1;share_prod_gvc_total 是 simple+complex 的汇总列

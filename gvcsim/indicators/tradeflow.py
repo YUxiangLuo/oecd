@@ -150,22 +150,16 @@ def _meaningful_exporter(df: pd.DataFrame) -> pd.Series:
 
 def _add_trade_shares(df: pd.DataFrame) -> pd.DataFrame:
     gross = df["trade_gross_exports"]
-    noise_ok = _exports_above_noise(gross)       # 有界占比:只剔机器精度噪声
-    export_ok = _meaningful_exporter(df)         # 无界的前向/总参与度:再加相对下限
+    noise_ok = _exports_above_noise(gross)  # 有界占比:只剔机器精度噪声
+    export_ok = _meaningful_exporter(df)  # 无界的前向/总参与度:再加相对下限
     with np.errstate(divide="ignore", invalid="ignore"):
         df["share_trade_dva"] = np.where(noise_ok, df["trade_dva"] / gross, np.nan)
         df["share_trade_fva"] = np.where(noise_ok, df["trade_fva"] / gross, np.nan)
         df["share_trade_pdc"] = np.where(noise_ok, df["trade_pdc"] / gross, np.nan)
-        df["share_trade_backward_gvc"] = np.where(
-            noise_ok, (df["trade_fva"] + df["trade_fdc"]) / gross, np.nan
-        )
-        df["share_trade_forward_gvc"] = np.where(
-            export_ok, df["trade_forward_va_in_foreign_exports"] / gross, np.nan
-        )
+        df["share_trade_backward_gvc"] = np.where(noise_ok, (df["trade_fva"] + df["trade_fdc"]) / gross, np.nan)
+        df["share_trade_forward_gvc"] = np.where(export_ok, df["trade_forward_va_in_foreign_exports"] / gross, np.nan)
     # 总参与度含前向项,前向对非"有意义出口部门"已是缺失,后向 + 缺失 = 缺失,口径自然一致
-    df["share_trade_gvc_participation"] = (
-        df["share_trade_backward_gvc"] + df["share_trade_forward_gvc"]
-    )
+    df["share_trade_gvc_participation"] = df["share_trade_backward_gvc"] + df["share_trade_forward_gvc"]
     return df
 
 
@@ -190,7 +184,6 @@ def sector_tradeflow(arr: IcioArrays) -> pd.DataFrame:
     # 最终品出口(剔除本国内销)
     final_exports = arr.Yd.sum(axis=1) - arr.Yd[idx, home_col]
     Zf = np.where(border, arr.Z, 0.0)
-    intermediate_exports = Zf.sum(axis=1)
     importer_absorption_share = ultimate[idx, home_col]
 
     trade_dva_final = np.zeros(n)
@@ -204,9 +197,7 @@ def sector_tradeflow(arr: IcioArrays) -> pd.DataFrame:
     for r in arr.regions:
         p = arr.pos[r]
         home = region_idx[r]
-        domestic_source, domestic_full, foreign_source, foreign_full = (
-            _bm_source_coefficients(arr, r)
-        )
+        domestic_source, domestic_full, foreign_source, foreign_full = _bm_source_coefficients(arr, r)
 
         returned = (Zf[p, :] * ultimate[:, home][None, :]).sum(axis=1)
         absorbed = (Zf[p, :] * importer_absorption_share[None, :]).sum(axis=1)
@@ -214,12 +205,7 @@ def sector_tradeflow(arr: IcioArrays) -> pd.DataFrame:
         trade_dva_final[p] = domestic_source * final_exports[p]
         trade_dva_absorbed[p] = domestic_source * absorbed
         trade_rdv[p] = domestic_source * returned
-        trade_dva_reexported[p] = (
-            domestic_source * arr.E[p]
-            - trade_dva_final[p]
-            - trade_dva_absorbed[p]
-            - trade_rdv[p]
-        )
+        trade_dva_reexported[p] = domestic_source * arr.E[p] - trade_dva_final[p] - trade_dva_absorbed[p] - trade_rdv[p]
         # Keep the split stable if tiny allocation noise makes the residual negative.
         small = np.abs(trade_dva_reexported[p]) < 1e-10
         trade_dva_reexported[p[small]] = 0.0
@@ -251,9 +237,7 @@ def sector_tradeflow(arr: IcioArrays) -> pd.DataFrame:
             "trade_forward_va_in_foreign_exports": forward,
             "trade_balance_error": gross - accounted,
         },
-        index=pd.MultiIndex.from_arrays(
-            [node_regions, node_sectors], names=["country", "sector"]
-        ),
+        index=pd.MultiIndex.from_arrays([node_regions, node_sectors], names=["country", "sector"]),
     )
     return _add_trade_shares(df)
 

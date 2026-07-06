@@ -34,7 +34,4 @@ def available_years(raw_dir: Path = RAW_DATA_DIR) -> list[int]:
 
 def processed_years() -> list[int]:
     """扫描已完成指标预计算的年份。"""
-    return sorted(
-        int(f.stem.rsplit("_", 1)[1])
-        for f in PROCESSED_DIR.glob("indicators_country_*.csv")
-    )
+    return sorted(int(f.stem.rsplit("_", 1)[1]) for f in PROCESSED_DIR.glob("indicators_country_*.csv"))
