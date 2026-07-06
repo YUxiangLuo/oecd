@@ -258,4 +258,5 @@ GitHub Actions 已配置 `.github/workflows/ci.yml`,推送或 PR 时运行
 已部署到示例服务器,过程与运维命令(nginx + systemd + rsync 同步)记录在
 [`DEPLOY_101.201.151.30.md`](./DEPLOY_101.201.151.30.md)。该文档按当前服务器
 固定写死路径/端口/IP,更新部署时照其中的 rsync + `systemctl restart` 步骤即可
-(注意:同步命令必须排除服务器运行时的 `.venv311/`)。
+(注意:同步命令必须排除服务器运行时的 `.venv311/`;若指标/面板口径或数据源变化,
+需先重跑 `uv run gvcsim compute` 并同步新的 `data/processed/`)。

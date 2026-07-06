@@ -104,12 +104,15 @@ export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) 
   const err = Math.abs(sum - total);
   const rel = total ? err / Math.abs(total) : err;
   const ok = rel < 1e-6;
-  // 有些行业(家庭雇佣、公共管理、供水等)在该经济体几乎无出口/产出,总量≈0、
-  // 各分项全为 0,分解虽仍"闭合"但无信息量——提示学生换一个活跃行业。
+  // 有些行业(家庭雇佣、公共管理、供水等)在该经济体几乎无出口/产出,
+  // 分解虽仍"闭合"但信息量低、比例也容易受极小分母影响——提示学生换一个活跃行业。
   const countryTotal = (sectorPage?.rows ?? []).reduce((a, r) => a + Math.abs(num(r[cfg.total])), 0);
   const negligible =
     gran === "sector" && row != null &&
     (total === 0 || (countryTotal > 0 && Math.abs(total) / countryTotal < 1e-4));
+  const negligibleReason = total === 0
+    ? `${cfg.totalLabel}=0`
+    : `${cfg.totalLabel}占本国行业合计不足 0.01%`;
 
   return (
     <div className="demo-card">
@@ -191,8 +194,8 @@ export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) 
 
           {negligible && (
             <div className="decomp-hint">
-              ⚠️ {country} · {sectorLabel(effSector)} 的{cfg.totalLabel}≈0,各分项均为 0——
-              这类几乎无出口/产出的行业分解无信息量,换一个活跃行业(如制造业)更能看清口径。
+              ⚠️ {country} · {sectorLabel(effSector)} 的{negligibleReason}——
+              这类几乎无出口/产出的行业分解信息量低,换一个活跃行业(如制造业)更能看清口径。
             </div>
           )}
 

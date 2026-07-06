@@ -2,6 +2,7 @@
 
 import numpy as np
 import networkx as nx
+import pandas as pd
 import pytest
 
 from gvcsim.indicators import length, network, production, tradeflow
@@ -31,6 +32,37 @@ def test_tradeflow_bounds(fake_io):
     accounted_s = sector[["trade_dva", "trade_rdv", "trade_ddc", "trade_fva", "trade_fdc"]].sum(axis=1)
     assert np.allclose(accounted_s, sector["trade_gross_exports"])
     assert sector["share_trade_dva"].between(0, 1).all()
+
+
+def test_tradeflow_sector_forward_share_requires_export_sector():
+    """小出口行业的无界前向/总参与度置空,但有界 FVA/DVA 占比仍保留。"""
+    idx = pd.MultiIndex.from_tuples(
+        [("AAA", "major"), ("AAA", "minor")],
+        names=["country", "sector"],
+    )
+    df = pd.DataFrame(
+        {
+            "trade_gross_exports": [1000.0, 5.0],
+            "trade_dva": [700.0, 3.5],
+            "trade_fva": [200.0, 1.0],
+            "trade_pdc": [10.0, 0.05],
+            "trade_fdc": [5.0, 0.02],
+            "trade_forward_va_in_foreign_exports": [100.0, 100.0],
+        },
+        index=idx,
+    )
+
+    out = tradeflow._add_trade_shares(df.copy())
+
+    assert out.loc[("AAA", "major"), "share_trade_forward_gvc"] == pytest.approx(0.1)
+    assert pd.isna(out.loc[("AAA", "minor"), "share_trade_forward_gvc"])
+    assert pd.isna(out.loc[("AAA", "minor"), "share_trade_gvc_participation"])
+    assert out.loc[("AAA", "minor"), "share_trade_fva"] == pytest.approx(0.2)
+
+    flat = df.reset_index()
+    flat_out = tradeflow._add_trade_shares(flat.copy())
+    assert pd.isna(flat_out.loc[1, "share_trade_forward_gvc"])
+    assert flat_out.loc[1, "share_trade_fva"] == pytest.approx(0.2)
 
 
 def test_tradeflow_bm_source_coefficients_match_cut_inverse(fake_io):
