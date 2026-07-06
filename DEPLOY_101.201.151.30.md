@@ -15,7 +15,7 @@
 - 后端监听: `127.0.0.1:18000`
 - 前端静态文件: `/opt/oecd-icio-analysis/frontend/dist`
 - 当前部署来源分支: `cc`
-- 当前应用代码部署提交: `297b41f docs: update post-merge project status`
+- 当前应用代码部署提交: `7f554ac fix: 行业级参与度相对下限 1% → 0.5%`
 
 ## 本地准备
 
@@ -241,6 +241,15 @@ curl -fsS --max-time 90 \
 - `benchmark.backend = linearmodels.PanelOLS`
 - `benchmark.passed = true`
 - agent-browser 打开公网登录页无页面错误
+
+2026-07-06 更新部署(源 `cc` @ `7f554ac`,含可视化易用性 + 行业级 GVC 参与度口径修复):
+
+- 已按本文档 rsync + `systemctl restart` + `nginx reload` 流程重新部署
+- 因参与度口径为破坏性变更,已先本地 `uv run gvcsim compute` 重算 `data/processed/` 再同步
+- 首页 / `/docs` 返回 `200 OK`,`student / gvclab2026` 登录 `200 OK`
+- 国家级 DID + ICIO 控制回归 `200 OK`:`n_obs = 385`、`n_clusters = 77`、`benchmark.passed = true`
+- 线上行业级参与度已修复:CHN 2020 共 45 行业中 25 个有值、20 个置空(非主力出口部门),
+  最大总参与度 `≈ 1.006`(旧版曾达 `1e15` 的爆表值已消失)
 
 ## 运维命令
 
