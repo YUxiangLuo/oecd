@@ -688,18 +688,22 @@ export function QuadrantScatter({ rows, xKey, yKey, xLabel, yLabel, xFormat, yFo
 /** 构成条:指标驱动、可排序的横向堆叠条(泛化 StackedShareViz/LengthViz)。
  *  normalize=true 每条=分段和的 100%(步8 出口来源、步9 生产构成);
  *  normalize=false 用全局最大值的绝对宽度(步10 生产链长度)。 */
-export function CompositionBar({ rows, segments, sortKey, normalize = true, valueFormat = "pct", highlight }: {
+export function CompositionBar({ rows, segments, sortKey, sortLabel, sortFormat, normalize = true, valueFormat = "pct", highlight }: {
   rows: Row[]; segments: { key: string; name: string }[]; sortKey?: string;
+  sortLabel?: string; sortFormat?: string;
   normalize?: boolean; valueFormat?: string; highlight?: Set<string>;
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const skey = sortKey ?? segments[segments.length - 1]?.key ?? "";
+  const segKeys = new Set(segments.map((s) => s.key));
   const total = (r: Row) => segments.reduce((s, seg) => s + num(r[seg.key]), 0);
   const data = [...rows].sort((a, b) => num(b[skey]) - num(a[skey]));
   const globalMax = Math.max(...data.map(total), 1e-9);
   const tipLines = (r: Row): [string, string][] => [
     ["", rowName(r)],
     ...segments.map((s) => [s.name, fmtVal(num(r[s.key]), valueFormat)] as [string, string]),
+    // 排序指标若不在分段里(如按毛出口/总量排序),额外单列,用它自己的格式
+    ...(sortLabel && !segKeys.has(skey) ? [[sortLabel, fmtVal(num(r[skey]), sortFormat)] as [string, string]] : []),
   ];
   return (
     <div ref={wrapRef} style={cardStyle}>
@@ -724,8 +728,9 @@ export function CompositionBar({ rows, segments, sortKey, normalize = true, valu
                   }} />
                 ))}
               </div>
-              <span style={{ width: 64, textAlign: "right", fontSize: 11.5, color: "#3a4050", fontVariantNumeric: "tabular-nums" }}>
-                {fmtVal(normalize ? num(r[skey]) : total(r), valueFormat)}
+              <span style={{ width: 72, textAlign: "right", fontSize: 11.5, color: "#3a4050", fontVariantNumeric: "tabular-nums" }}>
+                {/* 归一化条右侧显示排序指标值(用其自身格式);绝对条显示分段总量(用分段格式) */}
+                {normalize ? fmtVal(num(r[skey]), sortFormat ?? valueFormat) : fmtVal(total(r), valueFormat)}
               </span>
             </div>
           );

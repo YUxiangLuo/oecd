@@ -685,11 +685,11 @@ const STEP_VIZ: Record<number, StepVizConfig> = {
  *  App.tsx 用 key={step.n} 挂载,切步即重挂 → 下面所有初值按本步 cfg 重新生效。 */
 export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
   const cfg = STEP_VIZ[step.n] ?? STEP_VIZ[8];
-  // metricX 同时驱动排序/构成/趋势与散点X:默认视图是排序/构成时取本步排序指标,否则取散点X
-  const initX = cfg.defaultView === "rank" || cfg.defaultView === "composition" ? cfg.rankMetric : cfg.scatter[0];
   const [year, setYear] = useState(meta.years.at(-1)!);
   const [view, setView] = useState<ViewKind>(cfg.defaultView);
-  const [metricX, setMetricX] = useState(initX);
+  // 单指标视图(排序/构成/趋势)用 rankBy;散点用 metricX/Y —— 分开存,互不干扰默认值
+  const [rankBy, setRankBy] = useState(cfg.rankMetric);
+  const [metricX, setMetricX] = useState(cfg.scatter[0]);
   const [metricY, setMetricY] = useState(cfg.scatter[1]);
   const [allMetrics, setAllMetrics] = useState(false);
   const [entityMode, setEntityMode] = useState<"topn" | "pick">("topn");
@@ -724,9 +724,9 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
   const groupOf = (f: string) => (schema?.groups ?? []).find((g) => g.fields.includes(f))?.key;
   const allRows = granularity === "sector" ? (sectorPage?.rows ?? []) : (rows ?? []);
   const sectorLoading = granularity === "sector" && !sectorPage;
-  // 象限图轴固定(cfg.quadrant),与选择器的 metricX/Y 无关;其余视图用 metricX/Y。
+  // 有效主/次轴:象限=固定 cfg.quadrant;散点=metricX/Y;其余单指标视图=rankBy。
   const twoAxis = view === "scatter" || view === "quadrant";
-  const effX = view === "quadrant" ? cfg.quadrant![0] : metricX;
+  const effX = view === "quadrant" ? cfg.quadrant![0] : view === "scatter" ? metricX : rankBy;
   const effY = view === "quadrant" ? cfg.quadrant![1] : metricY;
   // 占比/长度指标对"实际不出口的行业"是缺失(null):排序/散点/象限/构成里剔除,避免把它们
   // 当成 0 画出幽灵条/原点(表格视图保留、以"—"如实显示)。
@@ -749,12 +749,12 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
       ? []
       : entityMode === "pick"
       ? picked
-      : [...allRows].sort((a, b) => num(b[metricX]) - num(a[metricX])).slice(0, Math.min(topN, 6)).map((r) => String(r.country));
+      : [...allRows].sort((a, b) => num(b[rankBy]) - num(a[rankBy])).slice(0, Math.min(topN, 6)).map((r) => String(r.country));
   const trendSeries = trendCountries.map((c) => ({
     country: c,
     values: meta.years.map((_, i) => {
       const r = (yearsData?.[i] ?? []).find((row) => String(row.country) === c);
-      return r ? num(r[metricX]) : NaN;
+      return r ? num(r[rankBy]) : NaN;
     }),
   }));
 
@@ -784,7 +784,8 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
   const toggleAllMetrics = (on: boolean) => {
     setAllMetrics(on);
     if (!on) {
-      if (groupOf(metricX) !== cfg.group) setMetricX(initX);
+      if (groupOf(rankBy) !== cfg.group) setRankBy(cfg.rankMetric);
+      if (groupOf(metricX) !== cfg.group) setMetricX(cfg.scatter[0]);
       if (groupOf(metricY) !== cfg.group) setMetricY(cfg.scatter[1]);
     }
   };
@@ -829,7 +830,9 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
               </select>
             </span>
           )}
-          {showMetricPicker && metricSelect(metricX, setMetricX, view === "scatter" ? "X 指标" : "指标")}
+          {showMetricPicker && (view === "scatter"
+            ? metricSelect(metricX, setMetricX, "X 指标")
+            : metricSelect(rankBy, setRankBy, "指标"))}
           {view === "scatter" && metricSelect(metricY, setMetricY, "Y 指标")}
           {showMetricPicker && (
             <label className="field metric-scope">
@@ -863,7 +866,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
       {view === "rank" && (
         sectorLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p>
           : selRows.length
-          ? <RankBarChart rows={selRows} metricKey={metricX} label={fieldLabel(metricX, schema)} format={fmtOf(metricX)} highlight={highlight} />
+          ? <RankBarChart rows={selRows} metricKey={rankBy} label={fieldLabel(rankBy, schema)} format={fmtOf(rankBy)} highlight={highlight} />
           : <p className="muted">请在“选国家”里选择至少一个国家。</p>
       )}
 
@@ -891,8 +894,8 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
           : selRows.length
           ? <CompositionBar rows={selRows}
               segments={cfg.composition.map((k) => ({ key: k, name: fieldLabel(k, schema) }))}
-              sortKey={metricX} normalize={step.n !== 10} valueFormat={fmtOf(cfg.composition[0])}
-              highlight={highlight} />
+              sortKey={rankBy} sortLabel={fieldLabel(rankBy, schema)} sortFormat={fmtOf(rankBy)}
+              normalize={step.n !== 10} valueFormat={fmtOf(cfg.composition[0])} highlight={highlight} />
           : <p className="muted">请在“选国家”里选择至少一个国家。</p>
       )}
 
@@ -900,7 +903,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
         granularity === "sector" ? <p className="muted">趋势图暂使用国家级时间序列;切回“国家级”后可查看 2016–2020 趋势。</p>
           : !yearsData ? <p className="muted">加载多年数据中…</p>
           : trendSeries.length
-            ? <TrendChart years={meta.years} series={trendSeries} label={fieldLabel(metricX, schema)} format={fmtOf(metricX)} />
+            ? <TrendChart years={meta.years} series={trendSeries} label={fieldLabel(rankBy, schema)} format={fmtOf(rankBy)} />
             : <p className="muted">请在“选国家”里选择国家(或切到 Top-N)。</p>
       )}
 
