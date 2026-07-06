@@ -431,9 +431,9 @@ def test_regression_methods():
     assert fe_export.status_code == 200
     assert fe_export.json()["result"]["coefs"][0]["name"] == "export_control_shock"
 
-    # 事件研究:基期 k=-1 省略,动态系数逐年一个
+    # 事件研究:基期 k=-1 优先省略,动态系数按个体首次冲击年 G_i 的相对时间构造
     ev = client.post("/api/regression/run", json={"step": 14, "method": "事件研究"})
     assert ev.status_code == 200
     names = [c["name"] for c in ev.json()["result"]["coefs"]]
-    assert names == ["k=-2", "k=0", "k=+1", "k=+2"]
-    assert "T₀=2018" in " ".join(ev.json()["result"]["notes"])
+    assert "k=0" in names and "k=-1" not in names
+    assert "year-G_i" in " ".join(ev.json()["result"]["notes"])
