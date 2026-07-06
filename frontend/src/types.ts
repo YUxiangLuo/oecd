@@ -239,7 +239,8 @@ export interface RegressionResponse {
     }[];
     max_abs_coef_diff: number;
     max_abs_se_diff: number;
-    passed: boolean;
+    coef_check_passed: boolean;
+    se_check_mode: "informational";
     notes: string[];
   };
   disclaimer: string;

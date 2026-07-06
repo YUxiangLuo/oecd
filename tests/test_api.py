@@ -327,6 +327,10 @@ def test_regression_run():
     assert body["result"]["coefs"][0]["name"] == "treated×post"
     assert "benchmark" in body
     assert body["benchmark"]["backend"] == "linearmodels.PanelOLS"
+    assert "passed" not in body["benchmark"]
+    assert body["benchmark"]["coef_check_passed"] is True
+    assert body["benchmark"]["se_check_mode"] == "informational"
+    assert any("仅针对政策系数" in n for n in body["benchmark"]["notes"])
     # 行业级个体数远多于国家数;标准误按国家聚类
     assert body["result"]["n_entities"] > 1000
     assert body["result"]["n_clusters"] < 100
@@ -402,6 +406,8 @@ def test_parameterized_report_endpoint():
     assert "export_control_shock" in md
     assert "macro_log_gdp_usd" in md
     assert "个国家×行业 ×" in md
+    assert "PanelOLS 政策系数对照" in md
+    assert "标准误最大差异" in md and "仅作参考" in md
 
     bad = client.post(
         "/api/report",

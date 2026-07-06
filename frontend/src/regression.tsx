@@ -355,10 +355,13 @@ export function RegressionRunLab({ step }: { step: Step }) {
             <div className="teach-label">标准库对照</div>
             <p>
               {result.benchmark.backend}:政策系数最大差异{" "}
-              <b>{result.benchmark.max_abs_coef_diff.toExponential(2)}</b>,
+              <b>{result.benchmark.max_abs_coef_diff.toExponential(2)}</b>
+              {result.benchmark.coef_check_passed
+                ? "，政策系数对照通过。"
+                : "，政策系数对照未通过,请复核。"}
               标准误最大差异{" "}
-              <b>{result.benchmark.max_abs_se_diff.toExponential(2)}</b>
-              {result.benchmark.passed ? "。系数对照通过。" : "。请复核对照差异。"}
+              <b>{result.benchmark.max_abs_se_diff.toExponential(2)}</b>，
+              仅作参考(不同实现的小样本/自由度修正规则可能不同)。
             </p>
           </div>
 
