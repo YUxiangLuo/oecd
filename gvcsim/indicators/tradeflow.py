@@ -118,9 +118,9 @@ def _bm_source_coefficients(
 # 占比指标除以毛出口,只有当该实体"确实出口"时才有意义。分两档下限:
 _EXPORT_NOISE_FLOOR = 1e-9  # 相对本帧最大毛出口:剔除非贸易行业在小经济体里 ~1e-13 的机器精度噪声
 # 国家-行业级、仅用于前向/总参与度这类"无界"指标的额外相对下限:毛出口不足本国总出口
-# 0.1% 的行业不是"有意义的出口部门"(多为电力/供水/建筑/邮政/公共管理等非贸易品),
-# 其前向参与度会被自身极小的出口分母放大到几十倍,记为缺失比记一个爆表百分数更诚实。
-_EXPORT_SECTOR_FLOOR = 1e-3
+# 1% 的行业不是主要出口部门(多为电力/供水/建筑/房地产/公共管理等非贸易品),
+# 其前向参与度会被自身很小的出口分母放大到数倍甚至几十倍,记为缺失比记一个爆表百分数更诚实。
+_EXPORT_SECTOR_FLOOR = 1e-2
 
 
 def _exports_above_noise(gross: pd.Series) -> pd.Series:
@@ -130,16 +130,20 @@ def _exports_above_noise(gross: pd.Series) -> pd.Series:
     return gross > float(gross.max()) * _EXPORT_NOISE_FLOOR
 
 
-def _meaningful_exporter(gross: pd.Series) -> pd.Series:
+def _meaningful_exporter(df: pd.DataFrame) -> pd.Series:
     """在噪声门槛之上,再要求是本国"有意义的出口部门"(仅用于无界的前向/总参与度)。
 
     DVA/FVA/PDC/后向占比都是毛出口的组成项,天然 ∈[0,1],即便行业出口很小也有意义、
     不需要这道相对下限——收窄到前向/总参与度,既修好爆表显示,又不无谓丢弃步骤13
     (depvar=share_trade_fva)等回归的有效样本。
     """
+    gross = df["trade_gross_exports"]
     valid = _exports_above_noise(gross)
     if isinstance(gross.index, pd.MultiIndex):  # (country, sector) 粒度
         country_total = gross.groupby(level=0).transform("sum")
+        valid = valid & (gross > country_total * _EXPORT_SECTOR_FLOOR)
+    elif {"country", "sector"}.issubset(df.columns):  # 扁平化后的国家-行业表
+        country_total = gross.groupby(df["country"]).transform("sum")
         valid = valid & (gross > country_total * _EXPORT_SECTOR_FLOOR)
     return valid
 
@@ -147,7 +151,7 @@ def _meaningful_exporter(gross: pd.Series) -> pd.Series:
 def _add_trade_shares(df: pd.DataFrame) -> pd.DataFrame:
     gross = df["trade_gross_exports"]
     noise_ok = _exports_above_noise(gross)       # 有界占比:只剔机器精度噪声
-    export_ok = _meaningful_exporter(gross)      # 无界的前向/总参与度:再加相对下限
+    export_ok = _meaningful_exporter(df)         # 无界的前向/总参与度:再加相对下限
     with np.errstate(divide="ignore", invalid="ignore"):
         df["share_trade_dva"] = np.where(noise_ok, df["trade_dva"] / gross, np.nan)
         df["share_trade_fva"] = np.where(noise_ok, df["trade_fva"] / gross, np.nan)

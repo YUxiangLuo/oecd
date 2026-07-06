@@ -27,6 +27,13 @@ cd frontend && bun run build
 cd ..
 ```
 
+如果本次改动涉及指标口径、冲击生成、控制变量、预计算流水线或原始数据,必须先在本地重算
+`data/processed/`,再执行下面的 rsync,否则线上 API 会继续读取旧 CSV:
+
+```bash
+uv run gvcsim compute
+```
+
 把本地工作区同步到服务器。这里不传 `.git`、虚拟环境、node_modules 和本地认证密钥:
 
 ```bash
@@ -267,7 +274,7 @@ ss -ltnp | grep -E ':(6363|8181|18000)'
 
 以后如果要重新部署同一个 IP,按当前做法:
 
-1. 在本地完成测试和前端构建。
+1. 在本地完成测试和前端构建;若指标/面板口径或数据源有变化,先运行 `uv run gvcsim compute`。
 2. 用上面的 `rsync` 命令同步到 `/opt/oecd-icio-analysis/`。
 3. 如果 Python 依赖没有变化,只需要:
 
