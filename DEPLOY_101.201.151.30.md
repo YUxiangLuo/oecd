@@ -15,7 +15,7 @@
 - 后端监听: `127.0.0.1:18000`
 - 前端静态文件: `/opt/oecd-icio-analysis/frontend/dist`
 - 当前部署来源分支: `cc`
-- 当前应用代码部署提交: `7a50956 fix: 修复 review 指出的散点默认退化与构成排序值格式` (上次实际部署;每次重新部署后更新)
+- 当前应用代码部署提交: `c501af5 Merge pull request #13 from YUxiangLuo/chore/medium-priority-hardening`
 
 ## 本地准备
 
@@ -298,6 +298,17 @@ curl -fsS --max-time 90 \
 - 首页 / `/docs` `200 OK`,`student / gvclab2026` 登录 `200 OK`
 - `/api/steps` 已返回对齐后的步骤文案(步8「GVC 定位图…」、步11「枢纽地图…」)
 - 步骤 8 默认落在 GVC 定位象限图,标签集为 招牌/象限/构成/排序/散点/表格,右栏「本步目标」与默认视图一致
+
+2026-07-06 再次更新部署(源 `cc` @ `c501af5`,中优先级工程加固 + 控制变量质检 + CI/E2E):
+
+- 部署前本地验证通过:`ruff format --check`、`ruff check`、`mypy`、`pytest -q`(86 passed)、前端 `bun run build` 与 Playwright 最小 E2E
+- 因新增 `qc_controls.json` 产物,已先本地重跑 `uv run gvcsim compute`,再同步 `data/processed/`
+- 按新版 rsync 排除规则同步代码与前端 dist;服务器侧已清理 `dogfood-output/`、`prototype/`、`tests/`、`reports/`、`frontend/e2e/` 等非运行内容
+- 已执行 `systemctl restart gvcsim-api.service` 与 `nginx -t && systemctl reload nginx`,服务状态 `active`
+- 首页 / `/docs` 返回 `200 OK`,`student / gvclab2026` 登录与 `/api/auth/me` 返回 `200 OK`
+- `/api/qc/controls` 返回 5 项控制变量质检且全部通过
+- `/api/regression/options` 携带 Bearer token 返回 `200 OK`,包含控制变量与价格口径选项
+- 国家级 DID + ICIO 控制回归 `200 OK`:`n_obs = 385`、`n_clusters = 77`、`benchmark.coef_check_passed = true`、`se_check_mode = informational`,且 benchmark 不再返回旧字段 `passed`
 
 ## 运维命令
 
