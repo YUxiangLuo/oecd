@@ -48,7 +48,7 @@ export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
   return { data, error };
 }
 
-const DB_SOURCES = [
+export const DB_SOURCES = [
   {
     name: "OECD ICIO",
     status: "已接入",
@@ -71,15 +71,19 @@ const DB_SOURCES = [
   },
 ];
 
-const DB_TABLES: { key: DbTableKind; label: string; hint: string }[] = [
+export const DB_TABLES: { key: DbTableKind; label: string; hint: string }[] = [
   { key: "z", label: "中间投入 Z", hint: "国家-行业 × 国家-行业" },
   { key: "y", label: "最终需求 Y", hint: "国家-行业 × 目的国需求类别" },
   { key: "accounts", label: "账户项", hint: "TLS / VA / OUT 转置为国家-行业行" },
 ];
 
-/** 步骤1:数据库介绍 + OECD ICIO 原始表浏览 */
-export function DbLab() {
-  const { data: meta, error: metaError } = useAsync<DbMeta>(() => api.dbMeta(), []);
+/** OECD ICIO 原始表浏览器(步骤1 阶段④「亲手切片」;可传入已取到的 meta 复用)。 */
+export function DbBrowser({ meta: metaProp }: { meta?: DbMeta | null }) {
+  const { data: fetched, error: metaError } = useAsync<DbMeta>(
+    () => (metaProp ? Promise.resolve(metaProp) : api.dbMeta()),
+    [metaProp],
+  );
+  const meta = metaProp ?? fetched;
   const [table, setTable] = useState<DbTableKind>("z");
   const [year, setYear] = useState<number | null>(null);
   const [rowCountry, setRowCountry] = useState("");
@@ -133,39 +137,14 @@ export function DbLab() {
 
   if (!meta.years.length) {
     return (
-      <div>
-        <div className="db-source-grid">
-          {DB_SOURCES.map((source) => (
-            <div key={source.name} className={`db-source${source.name === "OECD ICIO" ? " active" : ""}`}>
-              <div className="db-source-head">
-                <strong>{source.name}</strong>
-                <span>{source.status}</span>
-              </div>
-              <p>{source.detail}</p>
-            </div>
-          ))}
-        </div>
-        <div className="warnbox">
-          未找到本地 OECD ICIO 原始 CSV。请将 ICIO2023_YYYY.csv 放入 OECD_ICIO/ 后刷新本页。
-        </div>
+      <div className="warnbox">
+        未找到本地 OECD ICIO 原始 CSV。请将 ICIO2023_YYYY.csv 放入 OECD_ICIO/ 后刷新本页。
       </div>
     );
   }
 
   return (
     <div>
-      <div className="db-source-grid">
-        {DB_SOURCES.map((source) => (
-          <div key={source.name} className={`db-source${source.name === "OECD ICIO" ? " active" : ""}`}>
-            <div className="db-source-head">
-              <strong>{source.name}</strong>
-              <span>{source.status}</span>
-            </div>
-            <p>{source.detail}</p>
-          </div>
-        ))}
-      </div>
-
       <div className="db-summary">
         <span>原始年份 {meta.years[0]}-{meta.years.at(-1)}</span>
         <span>{meta.countries.length} 个经济体</span>

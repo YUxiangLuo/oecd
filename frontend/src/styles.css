@@ -855,3 +855,71 @@ button { font-family: inherit; cursor: pointer; }
   font-size: 12px; font-family: inherit; padding: 3px 5px; accent-color: #4b47e0;
 }
 .country-multi option { padding: 2px 5px; border-radius: 4px; }
+
+/* ======================= 页内多阶段向导(StepStages) ======================= */
+.wizard { display: flex; flex-direction: column; gap: 14px; }
+.wizard-top { display: flex; align-items: center; justify-content: space-between; }
+.wizard-dots { display: flex; gap: 8px; }
+.wizard-dot {
+  width: 10px; height: 10px; border-radius: 99px; border: none; cursor: pointer;
+  background: #dcdfe8; padding: 0; transition: all 0.22s;
+}
+.wizard-dot.past { background: #b9bceb; }
+.wizard-dot.on { width: 28px; background: #4b47e0; }
+.wizard-counter { font-size: 12px; color: #8a90a0; font-variant-numeric: tabular-nums; }
+.wizard-head { font-size: 17px; font-weight: 700; color: #1b1f2b; }
+.stage-pane { display: block; }
+.stage-pane[hidden] { display: none; }
+.wizard-foot {
+  display: flex; align-items: center; gap: 12px; padding-top: 6px;
+  border-top: 1px solid #eef0f5; margin-top: 4px;
+}
+.wizard-foot button {
+  padding: 9px 16px; border-radius: 9px; border: 1px solid #e0e3ea;
+  background: #fff; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.wizard-foot button.primary { background: #4b47e0; border-color: #4b47e0; color: #fff; }
+.wizard-foot button:disabled { opacity: 0.4; cursor: default; }
+.wizard-foot-mid { flex: 1; text-align: center; font-size: 12px; }
+.wizard-lead { font-size: 13px; color: #4c5568; line-height: 1.6; margin: 0 0 12px; }
+
+/* ---- 阶段① 示意投入产出矩阵 ---- */
+.mini-io-wrap { display: flex; flex-direction: column; gap: 14px; }
+.mini-io { border-collapse: collapse; font-size: 12.5px; }
+.mini-io th, .mini-io td {
+  border: 1px solid #eef0f5; padding: 8px 12px; text-align: center; min-width: 52px;
+  font-variant-numeric: tabular-nums;
+}
+.mini-io thead th, .mini-io tbody th { background: #fafbfd; font-weight: 600; color: #5a6070; }
+.mini-io-corner { font-size: 11px !important; color: #8a90a0 !important; white-space: nowrap; }
+.mini-io td { cursor: pointer; transition: background 0.12s; }
+.mini-io td:hover { background: #f3f2fe; }
+.mini-io td.diag { color: #8a90a0; background: #f8f9fc; }
+.mini-io tr.row-on td, .mini-io tr.row-on th { background: #efeefe; }
+.mini-io th.col-on, .mini-io td.col-on { background: #efeefe; }
+.mini-io td.cell-on { background: #4b47e0 !important; color: #fff; font-weight: 700; }
+.mini-io .mini-io-tot { background: #f4f5f8; color: #8a90a0; font-weight: 600; cursor: default; }
+.mini-io-readout {
+  background: #fbfbfe; border: 1px solid #e7e9f0; border-radius: 12px; padding: 12px 16px;
+  font-size: 13px; line-height: 1.7; color: #3a4050;
+}
+.mini-io-readout p { margin: 0 0 8px; }
+
+/* ---- 阶段② 数据库对比 ---- */
+.dbcmp td:first-child { font-weight: 600; color: #5a6070; }
+.dbcmp-primary { color: #4b47e0; font-weight: 600; }
+.dbcmp tr.dbcmp-on td { background: #efeefe; }
+.reveal-btn {
+  align-self: flex-start; border: none; background: none; cursor: pointer;
+  color: #4b47e0; font-weight: 600; font-size: 13px; padding: 4px 0; margin-top: 4px;
+}
+
+/* ---- 阶段③ ICIO 结构示意图 ---- */
+.schematic { display: block; width: 100%; max-width: 560px; height: auto; margin: 6px 0 12px; }
+.schematic .sch {
+  fill: #f4f5fb; stroke: #d7dbe6; stroke-width: 1.5; cursor: pointer; transition: fill 0.15s;
+}
+.schematic .sch:hover { fill: #ecebfb; }
+.schematic .sch.sch-on { fill: #e5e3fb; stroke: #4b47e0; stroke-width: 2; }
+.schematic .sch-t { fill: #3a4050; font-size: 16px; font-weight: 700; text-anchor: middle; pointer-events: none; }
+.schematic .sch-sub { fill: #8a90a0; font-size: 11.5px; text-anchor: middle; pointer-events: none; }

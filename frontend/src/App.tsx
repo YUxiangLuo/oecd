@@ -2,15 +2,19 @@ import { useEffect, useState } from "react";
 import { AUTH_TOKEN_KEY, api } from "./api";
 import { LogoMark } from "./brand";
 import { IntroOverlay } from "./intro";
-import { DbLab, IndicatorLab, QcLab, ReportLab, ShockLab, VizLab } from "./labs";
+import { IndicatorLab, QcLab, ReportLab, ShockLab, VizLab } from "./labs";
+import { Step1 } from "./step1";
 import { RegDesignLab, RegressionRunLab } from "./regression";
 import { LoginPage } from "./login";
 import type { AuthUser, Meta, Step, StepsResponse } from "./types";
 
 const ROMAN = ["", "一", "二", "三", "四", "五"];
 
+// 已改造成「页内多阶段向导」的步骤(自带讲解,主区跳过通用讲解卡)。随后续步骤扩充。
+const STAGED_STEPS = new Set([1]);
+
 function Lab({ step, meta }: { step: Step; meta: Meta | null }) {
-  if (step.lab === "db") return <DbLab />;
+  if (step.lab === "db") return <Step1 />;
   if (step.lab === "qc") return meta ? <QcLab meta={meta} /> : null;
   if (step.lab === "shock") return meta ? <ShockLab meta={meta} /> : null;
   if (step.lab === "ind") return meta ? <IndicatorLab meta={meta} step={step} /> : null;
@@ -93,6 +97,8 @@ export default function App() {
   const isReg = step.lab === "rgd" || step.lab === "reg";
   // 可视化步骤(viz)图表是主角:讲解卡默认折叠,给图表让出首屏纵向空间(可点开)
   const isViz = step.lab === "viz";
+  // 多阶段向导步骤(如步骤1):自带首段动机与讲解,跳过通用讲解卡。随后续步骤改造扩充。
+  const isStaged = STAGED_STEPS.has(step.n);
 
   return (
     <div className="layout">
@@ -179,7 +185,7 @@ export default function App() {
           <div className="content-row">
             <main className="content">
               <div className="content-inner">
-                {!isReg && (
+                {!isReg && !isStaged && (
                   <details className="card accent concept-card" open={!isViz}>
                     <summary className="kicker">讲解</summary>
                     <p>{step.concept}</p>
