@@ -55,8 +55,7 @@ class RegressionResult:
         return {
             "depvar": self.depvar,
             "coefs": [
-                {"name": c.name, "coef": c.coef, "se": c.se, "t": c.t, "p": c.p, "stars": c.stars}
-                for c in self.coefs
+                {"name": c.name, "coef": c.coef, "se": c.se, "t": c.t, "p": c.p, "stars": c.stars} for c in self.coefs
             ],
             "n_obs": self.n_obs,
             "n_entities": self.n_entities,
@@ -94,12 +93,7 @@ def _stable_noise(data: pd.DataFrame, cols: list[str]) -> pd.Series:
 def _attach_baseline_gvc(data: pd.DataFrame, entity: str, time: str) -> pd.DataFrame:
     """给估计样本加基期 GVC 参与度(每个个体可用样本最早两年均值)。"""
     data = data.sort_values([entity, time]).reset_index(drop=True)
-    base = (
-        data.groupby(entity, group_keys=False).head(2)
-        .groupby(entity)[BASE_GVC_COL]
-        .mean()
-        .rename(BASELINE_GVC_COL)
-    )
+    base = data.groupby(entity, group_keys=False).head(2).groupby(entity)[BASE_GVC_COL].mean().rename(BASELINE_GVC_COL)
     out = data.merge(base, left_on=entity, right_index=True, how="left")
     if out[BASELINE_GVC_COL].isna().any():
         raise ValueError("无法构造基期 GVC 参与度交互项")
@@ -107,9 +101,9 @@ def _attach_baseline_gvc(data: pd.DataFrame, entity: str, time: str) -> pd.DataF
 
 
 def _real_amount(s: pd.Series, deflator: pd.Series) -> pd.Series:
-    return (s.astype(float) / deflator.astype(float).replace(0.0, np.nan)).replace(
-        [np.inf, -np.inf], np.nan
-    ).fillna(0.0)
+    return (
+        (s.astype(float) / deflator.astype(float).replace(0.0, np.nan)).replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    )
 
 
 def _real_log_from_log(log_s: pd.Series, deflator: pd.Series) -> pd.Series:
@@ -123,11 +117,15 @@ def _country_year_real_growth(data: pd.DataFrame, amount_col: str, time: str) ->
     base["_real_amount"] = _real_amount(base[amount_col], base[DEFLATOR_COL])
     prev = base.groupby("country")["_real_amount"].shift(1)
     base["_real_growth"] = ((base["_real_amount"] - prev) / prev.where(prev.abs() > 1e-12)).fillna(0.0)
-    return data[["country", time]].merge(
-        base[["country", time, "_real_growth"]],
-        on=["country", time],
-        how="left",
-    )["_real_growth"].fillna(0.0)
+    return (
+        data[["country", time]]
+        .merge(
+            base[["country", time, "_real_growth"]],
+            on=["country", time],
+            how="left",
+        )["_real_growth"]
+        .fillna(0.0)
+    )
 
 
 def _apply_price_mode(df: pd.DataFrame, design, time: str = "year") -> pd.DataFrame:
@@ -155,7 +153,9 @@ def _apply_price_mode(df: pd.DataFrame, design, time: str = "year") -> pd.DataFr
 
 
 def _apply_teaching_scenario(
-    df: pd.DataFrame, design, time: str = "year",
+    df: pd.DataFrame,
+    design,
+    time: str = "year",
 ) -> tuple[pd.DataFrame, list[str]]:
     """为教学目的生成 clean/noisy/confounded 三类回归样本。"""
     scenario = getattr(design, "scenario", "clean")
@@ -174,9 +174,9 @@ def _apply_teaching_scenario(
         if design.method == "双向固定效应" and design.shock_col in out.columns:
             x_scale = float(out[design.shock_col].std(skipna=True) or 0.0)
             x_noise = _stable_noise(out, ["country", "sector" if "sector" in out.columns else time, time])
-            out[design.shock_col] = (
-                out[design.shock_col].astype(float) + x_noise * max(x_scale, 0.01) * 0.55
-            ).clip(lower=0.0)
+            out[design.shock_col] = (out[design.shock_col].astype(float) + x_noise * max(x_scale, 0.01) * 0.55).clip(
+                lower=0.0
+            )
         return out, ["教学场景:noisy,已加入确定性测量噪声,用于观察显著性下降"]
 
     if design.treated_col not in out.columns:
@@ -231,8 +231,9 @@ def _drop_collinear_columns(
     return X, xcols, dropped
 
 
-def _twoway_demean(values: np.ndarray, ent: np.ndarray, tim: np.ndarray,
-                   tol: float = 1e-10, max_iter: int = 200) -> np.ndarray:
+def _twoway_demean(
+    values: np.ndarray, ent: np.ndarray, tim: np.ndarray, tol: float = 1e-10, max_iter: int = 200
+) -> np.ndarray:
     """对每一列做 entity/time 交替去均值(Guimarães-Portugal 迭代)。"""
     out = values.astype(float).copy()
     for _ in range(max_iter):
@@ -269,9 +270,7 @@ def _demean_and_prune(
         model.data[model.time].values,
     )
     y = demeaned[:, 0]
-    X, xcols, dropped = _drop_collinear_columns(
-        demeaned[:, 1:], list(model.xcols), set(model.policy_xcols)
-    )
+    X, xcols, dropped = _drop_collinear_columns(demeaned[:, 1:], list(model.xcols), set(model.policy_xcols))
     return y, X, xcols, dropped
 
 
@@ -284,9 +283,7 @@ def _within_ols(
     prepared 可传入 _demean_and_prune 已算好的 (y, X, xcols, dropped),
     避免与 PanelOLS 对照重复做双向去均值。
     """
-    data, depvar, entity, time, cluster = (
-        model.data, model.depvar, model.entity, model.time, model.cluster
-    )
+    data, depvar, entity, time, cluster = (model.data, model.depvar, model.entity, model.time, model.cluster)
     ent = data[entity].values
     tim = data[time].values
     clu = data[cluster].values
@@ -316,8 +313,9 @@ def _within_ols(
     coefs = []
     for name, b, s in zip(xcols, beta, se):
         t_stat = b / s if s > 0 else float("nan")
-        coefs.append(CoefStat(name=name, coef=float(b), se=float(s),
-                              t=float(t_stat), p=_cluster_t_pvalue(float(t_stat), n_g)))
+        coefs.append(
+            CoefStat(name=name, coef=float(b), se=float(s), t=float(t_stat), p=_cluster_t_pvalue(float(t_stat), n_g))
+        )
 
     notes = list(model.notes)
     if dropped:
@@ -383,19 +381,22 @@ def _prepare_fe_model(
     )
 
 
-def twoway_fe(df: pd.DataFrame, depvar: str, regressors: list[str],
-              entity: str = "country", time: str = "year",
-              cluster: str | None = None,
-              controls: list[str] | tuple[str, ...] = (),
-              interaction: bool = False) -> RegressionResult:
+def twoway_fe(
+    df: pd.DataFrame,
+    depvar: str,
+    regressors: list[str],
+    entity: str = "country",
+    time: str = "year",
+    cluster: str | None = None,
+    controls: list[str] | tuple[str, ...] = (),
+    interaction: bool = False,
+) -> RegressionResult:
     """y_it = β·X_it + α_i + λ_t + ε_it,标准误按 cluster 聚类(默认=entity)。
 
     行业级面板用 entity=国家×行业 做固定效应、cluster=国家做聚类:
     同一国家各行业受同一政策冲击,残差组内相关,必须在更粗层面聚类。
     """
-    return _within_ols(_prepare_fe_model(
-        df, depvar, regressors, entity, time, cluster, controls, interaction
-    ))
+    return _within_ols(_prepare_fe_model(df, depvar, regressors, entity, time, cluster, controls, interaction))
 
 
 def run_design(df: pd.DataFrame, design) -> RegressionResult:
@@ -457,10 +458,7 @@ def placebo_did_distribution(
             cursor += int(count)
         pseudo = data.copy()
         pseudo_first = pseudo[true_model.entity].astype(str).map(assigned_year)
-        pseudo[pseudo_col] = (
-            pseudo_first.notna()
-            & (pseudo[true_model.time].astype(int) >= pseudo_first)
-        ).astype(int)
+        pseudo[pseudo_col] = (pseudo_first.notna() & (pseudo[true_model.time].astype(int) >= pseudo_first)).astype(int)
         try:
             placebo_model = _prepare_did_model(
                 pseudo,
@@ -500,8 +498,13 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
     """按 RegressionDesign 构造同一份估计样本,供自写引擎与 PanelOLS 共用。"""
     df = _apply_price_mode(df, design)
     df, scenario_notes = _apply_teaching_scenario(df, design)
-    kwargs = dict(entity=design.entity, time="year", cluster=design.cluster,
-                  controls=list(design.controls), interaction=design.interaction)
+    kwargs = dict(
+        entity=design.entity,
+        time="year",
+        cluster=design.cluster,
+        controls=list(design.controls),
+        interaction=design.interaction,
+    )
     if design.method == "双重差分 (DID)":
         model = _prepare_did_model(df, design.depvar, treated_col=design.treated_col, **kwargs)
     elif design.method == "事件研究":
@@ -516,24 +519,17 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
 
 @dataclass
 class TreatmentTiming:
-    ever: np.ndarray                 # 行级:该个体是否曾受处理
-    first_year: pd.Series            # 行级:该个体首次处理年份;never-treated 为 NA
-    first_by_entity: pd.Series       # 个体级:首次处理年份(index=entity)
+    ever: np.ndarray  # 行级:该个体是否曾受处理
+    first_year: pd.Series  # 行级:该个体首次处理年份;never-treated 为 NA
+    first_by_entity: pd.Series  # 个体级:首次处理年份(index=entity)
 
 
-def _prep_treatment(data: pd.DataFrame, entity: str, time: str,
-                    treated_col: str) -> TreatmentTiming:
+def _prep_treatment(data: pd.DataFrame, entity: str, time: str, treated_col: str) -> TreatmentTiming:
     """处理组指示与个体自身首次处理年份 G_i。"""
     treated = pd.to_numeric(data[treated_col], errors="coerce").fillna(0) > 0
     if not treated.any():
         raise ValueError(f"面板中没有受处理个体({treated_col} 全为 0),无法做 DID/事件研究")
-    first_by_entity = (
-        data.loc[treated, [entity, time]]
-        .groupby(entity)[time]
-        .min()
-        .astype(int)
-        .sort_index()
-    )
+    first_by_entity = data.loc[treated, [entity, time]].groupby(entity)[time].min().astype(int).sort_index()
     first_year = data[entity].map(first_by_entity)
     ever = first_year.notna().to_numpy(dtype=float)
     return TreatmentTiming(ever=ever, first_year=first_year, first_by_entity=first_by_entity)
@@ -559,10 +555,7 @@ def _prepare_did_model(
     data = df[cols].dropna().reset_index(drop=True)
     timing = _prep_treatment(data, entity, time, treated_col)
     did_col = "treated×post" if treated_col == "treated" else f"{treated_col}×post"
-    data[did_col] = (
-        timing.first_year.notna()
-        & (data[time].astype(int) >= timing.first_year)
-    ).astype(float)
+    data[did_col] = (timing.first_year.notna() & (data[time].astype(int) >= timing.first_year)).astype(float)
     policy_xcols = [did_col]
     xcols = [did_col]
     if interaction:
@@ -596,11 +589,16 @@ def _prepare_did_model(
     )
 
 
-def did(df: pd.DataFrame, depvar: str,
-        entity: str = "country", time: str = "year",
-        cluster: str | None = None, treated_col: str = "treated",
-        controls: list[str] | tuple[str, ...] = (),
-        interaction: bool = False) -> RegressionResult:
+def did(
+    df: pd.DataFrame,
+    depvar: str,
+    entity: str = "country",
+    time: str = "year",
+    cluster: str | None = None,
+    treated_col: str = "treated",
+    controls: list[str] | tuple[str, ...] = (),
+    interaction: bool = False,
+) -> RegressionResult:
     """双重差分:y_it = β·(treated_i × 1[t≥G_i]) + α_i + λ_t + ε_it。
 
     treated_i = 该个体在样本期内是否曾受冲击(时间不变);
@@ -608,9 +606,7 @@ def did(df: pd.DataFrame, depvar: str,
     β         = 处理组相对对照组在处理后的平均变化(ATT)。
     处理组/对照组主效应分别被个体/时间固定效应吸收。
     """
-    return _within_ols(
-        _prepare_did_model(df, depvar, entity, time, cluster, treated_col, controls, interaction)
-    )
+    return _within_ols(_prepare_did_model(df, depvar, entity, time, cluster, treated_col, controls, interaction))
 
 
 def _prepare_event_model(
@@ -663,8 +659,7 @@ def _prepare_event_model(
         f"{int(y)}:{int(n)}" for y, n in timing.first_by_entity.value_counts().sort_index().items()
     )
     notes = [
-        f"事件研究:事件时间 k=year-G_i(G_i 为个体首次冲击年),基期 k={base_k:+d};"
-        "k<0 的系数≈0 说明平行趋势成立",
+        f"事件研究:事件时间 k=year-G_i(G_i 为个体首次冲击年),基期 k={base_k:+d};k<0 的系数≈0 说明平行趋势成立",
         f"首次处理年份(cohort):{cohort_summary}",
     ]
     if interaction:
@@ -684,23 +679,28 @@ def _prepare_event_model(
     )
 
 
-def event_study(df: pd.DataFrame, depvar: str,
-                entity: str = "country", time: str = "year",
-                cluster: str | None = None, treated_col: str = "treated",
-                controls: list[str] | tuple[str, ...] = (),
-                interaction: bool = False) -> RegressionResult:
+def event_study(
+    df: pd.DataFrame,
+    depvar: str,
+    entity: str = "country",
+    time: str = "year",
+    cluster: str | None = None,
+    treated_col: str = "treated",
+    controls: list[str] | tuple[str, ...] = (),
+    interaction: bool = False,
+) -> RegressionResult:
     """事件研究:y_it = Σ_{k≠base} β_k·1[t-G_i = k] + α_i + λ_t + ε_it。
 
     G_i 是个体 i 的首次受冲击年份;优先以冲击前一年(k=-1)为基期。
     k<0 的系数应≈0(平行趋势检验),k≥0 的系数刻画处理效应的动态路径。
     """
-    return _within_ols(
-        _prepare_event_model(df, depvar, entity, time, cluster, treated_col, controls, interaction)
-    )
+    return _within_ols(_prepare_event_model(df, depvar, entity, time, cluster, treated_col, controls, interaction))
 
 
 def _panelols_estimate(
-    model: PreparedModel, keep_xcols: list[str], dropped: list[str],
+    model: PreparedModel,
+    keep_xcols: list[str],
+    dropped: list[str],
 ) -> RegressionResult:
     """用 linearmodels.PanelOLS 估计标准库对照。
 
@@ -713,7 +713,8 @@ def _panelols_estimate(
     clusters = pd.Series(model.data[model.cluster].values, index=data.index, name=model.cluster)
 
     res = PanelOLS(
-        y, X,
+        y,
+        X,
         entity_effects=True,
         time_effects=True,
         drop_absorbed=True,
@@ -753,7 +754,9 @@ def linearmodels_panel_ols(df: pd.DataFrame, design) -> RegressionResult:
 
 
 def _summarize_benchmark(
-    model: PreparedModel, own: RegressionResult, lm: RegressionResult,
+    model: PreparedModel,
+    own: RegressionResult,
+    lm: RegressionResult,
 ) -> dict:
     """自写引擎与 PanelOLS 在核心政策系数上的差异摘要。"""
     own_by = {c.name: c for c in own.coefs}
@@ -762,15 +765,17 @@ def _summarize_benchmark(
     for name in model.policy_xcols:
         if name not in own_by or name not in lm_by:
             continue
-        rows.append({
-            "name": name,
-            "own_coef": own_by[name].coef,
-            "panelols_coef": lm_by[name].coef,
-            "coef_diff": own_by[name].coef - lm_by[name].coef,
-            "own_se": own_by[name].se,
-            "panelols_se": lm_by[name].se,
-            "se_diff": own_by[name].se - lm_by[name].se,
-        })
+        rows.append(
+            {
+                "name": name,
+                "own_coef": own_by[name].coef,
+                "panelols_coef": lm_by[name].coef,
+                "coef_diff": own_by[name].coef - lm_by[name].coef,
+                "own_se": own_by[name].se,
+                "panelols_se": lm_by[name].se,
+                "se_diff": own_by[name].se - lm_by[name].se,
+            }
+        )
     max_coef = max((abs(r["coef_diff"]) for r in rows), default=float("nan"))
     max_se = max((abs(r["se_diff"]) for r in rows), default=float("nan"))
     coef_check_passed = bool(rows) and max_coef < 1e-8

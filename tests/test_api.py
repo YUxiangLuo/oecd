@@ -30,6 +30,11 @@ needs_shock_qc = pytest.mark.skipif(
     reason="缺少冲击质检产物,请先运行 uv run gvcsim compute",
 )
 
+needs_controls_qc = pytest.mark.skipif(
+    not (PROCESSED_DIR / "controls_country.csv").exists(),
+    reason="缺少控制变量产物,请先运行 uv run gvcsim compute",
+)
+
 needs_raw_icio = pytest.mark.skipif(
     not any(RAW_DATA_DIR.glob("ICIO*_*.csv")),
     reason="缺少 OECD ICIO 原始文件",
@@ -126,27 +131,15 @@ def test_regression_design():
     assert "Σ_k" in ev.json()["equation"]
 
     assert client.get("/api/regression/design", params={"step": 12}).status_code == 400
-    assert client.get(
-        "/api/regression/design", params={"step": 13, "method": "工具变量"}
-    ).status_code == 400
-    assert client.get(
-        "/api/regression/design", params={"step": 13, "shock_type": "汇率冲击"}
-    ).status_code == 400
-    sanction = client.get(
-        "/api/regression/design", params={"step": 13, "shock_type": "制裁清单"}
-    )
+    assert client.get("/api/regression/design", params={"step": 13, "method": "工具变量"}).status_code == 400
+    assert client.get("/api/regression/design", params={"step": 13, "shock_type": "汇率冲击"}).status_code == 400
+    sanction = client.get("/api/regression/design", params={"step": 13, "shock_type": "制裁清单"})
     assert sanction.status_code == 200
     assert sanction.json()["shock_col"] == "sanction_shock"
     assert "sanction_treated" in sanction.json()["equation"]
-    assert client.get(
-        "/api/regression/design", params={"step": 13, "control_mode": "外部宏观控制"}
-    ).status_code == 400
-    assert client.get(
-        "/api/regression/design", params={"step": 13, "price_mode": "购买力平价"}
-    ).status_code == 400
-    assert client.get(
-        "/api/regression/design", params={"step": 13, "scenario": "magic"}
-    ).status_code == 400
+    assert client.get("/api/regression/design", params={"step": 13, "control_mode": "外部宏观控制"}).status_code == 400
+    assert client.get("/api/regression/design", params={"step": 13, "price_mode": "购买力平价"}).status_code == 400
+    assert client.get("/api/regression/design", params={"step": 13, "scenario": "magic"}).status_code == 400
 
 
 def test_report_request_validation():
@@ -228,9 +221,7 @@ def test_meta_and_indicators():
     for col in ["share_trade_fva", "share_prod_complex_gvc", "upstreamness", "betweenness_centrality"]:
         assert col in cols
 
-    paged = client.get(
-        f"/api/indicators/sector/{year}", params={"country": "CHN", "page": 1}
-    ).json()
+    paged = client.get(f"/api/indicators/sector/{year}", params={"country": "CHN", "page": 1}).json()
     assert paged["total"] == 45  # ICIO 45个行业
     assert len(paged["rows"]) == 25
 
@@ -253,6 +244,16 @@ def test_shock_qc_endpoint():
     body = resp.json()
     assert len(body) == 5
     assert any("维度对齐" in c["name"] for c in body)
+
+
+@needs_controls_qc
+def test_controls_qc_endpoint():
+    resp = client.get("/api/qc/controls")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 5
+    assert all(c["passed"] for c in body), [(c["name"], c["detail"], c["warnings"]) for c in body]
+    assert any("控制变量 schema" in c["name"] for c in body)
 
 
 def test_shock_events():
@@ -300,9 +301,7 @@ def test_shock_summary_and_panel():
     assert rows[0]["tariff_shock"] >= rows[-1]["tariff_shock"]
     assert rows[0]["note"]
 
-    chn = client.get(
-        "/api/shocks/panel", params={"year": 2019, "country": "CHN", "only_hit": True}
-    ).json()
+    chn = client.get("/api/shocks/panel", params={"year": 2019, "country": "CHN", "only_hit": True}).json()
     assert chn["total"] > 10
     assert all(r["country"] == "CHN" for r in chn["rows"])
 
@@ -336,9 +335,7 @@ def test_regression_run():
     assert body["result"]["n_clusters"] < 100
 
     # 显式国家级粒度仍可用
-    resp_c = client.post(
-        "/api/regression/run", json={"step": 13, "granularity": "国家级"}
-    )
+    resp_c = client.post("/api/regression/run", json={"step": 13, "granularity": "国家级"})
     assert resp_c.status_code == 200
     assert resp_c.json()["result"]["n_entities"] < 100
 

@@ -66,8 +66,26 @@ CONTROL_LABELS = {
 
 MANUFACTURING_PREFIXES = ("C",)
 SERVICE_SECTORS = {
-    "G", "H49", "H50", "H51", "H52", "H53", "I", "J58T60", "J61", "J62_63",
-    "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T",
+    "G",
+    "H49",
+    "H50",
+    "H51",
+    "H52",
+    "H53",
+    "I",
+    "J58T60",
+    "J61",
+    "J62_63",
+    "K",
+    "L",
+    "M",
+    "N",
+    "O",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
 }
 
 
@@ -129,9 +147,7 @@ def build_controls(
     out["log_exports_proxy"] = _safe_log(country["trade_gross_exports"])
     out["export_intensity"] = _safe_div(country["trade_gross_exports"], country["prod_va_total"])
 
-    out["gdp_proxy_growth"] = (
-        country.groupby("country", group_keys=False)["prod_va_total"].apply(_growth).to_numpy()
-    )
+    out["gdp_proxy_growth"] = country.groupby("country", group_keys=False)["prod_va_total"].apply(_growth).to_numpy()
     out["exports_proxy_growth"] = (
         country.groupby("country", group_keys=False)["trade_gross_exports"].apply(_growth).to_numpy()
     )
@@ -170,9 +186,7 @@ def build_controls(
         0.15,
     )
     out["inflation_rate"] = inflation
-    out["gdp_deflator"] = (
-        (1.0 + inflation).groupby(country["country"], group_keys=False).cumprod()
-    )
+    out["gdp_deflator"] = (1.0 + inflation).groupby(country["country"], group_keys=False).cumprod()
 
     sector["is_manufacturing"] = sector["sector"].astype(str).str.startswith(MANUFACTURING_PREFIXES)
     sector["is_services"] = sector["sector"].isin(SERVICE_SECTORS)
@@ -189,23 +203,18 @@ def build_controls(
         .sum()
         .rename(columns={"prod_va_total": "_services_va"})
     )
-    shares = totals.merge(manu, on=["country", "year"], how="left").merge(
-        serv, on=["country", "year"], how="left"
-    )
-    shares[["_manufacturing_va", "_services_va"]] = shares[
-        ["_manufacturing_va", "_services_va"]
-    ].fillna(0.0)
+    shares = totals.merge(manu, on=["country", "year"], how="left").merge(serv, on=["country", "year"], how="left")
+    shares[["_manufacturing_va", "_services_va"]] = shares[["_manufacturing_va", "_services_va"]].fillna(0.0)
     shares["manufacturing_va_share"] = _safe_div(shares["_manufacturing_va"], shares["prod_va_total"])
     shares["services_va_share"] = _safe_div(shares["_services_va"], shares["prod_va_total"])
 
     out = out.merge(
         shares[["country", "year", "manufacturing_va_share", "services_va_share"]],
-        on=["country", "year"], how="left",
+        on=["country", "year"],
+        how="left",
     )
     out[ALL_CONTROL_COLUMNS] = out[ALL_CONTROL_COLUMNS].replace([np.inf, -np.inf], 0.0).fillna(0.0)
-    return out[["country", "year", *ALL_CONTROL_COLUMNS]].sort_values(
-        ["country", "year"]
-    ).reset_index(drop=True)
+    return out[["country", "year", *ALL_CONTROL_COLUMNS]].sort_values(["country", "year"]).reset_index(drop=True)
 
 
 def write_controls(

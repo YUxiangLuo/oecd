@@ -12,6 +12,7 @@
   panel_sector.csv                国家×行业×年份长面板 + 行业异质冲击(步骤13-16 默认回归样本)
   panel_country.csv               国家×年份长面板(冲击按行业出口额加权聚合)
   controls_country.csv            ICIO 派生/宏观mock控制 + 平减指数(步骤13-16)
+  qc_controls.json                controls_country.csv 独立质检
   export_exposure_<year>.csv      ICIO 派生出口目的地暴露度(步骤2 冲击加权)
 """
 
@@ -96,6 +97,13 @@ def build_panel() -> pd.DataFrame:
         ignore_index=True,
     )
     controls_df = controls.write_controls(country, sector)
+    controls_checks = quality.check_controls_country(
+        controls_df,
+        countries=sorted(country["country"].unique()),
+        years=years,
+    )
+    with open(PROCESSED_DIR / "qc_controls.json", "w", encoding="utf-8") as f:
+        json.dump([c.to_dict() for c in controls_checks], f, ensure_ascii=False, indent=2)
 
     # ---- 行业级 ----
     countries = sorted(sector["country"].unique())
@@ -105,18 +113,16 @@ def build_panel() -> pd.DataFrame:
     shock_checks = quality.check_shock_panel(shock_df, countries, sectors, years)
     with open(PROCESSED_DIR / "qc_shocks.json", "w", encoding="utf-8") as f:
         json.dump([c.to_dict() for c in shock_checks], f, ensure_ascii=False, indent=2)
-    shock_cols = list(dict.fromkeys(
-        col
-        for pair in shocks.SHOCK_SPECS.values()
-        for col in pair
-    ))
+    shock_cols = list(dict.fromkeys(col for pair in shocks.SHOCK_SPECS.values() for col in pair))
 
     sector = sector.merge(
         shock_df[["country", "sector", "year", *shock_cols]],
-        on=["country", "sector", "year"], how="left",
+        on=["country", "sector", "year"],
+        how="left",
     ).merge(
         controls_df,
-        on=["country", "year"], how="left",
+        on=["country", "year"],
+        how="left",
     )
     # 双向FE的个体维度:国家×行业
     sector["entity_id"] = sector["country"] + "_" + sector["sector"]
@@ -135,10 +141,12 @@ def build_panel() -> pd.DataFrame:
         agg = agg.drop(columns=["_ws"])
     country = country.merge(
         agg[["country", "year", *shock_cols]],
-        on=["country", "year"], how="left",
+        on=["country", "year"],
+        how="left",
     ).merge(
         controls_df,
-        on=["country", "year"], how="left",
+        on=["country", "year"],
+        how="left",
     )
     country.to_csv(PROCESSED_DIR / "panel_country.csv", index=False)
     return sector

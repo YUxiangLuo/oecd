@@ -2,8 +2,12 @@ import numpy as np
 import pandas as pd
 
 from gvcsim.data.controls import (
-    ALL_CONTROL_COLUMNS, MACRO_CONTROL_COLUMNS, PRICE_COLUMNS, build_controls,
+    ALL_CONTROL_COLUMNS,
+    MACRO_CONTROL_COLUMNS,
+    PRICE_COLUMNS,
+    build_controls,
 )
+from gvcsim.data.quality import check_controls_country
 
 
 def _fixtures():
@@ -16,16 +20,21 @@ def _fixtures():
         for y_i, year in enumerate(years):
             va = 1000 + c_i * 200 + y_i * 100
             exp = 200 + c_i * 50 + y_i * 20
-            country_rows.append({
-                "country": c, "year": year,
-                "prod_va_total": va,
-                "trade_gross_exports": exp,
-            })
-            sector_rows.extend([
-                {"country": c, "year": year, "sector": sectors[0], "prod_va_total": va * 0.40},
-                {"country": c, "year": year, "sector": sectors[1], "prod_va_total": va * 0.35},
-                {"country": c, "year": year, "sector": sectors[2], "prod_va_total": va * 0.25},
-            ])
+            country_rows.append(
+                {
+                    "country": c,
+                    "year": year,
+                    "prod_va_total": va,
+                    "trade_gross_exports": exp,
+                }
+            )
+            sector_rows.extend(
+                [
+                    {"country": c, "year": year, "sector": sectors[0], "prod_va_total": va * 0.40},
+                    {"country": c, "year": year, "sector": sectors[1], "prod_va_total": va * 0.35},
+                    {"country": c, "year": year, "sector": sectors[2], "prod_va_total": va * 0.25},
+                ]
+            )
     return pd.DataFrame(country_rows), pd.DataFrame(sector_rows)
 
 
@@ -59,3 +68,26 @@ def test_build_controls_from_processed_indicators_shape_and_values():
     assert set(PRICE_COLUMNS).issubset(controls.columns)
     assert controls["gdp_deflator"].ge(1.0).all()
     assert controls["inflation_rate"].between(0.0, 0.08).all()
+
+
+def test_controls_country_quality_checks_pass_and_fail():
+    country, sector = _fixtures()
+    controls = build_controls(country, sector)
+    countries = sorted(country["country"].unique())
+    years = sorted(country["year"].unique())
+
+    checks = check_controls_country(controls, countries=countries, years=years)
+    assert len(checks) == 5
+    assert all(c.passed for c in checks), [(c.name, c.detail, c.warnings) for c in checks]
+
+    missing_col = controls.drop(columns=["macro_log_population"])
+    schema = check_controls_country(missing_col, countries=countries, years=years)
+    assert not schema[0].passed
+    assert "macro_log_population" in schema[0].warnings[0]
+
+    bad = controls.copy()
+    bad.loc[0, "manufacturing_va_share"] = 1.4
+    bad.loc[1, "macro_log_gdp_per_capita"] += 0.5
+    bad_checks = {c.name: c for c in check_controls_country(bad, countries=countries, years=years)}
+    assert not bad_checks["控制变量构造恒等式"].passed
+    assert not bad_checks["控制变量经济范围"].passed

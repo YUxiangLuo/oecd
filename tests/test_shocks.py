@@ -12,9 +12,7 @@ YEARS = [2016, 2017, 2018, 2019, 2020]
 
 
 def _panel():
-    return demo_shock_panel(COUNTRIES, SECTORS, YEARS).set_index(
-        ["country", "sector", "year"]
-    )
+    return demo_shock_panel(COUNTRIES, SECTORS, YEARS).set_index(["country", "sector", "year"])
 
 
 def test_full_coverage_and_bounds():
@@ -25,9 +23,7 @@ def test_full_coverage_and_bounds():
     # 平均额外关税不可能为负,也不该超过 50%
     assert df["tariff_shock"].between(0, 0.5).all()
     # treated 与阈值一致
-    assert (
-        (df["tariff_shock"] > TREATED_THRESHOLD) == (df["treated"] == 1)
-    ).all()
+    assert ((df["tariff_shock"] > TREATED_THRESHOLD) == (df["treated"] == 1)).all()
 
 
 def test_prewar_years_are_zero():
@@ -103,9 +99,11 @@ def test_export_exposure_from_icio_flows(fake_io):
 
 
 def test_demo_panel_uses_passed_export_exposure():
-    exposure = pd.DataFrame([
-        {"country": "DEU", "imposer": "USA", "year": 2018, "export_exposure": 0.5},
-    ])
+    exposure = pd.DataFrame(
+        [
+            {"country": "DEU", "imposer": "USA", "year": 2018, "export_exposure": 0.5},
+        ]
+    )
     df = demo_shock_panel(["DEU", "USA"], ["C24"], [2018], export_exposure=exposure)
     val = df.set_index(["country", "sector", "year"]).loc[("DEU", "C24", 2018), "tariff_shock"]
     # 232 钢铝 2018 年 C24 基准税率 0.16 × ICIO 暴露度 0.5。

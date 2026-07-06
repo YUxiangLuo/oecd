@@ -33,6 +33,7 @@ _DEMO_SALT = bytes.fromhex("9f1c40aa31d24fe6a3b8d07c55e2b911")
 def _hash_password(password: str, salt: bytes = _DEMO_SALT) -> str:
     return hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 100_000).hex()
 
+
 USERS = {
     "student": {
         "password_hash": _hash_password("gvclab2026"),
@@ -79,10 +80,12 @@ def authenticate(username: str, password: str) -> dict | None:
 def issue_token(user: dict) -> tuple[str, int]:
     """签发令牌,返回 (token, 过期时间戳)。"""
     exp = int(time.time()) + TOKEN_TTL_SECONDS
-    payload = _b64(json.dumps(
-        {"sub": user["username"], "name": user["name"], "role": user["role"], "exp": exp},
-        ensure_ascii=False,
-    ).encode())
+    payload = _b64(
+        json.dumps(
+            {"sub": user["username"], "name": user["name"], "role": user["role"], "exp": exp},
+            ensure_ascii=False,
+        ).encode()
+    )
     sig = _b64(hmac.new(_secret(), payload.encode(), hashlib.sha256).digest())
     return f"{payload}.{sig}", exp
 

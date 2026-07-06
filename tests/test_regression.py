@@ -6,12 +6,22 @@ import pytest
 
 from gvcsim.data.controls import CONTROL_COLUMNS, MACRO_CONTROL_COLUMNS
 from gvcsim.regression.design import (
-    CONTROL_MODE_ICIO, CONTROL_MODE_MACRO, PRICE_MODE_REAL, SCENARIO_CONFOUNDED,
-    SCENARIO_NOISY, RegressionDesign,
+    CONTROL_MODE_ICIO,
+    CONTROL_MODE_MACRO,
+    PRICE_MODE_REAL,
+    SCENARIO_CONFOUNDED,
+    SCENARIO_NOISY,
+    RegressionDesign,
 )
 from gvcsim.regression.panel import (
-    _apply_price_mode, benchmark_linearmodels, did, event_study, placebo_did_distribution,
-    prepare_design_model, run_design, twoway_fe,
+    _apply_price_mode,
+    benchmark_linearmodels,
+    did,
+    event_study,
+    placebo_did_distribution,
+    prepare_design_model,
+    run_design,
+    twoway_fe,
 )
 
 rng = np.random.default_rng(42)
@@ -93,7 +103,7 @@ def test_design_equation_text():
     d = RegressionDesign(step=13)
     assert d.depvar == "share_trade_fva"
     assert d.granularity == "国家–行业级"  # 默认粒度已切到行业级
-    assert d.method == "双重差分 (DID)"    # 默认方法已切到 DID
+    assert d.method == "双重差分 (DID)"  # 默认方法已切到 DID
     eq = d.equation()
     assert "α_ij" in eq and "λ_t" in eq and "treated_ij × 1[t≥G_ij]" in eq
     eq_c = RegressionDesign(step=13, granularity="国家级").equation()
@@ -148,10 +158,15 @@ def test_cluster_se_differs_from_entity_se():
             for t in range(n_times):
                 x = shock_path[t] + rng.normal(0, 0.2)
                 y = -0.4 * x + fe + common_noise[t] * 1.0 + rng.normal(0, 0.1)
-                rows.append({
-                    "country": c, "entity_id": f"{c}_s{j}",
-                    "year": 2015 + t, "x": x, "y": y,
-                })
+                rows.append(
+                    {
+                        "country": c,
+                        "entity_id": f"{c}_s{j}",
+                        "year": 2015 + t,
+                        "x": x,
+                        "y": y,
+                    }
+                )
     df = pd.DataFrame(rows)
 
     by_country = twoway_fe(df, "y", ["x"], entity="entity_id", cluster="country")
@@ -170,8 +185,10 @@ def test_cluster_se_differs_from_entity_se():
 # DID / 事件研究
 # ---------------------------------------------------------------------------
 
-def _simulate_did_panel(effects: dict[int, float], t0: int = 2018,
-                        n_entities: int = 60, years=range(2016, 2021)) -> pd.DataFrame:
+
+def _simulate_did_panel(
+    effects: dict[int, float], t0: int = 2018, n_entities: int = 60, years=range(2016, 2021)
+) -> pd.DataFrame:
     """处理组(前一半个体)在 t0 起获得 effects[k](k=年份-t0)的处理效应。"""
     rows = []
     for i in range(n_entities):
@@ -181,11 +198,14 @@ def _simulate_did_panel(effects: dict[int, float], t0: int = 2018,
         for y in years:
             k = y - t0
             effect = effects.get(k, 0.0) if is_treated else 0.0
-            rows.append({
-                "country": e, "year": y,
-                "y": fe + 0.3 * (y - 2016) + effect + rng.normal(0, 0.05),
-                "treated": int(is_treated and k >= 0),
-            })
+            rows.append(
+                {
+                    "country": e,
+                    "year": y,
+                    "y": fe + 0.3 * (y - 2016) + effect + rng.normal(0, 0.05),
+                    "treated": int(is_treated and k >= 0),
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -218,12 +238,14 @@ def test_entity_specific_did_uses_each_entity_first_treatment_year():
         fe = rng.normal(0, 1)
         for year in years:
             post = first is not None and year >= first
-            rows.append({
-                "country": e,
-                "year": year,
-                "y": fe + 0.2 * (year - 2016) - 0.6 * float(post) + rng.normal(0, 0.02),
-                "treated": int(post),
-            })
+            rows.append(
+                {
+                    "country": e,
+                    "year": year,
+                    "y": fe + 0.2 * (year - 2016) - 0.6 * float(post) + rng.normal(0, 0.02),
+                    "treated": int(post),
+                }
+            )
     df = pd.DataFrame(rows)
 
     design = RegressionDesign(step=13, granularity="国家级")
@@ -284,7 +306,10 @@ def test_teaching_scenarios_add_expected_notes_and_pretrend():
     confounded = run_design(
         df,
         RegressionDesign(
-            step=13, granularity="国家级", method="事件研究", scenario=SCENARIO_CONFOUNDED,
+            step=13,
+            granularity="国家级",
+            method="事件研究",
+            scenario=SCENARIO_CONFOUNDED,
         ),
     )
     pre = next(c for c in confounded.coefs if c.name == "k=-2")
@@ -323,13 +348,15 @@ def test_did_with_baseline_gvc_interaction_recovers_heterogeneity():
             did_x = float(treated_group and post)
             y = fe + 0.1 * (year - 2016) + beta * did_x + theta * did_x * base_gvc
             y += rng.normal(0, 0.02)
-            rows.append({
-                "country": c,
-                "year": year,
-                "share_trade_fva": y,
-                "treated": int(did_x),
-                "share_trade_gvc_participation": base_gvc,
-            })
+            rows.append(
+                {
+                    "country": c,
+                    "year": year,
+                    "share_trade_fva": y,
+                    "treated": int(did_x),
+                    "share_trade_gvc_participation": base_gvc,
+                }
+            )
     df = pd.DataFrame(rows)
     design = RegressionDesign(step=13, granularity="国家级", interaction=True)
 

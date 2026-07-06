@@ -50,46 +50,133 @@ SHOCK_SPECS = {
 # ---------------------------------------------------------------------------
 _EXPOSURE_TO_USA = {
     # 北美
-    "CAN": 0.75, "MEX": 0.77,
+    "CAN": 0.75,
+    "MEX": 0.77,
     # 东亚 / 东南亚 / 南亚
-    "CHN": 0.19, "JPN": 0.19, "KOR": 0.12, "TWN": 0.12, "HKG": 0.08,
-    "VNM": 0.20, "THA": 0.11, "MYS": 0.09, "IDN": 0.10, "PHL": 0.15,
-    "SGP": 0.08, "KHM": 0.23, "LAO": 0.02, "MMR": 0.05, "BRN": 0.02,
-    "IND": 0.16, "BGD": 0.17, "PAK": 0.16,
+    "CHN": 0.19,
+    "JPN": 0.19,
+    "KOR": 0.12,
+    "TWN": 0.12,
+    "HKG": 0.08,
+    "VNM": 0.20,
+    "THA": 0.11,
+    "MYS": 0.09,
+    "IDN": 0.10,
+    "PHL": 0.15,
+    "SGP": 0.08,
+    "KHM": 0.23,
+    "LAO": 0.02,
+    "MMR": 0.05,
+    "BRN": 0.02,
+    "IND": 0.16,
+    "BGD": 0.17,
+    "PAK": 0.16,
     # 西欧
-    "DEU": 0.09, "GBR": 0.13, "FRA": 0.08, "ITA": 0.09, "ESP": 0.05,
-    "NLD": 0.05, "BEL": 0.06, "IRL": 0.28, "CHE": 0.15, "AUT": 0.07,
-    "SWE": 0.07, "DNK": 0.08, "FIN": 0.07, "NOR": 0.05, "ISL": 0.05,
-    "PRT": 0.05, "GRC": 0.04, "LUX": 0.02, "MLT": 0.05, "CYP": 0.02,
+    "DEU": 0.09,
+    "GBR": 0.13,
+    "FRA": 0.08,
+    "ITA": 0.09,
+    "ESP": 0.05,
+    "NLD": 0.05,
+    "BEL": 0.06,
+    "IRL": 0.28,
+    "CHE": 0.15,
+    "AUT": 0.07,
+    "SWE": 0.07,
+    "DNK": 0.08,
+    "FIN": 0.07,
+    "NOR": 0.05,
+    "ISL": 0.05,
+    "PRT": 0.05,
+    "GRC": 0.04,
+    "LUX": 0.02,
+    "MLT": 0.05,
+    "CYP": 0.02,
     # 中东欧 / 独联体
-    "POL": 0.03, "CZE": 0.02, "SVK": 0.02, "HUN": 0.03, "SVN": 0.02,
-    "HRV": 0.02, "BGR": 0.02, "ROU": 0.02, "EST": 0.02, "LVA": 0.02,
-    "LTU": 0.04, "UKR": 0.01, "BLR": 0.01, "RUS": 0.03, "KAZ": 0.02,
+    "POL": 0.03,
+    "CZE": 0.02,
+    "SVK": 0.02,
+    "HUN": 0.03,
+    "SVN": 0.02,
+    "HRV": 0.02,
+    "BGR": 0.02,
+    "ROU": 0.02,
+    "EST": 0.02,
+    "LVA": 0.02,
+    "LTU": 0.04,
+    "UKR": 0.01,
+    "BLR": 0.01,
+    "RUS": 0.03,
+    "KAZ": 0.02,
     # 美洲(除北美)
-    "BRA": 0.12, "ARG": 0.06, "CHL": 0.14, "COL": 0.28, "PER": 0.12,
+    "BRA": 0.12,
+    "ARG": 0.06,
+    "CHL": 0.14,
+    "COL": 0.28,
+    "PER": 0.12,
     "CRI": 0.38,
     # 中东 / 非洲
-    "TUR": 0.05, "ISR": 0.26, "SAU": 0.10, "JOR": 0.25, "EGY": 0.06,
-    "MAR": 0.04, "TUN": 0.03, "NGA": 0.15, "ZAF": 0.07, "CIV": 0.06,
-    "CMR": 0.03, "SEN": 0.02,
+    "TUR": 0.05,
+    "ISR": 0.26,
+    "SAU": 0.10,
+    "JOR": 0.25,
+    "EGY": 0.06,
+    "MAR": 0.04,
+    "TUN": 0.03,
+    "NGA": 0.15,
+    "ZAF": 0.07,
+    "CIV": 0.06,
+    "CMR": 0.03,
+    "SEN": 0.02,
     # 大洋洲 / 其他
-    "AUS": 0.04, "NZL": 0.10, "ROW": 0.10,
+    "AUS": 0.04,
+    "NZL": 0.10,
+    "ROW": 0.10,
     "USA": 0.0,  # 自己对自己无出口
 }
 
 # 美国出口中流向各反制方的份额(反制事件只打美国,所以只需这一行)。
 _USA_EXPOSURE_TO = {
-    "CHN": 0.08, "EU": 0.19, "CAN": 0.18, "MEX": 0.16,
-    "TUR": 0.006, "RUS": 0.004, "IND": 0.02,
+    "CHN": 0.08,
+    "EU": 0.19,
+    "CAN": 0.18,
+    "MEX": 0.16,
+    "TUR": 0.006,
+    "RUS": 0.004,
+    "IND": 0.02,
 }
 
 # 欧盟作为加征方时按 EU27 聚合。2018 年的欧盟反制事件虽发生在英国脱欧前,
 # 本项目的 ICIO 国家口径与既有 export_exposure_<year>.csv 均按 EU27 口径聚合,
 # 英国相关冲击另在空客案事件中单列。
 EU27 = {
-    "AUT", "BEL", "BGR", "CYP", "CZE", "DEU", "DNK", "ESP", "EST",
-    "FIN", "FRA", "GRC", "HRV", "HUN", "IRL", "ITA", "LTU", "LUX",
-    "LVA", "MLT", "NLD", "POL", "PRT", "ROU", "SVK", "SVN", "SWE",
+    "AUT",
+    "BEL",
+    "BGR",
+    "CYP",
+    "CZE",
+    "DEU",
+    "DNK",
+    "ESP",
+    "EST",
+    "FIN",
+    "FRA",
+    "GRC",
+    "HRV",
+    "HUN",
+    "IRL",
+    "ITA",
+    "LTU",
+    "LUX",
+    "LVA",
+    "MLT",
+    "NLD",
+    "POL",
+    "PRT",
+    "ROU",
+    "SVK",
+    "SVN",
+    "SWE",
 }
 
 
@@ -100,9 +187,10 @@ class TariffEvent:
     rates[sector][year] 已折算两层"稀释":清单只覆盖行业内部分产品(覆盖面),
     以及年中生效(生效月数/12)。overrides 给国别特例(豁免/配额/加倍)。
     """
+
     name: str
-    imposer: str                       # 加征方("EU" 表示欧盟整体)
-    targets: tuple[str, ...] | str    # 目标国;"ALL" = 全部经济体(除加征方)
+    imposer: str  # 加征方("EU" 表示欧盟整体)
+    targets: tuple[str, ...] | str  # 目标国;"ALL" = 全部经济体(除加征方)
     announced: str
     effective: str
     rates: dict[str, dict[int, float]]
@@ -122,6 +210,7 @@ class EntityListEvent:
     可解释为该国家-行业在该类政策下的暴露程度。它是 mock 强度变量,
     不是关税税率。
     """
+
     name: str
     shock_type: str
     targets: tuple[str, ...]
@@ -147,8 +236,10 @@ _S232_BASE = {"C24": {2018: 0.16, 2019: 0.20, 2020: 0.20}}
 EVENTS = [
     TariffEvent(
         name="美国201保障措施(光伏、洗衣机)",
-        imposer="USA", targets="ALL",
-        announced="2018-01-22", effective="2018-02-07",
+        imposer="USA",
+        targets="ALL",
+        announced="2018-01-22",
+        effective="2018-02-07",
         # 30%/20–50% 的品目税率 × 行业内覆盖面(光伏占 C26 出口 ~5%,
         # 家电占 C27 出口 ~8%),税率逐年退坡
         rates={
@@ -158,8 +249,10 @@ EVENTS = [
     ),
     TariffEvent(
         name="美国232钢铝关税",
-        imposer="USA", targets="ALL",
-        announced="2018-03-08", effective="2018-03-23",
+        imposer="USA",
+        targets="ALL",
+        announced="2018-03-08",
+        effective="2018-03-23",
         rates=_S232_BASE,
         exempt=("AUS",),  # 澳大利亚全程豁免
         overrides={
@@ -176,131 +269,149 @@ EVENTS = [
     ),
     TariffEvent(
         name="美国301对华关税(四批清单)",
-        imposer="USA", targets=("CHN",),
-        announced="2018-06-15", effective="2018-07-06",
+        imposer="USA",
+        targets=("CHN",),
+        announced="2018-06-15",
+        effective="2018-07-06",
         # 行业平均税率:List 1/2(25%,2018-07/08)→ List 3(10%→25%,
         # 2018-09/2019-05)→ List 4A(15%→7.5%,2019-09/2020-02);
         # 2020 为第一阶段协议后的维持水平
         rates={
-            "C26":    {2018: 0.05, 2019: 0.16, 2020: 0.14},
-            "C27":    {2018: 0.08, 2019: 0.20, 2020: 0.18},
-            "C28":    {2018: 0.11, 2019: 0.23, 2020: 0.23},
-            "C29":    {2018: 0.10, 2019: 0.24, 2020: 0.24},
-            "C30":    {2018: 0.03, 2019: 0.10, 2020: 0.10},
-            "C20":    {2018: 0.06, 2019: 0.17, 2020: 0.17},
-            "C21":    {2019: 0.03, 2020: 0.03},
-            "C22":    {2018: 0.07, 2019: 0.21, 2020: 0.21},
-            "C23":    {2018: 0.04, 2019: 0.19, 2020: 0.19},
-            "C24":    {2018: 0.05, 2019: 0.21, 2020: 0.21},
-            "C25":    {2018: 0.06, 2019: 0.22, 2020: 0.22},
-            "C16":    {2018: 0.03, 2019: 0.20, 2020: 0.20},
+            "C26": {2018: 0.05, 2019: 0.16, 2020: 0.14},
+            "C27": {2018: 0.08, 2019: 0.20, 2020: 0.18},
+            "C28": {2018: 0.11, 2019: 0.23, 2020: 0.23},
+            "C29": {2018: 0.10, 2019: 0.24, 2020: 0.24},
+            "C30": {2018: 0.03, 2019: 0.10, 2020: 0.10},
+            "C20": {2018: 0.06, 2019: 0.17, 2020: 0.17},
+            "C21": {2019: 0.03, 2020: 0.03},
+            "C22": {2018: 0.07, 2019: 0.21, 2020: 0.21},
+            "C23": {2018: 0.04, 2019: 0.19, 2020: 0.19},
+            "C24": {2018: 0.05, 2019: 0.21, 2020: 0.21},
+            "C25": {2018: 0.06, 2019: 0.22, 2020: 0.22},
+            "C16": {2018: 0.03, 2019: 0.20, 2020: 0.20},
             "C17_18": {2018: 0.03, 2019: 0.19, 2020: 0.19},
-            "C19":    {2019: 0.05, 2020: 0.05},
+            "C19": {2019: 0.05, 2020: 0.05},
             "C13T15": {2019: 0.05, 2020: 0.06},
             "C31T33": {2018: 0.03, 2019: 0.19, 2020: 0.18},
             "C10T12": {2018: 0.02, 2019: 0.08, 2020: 0.08},
             "A01_02": {2018: 0.01, 2019: 0.03, 2020: 0.03},
-            "A03":    {2018: 0.02, 2019: 0.09, 2020: 0.09},
+            "A03": {2018: 0.02, 2019: 0.09, 2020: 0.09},
             "B05_06": {2019: 0.01, 2020: 0.01},
             "B07_08": {2018: 0.01, 2019: 0.04, 2020: 0.04},
-            "B09":    {2019: 0.04, 2020: 0.04},
+            "B09": {2019: 0.04, 2020: 0.04},
         },
     ),
     TariffEvent(
         name="中方对美反制关税",
-        imposer="CHN", targets=("USA",),
-        announced="2018-06-16", effective="2018-07-06",
+        imposer="CHN",
+        targets=("USA",),
+        announced="2018-06-16",
+        effective="2018-07-06",
         # 大豆等农产品 25%+10% 打满;能源(LNG/煤/原油)2019 加码;
         # 汽车 25% 于 2019-01 暂停;2020 为第一阶段协议采购豁免后的水平
         rates={
             "A01_02": {2018: 0.13, 2019: 0.26, 2020: 0.20},
-            "A03":    {2018: 0.12, 2019: 0.24, 2020: 0.18},
+            "A03": {2018: 0.12, 2019: 0.24, 2020: 0.18},
             "C10T12": {2018: 0.10, 2019: 0.22, 2020: 0.17},
             "B05_06": {2018: 0.02, 2019: 0.12, 2020: 0.09},
-            "C19":    {2019: 0.05, 2020: 0.04},
-            "C29":    {2018: 0.12, 2019: 0.04, 2020: 0.02},
-            "C30":    {2018: 0.02, 2019: 0.02, 2020: 0.01},
-            "C20":    {2018: 0.06, 2019: 0.14, 2020: 0.11},
-            "C21":    {2019: 0.03, 2020: 0.02},
-            "C22":    {2018: 0.05, 2019: 0.12, 2020: 0.10},
-            "C23":    {2019: 0.08, 2020: 0.06},
-            "C24":    {2018: 0.04, 2019: 0.10, 2020: 0.08},
-            "C25":    {2018: 0.04, 2019: 0.10, 2020: 0.08},
-            "C26":    {2018: 0.03, 2019: 0.09, 2020: 0.07},
-            "C27":    {2018: 0.04, 2019: 0.10, 2020: 0.08},
-            "C28":    {2018: 0.04, 2019: 0.11, 2020: 0.09},
-            "C16":    {2018: 0.03, 2019: 0.10, 2020: 0.08},
+            "C19": {2019: 0.05, 2020: 0.04},
+            "C29": {2018: 0.12, 2019: 0.04, 2020: 0.02},
+            "C30": {2018: 0.02, 2019: 0.02, 2020: 0.01},
+            "C20": {2018: 0.06, 2019: 0.14, 2020: 0.11},
+            "C21": {2019: 0.03, 2020: 0.02},
+            "C22": {2018: 0.05, 2019: 0.12, 2020: 0.10},
+            "C23": {2019: 0.08, 2020: 0.06},
+            "C24": {2018: 0.04, 2019: 0.10, 2020: 0.08},
+            "C25": {2018: 0.04, 2019: 0.10, 2020: 0.08},
+            "C26": {2018: 0.03, 2019: 0.09, 2020: 0.07},
+            "C27": {2018: 0.04, 2019: 0.10, 2020: 0.08},
+            "C28": {2018: 0.04, 2019: 0.11, 2020: 0.09},
+            "C16": {2018: 0.03, 2019: 0.10, 2020: 0.08},
             "C17_18": {2018: 0.03, 2019: 0.10, 2020: 0.08},
         },
     ),
     TariffEvent(
         name="欧盟对美再平衡关税(232反制)",
-        imposer="EU", targets=("USA",),
-        announced="2018-06-06", effective="2018-06-22",
+        imposer="EU",
+        targets=("USA",),
+        announced="2018-06-06",
+        effective="2018-06-22",
         # 25% 打钢制品、摩托车、波本威士忌、牛仔裤等 €2.8B 清单
         rates={
-            "C24":    {2018: 0.13, 2019: 0.22, 2020: 0.22},
-            "C30":    {2018: 0.08, 2019: 0.14, 2020: 0.14},
+            "C24": {2018: 0.13, 2019: 0.22, 2020: 0.22},
+            "C30": {2018: 0.08, 2019: 0.14, 2020: 0.14},
             "C10T12": {2018: 0.04, 2019: 0.07, 2020: 0.07},
             "C13T15": {2018: 0.02, 2019: 0.04, 2020: 0.04},
         },
     ),
     TariffEvent(
         name="加拿大对美反制关税",
-        imposer="CAN", targets=("USA",),
-        announced="2018-05-31", effective="2018-07-01",
+        imposer="CAN",
+        targets=("USA",),
+        announced="2018-05-31",
+        effective="2018-07-01",
         # 与 232 同步:2019-05 随豁免一并取消
         rates={
-            "C24":    {2018: 0.11, 2019: 0.08},
+            "C24": {2018: 0.11, 2019: 0.08},
             "C10T12": {2018: 0.02, 2019: 0.01},
             "C31T33": {2018: 0.01, 2019: 0.01},
         },
     ),
     TariffEvent(
         name="墨西哥对美反制关税",
-        imposer="MEX", targets=("USA",),
-        announced="2018-06-05", effective="2018-06-05",
+        imposer="MEX",
+        targets=("USA",),
+        announced="2018-06-05",
+        effective="2018-06-05",
         rates={
-            "C24":    {2018: 0.13, 2019: 0.08},
+            "C24": {2018: 0.13, 2019: 0.08},
             "C10T12": {2018: 0.06, 2019: 0.04},
             "A01_02": {2018: 0.03, 2019: 0.02},
         },
     ),
     TariffEvent(
         name="土耳其对美反制关税",
-        imposer="TUR", targets=("USA",),
-        announced="2018-06-21", effective="2018-06-21",
+        imposer="TUR",
+        targets=("USA",),
+        announced="2018-06-21",
+        effective="2018-06-21",
         rates={
-            "C29":    {2018: 0.15, 2019: 0.15, 2020: 0.15},
+            "C29": {2018: 0.15, 2019: 0.15, 2020: 0.15},
             "C10T12": {2018: 0.10, 2019: 0.10, 2020: 0.10},
             "B05_06": {2018: 0.05, 2019: 0.05, 2020: 0.05},
         },
     ),
     TariffEvent(
         name="俄罗斯对美反制关税",
-        imposer="RUS", targets=("USA",),
-        announced="2018-07-06", effective="2018-08-05",
+        imposer="RUS",
+        targets=("USA",),
+        announced="2018-07-06",
+        effective="2018-08-05",
         rates={"C28": {2018: 0.06, 2019: 0.15, 2020: 0.15}},
     ),
     TariffEvent(
         name="印度对美反制关税",
-        imposer="IND", targets=("USA",),
-        announced="2018-06-21", effective="2019-06-16",
+        imposer="IND",
+        targets=("USA",),
+        announced="2018-06-21",
+        effective="2019-06-16",
         rates={
             "A01_02": {2019: 0.10, 2020: 0.17},
-            "C20":    {2019: 0.02, 2020: 0.03},
-            "C24":    {2019: 0.05, 2020: 0.08},
+            "C20": {2019: 0.02, 2020: 0.03},
+            "C24": {2019: 0.05, 2020: 0.08},
         },
     ),
     TariffEvent(
         name="美国航空补贴案关税(空客裁决)",
-        imposer="USA", targets=("DEU", "FRA", "ESP", "GBR"),
-        announced="2019-10-02", effective="2019-10-18",
+        imposer="USA",
+        targets=("DEU", "FRA", "ESP", "GBR"),
+        announced="2019-10-02",
+        effective="2019-10-18",
         # 10%(2020-03 升至 15%)打飞机,25% 打葡萄酒/威士忌/奶酪等
         rates={
-            "C30":    {2019: 0.03, 2020: 0.13},
+            "C30": {2019: 0.03, 2020: 0.13},
             "C10T12": {2019: 0.02, 2020: 0.075},
-            "C28":    {2020: 0.02},
+            "C28": {2020: 0.02},
         },
     ),
 ]
@@ -396,26 +507,30 @@ def build_export_exposure(arr: IcioArrays, year: int) -> pd.DataFrame:
         total = float(arr.E[arr.pos[country]].sum())
         for imposer in arr.regions:
             bilateral = country_to_dest(country, imposer)
-            rows.append({
-                "country": country,
-                "imposer": imposer,
-                "year": year,
-                "bilateral_exports": bilateral,
-                "total_exports": total,
-                "export_exposure": bilateral / total if total > 0 else 0.0,
-            })
+            rows.append(
+                {
+                    "country": country,
+                    "imposer": imposer,
+                    "year": year,
+                    "bilateral_exports": bilateral,
+                    "total_exports": total,
+                    "export_exposure": bilateral / total if total > 0 else 0.0,
+                }
+            )
 
         eu_members = [r for r in arr.regions if r in EU27 and r != country]
         if eu_members:
             bilateral = sum(country_to_dest(country, dest) for dest in eu_members)
-            rows.append({
-                "country": country,
-                "imposer": "EU",
-                "year": year,
-                "bilateral_exports": bilateral,
-                "total_exports": total,
-                "export_exposure": bilateral / total if total > 0 else 0.0,
-            })
+            rows.append(
+                {
+                    "country": country,
+                    "imposer": "EU",
+                    "year": year,
+                    "bilateral_exports": bilateral,
+                    "total_exports": total,
+                    "export_exposure": bilateral / total if total > 0 else 0.0,
+                }
+            )
 
     return pd.DataFrame(rows).sort_values(["country", "imposer", "year"]).reset_index(drop=True)
 
@@ -486,8 +601,11 @@ def demo_shock_panel(
     exposure_lookup = _exposure_map(export_exposure)
 
     for ev in EVENTS:
-        targets = [c for c in countries if c != ev.imposer] if ev.targets == "ALL" \
+        targets = (
+            [c for c in countries if c != ev.imposer]
+            if ev.targets == "ALL"
             else [c for c in ev.targets if c in countries]
+        )
         for c in targets:
             if c in ev.exempt:
                 continue
@@ -504,19 +622,15 @@ def demo_shock_panel(
                     if key not in main_event or contrib > main_event[key][0]:
                         main_event[key] = (contrib, ev)
 
-    base = pd.MultiIndex.from_product(
-        [countries, sectors, years], names=["country", "sector", "year"]
-    ).to_frame(index=False)
-    base["tariff_shock"] = [
-        shock.get((c, s, y), 0.0)
-        for c, s, y in zip(base["country"], base["sector"], base["year"])
-    ]
+    base = pd.MultiIndex.from_product([countries, sectors, years], names=["country", "sector", "year"]).to_frame(
+        index=False
+    )
+    base["tariff_shock"] = [shock.get((c, s, y), 0.0) for c, s, y in zip(base["country"], base["sector"], base["year"])]
     base["treated"] = (base["tariff_shock"] > TREATED_THRESHOLD).astype(int)
     base["shock_type"] = "关税冲击"
 
     events = [
-        main_event.get((c, s, y), (0.0, None))[1]
-        for c, s, y in zip(base["country"], base["sector"], base["year"])
+        main_event.get((c, s, y), (0.0, None))[1] for c, s, y in zip(base["country"], base["sector"], base["year"])
     ]
     base["announced_date"] = [e.announced if e else "" for e in events]
     base["effective_date"] = [e.effective if e else "" for e in events]
@@ -571,34 +685,38 @@ def events_metadata() -> list[dict]:
     for ev in EVENTS:
         peak = {s: max(by_year.values()) for s, by_year in ev.rates.items()}
         top_sectors = sorted(peak, key=lambda s: peak[s], reverse=True)
-        out.append({
-            "name": ev.name,
-            "shock_type": "关税冲击",
-            "imposer": ev.imposer,
-            "targets": "全部经济体" if ev.targets == "ALL" else "、".join(ev.targets),
-            "exempt": "、".join(ev.exempt),
-            "announced": ev.announced,
-            "effective": ev.effective,
-            "n_sectors": len(ev.rates),
-            "top_sectors": top_sectors[:3],
-            "peak_rate": max(peak.values()),
-        })
+        out.append(
+            {
+                "name": ev.name,
+                "shock_type": "关税冲击",
+                "imposer": ev.imposer,
+                "targets": "全部经济体" if ev.targets == "ALL" else "、".join(ev.targets),
+                "exempt": "、".join(ev.exempt),
+                "announced": ev.announced,
+                "effective": ev.effective,
+                "n_sectors": len(ev.rates),
+                "top_sectors": top_sectors[:3],
+                "peak_rate": max(peak.values()),
+            }
+        )
     for ev in ENTITY_LIST_EVENTS:
         peak = {s: max(by_year.values()) for s, by_year in ev.intensities.items()}
         top_sectors = sorted(peak, key=lambda s: peak[s], reverse=True)
-        out.append({
-            "name": ev.name,
-            "imposer": "USA",
-            "targets": "、".join(ev.targets),
-            "exempt": "",
-            "announced": ev.announced,
-            "effective": ev.effective,
-            "n_sectors": len(ev.intensities),
-            "top_sectors": top_sectors[:3],
-            "peak_rate": max(peak.values()),
-            "shock_type": ev.shock_type,
-            "entities": "、".join(ev.entities),
-        })
+        out.append(
+            {
+                "name": ev.name,
+                "imposer": "USA",
+                "targets": "、".join(ev.targets),
+                "exempt": "",
+                "announced": ev.announced,
+                "effective": ev.effective,
+                "n_sectors": len(ev.intensities),
+                "top_sectors": top_sectors[:3],
+                "peak_rate": max(peak.values()),
+                "shock_type": ev.shock_type,
+                "entities": "、".join(ev.entities),
+            }
+        )
     return out
 
 
@@ -606,7 +724,5 @@ def load_shocks() -> pd.DataFrame:
     """读取 (country, sector, year) 冲击面板。接入真实数据后在这里切换数据源。"""
     path = SHOCKS_DIR / DEMO_FILE
     if not path.exists():
-        raise FileNotFoundError(
-            f"未找到冲击数据 {path},请先运行 `gvcsim compute` 生成演示数据"
-        )
+        raise FileNotFoundError(f"未找到冲击数据 {path},请先运行 `gvcsim compute` 生成演示数据")
     return pd.read_csv(path, keep_default_na=False)

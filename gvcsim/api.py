@@ -20,10 +20,17 @@ from gvcsim import auth
 from gvcsim import report as report_mod
 from gvcsim import shocks
 from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
-from gvcsim.data import crosswalk, icio_browser
+from gvcsim.data import crosswalk, icio_browser, quality
 from gvcsim.regression.design import (
-    CONTROL_MODES, GRANULARITIES, METHODS, PRICE_MODES, SCENARIO_LABELS, SCENARIOS, SHOCK_TYPES,
-    STEP_DEPVARS, RegressionDesign,
+    CONTROL_MODES,
+    GRANULARITIES,
+    METHODS,
+    PRICE_MODES,
+    SCENARIO_LABELS,
+    SCENARIOS,
+    SHOCK_TYPES,
+    STEP_DEPVARS,
+    RegressionDesign,
 )
 from gvcsim.regression.panel import placebo_did_distribution, run_design_with_benchmark
 from gvcsim.steps import STAGE_NAMES, STEPS
@@ -58,10 +65,7 @@ async def require_api_bearer(request: Request, call_next):
 
 def _clean(records: list[dict]) -> list[dict]:
     """NaN → None,保证 JSON 合法。"""
-    return [
-        {k: (None if isinstance(v, float) and math.isnan(v) else v) for k, v in r.items()}
-        for r in records
-    ]
+    return [{k: (None if isinstance(v, float) and math.isnan(v) else v) for k, v in r.items()} for r in records]
 
 
 @lru_cache(maxsize=32)
@@ -208,12 +212,8 @@ def meta():
     countries: list[str] = []
     sectors: list[str] = []
     if years:
-        countries = sorted(
-            _read_csv(f"indicators_country_{years[-1]}.csv")["country"].unique()
-        )
-        sectors = sorted(
-            _read_csv(f"indicators_sector_{years[-1]}.csv")["sector"].unique()
-        )
+        countries = sorted(_read_csv(f"indicators_country_{years[-1]}.csv")["country"].unique())
+        sectors = sorted(_read_csv(f"indicators_sector_{years[-1]}.csv")["sector"].unique())
     return {"years": years, "countries": countries, "sectors": sectors}
 
 
@@ -269,6 +269,18 @@ def qc_shocks():
     if not path.exists():
         raise HTTPException(status_code=404, detail="冲击面板尚未质检,请先运行 compute")
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+@app.get("/api/qc/controls")
+def qc_controls():
+    path = PROCESSED_DIR / "qc_controls.json"
+    if path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    controls_path = PROCESSED_DIR / "controls_country.csv"
+    if not controls_path.exists():
+        raise HTTPException(status_code=404, detail="控制变量尚未生成,请先运行 compute")
+    checks = quality.check_controls_country(_read_path(controls_path))
+    return [c.to_dict() for c in checks]
 
 
 @app.get("/api/qc/{year}")
@@ -369,16 +381,17 @@ def shock_summary(shock_type: str = "关税冲击"):
     for y, g in df.groupby("year"):
         hit = g[g[treated_col] == 1]
         top = g.loc[g[shock_col].idxmax()]
-        rows.append({
-            "year": int(y),
-            "treated_countries": int(hit["country"].nunique()),
-            "treated_pairs": int(len(hit)),
-            "mean_shock_treated": float(hit[shock_col].mean()) if len(hit) else 0.0,
-            "max_shock": float(top[shock_col]),
-            "max_shock_target": f"{top['country']}·{top['sector']}" if top[shock_col] > 0 else "",
-        })
-    return {"years": rows, "n_countries": int(df["country"].nunique()),
-            "n_sectors": int(df["sector"].nunique())}
+        rows.append(
+            {
+                "year": int(y),
+                "treated_countries": int(hit["country"].nunique()),
+                "treated_pairs": int(len(hit)),
+                "mean_shock_treated": float(hit[shock_col].mean()) if len(hit) else 0.0,
+                "max_shock": float(top[shock_col]),
+                "max_shock_target": f"{top['country']}·{top['sector']}" if top[shock_col] > 0 else "",
+            }
+        )
+    return {"years": rows, "n_countries": int(df["country"].nunique()), "n_sectors": int(df["sector"].nunique())}
 
 
 @app.get("/api/shocks/panel")
@@ -421,7 +434,7 @@ def shock_panel(
 
 
 class RegressionRequest(BaseModel):
-    step: int = 13                      # 13-16
+    step: int = 13  # 13-16
     granularity: str = "国家–行业级"
     shock_type: str = "关税冲击"
     method: str = "双重差分 (DID)"
@@ -485,9 +498,14 @@ def _validate_design(
     if scenario not in SCENARIOS:
         raise HTTPException(status_code=400, detail=f"scenario 必须是 {SCENARIOS}")
     return RegressionDesign(
-        step=step, granularity=granularity, shock_type=shock_type,
-        method=method, control_mode=control_mode, interaction=interaction,
-        price_mode=price_mode, scenario=scenario,
+        step=step,
+        granularity=granularity,
+        shock_type=shock_type,
+        method=method,
+        control_mode=control_mode,
+        interaction=interaction,
+        price_mode=price_mode,
+        scenario=scenario,
     )
 
 
@@ -527,16 +545,22 @@ def regression_design(
     scenario: str = "clean",
 ):
     """步骤12 设计确认:不跑回归,只返回方程与面板/个体/聚类等设计信息。"""
-    return _design_info(_validate_design(
-        step, granularity, shock_type, method, control_mode, interaction, price_mode, scenario
-    ))
+    return _design_info(
+        _validate_design(step, granularity, shock_type, method, control_mode, interaction, price_mode, scenario)
+    )
 
 
 @app.post("/api/regression/run")
 def regression_run(req: RegressionRequest):
     design = _validate_design(
-        req.step, req.granularity, req.shock_type, req.method, req.control_mode,
-        req.interaction, req.price_mode, req.scenario,
+        req.step,
+        req.granularity,
+        req.shock_type,
+        req.method,
+        req.control_mode,
+        req.interaction,
+        req.price_mode,
+        req.scenario,
     )
     panel = _read_csv(design.panel_file)
     try:
@@ -554,8 +578,14 @@ def regression_run(req: RegressionRequest):
 @app.post("/api/regression/placebo")
 def regression_placebo(req: PlaceboRequest):
     design = _validate_design(
-        req.step, req.granularity, req.shock_type, req.method, req.control_mode,
-        req.interaction, req.price_mode, req.scenario,
+        req.step,
+        req.granularity,
+        req.shock_type,
+        req.method,
+        req.control_mode,
+        req.interaction,
+        req.price_mode,
+        req.scenario,
     )
     panel = _read_csv(design.panel_file)
     try:
@@ -586,8 +616,13 @@ def report(year: int):
 def report_custom(req: ReportRequest):
     # 复用步骤13的设计校验;报告生成时会把同一套设定应用到 13-16 四个因变量。
     _validate_design(
-        13, req.granularity, req.shock_type, req.method, req.control_mode,
-        req.interaction, req.price_mode,
+        13,
+        req.granularity,
+        req.shock_type,
+        req.method,
+        req.control_mode,
+        req.interaction,
+        req.price_mode,
     )
     try:
         path = report_mod.generate(

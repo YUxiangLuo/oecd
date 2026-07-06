@@ -63,6 +63,7 @@ export const api = {
   },
   qc: (year: number) => get<import("./types").QcCheck[]>(`/api/qc/${year}`),
   qcShocks: () => get<import("./types").QcCheck[]>("/api/qc/shocks"),
+  qcControls: () => get<import("./types").QcCheck[]>("/api/qc/controls"),
   countryIndicators: (year: number) =>
     get<Record<string, string | number | null>[]>(`/api/indicators/country/${year}`),
   sectorIndicators: (year: number, country: string, page: number) =>

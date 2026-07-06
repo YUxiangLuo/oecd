@@ -34,7 +34,8 @@ cd ..
 uv run gvcsim compute
 ```
 
-把本地工作区同步到服务器。这里不传 `.git`、虚拟环境、node_modules 和本地认证密钥:
+把本地工作区同步到服务器。这里不传 `.git`、虚拟环境、node_modules、本地认证密钥、
+测试/截图/报告等非运行内容:
 
 ```bash
 rsync -az --delete --info=progress2 \
@@ -45,7 +46,19 @@ rsync -az --delete --info=progress2 \
   --exclude='__pycache__/' \
   --exclude='*.pyc' \
   --exclude='.pytest_cache/' \
+  --exclude='.ruff_cache/' \
+  --exclude='.mypy_cache/' \
+  --exclude='.coverage' \
+  --exclude='htmlcov/' \
   --exclude='frontend/.vite/' \
+  --exclude='frontend/playwright-report/' \
+  --exclude='frontend/test-results/' \
+  --exclude='frontend/e2e/' \
+  --exclude='frontend/playwright.config.ts' \
+  --exclude='dogfood-output/' \
+  --exclude='reports/' \
+  --exclude='prototype/' \
+  --exclude='tests/' \
   --exclude='data/.auth_secret' \
   ./ root@101.201.151.30:/opt/oecd-icio-analysis/
 ```

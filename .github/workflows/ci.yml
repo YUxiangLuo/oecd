@@ -25,11 +25,17 @@ jobs:
           enable-cache: true
       - name: Install Python dependencies
         run: uv sync --locked --group dev
-      - name: Run tests
-        run: uv run pytest -q
+      - name: Ruff format check
+        run: uv run ruff format --check .
+      - name: Ruff lint
+        run: uv run ruff check .
+      - name: Type check
+        run: uv run mypy
+      - name: Run tests with coverage
+        run: uv run pytest --cov=gvcsim --cov-report=term-missing -q
 
   frontend:
-    name: Frontend build
+    name: Frontend build and E2E
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -42,3 +48,7 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Build frontend
         run: bun run build
+      - name: Install Playwright browser
+        run: bunx playwright install --with-deps chromium
+      - name: Run frontend E2E
+        run: bun run test:e2e
