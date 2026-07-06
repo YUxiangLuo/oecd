@@ -11,7 +11,7 @@ from gvcsim.regression.design import (
 )
 from gvcsim.regression.panel import (
     _apply_price_mode, benchmark_linearmodels, did, event_study, placebo_did_distribution,
-    run_design, twoway_fe,
+    prepare_design_model, run_design, twoway_fe,
 )
 
 rng = np.random.default_rng(42)
@@ -95,14 +95,14 @@ def test_design_equation_text():
     assert d.granularity == "国家–行业级"  # 默认粒度已切到行业级
     assert d.method == "双重差分 (DID)"    # 默认方法已切到 DID
     eq = d.equation()
-    assert "α_ij" in eq and "λ_t" in eq and "treated_ij × post_t" in eq
+    assert "α_ij" in eq and "λ_t" in eq and "treated_ij × 1[t≥G_ij]" in eq
     eq_c = RegressionDesign(step=13, granularity="国家级").equation()
-    assert "α_ij" not in eq_c and "α_i" in eq_c and "treated_i × post_t" in eq_c
+    assert "α_ij" not in eq_c and "α_i" in eq_c and "treated_i × 1[t≥G_i]" in eq_c
 
     eq_fe = RegressionDesign(step=13, method="双向固定效应").equation()
     assert "tariff_shock" in eq_fe
     eq_ev = RegressionDesign(step=13, method="事件研究").equation()
-    assert "Σ_k" in eq_ev and "T₀+k" in eq_ev
+    assert "Σ_k" in eq_ev and "t-G_ij" in eq_ev
     eq_inter = RegressionDesign(step=13, interaction=True).equation()
     assert "BaseGVC" in eq_inter
     eq_ctrl = RegressionDesign(step=13, control_mode=CONTROL_MODE_ICIO).equation()
@@ -197,7 +197,8 @@ def test_did_recovers_att():
     assert c.name == "treated×post"
     assert abs(c.coef - (-0.6)) < 0.03
     assert c.p < 0.01
-    assert any("T₀(2018)" in n for n in result.notes)
+    assert any("首次冲击年 G_i" in n for n in result.notes)
+    assert any("2018:30" in n for n in result.notes)
     assert any("t(" in n and "小样本校正" in n for n in result.notes)
 
 
@@ -206,6 +207,35 @@ def test_did_requires_treated_rows():
     df["treated"] = 0
     with pytest.raises(ValueError):
         did(df, "y")
+
+
+def test_entity_specific_did_uses_each_entity_first_treatment_year():
+    rows = []
+    years = range(2016, 2021)
+    for i in range(90):
+        e = f"E{i:02d}"
+        first = 2018 if i < 30 else 2019 if i < 60 else None
+        fe = rng.normal(0, 1)
+        for year in years:
+            post = first is not None and year >= first
+            rows.append({
+                "country": e,
+                "year": year,
+                "y": fe + 0.2 * (year - 2016) - 0.6 * float(post) + rng.normal(0, 0.02),
+                "treated": int(post),
+            })
+    df = pd.DataFrame(rows)
+
+    design = RegressionDesign(step=13, granularity="国家级")
+    model = prepare_design_model(df.rename(columns={"y": "share_trade_fva"}), design)
+    e2019_pre = model.data[(model.data["country"] == "E30") & (model.data["year"] == 2018)]
+    e2019_at = model.data[(model.data["country"] == "E30") & (model.data["year"] == 2019)]
+    assert e2019_pre["treated×post"].iloc[0] == 0
+    assert e2019_at["treated×post"].iloc[0] == 1
+
+    result = did(df, "y")
+    assert result.coefs[0].coef == pytest.approx(-0.6, abs=0.04)
+    assert any("2018:30" in n and "2019:30" in n for n in result.notes)
 
 
 def test_event_study_dynamic_path():
@@ -274,6 +304,8 @@ def test_placebo_did_distribution_is_reproducible():
     assert abs(result["true_coef"] - (-0.6)) < 0.03
     assert len(result["placebo_coefs"]) == 12
     assert result["placebo_coefs"] == again["placebo_coefs"]
+    assert result["cohorts"] == {"2018": 30}
+    assert "cohort" in result["note"]
     assert 0 < result["empirical_p"] <= 1
 
 

@@ -907,7 +907,8 @@ export function PlaceboChart({ data }: { data: PlaceboResponse["placebo"] }) {
       </svg>
       <div style={{ fontSize: 11.5, color: "#5a6070", lineHeight: 1.7 }}>
         {data.n_draws} 次随机化 · 原处理个体 {data.treated_entities}/{data.total_entities} ·
-        T0={data.t0} · 经验 p={data.empirical_p.toFixed(3)}
+        cohort={Object.entries(data.cohorts).map(([y, n]) => `${y}:${n}`).join("、")} ·
+        经验 p={data.empirical_p.toFixed(3)}
       </div>
     </div>
   );

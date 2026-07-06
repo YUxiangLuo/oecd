@@ -257,7 +257,7 @@ export interface PlaceboResponse {
     seed: number;
     treated_entities: number;
     total_entities: number;
-    t0: number;
+    cohorts: Record<string, number>;
     note: string;
   };
   disclaimer: string;

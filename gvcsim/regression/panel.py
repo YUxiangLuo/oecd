@@ -9,8 +9,8 @@ linearmodels.PanelOLS 标准库对照。三种方法共用同一个 within-OLS �
 
 区别只在解释变量的构造:
   twoway_fe     连续冲击强度 tariff_shock 直接进方程
-  did           treated×post(处理组=曾受冲击的个体,处理期=首个冲击年起)
-  event_study   treated×各年份哑变量(基期 k=-1,即冲击前一年),动态效应路径
+  did           treated×post(处理组=曾受冲击的个体,处理期=该个体首次冲击年起)
+  event_study   treated×相对首次冲击年的事件时间哑变量(基期 k=-1),动态效应路径
 
 p 值按聚类数做 t(G-1) 小样本校正。PanelOLS 对照使用同一份样本与同一组
 可估计解释变量,只作为结果校验与界面展示。
@@ -411,8 +411,8 @@ def placebo_did_distribution(
 ) -> dict:
     """DID 安慰剂检验:随机指派伪处理组,重复估计主政策系数。
 
-    保持原始设计的样本、控制变量、交互项和处理组数量不变;每次随机抽取同等
-    数量的个体,并从原始 T0 起置为伪处理组。返回伪系数分布与真系数位置。
+    保持原始设计的样本、控制变量、交互项、处理组数量与首次处理年份(cohort)
+    分布不变;每次随机抽取同等数量的个体并分配原始 cohort。返回伪系数分布与真系数位置。
     """
     if design.method != "双重差分 (DID)":
         raise ValueError("安慰剂检验当前仅支持双重差分 (DID) 设计")
@@ -434,9 +434,10 @@ def placebo_did_distribution(
     true_coef = next(c.coef for c in true_result.coefs if c.name == policy_name)
 
     data = true_model.data.copy()
-    ever, t0 = _prep_treatment(data, true_model.entity, true_model.time, design.treated_col)
+    timing = _prep_treatment(data, true_model.entity, true_model.time, design.treated_col)
     entities = np.array(sorted(pd.unique(data[true_model.entity])))
-    treated_count = int(data.loc[ever > 0, true_model.entity].nunique())
+    cohort_counts = timing.first_by_entity.value_counts().sort_index().astype(int)
+    treated_count = int(cohort_counts.sum())
     if treated_count <= 0 or treated_count >= len(entities):
         raise ValueError("安慰剂检验需要同时存在处理组和对照组")
 
@@ -446,11 +447,19 @@ def placebo_did_distribution(
     pseudo_col = "__placebo_treated"
     while len(coefs) < n_draws and attempts < n_draws * 4:
         attempts += 1
-        assigned = set(rng.choice(entities, size=treated_count, replace=False))
+        selected = list(rng.choice(entities, size=treated_count, replace=False))
+        rng.shuffle(selected)
+        assigned_year: dict[str, int] = {}
+        cursor = 0
+        for cohort, count in cohort_counts.items():
+            for ent in selected[cursor : cursor + int(count)]:
+                assigned_year[str(ent)] = int(cohort)
+            cursor += int(count)
         pseudo = data.copy()
+        pseudo_first = pseudo[true_model.entity].astype(str).map(assigned_year)
         pseudo[pseudo_col] = (
-            pseudo[true_model.entity].isin(assigned)
-            & (pseudo[true_model.time].astype(int) >= t0)
+            pseudo_first.notna()
+            & (pseudo[true_model.time].astype(int) >= pseudo_first)
         ).astype(int)
         try:
             placebo_model = _prepare_did_model(
@@ -482,8 +491,8 @@ def placebo_did_distribution(
         "seed": int(seed),
         "treated_entities": treated_count,
         "total_entities": int(len(entities)),
-        "t0": int(t0),
-        "note": "随机指派同等数量伪处理个体,从原始 T0 起进入处理期",
+        "cohorts": {str(int(k)): int(v) for k, v in cohort_counts.items()},
+        "note": "随机指派同等数量伪处理个体,并保留原始首次处理年份(cohort)分布",
     }
 
 
@@ -505,14 +514,29 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
     return model
 
 
+@dataclass
+class TreatmentTiming:
+    ever: np.ndarray                 # 行级:该个体是否曾受处理
+    first_year: pd.Series            # 行级:该个体首次处理年份;never-treated 为 NA
+    first_by_entity: pd.Series       # 个体级:首次处理年份(index=entity)
+
+
 def _prep_treatment(data: pd.DataFrame, entity: str, time: str,
-                    treated_col: str) -> tuple[np.ndarray, int]:
-    """处理组指示(个体层面"曾受处理")与处理起始年 T0(首个受处理年份)。"""
-    if not (data[treated_col] > 0).any():
+                    treated_col: str) -> TreatmentTiming:
+    """处理组指示与个体自身首次处理年份 G_i。"""
+    treated = pd.to_numeric(data[treated_col], errors="coerce").fillna(0) > 0
+    if not treated.any():
         raise ValueError(f"面板中没有受处理个体({treated_col} 全为 0),无法做 DID/事件研究")
-    ever = (data.groupby(entity)[treated_col].transform("max") > 0).values.astype(float)
-    t0 = int(data.loc[data[treated_col] > 0, time].min())
-    return ever, t0
+    first_by_entity = (
+        data.loc[treated, [entity, time]]
+        .groupby(entity)[time]
+        .min()
+        .astype(int)
+        .sort_index()
+    )
+    first_year = data[entity].map(first_by_entity)
+    ever = first_year.notna().to_numpy(dtype=float)
+    return TreatmentTiming(ever=ever, first_year=first_year, first_by_entity=first_by_entity)
 
 
 def _prepare_did_model(
@@ -533,9 +557,12 @@ def _prepare_did_model(
     if missing:
         raise ValueError("面板缺少回归变量:" + "、".join(missing))
     data = df[cols].dropna().reset_index(drop=True)
-    ever, t0 = _prep_treatment(data, entity, time, treated_col)
+    timing = _prep_treatment(data, entity, time, treated_col)
     did_col = "treated×post" if treated_col == "treated" else f"{treated_col}×post"
-    data[did_col] = ever * (data[time] >= t0).values
+    data[did_col] = (
+        timing.first_year.notna()
+        & (data[time].astype(int) >= timing.first_year)
+    ).astype(float)
     policy_xcols = [did_col]
     xcols = [did_col]
     if interaction:
@@ -544,8 +571,14 @@ def _prepare_did_model(
         data[interaction_col] = data[did_col] * data[BASELINE_GVC_COL]
         policy_xcols.append(interaction_col)
         xcols.append(interaction_col)
-    n_treated = int(data.loc[ever > 0, entity].nunique())
-    notes = [f"DID:处理组={n_treated} 个曾受冲击个体,处理期=T₀({t0})起"]
+    cohort_summary = "、".join(
+        f"{int(y)}:{int(n)}" for y, n in timing.first_by_entity.value_counts().sort_index().items()
+    )
+    n_treated = int(timing.first_by_entity.size)
+    notes = [
+        f"DID:处理组={n_treated} 个曾受冲击个体,处理期=各个体首次冲击年 G_i 起",
+        f"首次处理年份(cohort):{cohort_summary}",
+    ]
     if interaction:
         notes.append("已加入处理效应×基期GVC参与度交互项")
     if controls:
@@ -568,10 +601,10 @@ def did(df: pd.DataFrame, depvar: str,
         cluster: str | None = None, treated_col: str = "treated",
         controls: list[str] | tuple[str, ...] = (),
         interaction: bool = False) -> RegressionResult:
-    """双重差分:y_it = β·(treated_i × post_t) + α_i + λ_t + ε_it。
+    """双重差分:y_it = β·(treated_i × 1[t≥G_i]) + α_i + λ_t + ε_it。
 
     treated_i = 该个体在样本期内是否曾受冲击(时间不变);
-    post_t    = 年份 ≥ T0(数据中首个出现冲击的年份);
+    post_it   = 年份 ≥ G_i,其中 G_i 是该个体首次受冲击年份;
     β         = 处理组相对对照组在处理后的平均变化(ATT)。
     处理组/对照组主效应分别被个体/时间固定效应吸收。
     """
@@ -598,18 +631,24 @@ def _prepare_event_model(
     if missing:
         raise ValueError("面板缺少回归变量:" + "、".join(missing))
     data = df[cols].dropna().reset_index(drop=True)
-    ever, t0 = _prep_treatment(data, entity, time, treated_col)
+    timing = _prep_treatment(data, entity, time, treated_col)
 
-    years = sorted(data[time].unique())
-    base = t0 - 1 if (t0 - 1) in years else years[0]
+    event_time = data[time].astype(int) - timing.first_year
+    observed_k = sorted(event_time[timing.first_year.notna()].dropna().astype(int).unique())
+    if not observed_k:
+        raise ValueError("事件研究没有可估计的事件时间")
+    negative_k = [k for k in observed_k if k < 0]
+    base_k = -1 if -1 in observed_k else (max(negative_k) if negative_k else min(observed_k))
     xcols = []
-    for y in years:
-        if y == base:
+    for k in observed_k:
+        if k == base_k:
             continue
-        k = int(y - t0)
         name = f"k={k:+d}" if k != 0 else "k=0"
-        data[name] = ever * (data[time] == y).values
-        xcols.append(name)
+        data[name] = (timing.first_year.notna() & (event_time == k)).astype(float)
+        if data[name].sum() > 0:
+            xcols.append(name)
+    if not xcols:
+        raise ValueError("事件研究除基期外没有可估计的事件时间")
     policy_xcols = list(xcols)
     if interaction:
         data = _attach_baseline_gvc(data, entity, time)
@@ -620,9 +659,13 @@ def _prepare_event_model(
             interaction_cols.append(interaction_col)
         xcols = [*xcols, *interaction_cols]
         policy_xcols = list(xcols)
+    cohort_summary = "、".join(
+        f"{int(y)}:{int(n)}" for y, n in timing.first_by_entity.value_counts().sort_index().items()
+    )
     notes = [
-        f"事件研究:T₀={t0},基期 k={base - t0:+d}({base} 年);"
+        f"事件研究:事件时间 k=year-G_i(G_i 为个体首次冲击年),基期 k={base_k:+d};"
         "k<0 的系数≈0 说明平行趋势成立",
+        f"首次处理年份(cohort):{cohort_summary}",
     ]
     if interaction:
         notes.append("已加入动态效应×基期GVC参与度交互项")
@@ -646,10 +689,10 @@ def event_study(df: pd.DataFrame, depvar: str,
                 cluster: str | None = None, treated_col: str = "treated",
                 controls: list[str] | tuple[str, ...] = (),
                 interaction: bool = False) -> RegressionResult:
-    """事件研究:y_it = Σ_{k≠-1} β_k·(treated_i × 1[t = T0+k]) + α_i + λ_t + ε_it。
+    """事件研究:y_it = Σ_{k≠base} β_k·1[t-G_i = k] + α_i + λ_t + ε_it。
 
-    以冲击前一年(k=-1)为基期;k<0 的系数应≈0(平行趋势检验),
-    k≥0 的系数刻画处理效应的动态路径。
+    G_i 是个体 i 的首次受冲击年份;优先以冲击前一年(k=-1)为基期。
+    k<0 的系数应≈0(平行趋势检验),k≥0 的系数刻画处理效应的动态路径。
     """
     return _within_ols(
         _prepare_event_model(df, depvar, entity, time, cluster, treated_col, controls, interaction)

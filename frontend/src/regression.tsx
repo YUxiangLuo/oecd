@@ -372,8 +372,8 @@ export function RegressionRunLab({ step }: { step: Step }) {
             {method === "双重差分 (DID)" ? (
               <>
                 <p>
-                  随机抽取同等数量的伪处理个体并重跑 DID;如果真系数落在伪分布尾部,
-                  说明估计结果不像随机分组偶然产生。
+                  随机抽取同等数量的伪处理个体,并保留原始首次处理年份(cohort)分布后重跑 DID;
+                  如果真系数落在伪分布尾部,说明估计结果不像随机分组偶然产生。
                 </p>
                 <button className="run-btn" onClick={runPlacebo} disabled={placeboRunning}>
                   {placeboRunning ? "随机化中…" : placebo ? "重新运行安慰剂检验" : "运行安慰剂检验"}

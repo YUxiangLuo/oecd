@@ -47,10 +47,10 @@ export const REG_TEACH: Record<number, TeachBlock[]> = {
     },
     {
       kind: "formula",
-      tex: "FVA_share_ijt = β·(treated_ij × post_t) + α_ij + λ_t + ε_ijt",
+      tex: "FVA_share_ijt = β·(treated_ij × 1[t≥G_ij]) + α_ij + λ_t + ε_ijt",
       terms: [
         { sym: "β", def: "关税冲击的因果效应 ATT(关注符号与显著性)" },
-        { sym: "treated×post", def: "处理组(曾受冲击的国家–行业)× 处理期(首个冲击年起)" },
+        { sym: "treated×post", def: "处理组(曾受冲击的国家–行业)× 处理期(各个体首次冲击年 G_ij 起)" },
         { sym: "α_ij / λ_t", def: "国家–行业、年份双向固定效应" },
       ],
       note: "切换方法时解释变量随之变化:强度法用连续冲击 tariff_shock,事件研究用逐年动态系数。" + ICIO_CONTROLS,
@@ -71,7 +71,7 @@ export const REG_TEACH: Record<number, TeachBlock[]> = {
     },
     {
       kind: "formula",
-      tex: "ComplexGVC_ijt = β·(treated_ij × post_t) + α_ij + λ_t + ε_ijt",
+      tex: "ComplexGVC_ijt = β·(treated_ij × 1[t≥G_ij]) + α_ij + λ_t + ε_ijt",
       terms: [
         { sym: "ComplexGVC", def: "WWYZ 生产分解中的复杂 GVC 生产份额(增加值至少两次跨境)" },
         { sym: "β", def: "冲击对复杂全球分工的平均处理效应" },
@@ -96,7 +96,7 @@ export const REG_TEACH: Record<number, TeachBlock[]> = {
     },
     {
       kind: "formula",
-      tex: "ChainLength_ijt = β·(treated_ij × post_t) + α_ij + λ_t + ε_ijt",
+      tex: "ChainLength_ijt = β·(treated_ij × 1[t≥G_ij]) + α_ij + λ_t + ε_ijt",
       terms: [
         { sym: "ChainLength", def: "生产链长度的跨境段(上游度分解;国内段是另一个可选因变量)" },
         { sym: "β", def: "冲击对跨境生产链长度的平均处理效应" },
@@ -120,7 +120,7 @@ export const REG_TEACH: Record<number, TeachBlock[]> = {
     },
     {
       kind: "formula",
-      tex: "Centrality_ijt = β·(treated_ij × post_t) + α_ij + λ_t + ε_ijt",
+      tex: "Centrality_ijt = β·(treated_ij × 1[t≥G_ij]) + α_ij + λ_t + ε_ijt",
       terms: [
         { sym: "Centrality", def: "生产网络介数中心性(本步因变量;度/特征向量中心性见步骤7/11)" },
         { sym: "β", def: "冲击对网络地位的平均处理效应" },

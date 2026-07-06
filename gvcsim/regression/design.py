@@ -117,13 +117,13 @@ class RegressionDesign:
         controls = " + γ·Controls_ct" if self.controls else ""
         interaction = ""
         if self.method == "双重差分 (DID)":
-            x = f"β·({self.treated_col}_{ent} × post_t)"
+            x = f"β·({self.treated_col}_{ent} × 1[t≥G_{ent}])"
             if self.interaction:
-                interaction = f" + θ·({self.treated_col}_{ent} × post_t × BaseGVC_{ent},0)"
+                interaction = f" + θ·({self.treated_col}_{ent} × 1[t≥G_{ent}] × BaseGVC_{ent},0)"
         elif self.method == "事件研究":
-            x = f"Σ_k β_k·({self.treated_col}_{ent} × 1[t=T₀+k])"
+            x = f"Σ_k β_k·1[t-G_{ent}=k]"
             if self.interaction:
-                interaction = f" + Σ_k θ_k·({self.treated_col}_{ent} × 1[t=T₀+k] × BaseGVC_{ent},0)"
+                interaction = f" + Σ_k θ_k·(1[t-G_{ent}=k] × BaseGVC_{ent},0)"
         else:
             x = " + ".join(f"β·{r}_{unit}" for r in self.regressors)
             if self.interaction:
