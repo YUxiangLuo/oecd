@@ -15,7 +15,7 @@
 - 后端监听: `127.0.0.1:18000`
 - 前端静态文件: `/opt/oecd-icio-analysis/frontend/dist`
 - 当前部署来源分支: `cc`
-- 当前应用代码部署提交: `7a50956 fix: 修复 review 指出的散点默认退化与构成排序值格式`
+- 当前应用代码部署提交: `7a50956 fix: 修复 review 指出的散点默认退化与构成排序值格式` (上次实际部署;每次重新部署后更新)
 
 ## 本地准备
 
@@ -100,19 +100,40 @@ python3 -m venv .venv311
   -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
-API 冒烟测试:
+API 冒烟测试。除 `/api/auth/login` 外,所有 `/api/*` 数据接口都需要 Bearer token。
+这段适合 systemd 尚未启动时做本机验证;若 `18000` 已被 `gvcsim-api.service` 占用,
+直接使用后面的 systemd/线上验证流程:
 
 ```bash
+set -euo pipefail
 cd /opt/oecd-icio-analysis
 (.venv311/bin/uvicorn gvcsim.api:app --host 127.0.0.1 --port 18000 \
   > /tmp/gvcsim-smoke.log 2>&1 & echo $! > /tmp/gvcsim-smoke.pid)
+cleanup() {
+  kill "$(cat /tmp/gvcsim-smoke.pid)" 2>/dev/null || true
+  cat /tmp/gvcsim-smoke.log
+}
+trap cleanup EXIT
 
 sleep 5
-curl -fsS http://127.0.0.1:18000/api/meta
-curl -fsS http://127.0.0.1:18000/api/regression/options
+TOKEN=$(curl -fsS \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"student","password":"gvclab2026"}' \
+  http://127.0.0.1:18000/api/auth/login \
+  | .venv311/bin/python -c 'import json,sys; print(json.load(sys.stdin)["token"])')
 
-kill "$(cat /tmp/gvcsim-smoke.pid)"
-cat /tmp/gvcsim-smoke.log
+curl -fsS \
+  -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:18000/api/auth/me
+curl -fsS \
+  -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:18000/api/meta
+curl -fsS \
+  -H "Authorization: Bearer $TOKEN" \
+  http://127.0.0.1:18000/api/regression/options
+
+cleanup
+trap - EXIT
 ```
 
 ## systemd 服务
@@ -200,30 +221,37 @@ systemctl reload nginx
 
 ## 线上验证
 
-从本地验证公网访问:
+从本地验证公网访问。首页和 `/docs` 不需要 token;除登录外的 `/api/*` 数据接口必须携带 Bearer token:
 
 ```bash
-curl -fsSI http://101.201.151.30:6363/
-curl -fsS http://101.201.151.30:6363/api/regression/options
-curl -fsSI http://101.201.151.30:6363/docs
-```
+set -euo pipefail
+BASE=http://101.201.151.30:6363
+curl -fsSI "$BASE/"
+curl -fsSI "$BASE/docs"
 
-验证登录:
-
-```bash
-curl -fsS \
+TOKEN=$(curl -fsS \
   -H 'Content-Type: application/json' \
   -d '{"username":"student","password":"gvclab2026"}' \
-  http://101.201.151.30:6363/api/auth/login
+  "$BASE/api/auth/login" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+
+curl -fsS \
+  -H "Authorization: Bearer $TOKEN" \
+  "$BASE/api/auth/me"
+curl -fsS \
+  -H "Authorization: Bearer $TOKEN" \
+  "$BASE/api/regression/options"
 ```
 
-验证一次国家级加控制变量回归:
+在同一个 shell 中继续验证一次国家级加控制变量回归,并检查当前 benchmark 字段:
 
 ```bash
 curl -fsS --max-time 90 \
+  -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"step":13,"granularity":"国家级","method":"双重差分 (DID)","control_mode":"ICIO 派生控制变量"}' \
-  http://101.201.151.30:6363/api/regression/run
+  "$BASE/api/regression/run" \
+  | python3 -c 'import json,sys; r=json.load(sys.stdin); print("n_obs=", r["result"]["n_obs"], "n_clusters=", r["result"]["n_clusters"], "coef_check_passed=", r["benchmark"]["coef_check_passed"], "se_check_mode=", r["benchmark"]["se_check_mode"])'
 ```
 
 2026-07-05 更新部署验证结果:
@@ -239,7 +267,7 @@ curl -fsS --max-time 90 \
 - 国家级加控制变量回归返回 `200 OK`
 - 回归样本量 `n_obs = 385`,聚类数 `n_clusters = 77`
 - `benchmark.backend = linearmodels.PanelOLS`
-- `benchmark.passed = true`
+- 旧版 benchmark 通过字段为 `true`;当前版本应检查 `benchmark.coef_check_passed = true`
 - agent-browser 打开公网登录页无页面错误
 
 2026-07-06 更新部署(源 `cc` @ `7f554ac`,含可视化易用性 + 行业级 GVC 参与度口径修复):
@@ -247,7 +275,7 @@ curl -fsS --max-time 90 \
 - 已按本文档 rsync + `systemctl restart` + `nginx reload` 流程重新部署
 - 因参与度口径为破坏性变更,已先本地 `uv run gvcsim compute` 重算 `data/processed/` 再同步
 - 首页 / `/docs` 返回 `200 OK`,`student / gvclab2026` 登录 `200 OK`
-- 国家级 DID + ICIO 控制回归 `200 OK`:`n_obs = 385`、`n_clusters = 77`、`benchmark.passed = true`
+- 国家级 DID + ICIO 控制回归 `200 OK`:`n_obs = 385`、`n_clusters = 77`;旧版 benchmark 通过字段为 `true`,当前版本应检查 `benchmark.coef_check_passed = true`
 - 线上行业级参与度已修复:CHN 2020 共 45 行业中 25 个有值、20 个置空(非主力出口部门),
   最大总参与度 `≈ 1.006`(旧版曾达 `1e15` 的爆表值已消失)
 
@@ -299,5 +327,8 @@ ssh root@101.201.151.30
 systemctl restart gvcsim-api.service
 nginx -t && systemctl reload nginx
 ```
+
+4. 执行上面的“线上验证”区块。若部署提交发生变化,同步更新本文档顶部的
+   “当前应用代码部署提交”,并按日期追加验证结果。
 
 如果 Python 依赖变化,重新执行本文档的 Python 运行环境安装命令。
