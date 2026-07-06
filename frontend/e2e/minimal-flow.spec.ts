@@ -137,7 +137,7 @@ test("登录、进入步骤、跑回归并生成报告", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "GVC 贸易流真实回归" })).toBeVisible();
 
   await page.getByRole("button", { name: "▶ 运行回归" }).click();
-  await expect(page.getByText("treated×post")).toBeVisible();
+  await expect(page.getByRole("cell", { name: "treated×post" })).toBeVisible();
   await expect(page.getByText("政策系数对照通过")).toBeVisible();
   await expect(page.getByText("仅作参考")).toBeVisible();
 
