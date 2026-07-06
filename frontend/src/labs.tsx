@@ -8,7 +8,7 @@ import type {
   CrosswalkHsRow, CrosswalkPayload, DbMeta, DbSlice, DbTableKind, IndicatorSchema, Meta, NetworkData, QcCheck,
   RegressionOptions, ReportRequest, ReportResponse, SectorPage, ShockEvent, ShockSummary, Step,
 } from "./types";
-import { HeatTableViz, LengthViz, NetworkViz, RankBarChart, ScatterChart, sectorLabel, StackedShareViz, TrendChart } from "./viz";
+import { CompositionBar, HeatTableViz, LengthViz, NetworkViz, QuadrantScatter, RankBarChart, ScatterChart, sectorLabel, StackedShareViz, TrendChart } from "./viz";
 import { DecompositionDemo, NetworkCentralityDemo } from "./demos";
 
 function fmtField(v: string | number | null, key: string, schema?: IndicatorSchema | null) {
@@ -612,29 +612,86 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
   );
 }
 
-// 各步散点图默认的 X/Y 指标(学生可再改)。
-// 选择原则:两轴在 Top-N 子集里都非退化、量级相近、且构成有教学意义的关系,
-// 避免出现"某轴对被选中的国家全为 0、点全压在坐标轴上"的退化图。
-const SCATTER_DEFAULT: Record<number, [string, string]> = {
-  // 参与度↑ 通常 DVA 份额↓(引进国外中间品换取参与),经典的负相关,全经济体都有值
-  8: ["share_trade_gvc_participation", "share_trade_dva"],
-  // GVC 生产份额 × 复杂 GVC 份额:越深度参与 GVC 的经济体复杂 GVC 占比越高
-  9: ["share_prod_gvc_total", "share_prod_complex_gvc"],
-  // 国内段 × 跨境段:看各国生产链长度的国内/跨境构成权衡
-  10: ["upstreamness_domestic", "upstreamness_cross"],
-  // 度中心性 × 介数中心性:枢纽国两者都高,但并不完全一致
-  11: ["degree_centrality", "betweenness_centrality"],
-};
-
-type ViewKind = "signature" | "rank" | "scatter" | "trend" | "table";
+type ViewKind = "signature" | "rank" | "scatter" | "quadrant" | "composition" | "trend" | "table";
 const num = (v: string | number | null | undefined) => (typeof v === "number" ? v : 0);
 
-/** 步骤8-11:富可视化(招牌图)+ 自由探索(自选指标 / 排序条 / 散点 / 选国家-TopN) */
-export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; columns: string[] }) {
+const VIEW_LABELS: Record<ViewKind, string> = {
+  signature: "招牌图", quadrant: "象限图", composition: "构成图",
+  rank: "排序条形图", scatter: "散点图", trend: "趋势图", table: "表格",
+};
+
+interface StepVizConfig {
+  group: string;                     // 主题指标组(与 schema.groups[].key 对应),用于作用域指标选择器
+  views: ViewKind[];                 // 本步的标签集(依次;首=招牌,尾=表格)
+  defaultView: ViewKind;             // 重挂时默认落在的探索视图
+  rankMetric: string;                // 排序/构成/趋势的默认指标
+  scatter: [string, string];         // 散点默认 X/Y
+  quadrant?: [string, string];       // 象限图固定 X/Y
+  quadLabels?: [string, string, string, string]; // 象限四角标签 [右上,左上,左下,右下]
+  composition?: string[];            // 构成条的分段指标(依次)
+  columns: string[];                 // 表格列
+  framing: string;                   // 一行引导语
+}
+
+// 每步的主题化探索配置:切步即重挂并重置为本步主题(见 App.tsx 的 key={step.n})。
+// 合并了旧的 SCATTER_DEFAULT 与 App.tsx 的 VIZ_COLUMNS。
+const STEP_VIZ: Record<number, StepVizConfig> = {
+  8: {
+    group: "trade",
+    views: ["signature", "quadrant", "composition", "rank", "scatter", "table"],
+    defaultView: "quadrant",
+    rankMetric: "share_trade_gvc_participation",
+    scatter: ["share_trade_gvc_participation", "share_trade_dva"],
+    quadrant: ["share_trade_backward_gvc", "share_trade_forward_gvc"],
+    quadLabels: ["双高·深度嵌入", "前向主导·卖中间品", "双低·相对自给", "后向主导·买中间品"],
+    composition: ["share_trade_dva", "share_trade_fva", "share_trade_pdc"],
+    columns: ["share_trade_gvc_participation", "share_trade_backward_gvc", "share_trade_forward_gvc", "trade_gross_exports"],
+    framing: "每个经济体的出口在 GVC 中处于什么位置?比较后向(用别人的中间品)与前向(被别人用作中间品)参与度。",
+  },
+  9: {
+    group: "production",
+    views: ["signature", "composition", "rank", "scatter", "trend", "table"],
+    defaultView: "composition",
+    rankMetric: "share_prod_complex_gvc",
+    scatter: ["share_prod_gvc_total", "share_prod_complex_gvc"],
+    composition: ["share_prod_pure_domestic", "share_prod_traditional", "share_prod_simple_gvc", "share_prod_complex_gvc"],
+    columns: ["share_prod_complex_gvc", "share_prod_simple_gvc", "share_prod_traditional", "share_prod_pure_domestic"],
+    framing: "一国的增加值有多少停留在国内、多少进入简单 / 复杂 GVC?对比生产结构的四段构成。",
+  },
+  10: {
+    group: "length",
+    views: ["signature", "scatter", "rank", "composition", "trend", "table"],
+    defaultView: "scatter",
+    rankMetric: "upstreamness",
+    scatter: ["upstreamness_domestic", "upstreamness_cross"],
+    composition: ["upstreamness_domestic", "upstreamness_cross"],
+    columns: ["upstreamness", "upstreamness_domestic", "upstreamness_cross"],
+    framing: "生产链有多长?拆成国内段与跨境段,看链条长度的来源。",
+  },
+  11: {
+    group: "network",
+    views: ["signature", "quadrant", "rank", "scatter", "trend", "table"],
+    defaultView: "quadrant",
+    rankMetric: "degree_centrality",
+    scatter: ["degree_centrality", "betweenness_centrality"],
+    quadrant: ["degree_centrality", "betweenness_centrality"],
+    quadLabels: ["核心枢纽", "桥接者(高介数)", "边缘", "枢纽连接者(高度)"],
+    columns: ["betweenness_centrality", "degree_centrality", "eigenvector_centrality"],
+    framing: "谁是生产网络的枢纽?高度中心性=连接多,高介数中心性=控扼要冲,四象限区分四类角色。",
+  },
+};
+
+/** 步骤8-11:主题化可视化探索(每步招牌图 + 本主题的默认图表/指标 + 自由探索)。
+ *  App.tsx 用 key={step.n} 挂载,切步即重挂 → 下面所有初值按本步 cfg 重新生效。 */
+export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
+  const cfg = STEP_VIZ[step.n] ?? STEP_VIZ[8];
+  // metricX 同时驱动排序/构成/趋势与散点X:默认视图是排序/构成时取本步排序指标,否则取散点X
+  const initX = cfg.defaultView === "rank" || cfg.defaultView === "composition" ? cfg.rankMetric : cfg.scatter[0];
   const [year, setYear] = useState(meta.years.at(-1)!);
-  const [view, setView] = useState<ViewKind>("signature");
-  const [metricX, setMetricX] = useState(SCATTER_DEFAULT[step.n]?.[0] ?? columns[0]);
-  const [metricY, setMetricY] = useState(SCATTER_DEFAULT[step.n]?.[1] ?? columns[1] ?? columns[0]);
+  const [view, setView] = useState<ViewKind>(cfg.defaultView);
+  const [metricX, setMetricX] = useState(initX);
+  const [metricY, setMetricY] = useState(cfg.scatter[1]);
+  const [allMetrics, setAllMetrics] = useState(false);
   const [entityMode, setEntityMode] = useState<"topn" | "pick">("topn");
   const [topN, setTopN] = useState(15);
   const [picked, setPicked] = useState<string[]>([]);
@@ -664,20 +721,25 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
   if (error || netErr || sectorErr) return <div className="error-box">{error ?? netErr ?? sectorErr}</div>;
 
   const fmtOf = (k: string) => schema?.fields[k]?.format;
+  const groupOf = (f: string) => (schema?.groups ?? []).find((g) => g.fields.includes(f))?.key;
   const allRows = granularity === "sector" ? (sectorPage?.rows ?? []) : (rows ?? []);
   const sectorLoading = granularity === "sector" && !sectorPage;
-  // 出口占比指标对"实际不出口的行业"是缺失(null):排序图/散点图里剔除,避免把它们
+  // 象限图轴固定(cfg.quadrant),与选择器的 metricX/Y 无关;其余视图用 metricX/Y。
+  const twoAxis = view === "scatter" || view === "quadrant";
+  const effX = view === "quadrant" ? cfg.quadrant![0] : metricX;
+  const effY = view === "quadrant" ? cfg.quadrant![1] : metricY;
+  // 占比/长度指标对"实际不出口的行业"是缺失(null):排序/散点/象限/构成里剔除,避免把它们
   // 当成 0 画出幽灵条/原点(表格视图保留、以"—"如实显示)。
   const isFin = (v: string | number | null | undefined) => typeof v === "number" && Number.isFinite(v);
-  const needFilter = view === "rank" || view === "scatter";
+  const needFilter = view === "rank" || view === "scatter" || view === "quadrant" || view === "composition";
   const metricOk = (r: Record<string, string | number | null>) =>
-    !needFilter || (isFin(r[metricX]) && (view !== "scatter" || isFin(r[metricY])));
-  // 选中的对象:Top-N(按当前指标X排序)或手动挑选的国家
+    !needFilter || (isFin(r[effX]) && (!twoAxis || isFin(r[effY])));
+  // 选中的对象:Top-N(按有效X指标排序)或手动挑选的国家
   const selRows =
     granularity === "sector"
-      ? allRows.filter(metricOk).sort((a, b) => num(b[metricX]) - num(a[metricX])).slice(0, topN)
+      ? allRows.filter(metricOk).sort((a, b) => num(b[effX]) - num(a[effX])).slice(0, topN)
       : entityMode === "topn"
-      ? allRows.filter(metricOk).sort((a, b) => num(b[metricX]) - num(a[metricX])).slice(0, topN)
+      ? allRows.filter(metricOk).sort((a, b) => num(b[effX]) - num(a[effX])).slice(0, topN)
       : allRows.filter((r) => picked.includes(String(r.country)) && metricOk(r));
   const highlight = granularity === "country" ? new Set(picked) : new Set<string>();
 
@@ -704,11 +766,13 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
     return <HeatTableViz rows={rows} />;
   };
 
+  // 指标选择器默认只列本步主题组;勾选「全部指标」放开到全部四组。
+  const shownGroups = allMetrics ? (schema?.groups ?? []) : (schema?.groups ?? []).filter((g) => g.key === cfg.group);
   const metricSelect = (value: string, onChange: (v: string) => void, label: string) => (
     <span className="field">
       <label>{label}</label>
       <select value={value} onChange={(e) => onChange(e.target.value)}>
-        {(schema?.groups ?? []).map((g) => (
+        {shownGroups.map((g) => (
           <optgroup key={g.key} label={g.label}>
             {g.fields.map((f) => <option key={f} value={f}>{schema?.fields[f]?.label ?? f}</option>)}
           </optgroup>
@@ -716,10 +780,17 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
       </select>
     </span>
   );
+  // 收起「全部指标」时,若当前选的是跨主题指标,回落到本步默认,避免 select 指向被隐藏的选项。
+  const toggleAllMetrics = (on: boolean) => {
+    setAllMetrics(on);
+    if (!on) {
+      if (groupOf(metricX) !== cfg.group) setMetricX(initX);
+      if (groupOf(metricY) !== cfg.group) setMetricY(cfg.scatter[1]);
+    }
+  };
 
-  const TABS: [ViewKind, string][] = [
-    ["signature", "招牌图"], ["rank", "排序条形图"], ["scatter", "散点图"], ["trend", "趋势图"], ["table", "表格"],
-  ];
+  const TABS: [ViewKind, string][] = cfg.views.map((v) => [v, VIEW_LABELS[v]]);
+  const showMetricPicker = view !== "signature" && view !== "table" && view !== "quadrant";
 
   return (
     <div>
@@ -737,7 +808,8 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
         </div>
       </div>
 
-      {/* 自由探索控件条:选指标 + 选对象(招牌图不需要) */}
+      {/* 自由探索:一行引导语 + 控件条(选粒度 / 选指标 / 选对象;招牌图不需要) */}
+      {view !== "signature" && <p className="viz-framing muted">{cfg.framing}</p>}
       {view !== "signature" && (
         <div className="controls viz-explore">
           <div className="seg">
@@ -757,8 +829,14 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
               </select>
             </span>
           )}
-          {view !== "table" && metricSelect(metricX, setMetricX, view === "scatter" ? "X 指标" : "指标")}
+          {showMetricPicker && metricSelect(metricX, setMetricX, view === "scatter" ? "X 指标" : "指标")}
           {view === "scatter" && metricSelect(metricY, setMetricY, "Y 指标")}
+          {showMetricPicker && (
+            <label className="field metric-scope">
+              <input type="checkbox" checked={allMetrics} onChange={(e) => toggleAllMetrics(e.target.checked)} />
+              全部指标
+            </label>
+          )}
           {granularity === "country" && (
             <div className="seg">
               <button className={entityMode === "topn" ? "on" : ""} onClick={() => setEntityMode("topn")}>Top-N</button>
@@ -798,6 +876,26 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
           : <p className="muted">请在“选国家”里选择至少一个国家。</p>
       )}
 
+      {view === "quadrant" && cfg.quadrant && (
+        sectorLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p>
+          : selRows.length
+          ? <QuadrantScatter rows={selRows} xKey={cfg.quadrant[0]} yKey={cfg.quadrant[1]}
+              xLabel={fieldLabel(cfg.quadrant[0], schema)} yLabel={fieldLabel(cfg.quadrant[1], schema)}
+              xFormat={fmtOf(cfg.quadrant[0])} yFormat={fmtOf(cfg.quadrant[1])}
+              highlight={highlight} quadrantLabels={cfg.quadLabels} />
+          : <p className="muted">请在“选国家”里选择至少一个国家。</p>
+      )}
+
+      {view === "composition" && cfg.composition && (
+        sectorLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p>
+          : selRows.length
+          ? <CompositionBar rows={selRows}
+              segments={cfg.composition.map((k) => ({ key: k, name: fieldLabel(k, schema) }))}
+              sortKey={metricX} normalize={step.n !== 10} valueFormat={fmtOf(cfg.composition[0])}
+              highlight={highlight} />
+          : <p className="muted">请在“选国家”里选择至少一个国家。</p>
+      )}
+
       {view === "trend" && (
         granularity === "sector" ? <p className="muted">趋势图暂使用国家级时间序列;切回“国家级”后可查看 2016–2020 趋势。</p>
           : !yearsData ? <p className="muted">加载多年数据中…</p>
@@ -809,12 +907,12 @@ export function VizLab({ meta, step, columns }: { meta: Meta; step: Step; column
       {view === "table" && (
         sectorLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p> : <div className="table-wrap">
           <table className="data-table">
-            <thead><tr><th>{granularity === "sector" ? "行业" : "国家"}</th>{columns.map((c) => <th key={c}>{fieldLabel(c, schema)}</th>)}</tr></thead>
+            <thead><tr><th>{granularity === "sector" ? "行业" : "国家"}</th>{cfg.columns.map((c) => <th key={c}>{fieldLabel(c, schema)}</th>)}</tr></thead>
             <tbody>
               {selRows.map((r) => (
                 <tr key={String(r.sector ?? r.country)}>
                   <td>{r.sector != null ? sectorLabel(String(r.sector)) : String(r.country)}</td>
-                  {columns.map((c) => <td key={c}>{fmtField(r[c], c, schema)}</td>)}
+                  {cfg.columns.map((c) => <td key={c}>{fmtField(r[c], c, schema)}</td>)}
                 </tr>
               ))}
             </tbody>
