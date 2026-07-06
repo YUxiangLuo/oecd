@@ -61,8 +61,12 @@ export function StepStages({ stages, initial = 0, onComplete }: {
         <span className="wizard-foot-mid">
           {gated && stage?.navHint && <span className="muted">{stage.navHint}</span>}
         </span>
-        <button className="primary" disabled={atLast || gated} onClick={next}>
-          {atLast ? "本步已完成 ✓" : "下一步 →"}
+        <button
+          className="primary"
+          disabled={gated || (atLast && !onComplete)}
+          onClick={next}
+        >
+          {atLast ? (onComplete ? "完成 ✓" : "本步已完成 ✓") : "下一步 →"}
         </button>
       </div>
     </div>

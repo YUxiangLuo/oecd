@@ -52,7 +52,11 @@ function MiniIoStage() {
                 {IO_SECTORS.map((_, j) => (
                   <td
                     key={j}
-                    className={`${sel && sel[0] === i && sel[1] === j ? "cell-on" : ""}${i === j ? " diag" : ""}`}
+                    className={[
+                      sel && sel[0] === i && sel[1] === j ? "cell-on" : "",
+                      sel && sel[1] === j ? "col-on" : "",
+                      i === j ? "diag" : "",
+                    ].filter(Boolean).join(" ")}
                     onClick={() => setSel([i, j])}
                   >
                     {IO_FLOWS[i][j]}
@@ -132,6 +136,13 @@ function DbCompareStage() {
 function IcioSchematicStage({ meta }: { meta: DbMeta | null }) {
   const [band, setBand] = useState<"z" | "y" | "acc">("z");
   if (!meta) return <p className="muted">读取 ICIO 表结构…</p>;
+  if (!meta.years.length) {
+    return (
+      <div className="warnbox">
+        未找到本地 OECD ICIO 原始 CSV。请将 ICIO2023_YYYY.csv 放入 OECD_ICIO/ 后刷新本页,即可看到真实的表结构。
+      </div>
+    );
+  }
   const info = {
     z: { title: "Z · 中间投入矩阵", text: `左侧主块:行与列都是「国家-行业」(${meta.countries.length} 国 × ${meta.sectors.length} 行业)。格子 = 某国某行业 卖给 另一国某行业 的中间投入,是最大的一块。` },
     y: { title: "Y · 最终需求", text: `右侧若干列:每个目的国的最终需求类别(${meta.final_demand_categories.join(" / ")})。格子 = 某国某行业的产品被最终消费/投资吸收的量。` },
@@ -165,7 +176,10 @@ function IcioSchematicStage({ meta }: { meta: DbMeta | null }) {
 
 /* -------------------------------- 阶段⑤ 自检小测 -------------------------------- */
 function SelfCheckStage({ meta }: { meta: DbMeta | null }) {
-  const size = meta ? `约 ${meta.n_rows.toLocaleString("zh-CN")} 行 × ${meta.n_columns.toLocaleString("zh-CN")} 列` : "约 3,468 行 × 3,929 列";
+  // 无本地 CSV 时 meta 存在但 n_rows/n_columns=0,退回 ICIO 的典型规模,避免答成 0×0
+  const size = meta?.years.length
+    ? `约 ${meta.n_rows.toLocaleString("zh-CN")} 行 × ${meta.n_columns.toLocaleString("zh-CN")} 列`
+    : "约 3,468 行 × 3,929 列(以本地实际数据为准)";
   const blocks: TeachBlock[] = [
     {
       kind: "selfcheck", items: [
