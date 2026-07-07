@@ -79,7 +79,7 @@ class PreparedModel:
     notes: list[str]
 
 
-BASE_GVC_COL = "share_trade_gvc_participation"
+BASE_GVC_COL = "GVC_participation"
 BASELINE_GVC_COL = "base_gvc_participation"
 DEFLATOR_COL = "gdp_deflator"
 ROW_CODE = "ROW"
@@ -157,10 +157,10 @@ def _apply_price_mode(df: pd.DataFrame, design, time: str = "year") -> pd.DataFr
         out["macro_log_gdp_usd"] = _real_log_from_log(out["macro_log_gdp_usd"], deflator)
     if {"macro_log_gdp_usd", "macro_log_population"}.issubset(out.columns):
         out["macro_log_gdp_per_capita"] = out["macro_log_gdp_usd"] - out["macro_log_population"]
-    if {"country", time, "prod_va_total", DEFLATOR_COL}.issubset(out.columns):
-        out["gdp_proxy_growth"] = _country_year_real_growth(out, "prod_va_total", time)
-    if {"country", time, "trade_gross_exports", DEFLATOR_COL}.issubset(out.columns):
-        out["exports_proxy_growth"] = _country_year_real_growth(out, "trade_gross_exports", time)
+    if {"country", time, "SVA", DEFLATOR_COL}.issubset(out.columns):
+        out["gdp_proxy_growth"] = _country_year_real_growth(out, "SVA", time)
+    if {"country", time, "_gross_exports", DEFLATOR_COL}.issubset(out.columns):
+        out["exports_proxy_growth"] = _country_year_real_growth(out, "_gross_exports", time)
     return out
 
 
@@ -185,7 +185,7 @@ def _apply_teaching_scenario(
         out[design.depvar] = out[design.depvar].astype(float) + y_noise * y_scale * 0.35
         if design.method == "双向固定效应" and design.shock_col in out.columns:
             x_scale = float(out[design.shock_col].std(skipna=True) or 0.0)
-            x_noise = _stable_noise(out, ["country", "sector" if "sector" in out.columns else time, time])
+            x_noise = _stable_noise(out, ["country", "industry" if "industry" in out.columns else time, time])
             out[design.shock_col] = (out[design.shock_col].astype(float) + x_noise * max(x_scale, 0.01) * 0.55).clip(
                 lower=0.0
             )

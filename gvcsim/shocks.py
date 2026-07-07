@@ -684,7 +684,7 @@ def events_metadata() -> list[dict]:
     out = []
     for ev in EVENTS:
         peak = {s: max(by_year.values()) for s, by_year in ev.rates.items()}
-        top_sectors = sorted(peak, key=lambda s: peak[s], reverse=True)
+        top_industries = sorted(peak, key=lambda s: peak[s], reverse=True)
         out.append(
             {
                 "name": ev.name,
@@ -694,14 +694,14 @@ def events_metadata() -> list[dict]:
                 "exempt": "、".join(ev.exempt),
                 "announced": ev.announced,
                 "effective": ev.effective,
-                "n_sectors": len(ev.rates),
-                "top_sectors": top_sectors[:3],
+                "n_industries": len(ev.rates),
+                "top_industries": top_industries[:3],
                 "peak_rate": max(peak.values()),
             }
         )
     for ev in ENTITY_LIST_EVENTS:
         peak = {s: max(by_year.values()) for s, by_year in ev.intensities.items()}
-        top_sectors = sorted(peak, key=lambda s: peak[s], reverse=True)
+        top_industries = sorted(peak, key=lambda s: peak[s], reverse=True)
         out.append(
             {
                 "name": ev.name,
@@ -710,8 +710,8 @@ def events_metadata() -> list[dict]:
                 "exempt": "",
                 "announced": ev.announced,
                 "effective": ev.effective,
-                "n_sectors": len(ev.intensities),
-                "top_sectors": top_sectors[:3],
+                "n_industries": len(ev.intensities),
+                "top_industries": top_industries[:3],
                 "peak_rate": max(peak.values()),
                 "shock_type": ev.shock_type,
                 "entities": "、".join(ev.entities),

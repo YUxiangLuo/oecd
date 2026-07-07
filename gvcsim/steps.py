@@ -47,8 +47,8 @@ STEPS = [
         status="done",
         title="GVC 总贸易流分解指标",
         goal="把一国的总出口分解为国内增加值、国外增加值与重复计算部分。",
-        concept="Borin-Mancini source-based 分解将毛出口拆成 DVA、RDV、DDC、FVA、FDC 与 PDC,揭示出口里真正来自本国、来自外国以及被重复计算的部分。",
-        tip="FVA 与 FDC 占比高 → 后向 GVC 参与度高(如越南、卢森堡)。",
+        concept="Borin-Mancini source-based 分解将毛出口拆成 DVAex、DVArt、DDC、FVA、FDC 与 taxsub,揭示出口里真正来自本国、来自外国以及被重复计算的部分。",
+        tip="FVA 与 FDC 占比较高的经济体,通常更依赖外来中间投入。",
     ),
     dict(
         n=5,

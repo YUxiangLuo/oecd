@@ -101,7 +101,7 @@ def test_collinear_control_is_dropped_but_policy_kept():
 
 def test_design_equation_text():
     d = RegressionDesign(step=13)
-    assert d.depvar == "share_trade_fva"
+    assert d.depvar == "FVA_share"
     assert d.granularity == "国家–行业级"  # 默认粒度已切到行业级
     assert d.method == "双重差分 (DID)"  # 默认方法已切到 DID
     assert d.exclude_row is True
@@ -134,7 +134,7 @@ def test_design_equation_text():
 
 def test_design_panel_spec():
     d = RegressionDesign(step=14)
-    assert d.panel_file == "panel_sector.csv"
+    assert d.panel_file == "panel_industry.csv"
     assert d.entity == "entity_id"
     assert d.cluster == "country"
     d_c = RegressionDesign(step=14, granularity="国家级")
@@ -251,7 +251,7 @@ def test_entity_specific_did_uses_each_entity_first_treatment_year():
     df = pd.DataFrame(rows)
 
     design = RegressionDesign(step=13, granularity="国家级")
-    model = prepare_design_model(df.rename(columns={"y": "share_trade_fva"}), design)
+    model = prepare_design_model(df.rename(columns={"y": "FVA_share"}), design)
     e2019_pre = model.data[(model.data["country"] == "E30") & (model.data["year"] == 2018)]
     e2019_at = model.data[(model.data["country"] == "E30") & (model.data["year"] == 2019)]
     assert e2019_pre["treated×post"].iloc[0] == 0
@@ -280,14 +280,14 @@ def test_event_study_dynamic_path():
 
 
 def test_design_regressions_exclude_row_by_default():
-    df = _simulate_did_panel({0: -0.5, 1: -0.5, 2: -0.5}).rename(columns={"y": "share_trade_fva"})
+    df = _simulate_did_panel({0: -0.5, 1: -0.5, 2: -0.5}).rename(columns={"y": "FVA_share"})
     row_rows = []
     for year in range(2016, 2021):
         row_rows.append(
             {
                 "country": "ROW",
                 "year": year,
-                "share_trade_fva": 999.0 if year >= 2018 else -999.0,
+                "FVA_share": 999.0 if year >= 2018 else -999.0,
                 "treated": int(year >= 2018),
             }
         )
@@ -323,7 +323,7 @@ def test_run_design_dispatch():
 
 def test_teaching_scenarios_add_expected_notes_and_pretrend():
     df = _simulate_did_panel({0: -0.5, 1: -0.5, 2: -0.5})
-    df = df.rename(columns={"y": "share_trade_fva"})
+    df = df.rename(columns={"y": "FVA_share"})
 
     noisy = run_design(
         df,
@@ -347,7 +347,7 @@ def test_teaching_scenarios_add_expected_notes_and_pretrend():
 
 def test_placebo_did_distribution_is_reproducible():
     df = _simulate_did_panel({0: -0.6, 1: -0.6, 2: -0.6})
-    df = df.rename(columns={"y": "share_trade_fva"})
+    df = df.rename(columns={"y": "FVA_share"})
     design = RegressionDesign(step=13, granularity="国家级", method="双重差分 (DID)")
 
     result = placebo_did_distribution(df, design, n_draws=12, seed=7)
@@ -380,9 +380,9 @@ def test_did_with_baseline_gvc_interaction_recovers_heterogeneity():
                 {
                     "country": c,
                     "year": year,
-                    "share_trade_fva": y,
+                    "FVA_share": y,
                     "treated": int(did_x),
-                    "share_trade_gvc_participation": base_gvc,
+                    "GVC_participation": base_gvc,
                 }
             )
     df = pd.DataFrame(rows)
@@ -398,7 +398,7 @@ def test_did_with_baseline_gvc_interaction_recovers_heterogeneity():
 
 def test_run_design_with_controls_and_panelols_benchmark():
     df = _simulate_panel(beta=-0.35, n_entities=35, n_times=6).rename(
-        columns={"y": "share_trade_fva", "x": "tariff_shock"}
+        columns={"y": "FVA_share", "x": "tariff_shock"}
     )
     df["entity_id"] = df["country"]
     for i, col in enumerate(CONTROL_COLUMNS):
@@ -425,7 +425,7 @@ def test_run_design_with_controls_and_panelols_benchmark():
 
 def test_run_design_with_macro_controls():
     df = _simulate_panel(beta=-0.25, n_entities=30, n_times=6).rename(
-        columns={"y": "share_trade_fva", "x": "tariff_shock"}
+        columns={"y": "FVA_share", "x": "tariff_shock"}
     )
     for i, col in enumerate(MACRO_CONTROL_COLUMNS):
         df[col] = rng.normal(0, 1, len(df)) + 0.03 * i * (df["year"] - df["year"].min())
@@ -444,16 +444,16 @@ def test_run_design_with_macro_controls():
 
 def test_real_price_mode_deflates_amount_controls():
     df = _simulate_panel(beta=-0.2, n_entities=12, n_times=4).rename(
-        columns={"y": "share_trade_fva", "x": "tariff_shock"}
+        columns={"y": "FVA_share", "x": "tariff_shock"}
     )
-    df["prod_va_total"] = 1000 + 30 * (df["year"] - df["year"].min())
-    df["trade_gross_exports"] = 300 + 12 * (df["year"] - df["year"].min())
+    df["SVA"] = 1000 + 30 * (df["year"] - df["year"].min())
+    df["_gross_exports"] = 300 + 12 * (df["year"] - df["year"].min())
     df["gdp_deflator"] = 1.0 + 0.04 * (df["year"] - df["year"].min())
-    df["log_gdp_proxy"] = np.log(df["prod_va_total"] + 1.0)
+    df["log_gdp_proxy"] = np.log(df["SVA"] + 1.0)
     df["gdp_proxy_growth"] = 0.0
-    df["log_exports_proxy"] = np.log(df["trade_gross_exports"] + 1.0)
+    df["log_exports_proxy"] = np.log(df["_gross_exports"] + 1.0)
     df["exports_proxy_growth"] = 0.0
-    df["export_intensity"] = df["trade_gross_exports"] / df["prod_va_total"]
+    df["export_intensity"] = df["_gross_exports"] / df["SVA"]
     df["manufacturing_va_share"] = 0.4
     df["services_va_share"] = 0.35
 
@@ -465,7 +465,7 @@ def test_real_price_mode_deflates_amount_controls():
         price_mode=PRICE_MODE_REAL,
     )
     adjusted = _apply_price_mode(df, design)
-    expected = np.log(df["prod_va_total"] / df["gdp_deflator"] + 1.0)
+    expected = np.log(df["SVA"] / df["gdp_deflator"] + 1.0)
 
     assert np.allclose(adjusted["log_gdp_proxy"], expected)
     result = run_design(df, design)

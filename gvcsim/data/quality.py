@@ -241,8 +241,8 @@ def check_controls_country(
     first_idx = base.groupby("country", sort=False)["_row"].first().to_numpy()
     base_checks = []
     for col, expected_value in [
-        ("trade_gross_exports_index", 1.0),
-        ("prod_va_total_index", 1.0),
+        ("gross_exports_index", 1.0),
+        ("SVA_index", 1.0),
         ("gdp_deflator", 1.0),
     ]:
         vals = numeric.iloc[first_idx][col]
@@ -263,8 +263,8 @@ def check_controls_country(
         "export_intensity": (0.0, 10.0),
         "manufacturing_va_share": (0.0, 1.0),
         "services_va_share": (0.0, 1.0),
-        "trade_gross_exports_index": (0.0, np.inf),
-        "prod_va_total_index": (0.0, np.inf),
+        "gross_exports_index": (0.0, np.inf),
+        "SVA_index": (0.0, np.inf),
         "macro_exchange_rate_change": (-0.20, 0.20),
         "macro_fdi_inflow_gdp": (0.0, 0.25),
         "gdp_deflator": (0.0, np.inf),
@@ -302,7 +302,7 @@ def check_shock_panel(
     """政策冲击面板质检。
 
     目标是补齐步骤3的第二类数据质检:冲击面板必须覆盖完整
-    country×sector×year,与 ICIO 指标维度严格对齐,且事件时间线与
+    country×industry×year,与 ICIO 指标维度严格对齐,且事件时间线与
     treated 标记可用于 DID / 事件研究。
     """
     df = shock_df.copy()
@@ -326,7 +326,7 @@ def check_shock_panel(
     duplicated = int(actual.duplicated().sum())
     checks.append(
         QcCheck(
-            name="冲击面板维度对齐(country×sector×year)",
+            name="冲击面板维度对齐(country×industry×year)",
             kind="结构",
             passed=len(missing) == 0 and len(extra) == 0 and duplicated == 0,
             detail=(

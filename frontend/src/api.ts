@@ -44,8 +44,8 @@ export const api = {
     table: import("./types").DbTableKind;
     rowCountry?: string;
     colCountry?: string;
-    rowSector?: string;
-    colSector?: string;
+    rowIndustry?: string;
+    colIndustry?: string;
     page?: number;
     pageSize?: number;
   }) => {
@@ -57,8 +57,8 @@ export const api = {
     });
     if (params.rowCountry) qs.set("row_country", params.rowCountry);
     if (params.colCountry) qs.set("col_country", params.colCountry);
-    if (params.rowSector) qs.set("row_sector", params.rowSector);
-    if (params.colSector) qs.set("col_sector", params.colSector);
+    if (params.rowIndustry) qs.set("row_industry", params.rowIndustry);
+    if (params.colIndustry) qs.set("col_industry", params.colIndustry);
     return get<import("./types").DbSlice>(`/api/db/slice?${qs.toString()}`);
   },
   qc: (year: number) => get<import("./types").QcCheck[]>(`/api/qc/${year}`),
@@ -66,14 +66,14 @@ export const api = {
   qcControls: () => get<import("./types").QcCheck[]>("/api/qc/controls"),
   countryIndicators: (year: number) =>
     get<Record<string, string | number | null>[]>(`/api/indicators/country/${year}`),
-  sectorIndicators: (year: number, country: string, page: number) =>
-    get<import("./types").SectorPage>(
-      `/api/indicators/sector/${year}?page=${page}${country ? `&country=${country}` : ""}`,
+  industryIndicators: (year: number, country: string, page: number) =>
+    get<import("./types").IndustryPage>(
+      `/api/indicators/industry/${year}?page=${page}${country ? `&country=${country}` : ""}`,
     ),
   // 拉取一个国家全部行业的指标行(用于步骤4-6 的拆解演示,一次取回填充行业下拉)
-  sectorIndicatorsAll: (year: number, country: string) =>
-    get<import("./types").SectorPage>(
-      `/api/indicators/sector/${year}?page=1&page_size=200${country ? `&country=${country}` : ""}`,
+  industryIndicatorsAll: (year: number, country: string) =>
+    get<import("./types").IndustryPage>(
+      `/api/indicators/industry/${year}?page=1&page_size=200${country ? `&country=${country}` : ""}`,
     ),
   network: (year: number) => get<import("./types").NetworkData>(`/api/viz/network/${year}`),
   shockEvents: () =>
@@ -84,10 +84,10 @@ export const api = {
     ),
   crosswalkDemo: (year = 2019) =>
     get<import("./types").CrosswalkPayload>(`/api/crosswalk/demo?year=${year}`),
-  shockPanel: (year: number, shockType: string, country: string, sector: string, onlyHit: boolean, page: number) =>
-    get<import("./types").SectorPage>(
+  shockPanel: (year: number, shockType: string, country: string, industry: string, onlyHit: boolean, page: number) =>
+    get<import("./types").IndustryPage>(
       `/api/shocks/panel?year=${year}&shock_type=${encodeURIComponent(shockType)}&only_hit=${onlyHit}&page=${page}` +
-        (country ? `&country=${country}` : "") + (sector ? `&sector=${sector}` : ""),
+        (country ? `&country=${country}` : "") + (industry ? `&industry=${industry}` : ""),
     ),
   regressionOptions: () => get<import("./types").RegressionOptions>("/api/regression/options"),
   regressionDesign: (params: {

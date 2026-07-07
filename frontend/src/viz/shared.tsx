@@ -46,7 +46,7 @@ export const SECTOR_NAMES: Record<string, string> = {
 /** 行业代码显示名:有映射则 "代码 中文名",否则原样返回;国家代码原样返回 */
 export const sectorLabel = (code: string) => (SECTOR_NAMES[code] ? `${code} ${SECTOR_NAMES[code]}` : code);
 /** 图元实体名:行业行显示中文名,国家行显示代码 */
-export const rowName = (r: Row) => (r.sector != null ? sectorLabel(String(r.sector)) : String(r.country));
+export const rowName = (r: Row) => (r.industry != null ? sectorLabel(String(r.industry)) : String(r.country));
 
 /** 暗色悬浮 tooltip(增强通道;全部数值同时可在表格视图获得) */
 export function useTip() {
@@ -106,4 +106,3 @@ export const cardStyle: React.CSSProperties = {
   position: "relative", background: "#fff", border: "1px solid #e7e9f0",
   borderRadius: 16, padding: "20px 22px",
 };
-

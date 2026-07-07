@@ -59,7 +59,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     api.steps().then(setStepsData, (e) => setFatal(String(e.message ?? e)));
-    api.meta().then(setMeta, () => setMeta({ years: [], countries: [], sectors: [] }));
+    api.meta().then(setMeta, () => setMeta({ years: [], countries: [], industries: [] }));
   }, [user]);
 
   if (!authChecked) return <div style={{ padding: 40 }} className="muted">加载中…</div>;

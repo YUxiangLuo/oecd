@@ -86,9 +86,9 @@ cd frontend && bun run build && bun run test:e2e
 │   ├── shocks.py                 #   步骤2:政策冲击数据接入(拟真演示面板:全经济体、行业异质)
 │   ├── indicators/
 │   │   ├── core.py               #   共享底座:IcioArrays(向量化的矩阵切块)
-│   │   ├── tradeflow.py          #   步骤4:贸易流分解,兼容 EXDVA/DVAex/DVArt/DDC/FVA/FDC/taxsub 字段
-│   │   ├── production.py         #   步骤5:WWYZ 生产分解,兼容 SVA/VA_* 与 FGY_* 字段
-│   │   ├── length.py             #   步骤6:长度/位置指标,兼容 PLv/PLy/Pos_TPL/GVCPs 字段
+│   │   ├── tradeflow.py          #   步骤4:贸易流分解,输出 EXDVA/DVAex/DVArt/DDC/FVA/FDC/taxsub 字段
+│   │   ├── production.py         #   步骤5:WWYZ 生产分解,输出客户资料 SVA/VA/FGY 字段
+│   │   ├── length.py             #   步骤6:长度/位置指标,输出 PLv/PLy/Pos_TPL/GVCPs 字段
 │   │   └── network.py            #   步骤7:Gephi 风格网络中心性(度/入度/出度/加权度/路径中心性)
 │   ├── regression/
 │   │   ├── design.py             #   步骤12:回归设计(粒度/冲击/方法 → 面板/个体/聚类/方程)
@@ -108,7 +108,7 @@ cd frontend && bun run build && bun run test:e2e
 ├── tests/                        # 合成小矩阵、synthetic compute、回归/API 集成测试
 ├── prototype/                    # 完整 UI 设计原型(最终形态参考,部署时排除)
 ├── data/processed/               # 预计算产物(gitignore;由 gvcsim compute 生成)
-├── data/shocks/                  # 冲击数据(自动生成的拟真演示面板,country×sector×year)
+├── data/shocks/                  # 冲击数据(自动生成的拟真演示面板,country×industry×year)
 ├── reports/                      # 自动生成的实验报告(gitignore;部署时排除)
 └── OECD_ICIO/                    # 原始数据(gitignore;按需同步到服务器)
 ```
@@ -119,11 +119,11 @@ cd frontend && bun run build && bun run test:e2e
 OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
                               ├─ quality.run_all()      → data/processed/qc_<year>.json
                               ├─ tradeflow / production
-                              │  length / network       → indicators_{country,sector}_<year>.csv
+                              │  length / network       → indicators_{country,industry}_<year>.csv
                               │                           network_edges_<year>.csv
                               └─ pipeline.build_panel() → controls_country.csv(ICIO 派生控制变量)
                                                           qc_controls.json / qc_shocks.json
-                                                          panel_sector.csv(行业级,回归默认)
+                                                          panel_industry.csv(行业级,回归默认)
                                                           panel_country.csv(冲击按出口额加权聚合)
                                                               │
               FastAPI(gvcsim/api.py,只读预计算产物,按 mtime 缓存)◀──────┘
@@ -171,9 +171,9 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 | 一、数据接入 | 1 数据库选型 | ✅ OECD ICIO,pymrio 下载解析已验证,原始表可在线切片浏览 |
 | | 2 政策冲击数据 | ✅ 关税/制裁/出口管制三类拟真面板(全经济体×行业异质,事件级编码),前端有事件时间线+三类面板浏览,并加入 HS 清单税率→ICIO 行业平均冲击的映射工作流演示 |
 | | 3 数据质检 | ✅ ICIO 5 项结构化检查 + 冲击面板质检(维度对齐、值域、时间线、treated 标记、处理组覆盖比例),CLI/API/前端共用 |
-| 二、指标计算 | 4 贸易流分解 | ✅ Borin-Mancini source-based 聚合分解,并输出客户资料字段 EXDVA/DVAex/DVArt/DDC/FVA/FDC/taxsub;taxsub 当前为空值兼容列;前端实时校验五项加总=毛出口 |
-| | 5 生产分解 | ✅ WWYZ 四段分解,输出 SVA/VA_* 与 FGY_* 兼容字段,恒等式经测试验证,国家+行业双粒度 |
-| | 6 长度分解 | ✅ 上游度 + 国内/跨境段,并输出 PLv/PLy/Pos_TPL/GVCPs 兼容字段;拆解演示实时校验 PLv=国内段+跨境段 |
+| 二、指标计算 | 4 贸易流分解 | ✅ Borin-Mancini source-based 聚合分解,并输出客户资料字段 EXDVA/DVAex/DVArt/DDC/FVA/FDC/taxsub;前端实时校验六项加总=毛出口 |
+| | 5 生产分解 | ✅ WWYZ 四段分解,输出 SVA/VA/FGY 客户字段,恒等式经测试验证,国家+行业双粒度 |
+| | 6 长度分解 | ✅ 生产长度与位置指标,输出 PLv/PLy/Pos_TPL/GVCPs 客户字段;拆解演示实时校验 PLv=PLv_D+PLv_RT+PLv_GVC |
 | | 7 网络指标 | ✅ Gephi 风格度/入度/出度/加权度/离心率/接近中心性/调和中心性/介数/特征向量中心性,国家+行业双粒度 |
 | 三、可视化 | 8–11 | ✅ 招牌图(网络图/生产堆叠条/长度双段条/中心性热力表)+ 自由探索:自选指标、排序条形图、X×Y 散点图、2016–2020 趋势折线、Top-N/选国家,均带表格视图与悬停 tooltip;网络图支持节点大小/颜色编码、边权阈值与点击节点明细;自由探索支持国家级/行业下钻 |
 | 四、回归 | 12 设计确认 | ✅ 交互式设计台:粒度/三类冲击/方法/被解释变量选择卡 → 即时方程与面板/个体/聚类摘要(GET /api/regression/design) |
@@ -198,25 +198,21 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 Mock 的质量标准(schema 对齐真实来源、量级锚定公开统计、维度全覆盖、时间线完整、
 诚实标注、过质检)与逐项落地计划见 [`开发计划.md`](./开发计划.md) 第二节。
 每个 mock 的 loader 接口就是将来真实数据的接入点:例如接入真实 PIIE 面板时,
-只需让 `shocks.load_shocks()` 返回同结构的 `country×sector×year` 面板。
+只需让 `shocks.load_shocks()` 返回同结构的 `country×industry×year` 面板。
 回归教学场景不重写底层冲击 CSV:步骤13–16 在估计样本层确定性注入
 `noisy` 测量误差或 `confounded` 前趋势混杂,用于课堂演示稳健性检验为何必要。
 
 ## 方法论说明(诚实告知)
 
 - 贸易流分解采用 Borin-Mancini (2019) source-based 出口国视角:毛出口闭合到
-  DVA、返回国内增加值(RDV/reflection)、国内重复计算(DDC)、外国增加值(FVA)、
-  外国重复计算(FDC)与纯重复计算(PDC),并派生前向/后向/总 GVC 参与度。
+  客户资料字段 DVAex、DVArt、DDC、FVA、FDC、taxsub,并派生 EXDVA。
   当前输出国家级与国家–行业级聚合结果,不输出 exporter-importer-sector 双边矩阵明细。
-  与上一版近似源码在 2016–2020 ICIO 上对比,国家级 DVA/FVA/PDC 份额的毛出口加权
-  平均绝对变化约为 8.06/2.25/10.70 个百分点;全量重算五项闭合最大误差约 7e-10。
 - 生产分解采用 Wang-Wei-Yu-Zhu (2017) 四类生产活动口径:纯国内、传统贸易、
   简单 GVC、复杂 GVC;四段加总恒等于 GDP,由单元测试保证。
 - 长度分解保留 Antràs-Chor 上游度口径(距最终需求的平均生产阶段数),
-  并按投入来源拆成国内段与跨境段;同时增加客户资料中的 PLv/PLy/Pos_TPL/GVCPs
-  兼容字段。PLv 复用前向上游度,PLy 由 Leontief 逆列和衡量后向长度;
-  未落地完整 GN×GN 长度矩阵前,GVC 段字段用于展示/教学兼容,不声称复现
-  客户样例的 1995–2018 数值。
+  输出客户资料字段 PLv、PLv_D、PLv_RT、PLv_GVC、PLy、PLy_D、PLy_RT、
+  PLy_GVC、Pos_TPL、GVCPs。当前数据库固定为 OECD ICIO 2016–2020,
+  不切换到客户样例的 1995–2018 数据库。
 - 回归的 p 值使用聚类数对应的 t(G−1) 小样本校正;DID 页面可随机指派
   伪处理组生成安慰剂系数分布,并保持原始首次处理年份(cohort)分布。
   冲击变量是演示数据,所有回归结果**只用于验证系统链路,不构成研究结论**。

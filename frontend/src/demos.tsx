@@ -4,16 +4,16 @@
  * DecompositionDemo(步骤4/5/6):用真实指标数据把总量拆成各分项,
  *   实时校验恒等式(加总 = 毛出口 / 总增加值 / 上游度),每项可 hover 看含义。
  *   恒等式口径与后端引擎一致:
- *     步骤4 毛出口 = DVAex + DVArt + DDC + FVA + FDC
- *     步骤5 SVA = VA_D + VA_RT + VA_GVC_S + VA_GVC_C
- *     步骤6 PLv = 国内段 + 跨境段
+ *     步骤4 毛出口 = DVAex + DVArt + DDC + FVA + FDC + taxsub
+ *     步骤5 SVA = 1_VA_D + 2_VA_RT + 3a_VA_GVC_S + 3b_VA_GVC_C
+ *     步骤6 PLv = PLv_D + PLv_RT + PLv_GVC
  * NetworkCentralityDemo(步骤7):在一个小网络上演示度/介数中心性怎么算出来。
  */
 import { useMemo, useState } from "react";
 import { api } from "./api";
 import { useAsync } from "./labs";
 import { sectorLabel } from "./viz";
-import type { Meta, SectorPage } from "./types";
+import type { Meta, IndustryPage } from "./types";
 
 type Row = Record<string, string | number | null>;
 
@@ -28,38 +28,39 @@ type DecompCfg = {
 
 const DECOMP: Record<number, DecompCfg> = {
   4: {
-    total: "trade_gross_exports",
+    total: "__gross_exports",
     totalLabel: "毛出口",
     unit: "amount",
     parts: [
-      { key: "dvaex", label: "DVAex 国外吸收", color: "#4b47e0", desc: "国内增加值出口并被其他地区吸收。" },
-      { key: "dvart", label: "DVArt 返回国内", color: "#7a6bff", desc: "国内增加值出口后最终返回本国被吸收。" },
-      { key: "ddc", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "国内增加值在跨境往返中被重复统计的部分。" },
-      { key: "fva", label: "FVA 国外增加值", color: "#159a86", desc: "总出口中来自国外账户的增加值。" },
-      { key: "fdc", label: "FDC 国外重复计算", color: "#e0982a", desc: "总出口中来自国外账户的纯重复计算部分。" },
+      { key: "DVAex", label: "DVAex 国外吸收", color: "#4b47e0", desc: "国内增加值出口并被其他地区吸收。" },
+      { key: "DVArt", label: "DVArt 返回国内", color: "#7a6bff", desc: "国内增加值出口后最终返回本国被吸收。" },
+      { key: "DDC", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "国内增加值在跨境往返中被重复统计的部分。" },
+      { key: "FVA", label: "FVA 国外增加值", color: "#159a86", desc: "总出口中来自国外账户的增加值。" },
+      { key: "FDC", label: "FDC 国外重复计算", color: "#e0982a", desc: "总出口中来自国外账户的纯重复计算部分。" },
+      { key: "taxsub", label: "taxsub 产品税补贴", color: "#7b8794", desc: "产品税减补贴在出口中的归属部分。" },
     ],
     note: (r) =>
-      `EXDVA = DVAex + DVArt = ${fmt(num(r.dvaex) + num(r.dvart), "amount")}。` +
-      `taxsub 目前保留为空值,不参与闭合校验。`,
+      `EXDVA = DVAex + DVArt = ${fmt(num(r.DVAex) + num(r.DVArt), "amount")}。`,
   },
   5: {
-    total: "sva",
+    total: "SVA",
     totalLabel: "SVA 总增加值",
     unit: "amount",
     parts: [
-      { key: "va_d", label: "1_VA_D 纯国内", color: "#4b47e0", desc: "国内生产和消费的增加值,不涉及跨境贸易。" },
-      { key: "va_rt", label: "2_VA_RT 传统贸易", color: "#159a86", desc: "体现在最终产品出口中的国内增加值。" },
-      { key: "va_gvc_s", label: "3a_VA_GVC_S 简单GVC", color: "#e0982a", desc: "增加值仅跨境一次,没有通过第三国再出口或返回。" },
-      { key: "va_gvc_c", label: "3b_VA_GVC_C 复杂GVC", color: "#f4693b", desc: "增加值跨境两次及以上,深度嵌入全球生产网络。" },
+      { key: "1_VA_D", label: "1_VA_D 纯国内", color: "#4b47e0", desc: "国内生产和消费的增加值,不涉及跨境贸易。" },
+      { key: "2_VA_RT", label: "2_VA_RT 传统贸易", color: "#159a86", desc: "体现在最终产品出口中的国内增加值。" },
+      { key: "3a_VA_GVC_S", label: "3a_VA_GVC_S 简单GVC", color: "#e0982a", desc: "增加值仅跨境一次,没有通过第三国再出口或返回。" },
+      { key: "3b_VA_GVC_C", label: "3b_VA_GVC_C 复杂GVC", color: "#f4693b", desc: "增加值跨境两次及以上,深度嵌入全球生产网络。" },
     ],
   },
   6: {
-    total: "plv",
+    total: "PLv",
     totalLabel: "PLv 前向总生产长度",
     unit: "number",
     parts: [
-      { key: "plv_d", label: "PLv_D 国内段", color: "#4b47e0", desc: "前向生产链在本国境内平均经过的阶段数。" },
-      { key: "upstreamness_cross", label: "跨境段", color: "#f4693b", desc: "前向生产链跨越国境的平均阶段数。" },
+      { key: "PLv_D", label: "PLv_D 国内段", color: "#4b47e0", desc: "前向生产链在本国境内平均经过的阶段数。" },
+      { key: "PLv_RT", label: "PLv_RT 传统贸易段", color: "#159a86", desc: "前向生产链中传统贸易相关阶段数。" },
+      { key: "PLv_GVC", label: "PLv_GVC GVC段", color: "#f4693b", desc: "前向生产链中 GVC 相关阶段数。" },
     ],
   },
 };
@@ -72,43 +73,48 @@ function fmt(v: number, unit: "amount" | "number"): string {
     ? v.toLocaleString("zh-CN", { maximumFractionDigits: 0 })
     : v.toFixed(3);
 }
+function totalOf(r: Row, cfg: DecompCfg): number {
+  return cfg.total === "__gross_exports"
+    ? cfg.parts.reduce((a, p) => a + num(r[p.key]), 0)
+    : num(r[cfg.total]);
+}
 
 export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) {
   const cfg = DECOMP[step];
-  const [gran, setGran] = useState<"country" | "sector">("sector");
+  const [gran, setGran] = useState<"country" | "industry">("industry");
   const [year, setYear] = useState(meta.years.at(-1)!);
   const [country, setCountry] = useState("CHN");
-  const [sector, setSector] = useState<string>("");
+  const [industry, setIndustry] = useState<string>("");
   const [hover, setHover] = useState<string | null>(null);
 
   const { data: countryRows } = useAsync<Row[]>(() => api.countryIndicators(year), [year]);
-  const { data: sectorPage } = useAsync<SectorPage>(
-    () => api.sectorIndicatorsAll(year, country),
+  const { data: industryPage } = useAsync<IndustryPage>(
+    () => api.industryIndicatorsAll(year, country),
     [year, country],
   );
 
-  const sectors = useMemo(
-    () => (sectorPage?.rows ?? []).map((r) => String(r.sector)),
-    [sectorPage],
+  const industries = useMemo(
+    () => (industryPage?.rows ?? []).map((r) => String(r.industry)),
+    [industryPage],
   );
   // 默认选第一个行业;换国家后若旧行业不存在则回退
-  const effSector = gran === "sector" ? (sectors.includes(sector) ? sector : sectors[0] ?? "") : "";
+  const effIndustry = gran === "industry" ? (industries.includes(industry) ? industry : industries[0] ?? "") : "";
 
   const row: Row | undefined =
     gran === "country"
       ? countryRows?.find((r) => r.country === country)
-      : (sectorPage?.rows ?? []).find((r) => r.sector === effSector);
+      : (industryPage?.rows ?? []).find((r) => r.industry === effIndustry);
 
-  const total = row ? num(row[cfg.total]) : 0;
+  const total = row ? totalOf(row, cfg) : 0;
   const sum = row ? cfg.parts.reduce((a, p) => a + num(row[p.key]), 0) : 0;
   const err = Math.abs(sum - total);
   const rel = total ? err / Math.abs(total) : err;
   const ok = rel < 1e-6;
   // 有些行业(家庭雇佣、公共管理、供水等)在该经济体几乎无出口/产出,
   // 分解虽仍"闭合"但信息量低、比例也容易受极小分母影响——提示学生换一个活跃行业。
-  const countryTotal = (sectorPage?.rows ?? []).reduce((a, r) => a + Math.abs(num(r[cfg.total])), 0);
+  const countryTotal = (industryPage?.rows ?? []).reduce((a, r) => a + Math.abs(totalOf(r, cfg)), 0);
   const negligible =
-    gran === "sector" && row != null &&
+    gran === "industry" && row != null &&
     (total === 0 || (countryTotal > 0 && Math.abs(total) / countryTotal < 1e-4));
   const negligibleReason = total === 0
     ? `${cfg.totalLabel}=0`
@@ -120,18 +126,18 @@ export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) 
 
       <div className="demo-controls">
         <div className="pill-group">
-          <button className={gran === "sector" ? "on" : ""} onClick={() => setGran("sector")}>国家–行业级</button>
+          <button className={gran === "industry" ? "on" : ""} onClick={() => setGran("industry")}>国家–行业级</button>
           <button className={gran === "country" ? "on" : ""} onClick={() => setGran("country")}>国家级</button>
         </div>
         <label>国家</label>
         <select value={country} onChange={(e) => setCountry(e.target.value)}>
           {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
-        {gran === "sector" && (
+        {gran === "industry" && (
           <>
             <label>行业</label>
-            <select value={effSector} onChange={(e) => setSector(e.target.value)}>
-              {sectors.map((s) => <option key={s} value={s}>{sectorLabel(s)}</option>)}
+            <select value={effIndustry} onChange={(e) => setIndustry(e.target.value)}>
+              {industries.map((s) => <option key={s} value={s}>{sectorLabel(s)}</option>)}
             </select>
           </>
         )}
@@ -194,7 +200,7 @@ export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) 
 
           {negligible && (
             <div className="decomp-hint">
-              ⚠️ {country} · {sectorLabel(effSector)} 的{negligibleReason}——
+              ⚠️ {country} · {sectorLabel(effIndustry)} 的{negligibleReason}——
               这类几乎无出口/产出的行业分解信息量低,换一个活跃行业(如制造业)更能看清口径。
             </div>
           )}

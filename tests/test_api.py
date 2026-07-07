@@ -16,7 +16,7 @@ login_resp = client.post("/api/auth/login", json={"username": "student", "passwo
 client.headers.update({"Authorization": f"Bearer {login_resp.json()['token']}"})
 
 needs_data = pytest.mark.skipif(
-    not (PROCESSED_DIR / "panel_country.csv").exists(),
+    not (PROCESSED_DIR / "panel_country.csv").exists() or not (PROCESSED_DIR / "panel_industry.csv").exists(),
     reason="缺少预计算产物,请先运行 uv run gvcsim compute",
 )
 
@@ -79,8 +79,8 @@ def test_regression_design():
     resp = client.get("/api/regression/design", params={"step": 13})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["depvar"] == "share_trade_fva"
-    assert body["panel_file"] == "panel_sector.csv"
+    assert body["depvar"] == "FVA_share"
+    assert body["panel_file"] == "panel_industry.csv"
     assert body["entity"] == "entity_id"
     assert body["cluster"] == "country"
     assert body["control_mode"] == "不加控制变量"
@@ -155,10 +155,10 @@ def test_indicator_schema():
     assert resp.status_code == 200
     body = resp.json()
     assert body["groups"][0]["key"] == "trade"
-    assert body["fields"]["share_trade_fva"]["label"]
-    assert body["fields"]["exdva"]["customer_key"] == "EXDVA"
-    assert body["fields"]["gvcps"]["customer_key"] == "GVCPs"
-    assert body["fields"]["taxsub"]["method_note"]
+    assert body["fields"]["FVA"]["label"]
+    assert body["fields"]["EXDVA"]["label"]
+    assert body["fields"]["GVCPs"]["label"]
+    assert body["fields"]["taxsub"]["label"]
 
 
 @needs_raw_icio
@@ -169,7 +169,7 @@ def test_db_meta_endpoint():
     assert body["years"]
     assert body["default_year"] in body["years"]
     assert "CHN" in body["countries"]
-    assert body["sectors"]
+    assert body["industries"]
     assert "HFCE" in body["final_demand_categories"]
 
 
@@ -218,17 +218,18 @@ def test_meta_and_indicators():
     year = meta["years"][-1]
     assert "CHN" in meta["countries"]
 
-    assert len(meta["sectors"]) == 45
+    assert len(meta["industries"]) == 45
 
     rows = client.get(f"/api/indicators/country/{year}").json()
     assert len(rows) > 50
     cols = rows[0].keys()
-    for col in ["exdva", "sva", "plv", "degree", "share_trade_fva", "share_prod_complex_gvc", "upstreamness"]:
+    for col in ["EXDVA", "SVA", "PLv", "degree", "FVA", "3b_VA_GVC_C", "betweenesscentrality"]:
         assert col in cols
 
-    paged = client.get(f"/api/indicators/sector/{year}", params={"country": "CHN", "page": 1}).json()
+    paged = client.get(f"/api/indicators/industry/{year}", params={"country": "CHN", "page": 1}).json()
     assert paged["total"] == 45  # ICIO 45个行业
     assert len(paged["rows"]) == 25
+    assert "industry" in paged["rows"][0]
 
 
 @needs_data
@@ -239,7 +240,8 @@ def test_qc_and_network():
 
     net = client.get(f"/api/viz/network/{year}").json()
     assert net["nodes"] and net["edges"]
-    assert "trade_gross_exports" in net["nodes"][0]
+    assert "EXDVA" in net["nodes"][0]
+    assert "GVC_participation" in net["nodes"][0]
 
 
 @needs_shock_qc
@@ -293,7 +295,7 @@ def test_crosswalk_demo_endpoint():
 def test_shock_summary_and_panel():
     summary = client.get("/api/shocks/summary").json()
     assert summary["n_countries"] == 77
-    assert summary["n_sectors"] == 45
+    assert summary["n_industries"] == 45
     y2019 = next(r for r in summary["years"] if r["year"] == 2019)
     # 232 覆盖全球:2019 年绝大多数经济体受处理
     assert y2019["treated_countries"] > 70
@@ -325,7 +327,7 @@ def test_regression_run():
     resp = client.post("/api/regression/run", json={"step": 13})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["design"]["depvar"] == "share_trade_fva"
+    assert body["design"]["depvar"] == "FVA_share"
     assert body["design"]["granularity"] == "国家–行业级"
     assert body["design"]["method"] == "双重差分 (DID)"
     assert body["result"]["coefs"][0]["name"] == "treated×post"

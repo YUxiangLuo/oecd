@@ -6,11 +6,11 @@ const HEAT_COLS = [
   { key: "degree", name: "度" },
   { key: "indegree", name: "入度" },
   { key: "outdegree", name: "出度" },
-  { key: "betweenness_centrality", name: "介数中心性" },
+  { key: "betweenesscentrality", name: "介数中心性" },
 ];
 
 export function HeatTableViz({ rows }: { rows: Row[] }) {
-  const top = [...rows].sort((a, b) => num(b.betweenness_centrality) - num(a.betweenness_centrality)).slice(0, 15);
+  const top = [...rows].sort((a, b) => num(b.betweenesscentrality) - num(a.betweenesscentrality)).slice(0, 15);
   const maxOf: Record<string, number> = {};
   HEAT_COLS.forEach((c) => { maxOf[c.key] = Math.max(...top.map((r) => num(r[c.key])), 1e-9); });
   const cell = (r: Row, key: string) => {

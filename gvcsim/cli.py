@@ -28,9 +28,9 @@ def main() -> None:
     p.add_argument("--step", type=int, default=13, choices=[13, 14, 15, 16])
     p.add_argument(
         "--granularity",
-        default="sector",
-        choices=["sector", "country"],
-        help="回归粒度:sector=国家–行业级(默认),country=国家级",
+        default="industry",
+        choices=["industry", "country"],
+        help="回归粒度:industry=国家–行业级(默认),country=国家级",
     )
     p.add_argument(
         "--method",
@@ -88,7 +88,7 @@ def main() -> None:
 
         if args.controls and args.macro_controls:
             raise SystemExit("--controls 与 --macro-controls 只能选择一个")
-        granularity = "国家–行业级" if args.granularity == "sector" else "国家级"
+        granularity = "国家–行业级" if args.granularity == "industry" else "国家级"
         method = {"did": "双重差分 (DID)", "fe": "双向固定效应", "event": "事件研究"}[args.method]
         control_mode = (
             CONTROL_MODE_MACRO if args.macro_controls else CONTROL_MODE_ICIO if args.controls else "不加控制变量"

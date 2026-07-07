@@ -20,6 +20,8 @@ class IcioArrays:
     x: np.ndarray  # 总产出 N
     v: np.ndarray  # 增加值系数 va/x,产出为0处置0,N
     va: np.ndarray  # 增加值 N
+    taxsub: np.ndarray  # 产品税减补贴 TLS,N
+    t: np.ndarray  # TLS 系数 taxsub/x,产出为0处置0,N
     A: np.ndarray  # 技术系数矩阵 N×N
     B: np.ndarray  # 全球里昂惕夫逆矩阵 (I-A)^-1,N×N
     L_dd: dict[str, np.ndarray]  # 各国国内里昂惕夫逆 (I-A_rr)^-1,S×S
@@ -46,10 +48,19 @@ def build_arrays(io) -> IcioArrays:
     Yd_df = io.Y.T.groupby(level=0, sort=False).sum().T
     Yd = Yd_df[regions].values.astype(float)
 
-    # 增加值 = 总产出 - 中间投入列和;系数 v = va/x(产出为0的行业置0)
+    # OECD ICIO 2023 原始表把 TLS 与 VA 放在 factor_inputs.F 中。测试夹具没有
+    # 这个扩展时才回退到 residual VA,并把 TLS 置零。
     va = x - Z.sum(axis=0)
+    taxsub = np.zeros_like(x)
+    factor_inputs = getattr(io, "factor_inputs", None)
+    F = getattr(factor_inputs, "F", None)
+    if F is not None and {"TLS", "VA"}.issubset(set(F.index.astype(str))):
+        F_aligned = F.reindex(columns=index)
+        va = F_aligned.loc["VA"].values.astype(float)
+        taxsub = F_aligned.loc["TLS"].values.astype(float)
     with np.errstate(divide="ignore", invalid="ignore"):
         v = np.where(x > 0, va / x, 0.0)
+        t = np.where(x > 0, taxsub / x, 0.0)
 
     row_regions = index.get_level_values(0).values
     pos = {r: np.where(row_regions == r)[0] for r in regions}
@@ -77,6 +88,8 @@ def build_arrays(io) -> IcioArrays:
         x=x,
         v=v,
         va=va,
+        taxsub=taxsub,
+        t=t,
         A=A,
         B=B,
         L_dd=L_dd,

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../../api";
-import type { CrosswalkHsRow, CrosswalkPayload, Meta, SectorPage, ShockEvent, ShockSummary } from "../../types";
+import type { CrosswalkHsRow, CrosswalkPayload, IndustryPage, Meta, ShockEvent, ShockSummary } from "../../types";
 import { pct, useAsync } from "../shared";
 
 const CROSSWALK_YEARS = [2018, 2019, 2020];
@@ -113,15 +113,15 @@ export function ShockLab({ meta }: { meta: Meta }) {
   const [year, setYear] = useState(meta.years.at(-1) ?? 2020);
   const [shockType, setShockType] = useState("关税冲击");
   const [country, setCountry] = useState("");
-  const [sector, setSector] = useState("");
+  const [industry, setIndustry] = useState("");
   const [onlyHit, setOnlyHit] = useState(true);
   const [page, setPage] = useState(1);
 
   const { data: events, error: evErr } = useAsync(() => api.shockEvents(), []);
   const { data: summary } = useAsync<ShockSummary>(() => api.shockSummary(shockType), [shockType]);
-  const { data: panel, error: panelErr } = useAsync<SectorPage>(
-    () => api.shockPanel(year, shockType, country, sector, onlyHit, page),
-    [year, shockType, country, sector, onlyHit, page],
+  const { data: panel, error: panelErr } = useAsync<IndustryPage>(
+    () => api.shockPanel(year, shockType, country, industry, onlyHit, page),
+    [year, shockType, country, industry, onlyHit, page],
   );
 
   const summaryYear = summary?.years.find((r) => r.year === year);
@@ -131,7 +131,7 @@ export function ShockLab({ meta }: { meta: Meta }) {
     <div>
       <div className="warnbox">
         ⚠ 拟真演示数据:以 2018–2020 全球贸易摩擦真实事件为原型手工编码(税率量级参考
-        PIIE/Bown),出口暴露度由 OECD ICIO 双边流向计算;覆盖 {summary ? `${summary.n_countries} 个经济体 × ${summary.n_sectors} 个行业` : "全部经济体与行业"},不能用于研究结论。
+        PIIE/Bown),出口暴露度由 OECD ICIO 双边流向计算;覆盖 {summary ? `${summary.n_countries} 个经济体 × ${summary.n_industries} 个行业` : "全部经济体与行业"},不能用于研究结论。
       </div>
 
       <h3 style={{ margin: "18px 0 10px", fontSize: 15 }}>事件时间线</h3>
@@ -152,7 +152,7 @@ export function ShockLab({ meta }: { meta: Meta }) {
                 <td>{e.imposer} → {e.targets}{e.exempt ? `(豁免:${e.exempt})` : ""}</td>
                 <td>{e.announced}</td>
                 <td>{e.effective}</td>
-                <td>{e.n_sectors} 个(主要:{e.top_sectors.join("、")})</td>
+                <td>{e.n_industries} 个(主要:{e.top_industries.join("、")})</td>
                 <td>{pct(e.peak_rate)}</td>
               </tr>
             ))}
@@ -178,9 +178,9 @@ export function ShockLab({ meta }: { meta: Meta }) {
           {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
         <label>行业</label>
-        <select value={sector} onChange={(e) => { setSector(e.target.value); setPage(1); }}>
+        <select value={industry} onChange={(e) => { setIndustry(e.target.value); setPage(1); }}>
           <option value="">全部</option>
-          {meta.sectors.map((s) => <option key={s} value={s}>{s}</option>)}
+          {meta.industries.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         <label style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <input type="checkbox" checked={onlyHit}
@@ -205,7 +205,7 @@ export function ShockLab({ meta }: { meta: Meta }) {
             {(panel?.rows ?? []).map((r, i) => (
               <tr key={i}>
                 <td style={{ textAlign: "left" }}>{String(r.country)}</td>
-                <td>{String(r.sector)}</td>
+                <td>{String(r.industry)}</td>
                 <td>{typeof r.tariff_shock === "number" ? pct(r.tariff_shock) : "—"}</td>
                 <td>{r.treated === 1 ? "✓" : ""}</td>
                 <td>{r.announced_date ?? "—"}</td>
@@ -224,4 +224,3 @@ export function ShockLab({ meta }: { meta: Meta }) {
     </div>
   );
 }
-

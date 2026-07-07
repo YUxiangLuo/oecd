@@ -102,7 +102,7 @@ export function IntroOverlay({ user, meta, onDone }: {
 
   const years = meta?.years ?? [];
   const yearSpan = years.length ? `${years[0]}–${years.at(-1)}` : "—";
-  const nodes = (meta?.countries.length ?? 0) * (meta?.sectors.length ?? 0);
+  const nodes = (meta?.countries.length ?? 0) * (meta?.industries.length ?? 0);
 
   const stages = useMemo(() => {
     if (!stepsData) return [];
@@ -139,7 +139,7 @@ export function IntroOverlay({ user, meta, onDone }: {
       </div>
       <div className="intro-stats">
         <div><div className="intro-stat-v"><CountUp value={meta?.countries.length ?? 77} /></div><div className="intro-stat-l">经济体</div></div>
-        <div><div className="intro-stat-v"><CountUp value={meta?.sectors.length ?? 45} /></div><div className="intro-stat-l">行业</div></div>
+        <div><div className="intro-stat-v"><CountUp value={meta?.industries.length ?? 45} /></div><div className="intro-stat-l">行业</div></div>
         <div><div className="intro-stat-v">{yearSpan}</div><div className="intro-stat-l">年份覆盖</div></div>
         <div><div className="intro-stat-v"><CountUp value={17} /></div><div className="intro-stat-l">实验步骤</div></div>
       </div>
@@ -165,7 +165,7 @@ export function IntroOverlay({ user, meta, onDone }: {
           </div>
           {openCard === "icio" && (
             <div className="intro-card-body">
-              <div>{meta?.countries.length ?? 77} 经济体 × {meta?.sectors.length ?? 45} 行业,{yearSpan} 逐年</div>
+              <div>{meta?.countries.length ?? 77} 经济体 × {meta?.industries.length ?? 45} 行业,{yearSpan} 逐年</div>
               <div>每年一张 {nodes.toLocaleString()} × {nodes.toLocaleString()} 的中间品流量矩阵</div>
               <div>由此解出里昂惕夫逆矩阵,追踪增加值的跨境路径</div>
             </div>

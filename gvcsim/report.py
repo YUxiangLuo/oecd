@@ -148,9 +148,9 @@ def generate(
         exclude_row=exclude_row,
     )
 
-    top_backward = snap["share_trade_backward_gvc"].nlargest(5)
-    top_forward = snap["share_trade_forward_gvc"].nlargest(5)
-    top_between = snap["betweenness_centrality"].nlargest(5)
+    top_fva = snap["FVA_share"].nlargest(5)
+    top_gvc = snap["GVC_participation"].nlargest(5)
+    top_between = snap["betweenesscentrality"].nlargest(5)
 
     sections = [
         "# 贸易政策冲击对全球价值链结构的影响\n",
@@ -166,10 +166,10 @@ def generate(
         f"质检结果见 data/processed/qc_{year}.json(维度一致性、会计恒等式、"
         "里昂惕夫逆矩阵性质等)。\n",
         "## 二、GVC 指标摘要",
-        "**后向参与度最高(BM 外国增加值与外国重复计算占毛出口比重)**:"
-        + "、".join(f"{c} ({v:.3f})" for c, v in top_backward.items()),
-        "\n**前向参与度最高(本国增加值最常嵌入他国出口)**:"
-        + "、".join(f"{c} ({v:.3f})" for c, v in top_forward.items()),
+        "**FVA 份额最高(FVA / 六项贸易流合计)**:"
+        + "、".join(f"{c} ({v:.3f})" for c, v in top_fva.items()),
+        "\n**GVC 生产参与度最高((3a+3b)_VA_GVC / SVA)**:"
+        + "、".join(f"{c} ({v:.3f})" for c, v in top_gvc.items()),
         "\n**介数中心性最高(供应链枢纽)**:" + "、".join(f"{c} ({v:.3f})" for c, v in top_between.items()) + "\n",
         "## 三、回归结果",
     ]

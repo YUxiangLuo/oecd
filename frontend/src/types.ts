@@ -30,7 +30,7 @@ export interface LoginResponse {
 export interface Meta {
   years: number[];
   countries: string[];
-  sectors: string[];
+  industries: string[];
 }
 
 export type DbTableKind = "z" | "y" | "accounts";
@@ -45,7 +45,7 @@ export interface DbMeta {
   years: number[];
   default_year: number | null;
   countries: string[];
-  sectors: string[];
+  industries: string[];
   final_demand_categories: string[];
   account_rows: string[];
   files: DbFile[];
@@ -71,8 +71,8 @@ export interface ShockEvent {
   exempt: string;
   announced: string;
   effective: string;
-  n_sectors: number;
-  top_sectors: string[];
+  n_industries: number;
+  top_industries: string[];
   peak_rate: number;
   entities?: string;
 }
@@ -89,7 +89,7 @@ export interface ShockSummaryYear {
 export interface ShockSummary {
   years: ShockSummaryYear[];
   n_countries: number;
-  n_sectors: number;
+  n_industries: number;
 }
 
 export interface QcCheck {
@@ -155,7 +155,6 @@ export interface IndicatorFieldMeta {
   format: "amount" | "pct" | "number";
   customer_key?: string;
   method_note?: string;
-  legacy?: boolean;
 }
 
 export interface IndicatorGroup {
@@ -169,7 +168,7 @@ export interface IndicatorSchema {
   fields: Record<string, IndicatorFieldMeta>;
 }
 
-export interface SectorPage {
+export interface IndustryPage {
   total: number;
   page: number;
   page_size: number;

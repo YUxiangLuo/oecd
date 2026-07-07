@@ -3,15 +3,27 @@
 上游度(Antras-Chor 2012):一单位产出到达最终消费者平均还要经过几个
 生产阶段。U=1 表示产出全部直接卖给最终消费者(最下游);越大越上游。
 
-分解:保留原有 upstreamness / domestic / cross 字段,并补充客户资料中的
-PLv/PLy/位置指数兼容字段。PLv 表示前向联系(到最终吸收端),PLy 表示后向联系
-(到初始投入端)。
+输出只保留客户资料中的 PLv/PLy/位置指数口径。PLv 表示前向联系
+(到最终吸收端),PLy 表示后向联系(到初始投入端)。
 """
 
 import numpy as np
 import pandas as pd
 
 from gvcsim.indicators.core import IcioArrays
+
+LENGTH_COLUMNS = [
+    "PLv",
+    "PLv_D",
+    "PLv_RT",
+    "PLv_GVC",
+    "PLy",
+    "PLy_D",
+    "PLy_RT",
+    "PLy_GVC",
+    "Pos_TPL",
+    "GVCPs",
+]
 
 
 def _allocation_matrix(arr: IcioArrays) -> np.ndarray:
@@ -36,21 +48,14 @@ def _safe_div(num: np.ndarray, den: np.ndarray) -> np.ndarray:
 
 
 def sector_length(arr: IcioArrays) -> pd.DataFrame:
-    """行业级长度指标,索引 (country, sector):
-
-    upstreamness           总上游度 U = (I-Ad)^-1 · 1
-    upstreamness_domestic  只走国内环节的长度
-    upstreamness_cross     跨境段 = 总长度 - 国内段
-
-    plv* / ply* / pos_tpl / gvcps 是客户资料字段:
-    plv = 前向总生产长度,ply = 后向总生产长度,pos_tpl = plv/ply。
-    当前系统没有落地 WWYZ 的 GN×GN 细分长度矩阵,因此 D/RT/GVC 段在现有
-    上游度框架下做可解释兼容:纯国内/传统贸易使用国内段,GVC 使用存在跨境段
-    时的总长度。
-    """
+    """行业级客户口径长度指标,索引 (country, industry)。"""
     Ad = _allocation_matrix(arr)
     n = Ad.shape[0]
     eye_n = np.eye(n)
+    node_regions = arr.index.get_level_values(0).to_numpy()
+    region_idx = {r: i for i, r in enumerate(arr.regions)}
+    home_col = np.array([region_idx[r] for r in node_regions])
+    border = node_regions[:, None] != node_regions[None, :]
 
     U = _solve_or_lstsq(eye_n - Ad, np.ones(n))
     # 后向长度:一单位最终产品沿 Leontief 逆追溯到初始投入端的总阶段数。
@@ -66,31 +71,38 @@ def sector_length(arr: IcioArrays) -> pd.DataFrame:
         U_dom[p] = _solve_or_lstsq(eye_s - Ad_rr, np.ones(len(p)))
         D_dom[p] = arr.L_dd[r].sum(axis=0)
 
-    U_cross = U - U_dom
-    D_cross = D - D_dom
-    plv_gvc = np.where(U_cross > 1e-12, U, np.nan)
-    ply_gvc = np.where(D_cross > 1e-12, D, np.nan)
+    U_cross = np.clip(U - U_dom, 0.0, None)
+    D_cross = np.clip(D - D_dom, 0.0, None)
+
+    final_exports = arr.Yd.sum(axis=1) - arr.Yd[np.arange(n), home_col]
+    intermediate_exports = np.where(border, arr.Z, 0.0).sum(axis=1)
+    cross_sales = final_exports + intermediate_exports
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rt_share = np.where(cross_sales > 1e-12, final_exports / cross_sales, 0.0)
+        gvc_share = np.where(cross_sales > 1e-12, intermediate_exports / cross_sales, 0.0)
+
+    plv_rt = U_cross * rt_share
+    plv_gvc = U_cross * gvc_share
+    ply_rt = np.zeros(n)
+    ply_gvc = D_cross
 
     df = pd.DataFrame(
         {
-            "upstreamness": U,
-            "upstreamness_domestic": U_dom,
-            "upstreamness_cross": U_cross,
-            "plv": U,
-            "plv_d": U_dom,
-            "plv_rt": U_dom,
-            "plv_gvc": plv_gvc,
-            "ply": D,
-            "ply_d": D_dom,
-            "ply_rt": D_dom,
-            "ply_gvc": ply_gvc,
-            "pos_tpl": _safe_div(U, D),
-            "gvcps": _safe_div(plv_gvc, ply_gvc),
+            "PLv": U,
+            "PLv_D": U_dom,
+            "PLv_RT": plv_rt,
+            "PLv_GVC": plv_gvc,
+            "PLy": D,
+            "PLy_D": D_dom,
+            "PLy_RT": ply_rt,
+            "PLy_GVC": ply_gvc,
+            "Pos_TPL": _safe_div(U, D),
+            "GVCPs": _safe_div(plv_gvc, ply_gvc),
         },
         index=arr.index,
     )
-    df.index.names = ["country", "sector"]
-    return df
+    df.index.names = ["country", "industry"]
+    return df[LENGTH_COLUMNS]
 
 
 def country_length(arr: IcioArrays, sector_df: pd.DataFrame | None = None) -> pd.DataFrame:
@@ -103,11 +115,11 @@ def country_length(arr: IcioArrays, sector_df: pd.DataFrame | None = None) -> pd
         sector_df = sector_length(arr)
     w = pd.Series(arr.x, index=arr.index)
     out = {}
-    for col in sector_df.columns:
+    for col in LENGTH_COLUMNS:
         valid = sector_df[col].notna()
         weighted = (sector_df[col].where(valid) * w).groupby(level=0).sum(min_count=1)
         weight_sum = w.where(valid).groupby(level=0).sum(min_count=1)
         out[col] = weighted / weight_sum
     df = pd.DataFrame(out)
     df.index.name = "country"
-    return df
+    return df[LENGTH_COLUMNS]

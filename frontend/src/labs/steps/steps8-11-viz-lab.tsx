@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../../api";
-import type { IndicatorSchema, Meta, NetworkData, SectorPage, Step } from "../../types";
+import type { IndicatorSchema, IndustryPage, Meta, NetworkData, Step } from "../../types";
 import { CompositionBar, HeatTableViz, LengthViz, NetworkViz, QuadrantScatter, RankBarChart, ScatterChart, sectorLabel, StackedShareViz, TrendChart } from "../../viz";
 import { fieldLabel, fmtField, useAsync } from "../shared";
 
@@ -32,32 +32,32 @@ const STEP_VIZ: Record<number, StepVizConfig> = {
     group: "trade",
     views: ["signature", "quadrant", "composition", "rank", "scatter", "table"],
     defaultView: "quadrant",
-    rankMetric: "exdva",
-    scatter: ["dvaex", "fva"],
-    quadrant: ["share_trade_backward_gvc", "share_trade_forward_gvc"],
+    rankMetric: "EXDVA",
+    scatter: ["DVAex", "FVA"],
+    quadrant: ["DVAex", "FVA"],
     quadLabels: ["双高·深度嵌入", "前向主导·卖中间品", "双低·相对自给", "后向主导·买中间品"],
-    composition: ["dvaex", "dvart", "ddc", "fva", "fdc"],
-    columns: ["exdva", "dvaex", "dvart", "ddc", "fva", "fdc", "taxsub"],
-    framing: "每个经济体的出口在 GVC 中处于什么位置?比较后向(用别人的中间品)与前向(被别人用作中间品)参与度。",
+    composition: ["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"],
+    columns: ["EXDVA", "DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"],
+    framing: "每个经济体的出口在 GVC 中处于什么位置?比较国内增加值出口与国外增加值出口构成。",
   },
   9: {
     group: "production",
     views: ["signature", "composition", "rank", "scatter", "trend", "table"],
     defaultView: "composition",
-    rankMetric: "va_gvc_c",
-    scatter: ["va_gvc", "va_gvc_c"],
-    composition: ["va_d", "va_rt", "va_gvc_s", "va_gvc_c"],
-    columns: ["sva", "va_d", "va_rt", "va_gvc", "va_gvc_s", "va_gvc_c", "fgy", "fgy_gvc"],
+    rankMetric: "3b_VA_GVC_C",
+    scatter: ["3_VA_GVC", "3b_VA_GVC_C"],
+    composition: ["1_VA_D", "2_VA_RT", "3a_VA_GVC_S", "3b_VA_GVC_C"],
+    columns: ["SVA", "1_VA_D", "2_VA_RT", "3_VA_GVC", "3a_VA_GVC_S", "3b_VA_GVC_C", "FGY", "3_FGY_GVC"],
     framing: "一国的增加值有多少停留在国内、多少进入简单 / 复杂 GVC?对比生产结构的四段构成。",
   },
   10: {
     group: "length",
     views: ["signature", "scatter", "rank", "composition", "trend", "table"],
     defaultView: "scatter",
-    rankMetric: "plv",
-    scatter: ["plv", "ply"],
-    composition: ["plv_d", "upstreamness_cross"],
-    columns: ["plv", "plv_d", "plv_rt", "plv_gvc", "ply", "ply_gvc", "pos_tpl", "gvcps"],
+    rankMetric: "PLv",
+    scatter: ["PLv", "PLy"],
+    composition: ["PLv_D", "PLv_RT", "PLv_GVC"],
+    columns: ["PLv", "PLv_D", "PLv_RT", "PLv_GVC", "PLy", "PLy_GVC", "Pos_TPL", "GVCPs"],
     framing: "生产链有多长、处在什么位置?比较前向长度 PLv、后向长度 PLy 与位置指数。",
   },
   11: {
@@ -65,10 +65,10 @@ const STEP_VIZ: Record<number, StepVizConfig> = {
     views: ["signature", "quadrant", "rank", "scatter", "trend", "table"],
     defaultView: "quadrant",
     rankMetric: "degree",
-    scatter: ["degree", "betweenness_centrality"],
-    quadrant: ["degree", "betweenness_centrality"],
+    scatter: ["degree", "betweenesscentrality"],
+    quadrant: ["degree", "betweenesscentrality"],
     quadLabels: ["核心枢纽", "桥接者(高介数)", "边缘", "枢纽连接者(高度)"],
-    columns: ["degree", "indegree", "outdegree", "weighted_degree", "betweenness_centrality", "eigenvector_centrality"],
+    columns: ["degree", "indegree", "outdegree", "weighted degree", "betweenesscentrality", "eigencentrality"],
     framing: "谁是生产网络的枢纽?高度中心性=连接多,高介数中心性=控扼要冲,四象限区分四类角色。",
   },
 };
@@ -87,15 +87,15 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
   const [entityMode, setEntityMode] = useState<"topn" | "pick">("topn");
   const [topN, setTopN] = useState(15);
   const [picked, setPicked] = useState<string[]>([]);
-  const [granularity, setGranularity] = useState<"country" | "sector">("country");
+  const [granularity, setGranularity] = useState<"country" | "industry">("country");
   const [drillCountry, setDrillCountry] = useState(meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "");
   const isNetwork = step.n === 8;
 
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
   const { data: rows, error } = useAsync(() => api.countryIndicators(year), [year]);
-  const { data: sectorPage, error: sectorErr } = useAsync<SectorPage | null>(
-    () => (granularity === "sector" && drillCountry
-      ? api.sectorIndicatorsAll(year, drillCountry)
+  const { data: industryPage, error: industryErr } = useAsync<IndustryPage | null>(
+    () => (granularity === "industry" && drillCountry
+      ? api.industryIndicatorsAll(year, drillCountry)
       : Promise.resolve(null)),
     [granularity, year, drillCountry],
   );
@@ -110,12 +110,12 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
       : Promise.resolve(null)),
     [view === "trend", granularity],
   );
-  if (error || netErr || sectorErr) return <div className="error-box">{error ?? netErr ?? sectorErr}</div>;
+  if (error || netErr || industryErr) return <div className="error-box">{error ?? netErr ?? industryErr}</div>;
 
   const fmtOf = (k: string) => schema?.fields[k]?.format;
   const groupOf = (f: string) => (schema?.groups ?? []).find((g) => g.fields.includes(f))?.key;
-  const allRows = granularity === "sector" ? (sectorPage?.rows ?? []) : (rows ?? []);
-  const sectorLoading = granularity === "sector" && !sectorPage;
+  const allRows = granularity === "industry" ? (industryPage?.rows ?? []) : (rows ?? []);
+  const industryLoading = granularity === "industry" && !industryPage;
   // 有效主/次轴:象限=固定 cfg.quadrant;散点=metricX/Y;其余单指标视图=rankBy。
   const twoAxis = view === "scatter" || view === "quadrant";
   const effX = view === "quadrant" ? cfg.quadrant![0] : view === "scatter" ? metricX : rankBy;
@@ -128,7 +128,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
     !needFilter || (isFin(r[effX]) && (!twoAxis || isFin(r[effY])));
   // 选中的对象:Top-N(按有效X指标排序)或手动挑选的国家
   const selRows =
-    granularity === "sector"
+    granularity === "industry"
       ? allRows.filter(metricOk).sort((a, b) => num(b[effX]) - num(a[effX])).slice(0, topN)
       : entityMode === "topn"
       ? allRows.filter(metricOk).sort((a, b) => num(b[effX]) - num(a[effX])).slice(0, topN)
@@ -137,7 +137,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
 
   // 趋势图折线:Top-N 模式限 6 条以内保证可读,选国家模式用全部选中国家
   const trendCountries =
-    granularity === "sector"
+    granularity === "industry"
       ? []
       : entityMode === "pick"
       ? picked
@@ -208,13 +208,13 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
           <div className="seg">
             <button className={granularity === "country" ? "on" : ""} onClick={() => setGranularity("country")}>国家级</button>
             <button
-              className={granularity === "sector" ? "on" : ""}
-              onClick={() => { setGranularity("sector"); setEntityMode("topn"); }}
+              className={granularity === "industry" ? "on" : ""}
+              onClick={() => { setGranularity("industry"); setEntityMode("topn"); }}
             >
               行业下钻
             </button>
           </div>
-          {granularity === "sector" && (
+          {granularity === "industry" && (
             <span className="field">
               <label>下钻国家</label>
               <select value={drillCountry} onChange={(e) => setDrillCountry(e.target.value)}>
@@ -238,7 +238,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
               <button className={entityMode === "pick" ? "on" : ""} onClick={() => setEntityMode("pick")}>选国家</button>
             </div>
           )}
-          {granularity === "sector" || entityMode === "topn" ? (
+          {granularity === "industry" || entityMode === "topn" ? (
             <span className="topn-ctl">
               前 <input type="range" min={5} max={40} value={topN} onChange={(e) => setTopN(Number(e.target.value))} />
               <b>{view === "trend" && granularity === "country" ? Math.min(topN, 6) : topN}</b>
@@ -256,14 +256,14 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
       {view === "signature" && signatureChart()}
 
       {view === "rank" && (
-        sectorLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p>
+        industryLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p>
           : selRows.length
           ? <RankBarChart rows={selRows} metricKey={rankBy} label={fieldLabel(rankBy, schema)} format={fmtOf(rankBy)} highlight={highlight} />
           : <p className="muted">请在“选国家”里选择至少一个国家。</p>
       )}
 
       {view === "scatter" && (
-        sectorLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p>
+        industryLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p>
           : selRows.length
           ? <ScatterChart rows={selRows} xKey={metricX} yKey={metricY}
               xLabel={fieldLabel(metricX, schema)} yLabel={fieldLabel(metricY, schema)}
@@ -272,7 +272,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
       )}
 
       {view === "quadrant" && cfg.quadrant && (
-        sectorLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p>
+        industryLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p>
           : selRows.length
           ? <QuadrantScatter rows={selRows} xKey={cfg.quadrant[0]} yKey={cfg.quadrant[1]}
               xLabel={fieldLabel(cfg.quadrant[0], schema)} yLabel={fieldLabel(cfg.quadrant[1], schema)}
@@ -282,7 +282,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
       )}
 
       {view === "composition" && cfg.composition && (
-        sectorLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p>
+        industryLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p>
           : selRows.length
           ? <CompositionBar rows={selRows}
               segments={cfg.composition.map((k) => ({ key: k, name: fieldLabel(k, schema) }))}
@@ -292,7 +292,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
       )}
 
       {view === "trend" && (
-        granularity === "sector" ? <p className="muted">趋势图暂使用国家级时间序列;切回“国家级”后可查看 2016–2020 趋势。</p>
+        granularity === "industry" ? <p className="muted">趋势图暂使用国家级时间序列;切回“国家级”后可查看 2016–2020 趋势。</p>
           : !yearsData ? <p className="muted">加载多年数据中…</p>
           : trendSeries.length
             ? <TrendChart years={meta.years} series={trendSeries} label={fieldLabel(rankBy, schema)} format={fmtOf(rankBy)} />
@@ -300,13 +300,13 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
       )}
 
       {view === "table" && (
-        sectorLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p> : <div className="table-wrap">
+        industryLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p> : <div className="table-wrap">
           <table className="data-table">
-            <thead><tr><th>{granularity === "sector" ? "行业" : "国家"}</th>{cfg.columns.map((c) => <th key={c}>{fieldLabel(c, schema)}</th>)}</tr></thead>
+            <thead><tr><th>{granularity === "industry" ? "行业" : "国家"}</th>{cfg.columns.map((c) => <th key={c}>{fieldLabel(c, schema)}</th>)}</tr></thead>
             <tbody>
               {selRows.map((r) => (
-                <tr key={String(r.sector ?? r.country)}>
-                  <td>{r.sector != null ? sectorLabel(String(r.sector)) : String(r.country)}</td>
+                <tr key={String(r.industry ?? r.country)}>
+                  <td>{r.industry != null ? sectorLabel(String(r.industry)) : String(r.country)}</td>
                   {cfg.columns.map((c) => <td key={c}>{fmtField(r[c], c, schema)}</td>)}
                 </tr>
               ))}

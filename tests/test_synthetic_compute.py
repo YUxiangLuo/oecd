@@ -29,13 +29,13 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
 
     expected_files = [
         "indicators_country_2018.csv",
-        "indicators_sector_2018.csv",
+        "indicators_industry_2018.csv",
         "network_edges_2018.csv",
         "export_exposure_2018.csv",
         "controls_country.csv",
         "qc_controls.json",
         "qc_shocks.json",
-        "panel_sector.csv",
+        "panel_industry.csv",
         "panel_country.csv",
     ]
     for name in expected_files:
@@ -49,5 +49,5 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
     assert len(controls_qc) == 5
     assert all(c["passed"] for c in controls_qc), controls_qc
 
-    assert len(panel) == 8  # 2 countries × 2 sectors × 2 years
+    assert len(panel) == 8  # 2 countries × 2 industries × 2 years
     assert {"entity_id", "tariff_shock", "treated", "macro_log_gdp_usd"}.issubset(panel.columns)

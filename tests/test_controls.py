@@ -13,7 +13,7 @@ from gvcsim.data.quality import check_controls_country
 def _fixtures():
     countries = ["AAA", "BBB"]
     years = [2018, 2019, 2020]
-    sectors = ["C10T12", "G", "A01_02"]
+    industries = ["C10T12", "G", "A01_02"]
     country_rows = []
     sector_rows = []
     for c_i, c in enumerate(countries):
@@ -24,15 +24,20 @@ def _fixtures():
                 {
                     "country": c,
                     "year": year,
-                    "prod_va_total": va,
-                    "trade_gross_exports": exp,
+                    "SVA": va,
+                    "DVAex": exp * 0.45,
+                    "DVArt": exp * 0.10,
+                    "DDC": exp * 0.05,
+                    "FVA": exp * 0.30,
+                    "FDC": exp * 0.08,
+                    "taxsub": exp * 0.02,
                 }
             )
             sector_rows.extend(
                 [
-                    {"country": c, "year": year, "sector": sectors[0], "prod_va_total": va * 0.40},
-                    {"country": c, "year": year, "sector": sectors[1], "prod_va_total": va * 0.35},
-                    {"country": c, "year": year, "sector": sectors[2], "prod_va_total": va * 0.25},
+                    {"country": c, "year": year, "industry": industries[0], "SVA": va * 0.40},
+                    {"country": c, "year": year, "industry": industries[1], "SVA": va * 0.35},
+                    {"country": c, "year": year, "industry": industries[2], "SVA": va * 0.25},
                 ]
             )
     return pd.DataFrame(country_rows), pd.DataFrame(sector_rows)
@@ -50,8 +55,8 @@ def test_build_controls_from_processed_indicators_shape_and_values():
     first = controls.sort_values(["country", "year"]).groupby("country").head(1)
     assert np.allclose(first["gdp_proxy_growth"], 0.0)
     assert np.allclose(first["exports_proxy_growth"], 0.0)
-    assert np.allclose(first["trade_gross_exports_index"], 1.0)
-    assert np.allclose(first["prod_va_total_index"], 1.0)
+    assert np.allclose(first["gross_exports_index"], 1.0)
+    assert np.allclose(first["SVA_index"], 1.0)
     assert np.allclose(first["gdp_deflator"], 1.0)
     assert np.allclose(first["inflation_rate"], 0.0)
 

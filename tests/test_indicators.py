@@ -1,8 +1,7 @@
 """指标计算的数学性质测试(合成小矩阵,不依赖真实数据)。"""
 
-import numpy as np
 import networkx as nx
-import pandas as pd
+import numpy as np
 import pytest
 
 from gvcsim.indicators import length, network, production, tradeflow
@@ -11,61 +10,28 @@ from gvcsim.indicators.core import build_arrays
 
 def test_build_arrays_basics(fake_io):
     arr = build_arrays(fake_io)
-    # 增加值恒等式:va = x - 中间投入列和
+    # 测试夹具没有 factor_inputs 表时,增加值回退为 x - 中间投入列和。
     assert np.allclose(arr.va, arr.x - arr.Z.sum(axis=0))
+    assert np.allclose(arr.t, 0.0)
     # 增加值系数与全球逆矩阵的恒等式:v'B = 1(每单位最终品的增加值总含量为1)
     assert np.allclose(arr.v @ arr.B, np.ones(4))
     # AAA-s1 的出口 = 卖给 BBB 的中间品 (4+2) + 卖给 BBB 的最终品 (10)
     assert arr.E[0] == pytest.approx(16.0)
 
 
-def test_tradeflow_bounds(fake_io):
+def test_tradeflow_customer_columns_and_identities(fake_io):
     arr = build_arrays(fake_io)
     df = tradeflow.country_tradeflow(arr)
-    accounted = df[["trade_dva", "trade_rdv", "trade_ddc", "trade_fva", "trade_fdc"]].sum(axis=1)
-    assert np.allclose(accounted, df["trade_gross_exports"])
-    assert np.allclose(df["trade_pdc"], df["trade_ddc"] + df["trade_fdc"])
-    assert np.allclose(df["exdva"], df["dvaex"] + df["dvart"])
-    assert np.allclose(df["dvaex"], df["trade_dva"])
-    assert df["taxsub"].isna().all()
-    assert df["share_trade_backward_gvc"].between(0, 1).all()
-    assert (df["share_trade_forward_gvc"] > 0).all()
+    assert list(df.columns) == tradeflow.TRADE_COLUMNS
+    accounted = tradeflow.gross_exports(df)
+    assert np.allclose(accounted, df[["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"]].sum(axis=1))
+    assert np.allclose(df["EXDVA"], df["DVAex"] + df["DVArt"])
+    assert np.allclose(df["taxsub"], 0.0)
 
-    sector = tradeflow.sector_tradeflow(arr)
-    accounted_s = sector[["trade_dva", "trade_rdv", "trade_ddc", "trade_fva", "trade_fdc"]].sum(axis=1)
-    assert np.allclose(accounted_s, sector["trade_gross_exports"])
-    assert sector["share_trade_dva"].between(0, 1).all()
-
-
-def test_tradeflow_sector_forward_share_requires_export_sector():
-    """小出口行业的无界前向/总参与度置空,但有界 FVA/DVA 占比仍保留。"""
-    idx = pd.MultiIndex.from_tuples(
-        [("AAA", "major"), ("AAA", "minor")],
-        names=["country", "sector"],
-    )
-    df = pd.DataFrame(
-        {
-            "trade_gross_exports": [1000.0, 5.0],
-            "trade_dva": [700.0, 3.5],
-            "trade_fva": [200.0, 1.0],
-            "trade_pdc": [10.0, 0.05],
-            "trade_fdc": [5.0, 0.02],
-            "trade_forward_va_in_foreign_exports": [100.0, 100.0],
-        },
-        index=idx,
-    )
-
-    out = tradeflow._add_trade_shares(df.copy())
-
-    assert out.loc[("AAA", "major"), "share_trade_forward_gvc"] == pytest.approx(0.1)
-    assert pd.isna(out.loc[("AAA", "minor"), "share_trade_forward_gvc"])
-    assert pd.isna(out.loc[("AAA", "minor"), "share_trade_gvc_participation"])
-    assert out.loc[("AAA", "minor"), "share_trade_fva"] == pytest.approx(0.2)
-
-    flat = df.reset_index()
-    flat_out = tradeflow._add_trade_shares(flat.copy())
-    assert pd.isna(flat_out.loc[1, "share_trade_forward_gvc"])
-    assert flat_out.loc[1, "share_trade_fva"] == pytest.approx(0.2)
+    industry = tradeflow.sector_tradeflow(arr)
+    assert list(industry.index.names) == ["country", "industry"]
+    assert list(industry.columns) == tradeflow.TRADE_COLUMNS
+    assert np.allclose(tradeflow.gross_exports(industry), industry[["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"]].sum(axis=1))
 
 
 def test_tradeflow_bm_source_coefficients_match_cut_inverse(fake_io):
@@ -92,117 +58,107 @@ def test_tradeflow_bm_source_coefficients_match_cut_inverse(fake_io):
 def test_tradeflow_bm_source_small_system_values(fake_io, cycle_io):
     """2国与3国循环小系统的 BM source-based 聚合值固定。"""
     fake = tradeflow.country_tradeflow(build_arrays(fake_io))
-    assert fake.loc["AAA", "trade_dva"] == pytest.approx(20.401203, abs=1e-6)
-    assert fake.loc["AAA", "trade_rdv"] == pytest.approx(1.698414, abs=1e-6)
-    assert fake.loc["AAA", "trade_ddc"] == pytest.approx(0.187618, abs=1e-6)
-    assert fake.loc["AAA", "trade_fva"] == pytest.approx(1.698346, abs=1e-6)
-    assert fake.loc["AAA", "trade_fdc"] == pytest.approx(0.014418, abs=1e-6)
+    assert fake.loc["AAA", "DVAex"] == pytest.approx(20.401203, abs=1e-6)
+    assert fake.loc["AAA", "DVArt"] == pytest.approx(1.698414, abs=1e-6)
+    assert fake.loc["AAA", "DDC"] == pytest.approx(0.187618, abs=1e-6)
+    assert fake.loc["AAA", "FVA"] == pytest.approx(1.698346, abs=1e-6)
+    assert fake.loc["AAA", "FDC"] == pytest.approx(0.014418, abs=1e-6)
 
     cycle = tradeflow.country_tradeflow(build_arrays(cycle_io))
-    assert cycle.loc["BBB", "trade_dva"] == pytest.approx(10.657258, abs=1e-6)
-    assert cycle.loc["BBB", "trade_rdv"] == pytest.approx(1.342742, abs=1e-6)
-    assert cycle.loc["BBB", "trade_ddc"] == pytest.approx(0.580645, abs=1e-6)
-    assert cycle.loc["BBB", "trade_fva"] == pytest.approx(7.076923, abs=1e-6)
-    assert cycle.loc["BBB", "trade_fdc"] == pytest.approx(0.342432, abs=1e-6)
+    assert cycle.loc["BBB", "DVAex"] == pytest.approx(10.657258, abs=1e-6)
+    assert cycle.loc["BBB", "DVArt"] == pytest.approx(1.342742, abs=1e-6)
+    assert cycle.loc["BBB", "DDC"] == pytest.approx(0.580645, abs=1e-6)
+    assert cycle.loc["BBB", "FVA"] == pytest.approx(7.076923, abs=1e-6)
+    assert cycle.loc["BBB", "FDC"] == pytest.approx(0.342432, abs=1e-6)
 
 
 def test_tradeflow_autarky(autarky_io):
-    """封闭经济:没有出口,参与度无从谈起(出口为0)。"""
+    """封闭经济没有出口。"""
     arr = build_arrays(autarky_io)
     assert np.allclose(arr.E, 0)
+    df = tradeflow.country_tradeflow(arr)
+    assert np.allclose(tradeflow.gross_exports(df), 0.0)
 
 
 def test_production_decomposition_adds_up(fake_io):
-    """四段分解之和 = 增加值总额(WWYZ 分解的核心恒等式)。"""
+    """客户资料生产字段的四段分解之和 = 增加值总额。"""
     arr = build_arrays(fake_io)
     df = production.country_production(arr)
-    parts = df[["prod_pure_domestic", "prod_traditional", "prod_simple_gvc", "prod_complex_gvc"]].sum(axis=1)
-    assert np.allclose(parts, df["prod_va_total"])
-    assert np.allclose(df["prod_gvc_total"], df["prod_simple_gvc"] + df["prod_complex_gvc"])
-    assert np.allclose(df["sva"], df["va_d"] + df["va_rt"] + df["va_gvc"])
-    assert np.allclose(df["va_gvc"], df["va_gvc_s"] + df["va_gvc_c"])
-    assert np.allclose(df["fgy"], df["fgy_d"] + df["fgy_rt"] + df["fgy_gvc"])
-    assert np.allclose(df["fgy_gvc"], df["fgy_gvc_s"] + df["fgy_gvc_c"])
-    # 总增加值应等于 va 向量按国加总
+    parts = df[["1_VA_D", "2_VA_RT", "3a_VA_GVC_S", "3b_VA_GVC_C"]].sum(axis=1)
+    assert np.allclose(parts, df["SVA"])
+    assert np.allclose(df["3_VA_GVC"], df["3a_VA_GVC_S"] + df["3b_VA_GVC_C"])
+    fgy_parts = df[["1_FGY_D", "2_FGY_RT", "3a_FGY_GVC_S", "3b_FGY_GVC_C"]].sum(axis=1)
+    assert np.allclose(fgy_parts, df["FGY"])
+    assert np.allclose(df["3_FGY_GVC"], df["3a_FGY_GVC_S"] + df["3b_FGY_GVC_C"])
+
     va_by_country = {r: arr.va[arr.pos[r]].sum() for r in arr.regions}
     for r in arr.regions:
-        assert df.loc[r, "prod_va_total"] == pytest.approx(va_by_country[r])
-    shares = df[[c for c in df.columns if c.startswith("share_")]].sum(axis=1)
-    assert np.allclose(shares - df["share_prod_gvc_total"], 1.0)
+        assert df.loc[r, "SVA"] == pytest.approx(va_by_country[r])
 
 
 def test_production_autarky(autarky_io):
     """封闭经济:增加值 100% 是纯国内,GVC 各段为 0。"""
     arr = build_arrays(autarky_io)
     df = production.country_production(arr)
-    assert np.allclose(df["share_prod_pure_domestic"], 1.0)
-    assert np.allclose(df["prod_traditional"], 0.0, atol=1e-9)
-    assert np.allclose(df["prod_simple_gvc"], 0.0, atol=1e-9)
-    assert np.allclose(df["prod_complex_gvc"], 0.0, atol=1e-9)
+    assert np.allclose(df["1_VA_D"], df["SVA"])
+    assert np.allclose(df["2_VA_RT"], 0.0, atol=1e-9)
+    assert np.allclose(df["3a_VA_GVC_S"], 0.0, atol=1e-9)
+    assert np.allclose(df["3b_VA_GVC_C"], 0.0, atol=1e-9)
 
 
 def test_sector_production_adds_up(fake_io):
     """行业级四段之和 = 行业增加值;按国加总 = 国家级分解。"""
     arr = build_arrays(fake_io)
     sec = production.sector_production(arr)
-    parts = sec[["prod_pure_domestic", "prod_traditional", "prod_simple_gvc", "prod_complex_gvc"]].sum(axis=1)
-    assert np.allclose(parts, sec["prod_va_total"])
-    assert np.allclose(sec["sva"], sec["va_d"] + sec["va_rt"] + sec["va_gvc"])
-    assert np.allclose(sec["va_gvc"], sec["va_gvc_s"] + sec["va_gvc_c"])
+    assert list(sec.index.names) == ["country", "industry"]
+    parts = sec[["1_VA_D", "2_VA_RT", "3a_VA_GVC_S", "3b_VA_GVC_C"]].sum(axis=1)
+    assert np.allclose(parts, sec["SVA"])
+    assert np.allclose(sec["3_VA_GVC"], sec["3a_VA_GVC_S"] + sec["3b_VA_GVC_C"])
 
     country = production.country_production(arr)
-    agg = (
-        sec[["prod_va_total", "prod_pure_domestic", "prod_traditional", "prod_simple_gvc", "prod_complex_gvc"]]
-        .groupby(level=0)
-        .sum()
-    )
-    assert np.allclose(agg.values, country[agg.columns].values)
-
-    # 行业级四分类占比加总为 1;share_prod_gvc_total 是 simple+complex 的汇总列
-    shares = sec[[c for c in sec.columns if c.startswith("share_")]].sum(axis=1)
-    assert np.allclose(shares - sec["share_prod_gvc_total"], 1.0)
+    agg = sec[production.PRODUCTION_COLUMNS].groupby(level=0).sum()
+    assert np.allclose(agg[country.columns].values, country.values)
 
 
 def test_sector_production_autarky(autarky_io):
     arr = build_arrays(autarky_io)
     sec = production.sector_production(arr)
-    assert np.allclose(sec["prod_traditional"], 0.0, atol=1e-9)
-    assert np.allclose(sec["prod_simple_gvc"], 0.0, atol=1e-9)
-    assert np.allclose(sec["prod_complex_gvc"], 0.0, atol=1e-9)
+    assert np.allclose(sec["2_VA_RT"], 0.0, atol=1e-9)
+    assert np.allclose(sec["3a_VA_GVC_S"], 0.0, atol=1e-9)
+    assert np.allclose(sec["3b_VA_GVC_C"], 0.0, atol=1e-9)
 
 
 def test_cycle_has_return_and_double_counting(cycle_io):
     """循环跨境链条应识别出返回国内增加值、重复计算与复杂 GVC。"""
     arr = build_arrays(cycle_io)
     tf = tradeflow.country_tradeflow(arr)
-    assert (tf["trade_rdv"] > 0).all()
-    assert (tf["trade_pdc"] > 0).all()
-    assert np.allclose(
-        tf[["trade_dva", "trade_rdv", "trade_ddc", "trade_fva", "trade_fdc"]].sum(axis=1),
-        tf["trade_gross_exports"],
-    )
+    assert (tf["DVArt"] > 0).all()
+    assert ((tf["DDC"] + tf["FDC"]) > 0).all()
+    assert np.allclose(tradeflow.gross_exports(tf), tf[["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"]].sum(axis=1))
 
     prod = production.country_production(arr)
-    assert (prod["prod_complex_gvc"] > 0).all()
+    assert (prod["3b_VA_GVC_C"] > 0).all()
 
 
 def test_length_properties(fake_io, autarky_io):
     arr = build_arrays(fake_io)
     df = length.sector_length(arr)
-    # 上游度至少为1(所有产出至少要经过自己这一个阶段)
-    assert (df["upstreamness"] >= 1 - 1e-9).all()
-    assert (df["upstreamness_domestic"] <= df["upstreamness"] + 1e-9).all()
-    assert (df["upstreamness_cross"] >= -1e-9).all()
-    assert np.allclose(df["plv"], df["upstreamness"])
-    assert np.allclose(df["plv_d"], df["upstreamness_domestic"])
-    assert np.isfinite(df["ply"]).all()
-    assert np.isfinite(df["pos_tpl"]).all()
+    assert list(df.index.names) == ["country", "industry"]
+    assert list(df.columns) == length.LENGTH_COLUMNS
+    assert (df["PLv"] >= 1 - 1e-9).all()
+    assert (df["PLv_D"] <= df["PLv"] + 1e-9).all()
+    assert np.allclose(df[["PLv_D", "PLv_RT", "PLv_GVC"]].sum(axis=1), df["PLv"])
+    assert np.allclose(df[["PLy_D", "PLy_RT", "PLy_GVC"]].sum(axis=1), df["PLy"])
+    assert np.isfinite(df["PLy"]).all()
+    assert np.isfinite(df["Pos_TPL"]).all()
 
-    # 封闭经济:跨境段为0,总长度=国内段
     arr_a = build_arrays(autarky_io)
     df_a = length.sector_length(arr_a)
-    assert np.allclose(df_a["upstreamness_cross"], 0.0, atol=1e-9)
-    assert df_a["gvcps"].isna().all()
+    assert np.allclose(df_a["PLv_RT"], 0.0, atol=1e-9)
+    assert np.allclose(df_a["PLv_GVC"], 0.0, atol=1e-9)
+    assert np.allclose(df_a["PLy_RT"], 0.0, atol=1e-9)
+    assert np.allclose(df_a["PLy_GVC"], 0.0, atol=1e-9)
+    assert df_a["GVCPs"].isna().all()
 
     country = length.country_length(arr, df)
     assert set(country.index) == {"AAA", "BBB"}
@@ -217,35 +173,25 @@ def test_network_metrics(fake_io):
     assert F.loc["AAA", "BBB"] == pytest.approx(24.0)
 
     df = network.country_network(arr)
-    assert df["degree_centrality"].between(0, 2).all()
-    for col in [
-        "degree",
-        "indegree",
-        "outdegree",
-        "weighted_degree",
-        "weighted_indegree",
-        "weighted_outdegree",
-        "eccentricity",
-        "closeness_centrality",
-        "harmonic_closeness_centrality",
-    ]:
-        assert col in df.columns
-    assert (df["eigenvector_centrality"] > 0).all()
+    assert list(df.columns) == network.NETWORK_COLUMNS
+    assert np.allclose(df["degree"], df["indegree"] + df["outdegree"])
+    assert np.allclose(df["weighted degree"], df["weighted indegree"] + df["weighted outdegree"])
+    assert (df["betweenesscentrality"] >= 0).all()
+    assert (df["eigencentrality"] > 0).all()
 
 
 def test_sector_network(fake_io):
     """行业级网络:索引齐全,数值性质合理。"""
     arr = build_arrays(fake_io)
     df = network.sector_network(arr)
-    assert list(df.index.names) == ["country", "sector"]
+    assert list(df.index.names) == ["country", "industry"]
     assert len(df) == 4  # 2 国 × 2 行业全覆盖
     assert not df.isna().any().any()
-    assert df["degree_centrality"].between(0, 2).all()
     assert np.allclose(df["degree"], df["indegree"] + df["outdegree"])
-    assert np.allclose(df["weighted_degree"], df["weighted_indegree"] + df["weighted_outdegree"])
-    assert (df["betweenness_centrality"] >= 0).all()
-    # fake_io 中所有行业间都有流量,度中心性应处处为正
-    assert (df["degree_centrality"] > 0).all()
+    assert np.allclose(df["weighted degree"], df["weighted indegree"] + df["weighted outdegree"])
+    assert (df["betweenesscentrality"] >= 0).all()
+    # fake_io 中所有行业间都有流量,度数应处处为正
+    assert (df["degree"] > 0).all()
 
 
 def test_betweenness_is_exact_under_node_limit(fake_io):
@@ -261,7 +207,7 @@ def test_betweenness_is_exact_under_node_limit(fake_io):
             G.add_edge(nodes[i], nodes[j], weight=w)
 
     got = network._betweenness_centrality(G)
-    expected = nx.betweenness_centrality(G, weight=None, normalized=True)
+    expected = nx.betweenness_centrality(G, weight=None, normalized=False)
 
     for node in nodes:
         assert got[node] == pytest.approx(expected[node])

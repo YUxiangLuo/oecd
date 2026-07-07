@@ -1,7 +1,7 @@
 """步骤4:GVC 总贸易流分解指标(Borin-Mancini source-based 口径)。
 
-本模块把一国/一国行业的毛出口拆成国内增加值、返回国内增加值(reflection)、
-国内重复计算、外国增加值与外国重复计算,并派生前向/后向 GVC 参与度。
+本模块把一国/一国行业的毛出口拆成客户资料中的 DVAex、DVArt、DDC、
+FVA、FDC 与 taxsub。
 实现范围是国家级与国家-行业级聚合结果;不输出 exporter-importer-sector
 双边明细。
 
@@ -14,20 +14,7 @@ import pandas as pd
 
 from gvcsim.indicators.core import IcioArrays
 
-_AMOUNT_COLS = [
-    "trade_gross_exports",
-    "trade_dva",
-    "trade_dva_final",
-    "trade_dva_intermediate_absorbed",
-    "trade_dva_intermediate_reexported",
-    "trade_rdv",
-    "trade_ddc",
-    "trade_fva",
-    "trade_fdc",
-    "trade_pdc",
-    "trade_forward_va_in_foreign_exports",
-    "trade_balance_error",
-]
+TRADE_COLUMNS = ["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub", "EXDVA"]
 
 
 def _node_regions(arr: IcioArrays) -> np.ndarray:
@@ -115,78 +102,12 @@ def _bm_source_coefficients(
     return domestic_source, domestic_full, foreign_source, foreign_full
 
 
-# 占比指标除以毛出口,只有当该实体"确实出口"时才有意义。分两档下限:
-_EXPORT_NOISE_FLOOR = 1e-9  # 相对本帧最大毛出口:剔除非贸易行业在小经济体里 ~1e-13 的机器精度噪声
-# 国家-行业级、仅用于前向/总参与度这类"无界"指标的额外相对下限:毛出口不足本国总出口
-# 0.5% 的行业不是主要出口部门(多为电力/供水/建筑/房地产/公共管理等非贸易品),
-# 其前向参与度会被自身很小的出口分母放大到数倍甚至几十倍,记为缺失比记一个爆表百分数更诚实。
-_EXPORT_SECTOR_FLOOR = 5e-3
-
-
-def _exports_above_noise(gross: pd.Series) -> pd.Series:
-    """毛出口是否高于机器精度噪声(所有占比指标共用的最低门槛)。"""
-    if not len(gross):
-        return gross > 0
-    return gross > float(gross.max()) * _EXPORT_NOISE_FLOOR
-
-
-def _meaningful_exporter(df: pd.DataFrame) -> pd.Series:
-    """在噪声门槛之上,再要求是本国"有意义的出口部门"(仅用于无界的前向/总参与度)。
-
-    DVA/FVA/PDC/后向占比都是毛出口的组成项,天然 ∈[0,1],即便行业出口很小也有意义、
-    不需要这道相对下限——收窄到前向/总参与度,既修好爆表显示,又不无谓丢弃步骤13
-    (depvar=share_trade_fva)等回归的有效样本。
-    """
-    gross = df["trade_gross_exports"]
-    valid = _exports_above_noise(gross)
-    if isinstance(gross.index, pd.MultiIndex):  # (country, sector) 粒度
-        country_total = gross.groupby(level=0).transform("sum")
-        valid = valid & (gross > country_total * _EXPORT_SECTOR_FLOOR)
-    elif {"country", "sector"}.issubset(df.columns):  # 扁平化后的国家-行业表
-        country_total = gross.groupby(df["country"]).transform("sum")
-        valid = valid & (gross > country_total * _EXPORT_SECTOR_FLOOR)
-    return valid
-
-
-def _add_trade_shares(df: pd.DataFrame) -> pd.DataFrame:
-    gross = df["trade_gross_exports"]
-    noise_ok = _exports_above_noise(gross)  # 有界占比:只剔机器精度噪声
-    export_ok = _meaningful_exporter(df)  # 无界的前向/总参与度:再加相对下限
-    with np.errstate(divide="ignore", invalid="ignore"):
-        df["share_trade_dva"] = np.where(noise_ok, df["trade_dva"] / gross, np.nan)
-        df["share_trade_fva"] = np.where(noise_ok, df["trade_fva"] / gross, np.nan)
-        df["share_trade_pdc"] = np.where(noise_ok, df["trade_pdc"] / gross, np.nan)
-        df["share_trade_backward_gvc"] = np.where(noise_ok, (df["trade_fva"] + df["trade_fdc"]) / gross, np.nan)
-        df["share_trade_forward_gvc"] = np.where(export_ok, df["trade_forward_va_in_foreign_exports"] / gross, np.nan)
-    # 总参与度含前向项,前向对非"有意义出口部门"已是缺失,后向 + 缺失 = 缺失,口径自然一致
-    df["share_trade_gvc_participation"] = df["share_trade_backward_gvc"] + df["share_trade_forward_gvc"]
-    _add_customer_fields(df)
-    return df
-
-
-def _add_customer_fields(df: pd.DataFrame) -> None:
-    """客户资料字段名兼容层。
-
-    客户样例第4组是国家-行业聚合表,不是 exporter-importer-sector 真双边表。
-    taxsub 在当前矩阵切块中没有稳定来源,保留为空值,避免伪造税补贴分解。
-    """
-    zero = pd.Series(0.0, index=df.index)
-    df["dvaex"] = df.get("trade_dva", zero)
-    df["dvart"] = df.get("trade_rdv", zero)
-    df["ddc"] = df.get("trade_ddc", zero)
-    df["fva"] = df.get("trade_fva", zero)
-    df["fdc"] = df.get("trade_fdc", zero)
-    df["exdva"] = df["dvaex"] + df["dvart"]
-    df["taxsub"] = np.nan
+def gross_exports(df: pd.DataFrame) -> pd.Series:
+    return df[["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"]].sum(axis=1)
 
 
 def sector_tradeflow(arr: IcioArrays) -> pd.DataFrame:
-    """国家-行业级 Borin-Mancini source-based 贸易流分解,索引为 (country, sector)。
-
-    五个闭合项(DVA/RDV/DDC/FVA/FDC)使用 BM 精确公式。DVA 的最终吸收
-    子项仍按输出流向追踪拆成最终品、进口国吸收、第三国再出口与返回本国,
-    以保持前端教学字段稳定。
-    """
+    """国家-行业级客户口径贸易流分解,索引为 (country, industry)。"""
     node_regions = _node_regions(arr)
     node_sectors = _node_sectors(arr)
     n = len(arr.x)
@@ -210,6 +131,7 @@ def sector_tradeflow(arr: IcioArrays) -> pd.DataFrame:
     trade_ddc = np.zeros(n)
     trade_fva = np.zeros(n)
     trade_fdc = np.zeros(n)
+    taxsub = np.zeros(n)
 
     for r in arr.regions:
         p = arr.pos[r]
@@ -230,40 +152,28 @@ def sector_tradeflow(arr: IcioArrays) -> pd.DataFrame:
         trade_ddc[p] = (domestic_full - domestic_source) * arr.E[p]
         trade_fva[p] = foreign_source * arr.E[p]
         trade_fdc[p] = (foreign_full - foreign_source) * arr.E[p]
-
-    trade_dva = trade_dva_final + trade_dva_absorbed + trade_dva_reexported
-    trade_pdc = trade_ddc + trade_fdc
-
-    gross = arr.E  # 毛出口 = 跨境中间品 + 最终品出口,core 已按同口径算好
-    accounted = trade_dva + trade_rdv + trade_ddc + trade_fva + trade_fdc
-    # 前向:本节点增加值嵌入外国节点毛出口的金额 v_i · Σ_{j 外国} B_ij · E_j
-    forward = arr.v * (np.where(border, arr.B, 0.0) @ arr.E)
+        taxsub[p] = (arr.t @ arr.B[:, p]) * arr.E[p]
 
     df = pd.DataFrame(
         {
-            "trade_gross_exports": gross,
-            "trade_dva": trade_dva,
-            "trade_dva_final": trade_dva_final,
-            "trade_dva_intermediate_absorbed": trade_dva_absorbed,
-            "trade_dva_intermediate_reexported": trade_dva_reexported,
-            "trade_rdv": trade_rdv,
-            "trade_ddc": trade_ddc,
-            "trade_fva": trade_fva,
-            "trade_fdc": trade_fdc,
-            "trade_pdc": trade_pdc,
-            "trade_forward_va_in_foreign_exports": forward,
-            "trade_balance_error": gross - accounted,
+            "DVAex": trade_dva_final + trade_dva_absorbed + trade_dva_reexported,
+            "DVArt": trade_rdv,
+            "DDC": trade_ddc,
+            "FVA": trade_fva,
+            "FDC": trade_fdc,
+            "taxsub": taxsub,
         },
-        index=pd.MultiIndex.from_arrays([node_regions, node_sectors], names=["country", "sector"]),
+        index=pd.MultiIndex.from_arrays([node_regions, node_sectors], names=["country", "industry"]),
     )
-    return _add_trade_shares(df)
+    df["EXDVA"] = df["DVAex"] + df["DVArt"]
+    return df[TRADE_COLUMNS]
 
 
 def country_tradeflow(arr: IcioArrays, sector_df: pd.DataFrame | None = None) -> pd.DataFrame:
-    """国家级贸易流分解 = 国家-行业级金额按国加总,占比重新计算。"""
+    """国家级贸易流分解 = 国家-行业级金额按国加总。"""
     if sector_df is None:
         sector_df = sector_tradeflow(arr)
-    amount_cols = [c for c in _AMOUNT_COLS if c in sector_df.columns]
-    df = sector_df[amount_cols].groupby(level=0).sum()
+    df = sector_df[TRADE_COLUMNS].groupby(level=0).sum()
+    df["EXDVA"] = df["DVAex"] + df["DVArt"]
     df.index.name = "country"
-    return _add_trade_shares(df)
+    return df[TRADE_COLUMNS]

@@ -48,7 +48,7 @@ def test_meta_reads_raw_icio_shape(tmp_path: Path):
     assert meta["years"] == [2020]
     assert meta["default_year"] == 2020
     assert meta["countries"] == ["AAA", "BBB"]
-    assert meta["sectors"] == ["s1", "s2"]
+    assert meta["industries"] == ["s1", "s2"]
     assert meta["final_demand_categories"] == ["HFCE", "GFCF"]
     assert meta["account_rows"] == ["TLS", "VA", "OUT"]
     assert meta["n_rows"] == 6

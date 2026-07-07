@@ -6,23 +6,57 @@ import { fmtDb, useAsync } from "../shared";
 const DB_SOURCES = [
   {
     name: "OECD ICIO",
-    status: "已接入",
-    detail: "当前项目主数据库,支持中间投入、最终需求、TLS/VA/OUT 账户表浏览。",
+    org: "经济合作与发展组织 OECD",
+    scope: "76+1",
+    industries: "45",
+    years: "1995-2020",
+    url: "https://www.oecd.org/en/data/datasets/inter-country-input-output-tables.html",
+    status: "唯一真实计算数据源",
+  },
+  {
+    name: "OECD-AMNE",
+    org: "经济合作与发展组织 OECD",
+    scope: "76+1",
+    industries: "41",
+    years: "2000-2020",
+    url: "https://www.oecd.org/en/data/datasets/multinational-enterprises-and-global-value-chains.html",
+    status: "教学比较",
+  },
+  {
+    name: "ADB-MRIO",
+    org: "亚洲开发银行 ADB",
+    scope: "62+1 / 72+1",
+    industries: "35",
+    years: "2007-2023",
+    url: "https://kidb.adb.org/globalization",
+    status: "教学比较",
   },
   {
     name: "WIOD",
-    status: "备选",
-    detail: "行业口径更细但年份覆盖不同,可作为稳健性扩展。",
+    org: "荷兰格罗宁根大学",
+    scope: "43+1",
+    industries: "56",
+    years: "2000-2014",
+    url: "https://www.rug.nl/ggdc/valuechain/wiod/",
+    status: "教学比较",
   },
   {
     name: "Eora MRIO",
-    status: "备选",
-    detail: "国家覆盖更广,适合全球网络扩展但许可和口径成本更高。",
+    org: "澳大利亚研究委员会 ARC 支持",
+    scope: "190",
+    industries: "26",
+    years: "1990-2022",
+    url: "https://worldmrio.com/",
+    status: "教学比较",
   },
   {
-    name: "中国国家统计局",
-    status: "补充",
-    detail: "适合国内分区域或投入产出表校准,不能直接替代全球 MRIO。",
+    name: "GTAP-11",
+    org: "美国普渡大学 GTAP",
+    scope: "141+19",
+    industries: "65",
+    years: "2004/2007/2011/2014/2017",
+    url: "https://www.gtap.agecon.purdue.edu/",
+    status: "教学比较",
   },
 ];
 
@@ -32,6 +66,37 @@ const DB_TABLES: { key: DbTableKind; label: string; hint: string }[] = [
   { key: "accounts", label: "账户项", hint: "TLS / VA / OUT 转置为国家-行业行" },
 ];
 
+function DatabaseComparison() {
+  return (
+    <div className="table-wrap" style={{ marginBottom: 16 }}>
+      <table className="data-table db-table">
+        <thead>
+          <tr>
+            <th>投入产出数据库</th>
+            <th>数据库建立机构</th>
+            <th>国家或地区数量</th>
+            <th>行业或部门数量</th>
+            <th>时间维度</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          {DB_SOURCES.map((source) => (
+            <tr key={source.name} className={source.name === "OECD ICIO" ? "active-row" : ""}>
+              <td><a href={source.url} target="_blank" rel="noreferrer">{source.name}</a></td>
+              <td>{source.org}</td>
+              <td>{source.scope}</td>
+              <td>{source.industries}</td>
+              <td>{source.years}</td>
+              <td>{source.status}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /** 步骤1:数据库介绍 + OECD ICIO 原始表浏览 */
 export function DbLab() {
   const { data: meta, error: metaError } = useAsync<DbMeta>(() => api.dbMeta(), []);
@@ -39,8 +104,8 @@ export function DbLab() {
   const [year, setYear] = useState<number | null>(null);
   const [rowCountry, setRowCountry] = useState("");
   const [colCountry, setColCountry] = useState("");
-  const [rowSector, setRowSector] = useState("");
-  const [colSector, setColSector] = useState("");
+  const [rowIndustry, setRowIndustry] = useState("");
+  const [colIndustry, setColIndustry] = useState("");
   const [page, setPage] = useState(1);
 
   useEffect(() => {
@@ -58,8 +123,8 @@ export function DbLab() {
   const pickYear = withPageReset(setYear);
   const pickRowCountry = withPageReset(setRowCountry);
   const pickColCountry = withPageReset(setColCountry);
-  const pickRowSector = withPageReset(setRowSector);
-  const pickColSector = withPageReset(setColSector);
+  const pickRowIndustry = withPageReset(setRowIndustry);
+  const pickColIndustry = withPageReset(setColIndustry);
 
   const ready = Boolean(meta && year && rowCountry && (table === "accounts" || colCountry));
   const { data: slice, error: sliceError } = useAsync<DbSlice | null>(
@@ -69,13 +134,13 @@ export function DbLab() {
         table,
         rowCountry,
         colCountry: table === "accounts" ? undefined : colCountry,
-        rowSector,
-        colSector: table === "accounts" ? undefined : colSector,
+        rowIndustry,
+        colIndustry: table === "accounts" ? undefined : colIndustry,
         page,
         pageSize: 25,
       })
       : Promise.resolve(null)),
-    [ready, year, table, rowCountry, colCountry, rowSector, colSector, page],
+    [ready, year, table, rowCountry, colCountry, rowIndustry, colIndustry, page],
   );
 
   if (metaError) return <div className="error-box">{metaError}</div>;
@@ -83,23 +148,13 @@ export function DbLab() {
 
   const selectedFile = meta.files.find((f) => f.year === year);
   const pages = slice ? Math.max(1, Math.ceil(slice.total / slice.page_size)) : 1;
-  const colOptions = table === "y" ? meta.final_demand_categories : meta.sectors;
+  const colOptions = table === "y" ? meta.final_demand_categories : meta.industries;
   const activeTable = DB_TABLES.find((t) => t.key === table)!;
 
   if (!meta.years.length) {
     return (
       <div>
-        <div className="db-source-grid">
-          {DB_SOURCES.map((source) => (
-            <div key={source.name} className={`db-source${source.name === "OECD ICIO" ? " active" : ""}`}>
-              <div className="db-source-head">
-                <strong>{source.name}</strong>
-                <span>{source.status}</span>
-              </div>
-              <p>{source.detail}</p>
-            </div>
-          ))}
-        </div>
+        <DatabaseComparison />
         <div className="warnbox">
           未找到本地 OECD ICIO 原始 CSV。请将 ICIO2023_YYYY.csv 放入 OECD_ICIO/ 后刷新本页。
         </div>
@@ -109,22 +164,12 @@ export function DbLab() {
 
   return (
     <div>
-      <div className="db-source-grid">
-        {DB_SOURCES.map((source) => (
-          <div key={source.name} className={`db-source${source.name === "OECD ICIO" ? " active" : ""}`}>
-            <div className="db-source-head">
-              <strong>{source.name}</strong>
-              <span>{source.status}</span>
-            </div>
-            <p>{source.detail}</p>
-          </div>
-        ))}
-      </div>
+      <DatabaseComparison />
 
       <div className="db-summary">
         <span>原始年份 {meta.years[0]}-{meta.years.at(-1)}</span>
         <span>{meta.countries.length} 个经济体</span>
-        <span>{meta.sectors.length} 个行业</span>
+        <span>{meta.industries.length} 个行业</span>
         <span>{meta.n_rows.toLocaleString("zh-CN")} 行 × {meta.n_columns.toLocaleString("zh-CN")} 列</span>
         {selectedFile && <span>{selectedFile.file}</span>}
       </div>
@@ -141,7 +186,7 @@ export function DbLab() {
               className={table === item.key ? "on" : ""}
               onClick={() => {
                 setTable(item.key);
-                setColSector("");
+                setColIndustry("");
                 setPage(1);
               }}
             >
@@ -158,9 +203,9 @@ export function DbLab() {
           {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
         <label>行行业</label>
-        <select value={rowSector} onChange={(e) => pickRowSector(e.target.value)}>
+        <select value={rowIndustry} onChange={(e) => pickRowIndustry(e.target.value)}>
           <option value="">全部</option>
-          {meta.sectors.map((s) => <option key={s} value={s}>{s}</option>)}
+          {meta.industries.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
         {table !== "accounts" && (
           <>
@@ -169,7 +214,7 @@ export function DbLab() {
               {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             <label>{table === "y" ? "最终需求" : "列行业"}</label>
-            <select value={colSector} onChange={(e) => pickColSector(e.target.value)}>
+            <select value={colIndustry} onChange={(e) => pickColIndustry(e.target.value)}>
               <option value="">全部</option>
               {colOptions.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -206,4 +251,3 @@ export function DbLab() {
     </div>
   );
 }
-

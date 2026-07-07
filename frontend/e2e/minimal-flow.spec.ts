@@ -43,12 +43,12 @@ const regressionOptions = {
   price_modes: ["名义值", "实际值(2016=1)"],
   scenarios: ["clean", "noisy", "confounded"],
   scenario_labels: { clean: "基准场景(clean)", noisy: "测量误差场景", confounded: "前趋势混杂场景" },
-  steps: { "13": "FVA 份额", "14": "复杂 GVC 生产", "15": "上游度", "16": "网络中心性" },
+  steps: { "13": "FVA 份额", "14": "复杂 GVC 生产", "15": "PLv_GVC", "16": "网络中心性" },
 };
 
 const design = {
   step: 13,
-  depvar: "share_trade_fva",
+  depvar: "FVA_share",
   depvar_label: "外国增加值份额",
   granularity: "国家–行业级",
   shock_type: "关税冲击",
@@ -65,7 +65,7 @@ const design = {
   controls: [],
   control_labels: {},
   equation: "Y_it = β·treated_i×post_it + α_i + λ_t + ε_it",
-  panel_file: "panel_sector.csv",
+  panel_file: "panel_industry.csv",
   entity: "entity_id",
   cluster: "country",
 };
@@ -86,7 +86,7 @@ async function mockApi(page: Page) {
         json: { stages: { "1": "数据接入", "2": "指标计算", "3": "可视化分析", "4": "回归设计与建模", "5": "实验闭环" }, steps: steps() },
       });
     }
-    if (path === "/api/meta") return route.fulfill({ json: { years: [2019, 2020], countries: ["CHN", "USA"], sectors: ["C", "G"] } });
+    if (path === "/api/meta") return route.fulfill({ json: { years: [2019, 2020], countries: ["CHN", "USA"], industries: ["C", "G"] } });
     if (path === "/api/shocks/events") return route.fulfill({ json: { events: [], disclaimer: "mock" } });
     if (path === "/api/regression/options") return route.fulfill({ json: regressionOptions });
     if (path === "/api/regression/design") return route.fulfill({ json: { ...design, step: Number(url.searchParams.get("step") ?? 13) } });

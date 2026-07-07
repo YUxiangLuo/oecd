@@ -3,18 +3,22 @@ import { CAT, Legend, type Row, cardStyle, num, useTip } from "../shared";
 /* --------------------------- 步骤9:生产结构堆叠条 --------------------------- */
 
 const PROD_SEGS = [
-  { key: "share_prod_pure_domestic", name: "纯国内" },
-  { key: "share_prod_traditional", name: "传统贸易" },
-  { key: "share_prod_simple_gvc", name: "简单 GVC" },
-  { key: "share_prod_complex_gvc", name: "复杂 GVC" },
+  { key: "1_VA_D", name: "纯国内" },
+  { key: "2_VA_RT", name: "传统贸易" },
+  { key: "3a_VA_GVC_S", name: "简单 GVC" },
+  { key: "3b_VA_GVC_C", name: "复杂 GVC" },
 ];
+const share = (r: Row, key: string) => {
+  const total = num(r.SVA);
+  return total ? num(r[key]) / total : 0;
+};
 
 export function StackedShareViz({ rows }: { rows: Row[] }) {
   const { wrapRef, Tip, show, hide } = useTip();
-  const top = [...rows].sort((a, b) => num(b.share_prod_complex_gvc) - num(a.share_prod_complex_gvc)).slice(0, 15);
+  const top = [...rows].sort((a, b) => share(b, "3b_VA_GVC_C") - share(a, "3b_VA_GVC_C")).slice(0, 15);
   const tipLines = (r: Row): [string, string][] => [
     ["", String(r.country)],
-    ...PROD_SEGS.map((s) => [s.name, `${(num(r[s.key]) * 100).toFixed(1)}%`] as [string, string]),
+    ...PROD_SEGS.map((s) => [s.name, `${(share(r, s.key) * 100).toFixed(1)}%`] as [string, string]),
   ];
   return (
     <div ref={wrapRef} style={cardStyle}>
@@ -30,13 +34,13 @@ export function StackedShareViz({ rows }: { rows: Row[] }) {
             <div style={{ flex: 1, display: "flex", height: 18, gap: 2 }}>
               {PROD_SEGS.map((s, i) => (
                 <div key={s.key} style={{
-                  width: `${num(r[s.key]) * 100}%`, background: CAT[i],
+                  width: `${share(r, s.key) * 100}%`, background: CAT[i],
                   borderRadius: i === PROD_SEGS.length - 1 ? "0 4px 4px 0" : 0,
                 }} />
               ))}
             </div>
             <div style={{ width: 86, fontSize: 11.5, color: "#8a90a0", fontVariantNumeric: "tabular-nums" }}>
-              复杂 {(num(r.share_prod_complex_gvc) * 100).toFixed(1)}%
+              复杂 {(share(r, "3b_VA_GVC_C") * 100).toFixed(1)}%
             </div>
           </div>
         ))}
@@ -48,4 +52,3 @@ export function StackedShareViz({ rows }: { rows: Row[] }) {
     </div>
   );
 }
-

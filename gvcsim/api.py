@@ -13,7 +13,7 @@ import pandas as pd
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from gvcsim import auth
@@ -70,7 +70,7 @@ def _clean(records: list[dict]) -> list[dict]:
 
 @lru_cache(maxsize=32)
 def _cached_csv(path_str: str, mtime_ns: int) -> pd.DataFrame:
-    """按 (路径, mtime) 缓存解析结果:大面板(panel_sector ~6MB)不必每请求重新解析,
+    """按 (路径, mtime) 缓存解析结果:大面板(panel_industry ~6MB)不必每请求重新解析,
     产物被 compute 重写后 mtime 变化会自动失效。调用方不得原地修改返回的 DataFrame。"""
     return pd.read_csv(path_str, keep_default_na=False, na_values=[""])
 
@@ -88,121 +88,45 @@ def _read_csv(name: str) -> pd.DataFrame:
     return _read_path(PROCESSED_DIR / name)
 
 
-def _indicator_compat(df: pd.DataFrame) -> pd.DataFrame:
-    """旧 processed CSV 的按需兼容层;新 compute 产物会直接包含这些列。"""
-    out = df.copy()
-    if "trade_dva" in out and "dvaex" not in out:
-        out["dvaex"] = out["trade_dva"]
-        out["dvart"] = out.get("trade_rdv", 0.0)
-        out["ddc"] = out.get("trade_ddc", 0.0)
-        out["fva"] = out.get("trade_fva", 0.0)
-        out["fdc"] = out.get("trade_fdc", 0.0)
-        out["exdva"] = out["dvaex"] + out["dvart"]
-        out["taxsub"] = float("nan")
-    if "prod_va_total" in out and "sva" not in out:
-        out["sva"] = out["prod_va_total"]
-        out["va_d"] = out.get("prod_pure_domestic", 0.0)
-        out["va_rt"] = out.get("prod_traditional", 0.0)
-        out["va_gvc_s"] = out.get("prod_simple_gvc", 0.0)
-        out["va_gvc_c"] = out.get("prod_complex_gvc", 0.0)
-        out["va_gvc"] = out["va_gvc_s"] + out["va_gvc_c"]
-        out["fgy"] = out["prod_va_total"]
-        out["fgy_d"] = out["va_d"]
-        out["fgy_rt"] = out["va_rt"]
-        out["fgy_gvc"] = out["va_gvc"]
-        out["fgy_gvc_s"] = out["va_gvc_s"]
-        out["fgy_gvc_c"] = out["va_gvc_c"]
-    if "upstreamness" in out and "plv" not in out:
-        out["plv"] = out["upstreamness"]
-        out["plv_d"] = out.get("upstreamness_domestic", 0.0)
-        out["plv_rt"] = out["plv_d"]
-        out["plv_gvc"] = out["plv"].where(out.get("upstreamness_cross", 0.0) > 1e-12)
-        out["ply"] = out["upstreamness"]
-        out["ply_d"] = out.get("upstreamness_domestic", 0.0)
-        out["ply_rt"] = out["ply_d"]
-        out["ply_gvc"] = out["ply"].where(out.get("upstreamness_cross", 0.0) > 1e-12)
-        out["pos_tpl"] = 1.0
-        out["gvcps"] = 1.0
-    return out
-
-
 INDICATOR_SCHEMA = {
     "groups": [
         {
             "key": "trade",
             "label": "双边总贸易流分解",
-            "fields": [
-                "exdva",
-                "dvaex",
-                "dvart",
-                "ddc",
-                "fva",
-                "fdc",
-                "taxsub",
-                "trade_gross_exports",
-                "trade_dva",
-                "trade_dva_final",
-                "trade_dva_intermediate_absorbed",
-                "trade_dva_intermediate_reexported",
-                "trade_rdv",
-                "trade_ddc",
-                "trade_fva",
-                "trade_fdc",
-                "trade_pdc",
-                "share_trade_dva",
-                "share_trade_fva",
-                "share_trade_pdc",
-                "share_trade_backward_gvc",
-                "share_trade_forward_gvc",
-                "share_trade_gvc_participation",
-            ],
+            "fields": ["EXDVA", "DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"],
         },
         {
             "key": "production",
             "label": "GVC 生产分解",
             "fields": [
-                "sva",
-                "va_d",
-                "va_rt",
-                "va_gvc",
-                "va_gvc_s",
-                "va_gvc_c",
-                "fgy",
-                "fgy_d",
-                "fgy_rt",
-                "fgy_gvc",
-                "fgy_gvc_s",
-                "fgy_gvc_c",
-                "prod_va_total",
-                "prod_pure_domestic",
-                "prod_traditional",
-                "prod_simple_gvc",
-                "prod_complex_gvc",
-                "prod_gvc_total",
-                "share_prod_pure_domestic",
-                "share_prod_traditional",
-                "share_prod_simple_gvc",
-                "share_prod_complex_gvc",
-                "share_prod_gvc_total",
+                "SVA",
+                "1_VA_D",
+                "2_VA_RT",
+                "3_VA_GVC",
+                "3a_VA_GVC_S",
+                "3b_VA_GVC_C",
+                "FGY",
+                "1_FGY_D",
+                "2_FGY_RT",
+                "3_FGY_GVC",
+                "3a_FGY_GVC_S",
+                "3b_FGY_GVC_C",
             ],
         },
         {
             "key": "length",
             "label": "GVC 长度与位置",
             "fields": [
-                "plv",
-                "plv_d",
-                "plv_rt",
-                "plv_gvc",
-                "ply",
-                "ply_d",
-                "ply_rt",
-                "ply_gvc",
-                "pos_tpl",
-                "gvcps",
-                "upstreamness",
-                "upstreamness_domestic",
-                "upstreamness_cross",
+                "PLv",
+                "PLv_D",
+                "PLv_RT",
+                "PLv_GVC",
+                "PLy",
+                "PLy_D",
+                "PLy_RT",
+                "PLy_GVC",
+                "Pos_TPL",
+                "GVCPs",
             ],
         },
         {
@@ -212,104 +136,58 @@ INDICATOR_SCHEMA = {
                 "degree",
                 "indegree",
                 "outdegree",
-                "weighted_degree",
-                "weighted_indegree",
-                "weighted_outdegree",
-                "eccentricity",
-                "closeness_centrality",
-                "harmonic_closeness_centrality",
-                "degree_centrality",
-                "betweenness_centrality",
-                "eigenvector_centrality",
+                "weighted degree",
+                "weighted indegree",
+                "weighted outdegree",
+                "Eccentricity",
+                "closnesscentrality",
+                "harmonicclosnesscentrality",
+                "betweenesscentrality",
+                "eigencentrality",
             ],
         },
     ],
     "fields": {
-        "exdva": {"label": "EXDVA 出口国内增加值", "format": "amount", "customer_key": "EXDVA"},
-        "dvaex": {"label": "DVAex 被国外吸收的国内增加值", "format": "amount", "customer_key": "DVAex"},
-        "dvart": {"label": "DVArt 返回国内增加值", "format": "amount", "customer_key": "DVArt"},
-        "ddc": {"label": "DDC 国内重复计算", "format": "amount", "customer_key": "DDC"},
-        "fva": {"label": "FVA 国外增加值", "format": "amount", "customer_key": "FVA"},
-        "fdc": {"label": "FDC 国外重复计算", "format": "amount", "customer_key": "FDC"},
-        "taxsub": {
-            "label": "taxsub 税补贴",
-            "format": "amount",
-            "customer_key": "taxsub",
-            "method_note": "当前 2016-2020 指标引擎不单独分解税补贴,该字段保留为空值。",
-        },
-        "trade_gross_exports": {"label": "毛出口", "format": "amount"},
-        "trade_dva": {"label": "国内增加值 DVA", "format": "amount"},
-        "trade_dva_final": {"label": "DVA:最终品出口", "format": "amount"},
-        "trade_dva_intermediate_absorbed": {"label": "DVA:进口国吸收", "format": "amount"},
-        "trade_dva_intermediate_reexported": {"label": "DVA:再出口吸收", "format": "amount"},
-        "trade_rdv": {"label": "返回国内增加值 RDV", "format": "amount"},
-        "trade_ddc": {"label": "国内重复计算 DDC", "format": "amount"},
-        "trade_fva": {"label": "外国增加值 FVA", "format": "amount"},
-        "trade_fdc": {"label": "外国重复计算 FDC", "format": "amount"},
-        "trade_pdc": {"label": "纯重复计算 PDC", "format": "amount"},
-        "share_trade_dva": {"label": "DVA 份额", "format": "pct"},
-        "share_trade_fva": {"label": "FVA 份额", "format": "pct"},
-        "share_trade_pdc": {"label": "PDC 份额", "format": "pct"},
-        "share_trade_backward_gvc": {"label": "后向 GVC 参与度", "format": "pct"},
-        "share_trade_forward_gvc": {"label": "前向 GVC 参与度", "format": "pct"},
-        "share_trade_gvc_participation": {"label": "总 GVC 参与度", "format": "pct"},
-        "sva": {"label": "SVA 总增加值", "format": "amount", "customer_key": "SVA"},
-        "va_d": {"label": "1_VA_D 纯国内生产", "format": "amount", "customer_key": "1_VA_D"},
-        "va_rt": {"label": "2_VA_RT 传统贸易生产", "format": "amount", "customer_key": "2_VA_RT"},
-        "va_gvc": {"label": "3_VA_GVC GVC 生产", "format": "amount", "customer_key": "3_VA_GVC"},
-        "va_gvc_s": {"label": "3a_VA_GVC_S 简单 GVC", "format": "amount", "customer_key": "3a_VA_GVC_S"},
-        "va_gvc_c": {"label": "3b_VA_GVC_C 复杂 GVC", "format": "amount", "customer_key": "3b_VA_GVC_C"},
-        "fgy": {
-            "label": "FGY 最终品生产",
-            "format": "amount",
-            "customer_key": "FGY",
-            "method_note": "当前版本按同一四分类聚合口径暴露兼容字段。",
-        },
-        "fgy_d": {"label": "1_FGY_D 国内最终品", "format": "amount", "customer_key": "1_FGY_D"},
-        "fgy_rt": {"label": "2_FGY_RT 最终品出口", "format": "amount", "customer_key": "2_FGY_RT"},
-        "fgy_gvc": {"label": "3_FGY_GVC GVC 最终品", "format": "amount", "customer_key": "3_FGY_GVC"},
-        "fgy_gvc_s": {"label": "3a_FGY_GVC_S 简单 GVC 最终品", "format": "amount", "customer_key": "3a_FGY_GVC_S"},
-        "fgy_gvc_c": {"label": "3b_FGY_GVC_C 复杂 GVC 最终品", "format": "amount", "customer_key": "3b_FGY_GVC_C"},
-        "prod_va_total": {"label": "总增加值", "format": "amount", "legacy": True},
-        "prod_pure_domestic": {"label": "纯国内生产", "format": "amount"},
-        "prod_traditional": {"label": "传统贸易生产", "format": "amount"},
-        "prod_simple_gvc": {"label": "简单 GVC 生产", "format": "amount"},
-        "prod_complex_gvc": {"label": "复杂 GVC 生产", "format": "amount"},
-        "prod_gvc_total": {"label": "GVC 生产合计", "format": "amount"},
-        "share_prod_pure_domestic": {"label": "纯国内份额", "format": "pct"},
-        "share_prod_traditional": {"label": "传统贸易份额", "format": "pct"},
-        "share_prod_simple_gvc": {"label": "简单 GVC 份额", "format": "pct"},
-        "share_prod_complex_gvc": {"label": "复杂 GVC 份额", "format": "pct"},
-        "share_prod_gvc_total": {"label": "GVC 生产份额", "format": "pct"},
-        "plv": {"label": "PLv 前向总生产长度", "format": "number", "customer_key": "PLv"},
-        "plv_d": {"label": "PLv_D 前向纯国内长度", "format": "number", "customer_key": "PLv_D"},
-        "plv_rt": {"label": "PLv_RT 前向传统贸易长度", "format": "number", "customer_key": "PLv_RT"},
-        "plv_gvc": {"label": "PLv_GVC 前向 GVC 长度", "format": "number", "customer_key": "PLv_GVC"},
-        "ply": {"label": "PLy 后向总生产长度", "format": "number", "customer_key": "PLy"},
-        "ply_d": {"label": "PLy_D 后向纯国内长度", "format": "number", "customer_key": "PLy_D"},
-        "ply_rt": {"label": "PLy_RT 后向传统贸易长度", "format": "number", "customer_key": "PLy_RT"},
-        "ply_gvc": {"label": "PLy_GVC 后向 GVC 长度", "format": "number", "customer_key": "PLy_GVC"},
-        "pos_tpl": {"label": "Pos_TPL 总生产位置", "format": "number", "customer_key": "Pos_TPL"},
-        "gvcps": {"label": "GVCPs GVC 位置指数", "format": "number", "customer_key": "GVCPs"},
-        "upstreamness": {"label": "上游度", "format": "number", "legacy": True},
-        "upstreamness_domestic": {"label": "国内段长度", "format": "number", "legacy": True},
-        "upstreamness_cross": {"label": "跨境段长度", "format": "number", "legacy": True},
+        "EXDVA": {"label": "EXDVA 出口国内增加值", "format": "amount"},
+        "DVAex": {"label": "DVAex 被国外吸收的国内增加值", "format": "amount"},
+        "DVArt": {"label": "DVArt 返回国内增加值", "format": "amount"},
+        "DDC": {"label": "DDC 国内重复计算", "format": "amount"},
+        "FVA": {"label": "FVA 国外增加值", "format": "amount"},
+        "FDC": {"label": "FDC 国外重复计算", "format": "amount"},
+        "taxsub": {"label": "taxsub 税补贴", "format": "amount"},
+        "SVA": {"label": "SVA 总增加值", "format": "amount"},
+        "1_VA_D": {"label": "1_VA_D 纯国内生产", "format": "amount"},
+        "2_VA_RT": {"label": "2_VA_RT 传统贸易生产", "format": "amount"},
+        "3_VA_GVC": {"label": "3_VA_GVC GVC 生产", "format": "amount"},
+        "3a_VA_GVC_S": {"label": "3a_VA_GVC_S 简单 GVC", "format": "amount"},
+        "3b_VA_GVC_C": {"label": "3b_VA_GVC_C 复杂 GVC", "format": "amount"},
+        "FGY": {"label": "FGY 最终品生产", "format": "amount"},
+        "1_FGY_D": {"label": "1_FGY_D 国内最终品", "format": "amount"},
+        "2_FGY_RT": {"label": "2_FGY_RT 最终品出口", "format": "amount"},
+        "3_FGY_GVC": {"label": "3_FGY_GVC GVC 最终品", "format": "amount"},
+        "3a_FGY_GVC_S": {"label": "3a_FGY_GVC_S 简单 GVC 最终品", "format": "amount"},
+        "3b_FGY_GVC_C": {"label": "3b_FGY_GVC_C 复杂 GVC 最终品", "format": "amount"},
+        "PLv": {"label": "PLv 前向总生产长度", "format": "number"},
+        "PLv_D": {"label": "PLv_D 前向纯国内长度", "format": "number"},
+        "PLv_RT": {"label": "PLv_RT 前向传统贸易长度", "format": "number"},
+        "PLv_GVC": {"label": "PLv_GVC 前向 GVC 长度", "format": "number"},
+        "PLy": {"label": "PLy 后向总生产长度", "format": "number"},
+        "PLy_D": {"label": "PLy_D 后向纯国内长度", "format": "number"},
+        "PLy_RT": {"label": "PLy_RT 后向传统贸易长度", "format": "number"},
+        "PLy_GVC": {"label": "PLy_GVC 后向 GVC 长度", "format": "number"},
+        "Pos_TPL": {"label": "Pos_TPL 总生产位置", "format": "number"},
+        "GVCPs": {"label": "GVCPs GVC 位置指数", "format": "number"},
         "degree": {"label": "度", "format": "number", "customer_key": "degree"},
         "indegree": {"label": "入度", "format": "number", "customer_key": "indegree"},
         "outdegree": {"label": "出度", "format": "number", "customer_key": "outdegree"},
-        "weighted_degree": {"label": "加权度", "format": "amount", "customer_key": "weighted degree"},
-        "weighted_indegree": {"label": "加权入度", "format": "amount", "customer_key": "weighted indegree"},
-        "weighted_outdegree": {"label": "加权出度", "format": "amount", "customer_key": "weighted outdegree"},
-        "eccentricity": {"label": "离心率", "format": "number", "customer_key": "Eccentricity"},
-        "closeness_centrality": {"label": "接近中心性", "format": "number", "customer_key": "closnesscentrality"},
-        "harmonic_closeness_centrality": {
-            "label": "调和中心性",
-            "format": "number",
-            "customer_key": "harmonicclosnesscentrality",
-        },
-        "degree_centrality": {"label": "加权度占比", "format": "number", "legacy": True},
-        "betweenness_centrality": {"label": "介数中心性", "format": "number"},
-        "eigenvector_centrality": {"label": "特征向量中心性", "format": "number"},
+        "weighted degree": {"label": "加权度", "format": "amount"},
+        "weighted indegree": {"label": "加权入度", "format": "amount"},
+        "weighted outdegree": {"label": "加权出度", "format": "amount"},
+        "Eccentricity": {"label": "离心率", "format": "number"},
+        "closnesscentrality": {"label": "接近中心性", "format": "number"},
+        "harmonicclosnesscentrality": {"label": "调和中心性", "format": "number"},
+        "betweenesscentrality": {"label": "介数中心性", "format": "number", "method_note": "高密图下使用固定 seed 抽样近似。"},
+        "eigencentrality": {"label": "特征向量中心性", "format": "number"},
     },
 }
 
@@ -342,11 +220,11 @@ def me(authorization: str | None = Header(default=None)):
 def meta():
     years = processed_years()
     countries: list[str] = []
-    sectors: list[str] = []
+    industries: list[str] = []
     if years:
         countries = sorted(_read_csv(f"indicators_country_{years[-1]}.csv")["country"].unique())
-        sectors = sorted(_read_csv(f"indicators_sector_{years[-1]}.csv")["sector"].unique())
-    return {"years": years, "countries": countries, "sectors": sectors}
+        industries = sorted(_read_csv(f"indicators_industry_{years[-1]}.csv")["industry"].unique())
+    return {"years": years, "countries": countries, "industries": industries}
 
 
 @app.get("/api/steps")
@@ -373,8 +251,8 @@ def db_slice(
     table: str = "z",
     row_country: str | None = None,
     col_country: str | None = None,
-    row_sector: str | None = None,
-    col_sector: str | None = None,
+    row_industry: str | None = None,
+    col_industry: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
 ):
@@ -384,8 +262,8 @@ def db_slice(
             table=table,
             row_country=row_country,
             col_country=col_country,
-            row_sector=row_sector,
-            col_sector=col_sector,
+            row_sector=row_industry,
+            col_sector=col_industry,
             page=page,
             page_size=page_size,
         )
@@ -425,25 +303,25 @@ def qc(year: int):
 
 @app.get("/api/indicators/country/{year}")
 def indicators_country(year: int, country: str | None = None):
-    df = _indicator_compat(_read_csv(f"indicators_country_{year}.csv"))
+    df = _read_csv(f"indicators_country_{year}.csv")
     if country:
         df = df[df["country"] == country]
     return _clean(df.to_dict(orient="records"))
 
 
-@app.get("/api/indicators/sector/{year}")
-def indicators_sector(
+@app.get("/api/indicators/industry/{year}")
+def indicators_industry(
     year: int,
     country: str | None = None,
-    sector: str | None = None,
+    industry: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
 ):
-    df = _indicator_compat(_read_csv(f"indicators_sector_{year}.csv"))
+    df = _read_csv(f"indicators_industry_{year}.csv")
     if country:
         df = df[df["country"] == country]
-    if sector:
-        df = df[df["sector"] == sector]
+    if industry:
+        df = df[df["industry"] == industry]
     total = len(df)
     start = (page - 1) * page_size
     return {
@@ -454,12 +332,88 @@ def indicators_sector(
     }
 
 
+EXPORT_COLUMNS = {
+    "trade": ["year", "country", "industry", "DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub", "EXDVA"],
+    "production": [
+        "year",
+        "country",
+        "industry",
+        "SVA",
+        "1_VA_D",
+        "2_VA_RT",
+        "3_VA_GVC",
+        "3a_VA_GVC_S",
+        "3b_VA_GVC_C",
+        "FGY",
+        "1_FGY_D",
+        "2_FGY_RT",
+        "3_FGY_GVC",
+        "3a_FGY_GVC_S",
+        "3b_FGY_GVC_C",
+    ],
+    "length": [
+        "year",
+        "country",
+        "industry",
+        "PLv",
+        "PLv_D",
+        "PLv_RT",
+        "PLv_GVC",
+        "PLy",
+        "PLy_D",
+        "PLy_RT",
+        "PLy_GVC",
+        "Pos_TPL",
+        "GVCPs",
+    ],
+    "network": [
+        "year",
+        "country",
+        "industry",
+        "degree",
+        "indegree",
+        "outdegree",
+        "weighted degree",
+        "weighted indegree",
+        "weighted outdegree",
+        "Eccentricity",
+        "closnesscentrality",
+        "harmonicclosnesscentrality",
+        "betweenesscentrality",
+        "eigencentrality",
+    ],
+}
+
+
+@app.get("/api/indicators/export/{granularity}/{year}")
+def indicators_export(granularity: str, year: int, profile: str):
+    if profile not in EXPORT_COLUMNS:
+        raise HTTPException(status_code=400, detail=f"profile 必须是 {list(EXPORT_COLUMNS)}")
+    if granularity == "country":
+        df = _read_csv(f"indicators_country_{year}.csv")
+        cols = [c for c in EXPORT_COLUMNS[profile] if c != "industry"]
+    elif granularity == "industry":
+        df = _read_csv(f"indicators_industry_{year}.csv")
+        cols = EXPORT_COLUMNS[profile]
+    else:
+        raise HTTPException(status_code=400, detail="granularity 必须是 country 或 industry")
+    csv = df[cols].to_csv(index=False)
+    filename = f"{profile}_{granularity}_{year}.csv"
+    return Response(
+        csv,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @app.get("/api/viz/network/{year}")
 def viz_network(year: int):
     edges = _read_csv(f"network_edges_{year}.csv")
-    nodes = _indicator_compat(_read_csv(f"indicators_country_{year}.csv"))[
-        ["country", "share_trade_gvc_participation", "betweenness_centrality", "trade_gross_exports"]
-    ]
+    base = _read_csv(f"indicators_country_{year}.csv").copy()
+    base["GVC_participation"] = (
+        (base["3a_VA_GVC_S"] + base["3b_VA_GVC_C"]) / base["SVA"].where(base["SVA"].abs() > 1e-12)
+    ).fillna(0.0)
+    nodes = base[["country", "GVC_participation", "betweenesscentrality", "EXDVA"]]
     return {
         "nodes": _clean(nodes.to_dict(orient="records")),
         "edges": _clean(edges.to_dict(orient="records")),
@@ -523,7 +477,7 @@ def shock_summary(shock_type: str = "关税冲击"):
                 "max_shock_target": f"{top['country']}·{top['sector']}" if top[shock_col] > 0 else "",
             }
         )
-    return {"years": rows, "n_countries": int(df["country"].nunique()), "n_sectors": int(df["sector"].nunique())}
+    return {"years": rows, "n_countries": int(df["country"].nunique()), "n_industries": int(df["sector"].nunique())}
 
 
 @app.get("/api/shocks/panel")
@@ -531,7 +485,7 @@ def shock_panel(
     year: int,
     shock_type: str = "关税冲击",
     country: str | None = None,
-    sector: str | None = None,
+    industry: str | None = None,
     only_hit: bool = True,
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
@@ -542,8 +496,8 @@ def shock_panel(
     df = df[df["year"] == year]
     if country:
         df = df[df["country"] == country]
-    if sector:
-        df = df[df["sector"] == sector]
+    if industry:
+        df = df[df["sector"] == industry]
     if only_hit:
         df = df[df[shock_col] > 0]
     df = df.sort_values(shock_col, ascending=False)
@@ -554,7 +508,9 @@ def shock_panel(
         effective_date=df[effective_col] if effective_col in df.columns else "",
         note=df[note_col] if note_col in df.columns else "",
         shock_type=shock_type,
+        industry=df["sector"],
     )
+    df = df.drop(columns=["sector"])
     total = len(df)
     start = (page - 1) * page_size
     return {
