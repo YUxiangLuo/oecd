@@ -156,6 +156,9 @@ def test_indicator_schema():
     body = resp.json()
     assert body["groups"][0]["key"] == "trade"
     assert body["fields"]["share_trade_fva"]["label"]
+    assert body["fields"]["exdva"]["customer_key"] == "EXDVA"
+    assert body["fields"]["gvcps"]["customer_key"] == "GVCPs"
+    assert body["fields"]["taxsub"]["method_note"]
 
 
 @needs_raw_icio
@@ -220,7 +223,7 @@ def test_meta_and_indicators():
     rows = client.get(f"/api/indicators/country/{year}").json()
     assert len(rows) > 50
     cols = rows[0].keys()
-    for col in ["share_trade_fva", "share_prod_complex_gvc", "upstreamness", "betweenness_centrality"]:
+    for col in ["exdva", "sva", "plv", "degree", "share_trade_fva", "share_prod_complex_gvc", "upstreamness"]:
         assert col in cols
 
     paged = client.get(f"/api/indicators/sector/{year}", params={"country": "CHN", "page": 1}).json()

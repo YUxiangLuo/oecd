@@ -3,9 +3,10 @@ import { type Row, SEQ, cardStyle, num } from "../shared";
 /* ----------------------------- 步骤11:热力表 ----------------------------- */
 
 const HEAT_COLS = [
-  { key: "degree_centrality", name: "度中心性" },
+  { key: "degree", name: "度" },
+  { key: "indegree", name: "入度" },
+  { key: "outdegree", name: "出度" },
   { key: "betweenness_centrality", name: "介数中心性" },
-  { key: "eigenvector_centrality", name: "特征向量中心性" },
 ];
 
 export function HeatTableViz({ rows }: { rows: Row[] }) {
@@ -27,13 +28,13 @@ export function HeatTableViz({ rows }: { rows: Row[] }) {
     <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
       <div style={{ display: "flex", padding: "11px 18px", background: "#fafbfd", borderBottom: "1px solid #eef0f5", fontSize: 11.5, color: "#8a90a0", fontWeight: 600 }}>
         <div style={{ flex: 1 }}>国家 / 地区(按介数排序 Top 15)</div>
-        {HEAT_COLS.map((c) => <div key={c.key} style={{ width: 150, textAlign: "center" }}>{c.name}</div>)}
+        {HEAT_COLS.map((c) => <div key={c.key} style={{ width: 128, textAlign: "center" }}>{c.name}</div>)}
       </div>
       {top.map((r) => (
         <div key={String(r.country)} style={{ display: "flex", alignItems: "center", padding: "6px 18px", borderBottom: "1px solid #f4f5f8", fontSize: 12.5 }}>
           <div style={{ flex: 1, fontWeight: 500 }}>{String(r.country)}</div>
           {HEAT_COLS.map((c) => (
-            <div key={c.key} style={{ width: 150, display: "flex", justifyContent: "center" }}>{cell(r, c.key)}</div>
+            <div key={c.key} style={{ width: 128, display: "flex", justifyContent: "center" }}>{cell(r, c.key)}</div>
           ))}
         </div>
       ))}
@@ -43,4 +44,3 @@ export function HeatTableViz({ rows }: { rows: Row[] }) {
     </div>
   );
 }
-

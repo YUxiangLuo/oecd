@@ -24,12 +24,35 @@ _AMOUNT_COLS = [
 ]
 
 
+def _add_customer_fields(df: pd.DataFrame) -> pd.DataFrame:
+    """客户资料字段名兼容层。
+
+    SVA/VA_* 是前向联系(增加值去向)口径。FGY/FY_* 在客户样例中是后向联系
+    字段;当前 2016-2020 教学系统没有单独落地 GN×GN 分解矩阵,因此先暴露为
+    同一四分类聚合口径下的兼容字段,保证 API/前端与客户资料字段一致。
+    """
+    df["sva"] = df["prod_va_total"]
+    df["va_d"] = df["prod_pure_domestic"]
+    df["va_rt"] = df["prod_traditional"]
+    df["va_gvc"] = df["prod_gvc_total"]
+    df["va_gvc_s"] = df["prod_simple_gvc"]
+    df["va_gvc_c"] = df["prod_complex_gvc"]
+
+    df["fgy"] = df["prod_va_total"]
+    df["fgy_d"] = df["prod_pure_domestic"]
+    df["fgy_rt"] = df["prod_traditional"]
+    df["fgy_gvc"] = df["prod_gvc_total"]
+    df["fgy_gvc_s"] = df["prod_simple_gvc"]
+    df["fgy_gvc_c"] = df["prod_complex_gvc"]
+    return df
+
+
 def _add_shares(df: pd.DataFrame) -> pd.DataFrame:
     df["prod_gvc_total"] = df["prod_simple_gvc"] + df["prod_complex_gvc"]
     with np.errstate(divide="ignore", invalid="ignore"):
         for col in _AMOUNT_COLS:
             df[f"share_{col}"] = np.where(df["prod_va_total"] > 0, df[col] / df["prod_va_total"], np.nan)
-    return df
+    return _add_customer_fields(df)
 
 
 def sector_production(arr: IcioArrays) -> pd.DataFrame:

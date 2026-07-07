@@ -4,10 +4,14 @@
 行业级:以 (国家, 行业) 为节点、中间品流 Z 为边的全球生产网络
 (含国内行业间边;最终需求不是生产节点,不计入)。
 
-三类中心性:
-  degree_centrality       加权度(强度):贸易连接的总量
-  betweenness_centrality  介数:作为供应链"咽喉/中转枢纽"的重要性
-  eigenvector_centrality  特征向量:与重要节点相连的程度
+客户资料/Gephi 风格指标:
+  degree / indegree / outdegree                    无权有向边数量
+  weighted_degree / weighted_indegree / weighted_outdegree  边权重强度
+  eccentricity / closeness_centrality / harmonic_closeness_centrality
+  betweenness_centrality / eigenvector_centrality
+
+兼容字段:
+  degree_centrality = weighted_degree / 全图流量,供旧前端和回归链路继续使用。
 """
 
 import networkx as nx
@@ -46,27 +50,17 @@ def country_flow_matrix(arr: IcioArrays) -> pd.DataFrame:
 
 def country_network(arr: IcioArrays) -> pd.DataFrame:
     F = country_flow_matrix(arr)
-    total = F.values.sum()
+    total = float(F.values.sum())
 
     G = nx.DiGraph()
     G.add_nodes_from(F.index)
     for r in F.index:
         for s in F.columns:
             w = F.loc[r, s]
-            if r != s and w / total > EDGE_SHARE_THRESHOLD:
-                G.add_edge(r, s, weight=float(w), distance=float(total / w))
+            if total > 0 and r != s and w / total > EDGE_SHARE_THRESHOLD:
+                G.add_edge(r, s, weight=float(w))
 
-    strength = {n: (G.out_degree(n, weight="weight") + G.in_degree(n, weight="weight")) / total for n in G.nodes}
-    betweenness = nx.betweenness_centrality(G, weight="distance", normalized=True)
-    eigen = _eigenvector_centrality(G)
-
-    df = pd.DataFrame(
-        {
-            "degree_centrality": strength,
-            "betweenness_centrality": betweenness,
-            "eigenvector_centrality": eigen,
-        }
-    )
+    df = _gephi_like_metrics(G, list(F.index), total)
     df.index.name = "country"
     return df
 
@@ -99,10 +93,53 @@ def _betweenness_centrality(G: nx.DiGraph) -> dict:
     return nx.betweenness_centrality(
         G,
         k=k,
-        weight="distance",
+        weight=None,
         normalized=True,
         seed=BETWEENNESS_SEED,
     )
+
+
+def _directed_eccentricity(G: nx.DiGraph) -> dict:
+    """有向无权图离心率:不可达节点不计;没有可达邻点时记 0。"""
+    out = {}
+    for node in G.nodes:
+        lengths = nx.single_source_shortest_path_length(G, node)
+        vals = [d for target, d in lengths.items() if target != node]
+        out[node] = float(max(vals)) if vals else 0.0
+    return out
+
+
+def _gephi_like_metrics(G: nx.DiGraph, nodes: list, total_weight: float) -> pd.DataFrame:
+    """输出客户资料中列出的 Gephi 风格网络指标。
+
+    路径类指标按无权有向图计算;weighted_* 与 eigenvector 使用边权重。
+    """
+    weighted_degree = {
+        n: float(G.out_degree(n, weight="weight") + G.in_degree(n, weight="weight")) for n in nodes
+    }
+    weighted_indegree = {n: float(G.in_degree(n, weight="weight")) for n in nodes}
+    weighted_outdegree = {n: float(G.out_degree(n, weight="weight")) for n in nodes}
+    degree_centrality = {
+        n: (weighted_degree[n] / total_weight if total_weight > 0 else 0.0) for n in nodes
+    }
+
+    df = pd.DataFrame(
+        {
+            "degree": {n: float(G.degree(n)) for n in nodes},
+            "indegree": {n: float(G.in_degree(n)) for n in nodes},
+            "outdegree": {n: float(G.out_degree(n)) for n in nodes},
+            "weighted_degree": weighted_degree,
+            "weighted_indegree": weighted_indegree,
+            "weighted_outdegree": weighted_outdegree,
+            "degree_centrality": degree_centrality,
+            "eccentricity": _directed_eccentricity(G),
+            "closeness_centrality": nx.closeness_centrality(G) if G.number_of_nodes() else {},
+            "harmonic_closeness_centrality": nx.harmonic_centrality(G) if G.number_of_nodes() else {},
+            "betweenness_centrality": _betweenness_centrality(G),
+            "eigenvector_centrality": _eigenvector_centrality(G),
+        }
+    )
+    return df.reindex(nodes).fillna(0.0)
 
 
 def sector_network(arr: IcioArrays) -> pd.DataFrame:
@@ -117,28 +154,15 @@ def sector_network(arr: IcioArrays) -> pd.DataFrame:
 
     G = nx.DiGraph()
     G.add_nodes_from(nodes)
-    src, dst = np.where(arr.Z / total > SECTOR_EDGE_SHARE_THRESHOLD)
-    for i, j in zip(src, dst):
-        if i == j:
-            continue
-        w = float(arr.Z[i, j])
-        G.add_edge(nodes[i], nodes[j], weight=w, distance=total / w)
+    if total > 0:
+        src, dst = np.where(arr.Z / total > SECTOR_EDGE_SHARE_THRESHOLD)
+        for i, j in zip(src, dst):
+            if i == j:
+                continue
+            w = float(arr.Z[i, j])
+            G.add_edge(nodes[i], nodes[j], weight=w)
 
-    strength = {n: (G.out_degree(n, weight="weight") + G.in_degree(n, weight="weight")) / total for n in G.nodes}
-    betweenness = _betweenness_centrality(G)
-    eigen = _eigenvector_centrality(G)
-
-    df = (
-        pd.DataFrame(
-            {
-                "degree_centrality": strength,
-                "betweenness_centrality": betweenness,
-                "eigenvector_centrality": eigen,
-            }
-        )
-        .reindex(nodes)
-        .fillna(0.0)
-    )
+    df = _gephi_like_metrics(G, nodes, total)
     df.index = pd.MultiIndex.from_tuples(nodes, names=["country", "sector"])
     return df
 

@@ -88,12 +88,57 @@ def _read_csv(name: str) -> pd.DataFrame:
     return _read_path(PROCESSED_DIR / name)
 
 
+def _indicator_compat(df: pd.DataFrame) -> pd.DataFrame:
+    """旧 processed CSV 的按需兼容层;新 compute 产物会直接包含这些列。"""
+    out = df.copy()
+    if "trade_dva" in out and "dvaex" not in out:
+        out["dvaex"] = out["trade_dva"]
+        out["dvart"] = out.get("trade_rdv", 0.0)
+        out["ddc"] = out.get("trade_ddc", 0.0)
+        out["fva"] = out.get("trade_fva", 0.0)
+        out["fdc"] = out.get("trade_fdc", 0.0)
+        out["exdva"] = out["dvaex"] + out["dvart"]
+        out["taxsub"] = float("nan")
+    if "prod_va_total" in out and "sva" not in out:
+        out["sva"] = out["prod_va_total"]
+        out["va_d"] = out.get("prod_pure_domestic", 0.0)
+        out["va_rt"] = out.get("prod_traditional", 0.0)
+        out["va_gvc_s"] = out.get("prod_simple_gvc", 0.0)
+        out["va_gvc_c"] = out.get("prod_complex_gvc", 0.0)
+        out["va_gvc"] = out["va_gvc_s"] + out["va_gvc_c"]
+        out["fgy"] = out["prod_va_total"]
+        out["fgy_d"] = out["va_d"]
+        out["fgy_rt"] = out["va_rt"]
+        out["fgy_gvc"] = out["va_gvc"]
+        out["fgy_gvc_s"] = out["va_gvc_s"]
+        out["fgy_gvc_c"] = out["va_gvc_c"]
+    if "upstreamness" in out and "plv" not in out:
+        out["plv"] = out["upstreamness"]
+        out["plv_d"] = out.get("upstreamness_domestic", 0.0)
+        out["plv_rt"] = out["plv_d"]
+        out["plv_gvc"] = out["plv"].where(out.get("upstreamness_cross", 0.0) > 1e-12)
+        out["ply"] = out["upstreamness"]
+        out["ply_d"] = out.get("upstreamness_domestic", 0.0)
+        out["ply_rt"] = out["ply_d"]
+        out["ply_gvc"] = out["ply"].where(out.get("upstreamness_cross", 0.0) > 1e-12)
+        out["pos_tpl"] = 1.0
+        out["gvcps"] = 1.0
+    return out
+
+
 INDICATOR_SCHEMA = {
     "groups": [
         {
             "key": "trade",
-            "label": "Borin-Mancini 贸易流分解",
+            "label": "双边总贸易流分解",
             "fields": [
+                "exdva",
+                "dvaex",
+                "dvart",
+                "ddc",
+                "fva",
+                "fdc",
+                "taxsub",
                 "trade_gross_exports",
                 "trade_dva",
                 "trade_dva_final",
@@ -114,8 +159,20 @@ INDICATOR_SCHEMA = {
         },
         {
             "key": "production",
-            "label": "WWYZ 生产分解",
+            "label": "GVC 生产分解",
             "fields": [
+                "sva",
+                "va_d",
+                "va_rt",
+                "va_gvc",
+                "va_gvc_s",
+                "va_gvc_c",
+                "fgy",
+                "fgy_d",
+                "fgy_rt",
+                "fgy_gvc",
+                "fgy_gvc_s",
+                "fgy_gvc_c",
                 "prod_va_total",
                 "prod_pure_domestic",
                 "prod_traditional",
@@ -131,13 +188,36 @@ INDICATOR_SCHEMA = {
         },
         {
             "key": "length",
-            "label": "价值链长度",
-            "fields": ["upstreamness", "upstreamness_domestic", "upstreamness_cross"],
+            "label": "GVC 长度与位置",
+            "fields": [
+                "plv",
+                "plv_d",
+                "plv_rt",
+                "plv_gvc",
+                "ply",
+                "ply_d",
+                "ply_rt",
+                "ply_gvc",
+                "pos_tpl",
+                "gvcps",
+                "upstreamness",
+                "upstreamness_domestic",
+                "upstreamness_cross",
+            ],
         },
         {
             "key": "network",
             "label": "生产网络中心性",
             "fields": [
+                "degree",
+                "indegree",
+                "outdegree",
+                "weighted_degree",
+                "weighted_indegree",
+                "weighted_outdegree",
+                "eccentricity",
+                "closeness_centrality",
+                "harmonic_closeness_centrality",
                 "degree_centrality",
                 "betweenness_centrality",
                 "eigenvector_centrality",
@@ -145,6 +225,18 @@ INDICATOR_SCHEMA = {
         },
     ],
     "fields": {
+        "exdva": {"label": "EXDVA 出口国内增加值", "format": "amount", "customer_key": "EXDVA"},
+        "dvaex": {"label": "DVAex 被国外吸收的国内增加值", "format": "amount", "customer_key": "DVAex"},
+        "dvart": {"label": "DVArt 返回国内增加值", "format": "amount", "customer_key": "DVArt"},
+        "ddc": {"label": "DDC 国内重复计算", "format": "amount", "customer_key": "DDC"},
+        "fva": {"label": "FVA 国外增加值", "format": "amount", "customer_key": "FVA"},
+        "fdc": {"label": "FDC 国外重复计算", "format": "amount", "customer_key": "FDC"},
+        "taxsub": {
+            "label": "taxsub 税补贴",
+            "format": "amount",
+            "customer_key": "taxsub",
+            "method_note": "当前 2016-2020 指标引擎不单独分解税补贴,该字段保留为空值。",
+        },
         "trade_gross_exports": {"label": "毛出口", "format": "amount"},
         "trade_dva": {"label": "国内增加值 DVA", "format": "amount"},
         "trade_dva_final": {"label": "DVA:最终品出口", "format": "amount"},
@@ -161,7 +253,24 @@ INDICATOR_SCHEMA = {
         "share_trade_backward_gvc": {"label": "后向 GVC 参与度", "format": "pct"},
         "share_trade_forward_gvc": {"label": "前向 GVC 参与度", "format": "pct"},
         "share_trade_gvc_participation": {"label": "总 GVC 参与度", "format": "pct"},
-        "prod_va_total": {"label": "总增加值", "format": "amount"},
+        "sva": {"label": "SVA 总增加值", "format": "amount", "customer_key": "SVA"},
+        "va_d": {"label": "1_VA_D 纯国内生产", "format": "amount", "customer_key": "1_VA_D"},
+        "va_rt": {"label": "2_VA_RT 传统贸易生产", "format": "amount", "customer_key": "2_VA_RT"},
+        "va_gvc": {"label": "3_VA_GVC GVC 生产", "format": "amount", "customer_key": "3_VA_GVC"},
+        "va_gvc_s": {"label": "3a_VA_GVC_S 简单 GVC", "format": "amount", "customer_key": "3a_VA_GVC_S"},
+        "va_gvc_c": {"label": "3b_VA_GVC_C 复杂 GVC", "format": "amount", "customer_key": "3b_VA_GVC_C"},
+        "fgy": {
+            "label": "FGY 最终品生产",
+            "format": "amount",
+            "customer_key": "FGY",
+            "method_note": "当前版本按同一四分类聚合口径暴露兼容字段。",
+        },
+        "fgy_d": {"label": "1_FGY_D 国内最终品", "format": "amount", "customer_key": "1_FGY_D"},
+        "fgy_rt": {"label": "2_FGY_RT 最终品出口", "format": "amount", "customer_key": "2_FGY_RT"},
+        "fgy_gvc": {"label": "3_FGY_GVC GVC 最终品", "format": "amount", "customer_key": "3_FGY_GVC"},
+        "fgy_gvc_s": {"label": "3a_FGY_GVC_S 简单 GVC 最终品", "format": "amount", "customer_key": "3a_FGY_GVC_S"},
+        "fgy_gvc_c": {"label": "3b_FGY_GVC_C 复杂 GVC 最终品", "format": "amount", "customer_key": "3b_FGY_GVC_C"},
+        "prod_va_total": {"label": "总增加值", "format": "amount", "legacy": True},
         "prod_pure_domestic": {"label": "纯国内生产", "format": "amount"},
         "prod_traditional": {"label": "传统贸易生产", "format": "amount"},
         "prod_simple_gvc": {"label": "简单 GVC 生产", "format": "amount"},
@@ -172,10 +281,33 @@ INDICATOR_SCHEMA = {
         "share_prod_simple_gvc": {"label": "简单 GVC 份额", "format": "pct"},
         "share_prod_complex_gvc": {"label": "复杂 GVC 份额", "format": "pct"},
         "share_prod_gvc_total": {"label": "GVC 生产份额", "format": "pct"},
-        "upstreamness": {"label": "上游度", "format": "number"},
-        "upstreamness_domestic": {"label": "国内段长度", "format": "number"},
-        "upstreamness_cross": {"label": "跨境段长度", "format": "number"},
-        "degree_centrality": {"label": "度中心性", "format": "number"},
+        "plv": {"label": "PLv 前向总生产长度", "format": "number", "customer_key": "PLv"},
+        "plv_d": {"label": "PLv_D 前向纯国内长度", "format": "number", "customer_key": "PLv_D"},
+        "plv_rt": {"label": "PLv_RT 前向传统贸易长度", "format": "number", "customer_key": "PLv_RT"},
+        "plv_gvc": {"label": "PLv_GVC 前向 GVC 长度", "format": "number", "customer_key": "PLv_GVC"},
+        "ply": {"label": "PLy 后向总生产长度", "format": "number", "customer_key": "PLy"},
+        "ply_d": {"label": "PLy_D 后向纯国内长度", "format": "number", "customer_key": "PLy_D"},
+        "ply_rt": {"label": "PLy_RT 后向传统贸易长度", "format": "number", "customer_key": "PLy_RT"},
+        "ply_gvc": {"label": "PLy_GVC 后向 GVC 长度", "format": "number", "customer_key": "PLy_GVC"},
+        "pos_tpl": {"label": "Pos_TPL 总生产位置", "format": "number", "customer_key": "Pos_TPL"},
+        "gvcps": {"label": "GVCPs GVC 位置指数", "format": "number", "customer_key": "GVCPs"},
+        "upstreamness": {"label": "上游度", "format": "number", "legacy": True},
+        "upstreamness_domestic": {"label": "国内段长度", "format": "number", "legacy": True},
+        "upstreamness_cross": {"label": "跨境段长度", "format": "number", "legacy": True},
+        "degree": {"label": "度", "format": "number", "customer_key": "degree"},
+        "indegree": {"label": "入度", "format": "number", "customer_key": "indegree"},
+        "outdegree": {"label": "出度", "format": "number", "customer_key": "outdegree"},
+        "weighted_degree": {"label": "加权度", "format": "amount", "customer_key": "weighted degree"},
+        "weighted_indegree": {"label": "加权入度", "format": "amount", "customer_key": "weighted indegree"},
+        "weighted_outdegree": {"label": "加权出度", "format": "amount", "customer_key": "weighted outdegree"},
+        "eccentricity": {"label": "离心率", "format": "number", "customer_key": "Eccentricity"},
+        "closeness_centrality": {"label": "接近中心性", "format": "number", "customer_key": "closnesscentrality"},
+        "harmonic_closeness_centrality": {
+            "label": "调和中心性",
+            "format": "number",
+            "customer_key": "harmonicclosnesscentrality",
+        },
+        "degree_centrality": {"label": "加权度占比", "format": "number", "legacy": True},
         "betweenness_centrality": {"label": "介数中心性", "format": "number"},
         "eigenvector_centrality": {"label": "特征向量中心性", "format": "number"},
     },
@@ -293,7 +425,7 @@ def qc(year: int):
 
 @app.get("/api/indicators/country/{year}")
 def indicators_country(year: int, country: str | None = None):
-    df = _read_csv(f"indicators_country_{year}.csv")
+    df = _indicator_compat(_read_csv(f"indicators_country_{year}.csv"))
     if country:
         df = df[df["country"] == country]
     return _clean(df.to_dict(orient="records"))
@@ -307,7 +439,7 @@ def indicators_sector(
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=200),
 ):
-    df = _read_csv(f"indicators_sector_{year}.csv")
+    df = _indicator_compat(_read_csv(f"indicators_sector_{year}.csv"))
     if country:
         df = df[df["country"] == country]
     if sector:
@@ -325,7 +457,7 @@ def indicators_sector(
 @app.get("/api/viz/network/{year}")
 def viz_network(year: int):
     edges = _read_csv(f"network_edges_{year}.csv")
-    nodes = _read_csv(f"indicators_country_{year}.csv")[
+    nodes = _indicator_compat(_read_csv(f"indicators_country_{year}.csv"))[
         ["country", "share_trade_gvc_participation", "betweenness_centrality", "trade_gross_exports"]
     ]
     return {

@@ -160,7 +160,24 @@ def _add_trade_shares(df: pd.DataFrame) -> pd.DataFrame:
         df["share_trade_forward_gvc"] = np.where(export_ok, df["trade_forward_va_in_foreign_exports"] / gross, np.nan)
     # 总参与度含前向项,前向对非"有意义出口部门"已是缺失,后向 + 缺失 = 缺失,口径自然一致
     df["share_trade_gvc_participation"] = df["share_trade_backward_gvc"] + df["share_trade_forward_gvc"]
+    _add_customer_fields(df)
     return df
+
+
+def _add_customer_fields(df: pd.DataFrame) -> None:
+    """客户资料字段名兼容层。
+
+    客户样例第4组是国家-行业聚合表,不是 exporter-importer-sector 真双边表。
+    taxsub 在当前矩阵切块中没有稳定来源,保留为空值,避免伪造税补贴分解。
+    """
+    zero = pd.Series(0.0, index=df.index)
+    df["dvaex"] = df.get("trade_dva", zero)
+    df["dvart"] = df.get("trade_rdv", zero)
+    df["ddc"] = df.get("trade_ddc", zero)
+    df["fva"] = df.get("trade_fva", zero)
+    df["fdc"] = df.get("trade_fdc", zero)
+    df["exdva"] = df["dvaex"] + df["dvart"]
+    df["taxsub"] = np.nan
 
 
 def sector_tradeflow(arr: IcioArrays) -> pd.DataFrame:

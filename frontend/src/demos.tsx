@@ -4,9 +4,9 @@
  * DecompositionDemo(步骤4/5/6):用真实指标数据把总量拆成各分项,
  *   实时校验恒等式(加总 = 毛出口 / 总增加值 / 上游度),每项可 hover 看含义。
  *   恒等式口径与后端引擎一致:
- *     步骤4 毛出口 = DVA + RDV + DDC + FVA + FDC(PDC 纯重复计算 = DDC + FDC,非独立加项)
- *     步骤5 总增加值 = 纯国内 + 传统贸易 + 简单GVC + 复杂GVC
- *     步骤6 上游度 = 国内段 + 跨境段
+ *     步骤4 毛出口 = DVAex + DVArt + DDC + FVA + FDC
+ *     步骤5 SVA = VA_D + VA_RT + VA_GVC_S + VA_GVC_C
+ *     步骤6 PLv = 国内段 + 跨境段
  * NetworkCentralityDemo(步骤7):在一个小网络上演示度/介数中心性怎么算出来。
  */
 import { useMemo, useState } from "react";
@@ -32,34 +32,34 @@ const DECOMP: Record<number, DecompCfg> = {
     totalLabel: "毛出口",
     unit: "amount",
     parts: [
-      { key: "trade_dva", label: "DVA 国内增加值", color: "#4b47e0", desc: "出口中真正由本国创造、并被国外最终吸收的增加值。占比越高,出口越“实”。" },
-      { key: "trade_rdv", label: "RDV 返回国内", color: "#7a6bff", desc: "先随出口离境、绕一圈又回到本国被吸收的国内增加值。" },
-      { key: "trade_ddc", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "本国增加值在跨境往返中被海关多次统计的部分。" },
-      { key: "trade_fva", label: "FVA 外国增加值", color: "#159a86", desc: "出口里来自外国的增加值(进口的中间品)。后向 GVC 参与度的核心。" },
-      { key: "trade_fdc", label: "FDC 外国重复计算", color: "#e0982a", desc: "外国增加值在跨境中被重复统计的部分。" },
+      { key: "dvaex", label: "DVAex 国外吸收", color: "#4b47e0", desc: "国内增加值出口并被其他地区吸收。" },
+      { key: "dvart", label: "DVArt 返回国内", color: "#7a6bff", desc: "国内增加值出口后最终返回本国被吸收。" },
+      { key: "ddc", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "国内增加值在跨境往返中被重复统计的部分。" },
+      { key: "fva", label: "FVA 国外增加值", color: "#159a86", desc: "总出口中来自国外账户的增加值。" },
+      { key: "fdc", label: "FDC 国外重复计算", color: "#e0982a", desc: "总出口中来自国外账户的纯重复计算部分。" },
     ],
     note: (r) =>
-      `PDC 纯重复计算 = DDC + FDC = ${fmt(num(r.trade_ddc) + num(r.trade_fdc), "amount")}` +
-      `(纯重复计算是 DDC 与 FDC 的合计,不是独立加项,故不进上面的闭合等式)。`,
+      `EXDVA = DVAex + DVArt = ${fmt(num(r.dvaex) + num(r.dvart), "amount")}。` +
+      `taxsub 目前保留为空值,不参与闭合校验。`,
   },
   5: {
-    total: "prod_va_total",
-    totalLabel: "总增加值(GDP)",
+    total: "sva",
+    totalLabel: "SVA 总增加值",
     unit: "amount",
     parts: [
-      { key: "prod_pure_domestic", label: "纯国内生产", color: "#4b47e0", desc: "增加值只服务本国最终需求,完全不跨境。" },
-      { key: "prod_traditional", label: "传统贸易生产", color: "#159a86", desc: "增加值随最终产品直接出口,货物只过一次国境。" },
-      { key: "prod_simple_gvc", label: "简单 GVC 生产", color: "#e0982a", desc: "增加值随中间品跨境一次后在国外被吸收。" },
-      { key: "prod_complex_gvc", label: "复杂 GVC 生产", color: "#f4693b", desc: "增加值至少两次跨越国境,深度嵌入全球生产网络。对政策冲击最敏感。" },
+      { key: "va_d", label: "1_VA_D 纯国内", color: "#4b47e0", desc: "国内生产和消费的增加值,不涉及跨境贸易。" },
+      { key: "va_rt", label: "2_VA_RT 传统贸易", color: "#159a86", desc: "体现在最终产品出口中的国内增加值。" },
+      { key: "va_gvc_s", label: "3a_VA_GVC_S 简单GVC", color: "#e0982a", desc: "增加值仅跨境一次,没有通过第三国再出口或返回。" },
+      { key: "va_gvc_c", label: "3b_VA_GVC_C 复杂GVC", color: "#f4693b", desc: "增加值跨境两次及以上,深度嵌入全球生产网络。" },
     ],
   },
   6: {
-    total: "upstreamness",
-    totalLabel: "上游度(平均生产链长度)",
+    total: "plv",
+    totalLabel: "PLv 前向总生产长度",
     unit: "number",
     parts: [
-      { key: "upstreamness_domestic", label: "国内段", color: "#4b47e0", desc: "生产链在本国境内平均经过的阶段数。" },
-      { key: "upstreamness_cross", label: "跨境段", color: "#f4693b", desc: "生产链跨越国境的平均阶段数,越长越依赖国际分工。" },
+      { key: "plv_d", label: "PLv_D 国内段", color: "#4b47e0", desc: "前向生产链在本国境内平均经过的阶段数。" },
+      { key: "upstreamness_cross", label: "跨境段", color: "#f4693b", desc: "前向生产链跨越国境的平均阶段数。" },
     ],
   },
 };

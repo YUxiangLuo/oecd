@@ -153,6 +153,9 @@ export interface NetworkData {
 export interface IndicatorFieldMeta {
   label: string;
   format: "amount" | "pct" | "number";
+  customer_key?: string;
+  method_note?: string;
+  legacy?: boolean;
 }
 
 export interface IndicatorGroup {
