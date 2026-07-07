@@ -82,6 +82,18 @@ class PreparedModel:
 BASE_GVC_COL = "share_trade_gvc_participation"
 BASELINE_GVC_COL = "base_gvc_participation"
 DEFLATOR_COL = "gdp_deflator"
+ROW_CODE = "ROW"
+
+
+def _apply_sample_filter(df: pd.DataFrame, design) -> tuple[pd.DataFrame, list[str]]:
+    """回归样本过滤:默认剔除 ROW 这类非真实国家聚合账户。"""
+    if not getattr(design, "exclude_row", True) or "country" not in df.columns:
+        return df, []
+    mask = df["country"].astype(str) != ROW_CODE
+    removed = int((~mask).sum())
+    if removed == 0:
+        return df, []
+    return df.loc[mask].copy(), [f"样本过滤:已排除 ROW(世界其他地区聚合账户) {removed} 行"]
 
 
 def _stable_noise(data: pd.DataFrame, cols: list[str]) -> pd.Series:
@@ -418,7 +430,8 @@ def placebo_did_distribution(
     if design.method != "双重差分 (DID)":
         raise ValueError("安慰剂检验当前仅支持双重差分 (DID) 设计")
     n_draws = max(1, min(int(n_draws), 200))
-    base = _apply_price_mode(df, design)
+    base, filter_notes = _apply_sample_filter(df, design)
+    base = _apply_price_mode(base, design)
     base, _ = _apply_teaching_scenario(base, design)
     true_model = _prepare_did_model(
         base,
@@ -430,6 +443,7 @@ def placebo_did_distribution(
         controls=list(design.controls),
         interaction=design.interaction,
     )
+    true_model.notes = [*filter_notes, *true_model.notes]
     true_result = _within_ols(true_model)
     policy_name = true_model.policy_xcols[0]
     true_coef = next(c.coef for c in true_result.coefs if c.name == policy_name)
@@ -496,6 +510,7 @@ def placebo_did_distribution(
 
 def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
     """按 RegressionDesign 构造同一份估计样本,供自写引擎与 PanelOLS 共用。"""
+    df, filter_notes = _apply_sample_filter(df, design)
     df = _apply_price_mode(df, design)
     df, scenario_notes = _apply_teaching_scenario(df, design)
     kwargs = dict(
@@ -511,6 +526,7 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
         model = _prepare_event_model(df, design.depvar, treated_col=design.treated_col, **kwargs)
     else:
         model = _prepare_fe_model(df, design.depvar, list(design.regressors), **kwargs)
+    model.notes = [*filter_notes, *model.notes]
     model.notes.extend(scenario_notes)
     if getattr(design, "price_mode", None) == PRICE_MODE_REAL:
         model.notes.append("实际值口径:金额类控制变量已用 GDP 平减指数调整(基期=1)")

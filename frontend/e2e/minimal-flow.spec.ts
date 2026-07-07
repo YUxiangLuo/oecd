@@ -60,6 +60,8 @@ const design = {
   price_mode: "名义值",
   scenario: "clean",
   scenario_label: "基准场景(clean)",
+  sample_filter: "排除 ROW(世界其他地区聚合账户)",
+  exclude_row: true,
   controls: [],
   control_labels: {},
   equation: "Y_it = β·treated_i×post_it + α_i + λ_t + ε_it",

@@ -112,6 +112,7 @@ def main() -> None:
         )
         print(f"步骤{args.step}:{design.depvar_label}({granularity} · {method})")
         print(f"价格口径:{price_mode}")
+        print(f"回归样本:{design.sample_filter}")
         if args.controls or args.macro_controls:
             print(f"控制变量:{control_mode}")
         if args.interaction:

@@ -104,6 +104,8 @@ def test_design_equation_text():
     assert d.depvar == "share_trade_fva"
     assert d.granularity == "国家–行业级"  # 默认粒度已切到行业级
     assert d.method == "双重差分 (DID)"  # 默认方法已切到 DID
+    assert d.exclude_row is True
+    assert "排除 ROW" in d.sample_filter
     eq = d.equation()
     assert "α_ij" in eq and "λ_t" in eq and "treated_ij × 1[t≥G_ij]" in eq
     eq_c = RegressionDesign(step=13, granularity="国家级").equation()
@@ -275,6 +277,32 @@ def test_event_study_dynamic_path():
     for name, true_val in [("k=0", 0.2), ("k=+1", 0.5), ("k=+2", 0.8)]:
         assert abs(by_name[name].coef - true_val) < 0.05, name
     assert by_name["k=+2"].p < 0.01
+
+
+def test_design_regressions_exclude_row_by_default():
+    df = _simulate_did_panel({0: -0.5, 1: -0.5, 2: -0.5}).rename(columns={"y": "share_trade_fva"})
+    row_rows = []
+    for year in range(2016, 2021):
+        row_rows.append(
+            {
+                "country": "ROW",
+                "year": year,
+                "share_trade_fva": 999.0 if year >= 2018 else -999.0,
+                "treated": int(year >= 2018),
+            }
+        )
+    df = pd.concat([df, pd.DataFrame(row_rows)], ignore_index=True)
+
+    design = RegressionDesign(step=13, granularity="国家级")
+    model = prepare_design_model(df, design)
+    assert "ROW" not in set(model.data["country"])
+    result = run_design(df, design)
+    assert result.n_entities == 60
+    assert result.n_clusters == 60
+    assert any("排除 ROW" in n for n in result.notes)
+
+    included = prepare_design_model(df, RegressionDesign(step=13, granularity="国家级", exclude_row=False))
+    assert "ROW" in set(included.data["country"])
 
 
 def test_run_design_dispatch():

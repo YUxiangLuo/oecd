@@ -37,6 +37,7 @@ def run_step_regression(
     control_mode: str = "不加控制变量",
     interaction: bool = False,
     price_mode: str = "名义值",
+    exclude_row: bool = True,
 ) -> RegressionResult:
     """跑步骤13-16 对应的默认设计回归(默认国家–行业级粒度 + DID)。"""
     kwargs = {"method": method} if method else {}
@@ -46,6 +47,7 @@ def run_step_regression(
         control_mode=control_mode,
         interaction=interaction,
         price_mode=price_mode,
+        exclude_row=exclude_row,
         **kwargs,
     )
     if panel is None:
@@ -77,6 +79,7 @@ def _design_summary(design: RegressionDesign) -> str:
             f"- 控制变量:{controls}",
             f"- 交互项:{interaction}",
             f"- 价格口径:{design.price_mode}",
+            f"- 回归样本:{design.sample_filter}",
         ]
     )
 
@@ -121,6 +124,7 @@ def generate(
     control_mode: str = "不加控制变量",
     interaction: bool = False,
     price_mode: str = "名义值",
+    exclude_row: bool = True,
 ) -> str:
     """生成报告并返回文件路径。year 为指标摘要引用的截面年份。
 
@@ -129,7 +133,10 @@ def generate(
     country_panel = _load_panel_file("panel_country.csv")
     years = processed_years()
     year = year or max(years)
-    snap = country_panel[country_panel["year"] == year].set_index("country")
+    snap = country_panel[country_panel["year"] == year].copy()
+    if exclude_row:
+        snap = snap[snap["country"].astype(str) != "ROW"]
+    snap = snap.set_index("country")
     design_preview = RegressionDesign(
         step=13,
         granularity=granularity,
@@ -138,6 +145,7 @@ def generate(
         control_mode=control_mode,
         interaction=interaction,
         price_mode=price_mode,
+        exclude_row=exclude_row,
     )
 
     top_backward = snap["share_trade_backward_gvc"].nlargest(5)
@@ -175,6 +183,7 @@ def generate(
             control_mode=control_mode,
             interaction=interaction,
             price_mode=price_mode,
+            exclude_row=exclude_row,
         )
         panel = _load_panel_file(design.panel_file)
         result = run_design(panel, design)

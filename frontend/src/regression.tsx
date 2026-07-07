@@ -76,6 +76,7 @@ function DesignMeta({ d }: { d: RegressionDesignInfo }) {
       <span>控制:{controls}</span>
       <span>交互项:{d.interaction ? "冲击×基期GVC" : "未加入"}</span>
       <span>价格口径:{d.price_mode}</span>
+      <span>样本:{d.sample_filter}</span>
       <span>场景:{d.scenario_label}</span>
     </div>
   );

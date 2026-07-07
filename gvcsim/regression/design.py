@@ -59,6 +59,9 @@ class RegressionDesign:
     interaction: bool = False
     price_mode: str = PRICE_MODE_NOMINAL
     scenario: str = SCENARIO_CLEAN
+    # ROW(Rest of World)是投入产出表闭合用的剩余地区,不是可解释的政策处理对象。
+    # 指标计算仍保留 ROW;回归估计默认剔除,避免 DID/事件研究把聚合残差当成真实国家。
+    exclude_row: bool = True
 
     @property
     def depvar(self) -> str:
@@ -107,6 +110,10 @@ class RegressionDesign:
     @property
     def scenario_label(self) -> str:
         return SCENARIO_LABELS.get(self.scenario, self.scenario)
+
+    @property
+    def sample_filter(self) -> str:
+        return "排除 ROW(世界其他地区聚合账户)" if self.exclude_row else "包含 ROW"
 
     def equation(self) -> str:
         """生成与原型界面一致的回归方程展示文本(按方法渲染解释变量)。"""

@@ -87,6 +87,8 @@ def test_regression_design():
     assert body["price_mode"] == "名义值"
     assert body["scenario"] == "clean"
     assert body["scenario_label"] == "基准场景(clean)"
+    assert body["exclude_row"] is True
+    assert "排除 ROW" in body["sample_filter"]
     assert body["controls"] == []
     assert body["shock_col"] == "tariff_shock"
     assert body["treated_col"] == "treated"
@@ -333,6 +335,7 @@ def test_regression_run():
     # 行业级个体数远多于国家数;标准误按国家聚类
     assert body["result"]["n_entities"] > 1000
     assert body["result"]["n_clusters"] < 100
+    assert any("排除 ROW" in n for n in body["result"]["notes"])
 
     # 显式国家级粒度仍可用
     resp_c = client.post("/api/regression/run", json={"step": 13, "granularity": "国家级"})
@@ -400,6 +403,7 @@ def test_parameterized_report_endpoint():
     assert "- 控制变量:GDP规模(log, WDI风格mock)" in md
     assert "- 交互项:开启:冲击×基期GVC参与度" in md
     assert "- 价格口径:实际值(2016=1)" in md
+    assert "- 回归样本:排除 ROW" in md
     assert "export_control_shock" in md
     assert "macro_log_gdp_usd" in md
     assert "个国家×行业 ×" in md

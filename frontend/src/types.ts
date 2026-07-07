@@ -207,6 +207,8 @@ export interface RegressionDesignInfo {
   price_mode: string;
   scenario: string;
   scenario_label: string;
+  sample_filter: string;
+  exclude_row: boolean;
   controls: string[];
   control_labels: Record<string, string>;
   equation: string;
@@ -272,6 +274,7 @@ export interface ReportRequest {
   control_mode: string;
   interaction: boolean;
   price_mode: string;
+  exclude_row?: boolean;
 }
 
 export interface ReportResponse {

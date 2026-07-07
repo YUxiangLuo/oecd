@@ -943,6 +943,7 @@ export function ReportLab({ meta }: { meta: Meta }) {
     control_mode: "不加控制变量",
     interaction: false,
     price_mode: "名义值",
+    exclude_row: true,
   };
   const [draft, setDraft] = useState<ReportRequest>(defaultRequest);
   const [request, setRequest] = useState<ReportRequest>(defaultRequest);
@@ -1004,7 +1005,7 @@ export function ReportLab({ meta }: { meta: Meta }) {
           <p className="muted report-meta">
             已写入 {data.path}(Markdown 源文件,可用 pandoc 转 PDF) ·
             当前设定:{request.granularity} · {request.shock_type} · {request.method} ·
-            {request.control_mode} · {request.price_mode}{request.interaction ? " · 交互项" : ""}
+            {request.control_mode} · {request.price_mode} · 排除 ROW{request.interaction ? " · 交互项" : ""}
           </p>
           <div className="report-md">{data.markdown}</div>
         </>

@@ -442,6 +442,7 @@ class RegressionRequest(BaseModel):
     interaction: bool = False
     price_mode: str = "名义值"
     scenario: str = "clean"
+    exclude_row: bool = True
 
 
 class PlaceboRequest(RegressionRequest):
@@ -457,6 +458,7 @@ class ReportRequest(BaseModel):
     control_mode: str = "不加控制变量"
     interaction: bool = False
     price_mode: str = "名义值"
+    exclude_row: bool = True
 
 
 @app.get("/api/regression/options")
@@ -482,6 +484,7 @@ def _validate_design(
     interaction: bool = False,
     price_mode: str = "名义值",
     scenario: str = "clean",
+    exclude_row: bool = True,
 ) -> RegressionDesign:
     if step not in STEP_DEPVARS:
         raise HTTPException(status_code=400, detail="step 必须是 13-16")
@@ -506,6 +509,7 @@ def _validate_design(
         interaction=interaction,
         price_mode=price_mode,
         scenario=scenario,
+        exclude_row=exclude_row,
     )
 
 
@@ -524,6 +528,8 @@ def _design_info(design: RegressionDesign) -> dict:
         "price_mode": design.price_mode,
         "scenario": design.scenario,
         "scenario_label": design.scenario_label,
+        "sample_filter": design.sample_filter,
+        "exclude_row": design.exclude_row,
         "controls": list(design.controls),
         "control_labels": design.control_labels,
         "equation": design.equation(),
@@ -543,10 +549,21 @@ def regression_design(
     interaction: bool = False,
     price_mode: str = "名义值",
     scenario: str = "clean",
+    exclude_row: bool = True,
 ):
     """步骤12 设计确认:不跑回归,只返回方程与面板/个体/聚类等设计信息。"""
     return _design_info(
-        _validate_design(step, granularity, shock_type, method, control_mode, interaction, price_mode, scenario)
+        _validate_design(
+            step,
+            granularity,
+            shock_type,
+            method,
+            control_mode,
+            interaction,
+            price_mode,
+            scenario,
+            exclude_row,
+        )
     )
 
 
@@ -561,6 +578,7 @@ def regression_run(req: RegressionRequest):
         req.interaction,
         req.price_mode,
         req.scenario,
+        req.exclude_row,
     )
     panel = _read_csv(design.panel_file)
     try:
@@ -586,6 +604,7 @@ def regression_placebo(req: PlaceboRequest):
         req.interaction,
         req.price_mode,
         req.scenario,
+        req.exclude_row,
     )
     panel = _read_csv(design.panel_file)
     try:
@@ -623,6 +642,7 @@ def report_custom(req: ReportRequest):
         req.control_mode,
         req.interaction,
         req.price_mode,
+        exclude_row=req.exclude_row,
     )
     try:
         path = report_mod.generate(
@@ -633,6 +653,7 @@ def report_custom(req: ReportRequest):
             control_mode=req.control_mode,
             interaction=req.interaction,
             price_mode=req.price_mode,
+            exclude_row=req.exclude_row,
         )
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
