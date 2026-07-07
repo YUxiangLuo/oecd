@@ -1,0 +1,85 @@
+import { useState } from "react";
+import { api } from "../../api";
+import type { IndicatorSchema, Meta, SectorPage, Step } from "../../types";
+import { DecompositionDemo, NetworkCentralityDemo } from "../../demos";
+import { sectorLabel } from "../../viz";
+import { fieldLabel, fmtField, useAsync } from "../shared";
+
+const STEP_GROUP: Record<number, string> = {
+  4: "trade",
+  5: "production",
+  6: "length",
+  7: "network",
+};
+
+/** 步骤4-7:行业级指标数据表(分页 + 国家/年份筛选) */
+export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
+  const [year, setYear] = useState(meta.years.at(-1)!);
+  const [country, setCountry] = useState("CHN");
+  const [page, setPage] = useState(1);
+  const groupKey = STEP_GROUP[step.n] ?? "trade";
+  const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
+  const { data, error } = useAsync<SectorPage>(
+    () => api.sectorIndicators(year, country, page),
+    [year, country, page],
+  );
+  if (error) return <div className="error-box">{error}</div>;
+  const group = schema?.groups.find((g) => g.key === groupKey);
+  const baseCols = ["year", "country", "sector"];
+  const rowKeys = data?.rows[0] ? new Set(Object.keys(data.rows[0])) : new Set<string>();
+  const cols = data?.rows[0]
+    ? [...baseCols, ...(group?.fields ?? []).filter((c) => rowKeys.has(c))]
+    : [];
+  const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
+  return (
+    <div>
+      {/* 步骤4-6:真实数据拆解演示;步骤7:网络中心性演示 */}
+      {[4, 5, 6].includes(step.n) && <DecompositionDemo step={step.n} meta={meta} />}
+      {step.n === 7 && <NetworkCentralityDemo />}
+
+      <div className="section-head">
+        <span className="section-head-icon">📄</span>完整分解数据表
+        <span className="section-head-line" />
+      </div>
+      <div className="controls">
+        <label>国家</label>
+        <select value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}>
+          <option value="">全部</option>
+          {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <label>年份</label>
+        <select value={year} onChange={(e) => { setYear(Number(e.target.value)); setPage(1); }}>
+          {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
+        </select>
+        <span className="muted">{data ? `共 ${data.total} 条` : "加载中…"}</span>
+      </div>
+      {group && (
+        <div className="tipbox">
+          {group.label}:按 {country || "全部经济体"} · {year} 年展示国家–行业级完整分解字段。
+        </div>
+      )}
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead><tr>{cols.map((c) => <th key={c}>{fieldLabel(c, schema)}</th>)}</tr></thead>
+          <tbody>
+            {(data?.rows ?? []).map((r, i) => (
+              <tr key={i}>{cols.map((c) => (
+                <td key={c}>{
+                  c === "sector" ? (r.sector != null ? sectorLabel(String(r.sector)) : "—")
+                    : ["year", "country"].includes(c) ? String(r[c] ?? "—")
+                    : fmtField(r[c], c, schema)
+                }</td>
+              ))}</tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="pager">
+        <button disabled={page <= 1} onClick={() => setPage(page - 1)}>← 上一页</button>
+        <span>{page} / {pages}</span>
+        <button disabled={page >= pages} onClick={() => setPage(page + 1)}>下一页 →</button>
+      </div>
+    </div>
+  );
+}
+
