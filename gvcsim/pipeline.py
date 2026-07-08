@@ -5,11 +5,11 @@
 
 产物(每年):
   qc_<year>.json                  质检结果(步骤3)
-  indicators_country_<year>.csv   国家级指标汇总(步骤4-7)
-  indicators_sector_<year>.csv    行业级指标(步骤4-7)
+  indicators_country_<year>.csv   国家级指标汇总(步骤4-7,客户口径字段)
+  indicators_industry_<year>.csv  国家-行业级指标(步骤4-7,客户口径字段)
   network_edges_<year>.csv        双边贸易流 top 边(步骤8 网络图)
 跨年:
-  panel_sector.csv                国家×行业×年份长面板 + 行业异质冲击(步骤13-16 默认回归样本)
+  panel_industry.csv              国家×行业×年份长面板 + 行业异质冲击(步骤13-16 默认回归样本)
   panel_country.csv               国家×年份长面板(冲击按行业出口额加权聚合)
   controls_country.csv            ICIO 派生/宏观mock控制 + 平减指数(步骤13-16)
   qc_controls.json                controls_country.csv 独立质检
@@ -70,7 +70,7 @@ def compute_year(year: int, verbose: bool = True) -> None:
 
     sector = tf_sector.join(prod_sector).join(len_sector).join(net_sector)
     sector.insert(0, "year", year)
-    sector.to_csv(PROCESSED_DIR / f"indicators_sector_{year}.csv")
+    sector.to_csv(PROCESSED_DIR / f"indicators_industry_{year}.csv")
 
     edges.insert(0, "year", year)
     edges.to_csv(PROCESSED_DIR / f"network_edges_{year}.csv", index=False)
@@ -80,7 +80,7 @@ def compute_year(year: int, verbose: bool = True) -> None:
 def build_panel() -> pd.DataFrame:
     """合并所有已计算年份为长面板,并 merge 冲击数据(演示版)。
 
-    行业级面板(panel_sector.csv)是回归的默认样本;国家级面板的冲击变量
+    行业级面板(panel_industry.csv)是回归的默认样本;国家级面板的冲击变量
     由行业级冲击按该国各行业出口额加权聚合而来,保证两个粒度口径一致。
     返回行业级面板。
     """
@@ -89,7 +89,7 @@ def build_panel() -> pd.DataFrame:
         raise RuntimeError("没有任何已预计算的年份,请先运行 gvcsim compute")
 
     sector = pd.concat(
-        [pd.read_csv(PROCESSED_DIR / f"indicators_sector_{y}.csv") for y in years],
+        [pd.read_csv(PROCESSED_DIR / f"indicators_industry_{y}.csv") for y in years],
         ignore_index=True,
     )
     country = pd.concat(
@@ -105,9 +105,17 @@ def build_panel() -> pd.DataFrame:
     with open(PROCESSED_DIR / "qc_controls.json", "w", encoding="utf-8") as f:
         json.dump([c.to_dict() for c in controls_checks], f, ensure_ascii=False, indent=2)
 
+    # 回归用派生列:毛出口与客户字段份额(FVA_share 等作为步骤13-16 因变量/交互基线)
+    for df in (sector, country):
+        df["gross_exports"] = tradeflow.gross_exports(df)
+        gross = df["gross_exports"]
+        df["FVA_share"] = (df["FVA"] / gross).where(gross > 0)
+        df["3b_VA_GVC_C_share"] = (df["3b_VA_GVC_C"] / df["SVA"]).where(df["SVA"] > 0)
+        df["3_VA_GVC_share"] = (df["3_VA_GVC"] / df["SVA"]).where(df["SVA"] > 0)
+
     # ---- 行业级 ----
     countries = sorted(sector["country"].unique())
-    sectors = sorted(sector["sector"].unique())
+    sectors = sorted(sector["industry"].unique())
     shocks.write_demo(countries, sectors, years)
     shock_df = shocks.load_shocks()
     shock_checks = quality.check_shock_panel(shock_df, countries, sectors, years)
@@ -115,9 +123,11 @@ def build_panel() -> pd.DataFrame:
         json.dump([c.to_dict() for c in shock_checks], f, ensure_ascii=False, indent=2)
     shock_cols = list(dict.fromkeys(col for pair in shocks.SHOCK_SPECS.values() for col in pair))
 
+    # 冲击 mock 面板保持 country×sector×year 结构不变,合并时把行业列名对齐为 industry
+    shock_merge = shock_df[["country", "sector", "year", *shock_cols]].rename(columns={"sector": "industry"})
     sector = sector.merge(
-        shock_df[["country", "sector", "year", *shock_cols]],
-        on=["country", "sector", "year"],
+        shock_merge,
+        on=["country", "industry", "year"],
         how="left",
     ).merge(
         controls_df,
@@ -125,11 +135,11 @@ def build_panel() -> pd.DataFrame:
         how="left",
     )
     # 双向FE的个体维度:国家×行业
-    sector["entity_id"] = sector["country"] + "_" + sector["sector"]
-    sector.to_csv(PROCESSED_DIR / "panel_sector.csv", index=False)
+    sector["entity_id"] = sector["country"] + "_" + sector["industry"]
+    sector.to_csv(PROCESSED_DIR / "panel_industry.csv", index=False)
 
     # ---- 国家级:冲击按行业出口额加权聚合 ----
-    w = sector["trade_gross_exports"].clip(lower=0.0)
+    w = sector["gross_exports"].clip(lower=0.0)
     sector_w = sector.assign(_w=w)
     agg = sector_w.groupby(["country", "year"], as_index=False)["_w"].sum()
     for _shock_type, (shock_col, treated_col) in shocks.SHOCK_SPECS.items():
@@ -157,5 +167,5 @@ def run(years: list[int] | None = None) -> None:
     for y in years:
         compute_year(y)
     build_panel()
-    print(f"面板构建完成:{PROCESSED_DIR / 'panel_sector.csv'}(行业级,回归默认)")
+    print(f"面板构建完成:{PROCESSED_DIR / 'panel_industry.csv'}(行业级,回归默认)")
     print(f"            {PROCESSED_DIR / 'panel_country.csv'}(国家级)")

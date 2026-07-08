@@ -1,10 +1,26 @@
-"""步骤6:GVC 长度分解指标。
+"""步骤6:GVC 生产长度与位置指标(Wang-Wei-Yu-Zhu 2017b 口径,输出客户资料字段)。
 
-上游度(Antras-Chor 2012):一单位产出到达最终消费者平均还要经过几个
-生产阶段。U=1 表示产出全部直接卖给最终消费者(最下游);越大越上游。
+生产长度 = 某段生产活动诱发的累计总产出 ÷ 该段增加值(增加值被计为总产出的
+平均次数)。按 WWYZ 2017b 式(10)-(29),各段的分子/分母(v 逐项约去或保留为权重):
 
-分解:用"只保留国内块"的分摊矩阵算出国内段长度 U_dom,
-跨境段 = 总长度 − 国内段,衡量对国际分工的依赖深度。
+前向(增加值来源行业视角,沿行加总):
+  PLv      总生产长度            (B B y) / (B y) = (B x) / x
+  PLv_D    纯国内段              (L L y_dom) / (L y_dom)
+  PLv_RT   传统贸易段            (L L y_exp) / (L y_exp)
+  PLv_GVC  GVC 段                (L L A^F x + L A^F B x) / (L A^F x)
+
+后向(最终产品完成地视角,沿列加总):
+  PLy      总生产长度            (v'B B) / (v'B)
+  PLy_D    纯国内段              (v'L L) / (v'L)
+  PLy_RT   传统贸易段            与 PLy_D 相同(最终品去向在比值中约去)
+  PLy_GVC  GVC 段                (v'L L A^F B + v'L A^F B B) / (v'L A^F B)
+
+位置指数:
+  Pos_TPL  基于总生产长度的位置   PLv / PLy
+  GVCPs    全球价值链位置指数     PLv_GVC / PLy_GVC
+
+总长度是各段长度按对应增加值份额的加权平均(WWYZ Figure 1),该恒等式由
+单元测试守护。分母趋近于 0(无对应活动)时记 NaN。
 """
 
 import numpy as np
@@ -12,64 +28,108 @@ import pandas as pd
 
 from gvcsim.indicators.core import IcioArrays
 
+LENGTH_COLUMNS = [
+    "PLv",
+    "PLv_D",
+    "PLv_RT",
+    "PLv_GVC",
+    "PLy",
+    "PLy_D",
+    "PLy_RT",
+    "PLy_GVC",
+    "Pos_TPL",
+    "GVCPs",
+]
 
-def _allocation_matrix(arr: IcioArrays) -> np.ndarray:
-    """分摊矩阵 Ad_ij = Z_ij / x_i(按卖方产出分摊,与技术系数 A 方向相反)。"""
+_DENOM_FLOOR = 1e-12
+
+
+def _safe_div(num: np.ndarray, den: np.ndarray) -> np.ndarray:
     with np.errstate(divide="ignore", invalid="ignore"):
-        Ad = np.where(arr.x[:, None] > 0, arr.Z / arr.x[:, None], 0.0)
-    return Ad
+        out = np.where(np.abs(den) > _DENOM_FLOOR, num / den, np.nan)
+    return np.where(np.isfinite(out), out, np.nan)
+
+
+def _components(arr: IcioArrays) -> dict[str, np.ndarray]:
+    """各段的分子(诱发产出)与分母(增加值),前向含 v、后向含 v,便于聚合。
+
+    行业级比值中 v 会逐项约去,但国家级聚合需要 v 加权,所以统一带上。
+    """
+    ydom = arr.y_domestic()
+    yexp = arr.y_export()
+
+    # ---- 前向 ----
+    Bx = arr.B @ arr.x  # B B y
+    Ly_dom = arr.apply_L(ydom)
+    Ly_exp = arr.apply_L(yexp)
+    zg = arr.apply_AF(arr.x)  # A^F B y
+    Lzg = arr.apply_L(zg)  # V_GVC 的产出核
+    fwd = {
+        "v_total": arr.v * arr.x,
+        "x_total": arr.v * Bx,
+        "v_d": arr.v * Ly_dom,
+        "x_d": arr.v * arr.apply_L(Ly_dom),
+        "v_rt": arr.v * Ly_exp,
+        "x_rt": arr.v * arr.apply_L(Ly_exp),
+        "v_gvc": arr.v * Lzg,
+        "x_gvc": arr.v * (arr.apply_L(Lzg) + arr.apply_L(arr.apply_AF(Bx))),
+    }
+
+    # ---- 后向 ----
+    ytot = ydom + yexp
+    vB = arr.v @ arr.B
+    vBB = vB @ arr.B
+    vL = arr.apply_L_T(arr.v)
+    vLL = arr.apply_L_T(vL)
+    vLAF = arr.apply_AF_T(vL)
+    vLAFB = vLAF @ arr.B
+    num_gvc = arr.apply_AF_T(vLL) @ arr.B + vLAFB @ arr.B
+    bwd = {
+        "y_total": vB * ytot,
+        "xy_total": vBB * ytot,
+        "y_d": vL * ydom,
+        "xy_d": vLL * ydom,
+        "y_rt": vL * yexp,
+        "xy_rt": vLL * yexp,
+        "y_gvc": vLAFB * ytot,
+        "xy_gvc": num_gvc * ytot,
+    }
+    return {**fwd, **bwd}
+
+
+def _lengths_from(parts: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+    plv = _safe_div(parts["x_total"], parts["v_total"])
+    plv_gvc = _safe_div(parts["x_gvc"], parts["v_gvc"])
+    ply = _safe_div(parts["xy_total"], parts["y_total"])
+    ply_gvc = _safe_div(parts["xy_gvc"], parts["y_gvc"])
+    return {
+        "PLv": plv,
+        "PLv_D": _safe_div(parts["x_d"], parts["v_d"]),
+        "PLv_RT": _safe_div(parts["x_rt"], parts["v_rt"]),
+        "PLv_GVC": plv_gvc,
+        "PLy": ply,
+        "PLy_D": _safe_div(parts["xy_d"], parts["y_d"]),
+        "PLy_RT": _safe_div(parts["xy_rt"], parts["y_rt"]),
+        "PLy_GVC": ply_gvc,
+        "Pos_TPL": _safe_div(plv, ply),
+        "GVCPs": _safe_div(plv_gvc, ply_gvc),
+    }
 
 
 def sector_length(arr: IcioArrays) -> pd.DataFrame:
-    """行业级长度指标,索引 (country, sector):
-
-    upstreamness           总上游度 U = (I-Ad)^-1 · 1
-    upstreamness_domestic  只走国内环节的长度
-    upstreamness_cross     跨境段 = 总长度 - 国内段
-    """
-    Ad = _allocation_matrix(arr)
-    n = Ad.shape[0]
-    eye_n = np.eye(n)
-
-    try:
-        U = np.linalg.solve(eye_n - Ad, np.ones(n))
-    except np.linalg.LinAlgError:
-        # 存在总产出为0的行业时 (I-Ad) 可能奇异,退化为最小二乘近似
-        U, *_ = np.linalg.lstsq(eye_n - Ad, np.ones(n), rcond=None)
-
-    # 国内段:每国单独解一个 S×S 小系统
-    U_dom = np.zeros(n)
-    eye_s = np.eye(len(arr.sectors))
-    for r in arr.regions:
-        p = arr.pos[r]
-        Ad_rr = Ad[np.ix_(p, p)]
-        U_dom[p] = np.linalg.solve(eye_s - Ad_rr, np.ones(len(p)))
-
-    df = pd.DataFrame(
-        {
-            "upstreamness": U,
-            "upstreamness_domestic": U_dom,
-            "upstreamness_cross": U - U_dom,
-        },
-        index=arr.index,
-    )
-    df.index.names = ["country", "sector"]
+    """行业级长度/位置指标,索引 (country, industry),输出客户资料 10 个字段。"""
+    parts = _components(arr)
+    df = pd.DataFrame(_lengths_from(parts), index=arr.index)
+    df.index.names = ["country", "industry"]
     return df
 
 
 def country_length(arr: IcioArrays, sector_df: pd.DataFrame | None = None) -> pd.DataFrame:
-    """国家级长度指标:行业指标按产出份额加权平均。
-
-    产出加权而非简单平均,避免一堆产出趋近于0的小行业稀释主导行业的信号
-    (例如尼日利亚的石油开采业)。
-    """
-    if sector_df is None:
-        sector_df = sector_length(arr)
-    w = pd.Series(arr.x, index=arr.index)
-    out = {}
-    for col in sector_df.columns:
-        weighted = (sector_df[col] * w).groupby(level=0).sum()
-        out[col] = weighted / w.groupby(level=0).sum()
-    df = pd.DataFrame(out)
+    """国家级长度指标:各段分子/分母分别按国加总后再取比值(即增加值加权平均)。"""
+    del sector_df  # 国家级直接从分量聚合,不由行业级表推导
+    parts = _components(arr)
+    grouped = {k: pd.Series(v, index=arr.index).groupby(level=0).sum().to_numpy() for k, v in parts.items()}
+    countries = pd.Series(0.0, index=arr.index).groupby(level=0).sum().index
+    df = pd.DataFrame(_lengths_from(grouped), index=countries)
     df.index.name = "country"
     return df

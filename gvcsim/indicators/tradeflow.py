@@ -1,12 +1,31 @@
-"""步骤4:GVC 总贸易流分解指标(Borin-Mancini source-based 口径)。
+"""步骤4:总贸易流分解指标(Wang-Wei-Zhu 2013 / 王直-魏尚进-祝坤福 2015 总贸易核算法)。
 
-本模块把一国/一国行业的毛出口拆成国内增加值、返回国内增加值(reflection)、
-国内重复计算、外国增加值与外国重复计算,并派生前向/后向 GVC 参与度。
-实现范围是国家级与国家-行业级聚合结果;不输出 exporter-importer-sector
-双边明细。
+按客户资料口径,把一国/一国行业的毛出口完全分解为六项:
 
-核心五项采用 Borin-Mancini (2019) source-based 出口国视角:增加值第一次越过
-出口国边界记为 DVA/FVA,此前已经越过同一出口国边界的部分记为 DDC/FDC。
+  DVAex   国内增加值出口并被其他地区最终吸收(WWZ 16 项中的第 1-5 项,VAX_G)
+  DVArt   国内增加值出口但最终返回国内(第 6-8 项,RDV)
+  DDC     纯国内重复计算(第 9-10 项)
+  FVA     毛出口中的外国增加值(第 11-14 项)
+  FDC     毛出口中来自外国的纯重复计算(第 15-16 项)
+  taxsub  毛出口中的产品税减补贴(TLS)含量
+并派生 EXDVA = DVAex + DVArt(出口的国内增加值总额)。
+
+实现说明:WWZ 的 16 项定义在双边 (s→r) 层面;本模块对进口伙伴求和,输出
+出口国×行业与出口国两级聚合(与客户样例数据同结构),不落盘双边明细。
+对伙伴求和后各组有紧凑的闭合形式(推导自 WWZ Table A2,逐项加总化简):
+
+  设出口国 s 的行块为 p,v/t 为纯增加值/税收系数,B 为全球逆,L_ss 为国内逆,
+  A^F 为跨境技术系数,W = B @ Yd(各国最终需求诱发的产出),
+  P_s = B[:, p] @ yexp_s(s 的最终品出口诱发的各国产出),eint 为中间品出口:
+
+  DVAex = (v_s B_ss) ⊙ yfin_s + (v_s L_ss) ⊙ [A^F_s (x − W[:,s] − P_s)]
+  DVArt = (v_s L_ss) ⊙ [A^F_s W[:,s]]
+  DDC   = (v_s L_ss) ⊙ [A^F_s P_s] + (v_s B_ss − v_s L_ss) ⊙ eint
+  FVA   = f ⊙ (yfin_s + A^F_s [L_rr ydom_r])      f = (vB)[p] − v_s B_ss
+  FDC   = f ⊙ (A^F_s [L_rr E_r])
+  taxsub = (tB)[p] ⊙ E_s
+
+六项加总恒等于毛出口 E(由 (v+t)'B = 1 保证),单元测试与全量重算均校验。
 """
 
 import numpy as np
@@ -14,239 +33,97 @@ import pandas as pd
 
 from gvcsim.indicators.core import IcioArrays
 
-_AMOUNT_COLS = [
-    "trade_gross_exports",
-    "trade_dva",
-    "trade_dva_final",
-    "trade_dva_intermediate_absorbed",
-    "trade_dva_intermediate_reexported",
-    "trade_rdv",
-    "trade_ddc",
-    "trade_fva",
-    "trade_fdc",
-    "trade_pdc",
-    "trade_forward_va_in_foreign_exports",
-    "trade_balance_error",
-]
+TRADE_COLUMNS = ["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub", "EXDVA"]
+
+# 六个闭合项(EXDVA 是派生项,不参与闭合)
+_CLOSURE_COLS = ["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"]
 
 
-def _node_regions(arr: IcioArrays) -> np.ndarray:
-    return arr.index.get_level_values(0).to_numpy()
-
-
-def _node_sectors(arr: IcioArrays) -> np.ndarray:
-    return arr.index.get_level_values(1).to_numpy()
-
-
-def _allocation_matrix(arr: IcioArrays) -> np.ndarray:
-    """Seller-side allocation matrix Z_ij / x_i."""
-    with np.errstate(divide="ignore", invalid="ignore"):
-        return np.where(arr.x[:, None] > 0, arr.Z / arr.x[:, None], 0.0)
-
-
-def _absorption_solve(Ad: np.ndarray, rhs: np.ndarray) -> np.ndarray:
-    """求解 (I - Ad)^{-1} · rhs,奇异时退化为最小二乘,并清掉非有限/负值。"""
-    eye = np.eye(Ad.shape[0])
-    try:
-        out = np.linalg.solve(eye - Ad, rhs)
-    except np.linalg.LinAlgError:
-        out, *_ = np.linalg.lstsq(eye - Ad, rhs, rcond=None)
-    return np.clip(np.where(np.isfinite(out), out, 0.0), 0.0, None)
-
-
-def _solve_square(lhs: np.ndarray, rhs: np.ndarray) -> np.ndarray:
-    """Solve lhs @ X = rhs; fall back to least squares for near-singular toy systems."""
-    try:
-        out = np.linalg.solve(lhs, rhs)
-    except np.linalg.LinAlgError:
-        out, *_ = np.linalg.lstsq(lhs, rhs, rcond=None)
-    return np.where(np.isfinite(out), out, 0.0)
-
-
-def _ultimate_absorption(arr: IcioArrays, Ad: np.ndarray) -> np.ndarray:
-    """Rows: producing node, columns: final absorption country shares.
-
-    If one unit of node i output is put into the production network, this gives the
-    expected final demand country. It is the row-oriented counterpart of the
-    Leontief tracing used to separate intermediate exports absorbed by the direct
-    importer, re-exported to third markets, or returned home.
-    """
-    with np.errstate(divide="ignore", invalid="ignore"):
-        final_share = np.where(arr.x[:, None] > 0, arr.Yd / arr.x[:, None], 0.0)
-    # OECD balancing items can create tiny negative probabilities; _absorption_solve
-    # clips them. Keep the accounting stable without changing well-behaved rows.
-    out = _absorption_solve(Ad, final_share)
-    row_sum = out.sum(axis=1)
-    good = row_sum > 0
-    out[good] = out[good] / row_sum[good, None]
-    return out
-
-
-def _bm_source_coefficients(
-    arr: IcioArrays,
-    country: str,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Return per-unit export content coefficients under BM source-based accounting.
-
-    For exporter s, DVA uses the domestic Leontief inverse L_ss. The full domestic
-    content V_s B_ss minus that local term is DDC. For foreign content, cutting
-    s's outward intermediate links gives B^cut_fs = B_fs B_ss^-1 L_ss, avoiding a
-    large inverse for every exporter.
-    """
-    p = arr.pos[country]
-    mask = np.ones(len(arr.x), dtype=bool)
-    mask[p] = False
-    f = np.where(mask)[0]
-
-    Lss = arr.L_dd[country]
-    Bss = arr.B[np.ix_(p, p)]
-    domestic_source = arr.v[p] @ Lss
-    domestic_full = arr.v[p] @ Bss
-
-    if len(f) == 0:
-        foreign_source = np.zeros_like(domestic_source)
-        foreign_full = np.zeros_like(domestic_source)
-    else:
-        cut_bridge = _solve_square(Bss, Lss)
-        Bfs = arr.B[np.ix_(f, p)]
-        foreign_source = arr.v[f] @ (Bfs @ cut_bridge)
-        foreign_full = arr.v[f] @ Bfs
-
-    return domestic_source, domestic_full, foreign_source, foreign_full
-
-
-# 占比指标除以毛出口,只有当该实体"确实出口"时才有意义。分两档下限:
-_EXPORT_NOISE_FLOOR = 1e-9  # 相对本帧最大毛出口:剔除非贸易行业在小经济体里 ~1e-13 的机器精度噪声
-# 国家-行业级、仅用于前向/总参与度这类"无界"指标的额外相对下限:毛出口不足本国总出口
-# 0.5% 的行业不是主要出口部门(多为电力/供水/建筑/房地产/公共管理等非贸易品),
-# 其前向参与度会被自身很小的出口分母放大到数倍甚至几十倍,记为缺失比记一个爆表百分数更诚实。
-_EXPORT_SECTOR_FLOOR = 5e-3
-
-
-def _exports_above_noise(gross: pd.Series) -> pd.Series:
-    """毛出口是否高于机器精度噪声(所有占比指标共用的最低门槛)。"""
-    if not len(gross):
-        return gross > 0
-    return gross > float(gross.max()) * _EXPORT_NOISE_FLOOR
-
-
-def _meaningful_exporter(df: pd.DataFrame) -> pd.Series:
-    """在噪声门槛之上,再要求是本国"有意义的出口部门"(仅用于无界的前向/总参与度)。
-
-    DVA/FVA/PDC/后向占比都是毛出口的组成项,天然 ∈[0,1],即便行业出口很小也有意义、
-    不需要这道相对下限——收窄到前向/总参与度,既修好爆表显示,又不无谓丢弃步骤13
-    (depvar=share_trade_fva)等回归的有效样本。
-    """
-    gross = df["trade_gross_exports"]
-    valid = _exports_above_noise(gross)
-    if isinstance(gross.index, pd.MultiIndex):  # (country, sector) 粒度
-        country_total = gross.groupby(level=0).transform("sum")
-        valid = valid & (gross > country_total * _EXPORT_SECTOR_FLOOR)
-    elif {"country", "sector"}.issubset(df.columns):  # 扁平化后的国家-行业表
-        country_total = gross.groupby(df["country"]).transform("sum")
-        valid = valid & (gross > country_total * _EXPORT_SECTOR_FLOOR)
-    return valid
-
-
-def _add_trade_shares(df: pd.DataFrame) -> pd.DataFrame:
-    gross = df["trade_gross_exports"]
-    noise_ok = _exports_above_noise(gross)  # 有界占比:只剔机器精度噪声
-    export_ok = _meaningful_exporter(df)  # 无界的前向/总参与度:再加相对下限
-    with np.errstate(divide="ignore", invalid="ignore"):
-        df["share_trade_dva"] = np.where(noise_ok, df["trade_dva"] / gross, np.nan)
-        df["share_trade_fva"] = np.where(noise_ok, df["trade_fva"] / gross, np.nan)
-        df["share_trade_pdc"] = np.where(noise_ok, df["trade_pdc"] / gross, np.nan)
-        df["share_trade_backward_gvc"] = np.where(noise_ok, (df["trade_fva"] + df["trade_fdc"]) / gross, np.nan)
-        df["share_trade_forward_gvc"] = np.where(export_ok, df["trade_forward_va_in_foreign_exports"] / gross, np.nan)
-    # 总参与度含前向项,前向对非"有意义出口部门"已是缺失,后向 + 缺失 = 缺失,口径自然一致
-    df["share_trade_gvc_participation"] = df["share_trade_backward_gvc"] + df["share_trade_forward_gvc"]
-    return df
+def gross_exports(df: pd.DataFrame) -> pd.Series:
+    """毛出口 = 六个闭合项之和(面板加权与演示恒等式共用)。"""
+    return df[_CLOSURE_COLS].sum(axis=1)
 
 
 def sector_tradeflow(arr: IcioArrays) -> pd.DataFrame:
-    """国家-行业级 Borin-Mancini source-based 贸易流分解,索引为 (country, sector)。
-
-    五个闭合项(DVA/RDV/DDC/FVA/FDC)使用 BM 精确公式。DVA 的最终吸收
-    子项仍按输出流向追踪拆成最终品、进口国吸收、第三国再出口与返回本国,
-    以保持前端教学字段稳定。
-    """
-    node_regions = _node_regions(arr)
-    node_sectors = _node_sectors(arr)
+    """国家-行业级 WWZ 总贸易核算分解,索引为 (country, industry)。"""
     n = len(arr.x)
-    idx = np.arange(n)
+    node_regions = arr.index.get_level_values(0).to_numpy()
+    node_sectors = arr.index.get_level_values(1).to_numpy()
     region_idx = {r: i for i, r in enumerate(arr.regions)}
-    home_col = np.array([region_idx[r] for r in node_regions])
-    border = node_regions[:, None] != node_regions[None, :]
 
-    Ad = _allocation_matrix(arr)
-    ultimate = _ultimate_absorption(arr, Ad)
+    ydom = arr.y_domestic()
+    yexp = arr.y_export()
 
-    # 最终品出口(剔除本国内销)
-    final_exports = arr.Yd.sum(axis=1) - arr.Yd[idx, home_col]
-    Zf = np.where(border, arr.Z, 0.0)
-    importer_absorption_share = ultimate[idx, home_col]
+    # 全局量,只算一次
+    W = arr.B @ arr.Yd  # N×R:各目的国最终需求诱发的产出
+    vB = arr.v @ arr.B  # 全球增加值系数(行向量)
+    tB = arr.t @ arr.B  # 全球税收含量系数
+    mL_dom = arr.apply_L(ydom)  # L_rr @ Y_rr,分国块
+    mL_exp = arr.apply_L(arr.E)  # L_rr @ E_r*,分国块
 
-    trade_dva_final = np.zeros(n)
-    trade_dva_absorbed = np.zeros(n)
-    trade_dva_reexported = np.zeros(n)
-    trade_rdv = np.zeros(n)
-    trade_ddc = np.zeros(n)
-    trade_fva = np.zeros(n)
-    trade_fdc = np.zeros(n)
+    dvaex = np.zeros(n)
+    dvart = np.zeros(n)
+    ddc = np.zeros(n)
+    fva = np.zeros(n)
+    fdc = np.zeros(n)
 
-    for r in arr.regions:
-        p = arr.pos[r]
-        home = region_idx[r]
-        domestic_source, domestic_full, foreign_source, foreign_full = _bm_source_coefficients(arr, r)
+    for s in arr.regions:
+        p = arr.pos[s]
+        c = region_idx[s]
+        L_ss = arr.L_dd[s]
+        B_ss = arr.B[np.ix_(p, p)]
+        vB_ss = arr.v[p] @ B_ss
+        vL_ss = arr.v[p] @ L_ss
+        f = vB[p] - vB_ss  # 外国增加值系数(全部 t≠s 来源)
 
-        returned = (Zf[p, :] * ultimate[:, home][None, :]).sum(axis=1)
-        absorbed = (Zf[p, :] * importer_absorption_share[None, :]).sum(axis=1)
+        yfin = yexp[p]  # 最终品出口
+        eint = arr.E[p] - yfin  # 中间品出口
 
-        trade_dva_final[p] = domestic_source * final_exports[p]
-        trade_dva_absorbed[p] = domestic_source * absorbed
-        trade_rdv[p] = domestic_source * returned
-        trade_dva_reexported[p] = domestic_source * arr.E[p] - trade_dva_final[p] - trade_dva_absorbed[p] - trade_rdv[p]
-        # Keep the split stable if tiny allocation noise makes the residual negative.
-        small = np.abs(trade_dva_reexported[p]) < 1e-10
-        trade_dva_reexported[p[small]] = 0.0
+        # s 的最终品出口诱发的各国产出(用于第 5 项排除与第 9 项返回)
+        P_s = arr.B[:, p] @ yexp[p]
 
-        trade_ddc[p] = (domestic_full - domestic_source) * arr.E[p]
-        trade_fva[p] = foreign_source * arr.E[p]
-        trade_fdc[p] = (foreign_full - foreign_source) * arr.E[p]
+        # A^F_s(·):s 行块的跨境技术系数乘以分国块向量,home 块列置零
+        A_row = arr.A[p, :].copy()
+        A_row[:, p] = 0.0
 
-    trade_dva = trade_dva_final + trade_dva_absorbed + trade_dva_reexported
-    trade_pdc = trade_ddc + trade_fdc
+        m_dvaex = arr.x - W[:, c] - P_s
+        m_dvaex[p] = 0.0
+        m_rdv = W[:, c].copy()
+        m_rdv[p] = 0.0
+        m_ddc = P_s.copy()
+        m_ddc[p] = 0.0
+        m_fva = mL_dom.copy()
+        m_fva[p] = 0.0
+        m_fdc = mL_exp.copy()
+        m_fdc[p] = 0.0
 
-    gross = arr.E  # 毛出口 = 跨境中间品 + 最终品出口,core 已按同口径算好
-    accounted = trade_dva + trade_rdv + trade_ddc + trade_fva + trade_fdc
-    # 前向:本节点增加值嵌入外国节点毛出口的金额 v_i · Σ_{j 外国} B_ij · E_j
-    forward = arr.v * (np.where(border, arr.B, 0.0) @ arr.E)
+        dvaex[p] = vB_ss * yfin + vL_ss * (A_row @ m_dvaex)
+        dvart[p] = vL_ss * (A_row @ m_rdv)
+        ddc[p] = vL_ss * (A_row @ m_ddc) + (vB_ss - vL_ss) * eint
+        fva[p] = f * yfin + f * (A_row @ m_fva)
+        fdc[p] = f * (A_row @ m_fdc)
+
+    taxsub = tB * arr.E
 
     df = pd.DataFrame(
         {
-            "trade_gross_exports": gross,
-            "trade_dva": trade_dva,
-            "trade_dva_final": trade_dva_final,
-            "trade_dva_intermediate_absorbed": trade_dva_absorbed,
-            "trade_dva_intermediate_reexported": trade_dva_reexported,
-            "trade_rdv": trade_rdv,
-            "trade_ddc": trade_ddc,
-            "trade_fva": trade_fva,
-            "trade_fdc": trade_fdc,
-            "trade_pdc": trade_pdc,
-            "trade_forward_va_in_foreign_exports": forward,
-            "trade_balance_error": gross - accounted,
+            "DVAex": dvaex,
+            "DVArt": dvart,
+            "DDC": ddc,
+            "FVA": fva,
+            "FDC": fdc,
+            "taxsub": taxsub,
+            "EXDVA": dvaex + dvart,
         },
-        index=pd.MultiIndex.from_arrays([node_regions, node_sectors], names=["country", "sector"]),
+        index=pd.MultiIndex.from_arrays([node_regions, node_sectors], names=["country", "industry"]),
     )
-    return _add_trade_shares(df)
+    return df
 
 
 def country_tradeflow(arr: IcioArrays, sector_df: pd.DataFrame | None = None) -> pd.DataFrame:
-    """国家级贸易流分解 = 国家-行业级金额按国加总,占比重新计算。"""
+    """国家级贸易流分解 = 国家-行业级金额按国加总。"""
     if sector_df is None:
         sector_df = sector_tradeflow(arr)
-    amount_cols = [c for c in _AMOUNT_COLS if c in sector_df.columns]
-    df = sector_df[amount_cols].groupby(level=0).sum()
+    df = sector_df[TRADE_COLUMNS].groupby(level=0).sum()
     df.index.name = "country"
-    return _add_trade_shares(df)
+    return df
