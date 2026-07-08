@@ -1,7 +1,7 @@
 /**
  * 登录后的沉浸式系统介绍(5 幕,可跳过、可在顶栏重看):
  *   1 开场:闭环管线动画 + 真实规模计数(经济体/行业/年份/步骤)
- *   2 数据底座:两张可翻开的数据卡(ICIO 结构 / 真实编码的冲击事件)
+ *   2 数据底座:两张可翻开的数据卡(ICIO 结构 / 拟真政策冲击事件)
  *   3 十七步旅程:五阶段可点击展开(内容来自 /api/steps 真实元数据)
  *   4 动手示意:关税滑块驱动的供应链示意动画(明确标注非真实估计)
  *   5 就绪:以当前登录身份进入实验
@@ -124,7 +124,7 @@ export function IntroOverlay({ user, meta, onDone }: {
       <h1 className="intro-title">供应链仿真系统</h1>
       <div className="intro-kicker">GVC SIMULATION LAB</div>
       <p className="intro-lede">
-        把<b>真实世界数据</b>变成<b>可检验的经济学结论</b> ——
+        把<b>OECD ICIO 真实数据</b>变成<b>可复现的实证链条</b> ——
         一条从数据接入到实验报告的完整闭环。
       </p>
       <div className="intro-pipeline">
@@ -149,7 +149,7 @@ export function IntroOverlay({ user, meta, onDone }: {
     <div key={1} className="intro-scene">
       <div className="intro-scene-kicker">数据底座</div>
       <h2 className="intro-h2">两块数据底座</h2>
-      <p className="intro-lede">价值链是"果",政策冲击是"因"。点开卡片,看看它们分别是什么。</p>
+      <p className="intro-lede">价值链指标来自真实 ICIO,政策冲击是教学用拟真面板。点开卡片,看看它们如何合并成回归样本。</p>
       <div className="intro-cards">
         <div
           className={`intro-card${openCard === "icio" ? " open" : ""}`}
@@ -158,8 +158,8 @@ export function IntroOverlay({ user, meta, onDone }: {
           <div className="intro-card-head">
             <CardIcon kind="icio" />
             <div>
-              <div className="intro-card-title">OECD 全球投入产出表</div>
-              <div className="intro-card-sub">谁买了谁的东西 —— 全球生产网络的账本</div>
+              <div className="intro-card-title">OECD ICIO 投入产出表</div>
+              <div className="intro-card-sub">谁买了谁的东西 —— 全球生产网络与增加值路径的账本</div>
             </div>
             <span className="intro-card-toggle">{openCard === "icio" ? "−" : "+"}</span>
           </div>
@@ -167,7 +167,7 @@ export function IntroOverlay({ user, meta, onDone }: {
             <div className="intro-card-body">
               <div>{meta?.countries.length ?? 77} 经济体 × {meta?.sectors.length ?? 45} 行业,{yearSpan} 逐年</div>
               <div>每年一张 {nodes.toLocaleString()} × {nodes.toLocaleString()} 的中间品流量矩阵</div>
-              <div>由此解出里昂惕夫逆矩阵,追踪增加值的跨境路径</div>
+              <div>结合 VA/TLS 账户、最终需求和里昂惕夫逆矩阵,追踪增加值、税收与网络位置</div>
             </div>
           )}
         </div>
@@ -179,7 +179,7 @@ export function IntroOverlay({ user, meta, onDone }: {
             <CardIcon kind="shock" />
             <div>
               <div className="intro-card-title">贸易政策冲击面板</div>
-              <div className="intro-card-sub">以 2018–2020 全球贸易摩擦为原型的拟真事件库</div>
+              <div className="intro-card-sub">以 2018–2020 全球贸易摩擦为原型的课堂拟真事件库</div>
             </div>
             <span className="intro-card-toggle">{openCard === "shock" ? "−" : "+"}</span>
           </div>
@@ -189,7 +189,7 @@ export function IntroOverlay({ user, meta, onDone }: {
                 <div key={e.name}>{e.name}({e.effective} 生效)</div>
               ))}
               <div style={{ opacity: 0.7, marginTop: 8 }}>
-                共 {events.length} 组事件,行业异质、覆盖全部经济体;宣布/生效时间线支持因果识别
+                共 {events.length} 组事件,保留行业异质和宣布/生效时间线;真实事件库接入后可直接替换
               </div>
             </div>
           )}
@@ -227,7 +227,7 @@ export function IntroOverlay({ user, meta, onDone }: {
     <div key={3} className="intro-scene">
       <div className="intro-scene-kicker">动手预演</div>
       <h2 className="intro-h2">政策冲击如何重塑价值链?</h2>
-      <p className="intro-lede">拖动滑块,给跨境环节加征关税,看看链条发生什么。</p>
+      <p className="intro-lede">拖动滑块,给跨境环节加征关税,观察 GVC 生产份额和国内替代环节如何变化。</p>
       <svg viewBox="0 0 640 196" style={{ width: "min(720px, 94%)", margin: "10px auto 0" }}>
         {/* 跨境流:宽度随 τ 收缩 */}
         <path d="M118 95 C 200 40, 260 40, 312 88" fill="none" stroke="#7aa5e8"
@@ -255,12 +255,12 @@ export function IntroOverlay({ user, meta, onDone }: {
           onChange={(e) => setTau(Number(e.target.value) / 100)}
         />
         <span className="intro-tau">{(tau * 100).toFixed(0)}%</span>
-        <span className="intro-slider-label" style={{ marginLeft: 20 }}>复杂 GVC 份额(示意)</span>
+        <span className="intro-slider-label" style={{ marginLeft: 20 }}>复杂 GVC 生产份额(示意)</span>
         <span className="intro-tau" style={{ color: tau > 0.02 ? "#ff9d9d" : "#eef1fb" }}>{demoShare}%</span>
       </div>
       <p className="intro-note">
-        本页为教学示意动画,不是估计结果。真实效应由步骤 13–16 的 DID / 事件研究给出
-        (演示数据上:受冲击国家-行业的复杂 GVC 份额在 2018 年后相对下降约 0.4 个百分点)。
+        本页为教学示意动画,不是估计结果。后续回归会分别检验外国增加值份额(FVA_share)、
+        复杂 GVC 生产份额、前向 GVC 生产长度(PLv_GVC)与介数中心性。
       </p>
     </div>,
 
@@ -274,8 +274,8 @@ export function IntroOverlay({ user, meta, onDone }: {
       <h2 className="intro-h2">实验台已就绪</h2>
       <p className="intro-lede">
         你将以<b>{roleName}</b>身份进入。建议从阶段一开始,
-        亲手走完 数据 → 指标 → 回归 → 报告 的完整闭环;
-        每一步都配有概念讲解、动手面板和小贴士。
+        亲手走完 数据 → 指标 → 可视化 → 回归 → 报告 的完整闭环;
+        每一步都配有方法说明、动手面板和小贴士。
       </p>
       <div className="intro-cta-row">
         <button className="intro-cta" onClick={() => onDone(1)}>从第 1 步开始实验</button>
@@ -288,14 +288,31 @@ export function IntroOverlay({ user, meta, onDone }: {
       <button className="intro-skip" aria-label="跳过介绍" title="跳过介绍" onClick={() => onDone()}>
         <NavIcon kind="skip" />
       </button>
-      {scenes[scene]}
-      <div className="intro-nav">
+      <div className="intro-scene-shell">
         <button
-          className="intro-nav-btn" aria-label="上一页" title="上一页" disabled={scene === 0}
+          className="intro-side-nav intro-side-nav-prev" aria-label="上一页" title="上一页" disabled={scene === 0}
           onClick={() => setScene(scene - 1)}
         >
           <NavIcon kind="prev" />
         </button>
+        {scenes[scene]}
+        {scene < N_SCENES - 1 ? (
+          <button
+            className="intro-side-nav intro-side-nav-next" aria-label="下一页" title="下一页"
+            onClick={() => setScene(scene + 1)}
+          >
+            <NavIcon kind="next" />
+          </button>
+        ) : (
+          <button
+            className="intro-side-nav intro-side-nav-next intro-side-nav-start" aria-label="开始实验" title="开始实验"
+            onClick={() => onDone(1)}
+          >
+            <NavIcon kind="start" />
+          </button>
+        )}
+      </div>
+      <div className="intro-nav">
         <div className="intro-dots">
           {Array.from({ length: N_SCENES }, (_, i) => (
             <button
@@ -304,15 +321,6 @@ export function IntroOverlay({ user, meta, onDone }: {
             />
           ))}
         </div>
-        {scene < N_SCENES - 1 ? (
-          <button className="intro-nav-btn primary" aria-label="下一页" title="下一页" onClick={() => setScene(scene + 1)}>
-            <NavIcon kind="next" />
-          </button>
-        ) : (
-          <button className="intro-nav-btn primary" aria-label="开始实验" title="开始实验" onClick={() => onDone(1)}>
-            <NavIcon kind="start" />
-          </button>
-        )}
       </div>
       <div className="intro-keyhint">← → 方向键翻页 · Esc 跳过</div>
     </div>
