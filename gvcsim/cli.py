@@ -5,6 +5,7 @@ validate  对某年数据做质检并打印结果(步骤3)
 compute   预计算指标与回归面板(步骤4-7 + 面板)
 regress   跑步骤13-16 的演示回归并打印系数表
 report    生成实验报告(步骤17)
+benchmark 与 client-docs 客户基准数据对账,生成 reports/client_benchmark.md
 serve     启动 API 服务(供前端使用)
 """
 
@@ -28,9 +29,9 @@ def main() -> None:
     p.add_argument("--step", type=int, default=13, choices=[13, 14, 15, 16])
     p.add_argument(
         "--granularity",
-        default="sector",
-        choices=["sector", "country"],
-        help="回归粒度:sector=国家–行业级(默认),country=国家级",
+        default="industry",
+        choices=["industry", "country"],
+        help="回归粒度:industry=国家–行业级(默认),country=国家级",
     )
     p.add_argument(
         "--method",
@@ -40,11 +41,13 @@ def main() -> None:
     )
     p.add_argument("--controls", action="store_true", help="加入 ICIO 派生国家-年份控制变量")
     p.add_argument("--macro-controls", action="store_true", help="加入 WDI/IMF 风格模拟宏观控制变量")
-    p.add_argument("--interaction", action="store_true", help="加入 冲击×基期GVC参与度 交互项")
+    p.add_argument("--interaction", action="store_true", help="加入 冲击×基期GVC生产份额 交互项")
     p.add_argument("--real", action="store_true", help="使用 GDP 平减指数切换到实际值口径(2016=1)")
 
     p = sub.add_parser("report", help="生成实验报告")
     p.add_argument("--year", type=int, default=None)
+
+    sub.add_parser("benchmark", help="与客户基准数据(client-docs)对账")
 
     p = sub.add_parser("serve", help="启动 API 服务")
     p.add_argument("--port", type=int, default=8000)
@@ -88,7 +91,7 @@ def main() -> None:
 
         if args.controls and args.macro_controls:
             raise SystemExit("--controls 与 --macro-controls 只能选择一个")
-        granularity = "国家–行业级" if args.granularity == "sector" else "国家级"
+        granularity = "国家级" if args.granularity == "country" else "国家–行业级"
         method = {"did": "双重差分 (DID)", "fe": "双向固定效应", "event": "事件研究"}[args.method]
         control_mode = (
             CONTROL_MODE_MACRO if args.macro_controls else CONTROL_MODE_ICIO if args.controls else "不加控制变量"
@@ -133,6 +136,11 @@ def main() -> None:
 
         path = report.generate(args.year)
         print(f"报告已生成: {path}")
+
+    elif args.command == "benchmark":
+        from gvcsim import benchmark
+
+        benchmark.run()
 
     elif args.command == "serve":
         import uvicorn

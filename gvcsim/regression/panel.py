@@ -79,7 +79,7 @@ class PreparedModel:
     notes: list[str]
 
 
-BASE_GVC_COL = "share_trade_gvc_participation"
+BASE_GVC_COL = "3_VA_GVC_share"  # 基期 GVC 生产份额(3_VA_GVC / SVA)
 BASELINE_GVC_COL = "base_gvc_participation"
 DEFLATOR_COL = "gdp_deflator"
 ROW_CODE = "ROW"
@@ -103,12 +103,12 @@ def _stable_noise(data: pd.DataFrame, cols: list[str]) -> pd.Series:
 
 
 def _attach_baseline_gvc(data: pd.DataFrame, entity: str, time: str) -> pd.DataFrame:
-    """给估计样本加基期 GVC 参与度(每个个体可用样本最早两年均值)。"""
+    """给估计样本加基期 GVC 生产份额(每个个体可用样本最早两年均值)。"""
     data = data.sort_values([entity, time]).reset_index(drop=True)
     base = data.groupby(entity, group_keys=False).head(2).groupby(entity)[BASE_GVC_COL].mean().rename(BASELINE_GVC_COL)
     out = data.merge(base, left_on=entity, right_index=True, how="left")
     if out[BASELINE_GVC_COL].isna().any():
-        raise ValueError("无法构造基期 GVC 参与度交互项")
+        raise ValueError("无法构造基期 GVC 生产份额交互项")
     return out
 
 
@@ -157,10 +157,10 @@ def _apply_price_mode(df: pd.DataFrame, design, time: str = "year") -> pd.DataFr
         out["macro_log_gdp_usd"] = _real_log_from_log(out["macro_log_gdp_usd"], deflator)
     if {"macro_log_gdp_usd", "macro_log_population"}.issubset(out.columns):
         out["macro_log_gdp_per_capita"] = out["macro_log_gdp_usd"] - out["macro_log_population"]
-    if {"country", time, "prod_va_total", DEFLATOR_COL}.issubset(out.columns):
-        out["gdp_proxy_growth"] = _country_year_real_growth(out, "prod_va_total", time)
-    if {"country", time, "trade_gross_exports", DEFLATOR_COL}.issubset(out.columns):
-        out["exports_proxy_growth"] = _country_year_real_growth(out, "trade_gross_exports", time)
+    if {"country", time, "SVA", DEFLATOR_COL}.issubset(out.columns):
+        out["gdp_proxy_growth"] = _country_year_real_growth(out, "SVA", time)
+    if {"country", time, "gross_exports", DEFLATOR_COL}.issubset(out.columns):
+        out["exports_proxy_growth"] = _country_year_real_growth(out, "gross_exports", time)
     return out
 
 
@@ -185,7 +185,7 @@ def _apply_teaching_scenario(
         out[design.depvar] = out[design.depvar].astype(float) + y_noise * y_scale * 0.35
         if design.method == "双向固定效应" and design.shock_col in out.columns:
             x_scale = float(out[design.shock_col].std(skipna=True) or 0.0)
-            x_noise = _stable_noise(out, ["country", "sector" if "sector" in out.columns else time, time])
+            x_noise = _stable_noise(out, ["country", "industry" if "industry" in out.columns else time, time])
             out[design.shock_col] = (out[design.shock_col].astype(float) + x_noise * max(x_scale, 0.01) * 0.55).clip(
                 lower=0.0
             )
@@ -377,7 +377,7 @@ def _prepare_fe_model(
         xcols = [*regressors, *interaction_cols, *controls]
     notes = ["连续冲击强度直接进方程(强度法)"]
     if interaction:
-        notes.append("已加入冲击×基期GVC参与度交互项")
+        notes.append("已加入冲击×基期GVC生产份额交互项")
     if controls:
         notes.append("已加入国家-年份控制变量")
     return PreparedModel(
@@ -589,7 +589,7 @@ def _prepare_did_model(
         f"首次处理年份(cohort):{cohort_summary}",
     ]
     if interaction:
-        notes.append("已加入处理效应×基期GVC参与度交互项")
+        notes.append("已加入处理效应×基期GVC生产份额交互项")
     if controls:
         notes.append("已加入国家-年份控制变量")
     return PreparedModel(
@@ -679,7 +679,7 @@ def _prepare_event_model(
         f"首次处理年份(cohort):{cohort_summary}",
     ]
     if interaction:
-        notes.append("已加入动态效应×基期GVC参与度交互项")
+        notes.append("已加入动态效应×基期GVC生产份额交互项")
     if controls:
         notes.append("已加入国家-年份控制变量")
     return PreparedModel(

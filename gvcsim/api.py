@@ -70,7 +70,7 @@ def _clean(records: list[dict]) -> list[dict]:
 
 @lru_cache(maxsize=32)
 def _cached_csv(path_str: str, mtime_ns: int) -> pd.DataFrame:
-    """按 (路径, mtime) 缓存解析结果:大面板(panel_sector ~6MB)不必每请求重新解析,
+    """按 (路径, mtime) 缓存解析结果:大面板(panel_industry ~6MB)不必每请求重新解析,
     产物被 compute 重写后 mtime 变化会自动失效。调用方不得原地修改返回的 DataFrame。"""
     return pd.read_csv(path_str, keep_default_na=False, na_values=[""])
 
@@ -92,92 +92,120 @@ INDICATOR_SCHEMA = {
     "groups": [
         {
             "key": "trade",
-            "label": "Borin-Mancini 贸易流分解",
+            "label": "WWZ 总贸易核算分解",
             "fields": [
-                "trade_gross_exports",
-                "trade_dva",
-                "trade_dva_final",
-                "trade_dva_intermediate_absorbed",
-                "trade_dva_intermediate_reexported",
-                "trade_rdv",
-                "trade_ddc",
-                "trade_fva",
-                "trade_fdc",
-                "trade_pdc",
-                "share_trade_dva",
-                "share_trade_fva",
-                "share_trade_pdc",
-                "share_trade_backward_gvc",
-                "share_trade_forward_gvc",
-                "share_trade_gvc_participation",
+                "gross_exports",
+                "DVAex",
+                "DVArt",
+                "DDC",
+                "FVA",
+                "FDC",
+                "taxsub",
+                "EXDVA",
+                "FVA_share",
+                "DVAex_share",
             ],
         },
         {
             "key": "production",
             "label": "WWYZ 生产分解",
             "fields": [
-                "prod_va_total",
-                "prod_pure_domestic",
-                "prod_traditional",
-                "prod_simple_gvc",
-                "prod_complex_gvc",
-                "prod_gvc_total",
-                "share_prod_pure_domestic",
-                "share_prod_traditional",
-                "share_prod_simple_gvc",
-                "share_prod_complex_gvc",
-                "share_prod_gvc_total",
+                "SVA",
+                "1_VA_D",
+                "2_VA_RT",
+                "3_VA_GVC",
+                "3a_VA_GVC_S",
+                "3b_VA_GVC_C",
+                "FGY",
+                "1_FGY_D",
+                "2_FGY_RT",
+                "3_FGY_GVC",
+                "3a_FGY_GVC_S",
+                "3b_FGY_GVC_C",
+                "3_VA_GVC_share",
+                "3b_VA_GVC_C_share",
             ],
         },
         {
             "key": "length",
-            "label": "价值链长度",
-            "fields": ["upstreamness", "upstreamness_domestic", "upstreamness_cross"],
+            "label": "生产长度与位置",
+            "fields": [
+                "PLv",
+                "PLv_D",
+                "PLv_RT",
+                "PLv_GVC",
+                "PLy",
+                "PLy_D",
+                "PLy_RT",
+                "PLy_GVC",
+                "Pos_TPL",
+                "GVCPs",
+            ],
         },
         {
             "key": "network",
-            "label": "生产网络中心性",
+            "label": "生产网络中心性(Gephi 口径)",
             "fields": [
-                "degree_centrality",
-                "betweenness_centrality",
-                "eigenvector_centrality",
+                "degree",
+                "indegree",
+                "outdegree",
+                "weighted degree",
+                "weighted indegree",
+                "weighted outdegree",
+                "Eccentricity",
+                "closnesscentrality",
+                "harmonicclosnesscentrality",
+                "betweenesscentrality",
+                "eigencentrality",
             ],
         },
     ],
     "fields": {
-        "trade_gross_exports": {"label": "毛出口", "format": "amount"},
-        "trade_dva": {"label": "国内增加值 DVA", "format": "amount"},
-        "trade_dva_final": {"label": "DVA:最终品出口", "format": "amount"},
-        "trade_dva_intermediate_absorbed": {"label": "DVA:进口国吸收", "format": "amount"},
-        "trade_dva_intermediate_reexported": {"label": "DVA:再出口吸收", "format": "amount"},
-        "trade_rdv": {"label": "返回国内增加值 RDV", "format": "amount"},
-        "trade_ddc": {"label": "国内重复计算 DDC", "format": "amount"},
-        "trade_fva": {"label": "外国增加值 FVA", "format": "amount"},
-        "trade_fdc": {"label": "外国重复计算 FDC", "format": "amount"},
-        "trade_pdc": {"label": "纯重复计算 PDC", "format": "amount"},
-        "share_trade_dva": {"label": "DVA 份额", "format": "pct"},
-        "share_trade_fva": {"label": "FVA 份额", "format": "pct"},
-        "share_trade_pdc": {"label": "PDC 份额", "format": "pct"},
-        "share_trade_backward_gvc": {"label": "后向 GVC 参与度", "format": "pct"},
-        "share_trade_forward_gvc": {"label": "前向 GVC 参与度", "format": "pct"},
-        "share_trade_gvc_participation": {"label": "总 GVC 参与度", "format": "pct"},
-        "prod_va_total": {"label": "总增加值", "format": "amount"},
-        "prod_pure_domestic": {"label": "纯国内生产", "format": "amount"},
-        "prod_traditional": {"label": "传统贸易生产", "format": "amount"},
-        "prod_simple_gvc": {"label": "简单 GVC 生产", "format": "amount"},
-        "prod_complex_gvc": {"label": "复杂 GVC 生产", "format": "amount"},
-        "prod_gvc_total": {"label": "GVC 生产合计", "format": "amount"},
-        "share_prod_pure_domestic": {"label": "纯国内份额", "format": "pct"},
-        "share_prod_traditional": {"label": "传统贸易份额", "format": "pct"},
-        "share_prod_simple_gvc": {"label": "简单 GVC 份额", "format": "pct"},
-        "share_prod_complex_gvc": {"label": "复杂 GVC 份额", "format": "pct"},
-        "share_prod_gvc_total": {"label": "GVC 生产份额", "format": "pct"},
-        "upstreamness": {"label": "上游度", "format": "number"},
-        "upstreamness_domestic": {"label": "国内段长度", "format": "number"},
-        "upstreamness_cross": {"label": "跨境段长度", "format": "number"},
-        "degree_centrality": {"label": "度中心性", "format": "number"},
-        "betweenness_centrality": {"label": "介数中心性", "format": "number"},
-        "eigenvector_centrality": {"label": "特征向量中心性", "format": "number"},
+        "gross_exports": {"label": "毛出口(六项合计)", "format": "amount"},
+        "FVA_share": {"label": "FVA 份额(FVA/毛出口)", "format": "pct"},
+        "DVAex_share": {"label": "DVAex 份额(DVAex/毛出口)", "format": "pct"},
+        "3_VA_GVC_share": {"label": "GVC 生产份额(3_VA_GVC/SVA)", "format": "pct"},
+        "3b_VA_GVC_C_share": {"label": "复杂GVC生产份额(3b/SVA)", "format": "pct"},
+        "DVAex": {"label": "国内增加值出口(被国外吸收)", "format": "amount"},
+        "DVArt": {"label": "出口后返回的国内增加值", "format": "amount"},
+        "DDC": {"label": "国内重复计算", "format": "amount"},
+        "FVA": {"label": "出口中的外国增加值", "format": "amount"},
+        "FDC": {"label": "外国重复计算", "format": "amount"},
+        "taxsub": {"label": "出口中的税收减补贴", "format": "amount"},
+        "EXDVA": {"label": "出口国内增加值合计", "format": "amount"},
+        "SVA": {"label": "总增加值", "format": "amount"},
+        "1_VA_D": {"label": "纯国内生产增加值", "format": "amount"},
+        "2_VA_RT": {"label": "传统贸易增加值", "format": "amount"},
+        "3_VA_GVC": {"label": "GVC 生产增加值", "format": "amount"},
+        "3a_VA_GVC_S": {"label": "简单 GVC 增加值", "format": "amount"},
+        "3b_VA_GVC_C": {"label": "复杂 GVC 增加值", "format": "amount"},
+        "FGY": {"label": "最终品生产(全球增加值)", "format": "amount"},
+        "1_FGY_D": {"label": "国内最终品中的国内增加值", "format": "amount"},
+        "2_FGY_RT": {"label": "最终品出口中的国内增加值", "format": "amount"},
+        "3_FGY_GVC": {"label": "经中间品贸易的增加值", "format": "amount"},
+        "3a_FGY_GVC_S": {"label": "简单 GVC(后向)", "format": "amount"},
+        "3b_FGY_GVC_C": {"label": "复杂 GVC(后向)", "format": "amount"},
+        "PLv": {"label": "前向总生产长度", "format": "number"},
+        "PLv_D": {"label": "前向纯国内段长度", "format": "number"},
+        "PLv_RT": {"label": "前向传统贸易段长度", "format": "number"},
+        "PLv_GVC": {"label": "前向 GVC 段长度", "format": "number"},
+        "PLy": {"label": "后向总生产长度", "format": "number"},
+        "PLy_D": {"label": "后向纯国内段长度", "format": "number"},
+        "PLy_RT": {"label": "后向传统贸易段长度", "format": "number"},
+        "PLy_GVC": {"label": "后向 GVC 段长度", "format": "number"},
+        "Pos_TPL": {"label": "总生产长度位置指数", "format": "number"},
+        "GVCPs": {"label": "GVC 位置指数", "format": "number"},
+        "degree": {"label": "度", "format": "number"},
+        "indegree": {"label": "入度", "format": "number"},
+        "outdegree": {"label": "出度", "format": "number"},
+        "weighted degree": {"label": "加权度", "format": "amount"},
+        "weighted indegree": {"label": "加权入度", "format": "amount"},
+        "weighted outdegree": {"label": "加权出度", "format": "amount"},
+        "Eccentricity": {"label": "离心率", "format": "number"},
+        "closnesscentrality": {"label": "接近中心性", "format": "number"},
+        "harmonicclosnesscentrality": {"label": "调和中心性", "format": "number"},
+        "betweenesscentrality": {"label": "介数中心性", "format": "number"},
+        "eigencentrality": {"label": "特征向量中心性", "format": "number"},
     },
 }
 
@@ -213,7 +241,7 @@ def meta():
     sectors: list[str] = []
     if years:
         countries = sorted(_read_csv(f"indicators_country_{years[-1]}.csv")["country"].unique())
-        sectors = sorted(_read_csv(f"indicators_sector_{years[-1]}.csv")["sector"].unique())
+        sectors = sorted(_read_csv(f"indicators_industry_{years[-1]}.csv")["industry"].unique())
     return {"years": years, "countries": countries, "sectors": sectors}
 
 
@@ -291,27 +319,38 @@ def qc(year: int):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _with_derived(df: pd.DataFrame) -> pd.DataFrame:
+    """在客户口径原始列之外派生毛出口与教学用份额列(CSV 产物保持客户 schema 不动)。"""
+    out = df.copy()
+    out["gross_exports"] = out[["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"]].sum(axis=1)
+    gross = out["gross_exports"]
+    out["FVA_share"] = (out["FVA"] / gross).where(gross > 0)
+    out["DVAex_share"] = (out["DVAex"] / gross).where(gross > 0)
+    out["3_VA_GVC_share"] = (out["3_VA_GVC"] / out["SVA"]).where(out["SVA"] > 0)
+    out["3b_VA_GVC_C_share"] = (out["3b_VA_GVC_C"] / out["SVA"]).where(out["SVA"] > 0)
+    return out
+
+
 @app.get("/api/indicators/country/{year}")
 def indicators_country(year: int, country: str | None = None):
-    df = _read_csv(f"indicators_country_{year}.csv")
+    df = _with_derived(_read_csv(f"indicators_country_{year}.csv"))
     if country:
         df = df[df["country"] == country]
     return _clean(df.to_dict(orient="records"))
 
 
-@app.get("/api/indicators/sector/{year}")
-def indicators_sector(
+def _indicators_industry_page(
     year: int,
     country: str | None = None,
-    sector: str | None = None,
-    page: int = Query(1, ge=1),
-    page_size: int = Query(25, ge=1, le=200),
-):
-    df = _read_csv(f"indicators_sector_{year}.csv")
+    industry: str | None = None,
+    page: int = 1,
+    page_size: int = 25,
+) -> dict:
+    df = _with_derived(_read_csv(f"indicators_industry_{year}.csv"))
     if country:
         df = df[df["country"] == country]
-    if sector:
-        df = df[df["sector"] == sector]
+    if industry:
+        df = df[df["industry"] == industry]
     total = len(df)
     start = (page - 1) * page_size
     return {
@@ -322,12 +361,24 @@ def indicators_sector(
     }
 
 
+@app.get("/api/indicators/industry/{year}")
+def indicators_industry(
+    year: int,
+    country: str | None = None,
+    industry: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=200),
+):
+    return _indicators_industry_page(year, country, industry, page, page_size)
+
+
 @app.get("/api/viz/network/{year}")
 def viz_network(year: int):
     edges = _read_csv(f"network_edges_{year}.csv")
-    nodes = _read_csv(f"indicators_country_{year}.csv")[
-        ["country", "share_trade_gvc_participation", "betweenness_centrality", "trade_gross_exports"]
-    ]
+    country_df = _read_csv(f"indicators_country_{year}.csv")
+    nodes = country_df[["country", "betweenesscentrality"]].copy()
+    nodes["gross_exports"] = country_df[["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"]].sum(axis=1)
+    nodes["gvc_production_share"] = (country_df["3_VA_GVC"] / country_df["SVA"]).where(country_df["SVA"] > 0)
     return {
         "nodes": _clean(nodes.to_dict(orient="records")),
         "edges": _clean(edges.to_dict(orient="records")),
