@@ -79,8 +79,8 @@ def test_regression_design():
     resp = client.get("/api/regression/design", params={"step": 13})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["depvar"] == "share_trade_fva"
-    assert body["panel_file"] == "panel_sector.csv"
+    assert body["depvar"] == "FVA_share"
+    assert body["panel_file"] == "panel_industry.csv"
     assert body["entity"] == "entity_id"
     assert body["cluster"] == "country"
     assert body["control_mode"] == "不加控制变量"
@@ -155,7 +155,9 @@ def test_indicator_schema():
     assert resp.status_code == 200
     body = resp.json()
     assert body["groups"][0]["key"] == "trade"
-    assert body["fields"]["share_trade_fva"]["label"]
+    assert body["fields"]["FVA"]["label"]
+    assert body["fields"]["GVCPs"]["label"]
+    assert body["fields"]["closnesscentrality"]["label"]
 
 
 @needs_raw_icio
@@ -220,12 +222,13 @@ def test_meta_and_indicators():
     rows = client.get(f"/api/indicators/country/{year}").json()
     assert len(rows) > 50
     cols = rows[0].keys()
-    for col in ["share_trade_fva", "share_prod_complex_gvc", "upstreamness", "betweenness_centrality"]:
+    for col in ["DVAex", "taxsub", "SVA", "3b_FGY_GVC_C", "PLv_GVC", "GVCPs", "betweenesscentrality"]:
         assert col in cols
 
-    paged = client.get(f"/api/indicators/sector/{year}", params={"country": "CHN", "page": 1}).json()
+    paged = client.get(f"/api/indicators/industry/{year}", params={"country": "CHN", "page": 1}).json()
     assert paged["total"] == 45  # ICIO 45个行业
     assert len(paged["rows"]) == 25
+    assert client.get(f"/api/indicators/sector/{year}", params={"country": "CHN", "page": 1}).status_code == 404
 
 
 @needs_data
@@ -236,7 +239,9 @@ def test_qc_and_network():
 
     net = client.get(f"/api/viz/network/{year}").json()
     assert net["nodes"] and net["edges"]
-    assert "trade_gross_exports" in net["nodes"][0]
+    node = net["nodes"][0]
+    for key in ["gross_exports", "betweenesscentrality", "gvc_production_share"]:
+        assert key in node
 
 
 @needs_shock_qc
@@ -322,7 +327,7 @@ def test_regression_run():
     resp = client.post("/api/regression/run", json={"step": 13})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["design"]["depvar"] == "share_trade_fva"
+    assert body["design"]["depvar"] == "FVA_share"
     assert body["design"]["granularity"] == "国家–行业级"
     assert body["design"]["method"] == "双重差分 (DID)"
     assert body["result"]["coefs"][0]["name"] == "treated×post"
@@ -401,7 +406,7 @@ def test_parameterized_report_endpoint():
     assert "- 冲击类型:出口管制" in md
     assert "- 估计方法:双向固定效应" in md
     assert "- 控制变量:GDP规模(log, WDI风格mock)" in md
-    assert "- 交互项:开启:冲击×基期GVC参与度" in md
+    assert "- 交互项:开启:冲击×基期GVC生产份额" in md
     assert "- 价格口径:实际值(2016=1)" in md
     assert "- 回归样本:排除 ROW" in md
     assert "export_control_shock" in md

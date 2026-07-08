@@ -20,19 +20,25 @@ def _fixtures():
         for y_i, year in enumerate(years):
             va = 1000 + c_i * 200 + y_i * 100
             exp = 200 + c_i * 50 + y_i * 20
+            # 客户口径:毛出口 = WWZ 六个闭合项之和,GDP proxy = SVA
             country_rows.append(
                 {
                     "country": c,
                     "year": year,
-                    "prod_va_total": va,
-                    "trade_gross_exports": exp,
+                    "SVA": va,
+                    "DVAex": exp * 0.70,
+                    "DVArt": exp * 0.02,
+                    "DDC": exp * 0.03,
+                    "FVA": exp * 0.18,
+                    "FDC": exp * 0.04,
+                    "taxsub": exp * 0.03,
                 }
             )
             sector_rows.extend(
                 [
-                    {"country": c, "year": year, "sector": sectors[0], "prod_va_total": va * 0.40},
-                    {"country": c, "year": year, "sector": sectors[1], "prod_va_total": va * 0.35},
-                    {"country": c, "year": year, "sector": sectors[2], "prod_va_total": va * 0.25},
+                    {"country": c, "year": year, "industry": sectors[0], "SVA": va * 0.40},
+                    {"country": c, "year": year, "industry": sectors[1], "SVA": va * 0.35},
+                    {"country": c, "year": year, "industry": sectors[2], "SVA": va * 0.25},
                 ]
             )
     return pd.DataFrame(country_rows), pd.DataFrame(sector_rows)
