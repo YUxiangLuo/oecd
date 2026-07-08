@@ -1,6 +1,32 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const user = { username: "student", name: "学生", role: "student" };
+const teacher = { username: "teacher", name: "老师", role: "teacher" };
+
+const announcement = {
+  id: 1,
+  class_id: null,
+  class_name: null,
+  title: "e2e 公告:报告周五截止",
+  body: "",
+  author: "teacher",
+  created_at: "2026-07-08T10:00:00Z",
+};
+
+const submissionRow = {
+  id: 1,
+  title: "步骤17实验报告 · 2020",
+  year: 2020,
+  state: "pending",
+  score: null,
+  graded_by: null,
+  graded_at: null,
+  submitted_at: "2026-07-08T11:00:00Z",
+  username: "student",
+  display_name: "学生",
+  student_no: "2026001",
+  class_name: "GVC 实验演示班",
+};
 
 function steps() {
   const titles: Record<number, [number, string, "db" | "shock" | "qc" | "ind" | "viz" | "rgd" | "reg" | "rep"]> = {
@@ -70,7 +96,9 @@ const design = {
   cluster: "country",
 };
 
-async function mockApi(page: Page) {
+async function mockApi(page: Page, who = user) {
+  // 学生提交后 report/mine 由 none → pending(闭包保存跨请求状态)
+  let mine: Record<string, unknown> = { state: "none" };
   await page.route("**/api/**", async (route: Route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -78,9 +106,40 @@ async function mockApi(page: Page) {
     const method = request.method();
 
     if (path === "/api/auth/login" && method === "POST") {
-      return route.fulfill({ json: { token: "e2e-token", user, expires_at: 4_102_444_800 } });
+      return route.fulfill({ json: { token: "e2e-token", user: who, expires_at: 4_102_444_800 } });
     }
-    if (path === "/api/auth/me") return route.fulfill({ json: user });
+    if (path === "/api/auth/me") return route.fulfill({ json: who });
+    if (path === "/api/classroom/announcements") return route.fulfill({ json: { announcements: [announcement] } });
+    if (path === "/api/classroom/progress" && method === "POST") return route.fulfill({ json: { ok: true } });
+    if (path === "/api/classroom/report/mine") return route.fulfill({ json: mine });
+    if (path === "/api/classroom/report/submit" && method === "POST") {
+      mine = { state: "pending", id: 1, title: "步骤17实验报告 · 2020 · 双重差分 (DID)", year: 2020, submitted_at: "2026-07-08T11:00:00Z" };
+      return route.fulfill({ json: { id: 1, state: "pending", submitted_at: "2026-07-08T11:00:00Z" } });
+    }
+    if (path === "/api/classroom/overview") {
+      return route.fulfill({
+        json: {
+          student_count: 2, disabled_count: 0, submitted: 1, graded: 0, avg_score: null,
+          score_buckets: [{ label: "<60", count: 0 }, { label: "60-69", count: 0 }, { label: "70-79", count: 0 }, { label: "80-89", count: 0 }, { label: "90+", count: 0 }],
+          step_completion: Array.from({ length: 17 }, (_, i) => ({ step: i + 1, reached: i < 9 ? 1 : 0 })),
+        },
+      });
+    }
+    if (path === "/api/classroom/classes") {
+      return route.fulfill({ json: { classes: [{ id: 1, name: "GVC 实验演示班", code: "GVC-DEMO", semester: "2026 春", note: "", archived: false, created_at: "2026-07-01T00:00:00Z", student_count: 2 }] } });
+    }
+    if (path === "/api/classroom/students") {
+      return route.fulfill({
+        json: { students: [{ id: 2, username: "student", display_name: "学生", class_id: 1, class_name: "GVC 实验演示班", student_no: "2026001", active: true, last_login_at: null, created_at: "2026-07-01T00:00:00Z", current_step: 9, max_step: 9, progress_at: null, submission_id: 1, submission_state: "pending", score: null, submitted_at: "2026-07-08T11:00:00Z" }] },
+      });
+    }
+    if (path === "/api/classroom/submissions") return route.fulfill({ json: { submissions: [submissionRow] } });
+    if (path === "/api/classroom/submissions/1" && method === "GET") {
+      return route.fulfill({ json: { ...submissionRow, design: { method: "双重差分 (DID)" }, markdown: "# 实验报告\n\ne2e 正文", feedback: "" } });
+    }
+    if (path === "/api/classroom/submissions/1/grade" && method === "POST") {
+      return route.fulfill({ json: { ...submissionRow, state: "graded", score: 90, feedback: "很好", graded_by: "teacher", graded_at: "2026-07-08T12:00:00Z" } });
+    }
     if (path === "/api/steps") {
       return route.fulfill({
         json: { stages: { "1": "数据接入", "2": "指标计算", "3": "可视化分析", "4": "回归设计与建模", "5": "实验闭环" }, steps: steps() },
@@ -148,4 +207,34 @@ test("登录、进入步骤、跑回归并生成报告", async ({ page }) => {
   await page.getByRole("button", { name: "生成报告" }).click();
   await expect(page.getByText("已写入 reports/experiment_report_2020.md")).toBeVisible();
   await expect(page.getByText("PanelOLS 政策系数对照")).toBeVisible();
+
+  // 学生看到公告横幅,并能把报告提交给老师
+  await expect(page.getByText("e2e 公告:报告周五截止")).toBeVisible();
+  await page.getByRole("button", { name: "提交报告给老师" }).click();
+  await expect(page.getByText("等待教师评阅", { exact: false })).toBeVisible();
+});
+
+test("教师面板:概览、学生名单、评阅报告", async ({ page }) => {
+  await mockApi(page, teacher);
+  await page.goto("/");
+
+  // 教师登录不弹学生向导,直达教师面板;教师端没有任何进入学生 17 步实验的入口
+  await page.getByRole("button", { name: "登录" }).click();
+  await expect(page.getByText("学生人数")).toBeVisible();
+  await expect(page.getByText("已提交报告")).toBeVisible();
+  await expect(page.getByText("课程大纲")).toHaveCount(0);
+  await expect(page.getByText("生成实验报告")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "返回实验" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "班级与学生" }).click();
+  await expect(page.getByRole("cell", { name: "2026001" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "待评阅" })).toBeVisible();
+
+  await page.getByRole("button", { name: "报告评阅" }).click();
+  await page.getByRole("button", { name: "评阅", exact: true }).click();
+  await expect(page.getByText("e2e 正文")).toBeVisible();
+  await page.locator('input[type="number"]').fill("90");
+  await page.locator("textarea").fill("很好");
+  await page.getByRole("button", { name: "提交评阅" }).click();
+  await expect(page.getByRole("cell", { name: "待评阅" })).toBeVisible(); // 回到列表(mock 状态不回写)
 });

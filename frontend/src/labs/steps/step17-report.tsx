@@ -1,7 +1,59 @@
 import { useState } from "react";
 import { api } from "../../api";
-import type { Meta, RegressionOptions, ReportRequest, ReportResponse } from "../../types";
+import type { Meta, MySubmission, RegressionOptions, ReportRequest, ReportResponse } from "../../types";
 import { useAsync } from "../shared";
+
+const fmtTime = (s: string | null | undefined) => (s ? s.slice(0, 16).replace("T", " ") : "—");
+
+/** 提交报告给老师 + 评阅结果展示(教学库不可用时整卡隐藏,不影响报告生成) */
+function SubmitCard({ request, data }: { request: ReportRequest; data: ReportResponse }) {
+  const [refresh, setRefresh] = useState(0);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const { data: mine, error } = useAsync<MySubmission>(() => api.classroom.myReport(), [refresh]);
+  if (error || !mine) return null;
+
+  const submit = () => {
+    setSubmitting(true);
+    api.classroom
+      .submitReport({
+        year: request.year,
+        title: `步骤17实验报告 · ${request.year} · ${request.method}`,
+        design: { ...request },
+        markdown: data.markdown,
+      })
+      .then(
+        () => { setSubmitting(false); setSubmitError(null); setRefresh((n) => n + 1); },
+        (e) => { setSubmitting(false); setSubmitError(String(e.message ?? e)); },
+      );
+  };
+
+  return (
+    <div className="card accent submit-card">
+      <div className="kicker">提交与评阅</div>
+      {mine.state === "graded" ? (
+        <div className="review-result">
+          <div className="review-score">{mine.score}<span>分</span></div>
+          <div>
+            <p><b>{mine.title}</b>(提交于 {fmtTime(mine.submitted_at)})</p>
+            <p>教师评语:{mine.feedback || "(无评语)"}</p>
+            <p className="muted">评阅人 {mine.graded_by} · {fmtTime(mine.graded_at)};重新提交将覆盖本报告并等待重新评阅。</p>
+          </div>
+        </div>
+      ) : mine.state === "pending" ? (
+        <p>已提交「{mine.title}」({fmtTime(mine.submitted_at)}),等待教师评阅;重新提交会覆盖上一份。</p>
+      ) : (
+        <p>报告生成后可提交给老师评阅;当前设定与报告全文会一并快照留档。</p>
+      )}
+      <div className="controls">
+        <button className="primary" disabled={submitting} onClick={submit}>
+          {submitting ? "提交中…" : mine.state === "none" ? "提交报告给老师" : "重新提交当前报告"}
+        </button>
+      </div>
+      {submitError && <div className="error-box">{submitError}</div>}
+    </div>
+  );
+}
 
 /** 步骤17:实验报告 */
 export function ReportLab({ meta }: { meta: Meta }) {
@@ -77,6 +129,7 @@ export function ReportLab({ meta }: { meta: Meta }) {
             当前设定:{request.granularity} · {request.shock_type} · {request.method} ·
             {request.control_mode} · {request.price_mode} · 排除 ROW{request.interaction ? " · 交互项" : ""}
           </p>
+          <SubmitCard request={request} data={data} />
           <div className="report-md">{data.markdown}</div>
         </>
       ) : (

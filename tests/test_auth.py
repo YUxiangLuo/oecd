@@ -36,6 +36,17 @@ def test_me_rejects_missing_or_tampered_token():
     assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {tampered}"}).status_code == 401
 
 
+def test_demo_login_falls_back_when_db_unavailable(monkeypatch):
+    from gvcsim import config
+    from gvcsim.classroom import db
+
+    monkeypatch.setattr(config, "PG_DSN", "postgresql://alice:111111@127.0.0.1:59999/gvclab")
+    monkeypatch.setattr(db, "_schema_ready", False)
+    assert auth.authenticate("teacher", "gvclab2026") == {"username": "teacher", "name": "老师", "role": "teacher"}
+    assert auth.authenticate("teacher", "wrong") is None
+    assert auth.authenticate("ghost", "gvclab2026") is None
+
+
 def test_expired_token_rejected(monkeypatch):
     monkeypatch.setattr(auth, "TOKEN_TTL_SECONDS", -10)
     token, _ = auth.issue_token({"username": "student", "name": "同学", "role": "student"})

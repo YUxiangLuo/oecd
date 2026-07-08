@@ -5,7 +5,8 @@ import { IntroOverlay } from "./intro";
 import { DbLab, IndicatorLab, QcLab, ReportLab, ShockLab, VizLab } from "./labs";
 import { RegDesignLab, RegressionRunLab } from "./regression";
 import { LoginPage } from "./login";
-import type { AuthUser, Meta, Step, StepsResponse } from "./types";
+import { TeacherDashboard } from "./teacher";
+import type { Announcement, AuthUser, Meta, Step, StepsResponse } from "./types";
 
 const ROMAN = ["", "一", "二", "三", "四", "五"];
 
@@ -35,6 +36,10 @@ export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
+  // 课堂公告:登录后拉一次,顶栏下方横幅展示(教学库不可用时静默隐藏)
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [bannerExpanded, setBannerExpanded] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
@@ -58,9 +63,20 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    api.steps().then(setStepsData, (e) => setFatal(String(e.message ?? e)));
     api.meta().then(setMeta, () => setMeta({ years: [], countries: [], sectors: [] }));
+    if (user.role === "teacher") return; // 教师端不加载 17 步实验数据与公告横幅
+    api.steps().then(setStepsData, (e) => setFatal(String(e.message ?? e)));
+    api.classroom.announcements().then((r) => setAnnouncements(r.announcements), () => setAnnouncements([]));
   }, [user]);
+
+  // 学生实验进度自动上报:停留在某步 1.5s 后写入教学库(失败静默,不打扰实验)
+  useEffect(() => {
+    if (!user || user.role !== "student") return;
+    const timer = window.setTimeout(() => {
+      api.classroom.reportProgress(current).catch(() => {});
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [user, current]);
 
   if (!authChecked) return <div style={{ padding: 40 }} className="muted">加载中…</div>;
   if (!user)
@@ -68,8 +84,31 @@ export default function App() {
       <LoginPage onLogin={(r) => {
         localStorage.setItem(AUTH_TOKEN_KEY, r.token);
         setUser(r.user);
-        setShowIntro(true);
+        // 学生进交互式介绍;教师直达教师面板(不进入学生端)
+        setShowIntro(r.user.role !== "teacher");
       }} />
+    );
+
+  // 教师端与学生端彻底分离:教师只有教师面板,没有 17 步实验入口
+  if (user.role === "teacher")
+    return (
+      <div className="layout">
+        <header className="topbar">
+          <LogoMark size={30} />
+          <div>
+            <h1>供应链仿真系统</h1>
+            <div className="sub">GVC SIMULATION LAB · 教师端</div>
+          </div>
+          <div className="topbar-user">
+            <span className="muted">
+              数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
+            </span>
+            <span className="role-chip">{user.name}</span>
+            <button onClick={() => { localStorage.removeItem(AUTH_TOKEN_KEY); setUser(null); }}>退出</button>
+          </div>
+        </header>
+        <TeacherDashboard user={user} />
+      </div>
     );
 
   if (fatal)
@@ -113,6 +152,28 @@ export default function App() {
           <button onClick={() => { localStorage.removeItem(AUTH_TOKEN_KEY); setUser(null); }}>退出</button>
         </div>
       </header>
+
+      {announcements.length > 0 && !bannerDismissed && (
+        <div className="announce-banner">
+          <span className="announce-banner-ic">📢</span>
+          <div className="announce-banner-body">
+            <b>{announcements[0].title}</b>
+            {announcements[0].body && bannerExpanded && <p>{announcements[0].body}</p>}
+            {bannerExpanded && announcements.slice(1).map((a) => (
+              <div key={a.id} className="announce-banner-more">
+                <b>{a.title}</b>
+                {a.body && <p>{a.body}</p>}
+              </div>
+            ))}
+          </div>
+          {(announcements.length > 1 || announcements[0].body) && (
+            <button onClick={() => setBannerExpanded((v) => !v)}>
+              {bannerExpanded ? "收起" : `展开${announcements.length > 1 ? `全部 ${announcements.length} 条` : ""}`}
+            </button>
+          )}
+          <button onClick={() => setBannerDismissed(true)}>×</button>
+        </div>
+      )}
 
       {showIntro && (
         <IntroOverlay user={user} meta={meta} onDone={(gotoStep) => {

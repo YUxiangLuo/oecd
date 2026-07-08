@@ -20,6 +20,20 @@ async function get<T>(url: string): Promise<T> {
   return resp.json();
 }
 
+async function post<T>(url: string, body?: unknown, method = "POST"): Promise<T> {
+  const resp = await fetch(url, {
+    method,
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const payload = await resp.json().catch(() => null);
+    if (resp.status === 401) notifyAuthExpired();
+    throw new Error(payload?.detail ?? `${resp.status} ${resp.statusText}`);
+  }
+  return resp.json();
+}
+
 export const api = {
   login: async (username: string, password: string) => {
     const resp = await fetch("/api/auth/login", {
@@ -179,5 +193,45 @@ export const api = {
     if (resp.status === 401) notifyAuthExpired();
     if (!resp.ok) throw new Error((await resp.json()).detail ?? resp.statusText);
     return resp.json() as Promise<import("./types").ReportResponse>;
+  },
+  classroom: {
+    announcements: () =>
+      get<{ announcements: import("./types").Announcement[] }>("/api/classroom/announcements"),
+    reportProgress: (step: number) => post<{ ok: boolean }>("/api/classroom/progress", { step }),
+    submitReport: (body: { year: number; title: string; design: Record<string, unknown>; markdown: string }) =>
+      post<{ id: number; state: string; submitted_at: string }>("/api/classroom/report/submit", body),
+    myReport: () => get<import("./types").MySubmission>("/api/classroom/report/mine"),
+    overview: (classId?: number | null) =>
+      get<import("./types").ClassOverview>(
+        `/api/classroom/overview${classId != null ? `?class_id=${classId}` : ""}`,
+      ),
+    classes: () => get<{ classes: import("./types").ClassInfo[] }>("/api/classroom/classes"),
+    createClass: (body: { name: string; code: string; semester?: string; note?: string }) =>
+      post<import("./types").ClassInfo>("/api/classroom/classes", body),
+    students: (classId?: number | null) =>
+      get<{ students: import("./types").StudentRow[] }>(
+        `/api/classroom/students${classId != null ? `?class_id=${classId}` : ""}`,
+      ),
+    createStudent: (body: {
+      username: string;
+      display_name: string;
+      password: string;
+      student_no?: string;
+      class_id?: number | null;
+    }) => post<import("./types").StudentRow>("/api/classroom/students", body),
+    updateStudent: (
+      id: number,
+      body: { display_name?: string; student_no?: string; class_id?: number; active?: boolean; password?: string },
+    ) => post<import("./types").StudentRow>(`/api/classroom/students/${id}`, body),
+    submissions: () =>
+      get<{ submissions: import("./types").SubmissionRow[] }>("/api/classroom/submissions"),
+    submissionDetail: (id: number) =>
+      get<import("./types").SubmissionDetail>(`/api/classroom/submissions/${id}`),
+    grade: (id: number, score: number, feedback: string) =>
+      post<import("./types").SubmissionDetail>(`/api/classroom/submissions/${id}/grade`, { score, feedback }),
+    createAnnouncement: (body: { title: string; body: string; class_id?: number | null }) =>
+      post<import("./types").Announcement>("/api/classroom/announcements", body),
+    deleteAnnouncement: (id: number) =>
+      post<{ ok: boolean }>(`/api/classroom/announcements/${id}`, undefined, "DELETE"),
   },
 };
