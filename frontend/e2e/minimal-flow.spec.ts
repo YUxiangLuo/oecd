@@ -43,12 +43,12 @@ const regressionOptions = {
   price_modes: ["名义值", "实际值(2016=1)"],
   scenarios: ["clean", "noisy", "confounded"],
   scenario_labels: { clean: "基准场景(clean)", noisy: "测量误差场景", confounded: "前趋势混杂场景" },
-  steps: { "13": "FVA 份额", "14": "复杂 GVC 生产", "15": "上游度", "16": "网络中心性" },
+  steps: { "13": "FVA 份额", "14": "复杂 GVC 生产", "15": "GVC 生产长度", "16": "网络中心性" },
 };
 
 const design = {
   step: 13,
-  depvar: "share_trade_fva",
+  depvar: "FVA_share",
   depvar_label: "外国增加值份额",
   granularity: "国家–行业级",
   shock_type: "关税冲击",
@@ -65,7 +65,7 @@ const design = {
   controls: [],
   control_labels: {},
   equation: "Y_it = β·treated_i×post_it + α_i + λ_t + ε_it",
-  panel_file: "panel_sector.csv",
+  panel_file: "panel_industry.csv",
   entity: "entity_id",
   cluster: "country",
 };

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../../api";
-import type { IndicatorSchema, Meta, NetworkData, SectorPage, Step } from "../../types";
+import type { IndicatorSchema, IndustryPage, Meta, NetworkData, Step } from "../../types";
 import { CompositionBar, HeatTableViz, LengthViz, NetworkViz, QuadrantScatter, RankBarChart, ScatterChart, sectorLabel, StackedShareViz, TrendChart } from "../../viz";
 import { fieldLabel, fmtField, useAsync } from "../shared";
 
@@ -32,44 +32,43 @@ const STEP_VIZ: Record<number, StepVizConfig> = {
     group: "trade",
     views: ["signature", "quadrant", "composition", "rank", "scatter", "table"],
     defaultView: "quadrant",
-    rankMetric: "share_trade_gvc_participation",
-    scatter: ["share_trade_gvc_participation", "share_trade_dva"],
-    quadrant: ["share_trade_backward_gvc", "share_trade_forward_gvc"],
-    quadLabels: ["双高·深度嵌入", "前向主导·卖中间品", "双低·相对自给", "后向主导·买中间品"],
-    composition: ["share_trade_dva", "share_trade_fva", "share_trade_pdc"],
-    columns: ["share_trade_gvc_participation", "share_trade_backward_gvc", "share_trade_forward_gvc", "trade_gross_exports"],
-    framing: "每个经济体的出口在 GVC 中处于什么位置?比较后向(用别人的中间品)与前向(被别人用作中间品)参与度。",
+    rankMetric: "FVA_share",
+    scatter: ["FVA_share", "DVAex_share"],
+    quadrant: ["FVA_share", "3_VA_GVC_share"],
+    quadLabels: ["双高·深度嵌入", "GVC生产主导·前向型", "双低·相对自给", "进口依赖·后向型"],
+    composition: ["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"],
+    columns: ["gross_exports", "DVAex", "FVA", "taxsub", "FVA_share"],
+    framing: "每个经济体的出口值从哪里来?比较 FVA 份额(用别人的增加值)与 GVC 生产份额(增加值经中间品贸易实现)。",
   },
   9: {
     group: "production",
     views: ["signature", "composition", "rank", "scatter", "trend", "table"],
     defaultView: "composition",
-    rankMetric: "share_prod_complex_gvc",
-    scatter: ["share_prod_gvc_total", "share_prod_complex_gvc"],
-    composition: ["share_prod_pure_domestic", "share_prod_traditional", "share_prod_simple_gvc", "share_prod_complex_gvc"],
-    columns: ["share_prod_complex_gvc", "share_prod_simple_gvc", "share_prod_traditional", "share_prod_pure_domestic"],
-    framing: "一国的增加值有多少停留在国内、多少进入简单 / 复杂 GVC?对比生产结构的四段构成。",
+    rankMetric: "3b_VA_GVC_C_share",
+    scatter: ["3_VA_GVC_share", "3b_VA_GVC_C_share"],
+    composition: ["1_VA_D", "2_VA_RT", "3a_VA_GVC_S", "3b_VA_GVC_C"],
+    columns: ["SVA", "3_VA_GVC_share", "3b_VA_GVC_C_share", "3a_VA_GVC_S", "3b_VA_GVC_C"],
+    framing: "一国的增加值有多少停留在国内、多少进入简单 / 复杂 GVC?对比生产活动的四段构成(WWYZ)。",
   },
   10: {
     group: "length",
-    views: ["signature", "scatter", "rank", "composition", "trend", "table"],
+    views: ["signature", "scatter", "rank", "trend", "table"],
     defaultView: "scatter",
-    rankMetric: "upstreamness",
-    scatter: ["upstreamness_domestic", "upstreamness_cross"],
-    composition: ["upstreamness_domestic", "upstreamness_cross"],
-    columns: ["upstreamness", "upstreamness_domestic", "upstreamness_cross"],
-    framing: "生产链有多长?拆成国内段与跨境段,看链条长度的来源。",
+    rankMetric: "PLv",
+    scatter: ["PLv_GVC", "PLy_GVC"],
+    columns: ["PLv", "PLv_GVC", "PLy", "PLy_GVC", "Pos_TPL", "GVCPs"],
+    framing: "生产链有多长?前向 PLv 看增加值到最终吸收端的距离,后向 PLy 看最终品回溯到初始投入端的距离,GVCPs 衡量相对位置。",
   },
   11: {
     group: "network",
     views: ["signature", "quadrant", "rank", "scatter", "trend", "table"],
     defaultView: "quadrant",
-    rankMetric: "degree_centrality",
-    scatter: ["degree_centrality", "betweenness_centrality"],
-    quadrant: ["degree_centrality", "betweenness_centrality"],
-    quadLabels: ["核心枢纽", "桥接者(高介数)", "边缘", "枢纽连接者(高度)"],
-    columns: ["betweenness_centrality", "degree_centrality", "eigenvector_centrality"],
-    framing: "谁是生产网络的枢纽?高度中心性=连接多,高介数中心性=控扼要冲,四象限区分四类角色。",
+    rankMetric: "weighted degree",
+    scatter: ["weighted degree", "betweenesscentrality"],
+    quadrant: ["weighted degree", "betweenesscentrality"],
+    quadLabels: ["核心枢纽", "桥接者(高介数)", "边缘", "枢纽连接者(高加权度)"],
+    columns: ["degree", "weighted degree", "betweenesscentrality", "closnesscentrality", "harmonicclosnesscentrality", "eigencentrality"],
+    framing: "谁是生产网络的枢纽?加权度=贸易连接的总流量,介数中心性=控扼要冲的程度,四象限区分四类角色。",
   },
 };
 
@@ -93,9 +92,9 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
 
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
   const { data: rows, error } = useAsync(() => api.countryIndicators(year), [year]);
-  const { data: sectorPage, error: sectorErr } = useAsync<SectorPage | null>(
+  const { data: sectorPage, error: sectorErr } = useAsync<IndustryPage | null>(
     () => (granularity === "sector" && drillCountry
-      ? api.sectorIndicatorsAll(year, drillCountry)
+      ? api.industryIndicatorsAll(year, drillCountry)
       : Promise.resolve(null)),
     [granularity, year, drillCountry],
   );
@@ -305,8 +304,8 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
             <thead><tr><th>{granularity === "sector" ? "行业" : "国家"}</th>{cfg.columns.map((c) => <th key={c}>{fieldLabel(c, schema)}</th>)}</tr></thead>
             <tbody>
               {selRows.map((r) => (
-                <tr key={String(r.sector ?? r.country)}>
-                  <td>{r.sector != null ? sectorLabel(String(r.sector)) : String(r.country)}</td>
+                <tr key={String(r.industry ?? r.country)}>
+                  <td>{r.industry != null ? sectorLabel(String(r.industry)) : String(r.country)}</td>
                   {cfg.columns.map((c) => <td key={c}>{fmtField(r[c], c, schema)}</td>)}
                 </tr>
               ))}
@@ -317,4 +316,3 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
     </div>
   );
 }
-

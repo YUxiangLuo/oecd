@@ -76,7 +76,7 @@ export const REG_TEACH: Record<number, TeachBlock[]> = {
         { sym: "ComplexGVC", def: "WWYZ 生产分解中的复杂 GVC 生产份额(增加值至少两次跨境)" },
         { sym: "β", def: "冲击对复杂全球分工的平均处理效应" },
       ],
-      note: "打开“冲击×基期GVC”后可检验高参与度行业是否对政策冲击更敏感;基期取每个个体可用样本最早两年的 GVC 参与度均值,避免坏控制问题。" + ICIO_CONTROLS,
+      note: "打开“冲击×基期GVC”后可检验基期 GVC 生产份额(3_VA_GVC/SVA)越高的个体是否对政策冲击更敏感;基期取每个个体可用样本最早两年的均值,避免坏控制问题。" + ICIO_CONTROLS,
     },
     {
       kind: "takeaway",
@@ -91,14 +91,14 @@ export const REG_TEACH: Record<number, TeachBlock[]> = {
     {
       kind: "concept", kicker: "研究问题", title: "冲击是否缩短了跨境生产链",
       paras: [
-        "若关税提高使生产链的跨境段变短,说明企业在收缩全球分工、把生产环节搬回国内或邻近区域(近岸 / 回流)。",
+        "若关税提高使前向 GVC 生产长度(PLv_GVC)变短,说明增加值在国际生产网络中辗转的环节变少 —— 企业在收缩全球分工、把生产环节搬回国内或邻近区域(近岸 / 回流)。",
       ],
     },
     {
       kind: "formula",
       tex: "ChainLength_ijt = β·(treated_ij × 1[t≥G_ij]) + α_ij + λ_t + ε_ijt",
       terms: [
-        { sym: "ChainLength", def: "生产链长度的跨境段(上游度分解;国内段是另一个可选因变量)" },
+        { sym: "PLv_GVC", def: "前向 GVC 生产长度(WWYZ 2017b;后向 PLy_GVC 与位置指数 GVCPs 是配套指标)" },
         { sym: "β", def: "冲击对跨境生产链长度的平均处理效应" },
       ],
       note: ICIO_CONTROLS,
@@ -153,7 +153,7 @@ const STEP_READ: Record<number, { noun: string; neg: string; pos: string; pct: b
     pos: "复杂全球分工不缩反扩",
   },
   15: {
-    noun: "生产链跨境段长度", pct: false,
+    noun: "前向 GVC 生产长度(PLv_GVC)", pct: false,
     neg: "跨境生产链缩短 —— 近岸/回流的迹象",
     pos: "跨境生产链反而拉长",
   },

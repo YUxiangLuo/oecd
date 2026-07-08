@@ -10,12 +10,12 @@ from dataclasses import dataclass
 from gvcsim.data.controls import CONTROL_COLUMNS, CONTROL_LABELS, MACRO_CONTROL_COLUMNS
 from gvcsim.shocks import SHOCK_SPECS
 
-# 步骤编号 → (被解释变量, 中文含义)。列名来自 pipeline 产出的国家级面板。
+# 步骤编号 → (被解释变量, 中文含义)。列名来自 pipeline 产出的客户口径面板。
 STEP_DEPVARS = {
-    13: ("share_trade_fva", "出口中外国增加值份额(FVA share,BM source)"),
-    14: ("share_prod_complex_gvc", "复杂GVC生产份额(WWYZ)"),
-    15: ("upstreamness_cross", "生产链跨境段长度"),
-    16: ("betweenness_centrality", "生产网络介数中心性"),
+    13: ("FVA_share", "出口中外国增加值份额(FVA / 毛出口,WWZ)"),
+    14: ("3b_VA_GVC_C_share", "复杂GVC生产份额(3b_VA_GVC_C / SVA,WWYZ)"),
+    15: ("PLv_GVC", "前向 GVC 生产长度(WWYZ)"),
+    16: ("betweenesscentrality", "生产网络介数中心性"),
 }
 
 GRANULARITIES = ["国家–行业级", "国家级"]
@@ -44,7 +44,7 @@ SCENARIO_LABELS = {
 # 行业级回归的标准误也按国家聚类,避免组内相关低估标准误。
 _PANEL_SPECS = {
     "国家级": ("panel_country.csv", "country", "country"),
-    "国家–行业级": ("panel_sector.csv", "entity_id", "country"),
+    "国家–行业级": ("panel_industry.csv", "entity_id", "country"),
 }
 
 

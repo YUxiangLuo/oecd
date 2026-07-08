@@ -1,22 +1,24 @@
 import { CAT, Legend, type Row, cardStyle, num, useTip } from "../shared";
 
-/* ---------------------------- 步骤10:长度双段条 ---------------------------- */
+/* ------------------------ 步骤10:前向/后向生产长度对比 ------------------------ */
 
 export function LengthViz({ rows }: { rows: Row[] }) {
   const { wrapRef, Tip, show, hide } = useTip();
-  const top = [...rows].sort((a, b) => num(b.upstreamness) - num(a.upstreamness)).slice(0, 15);
-  const maxLen = Math.max(...top.map((r) => num(r.upstreamness)), 1);
+  const top = [...rows].sort((a, b) => num(b.PLv) - num(a.PLv)).slice(0, 15);
+  const maxLen = Math.max(...top.map((r) => Math.max(num(r.PLv), num(r.PLy))), 1);
   const ticks = Array.from({ length: Math.floor(maxLen) + 1 }, (_, i) => i);
   const tipLines = (r: Row): [string, string][] => [
     ["", String(r.country)],
-    ["生产链长度", num(r.upstreamness).toFixed(2)],
-    ["国内段", num(r.upstreamness_domestic).toFixed(2)],
-    ["跨境段", num(r.upstreamness_cross).toFixed(2)],
+    ["前向总长度 PLv", num(r.PLv).toFixed(2)],
+    ["前向 GVC 段", num(r.PLv_GVC).toFixed(2)],
+    ["后向总长度 PLy", num(r.PLy).toFixed(2)],
+    ["后向 GVC 段", num(r.PLy_GVC).toFixed(2)],
+    ["位置指数 GVCPs", num(r.GVCPs).toFixed(3)],
   ];
   return (
     <div ref={wrapRef} style={cardStyle}>
       <div style={{ marginBottom: 16 }}>
-        <Legend items={[{ name: "国内生产段", color: CAT[0] }, { name: "跨境生产段", color: CAT[1] }]} />
+        <Legend items={[{ name: "前向长度 PLv(到最终吸收端)", color: CAT[0] }, { name: "后向长度 PLy(到初始投入端)", color: CAT[1] }]} />
       </div>
       <div style={{ position: "relative" }}>
         <div style={{ position: "absolute", inset: 0, left: 56, right: 56, pointerEvents: "none" }}>
@@ -33,15 +35,13 @@ export function LengthViz({ rows }: { rows: Row[] }) {
               onMouseEnter={(e) => show(e, tipLines(r))}
               onMouseMove={(e) => show(e, tipLines(r))} onMouseLeave={hide}>
               <div style={{ width: 44, fontSize: 12, fontWeight: 500, textAlign: "right" }}>{String(r.country)}</div>
-              <div style={{ flex: 1, display: "flex", height: 16, gap: 2 }}>
-                <div style={{ width: `${(num(r.upstreamness_domestic) / maxLen) * 100}%`, background: CAT[0] }} />
-                <div style={{
-                  width: `${(num(r.upstreamness_cross) / maxLen) * 100}%`, background: CAT[1],
-                  borderRadius: "0 4px 4px 0",
-                }} />
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+                <div style={{ width: `${(num(r.PLv) / maxLen) * 100}%`, height: 8, background: CAT[0], borderRadius: "0 4px 4px 0" }} />
+                <div style={{ width: `${(num(r.PLy) / maxLen) * 100}%`, height: 8, background: CAT[1], borderRadius: "0 4px 4px 0" }} />
               </div>
-              <div style={{ width: 44, fontSize: 12.5, fontWeight: 600, color: "#3a4050", fontVariantNumeric: "tabular-nums" }}>
-                {num(r.upstreamness).toFixed(2)}
+              <div style={{ width: 78, fontSize: 12.5, fontWeight: 600, color: "#3a4050", fontVariantNumeric: "tabular-nums" }}
+                title="GVC 位置指数 = PLv_GVC / PLy_GVC">
+                GVCPs {num(r.GVCPs).toFixed(2)}
               </div>
             </div>
           ))}
@@ -56,10 +56,9 @@ export function LengthViz({ rows }: { rows: Row[] }) {
         </div>
       </div>
       <div style={{ marginTop: 12, fontSize: 11, color: "#a2a8b6" }}>
-        按上游度排序的 Top 15;条形总长 = 生产链平均长度(一单位最终品经过的平均生产阶段数)
+        按前向总生产长度 PLv 排序的 Top 15;GVCPs = 前向/后向 GVC 段长度之比,&gt;1 表示更靠上游(WWYZ 2017b)
       </div>
       {Tip}
     </div>
   );
 }
-

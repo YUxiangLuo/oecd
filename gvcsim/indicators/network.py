@@ -1,23 +1,46 @@
-"""步骤7:全球生产网络指标。
+"""步骤7:全球生产网络指标(客户资料/Gephi 风格口径)。
 
 国家级:国家间贸易流(中间品+最终品)构成带权有向图。
 行业级:以 (国家, 行业) 为节点、中间品流 Z 为边的全球生产网络
 (含国内行业间边;最终需求不是生产节点,不计入)。
 
-三类中心性:
-  degree_centrality       加权度(强度):贸易连接的总量
-  betweenness_centrality  介数:作为供应链"咽喉/中转枢纽"的重要性
-  eigenvector_centrality  特征向量:与重要节点相连的程度
+输出客户样例数据的 11 列(列名与拼写照抄客户 CSV):
+  degree / indegree / outdegree                      无权有向边数量(全部正流量边)
+  weighted degree / weighted indegree / weighted outdegree  边权(流量金额)加总
+  Eccentricity              到最远可达节点的距离(无权有向最短路)
+  closnesscentrality        接近中心性(NetworkX 有向默认:其他节点到该节点的距离)
+  harmonicclosnesscentrality 调和中心性(NetworkX 有向默认:其他节点到该节点的距离倒数和)
+  betweenesscentrality      介数中心性(Brandes,无权最短路,原始计数不归一)
+  eigencentrality           特征向量中心性(无权无向对称化,按最大值归一,Gephi 口径)
+
+与客户的 Gephi 口径一致:度/加权度在全部正流量边上计数/求和;路径类指标、
+介数与特征向量中心性在按流量占比阈值过滤后的无权图上计算。介数使用
+NetworkX Brandes;其他全源最短路用 scipy C 实现复现 NetworkX 默认定义。
 """
 
 import networkx as nx
 import numpy as np
 import pandas as pd
-from scipy.sparse.linalg import ArpackNoConvergence
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import shortest_path
 
 from gvcsim.indicators.core import IcioArrays
 
-# 过滤掉占总流量比例低于该阈值的边,去噪并让介数中心性可解释
+NETWORK_COLUMNS = [
+    "degree",
+    "indegree",
+    "outdegree",
+    "weighted degree",
+    "weighted indegree",
+    "weighted outdegree",
+    "Eccentricity",
+    "closnesscentrality",
+    "harmonicclosnesscentrality",
+    "betweenesscentrality",
+    "eigencentrality",
+]
+
+# 过滤掉占总流量比例低于该阈值的边,去噪并让路径类指标可解释
 EDGE_SHARE_THRESHOLD = 1e-4
 
 # 行业级图更稀疏,阈值放低才能保留有意义的国内/跨境链条
@@ -44,102 +67,136 @@ def country_flow_matrix(arr: IcioArrays) -> pd.DataFrame:
     return pd.DataFrame(F, index=arr.regions, columns=arr.regions)
 
 
-def country_network(arr: IcioArrays) -> pd.DataFrame:
-    F = country_flow_matrix(arr)
-    total = F.values.sum()
+def _degree_metrics(W: np.ndarray) -> dict[str, np.ndarray]:
+    """全部正边(去自环)上的度与加权度。W 为带权邻接矩阵(行→列)。"""
+    W = W.copy()
+    np.fill_diagonal(W, 0.0)
+    mask = W > 0
+    outdeg = mask.sum(axis=1).astype(float)
+    indeg = mask.sum(axis=0).astype(float)
+    w_out = W.sum(axis=1)
+    w_in = W.sum(axis=0)
+    return {
+        "degree": outdeg + indeg,
+        "indegree": indeg,
+        "outdegree": outdeg,
+        "weighted degree": w_out + w_in,
+        "weighted indegree": w_in,
+        "weighted outdegree": w_out,
+    }
+
+
+def _path_metrics(adj_mask: np.ndarray) -> dict[str, np.ndarray]:
+    """阈值图上的无权有向最短路指标。
+
+    closeness / harmonic 复现 NetworkX 对 DiGraph 的默认定义:使用其他节点
+    到该节点的距离(inward distance)。Eccentricity 沿用 Gephi 可达口径:
+    取该节点出发能到达节点的最远距离;无可达节点时记 0,避免断连图报错。
+    """
+    n = adj_mask.shape[0]
+    graph = csr_matrix(adj_mask.astype(np.int8))
+    D = shortest_path(graph, method="auto", directed=True, unweighted=True)
+    np.fill_diagonal(D, np.inf)  # 自身不计入
+    out_finite = np.isfinite(D)
+    in_finite = out_finite.T
+    in_reach = in_finite.sum(axis=1).astype(float)
+    in_dist_sum = np.where(in_finite, D.T, 0.0).sum(axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        out_reach = out_finite.sum(axis=1)
+        ecc = np.where(out_reach > 0, np.where(out_finite, D, -np.inf).max(axis=1), 0.0)
+        closeness = np.where(in_dist_sum > 0, in_reach / in_dist_sum, 0.0)
+        if n > 1:
+            closeness *= in_reach / (n - 1)
+        harmonic = np.where(in_finite, 1.0 / np.where(in_finite, D.T, 1.0), 0.0).sum(axis=1)
+    return {
+        "Eccentricity": ecc,
+        "closnesscentrality": closeness,
+        "harmonicclosnesscentrality": harmonic,
+    }
+
+
+def _betweenness_centrality(G: nx.DiGraph) -> dict:
+    """介数中心性:无权最短路、原始计数(Gephi 风格);超大图退回源点抽样。"""
+    k = None
+    if G.number_of_nodes() > BETWEENNESS_EXACT_NODE_LIMIT:
+        k = min(BETWEENNESS_SAMPLE_K, G.number_of_nodes())
+    return nx.betweenness_centrality(G, k=k, weight=None, normalized=False, seed=BETWEENNESS_SEED)
+
+
+def _eigencentrality(W: np.ndarray, *, max_iter: int = 2000, tol: float = 1e-10) -> np.ndarray:
+    """特征向量中心性:无向对称化 (W+W')/2 的主特征向量,按最大值归一。
+
+    Gephi 的 eigenvector centrality 是无权算法,调用方传入 0/1 邻接矩阵即可对齐;
+    用幂迭代(对称非负矩阵的 Perron 向量),规模 ~3500 时毫秒级;全零图返回 0。
+    """
+    S = (W + W.T) / 2.0
+    np.fill_diagonal(S, 0.0)
+    if not S.any():
+        return np.zeros(S.shape[0])
+    scale = S.max()
+    # 加单位阵位移:二部结构的图谱有 ±λ 成对特征值,裸幂迭代会震荡不收敛;
+    # S/scale + I 把谱整体右移,不改变主特征向量。
+    S = S / scale + np.eye(S.shape[0])
+    v = np.ones(S.shape[0]) / S.shape[0]
+    for _ in range(max_iter):
+        nxt = S @ v
+        norm = np.linalg.norm(nxt)
+        if norm <= 0:
+            return np.zeros(S.shape[0])
+        nxt = nxt / norm
+        if np.linalg.norm(nxt - v) < tol:
+            v = nxt
+            break
+        v = nxt
+    v = np.abs(v)
+    peak = v.max()
+    return v / peak if peak > 0 else v
+
+
+def _gephi_metrics(W: np.ndarray, nodes: list, threshold_share: float) -> pd.DataFrame:
+    """给定带权邻接矩阵输出 11 列指标:度类走全边,路径/介数/特征向量走阈值图。"""
+    total = float(W.sum())
+    full = W.copy()
+    np.fill_diagonal(full, 0.0)
+    metrics = _degree_metrics(full)
+
+    thresholded = full.copy()
+    if total > 0:
+        thresholded[thresholded / total <= threshold_share] = 0.0
+    else:
+        thresholded[:] = 0.0
+    threshold_mask = thresholded > 0
+    metrics.update(_path_metrics(threshold_mask))
+    metrics["eigencentrality"] = _eigencentrality(threshold_mask.astype(float))
 
     G = nx.DiGraph()
-    G.add_nodes_from(F.index)
-    for r in F.index:
-        for s in F.columns:
-            w = F.loc[r, s]
-            if r != s and w / total > EDGE_SHARE_THRESHOLD:
-                G.add_edge(r, s, weight=float(w), distance=float(total / w))
+    G.add_nodes_from(range(len(nodes)))
+    src, dst = np.nonzero(thresholded)
+    G.add_weighted_edges_from((int(i), int(j), float(thresholded[i, j])) for i, j in zip(src, dst))
+    betweenness = _betweenness_centrality(G)
+    metrics["betweenesscentrality"] = np.array([betweenness.get(i, 0.0) for i in range(len(nodes))])
 
-    strength = {n: (G.out_degree(n, weight="weight") + G.in_degree(n, weight="weight")) / total for n in G.nodes}
-    betweenness = nx.betweenness_centrality(G, weight="distance", normalized=True)
-    eigen = _eigenvector_centrality(G)
+    return pd.DataFrame(metrics, columns=NETWORK_COLUMNS, index=nodes)
 
-    df = pd.DataFrame(
-        {
-            "degree_centrality": strength,
-            "betweenness_centrality": betweenness,
-            "eigenvector_centrality": eigen,
-        }
-    )
+
+def country_network(arr: IcioArrays) -> pd.DataFrame:
+    """国家级网络指标,索引 country。"""
+    F = country_flow_matrix(arr)
+    df = _gephi_metrics(F.values, list(F.index), EDGE_SHARE_THRESHOLD)
     df.index.name = "country"
     return df
 
 
-def _eigenvector_centrality(
-    G: nx.Graph | nx.DiGraph,
-    *,
-    max_iter: int = 2000,
-    tol: float = 1e-6,
-) -> dict:
-    """特征向量中心性:优先使用 scipy/ARPACK,断连或不收敛时回退幂迭代。"""
-    H = G.to_undirected()
-    if H.number_of_edges() == 0:
-        return {n: 0.0 for n in H.nodes}
-    if H.number_of_nodes() <= 2:
-        values = nx.eigenvector_centrality(H, weight="weight", max_iter=max_iter, tol=tol)
-        return {n: float(values.get(n, 0.0)) for n in H.nodes}
-    try:
-        values = nx.eigenvector_centrality_numpy(H, weight="weight")
-    except (ArpackNoConvergence, nx.NetworkXException, TypeError, ValueError):
-        values = nx.eigenvector_centrality(H, weight="weight", max_iter=max_iter, tol=tol)
-    return {n: float(values.get(n, 0.0)) for n in H.nodes}
-
-
-def _betweenness_centrality(G: nx.DiGraph) -> dict:
-    """介数中心性:默认精确;超大图时退回抽样,避免 compute 失控。"""
-    k = None
-    if G.number_of_nodes() > BETWEENNESS_EXACT_NODE_LIMIT:
-        k = min(BETWEENNESS_SAMPLE_K, G.number_of_nodes())
-    return nx.betweenness_centrality(
-        G,
-        k=k,
-        weight="distance",
-        normalized=True,
-        seed=BETWEENNESS_SEED,
-    )
-
-
 def sector_network(arr: IcioArrays) -> pd.DataFrame:
-    """行业级网络中心性,索引 (country, sector)。
+    """行业级网络指标,索引 (country, industry)。
 
-    节点 = 国家×行业,边 = 中间品流 Z(去自环、按占比阈值过滤)。
-    介数默认精确计算;超过 BETWEENNESS_EXACT_NODE_LIMIT 个节点后退回源点抽样。
-    被阈值过滤成孤立点的行业中心性记 0。
+    节点 = 国家×行业,边 = 中间品流 Z(去自环)。度类在全部正边上计算;
+    路径类/介数/特征向量在阈值化无权图上计算;介数默认精确 Brandes,超过
+    BETWEENNESS_EXACT_NODE_LIMIT 个节点后退回源点抽样。
     """
-    total = float(arr.Z.sum())
     nodes = list(arr.index)
-
-    G = nx.DiGraph()
-    G.add_nodes_from(nodes)
-    src, dst = np.where(arr.Z / total > SECTOR_EDGE_SHARE_THRESHOLD)
-    for i, j in zip(src, dst):
-        if i == j:
-            continue
-        w = float(arr.Z[i, j])
-        G.add_edge(nodes[i], nodes[j], weight=w, distance=total / w)
-
-    strength = {n: (G.out_degree(n, weight="weight") + G.in_degree(n, weight="weight")) / total for n in G.nodes}
-    betweenness = _betweenness_centrality(G)
-    eigen = _eigenvector_centrality(G)
-
-    df = (
-        pd.DataFrame(
-            {
-                "degree_centrality": strength,
-                "betweenness_centrality": betweenness,
-                "eigenvector_centrality": eigen,
-            }
-        )
-        .reindex(nodes)
-        .fillna(0.0)
-    )
-    df.index = pd.MultiIndex.from_tuples(nodes, names=["country", "sector"])
+    df = _gephi_metrics(arr.Z, nodes, SECTOR_EDGE_SHARE_THRESHOLD)
+    df.index = pd.MultiIndex.from_tuples(nodes, names=["country", "industry"])
     return df
 
 

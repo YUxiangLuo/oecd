@@ -4,19 +4,19 @@ import { CAT, Legend, REGION_OF, REGIONS, SEQ, cardStyle, num, useTip } from "..
 
 /* ------------------------------ 步骤8:网络图 ------------------------------ */
 
-type NetworkMetric = "share_trade_gvc_participation" | "betweenness_centrality" | "trade_gross_exports";
+type NetworkMetric = "gvc_production_share" | "betweenesscentrality" | "gross_exports";
 type NetworkColorMode = "region" | NetworkMetric;
 
 const NETWORK_METRICS: { key: NetworkMetric; label: string; format: "pct" | "number" | "amount" }[] = [
-  { key: "share_trade_gvc_participation", label: "GVC 参与度", format: "pct" },
-  { key: "betweenness_centrality", label: "介数中心性", format: "number" },
-  { key: "trade_gross_exports", label: "毛出口", format: "amount" },
+  { key: "gvc_production_share", label: "GVC 生产份额", format: "pct" },
+  { key: "betweenesscentrality", label: "介数中心性", format: "number" },
+  { key: "gross_exports", label: "毛出口", format: "amount" },
 ];
 
 function fmtNetworkMetric(value: number, format: "pct" | "number" | "amount") {
   if (format === "pct") return `${(value * 100).toFixed(1)}%`;
   if (format === "amount") return value.toLocaleString("zh-CN", { maximumFractionDigits: 0 });
-  return value.toFixed(3);
+  return Math.abs(value) >= 100 ? value.toLocaleString("zh-CN", { maximumFractionDigits: 0 }) : value.toFixed(3);
 }
 
 function seqColor(value: number, max: number) {
@@ -28,7 +28,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const [hovered, setHovered] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [sizeMetric, setSizeMetric] = useState<NetworkMetric>("share_trade_gvc_participation");
+  const [sizeMetric, setSizeMetric] = useState<NetworkMetric>("gvc_production_share");
   const [colorMode, setColorMode] = useState<NetworkColorMode>("region");
   const [edgeThreshold, setEdgeThreshold] = useState(0);
 
@@ -36,9 +36,9 @@ export function NetworkViz({ data }: { data: NetworkData }) {
     const W = 1000, H = 560, cx = W / 2, cy = H / 2;
     const byRegion: string[][] = REGIONS.map(() => []);
     const metrics: Record<NetworkMetric, Record<string, number>> = {
-      share_trade_gvc_participation: {},
-      betweenness_centrality: {},
-      trade_gross_exports: {},
+      gvc_production_share: {},
+      betweenesscentrality: {},
+      gross_exports: {},
     };
     data.nodes.forEach((n) => {
       const c = String(n.country);
@@ -48,7 +48,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
       byRegion[REGION_OF[c] ?? 5].push(c);
     });
     byRegion.forEach((list) =>
-      list.sort((a, b) => metrics.share_trade_gvc_participation[b] - metrics.share_trade_gvc_participation[a]));
+      list.sort((a, b) => metrics.gvc_production_share[b] - metrics.gvc_production_share[a]));
 
     // 每个区域一个锚点,成员沿环排布;记录“朝外”单位向量供标签放射避让
     const pos: Record<string, { x: number; y: number; ox: number; oy: number }> = {};
@@ -71,9 +71,9 @@ export function NetworkViz({ data }: { data: NetworkData }) {
 
     const maxFlow = Math.max(...data.edges.map((e) => num(e.flow)), 1);
     const maxMetric: Record<NetworkMetric, number> = {
-      share_trade_gvc_participation: Math.max(...Object.values(metrics.share_trade_gvc_participation), 1e-9),
-      betweenness_centrality: Math.max(...Object.values(metrics.betweenness_centrality), 1e-9),
-      trade_gross_exports: Math.max(...Object.values(metrics.trade_gross_exports), 1e-9),
+      gvc_production_share: Math.max(...Object.values(metrics.gvc_production_share), 1e-9),
+      betweenesscentrality: Math.max(...Object.values(metrics.betweenesscentrality), 1e-9),
+      gross_exports: Math.max(...Object.values(metrics.gross_exports), 1e-9),
     };
     // 往返两条有向边合并为一个伙伴(流量相加),避免 tooltip 里同一国家出现两次
     const nbFlow: Record<string, Record<string, number>> = {};

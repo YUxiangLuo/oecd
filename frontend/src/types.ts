@@ -166,12 +166,14 @@ export interface IndicatorSchema {
   fields: Record<string, IndicatorFieldMeta>;
 }
 
-export interface SectorPage {
+export interface PagedRows {
   total: number;
   page: number;
   page_size: number;
   rows: Record<string, string | number | null>[];
 }
+
+export type IndustryPage = PagedRows;
 
 export interface CoefStat {
   name: string;

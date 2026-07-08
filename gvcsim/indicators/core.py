@@ -2,6 +2,11 @@
 
 所有指标模块(tradeflow / production / length / network)都吃 IcioArrays,
 这样每年只解析一次数据、只求一次逆,且便于用小型合成矩阵做单元测试。
+
+增加值与产品税:OECD ICIO 原始表把 TLS(产品税减补贴)与 VA(增加值)分开,
+pymrio 解析后在 io.factor_inputs.F 中。区分两者后 v(VA 系数)是"纯增加值"
+口径,t 是 TLS 系数,满足 (v + t)' B = 1(总产出完全分解)。测试夹具没有
+factor_inputs 扩展时回退为残差 VA(此时 t=0、v' B = 1)。
 """
 
 from dataclasses import dataclass
@@ -20,6 +25,8 @@ class IcioArrays:
     x: np.ndarray  # 总产出 N
     v: np.ndarray  # 增加值系数 va/x,产出为0处置0,N
     va: np.ndarray  # 增加值 N
+    taxsub: np.ndarray  # 产品税减补贴 TLS,N(无 TLS 数据时为 0)
+    t: np.ndarray  # TLS 系数 taxsub/x,产出为0处置0,N
     A: np.ndarray  # 技术系数矩阵 N×N
     B: np.ndarray  # 全球里昂惕夫逆矩阵 (I-A)^-1,N×N
     L_dd: dict[str, np.ndarray]  # 各国国内里昂惕夫逆 (I-A_rr)^-1,S×S
@@ -29,6 +36,53 @@ class IcioArrays:
     @property
     def n_regions(self) -> int:
         return len(self.regions)
+
+    # ---- 各指标模块共用的小工具 ----
+
+    def home_cols(self) -> np.ndarray:
+        """每个节点所属国家在 Yd 列中的位置,N。"""
+        region_idx = {r: i for i, r in enumerate(self.regions)}
+        return np.array([region_idx[r] for r in self.index.get_level_values(0)])
+
+    def y_domestic(self) -> np.ndarray:
+        """本国内销最终品 Y_ss,N。"""
+        return self.Yd[np.arange(len(self.x)), self.home_cols()]
+
+    def y_export(self) -> np.ndarray:
+        """最终品出口 Σ_{r≠s} Y_sr,N。"""
+        return self.Yd.sum(axis=1) - self.y_domestic()
+
+    def apply_L(self, vec: np.ndarray) -> np.ndarray:
+        """块对角国内里昂惕夫逆左乘:out[p_r] = L_rr @ vec[p_r]。"""
+        out = np.zeros_like(vec, dtype=float)
+        for r in self.regions:
+            p = self.pos[r]
+            out[p] = self.L_dd[r] @ vec[p]
+        return out
+
+    def apply_L_T(self, rowvec: np.ndarray) -> np.ndarray:
+        """块对角国内里昂惕夫逆右乘(行向量):out[p_r] = rowvec[p_r] @ L_rr。"""
+        out = np.zeros_like(rowvec, dtype=float)
+        for r in self.regions:
+            p = self.pos[r]
+            out[p] = rowvec[p] @ self.L_dd[r]
+        return out
+
+    def apply_AF(self, vec: np.ndarray) -> np.ndarray:
+        """跨境技术系数 A^F(A 去掉国内块)左乘,不显式物化 N×N 副本。"""
+        out = self.A @ vec
+        for r in self.regions:
+            p = self.pos[r]
+            out[p] -= self.A[np.ix_(p, p)] @ vec[p]
+        return out
+
+    def apply_AF_T(self, rowvec: np.ndarray) -> np.ndarray:
+        """跨境技术系数 A^F 右乘(行向量)。"""
+        out = rowvec @ self.A
+        for r in self.regions:
+            p = self.pos[r]
+            out[p] -= rowvec[p] @ self.A[np.ix_(p, p)]
+        return out
 
 
 def build_arrays(io) -> IcioArrays:
@@ -46,10 +100,21 @@ def build_arrays(io) -> IcioArrays:
     Yd_df = io.Y.T.groupby(level=0, sort=False).sum().T
     Yd = Yd_df[regions].values.astype(float)
 
-    # 增加值 = 总产出 - 中间投入列和;系数 v = va/x(产出为0的行业置0)
-    va = x - Z.sum(axis=0)
+    # OECD ICIO 原始表把 TLS 与 VA 放在 factor_inputs.F 中;测试夹具没有
+    # 这个扩展时才回退到残差 VA,并把 TLS 置零。
+    taxsub = np.zeros_like(x)
+    factor_inputs = getattr(io, "factor_inputs", None)
+    F = getattr(factor_inputs, "F", None)
+    if F is not None and {"TLS", "VA"}.issubset(set(F.index.astype(str))):
+        F_aligned = F.reindex(columns=index)
+        va = F_aligned.loc["VA"].values.astype(float)
+        taxsub = F_aligned.loc["TLS"].values.astype(float)
+    else:
+        # 残差 VA = 总产出 - 中间投入列和(此时含税,t=0)
+        va = x - Z.sum(axis=0)
     with np.errstate(divide="ignore", invalid="ignore"):
         v = np.where(x > 0, va / x, 0.0)
+        t = np.where(x > 0, taxsub / x, 0.0)
 
     row_regions = index.get_level_values(0).values
     pos = {r: np.where(row_regions == r)[0] for r in regions}
@@ -77,6 +142,8 @@ def build_arrays(io) -> IcioArrays:
         x=x,
         v=v,
         va=va,
+        taxsub=taxsub,
+        t=t,
         A=A,
         B=B,
         L_dd=L_dd,

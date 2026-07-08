@@ -29,13 +29,13 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
 
     expected_files = [
         "indicators_country_2018.csv",
-        "indicators_sector_2018.csv",
+        "indicators_industry_2018.csv",
         "network_edges_2018.csv",
         "export_exposure_2018.csv",
         "controls_country.csv",
         "qc_controls.json",
         "qc_shocks.json",
-        "panel_sector.csv",
+        "panel_industry.csv",
         "panel_country.csv",
     ]
     for name in expected_files:
@@ -51,3 +51,6 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
 
     assert len(panel) == 8  # 2 countries × 2 sectors × 2 years
     assert {"entity_id", "tariff_shock", "treated", "macro_log_gdp_usd"}.issubset(panel.columns)
+    # 客户口径字段与回归派生列都应进入面板
+    assert {"DVAex", "taxsub", "SVA", "PLv_GVC", "betweenesscentrality"}.issubset(panel.columns)
+    assert {"gross_exports", "FVA_share", "3b_VA_GVC_C_share", "3_VA_GVC_share"}.issubset(panel.columns)

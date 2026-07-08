@@ -134,14 +134,14 @@ export function RegDesignLab() {
             onChange={setControlMode}
           />
         </ChoiceCard>
-        <ChoiceCard title="异质性" hint="检验基期 GVC 参与度越高的个体是否更敏感。">
+        <ChoiceCard title="异质性" hint="检验基期 GVC 生产份额越高的个体是否更敏感。">
           <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input
               type="checkbox"
               checked={interaction}
               onChange={(e) => setInteraction(e.target.checked)}
             />
-            冲击 × 基期 GVC 参与度
+            冲击 × 基期 GVC 生产份额
           </label>
         </ChoiceCard>
         <ChoiceCard title="价格口径" hint="实际值会用 GDP 平减指数调整金额类控制变量。">

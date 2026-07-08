@@ -70,7 +70,7 @@ def _coef_table(result: RegressionResult, design: RegressionDesign) -> str:
 
 def _design_summary(design: RegressionDesign) -> str:
     controls = "、".join(design.control_labels.values()) if design.controls else "不加控制变量"
-    interaction = "开启:冲击×基期GVC参与度" if design.interaction else "未开启"
+    interaction = "开启:冲击×基期GVC生产份额" if design.interaction else "未开启"
     return "\n".join(
         [
             f"- 粒度:{design.granularity}",
@@ -148,9 +148,9 @@ def generate(
         exclude_row=exclude_row,
     )
 
-    top_backward = snap["share_trade_backward_gvc"].nlargest(5)
-    top_forward = snap["share_trade_forward_gvc"].nlargest(5)
-    top_between = snap["betweenness_centrality"].nlargest(5)
+    top_fva = snap["FVA_share"].nlargest(5)
+    top_gvcpos = snap["GVCPs"].nlargest(5)
+    top_between = snap["betweenesscentrality"].nlargest(5)
 
     sections = [
         "# 贸易政策冲击对全球价值链结构的影响\n",
@@ -166,11 +166,11 @@ def generate(
         f"质检结果见 data/processed/qc_{year}.json(维度一致性、会计恒等式、"
         "里昂惕夫逆矩阵性质等)。\n",
         "## 二、GVC 指标摘要",
-        "**后向参与度最高(BM 外国增加值与外国重复计算占毛出口比重)**:"
-        + "、".join(f"{c} ({v:.3f})" for c, v in top_backward.items()),
-        "\n**前向参与度最高(本国增加值最常嵌入他国出口)**:"
-        + "、".join(f"{c} ({v:.3f})" for c, v in top_forward.items()),
-        "\n**介数中心性最高(供应链枢纽)**:" + "、".join(f"{c} ({v:.3f})" for c, v in top_between.items()) + "\n",
+        "**FVA 份额最高(WWZ 口径,出口中外国增加值占毛出口比重)**:"
+        + "、".join(f"{c} ({v:.3f})" for c, v in top_fva.items()),
+        "\n**GVC 位置指数最高(WWYZ 口径,前向/后向 GVC 生产长度之比,越大越上游)**:"
+        + "、".join(f"{c} ({v:.3f})" for c, v in top_gvcpos.items()),
+        "\n**介数中心性最高(供应链枢纽)**:" + "、".join(f"{c} ({v:.1f})" for c, v in top_between.items()) + "\n",
         "## 三、回归结果",
     ]
 
@@ -208,8 +208,9 @@ def generate(
         "- 控制变量支持 ICIO 内生派生与 WDI/IMF 风格宏观 mock,用于稳健性演示;"
         "GDP 平减指数为拟真 mock,不是官方价格指数。论文级研究仍需接入真实 WDI/IMF/"
         "行业价格指数。",
-        "- 指标采用 Borin-Mancini source-based 贸易流分解与 WWYZ 生产活动分解的"
-        "国家/国家–行业聚合口径;本报告不输出 exporter-importer-sector 双边矩阵明细。",
+        "- 指标采用客户资料口径:WWZ (2013) 总贸易核算法、WWYZ (2017) 生产分解与"
+        "生产长度、Gephi 风格网络中心性,输出国家/国家–行业聚合结果;"
+        "本报告不输出 exporter-importer-sector 双边矩阵明细。",
     ]
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../../api";
-import type { CrosswalkHsRow, CrosswalkPayload, Meta, SectorPage, ShockEvent, ShockSummary } from "../../types";
+import type { CrosswalkHsRow, CrosswalkPayload, Meta, PagedRows, ShockEvent, ShockSummary } from "../../types";
 import { pct, useAsync } from "../shared";
 
 const CROSSWALK_YEARS = [2018, 2019, 2020];
@@ -119,7 +119,7 @@ export function ShockLab({ meta }: { meta: Meta }) {
 
   const { data: events, error: evErr } = useAsync(() => api.shockEvents(), []);
   const { data: summary } = useAsync<ShockSummary>(() => api.shockSummary(shockType), [shockType]);
-  const { data: panel, error: panelErr } = useAsync<SectorPage>(
+  const { data: panel, error: panelErr } = useAsync<PagedRows>(
     () => api.shockPanel(year, shockType, country, sector, onlyHit, page),
     [year, shockType, country, sector, onlyHit, page],
   );
@@ -224,4 +224,3 @@ export function ShockLab({ meta }: { meta: Meta }) {
     </div>
   );
 }
-
