@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api } from "../../api";
-import type { IndicatorSchema, Meta, SectorPage, Step } from "../../types";
+import type { IndicatorSchema, IndustryPage, Meta, Step } from "../../types";
 import { DecompositionDemo, NetworkCentralityDemo } from "../../demos";
 import { sectorLabel } from "../../viz";
 import { fieldLabel, fmtField, useAsync } from "../shared";
@@ -19,13 +19,13 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
   const [page, setPage] = useState(1);
   const groupKey = STEP_GROUP[step.n] ?? "trade";
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
-  const { data, error } = useAsync<SectorPage>(
-    () => api.sectorIndicators(year, country, page),
+  const { data, error } = useAsync<IndustryPage>(
+    () => api.industryIndicators(year, country, page),
     [year, country, page],
   );
   if (error) return <div className="error-box">{error}</div>;
   const group = schema?.groups.find((g) => g.key === groupKey);
-  const baseCols = ["year", "country", "sector"];
+  const baseCols = ["year", "country", "industry"];
   const rowKeys = data?.rows[0] ? new Set(Object.keys(data.rows[0])) : new Set<string>();
   const cols = data?.rows[0]
     ? [...baseCols, ...(group?.fields ?? []).filter((c) => rowKeys.has(c))]
@@ -65,7 +65,7 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
             {(data?.rows ?? []).map((r, i) => (
               <tr key={i}>{cols.map((c) => (
                 <td key={c}>{
-                  c === "sector" ? (r.sector != null ? sectorLabel(String(r.sector)) : "—")
+                  c === "industry" ? (r.industry != null ? sectorLabel(String(r.industry)) : "—")
                     : ["year", "country"].includes(c) ? String(r[c] ?? "—")
                     : fmtField(r[c], c, schema)
                 }</td>
@@ -82,4 +82,3 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
     </div>
   );
 }
-

@@ -51,7 +51,7 @@ export function ScatterChart({ rows, xKey, yKey, xLabel, yLabel, xFormat, yForma
   const W = 660, H = 400, m = { l: 62, r: 18, t: 14, b: 46 };
   // c = 完整名(tooltip / 高亮匹配),tag = 图上短标签(行业只标代码,避免中文名越界)
   const pts = rows.map((r) => ({
-    c: rowName(r), tag: r.sector != null ? String(r.sector) : String(r.country),
+    c: rowName(r), tag: r.industry != null ? String(r.industry) : String(r.country),
     x: num(r[xKey]), y: num(r[yKey]),
   }));
   const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
@@ -122,7 +122,7 @@ export function QuadrantScatter({ rows, xKey, yKey, xLabel, yLabel, xFormat, yFo
   const { wrapRef, Tip, show, hide } = useTip();
   const W = 660, H = 400, m = { l: 62, r: 18, t: 14, b: 46 };
   const pts = rows.map((r) => ({
-    c: rowName(r), tag: r.sector != null ? String(r.sector) : String(r.country),
+    c: rowName(r), tag: r.industry != null ? String(r.industry) : String(r.country),
     x: num(r[xKey]), y: num(r[yKey]),
   }));
   const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);

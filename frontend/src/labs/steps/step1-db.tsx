@@ -3,28 +3,44 @@ import { api } from "../../api";
 import type { DbMeta, DbSlice, DbTableKind } from "../../types";
 import { fmtDb, useAsync } from "../shared";
 
-const DB_SOURCES = [
-  {
-    name: "OECD ICIO",
-    status: "已接入",
-    detail: "当前项目主数据库,支持中间投入、最终需求、TLS/VA/OUT 账户表浏览。",
-  },
-  {
-    name: "WIOD",
-    status: "备选",
-    detail: "行业口径更细但年份覆盖不同,可作为稳健性扩展。",
-  },
-  {
-    name: "Eora MRIO",
-    status: "备选",
-    detail: "国家覆盖更广,适合全球网络扩展但许可和口径成本更高。",
-  },
-  {
-    name: "中国国家统计局",
-    status: "补充",
-    detail: "适合国内分区域或投入产出表校准,不能直接替代全球 MRIO。",
-  },
+/** 国际主流投入产出数据库对比(客户资料《1、国际主流投入产出数据库的展示与说明》) */
+const DB_COMPARISON = [
+  { name: "OECD-ICIO", org: "经济合作与发展组织 OECD", countries: "76+1", sectors: 45, years: "1995–2020", url: "https://www.oecd.org/en/data/datasets/inter-country-input-output-tables.html", note: "常规版+扩展版(中墨区分加工贸易);本系统主数据源" },
+  { name: "OECD-AMNE", org: "经济合作与发展组织 OECD", countries: "76+1", sectors: 41, years: "2000–2020", url: "https://www.oecd.org/en/data/datasets/multinational-enterprises-and-global-value-chains.html", note: "区分内、外资企业属性的跨国企业活动数据库" },
+  { name: "ADB-MRIO", org: "亚洲开发银行 ADB", countries: "62+1", sectors: 35, years: "2007–2023", url: "https://kidb.adb.org/globalization", note: "重点覆盖亚太经济体,数据时间维度较新" },
+  { name: "WIOD-2013", org: "格罗宁根大学(荷兰)", countries: "40+1", sectors: 35, years: "1995–2011", url: "https://www.rug.nl/ggdc/valuechain/wiod/?lang=en", note: "附带环境账户,适合贸易与碳足迹研究" },
+  { name: "WIOD-2016", org: "格罗宁根大学(荷兰)", countries: "43+1", sectors: 56, years: "2000–2014", url: "https://www.rug.nl/ggdc/valuechain/wiod/?lang=en", note: "行业分类最细(56 个)" },
+  { name: "Eora MRIO", org: "澳大利亚研究委员会 ARC 资助", countries: "190", sectors: 26, years: "1990–2022", url: "https://worldmrio.com/", note: "国家覆盖最广,常用于可持续发展与碳核算" },
+  { name: "GTAP-11", org: "美国普渡大学 GTAP", countries: "141+19", sectors: 65, years: "2004/2007/2011/2014/2017", url: "https://www.gtap.agecon.purdue.edu/databases/default.asp", note: "非连续年份,主要用于政策模拟与经济建模" },
 ];
+
+function DbComparisonTable() {
+  return (
+    <div className="table-wrap" style={{ marginBottom: 18 }}>
+      <table className="data-table">
+        <thead>
+          <tr><th>数据库</th><th>建立机构</th><th>国家/地区</th><th>行业数</th><th>时间维度</th><th>特点</th></tr>
+        </thead>
+        <tbody>
+          {DB_COMPARISON.map((db) => (
+            <tr key={db.name} style={db.name === "OECD-ICIO" ? { background: "#f4f3ff", fontWeight: 600 } : undefined}>
+              <td><a href={db.url} target="_blank" rel="noreferrer">{db.name}</a>{db.name === "OECD-ICIO" ? " ✓" : ""}</td>
+              <td>{db.org}</td>
+              <td>{db.countries}</td>
+              <td>{db.sectors}</td>
+              <td>{db.years}</td>
+              <td style={{ fontWeight: 400 }}>{db.note}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="muted" style={{ fontSize: 11.5, margin: "8px 2px 0" }}>
+        本系统选用 OECD-ICIO:77 经济体 × 45 行业、1995–2020 连续年份、官方免费,且提供 TLS/VA/OUT 账户项,
+        能同时支撑贸易流分解(税收项)、生产分解、长度与网络指标计算。("+1" = 世界其他地区 ROW 聚合账户)
+      </p>
+    </div>
+  );
+}
 
 const DB_TABLES: { key: DbTableKind; label: string; hint: string }[] = [
   { key: "z", label: "中间投入 Z", hint: "国家-行业 × 国家-行业" },
@@ -89,17 +105,7 @@ export function DbLab() {
   if (!meta.years.length) {
     return (
       <div>
-        <div className="db-source-grid">
-          {DB_SOURCES.map((source) => (
-            <div key={source.name} className={`db-source${source.name === "OECD ICIO" ? " active" : ""}`}>
-              <div className="db-source-head">
-                <strong>{source.name}</strong>
-                <span>{source.status}</span>
-              </div>
-              <p>{source.detail}</p>
-            </div>
-          ))}
-        </div>
+        <DbComparisonTable />
         <div className="warnbox">
           未找到本地 OECD ICIO 原始 CSV。请将 ICIO2023_YYYY.csv 放入 OECD_ICIO/ 后刷新本页。
         </div>
@@ -109,17 +115,7 @@ export function DbLab() {
 
   return (
     <div>
-      <div className="db-source-grid">
-        {DB_SOURCES.map((source) => (
-          <div key={source.name} className={`db-source${source.name === "OECD ICIO" ? " active" : ""}`}>
-            <div className="db-source-head">
-              <strong>{source.name}</strong>
-              <span>{source.status}</span>
-            </div>
-            <p>{source.detail}</p>
-          </div>
-        ))}
-      </div>
+      <DbComparisonTable />
 
       <div className="db-summary">
         <span>原始年份 {meta.years[0]}-{meta.years.at(-1)}</span>

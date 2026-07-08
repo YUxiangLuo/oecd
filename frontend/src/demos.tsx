@@ -2,70 +2,95 @@
  * 步骤4-7 的交互式「计算方法演示」组件。
  *
  * DecompositionDemo(步骤4/5/6):用真实指标数据把总量拆成各分项,
- *   实时校验恒等式(加总 = 毛出口 / 总增加值 / 上游度),每项可 hover 看含义。
- *   恒等式口径与后端引擎一致:
- *     步骤4 毛出口 = DVA + RDV + DDC + FVA + FDC(PDC 纯重复计算 = DDC + FDC,非独立加项)
- *     步骤5 总增加值 = 纯国内 + 传统贸易 + 简单GVC + 复杂GVC
- *     步骤6 上游度 = 国内段 + 跨境段
+ *   实时校验恒等式(加总 = 毛出口 / 总增加值 / 总生产长度),每项可 hover 看含义。
+ *   恒等式口径与后端引擎一致(客户资料口径):
+ *     步骤4 毛出口 = DVAex + DVArt + DDC + FVA + FDC + taxsub(WWZ 总贸易核算)
+ *     步骤5 SVA = 纯国内 + 传统贸易 + 简单GVC + 复杂GVC(WWYZ 2017a)
+ *     步骤6 PLv = 各段长度按对应增加值份额的加权平均(WWYZ 2017b;
+ *           分项显示为"VA份额×段长度"的贡献值,贡献加总 = 总长度)
  * NetworkCentralityDemo(步骤7):在一个小网络上演示度/介数中心性怎么算出来。
  */
 import { useMemo, useState } from "react";
 import { api } from "./api";
 import { useAsync } from "./labs";
 import { sectorLabel } from "./viz";
-import type { Meta, SectorPage } from "./types";
+import type { IndustryPage, Meta } from "./types";
 
 type Row = Record<string, string | number | null>;
 
-type Part = { key: string; label: string; color: string; desc: string };
+type Part = {
+  key: string;
+  label: string;
+  color: string;
+  desc: string;
+  /** 加权模式:分项贡献 = row[key] × row[weightKey] / row[weightTotal](见步骤6) */
+  weightKey?: string;
+};
 type DecompCfg = {
   total: string;
   totalLabel: string;
   unit: "amount" | "number";
   parts: Part[];
+  /** 加权模式的权重分母(如 SVA);设置后各分项按 VA 份额加权 */
+  weightTotal?: string;
   note?: (r: Row) => string;
 };
 
 const DECOMP: Record<number, DecompCfg> = {
   4: {
-    total: "trade_gross_exports",
+    total: "gross_exports",
     totalLabel: "毛出口",
     unit: "amount",
     parts: [
-      { key: "trade_dva", label: "DVA 国内增加值", color: "#4b47e0", desc: "出口中真正由本国创造、并被国外最终吸收的增加值。占比越高,出口越“实”。" },
-      { key: "trade_rdv", label: "RDV 返回国内", color: "#7a6bff", desc: "先随出口离境、绕一圈又回到本国被吸收的国内增加值。" },
-      { key: "trade_ddc", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "本国增加值在跨境往返中被海关多次统计的部分。" },
-      { key: "trade_fva", label: "FVA 外国增加值", color: "#159a86", desc: "出口里来自外国的增加值(进口的中间品)。后向 GVC 参与度的核心。" },
-      { key: "trade_fdc", label: "FDC 外国重复计算", color: "#e0982a", desc: "外国增加值在跨境中被重复统计的部分。" },
+      { key: "DVAex", label: "DVAex 国内增加值出口", color: "#4b47e0", desc: "出口中由本国创造、并被国外最终吸收的增加值。占比越高,出口越“实”。" },
+      { key: "DVArt", label: "DVArt 返回国内", color: "#7a6bff", desc: "先随出口离境、绕一圈又回到本国被吸收的国内增加值。" },
+      { key: "DDC", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "本国增加值在跨境往返中被海关多次统计的部分。" },
+      { key: "FVA", label: "FVA 外国增加值", color: "#159a86", desc: "出口里来自外国的增加值(进口的中间品)。后向 GVC 依赖的核心。" },
+      { key: "FDC", label: "FDC 外国重复计算", color: "#e0982a", desc: "外国增加值在跨境中被重复统计的部分。" },
+      { key: "taxsub", label: "taxsub 税收减补贴", color: "#98a0b3", desc: "毛出口中的产品税减补贴(TLS)含量,来自 ICIO 原始表的 TLS 账户行。" },
     ],
     note: (r) =>
-      `PDC 纯重复计算 = DDC + FDC = ${fmt(num(r.trade_ddc) + num(r.trade_fdc), "amount")}` +
-      `(纯重复计算是 DDC 与 FDC 的合计,不是独立加项,故不进上面的闭合等式)。`,
+      `EXDVA 出口国内增加值合计 = DVAex + DVArt = ${fmt(num(r.DVAex) + num(r.DVArt), "amount")}` +
+      `(WWZ 2013 / 王直等 2015 总贸易核算法,16 项分解归组为上面六大类)。`,
   },
   5: {
-    total: "prod_va_total",
-    totalLabel: "总增加值(GDP)",
+    total: "SVA",
+    totalLabel: "总增加值 SVA",
     unit: "amount",
     parts: [
-      { key: "prod_pure_domestic", label: "纯国内生产", color: "#4b47e0", desc: "增加值只服务本国最终需求,完全不跨境。" },
-      { key: "prod_traditional", label: "传统贸易生产", color: "#159a86", desc: "增加值随最终产品直接出口,货物只过一次国境。" },
-      { key: "prod_simple_gvc", label: "简单 GVC 生产", color: "#e0982a", desc: "增加值随中间品跨境一次后在国外被吸收。" },
-      { key: "prod_complex_gvc", label: "复杂 GVC 生产", color: "#f4693b", desc: "增加值至少两次跨越国境,深度嵌入全球生产网络。对政策冲击最敏感。" },
+      { key: "1_VA_D", label: "1_VA_D 纯国内生产", color: "#4b47e0", desc: "增加值只服务本国最终需求,完全不跨境。" },
+      { key: "2_VA_RT", label: "2_VA_RT 传统贸易生产", color: "#159a86", desc: "增加值随最终产品直接出口,货物只过一次国境。" },
+      { key: "3a_VA_GVC_S", label: "3a 简单 GVC 生产", color: "#e0982a", desc: "增加值随中间品跨境一次后在国外被吸收。" },
+      { key: "3b_VA_GVC_C", label: "3b 复杂 GVC 生产", color: "#f4693b", desc: "增加值至少两次跨越国境,深度嵌入全球生产网络。对政策冲击最敏感。" },
     ],
+    note: (r) =>
+      `3_VA_GVC = 3a + 3b = ${fmt(num(r["3a_VA_GVC_S"]) + num(r["3b_VA_GVC_C"]), "amount")};` +
+      `另有对称的后向分解 FGY 系列(按最终产品完成地记账),见上方指标表。`,
   },
   6: {
-    total: "upstreamness",
-    totalLabel: "上游度(平均生产链长度)",
+    total: "PLv",
+    totalLabel: "前向总生产长度 PLv",
     unit: "number",
+    weightTotal: "SVA",
     parts: [
-      { key: "upstreamness_domestic", label: "国内段", color: "#4b47e0", desc: "生产链在本国境内平均经过的阶段数。" },
-      { key: "upstreamness_cross", label: "跨境段", color: "#f4693b", desc: "生产链跨越国境的平均阶段数,越长越依赖国际分工。" },
+      { key: "PLv_D", label: "纯国内段长度", color: "#4b47e0", desc: "纯国内生产活动的平均长度,按 1_VA_D/SVA 份额加权计入总长度。", weightKey: "1_VA_D" },
+      { key: "PLv_RT", label: "传统贸易段长度", color: "#159a86", desc: "传统贸易生产活动的平均长度,按 2_VA_RT/SVA 份额加权计入。", weightKey: "2_VA_RT" },
+      { key: "PLv_GVC", label: "GVC 段长度", color: "#f4693b", desc: "GVC 生产活动的平均长度(通常最长,增加值多次被计为产出),按 3_VA_GVC/SVA 份额加权计入。", weightKey: "3_VA_GVC" },
     ],
+    note: (r) =>
+      `各分项显示的是"VA 份额 × 段长度"的贡献值(WWYZ 2017b:总长度是段长度的增加值加权平均);` +
+      `段长度本身:PLv_D=${num(r.PLv_D).toFixed(2)}、PLv_RT=${num(r.PLv_RT).toFixed(2)}、PLv_GVC=${num(r.PLv_GVC).toFixed(2)};` +
+      `GVC 位置指数 GVCPs = PLv_GVC / PLy_GVC = ${num(r.GVCPs).toFixed(3)}。`,
   },
 };
 
 function num(v: string | number | null | undefined): number {
   return typeof v === "number" ? v : 0;
+}
+function partValue(row: Row, p: Part, cfg: DecompCfg): number {
+  if (!p.weightKey || !cfg.weightTotal) return num(row[p.key]);
+  const wTot = num(row[cfg.weightTotal]);
+  return wTot ? (num(row[p.weightKey]) * num(row[p.key])) / wTot : 0;
 }
 function fmt(v: number, unit: "amount" | "number"): string {
   return unit === "amount"
@@ -82,13 +107,13 @@ export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) 
   const [hover, setHover] = useState<string | null>(null);
 
   const { data: countryRows } = useAsync<Row[]>(() => api.countryIndicators(year), [year]);
-  const { data: sectorPage } = useAsync<SectorPage>(
-    () => api.sectorIndicatorsAll(year, country),
+  const { data: sectorPage } = useAsync<IndustryPage>(
+    () => api.industryIndicatorsAll(year, country),
     [year, country],
   );
 
   const sectors = useMemo(
-    () => (sectorPage?.rows ?? []).map((r) => String(r.sector)),
+    () => (sectorPage?.rows ?? []).map((r) => String(r.industry)),
     [sectorPage],
   );
   // 默认选第一个行业;换国家后若旧行业不存在则回退
@@ -97,10 +122,10 @@ export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) 
   const row: Row | undefined =
     gran === "country"
       ? countryRows?.find((r) => r.country === country)
-      : (sectorPage?.rows ?? []).find((r) => r.sector === effSector);
+      : (sectorPage?.rows ?? []).find((r) => r.industry === effSector);
 
   const total = row ? num(row[cfg.total]) : 0;
-  const sum = row ? cfg.parts.reduce((a, p) => a + num(row[p.key]), 0) : 0;
+  const sum = row ? cfg.parts.reduce((a, p) => a + partValue(row, p, cfg), 0) : 0;
   const err = Math.abs(sum - total);
   const rel = total ? err / Math.abs(total) : err;
   const ok = rel < 1e-6;
@@ -171,7 +196,7 @@ export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) 
 
           <div className="decomp-bar">
             {cfg.parts.map((p) => {
-              const v = num(row[p.key]);
+              const v = partValue(row, p, cfg);
               const w = total ? Math.max(0, (v / total) * 100) : 0;
               return (
                 <div
@@ -202,7 +227,7 @@ export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) 
           <table className="decomp-table">
             <tbody>
               {cfg.parts.map((p) => {
-                const v = num(row[p.key]);
+                const v = partValue(row, p, cfg);
                 const share = total ? (v / total) * 100 : 0;
                 return (
                   <tr
