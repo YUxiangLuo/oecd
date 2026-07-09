@@ -14,8 +14,8 @@
 - systemd 服务: `gvcsim-api.service`
 - 后端监听: `127.0.0.1:18000`
 - 前端静态文件: `/opt/oecd-icio-analysis/frontend/dist`
-- 当前部署来源分支: `feat/teacher-dashboard`(⚠️ **未合并分支的预览部署**,PR #17;线上暂时不在主线 `cc` 上,合并后应用 `cc` 重新部署一次)
-- 当前应用代码部署提交: `555fa8a fix: address review — guard empty grade and student-only writes`
+- 当前部署来源分支: `cc`
+- 当前应用代码部署提交: `4d80e37 Merge pull request #17 from YUxiangLuo/feat/teacher-dashboard`
 - 教学数据库(教师端 dashboard 依赖): 本机 PostgreSQL 15,`gvclab` 库,DSN `postgresql://alice:111111@127.0.0.1:5432/gvclab`(与 `config.PG_DSN` 默认值一致,systemd 未额外设 `GVCSIM_PG_DSN`)
 
 ## 本地准备
@@ -326,6 +326,14 @@ curl -fsS --max-time 90 \
   `/api/classroom/overview`(teacher token)返回 `students=13 submitted=8 graded=5 active_7d=8`、
   14 天趋势、2 个班级对比;`/api/classroom/submissions` 返回 8 条;
   agent-browser 以教师身份登录,概览/学生/报告/公告四页渲染正常、数据无误
+
+2026-07-09 来源对齐(源 `cc` @ `4d80e37`,PR #17 已合并进主线):
+
+- PR #17 合并进 `cc` 后,把部署来源从预览分支切回主线;**代码内容与上条 `555fa8a` 完全一致**,
+  纯来源对齐,行为无变化
+- PostgreSQL / psycopg / 教学数据均已在上条部署时就绪,本次无需再动;直接 rsync(`cc`)+ `systemctl restart` + `nginx reload`
+- 线上验证:首页 `200`,`student` 与 `teacher / gvclab2026` 登录 `200`;
+  `/api/classroom/overview`(teacher token)`students=13 submitted=8 graded=5` 数据仍在
 
 ### 教学数据库(PostgreSQL)—— 教师端 dashboard 依赖
 
