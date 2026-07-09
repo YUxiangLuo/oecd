@@ -144,6 +144,32 @@ def test_progress_keeps_max_step():
     overview = client.get("/api/classroom/overview", headers=t).json()
     reached = {r["step"]: r["reached"] for r in overview["step_completion"]}
     assert reached[9] == 1 and reached[10] == 0
+    # 概览新增聚合字段:近 7 天活跃(刚上报过进度)、14 天趋势、班级对比
+    assert overview["active_7d"] == 1
+    assert len(overview["submission_trend"]) == 14
+    assert all({"date", "submitted", "graded"} <= r.keys() for r in overview["submission_trend"])
+    assert any(c["name"] == "GVC 实验演示班" for c in overview["class_breakdown"])
+
+
+def test_overview_trend_and_class_breakdown():
+    s, t = _login("student"), _login("teacher")
+    client.post(
+        "/api/classroom/report/submit",
+        headers=s,
+        json={
+            "year": 2020,
+            "title": "报告",
+            "design": {"method": "DID"},
+            "markdown": "## 正文",
+        },
+    )
+    ov = client.get("/api/classroom/overview", headers=t).json()
+    # 今天提交 1 份、未评阅:趋势最后一天 submitted=1/graded=0,班级对比累计一致
+    assert ov["submission_trend"][-1]["submitted"] == 1
+    assert ov["submission_trend"][-1]["graded"] == 0
+    demo = next(c for c in ov["class_breakdown"] if c["name"] == "GVC 实验演示班")
+    assert demo["student_count"] == 1 and demo["submitted"] == 1 and demo["graded"] == 0
+    assert demo["avg_score"] is None
 
 
 def test_announcements_scoped_by_class():

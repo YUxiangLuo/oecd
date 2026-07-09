@@ -373,6 +373,35 @@ def overview_stats(class_id: int | None = None) -> dict[str, Any]:
             " FROM generate_series(1, %s) AS gs(n) ORDER BY gs.n",
             (*params, MAX_STEP),
         ).fetchall()
+        # 近 14 天每日提交/评阅计数(补零到完整日历序列,便于前端画趋势)
+        trend = c.execute(
+            "SELECT to_char(gs.d, 'MM-DD') AS date,"
+            "  (SELECT count(*) FROM submissions s JOIN accounts a ON a.id = s.account_id"
+            f"   WHERE {where} AND s.submitted_at::date = gs.d) AS submitted,"
+            "  (SELECT count(*) FROM submissions s JOIN accounts a ON a.id = s.account_id"
+            f"   WHERE {where} AND s.graded_at::date = gs.d) AS graded"
+            " FROM generate_series(now()::date - 13, now()::date, interval '1 day') AS gs(d)"
+            " ORDER BY gs.d",
+            (*params, *params),
+        ).fetchall()
+        # 近 7 天有进度上报的活跃学生数
+        active = c.execute(
+            "SELECT count(*) AS n FROM step_progress p JOIN accounts a ON a.id = p.account_id"
+            f" WHERE {where} AND p.updated_at >= now() - interval '7 days'",
+            params,
+        ).fetchone()
+        # 各班对比(与 class_id 过滤无关,始终按全部班级分组)
+        by_class = c.execute(
+            "SELECT cl.id AS class_id, cl.name,"
+            " count(a.id) AS student_count,"
+            " count(s.id) AS submitted,"
+            " count(s.id) FILTER (WHERE s.state = 'graded') AS graded,"
+            " round(avg(s.score) FILTER (WHERE s.state = 'graded'), 1) AS avg_score"
+            " FROM classes cl"
+            " LEFT JOIN accounts a ON a.class_id = cl.id AND a.role = 'student'"
+            " LEFT JOIN submissions s ON s.account_id = a.id"
+            " GROUP BY cl.id, cl.name ORDER BY cl.id"
+        ).fetchall()
     return {
         "student_count": base["student_count"],
         "disabled_count": base["disabled_count"],
@@ -387,4 +416,17 @@ def overview_stats(class_id: int | None = None) -> dict[str, Any]:
             {"label": "90+", "count": buckets["b90"]},
         ],
         "step_completion": [{"step": r["step"], "reached": r["reached"]} for r in steps],
+        "active_7d": active["n"],
+        "submission_trend": [{"date": r["date"], "submitted": r["submitted"], "graded": r["graded"]} for r in trend],
+        "class_breakdown": [
+            {
+                "class_id": r["class_id"],
+                "name": r["name"],
+                "student_count": r["student_count"],
+                "submitted": r["submitted"],
+                "graded": r["graded"],
+                "avg_score": float(r["avg_score"]) if r["avg_score"] is not None else None,
+            }
+            for r in by_class
+        ],
     }

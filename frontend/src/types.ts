@@ -368,4 +368,15 @@ export interface ClassOverview {
   avg_score: number | null;
   score_buckets: { label: string; count: number }[];
   step_completion: { step: number; reached: number }[];
+  active_7d: number;
+  submission_trend: { date: string; submitted: number; graded: number }[];
+  class_breakdown: ClassBreakdown[];
+}
+export interface ClassBreakdown {
+  class_id: number;
+  name: string;
+  student_count: number;
+  submitted: number;
+  graded: number;
+  avg_score: number | null;
 }

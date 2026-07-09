@@ -122,6 +122,9 @@ async function mockApi(page: Page, who = user) {
           student_count: 2, disabled_count: 0, submitted: 1, graded: 0, avg_score: null,
           score_buckets: [{ label: "<60", count: 0 }, { label: "60-69", count: 0 }, { label: "70-79", count: 0 }, { label: "80-89", count: 0 }, { label: "90+", count: 0 }],
           step_completion: Array.from({ length: 17 }, (_, i) => ({ step: i + 1, reached: i < 9 ? 1 : 0 })),
+          active_7d: 1,
+          submission_trend: Array.from({ length: 14 }, (_, i) => ({ date: `07-${String(i + 1).padStart(2, "0")}`, submitted: i === 13 ? 1 : 0, graded: 0 })),
+          class_breakdown: [{ class_id: 1, name: "GVC 实验演示班", student_count: 2, submitted: 1, graded: 0, avg_score: null }],
         },
       });
     }

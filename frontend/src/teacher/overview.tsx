@@ -2,8 +2,10 @@ import { useState } from "react";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import type { ClassInfo, ClassOverview } from "../types";
+import { GradingDonut, StepFunnel, TrendChart } from "./charts";
+import { Toolbar } from "./ui";
 
-/** 班级概览:统计卡 + 分数段分布 + 17 步到达率 */
+/** 班级概览:KPI 卡行 + 面板网格(成绩分布 / 评阅进度 / 提交趋势 / 步骤漏斗 / 班级对比) */
 export function OverviewTab() {
   const [classId, setClassId] = useState<number | null>(null);
   const { data: cls } = useAsync<{ classes: ClassInfo[] }>(() => api.classroom.classes(), []);
@@ -12,49 +14,143 @@ export function OverviewTab() {
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted">加载中…</p>;
 
+  const pending = Math.max(0, data.submitted - data.graded);
   const maxBucket = Math.max(1, ...data.score_buckets.map((b) => b.count));
-  const denom = Math.max(1, data.student_count);
+  const showBreakdown = classId == null && data.class_breakdown.length > 1;
+
+  const kpis = [
+    { ic: "👥", tone: "indigo", num: data.student_count, label: "学生人数", sub: data.disabled_count ? `停用 ${data.disabled_count}` : "" },
+    { ic: "📤", tone: "indigo", num: data.submitted, label: "已提交报告", sub: `共 ${data.student_count} 人` },
+    { ic: "⏳", tone: "amber", num: pending, label: "待评阅", sub: pending ? "需要处理" : "已清空" },
+    { ic: "✅", tone: "green", num: data.graded, label: "已评阅", sub: "" },
+    { ic: "⭐", tone: "indigo", num: data.avg_score ?? "—", label: "平均分", sub: "已评阅" },
+    { ic: "🔥", tone: "green", num: data.active_7d, label: "近 7 天活跃", sub: "有进度上报" },
+  ] as const;
+
   return (
     <div>
-      <div className="controls">
-        <label>班级</label>
-        <select value={classId ?? ""} onChange={(e) => setClassId(e.target.value ? Number(e.target.value) : null)}>
-          <option value="">全部班级</option>
-          {(cls?.classes ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-      </div>
+      <Toolbar>
+        <div className="field">
+          <label>班级</label>
+          <select value={classId ?? ""} onChange={(e) => setClassId(e.target.value ? Number(e.target.value) : null)}>
+            <option value="">全部班级</option>
+            {(cls?.classes ?? []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </Toolbar>
 
-      <div className="stat-cards">
-        <div className="stat-card"><div className="stat-num">{data.student_count}</div><div className="stat-label">学生人数{data.disabled_count ? `(停用 ${data.disabled_count})` : ""}</div></div>
-        <div className="stat-card"><div className="stat-num">{data.submitted}</div><div className="stat-label">已提交报告</div></div>
-        <div className="stat-card"><div className="stat-num">{data.graded}</div><div className="stat-label">已评阅</div></div>
-        <div className="stat-card"><div className="stat-num">{data.avg_score ?? "—"}</div><div className="stat-label">平均分(已评阅)</div></div>
-      </div>
-
-      <div className="section-head"><span className="section-head-icon">📊</span>成绩分布(已评阅 {data.graded} 份)<span className="section-head-line" /></div>
-      <div className="bucket-bars">
-        {data.score_buckets.map((b) => (
-          <div key={b.label} className="bucket-row">
-            <span className="bucket-label">{b.label}</span>
-            <div className="bucket-track"><div className="bucket-bar" style={{ width: `${(b.count / maxBucket) * 100}%` }} /></div>
-            <span className="bucket-count">{b.count}</span>
+      <div className="kpi-row">
+        {kpis.map((k) => (
+          <div key={k.label} className="kpi-card">
+            <span className={`kpi-ic ${k.tone}`}>{k.ic}</span>
+            <div className="kpi-body">
+              <div className="kpi-num">{k.num}</div>
+              <div className="kpi-label">{k.label}</div>
+              {k.sub && <div className="kpi-sub">{k.sub}</div>}
+            </div>
           </div>
         ))}
       </div>
 
-      <div className="section-head"><span className="section-head-icon">🧭</span>实验进度 · 各步到达人数<span className="section-head-line" /></div>
-      <div className="step-heat">
-        {data.step_completion.map((s) => {
-          const ratio = s.reached / denom;
-          return (
-            <div key={s.step} className="step-heat-cell" title={`步骤${s.step}:${s.reached}/${data.student_count} 人到达`}>
-              <div className="step-heat-bar"><div className="step-heat-fill" style={{ height: `${Math.max(4, ratio * 100)}%`, opacity: s.reached ? 1 : 0.25 }} /></div>
-              <span className="step-heat-num">{s.step}</span>
+      <div className="panel-grid">
+        <section className="panel">
+          <div className="panel-head">
+            <span className="panel-ic">📊</span>成绩分布
+            <span className="panel-tag">已评阅 {data.graded} 份</span>
+          </div>
+          {data.graded === 0 ? (
+            <p className="muted panel-empty">暂无评阅成绩</p>
+          ) : (
+            <div className="bucket-bars">
+              {data.score_buckets.map((b) => (
+                <div key={b.label} className="bucket-row">
+                  <span className="bucket-label">{b.label}</span>
+                  <div className="bucket-track">
+                    <div className="bucket-bar" style={{ width: `${(b.count / maxBucket) * 100}%` }} />
+                  </div>
+                  <span className="bucket-count">{b.count}</span>
+                </div>
+              ))}
             </div>
-          );
-        })}
+          )}
+        </section>
+
+        <section className="panel">
+          <div className="panel-head">
+            <span className="panel-ic">🖊️</span>评阅进度
+            <span className="panel-tag">已提交 {data.submitted} 份</span>
+          </div>
+          {data.submitted === 0 ? (
+            <p className="muted panel-empty">还没有学生提交报告</p>
+          ) : (
+            <GradingDonut submitted={data.submitted} graded={data.graded} />
+          )}
+        </section>
+
+        <section className="panel wide">
+          <div className="panel-head">
+            <span className="panel-ic">📈</span>近 14 天提交与评阅趋势
+          </div>
+          <TrendChart data={data.submission_trend} />
+        </section>
+
+        <section className="panel wide">
+          <div className="panel-head">
+            <span className="panel-ic">🧭</span>实验进度 · 各步到达人数
+            <span className="panel-tag">共 {data.student_count} 人</span>
+          </div>
+          <StepFunnel steps={data.step_completion} total={data.student_count} />
+          <p className="muted panel-note">到达人数按学生上报的最远步骤统计;学生端切换步骤时自动上报。</p>
+        </section>
+
+        {showBreakdown && (
+          <section className="panel wide">
+            <div className="panel-head">
+              <span className="panel-ic">🏫</span>班级对比
+            </div>
+            <div className="table-wrap">
+              <table className="data-table compact">
+                <thead>
+                  <tr>
+                    <th>班级</th>
+                    <th>学生</th>
+                    <th>已提交</th>
+                    <th>提交率</th>
+                    <th>已评阅</th>
+                    <th>平均分</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.class_breakdown.map((c) => {
+                    const rate = c.student_count ? Math.round((c.submitted / c.student_count) * 100) : 0;
+                    return (
+                      <tr key={c.class_id}>
+                        <td>{c.name}</td>
+                        <td>{c.student_count}</td>
+                        <td>{c.submitted}</td>
+                        <td>
+                          <span className="rate-cell">
+                            <span className="mini-track">
+                              <span className="mini-bar" style={{ width: `${rate}%` }} />
+                            </span>
+                            {rate}%
+                          </span>
+                        </td>
+                        <td>{c.graded}</td>
+                        <td>{c.avg_score ?? "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
       </div>
-      <p className="muted">到达人数按学生上报的最远步骤统计;学生端切换步骤时自动上报,无需手动操作。</p>
     </div>
   );
 }
