@@ -14,8 +14,9 @@
 - systemd 服务: `gvcsim-api.service`
 - 后端监听: `127.0.0.1:18000`
 - 前端静态文件: `/opt/oecd-icio-analysis/frontend/dist`
-- 当前部署来源分支: `cc`
-- 当前应用代码部署提交: `c501af5 Merge pull request #13 from YUxiangLuo/chore/medium-priority-hardening`
+- 当前部署来源分支: `feat/teacher-dashboard`(⚠️ **未合并分支的预览部署**,PR #17;线上暂时不在主线 `cc` 上,合并后应用 `cc` 重新部署一次)
+- 当前应用代码部署提交: `555fa8a fix: address review — guard empty grade and student-only writes`
+- 教学数据库(教师端 dashboard 依赖): 本机 PostgreSQL 15,`gvclab` 库,DSN `postgresql://alice:111111@127.0.0.1:5432/gvclab`(与 `config.PG_DSN` 默认值一致,systemd 未额外设 `GVCSIM_PG_DSN`)
 
 ## 本地准备
 
@@ -309,6 +310,47 @@ curl -fsS --max-time 90 \
 - `/api/qc/controls` 返回 5 项控制变量质检且全部通过
 - `/api/regression/options` 携带 Bearer token 返回 `200 OK`,包含控制变量与价格口径选项
 - 国家级 DID + ICIO 控制回归 `200 OK`:`n_obs = 385`、`n_clusters = 77`、`benchmark.coef_check_passed = true`、`se_check_mode = informational`,且 benchmark 不再返回旧字段 `passed`
+
+2026-07-09 更新部署(源 `feat/teacher-dashboard` @ `555fa8a`,教师端 dashboard + UI/UX 重构,**PR #17 预览**):
+
+- 首次引入教学数据库依赖:本分支给 `api.py` 顶层 import 了 `gvcsim.classroom`(依赖 `psycopg`),
+  且教师端需要 PostgreSQL。**两项都必须在重启 API 前就绪,否则 API 起不来 = 整站宕机。**
+- 部署前本地全绿:`ruff check`、`ruff format --check`、`mypy`、`pytest -q`(105 passed,含教学面板 10 例)、
+  前端 `bun run build` 与 Playwright E2E 2/2;无指标/数据口径改动,**未重跑 `gvcsim compute`**
+- 顺序:rsync 代码(不重启)→ `psycopg[binary]` 装进 `.venv311` → 装 PostgreSQL 15 + 建库 → 建表播种 →
+  最后才 `systemctl restart`,把无依赖窗口降到零
+- 服务器 PostgreSQL:`apt-get install -y postgresql`;`CREATE ROLE alice LOGIN PASSWORD '111111'` +
+  `CREATE DATABASE gvclab OWNER alice`(与 `config.PG_DSN` 默认 DSN 对齐,免改 systemd);
+  `.venv311/bin/gvcsim classroom-init` 建表播种(teacher/student、班级 GVC-DEMO),另播种了演示班级/学生/提交
+- 线上验证:首页 / `/docs` `200`,`student` 与 `teacher / gvclab2026` 登录 `200`;
+  `/api/classroom/overview`(teacher token)返回 `students=13 submitted=8 graded=5 active_7d=8`、
+  14 天趋势、2 个班级对比;`/api/classroom/submissions` 返回 8 条;
+  agent-browser 以教师身份登录,概览/学生/报告/公告四页渲染正常、数据无误
+
+### 教学数据库(PostgreSQL)—— 教师端 dashboard 依赖
+
+教师端(班级/学生/评阅/公告)需要本机 PostgreSQL;核心 17 步实验**不依赖**它
+(库停机时 `/api/classroom/*` 返回 503,演示账号登录与指标/回归/报告照常)。重装/迁移服务器时:
+
+```bash
+ssh root@101.201.151.30
+# 1) psycopg(本分支起 api.py 顶层 import,缺它 API 起不来)
+cd /opt/oecd-icio-analysis
+.venv311/bin/python -m pip install --only-binary=:all: "psycopg[binary]>=3.2" \
+  -i https://pypi.tuna.tsinghua.edu.cn/simple
+# 2) PostgreSQL + 与默认 DSN 对齐的库
+DEBIAN_FRONTEND=noninteractive apt-get install -y postgresql
+systemctl enable --now postgresql
+su postgres -c "psql -c \"CREATE ROLE alice LOGIN PASSWORD '111111'\""
+su postgres -c "psql -c \"CREATE DATABASE gvclab OWNER alice\""
+# 3) 建表播种(服务端首访也会懒建表)
+.venv311/bin/gvcsim classroom-init
+# 校验 TCP 登录
+PGPASSWORD=111111 psql -h 127.0.0.1 -U alice -d gvclab -tAc "SELECT 1"
+```
+
+> 若线上要换库/换凭据,给 `gvcsim-api.service` 加 `Environment=GVCSIM_PG_DSN=postgresql://...`
+> 后 `daemon-reload` + `restart` 即可,代码零改动。
 
 ## 运维命令
 

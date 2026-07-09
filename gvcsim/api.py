@@ -19,6 +19,8 @@ from pydantic import BaseModel
 from gvcsim import auth
 from gvcsim import report as report_mod
 from gvcsim import shocks
+from gvcsim.classroom import db as classroom_db
+from gvcsim.classroom import routes as classroom_routes
 from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
 from gvcsim.data import crosswalk, icio_browser, quality
 from gvcsim.regression.design import (
@@ -58,8 +60,10 @@ async def require_api_bearer(request: Request, call_next):
     authorization = request.headers.get("authorization")
     if not authorization or not authorization.startswith("Bearer "):
         return JSONResponse(status_code=401, content={"detail": "缺少 Bearer 令牌"})
-    if auth.verify_token(authorization.removeprefix("Bearer ")) is None:
+    payload = auth.verify_token(authorization.removeprefix("Bearer "))
+    if payload is None:
         return JSONResponse(status_code=401, content={"detail": "令牌无效或已过期"})
+    request.state.user = payload  # 下游(/api/classroom)按角色鉴权用
     return await call_next(request)
 
 
@@ -713,3 +717,16 @@ def report_custom(req: ReportRequest):
     from pathlib import Path
 
     return {"path": path, "markdown": Path(path).read_text(encoding="utf-8")}
+
+
+# ---------------------------------------------------------------- 教学面板(班级/学生/评阅/公告)
+
+app.include_router(classroom_routes.router)
+
+
+@app.exception_handler(classroom_db.Unavailable)
+async def classroom_db_unavailable(request: Request, exc: classroom_db.Unavailable):
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "教学数据库不可用,请先启动 PostgreSQL 并运行 `uv run gvcsim classroom-init`"},
+    )

@@ -1,5 +1,6 @@
 """全局路径与常量配置。所有模块统一从这里取路径,避免各自写死。"""
 
+import os
 from pathlib import Path
 
 # 仓库根目录(gvcsim/ 的上一级)
@@ -19,6 +20,9 @@ REPORTS_DIR = ROOT / "reports"
 
 # ICIO2023 版本覆盖的年份范围(pymrio download_oecd 支持的区间)
 SUPPORTED_YEARS = range(1995, 2021)
+
+# 教学(班级/学生/评阅)数据库连接串;核心 17 步流程不依赖它,连不上时相关接口返回 503
+PG_DSN = os.environ.get("GVCSIM_PG_DSN", "postgresql://alice:111111@127.0.0.1:5432/gvclab")
 
 
 def available_years(raw_dir: Path = RAW_DATA_DIR) -> list[int]:

@@ -11,7 +11,7 @@ const FLOW = ["数据接入", "指标计算", "因果回归", "实验报告"];
 
 const ACCOUNTS = [
   { username: "student", label: "学生身份", note: "完成 17 步实验" },
-  { username: "teacher", label: "教师身份", note: "查看全部面板" },
+  { username: "teacher", label: "教师身份", note: "班级管理与报告评阅" },
 ];
 
 /** 左侧背景:静态勾勒的贸易网络(手工布点,非装饰性随机) */

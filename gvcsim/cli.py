@@ -7,6 +7,7 @@ regress   跑步骤13-16 的演示回归并打印系数表
 report    生成实验报告(步骤17)
 benchmark 与 client-docs 客户基准数据对账,生成 reports/client_benchmark.md
 serve     启动 API 服务(供前端使用)
+classroom-init  初始化教学数据库(建库/建表/播种演示数据)
 """
 
 import argparse
@@ -52,6 +53,9 @@ def main() -> None:
     p = sub.add_parser("serve", help="启动 API 服务")
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--reload", action="store_true")
+
+    p = sub.add_parser("classroom-init", help="初始化教学数据库(教师面板用;服务端也会懒建表)")
+    p.add_argument("--reset", action="store_true", help="删除并重建全部教学表(会清空班级/学生/提交数据)")
 
     args = parser.parse_args()
 
@@ -146,6 +150,30 @@ def main() -> None:
         import uvicorn
 
         uvicorn.run("gvcsim.api:app", port=args.port, reload=args.reload)
+
+    elif args.command == "classroom-init":
+        import psycopg
+
+        from gvcsim import config
+        from gvcsim.classroom import db as classroom_db
+
+        # 目标库不存在则先经维护库(dbname=postgres)创建
+        dsn = psycopg.conninfo.conninfo_to_dict(config.PG_DSN)
+        dbname = dsn.get("dbname", "gvclab")
+        try:
+            with psycopg.connect(**{**dsn, "dbname": "postgres"}, autocommit=True) as c:
+                if not c.execute("SELECT 1 FROM pg_database WHERE datname = %s", (dbname,)).fetchone():
+                    c.execute(f'CREATE DATABASE "{dbname}"')
+                    print(f"已创建数据库 {dbname}")
+        except psycopg.OperationalError as e:
+            raise SystemExit(f"无法连接 PostgreSQL({e});请确认服务已启动、GVCSIM_PG_DSN 正确") from e
+
+        if args.reset:
+            with psycopg.connect(config.PG_DSN, autocommit=True) as c:
+                c.execute("DROP TABLE IF EXISTS announcements, submissions, step_progress, accounts, classes CASCADE")
+            print("已删除旧教学表")
+        classroom_db.conn().close()  # conn() 首次调用会建表并播种
+        print(f"教学数据库就绪:{dbname}(演示账号 teacher/student,班级 GVC-DEMO)")
 
 
 if __name__ == "__main__":

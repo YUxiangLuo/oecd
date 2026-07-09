@@ -42,10 +42,13 @@ uv run gvcsim download --years 2016 2017 2018 2019 2020
 # 3. 预计算指标与回归面板(全量约 1 分钟,产物写入 data/processed/)
 uv run gvcsim compute
 
-# 4. 启动 API(http://localhost:8000,交互文档在 /docs)
+# 4. (可选)初始化教学数据库(教师面板/报告评阅用;需本机 PostgreSQL)
+uv run gvcsim classroom-init
+
+# 5. 启动 API(http://localhost:8000,交互文档在 /docs)
 uv run gvcsim serve
 
-# 5. 另开终端,启动前端(http://localhost:5173,/api 自动代理到 8000)
+# 6. 另开终端,启动前端(http://localhost:5173,/api 自动代理到 8000)
 cd frontend && bun install && bun run dev
 ```
 
@@ -54,11 +57,31 @@ cd frontend && bun install && bun run dev
 | 账号 | 密码 | 角色 |
 |---|---|---|
 | `student` | `gvclab2026` | 同学(学生身份) |
-| `teacher` | `gvclab2026` | 老师(教师身份) |
+| `teacher` | `gvclab2026` | 老师(教师身份,登录直达教师面板) |
 
 认证是真实实现(PBKDF2 口令哈希 + HMAC 签名令牌,12 小时有效,
 `POST /api/auth/login` / `GET /api/auth/me`);除登录与令牌校验外,
-所有 `/api/*` 数据接口均强制 Bearer 鉴权。
+所有 `/api/*` 数据接口均强制 Bearer 鉴权。账号优先存教学数据库
+(每账号独立盐,教师可在面板中创建学生账号);数据库不可用时自动回退
+上表硬编码演示账号,课堂演示不受影响。
+
+## 教师面板
+
+教师端与学生端完全分离:教师登录后直达教师面板,不进入(也没有入口进入)
+学生的 17 步实验界面;学生端则没有任何教师管理功能。教师面板包含四个页签:
+
+- **班级概览**:学生人数、提交/评阅数、平均分、分数段分布、17 步各步到达人数;
+- **班级与学生**:建班、创建学生账号(创建即可登录)、改名/重置密码/停用启用、
+  学生进度矩阵(当前步/最远步/报告状态/得分,由学生端自动上报);
+- **报告评阅**:学生在步骤 17 点「提交报告给老师」后出现在列表,教师打开全文
+  打分写评语,学生在同一页面实时看到得分与评语;重新提交会覆盖并重置评阅;
+- **课堂公告**:发布(全体或指定班级)与删除,学生登录后顶栏下方横幅可见。
+
+教学数据(班级/学生/进度/提交/公告)存本机 PostgreSQL(默认
+`postgresql://alice:111111@127.0.0.1:5432/gvclab`,环境变量 `GVCSIM_PG_DSN`
+可覆盖),`gvcsim classroom-init` 一键建库建表播种(`--reset` 重建)。
+服务端也会在首次访问时懒建表。**核心 17 步实验完全不依赖该库**:
+数据库停机时教学接口返回 503,指标/回归/报告一切照常。
 
 不起前端也能用 CLI 走完全流程:
 
@@ -74,7 +97,8 @@ uv run gvcsim regress --step 13 --controls --real       # 金额类控制变量�
 uv run gvcsim regress --step 13 --granularity country   # 国家级粒度
 uv run gvcsim report --year 2020      # 步骤17:生成 reports/experiment_report_2020.md
 uv run gvcsim benchmark               # 与 client-docs 客户基准数据对账 → reports/client_benchmark.md
-uv run pytest                         # 后端测试(含 synthetic compute 与 API 集成)
+uv run gvcsim classroom-init          # 初始化教学数据库(--reset 重建;教师面板用)
+uv run pytest                         # 后端测试(含 synthetic compute、API 集成与教学面板)
 uv run ruff check . && uv run ruff format --check . && uv run mypy
 cd frontend && bun run build && bun run test:e2e
 ```
@@ -103,7 +127,10 @@ cd frontend && bun run build && bun run test:e2e
 │   ├── benchmark.py              #   与 client-docs 客户基准数据对账(gvcsim benchmark)
 │   ├── pipeline.py               #   预计算流水线:原始表 → 质检 → 指标 → 面板
 │   ├── steps.py                  #   17 步元数据(API 与前端右栏速览的唯一来源)
-│   ├── auth.py                   #   登录认证(演示账号,PBKDF2 + HMAC 签名令牌)
+│   ├── auth.py                   #   登录认证(教学库账号优先 + 演示账号回退,PBKDF2 + HMAC 签名令牌)
+│   ├── classroom/
+│   │   ├── db.py                 #   教学数据库(PostgreSQL):班级/学生/进度/提交评阅/公告,懒建表+播种
+│   │   └── routes.py             #   /api/classroom 路由:学生提交/进度 + 教师管理/评阅/公告(角色鉴权)
 │   ├── api.py                    #   FastAPI:认证/面板/质检/冲击/可视化/回归/报告全部接口(CSV 按 mtime 缓存)
 │   └── cli.py                    #   gvcsim 命令行入口
 ├── frontend/                     # React + Vite + TS 前端(bun);App.tsx 三栏布局外壳、
@@ -111,7 +138,8 @@ cd frontend && bun run build && bun run test:e2e
 │                                 #   labs.tsx 步骤1-11/17 实验面板、demos.tsx 步骤4-7 计算演示
 │                                 #   (拆解恒等式校验 + 网络中心性算法)、viz.tsx 富可视化
 │                                 #   (网络/堆叠/长度/热力 + 排序/散点/趋势 + 事件研究/森林图,纯 SVG)、
-│                                 #   teach.tsx + regteach.ts + regression.tsx 步骤12-16 讲解卡与回归台
+│                                 #   teach.tsx + regteach.ts + regression.tsx 步骤12-16 讲解卡与回归台、
+│                                 #   teacher/ 教师面板(概览/班级学生/报告评阅/公告)
 ├── tests/                        # 合成小矩阵、synthetic compute、回归/API 集成测试
 ├── prototype/                    # 早期静态 UI 原型(历史参考,部署时排除;指标口径以 frontend/ 为准)
 ├── data/processed/               # 预计算产物(gitignore;由 gvcsim compute 生成)
@@ -194,7 +222,8 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 | 数据 | 性质 | 现状 |
 |---|---|---|
 | OECD ICIO 2016–2020 | ✅ 真实 | pymrio 下载的官方 CSV,所有指标由此计算 |
-| 登录认证 | ✅ 真实实现 | PBKDF2 + HMAC 签名令牌(账号是演示账号) |
+| 登录认证 | ✅ 真实实现 | PBKDF2 + HMAC 签名令牌;账号存教学库(每账号独立盐),库不可用回退演示账号 |
+| 教学数据(班级/学生/进度/提交评阅/公告) | ✅ 真实实现 | 本机 PostgreSQL(`gvclab` 库),教师面板与步骤17提交的持久层;核心 17 步不依赖 |
 | 关税冲击面板 | 🎭 拟真 mock | 按 2018–2020 真实事件逐条编码(232 钢铝、301 四批清单、各方反制、空客案),税率量级参考 PIIE/Bown,出口暴露度由 OECD ICIO 双边流向计算 |
 | 制裁清单 | 🎭 拟真 mock | OFAC SDN/二级制裁风格实体事件(RUSAL、俄罗斯能源金融限制、涉疆实体),聚合为 `sanction_shock` |
 | 出口管制清单 | 🎭 拟真 mock | BIS 实体清单风格事件(华为、SMIC),聚合为 `export_control_shock` |

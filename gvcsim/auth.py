@@ -66,7 +66,30 @@ def _unb64(s: str) -> bytes:
 
 
 def authenticate(username: str, password: str) -> dict | None:
-    """校验凭证。成功返回用户信息(不含哈希),失败返回 None。"""
+    """校验凭证。成功返回用户信息(不含哈希),失败返回 None。
+
+    优先走教学数据库(教师在面板创建的学生账号、每账号独立盐);
+    数据库不可用时回退硬编码演示账号,保证课堂演示不因 DB 停机而无法登录。
+    """
+    from gvcsim.classroom import db as classroom_db
+
+    try:
+        account = classroom_db.find_account(username)
+        if not account:
+            classroom_db.hash_password(password, "00" * 16)  # 等时哈希,避免暴露用户名是否存在
+            return None
+        if not account["active"]:
+            return None
+        if not hmac.compare_digest(account["pw_hash"], classroom_db.hash_password(password, account["pw_salt"])):
+            return None
+        try:
+            classroom_db.touch_login(username)
+        except classroom_db.Unavailable:
+            pass
+        return {"username": username, "name": account["display_name"], "role": account["role"]}
+    except classroom_db.Unavailable:
+        pass
+
     user = USERS.get(username)
     if not user:
         # 用户不存在也走一次哈希,避免时间侧信道暴露用户名是否存在

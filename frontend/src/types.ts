@@ -283,3 +283,100 @@ export interface ReportResponse {
   path: string;
   markdown: string;
 }
+
+// ---------------------------------------------------------------- 教学面板
+
+export interface Announcement {
+  id: number;
+  class_id: number | null;
+  class_name: string | null;
+  title: string;
+  body: string;
+  author: string;
+  created_at: string;
+}
+
+export interface ClassInfo {
+  id: number;
+  name: string;
+  code: string;
+  semester: string;
+  note: string;
+  archived: boolean;
+  created_at: string;
+  student_count?: number;
+}
+
+export interface StudentRow {
+  id: number;
+  username: string;
+  display_name: string;
+  class_id: number | null;
+  class_name: string | null;
+  student_no: string;
+  active: boolean;
+  last_login_at: string | null;
+  created_at: string;
+  current_step: number | null;
+  max_step: number | null;
+  progress_at: string | null;
+  submission_id: number | null;
+  submission_state: string | null;
+  score: number | null;
+  submitted_at: string | null;
+}
+
+/** 学生本人的提交/评阅状态;state === "none" 表示尚未提交 */
+export interface MySubmission {
+  state: "none" | "pending" | "graded";
+  id?: number;
+  title?: string;
+  year?: number;
+  score?: number | null;
+  feedback?: string;
+  graded_by?: string | null;
+  graded_at?: string | null;
+  submitted_at?: string;
+}
+
+export interface SubmissionRow {
+  id: number;
+  title: string;
+  year: number;
+  state: "pending" | "graded";
+  score: number | null;
+  graded_by: string | null;
+  graded_at: string | null;
+  submitted_at: string;
+  username: string;
+  display_name: string;
+  student_no: string;
+  class_name: string | null;
+}
+
+export interface SubmissionDetail extends SubmissionRow {
+  design: Record<string, unknown>;
+  markdown: string;
+  feedback: string;
+}
+
+export interface ClassOverview {
+  student_count: number;
+  disabled_count: number;
+  submitted: number;
+  graded: number;
+  avg_score: number | null;
+  score_buckets: { label: string; count: number }[];
+  step_completion: { step: number; reached: number }[];
+  active_7d: number;
+  submission_trend: { date: string; submitted: number; graded: number }[];
+  class_breakdown: ClassBreakdown[];
+}
+export interface ClassBreakdown {
+  class_id: number;
+  name: string;
+  student_count: number;
+  submitted: number;
+  graded: number;
+  avg_score: number | null;
+}
