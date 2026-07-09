@@ -31,6 +31,14 @@ def require_teacher(request: Request) -> dict[str, Any]:
     return user
 
 
+def require_student(request: Request) -> dict[str, Any]:
+    """进度上报/报告提交只接受学生令牌,避免教师账号被计入待评阅提交,守住教师/学生分离。"""
+    user = current_user(request)
+    if user.get("role") != "student":
+        raise HTTPException(status_code=403, detail="仅学生可提交")
+    return user
+
+
 # ---------------------------------------------------------------- 任意登录用户 / 学生
 
 
@@ -44,7 +52,7 @@ class ProgressRequest(BaseModel):
 
 
 @router.post("/progress")
-def report_progress(req: ProgressRequest, user: dict = Depends(current_user)):
+def report_progress(req: ProgressRequest, user: dict = Depends(require_student)):
     db.upsert_progress(user["sub"], req.step)
     return {"ok": True}
 
@@ -57,7 +65,7 @@ class SubmitRequest(BaseModel):
 
 
 @router.post("/report/submit")
-def submit_report(req: SubmitRequest, user: dict = Depends(current_user)):
+def submit_report(req: SubmitRequest, user: dict = Depends(require_student)):
     row = db.submit_report(user["sub"], req.year, req.title, req.design, req.markdown)
     if row is None:
         raise HTTPException(status_code=404, detail="账号不存在于教学数据库,无法提交")

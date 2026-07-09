@@ -134,6 +134,11 @@ function SubmissionView({ id, grader, onBack }: { id: number; grader: string; on
   }
 
   const submitGrade = () => {
+    // 显式输入才接受:空串会被 Number("") 静默转成 0,须先挡掉
+    if (score.trim() === "") {
+      setSaveError("请填写分数(0-100)");
+      return;
+    }
     const n = Number(score);
     if (!Number.isInteger(n) || n < 0 || n > 100) {
       setSaveError("分数须为 0-100 的整数");

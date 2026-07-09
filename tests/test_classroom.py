@@ -198,6 +198,16 @@ def test_student_forbidden_from_teacher_endpoints():
     assert client.post("/api/classroom/announcements", headers=s, json={"title": "x"}).status_code == 403
 
 
+def test_teacher_cannot_write_student_progress_or_report():
+    # 教师令牌不得上报进度/提交报告,否则会被计入待评阅提交,破坏教师/学生分离
+    t = _login("teacher")
+    assert client.post("/api/classroom/progress", headers=t, json={"step": 3}).status_code == 403
+    body = {"year": 2020, "title": "x", "design": {}, "markdown": "x"}
+    assert client.post("/api/classroom/report/submit", headers=t, json=body).status_code == 403
+    # 教师账号不会因此出现在提交列表里
+    assert client.get("/api/classroom/submissions", headers=t).json()["submissions"] == []
+
+
 def test_db_down_degrades_gracefully(monkeypatch):
     # 先在可用库拿到令牌,再把 DSN 指向死端口
     s = _login("student")
