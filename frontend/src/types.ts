@@ -61,6 +61,11 @@ export interface DbSlice {
   page_size: number;
   columns: string[];
   rows: Record<string, string | number | null>[];
+  row_summaries: {
+    row: string;
+    slice_total: number;
+    out: number | null;
+  }[];
 }
 
 export interface ShockEvent {
@@ -75,6 +80,10 @@ export interface ShockEvent {
   top_sectors: string[];
   peak_rate: number;
   entities?: string;
+  /** 供时间线点击联动使用；展示文案仍使用 targets/top_sectors。 */
+  target_codes?: string[];
+  sector_codes?: string[];
+  all_targets?: boolean;
 }
 
 export interface ShockSummaryYear {
@@ -153,6 +162,7 @@ export interface NetworkData {
 export interface IndicatorFieldMeta {
   label: string;
   format: "amount" | "pct" | "number";
+  desc: string;
 }
 
 export interface IndicatorGroup {
@@ -214,9 +224,17 @@ export interface RegressionDesignInfo {
   controls: string[];
   control_labels: Record<string, string>;
   equation: string;
+  equation_parts: EquationPart[];
   panel_file: string;
   entity: string;
   cluster: string;
+}
+
+export interface EquationPart {
+  text: string;
+  term?: string;
+  description?: string;
+  meta_key?: string;
 }
 
 export interface RegressionResponse {
@@ -280,8 +298,14 @@ export interface ReportRequest {
 }
 
 export interface ReportResponse {
-  path: string;
   markdown: string;
+  suggested_filename: string;
+}
+
+export interface ProgressResponse {
+  current_step: number | null;
+  max_step: number | null;
+  updated_at: string | null;
 }
 
 // ---------------------------------------------------------------- 教学面板

@@ -683,6 +683,9 @@ def events_metadata() -> list[dict]:
     """事件表的展示视图(步骤2 前端的事件时间线)。"""
     out = []
     for ev in EVENTS:
+        sector_codes = set(ev.rates)
+        for override in ev.overrides.values():
+            sector_codes.update(override)
         peak = {s: max(by_year.values()) for s, by_year in ev.rates.items()}
         top_sectors = sorted(peak, key=lambda s: peak[s], reverse=True)
         out.append(
@@ -697,6 +700,9 @@ def events_metadata() -> list[dict]:
                 "n_sectors": len(ev.rates),
                 "top_sectors": top_sectors[:3],
                 "peak_rate": max(peak.values()),
+                "target_codes": [] if ev.targets == "ALL" else list(ev.targets),
+                "sector_codes": sorted(sector_codes),
+                "all_targets": ev.targets == "ALL",
             }
         )
     for ev in ENTITY_LIST_EVENTS:
@@ -715,6 +721,9 @@ def events_metadata() -> list[dict]:
                 "peak_rate": max(peak.values()),
                 "shock_type": ev.shock_type,
                 "entities": "、".join(ev.entities),
+                "target_codes": list(ev.targets),
+                "sector_codes": sorted(ev.intensities),
+                "all_targets": False,
             }
         )
     return out

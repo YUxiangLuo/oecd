@@ -1,24 +1,53 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { scanAnnouncements } from "./announcement-state";
 import { AUTH_TOKEN_KEY, api } from "./api";
 import { LogoMark } from "./brand";
 import { IntroOverlay } from "./intro";
 import { DbLab, IndicatorLab, QcLab, ReportLab, ShockLab, VizLab } from "./labs";
-import { RegDesignLab, RegressionRunLab } from "./regression";
+import {
+  DEFAULT_REGRESSION_SETTINGS,
+  RegDesignLab,
+  RegressionRunLab,
+  type RegressionSettings,
+} from "./regression";
 import { LoginPage } from "./login";
 import { TeacherDashboard } from "./teacher";
 import type { Announcement, AuthUser, Meta, Step, StepsResponse } from "./types";
 
 const ROMAN = ["", "一", "二", "三", "四", "五"];
 
-function Lab({ step, meta }: { step: Step; meta: Meta | null }) {
+function stepFromUrl(): number | null {
+  const n = Number(new URLSearchParams(window.location.search).get("step"));
+  return Number.isInteger(n) && n >= 1 && n <= 17 ? n : null;
+}
+
+function Lab({ step, meta, regressionSettings, onRegressionSettingsChange, onNavigateStep }: {
+  step: Step;
+  meta: Meta | null;
+  regressionSettings: RegressionSettings;
+  onRegressionSettingsChange: (settings: RegressionSettings) => void;
+  onNavigateStep: (step: number) => void;
+}) {
   if (step.lab === "db") return <DbLab />;
   if (step.lab === "qc") return meta ? <QcLab meta={meta} /> : null;
   if (step.lab === "shock") return meta ? <ShockLab meta={meta} /> : null;
   if (step.lab === "ind") return meta ? <IndicatorLab meta={meta} step={step} /> : null;
   if (step.lab === "viz")
     return meta ? <VizLab key={step.n} meta={meta} step={step} /> : null;
-  if (step.lab === "rgd") return <RegDesignLab />;
-  if (step.lab === "reg") return <RegressionRunLab step={step} />;
+  if (step.lab === "rgd") return (
+    <RegDesignLab
+      settings={regressionSettings}
+      onSettingsChange={onRegressionSettingsChange}
+      onNavigateStep={onNavigateStep}
+    />
+  );
+  if (step.lab === "reg") return (
+    <RegressionRunLab
+      step={step}
+      settings={regressionSettings}
+      onSettingsChange={onRegressionSettingsChange}
+    />
+  );
   if (step.lab === "rep") return meta ? <ReportLab meta={meta} /> : null;
   return null;
 }
@@ -26,11 +55,12 @@ function Lab({ step, meta }: { step: Step; meta: Meta | null }) {
 export default function App() {
   const [stepsData, setStepsData] = useState<StepsResponse | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
-  // 支持 ?step=N 深链,便于分享/调试某一步
-  const [current, setCurrent] = useState(() => {
-    const n = Number(new URLSearchParams(window.location.search).get("step"));
-    return n >= 1 && n <= 17 ? n : 4;
-  });
+  // 有效深链优先于服务端进度；应用内部切步只 replace 当前 URL，不污染浏览器历史。
+  const explicitStep = useRef(stepFromUrl());
+  const navigationTouched = useRef(false);
+  const [current, setCurrent] = useState(() => explicitStep.current ?? 4);
+  const [progressReady, setProgressReady] = useState(false);
+  const [regressionSettings, setRegressionSettings] = useState<RegressionSettings>(DEFAULT_REGRESSION_SETTINGS);
   const [fatal, setFatal] = useState<string | null>(null);
   // 认证:localStorage 里的令牌先经 /api/auth/me 真实校验再放行
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -38,8 +68,18 @@ export default function App() {
   const [showIntro, setShowIntro] = useState(false);
   // 课堂公告:登录后拉一次,顶栏下方横幅展示(教学库不可用时静默隐藏)
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const highestAnnouncementId = useRef(0);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [bannerExpanded, setBannerExpanded] = useState(false);
+
+  const navigateStep = useCallback((next: number) => {
+    const step = Math.max(1, Math.min(17, next));
+    navigationTouched.current = true;
+    setCurrent(step);
+    const url = new URL(window.location.href);
+    url.searchParams.set("step", String(step));
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
@@ -56,6 +96,7 @@ export default function App() {
       setStepsData(null);
       setMeta(null);
       setFatal(null);
+      setProgressReady(false);
     };
     window.addEventListener("gvcsim-auth-expired", onExpired);
     return () => window.removeEventListener("gvcsim-auth-expired", onExpired);
@@ -65,18 +106,69 @@ export default function App() {
     if (!user) return;
     api.meta().then(setMeta, () => setMeta({ years: [], countries: [], sectors: [] }));
     if (user.role === "teacher") return; // 教师端不加载 17 步实验数据与公告横幅
+    highestAnnouncementId.current = 0;
+    setAnnouncements([]);
+    setBannerDismissed(false);
+    setBannerExpanded(false);
     api.steps().then(setStepsData, (e) => setFatal(String(e.message ?? e)));
-    api.classroom.announcements().then((r) => setAnnouncements(r.announcements), () => setAnnouncements([]));
   }, [user]);
+
+  // 恢复本人上次进度；显式深链或用户已经主动导航时不覆盖当前选择。
+  useEffect(() => {
+    if (!user) {
+      navigationTouched.current = false;
+      setProgressReady(false);
+      return;
+    }
+    if (user.role !== "student") {
+      setProgressReady(Boolean(user));
+      return;
+    }
+    let live = true;
+    setProgressReady(false);
+    api.classroom.progress().then(
+      (progress) => {
+        if (!live) return;
+        if (explicitStep.current == null && !navigationTouched.current) {
+          navigateStep(progress.current_step ?? 4);
+          navigationTouched.current = false;
+        }
+      },
+      () => {
+        if (live && explicitStep.current == null && !navigationTouched.current) {
+          navigateStep(4);
+          navigationTouched.current = false;
+        }
+      },
+    ).finally(() => live && setProgressReady(true));
+    return () => { live = false; };
+  }, [user, navigateStep]);
+
+  // 切步时顺带刷新公告；只有出现新的公告 ID 才让已关闭横幅重新出现。
+  useEffect(() => {
+    if (!user || user.role !== "student") return;
+    let live = true;
+    api.classroom.announcements().then((response) => {
+      if (!live) return;
+      const scan = scanAnnouncements(highestAnnouncementId.current, response.announcements);
+      if (scan.hasNew) {
+        setBannerDismissed(false);
+        setBannerExpanded(false);
+      }
+      highestAnnouncementId.current = scan.highestSeen;
+      setAnnouncements(response.announcements);
+    }, () => {});
+    return () => { live = false; };
+  }, [user, current]);
 
   // 学生实验进度自动上报:停留在某步 1.5s 后写入教学库(失败静默,不打扰实验)
   useEffect(() => {
-    if (!user || user.role !== "student") return;
+    if (!user || user.role !== "student" || !progressReady) return;
     const timer = window.setTimeout(() => {
       api.classroom.reportProgress(current).catch(() => {});
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [user, current]);
+  }, [user, current, progressReady]);
 
   if (!authChecked) return <div style={{ padding: 40 }} className="muted">加载中…</div>;
   if (!user)
@@ -178,7 +270,7 @@ export default function App() {
       {showIntro && (
         <IntroOverlay user={user} meta={meta} onDone={(gotoStep) => {
           setShowIntro(false);
-          if (gotoStep) setCurrent(gotoStep);
+          if (gotoStep) navigateStep(gotoStep);
         }} />
       )}
 
@@ -205,15 +297,17 @@ export default function App() {
               {steps.filter((s) => s.stage === st).map((s) => {
                 const state = s.n < current ? "past" : s.n === current ? "cur" : "future";
                 return (
-                  <div
+                  <button
+                    type="button"
                     key={s.n}
                     className={`step-row${s.n === current ? " active" : ""}`}
-                    onClick={() => setCurrent(s.n)}
+                    aria-current={s.n === current ? "step" : undefined}
+                    onClick={() => navigateStep(s.n)}
                   >
                     <span className={`step-badge ${state}`}>{state === "past" ? "✓" : s.n}</span>
                     <span className="step-row-title">{s.title}</span>
                     <span className="step-code">{String(s.n).padStart(2, "0")}</span>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -232,8 +326,8 @@ export default function App() {
               <h2>{step.title}</h2>
             </div>
             <div className="nav-btns">
-              <button disabled={current <= 1} onClick={() => setCurrent(current - 1)}>← 上一步</button>
-              <button className="primary" disabled={current >= 17} onClick={() => setCurrent(current + 1)}>下一步 →</button>
+              <button disabled={current <= 1} onClick={() => navigateStep(current - 1)}>← 上一步</button>
+              <button className="primary" disabled={current >= 17} onClick={() => navigateStep(current + 1)}>下一步 →</button>
             </div>
           </div>
 
@@ -246,7 +340,13 @@ export default function App() {
                     <p>{step.concept}</p>
                   </details>
                 )}
-                <Lab step={step} meta={meta} />
+                <Lab
+                  step={step}
+                  meta={meta}
+                  regressionSettings={regressionSettings}
+                  onRegressionSettingsChange={setRegressionSettings}
+                  onNavigateStep={navigateStep}
+                />
               </div>
             </main>
 
@@ -268,20 +368,20 @@ export default function App() {
               <div className="rail-flow">
                 <div className="rail-label">流程位置</div>
                 {prevStep && (
-                  <div className="rail-flow-row" onClick={() => setCurrent(prevStep.n)}>
+                  <button type="button" className="rail-flow-row" onClick={() => navigateStep(prevStep.n)}>
                     <span className="rail-flow-k">↑ 上一步</span>
                     <span className="rail-flow-t">{prevStep.title}</span>
-                  </div>
+                  </button>
                 )}
                 <div className="rail-flow-row cur">
                   <span className="rail-flow-k">● 当前</span>
                   <span className="rail-flow-t">{step.title}</span>
                 </div>
                 {nextStep && (
-                  <div className="rail-flow-row" onClick={() => setCurrent(nextStep.n)}>
+                  <button type="button" className="rail-flow-row" onClick={() => navigateStep(nextStep.n)}>
                     <span className="rail-flow-k">↓ 下一步</span>
                     <span className="rail-flow-t">{nextStep.title}</span>
-                  </div>
+                  </button>
                 )}
               </div>
             </aside>
@@ -291,9 +391,12 @@ export default function App() {
             <div className="footer-loc">{stageName} · {step.title}</div>
             <div className="footer-dots">
               {steps.map((s) => (
-                <span
+                <button
+                  type="button"
                   key={s.n}
-                  onClick={() => setCurrent(s.n)}
+                  onClick={() => navigateStep(s.n)}
+                  aria-label={`前往步骤 ${s.n}：${s.title}`}
+                  aria-current={s.n === current ? "step" : undefined}
                   className={`fdot${s.n === current ? " on" : s.n < current ? " past" : ""}`}
                 />
               ))}

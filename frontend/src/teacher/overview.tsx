@@ -6,7 +6,9 @@ import { GradingDonut, StepFunnel, TrendChart } from "./charts";
 import { Toolbar } from "./ui";
 
 /** 班级概览:KPI 卡行 + 面板网格(成绩分布 / 评阅进度 / 提交趋势 / 步骤漏斗 / 班级对比) */
-export function OverviewTab() {
+export function OverviewTab({ onSelectStep }: {
+  onSelectStep: (step: number, classId: number | null) => void;
+}) {
   const [classId, setClassId] = useState<number | null>(null);
   const { data: cls } = useAsync<{ classes: ClassInfo[] }>(() => api.classroom.classes(), []);
   const { data, error } = useAsync<ClassOverview>(() => api.classroom.overview(classId), [classId]);
@@ -103,8 +105,12 @@ export function OverviewTab() {
             <span className="panel-ic">🧭</span>实验进度 · 各步到达人数
             <span className="panel-tag">共 {data.student_count} 人</span>
           </div>
-          <StepFunnel steps={data.step_completion} total={data.student_count} />
-          <p className="muted panel-note">到达人数按学生上报的最远步骤统计;学生端切换步骤时自动上报。</p>
+          <StepFunnel
+            steps={data.step_completion}
+            total={data.student_count}
+            onSelect={(step) => onSelectStep(step, classId)}
+          />
+          <p className="muted panel-note">点击任一步可查看已到达该步的学生;到达人数按学生上报的最远步骤统计。</p>
         </section>
 
         {showBreakdown && (

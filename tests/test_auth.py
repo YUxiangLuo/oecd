@@ -2,6 +2,7 @@
 
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from gvcsim import auth
@@ -43,8 +44,14 @@ def test_demo_login_falls_back_when_db_unavailable(monkeypatch):
     monkeypatch.setattr(config, "PG_DSN", "postgresql://alice:111111@127.0.0.1:59999/gvclab")
     monkeypatch.setattr(db, "_schema_ready", False)
     assert auth.authenticate("teacher", "gvclab2026") == {"username": "teacher", "name": "老师", "role": "teacher"}
-    assert auth.authenticate("teacher", "wrong") is None
-    assert auth.authenticate("ghost", "gvclab2026") is None
+    with pytest.raises(auth.AuthenticationUnavailable, match="请使用演示账号"):
+        auth.authenticate("teacher", "wrong")
+    with pytest.raises(auth.AuthenticationUnavailable, match="请使用演示账号"):
+        auth.authenticate("ghost", "gvclab2026")
+
+    bad = client.post("/api/auth/login", json={"username": "ghost", "password": "gvclab2026"})
+    assert bad.status_code == 503
+    assert "请使用演示账号" in bad.json()["detail"]
 
 
 def test_expired_token_rejected(monkeypatch):

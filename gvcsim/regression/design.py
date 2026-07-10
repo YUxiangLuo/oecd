@@ -115,24 +115,95 @@ class RegressionDesign:
     def sample_filter(self) -> str:
         return "排除 ROW(世界其他地区聚合账户)" if self.exclude_row else "包含 ROW"
 
-    def equation(self) -> str:
-        """生成与原型界面一致的回归方程展示文本(按方法渲染解释变量)。"""
+    def equation_parts(self) -> list[dict[str, str]]:
+        """返回可交互渲染的结构化方程片段。
+
+        ``text`` 连接后与 :meth:`equation` 完全一致；``term`` 和
+        ``meta_key`` 供前端把符号与回归设定摘要联动高亮。
+        """
         unit = "it" if self.granularity == "国家级" else "ijt"
         ent = "i" if self.granularity == "国家级" else "ij"
         y = f"{self.depvar}_{unit}"
-        fe = f"α_{ent} + λ_t"
-        controls = " + γ·Controls_ct" if self.controls else ""
-        interaction = ""
         if self.method == "双重差分 (DID)":
             x = f"β·({self.treated_col}_{ent} × 1[t≥G_{ent}])"
-            if self.interaction:
-                interaction = f" + θ·({self.treated_col}_{ent} × 1[t≥G_{ent}] × BaseGVC_{ent},0)"
+            policy_desc = "曾受处理个体自首次冲击年起的 DID 处理效应。"
+            interaction_text = f"θ·({self.treated_col}_{ent} × 1[t≥G_{ent}] × BaseGVC_{ent},0)"
         elif self.method == "事件研究":
             x = f"Σ_k β_k·1[t-G_{ent}=k]"
-            if self.interaction:
-                interaction = f" + Σ_k θ_k·(1[t-G_{ent}=k] × BaseGVC_{ent},0)"
+            policy_desc = "相对首次冲击年的动态主效应；k=-1 为省略基期。"
+            interaction_text = f"Σ_k θ_k·(1[t-G_{ent}=k] × BaseGVC_{ent},0)"
         else:
             x = " + ".join(f"β·{r}_{unit}" for r in self.regressors)
-            if self.interaction:
-                interaction = f" + θ·({self.shock_col}_{unit} × BaseGVC_{ent},0)"
-        return f"{y} = {x}{interaction}{controls} + {fe} + ε_{unit}"
+            policy_desc = f"连续冲击强度 {self.shock_col} 的主效应。"
+            interaction_text = f"θ·({self.shock_col}_{unit} × BaseGVC_{ent},0)"
+
+        parts: list[dict[str, str]] = [
+            {
+                "text": y,
+                "term": "dependent",
+                "description": self.depvar_label,
+                "meta_key": "depvar",
+            },
+            {"text": " = "},
+            {
+                "text": x,
+                "term": "policy",
+                "description": policy_desc,
+                "meta_key": "policy",
+            },
+        ]
+        if self.interaction:
+            parts.extend(
+                [
+                    {"text": " + "},
+                    {
+                        "text": interaction_text,
+                        "term": "interaction",
+                        "description": "冲击效应随个体基期 GVC 参与度变化的异质性。",
+                        "meta_key": "interaction",
+                    },
+                ]
+            )
+        if self.controls:
+            labels = "、".join(self.control_labels.values())
+            parts.extend(
+                [
+                    {"text": " + "},
+                    {
+                        "text": "γ·Controls_ct",
+                        "term": "controls",
+                        "description": f"国家-年份控制变量：{labels}。",
+                        "meta_key": "controls",
+                    },
+                ]
+            )
+        parts.extend(
+            [
+                {"text": " + "},
+                {
+                    "text": f"α_{ent}",
+                    "term": "fixed-effect",
+                    "description": f"{self.entity} 个体固定效应。",
+                    "meta_key": "entity",
+                },
+                {"text": " + "},
+                {
+                    "text": "λ_t",
+                    "term": "fixed-effect",
+                    "description": "年份固定效应，吸收同期公共冲击。",
+                    "meta_key": "entity",
+                },
+                {"text": " + "},
+                {
+                    "text": f"ε_{unit}",
+                    "term": "error",
+                    "description": f"误差项；统计推断的标准误按 {self.cluster} 聚类。",
+                    "meta_key": "cluster",
+                },
+            ]
+        )
+        return parts
+
+    def equation(self) -> str:
+        """生成与原型界面一致的回归方程展示文本(按方法渲染解释变量)。"""
+        return "".join(part["text"] for part in self.equation_parts())

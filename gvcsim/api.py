@@ -6,7 +6,7 @@
 
 import json
 import math
-from functools import lru_cache
+from numbers import Real
 from pathlib import Path
 
 import pandas as pd
@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from gvcsim import auth
 from gvcsim import report as report_mod
 from gvcsim import shocks
+from gvcsim.artifacts import read_csv_artifact
 from gvcsim.classroom import db as classroom_db
 from gvcsim.classroom import routes as classroom_routes
 from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
@@ -67,16 +68,16 @@ async def require_api_bearer(request: Request, call_next):
     return await call_next(request)
 
 
+def _clean_value(value):
+    """JSON 不支持的 NaN/±Infinity 统一转为 ``None``。"""
+    if isinstance(value, Real) and not math.isfinite(float(value)):
+        return None
+    return value
+
+
 def _clean(records: list[dict]) -> list[dict]:
-    """NaN → None,保证 JSON 合法。"""
-    return [{k: (None if isinstance(v, float) and math.isnan(v) else v) for k, v in r.items()} for r in records]
-
-
-@lru_cache(maxsize=32)
-def _cached_csv(path_str: str, mtime_ns: int) -> pd.DataFrame:
-    """按 (路径, mtime) 缓存解析结果:大面板(panel_industry ~6MB)不必每请求重新解析,
-    产物被 compute 重写后 mtime 变化会自动失效。调用方不得原地修改返回的 DataFrame。"""
-    return pd.read_csv(path_str, keep_default_na=False, na_values=[""])
+    """清理 DataFrame 记录中的非有限浮点数，保证响应是严格 JSON。"""
+    return [{k: _clean_value(v) for k, v in r.items()} for r in records]
 
 
 def _read_path(path: Path) -> pd.DataFrame:
@@ -85,7 +86,7 @@ def _read_path(path: Path) -> pd.DataFrame:
             status_code=404,
             detail=f"缺少预计算产物 {path.name},请先运行 `uv run gvcsim compute`",
         )
-    return _cached_csv(str(path), path.stat().st_mtime_ns)
+    return read_csv_artifact(path)
 
 
 def _read_csv(name: str) -> pd.DataFrame:
@@ -213,6 +214,56 @@ INDICATOR_SCHEMA = {
     },
 }
 
+_INDICATOR_DESCRIPTIONS = {
+    "gross_exports": "WWZ 六个出口核算分项之和，表示按增加值来源完整分解后的毛出口。",
+    "FVA_share": "出口中外国增加值占毛出口的比重；越高表示对进口中间投入的后向依赖越强。",
+    "DVAex_share": "被国外最终吸收的国内增加值占毛出口的比重；越高表示出口保留的本国增加值越多。",
+    "3_VA_GVC_share": "通过中间品跨境参与 GVC 的增加值占总增加值 SVA 的比重。",
+    "3b_VA_GVC_C_share": "至少经历两次跨境的复杂 GVC 增加值占总增加值 SVA 的比重。",
+    "DVAex": "由本国创造、随出口离境并最终被国外吸收的增加值。",
+    "DVArt": "随出口离境后又返回本国并在本国最终吸收的国内增加值。",
+    "DDC": "本国增加值在跨境生产链中多次计入毛流量形成的国内重复计算。",
+    "FVA": "本国出口中由外国生产者创造的增加值，是后向 GVC 参与的核心量。",
+    "FDC": "外国增加值在跨境生产链中多次计入毛流量形成的重复计算。",
+    "taxsub": "出口所含产品税减补贴；负值表示补贴大于税收。",
+    "EXDVA": "出口中的国内增加值合计，等于 DVAex 与 DVArt 之和。",
+    "SVA": "从增加值来源端核算的生产活动总增加值。",
+    "1_VA_D": "只在本国生产并满足本国最终需求、未发生跨境的增加值。",
+    "2_VA_RT": "随最终品直接出口、只发生一次跨境的传统贸易增加值。",
+    "3_VA_GVC": "随中间品贸易跨境并进入全球价值链生产的增加值。",
+    "3a_VA_GVC_S": "中间品跨境一次后在国外被最终吸收的简单 GVC 增加值。",
+    "3b_VA_GVC_C": "中间品至少两次跨境后才被最终吸收的复杂 GVC 增加值。",
+    "FGY": "从最终品生产端核算、为最终需求服务的全球增加值总量。",
+    "1_FGY_D": "本国最终品中由本国生产且全程不跨境的增加值。",
+    "2_FGY_RT": "最终品直接出口中包含的本国增加值。",
+    "3_FGY_GVC": "经由中间品跨境贸易后进入最终品的增加值。",
+    "3a_FGY_GVC_S": "从最终品端回溯、只经历一次中间品跨境的简单 GVC 增加值。",
+    "3b_FGY_GVC_C": "从最终品端回溯、经历多次中间品跨境的复杂 GVC 增加值。",
+    "PLv": "从增加值创造端向最终吸收端追踪的平均总生产阶段数。",
+    "PLv_D": "前向生产路径中纯国内活动贡献的加权长度。",
+    "PLv_RT": "前向生产路径中传统最终品贸易贡献的加权长度。",
+    "PLv_GVC": "前向生产路径中经中间品跨境的 GVC 活动贡献的加权长度。",
+    "PLy": "从最终品端向初始增加值来源回溯的平均总生产阶段数。",
+    "PLy_D": "后向生产路径中纯国内活动贡献的加权长度。",
+    "PLy_RT": "后向生产路径中传统最终品贸易贡献的加权长度。",
+    "PLy_GVC": "后向生产路径中经中间品跨境的 GVC 活动贡献的加权长度。",
+    "Pos_TPL": "以前向与后向总生产长度的相对关系衡量价值链位置。",
+    "GVCPs": "前向与后向 GVC 生产长度之比；大于 1 通常表示更靠近上游。",
+    "degree": "与该节点直接相连的入边和出边数量。",
+    "indegree": "指向该节点的直接供应链连接数量。",
+    "outdegree": "由该节点指向其他节点的直接供应链连接数量。",
+    "weighted degree": "与该节点相连的全部入向和出向贸易流量之和。",
+    "weighted indegree": "流入该节点的贸易流量之和。",
+    "weighted outdegree": "由该节点流出的贸易流量之和。",
+    "Eccentricity": "该节点到所有可达节点的最远最短路径距离。",
+    "closnesscentrality": "到其他节点最短路径距离之和的倒数，越高表示整体可达性越强。",
+    "harmonicclosnesscentrality": "对各节点最短路径倒数求和，可稳健处理不完全连通网络。",
+    "betweenesscentrality": "经过该节点的最短路径占比，越高表示越可能成为供应链中转枢纽。",
+    "eigencentrality": "同时考虑连接数量与相邻节点重要性的中心性指标。",
+}
+for _field, _meta in INDICATOR_SCHEMA["fields"].items():
+    _meta["desc"] = _INDICATOR_DESCRIPTIONS[_field]
+
 
 class LoginRequest(BaseModel):
     username: str
@@ -221,7 +272,10 @@ class LoginRequest(BaseModel):
 
 @app.post("/api/auth/login")
 def login(req: LoginRequest):
-    user = auth.authenticate(req.username, req.password)
+    try:
+        user = auth.authenticate(req.username, req.password)
+    except auth.AuthenticationUnavailable as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
     if user is None:
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     token, exp = auth.issue_token(user)
@@ -393,6 +447,31 @@ def _read_shocks() -> pd.DataFrame:
     return _read_path(SHOCKS_DIR / shocks.DEMO_FILE)
 
 
+def _with_tariff_exposure(df: pd.DataFrame, year: int, shock_type: str) -> pd.DataFrame:
+    """为关税面板行补充主要加征方及 ICIO 出口暴露度。"""
+    out = df.copy()
+    if shock_type != "关税冲击":
+        out["main_imposer"] = None
+        out["export_exposure"] = None
+        return out
+
+    imposer_by_event = {event.name: event.imposer for event in shocks.EVENTS}
+    out["main_imposer"] = out["note"].map(imposer_by_event).where(out["note"] != "", None)
+
+    exposure_path = PROCESSED_DIR / f"{shocks.EXPOSURE_PREFIX}_{year}.csv"
+    exposure_lookup: dict[tuple[str, str], float] = {}
+    if exposure_path.exists():
+        exposure = _read_path(exposure_path)
+        exposure_lookup = {
+            (str(row.country), str(row.imposer)): float(row.export_exposure) for row in exposure.itertuples(index=False)
+        }
+    out["export_exposure"] = [
+        exposure_lookup.get((str(country), str(imposer))) if imposer is not None else None
+        for country, imposer in zip(out["country"], out["main_imposer"])
+    ]
+    return out
+
+
 def _shock_view_columns(shock_type: str) -> tuple[str, str, str, str, str]:
     if shock_type not in shocks.SHOCK_SPECS:
         raise HTTPException(status_code=400, detail=f"shock_type 必须是 {list(shocks.SHOCK_SPECS)}")
@@ -478,6 +557,7 @@ def shock_panel(
         note=df[note_col] if note_col in df.columns else "",
         shock_type=shock_type,
     )
+    df = _with_tariff_exposure(df, year, shock_type)
     total = len(df)
     start = (page - 1) * page_size
     return {
@@ -588,6 +668,7 @@ def _design_info(design: RegressionDesign) -> dict:
         "controls": list(design.controls),
         "control_labels": design.control_labels,
         "equation": design.equation(),
+        "equation_parts": design.equation_parts(),
         "panel_file": design.panel_file,
         "entity": design.entity,
         "cluster": design.cluster,
@@ -639,7 +720,7 @@ def regression_run(req: RegressionRequest):
     try:
         result, benchmark = run_design_with_benchmark(panel, design)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return {
         "design": _design_info(design),
         "result": result.to_dict(),
@@ -665,7 +746,7 @@ def regression_placebo(req: PlaceboRequest):
     try:
         placebo = placebo_did_distribution(panel, design, n_draws=req.n_draws, seed=req.seed)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return {
         "design": _design_info(design),
         "placebo": placebo,
@@ -676,14 +757,12 @@ def regression_placebo(req: PlaceboRequest):
 @app.get("/api/report/{year}")
 def report(year: int):
     try:
-        path = report_mod.generate(year)
+        document = report_mod.build(year)
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    from pathlib import Path
-
-    return {"path": path, "markdown": Path(path).read_text(encoding="utf-8")}
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return document.to_dict()
 
 
 @app.post("/api/report")
@@ -700,7 +779,7 @@ def report_custom(req: ReportRequest):
         exclude_row=req.exclude_row,
     )
     try:
-        path = report_mod.generate(
+        document = report_mod.build(
             year=req.year,
             granularity=req.granularity,
             shock_type=req.shock_type,
@@ -711,12 +790,10 @@ def report_custom(req: ReportRequest):
             exclude_row=req.exclude_row,
         )
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    from pathlib import Path
-
-    return {"path": path, "markdown": Path(path).read_text(encoding="utf-8")}
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return document.to_dict()
 
 
 # ---------------------------------------------------------------- 教学面板(班级/学生/评阅/公告)

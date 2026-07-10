@@ -218,6 +218,9 @@ export function IntroOverlay({ user, meta, onDone }: {
             <span className="intro-step-num">{String(s.n).padStart(2, "0")}</span>
             <span className="intro-step-title">{s.title}</span>
             <span className="intro-step-goal">{s.goal}</span>
+            <button className="intro-step-start" onClick={() => onDone(s.n)}>
+              从这里开始
+            </button>
           </div>
         ))}
       </div>

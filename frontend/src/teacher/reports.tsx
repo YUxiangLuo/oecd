@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
+import { ReportMarkdown } from "../report-renderer";
 import type { AuthUser, SubmissionDetail, SubmissionRow } from "../types";
 import { EmptyState, SearchInput, StatusPill, Toolbar } from "./ui";
 
@@ -119,19 +120,32 @@ export function ReportsTab({ user }: { user: AuthUser }) {
 
 function SubmissionView({ id, grader, onBack }: { id: number; grader: string; onBack: (changed: boolean) => void }) {
   const { data, error } = useAsync<SubmissionDetail>(() => api.classroom.submissionDetail(id), [id]);
-  const [score, setScore] = useState<string>("");
-  const [feedback, setFeedback] = useState<string>("");
-  const [initialized, setInitialized] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted">加载中…</p>;
-  if (!initialized) {
-    setScore(data.score != null ? String(data.score) : "");
-    setFeedback(data.feedback ?? "");
-    setInitialized(true);
-  }
+  return <SubmissionGradeView key={`${id}-${data.submitted_at}`} data={data} grader={grader} onBack={onBack} />;
+}
+
+const SCORE_PRESETS = [60, 70, 80, 90, 100];
+const FEEDBACK_PRESETS = [
+  "结构完整",
+  "请补充识别假设",
+  "请区分 mock 与真实数据",
+  "请完善显著性和稳健性解读",
+];
+
+function SubmissionGradeView({
+  data,
+  grader,
+  onBack,
+}: {
+  data: SubmissionDetail;
+  grader: string;
+  onBack: (changed: boolean) => void;
+}) {
+  const [score, setScore] = useState(data.score != null ? String(data.score) : "");
+  const [feedback, setFeedback] = useState(data.feedback ?? "");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const submitGrade = () => {
     // 显式输入才接受:空串会被 Number("") 静默转成 0,须先挡掉
@@ -145,7 +159,7 @@ function SubmissionView({ id, grader, onBack }: { id: number; grader: string; on
       return;
     }
     setSaving(true);
-    api.classroom.grade(id, n, feedback).then(
+    api.classroom.grade(data.id, n, feedback).then(
       () => onBack(true),
       (e) => {
         setSaving(false);
@@ -182,7 +196,7 @@ function SubmissionView({ id, grader, onBack }: { id: number; grader: string; on
             <span className="muted"> · 数据年份 {data.year}</span>
           </h3>
           {design && <p className="muted">回归设定:{design}</p>}
-          <div className="report-md">{data.markdown}</div>
+          <ReportMarkdown markdown={data.markdown} />
         </div>
 
         <aside className="grade-side">
@@ -194,10 +208,28 @@ function SubmissionView({ id, grader, onBack }: { id: number; grader: string; on
               分数(0-100)
               <input type="number" min={0} max={100} value={score} onChange={(e) => setScore(e.target.value)} />
             </label>
+            <div className="pill-row" style={{ margin: "-4px 0 12px" }} aria-label="快捷分值">
+              {SCORE_PRESETS.map((value) => (
+                <button key={value} className={`pill${score === String(value) ? " on" : ""}`} onClick={() => setScore(String(value))}>
+                  {value}
+                </button>
+              ))}
+            </div>
             <label className="grade-field">
               评语(学生在步骤 17 页面可见)
               <textarea value={feedback} onChange={(e) => setFeedback(e.target.value)} rows={6} />
             </label>
+            <div className="pill-row" style={{ margin: "-4px 0 12px" }} aria-label="评语模板">
+              {FEEDBACK_PRESETS.map((text) => (
+                <button
+                  key={text}
+                  className="pill"
+                  onClick={() => setFeedback((current) => current.trim() ? `${current.trim()}；${text}` : text)}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
             {saveError && <div className="error-box">{saveError}</div>}
             <button className="primary block" disabled={saving} onClick={submitGrade}>
               {saving ? "提交中…" : data.state === "graded" ? "更新评阅" : "提交评阅"}

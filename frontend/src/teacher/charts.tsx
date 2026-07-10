@@ -105,7 +105,11 @@ export function TrendChart({ data }: { data: ClassOverview["submission_trend"] }
 }
 
 /** 各步到达漏斗:17 步到达人数面积图。 */
-export function StepFunnel({ steps, total }: { steps: ClassOverview["step_completion"]; total: number }) {
+export function StepFunnel({ steps, total, onSelect }: {
+  steps: ClassOverview["step_completion"];
+  total: number;
+  onSelect?: (step: number) => void;
+}) {
   const W = 560;
   const H = 150;
   const pad = { l: 24, r: 12, t: 12, b: 22 };
@@ -132,12 +136,24 @@ export function StepFunnel({ steps, total }: { steps: ClassOverview["step_comple
         <path d={area} fill="url(#funnelFill)" />
         <path d={line} fill="none" stroke={INDIGO} strokeWidth="2" />
         {steps.map((s, i) => (
-          <circle key={s.step} cx={x(i)} cy={y(s.reached)} r="2.4" fill={INDIGO} />
-        ))}
-        {steps.map((s, i) => (
-          <text key={s.step} x={x(i)} y={H - 6} textAnchor="middle" className="axis-lab">
-            {s.step}
-          </text>
+          <g
+            key={s.step}
+            role={onSelect ? "button" : undefined}
+            tabIndex={onSelect ? 0 : undefined}
+            aria-label={`查看已到达步骤 ${s.step} 的 ${s.reached} 名学生`}
+            className={onSelect ? "funnel-point" : undefined}
+            onClick={() => onSelect?.(s.step)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect?.(s.step);
+              }
+            }}
+          >
+            <circle cx={x(i)} cy={y(s.reached)} r="9" fill="transparent" />
+            <circle cx={x(i)} cy={y(s.reached)} r="3.2" fill={INDIGO} />
+            <text x={x(i)} y={H - 6} textAnchor="middle" className="axis-lab">{s.step}</text>
+          </g>
         ))}
       </svg>
     </div>

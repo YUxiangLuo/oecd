@@ -15,7 +15,7 @@
 真实数据到位时只需替换 loader(详见下文「数据边界与 Mock 策略」)。
 
 17 步实现状态见下文「17 步实现状态」;客户资料对齐验收、完成状态与后续增强项见
-[`开发计划.md`](./开发计划.md)。[`prototype/`](./prototype/) 仅保留早期静态设计原型,
+[`后续开发指导.md`](./后续开发指导.md)。[`prototype/`](./prototype/) 仅保留早期静态设计原型,
 其中部分旧指标口径已不代表当前实现;当前交互界面以 `frontend/` 与 `/api/steps` 为准。
 
 后端指标引擎、API、回归框架、报告生成,以及 17 步教学前端均已跑通真实数据
@@ -62,8 +62,8 @@ cd frontend && bun install && bun run dev
 认证是真实实现(PBKDF2 口令哈希 + HMAC 签名令牌,12 小时有效,
 `POST /api/auth/login` / `GET /api/auth/me`);除登录与令牌校验外,
 所有 `/api/*` 数据接口均强制 Bearer 鉴权。账号优先存教学数据库
-(每账号独立盐,教师可在面板中创建学生账号);数据库不可用时自动回退
-上表硬编码演示账号,课堂演示不受影响。
+(每账号独立盐,教师可在面板中创建学生账号);数据库不可用时,仅上表两个
+合法演示账号可安全回退,其他账号会收到明确的“教学数据库暂不可用”提示。
 
 ## 教师面板
 
@@ -100,7 +100,7 @@ uv run gvcsim benchmark               # 与 client-docs 客户基准数据对账
 uv run gvcsim classroom-init          # 初始化教学数据库(--reset 重建;教师面板用)
 uv run pytest                         # 后端测试(含 synthetic compute、API 集成与教学面板)
 uv run ruff check . && uv run ruff format --check . && uv run mypy
-cd frontend && bun run build && bun run test:e2e
+cd frontend && bun run build && bun run test:unit && bun run test:e2e
 ```
 
 ## 目录结构
@@ -232,7 +232,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 | HS↔ICIO 行业映射表 | 🎭 拟真 mock | HS 2 位章→ICIO 商品相关行业一对多权重映射,步骤2 演示 301 清单如何折算到行业平均税率 |
 
 Mock 的质量标准(schema 对齐真实来源、量级锚定公开统计、维度全覆盖、时间线完整、
-诚实标注、过质检)与逐项落地计划见 [`开发计划.md`](./开发计划.md) 第二节。
+诚实标注、过质检)与逐项落地计划见 [`后续开发指导.md`](./后续开发指导.md)。
 每个 mock 的 loader 接口就是将来真实数据的接入点:例如接入真实 PIIE 面板时,
 只需让 `shocks.load_shocks()` 返回同结构的 `country×sector×year` 面板。
 回归教学场景不重写底层冲击 CSV:步骤13–16 在估计样本层确定性注入
@@ -284,7 +284,7 @@ Mock 的质量标准(schema 对齐真实来源、量级锚定公开统计、维�
 
 M1-M4 feature 与 2026-07-08 客户资料对齐改造已全部合并到主开发线,仍坚持
 不超出既有 17 步、"除 ICIO 外全部 mock"的前提。逐项验收记录见
-[`开发计划.md`](./开发计划.md):
+[`后续开发指导.md`](./后续开发指导.md):
 
 1. **数据层补全**:出口暴露度已改由 ICIO 真实双边流向计算;关税/制裁/
    出口管制三类 mock、冲击面板质检、控制变量质检、HS↔ICIO 映射工作流演示均已接入。

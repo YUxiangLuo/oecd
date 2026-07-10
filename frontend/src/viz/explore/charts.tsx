@@ -1,11 +1,12 @@
+import { formatMetric } from "../../format";
 import { CAT, Legend, type Row, cardStyle, num, rowName, useTip } from "../shared";
+import { signedDomain, signedStack } from "../signed-layout";
+import { linearFit } from "../statistics";
 
 /* ---------------- 步骤8-11 自由探索:排序条形图 / 散点图 ---------------- */
 
 export function fmtVal(v: number, format?: string): string {
-  if (format === "pct") return `${(v * 100).toFixed(1)}%`;
-  if (format === "amount") return v.toLocaleString("zh-CN", { maximumFractionDigits: 0 });
-  return v.toFixed(3);
+  return formatMetric(v, format);
 }
 
 /** 任意指标的排序条形图(学生自选指标 + 对象后驱动) */
@@ -14,14 +15,15 @@ export function RankBarChart({ rows, metricKey, label, format, highlight }: {
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const data = [...rows].sort((a, b) => num(b[metricKey]) - num(a[metricKey]));
-  const max = Math.max(...data.map((r) => num(r[metricKey])), 1e-9);
+  const domain = signedDomain(data.map((row) => [num(row[metricKey])]), false);
   return (
     <div style={cardStyle} ref={wrapRef}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14 }}>{label} · 排序</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
         {data.map((r) => {
           const v = num(r[metricKey]);
-          const w = Math.max(1, (v / max) * 100);
+          const layout = signedStack([v], domain, false);
+          const segment = layout.segments[0];
           const entity = rowName(r);
           const hi = highlight?.has(entity);
           return (
@@ -29,8 +31,14 @@ export function RankBarChart({ rows, metricKey, label, format, highlight }: {
               onMouseMove={(e) => show(e, [["", entity], [label, fmtVal(v, format)]])}
               onMouseLeave={hide}>
               <span title={entity} style={{ width: 132, flexShrink: 0, fontSize: 11.5, color: "#5a6070", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entity}</span>
-              <div style={{ flex: 1, height: 16, background: "#f2f3f7", borderRadius: 5, overflow: "hidden" }}>
-                <div style={{ width: `${w}%`, height: "100%", background: hi ? CAT[5] : CAT[0], transition: "width .4s" }} />
+              <div style={{ flex: 1, position: "relative", height: 16, background: "#f2f3f7", borderRadius: 5, overflow: "hidden" }}>
+                {domain.negative > 0 && <span aria-hidden style={{ position: "absolute", zIndex: 2, insetBlock: 0, left: `${layout.zeroPct}%`, borderLeft: "1.5px solid #4b5263" }} />}
+                <div style={{
+                  position: "absolute", top: 0, bottom: 0,
+                  left: `${segment.leftPct}%`, width: `${segment.widthPct}%`,
+                  background: segment.negative ? "#e34948" : hi ? CAT[5] : CAT[0],
+                  transition: "width .4s, left .4s",
+                }} />
               </div>
               <span style={{ width: 76, textAlign: "right", fontSize: 11.5, fontFamily: "'Space Grotesk',sans-serif", color: "#3a4050" }}>{fmtVal(v, format)}</span>
             </div>
@@ -55,6 +63,7 @@ export function ScatterChart({ rows, xKey, yKey, xLabel, yLabel, xFormat, yForma
     x: num(r[xKey]), y: num(r[yKey]),
   }));
   const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const fit = linearFit(pts);
   const spread = (arr: number[]) => {
     const lo = Math.min(...arr), hi = Math.max(...arr), pad = (hi - lo) * 0.06 || Math.abs(hi) * 0.1 || 1;
     return [lo - pad, hi + pad] as const;
@@ -82,6 +91,16 @@ export function ScatterChart({ rows, xKey, yKey, xLabel, yLabel, xFormat, yForma
         <text x={(m.l + W - m.r) / 2} y={H - 6} textAnchor="middle" fontSize="11.5" fill="#5a6070">{xLabel}</text>
         <text x={14} y={(m.t + H - m.b) / 2} textAnchor="middle" fontSize="11.5" fill="#5a6070"
           transform={`rotate(-90 14 ${(m.t + H - m.b) / 2})`}>{yLabel}</text>
+        {/* 前端 OLS 只用于描述相关形态，不代表因果识别。 */}
+        {fit.slope != null && fit.intercept != null && (
+          <line
+            x1={px(Math.min(...xs))}
+            y1={py(fit.intercept + fit.slope * Math.min(...xs))}
+            x2={px(Math.max(...xs))}
+            y2={py(fit.intercept + fit.slope * Math.max(...xs))}
+            stroke="#e34948" strokeWidth={2} strokeDasharray="6 4"
+          />
+        )}
         {/* 点 */}
         {pts.map((p) => {
           const hi = highlight?.has(p.c);
@@ -100,6 +119,12 @@ export function ScatterChart({ rows, xKey, yKey, xLabel, yLabel, xFormat, yForma
           );
         })}
       </svg>
+      <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", fontSize: 11.5, color: "#6f7686", marginTop: 4 }}>
+        <b style={{ color: "#3a4050" }}>Pearson r = {fit.correlation == null ? "—" : fit.correlation.toFixed(3)}</b>
+        <span>n = {fit.n}</span>
+        <span style={{ color: "#e34948" }}>{fit.slope == null ? "X 轴无变异，无法拟合" : "虚线 = OLS 拟合"}</span>
+        <span>相关不等于因果：共同趋势、遗漏变量与反向因果都可能产生斜率。</span>
+      </div>
       {Tip}
     </div>
   );
@@ -114,8 +139,9 @@ const median = (arr: number[]) => {
 
 /** 象限散点图:两条参考线(默认中位数)把平面切成四象限,四角标注角色。
  *  步8「GVC 定位图」(后向×前向参与度)、步11「枢纽地图」(度×介数中心性)。 */
-export function QuadrantScatter({ rows, xKey, yKey, xLabel, yLabel, xFormat, yFormat, highlight, refMode = "median", quadrantLabels }: {
+export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabel, xFormat, yFormat, highlight, refMode = "median", quadrantLabels }: {
   rows: Row[]; xKey: string; yKey: string; xLabel: string; yLabel: string;
+  referenceRows?: Row[];
   xFormat?: string; yFormat?: string; highlight?: Set<string>;
   refMode?: "median" | "mean"; quadrantLabels?: [string, string, string, string];
 }) {
@@ -125,7 +151,8 @@ export function QuadrantScatter({ rows, xKey, yKey, xLabel, yLabel, xFormat, yFo
     c: rowName(r), tag: r.industry != null ? String(r.industry) : String(r.country),
     x: num(r[xKey]), y: num(r[yKey]),
   }));
-  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const referencePts = (referenceRows ?? rows).map((r) => ({ x: num(r[xKey]), y: num(r[yKey]) }));
+  const xs = referencePts.map((p) => p.x), ys = referencePts.map((p) => p.y);
   const spread = (arr: number[]) => {
     const lo = Math.min(...arr), hi = Math.max(...arr), pad = (hi - lo) * 0.06 || Math.abs(hi) * 0.1 || 1;
     return [lo - pad, hi + pad] as const;
@@ -147,7 +174,7 @@ export function QuadrantScatter({ rows, xKey, yKey, xLabel, yLabel, xFormat, yFo
   ];
   return (
     <div style={cardStyle} ref={wrapRef}>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{yLabel} × {xLabel}</div>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{yLabel} × {xLabel} <span style={{ fontSize: 10.5, color: "#8a90a0", fontWeight: 400 }}>（参考线基于完整有效样本 n={referencePts.length}）</span></div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%">
         {ticks(y0, y1).map((t, i) => (
           <g key={`y${i}`}>
@@ -204,7 +231,8 @@ export function CompositionBar({ rows, segments, sortKey, sortLabel, sortFormat,
   const segKeys = new Set(segments.map((s) => s.key));
   const total = (r: Row) => segments.reduce((s, seg) => s + num(r[seg.key]), 0);
   const data = [...rows].sort((a, b) => num(b[skey]) - num(a[skey]));
-  const globalMax = Math.max(...data.map(total), 1e-9);
+  const domain = signedDomain(data.map((row) => segments.map((segment) => num(row[segment.key]))), normalize);
+  const hasNegative = data.some((row) => segments.some((segment) => num(row[segment.key]) < 0));
   const tipLines = (r: Row): [string, string][] => [
     ["", rowName(r)],
     ...segments.map((s) => [s.name, fmtVal(num(r[s.key]), valueFormat)] as [string, string]),
@@ -214,25 +242,28 @@ export function CompositionBar({ rows, segments, sortKey, sortLabel, sortFormat,
   return (
     <div ref={wrapRef} style={cardStyle}>
       <div style={{ marginBottom: 14 }}>
-        <Legend items={segments.map((s, i) => ({ name: s.name, color: CAT[i] }))} />
+        <Legend items={[...segments.map((s, i) => ({ name: s.name, color: CAT[i] })), ...(hasNegative ? [{ name: "负分项（零轴左侧）", color: "#e34948" }] : [])]} />
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {data.map((r) => {
-          const denom = normalize ? total(r) || 1 : globalMax;
           const entity = rowName(r);
           const hi = highlight?.has(entity);
+          const layout = signedStack(segments.map((segment) => num(r[segment.key])), domain, normalize);
           return (
             <div key={entity} style={{ display: "flex", alignItems: "center", gap: 10 }}
               onMouseMove={(e) => show(e, tipLines(r))} onMouseLeave={hide}>
               <span title={entity} style={{ width: 128, flexShrink: 0, fontSize: 11.5, fontWeight: hi ? 700 : 500,
                 color: hi ? "#4b47e0" : "#5a6070", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entity}</span>
-              <div style={{ flex: 1, display: "flex", height: 17, gap: 2 }}>
-                {segments.map((s, i) => (
-                  <div key={s.key} style={{
-                    width: `${Math.max(0, (num(r[s.key]) / denom) * 100)}%`, background: CAT[i],
-                    borderRadius: i === segments.length - 1 ? "0 4px 4px 0" : 0,
-                  }} />
-                ))}
+              <div style={{ flex: 1, position: "relative", height: 17, background: "#f2f3f7", borderRadius: 5, overflow: "hidden" }}>
+                {domain.negative > 0 && <span aria-hidden style={{ position: "absolute", zIndex: 3, top: 0, bottom: 0, left: `${layout.zeroPct}%`, borderLeft: "1.5px solid #4b5263" }} />}
+                {segments.map((s, i) => {
+                  const segment = layout.segments[i];
+                  return <span key={s.key} style={{
+                    position: "absolute", top: 0, bottom: 0, left: `${segment.leftPct}%`,
+                    width: `${segment.widthPct}%`, background: segment.negative ? "#e34948" : CAT[i],
+                    borderRight: "2px solid #fff",
+                  }} />;
+                })}
               </div>
               <span style={{ width: 72, textAlign: "right", fontSize: 11.5, color: "#3a4050", fontVariantNumeric: "tabular-nums" }}>
                 {/* 归一化条右侧显示排序指标值(用其自身格式);绝对条显示分段总量(用分段格式) */}
@@ -299,4 +330,3 @@ export function TrendChart({ years, series, label, format }: {
     </div>
   );
 }
-

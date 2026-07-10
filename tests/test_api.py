@@ -4,11 +4,13 @@
 保证测试套件在全新 clone 上也能通过。
 """
 
+import math
+
 import pytest
 from fastapi.testclient import TestClient
 
 from gvcsim import shocks
-from gvcsim.api import app
+from gvcsim.api import _clean, app
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, SHOCKS_DIR, processed_years
 
 client = TestClient(app)
@@ -93,6 +95,13 @@ def test_regression_design():
     assert body["shock_col"] == "tariff_shock"
     assert body["treated_col"] == "treated"
     assert "treated" in body["equation"]
+    assert "".join(part["text"] for part in body["equation_parts"]) == body["equation"]
+    assert {part.get("meta_key") for part in body["equation_parts"]} >= {
+        "depvar",
+        "policy",
+        "entity",
+        "cluster",
+    }
 
     ctrl = client.get(
         "/api/regression/design",
@@ -158,6 +167,12 @@ def test_indicator_schema():
     assert body["fields"]["FVA"]["label"]
     assert body["fields"]["GVCPs"]["label"]
     assert body["fields"]["closnesscentrality"]["label"]
+    assert all(meta["desc"] for meta in body["fields"].values())
+
+
+def test_clean_replaces_all_non_finite_floats():
+    rows = _clean([{"nan": math.nan, "pos_inf": math.inf, "neg_inf": -math.inf, "finite": 1.25}])
+    assert rows == [{"nan": None, "pos_inf": None, "neg_inf": None, "finite": 1.25}]
 
 
 @needs_raw_icio
@@ -193,6 +208,8 @@ def test_db_slice_endpoint():
     assert z_body["total"] > 0
     assert z_body["columns"][0] == "row"
     assert 0 < len(z_body["rows"]) <= 5
+    assert len(z_body["row_summaries"]) == len(z_body["rows"])
+    assert all({"row", "slice_total", "out"} <= summary.keys() for summary in z_body["row_summaries"])
 
     accounts = client.get(
         "/api/db/slice",
@@ -270,8 +287,21 @@ def test_shock_events():
     body = resp.json()
     assert len(body["events"]) >= 8
     ev = body["events"][0]
-    for key in ["name", "imposer", "targets", "announced", "effective", "peak_rate"]:
+    for key in [
+        "name",
+        "imposer",
+        "targets",
+        "announced",
+        "effective",
+        "peak_rate",
+        "target_codes",
+        "sector_codes",
+        "all_targets",
+    ]:
         assert key in ev
+    assert ev["all_targets"] is True
+    assert ev["target_codes"] == []
+    assert ev["sector_codes"]
     names = " ".join(e["name"] for e in body["events"])
     assert "232" in names and "301" in names
 
@@ -307,6 +337,8 @@ def test_shock_summary_and_panel():
     # 默认按冲击强度降序
     assert rows[0]["tariff_shock"] >= rows[-1]["tariff_shock"]
     assert rows[0]["note"]
+    assert rows[0]["main_imposer"]
+    assert rows[0]["export_exposure"] is not None
 
     chn = client.get("/api/shocks/panel", params={"year": 2019, "country": "CHN", "only_hit": True}).json()
     assert chn["total"] > 10
@@ -319,6 +351,8 @@ def test_shock_summary_and_panel():
     assert export_control["total"] >= 2
     assert export_control["rows"][0]["shock_type"] == "出口管制"
     assert export_control["rows"][0]["tariff_shock"] > 0
+    assert export_control["rows"][0]["main_imposer"] is None
+    assert export_control["rows"][0]["export_exposure"] is None
 
 
 @needs_data
@@ -385,7 +419,10 @@ def test_regression_placebo_endpoint():
 
 
 @needs_data
-def test_parameterized_report_endpoint():
+def test_parameterized_report_endpoint(tmp_path, monkeypatch):
+    from gvcsim import report as report_mod
+
+    monkeypatch.setattr(report_mod, "REPORTS_DIR", tmp_path)
     resp = client.post(
         "/api/report",
         json={
@@ -401,7 +438,9 @@ def test_parameterized_report_endpoint():
     assert resp.status_code == 200
     body = resp.json()
     md = body["markdown"]
-    assert body["path"].endswith(f"experiment_report_{processed_years()[-1]}.md")
+    assert body["suggested_filename"] == f"experiment_report_{processed_years()[-1]}.md"
+    assert "path" not in body
+    assert list(tmp_path.iterdir()) == []  # HTTP 报告纯构建，不落盘
     assert "- 粒度:国家–行业级" in md
     assert "- 冲击类型:出口管制" in md
     assert "- 估计方法:双向固定效应" in md
@@ -414,6 +453,8 @@ def test_parameterized_report_endpoint():
     assert "个国家×行业 ×" in md
     assert "PanelOLS 政策系数对照" in md
     assert "标准误最大差异" in md and "仅作参考" in md
+    assert md.count("```gvcsim-chart") == 3
+    assert "<svg" not in md
 
     bad = client.post(
         "/api/report",

@@ -1,17 +1,35 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "../../api";
+import { ReportMarkdown } from "../../report-renderer";
 import type { Meta, MySubmission, RegressionOptions, ReportRequest, ReportResponse } from "../../types";
 import { useAsync } from "../shared";
 
 const fmtTime = (s: string | null | undefined) => (s ? s.slice(0, 16).replace("T", " ") : "—");
 
-/** 提交报告给老师 + 评阅结果展示(教学库不可用时整卡隐藏,不影响报告生成) */
+/** 提交报告给老师 + 评阅结果展示。教学库停机不影响报告生成与打印。 */
 function SubmitCard({ request, data }: { request: ReportRequest; data: ReportResponse }) {
   const [refresh, setRefresh] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const { data: mine, error } = useAsync<MySubmission>(() => api.classroom.myReport(), [refresh]);
-  if (error || !mine) return null;
+
+  if (error) {
+    return (
+      <div className="card accent submit-card" role="status">
+        <div className="kicker">提交与评阅</div>
+        <p>教学数据库暂不可用，当前仍可查看和打印报告，但暂不能提交评阅。</p>
+        <p className="muted">{error}</p>
+      </div>
+    );
+  }
+  if (!mine) {
+    return (
+      <div className="card accent submit-card" role="status">
+        <div className="kicker">提交与评阅</div>
+        <p className="muted">正在读取提交状态…</p>
+      </div>
+    );
+  }
 
   const submit = () => {
     setSubmitting(true);
@@ -68,11 +86,33 @@ export function ReportLab({ meta }: { meta: Meta }) {
     exclude_row: true,
   };
   const [draft, setDraft] = useState<ReportRequest>(defaultRequest);
-  const [request, setRequest] = useState<ReportRequest>(defaultRequest);
+  const [request, setRequest] = useState<ReportRequest | null>(null);
+  const [data, setData] = useState<ReportResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const generatingRef = useRef(false);
   const { data: opts } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
-  const { data, error } = useAsync<ReportResponse>(() => api.report(request), [JSON.stringify(request)]);
   const setField = <K extends keyof ReportRequest>(key: K, value: ReportRequest[K]) => {
     setDraft((current) => ({ ...current, [key]: value }));
+  };
+  const generate = async () => {
+    if (generatingRef.current) return;
+    generatingRef.current = true;
+    const submitted = { ...draft };
+    setGenerating(true);
+    setData(null);
+    setRequest(null);
+    setError(null);
+    try {
+      const response = await api.report(submitted);
+      setRequest(submitted);
+      setData(response);
+    } catch (e) {
+      setError(String((e as Error).message ?? e));
+    } finally {
+      generatingRef.current = false;
+      setGenerating(false);
+    }
   };
   return (
     <div className="report-lab">
@@ -111,29 +151,36 @@ export function ReportLab({ meta }: { meta: Meta }) {
           />
           冲击×基期GVC
         </label>
-        <button className="primary" onClick={() => setRequest({ ...draft })}>生成报告</button>
+        <button className="primary" onClick={generate} disabled={generating}>
+          {generating ? "生成中…" : "生成报告"}
+        </button>
         <button
           className="secondary"
-          disabled={!data || Boolean(error)}
+          disabled={!data || !request || generating}
           onClick={() => window.print()}
         >
           导出 PDF
         </button>
       </div>
+      <p className="muted">
+        正式报告固定使用基准 <code>clean</code> 场景；步骤13–16中的 noisy/confounded 仅用于课堂识别练习，不写入正式报告。
+      </p>
       {error ? (
         <div className="error-box">{error}</div>
-      ) : data ? (
+      ) : data && request ? (
         <>
           <p className="muted report-meta">
-            已写入 {data.path}(Markdown 源文件,可用 pandoc 转 PDF) ·
+            建议文件名：{data.suggested_filename} ·
             当前设定:{request.granularity} · {request.shock_type} · {request.method} ·
             {request.control_mode} · {request.price_mode} · 排除 ROW{request.interaction ? " · 交互项" : ""}
           </p>
           <SubmitCard request={request} data={data} />
-          <div className="report-md">{data.markdown}</div>
+          <ReportMarkdown markdown={data.markdown} />
         </>
+      ) : generating ? (
+        <p className="muted" role="status">正在生成报告，请稍候…</p>
       ) : (
-        <p className="muted">正在生成报告…</p>
+        <p className="muted">选择设定后点击“生成报告”；系统不会在进入本页时自动运行四组回归。</p>
       )}
     </div>
   );

@@ -14,6 +14,7 @@ import { useMemo, useState } from "react";
 import { api } from "./api";
 import { useAsync } from "./labs";
 import { sectorLabel } from "./viz";
+import { signedDomain, signedStack } from "./viz/signed-layout";
 import type { IndustryPage, Meta } from "./types";
 
 type Row = Record<string, string | number | null>;
@@ -98,160 +99,187 @@ function fmt(v: number, unit: "amount" | "number"): string {
     : v.toFixed(3);
 }
 
+const PLY_DECOMP: DecompCfg = {
+  total: "PLy",
+  totalLabel: "后向总生产长度 PLy",
+  unit: "number",
+  weightTotal: "FGY",
+  parts: [
+    { key: "PLy_D", label: "纯国内段", color: "#4b47e0", desc: "按 1_FGY_D / FGY 加权。", weightKey: "1_FGY_D" },
+    { key: "PLy_RT", label: "传统贸易段", color: "#159a86", desc: "按 2_FGY_RT / FGY 加权。", weightKey: "2_FGY_RT" },
+    { key: "PLy_GVC", label: "GVC 段", color: "#f4693b", desc: "按 3_FGY_GVC / FGY 加权。", weightKey: "3_FGY_GVC" },
+  ],
+};
+
+function MiniBackwardBar({ row }: { row: Row }) {
+  const values = PLY_DECOMP.parts.map((part) => partValue(row, part, PLY_DECOMP));
+  const total = num(row.PLy);
+  const sum = values.reduce((acc, value) => acc + value, 0);
+  const layout = signedStack(values, signedDomain([values], true), true);
+  return (
+    <div style={{ marginTop: 14, padding: 12, borderRadius: 10, background: "#f8f9fc" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 11.5, marginBottom: 7 }}>
+        <b>后向 PLy · 最终品回溯到初始投入端</b>
+        <span>{fmt(total, "number")}</span>
+      </div>
+      <div style={{ position: "relative", height: 12, background: "#eceef4", borderRadius: 5, overflow: "hidden" }}>
+        {PLY_DECOMP.parts.map((part, index) => (
+          <span key={part.key} title={`${part.label}: ${fmt(values[index], "number")}`}
+            style={{ position: "absolute", top: 0, bottom: 0, left: `${layout.segments[index].leftPct}%`, width: `${layout.segments[index].widthPct}%`, background: layout.segments[index].negative ? "#e34948" : part.color }} />
+        ))}
+      </div>
+      <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>
+        PLy = Σ(FGY 分项份额 × 对应段长度) = {fmt(sum, "number")}；与总量误差 {Math.abs(sum - total).toExponential(1)}。
+        GVCPs = PLv_GVC / PLy_GVC = {num(row.GVCPs).toFixed(3)}。
+      </div>
+    </div>
+  );
+}
+
 export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) {
   const cfg = DECOMP[step];
+  const defaultA = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
+  const defaultB = meta.countries.includes("USA") ? "USA" : meta.countries[1] ?? defaultA;
   const [gran, setGran] = useState<"country" | "sector">("sector");
   const [year, setYear] = useState(meta.years.at(-1)!);
-  const [country, setCountry] = useState("CHN");
-  const [sector, setSector] = useState<string>("");
+  const [compare, setCompare] = useState(false);
+  const [countryA, setCountryA] = useState(defaultA);
+  const [countryB, setCountryB] = useState(defaultB);
+  const [sectorA, setSectorA] = useState("");
+  const [sectorB, setSectorB] = useState("");
   const [hover, setHover] = useState<string | null>(null);
 
   const { data: countryRows } = useAsync<Row[]>(() => api.countryIndicators(year), [year]);
-  const { data: sectorPage } = useAsync<IndustryPage>(
-    () => api.industryIndicatorsAll(year, country),
-    [year, country],
+  const { data: pageA } = useAsync<IndustryPage>(() => api.industryIndicatorsAll(year, countryA), [year, countryA]);
+  const { data: pageB } = useAsync<IndustryPage | null>(
+    () => compare ? api.industryIndicatorsAll(year, countryB) : Promise.resolve(null),
+    [year, countryB, compare],
   );
-
-  const sectors = useMemo(
-    () => (sectorPage?.rows ?? []).map((r) => String(r.industry)),
-    [sectorPage],
+  const exampleCountry = meta.countries.includes("BRN") ? "BRN" : meta.countries[0] ?? "";
+  const exampleYear = meta.years.includes(2020) ? 2020 : meta.years.at(-1)!;
+  const { data: examplePage } = useAsync<IndustryPage | null>(
+    () => step === 4 && exampleCountry ? api.industryIndicatorsAll(exampleYear, exampleCountry) : Promise.resolve(null),
+    [step, exampleCountry, exampleYear],
   );
-  // 默认选第一个行业;换国家后若旧行业不存在则回退
-  const effSector = gran === "sector" ? (sectors.includes(sector) ? sector : sectors[0] ?? "") : "";
+  const negativeExample = useMemo(() => [...(examplePage?.rows ?? [])]
+    .filter((row) => {
+      const total = num(row.gross_exports);
+      return total > 1 && num(row.taxsub) < 0 && Math.abs(num(row.taxsub) / total) >= 0.001;
+    })
+    .sort((a, b) => Math.abs(num(b.taxsub) / num(b.gross_exports)) - Math.abs(num(a.taxsub) / num(a.gross_exports)))[0], [examplePage]);
 
-  const row: Row | undefined =
-    gran === "country"
-      ? countryRows?.find((r) => r.country === country)
-      : (sectorPage?.rows ?? []).find((r) => r.industry === effSector);
+  const sectorsA = (pageA?.rows ?? []).map((row) => String(row.industry));
+  const sectorsB = (pageB?.rows ?? []).map((row) => String(row.industry));
+  const effSectorA = sectorsA.includes(sectorA) ? sectorA : sectorsA[0] ?? "";
+  const effSectorB = sectorsB.includes(sectorB) ? sectorB : sectorsB[0] ?? "";
+  const rowA = gran === "country"
+    ? countryRows?.find((row) => row.country === countryA)
+    : pageA?.rows.find((row) => row.industry === effSectorA);
+  const rowB = gran === "country"
+    ? countryRows?.find((row) => row.country === countryB)
+    : pageB?.rows.find((row) => row.industry === effSectorB);
+  const panelRows = [rowA, ...(compare ? [rowB] : [])];
+  const valuesByRow = panelRows.filter((row): row is Row => row != null)
+    .map((row) => cfg.parts.map((part) => partValue(row, part, cfg)));
+  const domain = signedDomain(valuesByRow, true);
 
-  const total = row ? num(row[cfg.total]) : 0;
-  const sum = row ? cfg.parts.reduce((a, p) => a + partValue(row, p, cfg), 0) : 0;
-  const err = Math.abs(sum - total);
-  const rel = total ? err / Math.abs(total) : err;
-  const ok = rel < 1e-6;
-  // 有些行业(家庭雇佣、公共管理、供水等)在该经济体几乎无出口/产出,
-  // 分解虽仍"闭合"但信息量低、比例也容易受极小分母影响——提示学生换一个活跃行业。
-  const countryTotal = (sectorPage?.rows ?? []).reduce((a, r) => a + Math.abs(num(r[cfg.total])), 0);
-  const negligible =
-    gran === "sector" && row != null &&
-    (total === 0 || (countryTotal > 0 && Math.abs(total) / countryTotal < 1e-4));
-  const negligibleReason = total === 0
-    ? `${cfg.totalLabel}=0`
-    : `${cfg.totalLabel}占本国行业合计不足 0.01%`;
+  const entityPicker = (side: "A" | "B") => {
+    const country = side === "A" ? countryA : countryB;
+    const setCountry = side === "A" ? setCountryA : setCountryB;
+    const sector = side === "A" ? effSectorA : effSectorB;
+    const setSector = side === "A" ? setSectorA : setSectorB;
+    const sectors = side === "A" ? sectorsA : sectorsB;
+    return (
+      <div className="demo-controls" style={{ marginBottom: 10 }}>
+        <b>{compare ? `实体 ${side}` : "分析实体"}</b>
+        <label>国家</label>
+        <select value={country} onChange={(event) => setCountry(event.target.value)}>
+          {meta.countries.map((code) => <option key={code} value={code}>{code}</option>)}
+        </select>
+        {gran === "sector" && <>
+          <label>行业</label>
+          <select value={sector} onChange={(event) => setSector(event.target.value)}>
+            {sectors.map((code) => <option key={code} value={code}>{sectorLabel(code)}</option>)}
+          </select>
+        </>}
+      </div>
+    );
+  };
+
+  const panel = (row: Row | undefined, side: "A" | "B", page: IndustryPage | null, sector: string, country: string) => {
+    if (!row) return <div className="muted" style={{ padding: 18 }}>加载实体 {side}…</div>;
+    const values = cfg.parts.map((part) => partValue(row, part, cfg));
+    const layout = signedStack(values, domain, true);
+    const total = num(row[cfg.total]);
+    const sum = values.reduce((acc, value) => acc + value, 0);
+    const error = Math.abs(sum - total);
+    const ok = (total ? error / Math.abs(total) : error) < 1e-6;
+    const countryTotal = (page?.rows ?? []).reduce((acc, item) => acc + Math.abs(num(item[cfg.total])), 0);
+    const negligible = gran === "sector" && (total === 0 || (countryTotal > 0 && Math.abs(total) / countryTotal < 1e-4));
+    return (
+      <div style={{ minWidth: 0 }}>
+        {entityPicker(side)}
+        <div className="decomp-total-line">
+          {cfg.totalLabel} = <b>{fmt(total, cfg.unit)}</b>{cfg.unit === "amount" && <span className="muted"> (百万美元)</span>}
+        </div>
+        <div className="decomp-bar" style={{ position: "relative", display: "block", overflow: "hidden" }}>
+          {domain.negative > 0 && <span aria-hidden style={{ position: "absolute", zIndex: 3, left: `${layout.zeroPct}%`, top: -2, bottom: -2, borderLeft: "2px solid #4b5263" }} />}
+          {cfg.parts.map((part, index) => {
+            const value = values[index];
+            const share = total ? (value / total) * 100 : 0;
+            const segment = layout.segments[index];
+            return <span key={part.key}
+              className={`decomp-seg${hover && hover !== part.key ? " dim" : ""}`}
+              style={{ position: "absolute", top: 0, bottom: 0, left: `${segment.leftPct}%`, width: `${segment.widthPct}%`, background: segment.negative ? "#e34948" : part.color }}
+              onMouseEnter={() => setHover(part.key)} onMouseLeave={() => setHover(null)}
+              title={`${part.label} · 真实值 ${fmt(value, cfg.unit)} · 有符号占比 ${share.toFixed(1)}%${segment.negative ? "（负值，位于零轴左侧）" : ""}`} />;
+          })}
+        </div>
+        <div className={`decomp-identity ${ok ? "ok" : "bad"}`}>
+          {ok ? "✓" : "✗"} {cfg.parts.length} 项加总 = {fmt(sum, cfg.unit)} · 与 {cfg.totalLabel} 的误差 {error.toExponential(1)}
+        </div>
+        {negligible && <div className="decomp-hint">⚠️ {country} · {sectorLabel(sector)} 的{total === 0 ? `${cfg.totalLabel}=0` : `${cfg.totalLabel}占本国行业合计不足 0.01%`}，建议换一个活跃行业。</div>}
+        <table className="decomp-table">
+          <tbody>{cfg.parts.map((part, index) => {
+            const value = values[index];
+            const share = total ? (value / total) * 100 : 0;
+            return <tr key={part.key} className={hover === part.key ? "on" : ""}
+              onMouseEnter={() => setHover(part.key)} onMouseLeave={() => setHover(null)}>
+              <td className="dt-name"><span className="dt-swatch" style={{ background: value < 0 ? "#e34948" : part.color }} />{part.label}</td>
+              <td className="dt-val">{fmt(value, cfg.unit)}</td><td className="dt-share">{share.toFixed(1)}%</td><td className="dt-desc">{part.desc}</td>
+            </tr>;
+          })}</tbody>
+        </table>
+        {step === 6 && <MiniBackwardBar row={row} />}
+        {cfg.note && <div className="decomp-note">📌 {cfg.note(row)}</div>}
+      </div>
+    );
+  };
 
   return (
     <div className="demo-card">
       <div className="demo-title">🧮 动手拆解 · 看着分项加回总量</div>
-
       <div className="demo-controls">
         <div className="pill-group">
           <button className={gran === "sector" ? "on" : ""} onClick={() => setGran("sector")}>国家–行业级</button>
           <button className={gran === "country" ? "on" : ""} onClick={() => setGran("country")}>国家级</button>
         </div>
-        <label>国家</label>
-        <select value={country} onChange={(e) => setCountry(e.target.value)}>
-          {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        {gran === "sector" && (
-          <>
-            <label>行业</label>
-            <select value={effSector} onChange={(e) => setSector(e.target.value)}>
-              {sectors.map((s) => <option key={s} value={s}>{sectorLabel(s)}</option>)}
-            </select>
-          </>
-        )}
-        <label>年份</label>
-        <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
-          {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
-        </select>
+        <label>共享年份</label>
+        <select value={year} onChange={(event) => setYear(Number(event.target.value))}>{meta.years.map((value) => <option key={value}>{value}</option>)}</select>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <input type="checkbox" checked={compare} onChange={(event) => setCompare(event.target.checked)} /> 双实体并排对比
+        </label>
       </div>
-
-      {/* 公式:总量 = 分项 + 分项 + … */}
-      <div className="decomp-formula">
-        <span className="df-total">{cfg.totalLabel}</span>
-        <span className="df-eq">=</span>
-        {cfg.parts.map((p, i) => (
-          <span key={p.key}>
-            {i > 0 && <span className="df-plus">+</span>}
-            <span
-              className={`df-term${hover === p.key ? " on" : ""}`}
-              style={hover === p.key ? { color: p.color, borderColor: p.color } : undefined}
-              onMouseEnter={() => setHover(p.key)}
-              onMouseLeave={() => setHover(null)}
-            >
-              {p.label.split(" ")[0]}
-            </span>
-          </span>
-        ))}
+      {step === 4 && <div className="tipbox" style={{ marginBottom: 12 }}>
+        负 taxsub 表示产品补贴超过产品税。{negativeExample ? <button onClick={() => {
+          setGran("sector"); setYear(exampleYear); setCountryA(exampleCountry); setSectorA(String(negativeExample.industry));
+        }} style={{ marginLeft: 8 }}>一键查看真实负值：{exampleCountry} · {sectorLabel(String(negativeExample.industry))}</button> : "正在实际指标中寻找有经济量级的负值示例…"}
+      </div>}
+      <div className="decomp-formula"><span className="df-total">{cfg.totalLabel}</span><span className="df-eq">=</span>{cfg.parts.map((part, index) => <span key={part.key}>{index > 0 && <span className="df-plus">+</span>}<span className={`df-term${hover === part.key ? " on" : ""}`} style={hover === part.key ? { color: part.color, borderColor: part.color } : undefined} onMouseEnter={() => setHover(part.key)} onMouseLeave={() => setHover(null)}>{part.label.split(" ")[0]}</span></span>)}</div>
+      <div style={{ display: "grid", gridTemplateColumns: compare ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)", gap: 18 }}>
+        {panel(rowA, "A", pageA, effSectorA, countryA)}
+        {compare && panel(rowB, "B", pageB, effSectorB, countryB)}
       </div>
-
-      {!row ? (
-        <div className="muted" style={{ padding: "18px 0" }}>加载中…</div>
-      ) : (
-        <>
-          <div className="decomp-total-line">
-            {cfg.totalLabel} = <b>{fmt(total, cfg.unit)}</b>
-            {cfg.unit === "amount" && <span className="muted"> (百万美元)</span>}
-          </div>
-
-          <div className="decomp-bar">
-            {cfg.parts.map((p) => {
-              const v = partValue(row, p, cfg);
-              const w = total ? Math.max(0, (v / total) * 100) : 0;
-              return (
-                <div
-                  key={p.key}
-                  className={`decomp-seg${hover && hover !== p.key ? " dim" : ""}`}
-                  style={{ width: `${w}%`, background: p.color }}
-                  onMouseEnter={() => setHover(p.key)}
-                  onMouseLeave={() => setHover(null)}
-                  title={`${p.label} · ${fmt(v, cfg.unit)} · ${(w).toFixed(1)}%`}
-                />
-              );
-            })}
-          </div>
-
-          <div className={`decomp-identity ${ok ? "ok" : "bad"}`}>
-            {ok ? "✓" : "✗"} {cfg.parts.length} 项加总 = {fmt(sum, cfg.unit)} ·
-            与 {cfg.totalLabel} {fmt(total, cfg.unit)} 的误差 {err.toExponential(1)}
-            {ok ? "(恒等式成立)" : "(请核对口径)"}
-          </div>
-
-          {negligible && (
-            <div className="decomp-hint">
-              ⚠️ {country} · {sectorLabel(effSector)} 的{negligibleReason}——
-              这类几乎无出口/产出的行业分解信息量低,换一个活跃行业(如制造业)更能看清口径。
-            </div>
-          )}
-
-          <table className="decomp-table">
-            <tbody>
-              {cfg.parts.map((p) => {
-                const v = partValue(row, p, cfg);
-                const share = total ? (v / total) * 100 : 0;
-                return (
-                  <tr
-                    key={p.key}
-                    className={hover === p.key ? "on" : ""}
-                    onMouseEnter={() => setHover(p.key)}
-                    onMouseLeave={() => setHover(null)}
-                  >
-                    <td className="dt-name">
-                      <span className="dt-swatch" style={{ background: p.color }} />
-                      {p.label}
-                    </td>
-                    <td className="dt-val">{fmt(v, cfg.unit)}</td>
-                    <td className="dt-share">{share.toFixed(1)}%</td>
-                    <td className="dt-desc">{p.desc}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-
-          {cfg.note && <div className="decomp-note">📌 {cfg.note(row)}</div>}
-        </>
-      )}
     </div>
   );
 }
@@ -328,8 +356,25 @@ function computeCentrality() {
   ids.forEach((i) => (betNorm[i] = norm ? bet[i] / 2 / norm : 0));
   const degNorm: Record<string, number> = {};
   ids.forEach((i) => (degNorm[i] = deg[i] / (n - 1)));
+  const closeness: Record<string, number> = {};
+  ids.forEach((i) => {
+    const distanceSum = ids.reduce((sum, target) => sum + (Number.isFinite(dist[i][target]) ? dist[i][target] : 0), 0);
+    closeness[i] = distanceSum ? (n - 1) / distanceSum : 0;
+  });
 
-  return { adj, dist, sigma, preds, deg, degNorm, betNorm };
+  return { adj, dist, sigma, preds, deg, degNorm, betNorm, closeness };
+}
+
+function shortestPath(from: string, to: string, C: ReturnType<typeof computeCentrality>): string[] {
+  const path = [to];
+  let current = to;
+  while (current !== from) {
+    const previous = C.preds[from][current][0];
+    if (previous == null) return [];
+    path.push(previous);
+    current = previous;
+  }
+  return path.reverse();
 }
 
 // 重建一条经过 v 的、跨度尽量大的最短路径,用于高亮演示
@@ -361,12 +406,20 @@ function samplePathThrough(v: string, C: ReturnType<typeof computeCentrality>): 
 
 export function NetworkCentralityDemo() {
   const C = useMemo(computeCentrality, []);
-  const [mode, setMode] = useState<"degree" | "betweenness">("degree");
+  const [mode, setMode] = useState<"degree" | "betweenness" | "closeness">("degree");
   const [sel, setSel] = useState<string>("DEU");
 
   const pathNodes = mode === "betweenness" ? samplePathThrough(sel, C) : [];
   const pathEdges = new Set<string>();
   for (let i = 0; i + 1 < pathNodes.length; i++) pathEdges.add(ekey(pathNodes[i], pathNodes[i + 1]));
+  const distancePaths = NET_NODES.filter((node) => node.id !== sel).map((node) => ({
+    target: node.id,
+    distance: C.dist[sel][node.id],
+    path: shortestPath(sel, node.id, C),
+  }));
+  if (mode === "closeness") distancePaths.forEach(({ path }) => {
+    for (let i = 0; i + 1 < path.length; i++) pathEdges.add(ekey(path[i], path[i + 1]));
+  });
   const neighbors = new Set(C.adj[sel]);
 
   const edgeActive = (a: string, b: string) =>
@@ -383,6 +436,7 @@ export function NetworkCentralityDemo() {
         <div className="pill-group">
           <button className={mode === "degree" ? "on" : ""} onClick={() => setMode("degree")}>度中心性</button>
           <button className={mode === "betweenness" ? "on" : ""} onClick={() => setMode("betweenness")}>介数中心性</button>
+          <button className={mode === "closeness" ? "on" : ""} onClick={() => setMode("closeness")}>接近中心性</button>
         </div>
         <span className="muted">点节点查看它的中心性</span>
       </div>
@@ -404,8 +458,8 @@ export function NetworkCentralityDemo() {
           {NET_NODES.map((n) => {
             const isSel = n.id === sel;
             const isNeighbor = mode === "degree" && neighbors.has(n.id);
-            const onPath = mode === "betweenness" && pathNodes.includes(n.id);
-            const val = mode === "degree" ? C.degNorm[n.id] : C.betNorm[n.id];
+            const onPath = mode !== "degree" && (mode === "closeness" || pathNodes.includes(n.id));
+            const val = mode === "degree" ? C.degNorm[n.id] : mode === "betweenness" ? C.betNorm[n.id] : C.closeness[n.id];
             const r = 18 + val * 20;
             return (
               <g key={n.id} onClick={() => setSel(n.id)} style={{ cursor: "pointer" }}>
@@ -433,7 +487,7 @@ export function NetworkCentralityDemo() {
                 高亮的 {C.deg[sel]} 条连线就是它的直接连接。度中心性只看“邻居多不多”。
               </p>
             </>
-          ) : (
+          ) : mode === "betweenness" ? (
             <>
               <div className="ndp-formula">介数中心性 = 经过它的最短路径占比(归一化)</div>
               <div className="ndp-calc">= <b>{C.betNorm[sel].toFixed(3)}</b></div>
@@ -442,6 +496,22 @@ export function NetworkCentralityDemo() {
                   ? <>例如 {pathNodes[0]} → {pathNodes[pathNodes.length - 1]} 的最短路要穿过 {sel}(已高亮)。越多这类“必经”对,介数越高——它是供应链的咽喉。</>
                   : <>{selNode.label} 很少落在别人的最短路径上,介数中心性低。</>}
               </p>
+            </>
+          ) : (
+            <>
+              <div className="ndp-formula">接近中心性 = (N − 1) / 到其余节点的最短距离和</div>
+              <div className="ndp-calc">
+                = {NET_NODES.length - 1} / {distancePaths.reduce((sum, item) => sum + item.distance, 0)} = <b>{C.closeness[sel].toFixed(3)}</b>
+              </div>
+              <p className="ndp-note">高亮边组成从 {sel} 出发的一棵最短路径树；距离和越小，越能快速触达整个生产网络。</p>
+              <div style={{ maxHeight: 150, overflow: "auto", marginBottom: 10 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                  <thead><tr><th style={{ textAlign: "left" }}>目标</th><th>距离</th><th style={{ textAlign: "left" }}>一条最短路径</th></tr></thead>
+                  <tbody>{distancePaths.sort((a, b) => a.distance - b.distance || a.target.localeCompare(b.target)).map((item) => (
+                    <tr key={item.target}><td>{item.target}</td><td style={{ textAlign: "center" }}>{item.distance}</td><td>{item.path.join(" → ")}</td></tr>
+                  ))}</tbody>
+                </table>
+              </div>
             </>
           )}
           <div className="ndp-disclaim">

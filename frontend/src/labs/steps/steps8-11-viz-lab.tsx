@@ -88,6 +88,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
   const [picked, setPicked] = useState<string[]>([]);
   const [granularity, setGranularity] = useState<"country" | "sector">("country");
   const [drillCountry, setDrillCountry] = useState(meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "");
+  const [tableSort, setTableSort] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
   const isNetwork = step.n === 8;
 
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
@@ -104,10 +105,12 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
   );
   // 趋势图需要全部年份的国家级指标(按需拉取,服务端 CSV 已按 mtime 缓存)
   const { data: yearsData } = useAsync<Record<string, string | number | null>[][] | null>(
-    () => (view === "trend" && granularity === "country"
-      ? Promise.all(meta.years.map((y) => api.countryIndicators(y)))
-      : Promise.resolve(null)),
-    [view === "trend", granularity],
+    () => view === "trend"
+      ? granularity === "country"
+        ? Promise.all(meta.years.map((y) => api.countryIndicators(y)))
+        : Promise.all(meta.years.map((y) => api.industryIndicatorsAll(y, drillCountry))).then((pages) => pages.map((page) => page.rows))
+      : Promise.resolve(null),
+    [view === "trend", granularity, drillCountry],
   );
   if (error || netErr || sectorErr) return <div className="error-box">{error ?? netErr ?? sectorErr}</div>;
 
@@ -126,35 +129,54 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
   const metricOk = (r: Record<string, string | number | null>) =>
     !needFilter || (isFin(r[effX]) && (!twoAxis || isFin(r[effY])));
   // 选中的对象:Top-N(按有效X指标排序)或手动挑选的国家
-  const selRows =
-    granularity === "sector"
-      ? allRows.filter(metricOk).sort((a, b) => num(b[effX]) - num(a[effX])).slice(0, topN)
+  const validRows = allRows.filter(metricOk);
+  const selRows = view === "quadrant"
+    ? granularity === "country" && entityMode === "pick"
+      ? validRows.filter((row) => picked.includes(String(row.country)))
+      : validRows
+    : granularity === "sector"
+      ? validRows.sort((a, b) => num(b[effX]) - num(a[effX])).slice(0, topN)
       : entityMode === "topn"
-      ? allRows.filter(metricOk).sort((a, b) => num(b[effX]) - num(a[effX])).slice(0, topN)
-      : allRows.filter((r) => picked.includes(String(r.country)) && metricOk(r));
+        ? validRows.sort((a, b) => num(b[effX]) - num(a[effX])).slice(0, topN)
+        : validRows.filter((r) => picked.includes(String(r.country)));
   const highlight = granularity === "country" ? new Set(picked) : new Set<string>();
 
   // 趋势图折线:Top-N 模式限 6 条以内保证可读,选国家模式用全部选中国家
-  const trendCountries =
+  const trendEntities =
     granularity === "sector"
-      ? []
+      ? [...allRows].filter((row) => isFin(row[rankBy])).sort((a, b) => num(b[rankBy]) - num(a[rankBy]))
+        .slice(0, Math.min(topN, 6)).map((row) => String(row.industry))
       : entityMode === "pick"
       ? picked
       : [...allRows].sort((a, b) => num(b[rankBy]) - num(a[rankBy])).slice(0, Math.min(topN, 6)).map((r) => String(r.country));
-  const trendSeries = trendCountries.map((c) => ({
-    country: c,
+  const trendSeries = trendEntities.map((entity) => ({
+    country: granularity === "sector" ? sectorLabel(entity) : entity,
     values: meta.years.map((_, i) => {
-      const r = (yearsData?.[i] ?? []).find((row) => String(row.country) === c);
-      return r ? num(r[rankBy]) : NaN;
+      const r = (yearsData?.[i] ?? []).find((row) => String(row[granularity === "sector" ? "industry" : "country"]) === entity);
+      return r && isFin(r[rankBy]) ? num(r[rankBy]) : NaN;
     }),
   }));
+
+  const tableRows = !tableSort ? selRows : [...selRows].sort((a, b) => {
+    const entity = (row: Record<string, string | number | null>) => row.industry != null ? sectorLabel(String(row.industry)) : String(row.country ?? "");
+    const av = tableSort.key === "__entity__" ? entity(a) : a[tableSort.key];
+    const bv = tableSort.key === "__entity__" ? entity(b) : b[tableSort.key];
+    const aMissing = av == null || (typeof av === "number" && !Number.isFinite(av));
+    const bMissing = bv == null || (typeof bv === "number" && !Number.isFinite(bv));
+    if (aMissing || bMissing) return aMissing === bMissing ? 0 : aMissing ? 1 : -1;
+    const cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv), "zh-CN");
+    return tableSort.direction === "asc" ? cmp : -cmp;
+  });
+  const toggleTableSort = (key: string) => setTableSort((current) => current?.key === key
+    ? { key, direction: current.direction === "asc" ? "desc" : "asc" }
+    : { key, direction: "desc" });
 
   const signatureChart = () => {
     if (isNetwork) return net ? <NetworkViz data={net} /> : <p className="muted">加载中…</p>;
     if (!rows) return <p className="muted">加载中…</p>;
     if (step.n === 9) return <StackedShareViz rows={rows} />;
     if (step.n === 10) return <LengthViz rows={rows} />;
-    return <HeatTableViz rows={rows} />;
+    return <HeatTableViz rows={rows} schema={schema} />;
   };
 
   // 指标选择器默认只列本步主题组;勾选「全部指标」放开到全部四组。
@@ -233,16 +255,18 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
           )}
           {granularity === "country" && (
             <div className="seg">
-              <button className={entityMode === "topn" ? "on" : ""} onClick={() => setEntityMode("topn")}>Top-N</button>
+              <button className={entityMode === "topn" ? "on" : ""} onClick={() => setEntityMode("topn")}>{view === "quadrant" ? "全部" : "Top-N"}</button>
               <button className={entityMode === "pick" ? "on" : ""} onClick={() => setEntityMode("pick")}>选国家</button>
             </div>
           )}
-          {granularity === "sector" || entityMode === "topn" ? (
+          {view !== "quadrant" && (granularity === "sector" || entityMode === "topn") ? (
             <span className="topn-ctl">
               前 <input type="range" min={5} max={40} value={topN} onChange={(e) => setTopN(Number(e.target.value))} />
-              <b>{view === "trend" && granularity === "country" ? Math.min(topN, 6) : topN}</b>
-              个(按{view === "scatter" ? "X" : "该"}指标{view === "trend" && granularity === "country" ? ",趋势最多6条" : ""})
+              <b>{view === "trend" ? Math.min(topN, 6) : topN}</b>
+              个(按{view === "scatter" ? "X" : "该"}指标{view === "trend" ? ",趋势最多6条" : ""})
             </span>
+          ) : view === "quadrant" && (granularity === "sector" || entityMode === "topn") ? (
+            <span className="muted">显示全部 {validRows.length} 个有效样本；参考线始终按完整样本计算</span>
           ) : (
             <select multiple className="country-multi" value={picked}
               onChange={(e) => setPicked(Array.from(e.target.selectedOptions, (o) => o.value))}>
@@ -274,6 +298,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
         sectorLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p>
           : selRows.length
           ? <QuadrantScatter rows={selRows} xKey={cfg.quadrant[0]} yKey={cfg.quadrant[1]}
+              referenceRows={validRows}
               xLabel={fieldLabel(cfg.quadrant[0], schema)} yLabel={fieldLabel(cfg.quadrant[1], schema)}
               xFormat={fmtOf(cfg.quadrant[0])} yFormat={fmtOf(cfg.quadrant[1])}
               highlight={highlight} quadrantLabels={cfg.quadLabels} />
@@ -291,21 +316,31 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
       )}
 
       {view === "trend" && (
-        granularity === "sector" ? <p className="muted">趋势图暂使用国家级时间序列;切回“国家级”后可查看 2016–2020 趋势。</p>
-          : !yearsData ? <p className="muted">加载多年数据中…</p>
+        !yearsData ? <p className="muted">加载{granularity === "sector" ? `${drillCountry} 行业` : "国家"}多年数据中…</p>
           : trendSeries.length
             ? <TrendChart years={meta.years} series={trendSeries} label={fieldLabel(rankBy, schema)} format={fmtOf(rankBy)} />
-            : <p className="muted">请在“选国家”里选择国家(或切到 Top-N)。</p>
+            : <p className="muted">没有可绘制的有效时间序列。</p>
       )}
 
       {view === "table" && (
         sectorLoading ? <p className="muted">加载 {drillCountry} 行业指标中…</p> : <div className="table-wrap">
           <table className="data-table">
-            <thead><tr><th>{granularity === "sector" ? "行业" : "国家"}</th>{cfg.columns.map((c) => <th key={c}>{fieldLabel(c, schema)}</th>)}</tr></thead>
+            <thead><tr>
+              <th style={{ position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" }}>
+                <button onClick={() => toggleTableSort("__entity__")} style={{ border: 0, background: "transparent", font: "inherit", cursor: "pointer" }}>
+                  {granularity === "sector" ? "行业" : "国家"}{tableSort?.key === "__entity__" ? (tableSort.direction === "asc" ? " ↑" : " ↓") : " ↕"}
+                </button>
+              </th>
+              {cfg.columns.map((c) => <th key={c} title={schema?.fields[c]?.desc}>
+                <button onClick={() => toggleTableSort(c)} style={{ border: 0, background: "transparent", font: "inherit", cursor: "pointer" }}>
+                  {fieldLabel(c, schema)}{tableSort?.key === c ? (tableSort.direction === "asc" ? " ↑" : " ↓") : " ↕"}
+                </button>
+              </th>)}
+            </tr></thead>
             <tbody>
-              {selRows.map((r) => (
+              {tableRows.map((r) => (
                 <tr key={String(r.industry ?? r.country)}>
-                  <td>{r.industry != null ? sectorLabel(String(r.industry)) : String(r.country)}</td>
+                  <td style={{ position: "sticky", left: 0, zIndex: 2, background: "#fff" }}>{r.industry != null ? sectorLabel(String(r.industry)) : String(r.country)}</td>
                   {cfg.columns.map((c) => <td key={c}>{fmtField(r[c], c, schema)}</td>)}
                 </tr>
               ))}

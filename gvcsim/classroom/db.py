@@ -246,6 +246,17 @@ def upsert_progress(username: str, step: int) -> None:
         )
 
 
+def get_progress(username: str) -> dict[str, Any] | None:
+    """读取学生最后一次上报的当前步骤与历史最远步骤。"""
+    with conn() as c:
+        return c.execute(
+            "SELECT p.current_step, p.max_step, p.updated_at"
+            " FROM step_progress p JOIN accounts a ON a.id = p.account_id"
+            " WHERE a.username = %s AND a.role = 'student'",
+            (username,),
+        ).fetchone()
+
+
 # ---------------------------------------------------------------- 报告提交与评阅
 
 

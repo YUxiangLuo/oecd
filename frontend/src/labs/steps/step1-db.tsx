@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import type { DbMeta, DbSlice, DbTableKind } from "../../types";
-import { fmtDb, useAsync } from "../shared";
+import { fmtDb, Pager, useAsync } from "../shared";
 
 /** 国际主流投入产出数据库对比(客户资料《1、国际主流投入产出数据库的展示与说明》) */
 const DB_COMPARISON = [
@@ -47,6 +47,12 @@ const DB_TABLES: { key: DbTableKind; label: string; hint: string }[] = [
   { key: "y", label: "最终需求 Y", hint: "国家-行业 × 目的国需求类别" },
   { key: "accounts", label: "账户项", hint: "TLS / VA / OUT 转置为国家-行业行" },
 ];
+
+const ACCOUNT_HELP: Record<string, string> = {
+  TLS: "产品税减补贴。为负表示补贴超过产品税；步骤4 的 taxsub 正是沿投入产出链传导后的 TLS 含量。",
+  VA: "增加值：劳动报酬、资本回报等本地创造的价值，是步骤5生产活动分解的总来源。",
+  OUT: "总产出。按行看应等于中间使用 Z 的行和加最终需求 Y 的行和，步骤3会检验这条会计恒等式。",
+};
 
 /** 步骤1:数据库介绍 + OECD ICIO 原始表浏览 */
 export function DbLab() {
@@ -101,6 +107,14 @@ export function DbLab() {
   const pages = slice ? Math.max(1, Math.ceil(slice.total / slice.page_size)) : 1;
   const colOptions = table === "y" ? meta.final_demand_categories : meta.sectors;
   const activeTable = DB_TABLES.find((t) => t.key === table)!;
+  const dataColumns = (slice?.columns ?? []).filter((column) => column !== "row");
+  const rowHeatMax = (slice?.rows ?? []).map((row) =>
+    Math.max(...dataColumns.map((column) => Math.abs(typeof row[column] === "number" ? row[column] : 0)), 0));
+  const columnTotals = Object.fromEntries(dataColumns.map((column) => [
+    column,
+    (slice?.rows ?? []).reduce((sum, row) => sum + (typeof row[column] === "number" ? row[column] : 0), 0),
+  ]));
+  const showSummaries = table !== "accounts" && Boolean(slice?.row_summaries?.length);
 
   if (!meta.years.length) {
     return (
@@ -178,28 +192,71 @@ export function DbLab() {
       <div className="table-wrap">
         <table className="data-table db-table">
           <thead>
-            <tr>{(slice?.columns ?? ["row"]).map((c) => <th key={c}>{c}</th>)}</tr>
+            <tr>
+              {(slice?.columns ?? ["row"]).map((c, index) => (
+                <th
+                  key={c}
+                  title={ACCOUNT_HELP[c]}
+                  style={index === 0 ? { position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" } : undefined}
+                >
+                  {c}{ACCOUNT_HELP[c] ? " ⓘ" : ""}
+                </th>
+              ))}
+              {showSummaries && <th title="当前筛选列在该行的合计">切片合计</th>}
+              {showSummaries && <th title={ACCOUNT_HELP.OUT}>对应 OUT ⓘ</th>}
+            </tr>
           </thead>
           <tbody>
             {(slice?.rows ?? []).map((r, i) => (
               <tr key={`${r.row ?? "row"}-${i}`}>
-                {(slice?.columns ?? []).map((c) => (
-                  <td key={c}>{c === "row" ? String(r[c] ?? "—") : fmtDb(r[c])}</td>
-                ))}
+                {(slice?.columns ?? []).map((c, columnIndex) => {
+                  const value = r[c];
+                  const numericValue = typeof value === "number" ? value : null;
+                  const intensity = c === "row" || numericValue == null || rowHeatMax[i] === 0
+                    ? 0
+                    : Math.min(1, Math.abs(numericValue) / rowHeatMax[i]);
+                  return (
+                    <td
+                      key={c}
+                      title={ACCOUNT_HELP[c] ?? (typeof value === "number" ? `${c}: ${fmtDb(value)}` : undefined)}
+                      style={columnIndex === 0
+                        ? { position: "sticky", left: 0, zIndex: 2, background: "#fff", textAlign: "left" }
+                        : intensity > 0
+                          ? { background: numericValue != null && numericValue < 0 ? `rgba(227,73,72,${0.06 + intensity * 0.24})` : `rgba(42,120,214,${0.05 + intensity * 0.25})` }
+                          : undefined}
+                    >
+                      {c === "row" ? String(value ?? "—") : fmtDb(value)}
+                    </td>
+                  );
+                })}
+                {showSummaries && <td>{fmtDb(slice?.row_summaries?.[i]?.slice_total ?? null)}</td>}
+                {showSummaries && <td>{fmtDb(slice?.row_summaries?.[i]?.out ?? null)}</td>}
               </tr>
             ))}
             {slice && slice.rows.length === 0 && (
               <tr><td colSpan={slice.columns.length || 1}>无匹配记录</td></tr>
             )}
           </tbody>
+          {slice && slice.rows.length > 0 && (
+            <tfoot>
+              <tr style={{ fontWeight: 700, background: "#f7f8fb" }}>
+                <td style={{ position: "sticky", left: 0, zIndex: 2, background: "#f7f8fb", textAlign: "left" }}>本页列合计</td>
+                {dataColumns.map((column) => <td key={column}>{fmtDb(columnTotals[column])}</td>)}
+                {showSummaries && <td>{fmtDb((slice.row_summaries ?? []).reduce((sum, item) => sum + item.slice_total, 0))}</td>}
+                {showSummaries && <td>—</td>}
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
-      <div className="pager">
-        <button disabled={page <= 1} onClick={() => setPage(page - 1)}>← 上一页</button>
-        <span>{page} / {pages}{slice ? ` · 共 ${slice.total} 行` : ""}</span>
-        <button disabled={page >= pages} onClick={() => setPage(page + 1)}>下一页 →</button>
+      {table !== "accounts" && slice && (
+        <div className="tipbox" style={{ marginTop: 12 }}>
+          每个数据行同时给出当前切片合计与该国家–行业的 OUT。完整口径下，OUT = Z 行和 + Y 行和；当前切片只是一部分，差额来自未展示的目的国或需求列。
+        </div>
+      )}
+      <div style={{ marginTop: 12 }}>
+        <Pager page={page} pages={pages} total={slice?.total} onChange={setPage} />
       </div>
     </div>
   );
 }
-

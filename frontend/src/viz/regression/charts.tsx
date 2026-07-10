@@ -3,9 +3,11 @@ import { CAT, cardStyle, useTip } from "../shared";
 
 /* --------------------------- 事件研究:系数时间轴 --------------------------- */
 
-export function EventStudyChart({ coefs, notes }: {
+export function EventStudyChart({ coefs, notes, title, seriesLabel }: {
   coefs: { name: string; coef: number; se: number }[];
   notes: string[];
+  title?: string;
+  seriesLabel?: string;
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const pts = coefs.map((c) => ({ ...c, lo: c.coef - 1.96 * c.se, hi: c.coef + 1.96 * c.se }));
@@ -17,7 +19,7 @@ export function EventStudyChart({ coefs, notes }: {
   return (
     <div ref={wrapRef} style={{ ...cardStyle, marginTop: 14 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050", marginBottom: 6 }}>
-        事件研究:处理效应的动态路径(点 = 系数,须 = 95% 置信区间)
+        {title ?? "事件研究:处理效应的动态路径"}(点 = 系数,须 = 95% 置信区间)
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ display: "block", width: "100%", height: "auto" }}>
         {[-ext, -ext / 2, ext / 2, ext].map((v) => (
@@ -32,12 +34,12 @@ export function EventStudyChart({ coefs, notes }: {
         {pts.map((p, i) => (
           <g key={p.name}
             onMouseEnter={(e) => show(e, [
-              ["", p.name],
+              ["", seriesLabel ? `${seriesLabel} · ${p.name}` : p.name],
               ["系数", fmt(p.coef)],
               ["95% CI", `[${fmt(p.lo)}, ${fmt(p.hi)}]`],
             ])}
             onMouseMove={(e) => show(e, [
-              ["", p.name],
+              ["", seriesLabel ? `${seriesLabel} · ${p.name}` : p.name],
               ["系数", fmt(p.coef)],
               ["95% CI", `[${fmt(p.lo)}, ${fmt(p.hi)}]`],
             ])}
@@ -113,10 +115,15 @@ export function PlaceboChart({ data }: { data: PlaceboResponse["placebo"] }) {
         ))}
       </svg>
       <div style={{ fontSize: 11.5, color: "#5a6070", lineHeight: 1.7 }}>
-        {data.n_draws} 次随机化 · 原处理个体 {data.treated_entities}/{data.total_entities} ·
+        实际完成 {data.n_draws}/{data.requested_draws} 次随机化 · 原处理个体 {data.treated_entities}/{data.total_entities} ·
         cohort={Object.entries(data.cohorts).map(([y, n]) => `${y}:${n}`).join("、")} ·
         经验 p={data.empirical_p.toFixed(3)}
       </div>
+      {data.n_draws < data.requested_draws && (
+        <div role="alert" style={{ marginTop: 7, padding: "7px 10px", borderRadius: 7, background: "#fff5e8", color: "#9a5a00", fontSize: 11.5 }}>
+          有 {data.requested_draws - data.n_draws} 次随机化未得到有效估计；经验 p 值基于实际完成次数，解读时需谨慎。
+        </div>
+      )}
     </div>
   );
 }
@@ -129,8 +136,8 @@ export function CoefForestChart({ coefs }: {
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const pts = coefs.map((c) => ({ ...c, lo: c.coef - 1.96 * c.se, hi: c.coef + 1.96 * c.se }));
-  const rowH = 40, padT = 14, padB = 30, labelW = 96, padR = 18;
-  const W = 320, H = padT + pts.length * rowH + padB;
+  const rowH = 48, padT = 14, padB = 30, labelW = 132, padR = 18;
+  const W = 380, H = padT + pts.length * rowH + padB;
   const plotW = W - labelW - padR;
   const ext = Math.max(...pts.map((p) => Math.max(Math.abs(p.lo), Math.abs(p.hi))), 1e-6) * 1.12;
   const x = (v: number) => labelW + ((v + ext) / (2 * ext)) * plotW;
@@ -156,14 +163,21 @@ export function CoefForestChart({ coefs }: {
           const neg = p.coef < 0;
           const dot = neg ? "#d1462f" : "#137a41";
           const ci = neg ? "#f0b3a4" : "#a9d9bc";
+          const parts = p.name.includes("×base_gvc")
+            ? [p.name.replace("×base_gvc", ""), "×base_gvc"]
+            : p.name.length > 16
+              ? [p.name.slice(0, Math.ceil(p.name.length / 2)), p.name.slice(Math.ceil(p.name.length / 2))]
+              : [p.name];
           return (
             <g key={p.name}
               onMouseEnter={(e) => show(e, tip(p))}
               onMouseMove={(e) => show(e, tip(p))}
               onMouseLeave={hide} style={{ cursor: "default" }}>
               <rect x={labelW} y={y(i) - rowH / 2} width={plotW} height={rowH} fill="transparent" />
-              <text x={labelW - 8} y={y(i) + 3.5} textAnchor="end" fontSize={10.5} fill="#5a6070">
-                {p.name.length > 13 ? `${p.name.slice(0, 12)}…` : p.name}
+              <text x={labelW - 8} y={y(i) - (parts.length > 1 ? 5 : 0)} textAnchor="end" fontSize={10.5} fill="#5a6070">
+                {parts.map((part, partIndex) => (
+                  <tspan key={partIndex} x={labelW - 8} dy={partIndex === 0 ? 0 : 13}>{part}</tspan>
+                ))}
               </text>
               <line x1={x(p.lo)} x2={x(p.hi)} y1={y(i)} y2={y(i)} stroke={ci} strokeWidth={4} strokeLinecap="round" />
               <circle cx={x(p.coef)} cy={y(i)} r={5.5} fill={dot} stroke="#fff" strokeWidth={2} />

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { formatMetric } from "../../format";
 import type { NetworkData } from "../../types";
 import { CAT, Legend, REGION_OF, REGIONS, SEQ, cardStyle, num, useTip } from "../shared";
 
@@ -14,9 +15,7 @@ const NETWORK_METRICS: { key: NetworkMetric; label: string; format: "pct" | "num
 ];
 
 function fmtNetworkMetric(value: number, format: "pct" | "number" | "amount") {
-  if (format === "pct") return `${(value * 100).toFixed(1)}%`;
-  if (format === "amount") return value.toLocaleString("zh-CN", { maximumFractionDigits: 0 });
-  return Math.abs(value) >= 100 ? value.toLocaleString("zh-CN", { maximumFractionDigits: 0 }) : value.toFixed(3);
+  return formatMetric(value, format);
 }
 
 function seqColor(value: number, max: number) {
@@ -31,6 +30,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
   const [sizeMetric, setSizeMetric] = useState<NetworkMetric>("gvc_production_share");
   const [colorMode, setColorMode] = useState<NetworkColorMode>("region");
   const [edgeThreshold, setEdgeThreshold] = useState(0);
+  const [onlySelectedEdges, setOnlySelectedEdges] = useState(false);
 
   const model = useMemo(() => {
     const W = 1000, H = 560, cx = W / 2, cy = H / 2;
@@ -101,7 +101,15 @@ export function NetworkViz({ data }: { data: NetworkData }) {
   const { W, H, pos, metrics, maxMetric, maxFlow, neighbors, topLabeled } = model;
   const focus = hovered ?? selected;
   const adj = focus ? new Set([focus, ...(neighbors[focus] ?? []).map((n) => n.c)]) : null;
-  const visibleEdges = data.edges.filter((e) => num(e.flow) / maxFlow >= edgeThreshold);
+  const visibleEdges = data.edges.filter((e) => {
+    const passesThreshold = num(e.flow) / maxFlow >= edgeThreshold;
+    const touchesSelection = !onlySelectedEdges || !selected || String(e.source) === selected || String(e.target) === selected;
+    return passesThreshold && touchesSelection;
+  });
+  const labeledEdges = new Set(selected
+    ? visibleEdges.filter((edge) => String(edge.source) === selected || String(edge.target) === selected)
+      .sort((a, b) => num(b.flow) - num(a.flow)).slice(0, 5)
+    : []);
   const metricMeta = Object.fromEntries(NETWORK_METRICS.map((m) => [m.key, m])) as Record<NetworkMetric, typeof NETWORK_METRICS[number]>;
   const nodeColor = (c: string) =>
     colorMode === "region"
@@ -136,6 +144,10 @@ export function NetworkViz({ data }: { data: NetworkData }) {
           onChange={(e) => setEdgeThreshold(Number(e.target.value))}
         />
         <b>{(edgeThreshold * 100).toFixed(0)}%</b>
+        <label style={{ display: "inline-flex", alignItems: "center", gap: 5 }} title="锁定节点后，仅保留与它直接相连的贸易边">
+          <input type="checkbox" checked={onlySelectedEdges} onChange={(event) => setOnlySelectedEdges(event.target.checked)} />
+          只看选中节点的边
+        </label>
         {selected && <button onClick={() => setSelected(null)}>清除选择</button>}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ display: "block", width: "100%", height: "auto" }} onClick={() => setSelected(null)}>
@@ -150,11 +162,23 @@ export function NetworkViz({ data }: { data: NetworkData }) {
             const dx = p2.x - p1.x, dy = p2.y - p1.y;
             const off = Math.hypot(dx, dy) * 0.14, nl = Math.hypot(-dy, dx) || 1;
             const active = !adj || s === focus || t === focus;
+            const controlX = mx - (dy / nl) * off;
+            const controlY = my + (dx / nl) * off;
+            const labelX = (p1.x + 2 * controlX + p2.x) / 4;
+            const labelY = (p1.y + 2 * controlY + p2.y) / 4;
             return (
-              <path key={i} fill="none" stroke={col}
+              <g key={i}>
+              <path fill="none" stroke={col}
                 d={`M${p1.x} ${p1.y} Q${mx - (dy / nl) * off} ${my + (dx / nl) * off} ${p2.x} ${p2.y}`}
                 strokeOpacity={active ? 0.16 + f * 0.48 : 0.025}
                 strokeWidth={0.7 + f * 3.8} strokeLinecap="round" />
+              {labeledEdges.has(e) && (
+                <text x={labelX} y={labelY - 4} textAnchor="middle" fontSize={10.5} fontWeight={700} fill="#3a4050"
+                  stroke="#fff" strokeWidth={3.5} paintOrder="stroke" style={{ pointerEvents: "none" }}>
+                  {fmtNetworkMetric(num(e.flow), "amount")}
+                </text>
+              )}
+              </g>
             );
           })}
         </g>
@@ -225,10 +249,9 @@ export function NetworkViz({ data }: { data: NetworkData }) {
       )}
       <div style={{ position: "absolute", right: 18, bottom: 14, fontSize: 10.5, color: "#b0b5c2", textAlign: "right", lineHeight: 1.6 }}>
         节点大小 = {metricMeta[sizeMetric].label} · 节点颜色 = {colorMode === "region" ? "区域" : metricMeta[colorMode].label}<br />
-        显示 {visibleEdges.length}/{data.edges.length} 条 Top 边;点击节点锁定贸易伙伴明细
+        显示 {visibleEdges.length}/{data.edges.length} 条 Top 边;锁定节点后标注相关流量最高的 5 条边
       </div>
       {Tip}
     </div>
   );
 }
-
