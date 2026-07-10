@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import type { DbMeta, DbSlice, DbTableKind } from "../../types";
+import { countryLabel } from "../../viz";
 import { fmtDb, Pager, useAsync } from "../shared";
 
 /** 国际主流投入产出数据库对比(客户资料《1、国际主流投入产出数据库的展示与说明》) */
@@ -165,7 +166,7 @@ export function DbLab() {
       <div className="controls">
         <label>行国家</label>
         <select value={rowCountry} onChange={(e) => pickRowCountry(e.target.value)}>
-          {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
+          {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
         </select>
         <label>行行业</label>
         <select value={rowSector} onChange={(e) => pickRowSector(e.target.value)}>
@@ -176,7 +177,7 @@ export function DbLab() {
           <>
             <label>列国家</label>
             <select value={colCountry} onChange={(e) => pickColCountry(e.target.value)}>
-              {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
+              {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
             </select>
             <label>{table === "y" ? "最终需求" : "列行业"}</label>
             <select value={colSector} onChange={(e) => pickColSector(e.target.value)}>

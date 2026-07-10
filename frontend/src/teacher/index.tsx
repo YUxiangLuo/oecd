@@ -30,8 +30,10 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
     classId: null,
     reachedStep: null,
   });
-  // 拉一次提交列表算「待评阅」数,用于导航徽标(切 tab 时重新拉取,评阅后回到列表即更新)
-  const { data: subs } = useAsync<{ submissions: SubmissionRow[] }>(() => api.classroom.submissions(), [tab]);
+  // 评阅完成即 bump,让「待评阅」徽标立刻刷新,不用等切 tab
+  const [reviewBump, setReviewBump] = useState(0);
+  // 拉一次提交列表算「待评阅」数,用于导航徽标(切 tab 或评阅完成时重新拉取)
+  const { data: subs } = useAsync<{ submissions: SubmissionRow[] }>(() => api.classroom.submissions(), [tab, reviewBump]);
   const pending = (subs?.submissions ?? []).filter((r) => r.state === "pending").length;
 
   return (
@@ -79,7 +81,7 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
               onClearReachedStep={() => setStudentFilter((f) => ({ ...f, reachedStep: null }))}
             />
           )}
-          {tab === "reports" && <ReportsTab user={user} />}
+          {tab === "reports" && <ReportsTab user={user} onGraded={() => setReviewBump((n) => n + 1)} />}
           {tab === "announcements" && <AnnouncementsTab />}
         </div>
       </main>

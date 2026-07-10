@@ -13,6 +13,7 @@ import {
 } from "./regression";
 import { LoginPage } from "./login";
 import { TeacherDashboard } from "./teacher";
+import { ToastHost } from "./toast";
 import type { Announcement, AuthUser, Meta, Step, StepsResponse } from "./types";
 
 const ROMAN = ["", "一", "二", "三", "四", "五"];
@@ -64,6 +65,8 @@ export default function App() {
   const explicitStep = useRef(stepFromUrl());
   const navigationTouched = useRef(false);
   const [current, setCurrent] = useState(() => explicitStep.current ?? 4);
+  // 最远到达步:顶栏「学习进度」与大纲勾选按它显示,跳回前面复习不算进度倒退
+  const [maxStep, setMaxStep] = useState(() => explicitStep.current ?? 1);
   const [progressReady, setProgressReady] = useState(false);
   const [regressionSettings, setRegressionSettings] = useState<RegressionSettings>(DEFAULT_REGRESSION_SETTINGS);
   // 最近运行对比提升到应用会话:离开步骤13–16(如去步骤12/17)再回来时不丢失。
@@ -122,10 +125,17 @@ export default function App() {
   }, [user]);
 
   // 恢复本人上次进度；显式深链或用户已经主动导航时不覆盖当前选择。
+  // 当前步推进时同步刷新最远步(服务端也按 GREATEST 维护,重新登录后恢复)。
+  // 等进度恢复完成再开始跟随,避免换账号登录时旧会话的 current 污染新账号的最远步。
+  useEffect(() => {
+    if (progressReady) setMaxStep((m) => Math.max(m, current));
+  }, [current, progressReady]);
+
   useEffect(() => {
     if (!user) {
       navigationTouched.current = false;
       setProgressReady(false);
+      setMaxStep(1);
       return;
     }
     if (user.role !== "student") {
@@ -137,6 +147,7 @@ export default function App() {
     api.classroom.progress().then(
       (progress) => {
         if (!live) return;
+        setMaxStep((m) => Math.max(m, progress.max_step ?? progress.current_step ?? 1));
         if (explicitStep.current == null && !navigationTouched.current) {
           navigateStep(progress.current_step ?? 4);
           navigationTouched.current = false;
@@ -203,11 +214,12 @@ export default function App() {
             <span className="muted">
               数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
             </span>
-            <span className="role-chip">{user.name}</span>
+            <span className="role-chip" title={`教师账号 · ${user.username}`}>{user.name}</span>
             <button onClick={() => { localStorage.removeItem(AUTH_TOKEN_KEY); setUser(null); }}>退出</button>
           </div>
         </header>
         <TeacherDashboard user={user} />
+        <ToastHost />
       </div>
     );
 
@@ -245,9 +257,11 @@ export default function App() {
           <span className="muted">
             数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
           </span>
-          {/* 学习进度:显示当前所处步骤(非已完成数) */}
-          <span className="progress-pill">学习进度 <b>{current}</b><span>/17</span></span>
-          <span className="role-chip">{user.name}</span>
+          {/* 学习进度按最远到达步显示,跳回前面复习不会“倒退”;当前位置见步骤标题栏 */}
+          <span className="progress-pill" title={`最远到达第 ${maxStep} 步;当前在第 ${current} 步`}>
+            学习进度 <b>{maxStep}</b><span>/17</span>
+          </span>
+          <span className="role-chip" title={`学生账号 · ${user.username}`}>{user.name}</span>
           <button onClick={() => setShowIntro(true)}>ⓘ 系统介绍</button>
           <button onClick={() => { localStorage.removeItem(AUTH_TOKEN_KEY); setUser(null); }}>退出</button>
         </div>
@@ -290,7 +304,7 @@ export default function App() {
               <span className="sidebar-steps">17 STEPS</span>
             </div>
             <div className="progress-track">
-              <div className="progress-bar" style={{ width: `${Math.max(6, (current / 17) * 100)}%` }} />
+              <div className="progress-bar" style={{ width: `${Math.max(6, (maxStep / 17) * 100)}%` }} />
             </div>
             <div className="sidebar-sub">全球价值链实证分析 · 数据→指标→回归→报告</div>
           </div>
@@ -303,7 +317,8 @@ export default function App() {
                 <span className="stage-rule" />
               </div>
               {steps.filter((s) => s.stage === st).map((s) => {
-                const state = s.n < current ? "past" : s.n === current ? "cur" : "future";
+                // ✓ 表示“到过的步骤”(≤最远步),跳回复习时后面的勾不会消失
+                const state = s.n === current ? "cur" : s.n <= maxStep ? "past" : "future";
                 return (
                   <button
                     type="button"
@@ -407,7 +422,7 @@ export default function App() {
                   onClick={() => navigateStep(s.n)}
                   aria-label={`前往步骤 ${s.n}：${s.title}`}
                   aria-current={s.n === current ? "step" : undefined}
-                  className={`fdot${s.n === current ? " on" : s.n < current ? " past" : ""}`}
+                  className={`fdot${s.n === current ? " on" : s.n <= maxStep ? " past" : ""}`}
                 />
               ))}
             </div>
@@ -415,6 +430,7 @@ export default function App() {
           </footer>
         </div>
       </div>
+      <ToastHost />
     </div>
   );
 }

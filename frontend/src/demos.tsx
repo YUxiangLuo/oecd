@@ -13,7 +13,7 @@
 import { useMemo, useState } from "react";
 import { api } from "./api";
 import { useAsync } from "./labs";
-import { sectorLabel } from "./viz";
+import { countryLabel, sectorLabel } from "./viz";
 import { signedDomain, signedStack } from "./viz/signed-layout";
 import type { IndustryPage, Meta } from "./types";
 
@@ -194,7 +194,7 @@ export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) 
         <b>{compare ? `实体 ${side}` : "分析实体"}</b>
         <label>国家</label>
         <select value={country} onChange={(event) => setCountry(event.target.value)}>
-          {meta.countries.map((code) => <option key={code} value={code}>{code}</option>)}
+          {meta.countries.map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
         </select>
         {gran === "sector" && <>
           <label>行业</label>

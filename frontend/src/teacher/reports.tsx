@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import { ReportMarkdown } from "../report-renderer";
+import { showToast } from "../toast";
 import type { AuthUser, SubmissionDetail, SubmissionRow } from "../types";
 import { EmptyState, SearchInput, StatusPill, Toolbar } from "./ui";
 
@@ -15,7 +16,7 @@ const FILTERS: { key: Filter; label: string }[] = [
 ];
 
 /** 报告评阅:分段筛选 + 搜索的提交列表 → 左右双栏批阅 */
-export function ReportsTab({ user }: { user: AuthUser }) {
+export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () => void }) {
   const [refresh, setRefresh] = useState(0);
   const [openId, setOpenId] = useState<number | null>(null);
   const [filter, setFilter] = useState<Filter>("pending");
@@ -30,7 +31,10 @@ export function ReportsTab({ user }: { user: AuthUser }) {
         grader={user.username}
         onBack={(changed) => {
           setOpenId(null);
-          if (changed) setRefresh((n) => n + 1);
+          if (changed) {
+            setRefresh((n) => n + 1);
+            onGraded?.();
+          }
         }}
       />
     );
@@ -160,7 +164,10 @@ function SubmissionGradeView({
     }
     setSaving(true);
     api.classroom.grade(data.id, n, feedback).then(
-      () => onBack(true),
+      () => {
+        showToast(`已保存对 ${data.display_name} 的评阅:${n} 分`);
+        onBack(true);
+      },
       (e) => {
         setSaving(false);
         setSaveError(String(e.message ?? e));

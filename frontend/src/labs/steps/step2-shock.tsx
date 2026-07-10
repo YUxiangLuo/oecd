@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { api } from "../../api";
 import type { CrosswalkHsRow, CrosswalkPayload, Meta, PagedRows, ShockEvent, ShockSummary } from "../../types";
-import { sectorLabel } from "../../viz";
+import { countryLabel, sectorLabel } from "../../viz";
 import { Pager, pct, useAsync } from "../shared";
 
 const CROSSWALK_YEARS = [2018, 2019, 2020];
@@ -158,6 +158,8 @@ function EventTimeline({ events, onSelect }: { events: ShockEvent[]; onSelect: (
           const xa = x(event.announced);
           const xe = x(event.effective);
           const color = EVENT_COLORS[event.shock_type ?? "关税冲击"] ?? "#4a3aa7";
+          // 宣布与生效离得很近时略去文字标签(靠底部图例与悬停提示),密集区不再互相叠压
+          const labeled = Math.abs(xe - xa) >= 48;
           return (
             <g key={`${event.name}-${event.effective}`} role="button" tabIndex={0} style={{ cursor: "pointer" }}
               onClick={() => onSelect(event)}
@@ -168,8 +170,8 @@ function EventTimeline({ events, onSelect }: { events: ShockEvent[]; onSelect: (
               <line x1={xa} y1={y} x2={xe} y2={y} stroke={color} strokeWidth={3} strokeLinecap="round" />
               <circle cx={xa} cy={y} r={6} fill="#fff" stroke={color} strokeWidth={2.5} />
               <circle cx={xe} cy={y} r={6} fill={color} stroke="#fff" strokeWidth={1.5} />
-              <text x={xa} y={y - 10} textAnchor="middle" fontSize="9.5" fill="#777e8e">宣布</text>
-              <text x={xe} y={y + 15} textAnchor="middle" fontSize="9.5" fill={color}>生效</text>
+              {labeled && <text x={xa} y={y - 10} textAnchor="middle" fontSize="9.5" fill="#777e8e">宣布</text>}
+              {labeled && <text x={xe} y={y + 15} textAnchor="middle" fontSize="9.5" fill={color}>生效</text>}
             </g>
           );
         })}
@@ -265,7 +267,7 @@ export function ShockLab({ meta }: { meta: Meta }) {
         <label>国家</label>
         <select value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}>
           <option value="">全部</option>
-          {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
+          {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
         </select>
         <label>行业</label>
         <select value={sector} onChange={(e) => { setSector(e.target.value); setPage(1); }}>

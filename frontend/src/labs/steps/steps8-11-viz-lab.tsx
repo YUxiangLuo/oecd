@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { api } from "../../api";
 import type { IndicatorSchema, IndustryPage, Meta, NetworkData, Step } from "../../types";
-import { CompositionBar, HeatTableViz, LengthViz, NetworkViz, QuadrantScatter, RankBarChart, ScatterChart, sectorLabel, StackedShareViz, TrendChart } from "../../viz";
+import { CompositionBar, HeatTableViz, LengthViz, NetworkViz, QuadrantScatter, RankBarChart, ScatterChart, countryLabel, sectorLabel, StackedShareViz, TrendChart } from "../../viz";
+import { CountryPicker } from "../country-picker";
 import { fieldLabel, fmtField, useAsync } from "../shared";
 
 type ViewKind = "signature" | "rank" | "scatter" | "quadrant" | "composition" | "trend" | "table";
@@ -68,7 +69,7 @@ const STEP_VIZ: Record<number, StepVizConfig> = {
     quadrant: ["weighted degree", "betweenesscentrality"],
     quadLabels: ["核心枢纽", "桥接者(高介数)", "边缘", "枢纽连接者(高加权度)"],
     columns: ["degree", "weighted degree", "betweenesscentrality", "closnesscentrality", "harmonicclosnesscentrality", "eigencentrality"],
-    framing: "谁是生产网络的枢纽?加权度=贸易连接的总流量,介数中心性=控扼要冲的程度,四象限区分四类角色。",
+    framing: "谁是生产网络的枢纽?加权度=贸易连接的总流量(百万美元,轴刻度以万/亿缩写),介数中心性=控扼要冲的程度,四象限区分四类角色。",
   },
 };
 
@@ -239,7 +240,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
             <span className="field">
               <label>下钻国家</label>
               <select value={drillCountry} onChange={(e) => setDrillCountry(e.target.value)}>
-                {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
+                {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
               </select>
             </span>
           )}
@@ -268,10 +269,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
           ) : view === "quadrant" && (granularity === "sector" || entityMode === "topn") ? (
             <span className="muted">显示全部 {validRows.length} 个有效样本；参考线始终按完整样本计算</span>
           ) : (
-            <select multiple className="country-multi" value={picked}
-              onChange={(e) => setPicked(Array.from(e.target.selectedOptions, (o) => o.value))}>
-              {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <CountryPicker countries={meta.countries} picked={picked} onChange={setPicked} />
           )}
         </div>
       )}

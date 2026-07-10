@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "../../api";
 import type { IndicatorSchema, IndustryPage, Meta, Step } from "../../types";
 import { DecompositionDemo, NetworkCentralityDemo } from "../../demos";
-import { sectorLabel } from "../../viz";
+import { countryLabel, sectorLabel } from "../../viz";
 import { fieldLabel, fmtField, Pager, useAsync } from "../shared";
 
 const STEP_GROUP: Record<number, string> = {
@@ -50,7 +50,7 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
         <label>国家</label>
         <select value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}>
           <option value="">全部</option>
-          {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
+          {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
         </select>
         <label>年份</label>
         <select value={year} onChange={(e) => { setYear(Number(e.target.value)); setPage(1); }}>

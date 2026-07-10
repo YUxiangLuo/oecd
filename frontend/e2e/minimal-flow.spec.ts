@@ -234,10 +234,11 @@ test("登录、进入步骤、跑回归并生成报告", async ({ page }) => {
   await expect(page.getByRole("img", { name: "FVA Top 5" })).toBeVisible();
   expect(reportRequests).toBe(1);
 
-  // 学生看到公告横幅,并能把报告提交给老师
+  // 学生看到公告横幅,并能把报告提交给老师(提交卡片更新状态 + 成功 toast)
   await expect(page.getByText("e2e 公告:报告周五截止")).toBeVisible();
   await page.getByRole("button", { name: "提交报告给老师" }).click();
-  await expect(page.getByText("等待教师评阅", { exact: false })).toBeVisible();
+  await expect(page.locator(".submit-card").getByText("等待教师评阅", { exact: false })).toBeVisible();
+  await expect(page.locator(".toast-item")).toContainText("报告已提交");
 });
 
 test("教师面板:概览、学生名单、评阅报告", async ({ page }) => {

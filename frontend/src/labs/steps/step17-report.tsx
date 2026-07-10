@@ -1,19 +1,27 @@
 import { useRef, useState } from "react";
 import { api } from "../../api";
 import { ReportMarkdown } from "../../report-renderer";
+import { showToast } from "../../toast";
 import type { Meta, MySubmission, RegressionOptions, ReportRequest, ReportResponse } from "../../types";
 import { useAsync } from "../shared";
 
 const fmtTime = (s: string | null | undefined) => (s ? s.slice(0, 16).replace("T", " ") : "—");
 
-/** 提交报告给老师 + 评阅结果展示。教学库停机不影响报告生成与打印。 */
-function SubmitCard({ request, data }: { request: ReportRequest; data: ReportResponse }) {
-  const [refresh, setRefresh] = useState(0);
+/** 提交报告给老师 + 评阅结果展示。进入本页即回显提交/评分状态,不依赖先生成报告;
+ *  教学库停机不影响报告生成与打印。 */
+function SubmitCard({ request, data, mine, error, onSubmitted }: {
+  request: ReportRequest | null;
+  data: ReportResponse | null;
+  mine: MySubmission | null;
+  error: string | null;
+  onSubmitted: () => void;
+}) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const { data: mine, error } = useAsync<MySubmission>(() => api.classroom.myReport(), [refresh]);
 
   if (error) {
+    // 报告尚未生成时不打扰:教学库不可用只在“想提交”的场景需要说明
+    if (!(data && request)) return null;
     return (
       <div className="card accent submit-card" role="status">
         <div className="kicker">提交与评阅</div>
@@ -30,8 +38,12 @@ function SubmitCard({ request, data }: { request: ReportRequest; data: ReportRes
       </div>
     );
   }
+  // 从未提交且尚未生成报告:没有可展示的状态,由页面空态文案兜底
+  if (mine.state === "none" && !(data && request)) return null;
 
+  const canSubmit = Boolean(data && request);
   const submit = () => {
+    if (!data || !request) return;
     setSubmitting(true);
     api.classroom
       .submitReport({
@@ -41,7 +53,12 @@ function SubmitCard({ request, data }: { request: ReportRequest; data: ReportRes
         markdown: data.markdown,
       })
       .then(
-        () => { setSubmitting(false); setSubmitError(null); setRefresh((n) => n + 1); },
+        () => {
+          setSubmitting(false);
+          setSubmitError(null);
+          showToast(mine.state === "none" ? "报告已提交，等待教师评阅" : "已重新提交，等待教师重新评阅");
+          onSubmitted();
+        },
         (e) => { setSubmitting(false); setSubmitError(String(e.message ?? e)); },
       );
   };
@@ -64,9 +81,13 @@ function SubmitCard({ request, data }: { request: ReportRequest; data: ReportRes
         <p>报告生成后可提交给老师评阅;当前设定与报告全文会一并快照留档。</p>
       )}
       <div className="controls">
-        <button className="primary" disabled={submitting} onClick={submit}>
-          {submitting ? "提交中…" : mine.state === "none" ? "提交报告给老师" : "重新提交当前报告"}
-        </button>
+        {canSubmit ? (
+          <button className="primary" disabled={submitting} onClick={submit}>
+            {submitting ? "提交中…" : mine.state === "none" ? "提交报告给老师" : "重新提交当前报告"}
+          </button>
+        ) : (
+          <span className="muted">点击上方「生成报告」后,可重新提交覆盖本次记录。</span>
+        )}
       </div>
       {submitError && <div className="error-box">{submitError}</div>}
     </div>
@@ -92,6 +113,9 @@ export function ReportLab({ meta }: { meta: Meta }) {
   const [generating, setGenerating] = useState(false);
   const generatingRef = useRef(false);
   const { data: opts } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
+  // 进入本页即拉取提交/评阅状态:学生不必重跑回归生成报告才能看到得分与评语
+  const [submitRefresh, setSubmitRefresh] = useState(0);
+  const { data: mine, error: mineError } = useAsync<MySubmission>(() => api.classroom.myReport(), [submitRefresh]);
   const setField = <K extends keyof ReportRequest>(key: K, value: ReportRequest[K]) => {
     setDraft((current) => ({ ...current, [key]: value }));
   };
@@ -157,6 +181,7 @@ export function ReportLab({ meta }: { meta: Meta }) {
         <button
           className="secondary"
           disabled={!data || !request || generating}
+          title="打开浏览器打印对话框,选择“另存为 PDF”即可保存"
           onClick={() => window.print()}
         >
           导出 PDF
@@ -164,6 +189,7 @@ export function ReportLab({ meta }: { meta: Meta }) {
       </div>
       <p className="muted">
         正式报告固定使用基准 <code>clean</code> 场景；步骤13–16中的 noisy/confounded 仅用于课堂识别练习，不写入正式报告。
+        「导出 PDF」经浏览器打印对话框完成,目标选“另存为 PDF”。
       </p>
       {error ? (
         <div className="error-box">{error}</div>
@@ -174,13 +200,22 @@ export function ReportLab({ meta }: { meta: Meta }) {
             当前设定:{request.granularity} · {request.shock_type} · {request.method} ·
             {request.control_mode} · {request.price_mode} · 排除 ROW{request.interaction ? " · 交互项" : ""}
           </p>
-          <SubmitCard request={request} data={data} />
+          <SubmitCard request={request} data={data} mine={mine} error={mineError}
+            onSubmitted={() => setSubmitRefresh((n) => n + 1)} />
           <ReportMarkdown markdown={data.markdown} />
         </>
       ) : generating ? (
-        <p className="muted" role="status">正在生成报告，请稍候…</p>
+        <>
+          <SubmitCard request={null} data={null} mine={mine} error={mineError}
+            onSubmitted={() => setSubmitRefresh((n) => n + 1)} />
+          <p className="muted" role="status">正在生成报告，请稍候…</p>
+        </>
       ) : (
-        <p className="muted">选择设定后点击“生成报告”；系统不会在进入本页时自动运行四组回归。</p>
+        <>
+          <SubmitCard request={null} data={null} mine={mine} error={mineError}
+            onSubmitted={() => setSubmitRefresh((n) => n + 1)} />
+          <p className="muted">选择设定后点击“生成报告”；系统不会在进入本页时自动运行四组回归。</p>
+        </>
       )}
     </div>
   );

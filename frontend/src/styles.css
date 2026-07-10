@@ -158,7 +158,17 @@ button { font-family: inherit; cursor: pointer; }
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .data-table tr:hover td { background: #f7f8fb; }
-.table-wrap { overflow-x: auto; border: 1px solid #e7e9f0; border-radius: 12px; background: #fff; }
+/* 横向可滚动的表格容器:两侧滚动阴影提示还有内容(background-attachment: local
+   的白色遮罩滚到边缘时盖住阴影;1280–1440 宽的课堂笔记本上尤其需要这个暗示) */
+.table-wrap {
+  overflow-x: auto; border: 1px solid #e7e9f0; border-radius: 12px;
+  background:
+    linear-gradient(90deg, #fff 40%, rgba(255, 255, 255, 0)) left / 32px 100% no-repeat local,
+    linear-gradient(270deg, #fff 40%, rgba(255, 255, 255, 0)) right / 32px 100% no-repeat local,
+    linear-gradient(90deg, rgba(27, 31, 43, 0.12), rgba(27, 31, 43, 0)) left / 12px 100% no-repeat scroll,
+    linear-gradient(270deg, rgba(27, 31, 43, 0.12), rgba(27, 31, 43, 0)) right / 12px 100% no-repeat scroll,
+    #fff;
+}
 
 .seg { display: flex; background: #eef0f5; border-radius: 9px; padding: 3px; gap: 2px; }
 .seg button {
@@ -279,6 +289,7 @@ button { font-family: inherit; cursor: pointer; }
   .card.accent,
   .report-controls,
   .report-meta,
+  .toast-host,
   .error-box {
     display: none !important;
   }
@@ -543,9 +554,14 @@ button { font-family: inherit; cursor: pointer; }
   .intro-overlay *, .login-brand * { animation: none !important; transition: none !important; opacity: 1; }
 }
 .topbar-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+/* 身份徽章:圆点 + 文本的状态样式,避免做成染色 pill 后被当成按钮点 */
 .topbar-user .role-chip {
-  font-size: 11px; font-weight: 600; color: #4b47e0; background: #edecfd;
-  padding: 3px 9px; border-radius: 6px;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; color: #5a6070;
+  cursor: default; user-select: none;
+}
+.topbar-user .role-chip::before {
+  content: ""; width: 7px; height: 7px; border-radius: 99px; background: #4b47e0; flex: none;
 }
 .topbar-user button {
   padding: 6px 12px; border-radius: 8px; border: 1px solid #e0e3ea; background: #fff;
@@ -863,11 +879,53 @@ button { font-family: inherit; cursor: pointer; }
 .topn-ctl { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: #6b7280; }
 .topn-ctl input[type="range"] { width: 120px; accent-color: #4b47e0; }
 .topn-ctl b { font-family: "Space Grotesk", sans-serif; color: #4b47e0; min-width: 18px; text-align: center; }
-.country-multi {
-  min-width: 160px; height: 86px; border-radius: 8px; border: 1px solid #e0e3ea;
-  font-size: 12px; font-family: inherit; padding: 3px 5px; accent-color: #4b47e0;
+/* 选国家:搜索 + 勾选列表 + 已选 chips(替代原生 multi-select) */
+.country-picker {
+  min-width: 240px; max-width: 320px; border: 1px solid #e0e3ea; border-radius: 10px;
+  background: #fff; padding: 8px; font-size: 12px;
 }
-.country-multi option { padding: 2px 5px; border-radius: 4px; }
+.country-picker-head { display: flex; gap: 6px; align-items: center; }
+.country-picker-head input[type="search"] {
+  flex: 1; min-width: 0; border: 1px solid #e0e3ea; border-radius: 7px;
+  padding: 5px 8px; font-size: 12px; font-family: inherit;
+}
+.country-picker-clear {
+  border: none; background: transparent; color: #8a90a0; font-size: 11.5px; padding: 3px 5px;
+}
+.country-picker-clear:hover { color: #e34948; }
+.country-picker-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.country-chip {
+  border: 1px solid #d9d6fb; background: #edecfd; color: #4b47e0;
+  border-radius: 99px; padding: 2px 8px; font-size: 11px; font-weight: 600;
+}
+.country-chip:hover { background: #e0defc; }
+.country-picker-list {
+  margin-top: 7px; max-height: 132px; overflow-y: auto;
+  border-top: 1px solid #f0f1f6; padding-top: 5px;
+}
+.country-picker-row {
+  display: flex; align-items: center; gap: 7px; padding: 3px 5px;
+  border-radius: 6px; cursor: pointer;
+}
+.country-picker-row:hover { background: #f4f5f8; }
+.country-picker-row input { accent-color: #4b47e0; }
+.country-picker-row b { font-family: "Space Grotesk", sans-serif; font-weight: 600; color: #3a4050; }
+.country-picker-row span { color: #6b7280; }
+
+/* 操作成功 toast(showToast/ToastHost) */
+.toast-host {
+  position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; gap: 8px; z-index: 60; pointer-events: none;
+}
+.toast-item {
+  background: #1b1f2b; color: #fff; font-size: 12.5px; font-weight: 500;
+  padding: 10px 18px; border-radius: 99px; box-shadow: 0 10px 28px rgba(16, 20, 34, 0.32);
+  animation: toast-in 0.22s ease-out;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
 /* ---------- 教师面板:仪表盘外壳 ---------- */
 .teacher-layout { flex: 1; display: flex; min-height: 0; }
