@@ -23,7 +23,10 @@ def test_login_success_and_me():
     assert me.json()["username"] == "student"
 
 
-def test_login_rejects_bad_credentials():
+def test_login_rejects_bad_credentials(monkeypatch):
+    # 这里只验证 API 将普通认证失败映射为 401，不让结果依赖运行机是否有 PostgreSQL。
+    # 数据库停机时的演示账号回退与 503 语义由下方独立测试覆盖。
+    monkeypatch.setattr(auth, "authenticate", lambda _username, _password: None)
     assert client.post("/api/auth/login", json={"username": "student", "password": "wrong"}).status_code == 401
     assert client.post("/api/auth/login", json={"username": "ghost", "password": "gvclab2026"}).status_code == 401
 
