@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import type { DbMeta, DbSlice, DbTableKind } from "../../types";
-import { countryLabel } from "../../viz";
+import { countryLabel, sectorLabel } from "../../viz";
 import { fmtDb, Pager, useAsync } from "../shared";
 
 /** 国际主流投入产出数据库对比(客户资料《1、国际主流投入产出数据库的展示与说明》) */
@@ -54,6 +54,25 @@ const ACCOUNT_HELP: Record<string, string> = {
   VA: "增加值：劳动报酬、资本回报等本地创造的价值，是步骤5生产活动分解的总来源。",
   OUT: "总产出。按行看应等于中间使用 Z 的行和加最终需求 Y 的行和，步骤3会检验这条会计恒等式。",
 };
+
+/** OECD ICIO 最终需求类别缩写 → 中文名(Y 表列名形如 USA_HFCE:目的国_需求类别) */
+const FD_HELP: Record<string, string> = {
+  HFCE: "居民最终消费支出",
+  NPISH: "为居民服务的非营利机构消费",
+  GGFC: "政府最终消费支出",
+  GFCF: "固定资本形成总额(投资)",
+  INVNT: "存货变化",
+  DPABR: "居民境外直接购买(出境旅行等消费)",
+};
+
+/** 列头悬停说明:账户项直接查表;Y 表列拆成「目的国 + 需求类别」组合解释 */
+function columnHelp(column: string): string | undefined {
+  if (ACCOUNT_HELP[column]) return ACCOUNT_HELP[column];
+  const sep = column.lastIndexOf("_");
+  if (sep <= 0) return undefined;
+  const category = FD_HELP[column.slice(sep + 1)];
+  return category ? `${countryLabel(column.slice(0, sep))} 的${category}` : undefined;
+}
 
 /** 步骤1:数据库介绍 + OECD ICIO 原始表浏览 */
 export function DbLab() {
@@ -171,7 +190,7 @@ export function DbLab() {
         <label>行行业</label>
         <select value={rowSector} onChange={(e) => pickRowSector(e.target.value)}>
           <option value="">全部</option>
-          {meta.sectors.map((s) => <option key={s} value={s}>{s}</option>)}
+          {meta.sectors.map((s) => <option key={s} value={s}>{sectorLabel(s)}</option>)}
         </select>
         {table !== "accounts" && (
           <>
@@ -182,7 +201,9 @@ export function DbLab() {
             <label>{table === "y" ? "最终需求" : "列行业"}</label>
             <select value={colSector} onChange={(e) => pickColSector(e.target.value)}>
               <option value="">全部</option>
-              {colOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+              {colOptions.map((s) => (
+                <option key={s} value={s}>{table === "y" ? (FD_HELP[s] ? `${s} ${FD_HELP[s]}` : s) : sectorLabel(s)}</option>
+              ))}
             </select>
           </>
         )}
@@ -197,10 +218,10 @@ export function DbLab() {
               {(slice?.columns ?? ["row"]).map((c, index) => (
                 <th
                   key={c}
-                  title={ACCOUNT_HELP[c]}
+                  title={columnHelp(c)}
                   style={index === 0 ? { position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" } : undefined}
                 >
-                  {c}{ACCOUNT_HELP[c] ? " ⓘ" : ""}
+                  {c}{columnHelp(c) ? " ⓘ" : ""}
                 </th>
               ))}
               {showSummaries && <th title="当前筛选列在该行的合计">切片合计</th>}
@@ -219,7 +240,7 @@ export function DbLab() {
                   return (
                     <td
                       key={c}
-                      title={ACCOUNT_HELP[c] ?? (typeof value === "number" ? `${c}: ${fmtDb(value)}` : undefined)}
+                      title={columnHelp(c) ?? (typeof value === "number" ? `${c}: ${fmtDb(value)}` : undefined)}
                       style={columnIndex === 0
                         ? { position: "sticky", left: 0, zIndex: 2, background: "#fff", textAlign: "left" }
                         : intensity > 0

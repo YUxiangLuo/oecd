@@ -1,5 +1,5 @@
 import { formatMetric } from "../../format";
-import { CAT, KEY_ECONOMIES, Legend, type Row, cardStyle, num, rowName, useTip } from "../shared";
+import { CAT, KEY_ECONOMIES, Legend, type Row, cardStyle, num, rowLabel, rowName, useTip } from "../shared";
 import { signedDomain, signedStack } from "../signed-layout";
 import { linearFit } from "../statistics";
 
@@ -42,12 +42,13 @@ export function RankBarChart({ rows, metricKey, label, format, highlight }: {
           const widthPct = Math.max(1, segment.widthPct);
           const leftPct = segment.negative ? layout.zeroPct - widthPct : segment.leftPct;
           const entity = rowName(r);
+          const display = rowLabel(r);
           const hi = highlight?.has(entity);
           return (
             <div key={entity} style={{ display: "flex", alignItems: "center", gap: 10 }}
-              onMouseMove={(e) => show(e, [["", entity], [label, fmtVal(v, format)]])}
+              onMouseMove={(e) => show(e, [["", display], [label, fmtVal(v, format)]])}
               onMouseLeave={hide}>
-              <span title={entity} style={{ width: 132, flexShrink: 0, fontSize: 11.5, color: "#5a6070", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entity}</span>
+              <span title={display} style={{ width: 132, flexShrink: 0, fontSize: 11.5, color: "#5a6070", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{display}</span>
               <div style={{ flex: 1, position: "relative", height: 16, background: "#f2f3f7", borderRadius: 5, overflow: "hidden" }}>
                 {domain.negative > 0 && <span aria-hidden style={{ position: "absolute", zIndex: 2, insetBlock: 0, left: `${layout.zeroPct}%`, borderLeft: "1.5px solid #4b5263" }} />}
                 <div style={{
@@ -76,7 +77,7 @@ export function ScatterChart({ rows, xKey, yKey, xLabel, yLabel, xFormat, yForma
   const W = 660, H = 400, m = { l: 62, r: 18, t: 14, b: 46 };
   // c = 完整名(tooltip / 高亮匹配),tag = 图上短标签(行业只标代码,避免中文名越界)
   const pts = rows.map((r) => ({
-    c: rowName(r), tag: r.industry != null ? String(r.industry) : String(r.country),
+    c: rowName(r), label: rowLabel(r), tag: r.industry != null ? String(r.industry) : String(r.country),
     x: num(r[xKey]), y: num(r[yKey]),
   }));
   const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
@@ -120,7 +121,7 @@ export function ScatterChart({ rows, xKey, yKey, xLabel, yLabel, xFormat, yForma
           const key = KEY_ECONOMIES.has(p.tag);
           return (
             <g key={p.c}
-              onMouseMove={(e) => show(e, [["", p.c], [xLabel, fmtVal(p.x, xFormat)], [yLabel, fmtVal(p.y, yFormat)]])}
+              onMouseMove={(e) => show(e, [["", p.label], [xLabel, fmtVal(p.x, xFormat)], [yLabel, fmtVal(p.y, yFormat)]])}
               onMouseLeave={hide} style={{ cursor: "pointer" }}>
               <circle cx={px(p.x)} cy={py(p.y)} r={hi ? 6 : 4.5}
                 fill={hi ? CAT[5] : CAT[0]} fillOpacity={hi ? 0.95 : 0.62}
@@ -162,7 +163,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
   const { wrapRef, Tip, show, hide } = useTip();
   const W = 660, H = 400, m = { l: 62, r: 18, t: 14, b: 46 };
   const pts = rows.map((r) => ({
-    c: rowName(r), tag: r.industry != null ? String(r.industry) : String(r.country),
+    c: rowName(r), label: rowLabel(r), tag: r.industry != null ? String(r.industry) : String(r.country),
     x: num(r[xKey]), y: num(r[yKey]),
   }));
   const referencePts = (referenceRows ?? rows).map((r) => ({ x: num(r[xKey]), y: num(r[yKey]) }));
@@ -212,7 +213,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
           const key = KEY_ECONOMIES.has(p.tag);
           return (
             <g key={p.c}
-              onMouseMove={(e) => show(e, [["", p.c], [xLabel, fmtVal(p.x, xFormat)], [yLabel, fmtVal(p.y, yFormat)]])}
+              onMouseMove={(e) => show(e, [["", p.label], [xLabel, fmtVal(p.x, xFormat)], [yLabel, fmtVal(p.y, yFormat)]])}
               onMouseLeave={hide} style={{ cursor: "pointer" }}>
               <circle cx={px(p.x)} cy={py(p.y)} r={hi ? 6 : 4.5}
                 fill={hi ? CAT[5] : CAT[0]} fillOpacity={hi ? 0.95 : 0.62} stroke="#fff" strokeWidth={1} />
@@ -245,7 +246,7 @@ export function CompositionBar({ rows, segments, sortKey, sortLabel, sortFormat,
   const domain = signedDomain(data.map((row) => segments.map((segment) => num(row[segment.key]))), normalize);
   const hasNegative = data.some((row) => segments.some((segment) => num(row[segment.key]) < 0));
   const tipLines = (r: Row): [string, string][] => [
-    ["", rowName(r)],
+    ["", rowLabel(r)],
     ...segments.map((s) => [s.name, fmtVal(num(r[s.key]), valueFormat)] as [string, string]),
     // 排序指标若不在分段里(如按毛出口/总量排序),额外单列,用它自己的格式
     ...(sortLabel && !segKeys.has(skey) ? [[sortLabel, fmtVal(num(r[skey]), sortFormat)] as [string, string]] : []),
@@ -258,13 +259,14 @@ export function CompositionBar({ rows, segments, sortKey, sortLabel, sortFormat,
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {data.map((r) => {
           const entity = rowName(r);
+          const display = rowLabel(r);
           const hi = highlight?.has(entity);
           const layout = signedStack(segments.map((segment) => num(r[segment.key])), domain, normalize);
           return (
             <div key={entity} style={{ display: "flex", alignItems: "center", gap: 10 }}
               onMouseMove={(e) => show(e, tipLines(r))} onMouseLeave={hide}>
-              <span title={entity} style={{ width: 128, flexShrink: 0, fontSize: 11.5, fontWeight: hi ? 700 : 500,
-                color: hi ? "#4b47e0" : "#5a6070", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{entity}</span>
+              <span title={display} style={{ width: 128, flexShrink: 0, fontSize: 11.5, fontWeight: hi ? 700 : 500,
+                color: hi ? "#4b47e0" : "#5a6070", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{display}</span>
               <div style={{ flex: 1, position: "relative", height: 17, background: "#f2f3f7", borderRadius: 5, overflow: "hidden" }}>
                 {domain.negative > 0 && <span aria-hidden style={{ position: "absolute", zIndex: 3, top: 0, bottom: 0, left: `${layout.zeroPct}%`, borderLeft: "1.5px solid #4b5263" }} />}
                 {segments.map((s, i) => {
@@ -296,7 +298,9 @@ export function TrendChart({ years, series, label, format }: {
   label: string; format?: string;
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
-  const W = 660, H = 380, m = { l: 62, r: 92, t: 16, b: 38 };
+  // 右边距按最长线尾标签自适应:行业下钻的中文名远比 3 字母国家码宽
+  const maxLabelLen = Math.max(3, ...series.map((s) => s.country.length));
+  const W = 660, H = 380, m = { l: 62, r: Math.min(190, Math.max(92, 14 + maxLabelLen * 10.5)), t: 16, b: 38 };
   const all = series.flatMap((s) => s.values).filter((v) => Number.isFinite(v));
   const lo = all.length ? Math.min(...all) : 0, hi = all.length ? Math.max(...all) : 1;
   const pad = (hi - lo) * 0.08 || Math.abs(hi) * 0.1 || 1;
@@ -304,6 +308,21 @@ export function TrendChart({ years, series, label, format }: {
   const px = (i: number) => m.l + (years.length === 1 ? 0.5 : i / (years.length - 1)) * (W - m.l - m.r);
   const py = (v: number) => H - m.b - ((v - y0) / (y1 - y0 || 1)) * (H - m.t - m.b);
   const yticks = [0, 1, 2, 3, 4].map((i) => y0 + ((y1 - y0) / 4) * i);
+  // 线尾标签防碰撞:按终点纵坐标排序后保证至少 13px 间距,终值接近的系列不再叠字
+  const labelYBySeries: Record<number, number> = {};
+  series
+    .map((s, si) => {
+      const finite = s.values.map((v, i) => ({ i, v })).filter((p) => Number.isFinite(p.v));
+      const last = finite.at(-1);
+      return last ? { si, y: py(last.v) } : null;
+    })
+    .filter((e): e is { si: number; y: number } => e != null)
+    .sort((a, b) => a.y - b.y)
+    .reduce((prevY, e) => {
+      const y = Math.min(H - 6, Math.max(e.y, prevY + 13));
+      labelYBySeries[e.si] = y;
+      return y;
+    }, -Infinity);
   return (
     <div style={cardStyle} ref={wrapRef}>
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{label} · 趋势 {years[0]}–{years.at(-1)}</div>
@@ -331,7 +350,7 @@ export function TrendChart({ years, series, label, format }: {
                   onMouseLeave={hide} style={{ cursor: "pointer" }} />
               ))}
               {last && (
-                <text x={px(last.i) + 7} y={py(last.v) + 3.5} fontSize="10.5" fill={color} fontWeight={700}>{s.country}</text>
+                <text x={px(last.i) + 7} y={(labelYBySeries[si] ?? py(last.v)) + 3.5} fontSize="10.5" fill={color} fontWeight={700}>{s.country}</text>
               )}
             </g>
           );

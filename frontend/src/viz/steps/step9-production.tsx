@@ -1,4 +1,4 @@
-import { CAT, Legend, type Row, cardStyle, num, useTip } from "../shared";
+import { CAT, Legend, type Row, cardStyle, countryLabel, num, useTip } from "../shared";
 
 /* --------------------------- 步骤9:生产结构堆叠条 --------------------------- */
 
@@ -18,7 +18,7 @@ export function StackedShareViz({ rows }: { rows: Row[] }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const top = [...rows].sort((a, b) => shareOf(b, "3b_VA_GVC_C") - shareOf(a, "3b_VA_GVC_C")).slice(0, 15);
   const tipLines = (r: Row): [string, string][] => [
-    ["", String(r.country)],
+    ["", countryLabel(String(r.country))],
     ...PROD_SEGS.map((s) => [s.name, `${(shareOf(r, s.key) * 100).toFixed(1)}%`] as [string, string]),
   ];
   return (

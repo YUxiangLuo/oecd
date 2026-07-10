@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { formatMetric } from "../../format";
 import type { NetworkData } from "../../types";
-import { CAT, Legend, REGION_OF, REGIONS, SEQ, cardStyle, num, useTip } from "../shared";
+import { CAT, Legend, REGION_OF, REGIONS, SEQ, cardStyle, countryLabel, num, useTip } from "../shared";
 
 /* ------------------------------ 步骤8:网络图 ------------------------------ */
 
@@ -11,7 +11,7 @@ type NetworkColorMode = "region" | NetworkMetric;
 const NETWORK_METRICS: { key: NetworkMetric; label: string; format: "pct" | "number" | "amount" }[] = [
   { key: "gvc_production_share", label: "GVC 生产份额", format: "pct" },
   { key: "betweenesscentrality", label: "介数中心性", format: "number" },
-  { key: "gross_exports", label: "毛出口", format: "amount" },
+  { key: "gross_exports", label: "毛出口(百万美元)", format: "amount" },
 ];
 
 function fmtNetworkMetric(value: number, format: "pct" | "number" | "amount") {
@@ -116,7 +116,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
       ? CAT[REGION_OF[c] ?? 5]
       : seqColor(metrics[colorMode][c] ?? 0, maxMetric[colorMode]);
   const tooltipLines = (c: string): [string, string][] => [
-    ["", `${c} · ${REGIONS[REGION_OF[c] ?? 5]}`],
+    ["", `${countryLabel(c)} · ${REGIONS[REGION_OF[c] ?? 5]}`],
     ...NETWORK_METRICS.map((m) => [m.label, fmtNetworkMetric(metrics[m.key][c] ?? 0, m.format)] as [string, string]),
     ["主要伙伴", (neighbors[c] ?? []).slice(0, 4).map((n) => n.c).join("、") || "—"],
   ];
@@ -226,7 +226,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
       {selected && (
         <div className="network-detail">
           <div className="network-detail-head">
-            <strong>{selected}</strong>
+            <strong>{countryLabel(selected)}</strong>
             <button onClick={() => setSelected(null)}>×</button>
           </div>
           <div className="network-detail-grid">
@@ -238,10 +238,10 @@ export function NetworkViz({ data }: { data: NetworkData }) {
             ))}
           </div>
           <table>
-            <thead><tr><th>伙伴</th><th>双边流量</th></tr></thead>
+            <thead><tr><th>伙伴</th><th>双边流量(百万美元)</th></tr></thead>
             <tbody>
               {selectedNeighbors.slice(0, 8).map((n) => (
-                <tr key={n.c}><td>{n.c}</td><td>{fmtNetworkMetric(n.flow, "amount")}</td></tr>
+                <tr key={n.c}><td>{countryLabel(n.c)}</td><td>{fmtNetworkMetric(n.flow, "amount")}</td></tr>
               ))}
             </tbody>
           </table>

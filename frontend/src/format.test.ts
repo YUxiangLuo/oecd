@@ -18,4 +18,13 @@ describe("formatMetric", () => {
     expect(formatMetric(Number.POSITIVE_INFINITY, "amount")).toBe("—");
     expect(formatMetric(Number.NaN)).toBe("—");
   });
+
+  test("normalizes negative zero and tiny negatives that round to zero", () => {
+    expect(formatMetric(-0, "amount")).toBe("0");
+    expect(formatMetric(-1e-13, "amount")).toBe("0");
+    expect(formatMetric(-1e-9, "pct")).toBe("0.00%");
+    expect(formatMetric(-1e-9, "number")).toBe("0.000");
+    // 真正的负数不受影响
+    expect(formatMetric(-0.5, "amount")).toBe("-0.5");
+  });
 });

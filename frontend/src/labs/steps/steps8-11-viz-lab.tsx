@@ -151,7 +151,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
       ? picked
       : [...allRows].sort((a, b) => num(b[rankBy]) - num(a[rankBy])).slice(0, Math.min(topN, 6)).map((r) => String(r.country));
   const trendSeries = trendEntities.map((entity) => ({
-    country: granularity === "sector" ? sectorLabel(entity) : entity,
+    country: granularity === "sector" ? sectorLabel(entity) : countryLabel(entity),
     values: meta.years.map((_, i) => {
       const r = (yearsData?.[i] ?? []).find((row) => String(row[granularity === "sector" ? "industry" : "country"]) === entity);
       return r && isFin(r[rankBy]) ? num(r[rankBy]) : NaN;
@@ -159,7 +159,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
   }));
 
   const tableRows = !tableSort ? selRows : [...selRows].sort((a, b) => {
-    const entity = (row: Record<string, string | number | null>) => row.industry != null ? sectorLabel(String(row.industry)) : String(row.country ?? "");
+    const entity = (row: Record<string, string | number | null>) => row.industry != null ? sectorLabel(String(row.industry)) : countryLabel(String(row.country ?? ""));
     const av = tableSort.key === "__entity__" ? entity(a) : a[tableSort.key];
     const bv = tableSort.key === "__entity__" ? entity(b) : b[tableSort.key];
     const aMissing = av == null || (typeof av === "number" && !Number.isFinite(av));
@@ -338,7 +338,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
             <tbody>
               {tableRows.map((r) => (
                 <tr key={String(r.industry ?? r.country)}>
-                  <td style={{ position: "sticky", left: 0, zIndex: 2, background: "#fff" }}>{r.industry != null ? sectorLabel(String(r.industry)) : String(r.country)}</td>
+                  <td style={{ position: "sticky", left: 0, zIndex: 2, background: "#fff" }}>{r.industry != null ? sectorLabel(String(r.industry)) : countryLabel(String(r.country))}</td>
                   {cfg.columns.map((c) => <td key={c}>{fmtField(r[c], c, schema)}</td>)}
                 </tr>
               ))}

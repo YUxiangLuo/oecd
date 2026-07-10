@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { formatMetric } from "../format";
+import { formatMetric, stripNegativeZero } from "../format";
 import type { IndicatorSchema } from "../types";
 
 export function fmtField(v: string | number | null, key: string, schema?: IndicatorSchema | null) {
@@ -14,7 +14,7 @@ export function fieldLabel(key: string, schema?: IndicatorSchema | null) {
 export const fmtDb = (v: string | number | null) => {
   if (typeof v !== "number") return v ?? "—";
   if (!Number.isFinite(v)) return "—";
-  return v.toLocaleString("zh-CN", { maximumFractionDigits: Math.abs(v) < 10 ? 3 : 2 });
+  return stripNegativeZero(v.toLocaleString("zh-CN", { maximumFractionDigits: Math.abs(v) < 10 ? 3 : 2 }));
 };
 
 export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {

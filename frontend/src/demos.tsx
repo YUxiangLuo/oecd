@@ -11,6 +11,7 @@
  * NetworkCentralityDemo(步骤7):在一个小网络上演示度/介数中心性怎么算出来。
  */
 import { useMemo, useState } from "react";
+import { stripNegativeZero } from "./format";
 import { api } from "./api";
 import { useAsync } from "./labs";
 import { countryLabel, sectorLabel } from "./viz";
@@ -94,9 +95,9 @@ function partValue(row: Row, p: Part, cfg: DecompCfg): number {
   return wTot ? (num(row[p.weightKey]) * num(row[p.key])) / wTot : 0;
 }
 function fmt(v: number, unit: "amount" | "number"): string {
-  return unit === "amount"
+  return stripNegativeZero(unit === "amount"
     ? v.toLocaleString("zh-CN", { maximumFractionDigits: 0 })
-    : v.toFixed(3);
+    : v.toFixed(3));
 }
 
 const PLY_DECOMP: DecompCfg = {

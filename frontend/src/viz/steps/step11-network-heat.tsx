@@ -1,11 +1,11 @@
 import { formatMetric } from "../../format";
 import type { IndicatorSchema } from "../../types";
-import { type Row, SEQ, cardStyle, num, rowName } from "../shared";
+import { type Row, SEQ, cardStyle, num, rowLabel } from "../shared";
 
 /* ----------------------------- 步骤11:热力表 ----------------------------- */
 
 const HEAT_COLS = [
-  { key: "weighted degree", name: "加权度", fmt: "amount", desc: "与该节点直接相连的贸易流量总和。" },
+  { key: "weighted degree", name: "加权度", fmt: "amount", desc: "与该节点直接相连的贸易流量总和(百万美元)。" },
   { key: "betweenesscentrality", name: "介数中心性", fmt: "raw", desc: "其他节点对之间最短路径经过该节点的程度。" },
   { key: "closnesscentrality", name: "接近中心性", fmt: "num", desc: "到网络中其他节点最短距离和的倒数。" },
   { key: "harmonicclosnesscentrality", name: "调和中心性", fmt: "num", desc: "各目标节点距离倒数之和，对非连通网络更稳健。" },
@@ -22,7 +22,7 @@ export function HeatTableViz({ rows, schema }: { rows: Row[]; schema?: Indicator
     const v = num(r[key]);
     const idx = Math.min(SEQ.length - 1, Math.floor((v / maxOf[key]) * SEQ.length));
     return (
-      <div title={`${rowName(r)} · ${schema?.fields[key]?.label ?? key}: ${fmtVal(v, fmt)}`} style={{
+      <div title={`${rowLabel(r)} · ${schema?.fields[key]?.label ?? key}: ${fmtVal(v, fmt)}`} style={{
         width: 104, padding: "5px 0", borderRadius: 7, textAlign: "center",
         background: SEQ[idx], color: idx >= 3 ? "#fff" : "#1b1f2b",
         fontSize: 12, fontVariantNumeric: "tabular-nums",
@@ -37,14 +37,14 @@ export function HeatTableViz({ rows, schema }: { rows: Row[]; schema?: Indicator
       </div>
       {top.map((r) => (
         <div key={String(r.country)} style={{ display: "flex", alignItems: "center", padding: "6px 18px", borderBottom: "1px solid #f4f5f8", fontSize: 12.5 }}>
-          <div title={r.industry != null ? String(r.industry) : undefined} style={{ flex: 1, fontWeight: 500 }}>{rowName(r)}</div>
+          <div title={r.industry != null ? String(r.industry) : undefined} style={{ flex: 1, fontWeight: 500 }}>{rowLabel(r)}</div>
           {HEAT_COLS.map((c) => (
             <div key={c.key} style={{ width: 118, display: "flex", justifyContent: "center" }}>{cell(r, c.key, c.fmt)}</div>
           ))}
         </div>
       ))}
       <div style={{ padding: "10px 18px", fontSize: 11, color: "#a2a8b6" }}>
-        颜色深浅 = 该列内相对大小(每列独立归一化);Gephi 口径:加权度为贸易流量金额,介数为原始路径计数
+        颜色深浅 = 该列内相对大小(每列独立归一化);Gephi 口径:加权度为贸易流量金额(百万美元),介数为原始路径计数
       </div>
     </div>
   );
