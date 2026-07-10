@@ -24,13 +24,21 @@ const WHY_CHECK: [string, string][] = [
 const whyCheck = (name: string) => WHY_CHECK.find(([prefix]) => name.startsWith(prefix))?.[1]
   ?? "确认该中间产物满足后续计算与回归所依赖的口径，避免错误在流水线中继续传播。";
 
-export function QcLab({ meta }: { meta: Meta }) {
+export function QcLab({ meta, onNavigateStep }: { meta: Meta; onNavigateStep: (step: number) => void }) {
   const [year, setYear] = useState(meta.years.at(-1)!);
   const { data, error } = useAsync<QcCheck[]>(() => api.qc(year), [year]);
   const { data: shockChecks, error: shockError } = useAsync<QcCheck[]>(() => api.qcShocks(), []);
   const { data: controlChecks, error: controlError } = useAsync<QcCheck[]>(() => api.qcControls(), []);
   if (error) return <div className="error-box">{error}</div>;
-  const allChecks = [data, shockChecks, controlChecks].flatMap((rows) => rows ?? []);
+  // 总数从三组响应实际推导,不硬编码;加载中与读取失败分开表述,失败不会伪装成“加载中”。
+  const sections = [
+    { rows: data, error: null as string | null },
+    { rows: shockChecks, error: shockError },
+    { rows: controlChecks, error: controlError },
+  ];
+  const loading = sections.some((section) => section.rows == null && section.error == null);
+  const failedSections = sections.filter((section) => section.error != null).length;
+  const allChecks = sections.flatMap((section) => section.rows ?? []);
   const failures = allChecks.filter((check) => !check.passed).length;
   const table = (rows: QcCheck[] | null) => (
     <div className="table-wrap">
@@ -54,7 +62,12 @@ export function QcLab({ meta }: { meta: Meta }) {
                   <div className="muted" style={{ marginTop: 5 }}>{whyCheck(c.name)}</div>
                   {(c.name.startsWith("会计恒等式") || c.name.startsWith("维度一致性")) && (
                     <div style={{ marginTop: 5 }}>
-                      <a href="?step=1">前往步骤1浏览 Z / Y / OUT 原始切片核对 →</a>
+                      <button
+                        onClick={() => onNavigateStep(1)}
+                        style={{ border: 0, background: "transparent", padding: 0, font: "inherit", color: "#4b47e0", cursor: "pointer", textDecoration: "underline" }}
+                      >
+                        前往步骤1浏览 Z / Y / OUT 原始切片核对 →
+                      </button>
                     </div>
                   )}
                 </details>
@@ -68,12 +81,14 @@ export function QcLab({ meta }: { meta: Meta }) {
   return (
     <div>
       <YearPicker years={meta.years} year={year} onChange={setYear} />
-      <div className={failures ? "warnbox" : "tipbox"} style={{ marginBottom: 16, fontWeight: 700 }}>
-        {allChecks.length < 15
+      <div className={failures || failedSections ? "warnbox" : "tipbox"} style={{ marginBottom: 16, fontWeight: 700 }}>
+        {loading
           ? `正在汇总质检结果… 已读取 ${allChecks.length} 项`
-          : failures
-            ? `15 项质检中 ${15 - failures} 项通过、${failures} 项异常；异常项已在各表置顶。`
-            : "✓ 15 项质检全部通过；仍可展开每项查看检查动机与口径。"}
+          : failedSections
+            ? `有 ${failedSections} 组质检未能读取（详见下方错误）；已读取 ${allChecks.length} 项中 ${failures} 项异常。`
+            : failures
+              ? `${allChecks.length} 项质检中 ${allChecks.length - failures} 项通过、${failures} 项异常；异常项已在各表置顶。`
+              : `✓ ${allChecks.length} 项质检全部通过；仍可展开每项查看检查动机与口径。`}
       </div>
       <div className="section-head">
         <span className="section-head-icon">🧾</span>OECD ICIO 数据质检

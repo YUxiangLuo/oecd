@@ -6,6 +6,7 @@
 
 import json
 import math
+from functools import lru_cache
 from numbers import Real
 from pathlib import Path
 
@@ -261,8 +262,10 @@ _INDICATOR_DESCRIPTIONS = {
     "betweenesscentrality": "经过该节点的最短路径占比，越高表示越可能成为供应链中转枢纽。",
     "eigencentrality": "同时考虑连接数量与相邻节点重要性的中心性指标。",
 }
+# 用 .get 而不是下标:漏写描述应表现为测试失败(test_indicator_schema 断言
+# desc 全部非空),而不是 import 时 KeyError 拖垮整个服务。
 for _field, _meta in INDICATOR_SCHEMA["fields"].items():
-    _meta["desc"] = _INDICATOR_DESCRIPTIONS[_field]
+    _meta["desc"] = _INDICATOR_DESCRIPTIONS.get(_field, "")
 
 
 class LoginRequest(BaseModel):
@@ -447,6 +450,16 @@ def _read_shocks() -> pd.DataFrame:
     return _read_path(SHOCKS_DIR / shocks.DEMO_FILE)
 
 
+@lru_cache(maxsize=8)
+def _exposure_lookup(path_str: str, mtime_ns: int) -> dict[tuple[str, str], float]:
+    """(国家, 加征方) → 出口暴露度。与 CSV 缓存同样按 mtime 失效,
+    避免分页热路径上每个请求都重建整张查找表。"""
+    exposure = read_csv_artifact(Path(path_str))
+    return {
+        (str(row.country), str(row.imposer)): float(row.export_exposure) for row in exposure.itertuples(index=False)
+    }
+
+
 def _with_tariff_exposure(df: pd.DataFrame, year: int, shock_type: str) -> pd.DataFrame:
     """为关税面板行补充主要加征方及 ICIO 出口暴露度。"""
     out = df.copy()
@@ -456,17 +469,15 @@ def _with_tariff_exposure(df: pd.DataFrame, year: int, shock_type: str) -> pd.Da
         return out
 
     imposer_by_event = {event.name: event.imposer for event in shocks.EVENTS}
-    out["main_imposer"] = out["note"].map(imposer_by_event).where(out["note"] != "", None)
+    # note 为空或对不上事件表时保持 None,不让 NaN 渗入 JSON 或查找键。
+    out["main_imposer"] = [imposer_by_event.get(note) if note else None for note in out["note"].astype(str)]
 
     exposure_path = PROCESSED_DIR / f"{shocks.EXPOSURE_PREFIX}_{year}.csv"
     exposure_lookup: dict[tuple[str, str], float] = {}
     if exposure_path.exists():
-        exposure = _read_path(exposure_path)
-        exposure_lookup = {
-            (str(row.country), str(row.imposer)): float(row.export_exposure) for row in exposure.itertuples(index=False)
-        }
+        exposure_lookup = _exposure_lookup(str(exposure_path), exposure_path.stat().st_mtime_ns)
     out["export_exposure"] = [
-        exposure_lookup.get((str(country), str(imposer))) if imposer is not None else None
+        exposure_lookup.get((str(country), imposer)) if imposer is not None else None
         for country, imposer in zip(out["country"], out["main_imposer"])
     ]
     return out

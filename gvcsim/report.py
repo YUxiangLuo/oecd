@@ -283,10 +283,26 @@ def build(
 
 def generate(
     year: int | None = None,
-    **kwargs,
+    *,
+    granularity: str = "国家–行业级",
+    shock_type: str = "关税冲击",
+    method: str = "双重差分 (DID)",
+    control_mode: str = "不加控制变量",
+    interaction: bool = False,
+    price_mode: str = "名义值",
+    exclude_row: bool = True,
 ) -> str:
     """CLI 落盘入口：构建报告后写入 ``reports/`` 并返回路径。"""
-    document = build(year, **kwargs)
+    document = build(
+        year,
+        granularity=granularity,
+        shock_type=shock_type,
+        method=method,
+        control_mode=control_mode,
+        interaction=interaction,
+        price_mode=price_mode,
+        exclude_row=exclude_row,
+    )
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     output = REPORTS_DIR / document.suggested_filename
     output.write_text(document.markdown, encoding="utf-8")

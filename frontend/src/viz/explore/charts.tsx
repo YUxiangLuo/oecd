@@ -24,6 +24,9 @@ export function RankBarChart({ rows, metricKey, label, format, highlight }: {
           const v = num(r[metricKey]);
           const layout = signedStack([v], domain, false);
           const segment = layout.segments[0];
+          // 极小值也保留 1% 可见宽度;负值向左扩,保持贴住零轴。
+          const widthPct = Math.max(1, segment.widthPct);
+          const leftPct = segment.negative ? layout.zeroPct - widthPct : segment.leftPct;
           const entity = rowName(r);
           const hi = highlight?.has(entity);
           return (
@@ -35,7 +38,7 @@ export function RankBarChart({ rows, metricKey, label, format, highlight }: {
                 {domain.negative > 0 && <span aria-hidden style={{ position: "absolute", zIndex: 2, insetBlock: 0, left: `${layout.zeroPct}%`, borderLeft: "1.5px solid #4b5263" }} />}
                 <div style={{
                   position: "absolute", top: 0, bottom: 0,
-                  left: `${segment.leftPct}%`, width: `${segment.widthPct}%`,
+                  left: `${leftPct}%`, width: `${widthPct}%`,
                   background: segment.negative ? "#e34948" : hi ? CAT[5] : CAT[0],
                   transition: "width .4s, left .4s",
                 }} />

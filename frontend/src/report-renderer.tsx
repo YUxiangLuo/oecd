@@ -216,6 +216,8 @@ export function ReportMarkdown({ markdown, className = "report-md" }: { markdown
             <blockquote style={{ margin: "14px 0", padding: "8px 14px", borderLeft: "3px solid #4b47e0", background: "#f7f8fb", color: "#596173" }} {...props}>{children}</blockquote>
           ),
           // 提交内容会在教师端打开；禁用 Markdown 图片，避免自动请求学生指定的外部跟踪 URL。
+          // 链接保留可点(react-markdown 默认 urlTransform 已拦截 javascript: 等危险协议),
+          // 教师主动点击学生提供的外部链接是已接受的残余风险。
           img: ({ alt }) => <span className="muted">[图片已禁用{alt ? `：${alt}` : ""}]</span>,
         }}
       >

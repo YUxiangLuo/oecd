@@ -271,6 +271,9 @@ interface RunSnapshot {
   response: RegressionResponse;
 }
 
+/** 按步骤号保存的最近运行快照;由 App 持有,离开回归步骤再回来不丢失。 */
+export type RegressionHistory = Record<number, RunSnapshot[]>;
+
 const settingsKey = (settings: RegressionSettings) => JSON.stringify(settings);
 
 function settingsSummary(settings: RegressionSettings): string {
@@ -347,7 +350,11 @@ function RunComparison({ snapshots, onClear }: { snapshots: RunSnapshot[]; onCle
   );
 }
 
-export function RegressionRunLab({ step, settings, onSettingsChange }: { step: Step } & SharedSettingsProps) {
+export function RegressionRunLab({ step, settings, onSettingsChange, history, onHistoryChange }: {
+  step: Step;
+  history: RegressionHistory;
+  onHistoryChange: React.Dispatch<React.SetStateAction<RegressionHistory>>;
+} & SharedSettingsProps) {
   const { granularity: gran, shockType: shock, method, controlMode, interaction, priceMode, scenario } = settings;
   const setSetting = <K extends keyof RegressionSettings>(key: K, value: RegressionSettings[K]) => {
     onSettingsChange({ ...settings, [key]: value });
@@ -358,8 +365,6 @@ export function RegressionRunLab({ step, settings, onSettingsChange }: { step: S
   const [placeboError, setPlaceboError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [placeboRunning, setPlaceboRunning] = useState(false);
-  const [history, setHistory] = useState<Record<number, RunSnapshot[]>>({});
-  const nextRunId = useRef(1);
   const runningRef = useRef(false);
   const placeboRunningRef = useRef(false);
   const latestRequest = useRef(`${step.n}:${settingsKey(settings)}`);
@@ -399,11 +404,16 @@ export function RegressionRunLab({ step, settings, onSettingsChange }: { step: S
         runSettings.priceMode,
         runSettings.scenario,
       );
-      const snapshot: RunSnapshot = { id: nextRunId.current++, settings: runSettings, response };
-      setHistory((current) => ({
-        ...current,
-        [step.n]: [snapshot, ...(current[step.n] ?? [])].slice(0, 3),
-      }));
+      onHistoryChange((current) => {
+        const prior = current[step.n] ?? [];
+        // id 从已有快照推导,组件重挂载后不会与提升到 App 的历史撞 key。
+        const snapshot: RunSnapshot = {
+          id: Math.max(0, ...prior.map((item) => item.id)) + 1,
+          settings: runSettings,
+          response,
+        };
+        return { ...current, [step.n]: [snapshot, ...prior].slice(0, 3) };
+      });
       if (latestRequest.current === requestKey) setResult(response);
     } catch (e) {
       if (latestRequest.current === requestKey) setError(String((e as Error).message));
@@ -620,7 +630,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange }: { step: S
       )}
       <RunComparison
         snapshots={history[step.n] ?? []}
-        onClear={() => setHistory((current) => ({ ...current, [step.n]: [] }))}
+        onClear={() => onHistoryChange((current) => ({ ...current, [step.n]: [] }))}
       />
     </div>
   );

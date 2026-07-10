@@ -130,6 +130,21 @@ export function PlaceboChart({ data }: { data: PlaceboResponse["placebo"] }) {
 
 /* --------------------- 步骤13-16:系数森林图(横向 CI) --------------------- */
 
+/** 长系数名折成两行:优先在最靠近中点的分隔符(×、_、空格)处断行,避免截断记号。 */
+function splitCoefName(name: string): string[] {
+  if (name.includes("×base_gvc")) return [name.replace("×base_gvc", ""), "×base_gvc"];
+  if (name.length <= 16) return [name];
+  const mid = Math.ceil(name.length / 2);
+  let breakAt = -1;
+  for (let i = 1; i < name.length - 1; i++) {
+    if ("×_ ".includes(name[i]) && (breakAt === -1 || Math.abs(i - mid) < Math.abs(breakAt - mid))) breakAt = i;
+  }
+  if (breakAt === -1) return [name.slice(0, mid), name.slice(mid)];
+  // × 归到第二行行首(读作运算符),_ 与空格留在第一行行尾。
+  const cut = name[breakAt] === "×" ? breakAt : breakAt + 1;
+  return [name.slice(0, cut), name.slice(cut)];
+}
+
 /** 点=估计值,横条=95% 置信区间,竖线=0 轴;负效应红、正效应绿(与系数表一致)。 */
 export function CoefForestChart({ coefs }: {
   coefs: { name: string; coef: number; se: number; p: number; stars: string }[];
@@ -163,11 +178,7 @@ export function CoefForestChart({ coefs }: {
           const neg = p.coef < 0;
           const dot = neg ? "#d1462f" : "#137a41";
           const ci = neg ? "#f0b3a4" : "#a9d9bc";
-          const parts = p.name.includes("×base_gvc")
-            ? [p.name.replace("×base_gvc", ""), "×base_gvc"]
-            : p.name.length > 16
-              ? [p.name.slice(0, Math.ceil(p.name.length / 2)), p.name.slice(Math.ceil(p.name.length / 2))]
-              : [p.name];
+          const parts = splitCoefName(p.name);
           return (
             <g key={p.name}
               onMouseEnter={(e) => show(e, tip(p))}

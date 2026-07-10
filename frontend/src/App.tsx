@@ -8,6 +8,7 @@ import {
   DEFAULT_REGRESSION_SETTINGS,
   RegDesignLab,
   RegressionRunLab,
+  type RegressionHistory,
   type RegressionSettings,
 } from "./regression";
 import { LoginPage } from "./login";
@@ -21,15 +22,17 @@ function stepFromUrl(): number | null {
   return Number.isInteger(n) && n >= 1 && n <= 17 ? n : null;
 }
 
-function Lab({ step, meta, regressionSettings, onRegressionSettingsChange, onNavigateStep }: {
+function Lab({ step, meta, regressionSettings, onRegressionSettingsChange, regressionHistory, onRegressionHistoryChange, onNavigateStep }: {
   step: Step;
   meta: Meta | null;
   regressionSettings: RegressionSettings;
   onRegressionSettingsChange: (settings: RegressionSettings) => void;
+  regressionHistory: RegressionHistory;
+  onRegressionHistoryChange: React.Dispatch<React.SetStateAction<RegressionHistory>>;
   onNavigateStep: (step: number) => void;
 }) {
   if (step.lab === "db") return <DbLab />;
-  if (step.lab === "qc") return meta ? <QcLab meta={meta} /> : null;
+  if (step.lab === "qc") return meta ? <QcLab meta={meta} onNavigateStep={onNavigateStep} /> : null;
   if (step.lab === "shock") return meta ? <ShockLab meta={meta} /> : null;
   if (step.lab === "ind") return meta ? <IndicatorLab meta={meta} step={step} /> : null;
   if (step.lab === "viz")
@@ -46,6 +49,8 @@ function Lab({ step, meta, regressionSettings, onRegressionSettingsChange, onNav
       step={step}
       settings={regressionSettings}
       onSettingsChange={onRegressionSettingsChange}
+      history={regressionHistory}
+      onHistoryChange={onRegressionHistoryChange}
     />
   );
   if (step.lab === "rep") return meta ? <ReportLab meta={meta} /> : null;
@@ -61,6 +66,8 @@ export default function App() {
   const [current, setCurrent] = useState(() => explicitStep.current ?? 4);
   const [progressReady, setProgressReady] = useState(false);
   const [regressionSettings, setRegressionSettings] = useState<RegressionSettings>(DEFAULT_REGRESSION_SETTINGS);
+  // 最近运行对比提升到应用会话:离开步骤13–16(如去步骤12/17)再回来时不丢失。
+  const [regressionHistory, setRegressionHistory] = useState<RegressionHistory>({});
   const [fatal, setFatal] = useState<string | null>(null);
   // 认证:localStorage 里的令牌先经 /api/auth/me 真实校验再放行
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -97,6 +104,7 @@ export default function App() {
       setMeta(null);
       setFatal(null);
       setProgressReady(false);
+      setRegressionHistory({});
     };
     window.addEventListener("gvcsim-auth-expired", onExpired);
     return () => window.removeEventListener("gvcsim-auth-expired", onExpired);
@@ -345,6 +353,8 @@ export default function App() {
                   meta={meta}
                   regressionSettings={regressionSettings}
                   onRegressionSettingsChange={setRegressionSettings}
+                  regressionHistory={regressionHistory}
+                  onRegressionHistoryChange={setRegressionHistory}
                   onNavigateStep={navigateStep}
                 />
               </div>
