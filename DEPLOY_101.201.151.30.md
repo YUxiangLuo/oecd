@@ -14,8 +14,8 @@
 - systemd 服务: `gvcsim-api.service`
 - 后端监听: `127.0.0.1:18000`
 - 前端静态文件: `/opt/oecd-icio-analysis/frontend/dist`
-- 当前部署来源分支: `cc`
-- 当前应用代码部署提交: `4d80e37 Merge pull request #17 from YUxiangLuo/feat/teacher-dashboard`
+- 当前部署来源分支: `feat/case-showcase`(PR #20 预览)
+- 当前应用代码部署提交: `ee2d666 feat(frontend): 为 17 步教学加入内嵌案例展示`
 - 教学数据库(教师端 dashboard 依赖): 本机 PostgreSQL 15,`gvclab` 库,DSN `postgresql://alice:111111@127.0.0.1:5432/gvclab`(与 `config.PG_DSN` 默认值一致,systemd 未额外设 `GVCSIM_PG_DSN`)
 
 ## 本地准备
@@ -334,6 +334,16 @@ curl -fsS --max-time 90 \
 - PostgreSQL / psycopg / 教学数据均已在上条部署时就绪,本次无需再动;直接 rsync(`cc`)+ `systemctl restart` + `nginx reload`
 - 线上验证:首页 `200`,`student` 与 `teacher / gvclab2026` 登录 `200`;
   `/api/classroom/overview`(teacher token)`students=13 submitted=8 graded=5` 数据仍在
+
+2026-07-14 更新部署(源 `feat/case-showcase` @ `ee2d666`,17 步内嵌案例展示,**PR #20 预览**):
+
+- **纯前端**改动(新增指标解读型 + 政策情景型案例卡),无后端/指标/数据口径变化,**未重跑 `gvcsim compute`**,无 Python 依赖变化
+- 部署前本地全绿:`pytest -q`(110 passed)、前端 `bun run build`、`bun test src`(26 passed)、Playwright E2E(5 passed,1 real-api 按设计跳过)
+- 按本文档 rsync(含 `.venv311/` 排除)+ `systemctl restart gvcsim-api.service` + `nginx -t && reload` 流程重新部署;`.venv311` 完好,服务 `active`,新 dist 哈希(`index-BUrhs251.js`)已上线
+- 线上验证:首页 / `/docs` `200 OK`,`student / gvclab2026` 登录与 `/api/auth/me`、`/api/regression/options` `200 OK`
+- 国家级 DID + ICIO 控制回归 `200 OK`:`n_obs = 380`、`n_clusters = 76`、`benchmark.coef_check_passed = true`、`se_check_mode = informational`
+- agent-browser 实测:步骤 2 显示「📌 贯穿案例 · 2018 中美关税」政策卡;步骤 4 显示「真实案例」条,三张卡按真实 OECD 数据渲染(越南 FVA 38.33%、卢森堡 52.72%、美国 5.51%),点开越南卡即把拆解演示切到国家级并跳到越南
+- PR #20 合并进 `cc` 后需把部署来源切回主线(参照上条 PR #17 的「来源对齐」做法)
 
 ### 教学数据库(PostgreSQL)—— 教师端 dashboard 依赖
 
