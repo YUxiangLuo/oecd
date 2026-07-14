@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
-import { ReportMarkdown } from "../report-renderer";
+import { ReportMarkdown } from "../report-renderer-lazy";
 import { showToast } from "../toast";
 import type { AuthUser, SubmissionDetail, SubmissionRow } from "../types";
 import { EmptyState, SearchInput, StatusPill, Toolbar } from "./ui";

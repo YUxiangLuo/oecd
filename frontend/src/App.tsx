@@ -219,6 +219,8 @@ export default function App() {
           </div>
         </header>
         <TeacherDashboard user={user} />
+        {/* 教师端 ToastHost:与下方学生端的实例互斥(此处提前 return),任一时刻只挂载一个;
+            切勿在两个分支之外再挂一份,否则同一 toast 会重复弹出 */}
         <ToastHost />
       </div>
     );
@@ -430,6 +432,7 @@ export default function App() {
           </footer>
         </div>
       </div>
+      {/* 学生端 ToastHost:与上方教师端实例互斥,任一时刻只挂载一个(见教师分支处说明) */}
       <ToastHost />
     </div>
   );

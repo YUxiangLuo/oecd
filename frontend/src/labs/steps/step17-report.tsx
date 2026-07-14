@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
-import { ReportMarkdown } from "../../report-renderer";
+import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
 import { showToast } from "../../toast";
 import type { Meta, MySubmission, RegressionOptions, ReportRequest, ReportResponse } from "../../types";
 import { useAsync } from "../shared";
@@ -112,6 +112,13 @@ export function ReportLab({ meta }: { meta: Meta }) {
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const generatingRef = useRef(false);
+  // 进入本页即预取报告渲染器 chunk;就绪前禁用「导出 PDF」,避免打印到 Suspense 占位文案。
+  const [rendererReady, setRendererReady] = useState(false);
+  useEffect(() => {
+    let live = true;
+    preloadReportRenderer().then(() => live && setRendererReady(true), () => {});
+    return () => { live = false; };
+  }, []);
   const { data: opts } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
   // 进入本页即拉取提交/评阅状态:学生不必重跑回归生成报告才能看到得分与评语
   const [submitRefresh, setSubmitRefresh] = useState(0);
@@ -180,8 +187,8 @@ export function ReportLab({ meta }: { meta: Meta }) {
         </button>
         <button
           className="secondary"
-          disabled={!data || !request || generating}
-          title="打开浏览器打印对话框,选择“另存为 PDF”即可保存"
+          disabled={!data || !request || generating || !rendererReady}
+          title={rendererReady ? "打开浏览器打印对话框,选择“另存为 PDF”即可保存" : "报告渲染器加载中…"}
           onClick={() => window.print()}
         >
           导出 PDF

@@ -31,6 +31,7 @@ def _load_panel_file(name: str) -> pd.DataFrame:
     path = PROCESSED_DIR / name
     if not path.exists():
         raise FileNotFoundError(f"缺少 {name},请先运行 gvcsim compute")
+    # NOTE: 返回的是共享缓存 DataFrame,截面切片/派生前必须 .copy()(见 gvcsim/artifacts.py)。
     return read_csv_artifact(path)
 
 

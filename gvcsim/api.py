@@ -87,6 +87,7 @@ def _read_path(path: Path) -> pd.DataFrame:
             status_code=404,
             detail=f"缺少预计算产物 {path.name},请先运行 `uv run gvcsim compute`",
         )
+    # NOTE: 返回的是共享缓存 DataFrame,派生列/筛选/排序前必须 .copy()(见 gvcsim/artifacts.py)。
     return read_csv_artifact(path)
 
 
