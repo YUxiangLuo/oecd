@@ -11,6 +11,7 @@
  * NetworkCentralityDemo(步骤7):在一个小网络上演示度/介数中心性怎么算出来。
  */
 import { useMemo, useState } from "react";
+import { CaseStrip } from "./case-cards";
 import { stripNegativeZero } from "./format";
 import { api } from "./api";
 import { useAsync } from "./labs";
@@ -271,6 +272,10 @@ export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) 
           <input type="checkbox" checked={compare} onChange={(event) => setCompare(event.target.checked)} /> 双实体并排对比
         </label>
       </div>
+      <CaseStrip step={step} meta={meta} rows={countryRows ?? undefined} year={year} onPick={(c) => {
+        setGran("country");
+        setCountryA(c.economy);
+      }} />
       {step === 4 && <div className="tipbox" style={{ marginBottom: 12 }}>
         负 taxsub 表示产品补贴超过产品税。{negativeExample ? <button onClick={() => {
           setGran("sector"); setYear(exampleYear); setCountryA(exampleCountry); setSectorA(String(negativeExample.industry));

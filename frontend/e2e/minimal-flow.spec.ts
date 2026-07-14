@@ -156,6 +156,28 @@ async function mockApi(page: Page, who = user, currentStep: number | null = null
       });
     }
     if (path === "/api/meta") return route.fulfill({ json: { years: [2019, 2020], countries: ["CHN", "USA"], sectors: ["C", "G"] } });
+    if (path.startsWith("/api/indicators/schema")) {
+      return route.fulfill({ json: {
+        groups: [{ key: "trade", label: "总贸易流分解", fields: ["gross_exports", "DVAex", "FVA", "taxsub", "FVA_share"] }],
+        fields: {
+          gross_exports: { label: "毛出口", format: "amount" },
+          DVAex: { label: "DVAex", format: "amount" }, FVA: { label: "FVA", format: "amount" },
+          taxsub: { label: "taxsub", format: "amount" }, FVA_share: { label: "FVA 份额", format: "pct" },
+        },
+      } });
+    }
+    if (path.startsWith("/api/indicators/country/")) {
+      return route.fulfill({ json: [{ country: "CHN", FVA_share: 0.30 }, { country: "USA", FVA_share: 0.12 }] });
+    }
+    if (path.startsWith("/api/indicators/industry/")) {
+      return route.fulfill({ json: {
+        rows: [
+          { country: "CHN", industry: "C", year: 2020, gross_exports: 1000, DVAex: 600, DVArt: 40, DDC: 20, FVA: 320, FDC: 10, taxsub: 10, FVA_share: 0.32 },
+          { country: "CHN", industry: "G", year: 2020, gross_exports: 500, DVAex: 300, DVArt: 20, DDC: 10, FVA: 160, FDC: 5, taxsub: 5, FVA_share: 0.33 },
+        ],
+        total: 2, page: 1, page_size: 25,
+      } });
+    }
     if (path === "/api/shocks/events") return route.fulfill({ json: { events: [], disclaimer: "mock" } });
     if (path === "/api/regression/options") return route.fulfill({ json: regressionOptions });
     if (path === "/api/regression/design") return route.fulfill({ json: { ...design, step: Number(url.searchParams.get("step") ?? 13) } });
@@ -218,8 +240,18 @@ test("登录、进入步骤、跑回归并生成报告", async ({ page }) => {
   await page.getByRole("button", { name: "登录" }).click();
   await page.getByRole("button", { name: "跳过介绍" }).click();
 
+  // 步骤4 默认落地:指标解读型案例条按数据集过滤(mock 仅含 CHN/USA,越南/卢森堡被隐去,只剩美国对照卡)
+  await expect(page.getByText("真实案例 · 点开跳到该经济体")).toBeVisible();
+  const usaCase = page.getByRole("button", { name: /美国 · 大型内需经济体/ });
+  await expect(usaCase).toBeVisible();
+  // 点开案例把拆解演示切到国家级并跳到美国(不再报错即证明 onPick 驱动成功)
+  await usaCase.click();
+  await expect(page.locator(".decomp-total-line").first()).toBeVisible();
+
   await page.getByText("GVC 贸易流真实回归", { exact: true }).click();
   await expect(page.getByRole("heading", { name: "GVC 贸易流真实回归" })).toBeVisible();
+  // 政策情景型贯穿案例卡在回归步骤可见
+  await expect(page.getByText("贯穿案例 · 2018 中美关税")).toBeVisible();
 
   await page.getByRole("button", { name: "▶ 运行回归" }).click();
   await expect(page.getByRole("cell", { name: "treated×post" }).first()).toBeVisible();

@@ -1183,3 +1183,19 @@ button { font-family: inherit; cursor: pointer; }
   line-height: 1; padding: 10px 14px; background: #f0faf4; border-radius: 12px;
 }
 .review-score span { font-size: 13px; margin-left: 3px; color: #1f8a70; }
+
+/* 案例展示:指标解读型范例条(CaseStrip)+ 政策情景贯穿卡(PolicyCaseCard) */
+.case-strip { margin: 14px 0 6px; }
+.case-cards { display: flex; flex-wrap: wrap; gap: 10px; }
+.case-card {
+  flex: 1 1 200px; min-width: 200px; max-width: 340px; text-align: left; cursor: pointer;
+  background: #fff; border: 1px solid #e7e9f0; border-radius: 12px; padding: 11px 13px;
+  font: inherit; color: inherit; transition: border-color .12s, box-shadow .12s, transform .12s;
+}
+.case-card:hover { border-color: #4b47e0; box-shadow: 0 4px 14px rgba(75,71,224,.12); transform: translateY(-1px); }
+.case-claim { font-weight: 700; font-size: 13px; color: #303747; margin-bottom: 4px; }
+.case-metric { font-size: 12px; color: #4b5563; margin-bottom: 4px; }
+.case-metric b { color: #4b47e0; }
+.case-why { font-size: 11.5px; line-height: 1.6; }
+.case-cta { margin-top: 7px; font-size: 11.5px; font-weight: 600; color: #4b47e0; }
+.case-policy { border-left: 3px solid #4b47e0; }

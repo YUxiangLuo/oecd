@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { PolicyCaseCard } from "../../case-cards";
 import { api } from "../../api";
 import type { CrosswalkHsRow, CrosswalkPayload, Meta, PagedRows, ShockEvent, ShockSummary } from "../../types";
 import { countryLabel, sectorLabel } from "../../viz";
@@ -224,6 +225,8 @@ export function ShockLab({ meta }: { meta: Meta }) {
         ⚠ 拟真演示数据:以 2018–2020 全球贸易摩擦真实事件为原型手工编码(税率量级参考
         PIIE/Bown),出口暴露度由 OECD ICIO 双边流向计算;覆盖 {summary ? `${summary.n_countries} 个经济体 × ${summary.n_sectors} 个行业` : "全部经济体与行业"},不能用于研究结论。
       </div>
+
+      <PolicyCaseCard step={2} />
 
       <h3 style={{ margin: "18px 0 10px", fontSize: 15 }}>事件时间线</h3>
       {evErr && <div className="error-box">{evErr}</div>}

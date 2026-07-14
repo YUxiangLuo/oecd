@@ -8,6 +8,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import { PolicyCaseCard } from "./case-cards";
 import { useAsync } from "./labs";
 import { REG_TEACH, interpretResult, splitPolicyCoefficients } from "./regteach";
 import { SectionHead, TeachCards } from "./teach";
@@ -193,6 +194,7 @@ export function RegDesignLab({
   return (
     <div>
       <TeachCards blocks={REG_TEACH[12]} />
+      <PolicyCaseCard step={12} />
       <SectionHead icon="🧪" label="动手实验 · 生成你的回归设计" />
       <p className="lab-intro">
         在开发回归模块前先对齐三件事,避免做完返工。你的选择会即时生成回归方程;
@@ -449,6 +451,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
   return (
     <div>
       <TeachCards blocks={REG_TEACH[step.n] ?? []} />
+      <PolicyCaseCard step={step.n} />
       <SectionHead icon="🧪" label="动手实验 · 运行真实回归" />
       <div className="warnbox">
         ⚠ 冲击变量为<b>拟真演示面板</b>(以 2018–2020 全球贸易摩擦为原型,覆盖全部经济体、行业异质),仅用于验证系统链路;接入 PIIE/WTO 真实数据后才具研究意义。

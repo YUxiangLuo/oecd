@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "../../api";
 import type { IndicatorSchema, IndustryPage, Meta, NetworkData, Step } from "../../types";
 import { CompositionBar, HeatTableViz, LengthViz, NetworkViz, QuadrantScatter, RankBarChart, ScatterChart, countryLabel, sectorLabel, StackedShareViz, TrendChart } from "../../viz";
+import { CaseStrip } from "../../case-cards";
 import { CountryPicker } from "../country-picker";
 import { fieldLabel, fmtField, useAsync } from "../shared";
 
@@ -222,6 +223,16 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
           ))}
         </div>
       </div>
+
+      <CaseStrip step={step.n} meta={meta} rows={rows ?? undefined} schema={schema} year={year} onPick={(c) => {
+        // 跳到「按案例指标排序」的选国家视图:案例经济体对该指标必有有限值,保证不会被
+        // 象限/散点的有效性过滤掉而画出空图;同时保留(去重追加)用户已选的国家。
+        setGranularity("country");
+        setEntityMode("pick");
+        setPicked((prev) => (prev.includes(c.economy) ? prev : [...prev, c.economy]));
+        setRankBy(c.metric);
+        setView("rank");
+      }} />
 
       {/* 自由探索:一行引导语 + 控件条(选粒度 / 选指标 / 选对象;招牌图不需要) */}
       {view !== "signature" && <p className="viz-framing muted">{cfg.framing}</p>}

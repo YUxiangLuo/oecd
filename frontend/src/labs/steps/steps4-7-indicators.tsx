@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../../api";
 import type { IndicatorSchema, IndustryPage, Meta, Step } from "../../types";
+import { CaseStrip } from "../../case-cards";
 import { DecompositionDemo, NetworkCentralityDemo } from "../../demos";
 import { countryLabel, sectorLabel } from "../../viz";
 import { fieldLabel, fmtField, Pager, useAsync } from "../shared";
@@ -41,6 +42,12 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
       {/* 步骤4-6:真实数据拆解演示;步骤7:网络中心性演示 */}
       {[4, 5, 6].includes(step.n) && <DecompositionDemo step={step.n} meta={meta} />}
       {step.n === 7 && <NetworkCentralityDemo />}
+      {step.n === 7 && (
+        <CaseStrip step={7} meta={meta} schema={schema} year={year} onPick={(c) => {
+          setCountry(c.economy);
+          setPage(1);
+        }} />
+      )}
 
       <div className="section-head">
         <span className="section-head-icon">📄</span>完整分解数据表
