@@ -2,14 +2,19 @@ import { useState } from "react";
 import { api } from "../../api";
 import type { IndicatorSchema, IndustryPage, Meta, Step } from "../../types";
 import { DecompositionDemo, NetworkCentralityDemo } from "../../demos";
-import { sectorLabel } from "../../viz";
-import { fieldLabel, fmtField, useAsync } from "../shared";
+import { countryLabel, sectorLabel } from "../../viz";
+import { fieldLabel, fmtField, Pager, useAsync } from "../shared";
 
 const STEP_GROUP: Record<number, string> = {
   4: "trade",
   5: "production",
   6: "length",
   7: "network",
+};
+const BASE_DESC: Record<string, string> = {
+  country: "OECD 经济体代码",
+  industry: "ICIO 行业代码与中文名",
+  year: "指标年份",
 };
 
 /** 步骤4-7:行业级指标数据表(分页 + 国家/年份筛选) */
@@ -25,7 +30,7 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
   );
   if (error) return <div className="error-box">{error}</div>;
   const group = schema?.groups.find((g) => g.key === groupKey);
-  const baseCols = ["year", "country", "industry"];
+  const baseCols = ["country", "industry", "year"];
   const rowKeys = data?.rows[0] ? new Set(Object.keys(data.rows[0])) : new Set<string>();
   const cols = data?.rows[0]
     ? [...baseCols, ...(group?.fields ?? []).filter((c) => rowKeys.has(c))]
@@ -45,7 +50,7 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
         <label>国家</label>
         <select value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}>
           <option value="">全部</option>
-          {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
+          {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
         </select>
         <label>年份</label>
         <select value={year} onChange={(e) => { setYear(Number(e.target.value)); setPage(1); }}>
@@ -60,11 +65,16 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
       )}
       <div className="table-wrap">
         <table className="data-table">
-          <thead><tr>{cols.map((c) => <th key={c}>{fieldLabel(c, schema)}</th>)}</tr></thead>
+          <thead><tr>{cols.map((c, index) => (
+            <th key={c} title={schema?.fields[c]?.desc ?? BASE_DESC[c]}
+              style={index === 0 ? { position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" } : undefined}>
+              {fieldLabel(c, schema)}{schema?.fields[c]?.desc ? " ⓘ" : ""}
+            </th>
+          ))}</tr></thead>
           <tbody>
             {(data?.rows ?? []).map((r, i) => (
-              <tr key={i}>{cols.map((c) => (
-                <td key={c}>{
+              <tr key={i}>{cols.map((c, index) => (
+                <td key={c} style={index === 0 ? { position: "sticky", left: 0, zIndex: 2, background: "#fff" } : undefined}>{
                   c === "industry" ? (r.industry != null ? sectorLabel(String(r.industry)) : "—")
                     : ["year", "country"].includes(c) ? String(r[c] ?? "—")
                     : fmtField(r[c], c, schema)
@@ -74,11 +84,7 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
           </tbody>
         </table>
       </div>
-      <div className="pager">
-        <button disabled={page <= 1} onClick={() => setPage(page - 1)}>← 上一页</button>
-        <span>{page} / {pages}</span>
-        <button disabled={page >= pages} onClick={() => setPage(page + 1)}>下一页 →</button>
-      </div>
+      <Pager page={page} pages={pages} total={data?.total} onChange={setPage} />
     </div>
   );
 }

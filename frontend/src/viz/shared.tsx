@@ -45,8 +45,37 @@ export const SECTOR_NAMES: Record<string, string> = {
 };
 /** 行业代码显示名:有映射则 "代码 中文名",否则原样返回;国家代码原样返回 */
 export const sectorLabel = (code: string) => (SECTOR_NAMES[code] ? `${code} ${SECTOR_NAMES[code]}` : code);
-/** 图元实体名:行业行显示中文名,国家行显示代码 */
+
+/** OECD ICIO 77 经济体 ISO3 代码 → 中文名(选国家等控件用;图上仍标短代码) */
+export const COUNTRY_NAMES: Record<string, string> = {
+  CHN: "中国", JPN: "日本", KOR: "韩国", TWN: "中国台湾", HKG: "中国香港",
+  VNM: "越南", THA: "泰国", MYS: "马来西亚", IDN: "印度尼西亚", PHL: "菲律宾",
+  SGP: "新加坡", KHM: "柬埔寨", LAO: "老挝", MMR: "缅甸", BRN: "文莱",
+  IND: "印度", BGD: "孟加拉国", PAK: "巴基斯坦",
+  AUT: "奥地利", BEL: "比利时", BGR: "保加利亚", BLR: "白俄罗斯", CHE: "瑞士",
+  CYP: "塞浦路斯", CZE: "捷克", DEU: "德国", DNK: "丹麦", ESP: "西班牙",
+  EST: "爱沙尼亚", FIN: "芬兰", FRA: "法国", GBR: "英国", GRC: "希腊",
+  HRV: "克罗地亚", HUN: "匈牙利", IRL: "爱尔兰", ISL: "冰岛", ITA: "意大利",
+  LTU: "立陶宛", LUX: "卢森堡", LVA: "拉脱维亚", MLT: "马耳他", NLD: "荷兰",
+  NOR: "挪威", POL: "波兰", PRT: "葡萄牙", ROU: "罗马尼亚", RUS: "俄罗斯",
+  SVK: "斯洛伐克", SVN: "斯洛文尼亚", SWE: "瑞典", TUR: "土耳其", UKR: "乌克兰",
+  USA: "美国", CAN: "加拿大", MEX: "墨西哥", ARG: "阿根廷", BRA: "巴西",
+  CHL: "智利", COL: "哥伦比亚", CRI: "哥斯达黎加", PER: "秘鲁",
+  SAU: "沙特阿拉伯", ISR: "以色列", JOR: "约旦", EGY: "埃及", MAR: "摩洛哥",
+  TUN: "突尼斯", NGA: "尼日利亚", ZAF: "南非", CIV: "科特迪瓦", CMR: "喀麦隆",
+  SEN: "塞内加尔",
+  AUS: "澳大利亚", NZL: "新西兰", KAZ: "哈萨克斯坦", ROW: "世界其他地区",
+};
+/** 国家代码显示名:"CHN 中国";无映射时原样返回 */
+export const countryLabel = (code: string) =>
+  (COUNTRY_NAMES[code] ? `${code} ${COUNTRY_NAMES[code]}` : code);
+
+/** 散点/象限图上始终标注的重点经济体(右栏提示常让学生对照中美德日) */
+export const KEY_ECONOMIES = new Set(["CHN", "USA", "DEU", "JPN"]);
+/** 图元实体键:行业行显示中文名,国家行显示代码(用于高亮/选中匹配,须与 picked 里的码一致) */
 export const rowName = (r: Row) => (r.industry != null ? sectorLabel(String(r.industry)) : String(r.country));
+/** 图元实体展示名:行业与国家都带中文名(仅用于标签/tooltip 展示,不用于匹配) */
+export const rowLabel = (r: Row) => (r.industry != null ? sectorLabel(String(r.industry)) : countryLabel(String(r.country)));
 
 /** 暗色悬浮 tooltip(增强通道;全部数值同时可在表格视图获得) */
 export function useTip() {

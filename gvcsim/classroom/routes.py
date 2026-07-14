@@ -51,6 +51,12 @@ class ProgressRequest(BaseModel):
     step: int = Field(ge=1, le=db.MAX_STEP)
 
 
+@router.get("/progress")
+def get_progress(user: dict = Depends(require_student)):
+    row = db.get_progress(user["sub"])
+    return row or {"current_step": None, "max_step": None, "updated_at": None}
+
+
 @router.post("/progress")
 def report_progress(req: ProgressRequest, user: dict = Depends(require_student)):
     db.upsert_progress(user["sub"], req.step)
@@ -101,8 +107,8 @@ class ClassRequest(BaseModel):
 def create_class(req: ClassRequest, _: dict = Depends(require_teacher)):
     try:
         return db.create_class(req.name, req.code, req.semester, req.note)
-    except psycopg.errors.UniqueViolation:
-        raise HTTPException(status_code=409, detail=f"班级代码 {req.code} 已存在")
+    except psycopg.errors.UniqueViolation as e:
+        raise HTTPException(status_code=409, detail=f"班级代码 {req.code} 已存在") from e
 
 
 @router.get("/students")

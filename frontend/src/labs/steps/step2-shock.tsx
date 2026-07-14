@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api } from "../../api";
 import type { CrosswalkHsRow, CrosswalkPayload, Meta, PagedRows, ShockEvent, ShockSummary } from "../../types";
-import { pct, useAsync } from "../shared";
+import { countryLabel, sectorLabel } from "../../viz";
+import { Pager, pct, useAsync } from "../shared";
 
 const CROSSWALK_YEARS = [2018, 2019, 2020];
 
@@ -92,7 +93,7 @@ function CrosswalkDemo() {
               <tbody>
                 {mappedRows.map((r) => (
                   <tr key={r.icio_sector}>
-                    <td>{r.icio_sector}</td>
+                    <td title={r.icio_sector}>{sectorLabel(r.icio_sector)}</td>
                     <td>{pct(r.avg_tariff)}</td>
                     <td>{pct(r.mapped_value_weight)}</td>
                     <td>{pct(r.affected_value_weight)}</td>
@@ -104,6 +105,82 @@ function CrosswalkDemo() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+const EVENT_COLORS: Record<string, string> = {
+  关税冲击: "#2a78d6",
+  制裁清单: "#e34948",
+  出口管制: "#eda100",
+};
+
+const dateNumber = (value: string) => {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+};
+
+function EventTimeline({ events, onSelect }: { events: ShockEvent[]; onSelect: (event: ShockEvent) => void }) {
+  const model = useMemo(() => {
+    const dated = events.flatMap((event) => [dateNumber(event.announced), dateNumber(event.effective)])
+      .filter((value): value is number => value != null);
+    const fallbackStart = Date.UTC(2016, 0, 1);
+    const fallbackEnd = Date.UTC(2020, 11, 31);
+    const start = dated.length ? Math.min(...dated, fallbackStart) : fallbackStart;
+    const end = dated.length ? Math.max(...dated, fallbackEnd) : fallbackEnd;
+    return { start, end: Math.max(end, start + 1) };
+  }, [events]);
+  const W = 960;
+  const left = 230;
+  const right = 36;
+  const top = 38;
+  const rowHeight = 40;
+  const height = top + Math.max(1, events.length) * rowHeight + 36;
+  const x = (value: string) => {
+    const timestamp = dateNumber(value) ?? model.start;
+    return left + ((timestamp - model.start) / (model.end - model.start)) * (W - left - right);
+  };
+  const firstYear = new Date(model.start).getUTCFullYear();
+  const lastYear = new Date(model.end).getUTCFullYear();
+  const years = Array.from({ length: lastYear - firstYear + 1 }, (_, index) => firstYear + index);
+  const yearX = (year: number) => x(`${year}-01-01`);
+  return (
+    <div style={{ border: "1px solid #e8eaf0", borderRadius: 12, overflowX: "auto", background: "#fff", marginBottom: 14 }}>
+      <svg viewBox={`0 0 ${W} ${height}`} style={{ display: "block", minWidth: 820, width: "100%" }} aria-label="政策事件宣布与生效时间线">
+        {years.map((year) => (
+          <g key={year}>
+            <line x1={yearX(year)} y1={top - 10} x2={yearX(year)} y2={height - 24} stroke="#eef0f5" />
+            <text x={yearX(year)} y={18} textAnchor="middle" fontSize="11" fill="#8a90a0">{year}</text>
+          </g>
+        ))}
+        {events.map((event, index) => {
+          const y = top + index * rowHeight + rowHeight / 2;
+          const xa = x(event.announced);
+          const xe = x(event.effective);
+          const color = EVENT_COLORS[event.shock_type ?? "关税冲击"] ?? "#4a3aa7";
+          // 宣布与生效离得很近时略去文字标签(靠底部图例与悬停提示),密集区不再互相叠压
+          const labeled = Math.abs(xe - xa) >= 48;
+          return (
+            <g key={`${event.name}-${event.effective}`} role="button" tabIndex={0} style={{ cursor: "pointer" }}
+              onClick={() => onSelect(event)}
+              onKeyDown={(keyEvent) => (keyEvent.key === "Enter" || keyEvent.key === " ") && onSelect(event)}>
+              <title>点击筛选：{event.name}；宣布 {event.announced}，生效 {event.effective}</title>
+              <rect x={2} y={y - 17} width={W - 4} height={34} rx={6} fill="transparent" />
+              <text x={12} y={y + 4} fontSize="11.5" fill="#3a4050">{event.name.length > 28 ? `${event.name.slice(0, 27)}…` : event.name}</text>
+              <line x1={xa} y1={y} x2={xe} y2={y} stroke={color} strokeWidth={3} strokeLinecap="round" />
+              <circle cx={xa} cy={y} r={6} fill="#fff" stroke={color} strokeWidth={2.5} />
+              <circle cx={xe} cy={y} r={6} fill={color} stroke="#fff" strokeWidth={1.5} />
+              {labeled && <text x={xa} y={y - 10} textAnchor="middle" fontSize="9.5" fill="#777e8e">宣布</text>}
+              {labeled && <text x={xe} y={y + 15} textAnchor="middle" fontSize="9.5" fill={color}>生效</text>}
+            </g>
+          );
+        })}
+      </svg>
+      <div style={{ padding: "0 12px 10px", display: "flex", gap: 16, fontSize: 11, color: "#737a8a", flexWrap: "wrap" }}>
+        <span>○ 宣布</span><span>● 生效</span>
+        {Object.entries(EVENT_COLORS).map(([label, color]) => <span key={label} style={{ color }}>● {label}</span>)}
+        <span>点击事件可联动下方年份、类型、目标国与首个行业</span>
+      </div>
     </div>
   );
 }
@@ -126,6 +203,20 @@ export function ShockLab({ meta }: { meta: Meta }) {
 
   const summaryYear = summary?.years.find((r) => r.year === year);
   const pages = panel ? Math.max(1, Math.ceil(panel.total / panel.page_size)) : 1;
+  const pickEvent = (event: ShockEvent) => {
+    if (event.shock_type) setShockType(event.shock_type);
+    const effectiveYear = Number.parseInt(event.effective.slice(0, 4), 10);
+    if (Number.isFinite(effectiveYear) && meta.years.length) {
+      const closest = [...meta.years].sort((a, b) => Math.abs(a - effectiveYear) - Math.abs(b - effectiveYear))[0];
+      setYear(closest);
+    }
+    const uniqueTarget = !event.all_targets && event.target_codes?.length === 1 ? event.target_codes[0] : "";
+    setCountry(uniqueTarget && meta.countries.includes(uniqueTarget) ? uniqueTarget : "");
+    const firstSector = event.sector_codes?.find((code) => meta.sectors.includes(code)) ?? "";
+    setSector(firstSector);
+    setOnlyHit(true);
+    setPage(1);
+  };
 
   return (
     <div>
@@ -136,6 +227,7 @@ export function ShockLab({ meta }: { meta: Meta }) {
 
       <h3 style={{ margin: "18px 0 10px", fontSize: 15 }}>事件时间线</h3>
       {evErr && <div className="error-box">{evErr}</div>}
+      <EventTimeline events={events?.events ?? []} onSelect={pickEvent} />
       <div className="table-wrap">
         <table className="data-table">
           <thead>
@@ -152,7 +244,7 @@ export function ShockLab({ meta }: { meta: Meta }) {
                 <td>{e.imposer} → {e.targets}{e.exempt ? `(豁免:${e.exempt})` : ""}</td>
                 <td>{e.announced}</td>
                 <td>{e.effective}</td>
-                <td>{e.n_sectors} 个(主要:{e.top_sectors.join("、")})</td>
+                <td>{e.n_sectors} 个(主要:{e.top_sectors.map(sectorLabel).join("、")})</td>
                 <td>{pct(e.peak_rate)}</td>
               </tr>
             ))}
@@ -175,12 +267,12 @@ export function ShockLab({ meta }: { meta: Meta }) {
         <label>国家</label>
         <select value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}>
           <option value="">全部</option>
-          {meta.countries.map((c) => <option key={c} value={c}>{c}</option>)}
+          {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
         </select>
         <label>行业</label>
         <select value={sector} onChange={(e) => { setSector(e.target.value); setPage(1); }}>
           <option value="">全部</option>
-          {meta.sectors.map((s) => <option key={s} value={s}>{s}</option>)}
+          {meta.sectors.map((s) => <option key={s} value={s}>{sectorLabel(s)}</option>)}
         </select>
         <label style={{ display: "flex", alignItems: "center", gap: 5 }}>
           <input type="checkbox" checked={onlyHit}
@@ -199,14 +291,18 @@ export function ShockLab({ meta }: { meta: Meta }) {
       <div className="table-wrap">
         <table className="data-table">
           <thead>
-            <tr><th style={{ textAlign: "left" }}>国家</th><th>行业</th><th>冲击强度</th><th>受处理</th><th>宣布</th><th>生效</th><th style={{ textAlign: "left" }}>主要事件</th></tr>
+            <tr><th style={{ textAlign: "left" }}>国家</th><th>行业</th><th>冲击强度</th><th>主要加征方</th><th>ICIO 出口暴露度</th><th>受处理</th><th>宣布</th><th>生效</th><th style={{ textAlign: "left" }}>主要事件</th></tr>
           </thead>
           <tbody>
             {(panel?.rows ?? []).map((r, i) => (
               <tr key={i}>
                 <td style={{ textAlign: "left" }}>{String(r.country)}</td>
-                <td>{String(r.sector)}</td>
+                <td>{sectorLabel(String(r.sector))}</td>
                 <td>{typeof r.tariff_shock === "number" ? pct(r.tariff_shock) : "—"}</td>
+                <td>{String(r.main_imposer ?? r.primary_imposer ?? r.imposer ?? "—")}</td>
+                <td title="该经济体全部出口中流向主要加征方的份额（来自真实 OECD ICIO 双边流向）">
+                  {typeof r.export_exposure === "number" ? pct(r.export_exposure) : "—"}
+                </td>
                 <td>{r.treated === 1 ? "✓" : ""}</td>
                 <td>{r.announced_date ?? "—"}</td>
                 <td>{r.effective_date ?? "—"}</td>
@@ -216,10 +312,11 @@ export function ShockLab({ meta }: { meta: Meta }) {
           </tbody>
         </table>
       </div>
-      <div className="pager">
-        <button disabled={page <= 1} onClick={() => setPage(page - 1)}>← 上一页</button>
-        <span>{page} / {pages}{panel ? ` · 共 ${panel.total} 条` : ""}</span>
-        <button disabled={page >= pages} onClick={() => setPage(page + 1)}>下一页 →</button>
+      <div className="tipbox" style={{ marginTop: 12 }}>
+        关税冲击按“事件税率 × 对加征方出口暴露度”汇总；ICIO 暴露度使用真实双边投入产出流。总冲击可能同时包含多个事件，因此不一定等于表中主要加征方的单项乘积。
+      </div>
+      <div style={{ marginTop: 12 }}>
+        <Pager page={page} pages={pages} total={panel?.total} onChange={setPage} />
       </div>
     </div>
   );

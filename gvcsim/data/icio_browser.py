@@ -159,6 +159,36 @@ def _records(df: pd.DataFrame) -> list[dict[str, Any]]:
     return out
 
 
+def _matrix_page(
+    path: Path,
+    page_rows: list[str],
+    value_columns: list[str],
+    has_out: bool,
+) -> tuple[pd.DataFrame, list[dict[str, Any]]]:
+    """读取 Z/Y 当前页，并计算每行当前列切片合计与总产出 OUT。"""
+    usecols = tuple(dict.fromkeys(("V1", *value_columns, *(("OUT",) if has_out else ()))))
+    raw = _read_columns(path, usecols)
+    raw = raw[raw["V1"].isin(page_rows)]
+
+    if value_columns:
+        totals = raw[value_columns].apply(pd.to_numeric, errors="coerce").sum(axis=1).astype(float)
+    else:
+        totals = pd.Series(0.0, index=raw.index)
+    out_values = pd.to_numeric(raw["OUT"], errors="coerce") if has_out else pd.Series(float("nan"), index=raw.index)
+    summaries = []
+    for row_label, slice_total, out_value in zip(raw["V1"], totals, out_values):
+        summaries.append(
+            {
+                "row": str(row_label),
+                "slice_total": float(slice_total),
+                "out": float(out_value) if pd.notna(out_value) else None,
+            }
+        )
+
+    visible = raw[["V1", *value_columns]].rename(columns={"V1": "row"})
+    return visible, summaries
+
+
 def slice_table(
     year: int,
     table: str,
@@ -190,9 +220,7 @@ def slice_table(
         row_labels = _filter_labels(info["industry_columns"], row_country, row_sector)
         col_labels = _filter_labels(info["industry_columns"], col_country, col_sector)
         page_rows = _page(row_labels, page, page_size)
-        df = _read_columns(path, ("V1", *col_labels))
-        df = df[df["V1"].isin(page_rows)]
-        df = df.rename(columns={"V1": "row"})
+        df, row_summaries = _matrix_page(path, page_rows, col_labels, "OUT" in info["header"])
         return {
             "year": year,
             "table": table,
@@ -201,6 +229,7 @@ def slice_table(
             "page_size": page_size,
             "columns": df.columns.tolist(),
             "rows": _records(df),
+            "row_summaries": row_summaries,
         }
 
     if table == "y":
@@ -218,9 +247,7 @@ def slice_table(
                 continue
             fd_cols.append(col)
         page_rows = _page(row_labels, page, page_size)
-        df = _read_columns(path, ("V1", *fd_cols))
-        df = df[df["V1"].isin(page_rows)]
-        df = df.rename(columns={"V1": "row"})
+        df, row_summaries = _matrix_page(path, page_rows, fd_cols, "OUT" in info["header"])
         return {
             "year": year,
             "table": table,
@@ -229,6 +256,7 @@ def slice_table(
             "page_size": page_size,
             "columns": df.columns.tolist(),
             "rows": _records(df),
+            "row_summaries": row_summaries,
         }
 
     # accounts: transpose TLS/VA/OUT rows into country-sector rows.
@@ -246,4 +274,5 @@ def slice_table(
         "page_size": page_size,
         "columns": transposed.columns.tolist(),
         "rows": _records(transposed),
+        "row_summaries": [],
     }

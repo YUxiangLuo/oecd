@@ -12,6 +12,9 @@
   teacher / gvclab2026   老师(教师身份)
 
 API 层已对除登录/令牌校验外的 `/api/*` 数据接口强制 Bearer 校验。
+
+已知的教学部署取舍:当前登录端点没有速率限制或账号锁定，不应直接用于
+公网生产环境。对外部署时应在反向代理/身份提供方增加限流、审计和暴力破解防护。
 """
 
 import base64
@@ -46,6 +49,10 @@ USERS = {
         "role": "teacher",
     },
 }
+
+
+class AuthenticationUnavailable(Exception):
+    """教学数据库不可用，且请求不是合法的内置演示账号。"""
 
 
 def _secret() -> bytes:
@@ -87,17 +94,14 @@ def authenticate(username: str, password: str) -> dict | None:
         except classroom_db.Unavailable:
             pass
         return {"username": username, "name": account["display_name"], "role": account["role"]}
-    except classroom_db.Unavailable:
-        pass
-
-    user = USERS.get(username)
-    if not user:
-        # 用户不存在也走一次哈希,避免时间侧信道暴露用户名是否存在
-        _hash_password(password)
-        return None
-    if not hmac.compare_digest(user["password_hash"], _hash_password(password)):
-        return None
-    return {"username": username, "name": user["name"], "role": user["role"]}
+    except classroom_db.Unavailable as e:
+        user = USERS.get(username)
+        supplied_hash = _hash_password(password)
+        if user and hmac.compare_digest(user["password_hash"], supplied_hash):
+            return {"username": username, "name": user["name"], "role": user["role"]}
+        # 数据库停机时无法判断非演示账号是“不存在”还是“暂时无法校验”，
+        # 因此明确返回可用性错误，不伪装成密码错误。
+        raise AuthenticationUnavailable("教学数据库不可用，请使用演示账号 student 或 teacher") from e
 
 
 def issue_token(user: dict) -> tuple[str, int]:

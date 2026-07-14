@@ -137,8 +137,18 @@ def test_submit_review_roundtrip_and_resubmit_resets():
 
 def test_progress_keeps_max_step():
     s, t = _login("student"), _login("teacher")
+    assert client.get("/api/classroom/progress", headers=s).json() == {
+        "current_step": None,
+        "max_step": None,
+        "updated_at": None,
+    }
     for step in (5, 9, 3):
         assert client.post("/api/classroom/progress", headers=s, json={"step": step}).status_code == 200
+    mine = client.get("/api/classroom/progress", headers=s)
+    assert mine.status_code == 200
+    assert mine.json()["current_step"] == 3
+    assert mine.json()["max_step"] == 9
+    assert mine.json()["updated_at"] is not None
     row = client.get("/api/classroom/students", headers=t).json()["students"][0]
     assert row["current_step"] == 3 and row["max_step"] == 9
     overview = client.get("/api/classroom/overview", headers=t).json()
@@ -201,6 +211,7 @@ def test_student_forbidden_from_teacher_endpoints():
 def test_teacher_cannot_write_student_progress_or_report():
     # 教师令牌不得上报进度/提交报告,否则会被计入待评阅提交,破坏教师/学生分离
     t = _login("teacher")
+    assert client.get("/api/classroom/progress", headers=t).status_code == 403
     assert client.post("/api/classroom/progress", headers=t, json={"step": 3}).status_code == 403
     body = {"year": 2020, "title": "x", "design": {}, "markdown": "x"}
     assert client.post("/api/classroom/report/submit", headers=t, json=body).status_code == 403
@@ -217,4 +228,6 @@ def test_db_down_degrades_gracefully(monkeypatch):
     assert client.get("/api/meta", headers=s).status_code == 200
     assert client.get("/api/classroom/announcements", headers=s).status_code == 503
     assert client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).status_code == 200
-    assert client.post("/api/auth/login", json={"username": "teacher", "password": "wrong"}).status_code == 401
+    bad = client.post("/api/auth/login", json={"username": "teacher", "password": "wrong"})
+    assert bad.status_code == 503
+    assert "请使用演示账号" in bad.json()["detail"]

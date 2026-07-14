@@ -1,4 +1,4 @@
-export { CAT, SECTOR_NAMES, sectorLabel } from "./shared";
+export { CAT, COUNTRY_NAMES, SECTOR_NAMES, countryLabel, rowLabel, sectorLabel } from "./shared";
 export { NetworkViz } from "./steps/step8-network";
 export { StackedShareViz } from "./steps/step9-production";
 export { LengthViz } from "./steps/step10-length";

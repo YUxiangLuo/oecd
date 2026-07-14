@@ -3,7 +3,7 @@
  * 与结果动态解读生成器。
  */
 import type { TeachBlock } from "./teach";
-import type { RegressionResponse } from "./types";
+import type { CoefStat, RegressionResponse } from "./types";
 
 const ICIO_CONTROLS = "可切换控制变量 γ·Controls_ct:ICIO 派生控制用于解释增加值规模、出口强度与产业结构;模拟宏观控制按 WDI/IMF 风格提供 GDP、人口、人均收入、汇率变动与 FDI 流入。价格口径切到实际值时,金额类控制变量会用 GDP 平减指数 mock 调整。";
 
@@ -166,6 +166,33 @@ const STEP_READ: Record<number, { noun: string; neg: string; pos: string; pct: b
 
 const DISCLAIMER = "以上解读由系统根据系数符号与显著性自动生成;冲击为拟真演示面板,结论仅用于验证系统链路,不构成研究结论。";
 
+export interface PolicyCoefficientGroups {
+  policy: CoefStat[];
+  main: CoefStat[];
+  interactions: CoefStat[];
+  eventMain: CoefStat[];
+  eventInteraction: CoefStat[];
+}
+
+/** Pure classifier used by charts, interpretation and the recent-run comparison table. */
+export function classifyPolicyCoefficients(coefs: CoefStat[], controls: string[]): PolicyCoefficientGroups {
+  const policy = coefs.filter((coef) => !controls.includes(coef.name));
+  const interactions = policy.filter((coef) => coef.name.includes("×base_gvc"));
+  const main = policy.filter((coef) => !coef.name.includes("×base_gvc"));
+  return {
+    policy,
+    main,
+    interactions,
+    eventMain: main.filter((coef) => coef.name.startsWith("k=")),
+    eventInteraction: interactions.filter((coef) => coef.name.startsWith("k=")),
+  };
+}
+
+/** Keep policy, main-event and BaseGVC-interaction terms separate everywhere in the UI. */
+export function splitPolicyCoefficients(resp: RegressionResponse): PolicyCoefficientGroups {
+  return classifyPolicyCoefficients(resp.result.coefs, resp.design.controls);
+}
+
 function fmtEffect(coef: number, pct: boolean): string {
   return pct ? `${Math.abs(coef * 100).toFixed(2)} 个百分点` : Math.abs(coef).toFixed(4);
 }
@@ -182,12 +209,12 @@ export function interpretResult(step: number, resp: RegressionResponse): string[
   const read = STEP_READ[step];
   if (!read) return [DISCLAIMER];
   const { method } = resp.design;
-  const coefs = resp.result.coefs;
-  const policyCoefs = coefs.filter((c) => !resp.design.controls.includes(c.name));
+  const split = splitPolicyCoefficients(resp);
   const out: string[] = [];
 
   if (method === "事件研究") {
-    const eventCoefs = policyCoefs.filter((c) => c.name.startsWith("k="));
+    // 平行趋势只由主事件系数 β_k 判断；异质性交互 θ_k 是另一条估计路径。
+    const eventCoefs = split.eventMain;
     const pre = eventCoefs.filter((c) => c.name.startsWith("k=-"));
     const post = eventCoefs.filter((c) => !c.name.startsWith("k=-"));
     const preBad = pre.filter((c) => c.stars !== "");
@@ -207,8 +234,21 @@ export function interpretResult(step: number, resp: RegressionResponse): string[
         `效应在 ${peak.name} 期达到峰值(${dir} ${fmtEffect(peak.coef, read.pct)}),${peak.coef < 0 ? read.neg : read.pos}。`,
       );
     }
+    if (split.eventInteraction.length > 0) {
+      const postInteractions = split.eventInteraction.filter((coef) => !coef.name.startsWith("k=-"));
+      const significant = postInteractions.filter((coef) => coef.stars !== "");
+      if (significant.length === 0) {
+        out.push("异质性动态效应：冲击后的 θₖ 均不显著，尚无证据表明基期 GVC 参与度会系统性放大或缓冲主效应。");
+      } else {
+        const peak = significant.reduce((a, b) => (Math.abs(b.coef) > Math.abs(a.coef) ? b : a));
+        out.push(
+          `异质性动态效应：${significant.map((coef) => `${coef.name.replace("×base_gvc", "")} 的 θₖ=${coef.coef.toFixed(4)}${coef.stars}`).join("，")}。` +
+          `绝对值最大的附加效应出现在 ${peak.name.replace("×base_gvc", "")}；θₖ${peak.coef < 0 ? "<0 表示基期 GVC 参与度越高，负向响应越强（或正向响应越弱）" : ">0 表示基期 GVC 参与度越高，正向响应越强（或负向响应被缓冲）"}。`,
+        );
+      }
+    }
   } else {
-    const key = policyCoefs[0];
+    const key = split.main[0];
     if (key) {
       const isDid = method === "双重差分 (DID)";
       const dir = key.coef < 0 ? "下降" : "上升";
@@ -217,13 +257,24 @@ export function interpretResult(step: number, resp: RegressionResponse): string[
       const feEffect = read.pct
         ? `${Math.abs(key.coef).toFixed(2)} 个百分点`
         : Math.abs(key.coef * 0.01).toFixed(4);
+      const intensityLabel = resp.design.shock_type === "关税冲击"
+        ? "平均额外关税"
+        : `${resp.design.shock_type}强度`;
       const head = isDid
         ? `DID 估计:冲击发生后,处理组的${read.noun}相对对照组${dir} ${fmtEffect(key.coef, read.pct)}`
-        : `强度法估计:平均额外关税每上升 1 个百分点,${read.noun}${dir}约 ${feEffect}`;
+        : `强度法估计:${intensityLabel}每上升 1 个百分点,${read.noun}${dir}约 ${feEffect}`;
       out.push(`${head}(β = ${key.coef.toFixed(4)}${key.stars},${sigLabel(key.stars, key.p)})。`);
       out.push(sig
         ? (key.coef < 0 ? read.neg : read.pos) + "。"
         : "效应未达到常规显著性水平,不能据此下结论。");
+    }
+    const interactionCoef = split.interactions[0];
+    if (interactionCoef) {
+      out.push(
+        `交互项 θ = ${interactionCoef.coef.toFixed(4)}${interactionCoef.stars}（${sigLabel(interactionCoef.stars, interactionCoef.p)}）。` +
+        `边际政策效应为 β + θ×BaseGVC；θ${interactionCoef.coef < 0 ? "<0 表示基期 GVC 参与度越高，政策效应越偏负" : ">0 表示基期 GVC 参与度越高，政策效应越偏正"}，` +
+        `${interactionCoef.stars ? "该异质性达到常规显著性水平" : "该异质性尚未达到常规显著性水平"}。`,
+      );
     }
   }
   out.push(DISCLAIMER);

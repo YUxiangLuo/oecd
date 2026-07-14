@@ -91,12 +91,13 @@ const design = {
   controls: [],
   control_labels: {},
   equation: "Y_it = β·treated_i×post_it + α_i + λ_t + ε_it",
+  equation_parts: [{ text: "Y_it = " }, { text: "β·treated_i×post_it", term: "policy", description: "政策效应", meta_key: "policy" }],
   panel_file: "panel_industry.csv",
   entity: "entity_id",
   cluster: "country",
 };
 
-async function mockApi(page: Page, who = user) {
+async function mockApi(page: Page, who = user, currentStep: number | null = null) {
   // 学生提交后 report/mine 由 none → pending(闭包保存跨请求状态)
   let mine: Record<string, unknown> = { state: "none" };
   await page.route("**/api/**", async (route: Route) => {
@@ -110,6 +111,9 @@ async function mockApi(page: Page, who = user) {
     }
     if (path === "/api/auth/me") return route.fulfill({ json: who });
     if (path === "/api/classroom/announcements") return route.fulfill({ json: { announcements: [announcement] } });
+    if (path === "/api/classroom/progress" && method === "GET") {
+      return route.fulfill({ json: { current_step: currentStep, max_step: currentStep, updated_at: null } });
+    }
     if (path === "/api/classroom/progress" && method === "POST") return route.fulfill({ json: { ok: true } });
     if (path === "/api/classroom/report/mine") return route.fulfill({ json: mine });
     if (path === "/api/classroom/report/submit" && method === "POST") {
@@ -131,10 +135,13 @@ async function mockApi(page: Page, who = user) {
     if (path === "/api/classroom/classes") {
       return route.fulfill({ json: { classes: [{ id: 1, name: "GVC 实验演示班", code: "GVC-DEMO", semester: "2026 春", note: "", archived: false, created_at: "2026-07-01T00:00:00Z", student_count: 2 }] } });
     }
-    if (path === "/api/classroom/students") {
+    if (path === "/api/classroom/students" && method === "GET") {
       return route.fulfill({
         json: { students: [{ id: 2, username: "student", display_name: "学生", class_id: 1, class_name: "GVC 实验演示班", student_no: "2026001", active: true, last_login_at: null, created_at: "2026-07-01T00:00:00Z", current_step: 9, max_step: 9, progress_at: null, submission_id: 1, submission_state: "pending", score: null, submitted_at: "2026-07-08T11:00:00Z" }] },
       });
+    }
+    if (path === "/api/classroom/students" && method === "POST") {
+      return route.fulfill({ json: { id: 3, username: "new", display_name: "新同学", class_id: 1 } });
     }
     if (path === "/api/classroom/submissions") return route.fulfill({ json: { submissions: [submissionRow] } });
     if (path === "/api/classroom/submissions/1" && method === "GET") {
@@ -181,8 +188,18 @@ async function mockApi(page: Page, who = user) {
     if (path === "/api/report" && method === "POST") {
       return route.fulfill({
         json: {
-          path: "reports/experiment_report_2020.md",
-          markdown: "# 实验报告\n\nPanelOLS 政策系数对照:通过;标准误最大差异仅作参考。",
+          suggested_filename: "experiment_report_2020.md",
+          markdown: [
+            "# 实验报告",
+            "",
+            "| 检查 | 结果 |",
+            "|---|---|",
+            "| PanelOLS 政策系数对照 | 通过;标准误最大差异仅作参考 |",
+            "",
+            "```gvcsim-chart",
+            JSON.stringify({ version: 1, type: "bar", title: "FVA Top 5", items: [{ label: "CHN", value: 0.42 }] }),
+            "```",
+          ].join("\n"),
         },
       });
     }
@@ -191,6 +208,10 @@ async function mockApi(page: Page, who = user) {
 }
 
 test("登录、进入步骤、跑回归并生成报告", async ({ page }) => {
+  let reportRequests = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/report") reportRequests += 1;
+  });
   await mockApi(page);
   await page.goto("/");
 
@@ -201,20 +222,23 @@ test("登录、进入步骤、跑回归并生成报告", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "GVC 贸易流真实回归" })).toBeVisible();
 
   await page.getByRole("button", { name: "▶ 运行回归" }).click();
-  await expect(page.getByRole("cell", { name: "treated×post" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "treated×post" }).first()).toBeVisible();
   await expect(page.getByText("政策系数对照通过")).toBeVisible();
   await expect(page.getByText("仅作参考")).toBeVisible();
 
   await page.getByText("实验报告", { exact: true }).click();
   await expect(page.getByRole("heading", { name: "实验报告" })).toBeVisible();
+  expect(reportRequests).toBe(0);
   await page.getByRole("button", { name: "生成报告" }).click();
-  await expect(page.getByText("已写入 reports/experiment_report_2020.md")).toBeVisible();
   await expect(page.getByText("PanelOLS 政策系数对照")).toBeVisible();
+  await expect(page.getByRole("img", { name: "FVA Top 5" })).toBeVisible();
+  expect(reportRequests).toBe(1);
 
-  // 学生看到公告横幅,并能把报告提交给老师
+  // 学生看到公告横幅,并能把报告提交给老师(提交卡片更新状态 + 成功 toast)
   await expect(page.getByText("e2e 公告:报告周五截止")).toBeVisible();
   await page.getByRole("button", { name: "提交报告给老师" }).click();
-  await expect(page.getByText("等待教师评阅", { exact: false })).toBeVisible();
+  await expect(page.locator(".submit-card").getByText("等待教师评阅", { exact: false })).toBeVisible();
+  await expect(page.locator(".toast-item")).toContainText("报告已提交");
 });
 
 test("教师面板:概览、学生名单、评阅报告", async ({ page }) => {
@@ -233,11 +257,52 @@ test("教师面板:概览、学生名单、评阅报告", async ({ page }) => {
   await expect(page.getByRole("cell", { name: "2026001" })).toBeVisible();
   await expect(page.getByRole("cell", { name: "待评阅" })).toBeVisible();
 
+  // “全部班级”下不再静默落入第一个班级，必须显式选择班级或暂不分班。
+  await page.getByRole("button", { name: "+ 添加学生" }).click();
+  const studentDialog = page.getByRole("dialog", { name: "添加学生账号" });
+  await expect(studentDialog.locator("select")).toHaveValue("");
+  await studentDialog.locator("select").selectOption("1");
+  await expect(studentDialog.locator("select")).toHaveValue("1");
+  await studentDialog.getByRole("button", { name: "取消" }).click();
+
   await page.getByRole("button", { name: "报告评阅" }).click();
   await page.getByRole("button", { name: "评阅", exact: true }).click();
   await expect(page.getByText("e2e 正文")).toBeVisible();
-  await page.locator('input[type="number"]').fill("90");
-  await page.locator("textarea").fill("很好");
+  await page.getByLabel("快捷分值").getByRole("button", { name: "90" }).click();
+  await expect(page.locator('input[type="number"]')).toHaveValue("90");
+  await page.getByLabel("评语模板").getByRole("button", { name: "结构完整" }).click();
+  await expect(page.locator("textarea")).toHaveValue("结构完整");
   await page.getByRole("button", { name: "提交评阅" }).click();
   await expect(page.getByRole("cell", { name: "待评阅" })).toBeVisible(); // 回到列表(mock 状态不回写)
+});
+
+test("学生恢复服务端进度，切步后深链同步到 URL", async ({ page }) => {
+  await mockApi(page, user, 15);
+  await page.goto("/");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: "跳过介绍" }).click();
+
+  await expect(page.getByRole("heading", { name: "GVC 长度真实回归" })).toBeVisible();
+  await page.locator(".step-row").filter({ hasText: "网络指标真实回归" }).click();
+  await expect(page).toHaveURL(/\?step=16$/);
+});
+
+test("有效 step 深链优先于服务端保存进度", async ({ page }) => {
+  await mockApi(page, user, 15);
+  await page.goto("/?step=13");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: "跳过介绍" }).click();
+
+  await expect(page.getByRole("heading", { name: "GVC 贸易流真实回归" })).toBeVisible();
+  await expect(page).toHaveURL(/\?step=13$/);
+});
+
+test("小数 step 深链无效并安全回退到默认步骤", async ({ page }) => {
+  await mockApi(page, user, null);
+  await page.goto("/?step=1.5");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: "跳过介绍" }).click();
+
+  await expect(page.getByRole("heading", { name: "GVC 贸易流分解" })).toBeVisible();
+  await expect(page).toHaveURL(/\?step=4$/);
 });

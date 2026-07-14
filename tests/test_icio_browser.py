@@ -73,6 +73,10 @@ def test_z_slice_filters_row_and_column_industries(tmp_path: Path):
         {"row": "AAA_s1", "BBB_s1": 3},
         {"row": "AAA_s2", "BBB_s1": 6},
     ]
+    assert page["row_summaries"] == [
+        {"row": "AAA_s1", "slice_total": 3.0, "out": 39.0},
+        {"row": "AAA_s2", "slice_total": 6.0, "out": 77.0},
+    ]
 
 
 def test_y_slice_filters_final_demand_destination(tmp_path: Path):
@@ -90,6 +94,7 @@ def test_y_slice_filters_final_demand_destination(tmp_path: Path):
     assert page["total"] == 2
     assert page["columns"] == ["row", "BBB_HFCE", "BBB_GFCF"]
     assert page["rows"][0] == {"row": "AAA_s1", "BBB_HFCE": 12, "BBB_GFCF": 13}
+    assert page["row_summaries"][0] == {"row": "AAA_s1", "slice_total": 25.0, "out": 39.0}
 
 
 def test_y_slice_can_select_one_final_demand_category(tmp_path: Path):
@@ -126,6 +131,7 @@ def test_accounts_slice_transposes_account_rows(tmp_path: Path):
         {"row": "AAA_s1", "TLS": 0.1, "VA": 30, "OUT": 40},
         {"row": "AAA_s2", "TLS": 0.2, "VA": 40, "OUT": 50},
     ]
+    assert page["row_summaries"] == []
 
 
 def test_sector_filter_matches_exact_code_not_substring(tmp_path: Path):

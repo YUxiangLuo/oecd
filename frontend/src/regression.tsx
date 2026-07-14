@@ -2,14 +2,14 @@
  * 步骤12-16:回归相关页面(按 prototype 原型重做)。
  *
  * 步骤12 RegDesignLab:交互式设计确认 —— 选择卡即时生成回归方程(GET /api/regression/design),
- *   不影响步骤13-16(各步独立选择,用户确认的取向)。
+ *   设定提升到应用会话并与步骤13-16共用。
  * 步骤13-16 RegressionRunLab:模型设定卡(pill 选择 + 方程预览)→ 运行真实回归 →
  *   系数表 + 系数森林图/事件研究图 + 按结果自动生成的中文解读。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { useAsync } from "./labs";
-import { REG_TEACH, interpretResult } from "./regteach";
+import { REG_TEACH, interpretResult, splitPolicyCoefficients } from "./regteach";
 import { SectionHead, TeachCards } from "./teach";
 import type { PlaceboResponse, RegressionDesignInfo, RegressionOptions, RegressionResponse, Step } from "./types";
 import { CoefForestChart, EventStudyChart, PlaceboChart } from "./viz";
@@ -19,6 +19,31 @@ const SCENARIO_HINT: Record<string, string> = {
   clean: "基准场景:冲击数据按当前拟真事件面板进入模型,用于观察标准 DID/FE/事件研究链路。",
   noisy: "测量误差场景:系统给因变量和强度冲击加入确定性噪声,重点观察显著性与置信区间如何变弱。",
   confounded: "前趋势混杂场景:处理组被注入冲击前趋势,事件研究若出现显著 k<0 系数,应判定 DID 识别不可信。",
+};
+
+export interface RegressionSettings {
+  granularity: string;
+  shockType: string;
+  method: string;
+  controlMode: string;
+  interaction: boolean;
+  priceMode: string;
+  scenario: string;
+}
+
+export const DEFAULT_REGRESSION_SETTINGS: RegressionSettings = {
+  granularity: "国家–行业级",
+  shockType: "关税冲击",
+  method: "双重差分 (DID)",
+  controlMode: "不加控制变量",
+  interaction: false,
+  priceMode: "名义值",
+  scenario: "clean",
+};
+
+type SharedSettingsProps = {
+  settings: RegressionSettings;
+  onSettingsChange: (settings: RegressionSettings) => void;
 };
 
 function Pills({ options, value, onChange, readySet, labelMap }: {
@@ -61,41 +86,97 @@ function ChoiceCard({ title, hint, children }: {
   );
 }
 
-/** 设计摘要行:面板 / 个体 / 聚类(设计端点返回的真实口径) */
-function DesignMeta({ d }: { d: RegressionDesignInfo }) {
+/** 设计摘要行:面板 / 个体 / 聚类(设计端点返回的真实口径)。 */
+function DesignMeta({ d, activeKey }: { d: RegressionDesignInfo; activeKey?: string | null }) {
   const controls = d.controls.length
     ? d.controls.map((c) => d.control_labels[c] ?? c).join("、")
     : "不加控制变量";
+  const item = (key: string, text: string) => (
+    <span
+      key={key}
+      data-meta-key={key}
+      style={activeKey === key ? { color: "#4b47e0", background: "#edecfd", borderRadius: 5, padding: "1px 4px", margin: "-1px -4px" } : undefined}
+    >
+      {text}
+    </span>
+  );
   return (
     <div className="design-meta">
-      <span>被解释变量:{d.depvar_label}</span>
-      <span>冲击:{d.shock_type}({d.method === "双向固定效应" ? d.shock_col : d.treated_col})</span>
-      <span>面板:{d.panel_file}</span>
-      <span>个体 = {ENTITY_LABEL[d.entity] ?? d.entity}</span>
-      <span>标准误按{ENTITY_LABEL[d.cluster] ?? d.cluster}聚类</span>
-      <span>控制:{controls}</span>
-      <span>交互项:{d.interaction ? "冲击×基期GVC" : "未加入"}</span>
-      <span>价格口径:{d.price_mode}</span>
-      <span>样本:{d.sample_filter}</span>
-      <span>场景:{d.scenario_label}</span>
+      {item("depvar", `被解释变量:${d.depvar_label}`)}
+      {item("policy", `冲击:${d.shock_type}(${d.method === "双向固定效应" ? d.shock_col : d.treated_col})`)}
+      {item("panel", `面板:${d.panel_file}`)}
+      {item("entity", `个体 = ${ENTITY_LABEL[d.entity] ?? d.entity}`)}
+      {item("cluster", `标准误按${ENTITY_LABEL[d.cluster] ?? d.cluster}聚类`)}
+      {item("controls", `控制:${controls}`)}
+      {item("interaction", `交互项:${d.interaction ? "冲击×基期GVC" : "未加入"}`)}
+      {item("price_mode", `价格口径:${d.price_mode}`)}
+      {item("sample", `样本:${d.sample_filter}`)}
+      {item("scenario", `场景:${d.scenario_label}`)}
     </div>
+  );
+}
+
+function DesignEquation({ design, dark = false }: { design: RegressionDesignInfo; dark?: boolean }) {
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [activeDescription, setActiveDescription] = useState<string | null>(null);
+  const parts = design.equation_parts?.length
+    ? design.equation_parts
+    : [{ text: design.equation }];
+  return (
+    <>
+      <div className={dark ? "eq-dark" : undefined}>
+        {dark && <div className="eq-dark-label">生成的回归方程</div>}
+        <div className={dark ? "eq-dark-tex" : "model-eq"} aria-label="回归方程">
+          {parts.map((part, index) => {
+            const interactive = Boolean(part.term || part.description || part.meta_key);
+            return (
+              <span
+                key={`${part.text}-${index}`}
+                tabIndex={interactive ? 0 : undefined}
+                title={part.description}
+                data-equation-term={part.term}
+                onMouseEnter={() => { setActiveKey(part.meta_key ?? null); setActiveDescription(part.description ?? null); }}
+                onMouseLeave={() => { setActiveKey(null); setActiveDescription(null); }}
+                onFocus={() => { setActiveKey(part.meta_key ?? null); setActiveDescription(part.description ?? null); }}
+                onBlur={() => { setActiveKey(null); setActiveDescription(null); }}
+                style={interactive ? {
+                  cursor: "help",
+                  borderRadius: 4,
+                  outline: "none",
+                  background: activeKey && activeKey === part.meta_key ? (dark ? "rgba(129,140,248,.28)" : "#edecfd") : undefined,
+                } : undefined}
+              >
+                {part.text}
+              </span>
+            );
+          })}
+        </div>
+        {activeDescription && (
+          <div role="status" style={{ marginTop: 6, fontSize: 11.5, lineHeight: 1.6, color: dark ? "#aeb9e8" : "#6b7280" }}>
+            {activeDescription}
+          </div>
+        )}
+      </div>
+      <DesignMeta d={design} activeKey={activeKey} />
+    </>
   );
 }
 
 /* ------------------------------ 步骤12:设计确认 ------------------------------ */
 
-export function RegDesignLab() {
+export function RegDesignLab({
+  settings,
+  onSettingsChange,
+  onNavigateStep,
+}: SharedSettingsProps & { onNavigateStep: (step: number) => void }) {
   const { data: opts, error: optsErr } = useAsync<RegressionOptions>(
     () => api.regressionOptions(), [],
   );
-  const [gran, setGran] = useState("国家–行业级");
-  const [shock, setShock] = useState("关税冲击");
-  const [method, setMethod] = useState("双重差分 (DID)");
-  const [controlMode, setControlMode] = useState("不加控制变量");
-  const [interaction, setInteraction] = useState(false);
-  const [priceMode, setPriceMode] = useState("名义值");
-  const [scenario, setScenario] = useState("clean");
   const [depStep, setDepStep] = useState(13);
+  const setSetting = <K extends keyof RegressionSettings>(key: K, value: RegressionSettings[K]) => {
+    onSettingsChange({ ...settings, [key]: value });
+  };
+  const { granularity: gran, shockType: shock, method, controlMode, interaction, priceMode, scenario } = settings;
 
   const { data: design, error: designErr } = useAsync<RegressionDesignInfo>(
     () => api.regressionDesign({
@@ -115,23 +196,23 @@ export function RegDesignLab() {
       <SectionHead icon="🧪" label="动手实验 · 生成你的回归设计" />
       <p className="lab-intro">
         在开发回归模块前先对齐三件事,避免做完返工。你的选择会即时生成回归方程;
-        步骤13–16 可在各自页面上独立调整设计。
+        这套设定会带到步骤13–16，并在四个回归步骤间共享。
       </p>
       <div className="choice-grid">
         <ChoiceCard title="分析粒度" hint="决定冲击数据与 GVC 指标能对齐到多细。">
-          <Pills options={opts.granularities} value={gran} onChange={setGran} />
+          <Pills options={opts.granularities} value={gran} onChange={(value) => setSetting("granularity", value)} />
         </ChoiceCard>
         <ChoiceCard title="冲击类型" hint="选择本次实验关注的政策冲击。">
-          <Pills options={opts.shock_types} value={shock} onChange={setShock} />
+          <Pills options={opts.shock_types} value={shock} onChange={(value) => setSetting("shockType", value)} />
         </ChoiceCard>
         <ChoiceCard title="因果推断方式" hint="有精确时间线才能做 DID / 事件研究。">
-          <Pills options={opts.methods} value={method} onChange={setMethod} />
+          <Pills options={opts.methods} value={method} onChange={(value) => setSetting("method", value)} />
         </ChoiceCard>
         <ChoiceCard title="控制变量" hint="在 ICIO 派生控制与模拟宏观控制之间切换。">
           <Pills
             options={opts.control_modes ?? ["不加控制变量", "ICIO 派生控制变量", "模拟宏观控制"]}
             value={controlMode}
-            onChange={setControlMode}
+            onChange={(value) => setSetting("controlMode", value)}
           />
         </ChoiceCard>
         <ChoiceCard title="异质性" hint="检验基期 GVC 生产份额越高的个体是否更敏感。">
@@ -139,7 +220,7 @@ export function RegDesignLab() {
             <input
               type="checkbox"
               checked={interaction}
-              onChange={(e) => setInteraction(e.target.checked)}
+              onChange={(e) => setSetting("interaction", e.target.checked)}
             />
             冲击 × 基期 GVC 生产份额
           </label>
@@ -148,14 +229,14 @@ export function RegDesignLab() {
           <Pills
             options={opts.price_modes ?? ["名义值", "实际值(2016=1)"]}
             value={priceMode}
-            onChange={setPriceMode}
+            onChange={(value) => setSetting("priceMode", value)}
           />
         </ChoiceCard>
         <ChoiceCard title="教学场景" hint="切换测量误差或前趋势混杂,观察识别假设如何失效。">
           <Pills
             options={opts.scenarios ?? ["clean", "noisy", "confounded"]}
             value={scenario}
-            onChange={setScenario}
+            onChange={(value) => setSetting("scenario", value)}
             labelMap={opts.scenario_labels}
           />
         </ChoiceCard>
@@ -174,31 +255,120 @@ export function RegDesignLab() {
         </ChoiceCard>
       </div>
       {designErr && <div className="error-box">{designErr}</div>}
-      <div className="eq-dark">
-        <div className="eq-dark-label">生成的回归方程</div>
-        <div className="eq-dark-tex">{design ? design.equation : "…"}</div>
-      </div>
-      {design && <DesignMeta d={design} />}
+      {design ? <DesignEquation design={design} dark /> : <div className="eq-dark"><div className="eq-dark-tex">…</div></div>}
+      <button className="run-btn" onClick={() => onNavigateStep(depStep)} disabled={!design}>
+        以此设计打开步骤 {depStep}
+      </button>
     </div>
   );
 }
 
 /* --------------------------- 步骤13-16:真实回归 --------------------------- */
 
-export function RegressionRunLab({ step }: { step: Step }) {
-  const [gran, setGran] = useState("国家–行业级");
-  const [shock, setShock] = useState("关税冲击");
-  const [method, setMethod] = useState("双重差分 (DID)");
-  const [controlMode, setControlMode] = useState("不加控制变量");
-  const [interaction, setInteraction] = useState(false);
-  const [priceMode, setPriceMode] = useState("名义值");
-  const [scenario, setScenario] = useState("clean");
+interface RunSnapshot {
+  id: number;
+  settings: RegressionSettings;
+  response: RegressionResponse;
+}
+
+/** 按步骤号保存的最近运行快照;由 App 持有,离开回归步骤再回来不丢失。 */
+export type RegressionHistory = Record<number, RunSnapshot[]>;
+
+const settingsKey = (settings: RegressionSettings) => JSON.stringify(settings);
+
+function settingsSummary(settings: RegressionSettings): string {
+  return [
+    settings.granularity,
+    settings.shockType,
+    settings.method,
+    settings.controlMode,
+    settings.interaction ? "含交互" : "无交互",
+    settings.priceMode,
+    settings.scenario,
+  ].join(" · ");
+}
+
+function changedSettingsSummary(settings: RegressionSettings, snapshots: RunSnapshot[]): string {
+  if (snapshots.length < 2) return settingsSummary(settings);
+  const fields: { key: keyof RegressionSettings; label: string; format?: (value: RegressionSettings[keyof RegressionSettings]) => string }[] = [
+    { key: "granularity", label: "粒度" },
+    { key: "shockType", label: "冲击" },
+    { key: "method", label: "方法" },
+    { key: "controlMode", label: "控制" },
+    { key: "interaction", label: "交互", format: (value) => value ? "开启" : "关闭" },
+    { key: "priceMode", label: "口径" },
+    { key: "scenario", label: "场景" },
+  ];
+  const changed = fields.filter(({ key }) => new Set(snapshots.map((snapshot) => snapshot.settings[key])).size > 1);
+  if (changed.length === 0) return "设定未变（重复运行）";
+  return changed.map(({ key, label, format }) => {
+    const value = settings[key];
+    return `${label}=${format ? format(value) : String(value)}`;
+  }).join(" · ");
+}
+
+function RunComparison({ snapshots, onClear }: { snapshots: RunSnapshot[]; onClear: () => void }) {
+  if (snapshots.length === 0) return null;
+  const coefficientNames = [...new Set(snapshots.flatMap(({ response }) => (
+    splitPolicyCoefficients(response).policy.map((coef) => coef.name)
+  )))];
+  return (
+    <div className="benchmark-box" style={{ marginTop: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <div className="teach-label">最近运行对比（最多 3 次）</div>
+        <button className="secondary" onClick={onClear}>清空</button>
+      </div>
+      <div className="table-wrap">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>政策系数</th>
+              {snapshots.map((snapshot, index) => (
+                <th key={snapshot.id} title={settingsSummary(snapshot.settings)}>
+                  运行 {snapshots.length - index}
+                  <small style={{ display: "block", maxWidth: 180, whiteSpace: "normal", color: "#8a90a0", fontWeight: 400 }}>
+                    {changedSettingsSummary(snapshot.settings, snapshots)}
+                  </small>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {coefficientNames.map((name) => (
+              <tr key={name}>
+                <td>{name}</td>
+                {snapshots.map((snapshot) => {
+                  const coef = splitPolicyCoefficients(snapshot.response).policy.find((item) => item.name === name);
+                  return <td key={snapshot.id}>{coef ? `${coef.coef >= 0 ? "+" : ""}${coef.coef.toFixed(4)}${coef.stars}` : "—"}</td>;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export function RegressionRunLab({ step, settings, onSettingsChange, history, onHistoryChange }: {
+  step: Step;
+  history: RegressionHistory;
+  onHistoryChange: React.Dispatch<React.SetStateAction<RegressionHistory>>;
+} & SharedSettingsProps) {
+  const { granularity: gran, shockType: shock, method, controlMode, interaction, priceMode, scenario } = settings;
+  const setSetting = <K extends keyof RegressionSettings>(key: K, value: RegressionSettings[K]) => {
+    onSettingsChange({ ...settings, [key]: value });
+  };
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [placebo, setPlacebo] = useState<PlaceboResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [placeboError, setPlaceboError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [placeboRunning, setPlaceboRunning] = useState(false);
+  const runningRef = useRef(false);
+  const placeboRunningRef = useRef(false);
+  const latestRequest = useRef(`${step.n}:${settingsKey(settings)}`);
+  latestRequest.current = `${step.n}:${settingsKey(settings)}`;
 
   const { data: opts } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
   const { data: design } = useAsync<RegressionDesignInfo>(
@@ -215,35 +385,66 @@ export function RegressionRunLab({ step }: { step: Step }) {
   }, [step.n, gran, shock, method, controlMode, interaction, priceMode, scenario]);
 
   const run = async () => {
+    if (runningRef.current) return;
+    runningRef.current = true;
+    const runSettings = { ...settings };
+    const requestKey = `${step.n}:${settingsKey(runSettings)}`;
     setRunning(true);
     setError(null);
     setPlacebo(null);
     setPlaceboError(null);
     try {
-      setResult(await api.runRegression(step.n, gran, shock, method, controlMode, interaction, priceMode, scenario));
+      const response = await api.runRegression(
+        step.n,
+        runSettings.granularity,
+        runSettings.shockType,
+        runSettings.method,
+        runSettings.controlMode,
+        runSettings.interaction,
+        runSettings.priceMode,
+        runSettings.scenario,
+      );
+      onHistoryChange((current) => {
+        const prior = current[step.n] ?? [];
+        // id 从已有快照推导,组件重挂载后不会与提升到 App 的历史撞 key。
+        const snapshot: RunSnapshot = {
+          id: Math.max(0, ...prior.map((item) => item.id)) + 1,
+          settings: runSettings,
+          response,
+        };
+        return { ...current, [step.n]: [snapshot, ...prior].slice(0, 3) };
+      });
+      if (latestRequest.current === requestKey) setResult(response);
     } catch (e) {
-      setError(String((e as Error).message));
+      if (latestRequest.current === requestKey) setError(String((e as Error).message));
     } finally {
+      runningRef.current = false;
       setRunning(false);
     }
   };
 
   const runPlacebo = async () => {
+    if (placeboRunningRef.current) return;
+    placeboRunningRef.current = true;
+    const requestKey = `${step.n}:${settingsKey(settings)}`;
     setPlaceboRunning(true);
     setPlaceboError(null);
     try {
-      setPlacebo(await api.placeboRegression(step.n, gran, shock, method, controlMode, interaction, priceMode, scenario, 40));
+      const response = await api.placeboRegression(step.n, gran, shock, method, controlMode, interaction, priceMode, scenario, 40);
+      if (latestRequest.current === requestKey) setPlacebo(response);
     } catch (e) {
-      setPlaceboError(String((e as Error).message));
+      if (latestRequest.current === requestKey) setPlaceboError(String((e as Error).message));
     } finally {
+      placeboRunningRef.current = false;
       setPlaceboRunning(false);
     }
   };
 
-  const isEvent = method === "事件研究";
-  const policyCoefs = result
-    ? result.result.coefs.filter((c) => !result.design.controls.includes(c.name))
-    : [];
+  const isEvent = (result?.design.method ?? method) === "事件研究";
+  const splitCoefs = result ? splitPolicyCoefficients(result) : null;
+  const policyCoefs = splitCoefs?.policy ?? [];
+  const eventMainCoefs = splitCoefs?.eventMain ?? [];
+  const eventInteractionCoefs = splitCoefs?.eventInteraction ?? [];
 
   return (
     <div>
@@ -258,22 +459,22 @@ export function RegressionRunLab({ step }: { step: Step }) {
         <div className="model-controls">
           <div className="model-control">
             <span className="model-control-label">粒度</span>
-            <Pills options={opts?.granularities ?? ["国家–行业级", "国家级"]} value={gran} onChange={setGran} />
+            <Pills options={opts?.granularities ?? ["国家–行业级", "国家级"]} value={gran} onChange={(value) => setSetting("granularity", value)} />
           </div>
           <div className="model-control">
             <span className="model-control-label">冲击</span>
-            <Pills options={opts?.shock_types ?? ["关税冲击", "制裁清单", "出口管制"]} value={shock} onChange={setShock} />
+            <Pills options={opts?.shock_types ?? ["关税冲击", "制裁清单", "出口管制"]} value={shock} onChange={(value) => setSetting("shockType", value)} />
           </div>
           <div className="model-control">
             <span className="model-control-label">方法</span>
-            <Pills options={opts?.methods ?? ["双重差分 (DID)", "双向固定效应", "事件研究"]} value={method} onChange={setMethod} />
+            <Pills options={opts?.methods ?? ["双重差分 (DID)", "双向固定效应", "事件研究"]} value={method} onChange={(value) => setSetting("method", value)} />
           </div>
           <div className="model-control">
             <span className="model-control-label">控制</span>
             <Pills
               options={opts?.control_modes ?? ["不加控制变量", "ICIO 派生控制变量", "模拟宏观控制"]}
               value={controlMode}
-              onChange={setControlMode}
+              onChange={(value) => setSetting("controlMode", value)}
             />
           </div>
           <label className="model-control" style={{ gap: 8 }}>
@@ -281,7 +482,7 @@ export function RegressionRunLab({ step }: { step: Step }) {
             <input
               type="checkbox"
               checked={interaction}
-              onChange={(e) => setInteraction(e.target.checked)}
+              onChange={(e) => setSetting("interaction", e.target.checked)}
             />
             <span>冲击×基期GVC</span>
           </label>
@@ -290,7 +491,7 @@ export function RegressionRunLab({ step }: { step: Step }) {
             <Pills
               options={opts?.price_modes ?? ["名义值", "实际值(2016=1)"]}
               value={priceMode}
-              onChange={setPriceMode}
+              onChange={(value) => setSetting("priceMode", value)}
             />
           </div>
           <div className="model-control">
@@ -298,13 +499,16 @@ export function RegressionRunLab({ step }: { step: Step }) {
             <Pills
               options={opts?.scenarios ?? ["clean", "noisy", "confounded"]}
               value={scenario}
-              onChange={setScenario}
+              onChange={(value) => setSetting("scenario", value)}
               labelMap={opts?.scenario_labels}
             />
           </div>
         </div>
-        <div className="model-eq">{design ? design.equation : "…"}</div>
-        {design && <DesignMeta d={design} />}
+        {design ? <DesignEquation design={design} /> : <div className="model-eq">…</div>}
+        <div className="benchmark-box" style={{ margin: "0 0 12px" }}>
+          <div className="teach-label">运行前预期</div>
+          <p>{SCENARIO_HINT[scenario] ?? scenario}</p>
+        </div>
         <button
           className={`run-btn${result ? " done" : ""}`}
           onClick={run}
@@ -349,7 +553,22 @@ export function RegressionRunLab({ step }: { step: Step }) {
           </div>
 
           {isEvent && (
-            <EventStudyChart coefs={policyCoefs} notes={result.result.notes} />
+            <>
+              <EventStudyChart
+                coefs={eventMainCoefs}
+                notes={result.result.notes}
+                title="事件研究：主政策效应的动态路径"
+                seriesLabel="主效应 βₖ"
+              />
+              {eventInteractionCoefs.length > 0 && (
+                <EventStudyChart
+                  coefs={eventInteractionCoefs}
+                  notes={result.result.notes}
+                  title="异质性：基期 GVC 暴露的动态附加效应"
+                  seriesLabel="交互效应 θₖ"
+                />
+              )}
+            </>
           )}
 
           <div className="benchmark-box">
@@ -386,7 +605,11 @@ export function RegressionRunLab({ step }: { step: Step }) {
                 {placebo && <PlaceboChart data={placebo.placebo} />}
               </>
             ) : (
-              <p className="muted">当前教学版安慰剂检验针对 DID 设计;切换到“双重差分 (DID)”后可运行。</p>
+              <p className="muted">
+                当前教学版安慰剂检验只针对 DID：它通过随机重排处理组、保留 cohort 分布来构造伪 ATT。
+                当前方法的政策量或逐期动态系数没有同一个单一 ATT，因此不能直接套用这项随机化检验；
+                切换到“双重差分 (DID)”后可运行。
+              </p>
             )}
           </div>
 
@@ -397,9 +620,18 @@ export function RegressionRunLab({ step }: { step: Step }) {
             ))}
           </div>
 
-          {result.result.notes.map((n) => <p key={n} className="muted">· {n}</p>)}
+          <details style={{ marginTop: 12 }}>
+            <summary className="muted" style={{ cursor: "pointer" }}>样本与估计说明（{result.result.notes.length} 条）</summary>
+            <div style={{ padding: "4px 0 0 12px" }}>
+              {result.result.notes.map((n) => <p key={n} className="muted">· {n}</p>)}
+            </div>
+          </details>
         </div>
       )}
+      <RunComparison
+        snapshots={history[step.n] ?? []}
+        onClear={() => onHistoryChange((current) => ({ ...current, [step.n]: [] }))}
+      />
     </div>
   );
 }

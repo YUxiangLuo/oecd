@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useId, type ReactNode } from "react";
 
 /** 教师面板共用的轻量 UI 原语:模态框 / 工具条 / 搜索框 / 状态徽标 / 空态。
  *  替代原来散落的 window.prompt / window.confirm 与常驻内联表单。 */
@@ -15,6 +15,7 @@ export function Modal({
   children: ReactNode;
   width?: number;
 }) {
+  const titleId = useId();
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
@@ -22,9 +23,16 @@ export function Modal({
   }, [onClose]);
   return (
     <div className="modal-scrim" onMouseDown={onClose}>
-      <div className="modal-card" style={{ width }} onMouseDown={(e) => e.stopPropagation()}>
+      <div
+        className="modal-card"
+        style={{ width }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <div className="modal-head">
-          <b>{title}</b>
+          <b id={titleId}>{title}</b>
           <button className="modal-x" onClick={onClose} aria-label="关闭">
             ×
           </button>

@@ -1,32 +1,43 @@
-"""步骤17:自动生成实验报告(Markdown)。
+"""步骤17:生成实验报告(Markdown)。
 
-串联"数据→指标→回归→报告"闭环:读取预计算面板,跑四组回归,
-产出一份带指标摘要与回归表的报告。PDF 导出留给前端/pandoc(见 README 路线图)。
+HTTP 请求路径只构建内存中的 Markdown，不写入共享文件；CLI 通过
+``generate`` 将同一份文档写到 ``reports/experiment_report_<year>.md``。
+图表使用版本化的 ``gvcsim-chart`` fenced JSON，由前端的受控组件渲染，
+报告本身不包含原始 HTML。
 """
 
+import json
+from dataclasses import dataclass
 from datetime import date
-from functools import lru_cache
 
 import pandas as pd
 
+from gvcsim.artifacts import read_csv_artifact
 from gvcsim.config import PROCESSED_DIR, REPORTS_DIR, processed_years
 from gvcsim.regression.design import STEP_DEPVARS, RegressionDesign
-from gvcsim.regression.panel import RegressionResult, benchmark_linearmodels, run_design
+from gvcsim.regression.panel import RegressionResult, run_design, run_design_with_benchmark
 
 
-def _load_panel(design: RegressionDesign) -> pd.DataFrame:
-    path = PROCESSED_DIR / design.panel_file
-    if not path.exists():
-        raise FileNotFoundError(f"缺少 {design.panel_file},请先运行 gvcsim compute")
-    return pd.read_csv(path)
+@dataclass(frozen=True)
+class ReportDocument:
+    markdown: str
+    suggested_filename: str
+
+    def to_dict(self) -> dict[str, str]:
+        return {"markdown": self.markdown, "suggested_filename": self.suggested_filename}
 
 
-@lru_cache(maxsize=8)
 def _load_panel_file(name: str) -> pd.DataFrame:
     path = PROCESSED_DIR / name
     if not path.exists():
         raise FileNotFoundError(f"缺少 {name},请先运行 gvcsim compute")
-    return pd.read_csv(path)
+    # NOTE: 返回的是共享缓存 DataFrame,截面切片/派生前必须 .copy()(见 gvcsim/artifacts.py)。
+    return read_csv_artifact(path)
+
+
+def _load_panel(design: RegressionDesign) -> pd.DataFrame:
+    """为旧有 CLI/测试调用保留的设计导向加载器。"""
+    return _load_panel_file(design.panel_file)
 
 
 def run_step_regression(
@@ -39,7 +50,7 @@ def run_step_regression(
     price_mode: str = "名义值",
     exclude_row: bool = True,
 ) -> RegressionResult:
-    """跑步骤13-16 对应的默认设计回归(默认国家–行业级粒度 + DID)。"""
+    """跑步骤13-16 对应的回归（主要供 ``gvcsim regress`` 使用）。"""
     kwargs = {"method": method} if method else {}
     design = RegressionDesign(
         step=step,
@@ -50,15 +61,16 @@ def run_step_regression(
         exclude_row=exclude_row,
         **kwargs,
     )
-    if panel is None:
-        panel = _load_panel(design)
-    return run_design(panel, design)
+    return run_design(panel if panel is not None else _load_panel(design), design)
 
 
 def _coef_table(result: RegressionResult, design: RegressionDesign) -> str:
-    lines = ["| 变量 | 系数 | 聚类标准误 | t | p | |", "|---|---|---|---|---|---|"]
-    for c in result.coefs:
-        lines.append(f"| {c.name} | {c.coef:.4f} | {c.se:.4f} | {c.t:.2f} | {c.p:.3f} | {c.stars} |")
+    lines = [
+        "| 变量 | 系数 | 聚类标准误 | t | p | 显著性 |",
+        "|---|---:|---:|---:|---:|:---:|",
+    ]
+    for coef in result.coefs:
+        lines.append(f"| {coef.name} | {coef.coef:.4f} | {coef.se:.4f} | {coef.t:.2f} | {coef.p:.3f} | {coef.stars} |")
     entity_label = "国家" if design.granularity == "国家级" else "国家×行业"
     lines.append(
         f"\nN = {result.n_obs}({result.n_entities} 个{entity_label} × {result.n_times} 年,"
@@ -80,42 +92,65 @@ def _design_summary(design: RegressionDesign) -> str:
             f"- 交互项:{interaction}",
             f"- 价格口径:{design.price_mode}",
             f"- 回归样本:{design.sample_filter}",
+            "- 教学场景:正式报告固定使用 clean 基准场景",
         ]
     )
 
 
-def _policy_names(design: RegressionDesign, result: RegressionResult) -> list[str]:
-    if design.method == "双重差分 (DID)":
-        return ["treated×post" if design.treated_col == "treated" else f"{design.treated_col}×post"]
-    if design.method == "事件研究":
-        return [c.name for c in result.coefs if c.name not in design.controls]
-    return list(design.regressors)
+def _chart_block(payload: dict) -> str:
+    """输出严格 v1 图表块；``allow_nan=False`` 防止非标准 JSON 渗入报告。"""
+    encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+    return f"```gvcsim-chart\n{encoded}\n```"
 
 
-def _compare_table(
-    base_design: RegressionDesign,
-    base: RegressionResult,
-    ctrl_design: RegressionDesign,
-    ctrl: RegressionResult,
-) -> str:
-    base_by = {c.name: c for c in base.coefs}
-    ctrl_by = {c.name: c for c in ctrl.coefs}
-    lines = [
-        "| 政策变量 | 基准系数 | 基准 p | 加控制系数 | 加控制 p |",
-        "|---|---:|---:|---:|---:|",
-    ]
-    for name in _policy_names(base_design, base):
-        if name not in base_by or name not in ctrl_by:
-            continue
-        b, c = base_by[name], ctrl_by[name]
-        lines.append(f"| {name} | {b.coef:.4f}{b.stars} | {b.p:.3f} | {c.coef:.4f}{c.stars} | {c.p:.3f} |")
-    lines.append(
-        f"\n基准:N={base.n_obs},组内 R²={base.r2_within:.4f}; 加控制:N={ctrl.n_obs},组内 R²={ctrl.r2_within:.4f}。"
+def _bar_chart(title: str, values: pd.Series, y_label: str) -> str:
+    return _chart_block(
+        {
+            "version": 1,
+            "type": "bar",
+            "title": title,
+            "x_label": "经济体",
+            "y_label": y_label,
+            "items": [{"label": str(label), "value": float(value)} for label, value in values.items()],
+        }
     )
-    return "\n".join(lines)
 
 
-def generate(
+def _event_chart(
+    title: str,
+    result: RegressionResult,
+    *,
+    interaction: bool,
+) -> str | None:
+    suffix = "×base_gvc"
+    coefs = [
+        coef
+        for coef in result.coefs
+        if coef.name.startswith("k=") and (coef.name.endswith(suffix) if interaction else suffix not in coef.name)
+    ]
+    if not coefs:
+        return None
+    points = [
+        {
+            "label": coef.name.removesuffix(suffix),
+            "value": float(coef.coef),
+            "se": float(coef.se),
+        }
+        for coef in coefs
+    ]
+    return _chart_block(
+        {
+            "version": 1,
+            "type": "event-study",
+            "title": title,
+            "x_label": "相对首次冲击年 k",
+            "y_label": "回归系数",
+            "points": points,
+        }
+    )
+
+
+def build(
     year: int | None = None,
     *,
     granularity: str = "国家–行业级",
@@ -125,18 +160,23 @@ def generate(
     interaction: bool = False,
     price_mode: str = "名义值",
     exclude_row: bool = True,
-) -> str:
-    """生成报告并返回文件路径。year 为指标摘要引用的截面年份。
-
-    指标摘要用国家级面板(便于阅读),回归用国家–行业级面板(默认粒度)。
-    """
+) -> ReportDocument:
+    """纯构建报告：读取预计算产物并返回 Markdown，不产生磁盘副作用。"""
     country_panel = _load_panel_file("panel_country.csv")
     years = processed_years()
-    year = year or max(years)
-    snap = country_panel[country_panel["year"] == year].copy()
+    if not years:
+        raise FileNotFoundError("缺少指标产物,请先运行 gvcsim compute")
+    report_year = int(year if year is not None else max(years))
+    if report_year not in years:
+        raise ValueError(f"指标截面年份 {report_year} 不可用,可选年份为 {years}")
+
+    snap = country_panel[country_panel["year"] == report_year].copy()
     if exclude_row:
         snap = snap[snap["country"].astype(str) != "ROW"]
+    if snap.empty:
+        raise ValueError(f"panel_country.csv 中没有 {report_year} 年截面")
     snap = snap.set_index("country")
+
     design_preview = RegressionDesign(
         step=13,
         granularity=granularity,
@@ -147,7 +187,6 @@ def generate(
         price_mode=price_mode,
         exclude_row=exclude_row,
     )
-
     top_fva = snap["FVA_share"].nlargest(5)
     top_gvcpos = snap["GVCPs"].nlargest(5)
     top_between = snap["betweenesscentrality"].nlargest(5)
@@ -157,21 +196,25 @@ def generate(
         "> 供应链仿真系统自动生成的实验报告(演示版:冲击数据为覆盖全部经济体的"
         "拟真演示面板,以 2018–2020 全球贸易摩擦为原型,结论仅用于验证系统链路,"
         "不构成研究结论)\n",
-        f"- 数据:OECD ICIO {min(years)}–{max(years)}(指标截面:{year} 年)",
+        f"- 数据:OECD ICIO {min(years)}–{max(years)}(指标截面:{report_year} 年)",
         "- 方法:本报告使用步骤17中选择的回归设定;四组因变量共用同一套粒度/冲击/方法/控制/价格口径,便于横向比较",
         _design_summary(design_preview),
         f"- 生成日期:{date.today().isoformat()}\n",
         "## 一、数据与质检",
         f"覆盖 {snap.shape[0]} 个国家/地区、{len(years)} 个年份。"
-        f"质检结果见 data/processed/qc_{year}.json(维度一致性、会计恒等式、"
-        "里昂惕夫逆矩阵性质等)。\n",
+        f"质检结果见 data/processed/qc_{report_year}.json(维度一致性、会计恒等式、"
+        "里昂惕夫逆矩阵性质等)\n",
         "## 二、GVC 指标摘要",
         "**FVA 份额最高(WWZ 口径,出口中外国增加值占毛出口比重)**:"
-        + "、".join(f"{c} ({v:.3f})" for c, v in top_fva.items()),
+        + "、".join(f"{country} ({value:.3f})" for country, value in top_fva.items()),
+        _bar_chart("FVA 份额 Top 5", top_fva, "FVA 份额"),
         "\n**GVC 位置指数最高(WWYZ 口径,前向/后向 GVC 生产长度之比,越大越上游)**:"
-        + "、".join(f"{c} ({v:.3f})" for c, v in top_gvcpos.items()),
-        "\n**介数中心性最高(供应链枢纽)**:" + "、".join(f"{c} ({v:.1f})" for c, v in top_between.items()) + "\n",
-        "## 三、回归结果",
+        + "、".join(f"{country} ({value:.3f})" for country, value in top_gvcpos.items()),
+        _bar_chart("GVC 位置指数 Top 5", top_gvcpos, "GVCPs"),
+        "\n**介数中心性最高(供应链枢纽)**:"
+        + "、".join(f"{country} ({value:.1f})" for country, value in top_between.items()),
+        _bar_chart("介数中心性 Top 5", top_between, "介数中心性"),
+        "\n## 三、回归结果",
     ]
 
     for step in sorted(STEP_DEPVARS):
@@ -186,34 +229,82 @@ def generate(
             exclude_row=exclude_row,
         )
         panel = _load_panel_file(design.panel_file)
-        result = run_design(panel, design)
-        bench = benchmark_linearmodels(panel, design, result)
-        sections += [
-            f"### 步骤{step}:{design.depvar_label}",
-            f"模型:`{design.equation()}`\n",
-            _coef_table(result, design),
-            f"PanelOLS 政策系数对照:{'通过' if bench['coef_check_passed'] else '需复核'},"
-            f"最大政策系数差异={bench['max_abs_coef_diff']:.2e};"
-            f"标准误最大差异={bench['max_abs_se_diff']:.2e},仅作参考"
-            "(不同实现的小样本/自由度修正规则可能不同)。",
-            "",
+        # 自写引擎与 PanelOLS 对照共用一次 prepare/within 结果。
+        result, benchmark = run_design_with_benchmark(panel, design)
+        sections.extend(
+            [
+                f"### 步骤{step}:{design.depvar_label}",
+                f"模型:`{design.equation()}`\n",
+                _coef_table(result, design),
+            ]
+        )
+        if method == "事件研究":
+            main_chart = _event_chart(f"步骤{step}主政策效应动态", result, interaction=False)
+            if main_chart:
+                sections.extend(["#### 主政策效应动态", main_chart])
+            if interaction:
+                heterogeneity_chart = _event_chart(
+                    f"步骤{step}基期 GVC 异质性动态",
+                    result,
+                    interaction=True,
+                )
+                if heterogeneity_chart:
+                    sections.extend(["#### 基期 GVC 异质性动态", heterogeneity_chart])
+        sections.extend(
+            [
+                f"PanelOLS 政策系数对照:{'通过' if benchmark['coef_check_passed'] else '需复核'},"
+                f"最大政策系数差异={benchmark['max_abs_coef_diff']:.2e};"
+                f"标准误最大差异={benchmark['max_abs_se_diff']:.2e},仅作参考"
+                "(不同实现的小样本/自由度修正规则可能不同)。",
+                "",
+            ]
+        )
+
+    sections.extend(
+        [
+            "## 四、结论与限制",
+            f"- 本报告验证了“数据 → 指标 → 回归 → 报告”闭环可自动运行(本次回归粒度:{granularity})。",
+            "- 冲击变量为拟真演示面板(事件与量级参考公开资料的手工编码,"
+            "出口暴露度由 OECD ICIO 双边流向计算);"
+            "接入 PIIE/WTO 真实数据 + 官方 HS→ICIO 映射后本报告即具备研究意义。",
+            "- 控制变量支持 ICIO 内生派生与 WDI/IMF 风格宏观 mock,用于稳健性演示;"
+            "GDP 平减指数为拟真 mock,不是官方价格指数。论文级研究仍需接入真实 WDI/IMF/"
+            "行业价格指数。",
+            "- 指标采用客户资料口径:WWZ (2013) 总贸易核算法、WWYZ (2017) 生产分解与"
+            "生产长度、Gephi 风格网络中心性,输出国家/国家–行业聚合结果;"
+            "本报告不输出 exporter-importer-sector 双边矩阵明细。",
         ]
+    )
 
-    sections += [
-        "## 四、结论与限制",
-        f"- 本报告验证了“数据 → 指标 → 回归 → 报告”闭环可自动运行(本次回归粒度:{granularity})。",
-        "- 冲击变量为拟真演示面板(事件与量级参考公开资料的手工编码,"
-        "出口暴露度由 OECD ICIO 双边流向计算);"
-        "接入 PIIE/WTO 真实数据 + 官方 HS→ICIO 映射后本报告即具备研究意义。",
-        "- 控制变量支持 ICIO 内生派生与 WDI/IMF 风格宏观 mock,用于稳健性演示;"
-        "GDP 平减指数为拟真 mock,不是官方价格指数。论文级研究仍需接入真实 WDI/IMF/"
-        "行业价格指数。",
-        "- 指标采用客户资料口径:WWZ (2013) 总贸易核算法、WWYZ (2017) 生产分解与"
-        "生产长度、Gephi 风格网络中心性,输出国家/国家–行业聚合结果;"
-        "本报告不输出 exporter-importer-sector 双边矩阵明细。",
-    ]
+    return ReportDocument(
+        markdown="\n".join(sections),
+        suggested_filename=f"experiment_report_{report_year}.md",
+    )
 
+
+def generate(
+    year: int | None = None,
+    *,
+    granularity: str = "国家–行业级",
+    shock_type: str = "关税冲击",
+    method: str = "双重差分 (DID)",
+    control_mode: str = "不加控制变量",
+    interaction: bool = False,
+    price_mode: str = "名义值",
+    exclude_row: bool = True,
+) -> str:
+    """CLI 落盘入口：构建报告后写入 ``reports/`` 并返回路径。"""
+    document = build(
+        year,
+        granularity=granularity,
+        shock_type=shock_type,
+        method=method,
+        control_mode=control_mode,
+        interaction=interaction,
+        price_mode=price_mode,
+        exclude_row=exclude_row,
+    )
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    out = REPORTS_DIR / f"experiment_report_{year}.md"
-    out.write_text("\n".join(sections), encoding="utf-8")
-    return str(out)
+    output = REPORTS_DIR / document.suggested_filename
+    output.write_text(document.markdown, encoding="utf-8")
+    return str(output)

@@ -1,4 +1,4 @@
-import { CAT, Legend, type Row, cardStyle, num, useTip } from "../shared";
+import { CAT, Legend, type Row, cardStyle, countryLabel, num, useTip } from "../shared";
 
 /* ------------------------ 步骤10:前向/后向生产长度对比 ------------------------ */
 
@@ -8,7 +8,7 @@ export function LengthViz({ rows }: { rows: Row[] }) {
   const maxLen = Math.max(...top.map((r) => Math.max(num(r.PLv), num(r.PLy))), 1);
   const ticks = Array.from({ length: Math.floor(maxLen) + 1 }, (_, i) => i);
   const tipLines = (r: Row): [string, string][] => [
-    ["", String(r.country)],
+    ["", countryLabel(String(r.country))],
     ["前向总长度 PLv", num(r.PLv).toFixed(2)],
     ["前向 GVC 段", num(r.PLv_GVC).toFixed(2)],
     ["后向总长度 PLy", num(r.PLy).toFixed(2)],

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
-import type { ClassInfo, StudentRow } from "../types";
+import type { ClassInfo, StepsResponse, StudentRow } from "../types";
 import { ConfirmModal, EmptyState, Modal, SearchInput, StatusPill, Toolbar } from "./ui";
 
 const fmtTime = (s: string | null | undefined) => (s ? s.slice(0, 16).replace("T", " ") : "—");
@@ -15,13 +15,21 @@ type ModalState =
   | { type: "toggle"; s: StudentRow };
 
 /** 班级与学生:工具条(筛选/搜索/建班/建号) + 进度表 + 模态编辑 */
-export function StudentsTab() {
-  const [classId, setClassId] = useState<number | null>(null);
+type SortKey = "max_step" | "score" | "last_login_at";
+
+export function StudentsTab({ initialClassId, reachedStep, onClearReachedStep }: {
+  initialClassId: number | null;
+  reachedStep: number | null;
+  onClearReachedStep: () => void;
+}) {
+  const [classId, setClassId] = useState<number | null>(initialClassId);
   const [refresh, setRefresh] = useState(0);
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const { data: cls } = useAsync<{ classes: ClassInfo[] }>(() => api.classroom.classes(), [refresh]);
+  const { data: stepsData } = useAsync<StepsResponse>(() => api.steps(), []);
   const { data, error } = useAsync<{ students: StudentRow[] }>(
     () => api.classroom.students(classId),
     [classId, refresh],
@@ -40,11 +48,34 @@ export function StudentsTab() {
 
   const all = data?.students ?? [];
   const q = query.trim().toLowerCase();
-  const students = q
+  const searched = q
     ? all.filter((s) =>
         [s.display_name, s.username, s.student_no].some((v) => (v ?? "").toLowerCase().includes(q)),
       )
     : all;
+  const reached = reachedStep == null
+    ? searched
+    : searched.filter((s) => (s.max_step ?? 0) >= reachedStep);
+  const students = sort
+    ? [...reached].sort((a, b) => {
+        const av = a[sort.key];
+        const bv = b[sort.key];
+        if (av == null && bv == null) return 0;
+        if (av == null) return 1;
+        if (bv == null) return -1;
+        const cmp = typeof av === "number" && typeof bv === "number"
+          ? av - bv
+          : String(av).localeCompare(String(bv));
+        return sort.dir === "asc" ? cmp : -cmp;
+      })
+    : reached;
+  const stepTitles = new Map((stepsData?.steps ?? []).map((s) => [s.n, s.title]));
+  const toggleSort = (key: SortKey) => setSort((current) => (
+    current?.key === key
+      ? { key, dir: current.dir === "desc" ? "asc" : "desc" }
+      : { key, dir: "desc" }
+  ));
+  const sortMark = (key: SortKey) => sort?.key === key ? (sort.dir === "desc" ? " ↓" : " ↑") : "";
 
   return (
     <div>
@@ -71,6 +102,13 @@ export function StudentsTab() {
         </div>
       </Toolbar>
 
+      {reachedStep != null && (
+        <div className="active-filter">
+          已筛选：最远进度达到步骤 {reachedStep} · {stepTitles.get(reachedStep) ?? ""}
+          <button onClick={onClearReachedStep}>清除</button>
+        </div>
+      )}
+
       {actionError && <div className="error-box">{actionError}</div>}
 
       <div className="table-wrap">
@@ -82,10 +120,10 @@ export function StudentsTab() {
               <th>学号</th>
               <th>班级</th>
               <th>当前步</th>
-              <th>最远步</th>
+              <th><button className="table-sort" onClick={() => toggleSort("max_step")}>最远步{sortMark("max_step")}</button></th>
               <th>报告</th>
-              <th>得分</th>
-              <th>最近登录</th>
+              <th><button className="table-sort" onClick={() => toggleSort("score")}>得分{sortMark("score")}</button></th>
+              <th><button className="table-sort" onClick={() => toggleSort("last_login_at")}>最近登录{sortMark("last_login_at")}</button></th>
               <th>状态</th>
               <th></th>
             </tr>
@@ -97,7 +135,9 @@ export function StudentsTab() {
                 <td className="mono">{s.username}</td>
                 <td>{s.student_no || "—"}</td>
                 <td>{s.class_name ?? "—"}</td>
-                <td>{s.current_step ?? "—"}</td>
+                <td title={s.current_step ? stepTitles.get(s.current_step) : undefined}>
+                  {s.current_step ? `${s.current_step} · ${stepTitles.get(s.current_step) ?? ""}` : "—"}
+                </td>
                 <td>
                   {s.max_step ? (
                     <span className="step-cell">
@@ -165,7 +205,8 @@ export function StudentsTab() {
       )}
       {modal?.type === "student" && (
         <StudentModal
-          classId={classId ?? cls?.classes[0]?.id ?? null}
+          classes={cls?.classes ?? []}
+          defaultClassId={classId}
           onClose={() => setModal(null)}
           onSubmit={(b) => run(api.classroom.createStudent(b))}
         />
@@ -247,11 +288,13 @@ function ClassModal({
 }
 
 function StudentModal({
-  classId,
+  classes,
+  defaultClassId,
   onClose,
   onSubmit,
 }: {
-  classId: number | null;
+  classes: ClassInfo[];
+  defaultClassId: number | null;
   onClose: () => void;
   onSubmit: (b: {
     username: string;
@@ -262,6 +305,7 @@ function StudentModal({
   }) => void;
 }) {
   const [f, setF] = useState({ username: "", display_name: "", password: "", student_no: "" });
+  const [classChoice, setClassChoice] = useState(defaultClassId == null ? "" : String(defaultClassId));
   const [err, setErr] = useState<string | null>(null);
   return (
     <Modal title="添加学生账号" onClose={onClose}>
@@ -274,8 +318,14 @@ function StudentModal({
         <input value={f.student_no} onChange={(e) => setF({ ...f, student_no: e.target.value })} />
         <label>初始密码(≥6 位)</label>
         <input value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />
+        <label>所属班级</label>
+        <select value={classChoice} onChange={(e) => setClassChoice(e.target.value)}>
+          {defaultClassId == null && <option value="">请选择班级</option>}
+          <option value="unassigned">暂不分班</option>
+          {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
         {err && <div className="error-box">{err}</div>}
-        <p className="muted">归入{classId ? "当前所选班级" : "默认班级"};创建后学生即可用该账号登录。</p>
+        <p className="muted">创建后学生即可使用该账号登录；在“全部班级”视图中必须明确选择归属。</p>
         <div className="modal-actions">
           <button onClick={onClose}>取消</button>
           <button
@@ -283,7 +333,8 @@ function StudentModal({
             onClick={() => {
               if (!f.username || !f.display_name || f.password.length < 6)
                 return setErr("请填写用户名、姓名,密码至少 6 位");
-              onSubmit({ ...f, class_id: classId });
+              if (!classChoice) return setErr("请选择所属班级，或明确选择“暂不分班”");
+              onSubmit({ ...f, class_id: classChoice === "unassigned" ? null : Number(classChoice) });
               onClose();
             }}
           >

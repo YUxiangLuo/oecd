@@ -17,10 +17,20 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: {
-    command: "bun run dev -- --host 127.0.0.1 --port 4173",
-    url: "http://127.0.0.1:4173",
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      command: "bun run dev -- --host 127.0.0.1 --port 4173",
+      url: "http://127.0.0.1:4173",
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
+    ...(process.env.REAL_API
+      ? [{
+          command: "cd .. && uv run uvicorn gvcsim.api:app --host 127.0.0.1 --port 8000",
+          url: "http://127.0.0.1:8000/docs",
+          reuseExistingServer: !process.env.CI,
+          timeout: 120_000,
+        }]
+      : []),
+  ],
 });
