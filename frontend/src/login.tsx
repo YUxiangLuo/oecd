@@ -7,10 +7,10 @@ import { api } from "./api";
 import { LogoMark } from "./brand";
 import type { LoginResponse } from "./types";
 
-const FLOW = ["数据接入", "指标计算", "因果回归", "实验报告"];
+const FLOW = ["数据接入", "指标计算", "教学实证", "实验报告"];
 
 const ACCOUNTS = [
-  { username: "student", label: "学生身份", note: "完成 17 步实验" },
+  { username: "student", label: "学生身份", note: "完成 16 步实验" },
   { username: "teacher", label: "教师身份", note: "班级管理与报告评阅" },
 ];
 
@@ -73,14 +73,14 @@ export function LoginPage({ onLogin }: { onLogin: (r: LoginResponse) => void }) 
 
         <div className="login-hero">
           <h1>
-            用真实数据,
+            从真实指标出发,
             <br />
-            亲手检验全球价值链的因果。
+            亲手分析全球价值链变化。
           </h1>
           <p className="login-desc">
             基于 OECD 全球投入产出数据库的教学实验平台。
-            从 77 个经济体、45 个行业的真实贸易流出发,
-            计算价值链指标、检验政策冲击的因果效应,最终生成你自己的实验报告。
+            从 77 个经济体、45 个行业的真实贸易流出发，计算价值链指标，
+            再用拟真政策冲击练习实证比较、识别假设与不确定性判断，最终生成实验报告。
           </p>
           <div className="login-flow">
             {FLOW.map((p, i) => (

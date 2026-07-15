@@ -113,7 +113,7 @@ export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () =
             hint={
               rows.length
                 ? "换个筛选或关键词试试"
-                : "学生在步骤 17 生成报告后点击「提交报告给老师」即会出现在这里"
+                : "学生在步骤 16 生成报告后点击「提交报告给老师」即会出现在这里"
             }
           />
         )}
@@ -223,7 +223,7 @@ function SubmissionGradeView({
               ))}
             </div>
             <label className="grade-field">
-              评语(学生在步骤 17 页面可见)
+              评语(学生在步骤 16 页面可见)
               <textarea value={feedback} onChange={(e) => setFeedback(e.target.value)} rows={6} />
             </label>
             <div className="pill-row" style={{ margin: "-4px 0 12px" }} aria-label="评语模板">

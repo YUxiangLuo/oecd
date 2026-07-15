@@ -48,7 +48,7 @@ function SubmitCard({ request, data, mine, error, onSubmitted }: {
     api.classroom
       .submitReport({
         year: request.year,
-        title: `步骤17实验报告 · ${request.year} · ${request.method}`,
+        title: `步骤16实验报告 · ${request.year} · ${request.method}`,
         design: { ...request },
         markdown: data.markdown,
       })
@@ -94,7 +94,7 @@ function SubmitCard({ request, data, mine, error, onSubmitted }: {
   );
 }
 
-/** 步骤17:实验报告 */
+/** 步骤16：实验报告 */
 export function ReportLab({ meta }: { meta: Meta }) {
   const defaultRequest: ReportRequest = {
     year: meta.years.at(-1)!,
@@ -129,7 +129,10 @@ export function ReportLab({ meta }: { meta: Meta }) {
   const generate = async () => {
     if (generatingRef.current) return;
     generatingRef.current = true;
-    const submitted = { ...draft };
+    const submitted: ReportRequest = {
+      ...draft,
+      price_mode: draft.control_mode === "不加控制变量" ? "名义值" : draft.price_mode,
+    };
     setGenerating(true);
     setData(null);
     setRequest(null);
@@ -148,32 +151,36 @@ export function ReportLab({ meta }: { meta: Meta }) {
   return (
     <div className="report-lab">
       <div className="controls report-controls">
-        <label>年份</label>
-        <select value={draft.year} onChange={(e) => setField("year", Number(e.target.value))}>
+        <label htmlFor="report-year">年份</label>
+        <select id="report-year" value={draft.year} onChange={(e) => setField("year", Number(e.target.value))}>
           {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
-        <label>粒度</label>
-        <select value={draft.granularity} onChange={(e) => setField("granularity", e.target.value)}>
+        <label htmlFor="report-granularity">粒度</label>
+        <select id="report-granularity" value={draft.granularity} onChange={(e) => setField("granularity", e.target.value)}>
           {(opts?.granularities ?? ["国家–行业级", "国家级"]).map((v) => <option key={v} value={v}>{v}</option>)}
         </select>
-        <label>冲击</label>
-        <select value={draft.shock_type} onChange={(e) => setField("shock_type", e.target.value)}>
+        <label htmlFor="report-shock">冲击</label>
+        <select id="report-shock" value={draft.shock_type} onChange={(e) => setField("shock_type", e.target.value)}>
           {(opts?.shock_types ?? ["关税冲击", "制裁清单", "出口管制"]).map((v) => <option key={v} value={v}>{v}</option>)}
         </select>
-        <label>方法</label>
-        <select value={draft.method} onChange={(e) => setField("method", e.target.value)}>
+        <label htmlFor="report-method">方法</label>
+        <select id="report-method" value={draft.method} onChange={(e) => setField("method", e.target.value)}>
           {(opts?.methods ?? ["双重差分 (DID)", "双向固定效应", "事件研究"]).map((v) => <option key={v} value={v}>{v}</option>)}
         </select>
       </div>
       <div className="controls report-controls">
-        <label>控制变量</label>
-        <select value={draft.control_mode} onChange={(e) => setField("control_mode", e.target.value)}>
+        <label htmlFor="report-controls">控制变量</label>
+        <select id="report-controls" value={draft.control_mode} onChange={(e) => setField("control_mode", e.target.value)}>
           {(opts?.control_modes ?? ["不加控制变量", "ICIO 派生控制变量", "模拟宏观控制"]).map((v) => <option key={v} value={v}>{v}</option>)}
         </select>
-        <label>价格口径</label>
-        <select value={draft.price_mode} onChange={(e) => setField("price_mode", e.target.value)}>
-          {(opts?.price_modes ?? ["名义值", "实际值(2016=1)"]).map((v) => <option key={v} value={v}>{v}</option>)}
-        </select>
+        {draft.control_mode !== "不加控制变量" && (
+          <>
+            <label htmlFor="report-price">金额类控制口径</label>
+            <select id="report-price" value={draft.price_mode} onChange={(e) => setField("price_mode", e.target.value)}>
+              {(opts?.price_modes ?? ["名义值", "实际值(2016=1)"]).map((v) => <option key={v} value={v}>{v}</option>)}
+            </select>
+          </>
+        )}
         <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <input
             type="checkbox"
@@ -195,7 +202,7 @@ export function ReportLab({ meta }: { meta: Meta }) {
         </button>
       </div>
       <p className="muted">
-        正式报告固定使用基准 <code>clean</code> 场景；步骤13–16中的 noisy/confounded 仅用于课堂识别练习，不写入正式报告。
+        正式报告固定使用基准 <code>clean</code> 场景；步骤12–15中的 noisy/confounded 仅用于课堂识别练习，不写入正式报告。
         「导出 PDF」经浏览器打印对话框完成,目标选“另存为 PDF”。
       </p>
       {error ? (
@@ -205,7 +212,8 @@ export function ReportLab({ meta }: { meta: Meta }) {
           <p className="muted report-meta">
             建议文件名：{data.suggested_filename} ·
             当前设定:{request.granularity} · {request.shock_type} · {request.method} ·
-            {request.control_mode} · {request.price_mode} · 排除 ROW{request.interaction ? " · 交互项" : ""}
+            {request.control_mode}{request.control_mode === "不加控制变量" ? "" : ` · ${request.price_mode}`} ·
+            排除 ROW{request.interaction ? " · 交互项" : ""}
           </p>
           <SubmitCard request={request} data={data} mine={mine} error={mineError}
             onSubmitted={() => setSubmitRefresh((n) => n + 1)} />

@@ -2,7 +2,7 @@
 
 面向课堂的全球价值链(GVC)**教学实验系统**:基于全球投入产出数据库(OECD ICIO)
 计算并可视化 GVC 指标,结合贸易政策冲击数据做实证回归,自动生成实验报告 ——
-带学生走完 **数据 → 指标 → 回归 → 报告** 的完整实证闭环(17 个教学步骤)。
+带学生走完 **数据 → 指标 → 回归 → 报告** 的完整实证闭环（16 个教学步骤）。
 
 **指标口径与客户资料对齐**:四组指标全部按客户资料(`client-docs/`)引用的原始
 方法实现——WWZ (2013)/王直等 (2015) 总贸易核算法、WWYZ (2017a) 生产分解
@@ -14,12 +14,12 @@
 其余外部数据(政策冲击、宏观控制变量等)按真实来源的 schema 与量级**拟真 mock**,
 真实数据到位时只需替换 loader(详见下文「数据边界与 Mock 策略」)。
 
-17 步实现状态见下文「17 步实现状态」;客户资料对齐验收、完成状态与后续增强项见
+16 步实现状态见下文「16 步实现状态」；当前维护约束、回归契约与发布门禁见
 [`后续开发指导.md`](./后续开发指导.md)。[`prototype/`](./prototype/) 仅保留早期静态设计原型,
 其中部分旧指标口径已不代表当前实现;当前交互界面以 `frontend/` 与 `/api/steps` 为准。
 
-后端指标引擎、API、回归框架、报告生成,以及 17 步教学前端均已跑通真实数据
-(OECD ICIO 2016–2020,77 国 × 45 行业);指标字段与客户资料样例数据逐一对齐,
+后端指标引擎、API、回归框架、报告生成以及 16 步教学前端均已跑通：
+指标来自 OECD ICIO 2016–2020（77 国 × 45 行业），政策冲击等外部数据为明确标注的拟真 mock；指标字段与客户资料样例数据逐一对齐，
 客户给出的 1995–2018/2020 样例表只作口径参考与对账基准,不作为系统数据源。前端已按原型做成三栏教学布局
 (课程大纲侧栏 + 主实验区 + 本步速览右栏 + 底部进度页脚),并为指标步骤(4-7)
 加了交互式计算演示、为可视化步骤(8-11)加了可自选指标/图表的自由探索。
@@ -68,34 +68,34 @@ cd frontend && bun install && bun run dev
 ## 教师面板
 
 教师端与学生端完全分离:教师登录后直达教师面板,不进入(也没有入口进入)
-学生的 17 步实验界面;学生端则没有任何教师管理功能。教师面板包含四个页签:
+学生的 16 步实验界面；学生端则没有任何教师管理功能。教师面板包含四个页签：
 
-- **班级概览**:学生人数、提交/评阅数、平均分、分数段分布、17 步各步到达人数;
+- **班级概览**：学生人数、提交/评阅数、平均分、分数段分布、16 步各步到达人数；
 - **班级与学生**:建班、创建学生账号(创建即可登录)、改名/重置密码/停用启用、
   学生进度矩阵(当前步/最远步/报告状态/得分,由学生端自动上报);
-- **报告评阅**:学生在步骤 17 点「提交报告给老师」后出现在列表,教师打开全文
+- **报告评阅**：学生在步骤 16 点「提交报告给老师」后出现在列表，教师打开全文
   打分写评语,学生在同一页面实时看到得分与评语;重新提交会覆盖并重置评阅;
 - **课堂公告**:发布(全体或指定班级)与删除,学生登录后顶栏下方横幅可见。
 
 教学数据(班级/学生/进度/提交/公告)存本机 PostgreSQL(默认
 `postgresql://alice:111111@127.0.0.1:5432/gvclab`,环境变量 `GVCSIM_PG_DSN`
 可覆盖),`gvcsim classroom-init` 一键建库建表播种(`--reset` 重建)。
-服务端也会在首次访问时懒建表。**核心 17 步实验完全不依赖该库**:
+服务端也会在首次访问时懒建表。**核心 16 步实验完全不依赖该库**：
 数据库停机时教学接口返回 503,指标/回归/报告一切照常。
 
 不起前端也能用 CLI 走完全流程:
 
 ```bash
 uv run gvcsim validate --year 2018    # 步骤3:数据质检
-uv run gvcsim regress --step 13       # 步骤13-16:演示回归(默认国家–行业级 + DID)
-uv run gvcsim regress --step 14 --method event          # 事件研究(动态效应+前趋势)
-uv run gvcsim regress --step 13 --method fe             # 双向固定效应(强度法)
-uv run gvcsim regress --step 13 --controls              # 加入 ICIO 派生国家-年份控制变量
-uv run gvcsim regress --step 13 --macro-controls        # 加入 WDI/IMF 风格模拟宏观控制
-uv run gvcsim regress --step 13 --interaction           # 加入冲击×基期GVC参与度交互项
-uv run gvcsim regress --step 13 --controls --real       # 金额类控制变量切换为实际值口径
-uv run gvcsim regress --step 13 --granularity country   # 国家级粒度
-uv run gvcsim report --year 2020      # 步骤17:生成 reports/experiment_report_2020.md
+uv run gvcsim regress --outcome trade                    # 贸易流回归（默认国家–行业级 + DID）
+uv run gvcsim regress --outcome length --method event    # 长度事件研究（动态效应 + 前趋势诊断）
+uv run gvcsim regress --outcome production --method fe   # 生产双向固定效应（强度法）
+uv run gvcsim regress --outcome trade --controls         # 加入 ICIO 派生国家-年份控制变量
+uv run gvcsim regress --outcome network --macro-controls # 加入 WDI/IMF 风格模拟宏观控制
+uv run gvcsim regress --outcome production --interaction # 加入冲击×基期 GVC 参与度交互项
+uv run gvcsim regress --outcome trade --controls --real  # 金额类控制变量切换为实际值口径
+uv run gvcsim regress --outcome trade --granularity country # 国家级粒度
+uv run gvcsim report --year 2020                          # 步骤16：生成 reports/experiment_report_2020.md
 uv run gvcsim benchmark               # 与 client-docs 客户基准数据对账 → reports/client_benchmark.md
 uv run gvcsim classroom-init          # 初始化教学数据库(--reset 重建;教师面板用)
 uv run pytest                         # 后端测试(含 synthetic compute、API 集成与教学面板)
@@ -121,12 +121,12 @@ cd frontend && bun run build && bun run test:unit && bun run test:e2e
 │   │   ├── length.py             #   步骤6:WWYZ 2017b 生产长度(PLv/PLy 各段 + Pos_TPL/GVCPs)
 │   │   └── network.py            #   步骤7:Gephi 风格网络指标(度/加权度/离心率/接近/调和/介数/特征向量)
 │   ├── regression/
-│   │   ├── design.py             #   步骤12:回归设计(粒度/冲击/方法 → 面板/个体/聚类/方程)
-│   │   └── panel.py              #   步骤13-16:DID / 事件研究 / 双向FE + 聚类稳健标准误 + PanelOLS 对照
-│   ├── report.py                 #   步骤17:自动生成 Markdown 实验报告
+│   │   ├── design.py             #   步骤12–15：outcome-only 回归设计契约
+│   │   └── panel.py              #   步骤12–15：DID / 事件研究 / 双向FE + 聚类推断 + PanelOLS 对照
+│   ├── report.py                 #   步骤16：自动生成 Markdown 实验报告
 │   ├── benchmark.py              #   与 client-docs 客户基准数据对账(gvcsim benchmark)
 │   ├── pipeline.py               #   预计算流水线:原始表 → 质检 → 指标 → 面板
-│   ├── steps.py                  #   17 步元数据(API 与前端右栏速览的唯一来源)
+│   ├── steps.py                  #   16 步元数据（API 与前端右栏速览的唯一来源）
 │   ├── auth.py                   #   登录认证(教学库账号优先 + 演示账号回退,PBKDF2 + HMAC 签名令牌)
 │   ├── classroom/
 │   │   ├── db.py                 #   教学数据库(PostgreSQL):班级/学生/进度/提交评阅/公告,懒建表+播种
@@ -135,10 +135,10 @@ cd frontend && bun run build && bun run test:unit && bun run test:e2e
 │   └── cli.py                    #   gvcsim 命令行入口
 ├── frontend/                     # React + Vite + TS 前端(bun);App.tsx 三栏布局外壳、
 │                                 #   login.tsx 登录页、intro.tsx 登录后交互式系统介绍、
-│                                 #   labs.tsx 步骤1-11/17 实验面板、demos.tsx 步骤4-7 计算演示
-│                                 #   (拆解恒等式校验 + 网络中心性算法)、viz.tsx 富可视化
-│                                 #   (网络/堆叠/长度/热力 + 排序/散点/趋势 + 事件研究/森林图,纯 SVG)、
-│                                 #   teach.tsx + regteach.ts + regression.tsx 步骤12-16 讲解卡与回归台、
+│                                 #   labs/ 步骤1–11与16实验面板、demos.tsx 步骤4–7计算演示
+│                                 #   （拆解恒等式校验 + 网络中心性算法）、viz/ 富可视化
+│                                 #   （网络/堆叠/长度/热力 + 排序/散点/趋势 + 事件研究/森林图，纯 SVG）、
+│                                 #   regression-lessons.ts + regression.tsx 步骤12–15教学回归工作台、
 │                                 #   teacher/ 教师面板(概览/班级学生/报告评阅/公告)
 ├── tests/                        # 合成小矩阵、synthetic compute、回归/API 集成测试
 ├── prototype/                    # 早期静态 UI 原型(历史参考,部署时排除;指标口径以 frontend/ 为准)
@@ -163,7 +163,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
                                                               │
               FastAPI(gvcsim/api.py,只读预计算产物,按 mtime 缓存)◀──────┘
                     │                         │
-          frontend/(17步教学界面,     regression / report(按需在请求内运行)
+          frontend/(16步教学界面,    regression / report(按需在请求内运行)
           支持 ?step=N 深链;步骤2 有
           事件时间线 + 冲击面板浏览)
 ```
@@ -180,7 +180,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
   对照“通过/失败”只针对政策系数;标准误差异受聚类小样本修正与自由度处理影响,
   在界面和报告中仅作参考展示。
 - **稳健性控制变量**:从现有 ICIO 指标派生国家-年份控制变量(增加值规模/增长、
-  出口规模/增长、出口强度、制造业/服务业增加值份额),支持步骤12-17
+  出口规模/增长、出口强度、制造业/服务业增加值份额），支持步骤12–16
   展示"基准模型 vs 加控制变量模型";另有 WDI/IMF 风格宏观 mock(GDP、人口、
   人均收入、汇率变动、FDI 流入)。GDP 平减指数 mock 支持名义/实际口径切换;
   金额指数只表示相对基期变化,不是真实官方平减值。
@@ -189,7 +189,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
   ROW 作为世界其他地区聚合账户仍保留在指标计算中以保证 ICIO 闭合,但默认不进入政策回归样本。
 - **三种估计方法共用一个 within-OLS 核心**:默认 DID(处理组=曾受冲击个体,
   处理期=各个体首次冲击年 `G_i` 起,不再使用全局共同 T0);事件研究使用
-  `k = year - G_i` 的个体事件时间,并以 k=-1 为优先基期做平行趋势检验;
+  `k = year - G_i` 的个体事件时间,并以 k=-1 为优先基期做冲击前趋势诊断;
   双向FE(强度法)保留连续冲击强度的用法。
 - **冲击数据拟真 mock**:关税冲击按 2018–2020 真实事件逐条编码(232 钢铝、
   301 四批清单、各方反制、空客案),税率量级参考 PIIE/Bown 统计;出口暴露度由
@@ -199,7 +199,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
   2 国 × 2 行业与 3 国循环小系统验证数学恒等式(WWZ 六项闭合、生产前/后向分解
   恒等式、长度 VA 加权恒等、封闭经济跨境项=0、v′B=1 等)。
 
-## 17 步实现状态
+## 16 步实现状态
 
 | 阶段 | 步骤 | 状态 |
 |---|---|---|
@@ -211,9 +211,11 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 | | 6 长度分解 | ✅ WWYZ 2017b 生产长度,输出 PLv/PLy 各段与 Pos_TPL/GVCPs 共 10 个客户字段;拆解演示实时校验 VA 加权恒等式 |
 | | 7 网络指标 | ✅ Gephi 口径 11 个客户字段(度/入度/出度/加权度×3/离心率/接近/调和/介数/特征向量),国家+行业双粒度;度类在全部正边计算,路径类/介数/特征向量在阈值化无权图计算;前端有小网络交互演示 |
 | 三、可视化 | 8–11 | ✅ 招牌图(网络图/生产堆叠条/长度双段条/中心性热力表)+ 自由探索:自选指标、排序条形图、X×Y 散点图、2016–2020 趋势折线、Top-N/选国家,均带表格视图与悬停 tooltip;网络图支持节点大小/颜色编码、边权阈值与点击节点明细;自由探索支持国家级/行业下钻 |
-| 四、回归 | 12 设计确认 | ✅ 交互式设计台:粒度/三类冲击/方法/被解释变量选择卡 → 即时方程与面板/个体/聚类摘要(GET /api/regression/design) |
-| | 13–16 四组回归 | ✅ 讲解卡片体系(概念/公式/陷阱/自检/小结)+ 模型设定卡 + 控制变量切换(ICIO 派生 / 模拟宏观)+ 名义/实际口径切换 + clean/noisy/confounded 教学场景 + 系数表/森林图/事件研究图 + PanelOLS 对照 + DID 安慰剂检验 + 按结果自动生成的中文解读;默认 DID(个体FE+按国聚类SE),基于演示冲击数据 |
-| 五、闭环 | 17 实验报告 | ✅ Markdown 报告自动生成;步骤17 可吸收前端选择的粒度/冲击/方法/控制/交互项/价格口径并生成对应回归表;前端提供浏览器打印/另存 PDF 导出 |
+| 四、回归 | 12 贸易流实证 | ✅ 问题→比较→基准运行→自然单位结论→可信度→技术细节；因变量为 FVA 份额 |
+| | 13 生产实证 | ✅ 同一工作台，因变量为复杂 GVC 生产份额；重点练习基期 GVC 异质性 |
+| | 14 长度实证 | ✅ 同一工作台，因变量为 PLv_GVC；重点练习事件研究与保守的冲击前趋势诊断 |
+| | 15 网络实证 | ✅ 同一工作台，因变量为介数中心性；同时报告原始单位与样本标准差单位，支持 DID 安慰剂 |
+| 五、闭环 | 16 实验报告 | ✅ 按钮触发生成受控 Markdown + 图表；吸收粒度/冲击/方法/控制/交互/价格口径，支持打印/PDF 与提交评阅 |
 
 ## 数据边界与 Mock 策略
 
@@ -223,7 +225,7 @@ OECD_ICIO/*.csv ──pymrio──▶ pipeline.compute_year()
 |---|---|---|
 | OECD ICIO 2016–2020 | ✅ 真实 | pymrio 下载的官方 CSV,所有指标由此计算 |
 | 登录认证 | ✅ 真实实现 | PBKDF2 + HMAC 签名令牌;账号存教学库(每账号独立盐),库不可用回退演示账号 |
-| 教学数据(班级/学生/进度/提交评阅/公告) | ✅ 真实实现 | 本机 PostgreSQL(`gvclab` 库),教师面板与步骤17提交的持久层;核心 17 步不依赖 |
+| 教学数据(班级/学生/进度/提交评阅/公告) | ✅ 真实实现 | 本机 PostgreSQL(`gvclab` 库)，教师面板与步骤16提交的持久层；核心 16 步不依赖 |
 | 关税冲击面板 | 🎭 拟真 mock | 按 2018–2020 真实事件逐条编码(232 钢铝、301 四批清单、各方反制、空客案),税率量级参考 PIIE/Bown,出口暴露度由 OECD ICIO 双边流向计算 |
 | 制裁清单 | 🎭 拟真 mock | OFAC SDN/二级制裁风格实体事件(RUSAL、俄罗斯能源金融限制、涉疆实体),聚合为 `sanction_shock` |
 | 出口管制清单 | 🎭 拟真 mock | BIS 实体清单风格事件(华为、SMIC),聚合为 `export_control_shock` |
@@ -235,7 +237,7 @@ Mock 的质量标准(schema 对齐真实来源、量级锚定公开统计、维�
 诚实标注、过质检)与逐项落地计划见 [`后续开发指导.md`](./后续开发指导.md)。
 每个 mock 的 loader 接口就是将来真实数据的接入点:例如接入真实 PIIE 面板时,
 只需让 `shocks.load_shocks()` 返回同结构的 `country×sector×year` 面板。
-回归教学场景不重写底层冲击 CSV:步骤13–16 在估计样本层确定性注入
+回归教学场景不重写底层冲击 CSV：步骤12–15 在估计样本层确定性注入
 `noisy` 测量误差或 `confounded` 前趋势混杂,用于课堂演示稳健性检验为何必要。
 
 ## 方法论说明(诚实告知)
@@ -262,9 +264,10 @@ Mock 的质量标准(schema 对齐真实来源、量级锚定公开统计、维�
   0.94–0.998,长度类 0.75–0.93(中位相对差 3–6%);残余差异主要来自 ICIO 数据
   修订版本(客户用 OECD2021 版,本系统用 ICIO2023 版)。详见
   `reports/client_benchmark.md`。
-- 回归的 p 值使用聚类数对应的 t(G−1) 小样本校正;DID 页面可随机指派
-  伪处理组生成安慰剂系数分布,并保持原始首次处理年份(cohort)分布。
-  冲击变量是演示数据,所有回归结果**只用于验证系统链路,不构成研究结论**。
+- 回归的 p 值与 95% 置信区间使用聚类数对应的 t(G−1) 小样本校正；事件研究提供
+  保守的冲击前系数联合诊断，DID 可随机指派伪处理组并保持原始首次处理年份（cohort）分布。
+  连续强度法按“冲击强度增加 1 个百分点”解释；交互变量按样本个体均值中心化，主系数表示
+  基期 GVC 处于样本均值时的效应。冲击变量是演示数据，所有结果**不构成研究结论**。
 
 主要参考文献(实现口径的学术出处,均见客户资料 client-docs/ 附带的原文):
 
@@ -283,17 +286,17 @@ Mock 的质量标准(schema 对齐真实来源、量级锚定公开统计、维�
 ## 开发完成状态与后续增强项
 
 M1-M4 feature 与 2026-07-08 客户资料对齐改造已全部合并到主开发线,仍坚持
-不超出既有 17 步、"除 ICIO 外全部 mock"的前提。逐项验收记录见
-[`后续开发指导.md`](./后续开发指导.md):
+不超出既有 16 步、"除 ICIO 外全部 mock"的前提。当前维护与验收规则见
+[`后续开发指导.md`](./后续开发指导.md)：
 
 1. **数据层补全**:出口暴露度已改由 ICIO 真实双边流向计算;关税/制裁/
    出口管制三类 mock、冲击面板质检、控制变量质检、HS↔ICIO 映射工作流演示均已接入。
 2. **客户资料对齐**:四组指标已按客户资料方法级重实现为 WWZ 总贸易核算、
    WWYZ 生产分解(含 FGY)、WWYZ 2017b 生产长度与 Gephi 风格 11 个网络指标;
    产物字段与客户样例 schema 对齐,并新增 `gvcsim benchmark` 基准对账。
-3. **回归与报告闭环**:步骤13-16 因变量已迁到 FVA_share、3b_VA_GVC_C_share、
-   PLv_GVC、betweenesscentrality;控制变量、交互项、名义/实际口径、clean/noisy/
-   confounded 教学场景、PanelOLS 对照、安慰剂检验和步骤17 参数化报告均已跑通。
+3. **回归与报告闭环**：步骤12–15只用稳定 `outcome`（`trade`、`production`、
+   `length`、`network`）定位四个因变量；控制变量、均值中心化交互项、名义/实际口径、
+   clean/noisy/confounded 教学场景、PanelOLS 对照、安慰剂检验和步骤16参数化报告均已跑通。
 4. **工程质量**:API Bearer 鉴权、前端打印/PDF 导出、Ruff/mypy/pytest coverage、
    Bun build 与 Playwright E2E CI 均已接入。
 
@@ -320,6 +323,6 @@ mypy、pytest coverage、Bun build 与 Playwright E2E。
 
 已部署到示例服务器,过程与运维命令(nginx + systemd + rsync 同步)记录在
 [`DEPLOY_101.201.151.30.md`](./DEPLOY_101.201.151.30.md)。该文档按当前服务器
-固定写死路径/端口/IP,更新部署时照其中的 rsync + `systemctl restart` 步骤即可
-(注意:同步命令必须排除服务器运行时的 `.venv311/`;若指标/面板口径或数据源变化,
-需先重跑 `uv run gvcsim compute` 并同步新的 `data/processed/`)。
+固定写死路径/端口/IP；本轮按全新部署处理，旧教学库不恢复，依次执行停服、rsync、
+同步完整预计算数据、`classroom-init --reset` 与公网契约冒烟。
+同步命令必须排除服务器运行时的 `.venv311/`。

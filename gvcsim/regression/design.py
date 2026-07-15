@@ -1,8 +1,7 @@
-"""步骤12-16:回归设计。
+"""四类教学实证回归的稳定设计契约。
 
-步骤12 要求在建模前与客户书面对齐三件事(粒度/冲击类型/因果推断方式),
-这里把对齐结果编码成 RegressionDesign,并为步骤13-16 预置四组默认设计
-(被解释变量分别对应贸易流/生产/长度/网络四组指标)。
+课程编号属于展示层；回归业务只使用稳定 ``outcome`` 标识，避免课程调整改变
+贸易流、生产、长度与网络四类因变量的 API 含义。
 """
 
 from dataclasses import dataclass
@@ -10,13 +9,14 @@ from dataclasses import dataclass
 from gvcsim.data.controls import CONTROL_COLUMNS, CONTROL_LABELS, MACRO_CONTROL_COLUMNS
 from gvcsim.shocks import SHOCK_SPECS
 
-# 步骤编号 → (被解释变量, 中文含义)。列名来自 pipeline 产出的客户口径面板。
-STEP_DEPVARS = {
-    13: ("FVA_share", "出口中外国增加值份额(FVA / 毛出口,WWZ)"),
-    14: ("3b_VA_GVC_C_share", "复杂GVC生产份额(3b_VA_GVC_C / SVA,WWYZ)"),
-    15: ("PLv_GVC", "前向 GVC 生产长度(WWYZ)"),
-    16: ("betweenesscentrality", "生产网络介数中心性"),
+# 稳定 outcome → (被解释变量, 中文含义)。列名来自 pipeline 产出的客户口径面板。
+OUTCOME_DEPVARS = {
+    "trade": ("FVA_share", "出口中外国增加值份额(FVA / 毛出口,WWZ)"),
+    "production": ("3b_VA_GVC_C_share", "复杂GVC生产份额(3b_VA_GVC_C / SVA,WWYZ)"),
+    "length": ("PLv_GVC", "前向 GVC 生产长度(WWYZ)"),
+    "network": ("betweenesscentrality", "生产网络介数中心性"),
 }
+OUTCOMES = list(OUTCOME_DEPVARS)
 
 GRANULARITIES = ["国家–行业级", "国家级"]
 SHOCK_TYPES = list(SHOCK_SPECS)
@@ -50,10 +50,10 @@ _PANEL_SPECS = {
 
 @dataclass
 class RegressionDesign:
-    step: int
+    outcome: str
     granularity: str = "国家–行业级"
     shock_type: str = "关税冲击"
-    # 冲击数据自带宣布/生效时间线,默认用能识别因果的 DID(见步骤12 文案)
+    # 默认用 DID 展示处理组相对对照组的处理后变化；因果解释仍依赖识别假设。
     method: str = "双重差分 (DID)"
     control_mode: str = CONTROL_MODE_NONE
     interaction: bool = False
@@ -65,11 +65,11 @@ class RegressionDesign:
 
     @property
     def depvar(self) -> str:
-        return STEP_DEPVARS[self.step][0]
+        return OUTCOME_DEPVARS[self.outcome][0]
 
     @property
     def depvar_label(self) -> str:
-        return STEP_DEPVARS[self.step][1]
+        return OUTCOME_DEPVARS[self.outcome][1]
 
     @property
     def panel_file(self) -> str:
@@ -126,16 +126,16 @@ class RegressionDesign:
         y = f"{self.depvar}_{unit}"
         if self.method == "双重差分 (DID)":
             x = f"β·({self.treated_col}_{ent} × 1[t≥G_{ent}])"
-            policy_desc = "曾受处理个体自首次冲击年起的 DID 处理效应。"
-            interaction_text = f"θ·({self.treated_col}_{ent} × 1[t≥G_{ent}] × BaseGVC_{ent},0)"
+            policy_desc = "曾受处理个体自首次冲击年起、相对对照组的平均变化；因果解释依赖识别假设。"
+            interaction_text = f"θ·({self.treated_col}_{ent} × 1[t≥G_{ent}] × (BaseGVC_{ent},0−mean(BaseGVC_0)))"
         elif self.method == "事件研究":
             x = f"Σ_k β_k·1[t-G_{ent}=k]"
             policy_desc = "相对首次冲击年的动态主效应；k=-1 为省略基期。"
-            interaction_text = f"Σ_k θ_k·(1[t-G_{ent}=k] × BaseGVC_{ent},0)"
+            interaction_text = f"Σ_k θ_k·(1[t-G_{ent}=k] × (BaseGVC_{ent},0−mean(BaseGVC_0)))"
         else:
             x = " + ".join(f"β·{r}_{unit}" for r in self.regressors)
             policy_desc = f"连续冲击强度 {self.shock_col} 的主效应。"
-            interaction_text = f"θ·({self.shock_col}_{unit} × BaseGVC_{ent},0)"
+            interaction_text = f"θ·({self.shock_col}_{unit} × (BaseGVC_{ent},0−mean(BaseGVC_0)))"
 
         parts: list[dict[str, str]] = [
             {
@@ -159,7 +159,7 @@ class RegressionDesign:
                     {
                         "text": interaction_text,
                         "term": "interaction",
-                        "description": "冲击效应随个体基期 GVC 参与度变化的异质性。",
+                        "description": "冲击效应随个体基期 GVC 参与度变化的异质性；基期 GVC 按样本个体均值中心化，因此 β 表示均值处效应。",
                         "meta_key": "interaction",
                     },
                 ]

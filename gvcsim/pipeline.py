@@ -9,9 +9,9 @@
   indicators_industry_<year>.csv  国家-行业级指标(步骤4-7,客户口径字段)
   network_edges_<year>.csv        双边贸易流 top 边(步骤8 网络图)
 跨年:
-  panel_industry.csv              国家×行业×年份长面板 + 行业异质冲击(步骤13-16 默认回归样本)
+  panel_industry.csv              国家×行业×年份长面板 + 行业异质冲击(四类 outcome 默认回归样本)
   panel_country.csv               国家×年份长面板(冲击按行业出口额加权聚合)
-  controls_country.csv            ICIO 派生/宏观mock控制 + 平减指数(步骤13-16)
+  controls_country.csv            ICIO 派生/宏观mock控制 + 平减指数(四类 outcome)
   qc_controls.json                controls_country.csv 独立质检
   export_exposure_<year>.csv      ICIO 派生出口目的地暴露度(步骤2 冲击加权)
 """
@@ -105,7 +105,7 @@ def build_panel() -> pd.DataFrame:
     with open(PROCESSED_DIR / "qc_controls.json", "w", encoding="utf-8") as f:
         json.dump([c.to_dict() for c in controls_checks], f, ensure_ascii=False, indent=2)
 
-    # 回归用派生列:毛出口与客户字段份额(FVA_share 等作为步骤13-16 因变量/交互基线)
+    # 回归用派生列:毛出口与客户字段份额(FVA_share 等作为四类 outcome 因变量/交互基线)
     for df in (sector, country):
         df["gross_exports"] = tradeflow.gross_exports(df)
         gross = df["gross_exports"]

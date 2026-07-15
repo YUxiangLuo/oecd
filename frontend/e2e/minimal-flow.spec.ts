@@ -15,7 +15,7 @@ const announcement = {
 
 const submissionRow = {
   id: 1,
-  title: "步骤17实验报告 · 2020",
+  title: "步骤16实验报告 · 2020",
   year: 2020,
   state: "pending",
   score: null,
@@ -29,29 +29,29 @@ const submissionRow = {
 };
 
 function steps() {
-  const titles: Record<number, [number, string, "db" | "shock" | "qc" | "ind" | "viz" | "rgd" | "reg" | "rep"]> = {
-    1: [1, "数据库介绍", "db"],
-    2: [1, "政策冲击数据", "shock"],
-    3: [1, "数据质检", "qc"],
-    4: [2, "GVC 贸易流分解", "ind"],
-    5: [2, "GVC 生产分解", "ind"],
-    6: [2, "GVC 长度分解", "ind"],
-    7: [2, "网络指标", "ind"],
-    8: [3, "GVC 定位图", "viz"],
-    9: [3, "生产分解可视化", "viz"],
-    10: [3, "长度可视化", "viz"],
-    11: [3, "枢纽地图", "viz"],
-    12: [4, "回归设计确认", "rgd"],
-    13: [4, "GVC 贸易流真实回归", "reg"],
-    14: [4, "GVC 生产真实回归", "reg"],
-    15: [4, "GVC 长度真实回归", "reg"],
-    16: [4, "网络指标真实回归", "reg"],
-    17: [5, "实验报告", "rep"],
+  const titles: Record<number, [number, string, "db" | "shock" | "qc" | "ind" | "viz" | "reg" | "rep", "trade" | "production" | "length" | "network" | null]> = {
+    1: [1, "数据库介绍与选型", "db", null],
+    2: [1, "贸易政策冲击数据接入", "shock", null],
+    3: [1, "数据质检与清洗", "qc", null],
+    4: [2, "GVC 总贸易流分解指标", "ind", null],
+    5: [2, "GVC 生产分解指标", "ind", null],
+    6: [2, "GVC 长度分解指标", "ind", null],
+    7: [2, "全球生产网络指标", "ind", null],
+    8: [3, "GVC 贸易流指标可视化", "viz", null],
+    9: [3, "GVC 生产指标可视化", "viz", null],
+    10: [3, "GVC 长度指标可视化", "viz", null],
+    11: [3, "网络指标可视化", "viz", null],
+    12: [4, "GVC 贸易流教学实证回归", "reg", "trade"],
+    13: [4, "GVC 生产教学实证回归", "reg", "production"],
+    14: [4, "GVC 长度教学实证回归", "reg", "length"],
+    15: [4, "网络指标教学实证回归", "reg", "network"],
+    16: [5, "生成实验报告", "rep", null],
   };
-  return Object.entries(titles).map(([n, [stage, title, lab]]) => ({
+  return Object.entries(titles).map(([n, [stage, title, lab, outcome]]) => ({
     n: Number(n),
     stage,
     lab,
+    ...(outcome ? { regression_outcome: outcome } : {}),
     status: lab === "reg" ? "demo" : "done",
     title,
     goal: `${title}目标`,
@@ -69,11 +69,11 @@ const regressionOptions = {
   price_modes: ["名义值", "实际值(2016=1)"],
   scenarios: ["clean", "noisy", "confounded"],
   scenario_labels: { clean: "基准场景(clean)", noisy: "测量误差场景", confounded: "前趋势混杂场景" },
-  steps: { "13": "FVA 份额", "14": "复杂 GVC 生产", "15": "GVC 生产长度", "16": "网络中心性" },
+  outcomes: { trade: "FVA 份额", production: "复杂 GVC 生产", length: "GVC 生产长度", network: "网络中心性" },
 };
 
 const design = {
-  step: 13,
+  outcome: "trade",
   depvar: "FVA_share",
   depvar_label: "外国增加值份额",
   granularity: "国家–行业级",
@@ -97,9 +97,15 @@ const design = {
   cluster: "country",
 };
 
-async function mockApi(page: Page, who = user, currentStep: number | null = null) {
+async function mockApi(
+  page: Page,
+  who = user,
+  currentStep: number | null = null,
+  hooks: { placeboGate?: Promise<void>; runGate?: (runNumber: number) => Promise<void> } = {},
+) {
   // 学生提交后 report/mine 由 none → pending(闭包保存跨请求状态)
   let mine: Record<string, unknown> = { state: "none" };
+  let regressionRunCount = 0;
   await page.route("**/api/**", async (route: Route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -117,7 +123,7 @@ async function mockApi(page: Page, who = user, currentStep: number | null = null
     if (path === "/api/classroom/progress" && method === "POST") return route.fulfill({ json: { ok: true } });
     if (path === "/api/classroom/report/mine") return route.fulfill({ json: mine });
     if (path === "/api/classroom/report/submit" && method === "POST") {
-      mine = { state: "pending", id: 1, title: "步骤17实验报告 · 2020 · 双重差分 (DID)", year: 2020, submitted_at: "2026-07-08T11:00:00Z" };
+      mine = { state: "pending", id: 1, title: "步骤16实验报告 · 2020 · 双重差分 (DID)", year: 2020, submitted_at: "2026-07-08T11:00:00Z" };
       return route.fulfill({ json: { id: 1, state: "pending", submitted_at: "2026-07-08T11:00:00Z" } });
     }
     if (path === "/api/classroom/overview") {
@@ -125,7 +131,7 @@ async function mockApi(page: Page, who = user, currentStep: number | null = null
         json: {
           student_count: 2, disabled_count: 0, submitted: 1, graded: 0, avg_score: null,
           score_buckets: [{ label: "<60", count: 0 }, { label: "60-69", count: 0 }, { label: "70-79", count: 0 }, { label: "80-89", count: 0 }, { label: "90+", count: 0 }],
-          step_completion: Array.from({ length: 17 }, (_, i) => ({ step: i + 1, reached: i < 9 ? 1 : 0 })),
+          step_completion: Array.from({ length: 16 }, (_, i) => ({ step: i + 1, reached: i < 9 ? 1 : 0 })),
           active_7d: 1,
           submission_trend: Array.from({ length: 14 }, (_, i) => ({ date: `07-${String(i + 1).padStart(2, "0")}`, submitted: i === 13 ? 1 : 0, graded: 0 })),
           class_breakdown: [{ class_id: 1, name: "GVC 实验演示班", student_count: 2, submitted: 1, graded: 0, avg_score: null }],
@@ -158,18 +164,52 @@ async function mockApi(page: Page, who = user, currentStep: number | null = null
     if (path === "/api/meta") return route.fulfill({ json: { years: [2019, 2020], countries: ["CHN", "USA"], sectors: ["C", "G"] } });
     if (path === "/api/shocks/events") return route.fulfill({ json: { events: [], disclaimer: "mock" } });
     if (path === "/api/regression/options") return route.fulfill({ json: regressionOptions });
-    if (path === "/api/regression/design") return route.fulfill({ json: { ...design, step: Number(url.searchParams.get("step") ?? 13) } });
-    if (path === "/api/regression/run" && method === "POST") {
+    if (path === "/api/regression/design") {
+      const outcome = url.searchParams.get("outcome");
+      if (!outcome || url.searchParams.has("step")) return route.fulfill({ status: 422, json: { detail: "outcome required" } });
+      const selectedMethod = url.searchParams.get("method") ?? design.method;
       return route.fulfill({
         json: {
-          design,
+          ...design,
+          outcome,
+          method: selectedMethod,
+          shock_type: url.searchParams.get("shock_type") ?? design.shock_type,
+          equation: selectedMethod === "双向固定效应" ? "Y_it = β·tariff_shock_it + α_i + λ_t + ε_it" : design.equation,
+          equation_parts: selectedMethod === "双向固定效应"
+            ? [{ text: "Y_it = β·tariff_shock_it + α_i + λ_t + ε_it", description: "连续强度" }]
+            : design.equation_parts,
+        },
+      });
+    }
+    if (path === "/api/regression/run" && method === "POST") {
+      const payload = request.postDataJSON();
+      if (!payload.outcome || Object.hasOwn(payload, "step")) return route.fulfill({ status: 422, json: { detail: "outcome required" } });
+      regressionRunCount += 1;
+      if (hooks.runGate) await hooks.runGate(regressionRunCount);
+      const selectedMethod = payload.method ?? design.method;
+      const coefName = selectedMethod === "双向固定效应" ? "tariff_shock" : "treated×post";
+      return route.fulfill({
+        json: {
+          design: {
+            ...design,
+            outcome: payload.outcome,
+            method: selectedMethod,
+            shock_type: payload.shock_type ?? design.shock_type,
+            equation: selectedMethod === "双向固定效应" ? "Y_it = β·tariff_shock_it + α_i + λ_t + ε_it" : design.equation,
+            equation_parts: selectedMethod === "双向固定效应"
+              ? [{ text: "Y_it = β·tariff_shock_it + α_i + λ_t + ε_it", description: "连续强度" }]
+              : design.equation_parts,
+          },
           result: {
-            coefs: [{ name: "treated×post", coef: -0.0123, se: 0.0041, t: -3.0, p: 0.01, stars: "**" }],
+            coefs: [{ name: coefName, coef: -0.0123, se: 0.0041, t: -3.0, p: 0.01, stars: "**", ci_low: -0.022, ci_high: -0.0026 }],
             n_obs: 120,
             n_entities: 24,
             n_times: 5,
             n_clusters: 8,
             r2_within: 0.42,
+            depvar_mean: 0.2,
+            depvar_std: 0.08,
+            diagnostics: {},
             notes: ["e2e mock"],
           },
           benchmark: {
@@ -180,6 +220,29 @@ async function mockApi(page: Page, who = user, currentStep: number | null = null
             coef_check_passed: true,
             se_check_mode: "informational",
             notes: ["标准误仅作参考"],
+          },
+          disclaimer: "mock",
+        },
+      });
+    }
+    if (path === "/api/regression/placebo" && method === "POST") {
+      if (hooks.placeboGate) await hooks.placeboGate;
+      const payload = request.postDataJSON();
+      return route.fulfill({
+        json: {
+          design: { ...design, outcome: payload.outcome },
+          placebo: {
+            policy_name: "treated×post",
+            true_coef: -0.0123,
+            placebo_coefs: [-0.002, 0.001, 0.003],
+            empirical_p: 0.25,
+            n_draws: 3,
+            requested_draws: 3,
+            seed: 2026,
+            treated_entities: 8,
+            total_entities: 24,
+            cohorts: { "2018": 8 },
+            note: "e2e placebo",
           },
           disclaimer: "mock",
         },
@@ -218,16 +281,16 @@ test("登录、进入步骤、跑回归并生成报告", async ({ page }) => {
   await page.getByRole("button", { name: "登录" }).click();
   await page.getByRole("button", { name: "跳过介绍" }).click();
 
-  await page.getByText("GVC 贸易流真实回归", { exact: true }).click();
-  await expect(page.getByRole("heading", { name: "GVC 贸易流真实回归" })).toBeVisible();
+  await page.getByText("GVC 贸易流教学实证回归", { exact: true }).click();
+  await expect(page.getByRole("heading", { name: "GVC 贸易流教学实证回归" })).toBeVisible();
 
-  await page.getByRole("button", { name: "▶ 运行回归" }).click();
-  await expect(page.getByRole("cell", { name: "treated×post" }).first()).toBeVisible();
-  await expect(page.getByText("政策系数对照通过")).toBeVisible();
-  await expect(page.getByText("仅作参考")).toBeVisible();
+  await page.getByRole("button", { name: "运行基准回归" }).click();
+  await expect(page.getByRole("heading", { name: "发现负向变化证据" })).toBeVisible();
+  await expect(page.getByText("-1.23 个百分点", { exact: false })).toBeVisible();
+  await expect(page.getByText("不构成现实政策结论", { exact: false }).first()).toBeVisible();
 
-  await page.getByText("实验报告", { exact: true }).click();
-  await expect(page.getByRole("heading", { name: "实验报告" })).toBeVisible();
+  await page.getByText("生成实验报告", { exact: true }).click();
+  await expect(page.getByRole("heading", { name: "生成实验报告" })).toBeVisible();
   expect(reportRequests).toBe(0);
   await page.getByRole("button", { name: "生成报告" }).click();
   await expect(page.getByText("PanelOLS 政策系数对照")).toBeVisible();
@@ -241,11 +304,136 @@ test("登录、进入步骤、跑回归并生成报告", async ({ page }) => {
   await expect(page.locator(".toast-item")).toContainText("报告已提交");
 });
 
+test("旧结果的技术细节不会混入当前未运行的新方程", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: "跳过介绍" }).click();
+  await page.getByText("GVC 贸易流教学实证回归", { exact: true }).click();
+
+  await page.getByRole("button", { name: "运行基准回归" }).click();
+  await expect(page.locator(".verdict-card")).toBeVisible();
+  await page.getByRole("group", { name: "估计方法" }).getByRole("button", { name: "连续冲击强度" }).click();
+
+  const details = page.locator(".technical-details");
+  await details.locator("summary").click();
+  await expect(details.locator(".stale-result")).toContainText("上一次运行");
+  await expect(details.locator(".model-eq")).toContainText("treated_i×post_it");
+  await expect(details.locator(".model-eq")).not.toContainText("tariff_shock");
+});
+
+test("旧安慰剂响应不会覆盖新设定的主回归", async ({ page }) => {
+  let releasePlacebo!: () => void;
+  const placeboGate = new Promise<void>((resolve) => { releasePlacebo = resolve; });
+  await mockApi(page, user, null, { placeboGate });
+  await page.goto("/");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: "跳过介绍" }).click();
+  await page.getByText("GVC 贸易流教学实证回归", { exact: true }).click();
+
+  await page.getByRole("button", { name: "运行基准回归" }).click();
+  await page.getByRole("button", { name: "运行安慰剂检验" }).click();
+  await expect(page.getByRole("button", { name: "随机化中…" })).toBeVisible();
+
+  await page.getByRole("group", { name: "估计方法" }).getByRole("button", { name: "连续冲击强度" }).click();
+  await page.getByRole("button", { name: "重新运行当前设定" }).click();
+  await expect(page.locator(".verdict-metrics span").filter({ hasText: "冲击强度每增加 1 个百分点" })).toBeVisible();
+
+  const finished = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/regression/placebo");
+  releasePlacebo();
+  await finished;
+  await expect(page.locator(".placebo-verdict")).toHaveCount(0);
+  await expect(page.getByText("经验 p=", { exact: false })).toHaveCount(0);
+});
+
+test("同设定主回归运行中不能启动基于旧结果的新安慰剂", async ({ page }) => {
+  let releasePlacebo!: () => void;
+  let releaseSecondRun!: () => void;
+  const placeboGate = new Promise<void>((resolve) => { releasePlacebo = resolve; });
+  const secondRunGate = new Promise<void>((resolve) => { releaseSecondRun = resolve; });
+  let placeboRequests = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === "/api/regression/placebo") placeboRequests += 1;
+  });
+  await mockApi(page, user, null, {
+    placeboGate,
+    runGate: async (runNumber) => { if (runNumber === 2) await secondRunGate; },
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: "跳过介绍" }).click();
+  await page.getByText("GVC 贸易流教学实证回归", { exact: true }).click();
+
+  await page.getByRole("button", { name: "运行基准回归" }).click();
+  await page.getByRole("button", { name: "运行安慰剂检验" }).click();
+  await page.getByRole("button", { name: "重新运行当前设定" }).click();
+  const placeboButton = page.getByRole("button", { name: "运行安慰剂检验" });
+  await expect(placeboButton).toBeDisabled();
+  await placeboButton.click({ force: true });
+  expect(placeboRequests).toBe(1);
+
+  const secondFinished = page.waitForResponse((response) => (
+    new URL(response.url()).pathname === "/api/regression/run" && response.request().postDataJSON().method === "双重差分 (DID)"
+  ));
+  releaseSecondRun();
+  await secondFinished;
+  const placeboFinished = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/regression/placebo");
+  releasePlacebo();
+  await placeboFinished;
+  await expect(page.locator(".placebo-verdict")).toHaveCount(0);
+});
+
+test("正常退出会清空上一位学生的回归设置与历史", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: "跳过介绍" }).click();
+  await page.getByText("GVC 贸易流教学实证回归", { exact: true }).click();
+
+  await page.getByRole("button", { name: "运行基准回归" }).click();
+  await page.getByRole("group", { name: "估计方法" }).getByRole("button", { name: "连续冲击强度" }).click();
+  await page.getByRole("button", { name: "重新运行当前设定" }).click();
+  await expect(page.getByRole("heading", { name: "改变设定后，结论变化了吗？" })).toBeVisible();
+
+  await page.getByRole("button", { name: "退出" }).click();
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: "跳过介绍" }).click();
+  await page.getByText("GVC 贸易流教学实证回归", { exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "改变设定后，结论变化了吗？" })).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "估计方法" }).getByRole("button", { name: "二元处理 DID" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("退出期间返回的旧主回归不会写入下一位学生的历史", async ({ page }) => {
+  let releaseRun!: () => void;
+  const runGate = new Promise<void>((resolve) => { releaseRun = resolve; });
+  await mockApi(page, user, null, { runGate: async () => runGate });
+  await page.goto("/");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: "跳过介绍" }).click();
+  await page.getByText("GVC 贸易流教学实证回归", { exact: true }).click();
+
+  await page.getByRole("button", { name: "运行基准回归" }).click();
+  await expect(page.getByRole("button", { name: "估计中…" })).toBeVisible();
+  const oldFinished = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/regression/run");
+  await page.getByRole("button", { name: "退出" }).click();
+
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: "跳过介绍" }).click();
+  await page.getByText("GVC 贸易流教学实证回归", { exact: true }).click();
+  releaseRun();
+  await oldFinished;
+
+  await page.getByRole("button", { name: "运行基准回归" }).click();
+  await expect(page.locator(".verdict-card")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "改变设定后，结论变化了吗？" })).toHaveCount(0);
+});
+
 test("教师面板:概览、学生名单、评阅报告", async ({ page }) => {
   await mockApi(page, teacher);
   await page.goto("/");
 
-  // 教师登录不弹学生向导,直达教师面板;教师端没有任何进入学生 17 步实验的入口
+  // 教师登录不弹学生向导，直达教师面板；教师端没有任何进入学生 16 步实验的入口
   await page.getByRole("button", { name: "登录" }).click();
   await expect(page.getByText("学生人数")).toBeVisible();
   await expect(page.getByText("已提交报告")).toBeVisible();
@@ -277,24 +465,34 @@ test("教师面板:概览、学生名单、评阅报告", async ({ page }) => {
 });
 
 test("学生恢复服务端进度，切步后深链同步到 URL", async ({ page }) => {
-  await mockApi(page, user, 15);
+  await mockApi(page, user, 14);
   await page.goto("/");
   await page.getByRole("button", { name: "登录" }).click();
   await page.getByRole("button", { name: "跳过介绍" }).click();
 
-  await expect(page.getByRole("heading", { name: "GVC 长度真实回归" })).toBeVisible();
-  await page.locator(".step-row").filter({ hasText: "网络指标真实回归" }).click();
-  await expect(page).toHaveURL(/\?step=16$/);
+  await expect(page.getByRole("heading", { name: "GVC 长度教学实证回归" })).toBeVisible();
+  await page.locator(".step-row").filter({ hasText: "网络指标教学实证回归" }).click();
+  await expect(page).toHaveURL(/\?step=15$/);
 });
 
 test("有效 step 深链优先于服务端保存进度", async ({ page }) => {
-  await mockApi(page, user, 15);
-  await page.goto("/?step=13");
+  await mockApi(page, user, 14);
+  await page.goto("/?step=12");
   await page.getByRole("button", { name: "登录" }).click();
   await page.getByRole("button", { name: "跳过介绍" }).click();
 
-  await expect(page.getByRole("heading", { name: "GVC 贸易流真实回归" })).toBeVisible();
-  await expect(page).toHaveURL(/\?step=13$/);
+  await expect(page.getByRole("heading", { name: "GVC 贸易流教学实证回归" })).toBeVisible();
+  await expect(page).toHaveURL(/\?step=12$/);
+});
+
+test("旧步骤 17 深链无效并安全回退到默认步骤", async ({ page }) => {
+  await mockApi(page, user, null);
+  await page.goto("/?step=17");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: "跳过介绍" }).click();
+
+  await expect(page.getByRole("heading", { name: "GVC 总贸易流分解指标" })).toBeVisible();
+  await expect(page).toHaveURL(/\?step=4$/);
 });
 
 test("小数 step 深链无效并安全回退到默认步骤", async ({ page }) => {
@@ -303,6 +501,6 @@ test("小数 step 深链无效并安全回退到默认步骤", async ({ page }) 
   await page.getByRole("button", { name: "登录" }).click();
   await page.getByRole("button", { name: "跳过介绍" }).click();
 
-  await expect(page.getByRole("heading", { name: "GVC 贸易流分解" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "GVC 总贸易流分解指标" })).toBeVisible();
   await expect(page).toHaveURL(/\?step=4$/);
 });

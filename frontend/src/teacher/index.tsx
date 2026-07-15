@@ -19,11 +19,11 @@ type TabKey = (typeof NAV)[number]["key"];
 const TITLES: Record<TabKey, { title: string; sub: string }> = {
   overview: { title: "班级概览", sub: "教学数据一览:提交、评阅进度与实验进度分布" },
   students: { title: "班级与学生", sub: "创建班级与学生账号,查看每人实验进度" },
-  reports: { title: "报告评阅", sub: "批阅学生在步骤 17 提交的实验报告并打分" },
+  reports: { title: "报告评阅", sub: "批阅学生在步骤 16 提交的实验报告并打分" },
   announcements: { title: "课堂公告", sub: "向全体或指定班级发布公告,学生端实时可见" },
 };
 
-/** 教师面板:左侧栏导航 + 主内容区(仅 role=teacher 可进入,替代 17 步实验外壳) */
+/** 教师面板：左侧栏导航 + 主内容区（仅 role=teacher 可进入，替代 16 步实验外壳）。 */
 export function TeacherDashboard({ user }: { user: AuthUser }) {
   const [tab, setTab] = useState<TabKey>("overview");
   const [studentFilter, setStudentFilter] = useState<{ classId: number | null; reachedStep: number | null }>({

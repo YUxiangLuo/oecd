@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test";
 
-import { withQuery } from "./api";
+import { shouldExpireAuth, withQuery } from "./api";
+
+describe("auth expiration", () => {
+  test("a delayed 401 can only expire the token used by that request", () => {
+    expect(shouldExpireAuth("old-token", "old-token")).toBe(true);
+    expect(shouldExpireAuth("old-token", "new-token")).toBe(false);
+    expect(shouldExpireAuth(null, "new-token")).toBe(false);
+  });
+});
 
 describe("withQuery", () => {
   test("encodes every user-controlled query value", () => {

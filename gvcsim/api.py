@@ -1,4 +1,4 @@
-"""FastAPI 服务:为前端(frontend/)提供 17 步教学系统所需的全部数据接口。
+"""FastAPI 服务:为前端(frontend/)提供 16 步教学系统所需的全部数据接口。
 
 只读 data/processed/ 下的预计算产物,不在请求路径上碰原始大表。
 启动:gvcsim serve(或 uv run uvicorn gvcsim.api:app --reload)
@@ -15,7 +15,7 @@ from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from gvcsim import auth
 from gvcsim import report as report_mod
@@ -33,7 +33,8 @@ from gvcsim.regression.design import (
     SCENARIO_LABELS,
     SCENARIOS,
     SHOCK_TYPES,
-    STEP_DEPVARS,
+    OUTCOME_DEPVARS,
+    OUTCOMES,
     RegressionDesign,
 )
 from gvcsim.regression.panel import placebo_did_distribution, run_design_with_benchmark
@@ -581,7 +582,9 @@ def shock_panel(
 
 
 class RegressionRequest(BaseModel):
-    step: int = 13  # 13-16
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: str
     granularity: str = "国家–行业级"
     shock_type: str = "关税冲击"
     method: str = "双重差分 (DID)"
@@ -598,6 +601,8 @@ class PlaceboRequest(RegressionRequest):
 
 
 class ReportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     year: int | None = None
     granularity: str = "国家–行业级"
     shock_type: str = "关税冲击"
@@ -618,12 +623,12 @@ def regression_options():
         "price_modes": PRICE_MODES,
         "scenarios": SCENARIOS,
         "scenario_labels": SCENARIO_LABELS,
-        "steps": {k: v[1] for k, v in STEP_DEPVARS.items()},
+        "outcomes": {key: value[1] for key, value in OUTCOME_DEPVARS.items()},
     }
 
 
 def _validate_design(
-    step: int,
+    outcome: str,
     granularity: str,
     shock_type: str,
     method: str,
@@ -633,8 +638,8 @@ def _validate_design(
     scenario: str = "clean",
     exclude_row: bool = True,
 ) -> RegressionDesign:
-    if step not in STEP_DEPVARS:
-        raise HTTPException(status_code=400, detail="step 必须是 13-16")
+    if outcome not in OUTCOMES:
+        raise HTTPException(status_code=400, detail=f"outcome 必须是 {OUTCOMES}")
     if granularity not in GRANULARITIES:
         raise HTTPException(status_code=400, detail=f"granularity 必须是 {GRANULARITIES}")
     if shock_type not in SHOCK_TYPES:
@@ -648,7 +653,7 @@ def _validate_design(
     if scenario not in SCENARIOS:
         raise HTTPException(status_code=400, detail=f"scenario 必须是 {SCENARIOS}")
     return RegressionDesign(
-        step=step,
+        outcome=outcome,
         granularity=granularity,
         shock_type=shock_type,
         method=method,
@@ -662,7 +667,7 @@ def _validate_design(
 
 def _design_info(design: RegressionDesign) -> dict:
     return {
-        "step": design.step,
+        "outcome": design.outcome,
         "depvar": design.depvar,
         "depvar_label": design.depvar_label,
         "granularity": design.granularity,
@@ -689,7 +694,8 @@ def _design_info(design: RegressionDesign) -> dict:
 
 @app.get("/api/regression/design")
 def regression_design(
-    step: int = 13,
+    request: Request,
+    outcome: str,
     granularity: str = "国家–行业级",
     shock_type: str = "关税冲击",
     method: str = "双重差分 (DID)",
@@ -699,10 +705,12 @@ def regression_design(
     scenario: str = "clean",
     exclude_row: bool = True,
 ):
-    """步骤12 设计确认:不跑回归,只返回方程与面板/个体/聚类等设计信息。"""
+    """返回指定 outcome 的方程与面板/个体/聚类等设计信息，不执行估计。"""
+    if "step" in request.query_params:
+        raise HTTPException(status_code=422, detail="旧 step 参数已删除，请使用 outcome")
     return _design_info(
         _validate_design(
-            step,
+            outcome,
             granularity,
             shock_type,
             method,
@@ -718,7 +726,7 @@ def regression_design(
 @app.post("/api/regression/run")
 def regression_run(req: RegressionRequest):
     design = _validate_design(
-        req.step,
+        req.outcome,
         req.granularity,
         req.shock_type,
         req.method,
@@ -744,7 +752,7 @@ def regression_run(req: RegressionRequest):
 @app.post("/api/regression/placebo")
 def regression_placebo(req: PlaceboRequest):
     design = _validate_design(
-        req.step,
+        req.outcome,
         req.granularity,
         req.shock_type,
         req.method,
@@ -779,9 +787,9 @@ def report(year: int):
 
 @app.post("/api/report")
 def report_custom(req: ReportRequest):
-    # 复用步骤13的设计校验;报告生成时会把同一套设定应用到 13-16 四个因变量。
+    # 复用 trade 设计校验；报告会把同一套设定应用到四类 outcome。
     _validate_design(
-        13,
+        "trade",
         req.granularity,
         req.shock_type,
         req.method,

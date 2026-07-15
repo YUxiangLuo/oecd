@@ -2,7 +2,7 @@
  * 登录后的沉浸式系统介绍(5 幕,可跳过、可在顶栏重看):
  *   1 开场:闭环管线动画 + 真实规模计数(经济体/行业/年份/步骤)
  *   2 数据底座:两张可翻开的数据卡(ICIO 结构 / 拟真政策冲击事件)
- *   3 十七步旅程:五阶段可点击展开(内容来自 /api/steps 真实元数据)
+ *   3 十六步旅程：五阶段可点击展开（内容来自 /api/steps 真实元数据）
  *   4 动手示意:关税滑块驱动的供应链示意动画(明确标注非真实估计)
  *   5 就绪:以当前登录身份进入实验
  * 统计与文案全部取自后端真实接口;仅动手预演为教学示意。
@@ -128,7 +128,7 @@ export function IntroOverlay({ user, meta, onDone }: {
         一条从数据接入到实验报告的完整闭环。
       </p>
       <div className="intro-pipeline">
-        {["数据接入", "指标计算", "可视化", "因果回归", "实验报告"].map((p, i) => (
+        {["数据接入", "指标计算", "可视化", "教学实证", "实验报告"].map((p, i) => (
           <span key={p} style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <span className="intro-chip" style={{ animationDelay: `${0.3 + i * 0.35}s` }}>
               <span className="intro-chip-num">{i + 1}</span>{p}
@@ -141,7 +141,7 @@ export function IntroOverlay({ user, meta, onDone }: {
         <div><div className="intro-stat-v"><CountUp value={meta?.countries.length ?? 77} /></div><div className="intro-stat-l">经济体</div></div>
         <div><div className="intro-stat-v"><CountUp value={meta?.sectors.length ?? 45} /></div><div className="intro-stat-l">行业</div></div>
         <div><div className="intro-stat-v">{yearSpan}</div><div className="intro-stat-l">年份覆盖</div></div>
-        <div><div className="intro-stat-v"><CountUp value={17} /></div><div className="intro-stat-l">实验步骤</div></div>
+        <div><div className="intro-stat-v"><CountUp value={stepsData?.steps.length ?? 16} /></div><div className="intro-stat-l">实验步骤</div></div>
       </div>
     </div>,
 
@@ -197,10 +197,10 @@ export function IntroOverlay({ user, meta, onDone }: {
       </div>
     </div>,
 
-    /* ---- 3 十七步旅程 ---- */
+    /* ---- 3 十六步旅程 ---- */
     <div key={2} className="intro-scene">
       <div className="intro-scene-kicker">实验路线</div>
-      <h2 className="intro-h2">五个阶段,十七步</h2>
+      <h2 className="intro-h2">五个阶段，十六步</h2>
       <p className="intro-lede">点击各阶段,预览你将亲手完成的每一步。</p>
       <div className="intro-stage-tabs">
         {stages.map((st) => (

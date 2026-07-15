@@ -2,7 +2,7 @@
 
 Bearer 校验由 api.py 的全局中间件完成并把令牌 payload 放进 request.state.user;
 这里只做角色鉴权(require_teacher)。db.Unavailable 由 api.py 的全局异常
-处理器统一转 503,核心 17 步接口不受教学数据库影响。
+处理器统一转 503,核心 16 步接口不受教学数据库影响。
 """
 
 import re

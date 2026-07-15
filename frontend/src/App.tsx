@@ -6,7 +6,6 @@ import { IntroOverlay } from "./intro";
 import { DbLab, IndicatorLab, QcLab, ReportLab, ShockLab, VizLab } from "./labs";
 import {
   DEFAULT_REGRESSION_SETTINGS,
-  RegDesignLab,
   RegressionRunLab,
   type RegressionHistory,
   type RegressionSettings,
@@ -20,7 +19,7 @@ const ROMAN = ["", "一", "二", "三", "四", "五"];
 
 function stepFromUrl(): number | null {
   const n = Number(new URLSearchParams(window.location.search).get("step"));
-  return Number.isInteger(n) && n >= 1 && n <= 17 ? n : null;
+  return Number.isInteger(n) && n >= 1 && n <= 16 ? n : null;
 }
 
 function Lab({ step, meta, regressionSettings, onRegressionSettingsChange, regressionHistory, onRegressionHistoryChange, onNavigateStep }: {
@@ -38,15 +37,9 @@ function Lab({ step, meta, regressionSettings, onRegressionSettingsChange, regre
   if (step.lab === "ind") return meta ? <IndicatorLab meta={meta} step={step} /> : null;
   if (step.lab === "viz")
     return meta ? <VizLab key={step.n} meta={meta} step={step} /> : null;
-  if (step.lab === "rgd") return (
-    <RegDesignLab
-      settings={regressionSettings}
-      onSettingsChange={onRegressionSettingsChange}
-      onNavigateStep={onNavigateStep}
-    />
-  );
   if (step.lab === "reg") return (
     <RegressionRunLab
+      key={step.regression_outcome}
       step={step}
       settings={regressionSettings}
       onSettingsChange={onRegressionSettingsChange}
@@ -69,7 +62,7 @@ export default function App() {
   const [maxStep, setMaxStep] = useState(() => explicitStep.current ?? 1);
   const [progressReady, setProgressReady] = useState(false);
   const [regressionSettings, setRegressionSettings] = useState<RegressionSettings>(DEFAULT_REGRESSION_SETTINGS);
-  // 最近运行对比提升到应用会话:离开步骤13–16(如去步骤12/17)再回来时不丢失。
+  // 最近运行对比按稳定 outcome 保存，课程编号变化不改变其业务含义。
   const [regressionHistory, setRegressionHistory] = useState<RegressionHistory>({});
   const [fatal, setFatal] = useState<string | null>(null);
   // 认证:localStorage 里的令牌先经 /api/auth/me 真实校验再放行
@@ -82,14 +75,40 @@ export default function App() {
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [bannerExpanded, setBannerExpanded] = useState(false);
 
-  const navigateStep = useCallback((next: number) => {
-    const step = Math.max(1, Math.min(17, next));
-    navigationTouched.current = true;
-    setCurrent(step);
+  const clearSession = useCallback(() => {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    setUser(null);
+    setStepsData(null);
+    setMeta(null);
+    setFatal(null);
+    setShowIntro(false);
+    setProgressReady(false);
+    setRegressionSettings(DEFAULT_REGRESSION_SETTINGS);
+    setRegressionHistory({});
+    setAnnouncements([]);
+    highestAnnouncementId.current = 0;
+    setBannerDismissed(false);
+    setBannerExpanded(false);
+    explicitStep.current = null;
+    navigationTouched.current = false;
+    setCurrent(4);
+    setMaxStep(1);
     const url = new URL(window.location.href);
-    url.searchParams.set("step", String(step));
+    url.searchParams.delete("step");
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }, []);
+
+  const navigateStep = useCallback((next: number) => {
+    const available = stepsData?.steps ?? [];
+    const last = available.at(-1)?.n ?? 16;
+    const bounded = Math.max(1, Math.min(last, next));
+    const target = available.length && !available.some((item) => item.n === bounded) ? (available[0]?.n ?? 1) : bounded;
+    navigationTouched.current = true;
+    setCurrent(target);
+    const url = new URL(window.location.href);
+    url.searchParams.set("step", String(target));
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [stepsData]);
 
   useEffect(() => {
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
@@ -101,22 +120,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const onExpired = () => {
-      setUser(null);
-      setStepsData(null);
-      setMeta(null);
-      setFatal(null);
-      setProgressReady(false);
-      setRegressionHistory({});
-    };
-    window.addEventListener("gvcsim-auth-expired", onExpired);
-    return () => window.removeEventListener("gvcsim-auth-expired", onExpired);
-  }, []);
+    window.addEventListener("gvcsim-auth-expired", clearSession);
+    return () => window.removeEventListener("gvcsim-auth-expired", clearSession);
+  }, [clearSession]);
 
   useEffect(() => {
     if (!user) return;
     api.meta().then(setMeta, () => setMeta({ years: [], countries: [], sectors: [] }));
-    if (user.role === "teacher") return; // 教师端不加载 17 步实验数据与公告横幅
+    if (user.role === "teacher") return; // 教师端不加载 16 步实验数据与公告横幅
     highestAnnouncementId.current = 0;
     setAnnouncements([]);
     setBannerDismissed(false);
@@ -200,7 +211,7 @@ export default function App() {
       }} />
     );
 
-  // 教师端与学生端彻底分离:教师只有教师面板,没有 17 步实验入口
+  // 教师端与学生端彻底分离:教师只有教师面板,没有 16 步实验入口
   if (user.role === "teacher")
     return (
       <div className="layout">
@@ -215,7 +226,7 @@ export default function App() {
               数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
             </span>
             <span className="role-chip" title={`教师账号 · ${user.username}`}>{user.name}</span>
-            <button onClick={() => { localStorage.removeItem(AUTH_TOKEN_KEY); setUser(null); }}>退出</button>
+            <button onClick={clearSession}>退出</button>
           </div>
         </header>
         <TeacherDashboard user={user} />
@@ -237,13 +248,16 @@ export default function App() {
   if (!stepsData) return <div style={{ padding: 40 }} className="muted">加载中…</div>;
 
   const steps = stepsData.steps;
-  const step = steps.find((s) => s.n === current)!;
+  const totalSteps = steps.length;
+  const stepIndex = steps.findIndex((item) => item.n === current);
+  if (stepIndex < 0) return <div style={{ padding: 40 }} className="error-box">步骤不存在，请从课程大纲重新选择。</div>;
+  const step = steps[stepIndex];
   const stages = [...new Set(steps.map((s) => s.stage))];
   const stageName = stepsData.stages[String(step.stage)];
-  const prevStep = steps.find((s) => s.n === current - 1);
-  const nextStep = steps.find((s) => s.n === current + 1);
-  // 回归步骤(rgd/reg)自带完整讲解卡片体系,主区跳过通用讲解卡避免重复
-  const isReg = step.lab === "rgd" || step.lab === "reg";
+  const prevStep = steps[stepIndex - 1];
+  const nextStep = steps[stepIndex + 1];
+  // 回归工作台自带完整渐进教学结构，主区跳过通用讲解卡避免重复。
+  const isReg = step.lab === "reg";
   // 可视化步骤(viz)图表是主角:讲解卡默认折叠,给图表让出首屏纵向空间(可点开)
   const isViz = step.lab === "viz";
 
@@ -261,11 +275,11 @@ export default function App() {
           </span>
           {/* 学习进度按最远到达步显示,跳回前面复习不会“倒退”;当前位置见步骤标题栏 */}
           <span className="progress-pill" title={`最远到达第 ${maxStep} 步;当前在第 ${current} 步`}>
-            学习进度 <b>{maxStep}</b><span>/17</span>
+            学习进度 <b>{Math.min(maxStep, totalSteps)}</b><span>/{totalSteps}</span>
           </span>
           <span className="role-chip" title={`学生账号 · ${user.username}`}>{user.name}</span>
           <button onClick={() => setShowIntro(true)}>ⓘ 系统介绍</button>
-          <button onClick={() => { localStorage.removeItem(AUTH_TOKEN_KEY); setUser(null); }}>退出</button>
+          <button onClick={clearSession}>退出</button>
         </div>
       </header>
 
@@ -303,10 +317,10 @@ export default function App() {
           <div className="sidebar-head">
             <div className="sidebar-head-row">
               <span className="sidebar-title">课程大纲</span>
-              <span className="sidebar-steps">17 STEPS</span>
+              <span className="sidebar-steps">{totalSteps} STEPS</span>
             </div>
             <div className="progress-track">
-              <div className="progress-bar" style={{ width: `${Math.max(6, (maxStep / 17) * 100)}%` }} />
+              <div className="progress-bar" style={{ width: `${Math.max(6, (Math.min(maxStep, totalSteps) / totalSteps) * 100)}%` }} />
             </div>
             <div className="sidebar-sub">全球价值链实证分析 · 数据→指标→回归→报告</div>
           </div>
@@ -346,13 +360,13 @@ export default function App() {
             <div className="step-header-mid">
               <div className="step-header-meta">
                 <span className="stage-chip">{stageName}</span>
-                <span className="step-count">STEP {step.n} / 17</span>
+                <span className="step-count">STEP {step.n} / {totalSteps}</span>
               </div>
               <h2>{step.title}</h2>
             </div>
             <div className="nav-btns">
-              <button disabled={current <= 1} onClick={() => navigateStep(current - 1)}>← 上一步</button>
-              <button className="primary" disabled={current >= 17} onClick={() => navigateStep(current + 1)}>下一步 →</button>
+              <button disabled={!prevStep} onClick={() => prevStep && navigateStep(prevStep.n)}>← 上一步</button>
+              <button className="primary" disabled={!nextStep} onClick={() => nextStep && navigateStep(nextStep.n)}>下一步 →</button>
             </div>
           </div>
 
@@ -381,7 +395,7 @@ export default function App() {
               <div className="rail-head"><span className="rail-head-ic">📌</span>本步速览</div>
               <div className="rail-stage">
                 <div className="rail-stage-loc">阶段{ROMAN[step.stage]} · {stageName}</div>
-                <div className="rail-stage-num"><b>{String(step.n).padStart(2, "0")}</b><span>/ 17 步</span></div>
+                <div className="rail-stage-num"><b>{String(step.n).padStart(2, "0")}</b><span>/ {totalSteps} 步</span></div>
               </div>
               <div className="rail-sec">
                 <div className="rail-label">🎯 本步目标</div>

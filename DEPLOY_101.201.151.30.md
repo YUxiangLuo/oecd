@@ -41,11 +41,26 @@ cd ..
 
 部署前工作区应保持干净；`frontend/dist/` 必须是刚构建的 `cc` 产物。
 
-### 2. 同步应用代码
+### 2. 全新部署：停止旧服务
+
+本轮按全新环境部署，不恢复旧课程数据库、旧进度或旧运行目录。先停止旧 API，后续使用
+`classroom-init --reset` 建立全新的 16 步教学库；因此无需为旧 17 步数据设计回滚。
+
+```bash
+ssh root@101.201.151.30 '
+  set -euo pipefail
+  systemctl stop gvcsim-api.service || true
+'
+```
+
+若后续步骤失败，保持服务停止，修复后从本指南第 3 步重新执行完整部署。
+
+### 3. 同步应用代码
 
 ```bash
 EXCLUDES=(
   --exclude='.git/'
+  --exclude='.pi-subagents/'
   --exclude='.venv/'
   --exclude='.venv311/'
   --exclude='frontend/node_modules/'
@@ -78,12 +93,13 @@ rsync -az --delete --info=progress2 \
 
 不要移除 `.venv311/` 和 `data/` 排除项：前者是线上运行环境，后者包含预计算产物与认证密钥。
 
-### 3. 按需同步数据
+### 4. 同步数据（全新部署必做）
 
-只有指标口径、冲击、控制变量或原始数据发生变化时才执行：
+先在本地生成完整预计算产物，再同步到全新服务器：
 
 ```bash
 uv run gvcsim compute
+ssh root@101.201.151.30 'mkdir -p /opt/oecd-icio-analysis/data/processed /opt/oecd-icio-analysis/data/shocks'
 
 rsync -az --delete data/processed/ \
   root@101.201.151.30:/opt/oecd-icio-analysis/data/processed/
@@ -98,23 +114,44 @@ rsync -az --delete OECD_ICIO/ \
   root@101.201.151.30:/opt/oecd-icio-analysis/OECD_ICIO/
 ```
 
-### 4. 重启并验证
+### 5. 重建教学库、启动并验证
+
+先用 `systemctl cat gvcsim-api.service` 确认服务实际加载的环境文件；下例假定为
+`/etc/gvcsim.env`。该步骤会删除现有教学表并重新播种演示账号，符合本轮全新部署策略。
 
 ```bash
 ssh root@101.201.151.30 '
-  set -e
-  systemctl restart gvcsim-api.service
+  set -euo pipefail
+  cd /opt/oecd-icio-analysis
+  ENV_FILE=/etc/gvcsim.env  # 按实际 service 单元调整
+  test -r "$ENV_FILE"
+  set -a; . "$ENV_FILE"; set +a
+  : "${GVCSIM_PG_DSN:?必须使用 gvcsim-api.service 的真实 DSN}"
+
+  .venv311/bin/gvcsim classroom-init --reset
+  psql --dbname="$GVCSIM_PG_DSN" -v ON_ERROR_STOP=1 -Atc \
+    "SELECT count(*) FROM step_progress;" | grep -qx 0
+  psql --dbname="$GVCSIM_PG_DSN" -v ON_ERROR_STOP=1 -Atc \
+    "SELECT count(*) FROM schema_migrations WHERE id='\''2026_course_16_reset_progress'\'';" | grep -qx 1
+
   nginx -t
+  systemctl start gvcsim-api.service
   systemctl reload nginx
   systemctl is-active gvcsim-api.service
 '
 ```
+
+失败时保持 API 停止，修复配置或依赖后重新执行第 3–5 步；不恢复旧数据库。
+
+本次重构不改变 WWZ/WWYZ/网络指标算法；但由于采用全新部署，仍须同步完整
+`data/processed/` 与 `data/shocks/`，不能依赖旧服务器残留产物。
 
 公网冒烟检查：
 
 ```bash
 set -euo pipefail
 BASE=http://101.201.151.30:6363
+GVCSIM_STUDENT_PASSWORD=${GVCSIM_STUDENT_PASSWORD:-gvclab2026}
 
 curl -fsSI "$BASE/"
 curl -fsSI "$BASE/docs"
@@ -127,6 +164,28 @@ TOKEN=$(curl -fsS \
 
 curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/auth/me"
 curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/meta"
+
+STEPS=$(curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/steps")
+printf '%s' "$STEPS" | python3 -c '
+import json, sys
+body = json.load(sys.stdin)
+assert [row["n"] for row in body["steps"]] == list(range(1, 17))
+assert [row.get("regression_outcome") for row in body["steps"][11:15]] == ["trade", "production", "length", "network"]
+assert body["steps"][15]["lab"] == "rep"
+'
+
+curl -fsS -H "Authorization: Bearer $TOKEN" \
+  "$BASE/api/regression/design?outcome=trade" \
+  | python3 -c 'import json,sys; assert json.load(sys.stdin)["outcome"] == "trade"'
+
+curl -fsS -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"outcome":"trade","granularity":"国家级"}' \
+  "$BASE/api/regression/run" \
+  | python3 -c 'import json,sys; body=json.load(sys.stdin); assert body["design"]["outcome"] == "trade" and body["result"]["coefs"]'
+
+OLD_STATUS=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" \
+  "$BASE/api/regression/design?outcome=trade&step=12")
+test "$OLD_STATUS" = 422
 ```
 
 ## 运维命令

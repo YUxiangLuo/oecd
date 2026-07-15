@@ -1,4 +1,4 @@
-"""步骤17:生成实验报告(Markdown)。
+"""步骤16:生成实验报告(Markdown)。
 
 HTTP 请求路径只构建内存中的 Markdown，不写入共享文件；CLI 通过
 ``generate`` 将同一份文档写到 ``reports/experiment_report_<year>.md``。
@@ -14,7 +14,7 @@ import pandas as pd
 
 from gvcsim.artifacts import read_csv_artifact
 from gvcsim.config import PROCESSED_DIR, REPORTS_DIR, processed_years
-from gvcsim.regression.design import STEP_DEPVARS, RegressionDesign
+from gvcsim.regression.design import OUTCOME_DEPVARS, RegressionDesign
 from gvcsim.regression.panel import RegressionResult, run_design, run_design_with_benchmark
 
 
@@ -36,12 +36,12 @@ def _load_panel_file(name: str) -> pd.DataFrame:
 
 
 def _load_panel(design: RegressionDesign) -> pd.DataFrame:
-    """为旧有 CLI/测试调用保留的设计导向加载器。"""
+    """按当前设计读取回归面板。"""
     return _load_panel_file(design.panel_file)
 
 
-def run_step_regression(
-    step: int,
+def run_outcome_regression(
+    outcome: str,
     panel: pd.DataFrame | None = None,
     granularity: str = "国家–行业级",
     method: str | None = None,
@@ -50,10 +50,10 @@ def run_step_regression(
     price_mode: str = "名义值",
     exclude_row: bool = True,
 ) -> RegressionResult:
-    """跑步骤13-16 对应的回归（主要供 ``gvcsim regress`` 使用）。"""
+    """跑指定 outcome 的回归（主要供 ``gvcsim regress`` 使用）。"""
     kwargs = {"method": method} if method else {}
     design = RegressionDesign(
-        step=step,
+        outcome=outcome,
         granularity=granularity,
         control_mode=control_mode,
         interaction=interaction,
@@ -66,11 +66,14 @@ def run_step_regression(
 
 def _coef_table(result: RegressionResult, design: RegressionDesign) -> str:
     lines = [
-        "| 变量 | 系数 | 聚类标准误 | t | p | 显著性 |",
-        "|---|---:|---:|---:|---:|:---:|",
+        "| 变量 | 系数 | 聚类标准误 | 95% 置信区间 | t | p | 显著性 |",
+        "|---|---:|---:|---:|---:|---:|:---:|",
     ]
     for coef in result.coefs:
-        lines.append(f"| {coef.name} | {coef.coef:.4f} | {coef.se:.4f} | {coef.t:.2f} | {coef.p:.3f} | {coef.stars} |")
+        lines.append(
+            f"| {coef.name} | {coef.coef:.4f} | {coef.se:.4f} | [{coef.ci_low:.4f}, {coef.ci_high:.4f}] | "
+            f"{coef.t:.2f} | {coef.p:.3f} | {coef.stars} |"
+        )
     entity_label = "国家" if design.granularity == "国家级" else "国家×行业"
     lines.append(
         f"\nN = {result.n_obs}({result.n_entities} 个{entity_label} × {result.n_times} 年,"
@@ -80,9 +83,21 @@ def _coef_table(result: RegressionResult, design: RegressionDesign) -> str:
     return "\n".join(lines)
 
 
+def _pretrend_summary(result: RegressionResult) -> str | None:
+    diagnostic = result.diagnostics.get("pretrend")
+    if not diagnostic:
+        return None
+    if not diagnostic["available"]:
+        return f"冲击前趋势联合检验：不可评估。{diagnostic['interpretation']}"
+    return (
+        f"冲击前趋势联合检验：F({diagnostic['df_num']}, {diagnostic['df_denom']})="
+        f"{diagnostic['statistic']:.3f}, p={diagnostic['p']:.3f}。{diagnostic['interpretation']}"
+    )
+
+
 def _design_summary(design: RegressionDesign) -> str:
     controls = "、".join(design.control_labels.values()) if design.controls else "不加控制变量"
-    interaction = "开启:冲击×基期GVC生产份额" if design.interaction else "未开启"
+    interaction = "开启:冲击×基期GVC生产份额(按样本个体均值中心化)" if design.interaction else "未开启"
     return "\n".join(
         [
             f"- 粒度:{design.granularity}",
@@ -134,7 +149,8 @@ def _event_chart(
         {
             "label": coef.name.removesuffix(suffix),
             "value": float(coef.coef),
-            "se": float(coef.se),
+            "ci_low": float(coef.ci_low),
+            "ci_high": float(coef.ci_high),
         }
         for coef in coefs
     ]
@@ -178,7 +194,7 @@ def build(
     snap = snap.set_index("country")
 
     design_preview = RegressionDesign(
-        step=13,
+        outcome="trade",
         granularity=granularity,
         shock_type=shock_type,
         method=method,
@@ -197,7 +213,7 @@ def build(
         "拟真演示面板,以 2018–2020 全球贸易摩擦为原型,结论仅用于验证系统链路,"
         "不构成研究结论)\n",
         f"- 数据:OECD ICIO {min(years)}–{max(years)}(指标截面:{report_year} 年)",
-        "- 方法:本报告使用步骤17中选择的回归设定;四组因变量共用同一套粒度/冲击/方法/控制/价格口径,便于横向比较",
+        "- 方法:本报告使用步骤16中选择的回归设定;四组因变量共用同一套粒度/冲击/方法/控制/价格口径,便于横向比较。因果解释仍依赖冲击外生性、趋势可比性等识别假设",
         _design_summary(design_preview),
         f"- 生成日期:{date.today().isoformat()}\n",
         "## 一、数据与质检",
@@ -217,9 +233,9 @@ def build(
         "\n## 三、回归结果",
     ]
 
-    for step in sorted(STEP_DEPVARS):
+    for outcome in OUTCOME_DEPVARS:
         design = RegressionDesign(
-            step=step,
+            outcome=outcome,
             granularity=granularity,
             shock_type=shock_type,
             method=method,
@@ -233,18 +249,21 @@ def build(
         result, benchmark = run_design_with_benchmark(panel, design)
         sections.extend(
             [
-                f"### 步骤{step}:{design.depvar_label}",
+                f"### {design.depvar_label}",
                 f"模型:`{design.equation()}`\n",
                 _coef_table(result, design),
             ]
         )
         if method == "事件研究":
-            main_chart = _event_chart(f"步骤{step}主政策效应动态", result, interaction=False)
+            pretrend = _pretrend_summary(result)
+            if pretrend:
+                sections.extend(["#### 冲击前趋势检查", pretrend])
+            main_chart = _event_chart(f"{design.depvar_label}主政策效应动态", result, interaction=False)
             if main_chart:
                 sections.extend(["#### 主政策效应动态", main_chart])
             if interaction:
                 heterogeneity_chart = _event_chart(
-                    f"步骤{step}基期 GVC 异质性动态",
+                    f"{design.depvar_label}基期 GVC 异质性动态",
                     result,
                     interaction=True,
                 )
@@ -252,7 +271,7 @@ def build(
                     sections.extend(["#### 基期 GVC 异质性动态", heterogeneity_chart])
         sections.extend(
             [
-                f"PanelOLS 政策系数对照:{'通过' if benchmark['coef_check_passed'] else '需复核'},"
+                f"PanelOLS 代码实现一致性检查:{'通过' if benchmark['coef_check_passed'] else '需复核'},"
                 f"最大政策系数差异={benchmark['max_abs_coef_diff']:.2e};"
                 f"标准误最大差异={benchmark['max_abs_se_diff']:.2e},仅作参考"
                 "(不同实现的小样本/自由度修正规则可能不同)。",
@@ -265,8 +284,8 @@ def build(
             "## 四、结论与限制",
             f"- 本报告验证了“数据 → 指标 → 回归 → 报告”闭环可自动运行(本次回归粒度:{granularity})。",
             "- 冲击变量为拟真演示面板(事件与量级参考公开资料的手工编码,"
-            "出口暴露度由 OECD ICIO 双边流向计算);"
-            "接入 PIIE/WTO 真实数据 + 官方 HS→ICIO 映射后本报告即具备研究意义。",
+            "出口暴露度由 OECD ICIO 双边流向计算)。即使未来接入真实 PIIE/WTO 数据与官方 HS→ICIO 映射，"
+            "仍需论证冲击外生性、趋势可比性、处理效应异质性并完成稳健性检验，才能形成研究结论。",
             "- 控制变量支持 ICIO 内生派生与 WDI/IMF 风格宏观 mock,用于稳健性演示;"
             "GDP 平减指数为拟真 mock,不是官方价格指数。论文级研究仍需接入真实 WDI/IMF/"
             "行业价格指数。",

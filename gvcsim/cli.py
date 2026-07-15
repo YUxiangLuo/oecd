@@ -3,8 +3,8 @@
 download  下载 OECD ICIO 原始数据(步骤1)
 validate  对某年数据做质检并打印结果(步骤3)
 compute   预计算指标与回归面板(步骤4-7 + 面板)
-regress   跑步骤13-16 的演示回归并打印系数表
-report    生成实验报告(步骤17)
+regress   跑指定 outcome 的教学实证回归并打印系数表
+report    生成实验报告(步骤16)
 benchmark 与 client-docs 客户基准数据对账,生成 reports/client_benchmark.md
 serve     启动 API 服务(供前端使用)
 classroom-init  初始化教学数据库(建库/建表/播种演示数据)
@@ -26,8 +26,8 @@ def main() -> None:
     p = sub.add_parser("compute", help="预计算指标(默认:本地所有年份)")
     p.add_argument("--years", type=int, nargs="*", default=None)
 
-    p = sub.add_parser("regress", help="演示回归(步骤13-16)")
-    p.add_argument("--step", type=int, default=13, choices=[13, 14, 15, 16])
+    p = sub.add_parser("regress", help="教学实证回归")
+    p.add_argument("--outcome", default="trade", choices=["trade", "production", "length", "network"])
     p.add_argument(
         "--granularity",
         default="industry",
@@ -91,7 +91,7 @@ def main() -> None:
             PRICE_MODE_REAL,
             RegressionDesign,
         )
-        from gvcsim.report import run_step_regression
+        from gvcsim.report import run_outcome_regression
 
         if args.controls and args.macro_controls:
             raise SystemExit("--controls 与 --macro-controls 只能选择一个")
@@ -102,22 +102,22 @@ def main() -> None:
         )
         price_mode = PRICE_MODE_REAL if args.real else PRICE_MODE_NOMINAL
         design = RegressionDesign(
-            step=args.step,
+            outcome=args.outcome,
             granularity=granularity,
             method=method,
             control_mode=control_mode,
             interaction=args.interaction,
             price_mode=price_mode,
         )
-        result = run_step_regression(
-            args.step,
+        result = run_outcome_regression(
+            args.outcome,
             granularity=granularity,
             method=method,
             control_mode=control_mode,
             interaction=args.interaction,
             price_mode=price_mode,
         )
-        print(f"步骤{args.step}:{design.depvar_label}({granularity} · {method})")
+        print(f"{args.outcome}:{design.depvar_label}({granularity} · {method})")
         print(f"价格口径:{price_mode}")
         print(f"回归样本:{design.sample_filter}")
         if args.controls or args.macro_controls:
@@ -170,10 +170,18 @@ def main() -> None:
 
         if args.reset:
             with psycopg.connect(config.PG_DSN, autocommit=True) as c:
-                c.execute("DROP TABLE IF EXISTS announcements, submissions, step_progress, accounts, classes CASCADE")
+                c.execute(
+                    "DROP TABLE IF EXISTS announcements, submissions, step_progress, accounts, classes,"
+                    " schema_migrations CASCADE"
+                )
+            classroom_db._schema_ready = False
             print("已删除旧教学表")
-        classroom_db.conn().close()  # conn() 首次调用会建表并播种
-        print(f"教学数据库就绪:{dbname}(演示账号 teacher/student,班级 GVC-DEMO)")
+        applied = classroom_db.initialize_schema()
+        if applied:
+            print("已执行教学库迁移:" + "、".join(applied))
+        else:
+            print("教学库 schema 已是最新版本")
+        print(f"教学数据库就绪:{dbname}(16 步;演示账号 teacher/student,班级 GVC-DEMO)")
 
 
 if __name__ == "__main__":

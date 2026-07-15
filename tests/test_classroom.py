@@ -6,6 +6,7 @@
 """
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 import psycopg
 import pytest
@@ -35,7 +36,9 @@ def classroom_test_db(monkeypatch):
     db._schema_ready = False
     yield
     with psycopg.connect(TEST_DSN, autocommit=True) as c:
-        c.execute("DROP TABLE IF EXISTS announcements, submissions, step_progress, accounts, classes CASCADE")
+        c.execute(
+            "DROP TABLE IF EXISTS announcements, submissions, step_progress, accounts, classes, schema_migrations CASCADE"
+        )
     db._schema_ready = False
 
 
@@ -133,6 +136,88 @@ def test_submit_review_roundtrip_and_resubmit_resets():
         ).status_code
         == 422
     )
+
+
+def _make_old_17_step_schema() -> None:
+    with psycopg.connect(TEST_DSN) as c:
+        c.execute("ALTER TABLE step_progress DROP CONSTRAINT step_progress_current_step_check")
+        c.execute("ALTER TABLE step_progress DROP CONSTRAINT step_progress_max_step_check")
+        c.execute(
+            "ALTER TABLE step_progress ADD CONSTRAINT step_progress_current_step_check"
+            " CHECK (current_step BETWEEN 1 AND 17)"
+        )
+        c.execute(
+            "ALTER TABLE step_progress ADD CONSTRAINT step_progress_max_step_check CHECK (max_step BETWEEN 1 AND 17)"
+        )
+        c.execute("DROP TABLE schema_migrations")
+
+
+def test_course_16_initialize_migrates_old_database_and_is_idempotent():
+    student, teacher = _login("student"), _login("teacher")
+    client.post("/api/classroom/progress", headers=student, json={"step": 9})
+    submission = client.post(
+        "/api/classroom/report/submit",
+        headers=student,
+        json={"year": 2020, "title": "保留报告", "design": {"method": "DID"}, "markdown": "正文"},
+    ).json()
+    client.post(
+        f"/api/classroom/submissions/{submission['id']}/grade",
+        headers=teacher,
+        json={"score": 92, "feedback": "保留评分"},
+    )
+    with psycopg.connect(TEST_DSN) as c:
+        before = {
+            table: c.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+            for table in ("classes", "accounts", "submissions", "announcements")
+        }
+        submission_before = c.execute(
+            "SELECT title, year, design, markdown, state, score, feedback, graded_by FROM submissions WHERE id = %s",
+            (submission["id"],),
+        ).fetchone()
+
+    _make_old_17_step_schema()
+    db._schema_ready = False
+    assert db.initialize_schema() == [db.COURSE_16_MIGRATION]
+    assert db.initialize_schema() == []
+
+    with psycopg.connect(TEST_DSN) as c:
+        assert c.execute("SELECT count(*) FROM step_progress").fetchone()[0] == 0
+        after = {
+            table: c.execute(f"SELECT count(*) FROM {table}").fetchone()[0]
+            for table in ("classes", "accounts", "submissions", "announcements")
+        }
+        submission_after = c.execute(
+            "SELECT title, year, design, markdown, state, score, feedback, graded_by FROM submissions WHERE id = %s",
+            (submission["id"],),
+        ).fetchone()
+        assert after == before
+        assert submission_after == submission_before
+
+    with pytest.raises(psycopg.errors.CheckViolation):
+        with psycopg.connect(TEST_DSN) as c:
+            account_id = c.execute("SELECT id FROM accounts WHERE username = 'student'").fetchone()[0]
+            c.execute(
+                "INSERT INTO step_progress(account_id, current_step, max_step) VALUES (%s, 17, 17)",
+                (account_id,),
+            )
+
+
+def test_course_16_concurrent_initialize_applies_migration_once():
+    student = _login("student")
+    client.post("/api/classroom/progress", headers=student, json={"step": 8})
+    _make_old_17_step_schema()
+    db._schema_ready = False
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: db.initialize_schema(), range(2)))
+
+    assert sorted(results, key=len) == [[], [db.COURSE_16_MIGRATION]]
+    with psycopg.connect(TEST_DSN) as c:
+        assert c.execute("SELECT count(*) FROM step_progress").fetchone()[0] == 0
+        assert (
+            c.execute("SELECT count(*) FROM schema_migrations WHERE id = %s", (db.COURSE_16_MIGRATION,)).fetchone()[0]
+            == 1
+        )
 
 
 def test_progress_keeps_max_step():

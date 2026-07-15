@@ -1,4 +1,4 @@
-"""面板回归引擎(步骤13-16 共用):双向固定效应 / DID / 事件研究。
+"""四类 outcome 共用的面板回归引擎:双向固定效应 / DID / 事件研究。
 
 教学主引擎仍为纯 numpy 实现,便于单元测试与教学展示;同时提供
 linearmodels.PanelOLS 标准库对照。三种方法共用同一个 within-OLS 核心(_within_ols):
@@ -34,6 +34,8 @@ class CoefStat:
     se: float
     t: float
     p: float
+    ci_low: float
+    ci_high: float
 
     @property
     def stars(self) -> str:
@@ -49,19 +51,35 @@ class RegressionResult:
     n_times: int
     n_clusters: int
     r2_within: float
+    depvar_mean: float
+    depvar_std: float
+    diagnostics: dict = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
             "depvar": self.depvar,
             "coefs": [
-                {"name": c.name, "coef": c.coef, "se": c.se, "t": c.t, "p": c.p, "stars": c.stars} for c in self.coefs
+                {
+                    "name": c.name,
+                    "coef": c.coef,
+                    "se": c.se,
+                    "t": c.t,
+                    "p": c.p,
+                    "stars": c.stars,
+                    "ci_low": c.ci_low,
+                    "ci_high": c.ci_high,
+                }
+                for c in self.coefs
             ],
             "n_obs": self.n_obs,
             "n_entities": self.n_entities,
             "n_times": self.n_times,
             "n_clusters": self.n_clusters,
             "r2_within": self.r2_within,
+            "depvar_mean": self.depvar_mean,
+            "depvar_std": self.depvar_std,
+            "diagnostics": self.diagnostics,
             "notes": self.notes,
         }
 
@@ -103,10 +121,15 @@ def _stable_noise(data: pd.DataFrame, cols: list[str]) -> pd.Series:
 
 
 def _attach_baseline_gvc(data: pd.DataFrame, entity: str, time: str) -> pd.DataFrame:
-    """给估计样本加基期 GVC 生产份额(每个个体可用样本最早两年均值)。"""
+    """加入按个体计算、再按个体等权中心化的基期 GVC 生产份额。
+
+    中心化使交互模型的政策主系数表示“基期 GVC 处于样本个体均值时”的效应，
+    避免把几乎没有经济含义的 BaseGVC=0 条件效应当作平均变化。
+    """
     data = data.sort_values([entity, time]).reset_index(drop=True)
-    base = data.groupby(entity, group_keys=False).head(2).groupby(entity)[BASE_GVC_COL].mean().rename(BASELINE_GVC_COL)
-    out = data.merge(base, left_on=entity, right_index=True, how="left")
+    base = data.groupby(entity, group_keys=False).head(2).groupby(entity)[BASE_GVC_COL].mean()
+    centered = (base - float(base.mean())).rename(BASELINE_GVC_COL)
+    out = data.merge(centered, left_on=entity, right_index=True, how="left")
     if out[BASELINE_GVC_COL].isna().any():
         raise ValueError("无法构造基期 GVC 生产份额交互项")
     return out
@@ -286,6 +309,76 @@ def _demean_and_prune(
     return y, X, xcols, dropped
 
 
+def _unavailable_pretrend(names: list[str], n_clusters: int, reason: str, interpretation: str) -> dict:
+    return {
+        "pretrend": {
+            "available": False,
+            "reason": reason,
+            "terms": names,
+            "statistic": None,
+            "df_num": len(names),
+            "df_denom": max(n_clusters - 1, 0),
+            "p": None,
+            "interpretation": interpretation,
+        }
+    }
+
+
+def _pretrend_diagnostic(xcols: list[str], beta: np.ndarray, covariance: np.ndarray, n_clusters: int) -> dict:
+    """联合检验事件研究主效应的冲击前系数是否为零。
+
+    该检验只能发现明显的冲击前差异，不能证明平行趋势；传统 staggered
+    TWFE 在处理效应异质时仍可能有偏。聚类自由度或限制协方差秩不足时，
+    宁可返回不可评估，也不使用广义逆制造一个看似有效的 p 值。
+    """
+    indices = [i for i, name in enumerate(xcols) if name.startswith("k=-") and "×base_gvc" not in name]
+    names = [xcols[i] for i in indices]
+    if not indices:
+        return _unavailable_pretrend(
+            names, n_clusters, "no_pre_terms", "没有可联合检验的冲击前系数，无法评估冲击前趋势。"
+        )
+
+    q = len(indices)
+    df_denom = n_clusters - 1
+    if q > df_denom:
+        return _unavailable_pretrend(
+            names,
+            n_clusters,
+            "insufficient_cluster_df",
+            f"冲击前限制数为 {q}，但仅有 {df_denom} 个聚类自由度，联合检验不可评估。",
+        )
+
+    b = beta[indices]
+    cov = covariance[np.ix_(indices, indices)]
+    rank = int(np.linalg.matrix_rank(cov, hermitian=True))
+    if rank < q:
+        return _unavailable_pretrend(
+            names,
+            n_clusters,
+            "singular_covariance",
+            f"冲击前限制协方差秩不足（{rank}/{q}），联合检验不可评估；不得据此判断没有冲击前差异。",
+        )
+
+    statistic = float((b @ np.linalg.inv(cov) @ b) / q)
+    p_value = float(stats.f.sf(statistic, q, df_denom))
+    return {
+        "pretrend": {
+            "available": True,
+            "reason": None,
+            "terms": names,
+            "statistic": statistic,
+            "df_num": q,
+            "df_denom": df_denom,
+            "p": p_value,
+            "interpretation": (
+                "未发现明显的冲击前差异；不能据此确认平行趋势假设。"
+                if p_value >= 0.05
+                else "检测到明显的冲击前差异，因果解释需谨慎。"
+            ),
+        }
+    }
+
+
 def _within_ols(
     model: PreparedModel,
     prepared: tuple[np.ndarray, np.ndarray, list[str], list[str]] | None = None,
@@ -308,13 +401,16 @@ def _within_ols(
     # 聚类稳健标准误:V = (X'X)^-1 [Σ_g (X_g'u_g)(X_g'u_g)'] (X'X)^-1,带小样本修正
     XtX_inv = np.linalg.inv(X.T @ X)
     groups = pd.unique(clu)
+    n_g = len(groups)
+    if n_g <= 1:
+        raise ValueError("聚类稳健推断至少需要 2 个聚类；当前样本只有 1 个聚类，无法计算有效的 p 值和置信区间")
     meat = np.zeros((X.shape[1], X.shape[1]))
     for g in groups:
         mask = clu == g
         s = X[mask].T @ resid[mask]
         meat += np.outer(s, s)
-    n, k, n_g = len(y), X.shape[1], len(groups)
-    correction = (n_g / (n_g - 1)) * ((n - 1) / max(n - k, 1)) if n_g > 1 else 1.0
+    n, k = len(y), X.shape[1]
+    correction = (n_g / (n_g - 1)) * ((n - 1) / max(n - k, 1))
     V = correction * XtX_inv @ meat @ XtX_inv
     se = np.sqrt(np.clip(np.diag(V), 0.0, None))
 
@@ -322,11 +418,20 @@ def _within_ols(
     ss_tot = float(y @ y)
     r2_within = 1 - ss_res / ss_tot if ss_tot > 0 else float("nan")
 
+    critical = float(stats.t.ppf(0.975, n_g - 1))
     coefs = []
     for name, b, s in zip(xcols, beta, se):
         t_stat = b / s if s > 0 else float("nan")
         coefs.append(
-            CoefStat(name=name, coef=float(b), se=float(s), t=float(t_stat), p=_cluster_t_pvalue(float(t_stat), n_g))
+            CoefStat(
+                name=name,
+                coef=float(b),
+                se=float(s),
+                t=float(t_stat),
+                p=_cluster_t_pvalue(float(t_stat), n_g),
+                ci_low=float(b - critical * s),
+                ci_high=float(b + critical * s),
+            )
         )
 
     notes = list(model.notes)
@@ -340,10 +445,20 @@ def _within_ols(
         n_times=len(pd.unique(tim)),
         n_clusters=n_g,
         r2_within=r2_within,
+        depvar_mean=float(data[depvar].mean()),
+        depvar_std=float(data[depvar].std(ddof=1)),
+        diagnostics=_pretrend_diagnostic(xcols, beta, V, n_g)
+        if model.xcols and model.xcols[0].startswith("k=")
+        else {},
         notes=[
             *notes,
             f"双向固定效应({entity} + {time}),within 变换后 OLS",
-            f"标准误按 {cluster} 聚类(sandwich,{n_g} 组),p 值使用 t({max(n_g - 1, 1)}) 小样本校正",
+            f"标准误按 {cluster} 聚类(sandwich,{n_g} 组),p 值与 95% 置信区间使用 t({max(n_g - 1, 1)}) 小样本校正",
+            *(
+                ["传统 staggered TWFE 在处理效应异质时可能有偏；本教学估计只在识别假设成立时作因果解释。"]
+                if model.xcols and (model.xcols[0].startswith("k=") or "×post" in model.xcols[0])
+                else []
+            ),
         ],
     )
 
@@ -377,7 +492,7 @@ def _prepare_fe_model(
         xcols = [*regressors, *interaction_cols, *controls]
     notes = ["连续冲击强度直接进方程(强度法)"]
     if interaction:
-        notes.append("已加入冲击×基期GVC生产份额交互项")
+        notes.append("已加入冲击×基期GVC生产份额交互项；基期GVC已按样本个体均值中心化")
     if controls:
         notes.append("已加入国家-年份控制变量")
     return PreparedModel(
@@ -589,7 +704,7 @@ def _prepare_did_model(
         f"首次处理年份(cohort):{cohort_summary}",
     ]
     if interaction:
-        notes.append("已加入处理效应×基期GVC生产份额交互项")
+        notes.append("已加入处理效应×基期GVC生产份额交互项；基期GVC已按样本个体均值中心化")
     if controls:
         notes.append("已加入国家-年份控制变量")
     return PreparedModel(
@@ -619,7 +734,7 @@ def did(
 
     treated_i = 该个体在样本期内是否曾受冲击(时间不变);
     post_it   = 年份 ≥ G_i,其中 G_i 是该个体首次受冲击年份;
-    β         = 处理组相对对照组在处理后的平均变化(ATT)。
+    β         = 处理组相对对照组在处理后的平均变化；因果解释依赖识别假设。
     处理组/对照组主效应分别被个体/时间固定效应吸收。
     """
     return _within_ols(_prepare_did_model(df, depvar, entity, time, cluster, treated_col, controls, interaction))
@@ -675,11 +790,11 @@ def _prepare_event_model(
         f"{int(y)}:{int(n)}" for y, n in timing.first_by_entity.value_counts().sort_index().items()
     )
     notes = [
-        f"事件研究:事件时间 k=year-G_i(G_i 为个体首次冲击年),基期 k={base_k:+d};k<0 的系数≈0 说明平行趋势成立",
+        f"事件研究:事件时间 k=year-G_i(G_i 为个体首次冲击年),基期 k={base_k:+d};k<0 的系数用于检查是否存在明显冲击前差异",
         f"首次处理年份(cohort):{cohort_summary}",
     ]
     if interaction:
-        notes.append("已加入动态效应×基期GVC生产份额交互项")
+        notes.append("已加入动态效应×基期GVC生产份额交互项；基期GVC已按样本个体均值中心化")
     if controls:
         notes.append("已加入国家-年份控制变量")
     return PreparedModel(
@@ -708,7 +823,8 @@ def event_study(
     """事件研究:y_it = Σ_{k≠base} β_k·1[t-G_i = k] + α_i + λ_t + ε_it。
 
     G_i 是个体 i 的首次受冲击年份;优先以冲击前一年(k=-1)为基期。
-    k<0 的系数应≈0(平行趋势检验),k≥0 的系数刻画处理效应的动态路径。
+    k<0 的系数用于检查是否存在明显冲击前差异；未拒绝联合零假设不能证明平行趋势。
+    k≥0 的系数描述相对基期的动态路径。
     """
     return _within_ols(_prepare_event_model(df, depvar, entity, time, cluster, treated_col, controls, interaction))
 
@@ -728,6 +844,10 @@ def _panelols_estimate(
     X = data[keep_xcols].astype(float)
     clusters = pd.Series(model.data[model.cluster].values, index=data.index, name=model.cluster)
 
+    n_clusters = int(model.data[model.cluster].nunique())
+    if n_clusters <= 1:
+        raise ValueError("聚类稳健推断至少需要 2 个聚类；当前样本只有 1 个聚类，无法计算有效的 p 值和置信区间")
+
     res = PanelOLS(
         y,
         X,
@@ -736,12 +856,23 @@ def _panelols_estimate(
         drop_absorbed=True,
     ).fit(cov_type="clustered", clusters=clusters)
 
+    critical = float(stats.t.ppf(0.975, n_clusters - 1))
     coefs = []
     for name, b in res.params.items():
         se = float(res.std_errors[name])
         t_stat = float(res.tstats[name])
-        pval = float(res.pvalues[name])
-        coefs.append(CoefStat(name=name, coef=float(b), se=se, t=t_stat, p=pval))
+        pval = _cluster_t_pvalue(t_stat, n_clusters)
+        coefs.append(
+            CoefStat(
+                name=name,
+                coef=float(b),
+                se=se,
+                t=t_stat,
+                p=pval,
+                ci_low=float(b - critical * se),
+                ci_high=float(b + critical * se),
+            )
+        )
 
     notes = list(model.notes)
     if dropped:
@@ -752,12 +883,16 @@ def _panelols_estimate(
         n_obs=int(res.nobs),
         n_entities=int(model.data[model.entity].nunique()),
         n_times=int(model.data[model.time].nunique()),
-        n_clusters=int(model.data[model.cluster].nunique()),
+        n_clusters=n_clusters,
         r2_within=float(res.rsquared_within),
+        depvar_mean=float(model.data[model.depvar].mean()),
+        depvar_std=float(model.data[model.depvar].std(ddof=1)),
+        diagnostics={},
         notes=[
             *notes,
             f"标准库对照:linearmodels.PanelOLS({model.entity} + {model.time})",
-            f"标准误按 {model.cluster} 聚类",
+            f"标准误按 {model.cluster} 聚类；p 值和 95% 置信区间为教学界面统一按 t({n_clusters - 1}) 重算",
+            "PanelOLS 仅用于检查实现结果一致性，不验证因果识别假设。",
         ],
     )
 

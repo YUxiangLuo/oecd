@@ -22,35 +22,41 @@ export function withQuery(path: string, params: Record<string, QueryValue>): str
   return query ? `${path}?${query}` : path;
 }
 
-function notifyAuthExpired() {
+export function shouldExpireAuth(requestToken: string | null, currentToken: string | null): boolean {
+  return requestToken !== null && requestToken === currentToken;
+}
+
+function notifyAuthExpired(requestToken: string | null) {
+  if (!shouldExpireAuth(requestToken, localStorage.getItem(AUTH_TOKEN_KEY))) return;
   localStorage.removeItem(AUTH_TOKEN_KEY);
   window.dispatchEvent(new Event("gvcsim-auth-expired"));
 }
 
-function authHeaders(extra?: HeadersInit): HeadersInit {
-  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+function authHeaders(token: string | null, extra?: HeadersInit): HeadersInit {
   return token ? { ...extra, Authorization: `Bearer ${token}` } : (extra ?? {});
 }
 
 async function get<T>(url: string): Promise<T> {
-  const resp = await fetch(url, { headers: authHeaders() });
+  const requestToken = localStorage.getItem(AUTH_TOKEN_KEY);
+  const resp = await fetch(url, { headers: authHeaders(requestToken) });
   if (!resp.ok) {
     const body = await resp.json().catch(() => null);
-    if (resp.status === 401) notifyAuthExpired();
+    if (resp.status === 401) notifyAuthExpired(requestToken);
     throw new ApiError(resp.status, body?.detail ?? `${resp.status} ${resp.statusText}`);
   }
   return resp.json();
 }
 
 async function post<T>(url: string, body?: unknown, method = "POST"): Promise<T> {
+  const requestToken = localStorage.getItem(AUTH_TOKEN_KEY);
   const resp = await fetch(url, {
     method,
-    headers: authHeaders({ "Content-Type": "application/json" }),
+    headers: authHeaders(requestToken, { "Content-Type": "application/json" }),
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!resp.ok) {
     const payload = await resp.json().catch(() => null);
-    if (resp.status === 401) notifyAuthExpired();
+    if (resp.status === 401) notifyAuthExpired(requestToken);
     throw new ApiError(resp.status, payload?.detail ?? `${resp.status} ${resp.statusText}`);
   }
   return resp.json();
@@ -127,7 +133,7 @@ export const api = {
     ),
   regressionOptions: () => get<import("./types").RegressionOptions>("/api/regression/options"),
   regressionDesign: (params: {
-    step: number;
+    outcome: import("./types").RegressionOutcome;
     granularity: string;
     shockType?: string;
     method: string;
@@ -137,7 +143,7 @@ export const api = {
     scenario?: string;
   }) => {
     return get<import("./types").RegressionDesignInfo>(withQuery("/api/regression/design", {
-      step: params.step,
+      outcome: params.outcome,
       granularity: params.granularity,
       method: params.method,
       shock_type: params.shockType,
@@ -148,7 +154,7 @@ export const api = {
     }));
   },
   runRegression: async (
-    step: number,
+    outcome: import("./types").RegressionOutcome,
     granularity: string,
     shockType: string,
     method: string,
@@ -158,7 +164,7 @@ export const api = {
     scenario: string,
   ) => {
     return post<import("./types").RegressionResponse>("/api/regression/run", {
-        step,
+        outcome,
         granularity,
         shock_type: shockType,
         method,
@@ -169,7 +175,7 @@ export const api = {
     });
   },
   placeboRegression: async (
-    step: number,
+    outcome: import("./types").RegressionOutcome,
     granularity: string,
     shockType: string,
     method: string,
@@ -180,7 +186,7 @@ export const api = {
     nDraws = 40,
   ) => {
     return post<import("./types").PlaceboResponse>("/api/regression/placebo", {
-        step,
+        outcome,
         granularity,
         shock_type: shockType,
         method,

@@ -142,9 +142,9 @@ export function StudentsTab({ initialClassId, reachedStep, onClearReachedStep }:
                   {s.max_step ? (
                     <span className="step-cell">
                       <span className="mini-track">
-                        <span className="mini-bar" style={{ width: `${(s.max_step / 17) * 100}%` }} />
+                        <span className="mini-bar" style={{ width: `${(s.max_step / 16) * 100}%` }} />
                       </span>
-                      {s.max_step}/17
+                      {s.max_step}/16
                     </span>
                   ) : (
                     <span className="muted">未开始</span>

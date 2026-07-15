@@ -13,6 +13,23 @@ jobs:
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: alice
+          POSTGRES_PASSWORD: "111111"
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U alice -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      GVCSIM_PG_DSN: postgresql://alice:111111@127.0.0.1:5432/gvclab_test
+      GVCSIM_PG_DSN_TEST: postgresql://alice:111111@127.0.0.1:5432/gvclab_test
     steps:
       - uses: actions/checkout@v7
       - name: Set up Python
@@ -25,6 +42,8 @@ jobs:
           enable-cache: true
       - name: Install Python dependencies
         run: uv sync --locked --group dev
+      - name: Verify PostgreSQL for migration tests
+        run: uv run python -c "import psycopg; psycopg.connect('postgresql://alice:111111@127.0.0.1:5432/postgres').close()"
       - name: Ruff format check
         run: uv run ruff format --check .
       - name: Ruff lint

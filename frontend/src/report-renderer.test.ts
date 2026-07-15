@@ -14,6 +14,12 @@ describe("parseReportChart", () => {
     expect(parseReportChart(JSON.stringify({
       version: 1,
       type: "event-study",
+      points: [{ label: "k=0", value: -0.1, ci_low: -0.15, ci_high: -0.05 }],
+    }))).toMatchObject({ type: "event-study" });
+    // 已持久化的课程升级前 v1 报告仍可查看；新报告由后端发送 t(G−1) CI。
+    expect(parseReportChart(JSON.stringify({
+      version: 1,
+      type: "event-study",
       points: [{ label: "k=0", value: -0.1, se: 0.02 }],
     }))).toMatchObject({ type: "event-study" });
   });
@@ -24,7 +30,22 @@ describe("parseReportChart", () => {
     expect(parseReportChart(JSON.stringify({
       version: 1,
       type: "event-study",
-      points: [{ label: "k=0", value: 1, se: -1 }],
+      points: [{ label: "k=0", value: 1, se: -0.1 }],
+    }))).toBeNull();
+    expect(parseReportChart(JSON.stringify({
+      version: 1,
+      type: "event-study",
+      points: [{ label: "k=0", value: 1, ci_low: 2, ci_high: 3 }],
+    }))).toBeNull();
+    expect(parseReportChart(JSON.stringify({
+      version: 1,
+      type: "event-study",
+      points: [{ label: "k=0", value: 1, ci_low: 0.5 }],
+    }))).toBeNull();
+    expect(parseReportChart(JSON.stringify({
+      version: 1,
+      type: "event-study",
+      points: [{ label: "k=0", value: 1, se: 0.1, ci_low: 0.5, ci_high: 1.5 }],
     }))).toBeNull();
     expect(parseReportChart(JSON.stringify({
       version: 1,

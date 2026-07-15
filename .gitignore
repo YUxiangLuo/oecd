@@ -53,6 +53,9 @@ leontief_inverse_*.csv
 /reports/
 dogfood-output/
 
+# Local agent orchestration artifacts
+.pi-subagents/
+
 # Frontend
 frontend/node_modules/
 frontend/dist/

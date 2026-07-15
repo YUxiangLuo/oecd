@@ -2,9 +2,9 @@
 
 设计取舍(教学系统定位,刻意保持简单):
   - 每次操作短连接,不引入连接池;班级规模(几十人)下开销可忽略
-  - 无迁移工具:CREATE TABLE IF NOT EXISTS 懒建表,accounts 为空时播种演示数据
+  - CREATE TABLE IF NOT EXISTS 懒建表；最小 schema_migrations 记录破坏性课程升级
   - 数据库不可用统一抛 Unavailable:API 层转 503,认证层回退演示账号,
-    核心 17 步实验流程完全不依赖本库
+    核心 16 步实验流程完全不依赖本库
   - 每账号独立随机盐 + PBKDF2 哈希;停用账号不吊销已发令牌(≤12h 自然过期)
 """
 
@@ -18,7 +18,9 @@ from psycopg.rows import dict_row
 
 from gvcsim import config
 
-MAX_STEP = 17
+MAX_STEP = 16
+COURSE_16_MIGRATION = "2026_course_16_reset_progress"
+_SCHEMA_LOCK_ID = 736_861_016  # 固定事务级 advisory lock，串行化首次建表/迁移/播种
 
 
 class Unavailable(Exception):
@@ -30,6 +32,10 @@ def hash_password(password: str, salt_hex: str) -> str:
 
 
 _SCHEMA = """
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  id         text PRIMARY KEY,
+  applied_at timestamptz NOT NULL DEFAULT now()
+);
 CREATE TABLE IF NOT EXISTS classes (
   id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   name         text NOT NULL,
@@ -54,8 +60,8 @@ CREATE TABLE IF NOT EXISTS accounts (
 );
 CREATE TABLE IF NOT EXISTS step_progress (
   account_id   bigint PRIMARY KEY REFERENCES accounts(id),
-  current_step int NOT NULL CHECK (current_step BETWEEN 1 AND 17),
-  max_step     int NOT NULL CHECK (max_step BETWEEN 1 AND 17),
+  current_step int NOT NULL CONSTRAINT step_progress_current_step_check CHECK (current_step BETWEEN 1 AND 16),
+  max_step     int NOT NULL CONSTRAINT step_progress_max_step_check CHECK (max_step BETWEEN 1 AND 16),
   updated_at   timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS submissions (
@@ -85,6 +91,48 @@ CREATE TABLE IF NOT EXISTS announcements (
 _schema_ready = False
 
 
+def _lock_schema(c: psycopg.Connection[dict[str, Any]]) -> None:
+    """在当前事务结束前持有全局 schema 锁；同一事务重复获取是安全的。"""
+    c.execute("SELECT pg_advisory_xact_lock(%s)", (_SCHEMA_LOCK_ID,))
+
+
+def migrate_course_16(c: psycopg.Connection[dict[str, Any]]) -> bool:
+    """一次性清空旧课程进度并把约束切到 1..16；其他教学表保持不变。"""
+    _lock_schema(c)
+    if c.execute("SELECT 1 FROM schema_migrations WHERE id = %s", (COURSE_16_MIGRATION,)).fetchone():
+        return False
+    c.execute("TRUNCATE TABLE step_progress")
+    c.execute("ALTER TABLE step_progress DROP CONSTRAINT IF EXISTS step_progress_current_step_check")
+    c.execute("ALTER TABLE step_progress DROP CONSTRAINT IF EXISTS step_progress_max_step_check")
+    c.execute(
+        "ALTER TABLE step_progress ADD CONSTRAINT step_progress_current_step_check"
+        " CHECK (current_step BETWEEN 1 AND 16)"
+    )
+    c.execute("ALTER TABLE step_progress ADD CONSTRAINT step_progress_max_step_check CHECK (max_step BETWEEN 1 AND 16)")
+    c.execute("INSERT INTO schema_migrations(id) VALUES (%s)", (COURSE_16_MIGRATION,))
+    return True
+
+
+def initialize_schema() -> list[str]:
+    """建表、执行幂等迁移并播种；返回本次实际执行的 migration id。"""
+    global _schema_ready
+    c = _connect()
+    applied: list[str] = []
+    try:
+        with c:
+            # 先加锁再 CREATE TABLE，避免两个首次请求同时创建系统表或播种账号。
+            _lock_schema(c)
+            c.execute(_SCHEMA)
+            if migrate_course_16(c):
+                applied.append(COURSE_16_MIGRATION)
+            _seed_if_empty(c)
+    except psycopg.Error as e:
+        c.close()
+        raise Unavailable(str(e)) from e
+    _schema_ready = True
+    return applied
+
+
 def _connect() -> psycopg.Connection[dict[str, Any]]:
     try:
         return psycopg.connect(config.PG_DSN, row_factory=dict_row, connect_timeout=3)
@@ -93,20 +141,10 @@ def _connect() -> psycopg.Connection[dict[str, Any]]:
 
 
 def conn() -> psycopg.Connection[dict[str, Any]]:
-    """拿一个已保证建表的连接(with 语句用完即关)。"""
-    global _schema_ready
-    c = _connect()
+    """拿一个已保证建表并完成迁移的连接(with 语句用完即关)。"""
     if not _schema_ready:
-        try:
-            with c:
-                c.execute(_SCHEMA)
-                _seed_if_empty(c)
-            _schema_ready = True
-            c = _connect()
-        except psycopg.Error as e:
-            c.close()
-            raise Unavailable(str(e)) from e
-    return c
+        initialize_schema()
+    return _connect()
 
 
 def _seed_if_empty(c: psycopg.Connection[dict[str, Any]]) -> None:
@@ -132,7 +170,7 @@ def _seed_if_empty(c: psycopg.Connection[dict[str, Any]]) -> None:
         (
             None,
             "欢迎使用 GVC 实验系统",
-            "请按课程大纲完成 17 步实验;完成步骤 17 后,在报告页点击「提交报告给老师」,教师评阅后可在同一页面查看得分与评语。",
+            "请按课程大纲完成 16 步实验;完成步骤 16 后,在报告页点击「提交报告给老师」,教师评阅后可在同一页面查看得分与评语。",
             "teacher",
         ),
     )

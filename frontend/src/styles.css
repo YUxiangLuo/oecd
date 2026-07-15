@@ -645,7 +645,7 @@ button { font-family: inherit; cursor: pointer; }
 }
 .funnel-point { cursor: pointer; }
 
-/* ---------- 步骤12-16 回归页面(讲解卡 + 设计选择 + 结果区) ---------- */
+/* ---------- 步骤12–15 回归工作台 ---------- */
 
 .section-head {
   display: flex; align-items: center; gap: 8px; margin: 26px 0 14px;
@@ -1175,7 +1175,7 @@ button { font-family: inherit; cursor: pointer; }
   color: #4b47e0; font-size: 11.5px; font-weight: 600;
 }
 
-/* ---------- 步骤17 提交与评阅卡 ---------- */
+/* ---------- 步骤16 提交与评阅卡 ---------- */
 .submit-card { margin-bottom: 14px; }
 .review-result { display: flex; gap: 18px; align-items: flex-start; margin: 8px 0; }
 .review-score {
@@ -1183,3 +1183,60 @@ button { font-family: inherit; cursor: pointer; }
   line-height: 1; padding: 10px 14px; background: #f0faf4; border-radius: 12px;
 }
 .review-score span { font-size: 13px; margin-left: 3px; color: #1f8a70; }
+
+/* ---------- 16步回归教学工作台 ---------- */
+.reg-workbench { display: grid; gap: 12px; }
+.reg-question-card, .reg-compare-card, .reg-run-card, .reg-section-card, .reg-guide-card, .technical-details {
+  border: 1px solid #e5e7ef; border-radius: 12px; background: #fff; padding: 14px 16px;
+}
+.reg-question-card { background: linear-gradient(135deg, #f7f7ff, #fff); border-color: #dcdaf8; }
+.reg-question-main h3, .reg-compare-card h3, .reg-guide-card h3 { margin: 5px 0 6px; font-size: 18px; line-height: 1.4; }
+.reg-question-main p, .reg-compare-card p, .reg-guide-card p { margin: 4px 0; line-height: 1.65; }
+.reg-section-step { color: #4b47e0; font-size: 11px; font-weight: 800; letter-spacing: .04em; }
+.metric-facts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.metric-facts span { display: inline-flex; gap: 5px; padding: 5px 8px; background: #fff; border: 1px solid #e3e4ee; border-radius: 7px; font-size: 11.5px; }
+.lesson-details { margin-top: 9px; border-top: 1px dashed #d9dbea; padding-top: 8px; font-size: 12px; }
+.lesson-details summary, .advanced-settings summary, .technical-details > summary { cursor: pointer; color: #4b47e0; font-weight: 700; }
+.reg-compare-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; }
+.did-comparison { width: 211px; text-align: center; font-size: 11px; }
+.did-table { width: 100%; border-collapse: separate; border-spacing: 3px; }
+.did-table th, .did-table td { padding: 5px; border-radius: 5px; background: #f4f4fb; font-weight: 600; }
+.did-table thead th:first-child { background: transparent; }
+.did-formula { color: #4b47e0; font-weight: 700; padding-top: 1px; }
+.reg-run-card { box-shadow: 0 5px 18px rgba(35,39,60,.06); }
+.reg-boundary { margin: 7px 0 10px; padding: 7px 10px; border-radius: 7px; background: #fff8e6; color: #75521a; font-size: 11.5px; }
+.basic-settings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.basic-settings > div { border: 1px solid #e6e7ef; border-radius: 8px; padding: 7px 9px; }
+.basic-settings > div > span { display: block; margin-bottom: 5px; color: #596173; font-size: 11.5px; font-weight: 700; }
+.basic-settings .pill-row { gap: 4px; }
+.basic-settings .pill { padding: 4px 7px; font-size: 11.5px; }
+.advanced-settings { margin: 10px 0; border: 1px dashed #d9dbe7; border-radius: 8px; padding: 8px 10px; }
+.challenge-note { margin-top: 8px; padding: 8px 10px; border-radius: 7px; background: #fff4e8; color: #8c4c08; font-size: 11.5px; }
+.run-summary { margin: 9px 0 7px; font-size: 11.5px; color: #596173; }
+.verdict-anchor { scroll-margin-top: 12px; }
+.verdict-card { border: 1px solid #cbc9f4; border-left: 5px solid #4b47e0; border-radius: 12px; background: #f8f8ff; padding: 16px 18px; }
+.verdict-card h3 { margin: 5px 0 10px; font-size: 21px; }
+.verdict-kicker { color: #4b47e0; font-weight: 800; font-size: 11px; letter-spacing: .04em; }
+.verdict-insufficient { border-left-color: #b27b18; background: #fffaf0; }
+.verdict-negative, .verdict-positive { border-left-color: #4b47e0; }
+.verdict-metrics { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; margin: 10px 0; }
+.verdict-metrics > div { background: #fff; border: 1px solid #e4e4ef; border-radius: 8px; padding: 9px 11px; }
+.verdict-metrics span { display: block; color: #596173; font-size: 11px; }
+.verdict-metrics b { display: block; margin-top: 3px; font-size: 14px; color: #303747; }
+.verdict-card p { margin: 6px 0; line-height: 1.6; }
+.verdict-boundary { color: #8a6b2a; font-size: 11.5px; }
+.stale-result { margin: 8px 0; padding: 7px 9px; border-radius: 7px; background: #fff0db; color: #8b4f00; font-weight: 700; font-size: 11.5px; }
+.reg-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.reg-section-heading h3 { margin: 4px 0; }
+.comparison-warning { margin: 8px 0; padding: 8px 10px; border-radius: 7px; background: #fff8e6; color: #75521a; font-size: 11.5px; }
+.trust-item { margin-top: 10px; padding: 10px 12px; background: #f8f9fc; border-radius: 8px; }
+.trust-item p { margin: 5px 0; line-height: 1.6; }
+.placebo-verdict { margin: 10px 0; padding: 9px 11px; background: #eeefff; border-radius: 7px; color: #35328d; font-weight: 600; }
+.reg-guide-card { background: #f4f8ff; border-color: #d8e3f7; }
+.technical-details { margin-top: 2px; }
+.technical-details[open] > summary { margin-bottom: 12px; }
+.technical-details h3 { margin: 16px 0 7px; }
+@media (max-width: 1200px) {
+  .basic-settings { grid-template-columns: 1fr; }
+  .reg-compare-card { grid-template-columns: 1fr; }
+}

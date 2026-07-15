@@ -21,7 +21,7 @@ REPORTS_DIR = ROOT / "reports"
 # ICIO2023 版本覆盖的年份范围(pymrio download_oecd 支持的区间)
 SUPPORTED_YEARS = range(1995, 2021)
 
-# 教学(班级/学生/评阅)数据库连接串;核心 17 步流程不依赖它,连不上时相关接口返回 503
+# 教学(班级/学生/评阅)数据库连接串;核心 16 步流程不依赖它,连不上时相关接口返回 503
 PG_DSN = os.environ.get("GVCSIM_PG_DSN", "postgresql://alice:111111@127.0.0.1:5432/gvclab")
 
 

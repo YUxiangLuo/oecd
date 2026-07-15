@@ -1,16 +1,17 @@
-import type { PlaceboResponse } from "../../types";
+import type { PlaceboResponse, PretrendDiagnostic } from "../../types";
 import { CAT, cardStyle, useTip } from "../shared";
 
 /* --------------------------- 事件研究:系数时间轴 --------------------------- */
 
-export function EventStudyChart({ coefs, notes, title, seriesLabel }: {
-  coefs: { name: string; coef: number; se: number }[];
+export function EventStudyChart({ coefs, notes, title, seriesLabel, pretrend }: {
+  coefs: { name: string; coef: number; ci_low: number; ci_high: number }[];
   notes: string[];
   title?: string;
   seriesLabel?: string;
+  pretrend?: PretrendDiagnostic;
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
-  const pts = coefs.map((c) => ({ ...c, lo: c.coef - 1.96 * c.se, hi: c.coef + 1.96 * c.se }));
+  const pts = coefs.map((c) => ({ ...c, lo: c.ci_low, hi: c.ci_high }));
   const W = 640, H = 240, padL = 56, padR = 24, padT = 18, padB = 34;
   const ext = Math.max(...pts.map((p) => Math.max(Math.abs(p.lo), Math.abs(p.hi))), 1e-6) * 1.15;
   const x = (i: number) => padL + ((i + 0.5) / pts.length) * (W - padL - padR);
@@ -21,11 +22,12 @@ export function EventStudyChart({ coefs, notes, title, seriesLabel }: {
       <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050", marginBottom: 6 }}>
         {title ?? "事件研究:处理效应的动态路径"}(点 = 系数,须 = 95% 置信区间)
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ display: "block", width: "100%", height: "auto" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title ?? "事件研究动态路径"}：点为系数，竖线为 95% 置信区间`} style={{ display: "block", width: "100%", height: "auto" }}>
+        <title>{title ?? "事件研究动态路径"}：点为系数，竖线为 95% 置信区间</title>
         {[-ext, -ext / 2, ext / 2, ext].map((v) => (
           <g key={v}>
             <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="#f0f1f6" strokeWidth={1} />
-            <text x={padL - 8} y={y(v) + 3.5} textAnchor="end" fontSize={10} fill="#b0b5c2"
+            <text x={padL - 8} y={y(v) + 3.5} textAnchor="end" fontSize={11} fill="#747b8d"
               fontFamily="inherit" style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(v)}</text>
           </g>
         ))}
@@ -52,15 +54,16 @@ export function EventStudyChart({ coefs, notes, title, seriesLabel }: {
           </g>
         ))}
       </svg>
-      <div style={{ marginTop: 6, fontSize: 11, color: "#a2a8b6" }}>
-        {notes.find((n) => n.includes("基期")) ?? "基期为冲击前一年(系数归一为 0,不在图中)"}
+      <div style={{ marginTop: 6, fontSize: 11, color: "#747b8d", lineHeight: 1.65 }}>
+        <div>{notes.find((n) => n.includes("基期")) ?? "基期为冲击前一年（系数归一为 0，不在图中）"}</div>
+        {pretrend && <div><b>冲击前趋势检查：</b>{pretrend.interpretation}</div>}
       </div>
       {Tip}
     </div>
   );
 }
 
-/* -------------------------- 步骤13-16:安慰剂分布 -------------------------- */
+/* -------------------------- 步骤12–15：安慰剂分布 -------------------------- */
 
 export function PlaceboChart({ data }: { data: PlaceboResponse["placebo"] }) {
   const values = data.placebo_coefs;
@@ -84,9 +87,10 @@ export function PlaceboChart({ data }: { data: PlaceboResponse["placebo"] }) {
   return (
     <div style={{ ...cardStyle, marginTop: 14 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050", marginBottom: 6 }}>
-        安慰剂检验:随机伪处理组系数分布
+        安慰剂检验：随机伪处理组估计值分布
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ display: "block", width: "100%", height: "auto" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="安慰剂检验随机伪处理组估计值分布；竖线为原始分组估计值" style={{ display: "block", width: "100%", height: "auto" }}>
+        <title>安慰剂检验随机伪处理组估计值分布；竖线为原始分组估计值</title>
         {zeroIn && <line x1={x(0)} x2={x(0)} y1={m.t} y2={H - m.b} stroke="#cfd3dd" strokeDasharray="4 4" />}
         {counts.map((c, i) => {
           const x0 = m.l + (i / bins) * plotW + 2;
@@ -106,7 +110,7 @@ export function PlaceboChart({ data }: { data: PlaceboResponse["placebo"] }) {
         })}
         <line x1={x(data.true_coef)} x2={x(data.true_coef)} y1={m.t - 4} y2={H - m.b} stroke={CAT[5]} strokeWidth={2.5} />
         <text x={x(data.true_coef)} y={m.t - 8} textAnchor="middle" fontSize={11} fill={CAT[5]} fontWeight={700}>
-          真系数
+          原始分组估计值
         </text>
         {[lo, 0, hi].filter((v, i, arr) => (i === 0 || v !== arr[i - 1]) && v >= lo && v <= hi).map((v) => (
           <text key={v} x={x(v)} y={H - 14} textAnchor="middle" fontSize={10.5} fill="#8a90a0">
@@ -128,7 +132,7 @@ export function PlaceboChart({ data }: { data: PlaceboResponse["placebo"] }) {
   );
 }
 
-/* --------------------- 步骤13-16:系数森林图(横向 CI) --------------------- */
+/* --------------------- 步骤12–15：系数森林图（横向 CI） --------------------- */
 
 /** 长系数名折成两行:优先在最靠近中点的分隔符(×、_、空格)处断行,避免截断记号。 */
 function splitCoefName(name: string): string[] {
@@ -147,10 +151,10 @@ function splitCoefName(name: string): string[] {
 
 /** 点=估计值,横条=95% 置信区间,竖线=0 轴;负效应红、正效应绿(与系数表一致)。 */
 export function CoefForestChart({ coefs }: {
-  coefs: { name: string; coef: number; se: number; p: number; stars: string }[];
+  coefs: { name: string; coef: number; ci_low: number; ci_high: number; p: number; stars: string }[];
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
-  const pts = coefs.map((c) => ({ ...c, lo: c.coef - 1.96 * c.se, hi: c.coef + 1.96 * c.se }));
+  const pts = coefs.map((c) => ({ ...c, lo: c.ci_low, hi: c.ci_high }));
   const rowH = 48, padT = 14, padB = 30, labelW = 132, padR = 18;
   const W = 380, H = padT + pts.length * rowH + padB;
   const plotW = W - labelW - padR;
@@ -167,17 +171,17 @@ export function CoefForestChart({ coefs }: {
   return (
     <div ref={wrapRef} style={{ ...cardStyle, flex: "1 1 260px", minWidth: 260 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050" }}>系数图</div>
-      <div style={{ fontSize: 11, color: "#a2a8b6", marginBottom: 6 }}>点 = 估计值 · 横线 = 95% 置信区间</div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ display: "block", width: "100%", height: "auto" }}>
+      <div style={{ fontSize: 11, color: "#747b8d", marginBottom: 6 }}>点 = 估计值 · 横线 = 95% 置信区间</div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="政策系数及 95% 置信区间" style={{ display: "block", width: "100%", height: "auto" }}>
+        <title>政策系数及 95% 置信区间；完整数值见技术细节表</title>
         <line x1={x(0)} x2={x(0)} y1={padT} y2={H - padB} stroke="#e0e3ea" strokeWidth={1} />
         {[-ext, 0, ext].map((v) => (
-          <text key={v} x={x(v)} y={H - padB + 16} textAnchor="middle" fontSize={10} fill="#b0b5c2"
+          <text key={v} x={x(v)} y={H - padB + 16} textAnchor="middle" fontSize={11} fill="#747b8d"
             style={{ fontVariantNumeric: "tabular-nums" }}>{v === 0 ? "0" : fmt(v)}</text>
         ))}
         {pts.map((p, i) => {
-          const neg = p.coef < 0;
-          const dot = neg ? "#d1462f" : "#137a41";
-          const ci = neg ? "#f0b3a4" : "#a9d9bc";
+          const dot = "#4b47e0";
+          const ci = "#aaa7eb";
           const parts = splitCoefName(p.name);
           return (
             <g key={p.name}

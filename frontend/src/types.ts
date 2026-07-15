@@ -1,8 +1,11 @@
+export type RegressionOutcome = "trade" | "production" | "length" | "network";
+
 export interface Step {
   n: number;
   stage: number;
-  lab: "db" | "shock" | "qc" | "ind" | "viz" | "rgd" | "reg" | "rep";
-  status: "done" | "demo" | "partial" | "planned";
+  lab: "db" | "shock" | "qc" | "ind" | "viz" | "reg" | "rep";
+  regression_outcome?: RegressionOutcome;
+  status: "done" | "demo";
   title: string;
   goal: string;
   concept: string;
@@ -192,6 +195,8 @@ export interface CoefStat {
   t: number;
   p: number;
   stars: string;
+  ci_low: number;
+  ci_high: number;
 }
 
 export interface RegressionOptions {
@@ -202,11 +207,11 @@ export interface RegressionOptions {
   price_modes: string[];
   scenarios: string[];
   scenario_labels: Record<string, string>;
-  steps: Record<string, string>; // 步骤号 → 被解释变量中文名
+  outcomes: Record<RegressionOutcome, string>;
 }
 
 export interface RegressionDesignInfo {
-  step: number;
+  outcome: RegressionOutcome;
   depvar: string;
   depvar_label: string;
   granularity: string;
@@ -237,6 +242,17 @@ export interface EquationPart {
   meta_key?: string;
 }
 
+export interface PretrendDiagnostic {
+  available: boolean;
+  reason: string | null;
+  terms: string[];
+  statistic: number | null;
+  df_num: number;
+  df_denom: number;
+  p: number | null;
+  interpretation: string;
+}
+
 export interface RegressionResponse {
   design: RegressionDesignInfo;
   result: {
@@ -246,6 +262,9 @@ export interface RegressionResponse {
     n_times: number;
     n_clusters: number;
     r2_within: number;
+    depvar_mean: number;
+    depvar_std: number;
+    diagnostics: { pretrend?: PretrendDiagnostic };
     notes: string[];
   };
   benchmark: {

@@ -4,7 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 type ChartItem = { label: string; value: number };
-type ChartPoint = ChartItem & { se?: number };
+type ChartPoint = ChartItem & { se?: number; ci_low?: number; ci_high?: number };
 
 type ReportChart =
   | {
@@ -48,9 +48,17 @@ function isItem(value: unknown): value is ChartItem {
 function isPoint(value: unknown): value is ChartPoint {
   if (!value || typeof value !== "object") return false;
   const point = value as Record<string, unknown>;
-  if (!hasOnlyKeys(point, ["label", "value", "se"])) return false;
+  if (!hasOnlyKeys(point, ["label", "value", "se", "ci_low", "ci_high"])) return false;
   if (!isLabel(point.label) || typeof point.value !== "number" || !Number.isFinite(point.value)) return false;
-  return point.se == null || (typeof point.se === "number" && Number.isFinite(point.se) && point.se >= 0);
+  const hasCi = point.ci_low != null || point.ci_high != null;
+  if (hasCi) {
+    return typeof point.ci_low === "number" && Number.isFinite(point.ci_low)
+      && typeof point.ci_high === "number" && Number.isFinite(point.ci_high)
+      && point.ci_low <= point.value && point.value <= point.ci_high
+      && point.se == null;
+  }
+  // 仅用于渲染课程升级前已经持久化的 v1 报告；新报告始终发送后端 t(G−1) CI。
+  return typeof point.se === "number" && Number.isFinite(point.se) && point.se >= 0;
 }
 
 /** Parse only the versioned report-chart schema; arbitrary JSON/HTML never reaches the DOM. */
@@ -131,8 +139,8 @@ function EventChart({ chart }: { chart: Extract<ReportChart, { type: "event-stud
   const m = { l: 66, r: 26, t: 22, b: 46 };
   const intervals = chart.points.map((point) => ({
     ...point,
-    lo: point.value - 1.96 * (point.se ?? 0),
-    hi: point.value + 1.96 * (point.se ?? 0),
+    lo: point.ci_low ?? point.value - 1.96 * (point.se ?? 0),
+    hi: point.ci_high ?? point.value + 1.96 * (point.se ?? 0),
   }));
   const extent = Math.max(...intervals.flatMap((point) => [Math.abs(point.lo), Math.abs(point.hi)]), 1e-6) * 1.12;
   const plotW = W - m.l - m.r;
@@ -151,7 +159,7 @@ function EventChart({ chart }: { chart: Extract<ReportChart, { type: "event-stud
         ))}
         {intervals.map((point, i) => (
           <g key={`${point.label}-${i}`}>
-            {point.se != null && <line x1={x(i)} x2={x(i)} y1={y(point.lo)} y2={y(point.hi)} stroke="#7773df" strokeWidth={2} />}
+            <line x1={x(i)} x2={x(i)} y1={y(point.lo)} y2={y(point.hi)} stroke="#7773df" strokeWidth={2} />
             <circle cx={x(i)} cy={y(point.value)} r={5} fill="#4b47e0" stroke="#fff" strokeWidth={2} />
             <text x={x(i)} y={H - m.b + 18} textAnchor="middle" fontSize={11} fill="#596173">{point.label}</text>
           </g>

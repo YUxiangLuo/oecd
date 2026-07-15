@@ -30,20 +30,34 @@ def _stub_report_dependencies(monkeypatch):
 
     def estimate(panel, design):
         assert panel is regression_panel
-        calls.append(design.step)
+        calls.append(design.outcome)
         result = RegressionResult(
             depvar=design.depvar,
             coefs=[
-                CoefStat("k=-2", -0.1, 0.02, -5.0, 0.01),
-                CoefStat("k=0", 0.2, 0.03, 6.0, 0.01),
-                CoefStat("k=-2×base_gvc", -0.05, 0.01, -5.0, 0.01),
-                CoefStat("k=0×base_gvc", 0.1, 0.02, 5.0, 0.01),
+                CoefStat("k=-2", -0.1, 0.02, -5.0, 0.01, -0.15, -0.05),
+                CoefStat("k=0", 0.2, 0.03, 6.0, 0.01, 0.13, 0.27),
+                CoefStat("k=-2×base_gvc", -0.05, 0.01, -5.0, 0.01, -0.08, -0.02),
+                CoefStat("k=0×base_gvc", 0.1, 0.02, 5.0, 0.01, 0.05, 0.15),
             ],
             n_obs=100,
             n_entities=20,
             n_times=5,
             n_clusters=10,
             r2_within=0.5,
+            depvar_mean=0.2,
+            depvar_std=0.1,
+            diagnostics={
+                "pretrend": {
+                    "available": True,
+                    "reason": None,
+                    "terms": ["k=-2"],
+                    "statistic": 6.25,
+                    "df_num": 1,
+                    "df_denom": 9,
+                    "p": 0.034,
+                    "interpretation": "检测到明显的冲击前差异，因果解释需谨慎。",
+                }
+            },
         )
         benchmark = {
             "coef_check_passed": True,
@@ -58,13 +72,13 @@ def _stub_report_dependencies(monkeypatch):
     return calls
 
 
-def test_build_is_pure_and_runs_one_joint_estimate_per_step(tmp_path: Path, monkeypatch):
+def test_build_is_pure_and_runs_one_joint_estimate_per_outcome(tmp_path: Path, monkeypatch):
     calls = _stub_report_dependencies(monkeypatch)
     monkeypatch.setattr(report, "REPORTS_DIR", tmp_path)
 
     document = report.build(2020, method="事件研究", interaction=True)
 
-    assert calls == [13, 14, 15, 16]
+    assert calls == ["trade", "production", "length", "network"]
     assert document.suggested_filename == "experiment_report_2020.md"
     assert list(tmp_path.iterdir()) == []
     assert "<svg" not in document.markdown
@@ -80,6 +94,22 @@ def test_build_is_pure_and_runs_one_joint_estimate_per_step(tmp_path: Path, monk
     )
     assert sum("主政策效应" in payload["title"] for payload in event_payloads) == 4
     assert sum("异质性" in payload["title"] for payload in event_payloads) == 4
+    assert all(
+        set(point) == {"label", "value", "ci_low", "ci_high"}
+        for payload in event_payloads
+        for point in payload["points"]
+    )
+    assert event_payloads[0]["points"][0] == {
+        "label": "k=-2",
+        "value": -0.1,
+        "ci_low": -0.15,
+        "ci_high": -0.05,
+    }
+    assert document.markdown.count("95% 置信区间") == 4
+    assert "[-0.1500, -0.0500]" in document.markdown
+    assert document.markdown.count("冲击前趋势联合检验") == 4
+    assert "因果解释需谨慎" in document.markdown
+    assert "即具备研究意义" not in document.markdown
 
 
 def test_generate_keeps_cli_file_output(tmp_path: Path, monkeypatch):

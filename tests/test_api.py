@@ -9,6 +9,7 @@ import math
 import pytest
 from fastapi.testclient import TestClient
 
+from gvcsim import api as api_mod
 from gvcsim import shocks
 from gvcsim.api import _clean, app
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, SHOCKS_DIR, processed_years
@@ -47,7 +48,7 @@ def test_steps_metadata():
     resp = client.get("/api/steps")
     assert resp.status_code == 200
     body = resp.json()
-    assert len(body["steps"]) == 17
+    assert len(body["steps"]) == 16
     assert body["stages"]["2"] == "指标计算"
 
 
@@ -74,11 +75,21 @@ def test_regression_options():
     assert "实际值(2016=1)" in body["price_modes"]
     assert body["scenarios"] == ["clean", "noisy", "confounded"]
     assert "前趋势混杂" in body["scenario_labels"]["confounded"]
+    assert set(body["outcomes"]) == {"trade", "production", "length", "network"}
+    assert "steps" not in body
+
+
+def test_regression_endpoints_require_outcome_and_reject_legacy_step():
+    assert client.get("/api/regression/design").status_code == 422
+    assert client.post("/api/regression/run", json={}).status_code == 422
+    assert client.post("/api/regression/placebo", json={}).status_code == 422
+    assert client.get("/api/regression/design", params={"step": 13}).status_code == 422
+    assert client.post("/api/regression/run", json={"step": 13}).status_code == 422
 
 
 def test_regression_design():
     # 设计预览不跑回归、不依赖预计算面板
-    resp = client.get("/api/regression/design", params={"step": 13})
+    resp = client.get("/api/regression/design", params={"outcome": "trade"})
     assert resp.status_code == 200
     body = resp.json()
     assert body["depvar"] == "FVA_share"
@@ -105,7 +116,7 @@ def test_regression_design():
 
     ctrl = client.get(
         "/api/regression/design",
-        params={"step": 13, "control_mode": "ICIO 派生控制变量"},
+        params={"outcome": "trade", "control_mode": "ICIO 派生控制变量"},
     )
     assert ctrl.status_code == 200
     assert ctrl.json()["controls"]
@@ -113,14 +124,14 @@ def test_regression_design():
 
     macro = client.get(
         "/api/regression/design",
-        params={"step": 13, "control_mode": "模拟宏观控制"},
+        params={"outcome": "trade", "control_mode": "模拟宏观控制"},
     )
     assert macro.status_code == 200
     assert "macro_log_gdp_usd" in macro.json()["controls"]
 
     inter = client.get(
         "/api/regression/design",
-        params={"step": 13, "interaction": True},
+        params={"outcome": "trade", "interaction": True},
     )
     assert inter.status_code == 200
     assert inter.json()["interaction"] is True
@@ -128,29 +139,73 @@ def test_regression_design():
 
     real = client.get(
         "/api/regression/design",
-        params={"step": 13, "price_mode": "实际值(2016=1)"},
+        params={"outcome": "trade", "price_mode": "实际值(2016=1)"},
     )
     assert real.status_code == 200
     assert real.json()["price_mode"] == "实际值(2016=1)"
 
     ev = client.get(
         "/api/regression/design",
-        params={"step": 15, "granularity": "国家级", "method": "事件研究"},
+        params={"outcome": "length", "granularity": "国家级", "method": "事件研究"},
     )
     assert ev.status_code == 200
     assert ev.json()["panel_file"] == "panel_country.csv"
     assert "Σ_k" in ev.json()["equation"]
 
-    assert client.get("/api/regression/design", params={"step": 12}).status_code == 400
-    assert client.get("/api/regression/design", params={"step": 13, "method": "工具变量"}).status_code == 400
-    assert client.get("/api/regression/design", params={"step": 13, "shock_type": "汇率冲击"}).status_code == 400
-    sanction = client.get("/api/regression/design", params={"step": 13, "shock_type": "制裁清单"})
+    assert client.get("/api/regression/design", params={"step": 12}).status_code == 422
+    assert client.get("/api/regression/design", params={"outcome": "trade", "method": "工具变量"}).status_code == 400
+    assert (
+        client.get("/api/regression/design", params={"outcome": "trade", "shock_type": "汇率冲击"}).status_code == 400
+    )
+    sanction = client.get("/api/regression/design", params={"outcome": "trade", "shock_type": "制裁清单"})
     assert sanction.status_code == 200
     assert sanction.json()["shock_col"] == "sanction_shock"
     assert "sanction_treated" in sanction.json()["equation"]
-    assert client.get("/api/regression/design", params={"step": 13, "control_mode": "外部宏观控制"}).status_code == 400
-    assert client.get("/api/regression/design", params={"step": 13, "price_mode": "购买力平价"}).status_code == 400
-    assert client.get("/api/regression/design", params={"step": 13, "scenario": "magic"}).status_code == 400
+    assert (
+        client.get("/api/regression/design", params={"outcome": "trade", "control_mode": "外部宏观控制"}).status_code
+        == 400
+    )
+    assert (
+        client.get("/api/regression/design", params={"outcome": "trade", "price_mode": "购买力平价"}).status_code == 400
+    )
+    assert client.get("/api/regression/design", params={"outcome": "trade", "scenario": "magic"}).status_code == 400
+
+
+def test_all_outcomes_reach_design_and_run_contract(monkeypatch: pytest.MonkeyPatch):
+    expected = {
+        "trade": "FVA_share",
+        "production": "3b_VA_GVC_C_share",
+        "length": "PLv_GVC",
+        "network": "betweenesscentrality",
+    }
+    calls: list[str] = []
+
+    class StubResult:
+        def __init__(self, outcome: str) -> None:
+            self.outcome = outcome
+
+        def to_dict(self) -> dict[str, str]:
+            return {"outcome": self.outcome}
+
+    monkeypatch.setattr(api_mod, "_read_csv", lambda _name: object())
+
+    def estimate(_panel, design):
+        calls.append(design.outcome)
+        return StubResult(design.outcome), {"backend": "stub"}
+
+    monkeypatch.setattr(api_mod, "run_design_with_benchmark", estimate)
+
+    for outcome, depvar in expected.items():
+        preview = client.get("/api/regression/design", params={"outcome": outcome})
+        assert preview.status_code == 200
+        assert preview.json()["depvar"] == depvar
+
+        run = client.post("/api/regression/run", json={"outcome": outcome})
+        assert run.status_code == 200
+        assert run.json()["design"]["outcome"] == outcome
+        assert run.json()["result"] == {"outcome": outcome}
+
+    assert calls == list(expected)
 
 
 def test_report_request_validation():
@@ -358,13 +413,17 @@ def test_shock_summary_and_panel():
 @needs_data
 def test_regression_run():
     # 默认:国家–行业级 + DID
-    resp = client.post("/api/regression/run", json={"step": 13})
+    resp = client.post("/api/regression/run", json={"outcome": "trade"})
     assert resp.status_code == 200
     body = resp.json()
     assert body["design"]["depvar"] == "FVA_share"
     assert body["design"]["granularity"] == "国家–行业级"
     assert body["design"]["method"] == "双重差分 (DID)"
-    assert body["result"]["coefs"][0]["name"] == "treated×post"
+    policy = body["result"]["coefs"][0]
+    assert policy["name"] == "treated×post"
+    assert policy["ci_low"] < policy["coef"] < policy["ci_high"]
+    assert isinstance(body["result"]["depvar_mean"], float)
+    assert body["result"]["depvar_std"] > 0
     assert "benchmark" in body
     assert body["benchmark"]["backend"] == "linearmodels.PanelOLS"
     assert "passed" not in body["benchmark"]
@@ -377,19 +436,19 @@ def test_regression_run():
     assert any("排除 ROW" in n for n in body["result"]["notes"])
 
     # 显式国家级粒度仍可用
-    resp_c = client.post("/api/regression/run", json={"step": 13, "granularity": "国家级"})
+    resp_c = client.post("/api/regression/run", json={"outcome": "trade", "granularity": "国家级"})
     assert resp_c.status_code == 200
     assert resp_c.json()["result"]["n_entities"] < 100
 
     # 非法粒度/方法报 400
-    bad = client.post("/api/regression/run", json={"step": 13, "granularity": "城市级"})
+    bad = client.post("/api/regression/run", json={"outcome": "trade", "granularity": "城市级"})
     assert bad.status_code == 400
-    bad = client.post("/api/regression/run", json={"step": 13, "method": "工具变量"})
+    bad = client.post("/api/regression/run", json={"outcome": "trade", "method": "工具变量"})
     assert bad.status_code == 400
 
     ctrl = client.post(
         "/api/regression/run",
-        json={"step": 13, "granularity": "国家级", "control_mode": "ICIO 派生控制变量"},
+        json={"outcome": "trade", "granularity": "国家级", "control_mode": "ICIO 派生控制变量"},
     )
     assert ctrl.status_code == 200
     assert ctrl.json()["design"]["controls"]
@@ -401,7 +460,7 @@ def test_regression_run():
 def test_regression_placebo_endpoint():
     resp = client.post(
         "/api/regression/placebo",
-        json={"step": 13, "granularity": "国家级", "n_draws": 8, "seed": 11},
+        json={"outcome": "trade", "granularity": "国家级", "n_draws": 8, "seed": 11},
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -412,7 +471,7 @@ def test_regression_placebo_endpoint():
 
     bad = client.post(
         "/api/regression/placebo",
-        json={"step": 13, "method": "双向固定效应", "n_draws": 4},
+        json={"outcome": "trade", "method": "双向固定效应", "n_draws": 4},
     )
     assert bad.status_code == 400
     assert "DID" in bad.json()["detail"]
@@ -445,13 +504,13 @@ def test_parameterized_report_endpoint(tmp_path, monkeypatch):
     assert "- 冲击类型:出口管制" in md
     assert "- 估计方法:双向固定效应" in md
     assert "- 控制变量:GDP规模(log, WDI风格mock)" in md
-    assert "- 交互项:开启:冲击×基期GVC生产份额" in md
+    assert "- 交互项:开启:冲击×基期GVC生产份额(按样本个体均值中心化)" in md
     assert "- 价格口径:实际值(2016=1)" in md
     assert "- 回归样本:排除 ROW" in md
     assert "export_control_shock" in md
     assert "macro_log_gdp_usd" in md
     assert "个国家×行业 ×" in md
-    assert "PanelOLS 政策系数对照" in md
+    assert "PanelOLS 代码实现一致性检查" in md
     assert "标准误最大差异" in md and "仅作参考" in md
     assert md.count("```gvcsim-chart") == 3
     assert "<svg" not in md
@@ -473,19 +532,19 @@ def test_parameterized_report_endpoint(tmp_path, monkeypatch):
 @needs_data
 def test_regression_methods():
     # 双向固定效应(强度法):解释变量为连续冲击
-    fe = client.post("/api/regression/run", json={"step": 14, "method": "双向固定效应"})
+    fe = client.post("/api/regression/run", json={"outcome": "production", "method": "双向固定效应"})
     assert fe.status_code == 200
     assert fe.json()["result"]["coefs"][0]["name"] == "tariff_shock"
 
     fe_export = client.post(
         "/api/regression/run",
-        json={"step": 14, "method": "双向固定效应", "shock_type": "出口管制"},
+        json={"outcome": "production", "method": "双向固定效应", "shock_type": "出口管制"},
     )
     assert fe_export.status_code == 200
     assert fe_export.json()["result"]["coefs"][0]["name"] == "export_control_shock"
 
     # 事件研究:基期 k=-1 优先省略,动态系数按个体首次冲击年 G_i 的相对时间构造
-    ev = client.post("/api/regression/run", json={"step": 14, "method": "事件研究"})
+    ev = client.post("/api/regression/run", json={"outcome": "production", "method": "事件研究"})
     assert ev.status_code == 200
     names = [c["name"] for c in ev.json()["result"]["coefs"]]
     assert "k=0" in names and "k=-1" not in names

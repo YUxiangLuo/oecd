@@ -50,7 +50,7 @@ export function AnnouncementsTab() {
           <input
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
-            placeholder="如:第 13-16 步实验报告本周五截止"
+            placeholder="如：第 12–15 步回归练习本周五截止"
           />
           <label>可见范围</label>
           <select value={form.class_id} onChange={(e) => setForm({ ...form, class_id: e.target.value })}>
