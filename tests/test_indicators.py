@@ -49,6 +49,18 @@ def test_build_arrays_with_tls(fake_io):
     assert np.allclose((arr.v + arr.t) @ arr.B, np.ones(4))
 
 
+def test_tradeflow_preserves_negative_net_subsidy_and_closure(fake_io):
+    """负 TLS 沿供应链传播后仍可为负,但六项分解必须继续闭合。"""
+    arr = build_arrays(with_tls(fake_io, tls_ratio=-0.1))
+    df = tradeflow.sector_tradeflow(arr)
+    exporting = arr.E > 0
+
+    assert (arr.taxsub < 0).all()
+    assert (df.loc[exporting, "taxsub"] < 0).all()
+    assert np.allclose(tradeflow.gross_exports(df), arr.E)
+    assert np.allclose((arr.v + arr.t) @ arr.B, np.ones(4))
+
+
 # ---------------------------------------------------------------------------
 # WWZ 16 项暴力实现(逐 (s, r) 双边直译 Table A2,再按伙伴求和)
 # ---------------------------------------------------------------------------

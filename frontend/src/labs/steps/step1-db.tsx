@@ -50,7 +50,7 @@ const DB_TABLES: { key: DbTableKind; label: string; hint: string }[] = [
 ];
 
 const ACCOUNT_HELP: Record<string, string> = {
-  TLS: "产品税减补贴。为负表示补贴超过产品税；步骤4 的 taxsub 正是沿投入产出链传导后的 TLS 含量。",
+  TLS: "产品税减补贴。为负表示该账户合计为净补贴；步骤4 的 taxsub 是其沿投入产出链传导后的出口含量。",
   VA: "增加值：劳动报酬、资本回报等本地创造的价值，是步骤5生产活动分解的总来源。",
   OUT: "总产出。按行看应等于中间使用 Z 的行和加最终需求 Y 的行和，步骤3会检验这条会计恒等式。",
 };

@@ -19,8 +19,9 @@ const BASE_DESC: Record<string, string> = {
 
 /** 步骤4-7:行业级指标数据表(分页 + 国家/年份筛选) */
 export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
+  const defaultCountry = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
   const [year, setYear] = useState(meta.years.at(-1)!);
-  const [country, setCountry] = useState("CHN");
+  const [country, setCountry] = useState(defaultCountry);
   const [page, setPage] = useState(1);
   const groupKey = STEP_GROUP[step.n] ?? "trade";
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
@@ -39,7 +40,15 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
   return (
     <div>
       {/* 步骤4-6:真实数据拆解演示;步骤7:网络中心性演示 */}
-      {[4, 5, 6].includes(step.n) && <DecompositionDemo step={step.n} meta={meta} />}
+      {[4, 5, 6].includes(step.n) && <DecompositionDemo
+        step={step.n}
+        meta={meta}
+        onExampleChange={(exampleYear, exampleCountry) => {
+          setYear(exampleYear);
+          setCountry(exampleCountry);
+          setPage(1);
+        }}
+      />}
       {step.n === 7 && <NetworkCentralityDemo />}
 
       <div className="section-head">

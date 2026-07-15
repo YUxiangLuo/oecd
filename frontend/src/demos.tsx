@@ -49,7 +49,7 @@ const DECOMP: Record<number, DecompCfg> = {
       { key: "DDC", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "本国增加值在跨境往返中被海关多次统计的部分。" },
       { key: "FVA", label: "FVA 外国增加值", color: "#159a86", desc: "出口里来自外国的增加值(进口的中间品)。后向 GVC 依赖的核心。" },
       { key: "FDC", label: "FDC 外国重复计算", color: "#e0982a", desc: "外国增加值在跨境中被重复统计的部分。" },
-      { key: "taxsub", label: "taxsub 税收减补贴", color: "#98a0b3", desc: "毛出口中的产品税减补贴(TLS)含量,来自 ICIO 原始表的 TLS 账户行。" },
+      { key: "taxsub", label: "taxsub 税收减补贴", color: "#98a0b3", desc: "出口直接及间接所含的产品税减补贴(TLS)，由 ICIO TLS 账户沿投入产出链计算。" },
     ],
     note: (r) =>
       `EXDVA 出口国内增加值合计 = DVAex + DVArt = ${fmt(num(r.DVAex) + num(r.DVArt), "amount")}` +
@@ -137,7 +137,15 @@ function MiniBackwardBar({ row }: { row: Row }) {
   );
 }
 
-export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) {
+export function DecompositionDemo({
+  step,
+  meta,
+  onExampleChange,
+}: {
+  step: number;
+  meta: Meta;
+  onExampleChange?: (year: number, country: string) => void;
+}) {
   const cfg = DECOMP[step];
   const defaultA = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
   const defaultB = meta.countries.includes("USA") ? "USA" : meta.countries[1] ?? defaultA;
@@ -158,7 +166,7 @@ export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) 
   );
   const exampleCountry = meta.countries.includes("BRN") ? "BRN" : meta.countries[0] ?? "";
   const exampleYear = meta.years.includes(2020) ? 2020 : meta.years.at(-1)!;
-  const { data: examplePage } = useAsync<IndustryPage | null>(
+  const { data: examplePage, error: exampleError } = useAsync<IndustryPage | null>(
     () => step === 4 && exampleCountry ? api.industryIndicatorsAll(exampleYear, exampleCountry) : Promise.resolve(null),
     [step, exampleCountry, exampleYear],
   );
@@ -271,10 +279,32 @@ export function DecompositionDemo({ step, meta }: { step: number; meta: Meta }) 
           <input type="checkbox" checked={compare} onChange={(event) => setCompare(event.target.checked)} /> 双实体并排对比
         </label>
       </div>
-      {step === 4 && <div className="tipbox" style={{ marginBottom: 12 }}>
-        负 taxsub 表示产品补贴超过产品税。{negativeExample ? <button onClick={() => {
-          setGran("sector"); setYear(exampleYear); setCountryA(exampleCountry); setSectorA(String(negativeExample.industry));
-        }} style={{ marginLeft: 8 }}>一键查看真实负值：{exampleCountry} · {sectorLabel(String(negativeExample.industry))}</button> : "正在实际指标中寻找有经济量级的负值示例…"}
+      {step === 4 && <div className="tipbox taxsub-explainer" style={{ marginBottom: 12 }}>
+        <div className="taxsub-explainer-copy">
+          <strong>为什么 taxsub 可能为负？</strong>
+          <span>taxsub 是出口直接及间接所含的产品税减补贴。负值表示沿供应链累计后呈净补贴，不代表该行业直接获得同额补贴。</span>
+        </div>
+        {negativeExample ? <button
+          type="button"
+          className="taxsub-example-button"
+          aria-pressed={gran === "sector" && year === exampleYear && countryA === exampleCountry && effSectorA === String(negativeExample.industry)}
+          title={`该计算示例的 taxsub 为 ${fmt(num(negativeExample.taxsub), "amount")} 百万美元，占毛出口 ${(num(negativeExample.taxsub) / num(negativeExample.gross_exports) * 100).toFixed(1)}%`}
+          onClick={() => {
+            setGran("sector");
+            setYear(exampleYear);
+            setCountryA(exampleCountry);
+            setSectorA(String(negativeExample.industry));
+            onExampleChange?.(exampleYear, exampleCountry);
+          }}
+        >
+          <span>查看 ICIO {exampleYear} 计算示例：{countryLabel(exampleCountry)} · {sectorLabel(String(negativeExample.industry))}</span>
+          <small>
+            taxsub {num(negativeExample.taxsub).toLocaleString("zh-CN", { maximumFractionDigits: 2 })} 百万美元
+            · 占毛出口 {(num(negativeExample.taxsub) / num(negativeExample.gross_exports) * 100).toFixed(1)}%
+          </small>
+        </button> : <span className="taxsub-example-status">
+          {exampleError ? "计算示例暂时无法加载。" : examplePage ? "当前数据中没有满足展示条件的负值示例。" : "正在加载计算示例…"}
+        </span>}
       </div>}
       <div className="decomp-formula"><span className="df-total">{cfg.totalLabel}</span><span className="df-eq">=</span>{cfg.parts.map((part, index) => <span key={part.key}>{index > 0 && <span className="df-plus">+</span>}<span className={`df-term${hover === part.key ? " on" : ""}`} style={hover === part.key ? { color: part.color, borderColor: part.color } : undefined} onMouseEnter={() => setHover(part.key)} onMouseLeave={() => setHover(null)}>{part.label.split(" ")[0]}</span></span>)}</div>
       <div style={{ display: "grid", gridTemplateColumns: compare ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)", gap: 18 }}>
