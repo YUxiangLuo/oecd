@@ -21,7 +21,17 @@ def _stub_report_dependencies(monkeypatch):
             for rank, code in enumerate(["AAA", "BBB", "CCC", "DDD", "EEE", "FFF"])
         ]
     )
-    regression_panel = pd.DataFrame({"placeholder": [1]})
+    regression_panel = pd.DataFrame(
+        [
+            {
+                "country": code,
+                "industry": f"D{rank:02d}",
+                "year": 2020,
+                "betweenesscentrality": 100.0 + rank,
+            }
+            for rank, code in enumerate(["AAA", "BBB", "CCC", "DDD", "EEE", "FFF"])
+        ]
+    )
 
     def load(name: str):
         return country if name == "panel_country.csv" else regression_panel
@@ -29,7 +39,7 @@ def _stub_report_dependencies(monkeypatch):
     calls = []
 
     def estimate(panel, design):
-        assert panel is regression_panel
+        assert panel is (country if design.granularity == "国家级" else regression_panel)
         calls.append(design.outcome)
         result = RegressionResult(
             depvar=design.depvar,
@@ -88,6 +98,7 @@ def test_build_is_pure_and_runs_one_joint_estimate_per_outcome(tmp_path: Path, m
     assert len(payloads) == 11  # 3 个 Top5 + 4 个主效应 + 4 个异质性图
     assert all(payload["version"] == 1 for payload in payloads)
     assert [payload["type"] for payload in payloads[:3]] == ["bar", "bar", "bar"]
+    assert payloads[2]["x_label"] == "国家×行业节点"
     event_payloads = [payload for payload in payloads if payload["type"] == "event-study"]
     assert all(
         set(payload) == {"version", "type", "title", "x_label", "y_label", "points"} for payload in event_payloads
@@ -120,3 +131,15 @@ def test_generate_keeps_cli_file_output(tmp_path: Path, monkeypatch):
 
     assert output == tmp_path / "experiment_report_2020.md"
     assert output.read_text(encoding="utf-8").startswith("# 贸易政策冲击")
+
+
+def test_country_report_skips_degenerate_network_regression(monkeypatch):
+    calls = _stub_report_dependencies(monkeypatch)
+
+    document = report.build(2020, granularity="国家级")
+
+    assert calls == ["trade", "production", "length"]
+    assert "网络回归因国家图退化而不运行" in document.markdown
+    assert "Gephi 介数中心性恒为 0" in document.markdown
+    assert "网络回归仅支持国家–行业级面板" in document.markdown
+    assert "国家×行业介数中心性 Top 5" in document.markdown

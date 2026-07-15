@@ -46,7 +46,7 @@ const submissionRow = {
 
 function steps() {
   const titles: Record<number, [number, string, "db" | "shock" | "qc" | "ind" | "viz" | "reg" | "rep", "trade" | "production" | "length" | "network" | null]> = {
-    1: [1, "数据库介绍与选型", "db", null],
+    1: [1, "OECD ICIO 数据浏览", "db", null],
     2: [1, "贸易政策冲击数据接入", "shock", null],
     3: [1, "数据质检与清洗", "qc", null],
     4: [2, "GVC 总贸易流分解指标", "ind", null],
@@ -79,6 +79,12 @@ function steps() {
 
 const regressionOptions = {
   granularities: ["国家–行业级", "国家级"],
+  granularities_by_outcome: {
+    trade: ["国家–行业级", "国家级"],
+    production: ["国家–行业级", "国家级"],
+    length: ["国家–行业级", "国家级"],
+    network: ["国家–行业级"],
+  },
   shock_types: ["关税冲击", "制裁清单", "出口管制"],
   methods: ["双重差分 (DID)", "双向固定效应", "事件研究"],
   control_modes: ["不加控制变量", "ICIO 派生控制变量", "模拟宏观控制"],
@@ -178,6 +184,57 @@ async function mockApi(
       });
     }
     if (path === "/api/meta") return route.fulfill({ json: { years: [2018, 2019, 2020], countries: ["CHN", "USA"], sectors: ["A01_02", "C24", "C29"] } });
+    if (path === "/api/indicators/schema") {
+      const fields = Object.fromEntries([
+        "FVA_share", "3_VA_GVC_share", "DVAex_share", "gross_exports", "DVAex", "FVA", "taxsub",
+        "degree", "weighted degree", "betweenesscentrality", "closnesscentrality",
+        "harmonicclosnesscentrality", "eigencentrality",
+      ].map((key) => [key, { label: key, format: key.includes("share") ? "pct" : "number", desc: key }]));
+      return route.fulfill({
+        json: {
+          groups: [
+            { key: "trade", label: "贸易", fields: ["FVA_share", "3_VA_GVC_share", "DVAex_share", "gross_exports", "DVAex", "FVA", "taxsub"] },
+            { key: "network", label: "网络", fields: ["degree", "weighted degree", "betweenesscentrality", "closnesscentrality", "harmonicclosnesscentrality", "eigencentrality"] },
+          ],
+          fields,
+        },
+      });
+    }
+    if (path.startsWith("/api/indicators/country/")) {
+      return route.fulfill({
+        json: [
+          { country: "CHN", FVA_share: 0.22, "3_VA_GVC_share": 0.31, DVAex_share: 0.48, gross_exports: 100, DVAex: 48, FVA: 22, taxsub: 1 },
+          { country: "USA", FVA_share: 0.12, "3_VA_GVC_share": 0.18, DVAex_share: 0.62, gross_exports: 90, DVAex: 56, FVA: 11, taxsub: 1 },
+        ],
+      });
+    }
+    if (path.startsWith("/api/indicators/industry/")) {
+      return route.fulfill({
+        json: {
+          total: 2,
+          page: 1,
+          page_size: 200,
+          rows: [
+            { country: "CHN", industry: "C24", degree: 5, "weighted degree": 120, betweenesscentrality: 8, closnesscentrality: 0.6, harmonicclosnesscentrality: 0.7, eigencentrality: 0.8 },
+            { country: "CHN", industry: "C29", degree: 4, "weighted degree": 90, betweenesscentrality: 5, closnesscentrality: 0.5, harmonicclosnesscentrality: 0.6, eigencentrality: 0.7 },
+          ],
+        },
+      });
+    }
+    if (path.startsWith("/api/viz/network/")) {
+      return route.fulfill({
+        json: {
+          nodes: [
+            { country: "CHN", "weighted degree": 220, gross_exports: 100, gvc_production_share: 0.31 },
+            { country: "USA", "weighted degree": 180, gross_exports: 90, gvc_production_share: 0.18 },
+          ],
+          edges: [
+            { source: "CHN", target: "USA", flow: 70 },
+            { source: "USA", target: "CHN", flow: 40 },
+          ],
+        },
+      });
+    }
     if (path === "/api/shocks/events") return route.fulfill({ json: { events: [shockEvent301], disclaimer: "mock" } });
     if (path === "/api/shocks/summary") {
       return route.fulfill({
@@ -233,11 +290,16 @@ async function mockApi(
     if (path === "/api/regression/design") {
       const outcome = url.searchParams.get("outcome");
       if (!outcome || url.searchParams.has("step")) return route.fulfill({ status: 422, json: { detail: "outcome required" } });
+      const selectedGranularity = url.searchParams.get("granularity") ?? design.granularity;
+      if (outcome === "network" && selectedGranularity === "国家级") {
+        return route.fulfill({ status: 400, json: { detail: "network only supports industry granularity" } });
+      }
       const selectedMethod = url.searchParams.get("method") ?? design.method;
       return route.fulfill({
         json: {
           ...design,
           outcome,
+          granularity: selectedGranularity,
           method: selectedMethod,
           shock_type: url.searchParams.get("shock_type") ?? design.shock_type,
           equation: selectedMethod === "双向固定效应" ? "Y_it = β·tariff_shock_it + α_i + λ_t + ε_it" : design.equation,
@@ -250,6 +312,9 @@ async function mockApi(
     if (path === "/api/regression/run" && method === "POST") {
       const payload = request.postDataJSON();
       if (!payload.outcome || Object.hasOwn(payload, "step")) return route.fulfill({ status: 422, json: { detail: "outcome required" } });
+      if (payload.outcome === "network" && payload.granularity === "国家级") {
+        return route.fulfill({ status: 400, json: { detail: "network only supports industry granularity" } });
+      }
       regressionRunCount += 1;
       if (hooks.runGate) await hooks.runGate(regressionRunCount);
       const selectedMethod = payload.method ?? design.method;
@@ -410,6 +475,28 @@ test("步骤2事件选择会立即反馈并联动代表行业", async ({ page })
   await expect(page.locator(".crosswalk-content table:visible")).toHaveCount(1);
 });
 
+test("网络可视化保留有向边，步骤11不再拉取国家级指标", async ({ page }) => {
+  let countryIndicatorRequests = 0;
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/api/indicators/country/")) countryIndicatorRequests += 1;
+  });
+  await mockApi(page);
+
+  await page.goto("/?step=11");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: "跳过介绍" }).click();
+  await expect(page.getByRole("heading", { name: "网络指标可视化" })).toBeVisible();
+  await expect(page.getByText("分析粒度：国家–行业级（完整全球网络）")).toBeVisible();
+  expect(countryIndicatorRequests).toBe(0);
+
+  await page.locator(".step-row").filter({ hasText: "GVC 贸易流指标可视化" }).click();
+  await page.getByRole("button", { name: "招牌图" }).click();
+  const directedEdges = page.locator(".network-card svg path[marker-end]");
+  await expect(directedEdges).toHaveCount(2);
+  await expect(page.locator(".network-card svg title").first()).toContainText("CHN → USA");
+  await expect(page.locator(".network-card")).toContainText("阈值仅影响 Top 边显示，不影响 Gephi 指标计算");
+});
+
 test("旧结果的技术细节不会混入当前未运行的新方程", async ({ page }) => {
   await mockApi(page);
   await page.goto("/");
@@ -426,6 +513,29 @@ test("旧结果的技术细节不会混入当前未运行的新方程", async ({
   await expect(details.locator(".stale-result")).toContainText("上一次运行");
   await expect(details.locator(".model-eq")).toContainText("treated_i×post_it");
   await expect(details.locator(".model-eq")).not.toContainText("tariff_shock");
+});
+
+test("从国家级回归切到网络回归时不会发送无效粒度请求", async ({ page }) => {
+  const invalidRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/regression/design"
+      && url.searchParams.get("outcome") === "network"
+      && url.searchParams.get("granularity") === "国家级") {
+      invalidRequests.push(url.toString());
+    }
+  });
+  await mockApi(page);
+  await page.goto("/?step=12");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: "跳过介绍" }).click();
+
+  await page.getByRole("group", { name: "分析粒度" }).getByRole("button", { name: "国家级" }).click();
+  await page.locator(".step-row").filter({ hasText: "网络指标教学实证回归" }).click();
+
+  await expect(page.getByRole("heading", { name: "网络指标教学实证回归" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "分析粒度" }).getByRole("button", { name: "国家–行业级" })).toHaveAttribute("aria-pressed", "true");
+  expect(invalidRequests).toEqual([]);
 });
 
 test("旧安慰剂响应不会覆盖新设定的主回归", async ({ page }) => {

@@ -277,19 +277,32 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
   const placeboRequestRef = useRef(0);
   const verdictAnchorRef = useRef<HTMLDivElement>(null);
   const latestRequest = useRef(`${outcome}:${settingsKey(settings)}`);
-  latestRequest.current = `${outcome}:${settingsKey(settings)}`;
 
   const setSetting = <K extends keyof RegressionSettings>(key: K, value: RegressionSettings[K]) => {
     onSettingsChange({ ...settings, [key]: value });
   };
   const { data: options, error: optionsError } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
+  const allowedGranularities = options?.granularities_by_outcome[outcome]
+    ?? (outcome === "network" ? ["国家–行业级"] : ["国家–行业级", "国家级"]);
+  const effectiveGranularity = allowedGranularities.includes(granularity)
+    ? granularity
+    : allowedGranularities[0];
+  const currentSettings = { ...settings, granularity: effectiveGranularity };
+  latestRequest.current = `${outcome}:${settingsKey(currentSettings)}`;
+
+  useEffect(() => {
+    if (!allowedGranularities.includes(granularity)) {
+      setSetting("granularity", allowedGranularities[0]);
+    }
+  }, [outcome, granularity, options]);
+
   const { data: design, error: designError } = useAsync<RegressionDesignInfo>(
     () => api.regressionDesign({
-      outcome, granularity, shockType, method, controlMode, interaction,
+      outcome, granularity: effectiveGranularity, shockType, method, controlMode, interaction,
       priceMode: controlMode === "不加控制变量" ? "名义值" : priceMode,
       scenario,
     }),
-    [outcome, granularity, shockType, method, controlMode, interaction, priceMode, scenario],
+    [outcome, effectiveGranularity, shockType, method, controlMode, interaction, priceMode, scenario],
   );
 
   useEffect(() => {
@@ -311,7 +324,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
   const run = async () => {
     if (runningRef.current || !design) return;
     runningRef.current = true;
-    const runSettings = effectiveSettings(settings);
+    const runSettings = effectiveSettings(currentSettings);
     const requestKey = `${outcome}:${settingsKey(runSettings)}`;
     setRunning(true);
     setError(null);
@@ -348,7 +361,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
     }
   };
 
-  const stale = Boolean(resultSettings && settingsKey(resultSettings) !== settingsKey(settings));
+  const stale = Boolean(resultSettings && settingsKey(resultSettings) !== settingsKey(currentSettings));
 
   useEffect(() => {
     if (!result) return;
@@ -427,8 +440,11 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
         <div className="basic-settings">
           <div><span>冲击</span><Pills label="政策冲击" options={options?.shock_types ?? ["关税冲击", "制裁清单", "出口管制"]} value={shockType} onChange={(value) => setSetting("shockType", value)} /></div>
           <div><span>方法</span><Pills label="估计方法" options={options?.methods ?? ["双重差分 (DID)", "双向固定效应", "事件研究"]} value={method} onChange={(value) => setSetting("method", value)} labelMap={METHOD_LABELS} /></div>
-          <div><span>粒度</span><Pills label="分析粒度" options={options?.granularities ?? ["国家–行业级", "国家级"]} value={granularity} onChange={(value) => setSetting("granularity", value)} /></div>
+          <div><span>粒度</span><Pills label="分析粒度" options={allowedGranularities} value={effectiveGranularity} onChange={(value) => setSetting("granularity", value)} /></div>
         </div>
+        {outcome === "network" && (
+          <p className="muted">网络回归只使用全球国家×行业图。国家级贸易图在全正流量口径下为完全图，Gephi 介数中心性恒为 0。</p>
+        )}
 
         <details className="advanced-settings">
           <summary>高级设置与课堂挑战</summary>

@@ -5,12 +5,12 @@ import { linearFit } from "../statistics";
 
 /* ---------------- 步骤8-11 自由探索:排序条形图 / 散点图 ---------------- */
 
-export function fmtVal(v: number, format?: string): string {
+function fmtVal(v: number, format?: string): string {
   return formatMetric(v, format);
 }
 
 /** 轴刻度专用:大数用「万/亿」缩写,避免出现 4,857,813 这类挤满轴的原始值 */
-export function fmtAxis(v: number, format?: string): string {
+function fmtAxis(v: number, format?: string): string {
   if (format === "pct" || Math.abs(v) < 1e4) return fmtVal(v, format);
   if (Math.abs(v) >= 1e8) return `${(v / 1e8).toLocaleString("zh-CN", { maximumFractionDigits: 1 })}亿`;
   return `${(v / 1e4).toLocaleString("zh-CN", { maximumFractionDigits: 0 })}万`;

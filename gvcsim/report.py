@@ -14,7 +14,7 @@ import pandas as pd
 
 from gvcsim.artifacts import read_csv_artifact
 from gvcsim.config import PROCESSED_DIR, REPORTS_DIR, processed_years
-from gvcsim.regression.design import OUTCOME_DEPVARS, RegressionDesign
+from gvcsim.regression.design import OUTCOME_DEPVARS, OUTCOME_GRANULARITIES, RegressionDesign
 from gvcsim.regression.panel import RegressionResult, run_design, run_design_with_benchmark
 
 
@@ -32,7 +32,7 @@ def _load_panel_file(name: str) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"缺少 {name},请先运行 gvcsim compute")
     # NOTE: 返回的是共享缓存 DataFrame,截面切片/派生前必须 .copy()(见 gvcsim/artifacts.py)。
-    return read_csv_artifact(path)
+    return read_csv_artifact(path, require_current=True)
 
 
 def _load_panel(design: RegressionDesign) -> pd.DataFrame:
@@ -118,17 +118,33 @@ def _chart_block(payload: dict) -> str:
     return f"```gvcsim-chart\n{encoded}\n```"
 
 
-def _bar_chart(title: str, values: pd.Series, y_label: str) -> str:
+def _bar_chart(title: str, values: pd.Series, y_label: str, x_label: str = "经济体") -> str:
     return _chart_block(
         {
             "version": 1,
             "type": "bar",
             "title": title,
-            "x_label": "经济体",
+            "x_label": x_label,
             "y_label": y_label,
             "items": [{"label": str(label), "value": float(value)} for label, value in values.items()],
         }
     )
+
+
+def _industry_network_top(panel: pd.DataFrame, year: int, exclude_row: bool) -> pd.Series:
+    """返回全球行业网络中介数最高的五个国家×行业节点。"""
+    required = {"year", "country", "industry", "betweenesscentrality"}
+    missing = sorted(required - set(panel.columns))
+    if missing:
+        raise ValueError(f"panel_industry.csv 缺少网络摘要字段：{missing}")
+    snapshot = panel[panel["year"] == year].copy()
+    if exclude_row:
+        snapshot = snapshot[snapshot["country"].astype(str) != "ROW"]
+    if snapshot.empty:
+        raise ValueError(f"panel_industry.csv 中没有 {year} 年截面")
+    labels = snapshot["country"].astype(str) + " · " + snapshot["industry"].astype(str)
+    values = pd.to_numeric(snapshot["betweenesscentrality"], errors="coerce")
+    return pd.Series(values.to_numpy(), index=labels).nlargest(5)
 
 
 def _event_chart(
@@ -203,9 +219,15 @@ def build(
         price_mode=price_mode,
         exclude_row=exclude_row,
     )
+    industry_panel = _load_panel_file("panel_industry.csv")
     top_fva = snap["FVA_share"].nlargest(5)
     top_gvcpos = snap["GVCPs"].nlargest(5)
-    top_between = snap["betweenesscentrality"].nlargest(5)
+    top_between = _industry_network_top(industry_panel, report_year, exclude_row)
+    comparison_scope = (
+        "四组因变量共用同一套国家–行业级设定"
+        if granularity == "国家–行业级"
+        else "贸易流、生产与长度共用国家级设定；网络回归因国家图退化而不运行"
+    )
 
     sections = [
         "# 贸易政策冲击对全球价值链结构的影响\n",
@@ -213,7 +235,7 @@ def build(
         "拟真演示面板,以 2018–2020 全球贸易摩擦为原型,结论仅用于验证系统链路,"
         "不构成研究结论)\n",
         f"- 数据:OECD ICIO {min(years)}–{max(years)}(指标截面:{report_year} 年)",
-        "- 方法:本报告使用步骤16中选择的回归设定;四组因变量共用同一套粒度/冲击/方法/控制/价格口径,便于横向比较。因果解释仍依赖冲击外生性、趋势可比性等识别假设",
+        f"- 方法:本报告使用步骤16中选择的回归设定;{comparison_scope}。因果解释仍依赖冲击外生性、趋势可比性等识别假设",
         _design_summary(design_preview),
         f"- 生成日期:{date.today().isoformat()}\n",
         "## 一、数据与质检",
@@ -227,13 +249,23 @@ def build(
         "\n**GVC 位置指数最高(WWYZ 口径,前向/后向 GVC 生产长度之比,越大越上游)**:"
         + "、".join(f"{country} ({value:.3f})" for country, value in top_gvcpos.items()),
         _bar_chart("GVC 位置指数 Top 5", top_gvcpos, "GVCPs"),
-        "\n**介数中心性最高(供应链枢纽)**:"
-        + "、".join(f"{country} ({value:.1f})" for country, value in top_between.items()),
-        _bar_chart("介数中心性 Top 5", top_between, "介数中心性"),
+        "\n**全球国家×行业网络介数中心性最高(供应链枢纽)**:"
+        + "、".join(f"{node} ({value:.1f})" for node, value in top_between.items()),
+        _bar_chart("国家×行业介数中心性 Top 5", top_between, "介数中心性", "国家×行业节点"),
         "\n## 三、回归结果",
     ]
 
     for outcome in OUTCOME_DEPVARS:
+        if granularity not in OUTCOME_GRANULARITIES[outcome]:
+            sections.extend(
+                [
+                    f"### {OUTCOME_DEPVARS[outcome][1]}",
+                    "本项未运行：国家级贸易图在全部正流量边下为完全有向图，Gephi 介数中心性恒为 0，"
+                    "不具备回归所需的截面变异。网络回归仅支持国家–行业级面板。",
+                    "",
+                ]
+            )
+            continue
         design = RegressionDesign(
             outcome=outcome,
             granularity=granularity,
@@ -289,8 +321,9 @@ def build(
             "- 控制变量支持 ICIO 内生派生与 WDI/IMF 风格宏观 mock,用于稳健性演示;"
             "GDP 平减指数为拟真 mock,不是官方价格指数。论文级研究仍需接入真实 WDI/IMF/"
             "行业价格指数。",
-            "- 指标采用客户资料口径:WWZ (2013) 总贸易核算法、WWYZ (2017) 生产分解与"
-            "生产长度、Gephi 风格网络中心性,输出国家/国家–行业聚合结果;"
+            "- 指标采用公开文献口径:WWZ (2013) 总贸易核算法、WWYZ (2017) 生产分解与"
+            "生产长度，以及 Gephi 有向全正边网络中心性；国家网络指标如实输出，"
+            "网络回归仅使用存在节点差异的国家–行业级结果;"
             "本报告不输出 exporter-importer-sector 双边矩阵明细。",
         ]
     )

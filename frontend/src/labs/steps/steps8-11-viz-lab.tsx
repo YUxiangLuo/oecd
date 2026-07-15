@@ -69,7 +69,7 @@ const STEP_VIZ: Record<number, StepVizConfig> = {
     quadrant: ["weighted degree", "betweenesscentrality"],
     quadLabels: ["核心枢纽", "桥接者(高介数)", "边缘", "枢纽连接者(高加权度)"],
     columns: ["degree", "weighted degree", "betweenesscentrality", "closnesscentrality", "harmonicclosnesscentrality", "eigencentrality"],
-    framing: "谁是生产网络的枢纽?加权度=贸易连接的总流量(百万美元,轴刻度以万/亿缩写),介数中心性=控扼要冲的程度,四象限区分四类角色。",
+    framing: "在全球国家×行业有向图中识别枢纽。当前下钻显示所选国家的全部行业节点，但中心性始终由完整全球图共同计算。",
   },
 };
 
@@ -87,13 +87,16 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
   const [entityMode, setEntityMode] = useState<"topn" | "pick">("topn");
   const [topN, setTopN] = useState(15);
   const [picked, setPicked] = useState<string[]>([]);
-  const [granularity, setGranularity] = useState<"country" | "sector">("country");
+  const [granularity, setGranularity] = useState<"country" | "sector">(step.n === 11 ? "sector" : "country");
   const [drillCountry, setDrillCountry] = useState(meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "");
   const [tableSort, setTableSort] = useState<{ key: string; direction: "asc" | "desc" } | null>(null);
   const isNetwork = step.n === 8;
 
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
-  const { data: rows, error } = useAsync(() => api.countryIndicators(year), [year]);
+  const { data: rows, error } = useAsync<Record<string, string | number | null>[] | null>(
+    () => (step.n === 11 ? Promise.resolve(null) : api.countryIndicators(year)),
+    [year, step.n],
+  );
   const { data: sectorPage, error: sectorErr } = useAsync<IndustryPage | null>(
     () => (granularity === "sector" && drillCountry
       ? api.industryIndicatorsAll(year, drillCountry)
@@ -104,7 +107,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
     () => (isNetwork ? api.network(year) : Promise.resolve(null)),
     [year, isNetwork],
   );
-  // 趋势图需要全部年份的国家级指标(按需拉取,服务端 CSV 已按 mtime 缓存)
+  // 趋势图按当前粒度拉取全部年份指标(按需请求,服务端 CSV 已按 mtime 缓存)
   const { data: yearsData } = useAsync<Record<string, string | number | null>[][] | null>(
     () => view === "trend"
       ? granularity === "country"
@@ -174,6 +177,11 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
 
   const signatureChart = () => {
     if (isNetwork) return net ? <NetworkViz data={net} /> : <p className="muted">加载中…</p>;
+    if (step.n === 11) {
+      return sectorPage
+        ? <HeatTableViz rows={sectorPage.rows} schema={schema} />
+        : <p className="muted">加载 {drillCountry} 行业网络指标中…</p>;
+    }
     if (!rows) return <p className="muted">加载中…</p>;
     if (step.n === 9) return <StackedShareViz rows={rows} />;
     if (step.n === 10) return <LengthViz rows={rows} />;
@@ -221,21 +229,33 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
             <button key={k} className={view === k ? "on" : ""} onClick={() => setView(k)}>{lab}</button>
           ))}
         </div>
+        {step.n === 11 && view === "signature" && (
+          <span className="field">
+            <label>下钻国家</label>
+            <select value={drillCountry} onChange={(e) => setDrillCountry(e.target.value)}>
+              {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
+            </select>
+          </span>
+        )}
       </div>
 
       {/* 自由探索:一行引导语 + 控件条(选粒度 / 选指标 / 选对象;招牌图不需要) */}
       {view !== "signature" && <p className="viz-framing muted">{cfg.framing}</p>}
       {view !== "signature" && (
         <div className="controls viz-explore">
-          <div className="seg">
-            <button className={granularity === "country" ? "on" : ""} onClick={() => setGranularity("country")}>国家级</button>
-            <button
-              className={granularity === "sector" ? "on" : ""}
-              onClick={() => { setGranularity("sector"); setEntityMode("topn"); }}
-            >
-              行业下钻
-            </button>
-          </div>
+          {step.n === 11 ? (
+            <span className="muted">分析粒度：国家–行业级（完整全球网络）</span>
+          ) : (
+            <div className="seg">
+              <button className={granularity === "country" ? "on" : ""} onClick={() => setGranularity("country")}>国家级</button>
+              <button
+                className={granularity === "sector" ? "on" : ""}
+                onClick={() => { setGranularity("sector"); setEntityMode("topn"); }}
+              >
+                行业下钻
+              </button>
+            </div>
+          )}
           {granularity === "sector" && (
             <span className="field">
               <label>下钻国家</label>
@@ -271,6 +291,12 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
           ) : (
             <CountryPicker countries={meta.countries} picked={picked} onChange={setPicked} />
           )}
+        </div>
+      )}
+
+      {step.n === 11 && (
+        <div className="tipbox" style={{ marginBottom: 12 }}>
+          当前只列出 {drillCountry} 的行业节点；每个数值均在包含全部国家×行业节点和所有正中间品流量边的全球有向图上计算。国家级图的介数恒为 0，故本步骤不展示国家级中心性比较。
         </div>
       )}
 

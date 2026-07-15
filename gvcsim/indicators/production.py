@@ -1,4 +1,4 @@
-"""步骤5:GVC 生产分解指标(Wang-Wei-Yu-Zhu 2017a 口径,输出客户资料字段)。
+"""步骤5:GVC 生产分解指标（Wang-Wei-Yu-Zhu 2017a 公开文献口径）。
 
 按式 V̂BŶ = V̂LŶ^D + V̂LŶ^F + V̂LA^F LŶ^D + V̂LA^F(BŶ − LŶ^D) 把生产活动
 分为四类,并输出前向(增加值去向,沿行加总)与后向(增加值来源,沿列加总)
@@ -44,7 +44,7 @@ PRODUCTION_COLUMNS = [
 
 
 def sector_production(arr: IcioArrays) -> pd.DataFrame:
-    """行业级生产分解,索引 (country, industry),输出客户资料 12 个字段。"""
+    """行业级生产分解，索引 ``(country, industry)``，输出 12 个既有字段。"""
     ydom = arr.y_domestic()
     yexp = arr.y_export()
     ytot = ydom + yexp

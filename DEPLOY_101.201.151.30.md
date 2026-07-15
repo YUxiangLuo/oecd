@@ -6,12 +6,12 @@
 |---|---|
 | 访问地址 | `http://101.201.151.30:6363/` |
 | API 文档 | `http://101.201.151.30:6363/docs` |
-| 部署来源 | `cc` @ `02105ca` |
+| 部署来源 | 部署时检出的当前分支 |
 | 服务器目录 | `/opt/oecd-icio-analysis` |
 | 后端服务 | `gvcsim-api.service` → `127.0.0.1:18000` |
 | nginx 配置 | `/etc/nginx/conf.d/gvcsim.conf` |
 | 前端目录 | `/opt/oecd-icio-analysis/frontend/dist` |
-| Python 环境 | `/opt/oecd-icio-analysis/.venv311` |
+| Python 环境 | `/opt/oecd-icio-analysis/.venv`（Python 3.13+） |
 | 教学数据库 | 本机 PostgreSQL，数据库 `gvclab` |
 
 服务器部署目录不含 `.git`；线上代码属于哪个分支，取决于执行 `rsync` 时本地检出的分支。
@@ -57,12 +57,19 @@ ssh root@101.201.151.30 '
 
 ### 3. 同步应用代码
 
+先删除旧部署中不再属于产品的客户资料、旧原型与本地代理记录；这些目录随后继续被
+`rsync` 排除，避免本机忽略文件被重新上传：
+
+```bash
+ssh root@101.201.151.30 \
+  'rm -rf /opt/oecd-icio-analysis/client-docs /opt/oecd-icio-analysis/prototype /opt/oecd-icio-analysis/.pi-subagents'
+```
+
 ```bash
 EXCLUDES=(
   --exclude='.git/'
   --exclude='.pi-subagents/'
   --exclude='.venv/'
-  --exclude='.venv311/'
   --exclude='frontend/node_modules/'
   --exclude='frontend/.vite/'
   --exclude='frontend/playwright-report/'
@@ -78,11 +85,10 @@ EXCLUDES=(
   --exclude='.coverage'
   --exclude='htmlcov/'
   --exclude='data/'
-  --exclude='OECD_ICIO/'
   --exclude='client-docs/'
+  --exclude='OECD_ICIO/'
   --exclude='reports/'
   --exclude='dogfood-output/'
-  --exclude='prototype/'
   --exclude='tests/'
 )
 
@@ -91,7 +97,8 @@ rsync -az --delete --info=progress2 \
   ./ root@101.201.151.30:/opt/oecd-icio-analysis/
 ```
 
-不要移除 `.venv311/` 和 `data/` 排除项：前者是线上运行环境，后者包含预计算产物与认证密钥。
+不要移除 `.venv/`、`data/` 和 `client-docs/` 排除项：前者是线上运行环境，
+`data/` 包含预计算产物与认证密钥，`client-docs/` 用于阻止本地遗留客户资料进入部署目录。
 
 ### 4. 同步数据（全新部署必做）
 
@@ -114,10 +121,12 @@ rsync -az --delete OECD_ICIO/ \
   root@101.201.151.30:/opt/oecd-icio-analysis/OECD_ICIO/
 ```
 
-### 5. 重建教学库、启动并验证
+### 5. 更新依赖、重建教学库、启动并验证
 
-先用 `systemctl cat gvcsim-api.service` 确认服务实际加载的环境文件；下例假定为
-`/etc/gvcsim.env`。该步骤会删除现有教学表并重新播种演示账号，符合本轮全新部署策略。
+先运行 `systemctl cat gvcsim-api.service`，把服务单元（或 drop-in）的 `ExecStart` 更新为
+`/opt/oecd-icio-analysis/.venv/bin/uvicorn gvcsim.api:app --host 127.0.0.1 --port 18000`，
+并确认实际加载的环境文件；下例假定为 `/etc/gvcsim.env`。不能继续沿用旧 `.venv311`
+或其他历史虚拟环境路径。该步骤会删除现有教学表并重新播种演示账号，符合本轮全新部署策略。
 
 ```bash
 ssh root@101.201.151.30 '
@@ -128,7 +137,11 @@ ssh root@101.201.151.30 '
   set -a; . "$ENV_FILE"; set +a
   : "${GVCSIM_PG_DSN:?必须使用 gvcsim-api.service 的真实 DSN}"
 
-  .venv311/bin/gvcsim classroom-init --reset
+  uv sync --locked
+  systemctl daemon-reload
+  systemctl show gvcsim-api.service -p ExecStart --value \
+    | grep -F "/opt/oecd-icio-analysis/.venv/bin/uvicorn"
+  .venv/bin/gvcsim classroom-init --reset
   psql --dbname="$GVCSIM_PG_DSN" -v ON_ERROR_STOP=1 -Atc \
     "SELECT count(*) FROM step_progress;" | grep -qx 0
   psql --dbname="$GVCSIM_PG_DSN" -v ON_ERROR_STOP=1 -Atc \
@@ -143,8 +156,8 @@ ssh root@101.201.151.30 '
 
 失败时保持 API 停止，修复配置或依赖后重新执行第 3–5 步；不恢复旧数据库。
 
-本次重构不改变 WWZ/WWYZ/网络指标算法；但由于采用全新部署，仍须同步完整
-`data/processed/` 与 `data/shocks/`，不能依赖旧服务器残留产物。
+网络指标现已统一为 Gephi-compatible 全正边精确算法，并新增 NetworKit 运行依赖；必须重建
+Python 3.13+ 环境并同步完整 `data/processed/` 与 `data/shocks/`，不能复用旧网络产物。
 
 公网冒烟检查：
 
@@ -164,6 +177,12 @@ TOKEN=$(curl -fsS \
 
 curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/auth/me"
 curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/meta"
+curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/meta" \
+  | python3 -c '
+import json, sys
+contract = json.load(sys.stdin)["artifact_contract"]
+assert contract["network_algorithm"] == "gephi-compatible-directed-unweighted-positive-v1"
+'
 
 STEPS=$(curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/steps")
 printf '%s' "$STEPS" | python3 -c '
@@ -202,4 +221,4 @@ ssh root@101.201.151.30 'systemctl status postgresql --no-pager'
 ssh root@101.201.151.30 "ss -ltnp | grep -E ':(6363|18000)'"
 ```
 
-若 Python 依赖发生变化，不要直接覆盖 `.venv311`；先在服务器验证兼容环境，再切换 systemd 的 `ExecStart`。数据库连接信息通过 `GVCSIM_PG_DSN` 注入，不要把密码写入本文档。
+若 Python 依赖发生变化，先在服务器验证新环境，再切换 systemd 的 `ExecStart`。数据库连接信息通过 `GVCSIM_PG_DSN` 注入，不要把密码写入本文档。

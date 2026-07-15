@@ -1,4 +1,4 @@
-"""步骤6:GVC 生产长度与位置指标(Wang-Wei-Yu-Zhu 2017b 口径,输出客户资料字段)。
+"""步骤6:GVC 生产长度与位置指标（Wang-Wei-Yu-Zhu 2017b 公开文献口径）。
 
 生产长度 = 某段生产活动诱发的累计总产出 ÷ 该段增加值(增加值被计为总产出的
 平均次数)。按 WWYZ 2017b 式(10)-(29),各段的分子/分母(v 逐项约去或保留为权重):
@@ -117,9 +117,9 @@ def _lengths_from(parts: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
 
 
 def sector_length(arr: IcioArrays) -> pd.DataFrame:
-    """行业级长度/位置指标,索引 (country, industry),输出客户资料 10 个字段。"""
+    """行业级长度/位置指标，索引 ``(country, industry)``，输出 10 个既有字段。"""
     parts = _components(arr)
-    df = pd.DataFrame(_lengths_from(parts), index=arr.index)
+    df = pd.DataFrame(_lengths_from(parts), columns=LENGTH_COLUMNS, index=arr.index)
     df.index.names = ["country", "industry"]
     return df
 
@@ -130,6 +130,6 @@ def country_length(arr: IcioArrays, sector_df: pd.DataFrame | None = None) -> pd
     parts = _components(arr)
     grouped = {k: pd.Series(v, index=arr.index).groupby(level=0).sum().to_numpy() for k, v in parts.items()}
     countries = pd.Series(0.0, index=arr.index).groupby(level=0).sum().index
-    df = pd.DataFrame(_lengths_from(grouped), index=countries)
+    df = pd.DataFrame(_lengths_from(grouped), columns=LENGTH_COLUMNS, index=countries)
     df.index.name = "country"
     return df

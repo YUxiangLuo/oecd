@@ -721,6 +721,7 @@ def events_metadata() -> list[dict]:
                 "peak_rate": max(peak.values()),
                 "shock_type": ev.shock_type,
                 "entities": "、".join(ev.entities),
+                "removal": ev.removal or None,
                 "target_codes": list(ev.targets),
                 "sector_codes": sorted(ev.intensities),
                 "all_targets": False,

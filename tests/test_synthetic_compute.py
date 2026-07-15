@@ -37,6 +37,7 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
         "qc_shocks.json",
         "panel_industry.csv",
         "panel_country.csv",
+        "artifact_manifest.json",
     ]
     for name in expected_files:
         assert (processed / name).exists(), name
@@ -51,6 +52,6 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
 
     assert len(panel) == 8  # 2 countries × 2 sectors × 2 years
     assert {"entity_id", "tariff_shock", "treated", "macro_log_gdp_usd"}.issubset(panel.columns)
-    # 客户口径字段与回归派生列都应进入面板
+    # 文献指标字段与回归派生列都应进入面板。
     assert {"DVAex", "taxsub", "SVA", "PLv_GVC", "betweenesscentrality"}.issubset(panel.columns)
     assert {"gross_exports", "FVA_share", "3b_VA_GVC_C_share", "3_VA_GVC_share"}.issubset(panel.columns)

@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from gvcsim import api as api_mod
 from gvcsim import shocks
 from gvcsim.api import _clean, app
+from gvcsim.artifacts import NETWORK_ALGORITHM
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, SHOCKS_DIR, processed_years
 
 client = TestClient(app)
@@ -76,6 +77,8 @@ def test_regression_options():
     assert body["scenarios"] == ["clean", "noisy", "confounded"]
     assert "前趋势混杂" in body["scenario_labels"]["confounded"]
     assert set(body["outcomes"]) == {"trade", "production", "length", "network"}
+    assert body["granularities_by_outcome"]["network"] == ["国家–行业级"]
+    assert body["granularities_by_outcome"]["trade"] == ["国家–行业级", "国家级"]
     assert "steps" not in body
 
 
@@ -113,6 +116,13 @@ def test_regression_design():
         "entity",
         "cluster",
     }
+
+    network_country = client.get(
+        "/api/regression/design",
+        params={"outcome": "network", "granularity": "国家级"},
+    )
+    assert network_country.status_code == 400
+    assert "介数中心性恒为 0" in network_country.json()["detail"]
 
     ctrl = client.get(
         "/api/regression/design",
@@ -286,6 +296,7 @@ def test_db_slice_endpoint():
 def test_meta_and_indicators():
     meta = client.get("/api/meta").json()
     assert meta["years"]
+    assert meta["artifact_contract"]["network_algorithm"] == NETWORK_ALGORITHM
     year = meta["years"][-1]
     assert "CHN" in meta["countries"]
 
@@ -312,7 +323,7 @@ def test_qc_and_network():
     net = client.get(f"/api/viz/network/{year}").json()
     assert net["nodes"] and net["edges"]
     node = net["nodes"][0]
-    for key in ["gross_exports", "betweenesscentrality", "gvc_production_share"]:
+    for key in ["gross_exports", "weighted degree", "betweenesscentrality", "gvc_production_share"]:
         assert key in node
 
 
@@ -359,6 +370,8 @@ def test_shock_events():
     assert ev["sector_codes"]
     names = " ".join(e["name"] for e in body["events"])
     assert "232" in names and "301" in names
+    rusal = next(event for event in body["events"] if "RUSAL" in event["name"])
+    assert rusal["removal"] == "2019-01-27"
 
 
 def test_crosswalk_demo_endpoint():

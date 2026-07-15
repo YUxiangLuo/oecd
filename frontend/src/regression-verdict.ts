@@ -1,6 +1,6 @@
 import type { CoefStat, RegressionOutcome, RegressionResponse } from "./types";
 
-export type EvidenceState = "negative" | "positive" | "insufficient";
+type EvidenceState = "negative" | "positive" | "insufficient";
 
 export interface RegressionVerdict {
   state: EvidenceState;

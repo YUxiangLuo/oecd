@@ -1,0 +1,6 @@
+node,degree,indegree,outdegree,weighted degree,weighted indegree,weighted outdegree,Eccentricity,closnesscentrality,harmonicclosnesscentrality,betweenesscentrality,eigencentrality
+A,5,2,3,23,9,14,2,0.75,0.8333333333333334,2,0.8715378517875028
+B,3,1,2,6,2,4,2,0.75,0.8333333333333334,1,0.5954689285980788
+C,2,1,1,7,3,4,2,0.6,0.6666666666666666,1,0.40453107140192135
+D,2,2,0,8,8,0,0,0,0,0,1
+E,0,0,0,0,0,0,0,0,0,0,0

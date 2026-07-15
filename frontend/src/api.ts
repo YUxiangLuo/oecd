@@ -1,6 +1,8 @@
+import type { ProgressResponse } from "./types";
+
 export const AUTH_TOKEN_KEY = "gvcsim_token";
 
-export class ApiError extends Error {
+class ApiError extends Error {
   status: number;
 
   constructor(status: number, message: string) {
@@ -202,7 +204,7 @@ export const api = {
   classroom: {
     announcements: () =>
       get<{ announcements: import("./types").Announcement[] }>("/api/classroom/announcements"),
-    progress: () => get<import("./types").ProgressResponse>("/api/classroom/progress"),
+    progress: () => get<ProgressResponse>("/api/classroom/progress"),
     reportProgress: (step: number) => post<{ ok: boolean }>("/api/classroom/progress", { step }),
     submitReport: (body: { year: number; title: string; design: Record<string, unknown>; markdown: string }) =>
       post<{ id: number; state: string; submitted_at: string }>("/api/classroom/report/submit", body),

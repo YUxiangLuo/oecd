@@ -34,11 +34,15 @@ export interface Meta {
   years: number[];
   countries: string[];
   sectors: string[];
+  artifact_contract?: {
+    schema_version: number;
+    network_algorithm: string;
+  };
 }
 
 export type DbTableKind = "z" | "y" | "accounts";
 
-export interface DbFile {
+interface DbFile {
   year: number;
   file: string;
   size_bytes: number;
@@ -79,6 +83,7 @@ export interface ShockEvent {
   exempt: string;
   announced: string;
   effective: string;
+  removal?: string | null;
   n_sectors: number;
   top_sectors: string[];
   peak_rate: number;
@@ -89,7 +94,7 @@ export interface ShockEvent {
   all_targets?: boolean;
 }
 
-export interface ShockSummaryYear {
+interface ShockSummaryYear {
   year: number;
   treated_countries: number;
   treated_pairs: number;
@@ -112,7 +117,7 @@ export interface QcCheck {
   warnings: string[];
 }
 
-export interface CrosswalkSummary {
+interface CrosswalkSummary {
   n_hs_chapters: number;
   n_crosswalk_rows: number;
   n_icio_sectors: number;
@@ -130,7 +135,7 @@ export interface CrosswalkHsRow {
   note: string;
 }
 
-export interface CrosswalkMappedRow {
+interface CrosswalkMappedRow {
   icio_sector: string;
   mapped_value_weight: number;
   affected_value_weight: number;
@@ -139,7 +144,7 @@ export interface CrosswalkMappedRow {
   top_hs_chapters: string;
 }
 
-export interface CrosswalkRow {
+interface CrosswalkRow {
   hs_chapter: string;
   hs_description: string;
   icio_sector: string;
@@ -162,13 +167,13 @@ export interface NetworkData {
   edges: Record<string, string | number | null>[];
 }
 
-export interface IndicatorFieldMeta {
+interface IndicatorFieldMeta {
   label: string;
   format: "amount" | "pct" | "number";
   desc: string;
 }
 
-export interface IndicatorGroup {
+interface IndicatorGroup {
   key: string;
   label: string;
   fields: string[];
@@ -201,6 +206,7 @@ export interface CoefStat {
 
 export interface RegressionOptions {
   granularities: string[];
+  granularities_by_outcome: Record<RegressionOutcome, string[]>;
   shock_types: string[];
   methods: string[];
   control_modes: string[];
@@ -235,7 +241,7 @@ export interface RegressionDesignInfo {
   cluster: string;
 }
 
-export interface EquationPart {
+interface EquationPart {
   text: string;
   term?: string;
   description?: string;
@@ -415,7 +421,7 @@ export interface ClassOverview {
   submission_trend: { date: string; submitted: number; graded: number }[];
   class_breakdown: ClassBreakdown[];
 }
-export interface ClassBreakdown {
+interface ClassBreakdown {
   class_id: number;
   name: string;
   student_count: number;

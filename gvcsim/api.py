@@ -20,7 +20,12 @@ from pydantic import BaseModel, ConfigDict
 from gvcsim import auth
 from gvcsim import report as report_mod
 from gvcsim import shocks
-from gvcsim.artifacts import read_csv_artifact
+from gvcsim.artifacts import (
+    ArtifactContractError,
+    artifact_contract,
+    read_csv_artifact,
+    validate_artifact,
+)
 from gvcsim.classroom import db as classroom_db
 from gvcsim.classroom import routes as classroom_routes
 from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
@@ -34,8 +39,10 @@ from gvcsim.regression.design import (
     SCENARIOS,
     SHOCK_TYPES,
     OUTCOME_DEPVARS,
+    OUTCOME_GRANULARITIES,
     OUTCOMES,
     RegressionDesign,
+    validate_outcome_granularity,
 )
 from gvcsim.regression.panel import placebo_did_distribution, run_design_with_benchmark
 from gvcsim.steps import STAGE_NAMES, STEPS
@@ -89,7 +96,7 @@ def _read_path(path: Path) -> pd.DataFrame:
             detail=f"缺少预计算产物 {path.name},请先运行 `uv run gvcsim compute`",
         )
     # NOTE: 返回的是共享缓存 DataFrame,派生列/筛选/排序前必须 .copy()(见 gvcsim/artifacts.py)。
-    return read_csv_artifact(path)
+    return read_csv_artifact(path, require_current=path.parent == PROCESSED_DIR)
 
 
 def _read_csv(name: str) -> pd.DataFrame:
@@ -255,14 +262,14 @@ _INDICATOR_DESCRIPTIONS = {
     "degree": "与该节点直接相连的入边和出边数量。",
     "indegree": "指向该节点的直接供应链连接数量。",
     "outdegree": "由该节点指向其他节点的直接供应链连接数量。",
-    "weighted degree": "与该节点相连的全部入向和出向贸易流量之和。",
-    "weighted indegree": "流入该节点的贸易流量之和。",
-    "weighted outdegree": "由该节点流出的贸易流量之和。",
+    "weighted degree": "与该节点相连的全部入向和出向网络边流量之和。",
+    "weighted indegree": "流入该节点的网络边流量之和。",
+    "weighted outdegree": "由该节点流出的网络边流量之和。",
     "Eccentricity": "该节点到所有可达节点的最远最短路径距离。",
-    "closnesscentrality": "到其他节点最短路径距离之和的倒数，越高表示整体可达性越强。",
-    "harmonicclosnesscentrality": "对各节点最短路径倒数求和，可稳健处理不完全连通网络。",
-    "betweenesscentrality": "经过该节点的最短路径占比，越高表示越可能成为供应链中转枢纽。",
-    "eigencentrality": "同时考虑连接数量与相邻节点重要性的中心性指标。",
+    "closnesscentrality": "从该节点沿出边可达的节点数除以最短路径距离之和，越高表示向外可达性越强。",
+    "harmonicclosnesscentrality": "从该节点沿出边到可达节点的距离倒数平均值，可处理不完全连通网络。",
+    "betweenesscentrality": "经过该节点的有向最短路径原始计数（不归一化），越高表示越可能成为中转枢纽。",
+    "eigencentrality": "按入边邻居的重要性迭代计算并以最大值归一的 Gephi 特征向量中心性。",
 }
 # 用 .get 而不是下标:漏写描述应表现为测试失败(test_indicator_schema 断言
 # desc 全部非空),而不是 import 时 KeyError 拖垮整个服务。
@@ -305,7 +312,12 @@ def meta():
     if years:
         countries = sorted(_read_csv(f"indicators_country_{years[-1]}.csv")["country"].unique())
         sectors = sorted(_read_csv(f"indicators_industry_{years[-1]}.csv")["industry"].unique())
-    return {"years": years, "countries": countries, "sectors": sectors}
+    return {
+        "years": years,
+        "countries": countries,
+        "sectors": sectors,
+        "artifact_contract": artifact_contract(),
+    }
 
 
 @app.get("/api/steps")
@@ -359,6 +371,7 @@ def qc_shocks():
     path = PROCESSED_DIR / "qc_shocks.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail="冲击面板尚未质检,请先运行 compute")
+    validate_artifact(path)
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -366,6 +379,7 @@ def qc_shocks():
 def qc_controls():
     path = PROCESSED_DIR / "qc_controls.json"
     if path.exists():
+        validate_artifact(path)
         return json.loads(path.read_text(encoding="utf-8"))
     controls_path = PROCESSED_DIR / "controls_country.csv"
     if not controls_path.exists():
@@ -379,11 +393,12 @@ def qc(year: int):
     path = PROCESSED_DIR / f"qc_{year}.json"
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"{year} 年尚未质检,请先运行 compute")
+    validate_artifact(path)
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _with_derived(df: pd.DataFrame) -> pd.DataFrame:
-    """在客户口径原始列之外派生毛出口与教学用份额列(CSV 产物保持客户 schema 不动)。"""
+    """在公开文献指标列之外派生毛出口与教学用份额列（不改变 CSV schema）。"""
     out = df.copy()
     out["gross_exports"] = out[["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"]].sum(axis=1)
     gross = out["gross_exports"]
@@ -439,7 +454,7 @@ def indicators_industry(
 def viz_network(year: int):
     edges = _read_csv(f"network_edges_{year}.csv")
     country_df = _read_csv(f"indicators_country_{year}.csv")
-    nodes = country_df[["country", "betweenesscentrality"]].copy()
+    nodes = country_df[["country", "weighted degree", "betweenesscentrality"]].copy()
     nodes["gross_exports"] = country_df[["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"]].sum(axis=1)
     nodes["gvc_production_share"] = (country_df["3_VA_GVC"] / country_df["SVA"]).where(country_df["SVA"] > 0)
     return {
@@ -477,6 +492,7 @@ def _with_tariff_exposure(df: pd.DataFrame, year: int, shock_type: str) -> pd.Da
     exposure_path = PROCESSED_DIR / f"{shocks.EXPOSURE_PREFIX}_{year}.csv"
     exposure_lookup: dict[tuple[str, str], float] = {}
     if exposure_path.exists():
+        validate_artifact(exposure_path)
         exposure_lookup = _exposure_lookup(str(exposure_path), exposure_path.stat().st_mtime_ns)
     out["export_exposure"] = [
         exposure_lookup.get((str(country), imposer)) if imposer is not None else None
@@ -617,6 +633,7 @@ class ReportRequest(BaseModel):
 def regression_options():
     return {
         "granularities": GRANULARITIES,
+        "granularities_by_outcome": OUTCOME_GRANULARITIES,
         "shock_types": SHOCK_TYPES,
         "methods": METHODS,
         "control_modes": CONTROL_MODES,
@@ -642,6 +659,10 @@ def _validate_design(
         raise HTTPException(status_code=400, detail=f"outcome 必须是 {OUTCOMES}")
     if granularity not in GRANULARITIES:
         raise HTTPException(status_code=400, detail=f"granularity 必须是 {GRANULARITIES}")
+    try:
+        validate_outcome_granularity(outcome, granularity)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     if shock_type not in SHOCK_TYPES:
         raise HTTPException(status_code=400, detail=f"shock_type 必须是 {SHOCK_TYPES}")
     if method not in METHODS:
@@ -819,6 +840,11 @@ def report_custom(req: ReportRequest):
 # ---------------------------------------------------------------- 教学面板(班级/学生/评阅/公告)
 
 app.include_router(classroom_routes.router)
+
+
+@app.exception_handler(ArtifactContractError)
+async def artifact_contract_error(request: Request, exc: ArtifactContractError):
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
 @app.exception_handler(classroom_db.Unavailable)

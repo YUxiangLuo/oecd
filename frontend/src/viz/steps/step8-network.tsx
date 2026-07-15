@@ -1,16 +1,16 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { formatMetric } from "../../format";
 import type { NetworkData } from "../../types";
 import { CAT, Legend, REGION_OF, REGIONS, SEQ, cardStyle, countryLabel, num, useTip } from "../shared";
 
 /* ------------------------------ 步骤8:网络图 ------------------------------ */
 
-type NetworkMetric = "gvc_production_share" | "betweenesscentrality" | "gross_exports";
+type NetworkMetric = "gvc_production_share" | "weighted degree" | "gross_exports";
 type NetworkColorMode = "region" | NetworkMetric;
 
 const NETWORK_METRICS: { key: NetworkMetric; label: string; format: "pct" | "number" | "amount" }[] = [
   { key: "gvc_production_share", label: "GVC 生产份额", format: "pct" },
-  { key: "betweenesscentrality", label: "介数中心性", format: "number" },
+  { key: "weighted degree", label: "双向贸易加权度", format: "amount" },
   { key: "gross_exports", label: "毛出口(百万美元)", format: "amount" },
 ];
 
@@ -24,6 +24,7 @@ function seqColor(value: number, max: number) {
 }
 
 export function NetworkViz({ data }: { data: NetworkData }) {
+  const markerId = `network-edge-arrow-${useId().replaceAll(":", "")}`;
   const { wrapRef, Tip, show, hide } = useTip();
   const [hovered, setHovered] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -37,7 +38,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
     const byRegion: string[][] = REGIONS.map(() => []);
     const metrics: Record<NetworkMetric, Record<string, number>> = {
       gvc_production_share: {},
-      betweenesscentrality: {},
+      "weighted degree": {},
       gross_exports: {},
     };
     data.nodes.forEach((n) => {
@@ -72,25 +73,30 @@ export function NetworkViz({ data }: { data: NetworkData }) {
     const maxFlow = Math.max(...data.edges.map((e) => num(e.flow)), 1);
     const maxMetric: Record<NetworkMetric, number> = {
       gvc_production_share: Math.max(...Object.values(metrics.gvc_production_share), 1e-9),
-      betweenesscentrality: Math.max(...Object.values(metrics.betweenesscentrality), 1e-9),
+      "weighted degree": Math.max(...Object.values(metrics["weighted degree"]), 1e-9),
       gross_exports: Math.max(...Object.values(metrics.gross_exports), 1e-9),
     };
-    // 往返两条有向边合并为一个伙伴(流量相加),避免 tooltip 里同一国家出现两次
-    const nbFlow: Record<string, Record<string, number>> = {};
+    // 伙伴只列一次，但分别保存流出/流入，不能把两条有向边误写成无方向的“双边流量”。
+    const nbFlow: Record<string, Record<string, { inflow: number; outflow: number }>> = {};
     data.edges.forEach((e) => {
       const s = String(e.source), t = String(e.target), f = num(e.flow);
-      (nbFlow[s] ??= {})[t] = (nbFlow[s]?.[t] ?? 0) + f;
-      (nbFlow[t] ??= {})[s] = (nbFlow[t]?.[s] ?? 0) + f;
+      const fromSource = (nbFlow[s] ??= {});
+      const fromTarget = (nbFlow[t] ??= {});
+      const sourcePartner = (fromSource[t] ??= { inflow: 0, outflow: 0 });
+      const targetPartner = (fromTarget[s] ??= { inflow: 0, outflow: 0 });
+      sourcePartner.outflow += f;
+      targetPartner.inflow += f;
     });
-    const neighbors: Record<string, { c: string; flow: number }[]> = {};
+    const neighbors: Record<string, { c: string; inflow: number; outflow: number; total: number }[]> = {};
     Object.entries(nbFlow).forEach(([c, m]) => {
-      neighbors[c] = Object.entries(m).map(([p, flow]) => ({ c: p, flow }))
-        .sort((a, b) => b.flow - a.flow);
+      neighbors[c] = Object.entries(m)
+        .map(([p, flow]) => ({ c: p, ...flow, total: flow.inflow + flow.outflow }))
+        .sort((a, b) => b.total - a.total);
     });
 
     // 静态标签只给贸易流量最大的节点(区域内前 2),其余悬停时显示,避免密集区碰撞
     const flowSum: Record<string, number> = {};
-    Object.entries(neighbors).forEach(([c, l]) => { flowSum[c] = l.reduce((s, n) => s + n.flow, 0); });
+    Object.entries(neighbors).forEach(([c, l]) => { flowSum[c] = l.reduce((s, n) => s + n.total, 0); });
     const topLabeled = new Set<string>();
     byRegion.forEach((list) =>
       [...list].sort((a, b) => (flowSum[b] ?? 0) - (flowSum[a] ?? 0)).slice(0, 2)
@@ -111,6 +117,8 @@ export function NetworkViz({ data }: { data: NetworkData }) {
       .sort((a, b) => num(b.flow) - num(a.flow)).slice(0, 5)
     : []);
   const metricMeta = Object.fromEntries(NETWORK_METRICS.map((m) => [m.key, m])) as Record<NetworkMetric, typeof NETWORK_METRICS[number]>;
+  const nodeRadius = (c: string) =>
+    3.5 + ((metrics[sizeMetric][c] ?? 0) / Math.max(maxMetric[sizeMetric], 1e-9)) * 11;
   const nodeColor = (c: string) =>
     colorMode === "region"
       ? CAT[REGION_OF[c] ?? 5]
@@ -134,7 +142,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
           <option value="region">区域</option>
           {NETWORK_METRICS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
         </select>
-        <label>边权阈值</label>
+        <label>显示边权阈值</label>
         <input
           type="range"
           min={0}
@@ -151,6 +159,12 @@ export function NetworkViz({ data }: { data: NetworkData }) {
         {selected && <button onClick={() => setSelected(null)}>清除选择</button>}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ display: "block", width: "100%", height: "auto" }} onClick={() => setSelected(null)}>
+        <defs>
+          <marker id={markerId} markerWidth="6" markerHeight="6" refX="5.2" refY="3"
+            orient="auto" markerUnits="strokeWidth" viewBox="0 0 6 6">
+            <path d="M0 0 L6 3 L0 6 Z" fill="context-stroke" />
+          </marker>
+        </defs>
         <g>
           {visibleEdges.map((e, i) => {
             const s = String(e.source), t = String(e.target);
@@ -164,18 +178,28 @@ export function NetworkViz({ data }: { data: NetworkData }) {
             const active = !adj || s === focus || t === focus;
             const controlX = mx - (dy / nl) * off;
             const controlY = my + (dx / nl) * off;
-            const labelX = (p1.x + 2 * controlX + p2.x) / 4;
-            const labelY = (p1.y + 2 * controlY + p2.y) / 4;
+            const startLength = Math.hypot(controlX - p1.x, controlY - p1.y) || 1;
+            const endLength = Math.hypot(p2.x - controlX, p2.y - controlY) || 1;
+            const startGap = nodeRadius(s) + 2;
+            const endGap = nodeRadius(t) + 4;
+            const startX = p1.x + ((controlX - p1.x) / startLength) * startGap;
+            const startY = p1.y + ((controlY - p1.y) / startLength) * startGap;
+            const endX = p2.x - ((p2.x - controlX) / endLength) * endGap;
+            const endY = p2.y - ((p2.y - controlY) / endLength) * endGap;
+            const labelX = (startX + 2 * controlX + endX) / 4;
+            const labelY = (startY + 2 * controlY + endY) / 4;
+            const opacity = active ? 0.16 + f * 0.48 : 0.025;
             return (
-              <g key={i}>
+              <g key={`${s}-${t}-${i}`}>
+              <title>{s} → {t}: {fmtNetworkMetric(num(e.flow), "amount")} 百万美元</title>
               <path fill="none" stroke={col}
-                d={`M${p1.x} ${p1.y} Q${mx - (dy / nl) * off} ${my + (dx / nl) * off} ${p2.x} ${p2.y}`}
-                strokeOpacity={active ? 0.16 + f * 0.48 : 0.025}
+                d={`M${startX} ${startY} Q${controlX} ${controlY} ${endX} ${endY}`}
+                opacity={opacity} markerEnd={`url(#${markerId})`}
                 strokeWidth={0.7 + f * 3.8} strokeLinecap="round" />
               {labeledEdges.has(e) && (
                 <text x={labelX} y={labelY - 4} textAnchor="middle" fontSize={10.5} fontWeight={700} fill="#3a4050"
                   stroke="#fff" strokeWidth={3.5} paintOrder="stroke" style={{ pointerEvents: "none" }}>
-                  {fmtNetworkMetric(num(e.flow), "amount")}
+                  {s}→{t} · {fmtNetworkMetric(num(e.flow), "amount")}
                 </text>
               )}
               </g>
@@ -185,7 +209,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
         <g>
           {Object.keys(pos).map((c) => {
             const p = pos[c];
-            const r = 3.5 + ((metrics[sizeMetric][c] ?? 0) / Math.max(maxMetric[sizeMetric], 1e-9)) * 11;
+            const r = nodeRadius(c);
             const col = nodeColor(c);
             const dim = adj ? !adj.has(c) : false;
             const labeled = focus ? adj!.has(c) : topLabeled.has(c);
@@ -238,10 +262,15 @@ export function NetworkViz({ data }: { data: NetworkData }) {
             ))}
           </div>
           <table>
-            <thead><tr><th>伙伴</th><th>双边流量(百万美元)</th></tr></thead>
+            <thead><tr><th>伙伴</th><th>流出</th><th>流入</th><th>合计</th></tr></thead>
             <tbody>
               {selectedNeighbors.slice(0, 8).map((n) => (
-                <tr key={n.c}><td>{countryLabel(n.c)}</td><td>{fmtNetworkMetric(n.flow, "amount")}</td></tr>
+                <tr key={n.c}>
+                  <td>{countryLabel(n.c)}</td>
+                  <td>{fmtNetworkMetric(n.outflow, "amount")}</td>
+                  <td>{fmtNetworkMetric(n.inflow, "amount")}</td>
+                  <td>{fmtNetworkMetric(n.total, "amount")}</td>
+                </tr>
               ))}
             </tbody>
           </table>
@@ -249,7 +278,8 @@ export function NetworkViz({ data }: { data: NetworkData }) {
       )}
       <div style={{ position: "absolute", right: 18, bottom: 14, fontSize: 10.5, color: "#b0b5c2", textAlign: "right", lineHeight: 1.6 }}>
         节点大小 = {metricMeta[sizeMetric].label} · 节点颜色 = {colorMode === "region" ? "区域" : metricMeta[colorMode].label}<br />
-        显示 {visibleEdges.length}/{data.edges.length} 条 Top 边;锁定节点后标注相关流量最高的 5 条边
+        显示 {visibleEdges.length}/{data.edges.length} 条 Top 边；箭头表示 source → target<br />
+        阈值仅影响 Top 边显示，不影响 Gephi 指标计算
       </div>
       {Tip}
     </div>

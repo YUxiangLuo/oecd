@@ -18,9 +18,6 @@ SHOCKS_DIR = ROOT / "data" / "shocks"
 # 自动生成的实验报告
 REPORTS_DIR = ROOT / "reports"
 
-# ICIO2023 版本覆盖的年份范围(pymrio download_oecd 支持的区间)
-SUPPORTED_YEARS = range(1995, 2021)
-
 # 教学(班级/学生/评阅)数据库连接串;核心 16 步流程不依赖它,连不上时相关接口返回 503
 PG_DSN = os.environ.get("GVCSIM_PG_DSN", "postgresql://alice:111111@127.0.0.1:5432/gvclab")
 
@@ -37,5 +34,9 @@ def available_years(raw_dir: Path = RAW_DATA_DIR) -> list[int]:
 
 
 def processed_years() -> list[int]:
-    """扫描已完成指标预计算的年份。"""
-    return sorted(int(f.stem.rsplit("_", 1)[1]) for f in PROCESSED_DIR.glob("indicators_country_*.csv"))
+    """返回当前产物契约登记的完整指标年份。"""
+    from gvcsim.artifacts import current_artifact_years
+
+    if not any(PROCESSED_DIR.glob("indicators_country_*.csv")):
+        return []
+    return current_artifact_years(PROCESSED_DIR)

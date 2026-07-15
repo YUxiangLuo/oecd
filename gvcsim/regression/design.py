@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from gvcsim.data.controls import CONTROL_COLUMNS, CONTROL_LABELS, MACRO_CONTROL_COLUMNS
 from gvcsim.shocks import SHOCK_SPECS
 
-# 稳定 outcome → (被解释变量, 中文含义)。列名来自 pipeline 产出的客户口径面板。
+# 稳定 outcome → (被解释变量, 中文含义)。列名来自 pipeline 产出的指标面板。
 OUTCOME_DEPVARS = {
     "trade": ("FVA_share", "出口中外国增加值份额(FVA / 毛出口,WWZ)"),
     "production": ("3b_VA_GVC_C_share", "复杂GVC生产份额(3b_VA_GVC_C / SVA,WWYZ)"),
@@ -19,6 +19,9 @@ OUTCOME_DEPVARS = {
 OUTCOMES = list(OUTCOME_DEPVARS)
 
 GRANULARITIES = ["国家–行业级", "国家级"]
+OUTCOME_GRANULARITIES = {
+    outcome: (["国家–行业级"] if outcome == "network" else list(GRANULARITIES)) for outcome in OUTCOMES
+}
 SHOCK_TYPES = list(SHOCK_SPECS)
 METHODS = ["双重差分 (DID)", "双向固定效应", "事件研究"]
 CONTROL_MODE_NONE = "不加控制变量"
@@ -62,6 +65,9 @@ class RegressionDesign:
     # ROW(Rest of World)是投入产出表闭合用的剩余地区,不是可解释的政策处理对象。
     # 指标计算仍保留 ROW;回归估计默认剔除,避免 DID/事件研究把聚合残差当成真实国家。
     exclude_row: bool = True
+
+    def __post_init__(self) -> None:
+        validate_outcome_granularity(self.outcome, self.granularity)
 
     @property
     def depvar(self) -> str:
@@ -207,3 +213,17 @@ class RegressionDesign:
     def equation(self) -> str:
         """生成与原型界面一致的回归方程展示文本(按方法渲染解释变量)。"""
         return "".join(part["text"] for part in self.equation_parts())
+
+
+def validate_outcome_granularity(outcome: str, granularity: str) -> None:
+    """校验 outcome 与可识别的面板粒度组合。"""
+    if outcome not in OUTCOMES:
+        raise ValueError(f"outcome 必须是 {OUTCOMES}")
+    if granularity not in GRANULARITIES:
+        raise ValueError(f"granularity 必须是 {GRANULARITIES}")
+    supported = OUTCOME_GRANULARITIES[outcome]
+    if granularity not in supported:
+        raise ValueError(
+            "网络介数中心性回归仅支持国家–行业级；国家级贸易图在全部正流量边下为完全图，"
+            "Gephi 介数中心性恒为 0，不能用于回归。"
+        )

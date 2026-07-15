@@ -38,6 +38,7 @@ export function SelectedEventCard({
           <span>{event.shock_type ?? "关税冲击"}</span>
           <span>宣布 {event.announced}</span>
           <span>生效 {event.effective}</span>
+          {event.removal && <span>解除 {event.removal}</span>}
           <span>{event.imposer} → {event.targets}</span>
         </div>
       </div>

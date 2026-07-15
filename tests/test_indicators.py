@@ -4,8 +4,9 @@
 用来对照模块里向量化/化简后的公式,防止推导错误。
 """
 
+from pathlib import Path
+
 import numpy as np
-import networkx as nx
 import pandas as pd
 import pytest
 
@@ -277,7 +278,7 @@ def test_country_length_is_va_weighted(fake_io):
 
 
 # ---------------------------------------------------------------------------
-# 网络指标(Gephi 风格)
+# 网络指标（Gephi-compatible）
 # ---------------------------------------------------------------------------
 
 
@@ -302,8 +303,35 @@ def test_network_metrics(fake_io):
     assert df["eigencentrality"].max() == pytest.approx(1.0)
 
 
-def test_path_metrics_match_networkx_on_disconnected_digraph():
-    """接近/调和中心性在断连有向图上应复现 NetworkX 的 inward-distance 默认口径。"""
+def test_all_network_fields_match_gephi_0_10_1_golden_export():
+    """冻结 Gephi Toolkit 0.10.1 的 directed/unweighted/unnormalized 输出。
+
+    图同时覆盖正自环、非对称边、不同边权、汇点和隔离点；因此 11 个公开字段
+    的方向、权重、自环、断连和特征向量语义都由同一份外部基准守护。
+    """
+    weights = np.zeros((5, 5))
+    for source, target, value in [
+        (0, 0, 5.0),
+        (0, 1, 2.0),
+        (1, 2, 3.0),
+        (2, 0, 4.0),
+        (0, 3, 7.0),
+        (1, 3, 1.0),
+    ]:
+        weights[source, target] = value
+
+    expected = pd.read_csv(
+        Path(__file__).parent / "fixtures" / "gephi_0_10_1_directed_reference.csv",
+        index_col="node",
+    )
+    actual = network._gephi_metrics(weights, list(expected.index))
+
+    assert list(actual.columns) == list(expected.columns) == network.NETWORK_COLUMNS
+    assert np.allclose(actual.to_numpy(), expected.to_numpy(), rtol=1e-12, atol=1e-12)
+
+
+def test_path_metrics_follow_outgoing_gephi_distances():
+    """断连有向链按出边计算可达数、距离和与距离倒数平均。"""
     adj = np.array(
         [
             [0, 1, 0, 0],
@@ -314,14 +342,8 @@ def test_path_metrics_match_networkx_on_disconnected_digraph():
         dtype=bool,
     )
     got = network._path_metrics(adj)
-    G = nx.DiGraph()
-    G.add_nodes_from(range(4))
-    G.add_edges_from([(0, 1), (1, 2)])
-    closeness = nx.closeness_centrality(G, wf_improved=True)
-    harmonic = nx.harmonic_centrality(G, distance=None)
-
-    assert np.allclose(got["closnesscentrality"], [closeness[i] for i in range(4)])
-    assert np.allclose(got["harmonicclosnesscentrality"], [harmonic[i] for i in range(4)])
+    assert np.allclose(got["closnesscentrality"], [2 / 3, 1.0, 0.0, 0.0])
+    assert np.allclose(got["harmonicclosnesscentrality"], [0.75, 1.0, 0.0, 0.0])
     assert np.allclose(got["Eccentricity"], [2.0, 1.0, 0.0, 0.0])
 
 
@@ -332,49 +354,57 @@ def test_sector_network(fake_io):
     assert list(df.index.names) == ["country", "industry"]
     assert len(df) == 4  # 2 国 × 2 行业全覆盖
     assert not df.isna().any().any()
-    # Z 全正(去自环)→ 每个节点出/入度均为 3
-    assert np.allclose(df["indegree"], 3.0)
-    assert np.allclose(df["outdegree"], 3.0)
-    assert np.allclose(df["degree"], 6.0)
-    # 加权度 = Z 行和 + 列和(去对角)
-    z = arr.Z.copy()
-    np.fill_diagonal(z, 0.0)
-    assert np.allclose(df["weighted outdegree"], z.sum(axis=1))
-    assert np.allclose(df["weighted indegree"], z.sum(axis=0))
+    # Z 全正且保留正自环 → 每个节点出/入度均为 4，自环在总度中计两次。
+    assert np.allclose(df["indegree"], 4.0)
+    assert np.allclose(df["outdegree"], 4.0)
+    assert np.allclose(df["degree"], 8.0)
+    assert np.allclose(df["weighted outdegree"], arr.Z.sum(axis=1))
+    assert np.allclose(df["weighted indegree"], arr.Z.sum(axis=0))
     assert (df["betweenesscentrality"] >= 0).all()
 
 
-def test_betweenness_is_exact_under_node_limit(fake_io):
-    arr = build_arrays(fake_io)
-    total = float(arr.Z.sum())
-    nodes = list(arr.index)
-    G = nx.DiGraph()
-    G.add_nodes_from(nodes)
-    src, dst = np.where(arr.Z / total > network.SECTOR_EDGE_SHARE_THRESHOLD)
-    for i, j in zip(src, dst):
-        if i != j:
-            G.add_edge(nodes[i], nodes[j], weight=float(arr.Z[i, j]))
-
-    got = network._betweenness_centrality(G)
-    expected = nx.betweenness_centrality(G, weight=None, normalized=False)
-
-    for node in nodes:
-        assert got[node] == pytest.approx(expected[node])
-
-
-def test_eigencentrality_max_normalized_matches_networkx():
-    W = np.array(
+def test_betweenness_is_exact_directed_raw_brandes():
+    # 菱形图 0→{1,2}→3 的两条等长最短路各给中间节点 1/2 原始介数。
+    adj = np.array(
         [
-            [0.0, 2.0, 0.0],
-            [2.0, 0.0, 1.0],
-            [0.0, 1.0, 0.0],
-        ]
+            [0, 1, 1, 0],
+            [0, 0, 0, 1],
+            [0, 0, 0, 1],
+            [0, 0, 0, 0],
+        ],
+        dtype=bool,
     )
-    got = network._eigencentrality(W)
-    G = nx.from_numpy_array(W)
-    expected = nx.eigenvector_centrality_numpy(G, weight="weight")
-    peak = max(expected.values())
+    assert np.allclose(network._betweenness_centrality(adj), [0.0, 0.5, 0.5, 0.0])
 
-    assert got.max() == pytest.approx(1.0)
-    for i in G.nodes:
-        assert got[i] == pytest.approx(expected[i] / peak, abs=1e-8)
+
+def test_degree_keeps_positive_self_loops_and_ignores_nonpositive_values():
+    weights = np.array([[5.0, -2.0], [3.0, np.nan]])
+    got = network._gephi_metrics(weights, ["a", "b"])
+
+    assert np.allclose(got["outdegree"], [1.0, 1.0])
+    assert np.allclose(got["indegree"], [2.0, 0.0])
+    assert np.allclose(got["degree"], [3.0, 1.0])
+    assert np.allclose(got["weighted outdegree"], [5.0, 3.0])
+    assert np.allclose(got["weighted indegree"], [8.0, 0.0])
+    assert np.allclose(got["weighted degree"], [13.0, 3.0])
+
+
+def test_eigencentrality_reproduces_gephi_directed_100_iteration_result():
+    adj = np.array(
+        [
+            [1, 1, 0],
+            [0, 0, 1],
+            [1, 0, 0],
+        ],
+        dtype=bool,
+    )
+    got = network._eigencentrality(adj)
+
+    assert np.allclose(got, [1.0, 0.68321439, 0.46445021], atol=1e-8)
+
+
+def test_empty_network_maps_all_metrics_to_zero():
+    got = network._gephi_metrics(np.zeros((3, 3)), ["a", "b", "c"])
+
+    assert list(got.columns) == network.NETWORK_COLUMNS
+    assert np.allclose(got.to_numpy(), 0.0)

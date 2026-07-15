@@ -6,12 +6,12 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "numpy>=2.5.0",
-    "openpyxl>=3.1.0",
     "pandas>=3.0.3",
     "pymrio>=0.6.3",
-    "networkx>=3.4",
+    "networkit>=11.2.1",
     "scipy>=1.18.0",
     "fastapi>=0.115",
+    "pydantic>=2.0",
     "uvicorn>=0.34",
     "linearmodels>=7.0",
     "psycopg[binary]>=3.2",
@@ -42,7 +42,6 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 120
 target-version = "py313"
-extend-exclude = ["prototype"]
 
 [tool.mypy]
 python_version = "3.13"

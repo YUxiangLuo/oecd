@@ -3,7 +3,7 @@
  *
  * DecompositionDemo(步骤4/5/6):用真实指标数据把总量拆成各分项,
  *   实时校验恒等式(加总 = 毛出口 / 总增加值 / 总生产长度),每项可 hover 看含义。
- *   恒等式口径与后端引擎一致(客户资料口径):
+ *   恒等式口径与后端引擎及公开文献一致:
  *     步骤4 毛出口 = DVAex + DVArt + DDC + FVA + FDC + taxsub(WWZ 总贸易核算)
  *     步骤5 SVA = 纯国内 + 传统贸易 + 简单GVC + 复杂GVC(WWYZ 2017a)
  *     步骤6 PLv = 各段长度按对应增加值份额的加权平均(WWYZ 2017b;
@@ -333,13 +333,14 @@ const NET_EDGES: [string, string][] = [
   ["CHN", "KOR"], ["JPN", "KOR"], ["JPN", "VNM"], ["KOR", "VNM"],
 ];
 
-const ekey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+const ekey = (a: string, b: string) => `${a}→${b}`;
 
 function computeCentrality() {
   const ids = NET_NODES.map((n) => n.id);
-  const adj: Record<string, string[]> = {};
-  ids.forEach((i) => (adj[i] = []));
-  NET_EDGES.forEach(([a, b]) => { adj[a].push(b); adj[b].push(a); });
+  const out: Record<string, string[]> = {};
+  const incoming: Record<string, string[]> = {};
+  ids.forEach((i) => { out[i] = []; incoming[i] = []; });
+  NET_EDGES.forEach(([a, b]) => { out[a].push(b); incoming[b].push(a); });
 
   // 每个源点 BFS:dist、sigma(最短路条数)、preds
   const dist: Record<string, Record<string, number>> = {};
@@ -352,7 +353,7 @@ function computeCentrality() {
     const q = [s];
     while (q.length) {
       const v = q.shift()!;
-      for (const w of adj[v]) {
+      for (const w of out[v]) {
         if (d[w] === Infinity) { d[w] = d[v] + 1; q.push(w); }
         if (d[w] === d[v] + 1) { sg[w] += sg[v]; pr[w].push(v); }
       }
@@ -360,7 +361,7 @@ function computeCentrality() {
     dist[s] = d; sigma[s] = sg; preds[s] = pr;
   });
 
-  // Brandes 累积介数中心性(无向,最后除以 2)
+  // Brandes 累积介数中心性：有向、无权、原始计数，不归一化。
   const bet: Record<string, number> = {};
   ids.forEach((i) => (bet[i] = 0));
   ids.forEach((s) => {
@@ -379,21 +380,22 @@ function computeCentrality() {
       if (w !== s) bet[w] += delta[w];
     }
   });
-  const n = ids.length;
   const deg: Record<string, number> = {};
-  ids.forEach((i) => (deg[i] = adj[i].length));
-  const norm = ((n - 1) * (n - 2)) / 2; // 无向归一化
-  const betNorm: Record<string, number> = {};
-  ids.forEach((i) => (betNorm[i] = norm ? bet[i] / 2 / norm : 0));
-  const degNorm: Record<string, number> = {};
-  ids.forEach((i) => (degNorm[i] = deg[i] / (n - 1)));
+  const indeg: Record<string, number> = {};
+  const outdeg: Record<string, number> = {};
+  ids.forEach((i) => {
+    indeg[i] = incoming[i].length;
+    outdeg[i] = out[i].length;
+    deg[i] = indeg[i] + outdeg[i];
+  });
   const closeness: Record<string, number> = {};
   ids.forEach((i) => {
-    const distanceSum = ids.reduce((sum, target) => sum + (Number.isFinite(dist[i][target]) ? dist[i][target] : 0), 0);
-    closeness[i] = distanceSum ? (n - 1) / distanceSum : 0;
+    const reachable = ids.filter((target) => target !== i && Number.isFinite(dist[i][target]));
+    const distanceSum = reachable.reduce((sum, target) => sum + dist[i][target], 0);
+    closeness[i] = distanceSum ? reachable.length / distanceSum : 0;
   });
 
-  return { adj, dist, sigma, preds, deg, degNorm, betNorm, closeness };
+  return { out, incoming, dist, sigma, preds, deg, indeg, outdeg, bet, closeness };
 }
 
 function shortestPath(from: string, to: string, C: ReturnType<typeof computeCentrality>): string[] {
@@ -414,7 +416,7 @@ function samplePathThrough(v: string, C: ReturnType<typeof computeCentrality>): 
   let best: string[] = [];
   let bestLen = -1;
   for (const s of ids) for (const t of ids) {
-    if (s >= t || s === v || t === v) continue;
+    if (s === t || s === v || t === v || !Number.isFinite(C.dist[s][t])) continue;
     if (C.dist[s][v] + C.dist[v][t] === C.dist[s][t] && C.dist[s][t] > bestLen) {
       // 沿 preds 从 t 回溯一条经过 v 的最短路径
       const half = (from: string, to: string): string[] | null => {
@@ -451,7 +453,7 @@ export function NetworkCentralityDemo() {
   if (mode === "closeness") distancePaths.forEach(({ path }) => {
     for (let i = 0; i + 1 < path.length; i++) pathEdges.add(ekey(path[i], path[i + 1]));
   });
-  const neighbors = new Set(C.adj[sel]);
+  const neighbors = new Set([...C.out[sel], ...C.incoming[sel]]);
 
   const edgeActive = (a: string, b: string) =>
     mode === "degree"
@@ -459,6 +461,11 @@ export function NetworkCentralityDemo() {
       : pathEdges.has(ekey(a, b));
 
   const selNode = NET_NODES.find((n) => n.id === sel)!;
+  const reachablePaths = distancePaths.filter((item) => Number.isFinite(item.distance));
+  const distanceSum = reachablePaths.reduce((sum, item) => sum + item.distance, 0);
+  const visualMax = Math.max(...NET_NODES.map((node) => (
+    mode === "degree" ? C.deg[node.id] : mode === "betweenness" ? C.bet[node.id] : C.closeness[node.id]
+  )), 1e-9);
 
   return (
     <div className="demo-card">
@@ -474,15 +481,26 @@ export function NetworkCentralityDemo() {
 
       <div className="net-demo-wrap">
         <svg viewBox="0 0 620 340" className="net-demo-svg">
+          <defs>
+            <marker id="net-demo-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
+              <path d="M0,0 L0,6 L8,3 z" fill="context-stroke" />
+            </marker>
+          </defs>
           {NET_EDGES.map(([a, b]) => {
             const na = NET_NODES.find((n) => n.id === a)!;
             const nb = NET_NODES.find((n) => n.id === b)!;
             const active = edgeActive(a, b);
+            const length = Math.hypot(nb.x - na.x, nb.y - na.y) || 1;
+            const ux = (nb.x - na.x) / length;
+            const uy = (nb.y - na.y) / length;
             return (
               <line
-                key={ekey(a, b)} x1={na.x} y1={na.y} x2={nb.x} y2={nb.y}
+                key={ekey(a, b)}
+                x1={na.x + ux * 28} y1={na.y + uy * 28}
+                x2={nb.x - ux * 32} y2={nb.y - uy * 32}
                 stroke={active ? "#4b47e0" : "#d8dbe6"}
                 strokeWidth={active ? 3.5 : 1.5}
+                markerEnd="url(#net-demo-arrow)"
               />
             );
           })}
@@ -490,8 +508,8 @@ export function NetworkCentralityDemo() {
             const isSel = n.id === sel;
             const isNeighbor = mode === "degree" && neighbors.has(n.id);
             const onPath = mode !== "degree" && (mode === "closeness" || pathNodes.includes(n.id));
-            const val = mode === "degree" ? C.degNorm[n.id] : mode === "betweenness" ? C.betNorm[n.id] : C.closeness[n.id];
-            const r = 18 + val * 20;
+            const val = mode === "degree" ? C.deg[n.id] : mode === "betweenness" ? C.bet[n.id] : C.closeness[n.id];
+            const r = 18 + (val / visualMax) * 20;
             return (
               <g key={n.id} onClick={() => setSel(n.id)} style={{ cursor: "pointer" }}>
                 <circle
@@ -510,18 +528,18 @@ export function NetworkCentralityDemo() {
           <div className="ndp-node">节点 <b>{selNode.label}</b>（{sel}）</div>
           {mode === "degree" ? (
             <>
-              <div className="ndp-formula">度中心性 = 直接相连的节点数 / (N − 1)</div>
+              <div className="ndp-formula">度 = 入度 + 出度（原始边数）</div>
               <div className="ndp-calc">
-                = {C.deg[sel]} / {NET_NODES.length - 1} = <b>{C.degNorm[sel].toFixed(3)}</b>
+                = {C.indeg[sel]} + {C.outdeg[sel]} = <b>{C.deg[sel]}</b>
               </div>
               <p className="ndp-note">
-                高亮的 {C.deg[sel]} 条连线就是它的直接连接。度中心性只看“邻居多不多”。
+                高亮的是全部入边和出边。Gephi 中自环会分别计入一次入度和一次出度，因此总度计两次。
               </p>
             </>
           ) : mode === "betweenness" ? (
             <>
-              <div className="ndp-formula">介数中心性 = 经过它的最短路径占比(归一化)</div>
-              <div className="ndp-calc">= <b>{C.betNorm[sel].toFixed(3)}</b></div>
+              <div className="ndp-formula">介数中心性 = Σ σₛₜ(v) / σₛₜ（有向原始计数）</div>
+              <div className="ndp-calc">= <b>{C.bet[sel].toFixed(3)}</b></div>
               <p className="ndp-note">
                 {pathNodes.length >= 3
                   ? <>例如 {pathNodes[0]} → {pathNodes[pathNodes.length - 1]} 的最短路要穿过 {sel}(已高亮)。越多这类“必经”对,介数越高——它是供应链的咽喉。</>
@@ -530,23 +548,25 @@ export function NetworkCentralityDemo() {
             </>
           ) : (
             <>
-              <div className="ndp-formula">接近中心性 = (N − 1) / 到其余节点的最短距离和</div>
+              <div className="ndp-formula">接近中心性 = 沿出边可达节点数 / 最短距离和</div>
               <div className="ndp-calc">
-                = {NET_NODES.length - 1} / {distancePaths.reduce((sum, item) => sum + item.distance, 0)} = <b>{C.closeness[sel].toFixed(3)}</b>
+                {reachablePaths.length > 0
+                  ? <>= {reachablePaths.length} / {distanceSum} = <b>{C.closeness[sel].toFixed(3)}</b></>
+                  : <>无可达节点；按 Gephi 约定记为 <b>0.000</b></>}
               </div>
-              <p className="ndp-note">高亮边组成从 {sel} 出发的一棵最短路径树；距离和越小，越能快速触达整个生产网络。</p>
+              <p className="ndp-note">高亮边组成从 {sel} 沿箭头出发的最短路径树；不可达节点不进入分子和分母。</p>
               <div style={{ maxHeight: 150, overflow: "auto", marginBottom: 10 }}>
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
                   <thead><tr><th style={{ textAlign: "left" }}>目标</th><th>距离</th><th style={{ textAlign: "left" }}>一条最短路径</th></tr></thead>
                   <tbody>{distancePaths.sort((a, b) => a.distance - b.distance || a.target.localeCompare(b.target)).map((item) => (
-                    <tr key={item.target}><td>{item.target}</td><td style={{ textAlign: "center" }}>{item.distance}</td><td>{item.path.join(" → ")}</td></tr>
+                    <tr key={item.target}><td>{item.target}</td><td style={{ textAlign: "center" }}>{Number.isFinite(item.distance) ? item.distance : "不可达"}</td><td>{item.path.length ? item.path.join(" → ") : "—"}</td></tr>
                   ))}</tbody>
                 </table>
               </div>
             </>
           )}
           <div className="ndp-disclaim">
-            这是一个 7 节点的演示网络,用来展示算法本身。真实系统在 3465 个「国家×行业」节点的完整生产网络上计算(结果见步骤 11 的热力表)。
+            这是一个 7 节点的有向演示网络。真实系统保留全部正流量边和正自环，在完整的全球「国家×行业」生产网络上按同一 Gephi 口径计算。
           </div>
         </div>
       </div>

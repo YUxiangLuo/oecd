@@ -20,7 +20,7 @@ def _fixtures():
         for y_i, year in enumerate(years):
             va = 1000 + c_i * 200 + y_i * 100
             exp = 200 + c_i * 50 + y_i * 20
-            # 客户口径:毛出口 = WWZ 六个闭合项之和,GDP proxy = SVA
+            # 文献口径：毛出口 = WWZ 六个闭合项之和，GDP proxy = SVA。
             country_rows.append(
                 {
                     "country": c,

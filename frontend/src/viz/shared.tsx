@@ -32,7 +32,7 @@ export type Row = Record<string, string | number | null>;
 export const num = (v: string | number | null | undefined) => (typeof v === "number" ? v : 0);
 
 /** OECD ICIO 45 行业代码 → 中文名(学生看不懂 C26/H50 这类裸代码,统一映射) */
-export const SECTOR_NAMES: Record<string, string> = {
+const SECTOR_NAMES: Record<string, string> = {
   A01_02: "农林牧业", A03: "渔业", B05_06: "能源矿产开采", B07_08: "金属矿开采", B09: "采矿支持服务",
   C10T12: "食品饮料烟草", C13T15: "纺织服装皮革", C16: "木材制品", C17_18: "造纸印刷", C19: "焦炭与精炼油",
   C20: "化学品", C21: "医药", C22: "橡胶塑料", C23: "非金属矿物制品", C24: "基本金属", C25: "金属制品",
@@ -135,4 +135,3 @@ export const cardStyle: React.CSSProperties = {
   position: "relative", background: "#fff", border: "1px solid #e7e9f0",
   borderRadius: 16, padding: "20px 22px",
 };
-

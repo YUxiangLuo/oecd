@@ -5,7 +5,6 @@ validate  对某年数据做质检并打印结果(步骤3)
 compute   预计算指标与回归面板(步骤4-7 + 面板)
 regress   跑指定 outcome 的教学实证回归并打印系数表
 report    生成实验报告(步骤16)
-benchmark 与 client-docs 客户基准数据对账,生成 reports/client_benchmark.md
 serve     启动 API 服务(供前端使用)
 classroom-init  初始化教学数据库(建库/建表/播种演示数据)
 """
@@ -47,8 +46,6 @@ def main() -> None:
 
     p = sub.add_parser("report", help="生成实验报告")
     p.add_argument("--year", type=int, default=None)
-
-    sub.add_parser("benchmark", help="与客户基准数据(client-docs)对账")
 
     p = sub.add_parser("serve", help="启动 API 服务")
     p.add_argument("--port", type=int, default=8000)
@@ -101,14 +98,17 @@ def main() -> None:
             CONTROL_MODE_MACRO if args.macro_controls else CONTROL_MODE_ICIO if args.controls else "不加控制变量"
         )
         price_mode = PRICE_MODE_REAL if args.real else PRICE_MODE_NOMINAL
-        design = RegressionDesign(
-            outcome=args.outcome,
-            granularity=granularity,
-            method=method,
-            control_mode=control_mode,
-            interaction=args.interaction,
-            price_mode=price_mode,
-        )
+        try:
+            design = RegressionDesign(
+                outcome=args.outcome,
+                granularity=granularity,
+                method=method,
+                control_mode=control_mode,
+                interaction=args.interaction,
+                price_mode=price_mode,
+            )
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
         result = run_outcome_regression(
             args.outcome,
             granularity=granularity,
@@ -140,11 +140,6 @@ def main() -> None:
 
         path = report.generate(args.year)
         print(f"报告已生成: {path}")
-
-    elif args.command == "benchmark":
-        from gvcsim import benchmark
-
-        benchmark.run()
 
     elif args.command == "serve":
         import uvicorn

@@ -142,7 +142,7 @@ def build_controls(
     country = country_panel.copy()
     sector = sector_panel.copy()
     country = country.sort_values(["country", "year"]).reset_index(drop=True)
-    # 客户口径字段:GDP proxy = SVA(WWYZ 总增加值),毛出口 = WWZ 六项闭合之和
+    # 文献口径字段：GDP proxy = SVA（WWYZ 总增加值），毛出口 = WWZ 六项闭合之和。
     country["_va"] = country["SVA"]
     country["_exports"] = tradeflow.gross_exports(country)
 

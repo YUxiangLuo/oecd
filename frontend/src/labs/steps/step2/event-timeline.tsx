@@ -23,7 +23,11 @@ export function EventTimeline({
   onSelect: (event: ShockEvent) => void;
 }) {
   const model = useMemo(() => {
-    const dated = events.flatMap((event) => [dateNumber(event.announced), dateNumber(event.effective)])
+    const dated = events.flatMap((event) => [
+      dateNumber(event.announced),
+      dateNumber(event.effective),
+      event.removal ? dateNumber(event.removal) : null,
+    ])
       .filter((value): value is number => value != null);
     const fallbackStart = Date.UTC(2016, 0, 1);
     const fallbackEnd = Date.UTC(2020, 11, 31);
@@ -68,9 +72,10 @@ export function EventTimeline({
           const y = top + index * rowHeight + rowHeight / 2;
           const announcedX = x(event.announced);
           const effectiveX = x(event.effective);
+          const removalX = event.removal ? x(event.removal) : null;
           const color = EVENT_COLORS[event.shock_type ?? "关税冲击"] ?? "#4a3aa7";
           const labeled = Math.abs(effectiveX - announcedX) >= 48;
-          const accessibleName = `${event.name}；${event.shock_type ?? "关税冲击"}；宣布 ${event.announced}；生效 ${event.effective}`;
+          const accessibleName = `${event.name}；${event.shock_type ?? "关税冲击"}；宣布 ${event.announced}；生效 ${event.effective}${event.removal ? `；解除 ${event.removal}` : ""}`;
           return (
             <g
               key={key}
@@ -94,15 +99,17 @@ export function EventTimeline({
               <line x1={announcedX} y1={y} x2={effectiveX} y2={y} stroke={color} strokeWidth={3} strokeLinecap="round" />
               <circle cx={announcedX} cy={y} r={6} fill="#fff" stroke={color} strokeWidth={2.5} />
               <circle cx={effectiveX} cy={y} r={6} fill={color} stroke="#fff" strokeWidth={1.5} />
+              {removalX != null && <circle cx={removalX} cy={y} r={6} fill="#fff" stroke={color} strokeWidth={2.5} />}
               {labeled && <text x={announcedX} y={y - 9} textAnchor="middle" fontSize="9.5" fill="#777e8e">宣布</text>}
               {labeled && <text x={effectiveX} y={y + 14} textAnchor="middle" fontSize="9.5" fill={color}>生效</text>}
+              {removalX != null && <text x={removalX} y={y - 9} textAnchor="middle" fontSize="9.5" fill={color}>解除</text>}
               {selected && <text x={width - 16} y={y + 4} textAnchor="end" fontSize="11" fontWeight="700" fill="#4b47e0">✓ 已选</text>}
             </g>
           );
         })}
       </svg>
       <div className="shock-timeline-legend">
-        <span>○ 宣布</span><span>● 生效</span>
+        <span>○ 宣布/解除</span><span>● 生效</span>
         {Object.entries(EVENT_COLORS).map(([label, color]) => <span key={label} style={{ color }}>● {label}</span>)}
         <span>选择事件后会更新上方摘要与紧邻的冲击面板</span>
       </div>

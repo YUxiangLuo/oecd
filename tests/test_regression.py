@@ -156,6 +156,8 @@ def test_design_panel_spec():
     d_c = RegressionDesign(outcome="production", granularity="国家级")
     assert d_c.panel_file == "panel_country.csv"
     assert d_c.entity == d_c.cluster == "country"
+    with pytest.raises(ValueError, match="介数中心性恒为 0"):
+        RegressionDesign(outcome="network", granularity="国家级")
 
 
 def test_cluster_se_differs_from_entity_se():

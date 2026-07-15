@@ -5,8 +5,8 @@
 
 产物(每年):
   qc_<year>.json                  质检结果(步骤3)
-  indicators_country_<year>.csv   国家级指标汇总(步骤4-7,客户口径字段)
-  indicators_industry_<year>.csv  国家-行业级指标(步骤4-7,客户口径字段)
+  indicators_country_<year>.csv   国家级指标汇总(步骤4-7)
+  indicators_industry_<year>.csv  国家-行业级指标(步骤4-7)
   network_edges_<year>.csv        双边贸易流 top 边(步骤8 网络图)
 跨年:
   panel_industry.csv              国家×行业×年份长面板 + 行业异质冲击(四类 outcome 默认回归样本)
@@ -21,6 +21,7 @@ import json
 import pandas as pd
 
 from gvcsim import shocks
+from gvcsim.artifacts import register_artifacts, validate_artifact
 from gvcsim.config import PROCESSED_DIR, available_years, processed_years
 from gvcsim.data import controls, loader, quality
 from gvcsim.indicators import length, network, production, tradeflow
@@ -59,7 +60,7 @@ def compute_year(year: int, verbose: bool = True) -> None:
     len_sector = length.sector_length(arr)
     len_country = length.country_length(arr, len_sector)
 
-    log(f"[{year}] 步骤7 网络指标(行业级介数精确优先)...")
+    log(f"[{year}] 步骤7 Gephi-compatible 网络指标（全部正边、精确介数）...")
     net = network.country_network(arr)
     net_sector = network.sector_network(arr)
     edges = network.network_edges(arr)
@@ -74,6 +75,16 @@ def compute_year(year: int, verbose: bool = True) -> None:
 
     edges.insert(0, "year", year)
     edges.to_csv(PROCESSED_DIR / f"network_edges_{year}.csv", index=False)
+    register_artifacts(
+        PROCESSED_DIR,
+        [
+            f"qc_{year}.json",
+            f"export_exposure_{year}.csv",
+            f"indicators_country_{year}.csv",
+            f"indicators_industry_{year}.csv",
+            f"network_edges_{year}.csv",
+        ],
+    )
     log(f"[{year}] 完成,产物已写入 {PROCESSED_DIR}")
 
 
@@ -87,6 +98,9 @@ def build_panel() -> pd.DataFrame:
     years = processed_years()
     if not years:
         raise RuntimeError("没有任何已预计算的年份,请先运行 gvcsim compute")
+    for year in years:
+        validate_artifact(PROCESSED_DIR / f"indicators_country_{year}.csv")
+        validate_artifact(PROCESSED_DIR / f"indicators_industry_{year}.csv")
 
     sector = pd.concat(
         [pd.read_csv(PROCESSED_DIR / f"indicators_industry_{y}.csv") for y in years],
@@ -105,7 +119,7 @@ def build_panel() -> pd.DataFrame:
     with open(PROCESSED_DIR / "qc_controls.json", "w", encoding="utf-8") as f:
         json.dump([c.to_dict() for c in controls_checks], f, ensure_ascii=False, indent=2)
 
-    # 回归用派生列:毛出口与客户字段份额(FVA_share 等作为四类 outcome 因变量/交互基线)
+    # 回归用派生列：毛出口与文献指标份额（作为四类 outcome 因变量/交互基线）。
     for df in (sector, country):
         df["gross_exports"] = tradeflow.gross_exports(df)
         gross = df["gross_exports"]
@@ -159,12 +173,22 @@ def build_panel() -> pd.DataFrame:
         how="left",
     )
     country.to_csv(PROCESSED_DIR / "panel_country.csv", index=False)
+    register_artifacts(
+        PROCESSED_DIR,
+        [
+            "controls_country.csv",
+            "qc_controls.json",
+            "qc_shocks.json",
+            "panel_industry.csv",
+            "panel_country.csv",
+        ],
+    )
     return sector
 
 
 def run(years: list[int] | None = None) -> None:
-    years = years or available_years()
-    for y in years:
+    selected_years = sorted(set(years or available_years()))
+    for y in selected_years:
         compute_year(y)
     build_panel()
     print(f"面板构建完成:{PROCESSED_DIR / 'panel_industry.csv'}(行业级,回归默认)")
