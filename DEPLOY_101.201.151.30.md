@@ -6,7 +6,7 @@
 |---|---|
 | 访问地址 | `http://101.201.151.30:6363/` |
 | API 文档 | `http://101.201.151.30:6363/docs` |
-| 部署来源 | `cc` @ `672f02c` |
+| 部署来源 | `cc` @ `02105ca` |
 | 服务器目录 | `/opt/oecd-icio-analysis` |
 | 后端服务 | `gvcsim-api.service` → `127.0.0.1:18000` |
 | nginx 配置 | `/etc/nginx/conf.d/gvcsim.conf` |
