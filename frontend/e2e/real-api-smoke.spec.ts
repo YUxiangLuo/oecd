@@ -6,6 +6,14 @@ test("@real-api 登录、查看真实预计算指标并运行 outcome 回归", a
   await page.getByRole("button", { name: "登录" }).click();
   await page.getByRole("button", { name: "跳过介绍" }).click();
 
+  await page.locator(".step-row").filter({ hasText: "贸易政策冲击数据接入" }).click();
+  const shockEvent = page.getByRole("button", { name: /美国301对华关税.*宣布 2018-06-15/ });
+  await shockEvent.click();
+  await expect(shockEvent).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".selected-event-card")).toContainText("2018 · 关税冲击 · CHN 中国 · C29 汽车及零部件");
+  await expect(page.locator(".shock-panel-controls select").nth(3)).toHaveValue("C29");
+  await expect(page.locator(".shock-panel-table")).toContainText("C29 汽车及零部件");
+
   await page.locator(".step-row").filter({ hasText: "GVC 总贸易流分解指标" }).click();
   await expect(page.getByRole("heading", { name: "GVC 总贸易流分解指标" })).toBeVisible();
   await expect(page.getByText("与 毛出口 的误差", { exact: false })).toBeVisible();

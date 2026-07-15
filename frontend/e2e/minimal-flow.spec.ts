@@ -13,6 +13,22 @@ const announcement = {
   created_at: "2026-07-08T10:00:00Z",
 };
 
+const shockEvent301 = {
+  name: "美国301对华关税(四批清单)",
+  shock_type: "关税冲击",
+  imposer: "USA",
+  targets: "CHN",
+  exempt: "",
+  announced: "2018-06-15",
+  effective: "2018-07-06",
+  n_sectors: 3,
+  top_sectors: ["C29", "C24"],
+  peak_rate: 0.24,
+  target_codes: ["CHN"],
+  sector_codes: ["A01_02", "C24", "C29"],
+  all_targets: false,
+};
+
 const submissionRow = {
   id: 1,
   title: "步骤16实验报告 · 2020",
@@ -161,8 +177,58 @@ async function mockApi(
         json: { stages: { "1": "数据接入", "2": "指标计算", "3": "可视化分析", "4": "回归设计与建模", "5": "实验闭环" }, steps: steps() },
       });
     }
-    if (path === "/api/meta") return route.fulfill({ json: { years: [2019, 2020], countries: ["CHN", "USA"], sectors: ["C", "G"] } });
-    if (path === "/api/shocks/events") return route.fulfill({ json: { events: [], disclaimer: "mock" } });
+    if (path === "/api/meta") return route.fulfill({ json: { years: [2018, 2019, 2020], countries: ["CHN", "USA"], sectors: ["A01_02", "C24", "C29"] } });
+    if (path === "/api/shocks/events") return route.fulfill({ json: { events: [shockEvent301], disclaimer: "mock" } });
+    if (path === "/api/shocks/summary") {
+      return route.fulfill({
+        json: {
+          n_countries: 2,
+          n_sectors: 3,
+          years: [
+            { year: 2018, treated_countries: 1, treated_pairs: 1, mean_shock_treated: 0.02, max_shock: 0.02, max_shock_target: "CHN-C29" },
+            { year: 2019, treated_countries: 1, treated_pairs: 1, mean_shock_treated: 0.03, max_shock: 0.03, max_shock_target: "CHN-C29" },
+            { year: 2020, treated_countries: 1, treated_pairs: 1, mean_shock_treated: 0.04, max_shock: 0.04, max_shock_target: "CHN-C29" },
+          ],
+        },
+      });
+    }
+    if (path === "/api/shocks/panel") {
+      const sector = url.searchParams.get("sector") || "C29";
+      const country = url.searchParams.get("country") || "CHN";
+      const year = Number(url.searchParams.get("year") || 2020);
+      return route.fulfill({
+        json: {
+          total: 1,
+          page: 1,
+          page_size: 25,
+          rows: [{
+            country,
+            sector,
+            year,
+            tariff_shock: 0.02,
+            main_imposer: "USA",
+            export_exposure: 0.18,
+            treated: 1,
+            announced_date: "2018-06-15",
+            effective_date: "2018-07-06",
+            note: shockEvent301.name,
+          }],
+        },
+      });
+    }
+    if (path === "/api/crosswalk/demo") {
+      return route.fulfill({
+        json: {
+          year: Number(url.searchParams.get("year") || 2019),
+          summary: { n_hs_chapters: 2, n_crosswalk_rows: 3, n_icio_sectors: 2, demo_list_value_coverage: 0.58 },
+          checks: [{ name: "映射覆盖", kind: "coverage", passed: true, detail: "覆盖完整", warnings: [] }],
+          hs_rows: [{ hs_chapter: "87", list_name: "301", value_weight: 0.6, coverage: 0.5, rate_2018: 0.1, rate_2019: 0.2, rate_2020: 0.2, note: "车辆" }],
+          mapped_rows: [{ icio_sector: "C29", mapped_value_weight: 0.6, affected_value_weight: 0.3, tariff_contribution: 0.06, avg_tariff: 0.1, top_hs_chapters: "87" }],
+          crosswalk_rows: [],
+          disclaimer: "拟真 mock 映射。",
+        },
+      });
+    }
     if (path === "/api/regression/options") return route.fulfill({ json: regressionOptions });
     if (path === "/api/regression/design") {
       const outcome = url.searchParams.get("outcome");
@@ -302,6 +368,46 @@ test("登录、进入步骤、跑回归并生成报告", async ({ page }) => {
   await page.getByRole("button", { name: "提交报告给老师" }).click();
   await expect(page.locator(".submit-card").getByText("等待教师评阅", { exact: false })).toBeVisible();
   await expect(page.locator(".toast-item")).toContainText("报告已提交");
+});
+
+test("步骤2事件选择会立即反馈并联动代表行业", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: "跳过介绍" }).click();
+  await page.locator(".step-row").filter({ hasText: "贸易政策冲击数据接入" }).click();
+
+  await expect(page.getByRole("heading", { name: "贸易政策冲击数据接入" })).toBeVisible();
+  await expect(page.locator("details.event-catalog")).not.toHaveAttribute("open", "");
+  await expect(page.locator("details.crosswalk-details")).not.toHaveAttribute("open", "");
+  await expect(page.locator(".shock-workbench table:visible")).toHaveCount(1);
+
+  const eventButton = page.getByRole("button", { name: /美国301对华关税.*宣布 2018-06-15/ });
+  await eventButton.click();
+  await expect(eventButton).toHaveAttribute("aria-pressed", "true");
+  await eventButton.press("Space");
+  await expect(eventButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".selected-event-card")).toContainText("已同步冲击面板");
+  await expect(page.locator(".selected-event-card")).toContainText("2018 · 关税冲击 · CHN 中国 · C29 汽车及零部件");
+
+  const filters = page.locator(".shock-panel-controls select");
+  await expect(filters.nth(0)).toHaveValue("关税冲击");
+  await expect(filters.nth(1)).toHaveValue("2018");
+  await expect(filters.nth(2)).toHaveValue("CHN");
+  await expect(filters.nth(3)).toHaveValue("C29");
+  await expect(page.locator(".shock-panel-table")).toContainText("C29 汽车及零部件");
+
+  await page.locator("details.event-catalog > summary").click();
+  await expect(page.locator(".shock-event-table")).toBeVisible();
+  await page.locator("details.crosswalk-details > summary").click();
+  const summaryTab = page.getByRole("tab", { name: "映射摘要" });
+  await expect(summaryTab).toBeVisible();
+  await expect(page.locator(".crosswalk-content table:visible")).toHaveCount(1);
+  await summaryTab.focus();
+  await summaryTab.press("ArrowRight");
+  await expect(page.getByRole("tab", { name: "HS 清单样本" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("columnheader", { name: "HS章" })).toBeVisible();
+  await expect(page.locator(".crosswalk-content table:visible")).toHaveCount(1);
 });
 
 test("旧结果的技术细节不会混入当前未运行的新方程", async ({ page }) => {
