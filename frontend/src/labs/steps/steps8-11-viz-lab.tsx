@@ -16,7 +16,7 @@ const VIEW_LABELS: Record<ViewKind, string> = {
 interface StepVizConfig {
   group: string;                     // 主题指标组(与 schema.groups[].key 对应),用于作用域指标选择器
   views: ViewKind[];                 // 本步的标签集(依次;首=招牌,尾=表格)
-  defaultView: ViewKind;             // 重挂时默认落在的探索视图
+  defaultView: ViewKind;             // 重挂时默认落在的视图
   rankMetric: string;                // 排序/构成/趋势的默认指标
   scatter: [string, string];         // 散点默认 X/Y
   quadrant?: [string, string];       // 象限图固定 X/Y
@@ -32,7 +32,7 @@ const STEP_VIZ: Record<number, StepVizConfig> = {
   8: {
     group: "trade",
     views: ["signature", "quadrant", "composition", "rank", "scatter", "table"],
-    defaultView: "quadrant",
+    defaultView: "signature",
     rankMetric: "FVA_share",
     scatter: ["FVA_share", "DVAex_share"],
     quadrant: ["FVA_share", "3_VA_GVC_share"],
@@ -44,7 +44,7 @@ const STEP_VIZ: Record<number, StepVizConfig> = {
   9: {
     group: "production",
     views: ["signature", "composition", "rank", "scatter", "trend", "table"],
-    defaultView: "composition",
+    defaultView: "signature",
     rankMetric: "3b_VA_GVC_C_share",
     scatter: ["3_VA_GVC_share", "3b_VA_GVC_C_share"],
     composition: ["1_VA_D", "2_VA_RT", "3a_VA_GVC_S", "3b_VA_GVC_C"],
@@ -54,7 +54,7 @@ const STEP_VIZ: Record<number, StepVizConfig> = {
   10: {
     group: "length",
     views: ["signature", "scatter", "rank", "trend", "table"],
-    defaultView: "scatter",
+    defaultView: "signature",
     rankMetric: "PLv",
     scatter: ["PLv_GVC", "PLy_GVC"],
     columns: ["PLv", "PLv_GVC", "PLy", "PLy_GVC", "Pos_TPL", "GVCPs"],
@@ -63,7 +63,7 @@ const STEP_VIZ: Record<number, StepVizConfig> = {
   11: {
     group: "network",
     views: ["signature", "quadrant", "rank", "scatter", "trend", "table"],
-    defaultView: "quadrant",
+    defaultView: "signature",
     rankMetric: "weighted degree",
     scatter: ["weighted degree", "betweenesscentrality"],
     quadrant: ["weighted degree", "betweenesscentrality"],

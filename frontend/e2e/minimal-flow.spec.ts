@@ -475,6 +475,35 @@ test("步骤2事件选择会立即反馈并联动代表行业", async ({ page })
   await expect(page.locator(".crosswalk-content table:visible")).toHaveCount(1);
 });
 
+test("可视化四步进入时统一默认显示招牌图", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/?step=8");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("button", { name: "跳过介绍" }).click();
+
+  const cases = [
+    { n: 8, title: "GVC 贸易流指标可视化", otherView: "象限图" },
+    { n: 9, title: "GVC 生产指标可视化", otherView: "构成图" },
+    { n: 10, title: "GVC 长度指标可视化", otherView: "散点图" },
+    { n: 11, title: "网络指标可视化", otherView: "象限图" },
+  ];
+
+  for (const [index, item] of cases.entries()) {
+    if (index > 0) {
+      await page.locator(".step-row").filter({ hasText: item.title }).click();
+    }
+    await expect(page).toHaveURL(new RegExp(`\\?step=${item.n}$`));
+    await expect(page.getByRole("heading", { name: item.title })).toBeVisible();
+    await expect(page.getByRole("button", { name: "招牌图", exact: true })).toHaveClass(/\bon\b/);
+
+    await page.getByRole("button", { name: item.otherView, exact: true }).click();
+    await expect(page.getByRole("button", { name: item.otherView, exact: true })).toHaveClass(/\bon\b/);
+  }
+
+  await page.locator(".step-row").filter({ hasText: cases[0].title }).click();
+  await expect(page.getByRole("button", { name: "招牌图", exact: true })).toHaveClass(/\bon\b/);
+});
+
 test("网络可视化保留有向边，步骤11不再拉取国家级指标", async ({ page }) => {
   let countryIndicatorRequests = 0;
   page.on("request", (request) => {
@@ -486,11 +515,13 @@ test("网络可视化保留有向边，步骤11不再拉取国家级指标", asy
   await page.getByRole("button", { name: "登录" }).click();
   await page.getByRole("button", { name: "跳过介绍" }).click();
   await expect(page.getByRole("heading", { name: "网络指标可视化" })).toBeVisible();
+  expect(countryIndicatorRequests).toBe(0);
+
+  await page.getByRole("button", { name: "象限图" }).click();
   await expect(page.getByText("分析粒度：国家–行业级（完整全球网络）")).toBeVisible();
   expect(countryIndicatorRequests).toBe(0);
 
   await page.locator(".step-row").filter({ hasText: "GVC 贸易流指标可视化" }).click();
-  await page.getByRole("button", { name: "招牌图" }).click();
   const directedEdges = page.locator(".network-card svg path[marker-end]");
   await expect(directedEdges).toHaveCount(2);
   await expect(page.locator(".network-card svg title").first()).toContainText("CHN → USA");
