@@ -33,6 +33,29 @@ def artifact_contract() -> dict[str, str | int]:
     }
 
 
+def manifest_id(processed_dir: Path | None = None) -> str:
+    """当前产物集合的稳定标识:内容变了它就变。
+
+    实验会话绑定该 ID。重新 compute、换算法或任何一个产物文件被改动后,
+    ID 随之改变,旧会话里保存的实验结果即可被判定为过期,而不是被静默
+    当作仍然对应当前数据。
+    """
+    from gvcsim.config import PROCESSED_DIR
+
+    payload = _load_manifest(processed_dir or PROCESSED_DIR)
+    # 只取影响计算结果的字段;文件顺序归一,避免同一份产物得到不同 ID。
+    digest_source = json.dumps(
+        {
+            "schema_version": payload["schema_version"],
+            "network_algorithm": payload["network_algorithm"],
+            "files": {name: record.get("sha256") for name, record in sorted(payload["files"].items())},
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(digest_source.encode("utf-8")).hexdigest()[:16]
+
+
 @lru_cache(maxsize=16)
 def _cached_manifest(path_str: str, mtime_ns: int) -> dict:
     """解析 manifest；``mtime_ns`` 仅用于缓存失效。"""

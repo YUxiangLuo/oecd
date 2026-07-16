@@ -17,14 +17,22 @@ p 值按聚类数做 t(G-1) 小样本校正。PanelOLS 对照使用同一份样�
 """
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import numpy as np
 import pandas as pd
 from linearmodels.panel import PanelOLS
 from scipy import stats
 
-from gvcsim.regression.design import SCENARIO_CONFOUNDED, SCENARIO_NOISY, PRICE_MODE_REAL
+from gvcsim.regression.design import (
+    METHOD_DID,
+    METHOD_EVENT_STUDY,
+    METHOD_TWFE_INTENSITY,
+    PRICE_MODE_REAL,
+    SCENARIO_CONFOUNDED,
+    SCENARIO_NOISY,
+)
+from gvcsim.regression.validity import TreatmentSupport, analyze_support
 
 
 @dataclass
@@ -33,13 +41,20 @@ class CoefStat:
     coef: float
     se: float
     t: float
-    p: float
-    ci_low: float
-    ci_high: float
+    # 推断量:处理支持度不足或设计无效时为 None,表示"不可评估"而非"不显著"。
+    p: float | None
+    ci_low: float | None
+    ci_high: float | None
 
     @property
     def stars(self) -> str:
+        if self.p is None:
+            return ""
         return "***" if self.p < 0.01 else "**" if self.p < 0.05 else "*" if self.p < 0.1 else ""
+
+    def without_inference(self) -> "CoefStat":
+        """保留点估计与标准误,抹去 p 值、星号与置信区间。"""
+        return replace(self, p=None, ci_low=None, ci_high=None)
 
 
 @dataclass
@@ -55,6 +70,11 @@ class RegressionResult:
     depvar_std: float
     diagnostics: dict = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    # 设计有效性:ok / warning / insufficient / invalid_design。
+    # 未知处理结构(直接调用底层引擎)时为 None。
+    status: str | None = None
+    status_reasons: list[str] = field(default_factory=list)
+    support: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -81,6 +101,9 @@ class RegressionResult:
             "depvar_std": self.depvar_std,
             "diagnostics": self.diagnostics,
             "notes": self.notes,
+            "status": self.status,
+            "status_reasons": self.status_reasons,
+            "support": self.support,
         }
 
 
@@ -95,6 +118,8 @@ class PreparedModel:
     time: str
     cluster: str
     notes: list[str]
+    # 处理支持度;仅在能识别处理列时计算(见 analyze_support)。
+    support: TreatmentSupport | None = None
 
 
 BASE_GVC_COL = "3_VA_GVC_share"  # 基期 GVC 生产份额(3_VA_GVC / SVA)
@@ -206,7 +231,7 @@ def _apply_teaching_scenario(
     if scenario == SCENARIO_NOISY:
         y_noise = _stable_noise(out, [design.entity if design.entity in out.columns else "country", time])
         out[design.depvar] = out[design.depvar].astype(float) + y_noise * y_scale * 0.35
-        if design.method == "双向固定效应" and design.shock_col in out.columns:
+        if design.method == METHOD_TWFE_INTENSITY and design.shock_col in out.columns:
             x_scale = float(out[design.shock_col].std(skipna=True) or 0.0)
             x_noise = _stable_noise(out, ["country", "industry" if "industry" in out.columns else time, time])
             out[design.shock_col] = (out[design.shock_col].astype(float) + x_noise * max(x_scale, 0.01) * 0.55).clip(
@@ -437,6 +462,24 @@ def _within_ols(
     notes = list(model.notes)
     if dropped:
         notes.append("控制变量被固定效应吸收/完全共线,已剔除:" + "、".join(dropped))
+
+    support = model.support
+    # 处理支持度不足或处理路径与估计量不相容时,点估计与标准误照常返回,
+    # 但抑制 p 值、星号与置信区间:能算出数字不等于结果可报告。
+    if support is not None and support.suppress_inference:
+        coefs = [c.without_inference() for c in coefs]
+        notes.append(
+            "已抑制 p 值、星号与置信区间:" + ("设计无效" if support.status == "invalid_design" else "处理支持度不足")
+        )
+    cluster_note = (
+        f"标准误按 {cluster} 聚类(sandwich,{n_g} 组;其中处理聚类 {support.treated_clusters} 个、"
+        f"对照聚类 {support.untreated_clusters} 个)"
+        if support is not None
+        else f"标准误按 {cluster} 聚类(sandwich,{n_g} 组)"
+    )
+    if support is None or not support.suppress_inference:
+        cluster_note += f",p 值与 95% 置信区间使用 t({max(n_g - 1, 1)}) 小样本校正"
+
     return RegressionResult(
         depvar=depvar,
         coefs=coefs,
@@ -453,13 +496,17 @@ def _within_ols(
         notes=[
             *notes,
             f"双向固定效应({entity} + {time}),within 变换后 OLS",
-            f"标准误按 {cluster} 聚类(sandwich,{n_g} 组),p 值与 95% 置信区间使用 t({max(n_g - 1, 1)}) 小样本校正",
+            cluster_note,
+            *(support.reasons if support is not None else []),
             *(
                 ["传统 staggered TWFE 在处理效应异质时可能有偏；本教学估计只在识别假设成立时作因果解释。"]
                 if model.xcols and (model.xcols[0].startswith("k=") or "×post" in model.xcols[0])
                 else []
             ),
         ],
+        status=support.status if support is not None else None,
+        status_reasons=list(support.reasons) if support is not None else [],
+        support=support.to_dict() if support is not None else None,
     )
 
 
@@ -472,11 +519,16 @@ def _prepare_fe_model(
     cluster: str | None = None,
     controls: list[str] | tuple[str, ...] = (),
     interaction: bool = False,
+    treated_col: str | None = None,
 ) -> PreparedModel:
     cluster = cluster or entity
     interaction_cols: list[str] = []
     xcols = [*regressors, *controls]
     cols = list(dict.fromkeys([depvar, *xcols, entity, time, cluster]))
+    # 处理支持度只是诊断,面板没有处理指示列时照常估计,不因缺诊断而失败。
+    has_treated = bool(treated_col) and treated_col in df.columns
+    if has_treated:
+        cols.append(treated_col)
     if interaction:
         cols.append(BASE_GVC_COL)
     missing = [c for c in cols if c not in df.columns]
@@ -505,6 +557,9 @@ def _prepare_fe_model(
         time=time,
         cluster=cluster,
         notes=notes,
+        # 强度法直接用逐年冲击强度,不做"首次处理后永久处理"的编码,
+        # 因此处理可逆不构成设计冲突;但处理聚类支持度仍决定推断是否可用。
+        support=analyze_support(data, entity, time, cluster, treated_col, absorbing=False) if has_treated else None,
     )
 
 
@@ -542,7 +597,7 @@ def placebo_did_distribution(
     保持原始设计的样本、控制变量、交互项、处理组数量与首次处理年份(cohort)
     分布不变;每次随机抽取同等数量的个体并分配原始 cohort。返回伪系数分布与真系数位置。
     """
-    if design.method != "双重差分 (DID)":
+    if design.method != METHOD_DID:
         raise ValueError("安慰剂检验当前仅支持双重差分 (DID) 设计")
     n_draws = max(1, min(int(n_draws), 200))
     base, filter_notes = _apply_sample_filter(df, design)
@@ -635,12 +690,16 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
         controls=list(design.controls),
         interaction=design.interaction,
     )
-    if design.method == "双重差分 (DID)":
-        model = _prepare_did_model(df, design.depvar, treated_col=design.treated_col, **kwargs)
-    elif design.method == "事件研究":
-        model = _prepare_event_model(df, design.depvar, treated_col=design.treated_col, **kwargs)
+    if design.method == METHOD_DID:
+        model = _prepare_did_model(
+            df, design.depvar, treated_col=design.treated_col, intensity_col=design.shock_col, **kwargs
+        )
+    elif design.method == METHOD_EVENT_STUDY:
+        model = _prepare_event_model(
+            df, design.depvar, treated_col=design.treated_col, intensity_col=design.shock_col, **kwargs
+        )
     else:
-        model = _prepare_fe_model(df, design.depvar, list(design.regressors), **kwargs)
+        model = _prepare_fe_model(df, design.depvar, list(design.regressors), treated_col=design.treated_col, **kwargs)
     model.notes = [*filter_notes, *model.notes]
     model.notes.extend(scenario_notes)
     if getattr(design, "price_mode", None) == PRICE_MODE_REAL:
@@ -675,9 +734,13 @@ def _prepare_did_model(
     treated_col: str = "treated",
     controls: list[str] | tuple[str, ...] = (),
     interaction: bool = False,
+    intensity_col: str | None = None,
 ) -> PreparedModel:
     cluster = cluster or entity
     cols = list(dict.fromkeys([depvar, treated_col, entity, time, cluster, *controls]))
+    # 冲击强度列只用于识别真正的政策撤销;缺失时退回按处理指示列判断。
+    if intensity_col and intensity_col in df.columns:
+        cols.append(intensity_col)
     if interaction:
         cols.append(BASE_GVC_COL)
     missing = [c for c in cols if c not in df.columns]
@@ -717,6 +780,8 @@ def _prepare_did_model(
         time=time,
         cluster=cluster,
         notes=notes,
+        # DID 用 1[t≥G_i] 编码处理,首次处理后永久为 1 → 吸收型。
+        support=analyze_support(data, entity, time, cluster, treated_col, absorbing=True, intensity_col=intensity_col),
     )
 
 
@@ -749,9 +814,13 @@ def _prepare_event_model(
     treated_col: str = "treated",
     controls: list[str] | tuple[str, ...] = (),
     interaction: bool = False,
+    intensity_col: str | None = None,
 ) -> PreparedModel:
     cluster = cluster or entity
     cols = list(dict.fromkeys([depvar, treated_col, entity, time, cluster, *controls]))
+    # 冲击强度列只用于识别真正的政策撤销;缺失时退回按处理指示列判断。
+    if intensity_col and intensity_col in df.columns:
+        cols.append(intensity_col)
     if interaction:
         cols.append(BASE_GVC_COL)
     missing = [c for c in cols if c not in df.columns]
@@ -807,6 +876,8 @@ def _prepare_event_model(
         time=time,
         cluster=cluster,
         notes=notes,
+        # 事件研究同样围绕首次处理年 G_i 构造 → 吸收型。
+        support=analyze_support(data, entity, time, cluster, treated_col, absorbing=True, intensity_col=intensity_col),
     )
 
 

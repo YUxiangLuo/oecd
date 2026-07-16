@@ -1,12 +1,6 @@
 import { useMemo } from "react";
 import type { ShockEvent } from "../../../types";
-import { eventKey } from "./model";
-
-const EVENT_COLORS: Record<string, string> = {
-  关税冲击: "#2a78d6",
-  制裁清单: "#e34948",
-  出口管制: "#eda100",
-};
+import { eventKey, SHOCK_TYPES, SHOCK_TYPE_COLORS, SHOCK_TYPE_LABELS, shockTypeColor, shockTypeLabel } from "./model";
 
 const dateNumber = (value: string) => {
   const timestamp = Date.parse(value);
@@ -73,9 +67,9 @@ export function EventTimeline({
           const announcedX = x(event.announced);
           const effectiveX = x(event.effective);
           const removalX = event.removal ? x(event.removal) : null;
-          const color = EVENT_COLORS[event.shock_type ?? "关税冲击"] ?? "#4a3aa7";
+          const color = shockTypeColor(event.shock_type);
           const labeled = Math.abs(effectiveX - announcedX) >= 48;
-          const accessibleName = `${event.name}；${event.shock_type ?? "关税冲击"}；宣布 ${event.announced}；生效 ${event.effective}${event.removal ? `；解除 ${event.removal}` : ""}`;
+          const accessibleName = `${event.name}；${shockTypeLabel(event.shock_type)}；宣布 ${event.announced}；生效 ${event.effective}${event.removal ? `；解除 ${event.removal}` : ""}`;
           return (
             <g
               key={key}
@@ -110,7 +104,9 @@ export function EventTimeline({
       </svg>
       <div className="shock-timeline-legend">
         <span>○ 宣布/解除</span><span>● 生效</span>
-        {Object.entries(EVENT_COLORS).map(([label, color]) => <span key={label} style={{ color }}>● {label}</span>)}
+        {SHOCK_TYPES.map((key) => (
+          <span key={key} style={{ color: SHOCK_TYPE_COLORS[key] }}>● {SHOCK_TYPE_LABELS[key]}</span>
+        ))}
         <span>选择事件后会更新上方摘要与紧邻的冲击面板</span>
       </div>
     </div>

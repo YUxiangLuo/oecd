@@ -106,7 +106,7 @@ export function OverviewTab({ onSelectStep }: {
             <span className="panel-tag">共 {data.student_count} 人</span>
           </div>
           <StepFunnel
-            steps={data.step_completion}
+            steps={data.step_reach}
             total={data.student_count}
             onSelect={(step) => onSelectStep(step, classId)}
           />

@@ -84,6 +84,12 @@ def main() -> None:
         from gvcsim.regression.design import (
             CONTROL_MODE_ICIO,
             CONTROL_MODE_MACRO,
+            CONTROL_MODE_NONE,
+            GRANULARITY_COUNTRY,
+            GRANULARITY_COUNTRY_INDUSTRY,
+            METHOD_DID,
+            METHOD_EVENT_STUDY,
+            METHOD_TWFE_INTENSITY,
             PRICE_MODE_NOMINAL,
             PRICE_MODE_REAL,
             RegressionDesign,
@@ -92,10 +98,10 @@ def main() -> None:
 
         if args.controls and args.macro_controls:
             raise SystemExit("--controls 与 --macro-controls 只能选择一个")
-        granularity = "国家级" if args.granularity == "country" else "国家–行业级"
-        method = {"did": "双重差分 (DID)", "fe": "双向固定效应", "event": "事件研究"}[args.method]
+        granularity = GRANULARITY_COUNTRY if args.granularity == "country" else GRANULARITY_COUNTRY_INDUSTRY
+        method = {"did": METHOD_DID, "fe": METHOD_TWFE_INTENSITY, "event": METHOD_EVENT_STUDY}[args.method]
         control_mode = (
-            CONTROL_MODE_MACRO if args.macro_controls else CONTROL_MODE_ICIO if args.controls else "不加控制变量"
+            CONTROL_MODE_MACRO if args.macro_controls else CONTROL_MODE_ICIO if args.controls else CONTROL_MODE_NONE
         )
         price_mode = PRICE_MODE_REAL if args.real else PRICE_MODE_NOMINAL
         try:
@@ -117,17 +123,23 @@ def main() -> None:
             interaction=args.interaction,
             price_mode=price_mode,
         )
-        print(f"{args.outcome}:{design.depvar_label}({granularity} · {method})")
-        print(f"价格口径:{price_mode}")
+        print(f"{args.outcome}:{design.depvar_label}({design.granularity_label} · {design.method_label})")
+        print(f"价格口径:{design.price_mode_label}")
         print(f"回归样本:{design.sample_filter}")
         if args.controls or args.macro_controls:
-            print(f"控制变量:{control_mode}")
+            print(f"控制变量:{design.control_mode_label}")
         if args.interaction:
             print("交互项:冲击×基期GVC参与度")
         print(f"模型: {design.equation()}\n")
         print(f"{'变量':<20}{'系数':>12}{'标准误':>12}{'t':>8}{'p':>8}")
         for c in result.coefs:
-            print(f"{c.name:<20}{c.coef:>12.4f}{c.se:>12.4f}{c.t:>8.2f}{c.p:>8.3f} {c.stars}")
+            # 推断被抑制时 p 为 None,不能用 :.3f 直接格式化(也不能拿 0 冒充)。
+            p_text = f"{c.p:>8.3f}" if c.p is not None else f"{'—':>8}"
+            print(f"{c.name:<20}{c.coef:>12.4f}{c.se:>12.4f}{c.t:>8.2f}{p_text} {c.stars}")
+        if result.status_reasons:
+            print("\n设计有效性:" + (result.status or "ok"))
+            for reason in result.status_reasons:
+                print(f"  · {reason}")
         print(
             f"\nN={result.n_obs}({result.n_entities}个体×{result.n_times}年, "
             f"{result.n_clusters}国聚类), 组内R²={result.r2_within:.4f}"
@@ -164,18 +176,21 @@ def main() -> None:
             raise SystemExit(f"无法连接 PostgreSQL({e});请确认服务已启动、GVCSIM_PG_DSN 正确") from e
 
         if args.reset:
+            # 整个 schema 重建,而不是删一份写死的表名单:后者会把不在名单里的
+            # 旧表(如已废弃版本留下的表)留在库里,与新表并存,而版本戳仍写着旧值。
             with psycopg.connect(config.PG_DSN, autocommit=True) as c:
-                c.execute(
-                    "DROP TABLE IF EXISTS announcements, submissions, step_progress, accounts, classes,"
-                    " schema_migrations CASCADE"
-                )
+                c.execute("DROP SCHEMA public CASCADE")
+                c.execute("CREATE SCHEMA public")
             classroom_db._schema_ready = False
-            print("已删除旧教学表")
-        applied = classroom_db.initialize_schema()
+            print("已重建 public schema(旧教学数据全部删除)")
+        try:
+            applied = classroom_db.initialize_schema()
+        except classroom_db.SchemaVersionMismatch as e:
+            raise SystemExit(f"{e}") from e
         if applied:
-            print("已执行教学库迁移:" + "、".join(applied))
+            print("已执行:" + "、".join(applied))
         else:
-            print("教学库 schema 已是最新版本")
+            print(f"教学库 schema 已是当前版本({classroom_db.TEACHING_DB_VERSION})")
         print(f"教学数据库就绪:{dbname}(16 步;演示账号 teacher/student,班级 GVC-DEMO)")
 
 

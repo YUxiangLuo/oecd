@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../../api";
-import type { Meta, QcCheck } from "../../types";
+import { EvidencePanel, JudgmentBox } from "../../step-evidence";
+import type { EvidenceRules, Meta, QcCheck, StepEvidenceApi } from "../../types";
 import { useAsync, YearPicker } from "../shared";
 
 const WHY_CHECK: [string, string][] = [
@@ -24,7 +25,26 @@ const WHY_CHECK: [string, string][] = [
 const whyCheck = (name: string) => WHY_CHECK.find(([prefix]) => name.startsWith(prefix))?.[1]
   ?? "确认该中间产物满足后续计算与回归所依赖的口径，避免错误在流水线中继续传播。";
 
-export function QcLab({ meta, onNavigateStep }: { meta: Meta; onNavigateStep: (step: number) => void }) {
+/** 第 3 步的学习证据:对质检警告作出处置决定,并写下理由。 */
+interface QcEvidence extends Record<string, unknown> {
+  disposition?: QcDisposition;
+  judgment?: string;
+}
+
+type QcDisposition = "stop" | "fix" | "disclose";
+
+const QC_DISPOSITIONS: { key: QcDisposition; label: string; hint: string }[] = [
+  { key: "stop", label: "停止分析", hint: "问题足以让后续结论失效,不应继续。" },
+  { key: "fix", label: "修正数值", hint: "问题可定位且能修正,修正后再继续。" },
+  { key: "disclose", label: "披露后继续", hint: "问题不影响本课结论,但必须写进报告的局限。" },
+];
+
+export function QcLab({ meta, evidence, rules, onNavigateStep }: {
+  meta: Meta;
+  evidence: StepEvidenceApi<QcEvidence>;
+  rules: EvidenceRules;
+  onNavigateStep: (step: number) => void;
+}) {
   const [year, setYear] = useState(meta.years.at(-1)!);
   const { data, error } = useAsync<QcCheck[]>(() => api.qc(year), [year]);
   const { data: shockChecks, error: shockError } = useAsync<QcCheck[]>(() => api.qcShocks(), []);
@@ -107,6 +127,36 @@ export function QcLab({ meta, onNavigateStep }: { meta: Meta; onNavigateStep: (s
         <span className="section-head-line" />
       </div>
       {controlError ? <div className="error-box">{controlError}</div> : table(controlChecks)}
+
+      <section className="qc-decision">
+        <h3>你的处置决定</h3>
+        <p className="muted">
+          真实研究里,面对质检警告只有三条路。看完上面的结论后选一条并写下理由——
+          这一步的产出是<b>判断</b>,不是“看过报告”。
+        </p>
+        <div className="pill-row" role="group" aria-label="质检处置决定">
+          {QC_DISPOSITIONS.map((item) => (
+            <button
+              type="button"
+              key={item.key}
+              className={`pill${evidence.data?.disposition === item.key ? " on" : ""}`}
+              aria-pressed={evidence.data?.disposition === item.key}
+              title={item.hint}
+              onClick={() => evidence.save({ disposition: item.key })}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <JudgmentBox
+          prompt="为什么这样处置?"
+          hint="点名是哪一项质检、它会怎样影响后面的指标或回归。"
+          minChars={rules.min_judgment_chars}
+          value={evidence.data?.judgment ?? ""}
+          onChange={(judgment) => evidence.save({ judgment })}
+        />
+        <EvidencePanel evidence={evidence} />
+      </section>
     </div>
   );
 }

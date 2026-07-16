@@ -4,26 +4,33 @@ import { CAT, cardStyle, useTip } from "../shared";
 /* --------------------------- 事件研究:系数时间轴 --------------------------- */
 
 export function EventStudyChart({ coefs, notes, title, seriesLabel, pretrend }: {
-  coefs: { name: string; coef: number; ci_low: number; ci_high: number }[];
+  coefs: { name: string; coef: number; ci_low: number | null; ci_high: number | null }[];
   notes: string[];
   title?: string;
   seriesLabel?: string;
   pretrend?: PretrendDiagnostic;
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
+  // 推断被抑制时没有区间:只画点,不画须。否则 null→0 会把“不可评估”
+  // 画成一条零宽度的须,视觉上等于“估计极其精确”,恰好是反教学效果。
   const pts = coefs.map((c) => ({ ...c, lo: c.ci_low, hi: c.ci_high }));
+  const hasCi = pts.some((p) => p.lo != null && p.hi != null);
   const W = 640, H = 240, padL = 56, padR = 24, padT = 18, padB = 34;
-  const ext = Math.max(...pts.map((p) => Math.max(Math.abs(p.lo), Math.abs(p.hi))), 1e-6) * 1.15;
+  const ext = Math.max(
+    ...pts.map((p) => Math.max(Math.abs(p.lo ?? p.coef), Math.abs(p.hi ?? p.coef))),
+    1e-6,
+  ) * 1.15;
   const x = (i: number) => padL + ((i + 0.5) / pts.length) * (W - padL - padR);
   const y = (v: number) => padT + (1 - (v + ext) / (2 * ext)) * (H - padT - padB);
   const fmt = (v: number) => (Math.abs(v) < 0.01 ? v.toFixed(4) : v.toFixed(3));
   return (
     <div ref={wrapRef} style={{ ...cardStyle, marginTop: 14 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050", marginBottom: 6 }}>
-        {title ?? "事件研究:处理效应的动态路径"}(点 = 系数,须 = 95% 置信区间)
+        {title ?? "事件研究:处理效应的动态路径"}
+        {hasCi ? "(点 = 系数,须 = 95% 置信区间)" : "(点 = 系数;本设计不可作推断,无置信区间)"}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title ?? "事件研究动态路径"}：点为系数，竖线为 95% 置信区间`} style={{ display: "block", width: "100%", height: "auto" }}>
-        <title>{title ?? "事件研究动态路径"}：点为系数，竖线为 95% 置信区间</title>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title ?? "事件研究动态路径"}：点为系数${hasCi ? "，竖线为 95% 置信区间" : "；本设计不可作推断，无置信区间"}`} style={{ display: "block", width: "100%", height: "auto" }}>
+        <title>{title ?? "事件研究动态路径"}：点为系数{hasCi ? "，竖线为 95% 置信区间" : "；本设计不可作推断，无置信区间"}</title>
         {[-ext, -ext / 2, ext / 2, ext].map((v) => (
           <g key={v}>
             <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="#f0f1f6" strokeWidth={1} />
@@ -38,16 +45,18 @@ export function EventStudyChart({ coefs, notes, title, seriesLabel, pretrend }: 
             onMouseEnter={(e) => show(e, [
               ["", seriesLabel ? `${seriesLabel} · ${p.name}` : p.name],
               ["系数", fmt(p.coef)],
-              ["95% CI", `[${fmt(p.lo)}, ${fmt(p.hi)}]`],
+              ["95% CI", p.lo != null && p.hi != null ? `[${fmt(p.lo)}, ${fmt(p.hi)}]` : "不可评估"],
             ])}
             onMouseMove={(e) => show(e, [
               ["", seriesLabel ? `${seriesLabel} · ${p.name}` : p.name],
               ["系数", fmt(p.coef)],
-              ["95% CI", `[${fmt(p.lo)}, ${fmt(p.hi)}]`],
+              ["95% CI", p.lo != null && p.hi != null ? `[${fmt(p.lo)}, ${fmt(p.hi)}]` : "不可评估"],
             ])}
             onMouseLeave={hide} style={{ cursor: "default" }}>
             <rect x={x(i) - 14} y={padT} width={28} height={H - padT - padB} fill="transparent" />
-            <line x1={x(i)} x2={x(i)} y1={y(p.lo)} y2={y(p.hi)} stroke={CAT[0]} strokeWidth={2} strokeLinecap="round" />
+            {p.lo != null && p.hi != null && (
+              <line x1={x(i)} x2={x(i)} y1={y(p.lo)} y2={y(p.hi)} stroke={CAT[0]} strokeWidth={2} strokeLinecap="round" />
+            )}
             <circle cx={x(i)} cy={y(p.coef)} r={5} fill={CAT[0]} stroke="#fff" strokeWidth={2} />
             <text x={x(i)} y={H - padB + 16} textAnchor="middle" fontSize={11} fill="#5a6070"
               style={{ fontVariantNumeric: "tabular-nums" }}>{p.name}</text>
@@ -151,29 +160,36 @@ function splitCoefName(name: string): string[] {
 
 /** 点=估计值,横条=95% 置信区间,竖线=0 轴;负效应红、正效应绿(与系数表一致)。 */
 export function CoefForestChart({ coefs }: {
-  coefs: { name: string; coef: number; ci_low: number; ci_high: number; p: number; stars: string }[];
+  coefs: { name: string; coef: number; ci_low: number | null; ci_high: number | null; p: number | null; stars: string }[];
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
+  // 推断被抑制时只画点:零宽度的区间横条会被读成“估计极其精确”。
   const pts = coefs.map((c) => ({ ...c, lo: c.ci_low, hi: c.ci_high }));
+  const hasCi = pts.some((p) => p.lo != null && p.hi != null);
   const rowH = 48, padT = 14, padB = 30, labelW = 132, padR = 18;
   const W = 380, H = padT + pts.length * rowH + padB;
   const plotW = W - labelW - padR;
-  const ext = Math.max(...pts.map((p) => Math.max(Math.abs(p.lo), Math.abs(p.hi))), 1e-6) * 1.12;
+  const ext = Math.max(
+    ...pts.map((p) => Math.max(Math.abs(p.lo ?? p.coef), Math.abs(p.hi ?? p.coef))),
+    1e-6,
+  ) * 1.12;
   const x = (v: number) => labelW + ((v + ext) / (2 * ext)) * plotW;
   const y = (i: number) => padT + (i + 0.5) * rowH;
   const fmt = (v: number) => (Math.abs(v) < 0.01 ? v.toFixed(4) : v.toFixed(3));
   const tip = (p: (typeof pts)[number]): [string, string][] => [
     ["", p.name],
     ["系数", `${fmt(p.coef)}${p.stars}`],
-    ["95% CI", `[${fmt(p.lo)}, ${fmt(p.hi)}]`],
-    ["p 值", p.p.toFixed(3)],
+    ["95% CI", p.lo != null && p.hi != null ? `[${fmt(p.lo)}, ${fmt(p.hi)}]` : "不可评估"],
+    ["p 值", p.p != null ? p.p.toFixed(3) : "不可评估"],
   ];
   return (
     <div ref={wrapRef} style={{ ...cardStyle, flex: "1 1 260px", minWidth: 260 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050" }}>系数图</div>
-      <div style={{ fontSize: 11, color: "#747b8d", marginBottom: 6 }}>点 = 估计值 · 横线 = 95% 置信区间</div>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="政策系数及 95% 置信区间" style={{ display: "block", width: "100%", height: "auto" }}>
-        <title>政策系数及 95% 置信区间；完整数值见技术细节表</title>
+      <div style={{ fontSize: 11, color: "#747b8d", marginBottom: 6 }}>
+        {hasCi ? "点 = 估计值 · 横线 = 95% 置信区间" : "点 = 估计值 · 本设计不可作推断,无置信区间"}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={hasCi ? "政策系数及 95% 置信区间" : "政策系数；本设计不可作推断，无置信区间"} style={{ display: "block", width: "100%", height: "auto" }}>
+        <title>{hasCi ? "政策系数及 95% 置信区间；完整数值见技术细节表" : "政策系数；本设计不可作推断，无置信区间"}</title>
         <line x1={x(0)} x2={x(0)} y1={padT} y2={H - padB} stroke="#e0e3ea" strokeWidth={1} />
         {[-ext, 0, ext].map((v) => (
           <text key={v} x={x(v)} y={H - padB + 16} textAnchor="middle" fontSize={11} fill="#747b8d"
@@ -194,7 +210,9 @@ export function CoefForestChart({ coefs }: {
                   <tspan key={partIndex} x={labelW - 8} dy={partIndex === 0 ? 0 : 13}>{part}</tspan>
                 ))}
               </text>
-              <line x1={x(p.lo)} x2={x(p.hi)} y1={y(i)} y2={y(i)} stroke={ci} strokeWidth={4} strokeLinecap="round" />
+              {p.lo != null && p.hi != null && (
+                <line x1={x(p.lo)} x2={x(p.hi)} y1={y(i)} y2={y(i)} stroke={ci} strokeWidth={4} strokeLinecap="round" />
+              )}
               <circle cx={x(p.coef)} cy={y(i)} r={5.5} fill={dot} stroke="#fff" strokeWidth={2} />
             </g>
           );

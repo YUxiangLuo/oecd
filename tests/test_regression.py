@@ -118,18 +118,18 @@ def test_collinear_control_is_dropped_but_policy_kept():
 def test_design_equation_text():
     d = RegressionDesign(outcome="trade")
     assert d.depvar == "FVA_share"
-    assert d.granularity == "国家–行业级"  # 默认粒度已切到行业级
-    assert d.method == "双重差分 (DID)"  # 默认方法已切到 DID
+    assert d.granularity == "country_industry"  # 默认粒度已切到行业级
+    assert d.method == "did"  # 默认方法已切到 DID
     assert d.exclude_row is True
     assert "排除 ROW" in d.sample_filter
     eq = d.equation()
     assert "α_ij" in eq and "λ_t" in eq and "treated_ij × 1[t≥G_ij]" in eq
-    eq_c = RegressionDesign(outcome="trade", granularity="国家级").equation()
+    eq_c = RegressionDesign(outcome="trade", granularity="country").equation()
     assert "α_ij" not in eq_c and "α_i" in eq_c and "treated_i × 1[t≥G_i]" in eq_c
 
-    eq_fe = RegressionDesign(outcome="trade", method="双向固定效应").equation()
+    eq_fe = RegressionDesign(outcome="trade", method="twfe_intensity").equation()
     assert "tariff_shock" in eq_fe
-    eq_ev = RegressionDesign(outcome="trade", method="事件研究").equation()
+    eq_ev = RegressionDesign(outcome="trade", method="event_study").equation()
     assert "Σ_k" in eq_ev and "t-G_ij" in eq_ev
     eq_inter = RegressionDesign(outcome="trade", interaction=True).equation()
     assert "BaseGVC" in eq_inter
@@ -138,7 +138,7 @@ def test_design_equation_text():
     macro = RegressionDesign(outcome="trade", control_mode=CONTROL_MODE_MACRO)
     assert set(macro.controls) == set(MACRO_CONTROL_COLUMNS)
     assert "GDP规模" in macro.control_labels["macro_log_gdp_usd"]
-    d_sanction = RegressionDesign(outcome="trade", shock_type="制裁清单")
+    d_sanction = RegressionDesign(outcome="trade", shock_type="sanctions")
     assert d_sanction.shock_col == "sanction_shock"
     assert d_sanction.treated_col == "sanction_treated"
     assert "sanction_treated_ij" in d_sanction.equation()
@@ -153,11 +153,11 @@ def test_design_panel_spec():
     assert d.panel_file == "panel_industry.csv"
     assert d.entity == "entity_id"
     assert d.cluster == "country"
-    d_c = RegressionDesign(outcome="production", granularity="国家级")
+    d_c = RegressionDesign(outcome="production", granularity="country")
     assert d_c.panel_file == "panel_country.csv"
     assert d_c.entity == d_c.cluster == "country"
     with pytest.raises(ValueError, match="介数中心性恒为 0"):
-        RegressionDesign(outcome="network", granularity="国家级")
+        RegressionDesign(outcome="network", granularity="country")
 
 
 def test_cluster_se_differs_from_entity_se():
@@ -268,7 +268,7 @@ def test_entity_specific_did_uses_each_entity_first_treatment_year():
             )
     df = pd.DataFrame(rows)
 
-    design = RegressionDesign(outcome="trade", granularity="国家级")
+    design = RegressionDesign(outcome="trade", granularity="country")
     model = prepare_design_model(df.rename(columns={"y": "FVA_share"}), design)
     e2019_pre = model.data[(model.data["country"] == "E30") & (model.data["year"] == 2018)]
     e2019_at = model.data[(model.data["country"] == "E30") & (model.data["year"] == 2019)]
@@ -351,7 +351,7 @@ def test_design_regressions_exclude_row_by_default():
         )
     df = pd.concat([df, pd.DataFrame(row_rows)], ignore_index=True)
 
-    design = RegressionDesign(outcome="trade", granularity="国家级")
+    design = RegressionDesign(outcome="trade", granularity="country")
     model = prepare_design_model(df, design)
     assert "ROW" not in set(model.data["country"])
     result = run_design(df, design)
@@ -359,7 +359,7 @@ def test_design_regressions_exclude_row_by_default():
     assert result.n_clusters == 60
     assert any("排除 ROW" in n for n in result.notes)
 
-    included = prepare_design_model(df, RegressionDesign(outcome="trade", granularity="国家级", exclude_row=False))
+    included = prepare_design_model(df, RegressionDesign(outcome="trade", granularity="country", exclude_row=False))
     assert "ROW" in set(included.data["country"])
 
 
@@ -370,13 +370,13 @@ def test_run_design_dispatch():
     df["tariff_shock"] = df["treated"] * 0.1
 
     def names(method):
-        design = RegressionDesign(outcome="trade", granularity="国家级", method=method)
+        design = RegressionDesign(outcome="trade", granularity="country", method=method)
         r = run_design(df.rename(columns={"y": design.depvar}), design)
         return [c.name for c in r.coefs]
 
-    assert names("双重差分 (DID)") == ["treated×post"]
-    assert names("双向固定效应") == ["tariff_shock"]
-    assert names("事件研究") == ["k=-2", "k=0", "k=+1", "k=+2"]
+    assert names("did") == ["treated×post"]
+    assert names("twfe_intensity") == ["tariff_shock"]
+    assert names("event_study") == ["k=-2", "k=0", "k=+1", "k=+2"]
 
 
 def test_teaching_scenarios_add_expected_notes_and_pretrend():
@@ -385,7 +385,7 @@ def test_teaching_scenarios_add_expected_notes_and_pretrend():
 
     noisy = run_design(
         df,
-        RegressionDesign(outcome="trade", granularity="国家级", scenario=SCENARIO_NOISY),
+        RegressionDesign(outcome="trade", granularity="country", scenario=SCENARIO_NOISY),
     )
     assert any("noisy" in n for n in noisy.notes)
 
@@ -393,8 +393,8 @@ def test_teaching_scenarios_add_expected_notes_and_pretrend():
         df,
         RegressionDesign(
             outcome="trade",
-            granularity="国家级",
-            method="事件研究",
+            granularity="country",
+            method="event_study",
             scenario=SCENARIO_CONFOUNDED,
         ),
     )
@@ -409,7 +409,7 @@ def test_teaching_scenarios_add_expected_notes_and_pretrend():
 def test_placebo_did_distribution_is_reproducible():
     df = _simulate_did_panel({0: -0.6, 1: -0.6, 2: -0.6})
     df = df.rename(columns={"y": "FVA_share"})
-    design = RegressionDesign(outcome="trade", granularity="国家级", method="双重差分 (DID)")
+    design = RegressionDesign(outcome="trade", granularity="country", method="did")
 
     result = placebo_did_distribution(df, design, n_draws=12, seed=7)
     again = placebo_did_distribution(df, design, n_draws=12, seed=7)
@@ -447,7 +447,7 @@ def test_did_with_baseline_gvc_interaction_recovers_heterogeneity():
                 }
             )
     df = pd.DataFrame(rows)
-    design = RegressionDesign(outcome="trade", granularity="国家级", interaction=True)
+    design = RegressionDesign(outcome="trade", granularity="country", interaction=True)
 
     result = run_design(df, design)
     by_name = {c.name: c for c in result.coefs}
@@ -467,8 +467,8 @@ def test_run_design_with_controls_and_panelols_benchmark():
 
     design = RegressionDesign(
         outcome="trade",
-        granularity="国家级",
-        method="双向固定效应",
+        granularity="country",
+        method="twfe_intensity",
         control_mode=CONTROL_MODE_ICIO,
     )
     result = run_design(df, design)
@@ -497,8 +497,8 @@ def test_run_design_with_macro_controls():
 
     design = RegressionDesign(
         outcome="trade",
-        granularity="国家级",
-        method="双向固定效应",
+        granularity="country",
+        method="twfe_intensity",
         control_mode=CONTROL_MODE_MACRO,
     )
     result = run_design(df, design)
@@ -522,8 +522,8 @@ def test_real_price_mode_deflates_amount_controls():
 
     design = RegressionDesign(
         outcome="trade",
-        granularity="国家级",
-        method="双向固定效应",
+        granularity="country",
+        method="twfe_intensity",
         control_mode=CONTROL_MODE_ICIO,
         price_mode=PRICE_MODE_REAL,
     )

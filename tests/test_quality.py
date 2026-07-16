@@ -43,7 +43,7 @@ def test_shock_panel_quality_passes_on_complete_panel():
                 "year": y,
                 "tariff_shock": 0.02 if (c, s, y) == ("AAA", "s1", 2020) else 0.0,
                 "treated": 1 if (c, s, y) == ("AAA", "s1", 2020) else 0,
-                "shock_type": "关税冲击",
+                "shock_type": "tariff",
                 "announced_date": "2020-01-01" if (c, s, y) == ("AAA", "s1", 2020) else "",
                 "effective_date": "2020-02-01" if (c, s, y) == ("AAA", "s1", 2020) else "",
                 "note": "test" if (c, s, y) == ("AAA", "s1", 2020) else "",

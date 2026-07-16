@@ -1,11 +1,13 @@
 import { useMemo, useRef, useState } from "react";
 import { api } from "../../api";
-import type { Meta, ShockEvent } from "../../types";
+import { EvidencePanel } from "../../step-evidence";
+import type { EvidenceRules, Meta, ShockEvent, StepEvidenceApi } from "../../types";
 import { CrosswalkDemo } from "./step2/crosswalk-demo";
 import { EventCatalog } from "./step2/event-catalog";
 import { EventTimeline } from "./step2/event-timeline";
 import {
   eventKey,
+  shockTypeLabel,
   filtersForEvent,
   filtersMatchEvent,
   type ShockPanelFilters,
@@ -15,11 +17,20 @@ import { ShockPanel } from "./step2/shock-panel";
 import { useAsync } from "../shared";
 
 /** 步骤2:从政策事件选择到国家×行业冲击面板，并按需查看 HS→ICIO 技术细节。 */
-export function ShockLab({ meta }: { meta: Meta }) {
+/** 第 2 步的学习证据:三类政策冲击各查看过至少一个具体事件。 */
+interface ShockEvidence extends Record<string, unknown> {
+  viewed_shock_types?: string[];
+}
+
+export function ShockLab({ meta, evidence, rules }: {
+  meta: Meta;
+  evidence: StepEvidenceApi<ShockEvidence>;
+  rules: EvidenceRules;
+}) {
   const initialYear = meta.years.at(-1) ?? 2020;
   const [filters, setFilters] = useState<ShockPanelFilters>({
     year: initialYear,
-    shockType: "关税冲击",
+    shockType: "tariff",
     country: "",
     sector: "",
     onlyHit: true,
@@ -37,6 +48,13 @@ export function ShockLab({ meta }: { meta: Meta }) {
   const filtersDirty = expectedFilters ? !filtersMatchEvent(filters, expectedFilters) : false;
 
   const pickEvent = (event: ShockEvent) => {
+    // 证据:这一类政策冲击的具体事件被真正打开过。累加而不是覆盖——
+    // 三类冲击是分三次看的,整份覆盖会把前两次抹掉。
+    const type = event.shock_type ?? filters.shockType;
+    const viewed = evidence.data?.viewed_shock_types ?? [];
+    if (type && !viewed.includes(type)) {
+      evidence.save({ viewed_shock_types: [...viewed, type] });
+    }
     setSelectedEvent(event);
     setFilters(filtersForEvent(event, meta, initialYear));
   };
@@ -46,6 +64,10 @@ export function ShockLab({ meta }: { meta: Meta }) {
 
   return (
     <div className="shock-workbench">
+      <EvidencePanel
+        evidence={evidence}
+        title={`本步要留下的证据:${rules.required_shock_types.map(shockTypeLabel).join("、")} 三类事件各打开一个`}
+      />
       <div className="warnbox shock-disclaimer">
         ⚠ 拟真演示数据：以2018–2020全球贸易摩擦真实事件为原型手工编码（税率量级参考 PIIE/Bown），
         出口暴露度由 OECD ICIO 双边流向计算；覆盖 {meta.countries.length} 个经济体 × {meta.sectors.length} 个行业，不能用于研究结论。

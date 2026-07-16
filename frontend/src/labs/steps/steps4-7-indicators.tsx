@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../api";
-import type { IndicatorSchema, IndustryPage, Meta, Step } from "../../types";
+import type { IndicatorSchema, IndustryPage, Meta, Step, StepEvidenceApi } from "../../types";
 import { DecompositionDemo, NetworkCentralityDemo } from "../../demos";
+import { EvidencePanel } from "../../step-evidence";
 import { countryLabel, sectorLabel } from "../../viz";
 import { fieldLabel, fmtField, Pager, useAsync } from "../shared";
 
@@ -18,7 +19,16 @@ const BASE_DESC: Record<string, string> = {
 };
 
 /** 步骤4-7:行业级指标数据表(分页 + 国家/年份筛选) */
-export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
+/** 第 4–7 步的学习证据:在同一组指标上看过至少两个实体。 */
+interface IndicatorEvidence extends Record<string, unknown> {
+  compared?: string[];
+}
+
+export function IndicatorLab({ meta, step, evidence }: {
+  meta: Meta;
+  step: Step;
+  evidence: StepEvidenceApi<IndicatorEvidence>;
+}) {
   const defaultCountry = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
   const [year, setYear] = useState(meta.years.at(-1)!);
   const [country, setCountry] = useState(defaultCountry);
@@ -29,6 +39,17 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
     () => api.industryIndicators(year, country, page),
     [year, country, page],
   );
+
+  // 证据:该实体的指标真的被取回过。累加国家,凑够两个才算做过对比——
+  // 只看一个国家的分解不构成任何比较,而这一步的目标正是比较。
+  useEffect(() => {
+    if (!data || !country) return;
+    const compared = evidence.data?.compared ?? [];
+    if (!compared.includes(country)) evidence.save({ compared: [...compared, country] });
+    // evidence 每次渲染都是新对象,不入依赖。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, country]);
+
   if (error) return <div className="error-box">{error}</div>;
   const group = schema?.groups.find((g) => g.key === groupKey);
   const baseCols = ["country", "industry", "year"];
@@ -39,6 +60,10 @@ export function IndicatorLab({ meta, step }: { meta: Meta; step: Step }) {
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
   return (
     <div>
+      <EvidencePanel
+        evidence={evidence}
+        title="本步要留下的证据:在下方数据表里切换国家,看过至少两个实体"
+      />
       {/* 步骤4-6:真实数据拆解演示;步骤7:网络中心性演示 */}
       {[4, 5, 6].includes(step.n) && <DecompositionDemo
         step={step.n}

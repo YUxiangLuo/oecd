@@ -13,9 +13,16 @@ export interface Step {
   deps: string[];
 }
 
+/** 证据规则:唯一来源是服务端 gvcsim/evidence.py,前端只据此显示提示与计数。 */
+export interface EvidenceRules {
+  min_judgment_chars: number;
+  required_shock_types: string[];
+}
+
 export interface StepsResponse {
   stages: Record<string, string>;
   steps: Step[];
+  evidence_rules: EvidenceRules;
 }
 
 export interface AuthUser {
@@ -38,6 +45,8 @@ export interface Meta {
     schema_version: number;
     network_algorithm: string;
   };
+  /** 当前产物集合的标识;实验会话绑定它以判定结果是否过期。 */
+  manifest_id?: string | null;
 }
 
 export type DbTableKind = "z" | "y" | "accounts";
@@ -193,24 +202,147 @@ export interface PagedRows {
 
 export type IndustryPage = PagedRows;
 
+/** 实验会话:逐步实验状态的可恢复模型(契约见 gvcsim/session.py)。 */
+/** v2:回归设定改用稳定英文键;旧会话整份作废(不做历史格式兼容)。 */
+export const SESSION_VERSION = "experiment-session-v2";
+
+export interface SessionRecord<T = unknown> {
+  data: T;
+  /** 记录级时间戳;并发写入时服务端按它逐步合并,而不是整份覆盖。 */
+  updated_at: string;
+}
+
+/** 确实跨步骤共享的实验状态(白名单,与 gvcsim/session.py 的 SHARED_KEYS 一致)。 */
+export type SharedSessionKey = "regression_settings" | "regression_history";
+
+export interface ExperimentSession {
+  version: string;
+  /** 产出该会话的数据产物标识;变化即意味着里面的结果已过期。 */
+  manifest_id: string;
+  steps: Record<string, SessionRecord>;
+  shared: Partial<Record<SharedSessionKey, SessionRecord>>;
+}
+
+/**
+ * 一步实验台读写自己那份学习证据的接口。
+ *
+ * `missing` 与 `complete` 一律来自服务端判定,实验台不自行推断是否完成——
+ * 界面只负责收集证据,判定权在 gvcsim/evidence.py。
+ */
+export interface StepEvidenceApi<T = Record<string, unknown>> {
+  data: T | undefined;
+  /** 合并写入(与该步已有证据合并,不整份覆盖)。 */
+  save: (patch: Partial<T>) => void;
+  missing: string[];
+  complete: boolean;
+}
+
+/** 单步完成判定。由服务端从会话重算(gvcsim/evidence.py),客户端不参与判定。 */
+export interface StepEvidence {
+  step: number;
+  complete: boolean;
+  /** 未完成时还差什么;直接展示给学生。 */
+  missing: string[];
+}
+
+export interface CompletionSummary {
+  steps: StepEvidence[];
+  completed: number[];
+  completed_count: number;
+  total: number;
+}
+
+/** 第 16 步门槛:还差哪一步的什么证据(由服务端判定)。 */
+export interface ReportGateItem {
+  step: number;
+  title: string;
+  missing: string[];
+}
+
+export interface ReportGate {
+  blocked: ReportGateItem[];
+}
+
+/** 服务端生成的实验报告:正文与溯源都由服务端产出,客户端不提供任何内容。 */
+export interface GeneratedReport {
+  report_key: string;
+  markdown: string;
+  /** 「另存为」时的建议文件名(带 report_key,便于把文件对回具体那份报告)。 */
+  suggested_filename?: string;
+  provenance: {
+    report_key: string;
+    manifest_id: string;
+    session_revision: number;
+    session_version: string;
+    generated_at: string;
+    artifact: { schema_version: number; network_algorithm: string; years: number[] };
+    runs: ReportRun[];
+  };
+  created_at?: string;
+}
+
+/** 报告里一步回归的摘要:服务端复估后写入 provenance.runs,提交时随 design 一起冻结。 */
+export interface ReportRun {
+  step: number;
+  outcome: string;
+  design: string;
+  status: string | null;
+}
+
+export interface SessionResponse {
+  revision: number;
+  manifest_id: string;
+  session: ExperimentSession;
+  stale: boolean;
+  updated_at?: string | null;
+  /** 非 null 表示本次写入与另一处改动做了合并,应改用返回的会话。 */
+  merged_from?: number | null;
+  completion: CompletionSummary;
+}
+
 export interface CoefStat {
   name: string;
   coef: number;
   se: number;
   t: number;
-  p: number;
+  // 推断量在设计无效/支持度不足时为 null,表示“不可评估”,不是“不显著”。
+  p: number | null;
   stars: string;
-  ci_low: number;
-  ci_high: number;
+  ci_low: number | null;
+  ci_high: number | null;
 }
 
+/** 设计有效性:ok 可解释 / warning 可展示但需披露 / insufficient 支持度不足 / invalid_design 估计量与处理路径不相容。 */
+export type RegressionStatus = "ok" | "warning" | "insufficient" | "invalid_design";
+
+export interface TreatmentSupport {
+  treated_clusters: number;
+  untreated_clusters: number;
+  treated_entities: number;
+  reversal_entities: string[];
+  reversal_share: number;
+  absorbing: boolean;
+  status: RegressionStatus;
+  reasons: string[];
+  min_treated_clusters: number;
+  max_reversal_share: number;
+  suppress_inference: boolean;
+}
+
+/** 回归选项:键是稳定 API 契约,*_labels 是与之配对的展示文案。
+ *  界面渲染 labels、请求回传 keys——改文案不再是破坏性 API 变更。 */
 export interface RegressionOptions {
   granularities: string[];
+  granularity_labels: Record<string, string>;
   granularities_by_outcome: Record<RegressionOutcome, string[]>;
   shock_types: string[];
+  shock_type_labels: Record<string, string>;
   methods: string[];
+  method_labels: Record<string, string>;
   control_modes: string[];
+  control_mode_labels: Record<string, string>;
   price_modes: string[];
+  price_mode_labels: Record<string, string>;
   scenarios: string[];
   scenario_labels: Record<string, string>;
   outcomes: Record<RegressionOutcome, string>;
@@ -262,6 +394,7 @@ export interface PretrendDiagnostic {
 export interface RegressionResponse {
   design: RegressionDesignInfo;
   result: {
+    depvar: string;
     coefs: CoefStat[];
     n_obs: number;
     n_entities: number;
@@ -272,6 +405,9 @@ export interface RegressionResponse {
     depvar_std: number;
     diagnostics: { pretrend?: PretrendDiagnostic };
     notes: string[];
+    status: RegressionStatus | null;
+    status_reasons: string[];
+    support: TreatmentSupport | null;
   };
   benchmark: {
     backend: string;
@@ -404,9 +540,19 @@ export interface SubmissionRow {
 }
 
 export interface SubmissionDetail extends SubmissionRow {
-  design: Record<string, unknown>;
+  design: SubmissionDesign;
   markdown: string;
   feedback: string;
+}
+
+/** submissions.design:提交时冻结的溯源标量 + 各步回归摘要
+ * (由 gvcsim/classroom/db.py 的 submit_report 用 jsonb_build_object 组装)。
+ * 曾是 Record<string, unknown>,于是把 runs 数组 String() 成 "[object Object]" 也能过类型检查。 */
+export interface SubmissionDesign {
+  report_key: string;
+  manifest_id: string;
+  session_revision: number;
+  runs: ReportRun[];
 }
 
 export interface ClassOverview {
@@ -416,7 +562,7 @@ export interface ClassOverview {
   graded: number;
   avg_score: number | null;
   score_buckets: { label: string; count: number }[];
-  step_completion: { step: number; reached: number }[];
+  step_reach: { step: number; reached: number }[];
   active_7d: number;
   submission_trend: { date: string; submitted: number; graded: number }[];
   class_breakdown: ClassBreakdown[];

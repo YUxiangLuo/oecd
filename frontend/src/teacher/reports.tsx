@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
+import { regressionStatusLabel } from "../regression-verdict";
 import { ReportMarkdown } from "../report-renderer-lazy";
 import { showToast } from "../toast";
 import type { AuthUser, SubmissionDetail, SubmissionRow } from "../types";
@@ -175,9 +176,13 @@ function SubmissionGradeView({
     );
   };
 
-  const design = Object.entries(data.design ?? {})
+  // 只让标量进这行摘要:runs 是对象数组,String() 它只会得到 "[object Object]"。
+  // 结构化的部分单独渲染,新增的对象字段也不会再漏进字符串里。
+  const provenance = Object.entries(data.design ?? {})
+    .filter(([, v]) => v == null || typeof v !== "object")
     .map(([k, v]) => `${k}=${typeof v === "boolean" ? (v ? "是" : "否") : String(v)}`)
     .join(" · ");
+  const runs = data.design?.runs ?? [];
 
   return (
     <div>
@@ -202,7 +207,12 @@ function SubmissionGradeView({
             {data.title}
             <span className="muted"> · 数据年份 {data.year}</span>
           </h3>
-          {design && <p className="muted">回归设定:{design}</p>}
+          {runs.length > 0 && (
+            <p className="muted">
+              回归设定:{runs.map((run) => `步骤 ${run.step} · ${regressionStatusLabel(run.status)}`).join("；")}
+            </p>
+          )}
+          {provenance && <p className="muted">溯源:{provenance}</p>}
           <ReportMarkdown markdown={data.markdown} />
         </div>
 

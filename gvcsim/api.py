@@ -19,10 +19,12 @@ from pydantic import BaseModel, ConfigDict
 
 from gvcsim import auth
 from gvcsim import report as report_mod
-from gvcsim import shocks
+from gvcsim import evidence, shocks
+from gvcsim.shocks import SHOCK_LABELS, SHOCK_TARIFF
 from gvcsim.artifacts import (
     ArtifactContractError,
     artifact_contract,
+    manifest_id,
     read_csv_artifact,
     validate_artifact,
 )
@@ -31,10 +33,19 @@ from gvcsim.classroom import routes as classroom_routes
 from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
 from gvcsim.data import crosswalk, icio_browser, quality
 from gvcsim.regression.design import (
+    CONTROL_MODE_LABELS,
+    CONTROL_MODE_NONE,
     CONTROL_MODES,
     GRANULARITIES,
+    GRANULARITY_COUNTRY_INDUSTRY,
+    GRANULARITY_LABELS,
+    METHOD_DID,
+    METHOD_LABELS,
     METHODS,
+    PRICE_MODE_LABELS,
+    PRICE_MODE_NOMINAL,
     PRICE_MODES,
+    SCENARIO_CLEAN,
     SCENARIO_LABELS,
     SCENARIOS,
     SHOCK_TYPES,
@@ -317,6 +328,8 @@ def meta():
         "countries": countries,
         "sectors": sectors,
         "artifact_contract": artifact_contract(),
+        # 实验会话绑定该 ID:产物换代后旧会话即可被判定为过期。
+        "manifest_id": manifest_id() if years else None,
     }
 
 
@@ -325,6 +338,12 @@ def steps():
     return {
         "stages": STAGE_NAMES,
         "steps": STEPS,
+        # 证据规则来自服务端判定模块,前端只据此显示提示与计数,不另写一套阈值:
+        # 两边一旦漂移,界面会说“已达标”而服务端仍判未完成。
+        "evidence_rules": {
+            "min_judgment_chars": evidence.MIN_JUDGMENT_CHARS,
+            "required_shock_types": list(evidence.REQUIRED_SHOCK_TYPES),
+        },
     }
 
 
@@ -480,7 +499,7 @@ def _exposure_lookup(path_str: str, mtime_ns: int) -> dict[tuple[str, str], floa
 def _with_tariff_exposure(df: pd.DataFrame, year: int, shock_type: str) -> pd.DataFrame:
     """为关税面板行补充主要加征方及 ICIO 出口暴露度。"""
     out = df.copy()
-    if shock_type != "关税冲击":
+    if shock_type != SHOCK_TARIFF:
         out["main_imposer"] = None
         out["export_exposure"] = None
         return out
@@ -505,7 +524,7 @@ def _shock_view_columns(shock_type: str) -> tuple[str, str, str, str, str]:
     if shock_type not in shocks.SHOCK_SPECS:
         raise HTTPException(status_code=400, detail=f"shock_type 必须是 {list(shocks.SHOCK_SPECS)}")
     shock_col, treated_col = shocks.SHOCK_SPECS[shock_type]
-    if shock_type == "关税冲击":
+    if shock_type == SHOCK_TARIFF:
         return shock_col, treated_col, "announced_date", "effective_date", "note"
     prefix = shock_col.removesuffix("_shock")
     return (
@@ -536,7 +555,7 @@ def crosswalk_demo(year: int = 2019):
 
 
 @app.get("/api/shocks/summary")
-def shock_summary(shock_type: str = "关税冲击"):
+def shock_summary(shock_type: str = SHOCK_TARIFF):
     """按年份的冲击覆盖概览(步骤2 面板头部)。"""
     shock_col, treated_col, *_ = _shock_view_columns(shock_type)
     df = _read_shocks()
@@ -560,7 +579,7 @@ def shock_summary(shock_type: str = "关税冲击"):
 @app.get("/api/shocks/panel")
 def shock_panel(
     year: int,
-    shock_type: str = "关税冲击",
+    shock_type: str = SHOCK_TARIFF,
     country: str | None = None,
     sector: str | None = None,
     only_hit: bool = True,
@@ -601,13 +620,13 @@ class RegressionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     outcome: str
-    granularity: str = "国家–行业级"
-    shock_type: str = "关税冲击"
-    method: str = "双重差分 (DID)"
-    control_mode: str = "不加控制变量"
+    granularity: str = GRANULARITY_COUNTRY_INDUSTRY
+    shock_type: str = SHOCK_TARIFF
+    method: str = METHOD_DID
+    control_mode: str = CONTROL_MODE_NONE
     interaction: bool = False
-    price_mode: str = "名义值"
-    scenario: str = "clean"
+    price_mode: str = PRICE_MODE_NOMINAL
+    scenario: str = SCENARIO_CLEAN
     exclude_row: bool = True
 
 
@@ -620,24 +639,31 @@ class ReportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     year: int | None = None
-    granularity: str = "国家–行业级"
-    shock_type: str = "关税冲击"
-    method: str = "双重差分 (DID)"
-    control_mode: str = "不加控制变量"
+    granularity: str = GRANULARITY_COUNTRY_INDUSTRY
+    shock_type: str = SHOCK_TARIFF
+    method: str = METHOD_DID
+    control_mode: str = CONTROL_MODE_NONE
     interaction: bool = False
-    price_mode: str = "名义值"
+    price_mode: str = PRICE_MODE_NOMINAL
     exclude_row: bool = True
 
 
 @app.get("/api/regression/options")
 def regression_options():
+    # 键与文案一起下发:界面渲染 labels,请求回传 keys。
+    # 前端不再自备一份中文映射,改文案也不会变成破坏性 API 变更。
     return {
         "granularities": GRANULARITIES,
+        "granularity_labels": GRANULARITY_LABELS,
         "granularities_by_outcome": OUTCOME_GRANULARITIES,
         "shock_types": SHOCK_TYPES,
+        "shock_type_labels": SHOCK_LABELS,
         "methods": METHODS,
+        "method_labels": METHOD_LABELS,
         "control_modes": CONTROL_MODES,
+        "control_mode_labels": CONTROL_MODE_LABELS,
         "price_modes": PRICE_MODES,
+        "price_mode_labels": PRICE_MODE_LABELS,
         "scenarios": SCENARIOS,
         "scenario_labels": SCENARIO_LABELS,
         "outcomes": {key: value[1] for key, value in OUTCOME_DEPVARS.items()},
@@ -649,9 +675,9 @@ def _validate_design(
     granularity: str,
     shock_type: str,
     method: str,
-    control_mode: str = "不加控制变量",
+    control_mode: str = CONTROL_MODE_NONE,
     interaction: bool = False,
-    price_mode: str = "名义值",
+    price_mode: str = PRICE_MODE_NOMINAL,
     scenario: str = "clean",
     exclude_row: bool = True,
 ) -> RegressionDesign:
@@ -717,12 +743,12 @@ def _design_info(design: RegressionDesign) -> dict:
 def regression_design(
     request: Request,
     outcome: str,
-    granularity: str = "国家–行业级",
-    shock_type: str = "关税冲击",
-    method: str = "双重差分 (DID)",
-    control_mode: str = "不加控制变量",
+    granularity: str = GRANULARITY_COUNTRY_INDUSTRY,
+    shock_type: str = SHOCK_TARIFF,
+    method: str = METHOD_DID,
+    control_mode: str = CONTROL_MODE_NONE,
     interaction: bool = False,
-    price_mode: str = "名义值",
+    price_mode: str = PRICE_MODE_NOMINAL,
     scenario: str = "clean",
     exclude_row: bool = True,
 ):

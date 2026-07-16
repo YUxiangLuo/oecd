@@ -3,8 +3,10 @@ import re
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from gvcsim import report
+from gvcsim.config import PROCESSED_DIR
 from gvcsim.regression.panel import CoefStat, RegressionResult
 
 
@@ -39,7 +41,7 @@ def _stub_report_dependencies(monkeypatch):
     calls = []
 
     def estimate(panel, design):
-        assert panel is (country if design.granularity == "国家级" else regression_panel)
+        assert panel is (country if design.granularity == "country" else regression_panel)
         calls.append(design.outcome)
         result = RegressionResult(
             depvar=design.depvar,
@@ -86,7 +88,7 @@ def test_build_is_pure_and_runs_one_joint_estimate_per_outcome(tmp_path: Path, m
     calls = _stub_report_dependencies(monkeypatch)
     monkeypatch.setattr(report, "REPORTS_DIR", tmp_path)
 
-    document = report.build(2020, method="事件研究", interaction=True)
+    document = report.build(2020, method="event_study", interaction=True)
 
     assert calls == ["trade", "production", "length", "network"]
     assert document.suggested_filename == "experiment_report_2020.md"
@@ -136,10 +138,28 @@ def test_generate_keeps_cli_file_output(tmp_path: Path, monkeypatch):
 def test_country_report_skips_degenerate_network_regression(monkeypatch):
     calls = _stub_report_dependencies(monkeypatch)
 
-    document = report.build(2020, granularity="国家级")
+    document = report.build(2020, granularity="country")
 
     assert calls == ["trade", "production", "length"]
     assert "网络回归因国家图退化而不运行" in document.markdown
     assert "Gephi 介数中心性恒为 0" in document.markdown
     assert "网络回归仅支持国家–行业级面板" in document.markdown
     assert "国家×行业介数中心性 Top 5" in document.markdown
+
+
+@pytest.mark.skipif(
+    not (PROCESSED_DIR / "panel_industry.csv").exists(),
+    reason="需要 gvcsim compute 产出的面板",
+)
+def test_event_chart_omits_ci_when_inference_is_suppressed():
+    """遗留 /api/report 端点不能因为“推断被抑制”而崩。
+
+    p/ci 变成 Optional 后,_coef_table 更新了、_event_chart 漏了:
+    float(None) 会让 POST /api/report {"shock_type":"sanctions","method":"event_study"}
+    直接 500(shock_type/method 都是客户端传入的合法枚举)。
+    """
+    doc = report.build(shock_type="sanctions", method="event_study")
+    # 制裁 + 吸收型事件研究 → invalid_design → 区间被抑制 → 图里不能出现 ci 字段
+    assert '"ci_low"' not in doc.markdown
+    # 关税仍有合法推断,区间照常写进图表
+    assert '"ci_low"' in report.build(shock_type="tariff", method="event_study").markdown

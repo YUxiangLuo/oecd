@@ -74,26 +74,27 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
   },
 };
 
+// 按稳定键索引;值是课堂问句里的说法(与后端 SHOCK_LABELS 刻意不同)。
 const SHOCK_SUBJECT: Record<string, string> = {
-  关税冲击: "额外关税冲击",
-  制裁清单: "制裁暴露",
-  出口管制: "出口管制暴露",
+  tariff: "额外关税冲击",
+  sanctions: "制裁暴露",
+  export_control: "出口管制暴露",
 };
 
 export function lessonQuestion(outcome: RegressionOutcome, shockType: string, method: string): string {
   const lesson = REGRESSION_LESSONS[outcome];
   const shock = SHOCK_SUBJECT[shockType] ?? shockType;
-  if (method === "双向固定效应") {
+  if (method === "twfe_intensity") {
     return `${shock}强度增加时，${lesson.shortMetric}如何随之变化？`;
   }
   return `受到${shock}后，处理组的${lesson.shortMetric}相对对照组发生了怎样的变化？`;
 }
 
 export function comparisonExplanation(method: string): string {
-  if (method === "双重差分 (DID)") {
+  if (method === "did") {
     return "先算处理组冲击前后的变化，再减去对照组同期变化：DID =（处理后−处理前）−（对照后−对照前）。";
   }
-  if (method === "事件研究") {
+  if (method === "event_study") {
     return "以各个体冲击前一年为参照，逐期比较处理组相对对照组的变化；冲击前系数用于发现明显的预先差异。";
   }
   return "利用同一个体随时间变化的连续冲击强度，在吸收个体和年份共同差异后比较结果变量的相对变化。";

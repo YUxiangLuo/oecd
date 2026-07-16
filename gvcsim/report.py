@@ -14,7 +14,18 @@ import pandas as pd
 
 from gvcsim.artifacts import read_csv_artifact
 from gvcsim.config import PROCESSED_DIR, REPORTS_DIR, processed_years
-from gvcsim.regression.design import OUTCOME_DEPVARS, OUTCOME_GRANULARITIES, RegressionDesign
+from gvcsim.regression.design import (
+    CONTROL_MODE_NONE,
+    GRANULARITY_COUNTRY,
+    GRANULARITY_COUNTRY_INDUSTRY,
+    METHOD_DID,
+    METHOD_EVENT_STUDY,
+    OUTCOME_DEPVARS,
+    OUTCOME_GRANULARITIES,
+    PRICE_MODE_NOMINAL,
+    RegressionDesign,
+)
+from gvcsim.shocks import SHOCK_TARIFF
 from gvcsim.regression.panel import RegressionResult, run_design, run_design_with_benchmark
 
 
@@ -43,11 +54,11 @@ def _load_panel(design: RegressionDesign) -> pd.DataFrame:
 def run_outcome_regression(
     outcome: str,
     panel: pd.DataFrame | None = None,
-    granularity: str = "国家–行业级",
+    granularity: str = GRANULARITY_COUNTRY_INDUSTRY,
     method: str | None = None,
-    control_mode: str = "不加控制变量",
+    control_mode: str = CONTROL_MODE_NONE,
     interaction: bool = False,
-    price_mode: str = "名义值",
+    price_mode: str = PRICE_MODE_NOMINAL,
     exclude_row: bool = True,
 ) -> RegressionResult:
     """跑指定 outcome 的回归（主要供 ``gvcsim regress`` 使用）。"""
@@ -70,16 +81,23 @@ def _coef_table(result: RegressionResult, design: RegressionDesign) -> str:
         "|---|---:|---:|---:|---:|---:|:---:|",
     ]
     for coef in result.coefs:
+        # 推断被抑制时留空,不能退回显示 0 或"不显著"。
+        ci = f"[{coef.ci_low:.4f}, {coef.ci_high:.4f}]" if coef.ci_low is not None else "—"
+        p_text = f"{coef.p:.3f}" if coef.p is not None else "—"
         lines.append(
-            f"| {coef.name} | {coef.coef:.4f} | {coef.se:.4f} | [{coef.ci_low:.4f}, {coef.ci_high:.4f}] | "
-            f"{coef.t:.2f} | {coef.p:.3f} | {coef.stars} |"
+            f"| {coef.name} | {coef.coef:.4f} | {coef.se:.4f} | {ci} | {coef.t:.2f} | {p_text} | {coef.stars} |"
         )
-    entity_label = "国家" if design.granularity == "国家级" else "国家×行业"
+    entity_label = "国家" if design.granularity == GRANULARITY_COUNTRY else "国家×行业"
     lines.append(
         f"\nN = {result.n_obs}({result.n_entities} 个{entity_label} × {result.n_times} 年,"
         f"标准误按 {result.n_clusters} 国聚类),组内 R² = {result.r2_within:.4f},"
         "双向固定效应 ✓"
     )
+    if result.support and result.support.get("suppress_inference"):
+        lines.append(
+            f"\n> **本设计不可作统计推断({result.status})**,p 值、置信区间与显著性标记已抑制。\n>\n"
+            + "\n>\n".join(f"> {reason}" for reason in result.status_reasons)
+        )
     return "\n".join(lines)
 
 
@@ -100,12 +118,12 @@ def _design_summary(design: RegressionDesign) -> str:
     interaction = "开启:冲击×基期GVC生产份额(按样本个体均值中心化)" if design.interaction else "未开启"
     return "\n".join(
         [
-            f"- 粒度:{design.granularity}",
-            f"- 冲击类型:{design.shock_type}",
-            f"- 估计方法:{design.method}",
+            f"- 粒度:{design.granularity_label}",
+            f"- 冲击类型:{design.shock_type_label}",
+            f"- 估计方法:{design.method_label}",
             f"- 控制变量:{controls}",
             f"- 交互项:{interaction}",
-            f"- 价格口径:{design.price_mode}",
+            f"- 价格口径:{design.price_mode_label}",
             f"- 回归样本:{design.sample_filter}",
             "- 教学场景:正式报告固定使用 clean 基准场景",
         ]
@@ -161,12 +179,17 @@ def _event_chart(
     ]
     if not coefs:
         return None
+    # 推断被抑制时没有置信区间:整点省略 ci 字段(图表契约里 ci 本就可选),
+    # 渲染成一个没有须的点。不能退回 float(None),也不能拿 0 冒充区间。
     points = [
         {
             "label": coef.name.removesuffix(suffix),
             "value": float(coef.coef),
-            "ci_low": float(coef.ci_low),
-            "ci_high": float(coef.ci_high),
+            **(
+                {"ci_low": float(coef.ci_low), "ci_high": float(coef.ci_high)}
+                if coef.ci_low is not None and coef.ci_high is not None
+                else {}
+            ),
         }
         for coef in coefs
     ]
@@ -185,12 +208,12 @@ def _event_chart(
 def build(
     year: int | None = None,
     *,
-    granularity: str = "国家–行业级",
-    shock_type: str = "关税冲击",
-    method: str = "双重差分 (DID)",
-    control_mode: str = "不加控制变量",
+    granularity: str = GRANULARITY_COUNTRY_INDUSTRY,
+    shock_type: str = SHOCK_TARIFF,
+    method: str = METHOD_DID,
+    control_mode: str = CONTROL_MODE_NONE,
     interaction: bool = False,
-    price_mode: str = "名义值",
+    price_mode: str = PRICE_MODE_NOMINAL,
     exclude_row: bool = True,
 ) -> ReportDocument:
     """纯构建报告：读取预计算产物并返回 Markdown，不产生磁盘副作用。"""
@@ -225,7 +248,7 @@ def build(
     top_between = _industry_network_top(industry_panel, report_year, exclude_row)
     comparison_scope = (
         "四组因变量共用同一套国家–行业级设定"
-        if granularity == "国家–行业级"
+        if granularity == GRANULARITY_COUNTRY_INDUSTRY
         else "贸易流、生产与长度共用国家级设定；网络回归因国家图退化而不运行"
     )
 
@@ -286,7 +309,7 @@ def build(
                 _coef_table(result, design),
             ]
         )
-        if method == "事件研究":
+        if method == METHOD_EVENT_STUDY:
             pretrend = _pretrend_summary(result)
             if pretrend:
                 sections.extend(["#### 冲击前趋势检查", pretrend])
@@ -337,12 +360,12 @@ def build(
 def generate(
     year: int | None = None,
     *,
-    granularity: str = "国家–行业级",
-    shock_type: str = "关税冲击",
-    method: str = "双重差分 (DID)",
-    control_mode: str = "不加控制变量",
+    granularity: str = GRANULARITY_COUNTRY_INDUSTRY,
+    shock_type: str = SHOCK_TARIFF,
+    method: str = METHOD_DID,
+    control_mode: str = CONTROL_MODE_NONE,
     interaction: bool = False,
-    price_mode: str = "名义值",
+    price_mode: str = PRICE_MODE_NOMINAL,
     exclude_row: bool = True,
 ) -> str:
     """CLI 落盘入口：构建报告后写入 ``reports/`` 并返回路径。"""

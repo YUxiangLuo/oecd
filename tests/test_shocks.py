@@ -69,7 +69,7 @@ def test_event_timeline_columns():
     assert (hit["announced_date"] != "").all()
     assert (hit["effective_date"] != "").all()
     assert (hit["note"] != "").all()
-    assert (df["shock_type"] == "关税冲击").all()
+    assert (df["shock_type"] == "tariff").all()
 
 
 def test_entity_list_policy_shocks_are_generated():

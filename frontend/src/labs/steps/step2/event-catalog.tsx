@@ -1,7 +1,7 @@
 import type { ShockEvent } from "../../../types";
 import { sectorLabel } from "../../../viz";
 import { pct } from "../../shared";
-import { eventKey } from "./model";
+import { eventKey, shockTypeLabel } from "./model";
 
 export function EventCatalog({
   events,
@@ -43,7 +43,7 @@ export function EventCatalog({
                     </button>
                     {event.entities && <div className="muted shock-event-entities">实体：{event.entities}</div>}
                   </td>
-                  <td>{event.shock_type ?? "关税冲击"}</td>
+                  <td>{shockTypeLabel(event.shock_type)}</td>
                   <td>{event.imposer} → {event.targets}{event.exempt ? `（豁免：${event.exempt}）` : ""}</td>
                   <td>{event.announced}</td>
                   <td>{event.effective}</td>

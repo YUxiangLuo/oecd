@@ -2,12 +2,17 @@
 
 课程编号属于展示层；回归业务只使用稳定 ``outcome`` 标识，避免课程调整改变
 贸易流、生产、长度与网络四类因变量的 API 含义。
+
+**枚举值与展示文案分离**:API 只接受稳定英文键(``tariff``、``did`` 等),
+中文文案放在与之配对的 ``*_LABELS`` 里,并随 /api/regression/options 一起下发。
+早先的契约直接把界面文字当枚举值(``"双重差分 (DID)"``),于是改个标点、
+翻译或缩短标签都会变成破坏性 API 变更——展示层的措辞不该有这种权力。
 """
 
 from dataclasses import dataclass
 
 from gvcsim.data.controls import CONTROL_COLUMNS, CONTROL_LABELS, MACRO_CONTROL_COLUMNS
-from gvcsim.shocks import SHOCK_SPECS
+from gvcsim.shocks import SHOCK_LABELS, SHOCK_SPECS, SHOCK_TARIFF
 
 # 稳定 outcome → (被解释变量, 中文含义)。列名来自 pipeline 产出的指标面板。
 OUTCOME_DEPVARS = {
@@ -18,20 +23,46 @@ OUTCOME_DEPVARS = {
 }
 OUTCOMES = list(OUTCOME_DEPVARS)
 
-GRANULARITIES = ["国家–行业级", "国家级"]
-OUTCOME_GRANULARITIES = {
-    outcome: (["国家–行业级"] if outcome == "network" else list(GRANULARITIES)) for outcome in OUTCOMES
+GRANULARITY_COUNTRY_INDUSTRY = "country_industry"
+GRANULARITY_COUNTRY = "country"
+GRANULARITIES = [GRANULARITY_COUNTRY_INDUSTRY, GRANULARITY_COUNTRY]
+GRANULARITY_LABELS = {
+    GRANULARITY_COUNTRY_INDUSTRY: "国家–行业级",
+    GRANULARITY_COUNTRY: "国家级",
 }
-SHOCK_TYPES = list(SHOCK_SPECS)
-METHODS = ["双重差分 (DID)", "双向固定效应", "事件研究"]
-CONTROL_MODE_NONE = "不加控制变量"
-CONTROL_MODE_ICIO = "ICIO 派生控制变量"
-CONTROL_MODE_MACRO = "模拟宏观控制"
-CONTROL_MODES = [CONTROL_MODE_NONE, CONTROL_MODE_ICIO, CONTROL_MODE_MACRO]
+OUTCOME_GRANULARITIES = {
+    outcome: ([GRANULARITY_COUNTRY_INDUSTRY] if outcome == "network" else list(GRANULARITIES)) for outcome in OUTCOMES
+}
 
-PRICE_MODE_NOMINAL = "名义值"
-PRICE_MODE_REAL = "实际值(2016=1)"
+SHOCK_TYPES = list(SHOCK_SPECS)
+
+METHOD_DID = "did"
+METHOD_TWFE_INTENSITY = "twfe_intensity"
+METHOD_EVENT_STUDY = "event_study"
+METHODS = [METHOD_DID, METHOD_TWFE_INTENSITY, METHOD_EVENT_STUDY]
+METHOD_LABELS = {
+    METHOD_DID: "双重差分 (DID)",
+    METHOD_TWFE_INTENSITY: "双向固定效应",
+    METHOD_EVENT_STUDY: "事件研究",
+}
+
+CONTROL_MODE_NONE = "none"
+CONTROL_MODE_ICIO = "icio_derived"
+CONTROL_MODE_MACRO = "macro_sim"
+CONTROL_MODES = [CONTROL_MODE_NONE, CONTROL_MODE_ICIO, CONTROL_MODE_MACRO]
+CONTROL_MODE_LABELS = {
+    CONTROL_MODE_NONE: "不加控制变量",
+    CONTROL_MODE_ICIO: "ICIO 派生控制变量",
+    CONTROL_MODE_MACRO: "模拟宏观控制",
+}
+
+PRICE_MODE_NOMINAL = "nominal"
+PRICE_MODE_REAL = "real_2016"
 PRICE_MODES = [PRICE_MODE_NOMINAL, PRICE_MODE_REAL]
+PRICE_MODE_LABELS = {
+    PRICE_MODE_NOMINAL: "名义值",
+    PRICE_MODE_REAL: "实际值(2016=1)",
+}
 
 SCENARIO_CLEAN = "clean"
 SCENARIO_NOISY = "noisy"
@@ -46,18 +77,18 @@ SCENARIO_LABELS = {
 # 粒度 → (面板文件, 个体列, 聚类列)。冲击在国家层面高度相关,
 # 行业级回归的标准误也按国家聚类,避免组内相关低估标准误。
 _PANEL_SPECS = {
-    "国家级": ("panel_country.csv", "country", "country"),
-    "国家–行业级": ("panel_industry.csv", "entity_id", "country"),
+    GRANULARITY_COUNTRY: ("panel_country.csv", "country", "country"),
+    GRANULARITY_COUNTRY_INDUSTRY: ("panel_industry.csv", "entity_id", "country"),
 }
 
 
 @dataclass
 class RegressionDesign:
     outcome: str
-    granularity: str = "国家–行业级"
-    shock_type: str = "关税冲击"
+    granularity: str = GRANULARITY_COUNTRY_INDUSTRY
+    shock_type: str = SHOCK_TARIFF
     # 默认用 DID 展示处理组相对对照组的处理后变化；因果解释仍依赖识别假设。
-    method: str = "双重差分 (DID)"
+    method: str = METHOD_DID
     control_mode: str = CONTROL_MODE_NONE
     interaction: bool = False
     price_mode: str = PRICE_MODE_NOMINAL
@@ -117,6 +148,27 @@ class RegressionDesign:
     def scenario_label(self) -> str:
         return SCENARIO_LABELS.get(self.scenario, self.scenario)
 
+    # 展示文案由设计对象自己提供,调用方(API/报告/CLI)不各自维护一份映射。
+    @property
+    def granularity_label(self) -> str:
+        return GRANULARITY_LABELS.get(self.granularity, self.granularity)
+
+    @property
+    def shock_type_label(self) -> str:
+        return SHOCK_LABELS.get(self.shock_type, self.shock_type)
+
+    @property
+    def method_label(self) -> str:
+        return METHOD_LABELS.get(self.method, self.method)
+
+    @property
+    def control_mode_label(self) -> str:
+        return CONTROL_MODE_LABELS.get(self.control_mode, self.control_mode)
+
+    @property
+    def price_mode_label(self) -> str:
+        return PRICE_MODE_LABELS.get(self.price_mode, self.price_mode)
+
     @property
     def sample_filter(self) -> str:
         return "排除 ROW(世界其他地区聚合账户)" if self.exclude_row else "包含 ROW"
@@ -127,14 +179,14 @@ class RegressionDesign:
         ``text`` 连接后与 :meth:`equation` 完全一致；``term`` 和
         ``meta_key`` 供前端把符号与回归设定摘要联动高亮。
         """
-        unit = "it" if self.granularity == "国家级" else "ijt"
-        ent = "i" if self.granularity == "国家级" else "ij"
+        unit = "it" if self.granularity == GRANULARITY_COUNTRY else "ijt"
+        ent = "i" if self.granularity == GRANULARITY_COUNTRY else "ij"
         y = f"{self.depvar}_{unit}"
-        if self.method == "双重差分 (DID)":
+        if self.method == METHOD_DID:
             x = f"β·({self.treated_col}_{ent} × 1[t≥G_{ent}])"
             policy_desc = "曾受处理个体自首次冲击年起、相对对照组的平均变化；因果解释依赖识别假设。"
             interaction_text = f"θ·({self.treated_col}_{ent} × 1[t≥G_{ent}] × (BaseGVC_{ent},0−mean(BaseGVC_0)))"
-        elif self.method == "事件研究":
+        elif self.method == METHOD_EVENT_STUDY:
             x = f"Σ_k β_k·1[t-G_{ent}=k]"
             policy_desc = "相对首次冲击年的动态主效应；k=-1 为省略基期。"
             interaction_text = f"Σ_k θ_k·(1[t-G_{ent}=k] × (BaseGVC_{ent},0−mean(BaseGVC_0)))"

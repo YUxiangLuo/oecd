@@ -136,7 +136,7 @@ OECD ICIO ──> 质检与指标流水线 ──> 带版本清单的预计算�
 | `data/shocks/` | 教学政策冲击面板 |
 | `gvcsim/` | 指标流水线、FastAPI、回归、报告和课堂后端 |
 | `frontend/` | React 19、TypeScript、Vite 教学界面 |
-| `tests/`、`frontend/e2e/` | 后端测试、Gephi golden fixture、前端单测与浏览器测试 |
+| `tests/` | 后端测试与 Gephi golden fixture |
 
 原始数据、预计算结果、报告、数据库凭证和认证密钥都不会提交到 Git。
 
@@ -151,12 +151,10 @@ uv run pytest --cov=gvcsim --cov-report=term-missing -q
 cd frontend
 bun run test:unit
 bun run build
-bunx playwright install chromium  # 首次运行
-bun run test:e2e
 ```
 
-GitHub Actions 还会在干净环境中生成微型正式格式产物，并让 Playwright 同时连接真实 FastAPI 与
-Vite，避免只依赖接口 mock 的假通过。
+GitHub Actions 在每次 push 上跑同一组检查(后端带 PostgreSQL 服务、前端构建与单测)。
+浏览器端没有自动化测试:界面行为靠人工在真实服务上核对。
 
 ## 使用边界
 

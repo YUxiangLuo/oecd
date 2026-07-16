@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, test } from "bun:test";
 import type { Meta, ShockEvent } from "../../../types";
 import {
   closestSupportedYear,
@@ -6,6 +6,11 @@ import {
   filtersForEvent,
   filtersMatchEvent,
   representativeSector,
+  SHOCK_TYPE_COLORS,
+  SHOCK_TYPE_LABELS,
+  SHOCK_TYPES,
+  shockTypeColor,
+  shockTypeLabel,
 } from "./model";
 
 const meta: Meta = {
@@ -16,7 +21,7 @@ const meta: Meta = {
 
 const event: ShockEvent = {
   name: "美国301对华关税",
-  shock_type: "关税冲击",
+  shock_type: "tariff",
   imposer: "USA",
   targets: "CHN",
   exempt: "",
@@ -39,7 +44,7 @@ describe("step2 shock event model", () => {
     const filters = filtersForEvent(event, meta);
     expect(filters.year).toBe(2018);
     expect(filters.country).toBe("CHN");
-    expect(filters.shockType).toBe("关税冲击");
+    expect(filters.shockType).toBe("tariff");
     expect(filters.onlyHit).toBe(true);
     expect(filters.page).toBe(1);
   });
@@ -71,5 +76,33 @@ describe("step2 shock event model", () => {
     expect(filtersMatchEvent(expected, expected)).toBe(true);
     expect(filtersMatchEvent({ ...expected, sector: "C24" }, expected)).toBe(false);
     expect(filtersMatchEvent({ ...expected, page: 2 }, expected)).toBe(true);
+  });
+});
+
+describe("冲击类型的键与展示", () => {
+  test("每个稳定键都有文案和配色", () => {
+    // 这条守的是一次真实回归:配色表原来按中文名索引,枚举改成稳定键后
+    // 查表全部落空,时间线上所有事件退化成同一个兜底色,而没有任何测试会红。
+    for (const key of SHOCK_TYPES) {
+      expect(SHOCK_TYPE_LABELS[key]).toBeTruthy();
+      expect(SHOCK_TYPE_COLORS[key]).toMatch(/^#[0-9a-f]{6}$/i);
+    }
+    expect(Object.keys(SHOCK_TYPE_LABELS).sort()).toEqual([...SHOCK_TYPES].sort());
+    expect(Object.keys(SHOCK_TYPE_COLORS).sort()).toEqual([...SHOCK_TYPES].sort());
+  });
+
+  test("三类冲击的颜色互不相同", () => {
+    // 颜色是学生一眼区分三类冲击的主要线索;撞色等于没有编码。
+    expect(new Set(Object.values(SHOCK_TYPE_COLORS)).size).toBe(SHOCK_TYPES.length);
+  });
+
+  test("取文案/配色不会把原始键甩到界面上", () => {
+    expect(shockTypeLabel("tariff")).toBe("关税冲击");
+    expect(shockTypeLabel("sanctions")).toBe("制裁清单");
+    expect(shockTypeLabel("export_control")).toBe("出口管制");
+    // 未知或缺失的键要退回一个可读文案,而不是显示 undefined / 裸键。
+    expect(shockTypeLabel(undefined)).toBe("关税冲击");
+    expect(shockTypeLabel("bogus")).toBe("关税冲击");
+    expect(shockTypeColor("bogus")).toMatch(/^#/);
   });
 });

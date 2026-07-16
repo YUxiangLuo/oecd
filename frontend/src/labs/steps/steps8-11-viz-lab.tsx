@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../api";
-import type { IndicatorSchema, IndustryPage, Meta, NetworkData, Step } from "../../types";
+import { EvidencePanel } from "../../step-evidence";
+import type { IndicatorSchema, IndustryPage, Meta, NetworkData, Step, StepEvidenceApi } from "../../types";
 import { CompositionBar, HeatTableViz, LengthViz, NetworkViz, QuadrantScatter, RankBarChart, ScatterChart, countryLabel, sectorLabel, StackedShareViz, TrendChart } from "../../viz";
 import { CountryPicker } from "../country-picker";
 import { fieldLabel, fmtField, useAsync } from "../shared";
@@ -75,7 +76,17 @@ const STEP_VIZ: Record<number, StepVizConfig> = {
 
 /** 步骤8-11:主题化可视化探索(每步招牌图 + 本主题的默认图表/指标 + 自由探索)。
  *  App.tsx 用 key={step.n} 挂载,切步即重挂 → 下面所有初值按本步 cfg 重新生效。 */
-export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
+/** 第 8–11 步的学习证据:选定一个图表视角,并自选至少两个对比对象。 */
+interface VizEvidence extends Record<string, unknown> {
+  chart?: string;
+  compared?: string[];
+}
+
+export function VizLab({ meta, step, evidence }: {
+  meta: Meta;
+  step: Step;
+  evidence: StepEvidenceApi<VizEvidence>;
+}) {
   const cfg = STEP_VIZ[step.n] ?? STEP_VIZ[8];
   const [year, setYear] = useState(meta.years.at(-1)!);
   const [view, setView] = useState<ViewKind>(cfg.defaultView);
@@ -116,6 +127,50 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
       : Promise.resolve(null),
     [view === "trend", granularity, drillCountry],
   );
+  // 证据:选定了图表视角,并**自选**了对比对象。
+  // 刻意不采信 Top-N 自动选出来的实体:那是系统替学生选的,不构成学生的比较决定。
+  // 必须放在下面的早退之前:hook 不能在条件返回之后调用。
+  //
+  // 只有学生**真正动过**这三项才写证据(interacted 由各个 onClick/onChange 置位)。
+  // App.tsx 用 key={step.n} 挂载本组件,切回一个已完成的步骤会重挂并把
+  // view/entityMode/picked 重置为默认值;若照写就会用默认值覆盖学生存下的证据,
+  // 让做过的步骤退回未完成。
+  //
+  // 不能用“跳过 effect 的第一次运行”来实现:StrictMode 下 effect 会被
+  // 有意二次调用(run → cleanup → run),而 ref 在同一个组件实例里是延续的,
+  // 于是第二次运行照样把默认值写了出去。守卫必须挂在真实用户事件上,
+  // 与 step1-db 的 pickedSlice 同一个道理。
+  const [interacted, setInteracted] = useState(false);
+  useEffect(() => {
+    if (!interacted) return;
+    if (granularity === "sector") {
+      // 国家×行业节点(第 11 步):这里没有、也不该有国家多选——国家级贸易图
+      // 在全正边下是完全图,Gephi 介数恒为 0,所以这一步被固定在 sector 粒度。
+      // 因此“对比对象”来自「下钻国家」:看过哪几个国家的行业节点构成。
+      // 累加而不是覆盖,学生下钻过的国家一个都不会丢。
+      const seen = evidence.data?.compared ?? [];
+      evidence.save({
+        chart: view,
+        compared: seen.includes(drillCountry) ? seen : [...seen, drillCountry],
+      });
+    } else {
+      evidence.save({ chart: view, compared: entityMode === "pick" ? picked : [] });
+    }
+    // evidence 每次渲染都是新对象,不入依赖。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [interacted, view, entityMode, picked, granularity, drillCountry]);
+
+  /** 包装用户驱动的 setter:动过才算学生的选择。 */
+  const withEvidence = <T,>(set: (value: T) => void) => (value: T) => {
+    set(value);
+    setInteracted(true);
+  };
+  const pickView = withEvidence(setView);
+  const pickEntityMode = withEvidence(setEntityMode);
+  const pickCountries = withEvidence(setPicked);
+  const pickDrillCountry = withEvidence(setDrillCountry);
+  const pickGranularity = withEvidence(setGranularity);
+
   if (error || netErr || sectorErr) return <div className="error-box">{error ?? netErr ?? sectorErr}</div>;
 
   const fmtOf = (k: string) => schema?.fields[k]?.format;
@@ -217,6 +272,14 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
 
   return (
     <div>
+      <EvidencePanel
+        evidence={evidence}
+        // 提示必须指向界面上真实存在的控件名。sector 粒度(第 11 步)没有国家多选,
+        // 对比对象来自「下钻国家」;country 粒度要先离开招牌图才会出现「选国家」。
+        title={granularity === "sector"
+          ? "本步要留下的证据:点选一个图表视角,并用「下钻国家」看过至少两个国家的行业节点"
+          : "本步要留下的证据:点选一个图表视角(招牌图以外),再用「选国家」挑出至少两个对比对象"}
+      />
       <div className="controls">
         <span className="field">
           <label>年份</label>
@@ -226,13 +289,13 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
         </span>
         <div className="seg">
           {TABS.map(([k, lab]) => (
-            <button key={k} className={view === k ? "on" : ""} onClick={() => setView(k)}>{lab}</button>
+            <button key={k} className={view === k ? "on" : ""} onClick={() => pickView(k)}>{lab}</button>
           ))}
         </div>
         {step.n === 11 && view === "signature" && (
           <span className="field">
             <label>下钻国家</label>
-            <select value={drillCountry} onChange={(e) => setDrillCountry(e.target.value)}>
+            <select value={drillCountry} onChange={(e) => pickDrillCountry(e.target.value)}>
               {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
             </select>
           </span>
@@ -247,10 +310,10 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
             <span className="muted">分析粒度：国家–行业级（完整全球网络）</span>
           ) : (
             <div className="seg">
-              <button className={granularity === "country" ? "on" : ""} onClick={() => setGranularity("country")}>国家级</button>
+              <button className={granularity === "country" ? "on" : ""} onClick={() => pickGranularity("country")}>国家级</button>
               <button
                 className={granularity === "sector" ? "on" : ""}
-                onClick={() => { setGranularity("sector"); setEntityMode("topn"); }}
+                onClick={() => { pickGranularity("sector"); pickEntityMode("topn"); }}
               >
                 行业下钻
               </button>
@@ -259,7 +322,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
           {granularity === "sector" && (
             <span className="field">
               <label>下钻国家</label>
-              <select value={drillCountry} onChange={(e) => setDrillCountry(e.target.value)}>
+              <select value={drillCountry} onChange={(e) => pickDrillCountry(e.target.value)}>
                 {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
               </select>
             </span>
@@ -276,8 +339,8 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
           )}
           {granularity === "country" && (
             <div className="seg">
-              <button className={entityMode === "topn" ? "on" : ""} onClick={() => setEntityMode("topn")}>{view === "quadrant" ? "全部" : "Top-N"}</button>
-              <button className={entityMode === "pick" ? "on" : ""} onClick={() => setEntityMode("pick")}>选国家</button>
+              <button className={entityMode === "topn" ? "on" : ""} onClick={() => pickEntityMode("topn")}>{view === "quadrant" ? "全部" : "Top-N"}</button>
+              <button className={entityMode === "pick" ? "on" : ""} onClick={() => pickEntityMode("pick")}>选国家</button>
             </div>
           )}
           {view !== "quadrant" && (granularity === "sector" || entityMode === "topn") ? (
@@ -289,7 +352,7 @@ export function VizLab({ meta, step }: { meta: Meta; step: Step }) {
           ) : view === "quadrant" && (granularity === "sector" || entityMode === "topn") ? (
             <span className="muted">显示全部 {validRows.length} 个有效样本；参考线始终按完整样本计算</span>
           ) : (
-            <CountryPicker countries={meta.countries} picked={picked} onChange={setPicked} />
+            <CountryPicker countries={meta.countries} picked={picked} onChange={pickCountries} />
           )}
         </div>
       )}

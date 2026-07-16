@@ -106,7 +106,7 @@ export function TrendChart({ data }: { data: ClassOverview["submission_trend"] }
 
 /** 各步到达漏斗：16 步到达人数面积图。 */
 export function StepFunnel({ steps, total, onSelect }: {
-  steps: ClassOverview["step_completion"];
+  steps: ClassOverview["step_reach"];
   total: number;
   onSelect?: (step: number) => void;
 }) {

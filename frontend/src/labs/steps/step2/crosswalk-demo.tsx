@@ -39,7 +39,7 @@ function CrosswalkContent({ selectedShockType }: { selectedShockType: string }) 
 
   return (
     <div className="crosswalk-content">
-      {selectedShockType !== "关税冲击" && (
+      {selectedShockType !== "tariff" && (
         <div className="crosswalk-scope-note">
           当前面板选择的是“{selectedShockType}”，不直接使用 HS 商品编码；下方保留美国301关税清单的教学映射示例。
         </div>

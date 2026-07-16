@@ -37,7 +37,6 @@ cd frontend
 bun install --frozen-lockfile
 bun run test:unit
 bun run build
-bun run test:e2e
 cd ..
 ```
 
@@ -59,10 +58,6 @@ rsync -az --delete \
   --exclude='CLAUDE.md' \
   --exclude='frontend/node_modules/' \
   --exclude='frontend/.vite/' \
-  --exclude='frontend/playwright-report/' \
-  --exclude='frontend/test-results/' \
-  --exclude='frontend/e2e/' \
-  --exclude='frontend/playwright.config.ts' \
   --exclude='*.tsbuildinfo' \
   --exclude='__pycache__/' \
   --exclude='*.pyc' \

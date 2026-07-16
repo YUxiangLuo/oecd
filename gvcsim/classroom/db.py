@@ -1,16 +1,18 @@
-"""教学数据库(PostgreSQL):班级/学生账号/实验进度/报告提交评阅/公告。
+"""教学数据库(PostgreSQL):班级/学生账号/实验会话/进度/报告提交评阅/公告。
 
 设计取舍(教学系统定位,刻意保持简单):
   - 每次操作短连接,不引入连接池;班级规模(几十人)下开销可忽略
-  - CREATE TABLE IF NOT EXISTS 懒建表；最小 schema_migrations 记录破坏性课程升级
-  - 数据库不可用统一抛 Unavailable:API 层转 503,认证层回退演示账号,
-    核心 16 步实验流程完全不依赖本库
+  - CREATE TABLE IF NOT EXISTS 懒建表,但先过 schema_meta 版本闸门:
+    版本不符即明确失败并要求 reset,不在旧库上叠加新表、也不迁移旧语义
+  - 数据库不可用统一抛 Unavailable:API 层转 503,认证层回退演示账号;
+    但实验会话(逐步实验状态的持久化)确实依赖本库
   - 每账号独立随机盐 + PBKDF2 哈希;停用账号不吊销已发令牌(≤12h 自然过期)
 """
 
 import hashlib
 import json
 import secrets
+from collections.abc import Callable
 from typing import Any
 
 import psycopg
@@ -19,12 +21,21 @@ from psycopg.rows import dict_row
 from gvcsim import config
 
 MAX_STEP = 16
-COURSE_16_MIGRATION = "2026_course_16_reset_progress"
-_SCHEMA_LOCK_ID = 736_861_016  # 固定事务级 advisory lock，串行化首次建表/迁移/播种
+_SCHEMA_LOCK_ID = 736_861_016  # 固定事务级 advisory lock，串行化首次建表/播种
+# 会话写入的 advisory lock 命名空间(与 account_id 组成两段锁键,不与建表锁冲突)
+_SESSION_LOCK_NS = 736_861_017
+
+# 教学库 schema 版本。本系统不做历史格式兼容:版本不符即明确失败并要求
+# 一次性 reset,而不是就地迁移旧语义。改动表结构时必须同时改这个字符串。
+TEACHING_DB_VERSION = "gvcsim-teaching-db-v3"
 
 
 class Unavailable(Exception):
     """教学数据库不可用(未启动/未建库/网络不通)。"""
+
+
+class SchemaVersionMismatch(RuntimeError):
+    """教学库 schema 版本与当前代码不符,需要一次性 reset。"""
 
 
 def hash_password(password: str, salt_hex: str) -> str:
@@ -32,9 +43,10 @@ def hash_password(password: str, salt_hex: str) -> str:
 
 
 _SCHEMA = """
-CREATE TABLE IF NOT EXISTS schema_migrations (
-  id         text PRIMARY KEY,
-  applied_at timestamptz NOT NULL DEFAULT now()
+CREATE TABLE IF NOT EXISTS schema_meta (
+  singleton  boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+  version    text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS classes (
   id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -63,6 +75,24 @@ CREATE TABLE IF NOT EXISTS step_progress (
   current_step int NOT NULL CONSTRAINT step_progress_current_step_check CHECK (current_step BETWEEN 1 AND 16),
   max_step     int NOT NULL CONSTRAINT step_progress_max_step_check CHECK (max_step BETWEEN 1 AND 16),
   updated_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS experiment_sessions (
+  account_id  bigint PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+  revision    bigint NOT NULL,
+  manifest_id text NOT NULL,
+  session     jsonb NOT NULL,
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS reports (
+  id               bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  account_id       bigint NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  report_key       text NOT NULL,
+  session_revision bigint NOT NULL,
+  manifest_id      text NOT NULL,
+  markdown         text NOT NULL,
+  provenance       jsonb NOT NULL,
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (account_id, report_key)
 );
 CREATE TABLE IF NOT EXISTS submissions (
   id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -96,36 +126,58 @@ def _lock_schema(c: psycopg.Connection[dict[str, Any]]) -> None:
     c.execute("SELECT pg_advisory_xact_lock(%s)", (_SCHEMA_LOCK_ID,))
 
 
-def migrate_course_16(c: psycopg.Connection[dict[str, Any]]) -> bool:
-    """一次性清空旧课程进度并把约束切到 1..16；其他教学表保持不变。"""
-    _lock_schema(c)
-    if c.execute("SELECT 1 FROM schema_migrations WHERE id = %s", (COURSE_16_MIGRATION,)).fetchone():
-        return False
-    c.execute("TRUNCATE TABLE step_progress")
-    c.execute("ALTER TABLE step_progress DROP CONSTRAINT IF EXISTS step_progress_current_step_check")
-    c.execute("ALTER TABLE step_progress DROP CONSTRAINT IF EXISTS step_progress_max_step_check")
-    c.execute(
-        "ALTER TABLE step_progress ADD CONSTRAINT step_progress_current_step_check"
-        " CHECK (current_step BETWEEN 1 AND 16)"
+def _existing_version(c: psycopg.Connection[dict[str, Any]]) -> str | None:
+    """读取已有库的 schema 版本;空库或从未建表时返回 None。"""
+    present = c.execute("SELECT to_regclass('public.schema_meta') AS t").fetchone()
+    if not present or present["t"] is None:
+        # 完全空库返回 None;但若已有教学表却没有 schema_meta,说明它来自
+        # 更早的、无版本戳的 schema,同样必须 reset,不能在其上继续建表。
+        legacy = c.execute("SELECT to_regclass('public.accounts') AS t").fetchone()
+        if legacy and legacy["t"] is not None:
+            return "(无版本戳的旧 schema)"
+        return None
+    row = c.execute("SELECT version FROM schema_meta WHERE singleton").fetchone()
+    return row["version"] if row else None
+
+
+def _check_schema_version(c: psycopg.Connection[dict[str, Any]]) -> None:
+    """版本闸门:不符即明确失败。
+
+    绝不能在版本不符的库上继续 CREATE TABLE IF NOT EXISTS——那会让新旧两套
+    表并存,而 schema_meta 仍写着旧版本,数据库从此对自己的身份说谎。
+    """
+    version = _existing_version(c)
+    if version is None or version == TEACHING_DB_VERSION:
+        return
+    raise SchemaVersionMismatch(
+        f"教学库 schema 版本为 {version},当前代码需要 {TEACHING_DB_VERSION}。"
+        f"本系统不做历史格式兼容,请执行一次性重置:"
+        f"uv run gvcsim classroom-init --reset(会删除全部教学数据)"
     )
-    c.execute("ALTER TABLE step_progress ADD CONSTRAINT step_progress_max_step_check CHECK (max_step BETWEEN 1 AND 16)")
-    c.execute("INSERT INTO schema_migrations(id) VALUES (%s)", (COURSE_16_MIGRATION,))
-    return True
 
 
 def initialize_schema() -> list[str]:
-    """建表、执行幂等迁移并播种；返回本次实际执行的 migration id。"""
+    """校验版本、建表并播种;返回本次执行的动作说明。"""
     global _schema_ready
     c = _connect()
     applied: list[str] = []
     try:
         with c:
-            # 先加锁再 CREATE TABLE，避免两个首次请求同时创建系统表或播种账号。
+            # 先加锁再校验/建表，避免两个首次请求同时创建系统表或播种账号。
             _lock_schema(c)
+            _check_schema_version(c)
+            fresh = _existing_version(c) is None
             c.execute(_SCHEMA)
-            if migrate_course_16(c):
-                applied.append(COURSE_16_MIGRATION)
+            c.execute(
+                "INSERT INTO schema_meta(singleton, version) VALUES (true, %s) ON CONFLICT (singleton) DO NOTHING",
+                (TEACHING_DB_VERSION,),
+            )
+            if fresh:
+                applied.append(f"创建 schema {TEACHING_DB_VERSION}")
             _seed_if_empty(c)
+    except SchemaVersionMismatch:
+        c.close()
+        raise
     except psycopg.Error as e:
         c.close()
         raise Unavailable(str(e)) from e
@@ -295,21 +347,154 @@ def get_progress(username: str) -> dict[str, Any] | None:
         ).fetchone()
 
 
+# ---------------------------------------------------------------- 实验会话
+
+
+def get_session(username: str) -> dict[str, Any] | None:
+    """读取学生的实验会话;从未保存过则返回 None。"""
+    with conn() as c:
+        return c.execute(
+            "SELECT s.revision, s.manifest_id, s.session, s.updated_at"
+            " FROM experiment_sessions s JOIN accounts a ON a.id = s.account_id"
+            " WHERE a.username = %s AND a.role = 'student'",
+            (username,),
+        ).fetchone()
+
+
+def save_session(
+    username: str,
+    session: dict[str, Any],
+    base_revision: int,
+    merge: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]],
+) -> dict[str, Any] | None:
+    """写入会话;并发写入时按记录级时间戳合并,不整份覆盖。
+
+    ``base_revision`` 是客户端读到的版本。若服务端已被另一个标签页推进,
+    则用 ``merge`` 把两边的步骤记录合并后再写,避免丢掉任何一边的实验。
+    整个读-合并-写在一个事务内完成,并按账号加事务级 advisory 锁串行化。
+    """
+    with conn() as c:
+        with c.transaction():
+            account = c.execute(
+                "SELECT id FROM accounts WHERE username = %s AND role = 'student'", (username,)
+            ).fetchone()
+            if account is None:
+                return None
+            # 按账号串行化整个读-合并-写。
+            #
+            # 不能只靠下面那句 SELECT ... FOR UPDATE:行不存在时它锁不住任何东西。
+            # 首次并发写入(两个标签页都还没有会话行)会双双读到 current=None →
+            # 都跳过 merge → 都算出 revision=1 → 后到的 ON CONFLICT DO UPDATE
+            # 整份覆盖先到的,一边的实验被静默丢弃。advisory 锁对"尚不存在的行"
+            # 同样有效,因此把首写竞态也一起关掉。
+            c.execute("SELECT pg_advisory_xact_lock(%s, %s)", (_SESSION_LOCK_NS, account["id"]))
+            current = c.execute(
+                "SELECT revision, session FROM experiment_sessions WHERE account_id = %s FOR UPDATE",
+                (account["id"],),
+            ).fetchone()
+
+            merged = session
+            merged_from: int | None = None
+            if current is not None and current["revision"] != base_revision:
+                merged = merge(current["session"], session)
+                merged_from = current["revision"]
+            revision = (current["revision"] + 1) if current is not None else 1
+
+            c.execute(
+                "INSERT INTO experiment_sessions(account_id, revision, manifest_id, session)"
+                " VALUES (%s, %s, %s, %s)"
+                " ON CONFLICT (account_id) DO UPDATE SET"
+                " revision = EXCLUDED.revision, manifest_id = EXCLUDED.manifest_id,"
+                " session = EXCLUDED.session, updated_at = now()",
+                (account["id"], revision, merged["manifest_id"], json.dumps(merged)),
+            )
+            return {"revision": revision, "session": merged, "merged_from": merged_from}
+
+
+def clear_session(username: str) -> None:
+    with conn() as c:
+        c.execute(
+            "DELETE FROM experiment_sessions s USING accounts a WHERE s.account_id = a.id AND a.username = %s",
+            (username,),
+        )
+
+
+# ---------------------------------------------------------------- 服务端生成的报告
+
+
+def save_report(
+    username: str,
+    report_key: str,
+    session_revision: int,
+    manifest_id: str,
+    markdown: str,
+    provenance: dict[str, Any],
+) -> dict[str, Any] | None:
+    """落库一份服务端生成的报告。
+
+    同一 report_key 表示同一份会话内容 + 同一套产物,重复生成即幂等更新,
+    不会堆出一串实质相同的报告。
+    """
+    with conn() as c:
+        return c.execute(
+            "INSERT INTO reports(account_id, report_key, session_revision, manifest_id, markdown, provenance)"
+            " SELECT id, %s, %s, %s, %s, %s FROM accounts WHERE username = %s AND role = 'student'"
+            " ON CONFLICT (account_id, report_key) DO UPDATE SET"
+            " session_revision = EXCLUDED.session_revision, markdown = EXCLUDED.markdown,"
+            " provenance = EXCLUDED.provenance, created_at = now()"
+            " RETURNING id, report_key, session_revision, manifest_id, created_at",
+            (report_key, session_revision, manifest_id, markdown, json.dumps(provenance, ensure_ascii=False), username),
+        ).fetchone()
+
+
+def latest_report(username: str) -> dict[str, Any] | None:
+    """读取学生最近生成的报告(刷新后可重新打开全文)。"""
+    with conn() as c:
+        return c.execute(
+            "SELECT r.id, r.report_key, r.session_revision, r.manifest_id, r.markdown, r.provenance, r.created_at"
+            " FROM reports r JOIN accounts a ON a.id = r.account_id"
+            " WHERE a.username = %s ORDER BY r.created_at DESC LIMIT 1",
+            (username,),
+        ).fetchone()
+
+
+def report_by_key(username: str, report_key: str) -> dict[str, Any] | None:
+    with conn() as c:
+        return c.execute(
+            "SELECT r.id, r.report_key, r.session_revision, r.manifest_id, r.markdown, r.provenance, r.created_at"
+            " FROM reports r JOIN accounts a ON a.id = r.account_id"
+            " WHERE a.username = %s AND r.report_key = %s",
+            (username, report_key),
+        ).fetchone()
+
+
 # ---------------------------------------------------------------- 报告提交与评阅
 
 
-def submit_report(username: str, year: int, title: str, design: dict, markdown: str) -> dict[str, Any] | None:
-    """提交(或重交,覆盖并重置评阅)现行报告。"""
+def submit_report(username: str, title: str, report_key: str) -> dict[str, Any] | None:
+    """提交学生**已由服务端生成**的那份报告。
+
+    正文与溯源都从 reports 表里取,接口不接受任何客户端提供的 Markdown:
+    否则"报告已提交"只能证明有人上传过一段文字,证明不了他做过课程。
+    找不到对应 report_key(没生成过/不是本人的)时返回 None。
+    """
     with conn() as c:
         return c.execute(
             "INSERT INTO submissions(account_id, title, year, design, markdown)"
-            " SELECT id, %s, %s, %s, %s FROM accounts WHERE username = %s"
+            " SELECT r.account_id, %s,"
+            "        coalesce((r.provenance #>> '{artifact,years,-1}')::int, 0),"
+            "        jsonb_build_object("
+            "          'report_key', r.report_key, 'manifest_id', r.manifest_id,"
+            "          'session_revision', r.session_revision, 'runs', r.provenance -> 'runs'),"
+            "        r.markdown"
+            " FROM reports r JOIN accounts a ON a.id = r.account_id"
+            " WHERE a.username = %s AND a.role = 'student' AND r.report_key = %s"
             " ON CONFLICT (account_id) DO UPDATE SET"
             " title = EXCLUDED.title, year = EXCLUDED.year, design = EXCLUDED.design,"
             " markdown = EXCLUDED.markdown, state = 'pending', score = NULL, feedback = '',"
             " graded_by = NULL, graded_at = NULL, submitted_at = now()"
             " RETURNING id, state, submitted_at",
-            (title, year, json.dumps(design, ensure_ascii=False), markdown, username),
+            (title, username, report_key),
         ).fetchone()
 
 
@@ -415,6 +600,8 @@ def overview_stats(class_id: int | None = None) -> dict[str, Any]:
             f" WHERE s.state = 'graded' AND {where}",
             params,
         ).fetchone()
+        # 到达人数:max_step 只记录学生最远到过哪一步(深链即可推高),
+        # 因此这是到达统计,不是完成统计;字段名与前端文案都必须说“到达”。
         steps = c.execute(
             "SELECT gs.n AS step,"
             " (SELECT count(*) FROM step_progress p JOIN accounts a ON a.id = p.account_id"
@@ -464,7 +651,7 @@ def overview_stats(class_id: int | None = None) -> dict[str, Any]:
             {"label": "80-89", "count": buckets["b80"]},
             {"label": "90+", "count": buckets["b90"]},
         ],
-        "step_completion": [{"step": r["step"], "reached": r["reached"]} for r in steps],
+        "step_reach": [{"step": r["step"], "reached": r["reached"]} for r in steps],
         "active_7d": active["n"],
         "submission_trend": [{"date": r["date"], "submitted": r["submitted"], "graded": r["graded"]} for r in trend],
         "class_breakdown": [

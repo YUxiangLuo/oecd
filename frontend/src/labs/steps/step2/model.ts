@@ -1,5 +1,33 @@
 import type { Meta, ShockEvent } from "../../../types";
 
+/** 冲击类型的稳定键(API 契约,见 gvcsim/shocks.py 的 SHOCK_SPECS)。 */
+export const SHOCK_TYPES = ["tariff", "sanctions", "export_control"] as const;
+export type ShockType = (typeof SHOCK_TYPES)[number];
+
+/** 键 → 展示文案。界面任何地方都不得直接渲染 shock_type 原始键。 */
+export const SHOCK_TYPE_LABELS: Record<ShockType, string> = {
+  tariff: "关税冲击",
+  sanctions: "制裁清单",
+  export_control: "出口管制",
+};
+
+/** 键 → 时间线配色。三类冲击的处理密度完全不同,颜色是学生一眼分辨它们的主要线索。
+ *
+ * 与 SHOCK_TYPE_LABELS 同键、同源:这张表曾经按中文名索引,枚举改成稳定键后
+ * 查表全部落空、所有事件退化成同一个兜底色,而没有任何测试会红。
+ * model.test.ts 现在断言两张表都覆盖 SHOCK_TYPES。 */
+export const SHOCK_TYPE_COLORS: Record<ShockType, string> = {
+  tariff: "#2a78d6",
+  sanctions: "#e34948",
+  export_control: "#eda100",
+};
+
+/** 安全取文案/配色:键未知时不把原始键甩到界面上。 */
+export const shockTypeLabel = (key: string | undefined) =>
+  SHOCK_TYPE_LABELS[(key ?? "tariff") as ShockType] ?? SHOCK_TYPE_LABELS.tariff;
+export const shockTypeColor = (key: string | undefined) =>
+  SHOCK_TYPE_COLORS[(key ?? "tariff") as ShockType] ?? SHOCK_TYPE_COLORS.tariff;
+
 export type ShockPanelFilters = {
   year: number;
   shockType: string;

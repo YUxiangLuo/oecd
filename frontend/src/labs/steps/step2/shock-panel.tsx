@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 import { api } from "../../../api";
 import type { Meta, PagedRows, ShockSummary } from "../../../types";
 import { countryLabel, sectorLabel } from "../../../viz";
+import { SHOCK_TYPES, SHOCK_TYPE_LABELS, type ShockType } from "./model";
 import { Pager, pct, useAsync } from "../../shared";
 import type { ShockPanelFilters } from "./model";
 
@@ -44,7 +45,7 @@ export function ShockPanel({
         <span className="field">
           <label>冲击类型</label>
           <select value={filters.shockType} onChange={(event) => onChange({ shockType: event.target.value, page: 1 })}>
-            {["关税冲击", "制裁清单", "出口管制"].map((value) => <option key={value}>{value}</option>)}
+            {SHOCK_TYPES.map((value) => <option key={value} value={value}>{SHOCK_TYPE_LABELS[value]}</option>)}
           </select>
         </span>
         <span className="field">
@@ -80,7 +81,7 @@ export function ShockPanel({
       {summaryError && <div className="error-box">冲击概览读取失败：{summaryError}</div>}
       {summaryYear && (
         <div className="shock-panel-summary">
-          <strong>{filters.year} 年 · {filters.shockType}</strong>
+          <strong>{filters.year} 年 · {SHOCK_TYPE_LABELS[filters.shockType as ShockType] ?? filters.shockType}</strong>
           <span>{summaryYear.treated_countries} 个经济体</span>
           <span>{summaryYear.treated_pairs} 个国家–行业受冲击</span>
           {summaryYear.max_shock > 0 && <span>最高 {pct(summaryYear.max_shock)}（{summaryYear.max_shock_target}）</span>}

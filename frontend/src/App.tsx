@@ -13,7 +13,8 @@ import {
 import { LoginPage } from "./login";
 import { TeacherDashboard } from "./teacher";
 import { ToastHost } from "./toast";
-import type { Announcement, AuthUser, Meta, Step, StepsResponse } from "./types";
+import type { Announcement, AuthUser, EvidenceRules, Meta, Step, StepEvidenceApi, StepsResponse } from "./types";
+import { useSession } from "./use-session";
 
 const ROMAN = ["", "一", "二", "三", "四", "五"];
 
@@ -22,32 +23,40 @@ function stepFromUrl(): number | null {
   return Number.isInteger(n) && n >= 1 && n <= 16 ? n : null;
 }
 
-function Lab({ step, meta, regressionSettings, onRegressionSettingsChange, regressionHistory, onRegressionHistoryChange, onNavigateStep }: {
+function Lab({ step, meta, evidence, rules, onSessionChanged, regressionSettings, onRegressionSettingsChange, regressionHistory, onRegressionHistoryChange, onNavigateStep }: {
   step: Step;
   meta: Meta | null;
+  evidence: StepEvidenceApi;
+  rules: EvidenceRules;
+  /** 服务端改写会话后(如生成报告写入第 16 步证据)重新装载完成度。 */
+  onSessionChanged: () => void;
   regressionSettings: RegressionSettings;
   onRegressionSettingsChange: (settings: RegressionSettings) => void;
   regressionHistory: RegressionHistory;
   onRegressionHistoryChange: React.Dispatch<React.SetStateAction<RegressionHistory>>;
   onNavigateStep: (step: number) => void;
 }) {
-  if (step.lab === "db") return <DbLab />;
-  if (step.lab === "qc") return meta ? <QcLab meta={meta} onNavigateStep={onNavigateStep} /> : null;
-  if (step.lab === "shock") return meta ? <ShockLab meta={meta} /> : null;
-  if (step.lab === "ind") return meta ? <IndicatorLab meta={meta} step={step} /> : null;
+  if (step.lab === "db") return <DbLab evidence={evidence} />;
+  if (step.lab === "qc") return meta ? <QcLab meta={meta} evidence={evidence} rules={rules} onNavigateStep={onNavigateStep} /> : null;
+  if (step.lab === "shock") return meta ? <ShockLab meta={meta} evidence={evidence} rules={rules} /> : null;
+  // key:同一实验台横跨多步时必须按步重挂载。否则 country 等步内状态会跨步带过去,
+  // 记证据的 effect 因依赖未变而不触发,新到的那一步拿不到"当前看的是谁"。
+  if (step.lab === "ind") return meta ? <IndicatorLab key={step.n} meta={meta} step={step} evidence={evidence} /> : null;
   if (step.lab === "viz")
-    return meta ? <VizLab key={step.n} meta={meta} step={step} /> : null;
+    return meta ? <VizLab key={step.n} meta={meta} step={step} evidence={evidence} /> : null;
   if (step.lab === "reg") return (
     <RegressionRunLab
       key={step.regression_outcome}
       step={step}
+      evidence={evidence}
+      rules={rules}
       settings={regressionSettings}
       onSettingsChange={onRegressionSettingsChange}
       history={regressionHistory}
       onHistoryChange={onRegressionHistoryChange}
     />
   );
-  if (step.lab === "rep") return meta ? <ReportLab meta={meta} /> : null;
+  if (step.lab === "rep") return <ReportLab onNavigateStep={onNavigateStep} onGenerated={onSessionChanged} />;
   return null;
 }
 
@@ -57,13 +66,13 @@ export default function App() {
   // 有效深链优先于服务端进度；应用内部切步只 replace 当前 URL，不污染浏览器历史。
   const explicitStep = useRef(stepFromUrl());
   const navigationTouched = useRef(false);
-  const [current, setCurrent] = useState(() => explicitStep.current ?? 4);
-  // 最远到达步:顶栏「学习进度」与大纲勾选按它显示,跳回前面复习不算进度倒退
+  // 新会话从第 1 步开始:课程顺序是数据接入 → 指标 → 可视化 → 回归,
+  // 从中途开始会让学生在没读过数据、mock 边界和质检的情况下直接看指标分解。
+  const [current, setCurrent] = useState(() => explicitStep.current ?? 1);
+  // 最远到达步:仅表示“到过哪里”这一位置,不表示做过或学会了什么。
+  // 深链可直接把它推到任意步(?step=12 即为 12),因此它连“已浏览步数”都不是。
   const [maxStep, setMaxStep] = useState(() => explicitStep.current ?? 1);
   const [progressReady, setProgressReady] = useState(false);
-  const [regressionSettings, setRegressionSettings] = useState<RegressionSettings>(DEFAULT_REGRESSION_SETTINGS);
-  // 最近运行对比按稳定 outcome 保存，课程编号变化不改变其业务含义。
-  const [regressionHistory, setRegressionHistory] = useState<RegressionHistory>({});
   const [fatal, setFatal] = useState<string | null>(null);
   // 认证:localStorage 里的令牌先经 /api/auth/me 真实校验再放行
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -75,7 +84,37 @@ export default function App() {
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [bannerExpanded, setBannerExpanded] = useState(false);
 
-  const clearSession = useCallback(() => {
+  // 实验会话:回归设定与运行记录从此活在会话里(local-first + PostgreSQL),
+  // 刷新或重新登录都能恢复,不再随组件内存一起消失。
+  const session = useSession(user?.role === "student" ? user.username : null, meta?.manifest_id ?? null);
+  const regressionSettings = session.getShared<RegressionSettings>("regression_settings") ?? DEFAULT_REGRESSION_SETTINGS;
+  const regressionHistory = session.getShared<RegressionHistory>("regression_history") ?? {};
+  const setRegressionSettings = useCallback(
+    (next: RegressionSettings) => session.setShared("regression_settings", next),
+    [session],
+  );
+  const setRegressionHistory = useCallback(
+    (update: React.SetStateAction<RegressionHistory>) => {
+      const base = session.getShared<RegressionHistory>("regression_history") ?? {};
+      session.setShared("regression_history", typeof update === "function" ? update(base) : update);
+    },
+    [session],
+  );
+  const completedSteps = new Set(session.completion?.completed ?? []);
+
+  // 当前步的证据读写口。save 与该步已有证据合并:一步的证据往往分几次产生
+  // (先做动作、再写判断),整份覆盖会把先留下的那半抹掉。
+  const currentEvidence = session.completion?.steps.find((item) => item.step === current);
+  const stepEvidence: StepEvidenceApi = {
+    data: session.getStep(current),
+    save: (patch) => session.setStep(current, { ...(session.getStep<object>(current) ?? {}), ...patch }),
+    missing: currentEvidence?.missing ?? [],
+    complete: currentEvidence?.complete ?? false,
+  };
+
+  // 退出登录:只清认证与界面状态。刻意**不**清实验会话——
+  // 学生重新登录后必须能拿回自己的实验,这正是会话存在的意义。
+  const logout = useCallback(() => {
     localStorage.removeItem(AUTH_TOKEN_KEY);
     setUser(null);
     setStepsData(null);
@@ -83,15 +122,13 @@ export default function App() {
     setFatal(null);
     setShowIntro(false);
     setProgressReady(false);
-    setRegressionSettings(DEFAULT_REGRESSION_SETTINGS);
-    setRegressionHistory({});
     setAnnouncements([]);
     highestAnnouncementId.current = 0;
     setBannerDismissed(false);
     setBannerExpanded(false);
     explicitStep.current = null;
     navigationTouched.current = false;
-    setCurrent(4);
+    setCurrent(1);
     setMaxStep(1);
     const url = new URL(window.location.href);
     url.searchParams.delete("step");
@@ -120,9 +157,9 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    window.addEventListener("gvcsim-auth-expired", clearSession);
-    return () => window.removeEventListener("gvcsim-auth-expired", clearSession);
-  }, [clearSession]);
+    window.addEventListener("gvcsim-auth-expired", logout);
+    return () => window.removeEventListener("gvcsim-auth-expired", logout);
+  }, [logout]);
 
   useEffect(() => {
     if (!user) return;
@@ -160,13 +197,14 @@ export default function App() {
         if (!live) return;
         setMaxStep((m) => Math.max(m, progress.max_step ?? progress.current_step ?? 1));
         if (explicitStep.current == null && !navigationTouched.current) {
-          navigateStep(progress.current_step ?? 4);
+          navigateStep(progress.current_step ?? 1);
           navigationTouched.current = false;
         }
       },
       () => {
+        // 读不到上次位置就从头开始,不要假设学生已经过了前几步。
         if (live && explicitStep.current == null && !navigationTouched.current) {
-          navigateStep(4);
+          navigateStep(1);
           navigationTouched.current = false;
         }
       },
@@ -226,7 +264,7 @@ export default function App() {
               数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
             </span>
             <span className="role-chip" title={`教师账号 · ${user.username}`}>{user.name}</span>
-            <button onClick={clearSession}>退出</button>
+            <button onClick={logout}>退出</button>
           </div>
         </header>
         <TeacherDashboard user={user} />
@@ -273,13 +311,24 @@ export default function App() {
           <span className="muted">
             数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
           </span>
-          {/* 学习进度按最远到达步显示,跳回前面复习不会“倒退”;当前位置见步骤标题栏 */}
-          <span className="progress-pill" title={`最远到达第 ${maxStep} 步;当前在第 ${current} 步`}>
-            学习进度 <b>{Math.min(maxStep, totalSteps)}</b><span>/{totalSteps}</span>
-          </span>
+          {/* 现在有了真实完成度(服务端按学习证据判定),它才配用 N/16 分数。
+              位置信息退到 title 里:到过第几步不是成绩。 */}
+          {session.completion ? (
+            <span
+              className="progress-pill"
+              title={`已按学习证据完成 ${session.completion.completed_count} 步;最远到过第 ${maxStep} 步(到过不等于完成)`}
+            >
+              已完成 <b>{session.completion.completed_count}</b><span>/{totalSteps}</span>
+            </span>
+          ) : (
+            // 判定只在服务端;拿不到就说明拿不到,不用位置冒充完成度。
+            <span className="progress-pill" title={`最远到过第 ${maxStep} 步`}>
+              最远到第 <b>{Math.min(maxStep, totalSteps)}</b> 步
+            </span>
+          )}
           <span className="role-chip" title={`学生账号 · ${user.username}`}>{user.name}</span>
           <button onClick={() => setShowIntro(true)}>ⓘ 系统介绍</button>
-          <button onClick={clearSession}>退出</button>
+          <button onClick={logout}>退出</button>
         </div>
       </header>
 
@@ -319,9 +368,27 @@ export default function App() {
               <span className="sidebar-title">课程大纲</span>
               <span className="sidebar-steps">{totalSteps} STEPS</span>
             </div>
-            <div className="progress-track">
-              <div className="progress-bar" style={{ width: `${Math.max(6, (Math.min(maxStep, totalSteps) / totalSteps) * 100)}%` }} />
-            </div>
+            {/* 有服务端完成度时画真实完成度;拿不到就退回位置条并如实说明。 */}
+            {session.completion ? (
+              <div
+                className="progress-track"
+                role="img"
+                aria-label={`已完成 ${session.completion.completed_count} 步,共 ${totalSteps} 步`}
+              >
+                <div
+                  className="progress-bar done"
+                  style={{ width: `${Math.max(2, (session.completion.completed_count / totalSteps) * 100)}%` }}
+                />
+              </div>
+            ) : (
+              <div
+                className="progress-track"
+                role="img"
+                aria-label={`最远到过第 ${Math.min(maxStep, totalSteps)} 步,共 ${totalSteps} 步;这是浏览位置,不代表已完成`}
+              >
+                <div className="progress-bar" style={{ width: `${Math.max(6, (Math.min(maxStep, totalSteps) / totalSteps) * 100)}%` }} />
+              </div>
+            )}
             <div className="sidebar-sub">全球价值链实证分析 · 数据→指标→回归→报告</div>
           </div>
           <div className="sidebar-list">
@@ -333,8 +400,10 @@ export default function App() {
                 <span className="stage-rule" />
               </div>
               {steps.filter((s) => s.stage === st).map((s) => {
-                // ✓ 表示“到过的步骤”(≤最远步),跳回复习时后面的勾不会消失
-                const state = s.n === current ? "cur" : s.n <= maxStep ? "past" : "future";
+                // ✓ 只给服务端依据学习证据判定的完成步骤(gvcsim/evidence.py)。
+                // past 仅表示“到过”,是导航信息,一律显示步号——到过不是做过。
+                const done = completedSteps.has(s.n);
+                const state = done ? "done" : s.n === current ? "cur" : s.n <= maxStep ? "past" : "future";
                 return (
                   <button
                     type="button"
@@ -342,8 +411,9 @@ export default function App() {
                     className={`step-row${s.n === current ? " active" : ""}`}
                     aria-current={s.n === current ? "step" : undefined}
                     onClick={() => navigateStep(s.n)}
+                    title={done ? `第 ${s.n} 步已完成` : undefined}
                   >
-                    <span className={`step-badge ${state}`}>{state === "past" ? "✓" : s.n}</span>
+                    <span className={`step-badge ${state}`}>{done ? "✓" : s.n}</span>
                     <span className="step-row-title">{s.title}</span>
                     <span className="step-code">{String(s.n).padStart(2, "0")}</span>
                   </button>
@@ -382,6 +452,9 @@ export default function App() {
                 <Lab
                   step={step}
                   meta={meta}
+                  evidence={stepEvidence}
+                  rules={stepsData.evidence_rules}
+                  onSessionChanged={session.reload}
                   regressionSettings={regressionSettings}
                   onRegressionSettingsChange={setRegressionSettings}
                   regressionHistory={regressionHistory}
@@ -438,7 +511,7 @@ export default function App() {
                   onClick={() => navigateStep(s.n)}
                   aria-label={`前往步骤 ${s.n}：${s.title}`}
                   aria-current={s.n === current ? "step" : undefined}
-                  className={`fdot${s.n === current ? " on" : s.n <= maxStep ? " past" : ""}`}
+                  className={`fdot${s.n === current ? " on" : completedSteps.has(s.n) ? " done" : s.n <= maxStep ? " past" : ""}`}
                 />
               ))}
             </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
-import type { DbMeta, DbSlice, DbTableKind } from "../../types";
+import type { DbMeta, DbSlice, DbTableKind, StepEvidenceApi } from "../../types";
+import { EvidencePanel } from "../../step-evidence";
 import { countryLabel, sectorLabel } from "../../viz";
 import { fmtDb, Pager, useAsync } from "../shared";
 
@@ -36,7 +37,12 @@ function columnHelp(column: string): string | undefined {
 }
 
 /** 步骤1:本地 OECD ICIO 原始表浏览 */
-export function DbLab() {
+/** 第 1 步的学习证据:真正取回了一个有效切片。 */
+interface DbEvidence extends Record<string, unknown> {
+  slice?: { year: number; table: string; row_country: string; col_country: string };
+}
+
+export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
   const { data: meta, error: metaError } = useAsync<DbMeta>(() => api.dbMeta(), []);
   const [table, setTable] = useState<DbTableKind>("z");
   const [year, setYear] = useState<number | null>(null);
@@ -53,10 +59,15 @@ export function DbLab() {
     setColCountry((current) => current || (meta.countries.includes("USA") ? "USA" : meta.countries[0] ?? ""));
   }, [meta]);
 
+  // 本步的证据必须是学生**主动选定**的切片。页面自带默认切片(CHN×USA×最新年)
+  // 并会自动载入,如果照单记为证据,那就等于“打开这一步就算完成”——正是要消灭的东西。
+  const [pickedSlice, setPickedSlice] = useState(false);
+
   // 换筛选条件时在事件里直接回到第 1 页,避免先用旧页码发一次多余请求
   const withPageReset = <T,>(set: (v: T) => void) => (v: T) => {
     set(v);
     setPage(1);
+    setPickedSlice(true);
   };
   const pickYear = withPageReset(setYear);
   const pickRowCountry = withPageReset(setRowCountry);
@@ -80,6 +91,17 @@ export function DbLab() {
       : Promise.resolve(null)),
     [ready, year, table, rowCountry, colCountry, rowSector, colSector, page],
   );
+
+  // 证据要的是“学生自己选定的切片、并且真的取回了数据”:
+  // 因此既要有主动选择(pickedSlice),又要等切片加载成功。
+  useEffect(() => {
+    if (!slice || !year || !pickedSlice) return;
+    evidence.save({
+      slice: { year, table, row_country: rowCountry, col_country: table === "accounts" ? "" : colCountry },
+    });
+    // evidence 每次渲染都是新对象,不入依赖;切片本身变化即代表证据变化。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slice, year, table, rowCountry, colCountry, pickedSlice]);
 
   if (metaError) return <div className="error-box">{metaError}</div>;
   if (!meta) return <p className="muted">正在读取 OECD ICIO 原始文件索引…</p>;
@@ -109,6 +131,7 @@ export function DbLab() {
 
   return (
     <div>
+      <EvidencePanel evidence={evidence} title="本步要留下的证据:自己选定并载入一个切片(页面默认的切片不算)" />
       <div className="db-summary">
         <span>原始年份 {meta.years[0]}-{meta.years.at(-1)}</span>
         <span>{meta.countries.length} 个经济体</span>
@@ -131,6 +154,7 @@ export function DbLab() {
                 setTable(item.key);
                 setColSector("");
                 setPage(1);
+                setPickedSlice(true);
               }}
             >
               {item.label}

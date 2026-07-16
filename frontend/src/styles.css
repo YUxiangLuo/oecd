@@ -8,6 +8,23 @@ body {
 }
 button { font-family: inherit; cursor: pointer; }
 
+/* primary/secondary 的基础外观。原先这两个类只在 .controls / .nav-btns /
+   .teacher-content / .modal-card 之下才有规则,落在这些祖先之外的按钮
+   (第 12–16 步的安慰剂检验、清空比较、提交报告、导出 PDF)拿不到任何样式,
+   直接退回浏览器默认灰框。类名是给全站用的,基础样式就该在全站生效。
+   下面几处作用域规则特异度更高(或同特异度但更靠后),仍然照旧覆盖本规则。 */
+button.primary {
+  padding: 8px 14px; border-radius: 8px; border: 1px solid #4b47e0;
+  background: #4b47e0; color: #fff; font-size: 12.5px; font-weight: 600;
+}
+button.primary:hover:not(:disabled) { background: #3f3bd0; border-color: #3f3bd0; }
+button.secondary {
+  padding: 8px 14px; border-radius: 8px; border: 1px solid #d7dbe6;
+  background: #fff; color: #4c5568; font-size: 12.5px; font-weight: 600;
+}
+button.secondary:hover:not(:disabled) { background: #f5f6fa; }
+button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: default; }
+
 .layout { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
 .topbar {
   flex: none; height: 56px; display: flex; align-items: center; gap: 14px;
@@ -33,6 +50,8 @@ button { font-family: inherit; cursor: pointer; }
   height: 100%; background: linear-gradient(90deg, #4b47e0, #7a6bff);
   border-radius: 99px; transition: width 0.4s;
 }
+/* 真实完成度用成功绿,与位置条区分开。 */
+.progress-bar.done { background: linear-gradient(90deg, #0f8f47, #2fc46f); }
 .sidebar-sub { margin-top: 7px; font-size: 11px; color: #8a90a0; }
 .sidebar-list { flex: 1; overflow-y: auto; padding: 0 12px 24px; }
 
@@ -59,7 +78,10 @@ button { font-family: inherit; cursor: pointer; }
   font-size: 10.5px; font-weight: 700; font-family: "Space Grotesk", sans-serif;
   display: flex; align-items: center; justify-content: center;
 }
-.step-badge.past { background: #12a150; color: #fff; }
+/* done = 服务端按学习证据判定的真实完成,独占成功绿。
+   past = 只是到过(导航信息),中性灰蓝——到过不是做过。 */
+.step-badge.done { background: #12a150; color: #fff; }
+.step-badge.past { background: #d7dae3; color: #4a5162; }
 .step-badge.cur { background: #4b47e0; color: #fff; box-shadow: 0 0 0 4px #ded9fb; }
 .step-badge.future { background: #eef0f5; color: #a2a8b6; }
 .step-row-title {
@@ -743,7 +765,8 @@ button { font-family: inherit; cursor: pointer; }
   cursor: pointer; transition: all 0.25s;
   border: 0; padding: 0;
 }
-.fdot.past { background: #b6b1f2; }
+.fdot.past { background: #d7dae3; }
+.fdot.done { background: #12a150; }
 .fdot.on { width: 22px; background: #4b47e0; }
 
 .step-row:focus-visible, .rail-flow-row:focus-visible, .fdot:focus-visible,
@@ -1257,4 +1280,46 @@ button { font-family: inherit; cursor: pointer; }
 @media (max-width: 1200px) {
   .basic-settings { grid-template-columns: 1fr; }
   .reg-compare-card { grid-template-columns: 1fr; }
+}
+
+/* ---------- 学习证据(每步的完成条件) ---------- */
+.evidence-panel {
+  margin: 0 0 16px; padding: 12px 14px; border-radius: 10px;
+  background: #fff8e8; border: 1px solid #f3dfae;
+}
+.evidence-panel.done { background: #eefaf2; border-color: #b6e4c8; }
+.evidence-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #3a4050; }
+.evidence-badge {
+  flex: none; width: 18px; height: 18px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: #fff; background: #d99a2b;
+}
+.evidence-panel.done .evidence-badge { background: #12a150; }
+.evidence-panel ul { margin: 7px 0 0; padding-left: 26px; }
+.evidence-panel li { font-size: 12.5px; color: #5a6070; line-height: 1.7; }
+.evidence-panel p { margin: 6px 0 0; font-size: 12.5px; }
+
+.judgment-box { margin-top: 12px; }
+.judgment-box label { font-size: 13px; color: #3a4050; }
+.judgment-hint { margin: 4px 0 6px; font-size: 12px; }
+.judgment-box textarea {
+  width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid #dfe2ea;
+  font: inherit; font-size: 13px; line-height: 1.7; resize: vertical; background: #fff;
+}
+.judgment-box textarea:focus-visible { outline: 2px solid #4b47e0; outline-offset: 1px; }
+.judgment-count { margin-top: 5px; font-size: 11.5px; color: #a2670f; }
+.judgment-count.ok { color: #12a150; }
+
+.qc-decision {
+  margin-bottom: 18px; padding: 14px 16px; border-radius: 12px;
+  background: #fff; border: 1px solid #e7e9f0;
+}
+.qc-decision h3 { margin: 0 0 4px; font-size: 15px; }
+
+/* ---------- 第 16 步:服务端生成的报告 ---------- */
+.report-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.report-actions code { font-size: 11px; background: #f4f5f8; padding: 1px 5px; border-radius: 4px; }
+.gate-link {
+  border: 0; background: transparent; padding: 0; font: inherit; font-weight: 600;
+  color: #4b47e0; cursor: pointer; text-decoration: underline;
 }

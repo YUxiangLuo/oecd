@@ -36,10 +36,22 @@ EXPOSURE_PREFIX = "export_exposure"
 # 避免"土耳其对美反制 × 美国微小对土出口份额"这类痕量项污染处理组。
 TREATED_THRESHOLD = 0.001
 
+# 稳定英文键 → (强度列, 处理指示列)。键是 API 契约,展示文案见 SHOCK_LABELS:
+# 界面改个措辞不该变成破坏性 API 变更。
+SHOCK_TARIFF = "tariff"
+SHOCK_SANCTIONS = "sanctions"
+SHOCK_EXPORT_CONTROL = "export_control"
+
 SHOCK_SPECS = {
-    "关税冲击": ("tariff_shock", "treated"),
-    "制裁清单": ("sanction_shock", "sanction_treated"),
-    "出口管制": ("export_control_shock", "export_control_treated"),
+    SHOCK_TARIFF: ("tariff_shock", "treated"),
+    SHOCK_SANCTIONS: ("sanction_shock", "sanction_treated"),
+    SHOCK_EXPORT_CONTROL: ("export_control_shock", "export_control_treated"),
+}
+
+SHOCK_LABELS = {
+    SHOCK_TARIFF: "关税冲击",
+    SHOCK_SANCTIONS: "制裁清单",
+    SHOCK_EXPORT_CONTROL: "出口管制",
 }
 
 # ---------------------------------------------------------------------------
@@ -419,7 +431,7 @@ EVENTS = [
 ENTITY_LIST_EVENTS = [
     EntityListEvent(
         name="OFAC SDN 风格:俄铝 RUSAL 制裁",
-        shock_type="制裁清单",
+        shock_type=SHOCK_SANCTIONS,
         targets=("RUS",),
         announced="2018-04-06",
         effective="2018-04-06",
@@ -434,7 +446,7 @@ ENTITY_LIST_EVENTS = [
     ),
     EntityListEvent(
         name="OFAC/二级制裁风格:俄罗斯能源金融限制",
-        shock_type="制裁清单",
+        shock_type=SHOCK_SANCTIONS,
         targets=("RUS",),
         announced="2017-08-02",
         effective="2017-08-02",
@@ -447,7 +459,7 @@ ENTITY_LIST_EVENTS = [
     ),
     EntityListEvent(
         name="OFAC 风格:涉疆实体与进口限制",
-        shock_type="制裁清单",
+        shock_type=SHOCK_SANCTIONS,
         targets=("CHN",),
         announced="2020-07-20",
         effective="2020-07-20",
@@ -460,7 +472,7 @@ ENTITY_LIST_EVENTS = [
     ),
     EntityListEvent(
         name="BIS 实体清单:华为及关联公司",
-        shock_type="出口管制",
+        shock_type=SHOCK_EXPORT_CONTROL,
         targets=("CHN",),
         announced="2019-05-16",
         effective="2019-05-16",
@@ -473,7 +485,7 @@ ENTITY_LIST_EVENTS = [
     ),
     EntityListEvent(
         name="BIS 实体清单:中芯国际 SMIC",
-        shock_type="出口管制",
+        shock_type=SHOCK_EXPORT_CONTROL,
         targets=("CHN",),
         announced="2020-12-18",
         effective="2020-12-18",
@@ -627,7 +639,7 @@ def demo_shock_panel(
     )
     base["tariff_shock"] = [shock.get((c, s, y), 0.0) for c, s, y in zip(base["country"], base["sector"], base["year"])]
     base["treated"] = (base["tariff_shock"] > TREATED_THRESHOLD).astype(int)
-    base["shock_type"] = "关税冲击"
+    base["shock_type"] = SHOCK_TARIFF
 
     events = [
         main_event.get((c, s, y), (0.0, None))[1] for c, s, y in zip(base["country"], base["sector"], base["year"])
@@ -653,7 +665,7 @@ def demo_shock_panel(
                         entity_event[key] = (intensity, ev)
 
     for shock_type, (shock_col, treated_col) in SHOCK_SPECS.items():
-        if shock_type == "关税冲击":
+        if shock_type == SHOCK_TARIFF:
             continue
         base[shock_col] = [
             entity_shock.get((c, s, y, shock_col), 0.0)
@@ -691,7 +703,7 @@ def events_metadata() -> list[dict]:
         out.append(
             {
                 "name": ev.name,
-                "shock_type": "关税冲击",
+                "shock_type": SHOCK_TARIFF,
                 "imposer": ev.imposer,
                 "targets": "全部经济体" if ev.targets == "ALL" else "、".join(ev.targets),
                 "exempt": "、".join(ev.exempt),

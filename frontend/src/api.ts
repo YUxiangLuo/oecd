@@ -1,14 +1,20 @@
-import type { ProgressResponse } from "./types";
+import type { ExperimentSession, GeneratedReport, ProgressResponse, ReportGate, SessionResponse } from "./types";
 
 export const AUTH_TOKEN_KEY = "gvcsim_token";
 
 class ApiError extends Error {
   status: number;
+  /** 结构化 detail(如第 16 步门槛的 blocked 列表);普通字符串 detail 时为 undefined。 */
+  blocked?: import("./types").ReportGateItem[];
 
-  constructor(status: number, message: string) {
-    super(message);
+  constructor(status: number, detail: unknown, fallback: string) {
+    // FastAPI 的 detail 可以是字符串,也可以是对象(门槛就返回 {message, blocked})。
+    // 直接把对象塞进 Error.message 会渲染成 "[object Object]",这里分开处理。
+    const structured = typeof detail === "object" && detail !== null ? (detail as Record<string, unknown>) : null;
+    super(typeof detail === "string" ? detail : (structured?.message as string) ?? fallback);
     this.name = "ApiError";
     this.status = status;
+    if (Array.isArray(structured?.blocked)) this.blocked = structured.blocked as import("./types").ReportGateItem[];
   }
 }
 
@@ -44,7 +50,7 @@ async function get<T>(url: string): Promise<T> {
   if (!resp.ok) {
     const body = await resp.json().catch(() => null);
     if (resp.status === 401) notifyAuthExpired(requestToken);
-    throw new ApiError(resp.status, body?.detail ?? `${resp.status} ${resp.statusText}`);
+    throw new ApiError(resp.status, body?.detail, `${resp.status} ${resp.statusText}`);
   }
   return resp.json();
 }
@@ -59,7 +65,7 @@ async function post<T>(url: string, body?: unknown, method = "POST"): Promise<T>
   if (!resp.ok) {
     const payload = await resp.json().catch(() => null);
     if (resp.status === 401) notifyAuthExpired(requestToken);
-    throw new ApiError(resp.status, payload?.detail ?? `${resp.status} ${resp.statusText}`);
+    throw new ApiError(resp.status, payload?.detail, `${resp.status} ${resp.statusText}`);
   }
   return resp.json();
 }
@@ -71,12 +77,12 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
     });
-    if (!resp.ok) throw new ApiError(resp.status, (await resp.json()).detail ?? resp.statusText);
+    if (!resp.ok) throw new ApiError(resp.status, (await resp.json()).detail, resp.statusText);
     return resp.json() as Promise<import("./types").LoginResponse>;
   },
   me: async (token: string) => {
     const resp = await fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } });
-    if (!resp.ok) throw new ApiError(resp.status, "令牌无效或已过期");
+    if (!resp.ok) throw new ApiError(resp.status, null, "令牌无效或已过期");
     return resp.json() as Promise<import("./types").AuthUser>;
   },
   steps: () => get<import("./types").StepsResponse>("/api/steps"),
@@ -121,7 +127,7 @@ export const api = {
   network: (year: number) => get<import("./types").NetworkData>(`/api/viz/network/${year}`),
   shockEvents: () =>
     get<{ events: import("./types").ShockEvent[]; disclaimer: string }>("/api/shocks/events"),
-  shockSummary: (shockType = "关税冲击") =>
+  shockSummary: (shockType = "tariff") =>
     get<import("./types").ShockSummary>(
       withQuery("/api/shocks/summary", { shock_type: shockType }),
     ),
@@ -206,8 +212,16 @@ export const api = {
       get<{ announcements: import("./types").Announcement[] }>("/api/classroom/announcements"),
     progress: () => get<ProgressResponse>("/api/classroom/progress"),
     reportProgress: (step: number) => post<{ ok: boolean }>("/api/classroom/progress", { step }),
-    submitReport: (body: { year: number; title: string; design: Record<string, unknown>; markdown: string }) =>
+    session: () => get<SessionResponse>("/api/classroom/session"),
+    saveSession: (body: { base_revision: number; session: ExperimentSession }) =>
+      post<SessionResponse>("/api/classroom/session", body, "PUT"),
+    clearSession: () => post<{ ok: boolean }>("/api/classroom/session", undefined, "DELETE"),
+    // 只交报告指纹;服务端从它自己生成的报告里取正文,接口不接受 Markdown。
+    submitReport: (body: { title: string; report_key: string }) =>
       post<{ id: number; state: string; submitted_at: string }>("/api/classroom/report/submit", body),
+    generateReport: () => post<GeneratedReport>("/api/classroom/report/generate"),
+    generatedReport: () => get<Partial<GeneratedReport>>("/api/classroom/report/generated"),
+    reportGate: () => get<ReportGate>("/api/classroom/report/gate"),
     myReport: () => get<import("./types").MySubmission>("/api/classroom/report/mine"),
     overview: (classId?: number | null) =>
       get<import("./types").ClassOverview>(

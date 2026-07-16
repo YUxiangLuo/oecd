@@ -280,6 +280,13 @@ export function IntroOverlay({ user, meta, onDone }: {
         亲手走完 数据 → 指标 → 可视化 → 回归 → 报告 的完整闭环;
         每一步都配有方法说明、动手面板和小贴士。
       </p>
+      {/* 证据规则是这门课最重要的约定,必须在进入之前讲清楚:
+          学生若不知道“翻页不算完成”,只会觉得进度条坏了。 */}
+      <p className="intro-lede">
+        每一步都要<b>留下一份学习证据</b>才算完成——自己选定的切片、看过的三类政策冲击、
+        写下的判断……<b>只是翻页不算</b>。前 15 步的证据齐全后,第 16 步才能由服务端
+        生成实验报告。
+      </p>
       <div className="intro-cta-row">
         <button className="intro-cta" onClick={() => onDone(1)}>从第 1 步开始实验</button>
       </div>

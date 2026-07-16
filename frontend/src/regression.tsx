@@ -4,21 +4,26 @@ import { useAsync } from "./labs";
 import { comparisonExplanation, lessonQuestion, REGRESSION_LESSONS } from "./regression-lessons";
 import { buildRegressionVerdict, placeboInterpretation } from "./regression-verdict";
 import { splitPolicyCoefficients } from "./regteach";
+import { EvidencePanel, JudgmentBox } from "./step-evidence";
 import type {
+  EvidenceRules,
   PlaceboResponse,
   RegressionDesignInfo,
   RegressionOptions,
   RegressionOutcome,
   RegressionResponse,
   Step,
+  StepEvidenceApi,
 } from "./types";
 import { CoefForestChart, EventStudyChart, PlaceboChart } from "./viz";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
+// 教学用词:刻意与后端 labels 不同(后端说“双重差分 (DID)”,课堂说“二元处理 DID”)。
+// 枚举键稳定之后,界面措辞就是界面自己的事,改它不再是 API 变更。
 const METHOD_LABELS: Record<string, string> = {
-  "双重差分 (DID)": "二元处理 DID",
-  双向固定效应: "连续冲击强度",
-  事件研究: "动态事件研究",
+  did: "二元处理 DID",
+  twfe_intensity: "连续冲击强度",
+  event_study: "动态事件研究",
 };
 const SCENARIO_LABELS: Record<string, string> = {
   clean: "基准教学面板",
@@ -37,12 +42,12 @@ export interface RegressionSettings {
 }
 
 export const DEFAULT_REGRESSION_SETTINGS: RegressionSettings = {
-  granularity: "国家–行业级",
-  shockType: "关税冲击",
-  method: "双重差分 (DID)",
-  controlMode: "不加控制变量",
+  granularity: "country_industry",
+  shockType: "tariff",
+  method: "did",
+  controlMode: "none",
   interaction: false,
-  priceMode: "名义值",
+  priceMode: "nominal",
   scenario: "clean",
 };
 
@@ -133,23 +138,28 @@ export type RegressionHistory = Partial<Record<RegressionOutcome, RunSnapshot[]>
 
 const effectiveSettings = (settings: RegressionSettings): RegressionSettings => ({
   ...settings,
-  priceMode: settings.controlMode === "不加控制变量" ? "名义值" : settings.priceMode,
+  priceMode: settings.controlMode === "none" ? "nominal" : settings.priceMode,
 });
 const settingsKey = (settings: RegressionSettings) => JSON.stringify(effectiveSettings(settings));
 
-function settingsSummary(settings: RegressionSettings): string {
+/** 把稳定键翻成展示文案。文案随 /api/regression/options 下发,
+ *  拿不到时退回显示键本身——宁可露出 `tariff`,也不猜一个可能过时的中文。 */
+type Labels = RegressionOptions | null | undefined;
+const labelOf = (map: Record<string, string> | undefined, key: string) => map?.[key] ?? key;
+
+function settingsSummary(settings: RegressionSettings, options: Labels): string {
   return [
-    settings.granularity,
-    settings.shockType,
+    labelOf(options?.granularity_labels, settings.granularity),
+    labelOf(options?.shock_type_labels, settings.shockType),
     METHOD_LABELS[settings.method] ?? settings.method,
-    settings.controlMode,
+    labelOf(options?.control_mode_labels, settings.controlMode),
     settings.interaction ? "含交互" : "无交互",
-    settings.controlMode === "不加控制变量" ? null : settings.priceMode,
+    settings.controlMode === "none" ? null : labelOf(options?.price_mode_labels, settings.priceMode),
     SCENARIO_LABELS[settings.scenario] ?? settings.scenario,
   ].filter(Boolean).join(" · ");
 }
 
-function changedSettingsSummary(settings: RegressionSettings, snapshots: RunSnapshot[]): string {
+function changedSettingsSummary(settings: RegressionSettings, snapshots: RunSnapshot[], options: Labels): string {
   const fields: { key: keyof RegressionSettings; label: string }[] = [
     { key: "granularity", label: "粒度" },
     { key: "shockType", label: "冲击" },
@@ -159,16 +169,25 @@ function changedSettingsSummary(settings: RegressionSettings, snapshots: RunSnap
     { key: "priceMode", label: "口径" },
     { key: "scenario", label: "场景" },
   ];
+  const maps: Partial<Record<keyof RegressionSettings, Record<string, string> | undefined>> = {
+    granularity: options?.granularity_labels,
+    shockType: options?.shock_type_labels,
+    method: METHOD_LABELS,
+    controlMode: options?.control_mode_labels,
+    priceMode: options?.price_mode_labels,
+    scenario: SCENARIO_LABELS,
+  };
   const changed = fields.filter(({ key }) => new Set(snapshots.map((snapshot) => snapshot.settings[key])).size > 1);
   return changed.length
-    ? changed.map(({ key, label }) => `${label}=${String(settings[key])}`).join(" · ")
+    ? changed.map(({ key, label }) => `${label}=${labelOf(maps[key], String(settings[key]))}`).join(" · ")
     : "设定相同";
 }
 
-function RunComparison({ outcome, snapshots, onClear }: {
+function RunComparison({ outcome, snapshots, onClear, options }: {
   outcome: RegressionOutcome;
   snapshots: RunSnapshot[];
   onClear: () => void;
+  options: Labels;
 }) {
   if (snapshots.length < 2) return null;
   return (
@@ -188,8 +207,8 @@ function RunComparison({ outcome, snapshots, onClear }: {
               const verdict = buildRegressionVerdict(outcome, snapshot.response);
               return (
                 <tr key={snapshot.id}>
-                  <td title={settingsSummary(snapshot.settings)}>运行 {snapshot.id}</td>
-                  <td>{changedSettingsSummary(snapshot.settings, snapshots)}</td>
+                  <td title={settingsSummary(snapshot.settings, options)}>运行 {snapshot.id}</td>
+                  <td>{changedSettingsSummary(snapshot.settings, snapshots, options)}</td>
                   <td>{verdict.effectLabel}</td>
                   <td>{verdict.title}</td>
                   <td>{verdict.effect}</td>
@@ -224,6 +243,7 @@ function VerdictCard({ outcome, response, stale }: {
   stale: boolean;
 }) {
   const verdict = buildRegressionVerdict(outcome, response);
+  const support = response.result.support;
   return (
     <section className={`verdict-card verdict-${verdict.state}`} aria-live="polite">
       <div className="verdict-kicker">本次估计首先告诉你</div>
@@ -235,6 +255,20 @@ function VerdictCard({ outcome, response, stale }: {
       </div>
       <p>{verdict.evidence}</p>
       <p>{verdict.interpretation}</p>
+      {support && (
+        // 处理支持度必须和结论一起出现:总聚类很多、处理聚类极少,
+        // 正是“样本很大所以可信”这一误读的来源。
+        <p className="verdict-support">
+          处理支持度：<b>{support.treated_clusters}</b> 个处理聚类 ·{" "}
+          <b>{support.untreated_clusters}</b> 个对照聚类 · 共 {response.result.n_clusters} 个聚类
+          （{support.treated_entities} 个曾受冲击个体）
+        </p>
+      )}
+      {verdict.warnings.length > 0 && (
+        <ul className="verdict-warnings">
+          {verdict.warnings.map((reason) => <li key={reason}>{reason}</li>)}
+        </ul>
+      )}
       <p className="verdict-boundary">{verdict.boundary}</p>
     </section>
   );
@@ -242,7 +276,7 @@ function VerdictCard({ outcome, response, stale }: {
 
 function PretrendCheck({ response }: { response: RegressionResponse }) {
   const diagnostic = response.result.diagnostics.pretrend;
-  if (response.design.method !== "事件研究") return null;
+  if (response.design.method !== "event_study") return null;
   if (!diagnostic) return <p>当前响应没有冲击前趋势诊断，不能判断趋势可比性。</p>;
   return (
     <div className="trust-item">
@@ -255,10 +289,18 @@ function PretrendCheck({ response }: { response: RegressionResponse }) {
   );
 }
 
-export function RegressionRunLab({ step, settings, onSettingsChange, history, onHistoryChange }: {
+/** 第 12–15 步的学习证据:跑出结果(动作)+ 写下识别判断(取舍)。 */
+interface RegressionEvidence extends Record<string, unknown> {
+  run?: { depvar: string; status: string | null; settings: RegressionSettings };
+  judgment?: string;
+}
+
+export function RegressionRunLab({ step, settings, onSettingsChange, history, onHistoryChange, evidence, rules }: {
   step: Step;
   history: RegressionHistory;
   onHistoryChange: React.Dispatch<React.SetStateAction<RegressionHistory>>;
+  evidence: StepEvidenceApi<RegressionEvidence>;
+  rules: EvidenceRules;
 } & SharedSettingsProps) {
   const outcome = step.regression_outcome;
   if (!outcome) return <div className="error-box">当前回归步骤缺少 regression_outcome 配置。</div>;
@@ -299,7 +341,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
   const { data: design, error: designError } = useAsync<RegressionDesignInfo>(
     () => api.regressionDesign({
       outcome, granularity: effectiveGranularity, shockType, method, controlMode, interaction,
-      priceMode: controlMode === "不加控制变量" ? "名义值" : priceMode,
+      priceMode: controlMode === "none" ? "nominal" : priceMode,
       scenario,
     }),
     [outcome, effectiveGranularity, shockType, method, controlMode, interaction, priceMode, scenario],
@@ -320,6 +362,16 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
     setError(null);
     setPlaceboError(null);
   }, [outcome]);
+
+  // 从实验会话恢复最近一次运行:会话是异步到达的,所以只能用 effect 而不是
+  // useState 惰性初始化。刷新或换设备后,学生看到的是自己上次算出的结果,
+  // 而不是一个空白的“请运行”面板。设定与结果不一致时 stale 横幅仍会提示。
+  const latestSnapshot = (history[outcome] ?? [])[0];
+  useEffect(() => {
+    if (!latestSnapshot || result || running) return;
+    setResult(latestSnapshot.response);
+    setResultSettings(latestSnapshot.settings);
+  }, [latestSnapshot, result, running]);
 
   const run = async () => {
     if (runningRef.current || !design) return;
@@ -348,6 +400,11 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           response,
         };
         return { ...current, [outcome]: [snapshot, ...prior].slice(0, 3) };
+      });
+      // 学习证据:这一步的“动作”就是真的跑出了一次结果。
+      // 记录服务端判定的 status,报告里才能说清这次估计能不能作推断。
+      evidence.save({
+        run: { depvar: response.result.depvar, status: response.result.status, settings: runSettings },
       });
       if (latestRequest.current === requestKey) {
         setResult(response);
@@ -401,7 +458,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
   };
 
   const split = result ? splitPolicyCoefficients(result) : null;
-  const event = result?.design.method === "事件研究";
+  const event = result?.design.method === "event_study";
   const snapshots = history[outcome] ?? [];
 
   return (
@@ -431,16 +488,16 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           <h3>{METHOD_LABELS[method] ?? method}</h3>
           <p>{comparisonExplanation(method)}</p>
         </div>
-        {method === "双重差分 (DID)" && <DidFourCells />}
+        {method === "did" && <DidFourCells />}
       </section>
 
       <section className="reg-run-card">
         <span className="reg-section-step">3 · 运行当前方案</span>
         <div className="reg-boundary">真实 OECD ICIO 指标 + 拟真政策冲击；结果用于教学，不构成现实政策结论。</div>
         <div className="basic-settings">
-          <div><span>冲击</span><Pills label="政策冲击" options={options?.shock_types ?? ["关税冲击", "制裁清单", "出口管制"]} value={shockType} onChange={(value) => setSetting("shockType", value)} /></div>
-          <div><span>方法</span><Pills label="估计方法" options={options?.methods ?? ["双重差分 (DID)", "双向固定效应", "事件研究"]} value={method} onChange={(value) => setSetting("method", value)} labelMap={METHOD_LABELS} /></div>
-          <div><span>粒度</span><Pills label="分析粒度" options={allowedGranularities} value={effectiveGranularity} onChange={(value) => setSetting("granularity", value)} /></div>
+          <div><span>冲击</span><Pills label="政策冲击" options={options?.shock_types ?? []} value={shockType} onChange={(value) => setSetting("shockType", value)} labelMap={options?.shock_type_labels} /></div>
+          <div><span>方法</span><Pills label="估计方法" options={options?.methods ?? []} value={method} onChange={(value) => setSetting("method", value)} labelMap={METHOD_LABELS} /></div>
+          <div><span>粒度</span><Pills label="分析粒度" options={allowedGranularities} value={effectiveGranularity} onChange={(value) => setSetting("granularity", value)} labelMap={options?.granularity_labels} /></div>
         </div>
         {outcome === "network" && (
           <p className="muted">网络回归只使用全球国家×行业图。国家级贸易图在全正流量口径下为完全图，Gephi 介数中心性恒为 0。</p>
@@ -450,16 +507,16 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           <summary>高级设置与课堂挑战</summary>
           <p className="muted">以下选项用于稳健性与识别假设教学，不是开始基准实验的必要条件。</p>
           <div className="model-controls">
-            <div className="model-control"><span className="model-control-label">控制变量</span><Pills label="控制变量" options={options?.control_modes ?? ["不加控制变量", "ICIO 派生控制变量", "模拟宏观控制"]} value={controlMode} onChange={(value) => setSetting("controlMode", value)} /></div>
+            <div className="model-control"><span className="model-control-label">控制变量</span><Pills label="控制变量" options={options?.control_modes ?? []} value={controlMode} onChange={(value) => setSetting("controlMode", value)} labelMap={options?.control_mode_labels} /></div>
             <label className="model-control"><span className="model-control-label">异质性</span><input type="checkbox" checked={interaction} onChange={(eventValue) => setSetting("interaction", eventValue.target.checked)} />冲击 × 基期GVC</label>
-            {controlMode !== "不加控制变量" && <div className="model-control"><span className="model-control-label">金额类控制口径</span><Pills label="金额类控制口径" options={options?.price_modes ?? ["名义值", "实际值(2016=1)"]} value={priceMode} onChange={(value) => setSetting("priceMode", value)} /></div>}
-            <div className="model-control"><span className="model-control-label">课堂场景</span><Pills label="课堂场景" options={options?.scenarios ?? ["clean", "noisy", "confounded"]} value={scenario} onChange={(value) => setSetting("scenario", value)} labelMap={SCENARIO_LABELS} /></div>
+            {controlMode !== "none" && <div className="model-control"><span className="model-control-label">金额类控制口径</span><Pills label="金额类控制口径" options={options?.price_modes ?? []} value={priceMode} onChange={(value) => setSetting("priceMode", value)} labelMap={options?.price_mode_labels} /></div>}
+            <div className="model-control"><span className="model-control-label">课堂场景</span><Pills label="课堂场景" options={options?.scenarios ?? []} value={scenario} onChange={(value) => setSetting("scenario", value)} labelMap={SCENARIO_LABELS} /></div>
           </div>
           {scenario !== "clean" && <div className="challenge-note">该场景由系统人为改变估计样本，用于观察测量误差或冲击前趋势如何影响判断；它不是数据筛选条件。</div>}
         </details>
 
         {(optionsError || designError) && <div className="error-box">{optionsError ?? designError}</div>}
-        <div className="run-summary"><b>当前方案：</b>{settingsSummary(settings)}</div>
+        <div className="run-summary"><b>当前方案：</b>{settingsSummary(settings, options)}</div>
         <button className="run-btn" onClick={run} disabled={running || !design || Boolean(optionsError || designError)}>
           {running ? "估计中…" : result ? "重新运行当前设定" : "运行基准回归"}
         </button>
@@ -487,7 +544,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           <section className="reg-section-card">
             <span className="reg-section-step">5 · 可信度检查</span>
             <PretrendCheck response={result} />
-            {result.design.method === "双重差分 (DID)" ? (
+            {result.design.method === "did" ? (
               <div className="trust-item">
                 <h3>这个结果是否可能由随机分组产生？</h3>
                 <p>系统随机分配伪处理组并保留首次处理年份分布，再重复估计。它是稳健性检查，不是因果证明。</p>
@@ -501,8 +558,24 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
             ) : <p className="muted">当前安慰剂随机化只用于二元处理 DID；本方法请结合动态路径、控制变量与样本说明判断。</p>}
           </section>
 
+          <section className="reg-section-card">
+            <span className="reg-section-step">6 · 写下你的识别判断</span>
+            <JudgmentBox
+              prompt="这次估计的结果,能不能作因果解释?为什么?"
+              hint={
+                result.result.support?.suppress_inference
+                  ? "本次设计已被判定不可作推断——把原因写清楚,比抄一个系数更重要。"
+                  : "可以谈:处理组与对照组是否可比、冲击是否外生、处理支持度是否足够、撤销与异质性的影响。"
+              }
+              minChars={rules.min_judgment_chars}
+              value={evidence.data?.judgment ?? ""}
+              onChange={(judgment) => evidence.save({ judgment })}
+            />
+            <EvidencePanel evidence={evidence} />
+          </section>
+
           <section className="reg-guide-card">
-            <span className="reg-section-step">6 · 下一项引导实验</span>
+            <span className="reg-section-step">7 · 下一项引导实验</span>
             <h3>{lesson.focus}</h3>
             <p>{lesson.guidedExperiment}</p>
           </section>
@@ -527,7 +600,8 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
               <table className="data-table">
                 <thead><tr><th>变量</th><th>系数</th><th>95% CI</th><th>聚类SE</th><th>t</th><th>p</th></tr></thead>
                 <tbody>{result.result.coefs.map((coef) => (
-                  <tr key={coef.name}><td>{coef.name}</td><td>{coef.coef.toFixed(4)}</td><td>[{coef.ci_low.toFixed(4)}, {coef.ci_high.toFixed(4)}]</td><td>{coef.se.toFixed(4)}</td><td>{coef.t.toFixed(2)}</td><td>{coef.p.toFixed(3)}</td></tr>
+                  // 推断被抑制时留空,不能显示 0 或 NaN。
+                  <tr key={coef.name}><td>{coef.name}</td><td>{coef.coef.toFixed(4)}</td><td>{coef.ci_low != null && coef.ci_high != null ? `[${coef.ci_low.toFixed(4)}, ${coef.ci_high.toFixed(4)}]` : "—"}</td><td>{coef.se.toFixed(4)}</td><td>{coef.t.toFixed(2)}</td><td>{coef.p != null ? coef.p.toFixed(3) : "—"}</td></tr>
                 ))}</tbody>
               </table>
             </div>
@@ -539,7 +613,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
         )}
       </details>
 
-      <RunComparison outcome={outcome} snapshots={snapshots} onClear={() => onHistoryChange((current) => ({ ...current, [outcome]: [] }))} />
+      <RunComparison outcome={outcome} options={options} snapshots={snapshots} onClear={() => onHistoryChange((current) => ({ ...current, [outcome]: [] }))} />
     </div>
   );
 }
