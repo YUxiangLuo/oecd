@@ -443,8 +443,10 @@ export default function App() {
           <div className="content-row">
             <main className="content">
               <div className="content-inner">
-                {!isReg && (
-                  <details className="card accent concept-card" open={!isViz}>
+                {/* 可视化步骤的讲解已并入各页顶部的 StepIntro(常驻、含 concept),
+                    这里不再重复渲染折叠讲解卡;回归工作台自带渐进教学,也跳过。 */}
+                {!isReg && !isViz && (
+                  <details className="card accent concept-card" open>
                     <summary className="kicker">讲解</summary>
                     <p>{step.concept}</p>
                   </details>
