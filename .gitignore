@@ -60,3 +60,6 @@ dogfood-output/
 frontend/node_modules/
 frontend/dist/
 *.tsbuildinfo
+
+# Gephi golden-fixture generator (Java/Maven build output)
+scripts/gephi_golden/target/

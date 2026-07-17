@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  独立的 Maven 工程，用真实的 Gephi Toolkit 0.10.1 重新生成
+  tests/fixtures/gephi_0_10_1_directed_reference.csv。
+
+  这份工程刻意【不依赖】本仓库的 gvcsim 包：它的唯一依赖是 Gephi 官方
+  toolkit，因此它是 gvcsim/indicators/network.py 的独立“预言机”（oracle），
+  而不是拿被测实现反推基准。详见同目录 README.md。
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>org.gvcsim</groupId>
+  <artifactId>gephi-golden</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- 与 fixture 文件名里的版本号一致；升级前请阅读 README 的“升级基准”一节。 -->
+    <gephi.toolkit.version>0.10.1</gephi.toolkit.version>
+    <exec.mainClass>GephiGoldenExport</exec.mainClass>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.gephi</groupId>
+      <artifactId>gephi-toolkit</artifactId>
+      <version>${gephi.toolkit.version}</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.1.1</version>
+        <configuration>
+          <mainClass>${exec.mainClass}</mainClass>
+          <!-- Gephi/NetBeans 在无显示器的机器上需要 headless。 -->
+          <systemProperties>
+            <systemProperty>
+              <key>java.awt.headless</key>
+              <value>true</value>
+            </systemProperty>
+          </systemProperties>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -308,6 +308,10 @@ def test_all_network_fields_match_gephi_0_10_1_golden_export():
 
     图同时覆盖正自环、非对称边、不同边权、汇点和隔离点；因此 11 个公开字段
     的方向、权重、自环、断连和特征向量语义都由同一份外部基准守护。
+
+    基准 CSV 由真实 Gephi Toolkit 生成，可复现：见
+    ``scripts/gephi_golden/``（``generate.sh --check`` 会重新导出并逐字节比对）。
+    该生成器不依赖 gvcsim，故本测试对齐的是 Gephi 真实输出而非实现自身。
     """
     weights = np.zeros((5, 5))
     for source, target, value in [
