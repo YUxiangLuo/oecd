@@ -230,7 +230,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
   );
 }
 
-/** 构成条:指标驱动、可排序的横向堆叠条(泛化 StackedShareViz/LengthViz)。
+/** 构成条:指标驱动、可排序的横向堆叠条(步9 生产构成 / 步10 长度共用)。
  *  normalize=true 每条=分段和的 100%(步8 出口来源、步9 生产构成);
  *  normalize=false 用全局最大值的绝对宽度(步10 生产链长度)。 */
 export function CompositionBar({ rows, segments, sortKey, sortLabel, sortFormat, normalize = true, valueFormat = "pct", highlight }: {
