@@ -169,7 +169,18 @@ export function VizLab({ meta, step, evidence }: {
   const pickEntityMode = withEvidence(setEntityMode);
   const pickCountries = withEvidence(setPicked);
   const pickDrillCountry = withEvidence(setDrillCountry);
-  const pickGranularity = withEvidence(setGranularity);
+  // 切到国家级时,若当前选中的是国家级退化的网络中心性(在国家级选择器里已隐藏),
+  // 回落到本步默认指标,避免 select 指向空值、或画出恒为常数的“幽灵”图。
+  const pickGranularity = (value: "country" | "sector") => {
+    if (value === "country") {
+      const degenerate = (f: string) => schema?.fields[f]?.country_degenerate;
+      if (degenerate(rankBy)) setRankBy(cfg.rankMetric);
+      if (degenerate(metricX)) setMetricX(cfg.scatter[0]);
+      if (degenerate(metricY)) setMetricY(cfg.scatter[1]);
+    }
+    setGranularity(value);
+    setInteracted(true);
+  };
 
   if (error || netErr || sectorErr) return <div className="error-box">{error ?? netErr ?? sectorErr}</div>;
 
@@ -249,11 +260,16 @@ export function VizLab({ meta, step, evidence }: {
     <span className="field">
       <label>{label}</label>
       <select value={value} onChange={(e) => onChange(e.target.value)}>
-        {shownGroups.map((g) => (
-          <optgroup key={g.key} label={g.label}>
-            {g.fields.map((f) => <option key={f} value={f}>{schema?.fields[f]?.label ?? f}</option>)}
-          </optgroup>
-        ))}
+        {shownGroups.map((g) => {
+          // 国家级贸易图是完全图:无权网络中心性对所有国家恒为常数,从国家级选择器隐藏
+          // (加权度=贸易量仍保留);行业级不受影响。schema 的 country_degenerate 标记为准。
+          const fields = g.fields.filter((f) => granularity !== "country" || !schema?.fields[f]?.country_degenerate);
+          return fields.length ? (
+            <optgroup key={g.key} label={g.label}>
+              {fields.map((f) => <option key={f} value={f}>{schema?.fields[f]?.label ?? f}</option>)}
+            </optgroup>
+          ) : null;
+        })}
       </select>
     </span>
   );
@@ -336,6 +352,11 @@ export function VizLab({ meta, step, evidence }: {
               <input type="checkbox" checked={allMetrics} onChange={(e) => toggleAllMetrics(e.target.checked)} />
               全部指标
             </label>
+          )}
+          {granularity === "country" && allMetrics && (
+            <span className="muted" style={{ fontSize: 12, flexBasis: "100%" }}>
+              国家级贸易图为完全图,无权网络中心性(度 / 介数 / 接近 / 离心 / 调和 / 特征向量)对所有国家恒为常数,已从国家级隐藏;如需比较请切到「行业下钻」。加权度(贸易量)仍可用。
+            </span>
           )}
           {granularity === "country" && (
             <div className="seg">

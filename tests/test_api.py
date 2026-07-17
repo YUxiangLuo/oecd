@@ -236,6 +236,33 @@ def test_indicator_schema():
     assert all(meta["desc"] for meta in body["fields"].values())
 
 
+def test_country_degenerate_flag_marks_only_unweighted_network_fields():
+    """国家级贸易图是完全图 → 无权中心性恒为常数,须被标记以便前端在国家级隐藏。
+
+    加权度(=贸易量)与非网络指标不应被标记;标记字段的 desc 要带常数说明。
+    """
+    body = client.get("/api/indicators/schema").json()
+    fields = body["fields"]
+
+    degenerate = {
+        "degree",
+        "indegree",
+        "outdegree",
+        "Eccentricity",
+        "closnesscentrality",
+        "harmonicclosnesscentrality",
+        "betweenesscentrality",
+        "eigencentrality",
+    }
+    meaningful = {"weighted degree", "weighted indegree", "weighted outdegree", "FVA", "PLv"}
+
+    flagged = {name for name, meta in fields.items() if meta.get("country_degenerate")}
+    assert flagged == degenerate
+    assert not (flagged & meaningful)
+    for name in degenerate:
+        assert "恒为常数" in fields[name]["desc"]
+
+
 def test_clean_replaces_all_non_finite_floats():
     rows = _clean([{"nan": math.nan, "pos_inf": math.inf, "neg_inf": -math.inf, "finite": 1.25}])
     assert rows == [{"nan": None, "pos_inf": None, "neg_inf": None, "finite": 1.25}]

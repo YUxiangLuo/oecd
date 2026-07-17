@@ -180,6 +180,8 @@ interface IndicatorFieldMeta {
   label: string;
   format: "amount" | "pct" | "number";
   desc: string;
+  /** 国家级贸易图是完全图 → 该(无权)网络中心性对所有国家恒为常数,只在国家–行业级有区分度;前端在国家级隐藏。 */
+  country_degenerate?: boolean;
 }
 
 interface IndicatorGroup {

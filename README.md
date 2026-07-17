@@ -47,6 +47,11 @@ network_algorithm: gephi-compatible-directed-unweighted-positive-v1
 恒为 0；网络枢纽分析和网络回归使用具有节点差异的完整全球国家×行业图。与 Gephi 对比时必须使用
 相同节点、正边、自环和 directed/unweighted/unnormalized 设置。
 
+因为国家图是完全图，度、入/出度、离心率、接近、调和与特征向量、介数这些**无权**中心性对所有
+国家取同一常数（度恒为 152、介数恒为 0），没有横截面区分度。因此这些字段带 `country_degenerate`
+标记，界面在国家级粒度隐藏它们、只保留能区分国家的加权度（=贸易量），完整无权中心性只在
+国家–行业级展示；网络回归也只允许国家–行业级（见 `gvcsim/regression/design.py`）。
+
 ## 快速开始
 
 需要 Python 3.13、[uv](https://docs.astral.sh/uv/) 和 [Bun](https://bun.sh/)。

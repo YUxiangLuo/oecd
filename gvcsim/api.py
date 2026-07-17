@@ -282,10 +282,32 @@ _INDICATOR_DESCRIPTIONS = {
     "betweenesscentrality": "经过该节点的有向最短路径原始计数（不归一化），越高表示越可能成为中转枢纽。",
     "eigencentrality": "按入边邻居的重要性迭代计算并以最大值归一的 Gephi 特征向量中心性。",
 }
+# 国家级贸易图在全部正流量边下是完全图,这些无权中心性因此对所有国家取同一常数
+# (度=152、介数=0、接近/离心/调和/特征向量恒定),没有横截面区分度,只在国家–行业级
+# 图上才有意义。加权度(=贸易量)不在此列,国家级仍可区分。前端据此在国家级隐藏这些
+# 字段,回归也只允许 network outcome 用国家–行业级(见 regression/design.py)。
+_COUNTRY_DEGENERATE_NETWORK_FIELDS = frozenset(
+    {
+        "degree",
+        "indegree",
+        "outdegree",
+        "Eccentricity",
+        "closnesscentrality",
+        "harmonicclosnesscentrality",
+        "betweenesscentrality",
+        "eigencentrality",
+    }
+)
+_COUNTRY_DEGENERATE_NOTE = "（国家级贸易图为完全图，该指标对所有国家恒为常数，仅在国家–行业级有区分度）"
+
 # 用 .get 而不是下标:漏写描述应表现为测试失败(test_indicator_schema 断言
 # desc 全部非空),而不是 import 时 KeyError 拖垮整个服务。
 for _field, _meta in INDICATOR_SCHEMA["fields"].items():
-    _meta["desc"] = _INDICATOR_DESCRIPTIONS.get(_field, "")
+    _degenerate = _field in _COUNTRY_DEGENERATE_NETWORK_FIELDS
+    _desc = _INDICATOR_DESCRIPTIONS.get(_field, "")
+    _meta["desc"] = _desc + _COUNTRY_DEGENERATE_NOTE if _degenerate else _desc
+    # 契约字段:前端在国家级粒度隐藏被标记的字段,避免展示零信息的常数中心性。
+    _meta["country_degenerate"] = _degenerate
 
 
 class LoginRequest(BaseModel):
