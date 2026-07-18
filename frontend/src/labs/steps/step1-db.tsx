@@ -36,6 +36,55 @@ function columnHelp(column: string): string | undefined {
   return category ? `${countryLabel(column.slice(0, sep))} 的${category}` : undefined;
 }
 
+/** 主流全球投入产出 / 多区域投入产出(MRIO)数据库速览。覆盖数字随各库版本更新、
+ *  且行业/产品分类口径不同,不能直接横向相减;这里给学生一个"还有哪些选择"的地图。 */
+const OTHER_DATABASES: { name: string; org: string; coverage: string; focus: string }[] = [
+  { name: "WIOD", org: "格罗宁根大学", coverage: "43 国 · 56 行业 · 2000–2014", focus: "GVC 研究的经典数据源,含社会经济与环境账户;已停止更新" },
+  { name: "Eora / Eora26", org: "悉尼大学", coverage: "约 190 经济体 · 26 行业(精简版)", focus: "覆盖国家最全 + 环境卫星账户;行业口径较粗" },
+  { name: "EXIOBASE 3", org: "多机构联合", coverage: "约 49 区域 · 约 200 产品", focus: "环境扩展最细(产品级),侧重可持续与足迹分析" },
+  { name: "ADB MRIO", org: "亚洲开发银行", coverage: "60+ 经济体 · 35 行业", focus: "亚太经济体覆盖更细,大体延续 WIOD 口径" },
+];
+
+/** 数据库速览:说明还有哪些全球投入产出库,并明确本系统默认用 OECD ICIO 及原因。 */
+function DatabaseGuide({ meta }: { meta: DbMeta }) {
+  const icioCoverage = `${meta.countries.length} 经济体 · ${meta.sectors.length} 行业 · ${meta.years[0]}–${meta.years.at(-1)}（载入）`;
+  return (
+    <details className="card accent concept-card db-guide" open>
+      <summary className="kicker">全球投入产出数据库一览 · 本系统默认使用 OECD ICIO</summary>
+      <p style={{ maxWidth: 820 }}>
+        研究全球价值链,需要一张“谁向谁供货”的<b>跨国投入产出表</b>。主流数据库各有侧重——覆盖范围、行业/产品口径与更新节奏都不同:
+      </p>
+      <div className="table-wrap" style={{ marginTop: 10 }}>
+        <table className="data-table db-guide-table">
+          <thead>
+            <tr><th>数据库</th><th>编制方</th><th>覆盖</th><th>侧重 / 特点</th></tr>
+          </thead>
+          <tbody>
+            <tr className="db-guide-default">
+              <td><b>OECD ICIO</b> ✓ 本系统默认</td>
+              <td>OECD</td>
+              <td>{icioCoverage}</td>
+              <td>以各国官方国民账户为基础;增加值贸易 / GVC 分解的主流标准(本系统 WWZ、WWYZ 等指标即基于它)</td>
+            </tr>
+            {OTHER_DATABASES.map((db) => (
+              <tr key={db.name}>
+                <td>{db.name}</td>
+                <td>{db.org}</td>
+                <td>{db.coverage}</td>
+                <td>{db.focus}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted" style={{ maxWidth: 820, marginTop: 10 }}>
+        本系统默认并全程使用 <b>OECD ICIO</b>(2023 版,当前载入 {meta.years[0]}–{meta.years.at(-1)}):它口径官方、国家×行业相对平衡,最契合本课程的 GVC 指标计算与教学。
+        切换到其他数据库需替换原始表与解析器,不在本教学系统范围内;各库的覆盖数字随版本更新、分类口径不同,不能直接横向比较。
+      </p>
+    </details>
+  );
+}
+
 /** 步骤1:本地 OECD ICIO 原始表浏览 */
 /** 第 1 步的学习证据:真正取回了一个有效切片。 */
 interface DbEvidence extends Record<string, unknown> {
@@ -139,6 +188,8 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
         <span>{meta.n_rows.toLocaleString("zh-CN")} 行 × {meta.n_columns.toLocaleString("zh-CN")} 列</span>
         {selectedFile && <span>{selectedFile.file}</span>}
       </div>
+
+      <DatabaseGuide meta={meta} />
 
       <div className="controls">
         <label>年份</label>
