@@ -189,17 +189,27 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 
 /* 步骤 2 · 左右联动工作台:左选政策事件 → 右看国家×行业冲击 */
 .shock-linkbar {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
   padding: 10px 14px; margin: 4px 0 12px; border-radius: 10px;
   background: #f5f6fa; border: 1px solid #e7e9f0; font-size: 12.5px; color: #3a4050;
 }
 .shock-linkbar.active { background: #eef4fe; border-color: #cfe0fb; }
+.shock-linkbar-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .shock-linkbar-tag {
   font-size: 10.5px; font-weight: 700; color: #6b7280; background: #fff;
   border: 1px solid #dfe3ec; border-radius: 6px; padding: 2px 7px;
 }
 .shock-linkbar-name { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shock-linkbar-panel { font-size: 11.5px; font-weight: 600; color: #4b5060; }
 .shock-linkbar-arrow { color: #9aa0ae; font-weight: 700; }
+/* 已选事件的完整档案:原"全部政策事件清单"表的独有字段收敛到这里,只对选中项展开。 */
+.shock-selected-facts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 18px;
+  margin: 9px 0 0; padding-top: 9px; border-top: 1px dashed #d3ddef;
+}
+.shock-selected-facts > div { display: flex; gap: 7px; min-width: 0; font-size: 11.5px; line-height: 1.55; }
+.shock-selected-facts dt { flex: none; color: #808799; }
+.shock-selected-facts dd { margin: 0; min-width: 0; color: #2f3542; }
+.shock-split-hint { margin: -4px 0 11px; color: #868d9d; font-size: 11px; line-height: 1.6; }
 
 .shock-split {
   display: grid; grid-template-columns: minmax(300px, 1fr) minmax(0, 2.1fr);
@@ -231,9 +241,36 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 }
 .shock-event-item:hover { background: #f7f8fb; }
 .shock-event-item.on { background: #eef4fe; }
+.shock-event-item-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .shock-event-item-name { display: block; font-size: 12.5px; font-weight: 600; color: #2c2f3a; line-height: 1.45; }
+.shock-event-item-rate { flex: none; font-size: 11px; font-weight: 700; color: #4b5060; }
 .shock-event-item-meta { display: block; font-size: 10.5px; color: #868d9d; margin-top: 3px; line-height: 1.5; }
-.shock-workbench-section { margin-bottom: 18px; scroll-margin-top: 92px; }
+.shock-event-item-dates { display: block; font-size: 10px; color: #9aa0ae; margin-top: 3px; }
+
+/* 行内迷你时间条:所有行共用顶部年份刻度,横向位置因此可以跨事件比较(取代了独立时间线组件)。 */
+.shock-event-axis {
+  position: sticky; top: 0; z-index: 1; background: #fff; border-bottom: 1px solid #eef0f5;
+  /* 12.5px = 事件卡片的 border(1.5) + padding(11):让刻度轨道与行内时间条左右严格对齐, */
+  /* 否则年份刻度与圆点落在不同的横向范围上,共享刻度就读不出来了。 */
+  padding: 3px 12.5px 7px;
+}
+/* 必须 block:span 里只有绝对定位的刻度,保持 inline 会塌成 0 宽,刻度会全部叠在一起。 */
+.shock-event-axis-track { position: relative; display: block; height: 12px; min-width: 0; }
+.shock-event-axis-tick {
+  position: absolute; top: 0; transform: translateX(-50%); font-size: 9.5px; color: #9aa0ae; white-space: nowrap;
+}
+.shock-event-spark { position: relative; display: block; height: 11px; margin-top: 6px; }
+.shock-event-spark-track {
+  position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: #edeff4; transform: translateY(-50%);
+}
+.shock-event-spark-bar {
+  position: absolute; top: 50%; height: 3px; min-width: 2px; border-radius: 2px;
+  transform: translateY(-50%); opacity: .85;
+}
+.shock-event-spark-dot {
+  position: absolute; top: 50%; width: 7px; height: 7px; border-radius: 50%;
+  background: #fff; border: 1.5px solid #b8becb; transform: translate(-50%, -50%);
+}
 .shock-section-title {
   display: flex; align-items: center; gap: 10px; margin: 18px 0 10px; color: #202535;
 }
@@ -245,41 +282,6 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .shock-section-title strong { font-size: 15px; }
 .shock-section-title small { color: #81889a; font-size: 11.5px; font-weight: 400; line-height: 1.5; }
 .shock-section-title.compact { flex: 1; margin: 0; }
-.selected-event-card {
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center;
-  min-height: 76px; margin-bottom: 12px; padding: 13px 15px; border: 1px solid #cfcdf8;
-  border-left: 3px solid #4b47e0; border-radius: 12px; background: #f9f9ff;
-}
-.selected-event-card.empty { border-color: #e1e3eb; border-left-color: #b8becb; background: #fafbfc; }
-.selected-event-card.empty p { margin: 4px 0 0; color: #72798a; font-size: 12px; line-height: 1.55; }
-.selected-event-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.selected-event-kicker { color: #4b47e0; font-size: 10.5px; font-weight: 700; }
-.selected-event-main > strong { font-size: 14px; }
-.selected-event-meta { display: flex; flex-wrap: wrap; gap: 5px 12px; color: #6d7484; font-size: 11px; }
-.selected-event-sync {
-  display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-width: 350px; text-align: right;
-}
-.selected-event-announcement { display: flex; flex-direction: column; gap: 3px; }
-.selected-event-announcement > span { color: #72798a; font-size: 10.5px; }
-.selected-event-announcement > strong { color: #34309f; font-size: 11.5px; line-height: 1.45; }
-.selected-event-sync button {
-  padding: 3px 0; border: 0; background: transparent; color: #4b47e0; font-size: 11.5px; font-weight: 700;
-}
-.selected-event-filter-preview {
-  justify-self: end; padding: 7px 10px; border-radius: 8px; background: #f0f2f6; color: #747b8c; font-size: 11px;
-}
-.shock-timeline-wrap {
-  margin-bottom: 10px; overflow-x: auto; border: 1px solid #e3e6ee; border-radius: 12px; background: #fff;
-}
-.shock-timeline { display: block; min-width: 820px; width: 100%; }
-.shock-timeline-event { cursor: pointer; outline: none; }
-.shock-timeline-hit { fill: transparent; stroke: transparent; stroke-width: 1.5; }
-.shock-timeline-event:hover .shock-timeline-hit { fill: #f7f8fc; }
-.shock-timeline-event[aria-pressed="true"] .shock-timeline-hit { fill: #f0efff; stroke: #aaa6f4; }
-.shock-timeline-event:focus-visible .shock-timeline-hit { stroke: #4b47e0; stroke-width: 2; }
-.shock-timeline-legend {
-  display: flex; flex-wrap: wrap; gap: 5px 16px; padding: 0 12px 10px; color: #737a8a; font-size: 11px;
-}
 .shock-details {
   margin: 10px 0 18px; border: 1px solid #e1e4ec; border-radius: 12px; background: #fff;
 }
@@ -292,17 +294,6 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .shock-details[open] > summary::before { transform: rotate(90deg); }
 .shock-details[open] > summary { border-bottom: 1px solid #eceef3; }
 .shock-details-meta { margin-left: auto; color: #9298a7; font-size: 10.5px; font-weight: 500; }
-.shock-event-table { min-width: 1060px; table-layout: fixed; }
-.shock-event-table th:nth-child(1) { width: 260px; }
-.shock-event-table th:nth-child(2) { width: 90px; }
-.shock-event-table th:nth-child(3) { width: 170px; }
-.shock-event-table th:nth-child(4), .shock-event-table th:nth-child(5) { width: 100px; }
-.shock-event-table th:nth-child(6) { width: 230px; }
-.shock-event-table th:nth-child(7) { width: 90px; }
-.shock-event-table tr.selected td { background: #f2f1ff; }
-.shock-event-link { padding: 0; border: 0; background: transparent; color: #2e3442; font: inherit; font-weight: 650; text-align: left; }
-.shock-event-link:hover, .shock-event-link[aria-pressed="true"] { color: #4b47e0; text-decoration: underline; }
-.shock-event-entities { margin-top: 3px; line-height: 1.45; }
 .shock-panel-controls { margin-bottom: 10px; }
 .shock-only-hit { display: inline-flex; align-items: center; gap: 5px; color: #596173 !important; }
 .shock-panel-summary {

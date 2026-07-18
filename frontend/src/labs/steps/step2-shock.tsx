@@ -4,13 +4,12 @@ import { EvidencePanel } from "../../step-evidence";
 import type { EvidenceRules, Meta, QcCheck, ShockEvent, Step, StepEvidenceApi } from "../../types";
 import { countryLabel, sectorLabel } from "../../viz";
 import { CrosswalkDemo } from "./step2/crosswalk-demo";
-import { EventCatalog } from "./step2/event-catalog";
 import { EventList } from "./step2/event-list";
-import { EventTimeline } from "./step2/event-timeline";
 import { eventKey, filtersForEvent, filtersMatchEvent, shockTypeLabel, type ShockPanelFilters } from "./step2/model";
+import { SelectedEventBar } from "./step2/selected-event";
 import { ShockPanel } from "./step2/shock-panel";
 import { QcChecksTable } from "./qc-checks-table";
-import { ChartStory, StepIntro } from "./viz/scaffold";
+import { StepIntro } from "./viz/scaffold";
 import { useAsync } from "../shared";
 
 /** 步骤11:从政策事件到国家×行业冲击面板——左右并排、点事件即联动右侧冲击。 */
@@ -68,7 +67,7 @@ export function ShockLab({ meta, step, evidence, rules }: {
         lead="回归前,先接入“外生的因”:政策冲击"
         concept={step.concept}
         todo={[
-          "从左侧列表或上方时间线选一个政策事件,右侧即联动出它的国家×行业冲击",
+          "从左侧列表选一个政策事件(行内时间条给出宣布→生效时点),右侧即联动出它的国家×行业冲击",
           "关税 / 制裁 / 出口管制三类各看一个(留下证据)",
           "记住:这些冲击就是接下来第 12–15 步回归的处理变量",
         ]}
@@ -90,33 +89,17 @@ export function ShockLab({ meta, step, evidence, rules }: {
         <div className="shock-panel-state">当前没有可展示的政策事件。</div>
       ) : (
         <>
-          <ChartStory
-            eyebrow="政策事件 · 时间线"
-            title="2018–2020 全球贸易摩擦事件"
-            what={<>每一行是一个政策事件:○ 宣布 → ● 生效(○ 解除);颜色区分三类冲击(关税 / 制裁 / 出口管制)。</>}
-            read={<>点任意一个事件即选中它,下方左右联动区会立刻显示它的冲击;也可以直接在下方左侧列表里选。</>}
-          >
-            <EventTimeline events={events} selectedKey={selectedKey} onSelect={pickEvent} />
-          </ChartStory>
-
-          {/* 左右联动:左选事件 → 右看冲击。中间这条实时显示"选了谁 → 面板同步成什么"。 */}
-          <div className={`shock-linkbar${selectedEvent ? " active" : ""}`} role="status" aria-live="polite">
-            {selectedEvent ? (
-              <>
-                <span className="shock-linkbar-tag">已选事件</span>
-                <b className="shock-linkbar-name">{selectedEvent.name}</b>
-                <span className="shock-linkbar-arrow">→</span>
-                <span className="shock-linkbar-tag">{filtersDirty ? "面板(已微调)" : "面板已联动"}</span>
-                <b>{panelDesc}</b>
-              </>
-            ) : (
-              <span className="muted">从左侧列表或上方时间线选一个政策事件,右侧会立即显示它造成的国家×行业冲击。</span>
-            )}
-          </div>
+          {/* 左右联动:左选事件 → 右看冲击。中间这条实时显示"选了谁 → 面板同步成什么",
+              并展开该事件的完整档案(原"全部政策事件清单"表的信息收敛到这里)。 */}
+          <SelectedEventBar event={selectedEvent} panelDesc={panelDesc} filtersDirty={filtersDirty} />
 
           <div className="shock-split">
             <div className="shock-split-left">
               <div className="shock-split-head"><span className="shock-split-num">①</span>选择政策事件</div>
+              <p className="shock-split-hint">
+                按三类冲击分组;每行的时间条是 ○ 宣布 → ● 生效(○ 解除)。所有行共用顶部年份刻度,
+                因此可以横向比较:谁先发生、谁从宣布到生效拖得更久——这正是第 12–15 步事件研究要用的时点。
+              </p>
               <EventList events={events} selectedKey={selectedKey} onSelect={pickEvent} />
             </div>
             <div className="shock-split-right">
@@ -124,8 +107,6 @@ export function ShockLab({ meta, step, evidence, rules }: {
               <ShockPanel meta={meta} filters={filters} onChange={updateFilters} />
             </div>
           </div>
-
-          <EventCatalog events={events} selectedKey={selectedKey} onSelect={pickEvent} />
         </>
       )}
 
