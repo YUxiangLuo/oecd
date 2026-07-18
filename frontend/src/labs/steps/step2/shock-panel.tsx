@@ -1,9 +1,23 @@
+import { useRef } from "react";
 import { api } from "../../../api";
 import type { Meta, PagedRows, ShockSummary } from "../../../types";
 import { countryLabel, sectorLabel } from "../../../viz";
 import { SHOCK_TYPES, SHOCK_TYPE_LABELS, type ShockType } from "./model";
 import { Pager, pct, useAsync } from "../../shared";
 import type { ShockPanelFilters } from "./model";
+
+/**
+ * 保留上一次的结果,直到新数据到达。
+ *
+ * useAsync 在依赖变化时会先把 data 置空(shared.tsx),面板每次联动都会经历
+ * 「整张表 → 一行"正在读取" → 新表」,配合 1~25 行的行数差,整页会先塌缩再撑开。
+ * 这里改成 stale-while-revalidate:旧表留在原位淡化,新表到达再替换。
+ */
+function useLastNonNull<T>(value: T | null): T | null {
+  const ref = useRef<T | null>(null);
+  if (value != null) ref.current = value;
+  return value ?? ref.current;
+}
 
 export function ShockPanel({
   meta,
@@ -29,8 +43,12 @@ export function ShockPanel({
     ),
     [filters.year, filters.shockType, filters.country, filters.sector, filters.onlyHit, filters.page],
   );
-  const summaryYear = summary?.years.find((row) => row.year === filters.year);
-  const pages = panel ? Math.max(1, Math.ceil(panel.total / panel.page_size)) : 1;
+  // 出错时不沿用旧数据(会把失败伪装成成功);只有"正在重取"才保留上一份。
+  const shownSummary = useLastNonNull(summaryError ? null : summary);
+  const shownPanel = useLastNonNull(panelError ? null : panel);
+  const refreshing = (panel == null && panelError == null) || (summary == null && summaryError == null);
+  const summaryYear = shownSummary?.years.find((row) => row.year === filters.year);
+  const pages = shownPanel ? Math.max(1, Math.ceil(shownPanel.total / shownPanel.page_size)) : 1;
 
   return (
     <div className="shock-panel-embedded" aria-label="国家–行业冲击面板">
@@ -71,19 +89,25 @@ export function ShockPanel({
         </label>
       </div>
 
-      {summaryError && <div className="error-box">冲击概览读取失败：{summaryError}</div>}
-      {summaryYear && (
+      {/* 概览行常驻:切换事件会同时改年份与冲击类型,按年份查不到时若整行消失,又是一次高度跳变。 */}
+      {summaryError ? <div className="error-box">冲击概览读取失败：{summaryError}</div> : (
         <div className="shock-panel-summary">
           <strong>{filters.year} 年 · {SHOCK_TYPE_LABELS[filters.shockType as ShockType] ?? filters.shockType}</strong>
-          <span>{summaryYear.treated_countries} 个经济体</span>
-          <span>{summaryYear.treated_pairs} 个国家–行业受冲击</span>
-          {summaryYear.max_shock > 0 && <span>最高 {pct(summaryYear.max_shock)}（{summaryYear.max_shock_target}）</span>}
+          {summaryYear ? (
+            <>
+              <span>{summaryYear.treated_countries} 个经济体</span>
+              <span>{summaryYear.treated_pairs} 个国家–行业受冲击</span>
+              {summaryYear.max_shock > 0 && <span>最高 {pct(summaryYear.max_shock)}（{summaryYear.max_shock_target}）</span>}
+            </>
+          ) : <span className="muted">正在读取该口径的冲击概览…</span>}
         </div>
       )}
 
-      {panelError ? <div className="error-box">冲击面板读取失败：{panelError}</div> : !panel ? (
+      {/* 定高区:行数在 1~25 之间跳变(每页 25 条),不锁高度整页会随联动上下弹。 */}
+      <div className={`shock-panel-body${refreshing ? " refreshing" : ""}`}>
+      {panelError ? <div className="error-box">冲击面板读取失败：{panelError}</div> : !shownPanel ? (
         <div className="shock-panel-state">正在按当前条件读取冲击面板…</div>
-      ) : panel.rows.length === 0 ? (
+      ) : shownPanel.rows.length === 0 ? (
         <div className="shock-panel-state">当前条件下没有记录；可以放宽国家、行业或“只看受冲击”筛选。</div>
       ) : (
         <div className="table-wrap">
@@ -95,7 +119,7 @@ export function ShockPanel({
               </tr>
             </thead>
             <tbody>
-              {panel.rows.map((row, index) => (
+              {shownPanel.rows.map((row, index) => (
                 <tr key={`${row.country}-${row.sector}-${index}`}>
                   <td style={{ textAlign: "left" }}>{countryLabel(String(row.country))}</td>
                   <td>{sectorLabel(String(row.sector))}</td>
@@ -114,12 +138,21 @@ export function ShockPanel({
           </table>
         </div>
       )}
+      {/* 事件联动常把口径收窄到单个国家×行业,定高后会空出一片。与其留白,
+          不如把它变成"怎么看到完整范围"的引导——顺带点明左右两侧是同一套筛选。 */}
+      {shownPanel && shownPanel.rows.length > 0 && shownPanel.total <= shownPanel.page_size && (
+        <p className="shock-panel-hint">
+          以上是当前口径下的全部 {shownPanel.total} 条命中。想看这次冲击波及的完整范围,
+          可把上方的「国家 / 行业」改回“全部”。
+        </p>
+      )}
+      </div>
 
       <div className="tipbox shock-panel-note">
         关税冲击按“事件税率 × 对加征方出口暴露度”汇总；ICIO 暴露度使用真实双边投入产出流。总冲击可能包含多个事件，因此不一定等于主要加征方的单项乘积。
       </div>
-      {panel && panel.rows.length > 0 && (
-        <Pager page={filters.page} pages={pages} total={panel.total} onChange={(page) => onChange({ page })} />
+      {shownPanel && shownPanel.rows.length > 0 && (
+        <Pager page={filters.page} pages={pages} total={shownPanel.total} onChange={(page) => onChange({ page })} />
       )}
     </div>
   );

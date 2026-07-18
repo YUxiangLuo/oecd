@@ -306,6 +306,30 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   background: #fafbfc; color: #7b8292; font-size: 12px; text-align: center;
 }
 .shock-panel-table { min-width: 1050px; }
+/* 面板体定高。每页 25 条,但事件联动后常常只剩 1~3 行,不锁高度整页会随每次联动
+   上下弹(先塌缩到"正在读取"一行、再撑开)。这里固定高度、超出内部滚动,
+   与左列 640px 的事件滚动区对称,整个左右工作台的高度因此不随数据变化。 */
+.shock-panel-body {
+  display: flex; flex-direction: column; min-height: 0;
+  height: clamp(320px, 42vh, 480px);
+  transition: opacity .12s ease;
+}
+/* flex:0 1 auto —— 行少时表格按自然高度收住(不撑成一个大空框),
+   行多时才收缩并内部滚动;空出来的部分交给下方的提示行。 */
+.shock-panel-body > .table-wrap { flex: 0 1 auto; min-height: 0; overflow: auto; margin: 0; }
+/* margin-top:auto 把提示压到预留区底部,中间的空白因此看起来是留白而不是塌陷。 */
+.shock-panel-hint {
+  margin: auto 0 0; padding-top: 10px; color: #949bab; font-size: 11px; line-height: 1.6;
+}
+/* 提示类状态垂直居中,让预留出来的空间看起来是刻意的,而不是布局塌了。 */
+.shock-panel-body > .shock-panel-state, .shock-panel-body > .error-box { margin: auto 0; }
+/* 重取期间旧表留在原位淡化(stale-while-revalidate),不闪成空白。 */
+.shock-panel-body.refreshing { opacity: .5; }
+/* 表头在内部滚动时固定,否则滚下去就不知道哪列是哪列。
+   border-collapse:collapse 下 sticky 的 border-bottom 会丢,用 inset 阴影补出分隔线。 */
+.shock-panel-body .shock-panel-table thead th {
+  position: sticky; top: 0; z-index: 1; box-shadow: inset 0 -1px 0 #eef0f5;
+}
 .shock-panel-note { margin: 12px 0; line-height: 1.6; }
 .crosswalk-details > summary { padding: 10px 14px; }
 .crosswalk-content { padding: 14px; }
