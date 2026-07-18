@@ -183,11 +183,11 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   padding: 12px 16px; font-size: 12.5px; color: #b3341f; margin-bottom: 14px;
 }
 
-/* 步骤2:事件 → 冲击面板 → HS映射技术细节 */
+/* 步骤11:事件 → 冲击面板 → HS映射技术细节 */
 .shock-workbench { padding-bottom: 18px; }
 .shock-disclaimer { line-height: 1.65; }
 
-/* 步骤 2 · 左右联动工作台:左选政策事件 → 右看国家×行业冲击 */
+/* 步骤 11 · 左右联动工作台:左选政策事件 → 右看国家×行业冲击 */
 .shock-linkbar {
   padding: 10px 14px; margin: 4px 0 12px; border-radius: 10px;
   background: #f5f6fa; border: 1px solid #e7e9f0; font-size: 12.5px; color: #3a4050;
@@ -477,6 +477,13 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 }
 .db-table-seg button { min-width: 92px; }
 .db-table th, .db-table td { font-size: 12px; }
+.db-observation-cell {
+  width: 100%; min-width: max-content; border: 1px solid transparent; border-radius: 5px;
+  background: transparent; color: inherit; padding: 3px 5px; font: inherit; cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.db-observation-cell:hover, .db-observation-cell:focus-visible { border-color: #7773df; background: rgba(255,255,255,.78); outline: none; }
+.db-observation-cell.selected { border-color: #16876f; background: #e9f8f3; color: #116b5a; font-weight: 750; }
 
 @media print {
   @page { margin: 14mm 12mm; }
@@ -1187,6 +1194,40 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .panel-tag { margin-left: auto; font-size: 11px; font-weight: 600; color: #8a90a0; background: #f0f1f6; padding: 2px 9px; border-radius: 6px; }
 .panel-empty { padding: 24px 0; text-align: center; }
 .panel-note { margin: 10px 0 0; }
+.panel-head-action { margin-left: 8px; }
+
+/* ---------- 教师课程运行 / 作业发布 ---------- */
+.publish-flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+.publish-flow > div { display: flex; align-items: center; gap: 10px; padding: 11px 13px; border-radius: 11px; border: 1px solid #e1e4ec; background: #fff; }
+.publish-flow > div > b { flex: none; width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%; background: #eef0f5; color: #747c8d; }
+.publish-flow > div.done { border-color: #bfe2d5; background: #f4fbf8; }
+.publish-flow > div.done > b { background: #16876f; color: #fff; }
+.publish-flow span { display: grid; gap: 2px; font-size: 12.5px; font-weight: 700; color: #3a4050; }
+.publish-flow small { font-size: 10.5px; font-weight: 500; color: #8a90a0; }
+.course-publish-page .field { display: grid; gap: 4px; }
+.course-publish-page .field label { color: #737b8d; font-size: 10.5px; font-weight: 650; }
+.course-publish-page .field select { min-width: 300px; padding: 8px 10px; border: 1px solid #dce0e9; border-radius: 8px; background: #fff; }
+.assignment-table td { vertical-align: top; }
+.assignment-table code { display: inline-block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+.assignment-table .status-pill { margin-top: 5px; }
+.enrollment-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; max-height: 430px; overflow: auto; }
+.enrollment-row { display: flex; align-items: center; gap: 9px; border: 1px solid #e3e6ed; border-radius: 9px; padding: 9px 10px; background: #fff; cursor: pointer; }
+.enrollment-row.selected { border-color: #817ce2; background: #f3f2ff; }
+.enrollment-row > span:not(.status-pill) { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.enrollment-row small { color: #8a90a0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.manifest-lock-note { display: grid; gap: 5px; margin-bottom: 14px; padding: 11px 12px; border-radius: 9px; background: #f1f7ff; border: 1px solid #d6e4f5; }
+.manifest-lock-note code { overflow-wrap: anywhere; font-size: 11px; }
+.manifest-lock-note span { color: #697286; font-size: 11px; }
+.assignment-date-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.assignment-date-grid label { display: grid; }
+.assignment-date-grid input { margin-top: 5px; }
+.modal-form label.modal-check { display: flex; align-items: center; gap: 8px; margin: 1px 0 14px; color: #3d4555; }
+.modal-form label.modal-check input { width: auto; margin: 0; }
+@media (max-width: 850px) {
+  .publish-flow { grid-template-columns: 1fr; }
+  .course-publish-page .field select { min-width: 0; width: 100%; }
+  .assignment-date-grid { grid-template-columns: 1fr; }
+}
 
 /* ---------- 图表 ---------- */
 .bucket-bars { padding: 2px 0; }
@@ -1253,6 +1294,11 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .grade-doc-title { margin: 0 0 6px; font-size: 17px; }
 .grade-side { position: sticky; top: 92px; }
 .grade-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #6b7280; margin-bottom: 12px; }
+.grade-history summary { cursor: pointer; font-weight: 700; }
+.history-list { display: grid; gap: 8px; margin-top: 10px; }
+.history-item { display: grid; gap: 2px; padding: 8px 9px; border: 1px solid #e7e9f0; border-radius: 8px; background: #fafbfd; }
+.history-item b { font-size: 11.5px; color: #32384a; }
+.history-item span { font-size: 10.5px; line-height: 1.45; color: #737a8c; overflow-wrap: anywhere; }
 .grade-field input, .grade-field textarea {
   padding: 8px 11px; border-radius: 8px; border: 1px solid #e0e3ea; background: #fff;
   font-size: 13px; font-family: inherit; width: 100%;
@@ -1347,6 +1393,10 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .reg-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .reg-section-heading h3 { margin: 4px 0; }
 .comparison-warning { margin: 8px 0; padding: 8px 10px; border-radius: 7px; background: #fff8e6; color: #75521a; font-size: 11.5px; }
+.marginal-effects { margin: 14px 0; padding: 13px; border: 1px solid #dce2ed; border-radius: 10px; background: #f8fbff; }
+.marginal-effects-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
+.marginal-effects-head p { margin: 4px 0 0; color: #697286; font-size: 11.5px; line-height: 1.5; }
+.marginal-effects .data-table { background: #fff; }
 .trust-item { margin-top: 10px; padding: 10px 12px; background: #f8f9fc; border-radius: 8px; }
 .trust-item p { margin: 5px 0; line-height: 1.6; }
 .placebo-verdict { margin: 10px 0; padding: 9px 11px; background: #eeefff; border-radius: 7px; color: #35328d; font-weight: 600; }
@@ -1399,4 +1449,70 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .gate-link {
   border: 0; background: transparent; padding: 0; font: inherit; font-weight: 600;
   color: #4b47e0; cursor: pointer; text-decoration: underline;
+}
+.cer-box {
+  margin: 18px 0;
+  padding: 18px;
+  border: 1px solid #dfe4ee;
+  border-left: 4px solid #4b47e0;
+  border-radius: 12px;
+  background: #fbfcff;
+}
+.cer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
+.cer-head h3 { margin: 3px 0 0; font-size: 15px; }
+.cer-note { color: #5d6480; background: #eef1fa; border-radius: 999px; padding: 5px 10px; font-size: 11px; white-space: nowrap; }
+.cer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.cer-field { display: grid; gap: 5px; min-width: 0; }
+.cer-field > b { font-size: 12px; color: #2d3342; }
+.cer-field > span { min-height: 34px; color: #687083; font-size: 11.5px; line-height: 1.45; }
+.cer-field textarea { width: 100%; box-sizing: border-box; resize: vertical; border: 1px solid #d8dce7; border-radius: 8px; padding: 9px 10px; background: #fff; color: inherit; font: inherit; line-height: 1.5; }
+.cer-field textarea:focus { outline: 2px solid rgba(75, 71, 224, .18); border-color: #7773df; }
+.cer-field small { color: #b06e25; justify-self: end; }
+.cer-field small.ok { color: #148673; }
+.cer-submit-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: -8px 0 20px 4px; }
+.cer-signed { color: #148673; font-size: 12px; font-weight: 650; }
+.table-priority-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; }
+.table-priority-tools button { white-space: nowrap; }
+.bounded-data-table { max-height: 540px; overflow: auto; border: 1px solid #e7e9ef; border-radius: 9px; }
+.bounded-data-table table { margin: 0; }
+.qc-review-check { display: flex; align-items: flex-start; gap: 8px; margin: 12px; padding: 10px 12px; border-radius: 8px; background: #fff7e8; color: #684b19; font-size: 12px; line-height: 1.55; }
+.legacy-session-warning { margin: 12px 18px 0; }
+.observation-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 8px 0 10px; font-size: 11.5px; }
+.observation-strip b { color: #4a5265; }
+.observation-strip span { border-radius: 999px; background: #eef3fb; color: #44526e; padding: 4px 8px; }
+.required-run-plan { margin: 14px 0; padding: 13px 14px; border: 1px solid #dfe3ed; border-left: 4px solid #4b47e0; border-radius: 9px; background: #f8f9fd; }
+.required-run-plan p { margin: 4px 0 10px; color: #626a7b; font-size: 12px; line-height: 1.6; }
+.required-run-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.required-run-actions button { border: 1px solid #d6dae6; border-radius: 7px; background: #fff; padding: 6px 9px; cursor: pointer; }
+.required-run-actions button.on { border-color: #4b47e0; background: #eef0ff; color: #3733b4; }
+.required-run-actions span { color: #a16a24; font-size: 11px; margin-right: 8px; }
+.required-run-actions span.done { color: #148673; font-weight: 700; }
+.diagnostic-evidence-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 12px 0 18px; }
+.diagnostic-evidence-grid label { display: grid; gap: 6px; }
+.diagnostic-evidence-grid label > span { color: #6a7182; font-size: 11.5px; line-height: 1.5; }
+.diagnostic-evidence-grid textarea { box-sizing: border-box; width: 100%; border: 1px solid #d8dce7; border-radius: 8px; padding: 9px; font: inherit; resize: vertical; }
+.required-check-status { margin: 10px 0; border-radius: 8px; padding: 9px 11px; background: #fff3dd; color: #875b1e; font-size: 12px; }
+.required-check-status.done { background: #eaf8f4; color: #147866; }
+.qc-followup-field { display: grid; gap: 6px; margin: 12px 0; padding: 12px; border-radius: 9px; background: #f7f8fb; }
+.qc-followup-field > span { color: #677083; font-size: 11.5px; line-height: 1.5; }
+.qc-followup-field textarea { box-sizing: border-box; width: 100%; border: 1px solid #d8dce7; border-radius: 8px; padding: 9px; font: inherit; }
+.qc-disclosure-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.5; }
+.halted-course { margin: 18px 0; padding: 24px; }
+.halted-course h3 { margin: 0 0 8px; }
+.persistent-qc-warning { margin: 12px 18px 0; }
+.persistent-qc-warning > summary { cursor: pointer; font-weight: 750; }
+.persistent-qc-warning p { margin: 8px 0 0; font-size: 12px; line-height: 1.55; }
+.assignment-closed-warning { background: #f5f3ff; border-color: #d6d0f5; color: #443b87; }
+.read-only-lab { position: relative; }
+.read-only-lab::before { content: "截止后只读"; display: inline-flex; margin: 0 0 10px; padding: 4px 9px; border-radius: 999px; background: #ece9fb; color: #514793; font-size: 11px; font-weight: 750; }
+.intro-mechanisms { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 8px auto 2px; }
+.intro-mechanisms button { display: grid; gap: 2px; min-width: 170px; border: 1px solid rgba(255,255,255,.2); border-radius: 9px; background: rgba(255,255,255,.06); color: #e8edfb; padding: 8px 11px; text-align: left; cursor: pointer; }
+.intro-mechanisms button.on { border-color: #78a9f2; background: rgba(74,132,220,.25); }
+.intro-mechanisms button span { color: #aebbd8; font-size: 10.5px; }
+@media (max-width: 760px) { .diagnostic-evidence-grid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  .cer-grid { grid-template-columns: 1fr; }
+  .cer-field > span { min-height: 0; }
+  .cer-head { align-items: stretch; flex-direction: column; }
+  .cer-note { align-self: flex-start; }
 }

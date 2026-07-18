@@ -22,7 +22,7 @@ from typing import Any
 # v2:回归设定与冲击类型改用稳定英文键(tariff / did / ...)。旧会话里存的是
 # 中文界面文案,语义无法与新枚举对应——按"不做历史格式兼容"的原则整份拒绝,
 # 而不是猜测旧值的含义。学生会从空会话重新开始,但不会拿到一份被误读的实验。
-SESSION_VERSION = "experiment-session-v3"
+SESSION_VERSION = "experiment-session-v4"
 
 MIN_STEP = 1
 MAX_STEP = 16

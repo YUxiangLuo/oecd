@@ -13,10 +13,10 @@
 
 | 阶段 | 步骤 | 内容 |
 |---|---:|---|
-| 数据接入 | 1–3 | 浏览 ICIO 的 `Z`、`Y`、`TLS`、`VA`、`OUT`，接入政策冲击并执行质量检查 |
-| 指标计算 | 4–7 | WWZ 贸易流分解、WWYZ 生产分解、生产长度与 Gephi-compatible 网络中心性 |
-| 可视化分析 | 8–11 | 国家与国家–行业下钻、构成图、象限图、趋势图、排序图和有向网络图 |
-| 回归教学 | 12–15 | 贸易流、生产、长度和网络四类 outcome；支持 DID、双向固定效应、事件研究与安慰剂检验 |
+| 数据接入 | 1–2 | 浏览 ICIO 的 `Z`、`Y`、`TLS`、`VA`、`OUT`，执行原始数据与控制变量质量检查 |
+| 指标计算 | 3–6 | WWZ 贸易流分解、WWYZ 生产分解、生产长度与 Gephi-compatible 网络中心性 |
+| 可视化分析 | 7–10 | 国家与国家–行业下钻、构成图、象限图、趋势图、排序图和有向网络图 |
+| 冲击与回归 | 11–15 | 接入三类政策冲击；对贸易流、生产、长度和网络 outcome 运行 DID、双向固定效应、事件研究与稳健性检查 |
 | 实验闭环 | 16 | 汇总指标与回归结果，生成 Markdown/PDF 报告并支持课堂提交、评阅 |
 
 主要指标包括：
@@ -32,7 +32,7 @@
 预计算产物使用固定算法契约：
 
 ```text
-schema_version: 2
+schema_version: 3
 network_algorithm: gephi-compatible-directed-unweighted-positive-v1
 ```
 
@@ -64,16 +64,24 @@ uv sync --locked --group dev
 # 新环境需要先下载原始 ICIO；已有 OECD_ICIO/ 时可跳过
 uv run gvcsim download --years 2016 2017 2018 2019 2020
 
-# 计算逐年指标、网络指标、质检结果、回归面板和产物清单
+# 计算逐年指标、网络指标、质检结果、回归面板和产物清单；fatal QC 默认中止发布
 uv run gvcsim compute
 ```
 
-如果已有同版本的 `data/processed/` 与 `data/shocks/`，可以直接启动服务。API 会校验
-`artifact_manifest.json` 的算法版本和文件摘要，旧版本、部分重算或损坏的产物不会被静默使用。
+若课程负责人已核实异常、记录原因并决定仅用于教学演示，才可显式运行
+`uv run gvcsim compute --allow-qc-override`。override、失败项和披露要求会写入 manifest 与报告，
+不会被当成“质检通过”。
+
+如果已有同版本的 `data/processed/`，可以直接启动服务。冲击面板、逐年指标、回归面板与 QC
+都属于同一个原子产物集；`compute` 会先在 staging 中完整构建并校验，再把 `data/processed`
+符号链接一次性切到 `data/artifacts/<manifest_id>/`。旧版本会保留用于审计与回滚，部分重算或损坏的
+产物不会被静默使用。
 
 ### 2. 启动后端
 
 ```bash
+export GVCSIM_PG_DSN='postgresql://USER:PASSWORD@127.0.0.1:5432/gvclab'
+uv run gvcsim classroom-init
 uv run gvcsim serve --reload
 ```
 
@@ -89,19 +97,25 @@ bun install --frozen-lockfile
 bun run dev
 ```
 
-访问 `http://localhost:5173`。Vite 会把 `/api` 代理到本地 FastAPI 服务。
+访问 `http://localhost:5173`。Vite 会把 `/api` 代理到本地 FastAPI 服务。系统默认没有公开账号，
+认证和 16 步会话都依赖 PostgreSQL；数据库不可用时认证会关闭，而不会回退到内置教师账号。
 
-| 身份 | 用户名 | 密码 | 用途 |
-|---|---|---|---|
-| 学生 | `student` | `gvclab2026` | 完成 16 步实验并提交报告 |
-| 教师 | `teacher` | `gvclab2026` | 班级、学生、公告和报告评阅 |
-
-演示账号不依赖 PostgreSQL。课堂管理、进度保存和报告评阅需要 PostgreSQL：
+只在本机演示时，可显式开启演示播种并自行指定一次性密码：
 
 ```bash
 export GVCSIM_PG_DSN='postgresql://USER:PASSWORD@127.0.0.1:5432/gvclab'
+export GVCSIM_DEMO_MODE=1
+export GVCSIM_BOOTSTRAP_PASSWORD="$(openssl rand -base64 24)"
 uv run gvcsim classroom-init
 ```
+
+这会播种 `student` 与 `teacher`，两者使用本次设置的密码。生产环境设置
+`GVCSIM_ENV=production` 后会拒绝演示模式；生产环境必须分别设置至少 32 字节的
+`GVCSIM_AUTH_SECRET` 与 `GVCSIM_EVIDENCE_SECRET`，不要复用同一密钥；完整安全配置见
+[`deploy/gvcsim.env.example`](./deploy/gvcsim.env.example)。
+
+正式环境首次初始化教师时，临时设置 `GVCSIM_INITIAL_TEACHER_PASSWORD`，再运行
+`gvcsim classroom-init --teacher-username <管理员用户名> --teacher-name <显示名>`；成功后立即删除该变量。
 
 `classroom-init --reset` 会清空全部教学表，只应在确认不保留课堂数据时使用。
 
@@ -137,8 +151,8 @@ OECD ICIO ──> 质检与指标流水线 ──> 带版本清单的预计算�
 | 路径 | 内容 |
 |---|---|
 | `OECD_ICIO/` | 下载的 OECD ICIO 原始文件 |
-| `data/processed/` | 逐年指标、质检 JSON、网络展示边、回归面板与 `artifact_manifest.json` |
-| `data/shocks/` | 教学政策冲击面板 |
+| `data/processed/` | 指向当前完整产物版本的原子符号链接 |
+| `data/artifacts/<manifest_id>/` | 逐年指标、质检 JSON、教学冲击、网络边、回归面板与来源摘要 |
 | `gvcsim/` | 指标流水线、FastAPI、回归、报告和课堂后端 |
 | `frontend/` | React 19、TypeScript、Vite 教学界面 |
 | `tests/` | 后端测试与 Gephi golden fixture |
@@ -156,14 +170,21 @@ uv run pytest --cov=gvcsim --cov-report=term-missing -q
 cd frontend
 bun run test:unit
 bun run build
+
+# 前后端已启动且已准备专用测试账号时，跑真实浏览器路由/请求 smoke
+GVCSIM_BASE_URL=http://127.0.0.1:5173 \
+GVCSIM_E2E_USERNAME=<测试学生> \
+GVCSIM_E2E_PASSWORD=<测试口令> \
+scripts/agent_browser_smoke.sh
 ```
 
 GitHub Actions 在每次 push 上跑同一组检查(后端带 PostgreSQL 服务、前端构建与单测)。
-浏览器端没有自动化测试:界面行为靠人工在真实服务上核对。
+`agent_browser_smoke.sh` 会在真实登录态下挂载学生端 1–16 步，并对浏览器错误和失败 API 请求做失败判定；
+完整 CER、回归和报告提交仍应在固定真实数据快照上执行夜间/发布前全流程审查。
 
 ## 使用边界
 
 - 拟真政策冲击与模拟宏观控制适合教学，不应替代经审计的研究数据；
 - DID、固定效应和事件研究结果只有在相应识别假设成立时才可作因果解释；
-- 内置账号和 12 小时签名令牌面向课堂演示，公网部署应补充 HTTPS、限流、审计和正式身份系统；
+- 生产认证使用短期、可撤销且逐请求复查账号状态的令牌；访问令牌与学习证据使用独立签名密钥，仍应通过 HTTPS 部署并妥善保护数据库与两类密钥；
 - 当前服务器更新步骤见 [`DEPLOY_101.201.151.30.md`](./DEPLOY_101.201.151.30.md)。

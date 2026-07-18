@@ -108,3 +108,18 @@ def test_demo_panel_uses_passed_export_exposure():
     val = df.set_index(["country", "sector", "year"]).loc[("DEU", "C24", 2018), "tariff_shock"]
     # 232 钢铝 2018 年 C24 基准税率 0.16 × ICIO 暴露度 0.5。
     assert val == 0.08
+
+
+def test_tariff_primary_uses_last_pretreatment_weight_and_keeps_contemporaneous_robustness():
+    exposure = pd.DataFrame(
+        [
+            {"country": "DEU", "imposer": "USA", "year": 2017, "export_exposure": 0.20},
+            {"country": "DEU", "imposer": "USA", "year": 2018, "export_exposure": 0.80},
+            {"country": "DEU", "imposer": "USA", "year": 2019, "export_exposure": 0.90},
+        ]
+    )
+    panel = demo_shock_panel(["DEU", "USA"], ["C24"], [2017, 2018, 2019], export_exposure=exposure)
+    row = panel.set_index(["country", "sector", "year"]).loc[("DEU", "C24", 2018)]
+    assert row["tariff_shock"] == 0.16 * 0.20
+    assert row["tariff_shock_contemporaneous"] == 0.16 * 0.80
+    assert row["tariff_exposure_mode"] == "fixed_pretreatment"

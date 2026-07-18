@@ -77,8 +77,37 @@ def test_db_step_needs_a_complete_slice():
     step = _step_of("db")
     partial = _session({step: {"slice": {"year": 2020, "table": "z"}}})
     assert not evaluate_step(step, partial).complete
-    full = _session({step: {"slice": {"year": 2020, "table": "z", "row_country": "CHN", "col_country": "USA"}}})
+    full = _session(
+        {
+            step: {
+                "slice": {"year": 2020, "table": "z", "row_country": "CHN", "col_country": "USA"},
+                "observation": {"row": "CHN_D01T02", "column": "USA_D01T02", "value": 12.5},
+            }
+        }
+    )
     assert evaluate_step(step, full).complete
+
+
+def test_slice_receipt_rechecks_the_exact_server_cell(monkeypatch):
+    from gvcsim.classroom import routes
+
+    monkeypatch.setattr(
+        routes.icio_browser,
+        "slice_table",
+        lambda **_kwargs: {
+            "columns": ["row", "USA_D01T02"],
+            "rows": [{"row": "CHN_D01T02", "USA_D01T02": 12.5}],
+        },
+    )
+    payload = {
+        "slice": {"year": 2020, "table": "z", "row_country": "CHN", "col_country": "USA"},
+        "observation": {"row": "CHN_D01T02", "column": "USA_D01T02", "value": 12.5},
+    }
+    routes._verify_learning_payload(1, "slice", payload)
+
+    payload["observation"]["value"] = 999
+    with pytest.raises(ValueError, match="服务端原始值不一致"):
+        routes._verify_learning_payload(1, "slice", payload)
 
 
 def test_shock_step_needs_all_three_shock_types():
@@ -193,3 +222,85 @@ def test_invalid_regression_settings_checks_every_enum():
         ("scenario", "nope"),
     ]:
         assert check({key: bad}), f"{key}={bad} 应被判非法"
+
+
+def test_trusted_trade_comparison_rejects_two_incomparable_designs(monkeypatch):
+    step = 12
+    base_design = {
+        "outcome": "trade",
+        "granularity": "country_industry",
+        "shock_type": "tariff",
+        "method": "did",
+        "control_mode": "none",
+        "interaction": False,
+        "price_mode": "nominal",
+        "scenario": "clean",
+        "exclude_row": True,
+        "weight_mode": "fixed_pretreatment",
+    }
+    designs = {
+        "main": {**base_design, "control_mode": "icio_derived", "shock_type": "sanctions"},
+        "baseline": base_design,
+        "controlled": {**base_design, "control_mode": "icio_derived", "shock_type": "sanctions"},
+    }
+    monkeypatch.setattr(
+        "gvcsim.evidence.trusted_evidence.verify_regression_run",
+        lambda token, **_kwargs: {"design": designs[token]} if token in designs else None,
+    )
+    cer = {
+        "claim": "控制变量改变了估计方向，需要谨慎解释",
+        "evidence": "基准系数为 0.10，控制后为 0.20",
+        "reasoning": "只有其余设定相同，差异才可归因于控制变量",
+        "boundary": "这是拟真冲击且无永不处理组，不能直接外推",
+    }
+    data = {
+        "run_id": "main",
+        "run": {"depvar": "FVA_share", "settings": {"shockType": "sanctions", "controlMode": "icio_derived"}},
+        "checks": {"baseline_run_id": "baseline", "controlled_run_id": "controlled"},
+        "judgment": JUDGMENT,
+        "cer": cer,
+    }
+    result = evaluate_step(step, _session({step: data}), subject="student", require_trusted=True)
+    assert not result.complete
+    assert any("除控制变量外" in item for item in result.missing)
+
+
+def test_trusted_network_rejects_placebo_from_a_different_design(monkeypatch):
+    step = 15
+    base_design = {
+        "outcome": "network",
+        "granularity": "country_industry",
+        "shock_type": "tariff",
+        "method": "did",
+        "control_mode": "none",
+        "interaction": False,
+        "price_mode": "nominal",
+        "scenario": "clean",
+        "exclude_row": True,
+        "weight_mode": "fixed_pretreatment",
+    }
+    designs = {
+        "main": base_design,
+        "placebo": {**base_design, "shock_type": "sanctions"},
+    }
+    monkeypatch.setattr(
+        "gvcsim.evidence.trusted_evidence.verify_regression_run",
+        lambda token, **_kwargs: {"design": designs[token]} if token in designs else None,
+    )
+    cer = {
+        "claim": "网络位置在冲击后出现了可见变化，需要谨慎解释",
+        "evidence": "主回归系数为 0.10，安慰剂分布均值为 0.01",
+        "reasoning": "只有安慰剂和主回归设计相同，随机化比较才有意义",
+        "boundary": "网络节点存在 SUTVA 干扰和跨国网络外溢，不能孤立解释",
+    }
+    data = {
+        "run_id": "main",
+        "placebo_run_id": "placebo",
+        "run": {"depvar": "betweenesscentrality", "settings": {"shockType": "tariff", "method": "did"}},
+        "checks": {"placebo_run_id": "placebo"},
+        "judgment": JUDGMENT,
+        "cer": cer,
+    }
+    result = evaluate_step(step, _session({step: data}), subject="student", require_trusted=True)
+    assert not result.complete
+    assert any("安慰剂必须与本步主回归" in item for item in result.missing)

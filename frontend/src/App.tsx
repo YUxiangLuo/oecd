@@ -19,6 +19,48 @@ import type { Announcement, AuthUser, EvidenceRules, Meta, Step, StepEvidenceApi
 import { useSession } from "./use-session";
 
 const ROMAN = ["", "一", "二", "三", "四", "五"];
+const AUTH_EXPIRES_KEY = "gvcsim_token_expires_at";
+
+function sessionExpiryLabel(expiresAt: number | null): string | null {
+  if (!expiresAt) return null;
+  const date = new Date(expiresAt * 1000);
+  return Number.isNaN(date.getTime()) ? null : date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function deadlineLabel(value: string | null | undefined): string {
+  if (!value) return "教师设定的截止时间";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { hour12: false });
+}
+
+export interface QcReleaseSummary {
+  requiresDisclosure: boolean;
+  override: boolean;
+  fatal: string[];
+  warning: string[];
+  disclosure: string[];
+}
+
+/** Manifest QC nests year/control/shock scopes; flatten only machine-declared summaries. */
+export function summarizeQcRelease(qc: unknown): QcReleaseSummary {
+  const out: QcReleaseSummary = { requiresDisclosure: false, override: false, fatal: [], warning: [], disclosure: [] };
+  const visit = (value: unknown) => {
+    if (!value || typeof value !== "object") return;
+    const item = value as Record<string, unknown>;
+    if (item.requires_disclosure === true) out.requiresDisclosure = true;
+    if (item.override === true) out.override = true;
+    for (const key of ["fatal", "warning", "disclosure"] as const) {
+      if (Array.isArray(item[key])) out[key].push(...item[key].filter((name): name is string => typeof name === "string"));
+    }
+    Object.values(item).forEach((child) => {
+      if (child && typeof child === "object" && !Array.isArray(child)) visit(child);
+    });
+  };
+  visit(qc);
+  out.requiresDisclosure ||= out.override || out.fatal.length > 0 || out.warning.length > 0 || out.disclosure.length > 0;
+  for (const key of ["fatal", "warning", "disclosure"] as const) out[key] = [...new Set(out[key])];
+  return out;
+}
 
 function stepFromUrl(): number | null {
   const n = Number(new URLSearchParams(window.location.search).get("step"));
@@ -79,16 +121,74 @@ export default function App() {
   // 认证:localStorage 里的令牌先经 /api/auth/me 真实校验再放行
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const [authExpiresAt, setAuthExpiresAt] = useState<number | null>(() => {
+    const value = Number(localStorage.getItem(AUTH_EXPIRES_KEY));
+    return Number.isFinite(value) && value > 0 ? value : null;
+  });
   const [showIntro, setShowIntro] = useState(false);
   // 课堂公告:登录后拉一次,顶栏下方横幅展示(教学库不可用时静默隐藏)
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const highestAnnouncementId = useRef(0);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [bannerExpanded, setBannerExpanded] = useState(false);
+  const [resettingAttempt, setResettingAttempt] = useState(false);
+  const [resetAttemptError, setResetAttemptError] = useState<string | null>(null);
+  const [deadlineNow, setDeadlineNow] = useState(() => Date.now());
 
   // 实验会话:回归设定与运行记录从此活在会话里(local-first + PostgreSQL),
   // 刷新或重新登录都能恢复,不再随组件内存一起消失。
-  const session = useSession(user?.role === "student" ? user.username : null, meta?.manifest_id ?? null);
+  const session = useSession(
+    user?.role === "student" ? { username: user.username, accountId: user.account_id } : null,
+    meta?.manifest_id ? {
+      manifestId: meta.manifest_id,
+      courseRunId: meta.course_run_id,
+      assignmentId: meta.assignment_id,
+      attemptId: meta.attempt_id,
+    } : null,
+  );
+  const assignmentDueAt = meta?.due_at ?? session.dueAt;
+  const assignmentDueTime = assignmentDueAt ? new Date(assignmentDueAt).getTime() : Number.NaN;
+  const assignmentClosed = Boolean(meta?.assignment_closed || session.assignmentClosed)
+    || (Number.isFinite(assignmentDueTime) && assignmentDueTime <= deadlineNow);
+  useEffect(() => {
+    if (!Number.isFinite(assignmentDueTime) || assignmentDueTime <= Date.now()) return;
+    const delay = Math.min(2_147_000_000, Math.max(0, assignmentDueTime - Date.now() + 250));
+    const timer = window.setTimeout(() => setDeadlineNow(Date.now()), delay);
+    return () => window.clearTimeout(timer);
+  }, [assignmentDueTime, deadlineNow]);
+  const exportRecovery = useCallback(() => {
+    if (!session.recovery.length) return;
+    const exported = {
+      exported_at: new Date().toISOString(),
+      account_id: user?.account_id ?? null,
+      username: user?.username ?? null,
+      warning: "这些记录来自旧作用域/旧数据版本，仅供留档，不得合并到当前 attempt。",
+      records: session.recovery,
+    };
+    const blob = new Blob([JSON.stringify(exported, null, 2)], { type: "application/json" });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = `gvcsim-recovery-${String(user?.username ?? "student").replace(/[^a-zA-Z0-9_-]/g, "_")}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(href);
+  }, [session.recovery, user?.account_id, user?.username]);
+  const resetAttempt = useCallback(async () => {
+    const confirmed = window.confirm(
+      "重新开始会归档当前 attempt，并由服务端创建一个全新的 attempt。旧记录不会合并到新作业；如需留档，请先点击“导出隔离记录”。确定继续吗？",
+    );
+    if (!confirmed) return;
+    setResettingAttempt(true);
+    setResetAttemptError(null);
+    try {
+      await session.reset();
+    } catch (cause) {
+      setResetAttemptError(String((cause as Error).message ?? cause));
+      setResettingAttempt(false);
+    }
+  }, [session.reset]);
   // 回归设定按 outcome 存(与 regression_history 一致):每步首次进入落在其招牌默认
   // (SIGNATURE_SETTINGS),学生的修改按 outcome 分别保留、互不覆盖。
   const currentOutcome = stepsData?.steps.find((s) => s.n === current)?.regression_outcome;
@@ -99,26 +199,32 @@ export default function App() {
   const setRegressionSettings = useCallback(
     (next: RegressionSettings) => {
       if (!currentOutcome) return;
-      const base = asRegressionSettingsMap(session.getShared("regression_settings"));
-      session.setShared("regression_settings", { ...base, [currentOutcome]: next });
+      session.updateShared("regression_settings", (current) => ({
+        ...asRegressionSettingsMap(current),
+        [currentOutcome]: next,
+      }));
     },
     [session, currentOutcome],
   );
   const setRegressionHistory = useCallback(
     (update: React.SetStateAction<RegressionHistory>) => {
-      const base = session.getShared<RegressionHistory>("regression_history") ?? {};
-      session.setShared("regression_history", typeof update === "function" ? update(base) : update);
+      session.updateShared<RegressionHistory>("regression_history", (current) => {
+        const base = current ?? {};
+        return typeof update === "function" ? update(base) : update;
+      });
     },
     [session],
   );
   const completedSteps = new Set(session.completion?.completed ?? []);
+  const qcState = session.getStep<{ disposition?: string; evidence_id?: string }>(2);
+  const qcHalted = qcState?.disposition === "stop" && Boolean(qcState.evidence_id);
 
   // 当前步的证据读写口。save 与该步已有证据合并:一步的证据往往分几次产生
   // (先做动作、再写判断),整份覆盖会把先留下的那半抹掉。
   const currentEvidence = session.completion?.steps.find((item) => item.step === current);
   const stepEvidence: StepEvidenceApi = {
     data: session.getStep(current),
-    save: (patch) => session.setStep(current, { ...(session.getStep<object>(current) ?? {}), ...patch }),
+    save: (patch) => session.patchStep(current, patch),
     missing: currentEvidence?.missing ?? [],
     complete: currentEvidence?.complete ?? false,
   };
@@ -126,7 +232,11 @@ export default function App() {
   // 退出登录:只清认证与界面状态。刻意**不**清实验会话——
   // 学生重新登录后必须能拿回自己的实验,这正是会话存在的意义。
   const logout = useCallback(() => {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (token) void api.logout(token).catch(() => {});
     localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_EXPIRES_KEY);
+    setAuthExpiresAt(null);
     setUser(null);
     setStepsData(null);
     setMeta(null);
@@ -163,7 +273,12 @@ export default function App() {
     if (!token) { setAuthChecked(true); return; }
     api.me(token).then(
       (u) => { setUser(u); setAuthChecked(true); },
-      () => { localStorage.removeItem(AUTH_TOKEN_KEY); setAuthChecked(true); },
+      () => {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        localStorage.removeItem(AUTH_EXPIRES_KEY);
+        setAuthExpiresAt(null);
+        setAuthChecked(true);
+      },
     );
   }, []);
 
@@ -242,18 +357,20 @@ export default function App() {
 
   // 学生实验进度自动上报:停留在某步 1.5s 后写入教学库(失败静默,不打扰实验)
   useEffect(() => {
-    if (!user || user.role !== "student" || !progressReady) return;
+    if (!user || user.role !== "student" || !progressReady || assignmentClosed) return;
     const timer = window.setTimeout(() => {
       api.classroom.reportProgress(current).catch(() => {});
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [user, current, progressReady]);
+  }, [user, current, progressReady, assignmentClosed]);
 
   if (!authChecked) return <div style={{ padding: 40 }} className="muted">加载中…</div>;
   if (!user)
     return (
       <LoginPage onLogin={(r) => {
         localStorage.setItem(AUTH_TOKEN_KEY, r.token);
+        localStorage.setItem(AUTH_EXPIRES_KEY, String(r.expires_at));
+        setAuthExpiresAt(r.expires_at);
         setUser(r.user);
         // 学生进交互式介绍;教师直达教师面板(不进入学生端)
         setShowIntro(r.user.role !== "teacher");
@@ -274,6 +391,7 @@ export default function App() {
             <span className="muted">
               数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
             </span>
+            {sessionExpiryLabel(authExpiresAt) && <span className="muted">会话至 {sessionExpiryLabel(authExpiresAt)}</span>}
             <span className="role-chip" title={`教师账号 · ${user.username}`}>{user.name}</span>
             <button onClick={logout}>退出</button>
           </div>
@@ -309,6 +427,15 @@ export default function App() {
   const isReg = step.lab === "reg";
   // 可视化步骤(viz)图表是主角:讲解卡默认折叠,给图表让出首屏纵向空间(可点开)
   const isViz = step.lab === "viz";
+  const qcRelease = summarizeQcRelease(meta?.artifact_provenance?.qc);
+  const assignmentScopeMissing = !meta
+    || meta.course_run_id == null
+    || meta.assignment_id == null
+    || meta.attempt_id == null;
+  const assignmentLocked = assignmentScopeMissing
+    || session.stale
+    || assignmentClosed
+    || Boolean(meta?.assignment_unavailable || meta?.manifest_mismatch);
 
   return (
     <div className="layout">
@@ -318,7 +445,7 @@ export default function App() {
           <h1>供应链仿真系统</h1>
           <div className="sub">GVC SIMULATION LAB</div>
         </div>
-        <div className="topbar-user">
+          <div className="topbar-user">
           <span className="muted">
             数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
           </span>
@@ -337,7 +464,8 @@ export default function App() {
               最远到第 <b>{Math.min(maxStep, totalSteps)}</b> 步
             </span>
           )}
-          <span className="role-chip" title={`学生账号 · ${user.username}`}>{user.name}</span>
+            <span className="role-chip" title={`学生账号 · ${user.username}`}>{user.name}</span>
+            {sessionExpiryLabel(authExpiresAt) && <span className="muted" title="服务端签发的 expires_at">会话至 {sessionExpiryLabel(authExpiresAt)}</span>}
           <button onClick={() => setShowIntro(true)}>ⓘ 系统介绍</button>
           <button onClick={logout}>退出</button>
         </div>
@@ -421,8 +549,9 @@ export default function App() {
                     key={s.n}
                     className={`step-row${s.n === current ? " active" : ""}`}
                     aria-current={s.n === current ? "step" : undefined}
+                    disabled={qcHalted && s.n > 2}
                     onClick={() => navigateStep(s.n)}
-                    title={done ? `第 ${s.n} 步已完成` : undefined}
+                    title={qcHalted && s.n > 2 ? "本次作业已在步骤 2 停止，请先修改质检处置" : done ? `第 ${s.n} 步已完成` : undefined}
                   >
                     <span className={`step-badge ${state}`}>{done ? "✓" : s.n}</span>
                     <span className="step-row-title">{s.title}</span>
@@ -436,6 +565,53 @@ export default function App() {
         </aside>
 
         <div className="workarea">
+          {meta?.manifest_mismatch && (
+            <div className="warnbox persistent-qc-warning" role="alert">
+              当前数据 manifest 与这份作业冻结的版本不一致。为避免混用数据，学习证据、报告与提交将保持锁定；请联系教师切换作业版本。
+            </div>
+          )}
+          {assignmentClosed && (
+            <div className="warnbox persistent-qc-warning assignment-closed-warning" role="alert">
+              <b>作业已于 {deadlineLabel(assignmentDueAt)} 截止，现在为只读状态。</b>
+              <p>你仍可浏览既有步骤、可信证据与服务端完成度，但不能继续保存、签发证据、生成/提交报告、重置或新建 attempt。既有记录和审计历史不会被删除。</p>
+            </div>
+          )}
+          {!assignmentClosed && (meta?.assignment_unavailable || assignmentScopeMissing) && (
+            <div className="warnbox persistent-qc-warning" role="alert">
+              无法确认当前课程、作业与 attempt 作用域；实验输入与提交已锁定，本地缓存也已停用。
+              请刷新重试；仍未恢复时联系教师检查选课、作业发布和数据库状态。
+            </div>
+          )}
+          {qcRelease.requiresDisclosure && (
+            <details className="warnbox persistent-qc-warning">
+              <summary>
+                数据发布状态：当前产物含需持续披露的 QC 项
+                {qcRelease.override ? "（包含显式 override）" : ""}
+              </summary>
+              {qcRelease.fatal.length > 0 && <p><b>Fatal：</b>{qcRelease.fatal.join("、")}</p>}
+              {qcRelease.warning.length > 0 && <p><b>Warning：</b>{qcRelease.warning.join("、")}</p>}
+              {qcRelease.disclosure.length > 0 && <p><b>Disclosure：</b>{qcRelease.disclosure.join("、")}</p>}
+              <p>这些边界适用于本步及后续所有描述、回归和报告；折叠只收起明细，不会隐藏发布状态。</p>
+            </details>
+          )}
+          {session.stale && !assignmentClosed && (
+            <div className="warnbox legacy-session-warning" role="status">
+              <div>
+                发现旧课程、旧数据版本或用户名作用域的记录。它已被隔离为只读旧记录，
+                不会合并、不会自动回推，也不会计入本次作业完成度。
+              </div>
+              <div className="cer-submit-row" style={{ marginTop: 10 }}>
+                <button type="button" className="secondary" disabled={!session.recovery.length || resettingAttempt} onClick={exportRecovery}>
+                  导出隔离记录
+                </button>
+                <button type="button" className="primary" disabled={resettingAttempt} onClick={() => void resetAttempt()}>
+                  {resettingAttempt ? "正在归档并新建…" : "归档旧 attempt 并重新开始"}
+                </button>
+              </div>
+              <p className="muted">重新开始是显式操作：旧 attempt 会保留为审计记录，新 attempt 从空白证据开始。</p>
+              {resetAttemptError && <div className="error-box">重新开始失败：{resetAttemptError}</div>}
+            </div>
+          )}
           <div className="step-header-bar">
             <div className="big-num">{String(step.n).padStart(2, "0")}</div>
             <div className="step-header-mid">
@@ -447,7 +623,7 @@ export default function App() {
             </div>
             <div className="nav-btns">
               <button disabled={!prevStep} onClick={() => prevStep && navigateStep(prevStep.n)}>← 上一步</button>
-              <button className="primary" disabled={!nextStep} onClick={() => nextStep && navigateStep(nextStep.n)}>下一步 →</button>
+              <button className="primary" disabled={!nextStep || (qcHalted && Boolean(nextStep && nextStep.n > 2))} onClick={() => nextStep && navigateStep(nextStep.n)}>下一步 →</button>
             </div>
           </div>
 
@@ -462,7 +638,42 @@ export default function App() {
                     <p>{step.concept}</p>
                   </details>
                 )}
-                <Lab
+                {assignmentClosed ? (
+                  <div className="read-only-lab" inert aria-label="已截止作业的只读实验记录">
+                    <Lab
+                      step={step}
+                      meta={meta}
+                      evidence={stepEvidence}
+                      rules={stepsData.evidence_rules}
+                      onSessionChanged={session.reload}
+                      regressionSettings={regressionSettings}
+                      onRegressionSettingsChange={setRegressionSettings}
+                      regressionHistory={regressionHistory}
+                      onRegressionHistoryChange={setRegressionHistory}
+                      onNavigateStep={navigateStep}
+                    />
+                  </div>
+                ) : assignmentLocked ? (
+                  <div className="error-box assignment-lock" role="alert">
+                    <h3>实验台已锁定</h3>
+                    <p>
+                      {assignmentClosed
+                        ? `作业已于 ${deadlineLabel(assignmentDueAt)} 截止。当前页面只用于浏览既有记录，所有实验输入和提交均已关闭。`
+                        : meta?.manifest_mismatch
+                        ? "当前产物与作业冻结的数据版本不一致，不能生成或提交学习证据。"
+                        : session.stale
+                          ? "检测到旧课程、旧数据版本或未验证 attempt 的记录。请先在上方导出留档，并显式归档旧 attempt 后重新开始。"
+                        : "当前账号没有可验证的课程运行、作业或 attempt 上下文；此时填写内容不会被可靠保存，因此表单没有开放。"}
+                    </p>
+                    <p>刷新后仍未恢复，请联系教师确认作业是否已发布并将你加入对应课程运行。</p>
+                  </div>
+                ) : qcHalted && step.n > 2 ? (
+                  <div className="warnbox halted-course">
+                    <h3>本次分析已按你的质检处置停止</h3>
+                    <p>后续指标、回归和报告不会开放。返回步骤 2 修改处置；或等待教师发布修正并通过复检的新数据版本。</p>
+                    <button type="button" className="primary" onClick={() => navigateStep(2)}>返回步骤 2</button>
+                  </div>
+                ) : <Lab
                   step={step}
                   meta={meta}
                   evidence={stepEvidence}
@@ -473,7 +684,7 @@ export default function App() {
                   regressionHistory={regressionHistory}
                   onRegressionHistoryChange={setRegressionHistory}
                   onNavigateStep={navigateStep}
-                />
+                />}
               </div>
             </main>
 
@@ -505,7 +716,7 @@ export default function App() {
                   <span className="rail-flow-t">{step.title}</span>
                 </div>
                 {nextStep && (
-                  <button type="button" className="rail-flow-row" onClick={() => navigateStep(nextStep.n)}>
+                  <button type="button" className="rail-flow-row" disabled={qcHalted && nextStep.n > 2} onClick={() => navigateStep(nextStep.n)}>
                     <span className="rail-flow-k">↓ 下一步</span>
                     <span className="rail-flow-t">{nextStep.title}</span>
                   </button>

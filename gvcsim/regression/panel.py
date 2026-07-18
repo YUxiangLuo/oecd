@@ -68,6 +68,9 @@ class RegressionResult:
     r2_within: float
     depvar_mean: float
     depvar_std: float
+    # 交互模型在低(P25)/均值/高(P75)基期 GVC 水平下的线性组合效应。
+    # 空列表表示当前模型没有可配对的政策主效应×base_gvc 交互项。
+    marginal_effects: list[dict] = field(default_factory=list)
     diagnostics: dict = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     # 设计有效性:ok / warning / insufficient / invalid_design。
@@ -99,6 +102,7 @@ class RegressionResult:
             "r2_within": self.r2_within,
             "depvar_mean": self.depvar_mean,
             "depvar_std": self.depvar_std,
+            "marginal_effects": self.marginal_effects,
             "diagnostics": self.diagnostics,
             "notes": self.notes,
             "status": self.status,
@@ -404,6 +408,68 @@ def _pretrend_diagnostic(xcols: list[str], beta: np.ndarray, covariance: np.ndar
     }
 
 
+def _marginal_effects(
+    model: PreparedModel,
+    xcols: list[str],
+    beta: np.ndarray,
+    covariance: np.ndarray,
+    n_clusters: int,
+) -> list[dict]:
+    """用完整协方差矩阵计算 β + θ·BaseGVC 的三点线性组合。
+
+    BaseGVC 在建模时已按“个体等权均值”中心化，因此均值点严格为 0；
+    P25/P75 也从每个个体唯一的一份基期值计算，不让长面板中的重复年份改变分位点。
+    事件研究会为每个可估计事件期分别返回三点效应，由 ``policy_term`` 区分。
+    """
+    if BASELINE_GVC_COL not in model.data.columns:
+        return []
+    entity_values = model.data[[model.entity, BASELINE_GVC_COL]].drop_duplicates(model.entity)[BASELINE_GVC_COL]
+    if entity_values.empty:
+        return []
+    levels = (
+        ("low", "低（P25）", "p25", float(entity_values.quantile(0.25))),
+        ("mean", "均值", "mean", 0.0),
+        ("high", "高（P75）", "p75", float(entity_values.quantile(0.75))),
+    )
+    index = {name: i for i, name in enumerate(xcols)}
+    critical = float(stats.t.ppf(0.975, n_clusters - 1))
+    suppress = bool(model.support and model.support.suppress_inference)
+    output: list[dict] = []
+    for policy_term in model.policy_xcols:
+        if policy_term.endswith("×base_gvc"):
+            continue
+        interaction_term = f"{policy_term}×base_gvc"
+        if policy_term not in index or interaction_term not in index:
+            continue
+        main_i, interaction_i = index[policy_term], index[interaction_term]
+        for level, label, reference, centered in levels:
+            effect = float(beta[main_i] + centered * beta[interaction_i])
+            variance = float(
+                covariance[main_i, main_i]
+                + centered * centered * covariance[interaction_i, interaction_i]
+                + 2.0 * centered * covariance[main_i, interaction_i]
+            )
+            se = math.sqrt(max(variance, 0.0))
+            t_stat = effect / se if se > 0 else float("nan")
+            output.append(
+                {
+                    "policy_term": policy_term,
+                    "interaction_term": interaction_term,
+                    "level": level,
+                    "label": label,
+                    "reference": reference,
+                    "baseline_gvc_centered": centered,
+                    "effect": effect,
+                    "se": se,
+                    "t": t_stat,
+                    "p": None if suppress else _cluster_t_pvalue(t_stat, n_clusters),
+                    "ci_low": None if suppress else effect - critical * se,
+                    "ci_high": None if suppress else effect + critical * se,
+                }
+            )
+    return output
+
+
 def _within_ols(
     model: PreparedModel,
     prepared: tuple[np.ndarray, np.ndarray, list[str], list[str]] | None = None,
@@ -490,6 +556,7 @@ def _within_ols(
         r2_within=r2_within,
         depvar_mean=float(data[depvar].mean()),
         depvar_std=float(data[depvar].std(ddof=1)),
+        marginal_effects=_marginal_effects(model, xcols, beta, V, n_g),
         diagnostics=_pretrend_diagnostic(xcols, beta, V, n_g)
         if model.xcols and model.xcols[0].startswith("k=")
         else {},
@@ -559,7 +626,11 @@ def _prepare_fe_model(
         notes=notes,
         # 强度法直接用逐年冲击强度,不做"首次处理后永久处理"的编码,
         # 因此处理可逆不构成设计冲突;但处理聚类支持度仍决定推断是否可用。
-        support=analyze_support(data, entity, time, cluster, treated_col, absorbing=False) if has_treated else None,
+        support=(
+            analyze_support(data, entity, time, cluster, treated_col, absorbing=False)
+            if has_treated and treated_col is not None
+            else None
+        ),
     )
 
 
@@ -582,7 +653,7 @@ def twoway_fe(
 
 
 def run_design(df: pd.DataFrame, design) -> RegressionResult:
-    """按 RegressionDesign 的方法/粒度分发到对应引擎(步骤12 的对齐结果落地)。"""
+    """按 RegressionDesign 的方法/粒度分发到共用引擎(步骤12–15)。"""
     return _within_ols(prepare_design_model(df, design))
 
 
@@ -983,7 +1054,7 @@ def _summarize_benchmark(
     """自写引擎与 PanelOLS 在核心政策系数上的差异摘要。"""
     own_by = {c.name: c for c in own.coefs}
     lm_by = {c.name: c for c in lm.coefs}
-    rows = []
+    rows: list[dict[str, str | float]] = []
     for name in model.policy_xcols:
         if name not in own_by or name not in lm_by:
             continue
@@ -998,8 +1069,8 @@ def _summarize_benchmark(
                 "se_diff": own_by[name].se - lm_by[name].se,
             }
         )
-    max_coef = max((abs(r["coef_diff"]) for r in rows), default=float("nan"))
-    max_se = max((abs(r["se_diff"]) for r in rows), default=float("nan"))
+    max_coef = max((abs(float(r["coef_diff"])) for r in rows), default=float("nan"))
+    max_se = max((abs(float(r["se_diff"])) for r in rows), default=float("nan"))
     coef_check_passed = bool(rows) and max_coef < 1e-8
     return {
         "backend": "linearmodels.PanelOLS",

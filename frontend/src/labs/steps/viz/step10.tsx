@@ -7,12 +7,12 @@
  *   GVCPs 排名  位置指数 = 前向 / 后向 GVC 长度之比,>1 更靠上游
  */
 import { api } from "../../../api";
-import { EvidencePanel } from "../../../step-evidence";
+import { EvidencePanel, VerifiedCerBox } from "../../../step-evidence";
 import type { Meta, Step, StepEvidenceApi } from "../../../types";
 import { LengthViz, QuadrantScatter, RankBarChart } from "../../../viz";
 import { CountryPicker } from "../../country-picker";
 import { useAsync } from "../../shared";
-import { ChartStory, LensNav, StepIntro, YearSelect, finiteBy, num, useVizLab, type Row, type VizEvidence } from "./scaffold";
+import { ChartStory, LensNav, StepIntro, YearSelect, finiteBy, num, useCountryObservations, useVizLab, type Row, type VizEvidence } from "./scaffold";
 
 type Lens = "position" | "bars" | "rank";
 
@@ -21,9 +21,12 @@ const POS_LABELS: [string, string, string, string] = [
 ];
 
 export function Step10Length({ meta, step, evidence }: { meta: Meta; step: Step; evidence: StepEvidenceApi<VizEvidence> }) {
-  const { year, setYear, lens, pickLens, picked, pickCountries } = useVizLab(meta, step, evidence, "position");
+  const { year, setYear, lens, pickLens, picked, pickCountries } = useVizLab(
+    meta, step, evidence, "position", ["position", "bars", "rank"],
+  );
   const { data } = useAsync<Row[]>(() => api.countryIndicators(year), [year]);
   const rows = data ?? [];
+  useCountryObservations(rows, picked, year, "GVCPs", evidence);
   const highlight = new Set(picked);
 
   const posRows = finiteBy(rows, "PLv_GVC", "PLy_GVC");
@@ -80,6 +83,7 @@ export function Step10Length({ meta, step, evidence }: { meta: Meta; step: Step;
             xLabel="后向 GVC 段长(→下游)" yLabel="前向 GVC 段长(→上游)"
             xFormat="number" yFormat="number"
             highlight={highlight} quadrantLabels={POS_LABELS}
+            equalityLine
           />
         </ChartStory>
       ) : lens === "bars" ? (
@@ -105,6 +109,13 @@ export function Step10Length({ meta, step, evidence }: { meta: Meta; step: Step;
           <RankBarChart rows={rankRows} metricKey="GVCPs" label="GVC 位置指数" format="number" highlight={highlight} />
         </ChartStory>
       )}
+      <VerifiedCerBox
+        step={step.n}
+        kind="visualization"
+        evidence={evidence}
+        ready={Boolean(evidence.data?.chart && (evidence.data?.compared?.length ?? 0) >= 2 && (evidence.data?.observations?.length ?? 0) >= 2)}
+        context={{ topic: step.topic, year, chart: lens, compared: picked, metric: evidence.data?.metric, observations: evidence.data?.observations }}
+      />
     </div>
   );
 }

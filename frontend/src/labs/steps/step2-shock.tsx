@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { api } from "../../api";
-import { EvidencePanel } from "../../step-evidence";
-import type { EvidenceRules, Meta, QcCheck, ShockEvent, Step, StepEvidenceApi } from "../../types";
+import { EvidencePanel, VerifiedCerBox } from "../../step-evidence";
+import type { CerStepEvidence, EvidenceRules, Meta, QcCheck, ShockEvent, Step, StepEvidenceApi } from "../../types";
 import { countryLabel, sectorLabel } from "../../viz";
 import { CrosswalkDemo } from "./step2/crosswalk-demo";
 import { EventList } from "./step2/event-list";
@@ -14,8 +14,22 @@ import { useAsync } from "../shared";
 
 /** 步骤11:从政策事件到国家×行业冲击面板——左右并排、点事件即联动右侧冲击。 */
 /** 第 11 步的学习证据:三类政策冲击各查看过至少一个具体事件。 */
-interface ShockEvidence extends Record<string, unknown> {
+interface ViewedShockEvent {
+  key: string;
+  name: string;
+  shock_type: string;
+  announced: string;
+  effective: string;
+  targets: string;
+  top_sectors: string[];
+  peak_rate: number;
+}
+
+interface ShockEvidence extends CerStepEvidence, Record<string, unknown> {
   viewed_shock_types?: string[];
+  viewed_events?: string[];
+  event_details?: ViewedShockEvent[];
+  qc_reviewed?: boolean;
 }
 
 export function ShockLab({ meta, step, evidence, rules }: {
@@ -50,9 +64,25 @@ export function ShockLab({ meta, step, evidence, rules }: {
     // 三类冲击是分三次看的,整份覆盖会把前两次抹掉。
     const type = event.shock_type ?? filters.shockType;
     const viewed = evidence.data?.viewed_shock_types ?? [];
-    if (type && !viewed.includes(type)) {
-      evidence.save({ viewed_shock_types: [...viewed, type] });
-    }
+    const viewedEvents = evidence.data?.viewed_events ?? [];
+    const eventDetails = evidence.data?.event_details ?? [];
+    const key = eventKey(event);
+    const eventRecord: ViewedShockEvent = {
+      key,
+      name: event.name,
+      shock_type: type,
+      announced: event.announced,
+      effective: event.effective,
+      targets: event.targets,
+      top_sectors: event.top_sectors,
+      peak_rate: event.peak_rate,
+    };
+    evidence.save({
+      viewed_shock_types: type && !viewed.includes(type) ? [...viewed, type] : viewed,
+      viewed_events: viewedEvents.includes(event.name) ? viewedEvents : [...viewedEvents, event.name],
+      event_details: eventDetails.some((item) => item.key === key) ? eventDetails : [...eventDetails, eventRecord],
+      evidence_id: "",
+    });
     setSelectedEvent(event);
     setFilters(filtersForEvent(event, meta, initialYear));
   };
@@ -120,11 +150,32 @@ export function ShockLab({ meta, step, evidence, rules }: {
         {shockQcError ? (
           <div className="error-box">{shockQcError}</div>
         ) : (
-          <QcChecksTable rows={shockChecks} />
+          <>
+            <label className="qc-review-check">
+              <input
+                type="checkbox"
+                checked={evidence.data?.qc_reviewed === true}
+                onChange={(event) => evidence.save({ qc_reviewed: event.target.checked, evidence_id: "" })}
+              />
+              我已检查异常项，并会在 CER 的“边界”中说明它如何限制后续回归。
+            </label>
+            <QcChecksTable rows={shockChecks} />
+          </>
         )}
       </details>
 
       <CrosswalkDemo selectedShockType={filters.shockType} />
+      <VerifiedCerBox
+        step={step.n}
+        kind="shock"
+        evidence={evidence}
+        ready={rules.required_shock_types.every((type) => evidence.data?.viewed_shock_types?.includes(type)) && evidence.data?.qc_reviewed === true}
+        context={{
+          viewed_shock_types: evidence.data?.viewed_shock_types,
+          viewed_events: evidence.data?.viewed_events,
+          qc_reviewed: evidence.data?.qc_reviewed,
+        }}
+      />
     </div>
   );
 }

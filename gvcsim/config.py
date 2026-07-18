@@ -18,8 +18,47 @@ SHOCKS_DIR = ROOT / "data" / "shocks"
 # 自动生成的实验报告
 REPORTS_DIR = ROOT / "reports"
 
-# 教学(班级/学生/评阅)数据库连接串;核心 16 步流程不依赖它,连不上时相关接口返回 503
-PG_DSN = os.environ.get("GVCSIM_PG_DSN", "postgresql://alice:111111@127.0.0.1:5432/gvclab")
+# 运行环境。生产环境必须显式提供所有安全配置；开发环境可通过
+# ``GVCSIM_DEMO_MODE=1`` 主动开启演示账号/数据库故障回退。
+APP_ENV = os.environ.get("GVCSIM_ENV", "development").strip().lower()
+IS_PRODUCTION = APP_ENV in {"production", "prod"}
+DEMO_MODE = os.environ.get("GVCSIM_DEMO_MODE", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+# 教学数据库连接串不再包含仓库内默认凭证。空字符串会由数据库层转换成
+# 可读的 503/fail-closed，而不会悄悄连接某个开发者账号。
+PG_DSN = os.environ.get("GVCSIM_PG_DSN", "").strip()
+
+# 只在显式 demo 模式播种演示账号。生产启动校验会拒绝 demo 模式和空值。
+BOOTSTRAP_PASSWORD = os.environ.get("GVCSIM_BOOTSTRAP_PASSWORD", "")
+AUTH_SECRET = os.environ.get("GVCSIM_AUTH_SECRET", "")
+EVIDENCE_SECRET = os.environ.get("GVCSIM_EVIDENCE_SECRET", "")
+TOKEN_TTL_SECONDS = int(os.environ.get("GVCSIM_TOKEN_TTL_SECONDS", "1800"))
+LOGIN_WINDOW_SECONDS = int(os.environ.get("GVCSIM_LOGIN_WINDOW_SECONDS", "300"))
+LOGIN_MAX_ATTEMPTS = int(os.environ.get("GVCSIM_LOGIN_MAX_ATTEMPTS", "8"))
+_origins_raw = os.environ.get("GVCSIM_ALLOWED_ORIGINS", "")
+ALLOWED_ORIGINS = [item.strip() for item in _origins_raw.split(",") if item.strip()]
+
+
+class ConfigurationError(RuntimeError):
+    """缺少会导致认证/持久化降级的安全配置。"""
+
+
+def validate_security_config() -> None:
+    """生产配置 fail-closed；在服务启动或首次安全操作时调用。"""
+    if not PG_DSN:
+        raise ConfigurationError("缺少 GVCSIM_PG_DSN；教学数据库和认证不可用")
+    if TOKEN_TTL_SECONDS <= 0 or TOKEN_TTL_SECONDS > 3600:
+        raise ConfigurationError("GVCSIM_TOKEN_TTL_SECONDS 必须在 1..3600 秒之间")
+    if LOGIN_WINDOW_SECONDS <= 0 or LOGIN_MAX_ATTEMPTS <= 0:
+        raise ConfigurationError("登录限流窗口和次数必须为正数")
+    if IS_PRODUCTION:
+        if DEMO_MODE:
+            raise ConfigurationError("生产环境禁止 GVCSIM_DEMO_MODE")
+        if not AUTH_SECRET or len(AUTH_SECRET.encode()) < 32:
+            raise ConfigurationError("生产环境必须提供至少 32 字节的 GVCSIM_AUTH_SECRET")
+        if not EVIDENCE_SECRET or len(EVIDENCE_SECRET.encode()) < 32:
+            raise ConfigurationError("生产环境必须提供至少 32 字节的 GVCSIM_EVIDENCE_SECRET")
+        # 空列表表示只允许同源请求，不安装宽松的跨域来源；这是安全默认值。
 
 
 def available_years(raw_dir: Path = RAW_DATA_DIR) -> list[int]:

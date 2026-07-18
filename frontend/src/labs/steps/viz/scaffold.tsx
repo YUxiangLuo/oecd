@@ -10,9 +10,9 @@
  * 证据语义与旧实现一致(gvcsim/evidence.py::_check_viz:chart 非空 + compared≥2),
  * 只在真实交互后写入,页面默认视图不计入。
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "../../../api";
-import type { IndicatorSchema, Meta, Step, StepEvidenceApi } from "../../../types";
+import type { CerStepEvidence, IndicatorSchema, Meta, Step, StepEvidenceApi } from "../../../types";
 import { useAsync } from "../../shared";
 import { CAT, cardStyle } from "../../../viz/shared";
 
@@ -25,9 +25,59 @@ export const finiteBy = (rows: Row[], ...keys: string[]) => rows.filter((r) => k
 /** 讲解性正文的最大阅读行宽(px):容器与图表/表格仍全宽,只有正文不跟着拉长,保证可读。 */
 export const PROSE_MAX = 820;
 
-export interface VizEvidence extends Record<string, unknown> {
+export interface VizEvidence extends CerStepEvidence, Record<string, unknown> {
   chart?: string;
   compared?: string[];
+  year?: number;
+  drill?: string;
+  metric?: string;
+  observations?: { entity: string; country: string; industry?: string; year: number; value: number }[];
+}
+
+export interface RestoredVizState {
+  year: number;
+  lens: string;
+  picked: string[];
+}
+
+/** Pure restoration policy, shared by initial render, async hydration and tests. */
+export function restoreVizState(
+  meta: Pick<Meta, "years" | "countries">,
+  saved: VizEvidence | undefined,
+  defaultLens: string,
+  validLenses: readonly string[],
+): RestoredVizState {
+  return {
+    year: saved?.year != null && meta.years.includes(saved.year) ? saved.year : meta.years.at(-1)!,
+    lens: saved?.chart && validLenses.includes(saved.chart) ? saved.chart : defaultLens,
+    picked: Array.isArray(saved?.compared)
+      ? saved.compared.filter((code) => meta.countries.includes(code))
+      : [],
+  };
+}
+
+/** Capture the exact country-level values behind the current comparison. */
+export function useCountryObservations(
+  rows: Row[],
+  picked: string[],
+  year: number,
+  metric: string,
+  evidence: StepEvidenceApi<VizEvidence>,
+) {
+  useEffect(() => {
+    if (picked.length < 1 || rows.length < 1) return;
+    const observations = picked.map((country) => {
+      const row = rows.find((item) => String(item.country) === country);
+      const value = row?.[metric];
+      return typeof value === "number" && Number.isFinite(value)
+        ? { entity: country, country, year, value }
+        : null;
+    }).filter((item): item is { entity: string; country: string; year: number; value: number } => item != null);
+    if (JSON.stringify(observations) === JSON.stringify(evidence.data?.observations)
+      && evidence.data?.metric === metric) return;
+    evidence.save({ metric, observations, evidence_id: "" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, picked, year, metric]);
 }
 
 /* --------------------------- 常驻教学引导(不折叠) --------------------------- */
@@ -134,23 +184,43 @@ export function LensNav<K extends string>({ lenses, active, onPick }: {
 
 /** 四步共用的数据/证据底座:年份、选国家、schema,以及 {chart, compared} 证据写入。
  *  compared = 学生**主动选出**的对比对象(Top-N 自动选出的不算学生的比较决定)。 */
-export function useVizLab(meta: Meta, _step: Step, evidence: StepEvidenceApi<VizEvidence>, defaultLens: string) {
-  const [year, setYear] = useState(meta.years.at(-1)!);
-  const [lens, setLens] = useState(defaultLens);
-  const [picked, setPicked] = useState<string[]>([]);
+export function useVizLab(
+  meta: Meta,
+  _step: Step,
+  evidence: StepEvidenceApi<VizEvidence>,
+  defaultLens: string,
+  validLenses: readonly string[],
+) {
+  const restored = restoreVizState(meta, evidence.data, defaultLens, validLenses);
+  const [year, setYearState] = useState(restored.year);
+  const [lens, setLens] = useState(restored.lens);
+  const [picked, setPicked] = useState<string[]>(restored.picked);
   const [interacted, setInteracted] = useState(false);
+  const hydrated = useRef(Boolean(evidence.data));
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
+
+  // Session data arrives asynchronously after the page mounts. Hydrate once,
+  // unless the student already interacted while it was loading.
+  useEffect(() => {
+    if (hydrated.current || interacted || !evidence.data) return;
+    const next = restoreVizState(meta, evidence.data, defaultLens, validLenses);
+    setYearState(next.year);
+    setLens(next.lens);
+    setPicked(next.picked);
+    hydrated.current = true;
+  }, [evidence.data, interacted, meta.countries, meta.years, validLenses]);
 
   // 只有学生真正动过(切镜头 / 选国家)才写证据;页面默认视图不计入(与旧实现一致)。
   useEffect(() => {
     if (!interacted) return;
-    evidence.save({ chart: lens, compared: picked });
+    evidence.save({ chart: lens, compared: picked, year, evidence_id: "" });
     // evidence 每次渲染都是新对象,不入依赖(与旧 VizLab 相同做法)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [interacted, lens, picked]);
+  }, [interacted, lens, picked, year]);
 
   const pickLens = (l: string) => { setLens(l); setInteracted(true); };
   const pickCountries = (c: string[]) => { setPicked(c); setInteracted(true); };
+  const setYear = (next: number) => { setYearState(next); setInteracted(true); };
   return { year, setYear, lens, pickLens, picked, pickCountries, schema, markInteracted: () => setInteracted(true) };
 }
 

@@ -8,16 +8,21 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
+import platform
 import re
+import subprocess
+import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 import pandas as pd
 
 ARTIFACT_MANIFEST = "artifact_manifest.json"
-ARTIFACT_SCHEMA_VERSION = 2
+MANIFEST_HISTORY_DIR = "manifest_history"
+ARTIFACT_SCHEMA_VERSION = 3
 NETWORK_ALGORITHM = "gephi-compatible-directed-unweighted-positive-v1"
 
 
@@ -49,11 +54,29 @@ def manifest_id(processed_dir: Path | None = None) -> str:
             "schema_version": payload["schema_version"],
             "network_algorithm": payload["network_algorithm"],
             "files": {name: record.get("sha256") for name, record in sorted(payload["files"].items())},
+            "sources": {name: record.get("sha256") for name, record in sorted((payload.get("sources") or {}).items())},
+            "qc": payload.get("qc") or {},
+            "build": payload.get("build") or {},
         },
         sort_keys=True,
         separators=(",", ":"),
     )
     return hashlib.sha256(digest_source.encode("utf-8")).hexdigest()[:16]
+
+
+def manifest_provenance(processed_dir: Path | None = None) -> dict[str, Any]:
+    """返回报告/API 可披露的完整产物来源和 QC 发布状态。"""
+    from gvcsim.config import PROCESSED_DIR
+
+    payload = _load_manifest(processed_dir or PROCESSED_DIR)
+    return {
+        "manifest_id": manifest_id(processed_dir or PROCESSED_DIR),
+        "schema_version": payload["schema_version"],
+        "network_algorithm": payload["network_algorithm"],
+        "qc": payload.get("qc") or {},
+        "sources": payload.get("sources") or {},
+        "build": payload.get("build") or {},
+    }
 
 
 @lru_cache(maxsize=16)
@@ -110,7 +133,75 @@ def _file_record(path: Path) -> dict[str, str | int]:
     }
 
 
-def register_artifacts(processed_dir: Path, filenames: Iterable[str]) -> None:
+def _deep_merge(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in incoming.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _git_head(root: Path) -> str | None:
+    """让 Git 自己解析当前 commit，兼容 packed refs、detached HEAD 与 worktree。"""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", "HEAD"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    commit = result.stdout.strip()
+    return commit if re.fullmatch(r"[0-9a-fA-F]{40,64}", commit) else None
+
+
+def _git_dirty(root: Path) -> bool | None:
+    """记录构建是否来自 dirty worktree；git 不可用时明确返回 None。"""
+    try:
+        result = subprocess.run(
+            ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return bool(result.stdout.strip())
+
+
+def _runtime_versions() -> dict[str, Any]:
+    packages: dict[str, str] = {}
+    for name in ("numpy", "pandas", "pymrio", "networkit", "scipy", "linearmodels"):
+        try:
+            packages[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            packages[name] = "not-installed"
+    return {
+        "python": platform.python_version(),
+        "implementation": platform.python_implementation(),
+        "platform": sys.platform,
+        "packages": packages,
+    }
+
+
+def _source_tree_sha256(sources: dict[str, Any]) -> str:
+    source_hashes = {name: record.get("sha256") for name, record in sorted(sources.items()) if isinstance(record, dict)}
+    encoded = json.dumps(source_hashes, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def register_artifacts(
+    processed_dir: Path,
+    filenames: Iterable[str],
+    *,
+    metadata: dict[str, Any] | None = None,
+    source_paths: Iterable[Path] = (),
+) -> None:
     """把本次成功写出的文件登记为当前契约，并原子替换 manifest。
 
     若旧 manifest 缺失或版本不同，不继承任何旧条目；随后构建面板时也只会
@@ -119,9 +210,11 @@ def register_artifacts(processed_dir: Path, filenames: Iterable[str]) -> None:
     processed_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = processed_dir / ARTIFACT_MANIFEST
     files: dict[str, dict[str, str | int]] = {}
+    prior: dict[str, Any] = {}
     if manifest_path.exists():
         try:
-            files = dict(_load_manifest(processed_dir)["files"])
+            prior = dict(_load_manifest(processed_dir))
+            files = dict(prior["files"])
         except ArtifactContractError:
             files = {}
 
@@ -131,7 +224,37 @@ def register_artifacts(processed_dir: Path, filenames: Iterable[str]) -> None:
             raise FileNotFoundError(path)
         files[filename] = _file_record(path)
 
-    payload = {**artifact_contract(), "files": dict(sorted(files.items()))}
+    from gvcsim.config import ROOT
+
+    sources = dict(prior.get("sources") or {})
+    for path in source_paths:
+        resolved = path.resolve()
+        if not resolved.is_file():
+            raise FileNotFoundError(resolved)
+        try:
+            logical_name = str(resolved.relative_to(ROOT.resolve()))
+        except ValueError:
+            logical_name = str(resolved)
+        sources[logical_name] = {**_file_record(resolved), "path": logical_name}
+
+    carried = {
+        key: value for key, value in prior.items() if key not in {"schema_version", "network_algorithm", "files"}
+    }
+    if metadata:
+        carried = _deep_merge(carried, metadata)
+    build = dict(carried.get("build") or {})
+    build["git_commit"] = _git_head(ROOT)
+    build["git_dirty"] = _git_dirty(ROOT)
+    build["source_tree_sha256"] = _source_tree_sha256(sources)
+    build["source_count"] = len(sources)
+    build["runtime"] = _runtime_versions()
+    carried["build"] = build
+    payload = {
+        **artifact_contract(),
+        **carried,
+        "files": dict(sorted(files.items())),
+        "sources": dict(sorted(sources.items())),
+    }
     temp_path = processed_dir / f".{ARTIFACT_MANIFEST}.tmp"
     with open(temp_path, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent=2, sort_keys=True)
@@ -139,6 +262,13 @@ def register_artifacts(processed_dir: Path, filenames: Iterable[str]) -> None:
     temp_path.replace(manifest_path)
     _cached_manifest.cache_clear()
     _cached_sha256.cache_clear()
+    # 当前指针之外保留内容寻址快照；同一 manifest 幂等，不覆盖历史。
+    current_id = manifest_id(processed_dir)
+    history_dir = processed_dir / MANIFEST_HISTORY_DIR
+    history_dir.mkdir(exist_ok=True)
+    history_path = history_dir / f"{current_id}.json"
+    if not history_path.exists():
+        history_path.write_text(manifest_path.read_text(encoding="utf-8"), encoding="utf-8")
 
 
 def validate_artifact(path: Path) -> None:
@@ -149,12 +279,56 @@ def validate_artifact(path: Path) -> None:
     record = payload["files"].get(path.name)
     if not isinstance(record, dict):
         raise ArtifactContractError(f"{path.name} 未按当前算法登记，请重新运行 `uv run gvcsim compute`")
-    stat = path.stat()
+    resolved = path.resolve()
+    stat = resolved.stat()
     if record.get("size_bytes") != stat.st_size:
         raise ArtifactContractError(f"{path.name} 与产物清单大小不一致，请重新计算或重新同步完整产物")
-    digest = _cached_sha256(str(path), stat.st_mtime_ns, stat.st_size)
+    digest = _cached_sha256(str(resolved), stat.st_mtime_ns, stat.st_size)
     if record.get("sha256") != digest:
         raise ArtifactContractError(f"{path.name} 与产物清单摘要不一致，请重新计算或重新同步完整产物")
+
+
+def validate_source(path: Path, processed_dir: Path | None = None) -> None:
+    """验证 processed 目录外、但会影响展示/回归的输入也属于当前 manifest。"""
+    from gvcsim.config import PROCESSED_DIR, ROOT
+
+    resolved = path.resolve()
+    if not resolved.is_file():
+        raise FileNotFoundError(resolved)
+    payload = _load_manifest(processed_dir or PROCESSED_DIR)
+    try:
+        logical_name = str(resolved.relative_to(ROOT.resolve()))
+    except ValueError:
+        logical_name = str(resolved)
+    record = (payload.get("sources") or {}).get(logical_name)
+    if not isinstance(record, dict):
+        raise ArtifactContractError(f"来源 {logical_name} 未登记在当前产物清单，请重新运行 `uv run gvcsim compute`")
+    stat = resolved.stat()
+    digest = _cached_sha256(str(resolved), stat.st_mtime_ns, stat.st_size)
+    if record.get("size_bytes") != stat.st_size or record.get("sha256") != digest:
+        raise ArtifactContractError(f"来源 {logical_name} 与产物清单不一致，请重新运行 `uv run gvcsim compute`")
+
+
+def validate_release(processed_dir: Path | None = None, *, validate_sources: bool = False) -> dict[str, int]:
+    """验证 manifest 登记的完整 release，而不只检查几个代表性文件。
+
+    文件摘要走 ``path+mtime+size`` 缓存，首次 readiness 会完整扫描，后续探针
+    只做廉价 stat。发布前可开启 ``validate_sources``，同时验证所有原始/代码输入。
+    """
+    from gvcsim.config import PROCESSED_DIR, ROOT
+
+    release_dir = processed_dir or PROCESSED_DIR
+    payload = _load_manifest(release_dir)
+    for filename in sorted(payload["files"]):
+        validate_artifact(release_dir / filename)
+    sources = payload.get("sources") or {}
+    if validate_sources:
+        for record in sources.values():
+            if not isinstance(record, dict) or not record.get("path"):
+                raise ArtifactContractError("预计算产物清单包含无效来源记录")
+            source = Path(str(record["path"]))
+            validate_source(source if source.is_absolute() else ROOT / source, release_dir)
+    return {"files": len(payload["files"]), "sources": len(sources) if validate_sources else 0}
 
 
 def current_artifact_years(processed_dir: Path) -> list[int]:
@@ -194,4 +368,5 @@ def read_csv_artifact(path: Path, *, require_current: bool = False) -> pd.DataFr
         raise FileNotFoundError(path)
     if require_current:
         validate_artifact(path)
-    return _cached_csv(str(path), path.stat().st_mtime_ns)
+    resolved = path.resolve()
+    return _cached_csv(str(resolved), resolved.stat().st_mtime_ns)

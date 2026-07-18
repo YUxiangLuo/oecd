@@ -57,9 +57,11 @@ def _metadata(path_str: str, mtime_ns: int) -> dict[str, Any]:
     industry_columns = [c for c in value_columns if _is_industry_label(c)]
     final_demand_columns = [c for c in value_columns if _is_final_demand_label(c)]
 
-    countries = list(dict.fromkeys(_split_label(c)[0] for c in industry_columns if _split_label(c)))
-    sectors = list(dict.fromkeys(_split_label(c)[1] for c in industry_columns if _split_label(c)))
-    fd_categories = list(dict.fromkeys(_split_label(c)[1] for c in final_demand_columns if _split_label(c)))
+    industry_parts = [parts for column in industry_columns if (parts := _split_label(column)) is not None]
+    demand_parts = [parts for column in final_demand_columns if (parts := _split_label(column)) is not None]
+    countries = list(dict.fromkeys(parts[0] for parts in industry_parts))
+    sectors = list(dict.fromkeys(parts[1] for parts in industry_parts))
+    fd_categories = list(dict.fromkeys(parts[1] for parts in demand_parts))
     account_rows = [r for r in ACCOUNT_ROWS if r in row_labels]
 
     return {

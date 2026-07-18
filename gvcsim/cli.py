@@ -1,8 +1,8 @@
 """命令行入口:uv run gvcsim <子命令>
 
 download  下载 OECD ICIO 原始数据(步骤1)
-validate  对某年数据做质检并打印结果(步骤3)
-compute   预计算指标与回归面板(步骤4-7 + 面板)
+validate  对某年数据做质检并打印结果(步骤2)
+compute   预计算质检、指标、可视化/冲击数据与回归面板(步骤2–11 + 面板)
 regress   跑指定 outcome 的教学实证回归并打印系数表
 report    生成实验报告(步骤16)
 serve     启动 API 服务(供前端使用)
@@ -24,6 +24,11 @@ def main() -> None:
 
     p = sub.add_parser("compute", help="预计算指标(默认:本地所有年份)")
     p.add_argument("--years", type=int, nargs="*", default=None)
+    p.add_argument(
+        "--allow-qc-override",
+        action="store_true",
+        help="仅用于有审计记录的教学演示:允许 fatal QC 后继续，并把 override 永久写入 manifest/报告",
+    )
 
     p = sub.add_parser("regress", help="教学实证回归")
     p.add_argument("--outcome", default="trade", choices=["trade", "production", "length", "network"])
@@ -53,6 +58,8 @@ def main() -> None:
 
     p = sub.add_parser("classroom-init", help="初始化教学数据库(教师面板用;服务端也会懒建表)")
     p.add_argument("--reset", action="store_true", help="删除并重建全部教学表(会清空班级/学生/提交数据)")
+    p.add_argument("--teacher-username", help="显式创建首位教师（口令从 GVCSIM_INITIAL_TEACHER_PASSWORD 读取）")
+    p.add_argument("--teacher-name", default="课程管理员", help="首位教师显示名")
 
     args = parser.parse_args()
 
@@ -78,7 +85,12 @@ def main() -> None:
     elif args.command == "compute":
         from gvcsim import pipeline
 
-        pipeline.run(args.years)
+        try:
+            pipeline.run(args.years, allow_qc_override=args.allow_qc_override)
+        except pipeline.QualityGateError as error:
+            raise SystemExit(
+                f"{error}\n如已完成修正/风险评审，可显式加 --allow-qc-override；该决定会写入 manifest。"
+            ) from error
 
     elif args.command == "regress":
         from gvcsim.regression.design import (
@@ -132,10 +144,10 @@ def main() -> None:
             print("交互项:冲击×基期GVC参与度")
         print(f"模型: {design.equation()}\n")
         print(f"{'变量':<20}{'系数':>12}{'标准误':>12}{'t':>8}{'p':>8}")
-        for c in result.coefs:
+        for coef in result.coefs:
             # 推断被抑制时 p 为 None,不能用 :.3f 直接格式化(也不能拿 0 冒充)。
-            p_text = f"{c.p:>8.3f}" if c.p is not None else f"{'—':>8}"
-            print(f"{c.name:<20}{c.coef:>12.4f}{c.se:>12.4f}{c.t:>8.2f}{p_text} {c.stars}")
+            p_text = f"{coef.p:>8.3f}" if coef.p is not None else f"{'—':>8}"
+            print(f"{coef.name:<20}{coef.coef:>12.4f}{coef.se:>12.4f}{coef.t:>8.2f}{p_text} {coef.stars}")
         if result.status_reasons:
             print("\n设计有效性:" + (result.status or "ok"))
             for reason in result.status_reasons:
@@ -159,18 +171,22 @@ def main() -> None:
         uvicorn.run("gvcsim.api:app", port=args.port, reload=args.reload)
 
     elif args.command == "classroom-init":
+        import os
+
         import psycopg
+        from psycopg import sql
 
         from gvcsim import config
         from gvcsim.classroom import db as classroom_db
 
         # 目标库不存在则先经维护库(dbname=postgres)创建
         dsn = psycopg.conninfo.conninfo_to_dict(config.PG_DSN)
-        dbname = dsn.get("dbname", "gvclab")
+        dbname = str(dsn.get("dbname") or "gvclab")
+        maintenance_dsn = psycopg.conninfo.make_conninfo(config.PG_DSN, dbname="postgres")
         try:
-            with psycopg.connect(**{**dsn, "dbname": "postgres"}, autocommit=True) as c:
-                if not c.execute("SELECT 1 FROM pg_database WHERE datname = %s", (dbname,)).fetchone():
-                    c.execute(f'CREATE DATABASE "{dbname}"')
+            with psycopg.connect(maintenance_dsn, autocommit=True) as connection:
+                if not connection.execute("SELECT 1 FROM pg_database WHERE datname = %s", (dbname,)).fetchone():
+                    connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(dbname)))
                     print(f"已创建数据库 {dbname}")
         except psycopg.OperationalError as e:
             raise SystemExit(f"无法连接 PostgreSQL({e});请确认服务已启动、GVCSIM_PG_DSN 正确") from e
@@ -178,9 +194,9 @@ def main() -> None:
         if args.reset:
             # 整个 schema 重建,而不是删一份写死的表名单:后者会把不在名单里的
             # 旧表(如已废弃版本留下的表)留在库里,与新表并存,而版本戳仍写着旧值。
-            with psycopg.connect(config.PG_DSN, autocommit=True) as c:
-                c.execute("DROP SCHEMA public CASCADE")
-                c.execute("CREATE SCHEMA public")
+            with psycopg.connect(config.PG_DSN, autocommit=True) as connection:
+                connection.execute("DROP SCHEMA public CASCADE")
+                connection.execute("CREATE SCHEMA public")
             classroom_db._schema_ready = False
             print("已重建 public schema(旧教学数据全部删除)")
         try:
@@ -191,7 +207,15 @@ def main() -> None:
             print("已执行:" + "、".join(applied))
         else:
             print(f"教学库 schema 已是当前版本({classroom_db.TEACHING_DB_VERSION})")
-        print(f"教学数据库就绪:{dbname}(16 步;演示账号 teacher/student,班级 GVC-DEMO)")
+        if args.teacher_username:
+            password = os.environ.get("GVCSIM_INITIAL_TEACHER_PASSWORD", "")
+            if len(password) < 12:
+                raise SystemExit("请通过 GVCSIM_INITIAL_TEACHER_PASSWORD 提供至少 12 位的初始教师口令")
+            if classroom_db.find_account(args.teacher_username):
+                raise SystemExit(f"账号 {args.teacher_username} 已存在，未修改其口令")
+            classroom_db.provision_teacher(args.teacher_username, args.teacher_name, password)
+            print(f"已创建首位教师:{args.teacher_username}（请登录后立即轮换初始口令）")
+        print(f"教学数据库就绪:{dbname}(schema {classroom_db.TEACHING_DB_VERSION})")
 
 
 if __name__ == "__main__":

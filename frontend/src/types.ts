@@ -28,6 +28,8 @@ export interface StepsResponse {
 }
 
 export interface AuthUser {
+  /** Stable database identity. Usernames are editable and must not scope cached work. */
+  account_id?: number;
   username: string;
   name: string;
   role: string;
@@ -49,6 +51,37 @@ export interface Meta {
   };
   /** 当前产物集合的标识;实验会话绑定它以判定结果是否过期。 */
   manifest_id?: string | null;
+  /** Stable teaching-run identifiers used to isolate local student work. */
+  course_run_id?: string | number | null;
+  assignment_id?: string | number | null;
+  attempt_id?: string | number | null;
+  assignment_scope?: string | null;
+  manifest_mismatch?: boolean;
+  assignment_unavailable?: boolean;
+  assignment_closed?: boolean;
+  due_at?: string | null;
+  artifact_provenance?: {
+    manifest_id?: string;
+    schema_version?: number;
+    qc?: Record<string, unknown>;
+    sources?: Record<string, unknown>;
+    build?: Record<string, unknown>;
+  } | null;
+}
+
+/** Lightweight Claim–Evidence–Reasoning record used by the descriptive labs. */
+export interface CerEvidence {
+  claim: string;
+  /** Must name the selected object/period/metric and include the observed value. */
+  evidence: string;
+  reasoning: string;
+  boundary: string;
+}
+
+export interface CerStepEvidence {
+  cer?: Partial<CerEvidence>;
+  /** Server-issued binding for the current operation context + CER draft. */
+  evidence_id?: string;
 }
 
 export type DbTableKind = "z" | "y" | "accounts";
@@ -126,6 +159,8 @@ export interface QcCheck {
   passed: boolean;
   detail: string;
   warnings: string[];
+  /** 服务端发布门禁：通过但带 warning 的检查也可能要求持续披露。 */
+  severity?: "ok" | "disclosure" | "warning" | "fatal";
 }
 
 interface CrosswalkSummary {
@@ -207,8 +242,11 @@ export interface PagedRows {
 export type IndustryPage = PagedRows;
 
 /** 实验会话:逐步实验状态的可恢复模型(契约见 gvcsim/session.py)。 */
-/** v2:回归设定改用稳定英文键;旧会话整份作废(不做历史格式兼容)。 */
-export const SESSION_VERSION = "experiment-session-v3";
+/**
+ * v4 requires server-issued learning evidence. v3 click-only evidence remains
+ * visible only in quarantined legacy storage and is never treated as trusted.
+ */
+export const SESSION_VERSION = "experiment-session-v4";
 
 export interface SessionRecord<T = unknown> {
   data: T;
@@ -265,6 +303,7 @@ export interface ReportGateItem {
 
 export interface ReportGate {
   blocked: ReportGateItem[];
+  halted?: boolean;
 }
 
 /** 服务端生成的实验报告:正文与溯源都由服务端产出,客户端不提供任何内容。 */
@@ -298,6 +337,10 @@ export interface SessionResponse {
   manifest_id: string;
   session: ExperimentSession;
   stale: boolean;
+  legacy_unverified?: boolean;
+  read_only?: boolean;
+  assignment_closed?: boolean;
+  due_at?: string | null;
   updated_at?: string | null;
   /** 非 null 表示本次写入与另一处改动做了合并,应改用返回的会话。 */
   merged_from?: number | null;
@@ -349,6 +392,8 @@ export interface RegressionOptions {
   price_mode_labels: Record<string, string>;
   scenarios: string[];
   scenario_labels: Record<string, string>;
+  weight_modes?: string[];
+  weight_mode_labels?: Record<string, string>;
   outcomes: Record<RegressionOutcome, string>;
 }
 
@@ -365,6 +410,7 @@ export interface RegressionDesignInfo {
   interaction: boolean;
   price_mode: string;
   scenario: string;
+  weight_mode?: string;
   scenario_label: string;
   sample_filter: string;
   exclude_row: boolean;
@@ -395,7 +441,24 @@ export interface PretrendDiagnostic {
   interpretation: string;
 }
 
+export interface MarginalEffect {
+  policy_term: string;
+  interaction_term: string;
+  level: "low" | "mean" | "high";
+  label: string;
+  reference: "p25" | "mean" | "p75";
+  baseline_gvc_centered: number;
+  effect: number;
+  se: number;
+  t: number;
+  p: number | null;
+  ci_low: number | null;
+  ci_high: number | null;
+}
+
 export interface RegressionResponse {
+  /** Server-signed binding to account, manifest, outcome, settings and result. */
+  run_id?: string;
   design: RegressionDesignInfo;
   result: {
     depvar: string;
@@ -408,6 +471,7 @@ export interface RegressionResponse {
     depvar_mean: number;
     depvar_std: number;
     diagnostics: { pretrend?: PretrendDiagnostic };
+    marginal_effects?: MarginalEffect[];
     notes: string[];
     status: RegressionStatus | null;
     status_reasons: string[];
@@ -434,6 +498,8 @@ export interface RegressionResponse {
 }
 
 export interface PlaceboResponse {
+  /** Server-signed binding for this placebo distribution. */
+  placebo_run_id?: string;
   design: RegressionDesignInfo;
   placebo: {
     policy_name: string;
@@ -449,22 +515,6 @@ export interface PlaceboResponse {
     note: string;
   };
   disclaimer: string;
-}
-
-export interface ReportRequest {
-  year: number;
-  granularity: string;
-  shock_type: string;
-  method: string;
-  control_mode: string;
-  interaction: boolean;
-  price_mode: string;
-  exclude_row?: boolean;
-}
-
-export interface ReportResponse {
-  markdown: string;
-  suggested_filename: string;
 }
 
 export interface ProgressResponse {
@@ -496,6 +546,54 @@ export interface ClassInfo {
   student_count?: number;
 }
 
+export interface CourseRun {
+  id: number;
+  name: string;
+  code: string;
+  term: string;
+  release_tag: string;
+  archived: boolean;
+  created_at: string;
+}
+
+export interface Assignment {
+  id: number;
+  course_run_id: number;
+  course_run_code?: string;
+  course_run_name?: string;
+  slug: string;
+  title: string;
+  manifest_id: string;
+  release_tag: string;
+  opens_at: string | null;
+  due_at: string | null;
+  active: boolean;
+  created_at: string;
+}
+
+export interface Enrollment {
+  id: number;
+  course_run_id: number;
+  account_id: number;
+  class_id: number | null;
+  active: boolean;
+  enrolled_at: string;
+}
+
+export interface EnrollmentRow {
+  enrollment_id: number;
+  course_run_id: number;
+  account_id: number;
+  class_id: number | null;
+  active: boolean;
+  enrolled_at: string;
+  username: string;
+  display_name: string;
+  student_no: string;
+  account_active: boolean;
+  class_name: string | null;
+}
+
 export interface StudentRow {
   id: number;
   username: string;
@@ -513,6 +611,16 @@ export interface StudentRow {
   submission_state: string | null;
   score: number | null;
   submitted_at: string | null;
+  /** Server-verified learning evidence; never inferred from max_step. */
+  verified_completed_count: number;
+  verified_completed_steps: number[];
+  completion_missing: number[];
+  session_stale: boolean;
+  legacy_unverified: boolean;
+  last_valid_activity: string | null;
+  course_run_id: number | null;
+  assignment_id: number | null;
+  attempt_id: number | null;
 }
 
 /** 学生本人的提交/评阅状态;state === "none" 表示尚未提交 */
@@ -549,6 +657,27 @@ export interface SubmissionDetail extends SubmissionRow {
   feedback: string;
 }
 
+/** Append-only submission and grading audit trail exposed to an authorized teacher. */
+export interface SubmissionHistory {
+  versions: {
+    id: number;
+    version_no: number;
+    title: string;
+    year: number;
+    design: SubmissionDesign;
+    markdown: string;
+    submitted_at: string;
+  }[];
+  grades: {
+    id: number;
+    version_no: number;
+    score: number;
+    feedback: string;
+    graded_by: string;
+    graded_at: string;
+  }[];
+}
+
 /** submissions.design:提交时冻结的溯源标量 + 各步回归摘要
  * (由 gvcsim/classroom/db.py 的 submit_report 用 jsonb_build_object 组装)。
  * 曾是 Record<string, unknown>,于是把 runs 数组 String() 成 "[object Object]" 也能过类型检查。 */
@@ -567,6 +696,7 @@ export interface ClassOverview {
   avg_score: number | null;
   score_buckets: { label: string; count: number }[];
   step_reach: { step: number; reached: number }[];
+  step_completion: { step: number; completed: number }[];
   active_7d: number;
   submission_trend: { date: string; submitted: number; graded: number }[];
   class_breakdown: ClassBreakdown[];

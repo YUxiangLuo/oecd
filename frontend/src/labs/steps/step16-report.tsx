@@ -99,6 +99,7 @@ export function ReportLab({ onNavigateStep, onGenerated }: {
 }) {
   const [report, setReport] = useState<GeneratedReport | null>(null);
   const [blocked, setBlocked] = useState<ReportGateItem[] | null>(null);
+  const [halted, setHalted] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rendererReady, setRendererReady] = useState(false);
@@ -113,7 +114,11 @@ export function ReportLab({ onNavigateStep, onGenerated }: {
       (row) => { if (live && row.report_key) setReport(row as GeneratedReport); },
       () => {},
     );
-    api.classroom.reportGate().then((gate) => live && setBlocked(gate.blocked), () => {});
+    api.classroom.reportGate().then((gate) => {
+      if (!live) return;
+      setBlocked(gate.blocked);
+      setHalted(gate.halted === true);
+    }, () => {});
     return () => { live = false; };
   }, []);
 
@@ -136,10 +141,11 @@ export function ReportLab({ onNavigateStep, onGenerated }: {
     );
   };
 
-  const canGenerate = blocked != null && blocked.length === 0;
+  const canGenerate = !halted && blocked != null && blocked.length === 0;
 
   return (
     <div>
+      {halted && <div className="warnbox">你在步骤 2 选择了“停止分析”。这份质检决策已记录，但报告保持锁定；请返回步骤 2 修改处置，或等待新数据通过复检。</div>}
       {blocked != null && blocked.length > 0 && <GateCard blocked={blocked} onNavigateStep={onNavigateStep} />}
 
       <section className="report-actions">

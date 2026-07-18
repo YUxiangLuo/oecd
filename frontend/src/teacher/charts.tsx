@@ -104,11 +104,12 @@ export function TrendChart({ data }: { data: ClassOverview["submission_trend"] }
   );
 }
 
-/** 各步到达漏斗：16 步到达人数面积图。 */
-export function StepFunnel({ steps, total, onSelect }: {
+/** Two explicitly different series: navigation reach and verified completion. */
+export function StepFunnel({ steps, completions = [], total, onSelect }: {
   steps: ClassOverview["step_reach"];
+  completions?: ClassOverview["step_completion"];
   total: number;
-  onSelect?: (step: number) => void;
+  onSelect?: (step: number, kind: "reached" | "completed") => void;
 }) {
   const W = 560;
   const H = 150;
@@ -119,10 +120,12 @@ export function StepFunnel({ steps, total, onSelect }: {
   const x = (i: number) => pad.l + (i / (steps.length - 1)) * iw;
   const y = (v: number) => pad.t + ih - (v / denom) * ih;
   const line = steps.map((s, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(s.reached).toFixed(1)}`).join(" ");
+  const completionByStep = new Map(completions.map((item) => [item.step, item.completed]));
+  const completionLine = steps.map((s, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(completionByStep.get(s.step) ?? 0).toFixed(1)}`).join(" ");
   const area = `${line} L ${x(steps.length - 1).toFixed(1)} ${pad.t + ih} L ${x(0).toFixed(1)} ${pad.t + ih} Z`;
   return (
     <div className="chart-scroll">
-      <svg viewBox={`0 0 ${W} ${H}`} className="funnel-svg" role="img" aria-label="各步到达人数">
+      <svg viewBox={`0 0 ${W} ${H}`} className="funnel-svg" role="img" aria-label="各步到达人数与服务端验证完成人数">
         <defs>
           <linearGradient id="funnelFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={INDIGO_L} stopOpacity="0.35" />
@@ -135,6 +138,7 @@ export function StepFunnel({ steps, total, onSelect }: {
         </text>
         <path d={area} fill="url(#funnelFill)" />
         <path d={line} fill="none" stroke={INDIGO} strokeWidth="2" />
+        {completions.length > 0 && <path d={completionLine} fill="none" stroke={GREEN} strokeWidth="2" />}
         {steps.map((s, i) => (
           <g
             key={s.step}
@@ -142,11 +146,11 @@ export function StepFunnel({ steps, total, onSelect }: {
             tabIndex={onSelect ? 0 : undefined}
             aria-label={`查看已到达步骤 ${s.step} 的 ${s.reached} 名学生`}
             className={onSelect ? "funnel-point" : undefined}
-            onClick={() => onSelect?.(s.step)}
+            onClick={() => onSelect?.(s.step, "reached")}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                onSelect?.(s.step);
+                onSelect?.(s.step, "reached");
               }
             }}
           >
@@ -155,7 +159,25 @@ export function StepFunnel({ steps, total, onSelect }: {
             <text x={x(i)} y={H - 6} textAnchor="middle" className="axis-lab">{s.step}</text>
           </g>
         ))}
+        {completions.length > 0 && steps.map((s, i) => {
+          const count = completionByStep.get(s.step) ?? 0;
+          return (
+            <g key={`completed-${s.step}`} role={onSelect ? "button" : undefined} tabIndex={onSelect ? 0 : undefined}
+              aria-label={`查看已验证完成步骤 ${s.step} 的 ${count} 名学生`} className={onSelect ? "funnel-point" : undefined}
+              onClick={() => onSelect?.(s.step, "completed")}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onSelect?.(s.step, "completed");
+                }
+              }}>
+              <circle cx={x(i)} cy={y(count)} r="8" fill="transparent" />
+              <circle cx={x(i)} cy={y(count)} r="3" fill={GREEN} />
+            </g>
+          );
+        })}
       </svg>
+      <div className="chart-legend"><span><i style={{ background: INDIGO }} />到达位置</span><span><i style={{ background: GREEN }} />验证完成</span></div>
     </div>
   );
 }

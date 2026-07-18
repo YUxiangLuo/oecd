@@ -20,6 +20,8 @@ import {
   localKey,
   makeRecord,
   mergeSessions,
+  quarantineLegacy,
+  readLegacyQuarantine,
   reconcileOnLoad,
   readShared,
   readStep,
@@ -31,6 +33,8 @@ import { SESSION_VERSION, type ExperimentSession } from "./types";
 
 const MID = "b08a35374d1021b0";
 const OTHER = "deadbeefdeadbeef";
+const SCOPE = { accountId: 7, courseRunId: "2026-spring", assignmentId: "gvc-lab-1", attemptId: 1, manifestId: MID };
+const scopeFor = (accountId: string | number) => ({ ...SCOPE, accountId });
 
 const session = (
   steps: ExperimentSession["steps"],
@@ -48,25 +52,46 @@ describe("session-store", () => {
 
   test("round-trips through localStorage", () => {
     const s = writeStep(emptySession(MID), 4, { country: "CHN" });
-    saveLocal("student", s);
-    expect(loadLocal("student")).toEqual(s);
-    clearLocal("student");
-    expect(loadLocal("student")).toBeNull();
+    saveLocal(SCOPE, s);
+    expect(loadLocal(SCOPE)).toEqual(s);
+    clearLocal(SCOPE);
+    expect(loadLocal(SCOPE)).toBeNull();
   });
 
   test("keeps sessions of different accounts apart", () => {
-    saveLocal("alice", writeStep(emptySession(MID), 4, { country: "CHN" }));
-    expect(loadLocal("bob")).toBeNull();
-    expect(localKey("alice")).not.toBe(localKey("bob"));
+    saveLocal(scopeFor("alice"), writeStep(emptySession(MID), 4, { country: "CHN" }));
+    expect(loadLocal(scopeFor("bob"))).toBeNull();
+    expect(localKey(scopeFor("alice"))).not.toBe(localKey(scopeFor("bob")));
+  });
+
+  test("keeps course runs, assignments, and manifests in separate caches", () => {
+    const variants = [
+      SCOPE,
+      { ...SCOPE, courseRunId: "2026-fall" },
+      { ...SCOPE, assignmentId: "gvc-lab-2" },
+      { ...SCOPE, attemptId: 2 },
+      { ...SCOPE, manifestId: OTHER },
+    ];
+    expect(new Set(variants.map(localKey)).size).toBe(variants.length);
+  });
+
+  test("quarantines username-only legacy state without loading it into a scoped cache", () => {
+    const old = writeStep(emptySession(MID), 16, { report_key: "old-db" });
+    localStorage.setItem("gvcsim_session:student", JSON.stringify(old));
+    expect(quarantineLegacy("student")).toBe(true);
+    expect(localStorage.getItem("gvcsim_session:student")).toBeNull();
+    expect(loadLocal(SCOPE)).toBeNull();
+    expect(localStorage.getItem("gvcsim_session:legacy-quarantine:student")).toBe(JSON.stringify(old));
+    expect(readLegacyQuarantine("student")).toEqual(old);
   });
 
   test("discards corrupted or foreign local payloads instead of trusting them", () => {
-    localStorage.setItem(localKey("student"), "{not json");
-    expect(loadLocal("student")).toBeNull();
-    localStorage.setItem(localKey("student"), JSON.stringify({ version: "old", manifest_id: MID, steps: {} }));
-    expect(loadLocal("student")).toBeNull();
-    localStorage.setItem(localKey("student"), JSON.stringify(session({ "99": makeRecord({}) })));
-    expect(loadLocal("student")).toBeNull();
+    localStorage.setItem(localKey(SCOPE), "{not json");
+    expect(loadLocal(SCOPE)).toBeNull();
+    localStorage.setItem(localKey(SCOPE), JSON.stringify({ version: "old", manifest_id: MID, steps: {} }));
+    expect(loadLocal(SCOPE)).toBeNull();
+    localStorage.setItem(localKey(SCOPE), JSON.stringify(session({ "99": makeRecord({}) })));
+    expect(loadLocal(SCOPE)).toBeNull();
   });
 
   test("rejects records missing a timestamp", () => {
@@ -162,6 +187,26 @@ describe("session-store", () => {
       expect(out.session.steps).toEqual({});
       expect(out.session.manifest_id).toBe(MID);
       expect(out.discardedServer).toBe(true);
+      expect(out.needsPush).toBe(false);
+    });
+
+    test("does not merge or automatically push a legacy v3 server session", () => {
+      const legacy = {
+        ...session({ "16": makeRecord({ report_key: "legacy" }) }),
+        version: "experiment-session-v3",
+      } as ExperimentSession;
+      const out = reconcileOnLoad(null, legacy, MID);
+      expect(out.session.steps).toEqual({});
+      expect(out.discardedServer).toBe(true);
+      expect(out.needsPush).toBe(false);
+    });
+
+    test("honours a server-side legacy/read-only verdict even when the manifest string matches", () => {
+      const server = session({ "4": makeRecord({ country: "旧 attempt" }) });
+      const out = reconcileOnLoad(null, server, MID, true);
+      expect(readStep(out.session, 4)).toBeUndefined();
+      expect(out.discardedServer).toBe(true);
+      expect(out.needsPush).toBe(false);
     });
   });
 });

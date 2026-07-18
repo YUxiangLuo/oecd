@@ -7,12 +7,12 @@
  *   FVA 排序 谁的出口最依赖外国增加值(后向 GVC 参与最深)
  */
 import { api } from "../../../api";
-import { EvidencePanel } from "../../../step-evidence";
+import { EvidencePanel, VerifiedCerBox } from "../../../step-evidence";
 import type { Meta, Step, StepEvidenceApi } from "../../../types";
 import { CompositionBar, QuadrantScatter, RankBarChart } from "../../../viz";
 import { CountryPicker } from "../../country-picker";
 import { useAsync } from "../../shared";
-import { ChartStory, LensNav, StepIntro, YearSelect, finiteBy, num, useVizLab, type Row, type VizEvidence } from "./scaffold";
+import { ChartStory, LensNav, StepIntro, YearSelect, finiteBy, num, useCountryObservations, useVizLab, type Row, type VizEvidence } from "./scaffold";
 
 type Lens = "quadrant" | "decompose" | "rank";
 
@@ -29,9 +29,12 @@ const QUAD_LABELS: [string, string, string, string] = [
 ];
 
 export function Step8Trade({ meta, step, evidence }: { meta: Meta; step: Step; evidence: StepEvidenceApi<VizEvidence> }) {
-  const { year, setYear, lens, pickLens, picked, pickCountries } = useVizLab(meta, step, evidence, "quadrant");
+  const { year, setYear, lens, pickLens, picked, pickCountries } = useVizLab(
+    meta, step, evidence, "quadrant", ["quadrant", "decompose", "rank"],
+  );
   const { data } = useAsync<Row[]>(() => api.countryIndicators(year), [year]);
   const rows = data ?? [];
+  useCountryObservations(rows, picked, year, "FVA_share", evidence);
 
   const highlight = new Set(picked);
   const quadRows = finiteBy(rows, "FVA_share", "3_VA_GVC_share");
@@ -39,7 +42,9 @@ export function Step8Trade({ meta, step, evidence }: { meta: Meta; step: Step; e
   const decompRows = picked.length
     ? rows.filter((r) => picked.includes(String(r.country)))
     : [...rows].sort((a, b) => num(b.gross_exports) - num(a.gross_exports)).slice(0, 8);
-  const rankRows = [...finiteBy(rows, "FVA_share")].sort((a, b) => num(b.FVA_share) - num(a.FVA_share)).slice(0, 20);
+  const ranked = [...finiteBy(rows, "FVA_share")].sort((a, b) => num(b.FVA_share) - num(a.FVA_share));
+  const topRankRows = ranked.slice(0, 20);
+  const rankRows = [...topRankRows, ...ranked.filter((row) => picked.includes(String(row.country)) && !topRankRows.includes(row))];
 
   return (
     <div>
@@ -116,11 +121,18 @@ export function Step8Trade({ meta, step, evidence }: { meta: Meta; step: Step; e
           what={<>横条 = 各国 <b>FVA 份额</b>(出口中外国增加值占比),从高到低取前 20;你选中的国家高亮为红色。</>}
           read={<>越长 = 后向 GVC 参与越深、越依赖全球供应链的进口投入。这类经济体对上游关税、断供最敏感。</>}
           find={<>榜首多是加工-再出口型小经济体;把中国、美国这类大国和它们对比,份额通常低不少。</>}
-          note="仅展示前 20;完整数值可在其它镜头悬停查看。"
+          note="展示前 20，并追加你主动选择但未进入前 20 的国家。"
         >
           <RankBarChart rows={rankRows} metricKey="FVA_share" label="FVA 份额" format="pct" highlight={highlight} />
         </ChartStory>
       )}
+      <VerifiedCerBox
+        step={step.n}
+        kind="visualization"
+        evidence={evidence}
+        ready={Boolean(evidence.data?.chart && (evidence.data?.compared?.length ?? 0) >= 2 && (evidence.data?.observations?.length ?? 0) >= 2)}
+        context={{ topic: step.topic, year, chart: lens, compared: picked, metric: evidence.data?.metric, observations: evidence.data?.observations }}
+      />
     </div>
   );
 }

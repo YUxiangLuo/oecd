@@ -1,4 +1,5 @@
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -7,12 +8,35 @@ from gvcsim.artifacts import (
     ARTIFACT_MANIFEST,
     NETWORK_ALGORITHM,
     ArtifactContractError,
+    _git_head,
     _cached_csv,
     current_artifact_years,
     read_csv_artifact,
     register_artifacts,
     validate_artifact,
+    validate_release,
+    validate_source,
 )
+
+
+def test_git_head_supports_packed_refs(tmp_path: Path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", repo], check=True)
+    subprocess.run(["git", "-C", repo, "config", "user.name", "Test"], check=True)
+    subprocess.run(["git", "-C", repo, "config", "user.email", "test@example.invalid"], check=True)
+    (repo / "tracked.txt").write_text("content\n", encoding="utf-8")
+    subprocess.run(["git", "-C", repo, "add", "tracked.txt"], check=True)
+    subprocess.run(["git", "-C", repo, "commit", "-qm", "fixture"], check=True)
+    expected = subprocess.run(
+        ["git", "-C", repo, "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    subprocess.run(["git", "-C", repo, "pack-refs", "--all"], check=True)
+
+    assert _git_head(repo) == expected
 
 
 def test_csv_artifact_cache_uses_path_and_mtime(tmp_path: Path):
@@ -54,6 +78,19 @@ def test_artifact_contract_registers_years_and_rejects_tampering(tmp_path: Path)
         validate_artifact(country)
 
 
+def test_validate_release_checks_every_registered_file(tmp_path: Path):
+    first = tmp_path / "first.csv"
+    second = tmp_path / "second.csv"
+    first.write_text("x\n1\n", encoding="utf-8")
+    second.write_text("x\n2\n", encoding="utf-8")
+    register_artifacts(tmp_path, [first.name, second.name])
+    assert validate_release(tmp_path) == {"files": 2, "sources": 0}
+
+    second.write_text("x\n9\n", encoding="utf-8")
+    with pytest.raises(ArtifactContractError, match="摘要不一致"):
+        validate_release(tmp_path)
+
+
 def test_artifact_contract_rejects_missing_and_old_algorithm(tmp_path: Path):
     country = tmp_path / "indicators_country_2020.csv"
     country.write_text("country,value\nAAA,1\n", encoding="utf-8")
@@ -66,3 +103,18 @@ def test_artifact_contract_rejects_missing_and_old_algorithm(tmp_path: Path):
     manifest.write_text(payload, encoding="utf-8")
     with pytest.raises(ArtifactContractError, match="Gephi-compatible"):
         validate_artifact(country)
+
+
+def test_manifest_registers_and_validates_external_sources(tmp_path: Path):
+    processed = tmp_path / "processed"
+    processed.mkdir()
+    artifact = processed / "panel.csv"
+    source = tmp_path / "source.csv"
+    artifact.write_text("x\n1\n", encoding="utf-8")
+    source.write_text("raw\n1\n", encoding="utf-8")
+    register_artifacts(processed, [artifact.name], source_paths=[source])
+    assert len(list((processed / "manifest_history").glob("*.json"))) == 1
+    validate_source(source, processed)
+    source.write_text("raw\n2\n", encoding="utf-8")
+    with pytest.raises(ArtifactContractError, match="来源"):
+        validate_source(source, processed)

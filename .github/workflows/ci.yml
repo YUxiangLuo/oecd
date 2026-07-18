@@ -7,6 +7,7 @@ on:
       - main
       - master
       - "feature/**"
+      - "codex/**"
   pull_request:
 
 jobs:
@@ -19,17 +20,22 @@ jobs:
         env:
           POSTGRES_USER: alice
           POSTGRES_PASSWORD: "111111"
-          POSTGRES_DB: postgres
+          # test_api.py 会在 collection 阶段取得学生令牌，且回归端点会立即写
+          # learning_evidence_events；服务启动时就创建目标库，不能依赖后续测试模块建库。
+          POSTGRES_DB: gvclab_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U alice -d postgres"
+          --health-cmd "pg_isready -U alice -d gvclab_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
     env:
       GVCSIM_PG_DSN: postgresql://alice:111111@127.0.0.1:5432/gvclab_test
       GVCSIM_PG_DSN_TEST: postgresql://alice:111111@127.0.0.1:5432/gvclab_test
+      # Enables the guarded, small OECD-shaped fixture; never a runtime fallback.
+      CI: "true"
+      GVCSIM_CI_SYNTHETIC: "1"
     steps:
       - uses: actions/checkout@v7
       - name: Set up Python
@@ -43,13 +49,17 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --locked --group dev
       - name: Verify PostgreSQL for migration tests
-        run: uv run python -c "import psycopg; psycopg.connect('postgresql://alice:111111@127.0.0.1:5432/postgres').close()"
+        run: uv run python -c "import psycopg; psycopg.connect('postgresql://alice:111111@127.0.0.1:5432/gvclab_test').close()"
       - name: Ruff format check
         run: uv run ruff format --check .
       - name: Ruff lint
         run: uv run ruff check .
       - name: Type check
         run: uv run mypy
+      - name: Validate deployment shell scripts
+        run: bash -n scripts/*.sh
+      - name: Build CI-only synthetic OECD fixture
+        run: uv run python scripts/build_ci_synthetic_data.py
       - name: Run tests with coverage
         run: uv run pytest --cov=gvcsim --cov-report=term-missing -q
 

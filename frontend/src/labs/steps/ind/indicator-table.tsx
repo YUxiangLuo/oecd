@@ -4,9 +4,9 @@
  * 受控组件:year/country/page 由外层持有,这样「动手拆解」演示的“查看 ICIO 示例”
  * 才能驱动这张表跳到指定实体。证据(看过 ≥2 个国家)在本组件内累加。
  */
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../../api";
-import type { IndicatorSchema, IndustryPage, Meta, StepEvidenceApi } from "../../../types";
+import type { CerStepEvidence, IndicatorSchema, IndustryPage, Meta, StepEvidenceApi } from "../../../types";
 import { countryLabel, sectorLabel } from "../../../viz";
 import { Pager, fieldLabel, fmtField, useAsync } from "../../shared";
 
@@ -16,9 +16,19 @@ const BASE_DESC: Record<string, string> = {
   year: "指标年份",
 };
 
-export interface IndicatorEvidence extends Record<string, unknown> {
+export interface IndicatorEvidence extends CerStepEvidence, Record<string, unknown> {
   compared?: string[];
+  last_view?: { year: number; country: string };
+  metric?: string;
+  observations?: { entity: string; value: number; year: number; country: string; industry: string }[];
 }
+
+const CORE_METRIC: Record<string, string> = {
+  trade: "FVA_share",
+  production: "3b_VA_GVC_C_share",
+  length: "GVCPs",
+  network: "betweenesscentrality",
+};
 
 export function IndicatorTable({ meta, groupKey, schema, evidence, year, country, page, onYear, onCountry, onPage }: {
   meta: Meta;
@@ -32,30 +42,57 @@ export function IndicatorTable({ meta, groupKey, schema, evidence, year, country
   onCountry: (country: string) => void;
   onPage: (page: number) => void;
 }) {
+  const [countryTouched, setCountryTouched] = useState(false);
+  const [showAllFields, setShowAllFields] = useState(false);
   const { data, error } = useAsync<IndustryPage>(() => api.industryIndicators(year, country, page), [year, country, page]);
 
   // 证据:该实体的指标真的被取回过;累加国家,凑够两个才算做过对比——
   // 只看一个国家的分解不构成任何比较,而这一步的目标正是比较。
   useEffect(() => {
-    if (!data || !country) return;
+    if (!data || !country || !countryTouched) return;
     const compared = evidence.data?.compared ?? [];
-    if (!compared.includes(country)) evidence.save({ compared: [...compared, country] });
+    const metric = CORE_METRIC[groupKey];
+    const existing = evidence.data?.observations ?? [];
+    const targetIndustry = existing[0]?.industry;
+    const observedRow = data.rows.find((row) => (
+      (!targetIndustry || String(row.industry ?? "") === targetIndustry)
+      && typeof row[metric] === "number" && Number.isFinite(row[metric])
+    )) ?? data.rows.find((row) => typeof row[metric] === "number" && Number.isFinite(row[metric]));
+    const observations = observedRow ? [
+      ...existing.filter((item) => item.country !== country),
+      {
+        entity: `${country}·${String(observedRow.industry ?? "")}`,
+        value: observedRow[metric] as number,
+        year,
+        country,
+        industry: String(observedRow.industry ?? ""),
+      },
+    ].slice(-2) : existing;
+    evidence.save({
+      compared: compared.includes(country) ? compared : [...compared, country],
+      last_view: { year, country },
+      metric,
+      observations,
+      evidence_id: "",
+    });
     // evidence 每次渲染都是新对象,不入依赖。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, country]);
+  }, [data, country, year, countryTouched, groupKey]);
 
   if (error) return <div className="error-box">{error}</div>;
   const group = schema?.groups.find((g) => g.key === groupKey);
   const baseCols = ["country", "industry", "year"];
   const rowKeys = data?.rows[0] ? new Set(Object.keys(data.rows[0])) : new Set<string>();
-  const cols = data?.rows[0] ? [...baseCols, ...(group?.fields ?? []).filter((c) => rowKeys.has(c))] : [];
+  const metricCols = data?.rows[0] ? (group?.fields ?? []).filter((c) => rowKeys.has(c)) : [];
+  const visibleMetrics = showAllFields ? metricCols : metricCols.slice(0, 5);
+  const cols = data?.rows[0] ? [...baseCols, ...visibleMetrics] : [];
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
 
   return (
     <>
       <div className="controls">
         <label>国家</label>
-        <select value={country} onChange={(e) => { onCountry(e.target.value); onPage(1); }}>
+        <select value={country} onChange={(e) => { setCountryTouched(true); onCountry(e.target.value); onPage(1); }}>
           <option value="">全部</option>
           {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
         </select>
@@ -65,7 +102,23 @@ export function IndicatorTable({ meta, groupKey, schema, evidence, year, country
         </select>
         <span className="muted">{data ? `共 ${data.total} 条` : "加载中…"}</span>
       </div>
-      <div className="table-wrap">
+      {(evidence.data?.observations?.length ?? 0) > 0 && (
+        <div className="observation-strip" aria-label="已捕获的对比数值">
+          <b>已捕获 {evidence.data?.metric}</b>
+          {evidence.data?.observations?.map((item) => (
+            <span key={`${item.year}-${item.entity}`}>{item.year} · {item.entity} = {fmtField(item.value, evidence.data?.metric ?? "", schema)}</span>
+          ))}
+        </div>
+      )}
+      {metricCols.length > 5 && (
+        <div className="table-priority-tools">
+          <span className="muted">默认显示 5 个核心指标，减少横向扫表负担。</span>
+          <button type="button" className="secondary" onClick={() => setShowAllFields((value) => !value)}>
+            {showAllFields ? "收起扩展指标" : `展开 ${metricCols.length - 5} 个扩展指标`}
+          </button>
+        </div>
+      )}
+      <div className="table-wrap bounded-data-table">
         <table className="data-table">
           <thead>
             <tr>
