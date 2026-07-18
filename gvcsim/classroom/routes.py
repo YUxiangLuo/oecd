@@ -181,12 +181,17 @@ def _derived_metric(row: dict[str, Any], metric: str) -> float:
     return float(row[metric])
 
 
-def _verify_observations(step: int, payload: dict[str, Any], *, industry: bool) -> None:
+def _verify_observations(
+    step: int,
+    payload: dict[str, Any],
+    *,
+    allowed_metrics: set[str],
+    industry: bool,
+) -> None:
     observations = payload.get("observations")
     metric = str(payload.get("metric") or "")
-    allowed = {_INDICATOR_METRICS[step]} if industry else _VIZ_METRICS[step]
-    if metric not in allowed:
-        raise ValueError(f"步骤 {step} 的可核查指标必须是 {sorted(allowed)}")
+    if metric not in allowed_metrics:
+        raise ValueError(f"步骤 {step} 的可核查指标必须是 {sorted(allowed_metrics)}")
     if not isinstance(observations, list) or len(observations) < 2:
         raise ValueError("请提交至少两个由当前图表/表格读取的数值 observations")
     countries: set[str] = set()
@@ -308,11 +313,21 @@ def _verify_learning_payload(step: int, kind: str, payload: dict[str, Any]) -> N
         ):
             raise ValueError("observation.value 与当前切片中的服务端原始值不一致")
     elif kind == "indicator":
-        _verify_observations(step, payload, industry=True)
+        _verify_observations(
+            step,
+            payload,
+            allowed_metrics={_INDICATOR_METRICS[step]},
+            industry=True,
+        )
     elif kind == "visualization":
         if payload.get("chart") not in _VIZ_CHARTS[step]:
             raise ValueError(f"步骤 {step} 的 chart 无法识别")
-        _verify_observations(step, payload, industry=step == 10)
+        _verify_observations(
+            step,
+            payload,
+            allowed_metrics=_VIZ_METRICS[step],
+            industry=step == 10,
+        )
     elif kind == "shock":
         if payload.get("qc_reviewed") is not True:
             raise ValueError("必须查看并确认当前 shock panel QC 后才能签发证据")

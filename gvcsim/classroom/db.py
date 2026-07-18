@@ -1459,10 +1459,18 @@ def save_session(
             if current is not None and current["legacy_unverified"]:
                 raise LegacySessionReadOnly("迁移前会话未经可信证据验证；请先导出记录并显式重新开始")
 
-            merged = session
+            # 即使客户端带回的 ``base_revision`` 正好等于 current，也必须做
+            # 记录级合并。服务端本身也会写会话（目前是报告生成写入 step 16），
+            # 而浏览器里可能已有一个在该写入前排队的防抖 PUT。它收到报告响应后
+            # 会更新 revision，却仍可能携带那份缺少 step 16 的旧本地快照；若因
+            # revision 相同就整份采用 incoming，服务端刚写下的可信记录会被删除。
+            #
+            # 单步删除从来不是 PUT /session 的契约；显式 reset 走独立的新 attempt
+            # 路径。因此 current 存在时始终 merge，既保护服务端专用步骤，也保持
+            # 两标签页“不同步骤都不丢”的既有语义。
+            merged = merge(current["session"], session) if current is not None else session
             merged_from: int | None = None
             if current is not None and current["revision"] != base_revision:
-                merged = merge(current["session"], session)
                 merged_from = current["revision"]
             revision = (current["revision"] + 1) if current is not None else 1
 

@@ -1110,7 +1110,11 @@ def test_submit_rejects_fabricated_markdown_because_it_no_longer_accepts_any():
 def test_generated_report_completes_step_16_and_can_be_reopened():
     s = _login("student")
     _put_complete_session(s)
-    assert client.get("/api/classroom/session", headers=s).json()["completion"]["completed_count"] == 15
+    before_generation = client.get("/api/classroom/session", headers=s).json()
+    assert before_generation["completion"]["completed_count"] == 15
+    # 模拟浏览器防抖队列里已经捕获、但尚未发出的本地快照。报告生成后客户端
+    # 会拿到最新 revision；快照本身仍可能没有服务端刚写入的 step 16。
+    queued_local_session = before_generation["session"]
 
     generated = client.post("/api/classroom/report/generate", headers=s)
     assert generated.status_code == 200, generated.text
@@ -1120,13 +1124,31 @@ def test_generated_report_completes_step_16_and_can_be_reopened():
     completion = client.get("/api/classroom/session", headers=s).json()["completion"]
     assert completion["completed_count"] == 16
 
+    # 真实事故：onGenerated reload 先把 revision 更新到报告写入后的值，随后这个
+    # 旧快照用“相同 revision”执行 PUT。服务端必须仍做记录级 merge，不能让
+    # incoming 整份覆盖并删除只由服务端签发的 step 16。
+    generated_revision = client.get("/api/classroom/session", headers=s).json()["revision"]
+    delayed = client.put(
+        "/api/classroom/session",
+        headers=s,
+        json={"base_revision": generated_revision, "session": queued_local_session},
+    )
+    assert delayed.status_code == 200, delayed.text
+    assert delayed.json()["merged_from"] is None  # revision 没冲突，但仍必须合并。
+    assert delayed.json()["completion"]["completed_count"] == 16
+    assert delayed.json()["session"]["steps"]["16"]["data"]["report_key"] == report_key
+
+    persisted = client.get("/api/classroom/session", headers=s).json()
+    assert persisted["completion"]["completed_count"] == 16
+    assert persisted["session"]["steps"]["16"]["data"]["report_key"] == report_key
+
     # 刷新/重新登录后仍能重新打开报告全文。
     reopened = client.get("/api/classroom/report/generated", headers=_login("student")).json()
     assert reopened["report_key"] == report_key
     assert reopened["markdown"] == generated.json()["markdown"]
     assert reopened["provenance"]["manifest_id"] == _manifest_id()
 
-    revision = client.get("/api/classroom/session", headers=s).json()["revision"]
+    revision = persisted["revision"]
     repeated = client.post("/api/classroom/report/generate", headers=s)
     assert repeated.status_code == 200
     assert repeated.json() == generated.json()

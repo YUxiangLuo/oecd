@@ -719,10 +719,31 @@ def _shock_view_columns(shock_type: str) -> tuple[str, str, str, str, str]:
 
 @app.get("/api/shocks/events")
 def shock_events():
-    """事件时间线(不依赖预计算产物,直接来自事件表)。"""
+    """只展示能由当前冲击面板核验的事件。
+
+    ``events_metadata`` 是事件定义全集，而面板只把每个国家-行业-年份格中
+    贡献最大的事件写进对应 ``*_note`` 列。若把定义全集原样交给学生，某些
+    被更大贡献覆盖的事件虽然可点击，却永远无法通过第 11 步的服务端签发。
+    因此可见列表必须从当前 release 的权威面板反向筛选；后端签发也检查同一
+    组 note 列，二者不会再漂移。
+    """
     artifacts.validate_source(Path(shocks.__file__))
+    frame = _read_shocks()
+    available_by_type: dict[str, set[str]] = {}
+    for shock_type in shocks.SHOCK_SPECS:
+        *_unused, note_col = _shock_view_columns(shock_type)
+        available_by_type[shock_type] = (
+            {str(value) for value in frame[note_col].dropna().unique() if str(value)}
+            if note_col in frame.columns
+            else set()
+        )
+    events = [
+        event
+        for event in shocks.events_metadata()
+        if str(event["name"]) in available_by_type.get(str(event.get("shock_type") or SHOCK_TARIFF), set())
+    ]
     return {
-        "events": shocks.events_metadata(),
+        "events": events,
         "disclaimer": "拟真演示数据:事件与税率量级参考公开资料手工编码,"
         "出口暴露度由 OECD ICIO 双边流向计算,不能用于研究结论",
     }

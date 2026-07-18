@@ -1293,6 +1293,9 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .grade-doc { min-width: 0; }
 .grade-doc-title { margin: 0 0 6px; font-size: 17px; }
 .grade-side { position: sticky; top: 92px; }
+/* 矮视口放不下完整评阅卡时，sticky 会把提交按钮和评分历史钉在视口外；
+   退回普通文档流后由 teacher-main 统一滚动，全部控件都能完整到达。 */
+@media (max-height: 760px) { .grade-side { position: static; } }
 .grade-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #6b7280; margin-bottom: 12px; }
 .grade-history summary { cursor: pointer; font-weight: 700; }
 .history-list { display: grid; gap: 8px; margin-top: 10px; }

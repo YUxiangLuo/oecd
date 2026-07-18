@@ -7,6 +7,7 @@
 import re
 import math
 
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
@@ -480,8 +481,20 @@ def test_controls_qc_endpoint():
 
 
 def test_shock_events(monkeypatch):
-    """事件元数据本身可独立渲染；source/manifest 漂移由制品与 health 测试覆盖。"""
+    """当前面板能核验的事件保留完整教学元数据。"""
     monkeypatch.setattr(api_mod.artifacts, "validate_source", lambda _path: None)
+    metadata = shocks.events_metadata()
+    note_columns = {
+        "tariff": "note",
+        "sanctions": "sanction_note",
+        "export_control": "export_control_note",
+    }
+    panel_rows = []
+    for event in metadata:
+        row = {column: "" for column in note_columns.values()}
+        row[note_columns[event["shock_type"]]] = event["name"]
+        panel_rows.append(row)
+    monkeypatch.setattr(api_mod, "_read_shocks", lambda: pd.DataFrame(panel_rows))
     resp = client.get("/api/shocks/events")
     assert resp.status_code == 200
     body = resp.json()
@@ -506,6 +519,34 @@ def test_shock_events(monkeypatch):
     assert "232" in names and "301" in names
     rusal = next(event for event in body["events"] if "RUSAL" in event["name"])
     assert rusal["removal"] == "2019-01-27"
+
+
+def test_shock_events_hide_definitions_absent_from_current_panel(monkeypatch):
+    """UI 不能累加一个后端注定拒签、且页面内无法移除的事件。"""
+    monkeypatch.setattr(api_mod.artifacts, "validate_source", lambda _path: None)
+    visible = {
+        "tariff": "美国232钢铝关税",
+        "sanctions": "OFAC SDN 风格:俄铝 RUSAL 制裁",
+        "export_control": "BIS 实体清单:华为及关联公司",
+    }
+    monkeypatch.setattr(
+        api_mod,
+        "_read_shocks",
+        lambda: pd.DataFrame(
+            {
+                "note": [visible["tariff"]],
+                "sanction_note": [visible["sanctions"]],
+                "export_control_note": [visible["export_control"]],
+            }
+        ),
+    )
+
+    response = client.get("/api/shocks/events")
+
+    assert response.status_code == 200
+    names = {event["name"] for event in response.json()["events"]}
+    assert names == set(visible.values())
+    assert "墨西哥对美反制关税" not in names
 
 
 def test_crosswalk_demo_endpoint(monkeypatch):

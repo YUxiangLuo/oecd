@@ -4,6 +4,7 @@
 本模块的判定必须让那种行为拿不到任何一个对勾。
 """
 
+import pandas as pd
 import pytest
 
 from gvcsim.evidence import (
@@ -108,6 +109,80 @@ def test_slice_receipt_rechecks_the_exact_server_cell(monkeypatch):
     payload["observation"]["value"] = 999
     with pytest.raises(ValueError, match="服务端原始值不一致"):
         routes._verify_learning_payload(1, "slice", payload)
+
+
+@pytest.mark.parametrize(
+    ("metric", "usa_value", "vnm_value"),
+    [
+        ("betweenesscentrality", 2251.223, 1618.279),
+        ("weighted degree", 38294.5, 27182.75),
+    ],
+)
+def test_network_visualization_rechecks_two_industry_observations(
+    monkeypatch,
+    metric,
+    usa_value,
+    vnm_value,
+):
+    """第 10 步是可视化步骤，却需要国家–行业级观察值。
+
+    数据粒度不能被误用来选择基础指标白名单，否则真实页面提交会在
+    ``_INDICATOR_METRICS[10]`` 上触发 ``KeyError``。
+    """
+    from gvcsim.classroom import routes
+
+    frame = pd.DataFrame(
+        [
+            {
+                "country": "USA",
+                "industry": "A01_02",
+                "betweenesscentrality": 2251.223,
+                "weighted degree": 38294.5,
+            },
+            {
+                "country": "VNM",
+                "industry": "A01_02",
+                "betweenesscentrality": 1618.279,
+                "weighted degree": 27182.75,
+            },
+        ]
+    )
+
+    def read_industry_artifact(path, *, require_current):
+        assert path.name == "indicators_industry_2020.csv"
+        assert require_current is True
+        return frame
+
+    monkeypatch.setattr(routes.artifacts, "read_csv_artifact", read_industry_artifact)
+    payload = {
+        "chart": "heat",
+        "metric": metric,
+        "compared": ["USA", "VNM"],
+        "observations": [
+            {
+                "country": "USA",
+                "industry": "A01_02",
+                "year": 2020,
+                "value": usa_value,
+            },
+            {
+                "country": "VNM",
+                "industry": "A01_02",
+                "year": 2020,
+                "value": vnm_value,
+            },
+        ],
+    }
+
+    routes._verify_learning_payload(10, "visualization", payload)
+
+    payload["observations"][0]["value"] = usa_value + 1000
+    with pytest.raises(ValueError, match="与当前产物不一致"):
+        routes._verify_learning_payload(10, "visualization", payload)
+
+    payload["metric"] = "FVA_share"
+    with pytest.raises(ValueError, match="可核查指标"):
+        routes._verify_learning_payload(10, "visualization", payload)
 
 
 def test_shock_step_needs_all_three_shock_types():
