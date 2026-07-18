@@ -454,9 +454,9 @@ export default function App() {
           <div className="content-row">
             <main className="content">
               <div className="content-inner">
-                {/* 可视化步骤的讲解已并入各页顶部的 StepIntro(常驻、含 concept),
-                    这里不再重复渲染折叠讲解卡;回归工作台自带渐进教学,也跳过。 */}
-                {!isReg && !isViz && (
+                {/* 已把 concept 并入页内 StepIntro(常驻)的步骤,这里不再重复渲染讲解卡:
+                    可视化步骤(isViz)与已重做的步骤 4;回归工作台自带渐进教学,也跳过。 */}
+                {!isReg && !isViz && step.n !== 4 && (
                   <details className="card accent concept-card" open>
                     <summary className="kicker">讲解</summary>
                     <p>{step.concept}</p>

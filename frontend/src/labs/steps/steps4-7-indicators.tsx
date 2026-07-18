@@ -5,6 +5,7 @@ import { DecompositionDemo, NetworkCentralityDemo } from "../../demos";
 import { EvidencePanel } from "../../step-evidence";
 import { countryLabel, sectorLabel } from "../../viz";
 import { fieldLabel, fmtField, Pager, useAsync } from "../shared";
+import { Step4Trade } from "./ind/step4";
 
 const STEP_GROUP: Record<number, string> = {
   4: "trade",
@@ -29,6 +30,8 @@ export function IndicatorLab({ meta, step, evidence }: {
   step: Step;
   evidence: StepEvidenceApi<IndicatorEvidence>;
 }) {
+  // 步骤 4 已重做成计算阶段的三段式(讲清 → 数据表 → 动手拆解验证);5/6/7 暂用原版。
+  if (step.n === 4) return <Step4Trade meta={meta} step={step} evidence={evidence} />;
   const defaultCountry = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
   const [year, setYear] = useState(meta.years.at(-1)!);
   const [country, setCountry] = useState(defaultCountry);
