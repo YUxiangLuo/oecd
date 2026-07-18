@@ -7,6 +7,8 @@ import { DbLab, IndicatorLab, QcLab, ReportLab, ShockLab, VizLab } from "./labs"
 import {
   DEFAULT_REGRESSION_SETTINGS,
   RegressionRunLab,
+  SIGNATURE_SETTINGS,
+  asRegressionSettingsMap,
   type RegressionHistory,
   type RegressionSettings,
 } from "./regression";
@@ -87,11 +89,20 @@ export default function App() {
   // 实验会话:回归设定与运行记录从此活在会话里(local-first + PostgreSQL),
   // 刷新或重新登录都能恢复,不再随组件内存一起消失。
   const session = useSession(user?.role === "student" ? user.username : null, meta?.manifest_id ?? null);
-  const regressionSettings = session.getShared<RegressionSettings>("regression_settings") ?? DEFAULT_REGRESSION_SETTINGS;
+  // 回归设定按 outcome 存(与 regression_history 一致):每步首次进入落在其招牌默认
+  // (SIGNATURE_SETTINGS),学生的修改按 outcome 分别保留、互不覆盖。
+  const currentOutcome = stepsData?.steps.find((s) => s.n === current)?.regression_outcome;
+  const regressionSettings =
+    (currentOutcome && asRegressionSettingsMap(session.getShared("regression_settings"))[currentOutcome]) ||
+    (currentOutcome ? SIGNATURE_SETTINGS[currentOutcome] : DEFAULT_REGRESSION_SETTINGS);
   const regressionHistory = session.getShared<RegressionHistory>("regression_history") ?? {};
   const setRegressionSettings = useCallback(
-    (next: RegressionSettings) => session.setShared("regression_settings", next),
-    [session],
+    (next: RegressionSettings) => {
+      if (!currentOutcome) return;
+      const base = asRegressionSettingsMap(session.getShared("regression_settings"));
+      session.setShared("regression_settings", { ...base, [currentOutcome]: next });
+    },
+    [session, currentOutcome],
   );
   const setRegressionHistory = useCallback(
     (update: React.SetStateAction<RegressionHistory>) => {

@@ -29,7 +29,7 @@ MAX_STEP = 16
 
 # 确实跨步骤共享的实验状态。刻意用白名单而不是任意键:
 # 会话是教学证据的载体,不能变成一个什么都能塞的杂物袋。
-#   regression_settings 步骤 12–15 共用同一套回归设定(同一设计跑四个 outcome)
+#   regression_settings 步骤 12–15 的回归设定,按 outcome 分别保存(每步各有招牌默认)
 #   regression_history  按 outcome 保存最近几次运行,用于跨步骤对照
 SHARED_KEYS = frozenset({"regression_settings", "regression_history"})
 

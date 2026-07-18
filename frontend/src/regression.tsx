@@ -51,6 +51,24 @@ export const DEFAULT_REGRESSION_SETTINGS: RegressionSettings = {
   scenario: "clean",
 };
 
+/** 每步的“招牌默认”:首次进入第 12–15 步时,设定直接落在本步要教的实验上——
+ *  贸易看基准 DID(随后加控制),生产开“冲击×基期GVC”异质性,长度用事件研究,
+ *  网络用 DID(随后跑安慰剂)。学生仍可自由修改,且改动按 outcome 分别保留
+ *  (见 App.tsx 里 regression_settings 的 per-outcome 存储)。 */
+export const SIGNATURE_SETTINGS: Record<RegressionOutcome, RegressionSettings> = {
+  trade: { ...DEFAULT_REGRESSION_SETTINGS },
+  production: { ...DEFAULT_REGRESSION_SETTINGS, interaction: true },
+  length: { ...DEFAULT_REGRESSION_SETTINGS, method: "event_study" },
+  network: { ...DEFAULT_REGRESSION_SETTINGS, granularity: "country_industry" },
+};
+
+/** 会话里 regression_settings 现按 outcome 存(map);历史上的单份扁平设定(含 method
+ *  顶层键)一律忽略,让各步重新按招牌默认 seed——与“不做历史格式兼容”一致。 */
+export function asRegressionSettingsMap(value: unknown): Partial<Record<RegressionOutcome, RegressionSettings>> {
+  if (!value || typeof value !== "object" || "method" in value) return {};
+  return value as Partial<Record<RegressionOutcome, RegressionSettings>>;
+}
+
 type SharedSettingsProps = {
   settings: RegressionSettings;
   onSettingsChange: (settings: RegressionSettings) => void;
@@ -324,8 +342,12 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
     onSettingsChange({ ...settings, [key]: value });
   };
   const { data: options, error: optionsError } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
+  // 兜底必须用稳定键(与 options.granularities_by_outcome 一致),不能用展示文案:
+  // 否则 options 未到时 allowedGranularities.includes(granularity) 恒为 false,会触发
+  // 下面的 granularity 归一化 effect 把当前设定(加载窗口里可能是招牌默认)写回会话,
+  // 覆盖掉学生已持久化的选择——刷新后设定被重置就是这么来的。
   const allowedGranularities = options?.granularities_by_outcome[outcome]
-    ?? (outcome === "network" ? ["国家–行业级"] : ["国家–行业级", "国家级"]);
+    ?? (outcome === "network" ? ["country_industry"] : ["country_industry", "country"]);
   const effectiveGranularity = allowedGranularities.includes(granularity)
     ? granularity
     : allowedGranularities[0];
