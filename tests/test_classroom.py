@@ -308,6 +308,36 @@ def test_course_assignment_enrollment_attempt_scope_is_operational():
     assert {row["code"] for row in db.list_course_runs("teacher")} >= {"GVC-LEGACY", "RUN-2"}
 
 
+def test_first_attempt_creation_is_safe_under_concurrent_student_bootstrap():
+    """首屏 meta/progress 并发时只能得到同一个 attempt，不能有唯一键 500。"""
+    _login("student")
+    run = db.create_course_run("teacher", "并发首屏课程", "RACE-RUN")
+    cls = db.create_class("并发首屏班", "RACE-CLASS", teacher_username="teacher")
+    student = db.create_student(
+        "race_student",
+        "并发学生",
+        "race-student-password",
+        class_id=cls["id"],
+        teacher_username="teacher",
+    )
+    enrollment = db.enroll_student("teacher", run["id"], student["id"], cls["id"])
+    assignment = db.create_assignment("teacher", run["id"], "race-lab", "并发作业", "race-manifest")
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        contexts = list(pool.map(lambda _: db.assignment_context("race_student", "race-manifest"), range(4)))
+
+    attempt_ids = {context["attempt_id"] for context in contexts if context is not None}
+    assert len(attempt_ids) == 1
+    with psycopg.connect(TEST_DSN) as connection:
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM experiment_attempts WHERE assignment_id=%s AND enrollment_id=%s",
+                (assignment["id"], enrollment["id"]),
+            ).fetchone()[0]
+            == 1
+        )
+
+
 def test_enrollment_list_is_persistent_and_teacher_scoped():
     teacher = _login("teacher")
     context = db.assignment_context("student", "manifest-enrollment-list")

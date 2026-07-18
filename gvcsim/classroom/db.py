@@ -705,14 +705,28 @@ def _attempt_scope(
             ).fetchone(),
             "next attempt number",
         )["n"]
-        created = _required(
-            c.execute(
-                "INSERT INTO experiment_attempts(assignment_id,enrollment_id,attempt_no) VALUES (%s,%s,%s)"
-                " RETURNING id,attempt_no,state",
-                (row["assignment_id"], row["enrollment_id"], next_no),
-            ).fetchone(),
-            "create attempt",
-        )
+        # 首次登录会并发请求 meta/progress/session。多个请求可能都先读到
+        # attempt_id=NULL，并算出同一个 next_no；创建必须是幂等竞争安全，不能让
+        # 输掉唯一键竞争的请求变成 500。冲突行提交后，READ COMMITTED 下方的
+        # 新 SELECT 会看到获胜请求创建的同一 attempt。
+        created = c.execute(
+            "INSERT INTO experiment_attempts(assignment_id,enrollment_id,attempt_no) VALUES (%s,%s,%s)"
+            # 同时吸收 attempt_no 唯一约束和“每个作业 enrollment 仅一个 active”
+            # 的部分唯一索引竞争，因此这里不能只指定前三列那个约束。
+            " ON CONFLICT DO NOTHING"
+            " RETURNING id,attempt_no,state",
+            (row["assignment_id"], row["enrollment_id"], next_no),
+        ).fetchone()
+        if created is None:
+            created = _required(
+                c.execute(
+                    "SELECT id,attempt_no,state FROM experiment_attempts"
+                    " WHERE assignment_id=%s AND enrollment_id=%s"
+                    " ORDER BY (state='active') DESC,attempt_no DESC LIMIT 1",
+                    (row["assignment_id"], row["enrollment_id"]),
+                ).fetchone(),
+                "load concurrently created attempt",
+            )
         row.update(
             {"attempt_id": created["id"], "attempt_no": created["attempt_no"], "attempt_state": created["state"]}
         )
