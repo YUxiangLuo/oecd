@@ -22,6 +22,9 @@ export const isFin = (v: unknown): v is number => typeof v === "number" && Numbe
 /** 占比/长度等对“实际不出口的行业”为 null 的指标:排序/散点前先剔除,避免幽灵点。 */
 export const finiteBy = (rows: Row[], ...keys: string[]) => rows.filter((r) => keys.every((k) => isFin(r[k])));
 
+/** 讲解性正文的最大阅读行宽(px):容器与图表/表格仍全宽,只有正文不跟着拉长,保证可读。 */
+export const PROSE_MAX = 820;
+
 export interface VizEvidence extends Record<string, unknown> {
   chart?: string;
   compared?: string[];
@@ -42,8 +45,8 @@ export function StepIntro({ kicker, lead, concept, todo }: {
       <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: CAT[0], textTransform: "uppercase" }}>
         {kicker}
       </div>
-      <div style={{ fontSize: 15.5, fontWeight: 700, color: "#1b1f2b", margin: "5px 0 8px" }}>{lead}</div>
-      <p style={{ fontSize: 12.8, lineHeight: 1.85, color: "#4a5061", margin: 0 }}>{concept}</p>
+      <div style={{ fontSize: 15.5, fontWeight: 700, color: "#1b1f2b", margin: "5px 0 8px", maxWidth: PROSE_MAX }}>{lead}</div>
+      <p style={{ fontSize: 12.8, lineHeight: 1.85, color: "#4a5061", margin: 0, maxWidth: PROSE_MAX }}>{concept}</p>
       <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
         {todo.map((item, i) => (
           <div key={i} style={{
@@ -83,7 +86,7 @@ export function ChartStory({ eyebrow, title, what, read, find, note, children }:
         {eyebrow && <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", color: "#9aa0ae", textTransform: "uppercase" }}>{eyebrow}</div>}
         <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1b1f2b", margin: "2px 0 0" }}>{title}</h3>
       </div>
-      <div style={{ display: "grid", gap: 6, marginBottom: 11 }}>
+      <div style={{ display: "grid", gap: 6, marginBottom: 11, maxWidth: PROSE_MAX }}>
         {guide.map(([label, body, color]) => (
           <div key={label} style={{ display: "flex", gap: 9, fontSize: 12.3, lineHeight: 1.65 }}>
             <span style={{
@@ -95,7 +98,7 @@ export function ChartStory({ eyebrow, title, what, read, find, note, children }:
         ))}
       </div>
       {children}
-      {note && <p style={{ fontSize: 11, color: "#a2a8b6", margin: "9px 2px 0", lineHeight: 1.6 }}>{note}</p>}
+      {note && <p style={{ fontSize: 11, color: "#a2a8b6", margin: "9px 2px 0", lineHeight: 1.6, maxWidth: PROSE_MAX }}>{note}</p>}
     </section>
   );
 }
