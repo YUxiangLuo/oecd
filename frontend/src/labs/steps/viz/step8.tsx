@@ -1,5 +1,5 @@
 /**
- * 步骤 8 · 贸易流可视化 —— 故事:「一国的出口,价值从哪来?」
+ * 步骤 7 · 贸易流可视化 —— 故事:「一国的出口,价值从哪来?」
  *
  * 三个贸易专属镜头(非通用图表标签),各自带读图脚手架:
  *   定位图   FVA 份额(后向参与)× GVC 生产份额(前向参与),四象限给经济体分型
@@ -45,7 +45,7 @@ export function Step8Trade({ meta, step, evidence }: { meta: Meta; step: Step; e
     <div>
       <EvidencePanel evidence={evidence} title="本步要留下的证据:选一个镜头,并在「选国家」里挑至少两个经济体对比" />
       <StepIntro
-        kicker="步骤 8 · 贸易流可视化"
+        kicker={`步骤 ${step.n} · 贸易流可视化`}
         lead="一国的出口,价值从哪来?"
         concept={step.concept}
         todo={[

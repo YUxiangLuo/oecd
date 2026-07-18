@@ -1,5 +1,5 @@
 /**
- * 步骤 10 · 生产长度可视化 —— 故事:「生产链有多长,你在上游还是下游?」
+ * 步骤 9 · 生产长度可视化 —— 故事:「生产链有多长,你在上游还是下游?」
  *
  * 长度专属镜头:
  *   上下游定位  前向 GVC 段长 × 后向 GVC 段长,象限区分上游 / 下游 / 长链 / 短链
@@ -33,7 +33,7 @@ export function Step10Length({ meta, step, evidence }: { meta: Meta; step: Step;
     <div>
       <EvidencePanel evidence={evidence} title="本步要留下的证据:选一个镜头,并在「选国家」里挑至少两个经济体对比" />
       <StepIntro
-        kicker="步骤 10 · 生产长度可视化"
+        kicker={`步骤 ${step.n} · 生产长度可视化`}
         lead="生产链有多长,你在上游还是下游?"
         concept={step.concept}
         todo={[

@@ -40,7 +40,7 @@ function Lab({ step, meta, evidence, rules, onSessionChanged, regressionSettings
 }) {
   if (step.lab === "db") return <DbLab evidence={evidence} />;
   if (step.lab === "qc") return meta ? <QcLab meta={meta} evidence={evidence} rules={rules} onNavigateStep={onNavigateStep} /> : null;
-  if (step.lab === "shock") return meta ? <ShockLab meta={meta} evidence={evidence} rules={rules} /> : null;
+  if (step.lab === "shock") return meta ? <ShockLab meta={meta} step={step} evidence={evidence} rules={rules} /> : null;
   // key:同一实验台横跨多步时必须按步重挂载。否则 country 等步内状态会跨步带过去,
   // 记证据的 effect 因依赖未变而不触发,新到的那一步拿不到"当前看的是谁"。
   if (step.lab === "ind") return meta ? <IndicatorLab key={step.n} meta={meta} step={step} evidence={evidence} /> : null;
@@ -455,8 +455,8 @@ export default function App() {
             <main className="content">
               <div className="content-inner">
                 {/* 已把 concept 并入页内 StepIntro(常驻)的步骤,这里不再重复渲染讲解卡:
-                    可视化步骤(isViz)与指标计算步骤(lab==="ind",4–7);回归自带渐进教学,也跳过。 */}
-                {!isReg && !isViz && step.lab !== "ind" && (
+                    可视化(isViz)、指标计算(ind)、政策冲击接入(shock);回归自带渐进教学,也跳过。 */}
+                {!isReg && !isViz && step.lab !== "ind" && step.lab !== "shock" && (
                   <details className="card accent concept-card" open>
                     <summary className="kicker">讲解</summary>
                     <p>{step.concept}</p>

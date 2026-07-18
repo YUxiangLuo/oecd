@@ -2,7 +2,7 @@ import { formatMetric } from "../../format";
 import type { IndicatorSchema } from "../../types";
 import { type Row, SEQ, cardStyle, num, rowLabel } from "../shared";
 
-/* ----------------------------- 步骤11:热力表 ----------------------------- */
+/* ----------------------------- 步骤10:热力表 ----------------------------- */
 
 const HEAT_COLS = [
   { key: "weighted degree", name: "加权度", fmt: "amount", desc: "与该节点直接相连的中间投入边流量总和(百万美元)。" },

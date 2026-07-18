@@ -3,7 +3,7 @@ import { formatMetric } from "../../format";
 import type { NetworkData } from "../../types";
 import { CAT, Legend, REGION_OF, REGIONS, SEQ, cardStyle, countryLabel, num, useTip } from "../shared";
 
-/* ------------------------------ 步骤8:网络图 ------------------------------ */
+/* ------------------------------ 步骤10:网络图 ------------------------------ */
 
 type NetworkMetric = "gvc_production_share" | "weighted degree" | "gross_exports";
 type NetworkColorMode = "region" | NetworkMetric;

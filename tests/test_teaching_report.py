@@ -104,7 +104,8 @@ def test_report_key_is_content_addressed():
     assert first.report_key == again.report_key
 
     changed = _complete_session(mid)
-    changed["steps"]["3"] = make_record({"disposition": "stop", "judgment": JUDGMENT})
+    # 改质检步(现为第 2 步)的处置决定:内容变 → key 应变。
+    changed["steps"]["2"] = make_record({"disposition": "stop", "judgment": JUDGMENT})
     assert build(changed, "同学", 1).report_key != first.report_key
 
 

@@ -1,5 +1,5 @@
 /**
- * 步骤 4–7 路由。
+ * 步骤 3–6 路由。
  *
  * 这四步是“把原始数据算成指标”的计算阶段。原先共用一个 IndicatorLab(演示 + 数据表),
  * 现按步拆成四个定制组件,统一为计算阶段三段式(讲清 → 分解数据表 → 动手拆解/验证);
@@ -18,8 +18,9 @@ export function IndicatorLab({ meta, step, evidence }: {
   step: Step;
   evidence: StepEvidenceApi<IndicatorEvidence>;
 }) {
-  if (step.n === 5) return <Step5Production meta={meta} step={step} evidence={evidence} />;
-  if (step.n === 6) return <Step6Length meta={meta} step={step} evidence={evidence} />;
-  if (step.n === 7) return <Step7Network meta={meta} step={step} evidence={evidence} />;
+  // 按主题路由,不依赖步号(步号可能因课程重排而变)。
+  if (step.topic === "production") return <Step5Production meta={meta} step={step} evidence={evidence} />;
+  if (step.topic === "length") return <Step6Length meta={meta} step={step} evidence={evidence} />;
+  if (step.topic === "network") return <Step7Network meta={meta} step={step} evidence={evidence} />;
   return <Step4Trade meta={meta} step={step} evidence={evidence} />;
 }

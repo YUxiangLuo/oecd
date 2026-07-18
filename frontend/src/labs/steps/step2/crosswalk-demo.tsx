@@ -59,7 +59,7 @@ function CrosswalkContent({ selectedShockType }: { selectedShockType: string }) 
         <>
           <div className="tipbox crosswalk-disclaimer">
             {data.disclaimer} 当前301清单样本覆盖 {pct(data.summary.demo_list_value_coverage)} 的示例贸易额；
-            这里只解释编码转换，最终面板的维度、值域、日期与 treated 一致性在步骤3检查。
+            这里只解释编码转换，最终面板的维度、值域、日期与 treated 一致性在本步下方的「冲击数据质检」一并检查。
           </div>
           <div className="crosswalk-stats">
             <div><strong>{data.summary.n_hs_chapters}</strong><span>HS章</span></div>

@@ -1,6 +1,6 @@
 import { CAT, Legend, type Row, cardStyle, countryLabel, num, useTip } from "../shared";
 
-/* ------------------------ 步骤10:前向/后向生产长度对比 ------------------------ */
+/* ------------------------ 步骤9:前向/后向生产长度对比 ------------------------ */
 
 export function LengthViz({ rows }: { rows: Row[] }) {
   const { wrapRef, Tip, show, hide } = useTip();

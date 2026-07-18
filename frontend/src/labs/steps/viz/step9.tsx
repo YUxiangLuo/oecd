@@ -1,5 +1,5 @@
 /**
- * 步骤 9 · 生产可视化 —— 故事:「一国的增加值,有多深地进了 GVC?」
+ * 步骤 8 · 生产可视化 —— 故事:「一国的增加值,有多深地进了 GVC?」
  *
  * 生产专属镜头:
  *   GVC 阶梯   把增加值拆成 纯国内 / 传统贸易 / 简单 GVC / 复杂 GVC 四段,越往右越深
@@ -46,7 +46,7 @@ export function Step9Production({ meta, step, evidence }: { meta: Meta; step: St
     <div>
       <EvidencePanel evidence={evidence} title="本步要留下的证据:选一个镜头,并在「选国家」里挑至少两个经济体对比" />
       <StepIntro
-        kicker="步骤 9 · 生产可视化"
+        kicker={`步骤 ${step.n} · 生产可视化`}
         lead="一国的增加值,有多深地进了 GVC?"
         concept={step.concept}
         todo={[

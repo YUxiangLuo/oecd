@@ -1,5 +1,5 @@
 /**
- * 步骤 6 · 指标计算(长度)—— 故事:「增加值走一趟生产,平均经过几道工序?」
+ * 步骤 5 · 指标计算(长度)—— 故事:「增加值走一趟生产,平均经过几道工序?」
  *
  * 计算阶段三段式:讲清 → 分解数据表 → 动手拆解(验证各段“VA份额×段长度”的贡献
  * 加权加总 = 总长度)。长度是加权口径,恒等式比 4/5 略微含蓄。
@@ -22,7 +22,7 @@ export function Step6Length({ meta, step, evidence }: { meta: Meta; step: Step; 
   return (
     <div>
       <StepIntro
-        kicker="步骤 6 · 指标计算"
+        kicker={`步骤 ${step.n} · 指标计算`}
         lead="增加值走一趟生产,平均经过几道工序?"
         concept={step.concept}
         todo={[

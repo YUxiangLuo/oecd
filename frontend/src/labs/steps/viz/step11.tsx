@@ -1,5 +1,5 @@
 /**
- * 步骤 11 · 网络可视化 —— 故事:「谁是全球生产的枢纽?」
+ * 步骤 10 · 网络可视化 —— 故事:「谁是全球生产的枢纽?」
  *
  * 网络专属镜头(与前三步完全不同的图元):
  *   枢纽热力表  选一国,看它各行业节点在**完整全球国家×行业图**上的中心性(热力)
@@ -42,7 +42,7 @@ export function Step11Network({ meta, step, evidence }: { meta: Meta; step: Step
     <div>
       <EvidencePanel evidence={evidence} title="本步要留下的证据:选一个镜头,并用「下钻国家」看过至少两个国家的行业枢纽" />
       <StepIntro
-        kicker="步骤 11 · 网络可视化"
+        kicker={`步骤 ${step.n} · 网络可视化`}
         lead="谁是全球生产的枢纽?"
         concept={step.concept}
         todo={[

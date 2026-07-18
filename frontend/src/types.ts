@@ -5,6 +5,8 @@ export interface Step {
   stage: number;
   lab: "db" | "shock" | "qc" | "ind" | "viz" | "reg" | "rep";
   regression_outcome?: RegressionOutcome;
+  /** 指标(ind)与可视化(viz)步的主题,用于按主题路由到定制组件,不依赖步号。 */
+  topic?: RegressionOutcome;
   status: "done" | "demo";
   title: string;
   goal: string;
@@ -206,7 +208,7 @@ export type IndustryPage = PagedRows;
 
 /** 实验会话:逐步实验状态的可恢复模型(契约见 gvcsim/session.py)。 */
 /** v2:回归设定改用稳定英文键;旧会话整份作废(不做历史格式兼容)。 */
-export const SESSION_VERSION = "experiment-session-v2";
+export const SESSION_VERSION = "experiment-session-v3";
 
 export interface SessionRecord<T = unknown> {
   data: T;

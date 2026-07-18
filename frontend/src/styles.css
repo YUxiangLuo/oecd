@@ -186,6 +186,53 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 /* 步骤2:事件 → 冲击面板 → HS映射技术细节 */
 .shock-workbench { padding-bottom: 18px; }
 .shock-disclaimer { line-height: 1.65; }
+
+/* 步骤 2 · 左右联动工作台:左选政策事件 → 右看国家×行业冲击 */
+.shock-linkbar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  padding: 10px 14px; margin: 4px 0 12px; border-radius: 10px;
+  background: #f5f6fa; border: 1px solid #e7e9f0; font-size: 12.5px; color: #3a4050;
+}
+.shock-linkbar.active { background: #eef4fe; border-color: #cfe0fb; }
+.shock-linkbar-tag {
+  font-size: 10.5px; font-weight: 700; color: #6b7280; background: #fff;
+  border: 1px solid #dfe3ec; border-radius: 6px; padding: 2px 7px;
+}
+.shock-linkbar-name { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shock-linkbar-arrow { color: #9aa0ae; font-weight: 700; }
+
+.shock-split {
+  display: grid; grid-template-columns: minmax(300px, 1fr) minmax(0, 2.1fr);
+  gap: 16px; align-items: start; margin-bottom: 18px;
+}
+@media (max-width: 1100px) { .shock-split { grid-template-columns: 1fr; } }
+.shock-split-left, .shock-split-right {
+  min-width: 0; background: #fff; border: 1px solid #e7e9f0; border-radius: 14px; padding: 14px 16px;
+}
+.shock-split-head {
+  display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700;
+  color: #1b1f2b; margin-bottom: 12px;
+}
+.shock-split-head .muted { font-weight: 400; }
+.shock-split-num {
+  flex: none; width: 20px; height: 20px; border-radius: 6px; background: #4b47e0; color: #fff;
+  font-size: 12px; display: flex; align-items: center; justify-content: center;
+}
+.shock-event-list { display: flex; flex-direction: column; gap: 14px; max-height: 640px; overflow-y: auto; padding-right: 2px; }
+.shock-event-group-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  font-size: 12px; font-weight: 700; margin-bottom: 6px;
+}
+.shock-event-group-count { color: #9aa0ae; font-weight: 500; font-size: 11px; }
+.shock-event-item {
+  display: block; width: 100%; text-align: left; cursor: pointer; font: inherit;
+  border: 1.5px solid #eceef4; border-radius: 9px; background: #fff; padding: 8px 11px; margin-bottom: 6px;
+  transition: border-color .12s, background .12s;
+}
+.shock-event-item:hover { background: #f7f8fb; }
+.shock-event-item.on { background: #eef4fe; }
+.shock-event-item-name { display: block; font-size: 12.5px; font-weight: 600; color: #2c2f3a; line-height: 1.45; }
+.shock-event-item-meta { display: block; font-size: 10.5px; color: #868d9d; margin-top: 3px; line-height: 1.5; }
 .shock-workbench-section { margin-bottom: 18px; scroll-margin-top: 92px; }
 .shock-section-title {
   display: flex; align-items: center; gap: 10px; margin: 18px 0 10px; color: #202535;

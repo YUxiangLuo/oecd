@@ -3,7 +3,7 @@ import { CAT, KEY_ECONOMIES, Legend, type Row, cardStyle, num, rowLabel, rowName
 import { signedDomain, signedStack } from "../signed-layout";
 import { linearFit } from "../statistics";
 
-/* ---------------- 步骤8-11 自由探索:排序条形图 / 散点图 ---------------- */
+/* ---------------- 步骤7-10 自由探索:排序条形图 / 散点图 ---------------- */
 
 function fmtVal(v: number, format?: string): string {
   return formatMetric(v, format);

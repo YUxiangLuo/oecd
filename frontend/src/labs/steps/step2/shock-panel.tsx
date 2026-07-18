@@ -1,4 +1,3 @@
-import type { RefObject } from "react";
 import { api } from "../../../api";
 import type { Meta, PagedRows, ShockSummary } from "../../../types";
 import { countryLabel, sectorLabel } from "../../../viz";
@@ -10,12 +9,10 @@ export function ShockPanel({
   meta,
   filters,
   onChange,
-  sectionRef,
 }: {
   meta: Meta;
   filters: ShockPanelFilters;
   onChange: (patch: Partial<ShockPanelFilters>) => void;
-  sectionRef: RefObject<HTMLElement | null>;
 }) {
   const { data: summary, error: summaryError } = useAsync<ShockSummary>(
     () => api.shockSummary(filters.shockType),
@@ -36,11 +33,7 @@ export function ShockPanel({
   const pages = panel ? Math.max(1, Math.ceil(panel.total / panel.page_size)) : 1;
 
   return (
-    <section ref={sectionRef} className="shock-workbench-section" aria-labelledby="shock-panel-title">
-      <div className="shock-section-title" id="shock-panel-title" role="heading" aria-level={3}>
-        <span>2</span>
-        <div><strong>查看国家–行业冲击面板</strong><small>事件选择结果会直接同步到这里，也可以继续手动调整。</small></div>
-      </div>
+    <div className="shock-panel-embedded" aria-label="国家–行业冲击面板">
       <div className="controls shock-panel-controls">
         <span className="field">
           <label>冲击类型</label>
@@ -128,6 +121,6 @@ export function ShockPanel({
       {panel && panel.rows.length > 0 && (
         <Pager page={filters.page} pages={pages} total={panel.total} onChange={(page) => onChange({ page })} />
       )}
-    </section>
+    </div>
   );
 }

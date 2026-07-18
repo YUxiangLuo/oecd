@@ -1,7 +1,7 @@
 /**
- * 步骤 5 · 指标计算(生产)—— 故事:「一国的增加值,有多深地进了全球分工?」
+ * 步骤 4 · 指标计算(生产)—— 故事:「一国的增加值,有多深地进了全球分工?」
  *
- * 与步骤 4 同为计算阶段三段式:讲清 → 分解数据表(先出数字)→ 动手拆解(验证四段
+ * 与步骤 3 同为计算阶段三段式:讲清 → 分解数据表(先出数字)→ 动手拆解(验证四段
  * 精确加回总增加值 SVA)。保留 DecompositionDemo。
  */
 import { useState } from "react";
@@ -22,7 +22,7 @@ export function Step5Production({ meta, step, evidence }: { meta: Meta; step: St
   return (
     <div>
       <StepIntro
-        kicker="步骤 5 · 指标计算"
+        kicker={`步骤 ${step.n} · 指标计算`}
         lead="一国的增加值,有多深地进了全球分工?"
         concept={step.concept}
         todo={[

@@ -119,7 +119,7 @@ export const api = {
     get<import("./types").IndustryPage>(
       withQuery(`/api/indicators/industry/${year}`, { page, country }),
     ),
-  // 拉取一个国家全部行业的指标行(用于步骤4-6 的拆解演示,一次取回填充行业下拉)
+  // 拉取一个国家全部行业的指标行(用于步骤3-5 的拆解演示,一次取回填充行业下拉)
   industryIndicatorsAll: (year: number, country: string) =>
     get<import("./types").IndustryPage>(
       withQuery(`/api/indicators/industry/${year}`, { page: 1, page_size: 200, country }),

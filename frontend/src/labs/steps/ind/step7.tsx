@@ -1,10 +1,10 @@
 /**
- * 步骤 7 · 指标计算(网络)—— 故事:「把经济当成一张网:谁是枢纽?」
+ * 步骤 6 · 指标计算(网络)—— 故事:「把经济当成一张网:谁是枢纽?」
  *
- * 网络没有加总恒等式,所以顺序与 4/5/6 相反:先用小网络建立“度 / 介数是怎么数出来
+ * 网络没有加总恒等式,所以顺序与 3/4/5 相反:先用小网络建立“度 / 介数是怎么数出来
  * 的”直觉,再看真实的全球国家×行业中心性表(否则一堆抽象数字看不懂)。
  * 保留 NetworkCentralityDemo(合成小图)。中心性只在国家–行业级有意义(国家图是
- * 完全图、介数恒为 0,见 country_degenerate 与步骤 11)。
+ * 完全图、介数恒为 0,见 country_degenerate 与步骤 10)。
  */
 import { useState } from "react";
 import { api } from "../../../api";
@@ -24,7 +24,7 @@ export function Step7Network({ meta, step, evidence }: { meta: Meta; step: Step;
   return (
     <div>
       <StepIntro
-        kicker="步骤 7 · 指标计算"
+        kicker={`步骤 ${step.n} · 指标计算`}
         lead="把经济当成一张网:谁是枢纽?"
         concept={step.concept}
         todo={[
@@ -51,7 +51,7 @@ export function Step7Network({ meta, step, evidence }: { meta: Meta; step: Step;
         what={<>把投入产出表当成<b>有向图</b>(节点 = 国家×行业,边 = 中间品流量),按 Gephi 口径算出的中心性:选个国家,看它各行业节点的度、加权度、介数等。</>}
         read={<><b>介数</b>高 = 该行业是全球供应链的<b>中转枢纽</b>(很多最短供应路径经过它);<b>加权度</b>高 = 直接吞吐的中间品流量大。</>}
         find={<>换个国家看不同的枢纽行业:制造业大国的电子 / 金属 / 化工节点介数通常更高。</>}
-        note="中心性在完整全球国家×行业图上计算。国家级贸易图是完全图、介数恒为 0、无区分度,所以枢纽识别只在国家–行业级做(见步骤 11)。"
+        note="中心性在完整全球国家×行业图上计算。国家级贸易图是完全图、介数恒为 0、无区分度,所以枢纽识别只在国家–行业级做(见步骤 10)。"
       >
         <IndicatorTable
           meta={meta} groupKey="network" schema={schema} evidence={evidence}
