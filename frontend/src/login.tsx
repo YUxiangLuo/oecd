@@ -1,7 +1,9 @@
 /**
  * 登录页:接真实后端(POST /api/auth/login,服务端加密校验 + 签名令牌)。
- * Production never embeds classroom credentials. Explicit VITE_DEMO_MODE may
- * expose development shortcuts, but the default form is always empty.
+ *
+ * 凭证只在**显式的演示构建**(VITE_DEMO_MODE=1)里预填:课堂演示要能一键进出,
+ * 而生产构建绝不能内嵌课堂口令。开关取自 import.meta.env,构建期即为字面量,
+ * 未开启时下面这段快捷账号 UI 与口令常量会被一起摇掉,不进产物。
  */
 import { useState } from "react";
 import { api } from "./api";
@@ -14,6 +16,8 @@ const DEMO_ACCOUNTS = [
   { username: "student", label: "学生身份", note: "完成 16 步实验" },
   { username: "teacher", label: "教师身份", note: "班级管理与报告评阅" },
 ];
+/** 演示口令;可用 VITE_DEMO_PASSWORD 覆盖,与服务端 GVCSIM_BOOTSTRAP_PASSWORD 对应。 */
+const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD || "gvclab2026";
 
 /** 左侧背景:静态勾勒的贸易网络(手工布点,非装饰性随机) */
 function NetBackdrop() {
@@ -44,8 +48,9 @@ function NetBackdrop() {
 
 export function LoginPage({ onLogin }: { onLogin: (r: LoginResponse) => void }) {
   const demoMode = import.meta.env.VITE_DEMO_MODE === "1";
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  // 演示构建默认落在学生身份并预填口令,打开即可直接登录;非演示构建仍是空表单。
+  const [username, setUsername] = useState(demoMode ? DEMO_ACCOUNTS[0].username : "");
+  const [password, setPassword] = useState(demoMode ? DEMO_PASSWORD : "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -110,7 +115,7 @@ export function LoginPage({ onLogin }: { onLogin: (r: LoginResponse) => void }) 
                 className={`login-role${username === a.username ? " on" : ""}`}
                 onClick={() => {
                   setUsername(a.username);
-                  setPassword("");
+                  setPassword(DEMO_PASSWORD);
                 }}
               >
                 <span className="login-role-label">{a.label}</span>
@@ -134,6 +139,7 @@ export function LoginPage({ onLogin }: { onLogin: (r: LoginResponse) => void }) 
             {busy ? "正在登录…" : "登录"}
           </button>
           <div className="login-hint">
+            {demoMode && <>课堂演示口令统一为 <b>{DEMO_PASSWORD}</b>;上方可一键切换学生 / 教师身份。<br /></>}
             会话有效期由服务器安全策略决定；登录后页面会显示本次会话的实际到期时间。
           </div>
         </form>
