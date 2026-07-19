@@ -18,7 +18,7 @@ STEPS = [
         status="done",
         title="OECD ICIO 数据浏览",
         goal="查看本地 OECD ICIO 的原始表结构与账户项。",
-        concept="投入产出表用一张矩阵描述“谁买了谁的东西”:行/列是产业部门,数值是部门间的中间投入。系统直接浏览本地 OECD ICIO 的 Z、Y、TLS、VA 与 OUT。",
+        concept="投入产出表用一张矩阵描述“谁买了谁的东西”:行是供给方、列是使用方(都是「国家×行业」),某一格就是行方向那个行业卖给列方向那个行业的中间投入。系统直接浏览本地 OECD ICIO 的 Z、Y、TLS、VA 与 OUT。",
         tip="本系统采用 OECD ICIO 作为主数据源,步骤 1 可直接查看 Z 矩阵、最终需求 Y 和 TLS/VA/OUT 账户项。",
     ),
     dict(

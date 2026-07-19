@@ -6,10 +6,25 @@ import { countryLabel, sectorLabel } from "../../viz";
 import { fmtDb, Pager, useAsync } from "../shared";
 
 const DB_TABLES: { key: DbTableKind; label: string; hint: string }[] = [
-  { key: "z", label: "中间投入 Z", hint: "国家-行业 × 国家-行业" },
-  { key: "y", label: "最终需求 Y", hint: "国家-行业 × 目的国需求类别" },
+  { key: "z", label: "中间投入 Z", hint: "供给国-行业(行) × 使用国-行业(列)" },
+  { key: "y", label: "最终需求 Y", hint: "供给国-行业(行) × 目的国需求类别(列)" },
   { key: "accounts", label: "账户项", hint: "TLS / VA / OUT 转置为国家-行业行" },
 ];
+
+/** 首列表头。后端返回的列名就是字面的 "row",直接显示对学生没有信息量。 */
+const ROW_HEADER: Record<DbTableKind, { label: string; title: string }> = {
+  z: { label: "供给国×行业(行)", title: "每一行是提供中间投入的一方:某国某行业" },
+  y: { label: "供给国×行业(行)", title: "每一行是提供最终产品的一方:某国某行业" },
+  accounts: { label: "国家×行业(行)", title: "每一行是一个国家×行业;列为该行业的账户项" },
+};
+
+/** 表格怎么读:行是供给方、列是使用方——这是投入产出表最容易被看反的一点,
+ *  因为"行"虽然横向延伸,它的标签却竖排在最左侧。按表类型给出具体读法。 */
+const HOW_TO_READ: Record<DbTableKind, string> = {
+  z: "行 = 供给方,列 = 使用方。某一格 = 行的「国家×行业」向 列的「国家×行业」提供的中间投入(百万美元)。",
+  y: "行 = 供给方,列 = 最终需求去向。某一格 = 行的「国家×行业」被 列的「目的国 × 需求类别」吸收的金额(百万美元)。",
+  accounts: "每一行是一个「国家×行业」,列是该行业的账户项(TLS / VA / OUT);此表没有列方向的国家维度。",
+};
 
 const ACCOUNT_HELP: Record<string, string> = {
   TLS: "产品税减补贴。为负表示该账户合计为净补贴；步骤3 的 taxsub 是其沿投入产出链传导后的出口含量。",
@@ -239,22 +254,22 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
       </div>
 
       <div className="controls">
-        <label>行国家</label>
+        <label>供给国(行)</label>
         <select value={rowCountry} onChange={(e) => pickRowCountry(e.target.value)}>
           {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
         </select>
-        <label>行行业</label>
+        <label>供给行业(行)</label>
         <select value={rowSector} onChange={(e) => pickRowSector(e.target.value)}>
           <option value="">全部</option>
           {meta.sectors.map((s) => <option key={s} value={s}>{sectorLabel(s)}</option>)}
         </select>
         {table !== "accounts" && (
           <>
-            <label>列国家</label>
+            <label>{table === "y" ? "需求国(列)" : "使用国(列)"}</label>
             <select value={colCountry} onChange={(e) => pickColCountry(e.target.value)}>
               {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
             </select>
-            <label>{table === "y" ? "最终需求" : "列行业"}</label>
+            <label>{table === "y" ? "最终需求(列)" : "使用行业(列)"}</label>
             <select value={colSector} onChange={(e) => pickColSector(e.target.value)}>
               <option value="">全部</option>
               {colOptions.map((s) => (
@@ -268,6 +283,9 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
 
       {sliceError && <div className="error-box" style={{ marginBottom: 14 }}>{sliceError}</div>}
       <div className="tipbox" style={{ marginBottom: 10 }}>
+        <b>怎么读这张表：</b>{HOW_TO_READ[table]}
+      </div>
+      <div className="tipbox" style={{ marginBottom: 10 }}>
         <b>留下可复核数据点：</b>点击表中任意一个数值单元格。系统会把它的行、列与原始数值绑定到本步证据；切换筛选或翻页后需要重新选择。
       </div>
       <div className="table-wrap bounded-data-table">
@@ -277,10 +295,12 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
               {(slice?.columns ?? ["row"]).map((c, index) => (
                 <th
                   key={c}
-                  title={columnHelp(c)}
+                  title={c === "row" ? ROW_HEADER[table].title : columnHelp(c)}
                   style={index === 0 ? { position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" } : undefined}
                 >
-                  {c}{columnHelp(c) ? " ⓘ" : ""}
+                  {/* 首列原样输出后端的 "row",学生看到的就是个英文字段名;这里换成
+                      说明它是什么方向的中文表头,与上方筛选器的「(行)」对应。 */}
+                  {c === "row" ? `${ROW_HEADER[table].label} ⓘ` : `${c}${columnHelp(c) ? " ⓘ" : ""}`}
                 </th>
               ))}
               {showSummaries && <th title="当前筛选列在该行的合计">切片合计</th>}

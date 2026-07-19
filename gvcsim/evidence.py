@@ -118,17 +118,20 @@ def _distinct(values: Any) -> list[str]:
 
 
 def _check_db(data: dict[str, Any]) -> list[str]:
-    """选定一个有效切片:年份 + 表 + 行国家,以及(除账户项外)列国家。
+    """选定一个有效切片:年份 + 表 + 供给国(行),以及(除账户项外)使用国(列)。
 
-    账户项表(TLS/VA/OUT)只有行方向的账户项,没有列国家维度,因此不要求它——
+    投入产出表的行是供给方、列是使用方,因此界面与提示都按"供给/使用"称呼这两个
+    维度;载荷键仍是 row_country / col_country,不随文案改动。
+
+    账户项表(TLS/VA/OUT)只有行方向的账户项,没有列方向的国家维度,因此不要求它——
     判定必须跟随数据本身的形状,否则那张表永远无法完成。
     """
     slice_ = data.get("slice")
     if not isinstance(slice_, dict):
-        return ["请在表格里自己选定一个切片(年份、表、行国家等);页面打开时的默认切片不计入证据"]
-    required = {"year": "年份", "table": "表(Z / Y / 账户项)", "row_country": "行国家"}
+        return ["请在表格里自己选定一个切片(年份、表、供给国等);页面打开时的默认切片不计入证据"]
+    required = {"year": "年份", "table": "表(Z / Y / 账户项)", "row_country": "供给国(行)"}
     if str(slice_.get("table", "")) != "accounts":
-        required["col_country"] = "列国家"
+        required["col_country"] = "使用国(列)"
     missing = [label for key, label in required.items() if not _text(str(slice_.get(key, "")))]
     problems = [f"切片还缺:{'、'.join(missing)}"] if missing else []
     observation = data.get("observation")
