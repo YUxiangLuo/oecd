@@ -154,11 +154,13 @@ const median = (arr: number[]) => {
 
 /** 象限散点图:两条参考线(默认中位数)把平面切成四象限,四角标注角色。
  *  步8「GVC 定位图」(后向×前向参与度)、步11「枢纽地图」(度×介数中心性)。 */
-export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabel, xFormat, yFormat, highlight, refMode = "median", quadrantLabels }: {
+export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabel, xFormat, yFormat, highlight, refMode = "median", quadrantLabels, equalityLine = false }: {
   rows: Row[]; xKey: string; yKey: string; xLabel: string; yLabel: string;
   referenceRows?: Row[];
   xFormat?: string; yFormat?: string; highlight?: Set<string>;
   refMode?: "median" | "mean"; quadrantLabels?: [string, string, string, string];
+  /** Draw y=x when both axes share a unit (e.g. forward vs backward length). */
+  equalityLine?: boolean;
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const W = 660, H = 400, m = { l: 62, r: 18, t: 14, b: 46 };
@@ -199,6 +201,15 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
         {/* 象限参考线(中位数) */}
         <line x1={px(xRef)} y1={m.t} x2={px(xRef)} y2={H - m.b} stroke="#c8ccd6" strokeWidth={1} strokeDasharray="4 4" />
         <line x1={m.l} y1={py(yRef)} x2={W - m.r} y2={py(yRef)} stroke="#c8ccd6" strokeWidth={1} strokeDasharray="4 4" />
+        {equalityLine && (() => {
+          const lo = Math.max(x0, y0);
+          const hi = Math.min(x1, y1);
+          return lo < hi ? (
+            <line x1={px(lo)} y1={py(lo)} x2={px(hi)} y2={py(hi)} stroke="#e0982a" strokeWidth={1.5} strokeDasharray="7 4">
+              <title>PLv_GVC = PLy_GVC；线上方更偏上游，线下方更偏下游</title>
+            </line>
+          ) : null;
+        })()}
         {/* 四角角色标签 */}
         {quadrantLabels?.map((lab, i) => (
           <text key={i} x={corners[i].x} y={corners[i].y} textAnchor={corners[i].anchor}
@@ -225,6 +236,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
           );
         })}
       </svg>
+      {equalityLine && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}><span style={{ color: "#e0982a", fontWeight: 700 }}>橙色虚线 y=x</span>：线上方 PLv_GVC &gt; PLy_GVC（GVCPs &gt; 1，更偏上游）；线下方更偏下游。灰色中位数线只表示相对高低。</div>}
       {Tip}
     </div>
   );

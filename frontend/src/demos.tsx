@@ -10,7 +10,7 @@
  *           分项显示为"VA份额×段长度"的贡献值,贡献加总 = 总长度)
  * NetworkCentralityDemo(步骤6):在一个小网络上演示度/介数中心性怎么算出来。
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { stripNegativeZero } from "./format";
 import { api } from "./api";
 import { useAsync } from "./labs";
@@ -141,22 +141,36 @@ export function DecompositionDemo({
   step,
   meta,
   onExampleChange,
+  primaryYear,
+  primaryCountry,
+  onPrimaryChange,
 }: {
   step: number;
   meta: Meta;
   onExampleChange?: (year: number, country: string) => void;
+  /** Keep the table and demo on the same primary entity. */
+  primaryYear?: number;
+  primaryCountry?: string;
+  onPrimaryChange?: (year: number, country: string) => void;
 }) {
   const cfg = DECOMP[step];
   const defaultA = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
   const defaultB = meta.countries.includes("USA") ? "USA" : meta.countries[1] ?? defaultA;
   const [gran, setGran] = useState<"country" | "sector">("sector");
-  const [year, setYear] = useState(meta.years.at(-1)!);
+  const [year, setYear] = useState(primaryYear ?? meta.years.at(-1)!);
   const [compare, setCompare] = useState(false);
-  const [countryA, setCountryA] = useState(defaultA);
+  const [countryA, setCountryA] = useState(primaryCountry ?? defaultA);
   const [countryB, setCountryB] = useState(defaultB);
   const [sectorA, setSectorA] = useState("");
   const [sectorB, setSectorB] = useState("");
   const [hover, setHover] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (primaryYear != null) setYear(primaryYear);
+  }, [primaryYear]);
+  useEffect(() => {
+    if (primaryCountry) setCountryA(primaryCountry);
+  }, [primaryCountry]);
 
   const { data: countryRows } = useAsync<Row[]>(() => api.countryIndicators(year), [year]);
   const { data: pageA } = useAsync<IndustryPage>(() => api.industryIndicatorsAll(year, countryA), [year, countryA]);
@@ -202,7 +216,10 @@ export function DecompositionDemo({
       <div className="demo-controls" style={{ marginBottom: 10 }}>
         <b>{compare ? `实体 ${side}` : "分析实体"}</b>
         <label>国家</label>
-        <select value={country} onChange={(event) => setCountry(event.target.value)}>
+        <select value={country} onChange={(event) => {
+          setCountry(event.target.value);
+          if (side === "A") onPrimaryChange?.(year, event.target.value);
+        }}>
           {meta.countries.map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
         </select>
         {gran === "sector" && <>
@@ -274,7 +291,11 @@ export function DecompositionDemo({
           <button className={gran === "country" ? "on" : ""} onClick={() => setGran("country")}>国家级</button>
         </div>
         <label>共享年份</label>
-        <select value={year} onChange={(event) => setYear(Number(event.target.value))}>{meta.years.map((value) => <option key={value}>{value}</option>)}</select>
+        <select value={year} onChange={(event) => {
+          const next = Number(event.target.value);
+          setYear(next);
+          onPrimaryChange?.(next, countryA);
+        }}>{meta.years.map((value) => <option key={value}>{value}</option>)}</select>
         <label style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
           <input type="checkbox" checked={compare} onChange={(event) => setCompare(event.target.checked)} /> 双实体并排对比
         </label>
@@ -294,6 +315,7 @@ export function DecompositionDemo({
             setYear(exampleYear);
             setCountryA(exampleCountry);
             setSectorA(String(negativeExample.industry));
+            onPrimaryChange?.(exampleYear, exampleCountry);
             onExampleChange?.(exampleYear, exampleCountry);
           }}
         >

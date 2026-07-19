@@ -1,4 +1,4 @@
-"""步骤3:数据质检。
+"""步骤2:数据质检。
 
 每个检查返回 QcCheck(可序列化),供 CLI 打印和 API 前端渲染共用。
 检查内容覆盖 ICIO 原始矩阵、政策冲击面板与国家-年份控制变量:
@@ -42,6 +42,12 @@ SHOCK_DATE_COLUMNS = [
 
 CONTROL_REQUIRED_COLUMNS = ["country", "year", *ALL_CONTROL_COLUMNS]
 
+QC_OK = "ok"
+QC_DISCLOSURE = "disclosure"
+QC_WARNING = "warning"
+QC_FATAL = "fatal"
+QC_SEVERITIES = (QC_OK, QC_DISCLOSURE, QC_WARNING, QC_FATAL)
+
 
 @dataclass
 class QcCheck:
@@ -50,9 +56,38 @@ class QcCheck:
     passed: bool
     detail: str = ""
     warnings: list[str] = field(default_factory=list)
+    # 该检查失败时的严重度。fatal 会阻断产物发布；warning 只有在显式
+    # 接受并披露后才能继续。通过但仍带 warnings 的检查会序列化为 disclosure。
+    severity: str = QC_FATAL
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        payload = asdict(self)
+        payload["severity"] = self.effective_severity
+        return payload
+
+    @property
+    def effective_severity(self) -> str:
+        if not self.passed:
+            return self.severity
+        return QC_DISCLOSURE if self.warnings else QC_OK
+
+
+def summarize_checks(checks: list[QcCheck], *, override: bool = False) -> dict:
+    """把一组检查归纳为可机器执行、也可持续披露的发布结论。"""
+    by_severity: dict[str, list[str]] = {level: [] for level in QC_SEVERITIES}
+    for check in checks:
+        by_severity[check.effective_severity].append(check.name)
+    fatal = by_severity[QC_FATAL]
+    warning = by_severity[QC_WARNING]
+    return {
+        "publishable": not fatal or override,
+        "override": bool(override and fatal),
+        "requires_disclosure": bool(fatal or warning or by_severity[QC_DISCLOSURE]),
+        "fatal": fatal,
+        "warning": warning,
+        "disclosure": by_severity[QC_DISCLOSURE],
+        "passed": by_severity[QC_OK],
+    }
 
 
 def check_shapes(io) -> QcCheck:
@@ -108,7 +143,14 @@ def check_accounting_identity(io) -> QcCheck:
 
 
 def check_leontief_inverse(io) -> QcCheck:
-    """(I-A)@L ≈ I,且 A 列和 < 1(否则隐含增加值≤0,矩阵接近奇异)。"""
+    """(I-A)@L ≈ I,且不存在**实质性**的 A 列和 ≥ 1(隐含增加值≤0)。
+
+    列和≥1 在真实 ICIO 里并不罕见:某国某部门当年增加值为负(疫情下的航空运输、
+    产出规模极小的部门被统计误差放大)都会触发。这类越界必须披露,但不足以判定
+    整年数据不可用——矩阵逆本身仍精确成立。因此判定只看 substantive_bad
+    (非 ROW 且产出≥1000),与 severity 的口径保持一致;其余仍以 warning 级别
+    进入披露项,不会因为"通过"而从学生的披露清单里消失。
+    """
     A, L = io.A.values, io.L.values
     identity = np.eye(A.shape[0])
     max_err = float(np.abs((identity - A) @ L - identity).max())
@@ -116,8 +158,11 @@ def check_leontief_inverse(io) -> QcCheck:
     col_sums = io.A.sum(axis=0)
     bad = col_sums[col_sums >= 1]
     warnings = []
+    substantive_bad = []
     for idx in bad.index:
         output = float(io.x.loc[idx].iloc[0])
+        if idx[0] != "ROW" and output >= 1000:
+            substantive_bad.append(idx)
         note = (
             "ROW 为账户闭合构造的余项地区,可忽略"
             if idx[0] == "ROW"
@@ -130,9 +175,21 @@ def check_leontief_inverse(io) -> QcCheck:
     return QcCheck(
         name="里昂惕夫逆矩阵性质((I-A)L≈I,A列和<1)",
         kind="数值",
-        passed=max_err < 1e-6 and len(bad) == 0,
-        detail=f"(I-A)L 最大误差 {max_err:.2e},列和≥1 的部门 {len(bad)} 个",
+        passed=max_err < 1e-6 and not substantive_bad,
+        detail=(
+            f"(I-A)L 最大误差 {max_err:.2e},列和≥1 的部门 {len(bad)} 个"
+            + (
+                f"(其中 {len(substantive_bad)} 个产出规模不小,需核实)"
+                if substantive_bad
+                else "(均为 ROW 或极小规模,按披露项处理)"
+                if len(bad)
+                else ""
+            )
+        ),
         warnings=warnings,
+        # 小规模部门的 A 列和越界仍须披露，但不足以阻断整套产物；矩阵
+        # 逆性质失败或非 ROW 且产出不小的部门越界才是 fatal。
+        severity=QC_FATAL if max_err >= 1e-6 or substantive_bad else QC_WARNING,
     )
 
 
@@ -301,7 +358,7 @@ def check_shock_panel(
 ) -> list[QcCheck]:
     """政策冲击面板质检。
 
-    目标是补齐步骤3的第二类数据质检:冲击面板必须覆盖完整
+    目标是补齐步骤11的第二类数据质检:冲击面板必须覆盖完整
     country×sector×year,与 ICIO 指标维度严格对齐,且事件时间线与
     treated 标记可用于 DID / 事件研究。
     """

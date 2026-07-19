@@ -85,6 +85,14 @@ export const api = {
     if (!resp.ok) throw new ApiError(resp.status, null, "令牌无效或已过期");
     return resp.json() as Promise<import("./types").AuthUser>;
   },
+  logout: async (token: string) => {
+    const resp = await fetch("/api/auth/logout", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!resp.ok) throw new ApiError(resp.status, (await resp.json().catch(() => null))?.detail, resp.statusText);
+    return resp.json() as Promise<{ ok: boolean }>;
+  },
   steps: () => get<import("./types").StepsResponse>("/api/steps"),
   meta: () => get<import("./types").Meta>("/api/meta"),
   indicatorSchema: () => get<import("./types").IndicatorSchema>("/api/indicators/schema"),
@@ -149,6 +157,7 @@ export const api = {
     interaction?: boolean;
     priceMode?: string;
     scenario?: string;
+    weightMode?: string;
   }) => {
     return get<import("./types").RegressionDesignInfo>(withQuery("/api/regression/design", {
       outcome: params.outcome,
@@ -159,6 +168,7 @@ export const api = {
       interaction: params.interaction || undefined,
       price_mode: params.priceMode,
       scenario: params.scenario,
+      weight_mode: params.weightMode,
     }));
   },
   runRegression: async (
@@ -170,6 +180,7 @@ export const api = {
     interaction: boolean,
     priceMode: string,
     scenario: string,
+    weightMode: string,
   ) => {
     return post<import("./types").RegressionResponse>("/api/regression/run", {
         outcome,
@@ -180,6 +191,7 @@ export const api = {
         interaction,
         price_mode: priceMode,
         scenario,
+        weight_mode: weightMode,
     });
   },
   placeboRegression: async (
@@ -191,6 +203,7 @@ export const api = {
     interaction: boolean,
     priceMode: string,
     scenario: string,
+    weightMode: string,
     nDraws = 40,
   ) => {
     return post<import("./types").PlaceboResponse>("/api/regression/placebo", {
@@ -202,12 +215,16 @@ export const api = {
         interaction,
         price_mode: priceMode,
         scenario,
+        weight_mode: weightMode,
         n_draws: nDraws,
     });
   },
-  report: (params: import("./types").ReportRequest) =>
-    post<import("./types").ReportResponse>("/api/report", params),
   classroom: {
+    issueEvidence: (body: {
+      step: number;
+      kind: "slice" | "qc_resolution" | "indicator" | "visualization" | "shock";
+      payload: Record<string, unknown>;
+    }) => post<{ evidence_id: string; evidence?: Record<string, unknown> }>("/api/classroom/evidence/issue", body),
     announcements: () =>
       get<{ announcements: import("./types").Announcement[] }>("/api/classroom/announcements"),
     progress: () => get<ProgressResponse>("/api/classroom/progress"),
@@ -215,7 +232,7 @@ export const api = {
     session: () => get<SessionResponse>("/api/classroom/session"),
     saveSession: (body: { base_revision: number; session: ExperimentSession }) =>
       post<SessionResponse>("/api/classroom/session", body, "PUT"),
-    clearSession: () => post<{ ok: boolean }>("/api/classroom/session", undefined, "DELETE"),
+    clearSession: () => post<{ ok: boolean; attempt_id?: number }>("/api/classroom/session", undefined, "DELETE"),
     // 只交报告指纹;服务端从它自己生成的报告里取正文,接口不接受 Markdown。
     submitReport: (body: { title: string; report_key: string }) =>
       post<{ id: number; state: string; submitted_at: string }>("/api/classroom/report/submit", body),
@@ -228,6 +245,32 @@ export const api = {
         withQuery("/api/classroom/overview", { class_id: classId }),
       ),
     classes: () => get<{ classes: import("./types").ClassInfo[] }>("/api/classroom/classes"),
+    courseRuns: () => get<{ course_runs: import("./types").CourseRun[] }>("/api/classroom/course-runs"),
+    createCourseRun: (body: { name: string; code: string; term?: string; release_tag?: string }) =>
+      post<import("./types").CourseRun>("/api/classroom/course-runs", body),
+    archiveCourseRun: (id: number, archived: boolean) =>
+      post<import("./types").CourseRun>(`/api/classroom/course-runs/${id}/archive`, { archived }),
+    assignments: (courseRunId?: number | null) =>
+      get<{ assignments: import("./types").Assignment[] }>(
+        withQuery("/api/classroom/assignments", { course_run_id: courseRunId }),
+      ),
+    createAssignment: (body: {
+      course_run_id: number;
+      slug: string;
+      title: string;
+      manifest_id: string;
+      release_tag?: string;
+      opens_at?: string | null;
+      due_at?: string | null;
+    }) => post<import("./types").Assignment>("/api/classroom/assignments", body),
+    setAssignmentState: (id: number, active: boolean) =>
+      post<import("./types").Assignment>(`/api/classroom/assignments/${id}/state`, { active }),
+    enrollStudent: (body: { course_run_id: number; account_id: number; class_id?: number | null }) =>
+      post<import("./types").Enrollment>("/api/classroom/enrollments", body),
+    enrollments: (courseRunId: number) =>
+      get<{ enrollments: import("./types").EnrollmentRow[] }>(
+        withQuery("/api/classroom/enrollments", { course_run_id: courseRunId }),
+      ),
     createClass: (body: { name: string; code: string; semester?: string; note?: string }) =>
       post<import("./types").ClassInfo>("/api/classroom/classes", body),
     students: (classId?: number | null) =>
@@ -249,6 +292,8 @@ export const api = {
       get<{ submissions: import("./types").SubmissionRow[] }>("/api/classroom/submissions"),
     submissionDetail: (id: number) =>
       get<import("./types").SubmissionDetail>(`/api/classroom/submissions/${id}`),
+    submissionHistory: (id: number) =>
+      get<import("./types").SubmissionHistory>(`/api/classroom/submissions/${id}/history`),
     grade: (id: number, score: number, feedback: string) =>
       post<import("./types").SubmissionDetail>(`/api/classroom/submissions/${id}/grade`, { score, feedback }),
     createAnnouncement: (body: { title: string; body: string; class_id?: number | null }) =>

@@ -4,12 +4,48 @@
 用于验证指标计算的数学性质,不依赖真实数据下载。
 """
 
+import json
+import os
+from pathlib import Path
+
+# 应用不再含数据库 DSN/演示口令默认值。测试必须显式选择隔离的 demo 配置，
+# 且要在测试模块 import ``gvcsim.api`` 之前设置。
+os.environ.setdefault(
+    "GVCSIM_PG_DSN",
+    os.environ.get("GVCSIM_PG_DSN_TEST", "postgresql://alice:111111@127.0.0.1:5432/gvclab_test"),
+)
+os.environ.setdefault("GVCSIM_DEMO_MODE", "1")
+os.environ.setdefault("GVCSIM_BOOTSTRAP_PASSWORD", "gvclab2026")
+os.environ.setdefault("GVCSIM_AUTH_SECRET", "tests-only-auth-secret-at-least-32-bytes")
+os.environ.setdefault("GVCSIM_EVIDENCE_SECRET", "tests-only-evidence-secret-at-least-32-bytes")
+
 import numpy as np
 import pandas as pd
 import pytest
 
+from gvcsim.config import RAW_DATA_DIR
+
 REGIONS = ["AAA", "BBB"]
 SECTORS = ["s1", "s2"]
+
+
+@pytest.fixture(scope="session")
+def ci_synthetic_contract() -> dict | None:
+    """Return the explicit CI-only dataset contract, never infer it from size.
+
+    Real OECD runs keep their strict 77×45 assertions.  The smaller expectations
+    are enabled only when both the CI environment flag and the generator's marker
+    are present, preventing an accidental partial production dataset from passing.
+    """
+    if os.environ.get("GVCSIM_CI_SYNTHETIC") != "1":
+        return None
+    marker = Path(RAW_DATA_DIR) / ".ci-only-synthetic.json"
+    if not marker.is_file():
+        pytest.fail(f"GVCSIM_CI_SYNTHETIC=1 but marker is missing: {marker}")
+    payload = json.loads(marker.read_text(encoding="utf-8"))
+    assert payload["kind"] == "gvcsim-ci-only-synthetic-oecd-icio"
+    assert payload["production_data"] is False
+    return payload
 
 
 class FakeIOSystem:

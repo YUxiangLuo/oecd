@@ -4,9 +4,11 @@ import { useAsync } from "./labs";
 import { comparisonExplanation, lessonQuestion, REGRESSION_LESSONS } from "./regression-lessons";
 import { buildRegressionVerdict, placeboInterpretation } from "./regression-verdict";
 import { splitPolicyCoefficients } from "./regteach";
-import { EvidencePanel, JudgmentBox } from "./step-evidence";
+import { CerBox, EvidencePanel, JudgmentBox } from "./step-evidence";
 import type {
+  CerEvidence,
   EvidenceRules,
+  MarginalEffect,
   PlaceboResponse,
   RegressionDesignInfo,
   RegressionOptions,
@@ -39,6 +41,7 @@ export interface RegressionSettings {
   interaction: boolean;
   priceMode: string;
   scenario: string;
+  weightMode: string;
 }
 
 export const DEFAULT_REGRESSION_SETTINGS: RegressionSettings = {
@@ -49,15 +52,16 @@ export const DEFAULT_REGRESSION_SETTINGS: RegressionSettings = {
   interaction: false,
   priceMode: "nominal",
   scenario: "clean",
+  weightMode: "fixed_pretreatment",
 };
 
 /** 每步的“招牌默认”:首次进入第 12–15 步时,设定直接落在本步要教的实验上——
- *  贸易看基准 DID(随后加控制),生产开“冲击×基期GVC”异质性,长度用事件研究,
+ *  贸易看基准 DID(随后加控制),生产先跑无交互基准再开异质性,长度用事件研究,
  *  网络用 DID(随后跑安慰剂)。学生仍可自由修改,且改动按 outcome 分别保留
  *  (见 App.tsx 里 regression_settings 的 per-outcome 存储)。 */
 export const SIGNATURE_SETTINGS: Record<RegressionOutcome, RegressionSettings> = {
   trade: { ...DEFAULT_REGRESSION_SETTINGS },
-  production: { ...DEFAULT_REGRESSION_SETTINGS, interaction: true },
+  production: { ...DEFAULT_REGRESSION_SETTINGS, interaction: false },
   length: { ...DEFAULT_REGRESSION_SETTINGS, method: "event_study" },
   network: { ...DEFAULT_REGRESSION_SETTINGS, granularity: "country_industry" },
 };
@@ -112,6 +116,7 @@ function DesignMeta({ design }: { design: RegressionDesignInfo }) {
       <span>控制：{controls}</span>
       <span>交互：{design.interaction ? "冲击 × 中心化基期 GVC" : "未加入"}</span>
       <span>样本：{design.sample_filter}</span>
+      <span>暴露权重：{design.weight_mode === "contemporaneous" ? "当期贸易结构（稳健性）" : "首次处理前固定结构（基准）"}</span>
     </div>
   );
 }
@@ -174,6 +179,7 @@ function settingsSummary(settings: RegressionSettings, options: Labels): string 
     settings.interaction ? "含交互" : "无交互",
     settings.controlMode === "none" ? null : labelOf(options?.price_mode_labels, settings.priceMode),
     SCENARIO_LABELS[settings.scenario] ?? settings.scenario,
+    settings.weightMode === "contemporaneous" ? "当期权重" : "固定处理前权重",
   ].filter(Boolean).join(" · ");
 }
 
@@ -186,6 +192,7 @@ function changedSettingsSummary(settings: RegressionSettings, snapshots: RunSnap
     { key: "interaction", label: "交互" },
     { key: "priceMode", label: "口径" },
     { key: "scenario", label: "场景" },
+    { key: "weightMode", label: "暴露权重" },
   ];
   const maps: Partial<Record<keyof RegressionSettings, Record<string, string> | undefined>> = {
     granularity: options?.granularity_labels,
@@ -194,6 +201,7 @@ function changedSettingsSummary(settings: RegressionSettings, snapshots: RunSnap
     controlMode: options?.control_mode_labels,
     priceMode: options?.price_mode_labels,
     scenario: SCENARIO_LABELS,
+    weightMode: options?.weight_mode_labels,
   };
   const changed = fields.filter(({ key }) => new Set(snapshots.map((snapshot) => snapshot.settings[key])).size > 1);
   return changed.length
@@ -307,9 +315,89 @@ function PretrendCheck({ response }: { response: RegressionResponse }) {
   );
 }
 
+const signedNumber = (value: number, digits = 2) => `${value >= 0 ? "+" : ""}${value.toFixed(digits)}`;
+
+function marginalNaturalScale(effect: MarginalEffect, response: RegressionResponse) {
+  const increment = response.design.method === "twfe_intensity" ? 0.01 : 1;
+  const scale = increment * 100; // production 的结果变量是份额，统一换成百分点。
+  return {
+    effect: effect.effect * scale,
+    ciLow: effect.ci_low == null ? null : effect.ci_low * scale,
+    ciHigh: effect.ci_high == null ? null : effect.ci_high * scale,
+  };
+}
+
+export function marginalEffectEvidenceText(response: RegressionResponse, effects: MarginalEffect[]): string {
+  const increment = response.design.method === "twfe_intensity" ? "冲击强度增加 1 个百分点" : "进入处理后";
+  return effects.map((effect) => {
+    const scaled = marginalNaturalScale(effect, response);
+    const interval = scaled.ciLow == null || scaled.ciHigh == null
+      ? "推断被抑制，不能报告置信区间"
+      : `95% CI [${signedNumber(scaled.ciLow)}, ${signedNumber(scaled.ciHigh)}] 个百分点`;
+    return `${effect.label}基期 GVC（相对样本均值 ${signedNumber(effect.baseline_gvc_centered * 100)} 个百分点）时，${increment}的边际效应为 ${signedNumber(scaled.effect)} 个百分点，${interval}`;
+  }).join("；") + "。这些边际效应由政策主效应与交互项共同计算，交互系数本身不是平均效应。";
+}
+
+function MarginalEffectsPanel({ response, onUse }: {
+  response: RegressionResponse;
+  onUse: (text: string) => void;
+}) {
+  const effects = response.result.marginal_effects ?? [];
+  if (!response.design.interaction || effects.length === 0) return null;
+  const groups = [...new Set(effects.map((effect) => effect.policy_term))];
+  return (
+    <div className="marginal-effects">
+      <div className="marginal-effects-head">
+        <div>
+          <b>低 / 中 / 高基期 GVC 的政策边际效应</b>
+          <p>分位点按样本实体等权计算；区间使用主效应、交互项及其协方差，不是把两个系数各自解读。</p>
+        </div>
+        <button type="button" className="secondary" onClick={() => onUse(marginalEffectEvidenceText(response, effects))}>将三档数值填入解释</button>
+      </div>
+      {groups.map((term) => {
+        const rows = effects.filter((effect) => effect.policy_term === term);
+        return (
+          <div className="table-wrap" key={term}>
+            {groups.length > 1 && <div className="muted" style={{ margin: "8px 0" }}>政策项：{term}</div>}
+            <table className="data-table">
+              <thead><tr><th>基期 GVC 水平</th><th>相对均值</th><th>边际效应</th><th>95% 置信区间</th><th>p 值</th></tr></thead>
+              <tbody>
+                {rows.map((effect) => {
+                  const scaled = marginalNaturalScale(effect, response);
+                  return (
+                    <tr key={`${effect.policy_term}-${effect.level}`}>
+                      <td><b>{effect.label}</b></td>
+                      <td>{signedNumber(effect.baseline_gvc_centered * 100)} pp</td>
+                      <td>{signedNumber(scaled.effect)} 个百分点</td>
+                      <td>{scaled.ciLow == null || scaled.ciHigh == null ? "已抑制" : `[${signedNumber(scaled.ciLow)}, ${signedNumber(scaled.ciHigh)}] pp`}</td>
+                      <td>{effect.p == null ? "—" : effect.p.toFixed(3)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** 第 12–15 步的学习证据:跑出结果(动作)+ 写下识别判断(取舍)。 */
 interface RegressionEvidence extends Record<string, unknown> {
-  run?: { depvar: string; status: string | null; settings: RegressionSettings };
+  run?: { depvar: string; status: string | null; settings: RegressionSettings; run_id?: string };
+  run_id?: string;
+  placebo_run_id?: string;
+  checks?: {
+    baseline_run_id?: string;
+    controlled_run_id?: string;
+    no_interaction_run_id?: string;
+    interaction_run_id?: string;
+    pretrend?: string;
+    post_effect?: string;
+    marginal_effect?: string;
+  };
+  cer?: Partial<CerEvidence>;
   judgment?: string;
 }
 
@@ -323,7 +411,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
   const outcome = step.regression_outcome;
   if (!outcome) return <div className="error-box">当前回归步骤缺少 regression_outcome 配置。</div>;
   const lesson = REGRESSION_LESSONS[outcome];
-  const { granularity, shockType, method, controlMode, interaction, priceMode, scenario } = settings;
+  const { granularity, shockType, method, controlMode, interaction, priceMode, scenario, weightMode } = settings;
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [resultSettings, setResultSettings] = useState<RegressionSettings | null>(null);
   const [placebo, setPlacebo] = useState<PlaceboResponse | null>(null);
@@ -340,6 +428,9 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
 
   const setSetting = <K extends keyof RegressionSettings>(key: K, value: RegressionSettings[K]) => {
     onSettingsChange({ ...settings, [key]: value });
+  };
+  const saveCheck = (key: "pretrend" | "post_effect" | "marginal_effect", value: string) => {
+    evidence.save({ checks: { ...(evidence.data?.checks ?? {}), [key]: value } });
   };
   const { data: options, error: optionsError } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
   // 兜底必须用稳定键(与 options.granularities_by_outcome 一致),不能用展示文案:
@@ -364,9 +455,9 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
     () => api.regressionDesign({
       outcome, granularity: effectiveGranularity, shockType, method, controlMode, interaction,
       priceMode: controlMode === "none" ? "nominal" : priceMode,
-      scenario,
+      scenario, weightMode,
     }),
-    [outcome, effectiveGranularity, shockType, method, controlMode, interaction, priceMode, scenario],
+    [outcome, effectiveGranularity, shockType, method, controlMode, interaction, priceMode, scenario, weightMode],
   );
 
   useEffect(() => {
@@ -411,7 +502,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
     try {
       const response = await api.runRegression(
         outcome, runSettings.granularity, runSettings.shockType, runSettings.method,
-        runSettings.controlMode, runSettings.interaction, runSettings.priceMode, runSettings.scenario,
+        runSettings.controlMode, runSettings.interaction, runSettings.priceMode, runSettings.scenario, runSettings.weightMode,
       );
       if (!mountedRef.current) return;
       onHistoryChange((current) => {
@@ -425,8 +516,20 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
       });
       // 学习证据:这一步的“动作”就是真的跑出了一次结果。
       // 记录服务端判定的 status,报告里才能说清这次估计能不能作推断。
+      const priorChecks = evidence.data?.checks ?? {};
+      const nextChecks = { ...priorChecks };
+      if (response.run_id && outcome === "trade") {
+        if (runSettings.controlMode === "none") nextChecks.baseline_run_id = response.run_id;
+        else nextChecks.controlled_run_id = response.run_id;
+      }
+      if (response.run_id && outcome === "production") {
+        if (runSettings.interaction) nextChecks.interaction_run_id = response.run_id;
+        else nextChecks.no_interaction_run_id = response.run_id;
+      }
       evidence.save({
-        run: { depvar: response.result.depvar, status: response.result.status, settings: runSettings },
+        run: { depvar: response.result.depvar, status: response.result.status, settings: runSettings, run_id: response.run_id },
+        run_id: response.run_id,
+        checks: nextChecks,
       });
       if (latestRequest.current === requestKey) {
         setResult(response);
@@ -464,9 +567,12 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
     try {
       const response = await api.placeboRegression(
         outcome, placeboSettings.granularity, placeboSettings.shockType, placeboSettings.method,
-        placeboSettings.controlMode, placeboSettings.interaction, placeboSettings.priceMode, placeboSettings.scenario, 40,
+        placeboSettings.controlMode, placeboSettings.interaction, placeboSettings.priceMode, placeboSettings.scenario, placeboSettings.weightMode, 40,
       );
-      if (placeboRequestRef.current === requestId && latestRequest.current === requestKey) setPlacebo(response);
+      if (placeboRequestRef.current === requestId && latestRequest.current === requestKey) {
+        setPlacebo(response);
+        if (response.placebo_run_id) evidence.save({ placebo_run_id: response.placebo_run_id });
+      }
     } catch (cause) {
       if (placeboRequestRef.current === requestId && latestRequest.current === requestKey) {
         setPlaceboError(String((cause as Error).message));
@@ -525,6 +631,38 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           <p className="muted">网络回归只使用全球国家×行业图。国家级贸易图在全正流量口径下为完全图，Gephi 介数中心性恒为 0。</p>
         )}
 
+        <div className="required-run-plan">
+          <div>
+            <b>本步必做对照</b>
+            <p>
+              {outcome === "trade" && "用完全相同的冲击、方法与粒度，分别运行不加控制和加入 ICIO 派生控制的模型。"}
+              {outcome === "production" && "先运行无交互模型，再运行“冲击 × 基期 GVC”交互模型；交互系数不是平均效应。"}
+              {outcome === "length" && "使用事件研究，并在结果后分别写出一项事前诊断和一项事后动态效应。"}
+              {outcome === "network" && "使用 DID 基准结果后必须运行安慰剂检验；随机化尾部位置也不是因果证明。"}
+            </p>
+          </div>
+          <div className="required-run-actions">
+            {outcome === "trade" && <>
+              <button type="button" className={controlMode === "none" ? "on" : ""} onClick={() => setSetting("controlMode", "none")}>① 切换到无控制基准</button>
+              <span className={evidence.data?.checks?.baseline_run_id ? "done" : ""}>{evidence.data?.checks?.baseline_run_id ? "✓ 已运行" : "待运行"}</span>
+              <button type="button" className={controlMode === "icio_derived" ? "on" : ""} onClick={() => setSetting("controlMode", "icio_derived")}>② 切换到 ICIO 控制</button>
+              <span className={evidence.data?.checks?.controlled_run_id ? "done" : ""}>{evidence.data?.checks?.controlled_run_id ? "✓ 已运行" : "待运行"}</span>
+            </>}
+            {outcome === "production" && <>
+              <button type="button" className={!interaction ? "on" : ""} onClick={() => setSetting("interaction", false)}>① 切换到无交互</button>
+              <span className={evidence.data?.checks?.no_interaction_run_id ? "done" : ""}>{evidence.data?.checks?.no_interaction_run_id ? "✓ 已运行" : "待运行"}</span>
+              <button type="button" className={interaction ? "on" : ""} onClick={() => setSetting("interaction", true)}>② 打开基期 GVC 交互</button>
+              <span className={evidence.data?.checks?.interaction_run_id ? "done" : ""}>{evidence.data?.checks?.interaction_run_id ? "✓ 已运行" : "待运行"}</span>
+            </>}
+            {outcome === "length" && (
+              <button type="button" className={method === "event_study" ? "on" : ""} onClick={() => setSetting("method", "event_study")}>使用事件研究</button>
+            )}
+            {outcome === "network" && (
+              <button type="button" className={method === "did" ? "on" : ""} onClick={() => setSetting("method", "did")}>使用 DID + 安慰剂</button>
+            )}
+          </div>
+        </div>
+
         <details className="advanced-settings">
           <summary>高级设置与课堂挑战</summary>
           <p className="muted">以下选项用于稳健性与识别假设教学，不是开始基准实验的必要条件。</p>
@@ -533,8 +671,10 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
             <label className="model-control"><span className="model-control-label">异质性</span><input type="checkbox" checked={interaction} onChange={(eventValue) => setSetting("interaction", eventValue.target.checked)} />冲击 × 基期GVC</label>
             {controlMode !== "none" && <div className="model-control"><span className="model-control-label">金额类控制口径</span><Pills label="金额类控制口径" options={options?.price_modes ?? []} value={priceMode} onChange={(value) => setSetting("priceMode", value)} labelMap={options?.price_mode_labels} /></div>}
             <div className="model-control"><span className="model-control-label">课堂场景</span><Pills label="课堂场景" options={options?.scenarios ?? []} value={scenario} onChange={(value) => setSetting("scenario", value)} labelMap={SCENARIO_LABELS} /></div>
+            <div className="model-control"><span className="model-control-label">冲击暴露权重</span><Pills label="冲击暴露权重" options={options?.weight_modes ?? ["fixed_pretreatment", "contemporaneous"]} value={weightMode} onChange={(value) => setSetting("weightMode", value)} labelMap={options?.weight_mode_labels ?? { fixed_pretreatment: "首次处理前固定权重（基准）", contemporaneous: "当期贸易权重（稳健性）" }} /></div>
           </div>
           {scenario !== "clean" && <div className="challenge-note">该场景由系统人为改变估计样本，用于观察测量误差或冲击前趋势如何影响判断；它不是数据筛选条件。</div>}
+          {weightMode === "contemporaneous" && <div className="challenge-note">当期贸易结构可能已受政策影响，因此该口径只用于和固定处理前权重对照，不能替代基准识别。</div>}
         </details>
 
         {(optionsError || designError) && <div className="error-box">{optionsError ?? designError}</div>}
@@ -560,6 +700,9 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
                 {(split?.eventInteraction.length ?? 0) > 0 && <EventStudyChart coefs={split?.eventInteraction ?? []} notes={result.result.notes} title="基期 GVC 异质性附加变化" seriesLabel="交互效应 θₖ" />}
               </>
             ) : <CoefForestChart coefs={split?.policy ?? []} />}
+            {outcome === "production" && (
+              <MarginalEffectsPanel response={result} onUse={(text) => saveCheck("marginal_effect", text)} />
+            )}
             <p className="muted">图只展示政策相关系数；加入控制变量后，完整控制项保留在下方技术细节表中。</p>
           </section>
 
@@ -582,6 +725,54 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
 
           <section className="reg-section-card">
             <span className="reg-section-step">6 · 写下你的识别判断</span>
+            {outcome === "length" && (
+              <div className="diagnostic-evidence-grid">
+                <label>
+                  <b>事前诊断</b>
+                  <span>引用冲击前联合检验或一个冲击前系数，并解释“不显著”能与不能说明什么。</span>
+                  <textarea
+                    rows={3}
+                    value={evidence.data?.checks?.pretrend ?? ""}
+                    onChange={(eventValue) => saveCheck("pretrend", eventValue.target.value)}
+                    placeholder="例如：冲击前联合检验 p=…；未拒绝零假设只表示未发现明显预趋势……"
+                  />
+                </label>
+                <label>
+                  <b>事后动态效应</b>
+                  <span>引用一个冲击后期数、系数和置信区间，再解释其经济含义。</span>
+                  <textarea
+                    rows={3}
+                    value={evidence.data?.checks?.post_effect ?? ""}
+                    onChange={(eventValue) => saveCheck("post_effect", eventValue.target.value)}
+                    placeholder="例如：冲击后第 … 期系数为 …，95% CI 为 […]，与链条…一致。"
+                  />
+                </label>
+              </div>
+            )}
+            {outcome === "production" && (
+              <div className="diagnostic-evidence-grid" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+                <label>
+                  <b>边际效应解释</b>
+                  <span>结合无交互与交互模型，引用低/中/高基期 GVC 中至少一个水平的具体边际效应；不要把交互系数直接当平均效应。</span>
+                  <textarea
+                    rows={3}
+                    value={evidence.data?.checks?.marginal_effect ?? ""}
+                    onChange={(eventValue) => saveCheck("marginal_effect", eventValue.target.value)}
+                    placeholder="例如：在高基期 GVC（…）时，冲击边际效应为 … 个百分点；它由主效应与交互项共同构成。"
+                  />
+                </label>
+              </div>
+            )}
+            {outcome === "network" && (
+              <>
+                <div className={`required-check-status${evidence.data?.placebo_run_id ? " done" : ""}`}>
+                  {evidence.data?.placebo_run_id ? "✓ 已保存与当前账号和数据版本绑定的安慰剂结果" : "还需在上方可信度检查中运行安慰剂检验"}
+                </div>
+                <div className={`required-check-status${/(SUTVA|干扰|相互影响|网络外溢)/i.test(evidence.data?.cer?.boundary ?? "") ? " done" : ""}`}>
+                  网络结果的 Boundary 必须讨论 SUTVA、节点相互影响、干扰或网络外溢；一个节点受冲击可能改变其他节点的中心性。
+                </div>
+              </>
+            )}
             <JudgmentBox
               prompt="这次估计的结果,能不能作因果解释?为什么?"
               hint={
@@ -592,6 +783,11 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
               minChars={rules.min_judgment_chars}
               value={evidence.data?.judgment ?? ""}
               onChange={(judgment) => evidence.save({ judgment })}
+            />
+            <CerBox
+              title="把回归结果写成可进入报告的 CER"
+              value={evidence.data?.cer}
+              onChange={(cer) => evidence.save({ cer })}
             />
             <EvidencePanel evidence={evidence} />
           </section>

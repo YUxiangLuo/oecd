@@ -456,6 +456,14 @@ def test_did_with_baseline_gvc_interaction_recovers_heterogeneity():
     # 表示样本个体均值处的政策效应 beta + theta × 0.5。
     assert by_name["treated×post"].coef == pytest.approx(beta + theta * 0.5, abs=0.04)
     assert by_name["treated×post×base_gvc"].coef == pytest.approx(theta, abs=0.08)
+    assert [item["level"] for item in result.marginal_effects] == ["low", "mean", "high"]
+    assert result.marginal_effects[0]["baseline_gvc_centered"] < 0
+    assert result.marginal_effects[1]["baseline_gvc_centered"] == 0
+    assert result.marginal_effects[2]["baseline_gvc_centered"] > 0
+    assert result.marginal_effects[0]["effect"] > result.marginal_effects[2]["effect"]
+    assert all(
+        item["se"] >= 0 and item["ci_low"] <= item["effect"] <= item["ci_high"] for item in result.marginal_effects
+    )
     assert any("均值中心化" in note for note in result.notes)
 
 

@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { api } from "../../../api";
 import { DecompositionDemo } from "../../../demos";
-import { EvidencePanel } from "../../../step-evidence";
+import { EvidencePanel, VerifiedCerBox } from "../../../step-evidence";
 import type { IndicatorSchema, Meta, Step, StepEvidenceApi } from "../../../types";
 import { useAsync } from "../../shared";
 import { ChartStory, StepIntro } from "../viz/scaffold";
@@ -57,13 +57,22 @@ export function Step6Length({ meta, step, evidence }: { meta: Meta; step: Step; 
         <DecompositionDemo
           step={6}
           meta={meta}
-          onExampleChange={(exampleYear, exampleCountry) => {
+          primaryYear={year}
+          primaryCountry={country}
+          onPrimaryChange={(exampleYear, exampleCountry) => {
             setYear(exampleYear);
             setCountry(exampleCountry);
             setPage(1);
           }}
         />
       </ChartStory>
+      <VerifiedCerBox
+        step={step.n}
+        kind="indicator"
+        evidence={evidence}
+        ready={(evidence.data?.compared?.length ?? 0) >= 2 && (evidence.data?.observations?.length ?? 0) >= 2}
+        context={{ topic: step.topic, compared: evidence.data?.compared, last_view: evidence.data?.last_view, metric: evidence.data?.metric, observations: evidence.data?.observations }}
+      />
     </div>
   );
 }

@@ -7,6 +7,7 @@
 
 import os
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 
 import psycopg
 import pytest
@@ -63,7 +64,7 @@ def _login(username: str, password: str = "gvclab2026") -> dict:
 def test_seeded_accounts_login_via_db():
     headers = _login("student")
     me = client.get("/api/auth/me", headers=headers).json()
-    assert me == {"username": "student", "name": "同学", "role": "student"}
+    assert me == {"username": "student", "name": "同学", "role": "student", "account_id": 2}
     # 播种数据落在测试库
     with psycopg.connect(TEST_DSN) as c:
         assert c.execute("SELECT count(*) FROM accounts").fetchone()[0] == 2
@@ -77,7 +78,7 @@ def test_teacher_creates_student_who_can_login():
         json={
             "username": "s001",
             "display_name": "王小明",
-            "password": "abc12345",
+            "password": "abc12345-safe",
             "student_no": "2026002",
             "class_id": 1,
         },
@@ -85,14 +86,14 @@ def test_teacher_creates_student_who_can_login():
     assert resp.status_code == 200, resp.text
     assert resp.json()["username"] == "s001"
     # 新账号立即可登录
-    s = _login("s001", "abc12345")
+    s = _login("s001", "abc12345-safe")
     assert client.get("/api/auth/me", headers=s).json()["name"] == "王小明"
     # 重名 409;非法用户名 400
     assert (
         client.post(
             "/api/classroom/students",
             headers=t,
-            json={"username": "s001", "display_name": "x", "password": "abc12345"},
+            json={"username": "s001", "display_name": "x", "password": "abc12345-safe"},
         ).status_code
         == 409
     )
@@ -100,9 +101,17 @@ def test_teacher_creates_student_who_can_login():
         client.post(
             "/api/classroom/students",
             headers=t,
-            json={"username": "空 格", "display_name": "x", "password": "abc12345"},
+            json={"username": "空 格", "display_name": "x", "password": "abc12345-safe"},
         ).status_code
         == 400
+    )
+    assert (
+        client.post(
+            "/api/classroom/students",
+            headers=t,
+            json={"username": "shortpw", "display_name": "x", "password": "too-short", "class_id": 1},
+        ).status_code
+        == 422
     )
 
 
@@ -171,7 +180,7 @@ def test_schema_version_mismatch_fails_loudly_instead_of_stacking_tables():
     with pytest.raises(db.SchemaVersionMismatch) as excinfo:
         db.initialize_schema()
     assert "v2" in str(excinfo.value)
-    assert "--reset" in str(excinfo.value)  # 必须给出可执行的出路
+    assert "备份" in str(excinfo.value) and "禁止直接 reset" in str(excinfo.value)
 
     # 关键:失败后没有留下任何新表,版本戳也没有被偷偷改写。
     with psycopg.connect(TEST_DSN) as c:
@@ -179,7 +188,7 @@ def test_schema_version_mismatch_fails_loudly_instead_of_stacking_tables():
 
 
 def test_legacy_schema_without_version_stamp_is_rejected():
-    """没有版本戳的更早 schema 也必须要求 reset,不能被当成空库直接建表。"""
+    """没有版本戳的更早 schema 不能被当成空库直接建表。"""
     _login("student")
     with psycopg.connect(TEST_DSN, autocommit=True) as c:
         c.execute("DROP TABLE schema_meta")
@@ -187,6 +196,59 @@ def test_legacy_schema_without_version_stamp_is_rejected():
 
     with pytest.raises(db.SchemaVersionMismatch):
         db.initialize_schema()
+
+
+def test_v3_schema_is_migrated_in_place_and_legacy_session_is_unverified():
+    """生产升级必须保留旧数据，旧 JSON 只能只读且不能静默满足新门槛。"""
+    v3 = """
+    CREATE TABLE schema_meta(singleton boolean PRIMARY KEY,version text NOT NULL,created_at timestamptz DEFAULT now());
+    CREATE TABLE classes(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,name text NOT NULL,code text UNIQUE NOT NULL,
+      semester text NOT NULL DEFAULT '',note text NOT NULL DEFAULT '',archived boolean NOT NULL DEFAULT false,created_at timestamptz DEFAULT now());
+    CREATE TABLE accounts(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,username text UNIQUE NOT NULL,display_name text NOT NULL,
+      role text NOT NULL,class_id bigint REFERENCES classes(id),student_no text NOT NULL DEFAULT '',pw_salt text NOT NULL,pw_hash text NOT NULL,
+      active boolean NOT NULL DEFAULT true,last_login_at timestamptz,created_at timestamptz DEFAULT now());
+    CREATE TABLE step_progress(account_id bigint PRIMARY KEY REFERENCES accounts(id),current_step int NOT NULL,max_step int NOT NULL,updated_at timestamptz DEFAULT now());
+    CREATE TABLE experiment_sessions(account_id bigint PRIMARY KEY REFERENCES accounts(id),revision bigint NOT NULL,manifest_id text NOT NULL,
+      session jsonb NOT NULL,updated_at timestamptz DEFAULT now());
+    CREATE TABLE reports(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,account_id bigint NOT NULL REFERENCES accounts(id),report_key text NOT NULL,
+      session_revision bigint NOT NULL,manifest_id text NOT NULL,markdown text NOT NULL,provenance jsonb NOT NULL,created_at timestamptz DEFAULT now(),
+      UNIQUE(account_id,report_key));
+    CREATE TABLE submissions(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,account_id bigint NOT NULL UNIQUE REFERENCES accounts(id),title text NOT NULL,
+      year int NOT NULL,design jsonb NOT NULL,markdown text NOT NULL,state text NOT NULL DEFAULT 'pending',score int,feedback text NOT NULL DEFAULT '',
+      graded_by text,graded_at timestamptz,submitted_at timestamptz DEFAULT now());
+    CREATE TABLE announcements(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,class_id bigint REFERENCES classes(id),title text NOT NULL,
+      body text NOT NULL DEFAULT '',author text NOT NULL,created_at timestamptz DEFAULT now());
+    """
+    with psycopg.connect(TEST_DSN, autocommit=True) as c:
+        c.execute("DROP SCHEMA public CASCADE")
+        c.execute("CREATE SCHEMA public")
+        c.execute(v3)
+        c.execute("INSERT INTO schema_meta VALUES(true,'gvcsim-teaching-db-v3',now())")
+        class_id = c.execute("INSERT INTO classes(name,code) VALUES('旧班','OLD') RETURNING id").fetchone()[0]
+        teacher_id = c.execute(
+            "INSERT INTO accounts(username,display_name,role,pw_salt,pw_hash) VALUES('old_teacher','旧师','teacher','00','x') RETURNING id"
+        ).fetchone()[0]
+        student_id = c.execute(
+            "INSERT INTO accounts(username,display_name,role,class_id,pw_salt,pw_hash) VALUES('old_student','旧生','student',%s,'00','x') RETURNING id",
+            (class_id,),
+        ).fetchone()[0]
+        c.execute(
+            "INSERT INTO experiment_sessions(account_id,revision,manifest_id,session) VALUES(%s,2,'old-manifest',%s)",
+            (student_id, '{"version":"experiment-session-v3","manifest_id":"old-manifest","steps":{}}'),
+        )
+    db._schema_ready = False
+    applied = db.initialize_schema()
+    assert any("v3" in item and "v4" in item for item in applied)
+    with psycopg.connect(TEST_DSN) as c:
+        assert c.execute("SELECT version FROM schema_meta").fetchone()[0] == db.TEACHING_DB_VERSION
+        assert c.execute("SELECT legacy_unverified FROM attempt_sessions").fetchone()[0] is True
+        assert c.execute("SELECT count(*) FROM accounts").fetchone()[0] == 2
+        assert (
+            c.execute(
+                "SELECT count(*) FROM teacher_course_access WHERE teacher_account_id=%s", (teacher_id,)
+            ).fetchone()[0]
+            == 1
+        )
 
 
 def test_concurrent_initialize_is_safe_and_idempotent():
@@ -203,6 +265,495 @@ def test_concurrent_initialize_is_safe_and_idempotent():
     with psycopg.connect(TEST_DSN) as c:
         assert c.execute("SELECT count(*) FROM schema_meta").fetchone()[0] == 1
         assert c.execute("SELECT count(*) FROM accounts WHERE username = 'student'").fetchone()[0] == 1
+
+
+def test_provisioned_teachers_receive_isolated_default_courses(monkeypatch):
+    """生产空库显式建多个教师时，默认课程不能成为隐式共享授权通道。"""
+    monkeypatch.setattr(config, "DEMO_MODE", False)
+    monkeypatch.setattr(config, "BOOTSTRAP_PASSWORD", "")
+    assert any("创建 schema" in item for item in db.initialize_schema())
+
+    db.provision_teacher("owner_a", "甲教师", "owner-a-private-password")
+    db.provision_teacher("owner_b", "乙教师", "owner-b-private-password")
+    runs_a = db.list_course_runs("owner_a")
+    runs_b = db.list_course_runs("owner_b")
+    assert len(runs_a) == 1 and len(runs_b) == 1
+    assert runs_a[0]["id"] != runs_b[0]["id"]
+    assert runs_a[0]["code"] != runs_b[0]["code"]
+
+    class_a = db.create_class("甲班", "OWNER-A-CLASS", teacher_username="owner_a")
+    class_b = db.create_class("乙班", "OWNER-B-CLASS", teacher_username="owner_b")
+    assert {row["id"] for row in db.list_classes("owner_a")} == {class_a["id"]}
+    assert {row["id"] for row in db.list_classes("owner_b")} == {class_b["id"]}
+
+
+def test_course_assignment_enrollment_attempt_scope_is_operational():
+    _login("student")  # 初始化并播种
+    run = db.create_course_run("teacher", "第二门课", "RUN-2", "2026 秋", "release-2")
+    cls = db.create_class("第二班", "CLASS-2", teacher_username="teacher")
+    student = db.create_student(
+        "scope_s2", "作用域学生", "safe-password", class_id=cls["id"], teacher_username="teacher"
+    )
+    enrollment = db.enroll_student("teacher", run["id"], student["id"], cls["id"])
+    assignment = db.create_assignment("teacher", run["id"], "lab-1", "实验一", "manifest-release-2")
+
+    context = db.assignment_context("scope_s2", "manifest-release-2")
+    assert context and context["course_run_id"] == run["id"]
+    assert context["assignment_id"] == assignment["id"]
+    assert context["enrollment_id"] == enrollment["id"]
+    assert context["attempt_no"] == 1
+
+    second = db.start_new_attempt("scope_s2", "manifest-release-2")
+    assert second["attempt_no"] == 2 and second["attempt_id"] != context["attempt_id"]
+    assert {row["code"] for row in db.list_course_runs("teacher")} >= {"GVC-LEGACY", "RUN-2"}
+
+
+def test_first_attempt_creation_is_safe_under_concurrent_student_bootstrap():
+    """首屏 meta/progress 并发时只能得到同一个 attempt，不能有唯一键 500。"""
+    _login("student")
+    run = db.create_course_run("teacher", "并发首屏课程", "RACE-RUN")
+    cls = db.create_class("并发首屏班", "RACE-CLASS", teacher_username="teacher")
+    student = db.create_student(
+        "race_student",
+        "并发学生",
+        "race-student-password",
+        class_id=cls["id"],
+        teacher_username="teacher",
+    )
+    enrollment = db.enroll_student("teacher", run["id"], student["id"], cls["id"])
+    assignment = db.create_assignment("teacher", run["id"], "race-lab", "并发作业", "race-manifest")
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        contexts = list(pool.map(lambda _: db.assignment_context("race_student", "race-manifest"), range(4)))
+
+    attempt_ids = {context["attempt_id"] for context in contexts if context is not None}
+    assert len(attempt_ids) == 1
+    with psycopg.connect(TEST_DSN) as connection:
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM experiment_attempts WHERE assignment_id=%s AND enrollment_id=%s",
+                (assignment["id"], enrollment["id"]),
+            ).fetchone()[0]
+            == 1
+        )
+
+
+def test_enrollment_list_is_persistent_and_teacher_scoped():
+    teacher = _login("teacher")
+    context = db.assignment_context("student", "manifest-enrollment-list")
+    assert context
+    url = f"/api/classroom/enrollments?course_run_id={context['course_run_id']}"
+    first = client.get(url, headers=teacher)
+    second = client.get(url, headers=teacher)
+    assert first.status_code == 200 and second.json() == first.json()
+    enrolled = first.json()["enrollments"]
+    assert any(row["account_id"] == 2 and row["active"] is True for row in enrolled)
+
+    db.provision_teacher("teacher2", "教师二", "teacher2-private-password")
+    other = _login("teacher2", "teacher2-private-password")
+    assert client.get(url, headers=other).status_code == 403
+
+
+def test_assignment_time_window_is_enforced_by_api_and_db():
+    teacher = _login("teacher")
+    run_id = db.assignment_context("student", "manifest-window")["course_run_id"]
+    response = client.post(
+        "/api/classroom/assignments",
+        headers=teacher,
+        json={
+            "course_run_id": run_id,
+            "slug": "bad-window",
+            "title": "不可达作业",
+            "manifest_id": "manifest-window",
+            "opens_at": "2026-07-20T00:00:00Z",
+            "due_at": "2026-07-20T00:00:00Z",
+        },
+    )
+    assert response.status_code == 422
+    with pytest.raises(ValueError, match="due_at"):
+        db.create_assignment(
+            "teacher",
+            run_id,
+            "bad-window-db",
+            "不可达作业",
+            "manifest-window",
+            opens_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+            due_at=datetime(2026, 7, 20, tzinfo=timezone.utc),
+        )
+
+
+def test_historical_manifest_assignment_cannot_be_reactivated(monkeypatch):
+    teacher = _login("teacher")
+    run_id = db.assignment_context("student", "manifest-current")["course_run_id"]
+    historical = db.create_assignment("teacher", run_id, "historical", "历史作业", "manifest-historical")
+    assert db.set_assignment_active("teacher", historical["id"], False)
+    monkeypatch.setattr(artifacts, "manifest_id", lambda: "manifest-current")
+    response = client.post(
+        f"/api/classroom/assignments/{historical['id']}/state",
+        headers=teacher,
+        json={"active": True},
+    )
+    assert response.status_code == 409
+    assert "历史" in response.json()["detail"]
+
+
+def test_teacher_queries_are_scoped_to_granted_courses_and_classes():
+    _login("student")
+    db.provision_teacher("teacher2", "教师二", "a-long-private-password")
+    other_class = db.create_class("教师二班级", "T2-CLASS", teacher_username="teacher2")
+    other_student = db.create_student(
+        "teacher2_student",
+        "二班学生",
+        "safe-password",
+        class_id=other_class["id"],
+        teacher_username="teacher2",
+    )
+
+    # 模拟生产服务重启。普通 v4 initialize 不能把所有教师、班级和学生再次
+    # 汇入 GVC-LEGACY，否则两个原本隔离的教师会经共享 legacy run 互相越权。
+    db._schema_ready = False
+    assert db.initialize_schema() == []
+
+    assert other_class["id"] not in {row["id"] for row in db.list_classes("teacher")}
+    assert 1 not in {row["id"] for row in db.list_classes("teacher2")}
+    assert "teacher2_student" not in {row["username"] for row in db.list_students(teacher_username="teacher")}
+    assert db.update_student(other_student["id"], {"display_name": "越权修改"}, "teacher") is None
+    assert "GVC-LEGACY" not in {row["code"] for row in db.list_course_runs("teacher2")}
+
+
+def test_revoked_course_manage_access_cannot_enumerate_course_or_submission_metadata():
+    """撤销 can_manage 后，列表端点也必须与详情/评分端点一样 fail closed。"""
+    _login("student")
+    db.provision_teacher("teacher2", "教师二", "teacher2-private-password")
+    teacher2 = _login("teacher2", "teacher2-private-password")
+    run = db.create_course_run("teacher2", "教师二私有课程", "T2-PRIVATE")
+    cls = db.create_class("教师二私有班", "T2-PRIVATE-CLASS", teacher_username="teacher2")
+    student = db.create_student(
+        "teacher2_private_student",
+        "教师二学生",
+        "student-private-password",
+        class_id=cls["id"],
+        teacher_username="teacher2",
+    )
+    db.enroll_student("teacher2", run["id"], student["id"], cls["id"])
+    db.create_assignment("teacher2", run["id"], "private-lab", "私有作业", "private-manifest")
+    provenance = {"artifact": {"years": [2020]}, "runs": []}
+    assert db.save_report(
+        "teacher2_private_student",
+        "private-report",
+        1,
+        "private-manifest",
+        "# 私有报告",
+        provenance,
+    )
+    submission = db.submit_report("teacher2_private_student", "私有提交", "private-report", "private-manifest")
+    assert submission
+
+    assert run["id"] in {
+        row["id"] for row in client.get("/api/classroom/course-runs", headers=teacher2).json()["course_runs"]
+    }
+    assert submission["id"] in {
+        row["id"] for row in client.get("/api/classroom/submissions", headers=teacher2).json()["submissions"]
+    }
+
+    with psycopg.connect(TEST_DSN, autocommit=True) as connection:
+        connection.execute(
+            "UPDATE teacher_course_access SET can_manage=false"
+            " WHERE teacher_account_id=(SELECT id FROM accounts WHERE username='teacher2')"
+            " AND course_run_id=%s",
+            (run["id"],),
+        )
+
+    assert run["id"] not in {
+        row["id"] for row in client.get("/api/classroom/course-runs", headers=teacher2).json()["course_runs"]
+    }
+    assert submission["id"] not in {
+        row["id"] for row in client.get("/api/classroom/submissions", headers=teacher2).json()["submissions"]
+    }
+
+
+def test_shared_class_teacher_dashboard_does_not_mix_other_course_attempts_or_submissions():
+    """共享班级只共享花名册，不得让另一教师课程的 attempt、成绩和活动串入概览。"""
+    _login("student")
+    course_a = db.assignment_context("student", "manifest-course-a")
+    assert course_a and course_a["attempt_id"]
+
+    db.provision_teacher("teacher2", "教师二", "teacher2-private-password")
+    course_b = db.list_course_runs("teacher2")[0]
+    with psycopg.connect(TEST_DSN, autocommit=True) as connection:
+        # 教务层显式共享同一个班级；两个教师仍只拥有各自 course_run 的学习记录。
+        connection.execute("INSERT INTO course_class_links(course_run_id,class_id) VALUES (%s,1)", (course_b["id"],))
+    student_id = db.find_account("student")["id"]
+    db.enroll_student("teacher2", course_b["id"], student_id, 1)
+    assignment_b = db.create_assignment(
+        "teacher2", course_b["id"], "course-b-lab", "教师二课程作业", "manifest-course-b"
+    )
+    with psycopg.connect(TEST_DSN, autocommit=True) as connection:
+        connection.execute(
+            "UPDATE assignments SET created_at=now()+interval '1 second' WHERE id=%s", (assignment_b["id"],)
+        )
+    scope_b = db.assignment_context("student", "manifest-course-b")
+    assert scope_b and scope_b["assignment_id"] == assignment_b["id"]
+    db.upsert_progress("student", 12)
+    provenance = {"artifact": {"years": [2020]}, "runs": []}
+    assert db.save_report("student", "course-b-report", 1, "manifest-course-b", "# B 课程报告", provenance)
+    submitted_b = db.submit_report("student", "B 课程提交", "course-b-report", "manifest-course-b")
+    assert submitted_b
+
+    teacher_a_row = db.list_students(teacher_username="teacher")[0]
+    teacher_b_row = db.list_students(teacher_username="teacher2")[0]
+    assert teacher_a_row["assignment_id"] == course_a["assignment_id"]
+    assert teacher_a_row["attempt_id"] == course_a["attempt_id"]
+    assert teacher_a_row["max_step"] is None
+    assert teacher_a_row["submission_id"] is None
+    assert teacher_b_row["assignment_id"] == assignment_b["id"]
+    assert teacher_b_row["attempt_id"] == scope_b["attempt_id"]
+    assert teacher_b_row["max_step"] == 12
+    assert teacher_b_row["submission_id"] == submitted_b["id"]
+
+    overview_a = db.overview_stats(teacher_username="teacher")
+    overview_b = db.overview_stats(teacher_username="teacher2")
+    assert overview_a["submitted"] == 0 and overview_a["active_7d"] == 0
+    assert overview_b["submitted"] == 1 and overview_b["active_7d"] == 1
+
+
+def test_submission_and_grading_versions_are_append_only_and_reset_is_consistent():
+    _login("student")
+    manifest = "manifest-version-history"
+    before = db.assignment_context("student", manifest)
+    assert before
+    provenance = {"artifact": {"years": [2020]}, "runs": []}
+    db.save_report("student", "report-v1", 1, manifest, "# 第一版", provenance)
+    first = db.submit_report("student", "第一版", "report-v1", manifest)
+    assert first and first["version_no"] == 1
+    assert db.grade_submission(first["id"], 88, "第一版评语", "teacher")
+
+    db.save_report("student", "report-v2", 2, manifest, "# 第二版", provenance)
+    second = db.submit_report("student", "第二版", "report-v2", manifest)
+    assert second and second["id"] == first["id"] and second["version_no"] == 2
+    history = db.submission_history(first["id"], "teacher")
+    assert history and [row["markdown"] for row in history["versions"]] == ["# 第一版", "# 第二版"]
+    assert history["grades"][0]["version_no"] == 1 and history["grades"][0]["score"] == 88
+
+    # 重置切换 attempt：当前进度/报告/提交为空，但不可变历史仍可审计。
+    db.upsert_progress("student", 12)
+    db.clear_session("student")
+    after = db.assignment_context("student", manifest)
+    assert after and after["attempt_id"] != before["attempt_id"]
+    assert db.get_progress("student") is None
+    assert db.latest_report("student") is None
+    assert db.my_submission("student") is None
+    assert len(db.submission_history(first["id"], "teacher")["versions"]) == 2
+
+
+def test_report_and_step16_session_are_atomic_and_revision_bound():
+    _login("student")
+    manifest = "manifest-atomic-report"
+    base = session_model.empty_session(manifest)
+    saved = db.save_session("student", base, 0, session_model.merge_sessions)
+    assert saved and saved["revision"] == 1
+    updated = session_model.empty_session(manifest)
+    updated["steps"]["16"] = session_model.make_record({"report_key": "atomic-key"})
+    provenance = {"artifact": {"years": [2020]}, "runs": []}
+
+    atomic = db.save_generated_report_and_session(
+        "student", "atomic-key", 1, manifest, "# 原子报告", provenance, updated
+    )
+    assert atomic and atomic["revision"] == 2
+    assert db.latest_report("student")["markdown"] == "# 原子报告"
+    assert db.get_session("student")["session"]["steps"]["16"]["data"]["report_key"] == "atomic-key"
+
+    # 同一内容重复生成必须真正幂等：不改不可变正文，也不靠刷新时间戳推进 revision。
+    again = db.save_generated_report_and_session(
+        "student", "atomic-key", 2, manifest, "# 不能覆盖原文", {"new": True}, updated
+    )
+    assert again and again["revision"] == 2
+    assert again["report"]["markdown"] == "# 原子报告"
+    assert db.get_session("student")["revision"] == 2
+
+    # 旧 revision 冲突必须整笔回滚，不能留下 orphan report。
+    with pytest.raises(db.SessionRevisionConflict):
+        db.save_generated_report_and_session("student", "orphan-key", 1, manifest, "# 不应落库", provenance, updated)
+    assert db.report_by_key("student", "orphan-key") is None
+
+    # report_key 是内容指纹；新 attempt 可能生成同一内容，唯一边界必须是 attempt。
+    db.start_new_attempt("student", manifest)
+    db.save_session("student", base, 0, session_model.merge_sessions)
+    repeated = db.save_generated_report_and_session(
+        "student", "atomic-key", 1, manifest, "# 原子报告", provenance, updated
+    )
+    assert repeated
+    with psycopg.connect(TEST_DSN) as c:
+        assert c.execute("SELECT count(*) FROM reports WHERE report_key='atomic-key'").fetchone()[0] == 2
+
+
+def test_evidence_event_cannot_cross_attempt_boundary():
+    _login("student")
+    manifest = "manifest-event-scope"
+    context = db.assignment_context("student", manifest)
+    event = db.record_evidence_event("student", 1, "slice", manifest, "a" * 64, {"ok": True})
+    assert db.evidence_event_exists(
+        "student", event["event_id"], context["assignment_id"], context["attempt_id"], "a" * 64
+    )
+    db.start_new_attempt("student", manifest)
+    assert not db.evidence_event_exists(
+        "student", event["event_id"], context["assignment_id"], context["attempt_id"], "a" * 64
+    )
+
+
+def test_learning_and_regression_receipts_cannot_cross_new_assignment_with_same_manifest():
+    """新 assignment 不会归档旧 assignment attempt；收据仍必须按 current scope 失效。"""
+    from gvcsim import evidence, trusted_evidence
+
+    _login("student")
+    manifest = "manifest-same-release-new-assignment"
+    old_scope = db.assignment_context("student", manifest)
+    assert old_scope
+
+    learning_payload = {"slice": {"year": 2020}, "cer": {"claim": "旧作业"}}
+    learning_event = db.record_evidence_event(
+        "student", 1, "slice", manifest, trusted_evidence.digest(learning_payload), {"payload": learning_payload}
+    )
+    learning_token = trusted_evidence.issue_learning_evidence(
+        subject="student",
+        step=1,
+        kind="slice",
+        manifest_id=manifest,
+        payload=learning_payload,
+        event=learning_event,
+    )
+
+    def regression_token(step: int, kind: str, design: dict) -> str:
+        result = {"depvar": "DVAex_share", "coefs": []}
+        event = db.record_evidence_event(
+            "student",
+            step,
+            kind,
+            manifest,
+            trusted_evidence.digest({"design": design, "result": result}),
+            {"design": design, "result_sha256": trusted_evidence.digest(result)},
+        )
+        return trusted_evidence.issue_regression_run(
+            subject="student", manifest_id=manifest, design=design, result=result, event=event, kind=kind
+        )
+
+    baseline_design = {
+        "outcome": "trade",
+        "granularity": "country_industry",
+        "shock_type": "tariff",
+        "method": "did",
+        "control_mode": "none",
+        "interaction": False,
+        "price_mode": "nominal",
+        "scenario": "clean",
+        "exclude_row": True,
+        "weight_mode": "fixed_pretreatment",
+    }
+    controlled_design = {**baseline_design, "control_mode": "icio_derived"}
+    baseline_token = regression_token(12, "regression", baseline_design)
+    controlled_token = regression_token(12, "regression", controlled_design)
+    placebo_design = {**baseline_design, "outcome": "network"}
+    placebo_token = regression_token(15, "placebo", placebo_design)
+
+    assert trusted_evidence.verify_learning_evidence(
+        learning_token,
+        subject="student",
+        step=1,
+        kind="slice",
+        manifest_id=manifest,
+        payload=learning_payload,
+    )
+    assert trusted_evidence.verify_regression_run(
+        controlled_token,
+        subject="student",
+        manifest_id=manifest,
+        outcome="trade",
+        settings={"controlMode": "icio_derived"},
+        step=12,
+    )
+    assert trusted_evidence.verify_regression_run(
+        placebo_token,
+        subject="student",
+        manifest_id=manifest,
+        outcome="network",
+        settings={},
+        kind="placebo",
+        step=15,
+    )
+
+    step12_data = {
+        "run": {"depvar": "DVAex_share", "settings": {"controlMode": "icio_derived"}},
+        "run_id": controlled_token,
+        "checks": {"baseline_run_id": baseline_token, "controlled_run_id": controlled_token},
+        "judgment": "该回归只有在平行趋势和外生冲击成立时才可作有限因果解释",
+        "cer": {
+            "claim": "加入控制变量后结果仍显示稳定的方向性关系",
+            "evidence": "两次服务端估计的系数差异约为 0.12 个单位",
+            "reasoning": "同一设计只改变控制变量可用于检查遗漏变量敏感性",
+            "boundary": "该比较仍受平行趋势与模拟政策冲击边界限制",
+        },
+    }
+    old_session = _session_body({"12": session_model.make_record(step12_data)}, manifest)
+    assert evidence.evaluate_step(12, old_session, subject="student", require_trusted=True).complete
+
+    newer = db.create_assignment(
+        "teacher",
+        old_scope["course_run_id"],
+        "same-release-next",
+        "同一发布的新作业",
+        manifest,
+    )
+    with psycopg.connect(TEST_DSN, autocommit=True) as connection:
+        connection.execute("UPDATE assignments SET created_at=now()+interval '1 second' WHERE id=%s", (newer["id"],))
+        assert (
+            connection.execute(
+                "SELECT state FROM experiment_attempts WHERE id=%s", (old_scope["attempt_id"],)
+            ).fetchone()[0]
+            == "active"
+        )
+    new_scope = db.assignment_context("student", manifest)
+    assert new_scope and new_scope["assignment_id"] == newer["id"]
+
+    assert not trusted_evidence.verify_learning_evidence(
+        learning_token,
+        subject="student",
+        step=1,
+        kind="slice",
+        manifest_id=manifest,
+        payload=learning_payload,
+    )
+    assert not trusted_evidence.verify_regression_run(
+        controlled_token,
+        subject="student",
+        manifest_id=manifest,
+        outcome="trade",
+        settings={"controlMode": "icio_derived"},
+        step=12,
+    )
+    assert not trusted_evidence.verify_regression_run(
+        placebo_token,
+        subject="student",
+        manifest_id=manifest,
+        outcome="network",
+        settings={},
+        kind="placebo",
+        step=15,
+    )
+    assert not evidence.evaluate_step(12, old_session, subject="student", require_trusted=True).complete
+
+
+def test_password_reset_revokes_existing_access_token():
+    student_headers = _login("student")
+    teacher_headers = _login("teacher")
+    student_id = client.get("/api/classroom/students", headers=teacher_headers).json()["students"][0]["id"]
+    changed = client.post(
+        f"/api/classroom/students/{student_id}",
+        headers=teacher_headers,
+        json={"password": "new-safe-password"},
+    )
+    assert changed.status_code == 200
+    assert client.get("/api/meta", headers=student_headers).status_code == 401
+    _login("student", "new-safe-password")
 
 
 # ---------------------------------------------------------------- 实验会话
@@ -284,7 +835,7 @@ def test_stale_session_is_flagged_not_silently_served():
         json={"base_revision": 0, "session": _session_body({"4": session_model.make_record({"a": 1})}, _manifest_id())},
     )
     with psycopg.connect(TEST_DSN, autocommit=True) as c:
-        c.execute("UPDATE experiment_sessions SET session = jsonb_set(session, '{manifest_id}', '\"deadbeef\"')")
+        c.execute("UPDATE attempt_sessions SET session = jsonb_set(session, '{manifest_id}', '\"deadbeef\"')")
     assert client.get("/api/classroom/session", headers=s).json()["stale"] is True
 
 
@@ -302,27 +853,224 @@ def test_malformed_session_is_rejected():
         assert resp.status_code == 422, body
 
 
+@needs_artifacts
+def test_due_at_is_a_hard_write_boundary_but_preserves_verified_read_state():
+    from gvcsim import trusted_evidence
+
+    student = _login("student")
+    mid = _manifest_id()
+    context = db.assignment_context("student", mid)
+    payload = {
+        "compared": ["CHN", "USA"],
+        "cer": {
+            "claim": "当前结果显示两个经济体之间存在可解释的差异",
+            "evidence": "2020 年服务端数值显示差异约为 12.5 个单位",
+            "reasoning": "统一统计口径使该数值比较能够支持当前描述性主张",
+            "boundary": "当前证据只适用于该数据版本与所选经济体样本",
+        },
+    }
+    event = db.record_evidence_event(
+        "student", 3, "indicator", mid, trusted_evidence.digest(payload), {"payload": payload}
+    )
+    payload["evidence_id"] = trusted_evidence.issue_learning_evidence(
+        subject="student", step=3, kind="indicator", manifest_id=mid, payload=payload, event=event
+    )
+    session = _session_body({"3": session_model.make_record(payload)}, mid)
+    saved = client.put("/api/classroom/session", headers=student, json={"base_revision": 0, "session": session})
+    assert saved.status_code == 200 and saved.json()["completion"]["completed"] == [3]
+
+    with psycopg.connect(TEST_DSN, autocommit=True) as connection:
+        connection.execute("UPDATE assignments SET due_at=now() WHERE id=%s", (context["assignment_id"],))
+
+    reopened = client.get("/api/classroom/session", headers=student)
+    assert reopened.status_code == 200
+    assert reopened.json()["assignment_closed"] is True
+    assert reopened.json()["read_only"] is True
+    assert reopened.json()["stale"] is False
+    assert reopened.json()["completion"]["completed"] == [3]
+    assert reopened.json()["session"]["steps"]["3"]["data"]["compared"] == ["CHN", "USA"]
+
+    meta = client.get("/api/meta", headers=student).json()
+    assert meta["assignment_closed"] is True and meta["due_at"]
+    assert meta["assignment_context"]["assignment_closed"] is True
+
+    assert (
+        client.put("/api/classroom/session", headers=student, json={"base_revision": 1, "session": session}).status_code
+        == 409
+    )
+    assert client.post("/api/classroom/progress", headers=student, json={"step": 4}).status_code == 409
+    assert client.delete("/api/classroom/session", headers=student).status_code == 409
+    assert client.post("/api/classroom/attempts/new", headers=student).status_code == 409
+    assert client.post("/api/classroom/report/generate", headers=student).status_code == 409
+    assert (
+        client.post(
+            "/api/classroom/report/submit", headers=student, json={"title": "截止后提交", "report_key": "none"}
+        ).status_code
+        == 409
+    )
+    with pytest.raises(db.AssignmentClosed):
+        db.record_evidence_event("student", 4, "indicator", mid, "a" * 64, {"payload": {}})
+
+
 # ------------------------------------------------------- 第 16 步:报告闭环
 
 
 def _put_complete_session(headers: dict) -> None:
-    from gvcsim import evidence
+    """写入一套真实绑定当前 account/assignment/attempt 的 1–15 步测试证据。"""
+    from gvcsim import evidence, trusted_evidence
 
     mid = _manifest_id()
-    payload = {
-        "db": {"slice": {"year": 2020, "table": "z", "row_country": "CHN", "col_country": "USA"}},
-        "shock": {"viewed_shock_types": list(evidence.REQUIRED_SHOCK_TYPES)},
-        "qc": {"disposition": "disclose", "judgment": "质检警告不影响本课结论,披露后继续"},
-        "ind": {"compared": ["CHN", "USA"]},
-        "viz": {"chart": "quadrant", "compared": ["CHN", "USA"]},
-        "reg": {
-            "run": {"depvar": "FVA_share", "settings": {"shockType": "export_control"}},
-            "judgment": "只有一个处理聚类,推断被抑制,不能作因果解释",
-        },
+
+    def cer(boundary: str = "该比较只适用于当前样本和课程定义口径") -> dict[str, str]:
+        return {
+            "claim": "当前结果显示两个观察对象之间存在值得解释的差异",
+            "evidence": "2020 年服务端结果显示代表性差值约为 12.5 个单位",
+            "reasoning": "统一口径下的数值对比支持该主张但仍不能单独识别因果",
+            "boundary": boundary,
+        }
+
+    def learning(step: int, kind: str, payload: dict) -> dict:
+        event = db.record_evidence_event(
+            "student", step, kind, mid, trusted_evidence.digest(payload), {"payload": payload}
+        )
+        token = trusted_evidence.issue_learning_evidence(
+            subject="student", step=step, kind=kind, manifest_id=mid, payload=payload, event=event
+        )
+        return {**payload, "evidence_id": token}
+
+    def design(outcome: str, **changes) -> dict:
+        value = {
+            "outcome": outcome,
+            "granularity": "country_industry",
+            "shock_type": "tariff",
+            "method": "did",
+            "control_mode": "none",
+            "interaction": False,
+            "price_mode": "nominal",
+            "scenario": "clean",
+            "exclude_row": True,
+            "weight_mode": "fixed_pretreatment",
+        }
+        value.update(changes)
+        return value
+
+    def regression_run(step: int, run_design: dict, *, kind: str = "regression") -> str:
+        result = {"depvar": f"{run_design['outcome']}_outcome", "coefs": []}
+        event = db.record_evidence_event(
+            "student",
+            step,
+            kind,
+            mid,
+            trusted_evidence.digest({"design": run_design, "result": result}),
+            {"design": run_design, "result": result},
+        )
+        return trusted_evidence.issue_regression_run(
+            subject="student",
+            manifest_id=mid,
+            design=run_design,
+            result=result,
+            event=event,
+            kind=kind,
+        )
+
+    steps: dict[str, dict] = {
+        "1": session_model.make_record(
+            learning(
+                1,
+                "slice",
+                {
+                    "slice": {"year": 2020, "table": "z", "row_country": "CHN", "col_country": "USA"},
+                    "observation": {"row": "CHN_D01T02", "column": "USA_D01T02", "value": 12.5},
+                    "cer": cer(),
+                },
+            )
+        ),
+        "2": session_model.make_record(
+            learning(
+                2,
+                "qc_resolution",
+                {
+                    "disposition": "disclose",
+                    "judgment": "当前质检警告会写入报告限制部分，披露后才能继续解释结果",
+                    "disclosures": ["测试环境中的质检警告已明确披露"],
+                },
+            )
+        ),
     }
-    steps = {
-        str(step): session_model.make_record(payload[lab]) for step, lab in evidence.STEP_LABS.items() if lab != "rep"
+    for step in range(3, 7):
+        steps[str(step)] = session_model.make_record(
+            learning(step, "indicator", {"compared": ["CHN", "USA"], "cer": cer()})
+        )
+    for step in range(7, 11):
+        steps[str(step)] = session_model.make_record(
+            learning(step, "visualization", {"chart": "rank", "compared": ["CHN", "USA"], "cer": cer()})
+        )
+    steps["11"] = session_model.make_record(
+        learning(
+            11,
+            "shock",
+            {
+                "viewed_shock_types": list(evidence.REQUIRED_SHOCK_TYPES),
+                "viewed_events": ["测试关税事件", "测试制裁事件", "测试出口管制事件"],
+                "cer": cer(),
+            },
+        )
+    )
+
+    trade_main = design("trade", control_mode="icio_derived")
+    production_main = design("production", interaction=True)
+    length_main = design("length", method="event_study")
+    network_main = design("network")
+    trade_controlled = regression_run(12, trade_main)
+    production_interaction = regression_run(13, production_main)
+    placebo = regression_run(15, network_main, kind="placebo")
+    specs = {
+        12: (
+            trade_main,
+            {"controlMode": "icio_derived"},
+            {
+                "baseline_run_id": regression_run(12, design("trade")),
+                "controlled_run_id": trade_controlled,
+            },
+        ),
+        13: (
+            production_main,
+            {"interaction": True},
+            {
+                "baseline_run_id": regression_run(13, design("production")),
+                "interaction_run_id": production_interaction,
+                "marginal_effect": "基期 GVC 每增加 1 单位，边际效应约变化 0.25",
+            },
+        ),
+        14: (
+            length_main,
+            {"method": "event_study"},
+            {
+                "pretrend": "事件前第 2 期估计值约为 0.10，未显示明显预趋势",
+                "post_effect": "事件后第 1 期估计值约为 0.30，方向与假设一致",
+            },
+        ),
+        15: (network_main, {}, {"placebo_run_id": placebo}),
     }
+    for step, (run_design, settings, checks) in specs.items():
+        main_run = (
+            trade_controlled
+            if step == 12
+            else production_interaction
+            if step == 13
+            else regression_run(step, run_design)
+        )
+        data = {
+            "run_id": main_run,
+            "run": {"depvar": f"{run_design['outcome']}_outcome", "settings": settings},
+            "judgment": "处理支持度和识别假设限制了因果解释，当前结果只能作审慎的条件性说明",
+            "checks": checks,
+            "cer": (cer("网络节点可能相互干扰并产生网络外溢，因此 SUTVA 边界需要明确讨论") if step == 15 else cer()),
+        }
+        if step == 15:
+            data["placebo_run_id"] = placebo
+        steps[str(step)] = session_model.make_record(data)
+
     resp = client.put(
         "/api/classroom/session", headers=headers, json={"base_revision": 0, "session": _session_body(steps, mid)}
     )
@@ -362,7 +1110,11 @@ def test_submit_rejects_fabricated_markdown_because_it_no_longer_accepts_any():
 def test_generated_report_completes_step_16_and_can_be_reopened():
     s = _login("student")
     _put_complete_session(s)
-    assert client.get("/api/classroom/session", headers=s).json()["completion"]["completed_count"] == 15
+    before_generation = client.get("/api/classroom/session", headers=s).json()
+    assert before_generation["completion"]["completed_count"] == 15
+    # 模拟浏览器防抖队列里已经捕获、但尚未发出的本地快照。报告生成后客户端
+    # 会拿到最新 revision；快照本身仍可能没有服务端刚写入的 step 16。
+    queued_local_session = before_generation["session"]
 
     generated = client.post("/api/classroom/report/generate", headers=s)
     assert generated.status_code == 200, generated.text
@@ -372,11 +1124,35 @@ def test_generated_report_completes_step_16_and_can_be_reopened():
     completion = client.get("/api/classroom/session", headers=s).json()["completion"]
     assert completion["completed_count"] == 16
 
+    # 真实事故：onGenerated reload 先把 revision 更新到报告写入后的值，随后这个
+    # 旧快照用“相同 revision”执行 PUT。服务端必须仍做记录级 merge，不能让
+    # incoming 整份覆盖并删除只由服务端签发的 step 16。
+    generated_revision = client.get("/api/classroom/session", headers=s).json()["revision"]
+    delayed = client.put(
+        "/api/classroom/session",
+        headers=s,
+        json={"base_revision": generated_revision, "session": queued_local_session},
+    )
+    assert delayed.status_code == 200, delayed.text
+    assert delayed.json()["merged_from"] is None  # revision 没冲突，但仍必须合并。
+    assert delayed.json()["completion"]["completed_count"] == 16
+    assert delayed.json()["session"]["steps"]["16"]["data"]["report_key"] == report_key
+
+    persisted = client.get("/api/classroom/session", headers=s).json()
+    assert persisted["completion"]["completed_count"] == 16
+    assert persisted["session"]["steps"]["16"]["data"]["report_key"] == report_key
+
     # 刷新/重新登录后仍能重新打开报告全文。
     reopened = client.get("/api/classroom/report/generated", headers=_login("student")).json()
     assert reopened["report_key"] == report_key
     assert reopened["markdown"] == generated.json()["markdown"]
     assert reopened["provenance"]["manifest_id"] == _manifest_id()
+
+    revision = persisted["revision"]
+    repeated = client.post("/api/classroom/report/generate", headers=s)
+    assert repeated.status_code == 200
+    assert repeated.json() == generated.json()
+    assert client.get("/api/classroom/session", headers=s).json()["revision"] == revision
 
 
 @needs_artifacts
@@ -496,13 +1272,13 @@ def test_db_down_degrades_gracefully(monkeypatch):
     s = _login("student")
     monkeypatch.setattr(config, "PG_DSN", DEAD_DSN)
     db._schema_ready = False
-    # 核心接口不受影响;教学接口 503;演示账号回退登录可用
-    assert client.get("/api/meta", headers=s).status_code == 200
+    # 可撤销令牌逐请求复查数据库；故障必须明确 503，不能伪装成无效令牌 401。
+    assert client.get("/api/meta", headers=s).status_code == 503
     assert client.get("/api/classroom/announcements", headers=s).status_code == 503
     assert client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).status_code == 200
     bad = client.post("/api/auth/login", json={"username": "teacher", "password": "wrong"})
     assert bad.status_code == 503
-    assert "请使用演示账号" in bad.json()["detail"]
+    assert "认证数据库不可用" in bad.json()["detail"]
 
 
 @needs_artifacts

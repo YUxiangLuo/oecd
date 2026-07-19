@@ -1,15 +1,30 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
-import type { DbMeta, DbSlice, DbTableKind, StepEvidenceApi } from "../../types";
-import { EvidencePanel } from "../../step-evidence";
+import type { CerStepEvidence, DbMeta, DbSlice, DbTableKind, StepEvidenceApi } from "../../types";
+import { EvidencePanel, VerifiedCerBox } from "../../step-evidence";
 import { countryLabel, sectorLabel } from "../../viz";
 import { fmtDb, Pager, useAsync } from "../shared";
 
 const DB_TABLES: { key: DbTableKind; label: string; hint: string }[] = [
-  { key: "z", label: "中间投入 Z", hint: "国家-行业 × 国家-行业" },
-  { key: "y", label: "最终需求 Y", hint: "国家-行业 × 目的国需求类别" },
+  { key: "z", label: "中间投入 Z", hint: "供给国-行业(行) × 使用国-行业(列)" },
+  { key: "y", label: "最终需求 Y", hint: "供给国-行业(行) × 目的国需求类别(列)" },
   { key: "accounts", label: "账户项", hint: "TLS / VA / OUT 转置为国家-行业行" },
 ];
+
+/** 首列表头。后端返回的列名就是字面的 "row",直接显示对学生没有信息量。 */
+const ROW_HEADER: Record<DbTableKind, { label: string; title: string }> = {
+  z: { label: "供给国×行业(行)", title: "每一行是提供中间投入的一方:某国某行业" },
+  y: { label: "供给国×行业(行)", title: "每一行是提供最终产品的一方:某国某行业" },
+  accounts: { label: "国家×行业(行)", title: "每一行是一个国家×行业;列为该行业的账户项" },
+};
+
+/** 表格怎么读:行是供给方、列是使用方——这是投入产出表最容易被看反的一点,
+ *  因为"行"虽然横向延伸,它的标签却竖排在最左侧。按表类型给出具体读法。 */
+const HOW_TO_READ: Record<DbTableKind, string> = {
+  z: "行 = 供给方,列 = 使用方。某一格 = 行的「国家×行业」向 列的「国家×行业」提供的中间投入(百万美元)。",
+  y: "行 = 供给方,列 = 最终需求去向。某一格 = 行的「国家×行业」被 列的「目的国 × 需求类别」吸收的金额(百万美元)。",
+  accounts: "每一行是一个「国家×行业」,列是该行业的账户项(TLS / VA / OUT);此表没有列方向的国家维度。",
+};
 
 const ACCOUNT_HELP: Record<string, string> = {
   TLS: "产品税减补贴。为负表示该账户合计为净补贴；步骤3 的 taxsub 是其沿投入产出链传导后的出口含量。",
@@ -49,7 +64,7 @@ const OTHER_DATABASES: { name: string; org: string; coverage: string; focus: str
 function DatabaseGuide({ meta }: { meta: DbMeta }) {
   const icioCoverage = `${meta.countries.length} 经济体 · ${meta.sectors.length} 行业 · ${meta.years[0]}–${meta.years.at(-1)}（载入）`;
   return (
-    <details className="card accent concept-card db-guide" open>
+    <details className="card accent concept-card db-guide">
       <summary className="kicker">全球投入产出数据库一览 · 本系统默认使用 OECD ICIO</summary>
       <p style={{ maxWidth: 820 }}>
         研究全球价值链,需要一张“谁向谁供货”的<b>跨国投入产出表</b>。主流数据库各有侧重——覆盖范围、行业/产品口径与更新节奏都不同:
@@ -87,8 +102,20 @@ function DatabaseGuide({ meta }: { meta: DbMeta }) {
 
 /** 步骤1:本地 OECD ICIO 原始表浏览 */
 /** 第 1 步的学习证据:真正取回了一个有效切片。 */
-interface DbEvidence extends Record<string, unknown> {
-  slice?: { year: number; table: string; row_country: string; col_country: string };
+interface DbEvidence extends CerStepEvidence, Record<string, unknown> {
+  slice?: {
+    year: number;
+    table: string;
+    row_country: string;
+    col_country: string;
+    row_sector?: string;
+    col_sector?: string;
+  };
+  observation?: {
+    row: string;
+    column: string;
+    value: number;
+  };
 }
 
 export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
@@ -146,7 +173,17 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
   useEffect(() => {
     if (!slice || !year || !pickedSlice) return;
     evidence.save({
-      slice: { year, table, row_country: rowCountry, col_country: table === "accounts" ? "" : colCountry },
+      slice: {
+        year,
+        table,
+        row_country: rowCountry,
+        col_country: table === "accounts" ? "" : colCountry,
+        row_sector: rowSector,
+        col_sector: table === "accounts" ? "" : colSector,
+      },
+      // 单元格必须属于当前成功返回的切片；任何筛选/翻页变化都会要求重选。
+      observation: undefined,
+      evidence_id: "",
     });
     // evidence 每次渲染都是新对象,不入依赖;切片本身变化即代表证据变化。
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -167,6 +204,7 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
     (slice?.rows ?? []).reduce((sum, row) => sum + (typeof row[column] === "number" ? row[column] : 0), 0),
   ]));
   const showSummaries = table !== "accounts" && Boolean(slice?.row_summaries?.length);
+  const selectedObservation = evidence.data?.observation;
 
   if (!meta.years.length) {
     return (
@@ -180,7 +218,7 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
 
   return (
     <div>
-      <EvidencePanel evidence={evidence} title="本步要留下的证据:自己选定并载入一个切片(页面默认的切片不算)" />
+      <EvidencePanel evidence={evidence} title="本步要留下的证据：主动载入切片，并解释一个具体单元格或账户数值" />
       <div className="db-summary">
         <span>原始年份 {meta.years[0]}-{meta.years.at(-1)}</span>
         <span>{meta.countries.length} 个经济体</span>
@@ -216,22 +254,22 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
       </div>
 
       <div className="controls">
-        <label>行国家</label>
+        <label>供给国(行)</label>
         <select value={rowCountry} onChange={(e) => pickRowCountry(e.target.value)}>
           {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
         </select>
-        <label>行行业</label>
+        <label>供给行业(行)</label>
         <select value={rowSector} onChange={(e) => pickRowSector(e.target.value)}>
           <option value="">全部</option>
           {meta.sectors.map((s) => <option key={s} value={s}>{sectorLabel(s)}</option>)}
         </select>
         {table !== "accounts" && (
           <>
-            <label>列国家</label>
+            <label>{table === "y" ? "需求国(列)" : "使用国(列)"}</label>
             <select value={colCountry} onChange={(e) => pickColCountry(e.target.value)}>
               {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
             </select>
-            <label>{table === "y" ? "最终需求" : "列行业"}</label>
+            <label>{table === "y" ? "最终需求(列)" : "使用行业(列)"}</label>
             <select value={colSector} onChange={(e) => pickColSector(e.target.value)}>
               <option value="">全部</option>
               {colOptions.map((s) => (
@@ -244,17 +282,25 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
       </div>
 
       {sliceError && <div className="error-box" style={{ marginBottom: 14 }}>{sliceError}</div>}
-      <div className="table-wrap">
+      <div className="tipbox" style={{ marginBottom: 10 }}>
+        <b>怎么读这张表：</b>{HOW_TO_READ[table]}
+      </div>
+      <div className="tipbox" style={{ marginBottom: 10 }}>
+        <b>留下可复核数据点：</b>点击表中任意一个数值单元格。系统会把它的行、列与原始数值绑定到本步证据；切换筛选或翻页后需要重新选择。
+      </div>
+      <div className="table-wrap bounded-data-table">
         <table className="data-table db-table">
           <thead>
             <tr>
               {(slice?.columns ?? ["row"]).map((c, index) => (
                 <th
                   key={c}
-                  title={columnHelp(c)}
+                  title={c === "row" ? ROW_HEADER[table].title : columnHelp(c)}
                   style={index === 0 ? { position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" } : undefined}
                 >
-                  {c}{columnHelp(c) ? " ⓘ" : ""}
+                  {/* 首列原样输出后端的 "row",学生看到的就是个英文字段名;这里换成
+                      说明它是什么方向的中文表头,与上方筛选器的「(行)」对应。 */}
+                  {c === "row" ? `${ROW_HEADER[table].label} ⓘ` : `${c}${columnHelp(c) ? " ⓘ" : ""}`}
                 </th>
               ))}
               {showSummaries && <th title="当前筛选列在该行的合计">切片合计</th>}
@@ -267,6 +313,11 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
                 {(slice?.columns ?? []).map((c, columnIndex) => {
                   const value = r[c];
                   const numericValue = typeof value === "number" ? value : null;
+                  const rowLabel = String(r.row ?? "");
+                  const selected = numericValue != null
+                    && selectedObservation?.row === rowLabel
+                    && selectedObservation.column === c
+                    && selectedObservation.value === numericValue;
                   const intensity = c === "row" || numericValue == null || rowHeatMax[i] === 0
                     ? 0
                     : Math.min(1, Math.abs(numericValue) / rowHeatMax[i]);
@@ -280,7 +331,20 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
                           ? { background: numericValue != null && numericValue < 0 ? `rgba(227,73,72,${0.06 + intensity * 0.24})` : `rgba(42,120,214,${0.05 + intensity * 0.25})` }
                           : undefined}
                     >
-                      {c === "row" ? String(value ?? "—") : fmtDb(value)}
+                      {c === "row" || numericValue == null ? String(value ?? "—") : (
+                        <button
+                          type="button"
+                          className={`db-observation-cell${selected ? " selected" : ""}`}
+                          aria-pressed={selected}
+                          title={`${rowLabel} × ${c}: ${fmtDb(numericValue)}；点击选为可核查证据`}
+                          onClick={() => evidence.save({
+                            observation: { row: rowLabel, column: c, value: numericValue },
+                            evidence_id: "",
+                          })}
+                        >
+                          {fmtDb(numericValue)}{selected ? " ✓" : ""}
+                        </button>
+                      )}
                     </td>
                   );
                 })}
@@ -312,6 +376,22 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
       <div style={{ marginTop: 12 }}>
         <Pager page={page} pages={pages} total={slice?.total} onChange={setPage} />
       </div>
+      <div className="observation-strip" aria-live="polite">
+        <b>已选原始数据点</b>
+        {selectedObservation ? (
+          <span>{selectedObservation.row} × {selectedObservation.column} = {fmtDb(selectedObservation.value)}</span>
+        ) : <span>尚未选择</span>}
+      </div>
+      <VerifiedCerBox
+        step={1}
+        kind="slice"
+        evidence={evidence}
+        ready={Boolean(evidence.data?.slice && evidence.data?.observation && slice?.rows.length)}
+        context={{
+          slice: evidence.data?.slice,
+          observation: evidence.data?.observation,
+        }}
+      />
     </div>
   );
 }

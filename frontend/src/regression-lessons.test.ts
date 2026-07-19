@@ -7,6 +7,12 @@ describe("regression lessons", () => {
     expect(REGRESSION_LESSONS.trade.unit).toContain("百分点");
     expect(REGRESSION_LESSONS.length.focus).toContain("事件研究");
     expect(REGRESSION_LESSONS.network.focus).toContain("安慰剂");
+    expect([
+      REGRESSION_LESSONS.trade.priorStep,
+      REGRESSION_LESSONS.production.priorStep,
+      REGRESSION_LESSONS.length.priorStep,
+      REGRESSION_LESSONS.network.priorStep,
+    ]).toEqual([3, 4, 5, 6]);
   });
 
   test("research question follows the selected shock and estimand", () => {

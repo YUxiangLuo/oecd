@@ -50,12 +50,11 @@ ignore_missing_imports = true
 warn_unused_configs = true
 # pandas-heavy paths still have gradually typed internals; keep CI typecheck lightweight
 # while preventing future syntax/signature regressions from going unnoticed.
-disable_error_code = ["assignment", "attr-defined", "index", "arg-type"]
 
 [tool.coverage.run]
 source = ["gvcsim"]
 
 [tool.coverage.report]
-fail_under = 60
+fail_under = 85
 show_missing = true
 skip_covered = true

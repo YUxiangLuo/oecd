@@ -15,12 +15,22 @@ type ModalState =
   | { type: "toggle"; s: StudentRow };
 
 /** 班级与学生:工具条(筛选/搜索/建班/建号) + 进度表 + 模态编辑 */
-type SortKey = "max_step" | "score" | "last_login_at";
+type SortKey = "max_step" | "verified_completed_count" | "score" | "last_login_at";
 
-export function StudentsTab({ initialClassId, reachedStep, onClearReachedStep }: {
+export type StudentStepFilterKind = "reached" | "completed";
+export const PASSWORD_INPUT_PROPS = { type: "password", autoComplete: "new-password" } as const;
+export function filterStudentsByStep(students: StudentRow[], step: number | null, kind: StudentStepFilterKind): StudentRow[] {
+  if (step == null) return students;
+  return kind === "completed"
+    ? students.filter((student) => student.verified_completed_steps?.includes(step))
+    : students.filter((student) => (student.max_step ?? 0) >= step);
+}
+
+export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearStep }: {
   initialClassId: number | null;
-  reachedStep: number | null;
-  onClearReachedStep: () => void;
+  filteredStep: number | null;
+  filterKind: StudentStepFilterKind;
+  onClearStep: () => void;
 }) {
   const [classId, setClassId] = useState<number | null>(initialClassId);
   const [refresh, setRefresh] = useState(0);
@@ -53,9 +63,7 @@ export function StudentsTab({ initialClassId, reachedStep, onClearReachedStep }:
         [s.display_name, s.username, s.student_no].some((v) => (v ?? "").toLowerCase().includes(q)),
       )
     : all;
-  const reached = reachedStep == null
-    ? searched
-    : searched.filter((s) => (s.max_step ?? 0) >= reachedStep);
+  const reached = filterStudentsByStep(searched, filteredStep, filterKind);
   const students = sort
     ? [...reached].sort((a, b) => {
         const av = a[sort.key];
@@ -102,10 +110,10 @@ export function StudentsTab({ initialClassId, reachedStep, onClearReachedStep }:
         </div>
       </Toolbar>
 
-      {reachedStep != null && (
+      {filteredStep != null && (
         <div className="active-filter">
-          已筛选：最远进度达到步骤 {reachedStep} · {stepTitles.get(reachedStep) ?? ""}
-          <button onClick={onClearReachedStep}>清除</button>
+          已筛选：{filterKind === "completed" ? "已验证完成" : "最远到达"}步骤 {filteredStep} · {stepTitles.get(filteredStep) ?? ""}
+          <button onClick={onClearStep}>清除</button>
         </div>
       )}
 
@@ -120,7 +128,9 @@ export function StudentsTab({ initialClassId, reachedStep, onClearReachedStep }:
               <th>学号</th>
               <th>班级</th>
               <th>当前步</th>
-              <th><button className="table-sort" onClick={() => toggleSort("max_step")}>最远步{sortMark("max_step")}</button></th>
+              <th><button className="table-sort" onClick={() => toggleSort("max_step")}>到达位置{sortMark("max_step")}</button></th>
+              <th><button className="table-sort" onClick={() => toggleSort("verified_completed_count")}>验证完成{sortMark("verified_completed_count")}</button></th>
+              <th>证据状态</th>
               <th>报告</th>
               <th><button className="table-sort" onClick={() => toggleSort("score")}>得分{sortMark("score")}</button></th>
               <th><button className="table-sort" onClick={() => toggleSort("last_login_at")}>最近登录{sortMark("last_login_at")}</button></th>
@@ -149,6 +159,28 @@ export function StudentsTab({ initialClassId, reachedStep, onClearReachedStep }:
                   ) : (
                     <span className="muted">未开始</span>
                   )}
+                </td>
+                <td>
+                  <span className="step-cell" title={`已验证步骤：${(s.verified_completed_steps ?? []).join("、") || "无"}`}>
+                    <span className="mini-track verified">
+                      <span className="mini-bar" style={{ width: `${((s.verified_completed_count ?? 0) / 16) * 100}%` }} />
+                    </span>
+                    {s.verified_completed_count ?? 0}/16
+                  </span>
+                </td>
+                <td>
+                  {s.legacy_unverified ? (
+                    <StatusPill tone="warn">旧记录未验证</StatusPill>
+                  ) : s.session_stale ? (
+                    <StatusPill tone="warn">数据版本已过期</StatusPill>
+                  ) : (s.verified_completed_count ?? 0) > 0 ? (
+                    <StatusPill tone="ok">服务端已核验</StatusPill>
+                  ) : (
+                    <StatusPill tone="muted">尚无核验证据</StatusPill>
+                  )}
+                  <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>
+                    有效活动 {fmtTime(s.last_valid_activity)}
+                  </div>
                 </td>
                 <td>
                   {s.submission_state === "graded" ? (
@@ -198,7 +230,7 @@ export function StudentsTab({ initialClassId, reachedStep, onClearReachedStep }:
           />
         )}
       </div>
-      <p className="muted panel-note">停用只禁止后续登录(已发令牌 12 小时内自然过期),不删除数据;进度由学生端自动上报。</p>
+      <p className="muted panel-note">“到达位置”只表示浏览导航；“验证完成”来自绑定账号、作业、数据版本的服务端证据。停用账号会立即撤销现有会话并禁止后续请求，但保留学习与审计记录。</p>
 
       {modal?.type === "class" && (
         <ClassModal onClose={() => setModal(null)} onSubmit={(b) => run(api.classroom.createClass(b))} />
@@ -226,7 +258,9 @@ export function StudentsTab({ initialClassId, reachedStep, onClearReachedStep }:
           title={`重置 ${modal.s.display_name} 的密码`}
           label="新密码"
           initial=""
-          validate={(v) => (v.length >= 6 ? null : "密码至少 6 位")}
+          inputType="password"
+          autoComplete="new-password"
+          validate={(v) => (v.length >= 12 ? null : "密码至少 12 位")}
           onClose={() => setModal(null)}
           onSubmit={(v) => run(api.classroom.updateStudent(modal.s.id, { password: v }))}
         />
@@ -316,8 +350,8 @@ function StudentModal({
         <input value={f.display_name} onChange={(e) => setF({ ...f, display_name: e.target.value })} />
         <label>学号(可空)</label>
         <input value={f.student_no} onChange={(e) => setF({ ...f, student_no: e.target.value })} />
-        <label>初始密码(≥6 位)</label>
-        <input value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />
+        <label>初始密码(≥12 位)</label>
+        <input {...PASSWORD_INPUT_PROPS} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />
         <label>所属班级</label>
         <select value={classChoice} onChange={(e) => setClassChoice(e.target.value)}>
           {defaultClassId == null && <option value="">请选择班级</option>}
@@ -331,8 +365,8 @@ function StudentModal({
           <button
             className="primary"
             onClick={() => {
-              if (!f.username || !f.display_name || f.password.length < 6)
-                return setErr("请填写用户名、姓名,密码至少 6 位");
+              if (!f.username || !f.display_name || f.password.length < 12)
+                return setErr("请填写用户名、姓名,密码至少 12 位");
               if (!classChoice) return setErr("请选择所属班级，或明确选择“暂不分班”");
               onSubmit({ ...f, class_id: classChoice === "unassigned" ? null : Number(classChoice) });
               onClose();
@@ -350,6 +384,8 @@ function FieldModal({
   title,
   label,
   initial,
+  inputType = "text",
+  autoComplete,
   validate,
   onClose,
   onSubmit,
@@ -357,6 +393,8 @@ function FieldModal({
   title: string;
   label: string;
   initial: string;
+  inputType?: "text" | "password";
+  autoComplete?: string;
   validate: (v: string) => string | null;
   onClose: () => void;
   onSubmit: (v: string) => void;
@@ -367,7 +405,7 @@ function FieldModal({
     <Modal title={title} onClose={onClose} width={380}>
       <div className="modal-form">
         <label>{label}</label>
-        <input autoFocus value={v} onChange={(e) => setV(e.target.value)} />
+        <input type={inputType} autoComplete={autoComplete} autoFocus value={v} onChange={(e) => setV(e.target.value)} />
         {err && <div className="error-box">{err}</div>}
         <div className="modal-actions">
           <button onClick={onClose}>取消</button>

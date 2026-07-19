@@ -18,7 +18,7 @@ STEPS = [
         status="done",
         title="OECD ICIO 数据浏览",
         goal="查看本地 OECD ICIO 的原始表结构与账户项。",
-        concept="投入产出表用一张矩阵描述“谁买了谁的东西”:行/列是产业部门,数值是部门间的中间投入。系统直接浏览本地 OECD ICIO 的 Z、Y、TLS、VA 与 OUT。",
+        concept="投入产出表用一张矩阵描述“谁买了谁的东西”:行是供给方、列是使用方(都是「国家×行业」),某一格就是行方向那个行业卖给列方向那个行业的中间投入。系统直接浏览本地 OECD ICIO 的 Z、Y、TLS、VA 与 OUT。",
         tip="本系统采用 OECD ICIO 作为主数据源,步骤 1 可直接查看 Z 矩阵、最终需求 Y 和 TLS/VA/OUT 账户项。",
     ),
     dict(
@@ -82,9 +82,9 @@ STEPS = [
         topic="trade",
         status="done",
         title="GVC 贸易流指标可视化",
-        goal="探索各国出口的价值构成:定位图按 FVA 份额 × DVAex 份额分四象限,并可切换网络图、构成、排序等多种视角。",
-        concept="FVA 份额高=出口里用了很多别人的增加值(后向依赖);DVAex 份额高=出口以本国增加值为主。定位图据此把经济体分到四象限;招牌网络图则把双边贸易关联画成有向网络,悬停可高亮某国的伙伴与区域集群。",
-        tip="看看谁落在「高 FVA」象限(深度后向嵌入);再切到网络图,悬停中国与美国观察各自的区域集群。",
+        goal="探索各国出口的价值构成:定位图按 FVA 份额 × GVC 生产份额分四象限,并比较出口六项构成与 FVA 排名。",
+        concept="FVA 份额高=出口里用了很多外国增加值(后向依赖);GVC 生产份额高=本国增加值更多经中间品贸易进入全球生产(前向参与)。定位图把经济体分成双高、前向型、双低与后向型四类。",
+        tip="先判断两国落在哪个象限,再到出口拆解镜头引用具体 FVA 数值解释差异。国家贸易网络在步骤 10 单独展示。",
     ),
     dict(
         n=8,
@@ -93,7 +93,7 @@ STEPS = [
         topic="production",
         status="done",
         title="GVC 生产指标可视化",
-        goal="对比各国生产活动的构成:纯国内 / 传统贸易 / 简单 GVC / 复杂 GVC 各占多少,并可切换排序、散点等视角自选指标。",
+        goal="用 GVC 阶梯和复杂 GVC 排名比较各国生产构成,再下钻一国行业识别内部异质性。",
         concept="增加值按去向分四类:只服务本国最终需求(纯国内)、随最终品直接出口(传统贸易)、随中间品跨境一次(简单 GVC)、至少两次跨境(复杂 GVC)。复杂 GVC 份额越高,越深地嵌入全球生产。",
         tip="对比小型开放经济体(新加坡)与大型经济体(美国)的复杂 GVC 份额;可用「行业下钻」看某国各行业的构成。",
     ),
@@ -104,7 +104,7 @@ STEPS = [
         topic="length",
         status="done",
         title="GVC 长度指标可视化",
-        goal="探索各国生产链的长度与前向/后向构成:散点图看前向×后向 GVC 段长度的权衡,并可切换长度条、排序、构成等视角。",
+        goal="用上下游定位图、前后向链长对比和 GVCPs 排名判断各国在价值链中的位置。",
         concept="前向长度 PLv 与后向长度 PLy 各拆成纯国内 / 传统贸易 / GVC 三段;GVC 段越长,增加值在国际生产网络中辗转的环节越多。GVCPs(前向/后向 GVC 长度之比)>1 表示更靠上游。",
         tip="散点图看 PLv_GVC × PLy_GVC 的权衡;GVCPs 高的经济体多为资源与原材料供应方。",
     ),
@@ -205,4 +205,9 @@ _DEPS = {
     16: ["全流程结果"],
 }
 for _s in STEPS:
-    _s["deps"] = _DEPS[_s["n"]]
+    # ``STEPS`` is intentionally a heterogeneous JSON-ready structure; narrow
+    # the one field used as an integer key at this boundary.
+    _step_number = _s["n"]
+    if not isinstance(_step_number, int):
+        raise TypeError("step.n 必须是整数")
+    _s["deps"] = _DEPS[_step_number]

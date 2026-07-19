@@ -1,0 +1,34 @@
+[Unit]
+Description=GVC Simulation Lab API
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gvcsim
+Group=gvcsim
+WorkingDirectory=/opt/gvcsim/current
+EnvironmentFile=/etc/gvcsim.env
+ExecStart=/opt/gvcsim/current/.venv/bin/gvcsim serve --port 18000
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+UMask=0077
+
+# systemd 沙箱。release 只读；运行数据经 release 内符号链接落到 shared。
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ReadWritePaths=/opt/gvcsim/shared/data /opt/gvcsim/shared/reports
+
+[Install]
+WantedBy=multi-user.target

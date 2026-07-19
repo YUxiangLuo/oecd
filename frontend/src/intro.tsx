@@ -84,6 +84,7 @@ export function IntroOverlay({ user, meta, onDone }: {
   const [openCard, setOpenCard] = useState<"icio" | "shock" | null>("icio");
   const [stage, setStage] = useState(1);
   const [tau, setTau] = useState(0);
+  const [mechanism, setMechanism] = useState<"contract" | "reroute" | "offset" | null>(null);
 
   useEffect(() => {
     api.steps().then(setStepsData, () => {});
@@ -111,9 +112,18 @@ export function IntroOverlay({ user, meta, onDone }: {
     }));
   }, [stepsData]);
 
-  // 动手示意:跨境流宽度随 τ 收缩,复杂 GVC 份额(示意值)随之下降
-  const shrink = Math.max(0.25, 1 - tau * 2.6);
-  const demoShare = (12.0 * Math.max(0.3, 1 - tau * 1.8)).toFixed(1);
+  // This is a mechanism explorer, not a pre-baked causal answer. Students
+  // predict first, then compare three plausible adjustment paths.
+  const shrink = mechanism === "offset"
+    ? Math.min(1.25, 1 + tau * 0.7)
+    : mechanism === "reroute"
+      ? Math.max(0.7, 1 - tau * 0.8)
+      : Math.max(0.25, 1 - tau * 2.6);
+  const demoShare = (mechanism === "offset"
+    ? 12.0 * (1 + tau * 0.5)
+    : mechanism === "reroute"
+      ? 12.0 * Math.max(0.82, 1 - tau * 0.45)
+      : 12.0 * Math.max(0.3, 1 - tau * 1.8)).toFixed(1);
 
   const roleName = user.role === "teacher" ? "教师" : "学生";
 
@@ -201,7 +211,7 @@ export function IntroOverlay({ user, meta, onDone }: {
     <div key={2} className="intro-scene">
       <div className="intro-scene-kicker">实验路线</div>
       <h2 className="intro-h2">五个阶段，十六步</h2>
-      <p className="intro-lede">点击各阶段,预览你将亲手完成的每一步。</p>
+      <p className="intro-lede">点击各阶段预览路线。建议按顺序完成；“自由浏览”只改变位置，不会绕过前置证据或计入完成度。</p>
       <div className="intro-stage-tabs">
         {stages.map((st) => (
           <button
@@ -219,7 +229,7 @@ export function IntroOverlay({ user, meta, onDone }: {
             <span className="intro-step-title">{s.title}</span>
             <span className="intro-step-goal">{s.goal}</span>
             <button className="intro-step-start" onClick={() => onDone(s.n)}>
-              从这里开始
+              自由浏览此步
             </button>
           </div>
         ))}
@@ -230,7 +240,12 @@ export function IntroOverlay({ user, meta, onDone }: {
     <div key={3} className="intro-scene">
       <div className="intro-scene-kicker">动手预演</div>
       <h2 className="intro-h2">政策冲击如何重塑价值链?</h2>
-      <p className="intro-lede">拖动滑块,给跨境环节加征关税,观察 GVC 生产份额和国内替代环节如何变化。</p>
+      <p className="intro-lede">先预测企业最可能怎样调整，再拖动滑块比较一种机制路径。真实方向必须由后续数据与识别设计回答。</p>
+      <div className="intro-mechanisms" role="group" aria-label="先选择政策传导机制">
+        <button className={mechanism === "contract" ? "on" : ""} onClick={() => setMechanism("contract")}><b>跨境收缩</b><span>供应链缩短，复杂 GVC 下降</span></button>
+        <button className={mechanism === "reroute" ? "on" : ""} onClick={() => setMechanism("reroute")}><b>贸易转移</b><span>改道第三国，原有链条部分保留</span></button>
+        <button className={mechanism === "offset" ? "on" : ""} onClick={() => setMechanism("offset")}><b>替代性扩张</b><span>新供应商接入，复杂度未必下降</span></button>
+      </div>
       <svg viewBox="0 0 640 196" style={{ width: "min(720px, 94%)", margin: "10px auto 0" }}>
         {/* 跨境流:宽度随 τ 收缩 */}
         <path d="M118 95 C 200 40, 260 40, 312 88" fill="none" stroke="#7aa5e8"
@@ -254,7 +269,7 @@ export function IntroOverlay({ user, meta, onDone }: {
       <div className="intro-slider-row">
         <span className="intro-slider-label">关税冲击 τ</span>
         <input
-          type="range" min={0} max={25} value={tau * 100}
+          type="range" min={0} max={25} value={tau * 100} disabled={!mechanism}
           onChange={(e) => setTau(Number(e.target.value) / 100)}
         />
         <span className="intro-tau">{(tau * 100).toFixed(0)}%</span>
@@ -262,7 +277,7 @@ export function IntroOverlay({ user, meta, onDone }: {
         <span className="intro-tau" style={{ color: tau > 0.02 ? "#ff9d9d" : "#eef1fb" }}>{demoShare}%</span>
       </div>
       <p className="intro-note">
-        本页为教学示意动画,不是估计结果。后续回归会分别检验外国增加值份额(FVA_share)、
+        本页只展示你选择的一种可能机制，不是估计结果，也不预告真实方向。后续回归会分别检验外国增加值份额(FVA_share)、
         复杂 GVC 生产份额、前向 GVC 生产长度(PLv_GVC)与介数中心性。
       </p>
     </div>,

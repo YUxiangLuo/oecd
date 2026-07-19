@@ -216,11 +216,14 @@ def panel() -> pd.DataFrame:
 
 
 @needs_panel
-def test_export_control_did_is_insufficient_and_hides_stars(panel):
+def test_export_control_did_is_insufficient_and_hides_stars(panel, ci_synthetic_contract):
     """出口管制只处理 CHN 一个国家:76 个聚类不能让单处理聚类变得可推断。"""
     result = run_design(panel, RegressionDesign(outcome="trade", shock_type="export_control"))
     assert result.support["treated_clusters"] == 1
-    assert result.n_clusters > 50  # 总聚类很多,但与处理支持度无关
+    if ci_synthetic_contract is None:
+        assert result.n_clusters > 50  # 真实数据总聚类很多,但与处理支持度无关
+    else:
+        assert result.n_clusters == ci_synthetic_contract["expected_regression_countries"]
     assert result.status == STATUS_INSUFFICIENT
     for coef in result.coefs:
         assert coef.p is None
@@ -250,10 +253,13 @@ def test_sanctions_intensity_twfe_is_not_invalid_design(panel):
 
 
 @needs_panel
-def test_tariff_did_keeps_inference_but_discloses_small_reversal(panel):
+def test_tariff_did_keeps_inference_but_discloses_small_reversal(panel, ci_synthetic_contract):
     """关税 mock 只有极少数撤销(钢铝关税取消),披露即可,不必抑制推断。"""
     result = run_design(panel, RegressionDesign(outcome="trade", shock_type="tariff"))
     assert result.status == STATUS_WARNING
     assert 0 < result.support["reversal_share"] < MAX_REVERSAL_SHARE
-    assert result.support["untreated_clusters"] == 0  # 没有从未受处理的对照国
+    if ci_synthetic_contract is None:
+        assert result.support["untreated_clusters"] == 0  # 真实教学表没有从未受处理的对照国
+    else:
+        assert result.support["untreated_clusters"] == ci_synthetic_contract["expected_tariff_untreated_clusters"]
     assert all(coef.p is not None for coef in result.coefs)

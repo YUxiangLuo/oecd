@@ -23,7 +23,10 @@ def _complete_session(manifest_id: str) -> dict:
     """一份 1–15 步证据齐全的会话。"""
     session = empty_session(manifest_id)
     payload = {
-        "db": {"slice": {"year": 2020, "table": "z", "row_country": "CHN", "col_country": "USA"}},
+        "db": {
+            "slice": {"year": 2020, "table": "z", "row_country": "CHN", "col_country": "USA"},
+            "observation": {"row": "CHN_D01T02", "column": "USA_D01T02", "value": 1.0},
+        },
         "shock": {"viewed_shock_types": list(evidence.REQUIRED_SHOCK_TYPES)},
         "qc": {"disposition": "disclose", "judgment": JUDGMENT},
         "ind": {"compared": ["CHN", "USA"]},
@@ -102,11 +105,18 @@ def test_report_key_is_content_addressed():
     first = build(_complete_session(mid), "同学", 1)
     again = build(_complete_session(mid), "同学", 2)  # revision 变,内容没变
     assert first.report_key == again.report_key
+    assert first.markdown == again.markdown
 
     changed = _complete_session(mid)
-    # 改质检步(现为第 2 步)的处置决定:内容变 → key 应变。
-    changed["steps"]["2"] = make_record({"disposition": "stop", "judgment": JUDGMENT})
+    # 改质检判断的语义内容（仍保持允许继续）→ key 应变。
+    changed["steps"]["2"] = make_record({"disposition": "disclose", "judgment": JUDGMENT + "，并披露航空业异常"})
     assert build(changed, "同学", 1).report_key != first.report_key
+
+    receipts_changed = _complete_session(mid)
+    receipts_changed["steps"]["1"]["data"]["evidence_id"] = "new-random-event"
+    receipts_changed["steps"]["12"]["data"]["run_id"] = "new-random-run"
+    receipts_changed["steps"]["12"]["data"]["checks"] = {"baseline_run_id": "another-event"}
+    assert build(receipts_changed, "同学", 3).report_key == first.report_key
 
 
 @needs_artifacts

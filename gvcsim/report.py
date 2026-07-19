@@ -258,7 +258,7 @@ def build(
         "拟真演示面板,以 2018–2020 全球贸易摩擦为原型,结论仅用于验证系统链路,"
         "不构成研究结论)\n",
         f"- 数据:OECD ICIO {min(years)}–{max(years)}(指标截面:{report_year} 年)",
-        f"- 方法:本报告使用步骤16中选择的回归设定;{comparison_scope}。因果解释仍依赖冲击外生性、趋势可比性等识别假设",
+        f"- 方法:本报告使用步骤12–15保存的回归设定;{comparison_scope}。因果解释仍依赖冲击外生性、趋势可比性等识别假设",
         _design_summary(design_preview),
         f"- 生成日期:{date.today().isoformat()}\n",
         "## 一、数据与质检",

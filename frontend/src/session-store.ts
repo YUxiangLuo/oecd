@@ -12,9 +12,62 @@ const SHARED_KEYS: readonly SharedSessionKey[] = ["regression_settings", "regres
  * 两边必须同规则,否则同一份并发写入在客户端与服务端会得到不同结果。
  */
 
-const LOCAL_KEY_PREFIX = "gvcsim_session:";
+const LOCAL_KEY_PREFIX = "gvcsim_session:v2:";
+const LEGACY_KEY_PREFIX = "gvcsim_session:";
+const QUARANTINE_KEY_PREFIX = "gvcsim_session:legacy-quarantine:";
 
-export const localKey = (username: string) => `${LOCAL_KEY_PREFIX}${username}`;
+export interface LocalSessionScope {
+  accountId: string | number;
+  courseRunId: string | number;
+  assignmentId: string | number;
+  attemptId: string | number;
+  manifestId: string;
+}
+
+const keyPart = (value: string | number) => encodeURIComponent(String(value));
+export const localKey = (scope: LocalSessionScope) => [
+  LOCAL_KEY_PREFIX.slice(0, -1),
+  keyPart(scope.accountId),
+  keyPart(scope.courseRunId),
+  keyPart(scope.assignmentId),
+  keyPart(scope.attemptId),
+  keyPart(scope.manifestId),
+].join(":");
+
+/**
+ * Preserve a v1 username-only cache without trusting or uploading it. There is
+ * no reliable way to prove which database/course produced that payload, even
+ * when its manifest happens to match. The quarantined copy remains recoverable
+ * for support, but never participates in reconciliation.
+ */
+export function quarantineLegacy(username: string): boolean {
+  try {
+    const legacyKey = `${LEGACY_KEY_PREFIX}${username}`;
+    const raw = localStorage.getItem(legacyKey);
+    if (!raw) return false;
+    const quarantineKey = `${QUARANTINE_KEY_PREFIX}${encodeURIComponent(username)}`;
+    if (!localStorage.getItem(quarantineKey)) localStorage.setItem(quarantineKey, raw);
+    localStorage.removeItem(legacyKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 读取已隔离的 username-only 记录，仅用于让学生导出留档；绝不参与合并。 */
+export function readLegacyQuarantine(username: string): unknown | null {
+  try {
+    const raw = localStorage.getItem(`${QUARANTINE_KEY_PREFIX}${encodeURIComponent(username)}`);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as unknown;
+    } catch {
+      return raw;
+    }
+  } catch {
+    return null;
+  }
+}
 
 export function emptySession(manifestId: string): ExperimentSession {
   return { version: SESSION_VERSION, manifest_id: manifestId, steps: {}, shared: {} };
@@ -45,9 +98,9 @@ export function isValidSession(value: unknown): value is ExperimentSession {
   return stepsOk && sharedOk;
 }
 
-export function loadLocal(username: string): ExperimentSession | null {
+export function loadLocal(scope: LocalSessionScope): ExperimentSession | null {
   try {
-    const raw = localStorage.getItem(localKey(username));
+    const raw = localStorage.getItem(localKey(scope));
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     return isValidSession(parsed) ? parsed : null;
@@ -56,17 +109,17 @@ export function loadLocal(username: string): ExperimentSession | null {
   }
 }
 
-export function saveLocal(username: string, session: ExperimentSession): void {
+export function saveLocal(scope: LocalSessionScope, session: ExperimentSession): void {
   try {
-    localStorage.setItem(localKey(username), JSON.stringify(session));
+    localStorage.setItem(localKey(scope), JSON.stringify(session));
   } catch {
     // 配额满或隐私模式:本地缓存失败不应打断实验,服务端仍是真实来源。
   }
 }
 
-export function clearLocal(username: string): void {
+export function clearLocal(scope: LocalSessionScope): void {
   try {
-    localStorage.removeItem(localKey(username));
+    localStorage.removeItem(localKey(scope));
   } catch {
     /* 同上 */
   }
@@ -128,8 +181,10 @@ export function reconcileOnLoad(
   local: ExperimentSession | null,
   server: ExperimentSession,
   manifestId: string,
+  serverUntrusted = false,
 ): { session: ExperimentSession; needsPush: boolean; discardedLocal: boolean; discardedServer: boolean } {
-  const serverStale = isStale(server, manifestId);
+  const serverInvalid = !isValidSession(server);
+  const serverStale = serverUntrusted || serverInvalid || isStale(server, manifestId);
   const localStale = local != null && isStale(local, manifestId);
   const usableLocal = local && !localStale ? local : null;
   const usableServer = serverStale ? emptySession(manifestId) : server;
@@ -137,7 +192,9 @@ export function reconcileOnLoad(
   if (!usableLocal) {
     return {
       session: usableServer,
-      needsPush: serverStale && Object.keys(server.steps).length > 0,
+      // Never turn an old/foreign session into a v4 write implicitly. The first
+      // explicit student edit will create a fresh scoped v4 session instead.
+      needsPush: false,
       discardedLocal: localStale,
       discardedServer: serverStale,
     };

@@ -7,14 +7,16 @@
 import re
 import math
 
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
 from gvcsim import api as api_mod
-from gvcsim import shocks
+from gvcsim import auth, shocks
 from gvcsim.api import _clean, app
-from gvcsim.artifacts import NETWORK_ALGORITHM
-from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, SHOCKS_DIR, processed_years
+from gvcsim.artifacts import NETWORK_ALGORITHM, register_artifacts
+from gvcsim.classroom import db as classroom_db
+from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, processed_years
 
 client = TestClient(app)
 login_resp = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
@@ -26,7 +28,7 @@ needs_data = pytest.mark.skipif(
 )
 
 needs_shocks = pytest.mark.skipif(
-    not (SHOCKS_DIR / shocks.DEMO_FILE).exists(),
+    not (PROCESSED_DIR / shocks.DEMO_FILE).exists(),
     reason="缺少冲击演示数据,请先运行 uv run gvcsim compute",
 )
 
@@ -52,6 +54,83 @@ def test_steps_metadata():
     body = resp.json()
     assert len(body["steps"]) == 16
     assert body["stages"]["2"] == "指标计算"
+
+
+def test_health_is_public_and_checks_artifact_contract(monkeypatch):
+    monkeypatch.setattr(api_mod, "validate_release", lambda _path, **_kwargs: {"files": 1, "sources": 0})
+    monkeypatch.setattr(api_mod, "processed_years", lambda: [2019, 2020])
+    monkeypatch.setattr(api_mod, "manifest_id", lambda: "manifest-test")
+    monkeypatch.setattr(
+        classroom_db,
+        "readiness",
+        lambda: {"status": "ok", "schema_version": classroom_db.TEACHING_DB_VERSION},
+    )
+    anon = TestClient(app)
+    response = anon.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ok",
+        "years": [2019, 2020],
+        "manifest_id": "manifest-test",
+        "artifact_contract": {
+            "schema_version": 3,
+            "network_algorithm": NETWORK_ALGORITHM,
+        },
+        "database": {"status": "ok", "schema_version": classroom_db.TEACHING_DB_VERSION},
+    }
+
+
+def test_health_returns_503_without_complete_artifacts(monkeypatch):
+    monkeypatch.setattr(api_mod, "validate_release", lambda _path, **_kwargs: {"files": 1, "sources": 0})
+    monkeypatch.setattr(api_mod, "processed_years", lambda: [])
+    response = TestClient(app).get("/health")
+    assert response.status_code == 503
+    assert response.json()["status"] == "unavailable"
+
+
+def test_health_returns_503_when_database_is_unavailable_outside_demo(monkeypatch):
+    monkeypatch.setattr(api_mod, "validate_release", lambda _path, **_kwargs: {"files": 1, "sources": 0})
+    monkeypatch.setattr(api_mod, "processed_years", lambda: [2020])
+    monkeypatch.setattr(api_mod, "manifest_id", lambda: "manifest-test")
+    monkeypatch.setattr(classroom_db, "readiness", lambda: (_ for _ in ()).throw(classroom_db.Unavailable("secret")))
+    monkeypatch.setattr(api_mod.app_config, "DEMO_MODE", False)
+    response = TestClient(app).get("/health")
+    assert response.status_code == 503
+    assert response.json() == {"status": "unavailable", "detail": "教学数据库未就绪"}
+
+
+def test_health_returns_503_when_any_registered_artifact_is_tampered(tmp_path, monkeypatch):
+    release = tmp_path / "processed"
+    release.mkdir()
+    artifact = release / "panel.csv"
+    artifact.write_text("x\n1\n", encoding="utf-8")
+    register_artifacts(release, [artifact.name])
+    artifact.write_text("x\n9\n", encoding="utf-8")
+    monkeypatch.setattr(api_mod, "PROCESSED_DIR", release)
+
+    response = TestClient(app).get("/health")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "unavailable"
+    assert "摘要不一致" in response.json()["detail"]
+
+
+def test_health_returns_503_when_a_registered_source_is_tampered(tmp_path, monkeypatch):
+    release = tmp_path / "processed"
+    release.mkdir()
+    artifact = release / "panel.csv"
+    source = tmp_path / "raw.csv"
+    artifact.write_text("x\n1\n", encoding="utf-8")
+    source.write_text("raw\n1\n", encoding="utf-8")
+    register_artifacts(release, [artifact.name], source_paths=[source])
+    source.write_text("raw\n9\n", encoding="utf-8")
+    monkeypatch.setattr(api_mod, "PROCESSED_DIR", release)
+
+    response = TestClient(app).get("/health")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "unavailable"
+    assert "来源" in response.json()["detail"]
 
 
 def test_data_endpoints_require_bearer():
@@ -205,6 +284,21 @@ def test_all_outcomes_reach_design_and_run_contract(monkeypatch: pytest.MonkeyPa
         return StubResult(design.outcome), {"backend": "stub"}
 
     monkeypatch.setattr(api_mod, "run_design_with_benchmark", estimate)
+    monkeypatch.setattr(api_mod, "manifest_id", lambda: "manifest-test")
+
+    def evidence_event(_username, step, kind, manifest_id, *_args, **_kwargs):
+        return {
+            "event_id": "00000000-0000-0000-0000-000000000001",
+            "account_id": 1,
+            "assignment_id": 1,
+            "attempt_id": 1,
+            "step": step,
+            "kind": kind,
+            "manifest_id": manifest_id,
+            "issued_at": "2026-07-19T00:00:00+00:00",
+        }
+
+    monkeypatch.setattr(api_mod.classroom_db, "record_evidence_event", evidence_event)
 
     for outcome, depvar in expected.items():
         preview = client.get("/api/regression/design", params={"outcome": outcome})
@@ -219,10 +313,11 @@ def test_all_outcomes_reach_design_and_run_contract(monkeypatch: pytest.MonkeyPa
     assert calls == list(expected)
 
 
-def test_report_request_validation():
+def test_legacy_report_http_endpoint_is_gone():
     resp = client.post("/api/report", json={"method": "工具变量"})
-    assert resp.status_code == 400
-    assert "method" in resp.json()["detail"]
+    assert resp.status_code == 410
+    assert "classroom/report/generate" in resp.json()["detail"]
+    assert client.get("/api/report/2020").status_code == 410
 
 
 def test_indicator_schema():
@@ -321,24 +416,35 @@ def test_db_slice_endpoint():
 
 
 @needs_data
-def test_meta_and_indicators():
+def test_meta_and_indicators(ci_synthetic_contract):
     meta = client.get("/api/meta").json()
     assert meta["years"]
     assert meta["artifact_contract"]["network_algorithm"] == NETWORK_ALGORITHM
     year = meta["years"][-1]
     assert "CHN" in meta["countries"]
 
-    assert len(meta["sectors"]) == 45
+    if ci_synthetic_contract is None:
+        assert len(meta["sectors"]) == 45
+    else:
+        assert meta["countries"] == sorted(ci_synthetic_contract["countries"])
+        assert meta["sectors"] == sorted(ci_synthetic_contract["sectors"])
 
     rows = client.get(f"/api/indicators/country/{year}").json()
-    assert len(rows) > 50
+    if ci_synthetic_contract is None:
+        assert len(rows) > 50
+    else:
+        assert len(rows) == ci_synthetic_contract["n_countries"]
     cols = rows[0].keys()
     for col in ["DVAex", "taxsub", "SVA", "3b_FGY_GVC_C", "PLv_GVC", "GVCPs", "betweenesscentrality"]:
         assert col in cols
 
     paged = client.get(f"/api/indicators/industry/{year}", params={"country": "CHN", "page": 1}).json()
-    assert paged["total"] == 45  # ICIO 45个行业
-    assert len(paged["rows"]) == 25
+    if ci_synthetic_contract is None:
+        assert paged["total"] == 45  # 真实 ICIO 固定为 45 个行业
+        assert len(paged["rows"]) == 25
+    else:
+        assert paged["total"] == ci_synthetic_contract["n_sectors"]
+        assert len(paged["rows"]) == min(25, ci_synthetic_contract["n_sectors"])
     assert client.get(f"/api/indicators/sector/{year}", params={"country": "CHN", "page": 1}).status_code == 404
 
 
@@ -374,8 +480,21 @@ def test_controls_qc_endpoint():
     assert any("控制变量 schema" in c["name"] for c in body)
 
 
-def test_shock_events():
-    """事件时间线不依赖预计算产物。"""
+def test_shock_events(monkeypatch):
+    """当前面板能核验的事件保留完整教学元数据。"""
+    monkeypatch.setattr(api_mod.artifacts, "validate_source", lambda _path: None)
+    metadata = shocks.events_metadata()
+    note_columns = {
+        "tariff": "note",
+        "sanctions": "sanction_note",
+        "export_control": "export_control_note",
+    }
+    panel_rows = []
+    for event in metadata:
+        row = {column: "" for column in note_columns.values()}
+        row[note_columns[event["shock_type"]]] = event["name"]
+        panel_rows.append(row)
+    monkeypatch.setattr(api_mod, "_read_shocks", lambda: pd.DataFrame(panel_rows))
     resp = client.get("/api/shocks/events")
     assert resp.status_code == 200
     body = resp.json()
@@ -402,7 +521,37 @@ def test_shock_events():
     assert rusal["removal"] == "2019-01-27"
 
 
-def test_crosswalk_demo_endpoint():
+def test_shock_events_hide_definitions_absent_from_current_panel(monkeypatch):
+    """UI 不能累加一个后端注定拒签、且页面内无法移除的事件。"""
+    monkeypatch.setattr(api_mod.artifacts, "validate_source", lambda _path: None)
+    visible = {
+        "tariff": "美国232钢铝关税",
+        "sanctions": "OFAC SDN 风格:俄铝 RUSAL 制裁",
+        "export_control": "BIS 实体清单:华为及关联公司",
+    }
+    monkeypatch.setattr(
+        api_mod,
+        "_read_shocks",
+        lambda: pd.DataFrame(
+            {
+                "note": [visible["tariff"]],
+                "sanction_note": [visible["sanctions"]],
+                "export_control_note": [visible["export_control"]],
+            }
+        ),
+    )
+
+    response = client.get("/api/shocks/events")
+
+    assert response.status_code == 200
+    names = {event["name"] for event in response.json()["events"]}
+    assert names == set(visible.values())
+    assert "墨西哥对美反制关税" not in names
+
+
+def test_crosswalk_demo_endpoint(monkeypatch):
+    """纯映射演示不借用本地 release；source 漂移由 artifact/health 契约测试覆盖。"""
+    monkeypatch.setattr(api_mod.artifacts, "validate_source", lambda _path: None)
     resp = client.get("/api/crosswalk/demo", params={"year": 2019})
     assert resp.status_code == 200
     body = resp.json()
@@ -418,17 +567,27 @@ def test_crosswalk_demo_endpoint():
 
 
 @needs_shocks
-def test_shock_summary_and_panel():
+def test_shock_summary_and_panel(ci_synthetic_contract):
     summary = client.get("/api/shocks/summary").json()
-    assert summary["n_countries"] == 77
-    assert summary["n_sectors"] == 45
+    if ci_synthetic_contract is None:
+        assert summary["n_countries"] == 77
+        assert summary["n_sectors"] == 45
+    else:
+        assert summary["n_countries"] == ci_synthetic_contract["n_countries"]
+        assert summary["n_sectors"] == ci_synthetic_contract["n_sectors"]
     y2019 = next(r for r in summary["years"] if r["year"] == 2019)
     # 232 覆盖全球:2019 年绝大多数经济体受处理
-    assert y2019["treated_countries"] > 70
+    if ci_synthetic_contract is None:
+        assert y2019["treated_countries"] > 70
+    else:
+        assert y2019["treated_countries"] >= ci_synthetic_contract["expected_regression_countries"]
     assert y2019["max_shock"] > 0.05
 
     panel = client.get("/api/shocks/panel", params={"year": 2019}).json()
-    assert panel["total"] > 100
+    if ci_synthetic_contract is None:
+        assert panel["total"] > 100
+    else:
+        assert panel["total"] > ci_synthetic_contract["n_sectors"]
     rows = panel["rows"]
     # 默认按冲击强度降序
     assert rows[0]["tariff_shock"] >= rows[-1]["tariff_shock"]
@@ -437,7 +596,7 @@ def test_shock_summary_and_panel():
     assert rows[0]["export_exposure"] is not None
 
     chn = client.get("/api/shocks/panel", params={"year": 2019, "country": "CHN", "only_hit": True}).json()
-    assert chn["total"] > 10
+    assert chn["total"] > (10 if ci_synthetic_contract is None else 0)
     assert all(r["country"] == "CHN" for r in chn["rows"])
 
     export_control = client.get(
@@ -452,7 +611,7 @@ def test_shock_summary_and_panel():
 
 
 @needs_data
-def test_regression_run():
+def test_regression_run(ci_synthetic_contract):
     # 默认:国家–行业级 + DID
     resp = client.post("/api/regression/run", json={"outcome": "trade"})
     assert resp.status_code == 200
@@ -472,14 +631,23 @@ def test_regression_run():
     assert body["benchmark"]["se_check_mode"] == "informational"
     assert any("仅针对政策系数" in n for n in body["benchmark"]["notes"])
     # 行业级个体数远多于国家数;标准误按国家聚类
-    assert body["result"]["n_entities"] > 1000
-    assert body["result"]["n_clusters"] < 100
+    if ci_synthetic_contract is None:
+        assert body["result"]["n_entities"] > 1000
+        assert body["result"]["n_clusters"] < 100
+    else:
+        assert body["result"]["n_entities"] == (
+            ci_synthetic_contract["expected_regression_countries"] * ci_synthetic_contract["n_sectors"]
+        )
+        assert body["result"]["n_clusters"] == ci_synthetic_contract["expected_regression_countries"]
     assert any("排除 ROW" in n for n in body["result"]["notes"])
 
     # 显式国家级粒度仍可用
     resp_c = client.post("/api/regression/run", json={"outcome": "trade", "granularity": "country"})
     assert resp_c.status_code == 200
-    assert resp_c.json()["result"]["n_entities"] < 100
+    if ci_synthetic_contract is None:
+        assert resp_c.json()["result"]["n_entities"] < 100
+    else:
+        assert resp_c.json()["result"]["n_entities"] == ci_synthetic_contract["expected_regression_countries"]
 
     # 非法粒度/方法报 400
     bad = client.post("/api/regression/run", json={"outcome": "trade", "granularity": "城市级"})
@@ -501,73 +669,77 @@ def test_regression_run():
 def test_regression_placebo_endpoint():
     resp = client.post(
         "/api/regression/placebo",
-        json={"outcome": "trade", "granularity": "country", "n_draws": 8, "seed": 11},
+        json={"outcome": "trade", "granularity": "country", "n_draws": 10, "seed": 11},
     )
     assert resp.status_code == 200
     body = resp.json()
     assert body["design"]["method"] == "did"
     assert body["placebo"]["policy_name"] == "treated×post"
-    assert len(body["placebo"]["placebo_coefs"]) == 8
+    assert len(body["placebo"]["placebo_coefs"]) == 10
     assert 0 < body["placebo"]["empirical_p"] <= 1
 
     bad = client.post(
         "/api/regression/placebo",
-        json={"outcome": "trade", "method": "twfe_intensity", "n_draws": 4},
+        json={"outcome": "trade", "method": "twfe_intensity", "n_draws": 10},
     )
     assert bad.status_code == 400
     assert "DID" in bad.json()["detail"]
 
 
+@pytest.mark.parametrize(
+    "field,value",
+    [("n_draws", 9), ("n_draws", 201), ("seed", -1), ("seed", 2_147_483_648)],
+)
+def test_regression_placebo_rejects_cpu_abuse_bounds(field, value):
+    response = client.post("/api/regression/placebo", json={"outcome": "trade", field: value})
+    assert response.status_code == 422
+
+
+def test_teacher_cannot_mint_student_regression_evidence():
+    token, _ = auth.issue_token({"username": "teacher-test", "name": "教师", "role": "teacher", "demo": True})
+    teacher = TestClient(app, headers={"Authorization": f"Bearer {token}"})
+    assert teacher.post("/api/regression/run", json={"outcome": "trade"}).status_code == 403
+    assert teacher.post("/api/regression/placebo", json={"outcome": "trade"}).status_code == 403
+
+
 @needs_data
-def test_parameterized_report_endpoint(tmp_path, monkeypatch):
-    from gvcsim import report as report_mod
-
-    monkeypatch.setattr(report_mod, "REPORTS_DIR", tmp_path)
-    resp = client.post(
-        "/api/report",
-        json={
-            "year": processed_years()[-1],
-            "granularity": "country_industry",
-            "shock_type": "export_control",
-            "method": "twfe_intensity",
-            "control_mode": "macro_sim",
-            "interaction": True,
-            "price_mode": "real_2016",
-        },
+def test_regression_weight_mode_and_interaction_marginal_effect_contract():
+    fixed = client.post(
+        "/api/regression/run",
+        json={"outcome": "production", "granularity": "country", "interaction": True},
     )
-    assert resp.status_code == 200
-    body = resp.json()
-    md = body["markdown"]
-    assert body["suggested_filename"] == f"experiment_report_{processed_years()[-1]}.md"
-    assert "path" not in body
-    assert list(tmp_path.iterdir()) == []  # HTTP 报告纯构建，不落盘
-    assert "- 粒度:国家–行业级" in md
-    assert "- 冲击类型:出口管制" in md
-    assert "- 估计方法:双向固定效应" in md
-    assert "- 控制变量:GDP规模(log, WDI风格mock)" in md
-    assert "- 交互项:开启:冲击×基期GVC生产份额(按样本个体均值中心化)" in md
-    assert "- 价格口径:实际值(2016=1)" in md
-    assert "- 回归样本:排除 ROW" in md
-    assert "export_control_shock" in md
-    assert "macro_log_gdp_usd" in md
-    assert "个国家×行业 ×" in md
-    assert "PanelOLS 代码实现一致性检查" in md
-    assert "标准误最大差异" in md and "仅作参考" in md
-    assert md.count("```gvcsim-chart") == 3
-    assert "<svg" not in md
-
-    bad = client.post(
-        "/api/report",
-        json={
-            "year": processed_years()[-1],
-            "granularity": "country",
-            "shock_type": "export_control",
-            "method": "twfe_intensity",
-            "interaction": True,
-        },
+    assert fixed.status_code == 200
+    assert fixed.json()["design"]["weight_mode"] == "fixed_pretreatment"
+    effects = fixed.json()["result"]["marginal_effects"]
+    assert [item["level"] for item in effects] == ["low", "mean", "high"]
+    assert all(
+        {
+            "policy_term",
+            "interaction_term",
+            "label",
+            "baseline_gvc_centered",
+            "effect",
+            "se",
+            "ci_low",
+            "ci_high",
+        }
+        <= item.keys()
+        for item in effects
     )
-    assert bad.status_code == 400
-    assert "共线性" in bad.json()["detail"]
+
+    robustness = client.post(
+        "/api/regression/run",
+        json={"outcome": "production", "granularity": "country", "weight_mode": "contemporaneous"},
+    )
+    assert robustness.status_code == 200
+    assert robustness.json()["design"]["weight_mode"] == "contemporaneous"
+    assert any(check["code"] == "treatment_weighting" for check in robustness.json()["preflight"]["checks"])
+
+    unsupported = client.post(
+        "/api/regression/run",
+        json={"outcome": "production", "shock_type": "sanctions", "weight_mode": "contemporaneous"},
+    )
+    assert unsupported.status_code == 400
 
 
 @needs_data

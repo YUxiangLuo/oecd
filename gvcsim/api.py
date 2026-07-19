@@ -6,20 +6,19 @@
 
 import json
 import math
-from functools import lru_cache
 from numbers import Real
 from pathlib import Path
+from typing import Any, cast
 
 import pandas as pd
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
-from gvcsim import auth
-from gvcsim import report as report_mod
-from gvcsim import evidence, shocks
+from gvcsim import artifacts, auth, config as app_config
+from gvcsim import evidence, shocks, trusted_evidence
 from gvcsim.shocks import SHOCK_LABELS, SHOCK_TARIFF
 from gvcsim.artifacts import (
     ArtifactContractError,
@@ -27,10 +26,11 @@ from gvcsim.artifacts import (
     manifest_id,
     read_csv_artifact,
     validate_artifact,
+    validate_release,
 )
 from gvcsim.classroom import db as classroom_db
 from gvcsim.classroom import routes as classroom_routes
-from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR, processed_years
+from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, processed_years
 from gvcsim.data import crosswalk, icio_browser, quality
 from gvcsim.regression.design import (
     CONTROL_MODE_LABELS,
@@ -58,14 +58,59 @@ from gvcsim.regression.design import (
 from gvcsim.regression.panel import placebo_did_distribution, run_design_with_benchmark
 from gvcsim.steps import STAGE_NAMES, STEPS
 
+if app_config.IS_PRODUCTION:
+    app_config.validate_security_config()
+
 app = FastAPI(title="供应链仿真系统 API", version="0.1.0")
+
+_cors_origins = app_config.ALLOWED_ORIGINS
+if not _cors_origins and not app_config.IS_PRODUCTION:
+    _cors_origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/health", include_in_schema=False)
+def health() -> JSONResponse:
+    """供 systemd/nginx 使用的无认证只读就绪检查。
+
+    只暴露稳定契约和年份，不泄露数据库连接或文件路径。产物清单缺失、过期或
+    摘要契约不合法时返回 503，避免部署脚本把“进程已启动”误当成“数据可用”。
+    """
+    try:
+        validate_release(PROCESSED_DIR, validate_sources=True)
+        years = processed_years()
+        current_manifest = manifest_id() if years else None
+    except (ArtifactContractError, OSError, ValueError) as error:
+        return JSONResponse(status_code=503, content={"status": "unavailable", "detail": str(error)})
+    if not years or current_manifest is None:
+        return JSONResponse(status_code=503, content={"status": "unavailable", "detail": "没有完整产物"})
+    try:
+        database = classroom_db.readiness()
+    except (classroom_db.Unavailable, classroom_db.SchemaVersionMismatch, RuntimeError):
+        if app_config.DEMO_MODE:
+            # 显式 demo 允许只演示无持久化核心流程；响应必须明确标记降级。
+            database = {"status": "unavailable_demo"}
+        else:
+            return JSONResponse(
+                status_code=503,
+                content={"status": "unavailable", "detail": "教学数据库未就绪"},
+            )
+    return JSONResponse(
+        content={
+            "status": "ok",
+            "years": years,
+            "manifest_id": current_manifest,
+            "artifact_contract": artifact_contract(),
+            "database": database,
+        }
+    )
+
 
 PUBLIC_API_PATHS = {"/api/auth/login", "/api/auth/me"}
 
@@ -81,7 +126,10 @@ async def require_api_bearer(request: Request, call_next):
     authorization = request.headers.get("authorization")
     if not authorization or not authorization.startswith("Bearer "):
         return JSONResponse(status_code=401, content={"detail": "缺少 Bearer 令牌"})
-    payload = auth.verify_token(authorization.removeprefix("Bearer "))
+    try:
+        payload = auth.verify_token(authorization.removeprefix("Bearer "))
+    except auth.AuthenticationUnavailable as error:
+        return JSONResponse(status_code=503, content={"detail": str(error)})
     if payload is None:
         return JSONResponse(status_code=401, content={"detail": "令牌无效或已过期"})
     request.state.user = payload  # 下游(/api/classroom)按角色鉴权用
@@ -107,7 +155,10 @@ def _read_path(path: Path) -> pd.DataFrame:
             detail=f"缺少预计算产物 {path.name},请先运行 `uv run gvcsim compute`",
         )
     # NOTE: 返回的是共享缓存 DataFrame,派生列/筛选/排序前必须 .copy()(见 gvcsim/artifacts.py)。
-    return read_csv_artifact(path, require_current=path.parent == PROCESSED_DIR)
+    if path.parent == PROCESSED_DIR:
+        return read_csv_artifact(path, require_current=True)
+    artifacts.validate_source(path)
+    return read_csv_artifact(path)
 
 
 def _read_csv(name: str) -> pd.DataFrame:
@@ -302,7 +353,8 @@ _COUNTRY_DEGENERATE_NOTE = "（国家级贸易图为完全图，该指标对所�
 
 # 用 .get 而不是下标:漏写描述应表现为测试失败(test_indicator_schema 断言
 # desc 全部非空),而不是 import 时 KeyError 拖垮整个服务。
-for _field, _meta in INDICATOR_SCHEMA["fields"].items():
+_indicator_fields = cast(dict[str, dict[str, Any]], INDICATOR_SCHEMA["fields"])
+for _field, _meta in _indicator_fields.items():
     _degenerate = _field in _COUNTRY_DEGENERATE_NETWORK_FIELDS
     _desc = _INDICATOR_DESCRIPTIONS.get(_field, "")
     _meta["desc"] = _desc + _COUNTRY_DEGENERATE_NOTE if _degenerate else _desc
@@ -311,47 +363,139 @@ for _field, _meta in INDICATOR_SCHEMA["fields"].items():
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=1, max_length=256)
 
 
 @app.post("/api/auth/login")
-def login(req: LoginRequest):
+def login(req: LoginRequest, request: Request):
+    ip = request.client.host if request.client else None
+    rate_key = f"{ip or 'unknown'}|{req.username.casefold()}"
+    try:
+        auth.check_login_rate(rate_key)
+    except auth.TooManyLoginAttempts as error:
+        raise HTTPException(
+            status_code=429,
+            detail="登录尝试过于频繁，请稍后再试",
+            headers={"Retry-After": str(error.retry_after)},
+        ) from error
     try:
         user = auth.authenticate(req.username, req.password)
     except auth.AuthenticationUnavailable as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     if user is None:
+        auth.record_login_result(rate_key, success=False)
+        try:
+            classroom_db.record_audit_event(
+                "auth.login_failed", target_type="account", target_id=req.username, ip_address=ip
+            )
+        except classroom_db.Unavailable:
+            pass
         raise HTTPException(status_code=401, detail="用户名或密码错误")
-    token, exp = auth.issue_token(user)
-    return {"token": token, "user": user, "expires_at": exp}
+    try:
+        token, exp = auth.issue_token(user)
+        if not user.get("demo"):
+            classroom_db.record_audit_event(
+                "auth.login_succeeded",
+                actor_id=user.get("account_id"),
+                actor_name=user["username"],
+                target_type="auth_session",
+                ip_address=ip,
+            )
+    except (auth.AuthenticationUnavailable, classroom_db.Unavailable) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    auth.record_login_result(rate_key, success=True)
+    public_user = {
+        "username": user["username"],
+        "name": user["name"],
+        "role": user["role"],
+        "account_id": user.get("account_id"),
+    }
+    return {"token": token, "user": public_user, "expires_at": exp}
 
 
 @app.get("/api/auth/me")
 def me(authorization: str | None = Header(default=None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="缺少 Bearer 令牌")
-    payload = auth.verify_token(authorization.removeprefix("Bearer "))
+    try:
+        payload = auth.verify_token(authorization.removeprefix("Bearer "))
+    except auth.AuthenticationUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     if payload is None:
         raise HTTPException(status_code=401, detail="令牌无效或已过期")
-    return {"username": payload["sub"], "name": payload["name"], "role": payload["role"]}
+    return {
+        "username": payload["sub"],
+        "name": payload["name"],
+        "role": payload["role"],
+        "account_id": payload.get("aid"),
+    }
+
+
+@app.post("/api/auth/logout")
+def logout(authorization: str | None = Header(default=None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="缺少 Bearer 令牌")
+    token = authorization.removeprefix("Bearer ")
+    try:
+        payload = auth.verify_token(token)
+    except auth.AuthenticationUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    if payload is None:
+        raise HTTPException(status_code=401, detail="令牌无效或已过期")
+    if not auth.revoke_token(token):
+        raise HTTPException(status_code=409, detail="该会话无法撤销")
+    classroom_db.record_audit_event(
+        "auth.logout", actor_id=payload.get("aid"), actor_name=payload["sub"], target_type="auth_session"
+    )
+    return {"ok": True}
 
 
 @app.get("/api/meta")
-def meta():
+def meta(request: Request):
     years = processed_years()
     countries: list[str] = []
     sectors: list[str] = []
     if years:
         countries = sorted(_read_csv(f"indicators_country_{years[-1]}.csv")["country"].unique())
         sectors = sorted(_read_csv(f"indicators_industry_{years[-1]}.csv")["industry"].unique())
+    current_manifest = manifest_id() if years else None
+    assignment_context = None
+    assignment_unavailable = False
+    user = getattr(request.state, "user", {})
+    if user.get("role") == "student" and current_manifest:
+        try:
+            scope = classroom_db.assignment_context(user["sub"], current_manifest)
+            if scope:
+                assignment_context = {
+                    "course_run_id": scope.get("course_run_id"),
+                    "assignment_id": scope.get("assignment_id"),
+                    "attempt_id": scope.get("attempt_id"),
+                    "assignment_scope": scope.get("assignment_scope"),
+                    "assignment_manifest_id": scope.get("assignment_manifest_id"),
+                    "manifest_mismatch": bool(scope.get("manifest_mismatch")),
+                    "assignment_closed": bool(scope.get("assignment_closed")),
+                    "due_at": scope.get("due_at"),
+                }
+        except classroom_db.Unavailable:
+            assignment_unavailable = True
     return {
         "years": years,
         "countries": countries,
         "sectors": sectors,
         "artifact_contract": artifact_contract(),
         # 实验会话绑定该 ID:产物换代后旧会话即可被判定为过期。
-        "manifest_id": manifest_id() if years else None,
+        "manifest_id": current_manifest,
+        "artifact_provenance": artifacts.manifest_provenance() if years else None,
+        "assignment_context": assignment_context,
+        "assignment_unavailable": assignment_unavailable,
+        "course_run_id": (assignment_context or {}).get("course_run_id"),
+        "assignment_id": (assignment_context or {}).get("assignment_id"),
+        "attempt_id": (assignment_context or {}).get("attempt_id"),
+        "assignment_scope": (assignment_context or {}).get("assignment_scope"),
+        "manifest_mismatch": bool((assignment_context or {}).get("manifest_mismatch")),
+        "assignment_closed": bool((assignment_context or {}).get("assignment_closed")),
+        "due_at": (assignment_context or {}).get("due_at"),
     }
 
 
@@ -376,6 +520,8 @@ def indicators_schema():
 
 @app.get("/api/db/meta")
 def db_meta():
+    for path in sorted(RAW_DATA_DIR.glob("ICIO*_*.csv")):
+        artifacts.validate_source(path)
     return icio_browser.meta()
 
 
@@ -391,6 +537,11 @@ def db_slice(
     page_size: int = Query(25, ge=1, le=200),
 ):
     try:
+        candidates = sorted(RAW_DATA_DIR.glob(f"ICIO*_{year}.csv"))
+        if not candidates:
+            raise FileNotFoundError(f"没有 {year} 年 OECD ICIO 原始表")
+        for path in candidates:
+            artifacts.validate_source(path)
         return icio_browser.slice_table(
             year=year,
             table=table,
@@ -505,17 +656,7 @@ def viz_network(year: int):
 
 
 def _read_shocks() -> pd.DataFrame:
-    return _read_path(SHOCKS_DIR / shocks.DEMO_FILE)
-
-
-@lru_cache(maxsize=8)
-def _exposure_lookup(path_str: str, mtime_ns: int) -> dict[tuple[str, str], float]:
-    """(国家, 加征方) → 出口暴露度。与 CSV 缓存同样按 mtime 失效,
-    避免分页热路径上每个请求都重建整张查找表。"""
-    exposure = read_csv_artifact(Path(path_str))
-    return {
-        (str(row.country), str(row.imposer)): float(row.export_exposure) for row in exposure.itertuples(index=False)
-    }
+    return _read_path(PROCESSED_DIR / shocks.DEMO_FILE)
 
 
 def _with_tariff_exposure(df: pd.DataFrame, year: int, shock_type: str) -> pd.DataFrame:
@@ -530,15 +671,33 @@ def _with_tariff_exposure(df: pd.DataFrame, year: int, shock_type: str) -> pd.Da
     # note 为空或对不上事件表时保持 None,不让 NaN 渗入 JSON 或查找键。
     out["main_imposer"] = [imposer_by_event.get(note) if note else None for note in out["note"].astype(str)]
 
-    exposure_path = PROCESSED_DIR / f"{shocks.EXPOSURE_PREFIX}_{year}.csv"
-    exposure_lookup: dict[tuple[str, str], float] = {}
-    if exposure_path.exists():
-        validate_artifact(exposure_path)
-        exposure_lookup = _exposure_lookup(str(exposure_path), exposure_path.stat().st_mtime_ns)
-    out["export_exposure"] = [
-        exposure_lookup.get((str(country), imposer)) if imposer is not None else None
-        for country, imposer in zip(out["country"], out["main_imposer"])
-    ]
+    years = processed_years()
+    exposure_frames = []
+    for exposure_year in years:
+        path = PROCESSED_DIR / f"{shocks.EXPOSURE_PREFIX}_{exposure_year}.csv"
+        validate_artifact(path)
+        exposure_frames.append(read_csv_artifact(path))
+    exposure_data = pd.concat(exposure_frames, ignore_index=True) if exposure_frames else None
+    lookup = shocks._exposure_map(exposure_data)
+    fixed_values: list[float | None] = []
+    current_values: list[float | None] = []
+    base_years: list[int | None] = []
+    for country, imposer in zip(out["country"], out["main_imposer"]):
+        if imposer is None or lookup is None:
+            fixed_values.append(None)
+            current_values.append(None)
+            base_years.append(None)
+            continue
+        country_code = str(country)
+        base_year = shocks._fixed_exposure_year(country_code, imposer, years, lookup)
+        base_years.append(base_year)
+        fixed_values.append(lookup.get((country_code, imposer, base_year)) if base_year is not None else None)
+        current_values.append(lookup.get((country_code, imposer, year)))
+    out["export_exposure"] = fixed_values
+    out["export_exposure_fixed"] = fixed_values
+    out["export_exposure_contemporaneous"] = current_values
+    out["exposure_base_year"] = base_years
+    out["exposure_mode"] = shocks.EXPOSURE_MODE_FIXED_PRETREATMENT
     return out
 
 
@@ -560,9 +719,31 @@ def _shock_view_columns(shock_type: str) -> tuple[str, str, str, str, str]:
 
 @app.get("/api/shocks/events")
 def shock_events():
-    """事件时间线(不依赖预计算产物,直接来自事件表)。"""
+    """只展示能由当前冲击面板核验的事件。
+
+    ``events_metadata`` 是事件定义全集，而面板只把每个国家-行业-年份格中
+    贡献最大的事件写进对应 ``*_note`` 列。若把定义全集原样交给学生，某些
+    被更大贡献覆盖的事件虽然可点击，却永远无法通过第 11 步的服务端签发。
+    因此可见列表必须从当前 release 的权威面板反向筛选；后端签发也检查同一
+    组 note 列，二者不会再漂移。
+    """
+    artifacts.validate_source(Path(shocks.__file__))
+    frame = _read_shocks()
+    available_by_type: dict[str, set[str]] = {}
+    for shock_type in shocks.SHOCK_SPECS:
+        *_unused, note_col = _shock_view_columns(shock_type)
+        available_by_type[shock_type] = (
+            {str(value) for value in frame[note_col].dropna().unique() if str(value)}
+            if note_col in frame.columns
+            else set()
+        )
+    events = [
+        event
+        for event in shocks.events_metadata()
+        if str(event["name"]) in available_by_type.get(str(event.get("shock_type") or SHOCK_TARIFF), set())
+    ]
     return {
-        "events": shocks.events_metadata(),
+        "events": events,
         "disclaimer": "拟真演示数据:事件与税率量级参考公开资料手工编码,"
         "出口暴露度由 OECD ICIO 双边流向计算,不能用于研究结论",
     }
@@ -571,6 +752,7 @@ def shock_events():
 @app.get("/api/crosswalk/demo")
 def crosswalk_demo(year: int = 2019):
     try:
+        artifacts.validate_source(Path(crosswalk.__file__))
         return crosswalk.demo_payload(year)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -578,7 +760,7 @@ def crosswalk_demo(year: int = 2019):
 
 @app.get("/api/shocks/summary")
 def shock_summary(shock_type: str = SHOCK_TARIFF):
-    """按年份的冲击覆盖概览(步骤2 面板头部)。"""
+    """按年份的冲击覆盖概览(步骤11 面板头部)。"""
     shock_col, treated_col, *_ = _shock_view_columns(shock_type)
     df = _read_shocks()
     rows = []
@@ -650,11 +832,12 @@ class RegressionRequest(BaseModel):
     price_mode: str = PRICE_MODE_NOMINAL
     scenario: str = SCENARIO_CLEAN
     exclude_row: bool = True
+    weight_mode: str = shocks.EXPOSURE_MODE_FIXED_PRETREATMENT
 
 
 class PlaceboRequest(RegressionRequest):
-    n_draws: int = 80
-    seed: int = 2026
+    n_draws: int = Field(default=80, ge=10, le=200)
+    seed: int = Field(default=2026, ge=0, le=2_147_483_647)
 
 
 class ReportRequest(BaseModel):
@@ -688,6 +871,11 @@ def regression_options():
         "price_mode_labels": PRICE_MODE_LABELS,
         "scenarios": SCENARIOS,
         "scenario_labels": SCENARIO_LABELS,
+        "weight_modes": list(shocks.EXPOSURE_MODES),
+        "weight_mode_labels": {
+            shocks.EXPOSURE_MODE_FIXED_PRETREATMENT: "首次处理前固定权重（主口径）",
+            shocks.EXPOSURE_MODE_CONTEMPORANEOUS: "当期贸易权重（稳健性）",
+        },
         "outcomes": {key: value[1] for key, value in OUTCOME_DEPVARS.items()},
     }
 
@@ -734,7 +922,7 @@ def _validate_design(
     )
 
 
-def _design_info(design: RegressionDesign) -> dict:
+def _design_info(design: RegressionDesign, weight_mode: str = shocks.EXPOSURE_MODE_FIXED_PRETREATMENT) -> dict:
     return {
         "outcome": design.outcome,
         "depvar": design.depvar,
@@ -758,7 +946,82 @@ def _design_info(design: RegressionDesign) -> dict:
         "panel_file": design.panel_file,
         "entity": design.entity,
         "cluster": design.cluster,
+        "weight_mode": weight_mode,
     }
+
+
+def _validate_weight_mode(design: RegressionDesign, weight_mode: str) -> None:
+    if weight_mode not in shocks.EXPOSURE_MODES:
+        raise HTTPException(status_code=400, detail=f"weight_mode 必须是 {shocks.EXPOSURE_MODES}")
+    if weight_mode == shocks.EXPOSURE_MODE_CONTEMPORANEOUS and design.shock_type != SHOCK_TARIFF:
+        raise HTTPException(status_code=400, detail="当期贸易权重稳健性只适用于 tariff 冲击")
+
+
+def _panel_for_weight_mode(panel: pd.DataFrame, design: RegressionDesign, weight_mode: str) -> pd.DataFrame:
+    _validate_weight_mode(design, weight_mode)
+    if weight_mode == shocks.EXPOSURE_MODE_FIXED_PRETREATMENT:
+        return panel
+    required = {"tariff_shock_contemporaneous", "treated_contemporaneous"}
+    if not required.issubset(panel.columns):
+        raise HTTPException(status_code=409, detail="当前产物没有当期权重稳健性列，请重建 schema 3 产物")
+    out = panel.copy()
+    out[design.shock_col] = out["tariff_shock_contemporaneous"]
+    out[design.treated_col] = out["treated_contemporaneous"]
+    return out
+
+
+def _regression_preflight(design: RegressionDesign, result: dict[str, Any], weight_mode: str) -> dict[str, Any]:
+    """把识别风险从脚注提升为每次估计都返回的结构化预检。"""
+    support_value = result.get("support")
+    support: dict[str, Any] = support_value if isinstance(support_value, dict) else {}
+    checks: list[dict[str, str]] = []
+
+    def add(code: str, severity: str, message: str) -> None:
+        checks.append({"code": code, "severity": severity, "message": message})
+
+    if support.get("untreated_clusters") == 0 and support.get("treated_clusters", 0) > 0:
+        add(
+            "no_never_treated",
+            "warning",
+            "没有永不处理聚类；识别仅来自尚未处理者与处理时点差异，异质处理效应下传统 staggered TWFE 可能有偏。",
+        )
+    if support.get("reversal_entities"):
+        add(
+            "treatment_reversal",
+            "fatal" if result.get("status") == "invalid_design" else "warning",
+            f"检测到 {len(support['reversal_entities'])} 个处理撤销实体；吸收型 DID/事件研究可能误编码撤销后的年份。",
+        )
+    if design.outcome == "network":
+        add(
+            "network_interference",
+            "warning",
+            "网络结果存在单位间干扰：一国政策会同时改变其他节点的边与中心性，传统 SUTVA 不成立。",
+        )
+    add(
+        "treatment_weighting",
+        "disclosure" if weight_mode == shocks.EXPOSURE_MODE_FIXED_PRETREATMENT else "warning",
+        (
+            "本次使用首次处理前固定贸易权重，避免处理后贸易结构反向决定 treatment。"
+            if weight_mode == shocks.EXPOSURE_MODE_FIXED_PRETREATMENT
+            else "本次使用当期贸易权重，仅作稳健性；该权重可能已受政策影响，不能替代固定处理前主口径。"
+        ),
+    )
+    return {
+        "status": result.get("status") or "ok",
+        "can_infer": not bool(support.get("suppress_inference")),
+        "checks": checks,
+    }
+
+
+def _regression_step(outcome: str) -> int:
+    return next(cast(int, step["n"]) for step in STEPS if step.get("regression_outcome") == outcome)
+
+
+def _require_regression_student(request: Request) -> str:
+    user = getattr(request.state, "user", None) or {}
+    if user.get("role") != "student":
+        raise HTTPException(status_code=403, detail="回归学习事件只对当前作业中的学生签发")
+    return str(user["sub"])
 
 
 @app.get("/api/regression/design")
@@ -773,27 +1036,30 @@ def regression_design(
     price_mode: str = PRICE_MODE_NOMINAL,
     scenario: str = "clean",
     exclude_row: bool = True,
+    weight_mode: str = shocks.EXPOSURE_MODE_FIXED_PRETREATMENT,
 ):
     """返回指定 outcome 的方程与面板/个体/聚类等设计信息，不执行估计。"""
     if "step" in request.query_params:
         raise HTTPException(status_code=422, detail="旧 step 参数已删除，请使用 outcome")
-    return _design_info(
-        _validate_design(
-            outcome,
-            granularity,
-            shock_type,
-            method,
-            control_mode,
-            interaction,
-            price_mode,
-            scenario,
-            exclude_row,
-        )
+    design = _validate_design(
+        outcome,
+        granularity,
+        shock_type,
+        method,
+        control_mode,
+        interaction,
+        price_mode,
+        scenario,
+        exclude_row,
     )
+    _validate_weight_mode(design, weight_mode)
+    return _design_info(design, weight_mode)
 
 
 @app.post("/api/regression/run")
-def regression_run(req: RegressionRequest):
+def regression_run(req: RegressionRequest, request: Request):
+    subject = _require_regression_student(request)
+    run_manifest = manifest_id()
     design = _validate_design(
         req.outcome,
         req.granularity,
@@ -805,21 +1071,45 @@ def regression_run(req: RegressionRequest):
         req.scenario,
         req.exclude_row,
     )
-    panel = _read_csv(design.panel_file)
+    panel = _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
     try:
         result, benchmark = run_design_with_benchmark(panel, design)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    design_info = _design_info(design, req.weight_mode)
+    result_info = result.to_dict()
+    if manifest_id() != run_manifest:
+        raise HTTPException(status_code=409, detail="估计期间数据产物已切换，请重新运行")
+    event_payload_sha256 = trusted_evidence.digest({"design": design_info, "result": result_info})
+    event = classroom_db.record_evidence_event(
+        subject,
+        _regression_step(design.outcome),
+        "regression",
+        run_manifest,
+        event_payload_sha256,
+        {"design": design_info, "result_sha256": trusted_evidence.digest(result_info)},
+    )
+    run_id = trusted_evidence.issue_regression_run(
+        subject=subject,
+        manifest_id=run_manifest,
+        design=design_info,
+        result=result_info,
+        event=event,
+    )
     return {
-        "design": _design_info(design),
-        "result": result.to_dict(),
+        "run_id": run_id,
+        "design": design_info,
+        "result": result_info,
+        "preflight": _regression_preflight(design, result_info, req.weight_mode),
         "benchmark": benchmark,
         "disclaimer": "冲击变量为拟真演示面板(全经济体覆盖、行业异质),结果仅用于验证系统链路",
     }
 
 
 @app.post("/api/regression/placebo")
-def regression_placebo(req: PlaceboRequest):
+def regression_placebo(req: PlaceboRequest, request: Request):
+    subject = _require_regression_student(request)
+    run_manifest = manifest_id()
     design = _validate_design(
         req.outcome,
         req.granularity,
@@ -831,13 +1121,34 @@ def regression_placebo(req: PlaceboRequest):
         req.scenario,
         req.exclude_row,
     )
-    panel = _read_csv(design.panel_file)
+    panel = _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
     try:
         placebo = placebo_did_distribution(panel, design, n_draws=req.n_draws, seed=req.seed)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    design_info = _design_info(design, req.weight_mode)
+    if manifest_id() != run_manifest:
+        raise HTTPException(status_code=409, detail="安慰剂期间数据产物已切换，请重新运行")
+    event_payload_sha256 = trusted_evidence.digest({"design": design_info, "result": placebo})
+    event = classroom_db.record_evidence_event(
+        subject,
+        _regression_step(design.outcome),
+        "placebo",
+        run_manifest,
+        event_payload_sha256,
+        {"design": design_info, "result_sha256": trusted_evidence.digest(placebo)},
+    )
+    placebo_run_id = trusted_evidence.issue_regression_run(
+        subject=subject,
+        manifest_id=run_manifest,
+        design=design_info,
+        result=placebo,
+        event=event,
+        kind="placebo",
+    )
     return {
-        "design": _design_info(design),
+        "placebo_run_id": placebo_run_id,
+        "design": design_info,
         "placebo": placebo,
         "disclaimer": "安慰剂检验基于拟真演示冲击数据,用于教学展示随机化反事实分布",
     }
@@ -845,44 +1156,19 @@ def regression_placebo(req: PlaceboRequest):
 
 @app.get("/api/report/{year}")
 def report(year: int):
-    try:
-        document = report_mod.build(year)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    return document.to_dict()
+    del year
+    raise HTTPException(
+        status_code=410,
+        detail="该无学习证据门槛的报告端点已停用；学生请使用 /api/classroom/report/generate，批处理请使用 CLI",
+    )
 
 
 @app.post("/api/report")
-def report_custom(req: ReportRequest):
-    # 复用 trade 设计校验；报告会把同一套设定应用到四类 outcome。
-    _validate_design(
-        "trade",
-        req.granularity,
-        req.shock_type,
-        req.method,
-        req.control_mode,
-        req.interaction,
-        req.price_mode,
-        exclude_row=req.exclude_row,
+def report_custom():
+    raise HTTPException(
+        status_code=410,
+        detail="该无学习证据门槛的报告端点已停用；学生请使用 /api/classroom/report/generate，批处理请使用 CLI",
     )
-    try:
-        document = report_mod.build(
-            year=req.year,
-            granularity=req.granularity,
-            shock_type=req.shock_type,
-            method=req.method,
-            control_mode=req.control_mode,
-            interaction=req.interaction,
-            price_mode=req.price_mode,
-            exclude_row=req.exclude_row,
-        )
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    return document.to_dict()
 
 
 # ---------------------------------------------------------------- 教学面板(班级/学生/评阅/公告)
@@ -901,3 +1187,18 @@ async def classroom_db_unavailable(request: Request, exc: classroom_db.Unavailab
         status_code=503,
         content={"detail": "教学数据库不可用,请先启动 PostgreSQL 并运行 `uv run gvcsim classroom-init`"},
     )
+
+
+@app.exception_handler(classroom_db.SchemaVersionMismatch)
+async def classroom_schema_unavailable(request: Request, exc: classroom_db.SchemaVersionMismatch):
+    return JSONResponse(status_code=503, content={"detail": "教学数据库 schema 未就绪；请先完成兼容迁移"})
+
+
+@app.exception_handler(classroom_db.AssignmentScopeMismatch)
+async def assignment_scope_mismatch(request: Request, exc: classroom_db.AssignmentScopeMismatch):
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(classroom_db.AssignmentClosed)
+async def assignment_closed(request: Request, exc: classroom_db.AssignmentClosed):
+    return JSONResponse(status_code=409, content={"detail": str(exc)})

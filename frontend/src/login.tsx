@@ -1,18 +1,23 @@
 /**
  * 登录页:接真实后端(POST /api/auth/login,服务端加密校验 + 签名令牌)。
- * 演示定位:默认预填学生账号,右侧可一键切换学生/教师身份。
+ *
+ * 凭证只在**显式的演示构建**(VITE_DEMO_MODE=1)里预填:课堂演示要能一键进出,
+ * 而生产构建绝不能内嵌课堂口令。开关取自 import.meta.env,构建期即为字面量,
+ * 未开启时下面这段快捷账号 UI 与口令常量会被一起摇掉,不进产物。
  */
 import { useState } from "react";
 import { api } from "./api";
 import { LogoMark } from "./brand";
 import type { LoginResponse } from "./types";
 
-const FLOW = ["数据接入", "指标计算", "教学实证", "实验报告"];
+export const LOGIN_FLOW = ["数据接入", "指标计算", "可视化", "教学实证", "实验报告"];
 
-const ACCOUNTS = [
+const DEMO_ACCOUNTS = [
   { username: "student", label: "学生身份", note: "完成 16 步实验" },
   { username: "teacher", label: "教师身份", note: "班级管理与报告评阅" },
 ];
+/** 演示口令;可用 VITE_DEMO_PASSWORD 覆盖,与服务端 GVCSIM_BOOTSTRAP_PASSWORD 对应。 */
+const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD || "gvclab2026";
 
 /** 左侧背景:静态勾勒的贸易网络(手工布点,非装饰性随机) */
 function NetBackdrop() {
@@ -42,8 +47,10 @@ function NetBackdrop() {
 }
 
 export function LoginPage({ onLogin }: { onLogin: (r: LoginResponse) => void }) {
-  const [username, setUsername] = useState("student");
-  const [password, setPassword] = useState("gvclab2026");
+  const demoMode = import.meta.env.VITE_DEMO_MODE === "1";
+  // 演示构建默认落在学生身份并预填口令,打开即可直接登录;非演示构建仍是空表单。
+  const [username, setUsername] = useState(demoMode ? DEMO_ACCOUNTS[0].username : "");
+  const [password, setPassword] = useState(demoMode ? DEMO_PASSWORD : "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -83,7 +90,7 @@ export function LoginPage({ onLogin }: { onLogin: (r: LoginResponse) => void }) 
             再用拟真政策冲击练习实证比较、识别假设与不确定性判断，最终生成实验报告。
           </p>
           <div className="login-flow">
-            {FLOW.map((p, i) => (
+            {LOGIN_FLOW.map((p, i) => (
               <span key={p} className="login-flow-item" style={{ animationDelay: `${0.15 + i * 0.18}s` }}>
                 <span className="login-flow-num">{String(i + 1).padStart(2, "0")}</span>
                 {p}
@@ -98,33 +105,33 @@ export function LoginPage({ onLogin }: { onLogin: (r: LoginResponse) => void }) 
       <div className="login-panel">
         <form className="login-card" onSubmit={submit}>
           <h2>进入实验平台</h2>
-          <p className="login-card-sub">选择身份后点击登录,凭证已为你填好。</p>
+          <p className="login-card-sub">使用教师分配的个人账号登录；角色与课程权限由服务器确认。</p>
 
-          <div className="login-roles">
-            {ACCOUNTS.map((a) => (
+          {demoMode && <div className="login-roles" aria-label="开发演示快捷账号">
+            {DEMO_ACCOUNTS.map((a) => (
               <button
                 key={a.username}
                 type="button"
                 className={`login-role${username === a.username ? " on" : ""}`}
                 onClick={() => {
                   setUsername(a.username);
-                  setPassword("gvclab2026");
+                  setPassword(DEMO_PASSWORD);
                 }}
               >
                 <span className="login-role-label">{a.label}</span>
                 <span className="login-role-note">{a.note}</span>
               </button>
             ))}
-          </div>
+          </div>}
 
           <label className="login-label" htmlFor="login-user">用户名</label>
           <input
-            id="login-user" className="login-input" value={username} autoComplete="username"
+            id="login-user" className="login-input" value={username} autoComplete="username" required
             onChange={(e) => setUsername(e.target.value)}
           />
           <label className="login-label" htmlFor="login-pass">密码</label>
           <input
-            id="login-pass" className="login-input" type="password" value={password}
+            id="login-pass" className="login-input" type="password" value={password} required
             autoComplete="current-password" onChange={(e) => setPassword(e.target.value)}
           />
           {error && <div className="error-box" style={{ marginTop: 14, padding: "10px 14px" }}>{error}</div>}
@@ -132,7 +139,8 @@ export function LoginPage({ onLogin }: { onLogin: (r: LoginResponse) => void }) 
             {busy ? "正在登录…" : "登录"}
           </button>
           <div className="login-hint">
-            课堂演示口令统一为 <code>gvclab2026</code>;登录状态保留 12 小时,口令在服务端加密校验。
+            {demoMode && <>课堂演示口令统一为 <b>{DEMO_PASSWORD}</b>;上方可一键切换学生 / 教师身份。<br /></>}
+            会话有效期由服务器安全策略决定；登录后页面会显示本次会话的实际到期时间。
           </div>
         </form>
       </div>

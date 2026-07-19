@@ -1,4 +1,4 @@
-"""步骤2:贸易政策冲击数据接入。
+"""步骤11:贸易政策冲击数据接入。
 
 真实系统应接入 PIIE 中美关税追踪库 / WTO / GTA / OFAC-BIS 清单(见项目
 说明文档 4.2 节)。开发起点阶段提供一份**拟真的演示数据**:以 2018–2020
@@ -35,6 +35,9 @@ EXPOSURE_PREFIX = "export_exposure"
 # treated 阈值:全部出口的平均额外关税超过 0.1 个百分点才算受处理,
 # 避免"土耳其对美反制 × 美国微小对土出口份额"这类痕量项污染处理组。
 TREATED_THRESHOLD = 0.001
+EXPOSURE_MODE_FIXED_PRETREATMENT = "fixed_pretreatment"
+EXPOSURE_MODE_CONTEMPORANEOUS = "contemporaneous"
+EXPOSURE_MODES = (EXPOSURE_MODE_FIXED_PRETREATMENT, EXPOSURE_MODE_CONTEMPORANEOUS)
 
 # 稳定英文键 → (强度列, 处理指示列)。键是 API 契约,展示文案见 SHOCK_LABELS:
 # 界面改个措辞不该变成破坏性 API 变更。
@@ -577,6 +580,36 @@ def _exposure_map(export_exposure: pd.DataFrame | None) -> dict[tuple[str, str, 
     }
 
 
+def _first_tariff_year(country: str, imposer: str, years: list[int]) -> int | None:
+    candidates: list[int] = []
+    for ev in EVENTS:
+        if ev.imposer != imposer or country in ev.exempt:
+            continue
+        targeted = ev.targets == "ALL" and country != imposer or ev.targets != "ALL" and country in ev.targets
+        if not targeted:
+            continue
+        schedules = ev.overrides.get(country, ev.rates)
+        candidates.extend(y for values in schedules.values() for y, rate in values.items() if y in years and rate > 0)
+    return min(candidates) if candidates else None
+
+
+def _fixed_exposure_year(
+    country: str,
+    imposer: str,
+    years: list[int],
+    exposure_lookup: dict[tuple[str, str, int], float] | None,
+) -> int | None:
+    """选取首次处理前最后一个可用 ICIO 年；短面板无前期时明确回退最早年。"""
+    if exposure_lookup is None:
+        return None
+    available = sorted(y for c, i, y in exposure_lookup if c == country and i == imposer)
+    if not available:
+        return None
+    first = _first_tariff_year(country, imposer, years)
+    pre = [y for y in available if first is None or y < first]
+    return max(pre) if pre else min(available)
+
+
 def _stylized_exposure(country: str, imposer: str) -> float:
     """小测试与缺少预计算暴露度时的风格化回退口径。"""
     if imposer == "USA":
@@ -590,10 +623,18 @@ def _exposure(
     imposer: str,
     year: int,
     exposure_lookup: dict[tuple[str, str, int], float] | None,
+    *,
+    mode: str = EXPOSURE_MODE_FIXED_PRETREATMENT,
+    panel_years: list[int] | None = None,
 ) -> float:
     """country 的出口中流向 imposer 的份额(冲击的贸易加权系数)。"""
     if exposure_lookup is not None:
-        return exposure_lookup.get((country, imposer, year), 0.0)
+        if mode == EXPOSURE_MODE_CONTEMPORANEOUS:
+            return exposure_lookup.get((country, imposer, year), 0.0)
+        if mode != EXPOSURE_MODE_FIXED_PRETREATMENT:
+            raise ValueError(f"未知出口暴露权重口径: {mode}")
+        base_year = _fixed_exposure_year(country, imposer, panel_years or [year], exposure_lookup)
+        return exposure_lookup.get((country, imposer, base_year), 0.0) if base_year is not None else 0.0
     return _stylized_exposure(country, imposer)
 
 
@@ -602,43 +643,61 @@ def demo_shock_panel(
     sectors: list[str],
     years: list[int],
     export_exposure: pd.DataFrame | None = None,
+    exposure_mode: str = EXPOSURE_MODE_FIXED_PRETREATMENT,
 ) -> pd.DataFrame:
     """生成覆盖全部 (country, sector, year) 的冲击面板,未受冲击处为 0。
 
     列:tariff_shock(全部出口面对的平均额外关税)、treated、shock_type、
         announced_date / effective_date(取贡献最大事件,支持 DID 时间线)、note。
     """
+    if exposure_mode not in EXPOSURE_MODES:
+        raise ValueError(f"exposure_mode 必须是 {EXPOSURE_MODES}")
     shock: dict[tuple[str, str, int], float] = {}
+    shock_contemporaneous: dict[tuple[str, str, int], float] = {}
     main_event: dict[tuple[str, str, int], tuple[float, TariffEvent]] = {}
     exposure_lookup = _exposure_map(export_exposure)
 
-    for ev in EVENTS:
+    for tariff_event in EVENTS:
         targets = (
-            [c for c in countries if c != ev.imposer]
-            if ev.targets == "ALL"
-            else [c for c in ev.targets if c in countries]
+            [c for c in countries if c != tariff_event.imposer]
+            if tariff_event.targets == "ALL"
+            else [c for c in tariff_event.targets if c in countries]
         )
         for c in targets:
-            if c in ev.exempt:
+            if c in tariff_event.exempt:
                 continue
-            for s, by_year in (ev.overrides.get(c, ev.rates)).items():
+            for s, by_year in (tariff_event.overrides.get(c, tariff_event.rates)).items():
                 for y, rate in by_year.items():
                     if y not in years or rate <= 0:
                         continue
-                    w = _exposure(c, ev.imposer, y, exposure_lookup)
+                    w = _exposure(c, tariff_event.imposer, y, exposure_lookup, mode=exposure_mode, panel_years=years)
                     if w <= 0:
                         continue
                     contrib = rate * w
-                    key = (c, s, y)
-                    shock[key] = shock.get(key, 0.0) + contrib
-                    if key not in main_event or contrib > main_event[key][0]:
-                        main_event[key] = (contrib, ev)
+                    contemporaneous = rate * _exposure(
+                        c,
+                        tariff_event.imposer,
+                        y,
+                        exposure_lookup,
+                        mode=EXPOSURE_MODE_CONTEMPORANEOUS,
+                        panel_years=years,
+                    )
+                    tariff_key = (c, s, y)
+                    shock[tariff_key] = shock.get(tariff_key, 0.0) + contrib
+                    shock_contemporaneous[tariff_key] = shock_contemporaneous.get(tariff_key, 0.0) + contemporaneous
+                    if tariff_key not in main_event or contrib > main_event[tariff_key][0]:
+                        main_event[tariff_key] = (contrib, tariff_event)
 
     base = pd.MultiIndex.from_product([countries, sectors, years], names=["country", "sector", "year"]).to_frame(
         index=False
     )
     base["tariff_shock"] = [shock.get((c, s, y), 0.0) for c, s, y in zip(base["country"], base["sector"], base["year"])]
     base["treated"] = (base["tariff_shock"] > TREATED_THRESHOLD).astype(int)
+    base["tariff_shock_contemporaneous"] = [
+        shock_contemporaneous.get((c, s, y), 0.0) for c, s, y in zip(base["country"], base["sector"], base["year"])
+    ]
+    base["treated_contemporaneous"] = (base["tariff_shock_contemporaneous"] > TREATED_THRESHOLD).astype(int)
+    base["tariff_exposure_mode"] = exposure_mode
     base["shock_type"] = SHOCK_TARIFF
 
     events = [
@@ -651,18 +710,18 @@ def demo_shock_panel(
     # 制裁/出口管制 mock:直接按国家-行业-年份暴露强度写入独立列。
     entity_shock: dict[tuple[str, str, int, str], float] = {}
     entity_event: dict[tuple[str, str, int, str], tuple[float, EntityListEvent]] = {}
-    for ev in ENTITY_LIST_EVENTS:
-        for c in [t for t in ev.targets if t in countries]:
-            for s, by_year in ev.intensities.items():
+    for entity_event_def in ENTITY_LIST_EVENTS:
+        for c in [t for t in entity_event_def.targets if t in countries]:
+            for s, by_year in entity_event_def.intensities.items():
                 if s not in sectors:
                     continue
                 for y, intensity in by_year.items():
                     if y not in years or intensity <= 0:
                         continue
-                    key = (c, s, y, ev.shock_col)
-                    entity_shock[key] = entity_shock.get(key, 0.0) + intensity
-                    if key not in entity_event or intensity > entity_event[key][0]:
-                        entity_event[key] = (intensity, ev)
+                    entity_key = (c, s, y, entity_event_def.shock_col)
+                    entity_shock[entity_key] = entity_shock.get(entity_key, 0.0) + intensity
+                    if entity_key not in entity_event or intensity > entity_event[entity_key][0]:
+                        entity_event[entity_key] = (intensity, entity_event_def)
 
     for shock_type, (shock_col, treated_col) in SHOCK_SPECS.items():
         if shock_type == SHOCK_TARIFF:
@@ -683,59 +742,65 @@ def demo_shock_panel(
     return base
 
 
-def write_demo(countries: list[str], sectors: list[str], years: list[int]) -> None:
-    SHOCKS_DIR.mkdir(parents=True, exist_ok=True)
+def write_demo(
+    countries: list[str],
+    sectors: list[str],
+    years: list[int],
+    *,
+    exposure_mode: str = EXPOSURE_MODE_FIXED_PRETREATMENT,
+) -> None:
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     export_exposure = load_export_exposure(years)
-    demo_shock_panel(countries, sectors, years, export_exposure=export_exposure).to_csv(
-        SHOCKS_DIR / DEMO_FILE, index=False
+    demo_shock_panel(countries, sectors, years, export_exposure=export_exposure, exposure_mode=exposure_mode).to_csv(
+        PROCESSED_DIR / DEMO_FILE, index=False
     )
 
 
 def events_metadata() -> list[dict]:
-    """事件表的展示视图(步骤2 前端的事件时间线)。"""
+    """事件表的展示视图(步骤11 前端的事件时间线)。"""
     out = []
-    for ev in EVENTS:
-        sector_codes = set(ev.rates)
-        for override in ev.overrides.values():
+    for tariff_event in EVENTS:
+        sector_codes = set(tariff_event.rates)
+        for override in tariff_event.overrides.values():
             sector_codes.update(override)
-        peak = {s: max(by_year.values()) for s, by_year in ev.rates.items()}
+        peak = {s: max(by_year.values()) for s, by_year in tariff_event.rates.items()}
         top_sectors = sorted(peak, key=lambda s: peak[s], reverse=True)
         out.append(
             {
-                "name": ev.name,
+                "name": tariff_event.name,
                 "shock_type": SHOCK_TARIFF,
-                "imposer": ev.imposer,
-                "targets": "全部经济体" if ev.targets == "ALL" else "、".join(ev.targets),
-                "exempt": "、".join(ev.exempt),
-                "announced": ev.announced,
-                "effective": ev.effective,
-                "n_sectors": len(ev.rates),
+                "imposer": tariff_event.imposer,
+                "targets": "全部经济体" if tariff_event.targets == "ALL" else "、".join(tariff_event.targets),
+                "exempt": "、".join(tariff_event.exempt),
+                "announced": tariff_event.announced,
+                "effective": tariff_event.effective,
+                "n_sectors": len(tariff_event.rates),
                 "top_sectors": top_sectors[:3],
                 "peak_rate": max(peak.values()),
-                "target_codes": [] if ev.targets == "ALL" else list(ev.targets),
+                "target_codes": [] if tariff_event.targets == "ALL" else list(tariff_event.targets),
                 "sector_codes": sorted(sector_codes),
-                "all_targets": ev.targets == "ALL",
+                "all_targets": tariff_event.targets == "ALL",
             }
         )
-    for ev in ENTITY_LIST_EVENTS:
-        peak = {s: max(by_year.values()) for s, by_year in ev.intensities.items()}
+    for entity_event_def in ENTITY_LIST_EVENTS:
+        peak = {s: max(by_year.values()) for s, by_year in entity_event_def.intensities.items()}
         top_sectors = sorted(peak, key=lambda s: peak[s], reverse=True)
         out.append(
             {
-                "name": ev.name,
+                "name": entity_event_def.name,
                 "imposer": "USA",
-                "targets": "、".join(ev.targets),
+                "targets": "、".join(entity_event_def.targets),
                 "exempt": "",
-                "announced": ev.announced,
-                "effective": ev.effective,
-                "n_sectors": len(ev.intensities),
+                "announced": entity_event_def.announced,
+                "effective": entity_event_def.effective,
+                "n_sectors": len(entity_event_def.intensities),
                 "top_sectors": top_sectors[:3],
                 "peak_rate": max(peak.values()),
-                "shock_type": ev.shock_type,
-                "entities": "、".join(ev.entities),
-                "removal": ev.removal or None,
-                "target_codes": list(ev.targets),
-                "sector_codes": sorted(ev.intensities),
+                "shock_type": entity_event_def.shock_type,
+                "entities": "、".join(entity_event_def.entities),
+                "removal": entity_event_def.removal or None,
+                "target_codes": list(entity_event_def.targets),
+                "sector_codes": sorted(entity_event_def.intensities),
                 "all_targets": False,
             }
         )
@@ -744,7 +809,11 @@ def events_metadata() -> list[dict]:
 
 def load_shocks() -> pd.DataFrame:
     """读取 (country, sector, year) 冲击面板。接入真实数据后在这里切换数据源。"""
-    path = SHOCKS_DIR / DEMO_FILE
+    path = PROCESSED_DIR / DEMO_FILE
+    if not path.exists():
+        # 仅供 schema v2 迁移前给出可读错误；v3 manifest 不会登记这个旧路径。
+        legacy = SHOCKS_DIR / DEMO_FILE
+        path = legacy if legacy.exists() else path
     if not path.exists():
         raise FileNotFoundError(f"未找到冲击数据 {path},请先运行 `gvcsim compute` 生成演示数据")
     return pd.read_csv(path, keep_default_na=False)

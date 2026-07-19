@@ -6,14 +6,14 @@
  *   复杂排名   复杂 GVC 生产份额(3b/SVA)—— 深度分工的强度
  *   行业下钻   选一国看它各行业的生产构成,暴露一国内部的巨大异质性
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../../api";
-import { EvidencePanel } from "../../../step-evidence";
+import { EvidencePanel, VerifiedCerBox } from "../../../step-evidence";
 import type { IndustryPage, Meta, Step, StepEvidenceApi } from "../../../types";
 import { CompositionBar, RankBarChart, countryLabel } from "../../../viz";
 import { CountryPicker } from "../../country-picker";
 import { useAsync } from "../../shared";
-import { ChartStory, LensNav, StepIntro, YearSelect, finiteBy, num, useVizLab, type Row, type VizEvidence } from "./scaffold";
+import { ChartStory, LensNav, StepIntro, YearSelect, finiteBy, num, useCountryObservations, useVizLab, type Row, type VizEvidence } from "./scaffold";
 
 type Lens = "ladder" | "rank" | "industry";
 
@@ -25,14 +25,39 @@ const PROD_SEGMENTS = [
 ];
 
 export function Step9Production({ meta, step, evidence }: { meta: Meta; step: Step; evidence: StepEvidenceApi<VizEvidence> }) {
-  const { year, setYear, lens, pickLens, picked, pickCountries } = useVizLab(meta, step, evidence, "ladder");
-  const [drill, setDrill] = useState(meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "");
+  const { year, setYear, lens, pickLens, picked, pickCountries } = useVizLab(
+    meta, step, evidence, "ladder", ["ladder", "rank", "industry"],
+  );
+  const fallbackDrill = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
+  const [drill, setDrill] = useState(evidence.data?.drill ?? evidence.data?.compared?.at(-1) ?? fallbackDrill);
+  const drillTouched = useRef(Boolean(evidence.data));
+  useEffect(() => {
+    if (drillTouched.current || !evidence.data) return;
+    const saved = evidence.data.drill ?? evidence.data.compared?.at(-1);
+    if (saved && meta.countries.includes(saved)) setDrill(saved);
+    drillTouched.current = true;
+  }, [evidence.data, meta.countries]);
+  const selectCountries = (next: string[]) => {
+    pickCountries(next);
+    const last = next.at(-1);
+    if (last) {
+      setDrill(last);
+      evidence.save({ drill: last, evidence_id: "" });
+    }
+  };
+  const selectDrill = (next: string) => {
+    drillTouched.current = true;
+    setDrill(next);
+    pickCountries(picked.includes(next) ? picked : [...picked, next]);
+    evidence.save({ drill: next, evidence_id: "" });
+  };
   const { data } = useAsync<Row[]>(() => api.countryIndicators(year), [year]);
   const { data: page } = useAsync<IndustryPage | null>(
     () => (lens === "industry" && drill ? api.industryIndicatorsAll(year, drill) : Promise.resolve(null)),
     [lens, year, drill],
   );
   const rows = data ?? [];
+  useCountryObservations(rows, picked, year, "3b_VA_GVC_C_share", evidence);
   const highlight = new Set(picked);
 
   // 阶梯:主要经济体(按 SVA 取前 15)+ 你选中的国家,按复杂 GVC 份额排序 → 呈现梯度。
@@ -63,7 +88,7 @@ export function Step9Production({ meta, step, evidence }: { meta: Meta; step: St
         </span>
       </div>
       <div style={{ marginBottom: 14 }}>
-        <CountryPicker countries={meta.countries} picked={picked} onChange={pickCountries} />
+        <CountryPicker countries={meta.countries} picked={picked} onChange={selectCountries} />
       </div>
 
       <LensNav<Lens>
@@ -87,7 +112,7 @@ export function Step9Production({ meta, step, evidence }: { meta: Meta; step: St
         >
           <div className="controls" style={{ marginBottom: 12 }}>
             <label>下钻国家</label>
-            <select value={drill} onChange={(e) => setDrill(e.target.value)}>
+            <select value={drill} onChange={(e) => selectDrill(e.target.value)}>
               {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
             </select>
           </div>
@@ -121,6 +146,13 @@ export function Step9Production({ meta, step, evidence }: { meta: Meta; step: St
           <RankBarChart rows={rankRows} metricKey="3b_VA_GVC_C_share" label="复杂 GVC 份额" format="pct" highlight={highlight} />
         </ChartStory>
       )}
+      <VerifiedCerBox
+        step={step.n}
+        kind="visualization"
+        evidence={evidence}
+        ready={Boolean(evidence.data?.chart && (evidence.data?.compared?.length ?? 0) >= 2 && (evidence.data?.observations?.length ?? 0) >= 2)}
+        context={{ topic: step.topic, year, chart: lens, compared: picked, drill, metric: evidence.data?.metric, observations: evidence.data?.observations }}
+      />
     </div>
   );
 }
