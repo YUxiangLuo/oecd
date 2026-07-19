@@ -680,7 +680,9 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
         {(optionsError || designError) && <div className="error-box">{optionsError ?? designError}</div>}
         <div className="run-summary"><b>当前方案：</b>{settingsSummary(settings, options)}</div>
         <button className="run-btn" onClick={run} disabled={running || !design || Boolean(optionsError || designError)}>
-          {running ? "估计中…" : result ? "重新运行当前设定" : "运行基准回归"}
+          {/* 改了设定却仍写"重新运行",会让人以为按钮跑的还是上一次那套(点完招牌流程的
+              ①/② 后尤其容易误解)。stale 已表示"设定与上次结果不一致",据此分开措辞。 */}
+          {running ? "估计中…" : stale ? "运行修改后的设定" : result ? "重新运行当前设定" : "运行基准回归"}
         </button>
       </section>
 

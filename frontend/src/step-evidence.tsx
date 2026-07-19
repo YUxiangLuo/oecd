@@ -130,6 +130,8 @@ export function VerifiedCerBox<T extends CerStepEvidence & Record<string, unknow
   const [issuing, setIssuing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cer = evidence.data?.cer;
+  // 本地只做最廉价的护栏(四段是否写够字数),避免空表单去打服务端;
+  // "还差什么"仍一律以服务端 missing 为准,不在前端复制一套 CER 规则。
   const completeDraft = [cer?.claim, cer?.evidence, cer?.reasoning, cer?.boundary]
     .every((text) => typeof text === "string" && text.trim().length >= 12);
   const signed = typeof evidence.data?.evidence_id === "string" && Boolean(evidence.data.evidence_id);
@@ -166,7 +168,7 @@ export function VerifiedCerBox<T extends CerStepEvidence & Record<string, unknow
           {issuing ? "正在核验…" : signed ? "重新提交可核查证据" : "提交可核查证据"}
         </button>
         <span className={signed ? "cer-signed" : "muted"}>
-          {signed ? "✓ 已由服务器绑定到本账号、步骤与当前数据版本" : !ready ? "请先完成本步指定操作" : !completeDraft ? "请先完成上方四项，每项至少 12 字" : "提交后才计入完成度"}
+          {signed ? "✓ 已由服务器绑定到本账号、步骤与当前数据版本" : !ready ? "请先完成本步指定操作" : !completeDraft ? "请先完成上方四项，每项至少 12 字" : evidence.missing.length ? evidence.missing.join("；") : "提交后才计入完成度"}
         </span>
       </div>
       {error && <div className="error-box" style={{ marginTop: 10 }}>{error}</div>}
