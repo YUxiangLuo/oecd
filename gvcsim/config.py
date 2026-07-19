@@ -32,6 +32,10 @@ PG_DSN = os.environ.get("GVCSIM_PG_DSN", "").strip()
 BOOTSTRAP_PASSWORD = os.environ.get("GVCSIM_BOOTSTRAP_PASSWORD", "")
 AUTH_SECRET = os.environ.get("GVCSIM_AUTH_SECRET", "")
 EVIDENCE_SECRET = os.environ.get("GVCSIM_EVIDENCE_SECRET", "")
+# 访问令牌有效期上限。一轮完整实验要跑四次服务端回归,原先 1 小时的上限会让
+# 学生在课中被登出;令牌可撤销(登出)且服务端有会话表逐请求复查账号状态,因此
+# 放宽到 2 小时。上限只定义在这里,auth.py 签发时复用同一常量,避免两处漂移。
+MAX_TOKEN_TTL_SECONDS = 7200
 TOKEN_TTL_SECONDS = int(os.environ.get("GVCSIM_TOKEN_TTL_SECONDS", "1800"))
 LOGIN_WINDOW_SECONDS = int(os.environ.get("GVCSIM_LOGIN_WINDOW_SECONDS", "300"))
 LOGIN_MAX_ATTEMPTS = int(os.environ.get("GVCSIM_LOGIN_MAX_ATTEMPTS", "8"))
@@ -47,8 +51,8 @@ def validate_security_config() -> None:
     """生产配置 fail-closed；在服务启动或首次安全操作时调用。"""
     if not PG_DSN:
         raise ConfigurationError("缺少 GVCSIM_PG_DSN；教学数据库和认证不可用")
-    if TOKEN_TTL_SECONDS <= 0 or TOKEN_TTL_SECONDS > 3600:
-        raise ConfigurationError("GVCSIM_TOKEN_TTL_SECONDS 必须在 1..3600 秒之间")
+    if TOKEN_TTL_SECONDS <= 0 or TOKEN_TTL_SECONDS > MAX_TOKEN_TTL_SECONDS:
+        raise ConfigurationError(f"GVCSIM_TOKEN_TTL_SECONDS 必须在 1..{MAX_TOKEN_TTL_SECONDS} 秒之间")
     if LOGIN_WINDOW_SECONDS <= 0 or LOGIN_MAX_ATTEMPTS <= 0:
         raise ConfigurationError("登录限流窗口和次数必须为正数")
     if IS_PRODUCTION:

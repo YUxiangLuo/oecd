@@ -155,8 +155,8 @@ def authenticate(username: str, password: str) -> dict | None:
 def issue_token(user: dict) -> tuple[str, int]:
     """签发短期、可撤销访问令牌并登记服务端安全会话。"""
     ttl = config.TOKEN_TTL_SECONDS
-    if ttl <= 0 or ttl > 3600:
-        raise AuthenticationUnavailable("访问令牌有效期必须在 1..3600 秒之间")
+    if ttl <= 0 or ttl > config.MAX_TOKEN_TTL_SECONDS:
+        raise AuthenticationUnavailable(f"访问令牌有效期必须在 1..{config.MAX_TOKEN_TTL_SECONDS} 秒之间")
     now = int(time.time())
     exp = now + ttl
     jti = secrets.token_urlsafe(24)
