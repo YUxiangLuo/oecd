@@ -27,6 +27,26 @@
 - 网络中心性：度、加权度、离心率、接近中心性、调和中心性、介数和特征向量中心性；
 - 教学实证：国家级与国家–行业级面板、国家聚类标准误、控制变量、异质性和名义/实际值口径。
 
+## 学习证据与完成判定
+
+"完成某一步"不由客户端自称，而由服务端签发的可审计收据决定。每个可核查动作会先被服务器
+按当前数据重算核对，写入 append-only 的 `learning_evidence_events`，再签发一张 HMAC 收据，
+绑定账号、assignment、attempt、manifest、步骤与 payload 摘要。学生改动筛选、观察值、CER 或
+回归设定后，旧收据立即失效；第 12–15 步只认服务器实际运行后签发的 `run_id` / `placebo_run_id`。
+
+每一步还要求结构化的 **CER**：Claim（主张）、Evidence（数值证据）、Reasoning（推理）、
+Boundary（边界/限制）四段，各至少 12 字、四段不得重复、Evidence 必须引用具体数值。
+
+系统只核验"可复现的动作与对象确实存在"，**不判断**主张是否成立、推理是否充分——那属于教师
+0–2 分 rubric。两者的完整分工与逐步硬门槛见 [`docs/COURSE_EVIDENCE.md`](./docs/COURSE_EVIDENCE.md)。
+
+课堂数据模型为 course run → assignment → enrollment → attempt；学生的会话、进度、证据、报告
+与提交都挂在 attempt 之下，历史 attempt 保留为审计记录。
+
+> **assignment 绑定数据版本。** `assignments.manifest_id` 固定指向某个产物版本，重算产物
+> （`gvcsim compute`）后既有作业会立刻失配，学生的一切写入返回 409 且无法自行新建 attempt，
+> 必须由教师新建绑定新 manifest 的作业。学期中途不要随手重算，详见部署文档的「数据发布」。
+
 ## Gephi-compatible 网络口径
 
 预计算产物使用固定算法契约：
@@ -99,6 +119,10 @@ bun run dev
 
 访问 `http://localhost:5173`。Vite 会把 `/api` 代理到本地 FastAPI 服务。系统默认没有公开账号，
 认证和 16 步会话都依赖 PostgreSQL；数据库不可用时认证会关闭，而不会回退到内置教师账号。
+
+登录页默认是空表单。课堂演示可用**构建期**开关 `VITE_DEMO_MODE=1`（`bun run dev` 同样识别）
+显示学生/教师快捷入口并预填演示口令；默认构建会把这段 UI 与口令常量一并 tree-shaking 掉，
+因此生产产物里不含任何课堂凭证。
 
 只在本机演示时，可显式开启演示播种并自行指定一次性密码：
 

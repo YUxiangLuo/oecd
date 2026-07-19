@@ -2,6 +2,17 @@
 
 本指南使用非 root 服务账号、HTTPS、不可变 release、共享数据目录和部署前数据库备份。生产环境不提供公开演示账号，也不会在 PostgreSQL 故障时回退到内置教师账号。
 
+> **本文描述的是目标架构，当前主机尚未迁移到位。** 截至最后一次更新，
+> `101.201.151.30` 上跑的仍是早期演示布局：应用在 `/opt/oecd-icio-analysis`、以 root 运行、
+> 入口是 **HTTP `:6363`**、`/etc/gvcsim.env` 只有 `GVCSIM_PG_DSN`、systemd unit 也仍指向旧路径
+> （`deploy/gvcsim-api.service` 里的沙箱化 unit 指向 `/opt/gvcsim/current` 与 `gvcsim` 账号，
+> **直接安装会起不来**）。
+>
+> 在完成「一次性主机准备」之前，下面的 release 事务无法照搬。承载真实学生数据前必须先补齐：
+> 迁到 `/opt/gvcsim/` 布局、建服务账号、配 HTTPS、把 `GVCSIM_ENV` 设为 `production` 并生成两把
+> 独立密钥。演示期间以 `GVCSIM_ENV=development` + `GVCSIM_DEMO_MODE=1` 运行，登录页会明文提示
+> 演示口令——这套配置**不得**用于对外环境。
+
 ## 目录与拓扑
 
 ```text
@@ -77,8 +88,16 @@ uv run pytest --cov=gvcsim --cov-report=term-missing -q
 cd frontend
 bun install --frozen-lockfile
 bun run test:unit
-bun run build
+bun run build          # 生产构建：不要设置 VITE_DEMO_MODE
 cd ..
+```
+
+前端有一个**构建期**演示开关 `VITE_DEMO_MODE=1`：开启后登录页会显示学生/教师快捷入口
+并预填演示口令，仅供课堂演示。默认构建会把这段 UI 与口令常量一并 tree-shaking 掉，
+发布前可自查：
+
+```bash
+grep -rl "gvclab2026" frontend/dist/ && echo "❌ 演示口令进入产物，请用默认构建重新发布"
 ```
 
 release id 应同时含 Git commit 和 UTC 时间，例如：
@@ -189,14 +208,62 @@ curl -fsS "$BASE/health"
 
 ## 数据发布
 
-新的指标或政策输入必须在暂存目录完整生成并验证：
+> ⚠️ **重算产物会使在读作业整体锁死。** 这是本系统最容易踩的运维陷阱，先读完本节再执行
+> `gvcsim compute`。学期中途重算前必须先安排好作业切换，否则全班会瞬间无法提交任何证据。
+
+新的指标或政策输入必须在构建机完整生成并验证：
 
 ```bash
-uv run gvcsim compute
+uv run gvcsim compute            # fatal QC 会中止发布；确需教学演示才加 --allow-qc-override
 uv run pytest -q tests/test_artifacts.py tests/test_quality.py tests/test_synthetic_compute.py
 ```
 
-manifest 必须覆盖原始 ICIO 摘要、处理 CSV、政策冲击、事件定义、crosswalk、Git commit 与锁文件摘要。上传完整版本后再原子切换数据快照；每个 assignment 固定一个 manifest，不能用全局重算使在读作业整体失效。
+manifest 必须覆盖原始 ICIO 摘要、处理 CSV、政策冲击、事件定义、crosswalk、Git commit 与锁文件摘要。
+
+### 投放产物
+
+`compute` 产出的是 `data/artifacts/<manifest_id>/` 整套版本，`data/processed` 只是指向它的
+符号链接。因此**不能** `rsync data/processed/`（带尾斜杠会跟随链接、把内容摊成实体目录，
+下次切换版本时不再是原子操作）。正确做法是先同步版本目录，再切链接：
+
+```bash
+manifest_id=$(uv run python -c 'from gvcsim.artifacts import manifest_id; print(manifest_id())')
+
+rsync -az "data/artifacts/$manifest_id/" \
+  "$SERVER:/opt/gvcsim/shared/data/artifacts/$manifest_id/"
+rsync -az --delete data/shocks/ "$SERVER:/opt/gvcsim/shared/data/shocks/"
+
+ssh "$SERVER" "sudo -u gvcsim ln -sfn 'artifacts/$manifest_id' /opt/gvcsim/shared/data/processed"
+```
+
+旧版本目录保留用于审计与回滚，确认无作业仍绑定后再清理。
+
+### 作业与 manifest 的绑定（必读）
+
+每个 assignment 在 `assignments.manifest_id` 上**固定绑定**一个数据版本，学生的每一次证据写入
+都要经过 `_attempt_scope` 校验。切换产物后该字段不会自动跟随，于是：
+
+- 症状：所有学习证据、回归运行与报告生成返回 **409**（`事件不属于当前 assignment/manifest`）；
+- 学生**无法自救**——`start_new_attempt` 同样以「没有与当前 manifest 匹配的开放作业」拒绝；
+- 只有教师能恢复：新建一个绑定新 manifest 的 assignment（`POST /api/classroom/assignments`），
+  或在维护窗口内更新既有作业的绑定。
+
+发布前后各查一次作用域，确认没有落空：
+
+```bash
+curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/classroom/context" \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["assignment_manifest_id"], d["manifest_mismatch"])'
+# 期望：<新 manifest_id> False
+```
+
+同一机制也会让**测试库**失配：若开发机的 `gvclab_test` 里留有绑定旧 manifest 的作业，
+`pytest` 会出现若干 `assert 409 == 200`（集中在 `tests/test_api.py` 的回归用例）。这不是代码
+缺陷，重置测试库即可：
+
+```bash
+GVCSIM_PG_DSN=...gvclab_test GVCSIM_DEMO_MODE=1 GVCSIM_BOOTSTRAP_PASSWORD=... \
+  .venv/bin/gvcsim classroom-init --reset
+```
 
 ## 回滚
 
