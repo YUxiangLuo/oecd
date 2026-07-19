@@ -33,35 +33,6 @@ function deadlineLabel(value: string | null | undefined): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { hour12: false });
 }
 
-export interface QcReleaseSummary {
-  requiresDisclosure: boolean;
-  override: boolean;
-  fatal: string[];
-  warning: string[];
-  disclosure: string[];
-}
-
-/** Manifest QC nests year/control/shock scopes; flatten only machine-declared summaries. */
-export function summarizeQcRelease(qc: unknown): QcReleaseSummary {
-  const out: QcReleaseSummary = { requiresDisclosure: false, override: false, fatal: [], warning: [], disclosure: [] };
-  const visit = (value: unknown) => {
-    if (!value || typeof value !== "object") return;
-    const item = value as Record<string, unknown>;
-    if (item.requires_disclosure === true) out.requiresDisclosure = true;
-    if (item.override === true) out.override = true;
-    for (const key of ["fatal", "warning", "disclosure"] as const) {
-      if (Array.isArray(item[key])) out[key].push(...item[key].filter((name): name is string => typeof name === "string"));
-    }
-    Object.values(item).forEach((child) => {
-      if (child && typeof child === "object" && !Array.isArray(child)) visit(child);
-    });
-  };
-  visit(qc);
-  out.requiresDisclosure ||= out.override || out.fatal.length > 0 || out.warning.length > 0 || out.disclosure.length > 0;
-  for (const key of ["fatal", "warning", "disclosure"] as const) out[key] = [...new Set(out[key])];
-  return out;
-}
-
 function stepFromUrl(): number | null {
   const n = Number(new URLSearchParams(window.location.search).get("step"));
   return Number.isInteger(n) && n >= 1 && n <= 16 ? n : null;
@@ -427,7 +398,6 @@ export default function App() {
   const isReg = step.lab === "reg";
   // 可视化步骤(viz)图表是主角:讲解卡默认折叠,给图表让出首屏纵向空间(可点开)
   const isViz = step.lab === "viz";
-  const qcRelease = summarizeQcRelease(meta?.artifact_provenance?.qc);
   const assignmentScopeMissing = !meta
     || meta.course_run_id == null
     || meta.assignment_id == null
@@ -581,18 +551,6 @@ export default function App() {
               无法确认当前课程、作业与 attempt 作用域；实验输入与提交已锁定，本地缓存也已停用。
               请刷新重试；仍未恢复时联系教师检查选课、作业发布和数据库状态。
             </div>
-          )}
-          {qcRelease.requiresDisclosure && (
-            <details className="warnbox persistent-qc-warning">
-              <summary>
-                数据发布状态：当前产物含需持续披露的 QC 项
-                {qcRelease.override ? "（包含显式 override）" : ""}
-              </summary>
-              {qcRelease.fatal.length > 0 && <p><b>Fatal：</b>{qcRelease.fatal.join("、")}</p>}
-              {qcRelease.warning.length > 0 && <p><b>Warning：</b>{qcRelease.warning.join("、")}</p>}
-              {qcRelease.disclosure.length > 0 && <p><b>Disclosure：</b>{qcRelease.disclosure.join("、")}</p>}
-              <p>这些边界适用于本步及后续所有描述、回归和报告；折叠只收起明细，不会隐藏发布状态。</p>
-            </details>
           )}
           {session.stale && !assignmentClosed && (
             <div className="warnbox legacy-session-warning" role="status">

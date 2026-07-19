@@ -5,6 +5,7 @@ import type { EvidenceRules, Meta, QcCheck, StepEvidenceApi } from "../../types"
 import { useAsync, YearPicker } from "../shared";
 import { QcChecksTable } from "./qc-checks-table";
 import { qcDisclosureItems } from "./qc-evidence";
+import { summarizeQcRelease } from "./qc-release";
 
 /** 第 2 步的学习证据:对质检警告作出处置决定,并写下理由。 */
 interface QcEvidence extends Record<string, unknown> {
@@ -50,6 +51,9 @@ export function QcLab({ meta, evidence, rules, onNavigateStep }: {
   // 与服务端签发器使用同一组稳定键：不仅收失败项，也收“通过但仍需披露”的
   // warning；年度 ICIO 检查保留原名，控制变量检查加前缀避免重名碰撞。
   const disclosureItems = qcDisclosureItems(data ?? [], controlChecks ?? []);
+  // 数据产物自带的发布状态:哪些 QC 项在这一版数据里必须持续披露。
+  // 它讲的是本步的数据口径边界,因此放在质检结论旁边,而不是常驻在每一步顶部。
+  const qcRelease = summarizeQcRelease(meta.artifact_provenance?.qc);
   const disposition = evidence.data?.disposition;
   const canIssue = Boolean(
     !loading
@@ -103,6 +107,23 @@ export function QcLab({ meta, evidence, rules, onNavigateStep }: {
               ? `${allChecks.length} 项质检中 ${allChecks.length - failures} 项通过、${failures} 项异常；异常项已在各表置顶。`
               : `✓ ${allChecks.length} 项质检全部通过；仍可展开每项查看检查动机与口径。`}
       </div>
+
+      {qcRelease.requiresDisclosure && (
+        <details className="warnbox qc-release-status">
+          <summary>
+            数据发布状态：当前产物含需持续披露的 QC 项
+            {qcRelease.override ? "（包含显式 override）" : ""}
+          </summary>
+          {qcRelease.fatal.length > 0 && <p><b>Fatal：</b>{qcRelease.fatal.join("、")}</p>}
+          {qcRelease.warning.length > 0 && <p><b>Warning：</b>{qcRelease.warning.join("、")}</p>}
+          {qcRelease.disclosure.length > 0 && <p><b>Disclosure：</b>{qcRelease.disclosure.join("、")}</p>}
+          <p>
+            这些是<b>数据这一版本自带</b>的边界,与下面逐项质检结论一并构成本步口径;
+            它们适用于后续所有描述、回归与报告。折叠只收起明细,不改变披露义务。
+          </p>
+        </details>
+      )}
+
       <div className="section-head">
         <span className="section-head-icon">🧾</span>OECD ICIO 数据质检
         <span className="section-head-line" />

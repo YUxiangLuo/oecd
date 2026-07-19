@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { summarizeQcRelease } from "./App";
+import { summarizeQcRelease } from "./qc-release";
 
 describe("manifest QC disclosure", () => {
   test("finds nested year/control summaries and deduplicates names", () => {
