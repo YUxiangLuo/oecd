@@ -1,9 +1,12 @@
 /**
  * 选国家控件:可搜索的勾选列表 + 已选 chips。
  * 替代原生 <select multiple>(需要 Ctrl 多选、无搜索、只显示 ISO3 码,课堂可用性差)。
+ *
+ * 高度由外层容器决定:列表 flex:1 + 内部滚动,因此可以和右侧图表并排等高
+ * (见 viz/scaffold 的 VizWorkbench)。国旗只是视觉锚点,搜索仍按代码/中文名匹配。
  */
 import { useState } from "react";
-import { COUNTRY_NAMES, countryLabel } from "../viz";
+import { COUNTRY_NAMES, countryFlag, countryLabel } from "../viz";
 
 export function CountryPicker({ countries, picked, onChange }: {
   countries: string[];
@@ -37,6 +40,7 @@ export function CountryPicker({ countries, picked, onChange }: {
           {picked.map((code) => (
             <button type="button" key={code} className="country-chip" title="点击移除"
               onClick={() => toggle(code)}>
+              <span className="country-flag" aria-hidden="true">{countryFlag(code)}</span>
               {countryLabel(code)} ×
             </button>
           ))}
@@ -44,10 +48,11 @@ export function CountryPicker({ countries, picked, onChange }: {
       )}
       <div className="country-picker-list" role="listbox" aria-multiselectable="true">
         {shown.map((code) => (
-          <label key={code} className="country-picker-row">
+          <label key={code} className={`country-picker-row${picked.includes(code) ? " on" : ""}`}>
             <input type="checkbox" checked={picked.includes(code)} onChange={() => toggle(code)} />
+            <span className="country-flag" aria-hidden="true">{countryFlag(code)}</span>
             <b>{code}</b>
-            <span>{COUNTRY_NAMES[code] ?? ""}</span>
+            <span className="country-picker-name">{COUNTRY_NAMES[code] ?? ""}</span>
           </label>
         ))}
         {shown.length === 0 && <div className="muted" style={{ padding: "6px 8px" }}>没有匹配「{query}」的经济体</div>}

@@ -1005,8 +1005,33 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .topn-ctl input[type="range"] { width: 120px; accent-color: #4b47e0; }
 .topn-ctl b { font-family: "Space Grotesk", sans-serif; color: #4b47e0; min-width: 18px; text-align: center; }
 /* 选国家:搜索 + 勾选列表 + 已选 chips(替代原生 multi-select) */
+/* 可视化工作台:左选国家、右看图,两栏等高。行高由右侧图表决定,选择器列表内部滚动,
+   于是"选了谁"和"图上是谁"始终同屏,不必上下滚动来回对照。 */
+.viz-split {
+  display: grid; grid-template-columns: minmax(250px, 290px) minmax(0, 1fr);
+  gap: 16px; align-items: stretch; margin-bottom: 16px;
+  /* 必须是**确定**高度:只给 min-height 的话,77 行国家列表会把整行撑到两千像素,
+     flex:1 + overflow 也约束不住(stretch 取的是最高那栏的内容高度)。 */
+  height: clamp(520px, 68vh, 780px);
+}
+@media (max-width: 1100px) {
+  .viz-split { grid-template-columns: 1fr; height: auto; }
+  .viz-split-side { height: 420px; }
+}
+.viz-split-side { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+/* 图表栏自身滚动:讲解较长或窄屏时不至于把图挤出可视区。 */
+.viz-split-main { min-width: 0; min-height: 0; overflow-y: auto; }
+.viz-side-head {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: 8px; margin-bottom: 8px;
+}
+.viz-side-count { color: #7b8292; font-size: 12px; }
+.viz-side-count b.ok { color: #159a86; }
+.viz-side-count b.todo { color: #e0982a; }
+
 .country-picker {
-  min-width: 240px; max-width: 320px; border: 1px solid #e0e3ea; border-radius: 10px;
+  display: flex; flex-direction: column; min-height: 0; flex: 1;
+  border: 1px solid #e0e3ea; border-radius: 10px;
   background: #fff; padding: 8px; font-size: 12px;
 }
 .country-picker-head { display: flex; gap: 6px; align-items: center; }
@@ -1024,18 +1049,25 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   border-radius: 99px; padding: 2px 8px; font-size: 11px; font-weight: 600;
 }
 .country-chip:hover { background: #e0defc; }
+/* flex:1 + min-height:0 —— 列表吃掉剩余高度并内部滚动,整体高度交给外层的 .viz-split。 */
 .country-picker-list {
-  margin-top: 7px; max-height: 132px; overflow-y: auto;
-  border-top: 1px solid #f0f1f6; padding-top: 5px;
+  flex: 1; min-height: 120px; overflow-y: auto;
+  margin-top: 7px; border-top: 1px solid #f0f1f6; padding-top: 5px;
 }
 .country-picker-row {
   display: flex; align-items: center; gap: 7px; padding: 3px 5px;
   border-radius: 6px; cursor: pointer;
 }
 .country-picker-row:hover { background: #f4f5f8; }
+.country-picker-row.on { background: #f2f1ff; }
 .country-picker-row input { accent-color: #4b47e0; }
 .country-picker-row b { font-family: "Space Grotesk", sans-serif; font-weight: 600; color: #3a4050; }
-.country-picker-row span { color: #6b7280; }
+.country-picker-name { color: #6b7280; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 国旗用系统 emoji 字体渲染;稍大一点才在 12px 正文里看得清。 */
+.country-flag {
+  flex: none; font-size: 14px; line-height: 1;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
 
 /* 操作成功 toast(showToast/ToastHost) */
 .toast-host {

@@ -10,9 +10,8 @@ import { api } from "../../../api";
 import { EvidencePanel, VerifiedCerBox } from "../../../step-evidence";
 import type { Meta, Step, StepEvidenceApi } from "../../../types";
 import { LengthViz, QuadrantScatter, RankBarChart } from "../../../viz";
-import { CountryPicker } from "../../country-picker";
 import { useAsync } from "../../shared";
-import { ChartStory, LensNav, StepIntro, YearSelect, finiteBy, num, useCountryObservations, useVizLab, type Row, type VizEvidence } from "./scaffold";
+import { ChartStory, LensNav, StepIntro, VizWorkbench, finiteBy, num, useCountryObservations, useVizLab, type Row, type VizEvidence } from "./scaffold";
 
 type Lens = "position" | "bars" | "rank";
 
@@ -46,16 +45,6 @@ export function Step10Length({ meta, step, evidence }: { meta: Meta; step: Step;
         ]}
       />
 
-      <div className="controls" style={{ marginBottom: 10 }}>
-        <YearSelect years={meta.years} year={year} onChange={setYear} />
-        <span className="muted" style={{ fontSize: 12 }}>
-          已选 <b style={{ color: picked.length >= 2 ? "#159a86" : "#e0982a" }}>{picked.length}</b> 国{picked.length < 2 ? "(需 ≥2)" : ""}
-        </span>
-      </div>
-      <div style={{ marginBottom: 14 }}>
-        <CountryPicker countries={meta.countries} picked={picked} onChange={pickCountries} />
-      </div>
-
       <LensNav<Lens>
         active={lens as Lens}
         onPick={pickLens}
@@ -66,6 +55,10 @@ export function Step10Length({ meta, step, evidence }: { meta: Meta; step: Step;
         ]}
       />
 
+      <VizWorkbench
+        years={meta.years} year={year} onYearChange={setYear}
+        countries={meta.countries} picked={picked} onPick={pickCountries}
+      >
       {!rows.length ? (
         <p className="muted">加载 {year} 年国家指标中…</p>
       ) : lens === "position" ? (
@@ -109,6 +102,7 @@ export function Step10Length({ meta, step, evidence }: { meta: Meta; step: Step;
           <RankBarChart rows={rankRows} metricKey="GVCPs" label="GVC 位置指数" format="number" highlight={highlight} />
         </ChartStory>
       )}
+      </VizWorkbench>
       <VerifiedCerBox
         step={step.n}
         kind="visualization"

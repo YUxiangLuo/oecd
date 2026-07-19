@@ -70,6 +70,27 @@ export const COUNTRY_NAMES: Record<string, string> = {
 export const countryLabel = (code: string) =>
   (COUNTRY_NAMES[code] ? `${code} ${COUNTRY_NAMES[code]}` : code);
 
+/** ISO3 → ISO2,仅用于渲染国旗。ROW(世界其他地区)是账户闭合的余项,没有对应旗帜。 */
+const ISO3_TO_ISO2: Record<string, string> = {
+  ARG: "AR", AUS: "AU", AUT: "AT", BEL: "BE", BGD: "BD", BGR: "BG", BLR: "BY", BRA: "BR",
+  BRN: "BN", CAN: "CA", CHE: "CH", CHL: "CL", CHN: "CN", CIV: "CI", CMR: "CM", COL: "CO",
+  CRI: "CR", CYP: "CY", CZE: "CZ", DEU: "DE", DNK: "DK", EGY: "EG", ESP: "ES", EST: "EE",
+  FIN: "FI", FRA: "FR", GBR: "GB", GRC: "GR", HKG: "HK", HRV: "HR", HUN: "HU", IDN: "ID",
+  IND: "IN", IRL: "IE", ISL: "IS", ISR: "IL", ITA: "IT", JOR: "JO", JPN: "JP", KAZ: "KZ",
+  KHM: "KH", KOR: "KR", LAO: "LA", LTU: "LT", LUX: "LU", LVA: "LV", MAR: "MA", MEX: "MX",
+  MLT: "MT", MMR: "MM", MYS: "MY", NGA: "NG", NLD: "NL", NOR: "NO", NZL: "NZ", PAK: "PK",
+  PER: "PE", PHL: "PH", POL: "PL", PRT: "PT", ROU: "RO", RUS: "RU", SAU: "SA", SEN: "SN",
+  SGP: "SG", SVK: "SK", SVN: "SI", SWE: "SE", THA: "TH", TUN: "TN", TUR: "TR", TWN: "TW",
+  UKR: "UA", USA: "US", VNM: "VN", ZAF: "ZA",
+};
+
+/** 国旗 emoji:两个区域指示符号(U+1F1E6..U+1F1FF)拼成。ROW 用地球代替。 */
+export const countryFlag = (code: string): string => {
+  const iso2 = ISO3_TO_ISO2[code];
+  if (!iso2) return "🌍";
+  return String.fromCodePoint(...[...iso2].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65));
+};
+
 /** 散点/象限图上始终标注的重点经济体(右栏提示常让学生对照中美德日) */
 export const KEY_ECONOMIES = new Set(["CHN", "USA", "DEU", "JPN"]);
 /** 图元实体键:行业行显示中文名,国家行显示代码(用于高亮/选中匹配,须与 picked 里的码一致) */

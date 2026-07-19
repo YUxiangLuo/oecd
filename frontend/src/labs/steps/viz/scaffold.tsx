@@ -14,6 +14,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "../../../api";
 import type { CerStepEvidence, IndicatorSchema, Meta, Step, StepEvidenceApi } from "../../../types";
 import { useAsync } from "../../shared";
+import { CountryPicker } from "../../country-picker";
 import { CAT, cardStyle } from "../../../viz/shared";
 
 export type Row = Record<string, string | number | null>;
@@ -225,6 +226,40 @@ export function useVizLab(
 }
 
 /** 年份下拉(四步共用的唯一通用控件)。 */
+/**
+ * 可视化工作台:左边「年份 + 选国家」,右边图表,两栏等高并排。
+ *
+ * 原先年份/选国家整宽铺在最上方,中间还隔着镜头切换,学生要在页面上下来回滚动才能
+ * 把"选了谁"和"图上是谁"对上。这里把二者并到同一行:选择器列表 flex:1 内部滚动,
+ * 高度由右侧图表决定,所以永远与图表齐平;选完即可在旁边直接看到结果。
+ */
+export function VizWorkbench({ years, year, onYearChange, countries, picked, onPick, minPicks = 2, children }: {
+  years: number[];
+  year: number;
+  onYearChange: (y: number) => void;
+  countries: string[];
+  picked: string[];
+  onPick: (picked: string[]) => void;
+  minPicks?: number;
+  children: React.ReactNode;
+}) {
+  const enough = picked.length >= minPicks;
+  return (
+    <div className="viz-split">
+      <aside className="viz-split-side" aria-label="年份与经济体选择">
+        <div className="viz-side-head">
+          <YearSelect years={years} year={year} onChange={onYearChange} />
+          <span className="viz-side-count">
+            已选 <b className={enough ? "ok" : "todo"}>{picked.length}</b> 国{enough ? "" : `(需 ≥${minPicks})`}
+          </span>
+        </div>
+        <CountryPicker countries={countries} picked={picked} onChange={onPick} />
+      </aside>
+      <div className="viz-split-main">{children}</div>
+    </div>
+  );
+}
+
 export function YearSelect({ years, year, onChange }: { years: number[]; year: number; onChange: (y: number) => void }) {
   return (
     <span className="field">
