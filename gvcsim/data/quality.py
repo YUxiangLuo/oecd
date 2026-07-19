@@ -143,7 +143,14 @@ def check_accounting_identity(io) -> QcCheck:
 
 
 def check_leontief_inverse(io) -> QcCheck:
-    """(I-A)@L ≈ I,且 A 列和 < 1(否则隐含增加值≤0,矩阵接近奇异)。"""
+    """(I-A)@L ≈ I,且不存在**实质性**的 A 列和 ≥ 1(隐含增加值≤0)。
+
+    列和≥1 在真实 ICIO 里并不罕见:某国某部门当年增加值为负(疫情下的航空运输、
+    产出规模极小的部门被统计误差放大)都会触发。这类越界必须披露,但不足以判定
+    整年数据不可用——矩阵逆本身仍精确成立。因此判定只看 substantive_bad
+    (非 ROW 且产出≥1000),与 severity 的口径保持一致;其余仍以 warning 级别
+    进入披露项,不会因为"通过"而从学生的披露清单里消失。
+    """
     A, L = io.A.values, io.L.values
     identity = np.eye(A.shape[0])
     max_err = float(np.abs((identity - A) @ L - identity).max())
@@ -168,8 +175,17 @@ def check_leontief_inverse(io) -> QcCheck:
     return QcCheck(
         name="里昂惕夫逆矩阵性质((I-A)L≈I,A列和<1)",
         kind="数值",
-        passed=max_err < 1e-6 and len(bad) == 0,
-        detail=f"(I-A)L 最大误差 {max_err:.2e},列和≥1 的部门 {len(bad)} 个",
+        passed=max_err < 1e-6 and not substantive_bad,
+        detail=(
+            f"(I-A)L 最大误差 {max_err:.2e},列和≥1 的部门 {len(bad)} 个"
+            + (
+                f"(其中 {len(substantive_bad)} 个产出规模不小,需核实)"
+                if substantive_bad
+                else "(均为 ROW 或极小规模,按披露项处理)"
+                if len(bad)
+                else ""
+            )
+        ),
         warnings=warnings,
         # 小规模部门的 A 列和越界仍须披露，但不足以阻断整套产物；矩阵
         # 逆性质失败或非 ROW 且产出不小的部门越界才是 fatal。
