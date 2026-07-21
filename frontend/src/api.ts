@@ -225,6 +225,14 @@ export const api = {
       kind: "slice" | "qc_resolution" | "indicator" | "visualization" | "shock";
       payload: Record<string, unknown>;
     }) => post<{ evidence_id: string; evidence?: Record<string, unknown> }>("/api/classroom/evidence/issue", body),
+    submitQuiz: (body: { step: number; version: string; answers: Record<string, string> }) =>
+      post<{
+        passed: boolean;
+        version: string;
+        results: { question_id: string; correct: boolean; explanation: string }[];
+        quiz_id?: string;
+        quiz?: { version: string; answers: Record<string, string> };
+      }>("/api/classroom/quiz/submit", body),
     announcements: () =>
       get<{ announcements: import("./types").Announcement[] }>("/api/classroom/announcements"),
     progress: () => get<ProgressResponse>("/api/classroom/progress"),

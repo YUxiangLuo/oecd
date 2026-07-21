@@ -173,7 +173,7 @@ fi
 
 ## 5. 切换服务
 
-此步骤会短暂停止 API。任一命令失败时，不要继续，直接执行第 8 节回滚。
+此步骤会短暂停止 API。任一命令失败时，不要继续，直接执行第 9 节回滚。
 
 ```bash
 ssh "$SERVER" bash -s -- \
@@ -237,7 +237,8 @@ curl -fsS http://127.0.0.1:18000/health
 nginx -t
 systemctl reload nginx
 systemctl is-active --quiet gvcsim-api.service
-rm -rf -- "$upload"
+# 上传目录清理失败不影响已经通过的服务切换。
+rm -rf -- "$upload" || true
 REMOTE
 ```
 
@@ -287,7 +288,36 @@ scripts/agent_browser_smoke.sh
 完整发布还要检查 `/api/meta`、assignment/manifest、步骤 1 ICIO 切片和 regression
 design。探针可能创建 attempt，不要使用真实学生账号。
 
-## 8. 回滚
+## 8. 验收通过后切换学习记录
+
+只有第 7 节全部通过后才执行。此后不再安排可能触发代码回滚的发布步骤：
+
+```bash
+ssh "$SERVER" bash -s -- "$APP" <<'REMOTE'
+set -euo pipefail
+app=$1
+[[ "$app" == "/opt/oecd-icio-analysis" ]] || exit 64
+cd "$app"
+
+# 所有失败风险较高的检查必须在数据库变更之前完成。
+systemctl is-active --quiet gvcsim-api.service
+curl -fsS http://127.0.0.1:18000/health
+nginx -t
+set -a
+. /etc/gvcsim.env
+set +a
+
+# 最后一条命令才切换 attempt；命令在数据库事务内执行，并按题库版本保持幂等。
+.venv/bin/gvcsim classroom-reset-attempts --quiz-version course-quiz-v1 --confirm
+REMOTE
+```
+
+`classroom-reset-attempts` 不删除历史 session、报告、提交或评分；它只撤销旧 attempt
+的学习凭证、归档旧 attempt 并建立新 attempt。升级下一版题库时必须同时更换版本号，
+不能复用 `course-quiz-v1`。如果 SSH 在最后一步附近中断，先原样重跑命令确认幂等结果，
+不要直接回滚代码。
+
+## 9. 回滚
 
 使用第 3 节生成的备份恢复代码、虚拟环境和旧 manifest：
 

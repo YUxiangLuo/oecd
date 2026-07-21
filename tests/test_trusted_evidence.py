@@ -22,7 +22,7 @@ def _trust_test_events(monkeypatch):
 
 def test_learning_receipt_binds_subject_step_manifest_and_exact_payload(monkeypatch):
     _trust_test_events(monkeypatch)
-    payload = {"compared": ["CHN", "VNM"], "cer": {"claim": "x"}}
+    payload = {"compared": ["CHN", "VNM"]}
     token = trusted_evidence.issue_learning_evidence(
         subject="alice",
         step=3,

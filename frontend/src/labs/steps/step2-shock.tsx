@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { api } from "../../api";
-import { EvidencePanel, VerifiedCerBox } from "../../step-evidence";
-import type { CerStepEvidence, EvidenceRules, Meta, QcCheck, ShockEvent, Step, StepEvidenceApi } from "../../types";
+import { EvidencePanel, VerifiedActionBox } from "../../step-evidence";
+import type { EvidenceRules, Meta, QcCheck, QuizStepEvidence, ShockEvent, Step, StepEvidenceApi } from "../../types";
 import { countryLabel, sectorLabel } from "../../viz";
 import { CrosswalkDemo } from "./step2/crosswalk-demo";
 import { EventList } from "./step2/event-list";
@@ -25,7 +25,7 @@ interface ViewedShockEvent {
   peak_rate: number;
 }
 
-interface ShockEvidence extends CerStepEvidence, Record<string, unknown> {
+interface ShockEvidence extends QuizStepEvidence, Record<string, unknown> {
   viewed_shock_types?: string[];
   viewed_events?: string[];
   event_details?: ViewedShockEvent[];
@@ -157,7 +157,7 @@ export function ShockLab({ meta, step, evidence, rules }: {
                 checked={evidence.data?.qc_reviewed === true}
                 onChange={(event) => evidence.save({ qc_reviewed: event.target.checked, evidence_id: "" })}
               />
-              我已检查异常项，并会在 CER 的“边界”中说明它如何限制后续回归。
+              我已检查异常项；本步理解检查会确认它如何限制后续回归。
             </label>
             <QcChecksTable rows={shockChecks} />
           </>
@@ -165,7 +165,7 @@ export function ShockLab({ meta, step, evidence, rules }: {
       </details>
 
       <CrosswalkDemo selectedShockType={filters.shockType} />
-      <VerifiedCerBox
+      <VerifiedActionBox
         step={step.n}
         kind="shock"
         evidence={evidence}

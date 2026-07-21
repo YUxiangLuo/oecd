@@ -70,6 +70,55 @@ def test_seeded_accounts_login_via_db():
         assert c.execute("SELECT count(*) FROM accounts").fetchone()[0] == 2
 
 
+@needs_artifacts
+def test_quiz_endpoint_persists_only_a_fully_correct_current_answer_set():
+    from gvcsim import quizzes
+
+    student = _login("student")
+    correct = quizzes.correct_quiz(12)
+    wrong = dict(correct["answers"])
+    question = quizzes.STEP_QUIZZES[12][0]
+    wrong[question["id"]] = next(option["id"] for option in question["options"] if option["id"] != question["correct"])
+
+    failed = client.post(
+        "/api/classroom/quiz/submit",
+        headers=student,
+        json={"step": 12, "version": correct["version"], "answers": wrong},
+    )
+    assert failed.status_code == 200, failed.text
+    assert failed.json()["passed"] is False
+    assert "quiz_id" not in failed.json() and "quiz" not in failed.json()
+    with psycopg.connect(TEST_DSN) as connection:
+        assert connection.execute("SELECT count(*) FROM learning_evidence_events WHERE kind='quiz'").fetchone()[0] == 0
+
+    passed = client.post("/api/classroom/quiz/submit", headers=student, json={"step": 12, **correct})
+    assert passed.status_code == 200, passed.text
+    assert passed.json()["passed"] is True and passed.json()["quiz_id"]
+    assert passed.json()["quiz"] == correct
+    with psycopg.connect(TEST_DSN) as connection:
+        assert connection.execute("SELECT count(*) FROM learning_evidence_events WHERE kind='quiz'").fetchone()[0] == 1
+
+    stale = client.post(
+        "/api/classroom/quiz/submit",
+        headers=student,
+        json={"step": 12, "version": "old-version", "answers": correct["answers"]},
+    )
+    assert stale.status_code == 422 and "刷新" in stale.json()["detail"]
+
+
+@needs_artifacts
+def test_steps_api_exposes_questions_but_not_answer_keys():
+    student = _login("student")
+    response = client.get("/api/steps", headers=student)
+    assert response.status_code == 200, response.text
+    steps = response.json()["steps"]
+    assert all(step.get("quiz", {}).get("questions") for step in steps[:15])
+    assert "quiz" not in steps[15]
+    for step in steps[:15]:
+        for question in step["quiz"]["questions"]:
+            assert "correct" not in question and "explanation" not in question
+
+
 def test_teacher_creates_student_who_can_login():
     t = _login("teacher")
     resp = client.post(
@@ -601,16 +650,67 @@ def test_evidence_event_cannot_cross_attempt_boundary():
     )
 
 
+@needs_artifacts
+def test_quiz_rollout_reset_archives_current_attempt_once_and_preserves_history():
+    from gvcsim import quizzes
+
+    _login("student")
+    manifest = _manifest_id()
+    before = db.assignment_context("student", manifest)
+    assert before and before["attempt_id"]
+    session = session_model.empty_session(manifest)
+    assert db.save_session("student", session, 0, session_model.merge_sessions)
+    event = db.record_evidence_event("student", 1, "slice", manifest, "a" * 64, {"payload": {}})
+    assert db.save_report("student", "pre-quiz-report", 1, manifest, "# 历史报告", {"runs": []})
+
+    result = db.reset_active_attempts_for_quiz(quizzes.QUIZ_VERSION, manifest)
+    assert result["already_applied"] is False and result["reset_count"] == 1
+    after = db.assignment_context("student", manifest)
+    assert after and after["attempt_id"] != before["attempt_id"]
+    assert db.get_session("student", manifest) is None
+
+    with psycopg.connect(TEST_DSN) as connection:
+        old_state = connection.execute(
+            "SELECT state FROM experiment_attempts WHERE id=%s", (before["attempt_id"],)
+        ).fetchone()[0]
+        assert old_state == "archived"
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM attempt_sessions WHERE attempt_id=%s", (before["attempt_id"],)
+            ).fetchone()[0]
+            == 1
+        )
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM reports WHERE attempt_id=%s AND report_key='pre-quiz-report'",
+                (before["attempt_id"],),
+            ).fetchone()[0]
+            == 1
+        )
+        assert (
+            connection.execute(
+                "SELECT revoked_at IS NOT NULL FROM learning_evidence_events WHERE id=%s", (event["event_id"],)
+            ).fetchone()[0]
+            is True
+        )
+        attempts_before_retry = connection.execute("SELECT count(*) FROM experiment_attempts").fetchone()[0]
+
+    repeated = db.reset_active_attempts_for_quiz(quizzes.QUIZ_VERSION, manifest)
+    assert repeated["already_applied"] is True and repeated["reset_count"] == 1
+    with psycopg.connect(TEST_DSN) as connection:
+        assert connection.execute("SELECT count(*) FROM experiment_attempts").fetchone()[0] == attempts_before_retry
+
+
 def test_learning_and_regression_receipts_cannot_cross_new_assignment_with_same_manifest():
     """新 assignment 不会归档旧 assignment attempt；收据仍必须按 current scope 失效。"""
-    from gvcsim import evidence, trusted_evidence
+    from gvcsim import evidence, quizzes, trusted_evidence
 
     _login("student")
     manifest = "manifest-same-release-new-assignment"
     old_scope = db.assignment_context("student", manifest)
     assert old_scope
 
-    learning_payload = {"slice": {"year": 2020}, "cer": {"claim": "旧作业"}}
+    learning_payload = {"slice": {"year": 2020}}
     learning_event = db.record_evidence_event(
         "student", 1, "slice", manifest, trusted_evidence.digest(learning_payload), {"payload": learning_payload}
     )
@@ -654,6 +754,18 @@ def test_learning_and_regression_receipts_cannot_cross_new_assignment_with_same_
     controlled_token = regression_token(12, "regression", controlled_design)
     placebo_design = {**baseline_design, "outcome": "network"}
     placebo_token = regression_token(15, "placebo", placebo_design)
+    quiz_payload = quizzes.correct_quiz(12)
+    quiz_event = db.record_evidence_event(
+        "student", 12, "quiz", manifest, trusted_evidence.digest(quiz_payload), {"payload": quiz_payload}
+    )
+    quiz_token = trusted_evidence.issue_learning_evidence(
+        subject="student",
+        step=12,
+        kind="quiz",
+        manifest_id=manifest,
+        payload=quiz_payload,
+        event=quiz_event,
+    )
 
     assert trusted_evidence.verify_learning_evidence(
         learning_token,
@@ -685,13 +797,8 @@ def test_learning_and_regression_receipts_cannot_cross_new_assignment_with_same_
         "run": {"depvar": "DVAex_share", "settings": {"controlMode": "icio_derived"}},
         "run_id": controlled_token,
         "checks": {"baseline_run_id": baseline_token, "controlled_run_id": controlled_token},
-        "judgment": "该回归只有在平行趋势和外生冲击成立时才可作有限因果解释",
-        "cer": {
-            "claim": "加入控制变量后结果仍显示稳定的方向性关系",
-            "evidence": "两次服务端估计的系数差异约为 0.12 个单位",
-            "reasoning": "同一设计只改变控制变量可用于检查遗漏变量敏感性",
-            "boundary": "该比较仍受平行趋势与模拟政策冲击边界限制",
-        },
+        "quiz": quiz_payload,
+        "quiz_id": quiz_token,
     }
     old_session = _session_body({"12": session_model.make_record(step12_data)}, manifest)
     assert evidence.evaluate_step(12, old_session, subject="student", require_trusted=True).complete
@@ -816,6 +923,53 @@ def test_concurrent_session_writes_merge_per_step_instead_of_clobbering():
 
 
 @needs_artifacts
+def test_concurrent_same_step_writes_merge_action_and_quiz_fields():
+    """同一步骤的操作与答题由不同标签页提交时，两类凭证都必须保留。"""
+    s = _login("student")
+    mid = _manifest_id()
+    initial_time = "2026-07-16T10:00:00+00:00"
+    action_time = "2026-07-16T10:01:00+00:00"
+    quiz_time = "2026-07-16T10:02:00+00:00"
+    initial = session_model.make_record({"compared": ["CHN", "USA"]}, initial_time)
+    action = {
+        "data": {"compared": ["CHN", "USA"], "evidence_id": "action-event"},
+        "updated_at": action_time,
+        "field_updated_at": {"compared": action_time, "evidence_id": action_time},
+    }
+    quiz = {
+        "data": {
+            **initial["data"],
+            "quiz": {"version": "course-quiz-v1", "answers": {"q1": "a"}},
+            "quiz_id": "quiz-event",
+        },
+        "updated_at": quiz_time,
+        "field_updated_at": {
+            **initial["field_updated_at"],
+            "quiz": quiz_time,
+            "quiz_id": quiz_time,
+        },
+    }
+
+    first = client.put(
+        "/api/classroom/session",
+        headers=s,
+        json={"base_revision": 0, "session": _session_body({"3": action}, mid)},
+    )
+    assert first.status_code == 200, first.text
+    second = client.put(
+        "/api/classroom/session",
+        headers=s,
+        json={"base_revision": 0, "session": _session_body({"3": quiz}, mid)},
+    )
+    assert second.status_code == 200, second.text
+
+    merged = second.json()["session"]["steps"]["3"]["data"]
+    assert merged["compared"] == ["CHN", "USA"]
+    assert merged["evidence_id"] == "action-event"
+    assert merged["quiz_id"] == "quiz-event"
+
+
+@needs_artifacts
 def test_session_from_other_artifacts_is_rejected():
     """产物变了就不能再往当前会话里写旧结果。"""
     s = _login("student")
@@ -855,26 +1009,22 @@ def test_malformed_session_is_rejected():
 
 @needs_artifacts
 def test_due_at_is_a_hard_write_boundary_but_preserves_verified_read_state():
-    from gvcsim import trusted_evidence
+    from gvcsim import quizzes, trusted_evidence
 
     student = _login("student")
     mid = _manifest_id()
     context = db.assignment_context("student", mid)
-    payload = {
-        "compared": ["CHN", "USA"],
-        "cer": {
-            "claim": "当前结果显示两个经济体之间存在可解释的差异",
-            "evidence": "2020 年服务端数值显示差异约为 12.5 个单位",
-            "reasoning": "统一统计口径使该数值比较能够支持当前描述性主张",
-            "boundary": "当前证据只适用于该数据版本与所选经济体样本",
-        },
-    }
+    payload = {"compared": ["CHN", "USA"]}
     event = db.record_evidence_event(
         "student", 3, "indicator", mid, trusted_evidence.digest(payload), {"payload": payload}
     )
     payload["evidence_id"] = trusted_evidence.issue_learning_evidence(
         subject="student", step=3, kind="indicator", manifest_id=mid, payload=payload, event=event
     )
+    answer = quizzes.correct_quiz(3)
+    graded = client.post("/api/classroom/quiz/submit", headers=student, json={"step": 3, **answer})
+    assert graded.status_code == 200, graded.text
+    payload.update({"quiz": graded.json()["quiz"], "quiz_id": graded.json()["quiz_id"]})
     session = _session_body({"3": session_model.make_record(payload)}, mid)
     saved = client.put("/api/classroom/session", headers=student, json={"base_revision": 0, "session": session})
     assert saved.status_code == 200 and saved.json()["completion"]["completed"] == [3]
@@ -920,14 +1070,6 @@ def _put_complete_session(headers: dict) -> None:
     from gvcsim import evidence, trusted_evidence
 
     mid = _manifest_id()
-
-    def cer(boundary: str = "该比较只适用于当前样本和课程定义口径") -> dict[str, str]:
-        return {
-            "claim": "当前结果显示两个观察对象之间存在值得解释的差异",
-            "evidence": "2020 年服务端结果显示代表性差值约为 12.5 个单位",
-            "reasoning": "统一口径下的数值对比支持该主张但仍不能单独识别因果",
-            "boundary": boundary,
-        }
 
     def learning(step: int, kind: str, payload: dict) -> dict:
         event = db.record_evidence_event(
@@ -981,7 +1123,6 @@ def _put_complete_session(headers: dict) -> None:
                 {
                     "slice": {"year": 2020, "table": "z", "row_country": "CHN", "col_country": "USA"},
                     "observation": {"row": "CHN_D01T02", "column": "USA_D01T02", "value": 12.5},
-                    "cer": cer(),
                 },
             )
         ),
@@ -991,19 +1132,16 @@ def _put_complete_session(headers: dict) -> None:
                 "qc_resolution",
                 {
                     "disposition": "disclose",
-                    "judgment": "当前质检警告会写入报告限制部分，披露后才能继续解释结果",
                     "disclosures": ["测试环境中的质检警告已明确披露"],
                 },
             )
         ),
     }
     for step in range(3, 7):
-        steps[str(step)] = session_model.make_record(
-            learning(step, "indicator", {"compared": ["CHN", "USA"], "cer": cer()})
-        )
+        steps[str(step)] = session_model.make_record(learning(step, "indicator", {"compared": ["CHN", "USA"]}))
     for step in range(7, 11):
         steps[str(step)] = session_model.make_record(
-            learning(step, "visualization", {"chart": "rank", "compared": ["CHN", "USA"], "cer": cer()})
+            learning(step, "visualization", {"chart": "rank", "compared": ["CHN", "USA"]})
         )
     steps["11"] = session_model.make_record(
         learning(
@@ -1012,7 +1150,6 @@ def _put_complete_session(headers: dict) -> None:
             {
                 "viewed_shock_types": list(evidence.REQUIRED_SHOCK_TYPES),
                 "viewed_events": ["测试关税事件", "测试制裁事件", "测试出口管制事件"],
-                "cer": cer(),
             },
         )
     )
@@ -1039,16 +1176,12 @@ def _put_complete_session(headers: dict) -> None:
             {
                 "baseline_run_id": regression_run(13, design("production")),
                 "interaction_run_id": production_interaction,
-                "marginal_effect": "基期 GVC 每增加 1 单位，边际效应约变化 0.25",
             },
         ),
         14: (
             length_main,
             {"method": "event_study"},
-            {
-                "pretrend": "事件前第 2 期估计值约为 0.10，未显示明显预趋势",
-                "post_effect": "事件后第 1 期估计值约为 0.30，方向与假设一致",
-            },
+            {},
         ),
         15: (network_main, {}, {"placebo_run_id": placebo}),
     }
@@ -1063,13 +1196,31 @@ def _put_complete_session(headers: dict) -> None:
         data = {
             "run_id": main_run,
             "run": {"depvar": f"{run_design['outcome']}_outcome", "settings": settings},
-            "judgment": "处理支持度和识别假设限制了因果解释，当前结果只能作审慎的条件性说明",
             "checks": checks,
-            "cer": (cer("网络节点可能相互干扰并产生网络外溢，因此 SUTVA 边界需要明确讨论") if step == 15 else cer()),
         }
         if step == 15:
             data["placebo_run_id"] = placebo
         steps[str(step)] = session_model.make_record(data)
+
+    # 选择题必须通过真实 HTTP 判题端点签发；测试因此同时覆盖 quiz event 与
+    # account/assignment/attempt/manifest 绑定，而不是伪造一个本地答案对象。
+    from gvcsim import quizzes
+
+    for step in range(1, 16):
+        answer = quizzes.correct_quiz(step)
+        graded = client.post(
+            "/api/classroom/quiz/submit",
+            headers=headers,
+            json={"step": step, **answer},
+        )
+        assert graded.status_code == 200, graded.text
+        body = graded.json()
+        assert body["passed"] is True and body.get("quiz_id")
+        record = steps[str(step)]
+        quiz_time = session_model.utc_now_iso()
+        record["data"].update({"quiz": body["quiz"], "quiz_id": body["quiz_id"]})
+        record["field_updated_at"].update({"quiz": quiz_time, "quiz_id": quiz_time})
+        record["updated_at"] = quiz_time
 
     resp = client.put(
         "/api/classroom/session", headers=headers, json={"base_revision": 0, "session": _session_body(steps, mid)}
@@ -1302,7 +1453,10 @@ def test_first_concurrent_session_writes_do_not_clobber_each_other():
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = [
             f.result()
-            for f in [pool.submit(put, "4", {"compared": ["CHN", "USA"]}), pool.submit(put, "12", {"judgment": "x"})]
+            for f in [
+                pool.submit(put, "4", {"compared": ["CHN", "USA"]}),
+                pool.submit(put, "12", {"run": {"depvar": "FVA_share"}}),
+            ]
         ]
     assert all(r.status_code == 200 for r in results), [r.text for r in results]
 

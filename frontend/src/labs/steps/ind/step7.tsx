@@ -9,7 +9,7 @@
 import { useState } from "react";
 import { api } from "../../../api";
 import { NetworkCentralityDemo } from "../../../demos";
-import { EvidencePanel, VerifiedCerBox } from "../../../step-evidence";
+import { EvidencePanel, VerifiedActionBox } from "../../../step-evidence";
 import type { IndicatorSchema, Meta, Step, StepEvidenceApi } from "../../../types";
 import { useAsync } from "../../shared";
 import { ChartStory, StepIntro } from "../viz/scaffold";
@@ -59,7 +59,7 @@ export function Step7Network({ meta, step, evidence }: { meta: Meta; step: Step;
           onYear={setYear} onCountry={setCountry} onPage={setPage}
         />
       </ChartStory>
-      <VerifiedCerBox
+      <VerifiedActionBox
         step={step.n}
         kind="indicator"
         evidence={evidence}

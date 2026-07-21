@@ -60,7 +60,13 @@ def test_validate_rejects_out_of_range_step_keys(key):
     [
         {"data": {}},  # 缺 updated_at
         {"updated_at": "2026-07-16T10:00:00+00:00"},  # 缺 data
+        {"data": {}, "updated_at": "2026-07-16T10:00:00+00:00"},  # 缺字段时间戳
         {"data": {}, "updated_at": "昨天"},  # 时间戳不合法
+        {
+            "data": {"country": "CHN"},
+            "updated_at": "2026-07-16T10:00:00+00:00",
+            "field_updated_at": {},
+        },  # data 字段没有对应时间戳
         "not-a-record",
     ],
 )
@@ -95,6 +101,71 @@ def test_merge_keeps_newer_base_record_over_older_incoming():
     base = _session({"4": make_record({"v": "newer"}, "2026-07-16T11:00:00+00:00")})
     incoming = _session({"4": make_record({"v": "stale"}, "2026-07-16T10:00:00+00:00")})
     assert merge_sessions(base, incoming)["steps"]["4"]["data"] == {"v": "newer"}
+
+
+def test_merge_same_step_preserves_concurrent_action_and_quiz_credentials():
+    """两个标签页从同一快照分别提交操作与答题，不能整条记录后写覆盖。"""
+    initial_time = "2026-07-16T10:00:00+00:00"
+    action_time = "2026-07-16T10:01:00+00:00"
+    quiz_time = "2026-07-16T10:02:00+00:00"
+    initial = make_record({"compared": ["CHN", "USA"]}, initial_time)
+    action = {
+        "data": {"compared": ["CHN", "USA"], "evidence_id": "action-event"},
+        "updated_at": action_time,
+        "field_updated_at": {"compared": action_time, "evidence_id": action_time},
+    }
+    quiz = {
+        "data": {
+            "compared": initial["data"]["compared"],
+            "quiz": {"version": "course-quiz-v1", "answers": {"q1": "a"}},
+            "quiz_id": "quiz-event",
+        },
+        "updated_at": quiz_time,
+        "field_updated_at": {
+            **initial["field_updated_at"],
+            "quiz": quiz_time,
+            "quiz_id": quiz_time,
+        },
+    }
+
+    merged = merge_sessions(_session({"3": action}), _session({"3": quiz}))["steps"]["3"]
+    assert merged["data"]["compared"] == ["CHN", "USA"]
+    assert merged["data"]["evidence_id"] == "action-event"
+    assert merged["data"]["quiz_id"] == "quiz-event"
+    assert merged["data"]["quiz"]["version"] == "course-quiz-v1"
+
+
+def test_merge_field_tombstone_prevents_stale_credential_from_reappearing():
+    """操作参数变化时清空 evidence_id，旧标签页不能把已失效凭证带回来。"""
+    base = _session(
+        {
+            "3": {
+                "data": {"compared": ["CHN", "USA"]},
+                "updated_at": "2026-07-16T10:02:00+00:00",
+                "field_updated_at": {
+                    "compared": "2026-07-16T10:02:00+00:00",
+                    "evidence_id": "2026-07-16T10:02:00+00:00",
+                },
+            }
+        }
+    )
+    stale = _session(
+        {
+            "3": {
+                "data": {"compared": ["CHN", "USA"], "evidence_id": "old-event", "quiz_id": "quiz-event"},
+                "updated_at": "2026-07-16T10:01:00+00:00",
+                "field_updated_at": {
+                    "compared": "2026-07-16T10:00:00+00:00",
+                    "evidence_id": "2026-07-16T10:00:00+00:00",
+                    "quiz_id": "2026-07-16T10:01:00+00:00",
+                },
+            }
+        }
+    )
+
+    data = merge_sessions(base, stale)["steps"]["3"]["data"]
+    assert "evidence_id" not in data
+    assert data["quiz_id"] == "quiz-event"
 
 
 def test_merge_result_is_valid_session():

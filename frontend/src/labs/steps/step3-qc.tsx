@@ -1,16 +1,15 @@
 import { useState } from "react";
 import { api } from "../../api";
-import { EvidencePanel, JudgmentBox } from "../../step-evidence";
-import type { EvidenceRules, Meta, QcCheck, StepEvidenceApi } from "../../types";
+import { EvidencePanel } from "../../step-evidence";
+import type { Meta, QcCheck, QuizStepEvidence, StepEvidenceApi } from "../../types";
 import { useAsync, YearPicker } from "../shared";
 import { QcChecksTable } from "./qc-checks-table";
 import { qcDisclosureItems } from "./qc-evidence";
 import { summarizeQcRelease } from "./qc-release";
 
-/** 第 2 步的学习证据:对质检警告作出处置决定,并写下理由。 */
-interface QcEvidence extends Record<string, unknown> {
+/** 第 2 步的操作证据：对质检警告作出处置决定并完成必要后续。 */
+interface QcEvidence extends QuizStepEvidence, Record<string, unknown> {
   disposition?: QcDisposition;
-  judgment?: string;
   remediation?: string;
   disclosures?: string[];
   retest_passed?: boolean;
@@ -26,10 +25,9 @@ const QC_DISPOSITIONS: { key: QcDisposition; label: string; hint: string }[] = [
   { key: "disclose", label: "披露后继续", hint: "问题不影响本课结论,但必须写进报告的局限。" },
 ];
 
-export function QcLab({ meta, evidence, rules, onNavigateStep }: {
+export function QcLab({ meta, evidence, onNavigateStep }: {
   meta: Meta;
   evidence: StepEvidenceApi<QcEvidence>;
-  rules: EvidenceRules;
   onNavigateStep: (step: number) => void;
 }) {
   const [year, setYear] = useState(meta.years.at(-1)!);
@@ -59,7 +57,6 @@ export function QcLab({ meta, evidence, rules, onNavigateStep }: {
     !loading
     && failedSections === 0
     && disposition
-    && (evidence.data?.judgment?.trim().length ?? 0) >= rules.min_judgment_chars
     && (disposition !== "fix" || (evidence.data?.remediation?.trim().length ?? 0) >= 12)
     && (disposition !== "disclose" || (
       disclosureItems.length > 0
@@ -75,7 +72,6 @@ export function QcLab({ meta, evidence, rules, onNavigateStep }: {
       const payload: Record<string, unknown> = {
         year,
         disposition,
-        judgment: evidence.data?.judgment ?? "",
         remediation: disposition === "fix" ? evidence.data?.remediation ?? "" : "",
         // 只提交当前两组检查实际要求披露的项，避免切换年份后把旧选择混入签名。
         disclosures: disposition === "disclose" ? disclosureItems : [],
@@ -139,8 +135,8 @@ export function QcLab({ meta, evidence, rules, onNavigateStep }: {
       <section className="qc-decision">
         <h3>你的处置决定</h3>
         <p className="muted">
-          真实研究里,面对质检警告只有三条路。看完上面的结论后选一条并写下理由——
-          这一步的产出是<b>判断</b>,不是“看过报告”。
+          真实研究里,面对质检警告只有三条路。看完上面的结论后选择实际处置；
+          下方理解检查会确认你是否掌握不同处置的适用边界。
         </p>
         <div className="pill-row" role="group" aria-label="质检处置决定">
           {QC_DISPOSITIONS.map((item) => {
@@ -167,13 +163,6 @@ export function QcLab({ meta, evidence, rules, onNavigateStep }: {
         {failedSections > 0 && (
           <div className="error-box">质检结果尚未完整读取，暂不能提交处置。请先重试或联系教师，避免遗漏必须披露的检查。</div>
         )}
-        <JudgmentBox
-          prompt="为什么这样处置?"
-          hint="点名是哪一项质检、它会怎样影响后面的指标或回归。"
-          minChars={rules.min_judgment_chars}
-          value={evidence.data?.judgment ?? ""}
-          onChange={(judgment) => change({ judgment })}
-        />
         {disposition === "fix" && (
           <label className="qc-followup-field">
             <b>实际修正规则</b>
@@ -202,11 +191,11 @@ export function QcLab({ meta, evidence, rules, onNavigateStep }: {
         {disposition === "stop" && (
           <div className="warnbox">确认后，本次作业会停在质检步骤；后续实验与报告将保持锁定，直到返回修改处置或教师发布通过质检的新数据版本。</div>
         )}
-        <div className="cer-submit-row" style={{ marginTop: 12 }}>
+        <div className="evidence-submit-row" style={{ marginTop: 12 }}>
           <button type="button" className="primary" disabled={!canIssue || issuing} onClick={issue}>
             {issuing ? "正在复核…" : evidence.data?.evidence_id ? "重新提交质检处置" : "提交质检处置并复核"}
           </button>
-          <span className={evidence.data?.evidence_id ? "cer-signed" : "muted"}>
+          <span className={evidence.data?.evidence_id ? "evidence-signed" : "muted"}>
             {evidence.data?.evidence_id ? `✓ 服务端已复核${evidence.data.retest_passed ? "，复检通过" : "并绑定当前数据版本"}` : "服务端会核对真实失败项、manifest 与复检状态"}
           </span>
         </div>

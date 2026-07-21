@@ -8,7 +8,6 @@ import pandas as pd
 import pytest
 
 from gvcsim.evidence import (
-    MIN_JUDGMENT_CHARS,
     QC_DISPOSITIONS,
     REQUIRED_SHOCK_TYPES,
     STEP_LABS,
@@ -16,6 +15,7 @@ from gvcsim.evidence import (
     evaluate,
     evaluate_step,
 )
+from gvcsim.quizzes import correct_quiz
 from gvcsim.session import empty_session, make_record
 
 MID = "b08a35374d1021b0"
@@ -23,11 +23,10 @@ MID = "b08a35374d1021b0"
 
 def _session(steps: dict) -> dict:
     s = empty_session(MID)
-    s["steps"] = {str(k): make_record(v) for k, v in steps.items()}
+    s["steps"] = {
+        str(k): make_record({**v, **({"quiz": correct_quiz(k)} if 1 <= k <= 15 else {})}) for k, v in steps.items()
+    }
     return s
-
-
-JUDGMENT = "制裁只有 2 个处理聚类,推断被抑制,不能作因果解释"
 
 
 def _step_of(lab: str) -> int:
@@ -197,15 +196,14 @@ def test_shock_step_needs_all_three_shock_types():
     assert evaluate_step(step, all_three).complete
 
 
-def test_qc_step_needs_a_disposition_and_a_reason():
-    """质检的产出是处置决定,不是“已阅”布尔值——后者与“到过”没有区别。"""
+def test_qc_step_needs_a_disposition():
+    """质检的操作产出是实际处置，不是“已阅”布尔值。"""
     step = _step_of("qc")
-    assert not evaluate_step(step, _session({step: {"disposition": "fix"}})).complete
-    assert not evaluate_step(step, _session({step: {"judgment": JUDGMENT}})).complete
+    assert not evaluate_step(step, _session({step: {}})).complete
     # 处置必须是三条真实路径之一,不接受任意字符串。
-    assert not evaluate_step(step, _session({step: {"disposition": "whatever", "judgment": JUDGMENT}})).complete
+    assert not evaluate_step(step, _session({step: {"disposition": "whatever"}})).complete
     for disposition in QC_DISPOSITIONS:
-        assert evaluate_step(step, _session({step: {"disposition": disposition, "judgment": JUDGMENT}})).complete
+        assert evaluate_step(step, _session({step: {"disposition": disposition}})).complete
 
 
 def test_indicator_step_needs_two_distinct_entities():
@@ -223,26 +221,29 @@ def test_viz_step_needs_chart_and_two_targets():
     assert evaluate_step(step, _session({step: {"chart": "quadrant", "compared": ["CHN", "USA"]}})).complete
 
 
-def test_regression_step_needs_a_run_and_a_judgment():
+def test_regression_step_needs_a_run():
     step = _step_of("reg")
     ran = {"run": {"depvar": "FVA_share", "status": "insufficient"}}
-    assert not evaluate_step(step, _session({step: ran})).complete
-    assert not evaluate_step(step, _session({step: {"judgment": JUDGMENT}})).complete
-    assert evaluate_step(step, _session({step: {**ran, "judgment": JUDGMENT}})).complete
+    assert evaluate_step(step, _session({step: ran})).complete
 
 
-def test_short_judgment_is_rejected_with_a_helpful_message():
+def test_quiz_is_required_in_addition_to_the_real_operation():
     step = _step_of("reg")
-    ran = {"run": {"depvar": "FVA_share"}}
-    result = evaluate_step(step, _session({step: {**ran, "judgment": "不知道"}}))
+    session = _session({step: {"run": {"depvar": "FVA_share"}}})
+    session["steps"][str(step)]["data"].pop("quiz")
+    result = evaluate_step(step, session)
     assert not result.complete
-    assert str(MIN_JUDGMENT_CHARS) in result.missing[0]
+    assert any("理解检查" in item for item in result.missing)
 
 
-def test_whitespace_judgment_is_not_evidence():
+def test_wrong_or_stale_quiz_is_not_evidence():
     step = _step_of("reg")
-    session = _session({step: {"run": {"depvar": "FVA_share"}, "judgment": "   " * 20}})
-    assert not evaluate_step(step, session).complete
+    data = {"run": {"depvar": "FVA_share"}, "quiz": correct_quiz(step)}
+    session = _session({step: data})
+    session["steps"][str(step)]["data"]["quiz"]["version"] = "stale"
+    result = evaluate_step(step, session)
+    assert not result.complete
+    assert any("版本" in item for item in result.missing)
 
 
 def test_report_step_needs_a_report_key():
@@ -271,14 +272,13 @@ def test_forged_regression_settings_do_not_complete_a_step():
     把 /report/generate 变成 500。第一道防线是让这一步压根不算完成。
     """
     step = _step_of("reg")
-    forged = {"run": {"depvar": "FVA_share", "settings": {"shockType": "bogus_shock"}}, "judgment": JUDGMENT}
+    forged = {"run": {"depvar": "FVA_share", "settings": {"shockType": "bogus_shock"}}}
     result = evaluate_step(step, _session({step: forged}))
     assert not result.complete
     assert "无法识别" in result.missing[0]
 
     ok = {
         "run": {"depvar": "FVA_share", "settings": {"shockType": "export_control", "method": "did"}},
-        "judgment": JUDGMENT,
     }
     assert evaluate_step(step, _session({step: ok})).complete
 
@@ -322,18 +322,11 @@ def test_trusted_trade_comparison_rejects_two_incomparable_designs(monkeypatch):
         "gvcsim.evidence.trusted_evidence.verify_regression_run",
         lambda token, **_kwargs: {"design": designs[token]} if token in designs else None,
     )
-    cer = {
-        "claim": "控制变量改变了估计方向，需要谨慎解释",
-        "evidence": "基准系数为 0.10，控制后为 0.20",
-        "reasoning": "只有其余设定相同，差异才可归因于控制变量",
-        "boundary": "这是拟真冲击且无永不处理组，不能直接外推",
-    }
+    monkeypatch.setattr("gvcsim.evidence.trusted_evidence.verify_learning_evidence", lambda *_args, **_kwargs: True)
     data = {
         "run_id": "main",
         "run": {"depvar": "FVA_share", "settings": {"shockType": "sanctions", "controlMode": "icio_derived"}},
         "checks": {"baseline_run_id": "baseline", "controlled_run_id": "controlled"},
-        "judgment": JUDGMENT,
-        "cer": cer,
     }
     result = evaluate_step(step, _session({step: data}), subject="student", require_trusted=True)
     assert not result.complete
@@ -362,19 +355,12 @@ def test_trusted_network_rejects_placebo_from_a_different_design(monkeypatch):
         "gvcsim.evidence.trusted_evidence.verify_regression_run",
         lambda token, **_kwargs: {"design": designs[token]} if token in designs else None,
     )
-    cer = {
-        "claim": "网络位置在冲击后出现了可见变化，需要谨慎解释",
-        "evidence": "主回归系数为 0.10，安慰剂分布均值为 0.01",
-        "reasoning": "只有安慰剂和主回归设计相同，随机化比较才有意义",
-        "boundary": "网络节点存在 SUTVA 干扰和跨国网络外溢，不能孤立解释",
-    }
+    monkeypatch.setattr("gvcsim.evidence.trusted_evidence.verify_learning_evidence", lambda *_args, **_kwargs: True)
     data = {
         "run_id": "main",
         "placebo_run_id": "placebo",
         "run": {"depvar": "betweenesscentrality", "settings": {"shockType": "tariff", "method": "did"}},
         "checks": {"placebo_run_id": "placebo"},
-        "judgment": JUDGMENT,
-        "cer": cer,
     }
     result = evaluate_step(step, _session({step: data}), subject="student", require_trusted=True)
     assert not result.complete

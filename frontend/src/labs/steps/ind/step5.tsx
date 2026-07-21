@@ -7,7 +7,7 @@
 import { useState } from "react";
 import { api } from "../../../api";
 import { DecompositionDemo } from "../../../demos";
-import { EvidencePanel, VerifiedCerBox } from "../../../step-evidence";
+import { EvidencePanel, VerifiedActionBox } from "../../../step-evidence";
 import type { IndicatorSchema, Meta, Step, StepEvidenceApi } from "../../../types";
 import { useAsync } from "../../shared";
 import { ChartStory, StepIntro } from "../viz/scaffold";
@@ -66,7 +66,7 @@ export function Step5Production({ meta, step, evidence }: { meta: Meta; step: St
           }}
         />
       </ChartStory>
-      <VerifiedCerBox
+      <VerifiedActionBox
         step={step.n}
         kind="indicator"
         evidence={evidence}

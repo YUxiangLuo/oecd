@@ -15,7 +15,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, model_validator
 
-from gvcsim import artifacts, evidence, shocks, trusted_evidence
+from gvcsim import artifacts, evidence, quizzes, shocks, trusted_evidence
 from gvcsim import session as session_model
 from gvcsim import teaching_report
 from gvcsim.classroom import db
@@ -145,6 +145,12 @@ class EvidenceIssueRequest(BaseModel):
     step: int = Field(ge=1, le=db.MAX_STEP)
     kind: str = Field(min_length=1, max_length=32)
     payload: dict[str, Any]
+
+
+class QuizSubmitRequest(BaseModel):
+    step: int = Field(ge=1, le=15)
+    version: str = Field(min_length=1, max_length=80)
+    answers: dict[str, str]
 
 
 _INDICATOR_METRICS = {
@@ -353,11 +359,12 @@ def _verify_learning_payload(step: int, kind: str, payload: dict[str, Any]) -> N
 
 @router.post("/evidence/issue")
 def issue_evidence(req: EvidenceIssueRequest, user: dict = Depends(require_student)):
-    """校验一次学习动作/CER，并签发绑定学生、步骤与当前 manifest 的收据。"""
+    """校验一次真实学习动作，并签发绑定学生、步骤与当前 manifest 的收据。"""
     current_manifest = artifacts.manifest_id()
     try:
         clean = evidence.normalize_issue_payload(req.step, req.kind, req.payload)
         _verify_learning_payload(req.step, req.kind, clean)
+        clean = evidence.action_payload(req.step, clean)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     if artifacts.manifest_id() != current_manifest:
@@ -385,8 +392,52 @@ def issue_evidence(req: EvidenceIssueRequest, user: dict = Depends(require_stude
     return {"evidence_id": evidence_id, "evidence": clean}
 
 
+@router.post("/quiz/submit")
+def submit_quiz(req: QuizSubmitRequest, user: dict = Depends(require_student)):
+    """判定固定单选题；全部正确后才持久化事件并签发可信凭证。"""
+    _ensure_current_assignment(user["sub"])
+    try:
+        passed, normalized, results = quizzes.grade(req.step, req.version, req.answers)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    response: dict[str, Any] = {
+        "passed": passed,
+        "version": quizzes.QUIZ_VERSION,
+        "results": results,
+    }
+    if not passed:
+        return response
+
+    current_manifest = artifacts.manifest_id()
+    payload = {"version": quizzes.QUIZ_VERSION, "answers": normalized}
+    payload_sha256 = trusted_evidence.digest(payload)
+    try:
+        event = db.record_evidence_event(
+            user["sub"],
+            req.step,
+            "quiz",
+            current_manifest,
+            payload_sha256,
+            {"payload": payload},
+        )
+    except (db.AssignmentScopeMismatch, db.AssignmentClosed) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if artifacts.manifest_id() != current_manifest:
+        raise HTTPException(status_code=409, detail="判定答题期间数据产物已切换，请刷新后重新提交")
+    response["quiz_id"] = trusted_evidence.issue_learning_evidence(
+        subject=user["sub"],
+        step=req.step,
+        kind="quiz",
+        manifest_id=current_manifest,
+        payload=payload,
+        event=event,
+    )
+    response["quiz"] = payload
+    return response
+
+
 class SessionRequest(BaseModel):
-    # 客户端读到的版本;服务端已被其它标签页推进时用它触发记录级合并。
+    # 客户端读到的版本;服务端已被其它标签页推进时用它触发记录/字段级合并。
     base_revision: int = Field(ge=0)
     session: dict[str, Any]
 

@@ -20,6 +20,7 @@ import {
   localKey,
   makeRecord,
   mergeSessions,
+  patchStep,
   quarantineLegacy,
   readLegacyQuarantine,
   reconcileOnLoad,
@@ -118,6 +119,50 @@ describe("session-store", () => {
     expect(readStep<object>(mergeSessions(session({ "4": older }), session({ "4": newer })), 4)).toEqual({ v: "new" });
     // 本次写入者不必然更新:它可能拿着很旧的状态。
     expect(readStep<object>(mergeSessions(session({ "4": newer }), session({ "4": older })), 4)).toEqual({ v: "new" });
+  });
+
+  test("same-step concurrent action and quiz submissions preserve both credentials", () => {
+    const initial = session({
+      "3": makeRecord({ compared: ["CHN", "USA"] }, "2026-07-16T10:00:00.000Z"),
+    });
+    const actionTab = patchStep(
+      initial,
+      3,
+      { compared: ["CHN", "USA"], evidence_id: "action-event" },
+      "2026-07-16T10:01:00.000Z",
+    );
+    const quizTab = patchStep(
+      initial,
+      3,
+      {
+        quiz: { version: "course-quiz-v1", answers: { q1: "a" } },
+        quiz_id: "quiz-event",
+      },
+      "2026-07-16T10:02:00.000Z",
+    );
+
+    expect(readStep<Record<string, unknown>>(mergeSessions(actionTab, quizTab), 3)).toEqual({
+      compared: ["CHN", "USA"],
+      evidence_id: "action-event",
+      quiz: { version: "course-quiz-v1", answers: { q1: "a" } },
+      quiz_id: "quiz-event",
+    });
+  });
+
+  test("a newer field tombstone prevents a stale credential from reappearing", () => {
+    const original = session({
+      "3": makeRecord(
+        { compared: ["CHN", "USA"], evidence_id: "old-event" },
+        "2026-07-16T10:00:00.000Z",
+      ),
+    });
+    const actionTab = patchStep(original, 3, { evidence_id: undefined }, "2026-07-16T10:02:00.000Z");
+    const quizTab = patchStep(original, 3, { quiz_id: "quiz-event" }, "2026-07-16T10:01:00.000Z");
+
+    expect(readStep<Record<string, unknown>>(mergeSessions(actionTab, quizTab), 3)).toEqual({
+      compared: ["CHN", "USA"],
+      quiz_id: "quiz-event",
+    });
   });
 
   test("isStale detects another artifact set", () => {

@@ -6,7 +6,7 @@ HEAD 的第 16 步只能证明“有人上传过一段 Markdown”。这些用�
 
 import pytest
 
-from gvcsim import evidence
+from gvcsim import evidence, quizzes
 from gvcsim.config import PROCESSED_DIR
 from gvcsim.session import empty_session, make_record
 from gvcsim.teaching_report import GATE_STEPS, ReportGateError, build, check_gate
@@ -15,8 +15,6 @@ needs_artifacts = pytest.mark.skipif(
     not (PROCESSED_DIR / "panel_industry.csv").exists(),
     reason="需要 gvcsim compute 产出的面板与产物清单",
 )
-
-JUDGMENT = "处理聚类只有 2 个,推断已被抑制,不能作因果解释"
 
 
 def _complete_session(manifest_id: str) -> dict:
@@ -28,15 +26,15 @@ def _complete_session(manifest_id: str) -> dict:
             "observation": {"row": "CHN_D01T02", "column": "USA_D01T02", "value": 1.0},
         },
         "shock": {"viewed_shock_types": list(evidence.REQUIRED_SHOCK_TYPES)},
-        "qc": {"disposition": "disclose", "judgment": JUDGMENT},
+        "qc": {"disposition": "disclose"},
         "ind": {"compared": ["CHN", "USA"]},
         "viz": {"chart": "quadrant", "compared": ["CHN", "USA"]},
-        "reg": {"run": {"depvar": "FVA_share", "settings": {"shockType": "export_control"}}, "judgment": JUDGMENT},
+        "reg": {"run": {"depvar": "FVA_share", "settings": {"shockType": "export_control"}}},
     }
     for step, lab in evidence.STEP_LABS.items():
         if lab == "rep":
             continue
-        session["steps"][str(step)] = make_record(payload[lab])
+        session["steps"][str(step)] = make_record({**payload[lab], "quiz": quizzes.correct_quiz(step)})
     return session
 
 
@@ -81,7 +79,7 @@ def test_report_reruns_regressions_server_side_and_records_status():
 
 
 @needs_artifacts
-def test_report_binds_provenance_and_student_judgments():
+def test_report_binds_provenance_and_selected_quiz_answers():
     from gvcsim import artifacts
 
     mid = artifacts.manifest_id()
@@ -90,8 +88,9 @@ def test_report_binds_provenance_and_student_judgments():
     assert report.provenance["session_revision"] == 7
     assert report.report_key in report.markdown
     assert mid in report.markdown
-    # 学生自己的判断必须原样进入报告——这是机器复算不出来的部分。
-    assert JUDGMENT in report.markdown
+    # 固定题目与学生最终答对的选项进入报告，教师可审计理解证据。
+    assert "Z 表的一格应该怎样解释" in report.markdown
+    assert "行方国家×行业向列方国家×行业提供的中间投入" in report.markdown
     # 真实/mock 边界必须写在报告里。
     assert "mock" in report.markdown and "OECD ICIO" in report.markdown
 
@@ -108,12 +107,13 @@ def test_report_key_is_content_addressed():
     assert first.markdown == again.markdown
 
     changed = _complete_session(mid)
-    # 改质检判断的语义内容（仍保持允许继续）→ key 应变。
-    changed["steps"]["2"] = make_record({"disposition": "disclose", "judgment": JUDGMENT + "，并披露航空业异常"})
+    # 改质检处置的语义内容（题目答案仍正确）→ key 应变。
+    changed["steps"]["2"] = make_record({"disposition": "fix", "quiz": quizzes.correct_quiz(2)})
     assert build(changed, "同学", 1).report_key != first.report_key
 
     receipts_changed = _complete_session(mid)
     receipts_changed["steps"]["1"]["data"]["evidence_id"] = "new-random-event"
+    receipts_changed["steps"]["1"]["data"]["quiz_id"] = "new-random-quiz-event"
     receipts_changed["steps"]["12"]["data"]["run_id"] = "new-random-run"
     receipts_changed["steps"]["12"]["data"]["checks"] = {"baseline_run_id": "another-event"}
     assert build(receipts_changed, "同学", 3).report_key == first.report_key

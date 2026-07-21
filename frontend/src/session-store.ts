@@ -2,13 +2,13 @@ import { SESSION_VERSION, type ExperimentSession, type SessionRecord, type Share
 
 const SHARED_KEYS: readonly SharedSessionKey[] = ["regression_settings", "regression_history"];
 
-/** 实验会话的客户端存储:local-first + 与服务端按记录级时间戳合并。
+/** 实验会话的客户端存储:local-first + 与服务端按记录/字段时间戳合并。
  *
  * local-first 的理由:学生每改一个筛选就打一次网络请求既慢又脆弱,
  * 而“刷新后还在”必须是确定的。因此改动先落 localStorage(同步、必成功),
  * 再防抖同步到 PostgreSQL;网络失败不影响本地实验继续。
  *
- * 合并规则与服务端 gvcsim/session.py 完全一致:按步骤取较新的记录。
+ * 合并规则与服务端 gvcsim/session.py 完全一致:不同步骤保留双方，同一步骤逐字段合并。
  * 两边必须同规则,否则同一份并发写入在客户端与服务端会得到不同结果。
  */
 
@@ -74,8 +74,18 @@ export function emptySession(manifestId: string): ExperimentSession {
 }
 
 export function makeRecord<T>(data: T, updatedAt?: string): SessionRecord<T> {
-  return { data, updated_at: updatedAt ?? new Date().toISOString() };
+  const timestamp = updatedAt ?? new Date().toISOString();
+  const fieldUpdatedAt = isFieldObject(data)
+    ? Object.fromEntries(Object.keys(data).map((key) => [key, timestamp]))
+    : {};
+  return { data, updated_at: timestamp, field_updated_at: fieldUpdatedAt };
 }
+
+function isFieldObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const timestampValue = (value: string) => Date.parse(value);
 
 /** 结构性校验:localStorage 可能被手改或残留旧版本,读到坏数据宁可丢弃。 */
 export function isValidSession(value: unknown): value is ExperimentSession {
@@ -85,9 +95,20 @@ export function isValidSession(value: unknown): value is ExperimentSession {
   if (typeof s.manifest_id !== "string" || !s.manifest_id) return false;
   if (typeof s.steps !== "object" || s.steps === null) return false;
   if (typeof s.shared !== "object" || s.shared === null) return false;
-  const validRecord = (record: unknown) =>
-    typeof record === "object" && record !== null
-    && "data" in record && typeof (record as SessionRecord).updated_at === "string";
+  const validRecord = (record: unknown) => {
+    if (typeof record !== "object" || record === null || !("data" in record)) return false;
+    const candidate = record as SessionRecord;
+    const recordTime = timestampValue(candidate.updated_at);
+    if (typeof candidate.updated_at !== "string" || !Number.isFinite(recordTime)) return false;
+    if (!isFieldObject(candidate.field_updated_at)) return false;
+    if (!Object.values(candidate.field_updated_at).every(
+      (value) => typeof value === "string" && Number.isFinite(timestampValue(value)) && timestampValue(value) <= recordTime,
+    )) return false;
+    if (isFieldObject(candidate.data)) {
+      return Object.keys(candidate.data).every((key) => key in candidate.field_updated_at);
+    }
+    return Object.keys(candidate.field_updated_at).length === 0;
+  };
   const stepsOk = Object.entries(s.steps).every(([key, record]) => {
     const n = Number(key);
     return Number.isInteger(n) && n >= 1 && n <= 16 && validRecord(record);
@@ -125,12 +146,39 @@ export function clearLocal(scope: LocalSessionScope): void {
   }
 }
 
-/** 按记录取较新的一份;时间戳相同则取 incoming。与服务端同规则。 */
+/** 同一步骤对象逐字段合并；字段时间戳相同则取 incoming。与服务端同规则。 */
+function mergeRecord(current: SessionRecord, incoming: SessionRecord): SessionRecord {
+  if (!isFieldObject(current.data) || !isFieldObject(incoming.data)) {
+    return timestampValue(incoming.updated_at) >= timestampValue(current.updated_at) ? incoming : current;
+  }
+
+  const data: Record<string, unknown> = {};
+  const fieldUpdatedAt: Record<string, string> = {};
+  const keys = new Set([
+    ...Object.keys(current.field_updated_at),
+    ...Object.keys(incoming.field_updated_at),
+  ]);
+  for (const key of keys) {
+    const currentTime = current.field_updated_at[key];
+    const incomingTime = incoming.field_updated_at[key];
+    const useIncoming = incomingTime !== undefined
+      && (currentTime === undefined || timestampValue(incomingTime) >= timestampValue(currentTime));
+    const source = useIncoming ? incoming.data : current.data;
+    const selectedTime = useIncoming ? incomingTime : currentTime;
+    if (key in source) data[key] = source[key];
+    // 映射中存在但 data 中不存在表示删除墓碑，防止另一标签页的旧值复活。
+    if (selectedTime !== undefined) fieldUpdatedAt[key] = selectedTime;
+  }
+
+  const latest = timestampValue(incoming.updated_at) >= timestampValue(current.updated_at) ? incoming : current;
+  return { data, updated_at: latest.updated_at, field_updated_at: fieldUpdatedAt };
+}
+
 function mergeSlot<T extends Record<string, SessionRecord | undefined>>(base: T, incoming: T): T {
   const out: Record<string, SessionRecord | undefined> = { ...base };
   for (const [key, record] of Object.entries(incoming)) {
     const current = out[key];
-    if (record && (!current || record.updated_at >= current.updated_at)) out[key] = record;
+    if (record) out[key] = current ? mergeRecord(current, record) : record;
   }
   return out as T;
 }
@@ -152,6 +200,42 @@ export function writeStep<T>(session: ExperimentSession, step: number, data: T):
   return {
     ...session,
     steps: { ...session.steps, [String(step)]: makeRecord(data) },
+  };
+}
+
+/** 只更新时间戳所对应的补丁字段，避免把同一记录里的陈旧字段伪装成新写入。 */
+export function patchStep<T extends object>(
+  session: ExperimentSession,
+  step: number,
+  patch: Partial<T>,
+  updatedAt?: string,
+): ExperimentSession {
+  const key = String(step);
+  const current = session.steps[key];
+  if (!current || !isFieldObject(current.data)) {
+    return {
+      ...session,
+      steps: { ...session.steps, [key]: makeRecord(patch, updatedAt) },
+    };
+  }
+
+  const requestedTime = updatedAt ?? new Date().toISOString();
+  const timestamp = timestampValue(requestedTime) >= timestampValue(current.updated_at)
+    ? requestedTime
+    : current.updated_at;
+  const data = { ...current.data };
+  const fieldUpdatedAt = { ...current.field_updated_at };
+  for (const [field, value] of Object.entries(patch)) {
+    if (value === undefined) delete data[field];
+    else data[field] = value;
+    fieldUpdatedAt[field] = timestamp;
+  }
+  return {
+    ...session,
+    steps: {
+      ...session.steps,
+      [key]: { data, updated_at: timestamp, field_updated_at: fieldUpdatedAt },
+    },
   };
 }
 
@@ -192,8 +276,8 @@ export function reconcileOnLoad(
   if (!usableLocal) {
     return {
       session: usableServer,
-      // Never turn an old/foreign session into a v4 write implicitly. The first
-      // explicit student edit will create a fresh scoped v4 session instead.
+      // Never turn an old/foreign session into a v5 write implicitly. The first
+      // explicit student edit will create a fresh scoped v5 session instead.
       needsPush: false,
       discardedLocal: localStale,
       discardedServer: serverStale,

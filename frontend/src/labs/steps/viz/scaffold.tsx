@@ -12,7 +12,7 @@
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "../../../api";
-import type { CerStepEvidence, IndicatorSchema, Meta, Step, StepEvidenceApi } from "../../../types";
+import type { IndicatorSchema, Meta, QuizStepEvidence, Step, StepEvidenceApi } from "../../../types";
 import { useAsync } from "../../shared";
 import { CountryPicker } from "../../country-picker";
 import { CAT, cardStyle } from "../../../viz/shared";
@@ -26,7 +26,7 @@ export const finiteBy = (rows: Row[], ...keys: string[]) => rows.filter((r) => k
 /** 讲解性正文的最大阅读行宽(px):容器与图表/表格仍全宽,只有正文不跟着拉长,保证可读。 */
 export const PROSE_MAX = 820;
 
-export interface VizEvidence extends CerStepEvidence, Record<string, unknown> {
+export interface VizEvidence extends QuizStepEvidence, Record<string, unknown> {
   chart?: string;
   compared?: string[];
   year?: number;

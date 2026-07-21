@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { DEFAULT_REGRESSION_SETTINGS, SIGNATURE_SETTINGS, asRegressionSettingsMap, marginalEffectEvidenceText } from "./regression";
-import type { MarginalEffect, RegressionResponse } from "./types";
+import { DEFAULT_REGRESSION_SETTINGS, SIGNATURE_SETTINGS, asRegressionSettingsMap } from "./regression";
 
 describe("SIGNATURE_SETTINGS", () => {
   it("每步的招牌默认对应它要教的实验", () => {
@@ -37,24 +36,5 @@ describe("asRegressionSettingsMap", () => {
     expect(asRegressionSettingsMap(undefined)).toEqual({});
     expect(asRegressionSettingsMap(null)).toEqual({});
     expect(asRegressionSettingsMap("x")).toEqual({});
-  });
-});
-
-describe("production marginal-effect evidence", () => {
-  it("turns server-computed low/mean/high effects into concrete report-ready numbers", () => {
-    const response = {
-      design: { method: "did", interaction: true },
-      result: {},
-    } as RegressionResponse;
-    const effects: MarginalEffect[] = [
-      { policy_term: "treated×post", interaction_term: "treated×post×base_gvc", level: "low", label: "低（P25）", reference: "p25", baseline_gvc_centered: -0.1, effect: 0.02, se: 0.01, t: 2, p: 0.05, ci_low: 0.001, ci_high: 0.039 },
-      { policy_term: "treated×post", interaction_term: "treated×post×base_gvc", level: "mean", label: "均值", reference: "mean", baseline_gvc_centered: 0, effect: 0.01, se: 0.01, t: 1, p: 0.3, ci_low: -0.01, ci_high: 0.03 },
-      { policy_term: "treated×post", interaction_term: "treated×post×base_gvc", level: "high", label: "高（P75）", reference: "p75", baseline_gvc_centered: 0.1, effect: 0, se: 0.01, t: 0, p: 1, ci_low: -0.02, ci_high: 0.02 },
-    ];
-    const text = marginalEffectEvidenceText(response, effects);
-    expect(text).toContain("低（P25）基期 GVC");
-    expect(text).toContain("+2.00 个百分点");
-    expect(text).toContain("高（P75）基期 GVC");
-    expect(text).toContain("交互系数本身不是平均效应");
   });
 });

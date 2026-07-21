@@ -9,8 +9,8 @@ HEAD 缺的不是“再加一个进度字段”,而是一个可恢复、可审�
   - ``manifest_id`` 把会话绑定到产出它的那套数据产物。重新 compute 或换算法后
     ID 改变,旧会话里的结果即被判定为过期,而不是被静默当成当前数据。
   - ``revision`` 由服务端单调递增,用于并发写入检测。
-  - 每个步骤记录自带 ``updated_at``,冲突时按记录级时间戳合并,而不是整份覆盖——
-    学生在两个标签页里分别做了第 4 步和第 12 步,不该有一边被整体丢掉。
+  - 每个步骤记录自带记录级与字段级时间戳。不同步骤按记录合并，同一步骤按字段
+    合并——学生在两个标签页分别提交操作与选择题时，两类凭证都不能丢失。
 """
 
 from __future__ import annotations
@@ -19,10 +19,9 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-# v2:回归设定与冲击类型改用稳定英文键(tariff / did / ...)。旧会话里存的是
-# 中文界面文案,语义无法与新枚举对应——按"不做历史格式兼容"的原则整份拒绝,
-# 而不是猜测旧值的含义。学生会从空会话重新开始,但不会拿到一份被误读的实验。
-SESSION_VERSION = "experiment-session-v4"
+# v5:学习证据由 CER 自由文本改为版本化固定单选题。部署会显式归档旧 attempt，
+# 新 attempt 从空白证据开始；旧会话只作为历史审计记录，不能与新题库混用。
+SESSION_VERSION = "experiment-session-v5"
 
 MIN_STEP = 1
 MAX_STEP = 16
@@ -52,8 +51,18 @@ def empty_session(manifest_id: str) -> dict[str, Any]:
 
 
 def make_record(data: Any, updated_at: str | None = None) -> dict[str, Any]:
-    """构造带时间戳的步骤记录。"""
-    return {"data": data, "updated_at": updated_at or utc_now_iso()}
+    """构造带记录级、字段级时间戳的步骤记录。"""
+    timestamp = updated_at or utc_now_iso()
+    field_updated_at = {key: timestamp for key in data} if isinstance(data, dict) else {}
+    return {"data": data, "updated_at": timestamp, "field_updated_at": field_updated_at}
+
+
+def _parse_timestamp(value: str) -> datetime:
+    """把合法 ISO 时间统一成可比较的 UTC 时间；无时区值按 UTC 处理。"""
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _validate_record(step: str, record: Any) -> dict[str, Any]:
@@ -65,10 +74,36 @@ def _validate_record(step: str, record: Any) -> dict[str, Any]:
     if not isinstance(updated_at, str) or not updated_at:
         raise SessionError(f"步骤 {step} 的会话记录缺少 updated_at")
     try:
-        datetime.fromisoformat(updated_at)
+        record_time = _parse_timestamp(updated_at)
     except ValueError as error:
         raise SessionError(f"步骤 {step} 的 updated_at 不是合法时间戳:{updated_at}") from error
-    return {"data": record["data"], "updated_at": updated_at}
+
+    field_updated_at = record.get("field_updated_at")
+    if not isinstance(field_updated_at, dict):
+        raise SessionError(f"步骤 {step} 的会话记录缺少 field_updated_at")
+    clean_field_times: dict[str, str] = {}
+    for key, value in field_updated_at.items():
+        if not isinstance(key, str) or not isinstance(value, str) or not value:
+            raise SessionError(f"步骤 {step} 的 field_updated_at 必须是字段名到时间戳的映射")
+        try:
+            field_time = _parse_timestamp(value)
+        except ValueError as error:
+            raise SessionError(f"步骤 {step} 字段 {key!r} 的时间戳不合法:{value}") from error
+        if field_time > record_time:
+            raise SessionError(f"步骤 {step} 字段 {key!r} 的时间戳不能晚于 updated_at")
+        clean_field_times[key] = value
+
+    data = record["data"]
+    if isinstance(data, dict):
+        if not all(isinstance(key, str) for key in data):
+            raise SessionError(f"步骤 {step} 的 data 字段名必须是字符串")
+        missing = set(data) - set(clean_field_times)
+        if missing:
+            raise SessionError(f"步骤 {step} 的 field_updated_at 缺少字段:{sorted(missing)}")
+    elif clean_field_times:
+        raise SessionError(f"步骤 {step} 的非对象 data 不能带字段时间戳")
+
+    return {"data": data, "updated_at": updated_at, "field_updated_at": clean_field_times}
 
 
 def validate_session(payload: Any) -> dict[str, Any]:
@@ -117,18 +152,49 @@ def validate_session(payload: Any) -> dict[str, Any]:
 
 
 def merge_sessions(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
-    """按记录级时间戳合并两份会话,较新的步骤记录获胜。
+    """按记录与字段时间戳合并两份会话。
 
-    用于并发写入:两个标签页可能各自更新了不同步骤,整份覆盖会丢掉一边的工作。
-    时间戳相同则保留 incoming(调用方是本次写入者)。
+    不同步骤保留双方；同一步骤的对象数据逐字段合并。因此一个标签页提交操作凭证、
+    另一个标签页提交选择题凭证时，两者不会因整条记录后写覆盖而互相删除。时间戳
+    相同则保留 incoming（调用方是本次写入者）。
     """
+
+    def merge_record(current: dict[str, Any], record: dict[str, Any]) -> dict[str, Any]:
+        current_data = current["data"]
+        incoming_data = record["data"]
+        if not isinstance(current_data, dict) or not isinstance(incoming_data, dict):
+            return record if _parse_timestamp(record["updated_at"]) >= _parse_timestamp(current["updated_at"]) else current
+
+        current_times = current["field_updated_at"]
+        incoming_times = record["field_updated_at"]
+        merged_data: dict[str, Any] = {}
+        merged_times: dict[str, str] = {}
+        for key in current_times.keys() | incoming_times.keys():
+            current_time = current_times.get(key)
+            incoming_time = incoming_times.get(key)
+            use_incoming = incoming_time is not None and (
+                current_time is None or _parse_timestamp(incoming_time) >= _parse_timestamp(current_time)
+            )
+            source_data = incoming_data if use_incoming else current_data
+            selected_time = incoming_time if use_incoming else current_time
+            if key in source_data:
+                merged_data[key] = source_data[key]
+            if selected_time is not None:
+                # 仅存在于 field_updated_at 的键是删除墓碑，也必须保留以阻止旧值复活。
+                merged_times[key] = selected_time
+
+        latest = record if _parse_timestamp(record["updated_at"]) >= _parse_timestamp(current["updated_at"]) else current
+        return {
+            "data": merged_data,
+            "updated_at": latest["updated_at"],
+            "field_updated_at": merged_times,
+        }
 
     def merge_slot(base_slot: dict[str, Any], incoming_slot: dict[str, Any]) -> dict[str, Any]:
         merged = dict(base_slot)
         for key, record in incoming_slot.items():
             current = merged.get(key)
-            if current is None or record["updated_at"] >= current["updated_at"]:
-                merged[key] = record
+            merged[key] = record if current is None else merge_record(current, record)
         return merged
 
     return {

@@ -11,8 +11,8 @@ HEAD 的第 16 步是一个独立的参数表单,重新生成一份通用系统�
   2. **服务端复估**:回归按学生保存的设定在服务端重跑,报告里的数字不来自客户端。
   3. **绑定溯源**:report_key(内容指纹)、session revision、manifest_id 一起落库,
      日后可以回答"这份报告由哪套数据、哪次会话、哪个设计生成"。
-  4. **学生自己的判断**:质检处置与四步识别判断原样进入报告——这是报告里唯一
-     无法由机器复算的部分,也正是教学要留下的东西。
+  4. **学习证据**:真实操作与已通过的固定单选题答案一起进入报告，既可审计，
+     又不会把长篇自由文本当作完成门槛。
 
 报告正文是普通 GFM(表格 + 文字),复制到任何 Markdown 阅读器都完整可读,
 不依赖本系统的私有图表块。
@@ -28,7 +28,7 @@ from typing import Any, cast
 
 import pandas as pd
 
-from gvcsim import artifacts, evidence
+from gvcsim import artifacts, evidence, quizzes
 from gvcsim.regression.design import RegressionDesign
 from gvcsim.regression.panel import ROW_CODE, RegressionResult, run_design
 from gvcsim.report import _industry_network_top, _load_panel, _load_panel_file
@@ -188,11 +188,7 @@ def _rerun(session: dict[str, Any]) -> list[dict[str, Any]]:
                 "outcome": outcome,
                 "design": design,
                 "result": result,
-                "judgment": str(data.get("judgment", "")).strip(),
                 "weight_mode": weight_mode,
-                "cer": data.get("cer") if isinstance(data.get("cer"), dict) else {},
-                "checks": data.get("checks") if isinstance(data.get("checks"), dict) else {},
-                "placebo_run_id": str(data.get("placebo_run_id") or ""),
             }
         )
     return runs
@@ -210,7 +206,7 @@ def _fingerprint(session: dict[str, Any], manifest_id: str, runs: list[dict[str,
             normalized = {
                 key: semantic(item)
                 for key, item in value.items()
-                if key != "evidence_id" and key != "run_id" and key != "placebo_run_id" and not key.endswith("_run_id")
+                if key not in {"evidence_id", "quiz_id", "run_id", "placebo_run_id"} and not key.endswith("_run_id")
             }
             # 一个只装随机收据的 checks 容器在去掉 *_run_id 后为空；它与未创建
             # checks 的会话语义相同，不应让重复生成得到不同 report_key。
@@ -234,16 +230,31 @@ def _fingerprint(session: dict[str, Any], manifest_id: str, runs: list[dict[str,
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
+def _quiz_lines(step: int, data: dict[str, Any]) -> list[str]:
+    """渲染一组已通过的题目和学生最终答案。"""
+    selected = quizzes.selected_answers(step, data.get("quiz"))
+    if not selected:
+        return ["- 理解检查:(未记录)", ""]
+    lines = ["**理解检查（已通过）**", ""]
+    for index, item in enumerate(selected, start=1):
+        lines += [f"{index}. {item['question']}", f"   - 我的答案:{item['answer']}"]
+    lines.append("")
+    return lines
+
+
 def _learning_evidence_sections(session: dict[str, Any]) -> list[str]:
-    """把步骤 1、3–11 的实际对象、镜头、事件与 CER 原样写入报告。"""
-    lines = ["## 2. 我的描述性学习证据", "", "以下内容来自我逐步提交、由服务器绑定当前数据版本的 CER。", ""]
+    """把描述性步骤的真实操作与最终选择题答案写入报告。"""
+    lines = [
+        "## 2. 我的描述性学习证据",
+        "",
+        "以下内容来自我逐步提交、由服务器复核的真实操作和理解检查。",
+        "",
+    ]
     for step in GATE_STEPS:
         lab = evidence.STEP_LABS[step]
         if lab in {"qc", "reg"}:
             continue
         data = _step_data(session, step)
-        cer_value = data.get("cer")
-        cer: dict[str, Any] = cer_value if isinstance(cer_value, dict) else {}
         lines += [f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}", ""]
         if isinstance(data.get("slice"), dict):
             slice_ = data["slice"]
@@ -272,13 +283,7 @@ def _learning_evidence_sections(session: dict[str, Any]) -> list[str]:
                 lines.append("- 服务端复核数值: " + "；".join(rendered))
         if data.get("viewed_events"):
             lines.append("- 具体政策事件: " + "；".join(str(item) for item in data["viewed_events"]))
-        lines += [
-            f"- **Claim**: {cer.get('claim', '(未记录)')}",
-            f"- **Evidence**: {cer.get('evidence', '(未记录)')}",
-            f"- **Reasoning**: {cer.get('reasoning', '(未记录)')}",
-            f"- **Boundary**: {cer.get('boundary', '(未记录)')}",
-            "",
-        ]
+        lines += _quiz_lines(step, data)
     return lines
 
 
@@ -401,8 +406,6 @@ def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], p
     lines += [
         f"面对质检结果,我的处置是:**{disposition}**。",
         "",
-        f"理由:{qc.get('judgment', '(未记录)')}",
-        "",
     ]
     if qc.get("failed_checks"):
         lines += ["当前失败检查:", "", *[f"- {item}" for item in qc["failed_checks"]], ""]
@@ -410,6 +413,8 @@ def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], p
         lines += [f"修正规则:{qc['remediation']}  ·  服务端复检:{'通过' if qc.get('retest_passed') else '未通过'}", ""]
     if qc.get("disclosures"):
         lines += ["持续披露:", "", *[f"- {item}" for item in qc["disclosures"]], ""]
+    qc_step = next(n for n, lab in evidence.STEP_LABS.items() if lab == "qc")
+    lines += _quiz_lines(qc_step, qc)
     lines += _learning_evidence_sections(session)
     lines += _indicator_summary(int(years[-1]))
     lines += [
@@ -459,7 +464,6 @@ def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], p
             lines += ["- **预检警告**:没有永不处理聚类；结论仅依赖错位处理时点。", ""]
         if design.outcome == "network":
             lines += ["- **预检警告**:网络节点间存在干扰/外溢，传统 SUTVA 不成立。", ""]
-        checks = run["checks"]
         if run["step"] == 12:
             lines += [
                 "- 必做对照:无控制 baseline 与加入控制模型均有服务端 run event。",
@@ -468,7 +472,6 @@ def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], p
         elif run["step"] == 13:
             lines += [
                 "- 必做对照:无交互 baseline 与 GVC 交互模型均有服务端 run event。",
-                f"- 边际效应解释:{checks.get('marginal_effect', '(未记录)')}",
                 "",
             ]
             if result.marginal_effects:
@@ -487,24 +490,9 @@ def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], p
                         f"{item['effect']:.4f} | {item['se']:.4f} | {interval} |"
                     )
                 lines.append("")
-        elif run["step"] == 14:
-            lines += [
-                f"- 事前趋势诊断:{checks.get('pretrend', '(未记录)')}",
-                f"- 事后动态效应:{checks.get('post_effect', '(未记录)')}",
-                "",
-            ]
         elif run["step"] == 15:
             lines += ["- 必做安慰剂:服务端 event 已校验并绑定当前 attempt。", ""]
-        cer = run["cer"]
-        lines += [
-            f"**我的识别判断**:{run['judgment'] or '(未记录)'}",
-            "",
-            f"- **Claim**: {cer.get('claim', '(未记录)')}",
-            f"- **Evidence**: {cer.get('evidence', '(未记录)')}",
-            f"- **Reasoning**: {cer.get('reasoning', '(未记录)')}",
-            f"- **Boundary**: {cer.get('boundary', '(未记录)')}",
-            "",
-        ]
+        lines += _quiz_lines(run["step"], _step_data(session, run["step"]))
 
     build = provenance["artifact"].get("build") or {}
     runtime = build.get("runtime") or {}

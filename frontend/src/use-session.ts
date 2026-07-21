@@ -4,6 +4,7 @@ import {
   clearLocal,
   emptySession,
   loadLocal,
+  patchStep as patchStoredStep,
   type LocalSessionScope,
   quarantineLegacy,
   readLegacyQuarantine,
@@ -98,8 +99,7 @@ export function patchSessionStep<T extends object>(
   step: number,
   patch: Partial<T>,
 ): ExperimentSession {
-  const current = readStep<T>(session, step);
-  return writeStep(session, step, { ...(current ?? {} as T), ...patch });
+  return patchStoredStep(session, step, patch);
 }
 
 /** Apply shared-state updates against the newest functional state for the same reason. */
@@ -144,7 +144,7 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
     }
   }, [scope?.accountId, scope?.courseRunId, scope?.assignmentId, scope?.attemptId, scope?.manifestId]);
 
-  // 登录后装载:服务端会话与本地会话按记录级时间戳合并。
+  // 登录后装载:服务端会话与本地会话按记录级/字段级时间戳合并。
   useEffect(() => {
     if (!username || !manifestId) return;
     let live = true;

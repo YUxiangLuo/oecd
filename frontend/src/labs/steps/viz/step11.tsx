@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../../api";
-import { EvidencePanel, VerifiedCerBox } from "../../../step-evidence";
+import { EvidencePanel, VerifiedActionBox } from "../../../step-evidence";
 import type { IndustryPage, Meta, NetworkData, Step, StepEvidenceApi } from "../../../types";
 import { HeatTableViz, NetworkViz, countryLabel } from "../../../viz";
 import { useAsync } from "../../shared";
@@ -137,7 +137,7 @@ export function Step11Network({ meta, step, evidence }: { meta: Meta; step: Step
           {!net ? <p className="muted">加载 {year} 年贸易网络中…</p> : <NetworkViz data={net} />}
         </ChartStory>
       )}
-      <VerifiedCerBox
+      <VerifiedActionBox
         step={step.n}
         kind="visualization"
         evidence={evidence}
