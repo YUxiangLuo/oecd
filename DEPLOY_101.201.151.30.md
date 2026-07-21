@@ -1,294 +1,357 @@
-# 101.201.151.30 生产部署与回滚
+# 101.201.151.30 当前演示服务器部署指南
 
-本指南使用非 root 服务账号、HTTPS、不可变 release、共享数据目录和部署前数据库备份。生产环境不提供公开演示账号，也不会在 PostgreSQL 故障时回退到内置教师账号。
-
-> **本文描述的是目标架构，当前主机尚未迁移到位。** 截至最后一次更新，
-> `101.201.151.30` 上跑的仍是早期演示布局：应用在 `/opt/oecd-icio-analysis`、以 root 运行、
-> 入口是 **HTTP `:6363`**、`/etc/gvcsim.env` 只有 `GVCSIM_PG_DSN`、systemd unit 也仍指向旧路径
-> （`deploy/gvcsim-api.service` 里的沙箱化 unit 指向 `/opt/gvcsim/current` 与 `gvcsim` 账号，
-> **直接安装会起不来**）。
+> 最后核对：2026-07-22。
 >
-> 在完成「一次性主机准备」之前，下面的 release 事务无法照搬。承载真实学生数据前必须先补齐：
-> 迁到 `/opt/gvcsim/` 布局、建服务账号、配 HTTPS、把 `GVCSIM_ENV` 设为 `production` 并生成两把
-> 独立密钥。演示期间以 `GVCSIM_ENV=development` + `GVCSIM_DEMO_MODE=1` 运行，登录页会明文提示
-> 演示口令——这套配置**不得**用于对外环境。
+> 这台机器仍是演示环境：应用以 root 运行，通过明文 HTTP 对外服务，并在固定目录中原地更新。
+> 本文只写当前可执行的流程；正式生产迁移要求见文末。
 
-## 目录与拓扑
+## 当前结构
 
-```text
-/opt/gvcsim/
-  current -> releases/<release-id>
-  releases/<release-id>/       只读代码、虚拟环境、前端 dist
-  shared/data/                 原始/处理数据与本地开发密钥（生产不用文件密钥）
-  shared/reports/
-/etc/gvcsim.env                root:gvcsim 0640
-/var/backups/gvcsim/           PostgreSQL custom-format 备份，0700
-nginx :443 -> 127.0.0.1:18000 -> gvcsim-api.service
-```
+| 项目 | 当前值 |
+| --- | --- |
+| SSH | `root@101.201.151.30` |
+| 应用目录 | `/opt/oecd-icio-analysis` |
+| systemd | `gvcsim-api.service` |
+| 后端 | `127.0.0.1:18000` |
+| 外部入口 | `http://101.201.151.30:6363` |
+| 环境变量 | `/etc/gvcsim.env` |
+| 当前数据 | `data/processed -> artifacts/<manifest_id>` |
+| 备份目录 | `/var/backups/gvcsim` |
 
-DNS 应把正式域名指向 `101.201.151.30`。若只能使用 IP，仍应配置受信任证书；不得让学生密码和 Bearer token 经明文 HTTP 传输。
+`deploy/gvcsim-api.service` 和 `deploy/nginx-gvcsim.conf` 面向未来的
+`/opt/gvcsim/current`、非 root、HTTPS 架构，**不能直接安装到当前主机**。
 
-## 一次性主机准备
+## 1. 判断发布类型
 
-```bash
-sudo useradd --system --home /opt/gvcsim --shell /usr/bin/nologin gvcsim
-sudo install -d -o root -g root -m 0755 /opt/gvcsim /opt/gvcsim/releases /opt/gvcsim/.staging
-sudo install -d -o gvcsim -g gvcsim -m 0750 /opt/gvcsim/shared/data /opt/gvcsim/shared/reports
-sudo install -d -o root -g root -m 0700 /var/backups/gvcsim
+| 变更范围 | 重算 artifact | 新建 assignment |
+| --- | --- | --- |
+| 仅前端、README、文档或测试 | 否 | 否 |
+| `gvcsim/`、`pyproject.toml`、`uv.lock`、ICIO 输入或计算口径 | 是 | 是 |
+| 无法确定 | 是 | 是 |
 
-sudo install -o root -g gvcsim -m 0640 deploy/gvcsim.env.example /etc/gvcsim.env
-sudo install -o root -g root -m 0644 deploy/gvcsim-api.service /etc/systemd/system/gvcsim-api.service
-sudo install -o root -g root -m 0644 deploy/nginx-gvcsim.conf /etc/nginx/conf.d/gvcsim.conf
-```
+后端源码摘要属于 artifact manifest。修改后端却沿用旧 manifest，会使 `/health`
+返回 503。切换 manifest 后，旧 assignment 会产生 409，因此完整发布必须安排维护窗口。
 
-编辑 `/etc/gvcsim.env`：
+## 2. 本地构建
 
-- `GVCSIM_ENV=production`；
-- `GVCSIM_PG_DSN` 使用权限受限的应用数据库用户；
-- `GVCSIM_AUTH_SECRET` 使用 `openssl rand -base64 48` 生成，至少 32 字节；
-- `GVCSIM_EVIDENCE_SECRET` 另行生成至少 32 字节，不能与认证密钥复用；轮换它会使既有学习证据收据失效，必须作为受控数据迁移处理；
-- `GVCSIM_ALLOWED_ORIGINS` 只列正式 HTTPS 域名；同源 nginx 部署不需要通配符；
-- `GVCSIM_DEMO_MODE=0`；
-- 不设置 `GVCSIM_BOOTSTRAP_PASSWORD`。
-
-首次安装没有任何公开教师账号。完成下面的首个 release 构建并建立 `current`
-链接后，临时设置至少 12 位的 `GVCSIM_INITIAL_TEACHER_PASSWORD`，执行：
-
-```bash
-sudo -u gvcsim bash -lc '
-  set -a; . /etc/gvcsim.env; set +a
-  cd /opt/gvcsim/current
-  .venv/bin/gvcsim classroom-init --teacher-username admin --teacher-name "课程管理员"
-'
-```
-
-创建成功后立即从 `/etc/gvcsim.env` 删除该临时变量。后续教师由已授权管理员创建，
-日常迁移只运行不带教师参数的 `classroom-init`。
-
-然后配置证书并检查配置：
-
-```bash
-sudo nginx -t
-sudo systemctl daemon-reload
-sudo systemctl enable gvcsim-api.service nginx
-```
-
-## 构建 release
-
-在可信构建机完成所有检查，不在生产机上构建前端：
+先提交代码并确保工作树干净：
 
 ```bash
 git status --short --branch
+test -z "$(git status --porcelain)"
+
 uv sync --locked --group dev
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy
 uv run pytest --cov=gvcsim --cov-report=term-missing -q
 
-cd frontend
-bun install --frozen-lockfile
-bun run test:unit
-bun run build          # 生产构建：不要设置 VITE_DEMO_MODE
-cd ..
+(
+  cd frontend || exit
+  bun install --frozen-lockfile
+  bun run test:unit
+  bun run build:demo
+)
+
+if ! grep -RIl "gvclab2026" frontend/dist/ >/dev/null; then
+  echo "演示构建未包含默认演示口令" >&2
+  exit 1
+fi
+
+git push
+COMMIT=$(git rev-parse HEAD)
 ```
 
-前端有一个**构建期**演示开关 `VITE_DEMO_MODE=1`：开启后登录页会显示学生/教师快捷入口
-并预填演示口令，仅供课堂演示。默认构建会把这段 UI 与口令常量一并 tree-shaking 掉，
-发布前可自查：
+当前服务器默认部署演示前端：学生账号 `student`、教师账号 `teacher`，默认口令
+`gvclab2026`。`build:demo` 只用于这台演示服务器；正式生产必须使用 `bun run build`，
+并确认前端产物不包含演示口令。
+
+完整发布还要在这个干净提交上重算并验证数据：
 
 ```bash
-grep -rl "gvclab2026" frontend/dist/ && echo "❌ 演示口令进入产物，请用默认构建重新发布"
-```
-
-release id 应同时含 Git commit 和 UTC 时间，例如：
-
-```bash
-release_id="$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short=12 HEAD)"
-release_dir="/opt/gvcsim/releases/$release_id"
-upload_dir="/var/tmp/gvcsim-upload-$release_id"
-build_dir="/opt/gvcsim/.staging/$release_id"
-
-ssh deploy@101.201.151.30 "install -d -m 0700 '$upload_dir'"
-rsync -az --delete \
-  --exclude='.git/' --exclude='.venv/' --exclude='frontend/node_modules/' \
-  --exclude='data/' --exclude='OECD_ICIO/' --exclude='reports/' \
-  ./ "deploy@101.201.151.30:$upload_dir/"
-```
-
-上传目录归 `deploy` 所有，只用于接收文件。先由 root 把内容复制到服务账号可写的
-构建目录，再以 `gvcsim` 安装锁定依赖并连接共享数据：
-
-```bash
-ssh deploy@101.201.151.30 "sudo bash -lc '
-  set -euo pipefail
-  case \"$upload_dir\" in /var/tmp/gvcsim-upload-*) ;; *) exit 64;; esac
-  case \"$build_dir\" in /opt/gvcsim/.staging/*) ;; *) exit 64;; esac
-  test ! -e \"$build_dir\"
-  install -d -o gvcsim -g gvcsim -m 0750 \"$build_dir\"
-  rsync -a --delete --chown=gvcsim:gvcsim \"$upload_dir/\" \"$build_dir/\"
-  rm -rf -- \"$upload_dir\"
-'"
-
-ssh deploy@101.201.151.30 "sudo -u gvcsim bash -lc '
-  set -euo pipefail
-  cd $build_dir
-  uv sync --locked
-  ln -s /opt/gvcsim/shared/data data
-  ln -s /opt/gvcsim/shared/reports reports
-'"
-```
-
-如果 release 包含原始数据浏览，还应将 `OECD_ICIO` 放入 `shared/data` 外的独立只读目录，并在 release 中建立明确符号链接。不要让 `rsync --delete` 指向共享数据目录。
-
-依赖安装和链接完成后，root 移除整个 release 的写权限，再原子移入只读 releases
-目录。`gvcsim` 服务账号不能改写或替换已经封存的 release：
-
-```bash
-ssh deploy@101.201.151.30 "sudo bash -lc '
-  set -euo pipefail
-  case \"$build_dir\" in /opt/gvcsim/.staging/*) ;; *) exit 64;; esac
-  case \"$release_dir\" in /opt/gvcsim/releases/*) ;; *) exit 64;; esac
-  test -d \"$build_dir\"
-  test ! -e \"$release_dir\"
-  chown -R root:root \"$build_dir\"
-  chmod -R a-w \"$build_dir\"
-  mv -T \"$build_dir\" \"$release_dir\"
-'"
-```
-
-## 部署事务
-
-### 1. 备份并校验
-
-```bash
-ssh deploy@101.201.151.30 "sudo bash -lc '
-  set -a; . /etc/gvcsim.env; set +a
-  GVCSIM_BACKUP_DIR=/var/backups/gvcsim $release_dir/scripts/backup_classroom.sh
-'"
-```
-
-在继续前执行输出中的 `sha256sum -c`。数据库 schema 更新必须走兼容迁移；日常部署不得使用 `classroom-init --reset`。
-
-### 2. 迁移新 release
-
-```bash
-ssh deploy@101.201.151.30 "sudo -u gvcsim bash -lc '
-  set -a; . /etc/gvcsim.env; set +a
-  cd $release_dir
-  .venv/bin/gvcsim classroom-init
-'"
-```
-
-迁移应满足“先扩展、后切换、最后清理”的向后兼容策略。若迁移失败，不切换 `current`。
-
-### 3. 原子切换并健康检查
-
-```bash
-ssh deploy@101.201.151.30 "sudo bash -lc '
-  set -euo pipefail
-  ln -sfn $release_dir /opt/gvcsim/current.next
-  mv -Tf /opt/gvcsim/current.next /opt/gvcsim/current
-  systemctl restart gvcsim-api.service
-  nginx -t
-  systemctl reload nginx
-  systemctl is-active --quiet gvcsim-api.service
-  curl -fsS http://127.0.0.1:18000/health
-'"
-```
-
-外部验证：
-
-```bash
-BASE=https://gvcsim.example.edu
-curl -fsSI "$BASE/"
-curl -fsS "$BASE/health"
-```
-
-使用专门的部署探针账号检查登录、`/api/meta`、当前 assignment/manifest、步骤 1 切片和回归 design。不要把固定教师密码写入部署脚本。
-
-## 数据发布
-
-> ⚠️ **重算产物会使在读作业整体锁死。** 这是本系统最容易踩的运维陷阱，先读完本节再执行
-> `gvcsim compute`。学期中途重算前必须先安排好作业切换，否则全班会瞬间无法提交任何证据。
-
-新的指标或政策输入必须在构建机完整生成并验证：
-
-```bash
-uv run gvcsim compute            # fatal QC 会中止发布；确需教学演示才加 --allow-qc-override
+uv run gvcsim compute
 uv run pytest -q tests/test_artifacts.py tests/test_quality.py tests/test_synthetic_compute.py
+MANIFEST_ID=$(uv run python -c 'from gvcsim.artifacts import manifest_id; print(manifest_id())')
+
+MANIFEST_ID="$MANIFEST_ID" COMMIT="$COMMIT" uv run python - <<'PY'
+import os
+from gvcsim.artifacts import manifest_id, manifest_provenance, validate_release
+from gvcsim.config import PROCESSED_DIR
+
+validate_release(PROCESSED_DIR, validate_sources=True)
+p = manifest_provenance()
+assert manifest_id() == os.environ["MANIFEST_ID"]
+assert p["build"]["git_commit"] == os.environ["COMMIT"]
+assert p["build"]["git_dirty"] is False
+assert all(q["publishable"] and not q["fatal"] and not q["override"] for q in p["qc"]["years"].values())
+print("artifact preflight: OK")
+PY
 ```
 
-manifest 必须覆盖原始 ICIO 摘要、处理 CSV、政策冲击、事件定义、crosswalk、Git commit 与锁文件摘要。
-
-### 投放产物
-
-`compute` 产出的是 `data/artifacts/<manifest_id>/` 整套版本，`data/processed` 只是指向它的
-符号链接。因此**不能** `rsync data/processed/`（带尾斜杠会跟随链接、把内容摊成实体目录，
-下次切换版本时不再是原子操作）。正确做法是先同步版本目录，再切链接：
+普通发布不得使用 `--allow-qc-override`。仅前端/文档发布使用 `-` 表示不切换 manifest：
 
 ```bash
-manifest_id=$(uv run python -c 'from gvcsim.artifacts import manifest_id; print(manifest_id())')
-
-rsync -az "data/artifacts/$manifest_id/" \
-  "$SERVER:/opt/gvcsim/shared/data/artifacts/$manifest_id/"
-rsync -az --delete data/shocks/ "$SERVER:/opt/gvcsim/shared/data/shocks/"
-
-ssh "$SERVER" "sudo -u gvcsim ln -sfn 'artifacts/$manifest_id' /opt/gvcsim/shared/data/processed"
+MANIFEST_ID=-
 ```
 
-旧版本目录保留用于审计与回滚，确认无作业仍绑定后再清理。
-
-### 作业与 manifest 的绑定（必读）
-
-每个 assignment 在 `assignments.manifest_id` 上**固定绑定**一个数据版本，学生的每一次证据写入
-都要经过 `_attempt_scope` 校验。切换产物后该字段不会自动跟随，于是：
-
-- 症状：所有学习证据、回归运行与报告生成返回 **409**（`事件不属于当前 assignment/manifest`）；
-- 学生**无法自救**——`start_new_attempt` 同样以「没有与当前 manifest 匹配的开放作业」拒绝；
-- 只有教师能恢复：新建一个绑定新 manifest 的 assignment（`POST /api/classroom/assignments`），
-  或在维护窗口内更新既有作业的绑定。
-
-发布前后各查一次作用域，确认没有落空：
+设置本次部署变量；后续命令在同一个本地 shell 中执行：
 
 ```bash
-curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/classroom/context" \
-  | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["assignment_manifest_id"], d["manifest_mismatch"])'
-# 期望：<新 manifest_id> False
+SERVER=root@101.201.151.30
+APP=/opt/oecd-icio-analysis
+RELEASE_ID="$(date -u +%Y%m%dT%H%M%SZ)-$(git rev-parse --short=12 HEAD)"
+UPLOAD="/var/tmp/gvcsim-upload-$RELEASE_ID"
+BACKUP="/var/backups/gvcsim/releases/$RELEASE_ID-pre"
 ```
 
-同一机制也会让**测试库**失配：若开发机的 `gvclab_test` 里留有绑定旧 manifest 的作业，
-`pytest` 会出现若干 `assert 409 == 200`（集中在 `tests/test_api.py` 的回归用例）。这不是代码
-缺陷，重置测试库即可：
+## 3. 部署前备份
+
+同时备份 PostgreSQL、当前代码、虚拟环境和旧 manifest 链接：
 
 ```bash
-GVCSIM_PG_DSN=...gvclab_test GVCSIM_DEMO_MODE=1 GVCSIM_BOOTSTRAP_PASSWORD=... \
-  .venv/bin/gvcsim classroom-init --reset
+ssh "$SERVER" bash -s -- "$APP" "$BACKUP" <<'REMOTE'
+set -euo pipefail
+app=$1
+backup=$2
+case "$backup" in /var/backups/gvcsim/releases/*-pre) ;; *) exit 64 ;; esac
+test -d "$app"
+install -d -m 0700 "$(dirname "$backup")"
+test ! -e "$backup"
+install -d -m 0700 "$backup/app"
+
+set -a
+. /etc/gvcsim.env
+set +a
+result=$(GVCSIM_BACKUP_DIR=/var/backups/gvcsim "$app/scripts/backup_classroom.sh")
+printf '%s\n' "$result"
+dump=$(printf '%s\n' "$result" | sed -n 's/^backup=//p')
+test -n "$dump"
+sha256sum -c "$dump.sha256"
+
+rsync -a --delete \
+  --exclude='/data/' --exclude='/OECD_ICIO/' --exclude='/reports/' \
+  "$app/" "$backup/app/"
+readlink "$app/data/processed" > "$backup/processed-target"
+REMOTE
 ```
 
-## 回滚
+必须看到数据库备份校验结果 `OK` 后才能继续。
 
-记录切换前的 `/opt/gvcsim/current` 目标。应用回滚只切换到一个已验证、且能读取当前数据库 schema 和 assignment manifest 的 release：
+## 4. 上传
+
+代码先上传到临时目录：
 
 ```bash
-previous_release=/opt/gvcsim/releases/REPLACE_WITH_VERIFIED_RELEASE
-ssh deploy@101.201.151.30 "sudo bash -lc '
-  set -euo pipefail
-  test -x $previous_release/.venv/bin/gvcsim
-  ln -sfn $previous_release /opt/gvcsim/current.next
-  mv -Tf /opt/gvcsim/current.next /opt/gvcsim/current
-  systemctl restart gvcsim-api.service
+ssh "$SERVER" "test ! -e '$UPLOAD' && install -d -m 0700 '$UPLOAD'"
+rsync -az --delete \
+  --exclude='/.git/' --exclude='/.venv/' --exclude='/frontend/node_modules/' \
+  --exclude='/data/' --exclude='/OECD_ICIO/' --exclude='/reports/' \
+  --exclude='/.pytest_cache/' --exclude='/.ruff_cache/' --exclude='/.mypy_cache/' \
+  ./ "$SERVER:$UPLOAD/"
+
+ssh "$SERVER" \
+  "test -f '$UPLOAD/gvcsim/data/loader.py' && test -f '$UPLOAD/frontend/dist/index.html'"
+```
+
+排除规则的前导 `/` 不能删除；未锚定的 `data/` 会误排除 `gvcsim/data/` 源码。
+
+完整发布还要上传不可变 artifact。不要同步 `data/processed/`：
+
+```bash
+if [[ "$MANIFEST_ID" != "-" ]]; then
+  ARTIFACT_STAGE="$APP/data/.artifact-staging-$RELEASE_ID"
+  ssh "$SERVER" "test ! -e '$ARTIFACT_STAGE' && install -d -m 0755 '$ARTIFACT_STAGE'"
+  rsync -az --delete "data/artifacts/$MANIFEST_ID/" "$SERVER:$ARTIFACT_STAGE/"
+  ssh "$SERVER" \
+    "test ! -e '$APP/data/artifacts/$MANIFEST_ID' && mv '$ARTIFACT_STAGE' '$APP/data/artifacts/$MANIFEST_ID'"
+fi
+```
+
+同一 manifest ID 不得覆盖；失败重试前先用 `rsync -naci` 确认远端内容是否完整一致。
+本流程假设远端 `OECD_ICIO/` 原始文件不变；若原始输入也变更，应作为独立数据迁移，
+先备份并逐文件同步，再核对 manifest 中的摘要。
+
+## 5. 切换服务
+
+此步骤会短暂停止 API。任一命令失败时，不要继续，直接执行第 8 节回滚。
+
+```bash
+ssh "$SERVER" bash -s -- \
+  "$APP" "$UPLOAD" "$RELEASE_ID" "$MANIFEST_ID" "$COMMIT" <<'REMOTE'
+set -euo pipefail
+app=$1
+upload=$2
+release_id=$3
+new_manifest=$4
+expected_commit=$5
+
+[[ "$app" == "/opt/oecd-icio-analysis" ]] || exit 64
+case "$upload" in /var/tmp/gvcsim-upload-*) ;; *) exit 64 ;; esac
+test -d "$upload"
+if [[ "$new_manifest" == "-" ]]; then
+  new_manifest=
+fi
+systemctl stop gvcsim-api.service
+
+rsync -a --delete \
+  --exclude='/.venv/' --exclude='/data/' --exclude='/OECD_ICIO/' --exclude='/reports/' \
+  "$upload/" "$app/"
+
+cd "$app"
+uv sync --locked
+set -a
+. /etc/gvcsim.env
+set +a
+.venv/bin/gvcsim classroom-init
+
+MANIFEST_ID="$new_manifest" EXPECTED_COMMIT="$expected_commit" .venv/bin/python - <<'PY'
+import os
+from pathlib import Path
+from gvcsim.artifacts import manifest_id, manifest_provenance, validate_release
+from gvcsim.config import PROCESSED_DIR
+
+mid = os.environ["MANIFEST_ID"]
+target = Path("data/artifacts") / mid if mid else PROCESSED_DIR
+validate_release(target, validate_sources=True)
+if mid:
+    assert manifest_id(target) == mid
+    p = manifest_provenance(target)
+    assert p["build"]["git_commit"] == os.environ["EXPECTED_COMMIT"]
+    assert p["build"]["git_dirty"] is False
+print("remote artifact preflight: OK")
+PY
+
+if [[ -n "$new_manifest" ]]; then
+  next_link="$app/data/processed.next-$release_id"
+  rm -f -- "$next_link"
+  ln -s "artifacts/$new_manifest" "$next_link"
+  mv -Tf "$next_link" "$app/data/processed"
+fi
+
+systemctl start gvcsim-api.service
+for _ in $(seq 1 30); do
+  curl -fsS http://127.0.0.1:18000/health && break
+  sleep 1
+done
+curl -fsS http://127.0.0.1:18000/health
+nginx -t
+systemctl reload nginx
+systemctl is-active --quiet gvcsim-api.service
+rm -rf -- "$upload"
+REMOTE
+```
+
+`classroom-init --reset` 会删除教学数据，日常部署绝对不能使用。
+
+## 6. manifest 变更后新建作业
+
+仅完整发布需要此步骤。保持维护窗口，通过教师管理界面或
+`POST /api/classroom/assignments` 新建绑定 `MANIFEST_ID` 的 assignment：
+
+- 保留旧 assignment、attempt、session 和 evidence；
+- 不要改写旧 session/evidence 的 manifest；
+- 新 assignment 验证通过后再结束维护窗口。
+
+用探针学生登录后确认作用域：
+
+```bash
+BASE=http://101.201.151.30:6363
+curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/classroom/context" |
+  python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["assignment_manifest_id"], d["manifest_mismatch"])'
+```
+
+期望输出新 manifest 和 `False`。不要把密码或 token 写入仓库或脚本。
+
+## 7. 验收
+
+当前 Nginx 未对外代理 `/health`，健康检查必须从服务器内部执行：
+
+```bash
+ssh "$SERVER" '
+  systemctl is-active gvcsim-api.service
   curl -fsS http://127.0.0.1:18000/health
-'"
+  readlink /opt/oecd-icio-analysis/data/processed
+  journalctl -u gvcsim-api.service -n 80 --no-pager
+'
 ```
 
-若必须恢复数据库，先停止 API，在一个新建的恢复数据库中运行 `pg_restore --list` 和试恢复，核对后再切换 DSN。不要直接覆盖唯一生产库。
-
-## 审计与日常运维
+使用专用探针账号运行真实浏览器检查：
 
 ```bash
-sudo systemctl status gvcsim-api.service --no-pager -l
-sudo journalctl -u gvcsim-api.service --since today
-sudo find /var/backups/gvcsim -maxdepth 1 -type f -name '*.dump' -printf '%TY-%Tm-%Td %TT %s %p\n'
+GVCSIM_BASE_URL=http://101.201.151.30:6363 \
+GVCSIM_E2E_USERNAME=<探针学生> \
+GVCSIM_E2E_PASSWORD=<临时口令> \
+scripts/agent_browser_smoke.sh
 ```
 
-至少监控：登录失败/限流、401/403/5xx、报告生成失败、manifest stale、QC override、教师评分和 assignment 变更。备份需定期在隔离数据库做恢复演练；只生成但从未恢复验证的 dump 不能视为可用备份。
+完整发布还要检查 `/api/meta`、assignment/manifest、步骤 1 ICIO 切片和 regression
+design。探针可能创建 attempt，不要使用真实学生账号。
+
+## 8. 回滚
+
+使用第 3 节生成的备份恢复代码、虚拟环境和旧 manifest：
+
+```bash
+ssh "$SERVER" bash -s -- "$APP" "$BACKUP" "$RELEASE_ID" <<'REMOTE'
+set -euo pipefail
+app=$1
+backup=$2
+release_id=$3
+[[ "$app" == "/opt/oecd-icio-analysis" ]] || exit 64
+case "$backup" in /var/backups/gvcsim/releases/*-pre) ;; *) exit 64 ;; esac
+test -d "$backup/app"
+old_target=$(cat "$backup/processed-target")
+
+systemctl stop gvcsim-api.service
+rsync -a --delete \
+  --exclude='/data/' --exclude='/OECD_ICIO/' --exclude='/reports/' \
+  "$backup/app/" "$app/"
+next_link="$app/data/processed.rollback-$release_id"
+rm -f -- "$next_link"
+ln -s "$old_target" "$next_link"
+mv -Tf "$next_link" "$app/data/processed"
+systemctl restart gvcsim-api.service
+curl -fsS http://127.0.0.1:18000/health
+REMOTE
+```
+
+如果已创建新 assignment，回滚后由教师将它停用；已有 attempt/evidence 时不要删除。
+新 artifact 保留用于审计。
+
+数据库不会自动回滚。确需恢复时，先在新建的隔离数据库中执行 `pg_restore --list`
+和试恢复，确认后再切换 DSN；不要覆盖唯一数据库。
+
+## 日常检查
+
+```bash
+ssh root@101.201.151.30 '
+  systemctl status gvcsim-api.service --no-pager -l
+  journalctl -u gvcsim-api.service --since today --no-pager
+  find /var/backups/gvcsim -maxdepth 1 -type f -name "*.dump" \
+    -printf "%TY-%Tm-%Td %TT %s %p\n"
+'
+```
+
+至少监控登录失败/限流、401/403/5xx、报告失败、manifest stale、QC override 和
+assignment 变更。备份应定期在隔离数据库做恢复演练。
+
+## 正式生产迁移
+
+当前演示布局不得承载真实学生密码和 Bearer token。正式上线至少需要：
+
+- `gvcsim` 非 root 服务账号；
+- `/opt/gvcsim/releases/<release-id>` 和原子 `current` 链接；
+- 独立共享数据目录；
+- 正式域名、受信任 HTTPS 证书和登录限流；
+- `GVCSIM_ENV=production`、`GVCSIM_DEMO_MODE=0`；
+- 两把独立随机密钥，并移除 `GVCSIM_BOOTSTRAP_PASSWORD`。
+
+完成迁移后才能安装仓库中的目标版 systemd/nginx 配置。生产化迁移应作为独立变更，
+不要和日常代码发布混在一起。生产构建使用 `bun run build`，并执行：
+
+```bash
+if grep -RIl "gvclab2026" frontend/dist/; then
+  echo "生产前端包含演示口令" >&2
+  exit 1
+fi
+```

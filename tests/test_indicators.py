@@ -33,6 +33,8 @@ def with_tls(io: FakeIOSystem, tls_ratio: float = 0.2) -> FakeIOSystem:
 
 
 def test_build_arrays_basics(fake_io):
+    # 生产加载器一定提供 factor_inputs；这里显式删除以单独守护兼容旧夹具的回退分支。
+    del fake_io.factor_inputs
     arr = build_arrays(fake_io)
     # 无 factor_inputs 时回退残差 VA:va = x - 中间投入列和,taxsub = 0
     assert np.allclose(arr.va, arr.x - arr.Z.sum(axis=0))

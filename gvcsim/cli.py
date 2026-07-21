@@ -74,13 +74,18 @@ def main() -> None:
         io = loader.load(args.year)
         checks = quality.run_all(io)
         for c in checks:
-            print(f"[{'✓' if c.passed else '✗'}] {c.name} —— {c.detail}")
+            marker = {"fatal": "✗", "warning": "⚠", "disclosure": "◇", "ok": "✓"}[c.effective_severity]
+            print(f"[{marker}] {c.name} —— {c.detail}")
             for w in c.warnings:
                 print(f"      ⚠ {w}")
-        print(
-            "\n"
-            + ("数据整体校验通过。" if all(c.passed for c in checks) else "存在异常项,请查看上方警告后决定是否使用。")
-        )
+        summary = quality.summarize_checks(checks)
+        if summary["fatal"]:
+            conclusion = "存在 fatal 异常，数据不得发布。"
+        elif summary["requires_disclosure"]:
+            conclusion = "无 fatal 异常；数据可使用，但必须持续披露上述 warning/disclosure。"
+        else:
+            conclusion = "数据整体校验通过。"
+        print("\n" + conclusion)
 
     elif args.command == "compute":
         from gvcsim import pipeline

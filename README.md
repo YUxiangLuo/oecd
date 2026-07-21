@@ -92,6 +92,10 @@ uv run gvcsim compute
 `uv run gvcsim compute --allow-qc-override`。override、失败项和披露要求会写入 manifest 与报告，
 不会被当成“质检通过”。
 
+ICIO 质检会独立保留原始 CSV 的 `OUT` 账户，分别复核 `OUT = Z行和 + Y行和` 与
+`OUT = Z列和 + VA + TLS`；里昂惕夫系统以谱半径、条件数、逆残差和逆矩阵非负性判断。
+负 VA 会作为行业指标定义域 warning 持续披露，但不会仅因某个 `A` 列和超过 1 而误判整年矩阵失效。
+
 如果已有同版本的 `data/processed/`，可以直接启动服务。冲击面板、逐年指标、回归面板与 QC
 都属于同一个原子产物集；`compute` 会先在 staging 中完整构建并校验，再把 `data/processed`
 符号链接一次性切到 `data/artifacts/<manifest_id>/`。旧版本会保留用于审计与回滚，部分重算或损坏的

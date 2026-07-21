@@ -7,6 +7,7 @@
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 # 应用不再含数据库 DSN/演示口令默认值。测试必须显式选择隔离的 demo 配置，
 # 且要在测试模块 import ``gvcsim.api`` 之前设置。
@@ -72,6 +73,16 @@ class FakeIOSystem:
         self.x = pd.DataFrame({"indout": x}, index=index)
         self.A = pd.DataFrame(A, index=index, columns=index)
         self.L = pd.DataFrame(L, index=index, columns=index)
+        self.reported_output = pd.Series(x, index=index, name="OUT")
+        primary_inputs = x - Z.sum(axis=0)
+        self.factor_inputs = SimpleNamespace(
+            F=pd.DataFrame(
+                [np.zeros_like(primary_inputs), primary_inputs],
+                index=pd.Index(["TLS", "VA"], name="inputtype"),
+                columns=index,
+            )
+        )
+        self.unit = pd.DataFrame({"unit": "Million USD"}, index=index)
 
     def get_regions(self):
         return self._regions
