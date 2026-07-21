@@ -110,10 +110,13 @@ build_dir="/opt/gvcsim/.staging/$release_id"
 
 ssh deploy@101.201.151.30 "install -d -m 0700 '$upload_dir'"
 rsync -az --delete \
-  --exclude='.git/' --exclude='.venv/' --exclude='frontend/node_modules/' \
-  --exclude='data/' --exclude='OECD_ICIO/' --exclude='reports/' \
+  --exclude='/.git/' --exclude='/.venv/' --exclude='/frontend/node_modules/' \
+  --exclude='/data/' --exclude='/OECD_ICIO/' --exclude='/reports/' \
   ./ "deploy@101.201.151.30:$upload_dir/"
 ```
+
+排除规则前的 `/` 用于锚定仓库根目录；不可写成未锚定的 `data/`，否则 rsync
+也会误排除后端源码目录 `gvcsim/data/`，导致 release 缺少加载器和质检模块。
 
 上传目录归 `deploy` 所有，只用于接收文件。先由 root 把内容复制到服务账号可写的
 构建目录，再以 `gvcsim` 安装锁定依赖并连接共享数据：
