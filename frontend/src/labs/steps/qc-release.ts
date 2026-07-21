@@ -1,4 +1,4 @@
-export interface QcReleaseSummary {
+interface QcReleaseSummary {
   requiresDisclosure: boolean;
   override: boolean;
   fatal: string[];

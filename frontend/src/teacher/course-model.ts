@@ -8,7 +8,7 @@ export interface AssignmentDraft {
   dueAt: string;
 }
 
-export function toApiDateTime(value: string): string | null {
+function toApiDateTime(value: string): string | null {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();

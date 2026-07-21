@@ -21,7 +21,7 @@ export function regressionStatusLabel(status: string | null | undefined): string
   return REGRESSION_STATUS_LABELS[status as RegressionStatus] ?? "设计有效性未知";
 }
 
-export interface RegressionVerdict {
+interface RegressionVerdict {
   state: EvidenceState;
   title: string;
   effectLabel: string;

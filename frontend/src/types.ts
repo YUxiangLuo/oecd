@@ -1,17 +1,17 @@
 export type RegressionOutcome = "trade" | "production" | "length" | "network";
 
-export interface QuizOption {
+interface QuizOption {
   id: string;
   label: string;
 }
 
-export interface QuizQuestion {
+interface QuizQuestion {
   id: string;
   prompt: string;
   options: QuizOption[];
 }
 
-export interface StepQuiz {
+interface StepQuiz {
   version: string;
   questions: QuizQuestion[];
 }
@@ -292,7 +292,7 @@ export interface StepEvidenceApi<T = Record<string, unknown>> {
 }
 
 /** 单步完成判定。由服务端从会话重算(gvcsim/evidence.py),客户端不参与判定。 */
-export interface StepEvidence {
+interface StepEvidence {
   step: number;
   complete: boolean;
   /** 未完成时还差什么;直接展示给学生。 */
@@ -337,7 +337,7 @@ export interface GeneratedReport {
 }
 
 /** 报告里一步回归的摘要:服务端复估后写入 provenance.runs,提交时随 design 一起冻结。 */
-export interface ReportRun {
+interface ReportRun {
   step: number;
   outcome: string;
   design: string;
@@ -693,7 +693,7 @@ export interface SubmissionHistory {
 /** submissions.design:提交时冻结的溯源标量 + 各步回归摘要
  * (由 gvcsim/classroom/db.py 的 submit_report 用 jsonb_build_object 组装)。
  * 曾是 Record<string, unknown>,于是把 runs 数组 String() 成 "[object Object]" 也能过类型检查。 */
-export interface SubmissionDesign {
+interface SubmissionDesign {
   report_key: string;
   manifest_id: string;
   session_revision: number;

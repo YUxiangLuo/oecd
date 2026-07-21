@@ -616,9 +616,7 @@ export default function App() {
                   <div className="error-box assignment-lock" role="alert">
                     <h3>实验台已锁定</h3>
                     <p>
-                      {assignmentClosed
-                        ? `作业已于 ${deadlineLabel(assignmentDueAt)} 截止。当前页面只用于浏览既有记录，所有实验输入和提交均已关闭。`
-                        : meta?.manifest_mismatch
+                      {meta?.manifest_mismatch
                         ? "当前产物与作业冻结的数据版本不一致，不能生成或提交学习证据。"
                         : session.stale
                           ? "检测到旧课程、旧数据版本或未验证 attempt 的记录。请先在上方导出留档，并显式归档旧 attempt 后重新开始。"

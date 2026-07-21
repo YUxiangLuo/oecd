@@ -17,7 +17,7 @@ type ModalState =
 /** 班级与学生:工具条(筛选/搜索/建班/建号) + 进度表 + 模态编辑 */
 type SortKey = "max_step" | "verified_completed_count" | "score" | "last_login_at";
 
-export type StudentStepFilterKind = "reached" | "completed";
+type StudentStepFilterKind = "reached" | "completed";
 export const PASSWORD_INPUT_PROPS = { type: "password", autoComplete: "new-password" } as const;
 export function filterStudentsByStep(students: StudentRow[], step: number | null, kind: StudentStepFilterKind): StudentRow[] {
   if (step == null) return students;

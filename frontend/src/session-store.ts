@@ -196,13 +196,6 @@ export function readStep<T>(session: ExperimentSession, step: number): T | undef
   return session.steps[String(step)]?.data as T | undefined;
 }
 
-export function writeStep<T>(session: ExperimentSession, step: number, data: T): ExperimentSession {
-  return {
-    ...session,
-    steps: { ...session.steps, [String(step)]: makeRecord(data) },
-  };
-}
-
 /** 只更新时间戳所对应的补丁字段，避免把同一记录里的陈旧字段伪装成新写入。 */
 export function patchStep<T extends object>(
   session: ExperimentSession,

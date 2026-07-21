@@ -25,7 +25,7 @@ const WHY_CHECK: [string, string][] = [
   ["控制变量经济范围", "极端但有限的数值也可能是录入或单位错误，需要在回归前暴露出来。"],
 ];
 
-export const whyCheck = (name: string) => WHY_CHECK.find(([prefix]) => name.startsWith(prefix))?.[1]
+const whyCheck = (name: string) => WHY_CHECK.find(([prefix]) => name.startsWith(prefix))?.[1]
   ?? "确认该中间产物满足后续计算与回归所依赖的口径，避免错误在流水线中继续传播。";
 
 export function qcResultLabel(check: QcCheck): { className: string; text: string } {

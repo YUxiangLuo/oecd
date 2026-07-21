@@ -28,7 +28,6 @@ import {
   readStep,
   saveLocal,
   writeShared,
-  writeStep,
 } from "./session-store";
 import { SESSION_VERSION, type ExperimentSession } from "./types";
 
@@ -52,7 +51,7 @@ describe("session-store", () => {
   beforeEach(() => localStorage.clear());
 
   test("round-trips through localStorage", () => {
-    const s = writeStep(emptySession(MID), 4, { country: "CHN" });
+    const s = patchStep(emptySession(MID), 4, { country: "CHN" });
     saveLocal(SCOPE, s);
     expect(loadLocal(SCOPE)).toEqual(s);
     clearLocal(SCOPE);
@@ -60,7 +59,7 @@ describe("session-store", () => {
   });
 
   test("keeps sessions of different accounts apart", () => {
-    saveLocal(scopeFor("alice"), writeStep(emptySession(MID), 4, { country: "CHN" }));
+    saveLocal(scopeFor("alice"), patchStep(emptySession(MID), 4, { country: "CHN" }));
     expect(loadLocal(scopeFor("bob"))).toBeNull();
     expect(localKey(scopeFor("alice"))).not.toBe(localKey(scopeFor("bob")));
   });
@@ -77,7 +76,7 @@ describe("session-store", () => {
   });
 
   test("quarantines username-only legacy state without loading it into a scoped cache", () => {
-    const old = writeStep(emptySession(MID), 16, { report_key: "old-db" });
+    const old = patchStep(emptySession(MID), 16, { report_key: "old-db" });
     localStorage.setItem("gvcsim_session:student", JSON.stringify(old));
     expect(quarantineLegacy("student")).toBe(true);
     expect(localStorage.getItem("gvcsim_session:student")).toBeNull();
@@ -99,8 +98,8 @@ describe("session-store", () => {
     expect(isValidSession({ version: SESSION_VERSION, manifest_id: MID, steps: { "4": { data: {} } } })).toBe(false);
   });
 
-  test("read/write step state", () => {
-    const s = writeStep(emptySession(MID), 12, { shock: "tariff" });
+  test("read/patch step state", () => {
+    const s = patchStep(emptySession(MID), 12, { shock: "tariff" });
     expect(readStep<{ shock: string }>(s, 12)?.shock).toBe("tariff");
     expect(readStep(s, 4)).toBeUndefined();
   });

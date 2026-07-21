@@ -163,7 +163,9 @@ def merge_sessions(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, 
         current_data = current["data"]
         incoming_data = record["data"]
         if not isinstance(current_data, dict) or not isinstance(incoming_data, dict):
-            return record if _parse_timestamp(record["updated_at"]) >= _parse_timestamp(current["updated_at"]) else current
+            return (
+                record if _parse_timestamp(record["updated_at"]) >= _parse_timestamp(current["updated_at"]) else current
+            )
 
         current_times = current["field_updated_at"]
         incoming_times = record["field_updated_at"]
@@ -183,7 +185,9 @@ def merge_sessions(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, 
                 # 仅存在于 field_updated_at 的键是删除墓碑，也必须保留以阻止旧值复活。
                 merged_times[key] = selected_time
 
-        latest = record if _parse_timestamp(record["updated_at"]) >= _parse_timestamp(current["updated_at"]) else current
+        latest = (
+            record if _parse_timestamp(record["updated_at"]) >= _parse_timestamp(current["updated_at"]) else current
+        )
         return {
             "data": merged_data,
             "updated_at": latest["updated_at"],

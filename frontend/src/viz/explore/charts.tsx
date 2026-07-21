@@ -1,7 +1,6 @@
 import { formatMetric } from "../../format";
 import { CAT, KEY_ECONOMIES, Legend, type Row, cardStyle, num, rowLabel, rowName, useTip } from "../shared";
 import { signedDomain, signedStack } from "../signed-layout";
-import { linearFit } from "../statistics";
 
 /* ---------------- 步骤7-10 自由探索:排序条形图 / 散点图 ---------------- */
 
@@ -62,83 +61,6 @@ export function RankBarChart({ rows, metricKey, label, format, highlight }: {
             </div>
           );
         })}
-      </div>
-      {Tip}
-    </div>
-  );
-}
-
-/** X × Y 两指标散点图(学生自选,用于看指标间关系) */
-export function ScatterChart({ rows, xKey, yKey, xLabel, yLabel, xFormat, yFormat, highlight }: {
-  rows: Row[]; xKey: string; yKey: string; xLabel: string; yLabel: string;
-  xFormat?: string; yFormat?: string; highlight?: Set<string>;
-}) {
-  const { wrapRef, Tip, show, hide } = useTip();
-  const W = 660, H = 400, m = { l: 62, r: 18, t: 14, b: 46 };
-  // c = 完整名(tooltip / 高亮匹配),tag = 图上短标签(行业只标代码,避免中文名越界)
-  const pts = rows.map((r) => ({
-    c: rowName(r), label: rowLabel(r), tag: r.industry != null ? String(r.industry) : String(r.country),
-    x: num(r[xKey]), y: num(r[yKey]),
-  }));
-  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
-  const fit = linearFit(pts);
-  const [x0, x1] = spreadDomain(xs), [y0, y1] = spreadDomain(ys);
-  const px = (x: number) => m.l + ((x - x0) / (x1 - x0 || 1)) * (W - m.l - m.r);
-  const py = (y: number) => H - m.b - ((y - y0) / (y1 - y0 || 1)) * (H - m.t - m.b);
-  const ticks = (lo: number, hi: number) => [0, 1, 2, 3, 4].map((i) => lo + ((hi - lo) / 4) * i);
-  const showLabels = pts.length <= 24;
-  return (
-    <div style={cardStyle} ref={wrapRef}>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{yLabel} × {xLabel}</div>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%">
-        {/* 网格 + 刻度 */}
-        {ticks(y0, y1).map((t, i) => (
-          <g key={`y${i}`}>
-            <line x1={m.l} y1={py(t)} x2={W - m.r} y2={py(t)} stroke="#eef0f5" strokeWidth={1} />
-            <text x={m.l - 8} y={py(t) + 4} textAnchor="end" fontSize="10.5" fill="#8a90a0">{fmtAxis(t, yFormat)}</text>
-          </g>
-        ))}
-        {ticks(x0, x1).map((t, i) => (
-          <text key={`x${i}`} x={px(t)} y={H - m.b + 18} textAnchor="middle" fontSize="10.5" fill="#8a90a0">{fmtAxis(t, xFormat)}</text>
-        ))}
-        {/* 轴标题 */}
-        <text x={(m.l + W - m.r) / 2} y={H - 6} textAnchor="middle" fontSize="11.5" fill="#5a6070">{xLabel}</text>
-        <text x={14} y={(m.t + H - m.b) / 2} textAnchor="middle" fontSize="11.5" fill="#5a6070"
-          transform={`rotate(-90 14 ${(m.t + H - m.b) / 2})`}>{yLabel}</text>
-        {/* 前端 OLS 只用于描述相关形态，不代表因果识别。 */}
-        {fit.slope != null && fit.intercept != null && (
-          <line
-            x1={px(Math.min(...xs))}
-            y1={py(fit.intercept + fit.slope * Math.min(...xs))}
-            x2={px(Math.max(...xs))}
-            y2={py(fit.intercept + fit.slope * Math.max(...xs))}
-            stroke="#e34948" strokeWidth={2} strokeDasharray="6 4"
-          />
-        )}
-        {/* 点 */}
-        {pts.map((p) => {
-          const hi = highlight?.has(p.c);
-          const key = KEY_ECONOMIES.has(p.tag);
-          return (
-            <g key={p.c}
-              onMouseMove={(e) => show(e, [["", p.label], [xLabel, fmtVal(p.x, xFormat)], [yLabel, fmtVal(p.y, yFormat)]])}
-              onMouseLeave={hide} style={{ cursor: "pointer" }}>
-              <circle cx={px(p.x)} cy={py(p.y)} r={hi ? 6 : 4.5}
-                fill={hi ? CAT[5] : CAT[0]} fillOpacity={hi ? 0.95 : 0.62}
-                stroke="#fff" strokeWidth={1} />
-              {(showLabels || hi || key) && (
-                <text x={px(p.x) + 7} y={py(p.y) + 3.5} fontSize="10" fill={hi ? CAT[5] : key ? "#3a4050" : "#8a90a0"}
-                  fontWeight={hi || key ? 700 : 400}>{p.tag}</text>
-              )}
-            </g>
-          );
-        })}
-      </svg>
-      <div style={{ display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap", fontSize: 11.5, color: "#6f7686", marginTop: 4 }}>
-        <b style={{ color: "#3a4050" }}>Pearson r = {fit.correlation == null ? "—" : fit.correlation.toFixed(3)}</b>
-        <span>n = {fit.n}</span>
-        <span style={{ color: "#e34948" }}>{fit.slope == null ? "X 轴无变异，无法拟合" : "虚线 = OLS 拟合"}</span>
-        <span>相关不等于因果：共同趋势、遗漏变量与反向因果都可能产生斜率。</span>
       </div>
       {Tip}
     </div>
@@ -298,76 +220,6 @@ export function CompositionBar({ rows, segments, sortKey, sortLabel, sortFormat,
           );
         })}
       </div>
-      {Tip}
-    </div>
-  );
-}
-
-/** 多国某指标的时间趋势折线图(学生自选指标 + 国家) */
-export function TrendChart({ years, series, label, format }: {
-  years: number[];
-  series: { country: string; values: number[] }[];
-  label: string; format?: string;
-}) {
-  const { wrapRef, Tip, show, hide } = useTip();
-  // 右边距按最长线尾标签自适应:行业下钻的中文名远比 3 字母国家码宽
-  const maxLabelLen = Math.max(3, ...series.map((s) => s.country.length));
-  const W = 660, H = 380, m = { l: 62, r: Math.min(190, Math.max(92, 14 + maxLabelLen * 10.5)), t: 16, b: 38 };
-  const all = series.flatMap((s) => s.values).filter((v) => Number.isFinite(v));
-  const lo = all.length ? Math.min(...all) : 0, hi = all.length ? Math.max(...all) : 1;
-  const pad = (hi - lo) * 0.08 || Math.abs(hi) * 0.1 || 1;
-  const y0 = lo - pad, y1 = hi + pad;
-  const px = (i: number) => m.l + (years.length === 1 ? 0.5 : i / (years.length - 1)) * (W - m.l - m.r);
-  const py = (v: number) => H - m.b - ((v - y0) / (y1 - y0 || 1)) * (H - m.t - m.b);
-  const yticks = [0, 1, 2, 3, 4].map((i) => y0 + ((y1 - y0) / 4) * i);
-  // 线尾标签防碰撞:按终点纵坐标排序后保证至少 13px 间距,终值接近的系列不再叠字
-  const labelYBySeries: Record<number, number> = {};
-  series
-    .map((s, si) => {
-      const finite = s.values.map((v, i) => ({ i, v })).filter((p) => Number.isFinite(p.v));
-      const last = finite.at(-1);
-      return last ? { si, y: py(last.v) } : null;
-    })
-    .filter((e): e is { si: number; y: number } => e != null)
-    .sort((a, b) => a.y - b.y)
-    .reduce((prevY, e) => {
-      const y = Math.min(H - 6, Math.max(e.y, prevY + 13));
-      labelYBySeries[e.si] = y;
-      return y;
-    }, -Infinity);
-  return (
-    <div style={cardStyle} ref={wrapRef}>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{label} · 趋势 {years[0]}–{years.at(-1)}</div>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%">
-        {yticks.map((t, i) => (
-          <g key={`y${i}`}>
-            <line x1={m.l} y1={py(t)} x2={W - m.r} y2={py(t)} stroke="#eef0f5" strokeWidth={1} />
-            <text x={m.l - 8} y={py(t) + 4} textAnchor="end" fontSize="10.5" fill="#8a90a0">{fmtVal(t, format)}</text>
-          </g>
-        ))}
-        {years.map((y, i) => (
-          <text key={y} x={px(i)} y={H - m.b + 18} textAnchor="middle" fontSize="10.5" fill="#8a90a0">{y}</text>
-        ))}
-        {series.map((s, si) => {
-          const color = CAT[si % CAT.length];
-          const pts = s.values.map((v, i) => ({ i, v })).filter((p) => Number.isFinite(p.v));
-          const d = pts.map((p, k) => `${k === 0 ? "M" : "L"}${px(p.i)},${py(p.v)}`).join(" ");
-          const last = pts.at(-1);
-          return (
-            <g key={s.country}>
-              <path d={d} fill="none" stroke={color} strokeWidth={2.2} />
-              {pts.map((p) => (
-                <circle key={p.i} cx={px(p.i)} cy={py(p.v)} r={3.5} fill={color} stroke="#fff" strokeWidth={1}
-                  onMouseMove={(e) => show(e, [["", s.country], ["年份", String(years[p.i])], [label, fmtVal(p.v, format)]])}
-                  onMouseLeave={hide} style={{ cursor: "pointer" }} />
-              ))}
-              {last && (
-                <text x={px(last.i) + 7} y={(labelYBySeries[si] ?? py(last.v)) + 3.5} fontSize="10.5" fill={color} fontWeight={700}>{s.country}</text>
-              )}
-            </g>
-          );
-        })}
-      </svg>
       {Tip}
     </div>
   );

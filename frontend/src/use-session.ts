@@ -13,16 +13,15 @@ import {
   reconcileOnLoad,
   saveLocal,
   writeShared,
-  writeStep,
 } from "./session-store";
 import type { CompletionSummary, ExperimentSession, SessionResponse, SharedSessionKey } from "./types";
 
 /** 同步到服务端的防抖窗口:学生连续调筛选时不必每次都写库。 */
 const SYNC_DEBOUNCE_MS = 800;
 
-export type SessionStatus = "loading" | "ready" | "unavailable";
+type SessionStatus = "loading" | "ready" | "unavailable";
 
-export interface SessionApi {
+interface SessionApi {
   status: SessionStatus;
   session: ExperimentSession;
   /** 会话由另一套数据产物生成:其中的结果已不对应当前产物。 */
@@ -40,14 +39,10 @@ export interface SessionApi {
   completion: CompletionSummary | null;
   /** 读取某步的实验状态。 */
   getStep: <T>(step: number) => T | undefined;
-  /** 写入某步的实验状态(先落本地,再防抖同步)。 */
-  setStep: <T>(step: number, data: T) => void;
   /** 在最新一步记录上原子合并字段，避免同一批 React effect 互相覆盖。 */
   patchStep: <T extends object>(step: number, patch: Partial<T>) => void;
   /** 读取跨步骤共享的实验状态。 */
   getShared: <T>(key: SharedSessionKey) => T | undefined;
-  /** 写入跨步骤共享的实验状态。 */
-  setShared: <T>(key: SharedSessionKey, data: T) => void;
   /** 基于最新共享记录做函数式更新。 */
   updateShared: <T>(key: SharedSessionKey, apply: (current: T | undefined) => T) => void;
   /** 丢弃本地与服务端会话(如产物换代后重新开始)。 */
@@ -64,12 +59,12 @@ export interface SessionApi {
  * 顺序很关键:先写内存与 localStorage(同步、必成功),再异步推服务端。
  * 这样“刷新后还在”不依赖网络是否成功,而服务端仍是跨设备/跨登录的真实来源。
  */
-export interface SessionIdentity {
+interface SessionIdentity {
   username: string;
   accountId?: string | number | null;
 }
 
-export interface SessionContext {
+interface SessionContext {
   manifestId: string;
   courseRunId?: string | number | null;
   assignmentId?: string | number | null;
@@ -202,7 +197,7 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
     if (timer.current != null) window.clearTimeout(timer.current);
   }, []);
 
-  /** 写入 + 立即落本地 + 防抖同步服务端。setStep/setShared 共用。 */
+  /** 写入 + 立即落本地 + 防抖同步服务端。 */
   const update = useCallback(
     (apply: (session: ExperimentSession) => ExperimentSession) => {
       // 没有完整 assignment/attempt 作用域时拒绝写入。App 会同时锁住表单，
@@ -226,16 +221,8 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
     [username, manifestId, scope?.accountId, scope?.courseRunId, scope?.assignmentId, scope?.attemptId, scope?.manifestId, assignmentClosed, push],
   );
 
-  const setStep = useCallback(
-    <T,>(step: number, data: T) => update((s) => writeStep(s, step, data)),
-    [update],
-  );
   const patchStep = useCallback(
     <T extends object,>(step: number, patch: Partial<T>) => update((s) => patchSessionStep<T>(s, step, patch)),
-    [update],
-  );
-  const setShared = useCallback(
-    <T,>(key: SharedSessionKey, data: T) => update((s) => writeShared(s, key, data)),
     [update],
   );
   const updateShared = useCallback(
@@ -280,10 +267,8 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
     dueAt,
     completion,
     getStep,
-    setStep,
     patchStep,
     getShared,
-    setShared,
     updateShared,
     reset,
     reload,
