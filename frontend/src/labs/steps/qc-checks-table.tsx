@@ -2,14 +2,16 @@ import type { QcCheck } from "../../types";
 
 /**
  * 质检结果表:ICIO/控制变量质检(第 2 步)与冲击面板质检(第 11 步)共用同一张表。
- * 每项都带「为什么检查?」的口径说明;会计恒等式/维度一致性两项在提供 onNavigateStep 时
+ * 每项都带「为什么检查?」的口径说明;双侧会计恒等式/维度一致性在提供 onNavigateStep 时
  * 额外给出回步骤 1 核对原始切片的入口。
  */
 const WHY_CHECK: [string, string][] = [
   ["维度一致性", "Z、Y 与产出向量必须描述同一组国家–行业节点；错一行就会让矩阵乘法错位。"],
   ["缺失值 / 负值", "缺失值会沿矩阵运算扩散；不合口径的负投入会扭曲技术系数与分解结果。"],
   ["会计恒等式", "总产出应等于中间使用与最终使用之和；不闭合通常意味着漏列、错位或单位不一致。"],
-  ["里昂惕夫逆矩阵", "若技术系数列和异常或矩阵近奇异，逆矩阵会放大微小误差，后续所有增加值追踪都不可靠。"],
+  ["因子投入", "VA 与 TLS 必须完整对齐；负 VA 可以真实存在，但会让对应行业的生产份额失去通常的非负份额解释。"],
+  ["投入侧恒等式", "从成本侧复核原始 OUT 是否等于中间投入、增加值和产品税净额之和。"],
+  ["里昂惕夫逆矩阵", "谱半径、条件数、逆残差与非负性共同判断生产系统是否可行且数值稳定；单个 A 列和超过 1 不能单独下结论。"],
   ["国家/行业覆盖", "确认每年使用同一分析总体，避免把样本增减误当成经济变化。"],
   ["冲击面板维度", "政策变量必须与回归中的国家×行业×年份逐格对齐，重复或漏格都会改变处理组。"],
   ["冲击强度值域", "税率与暴露度都应在合理范围内；越界通常表示百分数与小数混用。"],
@@ -26,6 +28,15 @@ const WHY_CHECK: [string, string][] = [
 export const whyCheck = (name: string) => WHY_CHECK.find(([prefix]) => name.startsWith(prefix))?.[1]
   ?? "确认该中间产物满足后续计算与回归所依赖的口径，避免错误在流水线中继续传播。";
 
+export function qcResultLabel(check: QcCheck): { className: string; text: string } {
+  if (check.severity === "fatal") return { className: "qc-fail", text: "✗ Fatal" };
+  if (check.severity === "warning") return { className: "qc-warning", text: "⚠ Warning" };
+  if (check.severity === "disclosure") return { className: "qc-warning", text: "✓ 通过·需披露" };
+  return check.passed
+    ? { className: "qc-pass", text: "✓ 通过" }
+    : { className: "qc-fail", text: "✗ 异常" };
+}
+
 export function QcChecksTable({ rows, onNavigateStep }: {
   rows: QcCheck[] | null;
   onNavigateStep?: (step: number) => void;
@@ -37,33 +48,40 @@ export function QcChecksTable({ rows, onNavigateStep }: {
           <tr><th>质检项</th><th>类型</th><th>结果</th><th style={{ textAlign: "left" }}>详情</th></tr>
         </thead>
         <tbody>
-          {[...(rows ?? [])].sort((a, b) => Number(a.passed) - Number(b.passed)).map((c) => (
-            <tr key={c.name}>
-              <td>{c.name}</td>
-              <td>{c.kind}</td>
-              <td className={c.passed ? "qc-pass" : "qc-fail"}>{c.passed ? "✓ 通过" : "✗ 异常"}</td>
-              <td style={{ textAlign: "left", whiteSpace: "normal" }}>
-                {c.detail}
-                {c.warnings.map((w) => (
-                  <div key={w} className="muted">⚠ {w}</div>
-                ))}
-                <details style={{ marginTop: 7 }}>
-                  <summary style={{ cursor: "pointer", color: "#4b47e0", fontWeight: 600 }}>为什么检查？</summary>
-                  <div className="muted" style={{ marginTop: 5 }}>{whyCheck(c.name)}</div>
-                  {onNavigateStep && (c.name.startsWith("会计恒等式") || c.name.startsWith("维度一致性")) && (
-                    <div style={{ marginTop: 5 }}>
-                      <button
-                        onClick={() => onNavigateStep(1)}
-                        style={{ border: 0, background: "transparent", padding: 0, font: "inherit", color: "#4b47e0", cursor: "pointer", textDecoration: "underline" }}
-                      >
-                        前往步骤1浏览 Z / Y / OUT 原始切片核对 →
-                      </button>
-                    </div>
-                  )}
-                </details>
-              </td>
-            </tr>
-          ))}
+          {[...(rows ?? [])].sort((a, b) => Number(a.passed) - Number(b.passed)).map((c) => {
+            const result = qcResultLabel(c);
+            return (
+              <tr key={c.name}>
+                <td>{c.name}</td>
+                <td>{c.kind}</td>
+                <td className={result.className}>{result.text}</td>
+                <td style={{ textAlign: "left", whiteSpace: "normal" }}>
+                  {c.detail}
+                  {c.warnings.map((w) => (
+                    <div key={w} className="muted">⚠ {w}</div>
+                  ))}
+                  <details style={{ marginTop: 7 }}>
+                    <summary style={{ cursor: "pointer", color: "#4b47e0", fontWeight: 600 }}>为什么检查？</summary>
+                    <div className="muted" style={{ marginTop: 5 }}>{whyCheck(c.name)}</div>
+                    {onNavigateStep && (
+                      c.name.startsWith("会计恒等式")
+                      || c.name.startsWith("投入侧恒等式")
+                      || c.name.startsWith("维度一致性")
+                    ) && (
+                      <div style={{ marginTop: 5 }}>
+                        <button
+                          onClick={() => onNavigateStep(1)}
+                          style={{ border: 0, background: "transparent", padding: 0, font: "inherit", color: "#4b47e0", cursor: "pointer", textDecoration: "underline" }}
+                        >
+                          前往步骤1浏览 Z / Y / OUT 原始切片核对 →
+                        </button>
+                      </div>
+                    )}
+                  </details>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

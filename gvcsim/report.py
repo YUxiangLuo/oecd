@@ -263,8 +263,8 @@ def build(
         f"- 生成日期:{date.today().isoformat()}\n",
         "## 一、数据与质检",
         f"覆盖 {snap.shape[0]} 个国家/地区、{len(years)} 个年份。"
-        f"质检结果见 data/processed/qc_{report_year}.json(维度一致性、会计恒等式、"
-        "里昂惕夫逆矩阵性质等)\n",
+        f"质检结果见 data/processed/qc_{report_year}.json(维度/索引、原始 OUT 双侧恒等式、"
+        "VA/TLS 定义域与里昂惕夫数值稳定性等)\n",
         "## 二、GVC 指标摘要",
         "**FVA 份额最高(WWZ 口径,出口中外国增加值占毛出口比重)**:"
         + "、".join(f"{country} ({value:.3f})" for country, value in top_fva.items()),

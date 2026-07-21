@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from gvcsim import api as api_mod
 from gvcsim import auth, shocks
 from gvcsim.api import _clean, app
-from gvcsim.artifacts import NETWORK_ALGORITHM, register_artifacts
+from gvcsim.artifacts import NETWORK_ALGORITHM, manifest_id, register_artifacts
 from gvcsim.classroom import db as classroom_db
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, processed_years
 
@@ -46,6 +46,24 @@ needs_raw_icio = pytest.mark.skipif(
     not any(RAW_DATA_DIR.glob("ICIO*_*.csv")),
     reason="缺少 OECD ICIO 原始文件",
 )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def bind_demo_assignment_to_current_test_manifest():
+    """测试库可跨本地测试运行保留，但 API 集成测试必须绑定本次产物。
+
+    生产环境故意禁止作业静默漂移到新 manifest；这里仅在专用测试库中显式
+    更新 demo assignment，避免上一次测试运行留下的内容 ID 让回归端点误报 409。
+    """
+    if not (PROCESSED_DIR / "panel_country.csv").exists():
+        return
+    scope = classroom_db.assignment_context("student")
+    if scope:
+        with classroom_db.conn() as connection:
+            connection.execute(
+                "UPDATE assignments SET manifest_id=%s WHERE id=%s",
+                (manifest_id(), scope["assignment_id"]),
+            )
 
 
 def test_steps_metadata():
@@ -452,7 +470,9 @@ def test_meta_and_indicators(ci_synthetic_contract):
 def test_qc_and_network():
     year = processed_years()[-1]
     qc = client.get(f"/api/qc/{year}").json()
-    assert len(qc) == 5
+    assert len(qc) == 7
+    assert any(check["name"].startswith("因子投入") for check in qc)
+    assert any(check["name"].startswith("投入侧恒等式") for check in qc)
 
     net = client.get(f"/api/viz/network/{year}").json()
     assert net["nodes"] and net["edges"]
