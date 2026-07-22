@@ -4,19 +4,15 @@
  * 与步骤 3 同为计算阶段三段式:讲清 → 分解数据表(先出数字)→ 动手拆解(验证四段
  * 精确加回总增加值 SVA)。保留 DecompositionDemo。
  */
-import { useState } from "react";
 import { api } from "../../../api";
 import { DecompositionDemo } from "../../../demos";
-import { EvidencePanel, VerifiedActionBox } from "../../../step-evidence";
-import type { IndicatorSchema, Meta, Step, StepEvidenceApi } from "../../../types";
+import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
 import { ChartStory, StepIntro } from "../viz/scaffold";
-import { IndicatorTable, type IndicatorEvidence } from "./indicator-table";
+import { IndicatorTable, type IndicatorStepState, useIndicatorControls } from "./indicator-table";
 
-export function Step5Production({ meta, step, evidence }: { meta: Meta; step: Step; evidence: StepEvidenceApi<IndicatorEvidence> }) {
-  const [year, setYear] = useState(meta.years.at(-1)!);
-  const [country, setCountry] = useState(meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "");
-  const [page, setPage] = useState(1);
+export function Step5Production({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }) {
+  const controls = useIndicatorControls(meta, state);
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
 
   return (
@@ -28,10 +24,9 @@ export function Step5Production({ meta, step, evidence }: { meta: Meta; step: St
         todo={[
           "先看生产分解表:选个国家,读它各行业的四段增加值",
           "再用「动手拆解」挑一个,看四段精确加回总增加值 SVA(误差≈0)",
-          "切换到第二个国家对比,留下学习证据",
+          "切换国家进行对比；当前选择会自动保存到实验记录",
         ]}
       />
-      <EvidencePanel evidence={evidence} title="本步要留下的证据:在生产分解表里切换国家,看过至少两个实体" />
 
       <ChartStory
         eyebrow="计算结果 · 先出数字"
@@ -41,9 +36,9 @@ export function Step5Production({ meta, step, evidence }: { meta: Meta; step: St
         find={<>换个国家看数字怎么变。小型开放经济体(如新加坡、卢森堡)的复杂 GVC 通常占比更高;下一节验证四段精确加回 SVA。</>}
       >
         <IndicatorTable
-          meta={meta} groupKey="production" schema={schema} evidence={evidence}
-          year={year} country={country} page={page}
-          onYear={setYear} onCountry={setCountry} onPage={setPage}
+          meta={meta} groupKey="production" schema={schema} state={state}
+          year={controls.year} country={controls.country} page={controls.page} interacted={controls.interacted}
+          onYear={controls.setYear} onCountry={controls.setCountry} onPage={controls.setPage}
         />
       </ChartStory>
 
@@ -57,22 +52,11 @@ export function Step5Production({ meta, step, evidence }: { meta: Meta; step: St
         <DecompositionDemo
           step={5}
           meta={meta}
-          primaryYear={year}
-          primaryCountry={country}
-          onPrimaryChange={(exampleYear, exampleCountry) => {
-            setYear(exampleYear);
-            setCountry(exampleCountry);
-            setPage(1);
-          }}
+          primaryYear={controls.year}
+          primaryCountry={controls.country}
+          onPrimaryChange={controls.setPrimary}
         />
       </ChartStory>
-      <VerifiedActionBox
-        step={step.n}
-        kind="indicator"
-        evidence={evidence}
-        ready={(evidence.data?.compared?.length ?? 0) >= 2 && (evidence.data?.observations?.length ?? 0) >= 2}
-        context={{ topic: step.topic, compared: evidence.data?.compared, last_view: evidence.data?.last_view, metric: evidence.data?.metric, observations: evidence.data?.observations }}
-      />
     </div>
   );
 }

@@ -331,11 +331,9 @@ def test_all_outcomes_reach_design_and_run_contract(monkeypatch: pytest.MonkeyPa
     assert calls == list(expected)
 
 
-def test_legacy_report_http_endpoint_is_gone():
-    resp = client.post("/api/report", json={"method": "工具变量"})
-    assert resp.status_code == 410
-    assert "classroom/report/generate" in resp.json()["detail"]
-    assert client.get("/api/report/2020").status_code == 410
+def test_legacy_report_http_endpoints_are_absent():
+    assert client.post("/api/report", json={"method": "工具变量"}).status_code == 404
+    assert client.get("/api/report/2020").status_code == 404
 
 
 def test_indicator_schema():
@@ -501,7 +499,7 @@ def test_controls_qc_endpoint():
 
 
 def test_shock_events(monkeypatch):
-    """当前面板能核验的事件保留完整教学元数据。"""
+    """当前面板有对应行的事件保留完整教学元数据。"""
     monkeypatch.setattr(api_mod.artifacts, "validate_source", lambda _path: None)
     metadata = shocks.events_metadata()
     note_columns = {
@@ -542,7 +540,7 @@ def test_shock_events(monkeypatch):
 
 
 def test_shock_events_hide_definitions_absent_from_current_panel(monkeypatch):
-    """UI 不能累加一个后端注定拒签、且页面内无法移除的事件。"""
+    """UI 不展示一个在右侧面板中没有对应数据行的事件。"""
     monkeypatch.setattr(api_mod.artifacts, "validate_source", lambda _path: None)
     visible = {
         "tariff": "美国232钢铝关税",
@@ -636,6 +634,7 @@ def test_regression_run(ci_synthetic_contract):
     resp = client.post("/api/regression/run", json={"outcome": "trade"})
     assert resp.status_code == 200
     body = resp.json()
+    assert body["run_id"]
     assert body["design"]["depvar"] == "FVA_share"
     assert body["design"]["granularity"] == "country_industry"
     assert body["design"]["method"] == "did"
@@ -693,6 +692,7 @@ def test_regression_placebo_endpoint():
     )
     assert resp.status_code == 200
     body = resp.json()
+    assert "placebo_run_id" not in body
     assert body["design"]["method"] == "did"
     assert body["placebo"]["policy_name"] == "treated×post"
     assert len(body["placebo"]["placebo_coefs"]) == 10

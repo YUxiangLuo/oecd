@@ -1,21 +1,8 @@
-"""第 16 步的实验报告:由服务端从学生的实验会话生成。
+"""第 16 步实验报告：由服务端从答题结果与自动保存的实验状态生成。
 
-HEAD 的第 16 步是一个独立的参数表单,重新生成一份通用系统报告,和前 15 步
-毫无关系;提交接口又直接收下客户端给的任意 Markdown。于是"报告已提交"只能
-证明有人上传过一段文字——不能证明学生做过课程、不能证明报告对应他保存的实验、
-更不能证明里面的回归还对得上当前数据。
-
-本模块给出闭环:
-
-  1. **前置门槛**:1–15 步的学习证据必须齐全,否则拒绝生成。
-  2. **服务端复估**:回归按学生保存的设定在服务端重跑,报告里的数字不来自客户端。
-  3. **绑定溯源**:report_key(内容指纹)、session revision、manifest_id 一起落库,
-     日后可以回答"这份报告由哪套数据、哪次会话、哪个设计生成"。
-  4. **学习证据**:真实操作与已通过的固定单选题答案一起进入报告，既可审计，
-     又不会把长篇自由文本当作完成门槛。
-
-报告正文是普通 GFM(表格 + 文字),复制到任何 Markdown 阅读器都完整可读,
-不依赖本系统的私有图表块。
+步骤 1–15 只以答题通过作为报告门槛。切片、筛选、图表和运行结果是可选的
+会话快照，不影响完成度。报告只复估当前学生真实运行过、且能绑定当前
+assignment/attempt/manifest 的回归；没有运行时明确记为未记录，不补跑默认模型。
 """
 
 from __future__ import annotations
@@ -28,27 +15,50 @@ from typing import Any, cast
 
 import pandas as pd
 
-from gvcsim import artifacts, evidence, quizzes
-from gvcsim.regression.design import RegressionDesign
+from gvcsim import artifacts, evidence, quizzes, trusted_evidence
+from gvcsim.regression.design import (
+    CONTROL_MODES,
+    GRANULARITIES,
+    METHODS,
+    PRICE_MODES,
+    SCENARIOS,
+    SHOCK_TYPES,
+    RegressionDesign,
+)
 from gvcsim.regression.panel import ROW_CODE, RegressionResult, run_design
 from gvcsim.report import _industry_network_top, _load_panel, _load_panel_file
 from gvcsim.session import SESSION_VERSION
+from gvcsim.shocks import SHOCK_LABELS
 from gvcsim.steps import STEPS
 
-# 生成报告前必须完成的步骤:除第 16 步自身外的全部。
 GATE_STEPS = tuple(n for n in sorted(evidence.STEP_LABS) if evidence.STEP_LABS[n] != "rep")
-
-# STEPS 的字典值是异构的,静态类型只能推出 object,这里在边界处收窄(同 evidence.py)。
-_STEP_TITLES: dict[int, str] = {cast(int, s["n"]): cast(str, s["title"]) for s in STEPS}
+_STEP_TITLES: dict[int, str] = {cast(int, item["n"]): cast(str, item["title"]) for item in STEPS}
 _STEP_OUTCOMES: dict[int, str] = {
-    cast(int, s["n"]): cast(str, s["regression_outcome"]) for s in STEPS if s.get("regression_outcome")
+    cast(int, item["n"]): cast(str, item["regression_outcome"]) for item in STEPS if item.get("regression_outcome")
 }
 
-_QC_DISPOSITION_LABELS = {
-    "stop": "停止分析",
-    "fix": "修正数值",
-    "disclose": "披露后继续",
+_REG_SETTING_ENUMS: dict[str, set[str]] = {
+    "granularity": set(GRANULARITIES),
+    "shockType": set(SHOCK_TYPES),
+    "method": set(METHODS),
+    "controlMode": set(CONTROL_MODES),
+    "priceMode": set(PRICE_MODES),
+    "scenario": set(SCENARIOS),
+    "weightMode": {"fixed_pretreatment", "contemporaneous"},
 }
+
+_SNAPSHOT_FIELDS = (
+    "slice",
+    "observation",
+    "year",
+    "chart",
+    "compared",
+    "metric",
+    "observations",
+    "drill",
+    "viewed_shock_types",
+    "viewed_events",
+)
 
 _STATUS_LABELS = {
     "ok": "可按课程口径解释",
@@ -59,11 +69,21 @@ _STATUS_LABELS = {
 
 
 class ReportGateError(RuntimeError):
-    """前 15 步证据不齐,不能生成报告。"""
+    """前 15 步答题未全部通过，不能生成报告。"""
 
     def __init__(self, missing: list[dict[str, Any]]):
         self.missing = missing
-        super().__init__("实验报告需要先完成第 1–15 步的学习证据")
+        super().__init__("实验报告需要先通过第 1–15 步的理解检查")
+
+
+class ReportReplayError(RuntimeError):
+    """已接受的学生回归无法按当前产物复估，报告必须停止生成。"""
+
+    def __init__(self, step: int, title: str, reason: str):
+        self.step = step
+        self.title = title
+        self.reason = reason
+        super().__init__(f"步骤 {step} · {title} 已记录回归，但{reason}；报告未生成，请稍后重试或联系管理员")
 
 
 @dataclass
@@ -71,36 +91,18 @@ class TeachingReport:
     report_key: str
     markdown: str
     provenance: dict[str, Any]
-    # 学生「另存为」时的建议文件名;带 report_key 便于教师把文件对回具体那份报告。
     suggested_filename: str
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "report_key": self.report_key,
-            "markdown": self.markdown,
-            "provenance": self.provenance,
-            "suggested_filename": self.suggested_filename,
-        }
 
 
 def check_gate(
     session: dict[str, Any], *, subject: str | None = None, require_trusted: bool = False
 ) -> list[dict[str, Any]]:
-    """返回未完成的前置步骤;空表示可以生成。"""
+    """返回尚未答题通过的步骤；空列表表示可以生成报告。"""
     blocked = []
     for step in GATE_STEPS:
         item = evidence.evaluate_step(step, session, subject=subject, require_trusted=require_trusted)
         if not item.complete:
             blocked.append({"step": step, "title": _STEP_TITLES.get(step, ""), "missing": item.missing})
-    qc_step = next(n for n, lab in evidence.STEP_LABS.items() if lab == "qc")
-    if _step_data(session, qc_step).get("disposition") == "stop":
-        blocked.append(
-            {
-                "step": qc_step,
-                "title": _STEP_TITLES.get(qc_step, ""),
-                "missing": ["你选择了停止分析；必须等待数据修复并重新完成 QC，不能生成或提交下游报告"],
-            }
-        )
     return blocked
 
 
@@ -110,27 +112,18 @@ def _step_data(session: dict[str, Any], step: int) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _settings_to_design(outcome: str, settings: dict[str, Any]) -> RegressionDesign:
-    """把学生保存的设定还原成回归设计。
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
-    这里只接受会话里存过的字段;缺失时回落到课程默认值,而不是猜测。
 
-    会话的 data 是客户端可写的不透明 blob,因此必须自己校验入参:
-    正常路径上 evidence._check_reg 已经把非法设定挡在门槛外(该步不算完成),
-    这里是第二道防线——宁可给出一个可执行的 409,也不要让伪造的设定
-    一路走到 SHOCK_SPECS[...] 抛 KeyError、变成一个无从解释的 500。
-    """
-    bad = evidence.invalid_regression_settings(settings)
-    if bad:
-        raise ReportGateError(
-            [
-                {
-                    "step": 0,
-                    "title": "保存的回归设定无法识别",
-                    "missing": [f"设定 {'、'.join(bad)} 不是合法取值;请回到对应回归步骤重新运行"],
-                }
-            ]
-        )
+def _settings_to_design(outcome: str, settings: dict[str, Any]) -> tuple[RegressionDesign, str] | None:
+    """把合法的客户端设置还原成设计；可选实验状态有问题时忽略，不阻塞报告。"""
+    for key, allowed in _REG_SETTING_ENUMS.items():
+        value = settings.get(key)
+        if value is not None and value not in allowed:
+            return None
+    if "interaction" in settings and not isinstance(settings["interaction"], bool):
+        return None
     kwargs: dict[str, Any] = {"outcome": outcome}
     for key, field in (
         ("granularity", "granularity"),
@@ -146,41 +139,106 @@ def _settings_to_design(outcome: str, settings: dict[str, Any]) -> RegressionDes
     if isinstance(settings.get("interaction"), bool):
         kwargs["interaction"] = settings["interaction"]
     try:
-        return RegressionDesign(**kwargs)
-    except ValueError as error:
-        # 枚举值都合法、但组合不成立(如 network outcome 配国家级粒度)。
-        raise ReportGateError([{"step": 0, "title": "保存的回归设定不成立", "missing": [str(error)]}]) from error
+        return RegressionDesign(**kwargs), str(settings.get("weightMode") or "fixed_pretreatment")
+    except (KeyError, ValueError):
+        return None
 
 
-def _rerun(session: dict[str, Any]) -> list[dict[str, Any]]:
-    """按学生保存的设定在服务端重跑四步回归。
+def _claims_to_design(outcome: str, claims: dict[str, Any]) -> tuple[RegressionDesign, str] | None:
+    design_data = _as_dict(claims.get("design"))
+    if design_data.get("outcome") != outcome:
+        return None
+    kwargs: dict[str, Any] = {"outcome": outcome}
+    for key in ("granularity", "shock_type", "method", "control_mode", "price_mode", "scenario"):
+        value = design_data.get(key)
+        if isinstance(value, str) and value:
+            kwargs[key] = value
+    if isinstance(design_data.get("interaction"), bool):
+        kwargs["interaction"] = design_data["interaction"]
+    if isinstance(design_data.get("exclude_row"), bool):
+        kwargs["exclude_row"] = design_data["exclude_row"]
+    try:
+        design = RegressionDesign(**kwargs)
+    except (KeyError, ValueError):
+        return None
+    weight_mode = str(design_data.get("weight_mode") or "fixed_pretreatment")
+    if weight_mode not in _REG_SETTING_ENUMS["weightMode"]:
+        return None
+    return design, weight_mode
 
-    报告里的系数、状态与结论一律来自这次重跑,而不是客户端上传的数字:
-    客户端可以显示任何东西,但它改不了服务端用同一份产物重算出的结果。
-    """
+
+def _saved_run_design(
+    session: dict[str, Any],
+    step: int,
+    outcome: str,
+    *,
+    subject: str | None,
+    require_trusted: bool,
+) -> tuple[RegressionDesign, str] | None:
+    data = _step_data(session, step)
+    run = _as_dict(data.get("run"))
+    if not run:
+        return None
+    settings = _as_dict(run.get("settings"))
+    if require_trusted:
+        if not subject:
+            return None
+        claims = trusted_evidence.verify_regression_run(
+            data.get("run_id"),
+            subject=subject,
+            manifest_id=str(session.get("manifest_id") or ""),
+            outcome=outcome,
+            settings=settings,
+            step=step,
+        )
+        return _claims_to_design(outcome, claims) if claims else None
+    return _settings_to_design(outcome, settings)
+
+
+def _rerun_recorded(session: dict[str, Any], *, subject: str | None, require_trusted: bool) -> list[dict[str, Any]]:
+    """只复估学生实际运行过且可信的回归；可信运行复估失败时 fail closed。"""
     runs: list[dict[str, Any]] = []
     for step, outcome in sorted(_STEP_OUTCOMES.items()):
-        data = _step_data(session, step)
-        settings = (data.get("run") or {}).get("settings") or {}
-        design = _settings_to_design(outcome, settings)
-        panel = _load_panel(design)
-        weight_mode = str(settings.get("weightMode") or "fixed_pretreatment")
-        if weight_mode == "contemporaneous":
-            required = {"tariff_shock_contemporaneous", "treated_contemporaneous"}
-            if design.shock_type != "tariff" or not required.issubset(panel.columns):
-                raise ReportGateError(
-                    [
-                        {
-                            "step": step,
-                            "title": _STEP_TITLES.get(step, ""),
-                            "missing": ["当期权重稳健性设定与当前产物不匹配"],
-                        }
-                    ]
-                )
-            panel = panel.copy()
-            panel[design.shock_col] = panel["tariff_shock_contemporaneous"]
-            panel[design.treated_col] = panel["treated_contemporaneous"]
-        result: RegressionResult = run_design(panel, design)
+        saved = _saved_run_design(
+            session,
+            step,
+            outcome,
+            subject=subject,
+            require_trusted=require_trusted,
+        )
+        if saved is None:
+            continue
+        design, weight_mode = saved
+        try:
+            panel = _load_panel(design)
+            if weight_mode == "contemporaneous":
+                required = {"tariff_shock_contemporaneous", "treated_contemporaneous"}
+                if design.shock_type != "tariff":
+                    raise ReportReplayError(
+                        step,
+                        _STEP_TITLES.get(step, ""),
+                        "记录的当期暴露权重不适用于该冲击类型",
+                    )
+                if not required.issubset(panel.columns):
+                    raise ReportReplayError(
+                        step,
+                        _STEP_TITLES.get(step, ""),
+                        "当前回归面板缺少当期暴露字段",
+                    )
+                panel = panel.copy()
+                panel[design.shock_col] = panel["tariff_shock_contemporaneous"]
+                panel[design.treated_col] = panel["treated_contemporaneous"]
+            result: RegressionResult = run_design(panel, design)
+        except ReportReplayError:
+            raise
+        except (KeyError, OSError, ValueError) as error:
+            if isinstance(error, OSError):
+                reason = "服务端无法读取当前回归面板"
+            elif isinstance(error, KeyError):
+                reason = "当前回归面板缺少必要字段"
+            else:
+                reason = "当前产物无法执行原回归设计"
+            raise ReportReplayError(step, _STEP_TITLES.get(step, ""), reason) from error
         runs.append(
             {
                 "step": step,
@@ -194,35 +252,28 @@ def _rerun(session: dict[str, Any]) -> list[dict[str, Any]]:
     return runs
 
 
+def _experiment_snapshots(session: dict[str, Any]) -> dict[str, Any]:
+    """只抽取报告会展示的实验快照，不包含答题和随机收据。"""
+    snapshots: dict[str, Any] = {}
+    for step in GATE_STEPS:
+        if evidence.STEP_LABS[step] in {"qc", "reg"}:
+            continue
+        data = _step_data(session, step)
+        snapshot = {key: data[key] for key in _SNAPSHOT_FIELDS if key in data}
+        if snapshot:
+            snapshots[str(step)] = snapshot
+    return snapshots
+
+
 def _fingerprint(session: dict[str, Any], manifest_id: str, runs: list[dict[str, Any]], student: str) -> str:
-    """报告指纹:同一份会话内容 + 同一套产物 → 同一个 report_key。
-
-    用内容而不是时间戳做键:学生重复点“生成”不会堆出一串实质相同的报告,
-    而任何一处证据或数据变化都会得到一个新的 key。
-    """
-
-    def semantic(value: Any) -> Any:
-        if isinstance(value, dict):
-            normalized = {
-                key: semantic(item)
-                for key, item in value.items()
-                if key not in {"evidence_id", "quiz_id", "run_id", "placebo_run_id"} and not key.endswith("_run_id")
-            }
-            # 一个只装随机收据的 checks 容器在去掉 *_run_id 后为空；它与未创建
-            # checks 的会话语义相同，不应让重复生成得到不同 report_key。
-            if normalized.get("checks") == {}:
-                normalized.pop("checks")
-            return normalized
-        if isinstance(value, list):
-            return [semantic(item) for item in value]
-        return value
-
+    """内容寻址：只纳入报告实际使用的答案、实验快照与回归设计。"""
     payload = json.dumps(
         {
             "manifest_id": manifest_id,
             "student": student,
-            "steps": {str(n): semantic(_step_data(session, n)) for n in GATE_STEPS},
-            "designs": [run["design"].equation() for run in runs],
+            "quizzes": {str(step): _step_data(session, step).get("quiz") for step in GATE_STEPS},
+            "snapshots": _experiment_snapshots(session),
+            "designs": [{"equation": run["design"].equation(), "weight_mode": run["weight_mode"]} for run in runs],
         },
         sort_keys=True,
         ensure_ascii=False,
@@ -231,69 +282,113 @@ def _fingerprint(session: dict[str, Any], manifest_id: str, runs: list[dict[str,
 
 
 def _quiz_lines(step: int, data: dict[str, Any]) -> list[str]:
-    """渲染一组已通过的题目和学生最终答案。"""
     selected = quizzes.selected_answers(step, data.get("quiz"))
     if not selected:
-        return ["- 理解检查:(未记录)", ""]
-    lines = ["**理解检查（已通过）**", ""]
+        return ["- 理解检查：未记录", ""]
+    lines: list[str] = []
     for index, item in enumerate(selected, start=1):
-        lines += [f"{index}. {item['question']}", f"   - 我的答案:{item['answer']}"]
+        lines += [f"{index}. {item['question']}", f"   - 答案：{item['answer']}"]
     lines.append("")
     return lines
 
 
-def _learning_evidence_sections(session: dict[str, Any]) -> list[str]:
-    """把描述性步骤的真实操作与最终选择题答案写入报告。"""
+def _quiz_sections(session: dict[str, Any]) -> list[str]:
     lines = [
-        "## 2. 我的描述性学习证据",
+        "## 2. 理解检查摘要",
         "",
-        "以下内容来自我逐步提交、由服务器复核的真实操作和理解检查。",
+        "以下是步骤 1–15 已通过的选择题答案；答题通过是这些步骤唯一的完成条件。",
         "",
     ]
     for step in GATE_STEPS:
-        lab = evidence.STEP_LABS[step]
-        if lab in {"qc", "reg"}:
-            continue
-        data = _step_data(session, step)
         lines += [f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}", ""]
-        if isinstance(data.get("slice"), dict):
-            slice_ = data["slice"]
-            lines.append(
-                "- 切片: "
-                + " / ".join(
-                    str(slice_.get(key) or "—")
-                    for key in ("year", "table", "row_country", "row_sector", "col_country", "col_sector")
-                )
+        lines += _quiz_lines(step, _step_data(session, step))
+    return lines
+
+
+def _snapshot_lines(data: dict[str, Any]) -> list[str]:
+    """把不可信的客户端快照压成有限、单行的 Markdown 文本。"""
+
+    def inline(value: Any, limit: int = 180) -> str:
+        text = " ".join(str(value).split()).replace("`", "ʼ").replace("|", "¦")
+        return text if len(text) <= limit else f"{text[: limit - 1]}…"
+
+    def render_list(value: Any, *, limit: int = 8) -> str:
+        if not isinstance(value, list):
+            return ""
+        items = [inline(item) for item in value[:limit]]
+        if len(value) > limit:
+            items.append(f"另 {len(value) - limit} 项")
+        return "、".join(items)
+
+    lines: list[str] = []
+    if isinstance(data.get("slice"), dict):
+        slice_ = data["slice"]
+        lines.append(
+            "- 查看切片："
+            + " / ".join(
+                inline(slice_.get(key) or "—")
+                for key in ("year", "table", "row_country", "row_sector", "col_country", "col_sector")
             )
-        if data.get("chart"):
-            lines.append(f"- 图表镜头: `{data['chart']}`")
-        if data.get("compared"):
-            lines.append("- 对比对象: " + "、".join(str(item) for item in data["compared"]))
-        if data.get("metric"):
-            lines.append(f"- 核查指标: `{data['metric']}`")
-        if isinstance(data.get("observations"), list):
-            rendered = []
-            for item in data["observations"]:
-                if isinstance(item, dict):
-                    entity = item.get("entity") or "·".join(
-                        str(item.get(key) or "") for key in ("country", "industry")
-                    ).strip("·")
-                    rendered.append(f"{entity} ({item.get('year', '—')}) = {item.get('value', '—')}")
-            if rendered:
-                lines.append("- 服务端复核数值: " + "；".join(rendered))
-        if data.get("viewed_events"):
-            lines.append("- 具体政策事件: " + "；".join(str(item) for item in data["viewed_events"]))
-        lines += _quiz_lines(step, data)
+        )
+    if isinstance(data.get("observation"), dict):
+        item = data["observation"]
+        lines.append(
+            f"- 选中单元格：{inline(item.get('row', '—'))} × {inline(item.get('column', '—'))}"
+            f" = {inline(item.get('value', '—'))}"
+        )
+    if isinstance(data.get("year"), int):
+        lines.append(f"- 当前年份：{data['year']}")
+    if data.get("chart"):
+        lines.append(f"- 图表视角：`{inline(data['chart'])}`")
+    compared = render_list(data.get("compared"))
+    if compared:
+        lines.append("- 对比对象：" + compared)
+    if data.get("metric"):
+        lines.append(f"- 查看指标：`{inline(data['metric'])}`")
+    if data.get("drill"):
+        lines.append(f"- 下钻对象：{inline(data['drill'])}")
+    if isinstance(data.get("observations"), list):
+        rendered = []
+        for item in data["observations"][:8]:
+            if not isinstance(item, dict):
+                continue
+            entity = item.get("entity") or "·".join(
+                inline(item.get(key) or "") for key in ("country", "industry")
+            ).strip("·")
+            rendered.append(f"{inline(entity)} ({inline(item.get('year', '—'))}) = {inline(item.get('value', '—'))}")
+        if rendered:
+            lines.append("- 自动保存的观察值：" + "；".join(rendered))
+    viewed_types = render_list(data.get("viewed_shock_types"))
+    if viewed_types:
+        labels = render_list([SHOCK_LABELS.get(str(item), str(item)) for item in data["viewed_shock_types"]])
+        lines.append("- 查看过的冲击类别：" + labels)
+    viewed_events = render_list(data.get("viewed_events"))
+    if viewed_events:
+        lines.append("- 打开过的政策事件：" + viewed_events)
+    return lines
+
+
+def _snapshot_sections(session: dict[str, Any]) -> list[str]:
+    lines = [
+        "## 3. 自动记录的实验过程",
+        "",
+        "本节来自学生实验会话自动保存的关键界面状态，不追踪逐次点击，也不作为步骤完成条件；这些快照未由服务端重算验证。",
+        "",
+    ]
+    count = 0
+    for raw_step, data in _experiment_snapshots(session).items():
+        step = int(raw_step)
+        rendered = _snapshot_lines(_as_dict(data))
+        if not rendered:
+            continue
+        count += 1
+        lines += [f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}", "", *rendered, ""]
+    if count == 0:
+        lines += ["未记录到可展示的实验快照。", ""]
     return lines
 
 
 def _top5_table(values: pd.Series, entity_header: str, value_header: str, digits: int) -> list[str]:
-    """Top5 用普通 GFM 表格呈现,不用私有图表块。
-
-    HEAD 这里用的是 ``gvcsim-chart`` fenced JSON,只有本项目的 renderer 认得;
-    报告一旦离开本系统(复制到 GitHub、教学平台、批改工具)就只剩一段 JSON。
-    表格损失了视觉冲击,但换来"在任何 Markdown 阅读器里都完整可读"。
-    """
     return [
         f"| {entity_header} | {value_header} |",
         "|---|---:|",
@@ -303,11 +398,6 @@ def _top5_table(values: pd.Series, entity_header: str, value_header: str, digits
 
 
 def _indicator_summary(year: int) -> list[str]:
-    """GVC 指标摘要:学生做完 11 步指标与可视化之后,报告里该有的描述性画面。
-
-    这是课程固定的全局截面(取最新可用年份),不随学生设定变化——它回答的是
-    "这些经济体在 GVC 里长什么样",是后面四个回归的背景,不是学生的实验结果。
-    """
     country_panel = _load_panel_file("panel_country.csv")
     snap = country_panel[country_panel["year"] == year].copy()
     snap = snap[snap["country"].astype(str) != ROW_CODE]
@@ -317,51 +407,60 @@ def _indicator_summary(year: int) -> list[str]:
         )
     snap = snap.set_index("country")
     industry_panel = _load_panel_file("panel_industry.csv")
-
-    top_fva = snap["FVA_share"].nlargest(5)
-    top_gvcpos = snap["GVCPs"].nlargest(5)
-    top_between = _industry_network_top(industry_panel, year, exclude_row=True)
-
     return [
-        f"## 3. GVC 指标摘要({year} 年截面)",
+        f"## 4. GVC 指标摘要（{year} 年截面）",
         "",
-        f"覆盖 {snap.shape[0]} 个经济体。以下是真实 OECD ICIO 计算出的全局画面,"
-        "是后面四个回归的背景;它不随我的设定变化。",
+        f"覆盖 {snap.shape[0]} 个经济体。以下是 OECD ICIO 计算出的全局背景，不代表学生执行了回归。",
         "",
-        "**FVA 份额最高**(WWZ 口径,出口中外国增加值占毛出口比重):",
+        "**FVA 份额最高**（出口中外国增加值占毛出口比重）：",
         "",
-        *_top5_table(top_fva, "经济体", "FVA 份额", 3),
-        "**GVC 位置指数最高**(WWYZ 口径,前向/后向 GVC 生产长度之比,越大越上游):",
+        *_top5_table(snap["FVA_share"].nlargest(5), "经济体", "FVA 份额", 3),
+        "**GVC 位置指数最高**（前向/后向 GVC 生产长度之比）：",
         "",
-        *_top5_table(top_gvcpos, "经济体", "GVCPs", 3),
-        "**全球国家×行业网络介数中心性最高**(供应链枢纽):",
+        *_top5_table(snap["GVCPs"].nlargest(5), "经济体", "GVCPs", 3),
+        "**全球国家×行业网络介数中心性最高**：",
         "",
-        *_top5_table(top_between, "国家×行业节点", "介数中心性", 1),
+        *_top5_table(_industry_network_top(industry_panel, year, exclude_row=True), "国家×行业节点", "介数中心性", 1),
     ]
 
 
-def _limitations(granularity_label: str) -> list[str]:
-    """结论与限制。
-
-    这一段是 HEAD 里写得最好的披露文字:方法学出处、控制变量的真实/mock 身份、
-    以及明确声明"本报告不输出什么"。它与证据闭环正交,重建时不该丢。
-    """
-    return [
-        "## 6. 结论与限制",
+def _qc_sections(qc_manifest: dict[str, Any]) -> list[str]:
+    lines = [
+        "## 1. 数据质检状态",
         "",
-        f"- 本报告由服务端从我自己的实验会话生成,前 15 步的学习证据齐全才允许产出(本次回归粒度:{granularity_label})。",
-        "- 冲击变量为**拟真演示面板**(事件与量级参考公开资料的手工编码,出口暴露度由 OECD ICIO 双边流向计算)。"
-        "即使未来接入真实 PIIE/WTO 数据与官方 HS→ICIO 映射,仍需论证冲击外生性、趋势可比性、"
-        "处理效应异质性并完成稳健性检验,才能形成研究结论。",
-        "- 控制变量支持 ICIO 内生派生与 WDI/IMF 风格宏观 mock,用于稳健性演示;"
-        "**GDP 平减指数为拟真 mock,不是官方价格指数**。论文级研究仍需接入真实 WDI/IMF/行业价格指数。",
-        "- 指标采用公开文献口径:WWZ (2013) 总贸易核算法、WWYZ (2017) 生产分解与生产长度,"
-        "以及 Gephi 有向全正边网络中心性;国家网络指标如实输出,网络回归仅使用存在节点差异的"
-        "国家–行业级结果;本报告不输出 exporter-importer-sector 双边矩阵明细。",
-        "- 被标为 `insufficient` 或 `invalid_design` 的估计已抑制 p 值、置信区间与显著性标记:"
-        "那不是“没有效应”,而是当前设计无法评估。",
+        "本节直接来自当前数据产物的发布质检，不要求学生另行选择或提交处置。",
         "",
     ]
+    groups: list[tuple[str, dict[str, Any]]] = []
+    for year, status in sorted(_as_dict(qc_manifest.get("years")).items()):
+        if isinstance(status, dict):
+            groups.append((str(year), status))
+    for key, label in (("controls", "控制变量"), ("shocks", "政策冲击")):
+        status = qc_manifest.get(key)
+        if isinstance(status, dict):
+            groups.append((label, status))
+    disclosures = 0
+    for label, status in groups:
+        fatal = [str(item) for item in status.get("fatal") or []]
+        warning = [str(item) for item in status.get("warning") or []]
+        disclosure = [str(item) for item in status.get("disclosure") or []]
+        if not (fatal or warning or disclosure or status.get("override")):
+            continue
+        disclosures += 1
+        lines.append(f"### {label}")
+        lines.append("")
+        if status.get("override"):
+            lines.append("- **包含显式 QC override；下游结果必须持续披露。**")
+        if fatal:
+            lines.append("- Fatal：" + "、".join(fatal))
+        if warning:
+            lines.append("- Warning：" + "、".join(warning))
+        if disclosure:
+            lines.append("- Disclosure：" + "、".join(disclosure))
+        lines.append("")
+    if disclosures == 0:
+        lines += ["当前发布清单没有需要额外披露的 QC 项。", ""]
+    return lines
 
 
 def _coef_rows(result: RegressionResult) -> list[str]:
@@ -373,56 +472,19 @@ def _coef_rows(result: RegressionResult) -> list[str]:
     return rows
 
 
-def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], provenance: dict[str, Any]) -> str:
-    qc = _step_data(session, next(n for n, lab in evidence.STEP_LABS.items() if lab == "qc"))
-    years = provenance["artifact"]["years"]
-    lines: list[str] = [
-        "# 贸易政策冲击对全球价值链结构的影响",
+def _regression_sections(runs: list[dict[str, Any]]) -> list[str]:
+    lines = [
+        "## 5. 学生实际运行的教学回归",
         "",
-        f"学生:{student}  ·  内容版本:`{provenance['session_fingerprint']}`",
-        "",
-        "> **数据边界**:结果变量与网络指标来自真实 OECD ICIO "
-        f"({years[0]}–{years[-1]});"
-        "政策冲击(关税/制裁/出口管制)为**确定性 mock**,以真实事件为原型手工编码。"
-        "因此本报告可以用来练习识别与推断,**不构成任何现实政策结论**。",
-        "",
-        "## 1. 数据质检与处置",
+        "这里只收录与当前学生、作业尝试和数据版本匹配的运行，并由服务端按原设计重新估计。未运行的步骤不会自动补跑默认模型。",
         "",
     ]
-    qc_manifest = provenance["artifact"].get("qc") or {}
-    overridden = [
-        f"{year}: {'、'.join(status.get('fatal') or [])}"
-        for year, status in (qc_manifest.get("years") or {}).items()
-        if isinstance(status, dict) and status.get("override")
-    ]
-    if overridden:
-        lines += [
-            "> **QC override 持续披露**:以下 fatal 检查经显式 override 后发布；所有下游数字和推断均受其限制。",
-            "",
-            *[f"> - {item}" for item in overridden],
-            "",
-        ]
-    disposition = _QC_DISPOSITION_LABELS.get(str(qc.get("disposition")), "(未记录)")
-    lines += [
-        f"面对质检结果,我的处置是:**{disposition}**。",
-        "",
-    ]
-    if qc.get("failed_checks"):
-        lines += ["当前失败检查:", "", *[f"- {item}" for item in qc["failed_checks"]], ""]
-    if qc.get("remediation"):
-        lines += [f"修正规则:{qc['remediation']}  ·  服务端复检:{'通过' if qc.get('retest_passed') else '未通过'}", ""]
-    if qc.get("disclosures"):
-        lines += ["持续披露:", "", *[f"- {item}" for item in qc["disclosures"]], ""]
-    qc_step = next(n for n, lab in evidence.STEP_LABS.items() if lab == "qc")
-    lines += _quiz_lines(qc_step, qc)
-    lines += _learning_evidence_sections(session)
-    lines += _indicator_summary(int(years[-1]))
-    lines += [
-        "## 4. 四步教学实证回归(服务端复估)",
-        "",
-        "下表由服务端按我在各步保存的设定**重新估计**得到,不是界面上的数字。",
-        "",
-    ]
+    run_steps = {int(run["step"]) for run in runs}
+    for step in sorted(_STEP_OUTCOMES):
+        if step not in run_steps:
+            lines.append(f"- 步骤 {step} · {_STEP_TITLES.get(step, '')}：未记录学生运行。")
+    if len(run_steps) < len(_STEP_OUTCOMES):
+        lines.append("")
 
     for run in runs:
         result: RegressionResult = run["result"]
@@ -431,68 +493,89 @@ def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], p
         lines += [
             f"### 步骤 {run['step']} · {run['title']}",
             "",
-            f"- 被解释变量:{design.depvar_label}",
-            f"- 政策冲击:{design.shock_type_label}  ·  方法:{design.method_label}  ·  粒度:{design.granularity_label}",
-            f"- 控制:{design.control_mode_label}  ·  样本:{design.sample_filter}",
-            f"- 暴露权重:{'首次处理前固定（主口径）' if run['weight_mode'] == 'fixed_pretreatment' else '当期贸易结构（仅稳健性）'}",
-            f"- **设计有效性:{status} — {_STATUS_LABELS.get(status, status)}**",
+            "- 来源：学生实际运行，服务端已校验并复估",
+            f"- 被解释变量：{design.depvar_label}",
+            f"- 政策冲击：{design.shock_type_label}  ·  方法：{design.method_label}  ·  粒度：{design.granularity_label}",
+            f"- 控制：{design.control_mode_label}  ·  样本：{design.sample_filter}",
+            f"- 暴露权重：{'首次处理前固定（主口径）' if run['weight_mode'] == 'fixed_pretreatment' else '当期贸易结构（仅稳健性）'}",
+            f"- **设计有效性：{status} — {_STATUS_LABELS.get(status, status)}**",
             "",
             "| 变量 | 系数 | 聚类标准误 | 95% 置信区间 | p | 显著性 |",
             "|---|---:|---:|---:|---:|:---:|",
             *_coef_rows(result),
             "",
-            f"N = {result.n_obs};聚类 {result.n_clusters} 组"
+            f"N = {result.n_obs}；聚类 {result.n_clusters} 组"
             + (
-                f"(处理聚类 {result.support['treated_clusters']}、对照聚类 {result.support['untreated_clusters']})"
+                f"（处理聚类 {result.support['treated_clusters']}、对照聚类 {result.support['untreated_clusters']}）"
                 if result.support
                 else ""
             ),
             "",
         ]
         if result.status_reasons:
-            lines += ["设计问题:", ""] + [f"- {reason}" for reason in result.status_reasons] + [""]
+            lines += ["设计问题：", "", *[f"- {reason}" for reason in result.status_reasons], ""]
         support = result.support or {}
         lines += [
-            "结构化设计预检:",
+            "结构化设计预检：",
             "",
-            f"- 处理聚类 / 永不处理聚类: {support.get('treated_clusters', '—')} / {support.get('untreated_clusters', '—')}",
-            f"- 处理撤销实体: {len(support.get('reversal_entities') or [])}；占处理后个体年 {support.get('reversal_share', 0):.2%}",
-            f"- 推断是否抑制: {'是' if support.get('suppress_inference') else '否'}",
+            f"- 处理聚类 / 永不处理聚类：{support.get('treated_clusters', '—')} / {support.get('untreated_clusters', '—')}",
+            f"- 处理撤销实体：{len(support.get('reversal_entities') or [])}；占处理后个体年 {support.get('reversal_share', 0):.2%}",
+            f"- 推断是否抑制：{'是' if support.get('suppress_inference') else '否'}",
             "",
         ]
         if result.support and result.support.get("untreated_clusters") == 0:
-            lines += ["- **预检警告**:没有永不处理聚类；结论仅依赖错位处理时点。", ""]
+            lines += ["- **预检警告**：没有永不处理聚类；结论仅依赖错位处理时点。", ""]
         if design.outcome == "network":
-            lines += ["- **预检警告**:网络节点间存在干扰/外溢，传统 SUTVA 不成立。", ""]
-        if run["step"] == 12:
+            lines += ["- **预检警告**：网络节点间存在干扰/外溢，传统 SUTVA 不成立。", ""]
+        if result.marginal_effects:
             lines += [
-                "- 必做对照:无控制 baseline 与加入控制模型均有服务端 run event。",
+                "服务端按完整协方差矩阵计算的条件边际效应：",
                 "",
+                "| 政策项 | 基期 GVC 水平 | 中心化值 | 效应 | 聚类标准误 | 95% 置信区间 |",
+                "|---|---|---:|---:|---:|---:|",
             ]
-        elif run["step"] == 13:
-            lines += [
-                "- 必做对照:无交互 baseline 与 GVC 交互模型均有服务端 run event。",
-                "",
-            ]
-            if result.marginal_effects:
-                lines += [
-                    "服务端按完整协方差矩阵计算的条件边际效应:",
-                    "",
-                    "| 政策项 | 基期 GVC 水平 | 中心化值 | 效应 | 聚类标准误 | 95% 置信区间 |",
-                    "|---|---|---:|---:|---:|---:|",
-                ]
-                for item in result.marginal_effects:
-                    interval = (
-                        f"[{item['ci_low']:.4f}, {item['ci_high']:.4f}]" if item.get("ci_low") is not None else "—"
-                    )
-                    lines.append(
-                        f"| {item['policy_term']} | {item['label']} | {item['baseline_gvc_centered']:.4f} | "
-                        f"{item['effect']:.4f} | {item['se']:.4f} | {interval} |"
-                    )
-                lines.append("")
-        elif run["step"] == 15:
-            lines += ["- 必做安慰剂:服务端 event 已校验并绑定当前 attempt。", ""]
-        lines += _quiz_lines(run["step"], _step_data(session, run["step"]))
+            for item in result.marginal_effects:
+                interval = f"[{item['ci_low']:.4f}, {item['ci_high']:.4f}]" if item.get("ci_low") is not None else "—"
+                lines.append(
+                    f"| {item['policy_term']} | {item['label']} | {item['baseline_gvc_centered']:.4f} | "
+                    f"{item['effect']:.4f} | {item['se']:.4f} | {interval} |"
+                )
+            lines.append("")
+    return lines
+
+
+def _limitations(runs: list[dict[str, Any]]) -> list[str]:
+    granularities = "、".join(sorted({run["design"].granularity_label for run in runs})) or "未记录学生回归"
+    return [
+        "## 7. 结论与限制",
+        "",
+        f"- 本报告由服务端从当前实验会话生成；前 15 步答题通过后即可产出（回归粒度：{granularities}）。",
+        "- 自动保存的筛选和观察值只是实验快照，不是完成凭证，也不应被解释为因果证据。",
+        "- 冲击变量为**拟真演示面板**；即使未来接入真实事件数据，仍需论证冲击外生性、趋势可比性、处理效应异质性并完成稳健性检验。",
+        "- 控制变量支持 ICIO 内生派生与 WDI/IMF 风格宏观 mock；**GDP 平减指数为拟真 mock，不是官方价格指数**。",
+        "- 指标采用公开文献口径：WWZ (2013) 总贸易核算、WWYZ (2017) 生产分解与生产长度，以及 Gephi-compatible 有向网络中心性；本报告不输出 exporter-importer-sector 双边矩阵明细。",
+        "- 被标为 `insufficient` 或 `invalid_design` 的估计已抑制推断量；这不代表“没有效应”。",
+        "",
+    ]
+
+
+def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], provenance: dict[str, Any]) -> str:
+    years = provenance["artifact"]["years"]
+    lines: list[str] = [
+        "# 贸易政策冲击对全球价值链结构的影响",
+        "",
+        f"学生：{student}  ·  内容版本：`{provenance['session_fingerprint']}`",
+        "",
+        "> **数据边界**：结果变量与网络指标来自真实 OECD ICIO "
+        f"（{years[0]}–{years[-1]}）；政策冲击为确定性教学 mock。"
+        "本报告用于练习识别与推断，不构成现实政策结论。",
+        "",
+    ]
+    lines += _qc_sections(_as_dict(provenance["artifact"].get("qc")))
+    lines += _quiz_sections(session)
+    lines += _snapshot_sections(session)
+    lines += _indicator_summary(int(years[-1]))
+    lines += _regression_sections(runs)
 
     build = provenance["artifact"].get("build") or {}
     runtime = build.get("runtime") or {}
@@ -506,26 +589,23 @@ def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], p
         ]
     )
     lines += [
-        "## 5. 溯源与状态",
+        "## 6. 溯源与状态",
         "",
         "| 项 | 值 |",
         "|---|---|",
         f"| 报告指纹 report_key | `{provenance['report_key']}` |",
         f"| 产物清单 manifest_id | `{provenance['manifest_id']}` |",
         f"| 会话契约版本 | `{provenance['session_version']}` |",
-        f"| 报告状态 | `{provenance['status']}`（提交后由 submission 实体另行记录） |",
-        f"| 产物 schema / 网络算法 | `{provenance['artifact']['schema_version']}` / "
-        f"`{provenance['artifact']['network_algorithm']}` |",
+        f"| 报告状态 | `{provenance['status']}` |",
+        f"| 产物 schema / 网络算法 | `{provenance['artifact']['schema_version']}` / `{provenance['artifact']['network_algorithm']}` |",
         f"| 构建 Git commit / dirty | `{build.get('git_commit', '—')}` / `{build.get('git_dirty', '—')}` |",
         f"| 影响产物的 source tree SHA-256 | `{build.get('source_tree_sha256', '—')}` |",
         f"| 构建运行环境 | {runtime_summary} |",
         "",
-        "同一份会话内容与同一套数据产物会得到同一个 report_key;任何一处证据或数据发生变化,report_key 都会随之改变。",
+        "同一组答题结果、报告中展示的实验快照、实际回归设计与数据产物会得到同一个 report_key。",
         "",
     ]
-    # 四步回归的粒度按学生自己的设定;它们共用同一套设定时直接报它。
-    granularity_labels = {run["design"].granularity_label for run in runs}
-    lines += _limitations("、".join(sorted(granularity_labels)))
+    lines += _limitations(runs)
     return "\n".join(lines)
 
 
@@ -537,7 +617,7 @@ def build(
     subject: str | None = None,
     require_trusted: bool = False,
 ) -> TeachingReport:
-    """从实验会话生成报告;前 15 步证据不齐时抛 ReportGateError。"""
+    """从实验会话生成报告；前 15 步答题未通过时抛 ReportGateError。"""
     blocked = check_gate(session, subject=subject, require_trusted=require_trusted)
     if blocked:
         raise ReportGateError(blocked)
@@ -545,15 +625,14 @@ def build(
     manifest_id = artifacts.manifest_id()
     if session.get("manifest_id") != manifest_id:
         raise ReportGateError(
-            [{"step": 0, "title": "数据产物已更新", "missing": ["实验会话对应的产物已过期,请重新完成实验后再生成报告"]}]
+            [{"step": 0, "title": "数据产物已更新", "missing": ["实验会话对应的产物已过期，请重新答题后再生成报告"]}]
         )
 
-    runs = _rerun(session)
+    runs = _rerun_recorded(session, subject=subject, require_trusted=require_trusted)
     report_key = _fingerprint(session, manifest_id, runs, student)
     contract = artifacts.artifact_contract()
     from gvcsim.config import processed_years
 
-    manifest_provenance = artifacts.manifest_provenance()
     provenance = {
         "report_key": report_key,
         "session_fingerprint": report_key,
@@ -562,7 +641,7 @@ def build(
         "session_version": SESSION_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "status": "generated",
-        "artifact": {**contract, "years": processed_years(), **manifest_provenance},
+        "artifact": {**contract, "years": processed_years(), **artifacts.manifest_provenance()},
         "runs": [
             {
                 "step": run["step"],
@@ -570,6 +649,7 @@ def build(
                 "design": run["design"].equation(),
                 "status": run["result"].status,
                 "weight_mode": run["weight_mode"],
+                "source": "student_run",
             }
             for run in runs
         ],

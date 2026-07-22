@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 
-QUIZ_VERSION = "course-quiz-v1"
+QUIZ_VERSION = "course-quiz-v2"
 
 
 def _option(option_id: str, label: str) -> dict[str, str]:
@@ -383,7 +383,7 @@ def validate_bank() -> None:
     if sorted(STEP_QUIZZES) != list(range(1, 16)):
         raise RuntimeError("题库必须完整覆盖步骤 1–15")
     if sum(len(items) for items in STEP_QUIZZES.values()) != 21:
-        raise RuntimeError("course-quiz-v1 必须恰好包含 21 题")
+        raise RuntimeError(f"{QUIZ_VERSION} 必须恰好包含 21 题")
     ids = [str(question["id"]) for questions in STEP_QUIZZES.values() for question in questions]
     if len(ids) != len(set(ids)):
         raise RuntimeError("题目 ID 必须全局唯一")

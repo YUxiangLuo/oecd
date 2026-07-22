@@ -152,11 +152,10 @@ def test_country_report_skips_degenerate_network_regression(monkeypatch):
     reason="需要 gvcsim compute 产出的面板",
 )
 def test_event_chart_omits_ci_when_inference_is_suppressed():
-    """遗留 /api/report 端点不能因为“推断被抑制”而崩。
+    """批处理报告不能因为“推断被抑制”而崩。
 
     p/ci 变成 Optional 后,_coef_table 更新了、_event_chart 漏了:
-    float(None) 会让 POST /api/report {"shock_type":"sanctions","method":"event_study"}
-    直接 500(shock_type/method 都是客户端传入的合法枚举)。
+    float(None) 会让合法的 sanctions + event_study 批处理报告直接失败。
     """
     doc = report.build(shock_type="sanctions", method="event_study")
     # 制裁 + 吸收型事件研究 → invalid_design → 区间被抑制 → 图里不能出现 ci 字段

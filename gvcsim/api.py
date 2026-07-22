@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from gvcsim import artifacts, auth, config as app_config
-from gvcsim import evidence, quizzes, shocks, trusted_evidence
+from gvcsim import quizzes, shocks, trusted_evidence
 from gvcsim.shocks import SHOCK_LABELS, SHOCK_TARIFF
 from gvcsim.artifacts import (
     ArtifactContractError,
@@ -510,11 +510,6 @@ def steps():
             }
             for step in STEPS
         ],
-        # 证据规则来自服务端判定模块,前端只据此显示提示与计数,不另写一套阈值:
-        # 两边一旦漂移,界面会说“已达标”而服务端仍判未完成。
-        "evidence_rules": {
-            "required_shock_types": list(evidence.REQUIRED_SHOCK_TYPES),
-        },
     }
 
 
@@ -724,13 +719,12 @@ def _shock_view_columns(shock_type: str) -> tuple[str, str, str, str, str]:
 
 @app.get("/api/shocks/events")
 def shock_events():
-    """只展示能由当前冲击面板核验的事件。
+    """只展示在当前冲击面板中有对应数据行的事件。
 
     ``events_metadata`` 是事件定义全集，而面板只把每个国家-行业-年份格中
     贡献最大的事件写进对应 ``*_note`` 列。若把定义全集原样交给学生，某些
-    被更大贡献覆盖的事件虽然可点击，却永远无法通过第 11 步的服务端签发。
-    因此可见列表必须从当前 release 的权威面板反向筛选；后端签发也检查同一
-    组 note 列，二者不会再漂移。
+    被更大贡献覆盖的事件虽然可点击，右侧却找不到与之对应的冲击行。可见列表
+    因此从当前 release 的权威面板反向筛选，保证事件列表与面板内容一致。
     """
     artifacts.validate_source(Path(shocks.__file__))
     frame = _read_shocks()
@@ -843,19 +837,6 @@ class RegressionRequest(BaseModel):
 class PlaceboRequest(RegressionRequest):
     n_draws: int = Field(default=80, ge=10, le=200)
     seed: int = Field(default=2026, ge=0, le=2_147_483_647)
-
-
-class ReportRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    year: int | None = None
-    granularity: str = GRANULARITY_COUNTRY_INDUSTRY
-    shock_type: str = SHOCK_TARIFF
-    method: str = METHOD_DID
-    control_mode: str = CONTROL_MODE_NONE
-    interaction: bool = False
-    price_mode: str = PRICE_MODE_NOMINAL
-    exclude_row: bool = True
 
 
 @app.get("/api/regression/options")
@@ -1135,7 +1116,7 @@ def regression_placebo(req: PlaceboRequest, request: Request):
     if manifest_id() != run_manifest:
         raise HTTPException(status_code=409, detail="安慰剂期间数据产物已切换，请重新运行")
     event_payload_sha256 = trusted_evidence.digest({"design": design_info, "result": placebo})
-    event = classroom_db.record_evidence_event(
+    classroom_db.record_evidence_event(
         subject,
         _regression_step(design.outcome),
         "placebo",
@@ -1143,37 +1124,11 @@ def regression_placebo(req: PlaceboRequest, request: Request):
         event_payload_sha256,
         {"design": design_info, "result_sha256": trusted_evidence.digest(placebo)},
     )
-    placebo_run_id = trusted_evidence.issue_regression_run(
-        subject=subject,
-        manifest_id=run_manifest,
-        design=design_info,
-        result=placebo,
-        event=event,
-        kind="placebo",
-    )
     return {
-        "placebo_run_id": placebo_run_id,
         "design": design_info,
         "placebo": placebo,
         "disclaimer": "安慰剂检验基于拟真演示冲击数据,用于教学展示随机化反事实分布",
     }
-
-
-@app.get("/api/report/{year}")
-def report(year: int):
-    del year
-    raise HTTPException(
-        status_code=410,
-        detail="该无学习证据门槛的报告端点已停用；学生请使用 /api/classroom/report/generate，批处理请使用 CLI",
-    )
-
-
-@app.post("/api/report")
-def report_custom():
-    raise HTTPException(
-        status_code=410,
-        detail="该无学习证据门槛的报告端点已停用；学生请使用 /api/classroom/report/generate，批处理请使用 CLI",
-    )
 
 
 # ---------------------------------------------------------------- 教学面板(班级/学生/评阅/公告)

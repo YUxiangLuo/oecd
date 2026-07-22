@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
-import type { DbMeta, DbSlice, DbTableKind, QuizStepEvidence, StepEvidenceApi } from "../../types";
-import { EvidencePanel, VerifiedActionBox } from "../../step-evidence";
+import type { DbMeta, DbSlice, DbTableKind, QuizCompletionState, StepStateApi } from "../../types";
 import { countryLabel, sectorLabel } from "../../viz";
 import { fmtDb, Pager, useAsync } from "../shared";
 
@@ -101,8 +100,8 @@ function DatabaseGuide({ meta }: { meta: DbMeta }) {
 }
 
 /** 步骤1:本地 OECD ICIO 原始表浏览 */
-/** 第 1 步的学习证据:真正取回了一个有效切片。 */
-interface DbEvidence extends QuizStepEvidence, Record<string, unknown> {
+/** 自动保存学生主动查看过的切片与单元格，供恢复界面和生成报告。 */
+interface DbStepState extends QuizCompletionState, Record<string, unknown> {
   slice?: {
     year: number;
     table: string;
@@ -118,7 +117,56 @@ interface DbEvidence extends QuizStepEvidence, Record<string, unknown> {
   };
 }
 
-export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
+interface DbSliceSelection {
+  year: number;
+  table: DbTableKind;
+  rowCountry: string;
+  colCountry: string;
+  rowSector: string;
+  colSector: string;
+}
+
+export function dbSliceSnapshot(selection: DbSliceSelection): NonNullable<DbStepState["slice"]> {
+  return {
+    year: selection.year,
+    table: selection.table,
+    row_country: selection.rowCountry,
+    col_country: selection.table === "accounts" ? "" : selection.colCountry,
+    row_sector: selection.rowSector,
+    col_sector: selection.table === "accounts" ? "" : selection.colSector,
+  };
+}
+
+export function captureDbObservation(
+  selection: DbSliceSelection,
+  observation: NonNullable<DbStepState["observation"]>,
+): Pick<DbStepState, "slice" | "observation"> {
+  return { slice: dbSliceSnapshot(selection), observation };
+}
+
+export function restoreDbSlice(meta: DbMeta, saved?: DbStepState["slice"]) {
+  if (!saved || !meta.years.includes(saved.year)) return null;
+  const table = DB_TABLES.some((item) => item.key === saved.table)
+    ? saved.table as DbTableKind
+    : null;
+  if (!table || !meta.countries.includes(saved.row_country)) return null;
+  if (table !== "accounts" && !meta.countries.includes(saved.col_country)) return null;
+  const rowSector = saved.row_sector ?? "";
+  if (rowSector && !meta.sectors.includes(rowSector)) return null;
+  const colSector = saved.col_sector ?? "";
+  const allowedColumns = table === "y" ? meta.final_demand_categories : meta.sectors;
+  if (table !== "accounts" && colSector && !allowedColumns.includes(colSector)) return null;
+  return {
+    year: saved.year,
+    table,
+    rowCountry: saved.row_country,
+    colCountry: table === "accounts" ? "" : saved.col_country,
+    rowSector,
+    colSector: table === "accounts" ? "" : colSector,
+  };
+}
+
+export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
   const { data: meta, error: metaError } = useAsync<DbMeta>(() => api.dbMeta(), []);
   const [table, setTable] = useState<DbTableKind>("z");
   const [year, setYear] = useState<number | null>(null);
@@ -135,9 +183,23 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
     setColCountry((current) => current || (meta.countries.includes("USA") ? "USA" : meta.countries[0] ?? ""));
   }, [meta]);
 
-  // 本步的证据必须是学生**主动选定**的切片。页面自带默认切片(CHN×USA×最新年)
-  // 并会自动载入,如果照单记为证据,那就等于“打开这一步就算完成”——正是要消灭的东西。
+  // 默认切片不写入实验快照；学生主动调整后才保存，避免报告声称他做过未发生的探索。
   const [pickedSlice, setPickedSlice] = useState(false);
+  const restoredSlice = useRef(false);
+
+  useEffect(() => {
+    if (!meta || pickedSlice || restoredSlice.current || state.data === undefined) return;
+    restoredSlice.current = true;
+    const restored = restoreDbSlice(meta, state.data.slice);
+    if (!restored) return;
+    setYear(restored.year);
+    setTable(restored.table);
+    setRowCountry(restored.rowCountry);
+    setColCountry(restored.colCountry);
+    setRowSector(restored.rowSector);
+    setColSector(restored.colSector);
+    setPage(1);
+  }, [meta, pickedSlice, state.data]);
 
   // 换筛选条件时在事件里直接回到第 1 页,避免先用旧页码发一次多余请求
   const withPageReset = <T,>(set: (v: T) => void) => (v: T) => {
@@ -152,40 +214,45 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
   const pickColSector = withPageReset(setColSector);
 
   const ready = Boolean(meta && year && rowCountry && (table === "accounts" || colCountry));
-  const { data: slice, error: sliceError } = useAsync<DbSlice | null>(
-    () => (ready && year
-      ? api.dbSlice({
+  const sliceKey = JSON.stringify([
+    ready, year, table, rowCountry, colCountry, rowSector, colSector, page,
+  ]);
+  const { data: sliceResult, error: sliceError } = useAsync<{ sliceKey: string; slice: DbSlice | null }>(
+    async () => ({
+      sliceKey,
+      slice: ready && year
+        ? await api.dbSlice({
+          year,
+          table,
+          rowCountry,
+          colCountry: table === "accounts" ? undefined : colCountry,
+          rowSector,
+          colSector: table === "accounts" ? undefined : colSector,
+          page,
+          pageSize: 25,
+        })
+        : null,
+    }),
+    [sliceKey],
+  );
+  const slice = sliceResult?.sliceKey === sliceKey ? sliceResult.slice : null;
+
+  // 只有主动选择且数据加载成功后才写入自动快照。
+  useEffect(() => {
+    if (!slice || !year || !pickedSlice) return;
+    state.save({
+      slice: dbSliceSnapshot({
         year,
         table,
         rowCountry,
-        colCountry: table === "accounts" ? undefined : colCountry,
+        colCountry,
         rowSector,
-        colSector: table === "accounts" ? undefined : colSector,
-        page,
-        pageSize: 25,
-      })
-      : Promise.resolve(null)),
-    [ready, year, table, rowCountry, colCountry, rowSector, colSector, page],
-  );
-
-  // 证据要的是“学生自己选定的切片、并且真的取回了数据”:
-  // 因此既要有主动选择(pickedSlice),又要等切片加载成功。
-  useEffect(() => {
-    if (!slice || !year || !pickedSlice) return;
-    evidence.save({
-      slice: {
-        year,
-        table,
-        row_country: rowCountry,
-        col_country: table === "accounts" ? "" : colCountry,
-        row_sector: rowSector,
-        col_sector: table === "accounts" ? "" : colSector,
-      },
-      // 单元格必须属于当前成功返回的切片；任何筛选/翻页变化都会要求重选。
+        colSector,
+      }),
+      // 单元格必须属于当前成功返回的切片；筛选变化后清空旧选择。
       observation: undefined,
-      evidence_id: "",
     });
-    // evidence 每次渲染都是新对象,不入依赖;切片本身变化即代表证据变化。
+    // state 每次渲染都是新对象，不入依赖。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slice, year, table, rowCountry, colCountry, pickedSlice]);
 
@@ -204,7 +271,7 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
     (slice?.rows ?? []).reduce((sum, row) => sum + (typeof row[column] === "number" ? row[column] : 0), 0),
   ]));
   const showSummaries = table !== "accounts" && Boolean(slice?.row_summaries?.length);
-  const selectedObservation = evidence.data?.observation;
+  const selectedObservation = state.data?.observation;
 
   if (!meta.years.length) {
     return (
@@ -218,7 +285,6 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
 
   return (
     <div>
-      <EvidencePanel evidence={evidence} title="本步要留下的证据：主动载入切片，并解释一个具体单元格或账户数值" />
       <div className="db-summary">
         <span>原始年份 {meta.years[0]}-{meta.years.at(-1)}</span>
         <span>{meta.countries.length} 个经济体</span>
@@ -286,7 +352,7 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
         <b>怎么读这张表：</b>{HOW_TO_READ[table]}
       </div>
       <div className="tipbox" style={{ marginBottom: 10 }}>
-        <b>留下可复核数据点：</b>点击表中任意一个数值单元格。系统会把它的行、列与原始数值绑定到本步证据；切换筛选或翻页后需要重新选择。
+        <b>记录一个观察值：</b>点击任意数值单元格，系统会自动保存它的行、列与数值，并在实验报告中作为可选实验快照展示。
       </div>
       <div className="table-wrap bounded-data-table">
         <table className="data-table db-table">
@@ -336,11 +402,21 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
                           type="button"
                           className={`db-observation-cell${selected ? " selected" : ""}`}
                           aria-pressed={selected}
-                          title={`${rowLabel} × ${c}: ${fmtDb(numericValue)}；点击选为可核查证据`}
-                          onClick={() => evidence.save({
-                            observation: { row: rowLabel, column: c, value: numericValue },
-                            evidence_id: "",
-                          })}
+                          title={`${rowLabel} × ${c}: ${fmtDb(numericValue)}；点击记录这个观察值`}
+                          onClick={() => {
+                            if (!slice) return;
+                            state.save(captureDbObservation(
+                              {
+                                year: slice.year,
+                                table,
+                                rowCountry,
+                                colCountry,
+                                rowSector,
+                                colSector,
+                              },
+                              { row: rowLabel, column: c, value: numericValue },
+                            ));
+                          }}
                         >
                           {fmtDb(numericValue)}{selected ? " ✓" : ""}
                         </button>
@@ -382,16 +458,6 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
           <span>{selectedObservation.row} × {selectedObservation.column} = {fmtDb(selectedObservation.value)}</span>
         ) : <span>尚未选择</span>}
       </div>
-      <VerifiedActionBox
-        step={1}
-        kind="slice"
-        evidence={evidence}
-        ready={Boolean(evidence.data?.slice && evidence.data?.observation && slice?.rows.length)}
-        context={{
-          slice: evidence.data?.slice,
-          observation: evidence.data?.observation,
-        }}
-      />
     </div>
   );
 }

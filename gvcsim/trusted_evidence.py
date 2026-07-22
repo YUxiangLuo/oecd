@@ -1,9 +1,10 @@
-"""服务端签发的学习证据收据。
+"""服务端签发的答题与回归运行收据。
 
-会话仍是便于恢复 UI 的 JSON，但“完成”只认可本模块签名的收据。收据绑定
-账号、步骤、manifest 与规范化 payload 摘要；客户端改动答题、筛选或回归设定
-后，旧收据立即失效。每次签发前先写入 append-only evidence_events；HMAC 收据
-只是该事件的便携引用，验证时还会检查当前账号/assignment/attempt 下的真实事件。
+会话仍是便于恢复 UI 的 JSON，但答题完成与报告中的回归只认可本模块签名的
+收据。收据绑定账号、步骤、manifest 与规范化 payload 摘要；客户端改动答题
+或回归设定后，旧收据立即失效。每次签发前先写入 append-only 事件；HMAC
+收据只是该事件的便携引用，验证时还会检查当前账号/assignment/attempt 下的
+真实事件。
 """
 
 from __future__ import annotations
@@ -16,11 +17,7 @@ from typing import Any
 
 from gvcsim import auth
 
-TOKEN_VERSION = "learning-evidence-v1"
-
-
-class EvidenceTokenError(ValueError):
-    pass
+TOKEN_VERSION = "trusted-receipt-v2"
 
 
 def _event_time(event: dict[str, Any]) -> str:
@@ -66,15 +63,14 @@ def verify_claims(token: Any) -> dict[str, Any] | None:
         return None
 
 
-def issue_learning_evidence(
-    *, subject: str, step: int, kind: str, manifest_id: str, payload: dict[str, Any], event: dict[str, Any]
+def issue_quiz_completion(
+    *, subject: str, step: int, manifest_id: str, payload: dict[str, Any], event: dict[str, Any]
 ) -> str:
     return issue_claims(
         {
-            "type": "learning",
+            "type": "quiz",
             "sub": subject,
             "step": step,
-            "kind": kind,
             "manifest_id": manifest_id,
             "payload_sha256": digest(payload),
             "event_id": str(event["event_id"]),
@@ -86,22 +82,20 @@ def issue_learning_evidence(
     )
 
 
-def verify_learning_evidence(
+def verify_quiz_completion(
     token: Any,
     *,
     subject: str,
     step: int,
-    kind: str,
     manifest_id: str,
     payload: dict[str, Any],
 ) -> bool:
     claims = verify_claims(token)
     valid = bool(
         claims
-        and claims.get("type") == "learning"
+        and claims.get("type") == "quiz"
         and claims.get("sub") == subject
         and claims.get("step") == step
-        and claims.get("kind") == kind
         and claims.get("manifest_id") == manifest_id
         and claims.get("payload_sha256") == digest(payload)
     )
@@ -118,7 +112,7 @@ def verify_learning_evidence(
             str(claims["payload_sha256"]),
             account_id=int(claims["account_id"]),
             step=step,
-            kind=kind,
+            kind="quiz",
             manifest_id=manifest_id,
         )
     except (KeyError, TypeError, ValueError):
@@ -132,13 +126,12 @@ def issue_regression_run(
     design: dict[str, Any],
     result: dict[str, Any],
     event: dict[str, Any],
-    kind: str = "regression",
 ) -> str:
     """签发引用 append-only 运行事件的 run_id；语义幂等由报告指纹另行归一。"""
     payload_sha256 = digest({"design": design, "result": result})
     return issue_claims(
         {
-            "type": kind,
+            "type": "regression",
             "sub": subject,
             "step": int(event["step"]),
             "manifest_id": manifest_id,
@@ -161,13 +154,12 @@ def verify_regression_run(
     manifest_id: str,
     outcome: str,
     settings: dict[str, Any],
-    kind: str = "regression",
     step: int | None = None,
 ) -> dict[str, Any] | None:
     claims = verify_claims(token)
     if not claims or any(
         (
-            claims.get("type") != kind,
+            claims.get("type") != "regression",
             claims.get("sub") != subject,
             claims.get("manifest_id") != manifest_id,
         )
@@ -204,7 +196,7 @@ def verify_regression_run(
             str(claims["payload_sha256"]),
             account_id=int(claims["account_id"]),
             step=step,
-            kind=kind,
+            kind="regression",
             manifest_id=manifest_id,
         )
     except (KeyError, TypeError, ValueError):

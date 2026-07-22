@@ -6,21 +6,21 @@
  * 各自决定布局、主图与「看什么 / 怎么读 / 该发现」读图讲解;这里按主题(topic)分发。
  * 共享的仅是底层图表原语(viz/explore/charts)与读图脚手架(viz/scaffold)。
  */
-import type { Meta, Step, StepEvidenceApi } from "../../types";
-import type { VizEvidence } from "./viz/scaffold";
+import type { Meta, Step, StepStateApi } from "../../types";
+import type { VizStepState } from "./viz/scaffold";
 import { Step8Trade } from "./viz/step8";
 import { Step9Production } from "./viz/step9";
 import { Step10Length } from "./viz/step10";
 import { Step11Network } from "./viz/step11";
 
-export function VizLab({ meta, step, evidence }: {
+export function VizLab({ meta, step, state }: {
   meta: Meta;
   step: Step;
-  evidence: StepEvidenceApi<VizEvidence>;
+  state: StepStateApi<VizStepState>;
 }) {
   // 按主题路由,不依赖步号(步号可能因课程重排而变)。
-  if (step.topic === "production") return <Step9Production meta={meta} step={step} evidence={evidence} />;
-  if (step.topic === "length") return <Step10Length meta={meta} step={step} evidence={evidence} />;
-  if (step.topic === "network") return <Step11Network meta={meta} step={step} evidence={evidence} />;
-  return <Step8Trade meta={meta} step={step} evidence={evidence} />;
+  if (step.topic === "production") return <Step9Production meta={meta} step={step} state={state} />;
+  if (step.topic === "length") return <Step10Length meta={meta} step={step} state={state} />;
+  if (step.topic === "network") return <Step11Network meta={meta} step={step} state={state} />;
+  return <Step8Trade meta={meta} step={step} state={state} />;
 }

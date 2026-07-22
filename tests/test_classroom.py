@@ -13,7 +13,7 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
-from gvcsim import artifacts, config
+from gvcsim import artifacts, config, teaching_report
 from gvcsim import session as session_model
 from gvcsim.api import app
 from gvcsim.classroom import db
@@ -59,6 +59,30 @@ def _login(username: str, password: str = "gvclab2026") -> dict:
     resp = client.post("/api/auth/login", json={"username": username, "password": password})
     assert resp.status_code == 200, resp.text
     return {"Authorization": f"Bearer {resp.json()['token']}"}
+
+
+def _save_generated_report(
+    username: str,
+    report_key: str,
+    manifest_id: str,
+    markdown: str,
+    provenance: dict,
+) -> dict:
+    """通过现行原子写入路径准备报告，不为测试保留已废弃的独立写入函数。"""
+    current = db.get_session(username, manifest_id)
+    revision = current["revision"] if current else 0
+    session = current["session"] if current else session_model.empty_session(manifest_id)
+    saved = db.save_generated_report_and_session(
+        username,
+        report_key,
+        revision,
+        manifest_id,
+        markdown,
+        provenance,
+        session,
+    )
+    assert saved
+    return saved["report"]
 
 
 def test_seeded_accounts_login_via_db():
@@ -111,7 +135,9 @@ def test_steps_api_exposes_questions_but_not_answer_keys():
     student = _login("student")
     response = client.get("/api/steps", headers=student)
     assert response.status_code == 200, response.text
-    steps = response.json()["steps"]
+    payload = response.json()
+    assert "evidence_rules" not in payload
+    steps = payload["steps"]
     assert all(step.get("quiz", {}).get("questions") for step in steps[:15])
     assert "quiz" not in steps[15]
     for step in steps[:15]:
@@ -120,31 +146,17 @@ def test_steps_api_exposes_questions_but_not_answer_keys():
 
 
 @needs_artifacts
-def test_shock_evidence_needs_only_three_viewed_event_types():
-    """冲击 QC 由服务端自动绑定，学生不必再勾选隐藏的额外确认框。"""
+def test_operation_receipt_endpoint_is_removed():
+    """实验操作只自动保存为会话快照，不再有独立提交端点。"""
     student = _login("student")
-    payload = {
-        "viewed_shock_types": ["tariff", "sanctions", "export_control"],
-        "viewed_events": [
-            "美国232钢铝关税",
-            "OFAC/二级制裁风格:俄罗斯能源金融限制",
-            "BIS 实体清单:中芯国际 SMIC",
-        ],
-    }
-
     response = client.post(
         "/api/classroom/evidence/issue",
         headers=student,
-        json={"step": 11, "kind": "shock", "payload": payload},
+        json={"step": 11, "kind": "shock", "payload": {"viewed_shock_types": ["tariff"]}},
     )
-
-    assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["evidence_id"]
-    assert body["evidence"]["viewed_shock_types"] == payload["viewed_shock_types"]
-    assert body["evidence"]["viewed_events"] == payload["viewed_events"]
-    assert "qc_reviewed" not in body["evidence"]
-    assert "shock_qc_failures" in body["evidence"]
+    assert response.status_code == 404
+    with psycopg.connect(TEST_DSN) as connection:
+        assert connection.execute("SELECT count(*) FROM learning_evidence_events").fetchone()[0] == 0
 
 
 def test_teacher_creates_student_who_can_login():
@@ -515,10 +527,9 @@ def test_revoked_course_manage_access_cannot_enumerate_course_or_submission_meta
     db.enroll_student("teacher2", run["id"], student["id"], cls["id"])
     db.create_assignment("teacher2", run["id"], "private-lab", "私有作业", "private-manifest")
     provenance = {"artifact": {"years": [2020]}, "runs": []}
-    assert db.save_report(
+    assert _save_generated_report(
         "teacher2_private_student",
         "private-report",
-        1,
         "private-manifest",
         "# 私有报告",
         provenance,
@@ -573,7 +584,7 @@ def test_shared_class_teacher_dashboard_does_not_mix_other_course_attempts_or_su
     assert scope_b and scope_b["assignment_id"] == assignment_b["id"]
     db.upsert_progress("student", 12)
     provenance = {"artifact": {"years": [2020]}, "runs": []}
-    assert db.save_report("student", "course-b-report", 1, "manifest-course-b", "# B 课程报告", provenance)
+    assert _save_generated_report("student", "course-b-report", "manifest-course-b", "# B 课程报告", provenance)
     submitted_b = db.submit_report("student", "B 课程提交", "course-b-report", "manifest-course-b")
     assert submitted_b
 
@@ -600,12 +611,12 @@ def test_submission_and_grading_versions_are_append_only_and_reset_is_consistent
     before = db.assignment_context("student", manifest)
     assert before
     provenance = {"artifact": {"years": [2020]}, "runs": []}
-    db.save_report("student", "report-v1", 1, manifest, "# 第一版", provenance)
+    _save_generated_report("student", "report-v1", manifest, "# 第一版", provenance)
     first = db.submit_report("student", "第一版", "report-v1", manifest)
     assert first and first["version_no"] == 1
     assert db.grade_submission(first["id"], 88, "第一版评语", "teacher")
 
-    db.save_report("student", "report-v2", 2, manifest, "# 第二版", provenance)
+    _save_generated_report("student", "report-v2", manifest, "# 第二版", provenance)
     second = db.submit_report("student", "第二版", "report-v2", manifest)
     assert second and second["id"] == first["id"] and second["version_no"] == 2
     history = db.submission_history(first["id"], "teacher")
@@ -614,7 +625,11 @@ def test_submission_and_grading_versions_are_append_only_and_reset_is_consistent
 
     # 重置切换 attempt：当前进度/报告/提交为空，但不可变历史仍可审计。
     db.upsert_progress("student", 12)
-    db.clear_session("student")
+    db.clear_session(
+        "student",
+        expected_assignment_id=before["assignment_id"],
+        expected_attempt_id=before["attempt_id"],
+    )
     after = db.assignment_context("student", manifest)
     assert after and after["attempt_id"] != before["attempt_id"]
     assert db.get_progress("student") is None
@@ -668,7 +683,7 @@ def test_evidence_event_cannot_cross_attempt_boundary():
     _login("student")
     manifest = "manifest-event-scope"
     context = db.assignment_context("student", manifest)
-    event = db.record_evidence_event("student", 1, "slice", manifest, "a" * 64, {"ok": True})
+    event = db.record_evidence_event("student", 1, "quiz", manifest, "a" * 64, {"ok": True})
     assert db.evidence_event_exists(
         "student", event["event_id"], context["assignment_id"], context["attempt_id"], "a" * 64
     )
@@ -688,8 +703,8 @@ def test_quiz_rollout_reset_archives_current_attempt_once_and_preserves_history(
     assert before and before["attempt_id"]
     session = session_model.empty_session(manifest)
     assert db.save_session("student", session, 0, session_model.merge_sessions)
-    event = db.record_evidence_event("student", 1, "slice", manifest, "a" * 64, {"payload": {}})
-    assert db.save_report("student", "pre-quiz-report", 1, manifest, "# 历史报告", {"runs": []})
+    event = db.record_evidence_event("student", 1, "quiz", manifest, "a" * 64, {"payload": {}})
+    assert _save_generated_report("student", "pre-quiz-report", manifest, "# 历史报告", {"runs": []})
 
     result = db.reset_active_attempts_for_quiz(quizzes.QUIZ_VERSION, manifest)
     assert result["already_applied"] is False and result["reset_count"] == 1
@@ -729,8 +744,8 @@ def test_quiz_rollout_reset_archives_current_attempt_once_and_preserves_history(
         assert connection.execute("SELECT count(*) FROM experiment_attempts").fetchone()[0] == attempts_before_retry
 
 
-def test_learning_and_regression_receipts_cannot_cross_new_assignment_with_same_manifest():
-    """新 assignment 不会归档旧 assignment attempt；收据仍必须按 current scope 失效。"""
+def test_quiz_and_regression_receipts_cannot_cross_new_assignment_with_same_manifest():
+    """新 assignment 不会归档旧 attempt；答题与运行收据仍须按 current scope 失效。"""
     from gvcsim import evidence, quizzes, trusted_evidence
 
     _login("student")
@@ -738,34 +753,21 @@ def test_learning_and_regression_receipts_cannot_cross_new_assignment_with_same_
     old_scope = db.assignment_context("student", manifest)
     assert old_scope
 
-    learning_payload = {"slice": {"year": 2020}}
-    learning_event = db.record_evidence_event(
-        "student", 1, "slice", manifest, trusted_evidence.digest(learning_payload), {"payload": learning_payload}
-    )
-    learning_token = trusted_evidence.issue_learning_evidence(
-        subject="student",
-        step=1,
-        kind="slice",
-        manifest_id=manifest,
-        payload=learning_payload,
-        event=learning_event,
-    )
-
-    def regression_token(step: int, kind: str, design: dict) -> str:
+    def regression_token(step: int, design: dict) -> str:
         result = {"depvar": "DVAex_share", "coefs": []}
         event = db.record_evidence_event(
             "student",
             step,
-            kind,
+            "regression",
             manifest,
             trusted_evidence.digest({"design": design, "result": result}),
             {"design": design, "result_sha256": trusted_evidence.digest(result)},
         )
         return trusted_evidence.issue_regression_run(
-            subject="student", manifest_id=manifest, design=design, result=result, event=event, kind=kind
+            subject="student", manifest_id=manifest, design=design, result=result, event=event
         )
 
-    baseline_design = {
+    run_design = {
         "outcome": "trade",
         "granularity": "country_industry",
         "shock_type": "tariff",
@@ -777,54 +779,34 @@ def test_learning_and_regression_receipts_cannot_cross_new_assignment_with_same_
         "exclude_row": True,
         "weight_mode": "fixed_pretreatment",
     }
-    controlled_design = {**baseline_design, "control_mode": "icio_derived"}
-    baseline_token = regression_token(12, "regression", baseline_design)
-    controlled_token = regression_token(12, "regression", controlled_design)
-    placebo_design = {**baseline_design, "outcome": "network"}
-    placebo_token = regression_token(15, "placebo", placebo_design)
+    run_token = regression_token(12, run_design)
     quiz_payload = quizzes.correct_quiz(12)
     quiz_event = db.record_evidence_event(
         "student", 12, "quiz", manifest, trusted_evidence.digest(quiz_payload), {"payload": quiz_payload}
     )
-    quiz_token = trusted_evidence.issue_learning_evidence(
+    quiz_token = trusted_evidence.issue_quiz_completion(
         subject="student",
         step=12,
-        kind="quiz",
         manifest_id=manifest,
         payload=quiz_payload,
         event=quiz_event,
     )
 
-    assert trusted_evidence.verify_learning_evidence(
-        learning_token,
-        subject="student",
-        step=1,
-        kind="slice",
-        manifest_id=manifest,
-        payload=learning_payload,
+    assert trusted_evidence.verify_quiz_completion(
+        quiz_token, subject="student", step=12, manifest_id=manifest, payload=quiz_payload
     )
     assert trusted_evidence.verify_regression_run(
-        controlled_token,
+        run_token,
         subject="student",
         manifest_id=manifest,
         outcome="trade",
-        settings={"controlMode": "icio_derived"},
+        settings={"controlMode": "none"},
         step=12,
-    )
-    assert trusted_evidence.verify_regression_run(
-        placebo_token,
-        subject="student",
-        manifest_id=manifest,
-        outcome="network",
-        settings={},
-        kind="placebo",
-        step=15,
     )
 
     step12_data = {
-        "run": {"depvar": "DVAex_share", "settings": {"controlMode": "icio_derived"}},
-        "run_id": controlled_token,
-        "checks": {"baseline_run_id": baseline_token, "controlled_run_id": controlled_token},
+        "run": {"depvar": "DVAex_share", "settings": {"controlMode": "none"}},
+        "run_id": run_token,
         "quiz": quiz_payload,
         "quiz_id": quiz_token,
     }
@@ -849,30 +831,16 @@ def test_learning_and_regression_receipts_cannot_cross_new_assignment_with_same_
     new_scope = db.assignment_context("student", manifest)
     assert new_scope and new_scope["assignment_id"] == newer["id"]
 
-    assert not trusted_evidence.verify_learning_evidence(
-        learning_token,
-        subject="student",
-        step=1,
-        kind="slice",
-        manifest_id=manifest,
-        payload=learning_payload,
+    assert not trusted_evidence.verify_quiz_completion(
+        quiz_token, subject="student", step=12, manifest_id=manifest, payload=quiz_payload
     )
     assert not trusted_evidence.verify_regression_run(
-        controlled_token,
+        run_token,
         subject="student",
         manifest_id=manifest,
         outcome="trade",
-        settings={"controlMode": "icio_derived"},
+        settings={"controlMode": "none"},
         step=12,
-    )
-    assert not trusted_evidence.verify_regression_run(
-        placebo_token,
-        subject="student",
-        manifest_id=manifest,
-        outcome="network",
-        settings={},
-        kind="placebo",
-        step=15,
     )
     assert not evidence.evaluate_step(12, old_session, subject="student", require_trusted=True).complete
 
@@ -902,6 +870,31 @@ def _manifest_id() -> str:
     return artifacts.manifest_id()
 
 
+def _session_request(
+    session: dict,
+    *,
+    base_revision: int = 0,
+    username: str = "student",
+    context: dict | None = None,
+) -> dict:
+    """构造带浏览器所见 assignment/attempt 边界的现行会话请求。"""
+    scope = context or db.assignment_context(username)
+    assert scope and scope["assignment_id"] and scope["attempt_id"]
+    return {
+        "base_revision": base_revision,
+        "expected_assignment_id": scope["assignment_id"],
+        "expected_attempt_id": scope["attempt_id"],
+        "session": session,
+    }
+
+
+def _attempt_request(context: dict) -> dict:
+    return {
+        "expected_assignment_id": context["assignment_id"],
+        "expected_attempt_id": context["attempt_id"],
+    }
+
+
 @needs_artifacts
 def test_session_round_trips_and_survives_relogin():
     """会话必须能跨刷新/重新登录恢复——这正是 HEAD 丢失学生实验的地方。"""
@@ -910,7 +903,7 @@ def test_session_round_trips_and_survives_relogin():
     assert empty["revision"] == 0 and empty["session"]["steps"] == {}
 
     body = _session_body({"4": session_model.make_record({"country": "CHN", "year": 2020})}, _manifest_id())
-    saved = client.put("/api/classroom/session", headers=s, json={"base_revision": 0, "session": body})
+    saved = client.put("/api/classroom/session", headers=s, json=_session_request(body))
     assert saved.status_code == 200, saved.text
     assert saved.json()["revision"] == 1
 
@@ -922,6 +915,56 @@ def test_session_round_trips_and_survives_relogin():
 
 
 @needs_artifacts
+def test_stale_tab_cannot_write_an_old_session_into_a_new_attempt():
+    """reset 后仍开着的旧标签页必须在服务端边界被拒绝。"""
+    headers = _login("student")
+    manifest_id = _manifest_id()
+    old_scope = db.assignment_context("student", manifest_id)
+    assert old_scope and old_scope["attempt_id"]
+    stale_session = _session_body(
+        {"4": session_model.make_record({"country": "CHN", "year": 2020})},
+        manifest_id,
+    )
+
+    new_scope = db.start_new_attempt("student", manifest_id)
+    assert new_scope["attempt_id"] != old_scope["attempt_id"]
+
+    response = client.put(
+        "/api/classroom/session",
+        headers=headers,
+        json=_session_request(stale_session, context=old_scope),
+    )
+    assert response.status_code == 409
+    assert "attempt 已变化" in response.json()["detail"]
+    assert db.get_session("student", manifest_id) is None
+
+
+@needs_artifacts
+def test_concurrent_stale_resets_only_archive_the_expected_attempt_once():
+    """两个旧标签页同时 reset 时，后到者不能再归档先到者刚创建的 attempt。"""
+    headers = _login("student")
+    manifest_id = _manifest_id()
+    old_scope = db.assignment_context("student", manifest_id)
+    assert old_scope and old_scope["attempt_id"]
+    body = _attempt_request(old_scope)
+
+    def reset():
+        return client.request("DELETE", "/api/classroom/session", headers=headers, json=body)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = [future.result() for future in [pool.submit(reset), pool.submit(reset)]]
+
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    current = db.assignment_context("student", manifest_id)
+    assert current
+    assert current["attempt_id"] != old_scope["attempt_id"]
+    assert current["attempt_no"] == old_scope["attempt_no"] + 1
+    stale_new = client.post("/api/classroom/attempts/new", headers=headers, json=body)
+    assert stale_new.status_code == 409
+    assert db.assignment_context("student", manifest_id)["attempt_id"] == current["attempt_id"]
+
+
+@needs_artifacts
 def test_concurrent_session_writes_merge_per_step_instead_of_clobbering():
     """两个标签页各做一步,不能有一边被整份覆盖掉。"""
     s = _login("student")
@@ -929,7 +972,7 @@ def test_concurrent_session_writes_merge_per_step_instead_of_clobbering():
     first = client.put(
         "/api/classroom/session",
         headers=s,
-        json={"base_revision": 0, "session": _session_body({"4": session_model.make_record({"country": "CHN"})}, mid)},
+        json=_session_request(_session_body({"4": session_model.make_record({"country": "CHN"})}, mid)),
     ).json()
     assert first["revision"] == 1
 
@@ -937,10 +980,7 @@ def test_concurrent_session_writes_merge_per_step_instead_of_clobbering():
     second = client.put(
         "/api/classroom/session",
         headers=s,
-        json={
-            "base_revision": 0,
-            "session": _session_body({"12": session_model.make_record({"shock": "tariff"})}, mid),
-        },
+        json=_session_request(_session_body({"12": session_model.make_record({"shock": "tariff"})}, mid)),
     )
     assert second.status_code == 200
     merged = second.json()
@@ -951,23 +991,23 @@ def test_concurrent_session_writes_merge_per_step_instead_of_clobbering():
 
 
 @needs_artifacts
-def test_concurrent_same_step_writes_merge_action_and_quiz_fields():
-    """同一步骤的操作与答题由不同标签页提交时，两类凭证都必须保留。"""
+def test_concurrent_same_step_writes_merge_experiment_and_quiz_fields():
+    """同一步骤的实验快照与答题由不同标签页保存时，两者都必须保留。"""
     s = _login("student")
     mid = _manifest_id()
     initial_time = "2026-07-16T10:00:00+00:00"
     action_time = "2026-07-16T10:01:00+00:00"
     quiz_time = "2026-07-16T10:02:00+00:00"
     initial = session_model.make_record({"compared": ["CHN", "USA"]}, initial_time)
-    action = {
-        "data": {"compared": ["CHN", "USA"], "evidence_id": "action-event"},
+    experiment = {
+        "data": {"compared": ["CHN", "USA"], "chart": "quadrant"},
         "updated_at": action_time,
-        "field_updated_at": {"compared": action_time, "evidence_id": action_time},
+        "field_updated_at": {"compared": action_time, "chart": action_time},
     }
     quiz = {
         "data": {
             **initial["data"],
-            "quiz": {"version": "course-quiz-v1", "answers": {"q1": "a"}},
+            "quiz": {"version": "course-quiz-v2", "answers": {"q1": "a"}},
             "quiz_id": "quiz-event",
         },
         "updated_at": quiz_time,
@@ -981,19 +1021,19 @@ def test_concurrent_same_step_writes_merge_action_and_quiz_fields():
     first = client.put(
         "/api/classroom/session",
         headers=s,
-        json={"base_revision": 0, "session": _session_body({"3": action}, mid)},
+        json=_session_request(_session_body({"3": experiment}, mid)),
     )
     assert first.status_code == 200, first.text
     second = client.put(
         "/api/classroom/session",
         headers=s,
-        json={"base_revision": 0, "session": _session_body({"3": quiz}, mid)},
+        json=_session_request(_session_body({"3": quiz}, mid)),
     )
     assert second.status_code == 200, second.text
 
     merged = second.json()["session"]["steps"]["3"]["data"]
     assert merged["compared"] == ["CHN", "USA"]
-    assert merged["evidence_id"] == "action-event"
+    assert merged["chart"] == "quadrant"
     assert merged["quiz_id"] == "quiz-event"
 
 
@@ -1002,7 +1042,7 @@ def test_session_from_other_artifacts_is_rejected():
     """产物变了就不能再往当前会话里写旧结果。"""
     s = _login("student")
     body = _session_body({"4": session_model.make_record({"country": "CHN"})}, "0000000000000000")
-    resp = client.put("/api/classroom/session", headers=s, json={"base_revision": 0, "session": body})
+    resp = client.put("/api/classroom/session", headers=s, json=_session_request(body))
     assert resp.status_code == 409
     assert "产物" in resp.json()["detail"]
 
@@ -1014,7 +1054,7 @@ def test_stale_session_is_flagged_not_silently_served():
     client.put(
         "/api/classroom/session",
         headers=s,
-        json={"base_revision": 0, "session": _session_body({"4": session_model.make_record({"a": 1})}, _manifest_id())},
+        json=_session_request(_session_body({"4": session_model.make_record({"a": 1})}, _manifest_id())),
     )
     with psycopg.connect(TEST_DSN, autocommit=True) as c:
         c.execute("UPDATE attempt_sessions SET session = jsonb_set(session, '{manifest_id}', '\"deadbeef\"')")
@@ -1031,30 +1071,24 @@ def test_malformed_session_is_rejected():
         {"version": "experiment-session-v0", "manifest_id": mid, "steps": {}},  # 旧版本不做兼容
     ]
     for body in bad_bodies:
-        resp = client.put("/api/classroom/session", headers=s, json={"base_revision": 0, "session": body})
+        resp = client.put("/api/classroom/session", headers=s, json=_session_request(body))
         assert resp.status_code == 422, body
 
 
 @needs_artifacts
 def test_due_at_is_a_hard_write_boundary_but_preserves_verified_read_state():
-    from gvcsim import quizzes, trusted_evidence
+    from gvcsim import quizzes
 
     student = _login("student")
     mid = _manifest_id()
     context = db.assignment_context("student", mid)
     payload = {"compared": ["CHN", "USA"]}
-    event = db.record_evidence_event(
-        "student", 3, "indicator", mid, trusted_evidence.digest(payload), {"payload": payload}
-    )
-    payload["evidence_id"] = trusted_evidence.issue_learning_evidence(
-        subject="student", step=3, kind="indicator", manifest_id=mid, payload=payload, event=event
-    )
     answer = quizzes.correct_quiz(3)
     graded = client.post("/api/classroom/quiz/submit", headers=student, json={"step": 3, **answer})
     assert graded.status_code == 200, graded.text
     payload.update({"quiz": graded.json()["quiz"], "quiz_id": graded.json()["quiz_id"]})
     session = _session_body({"3": session_model.make_record(payload)}, mid)
-    saved = client.put("/api/classroom/session", headers=student, json={"base_revision": 0, "session": session})
+    saved = client.put("/api/classroom/session", headers=student, json=_session_request(session, context=context))
     assert saved.status_code == 200 and saved.json()["completion"]["completed"] == [3]
 
     with psycopg.connect(TEST_DSN, autocommit=True) as connection:
@@ -1073,12 +1107,31 @@ def test_due_at_is_a_hard_write_boundary_but_preserves_verified_read_state():
     assert meta["assignment_context"]["assignment_closed"] is True
 
     assert (
-        client.put("/api/classroom/session", headers=student, json={"base_revision": 1, "session": session}).status_code
+        client.put(
+            "/api/classroom/session",
+            headers=student,
+            json=_session_request(session, base_revision=1, context=context),
+        ).status_code
         == 409
     )
     assert client.post("/api/classroom/progress", headers=student, json={"step": 4}).status_code == 409
-    assert client.delete("/api/classroom/session", headers=student).status_code == 409
-    assert client.post("/api/classroom/attempts/new", headers=student).status_code == 409
+    assert (
+        client.request(
+            "DELETE",
+            "/api/classroom/session",
+            headers=student,
+            json=_attempt_request(context),
+        ).status_code
+        == 409
+    )
+    assert (
+        client.post(
+            "/api/classroom/attempts/new",
+            headers=student,
+            json=_attempt_request(context),
+        ).status_code
+        == 409
+    )
     assert client.post("/api/classroom/report/generate", headers=student).status_code == 409
     assert (
         client.post(
@@ -1087,153 +1140,30 @@ def test_due_at_is_a_hard_write_boundary_but_preserves_verified_read_state():
         == 409
     )
     with pytest.raises(db.AssignmentClosed):
-        db.record_evidence_event("student", 4, "indicator", mid, "a" * 64, {"payload": {}})
+        db.record_evidence_event("student", 4, "quiz", mid, "a" * 64, {"payload": {}})
 
 
 # ------------------------------------------------------- 第 16 步:报告闭环
 
 
 def _put_complete_session(headers: dict) -> None:
-    """写入一套真实绑定当前 account/assignment/attempt 的 1–15 步测试证据。"""
-    from gvcsim import evidence, trusted_evidence
-
-    mid = _manifest_id()
-
-    def learning(step: int, kind: str, payload: dict) -> dict:
-        event = db.record_evidence_event(
-            "student", step, kind, mid, trusted_evidence.digest(payload), {"payload": payload}
-        )
-        token = trusted_evidence.issue_learning_evidence(
-            subject="student", step=step, kind=kind, manifest_id=mid, payload=payload, event=event
-        )
-        return {**payload, "evidence_id": token}
-
-    def design(outcome: str, **changes) -> dict:
-        value = {
-            "outcome": outcome,
-            "granularity": "country_industry",
-            "shock_type": "tariff",
-            "method": "did",
-            "control_mode": "none",
-            "interaction": False,
-            "price_mode": "nominal",
-            "scenario": "clean",
-            "exclude_row": True,
-            "weight_mode": "fixed_pretreatment",
-        }
-        value.update(changes)
-        return value
-
-    def regression_run(step: int, run_design: dict, *, kind: str = "regression") -> str:
-        result = {"depvar": f"{run_design['outcome']}_outcome", "coefs": []}
-        event = db.record_evidence_event(
-            "student",
-            step,
-            kind,
-            mid,
-            trusted_evidence.digest({"design": run_design, "result": result}),
-            {"design": run_design, "result": result},
-        )
-        return trusted_evidence.issue_regression_run(
-            subject="student",
-            manifest_id=mid,
-            design=run_design,
-            result=result,
-            event=event,
-            kind=kind,
-        )
-
-    steps: dict[str, dict] = {
-        "1": session_model.make_record(
-            learning(
-                1,
-                "slice",
-                {
-                    "slice": {"year": 2020, "table": "z", "row_country": "CHN", "col_country": "USA"},
-                    "observation": {"row": "CHN_D01T02", "column": "USA_D01T02", "value": 12.5},
-                },
-            )
-        ),
-        "2": session_model.make_record(
-            learning(
-                2,
-                "qc_resolution",
-                {
-                    "disposition": "disclose",
-                    "disclosures": ["测试环境中的质检警告已明确披露"],
-                },
-            )
-        ),
-    }
-    for step in range(3, 7):
-        steps[str(step)] = session_model.make_record(learning(step, "indicator", {"compared": ["CHN", "USA"]}))
-    for step in range(7, 11):
-        steps[str(step)] = session_model.make_record(
-            learning(step, "visualization", {"chart": "rank", "compared": ["CHN", "USA"]})
-        )
-    steps["11"] = session_model.make_record(
-        learning(
-            11,
-            "shock",
-            {
-                "viewed_shock_types": list(evidence.REQUIRED_SHOCK_TYPES),
-                "viewed_events": ["测试关税事件", "测试制裁事件", "测试出口管制事件"],
-            },
-        )
-    )
-
-    trade_main = design("trade", control_mode="icio_derived")
-    production_main = design("production", interaction=True)
-    length_main = design("length", method="event_study")
-    network_main = design("network")
-    trade_controlled = regression_run(12, trade_main)
-    production_interaction = regression_run(13, production_main)
-    placebo = regression_run(15, network_main, kind="placebo")
-    specs = {
-        12: (
-            trade_main,
-            {"controlMode": "icio_derived"},
-            {
-                "baseline_run_id": regression_run(12, design("trade")),
-                "controlled_run_id": trade_controlled,
-            },
-        ),
-        13: (
-            production_main,
-            {"interaction": True},
-            {
-                "baseline_run_id": regression_run(13, design("production")),
-                "interaction_run_id": production_interaction,
-            },
-        ),
-        14: (
-            length_main,
-            {"method": "event_study"},
-            {},
-        ),
-        15: (network_main, {}, {"placebo_run_id": placebo}),
-    }
-    for step, (run_design, settings, checks) in specs.items():
-        main_run = (
-            trade_controlled
-            if step == 12
-            else production_interaction
-            if step == 13
-            else regression_run(step, run_design)
-        )
-        data = {
-            "run_id": main_run,
-            "run": {"depvar": f"{run_design['outcome']}_outcome", "settings": settings},
-            "checks": checks,
-        }
-        if step == 15:
-            data["placebo_run_id"] = placebo
-        steps[str(step)] = session_model.make_record(data)
-
-    # 选择题必须通过真实 HTTP 判题端点签发；测试因此同时覆盖 quiz event 与
-    # account/assignment/attempt/manifest 绑定，而不是伪造一个本地答案对象。
+    """只靠真实判题收据写入 1–15 步，另带几项自动保存的实验快照。"""
     from gvcsim import quizzes
 
+    mid = _manifest_id()
+    snapshots = {
+        1: {
+            "slice": {"year": 2020, "table": "z", "row_country": "CHN", "col_country": "USA"},
+            "observation": {"row": "CHN_D01T02", "column": "USA_D01T02", "value": 12.5},
+        },
+        3: {"year": 2020, "metric": "FVA_share", "compared": ["CHN", "USA"]},
+        7: {"year": 2020, "chart": "rank", "compared": ["CHN", "USA"]},
+        11: {
+            "viewed_shock_types": ["tariff", "sanctions", "export_control"],
+            "viewed_events": ["测试关税事件", "测试制裁事件", "测试出口管制事件"],
+        },
+    }
+    steps: dict[str, dict] = {}
     for step in range(1, 16):
         answer = quizzes.correct_quiz(step)
         graded = client.post(
@@ -1244,20 +1174,16 @@ def _put_complete_session(headers: dict) -> None:
         assert graded.status_code == 200, graded.text
         body = graded.json()
         assert body["passed"] is True and body.get("quiz_id")
-        record = steps[str(step)]
-        quiz_time = session_model.utc_now_iso()
-        record["data"].update({"quiz": body["quiz"], "quiz_id": body["quiz_id"]})
-        record["field_updated_at"].update({"quiz": quiz_time, "quiz_id": quiz_time})
-        record["updated_at"] = quiz_time
+        steps[str(step)] = session_model.make_record(
+            {**snapshots.get(step, {}), "quiz": body["quiz"], "quiz_id": body["quiz_id"]}
+        )
 
-    resp = client.put(
-        "/api/classroom/session", headers=headers, json={"base_revision": 0, "session": _session_body(steps, mid)}
-    )
+    resp = client.put("/api/classroom/session", headers=headers, json=_session_request(_session_body(steps, mid)))
     assert resp.status_code == 200, resp.text
 
 
 @needs_artifacts
-def test_report_generation_is_blocked_until_the_first_15_steps_have_evidence():
+def test_report_generation_is_blocked_until_the_first_15_quizzes_pass():
     s = _login("student")
     resp = client.post("/api/classroom/report/generate", headers=s)
     assert resp.status_code == 409
@@ -1265,6 +1191,23 @@ def test_report_generation_is_blocked_until_the_first_15_steps_have_evidence():
     assert [item["step"] for item in blocked] == list(range(1, 16))
     # 门槛状态也可单独查询,便于第 16 步界面直接告诉学生还差什么。
     assert client.get("/api/classroom/report/gate", headers=s).json()["blocked"]
+
+
+@needs_artifacts
+def test_report_replay_failure_is_explicit_and_does_not_persist_a_partial_report(monkeypatch):
+    student = _login("student")
+
+    def fail_replay(*_args, **_kwargs):
+        raise teaching_report.ReportReplayError(12, "贸易流回归", "服务端无法读取当前回归面板")
+
+    monkeypatch.setattr(teaching_report, "build", fail_replay)
+    response = client.post("/api/classroom/report/generate", headers=student)
+
+    assert response.status_code == 503
+    assert "已记录回归" in response.json()["detail"]
+    assert db.latest_report("student") is None
+    stored = client.get("/api/classroom/session", headers=student).json()["session"]
+    assert "16" not in stored["steps"]
 
 
 @needs_artifacts
@@ -1299,7 +1242,7 @@ def test_generated_report_completes_step_16_and_can_be_reopened():
     assert generated.status_code == 200, generated.text
     report_key = generated.json()["report_key"]
 
-    # 第 16 步的证据由服务端写入会话 → 完成度变成 16/16。
+    # 第 16 步的报告记录由服务端写入会话 → 完成度变成 16/16。
     completion = client.get("/api/classroom/session", headers=s).json()["completion"]
     assert completion["completed_count"] == 16
 
@@ -1310,7 +1253,7 @@ def test_generated_report_completes_step_16_and_can_be_reopened():
     delayed = client.put(
         "/api/classroom/session",
         headers=s,
-        json={"base_revision": generated_revision, "session": queued_local_session},
+        json=_session_request(queued_local_session, base_revision=generated_revision),
     )
     assert delayed.status_code == 200, delayed.text
     assert delayed.json()["merged_from"] is None  # revision 没冲突，但仍必须合并。
@@ -1356,7 +1299,7 @@ def test_step_reach_counts_reaching_not_completing():
     """`step_reach` 是到达统计,不是完成统计。
 
     深链(?step=12)或一次跳转即可把 max_step 推到 12,前 11 步一次都没打开过。
-    这条用例把该语义钉死:在有真实学习证据之前,任何一层都不得把它当作完成度——
+    这条用例把该语义钉死:在有真实答题结果之前,任何一层都不得把它当作完成度——
     字段名、SQL、前端文案都必须说“到达”。
     """
     s, t = _login("student"), _login("teacher")
@@ -1475,7 +1418,7 @@ def test_first_concurrent_session_writes_do_not_clobber_each_other():
         return client.put(
             "/api/classroom/session",
             headers=s,
-            json={"base_revision": 0, "session": _session_body({step: session_model.make_record(data)}, mid)},
+            json=_session_request(_session_body({step: session_model.make_record(data)}, mid)),
         )
 
     with ThreadPoolExecutor(max_workers=2) as pool:

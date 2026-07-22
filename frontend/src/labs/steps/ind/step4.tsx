@@ -9,19 +9,15 @@
  * 与步骤 7-9 的分工:这里是单实体的绝对值 + 恒等式验证 + 逐项释义(理解与验证),
  * 步骤 7-9 是多国归一化对比(找规律)。
  */
-import { useState } from "react";
 import { api } from "../../../api";
 import { DecompositionDemo } from "../../../demos";
-import { EvidencePanel, VerifiedActionBox } from "../../../step-evidence";
-import type { IndicatorSchema, Meta, Step, StepEvidenceApi } from "../../../types";
+import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
 import { ChartStory, StepIntro } from "../viz/scaffold";
-import { IndicatorTable, type IndicatorEvidence } from "./indicator-table";
+import { IndicatorTable, type IndicatorStepState, useIndicatorControls } from "./indicator-table";
 
-export function Step4Trade({ meta, step, evidence }: { meta: Meta; step: Step; evidence: StepEvidenceApi<IndicatorEvidence> }) {
-  const [year, setYear] = useState(meta.years.at(-1)!);
-  const [country, setCountry] = useState(meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "");
-  const [page, setPage] = useState(1);
+export function Step4Trade({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }) {
+  const controls = useIndicatorControls(meta, state);
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
 
   return (
@@ -33,10 +29,9 @@ export function Step4Trade({ meta, step, evidence }: { meta: Meta; step: Step; e
         todo={[
           "先看分解数据表:选个国家,读它各行业算出来的六项",
           "再用「动手拆解」挑一个出口,看六项精确加回毛出口(误差≈0)",
-          "切换到第二个国家对比,留下学习证据",
+          "切换国家进行对比；当前选择会自动保存到实验记录",
         ]}
       />
-      <EvidencePanel evidence={evidence} title="本步要留下的证据:在分解数据表里切换国家,看过至少两个实体" />
 
       <ChartStory
         eyebrow="计算结果 · 先出数字"
@@ -46,9 +41,9 @@ export function Step4Trade({ meta, step, evidence }: { meta: Meta; step: Step; e
         find={<>换个国家(下方筛选)看数字怎么变。这一步先把"算出来的数字"看明白,下一节再验证它们精确加回总量。</>}
       >
         <IndicatorTable
-          meta={meta} groupKey="trade" schema={schema} evidence={evidence}
-          year={year} country={country} page={page}
-          onYear={setYear} onCountry={setCountry} onPage={setPage}
+          meta={meta} groupKey="trade" schema={schema} state={state}
+          year={controls.year} country={controls.country} page={controls.page} interacted={controls.interacted}
+          onYear={controls.setYear} onCountry={controls.setCountry} onPage={controls.setPage}
         />
       </ChartStory>
 
@@ -62,22 +57,11 @@ export function Step4Trade({ meta, step, evidence }: { meta: Meta; step: Step; e
         <DecompositionDemo
           step={4}
           meta={meta}
-          primaryYear={year}
-          primaryCountry={country}
-          onPrimaryChange={(exampleYear, exampleCountry) => {
-            setYear(exampleYear);
-            setCountry(exampleCountry);
-            setPage(1);
-          }}
+          primaryYear={controls.year}
+          primaryCountry={controls.country}
+          onPrimaryChange={controls.setPrimary}
         />
       </ChartStory>
-      <VerifiedActionBox
-        step={step.n}
-        kind="indicator"
-        evidence={evidence}
-        ready={(evidence.data?.compared?.length ?? 0) >= 2 && (evidence.data?.observations?.length ?? 0) >= 2}
-        context={{ topic: step.topic, compared: evidence.data?.compared, last_view: evidence.data?.last_view, metric: evidence.data?.metric, observations: evidence.data?.observations }}
-      />
     </div>
   );
 }

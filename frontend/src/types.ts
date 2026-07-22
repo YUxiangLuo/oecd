@@ -29,19 +29,13 @@ export interface Step {
   concept: string;
   tip: string;
   deps: string[];
-  /** 步骤 1–15 的固定理解检查；第 16 步以报告生成作为完成证据。 */
+  /** 步骤 1–15 的固定理解检查；第 16 步以报告生成作为完成条件。 */
   quiz?: StepQuiz;
-}
-
-/** 证据规则:唯一来源是服务端 gvcsim/evidence.py,前端只据此显示提示与计数。 */
-export interface EvidenceRules {
-  required_shock_types: string[];
 }
 
 export interface StepsResponse {
   stages: Record<string, string>;
   steps: Step[];
-  evidence_rules: EvidenceRules;
 }
 
 export interface AuthUser {
@@ -86,15 +80,13 @@ export interface Meta {
   } | null;
 }
 
-export interface QuizStepEvidence {
+export interface QuizCompletionState {
   quiz?: {
     version: string;
     answers: Record<string, string>;
   };
   /** Server-issued binding for a fully correct answer set. */
   quiz_id?: string;
-  /** Server-issued binding for the current real operation context. */
-  evidence_id?: string;
 }
 
 export type DbTableKind = "z" | "y" | "accounts";
@@ -255,14 +247,14 @@ export interface PagedRows {
 export type IndustryPage = PagedRows;
 
 /** 实验会话:逐步实验状态的可恢复模型(契约见 gvcsim/session.py)。 */
-/** v5 同时要求服务端签发的操作凭证与选择题凭证；其它会话版本一律拒绝。 */
-export const SESSION_VERSION = "experiment-session-v5";
+/** v6 以选择题作为步骤 1–15 的唯一完成条件；其它会话版本一律拒绝。 */
+export const SESSION_VERSION = "experiment-session-v6";
 
 export interface SessionRecord<T = unknown> {
   data: T;
   /** 记录级时间戳；不同步骤并发写入时按它合并。 */
   updated_at: string;
-  /** 顶层字段时间戳；同一步骤的操作凭证与选择题凭证据此独立合并。 */
+  /** 顶层字段时间戳；同一步骤的实验快照与答题结果据此独立合并。 */
   field_updated_at: Record<string, string>;
 }
 
@@ -278,21 +270,23 @@ export interface ExperimentSession {
 }
 
 /**
- * 一步实验台读写自己那份学习证据的接口。
+ * 一步实验台读写自己的自动保存状态。
  *
- * `missing` 与 `complete` 一律来自服务端判定,实验台不自行推断是否完成——
- * 界面只负责收集证据,判定权在 gvcsim/evidence.py。
+ * `complete` 一律来自服务端判定,实验台不自行推断是否完成——实验操作不参与
+ * 完成判定；步骤 1–15 只由答题结果决定。
  */
-export interface StepEvidenceApi<T = Record<string, unknown>> {
+export interface StepStateApi<T = Record<string, unknown>> {
   data: T | undefined;
-  /** 合并写入(与该步已有证据合并,不整份覆盖)。 */
+  /** 合并写入（与该步已有状态合并，不整份覆盖）。 */
   save: (patch: Partial<T>) => void;
-  missing: string[];
   complete: boolean;
+  syncing: boolean;
+  syncError: string | null;
+  syncNow: () => void;
 }
 
-/** 单步完成判定。由服务端从会话重算(gvcsim/evidence.py),客户端不参与判定。 */
-interface StepEvidence {
+/** 单步完成判定。由服务端从会话重算，客户端不参与判定。 */
+interface StepCompletion {
   step: number;
   complete: boolean;
   /** 未完成时还差什么;直接展示给学生。 */
@@ -300,13 +294,13 @@ interface StepEvidence {
 }
 
 export interface CompletionSummary {
-  steps: StepEvidence[];
+  steps: StepCompletion[];
   completed: number[];
   completed_count: number;
   total: number;
 }
 
-/** 第 16 步门槛:还差哪一步的什么证据(由服务端判定)。 */
+/** 第 16 步门槛：还差哪一步的理解检查。 */
 export interface ReportGateItem {
   step: number;
   title: string;
@@ -315,7 +309,6 @@ export interface ReportGateItem {
 
 export interface ReportGate {
   blocked: ReportGateItem[];
-  halted?: boolean;
 }
 
 /** 服务端生成的实验报告:正文与溯源都由服务端产出,客户端不提供任何内容。 */
@@ -342,6 +335,7 @@ interface ReportRun {
   outcome: string;
   design: string;
   status: string | null;
+  source: "student_run";
 }
 
 export interface SessionResponse {
@@ -510,8 +504,6 @@ export interface RegressionResponse {
 }
 
 export interface PlaceboResponse {
-  /** Server-signed binding for this placebo distribution. */
-  placebo_run_id?: string;
   design: RegressionDesignInfo;
   placebo: {
     policy_name: string;
@@ -623,7 +615,7 @@ export interface StudentRow {
   submission_state: string | null;
   score: number | null;
   submitted_at: string | null;
-  /** Server-verified learning evidence; never inferred from max_step. */
+  /** Server-verified completion; never inferred from max_step. */
   verified_completed_count: number;
   verified_completed_steps: number[];
   completion_missing: number[];

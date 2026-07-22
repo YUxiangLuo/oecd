@@ -67,7 +67,6 @@ def load(year: int):
     io = pymrio.parse_oecd(path=RAW_DATA_DIR, year=year)
     # 必须在 calc_all 之外独立读取；这是对源表的观测值，不是派生的 x。
     io.reported_output = _read_reported_output(source, io.Z.index)
-    io.source_csv = source
     if io.A is None or io.L is None:
         io.calc_all()
     return io

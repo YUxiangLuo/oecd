@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { beginAccountMetaLoad } from "./account-meta";
 import { scanAnnouncements } from "./announcement-state";
 import { AUTH_TOKEN_KEY, api } from "./api";
 import { LogoMark } from "./brand";
@@ -13,11 +14,11 @@ import {
   type RegressionSettings,
 } from "./regression";
 import { LoginPage } from "./login";
-import { QuizPanel } from "./step-evidence";
+import { QuizPanel } from "./step-quiz";
 import { TeacherDashboard } from "./teacher";
 import { ToastHost } from "./toast";
-import type { Announcement, AuthUser, EvidenceRules, Meta, Step, StepEvidenceApi, StepsResponse } from "./types";
-import { useSession } from "./use-session";
+import type { Announcement, AuthUser, Meta, Step, StepStateApi, StepsResponse } from "./types";
+import { useSession, type SessionStatus } from "./use-session";
 
 const ROMAN = ["", "一", "二", "三", "四", "五"];
 const AUTH_EXPIRES_KEY = "gvcsim_token_expires_at";
@@ -39,12 +40,17 @@ function stepFromUrl(): number | null {
   return Number.isInteger(n) && n >= 1 && n <= 16 ? n : null;
 }
 
-function Lab({ step, meta, evidence, rules, onSessionChanged, regressionSettings, onRegressionSettingsChange, regressionHistory, onRegressionHistoryChange, onNavigateStep }: {
+function Lab({ step, meta, state, completionKey, sessionStatus, sessionUnsynced, sessionSyncing, sessionSyncError, onFlushSession, onSessionChanged, regressionSettings, onRegressionSettingsChange, regressionHistory, onRegressionHistoryChange, onNavigateStep }: {
   step: Step;
   meta: Meta | null;
-  evidence: StepEvidenceApi;
-  rules: EvidenceRules;
-  /** 服务端改写会话后(如生成报告写入第 16 步证据)重新装载完成度。 */
+  state: StepStateApi;
+  completionKey: string;
+  sessionStatus: SessionStatus;
+  sessionUnsynced: boolean;
+  sessionSyncing: boolean;
+  sessionSyncError: string | null;
+  onFlushSession: () => Promise<void>;
+  /** 服务端改写会话后（如生成报告写入第 16 步完成记录）重新装载完成度。 */
   onSessionChanged: () => void;
   regressionSettings: RegressionSettings;
   onRegressionSettingsChange: (settings: RegressionSettings) => void;
@@ -52,26 +58,38 @@ function Lab({ step, meta, evidence, rules, onSessionChanged, regressionSettings
   onRegressionHistoryChange: React.Dispatch<React.SetStateAction<RegressionHistory>>;
   onNavigateStep: (step: number) => void;
 }) {
-  if (step.lab === "db") return <DbLab evidence={evidence} />;
-  if (step.lab === "qc") return meta ? <QcLab meta={meta} evidence={evidence} onNavigateStep={onNavigateStep} /> : null;
-  if (step.lab === "shock") return meta ? <ShockLab meta={meta} step={step} evidence={evidence} rules={rules} /> : null;
+  if (step.lab === "db") return <DbLab state={state} />;
+  if (step.lab === "qc") return meta ? <QcLab meta={meta} onNavigateStep={onNavigateStep} /> : null;
+  if (step.lab === "shock") return meta ? <ShockLab meta={meta} step={step} state={state} /> : null;
   // key:同一实验台横跨多步时必须按步重挂载。否则 country 等步内状态会跨步带过去,
-  // 记证据的 effect 因依赖未变而不触发,新到的那一步拿不到"当前看的是谁"。
-  if (step.lab === "ind") return meta ? <IndicatorLab key={step.n} meta={meta} step={step} evidence={evidence} /> : null;
+  // 自动保存的 effect 因依赖未变而不触发，新到的那一步拿不到“当前看的是谁”。
+  if (step.lab === "ind") return meta ? <IndicatorLab key={step.n} meta={meta} step={step} state={state} /> : null;
   if (step.lab === "viz")
-    return meta ? <VizLab key={step.n} meta={meta} step={step} evidence={evidence} /> : null;
+    return meta ? <VizLab key={step.n} meta={meta} step={step} state={state} /> : null;
   if (step.lab === "reg") return (
     <RegressionRunLab
       key={step.regression_outcome}
       step={step}
-      evidence={evidence}
+      state={state}
       settings={regressionSettings}
       onSettingsChange={onRegressionSettingsChange}
       history={regressionHistory}
       onHistoryChange={onRegressionHistoryChange}
     />
   );
-  if (step.lab === "rep") return <ReportLab onNavigateStep={onNavigateStep} onGenerated={onSessionChanged} />;
+  if (step.lab === "rep") return (
+    <ReportLab
+      key={`${meta?.assignment_id ?? "none"}:${meta?.attempt_id ?? "none"}`}
+      completionKey={completionKey}
+      sessionStatus={sessionStatus}
+      sessionUnsynced={sessionUnsynced}
+      sessionSyncing={sessionSyncing}
+      sessionSyncError={sessionSyncError}
+      onFlushSession={onFlushSession}
+      onNavigateStep={onNavigateStep}
+      onGenerated={onSessionChanged}
+    />
+  );
   return null;
 }
 
@@ -187,17 +205,17 @@ export default function App() {
     [session],
   );
   const completedSteps = new Set(session.completion?.completed ?? []);
-  const qcState = session.getStep<{ disposition?: string; evidence_id?: string }>(2);
-  const qcHalted = qcState?.disposition === "stop" && Boolean(qcState.evidence_id);
+  const completionKey = session.completion?.completed.join(",") ?? "unavailable";
 
-  // 当前步的证据读写口。save 与该步已有证据合并:一步的证据往往分几次产生
-  // (先做动作、再写判断),整份覆盖会把先留下的那半抹掉。
-  const currentEvidence = session.completion?.steps.find((item) => item.step === current);
-  const stepEvidence: StepEvidenceApi = {
+  // 当前步的状态读写口。实验快照与答题结果分次产生，save 必须逐字段合并。
+  const currentCompletion = session.completion?.steps.find((item) => item.step === current);
+  const stepState: StepStateApi = {
     data: session.getStep(current),
     save: (patch) => session.patchStep(current, patch),
-    missing: currentEvidence?.missing ?? [],
-    complete: currentEvidence?.complete ?? false,
+    complete: currentCompletion?.complete ?? false,
+    syncing: session.syncing,
+    syncError: session.syncError,
+    syncNow: () => { void session.syncNow().catch(() => {}); },
   };
 
   // 退出登录:只清认证与界面状态。刻意**不**清实验会话——
@@ -258,16 +276,34 @@ export default function App() {
     return () => window.removeEventListener("gvcsim-auth-expired", logout);
   }, [logout]);
 
+  const accountId = user?.account_id ?? null;
+  const accountRole = user?.role ?? null;
   useEffect(() => {
-    if (!user) return;
-    api.meta().then(setMeta, () => setMeta({ years: [], countries: [], sectors: [] }));
-    if (user.role === "teacher") return; // 教师端不加载 16 步实验数据与公告横幅
+    if (accountId == null || accountRole == null) return;
+    let live = true;
+    // 新账号解析完成前不沿用上一账号的 assignment/attempt。
+    setMeta(null);
+    const cancelMetaLoad = beginAccountMetaLoad(() => api.meta(), setMeta);
+    if (accountRole === "teacher") {
+      return () => {
+        live = false;
+        cancelMetaLoad();
+      };
+    }
+    // 教师端不加载 16 步实验数据与公告横幅。
     highestAnnouncementId.current = 0;
     setAnnouncements([]);
     setBannerDismissed(false);
     setBannerExpanded(false);
-    api.steps().then(setStepsData, (e) => setFatal(String(e.message ?? e)));
-  }, [user]);
+    api.steps().then(
+      (value) => { if (live) setStepsData(value); },
+      (error) => { if (live) setFatal(String(error.message ?? error)); },
+    );
+    return () => {
+      live = false;
+      cancelMetaLoad();
+    };
+  }, [accountId, accountRole]);
 
   // 恢复本人上次进度；显式深链或用户已经主动导航时不覆盖当前选择。
   // 当前步推进时同步刷新最远步(服务端也按 GREATEST 维护,重新登录后恢复)。
@@ -419,12 +455,12 @@ export default function App() {
           <span className="muted">
             数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
           </span>
-          {/* 现在有了真实完成度(服务端按学习证据判定),它才配用 N/16 分数。
+          {/* 完成度由服务端按答题结果/报告生成判定，位置不冒充完成度。
               位置信息退到 title 里:到过第几步不是成绩。 */}
           {session.completion ? (
             <span
               className="progress-pill"
-              title={`已按学习证据完成 ${session.completion.completed_count} 步;最远到过第 ${maxStep} 步(到过不等于完成)`}
+              title={`已完成 ${session.completion.completed_count} 步；最远到过第 ${maxStep} 步（到过不等于完成）`}
             >
               已完成 <b>{session.completion.completed_count}</b><span>/{totalSteps}</span>
             </span>
@@ -509,7 +545,7 @@ export default function App() {
                 <span className="stage-rule" />
               </div>
               {steps.filter((s) => s.stage === st).map((s) => {
-                // ✓ 只给服务端依据学习证据判定的完成步骤(gvcsim/evidence.py)。
+                // ✓ 只给服务端判定完成的步骤；到过仍只是一种导航状态。
                 // past 仅表示“到过”,是导航信息,一律显示步号——到过不是做过。
                 const done = completedSteps.has(s.n);
                 const state = done ? "done" : s.n === current ? "cur" : s.n <= maxStep ? "past" : "future";
@@ -519,9 +555,8 @@ export default function App() {
                     key={s.n}
                     className={`step-row${s.n === current ? " active" : ""}`}
                     aria-current={s.n === current ? "step" : undefined}
-                    disabled={qcHalted && s.n > 2}
                     onClick={() => navigateStep(s.n)}
-                    title={qcHalted && s.n > 2 ? "本次作业已在步骤 2 停止，请先修改质检处置" : done ? `第 ${s.n} 步已完成` : undefined}
+                    title={done ? `第 ${s.n} 步已完成` : undefined}
                   >
                     <span className={`step-badge ${state}`}>{done ? "✓" : s.n}</span>
                     <span className="step-row-title">{s.title}</span>
@@ -535,15 +570,29 @@ export default function App() {
         </aside>
 
         <div className="workarea">
+          {session.syncError && !assignmentClosed && (
+            <div className="error-box persistent-qc-warning" role="alert">
+              <b>实验记录尚未同步到服务器。</b>
+              <p>{session.syncError} 本地记录仍在，可以直接重试。</p>
+              <button
+                type="button"
+                className="secondary"
+                disabled={session.syncing}
+                onClick={() => { void session.syncNow().catch(() => {}); }}
+              >
+                {session.syncing ? "正在重试…" : "重试保存"}
+              </button>
+            </div>
+          )}
           {meta?.manifest_mismatch && (
             <div className="warnbox persistent-qc-warning" role="alert">
-              当前数据 manifest 与这份作业冻结的版本不一致。为避免混用数据，学习证据、报告与提交将保持锁定；请联系教师切换作业版本。
+              当前数据 manifest 与这份作业冻结的版本不一致。为避免混用数据，答题、实验记录、报告与提交将保持锁定；请联系教师切换作业版本。
             </div>
           )}
           {assignmentClosed && (
             <div className="warnbox persistent-qc-warning assignment-closed-warning" role="alert">
               <b>作业已于 {deadlineLabel(assignmentDueAt)} 截止，现在为只读状态。</b>
-              <p>你仍可浏览既有步骤、可信证据与服务端完成度，但不能继续保存、签发证据、生成/提交报告、重置或新建 attempt。既有记录和审计历史不会被删除。</p>
+              <p>你仍可浏览既有步骤、答题结果与服务端完成度，但不能继续保存实验状态、答题、生成/提交报告、重置或新建 attempt。既有记录和审计历史不会被删除。</p>
             </div>
           )}
           {!assignmentClosed && (meta?.assignment_unavailable || assignmentScopeMissing) && (
@@ -558,7 +607,7 @@ export default function App() {
                 发现旧课程、旧数据版本或用户名作用域的记录。它已被隔离为只读旧记录，
                 不会合并、不会自动回推，也不会计入本次作业完成度。
               </div>
-              <div className="evidence-submit-row" style={{ marginTop: 10 }}>
+              <div className="session-actions" style={{ marginTop: 10 }}>
                 <button type="button" className="secondary" disabled={!session.recovery.length || resettingAttempt} onClick={exportRecovery}>
                   导出隔离记录
                 </button>
@@ -566,7 +615,7 @@ export default function App() {
                   {resettingAttempt ? "正在归档并新建…" : "归档旧 attempt 并重新开始"}
                 </button>
               </div>
-              <p className="muted">重新开始是显式操作：旧 attempt 会保留为审计记录，新 attempt 从空白证据开始。</p>
+              <p className="muted">重新开始是显式操作：旧 attempt 会保留为审计记录，新 attempt 从空白状态开始。</p>
               {resetAttemptError && <div className="error-box">重新开始失败：{resetAttemptError}</div>}
             </div>
           )}
@@ -581,7 +630,7 @@ export default function App() {
             </div>
             <div className="nav-btns">
               <button disabled={!prevStep} onClick={() => prevStep && navigateStep(prevStep.n)}>← 上一步</button>
-              <button className="primary" disabled={!nextStep || (qcHalted && Boolean(nextStep && nextStep.n > 2))} onClick={() => nextStep && navigateStep(nextStep.n)}>下一步 →</button>
+              <button className="primary" disabled={!nextStep} onClick={() => nextStep && navigateStep(nextStep.n)}>下一步 →</button>
             </div>
           </div>
 
@@ -601,8 +650,13 @@ export default function App() {
                     <Lab
                       step={step}
                       meta={meta}
-                      evidence={stepEvidence}
-                      rules={stepsData.evidence_rules}
+                      state={stepState}
+                      completionKey={completionKey}
+                      sessionStatus={session.status}
+                      sessionUnsynced={session.unsynced}
+                      sessionSyncing={session.syncing}
+                      sessionSyncError={session.syncError}
+                      onFlushSession={session.syncNow}
                       onSessionChanged={session.reload}
                       regressionSettings={regressionSettings}
                       onRegressionSettingsChange={setRegressionSettings}
@@ -610,33 +664,32 @@ export default function App() {
                       onRegressionHistoryChange={setRegressionHistory}
                       onNavigateStep={navigateStep}
                     />
-                    <QuizPanel key={step.n} step={step} evidence={stepEvidence} />
+                    <QuizPanel key={step.n} step={step} state={stepState} />
                   </div>
                 ) : assignmentLocked ? (
                   <div className="error-box assignment-lock" role="alert">
                     <h3>实验台已锁定</h3>
                     <p>
                       {meta?.manifest_mismatch
-                        ? "当前产物与作业冻结的数据版本不一致，不能生成或提交学习证据。"
+                        ? "当前产物与作业冻结的数据版本不一致，不能保存实验状态、答题或生成报告。"
                         : session.stale
                           ? "检测到旧课程、旧数据版本或未验证 attempt 的记录。请先在上方导出留档，并显式归档旧 attempt 后重新开始。"
                         : "当前账号没有可验证的课程运行、作业或 attempt 上下文；此时填写内容不会被可靠保存，因此表单没有开放。"}
                     </p>
                     <p>刷新后仍未恢复，请联系教师确认作业是否已发布并将你加入对应课程运行。</p>
                   </div>
-                ) : qcHalted && step.n > 2 ? (
-                  <div className="warnbox halted-course">
-                    <h3>本次分析已按你的质检处置停止</h3>
-                    <p>后续指标、回归和报告不会开放。返回步骤 2 修改处置；或等待教师发布修正并通过复检的新数据版本。</p>
-                    <button type="button" className="primary" onClick={() => navigateStep(2)}>返回步骤 2</button>
-                  </div>
                 ) : (
                   <>
                     <Lab
                       step={step}
                       meta={meta}
-                      evidence={stepEvidence}
-                      rules={stepsData.evidence_rules}
+                      state={stepState}
+                      completionKey={completionKey}
+                      sessionStatus={session.status}
+                      sessionUnsynced={session.unsynced}
+                      sessionSyncing={session.syncing}
+                      sessionSyncError={session.syncError}
+                      onFlushSession={session.syncNow}
                       onSessionChanged={session.reload}
                       regressionSettings={regressionSettings}
                       onRegressionSettingsChange={setRegressionSettings}
@@ -644,7 +697,7 @@ export default function App() {
                       onRegressionHistoryChange={setRegressionHistory}
                       onNavigateStep={navigateStep}
                     />
-                    <QuizPanel key={step.n} step={step} evidence={stepEvidence} />
+                    <QuizPanel key={step.n} step={step} state={stepState} />
                   </>
                 )}
               </div>
@@ -678,7 +731,7 @@ export default function App() {
                   <span className="rail-flow-t">{step.title}</span>
                 </div>
                 {nextStep && (
-                  <button type="button" className="rail-flow-row" disabled={qcHalted && nextStep.n > 2} onClick={() => navigateStep(nextStep.n)}>
+                  <button type="button" className="rail-flow-row" onClick={() => navigateStep(nextStep.n)}>
                     <span className="rail-flow-k">↓ 下一步</span>
                     <span className="rail-flow-t">{nextStep.title}</span>
                   </button>

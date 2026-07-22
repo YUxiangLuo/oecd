@@ -112,7 +112,7 @@ export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearS
 
       {filteredStep != null && (
         <div className="active-filter">
-          已筛选：{filterKind === "completed" ? "已验证完成" : "最远到达"}步骤 {filteredStep} · {stepTitles.get(filteredStep) ?? ""}
+          已筛选：{filterKind === "completed" ? "已完成" : "最远到达"}步骤 {filteredStep} · {stepTitles.get(filteredStep) ?? ""}
           <button onClick={onClearStep}>清除</button>
         </div>
       )}
@@ -129,8 +129,8 @@ export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearS
               <th>班级</th>
               <th>当前步</th>
               <th><button className="table-sort" onClick={() => toggleSort("max_step")}>到达位置{sortMark("max_step")}</button></th>
-              <th><button className="table-sort" onClick={() => toggleSort("verified_completed_count")}>验证完成{sortMark("verified_completed_count")}</button></th>
-              <th>证据状态</th>
+              <th><button className="table-sort" onClick={() => toggleSort("verified_completed_count")}>完成步骤{sortMark("verified_completed_count")}</button></th>
+              <th>完成状态</th>
               <th>报告</th>
               <th><button className="table-sort" onClick={() => toggleSort("score")}>得分{sortMark("score")}</button></th>
               <th><button className="table-sort" onClick={() => toggleSort("last_login_at")}>最近登录{sortMark("last_login_at")}</button></th>
@@ -161,7 +161,7 @@ export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearS
                   )}
                 </td>
                 <td>
-                  <span className="step-cell" title={`已验证步骤：${(s.verified_completed_steps ?? []).join("、") || "无"}`}>
+                  <span className="step-cell" title={`已完成步骤：${(s.verified_completed_steps ?? []).join("、") || "无"}`}>
                     <span className="mini-track verified">
                       <span className="mini-bar" style={{ width: `${((s.verified_completed_count ?? 0) / 16) * 100}%` }} />
                     </span>
@@ -170,13 +170,13 @@ export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearS
                 </td>
                 <td>
                   {s.legacy_unverified ? (
-                    <StatusPill tone="warn">旧记录未验证</StatusPill>
+                    <StatusPill tone="warn">旧会话不可用</StatusPill>
                   ) : s.session_stale ? (
                     <StatusPill tone="warn">数据版本已过期</StatusPill>
                   ) : (s.verified_completed_count ?? 0) > 0 ? (
-                    <StatusPill tone="ok">服务端已核验</StatusPill>
+                    <StatusPill tone="ok">服务端已判定</StatusPill>
                   ) : (
-                    <StatusPill tone="muted">尚无核验证据</StatusPill>
+                    <StatusPill tone="muted">尚无完成步骤</StatusPill>
                   )}
                   <div className="muted" style={{ fontSize: 10.5, marginTop: 4 }}>
                     有效活动 {fmtTime(s.last_valid_activity)}
@@ -230,7 +230,7 @@ export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearS
           />
         )}
       </div>
-      <p className="muted panel-note">“到达位置”只表示浏览导航；“验证完成”来自绑定账号、作业、数据版本的服务端证据。停用账号会立即撤销现有会话并禁止后续请求，但保留学习与审计记录。</p>
+      <p className="muted panel-note">“到达位置”只表示浏览导航；步骤 1–15 由答题通过判定，第 16 步由报告生成判定。停用账号会立即撤销现有会话并禁止后续请求，但保留历史记录。</p>
 
       {modal?.type === "class" && (
         <ClassModal onClose={() => setModal(null)} onSubmit={(b) => run(api.classroom.createClass(b))} />

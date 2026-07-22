@@ -5,7 +5,6 @@ import {
   eventKey,
   filtersForEvent,
   filtersMatchEvent,
-  isShockActionReady,
   representativeSector,
   SHOCK_TYPE_COLORS,
   SHOCK_TYPE_LABELS,
@@ -81,11 +80,6 @@ describe("step2 shock event model", () => {
 });
 
 describe("冲击类型的键与展示", () => {
-  test("三类事件各打开一个后即可提交操作证据", () => {
-    expect(isShockActionReady(["tariff", "sanctions"], SHOCK_TYPES)).toBe(false);
-    expect(isShockActionReady(["export_control", "tariff", "sanctions"], SHOCK_TYPES)).toBe(true);
-  });
-
   test("每个稳定键都有文案和配色", () => {
     // 这条守的是一次真实回归:配色表原来按中文名索引,枚举改成稳定键后
     // 查表全部落空,时间线上所有事件退化成同一个兜底色,而没有任何测试会红。

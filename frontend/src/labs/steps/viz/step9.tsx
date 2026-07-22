@@ -8,11 +8,10 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../../api";
-import { EvidencePanel, VerifiedActionBox } from "../../../step-evidence";
-import type { IndustryPage, Meta, Step, StepEvidenceApi } from "../../../types";
+import type { IndustryPage, Meta, Step, StepStateApi } from "../../../types";
 import { CompositionBar, RankBarChart, countryLabel } from "../../../viz";
 import { useAsync } from "../../shared";
-import { ChartStory, LensNav, StepIntro, VizWorkbench, finiteBy, num, useCountryObservations, useVizLab, type Row, type VizEvidence } from "./scaffold";
+import { ChartStory, LensNav, StepIntro, VizWorkbench, finiteBy, num, useCountryObservations, useVizLab, type Row, type VizStepState } from "./scaffold";
 
 type Lens = "ladder" | "rank" | "industry";
 
@@ -23,32 +22,32 @@ const PROD_SEGMENTS = [
   { key: "3b_VA_GVC_C", name: "复杂 GVC" },
 ];
 
-export function Step9Production({ meta, step, evidence }: { meta: Meta; step: Step; evidence: StepEvidenceApi<VizEvidence> }) {
+export function Step9Production({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
   const { year, setYear, lens, pickLens, picked, pickCountries } = useVizLab(
-    meta, step, evidence, "ladder", ["ladder", "rank", "industry"],
+    meta, step, state, "ladder", ["ladder", "rank", "industry"],
   );
   const fallbackDrill = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
-  const [drill, setDrill] = useState(evidence.data?.drill ?? evidence.data?.compared?.at(-1) ?? fallbackDrill);
-  const drillTouched = useRef(Boolean(evidence.data));
+  const [drill, setDrill] = useState(state.data?.drill ?? state.data?.compared?.at(-1) ?? fallbackDrill);
+  const drillTouched = useRef(Boolean(state.data));
   useEffect(() => {
-    if (drillTouched.current || !evidence.data) return;
-    const saved = evidence.data.drill ?? evidence.data.compared?.at(-1);
+    if (drillTouched.current || !state.data) return;
+    const saved = state.data.drill ?? state.data.compared?.at(-1);
     if (saved && meta.countries.includes(saved)) setDrill(saved);
     drillTouched.current = true;
-  }, [evidence.data, meta.countries]);
+  }, [state.data, meta.countries]);
   const selectCountries = (next: string[]) => {
     pickCountries(next);
     const last = next.at(-1);
     if (last) {
       setDrill(last);
-      evidence.save({ drill: last, evidence_id: "" });
+      state.save({ drill: last });
     }
   };
   const selectDrill = (next: string) => {
     drillTouched.current = true;
     setDrill(next);
     pickCountries(picked.includes(next) ? picked : [...picked, next]);
-    evidence.save({ drill: next, evidence_id: "" });
+    state.save({ drill: next });
   };
   const { data } = useAsync<Row[]>(() => api.countryIndicators(year), [year]);
   const { data: page } = useAsync<IndustryPage | null>(
@@ -56,7 +55,7 @@ export function Step9Production({ meta, step, evidence }: { meta: Meta; step: St
     [lens, year, drill],
   );
   const rows = data ?? [];
-  useCountryObservations(rows, picked, year, "3b_VA_GVC_C_share", evidence);
+  useCountryObservations(rows, picked, year, "3b_VA_GVC_C_share", state);
   const highlight = new Set(picked);
 
   // 阶梯:主要经济体(按 SVA 取前 15)+ 你选中的国家,按复杂 GVC 份额排序 → 呈现梯度。
@@ -68,7 +67,6 @@ export function Step9Production({ meta, step, evidence }: { meta: Meta; step: St
 
   return (
     <div>
-      <EvidencePanel evidence={evidence} title="本步要留下的证据:选一个镜头,并在「选国家」里挑至少两个经济体对比" />
       <StepIntro
         kicker={`步骤 ${step.n} · 生产可视化`}
         lead="一国的增加值,有多深地进了 GVC?"
@@ -140,13 +138,6 @@ export function Step9Production({ meta, step, evidence }: { meta: Meta; step: St
         </ChartStory>
       )}
       </VizWorkbench>
-      <VerifiedActionBox
-        step={step.n}
-        kind="visualization"
-        evidence={evidence}
-        ready={Boolean(evidence.data?.chart && (evidence.data?.compared?.length ?? 0) >= 2 && (evidence.data?.observations?.length ?? 0) >= 2)}
-        context={{ topic: step.topic, year, chart: lens, compared: picked, drill, metric: evidence.data?.metric, observations: evidence.data?.observations }}
-      />
     </div>
   );
 }

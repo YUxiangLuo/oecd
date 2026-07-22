@@ -1,7 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api";
-import { EvidencePanel, VerifiedActionBox } from "../../step-evidence";
-import type { EvidenceRules, Meta, QcCheck, QuizStepEvidence, ShockEvent, Step, StepEvidenceApi } from "../../types";
+import type { Meta, QcCheck, QuizCompletionState, ShockEvent, Step, StepStateApi } from "../../types";
 import { countryLabel, sectorLabel } from "../../viz";
 import { CrosswalkDemo } from "./step2/crosswalk-demo";
 import { EventList } from "./step2/event-list";
@@ -9,7 +8,6 @@ import {
   eventKey,
   filtersForEvent,
   filtersMatchEvent,
-  isShockActionReady,
   shockTypeLabel,
   type ShockPanelFilters,
 } from "./step2/model";
@@ -20,29 +18,17 @@ import { StepIntro } from "./viz/scaffold";
 import { useAsync } from "../shared";
 
 /** 步骤11:从政策事件到国家×行业冲击面板——左右并排、点事件即联动右侧冲击。 */
-/** 第 11 步的学习证据:三类政策冲击各查看过至少一个具体事件。 */
-interface ViewedShockEvent {
-  key: string;
-  name: string;
-  shock_type: string;
-  announced: string;
-  effective: string;
-  targets: string;
-  top_sectors: string[];
-  peak_rate: number;
-}
-
-interface ShockEvidence extends QuizStepEvidence, Record<string, unknown> {
+/** 自动保存学生打开过的政策事件，供报告摘要。 */
+interface ShockStepState extends QuizCompletionState, Record<string, unknown> {
   viewed_shock_types?: string[];
   viewed_events?: string[];
-  event_details?: ViewedShockEvent[];
+  selected_event_key?: string;
 }
 
-export function ShockLab({ meta, step, evidence, rules }: {
+export function ShockLab({ meta, step, state }: {
   meta: Meta;
   step: Step;
-  evidence: StepEvidenceApi<ShockEvidence>;
-  rules: EvidenceRules;
+  state: StepStateApi<ShockStepState>;
 }) {
   const initialYear = meta.years.at(-1) ?? 2020;
   const [filters, setFilters] = useState<ShockPanelFilters>({
@@ -54,6 +40,7 @@ export function ShockLab({ meta, step, evidence, rules }: {
     page: 1,
   });
   const [selectedEvent, setSelectedEvent] = useState<ShockEvent | null>(null);
+  const eventInteraction = useRef(false);
   const { data: eventsResponse, error: eventsError } = useAsync(() => api.shockEvents(), []);
   // 冲击面板的专项质检随冲击一起放在回归前(本步),作为回归前的口径检查。
   const { data: shockChecks, error: shockQcError } = useAsync<QcCheck[]>(() => api.qcShocks(), []);
@@ -65,34 +52,36 @@ export function ShockLab({ meta, step, evidence, rules }: {
   );
   const filtersDirty = expectedFilters ? !filtersMatchEvent(filters, expectedFilters) : false;
 
+  useEffect(() => {
+    if (eventInteraction.current || selectedEvent || events.length === 0) return;
+    const savedKey = state.data?.selected_event_key;
+    const savedName = state.data?.viewed_events?.at(-1);
+    const restored = events.find((event) => (
+      (savedKey && eventKey(event) === savedKey) || (!savedKey && savedName && event.name === savedName)
+    ));
+    if (!restored) return;
+    setSelectedEvent(restored);
+    setFilters(filtersForEvent(restored, meta, initialYear));
+  }, [events, initialYear, meta, selectedEvent, state.data]);
+
   const pickEvent = (event: ShockEvent) => {
-    // 证据:这一类政策冲击的具体事件被真正打开过。累加而不是覆盖——
-    // 三类冲击是分三次看的,整份覆盖会把前两次抹掉。
+    // 打开过的事件累加保存，刷新后可恢复，也可进入最终报告的实验摘要。
     const type = event.shock_type ?? filters.shockType;
-    const viewed = evidence.data?.viewed_shock_types ?? [];
-    const viewedEvents = evidence.data?.viewed_events ?? [];
-    const eventDetails = evidence.data?.event_details ?? [];
-    const key = eventKey(event);
-    const eventRecord: ViewedShockEvent = {
-      key,
-      name: event.name,
-      shock_type: type,
-      announced: event.announced,
-      effective: event.effective,
-      targets: event.targets,
-      top_sectors: event.top_sectors,
-      peak_rate: event.peak_rate,
-    };
-    evidence.save({
+    const viewed = state.data?.viewed_shock_types ?? [];
+    const viewedEvents = state.data?.viewed_events ?? [];
+    eventInteraction.current = true;
+    state.save({
       viewed_shock_types: type && !viewed.includes(type) ? [...viewed, type] : viewed,
-      viewed_events: viewedEvents.includes(event.name) ? viewedEvents : [...viewedEvents, event.name],
-      event_details: eventDetails.some((item) => item.key === key) ? eventDetails : [...eventDetails, eventRecord],
-      evidence_id: "",
+      viewed_events: [...viewedEvents.filter((name) => name !== event.name), event.name],
+      selected_event_key: eventKey(event),
     });
     setSelectedEvent(event);
     setFilters(filtersForEvent(event, meta, initialYear));
   };
-  const updateFilters = (patch: Partial<ShockPanelFilters>) => setFilters((current) => ({ ...current, ...patch }));
+  const updateFilters = (patch: Partial<ShockPanelFilters>) => {
+    eventInteraction.current = true;
+    setFilters((current) => ({ ...current, ...patch }));
+  };
 
   const panelDesc = `${filters.year} · ${shockTypeLabel(filters.shockType)} · ${filters.country ? countryLabel(filters.country) : "全部经济体"} · ${filters.sector ? sectorLabel(filters.sector) : "全部行业"}`;
 
@@ -104,13 +93,9 @@ export function ShockLab({ meta, step, evidence, rules }: {
         concept={step.concept}
         todo={[
           "从左侧列表选一个政策事件(行内时间条给出宣布→生效时点),右侧即联动出它的国家×行业冲击",
-          "关税 / 制裁 / 出口管制三类各看一个,随后直接提交操作证据",
+          "可继续查看关税 / 制裁 / 出口管制的差异；打开过的事件会自动进入实验记录",
           "记住:这些冲击就是接下来第 12–15 步回归的处理变量",
         ]}
-      />
-      <EvidencePanel
-        evidence={evidence}
-        title={`本步要留下的证据:${rules.required_shock_types.map(shockTypeLabel).join("、")} 三类事件各打开一个`}
       />
       <div className="warnbox shock-disclaimer">
         ⚠ 拟真演示数据:以 2018–2020 全球贸易摩擦真实事件为原型手工编码(税率量级参考 PIIE/Bown),
@@ -161,16 +146,6 @@ export function ShockLab({ meta, step, evidence, rules }: {
       </details>
 
       <CrosswalkDemo selectedShockType={filters.shockType} />
-      <VerifiedActionBox
-        step={step.n}
-        kind="shock"
-        evidence={evidence}
-        ready={isShockActionReady(evidence.data?.viewed_shock_types, rules.required_shock_types)}
-        context={{
-          viewed_shock_types: evidence.data?.viewed_shock_types,
-          viewed_events: evidence.data?.viewed_events,
-        }}
-      />
     </div>
   );
 }

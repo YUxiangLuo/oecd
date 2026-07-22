@@ -3,16 +3,30 @@ import { api } from "../../api";
 import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
 import { showToast } from "../../toast";
 import type { GeneratedReport, MySubmission, ReportGateItem } from "../../types";
+import type { SessionStatus } from "../../use-session";
 import { useAsync } from "../shared";
 
 const fmtTime = (s: string | null | undefined) => (s ? s.slice(0, 16).replace("T", " ") : "—");
 
+/** 报告生成必须等初次会话恢复和所有本地写入都由服务端确认。 */
+export function reportGenerationReady(
+  sessionStatus: SessionStatus,
+  blocked: ReportGateItem[] | null,
+  sessionUnsynced: boolean,
+  sessionSyncing: boolean,
+): boolean {
+  return sessionStatus === "ready"
+    && blocked != null
+    && blocked.length === 0
+    && !sessionUnsynced
+    && !sessionSyncing;
+}
+
 /** 第 16 步:实验报告。
  *
  * 这一步刻意**没有任何参数表单**。报告由服务端从学生自己的实验会话生成:
- * 前 15 步证据齐全才允许生成,回归在服务端按学生保存的设定重跑,正文与溯源
- * 一起落库。界面只负责触发、展示和提交 report_key——它拿不到、也不需要
- * 任何可以自己编造的内容。
+ * 前 15 步答题通过后即可生成；自动保存的实验快照会进入报告，只有学生实际
+ * 运行过的回归才由服务端复估。界面只负责触发、展示和提交 report_key。
  */
 
 function GateCard({ blocked, onNavigateStep }: {
@@ -20,12 +34,12 @@ function GateCard({ blocked, onNavigateStep }: {
   onNavigateStep: (step: number) => void;
 }) {
   return (
-    <section className="evidence-panel">
-      <div className="evidence-head">
-        <span className="evidence-badge">!</span>
-        <b>还不能生成报告:前 15 步的学习证据尚未齐全</b>
+    <section className="report-gate-panel">
+      <div className="report-gate-head">
+        <span className="report-gate-badge">!</span>
+        <b>还不能生成报告：前 15 步的理解检查尚未全部通过</b>
       </div>
-      <p className="muted">报告要能证明你做过这门课,因此它只从你自己的实验记录生成。还差:</p>
+      <p className="muted">请完成以下步骤的选择题：</p>
       <ul>
         {blocked.map((item) => (
           <li key={item.step}>
@@ -92,14 +106,28 @@ function SubmitCard({ report, mine, onSubmitted }: {
   );
 }
 
-export function ReportLab({ onNavigateStep, onGenerated }: {
+export function ReportLab({
+  completionKey,
+  sessionStatus,
+  sessionUnsynced,
+  sessionSyncing,
+  sessionSyncError,
+  onFlushSession,
+  onNavigateStep,
+  onGenerated,
+}: {
+  completionKey: string;
+  sessionStatus: SessionStatus;
+  sessionUnsynced: boolean;
+  sessionSyncing: boolean;
+  sessionSyncError: string | null;
+  onFlushSession: () => Promise<void>;
   onNavigateStep: (step: number) => void;
-  /** 报告生成后服务端会写入第 16 步证据,通知外层重取完成度。 */
+  /** 报告生成后服务端会写入第 16 步完成记录，通知外层重取完成度。 */
   onGenerated: () => void;
 }) {
   const [report, setReport] = useState<GeneratedReport | null>(null);
   const [blocked, setBlocked] = useState<ReportGateItem[] | null>(null);
-  const [halted, setHalted] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rendererReady, setRendererReady] = useState(false);
@@ -114,43 +142,95 @@ export function ReportLab({ onNavigateStep, onGenerated }: {
       (row) => { if (live && row.report_key) setReport(row as GeneratedReport); },
       () => {},
     );
-    api.classroom.reportGate().then((gate) => {
-      if (!live) return;
-      setBlocked(gate.blocked);
-      setHalted(gate.halted === true);
-    }, () => {});
     return () => { live = false; };
   }, []);
 
-  const generate = () => {
+  useEffect(() => {
+    setBlocked(null);
+    if (sessionStatus !== "ready") return;
+    let live = true;
+    api.classroom.reportGate().then((gate) => {
+      if (!live) return;
+      setBlocked(gate.blocked);
+    }, () => {});
+    return () => { live = false; };
+  }, [completionKey, sessionStatus]);
+
+  // 进入报告页就冲刷防抖队列；同步成功前按钮保持锁定。失败由全局提示和
+  // 下方重试入口共同呈现，不自动死循环重试。
+  useEffect(() => {
+    if (sessionStatus !== "ready" || !sessionUnsynced || sessionSyncing || sessionSyncError) return;
+    void onFlushSession().catch(() => {});
+  }, [sessionStatus, sessionUnsynced, sessionSyncing, sessionSyncError, onFlushSession]);
+
+  const generate = async () => {
     setGenerating(true);
     setError(null);
-    api.classroom.generateReport().then(
-      (row) => {
-        setGenerating(false);
-        setReport(row);
-        setBlocked([]);
-        onGenerated();
-      },
-      (e: Error & { blocked?: ReportGateItem[] }) => {
-        setGenerating(false);
-        // 门槛未过:服务端会告诉学生还差什么,原样展示,不在前端另编一套判断。
-        if (e.blocked) setBlocked(e.blocked);
-        else setError(e.message);
-      },
-    );
+    try {
+      // 即使按钮状态因 React 批处理尚未来得及刷新，也在请求报告前再做一次
+      // 防御性 flush，确保服务端读取的是当前浏览器最新确认的 revision。
+      await onFlushSession();
+    } catch (cause) {
+      setGenerating(false);
+      setError(`最新实验记录尚未保存，不能生成报告：${String((cause as Error).message ?? cause)}`);
+      return;
+    }
+    try {
+      const row = await api.classroom.generateReport();
+      setReport(row);
+      setBlocked([]);
+      onGenerated();
+    } catch (cause) {
+      const apiError = cause as Error & { blocked?: ReportGateItem[] };
+      // 门槛未过:服务端会告诉学生还差什么,原样展示,不在前端另编一套判断。
+      if (apiError.blocked) setBlocked(apiError.blocked);
+      else setError(apiError.message);
+    } finally {
+      setGenerating(false);
+    }
   };
 
-  const canGenerate = !halted && blocked != null && blocked.length === 0;
+  const canGenerate = reportGenerationReady(sessionStatus, blocked, sessionUnsynced, sessionSyncing);
 
   return (
     <div>
-      {halted && <div className="warnbox">你在步骤 2 选择了“停止分析”。这份质检决策已记录，但报告保持锁定；请返回步骤 2 修改处置，或等待新数据通过复检。</div>}
       {blocked != null && blocked.length > 0 && <GateCard blocked={blocked} onNavigateStep={onNavigateStep} />}
 
+      {sessionStatus !== "ready" && (
+        <div className={sessionStatus === "unavailable" ? "error-box" : "muted"} role="status">
+          {sessionStatus === "loading"
+            ? "正在恢复最新实验记录，恢复完成后才能生成报告…"
+            : "当前无法连接教学服务，不能确认最新实验记录或生成报告。"}
+        </div>
+      )}
+
+      {sessionUnsynced && (
+        <div className={sessionSyncError ? "error-box" : "muted"} role="status">
+          {sessionSyncError
+            ? "最新实验记录尚未保存；保存成功后才能生成报告。"
+            : "正在保存最新实验记录，完成后即可生成报告…"}
+          {sessionSyncError && (
+            <button
+              type="button"
+              className="secondary"
+              disabled={sessionSyncing}
+              onClick={() => { void onFlushSession().catch(() => {}); }}
+            >
+              {sessionSyncing ? "正在重试…" : "重试保存"}
+            </button>
+          )}
+        </div>
+      )}
+
       <section className="report-actions">
-        <button className="run-btn" onClick={generate} disabled={generating || !canGenerate}>
-          {generating ? "服务端生成中…" : report ? "重新生成报告" : "生成实验报告"}
+        <button className="run-btn" onClick={() => { void generate(); }} disabled={generating || !canGenerate}>
+          {sessionStatus === "loading"
+            ? "正在恢复实验记录…"
+            : sessionStatus === "unavailable"
+              ? "教学服务不可用"
+              : sessionUnsynced
+            ? "等待最新记录保存…"
+            : generating ? "服务端生成中…" : report ? "重新生成报告" : "生成实验报告"}
         </button>
         <button
           className="secondary"
@@ -179,7 +259,7 @@ export function ReportLab({ onNavigateStep, onGenerated }: {
           </div>
         </>
       ) : (
-        canGenerate && <p className="muted">前 15 步的证据已齐全,点击上方按钮由服务端生成报告。</p>
+        canGenerate && <p className="muted">前 15 步均已答题通过。点击上方按钮生成报告；没有实际运行过的回归会如实标记为“未记录”。</p>
       )}
     </div>
   );

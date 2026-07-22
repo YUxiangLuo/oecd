@@ -7,11 +7,10 @@
  *   FVA 排序 谁的出口最依赖外国增加值(后向 GVC 参与最深)
  */
 import { api } from "../../../api";
-import { EvidencePanel, VerifiedActionBox } from "../../../step-evidence";
-import type { Meta, Step, StepEvidenceApi } from "../../../types";
+import type { Meta, Step, StepStateApi } from "../../../types";
 import { CompositionBar, QuadrantScatter, RankBarChart } from "../../../viz";
 import { useAsync } from "../../shared";
-import { ChartStory, LensNav, StepIntro, VizWorkbench, finiteBy, num, useCountryObservations, useVizLab, type Row, type VizEvidence } from "./scaffold";
+import { ChartStory, LensNav, StepIntro, VizWorkbench, finiteBy, num, useCountryObservations, useVizLab, type Row, type VizStepState } from "./scaffold";
 
 type Lens = "quadrant" | "decompose" | "rank";
 
@@ -27,13 +26,13 @@ const QUAD_LABELS: [string, string, string, string] = [
   "双高 · 深度嵌入", "GVC 生产主导 · 前向型", "双低 · 相对自给", "进口依赖 · 后向型",
 ];
 
-export function Step8Trade({ meta, step, evidence }: { meta: Meta; step: Step; evidence: StepEvidenceApi<VizEvidence> }) {
+export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
   const { year, setYear, lens, pickLens, picked, pickCountries } = useVizLab(
-    meta, step, evidence, "quadrant", ["quadrant", "decompose", "rank"],
+    meta, step, state, "quadrant", ["quadrant", "decompose", "rank"],
   );
   const { data } = useAsync<Row[]>(() => api.countryIndicators(year), [year]);
   const rows = data ?? [];
-  useCountryObservations(rows, picked, year, "FVA_share", evidence);
+  useCountryObservations(rows, picked, year, "FVA_share", state);
 
   const highlight = new Set(picked);
   const quadRows = finiteBy(rows, "FVA_share", "3_VA_GVC_share");
@@ -47,7 +46,6 @@ export function Step8Trade({ meta, step, evidence }: { meta: Meta; step: Step; e
 
   return (
     <div>
-      <EvidencePanel evidence={evidence} title="本步要留下的证据:选一个镜头,并在「选国家」里挑至少两个经济体对比" />
       <StepIntro
         kicker={`步骤 ${step.n} · 贸易流可视化`}
         lead="一国的出口,价值从哪来?"
@@ -120,13 +118,6 @@ export function Step8Trade({ meta, step, evidence }: { meta: Meta; step: Step; e
         </ChartStory>
       )}
       </VizWorkbench>
-      <VerifiedActionBox
-        step={step.n}
-        kind="visualization"
-        evidence={evidence}
-        ready={Boolean(evidence.data?.chart && (evidence.data?.compared?.length ?? 0) >= 2 && (evidence.data?.observations?.length ?? 0) >= 2)}
-        context={{ topic: step.topic, year, chart: lens, compared: picked, metric: evidence.data?.metric, observations: evidence.data?.observations }}
-      />
     </div>
   );
 }

@@ -313,7 +313,7 @@ def build_panel(*, allow_qc_override: bool = False) -> pd.DataFrame:
     country.to_csv(PROCESSED_DIR / "panel_country.csv", index=False)
     source_paths: list[Path] = [
         *sorted(RAW_DATA_DIR.glob("ICIO*_*.csv")),
-        # 受控收录整个 Python 后端：不仅指标公式，QC、报告、证据 gate 和 API
+        # 受控收录整个 Python 后端：不仅指标公式，QC、报告、完成度 gate 和 API
         # 都会改变学生最终看到/提交的内容，漏登记会让 dirty 构建冒充 commit 版本。
         *sorted((ROOT / "gvcsim").rglob("*.py")),
         ROOT / "pyproject.toml",

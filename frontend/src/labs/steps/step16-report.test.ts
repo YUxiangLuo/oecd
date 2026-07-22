@@ -1,0 +1,20 @@
+import { describe, expect, test } from "bun:test";
+import type { ReportGateItem } from "../../types";
+import { reportGenerationReady } from "./step16-report";
+
+const blocked: ReportGateItem[] = [{ step: 3, title: "理解检查", missing: ["尚未答题通过"] }];
+
+describe("report generation readiness", () => {
+  test("stays closed until initial session restoration finishes", () => {
+    expect(reportGenerationReady("loading", [], false, false)).toBe(false);
+    expect(reportGenerationReady("unavailable", [], false, false)).toBe(false);
+    expect(reportGenerationReady("ready", null, false, false)).toBe(false);
+  });
+
+  test("requires an open server gate and a fully flushed session", () => {
+    expect(reportGenerationReady("ready", blocked, false, false)).toBe(false);
+    expect(reportGenerationReady("ready", [], true, false)).toBe(false);
+    expect(reportGenerationReady("ready", [], false, true)).toBe(false);
+    expect(reportGenerationReady("ready", [], false, false)).toBe(true);
+  });
+});

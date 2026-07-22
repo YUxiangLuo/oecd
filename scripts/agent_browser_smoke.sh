@@ -22,8 +22,8 @@ agent-browser doctor >/dev/null
 "${ab[@]}" click 'button[type="submit"]'
 "${ab[@]}" wait --text '课程大纲'
 
-# 所有学生路由必须能在真实登录态下挂载。这里不伪造完成度；完整学习证据
-# 流程由人工/夜间真实数据审查执行，smoke 负责捕获白屏、路由和请求错误。
+# 所有学生路由必须能在真实登录态下挂载。这里不伪造答题完成度；完整答题与
+# 报告流程由人工/夜间真实数据审查执行，smoke 负责捕获白屏、路由和请求错误。
 for step in $(seq 1 16); do
   "${ab[@]}" open "$GVCSIM_BASE_URL/?step=$step"
   "${ab[@]}" wait '.step-header-mid h2'

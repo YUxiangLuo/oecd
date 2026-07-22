@@ -1,8 +1,8 @@
 """实验会话:学生逐步实验状态的一等公民模型。
 
 HEAD 缺的不是“再加一个进度字段”,而是一个可恢复、可审计、可失效的会话:
-筛选、比较、图表设定与回归结果都只存在浏览器内存里,刷新即丢,教师也无从
-知道某一步究竟做了什么。
+筛选、比较、图表设定与回归结果都只存在浏览器内存里,刷新即丢,最终报告也
+无法如实记录学生实际探索过的状态。
 
 本模块只定义会话的**契约**(信封、校验、合并),不关心持久化后端:
 
@@ -10,7 +10,7 @@ HEAD 缺的不是“再加一个进度字段”,而是一个可恢复、可审�
     ID 改变,旧会话里的结果即被判定为过期,而不是被静默当成当前数据。
   - ``revision`` 由服务端单调递增,用于并发写入检测。
   - 每个步骤记录自带记录级与字段级时间戳。不同步骤按记录合并，同一步骤按字段
-    合并——学生在两个标签页分别提交操作与选择题时，两类凭证都不能丢失。
+    合并——学生在两个标签页分别探索实验与完成答题时，两类最终状态都不能丢失。
 """
 
 from __future__ import annotations
@@ -19,15 +19,15 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-# v5:学习证据由 CER 自由文本改为版本化固定单选题。部署会显式归档旧 attempt，
-# 新 attempt 从空白证据开始；旧会话只作为历史审计记录，不能与新题库混用。
-SESSION_VERSION = "experiment-session-v5"
+# v6:步骤 1–15 只以版本化固定单选题判定完成；实验操作仅自动保存为报告快照，
+# 不参与完成判定。部署会显式归档旧 attempt，新 attempt 从空白状态开始。
+SESSION_VERSION = "experiment-session-v6"
 
 MIN_STEP = 1
 MAX_STEP = 16
 
 # 确实跨步骤共享的实验状态。刻意用白名单而不是任意键:
-# 会话是教学证据的载体,不能变成一个什么都能塞的杂物袋。
+# 会话承载实验状态与答题结果,不能变成一个什么都能塞的杂物袋。
 #   regression_settings 步骤 12–15 的回归设定,按 outcome 分别保存(每步各有招牌默认)
 #   regression_history  按 outcome 保存最近几次运行,用于跨步骤对照
 SHARED_KEYS = frozenset({"regression_settings", "regression_history"})
@@ -154,8 +154,8 @@ def validate_session(payload: Any) -> dict[str, Any]:
 def merge_sessions(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
     """按记录与字段时间戳合并两份会话。
 
-    不同步骤保留双方；同一步骤的对象数据逐字段合并。因此一个标签页提交操作凭证、
-    另一个标签页提交选择题凭证时，两者不会因整条记录后写覆盖而互相删除。时间戳
+    不同步骤保留双方；同一步骤的对象数据逐字段合并。因此一个标签页保存实验快照、
+    另一个标签页完成选择题时，两者不会因整条记录后写覆盖而互相删除。时间戳
     相同则保留 incoming（调用方是本次写入者）。
     """
 
