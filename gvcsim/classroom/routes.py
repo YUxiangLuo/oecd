@@ -139,9 +139,7 @@ def get_session(user: dict = Depends(require_student)):
             "stale": bool(context["manifest_mismatch"]),
             "legacy_unverified": False,
             "read_only": bool(
-                context["manifest_mismatch"]
-                or context["assignment_closed"]
-                or context["assignment_historical"]
+                context["manifest_mismatch"] or context["assignment_closed"] or context["assignment_historical"]
             ),
             **context,
             "updated_at": None,
@@ -162,11 +160,8 @@ def get_session(user: dict = Depends(require_student)):
         "session": row["session"],
         "stale": stale,
         "legacy_unverified": legacy,
-        "read_only": legacy or bool(
-            context["manifest_mismatch"]
-            or context["assignment_closed"]
-            or context["assignment_historical"]
-        ),
+        "read_only": legacy
+        or bool(context["manifest_mismatch"] or context["assignment_closed"] or context["assignment_historical"]),
         **context,
         "updated_at": row["updated_at"],
         # 完成度由服务端从会话重算,客户端不参与判定,也无法伪造。
