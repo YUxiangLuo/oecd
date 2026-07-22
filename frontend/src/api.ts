@@ -220,11 +220,6 @@ export const api = {
     });
   },
   classroom: {
-    issueEvidence: (body: {
-      step: number;
-      kind: "slice" | "qc_resolution" | "indicator" | "visualization" | "shock";
-      payload: Record<string, unknown>;
-    }) => post<{ evidence_id: string; evidence?: Record<string, unknown> }>("/api/classroom/evidence/issue", body),
     submitQuiz: (body: { step: number; version: string; answers: Record<string, string> }) =>
       post<{
         passed: boolean;
@@ -238,7 +233,12 @@ export const api = {
     progress: () => get<ProgressResponse>("/api/classroom/progress"),
     reportProgress: (step: number) => post<{ ok: boolean }>("/api/classroom/progress", { step }),
     session: () => get<SessionResponse>("/api/classroom/session"),
-    saveSession: (body: { base_revision: number; session: ExperimentSession }) =>
+    saveSession: (body: {
+      base_revision: number;
+      expected_assignment_id: string | number;
+      expected_attempt_id: string | number;
+      session: ExperimentSession;
+    }) =>
       post<SessionResponse>("/api/classroom/session", body, "PUT"),
     clearSession: () => post<{ ok: boolean; attempt_id?: number }>("/api/classroom/session", undefined, "DELETE"),
     // 只交报告指纹;服务端从它自己生成的报告里取正文,接口不接受 Markdown。

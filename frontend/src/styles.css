@@ -78,7 +78,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   font-size: 10.5px; font-weight: 700; font-family: "Space Grotesk", sans-serif;
   display: flex; align-items: center; justify-content: center;
 }
-/* done = 服务端按学习证据判定的真实完成,独占成功绿。
+/* done = 服务端按答题结果判定的真实完成,独占成功绿。
    past = 只是到过(导航信息),中性灰蓝——到过不是做过。 */
 .step-badge.done { background: #12a150; color: #fff; }
 .step-badge.past { background: #d7dae3; color: #4a5162; }
@@ -1408,6 +1408,8 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .reg-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .reg-section-heading h3 { margin: 4px 0; }
 .comparison-warning { margin: 8px 0; padding: 8px 10px; border-radius: 7px; background: #fff8e6; color: #75521a; font-size: 11.5px; }
+.exploration-status { margin: 8px 0; padding: 8px 10px; border: 1px solid #dfe3ed; border-radius: 7px; background: #f7f8fb; color: #616a7d; font-size: 11.5px; }
+.exploration-status.done { border-color: #b8dfcc; background: #f2faf6; color: #18745f; }
 .marginal-effects { margin: 14px 0; padding: 13px; border: 1px solid #dce2ed; border-radius: 10px; background: #f8fbff; }
 .marginal-effects-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
 .marginal-effects-head p { margin: 4px 0 0; color: #697286; font-size: 11.5px; line-height: 1.5; }
@@ -1424,37 +1426,26 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   .reg-compare-card { grid-template-columns: 1fr; }
 }
 
-/* ---------- 学习证据(每步的完成条件) ---------- */
-.evidence-panel {
+/* ---------- 第 16 步:服务端生成的报告 ---------- */
+.report-gate-panel {
   margin: 0 0 16px; padding: 12px 14px; border-radius: 10px;
   background: #fff8e8; border: 1px solid #f3dfae;
 }
-.evidence-panel.done { background: #eefaf2; border-color: #b6e4c8; }
-.evidence-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #3a4050; }
-.evidence-badge {
+.report-gate-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #3a4050; }
+.report-gate-badge {
   flex: none; width: 18px; height: 18px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-size: 11px; font-weight: 700; color: #fff; background: #d99a2b;
 }
-.evidence-panel.done .evidence-badge { background: #12a150; }
-.evidence-panel ul { margin: 7px 0 0; padding-left: 26px; }
-.evidence-panel li { font-size: 12.5px; color: #5a6070; line-height: 1.7; }
-.evidence-panel p { margin: 6px 0 0; font-size: 12.5px; }
-
-.qc-decision {
-  margin-bottom: 18px; padding: 14px 16px; border-radius: 12px;
-  background: #fff; border: 1px solid #e7e9f0;
-}
-.qc-decision h3 { margin: 0 0 4px; font-size: 15px; }
-
-/* ---------- 第 16 步:服务端生成的报告 ---------- */
+.report-gate-panel ul { margin: 7px 0 0; padding-left: 26px; }
+.report-gate-panel li { font-size: 12.5px; color: #5a6070; line-height: 1.7; }
+.report-gate-panel p { margin: 6px 0 0; font-size: 12.5px; }
 .report-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .report-actions code { font-size: 11px; background: #f4f5f8; padding: 1px 5px; border-radius: 4px; }
 .gate-link {
   border: 0; background: transparent; padding: 0; font: inherit; font-weight: 600;
   color: #4b47e0; cursor: pointer; text-decoration: underline;
 }
-.action-evidence-box,
 .quiz-box {
   margin: 18px 0;
   padding: 18px;
@@ -1463,7 +1454,6 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   border-radius: 12px;
   background: #fbfcff;
 }
-.action-evidence-box { padding-bottom: 2px; }
 .quiz-box.done { border-color: #9edbb8; border-left-color: #12a150; background: #f7fcf9; }
 .quiz-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
 .quiz-head h3 { margin: 3px 0 0; font-size: 16px; }
@@ -1480,33 +1470,22 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .quiz-feedback { margin: 8px 4px 0; color: #76502d; font-size: 12px; line-height: 1.6; }
 .quiz-question.correct .quiz-feedback { color: #147866; }
 .quiz-feedback b { margin-right: 4px; }
-.quiz-submit-row { margin-top: 16px; margin-bottom: 2px; }
-.evidence-submit-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: -8px 0 20px 4px; }
-.evidence-signed { color: #148673; font-size: 12px; font-weight: 650; }
+.quiz-submit-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 16px 0 2px; }
+.quiz-complete { color: #148673; font-size: 12px; font-weight: 650; }
+.session-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .table-priority-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; }
 .table-priority-tools button { white-space: nowrap; }
 .bounded-data-table { max-height: 540px; overflow: auto; border: 1px solid #e7e9ef; border-radius: 9px; }
 .bounded-data-table table { margin: 0; }
-.qc-review-check { display: flex; align-items: flex-start; gap: 8px; margin: 12px; padding: 10px 12px; border-radius: 8px; background: #fff7e8; color: #684b19; font-size: 12px; line-height: 1.55; }
 .legacy-session-warning { margin: 12px 18px 0; }
 .observation-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 8px 0 10px; font-size: 11.5px; }
 .observation-strip b { color: #4a5265; }
 .observation-strip span { border-radius: 999px; background: #eef3fb; color: #44526e; padding: 4px 8px; }
-.required-run-plan { margin: 14px 0; padding: 13px 14px; border: 1px solid #dfe3ed; border-left: 4px solid #4b47e0; border-radius: 9px; background: #f8f9fd; }
-.required-run-plan p { margin: 4px 0 10px; color: #626a7b; font-size: 12px; line-height: 1.6; }
-.required-run-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
-.required-run-actions button { border: 1px solid #d6dae6; border-radius: 7px; background: #fff; padding: 6px 9px; cursor: pointer; }
-.required-run-actions button.on { border-color: #4b47e0; background: #eef0ff; color: #3733b4; }
-.required-run-actions span { color: #a16a24; font-size: 11px; margin-right: 8px; }
-.required-run-actions span.done { color: #148673; font-weight: 700; }
-.required-check-status { margin: 10px 0; border-radius: 8px; padding: 9px 11px; background: #fff3dd; color: #875b1e; font-size: 12px; }
-.required-check-status.done { background: #eaf8f4; color: #147866; }
-.qc-followup-field { display: grid; gap: 6px; margin: 12px 0; padding: 12px; border-radius: 9px; background: #f7f8fb; }
-.qc-followup-field > span { color: #677083; font-size: 11.5px; line-height: 1.5; }
-.qc-followup-field textarea { box-sizing: border-box; width: 100%; border: 1px solid #d8dce7; border-radius: 8px; padding: 9px; font: inherit; }
-.qc-disclosure-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.5; }
-.halted-course { margin: 18px 0; padding: 24px; }
-.halted-course h3 { margin: 0 0 8px; }
+.comparison-plan { margin: 14px 0; padding: 13px 14px; border: 1px solid #dfe3ed; border-left: 4px solid #4b47e0; border-radius: 9px; background: #f8f9fd; }
+.comparison-plan p { margin: 4px 0 10px; color: #626a7b; font-size: 12px; line-height: 1.6; }
+.comparison-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+.comparison-actions button { border: 1px solid #d6dae6; border-radius: 7px; background: #fff; padding: 6px 9px; cursor: pointer; }
+.comparison-actions button.on { border-color: #4b47e0; background: #eef0ff; color: #3733b4; }
 .persistent-qc-warning { margin: 12px 18px 0; }
 .persistent-qc-warning > summary { cursor: pointer; font-weight: 750; }
 .persistent-qc-warning p { margin: 8px 0 0; font-size: 12px; line-height: 1.55; }

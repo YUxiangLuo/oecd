@@ -4,6 +4,7 @@ import {
   patchSessionStep,
   remoteSessionUntrusted,
   sessionScope,
+  sessionScopeKey,
   updateSessionShared,
 } from "./use-session";
 
@@ -24,6 +25,48 @@ describe("sessionScope", () => {
       { username: "student", accountId: 42 },
       { manifestId: "manifest" },
     )).toBeNull();
+  });
+
+  test("keys the retry queue by account and attempt boundaries", () => {
+    const base = sessionScopeKey({
+      accountId: 42,
+      courseRunId: 8,
+      assignmentId: 11,
+      attemptId: 3,
+      manifestId: "manifest",
+    });
+
+    expect(base).not.toBe(sessionScopeKey({
+      accountId: 43,
+      courseRunId: 8,
+      assignmentId: 11,
+      attemptId: 3,
+      manifestId: "manifest",
+    }));
+    expect(base).not.toBe(sessionScopeKey({
+      accountId: 42,
+      courseRunId: 8,
+      assignmentId: 11,
+      attemptId: 4,
+      manifestId: "manifest",
+    }));
+  });
+
+  test("normalizes numeric API ids without weakening scope isolation", () => {
+    expect(sessionScopeKey({
+      accountId: 42,
+      courseRunId: 8,
+      assignmentId: 11,
+      attemptId: 3,
+      manifestId: "manifest",
+    })).toBe(sessionScopeKey({
+      accountId: "42",
+      courseRunId: "8",
+      assignmentId: "11",
+      attemptId: "3",
+      manifestId: "manifest",
+    }));
+    expect(sessionScopeKey(null)).toBeNull();
   });
 });
 

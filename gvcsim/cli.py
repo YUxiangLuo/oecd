@@ -63,7 +63,7 @@ def main() -> None:
     p.add_argument("--teacher-name", default="课程管理员", help="首位教师显示名")
 
     p = sub.add_parser("classroom-reset-attempts", help="为新版理解检查归档开放作业的当前尝试")
-    p.add_argument("--quiz-version", required=True, help="稳定题库版本，例如 course-quiz-v1")
+    p.add_argument("--quiz-version", required=True, help="稳定题库版本，例如 course-quiz-v2")
     p.add_argument("--confirm", action="store_true", help="确认归档旧 attempt 并为学生创建空白 attempt")
 
     args = parser.parse_args()

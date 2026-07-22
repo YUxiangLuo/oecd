@@ -11,27 +11,26 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../../api";
-import { EvidencePanel, VerifiedActionBox } from "../../../step-evidence";
-import type { IndustryPage, Meta, NetworkData, Step, StepEvidenceApi } from "../../../types";
+import type { IndustryPage, Meta, NetworkData, Step, StepStateApi } from "../../../types";
 import { HeatTableViz, NetworkViz, countryLabel } from "../../../viz";
 import { useAsync } from "../../shared";
-import { ChartStory, LensNav, StepIntro, YearSelect, useVizLab, type Row, type VizEvidence } from "./scaffold";
+import { ChartStory, LensNav, StepIntro, YearSelect, useVizLab, type Row, type VizStepState } from "./scaffold";
 
 type Lens = "heat" | "network";
 
-export function Step11Network({ meta, step, evidence }: { meta: Meta; step: Step; evidence: StepEvidenceApi<VizEvidence> }) {
+export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
   const { year, setYear, lens, pickLens, picked, pickCountries, schema } = useVizLab(
-    meta, step, evidence, "heat", ["heat", "network"],
+    meta, step, state, "heat", ["heat", "network"],
   );
   const fallbackDrill = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
-  const [drill, setDrill] = useState(evidence.data?.drill ?? evidence.data?.compared?.at(-1) ?? fallbackDrill);
-  const drillTouched = useRef(Boolean(evidence.data));
+  const [drill, setDrill] = useState(state.data?.drill ?? state.data?.compared?.at(-1) ?? fallbackDrill);
+  const drillTouched = useRef(Boolean(state.data));
   useEffect(() => {
-    if (drillTouched.current || !evidence.data) return;
-    const saved = evidence.data.drill ?? evidence.data.compared?.at(-1);
+    if (drillTouched.current || !state.data) return;
+    const saved = state.data.drill ?? state.data.compared?.at(-1);
     if (saved && meta.countries.includes(saved)) setDrill(saved);
     drillTouched.current = true;
-  }, [evidence.data, meta.countries]);
+  }, [state.data, meta.countries]);
   const { data: page } = useAsync<IndustryPage | null>(
     () => (lens === "heat" && drill ? api.industryIndicatorsAll(year, drill) : Promise.resolve(null)),
     [lens, year, drill],
@@ -46,7 +45,7 @@ export function Step11Network({ meta, step, evidence }: { meta: Meta; step: Step
     drillTouched.current = true;
     setDrill(c);
     pickCountries(picked.includes(c) ? picked : [...picked, c]);
-    evidence.save({ drill: c, evidence_id: "" });
+    state.save({ drill: c });
   };
   const heatRows = (page?.rows ?? []) as Row[];
 
@@ -55,7 +54,7 @@ export function Step11Network({ meta, step, evidence }: { meta: Meta; step: Step
     const metric = "betweenesscentrality";
     const row = heatRows.find((item) => typeof item[metric] === "number" && Number.isFinite(item[metric]));
     if (!row) return;
-    const prior = evidence.data?.observations ?? [];
+    const prior = state.data?.observations ?? [];
     const observations = [
       ...prior.filter((item) => item.country !== drill),
       {
@@ -66,14 +65,13 @@ export function Step11Network({ meta, step, evidence }: { meta: Meta; step: Step
         value: row[metric] as number,
       },
     ].slice(-2);
-    if (JSON.stringify(observations) === JSON.stringify(prior) && evidence.data?.metric === metric) return;
-    evidence.save({ metric, observations, evidence_id: "" });
+    if (JSON.stringify(observations) === JSON.stringify(prior) && state.data?.metric === metric) return;
+    state.save({ metric, observations });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, drill, picked, year]);
 
   return (
     <div>
-      <EvidencePanel evidence={evidence} title="本步要留下的证据:选一个镜头,并用「下钻国家」看过至少两个国家的行业枢纽" />
       <StepIntro
         kicker={`步骤 ${step.n} · 网络可视化`}
         lead="谁是全球生产的枢纽?"
@@ -137,13 +135,6 @@ export function Step11Network({ meta, step, evidence }: { meta: Meta; step: Step
           {!net ? <p className="muted">加载 {year} 年贸易网络中…</p> : <NetworkViz data={net} />}
         </ChartStory>
       )}
-      <VerifiedActionBox
-        step={step.n}
-        kind="visualization"
-        evidence={evidence}
-        ready={Boolean(evidence.data?.chart && (evidence.data?.compared?.length ?? 0) >= 2 && (evidence.data?.observations?.length ?? 0) >= 2)}
-        context={{ topic: step.topic, year, chart: lens, compared: picked, drill, metric: evidence.data?.metric, observations: evidence.data?.observations }}
-      />
     </div>
   );
 }

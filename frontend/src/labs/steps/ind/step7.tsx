@@ -6,19 +6,15 @@
  * 保留 NetworkCentralityDemo(合成小图)。中心性只在国家–行业级有意义(国家图是
  * 完全图、介数恒为 0,见 country_degenerate 与步骤 10)。
  */
-import { useState } from "react";
 import { api } from "../../../api";
 import { NetworkCentralityDemo } from "../../../demos";
-import { EvidencePanel, VerifiedActionBox } from "../../../step-evidence";
-import type { IndicatorSchema, Meta, Step, StepEvidenceApi } from "../../../types";
+import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
 import { ChartStory, StepIntro } from "../viz/scaffold";
-import { IndicatorTable, type IndicatorEvidence } from "./indicator-table";
+import { IndicatorTable, type IndicatorStepState, useIndicatorControls } from "./indicator-table";
 
-export function Step7Network({ meta, step, evidence }: { meta: Meta; step: Step; evidence: StepEvidenceApi<IndicatorEvidence> }) {
-  const [year, setYear] = useState(meta.years.at(-1)!);
-  const [country, setCountry] = useState(meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "");
-  const [page, setPage] = useState(1);
+export function Step7Network({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }) {
+  const controls = useIndicatorControls(meta, state);
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
 
   return (
@@ -30,10 +26,9 @@ export function Step7Network({ meta, step, evidence }: { meta: Meta; step: Step;
         todo={[
           "先在小网络上看懂度 / 介数中心性是怎么数出来的",
           "再看真实的行业节点中心性表:选个国家读它各行业的枢纽度",
-          "切换到第二个国家对比,留下学习证据",
+          "切换国家进行对比；当前选择会自动保存到实验记录",
         ]}
       />
-      <EvidencePanel evidence={evidence} title="本步要留下的证据:在中心性表里切换国家,看过至少两个实体" />
 
       <ChartStory
         eyebrow="先建直觉 · 在一个小网络上"
@@ -54,18 +49,11 @@ export function Step7Network({ meta, step, evidence }: { meta: Meta; step: Step;
         note="中心性在完整全球国家×行业图上计算。国家级贸易图是完全图、介数恒为 0、无区分度,所以枢纽识别只在国家–行业级做(见步骤 10)。"
       >
         <IndicatorTable
-          meta={meta} groupKey="network" schema={schema} evidence={evidence}
-          year={year} country={country} page={page}
-          onYear={setYear} onCountry={setCountry} onPage={setPage}
+          meta={meta} groupKey="network" schema={schema} state={state}
+          year={controls.year} country={controls.country} page={controls.page} interacted={controls.interacted}
+          onYear={controls.setYear} onCountry={controls.setCountry} onPage={controls.setPage}
         />
       </ChartStory>
-      <VerifiedActionBox
-        step={step.n}
-        kind="indicator"
-        evidence={evidence}
-        ready={(evidence.data?.compared?.length ?? 0) >= 2 && (evidence.data?.observations?.length ?? 0) >= 2}
-        context={{ topic: step.topic, compared: evidence.data?.compared, last_view: evidence.data?.last_view, metric: evidence.data?.metric, observations: evidence.data?.observations }}
-      />
     </div>
   );
 }

@@ -103,21 +103,21 @@ def test_merge_keeps_newer_base_record_over_older_incoming():
     assert merge_sessions(base, incoming)["steps"]["4"]["data"] == {"v": "newer"}
 
 
-def test_merge_same_step_preserves_concurrent_action_and_quiz_credentials():
-    """两个标签页从同一快照分别提交操作与答题，不能整条记录后写覆盖。"""
+def test_merge_same_step_preserves_concurrent_experiment_snapshot_and_quiz_receipt():
+    """两个标签页从同一快照分别探索与答题，不能整条记录后写覆盖。"""
     initial_time = "2026-07-16T10:00:00+00:00"
     action_time = "2026-07-16T10:01:00+00:00"
     quiz_time = "2026-07-16T10:02:00+00:00"
     initial = make_record({"compared": ["CHN", "USA"]}, initial_time)
-    action = {
-        "data": {"compared": ["CHN", "USA"], "evidence_id": "action-event"},
+    experiment = {
+        "data": {"compared": ["CHN", "USA"], "chart": "quadrant"},
         "updated_at": action_time,
-        "field_updated_at": {"compared": action_time, "evidence_id": action_time},
+        "field_updated_at": {"compared": action_time, "chart": action_time},
     }
     quiz = {
         "data": {
             "compared": initial["data"]["compared"],
-            "quiz": {"version": "course-quiz-v1", "answers": {"q1": "a"}},
+            "quiz": {"version": "course-quiz-v2", "answers": {"q1": "a"}},
             "quiz_id": "quiz-event",
         },
         "updated_at": quiz_time,
@@ -128,15 +128,15 @@ def test_merge_same_step_preserves_concurrent_action_and_quiz_credentials():
         },
     }
 
-    merged = merge_sessions(_session({"3": action}), _session({"3": quiz}))["steps"]["3"]
+    merged = merge_sessions(_session({"3": experiment}), _session({"3": quiz}))["steps"]["3"]
     assert merged["data"]["compared"] == ["CHN", "USA"]
-    assert merged["data"]["evidence_id"] == "action-event"
+    assert merged["data"]["chart"] == "quadrant"
     assert merged["data"]["quiz_id"] == "quiz-event"
-    assert merged["data"]["quiz"]["version"] == "course-quiz-v1"
+    assert merged["data"]["quiz"]["version"] == "course-quiz-v2"
 
 
-def test_merge_field_tombstone_prevents_stale_credential_from_reappearing():
-    """操作参数变化时清空 evidence_id，旧标签页不能把已失效凭证带回来。"""
+def test_merge_field_tombstone_prevents_deleted_snapshot_from_reappearing():
+    """学生删除一个实验快照后，旧标签页不能把它带回来。"""
     base = _session(
         {
             "3": {
@@ -144,7 +144,7 @@ def test_merge_field_tombstone_prevents_stale_credential_from_reappearing():
                 "updated_at": "2026-07-16T10:02:00+00:00",
                 "field_updated_at": {
                     "compared": "2026-07-16T10:02:00+00:00",
-                    "evidence_id": "2026-07-16T10:02:00+00:00",
+                    "observation": "2026-07-16T10:02:00+00:00",
                 },
             }
         }
@@ -152,11 +152,11 @@ def test_merge_field_tombstone_prevents_stale_credential_from_reappearing():
     stale = _session(
         {
             "3": {
-                "data": {"compared": ["CHN", "USA"], "evidence_id": "old-event", "quiz_id": "quiz-event"},
+                "data": {"compared": ["CHN", "USA"], "observation": {"value": 1}, "quiz_id": "quiz-event"},
                 "updated_at": "2026-07-16T10:01:00+00:00",
                 "field_updated_at": {
                     "compared": "2026-07-16T10:00:00+00:00",
-                    "evidence_id": "2026-07-16T10:00:00+00:00",
+                    "observation": "2026-07-16T10:00:00+00:00",
                     "quiz_id": "2026-07-16T10:01:00+00:00",
                 },
             }
@@ -164,7 +164,7 @@ def test_merge_field_tombstone_prevents_stale_credential_from_reappearing():
     )
 
     data = merge_sessions(base, stale)["steps"]["3"]["data"]
-    assert "evidence_id" not in data
+    assert "observation" not in data
     assert data["quiz_id"] == "quiz-event"
 
 
@@ -189,7 +189,7 @@ def test_validate_accepts_known_shared_keys():
 
 
 def test_validate_rejects_unknown_shared_keys():
-    """shared 是白名单:会话是教学证据载体,不能变成任意 KV 存储。"""
+    """shared 是白名单:会话不能变成任意 KV 存储。"""
     with pytest.raises(SessionError):
         validate_session(_session({}, shared={"whatever": make_record({})}))
 

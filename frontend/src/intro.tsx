@@ -211,7 +211,7 @@ export function IntroOverlay({ user, meta, onDone }: {
     <div key={2} className="intro-scene">
       <div className="intro-scene-kicker">实验路线</div>
       <h2 className="intro-h2">五个阶段，十六步</h2>
-      <p className="intro-lede">点击各阶段预览路线。建议按顺序完成；“自由浏览”只改变位置，不会绕过前置证据或计入完成度。</p>
+      <p className="intro-lede">点击各阶段预览路线。建议按顺序完成；“自由浏览”只改变位置，答对本步选择题才会计入完成度。</p>
       <div className="intro-stage-tabs">
         {stages.map((st) => (
           <button
@@ -295,12 +295,10 @@ export function IntroOverlay({ user, meta, onDone }: {
         亲手走完 数据 → 指标 → 可视化 → 回归 → 报告 的完整闭环;
         每一步都配有方法说明、动手面板和小贴士。
       </p>
-      {/* 证据规则是这门课最重要的约定,必须在进入之前讲清楚:
-          学生若不知道“翻页不算完成”,只会觉得进度条坏了。 */}
+      {/* 进入前讲清完成规则，避免把浏览位置误认为学习进度。 */}
       <p className="intro-lede">
-        每一步都要<b>留下一份学习证据</b>才算完成——自己选定的切片、看过的三类政策冲击、
-        写下的判断……<b>只是翻页不算</b>。前 15 步的证据齐全后,第 16 步才能由服务端
-        生成实验报告。
+        步骤 1–15 只需<b>答对本步全部选择题</b>即可完成，不要求额外提交材料。
+        实验台中的切片、筛选与回归运行会自动保存，并按实际情况进入第 16 步的实验报告。
       </p>
       <div className="intro-cta-row">
         <button className="intro-cta" onClick={() => onDone(1)}>从第 1 步开始实验</button>

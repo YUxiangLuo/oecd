@@ -104,7 +104,7 @@ export function TrendChart({ data }: { data: ClassOverview["submission_trend"] }
   );
 }
 
-/** Two explicitly different series: navigation reach and verified completion. */
+/** Two explicitly different series: navigation reach and server completion. */
 export function StepFunnel({ steps, completions = [], total, onSelect }: {
   steps: ClassOverview["step_reach"];
   completions?: ClassOverview["step_completion"];
@@ -125,7 +125,7 @@ export function StepFunnel({ steps, completions = [], total, onSelect }: {
   const area = `${line} L ${x(steps.length - 1).toFixed(1)} ${pad.t + ih} L ${x(0).toFixed(1)} ${pad.t + ih} Z`;
   return (
     <div className="chart-scroll">
-      <svg viewBox={`0 0 ${W} ${H}`} className="funnel-svg" role="img" aria-label="各步到达人数与服务端验证完成人数">
+      <svg viewBox={`0 0 ${W} ${H}`} className="funnel-svg" role="img" aria-label="各步到达人数与服务端判定完成人数">
         <defs>
           <linearGradient id="funnelFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={INDIGO_L} stopOpacity="0.35" />
@@ -163,7 +163,7 @@ export function StepFunnel({ steps, completions = [], total, onSelect }: {
           const count = completionByStep.get(s.step) ?? 0;
           return (
             <g key={`completed-${s.step}`} role={onSelect ? "button" : undefined} tabIndex={onSelect ? 0 : undefined}
-              aria-label={`查看已验证完成步骤 ${s.step} 的 ${count} 名学生`} className={onSelect ? "funnel-point" : undefined}
+              aria-label={`查看已完成步骤 ${s.step} 的 ${count} 名学生`} className={onSelect ? "funnel-point" : undefined}
               onClick={() => onSelect?.(s.step, "completed")}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
@@ -177,7 +177,7 @@ export function StepFunnel({ steps, completions = [], total, onSelect }: {
           );
         })}
       </svg>
-      <div className="chart-legend"><span><i style={{ background: INDIGO }} />到达位置</span><span><i style={{ background: GREEN }} />验证完成</span></div>
+      <div className="chart-legend"><span><i style={{ background: INDIGO }} />到达位置</span><span><i style={{ background: GREEN }} />步骤完成</span></div>
     </div>
   );
 }

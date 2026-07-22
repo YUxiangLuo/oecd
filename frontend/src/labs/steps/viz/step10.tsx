@@ -7,11 +7,10 @@
  *   GVCPs 排名  位置指数 = 前向 / 后向 GVC 长度之比,>1 更靠上游
  */
 import { api } from "../../../api";
-import { EvidencePanel, VerifiedActionBox } from "../../../step-evidence";
-import type { Meta, Step, StepEvidenceApi } from "../../../types";
+import type { Meta, Step, StepStateApi } from "../../../types";
 import { LengthViz, QuadrantScatter, RankBarChart } from "../../../viz";
 import { useAsync } from "../../shared";
-import { ChartStory, LensNav, StepIntro, VizWorkbench, finiteBy, num, useCountryObservations, useVizLab, type Row, type VizEvidence } from "./scaffold";
+import { ChartStory, LensNav, StepIntro, VizWorkbench, finiteBy, num, useCountryObservations, useVizLab, type Row, type VizStepState } from "./scaffold";
 
 type Lens = "position" | "bars" | "rank";
 
@@ -19,13 +18,13 @@ const POS_LABELS: [string, string, string, string] = [
   "长链 · 两端都深", "偏上游 · 前向长", "短链 · 靠近两端", "偏下游 · 后向长",
 ];
 
-export function Step10Length({ meta, step, evidence }: { meta: Meta; step: Step; evidence: StepEvidenceApi<VizEvidence> }) {
+export function Step10Length({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
   const { year, setYear, lens, pickLens, picked, pickCountries } = useVizLab(
-    meta, step, evidence, "position", ["position", "bars", "rank"],
+    meta, step, state, "position", ["position", "bars", "rank"],
   );
   const { data } = useAsync<Row[]>(() => api.countryIndicators(year), [year]);
   const rows = data ?? [];
-  useCountryObservations(rows, picked, year, "GVCPs", evidence);
+  useCountryObservations(rows, picked, year, "GVCPs", state);
   const highlight = new Set(picked);
 
   const posRows = finiteBy(rows, "PLv_GVC", "PLy_GVC");
@@ -33,7 +32,6 @@ export function Step10Length({ meta, step, evidence }: { meta: Meta; step: Step;
 
   return (
     <div>
-      <EvidencePanel evidence={evidence} title="本步要留下的证据:选一个镜头,并在「选国家」里挑至少两个经济体对比" />
       <StepIntro
         kicker={`步骤 ${step.n} · 生产长度可视化`}
         lead="生产链有多长,你在上游还是下游?"
@@ -103,13 +101,6 @@ export function Step10Length({ meta, step, evidence }: { meta: Meta; step: Step;
         </ChartStory>
       )}
       </VizWorkbench>
-      <VerifiedActionBox
-        step={step.n}
-        kind="visualization"
-        evidence={evidence}
-        ready={Boolean(evidence.data?.chart && (evidence.data?.compared?.length ?? 0) >= 2 && (evidence.data?.observations?.length ?? 0) >= 2)}
-        context={{ topic: step.topic, year, chart: lens, compared: picked, metric: evidence.data?.metric, observations: evidence.data?.observations }}
-      />
     </div>
   );
 }

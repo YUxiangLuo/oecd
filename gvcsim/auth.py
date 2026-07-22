@@ -103,12 +103,12 @@ def _persistent_secret(configured: str, path: Path, env_name: str) -> bytes:
 
 
 def _secret() -> bytes:
-    """访问令牌签名密钥（兼容 trusted callers，但不可用于学习证据）。"""
+    """访问令牌签名密钥（兼容 trusted callers，但不可用于答题/运行收据）。"""
     return _persistent_secret(config.AUTH_SECRET, SECRET_FILE, "GVCSIM_AUTH_SECRET")
 
 
 def evidence_secret() -> bytes:
-    """长期学习证据专用密钥；轮换访问令牌密钥不会使既有证据失效。"""
+    """长期答题/运行收据专用密钥；轮换访问令牌密钥不会使既有收据失效。"""
     return _persistent_secret(config.EVIDENCE_SECRET, EVIDENCE_SECRET_FILE, "GVCSIM_EVIDENCE_SECRET")
 
 

@@ -1,367 +1,150 @@
-"""课程完成的真值判定。
+"""课程完成度契约：步骤 1–15 只看答题，步骤 16 只看服务端报告。"""
 
-这里守住的核心不变量:**访问不算完成**。HEAD 把“到过第 n 步”当成完成,
-本模块的判定必须让那种行为拿不到任何一个对勾。
-"""
+from __future__ import annotations
 
-import pandas as pd
 import pytest
 
-from gvcsim.evidence import (
-    QC_DISPOSITIONS,
-    REQUIRED_SHOCK_TYPES,
-    STEP_LABS,
-    completion_summary,
-    evaluate,
-    evaluate_step,
-)
+from gvcsim.evidence import STEP_LABS, completion_summary, evaluate, evaluate_step
 from gvcsim.quizzes import correct_quiz
 from gvcsim.session import empty_session, make_record
 
 MID = "b08a35374d1021b0"
 
 
-def _session(steps: dict) -> dict:
-    s = empty_session(MID)
-    s["steps"] = {
-        str(k): make_record({**v, **({"quiz": correct_quiz(k)} if 1 <= k <= 15 else {})}) for k, v in steps.items()
+def _session(steps: dict[int, dict]) -> dict:
+    value = empty_session(MID)
+    value["steps"] = {str(step): make_record(data) for step, data in steps.items()}
+    return value
+
+
+def _passed(step: int, **snapshots: object) -> dict:
+    return {**snapshots, "quiz": correct_quiz(step)}
+
+
+def test_empty_or_visited_session_completes_nothing():
+    assert completion_summary(empty_session(MID))["completed"] == []
+    visited = _session({step: {} for step in range(1, 17)})
+    assert completion_summary(visited)["completed"] == []
+
+
+def test_experiment_snapshots_never_complete_a_step():
+    snapshots = {
+        1: {"slice": {"year": 2020, "table": "z"}, "observation": {"value": 12.5}},
+        2: {"viewed_shock_types": ["tariff", "sanctions", "export_control"]},
+        3: {"selected_rows": ["CHN", "USA"]},
+        4: {"compared": ["CHN", "USA"]},
+        8: {"chart": "quadrant", "compared": ["CHN", "USA"]},
+        12: {"run": {"depvar": "FVA_share"}, "run_id": "forged"},
     }
-    return s
+    assert completion_summary(_session(snapshots))["completed"] == []
 
 
-def _step_of(lab: str) -> int:
-    return next(n for n, value in STEP_LABS.items() if value == lab)
+@pytest.mark.parametrize("step", range(1, 16))
+def test_correct_quiz_alone_completes_each_learning_step(step: int):
+    result = evaluate_step(step, _session({step: _passed(step)}))
+    assert result.complete
+    assert result.missing == []
 
 
-# ---------------------------------------------------------------- 核心不变量
-
-
-def test_empty_session_completes_nothing():
-    """全新会话:16 步一个都不算完成。"""
-    summary = completion_summary(empty_session(MID))
-    assert summary["completed"] == []
-    assert summary["completed_count"] == 0
-    assert summary["total"] == 16
-
-
-def test_visiting_every_step_completes_nothing():
-    """把 16 步全部“到过”——即使每步都留下空记录——仍然 0/16。
-
-    这正是 HEAD 会显示 16/16 的行为。
-    """
-    session = _session({n: {} for n in range(1, 17)})
-    assert completion_summary(session)["completed"] == []
-
-
-def test_unrelated_payload_does_not_complete_a_step():
-    """往会话里塞无关内容不能换来对勾。"""
-    session = _session({n: {"visited": True, "seconds": 999} for n in range(1, 17)})
-    assert completion_summary(session)["completed"] == []
-
-
-def test_every_step_has_a_check():
-    assert sorted(STEP_LABS) == list(range(1, 17))
-    for step in STEP_LABS:
-        assert evaluate_step(step, empty_session(MID)).missing, f"步骤 {step} 没有任何证据要求"
-
-
-def test_unknown_step_is_rejected():
-    with pytest.raises(ValueError):
-        evaluate_step(99, empty_session(MID))
-
-
-# ---------------------------------------------------------------- 各 lab 证据
-
-
-def test_db_step_needs_a_complete_slice():
-    step = _step_of("db")
-    partial = _session({step: {"slice": {"year": 2020, "table": "z"}}})
-    assert not evaluate_step(step, partial).complete
-    full = _session(
-        {
-            step: {
-                "slice": {"year": 2020, "table": "z", "row_country": "CHN", "col_country": "USA"},
-                "observation": {"row": "CHN_D01T02", "column": "USA_D01T02", "value": 12.5},
+def test_experiment_fields_do_not_change_quiz_completion():
+    step = 12
+    quiz_only = evaluate_step(step, _session({step: _passed(step)}))
+    with_arbitrary_snapshots = evaluate_step(
+        step,
+        _session(
+            {
+                step: _passed(
+                    step,
+                    run={"settings": {"shockType": "not-a-real-shock"}},
+                    run_id="not-a-real-receipt",
+                    client_noise={"ignored": True},
+                    selected_rows=["CHN", "USA"],
+                )
             }
-        }
+        ),
     )
-    assert evaluate_step(step, full).complete
+    assert quiz_only.complete
+    assert with_arbitrary_snapshots.complete
 
 
-def test_slice_receipt_rechecks_the_exact_server_cell(monkeypatch):
-    from gvcsim.classroom import routes
-
-    monkeypatch.setattr(
-        routes.icio_browser,
-        "slice_table",
-        lambda **_kwargs: {
-            "columns": ["row", "USA_D01T02"],
-            "rows": [{"row": "CHN_D01T02", "USA_D01T02": 12.5}],
-        },
-    )
-    payload = {
-        "slice": {"year": 2020, "table": "z", "row_country": "CHN", "col_country": "USA"},
-        "observation": {"row": "CHN_D01T02", "column": "USA_D01T02", "value": 12.5},
-    }
-    routes._verify_learning_payload(1, "slice", payload)
-
-    payload["observation"]["value"] = 999
-    with pytest.raises(ValueError, match="服务端原始值不一致"):
-        routes._verify_learning_payload(1, "slice", payload)
-
-
-@pytest.mark.parametrize(
-    ("metric", "usa_value", "vnm_value"),
-    [
-        ("betweenesscentrality", 2251.223, 1618.279),
-        ("weighted degree", 38294.5, 27182.75),
-    ],
-)
-def test_network_visualization_rechecks_two_industry_observations(
-    monkeypatch,
-    metric,
-    usa_value,
-    vnm_value,
-):
-    """第 10 步是可视化步骤，却需要国家–行业级观察值。
-
-    数据粒度不能被误用来选择基础指标白名单，否则真实页面提交会在
-    ``_INDICATOR_METRICS[10]`` 上触发 ``KeyError``。
-    """
-    from gvcsim.classroom import routes
-
-    frame = pd.DataFrame(
-        [
-            {
-                "country": "USA",
-                "industry": "A01_02",
-                "betweenesscentrality": 2251.223,
-                "weighted degree": 38294.5,
-            },
-            {
-                "country": "VNM",
-                "industry": "A01_02",
-                "betweenesscentrality": 1618.279,
-                "weighted degree": 27182.75,
-            },
-        ]
-    )
-
-    def read_industry_artifact(path, *, require_current):
-        assert path.name == "indicators_industry_2020.csv"
-        assert require_current is True
-        return frame
-
-    monkeypatch.setattr(routes.artifacts, "read_csv_artifact", read_industry_artifact)
-    payload = {
-        "chart": "heat",
-        "metric": metric,
-        "compared": ["USA", "VNM"],
-        "observations": [
-            {
-                "country": "USA",
-                "industry": "A01_02",
-                "year": 2020,
-                "value": usa_value,
-            },
-            {
-                "country": "VNM",
-                "industry": "A01_02",
-                "year": 2020,
-                "value": vnm_value,
-            },
-        ],
-    }
-
-    routes._verify_learning_payload(10, "visualization", payload)
-
-    payload["observations"][0]["value"] = usa_value + 1000
-    with pytest.raises(ValueError, match="与当前产物不一致"):
-        routes._verify_learning_payload(10, "visualization", payload)
-
-    payload["metric"] = "FVA_share"
-    with pytest.raises(ValueError, match="可核查指标"):
-        routes._verify_learning_payload(10, "visualization", payload)
-
-
-def test_shock_step_needs_all_three_shock_types():
-    """只看关税会形成错误直觉:三类冲击的处理密度完全不同。"""
-    step = _step_of("shock")
-    one = _session({step: {"viewed_shock_types": ["tariff"]}})
-    assert not evaluate_step(step, one).complete
-    # 证据存稳定键,但给学生的提示必须是中文文案,不能把 `sanctions` 甩到界面上。
-    assert "制裁清单" in evaluate_step(step, one).missing[0]
-    assert "sanctions" not in evaluate_step(step, one).missing[0]
-    all_three = _session({step: {"viewed_shock_types": list(REQUIRED_SHOCK_TYPES)}})
-    assert evaluate_step(step, all_three).complete
-
-
-def test_qc_step_needs_a_disposition():
-    """质检的操作产出是实际处置，不是“已阅”布尔值。"""
-    step = _step_of("qc")
+def test_missing_wrong_or_stale_quiz_is_incomplete():
+    step = 5
     assert not evaluate_step(step, _session({step: {}})).complete
-    # 处置必须是三条真实路径之一,不接受任意字符串。
-    assert not evaluate_step(step, _session({step: {"disposition": "whatever"}})).complete
-    for disposition in QC_DISPOSITIONS:
-        assert evaluate_step(step, _session({step: {"disposition": disposition}})).complete
 
+    wrong = correct_quiz(step)
+    question_id = next(iter(wrong["answers"]))
+    wrong["answers"][question_id] = "not-an-option"
+    assert not evaluate_step(step, _session({step: {"quiz": wrong}})).complete
 
-def test_indicator_step_needs_two_distinct_entities():
-    step = _step_of("ind")
-    assert not evaluate_step(step, _session({step: {"compared": ["CHN"]}})).complete
-    # 同一个实体重复两次不算对比。
-    assert not evaluate_step(step, _session({step: {"compared": ["CHN", "CHN"]}})).complete
-    assert evaluate_step(step, _session({step: {"compared": ["CHN", "USA"]}})).complete
-
-
-def test_viz_step_needs_chart_and_two_targets():
-    step = _step_of("viz")
-    assert not evaluate_step(step, _session({step: {"chart": "quadrant"}})).complete
-    assert not evaluate_step(step, _session({step: {"compared": ["CHN", "USA"]}})).complete
-    assert evaluate_step(step, _session({step: {"chart": "quadrant", "compared": ["CHN", "USA"]}})).complete
-
-
-def test_regression_step_needs_a_run():
-    step = _step_of("reg")
-    ran = {"run": {"depvar": "FVA_share", "status": "insufficient"}}
-    assert evaluate_step(step, _session({step: ran})).complete
-
-
-def test_quiz_is_required_in_addition_to_the_real_operation():
-    step = _step_of("reg")
-    session = _session({step: {"run": {"depvar": "FVA_share"}}})
-    session["steps"][str(step)]["data"].pop("quiz")
-    result = evaluate_step(step, session)
-    assert not result.complete
-    assert any("理解检查" in item for item in result.missing)
-
-
-def test_wrong_or_stale_quiz_is_not_evidence():
-    step = _step_of("reg")
-    data = {"run": {"depvar": "FVA_share"}, "quiz": correct_quiz(step)}
-    session = _session({step: data})
-    session["steps"][str(step)]["data"]["quiz"]["version"] = "stale"
-    result = evaluate_step(step, session)
+    stale = correct_quiz(step)
+    stale["version"] = "old-quiz"
+    result = evaluate_step(step, _session({step: {"quiz": stale}}))
     assert not result.complete
     assert any("版本" in item for item in result.missing)
 
 
-def test_report_step_needs_a_report_key():
-    step = _step_of("rep")
-    assert not evaluate_step(step, _session({step: {}})).complete
-    assert evaluate_step(step, _session({step: {"report_key": "abc123"}})).complete
+def test_trusted_completion_requires_the_signed_quiz_receipt(monkeypatch):
+    step = 7
+    session = _session({step: {**_passed(step), "quiz_id": "signed-quiz"}})
+    calls: list[dict] = []
+
+    def verify(token, **kwargs):
+        calls.append({"token": token, **kwargs})
+        return True
+
+    monkeypatch.setattr("gvcsim.evidence.trusted_evidence.verify_quiz_completion", verify)
+    assert evaluate_step(step, session, subject="student", require_trusted=True).complete
+    assert calls == [
+        {
+            "token": "signed-quiz",
+            "subject": "student",
+            "step": step,
+            "manifest_id": MID,
+            "payload": correct_quiz(step),
+        }
+    ]
 
 
-def test_completion_summary_counts_only_evidenced_steps():
-    step = _step_of("ind")
-    session = _session({step: {"compared": ["CHN", "USA"]}, 1: {}, 2: {}})
-    summary = completion_summary(session)
-    assert summary["completed"] == [step]
-    assert summary["completed_count"] == 1
-
-
-def test_evaluate_returns_all_steps_in_order():
-    items = evaluate(empty_session(MID))
-    assert [item.step for item in items] == list(range(1, 17))
-
-
-def test_forged_regression_settings_do_not_complete_a_step():
-    """会话的 data 是客户端可写的不透明 blob:伪造的设定不能换来对勾。
-
-    未校验时,伪造的 shockType 会一路走到 SHOCK_SPECS[...] 抛 KeyError,
-    把 /report/generate 变成 500。第一道防线是让这一步压根不算完成。
-    """
-    step = _step_of("reg")
-    forged = {"run": {"depvar": "FVA_share", "settings": {"shockType": "bogus_shock"}}}
-    result = evaluate_step(step, _session({step: forged}))
-    assert not result.complete
-    assert "无法识别" in result.missing[0]
-
-    ok = {
-        "run": {"depvar": "FVA_share", "settings": {"shockType": "export_control", "method": "did"}},
-    }
-    assert evaluate_step(step, _session({step: ok})).complete
-
-
-def test_invalid_regression_settings_checks_every_enum():
-    from gvcsim.evidence import invalid_regression_settings as check
-
-    assert check({}) == []
-    assert check({"granularity": "country", "method": "did", "priceMode": "nominal"}) == []
-    assert check("not-an-object")
-    for key, bad in [
-        ("granularity", "国家级"),  # 旧中文枚举也不再接受
-        ("method", "双重差分 (DID)"),
-        ("controlMode", "nope"),
-        ("priceMode", "nope"),
-        ("scenario", "nope"),
-    ]:
-        assert check({key: bad}), f"{key}={bad} 应被判非法"
-
-
-def test_trusted_trade_comparison_rejects_two_incomparable_designs(monkeypatch):
-    step = 12
-    base_design = {
-        "outcome": "trade",
-        "granularity": "country_industry",
-        "shock_type": "tariff",
-        "method": "did",
-        "control_mode": "none",
-        "interaction": False,
-        "price_mode": "nominal",
-        "scenario": "clean",
-        "exclude_row": True,
-        "weight_mode": "fixed_pretreatment",
-    }
-    designs = {
-        "main": {**base_design, "control_mode": "icio_derived", "shock_type": "sanctions"},
-        "baseline": base_design,
-        "controlled": {**base_design, "control_mode": "icio_derived", "shock_type": "sanctions"},
-    }
+def test_trusted_completion_rejects_missing_subject_or_invalid_receipt(monkeypatch):
+    step = 7
+    session = _session({step: {**_passed(step), "quiz_id": "forged"}})
+    assert not evaluate_step(step, session, require_trusted=True).complete
     monkeypatch.setattr(
-        "gvcsim.evidence.trusted_evidence.verify_regression_run",
-        lambda token, **_kwargs: {"design": designs[token]} if token in designs else None,
+        "gvcsim.evidence.trusted_evidence.verify_quiz_completion",
+        lambda *_args, **_kwargs: False,
     )
-    monkeypatch.setattr("gvcsim.evidence.trusted_evidence.verify_learning_evidence", lambda *_args, **_kwargs: True)
-    data = {
-        "run_id": "main",
-        "run": {"depvar": "FVA_share", "settings": {"shockType": "sanctions", "controlMode": "icio_derived"}},
-        "checks": {"baseline_run_id": "baseline", "controlled_run_id": "controlled"},
-    }
-    result = evaluate_step(step, _session({step: data}), subject="student", require_trusted=True)
+    result = evaluate_step(step, session, subject="student", require_trusted=True)
     assert not result.complete
-    assert any("除控制变量外" in item for item in result.missing)
+    assert any("凭证无效" in item for item in result.missing)
 
 
-def test_trusted_network_rejects_placebo_from_a_different_design(monkeypatch):
-    step = 15
-    base_design = {
-        "outcome": "network",
-        "granularity": "country_industry",
-        "shock_type": "tariff",
-        "method": "did",
-        "control_mode": "none",
-        "interaction": False,
-        "price_mode": "nominal",
-        "scenario": "clean",
-        "exclude_row": True,
-        "weight_mode": "fixed_pretreatment",
-    }
-    designs = {
-        "main": base_design,
-        "placebo": {**base_design, "shock_type": "sanctions"},
-    }
-    monkeypatch.setattr(
-        "gvcsim.evidence.trusted_evidence.verify_regression_run",
-        lambda token, **_kwargs: {"design": designs[token]} if token in designs else None,
-    )
-    monkeypatch.setattr("gvcsim.evidence.trusted_evidence.verify_learning_evidence", lambda *_args, **_kwargs: True)
-    data = {
-        "run_id": "main",
-        "placebo_run_id": "placebo",
-        "run": {"depvar": "betweenesscentrality", "settings": {"shockType": "tariff", "method": "did"}},
-        "checks": {"placebo_run_id": "placebo"},
-    }
-    result = evaluate_step(step, _session({step: data}), subject="student", require_trusted=True)
-    assert not result.complete
-    assert any("安慰剂必须与本步主回归" in item for item in result.missing)
+def test_report_step_requires_a_real_current_manifest_report(monkeypatch):
+    session = _session({16: {"report_key": "report-1"}})
+    assert evaluate_step(16, session).complete
+
+    from gvcsim.classroom import db
+
+    monkeypatch.setattr(db, "report_by_key", lambda subject, key: {"manifest_id": MID})
+    assert evaluate_step(16, session, subject="student", require_trusted=True).complete
+
+    monkeypatch.setattr(db, "report_by_key", lambda subject, key: {"manifest_id": "other"})
+    assert not evaluate_step(16, session, subject="student", require_trusted=True).complete
+
+
+def test_all_quizzes_then_report_produce_15_then_16_completed_steps():
+    steps = {step: _passed(step) for step in range(1, 16)}
+    summary = completion_summary(_session(steps))
+    assert summary["completed"] == list(range(1, 16))
+    assert summary["completed_count"] == 15
+    assert summary["total"] == 16
+
+    steps[16] = {"report_key": "report-1"}
+    assert completion_summary(_session(steps))["completed"] == list(range(1, 17))
+
+
+def test_every_step_has_a_completion_check_and_unknown_steps_are_rejected():
+    assert sorted(STEP_LABS) == list(range(1, 17))
+    assert [item.step for item in evaluate(empty_session(MID))] == list(range(1, 17))
+    assert all(item.missing for item in evaluate(empty_session(MID)))
+    with pytest.raises(ValueError, match="未知步骤"):
+        evaluate_step(99, empty_session(MID))

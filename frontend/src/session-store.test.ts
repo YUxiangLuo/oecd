@@ -120,45 +120,45 @@ describe("session-store", () => {
     expect(readStep<object>(mergeSessions(session({ "4": newer }), session({ "4": older })), 4)).toEqual({ v: "new" });
   });
 
-  test("same-step concurrent action and quiz submissions preserve both credentials", () => {
+  test("same-step concurrent experiment and quiz saves preserve both final states", () => {
     const initial = session({
       "3": makeRecord({ compared: ["CHN", "USA"] }, "2026-07-16T10:00:00.000Z"),
     });
-    const actionTab = patchStep(
+    const experimentTab = patchStep(
       initial,
       3,
-      { compared: ["CHN", "USA"], evidence_id: "action-event" },
+      { compared: ["CHN", "USA"], chart: "quadrant" },
       "2026-07-16T10:01:00.000Z",
     );
     const quizTab = patchStep(
       initial,
       3,
       {
-        quiz: { version: "course-quiz-v1", answers: { q1: "a" } },
+        quiz: { version: "course-quiz-v2", answers: { q1: "a" } },
         quiz_id: "quiz-event",
       },
       "2026-07-16T10:02:00.000Z",
     );
 
-    expect(readStep<Record<string, unknown>>(mergeSessions(actionTab, quizTab), 3)).toEqual({
+    expect(readStep<Record<string, unknown>>(mergeSessions(experimentTab, quizTab), 3)).toEqual({
       compared: ["CHN", "USA"],
-      evidence_id: "action-event",
-      quiz: { version: "course-quiz-v1", answers: { q1: "a" } },
+      chart: "quadrant",
+      quiz: { version: "course-quiz-v2", answers: { q1: "a" } },
       quiz_id: "quiz-event",
     });
   });
 
-  test("a newer field tombstone prevents a stale credential from reappearing", () => {
+  test("a newer field tombstone prevents a deleted experiment snapshot from reappearing", () => {
     const original = session({
       "3": makeRecord(
-        { compared: ["CHN", "USA"], evidence_id: "old-event" },
+        { compared: ["CHN", "USA"], observation: { value: 1 } },
         "2026-07-16T10:00:00.000Z",
       ),
     });
-    const actionTab = patchStep(original, 3, { evidence_id: undefined }, "2026-07-16T10:02:00.000Z");
+    const experimentTab = patchStep(original, 3, { observation: undefined }, "2026-07-16T10:02:00.000Z");
     const quizTab = patchStep(original, 3, { quiz_id: "quiz-event" }, "2026-07-16T10:01:00.000Z");
 
-    expect(readStep<Record<string, unknown>>(mergeSessions(actionTab, quizTab), 3)).toEqual({
+    expect(readStep<Record<string, unknown>>(mergeSessions(experimentTab, quizTab), 3)).toEqual({
       compared: ["CHN", "USA"],
       quiz_id: "quiz-event",
     });

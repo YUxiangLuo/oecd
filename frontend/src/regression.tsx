@@ -4,17 +4,16 @@ import { useAsync } from "./labs";
 import { comparisonExplanation, lessonQuestion, REGRESSION_LESSONS } from "./regression-lessons";
 import { buildRegressionVerdict, placeboInterpretation } from "./regression-verdict";
 import { splitPolicyCoefficients } from "./regteach";
-import { EvidencePanel } from "./step-evidence";
 import type {
   MarginalEffect,
   PlaceboResponse,
-  QuizStepEvidence,
+  QuizCompletionState,
   RegressionDesignInfo,
   RegressionOptions,
   RegressionOutcome,
   RegressionResponse,
   Step,
-  StepEvidenceApi,
+  StepStateApi,
 } from "./types";
 import { CoefForestChart, EventStudyChart, PlaceboChart } from "./viz";
 
@@ -367,24 +366,17 @@ function MarginalEffectsPanel({ response }: { response: RegressionResponse }) {
   );
 }
 
-/** 第 12–15 步的操作证据：真实运行与指定的对照/诊断。 */
-interface RegressionEvidence extends QuizStepEvidence, Record<string, unknown> {
-  run?: { depvar: string; status: string | null; settings: RegressionSettings; run_id?: string };
+/** 自动保存最近一次真实运行，供刷新恢复与报告复估。 */
+interface RegressionStepState extends QuizCompletionState, Record<string, unknown> {
+  run?: { settings: RegressionSettings };
   run_id?: string;
-  placebo_run_id?: string;
-  checks?: {
-    baseline_run_id?: string;
-    controlled_run_id?: string;
-    no_interaction_run_id?: string;
-    interaction_run_id?: string;
-  };
 }
 
-export function RegressionRunLab({ step, settings, onSettingsChange, history, onHistoryChange, evidence }: {
+export function RegressionRunLab({ step, settings, onSettingsChange, history, onHistoryChange, state }: {
   step: Step;
   history: RegressionHistory;
   onHistoryChange: React.Dispatch<React.SetStateAction<RegressionHistory>>;
-  evidence: StepEvidenceApi<RegressionEvidence>;
+  state: StepStateApi<RegressionStepState>;
 } & SharedSettingsProps) {
   const outcome = step.regression_outcome;
   if (!outcome) return <div className="error-box">当前回归步骤缺少 regression_outcome 配置。</div>;
@@ -489,22 +481,10 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
         };
         return { ...current, [outcome]: [snapshot, ...prior].slice(0, 3) };
       });
-      // 学习证据:这一步的“动作”就是真的跑出了一次结果。
-      // 记录服务端判定的 status,报告里才能说清这次估计能不能作推断。
-      const priorChecks = evidence.data?.checks ?? {};
-      const nextChecks = { ...priorChecks };
-      if (response.run_id && outcome === "trade") {
-        if (runSettings.controlMode === "none") nextChecks.baseline_run_id = response.run_id;
-        else nextChecks.controlled_run_id = response.run_id;
-      }
-      if (response.run_id && outcome === "production") {
-        if (runSettings.interaction) nextChecks.interaction_run_id = response.run_id;
-        else nextChecks.no_interaction_run_id = response.run_id;
-      }
-      evidence.save({
-        run: { depvar: response.result.depvar, status: response.result.status, settings: runSettings, run_id: response.run_id },
+      // 保存最近一次运行；它不影响步骤完成度，但可由最终报告校验并重新估计。
+      state.save({
+        run: { settings: runSettings },
         run_id: response.run_id,
-        checks: nextChecks,
       });
       if (latestRequest.current === requestKey) {
         setResult(response);
@@ -546,7 +526,6 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
       );
       if (placeboRequestRef.current === requestId && latestRequest.current === requestKey) {
         setPlacebo(response);
-        if (response.placebo_run_id) evidence.save({ placebo_run_id: response.placebo_run_id });
       }
     } catch (cause) {
       if (placeboRequestRef.current === requestId && latestRequest.current === requestKey) {
@@ -606,28 +585,24 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           <p className="muted">网络回归只使用全球国家×行业图。国家级贸易图在全正流量口径下为完全图，Gephi 介数中心性恒为 0。</p>
         )}
 
-        <div className="required-run-plan">
+        <div className="comparison-plan">
           <div>
-            <b>本步必做对照</b>
+            <b>建议对照实验</b>
             <p>
               {outcome === "trade" && "用完全相同的冲击、方法与粒度，分别运行不加控制和加入 ICIO 派生控制的模型。"}
               {outcome === "production" && "先运行无交互模型，再运行“冲击 × 基期 GVC”交互模型；交互系数不是平均效应。"}
               {outcome === "length" && "使用事件研究，并检查冲击前联合检验与冲击后的动态路径。"}
-              {outcome === "network" && "使用 DID 基准结果后必须运行安慰剂检验；随机化尾部位置也不是因果证明。"}
+              {outcome === "network" && "可在 DID 基准结果后运行安慰剂检验；随机化尾部位置也不是因果证明。"}
             </p>
           </div>
-          <div className="required-run-actions">
+          <div className="comparison-actions">
             {outcome === "trade" && <>
               <button type="button" className={controlMode === "none" ? "on" : ""} onClick={() => setSetting("controlMode", "none")}>① 切换到无控制基准</button>
-              <span className={evidence.data?.checks?.baseline_run_id ? "done" : ""}>{evidence.data?.checks?.baseline_run_id ? "✓ 已运行" : "待运行"}</span>
               <button type="button" className={controlMode === "icio_derived" ? "on" : ""} onClick={() => setSetting("controlMode", "icio_derived")}>② 切换到 ICIO 控制</button>
-              <span className={evidence.data?.checks?.controlled_run_id ? "done" : ""}>{evidence.data?.checks?.controlled_run_id ? "✓ 已运行" : "待运行"}</span>
             </>}
             {outcome === "production" && <>
               <button type="button" className={!interaction ? "on" : ""} onClick={() => setSetting("interaction", false)}>① 切换到无交互</button>
-              <span className={evidence.data?.checks?.no_interaction_run_id ? "done" : ""}>{evidence.data?.checks?.no_interaction_run_id ? "✓ 已运行" : "待运行"}</span>
               <button type="button" className={interaction ? "on" : ""} onClick={() => setSetting("interaction", true)}>② 打开基期 GVC 交互</button>
-              <span className={evidence.data?.checks?.interaction_run_id ? "done" : ""}>{evidence.data?.checks?.interaction_run_id ? "✓ 已运行" : "待运行"}</span>
             </>}
             {outcome === "length" && (
               <button type="button" className={method === "event_study" ? "on" : ""} onClick={() => setSetting("method", "event_study")}>使用事件研究</button>
@@ -701,25 +676,24 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           </section>
 
           <section className="reg-section-card">
-            <span className="reg-section-step">6 · 检查必做运行</span>
+            <span className="reg-section-step">6 · 继续探索</span>
             {outcome === "length" && (
-              <div className={`required-check-status${event ? " done" : ""}`}>
-                {event ? "✓ 已展示冲击前联合检验与冲击后动态路径" : "本步必须切换到事件研究并重新运行"}
+              <div className={`exploration-status${event ? " done" : ""}`}>
+                {event ? "✓ 已展示冲击前联合检验与冲击后动态路径" : "可切换到事件研究，查看冲击前检验和动态路径"}
               </div>
             )}
             {outcome === "production" && (
-              <div className={`required-check-status${result.design.interaction && (result.result.marginal_effects?.length ?? 0) > 0 ? " done" : ""}`}>
+              <div className={`exploration-status${result.design.interaction && (result.result.marginal_effects?.length ?? 0) > 0 ? " done" : ""}`}>
                 {result.design.interaction && (result.result.marginal_effects?.length ?? 0) > 0
                   ? "✓ 已展示低 / 中 / 高基期 GVC 的边际效应"
-                  : "请打开基期 GVC 交互并运行，以查看条件边际效应"}
+                  : "可打开基期 GVC 交互并运行，查看条件边际效应"}
               </div>
             )}
             {outcome === "network" && (
-              <div className={`required-check-status${evidence.data?.placebo_run_id ? " done" : ""}`}>
-                {evidence.data?.placebo_run_id ? "✓ 已保存与当前账号和数据版本绑定的安慰剂结果" : "还需在上方可信度检查中运行安慰剂检验"}
+              <div className={`exploration-status${placebo ? " done" : ""}`}>
+                {placebo ? "✓ 已查看安慰剂随机化结果" : "可在上方运行安慰剂检验，观察随机化反事实分布"}
               </div>
             )}
-            <EvidencePanel evidence={evidence} />
           </section>
 
           <section className="reg-guide-card">

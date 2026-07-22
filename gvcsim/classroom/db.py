@@ -52,7 +52,7 @@ class LegacySessionReadOnly(RuntimeError):
 
 
 class SessionRevisionConflict(RuntimeError):
-    """报告生成期间会话已被另一请求推进，必须基于新证据重新生成。"""
+    """报告生成期间会话已被另一请求推进，必须基于最新状态重新生成。"""
 
 
 def hash_password(password: str, salt_hex: str) -> str:
@@ -594,11 +594,6 @@ def revoke_auth_session(jti: str) -> bool:
         )
 
 
-def revoke_account_sessions(account_id: int) -> None:
-    with conn() as c:
-        c.execute("UPDATE auth_sessions SET revoked_at=coalesce(revoked_at, now()) WHERE account_id=%s", (account_id,))
-
-
 def record_audit_event(
     action: str,
     *,
@@ -801,8 +796,8 @@ def evidence_event_exists(
 
     仅检查 token 自称的旧 attempt 仍为 ``active`` 不够：教师发布同一 manifest
     的新 assignment 时，旧 assignment 的 attempt 不会自动归档。若不再核对当前
-    scope，旧收据可被复制到新作业。这里同时核对事件的教学语义字段，learning、
-    regression 与 placebo 共用这一道不可跨作业重放的边界。
+    scope，旧收据可被复制到新作业。这里同时核对事件的教学语义字段，quiz 与
+    regression 共用这一道不可跨作业重放的边界。
     """
     with conn() as c:
         scope = _attempt_scope(c, username, manifest_id, create=False)
@@ -872,21 +867,6 @@ def teacher_can_access_class(username: str, class_id: int) -> bool:
                 " JOIN course_class_links l ON l.course_run_id=tca.course_run_id"
                 " WHERE a.username=%s AND a.active AND l.class_id=%s AND tca.can_manage",
                 (username, class_id),
-            ).fetchone()
-            is not None
-        )
-
-
-def teacher_can_access_submission(username: str, submission_id: int) -> bool:
-    with conn() as c:
-        return (
-            c.execute(
-                "SELECT 1 FROM submissions s JOIN experiment_attempts at ON at.id=s.attempt_id"
-                " JOIN assignments ass ON ass.id=at.assignment_id"
-                " JOIN teacher_course_access tca ON tca.course_run_id=ass.course_run_id"
-                " JOIN accounts t ON t.id=tca.teacher_account_id"
-                " WHERE s.id=%s AND t.username=%s AND t.active AND tca.can_manage",
-                (submission_id, username),
             ).fetchone()
             is not None
         )
@@ -1040,7 +1020,7 @@ def list_enrollments(teacher_username: str, course_run_id: int) -> list[dict[str
 
 
 def start_new_attempt(username: str, manifest_id: str) -> dict[str, Any]:
-    """显式归档当前尝试并创建下一次；既有证据、提交和评分保持不可变。"""
+    """显式归档当前尝试并创建下一次；既有答题、运行、提交和评分保持不可变。"""
     with conn() as c:
         with c.transaction():
             scope = _attempt_scope(c, username, manifest_id)
@@ -1425,6 +1405,9 @@ def save_session(
     session: dict[str, Any],
     base_revision: int,
     merge: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]],
+    *,
+    expected_assignment_id: int | None = None,
+    expected_attempt_id: int | None = None,
 ) -> dict[str, Any] | None:
     """写入会话;并发写入时按记录级与字段级时间戳合并,不整份覆盖。
 
@@ -1441,6 +1424,10 @@ def save_session(
                 raise AssignmentScopeMismatch(
                     f"当前作业绑定 {scope['assignment_manifest_id']}，不能写入 {session.get('manifest_id')}"
                 )
+            if (expected_assignment_id is not None and scope["assignment_id"] != expected_assignment_id) or (
+                expected_attempt_id is not None and scope["attempt_id"] != expected_attempt_id
+            ):
+                raise AssignmentScopeMismatch("当前作业 attempt 已变化；请刷新页面后再继续实验")
             _require_assignment_writable(scope)
             account = {"id": scope["account_id"]}
             attempt_id = scope["attempt_id"]
@@ -1496,7 +1483,7 @@ def clear_session(username: str) -> None:
     """一致性重置当前尝试。
 
     归档旧尝试并创建下一 attempt；当前进度/报告/提交自然为空，历史记录仍可
-    审计。旧 evidence event 同时撤销，不能跨 attempt 复用。
+    审计。旧答题/回归收据引用的事件同时撤销，不能跨 attempt 复用。
     """
     with conn() as c:
         with c.transaction():
@@ -1504,7 +1491,7 @@ def clear_session(username: str) -> None:
             if not scope or scope["attempt_id"] is None:
                 return
             _require_assignment_writable(scope)
-            # 每次重置都换 attempt 边界：旧 evidence token 绑定旧 attempt，无法在
+            # 每次重置都换 attempt 边界：旧答题/回归收据绑定旧 attempt，无法在
             # 新会话复用；既有提交/评分仍可由教师审计，但不再是学生“当前状态”。
             c.execute(
                 "UPDATE learning_evidence_events SET revoked_at=coalesce(revoked_at,now()) WHERE attempt_id=%s",
@@ -1629,48 +1616,6 @@ def reset_active_attempts_for_quiz(quiz_version: str, manifest_id: str) -> dict[
 # ---------------------------------------------------------------- 服务端生成的报告
 
 
-def save_report(
-    username: str,
-    report_key: str,
-    session_revision: int,
-    manifest_id: str,
-    markdown: str,
-    provenance: dict[str, Any],
-) -> dict[str, Any] | None:
-    """落库一份服务端生成的报告。
-
-    报告内容不可变：相同 report_key 幂等返回原行，不更新时间/正文。
-    """
-    with conn() as c:
-        scope = _attempt_scope(c, username, manifest_id)
-        if not scope or scope.get("manifest_mismatch"):
-            raise AssignmentScopeMismatch("报告不属于当前 assignment/manifest")
-        _require_assignment_writable(scope)
-        row = c.execute(
-            "INSERT INTO reports(account_id,attempt_id,assignment_id,report_key,session_revision,manifest_id,markdown,provenance)"
-            " VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (attempt_id,report_key) DO NOTHING"
-            " RETURNING id,report_key,session_revision,manifest_id,created_at",
-            (
-                scope["account_id"],
-                scope["attempt_id"],
-                scope["assignment_id"],
-                report_key,
-                session_revision,
-                manifest_id,
-                markdown,
-                json.dumps(provenance, ensure_ascii=False),
-            ),
-        ).fetchone()
-        return (
-            row
-            or c.execute(
-                "SELECT id,report_key,session_revision,manifest_id,created_at FROM reports"
-                " WHERE account_id=%s AND report_key=%s AND attempt_id=%s",
-                (scope["account_id"], report_key, scope["attempt_id"]),
-            ).fetchone()
-        )
-
-
 def save_generated_report_and_session(
     username: str,
     report_key: str,
@@ -1680,10 +1625,10 @@ def save_generated_report_and_session(
     provenance: dict[str, Any],
     session: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """单事务写入服务端报告与 step16 会话证据。
+    """单事务写入服务端报告与 step16 完成记录。
 
     不接受并发 merge：报告正文基于 ``base_revision`` 重算；若会话已推进，
-    合并后正文与证据将不再属于同一快照，因此明确冲突并要求重新生成。
+    合并后正文与完成记录将不再属于同一快照，因此明确冲突并要求重新生成。
     """
     with conn() as c:
         with c.transaction():

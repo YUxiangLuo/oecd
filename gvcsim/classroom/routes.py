@@ -6,8 +6,6 @@ Bearer 校验由 api.py 的全局中间件完成并把令牌 payload 放进 requ
 """
 
 import re
-import math
-import json
 from datetime import datetime
 from typing import Any, Self
 
@@ -15,12 +13,10 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, model_validator
 
-from gvcsim import artifacts, evidence, quizzes, shocks, trusted_evidence
+from gvcsim import artifacts, evidence, quizzes, trusted_evidence
 from gvcsim import session as session_model
 from gvcsim import teaching_report
 from gvcsim.classroom import db
-from gvcsim.config import PROCESSED_DIR
-from gvcsim.data import icio_browser
 
 router = APIRouter(prefix="/api/classroom")
 
@@ -141,255 +137,10 @@ def get_session(user: dict = Depends(require_student)):
     }
 
 
-class EvidenceIssueRequest(BaseModel):
-    step: int = Field(ge=1, le=db.MAX_STEP)
-    kind: str = Field(min_length=1, max_length=32)
-    payload: dict[str, Any]
-
-
 class QuizSubmitRequest(BaseModel):
     step: int = Field(ge=1, le=15)
     version: str = Field(min_length=1, max_length=80)
     answers: dict[str, str]
-
-
-_INDICATOR_METRICS = {
-    3: "FVA_share",
-    4: "3b_VA_GVC_C_share",
-    5: "GVCPs",
-    6: "betweenesscentrality",
-}
-_VIZ_METRICS = {
-    7: {"FVA_share", "DVAex_share"},
-    8: {"3_VA_GVC_share", "3b_VA_GVC_C_share"},
-    9: {"PLv_GVC", "PLy_GVC", "GVCPs"},
-    10: {"betweenesscentrality", "weighted degree"},
-}
-_VIZ_CHARTS = {
-    7: {"quadrant", "decompose", "rank"},
-    8: {"ladder", "rank", "industry"},
-    9: {"position", "bars", "rank"},
-    10: {"heat", "network"},
-}
-
-
-def _derived_metric(row: dict[str, Any], metric: str) -> float:
-    if metric == "FVA_share":
-        gross = sum(float(row.get(key) or 0) for key in ("DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"))
-        return float(row["FVA"]) / gross if gross > 0 else math.nan
-    if metric == "DVAex_share":
-        gross = sum(float(row.get(key) or 0) for key in ("DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"))
-        return float(row["DVAex"]) / gross if gross > 0 else math.nan
-    if metric == "3_VA_GVC_share":
-        return float(row["3_VA_GVC"]) / float(row["SVA"]) if float(row["SVA"]) > 0 else math.nan
-    if metric == "3b_VA_GVC_C_share":
-        return float(row["3b_VA_GVC_C"]) / float(row["SVA"]) if float(row["SVA"]) > 0 else math.nan
-    return float(row[metric])
-
-
-def _verify_observations(
-    step: int,
-    payload: dict[str, Any],
-    *,
-    allowed_metrics: set[str],
-    industry: bool,
-) -> None:
-    observations = payload.get("observations")
-    metric = str(payload.get("metric") or "")
-    if metric not in allowed_metrics:
-        raise ValueError(f"步骤 {step} 的可核查指标必须是 {sorted(allowed_metrics)}")
-    if not isinstance(observations, list) or len(observations) < 2:
-        raise ValueError("请提交至少两个由当前图表/表格读取的数值 observations")
-    countries: set[str] = set()
-    for observation in observations:
-        if not isinstance(observation, dict):
-            raise ValueError("observation 必须是对象")
-        country = str(observation.get("country") or "")
-        year = int(observation.get("year") or 0)
-        industry_code = str(observation.get("industry") or "")
-        if not country or not year or industry and not industry_code:
-            raise ValueError("observation 缺少 country/year/industry")
-        path = PROCESSED_DIR / f"indicators_{'industry' if industry else 'country'}_{year}.csv"
-        frame = artifacts.read_csv_artifact(path, require_current=True)
-        selected = frame[frame["country"].astype(str) == country]
-        if industry:
-            selected = selected[selected["industry"].astype(str) == industry_code]
-        if selected.empty:
-            raise ValueError(f"当前产物中找不到 {country}·{industry_code or '国家'}·{year}")
-        expected = _derived_metric(selected.iloc[0].to_dict(), metric)
-        raw_value = observation.get("value")
-        if raw_value is None:
-            raise ValueError("observation 缺少 value")
-        supplied = float(raw_value)
-        if (
-            not math.isfinite(expected)
-            or not math.isfinite(supplied)
-            or not math.isclose(expected, supplied, rel_tol=1e-6, abs_tol=1e-9)
-        ):
-            raise ValueError(f"{country}·{industry_code or '国家'} 的 {metric} 与当前产物不一致")
-        countries.add(country)
-    if len(countries) < 2:
-        raise ValueError("observations 必须覆盖至少两个不同经济体")
-    compared = set(str(item) for item in payload.get("compared") or [])
-    if not countries.issubset(compared):
-        raise ValueError("observations 与当前 compared 对象不一致")
-
-
-def _verify_learning_payload(step: int, kind: str, payload: dict[str, Any]) -> None:
-    if kind == "qc_resolution":
-        year = int(payload.get("year") or 0)
-        path = PROCESSED_DIR / f"qc_{year}.json"
-        artifacts.validate_artifact(path)
-        checks = json.loads(path.read_text(encoding="utf-8"))
-        disclosure_levels = {"disclosure", "warning", "fatal"}
-        failed = [
-            str(item.get("name"))
-            for item in checks
-            if isinstance(item, dict) and (not item.get("passed") or item.get("severity") in disclosure_levels)
-        ]
-        controls_path = PROCESSED_DIR / "qc_controls.json"
-        artifacts.validate_artifact(controls_path)
-        controls_checks = json.loads(controls_path.read_text(encoding="utf-8"))
-        failed += [
-            "控制变量: " + str(item.get("name"))
-            for item in controls_checks
-            if isinstance(item, dict) and (not item.get("passed") or item.get("severity") in disclosure_levels)
-        ]
-        payload["failed_checks"] = failed
-        payload["disclosure_checks"] = failed
-        payload["qc_manifest_id"] = artifacts.manifest_id()
-        disposition = payload.get("disposition")
-        if disposition == "stop":
-            payload["retest_passed"] = False
-        elif disposition == "fix":
-            year_status = (artifacts.manifest_provenance().get("qc") or {}).get("years", {}).get(str(year), {})
-            if failed or year_status.get("fatal") or year_status.get("override"):
-                raise ValueError("当前 manifest 的 QC 仍有 fatal/override；请先修正原始数据、重算并通过复检")
-            payload["retest_passed"] = True
-        elif disposition == "disclose":
-            disclosed = set(str(item) for item in payload.get("disclosures") or [])
-            if not failed or not set(failed).issubset(disclosed):
-                raise ValueError("披露列表必须逐项包含当前 QC 的全部失败检查")
-            payload["disclosures"] = failed
-            payload["retest_passed"] = False
-    elif kind == "slice":
-        slice_ = payload.get("slice")
-        if not isinstance(slice_, dict):
-            raise ValueError("缺少 slice")
-        observation = payload.get("observation")
-        if not isinstance(observation, dict):
-            raise ValueError("缺少当前切片的 observation")
-        result = icio_browser.slice_table(
-            year=int(slice_["year"]),
-            table=str(slice_["table"]),
-            row_country=str(slice_["row_country"]),
-            col_country=str(slice_.get("col_country") or "") or None,
-            row_sector=str(slice_.get("row_sector") or "") or None,
-            col_sector=str(slice_.get("col_sector") or "") or None,
-            page=1,
-            page_size=200,
-        )
-        if not result.get("rows"):
-            raise ValueError("当前 OECD ICIO 原始数据中该切片为空")
-        row_label = str(observation.get("row") or "")
-        column = str(observation.get("column") or "")
-        if not row_label or column == "row" or column not in result.get("columns", []):
-            raise ValueError("observation 的行或列不属于当前切片")
-        matched = next(
-            (row for row in result["rows"] if isinstance(row, dict) and str(row.get("row") or "") == row_label),
-            None,
-        )
-        if matched is None or column not in matched:
-            raise ValueError("observation 的行或列不属于当前切片")
-        supplied_raw = observation.get("value")
-        expected_raw = matched[column]
-        if (
-            isinstance(supplied_raw, bool)
-            or not isinstance(supplied_raw, (int, float))
-            or isinstance(expected_raw, bool)
-            or not isinstance(expected_raw, (int, float))
-        ):
-            raise ValueError("observation.value 必须是当前切片中的有限数值")
-        supplied = float(supplied_raw)
-        expected = float(expected_raw)
-        if (
-            not math.isfinite(supplied)
-            or not math.isfinite(expected)
-            or not math.isclose(supplied, expected, rel_tol=1e-9, abs_tol=1e-12)
-        ):
-            raise ValueError("observation.value 与当前切片中的服务端原始值不一致")
-    elif kind == "indicator":
-        _verify_observations(
-            step,
-            payload,
-            allowed_metrics={_INDICATOR_METRICS[step]},
-            industry=True,
-        )
-    elif kind == "visualization":
-        if payload.get("chart") not in _VIZ_CHARTS[step]:
-            raise ValueError(f"步骤 {step} 的 chart 无法识别")
-        _verify_observations(
-            step,
-            payload,
-            allowed_metrics=_VIZ_METRICS[step],
-            industry=step == 10,
-        )
-    elif kind == "shock":
-        # 学生只需真正打开三类事件；当前产物的 shock QC 由服务端自动读取并绑定，
-        # 不再要求学生到折叠面板里额外勾选一个与完成清单不一致的确认框。
-        shock_qc_path = PROCESSED_DIR / "qc_shocks.json"
-        artifacts.validate_artifact(shock_qc_path)
-        shock_qc = json.loads(shock_qc_path.read_text(encoding="utf-8"))
-        payload["shock_qc_failures"] = [
-            str(item.get("name")) for item in shock_qc if isinstance(item, dict) and not item.get("passed")
-        ]
-        viewed = set(str(name) for name in payload.get("viewed_events") or [])
-        metadata = {str(item["name"]): str(item["shock_type"]) for item in shocks.events_metadata()}
-        if any(name not in metadata for name in viewed):
-            raise ValueError("viewed_events 含未登记事件")
-        frame = shocks.load_shocks()
-        note_columns = [column for column in frame if column == "note" or column.endswith("_note")]
-        panel_events = {
-            str(value) for column in note_columns for value in frame[column].dropna().unique() if str(value)
-        }
-        absent = viewed - panel_events
-        if absent:
-            raise ValueError("事件没有对应当前 shock panel 行:" + "、".join(sorted(absent)))
-
-
-@router.post("/evidence/issue")
-def issue_evidence(req: EvidenceIssueRequest, user: dict = Depends(require_student)):
-    """校验一次真实学习动作，并签发绑定学生、步骤与当前 manifest 的收据。"""
-    current_manifest = artifacts.manifest_id()
-    try:
-        clean = evidence.normalize_issue_payload(req.step, req.kind, req.payload)
-        _verify_learning_payload(req.step, req.kind, clean)
-        clean = evidence.action_payload(req.step, clean)
-    except ValueError as error:
-        raise HTTPException(status_code=422, detail=str(error)) from error
-    if artifacts.manifest_id() != current_manifest:
-        raise HTTPException(status_code=409, detail="核验证据期间数据产物已切换，请刷新后重新提交")
-    payload_sha256 = trusted_evidence.digest(clean)
-    try:
-        event = db.record_evidence_event(
-            user["sub"],
-            req.step,
-            req.kind,
-            current_manifest,
-            payload_sha256,
-            {"payload": clean},
-        )
-    except (db.AssignmentScopeMismatch, db.AssignmentClosed) as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
-    evidence_id = trusted_evidence.issue_learning_evidence(
-        subject=user["sub"],
-        step=req.step,
-        kind=req.kind,
-        manifest_id=current_manifest,
-        payload=clean,
-        event=event,
-    )
-    return {"evidence_id": evidence_id, "evidence": clean}
 
 
 @router.post("/quiz/submit")
@@ -424,10 +175,9 @@ def submit_quiz(req: QuizSubmitRequest, user: dict = Depends(require_student)):
         raise HTTPException(status_code=409, detail=str(error)) from error
     if artifacts.manifest_id() != current_manifest:
         raise HTTPException(status_code=409, detail="判定答题期间数据产物已切换，请刷新后重新提交")
-    response["quiz_id"] = trusted_evidence.issue_learning_evidence(
+    response["quiz_id"] = trusted_evidence.issue_quiz_completion(
         subject=user["sub"],
         step=req.step,
-        kind="quiz",
         manifest_id=current_manifest,
         payload=payload,
         event=event,
@@ -439,6 +189,10 @@ def submit_quiz(req: QuizSubmitRequest, user: dict = Depends(require_student)):
 class SessionRequest(BaseModel):
     # 客户端读到的版本;服务端已被其它标签页推进时用它触发记录/字段级合并。
     base_revision: int = Field(ge=0)
+    # 浏览器加载会话时看到的稳定边界。服务端必须在同一事务里核对，防止旧标签页
+    # 在教师重置/重新发布后把旧会话写进刚创建的新 attempt。
+    expected_assignment_id: int = Field(gt=0)
+    expected_attempt_id: int = Field(gt=0)
     session: dict[str, Any]
 
 
@@ -470,7 +224,14 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
         )
 
     try:
-        saved = db.save_session(user["sub"], payload, req.base_revision, _merge_and_validate)
+        saved = db.save_session(
+            user["sub"],
+            payload,
+            req.base_revision,
+            _merge_and_validate,
+            expected_assignment_id=req.expected_assignment_id,
+            expected_attempt_id=req.expected_attempt_id,
+        )
     except (db.AssignmentScopeMismatch, db.AssignmentClosed, db.LegacySessionReadOnly) as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     except session_model.SessionError as e:
@@ -564,8 +325,8 @@ def _step_data_for_gate(session: dict[str, Any], lab: str) -> dict[str, Any]:
 def generate_report(user: dict = Depends(require_student)):
     """由服务端从实验会话生成报告。
 
-    前 15 步证据不齐时拒绝(409),并返回还差什么;报告正文与其中的回归结果
-    都由服务端重算,不接受任何客户端提供的内容。
+    前 15 步答题未全部通过时拒绝(409),并返回还差什么;报告正文与其中实际
+    运行过的回归结果都由服务端生成,不接受任何客户端提供的正文。
     """
     _ensure_current_assignment(user["sub"])
     session, revision = _load_session_for_report(user["sub"])
@@ -580,16 +341,15 @@ def generate_report(user: dict = Depends(require_student)):
     except teaching_report.ReportGateError as e:
         raise HTTPException(status_code=409, detail={"message": str(e), "blocked": e.missing}) from e
 
-    # 第 16 步的证据由服务端写入,而不是让客户端声称“我生成过报告”。
-    # 先把带报告证据的会话校验好再落库:否则校验失败时报告已经写进 reports 表,
-    # 学生看到 500、库里却躺着一份报告、第 16 步证据还没写上,三者互相矛盾。
+    # 第 16 步的完成记录由服务端写入,而不是让客户端声称“我生成过报告”。
+    # 先把记录写进会话并校验，再与报告一起原子落库。
     existing_report_key = str(_step_data_for_gate(session, "rep").get("report_key") or "")
     if existing_report_key != report.report_key:
         session["steps"][str(_REPORT_STEP)] = session_model.make_record({"report_key": report.report_key})
     try:
         updated = session_model.validate_session(session)
     except session_model.SessionError as e:
-        raise HTTPException(status_code=422, detail=f"写入报告证据后会话不合规:{e}") from e
+        raise HTTPException(status_code=422, detail=f"写入报告记录后会话不合规:{e}") from e
 
     try:
         saved = db.save_generated_report_and_session(
@@ -617,20 +377,17 @@ def generate_report(user: dict = Depends(require_student)):
         "report_key": canonical["report_key"],
         "markdown": canonical["markdown"],
         "provenance": canonical["provenance"],
-        "suggested_filename": f"gvc_experiment_report_{canonical['report_key']}.md",
+        "suggested_filename": report.suggested_filename,
     }
 
 
 @router.get("/report/gate")
 def report_gate(user: dict = Depends(require_student)):
-    """第 16 步的前置门槛状态:还差哪些步骤的证据。"""
+    """第 16 步的前置门槛状态:还差哪些步骤的理解检查。"""
     _ensure_current_assignment(user["sub"])
     row = db.get_session(user["sub"])
     session = row["session"] if row else session_model.empty_session(artifacts.manifest_id())
-    return {
-        "blocked": teaching_report.check_gate(session, subject=user["sub"], require_trusted=True),
-        "halted": _step_data_for_gate(session, "qc").get("disposition") == "stop",
-    }
+    return {"blocked": teaching_report.check_gate(session, subject=user["sub"], require_trusted=True)}
 
 
 @router.get("/report/generated")

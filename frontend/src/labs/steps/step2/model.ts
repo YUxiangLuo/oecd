@@ -28,15 +28,6 @@ export const shockTypeLabel = (key: string | undefined) =>
 export const shockTypeColor = (key: string | undefined) =>
   SHOCK_TYPE_COLORS[(key ?? "tariff") as ShockType] ?? SHOCK_TYPE_COLORS.tariff;
 
-/** 三类事件本身就是本步的全部操作证据；冲击面板 QC 由服务端自动绑定。 */
-export function isShockActionReady(
-  viewedShockTypes: readonly string[] | undefined,
-  requiredShockTypes: readonly string[],
-): boolean {
-  const viewed = new Set(viewedShockTypes ?? []);
-  return requiredShockTypes.every((type) => viewed.has(type));
-}
-
 export type ShockPanelFilters = {
   year: number;
   shockType: string;

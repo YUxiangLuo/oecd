@@ -1,12 +1,12 @@
 /**
- * 指标计算阶段(步骤 3–6)的分解数据表:国家/年份筛选 + 分页 + 学习证据。
+ * 指标计算阶段（步骤 3–6）的分解数据表：国家/年份筛选、分页与实验快照。
  *
  * 受控组件:year/country/page 由外层持有,这样「动手拆解」演示的“查看 ICIO 示例”
- * 才能驱动这张表跳到指定实体。证据(看过 ≥2 个国家)在本组件内累加。
+ * 才能驱动这张表跳到指定实体。主动查看过的国家在本组件内累加保存。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../../api";
-import type { IndicatorSchema, IndustryPage, Meta, QuizStepEvidence, StepEvidenceApi } from "../../../types";
+import type { IndicatorSchema, IndustryPage, Meta, QuizCompletionState, StepStateApi } from "../../../types";
 import { countryLabel, sectorLabel } from "../../../viz";
 import { Pager, fieldLabel, fmtField, useAsync } from "../../shared";
 
@@ -16,9 +16,10 @@ const BASE_DESC: Record<string, string> = {
   year: "指标年份",
 };
 
-export interface IndicatorEvidence extends QuizStepEvidence, Record<string, unknown> {
+export interface IndicatorStepState extends QuizCompletionState, Record<string, unknown> {
+  year?: number;
+  country?: string;
   compared?: string[];
-  last_view?: { year: number; country: string };
   metric?: string;
   observations?: { entity: string; value: number; year: number; country: string; industry: string }[];
 }
@@ -30,29 +31,96 @@ const CORE_METRIC: Record<string, string> = {
   network: "betweenesscentrality",
 };
 
-export function IndicatorTable({ meta, groupKey, schema, evidence, year, country, page, onYear, onCountry, onPage }: {
+export function restoreIndicatorSelection(meta: Meta, saved?: IndicatorStepState) {
+  const fallbackCountry = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
+  const savedCountry = typeof saved?.country === "string"
+    ? saved.country
+    : [...(saved?.compared ?? [])].reverse().find((item) => meta.countries.includes(item));
+  return {
+    year: typeof saved?.year === "number" && meta.years.includes(saved.year)
+      ? saved.year
+      : meta.years.at(-1)!,
+    country: savedCountry === "" || (savedCountry != null && meta.countries.includes(savedCountry))
+      ? savedCountry
+      : fallbackCountry,
+  };
+}
+
+/** 指标表与分解演示共享一套选择，并只把学生真实交互后的变化写回会话。 */
+export function useIndicatorControls(meta: Meta, state: StepStateApi<IndicatorStepState>) {
+  const initial = restoreIndicatorSelection(meta, state.data);
+  const [year, setYearValue] = useState(initial.year);
+  const [country, setCountryValue] = useState(initial.country);
+  const [page, setPageValue] = useState(1);
+  const [interacted, setInteracted] = useState(false);
+  const restored = useRef(state.data !== undefined);
+
+  useEffect(() => {
+    if (restored.current || interacted || state.data === undefined) return;
+    const next = restoreIndicatorSelection(meta, state.data);
+    setYearValue(next.year);
+    setCountryValue(next.country);
+    setPageValue(1);
+    restored.current = true;
+  }, [interacted, meta, state.data]);
+
+  const setYear = (next: number) => {
+    setInteracted(true);
+    setYearValue(next);
+    setPageValue(1);
+  };
+  const setCountry = (next: string) => {
+    setInteracted(true);
+    setCountryValue(next);
+    setPageValue(1);
+  };
+  const setPage = (next: number) => {
+    setInteracted(true);
+    setPageValue(next);
+  };
+  const setPrimary = (nextYear: number, nextCountry: string) => {
+    setInteracted(true);
+    setYearValue(nextYear);
+    setCountryValue(nextCountry);
+    setPageValue(1);
+  };
+
+  return { year, country, page, interacted, setYear, setCountry, setPage, setPrimary };
+}
+
+export function IndicatorTable({ meta, groupKey, schema, state, year, country, page, interacted, onYear, onCountry, onPage }: {
   meta: Meta;
   groupKey: string;
   schema: IndicatorSchema | null | undefined;
-  evidence: StepEvidenceApi<IndicatorEvidence>;
+  state: StepStateApi<IndicatorStepState>;
   year: number;
   country: string;
   page: number;
+  interacted: boolean;
   onYear: (year: number) => void;
   onCountry: (country: string) => void;
   onPage: (page: number) => void;
 }) {
-  const [countryTouched, setCountryTouched] = useState(false);
   const [showAllFields, setShowAllFields] = useState(false);
-  const { data, error } = useAsync<IndustryPage>(() => api.industryIndicators(year, country, page), [year, country, page]);
+  const queryKey = JSON.stringify([year, country, page]);
+  const { data: result, error } = useAsync<{ queryKey: string; page: IndustryPage }>(async () => ({
+    queryKey,
+    page: await api.industryIndicators(year, country, page),
+  }), [queryKey]);
+  // useAsync 在依赖变化后的 effect 才清旧结果；显式核对请求键，避免新筛选在
+  // 同一帧误把上一次响应中的数值标成新国家/新年份后保存。
+  const data = result?.queryKey === queryKey ? result.page : null;
 
-  // 证据:该实体的指标真的被取回过;累加国家,凑够两个才算做过对比——
-  // 只看一个国家的分解不构成任何比较,而这一步的目标正是比较。
+  // 该实体的指标取回后保存快照；累加主动查看过的国家，供刷新恢复和报告摘要。
   useEffect(() => {
-    if (!data || !country || !countryTouched) return;
-    const compared = evidence.data?.compared ?? [];
+    if (!data || !interacted) return;
     const metric = CORE_METRIC[groupKey];
-    const existing = evidence.data?.observations ?? [];
+    if (!country) {
+      state.save({ year, country, metric });
+      return;
+    }
+    const compared = state.data?.compared ?? [];
+    const existing = state.data?.observations ?? [];
     const targetIndustry = existing[0]?.industry;
     const observedRow = data.rows.find((row) => (
       (!targetIndustry || String(row.industry ?? "") === targetIndustry)
@@ -68,16 +136,16 @@ export function IndicatorTable({ meta, groupKey, schema, evidence, year, country
         industry: String(observedRow.industry ?? ""),
       },
     ].slice(-2) : existing;
-    evidence.save({
-      compared: compared.includes(country) ? compared : [...compared, country],
-      last_view: { year, country },
+    state.save({
+      year,
+      country,
+      compared: [...compared.filter((item) => item !== country), country],
       metric,
       observations,
-      evidence_id: "",
     });
-    // evidence 每次渲染都是新对象,不入依赖。
+    // state 每次渲染都是新对象,不入依赖。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, country, year, countryTouched, groupKey]);
+  }, [data, country, year, interacted, groupKey]);
 
   if (error) return <div className="error-box">{error}</div>;
   const group = schema?.groups.find((g) => g.key === groupKey);
@@ -92,21 +160,21 @@ export function IndicatorTable({ meta, groupKey, schema, evidence, year, country
     <>
       <div className="controls">
         <label>国家</label>
-        <select value={country} onChange={(e) => { setCountryTouched(true); onCountry(e.target.value); onPage(1); }}>
+        <select value={country} onChange={(e) => onCountry(e.target.value)}>
           <option value="">全部</option>
           {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
         </select>
         <label>年份</label>
-        <select value={year} onChange={(e) => { onYear(Number(e.target.value)); onPage(1); }}>
+        <select value={year} onChange={(e) => onYear(Number(e.target.value))}>
           {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
         </select>
         <span className="muted">{data ? `共 ${data.total} 条` : "加载中…"}</span>
       </div>
-      {(evidence.data?.observations?.length ?? 0) > 0 && (
+      {(state.data?.observations?.length ?? 0) > 0 && (
         <div className="observation-strip" aria-label="已捕获的对比数值">
-          <b>已捕获 {evidence.data?.metric}</b>
-          {evidence.data?.observations?.map((item) => (
-            <span key={`${item.year}-${item.entity}`}>{item.year} · {item.entity} = {fmtField(item.value, evidence.data?.metric ?? "", schema)}</span>
+          <b>已捕获 {state.data?.metric}</b>
+          {state.data?.observations?.map((item) => (
+            <span key={`${item.year}-${item.entity}`}>{item.year} · {item.entity} = {fmtField(item.value, state.data?.metric ?? "", schema)}</span>
           ))}
         </div>
       )}

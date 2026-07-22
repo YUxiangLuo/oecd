@@ -269,8 +269,8 @@ export function reconcileOnLoad(
   if (!usableLocal) {
     return {
       session: usableServer,
-      // Never turn an old/foreign session into a v5 write implicitly. The first
-      // explicit student edit will create a fresh scoped v5 session instead.
+      // Never turn an old/foreign session into a v6 write implicitly. The first
+      // explicit student edit will create a fresh scoped v6 session instead.
       needsPush: false,
       discardedLocal: localStale,
       discardedServer: serverStale,

@@ -9,7 +9,7 @@ import { SHOCK_TYPES, SHOCK_TYPE_COLORS, SHOCK_TYPE_LABELS, eventKey, shockTypeC
  * 每行内嵌一条「宣布 ○━━● 生效(○ 解除)」迷你时间条。刻意让所有行**共用同一条时间刻度**
  * (顶部年份轴),所以横向位置可以跨事件比较——谁先宣布、谁的宣布到生效拖得更久,
  * 一眼可见。这正是第 12–15 步事件研究要用的时点信息,因此不再另设独立时间线组件。
- * 分组本身也在提醒学生"关税 / 制裁 / 出口管制三类都要各看一个"(本步证据要求)。
+ * 分组帮助学生主动比较关税、制裁与出口管制三类冲击的覆盖差异。
  */
 const dateNumber = (value: string | null | undefined) => {
   if (!value) return null;

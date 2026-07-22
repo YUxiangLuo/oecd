@@ -6,13 +6,12 @@
  * 主图与讲解;这里只沉淀真正该复用的三样东西:
  *   1) ChartStory —— 每张图自带「看什么 / 怎么读 / 该发现」读图脚手架;
  *   2) StepIntro / LensNav —— 常驻教学引导与「本步专属」的视角切换(非通用 7 标签);
- *   3) useVizLab —— 年份 / 选国家 / 数据拉取 + 学习证据({chart, compared})。
- * 证据语义与旧实现一致(gvcsim/evidence.py::_check_viz:chart 非空 + compared≥2),
- * 只在真实交互后写入,页面默认视图不计入。
+ *   3) useVizLab —— 年份 / 选国家 / 数据拉取 + 自动实验快照({chart, compared})。
+ * 只在真实交互后写入，页面默认视图不冒充学生探索。
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "../../../api";
-import type { IndicatorSchema, Meta, QuizStepEvidence, Step, StepEvidenceApi } from "../../../types";
+import type { IndicatorSchema, Meta, QuizCompletionState, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
 import { CountryPicker } from "../../country-picker";
 import { CAT, cardStyle } from "../../../viz/shared";
@@ -26,7 +25,7 @@ export const finiteBy = (rows: Row[], ...keys: string[]) => rows.filter((r) => k
 /** 讲解性正文的最大阅读行宽(px):容器与图表/表格仍全宽,只有正文不跟着拉长,保证可读。 */
 const PROSE_MAX = 820;
 
-export interface VizEvidence extends QuizStepEvidence, Record<string, unknown> {
+export interface VizStepState extends QuizCompletionState, Record<string, unknown> {
   chart?: string;
   compared?: string[];
   year?: number;
@@ -44,7 +43,7 @@ interface RestoredVizState {
 /** Pure restoration policy, shared by initial render, async hydration and tests. */
 export function restoreVizState(
   meta: Pick<Meta, "years" | "countries">,
-  saved: VizEvidence | undefined,
+  saved: VizStepState | undefined,
   defaultLens: string,
   validLenses: readonly string[],
 ): RestoredVizState {
@@ -63,7 +62,7 @@ export function useCountryObservations(
   picked: string[],
   year: number,
   metric: string,
-  evidence: StepEvidenceApi<VizEvidence>,
+  state: StepStateApi<VizStepState>,
 ) {
   useEffect(() => {
     if (picked.length < 1 || rows.length < 1) return;
@@ -74,9 +73,9 @@ export function useCountryObservations(
         ? { entity: country, country, year, value }
         : null;
     }).filter((item): item is { entity: string; country: string; year: number; value: number } => item != null);
-    if (JSON.stringify(observations) === JSON.stringify(evidence.data?.observations)
-      && evidence.data?.metric === metric) return;
-    evidence.save({ metric, observations, evidence_id: "" });
+    if (JSON.stringify(observations) === JSON.stringify(state.data?.observations)
+      && state.data?.metric === metric) return;
+    state.save({ metric, observations });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, picked, year, metric]);
 }
@@ -156,7 +155,7 @@ export function ChartStory({ eyebrow, title, what, read, find, note, children }:
 
 /* --------------------- 本步专属的视角切换(非通用 7 标签) --------------------- */
 
-/** 每步只保留讲得清本步故事的少数镜头;选中即记为 chart 证据。 */
+/** 每步只保留讲得清本步故事的少数镜头；选择会自动保存。 */
 export function LensNav<K extends string>({ lenses, active, onPick }: {
   lenses: { key: K; label: string; hint?: string }[];
   active: K;
@@ -181,48 +180,48 @@ export function LensNav<K extends string>({ lenses, active, onPick }: {
   );
 }
 
-/* ----------------------------- 数据 + 学习证据 ----------------------------- */
+/* ----------------------------- 数据 + 实验快照 ----------------------------- */
 
-/** 四步共用的数据/证据底座:年份、选国家、schema,以及 {chart, compared} 证据写入。
- *  compared = 学生**主动选出**的对比对象(Top-N 自动选出的不算学生的比较决定)。 */
+/** 四步共用的数据底座：年份、选国家、schema，以及 {chart, compared} 快照写入。
+ * compared 只记录学生主动选出的对象，Top-N 默认展示不算学生探索。 */
 export function useVizLab(
   meta: Meta,
   _step: Step,
-  evidence: StepEvidenceApi<VizEvidence>,
+  state: StepStateApi<VizStepState>,
   defaultLens: string,
   validLenses: readonly string[],
 ) {
-  const restored = restoreVizState(meta, evidence.data, defaultLens, validLenses);
+  const restored = restoreVizState(meta, state.data, defaultLens, validLenses);
   const [year, setYearState] = useState(restored.year);
   const [lens, setLens] = useState(restored.lens);
   const [picked, setPicked] = useState<string[]>(restored.picked);
   const [interacted, setInteracted] = useState(false);
-  const hydrated = useRef(Boolean(evidence.data));
+  const hydrated = useRef(Boolean(state.data));
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
 
   // Session data arrives asynchronously after the page mounts. Hydrate once,
   // unless the student already interacted while it was loading.
   useEffect(() => {
-    if (hydrated.current || interacted || !evidence.data) return;
-    const next = restoreVizState(meta, evidence.data, defaultLens, validLenses);
+    if (hydrated.current || interacted || !state.data) return;
+    const next = restoreVizState(meta, state.data, defaultLens, validLenses);
     setYearState(next.year);
     setLens(next.lens);
     setPicked(next.picked);
     hydrated.current = true;
-  }, [evidence.data, interacted, meta.countries, meta.years, validLenses]);
+  }, [state.data, interacted, meta.countries, meta.years, validLenses]);
 
-  // 只有学生真正动过(切镜头 / 选国家)才写证据;页面默认视图不计入(与旧实现一致)。
+  // 只有学生真正交互过（切镜头 / 选国家）才写入实验快照。
   useEffect(() => {
     if (!interacted) return;
-    evidence.save({ chart: lens, compared: picked, year, evidence_id: "" });
-    // evidence 每次渲染都是新对象,不入依赖(与旧 VizLab 相同做法)。
+    state.save({ chart: lens, compared: picked, year });
+    // state 每次渲染都是新对象,不入依赖(与旧 VizLab 相同做法)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interacted, lens, picked, year]);
 
   const pickLens = (l: string) => { setLens(l); setInteracted(true); };
   const pickCountries = (c: string[]) => { setPicked(c); setInteracted(true); };
   const setYear = (next: number) => { setYearState(next); setInteracted(true); };
-  return { year, setYear, lens, pickLens, picked, pickCountries, schema, markInteracted: () => setInteracted(true) };
+  return { year, setYear, lens, pickLens, picked, pickCountries, schema };
 }
 
 /** 年份下拉(四步共用的唯一通用控件)。 */

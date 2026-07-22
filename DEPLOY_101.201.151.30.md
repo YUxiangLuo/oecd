@@ -249,8 +249,8 @@ REMOTE
 仅完整发布需要此步骤。保持维护窗口，通过教师管理界面或
 `POST /api/classroom/assignments` 新建绑定 `MANIFEST_ID` 的 assignment：
 
-- 保留旧 assignment、attempt、session 和 evidence；
-- 不要改写旧 session/evidence 的 manifest；
+- 保留旧 assignment、attempt、session 和答题/运行审计事件；
+- 不要改写旧 session 或审计事件的 manifest；
 - 新 assignment 验证通过后再结束维护窗口。
 
 用探针学生登录后确认作用域：
@@ -308,13 +308,13 @@ set -a
 set +a
 
 # 最后一条命令才切换 attempt；命令在数据库事务内执行，并按题库版本保持幂等。
-.venv/bin/gvcsim classroom-reset-attempts --quiz-version course-quiz-v1 --confirm
+.venv/bin/gvcsim classroom-reset-attempts --quiz-version course-quiz-v2 --confirm
 REMOTE
 ```
 
 `classroom-reset-attempts` 不删除历史 session、报告、提交或评分；它只撤销旧 attempt
-的学习凭证、归档旧 attempt 并建立新 attempt。升级下一版题库时必须同时更换版本号，
-不能复用 `course-quiz-v1`。如果 SSH 在最后一步附近中断，先原样重跑命令确认幂等结果，
+的答题/运行收据、归档旧 attempt 并建立新 attempt。升级下一版题库时必须同时更换版本号，
+不能复用 `course-quiz-v2`。如果 SSH 在最后一步附近中断，先原样重跑命令确认幂等结果，
 不要直接回滚代码。
 
 ## 9. 回滚
@@ -345,7 +345,7 @@ curl -fsS http://127.0.0.1:18000/health
 REMOTE
 ```
 
-如果已创建新 assignment，回滚后由教师将它停用；已有 attempt/evidence 时不要删除。
+如果已创建新 assignment，回滚后由教师将它停用；已有 attempt 或审计事件时不要删除。
 新 artifact 保留用于审计。
 
 数据库不会自动回滚。确需恢复时，先在新建的隔离数据库中执行 `pg_restore --list`
