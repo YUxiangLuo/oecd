@@ -23,7 +23,7 @@ gvcsim = "gvcsim.cli:main"
 [dependency-groups]
 dev = [
     "pytest>=8.3",
-    "httpx>=0.28",
+    "httpx2",
     "ruff>=0.15.20",
     "mypy>=2.1.0",
     "pytest-cov>=7.1.0",

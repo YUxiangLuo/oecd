@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { beginAccountMetaLoad } from "./account-meta";
+import { assignmentContextLabel } from "./assignment-context";
 import { scanAnnouncements } from "./announcement-state";
 import { AUTH_TOKEN_KEY, api } from "./api";
 import { LogoMark } from "./brand";
@@ -17,7 +18,15 @@ import { LoginPage } from "./login";
 import { QuizPanel } from "./step-quiz";
 import { TeacherDashboard } from "./teacher";
 import { ToastHost } from "./toast";
-import type { Announcement, AuthUser, Meta, Step, StepStateApi, StepsResponse } from "./types";
+import type {
+  Announcement,
+  AuthUser,
+  Meta,
+  Step,
+  StepStateApi,
+  StepsResponse,
+  StudentAssignmentContext,
+} from "./types";
 import { useSession, type SessionStatus } from "./use-session";
 
 const ROMAN = ["", "一", "二", "三", "四", "五"];
@@ -122,6 +131,9 @@ export default function App() {
   const [bannerExpanded, setBannerExpanded] = useState(false);
   const [resettingAttempt, setResettingAttempt] = useState(false);
   const [resetAttemptError, setResetAttemptError] = useState<string | null>(null);
+  const [assignmentContexts, setAssignmentContexts] = useState<StudentAssignmentContext[]>([]);
+  const [switchingAssignment, setSwitchingAssignment] = useState(false);
+  const [assignmentSwitchError, setAssignmentSwitchError] = useState<string | null>(null);
   const [deadlineNow, setDeadlineNow] = useState(() => Date.now());
 
   // 实验会话:回归设定与运行记录从此活在会话里(local-first + PostgreSQL),
@@ -139,6 +151,8 @@ export default function App() {
   const assignmentDueTime = assignmentDueAt ? new Date(assignmentDueAt).getTime() : Number.NaN;
   const assignmentClosed = Boolean(meta?.assignment_closed || session.assignmentClosed)
     || (Number.isFinite(assignmentDueTime) && assignmentDueTime <= deadlineNow);
+  const assignmentHistorical = Boolean(meta?.assignment_historical || session.assignmentHistorical);
+  const assignmentReadOnly = assignmentClosed || assignmentHistorical;
   useEffect(() => {
     if (!Number.isFinite(assignmentDueTime) || assignmentDueTime <= Date.now()) return;
     const delay = Math.min(2_147_000_000, Math.max(0, assignmentDueTime - Date.now() + 250));
@@ -178,6 +192,21 @@ export default function App() {
       setResettingAttempt(false);
     }
   }, [session.reset]);
+  const switchAssignment = useCallback(async (assignmentId: number) => {
+    if (!Number.isFinite(assignmentId) || String(assignmentId) === String(meta?.assignment_id)) return;
+    setSwitchingAssignment(true);
+    setAssignmentSwitchError(null);
+    try {
+      // 切断 attempt 边界前先排空当前作用域的本地队列，不让防抖写入跨作业。
+      await session.syncNow();
+      await api.classroom.selectAssignmentContext(assignmentId);
+      // meta / progress / session 必须在同一个新边界上重新装载。
+      window.location.reload();
+    } catch (cause) {
+      setAssignmentSwitchError(String((cause as Error).message ?? cause));
+      setSwitchingAssignment(false);
+    }
+  }, [meta?.assignment_id, session]);
   // 回归设定按 outcome 存(与 regression_history 一致):每步首次进入落在其招牌默认
   // (SIGNATURE_SETTINGS),学生的修改按 outcome 分别保留、互不覆盖。
   const currentOutcome = stepsData?.steps.find((s) => s.n === current)?.regression_outcome;
@@ -233,6 +262,9 @@ export default function App() {
     setShowIntro(false);
     setProgressReady(false);
     setAnnouncements([]);
+    setAssignmentContexts([]);
+    setSwitchingAssignment(false);
+    setAssignmentSwitchError(null);
     highestAnnouncementId.current = 0;
     setBannerDismissed(false);
     setBannerExpanded(false);
@@ -293,11 +325,16 @@ export default function App() {
     // 教师端不加载 16 步实验数据与公告横幅。
     highestAnnouncementId.current = 0;
     setAnnouncements([]);
+    setAssignmentContexts([]);
     setBannerDismissed(false);
     setBannerExpanded(false);
     api.steps().then(
       (value) => { if (live) setStepsData(value); },
       (error) => { if (live) setFatal(String(error.message ?? error)); },
+    );
+    api.classroom.assignmentContexts().then(
+      (value) => { if (live) setAssignmentContexts(value.assignments); },
+      () => { if (live) setAssignmentContexts([]); },
     );
     return () => {
       live = false;
@@ -364,12 +401,12 @@ export default function App() {
 
   // 学生实验进度自动上报:停留在某步 1.5s 后写入教学库(失败静默,不打扰实验)
   useEffect(() => {
-    if (!user || user.role !== "student" || !progressReady || assignmentClosed) return;
+    if (!user || user.role !== "student" || !progressReady || assignmentReadOnly) return;
     const timer = window.setTimeout(() => {
       api.classroom.reportProgress(current).catch(() => {});
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [user, current, progressReady, assignmentClosed]);
+  }, [user, current, progressReady, assignmentReadOnly]);
 
   if (!authChecked) return <div style={{ padding: 40 }} className="muted">加载中…</div>;
   if (!user)
@@ -440,7 +477,7 @@ export default function App() {
     || meta.attempt_id == null;
   const assignmentLocked = assignmentScopeMissing
     || session.stale
-    || assignmentClosed
+    || assignmentReadOnly
     || Boolean(meta?.assignment_unavailable || meta?.manifest_mismatch);
 
   return (
@@ -452,6 +489,23 @@ export default function App() {
           <div className="sub">GVC SIMULATION LAB</div>
         </div>
           <div className="topbar-user">
+          {assignmentContexts.length > 0 && (
+            <label className="assignment-context-picker">
+              <span>课程作业</span>
+              <select
+                aria-label="切换课程作业"
+                value={String(meta?.assignment_id ?? "")}
+                disabled={switchingAssignment}
+                onChange={(event) => { void switchAssignment(Number(event.target.value)); }}
+              >
+                {assignmentContexts.map((context) => (
+                  <option key={context.assignment_id} value={context.assignment_id}>
+                    {assignmentContextLabel(context)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <span className="muted">
             数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
           </span>
@@ -476,6 +530,10 @@ export default function App() {
           <button onClick={logout}>退出</button>
         </div>
       </header>
+
+      {assignmentSwitchError && (
+        <div className="error-box assignment-switch-error" role="alert">切换作业失败：{assignmentSwitchError}</div>
+      )}
 
       {announcements.length > 0 && !bannerDismissed && (
         <div className="announce-banner">
@@ -556,7 +614,7 @@ export default function App() {
                     className={`step-row${s.n === current ? " active" : ""}`}
                     aria-current={s.n === current ? "step" : undefined}
                     onClick={() => navigateStep(s.n)}
-                    title={done ? `第 ${s.n} 步已完成` : undefined}
+                    title={`第 ${s.n} 步：${s.title}${done ? "（已完成）" : ""}`}
                   >
                     <span className={`step-badge ${state}`}>{done ? "✓" : s.n}</span>
                     <span className="step-row-title">{s.title}</span>
@@ -593,6 +651,12 @@ export default function App() {
             <div className="warnbox persistent-qc-warning assignment-closed-warning" role="alert">
               <b>作业已于 {deadlineLabel(assignmentDueAt)} 截止，现在为只读状态。</b>
               <p>你仍可浏览既有步骤、答题结果与服务端完成度，但不能继续保存实验状态、答题、生成/提交报告、重置或新建 attempt。既有记录和审计历史不会被删除。</p>
+            </div>
+          )}
+          {assignmentHistorical && (
+            <div className="warnbox persistent-qc-warning assignment-closed-warning" role="status">
+              <b>正在查看历史作业。</b>
+              <p>既有步骤、报告、提交和教师评分保留可见；历史作用域不接受新写入。可从顶栏切回当前作业。</p>
             </div>
           )}
           {!assignmentClosed && (meta?.assignment_unavailable || assignmentScopeMissing) && (
@@ -645,8 +709,12 @@ export default function App() {
                     <p>{step.concept}</p>
                   </details>
                 )}
-                {assignmentClosed ? (
-                  <div className="read-only-lab" inert aria-label="已截止作业的只读实验记录">
+                {assignmentReadOnly ? (
+                  <div
+                    className={`read-only-lab${assignmentHistorical ? " historical" : ""}`}
+                    inert
+                    aria-label={assignmentHistorical ? "历史作业的只读实验记录" : "已截止作业的只读实验记录"}
+                  >
                     <Lab
                       step={step}
                       meta={meta}

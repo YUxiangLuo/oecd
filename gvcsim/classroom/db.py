@@ -2,7 +2,7 @@
 
 设计取舍:
   - 每次操作短连接,不引入连接池;班级规模(几十人)下开销可忽略
-  - schema_meta 串行化增量迁移；v3 会原地升级且保留全部课堂数据，未知版本拒绝
+  - schema_meta 串行化增量迁移；v3/v4 会原地升级且保留全部课堂数据，未知版本拒绝
   - course_run → assignment → enrollment → experiment_attempt 是所有学习记录的作用域
   - submission_versions / grading_events 追加写，保留不可变提交与评分历史
   - 数据库不可用统一抛 Unavailable；生产认证 fail-closed
@@ -27,8 +27,9 @@ _SCHEMA_LOCK_ID = 736_861_016  # 固定事务级 advisory lock，串行化首次
 # 会话写入的 advisory lock 命名空间(与 account_id 组成两段锁键,不与建表锁冲突)
 _SESSION_LOCK_NS = 736_861_017
 
-# v4 是首个支持多课程运行/多作业/多次尝试和不可变提交历史的版本。
-TEACHING_DB_VERSION = "gvcsim-teaching-db-v4"
+# v5 在 v4 的多课程模型上增加学生显式作业选择，避免“最新作业”
+# 隐式覆盖已完成作业和评分的访问入口。
+TEACHING_DB_VERSION = "gvcsim-teaching-db-v5"
 
 
 class Unavailable(Exception):
@@ -142,6 +143,11 @@ CREATE TABLE IF NOT EXISTS enrollments (
   active        boolean NOT NULL DEFAULT true,
   enrolled_at   timestamptz NOT NULL DEFAULT now(),
   UNIQUE (course_run_id, account_id)
+);
+CREATE TABLE IF NOT EXISTS student_assignment_selections (
+  account_id    bigint PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+  assignment_id bigint NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+  updated_at    timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS experiment_attempts (
   id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -331,6 +337,22 @@ def _migrate_v3_to_v4(c: psycopg.Connection[dict[str, Any]]) -> None:
     c.execute("ALTER TABLE reports ALTER COLUMN assignment_id SET NOT NULL")
     c.execute("ALTER TABLE reports DROP CONSTRAINT IF EXISTS reports_account_id_report_key_key")
     c.execute("CREATE UNIQUE INDEX IF NOT EXISTS reports_attempt_report_key ON reports(attempt_id,report_key)")
+    c.execute("UPDATE schema_meta SET version = 'gvcsim-teaching-db-v4' WHERE singleton")
+
+
+def _migrate_v4_to_v5(c: psycopg.Connection[dict[str, Any]]) -> None:
+    """原地增加学生的显式作业选择。
+
+    不在迁移时猜测“当前”作业：第一次解析作用域时会优先选择已有
+    提交/进度的 attempt，然后持久化。这样升级后不会把新建的空作业
+    写成默认值，也不会破坏既有历史。
+    """
+    c.execute(
+        "CREATE TABLE IF NOT EXISTS student_assignment_selections ("
+        " account_id bigint PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,"
+        " assignment_id bigint NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,"
+        " updated_at timestamptz NOT NULL DEFAULT now())"
+    )
     c.execute("UPDATE schema_meta SET version = %s WHERE singleton", (TEACHING_DB_VERSION,))
 
 
@@ -438,7 +460,7 @@ def _ensure_legacy_context(c: psycopg.Connection[dict[str, Any]]) -> None:
 
 
 def initialize_schema() -> list[str]:
-    """建表/安全迁移并播种；从 v3 升级不需要 reset。"""
+    """建表/安全迁移并播种；从 v3/v4 升级不需要 reset。"""
     global _schema_ready
     c = _connect()
     applied: list[str] = []
@@ -451,18 +473,22 @@ def initialize_schema() -> list[str]:
             if version == "gvcsim-teaching-db-v3":
                 _migrate_v3_to_v4(c)
                 applied.append("安全迁移 v3 → v4（保留课堂、会话、报告、提交与评分）")
+                version = "gvcsim-teaching-db-v4"
+            if version == "gvcsim-teaching-db-v4":
+                _migrate_v4_to_v5(c)
+                applied.append("安全迁移 v4 → v5（增加学生显式作业选择）")
             elif version not in {None, TEACHING_DB_VERSION}:
                 raise SchemaVersionMismatch(
                     f"教学库 schema 版本为 {version}，当前代码需要 {TEACHING_DB_VERSION}；"
                     "没有已验证的自动迁移路径，请先备份并按部署文档处理，禁止直接 reset 生产数据"
                 )
-            else:
+            if version is None:
                 c.execute(_SCHEMA)
                 c.execute(
                     "INSERT INTO schema_meta(singleton, version) VALUES (true, %s) ON CONFLICT (singleton) DO NOTHING",
                     (TEACHING_DB_VERSION,),
                 )
-            # v4 开发期新增的非破坏性列也保持幂等，避免早期 v4 测试库需 reset。
+            # v4 开发期新增的非破坏性列仍保持幂等，旧测试库无需 reset。
             c.execute(
                 "ALTER TABLE attempt_sessions ADD COLUMN IF NOT EXISTS legacy_unverified boolean NOT NULL DEFAULT false"
             )
@@ -474,7 +500,7 @@ def initialize_schema() -> list[str]:
                 applied.append(f"创建 schema {TEACHING_DB_VERSION}")
             # 只有**本次调用确实创建了显式 demo 账号**时才需要为它们补默认
             # course/assignment。v3 的历史回填已在 _migrate_v3_to_v4 的同一事务
-            # 内完成；普通 v4 重启绝不能再次把所有教师/班级/学生汇入 legacy run。
+            # 内完成；普通已版本化 schema 重启绝不能再次把所有教师/班级/学生汇入 legacy run。
             if _seed_if_empty(c):
                 _ensure_legacy_context(c)
     except SchemaVersionMismatch:
@@ -655,29 +681,54 @@ def _attempt_scope(
     create: bool = True,
     course_run_ids: list[int] | None = None,
 ) -> dict[str, Any] | None:
-    """解析学生当前作业尝试；所有学习记录必须经此函数取得作用域。"""
+    """解析学生当前作业尝试；所有学习记录必须经此函数取得作用域。
+
+    学生手动选择始终优先。没有选择时，先保留已有提交/报告/进度的
+    作业，再考虑新发布的空作业；选中后持久化，不让刷新改变作用域。
+    教师按 course_run_ids 查看时不改写学生的选择。
+    """
     course_scope = " AND cr.id=ANY(%s)" if course_run_ids is not None else ""
     params: tuple[Any, ...] = (username, course_run_ids) if course_run_ids is not None else (username,)
     row = c.execute(
         "SELECT a.id AS account_id,a.class_id,cr.id AS course_run_id,cr.code AS course_run_code,"
+        " cr.name AS course_run_name,cr.term AS course_run_term,"
         " ass.id AS assignment_id,ass.slug AS assignment_slug,ass.title AS assignment_title,"
         " ass.manifest_id AS assignment_manifest_id,ass.opens_at,ass.due_at,"
         " (ass.due_at IS NOT NULL AND ass.due_at<=now()) AS assignment_closed,e.id AS enrollment_id,"
+        " NOT (e.active AND NOT cr.archived AND ass.active"
+        "   AND (ass.opens_at IS NULL OR ass.opens_at<=now())) AS assignment_historical,"
         " at.id AS attempt_id,at.attempt_no,at.state AS attempt_state"
-        " FROM accounts a JOIN enrollments e ON e.account_id=a.id AND e.active"
-        " JOIN course_runs cr ON cr.id=e.course_run_id AND NOT cr.archived"
-        " JOIN assignments ass ON ass.course_run_id=cr.id AND ass.active"
+        " FROM accounts a"
+        " LEFT JOIN student_assignment_selections sel ON sel.account_id=a.id"
+        " JOIN enrollments e ON e.account_id=a.id"
+        " JOIN course_runs cr ON cr.id=e.course_run_id"
+        " JOIN assignments ass ON ass.course_run_id=cr.id"
         " LEFT JOIN LATERAL (SELECT x.* FROM experiment_attempts x"
         "   WHERE x.assignment_id=ass.id AND x.enrollment_id=e.id"
         "   ORDER BY (x.state='active') DESC,x.attempt_no DESC LIMIT 1) at ON true"
         " WHERE a.username=%s AND a.role='student' AND a.active"
-        " AND (ass.opens_at IS NULL OR ass.opens_at<=now())"
+        " AND ((sel.assignment_id=ass.id AND at.id IS NOT NULL)"
+        "   OR (e.active AND NOT cr.archived AND ass.active"
+        "     AND (ass.opens_at IS NULL OR ass.opens_at<=now())))"
         f"{course_scope}"
-        " ORDER BY (ass.due_at IS NULL OR ass.due_at>now()) DESC,ass.created_at DESC LIMIT 1",
+        " ORDER BY (sel.assignment_id=ass.id) DESC,"
+        " EXISTS (SELECT 1 FROM submissions s WHERE s.attempt_id=at.id) DESC,"
+        " EXISTS (SELECT 1 FROM reports r WHERE r.attempt_id=at.id) DESC,"
+        " coalesce((SELECT p.max_step FROM attempt_step_progress p WHERE p.attempt_id=at.id),0) DESC,"
+        " (at.id IS NOT NULL) DESC,"
+        " (e.active AND NOT cr.archived AND ass.active) DESC,"
+        " (ass.due_at IS NULL OR ass.due_at>now()) DESC,ass.created_at DESC LIMIT 1",
         params,
     ).fetchone()
     if row is None:
         return None
+    if course_run_ids is None:
+        c.execute(
+            "INSERT INTO student_assignment_selections(account_id,assignment_id) VALUES (%s,%s)"
+            " ON CONFLICT (account_id) DO UPDATE SET assignment_id=EXCLUDED.assignment_id,updated_at=now()"
+            " WHERE student_assignment_selections.assignment_id IS DISTINCT FROM EXCLUDED.assignment_id",
+            (row["account_id"], row["assignment_id"]),
+        )
     row["assignment_scope"] = (
         f"course:{row['course_run_id']}/assignment:{row['assignment_id']}/attempt:{row['attempt_id']}"
     )
@@ -685,13 +736,18 @@ def _attempt_scope(
         assigned = row["assignment_manifest_id"]
         if assigned and assigned != manifest_id:
             return {**row, "manifest_mismatch": True}
-        if not assigned and not row["assignment_closed"]:
+        if not assigned and not row["assignment_closed"] and not row["assignment_historical"]:
             c.execute(
                 "UPDATE assignments SET manifest_id=%s WHERE id=%s AND manifest_id=''",
                 (manifest_id, row["assignment_id"]),
             )
             row["assignment_manifest_id"] = manifest_id
-    if create and not row["assignment_closed"] and (row["attempt_id"] is None or row["attempt_state"] != "active"):
+    if (
+        create
+        and not row["assignment_closed"]
+        and not row["assignment_historical"]
+        and (row["attempt_id"] is None or row["attempt_state"] != "active")
+    ):
         next_no = _required(
             c.execute(
                 "SELECT coalesce(max(attempt_no),0)+1 AS n FROM experiment_attempts"
@@ -732,6 +788,8 @@ def _attempt_scope(
 
 
 def _require_assignment_writable(scope: dict[str, Any]) -> None:
+    if scope.get("assignment_historical"):
+        raise AssignmentClosed("这是历史作业；既有进度、报告和评分可查看，但不能继续写入")
     if scope.get("assignment_closed"):
         due_at = scope.get("due_at")
         isoformat = getattr(due_at, "isoformat", None)
@@ -741,6 +799,67 @@ def _require_assignment_writable(scope: dict[str, Any]) -> None:
 
 def assignment_context(username: str, manifest_id: str | None = None) -> dict[str, Any] | None:
     with conn() as c:
+        return _attempt_scope(c, username, manifest_id)
+
+
+def list_student_assignment_contexts(username: str, manifest_id: str | None = None) -> list[dict[str, Any]]:
+    """列出学生可切换的当前作业与有 attempt 的历史作业。"""
+    with conn() as c:
+        # 先解析一次，为 v4 升级后尚未有 selection 的账号建立稳定默认值。
+        _attempt_scope(c, username, manifest_id)
+        return c.execute(
+            "SELECT cr.id AS course_run_id,cr.code AS course_run_code,cr.name AS course_run_name,"
+            " cr.term AS course_run_term,cr.archived AS course_run_archived,"
+            " ass.id AS assignment_id,ass.slug AS assignment_slug,ass.title AS assignment_title,"
+            " ass.manifest_id AS assignment_manifest_id,ass.opens_at,ass.due_at,ass.active AS assignment_active,"
+            " e.active AS enrollment_active,at.id AS attempt_id,at.attempt_no,at.state AS attempt_state,"
+            " p.current_step,p.max_step,s.state AS submission_state,s.score,s.feedback,s.graded_at,s.submitted_at,"
+            " (sel.assignment_id=ass.id) AS selected,"
+            " NOT (e.active AND NOT cr.archived AND ass.active"
+            "   AND (ass.opens_at IS NULL OR ass.opens_at<=now())) AS historical,"
+            " (ass.due_at IS NOT NULL AND ass.due_at<=now()) AS assignment_closed"
+            " FROM accounts a"
+            " JOIN enrollments e ON e.account_id=a.id"
+            " JOIN course_runs cr ON cr.id=e.course_run_id"
+            " JOIN assignments ass ON ass.course_run_id=cr.id"
+            " LEFT JOIN student_assignment_selections sel ON sel.account_id=a.id"
+            " LEFT JOIN LATERAL (SELECT x.* FROM experiment_attempts x"
+            "   WHERE x.assignment_id=ass.id AND x.enrollment_id=e.id"
+            "   ORDER BY (x.state='active') DESC,x.attempt_no DESC LIMIT 1) at ON true"
+            " LEFT JOIN attempt_step_progress p ON p.attempt_id=at.id"
+            " LEFT JOIN submissions s ON s.attempt_id=at.id"
+            " WHERE a.username=%s AND a.role='student' AND a.active"
+            " AND ((e.active AND NOT cr.archived AND ass.active"
+            "   AND (ass.opens_at IS NULL OR ass.opens_at<=now())) OR at.id IS NOT NULL)"
+            " ORDER BY (sel.assignment_id=ass.id) DESC,historical,cr.created_at DESC,ass.created_at DESC",
+            (username,),
+        ).fetchall()
+
+
+def select_student_assignment(
+    username: str, assignment_id: int, manifest_id: str | None = None
+) -> dict[str, Any] | None:
+    """显式选择当前作业；只允许选本人开放作业或已有 attempt 的历史作业。"""
+    with conn() as c:
+        candidate = c.execute(
+            "SELECT a.id AS account_id FROM accounts a"
+            " JOIN enrollments e ON e.account_id=a.id"
+            " JOIN course_runs cr ON cr.id=e.course_run_id"
+            " JOIN assignments ass ON ass.course_run_id=cr.id"
+            " WHERE a.username=%s AND a.role='student' AND a.active AND ass.id=%s"
+            " AND ((e.active AND NOT cr.archived AND ass.active"
+            "   AND (ass.opens_at IS NULL OR ass.opens_at<=now()))"
+            " OR EXISTS (SELECT 1 FROM experiment_attempts at"
+            "   WHERE at.assignment_id=ass.id AND at.enrollment_id=e.id))",
+            (username, assignment_id),
+        ).fetchone()
+        if candidate is None:
+            return None
+        c.execute(
+            "INSERT INTO student_assignment_selections(account_id,assignment_id) VALUES (%s,%s)"
+            " ON CONFLICT (account_id) DO UPDATE SET assignment_id=EXCLUDED.assignment_id,updated_at=now()",
+            (candidate["account_id"], assignment_id),
+        )
         return _attempt_scope(c, username, manifest_id)
 
 

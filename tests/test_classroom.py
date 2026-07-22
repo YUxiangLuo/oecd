@@ -340,6 +340,21 @@ def test_v3_schema_is_migrated_in_place_and_legacy_session_is_unverified():
         )
 
 
+def test_v4_schema_is_migrated_in_place_with_assignment_selection():
+    _login("student")
+    with psycopg.connect(TEST_DSN, autocommit=True) as c:
+        c.execute("DROP TABLE student_assignment_selections")
+        c.execute("UPDATE schema_meta SET version='gvcsim-teaching-db-v4' WHERE singleton")
+    db._schema_ready = False
+
+    applied = db.initialize_schema()
+
+    assert any("v4" in item and "v5" in item for item in applied)
+    with psycopg.connect(TEST_DSN) as c:
+        assert c.execute("SELECT version FROM schema_meta").fetchone()[0] == db.TEACHING_DB_VERSION
+        assert c.execute("SELECT to_regclass('public.student_assignment_selections')").fetchone()[0]
+
+
 def test_concurrent_initialize_is_safe_and_idempotent():
     with psycopg.connect(TEST_DSN, autocommit=True) as c:
         c.execute("DROP SCHEMA public CASCADE")
@@ -395,6 +410,57 @@ def test_course_assignment_enrollment_attempt_scope_is_operational():
     second = db.start_new_attempt("scope_s2", "manifest-release-2")
     assert second["attempt_no"] == 2 and second["attempt_id"] != context["attempt_id"]
     assert {row["code"] for row in db.list_course_runs("teacher")} >= {"GVC-LEGACY", "RUN-2"}
+
+
+@needs_artifacts
+def test_student_explicitly_switches_assignments_without_new_course_overriding_completed_context():
+    student_headers = _login("student")
+    manifest = artifacts.manifest_id()
+    original = db.assignment_context("student", manifest)
+    assert original
+    db.upsert_progress("student", 16)
+
+    with psycopg.connect(TEST_DSN) as c:
+        student_id = c.execute("SELECT id FROM accounts WHERE username='student'").fetchone()[0]
+    run = db.create_course_run("teacher", "第二门课", "SELECT-RUN", "2026 秋")
+    db.enroll_student("teacher", run["id"], student_id, 1)
+    newer = db.create_assignment("teacher", run["id"], "new-lab", "新作业", manifest)
+
+    # 新课程发布后刷新仍保留学生已在使用的作业，不隐式跳到 0/16。
+    assert db.assignment_context("student", manifest)["assignment_id"] == original["assignment_id"]
+    listed = client.get("/api/classroom/assignment-contexts", headers=student_headers)
+    assert listed.status_code == 200, listed.text
+    options = listed.json()["assignments"]
+    assert {row["assignment_id"] for row in options} == {original["assignment_id"], newer["id"]}
+    assert next(row for row in options if row["selected"])["assignment_id"] == original["assignment_id"]
+
+    switched = client.post(
+        "/api/classroom/assignment-context/select",
+        headers=student_headers,
+        json={"assignment_id": newer["id"]},
+    )
+    assert switched.status_code == 200, switched.text
+    assert switched.json()["assignment_id"] == newer["id"]
+    assert db.assignment_context("student", manifest)["assignment_id"] == newer["id"]
+
+    restored = client.post(
+        "/api/classroom/assignment-context/select",
+        headers=student_headers,
+        json={"assignment_id": original["assignment_id"]},
+    )
+    assert restored.status_code == 200, restored.text
+    assert db.assignment_context("student", manifest)["attempt_id"] == original["attempt_id"]
+
+    teacher_headers = _login("teacher")
+    assert client.get("/api/classroom/assignment-contexts", headers=teacher_headers).status_code == 403
+    assert (
+        client.post(
+            "/api/classroom/assignment-context/select",
+            headers=student_headers,
+            json={"assignment_id": 999_999},
+        ).status_code
+        == 404
+    )
 
 
 def test_first_attempt_creation_is_safe_under_concurrent_student_bootstrap():
@@ -580,7 +646,9 @@ def test_shared_class_teacher_dashboard_does_not_mix_other_course_attempts_or_su
         connection.execute(
             "UPDATE assignments SET created_at=now()+interval '1 second' WHERE id=%s", (assignment_b["id"],)
         )
-    scope_b = db.assignment_context("student", "manifest-course-b")
+    # v5 不会让新发布的课程隐式抢占学生作用域；本用例要准备 B 课程记录，
+    # 因此像前端选择器一样做一次显式切换。
+    scope_b = db.select_student_assignment("student", assignment_b["id"], "manifest-course-b")
     assert scope_b and scope_b["assignment_id"] == assignment_b["id"]
     db.upsert_progress("student", 12)
     provenance = {"artifact": {"years": [2020]}, "runs": []}
@@ -828,7 +896,8 @@ def test_quiz_and_regression_receipts_cannot_cross_new_assignment_with_same_mani
             ).fetchone()[0]
             == "active"
         )
-    new_scope = db.assignment_context("student", manifest)
+    # 作业切换改为学生显式选择；这里仍验证切换后的凭据边界。
+    new_scope = db.select_student_assignment("student", newer["id"], manifest)
     assert new_scope and new_scope["assignment_id"] == newer["id"]
 
     assert not trusted_evidence.verify_quiz_completion(

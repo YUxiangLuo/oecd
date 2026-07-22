@@ -230,6 +230,15 @@ export const api = {
       }>("/api/classroom/quiz/submit", body),
     announcements: () =>
       get<{ announcements: import("./types").Announcement[] }>("/api/classroom/announcements"),
+    assignmentContexts: () =>
+      get<{ assignments: import("./types").StudentAssignmentContext[] }>("/api/classroom/assignment-contexts"),
+    selectAssignmentContext: (assignmentId: number) =>
+      post<{
+        course_run_id: number;
+        assignment_id: number;
+        attempt_id: number | null;
+        assignment_historical: boolean;
+      }>("/api/classroom/assignment-context/select", { assignment_id: assignmentId }),
     progress: () => get<ProgressResponse>("/api/classroom/progress"),
     reportProgress: (step: number) => post<{ ok: boolean }>("/api/classroom/progress", { step }),
     session: () => get<SessionResponse>("/api/classroom/session"),

@@ -23,6 +23,11 @@ function seqColor(value: number, max: number) {
   return SEQ[idx];
 }
 
+/** “只看选中节点的边”只有在真有节点时才是有意义的状态。 */
+export function canFilterSelectedEdges(selected: string | null): boolean {
+  return selected !== null;
+}
+
 export function NetworkViz({ data }: { data: NetworkData }) {
   const markerId = `network-edge-arrow-${useId().replaceAll(":", "")}`;
   const { wrapRef, Tip, show, hide } = useTip();
@@ -106,10 +111,11 @@ export function NetworkViz({ data }: { data: NetworkData }) {
 
   const { W, H, pos, metrics, maxMetric, maxFlow, neighbors, topLabeled } = model;
   const focus = hovered ?? selected;
+  const filterSelectedEdges = canFilterSelectedEdges(selected) && onlySelectedEdges;
   const adj = focus ? new Set([focus, ...(neighbors[focus] ?? []).map((n) => n.c)]) : null;
   const visibleEdges = data.edges.filter((e) => {
     const passesThreshold = num(e.flow) / maxFlow >= edgeThreshold;
-    const touchesSelection = !onlySelectedEdges || !selected || String(e.source) === selected || String(e.target) === selected;
+    const touchesSelection = !filterSelectedEdges || String(e.source) === selected || String(e.target) === selected;
     return passesThreshold && touchesSelection;
   });
   const labeledEdges = new Set(selected
@@ -152,13 +158,26 @@ export function NetworkViz({ data }: { data: NetworkData }) {
           onChange={(e) => setEdgeThreshold(Number(e.target.value))}
         />
         <b>{(edgeThreshold * 100).toFixed(0)}%</b>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 5 }} title="锁定节点后，仅保留与它直接相连的贸易边">
-          <input type="checkbox" checked={onlySelectedEdges} onChange={(event) => setOnlySelectedEdges(event.target.checked)} />
+        <label
+          className={`network-selected-filter${selected ? "" : " disabled"}`}
+          title={selected ? "仅保留与选中节点直接相连的贸易边" : "请先点击图中一个节点"}
+        >
+          <input
+            type="checkbox"
+            disabled={!canFilterSelectedEdges(selected)}
+            checked={filterSelectedEdges}
+            onChange={(event) => setOnlySelectedEdges(event.target.checked)}
+          />
           只看选中节点的边
         </label>
-        {selected && <button onClick={() => setSelected(null)}>清除选择</button>}
+        {!selected && <span className="network-filter-hint" role="status">请先点击一个节点</span>}
+        {selected && <button onClick={() => { setSelected(null); setOnlySelectedEdges(false); }}>清除选择</button>}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ display: "block", width: "100%", height: "auto" }} onClick={() => setSelected(null)}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        style={{ display: "block", width: "100%", height: "auto" }}
+        onClick={() => { setSelected(null); setOnlySelectedEdges(false); }}
+      >
         <defs>
           <marker id={markerId} markerWidth="6" markerHeight="6" refX="5.2" refY="3"
             orient="auto" markerUnits="strokeWidth" viewBox="0 0 6 6">
@@ -218,7 +237,13 @@ export function NetworkViz({ data }: { data: NetworkData }) {
                 style={{ cursor: "pointer" }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelected((current) => current === c ? null : c);
+                  setSelected((current) => {
+                    if (current === c) {
+                      setOnlySelectedEdges(false);
+                      return null;
+                    }
+                    return c;
+                  });
                 }}
                 onMouseEnter={(e) => {
                   setHovered(c);
@@ -251,7 +276,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
         <div className="network-detail">
           <div className="network-detail-head">
             <strong>{countryLabel(selected)}</strong>
-            <button onClick={() => setSelected(null)}>×</button>
+            <button onClick={() => { setSelected(null); setOnlySelectedEdges(false); }}>×</button>
           </div>
           <div className="network-detail-grid">
             {NETWORK_METRICS.map((m) => (

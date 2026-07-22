@@ -1496,6 +1496,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .assignment-closed-warning { background: #f5f3ff; border-color: #d6d0f5; color: #443b87; }
 .read-only-lab { position: relative; }
 .read-only-lab::before { content: "截止后只读"; display: inline-flex; margin: 0 0 10px; padding: 4px 9px; border-radius: 999px; background: #ece9fb; color: #514793; font-size: 11px; font-weight: 750; }
+.read-only-lab.historical::before { content: "历史作业·只读"; }
 .intro-mechanisms { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 8px auto 2px; }
 .intro-mechanisms button { display: grid; gap: 2px; min-width: 170px; border: 1px solid rgba(255,255,255,.2); border-radius: 9px; background: rgba(255,255,255,.06); color: #e8edfb; padding: 8px 11px; text-align: left; cursor: pointer; }
 .intro-mechanisms button.on { border-color: #78a9f2; background: rgba(74,132,220,.25); }
@@ -1504,4 +1505,184 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   .quiz-head { align-items: stretch; flex-direction: column; }
   .quiz-note { align-self: flex-start; white-space: normal; }
   .quiz-box { padding: 14px; }
+}
+
+/* ---------- 作业作用域与网络空选择反馈 ---------- */
+.assignment-context-picker {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+  color: #697184; font-size: 11px; font-weight: 650;
+}
+.assignment-context-picker > span { white-space: nowrap; }
+.assignment-context-picker select {
+  width: min(350px, 28vw); min-width: 190px; padding: 6px 28px 6px 9px;
+  border: 1px solid #d9dde8; border-radius: 8px; background: #fff; color: #303747;
+  font: inherit; font-size: 11.5px; text-overflow: ellipsis;
+}
+.assignment-context-picker select:focus-visible { outline: 2px solid #817ce2; outline-offset: 1px; }
+.assignment-switch-error { flex: none; margin: 8px 18px 0; }
+.network-selected-filter { display: inline-flex; align-items: center; gap: 5px; }
+.network-selected-filter.disabled { color: #9aa0ad; cursor: not-allowed; }
+.network-selected-filter input:disabled { cursor: not-allowed; }
+.network-filter-hint { color: #8a6070; font-size: 11px; white-space: nowrap; }
+
+/* 768px 时不再硬塞学生三栏；速览信息在正文和步骤头中均已有对应。 */
+@media (max-width: 1100px) {
+  .rightrail { display: none; }
+}
+
+/* 窄屏把学生课程大纲与教师导航变成顶部横向菜单，主内容使用全宽。 */
+@media (max-width: 900px) {
+  html, body, #root { min-width: 0; max-width: 100%; overflow-x: hidden; }
+  .layout { height: 100dvh; max-width: 100vw; }
+  .topbar { height: auto; min-height: 56px; padding: 8px 12px; flex-wrap: wrap; }
+  .topbar > div:not(.topbar-user) { min-width: 0; }
+  .topbar-user { min-width: 0; max-width: 100%; gap: 7px; overflow-x: auto; }
+  .assignment-context-picker select { width: min(340px, 38vw); }
+
+  .main { flex-direction: column; min-width: 0; }
+  .sidebar {
+    width: 100%; min-width: 0; min-height: 0; max-height: 150px;
+    border-right: 0; border-bottom: 1px solid #e7e9f0;
+  }
+  .sidebar-head { padding: 8px 12px 5px; }
+  .sidebar-head-row { align-items: center; }
+  .sidebar-sub { display: none; }
+  .progress-track { margin-top: 6px; height: 4px; }
+  .sidebar-list {
+    display: flex; align-items: center; gap: 5px; flex: none;
+    overflow-x: auto; overflow-y: hidden; padding: 4px 8px 8px;
+    scrollbar-width: thin;
+  }
+  .sidebar-list > div { display: contents; }
+  .stage-label { display: none; }
+  .step-row { flex: 0 0 138px; margin: 0; padding: 7px 8px; }
+  .step-code { display: none; }
+  .workarea, .content-row, .content { min-width: 0; }
+  .step-header-bar { padding: 11px 14px; gap: 12px; }
+  .step-header-bar .big-num { font-size: 34px; }
+  .step-header-mid h2 { font-size: 17px; }
+  .content { padding: 16px 14px 30px; }
+
+  .teacher-layout { flex-direction: column; min-width: 0; }
+  .teacher-nav {
+    width: 100%; min-height: 0; flex-direction: row; align-items: center; gap: 4px;
+    overflow-x: auto; padding: 6px 8px; border-right: 0; border-bottom: 1px solid #e7e9f0;
+  }
+  .teacher-nav-title, .teacher-nav-foot { display: none; }
+  .teacher-nav-item { flex: none; width: auto; margin: 0; padding: 7px 9px; }
+  .teacher-nav-item.active { box-shadow: inset 0 -2px 0 #4b47e0; }
+  .teacher-nav-ic { width: 26px; height: 26px; }
+  .teacher-nav-sub { display: none; }
+  .teacher-main { width: 100%; min-height: 0; }
+  .dash-header { padding: 14px 16px 11px; }
+  .teacher-content { padding: 14px 14px 30px; }
+}
+
+@media (max-width: 600px) {
+  .topbar { align-content: center; gap: 7px; padding: 7px 9px; }
+  .topbar > svg { width: 26px; height: 26px; }
+  .topbar h1 { font-size: 13px; }
+  .topbar .sub { display: none; }
+  .topbar-user { order: 3; width: 100%; margin-left: 0; padding-bottom: 1px; flex-wrap: wrap; overflow: visible; }
+  .topbar-user > .muted { display: none; }
+  .topbar-user button { flex: none; padding: 5px 8px; }
+  .topbar-user .role-chip { flex: none; }
+  .assignment-context-picker { flex: 1 0 100%; width: 100%; }
+  .assignment-context-picker > span { display: none; }
+  .assignment-context-picker select { width: 100%; min-width: 170px; }
+  .progress-pill { flex: none; padding: 5px 8px; }
+
+  .sidebar { max-height: 103px; }
+  .sidebar-title { font-size: 12px; }
+  .sidebar-steps { font-size: 9px; }
+  .step-row { flex-basis: 39px; justify-content: center; padding: 6px; }
+  .step-row-title { display: none; }
+  .step-header-bar { padding: 9px 10px; gap: 8px; }
+  .step-header-bar .big-num { font-size: 28px; }
+  .step-header-meta { gap: 5px; }
+  .step-count { display: none; }
+  .step-header-mid h2 { font-size: 15px; line-height: 1.25; }
+  .nav-btns { gap: 4px; }
+  .nav-btns button { padding: 6px 7px; font-size: 11px; }
+  .content { padding: 12px 10px 26px; }
+  .stepfooter { padding: 8px 10px; }
+  .footer-loc, .footer-next { display: none; }
+  .footer-dots { margin: 0 auto; max-width: 100%; overflow-x: auto; }
+  .network-toolbar { align-items: flex-start; }
+  .network-filter-hint { flex-basis: 100%; }
+
+  .teacher-nav-text { display: none; }
+  .teacher-nav-item { padding: 6px; }
+  .teacher-content { padding: 10px 9px 24px; }
+  .dash-header { padding: 11px 10px 9px; }
+  .dash-header h2 { font-size: 17px; }
+  .toolbar-actions { margin-left: 0; width: 100%; overflow-x: auto; }
+  .search-input { min-width: 0; width: 100%; }
+
+  .login-layout { display: block; min-height: 100dvh; overflow-x: hidden; }
+  .login-brand { min-width: 0; padding: 14px 16px 12px; gap: 9px; justify-content: flex-start; }
+  .login-brand-head { gap: 10px; }
+  .login-wordmark { font-size: 14px; }
+  .login-wordmark-en { font-size: 9px; letter-spacing: 2px; }
+  .login-hero { min-width: 0; }
+  .login-hero h1 { font-size: 25px; line-height: 1.35; letter-spacing: 1px; }
+  .login-desc { margin-top: 8px; font-size: 11.5px; line-height: 1.5; }
+  .login-flow { gap: 8px; margin-top: 9px; flex-wrap: nowrap; }
+  .login-flow-item { min-width: 0; gap: 4px; font-size: 10.5px; white-space: nowrap; }
+  .login-flow-num { font-size: 9px; }
+  .login-foot, .login-net { display: none; }
+  .login-panel { min-width: 0; padding: 14px 12px 24px; align-items: flex-start; }
+  .login-card { width: 100%; padding: 22px 18px 20px; border-radius: 15px; }
+  .login-card h2 { font-size: 19px; }
+  .login-roles { margin-top: 16px; }
+  .login-role { min-width: 0; padding: 10px; }
+  .login-label { margin-top: 13px; }
+  .login-input { padding: 10px 12px; }
+  .login-btn { margin-top: 18px; padding: 12px; }
+  .login-hint { margin-top: 14px; padding-top: 10px; line-height: 1.6; }
+
+  .intro-overlay { justify-content: flex-start; gap: 14px; padding: 54px 6px 18px; overflow-x: hidden; }
+  .intro-skip { top: 10px; right: 10px; width: 38px; height: 38px; }
+  .intro-scene-shell { grid-template-columns: 38px minmax(0, 1fr) 38px; gap: 3px; padding: 0; }
+  .intro-side-nav { width: 36px; height: 62px; border-radius: 14px; }
+  .intro-side-nav svg { width: 20px; height: 20px; }
+  .intro-scene { min-width: 0; padding: 0 5px; }
+  .intro-logo { margin-bottom: 12px; }
+  .intro-title { font-size: 28px; letter-spacing: 1px; }
+  .intro-kicker { margin-top: 7px; font-size: 10px; letter-spacing: 2px; }
+  .intro-h2 { font-size: 23px; letter-spacing: 1px; }
+  .intro-scene-kicker { margin-bottom: 8px; font-size: 10px; }
+  .intro-lede { margin-top: 9px; font-size: 12.5px; line-height: 1.65; }
+  .intro-pipeline { gap: 6px; margin-top: 18px; }
+  .intro-pipeline > span { gap: 5px !important; }
+  .intro-chip { gap: 5px; padding: 7px 9px; font-size: 11px; }
+  .intro-arrow { display: none; }
+  .intro-stats { display: grid; grid-template-columns: 1fr 1fr; margin-top: 22px; gap: 12px; }
+  .intro-stats > div { padding: 0 5px; }
+  .intro-stats > div + div { border-left: 0; }
+  .intro-stat-v { font-size: 25px; }
+  .intro-stat-l { margin-top: 2px; font-size: 10px; }
+  .intro-cards { gap: 8px; margin-top: 15px; }
+  .intro-card { padding: 13px 12px; border-radius: 12px; }
+  .intro-card-head { gap: 9px; }
+  .intro-card-icon { width: 34px; height: 34px; }
+  .intro-card-title { font-size: 13.5px; }
+  .intro-card-sub { font-size: 11px; line-height: 1.45; }
+  .intro-card-body { margin: 9px 0 0 43px; font-size: 11px; line-height: 1.6; }
+  .intro-stage-tabs { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; margin-top: 13px; gap: 5px; }
+  .intro-stage-tab { flex: none; padding: 7px 9px; font-size: 11px; }
+  .intro-steps { min-height: 0; margin-top: 12px; gap: 6px; }
+  .intro-step-row { display: grid; grid-template-columns: auto 1fr auto; gap: 7px; padding: 9px; font-size: 12px; }
+  .intro-step-goal { display: none; }
+  .intro-step-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .intro-step-start { padding: 4px 6px; font-size: 10px; }
+  .intro-mechanisms { display: grid; grid-template-columns: 1fr; }
+  .intro-mechanisms button { min-width: 0; width: 100%; padding: 6px 8px; }
+  .intro-slider-row { gap: 7px; margin-top: 10px; }
+  .intro-slider-row input[type="range"] { width: min(190px, 65vw); }
+  .intro-note { margin-top: 10px; font-size: 10.5px; line-height: 1.5; }
+  .intro-check { width: 54px; height: 54px; margin-bottom: 12px; }
+  .intro-cta-row { margin-top: 14px; }
+  .intro-cta { padding: 11px 17px; font-size: 13px; }
+  .intro-keyhint { display: none; }
 }

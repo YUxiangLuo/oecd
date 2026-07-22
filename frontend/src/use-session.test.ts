@@ -75,6 +75,16 @@ describe("remote session trust", () => {
     expect(remoteSessionUntrusted({ stale: false, legacy_unverified: false, read_only: true, assignment_closed: true })).toBe(false);
   });
 
+  test("keeps a trusted historical session readable without reopening writes", () => {
+    expect(remoteSessionUntrusted({
+      stale: false,
+      legacy_unverified: false,
+      read_only: true,
+      assignment_closed: false,
+      assignment_historical: true,
+    })).toBe(false);
+  });
+
   test("still isolates stale, legacy, and unexplained read-only records", () => {
     expect(remoteSessionUntrusted({ stale: true, assignment_closed: true })).toBe(true);
     expect(remoteSessionUntrusted({ stale: false, legacy_unverified: true, assignment_closed: false })).toBe(true);

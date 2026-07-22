@@ -64,12 +64,17 @@ export interface Meta {
   manifest_id?: string | null;
   /** Stable teaching-run identifiers used to isolate local student work. */
   course_run_id?: string | number | null;
+  course_run_code?: string | null;
+  course_run_name?: string | null;
+  course_run_term?: string | null;
   assignment_id?: string | number | null;
+  assignment_title?: string | null;
   attempt_id?: string | number | null;
   assignment_scope?: string | null;
   manifest_mismatch?: boolean;
   assignment_unavailable?: boolean;
   assignment_closed?: boolean;
+  assignment_historical?: boolean;
   due_at?: string | null;
   artifact_provenance?: {
     manifest_id?: string;
@@ -346,6 +351,7 @@ export interface SessionResponse {
   legacy_unverified?: boolean;
   read_only?: boolean;
   assignment_closed?: boolean;
+  assignment_historical?: boolean;
   due_at?: string | null;
   updated_at?: string | null;
   /** 非 null 表示本次写入与另一处改动做了合并,应改用返回的会话。 */
@@ -573,6 +579,36 @@ export interface Assignment {
   due_at: string | null;
   active: boolean;
   created_at: string;
+}
+
+/** 学生顶栏作业选择器的服务端作用域；含有 attempt 的旧作业也保留入口。 */
+export interface StudentAssignmentContext {
+  course_run_id: number;
+  course_run_code: string;
+  course_run_name: string;
+  course_run_term: string;
+  course_run_archived: boolean;
+  assignment_id: number;
+  assignment_slug: string;
+  assignment_title: string;
+  assignment_manifest_id: string;
+  assignment_active: boolean;
+  opens_at: string | null;
+  due_at: string | null;
+  enrollment_active: boolean;
+  attempt_id: number | null;
+  attempt_no: number | null;
+  attempt_state: string | null;
+  current_step: number | null;
+  max_step: number | null;
+  submission_state: "pending" | "graded" | null;
+  score: number | null;
+  feedback: string | null;
+  graded_at: string | null;
+  submitted_at: string | null;
+  selected: boolean;
+  historical: boolean;
+  assignment_closed: boolean;
 }
 
 export interface Enrollment {

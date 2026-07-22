@@ -31,6 +31,8 @@ interface SessionApi {
   recovery: { source: string; data: unknown }[];
   /** 已截止作业仍可读取可信记录，但禁止任何写入或 reset。 */
   assignmentClosed: boolean;
+  /** 已停用/归档课程中有 attempt 的作业，仅供追溯。 */
+  assignmentHistorical: boolean;
   dueAt: string | null;
   /** 本地会话正在写入服务端。理解检查会绕过普通防抖并立即触发同步。 */
   syncing: boolean;
@@ -124,9 +126,16 @@ export function sessionScopeKey(scope: LocalSessionScope | null): string | null 
     : null;
 }
 
-/** read_only 可能只是正常截止；只有 stale/legacy/mismatch 才应隔离原 session。 */
-export function remoteSessionUntrusted(remote: Pick<SessionResponse, "stale" | "legacy_unverified" | "read_only" | "assignment_closed">): boolean {
-  return Boolean(remote.stale || remote.legacy_unverified || (remote.read_only && !remote.assignment_closed));
+/** read_only 可能是正常截止/历史查看；只有 stale/legacy/mismatch 才应隔离原 session。 */
+export function remoteSessionUntrusted(remote: Pick<
+  SessionResponse,
+  "stale" | "legacy_unverified" | "read_only" | "assignment_closed" | "assignment_historical"
+>): boolean {
+  return Boolean(
+    remote.stale
+    || remote.legacy_unverified
+    || (remote.read_only && !remote.assignment_closed && !remote.assignment_historical)
+  );
 }
 
 /** Merge against the session passed by React's functional state update, not a render-time snapshot. */
@@ -159,6 +168,8 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
   const [stale, setStale] = useState(false);
   const [recovery, setRecovery] = useState<{ source: string; data: unknown }[]>([]);
   const [assignmentClosed, setAssignmentClosed] = useState(false);
+  const [assignmentHistorical, setAssignmentHistorical] = useState(false);
+  const assignmentReadOnly = assignmentClosed || assignmentHistorical;
   const [dueAt, setDueAt] = useState<string | null>(null);
   const [completion, setCompletion] = useState<CompletionSummary | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -208,6 +219,7 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
     setStale(false);
     setRecovery([]);
     setAssignmentClosed(false);
+    setAssignmentHistorical(false);
     setDueAt(null);
     setCompletion(null);
     setSyncing(false);
@@ -301,6 +313,7 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
     setStale(false);
     setRecovery([]);
     setAssignmentClosed(false);
+    setAssignmentHistorical(false);
     setDueAt(null);
     api.classroom.session().then(
       (remote) => {
@@ -321,6 +334,7 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
         setStale(remoteUntrusted || out.discardedServer || out.discardedLocal || legacyQuarantined);
         setRecovery(recoverable);
         setAssignmentClosed(Boolean(remote.assignment_closed));
+        setAssignmentHistorical(Boolean(remote.assignment_historical));
         setDueAt(remote.due_at ?? null);
         setCompletion(remote.completion);
         if (scope) saveLocal(scope, out.session);
@@ -371,7 +385,7 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
         || !scope
         || !scopeKey
         || scopeKeyRef.current !== scopeKey
-        || assignmentClosed
+        || assignmentReadOnly
         || resetInProgress.current
       ) return;
       const generation = scopeGeneration.current;
@@ -391,7 +405,7 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
         void drainRef.current().catch(() => {});
       }, SYNC_DEBOUNCE_MS);
     },
-    [username, manifestId, scopeKey, assignmentClosed, replaceSession],
+    [username, manifestId, scopeKey, assignmentReadOnly, replaceSession],
   );
 
   const syncNow = useCallback((): Promise<void> => {
@@ -422,7 +436,7 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
 
   const reset = useCallback(async () => {
     if (!username || !manifestId || !scope) throw new Error("当前没有可重置的学生作业上下文");
-    if (assignmentClosed) throw new Error("作业已截止；既有 attempt 只读且不能重新开始");
+    if (assignmentReadOnly) throw new Error("作业为截止或历史只读状态；既有 attempt 不能重新开始");
     // 先让旧 scope 的在途请求自然结束，再让服务端创建新 attempt。否则一个已经
     // 发出的旧 PUT 可能在 reset 之后才抵达，并被服务端解析到新 attempt。
     resetInProgress.current = true;
@@ -452,7 +466,7 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
       setCompletion(null);
       throw cause;
     }
-  }, [username, manifestId, scopeKey, assignmentClosed, updateStatus]);
+  }, [username, manifestId, scopeKey, assignmentReadOnly, updateStatus]);
 
   const reload = useCallback(() => setReloadToken((n) => n + 1), []);
 
@@ -462,6 +476,7 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
     stale,
     recovery,
     assignmentClosed,
+    assignmentHistorical,
     dueAt,
     syncing,
     syncError,

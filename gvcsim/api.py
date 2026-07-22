@@ -469,12 +469,17 @@ def meta(request: Request):
             if scope:
                 assignment_context = {
                     "course_run_id": scope.get("course_run_id"),
+                    "course_run_code": scope.get("course_run_code"),
+                    "course_run_name": scope.get("course_run_name"),
+                    "course_run_term": scope.get("course_run_term"),
                     "assignment_id": scope.get("assignment_id"),
+                    "assignment_title": scope.get("assignment_title"),
                     "attempt_id": scope.get("attempt_id"),
                     "assignment_scope": scope.get("assignment_scope"),
                     "assignment_manifest_id": scope.get("assignment_manifest_id"),
                     "manifest_mismatch": bool(scope.get("manifest_mismatch")),
                     "assignment_closed": bool(scope.get("assignment_closed")),
+                    "assignment_historical": bool(scope.get("assignment_historical")),
                     "due_at": scope.get("due_at"),
                 }
         except classroom_db.Unavailable:
@@ -495,6 +500,11 @@ def meta(request: Request):
         "assignment_scope": (assignment_context or {}).get("assignment_scope"),
         "manifest_mismatch": bool((assignment_context or {}).get("manifest_mismatch")),
         "assignment_closed": bool((assignment_context or {}).get("assignment_closed")),
+        "assignment_historical": bool((assignment_context or {}).get("assignment_historical")),
+        "course_run_code": (assignment_context or {}).get("course_run_code"),
+        "course_run_name": (assignment_context or {}).get("course_run_name"),
+        "course_run_term": (assignment_context or {}).get("course_run_term"),
+        "assignment_title": (assignment_context or {}).get("assignment_title"),
         "due_at": (assignment_context or {}).get("due_at"),
     }
 
