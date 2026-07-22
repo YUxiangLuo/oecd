@@ -421,7 +421,7 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
   const getShared = useCallback(<T,>(key: SharedSessionKey) => readShared<T>(session, key), [session]);
 
   const reset = useCallback(async () => {
-    if (!username || !manifestId) throw new Error("当前没有可重置的学生作业上下文");
+    if (!username || !manifestId || !scope) throw new Error("当前没有可重置的学生作业上下文");
     if (assignmentClosed) throw new Error("作业已截止；既有 attempt 只读且不能重新开始");
     // 先让旧 scope 的在途请求自然结束，再让服务端创建新 attempt。否则一个已经
     // 发出的旧 PUT 可能在 reset 之后才抵达，并被服务端解析到新 attempt。
@@ -438,7 +438,10 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
     if (scope) clearLocal(scope);
     try {
       await oldDrain?.catch(() => {});
-      await api.classroom.clearSession();
+      await api.classroom.clearSession({
+        expected_assignment_id: scope.assignmentId,
+        expected_attempt_id: scope.attemptId,
+      });
       revision.current = 0;
       // App-level meta owns attempt_id; reload is the only atomic way to refresh
       // auth context + meta + session before accepting another local write.

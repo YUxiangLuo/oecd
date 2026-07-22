@@ -76,6 +76,16 @@ class ReportGateError(RuntimeError):
         super().__init__("实验报告需要先通过第 1–15 步的理解检查")
 
 
+class ReportReplayError(RuntimeError):
+    """已接受的学生回归无法按当前产物复估，报告必须停止生成。"""
+
+    def __init__(self, step: int, title: str, reason: str):
+        self.step = step
+        self.title = title
+        self.reason = reason
+        super().__init__(f"步骤 {step} · {title} 已记录回归，但{reason}；报告未生成，请稍后重试或联系管理员")
+
+
 @dataclass
 class TeachingReport:
     report_key: str
@@ -186,7 +196,7 @@ def _saved_run_design(
 
 
 def _rerun_recorded(session: dict[str, Any], *, subject: str | None, require_trusted: bool) -> list[dict[str, Any]]:
-    """只复估学生实际运行过且可信的回归；缺失或无效运行直接略过。"""
+    """只复估学生实际运行过且可信的回归；可信运行复估失败时 fail closed。"""
     runs: list[dict[str, Any]] = []
     for step, outcome in sorted(_STEP_OUTCOMES.items()):
         saved = _saved_run_design(
@@ -203,14 +213,32 @@ def _rerun_recorded(session: dict[str, Any], *, subject: str | None, require_tru
             panel = _load_panel(design)
             if weight_mode == "contemporaneous":
                 required = {"tariff_shock_contemporaneous", "treated_contemporaneous"}
-                if design.shock_type != "tariff" or not required.issubset(panel.columns):
-                    continue
+                if design.shock_type != "tariff":
+                    raise ReportReplayError(
+                        step,
+                        _STEP_TITLES.get(step, ""),
+                        "记录的当期暴露权重不适用于该冲击类型",
+                    )
+                if not required.issubset(panel.columns):
+                    raise ReportReplayError(
+                        step,
+                        _STEP_TITLES.get(step, ""),
+                        "当前回归面板缺少当期暴露字段",
+                    )
                 panel = panel.copy()
                 panel[design.shock_col] = panel["tariff_shock_contemporaneous"]
                 panel[design.treated_col] = panel["treated_contemporaneous"]
             result: RegressionResult = run_design(panel, design)
-        except (KeyError, OSError, ValueError):
-            continue
+        except ReportReplayError:
+            raise
+        except (KeyError, OSError, ValueError) as error:
+            if isinstance(error, OSError):
+                reason = "服务端无法读取当前回归面板"
+            elif isinstance(error, KeyError):
+                reason = "当前回归面板缺少必要字段"
+            else:
+                reason = "当前产物无法执行原回归设计"
+            raise ReportReplayError(step, _STEP_TITLES.get(step, ""), reason) from error
         runs.append(
             {
                 "step": step,

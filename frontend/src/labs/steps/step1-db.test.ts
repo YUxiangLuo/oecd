@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { DbMeta } from "../../types";
-import { restoreDbSlice } from "./step1-db";
+import { captureDbObservation, restoreDbSlice } from "./step1-db";
 
 const meta: DbMeta = {
   years: [2019, 2020],
@@ -40,5 +40,29 @@ describe("database slice restoration", () => {
       row_country: "CHN",
       col_country: "USA",
     })).toBeNull();
+  });
+
+  test("capturing a cell also records the default slice that gave it meaning", () => {
+    expect(captureDbObservation(
+      {
+        year: 2020,
+        table: "z",
+        rowCountry: "CHN",
+        colCountry: "USA",
+        rowSector: "",
+        colSector: "",
+      },
+      { row: "CHN_D01T02", column: "USA_D01T02", value: 228.0672 },
+    )).toEqual({
+      slice: {
+        year: 2020,
+        table: "z",
+        row_country: "CHN",
+        col_country: "USA",
+        row_sector: "",
+        col_sector: "",
+      },
+      observation: { row: "CHN_D01T02", column: "USA_D01T02", value: 228.0672 },
+    });
   });
 });

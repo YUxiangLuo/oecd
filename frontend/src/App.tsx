@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { beginAccountMetaLoad } from "./account-meta";
 import { scanAnnouncements } from "./announcement-state";
 import { AUTH_TOKEN_KEY, api } from "./api";
 import { LogoMark } from "./brand";
@@ -275,16 +276,34 @@ export default function App() {
     return () => window.removeEventListener("gvcsim-auth-expired", logout);
   }, [logout]);
 
+  const accountId = user?.account_id ?? null;
+  const accountRole = user?.role ?? null;
   useEffect(() => {
-    if (!user) return;
-    api.meta().then(setMeta, () => setMeta({ years: [], countries: [], sectors: [] }));
-    if (user.role === "teacher") return; // 教师端不加载 16 步实验数据与公告横幅
+    if (accountId == null || accountRole == null) return;
+    let live = true;
+    // 新账号解析完成前不沿用上一账号的 assignment/attempt。
+    setMeta(null);
+    const cancelMetaLoad = beginAccountMetaLoad(() => api.meta(), setMeta);
+    if (accountRole === "teacher") {
+      return () => {
+        live = false;
+        cancelMetaLoad();
+      };
+    }
+    // 教师端不加载 16 步实验数据与公告横幅。
     highestAnnouncementId.current = 0;
     setAnnouncements([]);
     setBannerDismissed(false);
     setBannerExpanded(false);
-    api.steps().then(setStepsData, (e) => setFatal(String(e.message ?? e)));
-  }, [user]);
+    api.steps().then(
+      (value) => { if (live) setStepsData(value); },
+      (error) => { if (live) setFatal(String(error.message ?? error)); },
+    );
+    return () => {
+      live = false;
+      cancelMetaLoad();
+    };
+  }, [accountId, accountRole]);
 
   // 恢复本人上次进度；显式深链或用户已经主动导航时不覆盖当前选择。
   // 当前步推进时同步刷新最远步(服务端也按 GREATEST 维护,重新登录后恢复)。

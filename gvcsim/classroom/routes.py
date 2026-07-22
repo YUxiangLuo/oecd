@@ -196,6 +196,13 @@ class SessionRequest(BaseModel):
     session: dict[str, Any]
 
 
+class AttemptBoundaryRequest(BaseModel):
+    """调用方看到的作业边界；reset 不得漂移到另一个标签页新建的 attempt。"""
+
+    expected_assignment_id: int = Field(gt=0)
+    expected_attempt_id: int = Field(gt=0)
+
+
 def _merge_and_validate(base: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
     """合并两份会话,并对**合并结果**再校验一次。
 
@@ -252,11 +259,14 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
 
 
 @router.delete("/session")
-def delete_session(user: dict = Depends(require_student)):
-    before = db.assignment_context(user["sub"])
+def delete_session(req: AttemptBoundaryRequest, user: dict = Depends(require_student)):
     try:
-        db.clear_session(user["sub"])
-    except db.AssignmentClosed as error:
+        db.clear_session(
+            user["sub"],
+            expected_assignment_id=req.expected_assignment_id,
+            expected_attempt_id=req.expected_attempt_id,
+        )
+    except (db.AssignmentScopeMismatch, db.AssignmentClosed) as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     after = db.assignment_context(user["sub"], artifacts.manifest_id())
     db.record_audit_event(
@@ -264,7 +274,7 @@ def delete_session(user: dict = Depends(require_student)):
         actor_id=user.get("aid"),
         actor_name=user["sub"],
         target_type="attempt",
-        target_id=str((before or {}).get("attempt_id") or ""),
+        target_id=str(req.expected_attempt_id),
         details={"new_attempt_id": (after or {}).get("attempt_id")},
     )
     return {"ok": True, **_public_context(after)}
@@ -340,6 +350,10 @@ def generate_report(user: dict = Depends(require_student)):
         )
     except teaching_report.ReportGateError as e:
         raise HTTPException(status_code=409, detail={"message": str(e), "blocked": e.missing}) from e
+    except teaching_report.ReportReplayError as e:
+        # 已通过可信收据校验的运行不能被静默降级成“未运行”。复估异常通常表示
+        # 当前服务实例或产物暂时不完整；不落半份报告，让学生可以重试。
+        raise HTTPException(status_code=503, detail=str(e)) from e
 
     # 第 16 步的完成记录由服务端写入,而不是让客户端声称“我生成过报告”。
     # 先把记录写进会话并校验，再与报告一起原子落库。
@@ -431,9 +445,14 @@ def my_report(user: dict = Depends(require_student)):
 
 
 @router.post("/attempts/new")
-def new_attempt(user: dict = Depends(require_student)):
+def new_attempt(req: AttemptBoundaryRequest, user: dict = Depends(require_student)):
     try:
-        scope = db.start_new_attempt(user["sub"], artifacts.manifest_id())
+        scope = db.start_new_attempt(
+            user["sub"],
+            artifacts.manifest_id(),
+            expected_assignment_id=req.expected_assignment_id,
+            expected_attempt_id=req.expected_attempt_id,
+        )
     except (db.AssignmentScopeMismatch, db.AssignmentClosed) as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     db.record_audit_event(

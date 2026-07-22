@@ -240,7 +240,10 @@ export const api = {
       session: ExperimentSession;
     }) =>
       post<SessionResponse>("/api/classroom/session", body, "PUT"),
-    clearSession: () => post<{ ok: boolean; attempt_id?: number }>("/api/classroom/session", undefined, "DELETE"),
+    clearSession: (body: {
+      expected_assignment_id: string | number;
+      expected_attempt_id: string | number;
+    }) => post<{ ok: boolean; attempt_id?: number }>("/api/classroom/session", body, "DELETE"),
     // 只交报告指纹;服务端从它自己生成的报告里取正文,接口不接受 Markdown。
     submitReport: (body: { title: string; report_key: string }) =>
       post<{ id: number; state: string; submitted_at: string }>("/api/classroom/report/submit", body),

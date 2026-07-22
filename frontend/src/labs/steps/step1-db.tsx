@@ -117,6 +117,33 @@ interface DbStepState extends QuizCompletionState, Record<string, unknown> {
   };
 }
 
+interface DbSliceSelection {
+  year: number;
+  table: DbTableKind;
+  rowCountry: string;
+  colCountry: string;
+  rowSector: string;
+  colSector: string;
+}
+
+export function dbSliceSnapshot(selection: DbSliceSelection): NonNullable<DbStepState["slice"]> {
+  return {
+    year: selection.year,
+    table: selection.table,
+    row_country: selection.rowCountry,
+    col_country: selection.table === "accounts" ? "" : selection.colCountry,
+    row_sector: selection.rowSector,
+    col_sector: selection.table === "accounts" ? "" : selection.colSector,
+  };
+}
+
+export function captureDbObservation(
+  selection: DbSliceSelection,
+  observation: NonNullable<DbStepState["observation"]>,
+): Pick<DbStepState, "slice" | "observation"> {
+  return { slice: dbSliceSnapshot(selection), observation };
+}
+
 export function restoreDbSlice(meta: DbMeta, saved?: DbStepState["slice"]) {
   if (!saved || !meta.years.includes(saved.year)) return null;
   const table = DB_TABLES.some((item) => item.key === saved.table)
@@ -214,14 +241,14 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
   useEffect(() => {
     if (!slice || !year || !pickedSlice) return;
     state.save({
-      slice: {
+      slice: dbSliceSnapshot({
         year,
         table,
-        row_country: rowCountry,
-        col_country: table === "accounts" ? "" : colCountry,
-        row_sector: rowSector,
-        col_sector: table === "accounts" ? "" : colSector,
-      },
+        rowCountry,
+        colCountry,
+        rowSector,
+        colSector,
+      }),
       // 单元格必须属于当前成功返回的切片；筛选变化后清空旧选择。
       observation: undefined,
     });
@@ -376,9 +403,20 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
                           className={`db-observation-cell${selected ? " selected" : ""}`}
                           aria-pressed={selected}
                           title={`${rowLabel} × ${c}: ${fmtDb(numericValue)}；点击记录这个观察值`}
-                          onClick={() => state.save({
-                            observation: { row: rowLabel, column: c, value: numericValue },
-                          })}
+                          onClick={() => {
+                            if (!slice) return;
+                            state.save(captureDbObservation(
+                              {
+                                year: slice.year,
+                                table,
+                                rowCountry,
+                                colCountry,
+                                rowSector,
+                                colSector,
+                              },
+                              { row: rowLabel, column: c, value: numericValue },
+                            ));
+                          }}
                         >
                           {fmtDb(numericValue)}{selected ? " ✓" : ""}
                         </button>

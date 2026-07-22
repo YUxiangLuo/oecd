@@ -8,7 +8,16 @@ from gvcsim import artifacts, quizzes
 from gvcsim.config import PROCESSED_DIR
 from gvcsim.regression.design import RegressionDesign
 from gvcsim.session import empty_session, make_record
-from gvcsim.teaching_report import GATE_STEPS, ReportGateError, _fingerprint, _snapshot_lines, build, check_gate
+from gvcsim.teaching_report import (
+    GATE_STEPS,
+    ReportGateError,
+    ReportReplayError,
+    _fingerprint,
+    _rerun_recorded,
+    _snapshot_lines,
+    build,
+    check_gate,
+)
 
 needs_artifacts = pytest.mark.skipif(
     not (PROCESSED_DIR / "panel_industry.csv").exists(),
@@ -94,6 +103,22 @@ def test_untrusted_snapshot_text_is_single_line_bounded_markdown():
     assert "¦" in rendered and "ʼ" in rendered
     assert "关税冲击" in rendered
     assert len(max(lines, key=len)) < 400
+
+
+def test_recorded_run_replay_failure_is_not_mislabeled_as_missing(monkeypatch):
+    session = _complete_session("mid")
+    _add_trade_run(session)
+
+    def unavailable_panel(_design):
+        raise OSError("test-only missing panel")
+
+    monkeypatch.setattr("gvcsim.teaching_report._load_panel", unavailable_panel)
+    with pytest.raises(ReportReplayError) as excinfo:
+        _rerun_recorded(session, subject=None, require_trusted=False)
+
+    assert excinfo.value.step == 12
+    assert "已记录回归" in str(excinfo.value)
+    assert "未记录学生运行" not in str(excinfo.value)
 
 
 @needs_artifacts

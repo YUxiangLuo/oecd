@@ -1019,18 +1019,40 @@ def list_enrollments(teacher_username: str, course_run_id: int) -> list[dict[str
         ).fetchall()
 
 
-def start_new_attempt(username: str, manifest_id: str) -> dict[str, Any]:
+def start_new_attempt(
+    username: str,
+    manifest_id: str,
+    *,
+    expected_assignment_id: int | None = None,
+    expected_attempt_id: int | None = None,
+) -> dict[str, Any]:
     """显式归档当前尝试并创建下一次；既有答题、运行、提交和评分保持不可变。"""
     with conn() as c:
         with c.transaction():
             scope = _attempt_scope(c, username, manifest_id)
-            if not scope or scope.get("manifest_mismatch"):
+            if not scope or scope.get("manifest_mismatch") or scope["attempt_id"] is None:
                 raise AssignmentScopeMismatch("没有与当前 manifest 匹配的开放作业")
+            attempt_id = scope["attempt_id"]
+            c.execute("SELECT pg_advisory_xact_lock(%s, %s)", (_SESSION_LOCK_NS, attempt_id))
+            locked_scope = _attempt_scope(c, username, manifest_id, create=False)
+            if (
+                not locked_scope
+                or locked_scope.get("manifest_mismatch")
+                or locked_scope["assignment_id"] != scope["assignment_id"]
+                or locked_scope["attempt_id"] != attempt_id
+                or (expected_assignment_id is not None and locked_scope["assignment_id"] != expected_assignment_id)
+                or (expected_attempt_id is not None and locked_scope["attempt_id"] != expected_attempt_id)
+            ):
+                raise AssignmentScopeMismatch("当前作业 attempt 已变化；请刷新页面后重试")
+            scope = locked_scope
             _require_assignment_writable(scope)
-            c.execute(
-                "UPDATE experiment_attempts SET state='archived',updated_at=now() WHERE id=%s AND state='active'",
+            archived = c.execute(
+                "UPDATE experiment_attempts SET state='archived',updated_at=now()"
+                " WHERE id=%s AND state='active' RETURNING id",
                 (scope["attempt_id"],),
-            )
+            ).fetchone()
+            if archived is None:
+                raise AssignmentScopeMismatch("当前作业 attempt 已变化；请刷新页面后重试")
             next_no = _required(
                 c.execute(
                     "SELECT coalesce(max(attempt_no),0)+1 AS n FROM experiment_attempts"
@@ -1439,6 +1461,21 @@ def save_session(
             # 整份覆盖先到的,一边的实验被静默丢弃。advisory 锁对"尚不存在的行"
             # 同样有效,因此把首写竞态也一起关掉。
             c.execute("SELECT pg_advisory_xact_lock(%s, %s)", (_SESSION_LOCK_NS, attempt_id))
+            # reset 与 PUT 共用 attempt 锁。若 PUT 在等待锁时另一个标签页已重置，
+            # 必须重新解析当前边界；否则它会在 reset 提交后把旧会话写回已归档
+            # attempt，并重新污染 account 级兼容镜像。
+            locked_scope = _attempt_scope(c, username, session.get("manifest_id"), create=False)
+            if (
+                locked_scope is None
+                or locked_scope.get("manifest_mismatch")
+                or locked_scope["assignment_id"] != scope["assignment_id"]
+                or locked_scope["attempt_id"] != attempt_id
+                or (expected_assignment_id is not None and locked_scope["assignment_id"] != expected_assignment_id)
+                or (expected_attempt_id is not None and locked_scope["attempt_id"] != expected_attempt_id)
+            ):
+                raise AssignmentScopeMismatch("当前作业 attempt 已变化；请刷新页面后再继续实验")
+            scope = locked_scope
+            _require_assignment_writable(scope)
             current = c.execute(
                 "SELECT revision,session,legacy_unverified FROM attempt_sessions WHERE attempt_id=%s FOR UPDATE",
                 (attempt_id,),
@@ -1479,7 +1516,12 @@ def save_session(
             return {"revision": revision, "session": merged, "merged_from": merged_from}
 
 
-def clear_session(username: str) -> None:
+def clear_session(
+    username: str,
+    *,
+    expected_assignment_id: int,
+    expected_attempt_id: int,
+) -> None:
     """一致性重置当前尝试。
 
     归档旧尝试并创建下一 attempt；当前进度/报告/提交自然为空，历史记录仍可
@@ -1487,9 +1529,24 @@ def clear_session(username: str) -> None:
     """
     with conn() as c:
         with c.transaction():
-            scope = _attempt_scope(c, username)
-            if not scope or scope["attempt_id"] is None:
-                return
+            initial_scope = _attempt_scope(c, username, create=False)
+            if not initial_scope or initial_scope["attempt_id"] is None:
+                raise AssignmentScopeMismatch("当前没有可重置的作业 attempt；请刷新页面后重试")
+            # 两个标签页可能同时拿着同一个旧 attempt 发 reset。先锁调用方最初
+            # 命中的 attempt，再重新读取 active 边界，令后到请求看到第一个请求
+            # 已创建的新 attempt 并被 expected_attempt_id 拒绝。
+            c.execute(
+                "SELECT pg_advisory_xact_lock(%s, %s)",
+                (_SESSION_LOCK_NS, initial_scope["attempt_id"]),
+            )
+            scope = _attempt_scope(c, username, create=False)
+            if (
+                not scope
+                or scope["attempt_state"] != "active"
+                or scope["assignment_id"] != expected_assignment_id
+                or scope["attempt_id"] != expected_attempt_id
+            ):
+                raise AssignmentScopeMismatch("当前作业 attempt 已变化；本次重新开始已取消，请刷新页面")
             _require_assignment_writable(scope)
             # 每次重置都换 attempt 边界：旧答题/回归收据绑定旧 attempt，无法在
             # 新会话复用；既有提交/评分仍可由教师审计，但不再是学生“当前状态”。
@@ -1514,10 +1571,10 @@ def clear_session(username: str) -> None:
                 (scope["assignment_id"], scope["enrollment_id"], next_no),
             )
             c.execute("DELETE FROM step_progress WHERE account_id=%s", (scope["account_id"],))
-        c.execute(
-            "DELETE FROM experiment_sessions s USING accounts a WHERE s.account_id = a.id AND a.username = %s",
-            (username,),
-        )
+            c.execute(
+                "DELETE FROM experiment_sessions s USING accounts a WHERE s.account_id = a.id AND a.username = %s",
+                (username,),
+            )
 
 
 def reset_active_attempts_for_quiz(quiz_version: str, manifest_id: str) -> dict[str, Any]:

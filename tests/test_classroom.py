@@ -13,7 +13,7 @@ import psycopg
 import pytest
 from fastapi.testclient import TestClient
 
-from gvcsim import artifacts, config
+from gvcsim import artifacts, config, teaching_report
 from gvcsim import session as session_model
 from gvcsim.api import app
 from gvcsim.classroom import db
@@ -625,7 +625,11 @@ def test_submission_and_grading_versions_are_append_only_and_reset_is_consistent
 
     # 重置切换 attempt：当前进度/报告/提交为空，但不可变历史仍可审计。
     db.upsert_progress("student", 12)
-    db.clear_session("student")
+    db.clear_session(
+        "student",
+        expected_assignment_id=before["assignment_id"],
+        expected_attempt_id=before["attempt_id"],
+    )
     after = db.assignment_context("student", manifest)
     assert after and after["attempt_id"] != before["attempt_id"]
     assert db.get_progress("student") is None
@@ -884,6 +888,13 @@ def _session_request(
     }
 
 
+def _attempt_request(context: dict) -> dict:
+    return {
+        "expected_assignment_id": context["assignment_id"],
+        "expected_attempt_id": context["attempt_id"],
+    }
+
+
 @needs_artifacts
 def test_session_round_trips_and_survives_relogin():
     """会话必须能跨刷新/重新登录恢复——这正是 HEAD 丢失学生实验的地方。"""
@@ -926,6 +937,31 @@ def test_stale_tab_cannot_write_an_old_session_into_a_new_attempt():
     assert response.status_code == 409
     assert "attempt 已变化" in response.json()["detail"]
     assert db.get_session("student", manifest_id) is None
+
+
+@needs_artifacts
+def test_concurrent_stale_resets_only_archive_the_expected_attempt_once():
+    """两个旧标签页同时 reset 时，后到者不能再归档先到者刚创建的 attempt。"""
+    headers = _login("student")
+    manifest_id = _manifest_id()
+    old_scope = db.assignment_context("student", manifest_id)
+    assert old_scope and old_scope["attempt_id"]
+    body = _attempt_request(old_scope)
+
+    def reset():
+        return client.request("DELETE", "/api/classroom/session", headers=headers, json=body)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = [future.result() for future in [pool.submit(reset), pool.submit(reset)]]
+
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    current = db.assignment_context("student", manifest_id)
+    assert current
+    assert current["attempt_id"] != old_scope["attempt_id"]
+    assert current["attempt_no"] == old_scope["attempt_no"] + 1
+    stale_new = client.post("/api/classroom/attempts/new", headers=headers, json=body)
+    assert stale_new.status_code == 409
+    assert db.assignment_context("student", manifest_id)["attempt_id"] == current["attempt_id"]
 
 
 @needs_artifacts
@@ -1079,8 +1115,23 @@ def test_due_at_is_a_hard_write_boundary_but_preserves_verified_read_state():
         == 409
     )
     assert client.post("/api/classroom/progress", headers=student, json={"step": 4}).status_code == 409
-    assert client.delete("/api/classroom/session", headers=student).status_code == 409
-    assert client.post("/api/classroom/attempts/new", headers=student).status_code == 409
+    assert (
+        client.request(
+            "DELETE",
+            "/api/classroom/session",
+            headers=student,
+            json=_attempt_request(context),
+        ).status_code
+        == 409
+    )
+    assert (
+        client.post(
+            "/api/classroom/attempts/new",
+            headers=student,
+            json=_attempt_request(context),
+        ).status_code
+        == 409
+    )
     assert client.post("/api/classroom/report/generate", headers=student).status_code == 409
     assert (
         client.post(
@@ -1140,6 +1191,23 @@ def test_report_generation_is_blocked_until_the_first_15_quizzes_pass():
     assert [item["step"] for item in blocked] == list(range(1, 16))
     # 门槛状态也可单独查询,便于第 16 步界面直接告诉学生还差什么。
     assert client.get("/api/classroom/report/gate", headers=s).json()["blocked"]
+
+
+@needs_artifacts
+def test_report_replay_failure_is_explicit_and_does_not_persist_a_partial_report(monkeypatch):
+    student = _login("student")
+
+    def fail_replay(*_args, **_kwargs):
+        raise teaching_report.ReportReplayError(12, "贸易流回归", "服务端无法读取当前回归面板")
+
+    monkeypatch.setattr(teaching_report, "build", fail_replay)
+    response = client.post("/api/classroom/report/generate", headers=student)
+
+    assert response.status_code == 503
+    assert "已记录回归" in response.json()["detail"]
+    assert db.latest_report("student") is None
+    stored = client.get("/api/classroom/session", headers=student).json()["session"]
+    assert "16" not in stored["steps"]
 
 
 @needs_artifacts
