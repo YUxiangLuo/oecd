@@ -62,21 +62,31 @@ def _public_context(scope: dict[str, Any] | None) -> dict[str, Any]:
     if not scope:
         return {
             "course_run_id": None,
+            "course_run_code": None,
+            "course_run_name": None,
+            "course_run_term": None,
             "assignment_id": None,
+            "assignment_title": None,
             "attempt_id": None,
             "assignment_scope": None,
             "manifest_mismatch": False,
             "assignment_closed": False,
+            "assignment_historical": False,
             "due_at": None,
         }
     return {
         "course_run_id": scope.get("course_run_id"),
+        "course_run_code": scope.get("course_run_code"),
+        "course_run_name": scope.get("course_run_name"),
+        "course_run_term": scope.get("course_run_term"),
         "assignment_id": scope.get("assignment_id"),
+        "assignment_title": scope.get("assignment_title"),
         "attempt_id": scope.get("attempt_id"),
         "assignment_scope": scope.get("assignment_scope"),
         "assignment_manifest_id": scope.get("assignment_manifest_id"),
         "manifest_mismatch": bool(scope.get("manifest_mismatch")),
         "assignment_closed": bool(scope.get("assignment_closed")),
+        "assignment_historical": bool(scope.get("assignment_historical")),
         "due_at": scope.get("due_at"),
     }
 
@@ -85,6 +95,25 @@ def _public_context(scope: dict[str, Any] | None) -> dict[str, Any]:
 def classroom_context(user: dict = Depends(require_student)):
     """返回稳定的本地会话隔离键；旧客户端可忽略新增字段。"""
     return _public_context(db.assignment_context(user["sub"], artifacts.manifest_id()))
+
+
+class AssignmentSelectionRequest(BaseModel):
+    assignment_id: int = Field(gt=0)
+
+
+@router.get("/assignment-contexts")
+def assignment_contexts(user: dict = Depends(require_student)):
+    """显式列出当前作业和有记录的历史作业，不再让“最新”代替用户选择。"""
+    rows = db.list_student_assignment_contexts(user["sub"], artifacts.manifest_id())
+    return {"assignments": rows}
+
+
+@router.post("/assignment-context/select")
+def select_assignment_context(req: AssignmentSelectionRequest, user: dict = Depends(require_student)):
+    scope = db.select_student_assignment(user["sub"], req.assignment_id, artifacts.manifest_id())
+    if scope is None:
+        raise HTTPException(status_code=404, detail="作业不属于当前账号，或尚未开放且没有可查看的历史记录")
+    return _public_context(scope)
 
 
 # ---------------------------------------------------------------- 实验会话
@@ -109,7 +138,9 @@ def get_session(user: dict = Depends(require_student)):
             "session": empty,
             "stale": bool(context["manifest_mismatch"]),
             "legacy_unverified": False,
-            "read_only": bool(context["manifest_mismatch"] or context["assignment_closed"]),
+            "read_only": bool(
+                context["manifest_mismatch"] or context["assignment_closed"] or context["assignment_historical"]
+            ),
             **context,
             "updated_at": None,
             "completion": evidence.completion_summary(empty, subject=user["sub"], require_trusted=True),
@@ -129,7 +160,8 @@ def get_session(user: dict = Depends(require_student)):
         "session": row["session"],
         "stale": stale,
         "legacy_unverified": legacy,
-        "read_only": legacy or bool(context["manifest_mismatch"] or context["assignment_closed"]),
+        "read_only": legacy
+        or bool(context["manifest_mismatch"] or context["assignment_closed"] or context["assignment_historical"]),
         **context,
         "updated_at": row["updated_at"],
         # 完成度由服务端从会话重算,客户端不参与判定,也无法伪造。
@@ -316,6 +348,8 @@ def _ensure_current_assignment(username: str) -> dict[str, Any]:
             status_code=409,
             detail="当前作业绑定的产物版本与服务器当前 release 不一致；请联系教师发布新 assignment",
         )
+    if scope.get("assignment_historical"):
+        raise HTTPException(status_code=409, detail="这是历史作业；进度、报告与评分可查看，但不能继续写入")
     if scope.get("assignment_closed"):
         raise HTTPException(
             status_code=409,
