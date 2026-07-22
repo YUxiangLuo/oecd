@@ -7,7 +7,7 @@
  *   FVA 排序 谁的出口最依赖外国增加值(后向 GVC 参与最深)
  */
 import { api } from "../../../api";
-import { EvidencePanel, VerifiedCerBox } from "../../../step-evidence";
+import { EvidencePanel, VerifiedActionBox } from "../../../step-evidence";
 import type { Meta, Step, StepEvidenceApi } from "../../../types";
 import { CompositionBar, QuadrantScatter, RankBarChart } from "../../../viz";
 import { useAsync } from "../../shared";
@@ -120,7 +120,7 @@ export function Step8Trade({ meta, step, evidence }: { meta: Meta; step: Step; e
         </ChartStory>
       )}
       </VizWorkbench>
-      <VerifiedCerBox
+      <VerifiedActionBox
         step={step.n}
         kind="visualization"
         evidence={evidence}

@@ -7,7 +7,7 @@
  *   GVCPs 排名  位置指数 = 前向 / 后向 GVC 长度之比,>1 更靠上游
  */
 import { api } from "../../../api";
-import { EvidencePanel, VerifiedCerBox } from "../../../step-evidence";
+import { EvidencePanel, VerifiedActionBox } from "../../../step-evidence";
 import type { Meta, Step, StepEvidenceApi } from "../../../types";
 import { LengthViz, QuadrantScatter, RankBarChart } from "../../../viz";
 import { useAsync } from "../../shared";
@@ -103,7 +103,7 @@ export function Step10Length({ meta, step, evidence }: { meta: Meta; step: Step;
         </ChartStory>
       )}
       </VizWorkbench>
-      <VerifiedCerBox
+      <VerifiedActionBox
         step={step.n}
         kind="visualization"
         evidence={evidence}

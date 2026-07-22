@@ -10,21 +10,20 @@ HEAD 把“到过第 n 步”渲染成绿色对勾并统计成完成率,于是�
 证据形态按 lab 类型定义,而不是逐步硬编码——16 步只有 7 类实验台:
     db     选定一个有效切片
     shock  三类政策冲击(关税/制裁/出口管制)各至少查看一个
-    qc     看过质检结论,并写下对警告的处置判断
+    qc     看过质检结论,并选择对警告的实际处置
     ind    至少对比两个实体的同一指标
     viz    保存一个图表配置和对比对象
-    reg    跑出结果,并写下一句识别判断
+    reg    跑出结果并完成指定的对照/诊断运行
     rep    报告(见第 16 步;由报告闭环单独校验)
 
-课程政策(非统计定理):步骤 1、3–15 均要求轻量 CER，步骤 2 用 QC 处置理由；
-其中对象、数值、事件和运行由服务端复核，文字的经济学质量留给教师 rubric。
-因此“有一段文字”本身不够，必须同时有绑定当前 attempt/manifest 的真实动作。
+课程政策(非统计定理):步骤 1–15 均要求真实操作加固定单选题。对象、数值、
+事件和运行由服务端复核，理解检查由服务端题库判定；只访问页面或只答题都不算
+完成，二者必须同时绑定当前 attempt/manifest。
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import re
 from typing import Any, cast
 
 from gvcsim.regression.design import (
@@ -35,15 +34,9 @@ from gvcsim.regression.design import (
     SCENARIOS,
     SHOCK_TYPES,
 )
-from gvcsim import trusted_evidence
+from gvcsim import quizzes, trusted_evidence
 from gvcsim.shocks import SHOCK_LABELS, SHOCK_SPECS, events_metadata
 from gvcsim.steps import STEPS
-
-# 文字判断的最小长度。中文信息密度高,一句有内容的判断通常超过它;
-# 它挡不住刻意乱敲,但那已不是"证据不足"而是学术诚信问题。
-MIN_JUDGMENT_CHARS = 15
-MIN_CER_CHARS = 12
-CER_FIELDS = ("claim", "evidence", "reasoning", "boundary")
 
 # 第 11 步要求三类政策冲击都看过:关税是密集处理、制裁是稀疏处理、
 # 出口管制是单国处理,三者的识别难度完全不同,只看一个会形成错误直觉。
@@ -84,31 +77,6 @@ def _text(value: Any) -> str:
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
-
-
-def _judgment_missing(data: dict[str, Any], prompt: str) -> list[str]:
-    judgment = _text(data.get("judgment"))
-    if not judgment:
-        return [prompt]
-    if len(judgment) < MIN_JUDGMENT_CHARS:
-        return [f"{prompt}(至少 {MIN_JUDGMENT_CHARS} 字,当前 {len(judgment)} 字)"]
-    return []
-
-
-def _cer_missing(data: dict[str, Any]) -> list[str]:
-    cer = data.get("cer")
-    if not isinstance(cer, dict):
-        return ["请提交 Claim–Evidence–Reasoning–Boundary 四段学习证据"]
-    labels = {"claim": "主张", "evidence": "数值证据", "reasoning": "推理", "boundary": "边界/限制"}
-    missing = [labels[key] for key in CER_FIELDS if len(_text(cer.get(key))) < MIN_CER_CHARS]
-    problems = [f"CER 还缺少至少 {MIN_CER_CHARS} 字的:{'、'.join(missing)}"] if missing else []
-    completed = [_text(cer.get(key)) for key in CER_FIELDS if _text(cer.get(key))]
-    if len(set(completed)) != len(completed):
-        problems.append("CER 四段不能用同一段文字重复填充")
-    evidence_text = _text(cer.get("evidence"))
-    if evidence_text and not re.search(r"\d", evidence_text):
-        problems.append("CER 的 Evidence 必须引用至少一个具体数值")
-    return problems
 
 
 def _distinct(values: Any) -> list[str]:
@@ -155,15 +123,14 @@ def _check_shock(data: dict[str, Any]) -> list[str]:
 
 
 def _check_qc(data: dict[str, Any]) -> list[str]:
-    """质检这一步的核心不是“看过报告”,而是**作出处置决定**并说明理由。
+    """质检这一步的操作核心不是“看过报告”,而是作出处置决定。
 
     因此动作证据是三选一的处置(停止/修正/披露后继续),而不是一个“已阅”布尔值——
-    后者与“到过”没有区别,正是本次重建要消灭的东西。
+    对处置边界的理解则由本步固定选择题核验。
     """
     missing: list[str] = []
     if data.get("disposition") not in QC_DISPOSITIONS:
         missing.append("请先对质检结果作出处置决定:停止分析、修正数值,还是披露后继续")
-    missing += _judgment_missing(data, "请写下作出该处置的理由(哪一项质检、为什么这样处理)")
     return missing
 
 
@@ -222,7 +189,6 @@ def _check_reg(data: dict[str, Any]) -> list[str]:
         bad = invalid_regression_settings(run.get("settings") or {})
         if bad:
             missing.append(f"这次运行保存的设定无法识别({'、'.join(bad)});请重新运行本步")
-    missing += _judgment_missing(data, "请写下这次估计的识别判断:结果能否作因果解释,为什么")
     return missing
 
 
@@ -251,9 +217,57 @@ _TRUSTED_KINDS = {
     "shock": "shock",
 }
 
+_ACTION_FIELDS = {
+    "db": ("slice", "observation"),
+    "qc": (
+        "year",
+        "disposition",
+        "remediation",
+        "disclosures",
+        "retest_passed",
+        "failed_checks",
+        "disclosure_checks",
+        "qc_manifest_id",
+    ),
+    "ind": ("compared", "metric", "observations"),
+    "viz": ("year", "chart", "compared", "metric", "observations"),
+    "shock": (
+        "viewed_shock_types",
+        "viewed_events",
+        "qc_reviewed",
+        "shock_qc_failures",
+    ),
+}
 
-def _learning_payload(data: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in data.items() if key != "evidence_id"}
+
+def action_payload(step: int, data: dict[str, Any]) -> dict[str, Any]:
+    """抽出该步真正由服务端复核并签名的操作字段。
+
+    选择题使用独立凭证；界面状态、旧文字字段或其它步骤字段都不能悄悄进入
+    操作签名，也不能因答题变化迫使学生重新执行昂贵操作。
+    """
+    lab = STEP_LABS.get(step)
+    fields = _ACTION_FIELDS.get(lab or "", ())
+    return {key: data[key] for key in fields if key in data}
+
+
+def _quiz_missing(step: int, data: dict[str, Any]) -> list[str]:
+    quiz = data.get("quiz")
+    if not isinstance(quiz, dict):
+        return ["请完成本步理解检查并答对全部选择题"]
+    try:
+        passed, normalized, _ = quizzes.grade(
+            step,
+            str(quiz.get("version") or ""),
+            quiz.get("answers"),
+        )
+    except ValueError as error:
+        return [str(error)]
+    if not passed:
+        return ["本步理解检查尚未全部答对"]
+    if normalized != quiz.get("answers"):
+        return ["理解检查答案格式无效，请重新提交"]
+    return []
 
 
 def normalize_issue_payload(step: int, kind: str, payload: Any) -> dict[str, Any]:
@@ -265,8 +279,9 @@ def normalize_issue_payload(step: int, kind: str, payload: Any) -> dict[str, Any
     if not isinstance(payload, dict):
         raise ValueError("evidence payload 必须是对象")
     clean = dict(payload)
-    if lab != "qc" and _cer_missing(clean):
-        raise ValueError(_cer_missing(clean)[0])
+    reserved = {"evidence_id", "quiz", "quiz_id", "cer", "judgment"}
+    if reserved.intersection(clean):
+        raise ValueError("操作证据不能包含答题凭证或旧版文字证据字段")
     if kind == "qc_resolution":
         missing = _check_qc(clean)
         if clean.get("disposition") == "fix" and not _text(clean.get("remediation")):
@@ -276,9 +291,9 @@ def normalize_issue_payload(step: int, kind: str, payload: Any) -> dict[str, Any
     elif kind == "slice":
         missing = _check_db(clean)
     elif kind == "indicator":
-        missing = [item for item in _check_ind(clean) if not item.startswith("CER")]
+        missing = _check_ind(clean)
     elif kind == "visualization":
-        missing = [item for item in _check_viz(clean) if not item.startswith("CER")]
+        missing = _check_viz(clean)
     else:
         missing = _check_shock(clean)
         event_types = {str(item["name"]): str(item["shock_type"]) for item in events_metadata()}
@@ -315,10 +330,15 @@ def evaluate_step(
     data = record.get("data") if isinstance(record, dict) else None
     if not isinstance(data, dict):
         # 只“到过”这一步不会产生任何记录,因此这里就是访问≠完成的落点。
-        return StepEvidence(step=step, complete=False, missing=_CHECKS[lab]({}))
+        missing = _CHECKS[lab]({})
+        if lab != "rep":
+            missing += _quiz_missing(step, {})
+        return StepEvidence(step=step, complete=False, missing=missing)
     missing = _CHECKS[lab](data)
-    if require_trusted and lab in {"db", "ind", "viz", "shock", "reg"}:
-        missing += _cer_missing(data)
+    quiz_missing: list[str] = []
+    if lab != "rep":
+        quiz_missing = _quiz_missing(step, data)
+        missing += quiz_missing
     if require_trusted and lab == "shock" and len(_distinct(data.get("viewed_events"))) < len(REQUIRED_SHOCK_TYPES):
         missing.append("请保存三类冲击各自对应的具体事件，而不只是类型名称")
     if require_trusted and lab == "qc":
@@ -333,9 +353,22 @@ def evaluate_step(
             step=step,
             kind=kind,
             manifest_id=str(session.get("manifest_id") or ""),
-            payload=_learning_payload(data),
+            payload=action_payload(step, data),
         ):
-            missing.append("筛选/CER 已变化或证据并非服务端签发，请重新提交可核查证据")
+            missing.append("操作内容已变化或证据并非服务端签发，请重新提交可核查证据")
+    if require_trusted and lab != "rep" and not quiz_missing:
+        quiz_payload = _as_dict(data.get("quiz"))
+        if not subject:
+            missing.append("服务端无法确认这份理解检查属于当前学生")
+        elif not trusted_evidence.verify_learning_evidence(
+            data.get("quiz_id"),
+            subject=subject,
+            step=step,
+            kind="quiz",
+            manifest_id=str(session.get("manifest_id") or ""),
+            payload=quiz_payload,
+        ):
+            missing.append("理解检查答案已变化或凭证无效，请重新提交")
     if require_trusted and lab == "reg":
         run = _as_dict(data.get("run"))
         settings = _as_dict(run.get("settings"))
@@ -420,16 +453,9 @@ def evaluate_step(
                 missing.append("生产回归需保存加入交互项的 interaction_run_id")
             if baseline and interaction and not same_design(baseline, interaction, except_keys={"interaction"}):
                 missing.append("两次生产回归除交互项外必须使用完全相同的冲击、样本、方法和权重口径")
-            marginal = _text(checks.get("marginal_effect"))
-            if len(marginal) < MIN_JUDGMENT_CHARS or not re.search(r"\d", marginal):
-                missing.append("请用具体数值解释低/中/高基期 GVC 下的边际效应")
         elif step == 14:
             if not verified or _as_dict(verified.get("design")).get("method") != "event_study":
                 missing.append("长度步骤必须保存一份事件研究 run_id")
-            for key, label in (("pretrend", "事前趋势诊断"), ("post_effect", "事后效应")):
-                text = _text(checks.get(key))
-                if len(text) < MIN_JUDGMENT_CHARS or not re.search(r"\d", text):
-                    missing.append(f"请引用具体数值记录{label}")
         elif step == 15:
             placebo_token = checks.get("placebo_run_id") or data.get("placebo_run_id")
             placebo = (
@@ -449,9 +475,6 @@ def evaluate_step(
                 missing.append("网络步骤必须完成并保存服务端 placebo_run_id")
             elif verified and not same_design(verified, placebo, except_keys=set()):
                 missing.append("安慰剂必须与本步主回归使用完全相同的 outcome、样本、冲击、方法、控制、交互和权重设定")
-            boundary = _text(_as_dict(data.get("cer")).get("boundary"))
-            if not re.search(r"SUTVA|干扰|相互影响|网络外溢", boundary, flags=re.IGNORECASE):
-                missing.append("网络回归的 Boundary 必须讨论 SUTVA/节点间干扰或网络外溢")
     if require_trusted and lab == "rep" and subject:
         try:
             from gvcsim.classroom import db

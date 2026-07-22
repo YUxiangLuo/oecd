@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from gvcsim import artifacts, auth, config as app_config
-from gvcsim import evidence, shocks, trusted_evidence
+from gvcsim import evidence, quizzes, shocks, trusted_evidence
 from gvcsim.shocks import SHOCK_LABELS, SHOCK_TARIFF
 from gvcsim.artifacts import (
     ArtifactContractError,
@@ -503,11 +503,16 @@ def meta(request: Request):
 def steps():
     return {
         "stages": STAGE_NAMES,
-        "steps": STEPS,
+        "steps": [
+            {
+                **step,
+                **({"quiz": quiz} if (quiz := quizzes.public_quiz(int(step["n"]))) is not None else {}),
+            }
+            for step in STEPS
+        ],
         # 证据规则来自服务端判定模块,前端只据此显示提示与计数,不另写一套阈值:
         # 两边一旦漂移,界面会说“已达标”而服务端仍判未完成。
         "evidence_rules": {
-            "min_judgment_chars": evidence.MIN_JUDGMENT_CHARS,
             "required_shock_types": list(evidence.REQUIRED_SHOCK_TYPES),
         },
     }

@@ -1,4 +1,4 @@
-import type { ExperimentSession, GeneratedReport, ProgressResponse, ReportGate, SessionResponse } from "./types";
+import type { Enrollment, ExperimentSession, GeneratedReport, ProgressResponse, ReportGate, SessionResponse } from "./types";
 
 export const AUTH_TOKEN_KEY = "gvcsim_token";
 
@@ -225,6 +225,14 @@ export const api = {
       kind: "slice" | "qc_resolution" | "indicator" | "visualization" | "shock";
       payload: Record<string, unknown>;
     }) => post<{ evidence_id: string; evidence?: Record<string, unknown> }>("/api/classroom/evidence/issue", body),
+    submitQuiz: (body: { step: number; version: string; answers: Record<string, string> }) =>
+      post<{
+        passed: boolean;
+        version: string;
+        results: { question_id: string; correct: boolean; explanation: string }[];
+        quiz_id?: string;
+        quiz?: { version: string; answers: Record<string, string> };
+      }>("/api/classroom/quiz/submit", body),
     announcements: () =>
       get<{ announcements: import("./types").Announcement[] }>("/api/classroom/announcements"),
     progress: () => get<ProgressResponse>("/api/classroom/progress"),
@@ -266,7 +274,7 @@ export const api = {
     setAssignmentState: (id: number, active: boolean) =>
       post<import("./types").Assignment>(`/api/classroom/assignments/${id}/state`, { active }),
     enrollStudent: (body: { course_run_id: number; account_id: number; class_id?: number | null }) =>
-      post<import("./types").Enrollment>("/api/classroom/enrollments", body),
+      post<Enrollment>("/api/classroom/enrollments", body),
     enrollments: (courseRunId: number) =>
       get<{ enrollments: import("./types").EnrollmentRow[] }>(
         withQuery("/api/classroom/enrollments", { course_run_id: courseRunId }),

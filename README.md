@@ -31,14 +31,13 @@
 
 "完成某一步"不由客户端自称，而由服务端签发的可审计收据决定。每个可核查动作会先被服务器
 按当前数据重算核对，写入 append-only 的 `learning_evidence_events`，再签发一张 HMAC 收据，
-绑定账号、assignment、attempt、manifest、步骤与 payload 摘要。学生改动筛选、观察值、CER 或
+绑定账号、assignment、attempt、manifest、步骤与 payload 摘要。学生改动筛选、观察值或
 回归设定后，旧收据立即失效；第 12–15 步只认服务器实际运行后签发的 `run_id` / `placebo_run_id`。
 
-每一步还要求结构化的 **CER**：Claim（主张）、Evidence（数值证据）、Reasoning（推理）、
-Boundary（边界/限制）四段，各至少 12 字、四段不得重复、Evidence 必须引用具体数值。
-
-系统只核验"可复现的动作与对象确实存在"，**不判断**主张是否成立、推理是否充分——那属于教师
-0–2 分 rubric。两者的完整分工与逐步硬门槛见 [`docs/COURSE_EVIDENCE.md`](./docs/COURSE_EVIDENCE.md)。
+步骤 1–15 各有 1–3 道固定单选题作为理解证据，共 21 题。学生提交后立即看到逐题反馈，可不限次数
+重试；只有全对时服务端才记录事件并签发独立 `quiz_id`。一步必须同时具备真实操作凭证与当前题库
+版本的答题凭证才算完成。第 16 步报告会列出题目和学生最终选择，详细契约见
+[`docs/COURSE_EVIDENCE.md`](./docs/COURSE_EVIDENCE.md)。
 
 课堂数据模型为 course run → assignment → enrollment → attempt；学生的会话、进度、证据、报告
 与提交都挂在 attempt 之下，历史 attempt 保留为审计记录。
@@ -208,7 +207,7 @@ scripts/agent_browser_smoke.sh
 
 GitHub Actions 在每次 push 上跑同一组检查(后端带 PostgreSQL 服务、前端构建与单测)。
 `agent_browser_smoke.sh` 会在真实登录态下挂载学生端 1–16 步，并对浏览器错误和失败 API 请求做失败判定；
-完整 CER、回归和报告提交仍应在固定真实数据快照上执行夜间/发布前全流程审查。
+完整答题、回归和报告提交仍应在固定真实数据快照上执行夜间/发布前全流程审查。
 
 ## 使用边界
 

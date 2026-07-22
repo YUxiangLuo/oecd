@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import { api } from "../../../api";
-import type { CerStepEvidence, IndicatorSchema, IndustryPage, Meta, StepEvidenceApi } from "../../../types";
+import type { IndicatorSchema, IndustryPage, Meta, QuizStepEvidence, StepEvidenceApi } from "../../../types";
 import { countryLabel, sectorLabel } from "../../../viz";
 import { Pager, fieldLabel, fmtField, useAsync } from "../../shared";
 
@@ -16,7 +16,7 @@ const BASE_DESC: Record<string, string> = {
   year: "指标年份",
 };
 
-export interface IndicatorEvidence extends CerStepEvidence, Record<string, unknown> {
+export interface IndicatorEvidence extends QuizStepEvidence, Record<string, unknown> {
   compared?: string[];
   last_view?: { year: number; country: string };
   metric?: string;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
-import type { CerStepEvidence, DbMeta, DbSlice, DbTableKind, StepEvidenceApi } from "../../types";
-import { EvidencePanel, VerifiedCerBox } from "../../step-evidence";
+import type { DbMeta, DbSlice, DbTableKind, QuizStepEvidence, StepEvidenceApi } from "../../types";
+import { EvidencePanel, VerifiedActionBox } from "../../step-evidence";
 import { countryLabel, sectorLabel } from "../../viz";
 import { fmtDb, Pager, useAsync } from "../shared";
 
@@ -102,7 +102,7 @@ function DatabaseGuide({ meta }: { meta: DbMeta }) {
 
 /** 步骤1:本地 OECD ICIO 原始表浏览 */
 /** 第 1 步的学习证据:真正取回了一个有效切片。 */
-interface DbEvidence extends CerStepEvidence, Record<string, unknown> {
+interface DbEvidence extends QuizStepEvidence, Record<string, unknown> {
   slice?: {
     year: number;
     table: string;
@@ -382,7 +382,7 @@ export function DbLab({ evidence }: { evidence: StepEvidenceApi<DbEvidence> }) {
           <span>{selectedObservation.row} × {selectedObservation.column} = {fmtDb(selectedObservation.value)}</span>
         ) : <span>尚未选择</span>}
       </div>
-      <VerifiedCerBox
+      <VerifiedActionBox
         step={1}
         kind="slice"
         evidence={evidence}

@@ -1,7 +1,7 @@
 """服务端签发的学习证据收据。
 
 会话仍是便于恢复 UI 的 JSON，但“完成”只认可本模块签名的收据。收据绑定
-账号、步骤、manifest 与规范化 payload 摘要；客户端改动 CER、筛选或回归设定
+账号、步骤、manifest 与规范化 payload 摘要；客户端改动答题、筛选或回归设定
 后，旧收据立即失效。每次签发前先写入 append-only evidence_events；HMAC 收据
 只是该事件的便携引用，验证时还会检查当前账号/assignment/attempt 下的真实事件。
 """

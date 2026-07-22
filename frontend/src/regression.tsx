@@ -4,12 +4,11 @@ import { useAsync } from "./labs";
 import { comparisonExplanation, lessonQuestion, REGRESSION_LESSONS } from "./regression-lessons";
 import { buildRegressionVerdict, placeboInterpretation } from "./regression-verdict";
 import { splitPolicyCoefficients } from "./regteach";
-import { CerBox, EvidencePanel, JudgmentBox } from "./step-evidence";
+import { EvidencePanel } from "./step-evidence";
 import type {
-  CerEvidence,
-  EvidenceRules,
   MarginalEffect,
   PlaceboResponse,
+  QuizStepEvidence,
   RegressionDesignInfo,
   RegressionOptions,
   RegressionOutcome,
@@ -327,21 +326,7 @@ function marginalNaturalScale(effect: MarginalEffect, response: RegressionRespon
   };
 }
 
-export function marginalEffectEvidenceText(response: RegressionResponse, effects: MarginalEffect[]): string {
-  const increment = response.design.method === "twfe_intensity" ? "冲击强度增加 1 个百分点" : "进入处理后";
-  return effects.map((effect) => {
-    const scaled = marginalNaturalScale(effect, response);
-    const interval = scaled.ciLow == null || scaled.ciHigh == null
-      ? "推断被抑制，不能报告置信区间"
-      : `95% CI [${signedNumber(scaled.ciLow)}, ${signedNumber(scaled.ciHigh)}] 个百分点`;
-    return `${effect.label}基期 GVC（相对样本均值 ${signedNumber(effect.baseline_gvc_centered * 100)} 个百分点）时，${increment}的边际效应为 ${signedNumber(scaled.effect)} 个百分点，${interval}`;
-  }).join("；") + "。这些边际效应由政策主效应与交互项共同计算，交互系数本身不是平均效应。";
-}
-
-function MarginalEffectsPanel({ response, onUse }: {
-  response: RegressionResponse;
-  onUse: (text: string) => void;
-}) {
+function MarginalEffectsPanel({ response }: { response: RegressionResponse }) {
   const effects = response.result.marginal_effects ?? [];
   if (!response.design.interaction || effects.length === 0) return null;
   const groups = [...new Set(effects.map((effect) => effect.policy_term))];
@@ -352,7 +337,6 @@ function MarginalEffectsPanel({ response, onUse }: {
           <b>低 / 中 / 高基期 GVC 的政策边际效应</b>
           <p>分位点按样本实体等权计算；区间使用主效应、交互项及其协方差，不是把两个系数各自解读。</p>
         </div>
-        <button type="button" className="secondary" onClick={() => onUse(marginalEffectEvidenceText(response, effects))}>将三档数值填入解释</button>
       </div>
       {groups.map((term) => {
         const rows = effects.filter((effect) => effect.policy_term === term);
@@ -383,8 +367,8 @@ function MarginalEffectsPanel({ response, onUse }: {
   );
 }
 
-/** 第 12–15 步的学习证据:跑出结果(动作)+ 写下识别判断(取舍)。 */
-interface RegressionEvidence extends Record<string, unknown> {
+/** 第 12–15 步的操作证据：真实运行与指定的对照/诊断。 */
+interface RegressionEvidence extends QuizStepEvidence, Record<string, unknown> {
   run?: { depvar: string; status: string | null; settings: RegressionSettings; run_id?: string };
   run_id?: string;
   placebo_run_id?: string;
@@ -393,20 +377,14 @@ interface RegressionEvidence extends Record<string, unknown> {
     controlled_run_id?: string;
     no_interaction_run_id?: string;
     interaction_run_id?: string;
-    pretrend?: string;
-    post_effect?: string;
-    marginal_effect?: string;
   };
-  cer?: Partial<CerEvidence>;
-  judgment?: string;
 }
 
-export function RegressionRunLab({ step, settings, onSettingsChange, history, onHistoryChange, evidence, rules }: {
+export function RegressionRunLab({ step, settings, onSettingsChange, history, onHistoryChange, evidence }: {
   step: Step;
   history: RegressionHistory;
   onHistoryChange: React.Dispatch<React.SetStateAction<RegressionHistory>>;
   evidence: StepEvidenceApi<RegressionEvidence>;
-  rules: EvidenceRules;
 } & SharedSettingsProps) {
   const outcome = step.regression_outcome;
   if (!outcome) return <div className="error-box">当前回归步骤缺少 regression_outcome 配置。</div>;
@@ -428,9 +406,6 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
 
   const setSetting = <K extends keyof RegressionSettings>(key: K, value: RegressionSettings[K]) => {
     onSettingsChange({ ...settings, [key]: value });
-  };
-  const saveCheck = (key: "pretrend" | "post_effect" | "marginal_effect", value: string) => {
-    evidence.save({ checks: { ...(evidence.data?.checks ?? {}), [key]: value } });
   };
   const { data: options, error: optionsError } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
   // 兜底必须用稳定键(与 options.granularities_by_outcome 一致),不能用展示文案:
@@ -637,7 +612,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
             <p>
               {outcome === "trade" && "用完全相同的冲击、方法与粒度，分别运行不加控制和加入 ICIO 派生控制的模型。"}
               {outcome === "production" && "先运行无交互模型，再运行“冲击 × 基期 GVC”交互模型；交互系数不是平均效应。"}
-              {outcome === "length" && "使用事件研究，并在结果后分别写出一项事前诊断和一项事后动态效应。"}
+              {outcome === "length" && "使用事件研究，并检查冲击前联合检验与冲击后的动态路径。"}
               {outcome === "network" && "使用 DID 基准结果后必须运行安慰剂检验；随机化尾部位置也不是因果证明。"}
             </p>
           </div>
@@ -703,7 +678,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
               </>
             ) : <CoefForestChart coefs={split?.policy ?? []} />}
             {outcome === "production" && (
-              <MarginalEffectsPanel response={result} onUse={(text) => saveCheck("marginal_effect", text)} />
+              <MarginalEffectsPanel response={result} />
             )}
             <p className="muted">图只展示政策相关系数；加入控制变量后，完整控制项保留在下方技术细节表中。</p>
           </section>
@@ -726,71 +701,24 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           </section>
 
           <section className="reg-section-card">
-            <span className="reg-section-step">6 · 写下你的识别判断</span>
+            <span className="reg-section-step">6 · 检查必做运行</span>
             {outcome === "length" && (
-              <div className="diagnostic-evidence-grid">
-                <label>
-                  <b>事前诊断</b>
-                  <span>引用冲击前联合检验或一个冲击前系数，并解释“不显著”能与不能说明什么。</span>
-                  <textarea
-                    rows={3}
-                    value={evidence.data?.checks?.pretrend ?? ""}
-                    onChange={(eventValue) => saveCheck("pretrend", eventValue.target.value)}
-                    placeholder="例如：冲击前联合检验 p=…；未拒绝零假设只表示未发现明显预趋势……"
-                  />
-                </label>
-                <label>
-                  <b>事后动态效应</b>
-                  <span>引用一个冲击后期数、系数和置信区间，再解释其经济含义。</span>
-                  <textarea
-                    rows={3}
-                    value={evidence.data?.checks?.post_effect ?? ""}
-                    onChange={(eventValue) => saveCheck("post_effect", eventValue.target.value)}
-                    placeholder="例如：冲击后第 … 期系数为 …，95% CI 为 […]，与链条…一致。"
-                  />
-                </label>
+              <div className={`required-check-status${event ? " done" : ""}`}>
+                {event ? "✓ 已展示冲击前联合检验与冲击后动态路径" : "本步必须切换到事件研究并重新运行"}
               </div>
             )}
             {outcome === "production" && (
-              <div className="diagnostic-evidence-grid" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
-                <label>
-                  <b>边际效应解释</b>
-                  <span>结合无交互与交互模型，引用低/中/高基期 GVC 中至少一个水平的具体边际效应；不要把交互系数直接当平均效应。</span>
-                  <textarea
-                    rows={3}
-                    value={evidence.data?.checks?.marginal_effect ?? ""}
-                    onChange={(eventValue) => saveCheck("marginal_effect", eventValue.target.value)}
-                    placeholder="例如：在高基期 GVC（…）时，冲击边际效应为 … 个百分点；它由主效应与交互项共同构成。"
-                  />
-                </label>
+              <div className={`required-check-status${result.design.interaction && (result.result.marginal_effects?.length ?? 0) > 0 ? " done" : ""}`}>
+                {result.design.interaction && (result.result.marginal_effects?.length ?? 0) > 0
+                  ? "✓ 已展示低 / 中 / 高基期 GVC 的边际效应"
+                  : "请打开基期 GVC 交互并运行，以查看条件边际效应"}
               </div>
             )}
             {outcome === "network" && (
-              <>
-                <div className={`required-check-status${evidence.data?.placebo_run_id ? " done" : ""}`}>
-                  {evidence.data?.placebo_run_id ? "✓ 已保存与当前账号和数据版本绑定的安慰剂结果" : "还需在上方可信度检查中运行安慰剂检验"}
-                </div>
-                <div className={`required-check-status${/(SUTVA|干扰|相互影响|网络外溢)/i.test(evidence.data?.cer?.boundary ?? "") ? " done" : ""}`}>
-                  网络结果的 Boundary 必须讨论 SUTVA、节点相互影响、干扰或网络外溢；一个节点受冲击可能改变其他节点的中心性。
-                </div>
-              </>
+              <div className={`required-check-status${evidence.data?.placebo_run_id ? " done" : ""}`}>
+                {evidence.data?.placebo_run_id ? "✓ 已保存与当前账号和数据版本绑定的安慰剂结果" : "还需在上方可信度检查中运行安慰剂检验"}
+              </div>
             )}
-            <JudgmentBox
-              prompt="这次估计的结果,能不能作因果解释?为什么?"
-              hint={
-                result.result.support?.suppress_inference
-                  ? "本次设计已被判定不可作推断——把原因写清楚,比抄一个系数更重要。"
-                  : "可以谈:处理组与对照组是否可比、冲击是否外生、处理支持度是否足够、撤销与异质性的影响。"
-              }
-              minChars={rules.min_judgment_chars}
-              value={evidence.data?.judgment ?? ""}
-              onChange={(judgment) => evidence.save({ judgment })}
-            />
-            <CerBox
-              title="把回归结果写成可进入报告的 CER"
-              value={evidence.data?.cer}
-              onChange={(cer) => evidence.save({ cer })}
-            />
             <EvidencePanel evidence={evidence} />
           </section>
 

@@ -8,7 +8,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../../api";
-import { EvidencePanel, VerifiedCerBox } from "../../../step-evidence";
+import { EvidencePanel, VerifiedActionBox } from "../../../step-evidence";
 import type { IndustryPage, Meta, Step, StepEvidenceApi } from "../../../types";
 import { CompositionBar, RankBarChart, countryLabel } from "../../../viz";
 import { useAsync } from "../../shared";
@@ -140,7 +140,7 @@ export function Step9Production({ meta, step, evidence }: { meta: Meta; step: St
         </ChartStory>
       )}
       </VizWorkbench>
-      <VerifiedCerBox
+      <VerifiedActionBox
         step={step.n}
         kind="visualization"
         evidence={evidence}

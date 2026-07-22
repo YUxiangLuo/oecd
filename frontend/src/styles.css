@@ -501,8 +501,6 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   .rightrail,
   .stepfooter,
   .card.accent,
-  .report-controls,
-  .report-meta,
   .toast-host,
   .error-box {
     display: none !important;
@@ -512,8 +510,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   .workarea,
   .content-row,
   .content,
-  .content-inner,
-  .report-lab {
+  .content-inner {
     display: block !important;
     height: auto !important;
     min-height: 0 !important;
@@ -993,18 +990,6 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   border-top: 1px solid #eef0f5; padding-top: 10px;
 }
 
-/* ---------- 步骤8-11 自由探索控件条 ---------- */
-.viz-framing { font-size: 12.5px; line-height: 1.6; margin: 0 0 10px; max-width: 760px; }
-.metric-scope { font-size: 12px; color: #6b7280; cursor: pointer; gap: 4px; }
-.metric-scope input { accent-color: #4b47e0; cursor: pointer; }
-.viz-explore {
-  background: #fafbfd; border: 1px solid #eef0f5; border-radius: 11px;
-  padding: 11px 14px; margin-bottom: 14px;
-}
-.viz-explore optgroup { font-size: 11px; color: #8a90a0; }
-.topn-ctl { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: #6b7280; }
-.topn-ctl input[type="range"] { width: 120px; accent-color: #4b47e0; }
-.topn-ctl b { font-family: "Space Grotesk", sans-serif; color: #4b47e0; min-width: 18px; text-align: center; }
 /* 选国家:搜索 + 勾选列表 + 已选 chips(替代原生 multi-select) */
 /* 可视化工作台:左选国家、右看图,两栏等高。行高由右侧图表决定,选择器列表内部滚动,
    于是"选了谁"和"图上是谁"始终同屏,不必上下滚动来回对照。 */
@@ -1377,12 +1362,6 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 
 /* ---------- 步骤16 提交与评阅卡 ---------- */
 .submit-card { margin-bottom: 14px; }
-.review-result { display: flex; gap: 18px; align-items: flex-start; margin: 8px 0; }
-.review-score {
-  font-family: "Space Grotesk", sans-serif; font-size: 40px; font-weight: 700; color: #12a150;
-  line-height: 1; padding: 10px 14px; background: #f0faf4; border-radius: 12px;
-}
-.review-score span { font-size: 13px; margin-left: 3px; color: #1f8a70; }
 
 /* ---------- 16步回归教学工作台 ---------- */
 .reg-workbench { display: grid; gap: 12px; }
@@ -1462,17 +1441,6 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .evidence-panel li { font-size: 12.5px; color: #5a6070; line-height: 1.7; }
 .evidence-panel p { margin: 6px 0 0; font-size: 12.5px; }
 
-.judgment-box { margin-top: 12px; }
-.judgment-box label { font-size: 13px; color: #3a4050; }
-.judgment-hint { margin: 4px 0 6px; font-size: 12px; }
-.judgment-box textarea {
-  width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid #dfe2ea;
-  font: inherit; font-size: 13px; line-height: 1.7; resize: vertical; background: #fff;
-}
-.judgment-box textarea:focus-visible { outline: 2px solid #4b47e0; outline-offset: 1px; }
-.judgment-count { margin-top: 5px; font-size: 11.5px; color: #a2670f; }
-.judgment-count.ok { color: #12a150; }
-
 .qc-decision {
   margin-bottom: 18px; padding: 14px 16px; border-radius: 12px;
   background: #fff; border: 1px solid #e7e9f0;
@@ -1486,7 +1454,8 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   border: 0; background: transparent; padding: 0; font: inherit; font-weight: 600;
   color: #4b47e0; cursor: pointer; text-decoration: underline;
 }
-.cer-box {
+.action-evidence-box,
+.quiz-box {
   margin: 18px 0;
   padding: 18px;
   border: 1px solid #dfe4ee;
@@ -1494,19 +1463,26 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   border-radius: 12px;
   background: #fbfcff;
 }
-.cer-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
-.cer-head h3 { margin: 3px 0 0; font-size: 15px; }
-.cer-note { color: #5d6480; background: #eef1fa; border-radius: 999px; padding: 5px 10px; font-size: 11px; white-space: nowrap; }
-.cer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.cer-field { display: grid; gap: 5px; min-width: 0; }
-.cer-field > b { font-size: 12px; color: #2d3342; }
-.cer-field > span { min-height: 34px; color: #687083; font-size: 11.5px; line-height: 1.45; }
-.cer-field textarea { width: 100%; box-sizing: border-box; resize: vertical; border: 1px solid #d8dce7; border-radius: 8px; padding: 9px 10px; background: #fff; color: inherit; font: inherit; line-height: 1.5; }
-.cer-field textarea:focus { outline: 2px solid rgba(75, 71, 224, .18); border-color: #7773df; }
-.cer-field small { color: #b06e25; justify-self: end; }
-.cer-field small.ok { color: #148673; }
-.cer-submit-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: -8px 0 20px 4px; }
-.cer-signed { color: #148673; font-size: 12px; font-weight: 650; }
+.action-evidence-box { padding-bottom: 2px; }
+.quiz-box.done { border-color: #9edbb8; border-left-color: #12a150; background: #f7fcf9; }
+.quiz-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
+.quiz-head h3 { margin: 3px 0 0; font-size: 16px; }
+.quiz-note { color: #5d6480; background: #eef1fa; border-radius: 999px; padding: 5px 10px; font-size: 11px; white-space: nowrap; }
+.quiz-questions { display: grid; gap: 12px; }
+.quiz-question { min-width: 0; margin: 0; padding: 12px 14px; border: 1px solid #e0e4ed; border-radius: 10px; background: #fff; }
+.quiz-question.correct { border-color: #a9ddc0; background: #f4fbf7; }
+.quiz-question.incorrect { border-color: #efbfac; background: #fff8f4; }
+.quiz-question legend { padding: 0 5px; color: #303747; font-size: 13px; font-weight: 700; line-height: 1.55; }
+.quiz-options { display: grid; gap: 7px; margin-top: 5px; }
+.quiz-options label { display: flex; align-items: flex-start; gap: 8px; padding: 7px 9px; border-radius: 7px; color: #4e5668; font-size: 12.5px; line-height: 1.5; cursor: pointer; }
+.quiz-options label:hover { background: #f3f5fb; }
+.quiz-options input { flex: none; margin-top: 3px; accent-color: #4b47e0; }
+.quiz-feedback { margin: 8px 4px 0; color: #76502d; font-size: 12px; line-height: 1.6; }
+.quiz-question.correct .quiz-feedback { color: #147866; }
+.quiz-feedback b { margin-right: 4px; }
+.quiz-submit-row { margin-top: 16px; margin-bottom: 2px; }
+.evidence-submit-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: -8px 0 20px 4px; }
+.evidence-signed { color: #148673; font-size: 12px; font-weight: 650; }
 .table-priority-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; }
 .table-priority-tools button { white-space: nowrap; }
 .bounded-data-table { max-height: 540px; overflow: auto; border: 1px solid #e7e9ef; border-radius: 9px; }
@@ -1523,10 +1499,6 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .required-run-actions button.on { border-color: #4b47e0; background: #eef0ff; color: #3733b4; }
 .required-run-actions span { color: #a16a24; font-size: 11px; margin-right: 8px; }
 .required-run-actions span.done { color: #148673; font-weight: 700; }
-.diagnostic-evidence-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 12px 0 18px; }
-.diagnostic-evidence-grid label { display: grid; gap: 6px; }
-.diagnostic-evidence-grid label > span { color: #6a7182; font-size: 11.5px; line-height: 1.5; }
-.diagnostic-evidence-grid textarea { box-sizing: border-box; width: 100%; border: 1px solid #d8dce7; border-radius: 8px; padding: 9px; font: inherit; resize: vertical; }
 .required-check-status { margin: 10px 0; border-radius: 8px; padding: 9px 11px; background: #fff3dd; color: #875b1e; font-size: 12px; }
 .required-check-status.done { background: #eaf8f4; color: #147866; }
 .qc-followup-field { display: grid; gap: 6px; margin: 12px 0; padding: 12px; border-radius: 9px; background: #f7f8fb; }
@@ -1549,10 +1521,8 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .intro-mechanisms button { display: grid; gap: 2px; min-width: 170px; border: 1px solid rgba(255,255,255,.2); border-radius: 9px; background: rgba(255,255,255,.06); color: #e8edfb; padding: 8px 11px; text-align: left; cursor: pointer; }
 .intro-mechanisms button.on { border-color: #78a9f2; background: rgba(74,132,220,.25); }
 .intro-mechanisms button span { color: #aebbd8; font-size: 10.5px; }
-@media (max-width: 760px) { .diagnostic-evidence-grid { grid-template-columns: 1fr; } }
 @media (max-width: 760px) {
-  .cer-grid { grid-template-columns: 1fr; }
-  .cer-field > span { min-height: 0; }
-  .cer-head { align-items: stretch; flex-direction: column; }
-  .cer-note { align-self: flex-start; }
+  .quiz-head { align-items: stretch; flex-direction: column; }
+  .quiz-note { align-self: flex-start; white-space: normal; }
+  .quiz-box { padding: 14px; }
 }

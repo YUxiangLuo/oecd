@@ -1426,7 +1426,7 @@ def save_session(
     base_revision: int,
     merge: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]],
 ) -> dict[str, Any] | None:
-    """写入会话;并发写入时按记录级时间戳合并,不整份覆盖。
+    """写入会话;并发写入时按记录级与字段级时间戳合并,不整份覆盖。
 
     ``base_revision`` 是客户端读到的版本。若服务端已被另一个标签页推进,
     则用 ``merge`` 把两边的步骤记录合并后再写,避免丢掉任何一边的实验。
@@ -1460,7 +1460,7 @@ def save_session(
                 raise LegacySessionReadOnly("迁移前会话未经可信证据验证；请先导出记录并显式重新开始")
 
             # 即使客户端带回的 ``base_revision`` 正好等于 current，也必须做
-            # 记录级合并。服务端本身也会写会话（目前是报告生成写入 step 16），
+            # 记录/字段级合并。服务端本身也会写会话（目前是报告生成写入 step 16），
             # 而浏览器里可能已有一个在该写入前排队的防抖 PUT。它收到报告响应后
             # 会更新 revision，却仍可能携带那份缺少 step 16 的旧本地快照；若因
             # revision 相同就整份采用 incoming，服务端刚写下的可信记录会被删除。
@@ -1531,6 +1531,99 @@ def clear_session(username: str) -> None:
             "DELETE FROM experiment_sessions s USING accounts a WHERE s.account_id = a.id AND a.username = %s",
             (username,),
         )
+
+
+def reset_active_attempts_for_quiz(quiz_version: str, manifest_id: str) -> dict[str, Any]:
+    """为新版题库一次性归档所有仍可写的当前 attempt。
+
+    历史 session、报告、提交和评分均留在旧 attempt 上；只撤销旧学习凭证并为
+    同一 assignment/enrollment 创建一个空白 attempt。audit_log 中的版本标记让
+    同一部署命令可安全重跑而不会连续重置学生。
+    """
+    if not quiz_version or len(quiz_version) > 80:
+        raise ValueError("quiz_version 必须是 1..80 字符的稳定版本号")
+    if not manifest_id:
+        raise ValueError("重置 attempt 需要当前 manifest_id")
+    action = "quiz.active_attempts_reset"
+    with conn() as c:
+        with c.transaction():
+            _lock_schema(c)
+            prior = c.execute(
+                "SELECT details,created_at FROM audit_log"
+                " WHERE action=%s AND target_type='quiz_version' AND target_id=%s"
+                " ORDER BY id DESC LIMIT 1",
+                (action, quiz_version),
+            ).fetchone()
+            if prior:
+                raw_details = prior.get("details")
+                details: dict[str, Any] = raw_details if isinstance(raw_details, dict) else {}
+                return {
+                    "quiz_version": quiz_version,
+                    "already_applied": True,
+                    "reset_count": int(details.get("reset_count") or 0),
+                    "applied_at": prior["created_at"],
+                }
+
+            attempts = c.execute(
+                "SELECT ea.id AS attempt_id,ea.assignment_id,ea.enrollment_id,en.account_id"
+                " FROM experiment_attempts ea"
+                " JOIN assignments ass ON ass.id=ea.assignment_id"
+                " JOIN course_runs cr ON cr.id=ass.course_run_id"
+                " JOIN enrollments en ON en.id=ea.enrollment_id"
+                " JOIN accounts acc ON acc.id=en.account_id"
+                " WHERE ea.state='active' AND ass.active AND NOT cr.archived"
+                " AND en.active AND acc.active AND ass.manifest_id=%s"
+                " AND (ass.opens_at IS NULL OR ass.opens_at<=now())"
+                " AND (ass.due_at IS NULL OR ass.due_at>now())"
+                " ORDER BY ea.id FOR UPDATE OF ea",
+                (manifest_id,),
+            ).fetchall()
+            account_ids: set[int] = set()
+            new_attempt_ids: list[int] = []
+            for attempt in attempts:
+                c.execute(
+                    "UPDATE learning_evidence_events SET revoked_at=coalesce(revoked_at,now()) WHERE attempt_id=%s",
+                    (attempt["attempt_id"],),
+                )
+                c.execute(
+                    "UPDATE experiment_attempts SET state='archived',updated_at=now() WHERE id=%s",
+                    (attempt["attempt_id"],),
+                )
+                next_no = _required(
+                    c.execute(
+                        "SELECT coalesce(max(attempt_no),0)+1 AS n FROM experiment_attempts"
+                        " WHERE assignment_id=%s AND enrollment_id=%s",
+                        (attempt["assignment_id"], attempt["enrollment_id"]),
+                    ).fetchone(),
+                    "next quiz reset attempt number",
+                )["n"]
+                created = _required(
+                    c.execute(
+                        "INSERT INTO experiment_attempts(assignment_id,enrollment_id,attempt_no)"
+                        " VALUES (%s,%s,%s) RETURNING id",
+                        (attempt["assignment_id"], attempt["enrollment_id"], next_no),
+                    ).fetchone(),
+                    "create quiz reset attempt",
+                )
+                new_attempt_ids.append(int(created["id"]))
+                account_ids.add(int(attempt["account_id"]))
+
+            if account_ids:
+                ids = sorted(account_ids)
+                c.execute("DELETE FROM step_progress WHERE account_id=ANY(%s)", (ids,))
+                c.execute("DELETE FROM experiment_sessions WHERE account_id=ANY(%s)", (ids,))
+            details = {
+                "quiz_version": quiz_version,
+                "manifest_id": manifest_id,
+                "reset_count": len(attempts),
+                "new_attempt_ids": new_attempt_ids,
+            }
+            c.execute(
+                "INSERT INTO audit_log(actor_name,action,target_type,target_id,details)"
+                " VALUES ('deployment',%s,'quiz_version',%s,%s)",
+                (action, quiz_version, json.dumps(details)),
+            )
+            return {**details, "already_applied": False}
 
 
 # ---------------------------------------------------------------- 服务端生成的报告

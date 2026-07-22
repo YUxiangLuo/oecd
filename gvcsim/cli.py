@@ -7,6 +7,7 @@ regress   跑指定 outcome 的教学实证回归并打印系数表
 report    生成实验报告(步骤16)
 serve     启动 API 服务(供前端使用)
 classroom-init  初始化教学数据库(建库/建表/播种演示数据)
+classroom-reset-attempts  为新版题库归档开放作业的当前尝试
 """
 
 import argparse
@@ -60,6 +61,10 @@ def main() -> None:
     p.add_argument("--reset", action="store_true", help="删除并重建全部教学表(会清空班级/学生/提交数据)")
     p.add_argument("--teacher-username", help="显式创建首位教师（口令从 GVCSIM_INITIAL_TEACHER_PASSWORD 读取）")
     p.add_argument("--teacher-name", default="课程管理员", help="首位教师显示名")
+
+    p = sub.add_parser("classroom-reset-attempts", help="为新版理解检查归档开放作业的当前尝试")
+    p.add_argument("--quiz-version", required=True, help="稳定题库版本，例如 course-quiz-v1")
+    p.add_argument("--confirm", action="store_true", help="确认归档旧 attempt 并为学生创建空白 attempt")
 
     args = parser.parse_args()
 
@@ -221,6 +226,21 @@ def main() -> None:
             classroom_db.provision_teacher(args.teacher_username, args.teacher_name, password)
             print(f"已创建首位教师:{args.teacher_username}（请登录后立即轮换初始口令）")
         print(f"教学数据库就绪:{dbname}(schema {classroom_db.TEACHING_DB_VERSION})")
+
+    elif args.command == "classroom-reset-attempts":
+        if not args.confirm:
+            raise SystemExit("该命令会归档开放作业的当前 attempt；确认备份后加 --confirm")
+        from gvcsim import artifacts
+        from gvcsim.classroom import db as classroom_db
+
+        reset_result = classroom_db.reset_active_attempts_for_quiz(args.quiz_version, artifacts.manifest_id())
+        if reset_result["already_applied"]:
+            print(
+                f"题库 {args.quiz_version} 已执行过 attempt 重置；"
+                f"本次未重复操作（原重置 {reset_result['reset_count']} 个）"
+            )
+        else:
+            print(f"已为题库 {args.quiz_version} 归档并重建 {reset_result['reset_count']} 个当前 attempt")
 
 
 if __name__ == "__main__":

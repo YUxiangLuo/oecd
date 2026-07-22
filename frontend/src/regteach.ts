@@ -1,7 +1,7 @@
 /** 回归工作台共用的政策系数分类工具。教学文案集中在 regression-lessons.ts。 */
 import type { CoefStat, RegressionResponse } from "./types";
 
-export interface PolicyCoefficientGroups {
+interface PolicyCoefficientGroups {
   policy: CoefStat[];
   main: CoefStat[];
   interactions: CoefStat[];

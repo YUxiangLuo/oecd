@@ -1,5 +1,21 @@
 export type RegressionOutcome = "trade" | "production" | "length" | "network";
 
+interface QuizOption {
+  id: string;
+  label: string;
+}
+
+interface QuizQuestion {
+  id: string;
+  prompt: string;
+  options: QuizOption[];
+}
+
+interface StepQuiz {
+  version: string;
+  questions: QuizQuestion[];
+}
+
 export interface Step {
   n: number;
   stage: number;
@@ -13,11 +29,12 @@ export interface Step {
   concept: string;
   tip: string;
   deps: string[];
+  /** 步骤 1–15 的固定理解检查；第 16 步以报告生成作为完成证据。 */
+  quiz?: StepQuiz;
 }
 
 /** 证据规则:唯一来源是服务端 gvcsim/evidence.py,前端只据此显示提示与计数。 */
 export interface EvidenceRules {
-  min_judgment_chars: number;
   required_shock_types: string[];
 }
 
@@ -69,18 +86,14 @@ export interface Meta {
   } | null;
 }
 
-/** Lightweight Claim–Evidence–Reasoning record used by the descriptive labs. */
-export interface CerEvidence {
-  claim: string;
-  /** Must name the selected object/period/metric and include the observed value. */
-  evidence: string;
-  reasoning: string;
-  boundary: string;
-}
-
-export interface CerStepEvidence {
-  cer?: Partial<CerEvidence>;
-  /** Server-issued binding for the current operation context + CER draft. */
+export interface QuizStepEvidence {
+  quiz?: {
+    version: string;
+    answers: Record<string, string>;
+  };
+  /** Server-issued binding for a fully correct answer set. */
+  quiz_id?: string;
+  /** Server-issued binding for the current real operation context. */
   evidence_id?: string;
 }
 
@@ -242,16 +255,15 @@ export interface PagedRows {
 export type IndustryPage = PagedRows;
 
 /** 实验会话:逐步实验状态的可恢复模型(契约见 gvcsim/session.py)。 */
-/**
- * v4 requires server-issued learning evidence. v3 click-only evidence remains
- * visible only in quarantined legacy storage and is never treated as trusted.
- */
-export const SESSION_VERSION = "experiment-session-v4";
+/** v5 同时要求服务端签发的操作凭证与选择题凭证；其它会话版本一律拒绝。 */
+export const SESSION_VERSION = "experiment-session-v5";
 
 export interface SessionRecord<T = unknown> {
   data: T;
-  /** 记录级时间戳;并发写入时服务端按它逐步合并,而不是整份覆盖。 */
+  /** 记录级时间戳；不同步骤并发写入时按它合并。 */
   updated_at: string;
+  /** 顶层字段时间戳；同一步骤的操作凭证与选择题凭证据此独立合并。 */
+  field_updated_at: Record<string, string>;
 }
 
 /** 确实跨步骤共享的实验状态(白名单,与 gvcsim/session.py 的 SHARED_KEYS 一致)。 */
@@ -280,7 +292,7 @@ export interface StepEvidenceApi<T = Record<string, unknown>> {
 }
 
 /** 单步完成判定。由服务端从会话重算(gvcsim/evidence.py),客户端不参与判定。 */
-export interface StepEvidence {
+interface StepEvidence {
   step: number;
   complete: boolean;
   /** 未完成时还差什么;直接展示给学生。 */
@@ -325,7 +337,7 @@ export interface GeneratedReport {
 }
 
 /** 报告里一步回归的摘要:服务端复估后写入 provenance.runs,提交时随 design 一起冻结。 */
-export interface ReportRun {
+interface ReportRun {
   step: number;
   outcome: string;
   design: string;
@@ -681,7 +693,7 @@ export interface SubmissionHistory {
 /** submissions.design:提交时冻结的溯源标量 + 各步回归摘要
  * (由 gvcsim/classroom/db.py 的 submit_report 用 jsonb_build_object 组装)。
  * 曾是 Record<string, unknown>,于是把 runs 数组 String() 成 "[object Object]" 也能过类型检查。 */
-export interface SubmissionDesign {
+interface SubmissionDesign {
   report_key: string;
   manifest_id: string;
   session_revision: number;

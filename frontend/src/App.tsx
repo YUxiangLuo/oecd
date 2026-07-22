@@ -13,6 +13,7 @@ import {
   type RegressionSettings,
 } from "./regression";
 import { LoginPage } from "./login";
+import { QuizPanel } from "./step-evidence";
 import { TeacherDashboard } from "./teacher";
 import { ToastHost } from "./toast";
 import type { Announcement, AuthUser, EvidenceRules, Meta, Step, StepEvidenceApi, StepsResponse } from "./types";
@@ -52,7 +53,7 @@ function Lab({ step, meta, evidence, rules, onSessionChanged, regressionSettings
   onNavigateStep: (step: number) => void;
 }) {
   if (step.lab === "db") return <DbLab evidence={evidence} />;
-  if (step.lab === "qc") return meta ? <QcLab meta={meta} evidence={evidence} rules={rules} onNavigateStep={onNavigateStep} /> : null;
+  if (step.lab === "qc") return meta ? <QcLab meta={meta} evidence={evidence} onNavigateStep={onNavigateStep} /> : null;
   if (step.lab === "shock") return meta ? <ShockLab meta={meta} step={step} evidence={evidence} rules={rules} /> : null;
   // key:同一实验台横跨多步时必须按步重挂载。否则 country 等步内状态会跨步带过去,
   // 记证据的 effect 因依赖未变而不触发,新到的那一步拿不到"当前看的是谁"。
@@ -64,7 +65,6 @@ function Lab({ step, meta, evidence, rules, onSessionChanged, regressionSettings
       key={step.regression_outcome}
       step={step}
       evidence={evidence}
-      rules={rules}
       settings={regressionSettings}
       onSettingsChange={onRegressionSettingsChange}
       history={regressionHistory}
@@ -558,7 +558,7 @@ export default function App() {
                 发现旧课程、旧数据版本或用户名作用域的记录。它已被隔离为只读旧记录，
                 不会合并、不会自动回推，也不会计入本次作业完成度。
               </div>
-              <div className="cer-submit-row" style={{ marginTop: 10 }}>
+              <div className="evidence-submit-row" style={{ marginTop: 10 }}>
                 <button type="button" className="secondary" disabled={!session.recovery.length || resettingAttempt} onClick={exportRecovery}>
                   导出隔离记录
                 </button>
@@ -610,14 +610,13 @@ export default function App() {
                       onRegressionHistoryChange={setRegressionHistory}
                       onNavigateStep={navigateStep}
                     />
+                    <QuizPanel key={step.n} step={step} evidence={stepEvidence} />
                   </div>
                 ) : assignmentLocked ? (
                   <div className="error-box assignment-lock" role="alert">
                     <h3>实验台已锁定</h3>
                     <p>
-                      {assignmentClosed
-                        ? `作业已于 ${deadlineLabel(assignmentDueAt)} 截止。当前页面只用于浏览既有记录，所有实验输入和提交均已关闭。`
-                        : meta?.manifest_mismatch
+                      {meta?.manifest_mismatch
                         ? "当前产物与作业冻结的数据版本不一致，不能生成或提交学习证据。"
                         : session.stale
                           ? "检测到旧课程、旧数据版本或未验证 attempt 的记录。请先在上方导出留档，并显式归档旧 attempt 后重新开始。"
@@ -631,18 +630,23 @@ export default function App() {
                     <p>后续指标、回归和报告不会开放。返回步骤 2 修改处置；或等待教师发布修正并通过复检的新数据版本。</p>
                     <button type="button" className="primary" onClick={() => navigateStep(2)}>返回步骤 2</button>
                   </div>
-                ) : <Lab
-                  step={step}
-                  meta={meta}
-                  evidence={stepEvidence}
-                  rules={stepsData.evidence_rules}
-                  onSessionChanged={session.reload}
-                  regressionSettings={regressionSettings}
-                  onRegressionSettingsChange={setRegressionSettings}
-                  regressionHistory={regressionHistory}
-                  onRegressionHistoryChange={setRegressionHistory}
-                  onNavigateStep={navigateStep}
-                />}
+                ) : (
+                  <>
+                    <Lab
+                      step={step}
+                      meta={meta}
+                      evidence={stepEvidence}
+                      rules={stepsData.evidence_rules}
+                      onSessionChanged={session.reload}
+                      regressionSettings={regressionSettings}
+                      onRegressionSettingsChange={setRegressionSettings}
+                      regressionHistory={regressionHistory}
+                      onRegressionHistoryChange={setRegressionHistory}
+                      onNavigateStep={navigateStep}
+                    />
+                    <QuizPanel key={step.n} step={step} evidence={stepEvidence} />
+                  </>
+                )}
               </div>
             </main>
 

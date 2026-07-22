@@ -1,8 +1,8 @@
-export interface SignedDomain {
+interface SignedDomain {
   negative: number;
   positive: number;
 }
-export interface SignedSegment {
+interface SignedSegment {
   value: number;
   leftPct: number;
   widthPct: number;

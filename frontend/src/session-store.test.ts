@@ -20,6 +20,7 @@ import {
   localKey,
   makeRecord,
   mergeSessions,
+  patchStep,
   quarantineLegacy,
   readLegacyQuarantine,
   reconcileOnLoad,
@@ -27,7 +28,6 @@ import {
   readStep,
   saveLocal,
   writeShared,
-  writeStep,
 } from "./session-store";
 import { SESSION_VERSION, type ExperimentSession } from "./types";
 
@@ -51,7 +51,7 @@ describe("session-store", () => {
   beforeEach(() => localStorage.clear());
 
   test("round-trips through localStorage", () => {
-    const s = writeStep(emptySession(MID), 4, { country: "CHN" });
+    const s = patchStep(emptySession(MID), 4, { country: "CHN" });
     saveLocal(SCOPE, s);
     expect(loadLocal(SCOPE)).toEqual(s);
     clearLocal(SCOPE);
@@ -59,7 +59,7 @@ describe("session-store", () => {
   });
 
   test("keeps sessions of different accounts apart", () => {
-    saveLocal(scopeFor("alice"), writeStep(emptySession(MID), 4, { country: "CHN" }));
+    saveLocal(scopeFor("alice"), patchStep(emptySession(MID), 4, { country: "CHN" }));
     expect(loadLocal(scopeFor("bob"))).toBeNull();
     expect(localKey(scopeFor("alice"))).not.toBe(localKey(scopeFor("bob")));
   });
@@ -76,7 +76,7 @@ describe("session-store", () => {
   });
 
   test("quarantines username-only legacy state without loading it into a scoped cache", () => {
-    const old = writeStep(emptySession(MID), 16, { report_key: "old-db" });
+    const old = patchStep(emptySession(MID), 16, { report_key: "old-db" });
     localStorage.setItem("gvcsim_session:student", JSON.stringify(old));
     expect(quarantineLegacy("student")).toBe(true);
     expect(localStorage.getItem("gvcsim_session:student")).toBeNull();
@@ -98,8 +98,8 @@ describe("session-store", () => {
     expect(isValidSession({ version: SESSION_VERSION, manifest_id: MID, steps: { "4": { data: {} } } })).toBe(false);
   });
 
-  test("read/write step state", () => {
-    const s = writeStep(emptySession(MID), 12, { shock: "tariff" });
+  test("read/patch step state", () => {
+    const s = patchStep(emptySession(MID), 12, { shock: "tariff" });
     expect(readStep<{ shock: string }>(s, 12)?.shock).toBe("tariff");
     expect(readStep(s, 4)).toBeUndefined();
   });
@@ -118,6 +118,50 @@ describe("session-store", () => {
     expect(readStep<object>(mergeSessions(session({ "4": older }), session({ "4": newer })), 4)).toEqual({ v: "new" });
     // 本次写入者不必然更新:它可能拿着很旧的状态。
     expect(readStep<object>(mergeSessions(session({ "4": newer }), session({ "4": older })), 4)).toEqual({ v: "new" });
+  });
+
+  test("same-step concurrent action and quiz submissions preserve both credentials", () => {
+    const initial = session({
+      "3": makeRecord({ compared: ["CHN", "USA"] }, "2026-07-16T10:00:00.000Z"),
+    });
+    const actionTab = patchStep(
+      initial,
+      3,
+      { compared: ["CHN", "USA"], evidence_id: "action-event" },
+      "2026-07-16T10:01:00.000Z",
+    );
+    const quizTab = patchStep(
+      initial,
+      3,
+      {
+        quiz: { version: "course-quiz-v1", answers: { q1: "a" } },
+        quiz_id: "quiz-event",
+      },
+      "2026-07-16T10:02:00.000Z",
+    );
+
+    expect(readStep<Record<string, unknown>>(mergeSessions(actionTab, quizTab), 3)).toEqual({
+      compared: ["CHN", "USA"],
+      evidence_id: "action-event",
+      quiz: { version: "course-quiz-v1", answers: { q1: "a" } },
+      quiz_id: "quiz-event",
+    });
+  });
+
+  test("a newer field tombstone prevents a stale credential from reappearing", () => {
+    const original = session({
+      "3": makeRecord(
+        { compared: ["CHN", "USA"], evidence_id: "old-event" },
+        "2026-07-16T10:00:00.000Z",
+      ),
+    });
+    const actionTab = patchStep(original, 3, { evidence_id: undefined }, "2026-07-16T10:02:00.000Z");
+    const quizTab = patchStep(original, 3, { quiz_id: "quiz-event" }, "2026-07-16T10:01:00.000Z");
+
+    expect(readStep<Record<string, unknown>>(mergeSessions(actionTab, quizTab), 3)).toEqual({
+      compared: ["CHN", "USA"],
+      quiz_id: "quiz-event",
+    });
   });
 
   test("isStale detects another artifact set", () => {

@@ -1,6 +1,6 @@
 import type { RegressionOutcome } from "./types";
 
-export interface RegressionLesson {
+interface RegressionLesson {
   outcome: RegressionOutcome;
   metric: string;
   shortMetric: string;
