@@ -5,7 +5,14 @@ import type { EvidenceRules, Meta, QcCheck, QuizStepEvidence, ShockEvent, Step, 
 import { countryLabel, sectorLabel } from "../../viz";
 import { CrosswalkDemo } from "./step2/crosswalk-demo";
 import { EventList } from "./step2/event-list";
-import { eventKey, filtersForEvent, filtersMatchEvent, shockTypeLabel, type ShockPanelFilters } from "./step2/model";
+import {
+  eventKey,
+  filtersForEvent,
+  filtersMatchEvent,
+  isShockActionReady,
+  shockTypeLabel,
+  type ShockPanelFilters,
+} from "./step2/model";
 import { SelectedEventBar } from "./step2/selected-event";
 import { ShockPanel } from "./step2/shock-panel";
 import { QcChecksTable } from "./qc-checks-table";
@@ -29,7 +36,6 @@ interface ShockEvidence extends QuizStepEvidence, Record<string, unknown> {
   viewed_shock_types?: string[];
   viewed_events?: string[];
   event_details?: ViewedShockEvent[];
-  qc_reviewed?: boolean;
 }
 
 export function ShockLab({ meta, step, evidence, rules }: {
@@ -98,7 +104,7 @@ export function ShockLab({ meta, step, evidence, rules }: {
         concept={step.concept}
         todo={[
           "从左侧列表选一个政策事件(行内时间条给出宣布→生效时点),右侧即联动出它的国家×行业冲击",
-          "关税 / 制裁 / 出口管制三类各看一个(留下证据)",
+          "关税 / 制裁 / 出口管制三类各看一个,随后直接提交操作证据",
           "记住:这些冲击就是接下来第 12–15 步回归的处理变量",
         ]}
       />
@@ -150,17 +156,7 @@ export function ShockLab({ meta, step, evidence, rules }: {
         {shockQcError ? (
           <div className="error-box">{shockQcError}</div>
         ) : (
-          <>
-            <label className="qc-review-check">
-              <input
-                type="checkbox"
-                checked={evidence.data?.qc_reviewed === true}
-                onChange={(event) => evidence.save({ qc_reviewed: event.target.checked, evidence_id: "" })}
-              />
-              我已检查异常项；本步理解检查会确认它如何限制后续回归。
-            </label>
-            <QcChecksTable rows={shockChecks} />
-          </>
+          <QcChecksTable rows={shockChecks} />
         )}
       </details>
 
@@ -169,11 +165,10 @@ export function ShockLab({ meta, step, evidence, rules }: {
         step={step.n}
         kind="shock"
         evidence={evidence}
-        ready={rules.required_shock_types.every((type) => evidence.data?.viewed_shock_types?.includes(type)) && evidence.data?.qc_reviewed === true}
+        ready={isShockActionReady(evidence.data?.viewed_shock_types, rules.required_shock_types)}
         context={{
           viewed_shock_types: evidence.data?.viewed_shock_types,
           viewed_events: evidence.data?.viewed_events,
-          qc_reviewed: evidence.data?.qc_reviewed,
         }}
       />
     </div>

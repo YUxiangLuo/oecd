@@ -234,7 +234,6 @@ _ACTION_FIELDS = {
     "shock": (
         "viewed_shock_types",
         "viewed_events",
-        "qc_reviewed",
         "shock_qc_failures",
     ),
 }

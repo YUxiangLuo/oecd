@@ -119,6 +119,34 @@ def test_steps_api_exposes_questions_but_not_answer_keys():
             assert "correct" not in question and "explanation" not in question
 
 
+@needs_artifacts
+def test_shock_evidence_needs_only_three_viewed_event_types():
+    """冲击 QC 由服务端自动绑定，学生不必再勾选隐藏的额外确认框。"""
+    student = _login("student")
+    payload = {
+        "viewed_shock_types": ["tariff", "sanctions", "export_control"],
+        "viewed_events": [
+            "美国232钢铝关税",
+            "OFAC/二级制裁风格:俄罗斯能源金融限制",
+            "BIS 实体清单:中芯国际 SMIC",
+        ],
+    }
+
+    response = client.post(
+        "/api/classroom/evidence/issue",
+        headers=student,
+        json={"step": 11, "kind": "shock", "payload": payload},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["evidence_id"]
+    assert body["evidence"]["viewed_shock_types"] == payload["viewed_shock_types"]
+    assert body["evidence"]["viewed_events"] == payload["viewed_events"]
+    assert "qc_reviewed" not in body["evidence"]
+    assert "shock_qc_failures" in body["evidence"]
+
+
 def test_teacher_creates_student_who_can_login():
     t = _login("teacher")
     resp = client.post(

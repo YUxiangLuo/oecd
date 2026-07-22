@@ -335,8 +335,8 @@ def _verify_learning_payload(step: int, kind: str, payload: dict[str, Any]) -> N
             industry=step == 10,
         )
     elif kind == "shock":
-        if payload.get("qc_reviewed") is not True:
-            raise ValueError("必须查看并确认当前 shock panel QC 后才能签发证据")
+        # 学生只需真正打开三类事件；当前产物的 shock QC 由服务端自动读取并绑定，
+        # 不再要求学生到折叠面板里额外勾选一个与完成清单不一致的确认框。
         shock_qc_path = PROCESSED_DIR / "qc_shocks.json"
         artifacts.validate_artifact(shock_qc_path)
         shock_qc = json.loads(shock_qc_path.read_text(encoding="utf-8"))
