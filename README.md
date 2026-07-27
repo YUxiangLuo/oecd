@@ -111,6 +111,10 @@ uv run gvcsim serve --reload
 
 API 默认位于 `http://localhost:8000`，交互式文档位于 `http://localhost:8000/docs`。
 
+正式课堂的并发配置不要照搬开发态单 worker。64 核、50–100 名学生的连接池、
+多 worker、CPU admission、PostgreSQL 预算和可复现压测流程见
+[`docs/CAPACITY_100_STUDENTS.md`](./docs/CAPACITY_100_STUDENTS.md)。
+
 ### 3. 启动前端
 
 另开终端：

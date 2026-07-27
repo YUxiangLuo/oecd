@@ -3,6 +3,7 @@
 import os
 import stat
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import psycopg
 import pytest
@@ -142,6 +143,35 @@ def test_login_rate_limit_is_a_sliding_window(monkeypatch):
     with pytest.raises(auth.TooManyLoginAttempts):
         auth.check_login_rate("ip|student", now=102)
     auth.check_login_rate("ip|student", now=161)
+
+
+def test_database_login_rate_limit_is_shared_and_atomic():
+    key = "203.0.113.8|student"
+    assert db.reserve_login_attempt(key, 60, 2, now=100) is None
+    assert db.reserve_login_attempt(key, 60, 2, now=101) is None
+    assert db.reserve_login_attempt(key, 60, 2, now=102) == 59
+
+    # 成功登录只清理自己的 IP+用户名键。
+    db.clear_login_attempts(key)
+    assert db.reserve_login_attempt(key, 60, 2, now=103) is None
+
+
+def test_concurrent_database_login_reservations_cannot_overshoot_limit():
+    key = "198.51.100.9|same-user"
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        results = list(executor.map(lambda _index: db.reserve_login_attempt(key, 300, 3, now=100), range(10)))
+    assert results.count(None) == 3
+    assert sum(result is not None for result in results) == 7
+
+
+def test_login_api_preserves_retry_after_from_shared_limiter(monkeypatch):
+    def saturated(_key: str) -> None:
+        raise auth.TooManyLoginAttempts(17)
+
+    monkeypatch.setattr(auth, "reserve_login_attempt", saturated)
+    response = client.post("/api/auth/login", json={"username": "student", "password": "wrong"})
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "17"
 
 
 def test_local_secret_is_created_with_owner_only_permissions(tmp_path, monkeypatch):

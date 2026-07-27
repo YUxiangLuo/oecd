@@ -1,24 +1,29 @@
 """教学数据库(PostgreSQL):班级/学生账号/实验会话/进度/报告提交评阅/公告。
 
 设计取舍:
-  - 每次操作短连接,不引入连接池;班级规模(几十人)下开销可忽略
-  - schema_meta 串行化增量迁移；v3/v4 会原地升级且保留全部课堂数据，未知版本拒绝
+  - 每个 API worker 使用有界 psycopg 连接池；池满时背压，不创建连接风暴
+  - schema_meta 串行化增量迁移；v3-v5 会原地升级且保留全部课堂数据，未知版本拒绝
   - course_run → assignment → enrollment → experiment_attempt 是所有学习记录的作用域
   - submission_versions / grading_events 追加写，保留不可变提交与评分历史
   - 数据库不可用统一抛 Unavailable；生产认证 fail-closed
-  - 短期令牌在 auth_sessions 登记，可撤销且逐请求复查账号状态
+  - 短期令牌在 auth_sessions 登记；登录限流状态由 PostgreSQL 跨 worker 共享
 """
 
+import atexit
 import hashlib
 import ipaddress
 import json
+import os
 import secrets
+import threading
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool, PoolClosed, PoolTimeout, TooManyRequests
 
 from gvcsim import config
 
@@ -27,9 +32,8 @@ _SCHEMA_LOCK_ID = 736_861_016  # 固定事务级 advisory lock，串行化首次
 # 会话写入的 advisory lock 命名空间(与 account_id 组成两段锁键,不与建表锁冲突)
 _SESSION_LOCK_NS = 736_861_017
 
-# v5 在 v4 的多课程模型上增加学生显式作业选择，避免“最新作业”
-# 隐式覆盖已完成作业和评分的访问入口。
-TEACHING_DB_VERSION = "gvcsim-teaching-db-v5"
+# v6 在 v5 上增加跨 worker 的原子登录限流；不改变既有课堂记录。
+TEACHING_DB_VERSION = "gvcsim-teaching-db-v6"
 
 
 class Unavailable(Exception):
@@ -262,6 +266,15 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
   created_at   timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS auth_sessions_account_idx ON auth_sessions(account_id);
+CREATE TABLE IF NOT EXISTS auth_login_attempts (
+  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  rate_key_hash text NOT NULL,
+  attempted_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS auth_login_attempts_key_time_idx
+  ON auth_login_attempts(rate_key_hash, attempted_at);
+CREATE INDEX IF NOT EXISTS auth_login_attempts_time_idx
+  ON auth_login_attempts(attempted_at);
 CREATE TABLE IF NOT EXISTS audit_log (
   id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   actor_id    bigint REFERENCES accounts(id) ON DELETE SET NULL,
@@ -284,6 +297,9 @@ CREATE TABLE IF NOT EXISTS announcements (
 """
 
 _schema_ready = False
+_pool: ConnectionPool[psycopg.Connection[dict[str, Any]]] | None = None
+_pool_signature: tuple[Any, ...] | None = None
+_pool_lock = threading.RLock()
 
 
 def _lock_schema(c: psycopg.Connection[dict[str, Any]]) -> None:
@@ -353,6 +369,21 @@ def _migrate_v4_to_v5(c: psycopg.Connection[dict[str, Any]]) -> None:
         " assignment_id bigint NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,"
         " updated_at timestamptz NOT NULL DEFAULT now())"
     )
+    c.execute("UPDATE schema_meta SET version = 'gvcsim-teaching-db-v5' WHERE singleton")
+
+
+def _migrate_v5_to_v6(c: psycopg.Connection[dict[str, Any]]) -> None:
+    """增加跨进程共享的登录失败滑动窗口，不触碰既有认证会话。"""
+    c.execute(
+        "CREATE TABLE IF NOT EXISTS auth_login_attempts ("
+        " id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,"
+        " rate_key_hash text NOT NULL,"
+        " attempted_at timestamptz NOT NULL DEFAULT now())"
+    )
+    c.execute(
+        "CREATE INDEX IF NOT EXISTS auth_login_attempts_key_time_idx ON auth_login_attempts(rate_key_hash,attempted_at)"
+    )
+    c.execute("CREATE INDEX IF NOT EXISTS auth_login_attempts_time_idx ON auth_login_attempts(attempted_at)")
     c.execute("UPDATE schema_meta SET version = %s WHERE singleton", (TEACHING_DB_VERSION,))
 
 
@@ -460,8 +491,12 @@ def _ensure_legacy_context(c: psycopg.Connection[dict[str, Any]]) -> None:
 
 
 def initialize_schema() -> list[str]:
-    """建表/安全迁移并播种；从 v3/v4 升级不需要 reset。"""
+    """建表/安全迁移并播种；从 v3-v5 升级不需要 reset。"""
     global _schema_ready
+    # 测试/运维将 ready 复位通常意味着 schema 或 DSN 已切换；旧连接上的
+    # prepared statement/事务状态不能跨越这条边界。
+    if not _schema_ready:
+        close_pool()
     c = _connect()
     applied: list[str] = []
     try:
@@ -477,6 +512,11 @@ def initialize_schema() -> list[str]:
             if version == "gvcsim-teaching-db-v4":
                 _migrate_v4_to_v5(c)
                 applied.append("安全迁移 v4 → v5（增加学生显式作业选择）")
+                version = "gvcsim-teaching-db-v5"
+            if version == "gvcsim-teaching-db-v5":
+                _migrate_v5_to_v6(c)
+                applied.append("安全迁移 v5 → v6（增加跨 worker 登录限流）")
+                version = TEACHING_DB_VERSION
             elif version not in {None, TEACHING_DB_VERSION}:
                 raise SchemaVersionMismatch(
                     f"教学库 schema 版本为 {version}，当前代码需要 {TEACHING_DB_VERSION}；"
@@ -517,16 +557,122 @@ def _connect() -> psycopg.Connection[dict[str, Any]]:
     if not config.PG_DSN:
         raise Unavailable("缺少 GVCSIM_PG_DSN；教学数据库未配置")
     try:
-        return psycopg.connect(config.PG_DSN, row_factory=dict_row, connect_timeout=3)
+        return psycopg.connect(
+            config.PG_DSN,
+            row_factory=dict_row,
+            connect_timeout=config.DB_CONNECT_TIMEOUT_SECONDS,
+            application_name="gvcsim-schema",
+            options=(
+                f"-c statement_timeout={config.DB_STATEMENT_TIMEOUT_MS} -c idle_in_transaction_session_timeout=30000"
+            ),
+        )
     except psycopg.OperationalError as e:
         raise Unavailable(str(e)) from e
 
 
-def conn() -> psycopg.Connection[dict[str, Any]]:
-    """拿一个已保证建表并完成迁移的连接(with 语句用完即关)。"""
+def _current_pool_signature() -> tuple[Any, ...]:
+    return (
+        os.getpid(),  # fork/spawn 后每个 worker 必须拥有自己的池和后台线程
+        config.PG_DSN,
+        config.DB_POOL_MIN_SIZE,
+        config.DB_POOL_MAX_SIZE,
+        config.DB_POOL_TIMEOUT_SECONDS,
+        config.DB_POOL_MAX_WAITING,
+        config.DB_POOL_MAX_LIFETIME_SECONDS,
+        config.DB_POOL_MAX_IDLE_SECONDS,
+        config.DB_CONNECT_TIMEOUT_SECONDS,
+        config.DB_STATEMENT_TIMEOUT_MS,
+    )
+
+
+def _get_pool() -> ConnectionPool[psycopg.Connection[dict[str, Any]]]:
+    global _pool, _pool_signature
+    if not config.PG_DSN:
+        raise Unavailable("缺少 GVCSIM_PG_DSN；教学数据库未配置")
+    signature = _current_pool_signature()
+    with _pool_lock:
+        if _pool is not None and _pool_signature == signature and not _pool.closed:
+            return _pool
+        if _pool is not None:
+            _pool.close()
+        try:
+            pool: ConnectionPool[psycopg.Connection[dict[str, Any]]] = ConnectionPool(
+                conninfo=config.PG_DSN,
+                min_size=config.DB_POOL_MIN_SIZE,
+                max_size=config.DB_POOL_MAX_SIZE,
+                kwargs={
+                    "row_factory": dict_row,
+                    "connect_timeout": config.DB_CONNECT_TIMEOUT_SECONDS,
+                    "application_name": f"gvcsim-api-{os.getpid()}",
+                    "options": (
+                        f"-c statement_timeout={config.DB_STATEMENT_TIMEOUT_MS} "
+                        "-c idle_in_transaction_session_timeout=30000"
+                    ),
+                },
+                open=False,
+                timeout=config.DB_POOL_TIMEOUT_SECONDS,
+                max_waiting=config.DB_POOL_MAX_WAITING,
+                max_lifetime=config.DB_POOL_MAX_LIFETIME_SECONDS,
+                max_idle=config.DB_POOL_MAX_IDLE_SECONDS,
+                reconnect_timeout=max(5.0, config.DB_POOL_TIMEOUT_SECONDS),
+                num_workers=2,
+                name=f"gvcsim-{os.getpid()}",
+            )
+            pool.open()
+        except (ValueError, psycopg.Error) as error:
+            raise Unavailable(str(error)) from error
+        _pool = pool
+        _pool_signature = signature
+        return pool
+
+
+def close_pool() -> None:
+    """关闭当前进程的池；幂等，可由 FastAPI lifespan 与测试调用。"""
+    global _pool, _pool_signature
+    with _pool_lock:
+        if _pool is not None:
+            _pool.close()
+        _pool = None
+        _pool_signature = None
+
+
+def startup() -> None:
+    """服务 worker 启动闸门：迁移完成且最小连接数建立后才接收流量。"""
+    config.validate_capacity_config()
     if not _schema_ready:
         initialize_schema()
-    return _connect()
+    try:
+        _get_pool().wait(timeout=max(5.0, config.DB_POOL_TIMEOUT_SECONDS))
+    except (PoolTimeout, PoolClosed, psycopg.OperationalError) as error:
+        close_pool()
+        raise Unavailable(str(error)) from error
+
+
+@contextmanager
+def conn() -> Iterator[psycopg.Connection[dict[str, Any]]]:
+    """从池中借用事务连接；正常提交、异常回滚，最后归还而不是断开。"""
+    if not _schema_ready:
+        initialize_schema()
+    try:
+        with _get_pool().connection(timeout=config.DB_POOL_TIMEOUT_SECONDS) as connection:
+            yield connection
+    except (PoolTimeout, TooManyRequests, PoolClosed, psycopg.OperationalError) as error:
+        raise Unavailable("教学数据库繁忙或不可用，请稍后重试") from error
+
+
+def pool_stats() -> dict[str, int]:
+    """返回当前 worker 的池指标；键名稳定且不包含 DSN。"""
+    stats = _get_pool().get_stats()
+    return {
+        "min": int(stats.get("pool_min", config.DB_POOL_MIN_SIZE)),
+        "max": int(stats.get("pool_max", config.DB_POOL_MAX_SIZE)),
+        "size": int(stats.get("pool_size", 0)),
+        "available": int(stats.get("pool_available", 0)),
+        "requests_waiting": int(stats.get("requests_waiting", 0)),
+        "requests_num": int(stats.get("requests_num", 0)),
+        "requests_queued": int(stats.get("requests_queued", 0)),
+        "requests_errors": int(stats.get("requests_errors", 0)),
+    }
 
 
 def readiness() -> dict[str, Any]:
@@ -535,7 +681,12 @@ def readiness() -> dict[str, Any]:
         row = c.execute("SELECT version,now() AS checked_at FROM schema_meta WHERE singleton").fetchone()
         if not row or row["version"] != TEACHING_DB_VERSION:
             raise SchemaVersionMismatch("教学数据库 schema 未就绪")
-        return {"status": "ok", "schema_version": row["version"]}
+    # 先归还 readiness 自己借用的连接，再取 stats；否则 available 会稳定少 1，
+    # 在 min_size=1 的健康 worker 上产生“池已耗尽”的误报警。
+    return {"status": "ok", "schema_version": row["version"], "pool": pool_stats()}
+
+
+atexit.register(close_pool)
 
 
 def _seed_if_empty(c: psycopg.Connection[dict[str, Any]]) -> bool:
@@ -575,6 +726,86 @@ def _seed_if_empty(c: psycopg.Connection[dict[str, Any]]) -> bool:
 
 
 # ---------------------------------------------------------------- 账号与认证
+
+
+def _rate_key_hash(rate_key: str) -> str:
+    return hashlib.sha256(rate_key.encode("utf-8")).hexdigest()
+
+
+def reserve_login_attempt(
+    rate_key: str,
+    window_seconds: int,
+    max_attempts: int,
+    *,
+    now: float | None = None,
+) -> int | None:
+    """原子预占一次登录尝试；达到上限时返回应等待秒数。
+
+    同一 ``IP|username`` 的事务通过 advisory lock 串行化，所以多个 API
+    worker 同时收到请求时也不能越过上限。键只以 SHA-256 形式落库。
+    """
+    if window_seconds <= 0 or max_attempts <= 0:
+        raise ValueError("登录限流窗口和次数必须为正数")
+    key_hash = _rate_key_hash(rate_key)
+    lock_key = int.from_bytes(hashlib.sha256(key_hash.encode()).digest()[:8], "big", signed=True)
+    with conn() as c:
+        c.execute("SELECT pg_advisory_xact_lock(%s)", (lock_key,))
+        if now is None:
+            c.execute(
+                "DELETE FROM auth_login_attempts"
+                " WHERE rate_key_hash=%s AND attempted_at<=now()-(%s * interval '1 second')",
+                (key_hash, window_seconds),
+            )
+            row = _required(
+                c.execute(
+                    "SELECT count(*)::int AS attempts,"
+                    " extract(epoch FROM min(attempted_at)) AS oldest"
+                    " FROM auth_login_attempts WHERE rate_key_hash=%s",
+                    (key_hash,),
+                ).fetchone(),
+                "login rate count",
+            )
+            current_epoch = _required(
+                c.execute("SELECT extract(epoch FROM now()) AS value").fetchone(),
+                "login rate clock",
+            )["value"]
+            attempted_at_sql = "now()"
+            attempted_at_params: tuple[Any, ...] = ()
+        else:
+            cutoff = now - window_seconds
+            c.execute(
+                "DELETE FROM auth_login_attempts WHERE rate_key_hash=%s AND attempted_at<=to_timestamp(%s)",
+                (key_hash, cutoff),
+            )
+            row = _required(
+                c.execute(
+                    "SELECT count(*)::int AS attempts,"
+                    " extract(epoch FROM min(attempted_at)) AS oldest"
+                    " FROM auth_login_attempts WHERE rate_key_hash=%s",
+                    (key_hash,),
+                ).fetchone(),
+                "login rate count",
+            )
+            current_epoch = now
+            attempted_at_sql = "to_timestamp(%s)"
+            attempted_at_params = (now,)
+        if row["attempts"] >= max_attempts:
+            oldest = float(row["oldest"] or current_epoch)
+            return max(1, int(oldest + window_seconds - float(current_epoch)) + 1)
+        c.execute(
+            f"INSERT INTO auth_login_attempts(rate_key_hash,attempted_at) VALUES (%s,{attempted_at_sql})",
+            (key_hash, *attempted_at_params),
+        )
+        # 有 attempted_at 单列索引；低概率清理攻击者制造的旧键，表不会无界增长。
+        if secrets.randbelow(128) == 0:
+            c.execute("DELETE FROM auth_login_attempts WHERE attempted_at<now()-interval '1 day'")
+    return None
+
+
+def clear_login_attempts(rate_key: str) -> None:
+    """登录成功后清空该身份键；其他用户名不受同一校园 NAT 影响。"""
+    with conn() as c:
+        c.execute("DELETE FROM auth_login_attempts WHERE rate_key_hash=%s", (_rate_key_hash(rate_key),))
 
 
 def find_account(username: str) -> dict[str, Any] | None:

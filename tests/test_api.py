@@ -79,6 +79,18 @@ def test_health_is_public_and_checks_artifact_contract(monkeypatch):
     monkeypatch.setattr(api_mod, "processed_years", lambda: [2019, 2020])
     monkeypatch.setattr(api_mod, "manifest_id", lambda: "manifest-test")
     monkeypatch.setattr(
+        api_mod.concurrency,
+        "capacity_snapshot",
+        lambda: {
+            "coordination": "cross-process-flock",
+            "cpu_permits_total": 16,
+            "cpu_permits_used": 2,
+            "admission_total": 128,
+            "admission_used": 4,
+            "acquire_timeout_seconds": 30.0,
+        },
+    )
+    monkeypatch.setattr(
         classroom_db,
         "readiness",
         lambda: {"status": "ok", "schema_version": classroom_db.TEACHING_DB_VERSION},
@@ -95,7 +107,31 @@ def test_health_is_public_and_checks_artifact_contract(monkeypatch):
             "network_algorithm": NETWORK_ALGORITHM,
         },
         "database": {"status": "ok", "schema_version": classroom_db.TEACHING_DB_VERSION},
+        "capacity": {
+            "coordination": "cross-process-flock",
+            "cpu_permits_total": 16,
+            "cpu_permits_used": 2,
+            "admission_total": 128,
+            "admission_used": 4,
+            "acquire_timeout_seconds": 30.0,
+        },
     }
+
+
+def test_liveness_is_public_and_dependency_free(monkeypatch):
+    monkeypatch.setattr(
+        api_mod,
+        "validate_release",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("liveness must not read artifacts")),
+    )
+    monkeypatch.setattr(
+        classroom_db,
+        "readiness",
+        lambda: (_ for _ in ()).throw(AssertionError("liveness must not query PostgreSQL")),
+    )
+    response = TestClient(app).get("/health/live")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
 
 
 def test_health_returns_503_without_complete_artifacts(monkeypatch):
@@ -682,6 +718,20 @@ def test_regression_run(ci_synthetic_contract):
     assert ctrl.json()["design"]["controls"]
     names = [c["name"] for c in ctrl.json()["result"]["coefs"]]
     assert "treated×post" in names
+
+
+def test_regression_capacity_saturation_returns_retryable_429(monkeypatch):
+    monkeypatch.setattr(api_mod, "_read_csv", lambda _name: object())
+
+    def saturated(*_args, **_kwargs):
+        raise api_mod.concurrency.CapacityExceeded("regression", "queue_full", 4)
+
+    monkeypatch.setattr(api_mod.concurrency, "cpu_workload", saturated)
+    response = client.post("/api/regression/run", json={"outcome": "trade"})
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "4"
+    assert response.json()["code"] == "capacity_queue_full"
+    assert "regression" in response.json()["detail"]
 
 
 @needs_data

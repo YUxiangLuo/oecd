@@ -78,6 +78,42 @@ def record_login_result(key: str, *, success: bool, now: float | None = None) ->
             _attempts[key].append(now)
 
 
+def reserve_login_attempt(key: str) -> None:
+    """在校验口令前原子预占一次尝试。
+
+    生产状态存于 PostgreSQL，所有 Uvicorn worker 共享同一滑动窗口。只有
+    数据库不可用且显式 demo 模式开启时才退回当前进程内的实现。
+    """
+    from gvcsim.classroom import db as classroom_db
+
+    try:
+        retry_after = classroom_db.reserve_login_attempt(
+            key,
+            config.LOGIN_WINDOW_SECONDS,
+            config.LOGIN_MAX_ATTEMPTS,
+        )
+    except (classroom_db.Unavailable, classroom_db.SchemaVersionMismatch) as exc:
+        if not config.DEMO_MODE:
+            raise AuthenticationUnavailable("登录限流数据库不可用或未就绪") from exc
+        check_login_rate(key)
+        record_login_result(key, success=False)
+        return
+    if retry_after is not None:
+        raise TooManyLoginAttempts(retry_after)
+
+
+def clear_login_rate(key: str) -> None:
+    """成功认证后清空失败窗口；失败尝试已经在 reserve 阶段持久化。"""
+    from gvcsim.classroom import db as classroom_db
+
+    try:
+        classroom_db.clear_login_attempts(key)
+    except (classroom_db.Unavailable, classroom_db.SchemaVersionMismatch) as exc:
+        if not config.DEMO_MODE:
+            raise AuthenticationUnavailable("登录限流数据库不可用或未就绪") from exc
+        record_login_result(key, success=True)
+
+
 def _persistent_secret(configured: str, path: Path, env_name: str) -> bytes:
     """读取独立显式密钥，或在非生产环境创建 0600 持久密钥。"""
     if configured:

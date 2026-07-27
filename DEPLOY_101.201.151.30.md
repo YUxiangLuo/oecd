@@ -385,3 +385,8 @@ if grep -RIl "gvclab2026" frontend/dist/; then
   exit 1
 fi
 ```
+
+若正式服务器用于 50–100 人同时实验，还必须按
+[`docs/CAPACITY_100_STUDENTS.md`](./docs/CAPACITY_100_STUDENTS.md) 配置
+16 worker、数据库连接预算、跨 worker CPU 槽并跑完 100 个独立账号的容量验收；
+当前 root/HTTP 演示布局不作为容量达标证据。

@@ -11,6 +11,7 @@ classroom-reset-attempts  为新版题库归档开放作业的当前尝试
 """
 
 import argparse
+import os
 
 
 def main() -> None:
@@ -54,8 +55,29 @@ def main() -> None:
     p.add_argument("--year", type=int, default=None)
 
     p = sub.add_parser("serve", help="启动 API 服务")
+    p.add_argument("--host", default=os.environ.get("GVCSIM_BIND_HOST", "127.0.0.1"))
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--reload", action="store_true")
+    p.add_argument("--workers", type=int, default=int(os.environ.get("GVCSIM_WEB_WORKERS", "1")))
+    p.add_argument(
+        "--limit-concurrency",
+        type=int,
+        default=int(os.environ.get("GVCSIM_WORKER_CONNECTION_LIMIT", "64")),
+        help="每 worker 同时连接/任务上限，超过时由 Uvicorn 返回 503",
+    )
+    p.add_argument("--backlog", type=int, default=int(os.environ.get("GVCSIM_SOCKET_BACKLOG", "2048")))
+    p.add_argument(
+        "--graceful-timeout",
+        type=int,
+        default=int(os.environ.get("GVCSIM_GRACEFUL_TIMEOUT_SECONDS", "120")),
+    )
+    p.add_argument("--log-level", default=os.environ.get("GVCSIM_LOG_LEVEL", "info"))
+    p.add_argument(
+        "--access-log",
+        action=argparse.BooleanOptionalAction,
+        default=os.environ.get("GVCSIM_ACCESS_LOG", "1").lower() not in {"0", "false", "no", "off"},
+        help="API 访问日志；Nginx 已记录访问时生产可用 --no-access-log 降低日志 I/O",
+    )
 
     p = sub.add_parser("classroom-init", help="初始化教学数据库(教师面板用;服务端也会懒建表)")
     p.add_argument("--reset", action="store_true", help="删除并重建全部教学表(会清空班级/学生/提交数据)")
@@ -178,11 +200,26 @@ def main() -> None:
     elif args.command == "serve":
         import uvicorn
 
-        uvicorn.run("gvcsim.api:app", port=args.port, reload=args.reload)
+        if args.workers <= 0 or args.limit_concurrency <= 0 or args.backlog <= 0 or args.graceful_timeout <= 0:
+            raise SystemExit("workers、limit-concurrency、backlog、graceful-timeout 必须为正数")
+        if args.reload and args.workers != 1:
+            raise SystemExit("--reload 与多 worker 不兼容；开发热更新请使用 --workers 1")
+        uvicorn.run(
+            "gvcsim.api:app",
+            host=args.host,
+            port=args.port,
+            reload=args.reload,
+            workers=args.workers,
+            limit_concurrency=args.limit_concurrency,
+            backlog=args.backlog,
+            timeout_graceful_shutdown=args.graceful_timeout,
+            proxy_headers=True,
+            forwarded_allow_ips="127.0.0.1",
+            log_level=args.log_level,
+            access_log=args.access_log,
+        )
 
     elif args.command == "classroom-init":
-        import os
-
         import psycopg
         from psycopg import sql
 

@@ -6,10 +6,12 @@
 
 import json
 import math
+from contextlib import asynccontextmanager
 from numbers import Real
 from pathlib import Path
 from typing import Any, cast
 
+import anyio
 import pandas as pd
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +19,7 @@ from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from gvcsim import artifacts, auth, config as app_config
+from gvcsim import artifacts, auth, concurrency, config as app_config
 from gvcsim import quizzes, shocks, trusted_evidence
 from gvcsim.shocks import SHOCK_LABELS, SHOCK_TARIFF
 from gvcsim.artifacts import (
@@ -61,7 +63,24 @@ from gvcsim.steps import STAGE_NAMES, STEPS
 if app_config.IS_PRODUCTION:
     app_config.validate_security_config()
 
-app = FastAPI(title="供应链仿真系统 API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """每个 worker 显式建立/关闭连接池，并限制同步端点线程数。"""
+    app_config.validate_capacity_config()
+    anyio.to_thread.current_default_thread_limiter().total_tokens = app_config.THREAD_TOKENS
+    try:
+        await anyio.to_thread.run_sync(classroom_db.startup)
+    except classroom_db.Unavailable:
+        if not app_config.DEMO_MODE:
+            raise
+    try:
+        yield
+    finally:
+        await anyio.to_thread.run_sync(classroom_db.close_pool)
+
+
+app = FastAPI(title="供应链仿真系统 API", version="0.2.0", lifespan=lifespan)
 
 _cors_origins = app_config.ALLOWED_ORIGINS
 if not _cors_origins and not app_config.IS_PRODUCTION:
@@ -86,7 +105,8 @@ def health() -> JSONResponse:
         validate_release(PROCESSED_DIR, validate_sources=True)
         years = processed_years()
         current_manifest = manifest_id() if years else None
-    except (ArtifactContractError, OSError, ValueError) as error:
+        capacity = concurrency.capacity_snapshot()
+    except (ArtifactContractError, OSError, RuntimeError, ValueError) as error:
         return JSONResponse(status_code=503, content={"status": "unavailable", "detail": str(error)})
     if not years or current_manifest is None:
         return JSONResponse(status_code=503, content={"status": "unavailable", "detail": "没有完整产物"})
@@ -108,8 +128,15 @@ def health() -> JSONResponse:
             "manifest_id": current_manifest,
             "artifact_contract": artifact_contract(),
             "database": database,
+            "capacity": capacity,
         }
     )
+
+
+@app.get("/health/live", include_in_schema=False)
+def liveness() -> dict[str, str]:
+    """只证明 worker 事件循环可接单；不触碰磁盘和 PostgreSQL。"""
+    return {"status": "ok"}
 
 
 PUBLIC_API_PATHS = {"/api/auth/login", "/api/auth/me"}
@@ -127,7 +154,12 @@ async def require_api_bearer(request: Request, call_next):
     if not authorization or not authorization.startswith("Bearer "):
         return JSONResponse(status_code=401, content={"detail": "缺少 Bearer 令牌"})
     try:
-        payload = auth.verify_token(authorization.removeprefix("Bearer "))
+        # 中间件运行在事件循环上；逐请求数据库复查必须转入有界线程池，
+        # 否则一个慢连接会阻塞该 worker 的所有并发请求。
+        payload = await anyio.to_thread.run_sync(
+            auth.verify_token,
+            authorization.removeprefix("Bearer "),
+        )
     except auth.AuthenticationUnavailable as error:
         return JSONResponse(status_code=503, content={"detail": str(error)})
     if payload is None:
@@ -372,19 +404,20 @@ def login(req: LoginRequest, request: Request):
     ip = request.client.host if request.client else None
     rate_key = f"{ip or 'unknown'}|{req.username.casefold()}"
     try:
-        auth.check_login_rate(rate_key)
+        auth.reserve_login_attempt(rate_key)
     except auth.TooManyLoginAttempts as error:
         raise HTTPException(
             status_code=429,
             detail="登录尝试过于频繁，请稍后再试",
             headers={"Retry-After": str(error.retry_after)},
         ) from error
+    except auth.AuthenticationUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     try:
         user = auth.authenticate(req.username, req.password)
     except auth.AuthenticationUnavailable as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     if user is None:
-        auth.record_login_result(rate_key, success=False)
         try:
             classroom_db.record_audit_event(
                 "auth.login_failed", target_type="account", target_id=req.username, ip_address=ip
@@ -393,6 +426,7 @@ def login(req: LoginRequest, request: Request):
             pass
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     try:
+        auth.clear_login_rate(rate_key)
         token, exp = auth.issue_token(user)
         if not user.get("demo"):
             classroom_db.record_audit_event(
@@ -404,7 +438,6 @@ def login(req: LoginRequest, request: Request):
             )
     except (auth.AuthenticationUnavailable, classroom_db.Unavailable) as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
-    auth.record_login_result(rate_key, success=True)
     public_user = {
         "username": user["username"],
         "name": user["name"],
@@ -1069,7 +1102,11 @@ def regression_run(req: RegressionRequest, request: Request):
     )
     panel = _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
     try:
-        result, benchmark = run_design_with_benchmark(panel, design)
+        with concurrency.cpu_workload(
+            "regression",
+            permits=app_config.REGRESSION_CPU_PERMITS,
+        ):
+            result, benchmark = run_design_with_benchmark(panel, design)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     design_info = _design_info(design, req.weight_mode)
@@ -1119,7 +1156,11 @@ def regression_placebo(req: PlaceboRequest, request: Request):
     )
     panel = _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
     try:
-        placebo = placebo_did_distribution(panel, design, n_draws=req.n_draws, seed=req.seed)
+        with concurrency.cpu_workload(
+            "placebo",
+            permits=app_config.PLACEBO_CPU_PERMITS,
+        ):
+            placebo = placebo_did_distribution(panel, design, n_draws=req.n_draws, seed=req.seed)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     design_info = _design_info(design, req.weight_mode)
@@ -1172,3 +1213,15 @@ async def assignment_scope_mismatch(request: Request, exc: classroom_db.Assignme
 @app.exception_handler(classroom_db.AssignmentClosed)
 async def assignment_closed(request: Request, exc: classroom_db.AssignmentClosed):
     return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(concurrency.CapacityExceeded)
+async def capacity_exceeded(request: Request, exc: concurrency.CapacityExceeded):
+    return JSONResponse(
+        status_code=429,
+        headers={"Retry-After": str(exc.retry_after)},
+        content={
+            "detail": f"{exc}（任务：{exc.workload}）",
+            "code": f"capacity_{exc.reason}",
+        },
+    )

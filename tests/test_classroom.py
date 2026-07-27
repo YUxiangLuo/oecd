@@ -355,6 +355,21 @@ def test_v4_schema_is_migrated_in_place_with_assignment_selection():
         assert c.execute("SELECT to_regclass('public.student_assignment_selections')").fetchone()[0]
 
 
+def test_v5_schema_is_migrated_in_place_with_shared_login_limiter():
+    _login("student")
+    with psycopg.connect(TEST_DSN, autocommit=True) as c:
+        c.execute("DROP TABLE auth_login_attempts")
+        c.execute("UPDATE schema_meta SET version='gvcsim-teaching-db-v5' WHERE singleton")
+    db._schema_ready = False
+
+    applied = db.initialize_schema()
+
+    assert any("v5" in item and "v6" in item for item in applied)
+    with psycopg.connect(TEST_DSN) as c:
+        assert c.execute("SELECT version FROM schema_meta").fetchone()[0] == db.TEACHING_DB_VERSION
+        assert c.execute("SELECT to_regclass('public.auth_login_attempts')").fetchone()[0]
+
+
 def test_concurrent_initialize_is_safe_and_idempotent():
     with psycopg.connect(TEST_DSN, autocommit=True) as c:
         c.execute("DROP SCHEMA public CASCADE")
@@ -369,6 +384,33 @@ def test_concurrent_initialize_is_safe_and_idempotent():
     with psycopg.connect(TEST_DSN) as c:
         assert c.execute("SELECT count(*) FROM schema_meta").fetchone()[0] == 1
         assert c.execute("SELECT count(*) FROM accounts WHERE username = 'student'").fetchone()[0] == 1
+
+
+def test_connection_pool_reuses_connections_and_applies_bounded_backpressure(monkeypatch):
+    _login("student")
+    monkeypatch.setattr(config, "DB_POOL_MIN_SIZE", 1)
+    monkeypatch.setattr(config, "DB_POOL_MAX_SIZE", 1)
+    monkeypatch.setattr(config, "DB_POOL_TIMEOUT_SECONDS", 0.08)
+    monkeypatch.setattr(config, "DB_POOL_MAX_WAITING", 1)
+    db.close_pool()
+
+    with db.conn() as connection:
+        first_pid = connection.execute("SELECT pg_backend_pid() AS pid").fetchone()["pid"]
+    with db.conn() as connection:
+        second_pid = connection.execute("SELECT pg_backend_pid() AS pid").fetchone()["pid"]
+    assert second_pid == first_pid
+    assert db.pool_stats()["size"] == 1
+    assert db.readiness()["pool"]["available"] == 1
+
+    def wait_for_connection() -> str:
+        with pytest.raises(db.Unavailable, match="繁忙"):
+            with db.conn():
+                pass
+        return "bounded"
+
+    with db.conn():
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            assert executor.submit(wait_for_connection).result(timeout=2) == "bounded"
 
 
 def test_provisioned_teachers_receive_isolated_default_courses(monkeypatch):

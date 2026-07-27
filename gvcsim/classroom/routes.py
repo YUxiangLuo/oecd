@@ -13,7 +13,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, model_validator
 
-from gvcsim import artifacts, evidence, quizzes, trusted_evidence
+from gvcsim import artifacts, concurrency, config, evidence, quizzes, trusted_evidence
 from gvcsim import session as session_model
 from gvcsim import teaching_report
 from gvcsim.classroom import db
@@ -375,13 +375,14 @@ def generate_report(user: dict = Depends(require_student)):
     _ensure_current_assignment(user["sub"])
     session, revision = _load_session_for_report(user["sub"])
     try:
-        report = teaching_report.build(
-            session,
-            user.get("name") or user["sub"],
-            revision,
-            subject=user["sub"],
-            require_trusted=True,
-        )
+        with concurrency.cpu_workload("report", permits=config.REPORT_CPU_PERMITS):
+            report = teaching_report.build(
+                session,
+                user.get("name") or user["sub"],
+                revision,
+                subject=user["sub"],
+                require_trusted=True,
+            )
     except teaching_report.ReportGateError as e:
         raise HTTPException(status_code=409, detail={"message": str(e), "blocked": e.missing}) from e
     except teaching_report.ReportReplayError as e:
