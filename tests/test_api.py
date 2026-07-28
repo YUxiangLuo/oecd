@@ -7,6 +7,7 @@
 import inspect
 import math
 import re
+from contextlib import asynccontextmanager
 
 import pandas as pd
 import pytest
@@ -134,6 +135,12 @@ def test_liveness_is_public_and_dependency_free(monkeypatch):
     response = TestClient(app).get("/health/live")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_cpu_endpoints_wait_asynchronously():
+    assert inspect.iscoroutinefunction(api_mod.regression_run)
+    assert inspect.iscoroutinefunction(api_mod.regression_placebo)
+    assert inspect.iscoroutinefunction(api_mod.classroom_routes.generate_report)
 
 
 def test_health_returns_503_without_complete_artifacts(monkeypatch):
@@ -725,10 +732,12 @@ def test_regression_run(ci_synthetic_contract):
 def test_regression_capacity_saturation_returns_retryable_429(monkeypatch):
     monkeypatch.setattr(api_mod, "_read_csv", lambda _name: object())
 
-    def saturated(*_args, **_kwargs):
+    @asynccontextmanager
+    async def saturated(*_args, **_kwargs):
         raise api_mod.concurrency.CapacityExceeded("regression", "queue_full", 4)
+        yield
 
-    monkeypatch.setattr(api_mod.concurrency, "cpu_workload", saturated)
+    monkeypatch.setattr(api_mod.concurrency, "async_cpu_workload", saturated)
     response = client.post("/api/regression/run", json={"outcome": "trade"})
     assert response.status_code == 429
     assert response.headers["retry-after"] == "4"

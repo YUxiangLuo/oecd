@@ -6,6 +6,7 @@ import multiprocessing
 import os
 from pathlib import Path
 
+import anyio
 import pytest
 
 from gvcsim import concurrency, config
@@ -73,6 +74,60 @@ def test_weighted_job_times_out_and_releases_admission(tmp_path: Path, monkeypat
                 pass
         assert exc.value.reason == "wait_timeout"
         assert concurrency.capacity_snapshot()["admission_used"] == 1
+
+
+def test_async_queue_wait_does_not_borrow_default_thread_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure(monkeypatch, tmp_path, cpu=1, queue=2, timeout=0.5)
+
+    async def scenario() -> None:
+        default_limiter = anyio.to_thread.current_default_thread_limiter()
+        previous_tokens = default_limiter.total_tokens
+        blocker = concurrency._try_acquire("cpu", 1, 1)
+        assert blocker is not None
+
+        async def queued_workload() -> None:
+            async with concurrency.async_cpu_workload("queued"):
+                pass
+
+        try:
+            default_limiter.total_tokens = 1
+            async with anyio.create_task_group() as tasks:
+                tasks.start_soon(queued_workload)
+                with anyio.fail_after(0.3):
+                    while concurrency.capacity_snapshot()["admission_used"] != 1:
+                        await anyio.sleep(0.005)
+
+                # 排队任务已经在等待 CPU 槽；默认线程池仍应能立即承接鉴权/DB 等工作。
+                with anyio.fail_after(0.3):
+                    assert await anyio.to_thread.run_sync(lambda: "available") == "available"
+                blocker.release()
+                blocker = None
+        finally:
+            if blocker is not None:
+                blocker.release()
+            default_limiter.total_tokens = previous_tokens
+
+    anyio.run(scenario)
+
+
+def test_cpu_computation_uses_a_limiter_separate_from_sync_endpoints(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure(monkeypatch, tmp_path, cpu=1, queue=2, timeout=0.2)
+
+    async def scenario() -> None:
+        default_limiter = anyio.to_thread.current_default_thread_limiter()
+        previous_tokens = default_limiter.total_tokens
+        try:
+            default_limiter.total_tokens = 0
+            with anyio.fail_after(0.3):
+                assert await concurrency.run_cpu_bound(lambda: "computed") == "computed"
+        finally:
+            default_limiter.total_tokens = previous_tokens
+
+    anyio.run(scenario)
 
 
 def test_slot_scan_releases_partial_lease_when_later_lock_raises(

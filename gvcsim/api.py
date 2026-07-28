@@ -1086,7 +1086,7 @@ def regression_design(
 
 
 @app.post("/api/regression/run")
-def regression_run(req: RegressionRequest, request: Request):
+async def regression_run(req: RegressionRequest, request: Request):
     subject = _require_regression_student(request)
     run_manifest = manifest_id()
     design = _validate_design(
@@ -1100,13 +1100,15 @@ def regression_run(req: RegressionRequest, request: Request):
         req.scenario,
         req.exclude_row,
     )
-    panel = _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
+    panel = await anyio.to_thread.run_sync(
+        lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
+    )
     try:
-        with concurrency.cpu_workload(
+        async with concurrency.async_cpu_workload(
             "regression",
             permits=app_config.REGRESSION_CPU_PERMITS,
         ):
-            result, benchmark = run_design_with_benchmark(panel, design)
+            result, benchmark = await concurrency.run_cpu_bound(run_design_with_benchmark, panel, design)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     design_info = _design_info(design, req.weight_mode)
@@ -1114,13 +1116,15 @@ def regression_run(req: RegressionRequest, request: Request):
     if manifest_id() != run_manifest:
         raise HTTPException(status_code=409, detail="估计期间数据产物已切换，请重新运行")
     event_payload_sha256 = trusted_evidence.digest({"design": design_info, "result": result_info})
-    event = classroom_db.record_evidence_event(
-        subject,
-        _regression_step(design.outcome),
-        "regression",
-        run_manifest,
-        event_payload_sha256,
-        {"design": design_info, "result_sha256": trusted_evidence.digest(result_info)},
+    event = await anyio.to_thread.run_sync(
+        lambda: classroom_db.record_evidence_event(
+            subject,
+            _regression_step(design.outcome),
+            "regression",
+            run_manifest,
+            event_payload_sha256,
+            {"design": design_info, "result_sha256": trusted_evidence.digest(result_info)},
+        )
     )
     run_id = trusted_evidence.issue_regression_run(
         subject=subject,
@@ -1140,7 +1144,7 @@ def regression_run(req: RegressionRequest, request: Request):
 
 
 @app.post("/api/regression/placebo")
-def regression_placebo(req: PlaceboRequest, request: Request):
+async def regression_placebo(req: PlaceboRequest, request: Request):
     subject = _require_regression_student(request)
     run_manifest = manifest_id()
     design = _validate_design(
@@ -1154,26 +1158,36 @@ def regression_placebo(req: PlaceboRequest, request: Request):
         req.scenario,
         req.exclude_row,
     )
-    panel = _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
+    panel = await anyio.to_thread.run_sync(
+        lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
+    )
     try:
-        with concurrency.cpu_workload(
+        async with concurrency.async_cpu_workload(
             "placebo",
             permits=app_config.PLACEBO_CPU_PERMITS,
         ):
-            placebo = placebo_did_distribution(panel, design, n_draws=req.n_draws, seed=req.seed)
+            placebo = await concurrency.run_cpu_bound(
+                placebo_did_distribution,
+                panel,
+                design,
+                n_draws=req.n_draws,
+                seed=req.seed,
+            )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     design_info = _design_info(design, req.weight_mode)
     if manifest_id() != run_manifest:
         raise HTTPException(status_code=409, detail="安慰剂期间数据产物已切换，请重新运行")
     event_payload_sha256 = trusted_evidence.digest({"design": design_info, "result": placebo})
-    classroom_db.record_evidence_event(
-        subject,
-        _regression_step(design.outcome),
-        "placebo",
-        run_manifest,
-        event_payload_sha256,
-        {"design": design_info, "result_sha256": trusted_evidence.digest(placebo)},
+    await anyio.to_thread.run_sync(
+        lambda: classroom_db.record_evidence_event(
+            subject,
+            _regression_step(design.outcome),
+            "placebo",
+            run_manifest,
+            event_payload_sha256,
+            {"design": design_info, "result_sha256": trusted_evidence.digest(placebo)},
+        )
     )
     return {
         "design": design_info,

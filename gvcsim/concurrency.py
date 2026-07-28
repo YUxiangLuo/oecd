@@ -19,12 +19,18 @@ import os
 import random
 import threading
 import time
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Callable, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
+from typing import ParamSpec, TypeVar
+
+import anyio
 
 from gvcsim import config
+
+P = ParamSpec("P")
+T = TypeVar("T")
 
 
 class CapacityExceeded(RuntimeError):
@@ -159,6 +165,73 @@ def cpu_workload(workload: str, *, permits: int = 1) -> Iterator[WorkloadLease]:
         finally:
             # compute 清理异常也不能跳过 admission，否则队列容量会永久缩小。
             admission.release()
+
+
+@asynccontextmanager
+async def async_cpu_workload(workload: str, *, permits: int = 1) -> AsyncIterator[WorkloadLease]:
+    """异步等待全机计算租约，不在排队期间占用 AnyIO 默认线程令牌。"""
+    config.validate_capacity_config()
+    if permits <= 0 or permits > config.CPU_CONCURRENCY:
+        raise ValueError(f"permits 必须在 1..{config.CPU_CONCURRENCY} 之间")
+
+    admission = _try_acquire("admission", config.CPU_QUEUE_SIZE, 1)
+    if admission is None:
+        raise CapacityExceeded(workload, "queue_full", config.CPU_RETRY_AFTER_SECONDS)
+
+    compute: _LockSet | None = None
+    started = time.monotonic()
+    deadline = started + config.CPU_ACQUIRE_TIMEOUT_SECONDS
+    try:
+        while compute is None:
+            compute = _try_acquire("cpu", config.CPU_CONCURRENCY, permits)
+            if compute is not None:
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise CapacityExceeded(workload, "wait_timeout", config.CPU_RETRY_AFTER_SECONDS)
+            await anyio.sleep(min(remaining, 0.02 + random.random() * 0.03))
+        yield WorkloadLease(
+            workload=workload,
+            permits=permits,
+            waited_seconds=max(0.0, time.monotonic() - started),
+        )
+    finally:
+        try:
+            if compute is not None:
+                compute.release()
+        finally:
+            admission.release()
+
+
+_compute_thread_limiter: anyio.CapacityLimiter | None = None
+
+
+def _compute_limiter() -> anyio.CapacityLimiter:
+    """返回与默认同步端点线程池隔离的本 worker 计算限流器。"""
+    global _compute_thread_limiter
+    expected_tokens = config.CPU_CONCURRENCY
+    limiter = _compute_thread_limiter
+    if limiter is None or limiter.total_tokens != expected_tokens:
+        if limiter is not None and limiter.borrowed_tokens:
+            raise RuntimeError("计算线程限流器仍有在途任务，不能在线修改容量")
+        limiter = anyio.CapacityLimiter(expected_tokens)
+        _compute_thread_limiter = limiter
+    return limiter
+
+
+async def run_cpu_bound(function: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
+    """在独立线程预算中运行已经取得全机 permit 的同步计算。"""
+    if kwargs:
+        from functools import partial
+
+        call = partial(function, *args, **kwargs)
+        return await anyio.to_thread.run_sync(call, abandon_on_cancel=False, limiter=_compute_limiter())
+    return await anyio.to_thread.run_sync(
+        function,
+        *args,
+        abandon_on_cancel=False,
+        limiter=_compute_limiter(),
+    )
 
 
 def _locked_count(namespace: str, size: int) -> int:

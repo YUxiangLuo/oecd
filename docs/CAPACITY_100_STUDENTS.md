@@ -26,7 +26,8 @@
 | 层级 | 基准值 | 全机上限 | 作用 |
 | --- | ---: | ---: | --- |
 | Uvicorn worker | 16 | 16 进程 | 利用多核并隔离单 worker 故障 |
-| AnyIO 同步线程 | 16 / worker | 256 | 承接同步 API、文件读取和数据库等待 |
+| AnyIO 默认同步线程 | 16 / worker | 256 | 承接同步 API、文件读取、鉴权和数据库等待；不承接 CPU 排队 |
+| CPU 计算线程 | 最多 16 / worker | 全机最多 16 个在途 permit | 仅在取得跨进程 permit 后运行 NumPy/SciPy |
 | PostgreSQL pool | 1–4 / worker | 16–64 连接 | 复用连接，并在池满时有界等待 |
 | CPU permit | — | 16 | 防止 NumPy/SciPy 任务同时把 64 核打满 |
 | 计算 admission | — | 128 请求 | 容纳 100 名学生，禁止无界排队 |
@@ -51,6 +52,9 @@
   整个 worker 的事件循环。
 - `/health/live` 是原生异步端点，不占用上述同步线程令牌；线程池饱和不会制造
   假性 liveness 失败。
+- 回归、安慰剂和报告使用异步 CPU 队列；最长 90 秒的 permit 等待不会占用
+  AnyIO 默认线程令牌。真正的 NumPy/SciPy 计算在独立限流器中执行，避免挤占
+  鉴权、数据库切片和 readiness 所需的同步线程。
 - 大 CSV 和原始 ICIO 列切片的首次读取在每个 worker 内 single-flight，
   避免冷缓存并发重复解析。
 - 计算队列满或等待超时时返回 `429`、稳定错误码和 `Retry-After`；已取得的
