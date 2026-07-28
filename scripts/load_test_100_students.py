@@ -120,9 +120,7 @@ async def _run(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
         raise SystemExit("容量验收的 --students 必须在 50..100 之间")
     available_users = list(credentials.get("users") or [])
     if len(available_users) < args.students:
-        raise SystemExit(
-            f"users file 只有 {len(available_users)} 个账号，少于 --students 请求的 {args.students} 个"
-        )
+        raise SystemExit(f"users file 只有 {len(available_users)} 个账号，少于 --students 请求的 {args.students} 个")
     users = available_users[: args.students]
     if not 0 <= args.placebo_ratio <= 1:
         raise SystemExit("--placebo-ratio 必须在 0..1 之间")

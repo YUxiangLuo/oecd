@@ -180,10 +180,7 @@ def test_capacity_harness_rejects_fewer_credentials_than_requested(tmp_path: Pat
         json.dumps(
             {
                 "kind": "gvcsim-capacity-test-users-v1",
-                "users": [
-                    {"username": f"student-{index}", "password": "password"}
-                    for index in range(50)
-                ],
+                "users": [{"username": f"student-{index}", "password": "password"} for index in range(50)],
             }
         ),
         encoding="utf-8",
@@ -200,10 +197,7 @@ def test_capacity_harness_rejects_requested_count_outside_acceptance_range(tmp_p
         json.dumps(
             {
                 "kind": "gvcsim-capacity-test-users-v1",
-                "users": [
-                    {"username": f"student-{index}", "password": "password"}
-                    for index in range(100)
-                ],
+                "users": [{"username": f"student-{index}", "password": "password"} for index in range(100)],
             }
         ),
         encoding="utf-8",
