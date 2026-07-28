@@ -53,6 +53,8 @@
 - 登录滑动窗口存于 PostgreSQL v6；同一 `IP + username` 的 8 次精确预算和
   同一 IP 全部用户名共享的 400 次总预算都在 16 个 worker 上原子计数。
   轮换 username 不能制造无界数据库写入，旧记录最多保留限流窗口的 4 倍。
+- 登录以 token 和服务端 `auth_session` 创建为关键提交点；之后的身份限流清理
+  与成功审计是带告警的 best-effort，不会让已创建 session 的正确口令返回 503。
 - 每个数据库池都有 `max_size`、`max_waiting` 和 checkout timeout；不会在
   流量尖峰中无限创建连接或无限排队。
 - pool checkout 饱和与借出连接后的查询/事务故障使用不同异常；后者保留

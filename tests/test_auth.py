@@ -46,6 +46,53 @@ def test_login_success_and_me():
     assert me.json()["account_id"] == 2
 
 
+def test_successful_login_survives_rate_cleanup_failure(monkeypatch, caplog):
+    def cleanup_failed(_key: str) -> None:
+        raise auth.AuthenticationUnavailable("sensitive cleanup detail")
+
+    monkeypatch.setattr(auth, "clear_login_rate", cleanup_failed)
+    response = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+
+    assert response.status_code == 200
+    token = response.json()["token"]
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+    assert "post-auth rate-limit cleanup failed" in caplog.text
+    assert "sensitive cleanup detail" not in caplog.text
+
+
+def test_successful_login_survives_audit_failure_and_returns_its_live_session(monkeypatch, caplog):
+    def audit_failed(*_args, **_kwargs) -> None:
+        raise db.OperationFailed("connection_lost", "08006")
+
+    monkeypatch.setattr(db, "record_audit_event", audit_failed)
+    response = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+
+    assert response.status_code == 200
+    token = response.json()["token"]
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json()["username"] == "student"
+    assert "successful-login audit write failed" in caplog.text
+
+
+def test_auth_session_creation_failure_remains_fail_closed_and_skips_post_commit_cleanup(monkeypatch):
+    cleanup_calls: list[str] = []
+    audit_calls: list[str] = []
+
+    def issue_failed(_user):
+        raise auth.AuthenticationUnavailable("session write failed")
+
+    monkeypatch.setattr(auth, "issue_token", issue_failed)
+    monkeypatch.setattr(auth, "clear_login_rate", lambda key: cleanup_calls.append(key))
+    monkeypatch.setattr(db, "record_audit_event", lambda action, **_kwargs: audit_calls.append(action))
+
+    response = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+
+    assert response.status_code == 503
+    assert cleanup_calls == []
+    assert audit_calls == []
+
+
 def test_login_rejects_bad_credentials(monkeypatch):
     # 这里只验证 API 将普通认证失败映射为 401，不让结果依赖运行机是否有 PostgreSQL。
     # 数据库停机时的演示账号回退与 503 语义由下方独立测试覆盖。

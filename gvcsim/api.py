@@ -5,6 +5,7 @@
 """
 
 import json
+import logging
 import math
 from contextlib import asynccontextmanager
 from numbers import Real
@@ -59,6 +60,8 @@ from gvcsim.regression.design import (
 )
 from gvcsim.regression.panel import placebo_did_distribution, run_design_with_benchmark
 from gvcsim.steps import STAGE_NAMES, STEPS
+
+logger = logging.getLogger(__name__)
 
 if app_config.IS_PRODUCTION:
     app_config.validate_security_config()
@@ -424,14 +427,25 @@ def login(req: LoginRequest, request: Request):
             classroom_db.record_audit_event(
                 "auth.login_failed", target_type="account", target_id=req.username, ip_address=ip
             )
-        except classroom_db.Unavailable:
-            pass
+        except Exception as error:
+            logger.warning("failed-login audit write failed: error=%s", type(error).__name__)
         raise HTTPException(status_code=401, detail="用户名或密码错误")
+
+    # token + 服务端 auth_session 是登录的关键提交点，失败时必须 fail-closed。
+    try:
+        token, exp = auth.issue_token(user)
+    except auth.AuthenticationUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+    # 此后都是非关键收尾：不能让一次清理/审计故障把已经创建的有效 session
+    # 改写成 503，并在数据库留下客户端永远拿不到 token 的孤儿会话。
     try:
         # 成功只清理该身份的口令猜测窗口；per-IP 总预算仍应统计这次请求。
         auth.clear_login_rate(identity_rate_key)
-        token, exp = auth.issue_token(user)
-        if not user.get("demo"):
+    except Exception as error:
+        logger.warning("post-auth rate-limit cleanup failed: error=%s", type(error).__name__)
+    if not user.get("demo"):
+        try:
             classroom_db.record_audit_event(
                 "auth.login_succeeded",
                 actor_id=user.get("account_id"),
@@ -439,8 +453,8 @@ def login(req: LoginRequest, request: Request):
                 target_type="auth_session",
                 ip_address=ip,
             )
-    except (auth.AuthenticationUnavailable, classroom_db.Unavailable) as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+        except Exception as error:
+            logger.warning("successful-login audit write failed: error=%s", type(error).__name__)
     public_user = {
         "username": user["username"],
         "name": user["name"],
