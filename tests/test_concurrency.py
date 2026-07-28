@@ -41,18 +41,23 @@ def _child_holds_slot(runtime_dir: str, pipe) -> None:
     pipe.close()
 
 
-def test_capacity_snapshot_tracks_active_weighted_lease(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_capacity_snapshot_is_read_only_and_does_not_scan_business_locks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _configure(monkeypatch, tmp_path, cpu=3, queue=5, timeout=0.2)
-
-    with concurrency.cpu_workload("placebo", permits=2) as lease:
-        snapshot = concurrency.capacity_snapshot()
-        assert lease.permits == 2
-        assert snapshot["cpu_permits_used"] == 2
-        assert snapshot["admission_used"] == 1
-
+    monkeypatch.setattr(
+        concurrency,
+        "_try_lock",
+        lambda _path: (_ for _ in ()).throw(AssertionError("capacity snapshot must not acquire flock")),
+    )
     snapshot = concurrency.capacity_snapshot()
-    assert snapshot["cpu_permits_used"] == 0
-    assert snapshot["admission_used"] == 0
+    assert snapshot == {
+        "coordination": "cross-process-flock",
+        "queue_policy": "fifo",
+        "cpu_permits_total": 3,
+        "admission_total": 5,
+        "acquire_timeout_seconds": 0.2,
+    }
 
 
 def test_admission_queue_is_bounded_without_waiting(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -75,7 +80,9 @@ def test_weighted_job_times_out_and_releases_admission(tmp_path: Path, monkeypat
             with concurrency.cpu_workload("regression"):
                 pass
         assert exc.value.reason == "wait_timeout"
-        assert concurrency.capacity_snapshot()["admission_used"] == 1
+        remaining_admission = concurrency._try_acquire("admission", 3, 2)
+        assert remaining_admission is not None
+        remaining_admission.release()
 
 
 def test_later_light_job_cannot_bypass_waiting_weighted_job(
@@ -186,7 +193,7 @@ def test_async_queue_wait_does_not_borrow_default_thread_token(
             async with anyio.create_task_group() as tasks:
                 tasks.start_soon(queued_workload)
                 with anyio.fail_after(0.3):
-                    while concurrency.capacity_snapshot()["admission_used"] != 1:
+                    while len(concurrency._queue_ticket_paths()) != 1:
                         await anyio.sleep(0.005)
 
                 # 排队任务已经在等待 CPU 槽；默认线程池仍应能立即承接鉴权/DB 等工作。

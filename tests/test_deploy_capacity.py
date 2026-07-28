@@ -67,6 +67,14 @@ def test_nginx_allows_classroom_nat_burst_and_reuses_backend_connections():
     assert "location ^~ /assets/" in nginx
 
 
+def test_nginx_rate_limits_public_health_probes():
+    nginx = (ROOT / "deploy" / "nginx-gvcsim.conf").read_text(encoding="utf-8")
+    assert "zone=gvcsim_health:1m rate=5r/s" in nginx
+    for marker in ("location = /health {", "location = /health/live {"):
+        location = _nginx_location(nginx, marker)
+        assert "limit_req zone=gvcsim_health burst=10 nodelay;" in location
+
+
 def test_proxy_timeout_covers_queue_execution_and_safety_margin():
     nginx = (ROOT / "deploy" / "nginx-gvcsim.conf").read_text(encoding="utf-8")
     api_location = _nginx_location(nginx, "location /api/")

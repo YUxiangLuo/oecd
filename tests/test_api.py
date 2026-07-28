@@ -80,17 +80,13 @@ def test_health_is_public_and_checks_artifact_contract(monkeypatch):
     monkeypatch.setattr(api_mod, "validate_release", lambda _path, **_kwargs: {"files": 1, "sources": 0})
     monkeypatch.setattr(api_mod, "processed_years", lambda: [2019, 2020])
     monkeypatch.setattr(api_mod, "manifest_id", lambda: "manifest-test")
+    monkeypatch.setattr(api_mod.app_config, "CPU_CONCURRENCY", 16)
+    monkeypatch.setattr(api_mod.app_config, "CPU_QUEUE_SIZE", 128)
+    monkeypatch.setattr(api_mod.app_config, "CPU_ACQUIRE_TIMEOUT_SECONDS", 30.0)
     monkeypatch.setattr(
         api_mod.concurrency,
-        "capacity_snapshot",
-        lambda: {
-            "coordination": "cross-process-flock",
-            "cpu_permits_total": 16,
-            "cpu_permits_used": 2,
-            "admission_total": 128,
-            "admission_used": 4,
-            "acquire_timeout_seconds": 30.0,
-        },
+        "_try_lock",
+        lambda _path: (_ for _ in ()).throw(AssertionError("health must not acquire capacity locks")),
     )
     monkeypatch.setattr(
         classroom_db,
@@ -111,10 +107,9 @@ def test_health_is_public_and_checks_artifact_contract(monkeypatch):
         "database": {"status": "ok", "schema_version": classroom_db.TEACHING_DB_VERSION},
         "capacity": {
             "coordination": "cross-process-flock",
+            "queue_policy": "fifo",
             "cpu_permits_total": 16,
-            "cpu_permits_used": 2,
             "admission_total": 128,
-            "admission_used": 4,
             "acquire_timeout_seconds": 30.0,
         },
     }

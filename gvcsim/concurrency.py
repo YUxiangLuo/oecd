@@ -385,25 +385,20 @@ async def run_cpu_bound(function: Callable[P, T], *args: P.args, **kwargs: P.kwa
     )
 
 
-def _locked_count(namespace: str, size: int) -> int:
-    locked = 0
-    for path in _slot_paths(namespace, size):
-        descriptor = _try_lock(path)
-        if descriptor is None:
-            locked += 1
-        else:
-            _LockSet([descriptor]).release()
-    return locked
-
-
 def capacity_snapshot() -> dict[str, int | float | str]:
-    """返回不含用户数据的近似瞬时容量，供 readiness/运维观测。"""
+    """返回只读容量配置；readiness 不扫描或短暂占用任何业务锁。"""
     config.validate_capacity_config()
     return {
         "coordination": "cross-process-flock",
+        "queue_policy": "fifo",
         "cpu_permits_total": config.CPU_CONCURRENCY,
-        "cpu_permits_used": _locked_count("cpu", config.CPU_CONCURRENCY),
         "admission_total": config.CPU_QUEUE_SIZE,
-        "admission_used": _locked_count("admission", config.CPU_QUEUE_SIZE),
         "acquire_timeout_seconds": config.CPU_ACQUIRE_TIMEOUT_SECONDS,
     }
+
+
+def validate_runtime() -> None:
+    """用独立探针文件验证共享目录可写且支持 flock，不触碰业务槽。"""
+    probe = _try_lock(_runtime_dir() / "coordination.probe")
+    if probe is not None:
+        _LockSet([probe]).release()

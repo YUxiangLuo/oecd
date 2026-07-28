@@ -132,7 +132,9 @@ curl -fsS http://127.0.0.1:18000/health
 ```
 
 `/health/live` 只检查 worker 存活；`/health` 会检查 artifact、数据库 schema、
-连接池和当前 CPU/admission 使用量。
+连接池和静态 CPU/admission 容量配置。它不会为了统计瞬时使用量去扫描或短暂
+占用业务 `flock`；动态使用量应由独立指标采集。Nginx 对两个公开探针共用
+`5r/s + burst 10` 的 per-IP 限流。
 
 ## 数据库迁移
 

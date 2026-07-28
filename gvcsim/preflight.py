@@ -30,6 +30,7 @@ def run() -> dict[str, Any]:
     if not years:
         raise artifacts.ArtifactContractError("没有完整的预计算产物年份")
     current_manifest = artifacts.manifest_id()
+    concurrency.validate_runtime()
     capacity = concurrency.capacity_snapshot()
 
     try:

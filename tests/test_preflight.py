@@ -31,6 +31,7 @@ def test_preflight_loads_asgi_app_and_checks_all_startup_dependencies(monkeypatc
     )
     monkeypatch.setattr(preflight.config, "processed_years", lambda: [2016, 2017])
     monkeypatch.setattr(preflight.artifacts, "manifest_id", lambda: "manifest-id")
+    monkeypatch.setattr(preflight.concurrency, "validate_runtime", lambda: calls.append("runtime"))
     monkeypatch.setattr(
         preflight.concurrency,
         "capacity_snapshot",
@@ -58,6 +59,7 @@ def test_preflight_loads_asgi_app_and_checks_all_startup_dependencies(monkeypatc
         "import:gvcsim.api",
         "security",
         "artifacts:True",
+        "runtime",
         "capacity",
         "database:start",
         "database:ready",
@@ -73,6 +75,7 @@ def test_preflight_closes_partial_database_startup_on_failure(monkeypatch: pytes
     monkeypatch.setattr(preflight.artifacts, "validate_release", lambda *_args, **_kwargs: {"files": 1, "sources": 1})
     monkeypatch.setattr(preflight.config, "processed_years", lambda: [2020])
     monkeypatch.setattr(preflight.artifacts, "manifest_id", lambda: "manifest-id")
+    monkeypatch.setattr(preflight.concurrency, "validate_runtime", lambda: None)
     monkeypatch.setattr(
         preflight.concurrency,
         "capacity_snapshot",
