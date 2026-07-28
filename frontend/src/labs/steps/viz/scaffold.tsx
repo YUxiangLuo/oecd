@@ -10,6 +10,7 @@
  * 只在真实交互后写入，页面默认视图不冒充学生探索。
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { IndicatorSchema, Meta, QuizCompletionState, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
@@ -133,14 +134,15 @@ export function ChartStory({ eyebrow, title, what, read, find, note, children }:
   return (
     <section style={{ marginBottom: 18 }}>
       <div style={{ marginBottom: 9 }}>
-        {eyebrow && <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", color: "#9aa0ae", textTransform: "uppercase" }}>{eyebrow}</div>}
+        {eyebrow && <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", color: "#5f6677", textTransform: "uppercase" }}>{eyebrow}</div>}
         <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1b1f2b", margin: "2px 0 0" }}>{title}</h3>
       </div>
       <div style={{ display: "grid", gap: 6, marginBottom: 11, maxWidth: PROSE_MAX }}>
         {guide.map(([label, body, color]) => (
           <div key={label} style={{ display: "flex", gap: 9, fontSize: 12.3, lineHeight: 1.65 }}>
             <span style={{
-              flexShrink: 0, alignSelf: "flex-start", fontSize: 10.5, fontWeight: 700, color: "#fff",
+              flexShrink: 0, alignSelf: "flex-start", fontSize: 10.5, fontWeight: 700,
+              color: color === CAT[0] ? "#fff" : "#1b1f2b",
               background: color, borderRadius: 5, padding: "2px 7px",
             }}>{label}</span>
             <span style={{ color: "#4a5061" }}>{body}</span>
@@ -148,7 +150,7 @@ export function ChartStory({ eyebrow, title, what, read, find, note, children }:
         ))}
       </div>
       {children}
-      {note && <p style={{ fontSize: 11, color: "#a2a8b6", margin: "9px 2px 0", lineHeight: 1.6, maxWidth: PROSE_MAX }}>{note}</p>}
+      {note && <p style={{ fontSize: 11, color: "#5f6677", margin: "9px 2px 0", lineHeight: 1.6, maxWidth: PROSE_MAX }}>{note}</p>}
     </section>
   );
 }
@@ -254,7 +256,9 @@ export function VizWorkbench({ years, year, onYearChange, countries, picked, onP
         </div>
         <CountryPicker countries={countries} picked={picked} onChange={onPick} />
       </aside>
-      <div className="viz-split-main">{children}</div>
+      <ScrollableRegion className="viz-split-main" label="可视化图表与说明，可纵向滚动">
+        {children}
+      </ScrollableRegion>
     </div>
   );
 }
@@ -262,10 +266,13 @@ export function VizWorkbench({ years, year, onYearChange, countries, picked, onP
 export function YearSelect({ years, year, onChange }: { years: number[]; year: number; onChange: (y: number) => void }) {
   return (
     <span className="field">
-      <label>年份</label>
-      <select value={year} onChange={(e) => onChange(Number(e.target.value))}>
-        {years.map((y) => <option key={y} value={y}>{y}</option>)}
-      </select>
+      <LabeledControl label="年份">
+        {(id) => (
+          <select id={id} value={year} onChange={(e) => onChange(Number(e.target.value))}>
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        )}
+      </LabeledControl>
     </span>
   );
 }

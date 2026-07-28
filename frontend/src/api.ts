@@ -44,15 +44,65 @@ function authHeaders(token: string | null, extra?: HeadersInit): HeadersInit {
   return token ? { ...extra, Authorization: `Bearer ${token}` } : (extra ?? {});
 }
 
-async function get<T>(url: string): Promise<T> {
-  const requestToken = localStorage.getItem(AUTH_TOKEN_KEY);
-  const resp = await fetch(url, { headers: authHeaders(requestToken) });
-  if (!resp.ok) {
-    const body = await resp.json().catch(() => null);
-    if (resp.status === 401) notifyAuthExpired(requestToken);
-    throw new ApiError(resp.status, body?.detail, `${resp.status} ${resp.statusText}`);
+const GET_TIMEOUT_MS = 10_000;
+interface PendingGet {
+  promise: Promise<unknown>;
+}
+const pendingGets = new Map<string, PendingGet>();
+
+function pendingGetPrefix(requestToken: string | null): string {
+  return `${requestToken ?? "anonymous"}\n`;
+}
+
+/** A successful mutation is a freshness boundary for every pending GET in the same auth scope. */
+function invalidatePendingGets(requestToken: string | null) {
+  const prefix = pendingGetPrefix(requestToken);
+  for (const key of pendingGets.keys()) {
+    if (key.startsWith(prefix)) pendingGets.delete(key);
   }
-  return resp.json();
+}
+
+function getWithToken<T>(url: string, requestToken: string | null, fallback?: string): Promise<T> {
+  const key = `${pendingGetPrefix(requestToken)}${url}`;
+  const pending = pendingGets.get(key);
+  if (pending) return pending.promise as Promise<T>;
+
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), GET_TIMEOUT_MS);
+  const baseRequest = (async () => {
+    try {
+      const resp = await fetch(url, {
+        headers: authHeaders(requestToken),
+        signal: controller.signal,
+      });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => null);
+        if (resp.status === 401) notifyAuthExpired(requestToken);
+        throw new ApiError(resp.status, body?.detail, fallback ?? `${resp.status} ${resp.statusText}`);
+      }
+      return await resp.json() as T;
+    } catch (cause) {
+      if (controller.signal.aborted) {
+        throw new Error(`请求超时（${GET_TIMEOUT_MS / 1000} 秒）：${url}`);
+      }
+      throw cause;
+    } finally {
+      globalThis.clearTimeout(timeout);
+    }
+  })();
+  const entry: PendingGet = { promise: baseRequest };
+  const request = baseRequest.finally(() => {
+    // A mutation may have invalidated this request and a fresh GET may already occupy
+    // the same key. The older request must not evict that newer coalescing entry.
+    if (pendingGets.get(key) === entry) pendingGets.delete(key);
+  });
+  entry.promise = request;
+  pendingGets.set(key, entry);
+  return request;
+}
+
+function get<T>(url: string): Promise<T> {
+  return getWithToken<T>(url, localStorage.getItem(AUTH_TOKEN_KEY));
 }
 
 async function post<T>(url: string, body?: unknown, method = "POST"): Promise<T> {
@@ -67,6 +117,9 @@ async function post<T>(url: string, body?: unknown, method = "POST"): Promise<T>
     if (resp.status === 401) notifyAuthExpired(requestToken);
     throw new ApiError(resp.status, payload?.detail, `${resp.status} ${resp.statusText}`);
   }
+  // Refreshes triggered after the awaited mutation must never reuse a GET that
+  // started against pre-mutation state.
+  invalidatePendingGets(requestToken);
   return resp.json();
 }
 
@@ -80,11 +133,8 @@ export const api = {
     if (!resp.ok) throw new ApiError(resp.status, (await resp.json()).detail, resp.statusText);
     return resp.json() as Promise<import("./types").LoginResponse>;
   },
-  me: async (token: string) => {
-    const resp = await fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } });
-    if (!resp.ok) throw new ApiError(resp.status, null, "令牌无效或已过期");
-    return resp.json() as Promise<import("./types").AuthUser>;
-  },
+  me: (token: string) =>
+    getWithToken<import("./types").AuthUser>("/api/auth/me", token, "令牌无效或已过期"),
   logout: async (token: string) => {
     const resp = await fetch("/api/auth/logout", {
       method: "POST",

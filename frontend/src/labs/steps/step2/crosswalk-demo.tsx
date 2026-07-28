@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LabeledControl } from "../../../a11y";
 import { api } from "../../../api";
 import type { CrosswalkHsRow, CrosswalkPayload } from "../../../types";
 import { sectorLabel } from "../../../viz";
@@ -46,10 +47,13 @@ function CrosswalkContent({ selectedShockType }: { selectedShockType: string }) 
       )}
       <div className="controls crosswalk-controls">
         <span className="field">
-          <label>折算年份</label>
-          <select value={year} onChange={(event) => setYear(Number(event.target.value))}>
-            {CROSSWALK_YEARS.map((value) => <option key={value}>{value}</option>)}
-          </select>
+          <LabeledControl label="折算年份">
+            {(id) => (
+              <select id={id} value={year} onChange={(event) => setYear(Number(event.target.value))}>
+                {CROSSWALK_YEARS.map((value) => <option key={value}>{value}</option>)}
+              </select>
+            )}
+          </LabeledControl>
         </span>
         {data && <span className="muted">HS {data.summary.n_hs_chapters} 章 → ICIO {data.summary.n_icio_sectors} 个商品相关行业</span>}
       </div>
@@ -88,7 +92,7 @@ function CrosswalkContent({ selectedShockType }: { selectedShockType: string }) 
           </div>
 
           {tab === "summary" && (
-            <div id="crosswalk-panel-summary" role="tabpanel" aria-labelledby="crosswalk-tab-summary" className="table-wrap">
+            <div id="crosswalk-panel-summary" role="tabpanel" tabIndex={0} aria-labelledby="crosswalk-tab-summary" className="table-wrap scrollable-region">
               <table className="data-table crosswalk-table">
                 <thead><tr><th>映射检查</th><th>结果</th><th style={{ textAlign: "left" }}>详情</th></tr></thead>
                 <tbody>
@@ -107,7 +111,7 @@ function CrosswalkContent({ selectedShockType }: { selectedShockType: string }) 
             </div>
           )}
           {tab === "hs" && (
-            <div id="crosswalk-panel-hs" role="tabpanel" aria-labelledby="crosswalk-tab-hs" className="table-wrap">
+            <div id="crosswalk-panel-hs" role="tabpanel" tabIndex={0} aria-labelledby="crosswalk-tab-hs" className="table-wrap scrollable-region">
               <table className="data-table crosswalk-table">
                 <thead>
                   <tr><th>HS章</th><th>清单</th><th>贸易额权重</th><th>清单覆盖</th><th>{year} 税率</th><th style={{ textAlign: "left" }}>说明</th></tr>
@@ -125,7 +129,7 @@ function CrosswalkContent({ selectedShockType }: { selectedShockType: string }) 
             </div>
           )}
           {tab === "icio" && (
-            <div id="crosswalk-panel-icio" role="tabpanel" aria-labelledby="crosswalk-tab-icio" className="table-wrap">
+            <div id="crosswalk-panel-icio" role="tabpanel" tabIndex={0} aria-labelledby="crosswalk-tab-icio" className="table-wrap scrollable-region">
               <table className="data-table crosswalk-table">
                 <thead>
                   <tr><th>ICIO行业</th><th>行业平均税率</th><th>映射贸易权重</th><th>受影响权重</th><th style={{ textAlign: "left" }}>主要HS章</th></tr>

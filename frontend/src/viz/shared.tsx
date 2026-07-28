@@ -9,7 +9,7 @@
 import { useRef } from "react";
 
 // 固定顺序的类别槽位(经校验的默认调色板,前 6 位)
-export const CAT = ["#2a78d6", "#1baf7a", "#eda100", "#008300", "#4a3aa7", "#e34948"];
+export const CAT = ["#216cc0", "#1baf7a", "#eda100", "#008300", "#4a3aa7", "#e34948"];
 // 顺序色(蓝,浅→深),用于热力表
 export const SEQ = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"];
 

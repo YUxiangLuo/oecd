@@ -44,6 +44,61 @@ function deadlineLabel(value: string | null | undefined): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { hour12: false });
 }
 
+function AppBootSkeleton() {
+  return (
+    <div className="layout app-boot" role="region" aria-busy="true" aria-label="正在恢复课程">
+      <header className="topbar">
+        <LogoMark size={30} />
+        <div>
+          <h1>供应链仿真系统</h1>
+          <div className="sub">GVC SIMULATION LAB</div>
+        </div>
+        <div className="topbar-user app-boot-topbar">
+          <span className="skeleton-block skeleton-course" />
+          <span className="skeleton-block skeleton-meta" />
+          <span className="skeleton-block skeleton-pill" />
+          <span className="skeleton-block skeleton-button" />
+        </div>
+      </header>
+      <div className="main">
+        <aside className="sidebar app-boot-sidebar">
+          <div className="sidebar-head">
+            <div className="sidebar-head-row">
+              <span className="sidebar-title">课程大纲</span>
+              <span className="sidebar-steps">16 STEPS</span>
+            </div>
+            <div className="progress-track"><div className="progress-bar" style={{ width: "35%" }} /></div>
+          </div>
+          <div className="sidebar-list app-boot-step-list">
+            {Array.from({ length: 8 }, (_, index) => (
+              <span key={index} className="skeleton-block skeleton-step" />
+            ))}
+          </div>
+        </aside>
+        <div className="workarea">
+          <div className="step-header-bar app-boot-step-header">
+            <span className="skeleton-block skeleton-step-number" />
+            <span className="skeleton-block skeleton-step-title" />
+          </div>
+          <div className="content-row">
+            <main className="content">
+              <div className="content-inner">
+                <div className="card skeleton-card">
+                  <span className="skeleton-block skeleton-line wide" />
+                  <span className="skeleton-block skeleton-line" />
+                  <span className="skeleton-block skeleton-line short" />
+                </div>
+                <div className="skeleton-block skeleton-report" />
+              </div>
+            </main>
+          </div>
+        </div>
+      </div>
+      <span className="sr-only" role="status">正在恢复最新课程与实验记录…</span>
+    </div>
+  );
+}
+
 function stepFromUrl(): number | null {
   const n = Number(new URLSearchParams(window.location.search).get("step"));
   return Number.isInteger(n) && n >= 1 && n <= 16 ? n : null;
@@ -105,6 +160,9 @@ function Lab({ step, meta, state, completionKey, sessionStatus, sessionUnsynced,
 export default function App() {
   const [stepsData, setStepsData] = useState<StepsResponse | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
+  const [metaReady, setMetaReady] = useState(false);
+  const [assignmentContextsReady, setAssignmentContextsReady] = useState(false);
+  const [announcementsReady, setAnnouncementsReady] = useState(false);
   // 有效深链优先于服务端进度；应用内部切步只 replace 当前 URL，不污染浏览器历史。
   const explicitStep = useRef(stepFromUrl());
   const navigationTouched = useRef(false);
@@ -118,12 +176,13 @@ export default function App() {
   const [fatal, setFatal] = useState<string | null>(null);
   // 认证:localStorage 里的令牌先经 /api/auth/me 真实校验再放行
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [authChecked, setAuthChecked] = useState(false);
+  const [authChecked, setAuthChecked] = useState(() => !localStorage.getItem(AUTH_TOKEN_KEY));
   const [authExpiresAt, setAuthExpiresAt] = useState<number | null>(() => {
     const value = Number(localStorage.getItem(AUTH_EXPIRES_KEY));
     return Number.isFinite(value) && value > 0 ? value : null;
   });
   const [showIntro, setShowIntro] = useState(false);
+  const introTriggerRef = useRef<HTMLButtonElement>(null);
   // 课堂公告:登录后拉一次,顶栏下方横幅展示(教学库不可用时静默隐藏)
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const highestAnnouncementId = useRef(0);
@@ -258,6 +317,9 @@ export default function App() {
     setUser(null);
     setStepsData(null);
     setMeta(null);
+    setMetaReady(false);
+    setAssignmentContextsReady(false);
+    setAnnouncementsReady(false);
     setFatal(null);
     setShowIntro(false);
     setProgressReady(false);
@@ -315,7 +377,12 @@ export default function App() {
     let live = true;
     // 新账号解析完成前不沿用上一账号的 assignment/attempt。
     setMeta(null);
-    const cancelMetaLoad = beginAccountMetaLoad(() => api.meta(), setMeta);
+    setMetaReady(false);
+    const cancelMetaLoad = beginAccountMetaLoad(() => api.meta(), (value) => {
+      if (!live) return;
+      setMeta(value);
+      setMetaReady(true);
+    });
     if (accountRole === "teacher") {
       return () => {
         live = false;
@@ -326,6 +393,8 @@ export default function App() {
     highestAnnouncementId.current = 0;
     setAnnouncements([]);
     setAssignmentContexts([]);
+    setAnnouncementsReady(false);
+    setAssignmentContextsReady(false);
     setBannerDismissed(false);
     setBannerExpanded(false);
     api.steps().then(
@@ -333,8 +402,16 @@ export default function App() {
       (error) => { if (live) setFatal(String(error.message ?? error)); },
     );
     api.classroom.assignmentContexts().then(
-      (value) => { if (live) setAssignmentContexts(value.assignments); },
-      () => { if (live) setAssignmentContexts([]); },
+      (value) => {
+        if (!live) return;
+        setAssignmentContexts(value.assignments);
+        setAssignmentContextsReady(true);
+      },
+      () => {
+        if (!live) return;
+        setAssignmentContexts([]);
+        setAssignmentContextsReady(true);
+      },
     );
     return () => {
       live = false;
@@ -395,7 +472,10 @@ export default function App() {
       }
       highestAnnouncementId.current = scan.highestSeen;
       setAnnouncements(response.announcements);
-    }, () => {});
+      setAnnouncementsReady(true);
+    }, () => {
+      if (live) setAnnouncementsReady(true);
+    });
     return () => { live = false; };
   }, [user, current]);
 
@@ -408,7 +488,7 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [user, current, progressReady, assignmentReadOnly]);
 
-  if (!authChecked) return <div style={{ padding: 40 }} className="muted">加载中…</div>;
+  if (!authChecked) return <AppBootSkeleton />;
   if (!user)
     return (
       <LoginPage onLogin={(r) => {
@@ -456,7 +536,16 @@ export default function App() {
         </div>
       </div>
     );
-  if (!stepsData) return <div style={{ padding: 40 }} className="muted">加载中…</div>;
+  if (
+    !stepsData
+    || !metaReady
+    || !assignmentContextsReady
+    || !announcementsReady
+    || !progressReady
+    || session.status === "loading"
+  ) {
+    return <AppBootSkeleton />;
+  }
 
   const steps = stepsData.steps;
   const totalSteps = steps.length;
@@ -481,7 +570,8 @@ export default function App() {
     || Boolean(meta?.assignment_unavailable || meta?.manifest_mismatch);
 
   return (
-    <div className="layout">
+    <>
+    <div className="layout" inert={showIntro ? true : undefined}>
       <header className="topbar">
         <LogoMark size={30} />
         <div>
@@ -526,7 +616,7 @@ export default function App() {
           )}
             <span className="role-chip" title={`学生账号 · ${user.username}`}>{user.name}</span>
             {sessionExpiryLabel(authExpiresAt) && <span className="muted" title="服务端签发的 expires_at">会话至 {sessionExpiryLabel(authExpiresAt)}</span>}
-          <button onClick={() => setShowIntro(true)}>ⓘ 系统介绍</button>
+          <button ref={introTriggerRef} onClick={() => setShowIntro(true)}>ⓘ 系统介绍</button>
           <button onClick={logout}>退出</button>
         </div>
       </header>
@@ -555,13 +645,6 @@ export default function App() {
           )}
           <button onClick={() => setBannerDismissed(true)}>×</button>
         </div>
-      )}
-
-      {showIntro && (
-        <IntroOverlay user={user} meta={meta} onDone={(gotoStep) => {
-          setShowIntro(false);
-          if (gotoStep) navigateStep(gotoStep);
-        }} />
       )}
 
       <div className="main">
@@ -607,18 +690,27 @@ export default function App() {
                 // past 仅表示“到过”,是导航信息,一律显示步号——到过不是做过。
                 const done = completedSteps.has(s.n);
                 const state = done ? "done" : s.n === current ? "cur" : s.n <= maxStep ? "past" : "future";
+                const stepAccessibleName = [
+                  `第 ${s.n} 步：${s.title}`,
+                  s.n === current ? "当前步骤" : null,
+                  done ? "已完成" : "未完成",
+                ].filter(Boolean).join("，");
                 return (
                   <button
                     type="button"
                     key={s.n}
                     className={`step-row${s.n === current ? " active" : ""}`}
+                    aria-label={stepAccessibleName}
                     aria-current={s.n === current ? "step" : undefined}
                     onClick={() => navigateStep(s.n)}
                     title={`第 ${s.n} 步：${s.title}${done ? "（已完成）" : ""}`}
                   >
-                    <span className={`step-badge ${state}`}>{done ? "✓" : s.n}</span>
-                    <span className="step-row-title">{s.title}</span>
-                    <span className="step-code">{String(s.n).padStart(2, "0")}</span>
+                    <span className={`step-badge ${state}`} aria-hidden="true">
+                      <span className="step-badge-mark">{done ? "✓" : s.n}</span>
+                      {done && <span className="step-badge-mobile-number">{s.n}</span>}
+                    </span>
+                    <span className="step-row-title" aria-hidden="true">{s.title}</span>
+                    <span className="step-code" aria-hidden="true">{String(s.n).padStart(2, "0")}</span>
                   </button>
                 );
               })}
@@ -829,5 +921,17 @@ export default function App() {
       {/* 学生端 ToastHost:与上方教师端实例互斥,任一时刻只挂载一个(见教师分支处说明) */}
       <ToastHost />
     </div>
+    {showIntro && (
+      <IntroOverlay
+        user={user}
+        meta={meta}
+        returnFocusRef={introTriggerRef}
+        onDone={(gotoStep) => {
+          setShowIntro(false);
+          if (gotoStep) navigateStep(gotoStep);
+        }}
+      />
+    )}
+    </>
   );
 }

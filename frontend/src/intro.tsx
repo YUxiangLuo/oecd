@@ -7,7 +7,9 @@
  *   5 就绪:以当前登录身份进入实验
  * 统计与文案全部取自后端真实接口;仅动手预演为教学示意。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
+import { useDialogFocus } from "./a11y";
 import { api } from "./api";
 import { LogoMark } from "./brand";
 import type { AuthUser, Meta, ShockEvent, StepsResponse } from "./types";
@@ -73,11 +75,18 @@ function NavIcon({ kind }: { kind: "prev" | "next" | "start" | "skip" }) {
   );
 }
 
-export function IntroOverlay({ user, meta, onDone }: {
+export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
   user: AuthUser;
   meta: Meta | null;
   onDone: (gotoStep?: number) => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
+  const titleId = useId();
+  const icioPanelId = useId();
+  const shockPanelId = useId();
+  const tariffSliderId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const skipRef = useRef<HTMLButtonElement>(null);
   const [scene, setScene] = useState(0);
   const [stepsData, setStepsData] = useState<StepsResponse | null>(null);
   const [events, setEvents] = useState<ShockEvent[]>([]);
@@ -85,6 +94,12 @@ export function IntroOverlay({ user, meta, onDone }: {
   const [stage, setStage] = useState(1);
   const [tau, setTau] = useState(0);
   const [mechanism, setMechanism] = useState<"contract" | "reroute" | "offset" | null>(null);
+  useDialogFocus({
+    containerRef: dialogRef,
+    initialFocusRef: skipRef,
+    returnFocusRef,
+    onClose: () => onDone(),
+  });
 
   useEffect(() => {
     api.steps().then(setStepsData, () => {});
@@ -95,11 +110,10 @@ export function IntroOverlay({ user, meta, onDone }: {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight") setScene((s) => Math.min(N_SCENES - 1, s + 1));
       if (e.key === "ArrowLeft") setScene((s) => Math.max(0, s - 1));
-      if (e.key === "Escape") onDone();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onDone]);
+  }, []);
 
   const years = meta?.years ?? [];
   const yearSpan = years.length ? `${years[0]}–${years.at(-1)}` : "—";
@@ -163,18 +177,25 @@ export function IntroOverlay({ user, meta, onDone }: {
       <div className="intro-cards">
         <div
           className={`intro-card${openCard === "icio" ? " open" : ""}`}
-          onClick={() => setOpenCard(openCard === "icio" ? null : "icio")}
         >
-          <div className="intro-card-head">
+          <button
+            type="button"
+            className="intro-card-toggle-button"
+            aria-expanded={openCard === "icio"}
+            aria-controls={icioPanelId}
+            onClick={() => setOpenCard(openCard === "icio" ? null : "icio")}
+          >
+          <span className="intro-card-head">
             <CardIcon kind="icio" />
-            <div>
-              <div className="intro-card-title">OECD ICIO 投入产出表</div>
-              <div className="intro-card-sub">谁买了谁的东西 —— 全球生产网络与增加值路径的账本</div>
-            </div>
+            <span>
+              <span className="intro-card-title">OECD ICIO 投入产出表</span>
+              <span className="intro-card-sub">谁买了谁的东西 —— 全球生产网络与增加值路径的账本</span>
+            </span>
             <span className="intro-card-toggle">{openCard === "icio" ? "−" : "+"}</span>
-          </div>
+          </span>
+          </button>
           {openCard === "icio" && (
-            <div className="intro-card-body">
+            <div className="intro-card-body" id={icioPanelId}>
               <div>{meta?.countries.length ?? 77} 经济体 × {meta?.sectors.length ?? 45} 行业,{yearSpan} 逐年</div>
               <div>每年一张 {nodes.toLocaleString()} × {nodes.toLocaleString()} 的中间品流量矩阵</div>
               <div>结合 VA/TLS 账户、最终需求和里昂惕夫逆矩阵,追踪增加值、税收与网络位置</div>
@@ -183,18 +204,25 @@ export function IntroOverlay({ user, meta, onDone }: {
         </div>
         <div
           className={`intro-card${openCard === "shock" ? " open" : ""}`}
-          onClick={() => setOpenCard(openCard === "shock" ? null : "shock")}
         >
-          <div className="intro-card-head">
+          <button
+            type="button"
+            className="intro-card-toggle-button"
+            aria-expanded={openCard === "shock"}
+            aria-controls={shockPanelId}
+            onClick={() => setOpenCard(openCard === "shock" ? null : "shock")}
+          >
+          <span className="intro-card-head">
             <CardIcon kind="shock" />
-            <div>
-              <div className="intro-card-title">贸易政策冲击面板</div>
-              <div className="intro-card-sub">以 2018–2020 全球贸易摩擦为原型的课堂拟真事件库</div>
-            </div>
+            <span>
+              <span className="intro-card-title">贸易政策冲击面板</span>
+              <span className="intro-card-sub">以 2018–2020 全球贸易摩擦为原型的课堂拟真事件库</span>
+            </span>
             <span className="intro-card-toggle">{openCard === "shock" ? "−" : "+"}</span>
-          </div>
+          </span>
+          </button>
           {openCard === "shock" && (
-            <div className="intro-card-body">
+            <div className="intro-card-body" id={shockPanelId}>
               {events.slice(0, 4).map((e) => (
                 <div key={e.name}>{e.name}({e.effective} 生效)</div>
               ))}
@@ -267,8 +295,9 @@ export function IntroOverlay({ user, meta, onDone }: {
         <text x={435} y={34} textAnchor="middle" fontSize={12.5} fill="#a8b6da">最终品出口</text>
       </svg>
       <div className="intro-slider-row">
-        <span className="intro-slider-label">关税冲击 τ</span>
+        <label className="intro-slider-label" htmlFor={tariffSliderId}>关税冲击 τ</label>
         <input
+          id={tariffSliderId}
           type="range" min={0} max={25} value={tau * 100} disabled={!mechanism}
           onChange={(e) => setTau(Number(e.target.value) / 100)}
         />
@@ -306,9 +335,17 @@ export function IntroOverlay({ user, meta, onDone }: {
     </div>,
   ];
 
-  return (
-    <div className="intro-overlay">
-      <button className="intro-skip" aria-label="跳过介绍" title="跳过介绍" onClick={() => onDone()}>
+  return createPortal(
+    <div
+      ref={dialogRef}
+      className="intro-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      tabIndex={-1}
+    >
+      <h2 id={titleId} className="sr-only">系统介绍</h2>
+      <button ref={skipRef} className="intro-skip" aria-label="跳过介绍" title="跳过介绍" onClick={() => onDone()}>
         <NavIcon kind="skip" />
       </button>
       <div className="intro-scene-shell">
@@ -346,6 +383,7 @@ export function IntroOverlay({ user, meta, onDone }: {
         </div>
       </div>
       <div className="intro-keyhint">← → 方向键翻页 · Esc 跳过</div>
-    </div>
+    </div>,
+    document.body,
   );
 }

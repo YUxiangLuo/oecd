@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LabeledControl } from "../a11y";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import type { Announcement, ClassInfo } from "../types";
@@ -46,23 +47,31 @@ export function AnnouncementsTab() {
           <span className="panel-ic">✏️</span>撰写公告
         </div>
         <div className="modal-form">
-          <label>标题</label>
-          <input
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            placeholder="如：第 12–15 步回归练习本周五截止"
-          />
-          <label>可见范围</label>
-          <select value={form.class_id} onChange={(e) => setForm({ ...form, class_id: e.target.value })}>
-            <option value="">全部班级</option>
-            {(cls?.classes ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <label>正文(可空)</label>
-          <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} rows={5} />
+          <LabeledControl label="标题">
+            {(id) => (
+              <input
+                id={id}
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                placeholder="如：第 12–15 步回归练习本周五截止"
+              />
+            )}
+          </LabeledControl>
+          <LabeledControl label="可见范围">
+            {(id) => (
+              <select id={id} value={form.class_id} onChange={(e) => setForm({ ...form, class_id: e.target.value })}>
+                <option value="">全部班级</option>
+                {(cls?.classes ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </LabeledControl>
+          <LabeledControl label="正文(可空)">
+            {(id) => <textarea id={id} value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} rows={5} />}
+          </LabeledControl>
           {actionError && <div className="error-box">{actionError}</div>}
           <button className="primary block" onClick={publish}>
             发布公告

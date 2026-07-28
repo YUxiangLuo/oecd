@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ScrollableRegion } from "../a11y";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import { regressionStatusLabel } from "../regression-verdict";
@@ -66,7 +67,7 @@ export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () =
         <SearchInput value={query} onChange={setQuery} placeholder="搜索学生 / 学号 / 标题" />
       </Toolbar>
 
-      <div className="table-wrap">
+      <ScrollableRegion className="table-wrap" label="报告提交列表，可横向滚动">
         <table className="data-table">
           <thead>
             <tr>
@@ -118,7 +119,7 @@ export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () =
             }
           />
         )}
-      </div>
+      </ScrollableRegion>
     </div>
   );
 }
@@ -233,7 +234,7 @@ function SubmissionGradeView({
               分数(0-100)
               <input type="number" min={0} max={100} value={score} onChange={(e) => setScore(e.target.value)} />
             </label>
-            <div className="pill-row" style={{ margin: "-4px 0 12px" }} aria-label="快捷分值">
+            <div className="pill-row" role="group" style={{ margin: "-4px 0 12px" }} aria-label="快捷分值">
               {SCORE_PRESETS.map((value) => (
                 <button key={value} className={`pill${score === String(value) ? " on" : ""}`} onClick={() => setScore(String(value))}>
                   {value}
@@ -244,7 +245,7 @@ function SubmissionGradeView({
               评语(学生在步骤 16 页面可见)
               <textarea value={feedback} onChange={(e) => setFeedback(e.target.value)} rows={6} />
             </label>
-            <div className="pill-row" style={{ margin: "-4px 0 12px" }} aria-label="评语模板">
+            <div className="pill-row" role="group" style={{ margin: "-4px 0 12px" }} aria-label="评语模板">
               {FEEDBACK_PRESETS.map((text) => (
                 <button
                   key={text}

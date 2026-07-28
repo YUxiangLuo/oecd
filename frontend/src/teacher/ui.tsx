@@ -1,4 +1,5 @@
-import { useEffect, useId, type ReactNode } from "react";
+import { useId, useRef, type ReactNode } from "react";
+import { useDialogFocus } from "../a11y";
 
 /** 教师面板共用的轻量 UI 原语:模态框 / 工具条 / 搜索框 / 状态徽标 / 空态。
  *  替代原来散落的 window.prompt / window.confirm 与常驻内联表单。 */
@@ -16,19 +17,18 @@ export function Modal({
   width?: number;
 }) {
   const titleId = useId();
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus({ containerRef: dialogRef, onClose });
   return (
     <div className="modal-scrim" onMouseDown={onClose}>
       <div
+        ref={dialogRef}
         className="modal-card"
         style={{ width }}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        tabIndex={-1}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="modal-head">
@@ -87,15 +87,17 @@ export function SearchInput({
   value,
   onChange,
   placeholder = "搜索…",
+  label = "搜索",
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  label?: string;
 }) {
   return (
     <div className="search-input">
       <span className="search-ic">🔍</span>
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+      <input aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
       {value && (
         <button className="search-clear" onClick={() => onChange("")} aria-label="清除">
           ×

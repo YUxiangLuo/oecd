@@ -1,3 +1,4 @@
+import { ScrollableRegion } from "../../a11y";
 import type { QcCheck } from "../../types";
 
 /**
@@ -42,7 +43,7 @@ export function QcChecksTable({ rows, onNavigateStep }: {
   onNavigateStep?: (step: number) => void;
 }) {
   return (
-    <div className="table-wrap">
+    <ScrollableRegion className="table-wrap" label="数据质检结果表，可横向滚动">
       <table className="data-table">
         <thead>
           <tr><th>质检项</th><th>类型</th><th>结果</th><th style={{ textAlign: "left" }}>详情</th></tr>
@@ -84,6 +85,6 @@ export function QcChecksTable({ rows, onNavigateStep }: {
           })}
         </tbody>
       </table>
-    </div>
+    </ScrollableRegion>
   );
 }

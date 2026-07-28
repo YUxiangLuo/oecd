@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { LabeledControl } from "../a11y";
 import { formatMetric, stripNegativeZero } from "../format";
 import type { IndicatorSchema } from "../types";
 
@@ -17,32 +18,90 @@ export const fmtDb = (v: string | number | null) => {
   return stripNegativeZero(v.toLocaleString("zh-CN", { maximumFractionDigits: Math.abs(v) < 10 ? 3 : 2 }));
 };
 
-export function useAsync<T>(fn: () => Promise<T>, deps: unknown[]) {
+export type AsyncStatus = "idle" | "loading" | "success" | "error";
+
+export type AsyncResult<T> = {
+  data: T | null;
+  error: string | null;
+  status: AsyncStatus;
+  retry: () => void;
+};
+
+export function useAsync<T>(
+  fn: () => Promise<T>,
+  deps: unknown[],
+  options: { enabled?: boolean } = {},
+): AsyncResult<T> {
+  const enabled = options.enabled ?? true;
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<AsyncStatus>(enabled ? "loading" : "idle");
+  const [revision, setRevision] = useState(0);
+  const retry = useCallback(() => setRevision((value) => value + 1), []);
   useEffect(() => {
+    if (!enabled) {
+      setData(null);
+      setError(null);
+      setStatus("idle");
+      return;
+    }
     let live = true;
     setData(null);
     setError(null);
+    setStatus("loading");
     fn().then(
-      (d) => live && setData(d),
-      (e) => live && setError(String(e.message ?? e)),
+      (d) => {
+        if (!live) return;
+        setData(d);
+        setStatus("success");
+      },
+      (e) => {
+        if (!live) return;
+        setError(String(e.message ?? e));
+        setStatus("error");
+      },
     );
     return () => {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
-  return { data, error };
+  }, [...deps, enabled, revision]);
+  return { data, error, status, retry };
+}
+
+export function AsyncStateMessage({
+  status,
+  error,
+  loadingLabel = "加载中…",
+  onRetry,
+}: {
+  status: AsyncStatus;
+  error: string | null;
+  loadingLabel?: string;
+  onRetry: () => void;
+}) {
+  if (status === "loading" || status === "idle") {
+    return <p className="muted" role="status">{loadingLabel}</p>;
+  }
+  if (status !== "error") return null;
+  return (
+    <div className="error-box async-error" role="alert">
+      <span>数据加载失败：{error ?? "未知错误"}</span>
+      <button type="button" className="secondary" onClick={onRetry}>重试</button>
+    </div>
+  );
 }
 
 export function YearPicker({ years, year, onChange }: { years: number[]; year: number; onChange: (y: number) => void }) {
   return (
     <div className="controls">
-      <label>年份</label>
-      <select value={year} onChange={(e) => onChange(Number(e.target.value))}>
-        {years.map((y) => <option key={y} value={y}>{y}</option>)}
-      </select>
+      <LabeledControl label="年份">
+        {(id) => (
+          <select id={id} value={year} onChange={(e) => onChange(Number(e.target.value))}>
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        )}
+      </LabeledControl>
     </div>
   );
 }

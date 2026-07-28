@@ -1,3 +1,5 @@
+import { useId } from "react";
+import { ScrollableRegion } from "../a11y";
 import type { ClassOverview } from "../types";
 
 /** 教师概览用的自足 SVG 小图表(纯 SVG,随容器缩放)。配色取全局 token。 */
@@ -69,7 +71,7 @@ export function TrendChart({ data }: { data: ClassOverview["submission_trend"] }
   const area = `${line("submitted")} L ${x(data.length - 1).toFixed(1)} ${pad.t + ih} L ${x(0).toFixed(1)} ${pad.t + ih} Z`;
   const ticks = [0, max];
   return (
-    <div className="chart-scroll">
+    <ScrollableRegion className="chart-scroll" label="近 14 天提交与评阅趋势图，可横向滚动">
       <svg viewBox={`0 0 ${W} ${H}`} className="trend-svg" role="img" aria-label="近 14 天提交与评阅趋势">
         {ticks.map((t) => (
           <g key={t}>
@@ -100,7 +102,7 @@ export function TrendChart({ data }: { data: ClassOverview["submission_trend"] }
           评阅
         </span>
       </div>
-    </div>
+    </ScrollableRegion>
   );
 }
 
@@ -111,6 +113,7 @@ export function StepFunnel({ steps, completions = [], total, onSelect }: {
   total: number;
   onSelect?: (step: number, kind: "reached" | "completed") => void;
 }) {
+  const titleId = useId();
   const W = 560;
   const H = 150;
   const pad = { l: 24, r: 12, t: 12, b: 22 };
@@ -124,8 +127,9 @@ export function StepFunnel({ steps, completions = [], total, onSelect }: {
   const completionLine = steps.map((s, i) => `${i === 0 ? "M" : "L"} ${x(i).toFixed(1)} ${y(completionByStep.get(s.step) ?? 0).toFixed(1)}`).join(" ");
   const area = `${line} L ${x(steps.length - 1).toFixed(1)} ${pad.t + ih} L ${x(0).toFixed(1)} ${pad.t + ih} Z`;
   return (
-    <div className="chart-scroll">
-      <svg viewBox={`0 0 ${W} ${H}`} className="funnel-svg" role="img" aria-label="各步到达人数与服务端判定完成人数">
+    <ScrollableRegion className="chart-scroll" label="各步到达与完成人数图，可横向滚动">
+      <svg viewBox={`0 0 ${W} ${H}`} className="funnel-svg" role="group" aria-labelledby={titleId}>
+        <title id={titleId}>各步到达人数与服务端判定完成人数</title>
         <defs>
           <linearGradient id="funnelFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={INDIGO_L} stopOpacity="0.35" />
@@ -154,7 +158,7 @@ export function StepFunnel({ steps, completions = [], total, onSelect }: {
               }
             }}
           >
-            <circle cx={x(i)} cy={y(s.reached)} r="9" fill="transparent" />
+            <circle className="funnel-hit" cx={x(i)} cy={y(s.reached)} r="9" fill="transparent" />
             <circle cx={x(i)} cy={y(s.reached)} r="3.2" fill={INDIGO} />
             <text x={x(i)} y={H - 6} textAnchor="middle" className="axis-lab">{s.step}</text>
           </g>
@@ -171,13 +175,13 @@ export function StepFunnel({ steps, completions = [], total, onSelect }: {
                   onSelect?.(s.step, "completed");
                 }
               }}>
-              <circle cx={x(i)} cy={y(count)} r="8" fill="transparent" />
+              <circle className="funnel-hit" cx={x(i)} cy={y(count)} r="8" fill="transparent" />
               <circle cx={x(i)} cy={y(count)} r="3" fill={GREEN} />
             </g>
           );
         })}
       </svg>
       <div className="chart-legend"><span><i style={{ background: INDIGO }} />到达位置</span><span><i style={{ background: GREEN }} />步骤完成</span></div>
-    </div>
+    </ScrollableRegion>
   );
 }
