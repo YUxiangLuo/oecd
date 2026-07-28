@@ -103,7 +103,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--users-file", type=Path, required=True)
     parser.add_argument("--students", type=int, default=100)
     parser.add_argument("--placebo-ratio", type=float, default=0.25)
-    parser.add_argument("--timeout", type=float, default=120)
+    parser.add_argument("--timeout", type=float, default=180)
     parser.add_argument("--max-read-p95", type=float, default=3)
     parser.add_argument("--max-regression-p95", type=float, default=35)
     parser.add_argument("--max-placebo-p95", type=float, default=50)

@@ -49,6 +49,8 @@
   流量尖峰中无限创建连接或无限排队。
 - Bearer 会话数据库复查从 ASGI 事件循环转入有界线程池，慢数据库不会阻塞
   整个 worker 的事件循环。
+- `/health/live` 是原生异步端点，不占用上述同步线程令牌；线程池饱和不会制造
+  假性 liveness 失败。
 - 大 CSV 和原始 ICIO 列切片的首次读取在每个 worker 内 single-flight，
   避免冷缓存并发重复解析。
 - 计算队列满或等待超时时返回 `429`、稳定错误码和 `Retry-After`；已取得的
@@ -83,11 +85,18 @@ NUMEXPR_NUM_THREADS=2
 systemd 模板启动参数：
 
 ```text
---workers 16 --limit-concurrency 64 --backlog 2048 --graceful-timeout 120 --no-access-log
+--workers 16 --limit-concurrency 64 --backlog 2048 --graceful-timeout 180 --no-access-log
 ```
 
 `--limit-concurrency` 是每 worker 上限，不是全机上限；真正限制 CPU 密集任务
-的是跨进程 permit。
+的是跨进程 permit。systemd 会先执行 `gvcsim preflight`，在父进程启动前验证
+ASGI 导入、生产安全配置、完整产物、共享锁目录和 PostgreSQL；预检失败会让
+unit 失败并进入 systemd 的 `RestartSec`/`StartLimit`，不会留下 Uvicorn 父进程
+不断重生失败 worker。
+
+Nginx 与压测客户端的单请求 timeout 均为 180 秒。模板的端到端预算为
+`90 秒排队 + 50 秒重任务 + 40 秒余量 = 180 秒`；调整排队或执行预算时必须
+同步调整反向代理及客户端，禁止让已获准计算在代理断开后继续“成功”。
 
 PostgreSQL 至少应满足：
 
@@ -151,7 +160,9 @@ uv run python scripts/load_test_100_students.py \
 
 脚本以 100 个独立账号获取 token，不会用一个共享账号掩盖数据库写竞争。返回
 非零退出码表示任一请求失败或 p95/总时长越过门槛。JSON 结果可以作为发布附件，
-但凭证文件只能保留在权限 0600 的本地 `data/` 目录。
+但凭证文件只能保留在权限 0600 的本地 `data/` 目录。provision 脚本会先以
+0600 创建同目录临时文件，完整写入并同步后再原子替换目标；中断不会留下
+公开可读的半份新凭据。
 
 ## 调优规则
 

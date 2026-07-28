@@ -4,8 +4,9 @@
 保证测试套件在全新 clone 上也能通过。
 """
 
-import re
+import inspect
 import math
+import re
 
 import pandas as pd
 import pytest
@@ -119,6 +120,7 @@ def test_health_is_public_and_checks_artifact_contract(monkeypatch):
 
 
 def test_liveness_is_public_and_dependency_free(monkeypatch):
+    assert inspect.iscoroutinefunction(api_mod.liveness)
     monkeypatch.setattr(
         api_mod,
         "validate_release",

@@ -2,6 +2,7 @@ import sys
 
 import pytest
 
+from gvcsim import preflight
 from gvcsim.cli import main
 
 
@@ -45,4 +46,36 @@ def test_serve_rejects_unbounded_or_zero_capacity(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(sys, "argv", ["gvcsim", "serve", "--workers", "0"])
 
     with pytest.raises(SystemExit, match="必须为正数"):
+        main()
+
+
+def test_preflight_command_reports_success(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    monkeypatch.setattr(sys, "argv", ["gvcsim", "preflight"])
+    monkeypatch.setattr(
+        preflight,
+        "run",
+        lambda: {
+            "manifest_id": "artifact-123",
+            "years": [2019, 2020],
+            "database": {"schema_version": "gvcsim-teaching-db-v6"},
+        },
+    )
+
+    main()
+
+    output = capsys.readouterr().out
+    assert "artifact-123" in output
+    assert "2019,2020" in output
+    assert "gvcsim-teaching-db-v6" in output
+
+
+def test_preflight_command_exits_nonzero_on_dependency_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["gvcsim", "preflight"])
+    monkeypatch.setattr(
+        preflight,
+        "run",
+        lambda: (_ for _ in ()).throw(RuntimeError("PostgreSQL unavailable")),
+    )
+
+    with pytest.raises(SystemExit, match="服务启动预检失败.*PostgreSQL unavailable"):
         main()

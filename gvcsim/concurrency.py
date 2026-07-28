@@ -50,12 +50,22 @@ class _LockSet:
     descriptors: list[int]
 
     def release(self) -> None:
-        for descriptor in reversed(self.descriptors):
+        # 即使某个 unlock/close 失败，也必须继续处理其余 descriptor；close 本身
+        # 会释放 flock，所以优先保证不会因一个坏 fd 逐步蚕食全机容量。
+        descriptors = list(reversed(self.descriptors))
+        self.descriptors.clear()
+        first_error: BaseException | None = None
+        for descriptor in descriptors:
             try:
                 fcntl.flock(descriptor, fcntl.LOCK_UN)
-            finally:
+            except BaseException as error:
+                first_error = first_error or error
+            try:
                 os.close(descriptor)
-        self.descriptors.clear()
+            except BaseException as error:
+                first_error = first_error or error
+        if first_error is not None:
+            raise first_error
 
 
 def _runtime_dir() -> Path:
@@ -93,12 +103,19 @@ def _try_acquire(namespace: str, size: int, permits: int) -> _LockSet | None:
     # 每个线程从不同位置开始扫描，避免所有 worker 永远争抢 slot 0。
     start = (os.getpid() * 31 + threading.get_ident()) % size
     held: list[int] = []
-    for offset in range(size):
-        descriptor = _try_lock(paths[(start + offset) % size])
-        if descriptor is not None:
-            held.append(descriptor)
-            if len(held) == permits:
-                return _LockSet(held)
+    try:
+        for offset in range(size):
+            descriptor = _try_lock(paths[(start + offset) % size])
+            if descriptor is not None:
+                held.append(descriptor)
+                if len(held) == permits:
+                    return _LockSet(held)
+    except BaseException as error:
+        try:
+            _LockSet(held).release()
+        except BaseException as cleanup_error:
+            error.add_note(f"释放部分容量租约时又发生异常：{cleanup_error}")
+        raise
     _LockSet(held).release()
     return None
 
@@ -136,9 +153,12 @@ def cpu_workload(workload: str, *, permits: int = 1) -> Iterator[WorkloadLease]:
             waited_seconds=max(0.0, time.monotonic() - started),
         )
     finally:
-        if compute is not None:
-            compute.release()
-        admission.release()
+        try:
+            if compute is not None:
+                compute.release()
+        finally:
+            # compute 清理异常也不能跳过 admission，否则队列容量会永久缩小。
+            admission.release()
 
 
 def _locked_count(namespace: str, size: int) -> int:

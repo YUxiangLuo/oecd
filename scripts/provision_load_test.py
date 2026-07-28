@@ -10,7 +10,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import tempfile
 from pathlib import Path
+from typing import Any
 
 import psycopg
 from psycopg import sql
@@ -25,6 +27,35 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", type=Path, default=Path("data/loadtest-users.json"))
     parser.add_argument("--reset", action="store_true", help="重建专用 *_loadtest 数据库的 public schema")
     return parser
+
+
+def _write_credentials(output: Path, payload: dict[str, Any]) -> None:
+    """以 0600 临时文件写入并原子替换，任何时刻都不暴露新凭据。"""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=output.parent,
+        prefix=f".{output.name}.",
+        suffix=".tmp",
+    )
+    temporary = Path(temporary_name)
+    try:
+        # mkstemp 已承诺 0600；这里显式收紧，防止平台差异或后续重构破坏契约。
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            descriptor = -1  # fdopen 已接管 descriptor
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, output)
+    except BaseException:
+        if descriptor >= 0:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        temporary.unlink(missing_ok=True)
+        raise
 
 
 def main() -> None:
@@ -106,9 +137,7 @@ def main() -> None:
         "manifest_id": current_manifest,
         "users": users,
     }
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    args.output.chmod(0o600)
+    _write_credentials(args.output, payload)
     db.close_pool()
     print(f"已准备 {len(users)} 个隔离压测账号；凭证文件：{args.output}（0600）")
 

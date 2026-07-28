@@ -134,7 +134,7 @@ def health() -> JSONResponse:
 
 
 @app.get("/health/live", include_in_schema=False)
-def liveness() -> dict[str, str]:
+async def liveness() -> dict[str, str]:
     """只证明 worker 事件循环可接单；不触碰磁盘和 PostgreSQL。"""
     return {"status": "ok"}
 

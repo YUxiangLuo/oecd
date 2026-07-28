@@ -6,6 +6,7 @@ compute   预计算质检、指标、可视化/冲击数据与回归面板(步�
 regress   跑指定 outcome 的教学实证回归并打印系数表
 report    生成实验报告(步骤16)
 serve     启动 API 服务(供前端使用)
+preflight 生产多 worker 启动前验证应用、产物、运行目录与数据库
 classroom-init  初始化教学数据库(建库/建表/播种演示数据)
 classroom-reset-attempts  为新版题库归档开放作业的当前尝试
 """
@@ -78,6 +79,8 @@ def main() -> None:
         default=os.environ.get("GVCSIM_ACCESS_LOG", "1").lower() not in {"0", "false", "no", "off"},
         help="API 访问日志；Nginx 已记录访问时生产可用 --no-access-log 降低日志 I/O",
     )
+
+    sub.add_parser("preflight", help="启动前验证 ASGI 应用、产物、容量目录和教学数据库")
 
     p = sub.add_parser("classroom-init", help="初始化教学数据库(教师面板用;服务端也会懒建表)")
     p.add_argument("--reset", action="store_true", help="删除并重建全部教学表(会清空班级/学生/提交数据)")
@@ -217,6 +220,20 @@ def main() -> None:
             forwarded_allow_ips="127.0.0.1",
             log_level=args.log_level,
             access_log=args.access_log,
+        )
+
+    elif args.command == "preflight":
+        from gvcsim import preflight
+
+        try:
+            preflight_report = preflight.run()
+        except Exception as error:
+            raise SystemExit(f"服务启动预检失败（{type(error).__name__}）：{error}") from error
+        print(
+            "服务启动预检通过："
+            f"manifest={preflight_report['manifest_id']}，"
+            f"年份={','.join(str(year) for year in preflight_report['years'])}，"
+            f"schema={preflight_report['database']['schema_version']}"
         )
 
     elif args.command == "classroom-init":

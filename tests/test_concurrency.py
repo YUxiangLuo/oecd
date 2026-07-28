@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import multiprocessing
+import os
 from pathlib import Path
 
 import pytest
@@ -72,6 +73,33 @@ def test_weighted_job_times_out_and_releases_admission(tmp_path: Path, monkeypat
                 pass
         assert exc.value.reason == "wait_timeout"
         assert concurrency.capacity_snapshot()["admission_used"] == 1
+
+
+def test_slot_scan_releases_partial_lease_when_later_lock_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure(monkeypatch, tmp_path, cpu=2, queue=3, timeout=0.2)
+    original_try_lock = concurrency._try_lock
+    acquired: list[int] = []
+    calls = 0
+
+    def fail_after_first_lock(path: Path) -> int | None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            descriptor = original_try_lock(path)
+            assert descriptor is not None
+            acquired.append(descriptor)
+            return descriptor
+        raise OSError("simulated descriptor exhaustion")
+
+    monkeypatch.setattr(concurrency, "_try_lock", fail_after_first_lock)
+    with pytest.raises(OSError, match="descriptor exhaustion"):
+        concurrency._try_acquire("partial-failure", 2, 2)
+
+    assert len(acquired) == 1
+    with pytest.raises(OSError):
+        os.fstat(acquired[0])
 
 
 @pytest.mark.skipif(not hasattr(multiprocessing, "get_context"), reason="multiprocessing unavailable")
