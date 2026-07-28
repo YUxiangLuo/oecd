@@ -92,6 +92,25 @@ def test_global_schema_mismatch_handler_returns_generic_503(monkeypatch):
     assert response.json() == {"detail": "教学数据库 schema 未就绪；请先完成兼容迁移"}
 
 
+def test_query_operation_failure_has_a_sanitized_distinct_response(monkeypatch):
+    login = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+    assert login.status_code == 200
+    headers = {"Authorization": f"Bearer {login.json()['token']}"}
+
+    def query_failed(*_args, **_kwargs):
+        raise db.OperationFailed("query_canceled", "57014")
+
+    monkeypatch.setattr(db, "list_announcements", query_failed)
+    response = client.get("/api/classroom/announcements", headers=headers)
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "教学数据库操作失败，请稍后重试",
+        "code": "database_query_canceled",
+    }
+    assert "57014" not in response.text
+
+
 def test_me_rejects_missing_or_tampered_token():
     assert client.get("/api/auth/me").status_code == 401
 

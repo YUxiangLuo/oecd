@@ -413,6 +413,80 @@ def test_connection_pool_reuses_connections_and_applies_bounded_backpressure(mon
             assert executor.submit(wait_for_connection).result(timeout=2) == "bounded"
 
 
+def test_connection_checkout_failure_is_not_reported_as_a_query_failure(monkeypatch):
+    class BusyPool:
+        def getconn(self, *, timeout):
+            raise db.PoolTimeout("sensitive pool detail")
+
+    monkeypatch.setattr(db, "_schema_ready", True)
+    monkeypatch.setattr(db, "_startup_sealed", False)
+    monkeypatch.setattr(db, "_get_pool", lambda: BusyPool())
+
+    with pytest.raises(db.Unavailable, match="连接池繁忙") as exc_info:
+        with db.conn():
+            pass
+    assert not isinstance(exc_info.value, db.OperationFailed)
+    assert "sensitive" not in str(exc_info.value)
+
+
+def test_query_operational_error_keeps_a_distinct_reason_and_sqlstate(monkeypatch, caplog):
+    class BorrowedConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, _exc_type, _exc, _traceback):
+            return False
+
+    class ReadyPool:
+        def __init__(self):
+            self.connection = BorrowedConnection()
+            self.returned = False
+
+        def getconn(self, *, timeout):
+            return self.connection
+
+        def putconn(self, connection):
+            assert connection is self.connection
+            self.returned = True
+
+    pool = ReadyPool()
+    monkeypatch.setattr(db, "_schema_ready", True)
+    monkeypatch.setattr(db, "_startup_sealed", False)
+    monkeypatch.setattr(db, "_get_pool", lambda: pool)
+
+    with pytest.raises(db.OperationFailed) as exc_info:
+        with db.conn():
+            raise psycopg.errors.QueryCanceled("sensitive SQL and bind values")
+
+    assert exc_info.value.reason == "query_canceled"
+    assert exc_info.value.sqlstate == "57014"
+    assert str(exc_info.value) == "教学数据库操作失败，请稍后重试"
+    assert isinstance(exc_info.value.__cause__, psycopg.errors.QueryCanceled)
+    assert pool.returned is True
+    assert "sensitive SQL" not in caplog.text
+    assert "sqlstate=57014" in caplog.text
+
+
+def test_started_worker_refuses_request_time_lazy_schema_initialization(monkeypatch):
+    monkeypatch.setattr(db, "_schema_ready", False)
+    monkeypatch.setattr(db, "_startup_sealed", True)
+    monkeypatch.setattr(
+        db,
+        "initialize_schema",
+        lambda: (_ for _ in ()).throw(AssertionError("request path must not migrate schema")),
+    )
+
+    with pytest.raises(db.Unavailable, match="拒绝在请求路径执行惰性迁移"):
+        with db.conn():
+            pass
+
+
+def test_started_worker_rejects_direct_schema_reinitialization(monkeypatch):
+    monkeypatch.setattr(db, "_startup_sealed", True)
+    with pytest.raises(RuntimeError, match="请求生命周期"):
+        db.initialize_schema()
+
+
 def test_provisioned_teachers_receive_isolated_default_courses(monkeypatch):
     """生产空库显式建多个教师时，默认课程不能成为隐式共享授权通道。"""
     monkeypatch.setattr(config, "DEMO_MODE", False)

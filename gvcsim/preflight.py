@@ -38,7 +38,7 @@ def run() -> dict[str, Any]:
         database = classroom_db.readiness()
     finally:
         # ExecStartPre 是短进程；不得把连接池后台线程或连接带到 Uvicorn 父进程。
-        classroom_db.close_pool()
+        classroom_db.shutdown()
 
     return {
         "status": "ok",

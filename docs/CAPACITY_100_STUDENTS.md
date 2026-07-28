@@ -46,12 +46,17 @@
 ## 并发安全保证
 
 - PostgreSQL schema 首次迁移继续由事务 advisory lock 串行化。
+- worker 的 startup 完成后会封存 schema 状态；请求路径若发现状态丢失会
+  fail-closed，不会惰性迁移或关闭正在使用的 pool。pool shutdown 只关闭空闲
+  连接，已借出连接在归还时关闭。
 - 学生会话写入继续按 attempt advisory lock 串行化，两个标签页不会覆盖。
 - 登录滑动窗口存于 PostgreSQL v6；同一 `IP + username` 的 8 次精确预算和
   同一 IP 全部用户名共享的 400 次总预算都在 16 个 worker 上原子计数。
   轮换 username 不能制造无界数据库写入，旧记录最多保留限流窗口的 4 倍。
 - 每个数据库池都有 `max_size`、`max_waiting` 和 checkout timeout；不会在
   流量尖峰中无限创建连接或无限排队。
+- pool checkout 饱和与借出连接后的查询/事务故障使用不同异常；后者保留
+  脱敏的原因码与 SQLSTATE 供日志诊断，不再一律伪装成“连接池繁忙”。
 - Bearer 会话数据库复查从 ASGI 事件循环转入有界线程池，慢数据库不会阻塞
   整个 worker 的事件循环。
 - `/health/live` 是原生异步端点，不占用上述同步线程令牌；线程池饱和不会制造

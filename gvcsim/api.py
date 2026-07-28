@@ -77,7 +77,7 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
-        await anyio.to_thread.run_sync(classroom_db.close_pool)
+        await anyio.to_thread.run_sync(classroom_db.shutdown)
 
 
 app = FastAPI(title="供应链仿真系统 API", version="0.2.0", lifespan=lifespan)
@@ -1214,6 +1214,17 @@ async def classroom_db_unavailable(request: Request, exc: classroom_db.Unavailab
     return JSONResponse(
         status_code=503,
         content={"detail": "教学数据库不可用,请先启动 PostgreSQL 并运行 `uv run gvcsim classroom-init`"},
+    )
+
+
+@app.exception_handler(classroom_db.OperationFailed)
+async def classroom_db_operation_failed(request: Request, exc: classroom_db.OperationFailed):
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "教学数据库操作失败，请稍后重试",
+            "code": f"database_{exc.reason}",
+        },
     )
 
 

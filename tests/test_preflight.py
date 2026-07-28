@@ -43,7 +43,7 @@ def test_preflight_loads_asgi_app_and_checks_all_startup_dependencies(monkeypatc
         "readiness",
         lambda: calls.append("database:ready") or {"status": "ok"},
     )
-    monkeypatch.setattr(preflight.classroom_db, "close_pool", lambda: calls.append("database:close"))
+    monkeypatch.setattr(preflight.classroom_db, "shutdown", lambda: calls.append("database:shutdown"))
 
     report = preflight.run()
 
@@ -63,7 +63,7 @@ def test_preflight_loads_asgi_app_and_checks_all_startup_dependencies(monkeypatc
         "capacity",
         "database:start",
         "database:ready",
-        "database:close",
+        "database:shutdown",
     ]
 
 
@@ -86,7 +86,7 @@ def test_preflight_closes_partial_database_startup_on_failure(monkeypatch: pytes
         "startup",
         lambda: (_ for _ in ()).throw(RuntimeError("database unavailable")),
     )
-    monkeypatch.setattr(preflight.classroom_db, "close_pool", lambda: closed.append(True))
+    monkeypatch.setattr(preflight.classroom_db, "shutdown", lambda: closed.append(True))
 
     with pytest.raises(RuntimeError, match="database unavailable"):
         preflight.run()

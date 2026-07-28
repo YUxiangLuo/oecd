@@ -13,6 +13,7 @@ import atexit
 import hashlib
 import ipaddress
 import json
+import logging
 import os
 import secrets
 import threading
@@ -27,6 +28,8 @@ from psycopg_pool import ConnectionPool, PoolClosed, PoolTimeout, TooManyRequest
 
 from gvcsim import config
 
+logger = logging.getLogger(__name__)
+
 MAX_STEP = 16
 _SCHEMA_LOCK_ID = 736_861_016  # 固定事务级 advisory lock，串行化首次建表/播种
 # 会话写入的 advisory lock 命名空间(与 account_id 组成两段锁键,不与建表锁冲突)
@@ -38,6 +41,15 @@ TEACHING_DB_VERSION = "gvcsim-teaching-db-v6"
 
 class Unavailable(Exception):
     """教学数据库不可用(未启动/未建库/网络不通)。"""
+
+
+class OperationFailed(Unavailable):
+    """连接已经借出后发生的数据库操作故障，不与 pool checkout 饱和混淆。"""
+
+    def __init__(self, reason: str, sqlstate: str | None):
+        self.reason = reason
+        self.sqlstate = sqlstate
+        super().__init__("教学数据库操作失败，请稍后重试")
 
 
 class SchemaVersionMismatch(RuntimeError):
@@ -297,6 +309,7 @@ CREATE TABLE IF NOT EXISTS announcements (
 """
 
 _schema_ready = False
+_startup_sealed = False
 _pool: ConnectionPool[psycopg.Connection[dict[str, Any]]] | None = None
 _pool_signature: tuple[Any, ...] | None = None
 _pool_lock = threading.RLock()
@@ -493,6 +506,8 @@ def _ensure_legacy_context(c: psycopg.Connection[dict[str, Any]]) -> None:
 def initialize_schema() -> list[str]:
     """建表/安全迁移并播种；从 v3-v5 升级不需要 reset。"""
     global _schema_ready
+    if _startup_sealed:
+        raise RuntimeError("服务已完成启动，禁止在请求生命周期内重新初始化 schema")
     # 测试/运维将 ready 复位通常意味着 schema 或 DSN 已切换；旧连接上的
     # prepared statement/事务状态不能跨越这条边界。
     if not _schema_ready:
@@ -627,7 +642,7 @@ def _get_pool() -> ConnectionPool[psycopg.Connection[dict[str, Any]]]:
 
 
 def close_pool() -> None:
-    """关闭当前进程的池；幂等，可由 FastAPI lifespan 与测试调用。"""
+    """关闭当前进程的池；借出的连接会在归还时关闭，不会被中途打断。"""
     global _pool, _pool_signature
     with _pool_lock:
         if _pool is not None:
@@ -636,28 +651,69 @@ def close_pool() -> None:
         _pool_signature = None
 
 
+def shutdown() -> None:
+    """结束服务生命周期并重新允许 CLI/测试显式执行 schema 初始化。"""
+    global _startup_sealed
+    _startup_sealed = False
+    close_pool()
+
+
 def startup() -> None:
     """服务 worker 启动闸门：迁移完成且最小连接数建立后才接收流量。"""
+    global _startup_sealed
     config.validate_capacity_config()
     if not _schema_ready:
         initialize_schema()
     try:
         _get_pool().wait(timeout=max(5.0, config.DB_POOL_TIMEOUT_SECONDS))
     except (PoolTimeout, PoolClosed, psycopg.OperationalError) as error:
+        _startup_sealed = False
         close_pool()
         raise Unavailable(str(error)) from error
+    _startup_sealed = True
+
+
+def _operation_failure(error: psycopg.OperationalError) -> OperationFailed:
+    sqlstate = error.sqlstate
+    if sqlstate == "57014":
+        reason = "query_canceled"
+    elif sqlstate and sqlstate.startswith("40"):
+        reason = "transaction_conflict"
+    elif sqlstate and (sqlstate.startswith("08") or sqlstate.startswith("57P0")):
+        reason = "connection_lost"
+    else:
+        reason = "operational_error"
+    logger.warning(
+        "database operation failed: reason=%s sqlstate=%s driver_error=%s",
+        reason,
+        sqlstate or "unknown",
+        type(error).__name__,
+    )
+    return OperationFailed(reason, sqlstate)
 
 
 @contextmanager
 def conn() -> Iterator[psycopg.Connection[dict[str, Any]]]:
     """从池中借用事务连接；正常提交、异常回滚，最后归还而不是断开。"""
     if not _schema_ready:
+        if _startup_sealed:
+            raise Unavailable("服务启动后的 schema 就绪状态丢失；拒绝在请求路径执行惰性迁移")
         initialize_schema()
+
+    pool = _get_pool()
     try:
-        with _get_pool().connection(timeout=config.DB_POOL_TIMEOUT_SECONDS) as connection:
-            yield connection
+        connection = pool.getconn(timeout=config.DB_POOL_TIMEOUT_SECONDS)
     except (PoolTimeout, TooManyRequests, PoolClosed, psycopg.OperationalError) as error:
-        raise Unavailable("教学数据库繁忙或不可用，请稍后重试") from error
+        raise Unavailable("教学数据库连接池繁忙或不可用，请稍后重试") from error
+
+    try:
+        try:
+            with connection:
+                yield connection
+        except psycopg.OperationalError as error:
+            raise _operation_failure(error) from error
+    finally:
+        pool.putconn(connection)
 
 
 def pool_stats() -> dict[str, int]:
@@ -686,7 +742,7 @@ def readiness() -> dict[str, Any]:
     return {"status": "ok", "schema_version": row["version"], "pool": pool_stats()}
 
 
-atexit.register(close_pool)
+atexit.register(shutdown)
 
 
 def _seed_if_empty(c: psycopg.Connection[dict[str, Any]]) -> bool:
