@@ -47,8 +47,9 @@
 
 - PostgreSQL schema 首次迁移继续由事务 advisory lock 串行化。
 - 学生会话写入继续按 attempt advisory lock 串行化，两个标签页不会覆盖。
-- 登录失败滑动窗口从进程内内存迁移到 PostgreSQL v6；同一
-  `IP + username` 在 16 个 worker 上原子计数。
+- 登录滑动窗口存于 PostgreSQL v6；同一 `IP + username` 的 8 次精确预算和
+  同一 IP 全部用户名共享的 400 次总预算都在 16 个 worker 上原子计数。
+  轮换 username 不能制造无界数据库写入，旧记录最多保留限流窗口的 4 倍。
 - 每个数据库池都有 `max_size`、`max_waiting` 和 checkout timeout；不会在
   流量尖峰中无限创建连接或无限排队。
 - Bearer 会话数据库复查从 ASGI 事件循环转入有界线程池，慢数据库不会阻塞
@@ -84,6 +85,10 @@ GVCSIM_RUNTIME_DIR=/run/gvcsim
 GVCSIM_CPU_CONCURRENCY=16
 GVCSIM_CPU_QUEUE_SIZE=128
 GVCSIM_CPU_ACQUIRE_TIMEOUT_SECONDS=90
+
+GVCSIM_LOGIN_WINDOW_SECONDS=300
+GVCSIM_LOGIN_MAX_ATTEMPTS=8
+GVCSIM_LOGIN_IP_MAX_ATTEMPTS=400
 
 OMP_NUM_THREADS=2
 OPENBLAS_NUM_THREADS=2
@@ -182,7 +187,8 @@ uv run python scripts/load_test_100_students.py \
 - `requests_waiting` 持续增长但 CPU 空闲：检查慢 SQL、锁等待和 pool 配置；
   确认 PostgreSQL 连接预算后再增加每 worker pool。
 - admission 经常达到 128：先查前端重复请求或异常重试；不要直接取消队列上限。
-- 校园 NAT 下登录被 Nginx 拒绝：确认使用新版 `20r/s + burst 120` 模板。
-  应用层仍会按 `IP + username` 精确限制口令猜测。
+- 校园 NAT 下登录被 Nginx 拒绝：确认使用新版 `5r/s + burst 120` 模板。
+  应用层的 `IP + username` 精确预算与 per-IP 总预算应分别调优；不要通过移除
+  per-IP 总预算来容纳更多学生。
 
 每次修改 worker、pool、BLAS 或 CPU permit 后，都必须重新运行 100 人脚本。

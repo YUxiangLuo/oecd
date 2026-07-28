@@ -54,12 +54,13 @@ def test_capacity_template_bounds_processes_connections_and_cpu_queue():
     assert int(env["GVCSIM_CPU_CONCURRENCY"]) == 16
     assert int(env["GVCSIM_CPU_QUEUE_SIZE"]) >= 100
     assert env["GVCSIM_RUNTIME_DIR"] == "/run/gvcsim"
+    assert int(env["GVCSIM_LOGIN_IP_MAX_ATTEMPTS"]) >= 100
     assert all(int(env[name]) == 2 for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"))
 
 
 def test_nginx_allows_classroom_nat_burst_and_reuses_backend_connections():
     nginx = (ROOT / "deploy" / "nginx-gvcsim.conf").read_text(encoding="utf-8")
-    assert "rate=20r/s" in nginx
+    assert "rate=5r/s" in nginx
     assert "burst=120" in nginx
     assert "keepalive 64" in nginx
     assert "proxy_http_version 1.1" in nginx

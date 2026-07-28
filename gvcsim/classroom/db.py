@@ -17,7 +17,7 @@ import os
 import secrets
 import threading
 import uuid
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from typing import Any
 
@@ -732,39 +732,36 @@ def _rate_key_hash(rate_key: str) -> str:
     return hashlib.sha256(rate_key.encode("utf-8")).hexdigest()
 
 
-def reserve_login_attempt(
-    rate_key: str,
+_LOGIN_ATTEMPT_RETENTION_WINDOWS = 4
+
+
+def reserve_login_attempts(
+    rate_limits: Sequence[tuple[str, int]],
     window_seconds: int,
-    max_attempts: int,
     *,
     now: float | None = None,
 ) -> int | None:
-    """原子预占一次登录尝试；达到上限时返回应等待秒数。
+    """按顺序原子预占多个登录预算；任一达到上限时返回等待秒数。
 
-    同一 ``IP|username`` 的事务通过 advisory lock 串行化，所以多个 API
-    worker 同时收到请求时也不能越过上限。键只以 SHA-256 形式落库。
+    所有键的 advisory lock 按数值排序取得，避免并发请求死锁。较早预算（per-IP）
+    已插入后即使较晚预算（IP+username）拒绝也会提交，从而让被身份限流挡住的
+    请求仍计入 IP 总量。键只以 SHA-256 形式落库。
     """
-    if window_seconds <= 0 or max_attempts <= 0:
+    limits = list(rate_limits)
+    if window_seconds <= 0 or not limits or any(not key or maximum <= 0 for key, maximum in limits):
         raise ValueError("登录限流窗口和次数必须为正数")
-    key_hash = _rate_key_hash(rate_key)
-    lock_key = int.from_bytes(hashlib.sha256(key_hash.encode()).digest()[:8], "big", signed=True)
+    if len({key for key, _maximum in limits}) != len(limits):
+        raise ValueError("同一次登录限流预占不能包含重复键")
+
+    hashed_limits = [(_rate_key_hash(key), maximum) for key, maximum in limits]
+    lock_keys = {
+        int.from_bytes(hashlib.sha256(key_hash.encode()).digest()[:8], "big", signed=True)
+        for key_hash, _maximum in hashed_limits
+    }
     with conn() as c:
-        c.execute("SELECT pg_advisory_xact_lock(%s)", (lock_key,))
+        for lock_key in sorted(lock_keys):
+            c.execute("SELECT pg_advisory_xact_lock(%s)", (lock_key,))
         if now is None:
-            c.execute(
-                "DELETE FROM auth_login_attempts"
-                " WHERE rate_key_hash=%s AND attempted_at<=now()-(%s * interval '1 second')",
-                (key_hash, window_seconds),
-            )
-            row = _required(
-                c.execute(
-                    "SELECT count(*)::int AS attempts,"
-                    " extract(epoch FROM min(attempted_at)) AS oldest"
-                    " FROM auth_login_attempts WHERE rate_key_hash=%s",
-                    (key_hash,),
-                ).fetchone(),
-                "login rate count",
-            )
             current_epoch = _required(
                 c.execute("SELECT extract(epoch FROM now()) AS value").fetchone(),
                 "login rate clock",
@@ -772,11 +769,39 @@ def reserve_login_attempt(
             attempted_at_sql = "now()"
             attempted_at_params: tuple[Any, ...] = ()
         else:
-            cutoff = now - window_seconds
-            c.execute(
-                "DELETE FROM auth_login_attempts WHERE rate_key_hash=%s AND attempted_at<=to_timestamp(%s)",
-                (key_hash, cutoff),
-            )
+            current_epoch = now
+            attempted_at_sql = "to_timestamp(%s)"
+            attempted_at_params = (now,)
+
+        # 全局清理窗口只比限流窗口长一个小倍数。即使攻击者轮换 username，
+        # 旧键也不会按固定 1 天滞留；显式 now 让测试和离线调用保持同一时钟。
+        if secrets.randbelow(128) == 0:
+            retention_seconds = window_seconds * _LOGIN_ATTEMPT_RETENTION_WINDOWS
+            if now is None:
+                c.execute(
+                    "DELETE FROM auth_login_attempts"
+                    " WHERE attempted_at<now()-(%s * interval '1 second')",
+                    (retention_seconds,),
+                )
+            else:
+                c.execute(
+                    "DELETE FROM auth_login_attempts WHERE attempted_at<to_timestamp(%s)",
+                    (float(current_epoch) - retention_seconds,),
+                )
+
+        for key_hash, max_attempts in hashed_limits:
+            cutoff = float(current_epoch) - window_seconds
+            if now is None:
+                c.execute(
+                    "DELETE FROM auth_login_attempts"
+                    " WHERE rate_key_hash=%s AND attempted_at<=now()-(%s * interval '1 second')",
+                    (key_hash, window_seconds),
+                )
+            else:
+                c.execute(
+                    "DELETE FROM auth_login_attempts WHERE rate_key_hash=%s AND attempted_at<=to_timestamp(%s)",
+                    (key_hash, cutoff),
+                )
             row = _required(
                 c.execute(
                     "SELECT count(*)::int AS attempts,"
@@ -786,20 +811,25 @@ def reserve_login_attempt(
                 ).fetchone(),
                 "login rate count",
             )
-            current_epoch = now
-            attempted_at_sql = "to_timestamp(%s)"
-            attempted_at_params = (now,)
-        if row["attempts"] >= max_attempts:
-            oldest = float(row["oldest"] or current_epoch)
-            return max(1, int(oldest + window_seconds - float(current_epoch)) + 1)
-        c.execute(
-            f"INSERT INTO auth_login_attempts(rate_key_hash,attempted_at) VALUES (%s,{attempted_at_sql})",
-            (key_hash, *attempted_at_params),
-        )
-        # 有 attempted_at 单列索引；低概率清理攻击者制造的旧键，表不会无界增长。
-        if secrets.randbelow(128) == 0:
-            c.execute("DELETE FROM auth_login_attempts WHERE attempted_at<now()-interval '1 day'")
+            if row["attempts"] >= max_attempts:
+                oldest = float(row["oldest"] or current_epoch)
+                return max(1, int(oldest + window_seconds - float(current_epoch)) + 1)
+            c.execute(
+                f"INSERT INTO auth_login_attempts(rate_key_hash,attempted_at) VALUES (%s,{attempted_at_sql})",
+                (key_hash, *attempted_at_params),
+            )
     return None
+
+
+def reserve_login_attempt(
+    rate_key: str,
+    window_seconds: int,
+    max_attempts: int,
+    *,
+    now: float | None = None,
+) -> int | None:
+    """兼容单键调用；API 登录使用 :func:`reserve_login_attempts` 双层预算。"""
+    return reserve_login_attempts(((rate_key, max_attempts),), window_seconds, now=now)
 
 
 def clear_login_attempts(rate_key: str) -> None:

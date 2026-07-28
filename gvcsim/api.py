@@ -402,9 +402,11 @@ class LoginRequest(BaseModel):
 @app.post("/api/auth/login")
 def login(req: LoginRequest, request: Request):
     ip = request.client.host if request.client else None
-    rate_key = f"{ip or 'unknown'}|{req.username.casefold()}"
+    client_key = ip or "unknown"
+    ip_rate_key = f"ip:{client_key}"
+    identity_rate_key = f"identity:{client_key}|{req.username.casefold()}"
     try:
-        auth.reserve_login_attempt(rate_key)
+        auth.reserve_login_attempt(ip_rate_key, identity_rate_key)
     except auth.TooManyLoginAttempts as error:
         raise HTTPException(
             status_code=429,
@@ -426,7 +428,8 @@ def login(req: LoginRequest, request: Request):
             pass
         raise HTTPException(status_code=401, detail="用户名或密码错误")
     try:
-        auth.clear_login_rate(rate_key)
+        # 成功只清理该身份的口令猜测窗口；per-IP 总预算仍应统计这次请求。
+        auth.clear_login_rate(identity_rate_key)
         token, exp = auth.issue_token(user)
         if not user.get("demo"):
             classroom_db.record_audit_event(

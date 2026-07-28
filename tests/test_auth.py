@@ -156,6 +156,58 @@ def test_database_login_rate_limit_is_shared_and_atomic():
     assert db.reserve_login_attempt(key, 60, 2, now=103) is None
 
 
+def test_login_api_adds_an_ip_budget_that_username_rotation_cannot_bypass(monkeypatch):
+    monkeypatch.setattr(config, "LOGIN_IP_MAX_ATTEMPTS", 2)
+    monkeypatch.setattr(config, "LOGIN_MAX_ATTEMPTS", 8)
+    monkeypatch.setattr(auth, "authenticate", lambda _username, _password: None)
+
+    first = client.post("/api/auth/login", json={"username": "rotating-1", "password": "wrong"})
+    second = client.post("/api/auth/login", json={"username": "rotating-2", "password": "wrong"})
+    blocked = client.post("/api/auth/login", json={"username": "rotating-3", "password": "wrong"})
+
+    assert first.status_code == 401
+    assert second.status_code == 401
+    assert blocked.status_code == 429
+    assert int(blocked.headers["retry-after"]) > 0
+
+
+def test_successful_login_does_not_reset_the_shared_ip_budget(monkeypatch):
+    monkeypatch.setattr(config, "LOGIN_IP_MAX_ATTEMPTS", 1)
+    monkeypatch.setattr(config, "LOGIN_MAX_ATTEMPTS", 8)
+
+    first = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+    blocked = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"})
+
+    assert first.status_code == 200
+    assert blocked.status_code == 429
+
+
+def test_login_attempt_cleanup_retains_only_a_small_multiple_of_the_window(monkeypatch):
+    now = 10_000.0
+    old_key = db._rate_key_hash("old-identity")
+    recent_key = db._rate_key_hash("recent-identity")
+    with db.conn() as connection:
+        connection.execute(
+            "INSERT INTO auth_login_attempts(rate_key_hash,attempted_at)"
+            " VALUES (%s,to_timestamp(%s)),(%s,to_timestamp(%s))",
+            (old_key, now - 241, recent_key, now - 239),
+        )
+
+    monkeypatch.setattr(db.secrets, "randbelow", lambda _upper: 0)
+    assert db.reserve_login_attempt("fresh", 60, 2, now=now) is None
+
+    with db.conn() as connection:
+        retained = {
+            row["rate_key_hash"]
+            for row in connection.execute(
+                "SELECT rate_key_hash FROM auth_login_attempts WHERE rate_key_hash IN (%s,%s)",
+                (old_key, recent_key),
+            ).fetchall()
+        }
+    assert old_key not in retained
+    assert recent_key in retained
+
+
 def test_concurrent_database_login_reservations_cannot_overshoot_limit():
     key = "198.51.100.9|same-user"
     with ThreadPoolExecutor(max_workers=10) as executor:
@@ -164,14 +216,51 @@ def test_concurrent_database_login_reservations_cannot_overshoot_limit():
     assert sum(result is not None for result in results) == 7
 
 
+def test_concurrent_rotating_usernames_share_one_atomic_ip_budget():
+    ip_key = "ip:192.0.2.44"
+
+    def reserve(index: int) -> int | None:
+        return db.reserve_login_attempts(
+            ((ip_key, 3), (f"identity:192.0.2.44|rotating-{index}", 8)),
+            300,
+            now=100,
+        )
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        results = list(executor.map(reserve, range(10)))
+    assert results.count(None) == 3
+    assert sum(result is not None for result in results) == 7
+
+
 def test_login_api_preserves_retry_after_from_shared_limiter(monkeypatch):
-    def saturated(_key: str) -> None:
+    def saturated(_ip_key: str, _identity_key: str) -> None:
         raise auth.TooManyLoginAttempts(17)
 
     monkeypatch.setattr(auth, "reserve_login_attempt", saturated)
     response = client.post("/api/auth/login", json={"username": "student", "password": "wrong"})
     assert response.status_code == 429
     assert response.headers["retry-after"] == "17"
+
+
+def test_login_api_namespaces_ip_and_identity_rate_keys(monkeypatch):
+    observed: list[tuple[str, str]] = []
+
+    def capture(ip_key: str, identity_key: str) -> None:
+        observed.append((ip_key, identity_key))
+
+    monkeypatch.setattr(auth, "reserve_login_attempt", capture)
+    monkeypatch.setattr(auth, "authenticate", lambda _username, _password: None)
+    response = client.post("/api/auth/login", json={"username": "STUDENT", "password": "wrong"})
+
+    assert response.status_code == 401
+    assert observed == [("ip:testclient", "identity:testclient|student")]
+
+
+def test_security_config_rejects_an_ip_limit_below_the_identity_limit(monkeypatch):
+    monkeypatch.setattr(config, "LOGIN_MAX_ATTEMPTS", 8)
+    monkeypatch.setattr(config, "LOGIN_IP_MAX_ATTEMPTS", 7)
+    with pytest.raises(config.ConfigurationError, match="不能小于"):
+        config.validate_security_config()
 
 
 def test_local_secret_is_created_with_owner_only_permissions(tmp_path, monkeypatch):

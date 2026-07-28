@@ -66,6 +66,9 @@ MAX_TOKEN_TTL_SECONDS = 7200
 TOKEN_TTL_SECONDS = int(os.environ.get("GVCSIM_TOKEN_TTL_SECONDS", "1800"))
 LOGIN_WINDOW_SECONDS = int(os.environ.get("GVCSIM_LOGIN_WINDOW_SECONDS", "300"))
 LOGIN_MAX_ATTEMPTS = int(os.environ.get("GVCSIM_LOGIN_MAX_ATTEMPTS", "8"))
+# 校园 NAT 下允许整班在同一公网 IP 后登录，但仍为该 IP 的所有用户名设置
+# 总预算，避免攻击者轮换 username 绕过精确键。
+LOGIN_IP_MAX_ATTEMPTS = int(os.environ.get("GVCSIM_LOGIN_IP_MAX_ATTEMPTS", "400"))
 _origins_raw = os.environ.get("GVCSIM_ALLOWED_ORIGINS", "")
 ALLOWED_ORIGINS = [item.strip() for item in _origins_raw.split(",") if item.strip()]
 
@@ -106,8 +109,10 @@ def validate_security_config() -> None:
         raise ConfigurationError("缺少 GVCSIM_PG_DSN；教学数据库和认证不可用")
     if TOKEN_TTL_SECONDS <= 0 or TOKEN_TTL_SECONDS > MAX_TOKEN_TTL_SECONDS:
         raise ConfigurationError(f"GVCSIM_TOKEN_TTL_SECONDS 必须在 1..{MAX_TOKEN_TTL_SECONDS} 秒之间")
-    if LOGIN_WINDOW_SECONDS <= 0 or LOGIN_MAX_ATTEMPTS <= 0:
-        raise ConfigurationError("登录限流窗口和次数必须为正数")
+    if LOGIN_WINDOW_SECONDS <= 0 or LOGIN_MAX_ATTEMPTS <= 0 or LOGIN_IP_MAX_ATTEMPTS <= 0:
+        raise ConfigurationError("登录限流窗口、身份次数和 IP 总次数必须为正数")
+    if LOGIN_IP_MAX_ATTEMPTS < LOGIN_MAX_ATTEMPTS:
+        raise ConfigurationError("GVCSIM_LOGIN_IP_MAX_ATTEMPTS 不能小于 GVCSIM_LOGIN_MAX_ATTEMPTS")
     if IS_PRODUCTION:
         if DEMO_MODE:
             raise ConfigurationError("生产环境禁止 GVCSIM_DEMO_MODE")
