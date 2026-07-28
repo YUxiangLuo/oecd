@@ -1,5 +1,6 @@
 """64 核 / 100 学生部署模板的容量不变量。"""
 
+import asyncio
 import json
 import os
 import re
@@ -158,6 +159,58 @@ def test_credentials_write_failure_keeps_old_target_and_removes_private_temporar
 
     assert output.read_text(encoding="utf-8") == "old credentials\n"
     assert list(tmp_path.glob(".users.json.*.tmp")) == []
+
+
+def _load_test_args(users_file: Path, students: int):
+    return load_test_100_students._parser().parse_args(
+        [
+            "--base-url",
+            "http://127.0.0.1:1",
+            "--users-file",
+            str(users_file),
+            "--students",
+            str(students),
+        ]
+    )
+
+
+def test_capacity_harness_rejects_fewer_credentials_than_requested(tmp_path: Path):
+    users_file = tmp_path / "users.json"
+    users_file.write_text(
+        json.dumps(
+            {
+                "kind": "gvcsim-capacity-test-users-v1",
+                "users": [
+                    {"username": f"student-{index}", "password": "password"}
+                    for index in range(50)
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="100"):
+        asyncio.run(load_test_100_students._run(_load_test_args(users_file, 100)))
+
+
+@pytest.mark.parametrize("students", [-1, 0, 49, 101])
+def test_capacity_harness_rejects_requested_count_outside_acceptance_range(tmp_path: Path, students: int):
+    users_file = tmp_path / "users.json"
+    users_file.write_text(
+        json.dumps(
+            {
+                "kind": "gvcsim-capacity-test-users-v1",
+                "users": [
+                    {"username": f"student-{index}", "password": "password"}
+                    for index in range(100)
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="50..100"):
+        asyncio.run(load_test_100_students._run(_load_test_args(users_file, students)))
 
 
 def test_capacity_harness_is_executable_and_documented():

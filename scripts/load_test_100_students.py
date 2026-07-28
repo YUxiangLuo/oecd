@@ -116,9 +116,14 @@ async def _run(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
     credentials = json.loads(args.users_file.read_text(encoding="utf-8"))
     if credentials.get("kind") != "gvcsim-capacity-test-users-v1":
         raise SystemExit("users file 契约不正确")
-    users = list(credentials.get("users") or [])[: args.students]
-    if not 50 <= len(users) <= 100:
-        raise SystemExit("容量验收必须使用 50..100 个独立学生账号")
+    if not 50 <= args.students <= 100:
+        raise SystemExit("容量验收的 --students 必须在 50..100 之间")
+    available_users = list(credentials.get("users") or [])
+    if len(available_users) < args.students:
+        raise SystemExit(
+            f"users file 只有 {len(available_users)} 个账号，少于 --students 请求的 {args.students} 个"
+        )
+    users = available_users[: args.students]
     if not 0 <= args.placebo_ratio <= 1:
         raise SystemExit("--placebo-ratio 必须在 0..1 之间")
 

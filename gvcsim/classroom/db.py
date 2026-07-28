@@ -1215,7 +1215,8 @@ def record_evidence_event(
     return row
 
 
-def evidence_event_exists(
+def _evidence_event_exists_in_conn(
+    c: psycopg.Connection[dict[str, Any]],
     username: str,
     event_id: str,
     assignment_id: int,
@@ -1227,6 +1228,66 @@ def evidence_event_exists(
     kind: str | None = None,
     manifest_id: str | None = None,
 ) -> bool:
+    scope = _attempt_scope(c, username, manifest_id, create=False)
+    if (
+        not scope
+        or scope.get("manifest_mismatch")
+        or scope.get("assignment_id") != assignment_id
+        or scope.get("attempt_id") != attempt_id
+        or (account_id is not None and scope.get("account_id") != account_id)
+    ):
+        return False
+    clauses = [
+        "a.username=%s",
+        "ev.id=%s",
+        "ev.account_id=%s",
+        "ev.assignment_id=%s",
+        "ev.attempt_id=%s",
+        "ev.payload_hash=%s",
+        "ev.revoked_at IS NULL",
+        "at.state='active'",
+    ]
+    params: list[Any] = [
+        username,
+        event_id,
+        scope["account_id"],
+        assignment_id,
+        attempt_id,
+        payload_sha256,
+    ]
+    if step is not None:
+        clauses.append("ev.step=%s")
+        params.append(step)
+    if kind is not None:
+        clauses.append("ev.kind=%s")
+        params.append(kind)
+    if manifest_id is not None:
+        clauses.append("ev.manifest_id=%s")
+        params.append(manifest_id)
+    return (
+        c.execute(
+            "SELECT 1 FROM learning_evidence_events ev JOIN accounts a ON a.id=ev.account_id"
+            " JOIN experiment_attempts at ON at.id=ev.attempt_id"
+            f" WHERE {' AND '.join(clauses)}",
+            tuple(params),
+        ).fetchone()
+        is not None
+    )
+
+
+def evidence_event_exists(
+    username: str,
+    event_id: str,
+    assignment_id: int,
+    attempt_id: int,
+    payload_sha256: str,
+    *,
+    account_id: int | None = None,
+    step: int | None = None,
+    kind: str | None = None,
+    manifest_id: str | None = None,
+    connection: psycopg.Connection[dict[str, Any]] | None = None,
+) -> bool:
     """确认事件属于学生**当前**解析出的 assignment/attempt。
 
     仅检查 token 自称的旧 attempt 仍为 ``active`` 不够：教师发布同一 manifest
@@ -1234,51 +1295,31 @@ def evidence_event_exists(
     scope，旧收据可被复制到新作业。这里同时核对事件的教学语义字段，quiz 与
     regression 共用这一道不可跨作业重放的边界。
     """
-    with conn() as c:
-        scope = _attempt_scope(c, username, manifest_id, create=False)
-        if (
-            not scope
-            or scope.get("manifest_mismatch")
-            or scope.get("assignment_id") != assignment_id
-            or scope.get("attempt_id") != attempt_id
-            or (account_id is not None and scope.get("account_id") != account_id)
-        ):
-            return False
-        clauses = [
-            "a.username=%s",
-            "ev.id=%s",
-            "ev.account_id=%s",
-            "ev.assignment_id=%s",
-            "ev.attempt_id=%s",
-            "ev.payload_hash=%s",
-            "ev.revoked_at IS NULL",
-            "at.state='active'",
-        ]
-        params: list[Any] = [
+    if connection is not None:
+        return _evidence_event_exists_in_conn(
+            connection,
             username,
             event_id,
-            scope["account_id"],
             assignment_id,
             attempt_id,
             payload_sha256,
-        ]
-        if step is not None:
-            clauses.append("ev.step=%s")
-            params.append(step)
-        if kind is not None:
-            clauses.append("ev.kind=%s")
-            params.append(kind)
-        if manifest_id is not None:
-            clauses.append("ev.manifest_id=%s")
-            params.append(manifest_id)
-        return (
-            c.execute(
-                "SELECT 1 FROM learning_evidence_events ev JOIN accounts a ON a.id=ev.account_id"
-                " JOIN experiment_attempts at ON at.id=ev.attempt_id"
-                f" WHERE {' AND '.join(clauses)}",
-                tuple(params),
-            ).fetchone()
-            is not None
+            account_id=account_id,
+            step=step,
+            kind=kind,
+            manifest_id=manifest_id,
+        )
+    with conn() as c:
+        return _evidence_event_exists_in_conn(
+            c,
+            username,
+            event_id,
+            assignment_id,
+            attempt_id,
+            payload_sha256,
+            account_id=account_id,
+            step=step,
+            kind=kind,
+            manifest_id=manifest_id,
         )
 
 
@@ -1684,7 +1725,12 @@ def _learning_status_in_conn(
     if result["legacy_unverified"] or result["session_stale"]:
         return result
     try:
-        summary = evidence.completion_summary(session["session"], subject=username, require_trusted=True)
+        summary = evidence.completion_summary(
+            session["session"],
+            subject=username,
+            require_trusted=True,
+            connection=c,
+        )
     except Exception:
         return result
     completed = summary.get("completed", [])
@@ -2199,17 +2245,30 @@ def latest_report(username: str) -> dict[str, Any] | None:
         ).fetchone()
 
 
-def report_by_key(username: str, report_key: str) -> dict[str, Any] | None:
+def _report_by_key_in_conn(
+    c: psycopg.Connection[dict[str, Any]], username: str, report_key: str
+) -> dict[str, Any] | None:
+    scope = _attempt_scope(c, username)
+    if not scope:
+        return None
+    return c.execute(
+        "SELECT r.id, r.report_key, r.session_revision, r.manifest_id, r.markdown, r.provenance, r.created_at"
+        " FROM reports r JOIN accounts a ON a.id = r.account_id"
+        " WHERE a.username = %s AND r.report_key = %s AND r.attempt_id=%s",
+        (username, report_key, scope["attempt_id"]),
+    ).fetchone()
+
+
+def report_by_key(
+    username: str,
+    report_key: str,
+    *,
+    connection: psycopg.Connection[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    if connection is not None:
+        return _report_by_key_in_conn(connection, username, report_key)
     with conn() as c:
-        scope = _attempt_scope(c, username)
-        if not scope:
-            return None
-        return c.execute(
-            "SELECT r.id, r.report_key, r.session_revision, r.manifest_id, r.markdown, r.provenance, r.created_at"
-            " FROM reports r JOIN accounts a ON a.id = r.account_id"
-            " WHERE a.username = %s AND r.report_key = %s AND r.attempt_id=%s",
-            (username, report_key, scope["attempt_id"]),
-        ).fetchone()
+        return _report_by_key_in_conn(c, username, report_key)
 
 
 # ---------------------------------------------------------------- 报告提交与评阅

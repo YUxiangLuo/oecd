@@ -413,6 +413,50 @@ def test_connection_pool_reuses_connections_and_applies_bounded_backpressure(mon
             assert executor.submit(wait_for_connection).result(timeout=2) == "bounded"
 
 
+@needs_artifacts
+def test_teacher_progress_reuses_held_pool_connection_for_trusted_checks(monkeypatch):
+    """单连接池也必须验证事件与报告，不能因嵌套 checkout 静默清空完成度。"""
+    from gvcsim import quizzes
+
+    student = _login("student")
+    manifest_id = _manifest_id()
+    answer = quizzes.correct_quiz(1)
+    graded = client.post(
+        "/api/classroom/quiz/submit",
+        headers=student,
+        json={"step": 1, **answer},
+    )
+    assert graded.status_code == 200, graded.text
+    receipt = graded.json()
+
+    report_key = "single-connection-report"
+    session = session_model.empty_session(manifest_id)
+    session["steps"] = {
+        "1": session_model.make_record({"quiz": receipt["quiz"], "quiz_id": receipt["quiz_id"]}),
+        "16": session_model.make_record({"report_key": report_key}),
+    }
+    saved = db.save_generated_report_and_session(
+        "student",
+        report_key,
+        0,
+        manifest_id,
+        "# report",
+        {},
+        session,
+    )
+    assert saved is not None
+
+    monkeypatch.setattr(config, "DB_POOL_MIN_SIZE", 1)
+    monkeypatch.setattr(config, "DB_POOL_MAX_SIZE", 1)
+    monkeypatch.setattr(config, "DB_POOL_TIMEOUT_SECONDS", 0.08)
+    monkeypatch.setattr(config, "DB_POOL_MAX_WAITING", 1)
+    db.close_pool()
+
+    row = db.list_students(teacher_username="teacher")[0]
+    assert row["verified_completed_steps"] == [1, 16]
+    assert row["verified_completed_count"] == 2
+
+
 def test_connection_checkout_failure_is_not_reported_as_a_query_failure(monkeypatch):
     class BusyPool:
         def getconn(self, *, timeout):
