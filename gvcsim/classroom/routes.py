@@ -373,6 +373,7 @@ async def generate_report(user: dict = Depends(require_student)):
     前 15 步答题未全部通过时拒绝(409),并返回还差什么;报告正文与其中实际
     运行过的回归结果都由服务端生成,不接受任何客户端提供的正文。
     """
+
     def prepare() -> tuple[dict[str, Any], int]:
         _ensure_current_assignment(user["sub"])
         return _load_session_for_report(user["sub"])

@@ -85,9 +85,7 @@ def test_weighted_job_times_out_and_releases_admission(tmp_path: Path, monkeypat
         remaining_admission.release()
 
 
-def test_later_light_job_cannot_bypass_waiting_weighted_job(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_later_light_job_cannot_bypass_waiting_weighted_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """持续轻任务能插队的旧实现会在 blocker 释放前先运行 light。"""
     _configure(monkeypatch, tmp_path, cpu=2, queue=4, timeout=1.5)
     blocker = concurrency._try_acquire("cpu", 2, 1)
@@ -153,9 +151,7 @@ def test_later_light_job_cannot_bypass_waiting_weighted_job(
     assert order == ["heavy", "light"]
 
 
-def test_abandoned_queue_ticket_is_removed_after_worker_crash(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_abandoned_queue_ticket_is_removed_after_worker_crash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure(monkeypatch, tmp_path, cpu=2, queue=4, timeout=0.2)
     abandoned = concurrency._try_create_queue_ticket()
     assert abandoned is not None and abandoned.descriptor is not None
@@ -173,9 +169,7 @@ def test_abandoned_queue_ticket_is_removed_after_worker_crash(
         successor.release()
 
 
-def test_async_queue_wait_does_not_borrow_default_thread_token(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_async_queue_wait_does_not_borrow_default_thread_token(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _configure(monkeypatch, tmp_path, cpu=1, queue=2, timeout=0.5)
 
     async def scenario() -> None:

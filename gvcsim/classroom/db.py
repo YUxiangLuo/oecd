@@ -835,8 +835,7 @@ def reserve_login_attempts(
             retention_seconds = window_seconds * _LOGIN_ATTEMPT_RETENTION_WINDOWS
             if now is None:
                 c.execute(
-                    "DELETE FROM auth_login_attempts"
-                    " WHERE attempted_at<now()-(%s * interval '1 second')",
+                    "DELETE FROM auth_login_attempts WHERE attempted_at<now()-(%s * interval '1 second')",
                     (retention_seconds,),
                 )
             else:
