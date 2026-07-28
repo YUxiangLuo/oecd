@@ -355,6 +355,21 @@ def test_v4_schema_is_migrated_in_place_with_assignment_selection():
         assert c.execute("SELECT to_regclass('public.student_assignment_selections')").fetchone()[0]
 
 
+def test_v5_schema_is_migrated_in_place_with_shared_login_limiter():
+    _login("student")
+    with psycopg.connect(TEST_DSN, autocommit=True) as c:
+        c.execute("DROP TABLE auth_login_attempts")
+        c.execute("UPDATE schema_meta SET version='gvcsim-teaching-db-v5' WHERE singleton")
+    db._schema_ready = False
+
+    applied = db.initialize_schema()
+
+    assert any("v5" in item and "v6" in item for item in applied)
+    with psycopg.connect(TEST_DSN) as c:
+        assert c.execute("SELECT version FROM schema_meta").fetchone()[0] == db.TEACHING_DB_VERSION
+        assert c.execute("SELECT to_regclass('public.auth_login_attempts')").fetchone()[0]
+
+
 def test_concurrent_initialize_is_safe_and_idempotent():
     with psycopg.connect(TEST_DSN, autocommit=True) as c:
         c.execute("DROP SCHEMA public CASCADE")
@@ -369,6 +384,151 @@ def test_concurrent_initialize_is_safe_and_idempotent():
     with psycopg.connect(TEST_DSN) as c:
         assert c.execute("SELECT count(*) FROM schema_meta").fetchone()[0] == 1
         assert c.execute("SELECT count(*) FROM accounts WHERE username = 'student'").fetchone()[0] == 1
+
+
+def test_connection_pool_reuses_connections_and_applies_bounded_backpressure(monkeypatch):
+    _login("student")
+    monkeypatch.setattr(config, "DB_POOL_MIN_SIZE", 1)
+    monkeypatch.setattr(config, "DB_POOL_MAX_SIZE", 1)
+    monkeypatch.setattr(config, "DB_POOL_TIMEOUT_SECONDS", 0.08)
+    monkeypatch.setattr(config, "DB_POOL_MAX_WAITING", 1)
+    db.close_pool()
+
+    with db.conn() as connection:
+        first_pid = connection.execute("SELECT pg_backend_pid() AS pid").fetchone()["pid"]
+    with db.conn() as connection:
+        second_pid = connection.execute("SELECT pg_backend_pid() AS pid").fetchone()["pid"]
+    assert second_pid == first_pid
+    assert db.pool_stats()["size"] == 1
+    assert db.readiness()["pool"]["available"] == 1
+
+    def wait_for_connection() -> str:
+        with pytest.raises(db.Unavailable, match="繁忙"):
+            with db.conn():
+                pass
+        return "bounded"
+
+    with db.conn():
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            assert executor.submit(wait_for_connection).result(timeout=2) == "bounded"
+
+
+@needs_artifacts
+def test_teacher_progress_reuses_held_pool_connection_for_trusted_checks(monkeypatch):
+    """单连接池也必须验证事件与报告，不能因嵌套 checkout 静默清空完成度。"""
+    from gvcsim import quizzes
+
+    student = _login("student")
+    manifest_id = _manifest_id()
+    answer = quizzes.correct_quiz(1)
+    graded = client.post(
+        "/api/classroom/quiz/submit",
+        headers=student,
+        json={"step": 1, **answer},
+    )
+    assert graded.status_code == 200, graded.text
+    receipt = graded.json()
+
+    report_key = "single-connection-report"
+    session = session_model.empty_session(manifest_id)
+    session["steps"] = {
+        "1": session_model.make_record({"quiz": receipt["quiz"], "quiz_id": receipt["quiz_id"]}),
+        "16": session_model.make_record({"report_key": report_key}),
+    }
+    saved = db.save_generated_report_and_session(
+        "student",
+        report_key,
+        0,
+        manifest_id,
+        "# report",
+        {},
+        session,
+    )
+    assert saved is not None
+
+    monkeypatch.setattr(config, "DB_POOL_MIN_SIZE", 1)
+    monkeypatch.setattr(config, "DB_POOL_MAX_SIZE", 1)
+    monkeypatch.setattr(config, "DB_POOL_TIMEOUT_SECONDS", 0.08)
+    monkeypatch.setattr(config, "DB_POOL_MAX_WAITING", 1)
+    db.close_pool()
+
+    row = db.list_students(teacher_username="teacher")[0]
+    assert row["verified_completed_steps"] == [1, 16]
+    assert row["verified_completed_count"] == 2
+
+
+def test_connection_checkout_failure_is_not_reported_as_a_query_failure(monkeypatch):
+    class BusyPool:
+        def getconn(self, *, timeout):
+            raise db.PoolTimeout("sensitive pool detail")
+
+    monkeypatch.setattr(db, "_schema_ready", True)
+    monkeypatch.setattr(db, "_startup_sealed", False)
+    monkeypatch.setattr(db, "_get_pool", lambda: BusyPool())
+
+    with pytest.raises(db.Unavailable, match="连接池繁忙") as exc_info:
+        with db.conn():
+            pass
+    assert not isinstance(exc_info.value, db.OperationFailed)
+    assert "sensitive" not in str(exc_info.value)
+
+
+def test_query_operational_error_keeps_a_distinct_reason_and_sqlstate(monkeypatch, caplog):
+    class BorrowedConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, _exc_type, _exc, _traceback):
+            return False
+
+    class ReadyPool:
+        def __init__(self):
+            self.connection = BorrowedConnection()
+            self.returned = False
+
+        def getconn(self, *, timeout):
+            return self.connection
+
+        def putconn(self, connection):
+            assert connection is self.connection
+            self.returned = True
+
+    pool = ReadyPool()
+    monkeypatch.setattr(db, "_schema_ready", True)
+    monkeypatch.setattr(db, "_startup_sealed", False)
+    monkeypatch.setattr(db, "_get_pool", lambda: pool)
+
+    with pytest.raises(db.OperationFailed) as exc_info:
+        with db.conn():
+            raise psycopg.errors.QueryCanceled("sensitive SQL and bind values")
+
+    assert exc_info.value.reason == "query_canceled"
+    assert exc_info.value.sqlstate == "57014"
+    assert str(exc_info.value) == "教学数据库操作失败，请稍后重试"
+    assert isinstance(exc_info.value.__cause__, psycopg.errors.QueryCanceled)
+    assert pool.returned is True
+    assert "sensitive SQL" not in caplog.text
+    assert "sqlstate=57014" in caplog.text
+
+
+def test_started_worker_refuses_request_time_lazy_schema_initialization(monkeypatch):
+    monkeypatch.setattr(db, "_schema_ready", False)
+    monkeypatch.setattr(db, "_startup_sealed", True)
+    monkeypatch.setattr(
+        db,
+        "initialize_schema",
+        lambda: (_ for _ in ()).throw(AssertionError("request path must not migrate schema")),
+    )
+
+    with pytest.raises(db.Unavailable, match="拒绝在请求路径执行惰性迁移"):
+        with db.conn():
+            pass
+
+
+def test_started_worker_rejects_direct_schema_reinitialization(monkeypatch):
+    monkeypatch.setattr(db, "_startup_sealed", True)
+    with pytest.raises(RuntimeError, match="请求生命周期"):
+        db.initialize_schema()
 
 
 def test_provisioned_teachers_receive_isolated_default_courses(monkeypatch):

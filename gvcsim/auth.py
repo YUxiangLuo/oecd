@@ -57,15 +57,16 @@ def _demo_user(username: str, password: str) -> dict | None:
     }
 
 
-def check_login_rate(key: str, now: float | None = None) -> None:
-    """按 ``IP|username`` 滑动窗口限流；成功登录会清空该键。"""
+def check_login_rate(key: str, now: float | None = None, *, max_attempts: int | None = None) -> None:
+    """进程内 demo 滑动窗口；生产流量使用 PostgreSQL 共享实现。"""
     now = time.time() if now is None else now
     window = config.LOGIN_WINDOW_SECONDS
+    limit = config.LOGIN_MAX_ATTEMPTS if max_attempts is None else max_attempts
     with _attempt_lock:
         q = _attempts[key]
         while q and q[0] <= now - window:
             q.popleft()
-        if len(q) >= config.LOGIN_MAX_ATTEMPTS:
+        if len(q) >= limit:
             raise TooManyLoginAttempts(int(q[0] + window - now) + 1)
 
 
@@ -76,6 +77,47 @@ def record_login_result(key: str, *, success: bool, now: float | None = None) ->
             _attempts.pop(key, None)
         else:
             _attempts[key].append(now)
+
+
+def reserve_login_attempt(ip_key: str, identity_key: str) -> None:
+    """在校验口令前原子预占一次尝试。
+
+    先消耗不含用户名的 per-IP 总预算，再消耗 ``IP|username`` 精确预算。
+    因此轮换用户名不能把登录端点变成无界数据库写路径。生产状态存于
+    PostgreSQL，所有 Uvicorn worker 共享；显式 demo 才允许进程内回退。
+    """
+    from gvcsim.classroom import db as classroom_db
+
+    try:
+        retry_after = classroom_db.reserve_login_attempts(
+            (
+                (ip_key, config.LOGIN_IP_MAX_ATTEMPTS),
+                (identity_key, config.LOGIN_MAX_ATTEMPTS),
+            ),
+            config.LOGIN_WINDOW_SECONDS,
+        )
+    except (classroom_db.Unavailable, classroom_db.SchemaVersionMismatch) as exc:
+        if not config.DEMO_MODE:
+            raise AuthenticationUnavailable("登录限流数据库不可用或未就绪") from exc
+        check_login_rate(ip_key, max_attempts=config.LOGIN_IP_MAX_ATTEMPTS)
+        record_login_result(ip_key, success=False)
+        check_login_rate(identity_key, max_attempts=config.LOGIN_MAX_ATTEMPTS)
+        record_login_result(identity_key, success=False)
+        return
+    if retry_after is not None:
+        raise TooManyLoginAttempts(retry_after)
+
+
+def clear_login_rate(key: str) -> None:
+    """成功认证后清空失败窗口；失败尝试已经在 reserve 阶段持久化。"""
+    from gvcsim.classroom import db as classroom_db
+
+    try:
+        classroom_db.clear_login_attempts(key)
+    except (classroom_db.Unavailable, classroom_db.SchemaVersionMismatch) as exc:
+        if not config.DEMO_MODE:
+            raise AuthenticationUnavailable("登录限流数据库不可用或未就绪") from exc
+        record_login_result(key, success=True)
 
 
 def _persistent_secret(configured: str, path: Path, env_name: str) -> bytes:

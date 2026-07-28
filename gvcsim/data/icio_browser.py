@@ -9,6 +9,7 @@
 
 from functools import lru_cache
 from pathlib import Path
+import threading
 from typing import Any
 
 import pandas as pd
@@ -18,6 +19,7 @@ from gvcsim.config import RAW_DATA_DIR, available_years
 FINAL_DEMAND_CATEGORIES = ("HFCE", "NPISH", "GGFC", "GFCF", "INVNT", "DPABR")
 ACCOUNT_ROWS = ("TLS", "VA", "OUT")
 VALID_TABLES = ("z", "y", "accounts")
+_raw_cache_lock = threading.RLock()
 
 
 def _year_file(year: int, raw_dir: Path = RAW_DATA_DIR) -> Path:
@@ -79,7 +81,8 @@ def _metadata(path_str: str, mtime_ns: int) -> dict[str, Any]:
 
 
 def _meta_for_path(path: Path) -> dict[str, Any]:
-    return _metadata(str(path), path.stat().st_mtime_ns)
+    with _raw_cache_lock:
+        return _metadata(str(path), path.stat().st_mtime_ns)
 
 
 @lru_cache(maxsize=32)
@@ -93,7 +96,8 @@ def _read_columns(path: Path, usecols: tuple[str, ...]) -> pd.DataFrame:
     翻页只换行不换列,命中缓存后无需重扫 ~66MB 的原始文件。
     缓存的 DataFrame 不得原地修改,调用方只能做产生副本的操作。
     """
-    return _read_columns_cached(str(path), path.stat().st_mtime_ns, usecols)
+    with _raw_cache_lock:
+        return _read_columns_cached(str(path), path.stat().st_mtime_ns, usecols)
 
 
 def meta(raw_dir: Path = RAW_DATA_DIR) -> dict[str, Any]:

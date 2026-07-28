@@ -9,11 +9,12 @@ import re
 from datetime import datetime
 from typing import Any, Self
 
+import anyio
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, model_validator
 
-from gvcsim import artifacts, evidence, quizzes, trusted_evidence
+from gvcsim import artifacts, concurrency, config, evidence, quizzes, trusted_evidence
 from gvcsim import session as session_model
 from gvcsim import teaching_report
 from gvcsim.classroom import db
@@ -366,22 +367,28 @@ def _step_data_for_gate(session: dict[str, Any], lab: str) -> dict[str, Any]:
 
 
 @router.post("/report/generate")
-def generate_report(user: dict = Depends(require_student)):
+async def generate_report(user: dict = Depends(require_student)):
     """由服务端从实验会话生成报告。
 
     前 15 步答题未全部通过时拒绝(409),并返回还差什么;报告正文与其中实际
     运行过的回归结果都由服务端生成,不接受任何客户端提供的正文。
     """
-    _ensure_current_assignment(user["sub"])
-    session, revision = _load_session_for_report(user["sub"])
+
+    def prepare() -> tuple[dict[str, Any], int]:
+        _ensure_current_assignment(user["sub"])
+        return _load_session_for_report(user["sub"])
+
+    session, revision = await anyio.to_thread.run_sync(prepare)
     try:
-        report = teaching_report.build(
-            session,
-            user.get("name") or user["sub"],
-            revision,
-            subject=user["sub"],
-            require_trusted=True,
-        )
+        async with concurrency.async_cpu_workload("report", permits=config.REPORT_CPU_PERMITS):
+            report = await concurrency.run_cpu_bound(
+                teaching_report.build,
+                session,
+                user.get("name") or user["sub"],
+                revision,
+                subject=user["sub"],
+                require_trusted=True,
+            )
     except teaching_report.ReportGateError as e:
         raise HTTPException(status_code=409, detail={"message": str(e), "blocked": e.missing}) from e
     except teaching_report.ReportReplayError as e:
@@ -400,14 +407,16 @@ def generate_report(user: dict = Depends(require_student)):
         raise HTTPException(status_code=422, detail=f"写入报告记录后会话不合规:{e}") from e
 
     try:
-        saved = db.save_generated_report_and_session(
-            user["sub"],
-            report.report_key,
-            revision,
-            report.provenance["manifest_id"],
-            report.markdown,
-            report.provenance,
-            updated,
+        saved = await anyio.to_thread.run_sync(
+            lambda: db.save_generated_report_and_session(
+                user["sub"],
+                report.report_key,
+                revision,
+                report.provenance["manifest_id"],
+                report.markdown,
+                report.provenance,
+                updated,
+            )
         )
     except (
         db.AssignmentScopeMismatch,

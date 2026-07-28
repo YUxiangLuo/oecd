@@ -3,6 +3,7 @@
 import os
 import stat
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import psycopg
 import pytest
@@ -43,6 +44,53 @@ def test_login_success_and_me():
     assert me.status_code == 200
     assert me.json()["username"] == "student"
     assert me.json()["account_id"] == 2
+
+
+def test_successful_login_survives_rate_cleanup_failure(monkeypatch, caplog):
+    def cleanup_failed(_key: str) -> None:
+        raise auth.AuthenticationUnavailable("sensitive cleanup detail")
+
+    monkeypatch.setattr(auth, "clear_login_rate", cleanup_failed)
+    response = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+
+    assert response.status_code == 200
+    token = response.json()["token"]
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+    assert "post-auth rate-limit cleanup failed" in caplog.text
+    assert "sensitive cleanup detail" not in caplog.text
+
+
+def test_successful_login_survives_audit_failure_and_returns_its_live_session(monkeypatch, caplog):
+    def audit_failed(*_args, **_kwargs) -> None:
+        raise db.OperationFailed("connection_lost", "08006")
+
+    monkeypatch.setattr(db, "record_audit_event", audit_failed)
+    response = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+
+    assert response.status_code == 200
+    token = response.json()["token"]
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json()["username"] == "student"
+    assert "successful-login audit write failed" in caplog.text
+
+
+def test_auth_session_creation_failure_remains_fail_closed_and_skips_post_commit_cleanup(monkeypatch):
+    cleanup_calls: list[str] = []
+    audit_calls: list[str] = []
+
+    def issue_failed(_user):
+        raise auth.AuthenticationUnavailable("session write failed")
+
+    monkeypatch.setattr(auth, "issue_token", issue_failed)
+    monkeypatch.setattr(auth, "clear_login_rate", lambda key: cleanup_calls.append(key))
+    monkeypatch.setattr(db, "record_audit_event", lambda action, **_kwargs: audit_calls.append(action))
+
+    response = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+
+    assert response.status_code == 503
+    assert cleanup_calls == []
+    assert audit_calls == []
 
 
 def test_login_rejects_bad_credentials(monkeypatch):
@@ -89,6 +137,25 @@ def test_global_schema_mismatch_handler_returns_generic_503(monkeypatch):
     response = client.get("/api/classroom/course-runs", headers=headers)
     assert response.status_code == 503
     assert response.json() == {"detail": "教学数据库 schema 未就绪；请先完成兼容迁移"}
+
+
+def test_query_operation_failure_has_a_sanitized_distinct_response(monkeypatch):
+    login = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+    assert login.status_code == 200
+    headers = {"Authorization": f"Bearer {login.json()['token']}"}
+
+    def query_failed(*_args, **_kwargs):
+        raise db.OperationFailed("query_canceled", "57014")
+
+    monkeypatch.setattr(db, "list_announcements", query_failed)
+    response = client.get("/api/classroom/announcements", headers=headers)
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "教学数据库操作失败，请稍后重试",
+        "code": "database_query_canceled",
+    }
+    assert "57014" not in response.text
 
 
 def test_me_rejects_missing_or_tampered_token():
@@ -142,6 +209,124 @@ def test_login_rate_limit_is_a_sliding_window(monkeypatch):
     with pytest.raises(auth.TooManyLoginAttempts):
         auth.check_login_rate("ip|student", now=102)
     auth.check_login_rate("ip|student", now=161)
+
+
+def test_database_login_rate_limit_is_shared_and_atomic():
+    key = "203.0.113.8|student"
+    assert db.reserve_login_attempt(key, 60, 2, now=100) is None
+    assert db.reserve_login_attempt(key, 60, 2, now=101) is None
+    assert db.reserve_login_attempt(key, 60, 2, now=102) == 59
+
+    # 成功登录只清理自己的 IP+用户名键。
+    db.clear_login_attempts(key)
+    assert db.reserve_login_attempt(key, 60, 2, now=103) is None
+
+
+def test_login_api_adds_an_ip_budget_that_username_rotation_cannot_bypass(monkeypatch):
+    monkeypatch.setattr(config, "LOGIN_IP_MAX_ATTEMPTS", 2)
+    monkeypatch.setattr(config, "LOGIN_MAX_ATTEMPTS", 8)
+    monkeypatch.setattr(auth, "authenticate", lambda _username, _password: None)
+
+    first = client.post("/api/auth/login", json={"username": "rotating-1", "password": "wrong"})
+    second = client.post("/api/auth/login", json={"username": "rotating-2", "password": "wrong"})
+    blocked = client.post("/api/auth/login", json={"username": "rotating-3", "password": "wrong"})
+
+    assert first.status_code == 401
+    assert second.status_code == 401
+    assert blocked.status_code == 429
+    assert int(blocked.headers["retry-after"]) > 0
+
+
+def test_successful_login_does_not_reset_the_shared_ip_budget(monkeypatch):
+    monkeypatch.setattr(config, "LOGIN_IP_MAX_ATTEMPTS", 1)
+    monkeypatch.setattr(config, "LOGIN_MAX_ATTEMPTS", 8)
+
+    first = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+    blocked = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"})
+
+    assert first.status_code == 200
+    assert blocked.status_code == 429
+
+
+def test_login_attempt_cleanup_retains_only_a_small_multiple_of_the_window(monkeypatch):
+    now = 10_000.0
+    old_key = db._rate_key_hash("old-identity")
+    recent_key = db._rate_key_hash("recent-identity")
+    with db.conn() as connection:
+        connection.execute(
+            "INSERT INTO auth_login_attempts(rate_key_hash,attempted_at)"
+            " VALUES (%s,to_timestamp(%s)),(%s,to_timestamp(%s))",
+            (old_key, now - 241, recent_key, now - 239),
+        )
+
+    monkeypatch.setattr(db.secrets, "randbelow", lambda _upper: 0)
+    assert db.reserve_login_attempt("fresh", 60, 2, now=now) is None
+
+    with db.conn() as connection:
+        retained = {
+            row["rate_key_hash"]
+            for row in connection.execute(
+                "SELECT rate_key_hash FROM auth_login_attempts WHERE rate_key_hash IN (%s,%s)",
+                (old_key, recent_key),
+            ).fetchall()
+        }
+    assert old_key not in retained
+    assert recent_key in retained
+
+
+def test_concurrent_database_login_reservations_cannot_overshoot_limit():
+    key = "198.51.100.9|same-user"
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        results = list(executor.map(lambda _index: db.reserve_login_attempt(key, 300, 3, now=100), range(10)))
+    assert results.count(None) == 3
+    assert sum(result is not None for result in results) == 7
+
+
+def test_concurrent_rotating_usernames_share_one_atomic_ip_budget():
+    ip_key = "ip:192.0.2.44"
+
+    def reserve(index: int) -> int | None:
+        return db.reserve_login_attempts(
+            ((ip_key, 3), (f"identity:192.0.2.44|rotating-{index}", 8)),
+            300,
+            now=100,
+        )
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        results = list(executor.map(reserve, range(10)))
+    assert results.count(None) == 3
+    assert sum(result is not None for result in results) == 7
+
+
+def test_login_api_preserves_retry_after_from_shared_limiter(monkeypatch):
+    def saturated(_ip_key: str, _identity_key: str) -> None:
+        raise auth.TooManyLoginAttempts(17)
+
+    monkeypatch.setattr(auth, "reserve_login_attempt", saturated)
+    response = client.post("/api/auth/login", json={"username": "student", "password": "wrong"})
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "17"
+
+
+def test_login_api_namespaces_ip_and_identity_rate_keys(monkeypatch):
+    observed: list[tuple[str, str]] = []
+
+    def capture(ip_key: str, identity_key: str) -> None:
+        observed.append((ip_key, identity_key))
+
+    monkeypatch.setattr(auth, "reserve_login_attempt", capture)
+    monkeypatch.setattr(auth, "authenticate", lambda _username, _password: None)
+    response = client.post("/api/auth/login", json={"username": "STUDENT", "password": "wrong"})
+
+    assert response.status_code == 401
+    assert observed == [("ip:testclient", "identity:testclient|student")]
+
+
+def test_security_config_rejects_an_ip_limit_below_the_identity_limit(monkeypatch):
+    monkeypatch.setattr(config, "LOGIN_MAX_ATTEMPTS", 8)
+    monkeypatch.setattr(config, "LOGIN_IP_MAX_ATTEMPTS", 7)
+    with pytest.raises(config.ConfigurationError, match="不能小于"):
+        config.validate_security_config()
 
 
 def test_local_secret_is_created_with_owner_only_permissions(tmp_path, monkeypatch):

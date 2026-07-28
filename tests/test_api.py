@@ -4,8 +4,10 @@
 保证测试套件在全新 clone 上也能通过。
 """
 
-import re
+import inspect
 import math
+import re
+from contextlib import asynccontextmanager
 
 import pandas as pd
 import pytest
@@ -78,6 +80,14 @@ def test_health_is_public_and_checks_artifact_contract(monkeypatch):
     monkeypatch.setattr(api_mod, "validate_release", lambda _path, **_kwargs: {"files": 1, "sources": 0})
     monkeypatch.setattr(api_mod, "processed_years", lambda: [2019, 2020])
     monkeypatch.setattr(api_mod, "manifest_id", lambda: "manifest-test")
+    monkeypatch.setattr(api_mod.app_config, "CPU_CONCURRENCY", 16)
+    monkeypatch.setattr(api_mod.app_config, "CPU_QUEUE_SIZE", 128)
+    monkeypatch.setattr(api_mod.app_config, "CPU_ACQUIRE_TIMEOUT_SECONDS", 30.0)
+    monkeypatch.setattr(
+        api_mod.concurrency,
+        "_try_lock",
+        lambda _path: (_ for _ in ()).throw(AssertionError("health must not acquire capacity locks")),
+    )
     monkeypatch.setattr(
         classroom_db,
         "readiness",
@@ -95,7 +105,37 @@ def test_health_is_public_and_checks_artifact_contract(monkeypatch):
             "network_algorithm": NETWORK_ALGORITHM,
         },
         "database": {"status": "ok", "schema_version": classroom_db.TEACHING_DB_VERSION},
+        "capacity": {
+            "coordination": "cross-process-flock",
+            "queue_policy": "fifo",
+            "cpu_permits_total": 16,
+            "admission_total": 128,
+            "acquire_timeout_seconds": 30.0,
+        },
     }
+
+
+def test_liveness_is_public_and_dependency_free(monkeypatch):
+    assert inspect.iscoroutinefunction(api_mod.liveness)
+    monkeypatch.setattr(
+        api_mod,
+        "validate_release",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("liveness must not read artifacts")),
+    )
+    monkeypatch.setattr(
+        classroom_db,
+        "readiness",
+        lambda: (_ for _ in ()).throw(AssertionError("liveness must not query PostgreSQL")),
+    )
+    response = TestClient(app).get("/health/live")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_cpu_endpoints_wait_asynchronously():
+    assert inspect.iscoroutinefunction(api_mod.regression_run)
+    assert inspect.iscoroutinefunction(api_mod.regression_placebo)
+    assert inspect.iscoroutinefunction(api_mod.classroom_routes.generate_report)
 
 
 def test_health_returns_503_without_complete_artifacts(monkeypatch):
@@ -682,6 +722,22 @@ def test_regression_run(ci_synthetic_contract):
     assert ctrl.json()["design"]["controls"]
     names = [c["name"] for c in ctrl.json()["result"]["coefs"]]
     assert "treated×post" in names
+
+
+def test_regression_capacity_saturation_returns_retryable_429(monkeypatch):
+    monkeypatch.setattr(api_mod, "_read_csv", lambda _name: object())
+
+    @asynccontextmanager
+    async def saturated(*_args, **_kwargs):
+        raise api_mod.concurrency.CapacityExceeded("regression", "queue_full", 4)
+        yield
+
+    monkeypatch.setattr(api_mod.concurrency, "async_cpu_workload", saturated)
+    response = client.post("/api/regression/run", json={"outcome": "trade"})
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "4"
+    assert response.json()["code"] == "capacity_queue_full"
+    assert "regression" in response.json()["detail"]
 
 
 @needs_data

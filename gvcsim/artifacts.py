@@ -14,6 +14,7 @@ import platform
 import re
 import subprocess
 import sys
+import threading
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
@@ -24,6 +25,7 @@ ARTIFACT_MANIFEST = "artifact_manifest.json"
 MANIFEST_HISTORY_DIR = "manifest_history"
 ARTIFACT_SCHEMA_VERSION = 3
 NETWORK_ALGORITHM = "gephi-compatible-directed-unweighted-positive-v1"
+_csv_cache_lock = threading.RLock()
 
 
 class ArtifactContractError(RuntimeError):
@@ -369,4 +371,7 @@ def read_csv_artifact(path: Path, *, require_current: bool = False) -> pd.DataFr
     if require_current:
         validate_artifact(path)
     resolved = path.resolve()
-    return _cached_csv(str(resolved), resolved.stat().st_mtime_ns)
+    # lru_cache 本身线程安全，但两个同时发生的首次 miss 仍可能重复执行函数体。
+    # 外层锁让同一 worker 的冷启动只解析一次大型 CSV。
+    with _csv_cache_lock:
+        return _cached_csv(str(resolved), resolved.stat().st_mtime_ns)

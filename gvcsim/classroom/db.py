@@ -1,39 +1,55 @@
 """教学数据库(PostgreSQL):班级/学生账号/实验会话/进度/报告提交评阅/公告。
 
 设计取舍:
-  - 每次操作短连接,不引入连接池;班级规模(几十人)下开销可忽略
-  - schema_meta 串行化增量迁移；v3/v4 会原地升级且保留全部课堂数据，未知版本拒绝
+  - 每个 API worker 使用有界 psycopg 连接池；池满时背压，不创建连接风暴
+  - schema_meta 串行化增量迁移；v3-v5 会原地升级且保留全部课堂数据，未知版本拒绝
   - course_run → assignment → enrollment → experiment_attempt 是所有学习记录的作用域
   - submission_versions / grading_events 追加写，保留不可变提交与评分历史
   - 数据库不可用统一抛 Unavailable；生产认证 fail-closed
-  - 短期令牌在 auth_sessions 登记，可撤销且逐请求复查账号状态
+  - 短期令牌在 auth_sessions 登记；登录限流状态由 PostgreSQL 跨 worker 共享
 """
 
+import atexit
 import hashlib
 import ipaddress
 import json
+import logging
+import os
 import secrets
+import threading
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 from typing import Any
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool, PoolClosed, PoolTimeout, TooManyRequests
 
 from gvcsim import config
+
+logger = logging.getLogger(__name__)
 
 MAX_STEP = 16
 _SCHEMA_LOCK_ID = 736_861_016  # 固定事务级 advisory lock，串行化首次建表/播种
 # 会话写入的 advisory lock 命名空间(与 account_id 组成两段锁键,不与建表锁冲突)
 _SESSION_LOCK_NS = 736_861_017
 
-# v5 在 v4 的多课程模型上增加学生显式作业选择，避免“最新作业”
-# 隐式覆盖已完成作业和评分的访问入口。
-TEACHING_DB_VERSION = "gvcsim-teaching-db-v5"
+# v6 在 v5 上增加跨 worker 的原子登录限流；不改变既有课堂记录。
+TEACHING_DB_VERSION = "gvcsim-teaching-db-v6"
 
 
 class Unavailable(Exception):
     """教学数据库不可用(未启动/未建库/网络不通)。"""
+
+
+class OperationFailed(Unavailable):
+    """连接已经借出后发生的数据库操作故障，不与 pool checkout 饱和混淆。"""
+
+    def __init__(self, reason: str, sqlstate: str | None):
+        self.reason = reason
+        self.sqlstate = sqlstate
+        super().__init__("教学数据库操作失败，请稍后重试")
 
 
 class SchemaVersionMismatch(RuntimeError):
@@ -262,6 +278,15 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
   created_at   timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS auth_sessions_account_idx ON auth_sessions(account_id);
+CREATE TABLE IF NOT EXISTS auth_login_attempts (
+  id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  rate_key_hash text NOT NULL,
+  attempted_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS auth_login_attempts_key_time_idx
+  ON auth_login_attempts(rate_key_hash, attempted_at);
+CREATE INDEX IF NOT EXISTS auth_login_attempts_time_idx
+  ON auth_login_attempts(attempted_at);
 CREATE TABLE IF NOT EXISTS audit_log (
   id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   actor_id    bigint REFERENCES accounts(id) ON DELETE SET NULL,
@@ -284,6 +309,10 @@ CREATE TABLE IF NOT EXISTS announcements (
 """
 
 _schema_ready = False
+_startup_sealed = False
+_pool: ConnectionPool[psycopg.Connection[dict[str, Any]]] | None = None
+_pool_signature: tuple[Any, ...] | None = None
+_pool_lock = threading.RLock()
 
 
 def _lock_schema(c: psycopg.Connection[dict[str, Any]]) -> None:
@@ -353,6 +382,21 @@ def _migrate_v4_to_v5(c: psycopg.Connection[dict[str, Any]]) -> None:
         " assignment_id bigint NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,"
         " updated_at timestamptz NOT NULL DEFAULT now())"
     )
+    c.execute("UPDATE schema_meta SET version = 'gvcsim-teaching-db-v5' WHERE singleton")
+
+
+def _migrate_v5_to_v6(c: psycopg.Connection[dict[str, Any]]) -> None:
+    """增加跨进程共享的登录失败滑动窗口，不触碰既有认证会话。"""
+    c.execute(
+        "CREATE TABLE IF NOT EXISTS auth_login_attempts ("
+        " id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,"
+        " rate_key_hash text NOT NULL,"
+        " attempted_at timestamptz NOT NULL DEFAULT now())"
+    )
+    c.execute(
+        "CREATE INDEX IF NOT EXISTS auth_login_attempts_key_time_idx ON auth_login_attempts(rate_key_hash,attempted_at)"
+    )
+    c.execute("CREATE INDEX IF NOT EXISTS auth_login_attempts_time_idx ON auth_login_attempts(attempted_at)")
     c.execute("UPDATE schema_meta SET version = %s WHERE singleton", (TEACHING_DB_VERSION,))
 
 
@@ -460,8 +504,14 @@ def _ensure_legacy_context(c: psycopg.Connection[dict[str, Any]]) -> None:
 
 
 def initialize_schema() -> list[str]:
-    """建表/安全迁移并播种；从 v3/v4 升级不需要 reset。"""
+    """建表/安全迁移并播种；从 v3-v5 升级不需要 reset。"""
     global _schema_ready
+    if _startup_sealed:
+        raise RuntimeError("服务已完成启动，禁止在请求生命周期内重新初始化 schema")
+    # 测试/运维将 ready 复位通常意味着 schema 或 DSN 已切换；旧连接上的
+    # prepared statement/事务状态不能跨越这条边界。
+    if not _schema_ready:
+        close_pool()
     c = _connect()
     applied: list[str] = []
     try:
@@ -477,6 +527,11 @@ def initialize_schema() -> list[str]:
             if version == "gvcsim-teaching-db-v4":
                 _migrate_v4_to_v5(c)
                 applied.append("安全迁移 v4 → v5（增加学生显式作业选择）")
+                version = "gvcsim-teaching-db-v5"
+            if version == "gvcsim-teaching-db-v5":
+                _migrate_v5_to_v6(c)
+                applied.append("安全迁移 v5 → v6（增加跨 worker 登录限流）")
+                version = TEACHING_DB_VERSION
             elif version not in {None, TEACHING_DB_VERSION}:
                 raise SchemaVersionMismatch(
                     f"教学库 schema 版本为 {version}，当前代码需要 {TEACHING_DB_VERSION}；"
@@ -517,16 +572,163 @@ def _connect() -> psycopg.Connection[dict[str, Any]]:
     if not config.PG_DSN:
         raise Unavailable("缺少 GVCSIM_PG_DSN；教学数据库未配置")
     try:
-        return psycopg.connect(config.PG_DSN, row_factory=dict_row, connect_timeout=3)
+        return psycopg.connect(
+            config.PG_DSN,
+            row_factory=dict_row,
+            connect_timeout=config.DB_CONNECT_TIMEOUT_SECONDS,
+            application_name="gvcsim-schema",
+            options=(
+                f"-c statement_timeout={config.DB_STATEMENT_TIMEOUT_MS} -c idle_in_transaction_session_timeout=30000"
+            ),
+        )
     except psycopg.OperationalError as e:
         raise Unavailable(str(e)) from e
 
 
-def conn() -> psycopg.Connection[dict[str, Any]]:
-    """拿一个已保证建表并完成迁移的连接(with 语句用完即关)。"""
+def _current_pool_signature() -> tuple[Any, ...]:
+    return (
+        os.getpid(),  # fork/spawn 后每个 worker 必须拥有自己的池和后台线程
+        config.PG_DSN,
+        config.DB_POOL_MIN_SIZE,
+        config.DB_POOL_MAX_SIZE,
+        config.DB_POOL_TIMEOUT_SECONDS,
+        config.DB_POOL_MAX_WAITING,
+        config.DB_POOL_MAX_LIFETIME_SECONDS,
+        config.DB_POOL_MAX_IDLE_SECONDS,
+        config.DB_CONNECT_TIMEOUT_SECONDS,
+        config.DB_STATEMENT_TIMEOUT_MS,
+    )
+
+
+def _get_pool() -> ConnectionPool[psycopg.Connection[dict[str, Any]]]:
+    global _pool, _pool_signature
+    if not config.PG_DSN:
+        raise Unavailable("缺少 GVCSIM_PG_DSN；教学数据库未配置")
+    signature = _current_pool_signature()
+    with _pool_lock:
+        if _pool is not None and _pool_signature == signature and not _pool.closed:
+            return _pool
+        if _pool is not None:
+            _pool.close()
+        try:
+            pool: ConnectionPool[psycopg.Connection[dict[str, Any]]] = ConnectionPool(
+                conninfo=config.PG_DSN,
+                min_size=config.DB_POOL_MIN_SIZE,
+                max_size=config.DB_POOL_MAX_SIZE,
+                kwargs={
+                    "row_factory": dict_row,
+                    "connect_timeout": config.DB_CONNECT_TIMEOUT_SECONDS,
+                    "application_name": f"gvcsim-api-{os.getpid()}",
+                    "options": (
+                        f"-c statement_timeout={config.DB_STATEMENT_TIMEOUT_MS} "
+                        "-c idle_in_transaction_session_timeout=30000"
+                    ),
+                },
+                open=False,
+                timeout=config.DB_POOL_TIMEOUT_SECONDS,
+                max_waiting=config.DB_POOL_MAX_WAITING,
+                max_lifetime=config.DB_POOL_MAX_LIFETIME_SECONDS,
+                max_idle=config.DB_POOL_MAX_IDLE_SECONDS,
+                reconnect_timeout=max(5.0, config.DB_POOL_TIMEOUT_SECONDS),
+                num_workers=2,
+                name=f"gvcsim-{os.getpid()}",
+            )
+            pool.open()
+        except (ValueError, psycopg.Error) as error:
+            raise Unavailable(str(error)) from error
+        _pool = pool
+        _pool_signature = signature
+        return pool
+
+
+def close_pool() -> None:
+    """关闭当前进程的池；借出的连接会在归还时关闭，不会被中途打断。"""
+    global _pool, _pool_signature
+    with _pool_lock:
+        if _pool is not None:
+            _pool.close()
+        _pool = None
+        _pool_signature = None
+
+
+def shutdown() -> None:
+    """结束服务生命周期并重新允许 CLI/测试显式执行 schema 初始化。"""
+    global _startup_sealed
+    _startup_sealed = False
+    close_pool()
+
+
+def startup() -> None:
+    """服务 worker 启动闸门：迁移完成且最小连接数建立后才接收流量。"""
+    global _startup_sealed
+    config.validate_capacity_config()
     if not _schema_ready:
         initialize_schema()
-    return _connect()
+    try:
+        _get_pool().wait(timeout=max(5.0, config.DB_POOL_TIMEOUT_SECONDS))
+    except (PoolTimeout, PoolClosed, psycopg.OperationalError) as error:
+        _startup_sealed = False
+        close_pool()
+        raise Unavailable(str(error)) from error
+    _startup_sealed = True
+
+
+def _operation_failure(error: psycopg.OperationalError) -> OperationFailed:
+    sqlstate = error.sqlstate
+    if sqlstate == "57014":
+        reason = "query_canceled"
+    elif sqlstate and sqlstate.startswith("40"):
+        reason = "transaction_conflict"
+    elif sqlstate and (sqlstate.startswith("08") or sqlstate.startswith("57P0")):
+        reason = "connection_lost"
+    else:
+        reason = "operational_error"
+    logger.warning(
+        "database operation failed: reason=%s sqlstate=%s driver_error=%s",
+        reason,
+        sqlstate or "unknown",
+        type(error).__name__,
+    )
+    return OperationFailed(reason, sqlstate)
+
+
+@contextmanager
+def conn() -> Iterator[psycopg.Connection[dict[str, Any]]]:
+    """从池中借用事务连接；正常提交、异常回滚，最后归还而不是断开。"""
+    if not _schema_ready:
+        if _startup_sealed:
+            raise Unavailable("服务启动后的 schema 就绪状态丢失；拒绝在请求路径执行惰性迁移")
+        initialize_schema()
+
+    pool = _get_pool()
+    try:
+        connection = pool.getconn(timeout=config.DB_POOL_TIMEOUT_SECONDS)
+    except (PoolTimeout, TooManyRequests, PoolClosed, psycopg.OperationalError) as error:
+        raise Unavailable("教学数据库连接池繁忙或不可用，请稍后重试") from error
+
+    try:
+        try:
+            with connection:
+                yield connection
+        except psycopg.OperationalError as error:
+            raise _operation_failure(error) from error
+    finally:
+        pool.putconn(connection)
+
+
+def pool_stats() -> dict[str, int]:
+    """返回当前 worker 的池指标；键名稳定且不包含 DSN。"""
+    stats = _get_pool().get_stats()
+    return {
+        "min": int(stats.get("pool_min", config.DB_POOL_MIN_SIZE)),
+        "max": int(stats.get("pool_max", config.DB_POOL_MAX_SIZE)),
+        "size": int(stats.get("pool_size", 0)),
+        "available": int(stats.get("pool_available", 0)),
+        "requests_waiting": int(stats.get("requests_waiting", 0)),
+        "requests_num": int(stats.get("requests_num", 0)),
+        "requests_queued": int(stats.get("requests_queued", 0)),
+        "requests_errors": int(stats.get("requests_errors", 0)),
+    }
 
 
 def readiness() -> dict[str, Any]:
@@ -535,7 +737,12 @@ def readiness() -> dict[str, Any]:
         row = c.execute("SELECT version,now() AS checked_at FROM schema_meta WHERE singleton").fetchone()
         if not row or row["version"] != TEACHING_DB_VERSION:
             raise SchemaVersionMismatch("教学数据库 schema 未就绪")
-        return {"status": "ok", "schema_version": row["version"]}
+    # 先归还 readiness 自己借用的连接，再取 stats；否则 available 会稳定少 1，
+    # 在 min_size=1 的健康 worker 上产生“池已耗尽”的误报警。
+    return {"status": "ok", "schema_version": row["version"], "pool": pool_stats()}
+
+
+atexit.register(shutdown)
 
 
 def _seed_if_empty(c: psycopg.Connection[dict[str, Any]]) -> bool:
@@ -575,6 +782,115 @@ def _seed_if_empty(c: psycopg.Connection[dict[str, Any]]) -> bool:
 
 
 # ---------------------------------------------------------------- 账号与认证
+
+
+def _rate_key_hash(rate_key: str) -> str:
+    return hashlib.sha256(rate_key.encode("utf-8")).hexdigest()
+
+
+_LOGIN_ATTEMPT_RETENTION_WINDOWS = 4
+
+
+def reserve_login_attempts(
+    rate_limits: Sequence[tuple[str, int]],
+    window_seconds: int,
+    *,
+    now: float | None = None,
+) -> int | None:
+    """按顺序原子预占多个登录预算；任一达到上限时返回等待秒数。
+
+    所有键的 advisory lock 按数值排序取得，避免并发请求死锁。较早预算（per-IP）
+    已插入后即使较晚预算（IP+username）拒绝也会提交，从而让被身份限流挡住的
+    请求仍计入 IP 总量。键只以 SHA-256 形式落库。
+    """
+    limits = list(rate_limits)
+    if window_seconds <= 0 or not limits or any(not key or maximum <= 0 for key, maximum in limits):
+        raise ValueError("登录限流窗口和次数必须为正数")
+    if len({key for key, _maximum in limits}) != len(limits):
+        raise ValueError("同一次登录限流预占不能包含重复键")
+
+    hashed_limits = [(_rate_key_hash(key), maximum) for key, maximum in limits]
+    lock_keys = {
+        int.from_bytes(hashlib.sha256(key_hash.encode()).digest()[:8], "big", signed=True)
+        for key_hash, _maximum in hashed_limits
+    }
+    with conn() as c:
+        for lock_key in sorted(lock_keys):
+            c.execute("SELECT pg_advisory_xact_lock(%s)", (lock_key,))
+        if now is None:
+            current_epoch = _required(
+                c.execute("SELECT extract(epoch FROM now()) AS value").fetchone(),
+                "login rate clock",
+            )["value"]
+            attempted_at_sql = "now()"
+            attempted_at_params: tuple[Any, ...] = ()
+        else:
+            current_epoch = now
+            attempted_at_sql = "to_timestamp(%s)"
+            attempted_at_params = (now,)
+
+        # 全局清理窗口只比限流窗口长一个小倍数。即使攻击者轮换 username，
+        # 旧键也不会按固定 1 天滞留；显式 now 让测试和离线调用保持同一时钟。
+        if secrets.randbelow(128) == 0:
+            retention_seconds = window_seconds * _LOGIN_ATTEMPT_RETENTION_WINDOWS
+            if now is None:
+                c.execute(
+                    "DELETE FROM auth_login_attempts WHERE attempted_at<now()-(%s * interval '1 second')",
+                    (retention_seconds,),
+                )
+            else:
+                c.execute(
+                    "DELETE FROM auth_login_attempts WHERE attempted_at<to_timestamp(%s)",
+                    (float(current_epoch) - retention_seconds,),
+                )
+
+        for key_hash, max_attempts in hashed_limits:
+            cutoff = float(current_epoch) - window_seconds
+            if now is None:
+                c.execute(
+                    "DELETE FROM auth_login_attempts"
+                    " WHERE rate_key_hash=%s AND attempted_at<=now()-(%s * interval '1 second')",
+                    (key_hash, window_seconds),
+                )
+            else:
+                c.execute(
+                    "DELETE FROM auth_login_attempts WHERE rate_key_hash=%s AND attempted_at<=to_timestamp(%s)",
+                    (key_hash, cutoff),
+                )
+            row = _required(
+                c.execute(
+                    "SELECT count(*)::int AS attempts,"
+                    " extract(epoch FROM min(attempted_at)) AS oldest"
+                    " FROM auth_login_attempts WHERE rate_key_hash=%s",
+                    (key_hash,),
+                ).fetchone(),
+                "login rate count",
+            )
+            if row["attempts"] >= max_attempts:
+                oldest = float(row["oldest"] or current_epoch)
+                return max(1, int(oldest + window_seconds - float(current_epoch)) + 1)
+            c.execute(
+                f"INSERT INTO auth_login_attempts(rate_key_hash,attempted_at) VALUES (%s,{attempted_at_sql})",
+                (key_hash, *attempted_at_params),
+            )
+    return None
+
+
+def reserve_login_attempt(
+    rate_key: str,
+    window_seconds: int,
+    max_attempts: int,
+    *,
+    now: float | None = None,
+) -> int | None:
+    """兼容单键调用；API 登录使用 :func:`reserve_login_attempts` 双层预算。"""
+    return reserve_login_attempts(((rate_key, max_attempts),), window_seconds, now=now)
+
+
+def clear_login_attempts(rate_key: str) -> None:
+    """登录成功后清空该身份键；其他用户名不受同一校园 NAT 影响。"""
+    with conn() as c:
+        c.execute("DELETE FROM auth_login_attempts WHERE rate_key_hash=%s", (_rate_key_hash(rate_key),))
 
 
 def find_account(username: str) -> dict[str, Any] | None:
@@ -899,7 +1215,8 @@ def record_evidence_event(
     return row
 
 
-def evidence_event_exists(
+def _evidence_event_exists_in_conn(
+    c: psycopg.Connection[dict[str, Any]],
     username: str,
     event_id: str,
     assignment_id: int,
@@ -911,6 +1228,66 @@ def evidence_event_exists(
     kind: str | None = None,
     manifest_id: str | None = None,
 ) -> bool:
+    scope = _attempt_scope(c, username, manifest_id, create=False)
+    if (
+        not scope
+        or scope.get("manifest_mismatch")
+        or scope.get("assignment_id") != assignment_id
+        or scope.get("attempt_id") != attempt_id
+        or (account_id is not None and scope.get("account_id") != account_id)
+    ):
+        return False
+    clauses = [
+        "a.username=%s",
+        "ev.id=%s",
+        "ev.account_id=%s",
+        "ev.assignment_id=%s",
+        "ev.attempt_id=%s",
+        "ev.payload_hash=%s",
+        "ev.revoked_at IS NULL",
+        "at.state='active'",
+    ]
+    params: list[Any] = [
+        username,
+        event_id,
+        scope["account_id"],
+        assignment_id,
+        attempt_id,
+        payload_sha256,
+    ]
+    if step is not None:
+        clauses.append("ev.step=%s")
+        params.append(step)
+    if kind is not None:
+        clauses.append("ev.kind=%s")
+        params.append(kind)
+    if manifest_id is not None:
+        clauses.append("ev.manifest_id=%s")
+        params.append(manifest_id)
+    return (
+        c.execute(
+            "SELECT 1 FROM learning_evidence_events ev JOIN accounts a ON a.id=ev.account_id"
+            " JOIN experiment_attempts at ON at.id=ev.attempt_id"
+            f" WHERE {' AND '.join(clauses)}",
+            tuple(params),
+        ).fetchone()
+        is not None
+    )
+
+
+def evidence_event_exists(
+    username: str,
+    event_id: str,
+    assignment_id: int,
+    attempt_id: int,
+    payload_sha256: str,
+    *,
+    account_id: int | None = None,
+    step: int | None = None,
+    kind: str | None = None,
+    manifest_id: str | None = None,
+    connection: psycopg.Connection[dict[str, Any]] | None = None,
+) -> bool:
     """确认事件属于学生**当前**解析出的 assignment/attempt。
 
     仅检查 token 自称的旧 attempt 仍为 ``active`` 不够：教师发布同一 manifest
@@ -918,51 +1295,31 @@ def evidence_event_exists(
     scope，旧收据可被复制到新作业。这里同时核对事件的教学语义字段，quiz 与
     regression 共用这一道不可跨作业重放的边界。
     """
-    with conn() as c:
-        scope = _attempt_scope(c, username, manifest_id, create=False)
-        if (
-            not scope
-            or scope.get("manifest_mismatch")
-            or scope.get("assignment_id") != assignment_id
-            or scope.get("attempt_id") != attempt_id
-            or (account_id is not None and scope.get("account_id") != account_id)
-        ):
-            return False
-        clauses = [
-            "a.username=%s",
-            "ev.id=%s",
-            "ev.account_id=%s",
-            "ev.assignment_id=%s",
-            "ev.attempt_id=%s",
-            "ev.payload_hash=%s",
-            "ev.revoked_at IS NULL",
-            "at.state='active'",
-        ]
-        params: list[Any] = [
+    if connection is not None:
+        return _evidence_event_exists_in_conn(
+            connection,
             username,
             event_id,
-            scope["account_id"],
             assignment_id,
             attempt_id,
             payload_sha256,
-        ]
-        if step is not None:
-            clauses.append("ev.step=%s")
-            params.append(step)
-        if kind is not None:
-            clauses.append("ev.kind=%s")
-            params.append(kind)
-        if manifest_id is not None:
-            clauses.append("ev.manifest_id=%s")
-            params.append(manifest_id)
-        return (
-            c.execute(
-                "SELECT 1 FROM learning_evidence_events ev JOIN accounts a ON a.id=ev.account_id"
-                " JOIN experiment_attempts at ON at.id=ev.attempt_id"
-                f" WHERE {' AND '.join(clauses)}",
-                tuple(params),
-            ).fetchone()
-            is not None
+            account_id=account_id,
+            step=step,
+            kind=kind,
+            manifest_id=manifest_id,
+        )
+    with conn() as c:
+        return _evidence_event_exists_in_conn(
+            c,
+            username,
+            event_id,
+            assignment_id,
+            attempt_id,
+            payload_sha256,
+            account_id=account_id,
+            step=step,
+            kind=kind,
+            manifest_id=manifest_id,
         )
 
 
@@ -1368,7 +1725,12 @@ def _learning_status_in_conn(
     if result["legacy_unverified"] or result["session_stale"]:
         return result
     try:
-        summary = evidence.completion_summary(session["session"], subject=username, require_trusted=True)
+        summary = evidence.completion_summary(
+            session["session"],
+            subject=username,
+            require_trusted=True,
+            connection=c,
+        )
     except Exception:
         return result
     completed = summary.get("completed", [])
@@ -1883,17 +2245,30 @@ def latest_report(username: str) -> dict[str, Any] | None:
         ).fetchone()
 
 
-def report_by_key(username: str, report_key: str) -> dict[str, Any] | None:
+def _report_by_key_in_conn(
+    c: psycopg.Connection[dict[str, Any]], username: str, report_key: str
+) -> dict[str, Any] | None:
+    scope = _attempt_scope(c, username)
+    if not scope:
+        return None
+    return c.execute(
+        "SELECT r.id, r.report_key, r.session_revision, r.manifest_id, r.markdown, r.provenance, r.created_at"
+        " FROM reports r JOIN accounts a ON a.id = r.account_id"
+        " WHERE a.username = %s AND r.report_key = %s AND r.attempt_id=%s",
+        (username, report_key, scope["attempt_id"]),
+    ).fetchone()
+
+
+def report_by_key(
+    username: str,
+    report_key: str,
+    *,
+    connection: psycopg.Connection[dict[str, Any]] | None = None,
+) -> dict[str, Any] | None:
+    if connection is not None:
+        return _report_by_key_in_conn(connection, username, report_key)
     with conn() as c:
-        scope = _attempt_scope(c, username)
-        if not scope:
-            return None
-        return c.execute(
-            "SELECT r.id, r.report_key, r.session_revision, r.manifest_id, r.markdown, r.provenance, r.created_at"
-            " FROM reports r JOIN accounts a ON a.id = r.account_id"
-            " WHERE a.username = %s AND r.report_key = %s AND r.attempt_id=%s",
-            (username, report_key, scope["attempt_id"]),
-        ).fetchone()
+        return _report_by_key_in_conn(c, username, report_key)
 
 
 # ---------------------------------------------------------------- 报告提交与评阅

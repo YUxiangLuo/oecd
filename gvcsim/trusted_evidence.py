@@ -89,6 +89,7 @@ def verify_quiz_completion(
     step: int,
     manifest_id: str,
     payload: dict[str, Any],
+    connection: Any | None = None,
 ) -> bool:
     claims = verify_claims(token)
     valid = bool(
@@ -104,6 +105,7 @@ def verify_quiz_completion(
     try:
         from gvcsim.classroom import db
 
+        connection_arg = {"connection": connection} if connection is not None else {}
         return db.evidence_event_exists(
             subject,
             str(claims["event_id"]),
@@ -114,6 +116,7 @@ def verify_quiz_completion(
             step=step,
             kind="quiz",
             manifest_id=manifest_id,
+            **connection_arg,
         )
     except (KeyError, TypeError, ValueError):
         return False
