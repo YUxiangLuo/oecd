@@ -5,8 +5,9 @@
 ``flock`` 实现进程崩溃自动释放的全机共享槽：
 
 1. admission 槽限制运行中 + 等待中的请求总数，拒绝无界排队；
-2. cpu 槽限制真正同时计算的任务数，支持较重任务占多个 permit；
-3. 等待有明确超时，调用方映射为带 ``Retry-After`` 的 429。
+2. 跨进程 FIFO 票据只允许队首争取 cpu 槽，避免多 permit 任务被轻任务饿死；
+3. cpu 槽限制真正同时计算的任务数，支持较重任务占多个 permit；
+4. 等待有明确超时，调用方映射为带 ``Retry-After`` 的 429。
 
 锁文件只保存互斥状态，不保存学生数据。部署时所有 worker 必须共享同一个
 ``GVCSIM_RUNTIME_DIR``（systemd 模板使用 ``/run/gvcsim``）。
@@ -74,6 +75,30 @@ class _LockSet:
             raise first_error
 
 
+@dataclass
+class _QueueTicket:
+    path: Path
+    descriptor: int | None
+
+    def release(self) -> None:
+        """先从队列隐藏票据，再释放 flock；崩溃残留由下一位清理。"""
+        descriptor = self.descriptor
+        if descriptor is None:
+            return
+        self.descriptor = None
+        first_error: BaseException | None = None
+        try:
+            self.path.unlink(missing_ok=True)
+        except BaseException as error:
+            first_error = error
+        try:
+            _LockSet([descriptor]).release()
+        except BaseException as error:
+            first_error = first_error or error
+        if first_error is not None:
+            raise first_error
+
+
 def _runtime_dir() -> Path:
     directory = config.RUNTIME_DIR
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -94,6 +119,23 @@ def _try_lock(path: Path) -> int | None:
     descriptor = os.open(path, flags, 0o600)
     try:
         os.fchmod(descriptor, 0o600)
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return descriptor
+    except BlockingIOError:
+        os.close(descriptor)
+        return None
+    except BaseException:
+        os.close(descriptor)
+        raise
+
+
+def _try_lock_existing(path: Path) -> int | None:
+    """只尝试已有文件；票据在并发 unlink 后消失时让调用方重扫。"""
+    flags = os.O_RDWR | os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(path, flags)
+    try:
         fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         return descriptor
     except BlockingIOError:
@@ -126,6 +168,98 @@ def _try_acquire(namespace: str, size: int, permits: int) -> _LockSet | None:
     return None
 
 
+_QUEUE_TICKET_PREFIX = "cpu.queue."
+_QUEUE_TICKET_DIGITS = 20
+
+
+def _queue_ticket_paths() -> list[Path]:
+    """返回格式合法的票据；序号固定宽度，因此文件名排序就是 FIFO 顺序。"""
+    prefix = _QUEUE_TICKET_PREFIX
+    paths = []
+    for path in _runtime_dir().glob(f"{prefix}*"):
+        suffix = path.name.removeprefix(prefix)
+        if len(suffix) == _QUEUE_TICKET_DIGITS and suffix.isascii() and suffix.isdigit():
+            paths.append(path)
+    return sorted(paths)
+
+
+def _try_create_queue_ticket() -> _QueueTicket | None:
+    """在短持有的 guard 下签发唯一递增票据；guard 忙时由调用方异步重试。"""
+    guard = _try_lock(_runtime_dir() / "cpu.queue.guard")
+    if guard is None:
+        return None
+
+    ticket: _QueueTicket | None = None
+    try:
+        paths = _queue_ticket_paths()
+        sequence = max((int(path.name.removeprefix(_QUEUE_TICKET_PREFIX)) for path in paths), default=0) + 1
+        if sequence >= 10**_QUEUE_TICKET_DIGITS:
+            raise RuntimeError("CPU 公平队列票据序号溢出")
+        path = _runtime_dir() / f"{_QUEUE_TICKET_PREFIX}{sequence:0{_QUEUE_TICKET_DIGITS}d}"
+        flags = os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(path, flags, 0o600)
+        try:
+            os.fchmod(descriptor, 0o600)
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+        except BaseException:
+            os.close(descriptor)
+            path.unlink(missing_ok=True)
+            raise
+        ticket = _QueueTicket(path, descriptor)
+    finally:
+        try:
+            _LockSet([guard]).release()
+        except BaseException:
+            if ticket is not None:
+                ticket.release()
+            raise
+    return ticket
+
+
+def _try_is_queue_head(ticket: _QueueTicket) -> bool | None:
+    """返回是否为最早活票据；guard 忙返回 None，崩溃残留在扫描中删除。"""
+    guard = _try_lock(_runtime_dir() / "cpu.queue.guard")
+    if guard is None:
+        return None
+    try:
+        for path in _queue_ticket_paths():
+            if path == ticket.path:
+                return True
+            try:
+                descriptor = _try_lock_existing(path)
+            except FileNotFoundError:
+                continue
+            if descriptor is None:
+                return False
+            try:
+                path.unlink(missing_ok=True)
+            finally:
+                _LockSet([descriptor]).release()
+        raise RuntimeError("CPU 公平队列中的当前票据意外丢失")
+    finally:
+        _LockSet([guard]).release()
+
+
+def _wait_delay(remaining: float) -> float:
+    return min(remaining, 0.02 + random.random() * 0.03)
+
+
+def _release_resources(*resources: _QueueTicket | _LockSet | None) -> None:
+    """异常路径仍依次释放全部资源，并在清理后传播第一个错误。"""
+    first_error: BaseException | None = None
+    for resource in resources:
+        if resource is None:
+            continue
+        try:
+            resource.release()
+        except BaseException as error:
+            first_error = first_error or error
+    if first_error is not None:
+        raise first_error
+
+
 @contextmanager
 def cpu_workload(workload: str, *, permits: int = 1) -> Iterator[WorkloadLease]:
     """取得一个有界计算租约；同机所有 API worker 共享容量。
@@ -141,30 +275,38 @@ def cpu_workload(workload: str, *, permits: int = 1) -> Iterator[WorkloadLease]:
     if admission is None:
         raise CapacityExceeded(workload, "queue_full", config.CPU_RETRY_AFTER_SECONDS)
 
+    ticket: _QueueTicket | None = None
     compute: _LockSet | None = None
     started = time.monotonic()
     deadline = started + config.CPU_ACQUIRE_TIMEOUT_SECONDS
     try:
-        while compute is None:
-            compute = _try_acquire("cpu", config.CPU_CONCURRENCY, permits)
-            if compute is not None:
+        while ticket is None:
+            ticket = _try_create_queue_ticket()
+            if ticket is not None:
                 break
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise CapacityExceeded(workload, "wait_timeout", config.CPU_RETRY_AFTER_SECONDS)
-            time.sleep(min(remaining, 0.02 + random.random() * 0.03))
+            time.sleep(_wait_delay(remaining))
+        while compute is None:
+            is_head = _try_is_queue_head(ticket)
+            if is_head:
+                compute = _try_acquire("cpu", config.CPU_CONCURRENCY, permits)
+            if compute is not None:
+                ticket.release()
+                ticket = None
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise CapacityExceeded(workload, "wait_timeout", config.CPU_RETRY_AFTER_SECONDS)
+            time.sleep(_wait_delay(remaining))
         yield WorkloadLease(
             workload=workload,
             permits=permits,
             waited_seconds=max(0.0, time.monotonic() - started),
         )
     finally:
-        try:
-            if compute is not None:
-                compute.release()
-        finally:
-            # compute 清理异常也不能跳过 admission，否则队列容量会永久缩小。
-            admission.release()
+        _release_resources(ticket, compute, admission)
 
 
 @asynccontextmanager
@@ -178,29 +320,38 @@ async def async_cpu_workload(workload: str, *, permits: int = 1) -> AsyncIterato
     if admission is None:
         raise CapacityExceeded(workload, "queue_full", config.CPU_RETRY_AFTER_SECONDS)
 
+    ticket: _QueueTicket | None = None
     compute: _LockSet | None = None
     started = time.monotonic()
     deadline = started + config.CPU_ACQUIRE_TIMEOUT_SECONDS
     try:
-        while compute is None:
-            compute = _try_acquire("cpu", config.CPU_CONCURRENCY, permits)
-            if compute is not None:
+        while ticket is None:
+            ticket = _try_create_queue_ticket()
+            if ticket is not None:
                 break
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise CapacityExceeded(workload, "wait_timeout", config.CPU_RETRY_AFTER_SECONDS)
-            await anyio.sleep(min(remaining, 0.02 + random.random() * 0.03))
+            await anyio.sleep(_wait_delay(remaining))
+        while compute is None:
+            is_head = _try_is_queue_head(ticket)
+            if is_head:
+                compute = _try_acquire("cpu", config.CPU_CONCURRENCY, permits)
+            if compute is not None:
+                ticket.release()
+                ticket = None
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise CapacityExceeded(workload, "wait_timeout", config.CPU_RETRY_AFTER_SECONDS)
+            await anyio.sleep(_wait_delay(remaining))
         yield WorkloadLease(
             workload=workload,
             permits=permits,
             waited_seconds=max(0.0, time.monotonic() - started),
         )
     finally:
-        try:
-            if compute is not None:
-                compute.release()
-        finally:
-            admission.release()
+        _release_resources(ticket, compute, admission)
 
 
 _compute_thread_limiter: anyio.CapacityLimiter | None = None

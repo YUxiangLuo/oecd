@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+import threading
+import time
 from pathlib import Path
 
 import anyio
@@ -74,6 +76,94 @@ def test_weighted_job_times_out_and_releases_admission(tmp_path: Path, monkeypat
                 pass
         assert exc.value.reason == "wait_timeout"
         assert concurrency.capacity_snapshot()["admission_used"] == 1
+
+
+def test_later_light_job_cannot_bypass_waiting_weighted_job(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """持续轻任务能插队的旧实现会在 blocker 释放前先运行 light。"""
+    _configure(monkeypatch, tmp_path, cpu=2, queue=4, timeout=1.5)
+    blocker = concurrency._try_acquire("cpu", 2, 1)
+    assert blocker is not None
+
+    heavy_entered = threading.Event()
+    release_heavy = threading.Event()
+    light_entered = threading.Event()
+    errors: list[BaseException] = []
+    order: list[str] = []
+
+    def heavy() -> None:
+        try:
+            with concurrency.cpu_workload("report", permits=2):
+                order.append("heavy")
+                heavy_entered.set()
+                assert release_heavy.wait(timeout=1)
+        except BaseException as error:
+            errors.append(error)
+
+    def light() -> None:
+        try:
+            with concurrency.cpu_workload("regression"):
+                order.append("light")
+                light_entered.set()
+        except BaseException as error:
+            errors.append(error)
+
+    heavy_thread = threading.Thread(target=heavy)
+    light_thread = threading.Thread(target=light)
+    try:
+        heavy_thread.start()
+        deadline = time.monotonic() + 0.5
+        while len(concurrency._queue_ticket_paths()) != 1 and time.monotonic() < deadline:
+            time.sleep(0.005)
+        assert len(concurrency._queue_ticket_paths()) == 1
+
+        light_thread.start()
+        deadline = time.monotonic() + 0.5
+        while len(concurrency._queue_ticket_paths()) != 2 and time.monotonic() < deadline:
+            time.sleep(0.005)
+        assert len(concurrency._queue_ticket_paths()) == 2
+
+        # 还有一个空闲 CPU 槽，但后来的轻任务不能越过需要两个槽的队首。
+        assert not light_entered.wait(timeout=0.1)
+        blocker.release()
+        blocker = None
+        assert heavy_entered.wait(timeout=0.7)
+        assert not light_entered.is_set()
+        assert order == ["heavy"]
+        release_heavy.set()
+        assert light_entered.wait(timeout=0.7)
+    finally:
+        release_heavy.set()
+        if blocker is not None:
+            blocker.release()
+        heavy_thread.join(timeout=2)
+        light_thread.join(timeout=2)
+
+    assert not heavy_thread.is_alive()
+    assert not light_thread.is_alive()
+    assert errors == []
+    assert order == ["heavy", "light"]
+
+
+def test_abandoned_queue_ticket_is_removed_after_worker_crash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _configure(monkeypatch, tmp_path, cpu=2, queue=4, timeout=0.2)
+    abandoned = concurrency._try_create_queue_ticket()
+    assert abandoned is not None and abandoned.descriptor is not None
+    descriptor = abandoned.descriptor
+    abandoned.descriptor = None
+    concurrency._LockSet([descriptor]).release()
+    assert abandoned.path.exists()
+
+    successor = concurrency._try_create_queue_ticket()
+    assert successor is not None
+    try:
+        assert concurrency._try_is_queue_head(successor) is True
+        assert not abandoned.path.exists()
+    finally:
+        successor.release()
 
 
 def test_async_queue_wait_does_not_borrow_default_thread_token(
