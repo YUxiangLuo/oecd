@@ -7,10 +7,11 @@
  *   行业下钻   选一国看它各行业的生产构成,暴露一国内部的巨大异质性
  */
 import { useEffect, useRef, useState } from "react";
+import { LabeledControl } from "../../../a11y";
 import { api } from "../../../api";
 import type { IndustryPage, Meta, Step, StepStateApi } from "../../../types";
 import { CompositionBar, RankBarChart, countryLabel } from "../../../viz";
-import { useAsync } from "../../shared";
+import { AsyncStateMessage, useAsync } from "../../shared";
 import { ChartStory, LensNav, StepIntro, VizWorkbench, finiteBy, num, useCountryObservations, useVizLab, type Row, type VizStepState } from "./scaffold";
 
 type Lens = "ladder" | "rank" | "industry";
@@ -49,12 +50,14 @@ export function Step9Production({ meta, step, state }: { meta: Meta; step: Step;
     pickCountries(picked.includes(next) ? picked : [...picked, next]);
     state.save({ drill: next });
   };
-  const { data } = useAsync<Row[]>(() => api.countryIndicators(year), [year]);
-  const { data: page } = useAsync<IndustryPage | null>(
-    () => (lens === "industry" && drill ? api.industryIndicatorsAll(year, drill) : Promise.resolve(null)),
+  const countryQuery = useAsync<Row[]>(() => api.countryIndicators(year), [year]);
+  const industryQuery = useAsync<IndustryPage>(
+    () => api.industryIndicatorsAll(year, drill),
     [lens, year, drill],
+    { enabled: lens === "industry" && Boolean(drill) },
   );
-  const rows = data ?? [];
+  const rows = countryQuery.data ?? [];
+  const page = industryQuery.data;
   useCountryObservations(rows, picked, year, "3b_VA_GVC_C_share", state);
   const highlight = new Set(picked);
 
@@ -102,18 +105,34 @@ export function Step9Production({ meta, step, state }: { meta: Meta; step: Step;
           note="行业级构成 = 该行业的生产分解;这一步说明为什么回归要下沉到国家–行业级。"
         >
           <div className="controls" style={{ marginBottom: 12 }}>
-            <label>下钻国家</label>
-            <select value={drill} onChange={(e) => selectDrill(e.target.value)}>
-              {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
-            </select>
+            <LabeledControl label="下钻国家">
+              {(id) => (
+                <select id={id} value={drill} onChange={(e) => selectDrill(e.target.value)}>
+                  {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
+                </select>
+              )}
+            </LabeledControl>
           </div>
-          {!page ? <p className="muted">加载 {countryLabel(drill)} 行业指标中…</p>
-            : industryRows.length ? (
+          {industryQuery.status === "loading" || industryQuery.status === "error" ? (
+            <AsyncStateMessage
+              status={industryQuery.status}
+              error={industryQuery.error}
+              loadingLabel={`加载 ${countryLabel(drill)} 行业指标中…`}
+              onRetry={industryQuery.retry}
+            />
+          ) : industryRows.length ? (
               <CompositionBar rows={industryRows} segments={PROD_SEGMENTS} sortKey="3b_VA_GVC_C" sortLabel="复杂 GVC" sortFormat="amount" valueFormat="amount" />
             ) : <p className="muted">该国无行业数据。</p>}
         </ChartStory>
+      ) : countryQuery.status === "loading" || countryQuery.status === "error" ? (
+        <AsyncStateMessage
+          status={countryQuery.status}
+          error={countryQuery.error}
+          loadingLabel={`加载 ${year} 年国家指标中…`}
+          onRetry={countryQuery.retry}
+        />
       ) : !rows.length ? (
-        <p className="muted">加载 {year} 年国家指标中…</p>
+        <p className="muted">该年份暂无国家指标数据。</p>
       ) : lens === "ladder" ? (
         <ChartStory
           eyebrow="WWYZ 生产分解"

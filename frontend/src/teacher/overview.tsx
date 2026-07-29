@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LabeledControl, ScrollableRegion } from "../a11y";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import type { ClassInfo, ClassOverview } from "../types";
@@ -35,15 +36,18 @@ export function OverviewTab({ onSelectStep }: {
     <div>
       <Toolbar>
         <div className="field">
-          <label>班级</label>
-          <select value={classId ?? ""} onChange={(e) => setClassId(e.target.value ? Number(e.target.value) : null)}>
-            <option value="">全部班级</option>
-            {(cls?.classes ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+          <LabeledControl label="班级">
+            {(id) => (
+              <select id={id} value={classId ?? ""} onChange={(e) => setClassId(e.target.value ? Number(e.target.value) : null)}>
+                <option value="">全部班级</option>
+                {(cls?.classes ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </LabeledControl>
         </div>
       </Toolbar>
 
@@ -121,7 +125,7 @@ export function OverviewTab({ onSelectStep }: {
             <div className="panel-head">
               <span className="panel-ic">🏫</span>班级对比
             </div>
-            <div className="table-wrap">
+            <ScrollableRegion className="table-wrap" label="班级对比表，可横向滚动">
               <table className="data-table compact">
                 <thead>
                   <tr>
@@ -156,7 +160,7 @@ export function OverviewTab({ onSelectStep }: {
                   })}
                 </tbody>
               </table>
-            </div>
+            </ScrollableRegion>
           </section>
         )}
       </div>

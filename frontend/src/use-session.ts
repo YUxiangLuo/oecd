@@ -161,8 +161,11 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
   const manifestId = context?.manifestId ?? null;
   const scope = sessionScope(identity, context);
   const scopeKey = sessionScopeKey(scope);
-  const [status, setStatus] = useState<SessionStatus>("loading");
-  const statusRef = useRef<SessionStatus>("loading");
+  // 缺少 manifest 或完整 assignment/attempt 作用域时没有任何异步装载会发生，
+  // 因而不能停在 loading；unavailable 会让 App 退出启动骨架并展示作用域恢复提示。
+  const initialStatus: SessionStatus = scopeKey ? "loading" : "unavailable";
+  const [status, setStatus] = useState<SessionStatus>(initialStatus);
+  const statusRef = useRef<SessionStatus>(initialStatus);
   const [session, setSession] = useState<ExperimentSession>(() => emptySession(manifestId ?? ""));
   const sessionRef = useRef(session);
   const [stale, setStale] = useState(false);
@@ -215,7 +218,7 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
     activeDrain.current = null;
     revision.current = 0;
     replaceSession(emptySession(manifestId ?? ""));
-    updateStatus("loading");
+    updateStatus(scopeKey ? "loading" : "unavailable");
     setStale(false);
     setRecovery([]);
     setAssignmentClosed(false);
@@ -302,7 +305,7 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
 
   // 登录后装载:服务端会话与本地会话按记录级/字段级时间戳合并。
   useEffect(() => {
-    if (!username || !manifestId) return;
+    if (!username || !manifestId || !scope || !scopeKey) return;
     let live = true;
     const loadScopeKey = scopeKey;
     const loadGeneration = scopeGeneration.current;

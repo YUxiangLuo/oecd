@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { LabeledControl, ScrollableRegion } from "../a11y";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import { showToast } from "../toast";
@@ -190,11 +191,14 @@ export function CourseAssignmentsTab() {
 
       <Toolbar>
         <div className="field">
-          <label>课程运行</label>
-          <select aria-label="课程运行" value={selectedRunId ?? ""} onChange={(event) => setSelectedRunId(Number(event.target.value))}>
-            {!runs.length && <option value="">尚无课程运行</option>}
-            {runs.map((run) => <option key={run.id} value={run.id}>{run.name} · {run.code}{run.archived ? "（已归档）" : ""}</option>)}
-          </select>
+          <LabeledControl label="课程运行">
+            {(id) => (
+              <select id={id} value={selectedRunId ?? ""} onChange={(event) => setSelectedRunId(Number(event.target.value))}>
+                {!runs.length && <option value="">尚无课程运行</option>}
+                {runs.map((run) => <option key={run.id} value={run.id}>{run.name} · {run.code}{run.archived ? "（已归档）" : ""}</option>)}
+              </select>
+            )}
+          </LabeledControl>
         </div>
         <div className="toolbar-actions">
           {selectedRun && (
@@ -227,7 +231,7 @@ export function CourseAssignmentsTab() {
             {!assignmentData ? <p className="muted">加载中…</p> : assignments.length === 0 ? (
               <EmptyState icon="🧪" title="此课程运行还没有作业" hint="点击“发布作业”，系统会自动绑定当前服务器数据版本。" />
             ) : (
-              <div className="table-wrap">
+              <ScrollableRegion className="table-wrap" label="课程作业表，可横向滚动">
                 <table className="data-table assignment-table">
                   <thead><tr><th>作业</th><th>数据版本</th><th>开放 / 截止</th><th>状态</th><th>操作</th></tr></thead>
                   <tbody>{assignments.map((assignment) => {
@@ -249,7 +253,7 @@ export function CourseAssignmentsTab() {
                     );
                   })}</tbody>
                 </table>
-              </div>
+              </ScrollableRegion>
             )}
           </section>
 
@@ -297,10 +301,18 @@ export function CourseAssignmentsTab() {
       {dialog === "course" && (
         <Modal title="新建课程运行" onClose={closeDialog} width={500}>
           <div className="modal-form">
-            <label>课程运行名称 *</label><input value={courseForm.name} onChange={(event) => setCourseForm({ ...courseForm, name: event.target.value })} placeholder="例如：全球价值链分析 2026 秋" />
-            <label>运行代码 *</label><input value={courseForm.code} onChange={(event) => setCourseForm({ ...courseForm, code: event.target.value })} placeholder="例如：GVC-2026-FALL" />
-            <label>学期</label><input value={courseForm.term} onChange={(event) => setCourseForm({ ...courseForm, term: event.target.value })} placeholder="2026 秋" />
-            <label>发布标签</label><input value={courseForm.releaseTag} onChange={(event) => setCourseForm({ ...courseForm, releaseTag: event.target.value })} placeholder="可选，如 cohort-a" />
+            <LabeledControl label="课程运行名称 *">
+              {(id) => <input id={id} value={courseForm.name} onChange={(event) => setCourseForm({ ...courseForm, name: event.target.value })} placeholder="例如：全球价值链分析 2026 秋" />}
+            </LabeledControl>
+            <LabeledControl label="运行代码 *">
+              {(id) => <input id={id} value={courseForm.code} onChange={(event) => setCourseForm({ ...courseForm, code: event.target.value })} placeholder="例如：GVC-2026-FALL" />}
+            </LabeledControl>
+            <LabeledControl label="学期">
+              {(id) => <input id={id} value={courseForm.term} onChange={(event) => setCourseForm({ ...courseForm, term: event.target.value })} placeholder="2026 秋" />}
+            </LabeledControl>
+            <LabeledControl label="发布标签">
+              {(id) => <input id={id} value={courseForm.releaseTag} onChange={(event) => setCourseForm({ ...courseForm, releaseTag: event.target.value })} placeholder="可选，如 cohort-a" />}
+            </LabeledControl>
             {actionError && <div className="error-box" style={{ marginBottom: 12 }}>{actionError}</div>}
             <button type="button" className="primary block" disabled={saving} onClick={() => void createCourse()}>{saving ? "创建中…" : "创建并选中"}</button>
           </div>
@@ -311,9 +323,15 @@ export function CourseAssignmentsTab() {
         <Modal title={`向 ${selectedRun.code} 发布作业`} onClose={closeDialog} width={540}>
           <div className="modal-form">
             <div className="manifest-lock-note"><b>🔒 数据版本自动冻结</b><code>{currentManifest ?? "manifest 不可用"}</code><span>此字段来自当前服务器，教师不能手填或改写。</span></div>
-            <label>作业标题 *</label><input value={assignmentForm.title} onChange={(event) => setAssignmentForm({ ...assignmentForm, title: event.target.value })} />
-            <label>作业 slug *</label><input value={assignmentForm.slug} onChange={(event) => setAssignmentForm({ ...assignmentForm, slug: event.target.value })} />
-            <label>发布标签</label><input value={assignmentForm.releaseTag} onChange={(event) => setAssignmentForm({ ...assignmentForm, releaseTag: event.target.value })} placeholder="可选" />
+            <LabeledControl label="作业标题 *">
+              {(id) => <input id={id} value={assignmentForm.title} onChange={(event) => setAssignmentForm({ ...assignmentForm, title: event.target.value })} />}
+            </LabeledControl>
+            <LabeledControl label="作业 slug *">
+              {(id) => <input id={id} value={assignmentForm.slug} onChange={(event) => setAssignmentForm({ ...assignmentForm, slug: event.target.value })} />}
+            </LabeledControl>
+            <LabeledControl label="发布标签">
+              {(id) => <input id={id} value={assignmentForm.releaseTag} onChange={(event) => setAssignmentForm({ ...assignmentForm, releaseTag: event.target.value })} placeholder="可选" />}
+            </LabeledControl>
             <div className="assignment-date-grid">
               <label>开放时间<input type="datetime-local" value={assignmentForm.opensAt} onChange={(event) => setAssignmentForm({ ...assignmentForm, opensAt: event.target.value })} /></label>
               <label>截止时间<input type="datetime-local" value={assignmentForm.dueAt} onChange={(event) => setAssignmentForm({ ...assignmentForm, dueAt: event.target.value })} /></label>

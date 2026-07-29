@@ -17,7 +17,7 @@ export const SHOCK_TYPE_LABELS: Record<ShockType, string> = {
  * 查表全部落空、所有事件退化成同一个兜底色,而没有任何测试会红。
  * model.test.ts 现在断言两张表都覆盖 SHOCK_TYPES。 */
 export const SHOCK_TYPE_COLORS: Record<ShockType, string> = {
-  tariff: "#2a78d6",
+  tariff: "#216cc0",
   sanctions: "#e34948",
   export_control: "#eda100",
 };

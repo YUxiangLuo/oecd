@@ -107,7 +107,7 @@ export function LoginPage({ onLogin }: { onLogin: (r: LoginResponse) => void }) 
           <h2>进入实验平台</h2>
           <p className="login-card-sub">使用教师分配的个人账号登录；角色与课程权限由服务器确认。</p>
 
-          {demoMode && <div className="login-roles" aria-label="开发演示快捷账号">
+          {demoMode && <div className="login-roles" role="group" aria-label="开发演示快捷账号">
             {DEMO_ACCOUNTS.map((a) => (
               <button
                 key={a.username}

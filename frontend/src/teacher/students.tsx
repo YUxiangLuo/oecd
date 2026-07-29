@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { LabeledControl, ScrollableRegion } from "../a11y";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import type { ClassInfo, StepsResponse, StudentRow } from "../types";
@@ -89,15 +90,18 @@ export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearS
     <div>
       <Toolbar>
         <div className="field">
-          <label>班级</label>
-          <select value={classId ?? ""} onChange={(e) => setClassId(e.target.value ? Number(e.target.value) : null)}>
-            <option value="">全部班级</option>
-            {(cls?.classes ?? []).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}({c.student_count ?? 0} 人)
-              </option>
-            ))}
-          </select>
+          <LabeledControl label="班级">
+            {(id) => (
+              <select id={id} value={classId ?? ""} onChange={(e) => setClassId(e.target.value ? Number(e.target.value) : null)}>
+                <option value="">全部班级</option>
+                {(cls?.classes ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}({c.student_count ?? 0} 人)
+                  </option>
+                ))}
+              </select>
+            )}
+          </LabeledControl>
         </div>
         <SearchInput value={query} onChange={setQuery} placeholder="搜索姓名 / 用户名 / 学号" />
         <div className="toolbar-actions">
@@ -119,7 +123,7 @@ export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearS
 
       {actionError && <div className="error-box">{actionError}</div>}
 
-      <div className="table-wrap">
+      <ScrollableRegion className="table-wrap" label="学生进度表，可横向滚动">
         <table className="data-table">
           <thead>
             <tr>
@@ -229,7 +233,7 @@ export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearS
             }
           />
         )}
-      </div>
+      </ScrollableRegion>
       <p className="muted panel-note">“到达位置”只表示浏览导航；步骤 1–15 由答题通过判定，第 16 步由报告生成判定。停用账号会立即撤销现有会话并禁止后续请求，但保留历史记录。</p>
 
       {modal?.type === "class" && (
@@ -296,12 +300,15 @@ function ClassModal({
   return (
     <Modal title="新建班级" onClose={onClose}>
       <div className="modal-form">
-        <label>班级名称</label>
-        <input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="如:GVC 实验 A 班" />
-        <label>班级代码</label>
-        <input value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} placeholder="如:GVC-2026-A" />
-        <label>学期(可空)</label>
-        <input value={f.semester} onChange={(e) => setF({ ...f, semester: e.target.value })} placeholder="如:2026 春" />
+        <LabeledControl label="班级名称">
+          {(id) => <input id={id} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="如:GVC 实验 A 班" />}
+        </LabeledControl>
+        <LabeledControl label="班级代码">
+          {(id) => <input id={id} value={f.code} onChange={(e) => setF({ ...f, code: e.target.value })} placeholder="如:GVC-2026-A" />}
+        </LabeledControl>
+        <LabeledControl label="学期(可空)">
+          {(id) => <input id={id} value={f.semester} onChange={(e) => setF({ ...f, semester: e.target.value })} placeholder="如:2026 春" />}
+        </LabeledControl>
         {err && <div className="error-box">{err}</div>}
         <div className="modal-actions">
           <button onClick={onClose}>取消</button>
@@ -344,20 +351,27 @@ function StudentModal({
   return (
     <Modal title="添加学生账号" onClose={onClose}>
       <div className="modal-form">
-        <label>用户名(登录用)</label>
-        <input value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} placeholder="字母数字下划线" />
-        <label>姓名</label>
-        <input value={f.display_name} onChange={(e) => setF({ ...f, display_name: e.target.value })} />
-        <label>学号(可空)</label>
-        <input value={f.student_no} onChange={(e) => setF({ ...f, student_no: e.target.value })} />
-        <label>初始密码(≥12 位)</label>
-        <input {...PASSWORD_INPUT_PROPS} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />
-        <label>所属班级</label>
-        <select value={classChoice} onChange={(e) => setClassChoice(e.target.value)}>
-          {defaultClassId == null && <option value="">请选择班级</option>}
-          <option value="unassigned">暂不分班</option>
-          {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        <LabeledControl label="用户名(登录用)">
+          {(id) => <input id={id} value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} placeholder="字母数字下划线" />}
+        </LabeledControl>
+        <LabeledControl label="姓名">
+          {(id) => <input id={id} value={f.display_name} onChange={(e) => setF({ ...f, display_name: e.target.value })} />}
+        </LabeledControl>
+        <LabeledControl label="学号(可空)">
+          {(id) => <input id={id} value={f.student_no} onChange={(e) => setF({ ...f, student_no: e.target.value })} />}
+        </LabeledControl>
+        <LabeledControl label="初始密码(≥12 位)">
+          {(id) => <input id={id} {...PASSWORD_INPUT_PROPS} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />}
+        </LabeledControl>
+        <LabeledControl label="所属班级">
+          {(id) => (
+            <select id={id} value={classChoice} onChange={(e) => setClassChoice(e.target.value)}>
+              {defaultClassId == null && <option value="">请选择班级</option>}
+              <option value="unassigned">暂不分班</option>
+              {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
+        </LabeledControl>
         {err && <div className="error-box">{err}</div>}
         <p className="muted">创建后学生即可使用该账号登录；在“全部班级”视图中必须明确选择归属。</p>
         <div className="modal-actions">
@@ -404,8 +418,9 @@ function FieldModal({
   return (
     <Modal title={title} onClose={onClose} width={380}>
       <div className="modal-form">
-        <label>{label}</label>
-        <input type={inputType} autoComplete={autoComplete} autoFocus value={v} onChange={(e) => setV(e.target.value)} />
+        <LabeledControl label={label}>
+          {(id) => <input id={id} type={inputType} autoComplete={autoComplete} autoFocus value={v} onChange={(e) => setV(e.target.value)} />}
+        </LabeledControl>
         {err && <div className="error-box">{err}</div>}
         <div className="modal-actions">
           <button onClick={onClose}>取消</button>

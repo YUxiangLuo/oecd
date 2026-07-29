@@ -109,16 +109,16 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
   ];
   return (
     <div style={cardStyle} ref={wrapRef}>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{yLabel} × {xLabel} <span style={{ fontSize: 10.5, color: "#8a90a0", fontWeight: 400 }}>（参考线基于完整有效样本 n={referencePts.length}）</span></div>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{yLabel} × {xLabel} <span style={{ fontSize: 10.5, color: "#5f6677", fontWeight: 400 }}>（参考线基于完整有效样本 n={referencePts.length}）</span></div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%">
         {ticks(y0, y1).map((t, i) => (
           <g key={`y${i}`}>
             <line x1={m.l} y1={py(t)} x2={W - m.r} y2={py(t)} stroke="#eef0f5" strokeWidth={1} />
-            <text x={m.l - 8} y={py(t) + 4} textAnchor="end" fontSize="10.5" fill="#8a90a0">{fmtAxis(t, yFormat)}</text>
+            <text x={m.l - 8} y={py(t) + 4} textAnchor="end" fontSize="10.5" fill="#5f6677">{fmtAxis(t, yFormat)}</text>
           </g>
         ))}
         {ticks(x0, x1).map((t, i) => (
-          <text key={`x${i}`} x={px(t)} y={H - m.b + 18} textAnchor="middle" fontSize="10.5" fill="#8a90a0">{fmtAxis(t, xFormat)}</text>
+          <text key={`x${i}`} x={px(t)} y={H - m.b + 18} textAnchor="middle" fontSize="10.5" fill="#5f6677">{fmtAxis(t, xFormat)}</text>
         ))}
         {/* 象限参考线(中位数) */}
         <line x1={px(xRef)} y1={m.t} x2={px(xRef)} y2={H - m.b} stroke="#c8ccd6" strokeWidth={1} strokeDasharray="4 4" />
@@ -135,7 +135,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
         {/* 四角角色标签 */}
         {quadrantLabels?.map((lab, i) => (
           <text key={i} x={corners[i].x} y={corners[i].y} textAnchor={corners[i].anchor}
-            fontSize="10.5" fill="#9aa0ae" fontWeight={600}>{lab}</text>
+            fontSize="10.5" fill="#5f6677" fontWeight={600}>{lab}</text>
         ))}
         {/* 轴标题 */}
         <text x={(m.l + W - m.r) / 2} y={H - 6} textAnchor="middle" fontSize="11.5" fill="#5a6070">{xLabel}</text>
@@ -151,7 +151,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
               <circle cx={px(p.x)} cy={py(p.y)} r={hi ? 6 : 4.5}
                 fill={hi ? CAT[5] : CAT[0]} fillOpacity={hi ? 0.95 : 0.62} stroke="#fff" strokeWidth={1} />
               {(showLabels || hi || key) && (
-                <text x={px(p.x) + 7} y={py(p.y) + 3.5} fontSize="10" fill={hi ? CAT[5] : key ? "#3a4050" : "#8a90a0"}
+                <text x={px(p.x) + 7} y={py(p.y) + 3.5} fontSize="10" fill={hi ? CAT[5] : key ? "#3a4050" : "#5f6677"}
                   fontWeight={hi || key ? 700 : 400}>{p.tag}</text>
               )}
             </g>

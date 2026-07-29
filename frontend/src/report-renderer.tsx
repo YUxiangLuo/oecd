@@ -2,6 +2,7 @@ import { isValidElement } from "react";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ScrollableRegion } from "./a11y";
 
 type ChartItem = { label: string; value: number };
 type ChartPoint = ChartItem & { se?: number; ci_low?: number; ci_high?: number };
@@ -127,7 +128,7 @@ function BarChart({ chart }: { chart: Extract<ReportChart, { type: "bar" }> }) {
             </g>
           );
         })}
-        {(chart.y_label || chart.x_label) && <text x={m.l + plotW / 2} y={H - 8} textAnchor="middle" fontSize={11} fill="#8a90a0">{chart.y_label ?? chart.x_label}</text>}
+        {(chart.y_label || chart.x_label) && <text x={m.l + plotW / 2} y={H - 8} textAnchor="middle" fontSize={11} fill="#5f6677">{chart.y_label ?? chart.x_label}</text>}
       </svg>
     </ReportFigure>
   );
@@ -154,7 +155,7 @@ function EventChart({ chart }: { chart: Extract<ReportChart, { type: "event-stud
         {[-extent, 0, extent].map((tick) => (
           <g key={tick}>
             <line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke={tick === 0 ? "#b9bec9" : "#eceef3"} />
-            <text x={m.l - 8} y={y(tick) + 4} textAnchor="end" fontSize={10} fill="#8a90a0">{fmt(tick)}</text>
+            <text x={m.l - 8} y={y(tick) + 4} textAnchor="end" fontSize={10} fill="#5f6677">{fmt(tick)}</text>
           </g>
         ))}
         {intervals.map((point, i) => (
@@ -164,8 +165,8 @@ function EventChart({ chart }: { chart: Extract<ReportChart, { type: "event-stud
             <text x={x(i)} y={H - m.b + 18} textAnchor="middle" fontSize={11} fill="#596173">{point.label}</text>
           </g>
         ))}
-        {chart.y_label && <text x={14} y={m.t + plotH / 2} textAnchor="middle" fontSize={11} fill="#8a90a0" transform={`rotate(-90 14 ${m.t + plotH / 2})`}>{chart.y_label}</text>}
-        {chart.x_label && <text x={m.l + plotW / 2} y={H - 7} textAnchor="middle" fontSize={11} fill="#8a90a0">{chart.x_label}</text>}
+        {chart.y_label && <text x={14} y={m.t + plotH / 2} textAnchor="middle" fontSize={11} fill="#5f6677" transform={`rotate(-90 14 ${m.t + plotH / 2})`}>{chart.y_label}</text>}
+        {chart.x_label && <text x={m.l + plotW / 2} y={H - 7} textAnchor="middle" fontSize={11} fill="#5f6677">{chart.x_label}</text>}
       </svg>
     </ReportFigure>
   );
@@ -213,9 +214,13 @@ export function ReportMarkdown({ markdown, className = "report-md" }: { markdown
           code: ReportCode,
           pre: ReportPre,
           table: ({ children, ...props }) => (
-            <div className="table-wrap" style={{ breakInside: "avoid", margin: "14px 0" }}>
+            <ScrollableRegion
+              className="table-wrap"
+              label="报告数据表，可横向滚动"
+              style={{ breakInside: "avoid", margin: "14px 0" }}
+            >
               <table className="data-table" {...props}>{children}</table>
-            </div>
+            </ScrollableRegion>
           ),
           h1: ({ children, ...props }) => <h1 style={{ breakAfter: "avoid" }} {...props}>{children}</h1>,
           h2: ({ children, ...props }) => <h2 style={{ breakAfter: "avoid", marginTop: 24 }} {...props}>{children}</h2>,

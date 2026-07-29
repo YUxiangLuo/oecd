@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { Meta, PagedRows, ShockSummary } from "../../../types";
 import { countryLabel, sectorLabel } from "../../../viz";
@@ -51,33 +52,45 @@ export function ShockPanel({
   const pages = shownPanel ? Math.max(1, Math.ceil(shownPanel.total / shownPanel.page_size)) : 1;
 
   return (
-    <div className="shock-panel-embedded" aria-label="国家–行业冲击面板">
+    <div className="shock-panel-embedded" role="region" aria-label="国家–行业冲击面板">
       <div className="controls shock-panel-controls">
         <span className="field">
-          <label>冲击类型</label>
-          <select value={filters.shockType} onChange={(event) => onChange({ shockType: event.target.value, page: 1 })}>
-            {SHOCK_TYPES.map((value) => <option key={value} value={value}>{SHOCK_TYPE_LABELS[value]}</option>)}
-          </select>
+          <LabeledControl label="冲击类型">
+            {(id) => (
+              <select id={id} value={filters.shockType} onChange={(event) => onChange({ shockType: event.target.value, page: 1 })}>
+                {SHOCK_TYPES.map((value) => <option key={value} value={value}>{SHOCK_TYPE_LABELS[value]}</option>)}
+              </select>
+            )}
+          </LabeledControl>
         </span>
         <span className="field">
-          <label>年份</label>
-          <select value={filters.year} onChange={(event) => onChange({ year: Number(event.target.value), page: 1 })}>
-            {meta.years.map((value) => <option key={value}>{value}</option>)}
-          </select>
+          <LabeledControl label="年份">
+            {(id) => (
+              <select id={id} value={filters.year} onChange={(event) => onChange({ year: Number(event.target.value), page: 1 })}>
+                {meta.years.map((value) => <option key={value}>{value}</option>)}
+              </select>
+            )}
+          </LabeledControl>
         </span>
         <span className="field">
-          <label>国家</label>
-          <select value={filters.country} onChange={(event) => onChange({ country: event.target.value, page: 1 })}>
-            <option value="">全部</option>
-            {meta.countries.map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
-          </select>
+          <LabeledControl label="国家">
+            {(id) => (
+              <select id={id} value={filters.country} onChange={(event) => onChange({ country: event.target.value, page: 1 })}>
+                <option value="">全部</option>
+                {meta.countries.map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
+              </select>
+            )}
+          </LabeledControl>
         </span>
         <span className="field">
-          <label>行业</label>
-          <select value={filters.sector} onChange={(event) => onChange({ sector: event.target.value, page: 1 })}>
-            <option value="">全部</option>
-            {meta.sectors.map((code) => <option key={code} value={code}>{sectorLabel(code)}</option>)}
-          </select>
+          <LabeledControl label="行业">
+            {(id) => (
+              <select id={id} value={filters.sector} onChange={(event) => onChange({ sector: event.target.value, page: 1 })}>
+                <option value="">全部</option>
+                {meta.sectors.map((code) => <option key={code} value={code}>{sectorLabel(code)}</option>)}
+              </select>
+            )}
+          </LabeledControl>
         </span>
         <label className="shock-only-hit">
           <input
@@ -110,7 +123,7 @@ export function ShockPanel({
       ) : shownPanel.rows.length === 0 ? (
         <div className="shock-panel-state">当前条件下没有记录；可以放宽国家、行业或“只看受冲击”筛选。</div>
       ) : (
-        <div className="table-wrap">
+        <ScrollableRegion className="table-wrap" label="国家行业冲击面板表，可横向滚动">
           <table className="data-table shock-panel-table">
             <thead>
               <tr>
@@ -136,7 +149,7 @@ export function ShockPanel({
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollableRegion>
       )}
       {/* 事件联动常把口径收窄到单个国家×行业,定高后会空出一片。与其留白,
           不如把它变成"怎么看到完整范围"的引导——顺带点明左右两侧是同一套筛选。 */}

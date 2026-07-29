@@ -9,7 +9,7 @@
 import { api } from "../../../api";
 import type { Meta, Step, StepStateApi } from "../../../types";
 import { CompositionBar, QuadrantScatter, RankBarChart } from "../../../viz";
-import { useAsync } from "../../shared";
+import { AsyncStateMessage, useAsync } from "../../shared";
 import { ChartStory, LensNav, StepIntro, VizWorkbench, finiteBy, num, useCountryObservations, useVizLab, type Row, type VizStepState } from "./scaffold";
 
 type Lens = "quadrant" | "decompose" | "rank";
@@ -30,7 +30,7 @@ export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; stat
   const { year, setYear, lens, pickLens, picked, pickCountries } = useVizLab(
     meta, step, state, "quadrant", ["quadrant", "decompose", "rank"],
   );
-  const { data } = useAsync<Row[]>(() => api.countryIndicators(year), [year]);
+  const { data, error, status, retry } = useAsync<Row[]>(() => api.countryIndicators(year), [year]);
   const rows = data ?? [];
   useCountryObservations(rows, picked, year, "FVA_share", state);
 
@@ -71,8 +71,15 @@ export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; stat
         years={meta.years} year={year} onYearChange={setYear}
         countries={meta.countries} picked={picked} onPick={pickCountries}
       >
-      {!rows.length ? (
-        <p className="muted">加载 {year} 年国家指标中…</p>
+      {status === "loading" || status === "error" ? (
+        <AsyncStateMessage
+          status={status}
+          error={error}
+          loadingLabel={`加载 ${year} 年国家指标中…`}
+          onRetry={retry}
+        />
+      ) : !rows.length ? (
+        <p className="muted">该年份暂无国家指标数据。</p>
       ) : lens === "quadrant" ? (
         <ChartStory
           eyebrow="经济体分型"

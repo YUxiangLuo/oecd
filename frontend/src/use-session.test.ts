@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { emptySession, readShared, readStep } from "./session-store";
 import {
   patchSessionStep,
@@ -6,6 +8,7 @@ import {
   sessionScope,
   sessionScopeKey,
   updateSessionShared,
+  useSession,
 } from "./use-session";
 
 describe("sessionScope", () => {
@@ -67,6 +70,19 @@ describe("sessionScope", () => {
       manifestId: "manifest",
     }));
     expect(sessionScopeKey(null)).toBeNull();
+  });
+});
+
+describe("session loading state", () => {
+  test("settles as unavailable when metadata has no manifest to load", () => {
+    function StatusProbe() {
+      return createElement("span", null, useSession(
+        { username: "student", accountId: 42 },
+        null,
+      ).status);
+    }
+
+    expect(renderToStaticMarkup(createElement(StatusProbe))).toContain("unavailable");
   });
 });
 

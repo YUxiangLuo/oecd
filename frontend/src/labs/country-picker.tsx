@@ -46,7 +46,7 @@ export function CountryPicker({ countries, picked, onChange }: {
           ))}
         </div>
       )}
-      <div className="country-picker-list" role="listbox" aria-multiselectable="true">
+      <div className="country-picker-list" role="group" aria-label="国家选择列表">
         {shown.map((code) => (
           <label key={code} className={`country-picker-row${picked.includes(code) ? " on" : ""}`}>
             <input type="checkbox" checked={picked.includes(code)} onChange={() => toggle(code)} />

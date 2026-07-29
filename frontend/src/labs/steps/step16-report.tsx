@@ -131,19 +131,30 @@ export function ReportLab({
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rendererReady, setRendererReady] = useState(false);
+  const [rendererSettled, setRendererSettled] = useState(false);
   const [submitRefresh, setSubmitRefresh] = useState(0);
-  const { data: mine } = useAsync<MySubmission>(() => api.classroom.myReport(), [submitRefresh]);
+  const mineQuery = useAsync<MySubmission>(() => api.classroom.myReport(), [submitRefresh]);
+  const generatedQuery = useAsync<Partial<GeneratedReport>>(() => api.classroom.generatedReport(), []);
+  const mine = mineQuery.data;
 
   useEffect(() => {
     let live = true;
-    preloadReportRenderer().then(() => live && setRendererReady(true), () => {});
-    // 进入本步先取回上次生成的报告:刷新或换设备后仍能直接读到全文。
-    api.classroom.generatedReport().then(
-      (row) => { if (live && row.report_key) setReport(row as GeneratedReport); },
-      () => {},
+    preloadReportRenderer().then(
+      () => {
+        if (!live) return;
+        setRendererReady(true);
+        setRendererSettled(true);
+      },
+      () => {
+        if (live) setRendererSettled(true);
+      },
     );
     return () => { live = false; };
   }, []);
+
+  useEffect(() => {
+    if (generatedQuery.data?.report_key) setReport(generatedQuery.data as GeneratedReport);
+  }, [generatedQuery.data]);
 
   useEffect(() => {
     setBlocked(null);
@@ -191,6 +202,9 @@ export function ReportLab({
   };
 
   const canGenerate = reportGenerationReady(sessionStatus, blocked, sessionUnsynced, sessionSyncing);
+  const restoringReport = generatedQuery.status === "loading"
+    || (mineQuery.status === "loading" && submitRefresh === 0)
+    || !rendererSettled;
 
   return (
     <div>
@@ -240,18 +254,39 @@ export function ReportLab({
         >
           打印 / 另存为 PDF
         </button>
-        {report && (
-          <span className="muted">
+        <span className="muted report-provenance-slot" aria-live="polite">
+          {report && (
+            <>
             指纹 <code>{report.report_key}</code> · 产物 <code>{report.provenance.manifest_id}</code> · 会话 rev{" "}
             {report.provenance.session_revision}
             {report.suggested_filename && <> · 建议文件名 <code>{report.suggested_filename}</code></>}
-          </span>
-        )}
+            </>
+          )}
+        </span>
       </section>
 
       {error && <div className="error-box">{error}</div>}
+      {generatedQuery.status === "error" && (
+        <div className="error-box async-error" role="alert">
+          <span>恢复已生成报告失败：{generatedQuery.error}</span>
+          <button type="button" className="secondary" onClick={generatedQuery.retry}>重试</button>
+        </div>
+      )}
+      {mineQuery.status === "error" && (
+        <div className="error-box async-error" role="alert">
+          <span>恢复提交与评分状态失败：{mineQuery.error}</span>
+          <button type="button" className="secondary" onClick={mineQuery.retry}>重试</button>
+        </div>
+      )}
 
-      {report ? (
+      {restoringReport ? (
+        <div className="report-restore-skeleton" role="region" aria-busy="true" aria-label="正在恢复报告">
+          <span className="skeleton-block skeleton-line wide" />
+          <span className="skeleton-block skeleton-line" />
+          <span className="skeleton-block skeleton-report" />
+          <span className="sr-only" role="status">正在恢复已生成报告和评阅状态…</span>
+        </div>
+      ) : report ? (
         <>
           <SubmitCard report={report} mine={mine ?? null} onSubmitted={() => setSubmitRefresh((n) => n + 1)} />
           <div className="report-body">

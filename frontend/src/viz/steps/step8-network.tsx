@@ -1,4 +1,5 @@
 import { useId, useMemo, useState } from "react";
+import { LabeledControl } from "../../a11y";
 import { formatMetric } from "../../format";
 import type { NetworkData } from "../../types";
 import { CAT, Legend, REGION_OF, REGIONS, SEQ, cardStyle, countryLabel, num, useTip } from "../shared";
@@ -139,24 +140,34 @@ export function NetworkViz({ data }: { data: NetworkData }) {
   return (
     <div ref={wrapRef} className="network-card" style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
       <div className="network-toolbar">
-        <label>节点大小</label>
-        <select value={sizeMetric} onChange={(e) => setSizeMetric(e.target.value as NetworkMetric)}>
-          {NETWORK_METRICS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
-        </select>
-        <label>节点颜色</label>
-        <select value={colorMode} onChange={(e) => setColorMode(e.target.value as NetworkColorMode)}>
-          <option value="region">区域</option>
-          {NETWORK_METRICS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
-        </select>
-        <label>显示边权阈值</label>
-        <input
-          type="range"
-          min={0}
-          max={0.5}
-          step={0.01}
-          value={edgeThreshold}
-          onChange={(e) => setEdgeThreshold(Number(e.target.value))}
-        />
+        <LabeledControl label="节点大小">
+          {(id) => (
+            <select id={id} value={sizeMetric} onChange={(e) => setSizeMetric(e.target.value as NetworkMetric)}>
+              {NETWORK_METRICS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+            </select>
+          )}
+        </LabeledControl>
+        <LabeledControl label="节点颜色">
+          {(id) => (
+            <select id={id} value={colorMode} onChange={(e) => setColorMode(e.target.value as NetworkColorMode)}>
+              <option value="region">区域</option>
+              {NETWORK_METRICS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+            </select>
+          )}
+        </LabeledControl>
+        <LabeledControl label="显示边权阈值">
+          {(id) => (
+            <input
+              id={id}
+              type="range"
+              min={0}
+              max={0.5}
+              step={0.01}
+              value={edgeThreshold}
+              onChange={(e) => setEdgeThreshold(Number(e.target.value))}
+            />
+          )}
+        </LabeledControl>
         <b>{(edgeThreshold * 100).toFixed(0)}%</b>
         <label
           className={`network-selected-filter${selected ? "" : " disabled"}`}

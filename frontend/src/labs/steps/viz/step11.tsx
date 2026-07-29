@@ -10,10 +10,11 @@
  * 对比对象 = 学生下钻看过的国家(≥2)。
  */
 import { useEffect, useRef, useState } from "react";
+import { LabeledControl } from "../../../a11y";
 import { api } from "../../../api";
 import type { IndustryPage, Meta, NetworkData, Step, StepStateApi } from "../../../types";
 import { HeatTableViz, NetworkViz, countryLabel } from "../../../viz";
-import { useAsync } from "../../shared";
+import { AsyncStateMessage, useAsync } from "../../shared";
 import { ChartStory, LensNav, StepIntro, YearSelect, useVizLab, type Row, type VizStepState } from "./scaffold";
 
 type Lens = "heat" | "network";
@@ -31,14 +32,18 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
     if (saved && meta.countries.includes(saved)) setDrill(saved);
     drillTouched.current = true;
   }, [state.data, meta.countries]);
-  const { data: page } = useAsync<IndustryPage | null>(
-    () => (lens === "heat" && drill ? api.industryIndicatorsAll(year, drill) : Promise.resolve(null)),
+  const pageQuery = useAsync<IndustryPage>(
+    () => api.industryIndicatorsAll(year, drill),
     [lens, year, drill],
+    { enabled: lens === "heat" && Boolean(drill) },
   );
-  const { data: net } = useAsync<NetworkData | null>(
-    () => (lens === "network" ? api.network(year) : Promise.resolve(null)),
+  const networkQuery = useAsync<NetworkData>(
+    () => api.network(year),
     [lens, year],
+    { enabled: lens === "network" },
   );
+  const page = pageQuery.data;
+  const net = networkQuery.data;
 
   // 对比对象 = 下钻看过的国家;换下钻国家即累加(累加而非覆盖,看过的不丢)。
   const changeDrill = (c: string) => {
@@ -114,14 +119,23 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
           note="中心性始终在完整全球国家×行业图上计算,下钻只筛选展示的行(见上方说明)。"
         >
           <div className="controls" style={{ marginBottom: 12 }}>
-            <label>下钻国家</label>
-            <select value={drill} onChange={(e) => changeDrill(e.target.value)}>
-              {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
-            </select>
+            <LabeledControl label="下钻国家">
+              {(id) => (
+                <select id={id} value={drill} onChange={(e) => changeDrill(e.target.value)}>
+                  {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
+                </select>
+              )}
+            </LabeledControl>
           </div>
-          {!page ? <p className="muted">加载 {countryLabel(drill)} 行业网络指标中…</p>
-            : heatRows.length ? <HeatTableViz rows={heatRows} schema={schema} />
-              : <p className="muted">该国无行业数据。</p>}
+          {pageQuery.status === "loading" || pageQuery.status === "error" ? (
+            <AsyncStateMessage
+              status={pageQuery.status}
+              error={pageQuery.error}
+              loadingLabel={`加载 ${countryLabel(drill)} 行业网络指标中…`}
+              onRetry={pageQuery.retry}
+            />
+          ) : heatRows.length ? <HeatTableViz rows={heatRows} schema={schema} />
+            : <p className="muted">该国无行业数据。</p>}
         </ChartStory>
       ) : (
         <ChartStory
@@ -132,7 +146,14 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
           find={<>找出中国、美国、德国的区域集群;注意国家层几乎两两相连(接近完全图),这正是无权中心性在国家级退化的原因。</>}
           note="仅渲染流量最大的若干条边以保证可读;中心性计算用的是完整图,不受此展示阈值影响。"
         >
-          {!net ? <p className="muted">加载 {year} 年贸易网络中…</p> : <NetworkViz data={net} />}
+          {networkQuery.status === "loading" || networkQuery.status === "error" ? (
+            <AsyncStateMessage
+              status={networkQuery.status}
+              error={networkQuery.error}
+              loadingLabel={`加载 ${year} 年贸易网络中…`}
+              onRetry={networkQuery.retry}
+            />
+          ) : net ? <NetworkViz data={net} /> : <p className="muted">该年份暂无网络数据。</p>}
         </ChartStory>
       )}
     </div>

@@ -5,6 +5,7 @@
  * 才能驱动这张表跳到指定实体。主动查看过的国家在本组件内累加保存。
  */
 import { useEffect, useRef, useState } from "react";
+import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { IndicatorSchema, IndustryPage, Meta, QuizCompletionState, StepStateApi } from "../../../types";
 import { countryLabel, sectorLabel } from "../../../viz";
@@ -159,19 +160,25 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
   return (
     <>
       <div className="controls">
-        <label>国家</label>
-        <select value={country} onChange={(e) => onCountry(e.target.value)}>
-          <option value="">全部</option>
-          {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
-        </select>
-        <label>年份</label>
-        <select value={year} onChange={(e) => onYear(Number(e.target.value))}>
-          {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
-        </select>
+        <LabeledControl label="国家">
+          {(id) => (
+            <select id={id} value={country} onChange={(e) => onCountry(e.target.value)}>
+              <option value="">全部</option>
+              {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
+            </select>
+          )}
+        </LabeledControl>
+        <LabeledControl label="年份">
+          {(id) => (
+            <select id={id} value={year} onChange={(e) => onYear(Number(e.target.value))}>
+              {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          )}
+        </LabeledControl>
         <span className="muted">{data ? `共 ${data.total} 条` : "加载中…"}</span>
       </div>
       {(state.data?.observations?.length ?? 0) > 0 && (
-        <div className="observation-strip" aria-label="已捕获的对比数值">
+        <div className="observation-strip" role="group" aria-label="已捕获的对比数值">
           <b>已捕获 {state.data?.metric}</b>
           {state.data?.observations?.map((item) => (
             <span key={`${item.year}-${item.entity}`}>{item.year} · {item.entity} = {fmtField(item.value, state.data?.metric ?? "", schema)}</span>
@@ -186,7 +193,10 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
           </button>
         </div>
       )}
-      <div className="table-wrap bounded-data-table">
+      <ScrollableRegion
+        className="table-wrap bounded-data-table"
+        label={`${group?.label ?? "指标"}数据表，可横向滚动`}
+      >
         <table className="data-table">
           <thead>
             <tr>
@@ -213,7 +223,7 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollableRegion>
       <Pager page={page} pages={pages} total={data?.total} onChange={onPage} />
     </>
   );

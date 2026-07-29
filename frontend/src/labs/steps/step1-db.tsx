@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { LabeledControl, ScrollableRegion } from "../../a11y";
 import { api } from "../../api";
 import type { DbMeta, DbSlice, DbTableKind, QuizCompletionState, StepStateApi } from "../../types";
 import { countryLabel, sectorLabel } from "../../viz";
@@ -68,7 +69,7 @@ function DatabaseGuide({ meta }: { meta: DbMeta }) {
       <p style={{ maxWidth: 820 }}>
         研究全球价值链,需要一张“谁向谁供货”的<b>跨国投入产出表</b>。主流数据库各有侧重——覆盖范围、行业/产品口径与更新节奏都不同:
       </p>
-      <div className="table-wrap" style={{ marginTop: 10 }}>
+      <ScrollableRegion className="table-wrap" label="全球投入产出数据库对比表，可横向滚动" style={{ marginTop: 10 }}>
         <table className="data-table db-guide-table">
           <thead>
             <tr><th>数据库</th><th>编制方</th><th>覆盖</th><th>侧重 / 特点</th></tr>
@@ -90,7 +91,7 @@ function DatabaseGuide({ meta }: { meta: DbMeta }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollableRegion>
       <p className="muted" style={{ maxWidth: 820, marginTop: 10 }}>
         本系统默认并全程使用 <b>OECD ICIO</b>(2023 版,当前载入 {meta.years[0]}–{meta.years.at(-1)}):它口径官方、国家×行业相对平衡,最契合本课程的 GVC 指标计算与教学。
         切换到其他数据库需替换原始表与解析器,不在本教学系统范围内;各库的覆盖数字随版本更新、分类口径不同,不能直接横向比较。
@@ -296,10 +297,13 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
       <DatabaseGuide meta={meta} />
 
       <div className="controls">
-        <label>年份</label>
-        <select value={year ?? ""} onChange={(e) => pickYear(Number(e.target.value))}>
-          {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
-        </select>
+        <LabeledControl label="年份">
+          {(id) => (
+            <select id={id} value={year ?? ""} onChange={(e) => pickYear(Number(e.target.value))}>
+              {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+          )}
+        </LabeledControl>
         <div className="seg db-table-seg">
           {DB_TABLES.map((item) => (
             <button
@@ -320,28 +324,40 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
       </div>
 
       <div className="controls">
-        <label>供给国(行)</label>
-        <select value={rowCountry} onChange={(e) => pickRowCountry(e.target.value)}>
-          {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
-        </select>
-        <label>供给行业(行)</label>
-        <select value={rowSector} onChange={(e) => pickRowSector(e.target.value)}>
-          <option value="">全部</option>
-          {meta.sectors.map((s) => <option key={s} value={s}>{sectorLabel(s)}</option>)}
-        </select>
-        {table !== "accounts" && (
-          <>
-            <label>{table === "y" ? "需求国(列)" : "使用国(列)"}</label>
-            <select value={colCountry} onChange={(e) => pickColCountry(e.target.value)}>
+        <LabeledControl label="供给国(行)">
+          {(id) => (
+            <select id={id} value={rowCountry} onChange={(e) => pickRowCountry(e.target.value)}>
               {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
             </select>
-            <label>{table === "y" ? "最终需求(列)" : "使用行业(列)"}</label>
-            <select value={colSector} onChange={(e) => pickColSector(e.target.value)}>
+          )}
+        </LabeledControl>
+        <LabeledControl label="供给行业(行)">
+          {(id) => (
+            <select id={id} value={rowSector} onChange={(e) => pickRowSector(e.target.value)}>
               <option value="">全部</option>
-              {colOptions.map((s) => (
-                <option key={s} value={s}>{table === "y" ? (FD_HELP[s] ? `${s} ${FD_HELP[s]}` : s) : sectorLabel(s)}</option>
-              ))}
+              {meta.sectors.map((s) => <option key={s} value={s}>{sectorLabel(s)}</option>)}
             </select>
+          )}
+        </LabeledControl>
+        {table !== "accounts" && (
+          <>
+            <LabeledControl label={table === "y" ? "需求国(列)" : "使用国(列)"}>
+              {(id) => (
+                <select id={id} value={colCountry} onChange={(e) => pickColCountry(e.target.value)}>
+                  {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
+                </select>
+              )}
+            </LabeledControl>
+            <LabeledControl label={table === "y" ? "最终需求(列)" : "使用行业(列)"}>
+              {(id) => (
+                <select id={id} value={colSector} onChange={(e) => pickColSector(e.target.value)}>
+                  <option value="">全部</option>
+                  {colOptions.map((s) => (
+                    <option key={s} value={s}>{table === "y" ? (FD_HELP[s] ? `${s} ${FD_HELP[s]}` : s) : sectorLabel(s)}</option>
+                  ))}
+                </select>
+              )}
+            </LabeledControl>
           </>
         )}
         <span className="muted">{slice ? `共 ${slice.total} 行` : "加载中…"}</span>
@@ -354,7 +370,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
       <div className="tipbox" style={{ marginBottom: 10 }}>
         <b>记录一个观察值：</b>点击任意数值单元格，系统会自动保存它的行、列与数值，并在实验报告中作为可选实验快照展示。
       </div>
-      <div className="table-wrap bounded-data-table">
+      <ScrollableRegion className="table-wrap bounded-data-table" label={`${activeTable.label}数据表，可横向滚动`}>
         <table className="data-table db-table">
           <thead>
             <tr>
@@ -443,7 +459,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
             </tfoot>
           )}
         </table>
-      </div>
+      </ScrollableRegion>
       {table !== "accounts" && slice && (
         <div className="tipbox" style={{ marginTop: 12 }}>
           每个数据行同时给出当前切片合计与该国家–行业的 OUT。完整口径下，OUT = Z 行和 + Y 行和；当前切片只是一部分，差额来自未展示的目的国或需求列。

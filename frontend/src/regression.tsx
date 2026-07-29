@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ScrollableRegion } from "./a11y";
 import { api } from "./api";
 import { useAsync } from "./labs";
 import { comparisonExplanation, lessonQuestion, REGRESSION_LESSONS } from "./regression-lessons";
@@ -124,7 +125,7 @@ function DesignEquation({ design }: { design: RegressionDesignInfo }) {
   const parts = design.equation_parts?.length ? design.equation_parts : [{ text: design.equation }];
   return (
     <div>
-      <div className="model-eq" aria-label="当前实际运行方程">
+      <div className="model-eq" role="group" aria-label="当前实际运行方程">
         {parts.map((part, index) => {
           const interactive = Boolean(part.description);
           return (
@@ -223,7 +224,7 @@ function RunComparison({ outcome, snapshots, onClear, options }: {
       {new Set(snapshots.map((snapshot) => snapshot.response.design.method)).size > 1 && (
         <p className="comparison-warning">不同方法估计的对象不同，只能并列检查证据是否稳健，不能把系数直接相减。</p>
       )}
-      <div className="table-wrap">
+      <ScrollableRegion className="table-wrap" label="回归运行比较表，可横向滚动">
         <table className="data-table">
           <thead><tr><th>运行</th><th>改变的设定</th><th>估计对象</th><th>证据判断</th><th>效应</th></tr></thead>
           <tbody>
@@ -241,7 +242,7 @@ function RunComparison({ outcome, snapshots, onClear, options }: {
             })}
           </tbody>
         </table>
-      </div>
+      </ScrollableRegion>
     </section>
   );
 }
@@ -340,7 +341,7 @@ function MarginalEffectsPanel({ response }: { response: RegressionResponse }) {
       {groups.map((term) => {
         const rows = effects.filter((effect) => effect.policy_term === term);
         return (
-          <div className="table-wrap" key={term}>
+          <ScrollableRegion className="table-wrap" key={term} label={`${term} 边际效应表，可横向滚动`}>
             {groups.length > 1 && <div className="muted" style={{ margin: "8px 0" }}>政策项：{term}</div>}
             <table className="data-table">
               <thead><tr><th>基期 GVC 水平</th><th>相对均值</th><th>边际效应</th><th>95% 置信区间</th><th>p 值</th></tr></thead>
@@ -359,7 +360,7 @@ function MarginalEffectsPanel({ response }: { response: RegressionResponse }) {
                 })}
               </tbody>
             </table>
-          </div>
+          </ScrollableRegion>
         );
       })}
     </div>
@@ -718,7 +719,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           <>
             <h3>完整系数表</h3>
             <p className="muted">此表包含政策项和控制变量；主效应图只展示政策项。</p>
-            <div className="table-wrap">
+            <ScrollableRegion className="table-wrap" label="完整回归系数表，可横向滚动">
               <table className="data-table">
                 <thead><tr><th>变量</th><th>系数</th><th>95% CI</th><th>聚类SE</th><th>t</th><th>p</th></tr></thead>
                 <tbody>{result.result.coefs.map((coef) => (
@@ -726,7 +727,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
                   <tr key={coef.name}><td>{coef.name}</td><td>{coef.coef.toFixed(4)}</td><td>{coef.ci_low != null && coef.ci_high != null ? `[${coef.ci_low.toFixed(4)}, ${coef.ci_high.toFixed(4)}]` : "—"}</td><td>{coef.se.toFixed(4)}</td><td>{coef.t.toFixed(2)}</td><td>{coef.p != null ? coef.p.toFixed(3) : "—"}</td></tr>
                 ))}</tbody>
               </table>
-            </div>
+            </ScrollableRegion>
             <p className="muted">N={result.result.n_obs.toLocaleString("zh-CN")} · {result.result.n_entities.toLocaleString("zh-CN")} 个体 × {result.result.n_times} 年 · {result.result.n_clusters} 个聚类 · 组内 R²={result.result.r2_within.toFixed(4)}</p>
             <div className="benchmark-box"><b>PanelOLS 代码实现一致性检查</b><p>政策系数最大差异 {result.benchmark.max_abs_coef_diff.toExponential(2)}；{result.benchmark.coef_check_passed ? "实现对照通过" : "实现对照需复核"}。这只能检查两套代码结果是否一致，不能验证因果识别。</p></div>
             <h3>样本与估计说明</h3>

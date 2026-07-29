@@ -9,11 +9,11 @@ import { ReportsTab } from "./reports";
 import { StudentsTab } from "./students";
 
 const NAV = [
-  { key: "overview", icon: "📊", label: "班级概览", sub: "总览与统计" },
-  { key: "courses", icon: "🏫", label: "课程与作业", sub: "发布 · 版本 · 选课" },
-  { key: "students", icon: "👥", label: "班级与学生", sub: "建班 · 建号 · 进度" },
-  { key: "reports", icon: "📝", label: "报告评阅", sub: "批改与打分" },
-  { key: "announcements", icon: "📢", label: "课堂公告", sub: "发布与管理" },
+  { key: "overview", icon: "📊", label: "班级概览", short: "概览", sub: "总览与统计" },
+  { key: "courses", icon: "🏫", label: "课程与作业", short: "课程", sub: "发布 · 版本 · 选课" },
+  { key: "students", icon: "👥", label: "班级与学生", short: "学生", sub: "建班 · 建号 · 进度" },
+  { key: "reports", icon: "📝", label: "报告评阅", short: "评阅", sub: "批改与打分" },
+  { key: "announcements", icon: "📢", label: "课堂公告", short: "公告", sub: "发布与管理" },
 ] as const;
 
 type TabKey = (typeof NAV)[number]["key"];
@@ -42,19 +42,22 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
 
   return (
     <div className="teacher-layout">
-      <nav className="teacher-nav">
+      <nav className="teacher-nav" aria-label="教师工作台主导航">
         <div className="teacher-nav-title">教师工作台</div>
         {NAV.map((n) => (
           <button
             key={n.key}
             className={`teacher-nav-item${tab === n.key ? " active" : ""}`}
+            aria-label={n.key === "reports" && pending > 0 ? `${n.label}，${pending} 份待评阅` : n.label}
+            aria-current={tab === n.key ? "page" : undefined}
             onClick={() => setTab(n.key)}
           >
-            <span className="teacher-nav-ic">{n.icon}</span>
+            <span className="teacher-nav-ic" aria-hidden="true">{n.icon}</span>
             <span className="teacher-nav-text">
               <span className="teacher-nav-label">{n.label}</span>
               <span className="teacher-nav-sub">{n.sub}</span>
             </span>
+            <span className="teacher-nav-mobile-label" aria-hidden="true">{n.short}</span>
             {n.key === "reports" && pending > 0 && <span className="nav-badge">{pending}</span>}
           </button>
         ))}

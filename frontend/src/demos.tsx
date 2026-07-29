@@ -11,6 +11,7 @@
  * NetworkCentralityDemo(步骤6):在一个小网络上演示度/介数中心性怎么算出来。
  */
 import { useEffect, useMemo, useState } from "react";
+import { LabeledControl } from "./a11y";
 import { stripNegativeZero } from "./format";
 import { api } from "./api";
 import { useAsync } from "./labs";
@@ -215,18 +216,24 @@ export function DecompositionDemo({
     return (
       <div className="demo-controls" style={{ marginBottom: 10 }}>
         <b>{compare ? `实体 ${side}` : "分析实体"}</b>
-        <label>国家</label>
-        <select value={country} onChange={(event) => {
-          setCountry(event.target.value);
-          if (side === "A") onPrimaryChange?.(year, event.target.value);
-        }}>
-          {meta.countries.map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
-        </select>
+        <LabeledControl label="国家">
+          {(id) => (
+            <select id={id} value={country} onChange={(event) => {
+              setCountry(event.target.value);
+              if (side === "A") onPrimaryChange?.(year, event.target.value);
+            }}>
+              {meta.countries.map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
+            </select>
+          )}
+        </LabeledControl>
         {gran === "sector" && <>
-          <label>行业</label>
-          <select value={sector} onChange={(event) => setSector(event.target.value)}>
-            {sectors.map((code) => <option key={code} value={code}>{sectorLabel(code)}</option>)}
-          </select>
+          <LabeledControl label="行业">
+            {(id) => (
+              <select id={id} value={sector} onChange={(event) => setSector(event.target.value)}>
+                {sectors.map((code) => <option key={code} value={code}>{sectorLabel(code)}</option>)}
+              </select>
+            )}
+          </LabeledControl>
         </>}
       </div>
     );
@@ -290,12 +297,15 @@ export function DecompositionDemo({
           <button className={gran === "sector" ? "on" : ""} onClick={() => setGran("sector")}>国家–行业级</button>
           <button className={gran === "country" ? "on" : ""} onClick={() => setGran("country")}>国家级</button>
         </div>
-        <label>共享年份</label>
-        <select value={year} onChange={(event) => {
-          const next = Number(event.target.value);
-          setYear(next);
-          onPrimaryChange?.(next, countryA);
-        }}>{meta.years.map((value) => <option key={value}>{value}</option>)}</select>
+        <LabeledControl label="共享年份">
+          {(id) => (
+            <select id={id} value={year} onChange={(event) => {
+              const next = Number(event.target.value);
+              setYear(next);
+              onPrimaryChange?.(next, countryA);
+            }}>{meta.years.map((value) => <option key={value}>{value}</option>)}</select>
+          )}
+        </LabeledControl>
         <label style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
           <input type="checkbox" checked={compare} onChange={(event) => setCompare(event.target.checked)} /> 双实体并排对比
         </label>

@@ -34,12 +34,12 @@ export function EventStudyChart({ coefs, notes, title, seriesLabel, pretrend }: 
         {[-ext, -ext / 2, ext / 2, ext].map((v) => (
           <g key={v}>
             <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} stroke="#f0f1f6" strokeWidth={1} />
-            <text x={padL - 8} y={y(v) + 3.5} textAnchor="end" fontSize={11} fill="#747b8d"
+            <text x={padL - 8} y={y(v) + 3.5} textAnchor="end" fontSize={11} fill="#5f6677"
               fontFamily="inherit" style={{ fontVariantNumeric: "tabular-nums" }}>{fmt(v)}</text>
           </g>
         ))}
         <line x1={padL} x2={W - padR} y1={y(0)} y2={y(0)} stroke="#c3c6d1" strokeWidth={1} />
-        <text x={padL - 8} y={y(0) + 3.5} textAnchor="end" fontSize={10} fill="#8a90a0">0</text>
+        <text x={padL - 8} y={y(0) + 3.5} textAnchor="end" fontSize={10} fill="#5f6677">0</text>
         {pts.map((p, i) => (
           <g key={p.name}
             onMouseEnter={(e) => show(e, [
@@ -63,7 +63,7 @@ export function EventStudyChart({ coefs, notes, title, seriesLabel, pretrend }: 
           </g>
         ))}
       </svg>
-      <div style={{ marginTop: 6, fontSize: 11, color: "#747b8d", lineHeight: 1.65 }}>
+      <div style={{ marginTop: 6, fontSize: 11, color: "#5f6677", lineHeight: 1.65 }}>
         <div>{notes.find((n) => n.includes("基期")) ?? "基期为冲击前一年（系数归一为 0，不在图中）"}</div>
         {pretrend && <div><b>冲击前趋势检查：</b>{pretrend.interpretation}</div>}
       </div>
@@ -122,7 +122,7 @@ export function PlaceboChart({ data }: { data: PlaceboResponse["placebo"] }) {
           原始分组估计值
         </text>
         {[lo, 0, hi].filter((v, i, arr) => (i === 0 || v !== arr[i - 1]) && v >= lo && v <= hi).map((v) => (
-          <text key={v} x={x(v)} y={H - 14} textAnchor="middle" fontSize={10.5} fill="#8a90a0">
+          <text key={v} x={x(v)} y={H - 14} textAnchor="middle" fontSize={10.5} fill="#5f6677">
             {v.toFixed(3)}
           </text>
         ))}
@@ -185,14 +185,14 @@ export function CoefForestChart({ coefs }: {
   return (
     <div ref={wrapRef} style={{ ...cardStyle, flex: "1 1 260px", minWidth: 260 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050" }}>系数图</div>
-      <div style={{ fontSize: 11, color: "#747b8d", marginBottom: 6 }}>
+      <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
         {hasCi ? "点 = 估计值 · 横线 = 95% 置信区间" : "点 = 估计值 · 本设计不可作推断,无置信区间"}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={hasCi ? "政策系数及 95% 置信区间" : "政策系数；本设计不可作推断，无置信区间"} style={{ display: "block", width: "100%", height: "auto" }}>
         <title>{hasCi ? "政策系数及 95% 置信区间；完整数值见技术细节表" : "政策系数；本设计不可作推断，无置信区间"}</title>
         <line x1={x(0)} x2={x(0)} y1={padT} y2={H - padB} stroke="#e0e3ea" strokeWidth={1} />
         {[-ext, 0, ext].map((v) => (
-          <text key={v} x={x(v)} y={H - padB + 16} textAnchor="middle" fontSize={11} fill="#747b8d"
+          <text key={v} x={x(v)} y={H - padB + 16} textAnchor="middle" fontSize={11} fill="#5f6677"
             style={{ fontVariantNumeric: "tabular-nums" }}>{v === 0 ? "0" : fmt(v)}</text>
         ))}
         {pts.map((p, i) => {
