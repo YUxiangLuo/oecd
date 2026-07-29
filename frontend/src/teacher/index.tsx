@@ -9,11 +9,11 @@ import { ReportsTab } from "./reports";
 import { StudentsTab } from "./students";
 
 const NAV = [
-  { key: "overview", icon: "📊", label: "班级概览", short: "概览", sub: "总览与统计" },
-  { key: "courses", icon: "🏫", label: "课程与作业", short: "课程", sub: "发布 · 版本 · 选课" },
-  { key: "students", icon: "👥", label: "班级与学生", short: "学生", sub: "建班 · 建号 · 进度" },
-  { key: "reports", icon: "📝", label: "报告评阅", short: "评阅", sub: "批改与打分" },
-  { key: "announcements", icon: "📢", label: "课堂公告", short: "公告", sub: "发布与管理" },
+  { key: "overview", icon: "📊", label: "班级概览", sub: "总览与统计" },
+  { key: "courses", icon: "🏫", label: "课程与作业", sub: "发布 · 版本 · 选课" },
+  { key: "students", icon: "👥", label: "班级与学生", sub: "建班 · 建号 · 进度" },
+  { key: "reports", icon: "📝", label: "报告评阅", sub: "批改与打分" },
+  { key: "announcements", icon: "📢", label: "课堂公告", sub: "发布与管理" },
 ] as const;
 
 type TabKey = (typeof NAV)[number]["key"];
@@ -57,7 +57,6 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
               <span className="teacher-nav-label">{n.label}</span>
               <span className="teacher-nav-sub">{n.sub}</span>
             </span>
-            <span className="teacher-nav-mobile-label" aria-hidden="true">{n.short}</span>
             {n.key === "reports" && pending > 0 && <span className="nav-badge">{pending}</span>}
           </button>
         ))}

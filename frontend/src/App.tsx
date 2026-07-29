@@ -705,10 +705,7 @@ export default function App() {
                     onClick={() => navigateStep(s.n)}
                     title={`第 ${s.n} 步：${s.title}${done ? "（已完成）" : ""}`}
                   >
-                    <span className={`step-badge ${state}`} aria-hidden="true">
-                      <span className="step-badge-mark">{done ? "✓" : s.n}</span>
-                      {done && <span className="step-badge-mobile-number">{s.n}</span>}
-                    </span>
+                    <span className={`step-badge ${state}`} aria-hidden="true">{done ? "✓" : s.n}</span>
                     <span className="step-row-title" aria-hidden="true">{s.title}</span>
                     <span className="step-code" aria-hidden="true">{String(s.n).padStart(2, "0")}</span>
                   </button>
