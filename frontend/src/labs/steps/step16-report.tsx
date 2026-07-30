@@ -22,6 +22,16 @@ export function reportGenerationReady(
     && !sessionSyncing;
 }
 
+export function submissionToastMessage(
+  previous: MySubmission["state"],
+  returned: "pending" | "graded",
+): string {
+  if (returned === "graded") return "报告内容未变化，原评分已保留";
+  if (previous === "none") return "报告已提交，等待教师评阅";
+  if (previous === "graded") return "已重新提交，等待教师重新评阅";
+  return "报告已提交，仍在等待教师评阅";
+}
+
 /** 第 16 步:实验报告。
  *
  * 这一步刻意**没有任何参数表单**。报告由服务端从学生自己的实验会话生成:
@@ -74,10 +84,12 @@ function SubmitCard({ report, mine, onSubmitted }: {
     api.classroom
       .submitReport({ title: `实验报告 · ${report.report_key}`, report_key: report.report_key })
       .then(
-        () => {
+        (submitted) => {
           setSubmitting(false);
           setSubmitError(null);
-          showToast(state === "none" ? "报告已提交，等待教师评阅" : "已重新提交，等待教师重新评阅");
+          // 相同 report_key 的重复请求由服务端幂等返回原状态。必须按返回状态
+          // 提示，不能把仍为 graded 的报告说成“等待重新评阅”。
+          showToast(submissionToastMessage(state, submitted.state));
           onSubmitted();
         },
         (e: Error) => {
@@ -207,7 +219,7 @@ export function ReportLab({
     || !rendererSettled;
 
   return (
-    <div>
+    <div className="report-lab">
       {blocked != null && blocked.length > 0 && <GateCard blocked={blocked} onNavigateStep={onNavigateStep} />}
 
       {sessionStatus !== "ready" && (

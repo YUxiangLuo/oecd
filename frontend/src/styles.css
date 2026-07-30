@@ -494,6 +494,10 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .network-detail th:not(:first-child), .network-detail td:not(:first-child) {
   text-align: right; font-variant-numeric: tabular-nums;
 }
+.network-node:focus { outline: none; }
+.network-node:focus .network-node-hit {
+  stroke: #1b1f2b; stroke-width: 3px; fill-opacity: .3;
+}
 .qc-pass { color: #12805a; font-weight: 700; }
 .qc-fail { color: #b3341f; font-weight: 700; }
 .qc-warning { color: #9a5b00; font-weight: 700; }
@@ -539,11 +543,16 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   .step-header-bar,
   .rightrail,
   .stepfooter,
+  .announce-banner,
+  .persistent-qc-warning,
   .card.accent,
   .toast-host,
   .error-box {
     display: none !important;
   }
+  /* 第 16 步打印只保留报告正文；操作按钮、提交/评分状态和恢复提示
+     属于应用界面，不应进入学生存档的 PDF。 */
+  .report-lab > :not(.report-body) { display: none !important; }
   .layout,
   .main,
   .workarea,
@@ -1401,6 +1410,9 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 
 /* ---------- 16步回归教学工作台 ---------- */
 .reg-workbench { display: grid; gap: 12px; }
+/* grid items default to min-width:auto and otherwise force the centre pane
+   wider than its allocation at the documented 1200px desktop minimum. */
+.reg-workbench > *, .reg-results, .reg-results > * { min-width: 0; max-width: 100%; }
 .reg-question-card, .reg-compare-card, .reg-run-card, .reg-section-card, .reg-guide-card, .technical-details {
   border: 1px solid #e5e7ef; border-radius: 12px; background: #fff; padding: 14px 16px;
 }
@@ -1421,7 +1433,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .reg-run-card { box-shadow: 0 5px 18px rgba(35,39,60,.06); }
 .reg-boundary { margin: 7px 0 10px; padding: 7px 10px; border-radius: 7px; background: #fff8e6; color: #75521a; font-size: 11.5px; }
 .basic-settings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.basic-settings > div { border: 1px solid #e6e7ef; border-radius: 8px; padding: 7px 9px; }
+.basic-settings > div { min-width: 0; border: 1px solid #e6e7ef; border-radius: 8px; padding: 7px 9px; }
 .basic-settings > div > span { display: block; margin-bottom: 5px; color: #596173; font-size: 11.5px; font-weight: 700; }
 .basic-settings .pill-row { gap: 4px; }
 .basic-settings .pill { padding: 4px 7px; font-size: 11.5px; }
@@ -1508,7 +1520,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .quiz-question.correct .quiz-feedback { color: #147866; }
 .quiz-feedback b { margin-right: 4px; }
 .quiz-submit-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 16px 0 2px; }
-.quiz-complete { color: #148673; font-size: 12px; font-weight: 650; }
+.quiz-complete { color: var(--text-success); font-size: 12px; font-weight: 650; }
 .session-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .table-priority-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; }
 .table-priority-tools button { white-space: nowrap; }

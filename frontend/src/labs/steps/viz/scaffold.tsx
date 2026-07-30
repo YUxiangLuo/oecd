@@ -164,11 +164,20 @@ export function LensNav<K extends string>({ lenses, active, onPick }: {
   onPick: (key: K) => void;
 }) {
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+    <div
+      role="group"
+      aria-label="图表视角"
+      style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}
+    >
       {lenses.map((l) => {
         const on = l.key === active;
         return (
-          <button key={l.key} onClick={() => onPick(l.key)} title={l.hint}
+          <button
+            key={l.key}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onPick(l.key)}
+            title={l.hint}
             style={{
               border: on ? `1.5px solid ${CAT[0]}` : "1.5px solid #e2e5ee", background: on ? "#eef4fe" : "#fff",
               color: on ? CAT[0] : "#5a6070", borderRadius: 9, padding: "7px 14px", cursor: "pointer",

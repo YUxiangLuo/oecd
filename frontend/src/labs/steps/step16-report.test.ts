@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ReportGateItem } from "../../types";
-import { reportGenerationReady } from "./step16-report";
+import { reportGenerationReady, submissionToastMessage } from "./step16-report";
 
 const blocked: ReportGateItem[] = [{ step: 3, title: "理解检查", missing: ["尚未答题通过"] }];
 
@@ -16,5 +16,17 @@ describe("report generation readiness", () => {
     expect(reportGenerationReady("ready", [], true, false)).toBe(false);
     expect(reportGenerationReady("ready", [], false, true)).toBe(false);
     expect(reportGenerationReady("ready", [], false, false)).toBe(true);
+  });
+});
+
+describe("report submission feedback", () => {
+  test("does not claim a duplicate graded report is awaiting review", () => {
+    expect(submissionToastMessage("graded", "graded"))
+      .toBe("报告内容未变化，原评分已保留");
+  });
+
+  test("distinguishes a real revision from the initial submission", () => {
+    expect(submissionToastMessage("none", "pending")).toBe("报告已提交，等待教师评阅");
+    expect(submissionToastMessage("graded", "pending")).toBe("已重新提交，等待教师重新评阅");
   });
 });

@@ -16,6 +16,7 @@ import type {
   Step,
   StepStateApi,
 } from "./types";
+import { userFacingRequestError } from "./user-facing-error";
 import { CoefForestChart, EventStudyChart, PlaceboChart } from "./viz";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
@@ -492,7 +493,9 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
         setResultSettings(runSettings);
       }
     } catch (cause) {
-      if (mountedRef.current && latestRequest.current === requestKey) setError(String((cause as Error).message));
+      if (mountedRef.current && latestRequest.current === requestKey) {
+        setError(userFacingRequestError(cause, "回归运行失败"));
+      }
     } finally {
       runningRef.current = false;
       if (mountedRef.current) setRunning(false);
@@ -530,7 +533,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
       }
     } catch (cause) {
       if (placeboRequestRef.current === requestId && latestRequest.current === requestKey) {
-        setPlaceboError(String((cause as Error).message));
+        setPlaceboError(userFacingRequestError(cause, "安慰剂检验失败"));
       }
     } finally {
       if (placeboRequestRef.current === requestId) {

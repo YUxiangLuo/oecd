@@ -15,6 +15,7 @@ import {
   type RegressionSettings,
 } from "./regression";
 import { LoginPage } from "./login";
+import { resetStepScroller } from "./step-navigation";
 import { QuizPanel } from "./step-quiz";
 import { TeacherDashboard } from "./teacher";
 import { ToastHost } from "./toast";
@@ -169,6 +170,7 @@ export default function App() {
   // 新会话从第 1 步开始:课程顺序是数据接入 → 指标 → 可视化 → 回归,
   // 从中途开始会让学生在没读过数据、mock 边界和质检的情况下直接看指标分解。
   const [current, setCurrent] = useState(() => explicitStep.current ?? 1);
+  const contentRef = useRef<HTMLElement>(null);
   // 最远到达步:仅表示“到过哪里”这一位置,不表示做过或学会了什么。
   // 深链可直接把它推到任意步(?step=12 即为 12),因此它连“已浏览步数”都不是。
   const [maxStep, setMaxStep] = useState(() => explicitStep.current ?? 1);
@@ -344,6 +346,9 @@ export default function App() {
     const last = available.at(-1)?.n ?? 16;
     const bounded = Math.max(1, Math.min(last, next));
     const target = available.length && !available.some((item) => item.n === bounded) ? (available[0]?.n ?? 1) : bounded;
+    // .content 是跨步骤复用的内部滚动容器。先归零再切内容，避免新步骤
+    // 继承上一页的纵向/横向位置而从答题区或表格右端开始。
+    resetStepScroller(contentRef.current);
     navigationTouched.current = true;
     setCurrent(target);
     const url = new URL(window.location.href);
@@ -626,7 +631,7 @@ export default function App() {
       )}
 
       {announcements.length > 0 && !bannerDismissed && (
-        <div className="announce-banner">
+        <section className="announce-banner" aria-label="课程公告">
           <span className="announce-banner-ic">📢</span>
           <div className="announce-banner-body">
             <b>{announcements[0].title}</b>
@@ -643,12 +648,19 @@ export default function App() {
               {bannerExpanded ? "收起" : `展开${announcements.length > 1 ? `全部 ${announcements.length} 条` : ""}`}
             </button>
           )}
-          <button onClick={() => setBannerDismissed(true)}>×</button>
-        </div>
+          <button
+            type="button"
+            aria-label="关闭课程公告"
+            title="关闭课程公告"
+            onClick={() => setBannerDismissed(true)}
+          >
+            ×
+          </button>
+        </section>
       )}
 
       <div className="main">
-        <aside className="sidebar">
+        <aside className="sidebar" aria-label="课程大纲">
           <div className="sidebar-head">
             <div className="sidebar-head-row">
               <span className="sidebar-title">课程大纲</span>
@@ -772,14 +784,14 @@ export default function App() {
               {resetAttemptError && <div className="error-box">重新开始失败：{resetAttemptError}</div>}
             </div>
           )}
-          <div className="step-header-bar">
+          <div className="step-header-bar" role="region" aria-labelledby="current-step-heading">
             <div className="big-num">{String(step.n).padStart(2, "0")}</div>
             <div className="step-header-mid">
               <div className="step-header-meta">
                 <span className="stage-chip">{stageName}</span>
                 <span className="step-count">STEP {step.n} / {totalSteps}</span>
               </div>
-              <h2>{step.title}</h2>
+              <h2 id="current-step-heading">{step.title}</h2>
             </div>
             <div className="nav-btns">
               <button disabled={!prevStep} onClick={() => prevStep && navigateStep(prevStep.n)}>← 上一步</button>
@@ -788,7 +800,7 @@ export default function App() {
           </div>
 
           <div className="content-row">
-            <main className="content">
+            <main ref={contentRef} className="content">
               <div className="content-inner">
                 {/* 已把 concept 并入页内 StepIntro(常驻)的步骤,这里不再重复渲染讲解卡:
                     可视化(isViz)、指标计算(ind)、政策冲击接入(shock);回归自带渐进教学,也跳过。 */}
@@ -860,7 +872,7 @@ export default function App() {
               </div>
             </main>
 
-            <aside className="rightrail">
+            <aside className="rightrail" aria-label="本步速览">
               <div className="rail-head"><span className="rail-head-ic">📌</span>本步速览</div>
               <div className="rail-stage">
                 <div className="rail-stage-loc">阶段{ROMAN[step.stage]} · {stageName}</div>

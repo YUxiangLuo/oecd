@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { LabeledControl, ScrollableRegion } from "../../a11y";
 import { api } from "../../api";
 import type { DbMeta, DbSlice, DbTableKind, QuizCompletionState, StepStateApi } from "../../types";
+import { userFacingRequestError } from "../../user-facing-error";
 import { countryLabel, sectorLabel } from "../../viz";
 import { fmtDb, Pager, useAsync } from "../shared";
 
@@ -218,7 +219,12 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
   const sliceKey = JSON.stringify([
     ready, year, table, rowCountry, colCountry, rowSector, colSector, page,
   ]);
-  const { data: sliceResult, error: sliceError } = useAsync<{ sliceKey: string; slice: DbSlice | null }>(
+  const {
+    data: sliceResult,
+    error: sliceError,
+    status: sliceStatus,
+    retry: retrySlice,
+  } = useAsync<{ sliceKey: string; slice: DbSlice | null }>(
     async () => ({
       sliceKey,
       slice: ready && year
@@ -360,10 +366,17 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
             </LabeledControl>
           </>
         )}
-        <span className="muted">{slice ? `共 ${slice.total} 行` : "加载中…"}</span>
+        <span className="muted" role="status">
+          {slice ? `共 ${slice.total} 行` : sliceStatus === "error" ? "加载失败" : "加载中…"}
+        </span>
       </div>
 
-      {sliceError && <div className="error-box" style={{ marginBottom: 14 }}>{sliceError}</div>}
+      {sliceError && (
+        <div className="error-box async-error" role="alert" style={{ marginBottom: 14 }}>
+          <span>{userFacingRequestError(sliceError, "数据切片加载失败")}</span>
+          <button type="button" className="secondary" onClick={retrySlice}>重试</button>
+        </div>
+      )}
       <div className="tipbox" style={{ marginBottom: 10 }}>
         <b>怎么读这张表：</b>{HOW_TO_READ[table]}
       </div>

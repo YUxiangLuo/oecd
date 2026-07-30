@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { LabeledControl } from "../../a11y";
 import { formatMetric } from "../../format";
 import type { NetworkData } from "../../types";
@@ -29,6 +29,25 @@ export function canFilterSelectedEdges(selected: string | null): boolean {
   return selected !== null;
 }
 
+/** Roving-tabindex navigation keeps a dense country graph to one Tab stop. */
+export function nextNetworkNode(
+  nodes: readonly string[],
+  current: string,
+  key: string,
+): string | null {
+  if (!nodes.length) return null;
+  const currentIndex = Math.max(0, nodes.indexOf(current));
+  if (key === "Home") return nodes[0];
+  if (key === "End") return nodes.at(-1) ?? null;
+  if (key === "ArrowRight" || key === "ArrowDown") {
+    return nodes[(currentIndex + 1) % nodes.length];
+  }
+  if (key === "ArrowLeft" || key === "ArrowUp") {
+    return nodes[(currentIndex - 1 + nodes.length) % nodes.length];
+  }
+  return null;
+}
+
 export function NetworkViz({ data }: { data: NetworkData }) {
   const markerId = `network-edge-arrow-${useId().replaceAll(":", "")}`;
   const { wrapRef, Tip, show, hide } = useTip();
@@ -38,6 +57,8 @@ export function NetworkViz({ data }: { data: NetworkData }) {
   const [colorMode, setColorMode] = useState<NetworkColorMode>("region");
   const [edgeThreshold, setEdgeThreshold] = useState(0);
   const [onlySelectedEdges, setOnlySelectedEdges] = useState(false);
+  const [keyboardFocus, setKeyboardFocus] = useState<string | null>(null);
+  const nodeRefs = useRef<Record<string, SVGGElement | null>>({});
 
   const model = useMemo(() => {
     const W = 1000, H = 560, cx = W / 2, cy = H / 2;
@@ -136,6 +157,29 @@ export function NetworkViz({ data }: { data: NetworkData }) {
     ["主要伙伴", (neighbors[c] ?? []).slice(0, 4).map((n) => n.c).join("、") || "—"],
   ];
   const selectedNeighbors = selected ? neighbors[selected] ?? [] : [];
+  const nodeOrder = Object.keys(pos);
+  const tabbableNode = keyboardFocus && pos[keyboardFocus]
+    ? keyboardFocus
+    : selected && pos[selected]
+      ? selected
+      : nodeOrder[0] ?? null;
+  const activateNode = (country: string) => {
+    setKeyboardFocus(country);
+    setSelected((current) => {
+      if (current === country) {
+        setOnlySelectedEdges(false);
+        return null;
+      }
+      return country;
+    });
+  };
+  const accessibleNodeLabel = (country: string) => [
+    countryLabel(country),
+    REGIONS[REGION_OF[country] ?? 5],
+    ...NETWORK_METRICS.map((metric) =>
+      `${metric.label} ${fmtNetworkMetric(metrics[metric.key][country] ?? 0, metric.format)}`),
+    selected === country ? "已选中" : "未选中",
+  ].join("，");
 
   return (
     <div ref={wrapRef} className="network-card" style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
@@ -187,6 +231,8 @@ export function NetworkViz({ data }: { data: NetworkData }) {
       <svg
         viewBox={`0 0 ${W} ${H}`}
         style={{ display: "block", width: "100%", height: "auto" }}
+        role="group"
+        aria-label="全球贸易网络图。按方向键浏览节点，按 Enter 或空格选择节点。"
         onClick={() => { setSelected(null); setOnlySelectedEdges(false); }}
       >
         <defs>
@@ -244,17 +290,42 @@ export function NetworkViz({ data }: { data: NetworkData }) {
             const dim = adj ? !adj.has(c) : false;
             const labeled = focus ? adj!.has(c) : topLabeled.has(c);
             return (
-              <g key={c} transform={`translate(${p.x} ${p.y})`} opacity={dim ? 0.18 : 1}
+              <g
+                key={c}
+                ref={(node) => { nodeRefs.current[c] = node; }}
+                className="network-node"
+                transform={`translate(${p.x} ${p.y})`}
+                opacity={dim ? 0.18 : 1}
+                role="button"
+                tabIndex={tabbableNode === c ? 0 : -1}
+                aria-label={accessibleNodeLabel(c)}
+                aria-pressed={selected === c}
                 style={{ cursor: "pointer" }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  setSelected((current) => {
-                    if (current === c) {
-                      setOnlySelectedEdges(false);
-                      return null;
-                    }
-                    return c;
-                  });
+                  activateNode(c);
+                }}
+                onFocus={() => {
+                  setKeyboardFocus(c);
+                  setHovered(c);
+                }}
+                onBlur={() => {
+                  setHovered((current) => current === c ? null : current);
+                  hide();
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    activateNode(c);
+                    return;
+                  }
+                  const next = nextNetworkNode(nodeOrder, c, event.key);
+                  if (!next) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setKeyboardFocus(next);
+                  nodeRefs.current[next]?.focus();
                 }}
                 onMouseEnter={(e) => {
                   setHovered(c);
@@ -262,7 +333,12 @@ export function NetworkViz({ data }: { data: NetworkData }) {
                 }}
                 onMouseMove={(e) => hovered === c && show(e, tooltipLines(c))}
                 onMouseLeave={() => { setHovered(null); hide(); }}>
-                <circle r={Math.max(12, r + 6)} fill={col} fillOpacity={selected === c ? 0.22 : 0.12} />
+                <circle
+                  className="network-node-hit"
+                  r={Math.max(12, r + 6)}
+                  fill={col}
+                  fillOpacity={selected === c ? 0.22 : 0.12}
+                />
                 <circle r={r} fill={col} stroke="#fff" strokeWidth={2} />
                 {labeled && (
                   <text x={p.ox * (r + 7)} y={p.oy * (r + 9) + 4}
@@ -287,7 +363,14 @@ export function NetworkViz({ data }: { data: NetworkData }) {
         <div className="network-detail">
           <div className="network-detail-head">
             <strong>{countryLabel(selected)}</strong>
-            <button onClick={() => { setSelected(null); setOnlySelectedEdges(false); }}>×</button>
+            <button
+              type="button"
+              aria-label="关闭节点详情"
+              title="关闭节点详情"
+              onClick={() => { setSelected(null); setOnlySelectedEdges(false); }}
+            >
+              ×
+            </button>
           </div>
           <div className="network-detail-grid">
             {NETWORK_METRICS.map((m) => (

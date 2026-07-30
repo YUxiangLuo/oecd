@@ -305,7 +305,12 @@ export const api = {
     }) => post<{ ok: boolean; attempt_id?: number }>("/api/classroom/session", body, "DELETE"),
     // 只交报告指纹;服务端从它自己生成的报告里取正文,接口不接受 Markdown。
     submitReport: (body: { title: string; report_key: string }) =>
-      post<{ id: number; state: string; submitted_at: string }>("/api/classroom/report/submit", body),
+      post<{
+        id: number;
+        state: "pending" | "graded";
+        submitted_at: string;
+        version_no: number;
+      }>("/api/classroom/report/submit", body),
     generateReport: () => post<GeneratedReport>("/api/classroom/report/generate"),
     generatedReport: () => get<Partial<GeneratedReport>>("/api/classroom/report/generated"),
     reportGate: () => get<ReportGate>("/api/classroom/report/gate"),
