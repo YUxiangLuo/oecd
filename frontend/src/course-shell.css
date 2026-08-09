@@ -1,0 +1,303 @@
+.topbar-user { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+/* 身份徽章:圆点 + 文本的状态样式,避免做成染色 pill 后被当成按钮点 */
+.topbar-user .role-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; color: #5a6070;
+  cursor: default; user-select: none;
+}
+.topbar-user .role-chip::before {
+  content: ""; width: 7px; height: 7px; border-radius: 99px; background: #4b47e0; flex: none;
+}
+.topbar-user button {
+  padding: 6px 12px; border-radius: 8px; border: 1px solid #e0e3ea; background: #fff;
+  font-size: 12px; color: #5a6070;
+}
+.progress-pill {
+  display: flex; align-items: center; gap: 7px; padding: 6px 12px;
+  background: #f4f5f8; border-radius: 9px; font-size: 12px; color: var(--text-muted);
+}
+.progress-pill b { font-family: "Space Grotesk", sans-serif; font-weight: 600; color: #1b1f2b; }
+.progress-pill span { color: var(--text-muted); }
+
+/* ---------- 右栏「本步速览」 ---------- */
+.rightrail {
+  flex: none; width: 300px; background: #fff; border-left: 1px solid #e7e9f0;
+  overflow-y: auto; padding: 22px 20px 32px;
+}
+.rail-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; margin-bottom: 16px; }
+.rail-head-ic {
+  width: 22px; height: 22px; border-radius: 7px; background: #edecfd;
+  display: flex; align-items: center; justify-content: center; font-size: 12px;
+}
+.rail-stage {
+  background: linear-gradient(135deg, #4b47e0, #6d63f5); border-radius: 12px;
+  padding: 14px 15px; margin-bottom: 16px; color: #fff;
+}
+.rail-stage-loc { font-size: 11px; opacity: 0.85; font-weight: 500; }
+.rail-stage-num { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; }
+.rail-stage-num b { font-family: "Space Grotesk", sans-serif; font-size: 26px; font-weight: 700; line-height: 1; }
+.rail-stage-num span { font-size: 12.5px; opacity: 0.9; }
+.rail-sec { margin-bottom: 16px; }
+.rail-label { font-size: 10.5px; color: var(--text-muted); font-weight: 600; letter-spacing: 0.3px; margin-bottom: 8px; }
+.rail-goal { font-size: 12.5px; color: #2a3040; line-height: 1.7; }
+.rail-tip {
+  display: flex; gap: 9px; padding: 13px 14px; margin-bottom: 16px;
+  background: #fff5ee; border: 1px solid #f6d6bf; border-radius: 11px;
+}
+.rail-tip > span { font-size: 14px; flex: none; }
+.rail-tip > div { font-size: 11.5px; color: #a2551f; line-height: 1.65; }
+.rail-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rail-chip {
+  font-size: 11px; color: #5a6070; background: #f2f3f7; border: 1px solid #eaecf1;
+  padding: 4px 9px; border-radius: 7px;
+}
+.rail-flow { border-top: 1px solid #eef0f5; padding-top: 15px; }
+.rail-flow-row {
+  display: flex; align-items: center; gap: 9px; padding: 9px 11px;
+  border-radius: 9px; cursor: pointer; margin-bottom: 6px;
+  width: 100%; border: 0; background: transparent; color: inherit;
+  font: inherit; text-align: left;
+}
+.rail-flow-row:not(.cur):hover { background: #f5f6fa; }
+.rail-flow-row.cur { background: #edecfd; cursor: default; }
+.rail-flow-k { flex: none; font-size: 11px; color: var(--text-muted); font-family: monospace; }
+.rail-flow-row.cur .rail-flow-k { color: #4b47e0; font-weight: 600; }
+.rail-flow-t {
+  font-size: 12px; color: #5a6070; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rail-flow-row.cur .rail-flow-t { color: #2c2a6b; font-weight: 600; }
+
+/* ---------- 底部页脚(流程位置 + 圆点分页) ---------- */
+.stepfooter {
+  flex: none; height: 52px; display: flex; align-items: center; gap: 16px;
+  padding: 0 28px; background: #fff; border-top: 1px solid #e7e9f0;
+}
+.footer-loc, .footer-next { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; }
+.footer-next { margin-left: auto; }
+.footer-dots { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; }
+.fdot {
+  width: 7px; height: 7px; border-radius: 99px; background: #dfe2ea;
+  cursor: pointer; transition: all 0.25s;
+  border: 0; padding: 0;
+}
+.fdot.past { background: #d7dae3; }
+.fdot.done { background: #12a150; }
+.fdot.on { width: 22px; background: #4b47e0; }
+
+.step-row:focus-visible, .rail-flow-row:focus-visible, .fdot:focus-visible,
+.intro-step-start:focus-visible, .funnel-point:focus-visible {
+  outline: 2px solid #4b47e0; outline-offset: 2px;
+}
+.funnel-point { cursor: pointer; }
+.funnel-point:focus { outline: none; }
+.funnel-point:focus .funnel-hit { stroke: #1b1f2b; stroke-width: 2.5; fill: rgba(255,255,255,.7); }
+
+/* ---------- 步骤12–15 回归工作台 ---------- */
+
+.section-head {
+  display: flex; align-items: center; gap: 8px; margin: 26px 0 14px;
+  font-size: 13.5px; font-weight: 700; color: #2a3040;
+}
+.section-head-icon { font-size: 15px; }
+.section-head-line { flex: 1; height: 1px; background: #e7e9f0; }
+
+.pill-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill {
+  padding: 6px 13px; border-radius: 999px; border: 1.5px solid #e0e3ea;
+  background: #fff; color: #5a6070; font-size: 12px; cursor: pointer;
+}
+.pill.on { border-color: #4b47e0; background: #edecfd; color: #4b47e0; font-weight: 600; }
+.design-meta {
+  display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12px; color: var(--text-muted);
+  margin-bottom: 12px;
+}
+
+.model-controls { display: flex; flex-wrap: wrap; gap: 10px 28px; margin-bottom: 12px; }
+.model-control { display: flex; align-items: center; gap: 10px; }
+.model-control-label { font-size: 12px; color: var(--text-muted); flex: none; }
+.model-eq {
+  background: #f7f8fb; border-radius: 10px; padding: 12px 15px; margin-bottom: 10px;
+  font-family: "Space Mono", monospace; font-size: 12.5px; color: #2a3040;
+  line-height: 1.8; overflow-x: auto;
+}
+.run-btn.done { background: #12a150; }
+.run-btn:disabled { opacity: 0.7; cursor: default; }
+
+@keyframes regfade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.reg-results { margin-top: 16px; animation: regfade 0.35s ease both; }
+.benchmark-box {
+  background: #f7f8fb; border: 1px solid #e7e9f0; border-radius: 12px;
+  padding: 13px 16px; margin-top: 14px;
+}
+.benchmark-box p {
+  margin: 0; color: #3a4050; font-size: 12.5px; line-height: 1.8;
+}
+.benchmark-box b { color: #2a3040; font-variant-numeric: tabular-nums; }
+
+/* ---------- 步骤4-7 交互式计算演示(demos.tsx) ---------- */
+.demo-card {
+  background: #fff; border: 1px solid #e7e9f0; border-radius: 14px;
+  padding: 18px 20px; margin-bottom: 14px;
+}
+.demo-title { font-size: 13.5px; font-weight: 700; color: #2a3040; margin-bottom: 14px; }
+.demo-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.demo-controls label { font-size: 12px; color: var(--text-muted); }
+.demo-controls select {
+  padding: 7px 10px; border-radius: 8px; border: 1px solid #e0e3ea;
+  background: #fff; font-size: 12.5px; font-family: inherit;
+}
+.pill-group { display: inline-flex; background: #f0f1f6; border-radius: 9px; padding: 3px; }
+.pill-group button {
+  border: none; background: transparent; padding: 6px 14px; border-radius: 7px;
+  font-size: 12.5px; font-weight: 600; color: var(--text-muted); cursor: pointer; font-family: inherit;
+}
+.pill-group button.on { background: #fff; color: #4b47e0; box-shadow: 0 1px 4px rgba(20, 24, 40, 0.12); }
+
+/* 公式条 */
+.decomp-formula {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  background: #1b1f2b; border-radius: 10px; padding: 12px 15px; margin-bottom: 14px;
+  font-family: "Space Mono", monospace; font-size: 13px; color: #d8dbe6;
+}
+.decomp-formula .df-total { color: #fff; font-weight: 700; }
+.decomp-formula .df-eq, .decomp-formula .df-plus { color: #c2c7d4; margin: 0 3px; }
+.decomp-formula .df-term {
+  padding: 2px 7px; border-radius: 6px; border: 1px solid transparent; cursor: default; transition: all 0.12s;
+}
+.decomp-formula .df-term.on { background: rgba(255, 255, 255, 0.08); font-weight: 700; }
+
+.decomp-total-line { font-size: 13.5px; color: #3a4050; margin-bottom: 8px; }
+.decomp-total-line b { font-family: "Space Grotesk", sans-serif; font-size: 16px; color: #1b1f2b; }
+
+.decomp-bar {
+  display: flex; height: 42px; border-radius: 9px; overflow: hidden;
+  border: 1px solid #e7e9f0; background: #f7f8fb;
+}
+.decomp-seg { height: 100%; transition: width 0.5s ease, opacity 0.15s; min-width: 2px; cursor: pointer; }
+.decomp-seg.dim { opacity: 0.35; }
+
+.decomp-identity {
+  margin-top: 12px; padding: 10px 14px; border-radius: 10px;
+  font-size: 12.5px; font-family: "Space Mono", monospace;
+}
+.decomp-identity.ok { background: #eafaf1; color: #137a41; border: 1px solid #bfe8d0; }
+.decomp-identity.bad { background: #fff0e6; color: #a2551f; border: 1px solid #f6d6bf; }
+.decomp-hint {
+  margin-top: 10px; padding: 10px 14px; border-radius: 10px;
+  font-size: 12.5px; line-height: 1.7; color: #8a5a1f;
+  background: #fffaf3; border: 1px solid #f2e2cd;
+}
+
+.decomp-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12.5px; }
+.decomp-table tr { border-bottom: 1px solid #f2f3f7; }
+.decomp-table tr.on { background: #f7f8fb; }
+.decomp-table td { padding: 9px 8px; vertical-align: top; }
+.dt-name { font-weight: 600; color: #2a3040; white-space: nowrap; }
+.dt-swatch { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 8px; vertical-align: middle; }
+.dt-val { text-align: right; font-family: "Space Grotesk", sans-serif; color: #3a4050; white-space: nowrap; }
+.dt-share { text-align: right; color: var(--text-muted); font-variant-numeric: tabular-nums; width: 60px; }
+.dt-desc { color: var(--text-muted); line-height: 1.6; }
+.decomp-note {
+  margin-top: 12px; font-size: 12px; color: #8a5a1f; background: #fffaf3;
+  border: 1px solid #f2e2cd; border-radius: 10px; padding: 10px 13px; line-height: 1.6;
+}
+
+/* 网络中心性演示 */
+.net-demo-wrap { display: flex; gap: 18px; align-items: stretch; flex-wrap: wrap; }
+.net-demo-svg {
+  flex: 1; min-width: 340px; max-width: 640px; background: #fafbfd;
+  border: 1px solid #eef0f5; border-radius: 12px;
+}
+.net-demo-panel {
+  flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 8px;
+  padding: 4px 0;
+}
+.ndp-node { font-size: 13px; color: #3a4050; }
+.ndp-node b { font-size: 15px; color: #4b47e0; }
+.ndp-formula {
+  font-size: 12px; color: #5a6070; background: #f4f5f8; border-radius: 8px; padding: 8px 11px;
+}
+.ndp-calc { font-family: "Space Mono", monospace; font-size: 13px; color: #2a3040; }
+.ndp-calc b { color: #4b47e0; font-size: 15px; }
+.ndp-note { font-size: 12px; color: var(--text-muted); line-height: 1.65; margin: 2px 0; }
+.ndp-disclaim {
+  margin-top: auto; font-size: 11px; color: var(--text-muted); line-height: 1.6;
+  border-top: 1px solid #eef0f5; padding-top: 10px;
+}
+
+/* 选国家:搜索 + 勾选列表 + 已选 chips(替代原生 multi-select) */
+/* 可视化工作台:左选国家、右看图,两栏等高。行高由右侧图表决定,选择器列表内部滚动,
+   于是"选了谁"和"图上是谁"始终同屏,不必上下滚动来回对照。 */
+.viz-split {
+  display: grid; grid-template-columns: minmax(250px, 290px) minmax(0, 1fr);
+  gap: 16px; align-items: stretch; margin-bottom: 16px;
+  /* 必须是**确定**高度:只给 min-height 的话,77 行国家列表会把整行撑到两千像素,
+     flex:1 + overflow 也约束不住(stretch 取的是最高那栏的内容高度)。 */
+  height: clamp(520px, 68vh, 780px);
+}
+.viz-split-side { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+/* 图表栏自身滚动:讲解较长时不至于把图挤出可视区。 */
+.viz-split-main { min-width: 0; min-height: 0; overflow-y: auto; }
+.viz-side-head {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  gap: 8px; margin-bottom: 8px;
+}
+.viz-side-count { color: var(--text-muted); font-size: 12px; }
+.viz-side-count b.ok { color: #159a86; }
+.viz-side-count b.todo { color: #e0982a; }
+
+.country-picker {
+  display: flex; flex-direction: column; min-height: 0; flex: 1;
+  border: 1px solid #e0e3ea; border-radius: 10px;
+  background: #fff; padding: 8px; font-size: 12px;
+}
+.country-picker-head { display: flex; gap: 6px; align-items: center; }
+.country-picker-head input[type="search"] {
+  flex: 1; min-width: 0; border: 1px solid #e0e3ea; border-radius: 7px;
+  padding: 5px 8px; font-size: 12px; font-family: inherit;
+}
+.country-picker-clear {
+  border: none; background: transparent; color: var(--text-muted); font-size: 11.5px; padding: 3px 5px;
+}
+.country-picker-clear:hover { color: #e34948; }
+.country-picker-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.country-chip {
+  border: 1px solid #d9d6fb; background: #edecfd; color: #4b47e0;
+  border-radius: 99px; padding: 2px 8px; font-size: 11px; font-weight: 600;
+}
+.country-chip:hover { background: #e0defc; }
+/* flex:1 + min-height:0 —— 列表吃掉剩余高度并内部滚动,整体高度交给外层的 .viz-split。 */
+.country-picker-list {
+  flex: 1; min-height: 120px; overflow-y: auto;
+  margin-top: 7px; border-top: 1px solid #f0f1f6; padding-top: 5px;
+}
+.country-picker-row {
+  display: flex; align-items: center; gap: 7px; padding: 3px 5px;
+  border-radius: 6px; cursor: pointer;
+}
+.country-picker-row:hover { background: #f4f5f8; }
+.country-picker-row.on { background: #f2f1ff; }
+.country-picker-row input { accent-color: #4b47e0; }
+.country-picker-row b { font-family: "Space Grotesk", sans-serif; font-weight: 600; color: #3a4050; }
+.country-picker-name { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 国旗用系统 emoji 字体渲染;稍大一点才在 12px 正文里看得清。 */
+.country-flag {
+  flex: none; font-size: 14px; line-height: 1;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+
+/* 操作成功 toast(showToast/ToastHost) */
+.toast-host {
+  position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; gap: 8px; z-index: 60; pointer-events: none;
+}
+.toast-item {
+  background: #1b1f2b; color: #fff; font-size: 12.5px; font-weight: 500;
+  padding: 10px 18px; border-radius: 99px; box-shadow: 0 10px 28px rgba(16, 20, 34, 0.32);
+  animation: toast-in 0.22s ease-out;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}

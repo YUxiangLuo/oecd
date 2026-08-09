@@ -1,15 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { beginAccountMetaLoad } from "./account-meta";
 import { AccountPasswordModal } from "./account-password";
-import { assignmentContextLabel } from "./assignment-context";
+import {
+  AnnouncementBanner,
+  AppBootSkeleton,
+  CourseSidebar,
+  StepFooter,
+  StepHeader,
+  StepRail,
+  StudentTopbar,
+  TeacherWorkspace,
+} from "./app-shell";
 import { scanAnnouncements } from "./announcement-state";
 import { AUTH_TOKEN_KEY, api } from "./api";
-import { LogoMark } from "./brand";
+import { LabRouter } from "./lab-router";
 import { IntroOverlay } from "./intro";
-import { DbLab, IndicatorLab, QcLab, ReportLab, ShockLab, VizLab } from "./labs";
 import {
   DEFAULT_REGRESSION_SETTINGS,
-  RegressionRunLab,
   SIGNATURE_SETTINGS,
   asRegressionSettingsMap,
   type RegressionHistory,
@@ -18,27 +25,18 @@ import {
 import { LoginPage } from "./login";
 import { resetStepScroller } from "./step-navigation";
 import { QuizPanel } from "./step-quiz";
-import { TeacherDashboard } from "./teacher";
 import { ToastHost } from "./toast";
 import type {
   Announcement,
   AuthUser,
   Meta,
-  Step,
-  StepStateApi,
   StepsResponse,
+  StepStateApi,
   StudentAssignmentContext,
 } from "./types";
-import { useSession, type SessionStatus } from "./use-session";
+import { useSession } from "./use-session";
 
-const ROMAN = ["", "一", "二", "三", "四", "五"];
 const AUTH_EXPIRES_KEY = "gvcsim_token_expires_at";
-
-function sessionExpiryLabel(expiresAt: number | null): string | null {
-  if (!expiresAt) return null;
-  const date = new Date(expiresAt * 1000);
-  return Number.isNaN(date.getTime()) ? null : date.toLocaleString("zh-CN", { hour12: false });
-}
 
 function deadlineLabel(value: string | null | undefined): string {
   if (!value) return "教师设定的截止时间";
@@ -46,117 +44,9 @@ function deadlineLabel(value: string | null | undefined): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { hour12: false });
 }
 
-function AppBootSkeleton() {
-  return (
-    <div className="layout app-boot" role="region" aria-busy="true" aria-label="正在恢复课程">
-      <header className="topbar">
-        <LogoMark size={30} />
-        <div>
-          <h1>供应链仿真系统</h1>
-          <div className="sub">GVC SIMULATION LAB</div>
-        </div>
-        <div className="topbar-user app-boot-topbar">
-          <span className="skeleton-block skeleton-course" />
-          <span className="skeleton-block skeleton-meta" />
-          <span className="skeleton-block skeleton-pill" />
-          <span className="skeleton-block skeleton-button" />
-        </div>
-      </header>
-      <div className="main">
-        <aside className="sidebar app-boot-sidebar">
-          <div className="sidebar-head">
-            <div className="sidebar-head-row">
-              <span className="sidebar-title">课程大纲</span>
-              <span className="sidebar-steps">16 STEPS</span>
-            </div>
-            <div className="progress-track"><div className="progress-bar" style={{ width: "35%" }} /></div>
-          </div>
-          <div className="sidebar-list app-boot-step-list">
-            {Array.from({ length: 8 }, (_, index) => (
-              <span key={index} className="skeleton-block skeleton-step" />
-            ))}
-          </div>
-        </aside>
-        <div className="workarea">
-          <div className="step-header-bar app-boot-step-header">
-            <span className="skeleton-block skeleton-step-number" />
-            <span className="skeleton-block skeleton-step-title" />
-          </div>
-          <div className="content-row">
-            <main className="content">
-              <div className="content-inner">
-                <div className="card skeleton-card">
-                  <span className="skeleton-block skeleton-line wide" />
-                  <span className="skeleton-block skeleton-line" />
-                  <span className="skeleton-block skeleton-line short" />
-                </div>
-                <div className="skeleton-block skeleton-report" />
-              </div>
-            </main>
-          </div>
-        </div>
-      </div>
-      <span className="sr-only" role="status">正在恢复最新课程与实验记录…</span>
-    </div>
-  );
-}
-
 function stepFromUrl(): number | null {
   const n = Number(new URLSearchParams(window.location.search).get("step"));
   return Number.isInteger(n) && n >= 1 && n <= 16 ? n : null;
-}
-
-function Lab({ step, meta, state, completionKey, sessionStatus, sessionUnsynced, sessionSyncing, sessionSyncError, onFlushSession, onSessionChanged, regressionSettings, onRegressionSettingsChange, regressionHistory, onRegressionHistoryChange, onNavigateStep }: {
-  step: Step;
-  meta: Meta | null;
-  state: StepStateApi;
-  completionKey: string;
-  sessionStatus: SessionStatus;
-  sessionUnsynced: boolean;
-  sessionSyncing: boolean;
-  sessionSyncError: string | null;
-  onFlushSession: () => Promise<void>;
-  /** 服务端改写会话后（如生成报告写入第 16 步完成记录）重新装载完成度。 */
-  onSessionChanged: () => void;
-  regressionSettings: RegressionSettings;
-  onRegressionSettingsChange: (settings: RegressionSettings) => void;
-  regressionHistory: RegressionHistory;
-  onRegressionHistoryChange: React.Dispatch<React.SetStateAction<RegressionHistory>>;
-  onNavigateStep: (step: number) => void;
-}) {
-  if (step.lab === "db") return <DbLab state={state} />;
-  if (step.lab === "qc") return meta ? <QcLab meta={meta} onNavigateStep={onNavigateStep} /> : null;
-  if (step.lab === "shock") return meta ? <ShockLab meta={meta} step={step} state={state} /> : null;
-  // key:同一实验台横跨多步时必须按步重挂载。否则 country 等步内状态会跨步带过去,
-  // 自动保存的 effect 因依赖未变而不触发，新到的那一步拿不到“当前看的是谁”。
-  if (step.lab === "ind") return meta ? <IndicatorLab key={step.n} meta={meta} step={step} state={state} /> : null;
-  if (step.lab === "viz")
-    return meta ? <VizLab key={step.n} meta={meta} step={step} state={state} /> : null;
-  if (step.lab === "reg") return (
-    <RegressionRunLab
-      key={step.regression_outcome}
-      step={step}
-      state={state}
-      settings={regressionSettings}
-      onSettingsChange={onRegressionSettingsChange}
-      history={regressionHistory}
-      onHistoryChange={onRegressionHistoryChange}
-    />
-  );
-  if (step.lab === "rep") return (
-    <ReportLab
-      key={`${meta?.assignment_id ?? "none"}:${meta?.attempt_id ?? "none"}`}
-      completionKey={completionKey}
-      sessionStatus={sessionStatus}
-      sessionUnsynced={sessionUnsynced}
-      sessionSyncing={sessionSyncing}
-      sessionSyncError={sessionSyncError}
-      onFlushSession={onFlushSession}
-      onNavigateStep={onNavigateStep}
-      onGenerated={onSessionChanged}
-    />
-  );
-  return null;
 }
 
 export default function App() {
@@ -345,6 +235,12 @@ export default function App() {
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }, []);
 
+  const passwordChanged = useCallback(() => {
+    setAuthNotice("密码已修改，所有旧会话均已撤销。请使用新密码重新登录。");
+    setShowPasswordChange(false);
+    logout();
+  }, [logout]);
+
   const navigateStep = useCallback((next: number) => {
     const available = stepsData?.steps ?? [];
     const last = available.at(-1)?.n ?? 16;
@@ -512,41 +408,20 @@ export default function App() {
     );
 
   // 教师端与学生端彻底分离:教师只有教师面板,没有 16 步实验入口
-  if (user.role === "teacher")
+  if (user.role === "teacher") {
     return (
-      <div className="layout">
-        <header className="topbar">
-          <LogoMark size={30} />
-          <div>
-            <h1>供应链仿真系统</h1>
-            <div className="sub">GVC SIMULATION LAB · 教师端</div>
-          </div>
-          <div className="topbar-user">
-            <span className="muted">
-              数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
-            </span>
-            {sessionExpiryLabel(authExpiresAt) && <span className="muted">会话至 {sessionExpiryLabel(authExpiresAt)}</span>}
-            <span className="role-chip" title={`教师账号 · ${user.username}`}>{user.name}</span>
-            <button onClick={() => setShowPasswordChange(true)}>修改密码</button>
-            <button onClick={logout}>退出</button>
-          </div>
-        </header>
-        <TeacherDashboard user={user} />
-        {/* 教师端 ToastHost:与下方学生端的实例互斥(此处提前 return),任一时刻只挂载一个;
-            切勿在两个分支之外再挂一份,否则同一 toast 会重复弹出 */}
-        <ToastHost />
-        {showPasswordChange && (
-          <AccountPasswordModal
-            onClose={() => setShowPasswordChange(false)}
-            onChanged={() => {
-              setAuthNotice("密码已修改，所有旧会话均已撤销。请使用新密码重新登录。");
-              setShowPasswordChange(false);
-              logout();
-            }}
-          />
-        )}
-      </div>
+      <TeacherWorkspace
+        user={user}
+        meta={meta}
+        authExpiresAt={authExpiresAt}
+        showPasswordChange={showPasswordChange}
+        onRequestPasswordChange={() => setShowPasswordChange(true)}
+        onClosePasswordChange={() => setShowPasswordChange(false)}
+        onPasswordChanged={passwordChanged}
+        onLogout={logout}
+      />
     );
+  }
 
   if (fatal)
     return (
@@ -573,7 +448,6 @@ export default function App() {
   const stepIndex = steps.findIndex((item) => item.n === current);
   if (stepIndex < 0) return <div style={{ padding: 40 }} className="error-box">步骤不存在，请从课程大纲重新选择。</div>;
   const step = steps[stepIndex];
-  const stages = [...new Set(steps.map((s) => s.stage))];
   const stageName = stepsData.stages[String(step.stage)];
   const prevStep = steps[stepIndex - 1];
   const nextStep = steps[stepIndex + 1];
@@ -593,157 +467,43 @@ export default function App() {
   return (
     <>
     <div className="layout" inert={showIntro ? true : undefined}>
-      <header className="topbar">
-        <LogoMark size={30} />
-        <div>
-          <h1>供应链仿真系统</h1>
-          <div className="sub">GVC SIMULATION LAB</div>
-        </div>
-          <div className="topbar-user">
-          {assignmentContexts.length > 0 && (
-            <label className="assignment-context-picker">
-              <span>课程作业</span>
-              <select
-                aria-label="切换课程作业"
-                value={String(meta?.assignment_id ?? "")}
-                disabled={switchingAssignment}
-                onChange={(event) => { void switchAssignment(Number(event.target.value)); }}
-              >
-                {assignmentContexts.map((context) => (
-                  <option key={context.assignment_id} value={context.assignment_id}>
-                    {assignmentContextLabel(context)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <span className="muted">
-            数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
-          </span>
-          {/* 完成度由服务端按答题结果/报告生成判定，位置不冒充完成度。
-              位置信息退到 title 里:到过第几步不是成绩。 */}
-          {session.completion ? (
-            <span
-              className="progress-pill"
-              title={`已完成 ${session.completion.completed_count} 步；最远到过第 ${maxStep} 步（到过不等于完成）`}
-            >
-              已完成 <b>{session.completion.completed_count}</b><span>/{totalSteps}</span>
-            </span>
-          ) : (
-            // 判定只在服务端;拿不到就说明拿不到,不用位置冒充完成度。
-            <span className="progress-pill" title={`最远到过第 ${maxStep} 步`}>
-              最远到第 <b>{Math.min(maxStep, totalSteps)}</b> 步
-            </span>
-          )}
-            <span className="role-chip" title={`学生账号 · ${user.username}`}>{user.name}</span>
-            {sessionExpiryLabel(authExpiresAt) && <span className="muted" title="服务端签发的 expires_at">会话至 {sessionExpiryLabel(authExpiresAt)}</span>}
-          <button ref={introTriggerRef} onClick={() => setShowIntro(true)}>ⓘ 系统介绍</button>
-          <button onClick={() => setShowPasswordChange(true)}>修改密码</button>
-          <button onClick={logout}>退出</button>
-        </div>
-      </header>
+      <StudentTopbar
+        user={user}
+        meta={meta}
+        authExpiresAt={authExpiresAt}
+        assignmentContexts={assignmentContexts}
+        switchingAssignment={switchingAssignment}
+        completion={session.completion}
+        maxStep={maxStep}
+        totalSteps={totalSteps}
+        introTriggerRef={introTriggerRef}
+        onSwitchAssignment={(assignmentId) => { void switchAssignment(assignmentId); }}
+        onShowIntro={() => setShowIntro(true)}
+        onRequestPasswordChange={() => setShowPasswordChange(true)}
+        onLogout={logout}
+      />
 
       {assignmentSwitchError && (
         <div className="error-box assignment-switch-error" role="alert">切换作业失败：{assignmentSwitchError}</div>
       )}
 
-      {announcements.length > 0 && !bannerDismissed && (
-        <section className="announce-banner" aria-label="课程公告">
-          <span className="announce-banner-ic">📢</span>
-          <div className="announce-banner-body">
-            <b>{announcements[0].title}</b>
-            {announcements[0].body && bannerExpanded && <p>{announcements[0].body}</p>}
-            {bannerExpanded && announcements.slice(1).map((a) => (
-              <div key={a.id} className="announce-banner-more">
-                <b>{a.title}</b>
-                {a.body && <p>{a.body}</p>}
-              </div>
-            ))}
-          </div>
-          {(announcements.length > 1 || announcements[0].body) && (
-            <button onClick={() => setBannerExpanded((v) => !v)}>
-              {bannerExpanded ? "收起" : `展开${announcements.length > 1 ? `全部 ${announcements.length} 条` : ""}`}
-            </button>
-          )}
-          <button
-            type="button"
-            aria-label="关闭课程公告"
-            title="关闭课程公告"
-            onClick={() => setBannerDismissed(true)}
-          >
-            ×
-          </button>
-        </section>
+      {!bannerDismissed && (
+        <AnnouncementBanner
+          announcements={announcements}
+          expanded={bannerExpanded}
+          onToggle={() => setBannerExpanded((value) => !value)}
+          onDismiss={() => setBannerDismissed(true)}
+        />
       )}
 
       <div className="main">
-        <aside className="sidebar" aria-label="课程大纲">
-          <div className="sidebar-head">
-            <div className="sidebar-head-row">
-              <span className="sidebar-title">课程大纲</span>
-              <span className="sidebar-steps">{totalSteps} STEPS</span>
-            </div>
-            {/* 有服务端完成度时画真实完成度;拿不到就退回位置条并如实说明。 */}
-            {session.completion ? (
-              <div
-                className="progress-track"
-                role="img"
-                aria-label={`已完成 ${session.completion.completed_count} 步,共 ${totalSteps} 步`}
-              >
-                <div
-                  className="progress-bar done"
-                  style={{ width: `${Math.max(2, (session.completion.completed_count / totalSteps) * 100)}%` }}
-                />
-              </div>
-            ) : (
-              <div
-                className="progress-track"
-                role="img"
-                aria-label={`最远到过第 ${Math.min(maxStep, totalSteps)} 步,共 ${totalSteps} 步;这是浏览位置,不代表已完成`}
-              >
-                <div className="progress-bar" style={{ width: `${Math.max(6, (Math.min(maxStep, totalSteps) / totalSteps) * 100)}%` }} />
-              </div>
-            )}
-            <div className="sidebar-sub">全球价值链实证分析 · 数据→指标→回归→报告</div>
-          </div>
-          <div className="sidebar-list">
-          {stages.map((st) => (
-            <div key={st}>
-              <div className="stage-label">
-                <span className="roman">{ROMAN[st]}</span>
-                {stepsData.stages[String(st)]}
-                <span className="stage-rule" />
-              </div>
-              {steps.filter((s) => s.stage === st).map((s) => {
-                // ✓ 只给服务端判定完成的步骤；到过仍只是一种导航状态。
-                // past 仅表示“到过”,是导航信息,一律显示步号——到过不是做过。
-                const done = completedSteps.has(s.n);
-                const state = done ? "done" : s.n === current ? "cur" : s.n <= maxStep ? "past" : "future";
-                const stepAccessibleName = [
-                  `第 ${s.n} 步：${s.title}`,
-                  s.n === current ? "当前步骤" : null,
-                  done ? "已完成" : "未完成",
-                ].filter(Boolean).join("，");
-                return (
-                  <button
-                    type="button"
-                    key={s.n}
-                    className={`step-row${s.n === current ? " active" : ""}`}
-                    aria-label={stepAccessibleName}
-                    aria-current={s.n === current ? "step" : undefined}
-                    onClick={() => navigateStep(s.n)}
-                    title={`第 ${s.n} 步：${s.title}${done ? "（已完成）" : ""}`}
-                  >
-                    <span className={`step-badge ${state}`} aria-hidden="true">{done ? "✓" : s.n}</span>
-                    <span className="step-row-title" aria-hidden="true">{s.title}</span>
-                    <span className="step-code" aria-hidden="true">{String(s.n).padStart(2, "0")}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-          </div>
-        </aside>
+        <CourseSidebar
+          stepsData={stepsData}
+          current={current}
+          maxStep={maxStep}
+          completion={session.completion}
+          onNavigate={navigateStep}
+        />
 
         <div className="workarea">
           {session.syncError && !assignmentClosed && (
@@ -801,20 +561,14 @@ export default function App() {
               {resetAttemptError && <div className="error-box">重新开始失败：{resetAttemptError}</div>}
             </div>
           )}
-          <div className="step-header-bar" role="region" aria-labelledby="current-step-heading">
-            <div className="big-num">{String(step.n).padStart(2, "0")}</div>
-            <div className="step-header-mid">
-              <div className="step-header-meta">
-                <span className="stage-chip">{stageName}</span>
-                <span className="step-count">STEP {step.n} / {totalSteps}</span>
-              </div>
-              <h2 id="current-step-heading">{step.title}</h2>
-            </div>
-            <div className="nav-btns">
-              <button disabled={!prevStep} onClick={() => prevStep && navigateStep(prevStep.n)}>← 上一步</button>
-              <button className="primary" disabled={!nextStep} onClick={() => nextStep && navigateStep(nextStep.n)}>下一步 →</button>
-            </div>
-          </div>
+          <StepHeader
+            step={step}
+            previous={prevStep}
+            next={nextStep}
+            stageName={stageName}
+            totalSteps={totalSteps}
+            onNavigate={navigateStep}
+          />
 
           <div className="content-row">
             <main ref={contentRef} className="content">
@@ -833,7 +587,7 @@ export default function App() {
                     inert
                     aria-label={assignmentHistorical ? "历史作业的只读实验记录" : "已截止作业的只读实验记录"}
                   >
-                    <Lab
+                    <LabRouter
                       step={step}
                       meta={meta}
                       state={stepState}
@@ -866,7 +620,7 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    <Lab
+                    <LabRouter
                       step={step}
                       meta={meta}
                       state={stepState}
@@ -889,59 +643,26 @@ export default function App() {
               </div>
             </main>
 
-            <aside className="rightrail" aria-label="本步速览">
-              <div className="rail-head"><span className="rail-head-ic">📌</span>本步速览</div>
-              <div className="rail-stage">
-                <div className="rail-stage-loc">阶段{ROMAN[step.stage]} · {stageName}</div>
-                <div className="rail-stage-num"><b>{String(step.n).padStart(2, "0")}</b><span>/ {totalSteps} 步</span></div>
-              </div>
-              <div className="rail-sec">
-                <div className="rail-label">🎯 本步目标</div>
-                <div className="rail-goal">{step.goal}</div>
-              </div>
-              <div className="rail-tip"><span>💡</span><div><b>关键提示 · </b>{step.tip}</div></div>
-              <div className="rail-sec">
-                <div className="rail-label">🔗 关联数据 / 依赖</div>
-                <div className="rail-chips">{step.deps.map((d) => <span key={d} className="rail-chip">{d}</span>)}</div>
-              </div>
-              <div className="rail-flow">
-                <div className="rail-label">流程位置</div>
-                {prevStep && (
-                  <button type="button" className="rail-flow-row" onClick={() => navigateStep(prevStep.n)}>
-                    <span className="rail-flow-k">↑ 上一步</span>
-                    <span className="rail-flow-t">{prevStep.title}</span>
-                  </button>
-                )}
-                <div className="rail-flow-row cur">
-                  <span className="rail-flow-k">● 当前</span>
-                  <span className="rail-flow-t">{step.title}</span>
-                </div>
-                {nextStep && (
-                  <button type="button" className="rail-flow-row" onClick={() => navigateStep(nextStep.n)}>
-                    <span className="rail-flow-k">↓ 下一步</span>
-                    <span className="rail-flow-t">{nextStep.title}</span>
-                  </button>
-                )}
-              </div>
-            </aside>
+            <StepRail
+              step={step}
+              previous={prevStep}
+              next={nextStep}
+              stageName={stageName}
+              totalSteps={totalSteps}
+              onNavigate={navigateStep}
+            />
           </div>
 
-          <footer className="stepfooter">
-            <div className="footer-loc">{stageName} · {step.title}</div>
-            <div className="footer-dots">
-              {steps.map((s) => (
-                <button
-                  type="button"
-                  key={s.n}
-                  onClick={() => navigateStep(s.n)}
-                  aria-label={`前往步骤 ${s.n}：${s.title}`}
-                  aria-current={s.n === current ? "step" : undefined}
-                  className={`fdot${s.n === current ? " on" : completedSteps.has(s.n) ? " done" : s.n <= maxStep ? " past" : ""}`}
-                />
-              ))}
-            </div>
-            <div className="footer-next">{nextStep ? `下一步 · ${nextStep.title}` : "已到最后一步"}</div>
-          </footer>
+          <StepFooter
+            steps={steps}
+            step={step}
+            next={nextStep}
+            stageName={stageName}
+            current={current}
+            maxStep={maxStep}
+            completedSteps={completedSteps}
+            onNavigate={navigateStep}
+          />
         </div>
       </div>
       {/* 学生端 ToastHost:与上方教师端实例互斥,任一时刻只挂载一个(见教师分支处说明) */}
@@ -959,14 +680,7 @@ export default function App() {
       />
     )}
     {showPasswordChange && (
-      <AccountPasswordModal
-        onClose={() => setShowPasswordChange(false)}
-        onChanged={() => {
-          setAuthNotice("密码已修改，所有旧会话均已撤销。请使用新密码重新登录。");
-          setShowPasswordChange(false);
-          logout();
-        }}
-      />
+      <AccountPasswordModal onClose={() => setShowPasswordChange(false)} onChanged={passwordChanged} />
     )}
     </>
   );
