@@ -15,7 +15,7 @@ dependencies = [
     "uvicorn>=0.34",
     "anyio>=4.8",
     "linearmodels>=7.0",
-    "psycopg[binary,pool]>=3.2",
+    "psycopg[binary,pool]>=3.3.4",
 ]
 
 [project.scripts]
