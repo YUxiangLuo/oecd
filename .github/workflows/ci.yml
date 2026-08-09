@@ -211,7 +211,7 @@ jobs:
           curl -fsS http://127.0.0.1:8000/health >"$output_dir/health.json"
       - name: Upload browser evidence
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: browser-smoke-${{ github.run_id }}-${{ github.run_attempt }}
           path: dogfood-output/ci-browser/
