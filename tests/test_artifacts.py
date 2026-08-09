@@ -11,6 +11,7 @@ from gvcsim.artifacts import (
     _git_head,
     _cached_csv,
     current_artifact_years,
+    manifest_provenance,
     read_csv_artifact,
     register_artifacts,
     validate_artifact,
@@ -112,8 +113,14 @@ def test_manifest_registers_and_validates_external_sources(tmp_path: Path):
     source = tmp_path / "source.csv"
     artifact.write_text("x\n1\n", encoding="utf-8")
     source.write_text("raw\n1\n", encoding="utf-8")
-    register_artifacts(processed, [artifact.name], source_paths=[source])
+    register_artifacts(
+        processed,
+        [artifact.name],
+        metadata={"data_sources": {"fixture": {"citation": "Example dataset"}}},
+        source_paths=[source],
+    )
     assert len(list((processed / "manifest_history").glob("*.json"))) == 1
+    assert manifest_provenance(processed)["data_sources"] == {"fixture": {"citation": "Example dataset"}}
     validate_source(source, processed)
     source.write_text("raw\n2\n", encoding="utf-8")
     with pytest.raises(ArtifactContractError, match="来源"):

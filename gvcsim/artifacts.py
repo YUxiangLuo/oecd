@@ -76,6 +76,7 @@ def manifest_provenance(processed_dir: Path | None = None) -> dict[str, Any]:
         "schema_version": payload["schema_version"],
         "network_algorithm": payload["network_algorithm"],
         "qc": payload.get("qc") or {},
+        "data_sources": payload.get("data_sources") or {},
         "sources": payload.get("sources") or {},
         "build": payload.get("build") or {},
     }

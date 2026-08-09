@@ -1,0 +1,84 @@
+import json
+
+import pytest
+
+from gvcsim.data.citations import (
+    CI_SYNTHETIC_KIND,
+    CI_SYNTHETIC_MARKER,
+    OECD_ICIO_DATASET_URL,
+    artifact_data_sources,
+    report_source_disclosures,
+    report_source_label,
+)
+
+
+def _clear_ci_gates(monkeypatch):
+    monkeypatch.delenv("CI", raising=False)
+    monkeypatch.delenv("GVCSIM_CI_SYNTHETIC", raising=False)
+
+
+def test_real_release_metadata_carries_oecd_attribution(tmp_path, monkeypatch):
+    _clear_ci_gates(monkeypatch)
+
+    metadata = artifact_data_sources(tmp_path)
+
+    assert set(metadata) == {"oecd_icio"}
+    assert metadata["oecd_icio"]["release"] == "2023"
+    assert metadata["oecd_icio"]["dataset_url"] == OECD_ICIO_DATASET_URL
+    assert "Inter-Country Input-Output Tables" in metadata["oecd_icio"]["citation"]
+
+
+def test_ci_synthetic_release_is_never_attributed_as_oecd_observations(tmp_path, monkeypatch):
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.setenv("GVCSIM_CI_SYNTHETIC", "1")
+    (tmp_path / CI_SYNTHETIC_MARKER).write_text(
+        json.dumps({"kind": CI_SYNTHETIC_KIND, "production_data": False}),
+        encoding="utf-8",
+    )
+
+    metadata = artifact_data_sources(tmp_path)
+
+    assert set(metadata) == {"ci_synthetic_icio"}
+    assert metadata["ci_synthetic_icio"]["production_data"] is False
+    assert "contains no OECD observations" in metadata["ci_synthetic_icio"]["citation"]
+    assert report_source_label(metadata).startswith("CI-only")
+    disclosure = "\n".join(report_source_disclosures(metadata))
+    assert "不得冒充 OECD 数据" in disclosure
+    assert OECD_ICIO_DATASET_URL not in disclosure
+
+
+@pytest.mark.parametrize(
+    ("ci", "synthetic"),
+    [(None, None), ("true", None), (None, "1")],
+)
+def test_synthetic_marker_requires_both_environment_gates(tmp_path, monkeypatch, ci, synthetic):
+    _clear_ci_gates(monkeypatch)
+    if ci is not None:
+        monkeypatch.setenv("CI", ci)
+    if synthetic is not None:
+        monkeypatch.setenv("GVCSIM_CI_SYNTHETIC", synthetic)
+    (tmp_path / CI_SYNTHETIC_MARKER).write_text(
+        json.dumps({"kind": CI_SYNTHETIC_KIND, "production_data": False}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="requires CI=true"):
+        artifact_data_sources(tmp_path)
+
+
+def test_unknown_manifest_source_does_not_fall_back_to_an_oecd_claim():
+    metadata = {"future_source": {"citation": "unknown"}}
+
+    assert report_source_label(metadata) == "manifest 中未识别的数据源"
+    disclosure = "\n".join(report_source_disclosures(metadata))
+    assert "无法识别" in disclosure
+    assert "不得对外发布" in disclosure
+    assert OECD_ICIO_DATASET_URL not in disclosure
+
+
+def test_synthetic_flag_without_a_valid_marker_fails_closed(tmp_path, monkeypatch):
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.setenv("GVCSIM_CI_SYNTHETIC", "1")
+
+    with pytest.raises(RuntimeError, match="valid marker"):
+        artifact_data_sources(tmp_path)

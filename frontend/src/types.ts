@@ -80,6 +80,7 @@ export interface Meta {
     manifest_id?: string;
     schema_version?: number;
     qc?: Record<string, unknown>;
+    data_sources?: Record<string, unknown>;
     sources?: Record<string, unknown>;
     build?: Record<string, unknown>;
   } | null;

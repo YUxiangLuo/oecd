@@ -68,6 +68,19 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
     assert {"numpy", "pandas", "pymrio", "networkit", "scipy", "linearmodels"}.issubset(
         manifest["build"]["runtime"]["packages"]
     )
+    data_sources = manifest["data_sources"]
+    if "oecd_icio" in data_sources:
+        oecd_source = data_sources["oecd_icio"]
+        assert oecd_source["release"] == "2023"
+        assert "Inter-Country Input-Output Tables" in oecd_source["citation"]
+        assert oecd_source["dataset_url"].startswith("https://www.oecd.org/")
+        assert oecd_source["methodology_url"] == "https://doi.org/10.1787/5a5d0665-en"
+        assert oecd_source["terms_url"].endswith("/terms-conditions.html")
+    else:
+        synthetic_source = data_sources["ci_synthetic_icio"]
+        assert synthetic_source["production_data"] is False
+        assert "contains no OECD observations" in synthetic_source["citation"]
+        assert "OECD_ICIO/.ci-only-synthetic.json" in manifest["sources"]
 
     controls_df = pd.read_csv(processed / "controls_country.csv")
     assert {"country", "year", "macro_log_gdp_usd", "gdp_deflator"}.issubset(controls_df.columns)

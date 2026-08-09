@@ -12,8 +12,9 @@ from datetime import date
 
 import pandas as pd
 
-from gvcsim.artifacts import read_csv_artifact
+from gvcsim.artifacts import manifest_provenance, read_csv_artifact
 from gvcsim.config import PROCESSED_DIR, REPORTS_DIR, processed_years
+from gvcsim.data.citations import report_source_disclosures, report_source_label
 from gvcsim.regression.design import (
     CONTROL_MODE_NONE,
     GRANULARITY_COUNTRY,
@@ -251,13 +252,15 @@ def build(
         if granularity == GRANULARITY_COUNTRY_INDUSTRY
         else "贸易流、生产与长度共用国家级设定；网络回归因国家图退化而不运行"
     )
+    data_sources = manifest_provenance().get("data_sources") or {}
+    source_label = report_source_label(data_sources)
 
     sections = [
         "# 贸易政策冲击对全球价值链结构的影响\n",
         "> 供应链仿真系统自动生成的实验报告(演示版:冲击数据为覆盖全部经济体的"
         "拟真演示面板,以 2018–2020 全球贸易摩擦为原型,结论仅用于验证系统链路,"
         "不构成研究结论)\n",
-        f"- 数据:OECD ICIO {min(years)}–{max(years)}(指标截面:{report_year} 年)",
+        f"- 数据:{source_label} {min(years)}–{max(years)}(指标截面:{report_year} 年)",
         f"- 方法:本报告使用步骤12–15保存的回归设定;{comparison_scope}。因果解释仍依赖冲击外生性、趋势可比性等识别假设",
         _design_summary(design_preview),
         f"- 生成日期:{date.today().isoformat()}\n",
@@ -339,7 +342,7 @@ def build(
             "## 四、结论与限制",
             f"- 本报告验证了“数据 → 指标 → 回归 → 报告”闭环可自动运行(本次回归粒度:{granularity})。",
             "- 冲击变量为拟真演示面板(事件与量级参考公开资料的手工编码,"
-            "出口暴露度由 OECD ICIO 双边流向计算)。即使未来接入真实 PIIE/WTO 数据与官方 HS→ICIO 映射，"
+            f"出口暴露度由 {source_label} 双边流向计算)。即使未来接入真实 PIIE/WTO 数据与官方 HS→ICIO 映射，"
             "仍需论证冲击外生性、趋势可比性、处理效应异质性并完成稳健性检验，才能形成研究结论。",
             "- 控制变量支持 ICIO 内生派生与 WDI/IMF 风格宏观 mock,用于稳健性演示;"
             "GDP 平减指数为拟真 mock,不是官方价格指数。论文级研究仍需接入真实 WDI/IMF/"
@@ -348,6 +351,9 @@ def build(
             "生产长度，以及 Gephi 有向全正边网络中心性；国家网络指标如实输出，"
             "网络回归仅使用存在节点差异的国家–行业级结果;"
             "本报告不输出 exporter-importer-sector 双边矩阵明细。",
+            "",
+            "## 五、数据来源与许可提示",
+            *report_source_disclosures(data_sources),
         ]
     )
 

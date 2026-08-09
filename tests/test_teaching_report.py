@@ -6,6 +6,7 @@ import pytest
 
 from gvcsim import artifacts, quizzes
 from gvcsim.config import PROCESSED_DIR
+from gvcsim.data.citations import OECD_ICIO_DATASET_URL, OECD_ICIO_METHODOLOGY_URL, OECD_ICIO_TERMS_URL
 from gvcsim.regression.design import RegressionDesign
 from gvcsim.session import empty_session, make_record
 from gvcsim.teaching_report import (
@@ -176,6 +177,29 @@ def test_report_binds_provenance_and_selected_quiz_answers():
 
 
 @needs_artifacts
+def test_ci_synthetic_teaching_report_does_not_claim_real_oecd_data(monkeypatch):
+    mid = artifacts.manifest_id()
+    monkeypatch.setattr(
+        artifacts,
+        "manifest_provenance",
+        lambda: {
+            "data_sources": {
+                "ci_synthetic_icio": {
+                    "citation": "Deterministic CI-only fixture; contains no OECD observations.",
+                    "production_data": False,
+                }
+            }
+        },
+    )
+
+    report = build(_complete_session(mid), "同学", 1)
+
+    assert "CI-only 确定性合成" in report.markdown
+    assert "不得冒充 OECD 数据" in report.markdown
+    assert OECD_ICIO_DATASET_URL not in report.markdown
+
+
+@needs_artifacts
 def test_report_key_tracks_report_content_but_ignores_random_receipts():
     mid = artifacts.manifest_id()
     first = build(_complete_session(mid), "同学", 1)
@@ -209,6 +233,10 @@ def test_report_is_portable_markdown_with_summary_and_limitations():
     assert "Gephi" in report.markdown
     assert "GDP 平减指数为拟真 mock" in report.markdown
     assert "不输出 exporter-importer-sector" in report.markdown
+    assert OECD_ICIO_DATASET_URL in report.markdown
+    assert OECD_ICIO_METHODOLOGY_URL in report.markdown
+    assert OECD_ICIO_TERMS_URL in report.markdown
+    assert "不代表 OECD 审核、参与或背书" in report.markdown
 
 
 @needs_artifacts

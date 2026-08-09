@@ -7,6 +7,7 @@ import pytest
 
 from gvcsim import report
 from gvcsim.config import PROCESSED_DIR
+from gvcsim.data.citations import OECD_ICIO_DATASET_URL, OECD_ICIO_METHODOLOGY_URL, OECD_ICIO_TERMS_URL
 from gvcsim.regression.panel import CoefStat, RegressionResult
 
 
@@ -123,6 +124,32 @@ def test_build_is_pure_and_runs_one_joint_estimate_per_outcome(tmp_path: Path, m
     assert document.markdown.count("冲击前趋势联合检验") == 4
     assert "因果解释需谨慎" in document.markdown
     assert "即具备研究意义" not in document.markdown
+    assert OECD_ICIO_DATASET_URL in document.markdown
+    assert OECD_ICIO_METHODOLOGY_URL in document.markdown
+    assert OECD_ICIO_TERMS_URL in document.markdown
+    assert "不代表 OECD 审核、参与或背书" in document.markdown
+
+
+def test_ci_synthetic_report_never_claims_to_contain_oecd_observations(monkeypatch):
+    _stub_report_dependencies(monkeypatch)
+    monkeypatch.setattr(
+        report,
+        "manifest_provenance",
+        lambda: {
+            "data_sources": {
+                "ci_synthetic_icio": {
+                    "citation": "Deterministic CI-only fixture; contains no OECD observations.",
+                    "production_data": False,
+                }
+            }
+        },
+    )
+
+    document = report.build(2020)
+
+    assert "CI-only 确定性合成" in document.markdown
+    assert "不得冒充 OECD 数据" in document.markdown
+    assert OECD_ICIO_DATASET_URL not in document.markdown
 
 
 def test_generate_keeps_cli_file_output(tmp_path: Path, monkeypatch):

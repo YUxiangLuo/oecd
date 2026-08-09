@@ -16,6 +16,7 @@ from typing import Any, cast
 import pandas as pd
 
 from gvcsim import artifacts, evidence, quizzes, trusted_evidence
+from gvcsim.data.citations import report_source_disclosures, report_source_label
 from gvcsim.regression.design import (
     CONTROL_MODES,
     GRANULARITIES,
@@ -397,7 +398,7 @@ def _top5_table(values: pd.Series, entity_header: str, value_header: str, digits
     ]
 
 
-def _indicator_summary(year: int) -> list[str]:
+def _indicator_summary(year: int, source_label: str) -> list[str]:
     country_panel = _load_panel_file("panel_country.csv")
     snap = country_panel[country_panel["year"] == year].copy()
     snap = snap[snap["country"].astype(str) != ROW_CODE]
@@ -410,7 +411,7 @@ def _indicator_summary(year: int) -> list[str]:
     return [
         f"## 4. GVC 指标摘要（{year} 年截面）",
         "",
-        f"覆盖 {snap.shape[0]} 个经济体。以下是 OECD ICIO 计算出的全局背景，不代表学生执行了回归。",
+        f"覆盖 {snap.shape[0]} 个经济体。以下是 {source_label} 计算出的全局背景，不代表学生执行了回归。",
         "",
         "**FVA 份额最高**（出口中外国增加值占毛出口比重）：",
         "",
@@ -561,12 +562,14 @@ def _limitations(runs: list[dict[str, Any]]) -> list[str]:
 
 def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], provenance: dict[str, Any]) -> str:
     years = provenance["artifact"]["years"]
+    data_sources = _as_dict(provenance["artifact"].get("data_sources"))
+    source_label = report_source_label(data_sources)
     lines: list[str] = [
         "# 贸易政策冲击对全球价值链结构的影响",
         "",
         f"学生：{student}  ·  内容版本：`{provenance['session_fingerprint']}`",
         "",
-        "> **数据边界**：结果变量与网络指标来自真实 OECD ICIO "
+        f"> **数据边界**：结果变量与网络指标来自 {source_label}"
         f"（{years[0]}–{years[-1]}）；政策冲击为确定性教学 mock。"
         "本报告用于练习识别与推断，不构成现实政策结论。",
         "",
@@ -574,7 +577,7 @@ def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], p
     lines += _qc_sections(_as_dict(provenance["artifact"].get("qc")))
     lines += _quiz_sections(session)
     lines += _snapshot_sections(session)
-    lines += _indicator_summary(int(years[-1]))
+    lines += _indicator_summary(int(years[-1]), source_label)
     lines += _regression_sections(runs)
 
     build = provenance["artifact"].get("build") or {}
@@ -601,6 +604,10 @@ def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], p
         f"| 构建 Git commit / dirty | `{build.get('git_commit', '—')}` / `{build.get('git_dirty', '—')}` |",
         f"| 影响产物的 source tree SHA-256 | `{build.get('source_tree_sha256', '—')}` |",
         f"| 构建运行环境 | {runtime_summary} |",
+        "",
+        "### 数据引用与许可提示",
+        "",
+        *report_source_disclosures(data_sources),
         "",
         "同一组答题结果、报告中展示的实验快照、实际回归设计与数据产物会得到同一个 report_key。",
         "",

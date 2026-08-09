@@ -31,6 +31,7 @@ from gvcsim.artifact_retention import artifact_store_lock
 from gvcsim.artifacts import manifest_provenance, register_artifacts, validate_artifact, validate_release
 from gvcsim import config as config_module
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, ROOT, available_years, processed_years
+from gvcsim.data.citations import CI_SYNTHETIC_MARKER, artifact_data_sources
 from gvcsim.data import controls, loader, quality
 from gvcsim.indicators import length, network, production, tradeflow
 from gvcsim.indicators.core import build_arrays
@@ -320,6 +321,7 @@ def build_panel(*, allow_qc_override: bool = False) -> pd.DataFrame:
     country.to_csv(PROCESSED_DIR / "panel_country.csv", index=False)
     source_paths: list[Path] = [
         *sorted(RAW_DATA_DIR.glob("ICIO*_*.csv")),
+        *([RAW_DATA_DIR / CI_SYNTHETIC_MARKER] if (RAW_DATA_DIR / CI_SYNTHETIC_MARKER).is_file() else []),
         # 受控收录整个 Python 后端：不仅指标公式，QC、报告、完成度 gate 和 API
         # 都会改变学生最终看到/提交的内容，漏登记会让 dirty 构建冒充 commit 版本。
         *sorted((ROOT / "gvcsim").rglob("*.py")),
@@ -338,6 +340,7 @@ def build_panel(*, allow_qc_override: bool = False) -> pd.DataFrame:
         ],
         metadata={
             "qc": {"controls": controls_qc, "shocks": shocks_qc},
+            "data_sources": artifact_data_sources(RAW_DATA_DIR),
             "shock_weighting": {
                 "primary": shocks.EXPOSURE_MODE_FIXED_PRETREATMENT,
                 "robustness": shocks.EXPOSURE_MODE_CONTEMPORANEOUS,
