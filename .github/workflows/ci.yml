@@ -79,3 +79,141 @@ jobs:
         run: bun run build  # build 脚本本身是 tsc -b && vite build,已包含类型检查
       - name: Run frontend unit tests
         run: bun run test:unit
+
+  browser-e2e:
+    name: Desktop browser smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: alice
+          POSTGRES_PASSWORD: "111111"
+          POSTGRES_DB: gvclab_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U alice -d gvclab_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      GVCSIM_PG_DSN: postgresql://alice:111111@127.0.0.1:5432/gvclab_e2e
+      CI: "true"
+      GVCSIM_CI_SYNTHETIC: "1"
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: ".python-version"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.0
+        with:
+          enable-cache: true
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install application dependencies
+        run: |
+          uv sync --locked --group dev
+          cd frontend
+          bun install --frozen-lockfile
+      - name: Build CI-only synthetic release
+        run: uv run python scripts/build_ci_synthetic_data.py
+      - name: Build production frontend bundle
+        run: cd frontend && bun run build
+      - name: Install agent-browser and Chrome
+        env:
+          AGENT_BROWSER_VERSION: "0.33.2"
+        run: |
+          bun add --global --trust "agent-browser@${AGENT_BROWSER_VERSION}"
+          agent-browser install --with-deps
+          agent-browser doctor
+      - name: Run student and teacher browser smoke
+        env:
+          GVCSIM_DEMO_MODE: "1"
+          GVCSIM_BOOTSTRAP_PASSWORD: ci-browser-private-password
+          GVCSIM_AUTH_SECRET: ci-browser-auth-secret-at-least-32-bytes
+          GVCSIM_EVIDENCE_SECRET: ci-browser-evidence-secret-at-least-32-bytes
+        run: |
+          set -euo pipefail
+          output_dir="$GITHUB_WORKSPACE/dogfood-output/ci-browser"
+          mkdir -p "$output_dir/student" "$output_dir/teacher"
+
+          api_pid=
+          ui_pid=
+          cleanup() {
+            status=$?
+            trap - EXIT
+            for pid in "$ui_pid" "$api_pid"; do
+              if [[ -n "$pid" ]]; then
+                kill -TERM -- "-$pid" >/dev/null 2>&1 || true
+              fi
+            done
+            for pid in "$ui_pid" "$api_pid"; do
+              if [[ -n "$pid" ]]; then
+                wait "$pid" >/dev/null 2>&1 || true
+              fi
+            done
+            if [[ "$status" -ne 0 ]]; then
+              echo "--- API log ---" >&2
+              tail -200 "$output_dir/api.log" >&2 || true
+              echo "--- frontend log ---" >&2
+              tail -200 "$output_dir/frontend.log" >&2 || true
+            fi
+            exit "$status"
+          }
+          trap cleanup EXIT
+
+          uv run gvcsim classroom-init --reset
+          uv run gvcsim preflight
+
+          setsid uv run gvcsim serve --host 127.0.0.1 --port 8000 --no-access-log \
+            >"$output_dir/api.log" 2>&1 &
+          api_pid=$!
+          setsid bash -c 'cd frontend && exec bun run preview -- --host 127.0.0.1 --port 5173' \
+            >"$output_dir/frontend.log" 2>&1 &
+          ui_pid=$!
+
+          ready=0
+          for _ in $(seq 1 90); do
+            if curl -fsS http://127.0.0.1:8000/health >/dev/null 2>&1 \
+              && curl -fsS http://127.0.0.1:5173/ >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$api_pid" 2>/dev/null || ! kill -0 "$ui_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready" -ne 1 ]]; then
+            echo "browser smoke services did not become ready" >&2
+            exit 1
+          fi
+
+          export GVCSIM_BASE_URL=http://127.0.0.1:5173
+          export GVCSIM_E2E_PASSWORD="$GVCSIM_BOOTSTRAP_PASSWORD"
+          export GVCSIM_E2E_NAMESPACE="gvcsim-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          GVCSIM_E2E_USERNAME=student \
+          GVCSIM_E2E_SESSION=student \
+          GVCSIM_E2E_ARTIFACT_DIR="$output_dir/student" \
+            scripts/agent_browser_smoke.sh
+
+          GVCSIM_E2E_USERNAME=teacher \
+          GVCSIM_E2E_NEW_PASSWORD=ci-browser-rotated-private-password \
+          GVCSIM_E2E_SESSION=teacher \
+          GVCSIM_E2E_ARTIFACT_DIR="$output_dir/teacher" \
+            scripts/agent_browser_teacher_smoke.sh
+
+          curl -fsS http://127.0.0.1:8000/health >"$output_dir/health.json"
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: browser-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dogfood-output/ci-browser/
+          if-no-files-found: warn
+          retention-days: 14

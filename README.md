@@ -227,16 +227,25 @@ cd frontend
 bun run test:unit
 bun run build
 
-# 前后端已启动且已准备专用测试账号时，跑真实浏览器路由/请求 smoke
+# 前后端已启动且已准备专用测试账号时，跑真实桌面浏览器 smoke
 GVCSIM_BASE_URL=http://127.0.0.1:5173 \
 GVCSIM_E2E_USERNAME=<测试学生> \
 GVCSIM_E2E_PASSWORD=<测试口令> \
 scripts/agent_browser_smoke.sh
+
+# 隔离测试库中的教师改密、旧密码失效与重新登录（会修改该测试账号密码）
+GVCSIM_BASE_URL=http://127.0.0.1:5173 \
+GVCSIM_E2E_USERNAME=<测试教师> \
+GVCSIM_E2E_PASSWORD=<当前测试口令> \
+GVCSIM_E2E_NEW_PASSWORD=<新的测试口令> \
+scripts/agent_browser_teacher_smoke.sh
 ```
 
-GitHub Actions 在每次 push 上跑同一组检查(后端带 PostgreSQL 服务、前端构建与单测)。
-`agent_browser_smoke.sh` 会在真实登录态下挂载学生端 1–16 步，并对浏览器错误和失败 API 请求做失败判定；
-完整答题、回归和报告提交仍应在固定真实数据快照上执行夜间/发布前全流程审查。
+GitHub Actions 在每次 push/PR 上除后端 PostgreSQL 测试、前端构建与单测外，还会用 CI-only 合成 ICIO
+完整发布产物，启动 FastAPI 与编译后的 Vite preview，并通过 agent-browser 执行桌面端门禁：学生 1–16 步、
+教师自助改密、旧密码失效、新密码重新登录、失败 API/页面错误检查及 WCAG 2 A/AA axe 审计。截图、HAR、
+a11y JSON、健康状态和服务日志会作为 CI artifact 保留 14 天。完整答题、回归和报告提交仍应在固定真实
+数据快照上执行夜间/发布前全流程审查。
 
 ## 使用边界
 

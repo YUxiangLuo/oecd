@@ -8,15 +8,24 @@ set -euo pipefail
 browser_namespace=${GVCSIM_E2E_NAMESPACE:-gvcsim-e2e}
 browser_session=${GVCSIM_E2E_SESSION:-"student-$(date -u +%Y%m%dT%H%M%SZ)"}
 artifact_dir=${GVCSIM_E2E_ARTIFACT_DIR:-}
+viewport_width=${GVCSIM_E2E_VIEWPORT_WIDTH:-1440}
+viewport_height=${GVCSIM_E2E_VIEWPORT_HEIGHT:-1000}
+[[ "$viewport_width" =~ ^[0-9]+$ && "$viewport_height" =~ ^[0-9]+$ && "$viewport_width" -ge 1200 ]] || {
+  echo "desktop smoke requires a numeric viewport of at least 1200px width" >&2
+  exit 2
+}
 ab=(agent-browser --namespace "$browser_namespace" --session "$browser_session")
+temporary_a11y_report=
 
 cleanup() {
   "${ab[@]}" close >/dev/null 2>&1 || true
+  [[ -z "$temporary_a11y_report" ]] || rm -f "$temporary_a11y_report"
 }
 trap cleanup EXIT
 
 agent-browser doctor >/dev/null
 "${ab[@]}" open "$GVCSIM_BASE_URL"
+"${ab[@]}" set viewport "$viewport_width" "$viewport_height"
 "${ab[@]}" fill '#login-user' "$GVCSIM_E2E_USERNAME"
 "${ab[@]}" fill '#login-pass' "$GVCSIM_E2E_PASSWORD"
 "${ab[@]}" click 'button[type="submit"]'
@@ -31,11 +40,32 @@ done
 
 if [[ -n "$artifact_dir" ]]; then
   install -d -m 0750 "$artifact_dir"
+  a11y_report="$artifact_dir/student-step16-a11y.json"
   "${ab[@]}" screenshot "$artifact_dir/student-step16.png" --full
   "${ab[@]}" network har start
   "${ab[@]}" reload
   "${ab[@]}" wait --load networkidle
   "${ab[@]}" network har stop "$artifact_dir/student-step16.har"
+else
+  temporary_a11y_report=$(mktemp)
+  a11y_report=$temporary_a11y_report
+fi
+
+"${ab[@]}" a11y --tags wcag2a,wcag2aa --json >"$a11y_report"
+a11y_violations=$(python3 - "$a11y_report" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    payload = json.load(handle)
+if payload.get("success") is not True:
+    raise SystemExit("agent-browser accessibility audit did not complete")
+print(len((payload.get("data") or {}).get("violations") or []))
+PY
+)
+if [[ "$a11y_violations" -ne 0 ]]; then
+  cat "$a11y_report" >&2
+  exit 1
 fi
 
 page_errors=$("${ab[@]}" errors)
@@ -50,4 +80,4 @@ if [[ -n "$failed_requests" ]]; then
   exit 1
 fi
 
-echo "student routes 1-16 rendered without browser or API errors"
+echo "student routes 1-16 rendered without browser/API errors or WCAG 2 A/AA violations"

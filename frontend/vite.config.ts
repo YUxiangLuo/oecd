@@ -9,4 +9,11 @@ export default defineConfig({
       "/api": "http://127.0.0.1:8000",
     },
   },
+  // CI browser smoke runs the compiled bundle through `vite preview`; keep its
+  // same-origin API behavior aligned with development and the production Nginx route.
+  preview: {
+    proxy: {
+      "/api": "http://127.0.0.1:8000",
+    },
+  },
 });
