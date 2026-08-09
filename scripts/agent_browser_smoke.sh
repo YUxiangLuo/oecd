@@ -36,6 +36,19 @@ agent-browser doctor >/dev/null
 for step in $(seq 1 16); do
   "${ab[@]}" open "$GVCSIM_BASE_URL/?step=$step"
   "${ab[@]}" wait '.step-header-mid h2'
+  if [[ "$step" -eq 10 ]]; then
+    # The network uses one portalled dialog instance: node activation expands it,
+    # Escape closes it, and focus/selection return to the invoking SVG node.
+    "${ab[@]}" wait '.network-node[aria-label^="USA "]'
+    "${ab[@]}" wait --load networkidle
+    "${ab[@]}" focus '.network-node[aria-label^="USA "]'
+    "${ab[@]}" press Enter
+    "${ab[@]}" wait '[role="dialog"][aria-modal="true"]'
+    "${ab[@]}" eval '(() => { const d=document.querySelector("[role=dialog][aria-modal=true]"); if(document.querySelectorAll(".network-card").length!==1) throw new Error("network dialog duplicated the graph"); if(document.activeElement?.textContent?.trim()!=="退出大图") throw new Error("network dialog did not receive focus"); return true; })()'
+    "${ab[@]}" press Escape
+    "${ab[@]}" wait --fn '() => !document.querySelector("[role=dialog]")'
+    "${ab[@]}" eval '(() => { const n=document.activeElement; if(!n?.classList.contains("network-node") || n.getAttribute("aria-pressed")!=="true") throw new Error("network dialog did not restore its node focus and selection"); return true; })()'
+  fi
 done
 
 if [[ -n "$artifact_dir" ]]; then
