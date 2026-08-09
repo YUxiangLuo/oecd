@@ -36,7 +36,7 @@
 1. 设置 `GVCSIM_ENV=production`，关闭 demo mode，使用 HTTPS 和受信反向代理；
 2. 为 `GVCSIM_AUTH_SECRET`、`GVCSIM_EVIDENCE_SECRET` 和数据库使用不同的高熵秘密，并存入专用 secret manager；
 3. 首次登录立即轮换教师临时密码，离职/泄露时重置账号并撤销会话；
-4. 先备份，再显式执行 `classroom-init` 迁移和只读 `preflight`；
+4. 按 [`docs/BACKUP_RESTORE.md`](./docs/BACKUP_RESTORE.md) 备份并完成隔离恢复演练，再显式执行 `classroom-init` 迁移和只读 `preflight`；
 5. 限制 PostgreSQL、artifact、备份、服务日志和 systemd 环境文件的主机权限；
 6. 保留并监控反向代理日志与 `audit_log`，对登录爆破、跨班访问和异常报告下载告警；
 7. 定期执行恢复演练、依赖更新、浏览器 CI、100 人容量验收和 `artifact-prune` dry-run；

@@ -21,13 +21,22 @@ if [[ -e "$dump_path" || -e "$dump_path.sha256" ]]; then
   exit 1
 fi
 
-# Do not expose a password-bearing DSN in argv. Dump to the destination
-# filesystem first, then publish atomically so a failed pg_dump never looks
-# like a completed backup.
+# Do not expose a password-bearing DSN in argv. Build and validate on the
+# destination filesystem, then publish the checksum sidecar last as the
+# completion marker; restore tooling rejects an archive without that sidecar.
 temp_dump=$(mktemp "$backup_dir/.classroom-$timestamp.XXXXXX.dump")
+temp_checksum=$(mktemp "$backup_dir/.classroom-$timestamp.XXXXXX.sha256")
 service_file=$(mktemp "$backup_dir/.pg-service-$timestamp.XXXXXX.conf")
+published_dump=
+published_checksum=
 cleanup() {
-  rm -f -- "$temp_dump" "$service_file"
+  rm -f -- "$temp_dump" "$temp_checksum" "$service_file"
+  if [[ -n "$published_checksum" ]]; then
+    rm -f -- "$published_checksum"
+  fi
+  if [[ -n "$published_dump" ]]; then
+    rm -f -- "$published_dump"
+  fi
 }
 trap cleanup EXIT
 "$project_python" - "$service_file" <<'PY'
@@ -53,11 +62,29 @@ PY
 PGSERVICEFILE="$service_file" PGSERVICE=gvcsim_backup \
   pg_dump --no-password --format=custom --no-owner --no-acl --file="$temp_dump"
 chmod 0600 "$temp_dump"
-mv -- "$temp_dump" "$dump_path"
+# 在发布完成标记前证明 custom archive 的目录可读。restore drill 仍会再次验证。
+pg_restore --list "$temp_dump" >/dev/null
+checksum=$(sha256sum "$temp_dump" | awk '{print $1}')
+printf '%s  %s\n' "$checksum" "$(basename "$dump_path")" > "$temp_checksum"
+chmod 0600 "$temp_checksum"
+sync -f "$temp_dump" "$temp_checksum"
+# Hard-link publication is atomic and fails rather than replacing a path won
+# by a concurrent backup process. Temporary and destination are on one FS.
+ln -- "$temp_dump" "$dump_path"
+published_dump=$dump_path
+rm -f -- "$temp_dump"
+ln -- "$temp_checksum" "$dump_path.sha256"
+published_checksum=$dump_path.sha256
+rm -f -- "$temp_checksum"
+sync -f "$backup_dir"
+published_checksum=
+published_dump=
 rm -f -- "$service_file"
 trap - EXIT
-dump_path=$(realpath "$dump_path")
-sha256sum "$dump_path" > "$dump_path.sha256"
 
-echo "backup=$dump_path"
-echo "verify=sha256sum -c $dump_path.sha256"
+dump_path=$(realpath "$dump_path")
+backup_parent=$(dirname "$dump_path")
+backup_name=$(basename "$dump_path")
+printf 'backup=%s\n' "$dump_path"
+printf 'pg_dump=%s\n' "$(pg_dump --version)"
+printf 'verify=(cd %q && sha256sum -c %q)\n' "$backup_parent" "$backup_name.sha256"

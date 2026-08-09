@@ -126,6 +126,9 @@ uv run gvcsim classroom-init
 uv run gvcsim serve --reload
 ```
 
+正式迁移前必须备份数据库和内容寻址产物，并在隔离的 `_restore_drill` 空库完成恢复校验；安全门禁、
+JSON 回执与清理步骤见 [`docs/BACKUP_RESTORE.md`](./docs/BACKUP_RESTORE.md)。
+
 API 默认位于 `http://localhost:8000`，交互式文档位于 `http://localhost:8000/docs`。
 `serve` 与 `preflight` 只读校验数据库 schema，不会自动建表或迁移；新建和升级数据库都必须先显式
 运行 `gvcsim classroom-init`，以便把备份、迁移和服务启动拆成可审计的独立步骤。

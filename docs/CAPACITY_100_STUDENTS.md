@@ -143,10 +143,19 @@ curl -fsS http://127.0.0.1:18000/health
 占用业务 `flock`；动态使用量应由独立指标采集。Nginx 对两个公开探针共用
 `5r/s + burst 10` 的 per-IP 限流。
 
-## 数据库迁移
+## 数据库备份、恢复与迁移
 
 本次 schema 为 `gvcsim-teaching-db-v6`，从 v3、v4、v5 都有事务内迁移路径。
-上线前必须备份，再把迁移作为独立步骤运行；只有它成功后才能启动或重启服务：
+上线前必须先生成数据库备份，并在隔离的 `_restore_drill` 空库完成恢复演练；完整的产物备份、校验、回执和
+清理流程见 [`BACKUP_RESTORE.md`](./BACKUP_RESTORE.md)：
+
+```bash
+GVCSIM_BACKUP_DIR=/secure-backups/gvcsim scripts/backup_classroom.sh
+uv run python scripts/restore_classroom_drill.py /secure-backups/gvcsim/classroom-YYYYMMDDTHHMMSSZ.dump \
+  --receipt dogfood-output/backup-restore/receipt.json
+```
+
+确认恢复回执后，再把迁移作为独立步骤运行；只有它成功后才能启动或重启服务：
 
 ```bash
 uv run gvcsim classroom-init

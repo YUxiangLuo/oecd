@@ -1,14 +1,17 @@
 """64 核 / 100 学生部署模板的容量不变量。"""
 
+import argparse
 import asyncio
+import hashlib
 import json
 import os
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from scripts import load_test_100_students, provision_load_test
+from scripts import load_test_100_students, provision_load_test, restore_classroom_drill
 
 from gvcsim.config import ROOT
 
@@ -207,11 +210,138 @@ def test_capacity_harness_rejects_requested_count_outside_acceptance_range(tmp_p
         asyncio.run(load_test_100_students._run(_load_test_args(users_file, students)))
 
 
+def test_restore_drill_requires_disposable_exactly_confirmed_database():
+    dsn = "postgresql://alice:private@127.0.0.1:5432/gvclab_release_restore_drill"
+
+    target = restore_classroom_drill._restore_target(dsn, "gvclab_release_restore_drill")
+
+    assert target.database == "gvclab_release_restore_drill"
+    assert target.params["password"] == "private"
+    with pytest.raises(restore_classroom_drill.DrillError, match="完全一致"):
+        restore_classroom_drill._restore_target(dsn, "gvclab")
+    with pytest.raises(restore_classroom_drill.DrillError, match="必须匹配"):
+        restore_classroom_drill._restore_target("postgresql://alice:private@127.0.0.1:5432/gvclab", "gvclab")
+    with pytest.raises(restore_classroom_drill.DrillError, match="不接受"):
+        restore_classroom_drill._restore_target("service=production", "gvclab_release_restore_drill")
+
+
+def test_restore_drill_verifies_private_backup_and_bound_checksum(tmp_path: Path):
+    backup = tmp_path / "classroom.dump"
+    backup.write_bytes(b"custom archive fixture")
+    backup.chmod(0o600)
+    checksum = hashlib.sha256(backup.read_bytes()).hexdigest()
+    sidecar = tmp_path / "classroom.dump.sha256"
+    sidecar.write_text(f"{checksum}  {backup.name}\n", encoding="utf-8")
+    sidecar.chmod(0o600)
+
+    assert restore_classroom_drill._private_regular_file(backup, "backup") == backup
+    assert restore_classroom_drill._verified_checksum(backup, sidecar) == checksum
+
+    sidecar.write_text(f"{checksum}  another.dump\n", encoding="utf-8")
+    with pytest.raises(restore_classroom_drill.DrillError, match="文件名"):
+        restore_classroom_drill._verified_checksum(backup, sidecar)
+    sidecar.write_text(f"{checksum}  {backup.name}\n", encoding="utf-8")
+    backup.write_bytes(b"tampered archive fixture")
+    with pytest.raises(restore_classroom_drill.DrillError, match="校验失败"):
+        restore_classroom_drill._verified_checksum(backup, sidecar)
+    backup.chmod(0o644)
+    with pytest.raises(restore_classroom_drill.DrillError, match="权限过宽"):
+        restore_classroom_drill._private_regular_file(backup, "backup")
+
+
+def test_restore_drill_service_file_is_private_and_receipt_never_overwrites(tmp_path: Path):
+    target = restore_classroom_drill._restore_target(
+        "postgresql://alice:private@127.0.0.1:5432/gvclab_release_restore_drill",
+        "gvclab_release_restore_drill",
+    )
+    service = tmp_path / "pg_service.conf"
+    restore_classroom_drill._write_service_file(service, target)
+    assert service.stat().st_mode & 0o777 == 0o600
+    assert "password=private" in service.read_text(encoding="utf-8")
+    redacted = restore_classroom_drill._redact(
+        "failed for postgresql://alice:private@127.0.0.1/db with private",
+        "postgresql://alice:private@127.0.0.1/db",
+        target,
+    )
+    assert "private" not in redacted
+    assert "<redacted-dsn>" in redacted
+
+    receipt = tmp_path / "evidence" / "receipt.json"
+    payload = {"kind": restore_classroom_drill.RECEIPT_KIND, "target_database": target.database}
+    restore_classroom_drill._write_receipt(receipt, payload)
+    assert receipt.stat().st_mode & 0o777 == 0o600
+    assert json.loads(receipt.read_text(encoding="utf-8")) == payload
+    with pytest.raises(restore_classroom_drill.DrillError, match="拒绝覆盖"):
+        restore_classroom_drill._write_receipt(receipt, payload)
+    assert not list(receipt.parent.glob(".*.tmp"))
+
+
+def test_restore_drill_never_passes_password_dsn_or_destructive_flags_to_pg_restore(tmp_path: Path, monkeypatch):
+    backup = tmp_path / "classroom.dump"
+    backup.write_bytes(b"archive")
+    backup.chmod(0o600)
+    checksum = hashlib.sha256(backup.read_bytes()).hexdigest()
+    sidecar = tmp_path / "classroom.dump.sha256"
+    sidecar.write_text(f"{checksum}  {backup.name}\n", encoding="utf-8")
+    sidecar.chmod(0o600)
+    dsn = "postgresql://alice:private@127.0.0.1:5432/gvclab_release_restore_drill"
+    monkeypatch.setenv("GVCSIM_RESTORE_DSN", dsn)
+    monkeypatch.setenv("GVCSIM_RESTORE_DRILL_CONFIRM", "gvclab_release_restore_drill")
+    monkeypatch.setattr(restore_classroom_drill.shutil, "which", lambda _name: "/usr/bin/pg_restore")
+    monkeypatch.setattr(restore_classroom_drill, "_assert_empty_target", lambda *_args: None)
+    monkeypatch.setattr(
+        restore_classroom_drill,
+        "_inventory",
+        lambda _dsn: {
+            "schema_version": "gvcsim-teaching-db-v6",
+            "postgresql_server_version_num": 180004,
+            "table_counts": {},
+            "referenced_artifacts": {},
+        },
+    )
+    commands: list[list[str]] = []
+
+    def fake_run(command, _environment, *, error_message):
+        del error_message
+        commands.append(command)
+        stdout = "preflight ok" if command[0] != "pg_restore" else ""
+        return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(restore_classroom_drill, "_run_tool", fake_run)
+
+    payload = restore_classroom_drill.run(argparse.Namespace(backup=backup, receipt=None))
+
+    restore_command = next(command for command in commands if "--single-transaction" in command)
+    rendered = " ".join(restore_command)
+    assert dsn not in rendered
+    assert "private" not in rendered
+    assert "--clean" not in restore_command
+    assert "--create" not in restore_command
+    assert "--single-transaction" in restore_command
+    assert "--dbname=service=gvcsim_restore_drill" in restore_command
+    assert payload["target_database"] == "gvclab_release_restore_drill"
+
+
 def test_capacity_harness_is_executable_and_documented():
-    for relative in ("scripts/provision_load_test.py", "scripts/load_test_100_students.py"):
+    for relative in (
+        "scripts/provision_load_test.py",
+        "scripts/load_test_100_students.py",
+        "scripts/restore_classroom_drill.py",
+    ):
         path = ROOT / relative
         assert path.stat().st_mode & 0o111
     guide = (ROOT / "docs" / "CAPACITY_100_STUDENTS.md").read_text(encoding="utf-8")
     assert "50–100" in guide
     assert "load_test_100_students.py" in guide
     assert "gvcsim-teaching-db-v6" in guide
+    assert "BACKUP_RESTORE.md" in guide
+
+    backup_script = (ROOT / "scripts" / "backup_classroom.sh").read_text(encoding="utf-8")
+    assert backup_script.index('pg_restore --list "$temp_dump"') < backup_script.index(
+        'ln -- "$temp_dump" "$dump_path"'
+    )
+    assert 'chmod 0600 "$temp_checksum"' in backup_script
+    restore_guide = (ROOT / "docs" / "BACKUP_RESTORE.md").read_text(encoding="utf-8")
+    assert "_restore_drill" in restore_guide
+    assert "--single-transaction" in restore_guide
+    assert "不会自动删除" in restore_guide
