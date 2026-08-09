@@ -173,7 +173,8 @@ def test_report_binds_provenance_and_selected_quiz_answers():
     assert mid in report.markdown
     assert "Z 表的一格应该怎样解释" in report.markdown
     assert "行方国家×行业向列方国家×行业提供的中间投入" in report.markdown
-    assert "mock" in report.markdown and "OECD ICIO" in report.markdown
+    assert "mock" in report.markdown
+    assert "数据引用与许可提示" in report.markdown
 
 
 @needs_artifacts
@@ -197,6 +198,24 @@ def test_ci_synthetic_teaching_report_does_not_claim_real_oecd_data(monkeypatch)
     assert "CI-only 确定性合成" in report.markdown
     assert "不得冒充 OECD 数据" in report.markdown
     assert OECD_ICIO_DATASET_URL not in report.markdown
+
+
+@needs_artifacts
+def test_oecd_teaching_report_includes_stable_attribution(monkeypatch):
+    mid = artifacts.manifest_id()
+    provenance = artifacts.manifest_provenance()
+    monkeypatch.setattr(
+        artifacts,
+        "manifest_provenance",
+        lambda: {**provenance, "data_sources": {"oecd_icio": {}}},
+    )
+
+    report = build(_complete_session(mid), "同学", 1)
+
+    assert OECD_ICIO_DATASET_URL in report.markdown
+    assert OECD_ICIO_METHODOLOGY_URL in report.markdown
+    assert OECD_ICIO_TERMS_URL in report.markdown
+    assert "不代表 OECD 审核、参与或背书" in report.markdown
 
 
 @needs_artifacts
@@ -233,10 +252,6 @@ def test_report_is_portable_markdown_with_summary_and_limitations():
     assert "Gephi" in report.markdown
     assert "GDP 平减指数为拟真 mock" in report.markdown
     assert "不输出 exporter-importer-sector" in report.markdown
-    assert OECD_ICIO_DATASET_URL in report.markdown
-    assert OECD_ICIO_METHODOLOGY_URL in report.markdown
-    assert OECD_ICIO_TERMS_URL in report.markdown
-    assert "不代表 OECD 审核、参与或背书" in report.markdown
 
 
 @needs_artifacts

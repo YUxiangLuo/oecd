@@ -82,6 +82,10 @@ def _stub_report_dependencies(monkeypatch):
     monkeypatch.setattr(report, "_load_panel_file", load)
     monkeypatch.setattr(report, "processed_years", lambda: [2020])
     monkeypatch.setattr(report, "run_design_with_benchmark", estimate)
+    # Keep this unit fixture independent of whichever real/synthetic artifact
+    # happened to be built before pytest. The dedicated synthetic test below
+    # replaces this metadata explicitly.
+    monkeypatch.setattr(report, "manifest_provenance", lambda: {"data_sources": {"oecd_icio": {}}})
     return calls
 
 
