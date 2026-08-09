@@ -14,8 +14,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from gvcsim import api as api_mod
-from gvcsim import auth, shocks
-from gvcsim.api import _clean, app
+from gvcsim import auth, data_routes, regression_routes, shocks
+from gvcsim.api import app
+from gvcsim.data_routes import _clean
 from gvcsim.artifacts import NETWORK_ALGORITHM, manifest_id, register_artifacts
 from gvcsim.classroom import db as classroom_db
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, processed_years
@@ -133,8 +134,8 @@ def test_liveness_is_public_and_dependency_free(monkeypatch):
 
 
 def test_cpu_endpoints_wait_asynchronously():
-    assert inspect.iscoroutinefunction(api_mod.regression_run)
-    assert inspect.iscoroutinefunction(api_mod.regression_placebo)
+    assert inspect.iscoroutinefunction(regression_routes.regression_run)
+    assert inspect.iscoroutinefunction(regression_routes.regression_placebo)
     assert inspect.iscoroutinefunction(api_mod.classroom_routes.generate_report)
 
 
@@ -335,14 +336,14 @@ def test_all_outcomes_reach_design_and_run_contract(monkeypatch: pytest.MonkeyPa
         def to_dict(self) -> dict[str, str]:
             return {"outcome": self.outcome}
 
-    monkeypatch.setattr(api_mod, "_read_csv", lambda _name: object())
+    monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: object())
 
     def estimate(_panel, design):
         calls.append(design.outcome)
         return StubResult(design.outcome), {"backend": "stub"}
 
-    monkeypatch.setattr(api_mod, "run_design_with_benchmark", estimate)
-    monkeypatch.setattr(api_mod, "manifest_id", lambda: "manifest-test")
+    monkeypatch.setattr(regression_routes, "run_design_with_benchmark", estimate)
+    monkeypatch.setattr(regression_routes, "manifest_id", lambda: "manifest-test")
 
     def evidence_event(_username, step, kind, manifest_id, *_args, **_kwargs):
         return {
@@ -552,7 +553,7 @@ def test_shock_events(monkeypatch):
         row = {column: "" for column in note_columns.values()}
         row[note_columns[event["shock_type"]]] = event["name"]
         panel_rows.append(row)
-    monkeypatch.setattr(api_mod, "_read_shocks", lambda: pd.DataFrame(panel_rows))
+    monkeypatch.setattr(data_routes, "_read_shocks", lambda: pd.DataFrame(panel_rows))
     resp = client.get("/api/shocks/events")
     assert resp.status_code == 200
     body = resp.json()
@@ -588,7 +589,7 @@ def test_shock_events_hide_definitions_absent_from_current_panel(monkeypatch):
         "export_control": "BIS 实体清单:华为及关联公司",
     }
     monkeypatch.setattr(
-        api_mod,
+        data_routes,
         "_read_shocks",
         lambda: pd.DataFrame(
             {
@@ -725,7 +726,7 @@ def test_regression_run(ci_synthetic_contract):
 
 
 def test_regression_capacity_saturation_returns_retryable_429(monkeypatch):
-    monkeypatch.setattr(api_mod, "_read_csv", lambda _name: object())
+    monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: object())
 
     @asynccontextmanager
     async def saturated(*_args, **_kwargs):
