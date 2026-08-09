@@ -1,5 +1,6 @@
-import { useId, useMemo, useRef, useState } from "react";
-import { LabeledControl } from "../../a11y";
+import { useId, useMemo, useRef, useState, type RefObject } from "react";
+import { createPortal } from "react-dom";
+import { LabeledControl, useDialogFocus } from "../../a11y";
 import { formatMetric } from "../../format";
 import type { NetworkData } from "../../types";
 import { CAT, Legend, REGION_OF, REGIONS, SEQ, cardStyle, countryLabel, num, useTip } from "../shared";
@@ -24,6 +25,14 @@ function seqColor(value: number, max: number) {
   return SEQ[idx];
 }
 
+/** Inline activation always opens the dialog; activation inside it only changes selection. */
+export function networkNodeActivation(selected: string | null, country: string, expanded: boolean) {
+  return {
+    selected: expanded && selected === country ? null : country,
+    expanded: true,
+  };
+}
+
 /** Roving-tabindex navigation keeps a dense country graph to one Tab stop. */
 export function nextNetworkNode(
   nodes: readonly string[],
@@ -43,8 +52,26 @@ export function nextNetworkNode(
   return null;
 }
 
+function NetworkDialogFocus({
+  containerRef,
+  initialFocusRef,
+  returnFocusRef,
+  onClose,
+}: {
+  containerRef: RefObject<HTMLElement | null>;
+  initialFocusRef: RefObject<HTMLElement | SVGElement | null>;
+  returnFocusRef: RefObject<HTMLElement | SVGElement | null>;
+  onClose: () => void;
+}) {
+  useDialogFocus({ containerRef, initialFocusRef, returnFocusRef, onClose });
+  return null;
+}
+
 export function NetworkViz({ data }: { data: NetworkData }) {
-  const markerId = `network-edge-arrow-${useId().replaceAll(":", "")}`;
+  const idBase = useId().replaceAll(":", "");
+  const markerId = `network-edge-arrow-${idBase}`;
+  const dialogTitleId = `network-dialog-title-${idBase}`;
+  const dialogDescriptionId = `network-dialog-description-${idBase}`;
   const { wrapRef, Tip, show, hide } = useTip();
   const [hovered, setHovered] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -52,7 +79,12 @@ export function NetworkViz({ data }: { data: NetworkData }) {
   const [colorMode, setColorMode] = useState<NetworkColorMode>("region");
   const [edgeThreshold, setEdgeThreshold] = useState(0);
   const [keyboardFocus, setKeyboardFocus] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [placeholderHeight, setPlaceholderHeight] = useState<number | null>(null);
   const nodeRefs = useRef<Record<string, SVGGElement | null>>({});
+  const returnFocusCountryRef = useRef<string | null>(null);
+  const returnFocusRef = useRef<HTMLElement | SVGElement | null>(null);
+  const dialogInitialFocusRef = useRef<HTMLElement | SVGElement | null>(null);
 
   const model = useMemo(() => {
     const W = 1000, H = 560, cx = W / 2, cy = H / 2;
@@ -152,9 +184,22 @@ export function NetworkViz({ data }: { data: NetworkData }) {
     : selected && pos[selected]
       ? selected
       : nodeOrder[0] ?? null;
+  const closeExpanded = () => {
+    hide();
+    setHovered(null);
+    setExpanded(false);
+  };
   const activateNode = (country: string) => {
     setKeyboardFocus(country);
-    setSelected((current) => current === country ? null : country);
+    hide();
+    setHovered(null);
+    if (!expanded) {
+      setPlaceholderHeight(wrapRef.current?.getBoundingClientRect().height ?? null);
+      returnFocusCountryRef.current = country;
+      returnFocusRef.current = nodeRefs.current[country] ?? null;
+    }
+    setSelected((current) => networkNodeActivation(current, country, expanded).selected);
+    setExpanded(true);
   };
   const accessibleNodeLabel = (country: string) => [
     countryLabel(country),
@@ -162,10 +207,36 @@ export function NetworkViz({ data }: { data: NetworkData }) {
     ...NETWORK_METRICS.map((metric) =>
       `${metric.label} ${fmtNetworkMetric(metrics[metric.key][country] ?? 0, metric.format)}`),
     selected === country ? "已选中" : "未选中",
+    expanded ? "当前处于大图模式" : "激活后进入大图模式",
   ].join("，");
 
-  return (
-    <div ref={wrapRef} className="network-card" style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+  const card = (
+    <div
+      ref={wrapRef}
+      className={`network-card${expanded ? " network-card--fullscreen" : ""}`}
+      style={{ ...cardStyle, padding: 0, overflow: "hidden" }}
+      role={expanded ? "dialog" : undefined}
+      aria-modal={expanded ? "true" : undefined}
+      aria-labelledby={expanded ? dialogTitleId : undefined}
+      aria-describedby={expanded ? dialogDescriptionId : undefined}
+      tabIndex={expanded ? -1 : undefined}
+    >
+      {expanded && (
+        <>
+          <h2 id={dialogTitleId} className="sr-only">贸易网络大图</h2>
+          <p id={dialogDescriptionId} className="sr-only">
+            已进入贸易网络大图模式。可继续选择节点，按 Escape 或“退出大图”返回步骤页面。
+          </p>
+          <button
+            ref={(node) => { dialogInitialFocusRef.current = node; }}
+            type="button"
+            className="network-fullscreen-exit"
+            onClick={closeExpanded}
+          >
+            退出大图
+          </button>
+        </>
+      )}
       <div className="network-toolbar">
         <LabeledControl label="节点大小">
           {(id) => (
@@ -200,9 +271,11 @@ export function NetworkViz({ data }: { data: NetworkData }) {
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        style={{ display: "block", width: "100%", height: "auto" }}
+        style={{ display: "block", width: "100%", height: expanded ? "100%" : "auto" }}
         role="group"
-        aria-label="全球贸易网络图。按方向键浏览节点，按 Enter 或空格选择节点。"
+        aria-label={expanded
+          ? "贸易网络大图。按方向键浏览节点，按 Enter 或空格选择节点。"
+          : "全球贸易网络图。激活任意节点进入大图模式；按方向键浏览节点。"}
         onClick={() => setSelected(null)}
       >
         <defs>
@@ -262,7 +335,10 @@ export function NetworkViz({ data }: { data: NetworkData }) {
             return (
               <g
                 key={c}
-                ref={(node) => { nodeRefs.current[c] = node; }}
+                ref={(node) => {
+                  nodeRefs.current[c] = node;
+                  if (returnFocusCountryRef.current === c) returnFocusRef.current = node;
+                }}
                 className="network-node"
                 transform={`translate(${p.x} ${p.y})`}
                 opacity={dim ? 0.18 : 1}
@@ -366,11 +442,36 @@ export function NetworkViz({ data }: { data: NetworkData }) {
         </div>
       )}
       <div style={{ position: "absolute", right: 18, bottom: 14, fontSize: 10.5, color: "#b0b5c2", textAlign: "right", lineHeight: 1.6 }}>
+        {expanded ? "大图模式 · 按 Esc 或“退出大图”返回" : "点击任意节点进入大图模式"}<br />
         节点大小 = {metricMeta[sizeMetric].label} · 节点颜色 = {colorMode === "region" ? "区域" : metricMeta[colorMode].label}<br />
         显示 {visibleEdges.length}/{data.edges.length} 条 Top 边；箭头表示 source → target<br />
         阈值仅影响 Top 边显示，不影响 Gephi 指标计算
       </div>
       {Tip}
     </div>
+  );
+
+  if (!expanded) return card;
+  return (
+    <>
+      <div
+        className="network-fullscreen-placeholder"
+        style={{ height: placeholderHeight ?? undefined }}
+        aria-hidden="true"
+      />
+      {createPortal(
+        <div className="network-fullscreen-scrim">
+          {card}
+          {/* Keep this after the card so its layout effect sees the newly attached portal ref. */}
+          <NetworkDialogFocus
+            containerRef={wrapRef}
+            initialFocusRef={dialogInitialFocusRef}
+            returnFocusRef={returnFocusRef}
+            onClose={closeExpanded}
+          />
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }

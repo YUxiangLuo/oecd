@@ -63,9 +63,16 @@ const FOCUSABLE = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
-function focusableWithin(container: HTMLElement): HTMLElement[] {
-  return [...container.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
-    (element) => !element.hidden && element.getAttribute("aria-hidden") !== "true",
+type DialogFocusTarget = HTMLElement | SVGElement;
+
+function isDialogFocusTarget(element: Element | null): element is DialogFocusTarget {
+  return element instanceof HTMLElement || element instanceof SVGElement;
+}
+
+function focusableWithin(container: HTMLElement): DialogFocusTarget[] {
+  return [...container.querySelectorAll<DialogFocusTarget>(FOCUSABLE)].filter(
+    (element) => (!(element instanceof HTMLElement) || !element.hidden)
+      && element.getAttribute("aria-hidden") !== "true",
   );
 }
 
@@ -80,20 +87,20 @@ export function useDialogFocus({
   onClose,
 }: {
   containerRef: RefObject<HTMLElement | null>;
-  initialFocusRef?: RefObject<HTMLElement | null>;
-  returnFocusRef?: RefObject<HTMLElement | null>;
+  initialFocusRef?: RefObject<DialogFocusTarget | null>;
+  returnFocusRef?: RefObject<DialogFocusTarget | null>;
   onClose: () => void;
 }) {
   const closeRef = useRef(onClose);
   const focusCycleRef = useRef(0);
-  const restoreTargetRef = useRef<HTMLElement | null>(null);
+  const restoreTargetRef = useRef<DialogFocusTarget | null>(null);
   closeRef.current = onClose;
 
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     const focusCycle = ++focusCycleRef.current;
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previouslyFocused = isDialogFocusTarget(document.activeElement) ? document.activeElement : null;
     if (previouslyFocused && !container.contains(previouslyFocused)) {
       restoreTargetRef.current = previouslyFocused;
     }
@@ -133,8 +140,13 @@ export function useDialogFocus({
     document.addEventListener("keydown", onKeyDown, true);
     return () => {
       document.removeEventListener("keydown", onKeyDown, true);
-      const target = returnFocusRef?.current ?? restoreTargetRef.current ?? previouslyFocused;
+      const fallbackTarget = restoreTargetRef.current ?? previouslyFocused;
       queueMicrotask(() => {
+        // Portalled dialogs can replace their trigger DOM node while closing. Read
+        // an explicit return ref after that commit so SVG controls can restore focus
+        // to the newly mounted counterpart rather than a disconnected old node.
+        const explicitTarget = returnFocusRef?.current;
+        const target = explicitTarget?.isConnected ? explicitTarget : fallbackTarget;
         // React Strict Mode immediately runs setup again after its development-only
         // cleanup. Do not let that stale cleanup pull focus back behind the dialog.
         if (focusCycleRef.current === focusCycle && target?.isConnected) target.focus();

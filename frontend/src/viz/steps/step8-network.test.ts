@@ -1,5 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { nextNetworkNode } from "./step8-network";
+import { networkNodeActivation, nextNetworkNode } from "./step8-network";
+
+describe("network fullscreen activation", () => {
+  test("an inline node always opens the large view with that node selected", () => {
+    expect(networkNodeActivation(null, "CHN", false)).toEqual({ selected: "CHN", expanded: true });
+    expect(networkNodeActivation("CHN", "CHN", false)).toEqual({ selected: "CHN", expanded: true });
+  });
+
+  test("node selection can change or clear without closing the large view", () => {
+    expect(networkNodeActivation("CHN", "USA", true)).toEqual({ selected: "USA", expanded: true });
+    expect(networkNodeActivation("CHN", "CHN", true)).toEqual({ selected: null, expanded: true });
+  });
+});
 
 describe("network keyboard navigation", () => {
   const nodes = ["CHN", "JPN", "USA"];
