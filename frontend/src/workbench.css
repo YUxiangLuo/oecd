@@ -156,7 +156,3 @@
 }
 .assignment-context-picker select:focus-visible { outline: 2px solid #817ce2; outline-offset: 1px; }
 .assignment-switch-error { flex: none; margin: 8px 18px 0; }
-.network-selected-filter { display: inline-flex; align-items: center; gap: 5px; }
-.network-selected-filter.disabled { color: var(--text-muted); cursor: not-allowed; }
-.network-selected-filter input:disabled { cursor: not-allowed; }
-.network-filter-hint { color: #8a6070; font-size: 11px; white-space: nowrap; }

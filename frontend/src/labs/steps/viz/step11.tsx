@@ -2,8 +2,8 @@
  * 步骤 10 · 网络可视化 —— 故事:「谁是全球生产的枢纽?」
  *
  * 网络专属镜头(与前三步完全不同的图元):
- *   枢纽热力表  选一国,看它各行业节点在**完整全球国家×行业图**上的中心性(热力)
  *   贸易网络图  国家间双边贸易流的有向网络,悬停看某国的伙伴与区域集群
+ *   枢纽热力表  选一国,看它各行业节点在**完整全球国家×行业图**上的中心性(热力)
  *
  * 口径:国家级贸易图是完全图 → 无权中心性(度 / 介数 …)恒为常数、无区分度,
  * 因此枢纽识别只在国家–行业级做(见 country_degenerate 处理与回归 network 粒度)。
@@ -19,9 +19,16 @@ import { ChartStory, LensNav, StepIntro, YearSelect, useVizLab, type Row, type V
 
 type Lens = "heat" | "network";
 
+export const STEP10_DEFAULT_LENS: Lens = "network";
+export const STEP10_LENSES: { key: Lens; label: string; hint: string }[] = [
+  { key: "network", label: "贸易网络图", hint: "国家间双边流向" },
+  { key: "heat", label: "枢纽热力表", hint: "一国各行业的中心性" },
+];
+const STEP10_LENS_KEYS = STEP10_LENSES.map(({ key }) => key);
+
 export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
   const { year, setYear, lens, pickLens, picked, pickCountries, schema } = useVizLab(
-    meta, step, state, "heat", ["heat", "network"],
+    meta, step, state, STEP10_DEFAULT_LENS, STEP10_LENS_KEYS,
   );
   const fallbackDrill = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
   const [drill, setDrill] = useState(state.data?.drill ?? state.data?.compared?.at(-1) ?? fallbackDrill);
@@ -82,9 +89,9 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
         lead="谁是全球生产的枢纽?"
         concept={step.concept}
         todo={[
-          "用「下钻国家」看某国各行业的中心性热力",
-          "至少换看两个国家,对比它们的枢纽行业",
-          "再切「贸易网络图」看国家间的流向与集群",
+          "先看「贸易网络图」观察国家间的流向与区域集群",
+          "点击国家查看主要贸易伙伴及流入、流出",
+          "再切「枢纽热力表」对比至少两个国家的枢纽行业",
         ]}
       />
 
@@ -100,14 +107,7 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
         </span>
       </div>
 
-      <LensNav<Lens>
-        active={lens as Lens}
-        onPick={pickLens}
-        lenses={[
-          { key: "heat", label: "枢纽热力表", hint: "一国各行业的中心性" },
-          { key: "network", label: "贸易网络图", hint: "国家间双边流向" },
-        ]}
-      />
+      <LensNav<Lens> active={lens as Lens} onPick={pickLens} lenses={STEP10_LENSES} />
 
       {lens === "heat" ? (
         <ChartStory
@@ -142,7 +142,7 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
           eyebrow="双边贸易网络"
           title="国家间生产贸易网络(有向,按流量)"
           what={<>节点 = 经济体,有向边 = 跨国中间品 + 最终品贸易流(不含国内边);点大小 / 边粗细反映流量规模。</>}
-          read={<>悬停一个国家高亮它的贸易伙伴与所属区域集群;箭头方向是"卖给谁"。它用于观察国家间流向，与上方国家×行业中心性图属于不同粒度。</>}
+          read={<>悬停一个国家可临时高亮伙伴;点击后会固定选择并打开流入、流出伙伴表。箭头方向是"卖给谁"。它用于观察国家间流向，与国家×行业中心性图属于不同粒度。</>}
           find={<>找出中国、美国、德国的区域集群;注意国家层几乎两两相连(接近完全图),这正是无权中心性在国家级退化的原因。</>}
           note="仅渲染流量最大的若干条边以保证可读;中心性计算用的是完整图,不受此展示阈值影响。"
         >

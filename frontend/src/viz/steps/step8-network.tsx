@@ -24,11 +24,6 @@ function seqColor(value: number, max: number) {
   return SEQ[idx];
 }
 
-/** “只看选中节点的边”只有在真有节点时才是有意义的状态。 */
-export function canFilterSelectedEdges(selected: string | null): boolean {
-  return selected !== null;
-}
-
 /** Roving-tabindex navigation keeps a dense country graph to one Tab stop. */
 export function nextNetworkNode(
   nodes: readonly string[],
@@ -56,7 +51,6 @@ export function NetworkViz({ data }: { data: NetworkData }) {
   const [sizeMetric, setSizeMetric] = useState<NetworkMetric>("gvc_production_share");
   const [colorMode, setColorMode] = useState<NetworkColorMode>("region");
   const [edgeThreshold, setEdgeThreshold] = useState(0);
-  const [onlySelectedEdges, setOnlySelectedEdges] = useState(false);
   const [keyboardFocus, setKeyboardFocus] = useState<string | null>(null);
   const nodeRefs = useRef<Record<string, SVGGElement | null>>({});
 
@@ -133,13 +127,8 @@ export function NetworkViz({ data }: { data: NetworkData }) {
 
   const { W, H, pos, metrics, maxMetric, maxFlow, neighbors, topLabeled } = model;
   const focus = hovered ?? selected;
-  const filterSelectedEdges = canFilterSelectedEdges(selected) && onlySelectedEdges;
   const adj = focus ? new Set([focus, ...(neighbors[focus] ?? []).map((n) => n.c)]) : null;
-  const visibleEdges = data.edges.filter((e) => {
-    const passesThreshold = num(e.flow) / maxFlow >= edgeThreshold;
-    const touchesSelection = !filterSelectedEdges || String(e.source) === selected || String(e.target) === selected;
-    return passesThreshold && touchesSelection;
-  });
+  const visibleEdges = data.edges.filter((e) => num(e.flow) / maxFlow >= edgeThreshold);
   const labeledEdges = new Set(selected
     ? visibleEdges.filter((edge) => String(edge.source) === selected || String(edge.target) === selected)
       .sort((a, b) => num(b.flow) - num(a.flow)).slice(0, 5)
@@ -165,13 +154,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
       : nodeOrder[0] ?? null;
   const activateNode = (country: string) => {
     setKeyboardFocus(country);
-    setSelected((current) => {
-      if (current === country) {
-        setOnlySelectedEdges(false);
-        return null;
-      }
-      return country;
-    });
+    setSelected((current) => current === country ? null : country);
   };
   const accessibleNodeLabel = (country: string) => [
     countryLabel(country),
@@ -213,27 +196,14 @@ export function NetworkViz({ data }: { data: NetworkData }) {
           )}
         </LabeledControl>
         <b>{(edgeThreshold * 100).toFixed(0)}%</b>
-        <label
-          className={`network-selected-filter${selected ? "" : " disabled"}`}
-          title={selected ? "仅保留与选中节点直接相连的贸易边" : "请先点击图中一个节点"}
-        >
-          <input
-            type="checkbox"
-            disabled={!canFilterSelectedEdges(selected)}
-            checked={filterSelectedEdges}
-            onChange={(event) => setOnlySelectedEdges(event.target.checked)}
-          />
-          只看选中节点的边
-        </label>
-        {!selected && <span className="network-filter-hint" role="status">请先点击一个节点</span>}
-        {selected && <button onClick={() => { setSelected(null); setOnlySelectedEdges(false); }}>清除选择</button>}
+        {selected && <button onClick={() => setSelected(null)}>清除选择</button>}
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}
         style={{ display: "block", width: "100%", height: "auto" }}
         role="group"
         aria-label="全球贸易网络图。按方向键浏览节点，按 Enter 或空格选择节点。"
-        onClick={() => { setSelected(null); setOnlySelectedEdges(false); }}
+        onClick={() => setSelected(null)}
       >
         <defs>
           <marker id={markerId} markerWidth="6" markerHeight="6" refX="5.2" refY="3"
@@ -367,7 +337,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
               type="button"
               aria-label="关闭节点详情"
               title="关闭节点详情"
-              onClick={() => { setSelected(null); setOnlySelectedEdges(false); }}
+              onClick={() => setSelected(null)}
             >
               ×
             </button>
