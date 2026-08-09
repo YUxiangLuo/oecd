@@ -4,7 +4,7 @@
  * 四个可视化页此前共用同一个 VizLab、只换默认指标,导致高度雷同、教学稀薄、
  * 图表用途不明。改造后每步是独立的展示组件(step8/9/10/11.tsx),各自决定布局、
  * 主图与讲解;这里只沉淀真正该复用的三样东西:
- *   1) ChartStory —— 每张图自带「看什么 / 怎么读 / 该发现」读图脚手架;
+ *   1) ChartStory —— 每张图自带“看什么 / 怎么读 / 试着找”读图脚手架；
  *   2) StepIntro / LensNav —— 常驻教学引导与「本步专属」的视角切换(非通用 7 标签);
  *   3) useVizLab —— 年份 / 选国家 / 数据拉取 + 自动实验快照({chart, compared})。
  * 只在真实交互后写入，页面默认视图不冒充学生探索。
@@ -113,23 +113,23 @@ export function StepIntro({ kicker, lead, concept, todo }: {
   );
 }
 
-/* ----------------------- 读图脚手架:每张图都自带讲解 ----------------------- */
+/* ----------------------- 读图脚手架：每张图都自带讲解 ----------------------- */
 
-/** 图卡:标题 + 「看什么 / 怎么读 / 该发现」三句引导 + 图本体。
- *  这是解决“图表多但不知道在干什么”的核心——引导先行,再看图。 */
+/** 图卡：标题 + “看什么 / 怎么读 / 试着找”三句引导 + 图本体。
+ *  先说明读图方法，再邀请学生自己观察，不预先把示例规律写成必然结论。 */
 export function ChartStory({ eyebrow, title, what, read, find, note, children }: {
   eyebrow?: string;
   title: string;
   what: ReactNode;   // 这张图在展示什么(轴 / 颜色 / 分段的含义)
   read: ReactNode;   // 怎么读(位置 / 方向代表什么)
-  find?: ReactNode;  // 该发现什么(真实数据里的看点)
+  find?: ReactNode;  // 邀请学生自己寻找的观察点
   note?: ReactNode;  // 口径 / 提醒(小字)
   children: ReactNode;
 }) {
   const guide: [string, ReactNode, string][] = [
     ["看什么", what, CAT[0]],
     ["怎么读", read, CAT[1]],
-    ...(find ? ([["该发现", find, CAT[2]]] as [string, ReactNode, string][]) : []),
+    ...(find ? ([["试着找", find, CAT[2]]] as [string, ReactNode, string][]) : []),
   ];
   return (
     <section style={{ marginBottom: 18 }}>
@@ -260,7 +260,7 @@ export function VizWorkbench({ years, year, onYearChange, countries, picked, onP
         <div className="viz-side-head">
           <YearSelect years={years} year={year} onChange={onYearChange} />
           <span className="viz-side-count">
-            已选 <b className={enough ? "ok" : "todo"}>{picked.length}</b> 国{enough ? "" : `(需 ≥${minPicks})`}
+            已选 <b className={enough ? "ok" : "todo"}>{picked.length}</b> 个经济体{enough ? "" : `（需 ≥${minPicks}）`}
           </span>
         </div>
         <CountryPicker countries={countries} picked={picked} onChange={onPick} />

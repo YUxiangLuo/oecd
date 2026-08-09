@@ -19,7 +19,7 @@ import type {
 import { userFacingRequestError } from "./user-facing-error";
 import { CoefForestChart, EventStudyChart, PlaceboChart } from "./viz";
 
-const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
+const ENTITY_LABEL: Record<string, string> = { entity_id: "经济体×行业", country: "经济体" };
 // 教学用词:刻意与后端 labels 不同(后端说“双重差分 (DID)”,课堂说“二元处理 DID”)。
 // 枚举键稳定之后,界面措辞就是界面自己的事,改它不再是 API 变更。
 const METHOD_LABELS: Record<string, string> = {
@@ -352,9 +352,9 @@ function MarginalEffectsPanel({ response }: { response: RegressionResponse }) {
                   return (
                     <tr key={`${effect.policy_term}-${effect.level}`}>
                       <td><b>{effect.label}</b></td>
-                      <td>{signedNumber(effect.baseline_gvc_centered * 100)} pp</td>
+                      <td>{signedNumber(effect.baseline_gvc_centered * 100)} 个百分点</td>
                       <td>{signedNumber(scaled.effect)} 个百分点</td>
-                      <td>{scaled.ciLow == null || scaled.ciHigh == null ? "已抑制" : `[${signedNumber(scaled.ciLow)}, ${signedNumber(scaled.ciHigh)}] pp`}</td>
+                      <td>{scaled.ciLow == null || scaled.ciHigh == null ? "已抑制" : `[${signedNumber(scaled.ciLow)}, ${signedNumber(scaled.ciHigh)}] 个百分点`}</td>
                       <td>{effect.p == null ? "—" : effect.p.toFixed(3)}</td>
                     </tr>
                   );
@@ -381,7 +381,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
   state: StepStateApi<RegressionStepState>;
 } & SharedSettingsProps) {
   const outcome = step.regression_outcome;
-  if (!outcome) return <div className="error-box">当前回归步骤缺少 regression_outcome 配置。</div>;
+  if (!outcome) return <div className="error-box">当前回归步骤配置不完整。请刷新；仍未恢复时请联系教师。</div>;
   const lesson = REGRESSION_LESSONS[outcome];
   const { granularity, shockType, method, controlMode, interaction, priceMode, scenario, weightMode } = settings;
   const [result, setResult] = useState<RegressionResponse | null>(null);
@@ -559,12 +559,12 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
             <span><b>解释单位</b>{lesson.unit}</span>
             <span><b>前置知识</b>步骤 {lesson.priorStep} · {lesson.priorLabel}</span>
           </div>
+          <p className="reg-method-caution"><b>方法提示：</b>{lesson.caution}</p>
         </div>
         <details className="lesson-details">
           <summary>先理解上升、下降分别可能意味着什么</summary>
           <p><b>下降：</b>{lesson.downMeaning}</p>
           <p><b>上升：</b>{lesson.upMeaning}</p>
-          <p><b>注意：</b>{lesson.caution}</p>
         </details>
       </section>
 
@@ -586,7 +586,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           <div><span>粒度</span><Pills label="分析粒度" options={allowedGranularities} value={effectiveGranularity} onChange={(value) => setSetting("granularity", value)} labelMap={options?.granularity_labels} /></div>
         </div>
         {outcome === "network" && (
-          <p className="muted">网络回归只使用全球国家×行业图。国家级贸易图在全正流量口径下为完全图，Gephi 介数中心性恒为 0。</p>
+          <p className="muted">网络回归只使用全球经济体×行业图。经济体层贸易图在全部正流量边下是完全图，无权介数中心性恒为 0。</p>
         )}
 
         <div className="comparison-plan">
@@ -622,7 +622,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           <p className="muted">以下选项用于稳健性与识别假设教学，不是开始基准实验的必要条件。</p>
           <div className="model-controls">
             <div className="model-control"><span className="model-control-label">控制变量</span><Pills label="控制变量" options={options?.control_modes ?? []} value={controlMode} onChange={(value) => setSetting("controlMode", value)} labelMap={options?.control_mode_labels} /></div>
-            <label className="model-control"><span className="model-control-label">异质性</span><input type="checkbox" checked={interaction} onChange={(eventValue) => setSetting("interaction", eventValue.target.checked)} />冲击 × 基期GVC</label>
+            <label className="model-control"><span className="model-control-label">异质性</span><input type="checkbox" checked={interaction} onChange={(eventValue) => setSetting("interaction", eventValue.target.checked)} />冲击 × 基期 GVC</label>
             {controlMode !== "none" && <div className="model-control"><span className="model-control-label">金额类控制口径</span><Pills label="金额类控制口径" options={options?.price_modes ?? []} value={priceMode} onChange={(value) => setSetting("priceMode", value)} labelMap={options?.price_mode_labels} /></div>}
             <div className="model-control"><span className="model-control-label">课堂场景</span><Pills label="课堂场景" options={options?.scenarios ?? []} value={scenario} onChange={(value) => setSetting("scenario", value)} labelMap={SCENARIO_LABELS} /></div>
             <div className="model-control"><span className="model-control-label">冲击暴露权重</span><Pills label="冲击暴露权重" options={options?.weight_modes ?? ["fixed_pretreatment", "contemporaneous"]} value={weightMode} onChange={(value) => setSetting("weightMode", value)} labelMap={options?.weight_mode_labels ?? { fixed_pretreatment: "首次处理前固定权重（基准）", contemporaneous: "当期贸易权重（稳健性）" }} /></div>

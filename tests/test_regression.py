@@ -121,7 +121,7 @@ def test_design_equation_text():
     assert d.granularity == "country_industry"  # 默认粒度已切到行业级
     assert d.method == "did"  # 默认方法已切到 DID
     assert d.exclude_row is True
-    assert "排除 ROW" in d.sample_filter
+    assert "排除“世界其他地区”（ROW）" in d.sample_filter
     eq = d.equation()
     assert "α_ij" in eq and "λ_t" in eq and "treated_ij × 1[t≥G_ij]" in eq
     eq_c = RegressionDesign(outcome="trade", granularity="country").equation()
@@ -137,7 +137,8 @@ def test_design_equation_text():
     assert "Controls_ct" in eq_ctrl
     macro = RegressionDesign(outcome="trade", control_mode=CONTROL_MODE_MACRO)
     assert set(macro.controls) == set(MACRO_CONTROL_COLUMNS)
-    assert "GDP规模" in macro.control_labels["macro_log_gdp_usd"]
+    assert "GDP 规模" in macro.control_labels["macro_log_gdp_usd"]
+    assert "拟真教学数据" in macro.control_labels["macro_log_gdp_usd"]
     d_sanction = RegressionDesign(outcome="trade", shock_type="sanctions")
     assert d_sanction.shock_col == "sanction_shock"
     assert d_sanction.treated_col == "sanction_treated"
@@ -145,7 +146,7 @@ def test_design_equation_text():
     real = RegressionDesign(outcome="trade", price_mode=PRICE_MODE_REAL)
     assert real.price_mode == PRICE_MODE_REAL
     noisy = RegressionDesign(outcome="trade", scenario=SCENARIO_NOISY)
-    assert noisy.scenario_label.startswith("测量误差")
+    assert noisy.scenario_label == "课堂挑战：加入测量误差"
 
 
 def test_design_panel_spec():
@@ -357,7 +358,7 @@ def test_design_regressions_exclude_row_by_default():
     result = run_design(df, design)
     assert result.n_entities == 60
     assert result.n_clusters == 60
-    assert any("排除 ROW" in n for n in result.notes)
+    assert any("排除“世界其他地区”（ROW）" in n for n in result.notes)
 
     included = prepare_design_model(df, RegressionDesign(outcome="trade", granularity="country", exclude_row=False))
     assert "ROW" in set(included.data["country"])

@@ -5,6 +5,7 @@ import { showToast } from "../../toast";
 import type { GeneratedReport, MySubmission, ReportGateItem } from "../../types";
 import type { SessionStatus } from "../../use-session";
 import { useAsync } from "../shared";
+import { studentFacingTechnicalTerms } from "../../user-facing-error";
 
 const fmtTime = (s: string | null | undefined) => (s ? s.slice(0, 16).replace("T", " ") : "—");
 
@@ -39,6 +40,15 @@ export function submissionToastMessage(
  * 运行过的回归才由服务端复估。界面只负责触发、展示和提交 report_key。
  */
 
+const ROUTINE_GATE_MESSAGES = new Set([
+  "请完成本步理解检查并答对全部选择题",
+  "本步理解检查尚未全部答对",
+]);
+
+export function reportGateDetail(item: ReportGateItem): string {
+  return item.missing.filter((message) => item.step <= 0 || !ROUTINE_GATE_MESSAGES.has(message)).join("；");
+}
+
 function GateCard({ blocked, onNavigateStep }: {
   blocked: ReportGateItem[];
   onNavigateStep: (step: number) => void;
@@ -49,21 +59,23 @@ function GateCard({ blocked, onNavigateStep }: {
         <span className="report-gate-badge">!</span>
         <b>还不能生成报告：前 15 步的理解检查尚未全部通过</b>
       </div>
-      <p className="muted">请完成以下步骤的选择题：</p>
+      <p className="muted">每个未完成步骤只需答对本步全部选择题。点击步骤可直接返回：</p>
       <ul>
-        {blocked.map((item) => (
-          <li key={item.step}>
-            {item.step > 0 ? (
-              <button type="button" className="gate-link" onClick={() => onNavigateStep(item.step)}>
-                步骤 {item.step} · {item.title}
-              </button>
-            ) : (
-              <b>{item.title}</b>
-            )}
-            {" — "}
-            {item.missing.join(";")}
-          </li>
-        ))}
+        {blocked.map((item) => {
+          const detail = reportGateDetail(item);
+          return (
+            <li key={item.step}>
+              {item.step > 0 ? (
+                <button type="button" className="gate-link" onClick={() => onNavigateStep(item.step)}>
+                  步骤 {item.step} · {item.title}
+                </button>
+              ) : (
+                <b>{item.title}</b>
+              )}
+              {detail && <span> — {detail}</span>}
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -94,7 +106,7 @@ function SubmitCard({ report, mine, onSubmitted }: {
         },
         (e: Error) => {
           setSubmitting(false);
-          setSubmitError(e.message);
+          setSubmitError(studentFacingTechnicalTerms(e.message));
         },
       );
   };
@@ -112,9 +124,51 @@ function SubmitCard({ report, mine, onSubmitted }: {
           </span>
         )}
       </div>
-      {state === "graded" && mine?.feedback && <p className="muted">教师评语:{mine.feedback}</p>}
+      {state === "graded" && mine?.feedback && <p className="muted">教师评语：{mine.feedback}</p>}
       {submitError && <div className="error-box">{submitError}</div>}
     </section>
+  );
+}
+
+const TECHNICAL_SECTION_HEADING = "## 7. 技术溯源（供核验）";
+const LEGACY_TECHNICAL_SECTION_HEADING = "## 6. 溯源与状态";
+const LEGACY_CONCLUSION_HEADING = "## 7. 结论与限制";
+
+export function splitStudentReport(markdown: string): { main: string; technical: string | null } {
+  const index = markdown.indexOf(TECHNICAL_SECTION_HEADING);
+  if (index >= 0) {
+    return {
+      main: markdown.slice(0, index).trimEnd(),
+      technical: markdown.slice(index + TECHNICAL_SECTION_HEADING.length).trim(),
+    };
+  }
+  const legacyStart = markdown.indexOf(LEGACY_TECHNICAL_SECTION_HEADING);
+  const legacyEnd = markdown.indexOf(LEGACY_CONCLUSION_HEADING, legacyStart + LEGACY_TECHNICAL_SECTION_HEADING.length);
+  if (legacyStart < 0 || legacyEnd < 0) return { main: markdown, technical: null };
+  return {
+    main: `${markdown.slice(0, legacyStart).trimEnd()}\n\n${markdown.slice(legacyEnd).trimStart()}`,
+    technical: markdown.slice(legacyStart + LEGACY_TECHNICAL_SECTION_HEADING.length, legacyEnd).trim(),
+  };
+}
+
+function StudentReportMarkdown({ markdown }: { markdown: string }) {
+  const sections = splitStudentReport(markdown);
+  return (
+    <>
+      <ReportMarkdown markdown={sections.main} />
+      {sections.technical && (
+        <>
+          <details className="report-technical-details">
+            <summary>技术溯源（供复核，不影响课程任务）</summary>
+            <p className="muted">这里保留数据版本、构建环境和机器校验信息；日常阅读报告时无需理解这些字段。</p>
+            <ReportMarkdown markdown={sections.technical} />
+          </details>
+          <div className="report-technical-print" aria-hidden="true">
+            <ReportMarkdown markdown={`${TECHNICAL_SECTION_HEADING}\n\n${sections.technical}`} />
+          </div>
+        </>
+      )}
+    </>
   );
 }
 
@@ -195,7 +249,7 @@ export function ReportLab({
       await onFlushSession();
     } catch (cause) {
       setGenerating(false);
-      setError(`最新实验记录尚未保存，不能生成报告：${String((cause as Error).message ?? cause)}`);
+      setError(`最新实验记录尚未保存，不能生成报告：${studentFacingTechnicalTerms(String((cause as Error).message ?? cause))}`);
       return;
     }
     try {
@@ -207,7 +261,7 @@ export function ReportLab({
       const apiError = cause as Error & { blocked?: ReportGateItem[] };
       // 门槛未过:服务端会告诉学生还差什么,原样展示,不在前端另编一套判断。
       if (apiError.blocked) setBlocked(apiError.blocked);
-      else setError(apiError.message);
+      else setError(studentFacingTechnicalTerms(apiError.message));
     } finally {
       setGenerating(false);
     }
@@ -262,15 +316,14 @@ export function ReportLab({
           className="secondary"
           onClick={() => window.print()}
           disabled={!report || !rendererReady}
-          title={rendererReady ? "打开浏览器打印对话框,选择“另存为 PDF”即可保存" : "报告渲染器加载中…"}
+          title={rendererReady ? "打开浏览器打印对话框，选择“另存为 PDF”即可保存" : "报告渲染器加载中…"}
         >
           打印 / 另存为 PDF
         </button>
         <span className="muted report-provenance-slot" aria-live="polite">
           {report && (
             <>
-            指纹 <code>{report.report_key}</code> · 产物 <code>{report.provenance.manifest_id}</code> · 会话 rev{" "}
-            {report.provenance.session_revision}
+            报告编号 <code>{report.report_key}</code> · 数据版本 <code>{report.provenance.manifest_id}</code>
             {report.suggested_filename && <> · 建议文件名 <code>{report.suggested_filename}</code></>}
             </>
           )}
@@ -302,7 +355,7 @@ export function ReportLab({
         <>
           <SubmitCard report={report} mine={mine ?? null} onSubmitted={() => setSubmitRefresh((n) => n + 1)} />
           <div className="report-body">
-            <ReportMarkdown markdown={report.markdown} />
+            <StudentReportMarkdown markdown={report.markdown} />
           </div>
         </>
       ) : (

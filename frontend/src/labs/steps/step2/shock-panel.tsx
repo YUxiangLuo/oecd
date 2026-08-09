@@ -52,7 +52,7 @@ export function ShockPanel({
   const pages = shownPanel ? Math.max(1, Math.ceil(shownPanel.total / shownPanel.page_size)) : 1;
 
   return (
-    <div className="shock-panel-embedded" role="region" aria-label="国家–行业冲击面板">
+    <div className="shock-panel-embedded" role="region" aria-label="经济体与行业政策暴露面板">
       <div className="controls shock-panel-controls">
         <span className="field">
           <LabeledControl label="冲击类型">
@@ -73,7 +73,7 @@ export function ShockPanel({
           </LabeledControl>
         </span>
         <span className="field">
-          <LabeledControl label="国家">
+          <LabeledControl label="经济体">
             {(id) => (
               <select id={id} value={filters.country} onChange={(event) => onChange({ country: event.target.value, page: 1 })}>
                 <option value="">全部</option>
@@ -109,7 +109,7 @@ export function ShockPanel({
           {summaryYear ? (
             <>
               <span>{summaryYear.treated_countries} 个经济体</span>
-              <span>{summaryYear.treated_pairs} 个国家–行业受冲击</span>
+              <span>{summaryYear.treated_pairs} 个经济体×行业受到政策暴露</span>
               {summaryYear.max_shock > 0 && <span>最高 {pct(summaryYear.max_shock)}（{summaryYear.max_shock_target}）</span>}
             </>
           ) : <span className="muted">正在读取该口径的冲击概览…</span>}
@@ -121,14 +121,14 @@ export function ShockPanel({
       {panelError ? <div className="error-box">冲击面板读取失败：{panelError}</div> : !shownPanel ? (
         <div className="shock-panel-state">正在按当前条件读取冲击面板…</div>
       ) : shownPanel.rows.length === 0 ? (
-        <div className="shock-panel-state">当前条件下没有记录；可以放宽国家、行业或“只看受冲击”筛选。</div>
+        <div className="shock-panel-state">当前条件下没有记录；可以放宽经济体、行业或“只看受冲击”筛选。</div>
       ) : (
-        <ScrollableRegion className="table-wrap" label="国家行业冲击面板表，可横向滚动">
+        <ScrollableRegion className="table-wrap" label="经济体与行业政策暴露表，可横向滚动">
           <table className="data-table shock-panel-table">
             <thead>
               <tr>
-                <th style={{ textAlign: "left" }}>国家</th><th>行业</th><th>冲击强度</th><th>主要加征方</th>
-                <th>ICIO 出口暴露度</th><th>受处理</th><th>宣布</th><th>生效</th><th style={{ textAlign: "left" }}>主要事件</th>
+                <th style={{ textAlign: "left" }}>经济体</th><th>行业</th><th>政策暴露强度</th><th>主要加征方</th>
+                <th>ICIO 出口暴露度</th><th>达到处理阈值</th><th>宣布</th><th>生效</th><th style={{ textAlign: "left" }}>主要事件</th>
               </tr>
             </thead>
             <tbody>
@@ -155,8 +155,8 @@ export function ShockPanel({
           不如把它变成"怎么看到完整范围"的引导——顺带点明左右两侧是同一套筛选。 */}
       {shownPanel && shownPanel.rows.length > 0 && shownPanel.total <= shownPanel.page_size && (
         <p className="shock-panel-hint">
-          以上是当前口径下的全部 {shownPanel.total} 条命中。想看这次冲击波及的完整范围,
-          可把上方的「国家 / 行业」改回“全部”。
+          以上是当前条件下的全部 {shownPanel.total} 条记录。想查看这次政策暴露涉及的完整范围，
+          可把上方的“经济体”和“行业”改回“全部”。
         </p>
       )}
       </div>

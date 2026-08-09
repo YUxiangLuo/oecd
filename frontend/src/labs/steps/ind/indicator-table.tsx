@@ -160,7 +160,7 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
   return (
     <>
       <div className="controls">
-        <LabeledControl label="国家">
+        <LabeledControl label="经济体">
           {(id) => (
             <select id={id} value={country} onChange={(e) => onCountry(e.target.value)}>
               <option value="">全部</option>
@@ -178,10 +178,12 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
         <span className="muted">{data ? `共 ${data.total} 条` : "加载中…"}</span>
       </div>
       {(state.data?.observations?.length ?? 0) > 0 && (
-        <div className="observation-strip" role="group" aria-label="已捕获的对比数值">
-          <b>已捕获 {state.data?.metric}</b>
+        <div className="observation-strip" role="group" aria-label="已记录的对比数值">
+          <b>已记录：{fieldLabel(state.data?.metric ?? "", schema)}</b>
           {state.data?.observations?.map((item) => (
-            <span key={`${item.year}-${item.entity}`}>{item.year} · {item.entity} = {fmtField(item.value, state.data?.metric ?? "", schema)}</span>
+            <span key={`${item.year}-${item.entity}`}>
+              {item.year} · {countryLabel(item.country)} · {sectorLabel(item.industry)} = {fmtField(item.value, state.data?.metric ?? "", schema)}
+            </span>
           ))}
         </div>
       )}
@@ -215,8 +217,9 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
                   <td key={c} style={index === 0 ? { position: "sticky", left: 0, zIndex: 2, background: "#fff" } : undefined}>
                     {c === "industry"
                       ? r.industry != null ? sectorLabel(String(r.industry)) : "—"
-                      : ["year", "country"].includes(c) ? String(r[c] ?? "—")
-                        : fmtField(r[c], c, schema)}
+                      : c === "country"
+                        ? r.country != null ? countryLabel(String(r.country)) : "—"
+                        : c === "year" ? String(r.year ?? "—") : fmtField(r[c], c, schema)}
                   </td>
                 ))}
               </tr>

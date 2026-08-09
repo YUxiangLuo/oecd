@@ -140,7 +140,7 @@ def _apply_sample_filter(df: pd.DataFrame, design) -> tuple[pd.DataFrame, list[s
     removed = int((~mask).sum())
     if removed == 0:
         return df, []
-    return df.loc[mask].copy(), [f"样本过滤:已排除 ROW(世界其他地区聚合账户) {removed} 行"]
+    return df.loc[mask].copy(), [f"样本筛选：已排除“世界其他地区”（ROW）聚合账户，共 {removed} 行"]
 
 
 def _stable_noise(data: pd.DataFrame, cols: list[str]) -> pd.Series:

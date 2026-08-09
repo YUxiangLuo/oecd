@@ -28,7 +28,7 @@ export function CountryPicker({ countries, picked, onChange }: {
           type="search"
           value={query}
           placeholder="搜索代码或中文名…"
-          aria-label="搜索国家"
+          aria-label="搜索经济体"
           onChange={(e) => setQuery(e.target.value)}
         />
         {picked.length > 0 && (
@@ -46,7 +46,7 @@ export function CountryPicker({ countries, picked, onChange }: {
           ))}
         </div>
       )}
-      <div className="country-picker-list" role="group" aria-label="国家选择列表">
+      <div className="country-picker-list" role="group" aria-label="经济体选择列表">
         {shown.map((code) => (
           <label key={code} className={`country-picker-row${picked.includes(code) ? " on" : ""}`}>
             <input type="checkbox" checked={picked.includes(code)} onChange={() => toggle(code)} />

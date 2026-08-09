@@ -527,6 +527,12 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   padding: 30px 36px; white-space: pre-wrap; font-size: 13px; line-height: 1.8;
   font-family: inherit; overflow-x: auto;
 }
+.report-technical-details {
+  margin-top: 14px; border: 1px solid #dfe2eb; border-radius: 12px; background: #f8f9fc; padding: 12px 14px;
+}
+.report-technical-details > summary { cursor: pointer; color: #4b47e0; font-weight: 700; }
+.report-technical-details > .report-md { margin-top: 10px; padding: 18px 20px; border-radius: 9px; font-size: 12px; }
+.report-technical-print { display: none; }
 .error-box {
   background: #fff5f2; border: 1px solid #f6cabf; border-radius: 12px;
   padding: 14px 18px; color: #b3341f; font-size: 13px;
@@ -604,4 +610,6 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
     overflow: visible;
     white-space: pre-wrap;
   }
+  .report-technical-details { display: none !important; }
+  .report-technical-print { display: block !important; }
 }

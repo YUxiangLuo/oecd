@@ -173,7 +173,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
     <div key={1} className="intro-scene">
       <div className="intro-scene-kicker">数据底座</div>
       <h2 className="intro-h2">两块数据底座</h2>
-      <p className="intro-lede">价值链指标来自真实 ICIO,政策冲击是教学用拟真面板。点开卡片,看看它们如何合并成回归样本。</p>
+      <p className="intro-lede">价值链指标来自真实 ICIO，政策冲击来自拟真教学面板。点开卡片，看看两类数据如何合并成回归样本。</p>
       <div className="intro-cards">
         <div
           className={`intro-card${openCard === "icio" ? " open" : ""}`}
@@ -196,9 +196,9 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
           </button>
           {openCard === "icio" && (
             <div className="intro-card-body" id={icioPanelId}>
-              <div>{meta?.countries.length ?? 77} 经济体 × {meta?.sectors.length ?? 45} 行业,{yearSpan} 逐年</div>
+              <div>{meta?.countries.length ?? 77} 个经济体 × {meta?.sectors.length ?? 45} 个行业，覆盖 {yearSpan}</div>
               <div>每年一张 {nodes.toLocaleString()} × {nodes.toLocaleString()} 的中间品流量矩阵</div>
-              <div>结合 VA/TLS 账户、最终需求和里昂惕夫逆矩阵,追踪增加值、税收与网络位置</div>
+              <div>结合增加值与税收账户、最终需求和里昂惕夫逆矩阵，追踪增加值来源与网络位置</div>
             </div>
           )}
         </div>
@@ -224,10 +224,10 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
           {openCard === "shock" && (
             <div className="intro-card-body" id={shockPanelId}>
               {events.slice(0, 4).map((e) => (
-                <div key={e.name}>{e.name}({e.effective} 生效)</div>
+                <div key={e.name}>{e.name}（{e.effective} 生效）</div>
               ))}
               <div style={{ opacity: 0.7, marginTop: 8 }}>
-                共 {events.length} 组事件,保留行业异质和宣布/生效时间线;真实事件库接入后可直接替换
+                共 {events.length} 组事件，保留行业差异和宣布、生效时间线；这些事件用于课堂拟真，不是研究级政策数据库
               </div>
             </div>
           )}
@@ -267,7 +267,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
     /* ---- 4 动手示意 ---- */
     <div key={3} className="intro-scene">
       <div className="intro-scene-kicker">动手预演</div>
-      <h2 className="intro-h2">政策冲击如何重塑价值链?</h2>
+      <h2 className="intro-h2">政策冲击可能如何改变价值链？</h2>
       <p className="intro-lede">先预测企业最可能怎样调整，再拖动滑块比较一种机制路径。真实方向必须由后续数据与识别设计回答。</p>
       <div className="intro-mechanisms" role="group" aria-label="先选择政策传导机制">
         <button className={mechanism === "contract" ? "on" : ""} onClick={() => setMechanism("contract")}><b>跨境收缩</b><span>供应链缩短，复杂 GVC 下降</span></button>
@@ -295,19 +295,19 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
         <text x={435} y={34} textAnchor="middle" fontSize={12.5} fill="#a8b6da">最终品出口</text>
       </svg>
       <div className="intro-slider-row">
-        <label className="intro-slider-label" htmlFor={tariffSliderId}>关税冲击 τ</label>
+        <label className="intro-slider-label" htmlFor={tariffSliderId}>关税冲击强度（τ）</label>
         <input
           id={tariffSliderId}
           type="range" min={0} max={25} value={tau * 100} disabled={!mechanism}
           onChange={(e) => setTau(Number(e.target.value) / 100)}
         />
         <span className="intro-tau">{(tau * 100).toFixed(0)}%</span>
-        <span className="intro-slider-label" style={{ marginLeft: 20 }}>复杂 GVC 生产份额(示意)</span>
+        <span className="intro-slider-label" style={{ marginLeft: 20 }}>复杂 GVC 生产份额（示意）</span>
         <span className="intro-tau" style={{ color: tau > 0.02 ? "#ff9d9d" : "#eef1fb" }}>{demoShare}%</span>
       </div>
       <p className="intro-note">
-        本页只展示你选择的一种可能机制，不是估计结果，也不预告真实方向。后续回归会分别检验外国增加值份额(FVA_share)、
-        复杂 GVC 生产份额、前向 GVC 生产长度(PLv_GVC)与介数中心性。
+        本页只展示你选择的一种可能机制，不是估计结果，也不预告真实方向。后续回归会分别检验外国增加值份额、
+        复杂 GVC 生产份额、前向 GVC 生产长度与介数中心性。
       </p>
     </div>,
 
@@ -320,8 +320,8 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
       </div>
       <h2 className="intro-h2">实验台已就绪</h2>
       <p className="intro-lede">
-        你将以<b>{roleName}</b>身份进入。建议从阶段一开始,
-        亲手走完 数据 → 指标 → 可视化 → 回归 → 报告 的完整闭环;
+        你将以<b>{roleName}</b>身份进入。建议从阶段一开始，
+        亲手走完“数据 → 指标 → 可视化 → 回归 → 报告”的完整闭环；
         每一步都配有方法说明、动手面板和小贴士。
       </p>
       {/* 进入前讲清完成规则，避免把浏览位置误认为学习进度。 */}

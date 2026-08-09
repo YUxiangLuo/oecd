@@ -51,18 +51,18 @@ ALL_CONTROL_COLUMNS = [
 ]
 
 CONTROL_LABELS = {
-    "log_gdp_proxy": "增加值规模(log, ICIO GDP proxy)",
+    "log_gdp_proxy": "增加值规模（对数，ICIO GDP 代理指标）",
     "gdp_proxy_growth": "增加值增长率",
-    "log_exports_proxy": "出口规模(log)",
+    "log_exports_proxy": "出口规模（对数）",
     "exports_proxy_growth": "出口增长率",
-    "export_intensity": "出口强度(毛出口/增加值)",
+    "export_intensity": "出口强度（毛出口 / 增加值）",
     "manufacturing_va_share": "制造业增加值份额",
     "services_va_share": "服务业增加值份额",
-    "macro_log_gdp_usd": "GDP规模(log, WDI风格mock)",
-    "macro_log_population": "人口规模(log, WDI风格mock)",
-    "macro_log_gdp_per_capita": "人均收入(log, WDI风格mock)",
-    "macro_exchange_rate_change": "汇率变动率(IMF风格mock)",
-    "macro_fdi_inflow_gdp": "FDI流入/GDP(WDI风格mock)",
+    "macro_log_gdp_usd": "GDP 规模（对数，WDI 风格拟真教学数据）",
+    "macro_log_population": "人口规模（对数，WDI 风格拟真教学数据）",
+    "macro_log_gdp_per_capita": "人均收入（对数，WDI 风格拟真教学数据）",
+    "macro_exchange_rate_change": "汇率变动率（IMF 风格拟真教学数据）",
+    "macro_fdi_inflow_gdp": "FDI 流入 / GDP（WDI 风格拟真教学数据）",
 }
 
 MANUFACTURING_PREFIXES = ("C",)

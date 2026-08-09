@@ -214,7 +214,7 @@ def test_regression_options():
     assert "macro_sim" in body["control_modes"]
     assert "real_2016" in body["price_modes"]
     assert body["scenarios"] == ["clean", "noisy", "confounded"]
-    assert "前趋势混杂" in body["scenario_labels"]["confounded"]
+    assert body["scenario_labels"]["confounded"] == "课堂挑战：加入冲击前趋势"
     assert set(body["outcomes"]) == {"trade", "production", "length", "network"}
     assert body["granularities_by_outcome"]["network"] == ["country_industry"]
     assert body["granularities_by_outcome"]["trade"] == ["country_industry", "country"]
@@ -241,9 +241,9 @@ def test_regression_design():
     assert body["control_mode"] == "none"
     assert body["price_mode"] == "nominal"
     assert body["scenario"] == "clean"
-    assert body["scenario_label"] == "基准场景(clean)"
+    assert body["scenario_label"] == "基准教学场景"
     assert body["exclude_row"] is True
-    assert "排除 ROW" in body["sample_filter"]
+    assert "排除“世界其他地区”（ROW）" in body["sample_filter"]
     assert body["controls"] == []
     assert body["shock_col"] == "tariff_shock"
     assert body["treated_col"] == "treated"
@@ -699,7 +699,7 @@ def test_regression_run(ci_synthetic_contract):
             ci_synthetic_contract["expected_regression_countries"] * ci_synthetic_contract["n_sectors"]
         )
         assert body["result"]["n_clusters"] == ci_synthetic_contract["expected_regression_countries"]
-    assert any("排除 ROW" in n for n in body["result"]["notes"])
+    assert any("排除“世界其他地区”（ROW）" in n for n in body["result"]["notes"])
 
     # 显式国家级粒度仍可用
     resp_c = client.post("/api/regression/run", json={"outcome": "trade", "granularity": "country"})

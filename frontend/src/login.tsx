@@ -80,7 +80,7 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
 
         <div className="login-hero">
           <h1>
-            从真实指标出发,
+            从真实指标出发，
             <br />
             亲手分析全球价值链变化。
           </h1>
@@ -140,7 +140,7 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
             {busy ? "正在登录…" : "登录"}
           </button>
           <div className="login-hint">
-            {demoMode && <>课堂演示口令统一为 <b>{DEMO_PASSWORD}</b>;上方可一键切换学生 / 教师身份。<br /></>}
+            {demoMode && <>课堂演示口令统一为 <b>{DEMO_PASSWORD}</b>；上方可一键切换学生或教师身份。<br /></>}
             会话有效期由服务器安全策略决定；登录后页面会显示本次会话的实际到期时间。
           </div>
         </form>
