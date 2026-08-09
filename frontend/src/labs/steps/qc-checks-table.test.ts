@@ -28,5 +28,7 @@ describe("QC result labels", () => {
     expect(studentQcText("('ITA', 'C19'): SVA≤0;误差 0.3 Million USD;INVNT 披露"))
       .toBe("ITA · C19：总增加值（SVA）≤0；误差 0.3 百万美元；存货变化（INVNT） 持续说明");
     expect(studentQcText("INVNT(库存变化)")).toBe("存货变化（INVNT）");
+    expect(studentQcText("77 个国家/地区 × 45 个行业"))
+      .toBe("77 个经济体/地区账户 × 45 个行业");
   });
 });

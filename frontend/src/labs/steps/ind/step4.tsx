@@ -27,7 +27,7 @@ export function Step4Trade({ meta, step, state }: { meta: Meta; step: Step; stat
         lead="把一个经济体的出口拆开：价值来自哪里？"
         concept={step.concept}
         todo={[
-          "先看分解数据表：选择一个经济体，读取各行业的六项金额",
+          "先看分解数据表：默认核心列同时展示金额与 FVA 份额；展开后可查看完整六项",
           "再用“动手拆解”选择一项出口，检查六项能否加回毛出口（误差≈0）",
           "切换经济体进行对比；当前选择会自动保存到实验记录",
         ]}
@@ -36,7 +36,7 @@ export function Step4Trade({ meta, step, state }: { meta: Meta; step: Step; stat
       <ChartStory
         eyebrow="计算结果 · 先出数字"
         title="WWZ 分解数据表（由 ICIO 计算）"
-        what={<>这张表由步骤 1 的 <b>ICIO 表</b>（Z 中间投入、Y 最终需求）按 WWZ 总贸易核算法计算。每一行表示某个经济体与行业的出口，后面六列是 DVAex、DVArt、DDC、FVA、FDC 和 taxsub 的金额，单位为百万美元。</>}
+        what={<>这张表由步骤 1 的 <b>ICIO 表</b>（Z 中间投入、Y 最终需求）按 WWZ 总贸易核算法计算。默认核心列同时展示毛出口、DVAex、FVA 及关键份额；点击“展开扩展指标”可查看 DVArt、DDC、FDC 和 taxsub 等完整分项。金额单位为百万美元。</>}
         read={<>金额用于核对出口价值如何分解：<b>DVAex</b> 是被外国最终吸收的本国增加值，<b>FVA</b> 是出口中的外国增加值。判断出口对外国投入的依赖程度时应比较 <b>FVA 份额</b>；不能只看 FVA 金额，因为金额还受出口规模影响。列名旁的 ⓘ 可悬停查看定义。</>}
         find={<>切换经济体，观察金额与份额是否给出相同排序；再到下一节检查六项能否精确加回毛出口。</>}
       >

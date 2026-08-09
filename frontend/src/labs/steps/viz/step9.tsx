@@ -122,13 +122,13 @@ export function Step9Production({ meta, step, state }: { meta: Meta; step: Step;
             />
           ) : industryRows.length ? (
               <CompositionBar rows={industryRows} segments={PROD_SEGMENTS} sortKey="3b_VA_GVC_C" sortLabel="复杂 GVC" sortFormat="amount" valueFormat="amount" />
-            ) : <p className="muted">该国无行业数据。</p>}
+            ) : <p className="muted">该经济体没有可展示的行业数据。</p>}
         </ChartStory>
       ) : countryQuery.status === "loading" || countryQuery.status === "error" ? (
         <AsyncStateMessage
           status={countryQuery.status}
           error={countryQuery.error}
-          loadingLabel={`加载 ${year} 年国家指标中…`}
+          loadingLabel={`加载 ${year} 年经济体指标中…`}
           onRetry={countryQuery.retry}
         />
       ) : !rows.length ? (

@@ -171,6 +171,7 @@ def _student_qc_text(value: Any) -> str:
         .replace("INVNT", inventory_label)
         .replace(inventory_token, inventory_label)
         .replace("披露", "持续说明")
+        .replace("国家/地区", "经济体/地区账户")
         .replace("国家–行业", "经济体×行业")
         .replace("国家×行业", "经济体×行业")
         .replace("国家–年份", "经济体–年份")
@@ -360,6 +361,11 @@ def _quiz_lines(step: int, data: dict[str, Any]) -> list[str]:
     if not selected:
         return ["- 理解检查：未记录", ""]
     lines: list[str] = []
+    if step == 13:
+        lines += [
+            "> 本步题目中的“基期 GVC 水平”指模型使用的中心化水平，即个体基期 GVC 减去样本个体均值。",
+            "",
+        ]
     for index, item in enumerate(selected, start=1):
         question = str(item["question"]).replace("fatal", "严重错误（Fatal）")
         lines += [f"{index}. {question}", f"   - 答案：{item['answer']}"]

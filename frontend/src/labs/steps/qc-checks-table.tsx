@@ -46,6 +46,7 @@ export function studentQcText(value: string): string {
     .replaceAll("INVNT", inventoryLabel)
     .replaceAll(inventoryToken, inventoryLabel)
     .replaceAll("披露", "持续说明")
+    .replaceAll("国家/地区", "经济体/地区账户")
     .replaceAll("国家–行业", "经济体×行业")
     .replaceAll("国家×行业", "经济体×行业")
     .replaceAll("国家–年份", "经济体–年份")

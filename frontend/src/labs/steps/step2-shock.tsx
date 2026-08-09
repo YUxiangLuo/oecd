@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api";
+import { economyAccountCoverageLabel } from "../../economy-coverage";
 import type { Meta, QcCheck, QuizCompletionState, ShockEvent, Step, StepStateApi } from "../../types";
 import { countryLabel, sectorLabel } from "../../viz";
 import { CrosswalkDemo } from "./step2/crosswalk-demo";
@@ -98,7 +99,7 @@ export function ShockLab({ meta, step, state }: {
         ]}
       />
       <div className="warnbox shock-disclaimer">
-        {`⚠ 拟真教学数据：以 2018–2020 年全球贸易摩擦事件为原型手工编码，税率量级参考 PIIE/Bown；出口暴露度由 OECD ICIO 双边流向计算。面板覆盖 ${meta.countries.length} 个经济体 × ${meta.sectors.length} 个行业，不能用于现实政策结论。`}
+        {`⚠ 拟真教学数据：以 2018–2020 年全球贸易摩擦事件为原型手工编码，税率量级参考 PIIE/Bown；出口暴露度由 OECD ICIO 双边流向计算。面板覆盖 ${economyAccountCoverageLabel(meta.countries)}和 ${meta.sectors.length} 个行业，不能用于现实政策结论。`}
       </div>
 
       {eventsError ? (

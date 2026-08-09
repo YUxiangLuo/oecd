@@ -92,7 +92,7 @@ export function lessonQuestion(outcome: RegressionOutcome, shockType: string, me
 
 export function comparisonExplanation(method: string): string {
   if (method === "did") {
-    return "先算处理组冲击前后的变化，再减去对照组同期变化：DID =（处理后−处理前）−（对照后−对照前）。";
+    return "先算处理组冲击前后的变化，再减去对照组同期变化：DID =（处理后−处理前）−（对照后−对照前）。要把差上差解释为因果效应，还需要假定：若没有政策，两组会保持可比趋势，并且不存在只影响其中一组的同期系统性变化；DID 数值本身不能证明这些条件。";
   }
   if (method === "event_study") {
     return "以各个体冲击前一年为参照，逐期比较处理组相对对照组的变化；冲击前系数用于发现明显的预先差异。";

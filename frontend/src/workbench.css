@@ -101,6 +101,8 @@
 .quiz-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
 .quiz-head h3 { margin: 3px 0 0; font-size: 16px; }
 .quiz-note { color: #5d6480; background: #eef1fa; border-radius: 999px; padding: 5px 10px; font-size: 11px; white-space: nowrap; }
+.quiz-context-note { margin: -2px 0 14px; padding: 9px 11px; border-left: 3px solid #7773df; background: #f1f2ff; color: #4a5061; font-size: 12px; line-height: 1.65; }
+.quiz-context-note b { color: #3531a7; }
 .quiz-questions { display: grid; gap: 12px; }
 .quiz-question { min-width: 0; margin: 0; padding: 12px 14px; border: 1px solid #e0e4ed; border-radius: 10px; background: #fff; }
 .quiz-question.correct { border-color: #a9ddc0; background: #f4fbf7; }

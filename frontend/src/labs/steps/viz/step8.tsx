@@ -75,7 +75,7 @@ export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; stat
         <AsyncStateMessage
           status={status}
           error={error}
-          loadingLabel={`加载 ${year} 年国家指标中…`}
+          loadingLabel={`加载 ${year} 年经济体指标中…`}
           onRetry={retry}
         />
       ) : !rows.length ? (

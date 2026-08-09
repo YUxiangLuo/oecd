@@ -8,6 +8,13 @@ interface QuizFeedback {
   explanation: string;
 }
 
+export function quizTeachingNote(step: number): string | null {
+  if (step === 13) {
+    return "本题中的“基期 GVC 水平”指模型实际使用的中心化水平，即个体基期 GVC 减去样本个体均值；因此样本均值处的中心化水平为 0。";
+  }
+  return null;
+}
+
 /** 步骤 1–15 的唯一完成条件：答对本步全部固定单选题。 */
 export function QuizPanel({
   step,
@@ -68,6 +75,7 @@ export function QuizPanel({
     }
   };
   const feedbackByQuestion = new Map(feedback.map((item) => [item.question_id, item]));
+  const teachingNote = quizTeachingNote(step.n);
   const submitLabel = submitting
     ? "正在判定…"
     : complete
@@ -92,6 +100,7 @@ export function QuizPanel({
         </div>
         <span className="quiz-note">不限重试 · 全部答对即完成</span>
       </div>
+      {teachingNote && <p className="quiz-context-note"><b>答题前说明：</b>{teachingNote}</p>}
       <div className="quiz-questions">
         {quiz.questions.map((question, index) => {
           const result = feedbackByQuestion.get(question.id);

@@ -108,7 +108,7 @@ export function ShockPanel({
           <strong>{filters.year} 年 · {SHOCK_TYPE_LABELS[filters.shockType as ShockType] ?? filters.shockType}</strong>
           {summaryYear ? (
             <>
-              <span>{summaryYear.treated_countries} 个经济体</span>
+              <span>{summaryYear.treated_countries} 个经济体/地区账户达到处理阈值</span>
               <span>{summaryYear.treated_pairs} 个经济体×行业受到政策暴露</span>
               {summaryYear.max_shock > 0 && <span>最高 {pct(summaryYear.max_shock)}（{summaryYear.max_shock_target}）</span>}
             </>

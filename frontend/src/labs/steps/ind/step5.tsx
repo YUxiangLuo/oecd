@@ -22,7 +22,7 @@ export function Step5Production({ meta, step, state }: { meta: Meta; step: Step;
         lead="一个经济体的增加值，经过了怎样的生产路径？"
         concept={step.concept}
         todo={[
-          "先看生产分解表：选择一个经济体，读取各行业的四类增加值金额",
+          "先看生产分解表：默认核心列同时展示复杂 GVC 金额与份额；展开后可查看完整分解",
           "再用“动手拆解”选择一项，检查四类能否加回总增加值 SVA（误差≈0）",
           "切换经济体进行对比；当前选择会自动保存到实验记录",
         ]}
@@ -31,7 +31,7 @@ export function Step5Production({ meta, step, state }: { meta: Meta; step: Step;
       <ChartStory
         eyebrow="计算结果 · 先出数字"
         title="WWYZ 生产分解表（由 ICIO 计算）"
-        what={<>这张表由步骤 1 的 <b>ICIO 表</b>按 WWYZ 方法计算。每一行表示某个经济体与行业的总增加值 <b>SVA</b>，并按去向拆成纯国内（1_VA_D）、传统贸易（2_VA_RT）、简单 GVC（3a）和复杂 GVC（3b）四类，单位为百万美元。</>}
+        what={<>这张表由步骤 1 的 <b>ICIO 表</b>按 WWYZ 方法计算。每一行表示某个经济体与行业的总增加值 <b>SVA</b>。默认核心列突出纯国内、传统贸易与复杂 GVC 的金额及复杂 GVC 份额；点击“展开扩展指标”可查看简单 GVC 等完整分解。金额单位为百万美元。</>}
         read={<>金额用于核对增加值如何分解。判断生产结构时应比较各类占 SVA 的<b>份额</b>：复杂 GVC 份额较高表示更多增加值经历多次跨境生产；不能只凭复杂 GVC 金额判断嵌入程度，因为金额还受经济规模影响。</>}
         find={<>切换经济体，比较复杂 GVC 金额与份额的排序是否一致；再到下一节检查四类能否精确加回 SVA。</>}
       >

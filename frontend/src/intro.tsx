@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import { useDialogFocus } from "./a11y";
 import { api } from "./api";
 import { LogoMark } from "./brand";
+import { economyAccountCoverage, economyAccountCoverageLabel } from "./economy-coverage";
 import type { AuthUser, Meta, ShockEvent, StepsResponse } from "./types";
 
 const N_SCENES = 5;
@@ -117,7 +118,8 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
 
   const years = meta?.years ?? [];
   const yearSpan = years.length ? `${years[0]}–${years.at(-1)}` : "—";
-  const nodes = (meta?.countries.length ?? 0) * (meta?.sectors.length ?? 0);
+  const coverage = economyAccountCoverage(meta?.countries);
+  const nodes = (meta?.countries.length ?? coverage.totalAccounts) * (meta?.sectors.length ?? 0);
 
   const stages = useMemo(() => {
     if (!stepsData) return [];
@@ -162,7 +164,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
         ))}
       </div>
       <div className="intro-stats">
-        <div><div className="intro-stat-v"><CountUp value={meta?.countries.length ?? 77} /></div><div className="intro-stat-l">经济体</div></div>
+        <div><div className="intro-stat-v"><CountUp value={coverage.economies} /></div><div className="intro-stat-l">经济体</div></div>
         <div><div className="intro-stat-v"><CountUp value={meta?.sectors.length ?? 45} /></div><div className="intro-stat-l">行业</div></div>
         <div><div className="intro-stat-v">{yearSpan}</div><div className="intro-stat-l">年份覆盖</div></div>
         <div><div className="intro-stat-v"><CountUp value={stepsData?.steps.length ?? 16} /></div><div className="intro-stat-l">实验步骤</div></div>
@@ -196,7 +198,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
           </button>
           {openCard === "icio" && (
             <div className="intro-card-body" id={icioPanelId}>
-              <div>{meta?.countries.length ?? 77} 个经济体 × {meta?.sectors.length ?? 45} 个行业，覆盖 {yearSpan}</div>
+              <div>{economyAccountCoverageLabel(meta?.countries)}；采用 {meta?.sectors.length ?? 45} 个行业分类，覆盖 {yearSpan}</div>
               <div>每年一张 {nodes.toLocaleString()} × {nodes.toLocaleString()} 的中间品流量矩阵</div>
               <div>结合增加值与税收账户、最终需求和里昂惕夫逆矩阵，追踪增加值来源与网络位置</div>
             </div>

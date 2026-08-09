@@ -173,6 +173,7 @@ def test_report_binds_provenance_and_selected_quiz_answers():
     assert mid in report.markdown
     assert "Z 表的一格应该怎样解释" in report.markdown
     assert "行方国家×行业向列方国家×行业提供的中间投入" in report.markdown
+    assert "个体基期 GVC 减去样本个体均值" in report.markdown
     assert "拟真教学面板" in report.markdown
     assert "报告编号" in report.markdown
     assert "技术溯源（供核验）" in report.markdown

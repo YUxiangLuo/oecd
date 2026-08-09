@@ -11,6 +11,7 @@ FRONTEND_COPY_FILES = [
     ROOT / "frontend/src/demos.tsx",
     ROOT / "frontend/src/labs/steps/ind/step4.tsx",
     ROOT / "frontend/src/labs/steps/ind/step5.tsx",
+    ROOT / "frontend/src/labs/steps/ind/step7.tsx",
     ROOT / "frontend/src/labs/steps/step2-shock.tsx",
     ROOT / "frontend/src/labs/steps/step2/selected-event.tsx",
     ROOT / "frontend/src/labs/steps/viz/step8.tsx",
@@ -42,8 +43,10 @@ def test_amounts_are_not_described_as_dependency_or_structure_shares() -> None:
     assert "应看各类份额" in production
 
 
-def test_methods_are_taught_before_their_quiz_terms() -> None:
-    assert "边际效应等于政策主效应加上交互系数" in _step(13)["concept"]
+def test_backend_method_metadata_matches_the_estimator() -> None:
+    interaction = _step(13)["concept"]
+    assert "减去样本均值" in interaction
+    assert "中心化后的水平" in interaction
     assert "稳定单元处理值假设（SUTVA）" in _step(15)["concept"]
     assert "无干扰" in _step(15)["concept"]
 
@@ -57,8 +60,28 @@ def test_frontend_copy_does_not_restore_rejected_overclaims() -> None:
         "FVA 越大 = 越依赖",
         "复杂 GVC(3b) 越大 =",
         "该发现",
+        "全球「国家×行业」",
+        "经济体层贸易图接近完全图",
     ):
         assert rejected not in copy
+
+
+def test_row_aggregate_is_not_counted_as_an_economy() -> None:
+    copy = "\n".join(
+        (ROOT / path).read_text(encoding="utf-8")
+        for path in (
+            "frontend/src/economy-coverage.ts",
+            "frontend/src/login.tsx",
+            "frontend/src/intro.tsx",
+            "frontend/src/labs/steps/step2-shock.tsx",
+            "frontend/src/labs/steps/step2/shock-panel.tsx",
+        )
+    )
+    assert "77 个经济体" not in copy
+    assert "treated_countries} 个经济体</span>" not in copy
+    assert "经济体/地区账户达到处理阈值" in copy
+    assert "世界其他地区" in copy
+    assert "ROW" in copy
 
 
 def test_indicator_and_regression_metadata_use_student_labels() -> None:

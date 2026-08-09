@@ -135,7 +135,7 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
               onRetry={pageQuery.retry}
             />
           ) : heatRows.length ? <HeatTableViz rows={heatRows} schema={schema} />
-            : <p className="muted">该国无行业数据。</p>}
+            : <p className="muted">该经济体没有可展示的行业数据。</p>}
         </ChartStory>
       ) : (
         <ChartStory
