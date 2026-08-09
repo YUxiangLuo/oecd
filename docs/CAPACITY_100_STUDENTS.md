@@ -158,6 +158,20 @@ uv run gvcsim preflight
 数据库升级是前向迁移：不要在迁移后直接启动旧二进制。需要代码回滚时应保留
 新版本数据库兼容代码，或从已验证备份切换到隔离恢复库。
 
+## 产物保留与磁盘回收
+
+`data/processed` 是指向当前内容寻址版本的符号链接。不要直接用 `find -mtime -delete` 清理
+`data/artifacts`：历史 assignment、报告、会话或学习证据仍可能依赖旧 manifest。先 dry-run：
+
+```bash
+uv run gvcsim artifact-prune --keep-latest 3
+```
+
+该命令需要可用且已显式迁移的教学数据库；数据库检查失败即拒绝生成删除计划。完成数据库和产物备份、
+核对受保护引用及候选大小后，才运行同一命令并添加 `--apply`。当前版本、最新三个回滚版本、所有课堂
+引用版本及任何 legacy/损坏/未知目录都会保留。清理与 `compute` 的原子发布共享文件锁，但仍应避开课堂
+高峰执行，并在完成后运行 `gvcsim preflight`。
+
 ## 100 人可复现验收
 
 使用名称以 `_loadtest` 结尾的专用数据库，禁止对课堂库运行 `--reset`：

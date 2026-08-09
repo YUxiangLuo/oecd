@@ -27,6 +27,7 @@ from pathlib import Path
 import pandas as pd
 
 from gvcsim import shocks
+from gvcsim.artifact_retention import artifact_store_lock
 from gvcsim.artifacts import manifest_provenance, register_artifacts, validate_artifact, validate_release
 from gvcsim import config as config_module
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, ROOT, available_years, processed_years
@@ -83,6 +84,12 @@ def _normalize_release_permissions(staging: Path) -> None:
 
 def _publish_staged_release(staging: Path, current: Path) -> tuple[str, Path]:
     """把完整 staging 固化为内容寻址版本，再原子切换 current symlink。"""
+    with artifact_store_lock(current.parent):
+        return _publish_staged_release_locked(staging, current)
+
+
+def _publish_staged_release_locked(staging: Path, current: Path) -> tuple[str, Path]:
+    """调用方持有 artifact store 锁时执行不可分割的发布切换。"""
     _normalize_release_permissions(staging)
     release_id = _validate_staged_release(staging)
     versions = current.parent / "artifacts"

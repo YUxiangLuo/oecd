@@ -3,6 +3,7 @@
 download  下载 OECD ICIO 原始数据(步骤1)
 validate  对某年数据做质检并打印结果(步骤2)
 compute   预计算质检、指标、可视化/冲击数据与回归面板(步骤2–11 + 面板)
+artifact-prune  预览或清理未被课堂记录引用的旧产物版本
 regress   跑指定 outcome 的教学实证回归并打印系数表
 report    生成实验报告(步骤16)
 serve     启动 API 服务(供前端使用)
@@ -32,6 +33,10 @@ def main() -> None:
         action="store_true",
         help="仅用于有审计记录的教学演示:允许 fatal QC 后继续，并把 override 永久写入 manifest/报告",
     )
+
+    p = sub.add_parser("artifact-prune", help="安全清理未被课堂记录引用的旧产物（默认仅预览）")
+    p.add_argument("--keep-latest", type=int, default=3, help="除当前版本外，至少保留最新 N 个回滚版本（默认 3）")
+    p.add_argument("--apply", action="store_true", help="实际删除；不加此参数只输出计划")
 
     p = sub.add_parser("regress", help="教学实证回归")
     p.add_argument("--outcome", default="trade", choices=["trade", "production", "length", "network"])
@@ -126,6 +131,40 @@ def main() -> None:
             raise SystemExit(
                 f"{error}\n如已完成修正/风险评审，可显式加 --allow-qc-override；该决定会写入 manifest。"
             ) from error
+
+    elif args.command == "artifact-prune":
+        from gvcsim import artifact_retention, config
+
+        try:
+            plan = artifact_retention.prune_artifacts(
+                config.PROCESSED_DIR.parent / "artifacts",
+                config.PROCESSED_DIR,
+                keep_latest=args.keep_latest,
+                apply=args.apply,
+            )
+        except Exception as error:
+            raise SystemExit(f"产物清理拒绝执行（{type(error).__name__}）：{error}") from error
+        mode = "已执行" if args.apply else "预览"
+        print(f"产物清理{mode}:current={plan.current_manifest_id},keep_latest={args.keep_latest}")
+        if plan.references:
+            print("课堂记录保护:")
+            for release_id, sources in plan.references.items():
+                print(f"  {release_id} <- {','.join(sources)}")
+        if plan.retained_recent:
+            print("最近版本保护:" + ",".join(plan.retained_recent))
+        if plan.skipped:
+            print("未纳入自动清理:")
+            for skipped in plan.skipped:
+                print(f"  {skipped.name}: {skipped.reason}")
+        if plan.candidates:
+            print("删除候选:")
+            for release in plan.candidates:
+                print(f"  {release.manifest_id}: {release.size_bytes / (1024 * 1024):.1f} MiB")
+        else:
+            print("没有可安全删除的旧版本")
+        print(f"可回收合计:{plan.reclaimable_bytes / (1024 * 1024):.1f} MiB")
+        if not args.apply and plan.candidates:
+            print("当前为 dry-run；确认数据库备份和列表后，加 --apply 执行")
 
     elif args.command == "regress":
         from gvcsim.regression.design import (

@@ -106,6 +106,18 @@ ICIO 质检会独立保留原始 CSV 的 `OUT` 账户，分别复核 `OUT = Z行
 符号链接一次性切到 `data/artifacts/<manifest_id>/`。旧版本会保留用于审计与回滚，部分重算或损坏的
 产物不会被静默使用。
 
+旧版本只能通过 fail-closed 清理命令处理，默认仅预览：
+
+```bash
+uv run gvcsim artifact-prune --keep-latest 3
+# 核对数据库备份、受保护引用和候选列表后再执行
+uv run gvcsim artifact-prune --keep-latest 3 --apply
+```
+
+清理会始终保留当前版本和最新 N 个回滚版本，并查询 PostgreSQL，保护被 assignment、报告、实验会话
+或学习证据引用的全部 manifest。数据库/schema 不可用时拒绝执行；`legacy-*`、符号链接、损坏或命名
+不符合内容 ID 的目录也不会自动删除。发布切换与清理共享跨进程文件锁，避免并发 compute 把新版本误删。
+
 ### 2. 启动后端
 
 ```bash
@@ -168,6 +180,9 @@ uv run gvcsim validate --year 2019
 
 # 只重算指定年份；不传 --years 时计算本地全部年份
 uv run gvcsim compute --years 2019 2020
+
+# dry-run 查看可安全清理的旧版本；确认后显式加 --apply
+uv run gvcsim artifact-prune --keep-latest 3
 
 # 四类教学回归
 uv run gvcsim regress --outcome trade --method did

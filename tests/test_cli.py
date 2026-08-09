@@ -1,8 +1,9 @@
 import sys
+from pathlib import Path
 
 import pytest
 
-from gvcsim import preflight
+from gvcsim import artifact_retention, config, preflight
 from gvcsim.cli import main
 
 
@@ -22,6 +23,57 @@ def test_removed_customer_benchmark_command_is_not_registered(monkeypatch: pytes
         main()
 
     assert exc.value.code == 2
+
+
+def test_artifact_prune_is_dry_run_by_default(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["gvcsim", "artifact-prune", "--keep-latest", "5"])
+    monkeypatch.setattr(config, "PROCESSED_DIR", Path("/srv/gvcsim/data/processed"))
+    captured: dict[str, object] = {}
+    candidate = artifact_retention.Release("1" * 16, Path("/srv/gvcsim/data/artifacts") / ("1" * 16), 1024, 1)
+    plan = artifact_retention.PrunePlan(
+        current_manifest_id="2" * 16,
+        references={"3" * 16: ("assignments",)},
+        retained_recent=("4" * 16,),
+        candidates=(candidate,),
+        skipped=(),
+    )
+
+    def planned(artifacts_dir, current, *, keep_latest, apply):
+        captured.update(
+            artifacts_dir=artifacts_dir,
+            current=current,
+            keep_latest=keep_latest,
+            apply=apply,
+        )
+        return plan
+
+    monkeypatch.setattr(artifact_retention, "prune_artifacts", planned)
+
+    main()
+
+    assert captured == {
+        "artifacts_dir": Path("/srv/gvcsim/data/artifacts"),
+        "current": Path("/srv/gvcsim/data/processed"),
+        "keep_latest": 5,
+        "apply": False,
+    }
+    output = capsys.readouterr().out
+    assert "dry-run" in output
+    assert "0.0 MiB" in output
+
+
+def test_artifact_prune_reports_fail_closed_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "argv", ["gvcsim", "artifact-prune", "--apply"])
+    monkeypatch.setattr(
+        artifact_retention,
+        "prune_artifacts",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("database unavailable")),
+    )
+
+    with pytest.raises(SystemExit, match="产物清理拒绝执行.*database unavailable"):
+        main()
 
 
 def test_network_country_regression_is_rejected_before_loading_data(monkeypatch: pytest.MonkeyPatch) -> None:
