@@ -11,6 +11,7 @@
 
 import atexit
 import hashlib
+import hmac
 import ipaddress
 import json
 import logging
@@ -658,12 +659,41 @@ def shutdown() -> None:
     close_pool()
 
 
+def verify_schema() -> dict[str, str]:
+    """只读确认教学库已经由显式 ``classroom-init`` 迁移到当前版本。
+
+    服务启动和 preflight 都走这里，绝不在部署探针里建表或迁移。这样数据库
+    变更是可单独备份、审查和回滚的运维步骤，而不是启动新二进制的副作用。
+    """
+    global _schema_ready
+    c = _connect()
+    try:
+        with c:
+            c.execute("SET TRANSACTION READ ONLY")
+            version = _existing_version(c)
+            if version != TEACHING_DB_VERSION:
+                rendered = version or "未初始化"
+                raise SchemaVersionMismatch(
+                    f"教学库 schema 版本为 {rendered}，当前代码需要 {TEACHING_DB_VERSION}；"
+                    "请先备份并显式运行 `uv run gvcsim classroom-init`"
+                )
+            c.execute("SELECT 1")
+    except SchemaVersionMismatch:
+        raise
+    except psycopg.Error as error:
+        raise Unavailable(str(error)) from error
+    finally:
+        c.close()
+    _schema_ready = True
+    return {"status": "ok", "schema_version": TEACHING_DB_VERSION}
+
+
 def startup() -> None:
-    """服务 worker 启动闸门：迁移完成且最小连接数建立后才接收流量。"""
+    """服务 worker 启动闸门：只读验 schema，并等待最小连接数建立。"""
     global _startup_sealed
     config.validate_capacity_config()
     if not _schema_ready:
-        initialize_schema()
+        verify_schema()
     try:
         _get_pool().wait(timeout=max(5.0, config.DB_POOL_TIMEOUT_SECONDS))
     except (PoolTimeout, PoolClosed, psycopg.OperationalError) as error:
@@ -984,6 +1014,44 @@ def provision_teacher(username: str, display_name: str, password: str) -> dict[s
             (row["id"], run["id"]),
         )
     return row
+
+
+def change_own_password(username: str, current_password: str, new_password: str) -> bool:
+    """验证当前口令后修改本人密码，并撤销该账号的全部既有登录会话。
+
+    密码更新、认证版本推进、会话撤销和审计记录处于同一事务；成功返回后调用方
+    必须要求重新登录。``False`` 只表示当前口令不正确，不泄露账号其它状态。
+    """
+    _validate_managed_password(new_password)
+    with conn() as c:
+        account = c.execute(
+            "SELECT id,username,pw_salt,pw_hash,active FROM accounts WHERE username=%s FOR UPDATE",
+            (username,),
+        ).fetchone()
+        if not account or not account["active"]:
+            return False
+        supplied = hash_password(current_password, account["pw_salt"])
+        if not hmac.compare_digest(account["pw_hash"], supplied):
+            return False
+        replacement_with_old_salt = hash_password(new_password, account["pw_salt"])
+        if hmac.compare_digest(account["pw_hash"], replacement_with_old_salt):
+            raise ValueError("新密码不能与当前密码相同")
+
+        salt = secrets.token_hex(16)
+        c.execute(
+            "UPDATE accounts SET pw_salt=%s,pw_hash=%s,auth_version=auth_version+1 WHERE id=%s",
+            (salt, hash_password(new_password, salt), account["id"]),
+        )
+        c.execute(
+            "UPDATE auth_sessions SET revoked_at=coalesce(revoked_at,now()) WHERE account_id=%s",
+            (account["id"],),
+        )
+        c.execute(
+            "INSERT INTO audit_log(actor_id,actor_name,action,target_type,target_id)"
+            " VALUES (%s,%s,'auth.password_changed','account',%s)",
+            (account["id"], account["username"], str(account["id"])),
+        )
+    return True
 
 
 # ---------------------------------------------------------------- 课程运行 / 作业 / enrollment / attempt

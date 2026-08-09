@@ -510,6 +510,11 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   background: #fff5f2; border: 1px solid #f6cabf; border-radius: 12px;
   padding: 14px 18px; color: #b3341f; font-size: 13px;
 }
+.success-box {
+  background: #edf9f4; border: 1px solid #b9e3d2; border-radius: 12px;
+  padding: 12px 16px; color: #116b50; font-size: 13px;
+}
+.login-notice { margin: 14px 0 2px; line-height: 1.55; }
 .muted { color: var(--text-muted); font-size: 12px; }
 
 .db-summary {
@@ -1236,6 +1241,8 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 }
 .modal-form textarea { line-height: 1.6; resize: vertical; }
 .modal-form input:focus, .modal-form select:focus, .modal-form textarea:focus { outline: none; border-color: #4b47e0; }
+.account-password-note { margin-bottom: 16px; }
+.account-password-error { margin: 0 0 13px; padding: 10px 12px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
 /* ---------- KPI 卡行 ---------- */

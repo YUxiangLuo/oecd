@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { beginAccountMetaLoad } from "./account-meta";
+import { AccountPasswordModal } from "./account-password";
 import { assignmentContextLabel } from "./assignment-context";
 import { scanAnnouncements } from "./announcement-state";
 import { AUTH_TOKEN_KEY, api } from "./api";
@@ -183,6 +184,8 @@ export default function App() {
     const value = Number(localStorage.getItem(AUTH_EXPIRES_KEY));
     return Number.isFinite(value) && value > 0 ? value : null;
   });
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
   const introTriggerRef = useRef<HTMLButtonElement>(null);
   // 课堂公告:登录后拉一次,顶栏下方横幅展示(教学库不可用时静默隐藏)
@@ -324,6 +327,7 @@ export default function App() {
     setAnnouncementsReady(false);
     setFatal(null);
     setShowIntro(false);
+    setShowPasswordChange(false);
     setProgressReady(false);
     setAnnouncements([]);
     setAssignmentContexts([]);
@@ -496,10 +500,11 @@ export default function App() {
   if (!authChecked) return <AppBootSkeleton />;
   if (!user)
     return (
-      <LoginPage onLogin={(r) => {
+      <LoginPage notice={authNotice} onLogin={(r) => {
         localStorage.setItem(AUTH_TOKEN_KEY, r.token);
         localStorage.setItem(AUTH_EXPIRES_KEY, String(r.expires_at));
         setAuthExpiresAt(r.expires_at);
+        setAuthNotice(null);
         setUser(r.user);
         // 学生进交互式介绍;教师直达教师面板(不进入学生端)
         setShowIntro(r.user.role !== "teacher");
@@ -522,6 +527,7 @@ export default function App() {
             </span>
             {sessionExpiryLabel(authExpiresAt) && <span className="muted">会话至 {sessionExpiryLabel(authExpiresAt)}</span>}
             <span className="role-chip" title={`教师账号 · ${user.username}`}>{user.name}</span>
+            <button onClick={() => setShowPasswordChange(true)}>修改密码</button>
             <button onClick={logout}>退出</button>
           </div>
         </header>
@@ -529,6 +535,16 @@ export default function App() {
         {/* 教师端 ToastHost:与下方学生端的实例互斥(此处提前 return),任一时刻只挂载一个;
             切勿在两个分支之外再挂一份,否则同一 toast 会重复弹出 */}
         <ToastHost />
+        {showPasswordChange && (
+          <AccountPasswordModal
+            onClose={() => setShowPasswordChange(false)}
+            onChanged={() => {
+              setAuthNotice("密码已修改，所有旧会话均已撤销。请使用新密码重新登录。");
+              setShowPasswordChange(false);
+              logout();
+            }}
+          />
+        )}
       </div>
     );
 
@@ -622,6 +638,7 @@ export default function App() {
             <span className="role-chip" title={`学生账号 · ${user.username}`}>{user.name}</span>
             {sessionExpiryLabel(authExpiresAt) && <span className="muted" title="服务端签发的 expires_at">会话至 {sessionExpiryLabel(authExpiresAt)}</span>}
           <button ref={introTriggerRef} onClick={() => setShowIntro(true)}>ⓘ 系统介绍</button>
+          <button onClick={() => setShowPasswordChange(true)}>修改密码</button>
           <button onClick={logout}>退出</button>
         </div>
       </header>
@@ -938,6 +955,16 @@ export default function App() {
         onDone={(gotoStep) => {
           setShowIntro(false);
           if (gotoStep) navigateStep(gotoStep);
+        }}
+      />
+    )}
+    {showPasswordChange && (
+      <AccountPasswordModal
+        onClose={() => setShowPasswordChange(false)}
+        onChanged={() => {
+          setAuthNotice("密码已修改，所有旧会话均已撤销。请使用新密码重新登录。");
+          setShowPasswordChange(false);
+          logout();
         }}
       />
     )}

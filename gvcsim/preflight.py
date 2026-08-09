@@ -1,8 +1,9 @@
-"""在 Uvicorn 多进程父进程启动前验证全部生产依赖。
+"""在 Uvicorn 多进程父进程启动前只读验证全部生产依赖。
 
 Uvicorn 的 multiprocess supervisor 不会因为 worker 在导入或 lifespan 中失败
 而退出。systemd 因此先运行本模块：只有 ASGI 应用可导入、产物完整、运行目录
-可用且 PostgreSQL schema/连接池就绪时，才会启动长期存活的父进程。
+可用且 PostgreSQL schema/连接池就绪时，才会启动长期存活的父进程。数据库建表
+与迁移必须预先显式运行 ``gvcsim classroom-init``，本探针不会修改 schema。
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ from gvcsim.classroom import db as classroom_db
 
 
 def run() -> dict[str, Any]:
-    """执行一次无持久连接残留的服务启动预检，失败时直接向调用方抛错。"""
+    """执行一次无持久连接残留、无 schema 写入的预检，失败时直接抛错。"""
     api_module = importlib.import_module("gvcsim.api")
     if getattr(api_module, "app", None) is None:
         raise RuntimeError("ASGI 应用未导出 app")

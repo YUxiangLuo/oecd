@@ -402,6 +402,11 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=256)
 
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=256)
+    new_password: str = Field(min_length=12, max_length=256)
+
+
 @app.post("/api/auth/login")
 def login(req: LoginRequest, request: Request):
     ip = request.client.host if request.client else None
@@ -499,6 +504,38 @@ def logout(authorization: str | None = Header(default=None)):
         "auth.logout", actor_id=payload.get("aid"), actor_name=payload["sub"], target_type="auth_session"
     )
     return {"ok": True}
+
+
+@app.post("/api/auth/password")
+def change_password(req: PasswordChangeRequest, request: Request):
+    """修改当前账号密码；成功后撤销该账号全部会话并要求重新登录。"""
+    user = getattr(request.state, "user", {})
+    if user.get("demo") or user.get("aid") is None:
+        raise HTTPException(status_code=409, detail="临时演示账号不能修改密码")
+    rate_key = f"password-change:{user['aid']}"
+    retry_after = classroom_db.reserve_login_attempt(
+        rate_key,
+        app_config.LOGIN_WINDOW_SECONDS,
+        app_config.LOGIN_MAX_ATTEMPTS,
+    )
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=429,
+            detail="密码验证尝试过于频繁，请稍后再试",
+            headers={"Retry-After": str(retry_after)},
+        )
+    try:
+        changed = classroom_db.change_own_password(user["sub"], req.current_password, req.new_password)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    if not changed:
+        raise HTTPException(status_code=400, detail="当前密码不正确")
+    try:
+        classroom_db.clear_login_attempts(rate_key)
+    except Exception as error:
+        # 密码更新与全会话撤销已经在同一事务提交；限流清理不能把成功改写成 503。
+        logger.warning("post-password-change rate-limit cleanup failed: error=%s", type(error).__name__)
+    return {"ok": True, "reauthenticate": True}
 
 
 @app.get("/api/meta")

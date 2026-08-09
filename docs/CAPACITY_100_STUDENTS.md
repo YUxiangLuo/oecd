@@ -111,9 +111,9 @@ systemd 模板启动参数：
 
 `--limit-concurrency` 是每 worker 上限，不是全机上限；真正限制 CPU 密集任务
 的是跨进程 permit。systemd 会先执行 `gvcsim preflight`，在父进程启动前验证
-ASGI 导入、生产安全配置、完整产物、共享锁目录和 PostgreSQL；预检失败会让
-unit 失败并进入 systemd 的 `RestartSec`/`StartLimit`，不会留下 Uvicorn 父进程
-不断重生失败 worker。
+ASGI 导入、生产安全配置、完整产物、共享锁目录和 PostgreSQL；该探针只读校验
+schema，绝不建表或迁移。预检失败会让 unit 失败并进入 systemd 的
+`RestartSec`/`StartLimit`，不会留下 Uvicorn 父进程不断重生失败 worker。
 
 Nginx 与压测客户端的单请求 timeout 均为 180 秒。模板的端到端预算为
 `90 秒排队 + 50 秒重任务 + 40 秒余量 = 180 秒`；调整排队或执行预算时必须
@@ -146,13 +146,15 @@ curl -fsS http://127.0.0.1:18000/health
 ## 数据库迁移
 
 本次 schema 为 `gvcsim-teaching-db-v6`，从 v3、v4、v5 都有事务内迁移路径。
-上线前必须备份，再运行：
+上线前必须备份，再把迁移作为独立步骤运行；只有它成功后才能启动或重启服务：
 
 ```bash
 uv run gvcsim classroom-init
+uv run gvcsim preflight
 ```
 
-v6 只新增登录限流表，不改写课堂记录。旧版程序会拒绝未知的 v6 schema，所以
+`serve`、systemd 的 `ExecStartPre` 和普通请求都不会替代上述显式迁移。v6 只新增登录限流表，
+不改写课堂记录。旧版程序会拒绝未知的 v6 schema，所以
 数据库升级是前向迁移：不要在迁移后直接启动旧二进制。需要代码回滚时应保留
 新版本数据库兼容代码，或从已验证备份切换到隔离恢复库。
 

@@ -82,7 +82,7 @@ def main() -> None:
 
     sub.add_parser("preflight", help="启动前验证 ASGI 应用、产物、容量目录和教学数据库")
 
-    p = sub.add_parser("classroom-init", help="初始化教学数据库(教师面板用;服务端也会懒建表)")
+    p = sub.add_parser("classroom-init", help="显式初始化或迁移教学数据库（serve/preflight 不会修改 schema）")
     p.add_argument("--reset", action="store_true", help="删除并重建全部教学表(会清空班级/学生/提交数据)")
     p.add_argument("--teacher-username", help="显式创建首位教师（口令从 GVCSIM_INITIAL_TEACHER_PASSWORD 读取）")
     p.add_argument("--teacher-name", default="课程管理员", help="首位教师显示名")

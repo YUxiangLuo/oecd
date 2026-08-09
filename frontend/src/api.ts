@@ -143,6 +143,11 @@ export const api = {
     if (!resp.ok) throw new ApiError(resp.status, (await resp.json().catch(() => null))?.detail, resp.statusText);
     return resp.json() as Promise<{ ok: boolean }>;
   },
+  changePassword: (currentPassword: string, newPassword: string) =>
+    post<{ ok: boolean; reauthenticate: boolean }>("/api/auth/password", {
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
   steps: () => get<import("./types").StepsResponse>("/api/steps"),
   meta: () => get<import("./types").Meta>("/api/meta"),
   indicatorSchema: () => get<import("./types").IndicatorSchema>("/api/indicators/schema"),

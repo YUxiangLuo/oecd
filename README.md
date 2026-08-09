@@ -115,6 +115,8 @@ uv run gvcsim serve --reload
 ```
 
 API 默认位于 `http://localhost:8000`，交互式文档位于 `http://localhost:8000/docs`。
+`serve` 与 `preflight` 只读校验数据库 schema，不会自动建表或迁移；新建和升级数据库都必须先显式
+运行 `gvcsim classroom-init`，以便把备份、迁移和服务启动拆成可审计的独立步骤。
 
 正式课堂的并发配置不要照搬开发态单 worker。64 核、50–100 名学生的连接池、
 多 worker、CPU admission、PostgreSQL 预算和可复现压测流程见
@@ -153,6 +155,8 @@ uv run gvcsim classroom-init
 
 正式环境首次初始化教师时，临时设置 `GVCSIM_INITIAL_TEACHER_PASSWORD`，再运行
 `gvcsim classroom-init --teacher-username <管理员用户名> --teacher-name <显示名>`；成功后立即删除该变量。
+教师首次登录后从顶栏选择「修改密码」轮换临时口令。修改成功会推进账号认证版本并撤销该账号在所有
+浏览器中的既有会话，随后必须使用新密码重新登录；学生账号也可使用同一入口自助改密。
 
 `classroom-init --reset` 会清空全部教学表，只应在确认不保留课堂数据时使用。
 

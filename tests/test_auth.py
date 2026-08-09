@@ -46,6 +46,116 @@ def test_login_success_and_me():
     assert me.json()["account_id"] == 2
 
 
+def test_password_change_revokes_every_session_and_requires_the_new_password():
+    first = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
+    second = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
+    headers = {"Authorization": f"Bearer {first['token']}"}
+
+    changed = client.post(
+        "/api/auth/password",
+        headers=headers,
+        json={"current_password": "gvclab2026", "new_password": "teacher-new-private-password"},
+    )
+    assert changed.status_code == 200
+    assert changed.json() == {"ok": True, "reauthenticate": True}
+
+    for token in (first["token"], second["token"]):
+        assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+    assert client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).status_code == 401
+    assert (
+        client.post(
+            "/api/auth/login",
+            json={"username": "teacher", "password": "teacher-new-private-password"},
+        ).status_code
+        == 200
+    )
+    with db.conn() as connection:
+        audit = connection.execute(
+            "SELECT action,actor_name,target_type FROM audit_log WHERE action='auth.password_changed'"
+        ).fetchone()
+    assert audit == {"action": "auth.password_changed", "actor_name": "teacher", "target_type": "account"}
+
+
+def test_password_change_rejects_a_wrong_or_reused_current_password_without_revoking_session():
+    login = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
+    headers = {"Authorization": f"Bearer {login['token']}"}
+
+    wrong = client.post(
+        "/api/auth/password",
+        headers=headers,
+        json={"current_password": "wrong-password", "new_password": "teacher-new-private-password"},
+    )
+    assert wrong.status_code == 400 and wrong.json()["detail"] == "当前密码不正确"
+    db.provision_teacher("rotation_teacher", "轮换教师", "rotation-private-password")
+    rotation = client.post(
+        "/api/auth/login", json={"username": "rotation_teacher", "password": "rotation-private-password"}
+    ).json()
+    same = client.post(
+        "/api/auth/password",
+        headers={"Authorization": f"Bearer {rotation['token']}"},
+        json={"current_password": "rotation-private-password", "new_password": "rotation-private-password"},
+    )
+    assert same.status_code == 400 and same.json()["detail"] == "新密码不能与当前密码相同"
+    assert client.get("/api/auth/me", headers=headers).status_code == 200
+
+    too_short = client.post(
+        "/api/auth/password",
+        headers=headers,
+        json={"current_password": "gvclab2026", "new_password": "short"},
+    )
+    assert too_short.status_code == 422
+
+
+def test_successful_password_change_survives_rate_cleanup_failure(monkeypatch, caplog):
+    login = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
+    headers = {"Authorization": f"Bearer {login['token']}"}
+
+    def cleanup_failed(_key: str) -> None:
+        raise db.OperationFailed("connection_lost", "08006")
+
+    monkeypatch.setattr(db, "clear_login_attempts", cleanup_failed)
+    response = client.post(
+        "/api/auth/password",
+        headers=headers,
+        json={"current_password": "gvclab2026", "new_password": "teacher-new-private-password"},
+    )
+
+    assert response.status_code == 200
+    assert client.get("/api/auth/me", headers=headers).status_code == 401
+    assert (
+        client.post(
+            "/api/auth/login", json={"username": "teacher", "password": "teacher-new-private-password"}
+        ).status_code
+        == 200
+    )
+    assert "post-password-change rate-limit cleanup failed" in caplog.text
+    assert "08006" not in caplog.text
+
+
+def test_password_change_has_an_account_scoped_attempt_budget(monkeypatch):
+    login = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
+    headers = {"Authorization": f"Bearer {login['token']}"}
+    changed = False
+
+    monkeypatch.setattr(db, "reserve_login_attempt", lambda *_args, **_kwargs: 17)
+
+    def should_not_change(*_args, **_kwargs):
+        nonlocal changed
+        changed = True
+        return True
+
+    monkeypatch.setattr(db, "change_own_password", should_not_change)
+    response = client.post(
+        "/api/auth/password",
+        headers=headers,
+        json={"current_password": "gvclab2026", "new_password": "teacher-new-private-password"},
+    )
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "17"
+    assert changed is False
+
+
 def test_successful_login_survives_rate_cleanup_failure(monkeypatch, caplog):
     def cleanup_failed(_key: str) -> None:
         raise auth.AuthenticationUnavailable("sensitive cleanup detail")

@@ -256,6 +256,16 @@ def _stamp_version(version: str) -> None:
         c.execute("UPDATE schema_meta SET version = %s WHERE singleton", (version,))
 
 
+def test_read_only_schema_verification_never_initializes_an_empty_database():
+    db._schema_ready = False
+    with pytest.raises(db.SchemaVersionMismatch, match="classroom-init"):
+        db.verify_schema()
+
+    with psycopg.connect(TEST_DSN) as connection:
+        assert connection.execute("SELECT to_regclass('public.schema_meta')").fetchone()[0] is None
+    assert db._schema_ready is False
+
+
 def test_schema_version_mismatch_fails_loudly_instead_of_stacking_tables():
     """版本不符必须明确失败,绝不能继续 CREATE TABLE IF NOT EXISTS。
 
@@ -509,6 +519,35 @@ def test_query_operational_error_keeps_a_distinct_reason_and_sqlstate(monkeypatc
     assert pool.returned is True
     assert "sensitive SQL" not in caplog.text
     assert "sqlstate=57014" in caplog.text
+
+
+def test_worker_startup_verifies_schema_without_running_migrations(monkeypatch):
+    calls: list[str] = []
+
+    class ReadyPool:
+        def wait(self, *, timeout):
+            assert timeout > 0
+            calls.append("pool:wait")
+
+    def verified():
+        db._schema_ready = True
+        calls.append("schema:verify")
+        return {"status": "ok", "schema_version": db.TEACHING_DB_VERSION}
+
+    monkeypatch.setattr(db, "_schema_ready", False)
+    monkeypatch.setattr(db, "_startup_sealed", False)
+    monkeypatch.setattr(db, "verify_schema", verified)
+    monkeypatch.setattr(
+        db,
+        "initialize_schema",
+        lambda: (_ for _ in ()).throw(AssertionError("worker startup must not migrate schema")),
+    )
+    monkeypatch.setattr(db, "_get_pool", lambda: ReadyPool())
+
+    db.startup()
+
+    assert calls == ["schema:verify", "pool:wait"]
+    assert db._startup_sealed is True
 
 
 def test_started_worker_refuses_request_time_lazy_schema_initialization(monkeypatch):

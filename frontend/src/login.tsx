@@ -46,7 +46,7 @@ function NetBackdrop() {
   );
 }
 
-export function LoginPage({ onLogin }: { onLogin: (r: LoginResponse) => void }) {
+export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin: (r: LoginResponse) => void }) {
   const demoMode = import.meta.env.VITE_DEMO_MODE === "1";
   // 演示构建默认落在学生身份并预填口令,打开即可直接登录;非演示构建仍是空表单。
   const [username, setUsername] = useState(demoMode ? DEMO_ACCOUNTS[0].username : "");
@@ -106,6 +106,7 @@ export function LoginPage({ onLogin }: { onLogin: (r: LoginResponse) => void }) 
         <form className="login-card" onSubmit={submit}>
           <h2>进入实验平台</h2>
           <p className="login-card-sub">使用教师分配的个人账号登录；角色与课程权限由服务器确认。</p>
+          {notice && <div className="success-box login-notice" role="status">{notice}</div>}
 
           {demoMode && <div className="login-roles" role="group" aria-label="开发演示快捷账号">
             {DEMO_ACCOUNTS.map((a) => (
