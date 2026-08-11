@@ -19,6 +19,8 @@ def test_demo_deploy_guide_keeps_routine_frontend_path_short_and_non_disruptive(
     assert "[完整发布](docs/DEMO_FULL_RELEASE.md)" in guide
     assert 'cd "$(dirname "$dump")" && sha256sum -c "$(basename "$dump").sha256"' in guide
     assert 'sha256sum -c "$dump.sha256"' not in guide
+    assert 'stat -c \'%a %u %g\' "$app" > "$backup/app-root-stat"' in guide
+    assert 'chmod 0600 "$backup/app-root-stat"' in guide
     assert "MANIFEST_ID=-" not in guide
 
     frontend_section = guide.split("## 4. 前端-only：上传与切换", 1)[1].split("## 5. 验收", 1)[0]
@@ -39,5 +41,9 @@ def test_full_demo_release_remains_fail_closed_and_auditable():
     assert ".venv/bin/gvcsim classroom-init\n" in commands
     assert ".venv/bin/gvcsim classroom-init --reset" not in commands
     assert "validate_release(target, validate_sources=True)" in commands
+    assert "read -r app_mode app_uid app_gid < <(stat -c '%a %u %g' \"$app\")" in commands
+    assert 'read -r app_mode app_uid app_gid < "$backup/app-root-stat"' in commands
+    assert commands.count('chown "$app_uid:$app_gid" "$app"') == 2
+    assert commands.count('chmod "$app_mode" "$app"') == 2
     assert "POST /api/classroom/assignments" in guide
     assert "这不是普通发布步骤" in guide

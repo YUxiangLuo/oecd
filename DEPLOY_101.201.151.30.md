@@ -79,6 +79,8 @@ case "$backup" in /var/backups/gvcsim/releases/*-pre) ;; *) exit 64 ;; esac
 test -d "$app"
 test ! -e "$backup"
 install -d -m 0700 "$(dirname "$backup")" "$backup" "$backup/app"
+stat -c '%a %u %g' "$app" > "$backup/app-root-stat"
+chmod 0600 "$backup/app-root-stat"
 set -a
 . /etc/gvcsim.env
 set +a
@@ -96,8 +98,9 @@ chmod 0700 "$backup" "$backup/app"
 REMOTE
 ```
 
-必须看到 `classroom-*.dump: OK`，并确认 `$BACKUP/app` 和
-`$BACKUP/processed-target` 存在。checksum 不替代隔离恢复演练。
+必须看到 `classroom-*.dump: OK`，并确认 `$BACKUP/app`、
+`$BACKUP/app-root-stat` 和 `$BACKUP/processed-target` 存在。根目录元数据用于避免安全的
+`0700` 上传暂存目录经 `rsync -a` 意外覆盖应用目录权限。checksum 不替代隔离恢复演练。
 
 ## 4. 前端-only：上传与切换
 
