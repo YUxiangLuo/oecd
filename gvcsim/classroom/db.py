@@ -192,7 +192,7 @@ def _seed_if_empty(c: psycopg.Connection[dict[str, Any]]) -> bool:
         return False
     class_id = _required(c.execute(
         "INSERT INTO classes(name,code,semester,note) VALUES (%s,%s,%s,%s) RETURNING id",
-        ("GVC 实验演示班", "GVC-DEMO", "2026 春", "默认演示班级。"),
+        ("GVC 实验演示班", "GVC-DEMO", config.COURSE_TERM, f"{config.COURSE_TERM}学期演示班级。"),
     ).fetchone(), "seed class")["id"]
     for username, name, role, target_class, student_no in (
         ("teacher", "老师", "teacher", None, ""),
@@ -206,7 +206,7 @@ def _seed_if_empty(c: psycopg.Connection[dict[str, Any]]) -> bool:
         )
     c.execute(
         "INSERT INTO announcements(title,body,author) VALUES (%s,%s,%s)",
-        ("欢迎使用 GVC 实验系统", "请按顺序完成 16 步实验并提交报告。", "teacher"),
+        ("欢迎进入 2026 秋学期", "本学期使用全新的题库与实验会话，请按顺序完成 16 步实验并提交报告。", "teacher"),
     )
     return True
 

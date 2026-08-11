@@ -21,7 +21,7 @@ button { font-family: inherit; cursor: pointer; }
 
 /* primary/secondary 的基础外观。原先这两个类只在 .controls / .nav-btns /
    .teacher-content / .modal-card 之下才有规则,落在这些祖先之外的按钮
-   (第 12–16 步的安慰剂检验、清空比较、提交报告、导出 PDF)拿不到任何样式,
+   (第 12–16 步的实体置换分析、清空比较、提交报告、导出 PDF)拿不到任何样式,
    直接退回浏览器默认灰框。类名是给全站用的,基础样式就该在全站生效。
    下面几处作用域规则特异度更高(或同特异度但更靠后),仍然照旧覆盖本规则。 */
 button.primary {

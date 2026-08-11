@@ -124,6 +124,10 @@ export interface ShockEvent {
   target_codes?: string[];
   sector_codes?: string[];
   all_targets?: boolean;
+  /** 复合处理或教学映射的时间线边界。 */
+  timeline_note?: string | null;
+  /** 支持事件日期/定义的官方来源。 */
+  source_urls?: string[];
 }
 
 interface ShockSummaryYear {
@@ -230,8 +234,8 @@ export interface PagedRows {
 export type IndustryPage = PagedRows;
 
 /** 实验会话:逐步实验状态的可恢复模型(契约见 gvcsim/session.py)。 */
-/** v7 以选择题作为步骤 1–15 的唯一完成条件；其它会话版本一律拒绝。 */
-export const SESSION_VERSION = "experiment-session-simple-v1";
+/** 当前学期只接受 simple-v2；其它会话版本一律拒绝。 */
+export const SESSION_VERSION = "experiment-session-simple-v2";
 
 export interface SessionRecord<T = unknown> {
   data: T;
@@ -250,7 +254,7 @@ export interface ExperimentSession {
  * 一步实验台读写自己的自动保存状态。
  *
  * `complete` 一律来自服务端判定,实验台不自行推断是否完成——实验操作不参与
- * 完成判定；步骤 1–15 只由答题结果决定。
+ * 完成判定；步骤 1–15 只由答题结果决定。第 16 步的报告门槛另行检查关键操作与原创分析。
  */
 export interface StepStateApi<T = Record<string, unknown>> {
   data: T | undefined;
@@ -277,7 +281,7 @@ export interface CompletionSummary {
   total: number;
 }
 
-/** 第 16 步门槛：还差哪一步的理解检查。 */
+/** 第 16 步门槛：还差哪项理解检查、关键操作或原创分析。 */
 export interface ReportGateItem {
   step: number;
   title: string;
@@ -288,12 +292,14 @@ export interface ReportGate {
   blocked: ReportGateItem[];
 }
 
-/** 服务端生成的实验报告:正文与溯源都由服务端产出,客户端不提供任何内容。 */
+/** 服务端生成的实验报告:正文与溯源由服务端从会话快照产出；客户端只保存学生原创文字和实验操作。 */
 export interface GeneratedReport {
   markdown: string;
   suggested_filename?: string;
   provenance: {
     session_version: string;
+    quiz_version?: string;
+    course_release?: string;
     generated_at: string;
     years: number[];
     session_fingerprint: string;
@@ -334,6 +340,9 @@ export interface TreatmentSupport {
   treated_clusters: number;
   untreated_clusters: number;
   treated_entities: number;
+  /** 旧会话保存的回归快照可能没有这两个实体级字段。 */
+  untreated_entities?: number;
+  total_entities?: number;
   reversal_entities: string[];
   reversal_share: number;
   absorbing: boolean;
@@ -469,6 +478,12 @@ export interface PlaceboResponse {
     policy_name: string;
     true_coef: number;
     placebo_coefs: number[];
+    /** 抽样系数中至少和原始估计一样极端的实际占比。 */
+    tail_share: number;
+    extreme_count: number;
+    /** 加一修正后的有限次 Monte Carlo 统计量；置换机制未校准，不能作为 p 值。 */
+    adjusted_tail_share: number;
+    /** @deprecated adjusted_tail_share 的旧字段别名，不得作 p 值解释。 */
     empirical_p: number;
     n_draws: number;
     requested_draws: number;
@@ -476,6 +491,9 @@ export interface PlaceboResponse {
     treated_entities: number;
     total_entities: number;
     cohorts: Record<string, number>;
+    calibrated_inference: false;
+    assignment_preserved: string[];
+    assignment_not_preserved: string[];
     note: string;
   };
   disclaimer: string;

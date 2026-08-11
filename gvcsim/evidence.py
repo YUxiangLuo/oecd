@@ -27,7 +27,7 @@ def evaluate_step(step: int, session: dict[str, Any], *, report_exists: bool = F
     if lab is None:
         raise ValueError(f"未知步骤:{step}")
     if lab == "rep":
-        missing = [] if report_exists else ["请在前 15 步答题通过后生成实验报告"]
+        missing = [] if report_exists else ["请完成理解检查、关键实验与原创分析门槛后生成实验报告"]
         return StepCompletion(step, not missing, missing)
     record = session.get("steps", {}).get(str(step))
     data = record.get("data") if isinstance(record, dict) else None

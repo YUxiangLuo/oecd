@@ -29,12 +29,13 @@ def test_quiz_returns_normalized_answers_without_receipt(teaching_db):
     assert "quiz_id" not in response.json()
 
 
-def test_session_put_is_full_last_write_and_strips_step_16(teaching_db):
+def test_session_put_is_full_last_write_and_keeps_student_reflection(teaching_db):
     client = _client(teaching_db)
     first = empty_session()
     first["steps"]["1"] = make_record({"value": 1})
-    first["steps"]["16"] = make_record({"forged": True})
-    assert client.put("/api/classroom/session", json={"session": first}).status_code == 200
+    first["steps"]["16"] = make_record({"research_question": "学生自己的问题"})
+    saved_first = client.put("/api/classroom/session", json={"session": first}).json()
+    assert saved_first["session"]["steps"]["16"]["data"]["research_question"] == "学生自己的问题"
     second = empty_session()
     second["steps"]["2"] = make_record({"value": 2})
     saved = client.put("/api/classroom/session", json={"session": second}).json()
@@ -42,7 +43,7 @@ def test_session_put_is_full_last_write_and_strips_step_16(teaching_db):
     assert set(saved) == {"session", "updated_at", "completion"}
 
 
-def test_complete_quizzes_can_be_supplied_without_trusted_evidence(teaching_db):
+def test_complete_quizzes_do_not_bypass_report_evidence_gate(teaching_db):
     client = _client(teaching_db)
     session = empty_session()
     session["steps"] = {
@@ -50,7 +51,8 @@ def test_complete_quizzes_can_be_supplied_without_trusted_evidence(teaching_db):
     }
     response = client.put("/api/classroom/session", json={"session": session})
     assert response.json()["completion"]["completed"] == list(range(1, 16))
-    assert client.get("/api/classroom/report/gate").json() == {"blocked": []}
+    blocked = client.get("/api/classroom/report/gate").json()["blocked"]
+    assert {1, 7, 12, 16} <= {item["step"] for item in blocked}
 
 
 def test_removed_endpoints_are_not_available(teaching_db):

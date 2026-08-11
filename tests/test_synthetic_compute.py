@@ -109,4 +109,5 @@ def test_run_replaces_fixed_directory_resets_learning_and_writes_sentinel_last(t
     assert calls == ["year:2020", "panel", "reset"]
     metadata = json.loads((current / "dataset.json").read_text())
     assert metadata["years"] == [2020]
+    assert metadata["course_release"] == config.COURSE_RELEASE
     assert set(metadata["qc"]) == {"years", "controls", "shocks"}

@@ -63,6 +63,21 @@
 .technical-details[open] > summary { margin-bottom: 12px; }
 .technical-details h3 { margin: 16px 0 7px; }
 /* ---------- 第 16 步:服务端生成的报告 ---------- */
+.report-reflection {
+  display: grid; grid-template-columns: minmax(220px, .75fr) minmax(360px, 1.5fr);
+  gap: 18px; margin-bottom: 16px; padding: 16px; border: 1px solid #dce2ed;
+  border-radius: 10px; background: #f8fbff;
+}
+.report-reflection h3 { margin: 5px 0 7px; }
+.report-reflection p { margin: 0; color: var(--text-muted); font-size: 12px; line-height: 1.65; }
+.report-reflection-fields { display: grid; gap: 12px; }
+.report-reflection-fields label > span { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 5px; }
+.report-reflection-fields small { color: var(--text-muted); font-weight: 500; }
+.report-reflection-fields textarea {
+  box-sizing: border-box; width: 100%; padding: 9px 10px; border: 1px solid #d7dce7;
+  border-radius: 8px; background: #fff; color: var(--text); font: inherit; line-height: 1.6; resize: vertical;
+}
+.report-reflection-fields textarea:focus { outline: none; border-color: #4b47e0; box-shadow: 0 0 0 2px rgba(75, 71, 224, .1); }
 .report-gate-panel {
   margin: 0 0 16px; padding: 12px 14px; border-radius: 10px;
   background: #fff8e8; border: 1px solid #f3dfae;

@@ -1,7 +1,8 @@
 """课程步骤的固定单选题题库。
 
 题干和选项可以公开给前端；正确答案与反馈只在服务端判题后返回。题库版本
-进入可信凭证，后续修改题目时必须提升版本，旧答案不会被静默套用到新题。
+随不兼容的题目/答案变更提升；仅澄清措辞且题目 ID、选项 ID 和正确答案不变时
+保持版本，避免让学生无意义地重答全部步骤。
 """
 
 from __future__ import annotations
@@ -9,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 
-QUIZ_VERSION = "course-quiz-v3"
+QUIZ_VERSION = "course-quiz-v4"
 
 
 def _option(option_id: str, label: str) -> dict[str, str]:
@@ -273,14 +274,14 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
     15: [
         _question(
             "s15-placebo",
-            "安慰剂检验结果支持主结果时，最恰当的解释是什么？",
+            "当前实体置换敏感性分析显示原始估计位于伪处理分布尾部时，最恰当的解释是什么？",
             [
                 _option("a", "已经证明真实因果效应"),
-                _option("b", "主结果相对随机化反事实更异常，但仍只是稳健性证据"),
-                _option("c", "安慰剂可以替代主回归"),
+                _option("b", "原始估计在这套非校准置换规则下较极端，但尾部占比不是 p 值，也没有复现真实政策分配机制"),
+                _option("c", "实体置换可以替代主回归"),
             ],
             "b",
-            "安慰剂比较主结果与随机化反事实分布，是稳健性检查而不是因果证明。",
+            "当前置换只保留处理实体数与 cohort 数量分布；它可用于描述设定敏感性，但不是校准随机化推断或因果证明。",
         ),
         _question(
             "s15-sutva",

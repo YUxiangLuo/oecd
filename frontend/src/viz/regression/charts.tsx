@@ -72,7 +72,7 @@ export function EventStudyChart({ coefs, notes, title, seriesLabel, pretrend }: 
   );
 }
 
-/* -------------------------- 步骤12–15：安慰剂分布 -------------------------- */
+/* -------------------------- 步骤12–15：非校准实体置换分布 -------------------------- */
 
 export function PlaceboChart({ data }: { data: PlaceboResponse["placebo"] }) {
   const values = data.placebo_coefs;
@@ -96,10 +96,10 @@ export function PlaceboChart({ data }: { data: PlaceboResponse["placebo"] }) {
   return (
     <div style={{ ...cardStyle, marginTop: 14 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050", marginBottom: 6 }}>
-        安慰剂检验：随机伪处理组估计值分布
+        实体置换敏感性分析（非校准）：伪处理估计值分布
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="安慰剂检验随机伪处理组估计值分布；竖线为原始分组估计值" style={{ display: "block", width: "100%", height: "auto" }}>
-        <title>安慰剂检验随机伪处理组估计值分布；竖线为原始分组估计值</title>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="非校准实体置换的伪处理估计值分布；竖线为原始分组估计值" style={{ display: "block", width: "100%", height: "auto" }}>
+        <title>非校准实体置换的伪处理估计值分布；竖线为原始分组估计值</title>
         {zeroIn && <line x1={x(0)} x2={x(0)} y1={m.t} y2={H - m.b} stroke="#cfd3dd" strokeDasharray="4 4" />}
         {counts.map((c, i) => {
           const x0 = m.l + (i / bins) * plotW + 2;
@@ -128,13 +128,13 @@ export function PlaceboChart({ data }: { data: PlaceboResponse["placebo"] }) {
         ))}
       </svg>
       <div style={{ fontSize: 11.5, color: "#5a6070", lineHeight: 1.7 }}>
-        实际完成 {data.n_draws}/{data.requested_draws} 次随机化 · 原处理个体 {data.treated_entities}/{data.total_entities} ·
+        实际完成 {data.n_draws}/{data.requested_draws} 次置换 · 原处理个体 {data.treated_entities}/{data.total_entities} ·
         cohort={Object.entries(data.cohorts).map(([y, n]) => `${y}:${n}`).join("、")} ·
-        经验 p={data.empirical_p.toFixed(3)}
+        描述性尾部占比={data.tail_share.toFixed(3)}（非 p 值）
       </div>
       {data.n_draws < data.requested_draws && (
         <div role="alert" style={{ marginTop: 7, padding: "7px 10px", borderRadius: 7, background: "#fff5e8", color: "#9a5a00", fontSize: 11.5 }}>
-          有 {data.requested_draws - data.n_draws} 次随机化未得到有效估计；经验 p 值基于实际完成次数，解读时需谨慎。
+          有 {data.requested_draws - data.n_draws} 次置换未得到有效估计；尾部占比基于实际完成次数，且不构成校准推断。
         </div>
       )}
     </div>

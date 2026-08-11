@@ -3,7 +3,7 @@
  *
  * 三个贸易专属镜头(非通用图表标签),各自带读图脚手架:
  *   定位图   FVA 份额(后向参与)× GVC 生产份额(前向参与),四象限给经济体分型
- *   出口拆解 选中国家的毛出口拆成 WWZ 六项,直观看本国 / 外国来源占比
+ *   出口拆解 选中国家的毛出口拆成五类 WWZ 聚合项与 TLS 扩展,直观看本国 / 外国来源占比
  *   FVA 排序 谁的出口最依赖外国增加值(后向 GVC 参与最深)
  */
 import { api } from "../../../api";
@@ -53,7 +53,7 @@ export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; stat
         todo={[
           "在「选国家」里挑至少两个经济体(如 中国 vs 越南)",
           "先看定位图它们各落哪个象限",
-          "再切「出口拆解」比较六项构成",
+          "再切「出口拆解」比较五类 WWZ 聚合项与 TLS 扩展构成",
         ]}
       />
 
@@ -62,7 +62,7 @@ export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; stat
         onPick={pickLens}
         lenses={[
           { key: "quadrant", label: "定位图", hint: "后向 × 前向参与,四象限分型" },
-          { key: "decompose", label: "出口拆解", hint: "毛出口 = WWZ 六项之和" },
+          { key: "decompose", label: "出口拆解", hint: "毛出口 = 五类 WWZ 聚合项 + TLS 扩展" },
           { key: "rank", label: "FVA 排序", hint: "谁最依赖外国增加值" },
         ]}
       />
@@ -99,11 +99,11 @@ export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; stat
         </ChartStory>
       ) : lens === "decompose" ? (
         <ChartStory
-          eyebrow="WWZ 总贸易核算"
-          title="拆开一国的出口:六项从哪来"
-          what={<>每条 = 一个国家的毛出口,按 WWZ 六项归一化到 100%:前三项(蓝系)是<b>本国</b>增加值及其重复计算,FVA / FDC(绿 / 橙)是<b>外国</b>来源,taxsub 是税收。</>}
+          eyebrow="WWZ 聚合项 + OECD TLS 扩展"
+          title="拆开一国的出口:五类增加值核算项与 TLS"
+          what={<>每条 = 一个国家的含税毛出口,归一化到 100%:DVAex / DVArt / DDC 是<b>本国</b>增加值及其重复计算,FVA / FDC 是<b>外国</b>来源；taxsub 是 OECD TLS 账户扩展,不是 WWZ 原文分类。</>}
           read={<>蓝色段越宽，国内增加值及其重复计算占毛出口的份额越高；绿 / 橙段越宽，外国增加值及其重复计算份额越高。右侧数字是该国毛出口(百万美元)。</>}
-          find={<>对比大型经济体(美国:DVAex 段主导)与小型开放经济体(越南、卢森堡:FVA 段很宽)。六项之和恒等于毛出口。</>}
+          find={<>对比大型经济体(美国:DVAex 段主导)与小型开放经济体(越南、卢森堡:FVA 段很宽)。五类 WWZ 聚合项加 TLS 扩展恒等于含税毛出口。</>}
           note={picked.length ? "当前显示你选中的国家。" : "未选国家时默认展示毛出口最大的 8 国;在上方「选国家」挑选可替换。"}
         >
           <CompositionBar

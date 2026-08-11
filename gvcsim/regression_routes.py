@@ -1,4 +1,4 @@
-"""Regression design, estimation, and placebo routes."""
+"""Regression design, estimation, and entity-permutation routes."""
 
 from typing import Any, cast
 
@@ -187,11 +187,19 @@ def _regression_preflight(design: RegressionDesign, result: dict[str, Any], weig
         checks.append({"code": code, "severity": severity, "message": message})
 
     if support.get("untreated_clusters") == 0 and support.get("treated_clusters", 0) > 0:
-        add(
-            "no_never_treated",
-            "warning",
-            "没有永不处理聚类；识别仅来自尚未处理者与处理时点差异，异质处理效应下传统 staggered TWFE 可能有偏。",
-        )
+        untreated_entities = int(support.get("untreated_entities") or 0)
+        if untreated_entities > 0:
+            add(
+                "no_fully_untreated_cluster",
+                "warning",
+                f"没有完全未处理的聚类，但仍有 {untreated_entities} 个从未处理实体；比较并非只来自尚未处理者。聚类层面的共同冲击辨识更依赖模型设定，异质处理效应下传统 staggered TWFE 仍可能有偏。",
+            )
+        else:
+            add(
+                "no_never_treated_entity",
+                "warning",
+                "没有从未处理实体或完全未处理聚类；识别依赖处理时点差异，异质处理效应下传统 staggered TWFE 可能有偏。",
+            )
     if support.get("reversal_entities"):
         add(
             "treatment_reversal",
@@ -326,5 +334,5 @@ async def regression_placebo(req: PlaceboRequest, request: Request):
     return {
         "design": design_info,
         "placebo": placebo,
-        "disclaimer": "安慰剂检验基于拟真演示冲击数据,用于教学展示随机化反事实分布",
+        "disclaimer": "实体置换仅用于描述性敏感性比较；它没有复现真实政策分配机制，尾部占比不是校准 p 值或因果证据",
     }

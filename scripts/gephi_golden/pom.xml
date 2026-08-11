@@ -5,7 +5,7 @@
 
   这份工程刻意【不依赖】本仓库的 gvcsim 包：它的唯一依赖是 Gephi 官方
   toolkit，因此它是 gvcsim/indicators/network.py 的独立“预言机”（oracle），
-  而不是拿被测实现反推基准。详见同目录 README.md。
+  而不是拿被测实现反推基准。口径由 tests/test_indicators.py 与 generate.sh 共同固定。
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -19,7 +19,7 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <!-- 与 fixture 文件名里的版本号一致；升级前请阅读 README 的“升级基准”一节。 -->
+    <!-- 与 fixture 文件名及根 README 的基准版本一致；升级时须重新运行 generate.sh --check 并提交新 fixture。 -->
     <gephi.toolkit.version>0.10.1</gephi.toolkit.version>
     <exec.mainClass>GephiGoldenExport</exec.mainClass>
   </properties>

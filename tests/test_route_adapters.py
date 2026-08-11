@@ -241,7 +241,7 @@ def test_regression_run_and_placebo_are_simple_current_results(teaching_db, monk
     run = client.post("/api/regression/run", json={"outcome": "network"})
     assert run.status_code == 200
     codes = {check["code"] for check in run.json()["preflight"]["checks"]}
-    assert {"no_never_treated", "treatment_reversal", "network_interference", "treatment_weighting"} <= codes
+    assert {"no_never_treated_entity", "treatment_reversal", "network_interference", "treatment_weighting"} <= codes
     assert run.json()["preflight"]["can_infer"] is False
 
     placebo = client.post("/api/regression/placebo", json={"outcome": "trade", "n_draws": 10, "seed": 7})

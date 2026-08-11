@@ -98,7 +98,7 @@ export function ShockLab({ meta, step, state }: {
         ]}
       />
       <div className="warnbox shock-disclaimer">
-        ⚠ 拟真演示数据:以 2018–2020 全球贸易摩擦真实事件为原型手工编码(税率量级参考 PIIE/Bown),
+        ⚠ 拟真演示数据:以 2017–2020 全球贸易摩擦真实事件为原型手工编码(税率量级参考 PIIE/Bown),
         出口暴露度由真实 OECD ICIO 双边流向计算;覆盖 {meta.countries.length} 经济体 × {meta.sectors.length} 行业,不能用于研究结论。
       </div>
 

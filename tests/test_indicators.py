@@ -53,7 +53,7 @@ def test_build_arrays_with_tls(fake_io):
 
 
 def test_tradeflow_preserves_negative_net_subsidy_and_closure(fake_io):
-    """负 TLS 沿供应链传播后仍可为负,但六项分解必须继续闭合。"""
+    """负 TLS 沿供应链传播后仍可为负,五类 WWZ 聚合项加 TLS 扩展仍须闭合。"""
     arr = build_arrays(with_tls(fake_io, tls_ratio=-0.1))
     df = tradeflow.sector_tradeflow(arr)
     exporting = arr.E > 0
@@ -169,7 +169,7 @@ def test_tradeflow_cycle_has_return_and_double_counting(cycle_io):
 
 
 def test_tradeflow_autarky(autarky_io):
-    """封闭经济:没有出口,六项全为 0。"""
+    """封闭经济:没有出口,五类 WWZ 聚合项与 TLS 扩展均为 0。"""
     arr = build_arrays(autarky_io)
     df = tradeflow.sector_tradeflow(arr)
     assert np.allclose(arr.E, 0)

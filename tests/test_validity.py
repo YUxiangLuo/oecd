@@ -59,6 +59,33 @@ def test_counts_treated_and_untreated_clusters_separately():
     s = _support(_many_treated(n_treated=3, n_control=9))
     assert s.treated_clusters == 3
     assert s.untreated_clusters == 9
+    assert s.treated_entities == 3
+    assert s.untreated_entities == 9
+    assert s.total_entities == 12
+
+
+def test_distinguishes_never_treated_entities_from_fully_untreated_clusters():
+    rows = []
+    for country in ("A", "B", "C", "D", "E"):
+        for industry in ("treated", "control"):
+            for year in (2016, 2017, 2018):
+                rows.append(
+                    {
+                        "country": country,
+                        "entity_id": f"{country}-{industry}",
+                        "year": year,
+                        "shock": float(industry == "treated" and year >= 2017),
+                        "treated": int(industry == "treated" and year >= 2017),
+                    }
+                )
+    s = analyze_support(
+        pd.DataFrame(rows), entity="entity_id", time="year", cluster="country",
+        treated_col="treated", absorbing=True, intensity_col="shock",
+    )
+    assert s.untreated_clusters == 0
+    assert s.treated_entities == 5
+    assert s.untreated_entities == 5
+    assert any("比较并非只来自尚未处理者" in reason for reason in s.reasons)
 
 
 def test_too_few_treated_clusters_is_insufficient_regardless_of_total_clusters():
@@ -76,14 +103,15 @@ def test_enough_treated_clusters_is_ok():
     assert s.suppress_inference is False
 
 
-def test_no_never_treated_control_is_warning_not_suppressed():
-    """全部聚类都受处理时识别只靠时点差异;披露但不抑制推断。"""
+def test_no_never_treated_entity_is_warning_not_suppressed():
+    """全部实体都受处理时识别只靠时点差异;披露但不抑制推断。"""
     rows = []
     for i in range(MIN_TREATED_CLUSTERS + 1):
         for y in (2016, 2017, 2018):
             rows.append((f"T{i}", y, 1.0 if y >= 2017 + (i % 2) else 0.0))
     s = _support(_panel(rows))
     assert s.untreated_clusters == 0
+    assert s.untreated_entities == 0
     assert s.status == STATUS_WARNING
     assert s.suppress_inference is False
 
@@ -259,7 +287,8 @@ def test_tariff_did_keeps_inference_but_discloses_small_reversal(panel, ci_synth
     assert result.status == STATUS_WARNING
     assert 0 < result.support["reversal_share"] < MAX_REVERSAL_SHARE
     if ci_synthetic_contract is None:
-        assert result.support["untreated_clusters"] == 0  # 真实教学表没有从未受处理的对照国
+        assert result.support["untreated_clusters"] == 0  # 每个国家都至少有一个受处理行业
+        assert result.support["untreated_entities"] > 0  # 但仍有许多从未受处理的国家×行业实体
     else:
         assert result.support["untreated_clusters"] == ci_synthetic_contract["expected_tariff_untreated_clusters"]
     assert all(coef.p is not None for coef in result.coefs)

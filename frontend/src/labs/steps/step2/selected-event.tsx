@@ -52,6 +52,15 @@ export function SelectedEventBar({
         {event.peak_rate > 0 && <div><dt>峰值强度</dt><dd>{pct(event.peak_rate)}</dd></div>}
         {event.exempt && <div><dt>豁免</dt><dd>{event.exempt}</dd></div>}
         {event.entities && <div><dt>实体</dt><dd>{event.entities}</dd></div>}
+        {event.timeline_note && <div><dt>时间线说明</dt><dd>{event.timeline_note}</dd></div>}
+        {event.source_urls && event.source_urls.length > 0 && (
+          <div>
+            <dt>官方来源</dt>
+            <dd>{event.source_urls.map((url, index) => (
+              <span key={url}>{index > 0 ? "、" : ""}<a href={url} target="_blank" rel="noreferrer">来源 {index + 1}</a></span>
+            ))}</dd>
+          </div>
+        )}
       </dl>
     </div>
   );

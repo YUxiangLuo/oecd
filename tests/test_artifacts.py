@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from gvcsim import artifacts
+from gvcsim import artifacts, config
 
 
 def _year(directory: Path, year: int) -> None:
@@ -15,20 +15,40 @@ def _year(directory: Path, year: int) -> None:
     (directory / f"qc_{year}.json").write_text("[]")
 
 
-def test_fixed_dataset_sentinel_and_files(tmp_path: Path):
-    _year(tmp_path, 2020)
+def _release_files(directory: Path) -> None:
+    _year(directory, 2020)
     for name in ("panel_country.csv", "panel_industry.csv", "controls_country.csv"):
-        pd.DataFrame({"value": [1]}).to_csv(tmp_path / name, index=False)
-    pd.DataFrame({"value": [1]}).to_csv(tmp_path / "demo_trade_war_tariffs.csv", index=False)
+        pd.DataFrame({"value": [1]}).to_csv(directory / name, index=False)
+    pd.DataFrame({"value": [1]}).to_csv(directory / "demo_trade_war_tariffs.csv", index=False)
     for name in ("qc_controls.json", "qc_shocks.json"):
-        (tmp_path / name).write_text("[]")
-    artifacts.write_dataset_metadata(tmp_path, [2020], metadata={"generated_at": "now"})
+        (directory / name).write_text("[]")
+
+
+def test_fixed_dataset_sentinel_and_files(tmp_path: Path):
+    _release_files(tmp_path)
+    artifacts.write_dataset_metadata(
+        tmp_path,
+        [2020],
+        metadata={"generated_at": "now", "course_release": config.COURSE_RELEASE},
+    )
     assert artifacts.validate_release(tmp_path)["years"] == 1
     assert artifacts.dataset_metadata(tmp_path)["generated_at"] == "now"
     assert artifacts.current_artifact_years(tmp_path) == [2020]
 
     (tmp_path / "demo_trade_war_tariffs.csv").unlink()
     with pytest.raises(artifacts.ArtifactContractError, match="demo_trade_war_tariffs"):
+        artifacts.validate_release(tmp_path)
+
+
+@pytest.mark.parametrize("release", [None, "2026-spring"])
+def test_release_rejects_missing_or_stale_course_version(tmp_path: Path, release: str | None):
+    _release_files(tmp_path)
+    metadata = {"years": [2020]}
+    if release is not None:
+        metadata["course_release"] = release
+    (tmp_path / artifacts.DATASET_METADATA).write_text(json.dumps(metadata))
+
+    with pytest.raises(artifacts.ArtifactContractError, match=config.COURSE_RELEASE):
         artifacts.validate_release(tmp_path)
 
 

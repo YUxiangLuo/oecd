@@ -87,7 +87,6 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
         payload = session_model.validate_session(req.session)
     except session_model.SessionError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    payload["steps"].pop("16", None)
     saved = db.save_session(user["sub"], payload)
     if saved is None:
         raise HTTPException(status_code=404, detail="学生账号不可用")

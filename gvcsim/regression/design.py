@@ -16,7 +16,7 @@ from gvcsim.shocks import SHOCK_LABELS, SHOCK_SPECS, SHOCK_TARIFF
 
 # 稳定 outcome → (被解释变量, 中文含义)。列名来自 pipeline 产出的指标面板。
 OUTCOME_DEPVARS = {
-    "trade": ("FVA_share", "出口中外国增加值份额(FVA / 毛出口,WWZ)"),
+    "trade": ("FVA_share", "出口中外国增加值份额(FVA / 含 TLS 毛出口)"),
     "production": ("3b_VA_GVC_C_share", "复杂GVC生产份额(3b_VA_GVC_C / SVA,WWYZ)"),
     "length": ("PLv_GVC", "前向 GVC 生产长度(WWYZ)"),
     "network": ("betweenesscentrality", "生产网络介数中心性"),

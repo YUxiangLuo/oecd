@@ -80,7 +80,7 @@ function DatabaseGuide({ meta }: { meta: DbMeta }) {
               <td><b>OECD ICIO</b> ✓ 本系统默认</td>
               <td>OECD</td>
               <td>{icioCoverage}</td>
-              <td>以各国官方国民账户为基础;增加值贸易 / GVC 分解的主流标准(本系统 WWZ、WWYZ 等指标即基于它)</td>
+              <td>以各国官方国民账户为基础;适合计算增加值贸易 / GVC 指标(本系统的 WWZ 聚合项、OECD TLS 扩展与 WWYZ 指标均基于它)</td>
             </tr>
             {OTHER_DATABASES.map((db) => (
               <tr key={db.name}>

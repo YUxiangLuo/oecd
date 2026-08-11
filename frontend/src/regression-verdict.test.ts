@@ -25,7 +25,8 @@ const suppressedCoefficient = (coef: number): CoefStat => ({
 });
 
 const support = (over: Partial<TreatmentSupport> = {}): TreatmentSupport => ({
-  treated_clusters: 1, untreated_clusters: 75, treated_entities: 4, reversal_entities: [],
+  treated_clusters: 1, untreated_clusters: 75, treated_entities: 4, untreated_entities: 296,
+  total_entities: 300, reversal_entities: [],
   reversal_share: 0, absorbing: true, status: "insufficient", reasons: ["处理支持度不足"],
   min_treated_clusters: 5, max_reversal_share: 0.05, suppress_inference: true, ...over,
 });
@@ -169,9 +170,10 @@ describe("buildRegressionVerdict", () => {
 });
 
 describe("placeboInterpretation", () => {
-  test("does not describe a low empirical p as causal proof", () => {
-    expect(placeboInterpretation(0.01)).toContain("不是因果证明");
-    expect(placeboInterpretation(0.2)).toContain("未提供额外");
+  test("always describes the tail share as non-calibrated", () => {
+    expect(placeboInterpretation(0.01)).toContain("1.0%");
+    expect(placeboInterpretation(0.01)).toContain("不是 p 值");
+    expect(placeboInterpretation(0.2)).toContain("不能支持或否定因果结论");
   });
 });
 

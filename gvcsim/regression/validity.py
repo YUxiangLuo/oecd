@@ -43,6 +43,8 @@ class TreatmentSupport:
     treated_clusters: int
     untreated_clusters: int
     treated_entities: int
+    untreated_entities: int
+    total_entities: int
     reversal_entities: list[str]
     reversal_share: float
     absorbing: bool
@@ -59,6 +61,8 @@ class TreatmentSupport:
             "treated_clusters": self.treated_clusters,
             "untreated_clusters": self.untreated_clusters,
             "treated_entities": self.treated_entities,
+            "untreated_entities": self.untreated_entities,
+            "total_entities": self.total_entities,
             "reversal_entities": list(self.reversal_entities),
             "reversal_share": self.reversal_share,
             "absorbing": self.absorbing,
@@ -104,7 +108,7 @@ def scan_reversal(
     frame = pd.DataFrame({entity: data[entity].values, time: data[time].values, "on": on_series.values})
     # 整表排序一次 + 按个体 cummax:累计最大值恰好就是"首次处理起恒为 1"的吸收型窗口,
     # 与逐组取 path[argmax():] 等价。原本是逐个体 groupby + sort_values 的 Python 循环,
-    # 每次估计多花约 0.3 秒;安慰剂检验要重估几十次,40 draws 因此从 16.5 秒降到 2.4 秒。
+    # 每次估计多花约 0.3 秒;实体置换要重估几十次,40 draws 因此从 16.5 秒降到 2.4 秒。
     frame = frame.sort_values([entity, time], kind="stable")
     post = frame.groupby(entity, sort=False)["on"].cummax().to_numpy(dtype=bool)
     on = frame["on"].to_numpy(dtype=bool)
@@ -139,7 +143,12 @@ def analyze_support(
     all_cluster_ids = set(clusters.unique())
     treated_clusters = len(treated_cluster_ids)
     untreated_clusters = len(all_cluster_ids - treated_cluster_ids)
-    treated_entities = int(data.loc[exposure.to_numpy(), entity].nunique())
+    entity_exposure = pd.DataFrame(
+        {"entity": data[entity].astype(str).to_numpy(), "exposed": exposure.to_numpy(dtype=bool)}
+    ).groupby("entity", sort=False)["exposed"].any()
+    treated_entities = int(entity_exposure.sum())
+    untreated_entities = int((~entity_exposure).sum())
+    total_entities = int(len(entity_exposure))
 
     status_col = intensity_col if intensity_col and intensity_col in data.columns else treated_col
     scan = scan_reversal(data, entity, time, status_col) if absorbing else ReversalScan([], 0, 0)
@@ -183,17 +192,28 @@ def analyze_support(
         )
 
     if absorbing and untreated_clusters == 0 and treated_clusters > 0:
-        escalate(
-            STATUS_WARNING,
-            f"没有从未受处理的对照聚类:全部 {treated_clusters} 个聚类都曾受处理,"
-            f"识别完全依赖处理时点差异(尚未处理者充当对照)。"
-            f"传统 staggered TWFE 在处理效应异质时尤其容易有偏。",
-        )
+        if untreated_entities > 0:
+            escalate(
+                STATUS_WARNING,
+                f"没有完全未处理的对照聚类:全部 {treated_clusters} 个聚类都至少包含一个处理实体,"
+                f"但样本仍有 {untreated_entities} 个从未处理实体。比较并非只来自尚未处理者；"
+                f"不过没有整个聚类都未处理,聚类层面的共同冲击辨识更依赖模型设定。"
+                f"传统 staggered TWFE 在处理效应异质时仍可能有偏。",
+            )
+        else:
+            escalate(
+                STATUS_WARNING,
+                f"没有从未处理实体或完全未处理聚类:全部 {treated_clusters} 个聚类和"
+                f"全部 {treated_entities} 个实体都曾受处理,识别依赖处理时点差异。"
+                f"传统 staggered TWFE 在处理效应异质时尤其容易有偏。",
+            )
 
     return TreatmentSupport(
         treated_clusters=treated_clusters,
         untreated_clusters=untreated_clusters,
         treated_entities=treated_entities,
+        untreated_entities=untreated_entities,
+        total_entities=total_entities,
         reversal_entities=reversal_entities,
         reversal_share=scan.share,
         absorbing=absorbing,

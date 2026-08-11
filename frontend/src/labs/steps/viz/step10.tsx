@@ -39,7 +39,7 @@ export function Step10Length({ meta, step, state }: { meta: Meta; step: Step; st
         todo={[
           "在「选国家」里挑至少两个经济体对比",
           "在上下游定位图里找它们靠上游还是下游",
-          "用 GVCPs 排名看谁最靠近原材料端",
+          "用 GVCPs 排名比较相对上下游位置，再避免把位置指数直接当作经济体类型",
         ]}
       />
 
@@ -71,8 +71,8 @@ export function Step10Length({ meta, step, state }: { meta: Meta; step: Step; st
           eyebrow="价值链位置"
           title="上下游定位:前向 GVC 段长 × 后向 GVC 段长"
           what={<>横轴 <b>后向 GVC 段长 PLy_GVC</b>(最终品回溯到初始投入的跨境环节),纵轴 <b>前向 GVC 段长 PLv_GVC</b>(增加值到最终吸收的跨境环节)。虚线是全样本中位数。</>}
-          read={<>越靠<b>左上</b>(前向长、后向短)= 越<b>上游</b>(靠近原材料 / 初始投入);越靠<b>右下</b> = 越<b>下游</b>(靠近最终消费)。两者都长表示前向和后向核算到的生产环节都较多。</>}
-          find={<>资源、原材料供应型经济体(如沙特、澳大利亚、俄罗斯)偏上游;组装、消费型经济体偏下游。看你选的国家落在哪。</>}
+          read={<>越靠<b>左上</b>(前向长、后向短)= 在该口径下越<b>上游</b>(离最终需求更远);越靠<b>右下</b> = 相对更下游。上游既可能是原材料，也可能是关键中间品或生产性服务。</>}
+          find={<>先看你选的国家相对位置，再下钻其行业构成。国家位置是多种行业活动的加权结果，不能直接等同于“资源国”或“组装国”。</>}
           note={`参考线基于全部有效样本 n=${posRows.length};段长 = 增加值被计为总产出的平均次数(WWYZ 2017b)。`}
         >
           <QuadrantScatter
@@ -100,9 +100,9 @@ export function Step10Length({ meta, step, state }: { meta: Meta; step: Step; st
           eyebrow="上游度"
           title="GVC 位置指数 GVCPs 排名(前 20)"
           what={<>横条 = <b>GVCPs = 前向 GVC 段长 / 后向 GVC 段长</b>。&gt;1 = 前向更长 = 更靠<b>上游</b>(离最终需求远)。</>}
-          read={<>越长 = 越靠近价值链的原材料 / 初始投入端。这类经济体的角色是"供给上游中间品",而非组装成品。</>}
-          find={<>榜首多为资源与原材料供应方;把你选的国家和它们对比,判断它在链条中的角色。</>}
-          note="仅展示前 20;GVCPs 为无量纲比值。"
+          read={<>比值越高 = 前向 GVC 段相对后向段更长、离最终需求相对更远；它不告诉你上游活动究竟是原材料、零部件还是服务。</>}
+          find={<>把你选的国家与榜首比较，再结合行业下钻或生产构成判断角色；不要仅凭一个国家级比值贴标签。</>}
+          note="仅展示前 20；GVCPs 为无量纲相对位置指标，不是资源禀赋或产业类型分类器。"
         >
           <RankBarChart rows={rankRows} metricKey="GVCPs" label="GVC 位置指数" format="number" highlight={highlight} />
         </ChartStory>

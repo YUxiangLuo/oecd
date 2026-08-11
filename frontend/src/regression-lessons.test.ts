@@ -6,7 +6,7 @@ describe("regression lessons", () => {
     expect(Object.keys(REGRESSION_LESSONS)).toEqual(["trade", "production", "length", "network"]);
     expect(REGRESSION_LESSONS.trade.unit).toContain("百分点");
     expect(REGRESSION_LESSONS.length.focus).toContain("事件研究");
-    expect(REGRESSION_LESSONS.network.focus).toContain("安慰剂");
+    expect(REGRESSION_LESSONS.network.focus).toContain("实体置换");
     expect([
       REGRESSION_LESSONS.trade.priorStep,
       REGRESSION_LESSONS.production.priorStep,

@@ -4,7 +4,7 @@
  * DecompositionDemo(步骤3/4/5):用真实指标数据把总量拆成各分项,
  *   实时校验恒等式(加总 = 毛出口 / 总增加值 / 总生产长度),每项可 hover 看含义。
  *   恒等式口径与后端引擎及公开文献一致:
- *     步骤3 毛出口 = DVAex + DVArt + DDC + FVA + FDC + taxsub(WWZ 总贸易核算)
+ *     步骤3 毛出口 = 五类 WWZ 聚合项 + OECD TLS 扩展项 taxsub
  *     步骤4 SVA = 纯国内 + 传统贸易 + 简单GVC + 复杂GVC(WWYZ 2017a)
  *     步骤5 PLv = 各段长度按对应增加值份额的加权平均(WWYZ 2017b;
  *           分项显示为"VA份额×段长度"的贡献值,贡献加总 = 总长度)
@@ -54,7 +54,7 @@ const DECOMP: Record<number, DecompCfg> = {
     ],
     note: (r) =>
       `EXDVA 出口国内增加值合计 = DVAex + DVArt = ${fmt(num(r.DVAex) + num(r.DVArt), "amount")}` +
-      `(WWZ 2013 / 王直等 2015 总贸易核算法,16 项分解归组为上面六大类)。`,
+      `（WWZ 16 个明细项归并为 DVAex / DVArt / DDC / FVA / FDC 五类；taxsub 是本系统基于 OECD ICIO TLS 账户加入的扩展项，不属于 WWZ 原文分类。）`,
   },
   5: {
     total: "SVA",

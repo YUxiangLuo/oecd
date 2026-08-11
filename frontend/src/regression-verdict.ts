@@ -192,8 +192,7 @@ export function buildRegressionVerdict(
   };
 }
 
-export function placeboInterpretation(empiricalP: number): string {
-  if (empiricalP < 0.05) return "原始分组估计值位于随机伪处理分布的尾部，随机分组较难产生同等极端结果；这仍不是因果证明。";
-  if (empiricalP < 0.1) return "原始分组估计值较少由随机伪处理产生，但证据较弱，需要结合其他检查。";
-  return "随机伪处理经常产生同等极端的估计值，安慰剂结果未提供额外的稳健性支持。";
+export function placeboInterpretation(tailShare: number): string {
+  const percent = Number.isFinite(tailShare) ? `${(tailShare * 100).toFixed(1)}%` : "—";
+  return `在这组非校准实体置换中，约 ${percent} 的伪处理估计至少同原始估计一样极端。该比例只描述当前置换规则下的位置；它不是 p 值，也不能支持或否定因果结论。`;
 }

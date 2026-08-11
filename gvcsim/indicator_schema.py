@@ -6,7 +6,7 @@ INDICATOR_SCHEMA = {
     "groups": [
         {
             "key": "trade",
-            "label": "WWZ 总贸易核算分解",
+            "label": "WWZ 聚合项 + OECD TLS 扩展",
             "fields": [
                 "gross_exports",
                 "DVAex",
@@ -75,7 +75,7 @@ INDICATOR_SCHEMA = {
         },
     ],
     "fields": {
-        "gross_exports": {"label": "毛出口(六项合计)", "format": "amount"},
+        "gross_exports": {"label": "毛出口(五类 WWZ 聚合项 + TLS)", "format": "amount"},
         "FVA_share": {"label": "FVA 份额(FVA/毛出口)", "format": "pct"},
         "DVAex_share": {"label": "DVAex 份额(DVAex/毛出口)", "format": "pct"},
         "3_VA_GVC_share": {"label": "GVC 生产份额(3_VA_GVC/SVA)", "format": "pct"},
@@ -124,7 +124,7 @@ INDICATOR_SCHEMA = {
 }
 
 _INDICATOR_DESCRIPTIONS = {
-    "gross_exports": "WWZ 六个出口核算分项之和，表示按增加值来源完整分解后的毛出口。",
+    "gross_exports": "五类 WWZ 聚合项与 OECD TLS 扩展项之和；taxsub 用于匹配 OECD 含税毛出口口径，不是 WWZ 原文中的分解项。",
     "FVA_share": "出口中外国增加值占毛出口的比重；越高表示对进口中间投入的后向依赖越强。",
     "DVAex_share": "被国外最终吸收的国内增加值占毛出口的比重；越高表示出口保留的本国增加值越多。",
     "3_VA_GVC_share": "通过中间品跨境参与 GVC 的增加值占总增加值 SVA 的比重。",
@@ -134,7 +134,7 @@ _INDICATOR_DESCRIPTIONS = {
     "DDC": "本国增加值在跨境生产链中多次计入毛流量形成的国内重复计算。",
     "FVA": "本国出口中由外国生产者创造的增加值，是后向 GVC 参与的核心量。",
     "FDC": "外国增加值在跨境生产链中多次计入毛流量形成的重复计算。",
-    "taxsub": "出口直接及间接所含的产品税减补贴；负值表示沿供应链累计后呈净补贴。",
+    "taxsub": "由 OECD ICIO 的 TLS 账户沿投入产出链计算的出口税收减补贴含量；这是本系统为匹配 OECD 账户口径加入的扩展项，不是 WWZ 原文分解项。负值表示沿供应链累计后呈净补贴。",
     "EXDVA": "出口中的国内增加值合计，等于 DVAex 与 DVArt 之和。",
     "SVA": "从增加值来源端核算的生产活动总增加值。",
     "1_VA_D": "只在本国生产并满足本国最终需求、未发生跨境的增加值。",

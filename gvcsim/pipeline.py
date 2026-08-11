@@ -292,6 +292,7 @@ def run(years: list[int] | None = None, *, allow_qc_override: bool = False) -> N
         selected_years,
         metadata={
             "generated_at": pd.Timestamp.now(tz="UTC").isoformat(),
+            "course_release": config_module.COURSE_RELEASE,
             "data_sources": artifact_data_sources(RAW_DATA_DIR),
             "qc": release_qc,
         },

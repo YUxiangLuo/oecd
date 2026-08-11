@@ -11,7 +11,8 @@ copyright holder.
 This notice does not claim ownership of third-party software, datasets,
 standards, publications, trademarks, or other material. In particular, OECD
 ICIO data and any derived data remain subject to the terms, metadata, and
-third-party rights applicable to those data. See docs/DATA_LICENSES.md.
+third-party rights applicable to those data. The root README records the
+relevant data sources and usage boundaries.
 
 THE PROJECT-AUTHORED MATERIAL IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF

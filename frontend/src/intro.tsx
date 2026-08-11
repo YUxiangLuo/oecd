@@ -216,7 +216,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
             <CardIcon kind="shock" />
             <span>
               <span className="intro-card-title">贸易政策冲击面板</span>
-              <span className="intro-card-sub">以 2018–2020 全球贸易摩擦为原型的课堂拟真事件库</span>
+              <span className="intro-card-sub">以 2017–2020 全球贸易摩擦为原型的课堂拟真事件库</span>
             </span>
             <span className="intro-card-toggle">{openCard === "shock" ? "−" : "+"}</span>
           </span>

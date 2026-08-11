@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, cast
 
 from gvcsim import evidence, quizzes
 from gvcsim.artifacts import NETWORK_ALGORITHM, dataset_metadata
-from gvcsim.config import processed_years
+from gvcsim.config import COURSE_RELEASE, processed_years
 from gvcsim.data.citations import report_source_disclosures, report_source_label
 from gvcsim.session import SESSION_VERSION
 from gvcsim.steps import STEPS
 
+REFLECTION_TEXT_LIMIT = 2400
 GATE_STEPS = tuple(step for step in sorted(evidence.STEP_LABS) if evidence.STEP_LABS[step] != "rep")
 _STEP_TITLES = {cast(int, item["n"]): cast(str, item["title"]) for item in STEPS}
 _STEP_OUTCOMES = {
@@ -35,12 +37,17 @@ _STATUS_LABELS = {
     "invalid_design": "设计无效",
     "unknown": "未记录设计状态",
 }
+_REFLECTION_MIN_LENGTHS = {
+    "research_question": 12,
+    "evidence_interpretation": 40,
+    "limitations": 30,
+}
 
 
 class ReportGateError(RuntimeError):
     def __init__(self, missing: list[dict[str, Any]]):
         self.missing = missing
-        super().__init__("实验报告需要先通过第 1–15 步的理解检查")
+        super().__init__("实验报告需要先完成理解检查、关键实验操作与原创分析")
 
 
 @dataclass
@@ -62,6 +69,60 @@ def check_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
         result = evidence.evaluate_step(step, session)
         if not result.complete:
             blocked.append({"step": step, "title": _STEP_TITLES.get(step, ""), "missing": result.missing})
+
+    observation = _step_data(session, 1).get("observation")
+    has_observation = isinstance(observation, dict) and all(
+        observation.get(key) not in (None, "") for key in ("row", "column", "value")
+    )
+    if not has_observation:
+        blocked.append({
+            "step": 1,
+            "title": _STEP_TITLES.get(1, ""),
+            "missing": ["请在 ICIO 表中点击并记录一个具体单元格"],
+        })
+
+    has_comparison = False
+    for step in range(3, 11):
+        data = _step_data(session, step)
+        compared = {str(item) for item in _list_values(data.get("compared")) if str(item).strip()}
+        observations = [
+            item for item in _list_values(data.get("observations"))
+            if isinstance(item, dict)
+            and item.get("entity", item.get("country")) not in (None, "")
+            and item.get("value") not in (None, "")
+        ]
+        if len(compared) >= 2 or len(observations) >= 2:
+            has_comparison = True
+            break
+    if not has_comparison:
+        blocked.append({
+            "step": 7,
+            "title": "指标对比探索",
+            "missing": ["请在步骤 3–10 中保存至少两个比较对象或两条指标观测"],
+        })
+
+    if not _gate_qualified_runs(session):
+        blocked.append({
+            "step": 12,
+            "title": "回归实验",
+            "missing": ["请在步骤 12–15 中至少运行并保存一次有效回归"],
+        })
+
+    reflection = _step_data(session, 16)
+    reflection_missing = []
+    for key, label in (
+        ("research_question", "研究问题"),
+        ("evidence_interpretation", "证据解释"),
+        ("limitations", "局限与反思"),
+    ):
+        minimum = _REFLECTION_MIN_LENGTHS[key]
+        value = reflection.get(key)
+        if not isinstance(value, str) or len(" ".join(value.split())) < minimum:
+            reflection_missing.append(f"请用自己的话填写{label}（至少 {minimum} 个字符）")
+        if isinstance(value, str) and len(value) > REFLECTION_TEXT_LIMIT:
+            reflection_missing.append(f"{label}不能超过 {REFLECTION_TEXT_LIMIT} 个字符")
+    if reflection_missing:
+        blocked.append({"step": 16, "title": "原创分析与反思", "missing": reflection_missing})
     return blocked
 
 
@@ -81,10 +142,60 @@ def _saved_runs(session: dict[str, Any]) -> list[dict[str, Any]]:
         if not isinstance(design, dict) or not isinstance(result, dict) or design.get("outcome") != outcome:
             continue
         coefs = result.get("coefs")
-        if not isinstance(coefs, list):
+        if not isinstance(coefs, list) or not any(
+            isinstance(coef, dict)
+            and isinstance(coef.get("name"), str)
+            and isinstance(coef.get("coef"), (int, float))
+            and not isinstance(coef.get("coef"), bool)
+            and math.isfinite(float(coef["coef"]))
+            for coef in coefs
+        ):
             continue
         runs.append({"step": step, "outcome": outcome, "design": design, "result": result})
     return runs
+
+
+def _gate_qualified_runs(session: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return saved runs whose server result remains eligible for inference."""
+    qualified = []
+    allowed_statuses = {"ok", "warning"}
+    for run in _saved_runs(session):
+        result = run["result"]
+        support = result.get("support") if isinstance(result.get("support"), dict) else {}
+        statuses = [status for status in (result.get("status"), support.get("status")) if status is not None]
+        if not statuses or any(
+            not isinstance(status, str) or status not in allowed_statuses for status in statuses
+        ):
+            continue
+        if support.get("suppress_inference") is True:
+            continue
+        qualified.append(run)
+    return qualified
+
+
+def _reflection_value(value: Any) -> str:
+    """Keep accepted student prose byte-for-byte instead of normalizing Markdown."""
+    return value if isinstance(value, str) else "—"
+
+
+def _reflection_section(session: dict[str, Any]) -> list[str]:
+    reflection = _step_data(session, 16)
+    return [
+        "## 学生原创分析与反思",
+        "",
+        "### 研究问题",
+        "",
+        _reflection_value(reflection.get("research_question")),
+        "",
+        "### 证据解释",
+        "",
+        _reflection_value(reflection.get("evidence_interpretation")),
+        "",
+        "### 局限与反思",
+        "",
+        _reflection_value(reflection.get("limitations")),
+        "",
+    ]
 
 
 def _quiz_sections(session: dict[str, Any]) -> list[str]:
@@ -229,7 +340,8 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
             support_bits = []
             for key, label in (
                 ("treated_entities", "处理个体"), ("treated_clusters", "处理聚类"),
-                ("untreated_clusters", "对照聚类"), ("reversal_share", "处理撤销行占比"),
+                ("untreated_entities", "从未处理个体"), ("untreated_clusters", "完全未处理聚类"),
+                ("reversal_share", "处理撤销行占比"),
             ):
                 if support.get(key) is not None:
                     support_bits.append(f"{label}={_safe(support[key])}")
@@ -360,9 +472,11 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "generated_at": generated_at,
         "years": years,
         "session_version": SESSION_VERSION,
+        "quiz_version": quizzes.QUIZ_VERSION,
+        "course_release": COURSE_RELEASE,
         "session_fingerprint": fingerprint,
         "runs": [{"step": run["step"], "outcome": run["outcome"], "design": run["design"]} for run in runs],
-        "algorithm": "WWZ/WWYZ indicators; unweighted path centralities; saved classroom regression output",
+        "algorithm": "WWZ five-category aggregation plus OECD TLS extension; WWYZ indicators; unweighted path centralities; saved classroom regression output",
         "network_algorithm": network_algorithm,
         "data_sources": data_sources,
         "qc": qc_metadata,
@@ -373,10 +487,12 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         f"学生：{_safe(student)}", "",
         f"> 数据覆盖 {years[0]}–{years[-1]}，指标来源：{_safe(source)}。政策冲击为基于公开事件手工编码的拟真教学面板，不能用于研究结论。", "",
         "> 本报告汇总描述性探索和已保存的教学估计，不证明政策冲击导致了 GVC 变化。因果解释至少依赖冲击外生性、趋势可比性、无同期混杂、处理定义与模型相容，以及处理效应异质性得到妥善处理。", "",
-        *_quiz_sections(session), *_experiment_sections(session), *_run_sections(runs), *_qc_disclosure_section(qc_summary),
+        *_reflection_section(session), *_quiz_sections(session), *_experiment_sections(session), *_run_sections(runs), *_qc_disclosure_section(qc_summary),
         "## 数据与方法说明", "",
-        "- 指标算法：WWZ/WWYZ 增加值贸易与生产长度口径；网络保留有向正流量边，加权度使用流量权重，介数、距离和特征向量中心性按有向无权网络计算。",
+        "- 指标算法：WWZ 16 个明细项归并为五类，另加由 OECD ICIO TLS 账户计算的 taxsub 扩展项以匹配含税毛出口；taxsub 不是 WWZ 原文分类。生产分解与生产长度采用 WWYZ 口径。",
+        "- 网络算法：保留有向正流量边；加权度使用流量权重，介数、距离和特征向量中心性按有向无权网络计算。",
         "- 无权路径口径把每条正流量边视为同样长度，因此高介数表示拓扑上的最短路径中介位置，不自动等于经济规模大、关键瓶颈或不可替代。",
+        "- 网络解释顺序：先以加权度观察经济流量规模，再把无权介数作为拓扑基准并比较排序。当前报告没有边阈值敏感性分析，微小正边是否改变最短路径与排序尚未检验。",
         "- 冲击口径：界面中的单个事件用于定位和理解；回归按冲击类型使用该类型全部已编码事件汇总形成的暴露面板。",
         "- 回归结果来自学生会话中保存的最后一次服务端运行，不在报告生成时复算。",
         f"- 生成时间：{generated_at}；会话摘要：`{fingerprint}`。", "",

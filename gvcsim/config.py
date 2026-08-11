@@ -27,6 +27,10 @@ PG_DSN = os.environ.get("GVCSIM_PG_DSN", "").strip()
 
 THREAD_TOKENS = int(os.environ.get("GVCSIM_THREAD_TOKENS", "16"))
 
+# 课程内容发布边界；数据库 schema 可保持不变，但学习记录不能跨学期复用。
+COURSE_RELEASE = "2026-fall"
+COURSE_TERM = "2026 秋"
+
 # 只在显式 demo 模式播种演示账号。生产启动校验会拒绝 demo 模式和空值。
 BOOTSTRAP_PASSWORD = os.environ.get("GVCSIM_BOOTSTRAP_PASSWORD", "")
 AUTH_SECRET = os.environ.get("GVCSIM_AUTH_SECRET", "")

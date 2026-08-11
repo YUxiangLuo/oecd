@@ -57,7 +57,7 @@ export const DEFAULT_REGRESSION_SETTINGS: RegressionSettings = {
 
 /** 每步的“招牌默认”:首次进入第 12–15 步时,设定直接落在本步要教的实验上——
  *  贸易看基准 DID(随后加控制),生产先跑无交互基准再开异质性,长度用事件研究,
- *  网络用 DID(随后跑安慰剂)。学生仍可自由修改,且改动按 outcome 分别保留
+ *  网络用 DID(随后跑非校准实体置换敏感性分析)。学生仍可自由修改,且改动按 outcome 分别保留
  *  (见 App.tsx 里 regression_settings 的 per-outcome 存储)。 */
 export const SIGNATURE_SETTINGS: Record<RegressionOutcome, RegressionSettings> = {
   trade: { ...DEFAULT_REGRESSION_SETTINGS },
@@ -287,8 +287,8 @@ function VerdictCard({ outcome, response, stale }: {
         // 正是“样本很大所以可信”这一误读的来源。
         <p className="verdict-support">
           处理支持度：<b>{support.treated_clusters}</b> 个处理聚类 ·{" "}
-          <b>{support.untreated_clusters}</b> 个对照聚类 · 共 {response.result.n_clusters} 个聚类
-          （{support.treated_entities} 个曾受冲击个体）
+          <b>{support.untreated_clusters}</b> 个完全未处理聚类 · 共 {response.result.n_clusters} 个聚类
+          （{support.treated_entities} 个曾受冲击实体 · {support.untreated_entities ?? "未记录"} 个从未受冲击实体）
         </p>
       )}
       {verdict.warnings.length > 0 && (
@@ -478,7 +478,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
     const requestKey = `${outcome}:${settingsKey(runSettings)}`;
     setRunning(true);
     setError(null);
-    // 新主回归开始即使所有在途安慰剂响应失效，避免旧分布覆盖新结果。
+    // 新主回归开始即使所有在途置换响应失效，避免旧分布覆盖新结果。
     placeboRequestRef.current += 1;
     placeboRunningRef.current = false;
     setPlaceboRunning(false);
@@ -548,7 +548,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
       }
     } catch (cause) {
       if (placeboRequestRef.current === requestId && latestRequest.current === requestKey) {
-        setPlaceboError(userFacingRequestError(cause, "安慰剂检验失败"));
+        setPlaceboError(userFacingRequestError(cause, "实体置换敏感性分析失败"));
       }
     } finally {
       if (placeboRequestRef.current === requestId) {
@@ -611,7 +611,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
               {outcome === "trade" && "用完全相同的冲击、方法与粒度，分别运行不加控制和加入 ICIO 派生控制的模型。"}
               {outcome === "production" && "先运行无交互模型，再运行“冲击 × 处理前 GVC”交互模型；交互系数不是平均效应。"}
               {outcome === "length" && "使用事件研究，并检查冲击前联合检验与冲击后的动态路径。"}
-              {outcome === "network" && "可在 DID 基准结果后运行安慰剂检验；随机化尾部位置也不是因果证明。"}
+              {outcome === "network" && "可在 DID 基准结果后运行非校准实体置换；它只检验结果对这一人为置换规则是否敏感。"}
             </p>
           </div>
           <div className="comparison-actions">
@@ -627,7 +627,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
               <button type="button" className={method === "event_study" ? "on" : ""} onClick={() => setSetting("method", "event_study")}>使用事件研究</button>
             )}
             {outcome === "network" && (
-              <button type="button" className={method === "did" ? "on" : ""} onClick={() => setSetting("method", "did")}>使用 DID + 安慰剂</button>
+              <button type="button" className={method === "did" ? "on" : ""} onClick={() => setSetting("method", "did")}>使用 DID + 实体置换</button>
             )}
           </div>
         </div>
@@ -682,16 +682,20 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
             <PretrendCheck response={result} />
             {result.design.method === "did" ? (
               <div className="trust-item">
-                <h3>这个结果是否可能由随机分组产生？</h3>
-                <p>系统随机分配伪处理组并保留首次处理年份分布，再重复估计。它是稳健性检查，不是因果证明。</p>
+                <h3>结果对一种简化的实体置换规则有多敏感？</h3>
+                <p>系统只保留处理实体数量与首次处理年份数量分布，再随机改派实体。它不会保留政策的国家定向、行业资格、事件分配机制或聚类结构，因此不是安慰剂检验或随机化推断。</p>
                 <button className="secondary" onClick={runPlacebo} disabled={running || placeboRunning || stale}>
-                  {placeboRunning ? "随机化中…" : placebo ? "重新运行安慰剂" : "运行安慰剂检验"}
+                  {placeboRunning ? "置换中…" : placebo ? "重新运行实体置换" : "运行实体置换敏感性分析"}
                 </button>
-                {stale && <p className="muted">请先重新运行当前设定，再运行匹配的安慰剂检验。</p>}
+                {stale && <p className="muted">请先重新运行当前设定，再运行匹配的实体置换。</p>}
                 {placeboError && <div className="error-box">{placeboError}</div>}
-                {placebo && <><p className="placebo-verdict">{placeboInterpretation(placebo.placebo.empirical_p)}</p><PlaceboChart data={placebo.placebo} /></>}
+                {placebo && <>
+                  <p className="placebo-verdict">{placeboInterpretation(placebo.placebo.tail_share)}</p>
+                  <p className="muted">保留：{placebo.placebo.assignment_preserved.join("、")}；未保留：{placebo.placebo.assignment_not_preserved.join("、")}。</p>
+                  <PlaceboChart data={placebo.placebo} />
+                </>}
               </div>
-            ) : <p className="muted">当前安慰剂随机化只用于二元处理 DID；本方法请结合动态路径、控制变量与样本说明判断。</p>}
+            ) : <p className="muted">当前实体置换只用于二元处理 DID；本方法请结合动态路径、控制变量与样本说明判断。</p>}
           </section>
 
           <section className="reg-section-card">
@@ -710,7 +714,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
             )}
             {outcome === "network" && (
               <div className={`exploration-status${placebo ? " done" : ""}`}>
-                {placebo ? "✓ 已查看安慰剂随机化结果" : "可在上方运行安慰剂检验，观察随机化反事实分布"}
+                {placebo ? "✓ 已查看非校准实体置换结果" : "可在上方运行实体置换敏感性分析，观察人为改派后的估计分布"}
               </div>
             )}
           </section>

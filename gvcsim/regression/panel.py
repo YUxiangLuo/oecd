@@ -557,7 +557,7 @@ def _within_ols(
         )
     cluster_note = (
         f"标准误按 {cluster} 聚类(sandwich,{n_g} 组;其中处理聚类 {support.treated_clusters} 个、"
-        f"对照聚类 {support.untreated_clusters} 个)"
+        f"完全未处理聚类 {support.untreated_clusters} 个；从未处理实体 {support.untreated_entities} 个)"
         if support is not None
         else f"标准误按 {cluster} 聚类(sandwich,{n_g} 组)"
     )
@@ -685,13 +685,15 @@ def placebo_did_distribution(
     n_draws: int = 80,
     seed: int = 2026,
 ) -> dict:
-    """DID 安慰剂检验:随机指派伪处理组,重复估计主政策系数。
+    """DID 实体置换敏感性分析:随机指派伪处理组,重复估计主政策系数。
 
     保持原始设计的样本、控制变量、交互项、处理组数量与首次处理年份(cohort)
-    分布不变;每次随机抽取同等数量的个体并分配原始 cohort。返回伪系数分布与真系数位置。
+    分布不变;每次随机抽取同等数量的个体并分配原始 cohort。它不保留政策的
+    国家定向、行业资格、事件分配机制或聚类结构,因此只返回描述性的尾部占比,
+    不能解释为校准 p 值或随机化推断。
     """
     if design.method != METHOD_DID:
-        raise ValueError("安慰剂检验当前仅支持双重差分 (DID) 设计")
+        raise ValueError("实体置换敏感性分析当前仅支持双重差分 (DID) 设计")
     n_draws = max(1, min(int(n_draws), 200))
     base, filter_notes = _apply_sample_filter(df, design)
     base = _apply_price_mode(base, design)
@@ -717,7 +719,7 @@ def placebo_did_distribution(
     cohort_counts = timing.first_by_entity.value_counts().sort_index().astype(int)
     treated_count = int(cohort_counts.sum())
     if treated_count <= 0 or treated_count >= len(entities):
-        raise ValueError("安慰剂检验需要同时存在处理组和对照组")
+        raise ValueError("实体置换敏感性分析需要同时存在处理组和对照组")
 
     rng = np.random.default_rng(seed)
     coefs: list[float] = []
@@ -754,20 +756,31 @@ def placebo_did_distribution(
         coefs.append(next(c.coef for c in placebo_result.coefs if c.name == placebo_name))
 
     if not coefs:
-        raise ValueError("无法生成可估计的安慰剂样本")
-    empirical_p = (sum(abs(c) >= abs(true_coef) for c in coefs) + 1) / (len(coefs) + 1)
+        raise ValueError("无法生成可估计的置换样本")
+    extreme_count = sum(abs(c) >= abs(true_coef) for c in coefs)
+    # 图表所说的“占比”必须能由展示的抽样系数直接复算。加一修正另存为兼容
+    # 统计量；由于置换机制并非真实政策的分配机制，两者都不是校准 p 值。
+    tail_share = extreme_count / len(coefs)
+    adjusted_tail_share = (extreme_count + 1) / (len(coefs) + 1)
     return {
         "policy_name": policy_name,
         "true_coef": float(true_coef),
         "placebo_coefs": [float(c) for c in coefs],
-        "empirical_p": float(empirical_p),
+        "tail_share": float(tail_share),
+        "extreme_count": int(extreme_count),
+        "adjusted_tail_share": float(adjusted_tail_share),
+        # 暂留旧字段以避免破坏既有 API 消费者；教学界面不得把它标成 p 值。
+        "empirical_p": float(adjusted_tail_share),
         "n_draws": len(coefs),
         "requested_draws": n_draws,
         "seed": int(seed),
         "treated_entities": treated_count,
         "total_entities": int(len(entities)),
         "cohorts": {str(int(k)): int(v) for k, v in cohort_counts.items()},
-        "note": "随机指派同等数量伪处理个体,并保留原始首次处理年份(cohort)分布",
+        "calibrated_inference": False,
+        "assignment_preserved": ["处理实体数量", "首次处理年份(cohort)数量分布"],
+        "assignment_not_preserved": ["政策的国家定向", "行业资格", "事件分配机制", "国家聚类结构"],
+        "note": "非校准实体置换:仅保留处理实体数量与首次处理年份(cohort)数量分布",
     }
 
 

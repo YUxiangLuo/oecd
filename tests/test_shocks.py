@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 
 from gvcsim.indicators.core import build_arrays
-from gvcsim.shocks import TREATED_THRESHOLD, build_export_exposure, demo_shock_panel
+from gvcsim.shocks import TREATED_THRESHOLD, build_export_exposure, demo_shock_panel, events_metadata
 
 COUNTRIES = ["CHN", "USA", "DEU", "CAN", "AUS", "BRA", "VNM", "TUR"]
 SECTORS = ["A01_02", "C24", "C26", "C28", "C29", "K", "J62_63"]
@@ -70,6 +70,20 @@ def test_event_timeline_columns():
     assert (hit["effective_date"] != "").all()
     assert (hit["note"] != "").all()
     assert (df["shock_type"] == "tariff").all()
+
+
+def test_event_metadata_discloses_composite_timeline_and_correct_xpcc_date():
+    events = events_metadata()
+    section_301 = next(event for event in events if event["name"].startswith("美国301对华关税"))
+    assert "复合处理" in section_301["name"]
+    assert "只对应首批" in section_301["timeline_note"]
+    assert section_301["source_urls"]
+
+    xpcc = next(event for event in events if "XPCC" in event["name"])
+    assert xpcc["announced"] == "2020-07-31"
+    assert xpcc["effective"] == "2020-07-31"
+    assert xpcc["source_urls"] == ["https://ofac.treasury.gov/recent-actions/20200731"]
+    assert "进口限制" not in xpcc["name"]
 
 
 def test_entity_list_policy_shocks_are_generated():

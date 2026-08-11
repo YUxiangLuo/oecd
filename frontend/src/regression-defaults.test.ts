@@ -11,7 +11,7 @@ describe("SIGNATURE_SETTINGS", () => {
     expect(SIGNATURE_SETTINGS.production.interaction).toBe(false);
     // 长度:事件研究看动态路径
     expect(SIGNATURE_SETTINGS.length.method).toBe("event_study");
-    // 网络:DID(随后跑安慰剂),且只允许国家–行业级
+    // 网络:DID(随后跑非校准实体置换),且只允许国家–行业级
     expect(SIGNATURE_SETTINGS.network.method).toBe("did");
     expect(SIGNATURE_SETTINGS.network.granularity).toBe("country_industry");
   });

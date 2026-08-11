@@ -68,6 +68,7 @@ export function LabRouter({
     return (
       <ReportLab
         key="report"
+        state={state}
         completionKey={completionKey}
         sessionStatus={sessionStatus}
         sessionUnsynced={sessionUnsynced}

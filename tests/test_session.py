@@ -1,5 +1,6 @@
 import pytest
 
+from gvcsim.config import ROOT
 from gvcsim.session import SESSION_VERSION, SessionError, empty_session, make_record, validate_session
 
 
@@ -9,6 +10,11 @@ def test_minimal_session_contract():
     payload["steps"]["1"] = make_record({"quiz": {"answers": {"q": "a"}}})
     payload["shared"]["regression_settings"] = {"trade": {"method": "did"}}
     assert validate_session(payload) == payload
+
+
+def test_frontend_and_backend_use_the_same_session_version():
+    frontend_types = (ROOT / "frontend" / "src" / "types.ts").read_text()
+    assert f'export const SESSION_VERSION = "{SESSION_VERSION}";' in frontend_types
 
 
 @pytest.mark.parametrize(

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
 import { showToast } from "../../toast";
-import type { GeneratedReport, MySubmission, ReportGateItem } from "../../types";
+import type { GeneratedReport, MySubmission, ReportGateItem, StepStateApi } from "../../types";
 import type { SessionStatus } from "../../use-session";
 import { useAsync } from "../shared";
 
@@ -34,10 +34,28 @@ export function submissionToastMessage(
 
 /** 第 16 步:实验报告。
  *
- * 这一步刻意**没有任何参数表单**。报告由服务端从学生自己的实验会话生成:
- * 前 15 步答题通过后即可生成；自动保存的实验快照会进入报告，只有学生实际
- * 运行过的回归直接从会话保存结果写入报告。
+ * 报告由服务端从学生自己的实验会话生成。除前 15 步理解检查外，学生还须
+ * 保存关键实验证据、至少一次有效回归，并亲自填写研究问题、证据解释与局限。
  */
+
+interface ReportReflectionState extends Record<string, unknown> {
+  research_question?: string;
+  evidence_interpretation?: string;
+  limitations?: string;
+}
+
+export const REFLECTION_MAX_LENGTH = 2400;
+
+const REFLECTION_FIELDS: {
+  key: keyof Pick<ReportReflectionState, "research_question" | "evidence_interpretation" | "limitations">;
+  label: string;
+  prompt: string;
+  min: number;
+}[] = [
+  { key: "research_question", label: "研究问题", prompt: "用一个可由本课程指标和回归回答的问题，明确结果变量、冲击与比较对象。", min: 12 },
+  { key: "evidence_interpretation", label: "证据解释", prompt: "引用你保存的描述性比较或回归结果，说明它支持什么、不支持什么。", min: 40 },
+  { key: "limitations", label: "局限与反思", prompt: "至少讨论一项数据、处理定义、识别假设、网络干扰或外推边界。", min: 30 },
+];
 
 function GateCard({ blocked, onNavigateStep }: {
   blocked: ReportGateItem[];
@@ -47,12 +65,12 @@ function GateCard({ blocked, onNavigateStep }: {
     <section className="report-gate-panel">
       <div className="report-gate-head">
         <span className="report-gate-badge">!</span>
-        <b>还不能生成报告：前 15 步的理解检查尚未全部通过</b>
+        <b>还不能生成报告：仍缺少理解检查、关键证据或原创分析</b>
       </div>
-      <p className="muted">请完成以下步骤的选择题：</p>
+      <p className="muted">请完成以下项目：</p>
       <ul>
-        {blocked.map((item) => (
-          <li key={item.step}>
+        {blocked.map((item, index) => (
+          <li key={`${item.step}-${index}`}>
             {item.step > 0 ? (
               <button type="button" className="gate-link" onClick={() => onNavigateStep(item.step)}>
                 步骤 {item.step} · {item.title}
@@ -116,6 +134,7 @@ function SubmitCard({ report, mine, onSubmitted }: {
 }
 
 export function ReportLab({
+  state,
   completionKey,
   sessionStatus,
   sessionUnsynced,
@@ -125,6 +144,7 @@ export function ReportLab({
   onNavigateStep,
   onGenerated,
 }: {
+  state: StepStateApi;
   completionKey: string;
   sessionStatus: SessionStatus;
   sessionUnsynced: boolean;
@@ -142,6 +162,7 @@ export function ReportLab({
   const [rendererReady, setRendererReady] = useState(false);
   const [rendererSettled, setRendererSettled] = useState(false);
   const [submitRefresh, setSubmitRefresh] = useState(0);
+  const [gateRevision, setGateRevision] = useState(0);
   const mineQuery = useAsync<MySubmission>(() => api.classroom.myReport(), [submitRefresh]);
   const generatedQuery = useAsync<Partial<GeneratedReport>>(() => api.classroom.generatedReport(), []);
   const mine = mineQuery.data;
@@ -174,7 +195,18 @@ export function ReportLab({
       setBlocked(gate.blocked);
     }, () => {});
     return () => { live = false; };
-  }, [completionKey, sessionStatus]);
+  }, [completionKey, sessionStatus, gateRevision]);
+
+  const reflection = (state.data ?? {}) as ReportReflectionState;
+  const saveReflection = (key: typeof REFLECTION_FIELDS[number]["key"], value: string) => {
+    state.save({ [key]: value });
+  };
+  const refreshGateAfterSave = () => {
+    void onFlushSession().then(
+      () => setGateRevision((value) => value + 1),
+      () => {},
+    );
+  };
 
   // 进入报告页就冲刷防抖队列；同步成功前按钮保持锁定。失败由全局提示和
   // 下方重试入口共同呈现，不自动死循环重试。
@@ -216,6 +248,33 @@ export function ReportLab({
 
   return (
     <div className="report-lab">
+      <section className="report-reflection" aria-labelledby="report-reflection-title">
+        <div>
+          <span className="reg-section-step">先完成 · 学生原创分析</span>
+          <h3 id="report-reflection-title">用自己的话把证据连成论证</h3>
+          <p>这些文字会完整进入报告。系统只检查最低长度，不替你判断观点是否正确；请引用自己实际保存的比较或回归。</p>
+        </div>
+        <div className="report-reflection-fields">
+          {REFLECTION_FIELDS.map((field) => {
+            const value = String(reflection[field.key] ?? "");
+            const length = value.trim().split(/\s+/).join(" ").length;
+            return (
+              <label key={field.key}>
+                <span><b>{field.label}</b><small>{length}/{field.min} 个最低字符</small></span>
+                <textarea
+                  value={value}
+                  rows={field.key === "research_question" ? 2 : 4}
+                  maxLength={REFLECTION_MAX_LENGTH}
+                  placeholder={field.prompt}
+                  onChange={(event) => saveReflection(field.key, event.target.value)}
+                  onBlur={refreshGateAfterSave}
+                />
+              </label>
+            );
+          })}
+        </div>
+      </section>
+
       {blocked != null && blocked.length > 0 && <GateCard blocked={blocked} onNavigateStep={onNavigateStep} />}
 
       {sessionStatus !== "ready" && (
@@ -301,7 +360,7 @@ export function ReportLab({
           </div>
         </>
       ) : (
-        canGenerate && <p className="muted">前 15 步均已答题通过。点击上方按钮生成报告；没有实际运行过的回归会如实标记为“未记录”。</p>
+        canGenerate && <p className="muted">理解检查、关键实验证据、有效回归与原创分析均已保存。点击上方按钮生成报告；未运行的其他回归会如实标记为“未记录”。</p>
       )}
     </div>
   );

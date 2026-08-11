@@ -68,10 +68,14 @@ def validate_source(path: Path, processed_dir: Path | None = None) -> None:
 
 def validate_release(processed_dir: Path | None = None, *, validate_sources: bool = False) -> dict[str, int]:
     del validate_sources
-    from gvcsim.config import PROCESSED_DIR
+    from gvcsim.config import COURSE_RELEASE, PROCESSED_DIR
 
     directory = processed_dir or PROCESSED_DIR
     metadata = dataset_metadata(directory)
+    if metadata.get("course_release") != COURSE_RELEASE:
+        raise ArtifactContractError(
+            f"固定产物属于其他课程发布，当前需要 {COURSE_RELEASE}；请重新运行 compute"
+        )
     years = current_artifact_years(directory)
     declared = sorted({int(year) for year in metadata["years"]})
     if not declared or years != declared:

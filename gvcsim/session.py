@@ -6,7 +6,7 @@ import json
 from copy import deepcopy
 from typing import Any
 
-SESSION_VERSION = "experiment-session-simple-v1"
+SESSION_VERSION = "experiment-session-simple-v2"
 MAX_SESSION_BYTES = 1_000_000
 MAX_STEPS = 16
 SHARED_KEYS = {"regression_settings"}

@@ -1,7 +1,7 @@
 """步骤11:贸易政策冲击数据接入。
 
 真实系统应接入 PIIE 中美关税追踪库 / WTO / GTA / OFAC-BIS 清单(见项目
-说明文档 4.2 节)。开发起点阶段提供一份**拟真的演示数据**:以 2018–2020
+说明文档 4.2 节)。开发起点阶段提供一份**拟真的演示数据**:以 2017–2020
 全球贸易摩擦为原型,按真实事件逐条编码,覆盖全部 77 个经济体、45 个行业:
 
   事件层(税率量级参考 PIIE / Bown (2021) 公布的统计,非精确值):
@@ -211,6 +211,8 @@ class TariffEvent:
     rates: dict[str, dict[int, float]]
     exempt: tuple[str, ...] = ()
     overrides: dict[str, dict[str, dict[int, float]]] = field(default_factory=dict)
+    timeline_note: str = ""
+    source_urls: tuple[str, ...] = ()
 
     def rate(self, country: str, sector: str, year: int) -> float:
         table = self.overrides.get(country, self.rates)
@@ -234,6 +236,8 @@ class EntityListEvent:
     intensities: dict[str, dict[int, float]]
     entities: tuple[str, ...]
     removal: str = ""
+    timeline_note: str = ""
+    source_urls: tuple[str, ...] = ()
 
     @property
     def shock_col(self) -> str:
@@ -283,7 +287,7 @@ EVENTS = [
         },
     ),
     TariffEvent(
-        name="美国301对华关税(四批清单)",
+        name="美国301对华关税(四批清单复合处理；时间线标首批)",
         imposer="USA",
         targets=("CHN",),
         announced="2018-06-15",
@@ -315,6 +319,11 @@ EVENTS = [
             "B07_08": {2018: 0.01, 2019: 0.04, 2020: 0.04},
             "B09": {2019: 0.04, 2020: 0.04},
         },
+        timeline_note="该行把 List 1、2、3、4A 的年度行业暴露合并为一个复合处理；宣布日和生效日只对应首批清单，后续批次已体现在 2018–2020 年强度中。",
+        source_urls=(
+            "https://www.ustr.gov/issue-areas/enforcement/section-301-investigations/section-301-china/34-billion-trade-action",
+            "https://www.ustr.gov/issue-areas/enforcement/section-301-investigations/section-301-china/200-billion-trade-action",
+        ),
     ),
     TariffEvent(
         name="中方对美反制关税",
@@ -461,17 +470,19 @@ ENTITY_LIST_EVENTS = [
         },
     ),
     EntityListEvent(
-        name="OFAC 风格:涉疆实体与进口限制",
+        name="OFAC SDN:新疆生产建设兵团(XPCC)指定",
         shock_type=SHOCK_SANCTIONS,
         targets=("CHN",),
-        announced="2020-07-20",
-        effective="2020-07-20",
-        entities=("XPCC", "textile supply-chain entities"),
+        announced="2020-07-31",
+        effective="2020-07-31",
+        entities=("XPCC", "与 XPCC 相关的被指定人员"),
         intensities={
             "C13T15": {2020: 0.030},
             "A01_02": {2020: 0.012},
             "C20": {2020: 0.010},
         },
+        timeline_note="本事件只对应 OFAC 于 2020-07-31 作出的 SDN 指定；行业强度是教学映射，不把其他进口限制混入同一事件。",
+        source_urls=("https://ofac.treasury.gov/recent-actions/20200731",),
     ),
     EntityListEvent(
         name="BIS 实体清单:华为及关联公司",
@@ -780,6 +791,8 @@ def events_metadata() -> list[dict]:
                 "target_codes": [] if tariff_event.targets == "ALL" else list(tariff_event.targets),
                 "sector_codes": sorted(sector_codes),
                 "all_targets": tariff_event.targets == "ALL",
+                "timeline_note": tariff_event.timeline_note or None,
+                "source_urls": list(tariff_event.source_urls),
             }
         )
     for entity_event_def in ENTITY_LIST_EVENTS:
@@ -802,6 +815,8 @@ def events_metadata() -> list[dict]:
                 "target_codes": list(entity_event_def.targets),
                 "sector_codes": sorted(entity_event_def.intensities),
                 "all_targets": False,
+                "timeline_note": entity_event_def.timeline_note or None,
+                "source_urls": list(entity_event_def.source_urls),
             }
         )
     return out

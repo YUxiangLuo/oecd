@@ -1,13 +1,15 @@
-"""步骤3:总贸易流分解指标(Wang-Wei-Zhu 2013 / 王直-魏尚进-祝坤福 2015 总贸易核算法)。
+"""步骤3:WWZ 总贸易核算聚合项与 OECD TLS 扩展。
 
-按 WWZ 公开文献口径，把一国/一国行业的毛出口完全分解为六项:
+先把 WWZ 公开文献的 16 个双边明细项聚合为五类:
 
   DVAex   国内增加值出口并被其他地区最终吸收(WWZ 16 项中的第 1-5 项,VAX_G)
   DVArt   国内增加值出口但最终返回国内(第 6-8 项,RDV)
   DDC     纯国内重复计算(第 9-10 项)
   FVA     毛出口中的外国增加值(第 11-14 项)
   FDC     毛出口中来自外国的纯重复计算(第 15-16 项)
-  taxsub  毛出口中的产品税减补贴(TLS)含量
+再增加一个 OECD ICIO 账户扩展:
+
+  taxsub  毛出口中的产品税减补贴(TLS)含量；不是 WWZ 原文的分解项
 并派生 EXDVA = DVAex + DVArt(出口的国内增加值总额)。
 
 实现说明:WWZ 的 16 项定义在双边 (s→r) 层面;本模块对进口伙伴求和,输出
@@ -25,7 +27,8 @@
   FDC   = f ⊙ (A^F_s [L_rr E_r])
   taxsub = (tB)[p] ⊙ E_s
 
-六项加总恒等于毛出口 E(由 (v+t)'B = 1 保证),单元测试与全量重算均校验。
+五个 WWZ 聚合项与 taxsub 扩展项加总恒等于 OECD 毛出口 E
+(由 (v+t)'B = 1 保证),单元测试与全量重算均校验。
 """
 
 import numpy as np
@@ -40,12 +43,12 @@ _CLOSURE_COLS = ["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"]
 
 
 def gross_exports(df: pd.DataFrame) -> pd.Series:
-    """毛出口 = 六个闭合项之和(面板加权与演示恒等式共用)。"""
+    """毛出口 = 五个 WWZ 聚合项 + OECD TLS 扩展项。"""
     return df[_CLOSURE_COLS].sum(axis=1)
 
 
 def sector_tradeflow(arr: IcioArrays) -> pd.DataFrame:
-    """国家-行业级 WWZ 总贸易核算分解,索引为 (country, industry)。"""
+    """国家-行业级 WWZ 聚合项与 OECD TLS 扩展,索引为 (country, industry)。"""
     n = len(arr.x)
     node_regions = arr.index.get_level_values(0).to_numpy()
     node_sectors = arr.index.get_level_values(1).to_numpy()
