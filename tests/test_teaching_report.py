@@ -63,6 +63,35 @@ def _add_trade_run(session: dict) -> None:
     }
 
 
+def _add_trade_placebo(session: dict, *, empirical_p: float = 0.05) -> None:
+    settings = dict(session["steps"]["12"]["data"]["run"]["settings"])
+    session["steps"]["12"]["data"].update(
+        {
+            "placebo_run": {
+                "settings": settings,
+                "response": {
+                    "design": {"outcome": "trade", "method": "did"},
+                    "placebo": {
+                        "policy_name": "treated×post",
+                        "true_coef": -0.25,
+                        "placebo_coefs": [-0.05, 0.02, 0.12],
+                        "empirical_p": empirical_p,
+                        "n_draws": 3,
+                        "requested_draws": 10,
+                        "seed": 2026,
+                        "treated_entities": 10,
+                        "total_entities": 100,
+                        "cohorts": {"2019": 10},
+                        "note": "test",
+                    },
+                    "disclaimer": "test",
+                },
+            },
+            "placebo_id": "test-only-receipt",
+        }
+    )
+
+
 def test_gate_lists_every_incomplete_step_and_excludes_report_step():
     blocked = check_gate(empty_session("mid"))
     assert [item["step"] for item in blocked] == list(GATE_STEPS)
@@ -175,6 +204,80 @@ def test_report_reruns_only_an_actual_student_run_and_records_its_source():
 
 
 @needs_artifacts
+def test_trusted_report_path_verifies_the_exact_saved_placebo(monkeypatch):
+    session = _complete_session(artifacts.manifest_id())
+    _add_trade_run(session)
+    _add_trade_placebo(session)
+    design = {
+        "outcome": "trade",
+        "granularity": "country_industry",
+        "shock_type": "export_control",
+        "method": "did",
+        "control_mode": "none",
+        "interaction": False,
+        "price_mode": "nominal",
+        "scenario": "clean",
+        "exclude_row": True,
+        "weight_mode": "fixed_pretreatment",
+    }
+    seen: dict = {}
+    monkeypatch.setattr(
+        "gvcsim.teaching_report.trusted_evidence.verify_regression_run",
+        lambda *_args, **_kwargs: {"design": design},
+    )
+
+    def verify_placebo(*_args, **kwargs):
+        seen.update(kwargs)
+        return {"design": design}
+
+    monkeypatch.setattr(
+        "gvcsim.teaching_report.trusted_evidence.verify_placebo_run",
+        verify_placebo,
+    )
+
+    runs = _rerun_recorded(session, subject="student", require_trusted=True)
+
+    assert runs[0]["placebo"]["result"]["empirical_p"] == 0.05
+    assert seen["subject"] == "student"
+    assert seen["step"] == 12
+    assert seen["result"]["n_draws"] == 3
+
+
+@needs_artifacts
+def test_report_persists_and_proves_an_actual_placebo_result():
+    session = _complete_session(artifacts.manifest_id())
+    _add_trade_run(session)
+    without_placebo = build(session, "同学", 1)
+
+    _add_trade_placebo(session, empirical_p=0.05)
+    report = build(session, "同学", 2)
+
+    assert report.report_key != without_placebo.report_key
+    assert "学生实际运行的安慰剂稳健性检验" in report.markdown
+    assert "随机化完成：3 / 10" in report.markdown
+    assert "经验 p 值：0.050" in report.markdown
+    assert "不能证明因果关系" in report.markdown
+    placebo = report.provenance["runs"][0]["placebo"]
+    assert placebo["source"] == "student_placebo"
+    assert placebo["n_draws"] == 3
+    assert placebo["empirical_p"] == 0.05
+    assert len(placebo["result_sha256"]) == 64
+
+
+@needs_artifacts
+def test_report_does_not_attach_a_placebo_from_different_main_settings():
+    session = _complete_session(artifacts.manifest_id())
+    _add_trade_run(session)
+    _add_trade_placebo(session)
+    session["steps"]["12"]["data"]["placebo_run"]["settings"]["controlMode"] = "icio_derived"
+
+    report = build(session, "同学", 1)
+
+    assert "学生实际运行的安慰剂稳健性检验" not in report.markdown
+    assert "placebo" not in report.provenance["runs"][0]
+
+
+@needs_artifacts
 def test_report_records_meaningful_final_snapshots_without_a_click_timeline():
     report = build(_complete_session(artifacts.manifest_id()), "同学", 1)
     assert "自动记录的实验过程" in report.markdown
@@ -263,6 +366,7 @@ def test_report_key_tracks_report_content_but_ignores_random_receipts():
     receipts_changed = _complete_session(mid)
     receipts_changed["steps"]["1"]["data"]["quiz_id"] = "new-random-quiz-receipt"
     receipts_changed["steps"]["12"]["data"]["run_id"] = "new-random-run-receipt"
+    receipts_changed["steps"]["12"]["data"]["placebo_id"] = "new-random-placebo-receipt"
     assert build(receipts_changed, "同学", 3).report_key == first.report_key
 
 

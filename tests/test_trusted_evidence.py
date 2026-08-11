@@ -190,3 +190,86 @@ def test_regression_run_id_binds_outcome_settings_and_step(monkeypatch):
         outcome="trade",
         settings={"controlMode": "icio_derived"},
     )
+
+
+def test_placebo_id_binds_exact_distribution_settings_step_and_event(monkeypatch):
+    _trust_test_events(monkeypatch)
+    design = {
+        "outcome": "network",
+        "granularity": "country_industry",
+        "shock_type": "tariff",
+        "method": "did",
+        "control_mode": "none",
+        "interaction": False,
+        "price_mode": "nominal",
+        "scenario": "clean",
+        "exclude_row": True,
+        "weight_mode": "fixed_pretreatment",
+    }
+    result = {
+        "policy_name": "treated×post",
+        "true_coef": -1.2,
+        "placebo_coefs": [-0.2, 0.1],
+        "empirical_p": 0.05,
+        "n_draws": 2,
+        "requested_draws": 2,
+        "seed": 2026,
+    }
+    token = trusted_evidence.issue_placebo_run(
+        subject="alice",
+        manifest_id="manifest-a",
+        design=design,
+        result=result,
+        event={**EVENT, "step": 15},
+    )
+    arguments = {
+        "subject": "alice",
+        "manifest_id": "manifest-a",
+        "outcome": "network",
+        "settings": {"method": "did", "controlMode": "none"},
+        "result": result,
+        "step": 15,
+    }
+
+    assert trusted_evidence.verify_placebo_run(token, **arguments)
+    assert not trusted_evidence.verify_placebo_run(
+        token,
+        **{**arguments, "result": {**result, "empirical_p": 0.9}},
+    )
+    assert not trusted_evidence.verify_placebo_run(
+        token,
+        **{**arguments, "settings": {"method": "did", "controlMode": "icio_derived"}},
+    )
+    assert not trusted_evidence.verify_placebo_run(token, **{**arguments, "step": 12})
+    assert not trusted_evidence.verify_placebo_run(token, **{**arguments, "subject": "mallory"})
+
+
+def test_placebo_id_database_lookup_uses_placebo_scope(monkeypatch):
+    monkeypatch.setattr(auth, "evidence_secret", lambda: b"receipt-secret" * 4)
+    seen: dict = {}
+
+    def exists(*args, **kwargs):
+        seen.update(kwargs)
+        return True
+
+    monkeypatch.setattr(db, "evidence_event_exists", exists)
+    design = {"outcome": "trade", "method": "did", "weight_mode": "fixed_pretreatment"}
+    result = {"true_coef": 1.0, "placebo_coefs": [0.0], "empirical_p": 0.5}
+    token = trusted_evidence.issue_placebo_run(
+        subject="alice",
+        manifest_id="manifest-a",
+        design=design,
+        result=result,
+        event={**EVENT, "step": 12},
+    )
+
+    assert trusted_evidence.verify_placebo_run(
+        token,
+        subject="alice",
+        manifest_id="manifest-a",
+        outcome="trade",
+        settings={"method": "did"},
+        result=result,
+        step=12,
+    )
+    assert seen == {"account_id": 7, "step": 12, "kind": "placebo", "manifest_id": "manifest-a"}

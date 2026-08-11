@@ -359,7 +359,7 @@ async def regression_placebo(req: PlaceboRequest, request: Request):
     if manifest_id() != run_manifest:
         raise HTTPException(status_code=409, detail="安慰剂期间数据产物已切换，请重新运行")
     event_payload_sha256 = trusted_evidence.digest({"design": design_info, "result": placebo})
-    await anyio.to_thread.run_sync(
+    event = await anyio.to_thread.run_sync(
         lambda: classroom_db.record_evidence_event(
             subject,
             _regression_step(design.outcome),
@@ -369,7 +369,15 @@ async def regression_placebo(req: PlaceboRequest, request: Request):
             {"design": design_info, "result_sha256": trusted_evidence.digest(placebo)},
         )
     )
+    placebo_id = trusted_evidence.issue_placebo_run(
+        subject=subject,
+        manifest_id=run_manifest,
+        design=design_info,
+        result=placebo,
+        event=event,
+    )
     return {
+        "placebo_id": placebo_id,
         "design": design_info,
         "placebo": placebo,
         "disclaimer": "安慰剂检验基于拟真演示冲击数据,用于教学展示随机化反事实分布",

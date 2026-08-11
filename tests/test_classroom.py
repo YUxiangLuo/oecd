@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from gvcsim import artifacts, config, teaching_report
 from gvcsim import session as session_model
 from gvcsim.api import app
-from gvcsim.classroom import db
+from gvcsim.classroom import db, passwords
 from gvcsim.config import PROCESSED_DIR
 
 # 会话绑定当前产物清单,因此这些用例需要 gvcsim compute 的产出。
@@ -378,6 +378,51 @@ def test_v5_schema_is_migrated_in_place_with_shared_login_limiter():
     with psycopg.connect(TEST_DSN) as c:
         assert c.execute("SELECT version FROM schema_meta").fetchone()[0] == db.TEACHING_DB_VERSION
         assert c.execute("SELECT to_regclass('public.auth_login_attempts')").fetchone()[0]
+
+
+def test_v6_schema_marks_legacy_password_cost_and_upgrades_on_successful_login():
+    first_session = _login("student")
+    salt = "11" * 16
+    legacy_hash = passwords.hash_password(
+        "gvclab2026",
+        salt,
+        iterations=passwords.LEGACY_ITERATIONS,
+    )
+    with psycopg.connect(TEST_DSN, autocommit=True) as c:
+        c.execute(
+            "UPDATE accounts SET pw_salt=%s,pw_hash=%s WHERE username='student'",
+            (salt, legacy_hash),
+        )
+        c.execute("ALTER TABLE accounts DROP COLUMN pw_algorithm, DROP COLUMN pw_iterations")
+        c.execute("UPDATE schema_meta SET version='gvcsim-teaching-db-v6' WHERE singleton")
+    db._schema_ready = False
+
+    applied = db.initialize_schema()
+
+    assert any("v6" in item and "v7" in item for item in applied)
+    with psycopg.connect(TEST_DSN) as c:
+        migrated = c.execute(
+            "SELECT pw_algorithm,pw_iterations,auth_version FROM accounts WHERE username='student'"
+        ).fetchone()
+        assert migrated == (passwords.PBKDF2_SHA256, passwords.LEGACY_ITERATIONS, 1)
+
+    _login("student")
+    with psycopg.connect(TEST_DSN) as c:
+        upgraded = c.execute(
+            "SELECT pw_salt,pw_hash,pw_algorithm,pw_iterations,auth_version FROM accounts WHERE username='student'"
+        ).fetchone()
+        assert upgraded[0] != salt
+        assert upgraded[2:] == (passwords.PBKDF2_SHA256, passwords.CURRENT_ITERATIONS, 1)
+        assert passwords.verify_password(
+            "gvclab2026",
+            upgraded[0],
+            upgraded[1],
+            algorithm=upgraded[2],
+            iterations=upgraded[3],
+        )
+        assert c.execute("SELECT count(*) FROM audit_log WHERE action='auth.password_rehashed'").fetchone()[0] == 1
+    # 渐进 rehash 没有改变凭证本身，因此不撤销迁移前已签发的有效会话。
+    assert client.get("/api/auth/me", headers=first_session).status_code == 200
 
 
 def test_concurrent_initialize_is_safe_and_idempotent():
@@ -1032,8 +1077,8 @@ def test_quiz_rollout_reset_archives_current_attempt_once_and_preserves_history(
         assert connection.execute("SELECT count(*) FROM experiment_attempts").fetchone()[0] == attempts_before_retry
 
 
-def test_quiz_and_regression_receipts_cannot_cross_new_assignment_with_same_manifest():
-    """新 assignment 不会归档旧 attempt；答题与运行收据仍须按 current scope 失效。"""
+def test_quiz_regression_and_placebo_receipts_cannot_cross_new_assignment_with_same_manifest():
+    """新 assignment 不会归档旧 attempt；全部学习收据仍须按 current scope 失效。"""
     from gvcsim import evidence, quizzes, trusted_evidence
 
     _login("student")
@@ -1068,6 +1113,33 @@ def test_quiz_and_regression_receipts_cannot_cross_new_assignment_with_same_mani
         "weight_mode": "fixed_pretreatment",
     }
     run_token = regression_token(12, run_design)
+    placebo_result = {
+        "policy_name": "treated×post",
+        "true_coef": -0.2,
+        "placebo_coefs": [0.1],
+        "empirical_p": 0.5,
+        "n_draws": 1,
+        "requested_draws": 10,
+        "seed": 2026,
+        "treated_entities": 1,
+        "total_entities": 2,
+        "cohorts": {"2019": 1},
+    }
+    placebo_event = db.record_evidence_event(
+        "student",
+        12,
+        "placebo",
+        manifest,
+        trusted_evidence.digest({"design": run_design, "result": placebo_result}),
+        {"design": run_design, "result_sha256": trusted_evidence.digest(placebo_result)},
+    )
+    placebo_token = trusted_evidence.issue_placebo_run(
+        subject="student",
+        manifest_id=manifest,
+        design=run_design,
+        result=placebo_result,
+        event=placebo_event,
+    )
     quiz_payload = quizzes.correct_quiz(12)
     quiz_event = db.record_evidence_event(
         "student", 12, "quiz", manifest, trusted_evidence.digest(quiz_payload), {"payload": quiz_payload}
@@ -1091,10 +1163,24 @@ def test_quiz_and_regression_receipts_cannot_cross_new_assignment_with_same_mani
         settings={"controlMode": "none"},
         step=12,
     )
+    assert trusted_evidence.verify_placebo_run(
+        placebo_token,
+        subject="student",
+        manifest_id=manifest,
+        outcome="trade",
+        settings={"controlMode": "none"},
+        result=placebo_result,
+        step=12,
+    )
 
     step12_data = {
         "run": {"depvar": "DVAex_share", "settings": {"controlMode": "none"}},
         "run_id": run_token,
+        "placebo_run": {
+            "settings": {"controlMode": "none"},
+            "response": {"design": run_design, "placebo": placebo_result},
+        },
+        "placebo_id": placebo_token,
         "quiz": quiz_payload,
         "quiz_id": quiz_token,
     }
@@ -1129,6 +1215,15 @@ def test_quiz_and_regression_receipts_cannot_cross_new_assignment_with_same_mani
         manifest_id=manifest,
         outcome="trade",
         settings={"controlMode": "none"},
+        step=12,
+    )
+    assert not trusted_evidence.verify_placebo_run(
+        placebo_token,
+        subject="student",
+        manifest_id=manifest,
+        outcome="trade",
+        settings={"controlMode": "none"},
+        result=placebo_result,
         step=12,
     )
     assert not evidence.evaluate_step(12, old_session, subject="student", require_trusted=True).complete
