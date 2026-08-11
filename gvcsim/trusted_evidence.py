@@ -1,4 +1,4 @@
-"""服务端签发的答题与回归运行收据。
+"""服务端签发的答题、主回归与安慰剂运行收据。
 
 会话仍是便于恢复 UI 的 JSON，但答题完成与报告中的回归只认可本模块签名的
 收据。收据绑定账号、步骤、manifest 与规范化 payload 摘要；客户端改动答题
@@ -228,6 +228,53 @@ def issue_regression_run(
     )
 
 
+def issue_placebo_run(
+    *,
+    subject: str,
+    manifest_id: str,
+    design: dict[str, Any],
+    result: dict[str, Any],
+    event: dict[str, Any],
+) -> str:
+    """Sign one placebo result so the exact distribution can survive a refresh."""
+    payload_sha256 = digest({"design": design, "result": result})
+    return issue_claims(
+        {
+            "type": "placebo",
+            "sub": subject,
+            "step": int(event["step"]),
+            "manifest_id": manifest_id,
+            "design": design,
+            "result_sha256": digest(result),
+            "payload_sha256": payload_sha256,
+            "event_id": str(event["event_id"]),
+            "account_id": int(event["account_id"]),
+            "assignment_id": int(event["assignment_id"]),
+            "attempt_id": int(event["attempt_id"]),
+            "issued_at": _event_time(event),
+        }
+    )
+
+
+def _settings_match_design(settings: dict[str, Any], design: dict[str, Any]) -> bool:
+    """Compare the camelCase session fields that the student actually saved."""
+    mapping = {
+        "granularity": "granularity",
+        "shockType": "shock_type",
+        "method": "method",
+        "controlMode": "control_mode",
+        "interaction": "interaction",
+        "priceMode": "price_mode",
+        "scenario": "scenario",
+        "excludeRow": "exclude_row",
+        "weightMode": "weight_mode",
+    }
+    return all(
+        session_key not in settings or settings[session_key] == design.get(design_key)
+        for session_key, design_key in mapping.items()
+    )
+
+
 def verify_regression_run(
     token: Any,
     *,
@@ -251,21 +298,8 @@ def verify_regression_run(
         return None
     if step is not None and claims.get("step") != step:
         return None
-    # 前端会话用 camelCase；API 设计信息用 snake_case。只比较学生确实保存的字段。
-    mapping = {
-        "granularity": "granularity",
-        "shockType": "shock_type",
-        "method": "method",
-        "controlMode": "control_mode",
-        "interaction": "interaction",
-        "priceMode": "price_mode",
-        "scenario": "scenario",
-        "excludeRow": "exclude_row",
-        "weightMode": "weight_mode",
-    }
-    for session_key, design_key in mapping.items():
-        if session_key in settings and settings[session_key] != design.get(design_key):
-            return None
+    if not _settings_match_design(settings, design):
+        return None
     try:
         from gvcsim.classroom import db
 
@@ -278,6 +312,55 @@ def verify_regression_run(
             account_id=int(claims["account_id"]),
             step=step,
             kind="regression",
+            manifest_id=manifest_id,
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+    return claims if exists else None
+
+
+def verify_placebo_run(
+    token: Any,
+    *,
+    subject: str,
+    manifest_id: str,
+    outcome: str,
+    settings: dict[str, Any],
+    result: dict[str, Any],
+    step: int,
+) -> dict[str, Any] | None:
+    """Validate the exact saved placebo distribution and its append-only event."""
+    claims = verify_claims(token)
+    if not claims or any(
+        (
+            claims.get("type") != "placebo",
+            claims.get("sub") != subject,
+            claims.get("manifest_id") != manifest_id,
+            claims.get("step") != step,
+            claims.get("result_sha256") != digest(result),
+        )
+    ):
+        return None
+    design = claims.get("design")
+    if not isinstance(design, dict) or design.get("outcome") != outcome:
+        return None
+    if not _settings_match_design(settings, design):
+        return None
+    payload_sha256 = digest({"design": design, "result": result})
+    if claims.get("payload_sha256") != payload_sha256:
+        return None
+    try:
+        from gvcsim.classroom import db
+
+        exists = db.evidence_event_exists(
+            subject,
+            str(claims["event_id"]),
+            int(claims["assignment_id"]),
+            int(claims["attempt_id"]),
+            payload_sha256,
+            account_id=int(claims["account_id"]),
+            step=step,
+            kind="placebo",
             manifest_id=manifest_id,
         )
     except (KeyError, TypeError, ValueError):

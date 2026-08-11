@@ -22,12 +22,17 @@ viewport_height=${GVCSIM_E2E_VIEWPORT_HEIGHT:-1000}
 }
 
 ab=(agent-browser --namespace "$browser_namespace" --session "$browser_session")
+har_sanitizer="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sanitize_har.py"
 temporary_a11y_report=
+har_path=
 har_started=0
 
 cleanup() {
-  if [[ "$har_started" -eq 1 && -n "$artifact_dir" ]]; then
-    "${ab[@]}" network har stop "$artifact_dir/teacher-password-flow.har" >/dev/null 2>&1 || true
+  if [[ "$har_started" -eq 1 && -n "$har_path" ]]; then
+    "${ab[@]}" network har stop "$har_path" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$har_path" && -f "$har_path" ]]; then
+    python3 "$har_sanitizer" "$har_path" >/dev/null 2>&1 || rm -f "$har_path"
   fi
   "${ab[@]}" close >/dev/null 2>&1 || true
   [[ -z "$temporary_a11y_report" ]] || rm -f "$temporary_a11y_report"
@@ -51,6 +56,7 @@ fi
 "${ab[@]}" wait --text '教师工作台'
 
 if [[ -n "$artifact_dir" ]]; then
+  har_path="$artifact_dir/teacher-password-flow.har"
   "${ab[@]}" network har start
   har_started=1
 fi
@@ -99,8 +105,9 @@ fi
 "${ab[@]}" wait --text '教师工作台'
 if [[ -n "$artifact_dir" ]]; then
   "${ab[@]}" screenshot "$artifact_dir/teacher-password-relogin.png" --full
-  "${ab[@]}" network har stop "$artifact_dir/teacher-password-flow.har"
+  "${ab[@]}" network har stop "$har_path"
   har_started=0
+  python3 "$har_sanitizer" "$har_path"
 fi
 
 page_errors=$("${ab[@]}" errors)

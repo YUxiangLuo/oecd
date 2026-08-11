@@ -369,9 +369,51 @@ function MarginalEffectsPanel({ response }: { response: RegressionResponse }) {
 }
 
 /** 自动保存最近一次真实运行，供刷新恢复与报告复估。 */
-interface RegressionStepState extends QuizCompletionState, Record<string, unknown> {
+export interface RegressionStepState extends QuizCompletionState, Record<string, unknown> {
   run?: { settings: RegressionSettings };
   run_id?: string;
+  placebo_run?: { settings: RegressionSettings; response: PlaceboResponse };
+  placebo_id?: string;
+}
+
+function validPlaceboResponse(value: unknown): value is PlaceboResponse {
+  if (typeof value !== "object" || value === null) return false;
+  const response = value as Partial<PlaceboResponse>;
+  const result = response.placebo;
+  return typeof response.design === "object" && response.design !== null
+    && typeof result === "object" && result !== null
+    && Number.isFinite(result.true_coef)
+    && Number.isFinite(result.empirical_p)
+    && result.empirical_p >= 0
+    && result.empirical_p <= 1
+    && Number.isInteger(result.n_draws)
+    && result.n_draws > 0
+    && Number.isInteger(result.requested_draws)
+    && result.requested_draws >= 10
+    && result.requested_draws <= 200
+    && result.n_draws <= result.requested_draws
+    && Number.isInteger(result.seed)
+    && result.seed >= 0
+    && Number.isInteger(result.treated_entities)
+    && Number.isInteger(result.total_entities)
+    && result.treated_entities >= 0
+    && result.treated_entities <= result.total_entities
+    && typeof result.cohorts === "object"
+    && result.cohorts !== null
+    && Object.values(result.cohorts).every((count) => Number.isInteger(count) && count >= 0)
+    && Array.isArray(result.placebo_coefs)
+    && result.placebo_coefs.length === result.n_draws
+    && result.placebo_coefs.every(Number.isFinite);
+}
+
+/** Only restore a randomized result that belongs to the displayed main-run settings. */
+export function restorablePlacebo(
+  data: RegressionStepState | undefined,
+  resultSettings: RegressionSettings | null,
+): PlaceboResponse | null {
+  const saved = data?.placebo_run;
+  if (!saved || !resultSettings || !validPlaceboResponse(saved.response)) return null;
+  return settingsKey(saved.settings) === settingsKey(resultSettings) ? saved.response : null;
 }
 
 export function RegressionRunLab({ step, settings, onSettingsChange, history, onHistoryChange, state }: {
@@ -455,6 +497,12 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
     setResultSettings(latestSnapshot.settings);
   }, [latestSnapshot, result, running]);
 
+  const savedPlacebo = restorablePlacebo(state.data, resultSettings);
+  useEffect(() => {
+    if (!savedPlacebo || placebo || running || placeboRunning) return;
+    setPlacebo(savedPlacebo);
+  }, [savedPlacebo, placebo, running, placeboRunning]);
+
   const run = async () => {
     if (runningRef.current || !design) return;
     runningRef.current = true;
@@ -487,6 +535,9 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
       state.save({
         run: { settings: runSettings },
         run_id: response.run_id,
+        // A placebo is only meaningful for the exact main-run settings it tested.
+        placebo_run: undefined,
+        placebo_id: undefined,
       });
       if (latestRequest.current === requestKey) {
         setResult(response);
@@ -529,7 +580,14 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
         placeboSettings.controlMode, placeboSettings.interaction, placeboSettings.priceMode, placeboSettings.scenario, placeboSettings.weightMode, 40,
       );
       if (placeboRequestRef.current === requestId && latestRequest.current === requestKey) {
-        setPlacebo(response);
+        if (!response.placebo_id) throw new Error("安慰剂结果缺少可信运行凭证，请重试");
+        const persistedResponse = { ...response };
+        delete persistedResponse.placebo_id;
+        state.save({
+          placebo_run: { settings: placeboSettings, response: persistedResponse },
+          placebo_id: response.placebo_id,
+        });
+        setPlacebo(persistedResponse);
       }
     } catch (cause) {
       if (placeboRequestRef.current === requestId && latestRequest.current === requestKey) {

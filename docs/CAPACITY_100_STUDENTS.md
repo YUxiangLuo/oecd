@@ -145,7 +145,7 @@ curl -fsS http://127.0.0.1:18000/health
 
 ## 数据库备份、恢复与迁移
 
-本次 schema 为 `gvcsim-teaching-db-v6`，从 v3、v4、v5 都有事务内迁移路径。
+本次 schema 为 `gvcsim-teaching-db-v7`，从 v3、v4、v5、v6 都有事务内迁移路径；v7 为既有 100k PBKDF2 行补记算法/成本，并在成功登录时渐进升级到 600k。
 上线前必须先生成数据库备份，并在隔离的 `_restore_drill` 空库完成恢复演练；完整的产物备份、校验、回执和
 清理流程见 [`BACKUP_RESTORE.md`](./BACKUP_RESTORE.md)：
 

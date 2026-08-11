@@ -342,6 +342,14 @@ interface ReportRun {
   design: string;
   status: string | null;
   source: "student_run";
+  placebo?: {
+    source: "student_placebo";
+    n_draws: number;
+    requested_draws: number;
+    empirical_p: number;
+    seed: number;
+    result_sha256: string;
+  };
 }
 
 export interface SessionResponse {
@@ -511,6 +519,8 @@ export interface RegressionResponse {
 }
 
 export interface PlaceboResponse {
+  /** Server-signed binding to the exact randomized distribution and classroom scope. */
+  placebo_id?: string;
   design: RegressionDesignInfo;
   placebo: {
     policy_name: string;

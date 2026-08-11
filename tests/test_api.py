@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from gvcsim import api as api_mod
-from gvcsim import auth, data_routes, regression_routes, shocks
+from gvcsim import auth, data_routes, regression_routes, shocks, trusted_evidence
 from gvcsim.api import app
 from gvcsim.data_routes import _clean
 from gvcsim.artifacts import NETWORK_ALGORITHM, manifest_id, register_artifacts
@@ -749,11 +749,20 @@ def test_regression_placebo_endpoint():
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert "placebo_run_id" not in body
+    assert body["placebo_id"]
     assert body["design"]["method"] == "did"
     assert body["placebo"]["policy_name"] == "treated×post"
     assert len(body["placebo"]["placebo_coefs"]) == 10
     assert 0 < body["placebo"]["empirical_p"] <= 1
+    assert trusted_evidence.verify_placebo_run(
+        body["placebo_id"],
+        subject="student",
+        manifest_id=manifest_id(),
+        outcome="trade",
+        settings={"granularity": "country", "method": "did"},
+        result=body["placebo"],
+        step=12,
+    )
 
     bad = client.post(
         "/api/regression/placebo",

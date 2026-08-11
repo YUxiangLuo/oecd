@@ -2,7 +2,7 @@
 
 设计取舍:
   - 每个 API worker 使用有界 psycopg 连接池；池满时背压，不创建连接风暴
-  - schema_meta 串行化增量迁移；v3-v5 会原地升级且保留全部课堂数据，未知版本拒绝
+  - schema_meta 串行化增量迁移；v3-v6 会原地升级且保留全部课堂数据，未知版本拒绝
   - course_run → assignment → enrollment → experiment_attempt 是所有学习记录的作用域
   - submission_versions / grading_events 追加写，保留不可变提交与评分历史
   - 数据库不可用统一抛 Unavailable；生产认证 fail-closed
@@ -14,7 +14,6 @@ facade 重新导出 ``management`` 与 ``records`` 中的领域操作。
 
 import atexit
 import hashlib
-import hmac
 import ipaddress
 import json
 import logging
@@ -30,7 +29,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool, PoolClosed, PoolTimeout, TooManyRequests
 
 from gvcsim import config
-from gvcsim.classroom import schema
+from gvcsim.classroom import passwords, schema
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +74,25 @@ class SessionRevisionConflict(RuntimeError):
     """报告生成期间会话已被另一请求推进，必须基于最新状态重新生成。"""
 
 
-def hash_password(password: str, salt_hex: str) -> str:
-    return hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt_hex), 100_000).hex()
+PasswordHashError = passwords.PasswordHashError
+PASSWORD_ALGORITHM = passwords.CURRENT_ALGORITHM
+PASSWORD_ITERATIONS = passwords.CURRENT_ITERATIONS
+
+
+def hash_password(
+    password: str,
+    salt_hex: str,
+    *,
+    algorithm: str = PASSWORD_ALGORITHM,
+    iterations: int = PASSWORD_ITERATIONS,
+) -> str:
+    """Compatibility facade for the versioned classroom password hasher."""
+    return passwords.hash_password(
+        password,
+        salt_hex,
+        algorithm=algorithm,
+        iterations=iterations,
+    )
 
 
 def _validate_managed_password(password: str) -> None:
@@ -99,7 +115,7 @@ _pool_lock = threading.RLock()
 
 
 def initialize_schema() -> list[str]:
-    """建表/安全迁移并播种；从 v3-v5 升级不需要 reset。"""
+    """建表/安全迁移并播种；从 v3-v6 升级不需要 reset。"""
     global _schema_ready
     if _startup_sealed:
         raise RuntimeError("服务已完成启动，禁止在请求生命周期内重新初始化 schema")
@@ -126,8 +142,12 @@ def initialize_schema() -> list[str]:
             if version == "gvcsim-teaching-db-v5":
                 schema.migrate_v5_to_v6(c)
                 applied.append("安全迁移 v5 → v6（增加跨 worker 登录限流）")
+                version = "gvcsim-teaching-db-v6"
+            if version == "gvcsim-teaching-db-v6":
+                schema.migrate_v6_to_v7(c)
+                applied.append("安全迁移 v6 → v7（参数化口令哈希并支持渐进升级）")
                 version = TEACHING_DB_VERSION
-            elif version not in {None, TEACHING_DB_VERSION}:
+            if version not in {None, TEACHING_DB_VERSION}:
                 raise SchemaVersionMismatch(
                     f"教学库 schema 版本为 {version}，当前代码需要 {TEACHING_DB_VERSION}；"
                     "没有已验证的自动迁移路径，请先备份并按部署文档处理，禁止直接 reset 生产数据"
@@ -389,9 +409,19 @@ def _seed_if_empty(c: psycopg.Connection[dict[str, Any]]) -> bool:
     ):
         salt = secrets.token_hex(16)
         c.execute(
-            "INSERT INTO accounts(username, display_name, role, class_id, student_no, pw_salt, pw_hash)"
-            " VALUES (%s, %s, %s, %s, %s, %s, %s)",
-            (username, display_name, role, cls, student_no, salt, hash_password(config.BOOTSTRAP_PASSWORD, salt)),
+            "INSERT INTO accounts(username, display_name, role, class_id, student_no, pw_salt, pw_hash,"
+            " pw_algorithm, pw_iterations) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (
+                username,
+                display_name,
+                role,
+                cls,
+                student_no,
+                salt,
+                hash_password(config.BOOTSTRAP_PASSWORD, salt),
+                PASSWORD_ALGORITHM,
+                PASSWORD_ITERATIONS,
+            ),
         )
     c.execute(
         "INSERT INTO announcements(class_id, title, body, author) VALUES (%s, %s, %s, %s)",
@@ -522,7 +552,74 @@ def find_account(username: str) -> dict[str, Any] | None:
         return c.execute("SELECT * FROM accounts WHERE username = %s", (username,)).fetchone()
 
 
+def authenticate_account(username: str, password: str) -> dict[str, Any] | None:
+    """Atomically verify one account and opportunistically upgrade a legacy hash.
+
+    A missing account still performs the current work factor. Existing 100k rows are
+    verified with their stored parameters, then re-salted and upgraded to 600k in the
+    same locked transaction. Rehashing does not change ``auth_version`` or revoke live
+    sessions because the credential itself has not changed.
+    """
+    with conn() as c:
+        account = c.execute(
+            "SELECT * FROM accounts WHERE username=%s FOR UPDATE",
+            (username,),
+        ).fetchone()
+        if account is None:
+            hash_password(password, "00" * 16)
+            return None
+
+        algorithm = str(account["pw_algorithm"])
+        iterations = int(account["pw_iterations"])
+        verified = passwords.verify_password(
+            password,
+            str(account["pw_salt"]),
+            str(account["pw_hash"]),
+            algorithm=algorithm,
+            iterations=iterations,
+        )
+        if not verified or not account["active"]:
+            return None
+
+        if passwords.needs_rehash(algorithm, iterations):
+            salt = secrets.token_hex(16)
+            replacement = hash_password(password, salt)
+            c.execute(
+                "UPDATE accounts SET pw_salt=%s,pw_hash=%s,pw_algorithm=%s,pw_iterations=%s WHERE id=%s",
+                (salt, replacement, PASSWORD_ALGORITHM, PASSWORD_ITERATIONS, account["id"]),
+            )
+            c.execute(
+                "INSERT INTO audit_log(actor_id,actor_name,action,target_type,target_id,details)"
+                " VALUES (%s,%s,'auth.password_rehashed','account',%s,%s)",
+                (
+                    account["id"],
+                    account["username"],
+                    str(account["id"]),
+                    json.dumps(
+                        {
+                            "from_algorithm": algorithm,
+                            "from_iterations": iterations,
+                            "to_algorithm": PASSWORD_ALGORITHM,
+                            "to_iterations": PASSWORD_ITERATIONS,
+                        }
+                    ),
+                ),
+            )
+            account.update(
+                {
+                    "pw_salt": salt,
+                    "pw_hash": replacement,
+                    "pw_algorithm": PASSWORD_ALGORITHM,
+                    "pw_iterations": PASSWORD_ITERATIONS,
+                }
+            )
+
+        c.execute("UPDATE accounts SET last_login_at=now() WHERE id=%s", (account["id"],))
+        return account
+
+
 def touch_login(username: str) -> None:
+    """Compatibility helper for callers that only need to stamp activity."""
     with conn() as c:
         c.execute("UPDATE accounts SET last_login_at = now() WHERE username = %s", (username,))
 
@@ -590,9 +687,16 @@ def provision_teacher(username: str, display_name: str, password: str) -> dict[s
     with conn() as c:
         row = _required(
             c.execute(
-                "INSERT INTO accounts(username,display_name,role,pw_salt,pw_hash)"
-                " VALUES (%s,%s,'teacher',%s,%s) RETURNING id,username,display_name,role,active",
-                (username, display_name, salt, hash_password(password, salt)),
+                "INSERT INTO accounts(username,display_name,role,pw_salt,pw_hash,pw_algorithm,pw_iterations)"
+                " VALUES (%s,%s,'teacher',%s,%s,%s,%s) RETURNING id,username,display_name,role,active",
+                (
+                    username,
+                    display_name,
+                    salt,
+                    hash_password(password, salt),
+                    PASSWORD_ALGORITHM,
+                    PASSWORD_ITERATIONS,
+                ),
             ).fetchone(),
             "provision teacher",
         )
@@ -619,22 +723,42 @@ def change_own_password(username: str, current_password: str, new_password: str)
     _validate_managed_password(new_password)
     with conn() as c:
         account = c.execute(
-            "SELECT id,username,pw_salt,pw_hash,active FROM accounts WHERE username=%s FOR UPDATE",
+            "SELECT id,username,pw_salt,pw_hash,pw_algorithm,pw_iterations,active"
+            " FROM accounts WHERE username=%s FOR UPDATE",
             (username,),
         ).fetchone()
         if not account or not account["active"]:
             return False
-        supplied = hash_password(current_password, account["pw_salt"])
-        if not hmac.compare_digest(account["pw_hash"], supplied):
+        algorithm = str(account["pw_algorithm"])
+        iterations = int(account["pw_iterations"])
+        if not passwords.verify_password(
+            current_password,
+            str(account["pw_salt"]),
+            str(account["pw_hash"]),
+            algorithm=algorithm,
+            iterations=iterations,
+        ):
             return False
-        replacement_with_old_salt = hash_password(new_password, account["pw_salt"])
-        if hmac.compare_digest(account["pw_hash"], replacement_with_old_salt):
+        if passwords.verify_password(
+            new_password,
+            str(account["pw_salt"]),
+            str(account["pw_hash"]),
+            algorithm=algorithm,
+            iterations=iterations,
+        ):
             raise ValueError("新密码不能与当前密码相同")
 
         salt = secrets.token_hex(16)
         c.execute(
-            "UPDATE accounts SET pw_salt=%s,pw_hash=%s,auth_version=auth_version+1 WHERE id=%s",
-            (salt, hash_password(new_password, salt), account["id"]),
+            "UPDATE accounts SET pw_salt=%s,pw_hash=%s,pw_algorithm=%s,pw_iterations=%s,"
+            " auth_version=auth_version+1 WHERE id=%s",
+            (
+                salt,
+                hash_password(new_password, salt),
+                PASSWORD_ALGORITHM,
+                PASSWORD_ITERATIONS,
+                account["id"],
+            ),
         )
         c.execute(
             "UPDATE auth_sessions SET revoked_at=coalesce(revoked_at,now()) WHERE account_id=%s",

@@ -46,6 +46,17 @@ def test_login_success_and_me():
     assert me.json()["account_id"] == 2
 
 
+def test_fresh_accounts_use_the_current_versioned_password_cost():
+    response = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+    assert response.status_code == 200
+    with db.conn() as connection:
+        row = connection.execute("SELECT pw_algorithm,pw_iterations FROM accounts WHERE username='student'").fetchone()
+    assert row == {
+        "pw_algorithm": db.PASSWORD_ALGORITHM,
+        "pw_iterations": db.PASSWORD_ITERATIONS,
+    }
+
+
 def test_password_change_revokes_every_session_and_requires_the_new_password():
     first = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
     second = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
@@ -229,10 +240,21 @@ def test_schema_mismatch_is_explicit_503_and_never_demo_fallback(monkeypatch):
     def mismatched(*_args, **_kwargs):
         raise db.SchemaVersionMismatch("sensitive schema detail")
 
-    monkeypatch.setattr(db, "find_account", mismatched)
+    monkeypatch.setattr(db, "authenticate_account", mismatched)
     login = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"})
     assert login.status_code == 503
     assert "sensitive" not in login.text
+
+
+def test_malformed_stored_password_parameters_fail_closed(monkeypatch):
+    def malformed(*_args, **_kwargs):
+        raise db.PasswordHashError("sensitive stored hash detail")
+
+    monkeypatch.setattr(db, "authenticate_account", malformed)
+    response = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"})
+    assert response.status_code == 503
+    assert response.json() == {"detail": "认证数据库不可用或未就绪"}
+    assert "sensitive" not in response.text
 
 
 def test_global_schema_mismatch_handler_returns_generic_503(monkeypatch):

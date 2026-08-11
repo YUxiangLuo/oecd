@@ -15,57 +15,33 @@ viewport_height=${GVCSIM_E2E_VIEWPORT_HEIGHT:-1000}
   exit 2
 }
 ab=(agent-browser --namespace "$browser_namespace" --session "$browser_session")
-temporary_a11y_report=
+har_sanitizer="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sanitize_har.py"
+temporary_artifact_dir=
+student_har=
 
 cleanup() {
   "${ab[@]}" close >/dev/null 2>&1 || true
-  [[ -z "$temporary_a11y_report" ]] || rm -f "$temporary_a11y_report"
+  if [[ -n "$student_har" && -f "$student_har" ]]; then
+    python3 "$har_sanitizer" "$student_har" >/dev/null 2>&1 || rm -f "$student_har"
+  fi
+  [[ -z "$temporary_artifact_dir" ]] || rm -rf "$temporary_artifact_dir"
 }
 trap cleanup EXIT
 
-agent-browser doctor >/dev/null
-"${ab[@]}" open "$GVCSIM_BASE_URL"
-"${ab[@]}" set viewport "$viewport_width" "$viewport_height"
-"${ab[@]}" fill '#login-user' "$GVCSIM_E2E_USERNAME"
-"${ab[@]}" fill '#login-pass' "$GVCSIM_E2E_PASSWORD"
-"${ab[@]}" click 'button[type="submit"]'
-"${ab[@]}" wait --text '课程大纲'
-
-# 所有学生路由必须能在真实登录态下挂载。这里不伪造答题完成度；完整答题与
-# 报告流程由人工/夜间真实数据审查执行，smoke 负责捕获白屏、路由和请求错误。
-for step in $(seq 1 16); do
-  "${ab[@]}" open "$GVCSIM_BASE_URL/?step=$step"
-  "${ab[@]}" wait '.step-header-mid h2'
-  if [[ "$step" -eq 10 ]]; then
-    # The network uses one portalled dialog instance: node activation expands it,
-    # Escape closes it, and focus/selection return to the invoking SVG node.
-    "${ab[@]}" wait '.network-node[aria-label^="USA "]'
-    "${ab[@]}" wait --load networkidle
-    "${ab[@]}" focus '.network-node[aria-label^="USA "]'
-    "${ab[@]}" press Enter
-    "${ab[@]}" wait '[role="dialog"][aria-modal="true"]'
-    "${ab[@]}" eval '(() => { const d=document.querySelector("[role=dialog][aria-modal=true]"); if(document.querySelectorAll(".network-card").length!==1) throw new Error("network dialog duplicated the graph"); if(document.activeElement?.textContent?.trim()!=="退出大图") throw new Error("network dialog did not receive focus"); return true; })()'
-    "${ab[@]}" press Escape
-    "${ab[@]}" wait --fn '() => !document.querySelector("[role=dialog]")'
-    "${ab[@]}" eval '(() => { const n=document.activeElement; if(!n?.classList.contains("network-node") || n.getAttribute("aria-pressed")!=="true") throw new Error("network dialog did not restore its node focus and selection"); return true; })()'
-  fi
-done
-
 if [[ -n "$artifact_dir" ]]; then
   install -d -m 0750 "$artifact_dir"
-  a11y_report="$artifact_dir/student-step16-a11y.json"
-  "${ab[@]}" screenshot "$artifact_dir/student-step16.png" --full
-  "${ab[@]}" network har start
-  "${ab[@]}" reload
-  "${ab[@]}" wait --load networkidle
-  "${ab[@]}" network har stop "$artifact_dir/student-step16.har"
+  a11y_dir=$artifact_dir
 else
-  temporary_a11y_report=$(mktemp)
-  a11y_report=$temporary_a11y_report
+  temporary_artifact_dir=$(mktemp -d)
+  chmod 0700 "$temporary_artifact_dir"
+  a11y_dir=$temporary_artifact_dir
 fi
 
-"${ab[@]}" a11y --tags wcag2a,wcag2aa --json >"$a11y_report"
-a11y_violations=$(python3 - "$a11y_report" <<'PY'
+assert_a11y() {
+  local report=$1
+  "${ab[@]}" a11y --tags wcag2a,wcag2aa --json >"$report"
+  local violations
+  violations=$(python3 - "$report" <<'PY'
 import json
 import sys
 
@@ -76,9 +52,52 @@ if payload.get("success") is not True:
 print(len((payload.get("data") or {}).get("violations") or []))
 PY
 )
-if [[ "$a11y_violations" -ne 0 ]]; then
-  cat "$a11y_report" >&2
-  exit 1
+  if [[ "$violations" -ne 0 ]]; then
+    cat "$report" >&2
+    return 1
+  fi
+}
+
+agent-browser doctor >/dev/null
+"${ab[@]}" open "$GVCSIM_BASE_URL"
+"${ab[@]}" set viewport "$viewport_width" "$viewport_height"
+"${ab[@]}" fill '#login-user' "$GVCSIM_E2E_USERNAME"
+"${ab[@]}" fill '#login-pass' "$GVCSIM_E2E_PASSWORD"
+"${ab[@]}" click 'button[type="submit"]'
+"${ab[@]}" wait --text '课程大纲'
+
+# 所有学生路由必须能在真实登录态下挂载。这里不伪造答题完成度；完整答题与
+# 报告流程由人工/夜间真实数据审查执行。每一步都等待异步数据稳定、核对实际
+# 路由并单独执行 axe，避免“只审计循环最后一页”给出假绿灯。
+for step in $(seq 1 16); do
+  "${ab[@]}" open "$GVCSIM_BASE_URL/?step=$step"
+  "${ab[@]}" wait '.step-header-mid h2'
+  "${ab[@]}" wait --load networkidle
+  "${ab[@]}" eval "(() => { const actual=document.querySelector('.step-count')?.textContent?.trim(); const expected='第 $step / 16 步'; if(actual!==expected) throw new Error(\`student route mismatch: expected \${expected}, got \${actual}\`); return true; })()"
+  if [[ "$step" -eq 10 ]]; then
+    # The network uses one portalled dialog instance: node activation expands it,
+    # Escape closes it, and focus/selection return to the invoking SVG node.
+    "${ab[@]}" wait '.network-node[aria-label^="USA "]'
+    "${ab[@]}" focus '.network-node[aria-label^="USA "]'
+    "${ab[@]}" press Enter
+    "${ab[@]}" wait '[role="dialog"][aria-modal="true"]'
+    "${ab[@]}" eval '(() => { const d=document.querySelector("[role=dialog][aria-modal=true]"); if(document.querySelectorAll(".network-card").length!==1) throw new Error("network dialog duplicated the graph"); if(document.activeElement?.textContent?.trim()!=="退出大图") throw new Error("network dialog did not receive focus"); return true; })()'
+    assert_a11y "$a11y_dir/student-step10-modal-a11y.json"
+    "${ab[@]}" press Escape
+    "${ab[@]}" wait --fn '() => !document.querySelector("[role=dialog]")'
+    "${ab[@]}" eval '(() => { const n=document.activeElement; if(!n?.classList.contains("network-node") || n.getAttribute("aria-pressed")!=="true") throw new Error("network dialog did not restore its node focus and selection"); return true; })()'
+  fi
+  assert_a11y "$a11y_dir/student-step${step}-a11y.json"
+done
+
+if [[ -n "$artifact_dir" ]]; then
+  student_har="$artifact_dir/student-step16.har"
+  "${ab[@]}" screenshot "$artifact_dir/student-step16.png" --full
+  "${ab[@]}" network har start
+  "${ab[@]}" reload
+  "${ab[@]}" wait --load networkidle
+  "${ab[@]}" network har stop "$student_har"
+  python3 "$har_sanitizer" "$student_har"
 fi
 
 page_errors=$("${ab[@]}" errors)

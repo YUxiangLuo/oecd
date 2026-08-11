@@ -312,6 +312,89 @@ def _saved_run_design(
     return _settings_to_design(outcome, settings)
 
 
+def _valid_placebo_result(value: Any) -> dict[str, Any] | None:
+    """Validate the bounded server response before it reaches report rendering."""
+    if not isinstance(value, dict):
+        return None
+    coefficients = value.get("placebo_coefs")
+    numeric_fields = ("true_coef", "empirical_p")
+    integer_fields = ("n_draws", "requested_draws", "seed", "treated_entities", "total_entities")
+    if any(
+        isinstance(value.get(key), bool)
+        or not isinstance(value.get(key), (int, float))
+        or not math.isfinite(float(value[key]))
+        for key in numeric_fields
+    ):
+        return None
+    if any(isinstance(value.get(key), bool) or not isinstance(value.get(key), int) for key in integer_fields):
+        return None
+    if not isinstance(coefficients, list) or not coefficients or len(coefficients) > 200:
+        return None
+    if any(
+        isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(float(item))
+        for item in coefficients
+    ):
+        return None
+    if value["n_draws"] != len(coefficients) or not 1 <= value["n_draws"] <= value["requested_draws"] <= 200:
+        return None
+    if value["requested_draws"] < 10:
+        return None
+    if not 0 <= float(value["empirical_p"]) <= 1 or not 0 <= int(value["seed"]) <= 2_147_483_647:
+        return None
+    if not 0 <= value["treated_entities"] <= value["total_entities"]:
+        return None
+    cohorts = value.get("cohorts")
+    if not isinstance(cohorts, dict) or any(
+        not isinstance(key, str) or isinstance(count, bool) or not isinstance(count, int) or count < 0
+        for key, count in cohorts.items()
+    ):
+        return None
+    if sum(cohorts.values()) != value["treated_entities"]:
+        return None
+    return value
+
+
+def _saved_placebo(
+    session: dict[str, Any],
+    step: int,
+    outcome: str,
+    *,
+    expected_design: RegressionDesign,
+    expected_weight_mode: str,
+    subject: str | None,
+    require_trusted: bool,
+) -> dict[str, Any] | None:
+    data = _step_data(session, step)
+    saved = _as_dict(data.get("placebo_run"))
+    settings = _as_dict(saved.get("settings"))
+    response = _as_dict(saved.get("response"))
+    result = _valid_placebo_result(response.get("placebo"))
+    if not saved or not settings or result is None:
+        return None
+
+    if require_trusted:
+        if not subject:
+            return None
+        claims = trusted_evidence.verify_placebo_run(
+            data.get("placebo_id"),
+            subject=subject,
+            manifest_id=str(session.get("manifest_id") or ""),
+            outcome=outcome,
+            settings=settings,
+            result=result,
+            step=step,
+        )
+        parsed = _claims_to_design(outcome, claims) if claims else None
+    else:
+        parsed = _settings_to_design(outcome, settings)
+    if parsed is None:
+        return None
+    design, weight_mode = parsed
+    if design != expected_design or weight_mode != expected_weight_mode or design.method != "did":
+        return None
+    return {"design": design, "weight_mode": weight_mode, "result": result}
+
+
 def _rerun_recorded(session: dict[str, Any], *, subject: str | None, require_trusted: bool) -> list[dict[str, Any]]:
     """只复估学生实际运行过且可信的回归；可信运行复估失败时 fail closed。"""
     runs: list[dict[str, Any]] = []
@@ -356,6 +439,15 @@ def _rerun_recorded(session: dict[str, Any], *, subject: str | None, require_tru
             else:
                 reason = "当前产物无法执行原回归设计"
             raise ReportReplayError(step, _STEP_TITLES.get(step, ""), reason) from error
+        placebo = _saved_placebo(
+            session,
+            step,
+            outcome,
+            expected_design=design,
+            expected_weight_mode=weight_mode,
+            subject=subject,
+            require_trusted=require_trusted,
+        )
         runs.append(
             {
                 "step": step,
@@ -364,6 +456,7 @@ def _rerun_recorded(session: dict[str, Any], *, subject: str | None, require_tru
                 "design": design,
                 "result": result,
                 "weight_mode": weight_mode,
+                "placebo": placebo,
             }
         )
     return runs
@@ -391,6 +484,16 @@ def _fingerprint(session: dict[str, Any], manifest_id: str, runs: list[dict[str,
             "quizzes": {str(step): _step_data(session, step).get("quiz") for step in GATE_STEPS},
             "snapshots": _experiment_snapshots(session),
             "designs": [{"equation": run["design"].equation(), "weight_mode": run["weight_mode"]} for run in runs],
+            "placebos": [
+                {
+                    "step": run["step"],
+                    "equation": run["placebo"]["design"].equation(),
+                    "weight_mode": run["placebo"]["weight_mode"],
+                    "result": run["placebo"]["result"],
+                }
+                for run in runs
+                if run.get("placebo")
+            ],
         },
         sort_keys=True,
         ensure_ascii=False,
@@ -609,6 +712,27 @@ def _coef_rows(result: RegressionResult) -> list[str]:
     return rows
 
 
+def _placebo_lines(placebo: dict[str, Any]) -> list[str]:
+    result = placebo["result"]
+    empirical_p = float(result["empirical_p"])
+    interpretation = (
+        "原始分组估计位于随机伪处理分布的尾部；这只是稳健性证据，仍不能证明因果关系。"
+        if empirical_p <= 0.05
+        else "随机伪处理经常产生同等或更极端的估计；本次安慰剂没有为主结果提供额外稳健性支持。"
+    )
+    cohorts = "、".join(f"{year}:{count}" for year, count in sorted(result["cohorts"].items())) or "—"
+    return [
+        "#### 学生实际运行的安慰剂稳健性检验",
+        "",
+        "- 来源：学生实际运行；服务端已校验账号、作业、attempt、步骤、课程数据版本与精确结果摘要",
+        f"- 随机化完成：{result['n_draws']} / {result['requested_draws']}；随机种子：{result['seed']}",
+        f"- 原始分组估计值：{float(result['true_coef']):.4f}；经验 p 值：{empirical_p:.3f}",
+        f"- 伪处理实体：{result['treated_entities']} / {result['total_entities']}；cohort 分布：{cohorts}",
+        f"- 解释：{interpretation}",
+        "",
+    ]
+
+
 def _regression_sections(runs: list[dict[str, Any]]) -> list[str]:
     lines = [
         "## 5. 学生实际运行的教学回归",
@@ -681,6 +805,8 @@ def _regression_sections(runs: list[dict[str, Any]]) -> list[str]:
                     f"{item['effect']:.4f} | {item['se']:.4f} | {interval} |"
                 )
             lines.append("")
+        if run.get("placebo"):
+            lines += _placebo_lines(run["placebo"])
     return lines
 
 
@@ -759,6 +885,29 @@ def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], p
     return "\n".join(lines)
 
 
+def _run_provenance(run: dict[str, Any]) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "step": run["step"],
+        "outcome": run["outcome"],
+        "design": run["design"].equation(),
+        "status": run["result"].status,
+        "weight_mode": run["weight_mode"],
+        "source": "student_run",
+    }
+    placebo = run.get("placebo")
+    if placebo:
+        result = placebo["result"]
+        item["placebo"] = {
+            "source": "student_placebo",
+            "n_draws": result["n_draws"],
+            "requested_draws": result["requested_draws"],
+            "empirical_p": result["empirical_p"],
+            "seed": result["seed"],
+            "result_sha256": trusted_evidence.digest(result),
+        }
+    return item
+
+
 def build(
     session: dict[str, Any],
     student: str,
@@ -798,17 +947,7 @@ def build(
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "status": "generated",
         "artifact": {**contract, "years": processed_years(), **artifacts.manifest_provenance()},
-        "runs": [
-            {
-                "step": run["step"],
-                "outcome": run["outcome"],
-                "design": run["design"].equation(),
-                "status": run["result"].status,
-                "weight_mode": run["weight_mode"],
-                "source": "student_run",
-            }
-            for run in runs
-        ],
+        "runs": [_run_provenance(run) for run in runs],
     }
     markdown = _render(session, student, runs, provenance)
     provenance["content_sha256"] = hashlib.sha256(markdown.encode("utf-8")).hexdigest()
