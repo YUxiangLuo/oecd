@@ -6,9 +6,29 @@ from gvcsim import quizzes
 
 
 def test_bank_covers_steps_1_through_15_with_21_questions():
+    assert quizzes.QUIZ_VERSION == "course-quiz-v3"
     assert sorted(quizzes.STEP_QUIZZES) == list(range(1, 16))
     assert sum(len(items) for items in quizzes.STEP_QUIZZES.values()) == 21
     assert all(1 <= len(items) <= 3 for items in quizzes.STEP_QUIZZES.values())
+
+
+def test_v3_uses_economy_terms_and_the_centered_interaction_formula():
+    student_copy = "\n".join(
+        str(value)
+        for questions in quizzes.STEP_QUIZZES.values()
+        for question in questions
+        for value in (
+            question["prompt"],
+            question["explanation"],
+            *(option["label"] for option in question["options"]),
+        )
+    )
+    assert "国家" not in student_copy
+
+    marginal = next(question for question in quizzes.STEP_QUIZZES[13] if question["id"] == "s13-marginal")
+    correct_label = next(option["label"] for option in marginal["options"] if option["id"] == marginal["correct"])
+    assert "中心化后的基期 GVC" in correct_label
+    assert "减去样本个体均值" in marginal["explanation"]
 
 
 def test_public_quiz_never_exposes_answers_or_feedback():
@@ -46,7 +66,7 @@ def test_selected_answers_renders_only_a_fully_correct_current_quiz():
     assert selected == [
         {
             "question": "Z 表的一格应该怎样解释？",
-            "answer": "行方国家×行业向列方国家×行业提供的中间投入",
+            "answer": "行方经济体×行业向列方经济体×行业提供的中间投入",
         }
     ]
     assert quizzes.selected_answers(1, {"version": "old", "answers": {}}) == []

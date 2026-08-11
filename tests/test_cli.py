@@ -3,7 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from gvcsim import artifact_retention, config, preflight
+from gvcsim import artifact_retention, artifacts, config, preflight, quizzes
+from gvcsim.classroom import db as classroom_db
 from gvcsim.cli import main
 
 
@@ -131,3 +132,44 @@ def test_preflight_command_exits_nonzero_on_dependency_failure(monkeypatch: pyte
 
     with pytest.raises(SystemExit, match="服务启动预检失败.*PostgreSQL unavailable"):
         main()
+
+
+def test_quiz_attempt_reset_requires_confirmation_and_the_current_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        classroom_db,
+        "reset_active_attempts_for_quiz",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("不得触碰数据库")),
+    )
+    monkeypatch.setattr(sys, "argv", ["gvcsim", "classroom-reset-attempts", "--quiz-version", quizzes.QUIZ_VERSION])
+    with pytest.raises(SystemExit, match="确认备份后加 --confirm"):
+        main()
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["gvcsim", "classroom-reset-attempts", "--quiz-version", "course-quiz-stale", "--confirm"],
+    )
+    with pytest.raises(SystemExit, match="题库版本不匹配.*拒绝重置"):
+        main()
+
+
+def test_quiz_attempt_reset_records_the_current_version(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    captured: dict[str, str] = {}
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["gvcsim", "classroom-reset-attempts", "--quiz-version", quizzes.QUIZ_VERSION, "--confirm"],
+    )
+    monkeypatch.setattr(artifacts, "manifest_id", lambda: "f" * 16)
+
+    def reset(version: str, manifest_id: str) -> dict[str, object]:
+        captured.update(version=version, manifest_id=manifest_id)
+        return {"already_applied": False, "reset_count": 2}
+
+    monkeypatch.setattr(classroom_db, "reset_active_attempts_for_quiz", reset)
+    main()
+
+    assert captured == {"version": quizzes.QUIZ_VERSION, "manifest_id": "f" * 16}
+    assert "归档并重建 2 个当前 attempt" in capsys.readouterr().out
