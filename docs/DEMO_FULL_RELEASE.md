@@ -76,11 +76,17 @@ case "$upload" in /var/tmp/gvcsim-upload-*) ;; *) exit 64 ;; esac
 [[ "$new_manifest" =~ ^[0-9a-f]{16}$ ]] || exit 64
 [[ "$expected_commit" =~ ^[0-9a-f]{40}$ ]] || exit 64
 test -d "$upload"
+read -r app_mode app_uid app_gid < <(stat -c '%a %u %g' "$app")
+[[ "$app_mode" =~ ^[0-7]{3,4}$ ]] || exit 64
+[[ "$app_uid" =~ ^[0-9]+$ && "$app_gid" =~ ^[0-9]+$ ]] || exit 64
 
 systemctl stop gvcsim-api.service
 rsync -a --delete \
   --exclude='/.venv/' --exclude='/data/' --exclude='/OECD_ICIO/' --exclude='/reports/' \
   "$upload/" "$app/"
+# 上传暂存目录固定为 0700；rsync -a 会把源根目录权限应用到目标根目录，必须恢复。
+chown "$app_uid:$app_gid" "$app"
+chmod "$app_mode" "$app"
 
 cd "$app"
 uv sync --locked
@@ -156,11 +162,16 @@ release_id=$3
 case "$backup" in /var/backups/gvcsim/releases/*-pre) ;; *) exit 64 ;; esac
 test -d "$backup/app"
 old_target=$(cat "$backup/processed-target")
+read -r app_mode app_uid app_gid < "$backup/app-root-stat"
+[[ "$app_mode" =~ ^[0-7]{3,4}$ ]] || exit 64
+[[ "$app_uid" =~ ^[0-9]+$ && "$app_gid" =~ ^[0-9]+$ ]] || exit 64
 
 systemctl stop gvcsim-api.service
 rsync -a --delete \
   --exclude='/data/' --exclude='/OECD_ICIO/' --exclude='/reports/' \
   "$backup/app/" "$app/"
+chown "$app_uid:$app_gid" "$app"
+chmod "$app_mode" "$app"
 next_link="$app/data/processed.rollback-$release_id"
 ln -s "$old_target" "$next_link"
 mv -Tf "$next_link" "$app/data/processed"
