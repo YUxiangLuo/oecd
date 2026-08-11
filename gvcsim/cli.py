@@ -93,7 +93,7 @@ def main() -> None:
     p.add_argument("--teacher-name", default="课程管理员", help="首位教师显示名")
 
     p = sub.add_parser("classroom-reset-attempts", help="为新版理解检查归档开放作业的当前尝试")
-    p.add_argument("--quiz-version", required=True, help="稳定题库版本，例如 course-quiz-v2")
+    p.add_argument("--quiz-version", required=True, help="稳定题库版本，例如 course-quiz-v3")
     p.add_argument("--confirm", action="store_true", help="确认归档旧 attempt 并为学生创建空白 attempt")
 
     args = parser.parse_args()
@@ -323,9 +323,13 @@ def main() -> None:
     elif args.command == "classroom-reset-attempts":
         if not args.confirm:
             raise SystemExit("该命令会归档开放作业的当前 attempt；确认备份后加 --confirm")
-        from gvcsim import artifacts
+        from gvcsim import artifacts, quizzes
         from gvcsim.classroom import db as classroom_db
 
+        if args.quiz_version != quizzes.QUIZ_VERSION:
+            raise SystemExit(
+                f"题库版本不匹配：命令收到 {args.quiz_version}，当前源码为 {quizzes.QUIZ_VERSION}；拒绝重置"
+            )
         reset_result = classroom_db.reset_active_attempts_for_quiz(args.quiz_version, artifacts.manifest_id())
         if reset_result["already_applied"]:
             print(
