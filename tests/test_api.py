@@ -145,9 +145,12 @@ def test_teacher_administration_and_grading_flow(teaching_db):
         json={"display_name": "学生二改", "student_no": "002"},
     )
     assert updated.status_code == 200 and updated.json()["display_name"] == "学生二改"
+    assert "active" not in updated.json()
+    assert teacher.post(f"/api/classroom/students/{account_id}", json={"active": False}).status_code == 422
     assert teacher.post("/api/classroom/students/999999", json={"display_name": "无"}).status_code == 404
     assert teacher.get("/api/classroom/students", params={"class_id": class_id}).json()["students"][0]["username"] == "student2"
-    assert teacher.get("/api/classroom/overview", params={"class_id": class_id}).json()["student_count"] == 1
+    overview = teacher.get("/api/classroom/overview", params={"class_id": class_id}).json()
+    assert overview["student_count"] == 1 and "disabled_count" not in overview
     assert teacher.get("/api/classroom/overview", params={"class_id": 999999}).status_code == 404
 
     assert teacher.post(

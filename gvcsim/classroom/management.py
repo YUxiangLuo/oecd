@@ -18,23 +18,23 @@ class _DatabaseProxy:
 
 
 database = _DatabaseProxy()
-_STUDENT_COLS = "a.id,a.username,a.display_name,a.class_id,a.student_no,a.active,a.last_login_at,a.created_at"
+_STUDENT_COLS = "a.id,a.username,a.display_name,a.class_id,a.student_no,a.last_login_at,a.created_at"
 
 
-def _active_teacher(c: psycopg.Connection[dict[str, Any]], username: str) -> bool:
+def _teacher_exists(c: psycopg.Connection[dict[str, Any]], username: str) -> bool:
     return c.execute(
-        "SELECT 1 FROM accounts WHERE username=%s AND role='teacher' AND active", (username,)
+        "SELECT 1 FROM accounts WHERE username=%s AND role='teacher'", (username,)
     ).fetchone() is not None
 
 
 def teacher_can_access_class(username: str, class_id: int) -> bool:
     with database.conn() as c:
-        return _active_teacher(c, username) and c.execute("SELECT 1 FROM classes WHERE id=%s", (class_id,)).fetchone() is not None
+        return _teacher_exists(c, username) and c.execute("SELECT 1 FROM classes WHERE id=%s", (class_id,)).fetchone() is not None
 
 
 def list_classes(teacher_username: str | None = None) -> list[dict[str, Any]]:
     with database.conn() as c:
-        if teacher_username and not _active_teacher(c, teacher_username):
+        if teacher_username and not _teacher_exists(c, teacher_username):
             return []
         return c.execute(
             "SELECT cl.*,count(a.id) AS student_count FROM classes cl LEFT JOIN accounts a"
@@ -44,7 +44,7 @@ def list_classes(teacher_username: str | None = None) -> list[dict[str, Any]]:
 
 def create_class(name: str, code: str, semester: str = "", note: str = "", teacher_username: str | None = None) -> dict[str, Any]:
     with database.conn() as c:
-        if teacher_username and not _active_teacher(c, teacher_username):
+        if teacher_username and not _teacher_exists(c, teacher_username):
             raise PermissionError("教师账号无效")
         return database._required(c.execute(
             "INSERT INTO classes(name,code,semester,note) VALUES (%s,%s,%s,%s) RETURNING *",
@@ -56,13 +56,13 @@ def create_student(username: str, display_name: str, password: str, student_no: 
     database._validate_managed_password(password)
     salt = secrets.token_hex(16)
     with database.conn() as c:
-        if teacher_username and not _active_teacher(c, teacher_username):
+        if teacher_username and not _teacher_exists(c, teacher_username):
             raise PermissionError("教师账号无效")
         if class_id is not None and not c.execute("SELECT 1 FROM classes WHERE id=%s", (class_id,)).fetchone():
             raise ValueError("班级不存在")
         return database._required(c.execute(
             "INSERT INTO accounts(username,display_name,role,class_id,student_no,pw_salt,pw_hash)"
-            " VALUES (%s,%s,'student',%s,%s,%s,%s) RETURNING id,username,display_name,class_id,student_no,active,last_login_at,created_at",
+            " VALUES (%s,%s,'student',%s,%s,%s,%s) RETURNING id,username,display_name,class_id,student_no,last_login_at,created_at",
             (username, display_name, class_id, student_no, salt, database.hash_password(password, salt)),
         ).fetchone(), "create student")
 
@@ -70,7 +70,7 @@ def create_student(username: str, display_name: str, password: str, student_no: 
 def update_student(account_id: int, fields: dict[str, Any], teacher_username: str | None = None) -> dict[str, Any] | None:
     sets: list[str] = []
     params: list[Any] = []
-    for key in ("display_name", "student_no", "class_id", "active"):
+    for key in ("display_name", "student_no", "class_id"):
         if key in fields:
             sets.append(f"{key}=%s")
             params.append(fields[key])
@@ -82,13 +82,13 @@ def update_student(account_id: int, fields: dict[str, Any], teacher_username: st
     if not sets:
         return None
     with database.conn() as c:
-        if teacher_username and not _active_teacher(c, teacher_username):
+        if teacher_username and not _teacher_exists(c, teacher_username):
             return None
         if fields.get("class_id") is not None and not c.execute("SELECT 1 FROM classes WHERE id=%s", (fields["class_id"],)).fetchone():
             return None
         return c.execute(
             f"UPDATE accounts SET {','.join(sets)} WHERE id=%s AND role='student'"
-            " RETURNING id,username,display_name,class_id,student_no,active,last_login_at,created_at",
+            " RETURNING id,username,display_name,class_id,student_no,last_login_at,created_at",
             (*params, account_id),
         ).fetchone()
 
@@ -120,7 +120,7 @@ def list_students(class_id: int | None = None, teacher_username: str | None = No
         clauses.append("a.class_id=%s")
         params.append(class_id)
     with database.conn() as c:
-        if teacher_username and not _active_teacher(c, teacher_username):
+        if teacher_username and not _teacher_exists(c, teacher_username):
             return []
         rows = c.execute(
             f"SELECT {_STUDENT_COLS},cl.name AS class_name,p.current_step,p.max_step,p.updated_at AS progress_at,"
@@ -163,7 +163,7 @@ def overview_stats(class_id: int | None = None, teacher_username: str | None = N
         grades = [row for row in subs if row.get("submission_state") == "graded" and row.get("score") is not None]
         breakdown.append({"class_id": cid, "name": name, "student_count": len(rows), "submitted": len(subs), "graded": len(grades), "avg_score": round(sum(int(row["score"]) for row in grades) / len(grades), 1) if grades else None})
     return {
-        "student_count": len(students), "disabled_count": sum(not row["active"] for row in students),
+        "student_count": len(students),
         "submitted": len(submitted), "graded": len(graded), "avg_score": round(sum(scores) / len(scores), 1) if scores else None,
         "score_buckets": [{"label": label, "count": sum(test(score) for score in scores)} for label, test in (("<60", lambda n: n < 60), ("60–69", lambda n: 60 <= n <= 69), ("70–79", lambda n: 70 <= n <= 79), ("80–89", lambda n: 80 <= n <= 89), ("90–100", lambda n: n >= 90))],
         "step_reach": [{"step": step, "reached": sum((row.get("max_step") or 0) >= step for row in students)} for step in range(1, 17)],

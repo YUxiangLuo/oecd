@@ -116,7 +116,7 @@ def main() -> None:
         else:
             updated = db.update_student(
                 int(account["id"]),
-                {"password": args.password, "class_id": class_id, "active": True},
+                {"password": args.password, "class_id": class_id},
                 "teacher",
             )
             if updated is None:

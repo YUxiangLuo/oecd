@@ -3,7 +3,7 @@ import { LabeledControl, ScrollableRegion } from "../a11y";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import type { ClassInfo, StepsResponse, StudentRow } from "../types";
-import { ConfirmModal, EmptyState, Modal, SearchInput, StatusPill, Toolbar } from "./ui";
+import { EmptyState, Modal, SearchInput, StatusPill, Toolbar } from "./ui";
 
 const fmtTime = (s: string | null | undefined) => (s ? s.slice(0, 16).replace("T", " ") : "—");
 
@@ -13,8 +13,7 @@ type ModalState =
   | { type: "student" }
   | { type: "rename"; s: StudentRow }
   | { type: "classify"; s: StudentRow }
-  | { type: "password"; s: StudentRow }
-  | { type: "toggle"; s: StudentRow };
+  | { type: "password"; s: StudentRow };
 
 /** 班级与学生:工具条(筛选/搜索/建班/建号) + 进度表 + 模态编辑 */
 type SortKey = "max_step" | "verified_completed_count" | "score" | "last_login_at";
@@ -139,13 +138,12 @@ export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearS
               <th>报告</th>
               <th><button className="table-sort" onClick={() => toggleSort("score")}>得分{sortMark("score")}</button></th>
               <th><button className="table-sort" onClick={() => toggleSort("last_login_at")}>最近登录{sortMark("last_login_at")}</button></th>
-              <th>状态</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {students.map((s) => (
-              <tr key={s.id} className={s.active ? undefined : "row-disabled"}>
+              <tr key={s.id}>
                 <td>{s.display_name}</td>
                 <td className="mono">{s.username}</td>
                 <td>{s.student_no || "—"}</td>
@@ -195,21 +193,12 @@ export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearS
                 <td>{s.score ?? "—"}</td>
                 <td>{fmtTime(s.last_login_at)}</td>
                 <td>
-                  {s.active ? <StatusPill tone="info">正常</StatusPill> : <StatusPill tone="muted">已停用</StatusPill>}
-                </td>
-                <td>
                   <details className="row-menu">
                     <summary aria-label="操作">⋯</summary>
                     <div className="row-menu-pop">
                       <button onClick={(e) => (closeMenu(e), setModal({ type: "rename", s }))}>改名</button>
                       <button onClick={(e) => (closeMenu(e), setModal({ type: "classify", s }))}>调整班级</button>
                       <button onClick={(e) => (closeMenu(e), setModal({ type: "password", s }))}>重置密码</button>
-                      <button
-                        className={s.active ? "danger" : undefined}
-                        onClick={(e) => (closeMenu(e), setModal({ type: "toggle", s }))}
-                      >
-                        {s.active ? "停用" : "启用"}
-                      </button>
                     </div>
                   </details>
                 </td>
@@ -232,7 +221,7 @@ export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearS
           />
         )}
       </ScrollableRegion>
-      <p className="muted panel-note">“到达位置”只表示浏览导航；步骤 1–15 由答题通过判定，第 16 步由报告生成判定。停用账号会立即撤销现有会话并禁止后续请求，但保留历史记录。</p>
+      <p className="muted panel-note">“到达位置”只表示浏览导航；步骤 1–15 由答题通过判定，第 16 步由报告生成判定。</p>
 
       {modal?.type === "class" && (
         <ClassModal onClose={() => setModal(null)} onSubmit={(b) => run(api.classroom.createClass(b))} />
@@ -273,16 +262,6 @@ export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearS
           validate={(v) => (v.length >= 12 ? null : "密码至少 12 位")}
           onClose={() => setModal(null)}
           onSubmit={(v) => run(api.classroom.updateStudent(modal.s.id, { password: v }))}
-        />
-      )}
-      {modal?.type === "toggle" && (
-        <ConfirmModal
-          title={modal.s.active ? "停用账号" : "启用账号"}
-          message={`确定要${modal.s.active ? "停用" : "启用"} ${modal.s.display_name}(${modal.s.username})吗?`}
-          confirmLabel={modal.s.active ? "停用" : "启用"}
-          danger={modal.s.active}
-          onConfirm={() => run(api.classroom.updateStudent(modal.s.id, { active: !modal.s.active }))}
-          onClose={() => setModal(null)}
         />
       )}
     </div>

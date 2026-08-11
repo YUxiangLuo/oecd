@@ -3,6 +3,7 @@ import { LabeledControl, ScrollableRegion } from "../a11y";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import type { ClassInfo, ClassOverview } from "../types";
+import { userFacingRequestError } from "../user-facing-error";
 import { GradingDonut, StepFunnel, TrendChart } from "./charts";
 import { Toolbar } from "./ui";
 
@@ -12,9 +13,16 @@ export function OverviewTab({ onSelectStep }: {
 }) {
   const [classId, setClassId] = useState<number | null>(null);
   const { data: cls } = useAsync<{ classes: ClassInfo[] }>(() => api.classroom.classes(), []);
-  const { data, error } = useAsync<ClassOverview>(() => api.classroom.overview(classId), [classId]);
+  const { data, error, retry } = useAsync<ClassOverview>(() => api.classroom.overview(classId), [classId]);
 
-  if (error) return <div className="error-box">{error}</div>;
+  if (error) {
+    return (
+      <div className="error-box async-error" role="alert">
+        <span>{userFacingRequestError(error, "班级概览加载失败")}</span>
+        <button type="button" className="secondary" onClick={retry}>重试</button>
+      </div>
+    );
+  }
   if (!data) return <p className="muted">加载中…</p>;
 
   const pending = Math.max(0, data.submitted - data.graded);
@@ -23,7 +31,7 @@ export function OverviewTab({ onSelectStep }: {
   const fullyVerified = data.step_completion.find((item) => item.step === 16)?.completed ?? 0;
 
   const kpis = [
-    { ic: "👥", tone: "indigo", num: data.student_count, label: "学生人数", sub: data.disabled_count ? `停用 ${data.disabled_count}` : "" },
+    { ic: "👥", tone: "indigo", num: data.student_count, label: "学生人数", sub: "" },
     { ic: "📤", tone: "indigo", num: data.submitted, label: "已提交报告", sub: `共 ${data.student_count} 人` },
     { ic: "⏳", tone: "amber", num: pending, label: "待评阅", sub: pending ? "需要处理" : "已清空" },
     { ic: "✅", tone: "green", num: data.graded, label: "已评阅", sub: "" },

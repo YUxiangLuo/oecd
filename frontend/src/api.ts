@@ -313,7 +313,7 @@ export const api = {
     }) => post<import("./types").StudentRow>("/api/classroom/students", body),
     updateStudent: (
       id: number,
-      body: { display_name?: string; student_no?: string; class_id?: number | null; active?: boolean; password?: string },
+      body: { display_name?: string; student_no?: string; class_id?: number | null; password?: string },
     ) => post<import("./types").StudentRow>(`/api/classroom/students/${id}`, body),
     submissions: () =>
       get<{ submissions: import("./types").SubmissionRow[] }>("/api/classroom/submissions"),

@@ -7,7 +7,7 @@ from typing import Any
 
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from gvcsim import concurrency, evidence, quizzes
 from gvcsim import session as session_model
@@ -229,10 +229,11 @@ def create_student(req: StudentCreateRequest, user: dict = Depends(require_teach
 
 
 class StudentUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     display_name: str | None = None
     student_no: str | None = None
     class_id: int | None = None
-    active: bool | None = None
     password: str | None = Field(default=None, min_length=12, max_length=256)
 
 

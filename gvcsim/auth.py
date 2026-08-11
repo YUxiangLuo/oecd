@@ -59,8 +59,6 @@ def authenticate(username: str, password: str) -> dict | None:
         if not account:
             db.hash_password(password, "00" * 16)
             return None
-        if not account["active"]:
-            return None
         supplied = db.hash_password(password, account["pw_salt"])
         if not hmac.compare_digest(account["pw_hash"], supplied):
             return None

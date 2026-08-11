@@ -171,9 +171,8 @@
 .axis-lab { fill: var(--text-muted); font-size: 9px; font-family: "Space Grotesk", sans-serif; }
 .chart-legend { display: flex; gap: 16px; font-size: 12px; color: #5a6070; margin-top: 6px; padding-left: 6px; }
 
-/* ---------- 表格补充(行内菜单 / 停用行 / 等宽) ---------- */
+/* ---------- 表格补充(行内菜单 / 等宽) ---------- */
 .data-table td .mono, .mono { font-family: "Space Grotesk", monospace; font-size: 12px; color: var(--text-muted); }
-.data-table tr.row-disabled td { opacity: 0.5; }
 .data-table.compact th, .data-table.compact td { padding-top: 7px; padding-bottom: 7px; }
 .row-menu { position: relative; display: inline-block; }
 .row-menu > summary {

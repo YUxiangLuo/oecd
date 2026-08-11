@@ -43,7 +43,7 @@ export function Modal({
   );
 }
 
-/** 确认对话框:危险操作(删除/停用)统一走这里,替代 window.confirm。 */
+/** 确认对话框:删除等危险操作统一走这里,替代 window.confirm。 */
 export function ConfirmModal({
   title,
   message,
@@ -109,7 +109,7 @@ export function SearchInput({
 
 type PillTone = "ok" | "info" | "warn" | "muted";
 
-/** 状态徽标:正常/停用、待评阅/已评阅等。 */
+/** 状态徽标:待评阅/已评阅等。 */
 export function StatusPill({ tone, children }: { tone: PillTone; children: ReactNode }) {
   return <span className={`status-pill ${tone}`}>{children}</span>;
 }

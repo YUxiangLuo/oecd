@@ -18,10 +18,9 @@ class _DatabaseProxy:
 database = _DatabaseProxy()
 
 
-def _student(c: psycopg.Connection[dict[str, Any]], username: str, *, active: bool = True) -> dict[str, Any] | None:
-    suffix = " AND active" if active else ""
+def _student(c: psycopg.Connection[dict[str, Any]], username: str) -> dict[str, Any] | None:
     return c.execute(
-        f"SELECT id,username FROM accounts WHERE username=%s AND role='student'{suffix}", (username,)
+        "SELECT id,username FROM accounts WHERE username=%s AND role='student'", (username,)
     ).fetchone()
 
 
@@ -41,7 +40,7 @@ def get_progress(username: str) -> dict[str, Any] | None:
     with database.conn() as c:
         return c.execute(
             "SELECT p.current_step,p.max_step,p.updated_at FROM step_progress p"
-            " JOIN accounts a ON a.id=p.account_id WHERE a.username=%s AND a.role='student' AND a.active",
+            " JOIN accounts a ON a.id=p.account_id WHERE a.username=%s AND a.role='student'",
             (username,),
         ).fetchone()
 
@@ -50,7 +49,7 @@ def get_session(username: str) -> dict[str, Any] | None:
     with database.conn() as c:
         return c.execute(
             "SELECT s.session,s.updated_at FROM experiment_sessions s JOIN accounts a ON a.id=s.account_id"
-            " WHERE a.username=%s AND a.role='student' AND a.active",
+            " WHERE a.username=%s AND a.role='student'",
             (username,),
         ).fetchone()
 
@@ -101,7 +100,7 @@ def latest_report(username: str) -> dict[str, Any] | None:
     with database.conn() as c:
         return c.execute(
             "SELECT r.markdown,r.provenance,r.updated_at FROM reports r JOIN accounts a ON a.id=r.account_id"
-            " WHERE a.username=%s AND a.active",
+            " WHERE a.username=%s",
             (username,),
         ).fetchone()
 
@@ -133,20 +132,20 @@ def my_submission(username: str) -> dict[str, Any] | None:
     with database.conn() as c:
         return c.execute(
             "SELECT s.id,s.title,s.year,s.state,s.score,s.feedback,s.graded_by,s.graded_at,s.submitted_at"
-            " FROM submissions s JOIN accounts a ON a.id=s.account_id WHERE a.username=%s AND a.active",
+            " FROM submissions s JOIN accounts a ON a.id=s.account_id WHERE a.username=%s",
             (username,),
         ).fetchone()
 
 
-def _active_teacher(c: psycopg.Connection[dict[str, Any]], username: str) -> bool:
+def _teacher_exists(c: psycopg.Connection[dict[str, Any]], username: str) -> bool:
     return c.execute(
-        "SELECT 1 FROM accounts WHERE username=%s AND role='teacher' AND active", (username,)
+        "SELECT 1 FROM accounts WHERE username=%s AND role='teacher'", (username,)
     ).fetchone() is not None
 
 
 def list_submissions(teacher_username: str | None = None) -> list[dict[str, Any]]:
     with database.conn() as c:
-        if teacher_username and not _active_teacher(c, teacher_username):
+        if teacher_username and not _teacher_exists(c, teacher_username):
             return []
         return c.execute(
             "SELECT s.id,s.title,s.year,s.state,s.score,s.graded_by,s.graded_at,s.submitted_at,"
@@ -158,7 +157,7 @@ def list_submissions(teacher_username: str | None = None) -> list[dict[str, Any]
 
 def get_submission(submission_id: int, teacher_username: str | None = None) -> dict[str, Any] | None:
     with database.conn() as c:
-        if teacher_username and not _active_teacher(c, teacher_username):
+        if teacher_username and not _teacher_exists(c, teacher_username):
             return None
         return c.execute(
             "SELECT s.*,a.username,a.display_name,a.student_no,cl.name AS class_name FROM submissions s"
@@ -168,14 +167,14 @@ def get_submission(submission_id: int, teacher_username: str | None = None) -> d
 
 
 def teacher_can_access_submission_in_conn(c, username: str, submission_id: int) -> bool:
-    return _active_teacher(c, username) and c.execute(
+    return _teacher_exists(c, username) and c.execute(
         "SELECT 1 FROM submissions WHERE id=%s", (submission_id,)
     ).fetchone() is not None
 
 
 def grade_submission(submission_id: int, score: int, feedback: str, graded_by: str) -> dict[str, Any] | None:
     with database.conn() as c:
-        if not _active_teacher(c, graded_by):
+        if not _teacher_exists(c, graded_by):
             return None
         return c.execute(
             "UPDATE submissions SET state='graded',score=%s,feedback=%s,graded_by=%s,graded_at=now()"
@@ -186,7 +185,7 @@ def grade_submission(submission_id: int, score: int, feedback: str, graded_by: s
 
 def list_announcements(username: str) -> list[dict[str, Any]]:
     with database.conn() as c:
-        account = c.execute("SELECT role,class_id FROM accounts WHERE username=%s AND active", (username,)).fetchone()
+        account = c.execute("SELECT role,class_id FROM accounts WHERE username=%s", (username,)).fetchone()
         if not account:
             return []
         base = (
@@ -203,7 +202,7 @@ def list_announcements(username: str) -> list[dict[str, Any]]:
 
 def create_announcement(title: str, body: str, author: str, class_id: int | None = None) -> dict[str, Any]:
     with database.conn() as c:
-        if not _active_teacher(c, author):
+        if not _teacher_exists(c, author):
             raise PermissionError("教师账号无效")
         if class_id is not None and not c.execute("SELECT 1 FROM classes WHERE id=%s", (class_id,)).fetchone():
             raise PermissionError("班级不存在")
@@ -218,6 +217,6 @@ def create_announcement(title: str, body: str, author: str, class_id: int | None
 
 def delete_announcement(announcement_id: int, actor: str | None = None) -> bool:
     with database.conn() as c:
-        if actor and not _active_teacher(c, actor):
+        if actor and not _teacher_exists(c, actor):
             return False
         return c.execute("DELETE FROM announcements WHERE id=%s RETURNING id", (announcement_id,)).fetchone() is not None

@@ -517,7 +517,6 @@ export interface StudentRow {
   class_id: number | null;
   class_name: string | null;
   student_no: string;
-  active: boolean;
   last_login_at: string | null;
   created_at: string;
   current_step: number | null;
@@ -577,7 +576,6 @@ interface SubmissionDesign {
 
 export interface ClassOverview {
   student_count: number;
-  disabled_count: number;
   submitted: number;
   graded: number;
   avg_score: number | null;

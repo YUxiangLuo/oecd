@@ -9,7 +9,6 @@ const student = (id: number, maxStep: number, verified: number[]): StudentRow =>
   class_id: 1,
   class_name: "A",
   student_no: String(id),
-  active: true,
   last_login_at: null,
   created_at: "",
   current_step: maxStep,

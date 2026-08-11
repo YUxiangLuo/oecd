@@ -227,7 +227,7 @@ def provision_teacher(username: str, display_name: str, password: str) -> dict[s
     with conn() as c:
         return _required(c.execute(
             "INSERT INTO accounts(username,display_name,role,pw_salt,pw_hash) VALUES (%s,%s,'teacher',%s,%s)"
-            " RETURNING id,username,display_name,role,active",
+            " RETURNING id,username,display_name,role",
             (username, display_name, salt, hash_password(password, salt)),
         ).fetchone(), "provision teacher")
 
@@ -235,8 +235,8 @@ def provision_teacher(username: str, display_name: str, password: str) -> dict[s
 def change_own_password(username: str, current_password: str, new_password: str) -> bool:
     _validate_managed_password(new_password)
     with conn() as c:
-        account = c.execute("SELECT id,pw_salt,pw_hash,active FROM accounts WHERE username=%s", (username,)).fetchone()
-        if not account or not account["active"]:
+        account = c.execute("SELECT id,pw_salt,pw_hash FROM accounts WHERE username=%s", (username,)).fetchone()
+        if not account:
             return False
         if not hmac.compare_digest(account["pw_hash"], hash_password(current_password, account["pw_salt"])):
             return False
