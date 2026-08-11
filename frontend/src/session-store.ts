@@ -12,15 +12,10 @@ const SHARED_KEYS: readonly SharedSessionKey[] = ["regression_settings", "regres
  * 两边必须同规则,否则同一份并发写入在客户端与服务端会得到不同结果。
  */
 
-const LOCAL_KEY_PREFIX = "gvcsim_session:v2:";
-const LEGACY_KEY_PREFIX = "gvcsim_session:";
-const QUARANTINE_KEY_PREFIX = "gvcsim_session:legacy-quarantine:";
+const LOCAL_KEY_PREFIX = "gvcsim_session:v3:";
 
 export interface LocalSessionScope {
   accountId: string | number;
-  courseRunId: string | number;
-  assignmentId: string | number;
-  attemptId: string | number;
   manifestId: string;
 }
 
@@ -28,46 +23,8 @@ const keyPart = (value: string | number) => encodeURIComponent(String(value));
 export const localKey = (scope: LocalSessionScope) => [
   LOCAL_KEY_PREFIX.slice(0, -1),
   keyPart(scope.accountId),
-  keyPart(scope.courseRunId),
-  keyPart(scope.assignmentId),
-  keyPart(scope.attemptId),
   keyPart(scope.manifestId),
 ].join(":");
-
-/**
- * Preserve a v1 username-only cache without trusting or uploading it. There is
- * no reliable way to prove which database/course produced that payload, even
- * when its manifest happens to match. The quarantined copy remains recoverable
- * for support, but never participates in reconciliation.
- */
-export function quarantineLegacy(username: string): boolean {
-  try {
-    const legacyKey = `${LEGACY_KEY_PREFIX}${username}`;
-    const raw = localStorage.getItem(legacyKey);
-    if (!raw) return false;
-    const quarantineKey = `${QUARANTINE_KEY_PREFIX}${encodeURIComponent(username)}`;
-    if (!localStorage.getItem(quarantineKey)) localStorage.setItem(quarantineKey, raw);
-    localStorage.removeItem(legacyKey);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/** 读取已隔离的 username-only 记录，仅用于让学生导出留档；绝不参与合并。 */
-export function readLegacyQuarantine(username: string): unknown | null {
-  try {
-    const raw = localStorage.getItem(`${QUARANTINE_KEY_PREFIX}${encodeURIComponent(username)}`);
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw) as unknown;
-    } catch {
-      return raw;
-    }
-  } catch {
-    return null;
-  }
-}
 
 export function emptySession(manifestId: string): ExperimentSession {
   return { version: SESSION_VERSION, manifest_id: manifestId, steps: {}, shared: {} };
@@ -269,8 +226,7 @@ export function reconcileOnLoad(
   if (!usableLocal) {
     return {
       session: usableServer,
-      // Never turn an old/foreign session into a v6 write implicitly. The first
-      // explicit student edit will create a fresh scoped v6 session instead.
+      // Never turn an old/foreign session into a current-version write implicitly.
       needsPush: false,
       discardedLocal: localStale,
       discardedServer: serverStale,

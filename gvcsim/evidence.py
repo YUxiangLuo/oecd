@@ -1,7 +1,7 @@
 """课程完成度的服务端真值。
 
 学生可以自由使用每一步的实验台，实验状态也会自动保存，但步骤 1–15 的完成
-条件只有一个：当前学生在当前 assignment/attempt/manifest 下答对本步全部选择题。
+条件只有一个：当前学生在当前 manifest 下答对本步全部选择题。
 实验操作不参与完成判定。步骤 16 仍以服务端真实生成的报告为完成条件。
 """
 
@@ -98,7 +98,7 @@ def evaluate_step(
                 except Exception:
                     report = None
                 if not isinstance(report, dict) or report.get("manifest_id") != session.get("manifest_id"):
-                    missing.append("report_key 没有绑定当前学生、attempt 与 manifest 的真实服务端报告")
+                    missing.append("report_key 没有绑定当前学生与 manifest 的真实服务端报告")
         return StepCompletion(step=step, complete=not missing, missing=missing)
 
     missing = _quiz_missing(step, data)

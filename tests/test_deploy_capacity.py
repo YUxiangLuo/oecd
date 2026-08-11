@@ -293,7 +293,7 @@ def test_restore_drill_never_passes_password_dsn_or_destructive_flags_to_pg_rest
         restore_classroom_drill,
         "_inventory",
         lambda _dsn: {
-            "schema_version": "gvcsim-teaching-db-v6",
+            "schema_version": "gvcsim-teaching-db-v7",
             "postgresql_server_version_num": 180004,
             "table_counts": {},
             "referenced_artifacts": {},
@@ -333,7 +333,7 @@ def test_capacity_harness_is_executable_and_documented():
     guide = (ROOT / "docs" / "CAPACITY_100_STUDENTS.md").read_text(encoding="utf-8")
     assert "50–100" in guide
     assert "load_test_100_students.py" in guide
-    assert "gvcsim-teaching-db-v6" in guide
+    assert "gvcsim-teaching-db-v7" in guide
     assert "BACKUP_RESTORE.md" in guide
 
     backup_script = (ROOT / "scripts" / "backup_classroom.sh").read_text(encoding="utf-8")

@@ -39,11 +39,11 @@ SERVICE_NAME = "gvcsim_restore_drill"
 _TARGET_NAME = re.compile(r"^[a-z][a-z0-9_]*_restore_drill$")
 _SERVICE_KEY = re.compile(r"^[a-z_]+$")
 _REFERENCE_TABLES = (
-    ("assignments", "manifest_id"),
     ("reports", "manifest_id"),
-    ("attempt_sessions", "manifest_id"),
     ("experiment_sessions", "manifest_id"),
     ("learning_evidence_events", "manifest_id"),
+    ("step_progress", "manifest_id"),
+    ("submissions", "manifest_id"),
 )
 
 

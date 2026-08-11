@@ -32,7 +32,7 @@ def _store(tmp_path: Path) -> tuple[Path, Path, dict[str, Path]]:
     releases = {
         "current": _release(versions, "current", 50),
         "recent": _release(versions, "recent", 40),
-        "assignment": _release(versions, "assignment", 30),
+        "progress": _release(versions, "progress", 30),
         "candidate": _release(versions, "candidate", 20),
         "report": _release(versions, "report", 10),
     }
@@ -78,11 +78,11 @@ def test_classroom_reference_scan_covers_every_durable_manifest_column(monkeypat
     references = artifact_retention.classroom_manifest_references()
 
     expected = {
-        "assignments",
         "reports",
-        "attempt_sessions",
         "experiment_sessions",
         "learning_evidence_events",
+        "step_progress",
+        "submissions",
     }
     assert verified is True
     assert set(queried) == expected
@@ -110,8 +110,8 @@ def test_plan_only_selects_valid_unreferenced_versions_outside_rollback_window(t
     (versions / "operator-note.txt").write_text("keep", encoding="utf-8")
 
     references = {
-        releases["assignment"].name: {"assignments"},
-        releases["report"].name: {"reports", "attempt_sessions"},
+        releases["progress"].name: {"step_progress"},
+        releases["report"].name: {"reports", "submissions"},
     }
     plan = artifact_retention.build_prune_plan(
         versions,
@@ -123,7 +123,7 @@ def test_plan_only_selects_valid_unreferenced_versions_outside_rollback_window(t
     assert plan.current_manifest_id == releases["current"].name
     assert plan.retained_recent == (releases["recent"].name,)
     assert [release.manifest_id for release in plan.candidates] == [releases["candidate"].name]
-    assert plan.references[releases["assignment"].name] == ("assignments",)
+    assert plan.references[releases["progress"].name] == ("step_progress",)
     assert plan.reclaimable_bytes > 0
     skipped = {entry.name: entry.reason for entry in plan.skipped}
     assert "legacy" in skipped["legacy-before-content-addressing"]
@@ -136,7 +136,7 @@ def test_plan_only_selects_valid_unreferenced_versions_outside_rollback_window(t
 def test_apply_deletes_only_the_frozen_plan_candidates(tmp_path):
     versions, current, releases = _store(tmp_path)
     references = {
-        releases["assignment"].name: {"assignments"},
+        releases["progress"].name: {"step_progress"},
         releases["report"].name: {"reports"},
     }
 
@@ -159,7 +159,7 @@ def test_apply_deletes_only_the_frozen_plan_candidates(tmp_path):
 
     assert [release.manifest_id for release in applied.candidates] == [releases["candidate"].name]
     assert not releases["candidate"].exists()
-    for name in ("current", "recent", "assignment", "report"):
+    for name in ("current", "recent", "progress", "report"):
         assert releases[name].is_dir()
     assert current.resolve() == releases["current"]
 

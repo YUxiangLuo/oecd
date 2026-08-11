@@ -7,8 +7,6 @@ from gvcsim.classroom import db
 EVENT = {
     "event_id": "00000000-0000-0000-0000-000000000001",
     "account_id": 7,
-    "assignment_id": 11,
-    "attempt_id": 13,
     "step": 3,
     "issued_at": "2026-07-19T00:00:00+00:00",
 }

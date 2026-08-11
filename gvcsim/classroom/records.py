@@ -1,17 +1,14 @@
-"""Attempt progress, sessions, reports, submissions, grading, and announcements."""
+"""Manifest-scoped progress, sessions, evidence, reports, grading, and announcements."""
 
 import json
+import uuid
 from collections.abc import Callable
 from typing import Any
 
 import psycopg
 
-from gvcsim.classroom import schema
-
 
 class _DatabaseProxy:
-    """Resolve the compatibility facade lazily, after ``classroom.db`` finishes importing."""
-
     def __getattr__(self, name: str) -> Any:
         from gvcsim.classroom import db
 
@@ -21,69 +18,90 @@ class _DatabaseProxy:
 database = _DatabaseProxy()
 
 
-# ---------------------------------------------------------------- 实验进度
+def _current_manifest() -> str:
+    from gvcsim.artifacts import manifest_id
+
+    return manifest_id()
+
+
+def _student(c: psycopg.Connection[dict[str, Any]], username: str) -> dict[str, Any] | None:
+    return c.execute(
+        "SELECT id,username,class_id FROM accounts WHERE username=%s AND role='student' AND active", (username,)
+    ).fetchone()
+
+
+def _workspace_reset_marker(
+    c: psycopg.Connection[dict[str, Any]], account_id: int, manifest_id: str
+) -> int:
+    row = database._required(
+        c.execute(
+            "SELECT coalesce(max(id),0) AS marker FROM audit_log"
+            " WHERE actor_id=%s AND action='workspace.reset' AND target_type='manifest' AND target_id=%s",
+            (account_id, manifest_id),
+        ).fetchone(),
+        "load workspace reset marker",
+    )
+    return int(row["marker"])
+
+
+def _lock_current_workspace(
+    c: psycopg.Connection[dict[str, Any]],
+    account_id: int,
+    manifest_id: str,
+    *,
+    require_active: bool = True,
+) -> None:
+    """Fence every workspace writer against reset and manifest/account changes."""
+    reset_marker = _workspace_reset_marker(c, account_id, manifest_id)
+    c.execute("SELECT pg_advisory_xact_lock(%s,%s)", (database._SESSION_LOCK_NS, account_id))
+    if manifest_id != _current_manifest():
+        raise database.WorkspaceScopeMismatch("等待写入期间服务器当前 manifest 已切换，请刷新后重试")
+    active_clause = " AND active" if require_active else ""
+    if (
+        c.execute(f"SELECT 1 FROM accounts WHERE id=%s AND role='student'{active_clause}", (account_id,)).fetchone()
+        is None
+    ):
+        raise database.WorkspaceScopeMismatch("等待写入期间学生账号状态已变化，请刷新后重试")
+    if reset_marker != _workspace_reset_marker(c, account_id, manifest_id):
+        raise database.WorkspaceScopeMismatch("工作区已被清空，请刷新后重试")
 
 
 def upsert_progress(username: str, step: int) -> None:
     step = max(1, min(database.MAX_STEP, step))
+    manifest_id = _current_manifest()
     with database.conn() as c:
-        scope = database._attempt_scope(c, username)
-        if not scope or scope["attempt_id"] is None:
+        account = _student(c, username)
+        if account is None:
             return
-        database._require_assignment_writable(scope)
+        _lock_current_workspace(c, account["id"], manifest_id)
         c.execute(
-            "INSERT INTO attempt_step_progress(attempt_id,current_step,max_step) VALUES (%s,%s,%s)"
-            " ON CONFLICT (attempt_id) DO UPDATE SET current_step=EXCLUDED.current_step,"
-            " max_step=GREATEST(attempt_step_progress.max_step,EXCLUDED.max_step),updated_at=now()",
-            (scope["attempt_id"], step, step),
-        )
-        # v3 缓存仅为旧客户端/运维查询兼容，不再是权威作用域。
-        c.execute(
-            "INSERT INTO step_progress(account_id, current_step, max_step)"
-            " SELECT id, %s, %s FROM accounts WHERE username = %s"
-            " ON CONFLICT (account_id) DO UPDATE SET"
-            " current_step = EXCLUDED.current_step,"
-            " max_step = GREATEST(step_progress.max_step, EXCLUDED.max_step),"
-            " updated_at = now()",
-            (step, step, username),
+            "INSERT INTO step_progress(account_id,manifest_id,current_step,max_step) VALUES (%s,%s,%s,%s)"
+            " ON CONFLICT (account_id,manifest_id) DO UPDATE SET current_step=EXCLUDED.current_step,"
+            " max_step=GREATEST(step_progress.max_step,EXCLUDED.max_step),updated_at=now()",
+            (account["id"], manifest_id, step, step),
         )
 
 
 def get_progress(username: str) -> dict[str, Any] | None:
-    """读取学生最后一次上报的当前步骤与历史最远步骤。"""
+    manifest_id = _current_manifest()
     with database.conn() as c:
-        scope = database._attempt_scope(c, username)
-        if scope and scope["attempt_id"] is not None:
-            row = c.execute(
-                "SELECT current_step,max_step,updated_at FROM attempt_step_progress WHERE attempt_id=%s",
-                (scope["attempt_id"],),
-            ).fetchone()
-            if row:
-                return row
-            return None
         return c.execute(
-            "SELECT p.current_step, p.max_step, p.updated_at"
-            " FROM step_progress p JOIN accounts a ON a.id = p.account_id"
-            " WHERE a.username = %s AND a.role = 'student'",
-            (username,),
+            "SELECT p.current_step,p.max_step,p.updated_at FROM step_progress p"
+            " JOIN accounts a ON a.id=p.account_id"
+            " WHERE a.username=%s AND a.role='student' AND a.active AND p.manifest_id=%s",
+            (username, manifest_id),
         ).fetchone()
-
-
-# ---------------------------------------------------------------- 实验会话
 
 
 def get_session(username: str, manifest_id: str | None = None) -> dict[str, Any] | None:
-    """读取学生的实验会话;从未保存过则返回 None。"""
+    target = manifest_id or _current_manifest()
     with database.conn() as c:
-        scope = database._attempt_scope(c, username, manifest_id)
-        if not scope or scope.get("manifest_mismatch") or scope["attempt_id"] is None:
-            return None
-        row = c.execute(
-            "SELECT s.revision,s.manifest_id,s.session,s.legacy_unverified,s.updated_at"
-            " FROM attempt_sessions s WHERE s.attempt_id=%s",
-            (scope["attempt_id"],),
+        return c.execute(
+            "SELECT s.revision,s.manifest_id,s.session,s.updated_at FROM experiment_sessions s"
+            " JOIN accounts a ON a.id=s.account_id"
+            " WHERE a.username=%s AND a.role='student' AND a.active AND s.manifest_id=%s",
+            (username, target),
         ).fetchone()
-        return {**row, **scope} if row else None
 
 
 def save_session(
@@ -91,250 +109,181 @@ def save_session(
     session: dict[str, Any],
     base_revision: int,
     merge: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]],
-    *,
-    expected_assignment_id: int | None = None,
-    expected_attempt_id: int | None = None,
 ) -> dict[str, Any] | None:
-    """写入会话;并发写入时按记录级与字段级时间戳合并,不整份覆盖。
-
-    ``base_revision`` 是客户端读到的版本。若服务端已被另一个标签页推进,
-    则用 ``merge`` 把两边的步骤记录合并后再写,避免丢掉任何一边的实验。
-    整个读-合并-写在一个事务内完成,并按账号加事务级 advisory 锁串行化。
-    """
-    with database.conn() as c:
-        with c.transaction():
-            scope = database._attempt_scope(c, username, session.get("manifest_id"))
-            if scope is None:
-                return None
-            if scope.get("manifest_mismatch"):
-                raise database.AssignmentScopeMismatch(
-                    f"当前作业绑定 {scope['assignment_manifest_id']}，不能写入 {session.get('manifest_id')}"
-                )
-            if (expected_assignment_id is not None and scope["assignment_id"] != expected_assignment_id) or (
-                expected_attempt_id is not None and scope["attempt_id"] != expected_attempt_id
-            ):
-                raise database.AssignmentScopeMismatch("当前作业 attempt 已变化；请刷新页面后再继续实验")
-            database._require_assignment_writable(scope)
-            account = {"id": scope["account_id"]}
-            attempt_id = scope["attempt_id"]
-            # 按账号串行化整个读-合并-写。
-            #
-            # 不能只靠下面那句 SELECT ... FOR UPDATE:行不存在时它锁不住任何东西。
-            # 首次并发写入(两个标签页都还没有会话行)会双双读到 current=None →
-            # 都跳过 merge → 都算出 revision=1 → 后到的 ON CONFLICT DO UPDATE
-            # 整份覆盖先到的,一边的实验被静默丢弃。advisory 锁对"尚不存在的行"
-            # 同样有效,因此把首写竞态也一起关掉。
-            c.execute("SELECT pg_advisory_xact_lock(%s, %s)", (database._SESSION_LOCK_NS, attempt_id))
-            # reset 与 PUT 共用 attempt 锁。若 PUT 在等待锁时另一个标签页已重置，
-            # 必须重新解析当前边界；否则它会在 reset 提交后把旧会话写回已归档
-            # attempt，并重新污染 account 级兼容镜像。
-            locked_scope = database._attempt_scope(c, username, session.get("manifest_id"), create=False)
-            if (
-                locked_scope is None
-                or locked_scope.get("manifest_mismatch")
-                or locked_scope["assignment_id"] != scope["assignment_id"]
-                or locked_scope["attempt_id"] != attempt_id
-                or (expected_assignment_id is not None and locked_scope["assignment_id"] != expected_assignment_id)
-                or (expected_attempt_id is not None and locked_scope["attempt_id"] != expected_attempt_id)
-            ):
-                raise database.AssignmentScopeMismatch("当前作业 attempt 已变化；请刷新页面后再继续实验")
-            scope = locked_scope
-            database._require_assignment_writable(scope)
-            current = c.execute(
-                "SELECT revision,session,legacy_unverified FROM attempt_sessions WHERE attempt_id=%s FOR UPDATE",
-                (attempt_id,),
-            ).fetchone()
-            if current is not None and current["legacy_unverified"]:
-                raise database.LegacySessionReadOnly("迁移前会话未经可信证据验证；请先导出记录并显式重新开始")
-
-            # 即使客户端带回的 ``base_revision`` 正好等于 current，也必须做
-            # 记录/字段级合并。服务端本身也会写会话（目前是报告生成写入 step 16），
-            # 而浏览器里可能已有一个在该写入前排队的防抖 PUT。它收到报告响应后
-            # 会更新 revision，却仍可能携带那份缺少 step 16 的旧本地快照；若因
-            # revision 相同就整份采用 incoming，服务端刚写下的可信记录会被删除。
-            #
-            # 单步删除从来不是 PUT /session 的契约；显式 reset 走独立的新 attempt
-            # 路径。因此 current 存在时始终 merge，既保护服务端专用步骤，也保持
-            # 两标签页“不同步骤都不丢”的既有语义。
-            merged = merge(current["session"], session) if current is not None else session
-            merged_from: int | None = None
-            if current is not None and current["revision"] != base_revision:
-                merged_from = current["revision"]
-            revision = (current["revision"] + 1) if current is not None else 1
-
-            c.execute(
-                "INSERT INTO attempt_sessions(attempt_id,revision,manifest_id,session,legacy_unverified)"
-                " VALUES (%s,%s,%s,%s,false) ON CONFLICT (attempt_id) DO UPDATE SET"
-                " revision=EXCLUDED.revision,manifest_id=EXCLUDED.manifest_id,session=EXCLUDED.session,"
-                " legacy_unverified=false,updated_at=now()",
-                (attempt_id, revision, merged["manifest_id"], json.dumps(merged)),
-            )
-            c.execute(
-                "INSERT INTO experiment_sessions(account_id, revision, manifest_id, session)"
-                " VALUES (%s, %s, %s, %s)"
-                " ON CONFLICT (account_id) DO UPDATE SET"
-                " revision = EXCLUDED.revision, manifest_id = EXCLUDED.manifest_id,"
-                " session = EXCLUDED.session, updated_at = now()",
-                (account["id"], revision, merged["manifest_id"], json.dumps(merged)),
-            )
-            return {"revision": revision, "session": merged, "merged_from": merged_from}
-
-
-def clear_session(
-    username: str,
-    *,
-    expected_assignment_id: int,
-    expected_attempt_id: int,
-) -> None:
-    """一致性重置当前尝试。
-
-    归档旧尝试并创建下一 attempt；当前进度/报告/提交自然为空，历史记录仍可
-    审计。旧答题/回归收据引用的事件同时撤销，不能跨 attempt 复用。
-    """
-    with database.conn() as c:
-        with c.transaction():
-            initial_scope = database._attempt_scope(c, username, create=False)
-            if not initial_scope or initial_scope["attempt_id"] is None:
-                raise database.AssignmentScopeMismatch("当前没有可重置的作业 attempt；请刷新页面后重试")
-            # 两个标签页可能同时拿着同一个旧 attempt 发 reset。先锁调用方最初
-            # 命中的 attempt，再重新读取 active 边界，令后到请求看到第一个请求
-            # 已创建的新 attempt 并被 expected_attempt_id 拒绝。
-            c.execute(
-                "SELECT pg_advisory_xact_lock(%s, %s)",
-                (database._SESSION_LOCK_NS, initial_scope["attempt_id"]),
-            )
-            scope = database._attempt_scope(c, username, create=False)
-            if (
-                not scope
-                or scope["attempt_state"] != "active"
-                or scope["assignment_id"] != expected_assignment_id
-                or scope["attempt_id"] != expected_attempt_id
-            ):
-                raise database.AssignmentScopeMismatch("当前作业 attempt 已变化；本次重新开始已取消，请刷新页面")
-            database._require_assignment_writable(scope)
-            # 每次重置都换 attempt 边界：旧答题/回归收据绑定旧 attempt，无法在
-            # 新会话复用；既有提交/评分仍可由教师审计，但不再是学生“当前状态”。
-            c.execute(
-                "UPDATE learning_evidence_events SET revoked_at=coalesce(revoked_at,now()) WHERE attempt_id=%s",
-                (scope["attempt_id"],),
-            )
-            c.execute(
-                "UPDATE experiment_attempts SET state='archived',updated_at=now() WHERE id=%s",
-                (scope["attempt_id"],),
-            )
-            next_no = database._required(
-                c.execute(
-                    "SELECT coalesce(max(attempt_no),0)+1 AS n FROM experiment_attempts"
-                    " WHERE assignment_id=%s AND enrollment_id=%s",
-                    (scope["assignment_id"], scope["enrollment_id"]),
-                ).fetchone(),
-                "next reset attempt number",
-            )["n"]
-            c.execute(
-                "INSERT INTO experiment_attempts(assignment_id,enrollment_id,attempt_no) VALUES (%s,%s,%s)",
-                (scope["assignment_id"], scope["enrollment_id"], next_no),
-            )
-            c.execute("DELETE FROM step_progress WHERE account_id=%s", (scope["account_id"],))
-            c.execute(
-                "DELETE FROM experiment_sessions s USING accounts a WHERE s.account_id = a.id AND a.username = %s",
-                (username,),
-            )
-
-
-def reset_active_attempts_for_quiz(quiz_version: str, manifest_id: str) -> dict[str, Any]:
-    """为新版题库一次性归档所有仍可写的当前 attempt。
-
-    历史 session、报告、提交和评分均留在旧 attempt 上；只撤销旧学习凭证并为
-    同一 assignment/enrollment 创建一个空白 attempt。audit_log 中的版本标记让
-    同一部署命令可安全重跑而不会连续重置学生。
-    """
-    if not quiz_version or len(quiz_version) > 80:
-        raise ValueError("quiz_version 必须是 1..80 字符的稳定版本号")
+    manifest_id = str(session.get("manifest_id") or "")
     if not manifest_id:
-        raise ValueError("重置 attempt 需要当前 manifest_id")
-    action = "quiz.active_attempts_reset"
+        raise database.WorkspaceScopeMismatch("会话缺少 manifest_id")
+    if manifest_id != _current_manifest():
+        raise database.WorkspaceScopeMismatch("只能写入服务器当前 manifest 的实验会话")
     with database.conn() as c:
         with c.transaction():
-            schema.lock_schema(c)
-            prior = c.execute(
-                "SELECT details,created_at FROM audit_log"
-                " WHERE action=%s AND target_type='quiz_version' AND target_id=%s"
-                " ORDER BY id DESC LIMIT 1",
-                (action, quiz_version),
+            account = _student(c, username)
+            if account is None:
+                return None
+            _lock_current_workspace(c, account["id"], manifest_id)
+            current = c.execute(
+                "SELECT revision,session FROM experiment_sessions WHERE account_id=%s AND manifest_id=%s FOR UPDATE",
+                (account["id"], manifest_id),
             ).fetchone()
-            if prior:
-                raw_details = prior.get("details")
-                details: dict[str, Any] = raw_details if isinstance(raw_details, dict) else {}
-                return {
-                    "quiz_version": quiz_version,
-                    "already_applied": True,
-                    "reset_count": int(details.get("reset_count") or 0),
-                    "applied_at": prior["created_at"],
-                }
-
-            attempts = c.execute(
-                "SELECT ea.id AS attempt_id,ea.assignment_id,ea.enrollment_id,en.account_id"
-                " FROM experiment_attempts ea"
-                " JOIN assignments ass ON ass.id=ea.assignment_id"
-                " JOIN course_runs cr ON cr.id=ass.course_run_id"
-                " JOIN enrollments en ON en.id=ea.enrollment_id"
-                " JOIN accounts acc ON acc.id=en.account_id"
-                " WHERE ea.state='active' AND ass.active AND NOT cr.archived"
-                " AND en.active AND acc.active AND ass.manifest_id=%s"
-                " AND (ass.opens_at IS NULL OR ass.opens_at<=now())"
-                " AND (ass.due_at IS NULL OR ass.due_at>now())"
-                " ORDER BY ea.id FOR UPDATE OF ea",
-                (manifest_id,),
-            ).fetchall()
-            account_ids: set[int] = set()
-            new_attempt_ids: list[int] = []
-            for attempt in attempts:
-                c.execute(
-                    "UPDATE learning_evidence_events SET revoked_at=coalesce(revoked_at,now()) WHERE attempt_id=%s",
-                    (attempt["attempt_id"],),
-                )
-                c.execute(
-                    "UPDATE experiment_attempts SET state='archived',updated_at=now() WHERE id=%s",
-                    (attempt["attempt_id"],),
-                )
-                next_no = database._required(
-                    c.execute(
-                        "SELECT coalesce(max(attempt_no),0)+1 AS n FROM experiment_attempts"
-                        " WHERE assignment_id=%s AND enrollment_id=%s",
-                        (attempt["assignment_id"], attempt["enrollment_id"]),
-                    ).fetchone(),
-                    "next quiz reset attempt number",
-                )["n"]
-                created = database._required(
-                    c.execute(
-                        "INSERT INTO experiment_attempts(assignment_id,enrollment_id,attempt_no)"
-                        " VALUES (%s,%s,%s) RETURNING id",
-                        (attempt["assignment_id"], attempt["enrollment_id"], next_no),
-                    ).fetchone(),
-                    "create quiz reset attempt",
-                )
-                new_attempt_ids.append(int(created["id"]))
-                account_ids.add(int(attempt["account_id"]))
-
-            if account_ids:
-                ids = sorted(account_ids)
-                c.execute("DELETE FROM step_progress WHERE account_id=ANY(%s)", (ids,))
-                c.execute("DELETE FROM experiment_sessions WHERE account_id=ANY(%s)", (ids,))
-            details = {
-                "quiz_version": quiz_version,
-                "manifest_id": manifest_id,
-                "reset_count": len(attempts),
-                "new_attempt_ids": new_attempt_ids,
-            }
+            current_revision = int(current["revision"]) if current else 0
+            merged_from = current_revision if current and current_revision != base_revision else None
+            payload = merge(current["session"], session) if current else session
+            revision = current_revision + 1
             c.execute(
-                "INSERT INTO audit_log(actor_name,action,target_type,target_id,details)"
-                " VALUES ('deployment',%s,'quiz_version',%s,%s)",
-                (action, quiz_version, json.dumps(details)),
+                "INSERT INTO experiment_sessions(account_id,manifest_id,revision,session) VALUES (%s,%s,%s,%s)"
+                " ON CONFLICT (account_id,manifest_id) DO UPDATE SET revision=EXCLUDED.revision,"
+                " session=EXCLUDED.session,updated_at=now()",
+                (account["id"], manifest_id, revision, json.dumps(payload, ensure_ascii=False)),
             )
-            return {**details, "already_applied": False}
+            return {"revision": revision, "session": payload, "merged_from": merged_from}
 
 
-# ---------------------------------------------------------------- 服务端生成的报告
+def reset_workspace(username: str, manifest_id: str, confirmation: str) -> dict[str, Any] | None:
+    if confirmation != "清空当前实验":
+        raise ValueError("请输入“清空当前实验”确认不可恢复的删除操作")
+    if manifest_id != _current_manifest():
+        raise database.WorkspaceScopeMismatch("只能清空服务器当前 manifest 的实验记录")
+    with database.conn() as c:
+        with c.transaction():
+            account = _student(c, username)
+            if account is None:
+                return None
+            _lock_current_workspace(c, account["id"], manifest_id)
+            submission_ids = [
+                row["id"]
+                for row in c.execute(
+                    "SELECT id FROM submissions WHERE account_id=%s AND manifest_id=%s",
+                    (account["id"], manifest_id),
+                ).fetchall()
+            ]
+            if submission_ids:
+                c.execute("DELETE FROM grading_events WHERE submission_id=ANY(%s)", (submission_ids,))
+                c.execute("DELETE FROM submission_versions WHERE submission_id=ANY(%s)", (submission_ids,))
+                c.execute("DELETE FROM submissions WHERE id=ANY(%s)", (submission_ids,))
+            c.execute("DELETE FROM reports WHERE account_id=%s AND manifest_id=%s", (account["id"], manifest_id))
+            c.execute(
+                "DELETE FROM learning_evidence_events WHERE account_id=%s AND manifest_id=%s",
+                (account["id"], manifest_id),
+            )
+            c.execute(
+                "DELETE FROM experiment_sessions WHERE account_id=%s AND manifest_id=%s",
+                (account["id"], manifest_id),
+            )
+            c.execute(
+                "DELETE FROM step_progress WHERE account_id=%s AND manifest_id=%s",
+                (account["id"], manifest_id),
+            )
+            c.execute(
+                "INSERT INTO audit_log(actor_id,actor_name,action,target_type,target_id,details)"
+                " VALUES (%s,%s,'workspace.reset','manifest',%s,%s)",
+                (account["id"], username, manifest_id, json.dumps({"manifest_id": manifest_id})),
+            )
+            return {"ok": True, "manifest_id": manifest_id}
+
+
+def record_evidence_event(
+    username: str,
+    step: int,
+    kind: str,
+    manifest_id: str,
+    payload_sha256: str,
+    claims: dict[str, Any],
+) -> dict[str, Any]:
+    if manifest_id != _current_manifest():
+        raise database.WorkspaceScopeMismatch("学习事件不属于服务器当前 manifest")
+    event_id = uuid.uuid4()
+    with database.conn() as c:
+        account = _student(c, username)
+        if account is None:
+            raise database.WorkspaceScopeMismatch("学生账号不可用")
+        _lock_current_workspace(c, account["id"], manifest_id)
+        return database._required(
+            c.execute(
+                "INSERT INTO learning_evidence_events(id,account_id,step,kind,manifest_id,payload_hash,payload)"
+                " VALUES (%s,%s,%s,%s,%s,%s,%s)"
+                " RETURNING id::text AS event_id,account_id,step,kind,manifest_id,created_at AS issued_at",
+                (
+                    event_id,
+                    account["id"],
+                    step,
+                    kind,
+                    manifest_id,
+                    payload_sha256,
+                    json.dumps(claims, ensure_ascii=False),
+                ),
+            ).fetchone(),
+            "record evidence event",
+        )
+
+
+def _evidence_event_exists_in_conn(
+    c: psycopg.Connection[dict[str, Any]],
+    username: str,
+    event_id: str,
+    payload_sha256: str,
+    *,
+    account_id: int | None = None,
+    step: int | None = None,
+    kind: str | None = None,
+    manifest_id: str | None = None,
+) -> bool:
+    clauses = [
+        "a.username=%s",
+        "a.role='student'",
+        "a.active",
+        "ev.id=%s",
+        "ev.payload_hash=%s",
+        "ev.revoked_at IS NULL",
+    ]
+    params: list[Any] = [username, event_id, payload_sha256]
+    if account_id is not None:
+        clauses.append("ev.account_id=%s")
+        params.append(account_id)
+    if step is not None:
+        clauses.append("ev.step=%s")
+        params.append(step)
+    if kind is not None:
+        clauses.append("ev.kind=%s")
+        params.append(kind)
+    if manifest_id is not None:
+        clauses.append("ev.manifest_id=%s")
+        params.append(manifest_id)
+    return (
+        c.execute(
+            "SELECT 1 FROM learning_evidence_events ev JOIN accounts a ON a.id=ev.account_id"
+            f" WHERE {' AND '.join(clauses)}",
+            tuple(params),
+        ).fetchone()
+        is not None
+    )
+
+
+def evidence_event_exists(
+    username: str,
+    event_id: str,
+    payload_sha256: str,
+    *,
+    account_id: int | None = None,
+    step: int | None = None,
+    kind: str | None = None,
+    manifest_id: str | None = None,
+    connection: psycopg.Connection[dict[str, Any]] | None = None,
+) -> bool:
+    if connection is not None:
+        return _evidence_event_exists_in_conn(
+            connection,
+            username,
+            event_id,
+            payload_sha256,
+            account_id=account_id,
+            step=step,
+            kind=kind,
+            manifest_id=manifest_id,
+        )
+    with database.conn() as c:
+        return _evidence_event_exists_in_conn(
+            c, username, event_id, payload_sha256, account_id=account_id, step=step, kind=kind, manifest_id=manifest_id
+        )
 
 
 def save_generated_report_and_session(
@@ -346,107 +295,82 @@ def save_generated_report_and_session(
     provenance: dict[str, Any],
     session: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """单事务写入服务端报告与 step16 完成记录。
-
-    不接受并发 merge：报告正文基于 ``base_revision`` 重算；若会话已推进，
-    合并后正文与完成记录将不再属于同一快照，因此明确冲突并要求重新生成。
-    """
+    if manifest_id != _current_manifest():
+        raise database.WorkspaceScopeMismatch("报告不属于服务器当前 manifest")
     with database.conn() as c:
         with c.transaction():
-            scope = database._attempt_scope(c, username, manifest_id)
-            if not scope or scope.get("manifest_mismatch"):
-                raise database.AssignmentScopeMismatch("报告不属于当前 assignment/manifest")
-            database._require_assignment_writable(scope)
-            attempt_id = scope["attempt_id"]
-            c.execute("SELECT pg_advisory_xact_lock(%s,%s)", (database._SESSION_LOCK_NS, attempt_id))
+            account = _student(c, username)
+            if account is None:
+                return None
+            _lock_current_workspace(c, account["id"], manifest_id)
             current = c.execute(
-                "SELECT revision,session,legacy_unverified FROM attempt_sessions WHERE attempt_id=%s FOR UPDATE",
-                (attempt_id,),
+                "SELECT revision,session FROM experiment_sessions WHERE account_id=%s AND manifest_id=%s FOR UPDATE",
+                (account["id"], manifest_id),
             ).fetchone()
-            current_revision = current["revision"] if current else 0
-            if current and current["legacy_unverified"]:
-                raise database.LegacySessionReadOnly("迁移前会话不能生成可评分报告")
+            current_revision = int(current["revision"]) if current else 0
             if current_revision != base_revision:
                 raise database.SessionRevisionConflict(
                     f"会话已从 revision {base_revision} 更新到 {current_revision}；请重新生成报告"
                 )
             report = c.execute(
-                "INSERT INTO reports(account_id,attempt_id,assignment_id,report_key,session_revision,"
-                " manifest_id,markdown,provenance) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)"
-                " ON CONFLICT (attempt_id,report_key) DO NOTHING"
+                "INSERT INTO reports(account_id,manifest_id,report_key,session_revision,markdown,provenance)"
+                " VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (account_id,manifest_id,report_key) DO NOTHING"
                 " RETURNING id,report_key,session_revision,manifest_id,markdown,provenance,created_at",
                 (
-                    scope["account_id"],
-                    attempt_id,
-                    scope["assignment_id"],
+                    account["id"],
+                    manifest_id,
                     report_key,
                     base_revision,
-                    manifest_id,
                     markdown,
                     json.dumps(provenance, ensure_ascii=False),
                 ),
             ).fetchone()
             if report is None:
-                report = c.execute(
-                    "SELECT id,report_key,session_revision,manifest_id,markdown,provenance,created_at FROM reports"
-                    " WHERE account_id=%s AND attempt_id=%s AND report_key=%s",
-                    (scope["account_id"], attempt_id, report_key),
-                ).fetchone()
-                if report is None:
-                    raise database.SessionRevisionConflict("report_key 已被其他 attempt 使用")
+                report = database._required(
+                    c.execute(
+                        "SELECT id,report_key,session_revision,manifest_id,markdown,provenance,created_at"
+                        " FROM reports WHERE account_id=%s AND manifest_id=%s AND report_key=%s",
+                        (account["id"], manifest_id, report_key),
+                    ).fetchone(),
+                    "load generated report",
+                )
             if current is not None and current["session"] == session:
                 return {"report": report, "revision": current_revision, "session": current["session"]}
             revision = current_revision + 1
-            serialized = json.dumps(session, ensure_ascii=False)
             c.execute(
-                "INSERT INTO attempt_sessions(attempt_id,revision,manifest_id,session,legacy_unverified)"
-                " VALUES (%s,%s,%s,%s,false) ON CONFLICT (attempt_id) DO UPDATE SET"
-                " revision=EXCLUDED.revision,manifest_id=EXCLUDED.manifest_id,session=EXCLUDED.session,"
-                " legacy_unverified=false,updated_at=now()",
-                (attempt_id, revision, manifest_id, serialized),
-            )
-            c.execute(
-                "INSERT INTO experiment_sessions(account_id,revision,manifest_id,session) VALUES (%s,%s,%s,%s)"
-                " ON CONFLICT (account_id) DO UPDATE SET revision=EXCLUDED.revision,"
-                " manifest_id=EXCLUDED.manifest_id,session=EXCLUDED.session,updated_at=now()",
-                (scope["account_id"], revision, manifest_id, serialized),
+                "INSERT INTO experiment_sessions(account_id,manifest_id,revision,session) VALUES (%s,%s,%s,%s)"
+                " ON CONFLICT (account_id,manifest_id) DO UPDATE SET revision=EXCLUDED.revision,"
+                " session=EXCLUDED.session,updated_at=now()",
+                (account["id"], manifest_id, revision, json.dumps(session, ensure_ascii=False)),
             )
             return {"report": report, "revision": revision, "session": session}
 
 
 def latest_report(username: str) -> dict[str, Any] | None:
-    """读取学生最近生成的报告(刷新后可重新打开全文)。"""
+    manifest_id = _current_manifest()
     with database.conn() as c:
-        scope = database._attempt_scope(c, username)
-        if not scope:
-            return None
         return c.execute(
-            "SELECT r.id, r.report_key, r.session_revision, r.manifest_id, r.markdown, r.provenance, r.created_at"
-            " FROM reports r JOIN accounts a ON a.id = r.account_id"
-            " WHERE a.username = %s AND r.attempt_id=%s ORDER BY r.created_at DESC LIMIT 1",
-            (username, scope["attempt_id"]),
+            "SELECT r.id,r.report_key,r.session_revision,r.manifest_id,r.markdown,r.provenance,r.created_at"
+            " FROM reports r JOIN accounts a ON a.id=r.account_id"
+            " WHERE a.username=%s AND a.active AND r.manifest_id=%s ORDER BY r.created_at DESC LIMIT 1",
+            (username, manifest_id),
         ).fetchone()
 
 
 def _report_by_key_in_conn(
     c: psycopg.Connection[dict[str, Any]], username: str, report_key: str
 ) -> dict[str, Any] | None:
-    scope = database._attempt_scope(c, username)
-    if not scope:
-        return None
+    manifest_id = _current_manifest()
     return c.execute(
-        "SELECT r.id, r.report_key, r.session_revision, r.manifest_id, r.markdown, r.provenance, r.created_at"
-        " FROM reports r JOIN accounts a ON a.id = r.account_id"
-        " WHERE a.username = %s AND r.report_key = %s AND r.attempt_id=%s",
-        (username, report_key, scope["attempt_id"]),
+        "SELECT r.id,r.report_key,r.session_revision,r.manifest_id,r.markdown,r.provenance,r.created_at"
+        " FROM reports r JOIN accounts a ON a.id=r.account_id"
+        " WHERE a.username=%s AND a.active AND r.manifest_id=%s AND r.report_key=%s",
+        (username, manifest_id, report_key),
     ).fetchone()
 
 
 def report_by_key(
-    username: str,
-    report_key: str,
-    *,
-    connection: psycopg.Connection[dict[str, Any]] | None = None,
+    username: str, report_key: str, *, connection: psycopg.Connection[dict[str, Any]] | None = None
 ) -> dict[str, Any] | None:
     if connection is not None:
         return _report_by_key_in_conn(connection, username, report_key)
@@ -454,61 +378,43 @@ def report_by_key(
         return _report_by_key_in_conn(c, username, report_key)
 
 
-# ---------------------------------------------------------------- 报告提交与评阅
-
-
 def submit_report(
     username: str, title: str, report_key: str, current_manifest_id: str | None = None
 ) -> dict[str, Any] | None:
-    """提交学生**已由服务端生成**的那份报告。
-
-    正文与溯源都从 reports 表里取,接口不接受任何客户端提供的 Markdown:
-    否则"报告已提交"只能证明有人上传过一段文字,证明不了他做过课程。
-    找不到对应 report_key(没生成过/不是本人的)时返回 None。
-
-    ``experiment_attempts.state`` 保持 active，以便同一 attempt 提交修订版并在
-    刷新后恢复；是否已交/已评只由 submissions.state 表示。显式“新尝试/重置”
-    才会把 attempt 归档。
-    """
+    manifest_id = current_manifest_id or _current_manifest()
+    if manifest_id != _current_manifest():
+        return None
     with database.conn() as c:
         with c.transaction():
-            scope = database._attempt_scope(c, username, current_manifest_id)
-            if not scope or scope.get("manifest_mismatch"):
+            account = _student(c, username)
+            if account is None:
                 return None
-            database._require_assignment_writable(scope)
+            _lock_current_workspace(c, account["id"], manifest_id)
             report = c.execute(
                 "SELECT r.*,coalesce((r.provenance #>> '{artifact,years,-1}')::int,0) AS year"
-                " FROM reports r WHERE r.account_id=%s AND r.attempt_id=%s AND r.assignment_id=%s"
-                " AND r.report_key=%s AND r.manifest_id=%s",
-                (
-                    scope["account_id"],
-                    scope["attempt_id"],
-                    scope["assignment_id"],
-                    report_key,
-                    current_manifest_id or scope["assignment_manifest_id"],
-                ),
+                " FROM reports r WHERE r.account_id=%s AND r.manifest_id=%s AND r.report_key=%s",
+                (account["id"], manifest_id, report_key),
             ).fetchone()
             if report is None:
                 return None
             design = {
                 "report_key": report["report_key"],
-                "manifest_id": report["manifest_id"],
+                "manifest_id": manifest_id,
                 "session_revision": report["session_revision"],
                 "runs": report["provenance"].get("runs"),
-                "assignment_id": scope["assignment_id"],
-                "attempt_id": scope["attempt_id"],
             }
             submission = c.execute(
-                "SELECT * FROM submissions WHERE attempt_id=%s FOR UPDATE", (scope["attempt_id"],)
+                "SELECT * FROM submissions WHERE account_id=%s AND manifest_id=%s FOR UPDATE",
+                (account["id"], manifest_id),
             ).fetchone()
             if submission is None:
                 submission = database._required(
                     c.execute(
-                        "INSERT INTO submissions(account_id,attempt_id,latest_version_no,title,year,design,markdown)"
+                        "INSERT INTO submissions(account_id,manifest_id,latest_version_no,title,year,design,markdown)"
                         " VALUES (%s,%s,1,%s,%s,%s,%s) RETURNING *",
                         (
-                            scope["account_id"],
-                            scope["attempt_id"],
+                            account["id"],
+                            manifest_id,
                             title,
                             report["year"],
                             json.dumps(design, ensure_ascii=False),
@@ -520,8 +426,7 @@ def submit_report(
                 version_no = 1
             else:
                 latest = c.execute(
-                    "SELECT report_id,title FROM submission_versions WHERE submission_id=%s"
-                    " ORDER BY version_no DESC LIMIT 1",
+                    "SELECT report_id,title FROM submission_versions WHERE submission_id=%s ORDER BY version_no DESC LIMIT 1",
                     (submission["id"],),
                 ).fetchone()
                 if latest and latest["report_id"] == report["id"] and latest["title"] == title:
@@ -531,7 +436,7 @@ def submit_report(
                         "submitted_at": submission["submitted_at"],
                         "version_no": submission["latest_version_no"],
                     }
-                version_no = submission["latest_version_no"] + 1
+                version_no = int(submission["latest_version_no"]) + 1
                 submission = database._required(
                     c.execute(
                         "UPDATE submissions SET latest_version_no=%s,title=%s,year=%s,design=%s,markdown=%s,"
@@ -571,74 +476,79 @@ def submit_report(
 
 
 def my_submission(username: str) -> dict[str, Any] | None:
+    manifest_id = _current_manifest()
     with database.conn() as c:
-        scope = database._attempt_scope(c, username, create=False)
-        if not scope or scope["attempt_id"] is None:
-            return None
         return c.execute(
             "SELECT s.id,s.title,s.year,s.state,s.score,s.feedback,s.graded_by,s.graded_at,s.submitted_at,"
-            " s.latest_version_no AS version_no"
-            " FROM submissions s JOIN accounts a ON a.id=s.account_id"
-            " WHERE a.username=%s AND s.attempt_id=%s ORDER BY s.submitted_at DESC LIMIT 1",
-            (username, scope["attempt_id"]),
+            " s.latest_version_no AS version_no FROM submissions s JOIN accounts a ON a.id=s.account_id"
+            " WHERE a.username=%s AND a.active AND s.manifest_id=%s",
+            (username, manifest_id),
         ).fetchone()
 
 
+def _active_teacher(c: psycopg.Connection[dict[str, Any]], username: str) -> bool:
+    return (
+        c.execute("SELECT 1 FROM accounts WHERE username=%s AND role='teacher' AND active", (username,)).fetchone()
+        is not None
+    )
+
+
 def list_submissions(teacher_username: str | None = None) -> list[dict[str, Any]]:
+    manifest_id = _current_manifest()
     with database.conn() as c:
-        scope_join = ""
-        params: tuple[Any, ...] = ()
-        if teacher_username:
-            scope_join = (
-                " JOIN experiment_attempts at ON at.id=s.attempt_id JOIN assignments ass ON ass.id=at.assignment_id"
-                " JOIN teacher_course_access tca ON tca.course_run_id=ass.course_run_id"
-                " JOIN accounts teacher ON teacher.id=tca.teacher_account_id AND teacher.username=%s"
-                " AND teacher.role='teacher' AND teacher.active AND tca.can_manage"
-            )
-            params = (teacher_username,)
+        if teacher_username and not _active_teacher(c, teacher_username):
+            return []
         return c.execute(
-            "SELECT s.id, s.title, s.year, s.state, s.score, s.graded_by, s.graded_at, s.submitted_at,"
-            " a.username, a.display_name, a.student_no, cl.name AS class_name"
-            " FROM submissions s JOIN accounts a ON a.id = s.account_id"
-            f" {scope_join}"
-            " LEFT JOIN classes cl ON cl.id = a.class_id"
-            " ORDER BY s.state, s.submitted_at DESC",
-            params,
+            "SELECT s.id,s.title,s.year,s.state,s.score,s.graded_by,s.graded_at,s.submitted_at,"
+            " a.username,a.display_name,a.student_no,cl.name AS class_name FROM submissions s"
+            " JOIN accounts a ON a.id=s.account_id LEFT JOIN classes cl ON cl.id=a.class_id"
+            " WHERE s.manifest_id=%s ORDER BY s.state,s.submitted_at DESC",
+            (manifest_id,),
         ).fetchall()
 
 
 def get_submission(submission_id: int, teacher_username: str | None = None) -> dict[str, Any] | None:
+    manifest_id = _current_manifest()
     with database.conn() as c:
-        scope = ""
-        params: list[Any] = [submission_id]
-        if teacher_username:
-            scope = (
-                " AND EXISTS (SELECT 1 FROM experiment_attempts at JOIN assignments ass ON ass.id=at.assignment_id"
-                " JOIN teacher_course_access tca ON tca.course_run_id=ass.course_run_id"
-                " JOIN accounts t ON t.id=tca.teacher_account_id WHERE at.id=s.attempt_id"
-                " AND t.username=%s AND t.active AND tca.can_manage)"
-            )
-            params.append(teacher_username)
+        if teacher_username and not _active_teacher(c, teacher_username):
+            return None
         return c.execute(
-            "SELECT s.*, a.username, a.display_name, a.student_no, cl.name AS class_name"
-            " FROM submissions s JOIN accounts a ON a.id = s.account_id"
-            f" LEFT JOIN classes cl ON cl.id = a.class_id WHERE s.id = %s {scope}",
-            tuple(params),
+            "SELECT s.*,a.username,a.display_name,a.student_no,cl.name AS class_name FROM submissions s"
+            " JOIN accounts a ON a.id=s.account_id LEFT JOIN classes cl ON cl.id=a.class_id"
+            " WHERE s.id=%s AND s.manifest_id=%s",
+            (submission_id, manifest_id),
         ).fetchone()
+
+
+def teacher_can_access_submission_in_conn(c, username: str, submission_id: int) -> bool:
+    return (
+        _active_teacher(c, username)
+        and c.execute(
+            "SELECT 1 FROM submissions WHERE id=%s AND manifest_id=%s", (submission_id, _current_manifest())
+        ).fetchone()
+        is not None
+    )
 
 
 def grade_submission(submission_id: int, score: int, feedback: str, graded_by: str) -> dict[str, Any] | None:
     with database.conn() as c:
         with c.transaction():
-            if not teacher_can_access_submission_in_conn(c, graded_by, submission_id):
+            grader = c.execute(
+                "SELECT id FROM accounts WHERE username=%s AND role='teacher' AND active", (graded_by,)
+            ).fetchone()
+            target = c.execute(
+                "SELECT account_id,manifest_id FROM submissions WHERE id=%s", (submission_id,)
+            ).fetchone()
+            if not grader or not target or target["manifest_id"] != _current_manifest():
                 return None
+            _lock_current_workspace(c, target["account_id"], target["manifest_id"], require_active=False)
             current = c.execute(
                 "SELECT s.*,sv.id AS version_id FROM submissions s JOIN submission_versions sv"
-                " ON sv.submission_id=s.id AND sv.version_no=s.latest_version_no WHERE s.id=%s FOR UPDATE",
-                (submission_id,),
+                " ON sv.submission_id=s.id AND sv.version_no=s.latest_version_no"
+                " WHERE s.id=%s AND s.account_id=%s AND s.manifest_id=%s FOR UPDATE",
+                (submission_id, target["account_id"], target["manifest_id"]),
             ).fetchone()
-            grader = c.execute("SELECT id FROM accounts WHERE username=%s AND role='teacher'", (graded_by,)).fetchone()
-            if not current or not grader:
+            if not current:
                 return None
             c.execute(
                 "INSERT INTO grading_events(submission_id,submission_version_id,score,feedback,graded_by_account_id)"
@@ -650,20 +560,6 @@ def grade_submission(submission_id: int, score: int, feedback: str, graded_by: s
                 " WHERE id=%s RETURNING id,state,score,feedback,graded_by,graded_at",
                 (score, feedback, graded_by, submission_id),
             ).fetchone()
-
-
-def teacher_can_access_submission_in_conn(c, username: str, submission_id: int) -> bool:
-    return (
-        c.execute(
-            "SELECT 1 FROM submissions s JOIN experiment_attempts at ON at.id=s.attempt_id"
-            " JOIN assignments ass ON ass.id=at.assignment_id"
-            " JOIN teacher_course_access tca ON tca.course_run_id=ass.course_run_id"
-            " JOIN accounts t ON t.id=tca.teacher_account_id"
-            " WHERE s.id=%s AND t.username=%s AND t.active AND tca.can_manage",
-            (submission_id, username),
-        ).fetchone()
-        is not None
-    )
 
 
 def submission_history(submission_id: int, teacher_username: str) -> dict[str, Any] | None:
@@ -684,64 +580,42 @@ def submission_history(submission_id: int, teacher_username: str) -> dict[str, A
         return {"versions": versions, "grades": grades}
 
 
-# ---------------------------------------------------------------- 公告
-
-
 def list_announcements(username: str) -> list[dict[str, Any]]:
-    """全局公告 + 学生本人班级；教师只看获授权课程关联班级。"""
     with database.conn() as c:
-        me = c.execute("SELECT role, class_id FROM accounts WHERE username = %s", (username,)).fetchone()
-        params: tuple[Any, ...]
-        if me and me["role"] == "teacher":
-            where = (
-                "(an.class_id IS NULL OR EXISTS (SELECT 1 FROM course_class_links l"
-                " JOIN teacher_course_access tca ON tca.course_run_id=l.course_run_id"
-                " JOIN accounts t ON t.id=tca.teacher_account_id"
-                " WHERE l.class_id=an.class_id AND t.username=%s AND t.active AND tca.can_manage))"
-            )
-            params = (username,)
-        else:
-            where, params = "(an.class_id IS NULL OR an.class_id = %s)", ((me or {}).get("class_id"),)
+        account = c.execute("SELECT role,class_id FROM accounts WHERE username=%s AND active", (username,)).fetchone()
+        if account is None:
+            return []
+        if account["role"] == "teacher":
+            return c.execute(
+                "SELECT an.*,cl.name AS class_name FROM announcements an LEFT JOIN classes cl ON cl.id=an.class_id"
+                " ORDER BY an.created_at DESC,an.id DESC"
+            ).fetchall()
         return c.execute(
-            f"SELECT an.*, cl.name AS class_name FROM announcements an"
-            f" LEFT JOIN classes cl ON cl.id = an.class_id WHERE {where} ORDER BY an.created_at DESC",
-            params,
+            "SELECT an.*,cl.name AS class_name FROM announcements an LEFT JOIN classes cl ON cl.id=an.class_id"
+            " WHERE an.class_id IS NULL OR an.class_id=%s ORDER BY an.created_at DESC,an.id DESC",
+            (account["class_id"],),
         ).fetchall()
 
 
 def create_announcement(title: str, body: str, author: str, class_id: int | None = None) -> dict[str, Any]:
     with database.conn() as c:
-        if (
-            class_id is not None
-            and not c.execute(
-                "SELECT 1 FROM course_class_links l JOIN teacher_course_access tca"
-                " ON tca.course_run_id=l.course_run_id JOIN accounts t ON t.id=tca.teacher_account_id"
-                " WHERE l.class_id=%s AND t.username=%s AND t.active AND tca.can_manage",
-                (class_id, author),
-            ).fetchone()
-        ):
-            raise PermissionError("教师无权向该班级发布公告")
-        row = c.execute(
-            "INSERT INTO announcements(class_id, title, body, author) VALUES (%s, %s, %s, %s) RETURNING *",
-            (class_id, title, body, author),
-        ).fetchone()
-    assert row is not None
-    return row
+        if not _active_teacher(c, author):
+            raise PermissionError("教师账号无效")
+        if class_id is not None and c.execute("SELECT 1 FROM classes WHERE id=%s", (class_id,)).fetchone() is None:
+            raise PermissionError("班级不存在")
+        return database._required(
+            c.execute(
+                "INSERT INTO announcements(class_id,title,body,author) VALUES (%s,%s,%s,%s) RETURNING *",
+                (class_id, title, body, author),
+            ).fetchone(),
+            "create announcement",
+        )
 
 
 def delete_announcement(announcement_id: int, actor: str | None = None) -> bool:
     with database.conn() as c:
-        scope = ""
-        params: list[Any] = [announcement_id]
-        if actor:
-            scope = (
-                " AND (class_id IS NULL AND author=%s OR EXISTS (SELECT 1 FROM course_class_links l"
-                " JOIN teacher_course_access tca ON tca.course_run_id=l.course_run_id"
-                " JOIN accounts t ON t.id=tca.teacher_account_id WHERE l.class_id=announcements.class_id"
-                " AND t.username=%s AND t.active AND tca.can_manage))"
-            )
-            params += [actor, actor]
+        if actor and not _active_teacher(c, actor):
+            return False
         return (
-            c.execute(f"DELETE FROM announcements WHERE id=%s {scope} RETURNING id", tuple(params)).fetchone()
-            is not None
+            c.execute("DELETE FROM announcements WHERE id=%s RETURNING id", (announcement_id,)).fetchone() is not None
         )

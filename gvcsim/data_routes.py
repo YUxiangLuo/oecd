@@ -7,11 +7,9 @@ from pathlib import Path
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
-from fastapi.requests import Request
 
 from gvcsim import artifacts, quizzes, shocks
 from gvcsim.artifacts import artifact_contract, manifest_id, read_csv_artifact, validate_artifact
-from gvcsim.classroom import db as classroom_db
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, processed_years
 from gvcsim.data import crosswalk, icio_browser, quality
 from gvcsim.indicator_schema import INDICATOR_SCHEMA
@@ -51,7 +49,7 @@ def _read_csv(name: str) -> pd.DataFrame:
 
 
 @router.get("/api/meta")
-def meta(request: Request):
+def meta():
     years = processed_years()
     countries: list[str] = []
     sectors: list[str] = []
@@ -59,30 +57,6 @@ def meta(request: Request):
         countries = sorted(_read_csv(f"indicators_country_{years[-1]}.csv")["country"].unique())
         sectors = sorted(_read_csv(f"indicators_industry_{years[-1]}.csv")["industry"].unique())
     current_manifest = manifest_id() if years else None
-    assignment_context = None
-    assignment_unavailable = False
-    user = getattr(request.state, "user", {})
-    if user.get("role") == "student" and current_manifest:
-        try:
-            scope = classroom_db.assignment_context(user["sub"], current_manifest)
-            if scope:
-                assignment_context = {
-                    "course_run_id": scope.get("course_run_id"),
-                    "course_run_code": scope.get("course_run_code"),
-                    "course_run_name": scope.get("course_run_name"),
-                    "course_run_term": scope.get("course_run_term"),
-                    "assignment_id": scope.get("assignment_id"),
-                    "assignment_title": scope.get("assignment_title"),
-                    "attempt_id": scope.get("attempt_id"),
-                    "assignment_scope": scope.get("assignment_scope"),
-                    "assignment_manifest_id": scope.get("assignment_manifest_id"),
-                    "manifest_mismatch": bool(scope.get("manifest_mismatch")),
-                    "assignment_closed": bool(scope.get("assignment_closed")),
-                    "assignment_historical": bool(scope.get("assignment_historical")),
-                    "due_at": scope.get("due_at"),
-                }
-        except classroom_db.Unavailable:
-            assignment_unavailable = True
     return {
         "years": years,
         "countries": countries,
@@ -91,20 +65,6 @@ def meta(request: Request):
         # 实验会话绑定该 ID:产物换代后旧会话即可被判定为过期。
         "manifest_id": current_manifest,
         "artifact_provenance": artifacts.manifest_provenance() if years else None,
-        "assignment_context": assignment_context,
-        "assignment_unavailable": assignment_unavailable,
-        "course_run_id": (assignment_context or {}).get("course_run_id"),
-        "assignment_id": (assignment_context or {}).get("assignment_id"),
-        "attempt_id": (assignment_context or {}).get("attempt_id"),
-        "assignment_scope": (assignment_context or {}).get("assignment_scope"),
-        "manifest_mismatch": bool((assignment_context or {}).get("manifest_mismatch")),
-        "assignment_closed": bool((assignment_context or {}).get("assignment_closed")),
-        "assignment_historical": bool((assignment_context or {}).get("assignment_historical")),
-        "course_run_code": (assignment_context or {}).get("course_run_code"),
-        "course_run_name": (assignment_context or {}).get("course_run_name"),
-        "course_run_term": (assignment_context or {}).get("course_run_term"),
-        "assignment_title": (assignment_context or {}).get("assignment_title"),
-        "due_at": (assignment_context or {}).get("due_at"),
     }
 
 

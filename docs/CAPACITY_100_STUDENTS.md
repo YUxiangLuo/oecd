@@ -49,8 +49,8 @@
 - worker 的 startup 完成后会封存 schema 状态；请求路径若发现状态丢失会
   fail-closed，不会惰性迁移或关闭正在使用的 pool。pool shutdown 只关闭空闲
   连接，已借出连接在归还时关闭。
-- 学生会话写入继续按 attempt advisory lock 串行化，两个标签页不会覆盖。
-- 登录滑动窗口存于 PostgreSQL v6；同一 `IP + username` 的 8 次精确预算和
+- 学生会话写入按账号 advisory lock 串行化，两个标签页不会覆盖。
+- 登录滑动窗口存于 PostgreSQL v7；同一 `IP + username` 的 8 次精确预算和
   同一 IP 全部用户名共享的 400 次总预算都在 16 个 worker 上原子计数。
   轮换 username 不能制造无界数据库写入，旧记录最多保留限流窗口的 4 倍。
 - 登录以 token 和服务端 `auth_session` 创建为关键提交点；之后的身份限流清理
@@ -145,7 +145,7 @@ curl -fsS http://127.0.0.1:18000/health
 
 ## 数据库备份、恢复与迁移
 
-本次 schema 为 `gvcsim-teaching-db-v6`，从 v3、v4、v5 都有事务内迁移路径。
+本次 schema 为 `gvcsim-teaching-db-v7`，旧教学 schema 不做兼容迁移，必须显式全量重建。
 上线前必须先生成数据库备份，并在隔离的 `_restore_drill` 空库完成恢复演练；完整的产物备份、校验、回执和
 清理流程见 [`BACKUP_RESTORE.md`](./BACKUP_RESTORE.md)：
 
@@ -155,22 +155,20 @@ uv run python scripts/restore_classroom_drill.py /secure-backups/gvcsim/classroo
   --receipt dogfood-output/backup-restore/receipt.json
 ```
 
-确认恢复回执后，再把迁移作为独立步骤运行；只有它成功后才能启动或重启服务：
+确认恢复回执后，再把重建作为独立步骤运行；只有它成功后才能启动或重启服务：
 
 ```bash
-uv run gvcsim classroom-init
+uv run gvcsim classroom-init --reset
 uv run gvcsim preflight
 ```
 
-`serve`、systemd 的 `ExecStartPre` 和普通请求都不会替代上述显式迁移。v6 只新增登录限流表，
-不改写课堂记录。旧版程序会拒绝未知的 v6 schema，所以
-数据库升级是前向迁移：不要在迁移后直接启动旧二进制。需要代码回滚时应保留
-新版本数据库兼容代码，或从已验证备份切换到隔离恢复库。
+`serve`、systemd 的 `ExecStartPre` 和普通请求都不会替代上述显式初始化。v7 移除了旧教学模型，
+必须先备份再通过 `classroom-init --reset` 全量重建；不要在重建后直接启动旧二进制。
 
 ## 产物保留与磁盘回收
 
 `data/processed` 是指向当前内容寻址版本的符号链接。不要直接用 `find -mtime -delete` 清理
-`data/artifacts`：历史 assignment、报告、会话或学习证据仍可能依赖旧 manifest。先 dry-run：
+`data/artifacts`：历史进度、报告、提交、会话或学习证据仍可能依赖旧 manifest。先 dry-run：
 
 ```bash
 uv run gvcsim artifact-prune --keep-latest 3

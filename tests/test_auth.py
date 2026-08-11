@@ -243,8 +243,8 @@ def test_global_schema_mismatch_handler_returns_generic_503(monkeypatch):
     def mismatched(*_args, **_kwargs):
         raise db.SchemaVersionMismatch("sensitive sql and dsn")
 
-    monkeypatch.setattr(db, "list_course_runs", mismatched)
-    response = client.get("/api/classroom/course-runs", headers=headers)
+    monkeypatch.setattr(db, "list_classes", mismatched)
+    response = client.get("/api/classroom/classes", headers=headers)
     assert response.status_code == 503
     assert response.json() == {"detail": "教学数据库 schema 未就绪；请先完成兼容迁移"}
 

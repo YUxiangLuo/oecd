@@ -22,12 +22,7 @@ const student = (id: number, maxStep: number, verified: number[]): StudentRow =>
   verified_completed_count: verified.length,
   verified_completed_steps: verified,
   completion_missing: [],
-  session_stale: false,
-  legacy_unverified: false,
   last_valid_activity: null,
-  course_run_id: 1,
-  assignment_id: 1,
-  attempt_id: 1,
 });
 
 describe("teacher progress filters", () => {

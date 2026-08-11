@@ -32,17 +32,10 @@ import type {
   Meta,
   StepsResponse,
   StepStateApi,
-  StudentAssignmentContext,
 } from "./types";
 import { useSession } from "./use-session";
 
 const AUTH_EXPIRES_KEY = "gvcsim_token_expires_at";
-
-function deadlineLabel(value: string | null | undefined): string {
-  if (!value) return "教师设定的截止时间";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { hour12: false });
-}
 
 function stepFromUrl(): number | null {
   const n = Number(new URLSearchParams(window.location.search).get("step"));
@@ -53,7 +46,6 @@ export default function App() {
   const [stepsData, setStepsData] = useState<StepsResponse | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [metaReady, setMetaReady] = useState(false);
-  const [assignmentContextsReady, setAssignmentContextsReady] = useState(false);
   const [announcementsReady, setAnnouncementsReady] = useState(false);
   // 有效深链优先于服务端进度；应用内部切步只 replace 当前 URL，不污染浏览器历史。
   const explicitStep = useRef(stepFromUrl());
@@ -83,84 +75,29 @@ export default function App() {
   const highestAnnouncementId = useRef(0);
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [bannerExpanded, setBannerExpanded] = useState(false);
-  const [resettingAttempt, setResettingAttempt] = useState(false);
-  const [resetAttemptError, setResetAttemptError] = useState<string | null>(null);
-  const [assignmentContexts, setAssignmentContexts] = useState<StudentAssignmentContext[]>([]);
-  const [switchingAssignment, setSwitchingAssignment] = useState(false);
-  const [assignmentSwitchError, setAssignmentSwitchError] = useState<string | null>(null);
-  const [deadlineNow, setDeadlineNow] = useState(() => Date.now());
+  const [resettingWorkspace, setResettingWorkspace] = useState(false);
+  const [resetWorkspaceError, setResetWorkspaceError] = useState<string | null>(null);
 
   // 实验会话:回归设定与运行记录从此活在会话里(local-first + PostgreSQL),
   // 刷新或重新登录都能恢复,不再随组件内存一起消失。
   const session = useSession(
     user?.role === "student" ? { username: user.username, accountId: user.account_id } : null,
-    meta?.manifest_id ? {
-      manifestId: meta.manifest_id,
-      courseRunId: meta.course_run_id,
-      assignmentId: meta.assignment_id,
-      attemptId: meta.attempt_id,
-    } : null,
+    meta?.manifest_id ? { manifestId: meta.manifest_id } : null,
   );
-  const assignmentDueAt = meta?.due_at ?? session.dueAt;
-  const assignmentDueTime = assignmentDueAt ? new Date(assignmentDueAt).getTime() : Number.NaN;
-  const assignmentClosed = Boolean(meta?.assignment_closed || session.assignmentClosed)
-    || (Number.isFinite(assignmentDueTime) && assignmentDueTime <= deadlineNow);
-  const assignmentHistorical = Boolean(meta?.assignment_historical || session.assignmentHistorical);
-  const assignmentReadOnly = assignmentClosed || assignmentHistorical;
-  useEffect(() => {
-    if (!Number.isFinite(assignmentDueTime) || assignmentDueTime <= Date.now()) return;
-    const delay = Math.min(2_147_000_000, Math.max(0, assignmentDueTime - Date.now() + 250));
-    const timer = window.setTimeout(() => setDeadlineNow(Date.now()), delay);
-    return () => window.clearTimeout(timer);
-  }, [assignmentDueTime, deadlineNow]);
-  const exportRecovery = useCallback(() => {
-    if (!session.recovery.length) return;
-    const exported = {
-      exported_at: new Date().toISOString(),
-      account_id: user?.account_id ?? null,
-      username: user?.username ?? null,
-      warning: "这些记录来自旧作用域/旧数据版本，仅供留档，不得合并到当前 attempt。",
-      records: session.recovery,
-    };
-    const blob = new Blob([JSON.stringify(exported, null, 2)], { type: "application/json" });
-    const href = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = href;
-    link.download = `gvcsim-recovery-${String(user?.username ?? "student").replace(/[^a-zA-Z0-9_-]/g, "_")}.json`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(href);
-  }, [session.recovery, user?.account_id, user?.username]);
-  const resetAttempt = useCallback(async () => {
-    const confirmed = window.confirm(
-      "重新开始会归档当前 attempt，并由服务端创建一个全新的 attempt。旧记录不会合并到新作业；如需留档，请先点击“导出隔离记录”。确定继续吗？",
+  const resetWorkspace = useCallback(async () => {
+    const confirmation = window.prompt(
+      "此操作会永久删除当前数据版本下的实验进度、证据、报告、提交和评分。请输入“清空当前实验”继续：",
     );
-    if (!confirmed) return;
-    setResettingAttempt(true);
-    setResetAttemptError(null);
+    if (confirmation !== "清空当前实验") return;
+    setResettingWorkspace(true);
+    setResetWorkspaceError(null);
     try {
       await session.reset();
     } catch (cause) {
-      setResetAttemptError(String((cause as Error).message ?? cause));
-      setResettingAttempt(false);
+      setResetWorkspaceError(String((cause as Error).message ?? cause));
+      setResettingWorkspace(false);
     }
   }, [session.reset]);
-  const switchAssignment = useCallback(async (assignmentId: number) => {
-    if (!Number.isFinite(assignmentId) || String(assignmentId) === String(meta?.assignment_id)) return;
-    setSwitchingAssignment(true);
-    setAssignmentSwitchError(null);
-    try {
-      // 切断 attempt 边界前先排空当前作用域的本地队列，不让防抖写入跨作业。
-      await session.syncNow();
-      await api.classroom.selectAssignmentContext(assignmentId);
-      // meta / progress / session 必须在同一个新边界上重新装载。
-      window.location.reload();
-    } catch (cause) {
-      setAssignmentSwitchError(String((cause as Error).message ?? cause));
-      setSwitchingAssignment(false);
-    }
-  }, [meta?.assignment_id, session]);
   // 回归设定按 outcome 存(与 regression_history 一致):每步首次进入落在其招牌默认
   // (SIGNATURE_SETTINGS),学生的修改按 outcome 分别保留、互不覆盖。
   const currentOutcome = stepsData?.steps.find((s) => s.n === current)?.regression_outcome;
@@ -213,16 +150,14 @@ export default function App() {
     setStepsData(null);
     setMeta(null);
     setMetaReady(false);
-    setAssignmentContextsReady(false);
     setAnnouncementsReady(false);
     setFatal(null);
     setShowIntro(false);
     setShowPasswordChange(false);
     setProgressReady(false);
     setAnnouncements([]);
-    setAssignmentContexts([]);
-    setSwitchingAssignment(false);
-    setAssignmentSwitchError(null);
+    setResettingWorkspace(false);
+    setResetWorkspaceError(null);
     highestAnnouncementId.current = 0;
     setBannerDismissed(false);
     setBannerExpanded(false);
@@ -280,7 +215,7 @@ export default function App() {
   useEffect(() => {
     if (accountId == null || accountRole == null) return;
     let live = true;
-    // 新账号解析完成前不沿用上一账号的 assignment/attempt。
+    // 新账号解析完成前不沿用上一账号的数据版本。
     setMeta(null);
     setMetaReady(false);
     const cancelMetaLoad = beginAccountMetaLoad(() => api.meta(), (value) => {
@@ -297,26 +232,12 @@ export default function App() {
     // 教师端不加载 16 步实验数据与公告横幅。
     highestAnnouncementId.current = 0;
     setAnnouncements([]);
-    setAssignmentContexts([]);
     setAnnouncementsReady(false);
-    setAssignmentContextsReady(false);
     setBannerDismissed(false);
     setBannerExpanded(false);
     api.steps().then(
       (value) => { if (live) setStepsData(value); },
       (error) => { if (live) setFatal(String(error.message ?? error)); },
-    );
-    api.classroom.assignmentContexts().then(
-      (value) => {
-        if (!live) return;
-        setAssignmentContexts(value.assignments);
-        setAssignmentContextsReady(true);
-      },
-      () => {
-        if (!live) return;
-        setAssignmentContexts([]);
-        setAssignmentContextsReady(true);
-      },
     );
     return () => {
       live = false;
@@ -386,12 +307,12 @@ export default function App() {
 
   // 学生实验进度自动上报:停留在某步 1.5s 后写入教学库(失败静默,不打扰实验)
   useEffect(() => {
-    if (!user || user.role !== "student" || !progressReady || assignmentReadOnly) return;
+    if (!user || user.role !== "student" || !progressReady) return;
     const timer = window.setTimeout(() => {
       api.classroom.reportProgress(current).catch(() => {});
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [user, current, progressReady, assignmentReadOnly]);
+  }, [user, current, progressReady]);
 
   if (!authChecked) return <AppBootSkeleton />;
   if (!user)
@@ -435,7 +356,6 @@ export default function App() {
   if (
     !stepsData
     || !metaReady
-    || !assignmentContextsReady
     || !announcementsReady
     || !progressReady
     || session.status === "loading"
@@ -455,15 +375,6 @@ export default function App() {
   const isReg = step.lab === "reg";
   // 可视化步骤(viz)图表是主角:讲解卡默认折叠,给图表让出首屏纵向空间(可点开)
   const isViz = step.lab === "viz";
-  const assignmentScopeMissing = !meta
-    || meta.course_run_id == null
-    || meta.assignment_id == null
-    || meta.attempt_id == null;
-  const assignmentLocked = assignmentScopeMissing
-    || session.stale
-    || assignmentReadOnly
-    || Boolean(meta?.assignment_unavailable || meta?.manifest_mismatch);
-
   return (
     <>
     <div className="layout" inert={showIntro ? true : undefined}>
@@ -471,20 +382,19 @@ export default function App() {
         user={user}
         meta={meta}
         authExpiresAt={authExpiresAt}
-        assignmentContexts={assignmentContexts}
-        switchingAssignment={switchingAssignment}
+        resettingWorkspace={resettingWorkspace}
         completion={session.completion}
         maxStep={maxStep}
         totalSteps={totalSteps}
         introTriggerRef={introTriggerRef}
-        onSwitchAssignment={(assignmentId) => { void switchAssignment(assignmentId); }}
+        onResetWorkspace={() => { void resetWorkspace(); }}
         onShowIntro={() => setShowIntro(true)}
         onRequestPasswordChange={() => setShowPasswordChange(true)}
         onLogout={logout}
       />
 
-      {assignmentSwitchError && (
-        <div className="error-box assignment-switch-error" role="alert">切换作业失败：{assignmentSwitchError}</div>
+      {resetWorkspaceError && (
+        <div className="error-box workspace-reset-error" role="alert">清空实验失败：{resetWorkspaceError}</div>
       )}
 
       {!bannerDismissed && (
@@ -506,7 +416,7 @@ export default function App() {
         />
 
         <div className="workarea">
-          {session.syncError && !assignmentClosed && (
+          {session.syncError && (
             <div className="error-box persistent-qc-warning" role="alert">
               <b>实验记录尚未同步到服务器。</b>
               <p>{session.syncError} 本地记录仍在，可以直接重试。</p>
@@ -518,47 +428,6 @@ export default function App() {
               >
                 {session.syncing ? "正在重试…" : "重试保存"}
               </button>
-            </div>
-          )}
-          {meta?.manifest_mismatch && (
-            <div className="warnbox persistent-qc-warning" role="alert">
-              当前数据 manifest 与这份作业冻结的版本不一致。为避免混用数据，答题、实验记录、报告与提交将保持锁定；请联系教师切换作业版本。
-            </div>
-          )}
-          {assignmentClosed && (
-            <div className="warnbox persistent-qc-warning assignment-closed-warning" role="alert">
-              <b>作业已于 {deadlineLabel(assignmentDueAt)} 截止，现在为只读状态。</b>
-              <p>你仍可浏览既有步骤、答题结果与服务端完成度，但不能继续保存实验状态、答题、生成/提交报告、重置或新建 attempt。既有记录和审计历史不会被删除。</p>
-            </div>
-          )}
-          {assignmentHistorical && (
-            <div className="warnbox persistent-qc-warning assignment-closed-warning" role="status">
-              <b>正在查看历史作业。</b>
-              <p>既有步骤、报告、提交和教师评分保留可见；历史作用域不接受新写入。可从顶栏切回当前作业。</p>
-            </div>
-          )}
-          {!assignmentClosed && (meta?.assignment_unavailable || assignmentScopeMissing) && (
-            <div className="warnbox persistent-qc-warning" role="alert">
-              无法确认当前课程、作业与 attempt 作用域；实验输入与提交已锁定，本地缓存也已停用。
-              请刷新重试；仍未恢复时联系教师检查选课、作业发布和数据库状态。
-            </div>
-          )}
-          {session.stale && !assignmentClosed && (
-            <div className="warnbox legacy-session-warning" role="status">
-              <div>
-                发现旧课程、旧数据版本或用户名作用域的记录。它已被隔离为只读旧记录，
-                不会合并、不会自动回推，也不会计入本次作业完成度。
-              </div>
-              <div className="session-actions" style={{ marginTop: 10 }}>
-                <button type="button" className="secondary" disabled={!session.recovery.length || resettingAttempt} onClick={exportRecovery}>
-                  导出隔离记录
-                </button>
-                <button type="button" className="primary" disabled={resettingAttempt} onClick={() => void resetAttempt()}>
-                  {resettingAttempt ? "正在归档并新建…" : "归档旧 attempt 并重新开始"}
-                </button>
-              </div>
-              <p className="muted">重新开始是显式操作：旧 attempt 会保留为审计记录，新 attempt 从空白状态开始。</p>
-              {resetAttemptError && <div className="error-box">重新开始失败：{resetAttemptError}</div>}
             </div>
           )}
           <StepHeader
@@ -581,12 +450,7 @@ export default function App() {
                     <p>{step.concept}</p>
                   </details>
                 )}
-                {assignmentReadOnly ? (
-                  <div
-                    className={`read-only-lab${assignmentHistorical ? " historical" : ""}`}
-                    inert
-                    aria-label={assignmentHistorical ? "历史作业的只读实验记录" : "已截止作业的只读实验记录"}
-                  >
+                <>
                     <LabRouter
                       step={step}
                       meta={meta}
@@ -605,41 +469,7 @@ export default function App() {
                       onNavigateStep={navigateStep}
                     />
                     <QuizPanel key={step.n} step={step} state={stepState} />
-                  </div>
-                ) : assignmentLocked ? (
-                  <div className="error-box assignment-lock" role="alert">
-                    <h3>实验台已锁定</h3>
-                    <p>
-                      {meta?.manifest_mismatch
-                        ? "当前产物与作业冻结的数据版本不一致，不能保存实验状态、答题或生成报告。"
-                        : session.stale
-                          ? "检测到旧课程、旧数据版本或未验证 attempt 的记录。请先在上方导出留档，并显式归档旧 attempt 后重新开始。"
-                        : "当前账号没有可验证的课程运行、作业或 attempt 上下文；此时填写内容不会被可靠保存，因此表单没有开放。"}
-                    </p>
-                    <p>刷新后仍未恢复，请联系教师确认作业是否已发布并将你加入对应课程运行。</p>
-                  </div>
-                ) : (
-                  <>
-                    <LabRouter
-                      step={step}
-                      meta={meta}
-                      state={stepState}
-                      completionKey={completionKey}
-                      sessionStatus={session.status}
-                      sessionUnsynced={session.unsynced}
-                      sessionSyncing={session.syncing}
-                      sessionSyncError={session.syncError}
-                      onFlushSession={session.syncNow}
-                      onSessionChanged={session.reload}
-                      regressionSettings={regressionSettings}
-                      onRegressionSettingsChange={setRegressionSettings}
-                      regressionHistory={regressionHistory}
-                      onRegressionHistoryChange={setRegressionHistory}
-                      onNavigateStep={navigateStep}
-                    />
-                    <QuizPanel key={step.n} step={step} state={stepState} />
-                  </>
-                )}
+                </>
               </div>
             </main>
 

@@ -36,7 +36,7 @@
 
 步骤 1–15 各有 1–3 道固定单选题，共 21 题。学生提交后立即看到逐题反馈，可不限次数重试；
 本步全部答对即完成，不要求另行提交任何实验操作。只有全对时服务端才记录事件并签发不可见的
-`quiz_id`，绑定账号、assignment、attempt、manifest、步骤、题库版本和最终答案，避免客户端
+`quiz_id`，绑定账号、manifest、步骤、题库版本和最终答案，避免客户端
 自行伪造完成度。
 
 切片、筛选、对比、图表和最近一次回归会随实验自动保存。相应页面的当前状态用于恢复界面，
@@ -45,12 +45,9 @@
 具有可信 `run_id` 的回归，没有运行的步骤明确标为“未记录学生运行”，不会偷偷补跑默认模型。
 详细契约见 [`docs/COURSE_COMPLETION.md`](./docs/COURSE_COMPLETION.md)。
 
-课堂数据模型为 course run → assignment → enrollment → attempt；学生的会话、进度、答题、报告
-与提交都挂在 attempt 之下，历史 attempt 保留为审计记录。
-
-> **assignment 绑定数据版本。** `assignments.manifest_id` 固定指向某个产物版本，重算产物
-> （`gvcsim compute`）后既有作业会立刻失配，学生的一切写入返回 409 且无法自行新建 attempt，
-> 必须由教师新建绑定新 manifest 的作业。学期中途不要随手重算，详见部署文档的「数据发布」。
+每个活跃学生账号可直接使用当前数据版本，学习记录按 `(account_id, manifest_id)` 隔离。
+重新计算产物后会自然进入一个全新工作区，旧版本记录仍保留在数据库中。班级仅用于教师端
+组织、筛选和定向公告，不控制实验访问。
 
 ## Gephi-compatible 网络口径
 
@@ -114,7 +111,7 @@ uv run gvcsim artifact-prune --keep-latest 3
 uv run gvcsim artifact-prune --keep-latest 3 --apply
 ```
 
-清理会始终保留当前版本和最新 N 个回滚版本，并查询 PostgreSQL，保护被 assignment、报告、实验会话
+清理会始终保留当前版本和最新 N 个回滚版本，并查询 PostgreSQL，保护被进度、报告、提交、实验会话
 或学习证据引用的全部 manifest。数据库/schema 不可用时拒绝执行；`legacy-*`、符号链接、损坏或命名
 不符合内容 ID 的目录也不会自动删除。发布切换与清理共享跨进程文件锁，避免并发 compute 把新版本误删。
 

@@ -229,7 +229,7 @@ def _regression_step(outcome: str) -> int:
 def _require_regression_student(request: Request) -> str:
     user = getattr(request.state, "user", None) or {}
     if user.get("role") != "student":
-        raise HTTPException(status_code=403, detail="回归学习事件只对当前作业中的学生签发")
+        raise HTTPException(status_code=403, detail="回归学习事件只对当前学生签发")
     return str(user["sub"])
 
 

@@ -4,7 +4,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { emptySession, readShared, readStep } from "./session-store";
 import {
   patchSessionStep,
-  remoteSessionUntrusted,
   sessionScope,
   sessionScopeKey,
   updateSessionShared,
@@ -12,61 +11,43 @@ import {
 } from "./use-session";
 
 describe("sessionScope", () => {
-  test("requires stable account, course-run, assignment and manifest ids", () => {
+  test("requires a stable account and manifest id", () => {
     expect(sessionScope(
       { username: "student", accountId: 42 },
-      { manifestId: "manifest", courseRunId: 8, assignmentId: 11, attemptId: 3 },
-    )).toEqual({ accountId: 42, courseRunId: 8, assignmentId: 11, attemptId: 3, manifestId: "manifest" });
+      { manifestId: "manifest" },
+    )).toEqual({ accountId: 42, manifestId: "manifest" });
   });
 
   test("fails closed instead of caching under username-only fallbacks", () => {
     expect(sessionScope(
       { username: "student" },
-      { manifestId: "manifest", courseRunId: 8, assignmentId: 11, attemptId: 3 },
-    )).toBeNull();
-    expect(sessionScope(
-      { username: "student", accountId: 42 },
       { manifestId: "manifest" },
     )).toBeNull();
+    expect(sessionScope({ username: "student", accountId: 42 }, null)).toBeNull();
   });
 
-  test("keys the retry queue by account and attempt boundaries", () => {
+  test("keys the retry queue by account and manifest boundaries", () => {
     const base = sessionScopeKey({
       accountId: 42,
-      courseRunId: 8,
-      assignmentId: 11,
-      attemptId: 3,
       manifestId: "manifest",
     });
 
     expect(base).not.toBe(sessionScopeKey({
       accountId: 43,
-      courseRunId: 8,
-      assignmentId: 11,
-      attemptId: 3,
       manifestId: "manifest",
     }));
     expect(base).not.toBe(sessionScopeKey({
       accountId: 42,
-      courseRunId: 8,
-      assignmentId: 11,
-      attemptId: 4,
-      manifestId: "manifest",
+      manifestId: "other-manifest",
     }));
   });
 
   test("normalizes numeric API ids without weakening scope isolation", () => {
     expect(sessionScopeKey({
       accountId: 42,
-      courseRunId: 8,
-      assignmentId: 11,
-      attemptId: 3,
       manifestId: "manifest",
     })).toBe(sessionScopeKey({
       accountId: "42",
-      courseRunId: "8",
-      assignmentId: "11",
-      attemptId: "3",
       manifestId: "manifest",
     }));
     expect(sessionScopeKey(null)).toBeNull();
@@ -83,28 +64,6 @@ describe("session loading state", () => {
     }
 
     expect(renderToStaticMarkup(createElement(StatusProbe))).toContain("unavailable");
-  });
-});
-
-describe("remote session trust", () => {
-  test("keeps a trusted session readable when read_only only means the assignment is closed", () => {
-    expect(remoteSessionUntrusted({ stale: false, legacy_unverified: false, read_only: true, assignment_closed: true })).toBe(false);
-  });
-
-  test("keeps a trusted historical session readable without reopening writes", () => {
-    expect(remoteSessionUntrusted({
-      stale: false,
-      legacy_unverified: false,
-      read_only: true,
-      assignment_closed: false,
-      assignment_historical: true,
-    })).toBe(false);
-  });
-
-  test("still isolates stale, legacy, and unexplained read-only records", () => {
-    expect(remoteSessionUntrusted({ stale: true, assignment_closed: true })).toBe(true);
-    expect(remoteSessionUntrusted({ stale: false, legacy_unverified: true, assignment_closed: false })).toBe(true);
-    expect(remoteSessionUntrusted({ stale: false, read_only: true, assignment_closed: false })).toBe(true);
   });
 });
 

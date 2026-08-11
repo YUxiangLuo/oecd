@@ -15,7 +15,7 @@ describe("userFacingRequestError", () => {
   });
 
   test("keeps useful server detail under a contextual heading", () => {
-    expect(userFacingRequestError(new Error("当前作业已截止"), "报告提交失败"))
-      .toBe("报告提交失败：当前作业已截止");
+    expect(userFacingRequestError(new Error("当前数据版本不可用"), "报告提交失败"))
+      .toBe("报告提交失败：当前数据版本不可用");
   });
 });

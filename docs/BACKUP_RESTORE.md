@@ -87,9 +87,9 @@ uv run python scripts/restore_classroom_drill.py \
 恢复使用 `--single-transaction --no-owner --no-acl`；任一 SQL 错误会回滚整个 restore。成功后脚本会：
 
 1. 以目标 DSN 执行当前版本的只读 `gvcsim preflight`；
-2. 核对 `gvcsim-teaching-db-v6`；
+2. 核对 `gvcsim-teaching-db-v7`；
 3. 记录 PostgreSQL、pg_dump/pg_restore 与数据库 collation 版本，并统计所有 public 表行数，但不导出行内容；
-4. 枚举 assignments、reports、attempt/experiment sessions 与学习证据引用的 manifest；
+4. 枚举进度、报告、实验会话、提交与学习证据引用的 manifest；
 5. 验证每个引用版本在本地 `data/artifacts/` 中存在且摘要有效；
 6. 原子写入权限为 `0600`、且绝不覆盖旧文件的 JSON 回执。
 
@@ -105,7 +105,7 @@ jq '{schema_version, duration_seconds, table_counts, referenced_artifacts}' \
   dogfood-output/backup-restore/receipt.json
 ```
 
-在隔离网络中使用只读抽样账号检查课程、作业、提交和报告关联；不要在恢复库触发改密、评分或清理任务。
+在隔离网络中使用只读抽样账号检查学生、manifest、提交和报告关联；不要在恢复库触发改密、评分或清理任务。
 确认回执已归档后，由操作员再次核对数据库名并显式删除：
 
 ```bash

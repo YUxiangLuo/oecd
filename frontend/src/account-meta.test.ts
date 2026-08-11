@@ -12,12 +12,11 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-const meta = (attemptId: number): Meta => ({
+const meta = (manifestId: string): Meta => ({
   years: [2020],
   countries: ["CHN"],
   sectors: ["D01T02"],
-  assignment_id: 7,
-  attempt_id: attemptId,
+  manifest_id: manifestId,
 });
 
 describe("account-scoped meta loading", () => {
@@ -30,12 +29,12 @@ describe("account-scoped meta loading", () => {
     cancelOld();
     beginAccountMetaLoad(() => newRequest.promise, (value) => applied.push(value));
 
-    newRequest.resolve(meta(22));
+    newRequest.resolve(meta("new-manifest"));
     await newRequest.promise;
-    oldRequest.resolve(meta(11));
+    oldRequest.resolve(meta("old-manifest"));
     await oldRequest.promise;
 
-    expect(applied.map((value) => value.attempt_id)).toEqual([22]);
+    expect(applied.map((value) => value.manifest_id)).toEqual(["new-manifest"]);
   });
 
   test("a cancelled request failure cannot replace the current account with empty meta", async () => {

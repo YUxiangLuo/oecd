@@ -21,8 +21,6 @@ import {
   makeRecord,
   mergeSessions,
   patchStep,
-  quarantineLegacy,
-  readLegacyQuarantine,
   reconcileOnLoad,
   readShared,
   readStep,
@@ -33,7 +31,7 @@ import { SESSION_VERSION, type ExperimentSession } from "./types";
 
 const MID = "b08a35374d1021b0";
 const OTHER = "deadbeefdeadbeef";
-const SCOPE = { accountId: 7, courseRunId: "2026-spring", assignmentId: "gvc-lab-1", attemptId: 1, manifestId: MID };
+const SCOPE = { accountId: 7, manifestId: MID };
 const scopeFor = (accountId: string | number) => ({ ...SCOPE, accountId });
 
 const session = (
@@ -64,25 +62,12 @@ describe("session-store", () => {
     expect(localKey(scopeFor("alice"))).not.toBe(localKey(scopeFor("bob")));
   });
 
-  test("keeps course runs, assignments, and manifests in separate caches", () => {
+  test("keeps manifests in separate caches", () => {
     const variants = [
       SCOPE,
-      { ...SCOPE, courseRunId: "2026-fall" },
-      { ...SCOPE, assignmentId: "gvc-lab-2" },
-      { ...SCOPE, attemptId: 2 },
       { ...SCOPE, manifestId: OTHER },
     ];
     expect(new Set(variants.map(localKey)).size).toBe(variants.length);
-  });
-
-  test("quarantines username-only legacy state without loading it into a scoped cache", () => {
-    const old = patchStep(emptySession(MID), 16, { report_key: "old-db" });
-    localStorage.setItem("gvcsim_session:student", JSON.stringify(old));
-    expect(quarantineLegacy("student")).toBe(true);
-    expect(localStorage.getItem("gvcsim_session:student")).toBeNull();
-    expect(loadLocal(SCOPE)).toBeNull();
-    expect(localStorage.getItem("gvcsim_session:legacy-quarantine:student")).toBe(JSON.stringify(old));
-    expect(readLegacyQuarantine("student")).toEqual(old);
   });
 
   test("discards corrupted or foreign local payloads instead of trusting them", () => {
@@ -234,7 +219,7 @@ describe("session-store", () => {
       expect(out.needsPush).toBe(false);
     });
 
-    test("does not merge or automatically push a legacy v3 server session", () => {
+    test("does not merge or automatically push an old server session", () => {
       const legacy = {
         ...session({ "16": makeRecord({ report_key: "legacy" }) }),
         version: "experiment-session-v3",

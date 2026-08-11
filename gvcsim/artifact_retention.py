@@ -23,11 +23,11 @@ from gvcsim import artifacts
 
 _RELEASE_ID = re.compile(r"[0-9a-f]{16}")
 _REFERENCE_TABLES = (
-    ("assignments", "manifest_id"),
     ("reports", "manifest_id"),
-    ("attempt_sessions", "manifest_id"),
     ("experiment_sessions", "manifest_id"),
     ("learning_evidence_events", "manifest_id"),
+    ("step_progress", "manifest_id"),
+    ("submissions", "manifest_id"),
 )
 
 

@@ -3,8 +3,8 @@
 本页只用于 `101.201.151.30` 的后端、依赖或数据变更。日常前端发布使用
 [`DEPLOY_101.201.151.30.md`](../DEPLOY_101.201.151.30.md)，不要套用本流程。
 
-完整发布会切换 Manifest，必须安排维护窗口并新建 assignment。禁止使用
-`--allow-qc-override`、`classroom-init --reset` 或覆盖同名 Artifact。
+完整发布会切换 Manifest，必须安排维护窗口。禁止使用 `--allow-qc-override`、
+`classroom-init --reset` 或覆盖同名 Artifact。
 
 ## 1. 本地 Artifact 门禁
 
@@ -123,26 +123,21 @@ rm -rf -- "$upload" || true
 REMOTE
 ```
 
-## 4. 新建 assignment
+## 4. 切换当前数据版本
 
-保持维护窗口，通过教师管理界面或 `POST /api/classroom/assignments` 新建绑定新
-`MANIFEST_ID` 的 assignment：
-
-- 保留旧 assignment、attempt、session 和全部审计事件；
-- 不改写历史 session 的 Manifest；
-- 新 assignment 验证通过后才结束维护窗口。
+发布新的 `data/processed` 指针后即可结束维护窗口。学生下一次进入时会自动使用
+`(account_id, MANIFEST_ID)` 对应的新工作区；旧 manifest 下的会话、报告、提交和评分不会改写。
 
 ## 5. 完整验收
 
-先执行主指南第 5 节，再检查 `/api/meta`、新 assignment/Manifest、步骤 1 ICIO 切片和
-regression design。探针上下文必须满足：
+先执行主指南第 5 节，再检查 `/api/meta` 的 Manifest、步骤 1 ICIO 切片和 regression design：
 
 ```bash
-curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/classroom/context" |
-  python3 -c 'import json,sys; d=json.load(sys.stdin); print(d["assignment_manifest_id"], d["manifest_mismatch"])'
+curl -fsS -H "Authorization: Bearer $TOKEN" "$BASE/api/meta" |
+  python3 -c 'import json,sys; print(json.load(sys.stdin)["manifest_id"])'
 ```
 
-期望输出新 Manifest 和 `False`。不要把密码或 token 写入仓库或验收脚本。
+期望输出新 Manifest。不要把密码或 token 写入仓库或验收脚本。
 
 ## 6. 完整回滚
 
@@ -169,8 +164,8 @@ curl -fsS http://127.0.0.1:18000/health
 REMOTE
 ```
 
-如果已创建新 assignment，回滚后由教师将它停用；不要删除。新 Artifact 保留用于审计。
-数据库不会自动回滚；确需恢复时，必须按 [`BACKUP_RESTORE.md`](BACKUP_RESTORE.md) 先在
+新 Artifact 保留用于审计。数据库不会自动回滚；确需恢复时，必须按
+[`BACKUP_RESTORE.md`](BACKUP_RESTORE.md) 先在
 隔离空库完成试恢复，禁止覆盖唯一课堂库。
 
 ## 可选：题库版本升级
@@ -190,9 +185,8 @@ nginx -t
 set -a
 . /etc/gvcsim.env
 set +a
-.venv/bin/gvcsim classroom-reset-attempts --quiz-version "$quiz_version" --confirm
+.venv/bin/gvcsim preflight
 REMOTE
 ```
 
-该命令归档旧 attempt 并建立新 attempt，不删除历史 session、报告、提交或评分。同一题库
-版本号不得复用；SSH 在最后一步附近中断时原样重跑确认幂等，不要直接回滚代码。
+题库版本号不得复用；同步提升会话版本后，学生会从当前 manifest 的新格式空会话开始。

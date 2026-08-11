@@ -12,6 +12,7 @@ type ModalState =
   | { type: "class" }
   | { type: "student" }
   | { type: "rename"; s: StudentRow }
+  | { type: "classify"; s: StudentRow }
   | { type: "password"; s: StudentRow }
   | { type: "toggle"; s: StudentRow };
 
@@ -173,11 +174,7 @@ export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearS
                   </span>
                 </td>
                 <td>
-                  {s.legacy_unverified ? (
-                    <StatusPill tone="warn">旧会话不可用</StatusPill>
-                  ) : s.session_stale ? (
-                    <StatusPill tone="warn">数据版本已过期</StatusPill>
-                  ) : (s.verified_completed_count ?? 0) > 0 ? (
+                  {(s.verified_completed_count ?? 0) > 0 ? (
                     <StatusPill tone="ok">服务端已判定</StatusPill>
                   ) : (
                     <StatusPill tone="muted">尚无完成步骤</StatusPill>
@@ -205,6 +202,7 @@ export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearS
                     <summary aria-label="操作">⋯</summary>
                     <div className="row-menu-pop">
                       <button onClick={(e) => (closeMenu(e), setModal({ type: "rename", s }))}>改名</button>
+                      <button onClick={(e) => (closeMenu(e), setModal({ type: "classify", s }))}>调整班级</button>
                       <button onClick={(e) => (closeMenu(e), setModal({ type: "password", s }))}>重置密码</button>
                       <button
                         className={s.active ? "danger" : undefined}
@@ -255,6 +253,14 @@ export function StudentsTab({ initialClassId, filteredStep, filterKind, onClearS
           validate={(v) => (v.trim() ? null : "姓名不能为空")}
           onClose={() => setModal(null)}
           onSubmit={(v) => run(api.classroom.updateStudent(modal.s.id, { display_name: v.trim() }))}
+        />
+      )}
+      {modal?.type === "classify" && (
+        <ClassChoiceModal
+          student={modal.s}
+          classes={cls?.classes ?? []}
+          onClose={() => setModal(null)}
+          onSubmit={(class_id) => run(api.classroom.updateStudent(modal.s.id, { class_id }))}
         />
       )}
       {modal?.type === "password" && (
@@ -366,14 +372,13 @@ function StudentModal({
         <LabeledControl label="所属班级">
           {(id) => (
             <select id={id} value={classChoice} onChange={(e) => setClassChoice(e.target.value)}>
-              {defaultClassId == null && <option value="">请选择班级</option>}
-              <option value="unassigned">暂不分班</option>
+              <option value="">暂不分班</option>
               {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           )}
         </LabeledControl>
         {err && <div className="error-box">{err}</div>}
-        <p className="muted">创建后学生即可使用该账号登录；在“全部班级”视图中必须明确选择归属。</p>
+        <p className="muted">班级仅用于组织和筛选；不分班的学生同样可以直接使用实验。</p>
         <div className="modal-actions">
           <button onClick={onClose}>取消</button>
           <button
@@ -381,13 +386,40 @@ function StudentModal({
             onClick={() => {
               if (!f.username || !f.display_name || f.password.length < 12)
                 return setErr("请填写用户名、姓名,密码至少 12 位");
-              if (!classChoice) return setErr("请选择所属班级，或明确选择“暂不分班”");
-              onSubmit({ ...f, class_id: classChoice === "unassigned" ? null : Number(classChoice) });
+              onSubmit({ ...f, class_id: classChoice ? Number(classChoice) : null });
               onClose();
             }}
           >
             创建账号
           </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ClassChoiceModal({ student, classes, onClose, onSubmit }: {
+  student: StudentRow;
+  classes: ClassInfo[];
+  onClose: () => void;
+  onSubmit: (classId: number | null) => void;
+}) {
+  const [choice, setChoice] = useState(student.class_id == null ? "" : String(student.class_id));
+  return (
+    <Modal title={`调整 ${student.display_name} 的班级`} onClose={onClose} width={380}>
+      <div className="modal-form">
+        <LabeledControl label="所属班级（可空）">
+          {(id) => (
+            <select id={id} value={choice} onChange={(event) => setChoice(event.target.value)}>
+              <option value="">暂不分班</option>
+              {classes.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          )}
+        </LabeledControl>
+        <p className="muted">清除班级只影响教师端的组织方式，不影响学生使用实验。</p>
+        <div className="modal-actions">
+          <button onClick={onClose}>取消</button>
+          <button className="primary" onClick={() => { onSubmit(choice ? Number(choice) : null); onClose(); }}>保存</button>
         </div>
       </div>
     </Modal>

@@ -39,5 +39,5 @@ def test_full_demo_release_remains_fail_closed_and_auditable():
     assert ".venv/bin/gvcsim classroom-init\n" in commands
     assert ".venv/bin/gvcsim classroom-init --reset" not in commands
     assert "validate_release(target, validate_sources=True)" in commands
-    assert "POST /api/classroom/assignments" in guide
+    assert "POST /api/classroom/assignments" not in guide
     assert "这不是普通发布步骤" in guide

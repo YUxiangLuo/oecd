@@ -95,11 +95,9 @@ def main() -> None:
     db._schema_ready = False
     db.initialize_schema()
 
-    runs = db.list_course_runs("teacher")
     classes = db.list_classes("teacher")
-    if not runs or not classes:
-        raise SystemExit("压测 demo 课程或班级初始化失败")
-    course_run_id = int(runs[0]["id"])
+    if not classes:
+        raise SystemExit("压测 demo 班级初始化失败")
     class_id = int(classes[0]["id"])
     current_manifest = artifacts.manifest_id()
 
@@ -125,10 +123,6 @@ def main() -> None:
             if updated is None:
                 raise SystemExit(f"无法更新压测账号 {username}")
             account = updated
-        db.enroll_student("teacher", course_run_id, int(account["id"]), class_id)
-        scope = db.assignment_context(username, current_manifest)
-        if not scope or scope.get("manifest_mismatch"):
-            raise SystemExit(f"账号 {username} 没有绑定当前 manifest 的开放作业")
         users.append({"username": username, "password": args.password})
 
     payload = {

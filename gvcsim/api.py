@@ -167,13 +167,8 @@ async def classroom_schema_unavailable(request: Request, exc: classroom_db.Schem
     return JSONResponse(status_code=503, content={"detail": "教学数据库 schema 未就绪；请先完成兼容迁移"})
 
 
-@app.exception_handler(classroom_db.AssignmentScopeMismatch)
-async def assignment_scope_mismatch(request: Request, exc: classroom_db.AssignmentScopeMismatch):
-    return JSONResponse(status_code=409, content={"detail": str(exc)})
-
-
-@app.exception_handler(classroom_db.AssignmentClosed)
-async def assignment_closed(request: Request, exc: classroom_db.AssignmentClosed):
+@app.exception_handler(classroom_db.WorkspaceScopeMismatch)
+async def workspace_scope_mismatch(request: Request, exc: classroom_db.WorkspaceScopeMismatch):
     return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 

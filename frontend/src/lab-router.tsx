@@ -67,7 +67,7 @@ export function LabRouter({
   if (step.lab === "rep") {
     return (
       <ReportLab
-        key={`${meta?.assignment_id ?? "none"}:${meta?.attempt_id ?? "none"}`}
+        key={meta?.manifest_id ?? "none"}
         completionKey={completionKey}
         sessionStatus={sessionStatus}
         sessionUnsynced={sessionUnsynced}

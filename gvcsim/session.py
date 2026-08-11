@@ -19,9 +19,9 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-# v6:步骤 1–15 只以版本化固定单选题判定完成；实验操作仅自动保存为报告快照，
-# 不参与完成判定。部署会显式归档旧 attempt，新 attempt 从空白状态开始。
-SESSION_VERSION = "experiment-session-v6"
+# v7:步骤 1–15 只以版本化固定单选题判定完成；实验操作仅自动保存为报告快照，
+# 不参与完成判定。账号在新的 manifest 下自然得到空白工作区。
+SESSION_VERSION = "experiment-session-v7"
 
 MIN_STEP = 1
 MAX_STEP = 16

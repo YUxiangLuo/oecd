@@ -3,14 +3,12 @@ import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import type { AuthUser, SubmissionRow } from "../types";
 import { AnnouncementsTab } from "./announcements";
-import { CourseAssignmentsTab } from "./course-assignments";
 import { OverviewTab } from "./overview";
 import { ReportsTab } from "./reports";
 import { StudentsTab } from "./students";
 
 const NAV = [
   { key: "overview", icon: "📊", label: "班级概览", sub: "总览与统计" },
-  { key: "courses", icon: "🏫", label: "课程与作业", sub: "发布 · 版本 · 选课" },
   { key: "students", icon: "👥", label: "班级与学生", sub: "建班 · 建号 · 进度" },
   { key: "reports", icon: "📝", label: "报告评阅", sub: "批改与打分" },
   { key: "announcements", icon: "📢", label: "课堂公告", sub: "发布与管理" },
@@ -20,7 +18,6 @@ type TabKey = (typeof NAV)[number]["key"];
 
 const TITLES: Record<TabKey, { title: string; sub: string }> = {
   overview: { title: "班级概览", sub: "教学数据一览:提交、评阅进度与实验进度分布" },
-  courses: { title: "课程与作业", sub: "创建 course run、冻结数据版本发布作业，并将学生加入真实学习作用域" },
   students: { title: "班级与学生", sub: "创建班级与学生账号,查看每人实验进度" },
   reports: { title: "报告评阅", sub: "批阅学生在步骤 16 提交的实验报告并打分" },
   announcements: { title: "课堂公告", sub: "向全体或指定班级发布公告,学生端实时可见" },
@@ -79,7 +76,6 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
               }}
             />
           )}
-          {tab === "courses" && <CourseAssignmentsTab />}
           {tab === "students" && (
             <StudentsTab
               key={`${studentFilter.classId ?? "all"}-${studentFilter.step ?? "all"}-${studentFilter.kind}`}

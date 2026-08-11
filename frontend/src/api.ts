@@ -1,4 +1,4 @@
-import type { Enrollment, ExperimentSession, GeneratedReport, ProgressResponse, ReportGate, SessionResponse } from "./types";
+import type { ExperimentSession, GeneratedReport, ProgressResponse, ReportGate, SessionResponse } from "./types";
 
 export const AUTH_TOKEN_KEY = "gvcsim_token";
 
@@ -285,29 +285,16 @@ export const api = {
       }>("/api/classroom/quiz/submit", body),
     announcements: () =>
       get<{ announcements: import("./types").Announcement[] }>("/api/classroom/announcements"),
-    assignmentContexts: () =>
-      get<{ assignments: import("./types").StudentAssignmentContext[] }>("/api/classroom/assignment-contexts"),
-    selectAssignmentContext: (assignmentId: number) =>
-      post<{
-        course_run_id: number;
-        assignment_id: number;
-        attempt_id: number | null;
-        assignment_historical: boolean;
-      }>("/api/classroom/assignment-context/select", { assignment_id: assignmentId }),
     progress: () => get<ProgressResponse>("/api/classroom/progress"),
     reportProgress: (step: number) => post<{ ok: boolean }>("/api/classroom/progress", { step }),
     session: () => get<SessionResponse>("/api/classroom/session"),
     saveSession: (body: {
       base_revision: number;
-      expected_assignment_id: string | number;
-      expected_attempt_id: string | number;
       session: ExperimentSession;
     }) =>
       post<SessionResponse>("/api/classroom/session", body, "PUT"),
-    clearSession: (body: {
-      expected_assignment_id: string | number;
-      expected_attempt_id: string | number;
-    }) => post<{ ok: boolean; attempt_id?: number }>("/api/classroom/session", body, "DELETE"),
+    resetWorkspace: (body: { manifest_id: string; confirmation: string }) =>
+      post<{ ok: boolean; manifest_id: string }>("/api/classroom/workspace/reset", body),
     // 只交报告指纹;服务端从它自己生成的报告里取正文,接口不接受 Markdown。
     submitReport: (body: { title: string; report_key: string }) =>
       post<{
@@ -325,32 +312,6 @@ export const api = {
         withQuery("/api/classroom/overview", { class_id: classId }),
       ),
     classes: () => get<{ classes: import("./types").ClassInfo[] }>("/api/classroom/classes"),
-    courseRuns: () => get<{ course_runs: import("./types").CourseRun[] }>("/api/classroom/course-runs"),
-    createCourseRun: (body: { name: string; code: string; term?: string; release_tag?: string }) =>
-      post<import("./types").CourseRun>("/api/classroom/course-runs", body),
-    archiveCourseRun: (id: number, archived: boolean) =>
-      post<import("./types").CourseRun>(`/api/classroom/course-runs/${id}/archive`, { archived }),
-    assignments: (courseRunId?: number | null) =>
-      get<{ assignments: import("./types").Assignment[] }>(
-        withQuery("/api/classroom/assignments", { course_run_id: courseRunId }),
-      ),
-    createAssignment: (body: {
-      course_run_id: number;
-      slug: string;
-      title: string;
-      manifest_id: string;
-      release_tag?: string;
-      opens_at?: string | null;
-      due_at?: string | null;
-    }) => post<import("./types").Assignment>("/api/classroom/assignments", body),
-    setAssignmentState: (id: number, active: boolean) =>
-      post<import("./types").Assignment>(`/api/classroom/assignments/${id}/state`, { active }),
-    enrollStudent: (body: { course_run_id: number; account_id: number; class_id?: number | null }) =>
-      post<Enrollment>("/api/classroom/enrollments", body),
-    enrollments: (courseRunId: number) =>
-      get<{ enrollments: import("./types").EnrollmentRow[] }>(
-        withQuery("/api/classroom/enrollments", { course_run_id: courseRunId }),
-      ),
     createClass: (body: { name: string; code: string; semester?: string; note?: string }) =>
       post<import("./types").ClassInfo>("/api/classroom/classes", body),
     students: (classId?: number | null) =>
@@ -366,7 +327,7 @@ export const api = {
     }) => post<import("./types").StudentRow>("/api/classroom/students", body),
     updateStudent: (
       id: number,
-      body: { display_name?: string; student_no?: string; class_id?: number; active?: boolean; password?: string },
+      body: { display_name?: string; student_no?: string; class_id?: number | null; active?: boolean; password?: string },
     ) => post<import("./types").StudentRow>(`/api/classroom/students/${id}`, body),
     submissions: () =>
       get<{ submissions: import("./types").SubmissionRow[] }>("/api/classroom/submissions"),

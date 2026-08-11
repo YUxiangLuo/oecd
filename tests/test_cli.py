@@ -34,7 +34,7 @@ def test_artifact_prune_is_dry_run_by_default(
     candidate = artifact_retention.Release("1" * 16, Path("/srv/gvcsim/data/artifacts") / ("1" * 16), 1024, 1)
     plan = artifact_retention.PrunePlan(
         current_manifest_id="2" * 16,
-        references={"3" * 16: ("assignments",)},
+        references={"3" * 16: ("reports",)},
         retained_recent=("4" * 16,),
         candidates=(candidate,),
         skipped=(),
@@ -109,7 +109,7 @@ def test_preflight_command_reports_success(monkeypatch: pytest.MonkeyPatch, caps
         lambda: {
             "manifest_id": "artifact-123",
             "years": [2019, 2020],
-            "database": {"schema_version": "gvcsim-teaching-db-v6"},
+            "database": {"schema_version": "gvcsim-teaching-db-v7"},
         },
     )
 
@@ -118,7 +118,7 @@ def test_preflight_command_reports_success(monkeypatch: pytest.MonkeyPatch, caps
     output = capsys.readouterr().out
     assert "artifact-123" in output
     assert "2019,2020" in output
-    assert "gvcsim-teaching-db-v6" in output
+    assert "gvcsim-teaching-db-v7" in output
 
 
 def test_preflight_command_exits_nonzero_on_dependency_failure(monkeypatch: pytest.MonkeyPatch) -> None:

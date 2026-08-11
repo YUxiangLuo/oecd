@@ -1,6 +1,5 @@
 import type { RefObject } from "react";
 import { AccountPasswordModal } from "./account-password";
-import { assignmentContextLabel } from "./assignment-context";
 import { LogoMark } from "./brand";
 import { TeacherDashboard } from "./teacher";
 import { ToastHost } from "./toast";
@@ -11,7 +10,6 @@ import type {
   Meta,
   Step,
   StepsResponse,
-  StudentAssignmentContext,
 } from "./types";
 
 const ROMAN = ["", "一", "二", "三", "四", "五"];
@@ -24,7 +22,7 @@ export function sessionExpiryLabel(expiresAt: number | null): string | null {
 
 export function AppBootSkeleton() {
   return (
-    <div className="layout app-boot" role="region" aria-busy="true" aria-label="正在恢复课程">
+    <div className="layout app-boot" role="region" aria-busy="true" aria-label="正在恢复实验">
       <header className="topbar">
         <LogoMark size={30} />
         <div>
@@ -72,7 +70,7 @@ export function AppBootSkeleton() {
           </div>
         </div>
       </div>
-      <span className="sr-only" role="status">正在恢复最新课程与实验记录…</span>
+      <span className="sr-only" role="status">正在恢复最新数据与实验记录…</span>
     </div>
   );
 }
@@ -131,13 +129,12 @@ interface StudentTopbarProps {
   user: AuthUser;
   meta: Meta | null;
   authExpiresAt: number | null;
-  assignmentContexts: StudentAssignmentContext[];
-  switchingAssignment: boolean;
+  resettingWorkspace: boolean;
   completion: CompletionSummary | null;
   maxStep: number;
   totalSteps: number;
   introTriggerRef: RefObject<HTMLButtonElement | null>;
-  onSwitchAssignment: (assignmentId: number) => void;
+  onResetWorkspace: () => void;
   onShowIntro: () => void;
   onRequestPasswordChange: () => void;
   onLogout: () => void;
@@ -147,13 +144,12 @@ export function StudentTopbar({
   user,
   meta,
   authExpiresAt,
-  assignmentContexts,
-  switchingAssignment,
+  resettingWorkspace,
   completion,
   maxStep,
   totalSteps,
   introTriggerRef,
-  onSwitchAssignment,
+  onResetWorkspace,
   onShowIntro,
   onRequestPasswordChange,
   onLogout,
@@ -167,23 +163,6 @@ export function StudentTopbar({
         <div className="sub">GVC SIMULATION LAB</div>
       </div>
       <div className="topbar-user">
-        {assignmentContexts.length > 0 && (
-          <label className="assignment-context-picker">
-            <span>课程作业</span>
-            <select
-              aria-label="切换课程作业"
-              value={String(meta?.assignment_id ?? "")}
-              disabled={switchingAssignment}
-              onChange={(event) => onSwitchAssignment(Number(event.target.value))}
-            >
-              {assignmentContexts.map((context) => (
-                <option key={context.assignment_id} value={context.assignment_id}>
-                  {assignmentContextLabel(context)}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
         <span className="muted">
           数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
         </span>
@@ -202,6 +181,9 @@ export function StudentTopbar({
         <span className="role-chip" title={`学生账号 · ${user.username}`}>{user.name}</span>
         {expiry && <span className="muted" title="服务端签发的 expires_at">会话至 {expiry}</span>}
         <button ref={introTriggerRef} onClick={onShowIntro}>ⓘ 系统介绍</button>
+        <button className="danger-text" disabled={resettingWorkspace} onClick={onResetWorkspace}>
+          {resettingWorkspace ? "正在清空…" : "清空当前实验"}
+        </button>
         <button onClick={onRequestPasswordChange}>修改密码</button>
         <button onClick={onLogout}>退出</button>
       </div>

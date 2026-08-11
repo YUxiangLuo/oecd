@@ -2,14 +2,14 @@
 
 设计取舍:
   - 每个 API worker 使用有界 psycopg 连接池；池满时背压，不创建连接风暴
-  - schema_meta 串行化增量迁移；v3-v5 会原地升级且保留全部课堂数据，未知版本拒绝
-  - course_run → assignment → enrollment → experiment_attempt 是所有学习记录的作用域
+  - schema_meta 串行化初始化；旧教学 schema 必须显式 reset
+  - account + manifest 是全部学习记录的唯一作用域
   - submission_versions / grading_events 追加写，保留不可变提交与评分历史
   - 数据库不可用统一抛 Unavailable；生产认证 fail-closed
   - 短期令牌在 auth_sessions 登记；登录限流状态由 PostgreSQL 跨 worker 共享
 
-本模块保留连接池、schema 闸门、认证和 assignment/attempt 作用域，并作为兼容
-facade 重新导出 ``management`` 与 ``records`` 中的领域操作。
+本模块保留连接池、schema 闸门和认证，并重新导出 ``management`` 与
+``records`` 中的领域操作。
 """
 
 import atexit
@@ -59,16 +59,8 @@ class SchemaVersionMismatch(RuntimeError):
     """教学库来自未知/不受支持版本，不能安全自动迁移。"""
 
 
-class AssignmentScopeMismatch(RuntimeError):
-    """客户端 manifest 不属于当前作业发布。"""
-
-
-class AssignmentClosed(RuntimeError):
-    """作业已到截止时间，学生端只能读取既有记录。"""
-
-
-class LegacySessionReadOnly(RuntimeError):
-    """旧 session 仅供查看，必须显式重置后才能写入新契约。"""
+class WorkspaceScopeMismatch(RuntimeError):
+    """客户端 manifest 不属于服务器当前学生工作区。"""
 
 
 class SessionRevisionConflict(RuntimeError):
@@ -99,7 +91,7 @@ _pool_lock = threading.RLock()
 
 
 def initialize_schema() -> list[str]:
-    """建表/安全迁移并播种；从 v3-v5 升级不需要 reset。"""
+    """创建 v7 schema 并播种；任何旧 schema 都要求显式 reset。"""
     global _schema_ready
     if _startup_sealed:
         raise RuntimeError("服务已完成启动，禁止在请求生命周期内重新初始化 schema")
@@ -115,22 +107,10 @@ def initialize_schema() -> list[str]:
             schema.lock_schema(c)
             version = schema.existing_version(c)
             fresh = version is None
-            if version == "gvcsim-teaching-db-v3":
-                schema.migrate_v3_to_v4(c)
-                applied.append("安全迁移 v3 → v4（保留课堂、会话、报告、提交与评分）")
-                version = "gvcsim-teaching-db-v4"
-            if version == "gvcsim-teaching-db-v4":
-                schema.migrate_v4_to_v5(c)
-                applied.append("安全迁移 v4 → v5（增加学生显式作业选择）")
-                version = "gvcsim-teaching-db-v5"
-            if version == "gvcsim-teaching-db-v5":
-                schema.migrate_v5_to_v6(c)
-                applied.append("安全迁移 v5 → v6（增加跨 worker 登录限流）")
-                version = TEACHING_DB_VERSION
-            elif version not in {None, TEACHING_DB_VERSION}:
+            if version not in {None, TEACHING_DB_VERSION}:
                 raise SchemaVersionMismatch(
                     f"教学库 schema 版本为 {version}，当前代码需要 {TEACHING_DB_VERSION}；"
-                    "没有已验证的自动迁移路径，请先备份并按部署文档处理，禁止直接 reset 生产数据"
+                    "旧教学模型不再兼容，请先备份并显式运行 `gvcsim classroom-init --reset`"
                 )
             if version is None:
                 c.execute(schema.SCHEMA_SQL)
@@ -138,21 +118,9 @@ def initialize_schema() -> list[str]:
                     "INSERT INTO schema_meta(singleton, version) VALUES (true, %s) ON CONFLICT (singleton) DO NOTHING",
                     (TEACHING_DB_VERSION,),
                 )
-            # v4 开发期新增的非破坏性列仍保持幂等，旧测试库无需 reset。
-            c.execute(
-                "ALTER TABLE attempt_sessions ADD COLUMN IF NOT EXISTS legacy_unverified boolean NOT NULL DEFAULT false"
-            )
-            c.execute("ALTER TABLE reports ALTER COLUMN attempt_id SET NOT NULL")
-            c.execute("ALTER TABLE reports ALTER COLUMN assignment_id SET NOT NULL")
-            c.execute("ALTER TABLE reports DROP CONSTRAINT IF EXISTS reports_account_id_report_key_key")
-            c.execute("CREATE UNIQUE INDEX IF NOT EXISTS reports_attempt_report_key ON reports(attempt_id,report_key)")
             if fresh:
                 applied.append(f"创建 schema {TEACHING_DB_VERSION}")
-            # 只有**本次调用确实创建了显式 demo 账号**时才需要为它们补默认
-            # course/assignment。v3 的历史回填已在 _migrate_v3_to_v4 的同一事务
-            # 内完成；普通已版本化 schema 重启绝不能再次把所有教师/班级/学生汇入 legacy run。
-            if _seed_if_empty(c):
-                schema.ensure_legacy_context(c)
+            _seed_if_empty(c)
     except SchemaVersionMismatch:
         c.close()
         raise
@@ -584,7 +552,7 @@ def record_audit_event(
 
 
 def provision_teacher(username: str, display_name: str, password: str) -> dict[str, Any]:
-    """显式初始化教师；不使用仓库默认口令，并创建其独立默认课程。"""
+    """显式初始化教师；不使用仓库默认口令。"""
     _validate_managed_password(password)
     salt = secrets.token_hex(16)
     with conn() as c:
@@ -595,17 +563,6 @@ def provision_teacher(username: str, display_name: str, password: str) -> dict[s
                 (username, display_name, salt, hash_password(password, salt)),
             ).fetchone(),
             "provision teacher",
-        )
-        run = _required(
-            c.execute(
-                "INSERT INTO course_runs(name,code,release_tag) VALUES (%s,%s,'initial') RETURNING id",
-                (f"{display_name}的 GVC 实验课程", f"GVC-DEFAULT-{row['id']}"),
-            ).fetchone(),
-            "provision teacher-owned default course",
-        )
-        c.execute(
-            "INSERT INTO teacher_course_access(teacher_account_id,course_run_id) VALUES (%s,%s) ON CONFLICT DO NOTHING",
-            (row["id"], run["id"]),
         )
     return row
 
@@ -648,46 +605,24 @@ def change_own_password(username: str, current_password: str, new_password: str)
     return True
 
 
-# Domain repositories live in focused modules; these imports preserve the
-# historical ``gvcsim.classroom.db`` API used by routes, CLI code, and extensions.
-from gvcsim.classroom.attempts import (  # noqa: E402
-    _attempt_scope as _attempt_scope,
-    _evidence_event_exists_in_conn as _evidence_event_exists_in_conn,
-    _require_assignment_writable as _require_assignment_writable,
-    assignment_context as assignment_context,
-    evidence_event_exists as evidence_event_exists,
-    list_student_assignment_contexts as list_student_assignment_contexts,
-    record_evidence_event as record_evidence_event,
-    select_student_assignment as select_student_assignment,
-)
-
 from gvcsim.classroom.management import (  # noqa: E402
     _STUDENT_COLS as _STUDENT_COLS,
     _learning_status_in_conn as _learning_status_in_conn,
-    _teacher_course_ids as _teacher_course_ids,
-    create_assignment as create_assignment,
     create_class as create_class,
-    create_course_run as create_course_run,
     create_student as create_student,
-    enroll_student as enroll_student,
-    list_assignments as list_assignments,
     list_classes as list_classes,
-    list_course_runs as list_course_runs,
-    list_enrollments as list_enrollments,
     list_students as list_students,
     overview_stats as overview_stats,
-    set_assignment_active as set_assignment_active,
-    set_course_run_archived as set_course_run_archived,
-    start_new_attempt as start_new_attempt,
     teacher_can_access_class as teacher_can_access_class,
     update_student as update_student,
 )
 
 from gvcsim.classroom.records import (  # noqa: E402
+    _evidence_event_exists_in_conn as _evidence_event_exists_in_conn,
     _report_by_key_in_conn as _report_by_key_in_conn,
-    clear_session as clear_session,
     create_announcement as create_announcement,
     delete_announcement as delete_announcement,
+    evidence_event_exists as evidence_event_exists,
     get_progress as get_progress,
     get_session as get_session,
     get_submission as get_submission,
@@ -696,8 +631,9 @@ from gvcsim.classroom.records import (  # noqa: E402
     list_announcements as list_announcements,
     list_submissions as list_submissions,
     my_submission as my_submission,
+    record_evidence_event as record_evidence_event,
     report_by_key as report_by_key,
-    reset_active_attempts_for_quiz as reset_active_attempts_for_quiz,
+    reset_workspace as reset_workspace,
     save_generated_report_and_session as save_generated_report_and_session,
     save_session as save_session,
     submission_history as submission_history,

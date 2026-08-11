@@ -3,7 +3,7 @@
 会话仍是便于恢复 UI 的 JSON，但答题完成与报告中的回归只认可本模块签名的
 收据。收据绑定账号、步骤、manifest 与规范化 payload 摘要；客户端改动答题
 或回归设定后，旧收据立即失效。每次签发前先写入 append-only 事件；HMAC
-收据只是该事件的便携引用，验证时还会检查当前账号/assignment/attempt 下的
+收据只是该事件的便携引用，验证时还会检查当前账号与 manifest 下的
 真实事件。
 """
 
@@ -17,7 +17,7 @@ from typing import Any
 
 from gvcsim import auth
 
-TOKEN_VERSION = "trusted-receipt-v2"
+TOKEN_VERSION = "trusted-receipt-v3"
 
 
 def _event_time(event: dict[str, Any]) -> str:
@@ -75,8 +75,6 @@ def issue_quiz_completion(
             "payload_sha256": digest(payload),
             "event_id": str(event["event_id"]),
             "account_id": int(event["account_id"]),
-            "assignment_id": int(event["assignment_id"]),
-            "attempt_id": int(event["attempt_id"]),
             "issued_at": _event_time(event),
         }
     )
@@ -109,8 +107,6 @@ def verify_quiz_completion(
         return db.evidence_event_exists(
             subject,
             str(claims["event_id"]),
-            int(claims["assignment_id"]),
-            int(claims["attempt_id"]),
             str(claims["payload_sha256"]),
             account_id=int(claims["account_id"]),
             step=step,
@@ -143,8 +139,6 @@ def issue_regression_run(
             "payload_sha256": payload_sha256,
             "event_id": str(event["event_id"]),
             "account_id": int(event["account_id"]),
-            "assignment_id": int(event["assignment_id"]),
-            "attempt_id": int(event["attempt_id"]),
             "issued_at": _event_time(event),
         }
     )
@@ -194,8 +188,6 @@ def verify_regression_run(
         exists = db.evidence_event_exists(
             subject,
             str(claims["event_id"]),
-            int(claims["assignment_id"]),
-            int(claims["attempt_id"]),
             str(claims["payload_sha256"]),
             account_id=int(claims["account_id"]),
             step=step,
