@@ -654,8 +654,10 @@ from gvcsim.classroom.attempts import (  # noqa: E402
     _attempt_scope as _attempt_scope,
     _evidence_event_exists_in_conn as _evidence_event_exists_in_conn,
     _require_assignment_writable as _require_assignment_writable,
+    _valid_evidence_event_ids_in_conn as _valid_evidence_event_ids_in_conn,
     assignment_context as assignment_context,
     evidence_event_exists as evidence_event_exists,
+    valid_evidence_event_ids as valid_evidence_event_ids,
     list_student_assignment_contexts as list_student_assignment_contexts,
     record_evidence_event as record_evidence_event,
     select_student_assignment as select_student_assignment,
@@ -684,6 +686,7 @@ from gvcsim.classroom.management import (  # noqa: E402
 )
 
 from gvcsim.classroom.records import (  # noqa: E402
+    _get_session_in_conn as _get_session_in_conn,
     _report_by_key_in_conn as _report_by_key_in_conn,
     clear_session as clear_session,
     create_announcement as create_announcement,

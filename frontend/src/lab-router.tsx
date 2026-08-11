@@ -75,6 +75,7 @@ export function LabRouter({
         sessionSyncError={sessionSyncError}
         onFlushSession={onFlushSession}
         onNavigateStep={onNavigateStep}
+        onReloadSession={onSessionChanged}
         onGenerated={onSessionChanged}
       />
     );

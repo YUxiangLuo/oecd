@@ -308,6 +308,131 @@ def _evidence_event_exists_in_conn(
     )
 
 
+def _valid_evidence_event_ids_in_conn(
+    c: psycopg.Connection[dict[str, Any]],
+    username: str,
+    checks: list[dict[str, Any]],
+    *,
+    manifest_id: str,
+    scope: dict[str, Any] | None = None,
+) -> set[str]:
+    """一次确认当前 attempt 下的一组可信收据事件。
+
+    完成度最多需要核对 15 道题。逐题调用 ``evidence_event_exists`` 会逐题
+    重新解析 assignment/attempt，并在真实课堂库上放大成数秒延迟。这里先解析
+    一次当前作用域，再按事件主键批量读取；每一行仍逐字段核对账号、作业、
+    attempt、步骤、类型、manifest 和 payload 摘要，不放宽防重放边界。
+    """
+    if not checks:
+        return set()
+    current = scope or _attempt_scope(c, username, manifest_id, create=False)
+    if (
+        not current
+        or current.get("attempt_id") is None
+        or (current.get("assignment_manifest_id") and current.get("assignment_manifest_id") != manifest_id)
+    ):
+        return set()
+
+    expected: dict[str, dict[str, Any]] = {}
+    conflicts: set[str] = set()
+    for raw in checks:
+        try:
+            event_uuid = uuid.UUID(str(raw["event_id"]))
+            check: dict[str, Any] = {
+                "event_id": str(event_uuid),
+                "account_id": int(raw["account_id"]),
+                "assignment_id": int(raw["assignment_id"]),
+                "attempt_id": int(raw["attempt_id"]),
+                "payload_sha256": str(raw["payload_sha256"]),
+                "step": int(raw["step"]),
+                "kind": str(raw["kind"]),
+                "manifest_id": str(raw["manifest_id"]),
+            }
+        except (KeyError, TypeError, ValueError, AttributeError):
+            continue
+        if (
+            check["account_id"] != current.get("account_id")
+            or check["assignment_id"] != current.get("assignment_id")
+            or check["attempt_id"] != current.get("attempt_id")
+            or check["manifest_id"] != manifest_id
+        ):
+            continue
+        event_id = str(check["event_id"])
+        if event_id in conflicts:
+            continue
+        previous = expected.get(event_id)
+        if previous is not None and previous != check:
+            expected.pop(event_id, None)
+            conflicts.add(event_id)
+            continue
+        expected[event_id] = check
+    if not expected:
+        return set()
+
+    rows = c.execute(
+        "SELECT ev.id::text AS event_id,ev.account_id,ev.assignment_id,ev.attempt_id,"
+        " ev.step,ev.kind,ev.manifest_id,ev.payload_hash"
+        " FROM learning_evidence_events ev JOIN accounts a ON a.id=ev.account_id"
+        " JOIN experiment_attempts at ON at.id=ev.attempt_id"
+        " WHERE ev.id=ANY(%s) AND a.username=%s AND ev.account_id=%s"
+        " AND ev.assignment_id=%s AND ev.attempt_id=%s"
+        " AND EXISTS (SELECT 1 FROM student_assignment_selections sel"
+        "   WHERE sel.account_id=ev.account_id AND sel.assignment_id=ev.assignment_id)"
+        " AND ev.revoked_at IS NULL AND at.state='active'",
+        (
+            [uuid.UUID(event_id) for event_id in expected],
+            username,
+            current["account_id"],
+            current["assignment_id"],
+            current["attempt_id"],
+        ),
+    ).fetchall()
+    valid: set[str] = set()
+    for row in rows:
+        event_id = str(row["event_id"])
+        expected_check = expected.get(event_id)
+        if expected_check and all(
+            (
+                row["account_id"] == expected_check["account_id"],
+                row["assignment_id"] == expected_check["assignment_id"],
+                row["attempt_id"] == expected_check["attempt_id"],
+                row["step"] == expected_check["step"],
+                row["kind"] == expected_check["kind"],
+                row["manifest_id"] == expected_check["manifest_id"],
+                row["payload_hash"] == expected_check["payload_sha256"],
+            )
+        ):
+            valid.add(event_id)
+    return valid
+
+
+def valid_evidence_event_ids(
+    username: str,
+    checks: list[dict[str, Any]],
+    *,
+    manifest_id: str,
+    scope: dict[str, Any] | None = None,
+    connection: psycopg.Connection[dict[str, Any]] | None = None,
+) -> set[str]:
+    """批量确认事件；可复用调用方同一事务中解析出的可信 scope。"""
+    if connection is not None:
+        return _valid_evidence_event_ids_in_conn(
+            connection,
+            username,
+            checks,
+            manifest_id=manifest_id,
+            scope=scope,
+        )
+    with database.conn() as c:
+        return _valid_evidence_event_ids_in_conn(
+            c,
+            username,
+            checks,
+            manifest_id=manifest_id,
+            scope=scope,
+        )
+
+
 def evidence_event_exists(
     username: str,
     event_id: str,

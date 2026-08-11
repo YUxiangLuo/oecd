@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -18,6 +19,7 @@ import pandas as pd
 
 from gvcsim import artifacts, evidence, quizzes, trusted_evidence
 from gvcsim.data.citations import report_source_disclosures, report_source_label
+from gvcsim.indicator_schema import INDICATOR_SCHEMA
 from gvcsim.regression.design import (
     CONTROL_MODES,
     GRANULARITIES,
@@ -126,15 +128,29 @@ class TeachingReport:
 
 
 def check_gate(
-    session: dict[str, Any], *, subject: str | None = None, require_trusted: bool = False
+    session: dict[str, Any],
+    *,
+    subject: str | None = None,
+    require_trusted: bool = False,
+    connection: Any | None = None,
+    trusted_scope: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
-    """返回尚未答题通过的步骤；空列表表示可以生成报告。"""
-    blocked = []
-    for step in GATE_STEPS:
-        item = evidence.evaluate_step(step, session, subject=subject, require_trusted=require_trusted)
-        if not item.complete:
-            blocked.append({"step": step, "title": _STEP_TITLES.get(step, ""), "missing": item.missing})
-    return blocked
+    """返回尚未答题通过的步骤；可信收据在整份会话上一次批量确认。"""
+    items = {
+        item.step: item
+        for item in evidence.evaluate(
+            session,
+            subject=subject,
+            require_trusted=require_trusted,
+            connection=connection,
+            trusted_scope=trusted_scope,
+        )
+    }
+    return [
+        {"step": step, "title": _STEP_TITLES.get(step, ""), "missing": items[step].missing}
+        for step in GATE_STEPS
+        if not items[step].complete
+    ]
 
 
 def _step_data(session: dict[str, Any], step: int) -> dict[str, Any]:
@@ -148,10 +164,33 @@ def _as_dict(value: Any) -> dict[str, Any]:
 
 
 def _display_entity_code(value: Any) -> str:
-    """把稳定机器键整理成可读代码，同时保留复核所需的原值。"""
-    text = str(value or "—")
+    """把稳定机器键整理成可读代码，不拆开行业代码自身的下划线。"""
+    text = str(value or "—").strip()
+    if "·" in text:
+        country, industry = text.split("·", 1)
+        return f"{country.strip()} · {industry.strip()}" if country.strip() and industry.strip() else text
     country, separator, industry = text.partition("_")
     return f"{country} · {industry}" if separator and country and industry else text
+
+
+def _format_observation_value(value: Any, metric: str) -> str:
+    """与学生指标表使用相同的百分比、金额和无量纲数值精度。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return str(value if value is not None else "—")
+    if not math.isfinite(value):
+        return "—"
+    fields = cast(dict[str, dict[str, str]], INDICATOR_SCHEMA["fields"])
+    format_kind = fields.get(metric, {}).get("format")
+    numeric = float(value)
+    if format_kind == "pct":
+        rendered = f"{numeric * 100:.2f}%"
+    elif format_kind == "amount":
+        rendered = f"{numeric:,.2f}".rstrip("0").rstrip(".")
+    elif abs(numeric) >= 100:
+        rendered = f"{numeric:,.0f}"
+    else:
+        rendered = f"{numeric:.3f}"
+    return rendered[1:] if rendered.startswith("-0") and float(rendered.rstrip("%").replace(",", "")) == 0 else rendered
 
 
 def _student_qc_text(value: Any) -> str:
@@ -178,6 +217,9 @@ def _student_qc_text(value: Any) -> str:
         .replace("国家/行业", "经济体/行业")
         .replace("国家级", "经济体层")
         .replace("每个国家", "每个经济体")
+        .replace("国家复杂", "经济体复杂")
+        .replace("该国", "该经济体")
+        .replace("国家筛选", "经济体筛选")
         .replace("treated 标记", "处理组标记")
         .replace("控制变量 schema", "控制变量字段结构")
         .replace("treated", "处理组")
@@ -367,8 +409,9 @@ def _quiz_lines(step: int, data: dict[str, Any]) -> list[str]:
             "",
         ]
     for index, item in enumerate(selected, start=1):
-        question = str(item["question"]).replace("fatal", "严重错误（Fatal）")
-        lines += [f"{index}. {question}", f"   - 答案：{item['answer']}"]
+        question = _student_qc_text(str(item["question"]).replace("fatal", "严重错误（Fatal）"))
+        answer = _student_qc_text(item["answer"])
+        lines += [f"{index}. {question}", f"   - 答案：{answer}"]
     lines.append("")
     return lines
 
@@ -437,6 +480,7 @@ def _snapshot_lines(data: dict[str, Any]) -> list[str]:
         lines.append(f"- 下钻经济体代码：{inline(data['drill'])}")
     if isinstance(data.get("observations"), list):
         rendered = []
+        metric = str(data.get("metric") or "")
         for item in data["observations"][:8]:
             if not isinstance(item, dict):
                 continue
@@ -445,7 +489,7 @@ def _snapshot_lines(data: dict[str, Any]) -> list[str]:
             ).strip("_")
             rendered.append(
                 f"{inline(_display_entity_code(entity))}（{inline(item.get('year', '—'))} 年）"
-                f" = {inline(item.get('value', '—'))}"
+                f" = {inline(_format_observation_value(item.get('value'), metric))}"
             )
         if rendered:
             lines.append("- 自动保存的观察值：" + "；".join(rendered))

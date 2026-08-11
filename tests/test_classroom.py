@@ -954,10 +954,31 @@ def test_evidence_event_cannot_cross_attempt_boundary():
     assert db.evidence_event_exists(
         "student", event["event_id"], context["assignment_id"], context["attempt_id"], "a" * 64
     )
+    check = {
+        "event_id": event["event_id"],
+        "account_id": event["account_id"],
+        "assignment_id": context["assignment_id"],
+        "attempt_id": context["attempt_id"],
+        "payload_sha256": "a" * 64,
+        "step": 1,
+        "kind": "quiz",
+        "manifest_id": manifest,
+    }
+    assert db.valid_evidence_event_ids("student", [check], manifest_id=manifest) == {event["event_id"]}
+    assert (
+        db.valid_evidence_event_ids(
+            "student",
+            [{**check, "payload_sha256": "b" * 64}],
+            manifest_id=manifest,
+        )
+        == set()
+    )
+
     db.start_new_attempt("student", manifest)
     assert not db.evidence_event_exists(
         "student", event["event_id"], context["assignment_id"], context["attempt_id"], "a" * 64
     )
+    assert db.valid_evidence_event_ids("student", [check], manifest_id=manifest) == set()
 
 
 @needs_artifacts
@@ -1111,6 +1132,14 @@ def test_quiz_and_regression_receipts_cannot_cross_new_assignment_with_same_mani
         step=12,
     )
     assert not evidence.evaluate_step(12, old_session, subject="student", require_trusted=True).complete
+    assert (
+        12
+        not in evidence.completion_summary(
+            old_session,
+            subject="student",
+            require_trusted=True,
+        )["completed"]
+    )
 
 
 def test_password_reset_revokes_existing_access_token():
@@ -1448,6 +1477,48 @@ def _put_complete_session(headers: dict) -> None:
 
     resp = client.put("/api/classroom/session", headers=headers, json=_session_request(_session_body(steps, mid)))
     assert resp.status_code == 200, resp.text
+
+
+@needs_artifacts
+def test_full_session_endpoints_use_one_evidence_batch_each(monkeypatch):
+    student, teacher = _login("student"), _login("teacher")
+    _put_complete_session(student)
+    original = db.valid_evidence_event_ids
+    calls: list[int] = []
+
+    def counted(username, checks, **kwargs):
+        calls.append(len(checks))
+        return original(username, checks, **kwargs)
+
+    monkeypatch.setattr(db, "valid_evidence_event_ids", counted)
+    for path, headers in (
+        ("/api/classroom/session", student),
+        ("/api/classroom/report/gate", student),
+        ("/api/classroom/students", teacher),
+        ("/api/classroom/overview", teacher),
+    ):
+        calls.clear()
+        response = client.get(path, headers=headers)
+        assert response.status_code == 200, response.text
+        assert calls == [15], f"{path} 没有把 15 步可信事件收敛成一次批量查询: {calls}"
+
+
+@needs_artifacts
+def test_session_get_keeps_a_previous_manifest_readable_and_trusted(monkeypatch):
+    student = _login("student")
+    _put_complete_session(student)
+    previous_manifest = artifacts.manifest_id()
+    monkeypatch.setattr(artifacts, "manifest_id", lambda: "new-server-manifest")
+
+    response = client.get("/api/classroom/session", headers=student)
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["manifest_id"] == previous_manifest
+    assert payload["session"]["manifest_id"] == previous_manifest
+    assert payload["manifest_mismatch"] is True
+    assert payload["stale"] is True and payload["read_only"] is True
+    assert payload["completion"]["completed"] == list(range(1, 16))
 
 
 @needs_artifacts

@@ -70,6 +70,7 @@ def evaluate_step(
     subject: str | None = None,
     require_trusted: bool = False,
     connection: Any | None = None,
+    _trusted_quiz_steps: set[int] | None = None,
 ) -> StepCompletion:
     """判定单步是否完成；实验操作字段一律不参与。"""
     lab = STEP_LABS.get(step)
@@ -107,15 +108,18 @@ def evaluate_step(
         if not subject:
             missing.append("服务端无法确认这次答题属于当前学生")
         else:
-            connection_arg = {"connection": connection} if connection is not None else {}
-            if not trusted_evidence.verify_quiz_completion(
-                data.get("quiz_id"),
-                subject=subject,
-                step=step,
-                manifest_id=str(session.get("manifest_id") or ""),
-                payload=quiz_payload,
-                **connection_arg,
-            ):
+            trusted = step in _trusted_quiz_steps if _trusted_quiz_steps is not None else None
+            if trusted is None:
+                connection_arg = {"connection": connection} if connection is not None else {}
+                trusted = trusted_evidence.verify_quiz_completion(
+                    data.get("quiz_id"),
+                    subject=subject,
+                    step=step,
+                    manifest_id=str(session.get("manifest_id") or ""),
+                    payload=quiz_payload,
+                    **connection_arg,
+                )
+            if not trusted:
                 missing.append("理解检查答案已变化或完成凭证无效，请重新提交")
     return StepCompletion(step=step, complete=not missing, missing=missing)
 
@@ -126,7 +130,26 @@ def evaluate(
     subject: str | None = None,
     require_trusted: bool = False,
     connection: Any | None = None,
+    trusted_scope: dict[str, Any] | None = None,
 ) -> list[StepCompletion]:
+    trusted_quiz_steps: set[int] | None = None
+    if require_trusted and subject:
+        receipts: dict[int, tuple[Any, dict[str, Any]]] = {}
+        for step, lab in STEP_LABS.items():
+            if lab == "rep":
+                continue
+            record = session.get("steps", {}).get(str(step))
+            raw_data = record.get("data") if isinstance(record, dict) else None
+            data = raw_data if isinstance(raw_data, dict) else {}
+            if not _quiz_missing(step, data):
+                receipts[step] = (data.get("quiz_id"), _as_dict(data.get("quiz")))
+        trusted_quiz_steps = trusted_evidence.verify_quiz_completions(
+            receipts,
+            subject=subject,
+            manifest_id=str(session.get("manifest_id") or ""),
+            connection=connection,
+            scope=trusted_scope,
+        )
     return [
         evaluate_step(
             n,
@@ -134,6 +157,7 @@ def evaluate(
             subject=subject,
             require_trusted=require_trusted,
             connection=connection,
+            _trusted_quiz_steps=trusted_quiz_steps,
         )
         for n in sorted(STEP_LABS)
     ]
@@ -145,12 +169,14 @@ def completion_summary(
     subject: str | None = None,
     require_trusted: bool = False,
     connection: Any | None = None,
+    trusted_scope: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     items = evaluate(
         session,
         subject=subject,
         require_trusted=require_trusted,
         connection=connection,
+        trusted_scope=trusted_scope,
     )
     return {
         "steps": [item.to_dict() for item in items],

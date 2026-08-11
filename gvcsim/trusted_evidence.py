@@ -82,6 +82,29 @@ def issue_quiz_completion(
     )
 
 
+def _verified_quiz_claims(
+    token: Any,
+    *,
+    subject: str,
+    step: int,
+    manifest_id: str,
+    payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    """先在内存中核对签名和教学语义；数据库事件边界由调用方随后确认。"""
+    claims = verify_claims(token)
+    if not claims or any(
+        (
+            claims.get("type") != "quiz",
+            claims.get("sub") != subject,
+            claims.get("step") != step,
+            claims.get("manifest_id") != manifest_id,
+            claims.get("payload_sha256") != digest(payload),
+        )
+    ):
+        return None
+    return claims
+
+
 def verify_quiz_completion(
     token: Any,
     *,
@@ -91,16 +114,14 @@ def verify_quiz_completion(
     payload: dict[str, Any],
     connection: Any | None = None,
 ) -> bool:
-    claims = verify_claims(token)
-    valid = bool(
-        claims
-        and claims.get("type") == "quiz"
-        and claims.get("sub") == subject
-        and claims.get("step") == step
-        and claims.get("manifest_id") == manifest_id
-        and claims.get("payload_sha256") == digest(payload)
+    claims = _verified_quiz_claims(
+        token,
+        subject=subject,
+        step=step,
+        manifest_id=manifest_id,
+        payload=payload,
     )
-    if claims is None or not valid:
+    if claims is None:
         return False
     try:
         from gvcsim.classroom import db
@@ -120,6 +141,63 @@ def verify_quiz_completion(
         )
     except (KeyError, TypeError, ValueError):
         return False
+
+
+def verify_quiz_completions(
+    receipts: dict[int, tuple[Any, dict[str, Any]]],
+    *,
+    subject: str,
+    manifest_id: str,
+    connection: Any | None = None,
+    scope: dict[str, Any] | None = None,
+) -> set[int]:
+    """批量核对一份会话里的答题收据，避免逐步重复解析课堂作用域。"""
+    checks: list[dict[str, Any]] = []
+    event_steps: dict[str, int] = {}
+    for step, (token, payload) in receipts.items():
+        claims = _verified_quiz_claims(
+            token,
+            subject=subject,
+            step=step,
+            manifest_id=manifest_id,
+            payload=payload,
+        )
+        if claims is None:
+            continue
+        try:
+            event_id = str(claims["event_id"])
+            checks.append(
+                {
+                    "event_id": event_id,
+                    "account_id": int(claims["account_id"]),
+                    "assignment_id": int(claims["assignment_id"]),
+                    "attempt_id": int(claims["attempt_id"]),
+                    "payload_sha256": str(claims["payload_sha256"]),
+                    "step": step,
+                    "kind": "quiz",
+                    "manifest_id": manifest_id,
+                }
+            )
+            event_steps[event_id] = step
+        except (KeyError, TypeError, ValueError):
+            continue
+    if not checks:
+        return set()
+
+    from gvcsim.classroom import db
+
+    kwargs: dict[str, Any] = {}
+    if connection is not None:
+        kwargs["connection"] = connection
+    if scope is not None:
+        kwargs["scope"] = scope
+    valid_ids = db.valid_evidence_event_ids(
+        subject,
+        checks,
+        manifest_id=manifest_id,
+        **kwargs,
+    )
+    return {event_steps[event_id] for event_id in valid_ids if event_id in event_steps}
 
 
 def issue_regression_run(

@@ -5,7 +5,7 @@ import { showToast } from "../../toast";
 import type { GeneratedReport, MySubmission, ReportGateItem } from "../../types";
 import type { SessionStatus } from "../../use-session";
 import { useAsync } from "../shared";
-import { studentFacingTechnicalTerms } from "../../user-facing-error";
+import { studentFacingTechnicalTerms, userFacingRequestError } from "../../user-facing-error";
 
 const fmtTime = (s: string | null | undefined) => (s ? s.slice(0, 16).replace("T", " ") : "—");
 
@@ -180,6 +180,7 @@ export function ReportLab({
   sessionSyncError,
   onFlushSession,
   onNavigateStep,
+  onReloadSession,
   onGenerated,
 }: {
   completionKey: string;
@@ -189,11 +190,15 @@ export function ReportLab({
   sessionSyncError: string | null;
   onFlushSession: () => Promise<void>;
   onNavigateStep: (step: number) => void;
+  /** 初次恢复失败时显式重取，不能让一次超时把生成按钮永久锁死。 */
+  onReloadSession: () => void;
   /** 报告生成后服务端会写入第 16 步完成记录，通知外层重取完成度。 */
   onGenerated: () => void;
 }) {
   const [report, setReport] = useState<GeneratedReport | null>(null);
   const [blocked, setBlocked] = useState<ReportGateItem[] | null>(null);
+  const [gateError, setGateError] = useState<string | null>(null);
+  const [gateRefresh, setGateRefresh] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rendererReady, setRendererReady] = useState(false);
@@ -224,14 +229,18 @@ export function ReportLab({
 
   useEffect(() => {
     setBlocked(null);
+    setGateError(null);
     if (sessionStatus !== "ready") return;
     let live = true;
     api.classroom.reportGate().then((gate) => {
       if (!live) return;
       setBlocked(gate.blocked);
-    }, () => {});
+    }, (cause: unknown) => {
+      if (!live) return;
+      setGateError(userFacingRequestError(cause, "无法确认报告生成条件"));
+    });
     return () => { live = false; };
-  }, [completionKey, sessionStatus]);
+  }, [completionKey, sessionStatus, gateRefresh]);
 
   // 进入报告页就冲刷防抖队列；同步成功前按钮保持锁定。失败由全局提示和
   // 下方重试入口共同呈现，不自动死循环重试。
@@ -276,11 +285,25 @@ export function ReportLab({
     <div className="report-lab">
       {blocked != null && blocked.length > 0 && <GateCard blocked={blocked} onNavigateStep={onNavigateStep} />}
 
+      {gateError && (
+        <div className="error-box async-error" role="alert">
+          <span>{gateError}</span>
+          <button type="button" className="secondary" onClick={() => setGateRefresh((value) => value + 1)}>
+            重新确认生成条件
+          </button>
+        </div>
+      )}
+
       {sessionStatus !== "ready" && (
-        <div className={sessionStatus === "unavailable" ? "error-box" : "muted"} role="status">
-          {sessionStatus === "loading"
-            ? "正在恢复最新实验记录，恢复完成后才能生成报告…"
-            : "当前无法连接教学服务，不能确认最新实验记录或生成报告。"}
+        <div className={sessionStatus === "unavailable" ? "error-box async-error" : "muted"} role="status">
+          <span>
+            {sessionStatus === "loading"
+              ? "正在恢复最新实验记录，恢复完成后才能生成报告…"
+              : "最新实验记录尚未通过服务器确认，可能是请求超时或网络中断；本地记录仍保留。"}
+          </span>
+          {sessionStatus === "unavailable" && (
+            <button type="button" className="secondary" onClick={onReloadSession}>重新恢复实验记录</button>
+          )}
         </div>
       )}
 
@@ -307,7 +330,7 @@ export function ReportLab({
           {sessionStatus === "loading"
             ? "正在恢复实验记录…"
             : sessionStatus === "unavailable"
-              ? "教学服务不可用"
+              ? "等待重新确认实验记录"
               : sessionUnsynced
             ? "等待最新记录保存…"
             : generating ? "服务端生成中…" : report ? "重新生成报告" : "生成实验报告"}
