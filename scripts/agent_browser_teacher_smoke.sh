@@ -81,13 +81,12 @@ if [[ -n "$artifact_dir" ]]; then
   "${ab[@]}" screenshot "$artifact_dir/teacher-password-dialog.png"
 fi
 "${ab[@]}" find role button click --name '修改并重新登录' --exact
-"${ab[@]}" wait --text '密码已修改，所有旧会话均已撤销。请使用新密码重新登录。'
+"${ab[@]}" wait --text '密码已修改。请使用新密码重新登录。'
 if [[ -n "$artifact_dir" ]]; then
   "${ab[@]}" screenshot "$artifact_dir/teacher-password-changed.png"
 fi
 
-# The old credential must fail. Its expected 401 (and the revoked-token logout request)
-# are cleared before the final unexpected-request gate.
+# The old credential must fail. Clear its expected 401 before the final request gate.
 "${ab[@]}" fill '#login-user' "$GVCSIM_E2E_USERNAME"
 "${ab[@]}" fill '#login-pass' "$GVCSIM_E2E_PASSWORD"
 "${ab[@]}" click 'button[type="submit"]'

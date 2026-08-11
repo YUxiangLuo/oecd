@@ -3,11 +3,10 @@
 download  下载 OECD ICIO 原始数据(步骤1)
 validate  对某年数据做质检并打印结果(步骤2)
 compute   预计算质检、指标、可视化/冲击数据与回归面板(步骤2–11 + 面板)
-artifact-prune  预览或清理未被课堂记录引用的旧产物版本
 regress   跑指定 outcome 的教学实证回归并打印系数表
 report    生成实验报告(步骤16)
 serve     启动 API 服务(供前端使用)
-preflight 生产多 worker 启动前验证应用、产物、运行目录与数据库
+preflight 启动前验证应用、固定产物与数据库
 classroom-init  初始化教学数据库(建库/建表/播种演示数据)
 """
 
@@ -30,12 +29,8 @@ def main() -> None:
     p.add_argument(
         "--allow-qc-override",
         action="store_true",
-        help="仅用于有审计记录的教学演示:允许 fatal QC 后继续，并把 override 永久写入 manifest/报告",
+        help="明确允许 fatal QC 后继续计算（仅用于教学演示）",
     )
-
-    p = sub.add_parser("artifact-prune", help="安全清理未被课堂记录引用的旧产物（默认仅预览）")
-    p.add_argument("--keep-latest", type=int, default=3, help="除当前版本外，至少保留最新 N 个回滚版本（默认 3）")
-    p.add_argument("--apply", action="store_true", help="实际删除；不加此参数只输出计划")
 
     p = sub.add_parser("regress", help="教学实证回归")
     p.add_argument("--outcome", default="trade", choices=["trade", "production", "length", "network"])
@@ -63,7 +58,6 @@ def main() -> None:
     p.add_argument("--host", default=os.environ.get("GVCSIM_BIND_HOST", "127.0.0.1"))
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--reload", action="store_true")
-    p.add_argument("--workers", type=int, default=int(os.environ.get("GVCSIM_WEB_WORKERS", "1")))
     p.add_argument(
         "--limit-concurrency",
         type=int,
@@ -124,42 +118,8 @@ def main() -> None:
             pipeline.run(args.years, allow_qc_override=args.allow_qc_override)
         except pipeline.QualityGateError as error:
             raise SystemExit(
-                f"{error}\n如已完成修正/风险评审，可显式加 --allow-qc-override；该决定会写入 manifest。"
+                f"{error}\n如确认仅用于教学演示，可显式加 --allow-qc-override。"
             ) from error
-
-    elif args.command == "artifact-prune":
-        from gvcsim import artifact_retention, config
-
-        try:
-            plan = artifact_retention.prune_artifacts(
-                config.PROCESSED_DIR.parent / "artifacts",
-                config.PROCESSED_DIR,
-                keep_latest=args.keep_latest,
-                apply=args.apply,
-            )
-        except Exception as error:
-            raise SystemExit(f"产物清理拒绝执行（{type(error).__name__}）：{error}") from error
-        mode = "已执行" if args.apply else "预览"
-        print(f"产物清理{mode}:current={plan.current_manifest_id},keep_latest={args.keep_latest}")
-        if plan.references:
-            print("课堂记录保护:")
-            for release_id, sources in plan.references.items():
-                print(f"  {release_id} <- {','.join(sources)}")
-        if plan.retained_recent:
-            print("最近版本保护:" + ",".join(plan.retained_recent))
-        if plan.skipped:
-            print("未纳入自动清理:")
-            for skipped in plan.skipped:
-                print(f"  {skipped.name}: {skipped.reason}")
-        if plan.candidates:
-            print("删除候选:")
-            for release in plan.candidates:
-                print(f"  {release.manifest_id}: {release.size_bytes / (1024 * 1024):.1f} MiB")
-        else:
-            print("没有可安全删除的旧版本")
-        print(f"可回收合计:{plan.reclaimable_bytes / (1024 * 1024):.1f} MiB")
-        if not args.apply and plan.candidates:
-            print("当前为 dry-run；确认数据库备份和列表后，加 --apply 执行")
 
     elif args.command == "regress":
         from gvcsim.regression.design import (
@@ -237,16 +197,14 @@ def main() -> None:
     elif args.command == "serve":
         import uvicorn
 
-        if args.workers <= 0 or args.limit_concurrency <= 0 or args.backlog <= 0 or args.graceful_timeout <= 0:
-            raise SystemExit("workers、limit-concurrency、backlog、graceful-timeout 必须为正数")
-        if args.reload and args.workers != 1:
-            raise SystemExit("--reload 与多 worker 不兼容；开发热更新请使用 --workers 1")
+        if args.limit_concurrency <= 0 or args.backlog <= 0 or args.graceful_timeout <= 0:
+            raise SystemExit("limit-concurrency、backlog、graceful-timeout 必须为正数")
         uvicorn.run(
             "gvcsim.api:app",
             host=args.host,
             port=args.port,
             reload=args.reload,
-            workers=args.workers,
+            workers=1,
             limit_concurrency=args.limit_concurrency,
             backlog=args.backlog,
             timeout_graceful_shutdown=args.graceful_timeout,
@@ -265,7 +223,6 @@ def main() -> None:
             raise SystemExit(f"服务启动预检失败（{type(error).__name__}）：{error}") from error
         print(
             "服务启动预检通过："
-            f"manifest={preflight_report['manifest_id']}，"
             f"年份={','.join(str(year) for year in preflight_report['years'])}，"
             f"schema={preflight_report['database']['schema_version']}"
         )

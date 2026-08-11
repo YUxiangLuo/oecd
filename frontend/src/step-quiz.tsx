@@ -22,9 +22,9 @@ export function QuizPanel({
   const [feedback, setFeedback] = useState<QuizFeedback[]>([]);
   const [error, setError] = useState<string | null>(null);
   const savedAnswers = useMemo(() => {
-    if (!quiz || !data?.quiz_id || data.quiz?.version !== quiz.version) return {};
+    if (!quiz || data?.quiz?.version !== quiz.version) return {};
     return data.quiz.answers ?? {};
-  }, [data?.quiz, data?.quiz_id, quiz]);
+  }, [data?.quiz, quiz]);
   // 错误选择只保留在当前组件内；服务器只保存全部答对的最终答案。
   const [draftAnswers, setDraftAnswers] = useState<Record<string, string>>(savedAnswers);
   useEffect(() => {
@@ -33,7 +33,7 @@ export function QuizPanel({
   if (!quiz) return null;
 
   const answeredAll = quiz.questions.every((question) => Boolean(draftAnswers[question.id]));
-  const locallyPassed = Boolean(data?.quiz_id) && data?.quiz?.version === quiz.version;
+  const locallyPassed = data?.quiz?.version === quiz.version;
   const complete = state.complete;
   const awaitingSave = locallyPassed && !complete && state.syncing;
   const choose = (questionId: string, optionId: string) => {
@@ -52,11 +52,10 @@ export function QuizPanel({
         answers: draftAnswers,
       });
       setFeedback(result.results);
-      if (result.passed && result.quiz_id) {
+      if (result.passed) {
         setDraftAnswers(result.quiz?.answers ?? draftAnswers);
         state.save({
           quiz: result.quiz ?? { version: result.version, answers: draftAnswers },
-          quiz_id: result.quiz_id,
         });
         // 答题是完成度的唯一来源，不等待普通实验快照的防抖窗口。
         state.syncNow();

@@ -101,6 +101,27 @@ def summarize_checks(checks: list[QcCheck], *, override: bool = False) -> dict:
     }
 
 
+def summarize_serialized_checks(checks: list[dict], *, override: bool = False) -> dict:
+    """Rebuild the release summary from the exact QC records written to disk."""
+    by_severity: dict[str, list[str]] = {level: [] for level in QC_SEVERITIES}
+    for check in checks:
+        severity = check.get("severity")
+        if severity not in by_severity:
+            raise ValueError(f"未知 QC severity:{severity}")
+        by_severity[severity].append(str(check.get("name") or "未命名检查"))
+    fatal = by_severity[QC_FATAL]
+    warning = by_severity[QC_WARNING]
+    return {
+        "publishable": not fatal or override,
+        "override": bool(override and fatal),
+        "requires_disclosure": bool(fatal or warning or by_severity[QC_DISCLOSURE]),
+        "fatal": fatal,
+        "warning": warning,
+        "disclosure": by_severity[QC_DISCLOSURE],
+        "passed": by_severity[QC_OK],
+    }
+
+
 def check_shapes(io) -> QcCheck:
     n = len(io.get_regions()) * len(io.get_sectors())
     expected_shapes = {"Z": (n, n), "A": (n, n), "L": (n, n), "x": (n, 1)}

@@ -16,7 +16,7 @@ describe("restoreVizState", () => {
     });
   });
 
-  test("drops values that do not belong to the current manifest metadata", () => {
+  test("drops values that do not belong to the current dataset metadata", () => {
     expect(restoreVizState(meta, {
       chart: "removed-lens",
       year: 2016,

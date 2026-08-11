@@ -14,10 +14,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 
-from gvcsim import artifacts as artifacts
-from gvcsim import auth, auth_routes, concurrency, data_routes, regression_routes
+from gvcsim import auth, auth_routes, data_routes, regression_routes
 from gvcsim import config as app_config
-from gvcsim.artifacts import ArtifactContractError, artifact_contract, manifest_id, validate_release
+from gvcsim.artifacts import ArtifactContractError, validate_release
 from gvcsim.classroom import db as classroom_db
 from gvcsim.classroom import routes as classroom_routes
 from gvcsim.config import PROCESSED_DIR, processed_years
@@ -31,11 +30,7 @@ async def lifespan(_app: FastAPI):
     """每个 worker 显式建立/关闭连接池，并限制同步端点线程数。"""
     app_config.validate_capacity_config()
     anyio.to_thread.current_default_thread_limiter().total_tokens = app_config.THREAD_TOKENS
-    try:
-        await anyio.to_thread.run_sync(classroom_db.startup)
-    except classroom_db.Unavailable:
-        if not app_config.DEMO_MODE:
-            raise
+    await anyio.to_thread.run_sync(classroom_db.startup)
     try:
         yield
     finally:
@@ -67,33 +62,24 @@ def health() -> JSONResponse:
     摘要契约不合法时返回 503，避免部署脚本把“进程已启动”误当成“数据可用”。
     """
     try:
-        validate_release(PROCESSED_DIR, validate_sources=True)
+        validate_release(PROCESSED_DIR)
         years = processed_years()
-        current_manifest = manifest_id() if years else None
-        capacity = concurrency.capacity_snapshot()
     except (ArtifactContractError, OSError, RuntimeError, ValueError) as error:
         return JSONResponse(status_code=503, content={"status": "unavailable", "detail": str(error)})
-    if not years or current_manifest is None:
+    if not years:
         return JSONResponse(status_code=503, content={"status": "unavailable", "detail": "没有完整产物"})
     try:
         database = classroom_db.readiness()
     except (classroom_db.Unavailable, classroom_db.SchemaVersionMismatch, RuntimeError):
-        if app_config.DEMO_MODE:
-            # 显式 demo 允许只演示无持久化核心流程；响应必须明确标记降级。
-            database = {"status": "unavailable_demo"}
-        else:
-            return JSONResponse(
-                status_code=503,
-                content={"status": "unavailable", "detail": "教学数据库未就绪"},
-            )
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unavailable", "detail": "教学数据库未就绪"},
+        )
     return JSONResponse(
         content={
             "status": "ok",
             "years": years,
-            "manifest_id": current_manifest,
-            "artifact_contract": artifact_contract(),
             "database": database,
-            "capacity": capacity,
         }
     )
 
@@ -119,12 +105,7 @@ async def require_api_bearer(request: Request, call_next):
     if not authorization or not authorization.startswith("Bearer "):
         return JSONResponse(status_code=401, content={"detail": "缺少 Bearer 令牌"})
     try:
-        # 中间件运行在事件循环上；逐请求数据库复查必须转入有界线程池，
-        # 否则一个慢连接会阻塞该 worker 的所有并发请求。
-        payload = await anyio.to_thread.run_sync(
-            auth.verify_token,
-            authorization.removeprefix("Bearer "),
-        )
+        payload = auth.verify_token(authorization.removeprefix("Bearer "))
     except auth.AuthenticationUnavailable as error:
         return JSONResponse(status_code=503, content={"detail": str(error)})
     if payload is None:
@@ -165,20 +146,3 @@ async def classroom_db_operation_failed(request: Request, exc: classroom_db.Oper
 @app.exception_handler(classroom_db.SchemaVersionMismatch)
 async def classroom_schema_unavailable(request: Request, exc: classroom_db.SchemaVersionMismatch):
     return JSONResponse(status_code=503, content={"detail": "教学数据库 schema 未就绪；请先完成兼容迁移"})
-
-
-@app.exception_handler(classroom_db.WorkspaceScopeMismatch)
-async def workspace_scope_mismatch(request: Request, exc: classroom_db.WorkspaceScopeMismatch):
-    return JSONResponse(status_code=409, content={"detail": str(exc)})
-
-
-@app.exception_handler(concurrency.CapacityExceeded)
-async def capacity_exceeded(request: Request, exc: concurrency.CapacityExceeded):
-    return JSONResponse(
-        status_code=429,
-        headers={"Retry-After": str(exc.retry_after)},
-        content={
-            "detail": f"{exc}（任务：{exc.workload}）",
-            "code": f"capacity_{exc.reason}",
-        },
-    )

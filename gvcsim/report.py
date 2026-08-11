@@ -12,7 +12,7 @@ from datetime import date
 
 import pandas as pd
 
-from gvcsim.artifacts import manifest_provenance, read_csv_artifact
+from gvcsim.artifacts import dataset_metadata, read_csv_artifact
 from gvcsim.config import PROCESSED_DIR, REPORTS_DIR, processed_years
 from gvcsim.data.citations import report_source_disclosures, report_source_label
 from gvcsim.regression.design import (
@@ -252,7 +252,7 @@ def build(
         if granularity == GRANULARITY_COUNTRY_INDUSTRY
         else "贸易流、生产与长度共用国家级设定；网络回归因国家图退化而不运行"
     )
-    data_sources = manifest_provenance().get("data_sources") or {}
+    data_sources = dataset_metadata().get("data_sources") or {}
     source_label = report_source_label(data_sources)
 
     sections = [

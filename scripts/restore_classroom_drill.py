@@ -30,21 +30,12 @@ from typing import Any
 import psycopg
 from psycopg.conninfo import conninfo_to_dict
 
-from gvcsim import artifacts
 from gvcsim.classroom.db import TEACHING_DB_VERSION
-from gvcsim.config import ROOT
 
 RECEIPT_KIND = "gvcsim-classroom-restore-drill-v1"
 SERVICE_NAME = "gvcsim_restore_drill"
 _TARGET_NAME = re.compile(r"^[a-z][a-z0-9_]*_restore_drill$")
 _SERVICE_KEY = re.compile(r"^[a-z_]+$")
-_REFERENCE_TABLES = (
-    ("reports", "manifest_id"),
-    ("experiment_sessions", "manifest_id"),
-    ("learning_evidence_events", "manifest_id"),
-    ("step_progress", "manifest_id"),
-    ("submissions", "manifest_id"),
-)
 
 
 class DrillError(RuntimeError):
@@ -272,31 +263,10 @@ def _inventory(dsn: str) -> dict[str, Any]:
                 ).fetchone(),
                 "database collation inventory",
             )
-            references: dict[str, set[str]] = {}
-            for table_name, column_name in _REFERENCE_TABLES:
-                rows = connection.execute(
-                    psycopg.sql.SQL("SELECT DISTINCT {} FROM {} WHERE {} <> ''").format(
-                        psycopg.sql.Identifier(column_name),
-                        psycopg.sql.Identifier(table_name),
-                        psycopg.sql.Identifier(column_name),
-                    )
-                ).fetchall()
-                for row in rows:
-                    references.setdefault(str(row[0]), set()).add(table_name)
     except DrillError:
         raise
     except psycopg.Error as error:
         raise DrillError("恢复后数据库清单校验失败") from error
-    validated_references: dict[str, list[str]] = {}
-    for manifest_id, source_tables in sorted(references.items()):
-        release = ROOT / "data" / "artifacts" / manifest_id
-        try:
-            if artifacts.manifest_id(release) != manifest_id:
-                raise artifacts.ArtifactContractError("manifest ID 与目录不一致")
-            artifacts.validate_release(release, validate_sources=False)
-        except (artifacts.ArtifactContractError, OSError, ValueError) as error:
-            raise DrillError(f"课堂记录引用的产物 {manifest_id} 缺失或损坏") from error
-        validated_references[manifest_id] = sorted(source_tables)
     return {
         "schema_version": TEACHING_DB_VERSION,
         "postgresql_server_version_num": server_version,
@@ -307,7 +277,7 @@ def _inventory(dsn: str) -> dict[str, Any]:
             "matches": collation_row[1] == collation_row[2],
         },
         "table_counts": table_counts,
-        "referenced_artifacts": validated_references,
+        "referenced_artifacts": {},
     }
 
 

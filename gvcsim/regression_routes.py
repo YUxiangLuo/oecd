@@ -1,4 +1,4 @@
-"""Regression design, estimation, placebo, and trusted learning-event routes."""
+"""Regression design, estimation, and placebo routes."""
 
 from typing import Any, cast
 
@@ -8,9 +8,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.requests import Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from gvcsim import concurrency, config as app_config, shocks, trusted_evidence
-from gvcsim.artifacts import manifest_id
-from gvcsim.classroom import db as classroom_db
+from gvcsim import concurrency, shocks
 from gvcsim.data_routes import _read_csv
 from gvcsim.regression.design import (
     CONTROL_MODE_LABELS,
@@ -267,8 +265,7 @@ def regression_design(
 
 @router.post("/api/regression/run")
 async def regression_run(req: RegressionRequest, request: Request):
-    subject = _require_regression_student(request)
-    run_manifest = manifest_id()
+    _require_regression_student(request)
     design = _validate_design(
         req.outcome,
         req.granularity,
@@ -284,37 +281,12 @@ async def regression_run(req: RegressionRequest, request: Request):
         lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
     )
     try:
-        async with concurrency.async_cpu_workload(
-            "regression",
-            permits=app_config.REGRESSION_CPU_PERMITS,
-        ):
-            result, benchmark = await concurrency.run_cpu_bound(run_design_with_benchmark, panel, design)
+        result, benchmark = await concurrency.run_cpu_bound(run_design_with_benchmark, panel, design)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     design_info = _design_info(design, req.weight_mode)
     result_info = result.to_dict()
-    if manifest_id() != run_manifest:
-        raise HTTPException(status_code=409, detail="估计期间数据产物已切换，请重新运行")
-    event_payload_sha256 = trusted_evidence.digest({"design": design_info, "result": result_info})
-    event = await anyio.to_thread.run_sync(
-        lambda: classroom_db.record_evidence_event(
-            subject,
-            _regression_step(design.outcome),
-            "regression",
-            run_manifest,
-            event_payload_sha256,
-            {"design": design_info, "result_sha256": trusted_evidence.digest(result_info)},
-        )
-    )
-    run_id = trusted_evidence.issue_regression_run(
-        subject=subject,
-        manifest_id=run_manifest,
-        design=design_info,
-        result=result_info,
-        event=event,
-    )
     return {
-        "run_id": run_id,
         "design": design_info,
         "result": result_info,
         "preflight": _regression_preflight(design, result_info, req.weight_mode),
@@ -325,8 +297,7 @@ async def regression_run(req: RegressionRequest, request: Request):
 
 @router.post("/api/regression/placebo")
 async def regression_placebo(req: PlaceboRequest, request: Request):
-    subject = _require_regression_student(request)
-    run_manifest = manifest_id()
+    _require_regression_student(request)
     design = _validate_design(
         req.outcome,
         req.granularity,
@@ -342,33 +313,16 @@ async def regression_placebo(req: PlaceboRequest, request: Request):
         lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
     )
     try:
-        async with concurrency.async_cpu_workload(
-            "placebo",
-            permits=app_config.PLACEBO_CPU_PERMITS,
-        ):
-            placebo = await concurrency.run_cpu_bound(
-                placebo_did_distribution,
-                panel,
-                design,
-                n_draws=req.n_draws,
-                seed=req.seed,
-            )
+        placebo = await concurrency.run_cpu_bound(
+            placebo_did_distribution,
+            panel,
+            design,
+            n_draws=req.n_draws,
+            seed=req.seed,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     design_info = _design_info(design, req.weight_mode)
-    if manifest_id() != run_manifest:
-        raise HTTPException(status_code=409, detail="安慰剂期间数据产物已切换，请重新运行")
-    event_payload_sha256 = trusted_evidence.digest({"design": design_info, "result": placebo})
-    await anyio.to_thread.run_sync(
-        lambda: classroom_db.record_evidence_event(
-            subject,
-            _regression_step(design.outcome),
-            "placebo",
-            run_manifest,
-            event_payload_sha256,
-            {"design": design_info, "result_sha256": trusted_evidence.digest(placebo)},
-        )
-    )
     return {
         "design": design_info,
         "placebo": placebo,

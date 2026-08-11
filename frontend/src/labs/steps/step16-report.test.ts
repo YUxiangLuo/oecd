@@ -20,9 +20,9 @@ describe("report generation readiness", () => {
 });
 
 describe("report submission feedback", () => {
-  test("does not claim a duplicate graded report is awaiting review", () => {
+  test("reports an already graded response without inventing a new queue state", () => {
     expect(submissionToastMessage("graded", "graded"))
-      .toBe("报告内容未变化，原评分已保留");
+      .toBe("报告已评阅");
   });
 
   test("distinguishes a real revision from the initial submission", () => {

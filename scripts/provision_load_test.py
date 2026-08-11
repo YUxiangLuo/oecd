@@ -84,7 +84,7 @@ def main() -> None:
             connection.execute("CREATE SCHEMA public")
 
     # 配置必须在导入数据库模块后也显式覆盖：脚本可能从已有 shell 环境启动。
-    from gvcsim import artifacts, config
+    from gvcsim import config
     from gvcsim.classroom import db
 
     config.PG_DSN = args.dsn
@@ -99,7 +99,6 @@ def main() -> None:
     if not classes:
         raise SystemExit("压测 demo 班级初始化失败")
     class_id = int(classes[0]["id"])
-    current_manifest = artifacts.manifest_id()
 
     users: list[dict[str, str]] = []
     for index in range(1, args.students + 1):
@@ -128,7 +127,6 @@ def main() -> None:
     payload = {
         "kind": "gvcsim-capacity-test-users-v1",
         "database": database,
-        "manifest_id": current_manifest,
         "users": users,
     }
     _write_credentials(args.output, payload)

@@ -21,7 +21,6 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = ROOT / "OECD_ICIO"
 PROCESSED_DIR = ROOT / "data" / "processed"
-ARTIFACTS_DIR = ROOT / "data" / "artifacts"
 MARKER = RAW_DIR / ".ci-only-synthetic.json"
 
 YEARS = tuple(range(2016, 2021))
@@ -79,9 +78,8 @@ def _require_empty_ci_workspace() -> None:
         raise SystemExit("refusing to build synthetic data in production")
     existing_raw = sorted(RAW_DIR.glob("ICIO*_*.csv")) if RAW_DIR.exists() else []
     processed_exists = PROCESSED_DIR.exists() or PROCESSED_DIR.is_symlink()
-    existing_artifacts = list(ARTIFACTS_DIR.iterdir()) if ARTIFACTS_DIR.exists() else []
-    if existing_raw or processed_exists or existing_artifacts:
-        paths = [*(str(path) for path in existing_raw), *(str(path) for path in existing_artifacts)]
+    if existing_raw or processed_exists:
+        paths = [*(str(path) for path in existing_raw)]
         if processed_exists:
             paths.append(str(PROCESSED_DIR))
         raise SystemExit("refusing to overwrite existing data: " + ", ".join(paths))

@@ -370,8 +370,11 @@ function MarginalEffectsPanel({ response }: { response: RegressionResponse }) {
 
 /** 自动保存最近一次真实运行，供刷新恢复与报告复估。 */
 interface RegressionStepState extends QuizCompletionState, Record<string, unknown> {
-  run?: { settings: RegressionSettings };
-  run_id?: string;
+  run?: {
+    settings: RegressionSettings;
+    design: RegressionResponse["design"];
+    result: RegressionResponse["result"];
+  };
 }
 
 export function RegressionRunLab({ step, settings, onSettingsChange, history, onHistoryChange, state }: {
@@ -450,10 +453,22 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
   // 而不是一个空白的“请运行”面板。设定与结果不一致时 stale 横幅仍会提示。
   const latestSnapshot = (history[outcome] ?? [])[0];
   useEffect(() => {
-    if (!latestSnapshot || result || running) return;
-    setResult(latestSnapshot.response);
-    setResultSettings(latestSnapshot.settings);
-  }, [latestSnapshot, result, running]);
+    if (result || running) return;
+    if (latestSnapshot) {
+      setResult(latestSnapshot.response);
+      setResultSettings(latestSnapshot.settings);
+      return;
+    }
+    const saved = state.data?.run;
+    if (!saved) return;
+    setResult({
+      design: saved.design,
+      result: saved.result,
+      benchmark: { backend: "saved", policy_coefs: [], max_abs_coef_diff: 0, max_abs_se_diff: 0, coef_check_passed: true, se_check_mode: "informational", notes: [] },
+      disclaimer: "从实验会话恢复的最近一次服务端回归结果",
+    });
+    setResultSettings(saved.settings);
+  }, [latestSnapshot, result, running, state.data?.run]);
 
   const run = async () => {
     if (runningRef.current || !design) return;
@@ -483,10 +498,9 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
         };
         return { ...current, [outcome]: [snapshot, ...prior].slice(0, 3) };
       });
-      // 保存最近一次运行；它不影响步骤完成度，但可由最终报告校验并重新估计。
+      // 保存最近一次运行；报告直接读取这份设计与结果，不再复估。
       state.save({
-        run: { settings: runSettings },
-        run_id: response.run_id,
+        run: { settings: runSettings, design: response.design, result: response.result },
       });
       if (latestRequest.current === requestKey) {
         setResult(response);

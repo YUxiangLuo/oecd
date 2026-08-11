@@ -56,19 +56,12 @@ export interface Meta {
   years: number[];
   countries: string[];
   sectors: string[];
-  artifact_contract?: {
-    schema_version: number;
-    network_algorithm: string;
-  };
-  /** 当前产物集合的标识;实验会话绑定它以判定结果是否过期。 */
-  manifest_id?: string | null;
-  artifact_provenance?: {
-    manifest_id?: string;
-    schema_version?: number;
-    qc?: Record<string, unknown>;
+  dataset?: {
+    years: number[];
+    generated_at?: string;
+    network_algorithm?: string;
     data_sources?: Record<string, unknown>;
-    sources?: Record<string, unknown>;
-    build?: Record<string, unknown>;
+    qc?: unknown;
   } | null;
 }
 
@@ -77,8 +70,6 @@ export interface QuizCompletionState {
     version: string;
     answers: Record<string, string>;
   };
-  /** Server-issued binding for a fully correct answer set. */
-  quiz_id?: string;
 }
 
 export type DbTableKind = "z" | "y" | "accounts";
@@ -240,23 +231,17 @@ export type IndustryPage = PagedRows;
 
 /** 实验会话:逐步实验状态的可恢复模型(契约见 gvcsim/session.py)。 */
 /** v7 以选择题作为步骤 1–15 的唯一完成条件；其它会话版本一律拒绝。 */
-export const SESSION_VERSION = "experiment-session-v7";
+export const SESSION_VERSION = "experiment-session-simple-v1";
 
 export interface SessionRecord<T = unknown> {
   data: T;
-  /** 记录级时间戳；不同步骤并发写入时按它合并。 */
-  updated_at: string;
-  /** 顶层字段时间戳；同一步骤的实验快照与答题结果据此独立合并。 */
-  field_updated_at: Record<string, string>;
 }
 
 /** 确实跨步骤共享的实验状态(白名单,与 gvcsim/session.py 的 SHARED_KEYS 一致)。 */
-export type SharedSessionKey = "regression_settings" | "regression_history";
+export type SharedSessionKey = "regression_settings";
 
 export interface ExperimentSession {
   version: string;
-  /** 产出该会话的数据产物标识;变化即意味着里面的结果已过期。 */
-  manifest_id: string;
   steps: Record<string, SessionRecord>;
   shared: Partial<Record<SharedSessionKey, SessionRecord>>;
 }
@@ -305,38 +290,28 @@ export interface ReportGate {
 
 /** 服务端生成的实验报告:正文与溯源都由服务端产出,客户端不提供任何内容。 */
 export interface GeneratedReport {
-  report_key: string;
   markdown: string;
-  /** 「另存为」时的建议文件名(带 report_key,便于把文件对回具体那份报告)。 */
   suggested_filename?: string;
   provenance: {
-    report_key: string;
-    manifest_id: string;
-    session_revision: number;
     session_version: string;
     generated_at: string;
-    artifact: { schema_version: number; network_algorithm: string; years: number[] };
+    years: number[];
+    session_fingerprint: string;
     runs: ReportRun[];
   };
-  created_at?: string;
+  updated_at?: string;
 }
 
 /** 报告里一步回归的摘要:服务端复估后写入 provenance.runs,提交时随 design 一起冻结。 */
 interface ReportRun {
   step: number;
   outcome: string;
-  design: string;
-  status: string | null;
-  source: "student_run";
+  design: RegressionDesignInfo;
 }
 
 export interface SessionResponse {
-  revision: number;
-  manifest_id: string;
   session: ExperimentSession;
   updated_at?: string | null;
-  /** 非 null 表示本次写入与另一处改动做了合并,应改用返回的会话。 */
-  merged_from?: number | null;
   completion: CompletionSummary;
 }
 
@@ -450,8 +425,6 @@ export interface MarginalEffect {
 }
 
 export interface RegressionResponse {
-  /** Server-signed binding to account, manifest, outcome, settings and result. */
-  run_id?: string;
   design: RegressionDesignInfo;
   result: {
     depvar: string;
@@ -595,34 +568,10 @@ export interface SubmissionDetail extends SubmissionRow {
   feedback: string;
 }
 
-/** Append-only submission and grading audit trail exposed to an authorized teacher. */
-export interface SubmissionHistory {
-  versions: {
-    id: number;
-    version_no: number;
-    title: string;
-    year: number;
-    design: SubmissionDesign;
-    markdown: string;
-    submitted_at: string;
-  }[];
-  grades: {
-    id: number;
-    version_no: number;
-    score: number;
-    feedback: string;
-    graded_by: string;
-    graded_at: string;
-  }[];
-}
-
 /** submissions.design:提交时冻结的溯源标量 + 各步回归摘要
  * (由 gvcsim/classroom/db.py 的 submit_report 用 jsonb_build_object 组装)。
  * 曾是 Record<string, unknown>,于是把 runs 数组 String() 成 "[object Object]" 也能过类型检查。 */
 interface SubmissionDesign {
-  report_key: string;
-  manifest_id: string;
-  session_revision: number;
   runs: ReportRun[];
 }
 

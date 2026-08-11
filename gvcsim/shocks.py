@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from gvcsim.config import PROCESSED_DIR, SHOCKS_DIR
+from gvcsim.config import PROCESSED_DIR
 from gvcsim.indicators.core import IcioArrays
 
 DEMO_FILE = "demo_trade_war_tariffs.csv"
@@ -810,10 +810,6 @@ def events_metadata() -> list[dict]:
 def load_shocks() -> pd.DataFrame:
     """读取 (country, sector, year) 冲击面板。接入真实数据后在这里切换数据源。"""
     path = PROCESSED_DIR / DEMO_FILE
-    if not path.exists():
-        # 仅供 schema v2 迁移前给出可读错误；v3 manifest 不会登记这个旧路径。
-        legacy = SHOCKS_DIR / DEMO_FILE
-        path = legacy if legacy.exists() else path
     if not path.exists():
         raise FileNotFoundError(f"未找到冲击数据 {path},请先运行 `gvcsim compute` 生成演示数据")
     return pd.read_csv(path, keep_default_na=False)

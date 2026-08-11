@@ -2,10 +2,9 @@ import { useState } from "react";
 import { ScrollableRegion } from "../a11y";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
-import { regressionStatusLabel } from "../regression-verdict";
 import { ReportMarkdown } from "../report-renderer-lazy";
 import { showToast } from "../toast";
-import type { AuthUser, SubmissionDetail, SubmissionHistory, SubmissionRow } from "../types";
+import type { AuthUser, SubmissionDetail, SubmissionRow } from "../types";
 import { EmptyState, SearchInput, StatusPill, Toolbar } from "./ui";
 
 const fmtTime = (s: string | null | undefined) => (s ? s.slice(0, 16).replace("T", " ") : "—");
@@ -125,16 +124,10 @@ export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () =
 }
 
 function SubmissionView({ id, grader, onBack }: { id: number; grader: string; onBack: (changed: boolean) => void }) {
-  const { data, error } = useAsync<{ detail: SubmissionDetail; history: SubmissionHistory }>(async () => {
-    const [detail, history] = await Promise.all([
-      api.classroom.submissionDetail(id),
-      api.classroom.submissionHistory(id),
-    ]);
-    return { detail, history };
-  }, [id]);
+  const { data, error } = useAsync<SubmissionDetail>(() => api.classroom.submissionDetail(id), [id]);
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted">加载中…</p>;
-  return <SubmissionGradeView key={`${id}-${data.detail.submitted_at}`} data={data.detail} history={data.history} grader={grader} onBack={onBack} />;
+  return <SubmissionGradeView key={`${id}-${data.submitted_at}`} data={data} grader={grader} onBack={onBack} />;
 }
 
 const SCORE_PRESETS = [60, 70, 80, 90, 100];
@@ -147,12 +140,10 @@ const FEEDBACK_PRESETS = [
 
 function SubmissionGradeView({
   data,
-  history,
   grader,
   onBack,
 }: {
   data: SubmissionDetail;
-  history: SubmissionHistory;
   grader: string;
   onBack: (changed: boolean) => void;
 }) {
@@ -218,7 +209,7 @@ function SubmissionGradeView({
           </h3>
           {runs.length > 0 && (
             <p className="muted">
-              回归设定:{runs.map((run) => `步骤 ${run.step} · ${regressionStatusLabel(run.status)}`).join("；")}
+              回归设定:{runs.map((run) => `步骤 ${run.step} · ${run.outcome}`).join("；")}
             </p>
           )}
           {provenance && <p className="muted">溯源:{provenance}</p>}
@@ -261,25 +252,6 @@ function SubmissionGradeView({
               {saving ? "提交中…" : data.state === "graded" ? "更新评阅" : "提交评阅"}
             </button>
             <p className="muted">评阅人:{grader};学生重新提交会重置评阅状态。</p>
-            <details className="lesson-details grade-history" style={{ marginTop: 14 }}>
-              <summary>提交与评分历史（只读）</summary>
-              <p className="muted">每次重新提交都会生成新版本；每次评分永久绑定当时的提交版本，不覆盖旧记录。</p>
-              <div className="history-list">
-                {history.versions.map((version) => (
-                  <div key={`version-${version.id}`} className="history-item">
-                    <b>提交 v{version.version_no}</b>
-                    <span>{fmtTime(version.submitted_at)} · {version.title} · {version.year}</span>
-                  </div>
-                ))}
-                {history.grades.map((grade) => (
-                  <div key={`grade-${grade.id}`} className="history-item">
-                    <b>评分 {grade.score} 分 → v{grade.version_no}</b>
-                    <span>{fmtTime(grade.graded_at)} · {grade.graded_by}{grade.feedback ? ` · ${grade.feedback}` : ""}</span>
-                  </div>
-                ))}
-                {!history.versions.length && <span className="muted">暂无历史记录。</span>}
-              </div>
-            </details>
           </div>
         </aside>
       </div>

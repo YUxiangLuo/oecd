@@ -9,7 +9,7 @@ interface QcReleaseSummary {
 /**
  * 汇总当前数据产物的「发布状态」:哪些 QC 项需要持续披露。
  *
- * manifest 的 qc 段按 年份 / 控制变量 / 冲击 等作用域嵌套,这里递归摊平,
+ * dataset 元数据中的 qc 段按年份、控制变量和冲击等作用域嵌套，这里递归摊平，
  * 但只采信机器声明的字段(requires_disclosure / override / fatal / warning /
  * disclosure),不去猜测任何未声明的内容。
  *

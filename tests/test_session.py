@@ -1,219 +1,25 @@
-"""实验会话契约:校验、合并与失效。
-
-这些是纯函数测试,不依赖数据库;数据库侧的往返、并发合并与过期标记
-见 tests/test_classroom.py。
-"""
-
 import pytest
 
-from gvcsim.session import (
-    MAX_SESSION_BYTES,
-    SESSION_VERSION,
-    SessionError,
-    empty_session,
-    is_stale,
-    make_record,
-    merge_sessions,
-    validate_session,
-)
-
-MID = "b08a35374d1021b0"
+from gvcsim.session import SESSION_VERSION, SessionError, empty_session, make_record, validate_session
 
 
-def _session(steps: dict, manifest_id: str = MID, shared: dict | None = None) -> dict:
-    return {"version": SESSION_VERSION, "manifest_id": manifest_id, "steps": steps, "shared": shared or {}}
-
-
-def test_empty_session_has_no_steps():
-    s = empty_session(MID)
-    assert validate_session(s) == s
-    assert s["steps"] == {}
-
-
-def test_validate_accepts_well_formed_session():
-    record = make_record({"country": "CHN"}, "2026-07-16T10:00:00+00:00")
-    assert validate_session(_session({"4": record}))["steps"]["4"]["data"] == {"country": "CHN"}
+def test_minimal_session_contract():
+    assert empty_session() == {"version": SESSION_VERSION, "steps": {}, "shared": {}}
+    payload = empty_session()
+    payload["steps"]["1"] = make_record({"quiz": {"answers": {"q": "a"}}})
+    payload["shared"]["regression_settings"] = {"trade": {"method": "did"}}
+    assert validate_session(payload) == payload
 
 
 @pytest.mark.parametrize(
     "payload",
     [
-        "not-an-object",
-        {"version": "experiment-session-v0", "manifest_id": MID, "steps": {}},  # 旧版本不做兼容
-        {"version": SESSION_VERSION, "steps": {}},  # 缺 manifest_id
-        {"version": SESSION_VERSION, "manifest_id": MID},  # 缺 steps
+        {},
+        {"version": SESSION_VERSION, "steps": {"17": {"data": {}}}, "shared": {}},
+        {"version": SESSION_VERSION, "steps": {}, "shared": {"regression_history": {}}},
+        {"version": SESSION_VERSION, "steps": {"1": {"data": {}, "updated_at": "old"}}, "shared": {}},
     ],
 )
-def test_validate_rejects_bad_envelope(payload):
+def test_rejects_old_or_unknown_session_shapes(payload):
     with pytest.raises(SessionError):
         validate_session(payload)
-
-
-@pytest.mark.parametrize("key", ["0", "17", "abc", "-1", "4.5"])
-def test_validate_rejects_out_of_range_step_keys(key):
-    with pytest.raises(SessionError):
-        validate_session(_session({key: make_record({})}))
-
-
-@pytest.mark.parametrize(
-    "record",
-    [
-        {"data": {}},  # 缺 updated_at
-        {"updated_at": "2026-07-16T10:00:00+00:00"},  # 缺 data
-        {"data": {}, "updated_at": "2026-07-16T10:00:00+00:00"},  # 缺字段时间戳
-        {"data": {}, "updated_at": "昨天"},  # 时间戳不合法
-        {
-            "data": {"country": "CHN"},
-            "updated_at": "2026-07-16T10:00:00+00:00",
-            "field_updated_at": {},
-        },  # data 字段没有对应时间戳
-        "not-a-record",
-    ],
-)
-def test_validate_rejects_bad_records(record):
-    with pytest.raises(SessionError):
-        validate_session(_session({"4": record}))
-
-
-def test_validate_rejects_oversized_session():
-    big = _session({"4": make_record({"blob": "x" * (MAX_SESSION_BYTES + 1)})})
-    with pytest.raises(SessionError, match="过大"):
-        validate_session(big)
-
-
-def test_merge_keeps_both_sides_when_different_steps_changed():
-    """两个标签页各改一步:整份覆盖会丢掉一边的实验。"""
-    base = _session({"4": make_record({"country": "CHN"}, "2026-07-16T10:00:00+00:00")})
-    incoming = _session({"12": make_record({"shock": "tariff"}, "2026-07-16T10:05:00+00:00")})
-    merged = merge_sessions(base, incoming)
-    assert merged["steps"]["4"]["data"] == {"country": "CHN"}
-    assert merged["steps"]["12"]["data"] == {"shock": "tariff"}
-
-
-def test_merge_prefers_newer_record_for_same_step():
-    base = _session({"4": make_record({"v": "old"}, "2026-07-16T10:00:00+00:00")})
-    incoming = _session({"4": make_record({"v": "new"}, "2026-07-16T10:05:00+00:00")})
-    assert merge_sessions(base, incoming)["steps"]["4"]["data"] == {"v": "new"}
-
-
-def test_merge_keeps_newer_base_record_over_older_incoming():
-    """本次写入者不必然更新:它可能拿着很旧的状态。"""
-    base = _session({"4": make_record({"v": "newer"}, "2026-07-16T11:00:00+00:00")})
-    incoming = _session({"4": make_record({"v": "stale"}, "2026-07-16T10:00:00+00:00")})
-    assert merge_sessions(base, incoming)["steps"]["4"]["data"] == {"v": "newer"}
-
-
-def test_merge_same_step_preserves_concurrent_experiment_snapshot_and_quiz_receipt():
-    """两个标签页从同一快照分别探索与答题，不能整条记录后写覆盖。"""
-    initial_time = "2026-07-16T10:00:00+00:00"
-    action_time = "2026-07-16T10:01:00+00:00"
-    quiz_time = "2026-07-16T10:02:00+00:00"
-    initial = make_record({"compared": ["CHN", "USA"]}, initial_time)
-    experiment = {
-        "data": {"compared": ["CHN", "USA"], "chart": "quadrant"},
-        "updated_at": action_time,
-        "field_updated_at": {"compared": action_time, "chart": action_time},
-    }
-    quiz = {
-        "data": {
-            "compared": initial["data"]["compared"],
-            "quiz": {"version": "course-quiz-v2", "answers": {"q1": "a"}},
-            "quiz_id": "quiz-event",
-        },
-        "updated_at": quiz_time,
-        "field_updated_at": {
-            **initial["field_updated_at"],
-            "quiz": quiz_time,
-            "quiz_id": quiz_time,
-        },
-    }
-
-    merged = merge_sessions(_session({"3": experiment}), _session({"3": quiz}))["steps"]["3"]
-    assert merged["data"]["compared"] == ["CHN", "USA"]
-    assert merged["data"]["chart"] == "quadrant"
-    assert merged["data"]["quiz_id"] == "quiz-event"
-    assert merged["data"]["quiz"]["version"] == "course-quiz-v2"
-
-
-def test_merge_field_tombstone_prevents_deleted_snapshot_from_reappearing():
-    """学生删除一个实验快照后，旧标签页不能把它带回来。"""
-    base = _session(
-        {
-            "3": {
-                "data": {"compared": ["CHN", "USA"]},
-                "updated_at": "2026-07-16T10:02:00+00:00",
-                "field_updated_at": {
-                    "compared": "2026-07-16T10:02:00+00:00",
-                    "observation": "2026-07-16T10:02:00+00:00",
-                },
-            }
-        }
-    )
-    stale = _session(
-        {
-            "3": {
-                "data": {"compared": ["CHN", "USA"], "observation": {"value": 1}, "quiz_id": "quiz-event"},
-                "updated_at": "2026-07-16T10:01:00+00:00",
-                "field_updated_at": {
-                    "compared": "2026-07-16T10:00:00+00:00",
-                    "observation": "2026-07-16T10:00:00+00:00",
-                    "quiz_id": "2026-07-16T10:01:00+00:00",
-                },
-            }
-        }
-    )
-
-    data = merge_sessions(base, stale)["steps"]["3"]["data"]
-    assert "observation" not in data
-    assert data["quiz_id"] == "quiz-event"
-
-
-def test_merge_result_is_valid_session():
-    base = _session({"4": make_record({"a": 1}, "2026-07-16T10:00:00+00:00")})
-    incoming = _session({"12": make_record({"b": 2}, "2026-07-16T10:01:00+00:00")})
-    merged = merge_sessions(base, incoming)
-    assert validate_session(merged) == merged
-
-
-def test_is_stale_detects_other_artifacts():
-    assert is_stale(empty_session(MID), MID) is False
-    assert is_stale(empty_session("deadbeefdeadbeef"), MID) is True
-
-
-# ------------------------------------------------------------------ shared 槽
-
-
-def test_validate_accepts_known_shared_keys():
-    s = _session({}, shared={"regression_settings": make_record({"method": "did"})})
-    assert validate_session(s)["shared"]["regression_settings"]["data"] == {"method": "did"}
-
-
-def test_validate_rejects_unknown_shared_keys():
-    """shared 是白名单:会话不能变成任意 KV 存储。"""
-    with pytest.raises(SessionError):
-        validate_session(_session({}, shared={"whatever": make_record({})}))
-
-
-def test_validate_rejects_bad_shared_record():
-    with pytest.raises(SessionError):
-        validate_session(_session({}, shared={"regression_settings": {"data": {}}}))
-
-
-def test_missing_shared_defaults_to_empty():
-    """shared 可省略:老客户端只发 steps 时不该被拒。"""
-    assert validate_session({"version": SESSION_VERSION, "manifest_id": MID, "steps": {}})["shared"] == {}
-
-
-def test_merge_applies_same_rule_to_shared_slot():
-    base = _session(
-        {},
-        shared={
-            "regression_settings": make_record({"v": "old"}, "2026-07-16T10:00:00+00:00"),
-            "regression_history": make_record({"trade": []}, "2026-07-16T10:00:00+00:00"),
-        },
-    )
-    incoming = _session({}, shared={"regression_settings": make_record({"v": "new"}, "2026-07-16T10:05:00+00:00")})
-    merged = merge_sessions(base, incoming)
-    assert merged["shared"]["regression_settings"]["data"] == {"v": "new"}
-    # 未被本次写入触及的共享键不能消失。
-    assert merged["shared"]["regression_history"]["data"] == {"trade": []}

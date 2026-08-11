@@ -12,6 +12,11 @@ import {
   TeacherWorkspace,
 } from "./app-shell";
 import { scanAnnouncements } from "./announcement-state";
+import {
+  EMPTY_SCOPED_REGRESSION_HISTORY,
+  historyForAccount,
+  updateHistoryForAccount,
+} from "./account-regression-history";
 import { AUTH_TOKEN_KEY, api } from "./api";
 import { LabRouter } from "./lab-router";
 import { IntroOverlay } from "./intro";
@@ -78,15 +83,12 @@ export default function App() {
   const [resettingWorkspace, setResettingWorkspace] = useState(false);
   const [resetWorkspaceError, setResetWorkspaceError] = useState<string | null>(null);
 
-  // 实验会话:回归设定与运行记录从此活在会话里(local-first + PostgreSQL),
-  // 刷新或重新登录都能恢复,不再随组件内存一起消失。
   const session = useSession(
     user?.role === "student" ? { username: user.username, accountId: user.account_id } : null,
-    meta?.manifest_id ? { manifestId: meta.manifest_id } : null,
   );
   const resetWorkspace = useCallback(async () => {
     const confirmation = window.prompt(
-      "此操作会永久删除当前数据版本下的实验进度、证据、报告、提交和评分。请输入“清空当前实验”继续：",
+      "此操作会删除你的实验进度、报告、提交和评分。请输入“清空当前实验”继续：",
     );
     if (confirmation !== "清空当前实验") return;
     setResettingWorkspace(true);
@@ -98,13 +100,23 @@ export default function App() {
       setResettingWorkspace(false);
     }
   }, [session.reset]);
-  // 回归设定按 outcome 存(与 regression_history 一致):每步首次进入落在其招牌默认
+  // 回归设定按 outcome 存；页面内运行历史只放在内存中。
   // (SIGNATURE_SETTINGS),学生的修改按 outcome 分别保留、互不覆盖。
   const currentOutcome = stepsData?.steps.find((s) => s.n === current)?.regression_outcome;
   const regressionSettings =
     (currentOutcome && asRegressionSettingsMap(session.getShared("regression_settings"))[currentOutcome]) ||
     (currentOutcome ? SIGNATURE_SETTINGS[currentOutcome] : DEFAULT_REGRESSION_SETTINGS);
-  const regressionHistory = session.getShared<RegressionHistory>("regression_history") ?? {};
+  const regressionAccountId = user?.role === "student" && user.account_id != null
+    ? String(user.account_id)
+    : null;
+  const [scopedRegressionHistory, setScopedRegressionHistory] = useState(EMPTY_SCOPED_REGRESSION_HISTORY);
+  const regressionHistory = historyForAccount(scopedRegressionHistory, regressionAccountId);
+  const setRegressionHistory = useCallback<React.Dispatch<React.SetStateAction<RegressionHistory>>>((update) => {
+    if (regressionAccountId === null) return;
+    setScopedRegressionHistory((currentHistory) => (
+      updateHistoryForAccount(currentHistory, regressionAccountId, update)
+    ));
+  }, [regressionAccountId]);
   const setRegressionSettings = useCallback(
     (next: RegressionSettings) => {
       if (!currentOutcome) return;
@@ -114,15 +126,6 @@ export default function App() {
       }));
     },
     [session, currentOutcome],
-  );
-  const setRegressionHistory = useCallback(
-    (update: React.SetStateAction<RegressionHistory>) => {
-      session.updateShared<RegressionHistory>("regression_history", (current) => {
-        const base = current ?? {};
-        return typeof update === "function" ? update(base) : update;
-      });
-    },
-    [session],
   );
   const completedSteps = new Set(session.completion?.completed ?? []);
   const completionKey = session.completion?.completed.join(",") ?? "unavailable";
@@ -141,8 +144,6 @@ export default function App() {
   // 退出登录:只清认证与界面状态。刻意**不**清实验会话——
   // 学生重新登录后必须能拿回自己的实验,这正是会话存在的意义。
   const logout = useCallback(() => {
-    const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (token) void api.logout(token).catch(() => {});
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(AUTH_EXPIRES_KEY);
     setAuthExpiresAt(null);
@@ -156,6 +157,7 @@ export default function App() {
     setShowPasswordChange(false);
     setProgressReady(false);
     setAnnouncements([]);
+    setScopedRegressionHistory(EMPTY_SCOPED_REGRESSION_HISTORY);
     setResettingWorkspace(false);
     setResetWorkspaceError(null);
     highestAnnouncementId.current = 0;
@@ -171,7 +173,7 @@ export default function App() {
   }, []);
 
   const passwordChanged = useCallback(() => {
-    setAuthNotice("密码已修改，所有旧会话均已撤销。请使用新密码重新登录。");
+    setAuthNotice("密码已修改。请使用新密码重新登录。");
     setShowPasswordChange(false);
     logout();
   }, [logout]);

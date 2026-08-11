@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { summarizeQcRelease } from "./qc-release";
 
-describe("manifest QC disclosure", () => {
+describe("dataset QC disclosure", () => {
   test("finds nested year/control summaries and deduplicates names", () => {
     expect(summarizeQcRelease({
       years: { "2020": { requires_disclosure: true, override: true, fatal: ["Leontief"], warning: ["边界"] } },
@@ -15,7 +15,7 @@ describe("manifest QC disclosure", () => {
     });
   });
 
-  test("does not invent a warning for a clean or absent manifest", () => {
+  test("does not invent a warning for clean or absent dataset metadata", () => {
     expect(summarizeQcRelease(undefined).requiresDisclosure).toBe(false);
     expect(summarizeQcRelease({ years: { "2020": { requires_disclosure: false } } }).requiresDisclosure).toBe(false);
   });

@@ -14,7 +14,7 @@
 ## 2. OECD ICIO 原始数据
 
 本项目通过 `pymrio.download_oecd` 下载 OECD Inter-Country Input-Output (ICIO) 数据。当前正式产物使用
-2023 release 中的 2016–2020 表；原始 CSV、下载日志和计算后的 `data/artifacts/` 均被 Git 忽略，
+2023 release 中的 2016–2020 表；原始 CSV、下载日志和计算后的 `data/processed/` 均被 Git 忽略，
 不随源代码仓库分发。
 
 使用或再分发前必须查看：
@@ -43,21 +43,20 @@ Database 2023, OECD Science, Technology and Industry Working Papers 2023/08,
 https://doi.org/10.1787/5a5d0665-en.
 ```
 
-服务端生成的第 16 步报告会自动写入上述数据集、方法和条款链接。manifest 的来源哈希用于复现与完整性
-校验，不是许可证明，也不能替代下载时的条款记录。
+服务端生成的第 16 步报告会自动写入上述数据集、方法和条款链接。`dataset.json` 只记录计算时间、年份和
+数据来源说明；它不是许可证明，也不能替代下载时的条款记录。
 
 ## 3. 衍生产物的再分发
 
-`data/artifacts/<manifest_id>/` 包含由 ICIO 计算的国家、行业和网络指标。即使它们经过转换或聚合，也不应
+`data/processed/` 包含由 ICIO 计算的国家、行业和网络指标。即使它们经过转换或聚合，也不应
 自动视为不受源数据条款约束。向仓库外复制完整 artifact、面板 CSV、批量表格或可逆明细前，应完成：
 
 1. 确认下载时适用的 OECD 条款、数据集 metadata/source 和第三方权利；
 2. 判断目标用途、接收方和再分发方式是否被允许；
-3. 保留 OECD 引用、版本、访问日期、manifest ID 和本项目算法版本；
-4. 不包含数据库凭证、学生记录、认证密钥、收据密钥或课堂审计日志；
+3. 保留 OECD 引用、版本、访问日期和本项目算法说明；
+4. 不包含数据库凭证、学生记录或认证密钥；
 5. 对外发布前由课程负责人或机构的数据/法务负责人复核。
 
-`gvcsim artifact-prune` 只处理本地保留周期，不改变任何数据许可，也不是授权检查工具。
 
 ## 4. 教学 mock 与 CI 合成数据
 

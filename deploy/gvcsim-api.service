@@ -12,14 +12,12 @@ Group=gvcsim
 WorkingDirectory=/opt/gvcsim/current
 EnvironmentFile=/etc/gvcsim.env
 ExecStartPre=/opt/gvcsim/current/.venv/bin/gvcsim preflight
-ExecStart=/opt/gvcsim/current/.venv/bin/gvcsim serve --port 18000 --workers 16 --limit-concurrency 64 --backlog 2048 --graceful-timeout 180 --no-access-log
+ExecStart=/opt/gvcsim/current/.venv/bin/gvcsim serve --port 18000 --limit-concurrency 64 --backlog 256 --graceful-timeout 120 --no-access-log
 Restart=on-failure
 RestartSec=3
-TimeoutStopSec=195
+TimeoutStopSec=130
 UMask=0077
-RuntimeDirectory=gvcsim
-RuntimeDirectoryMode=0750
-TasksMax=4096
+TasksMax=512
 LimitNOFILE=65536
 
 # systemd 沙箱。release 只读；运行数据经 release 内符号链接落到 shared。

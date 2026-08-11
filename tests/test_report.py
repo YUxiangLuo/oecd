@@ -85,7 +85,7 @@ def _stub_report_dependencies(monkeypatch):
     # Keep this unit fixture independent of whichever real/synthetic artifact
     # happened to be built before pytest. The dedicated synthetic test below
     # replaces this metadata explicitly.
-    monkeypatch.setattr(report, "manifest_provenance", lambda: {"data_sources": {"oecd_icio": {}}})
+    monkeypatch.setattr(report, "dataset_metadata", lambda: {"data_sources": {"oecd_icio": {}}})
     return calls
 
 
@@ -138,7 +138,7 @@ def test_ci_synthetic_report_never_claims_to_contain_oecd_observations(monkeypat
     _stub_report_dependencies(monkeypatch)
     monkeypatch.setattr(
         report,
-        "manifest_provenance",
+        "dataset_metadata",
         lambda: {
             "data_sources": {
                 "ci_synthetic_icio": {
@@ -179,7 +179,7 @@ def test_country_report_skips_degenerate_network_regression(monkeypatch):
 
 
 @pytest.mark.skipif(
-    not (PROCESSED_DIR / "panel_industry.csv").exists(),
+    not (PROCESSED_DIR / "panel_industry.csv").exists() or not (PROCESSED_DIR / "dataset.json").exists(),
     reason="需要 gvcsim compute 产出的面板",
 )
 def test_event_chart_omits_ci_when_inference_is_suppressed():

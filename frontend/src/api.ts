@@ -135,14 +135,6 @@ export const api = {
   },
   me: (token: string) =>
     getWithToken<import("./types").AuthUser>("/api/auth/me", token, "令牌无效或已过期"),
-  logout: async (token: string) => {
-    const resp = await fetch("/api/auth/logout", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!resp.ok) throw new ApiError(resp.status, (await resp.json().catch(() => null))?.detail, resp.statusText);
-    return resp.json() as Promise<{ ok: boolean }>;
-  },
   changePassword: (currentPassword: string, newPassword: string) =>
     post<{ ok: boolean; reauthenticate: boolean }>("/api/auth/password", {
       current_password: currentPassword,
@@ -280,7 +272,6 @@ export const api = {
         passed: boolean;
         version: string;
         results: { question_id: string; correct: boolean; explanation: string }[];
-        quiz_id?: string;
         quiz?: { version: string; answers: Record<string, string> };
       }>("/api/classroom/quiz/submit", body),
     announcements: () =>
@@ -288,20 +279,15 @@ export const api = {
     progress: () => get<ProgressResponse>("/api/classroom/progress"),
     reportProgress: (step: number) => post<{ ok: boolean }>("/api/classroom/progress", { step }),
     session: () => get<SessionResponse>("/api/classroom/session"),
-    saveSession: (body: {
-      base_revision: number;
-      session: ExperimentSession;
-    }) =>
+    saveSession: (body: { session: ExperimentSession }) =>
       post<SessionResponse>("/api/classroom/session", body, "PUT"),
-    resetWorkspace: (body: { manifest_id: string; confirmation: string }) =>
-      post<{ ok: boolean; manifest_id: string }>("/api/classroom/workspace/reset", body),
-    // 只交报告指纹;服务端从它自己生成的报告里取正文,接口不接受 Markdown。
-    submitReport: (body: { title: string; report_key: string }) =>
+    resetWorkspace: (body: { confirmation: string }) =>
+      post<{ ok: boolean }>("/api/classroom/workspace/reset", body),
+    submitReport: (body: { title: string }) =>
       post<{
         id: number;
         state: "pending" | "graded";
         submitted_at: string;
-        version_no: number;
       }>("/api/classroom/report/submit", body),
     generateReport: () => post<GeneratedReport>("/api/classroom/report/generate"),
     generatedReport: () => get<Partial<GeneratedReport>>("/api/classroom/report/generated"),
@@ -333,8 +319,6 @@ export const api = {
       get<{ submissions: import("./types").SubmissionRow[] }>("/api/classroom/submissions"),
     submissionDetail: (id: number) =>
       get<import("./types").SubmissionDetail>(`/api/classroom/submissions/${id}`),
-    submissionHistory: (id: number) =>
-      get<import("./types").SubmissionHistory>(`/api/classroom/submissions/${id}/history`),
     grade: (id: number, score: number, feedback: string) =>
       post<import("./types").SubmissionDetail>(`/api/classroom/submissions/${id}/grade`, { score, feedback }),
     createAnnouncement: (body: { title: string; body: string; class_id?: number | null }) =>

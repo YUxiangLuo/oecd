@@ -23,7 +23,7 @@ export function QcLab({ meta, onNavigateStep }: {
   const failedSections = sections.filter((section) => section.error != null).length;
   const allChecks = sections.flatMap((section) => section.rows ?? []);
   const failures = allChecks.filter((check) => !check.passed).length;
-  const qcRelease = summarizeQcRelease(meta.artifact_provenance?.qc);
+  const qcRelease = summarizeQcRelease(meta.dataset?.qc);
 
   return (
     <div>

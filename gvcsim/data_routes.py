@@ -8,8 +8,8 @@ from pathlib import Path
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 
-from gvcsim import artifacts, quizzes, shocks
-from gvcsim.artifacts import artifact_contract, manifest_id, read_csv_artifact, validate_artifact
+from gvcsim import quizzes, shocks
+from gvcsim.artifacts import dataset_metadata, read_csv_artifact, validate_artifact
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, processed_years
 from gvcsim.data import crosswalk, icio_browser, quality
 from gvcsim.indicator_schema import INDICATOR_SCHEMA
@@ -38,9 +38,6 @@ def _read_path(path: Path) -> pd.DataFrame:
             detail=f"缺少预计算产物 {path.name},请先运行 `uv run gvcsim compute`",
         )
     # NOTE: 返回的是共享缓存 DataFrame,派生列/筛选/排序前必须 .copy()(见 gvcsim/artifacts.py)。
-    if path.parent == PROCESSED_DIR:
-        return read_csv_artifact(path, require_current=True)
-    artifacts.validate_source(path)
     return read_csv_artifact(path)
 
 
@@ -56,15 +53,11 @@ def meta():
     if years:
         countries = sorted(_read_csv(f"indicators_country_{years[-1]}.csv")["country"].unique())
         sectors = sorted(_read_csv(f"indicators_industry_{years[-1]}.csv")["industry"].unique())
-    current_manifest = manifest_id() if years else None
     return {
         "years": years,
         "countries": countries,
         "sectors": sectors,
-        "artifact_contract": artifact_contract(),
-        # 实验会话绑定该 ID:产物换代后旧会话即可被判定为过期。
-        "manifest_id": current_manifest,
-        "artifact_provenance": artifacts.manifest_provenance() if years else None,
+        "dataset": dataset_metadata() if years else None,
     }
 
 
@@ -89,8 +82,6 @@ def indicators_schema():
 
 @router.get("/api/db/meta")
 def db_meta():
-    for path in sorted(RAW_DATA_DIR.glob("ICIO*_*.csv")):
-        artifacts.validate_source(path)
     return icio_browser.meta()
 
 
@@ -109,8 +100,6 @@ def db_slice(
         candidates = sorted(RAW_DATA_DIR.glob(f"ICIO*_{year}.csv"))
         if not candidates:
             raise FileNotFoundError(f"没有 {year} 年 OECD ICIO 原始表")
-        for path in candidates:
-            artifacts.validate_source(path)
         return icio_browser.slice_table(
             year=year,
             table=table,
@@ -295,7 +284,6 @@ def shock_events():
     被更大贡献覆盖的事件虽然可点击，右侧却找不到与之对应的冲击行。可见列表
     因此从当前 release 的权威面板反向筛选，保证事件列表与面板内容一致。
     """
-    artifacts.validate_source(Path(shocks.__file__))
     frame = _read_shocks()
     available_by_type: dict[str, set[str]] = {}
     for shock_type in shocks.SHOCK_SPECS:
@@ -320,7 +308,6 @@ def shock_events():
 @router.get("/api/crosswalk/demo")
 def crosswalk_demo(year: int = 2019):
     try:
-        artifacts.validate_source(Path(crosswalk.__file__))
         return crosswalk.demo_payload(year)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

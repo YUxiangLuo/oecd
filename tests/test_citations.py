@@ -69,7 +69,7 @@ def test_synthetic_marker_requires_both_environment_gates(tmp_path, monkeypatch,
 def test_unknown_manifest_source_does_not_fall_back_to_an_oecd_claim():
     metadata = {"future_source": {"citation": "unknown"}}
 
-    assert report_source_label(metadata) == "manifest 中未识别的数据源"
+    assert report_source_label(metadata) == "未识别的数据源"
     disclosure = "\n".join(report_source_disclosures(metadata))
     assert "无法识别" in disclosure
     assert "不得对外发布" in disclosure

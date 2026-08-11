@@ -17,21 +17,17 @@
 """
 
 import json
-import os
 import shutil
-import tempfile
-import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
 import pandas as pd
 
 from gvcsim import shocks
-from gvcsim.artifact_retention import artifact_store_lock
-from gvcsim.artifacts import manifest_provenance, register_artifacts, validate_artifact, validate_release
+from gvcsim.artifacts import write_dataset_metadata
 from gvcsim import config as config_module
-from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, ROOT, available_years, processed_years
-from gvcsim.data.citations import CI_SYNTHETIC_MARKER, artifact_data_sources
+from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, available_years, processed_years
+from gvcsim.data.citations import artifact_data_sources
 from gvcsim.data import controls, loader, quality
 from gvcsim.indicators import length, network, production, tradeflow
 from gvcsim.indicators.core import build_arrays
@@ -68,65 +64,25 @@ def _using_processed_dir(path: Path):
         controls.PROCESSED_DIR = old_controls
 
 
-def _validate_staged_release(staging: Path) -> str:
-    provenance = manifest_provenance(staging)
-    validate_release(staging, validate_sources=True)
-    return str(provenance["manifest_id"])
-
-
-def _normalize_release_permissions(staging: Path) -> None:
-    """让发布目录可由同部署组读取；不触碰任何 legacy/既有 release。"""
-    staging.chmod(0o750)
-    for path in staging.rglob("*"):
-        if path.is_symlink():
-            continue
-        path.chmod(0o750 if path.is_dir() else 0o640)
-
-
-def _publish_staged_release(staging: Path, current: Path) -> tuple[str, Path]:
-    """把完整 staging 固化为内容寻址版本，再原子切换 current symlink。"""
-    with artifact_store_lock(current.parent):
-        return _publish_staged_release_locked(staging, current)
-
-
-def _publish_staged_release_locked(staging: Path, current: Path) -> tuple[str, Path]:
-    """调用方持有 artifact store 锁时执行不可分割的发布切换。"""
-    _normalize_release_permissions(staging)
-    release_id = _validate_staged_release(staging)
-    versions = current.parent / "artifacts"
-    versions.mkdir(parents=True, exist_ok=True)
-    release = versions / release_id
-    if release.exists():
-        existing_id = _validate_staged_release(release)
-        if existing_id != release_id:
-            raise RuntimeError(f"既有版本目录 {release} 的内容 ID 不匹配: {existing_id}")
-        if (release / "artifact_manifest.json").read_bytes() != (staging / "artifact_manifest.json").read_bytes():
-            raise RuntimeError(f"版本目录 {release} 已存在但 manifest 内容不同")
-        shutil.rmtree(staging)
-    else:
-        os.replace(staging, release)
-
-    next_link = current.parent / f".processed-next-{uuid.uuid4().hex}"
-    next_link.symlink_to(Path("artifacts") / release_id, target_is_directory=True)
-    if current.is_symlink() or not current.exists():
-        os.replace(next_link, current)
-    else:
-        # 首次从旧的真实目录迁移：先完整保留为 legacy，不删除任何产物。
-        legacy = versions / f"legacy-{uuid.uuid4().hex[:12]}"
-        os.replace(current, legacy)
-        try:
-            os.replace(next_link, current)
-        except Exception:
-            os.replace(legacy, current)
-            raise
-    return release_id, release
-
-
 def _gate_qc(scope: str, checks: list[quality.QcCheck], allow_qc_override: bool) -> dict:
     summary = quality.summarize_checks(checks, override=allow_qc_override)
     if not summary["publishable"]:
         raise QualityGateError(scope, summary)
     return summary
+
+
+def _release_qc_metadata(directory: Path, years: list[int], *, override: bool) -> dict:
+    def read_summary(filename: str) -> dict:
+        payload = json.loads((directory / filename).read_text(encoding="utf-8"))
+        if not isinstance(payload, list) or any(not isinstance(item, dict) for item in payload):
+            raise RuntimeError(f"QC 文件格式无效:{filename}")
+        return quality.summarize_serialized_checks(payload, override=override)
+
+    return {
+        "years": {str(year): read_summary(f"qc_{year}.json") for year in years},
+        "controls": read_summary("qc_controls.json"),
+        "shocks": read_summary("qc_shocks.json"),
+    }
 
 
 def compute_year(year: int, verbose: bool = True, *, allow_qc_override: bool = False) -> None:
@@ -144,10 +100,10 @@ def compute_year(year: int, verbose: bool = True, *, allow_qc_override: bool = F
     qc_payload = [c.to_dict() for c in checks]
     try:
         # QC 是发布门槛而非装饰。fatal 默认在任何指标/暴露度计算前中止；
-        # 只有 CLI 显式 override 才可继续，并永久写入 manifest。
+        # 只有 CLI 显式 override 才可继续。
         qc_summary = _gate_qc(str(year), checks, allow_qc_override)
     except QualityGateError:
-        # 诊断写入 rejected/，不覆盖仍在提供服务的 current QC/manifest。
+        # 诊断写入 rejected/；成功标记仍不存在，服务不会读取半成品。
         rejected = PROCESSED_DIR / "rejected"
         rejected.mkdir(exist_ok=True)
         with open(rejected / f"qc_{year}.json", "w", encoding="utf-8") as f:
@@ -188,19 +144,7 @@ def compute_year(year: int, verbose: bool = True, *, allow_qc_override: bool = F
 
     edges.insert(0, "year", year)
     edges.to_csv(PROCESSED_DIR / f"network_edges_{year}.csv", index=False)
-    raw_sources = sorted(RAW_DATA_DIR.glob(f"ICIO*_{year}.csv"))
-    register_artifacts(
-        PROCESSED_DIR,
-        [
-            f"qc_{year}.json",
-            f"export_exposure_{year}.csv",
-            f"indicators_country_{year}.csv",
-            f"indicators_industry_{year}.csv",
-            f"network_edges_{year}.csv",
-        ],
-        metadata={"qc": {"years": {str(year): qc_summary}}},
-        source_paths=raw_sources,
-    )
+    del qc_summary
     log(f"[{year}] 完成,产物已写入 {PROCESSED_DIR}")
 
 
@@ -215,8 +159,10 @@ def build_panel(*, allow_qc_override: bool = False) -> pd.DataFrame:
     if not years:
         raise RuntimeError("没有任何已预计算的年份,请先运行 gvcsim compute")
     for year in years:
-        validate_artifact(PROCESSED_DIR / f"indicators_country_{year}.csv")
-        validate_artifact(PROCESSED_DIR / f"indicators_industry_{year}.csv")
+        if not (PROCESSED_DIR / f"indicators_country_{year}.csv").is_file():
+            raise FileNotFoundError(PROCESSED_DIR / f"indicators_country_{year}.csv")
+        if not (PROCESSED_DIR / f"indicators_industry_{year}.csv").is_file():
+            raise FileNotFoundError(PROCESSED_DIR / f"indicators_industry_{year}.csv")
 
     sector = pd.concat(
         [pd.read_csv(PROCESSED_DIR / f"indicators_industry_{y}.csv") for y in years],
@@ -319,36 +265,7 @@ def build_panel(*, allow_qc_override: bool = False) -> pd.DataFrame:
         how="left",
     )
     country.to_csv(PROCESSED_DIR / "panel_country.csv", index=False)
-    source_paths: list[Path] = [
-        *sorted(RAW_DATA_DIR.glob("ICIO*_*.csv")),
-        *([RAW_DATA_DIR / CI_SYNTHETIC_MARKER] if (RAW_DATA_DIR / CI_SYNTHETIC_MARKER).is_file() else []),
-        # 受控收录整个 Python 后端：不仅指标公式，QC、报告、完成度 gate 和 API
-        # 都会改变学生最终看到/提交的内容，漏登记会让 dirty 构建冒充 commit 版本。
-        *sorted((ROOT / "gvcsim").rglob("*.py")),
-        ROOT / "pyproject.toml",
-        ROOT / "uv.lock",
-    ]
-    register_artifacts(
-        PROCESSED_DIR,
-        [
-            "controls_country.csv",
-            "qc_controls.json",
-            "qc_shocks.json",
-            shocks.DEMO_FILE,
-            "panel_industry.csv",
-            "panel_country.csv",
-        ],
-        metadata={
-            "qc": {"controls": controls_qc, "shocks": shocks_qc},
-            "data_sources": artifact_data_sources(RAW_DATA_DIR),
-            "shock_weighting": {
-                "primary": shocks.EXPOSURE_MODE_FIXED_PRETREATMENT,
-                "robustness": shocks.EXPOSURE_MODE_CONTEMPORANEOUS,
-                "country_sector_weight_year": weight_year,
-            },
-        },
-        source_paths=source_paths,
-    )
+    del controls_qc, shocks_qc
     return sector
 
 
@@ -358,17 +275,27 @@ def run(years: list[int] | None = None, *, allow_qc_override: bool = False) -> N
         raise RuntimeError("没有可构建的 OECD ICIO 年份")
     current = PROCESSED_DIR
     current.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix=".gvcsim-staging-", dir=current.parent))
-    try:
-        with _using_processed_dir(staging):
-            for y in selected_years:
-                compute_year(y, allow_qc_override=allow_qc_override)
-            build_panel(allow_qc_override=allow_qc_override)
-        release_id, release = _publish_staged_release(staging, current)
-    except Exception:
-        if staging.exists():
-            shutil.rmtree(staging)
-        raise
+    if current.is_symlink():
+        current.unlink()
+    elif current.exists():
+        shutil.rmtree(current)
+    current.mkdir()
+    for year in selected_years:
+        compute_year(year, allow_qc_override=allow_qc_override)
+    build_panel(allow_qc_override=allow_qc_override)
+    release_qc = _release_qc_metadata(current, selected_years, override=allow_qc_override)
+    from gvcsim.classroom import db
+
+    db.reset_learning_records()
+    write_dataset_metadata(
+        current,
+        selected_years,
+        metadata={
+            "generated_at": pd.Timestamp.now(tz="UTC").isoformat(),
+            "data_sources": artifact_data_sources(RAW_DATA_DIR),
+            "qc": release_qc,
+        },
+    )
     print(f"面板构建完成:{current / 'panel_industry.csv'}(行业级,回归默认)")
     print(f"            {current / 'panel_country.csv'}(国家级)")
-    print(f"原子发布版本:{release_id} → {release}")
+    print("已清空学生实验记录并写入固定数据目录")

@@ -26,7 +26,7 @@ export function submissionToastMessage(
   previous: MySubmission["state"],
   returned: "pending" | "graded",
 ): string {
-  if (returned === "graded") return "报告内容未变化，原评分已保留";
+  if (returned === "graded") return "报告已评阅";
   if (previous === "none") return "报告已提交，等待教师评阅";
   if (previous === "graded") return "已重新提交，等待教师重新评阅";
   return "报告已提交，仍在等待教师评阅";
@@ -36,7 +36,7 @@ export function submissionToastMessage(
  *
  * 这一步刻意**没有任何参数表单**。报告由服务端从学生自己的实验会话生成:
  * 前 15 步答题通过后即可生成；自动保存的实验快照会进入报告，只有学生实际
- * 运行过的回归才由服务端复估。界面只负责触发、展示和提交 report_key。
+ * 运行过的回归直接从会话保存结果写入报告。
  */
 
 function GateCard({ blocked, onNavigateStep }: {
@@ -80,15 +80,12 @@ function SubmitCard({ report, mine, onSubmitted }: {
 
   const submit = () => {
     setSubmitting(true);
-    // 只交报告指纹:正文由服务端从它自己生成的那份取,接口不收 Markdown。
     api.classroom
-      .submitReport({ title: `实验报告 · ${report.report_key}`, report_key: report.report_key })
+      .submitReport({ title: `实验报告 · ${report.provenance.session_fingerprint}` })
       .then(
         (submitted) => {
           setSubmitting(false);
           setSubmitError(null);
-          // 相同 report_key 的重复请求由服务端幂等返回原状态。必须按返回状态
-          // 提示，不能把仍为 graded 的报告说成“等待重新评阅”。
           showToast(submissionToastMessage(state, submitted.state));
           onSubmitted();
         },
@@ -135,7 +132,7 @@ export function ReportLab({
   sessionSyncError: string | null;
   onFlushSession: () => Promise<void>;
   onNavigateStep: (step: number) => void;
-  /** 报告生成后服务端会写入第 16 步完成记录，通知外层重取完成度。 */
+  /** 报告生成后通知外层重取服务端完成度。 */
   onGenerated: () => void;
 }) {
   const [report, setReport] = useState<GeneratedReport | null>(null);
@@ -165,7 +162,7 @@ export function ReportLab({
   }, []);
 
   useEffect(() => {
-    if (generatedQuery.data?.report_key) setReport(generatedQuery.data as GeneratedReport);
+    if (generatedQuery.data?.markdown) setReport(generatedQuery.data as GeneratedReport);
   }, [generatedQuery.data]);
 
   useEffect(() => {
@@ -190,8 +187,7 @@ export function ReportLab({
     setGenerating(true);
     setError(null);
     try {
-      // 即使按钮状态因 React 批处理尚未来得及刷新，也在请求报告前再做一次
-      // 防御性 flush，确保服务端读取的是当前浏览器最新确认的 revision。
+      // 报告生成前冲刷当前浏览器的防抖保存队列。
       await onFlushSession();
     } catch (cause) {
       setGenerating(false);
@@ -269,8 +265,7 @@ export function ReportLab({
         <span className="muted report-provenance-slot" aria-live="polite">
           {report && (
             <>
-            指纹 <code>{report.report_key}</code> · 产物 <code>{report.provenance.manifest_id}</code> · 会话 rev{" "}
-            {report.provenance.session_revision}
+            会话摘要 <code>{report.provenance.session_fingerprint}</code> · 数据年份 {report.provenance.years.join("、")}
             {report.suggested_filename && <> · 建议文件名 <code>{report.suggested_filename}</code></>}
             </>
           )}

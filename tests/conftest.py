@@ -18,7 +18,6 @@ os.environ.setdefault(
 os.environ.setdefault("GVCSIM_DEMO_MODE", "1")
 os.environ.setdefault("GVCSIM_BOOTSTRAP_PASSWORD", "gvclab2026")
 os.environ.setdefault("GVCSIM_AUTH_SECRET", "tests-only-auth-secret-at-least-32-bytes")
-os.environ.setdefault("GVCSIM_EVIDENCE_SECRET", "tests-only-evidence-secret-at-least-32-bytes")
 
 import numpy as np
 import pandas as pd
@@ -28,6 +27,24 @@ from gvcsim.config import RAW_DATA_DIR
 
 REGIONS = ["AAA", "BBB"]
 SECTORS = ["s1", "s2"]
+
+
+@pytest.fixture
+def teaching_db():
+    """Create the intentionally non-migrating v8 test database once."""
+    import psycopg
+
+    from gvcsim import config
+    from gvcsim.classroom import db
+
+    db.shutdown()
+    with psycopg.connect(config.PG_DSN, autocommit=True) as connection:
+        connection.execute("DROP SCHEMA public CASCADE")
+        connection.execute("CREATE SCHEMA public")
+    db._schema_ready = False
+    db.initialize_schema()
+    yield db
+    db.shutdown()
 
 
 @pytest.fixture(scope="session")

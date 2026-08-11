@@ -15,7 +15,7 @@ export function validatePasswordChange(
   return null;
 }
 
-/** 当前账号自助改密。成功后服务端撤销该账号全部会话，调用方负责回到登录页。 */
+/** 当前账号自助改密。成功后当前浏览器回到登录页。 */
 export function AccountPasswordModal({
   onClose,
   onChanged,
@@ -55,7 +55,7 @@ export function AccountPasswordModal({
     <Modal title="修改登录密码" onClose={close} width={420}>
       <form className="modal-form" onSubmit={submit}>
         <p className="modal-msg account-password-note">
-          修改成功后，此账号在所有浏览器中的既有会话都会撤销，你需要使用新密码重新登录。
+          修改成功后，当前浏览器会退出，你需要使用新密码重新登录。
         </p>
 
         <label htmlFor="account-current-password">当前密码</label>
