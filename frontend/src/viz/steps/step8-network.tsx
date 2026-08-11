@@ -444,8 +444,8 @@ export function NetworkViz({ data }: { data: NetworkData }) {
       <div style={{ position: "absolute", right: 18, bottom: 14, fontSize: 10.5, color: "#b0b5c2", textAlign: "right", lineHeight: 1.6 }}>
         {expanded ? "大图模式 · 按 Esc 或“退出大图”返回" : "点击任意节点进入大图模式"}<br />
         节点大小 = {metricMeta[sizeMetric].label} · 节点颜色 = {colorMode === "region" ? "区域" : metricMeta[colorMode].label}<br />
-        显示 {visibleEdges.length}/{data.edges.length} 条 Top 边；箭头表示 source → target<br />
-        阈值仅影响 Top 边显示，不影响 Gephi 指标计算
+        显示 {visibleEdges.length}/{data.edges.length} 条主要边；箭头表示供给方 → 使用方<br />
+        阈值只影响界面显示，不影响使用完整网络计算的指标
       </div>
       {Tip}
     </div>

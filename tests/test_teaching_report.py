@@ -146,7 +146,7 @@ def test_report_reruns_only_an_actual_student_run_and_records_its_source():
     report = build(session, "同学", 7)
     assert [run["step"] for run in report.provenance["runs"]] == [12]
     assert report.provenance["runs"][0]["source"] == "student_run"
-    assert "来源：学生实际运行，服务端已校验并复估" in report.markdown
+    assert "来源：学生实际运行，服务器已校验并重新估计" in report.markdown
     assert "| 变量 | 系数 |" in report.markdown
     assert "步骤 13" in report.markdown and "未记录学生运行" in report.markdown
 
@@ -155,7 +155,7 @@ def test_report_reruns_only_an_actual_student_run_and_records_its_source():
 def test_report_records_meaningful_final_snapshots_without_a_click_timeline():
     report = build(_complete_session(artifacts.manifest_id()), "同学", 1)
     assert "自动记录的实验过程" in report.markdown
-    assert "查看切片" in report.markdown
+    assert "查看筛选结果" in report.markdown
     assert "选中单元格" in report.markdown
     assert "打开过的政策事件" in report.markdown
     assert "图表视角" in report.markdown
@@ -173,8 +173,14 @@ def test_report_binds_provenance_and_selected_quiz_answers():
     assert mid in report.markdown
     assert "Z 表的一格应该怎样解释" in report.markdown
     assert "行方国家×行业向列方国家×行业提供的中间投入" in report.markdown
-    assert "mock" in report.markdown
+    assert "个体基期 GVC 减去样本个体均值" in report.markdown
+    assert "拟真教学面板" in report.markdown
+    assert "报告编号" in report.markdown
+    assert "技术溯源（供核验）" in report.markdown
     assert "数据引用与许可提示" in report.markdown
+    assert "report_key" not in report.markdown
+    assert "manifest_id" not in report.markdown
+    assert "教学 mock" not in report.markdown
 
 
 @needs_artifacts
@@ -244,14 +250,16 @@ def test_report_is_portable_markdown_with_summary_and_limitations():
     assert "FVA 份额最高" in report.markdown
     assert "GVC 位置指数最高" in report.markdown
     assert "网络介数中心性最高" in report.markdown
-    assert "| 经济体 | FVA 份额 |" in report.markdown
-    assert "| 国家×行业节点 | 介数中心性 |" in report.markdown
-    assert "结论与限制" in report.markdown
-    assert "WWZ (2013)" in report.markdown
-    assert "WWYZ (2017)" in report.markdown
+    assert "| 经济体代码 | FVA 份额 |" in report.markdown
+    assert "| 经济体×行业代码 | 介数中心性 |" in report.markdown
+    assert "## 6. 结论与限制" in report.markdown
+    assert "## 7. 技术溯源（供核验）" in report.markdown
+    assert "WWZ（2013）" in report.markdown
+    assert "WWYZ（2017）" in report.markdown
     assert "Gephi" in report.markdown
-    assert "GDP 平减指数为拟真 mock" in report.markdown
-    assert "不输出 exporter-importer-sector" in report.markdown
+    assert "GDP 平减指数为拟真教学数据" in report.markdown
+    assert "出口方×进口方×行业" in report.markdown
+    assert "exporter-importer-sector" not in report.markdown
 
 
 @needs_artifacts

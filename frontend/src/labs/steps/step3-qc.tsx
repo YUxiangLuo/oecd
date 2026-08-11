@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api } from "../../api";
 import type { Meta, QcCheck } from "../../types";
 import { useAsync, YearPicker } from "../shared";
-import { QcChecksTable } from "./qc-checks-table";
+import { QcChecksTable, QcSeverityGuide, studentQcText } from "./qc-checks-table";
 import { summarizeQcRelease } from "./qc-release";
 
 /** 第 2 步只展示数据发布质检；处置边界由本步选择题检查。 */
@@ -38,17 +38,19 @@ export function QcLab({ meta, onNavigateStep }: {
               : `✓ ${allChecks.length} 项质检全部通过；仍可展开每项查看检查动机与口径。`}
       </div>
 
+      <QcSeverityGuide />
+
       {qcRelease.requiresDisclosure && (
         <details className="warnbox qc-release-status">
           <summary>
-            数据发布状态：当前产物含需持续披露的 QC 项
-            {qcRelease.override ? "（包含显式 override）" : ""}
+            数据发布状态：当前课程数据版本包含需要持续说明的质检项
+            {qcRelease.override ? "（包含人工例外放行）" : ""}
           </summary>
-          {qcRelease.fatal.length > 0 && <p><b>Fatal：</b>{qcRelease.fatal.join("、")}</p>}
-          {qcRelease.warning.length > 0 && <p><b>Warning：</b>{qcRelease.warning.join("、")}</p>}
-          {qcRelease.disclosure.length > 0 && <p><b>Disclosure：</b>{qcRelease.disclosure.join("、")}</p>}
+          {qcRelease.fatal.length > 0 && <p><b>严重错误：</b>{qcRelease.fatal.map(studentQcText).join("、")}</p>}
+          {qcRelease.warning.length > 0 && <p><b>警告：</b>{qcRelease.warning.map(studentQcText).join("、")}</p>}
+          {qcRelease.disclosure.length > 0 && <p><b>需持续说明：</b>{qcRelease.disclosure.map(studentQcText).join("、")}</p>}
           <p>
-            这些边界属于当前数据版本，适用于后续所有描述、回归与报告；最终报告会自动带入，无需在这里另行提交。
+            这些边界属于当前课程数据版本，适用于后续所有描述、回归与报告；最终报告会自动带入，无需在这里另行提交。
           </p>
         </details>
       )}
@@ -60,7 +62,7 @@ export function QcLab({ meta, onNavigateStep }: {
       <QcChecksTable rows={data} onNavigateStep={onNavigateStep} />
 
       <div className="section-head" style={{ marginTop: 18 }}>
-        <span className="section-head-icon">🧾</span>国家-年份控制变量质检
+        <span className="section-head-icon">🧾</span>经济体–年份控制变量质检
         <span className="section-head-line" />
       </div>
       {controlError
@@ -68,7 +70,7 @@ export function QcLab({ meta, onNavigateStep }: {
         : <QcChecksTable rows={controlChecks} onNavigateStep={onNavigateStep} />}
 
       <div className="tipbox" style={{ marginTop: 16 }}>
-        本步无需提交处置。请阅读异常等级与发布边界，并在下方理解检查中判断何时应停止、修正或披露。
+        本步无需提交处置。请阅读异常等级与发布边界，并在下方理解检查中判断何时应停止、修正或持续说明。
       </div>
     </div>
   );

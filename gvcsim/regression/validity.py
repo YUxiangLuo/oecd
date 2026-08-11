@@ -157,37 +157,38 @@ def analyze_support(
     if reversal_entities:
         shown = "、".join(reversal_entities[:3])
         more = f" 等 {len(reversal_entities)} 个" if len(reversal_entities) > 3 else ""
-        share_text = f"占处理后个体-年 {scan.share:.2%}({scan.miscoded_rows}/{scan.post_rows})"
+        share_text = f"占处理后个体–年份 {scan.share:.2%}（{scan.miscoded_rows}/{scan.post_rows}）"
         if scan.share >= MAX_REVERSAL_SHARE:
             escalate(
                 STATUS_INVALID_DESIGN,
-                f"处理可逆且比例过高:{shown}{more}个体在首次处理后又回到未处理状态,{share_text},"
-                f"超过教学上限 {MAX_REVERSAL_SHARE:.0%}。吸收型估计量把处理编码为首次处理后永久为 1,"
-                f"与真实政策路径不一致,估计对象已被实质改变,不能作推断;"
-                f"改用连续强度双向固定效应可让处理逐年跟随真实路径。",
+                f"处理可逆且比例过高：{shown}{more}个体在首次处理后又回到未处理状态，{share_text}，"
+                f"超过教学上限 {MAX_REVERSAL_SHARE:.0%}。吸收型估计量把处理编码为首次处理后永久为 1，"
+                f"与面板中逐年记录的处理路径不一致，估计对象已被实质改变，不能作推断；"
+                f"改用连续强度双向固定效应，可让处理逐年跟随面板记录。",
             )
         else:
             escalate(
                 STATUS_WARNING,
-                f"存在处理撤销:{shown}{more}个体在首次处理后又回到未处理状态,{share_text},"
-                f"未超过教学上限 {MAX_REVERSAL_SHARE:.0%}。吸收型编码把这些个体在撤销后仍记为处理,"
-                f"估计对象因此略有偏离;比例较小,推断仍予保留,解释时应排除这些个体。",
+                f"存在处理撤销：{shown}{more}个体在首次处理后又回到未处理状态，{share_text}，"
+                f"未超过教学上限 {MAX_REVERSAL_SHARE:.0%}。吸收型编码把这些个体在撤销后仍记为处理，"
+                f"估计对象因此略有偏离；比例较小，推断仍予保留，解释时应说明这一限制。",
             )
 
     if treated_clusters < MIN_TREATED_CLUSTERS:
+        cluster_label = "经济体" if cluster == "country" else cluster
         escalate(
             STATUS_INSUFFICIENT,
-            f"处理支持度不足:只有 {treated_clusters} 个处理聚类(按 {cluster} 聚类),"
+            f"处理支持度不足：只有 {treated_clusters} 个处理聚类（按{cluster_label}聚类），"
             f"低于教学下限 {MIN_TREATED_CLUSTERS}。总聚类数 {len(all_cluster_ids)} 不能补救这一点——"
-            f"聚类稳健方差由处理聚类的组间差异识别,已抑制 p 值、星号与置信区间。",
+            f"聚类稳健方差依赖处理聚类之间的差异，系统已抑制 p 值、星号与置信区间。",
         )
 
     if absorbing and untreated_clusters == 0 and treated_clusters > 0:
         escalate(
             STATUS_WARNING,
-            f"没有从未受处理的对照聚类:全部 {treated_clusters} 个聚类都曾受处理,"
-            f"识别完全依赖处理时点差异(尚未处理者充当对照)。"
-            f"传统 staggered TWFE 在处理效应异质时尤其容易有偏。",
+            f"没有从未受处理的对照聚类：全部 {treated_clusters} 个聚类都曾受处理，"
+            f"识别完全依赖处理时点差异（尚未处理者充当对照）。"
+            f"错位处理时点的双向固定效应（staggered TWFE）在处理效应存在异质性时尤其容易有偏。",
         )
 
     return TreatmentSupport(

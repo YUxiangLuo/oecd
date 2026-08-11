@@ -43,7 +43,7 @@ export function AppBootSkeleton() {
           <div className="sidebar-head">
             <div className="sidebar-head-row">
               <span className="sidebar-title">课程大纲</span>
-              <span className="sidebar-steps">16 STEPS</span>
+              <span className="sidebar-steps">共 16 步</span>
             </div>
             <div className="progress-track"><div className="progress-bar" style={{ width: "35%" }} /></div>
           </div>
@@ -109,7 +109,7 @@ export function TeacherWorkspace({
         </div>
         <div className="topbar-user">
           <span className="muted">
-            数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
+            数据：OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "（尚未准备）"}
           </span>
           {expiry && <span className="muted">会话至 {expiry}</span>}
           <span className="role-chip" title={`教师账号 · ${user.username}`}>{user.name}</span>
@@ -185,7 +185,7 @@ export function StudentTopbar({
           </label>
         )}
         <span className="muted">
-          数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
+          数据：OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "（尚未准备）"}
         </span>
         {completion ? (
           <span
@@ -200,7 +200,7 @@ export function StudentTopbar({
           </span>
         )}
         <span className="role-chip" title={`学生账号 · ${user.username}`}>{user.name}</span>
-        {expiry && <span className="muted" title="服务端签发的 expires_at">会话至 {expiry}</span>}
+        {expiry && <span className="muted" title="由服务器确定的会话到期时间">会话至 {expiry}</span>}
         <button ref={introTriggerRef} onClick={onShowIntro}>ⓘ 系统介绍</button>
         <button onClick={onRequestPasswordChange}>修改密码</button>
         <button onClick={onLogout}>退出</button>
@@ -260,10 +260,10 @@ export function CourseSidebar({ stepsData, current, maxStep, completion, onNavig
       <div className="sidebar-head">
         <div className="sidebar-head-row">
           <span className="sidebar-title">课程大纲</span>
-          <span className="sidebar-steps">{totalSteps} STEPS</span>
+          <span className="sidebar-steps">共 {totalSteps} 步</span>
         </div>
         {completion ? (
-          <div className="progress-track" role="img" aria-label={`已完成 ${completion.completed_count} 步,共 ${totalSteps} 步`}>
+          <div className="progress-track" role="img" aria-label={`已完成 ${completion.completed_count} 步，共 ${totalSteps} 步`}>
             <div
               className="progress-bar done"
               style={{ width: `${Math.max(2, (completion.completed_count / totalSteps) * 100)}%` }}
@@ -273,7 +273,7 @@ export function CourseSidebar({ stepsData, current, maxStep, completion, onNavig
           <div
             className="progress-track"
             role="img"
-            aria-label={`最远到过第 ${Math.min(maxStep, totalSteps)} 步,共 ${totalSteps} 步;这是浏览位置,不代表已完成`}
+            aria-label={`最远到过第 ${Math.min(maxStep, totalSteps)} 步，共 ${totalSteps} 步；这是浏览位置，不代表已完成`}
           >
             <div
               className="progress-bar"
@@ -338,7 +338,7 @@ export function StepHeader({ step, previous, next, stageName, totalSteps, onNavi
       <div className="step-header-mid">
         <div className="step-header-meta">
           <span className="stage-chip">{stageName}</span>
-          <span className="step-count">STEP {step.n} / {totalSteps}</span>
+          <span className="step-count">第 {step.n} / {totalSteps} 步</span>
         </div>
         <h2 id="current-step-heading">{step.title}</h2>
       </div>
@@ -364,7 +364,7 @@ export function StepRail({ step, previous, next, stageName, totalSteps, onNaviga
       </div>
       <div className="rail-tip"><span>💡</span><div><b>关键提示 · </b>{step.tip}</div></div>
       <div className="rail-sec">
-        <div className="rail-label">🔗 关联数据 / 依赖</div>
+        <div className="rail-label">🔗 关联数据与方法</div>
         <div className="rail-chips">{step.deps.map((dependency) => <span key={dependency} className="rail-chip">{dependency}</span>)}</div>
       </div>
       <div className="rail-flow">

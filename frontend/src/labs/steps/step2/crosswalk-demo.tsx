@@ -4,6 +4,8 @@ import { api } from "../../../api";
 import type { CrosswalkHsRow, CrosswalkPayload } from "../../../types";
 import { sectorLabel } from "../../../viz";
 import { pct, useAsync } from "../../shared";
+import { studentQcText } from "../qc-checks-table";
+import { shockTypeLabel } from "./model";
 
 const CROSSWALK_YEARS = [2018, 2019, 2020];
 type CrosswalkTab = "summary" | "hs" | "icio";
@@ -42,7 +44,7 @@ function CrosswalkContent({ selectedShockType }: { selectedShockType: string }) 
     <div className="crosswalk-content">
       {selectedShockType !== "tariff" && (
         <div className="crosswalk-scope-note">
-          当前面板选择的是“{selectedShockType}”，不直接使用 HS 商品编码；下方保留美国301关税清单的教学映射示例。
+          当前面板选择的是“{shockTypeLabel(selectedShockType)}”，不直接使用 HS 商品编码；下方保留美国 301 关税清单的教学映射示例。
         </div>
       )}
       <div className="controls crosswalk-controls">
@@ -62,13 +64,13 @@ function CrosswalkContent({ selectedShockType }: { selectedShockType: string }) 
       ) : (
         <>
           <div className="tipbox crosswalk-disclaimer">
-            {data.disclaimer} 当前301清单样本覆盖 {pct(data.summary.demo_list_value_coverage)} 的示例贸易额；
-            这里只解释编码转换，最终面板的维度、值域、日期与 treated 一致性在本步下方的「冲击数据质检」一并检查。
+            {studentQcText(data.disclaimer)} 当前 301 清单样本覆盖 {pct(data.summary.demo_list_value_coverage)} 的示例贸易额；
+            这里只解释编码转换，最终面板的维度、值域、日期与处理组标记一致性已在本步上方的“冲击数据质检”中检查。
           </div>
           <div className="crosswalk-stats">
-            <div><strong>{data.summary.n_hs_chapters}</strong><span>HS章</span></div>
+            <div><strong>{data.summary.n_hs_chapters}</strong><span>HS 章</span></div>
             <div><strong>{data.summary.n_crosswalk_rows}</strong><span>一对多映射</span></div>
-            <div><strong>{data.summary.n_icio_sectors}</strong><span>商品相关ICIO行业</span></div>
+            <div><strong>{data.summary.n_icio_sectors}</strong><span>商品相关 ICIO 行业</span></div>
             <div><strong>{data.checks.filter((check) => check.passed).length}/{data.checks.length}</strong><span>演示检查通过</span></div>
           </div>
           <div className="crosswalk-tabs" role="tablist" aria-label="HS 到 ICIO 映射详情">
@@ -98,11 +100,11 @@ function CrosswalkContent({ selectedShockType }: { selectedShockType: string }) 
                 <tbody>
                   {data.checks.map((check) => (
                     <tr key={check.name}>
-                      <td>{check.name}</td>
+                      <td>{studentQcText(check.name)}</td>
                       <td className={check.passed ? "qc-pass" : "qc-fail"}>{check.passed ? "通过" : "异常"}</td>
                       <td style={{ textAlign: "left", whiteSpace: "normal" }}>
-                        {check.detail}
-                        {check.warnings.map((warning) => <div key={warning} className="muted">{warning}</div>)}
+                        {studentQcText(check.detail)}
+                        {check.warnings.map((warning) => <div key={warning} className="muted">{studentQcText(warning)}</div>)}
                       </td>
                     </tr>
                   ))}
@@ -114,7 +116,7 @@ function CrosswalkContent({ selectedShockType }: { selectedShockType: string }) 
             <div id="crosswalk-panel-hs" role="tabpanel" tabIndex={0} aria-labelledby="crosswalk-tab-hs" className="table-wrap scrollable-region">
               <table className="data-table crosswalk-table">
                 <thead>
-                  <tr><th>HS章</th><th>清单</th><th>贸易额权重</th><th>清单覆盖</th><th>{year} 税率</th><th style={{ textAlign: "left" }}>说明</th></tr>
+                  <tr><th>HS 章</th><th>清单</th><th>贸易额权重</th><th>清单覆盖</th><th>{year} 税率</th><th style={{ textAlign: "left" }}>说明</th></tr>
                 </thead>
                 <tbody>
                   {data.hs_rows.map((row) => (
@@ -132,7 +134,7 @@ function CrosswalkContent({ selectedShockType }: { selectedShockType: string }) 
             <div id="crosswalk-panel-icio" role="tabpanel" tabIndex={0} aria-labelledby="crosswalk-tab-icio" className="table-wrap scrollable-region">
               <table className="data-table crosswalk-table">
                 <thead>
-                  <tr><th>ICIO行业</th><th>行业平均税率</th><th>映射贸易权重</th><th>受影响权重</th><th style={{ textAlign: "left" }}>主要HS章</th></tr>
+                  <tr><th>ICIO 行业</th><th>行业平均税率</th><th>映射贸易权重</th><th>受影响权重</th><th style={{ textAlign: "left" }}>主要 HS 章</th></tr>
                 </thead>
                 <tbody>
                   {mappedRows.map((row) => (
@@ -159,7 +161,7 @@ export function CrosswalkDemo({ selectedShockType }: { selectedShockType: string
       <summary>
         <div className="shock-section-title compact" role="heading" aria-level={3}>
           <span>3</span>
-          <div><strong>关税清单如何从 HS 映射到 ICIO</strong><small>仅关税冲击直接适用 · 美国301拟真教学示例</small></div>
+          <div><strong>关税清单如何从 HS 映射到 ICIO</strong><small>仅关税冲击直接适用 · 美国 301 拟真教学示例</small></div>
         </div>
         <span className="shock-details-meta">技术细节 · 默认收起</span>
       </summary>

@@ -36,7 +36,7 @@ describe("shared accessibility primitives", () => {
     );
 
     expect(html).toContain('role="group"');
-    expect(html).toContain('aria-label="国家选择列表"');
+    expect(html).toContain('aria-label="经济体选择列表"');
     expect(html).not.toContain('role="listbox"');
   });
 });

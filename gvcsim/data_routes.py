@@ -352,8 +352,8 @@ def shock_events():
     ]
     return {
         "events": events,
-        "disclaimer": "拟真演示数据:事件与税率量级参考公开资料手工编码,"
-        "出口暴露度由 OECD ICIO 双边流向计算,不能用于研究结论",
+        "disclaimer": "拟真教学数据：事件与税率量级参考公开资料手工编码；"
+        "出口暴露度由 OECD ICIO 双边流向计算，不能用于现实政策结论",
     }
 
 

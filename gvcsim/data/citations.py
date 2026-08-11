@@ -28,7 +28,7 @@ def report_source_label(data_sources: dict[str, Any] | None) -> str:
     if not data_sources or "oecd_icio" in data_sources:
         # Empty metadata is the legacy manifest shape used only by pre-attribution OECD releases.
         return "OECD ICIO"
-    return "manifest 中未识别的数据源"
+    return "课程数据版本中未识别的数据源"
 
 
 def report_source_disclosures(data_sources: dict[str, Any] | None) -> list[str]:
@@ -45,7 +45,7 @@ def report_source_disclosures(data_sources: dict[str, Any] | None) -> list[str]:
         ]
     if data_sources and "oecd_icio" not in data_sources:
         return [
-            "- 数据集：manifest 中的数据源类型无法识别。",
+            "- 数据集：课程数据版本中的数据源类型无法识别。",
             "- 许可提示：拒绝推断其权利状态；补齐来源、引用和条款前不得对外发布。",
         ]
     return [

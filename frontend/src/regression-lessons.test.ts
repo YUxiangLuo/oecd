@@ -24,8 +24,16 @@ describe("regression lessons", () => {
   });
 
   test("comparison copy explains the selected method without claiming proof", () => {
-    expect(comparisonExplanation("did")).toContain("处理后−处理前");
+    const did = comparisonExplanation("did");
+    expect(did).toContain("处理后−处理前");
+    expect(did).toContain("可比趋势");
+    expect(did).toContain("不能证明这些条件");
     expect(comparisonExplanation("event_study")).toContain("逐期比较");
     expect(comparisonExplanation("twfe_intensity")).toContain("连续冲击强度");
+  });
+
+  test("teaches centered interactions and no-interference in the rendered lesson source", () => {
+    expect(REGRESSION_LESSONS.production.caution).toContain("中心化后的基期 GVC 水平");
+    expect(REGRESSION_LESSONS.network.caution).toContain("无干扰");
   });
 });

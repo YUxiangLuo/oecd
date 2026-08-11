@@ -45,30 +45,30 @@ const DECOMP: Record<number, DecompCfg> = {
     totalLabel: "毛出口",
     unit: "amount",
     parts: [
-      { key: "DVAex", label: "DVAex 国内增加值出口", color: "#4b47e0", desc: "出口中由本国创造、并被国外最终吸收的增加值。占比越高,出口越“实”。" },
+      { key: "DVAex", label: "DVAex 国内增加值出口", color: "#4b47e0", desc: "出口中由本地创造、并被外国最终吸收的增加值；比较结构时应看它占毛出口的份额。" },
       { key: "DVArt", label: "DVArt 返回国内", color: "#7a6bff", desc: "先随出口离境、绕一圈又回到本国被吸收的国内增加值。" },
       { key: "DDC", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "本国增加值在跨境往返中被海关多次统计的部分。" },
-      { key: "FVA", label: "FVA 外国增加值", color: "#159a86", desc: "出口里来自外国的增加值(进口的中间品)。后向 GVC 依赖的核心。" },
+      { key: "FVA", label: "FVA 外国增加值", color: "#159a86", desc: "出口中来自外国投入的增加值；比较后向 GVC 参与程度时应看 FVA 占毛出口的份额。" },
       { key: "FDC", label: "FDC 外国重复计算", color: "#e0982a", desc: "外国增加值在跨境中被重复统计的部分。" },
       { key: "taxsub", label: "taxsub 税收减补贴", color: "#98a0b3", desc: "出口直接及间接所含的产品税减补贴(TLS)，由 ICIO TLS 账户沿投入产出链计算。" },
     ],
     note: (r) =>
       `EXDVA 出口国内增加值合计 = DVAex + DVArt = ${fmt(num(r.DVAex) + num(r.DVArt), "amount")}` +
-      `(WWZ 2013 / 王直等 2015 总贸易核算法,16 项分解归组为上面六大类)。`,
+      `（WWZ 2013 / 王直等 2015 总贸易核算法，将 16 项分解归组为上面六大类）。`,
   },
   5: {
     total: "SVA",
     totalLabel: "总增加值 SVA",
     unit: "amount",
     parts: [
-      { key: "1_VA_D", label: "1_VA_D 纯国内生产", color: "#4b47e0", desc: "增加值只服务本国最终需求,完全不跨境。" },
-      { key: "2_VA_RT", label: "2_VA_RT 传统贸易生产", color: "#159a86", desc: "增加值随最终产品直接出口,货物只过一次国境。" },
+      { key: "1_VA_D", label: "1_VA_D 纯国内生产", color: "#4b47e0", desc: "增加值只服务本地最终需求，完全不跨境。" },
+      { key: "2_VA_RT", label: "2_VA_RT 传统贸易生产", color: "#159a86", desc: "增加值随最终产品直接出口，货物跨境一次。" },
       { key: "3a_VA_GVC_S", label: "3a 简单 GVC 生产", color: "#e0982a", desc: "增加值随中间品跨境一次后在国外被吸收。" },
-      { key: "3b_VA_GVC_C", label: "3b 复杂 GVC 生产", color: "#f4693b", desc: "增加值至少两次跨越国境,深度嵌入全球生产网络。对政策冲击最敏感。" },
+      { key: "3b_VA_GVC_C", label: "3b 复杂 GVC 生产", color: "#f4693b", desc: "增加值至少两次跨境后被最终吸收；可能存在更多政策暴露渠道，敏感性仍需检验。" },
     ],
     note: (r) =>
-      `3_VA_GVC = 3a + 3b = ${fmt(num(r["3a_VA_GVC_S"]) + num(r["3b_VA_GVC_C"]), "amount")};` +
-      `另有对称的后向分解 FGY 系列(按最终产品完成地记账),见上方指标表。`,
+      `3_VA_GVC = 3a + 3b = ${fmt(num(r["3a_VA_GVC_S"]) + num(r["3b_VA_GVC_C"]), "amount")}；` +
+      `另有按最终产品完成地记账的后向分解 FGY 系列，见上方指标表。`,
   },
   6: {
     total: "PLv",
@@ -76,13 +76,13 @@ const DECOMP: Record<number, DecompCfg> = {
     unit: "number",
     weightTotal: "SVA",
     parts: [
-      { key: "PLv_D", label: "纯国内段长度", color: "#4b47e0", desc: "纯国内生产活动的平均长度,按 1_VA_D/SVA 份额加权计入总长度。", weightKey: "1_VA_D" },
-      { key: "PLv_RT", label: "传统贸易段长度", color: "#159a86", desc: "传统贸易生产活动的平均长度,按 2_VA_RT/SVA 份额加权计入。", weightKey: "2_VA_RT" },
-      { key: "PLv_GVC", label: "GVC 段长度", color: "#f4693b", desc: "GVC 生产活动的平均长度(通常最长,增加值多次被计为产出),按 3_VA_GVC/SVA 份额加权计入。", weightKey: "3_VA_GVC" },
+      { key: "PLv_D", label: "纯国内段长度", color: "#4b47e0", desc: "纯国内生产活动的平均长度，按 1_VA_D/SVA 份额加权计入总长度。", weightKey: "1_VA_D" },
+      { key: "PLv_RT", label: "传统贸易段长度", color: "#159a86", desc: "传统贸易生产活动的平均长度，按 2_VA_RT/SVA 份额加权计入。", weightKey: "2_VA_RT" },
+      { key: "PLv_GVC", label: "GVC 段长度", color: "#f4693b", desc: "GVC 生产活动的平均长度，按 3_VA_GVC/SVA 份额加权计入总长度。", weightKey: "3_VA_GVC" },
     ],
     note: (r) =>
-      `各分项显示的是"VA 份额 × 段长度"的贡献值(WWYZ 2017b:总长度是段长度的增加值加权平均);` +
-      `段长度本身:PLv_D=${num(r.PLv_D).toFixed(2)}、PLv_RT=${num(r.PLv_RT).toFixed(2)}、PLv_GVC=${num(r.PLv_GVC).toFixed(2)};` +
+      `各分项显示的是“VA 份额 × 段长度”的贡献值（WWYZ 2017b：总长度是段长度的增加值加权平均）；` +
+      `段长度本身：PLv_D=${num(r.PLv_D).toFixed(2)}、PLv_RT=${num(r.PLv_RT).toFixed(2)}、PLv_GVC=${num(r.PLv_GVC).toFixed(2)}；` +
       `GVC 位置指数 GVCPs = PLv_GVC / PLy_GVC = ${num(r.GVCPs).toFixed(3)}。`,
   },
 };
@@ -216,7 +216,7 @@ export function DecompositionDemo({
     return (
       <div className="demo-controls" style={{ marginBottom: 10 }}>
         <b>{compare ? `实体 ${side}` : "分析实体"}</b>
-        <LabeledControl label="国家">
+        <LabeledControl label="经济体">
           {(id) => (
             <select id={id} value={country} onChange={(event) => {
               setCountry(event.target.value);
@@ -294,8 +294,8 @@ export function DecompositionDemo({
       <div className="demo-title">🧮 动手拆解 · 看着分项加回总量</div>
       <div className="demo-controls">
         <div className="pill-group">
-          <button className={gran === "sector" ? "on" : ""} onClick={() => setGran("sector")}>国家–行业级</button>
-          <button className={gran === "country" ? "on" : ""} onClick={() => setGran("country")}>国家级</button>
+          <button className={gran === "sector" ? "on" : ""} onClick={() => setGran("sector")}>经济体×行业</button>
+          <button className={gran === "country" ? "on" : ""} onClick={() => setGran("country")}>经济体层</button>
         </div>
         <LabeledControl label="共享年份">
           {(id) => (
@@ -598,7 +598,7 @@ export function NetworkCentralityDemo() {
             </>
           )}
           <div className="ndp-disclaim">
-            这是一个 7 节点的有向演示网络。真实系统保留全部正流量边和正自环，在完整的全球「国家×行业」生产网络上按同一 Gephi 口径计算。
+            这是一个 7 节点的有向演示网络。真实系统保留全部正流量边和正自环，并在完整的全球“经济体×行业”生产网络上按统一的有向网络口径计算。
           </div>
         </div>
       </div>

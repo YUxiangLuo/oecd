@@ -112,7 +112,7 @@ function BarChart({ chart }: { chart: Extract<ReportChart, { type: "bar" }> }) {
   const zero = x(0);
 
   return (
-    <ReportFigure title={chart.title ?? "指标 Top 5"}>
+    <ReportFigure title={chart.title ?? "指标前 5 名"}>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "指标条形图"} style={{ width: "100%", height: "auto" }}>
         <line x1={zero} x2={zero} y1={m.t - 5} y2={H - m.b} stroke="#cfd3dd" />
         {chart.items.map((item, i) => {

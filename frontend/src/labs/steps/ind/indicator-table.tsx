@@ -1,8 +1,8 @@
 /**
- * 指标计算阶段（步骤 3–6）的分解数据表：国家/年份筛选、分页与实验快照。
+ * 指标计算阶段（步骤 3–6）的分解数据表：经济体/年份筛选、分页与实验快照。
  *
- * 受控组件:year/country/page 由外层持有,这样「动手拆解」演示的“查看 ICIO 示例”
- * 才能驱动这张表跳到指定实体。主动查看过的国家在本组件内累加保存。
+ * 受控组件 year/country/page 由外层持有，这样“动手拆解”演示的“查看 ICIO 示例”
+ * 才能驱动这张表跳到指定实体。主动查看过的经济体在本组件内累加保存。
  */
 import { useEffect, useRef, useState } from "react";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
@@ -10,6 +10,12 @@ import { api } from "../../../api";
 import type { IndicatorSchema, IndustryPage, Meta, QuizCompletionState, StepStateApi } from "../../../types";
 import { countryLabel, sectorLabel } from "../../../viz";
 import { Pager, fieldLabel, fmtField, useAsync } from "../../shared";
+
+const BASE_LABEL: Record<string, string> = {
+  country: "经济体",
+  industry: "行业",
+  year: "年份",
+};
 
 const BASE_DESC: Record<string, string> = {
   country: "OECD 经济体代码",
@@ -31,6 +37,29 @@ const CORE_METRIC: Record<string, string> = {
   length: "GVCPs",
   network: "betweenesscentrality",
 };
+
+/** 默认列围绕每一步的教学问题选取，不能再用“字段前五项”偶然决定。 */
+const DEFAULT_METRIC_FIELDS: Record<string, string[]> = {
+  trade: ["gross_exports", "DVAex", "FVA", "FVA_share", "DVAex_share"],
+  production: ["SVA", "1_VA_D", "2_VA_RT", "3b_VA_GVC_C", "3b_VA_GVC_C_share"],
+  length: ["PLv", "PLv_GVC", "PLy", "PLy_GVC", "GVCPs"],
+  network: ["degree", "weighted degree", "weighted indegree", "weighted outdegree", "betweenesscentrality"],
+};
+
+export function defaultIndicatorMetrics(groupKey: string, metricCols: string[]): string[] {
+  const available = new Set(metricCols);
+  const preferred = (DEFAULT_METRIC_FIELDS[groupKey] ?? []).filter((key) => available.has(key));
+  const selected = [...preferred];
+  for (const key of metricCols) {
+    if (selected.length >= 5) break;
+    if (!selected.includes(key)) selected.push(key);
+  }
+  return selected;
+}
+
+export function indicatorColumnLabel(key: string, schema?: IndicatorSchema | null): string {
+  return BASE_LABEL[key] ?? fieldLabel(key, schema);
+}
 
 export function restoreIndicatorSelection(meta: Meta, saved?: IndicatorStepState) {
   const fallbackCountry = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
@@ -153,14 +182,15 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
   const baseCols = ["country", "industry", "year"];
   const rowKeys = data?.rows[0] ? new Set(Object.keys(data.rows[0])) : new Set<string>();
   const metricCols = data?.rows[0] ? (group?.fields ?? []).filter((c) => rowKeys.has(c)) : [];
-  const visibleMetrics = showAllFields ? metricCols : metricCols.slice(0, 5);
+  const defaultMetrics = defaultIndicatorMetrics(groupKey, metricCols);
+  const visibleMetrics = showAllFields ? metricCols : defaultMetrics;
   const cols = data?.rows[0] ? [...baseCols, ...visibleMetrics] : [];
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
 
   return (
     <>
       <div className="controls">
-        <LabeledControl label="国家">
+        <LabeledControl label="经济体">
           {(id) => (
             <select id={id} value={country} onChange={(e) => onCountry(e.target.value)}>
               <option value="">全部</option>
@@ -178,18 +208,20 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
         <span className="muted">{data ? `共 ${data.total} 条` : "加载中…"}</span>
       </div>
       {(state.data?.observations?.length ?? 0) > 0 && (
-        <div className="observation-strip" role="group" aria-label="已捕获的对比数值">
-          <b>已捕获 {state.data?.metric}</b>
+        <div className="observation-strip" role="group" aria-label="已记录的对比数值">
+          <b>已记录：{fieldLabel(state.data?.metric ?? "", schema)}</b>
           {state.data?.observations?.map((item) => (
-            <span key={`${item.year}-${item.entity}`}>{item.year} · {item.entity} = {fmtField(item.value, state.data?.metric ?? "", schema)}</span>
+            <span key={`${item.year}-${item.entity}`}>
+              {item.year} · {countryLabel(item.country)} · {sectorLabel(item.industry)} = {fmtField(item.value, state.data?.metric ?? "", schema)}
+            </span>
           ))}
         </div>
       )}
-      {metricCols.length > 5 && (
+      {metricCols.length > defaultMetrics.length && (
         <div className="table-priority-tools">
-          <span className="muted">默认显示 5 个核心指标，减少横向扫表负担。</span>
+          <span className="muted">默认显示与本步问题直接相关的 {defaultMetrics.length} 个核心指标。</span>
           <button type="button" className="secondary" onClick={() => setShowAllFields((value) => !value)}>
-            {showAllFields ? "收起扩展指标" : `展开 ${metricCols.length - 5} 个扩展指标`}
+            {showAllFields ? "收起扩展指标" : `展开 ${metricCols.length - defaultMetrics.length} 个扩展指标`}
           </button>
         </div>
       )}
@@ -203,7 +235,7 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
               {cols.map((c, index) => (
                 <th key={c} title={schema?.fields[c]?.desc ?? BASE_DESC[c]}
                   style={index === 0 ? { position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" } : undefined}>
-                  {fieldLabel(c, schema)}{schema?.fields[c]?.desc ? " ⓘ" : ""}
+                  {indicatorColumnLabel(c, schema)}{schema?.fields[c]?.desc ? " ⓘ" : ""}
                 </th>
               ))}
             </tr>
@@ -215,8 +247,9 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
                   <td key={c} style={index === 0 ? { position: "sticky", left: 0, zIndex: 2, background: "#fff" } : undefined}>
                     {c === "industry"
                       ? r.industry != null ? sectorLabel(String(r.industry)) : "—"
-                      : ["year", "country"].includes(c) ? String(r[c] ?? "—")
-                        : fmtField(r[c], c, schema)}
+                      : c === "country"
+                        ? r.country != null ? countryLabel(String(r.country)) : "—"
+                        : c === "year" ? String(r.year ?? "—") : fmtField(r[c], c, schema)}
                   </td>
                 ))}
               </tr>

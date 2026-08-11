@@ -33,7 +33,7 @@ export function HeatTableViz({ rows, schema }: { rows: Row[]; schema?: Indicator
   return (
     <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
       <div style={{ display: "flex", padding: "11px 18px", background: "#fafbfd", borderBottom: "1px solid #eef0f5", fontSize: 11.5, color: "#5f6677", fontWeight: 600 }}>
-        <div style={{ flex: 1 }}>{isIndustry ? "行业节点" : "国家 / 地区"}(按介数排序 Top 15)</div>
+        <div style={{ flex: 1 }}>{isIndustry ? "行业节点" : "经济体或地区"}（按介数排序前 15）</div>
         {HEAT_COLS.map((c) => <div key={c.key} title={schema?.fields[c.key]?.desc ?? c.desc} style={{ width: 118, textAlign: "center" }}>{c.name} ⓘ</div>)}
       </div>
       {top.map((r) => (

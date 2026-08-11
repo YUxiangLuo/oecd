@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, cast
@@ -61,11 +62,40 @@ _SNAPSHOT_FIELDS = (
     "viewed_events",
 )
 
-_STATUS_LABELS = {
+_STATUS_TITLES = {
     "ok": "可按课程口径解释",
-    "warning": "可展示,但须披露设计问题",
-    "insufficient": "处理支持度不足,已抑制推断",
-    "invalid_design": "设计与处理路径不相容,已停止推断",
+    "warning": "需要谨慎解释",
+    "insufficient": "处理支持度不足",
+    "invalid_design": "设计不适用",
+}
+_STATUS_LABELS = {
+    "ok": "当前设计未触发结构化预检问题",
+    "warning": "结果可展示，但必须说明设计问题",
+    "insufficient": "处理支持度不足，系统已抑制推断",
+    "invalid_design": "设计与处理路径不相容，系统已停止推断",
+}
+
+_TABLE_LABELS = {
+    "z": "中间投入表（Z）",
+    "y": "最终需求表（Y）",
+    "accounts": "增加值、税收与总产出账户",
+}
+_CHART_LABELS = {
+    "quadrant": "出口价值定位图",
+    "decompose": "出口拆解",
+    "rank": "排名",
+    "ladder": "GVC 生产构成阶梯",
+    "industry": "行业下钻",
+    "position": "上下游定位图",
+    "bars": "生产链长度对比",
+    "network": "贸易网络图",
+    "heat": "枢纽热力表",
+}
+_METRIC_LABELS = {
+    "FVA_share": "外国增加值份额（FVA 份额）",
+    "3b_VA_GVC_C_share": "复杂 GVC 生产份额",
+    "GVCPs": "GVC 位置指数（GVCPs）",
+    "betweenesscentrality": "介数中心性",
 }
 
 
@@ -115,6 +145,50 @@ def _step_data(session: dict[str, Any], step: int) -> dict[str, Any]:
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _display_entity_code(value: Any) -> str:
+    """把稳定机器键整理成可读代码，同时保留复核所需的原值。"""
+    text = str(value or "—")
+    country, separator, industry = text.partition("_")
+    return f"{country} · {industry}" if separator and country and industry else text
+
+
+def _student_qc_text(value: Any) -> str:
+    """报告正文使用课堂术语；底层质检契约和机器键保持不变。"""
+    text = re.sub(r"\('([A-Z0-9_]+)', '([A-Z0-9_]+)'\)", r"\1 · \2", str(value))
+    inventory_label = "存货变化（INVNT）"
+    inventory_token = "__inventory_category_label__"
+    return (
+        text.replace("country×sector×year", "经济体×行业×年份")
+        .replace("country×year", "经济体×年份")
+        .replace("country/year", "经济体/年份")
+        .replace("*_shock", "冲击强度")
+        .replace("Million USD", "百万美元")
+        .replace("SVA≤0", "总增加值（SVA）≤0")
+        .replace("INVNT(库存变化)", inventory_token)
+        .replace("INVNT（库存变化）", inventory_token)
+        .replace("INVNT", inventory_label)
+        .replace(inventory_token, inventory_label)
+        .replace("披露", "持续说明")
+        .replace("国家/地区", "经济体/地区账户")
+        .replace("国家–行业", "经济体×行业")
+        .replace("国家×行业", "经济体×行业")
+        .replace("国家–年份", "经济体–年份")
+        .replace("国家/行业", "经济体/行业")
+        .replace("国家级", "经济体层")
+        .replace("每个国家", "每个经济体")
+        .replace("treated 标记", "处理组标记")
+        .replace("控制变量 schema", "控制变量字段结构")
+        .replace("treated", "处理组")
+        .replace("schema", "字段结构")
+        .replace("crosswalk", "映射表")
+        .replace("mock", "拟真教学数据")
+        .replace(";", "；")
+        .replace(": ", "：")
+        .replace("(", "（")
+        .replace(")", "）")
+    )
 
 
 def _settings_to_design(outcome: str, settings: dict[str, Any]) -> tuple[RegressionDesign, str] | None:
@@ -287,8 +361,14 @@ def _quiz_lines(step: int, data: dict[str, Any]) -> list[str]:
     if not selected:
         return ["- 理解检查：未记录", ""]
     lines: list[str] = []
+    if step == 13:
+        lines += [
+            "> 本步题目中的“基期 GVC 水平”指模型使用的中心化水平，即个体基期 GVC 减去样本个体均值。",
+            "",
+        ]
     for index, item in enumerate(selected, start=1):
-        lines += [f"{index}. {item['question']}", f"   - 答案：{item['answer']}"]
+        question = str(item["question"]).replace("fatal", "严重错误（Fatal）")
+        lines += [f"{index}. {question}", f"   - 答案：{item['answer']}"]
     lines.append("")
     return lines
 
@@ -324,39 +404,49 @@ def _snapshot_lines(data: dict[str, Any]) -> list[str]:
     lines: list[str] = []
     if isinstance(data.get("slice"), dict):
         slice_ = data["slice"]
-        lines.append(
-            "- 查看切片："
-            + " / ".join(
-                inline(slice_.get(key) or "—")
-                for key in ("year", "table", "row_country", "row_sector", "col_country", "col_sector")
-            )
-        )
+        parts = [
+            f"{inline(slice_.get('year') or '—')} 年",
+            _TABLE_LABELS.get(str(slice_.get("table") or ""), inline(slice_.get("table") or "未知表")),
+            f"供给方经济体 {inline(slice_.get('row_country') or '—')}",
+        ]
+        if slice_.get("row_sector"):
+            parts.append(f"供给方行业 {inline(slice_['row_sector'])}")
+        if slice_.get("col_country"):
+            parts.append(f"使用方经济体 {inline(slice_['col_country'])}")
+        if slice_.get("col_sector"):
+            parts.append(f"使用方行业 {inline(slice_['col_sector'])}")
+        lines.append("- 查看筛选结果：" + "；".join(parts))
     if isinstance(data.get("observation"), dict):
         item = data["observation"]
         lines.append(
-            f"- 选中单元格：{inline(item.get('row', '—'))} × {inline(item.get('column', '—'))}"
-            f" = {inline(item.get('value', '—'))}"
+            f"- 选中单元格：{inline(_display_entity_code(item.get('row')))} × "
+            f"{inline(_display_entity_code(item.get('column')))} = {inline(item.get('value', '—'))}"
         )
     if isinstance(data.get("year"), int):
         lines.append(f"- 当前年份：{data['year']}")
     if data.get("chart"):
-        lines.append(f"- 图表视角：`{inline(data['chart'])}`")
+        chart = str(data["chart"])
+        lines.append(f"- 图表视角：{_CHART_LABELS.get(chart, inline(chart))}")
     compared = render_list(data.get("compared"))
     if compared:
-        lines.append("- 对比对象：" + compared)
+        lines.append("- 对比的经济体代码：" + compared)
     if data.get("metric"):
-        lines.append(f"- 查看指标：`{inline(data['metric'])}`")
+        metric = str(data["metric"])
+        lines.append(f"- 查看指标：{_METRIC_LABELS.get(metric, inline(metric))}")
     if data.get("drill"):
-        lines.append(f"- 下钻对象：{inline(data['drill'])}")
+        lines.append(f"- 下钻经济体代码：{inline(data['drill'])}")
     if isinstance(data.get("observations"), list):
         rendered = []
         for item in data["observations"][:8]:
             if not isinstance(item, dict):
                 continue
-            entity = item.get("entity") or "·".join(
+            entity = item.get("entity") or "_".join(
                 inline(item.get(key) or "") for key in ("country", "industry")
-            ).strip("·")
-            rendered.append(f"{inline(entity)} ({inline(item.get('year', '—'))}) = {inline(item.get('value', '—'))}")
+            ).strip("_")
+            rendered.append(
+                f"{inline(_display_entity_code(entity))}（{inline(item.get('year', '—'))} 年）"
+                f" = {inline(item.get('value', '—'))}"
+            )
         if rendered:
             lines.append("- 自动保存的观察值：" + "；".join(rendered))
     viewed_types = render_list(data.get("viewed_shock_types"))
@@ -411,17 +501,17 @@ def _indicator_summary(year: int, source_label: str) -> list[str]:
     return [
         f"## 4. GVC 指标摘要（{year} 年截面）",
         "",
-        f"覆盖 {snap.shape[0]} 个经济体。以下是 {source_label} 计算出的全局背景，不代表学生执行了回归。",
+        f"覆盖 {snap.shape[0]} 个经济体。以下是根据 {source_label} 计算的全局背景，不代表学生执行了回归。",
         "",
         "**FVA 份额最高**（出口中外国增加值占毛出口比重）：",
         "",
-        *_top5_table(snap["FVA_share"].nlargest(5), "经济体", "FVA 份额", 3),
-        "**GVC 位置指数最高**（前向/后向 GVC 生产长度之比）：",
+        *_top5_table(snap["FVA_share"].nlargest(5), "经济体代码", "FVA 份额", 3),
+        "**GVC 位置指数最高**（前向 GVC 长度 / 后向 GVC 长度）：",
         "",
-        *_top5_table(snap["GVCPs"].nlargest(5), "经济体", "GVCPs", 3),
-        "**全球国家×行业网络介数中心性最高**：",
+        *_top5_table(snap["GVCPs"].nlargest(5), "经济体代码", "GVC 位置指数（GVCPs）", 3),
+        "**全球经济体×行业网络介数中心性最高**：",
         "",
-        *_top5_table(_industry_network_top(industry_panel, year, exclude_row=True), "国家×行业节点", "介数中心性", 1),
+        *_top5_table(_industry_network_top(industry_panel, year, exclude_row=True), "经济体×行业代码", "介数中心性", 1),
     ]
 
 
@@ -429,7 +519,9 @@ def _qc_sections(qc_manifest: dict[str, Any]) -> list[str]:
     lines = [
         "## 1. 数据质检状态",
         "",
-        "本节直接来自当前数据产物的发布质检，不要求学生另行选择或提交处置。",
+        "本节来自当前课程数据版本的发布质检，不要求学生另行选择或提交处置。",
+        "",
+        "> 等级说明：“严重错误”会阻止下游分析；“警告”表示结果可展示但需要谨慎解释；“需持续说明”表示检查已通过，但相关边界必须保留。",
         "",
     ]
     groups: list[tuple[str, dict[str, Any]]] = []
@@ -442,25 +534,25 @@ def _qc_sections(qc_manifest: dict[str, Any]) -> list[str]:
             groups.append((label, status))
     disclosures = 0
     for label, status in groups:
-        fatal = [str(item) for item in status.get("fatal") or []]
-        warning = [str(item) for item in status.get("warning") or []]
-        disclosure = [str(item) for item in status.get("disclosure") or []]
+        fatal = [_student_qc_text(item) for item in status.get("fatal") or []]
+        warning = [_student_qc_text(item) for item in status.get("warning") or []]
+        disclosure = [_student_qc_text(item) for item in status.get("disclosure") or []]
         if not (fatal or warning or disclosure or status.get("override")):
             continue
         disclosures += 1
         lines.append(f"### {label}")
         lines.append("")
         if status.get("override"):
-            lines.append("- **包含显式 QC override；下游结果必须持续披露。**")
+            lines.append("- **包含人工例外放行；下游结果必须持续说明。**")
         if fatal:
-            lines.append("- Fatal：" + "、".join(fatal))
+            lines.append("- 严重错误：" + "、".join(fatal))
         if warning:
-            lines.append("- Warning：" + "、".join(warning))
+            lines.append("- 警告：" + "、".join(warning))
         if disclosure:
-            lines.append("- Disclosure：" + "、".join(disclosure))
+            lines.append("- 需持续说明：" + "、".join(disclosure))
         lines.append("")
     if disclosures == 0:
-        lines += ["当前发布清单没有需要额外披露的 QC 项。", ""]
+        lines += ["当前课程数据版本没有需要额外说明的质检项。", ""]
     return lines
 
 
@@ -477,7 +569,7 @@ def _regression_sections(runs: list[dict[str, Any]]) -> list[str]:
     lines = [
         "## 5. 学生实际运行的教学回归",
         "",
-        "这里只收录与当前学生、作业尝试和数据版本匹配的运行，并由服务端按原设计重新估计。未运行的步骤不会自动补跑默认模型。",
+        "这里只收录与当前学生、本次作业记录和课程数据版本匹配的运行，并由服务器按原设计重新估计。未运行的步骤不会自动补跑默认模型。",
         "",
     ]
     run_steps = {int(run["step"]) for run in runs}
@@ -494,12 +586,12 @@ def _regression_sections(runs: list[dict[str, Any]]) -> list[str]:
         lines += [
             f"### 步骤 {run['step']} · {run['title']}",
             "",
-            "- 来源：学生实际运行，服务端已校验并复估",
+            "- 来源：学生实际运行，服务器已校验并重新估计",
             f"- 被解释变量：{design.depvar_label}",
             f"- 政策冲击：{design.shock_type_label}  ·  方法：{design.method_label}  ·  粒度：{design.granularity_label}",
             f"- 控制：{design.control_mode_label}  ·  样本：{design.sample_filter}",
             f"- 暴露权重：{'首次处理前固定（主口径）' if run['weight_mode'] == 'fixed_pretreatment' else '当期贸易结构（仅稳健性）'}",
-            f"- **设计有效性：{status} — {_STATUS_LABELS.get(status, status)}**",
+            f"- **设计有效性：{_STATUS_TITLES.get(status, '需要复核')} — {_STATUS_LABELS.get(status, '当前状态需要教师复核')}**",
             "",
             "| 变量 | 系数 | 聚类标准误 | 95% 置信区间 | p | 显著性 |",
             "|---|---:|---:|---:|---:|:---:|",
@@ -527,7 +619,10 @@ def _regression_sections(runs: list[dict[str, Any]]) -> list[str]:
         if result.support and result.support.get("untreated_clusters") == 0:
             lines += ["- **预检警告**：没有永不处理聚类；结论仅依赖错位处理时点。", ""]
         if design.outcome == "network":
-            lines += ["- **预检警告**：网络节点间存在干扰/外溢，传统 SUTVA 不成立。", ""]
+            lines += [
+                "- **预检警告**：稳定单元处理值假设（SUTVA）的“无干扰”条件可能不成立；一个节点受到的政策冲击可能通过网络影响其他节点。",
+                "",
+            ]
         if result.marginal_effects:
             lines += [
                 "服务端按完整协方差矩阵计算的条件边际效应：",
@@ -548,14 +643,14 @@ def _regression_sections(runs: list[dict[str, Any]]) -> list[str]:
 def _limitations(runs: list[dict[str, Any]]) -> list[str]:
     granularities = "、".join(sorted({run["design"].granularity_label for run in runs})) or "未记录学生回归"
     return [
-        "## 7. 结论与限制",
+        "## 6. 结论与限制",
         "",
-        f"- 本报告由服务端从当前实验会话生成；前 15 步答题通过后即可产出（回归粒度：{granularities}）。",
+        f"- 本报告由服务器根据当前实验记录生成；前 15 步答题通过后即可产出（回归粒度：{granularities}）。",
         "- 自动保存的筛选和观察值只是实验快照，不是完成凭证，也不应被解释为因果证据。",
-        "- 冲击变量为**拟真演示面板**；即使未来接入真实事件数据，仍需论证冲击外生性、趋势可比性、处理效应异质性并完成稳健性检验。",
-        "- 控制变量支持 ICIO 内生派生与 WDI/IMF 风格宏观 mock；**GDP 平减指数为拟真 mock，不是官方价格指数**。",
-        "- 指标采用公开文献口径：WWZ (2013) 总贸易核算、WWYZ (2017) 生产分解与生产长度，以及 Gephi-compatible 有向网络中心性；本报告不输出 exporter-importer-sector 双边矩阵明细。",
-        "- 被标为 `insufficient` 或 `invalid_design` 的估计已抑制推断量；这不代表“没有效应”。",
+        "- 政策冲击是**拟真教学面板**。它在回归中作为候选处理变量，但外生性不是预先成立的事实；因果解释仍需论证趋势可比性、处理效应异质性并完成稳健性检验。",
+        "- 控制变量包括 ICIO 派生指标，以及仿照 WDI/IMF 变量结构生成的拟真宏观控制变量；**GDP 平减指数为拟真教学数据，不是官方价格指数**。",
+        "- 指标采用公开文献口径：WWZ（2013）总贸易核算、WWYZ（2017）生产分解与生产长度，以及与 Gephi 方向口径兼容的网络中心性。报告不提供“出口方×进口方×行业”双边矩阵明细。",
+        "- 被标为“处理支持度不足”或“设计不适用”的估计已抑制推断量；这不代表“没有效应”。",
         "",
     ]
 
@@ -565,12 +660,12 @@ def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], p
     data_sources = _as_dict(provenance["artifact"].get("data_sources"))
     source_label = report_source_label(data_sources)
     lines: list[str] = [
-        "# 贸易政策冲击对全球价值链结构的影响",
+        "# 贸易政策暴露与全球价值链结构变化：教学实验报告",
         "",
-        f"学生：{student}  ·  内容版本：`{provenance['session_fingerprint']}`",
+        f"学生：{student}  ·  报告编号：`{provenance['session_fingerprint']}`",
         "",
         f"> **数据边界**：结果变量与网络指标来自 {source_label}"
-        f"（{years[0]}–{years[-1]}）；政策冲击为确定性教学 mock。"
+        f"（{years[0]}–{years[-1]}）；政策冲击来自确定性的拟真教学面板。"
         "本报告用于练习识别与推断，不构成现实政策结论。",
         "",
     ]
@@ -579,6 +674,7 @@ def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], p
     lines += _snapshot_sections(session)
     lines += _indicator_summary(int(years[-1]), source_label)
     lines += _regression_sections(runs)
+    lines += _limitations(runs)
 
     build = provenance["artifact"].get("build") or {}
     runtime = build.get("runtime") or {}
@@ -591,28 +687,31 @@ def _render(session: dict[str, Any], student: str, runs: list[dict[str, Any]], p
             f"linearmodels {package_versions.get('linearmodels', '—')}",
         ]
     )
+    dirty_value = build.get("git_dirty")
+    dirty_label = "是" if dirty_value is True else "否" if dirty_value is False else "—"
     lines += [
-        "## 6. 溯源与状态",
+        "## 7. 技术溯源（供核验）",
+        "",
+        "以下机器校验信息用于把报告对应回准确的数据和代码版本，不影响课程任务，也无需作为经济学结论解读。",
         "",
         "| 项 | 值 |",
         "|---|---|",
-        f"| 报告指纹 report_key | `{provenance['report_key']}` |",
-        f"| 产物清单 manifest_id | `{provenance['manifest_id']}` |",
-        f"| 会话契约版本 | `{provenance['session_version']}` |",
-        f"| 报告状态 | `{provenance['status']}` |",
-        f"| 产物 schema / 网络算法 | `{provenance['artifact']['schema_version']}` / `{provenance['artifact']['network_algorithm']}` |",
-        f"| 构建 Git commit / dirty | `{build.get('git_commit', '—')}` / `{build.get('git_dirty', '—')}` |",
-        f"| 影响产物的 source tree SHA-256 | `{build.get('source_tree_sha256', '—')}` |",
+        f"| 报告编号 | `{provenance['report_key']}` |",
+        f"| 课程数据版本 | `{provenance['manifest_id']}` |",
+        f"| 学习记录格式版本 | `{provenance['session_version']}` |",
+        "| 报告状态 | 已生成 |",
+        f"| 数据结构版本 / 网络计算口径 | `{provenance['artifact']['schema_version']}` / `{provenance['artifact']['network_algorithm']}` |",
+        f"| 构建代码版本 / 含未提交更改 | `{build.get('git_commit', '—')}` / {dirty_label} |",
+        f"| 课程数据构建输入摘要（SHA-256） | `{build.get('source_tree_sha256', '—')}` |",
         f"| 构建运行环境 | {runtime_summary} |",
         "",
         "### 数据引用与许可提示",
         "",
         *report_source_disclosures(data_sources),
         "",
-        "同一组答题结果、报告中展示的实验快照、实际回归设计与数据产物会得到同一个 report_key。",
+        "相同的答题结果、报告中展示的实验快照、实际回归设计和课程数据版本会得到相同的报告编号。",
         "",
     ]
-    lines += _limitations(runs)
     return "\n".join(lines)
 
 
@@ -632,7 +731,13 @@ def build(
     manifest_id = artifacts.manifest_id()
     if session.get("manifest_id") != manifest_id:
         raise ReportGateError(
-            [{"step": 0, "title": "数据产物已更新", "missing": ["实验会话对应的产物已过期，请重新答题后再生成报告"]}]
+            [
+                {
+                    "step": 0,
+                    "title": "课程数据已更新",
+                    "missing": ["当前实验记录对应的是旧数据版本，请按新作业要求完成理解检查后再生成报告"],
+                }
+            ]
         )
 
     runs = _rerun_recorded(session, subject=subject, require_trusted=require_trusted)

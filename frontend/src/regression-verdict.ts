@@ -9,9 +9,9 @@ type EvidenceState = "negative" | "positive" | "insufficient" | "suppressed";
  * regression-verdict.test.ts 断言本表覆盖它的每个取值。 */
 export const REGRESSION_STATUS_LABELS: Record<RegressionStatus, string> = {
   ok: "可按课程口径解释",
-  warning: "可展示,但须披露设计问题",
-  insufficient: "处理支持度不足,已抑制推断",
-  invalid_design: "设计与处理路径不相容,已停止推断",
+  warning: "可展示，但须说明设计问题",
+  insufficient: "处理支持度不足，已抑制推断",
+  invalid_design: "设计与处理路径不相容，已停止推断",
 };
 
 /** 安全取文案:状态缺失或未知时说“未知”,而不是默认成 ok——
@@ -154,7 +154,7 @@ export function buildRegressionVerdict(
       effect: scaled.effect,
       interval: "—",
       evidence: invalid
-        ? "估计量与真实政策路径不相容，点估计仍会算出，但它已不是原本想估计的对象；p 值、置信区间与星号均已抑制。"
+        ? "估计量与面板中的处理路径不相容，点估计仍会算出，但它已不是原本想估计的对象；p 值、置信区间与星号均已抑制。"
         : `只有 ${support.treated_clusters} 个处理聚类（下限 ${support.min_treated_clusters}），`
           + `聚类稳健推断在此失效；p 值、置信区间与星号均已抑制。`,
       interpretation: "不能据此判断变化方向——这不是“没有效应”，而是当前设计无法评估。",

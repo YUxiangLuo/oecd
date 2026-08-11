@@ -16,9 +16,9 @@ from gvcsim.shocks import SHOCK_LABELS, SHOCK_SPECS, SHOCK_TARIFF
 
 # 稳定 outcome → (被解释变量, 中文含义)。列名来自 pipeline 产出的指标面板。
 OUTCOME_DEPVARS = {
-    "trade": ("FVA_share", "出口中外国增加值份额(FVA / 毛出口,WWZ)"),
-    "production": ("3b_VA_GVC_C_share", "复杂GVC生产份额(3b_VA_GVC_C / SVA,WWYZ)"),
-    "length": ("PLv_GVC", "前向 GVC 生产长度(WWYZ)"),
+    "trade": ("FVA_share", "出口中的外国增加值份额（FVA / 毛出口，WWZ）"),
+    "production": ("3b_VA_GVC_C_share", "复杂 GVC 生产份额（3b / SVA，WWYZ）"),
+    "length": ("PLv_GVC", "前向 GVC 生产长度（WWYZ）"),
     "network": ("betweenesscentrality", "生产网络介数中心性"),
 }
 OUTCOMES = list(OUTCOME_DEPVARS)
@@ -27,8 +27,8 @@ GRANULARITY_COUNTRY_INDUSTRY = "country_industry"
 GRANULARITY_COUNTRY = "country"
 GRANULARITIES = [GRANULARITY_COUNTRY_INDUSTRY, GRANULARITY_COUNTRY]
 GRANULARITY_LABELS = {
-    GRANULARITY_COUNTRY_INDUSTRY: "国家–行业级",
-    GRANULARITY_COUNTRY: "国家级",
+    GRANULARITY_COUNTRY_INDUSTRY: "经济体×行业",
+    GRANULARITY_COUNTRY: "经济体层",
 }
 OUTCOME_GRANULARITIES = {
     outcome: ([GRANULARITY_COUNTRY_INDUSTRY] if outcome == "network" else list(GRANULARITIES)) for outcome in OUTCOMES
@@ -41,7 +41,7 @@ METHOD_TWFE_INTENSITY = "twfe_intensity"
 METHOD_EVENT_STUDY = "event_study"
 METHODS = [METHOD_DID, METHOD_TWFE_INTENSITY, METHOD_EVENT_STUDY]
 METHOD_LABELS = {
-    METHOD_DID: "双重差分 (DID)",
+    METHOD_DID: "双重差分（DID）",
     METHOD_TWFE_INTENSITY: "双向固定效应",
     METHOD_EVENT_STUDY: "事件研究",
 }
@@ -53,7 +53,7 @@ CONTROL_MODES = [CONTROL_MODE_NONE, CONTROL_MODE_ICIO, CONTROL_MODE_MACRO]
 CONTROL_MODE_LABELS = {
     CONTROL_MODE_NONE: "不加控制变量",
     CONTROL_MODE_ICIO: "ICIO 派生控制变量",
-    CONTROL_MODE_MACRO: "模拟宏观控制",
+    CONTROL_MODE_MACRO: "拟真宏观控制变量",
 }
 
 PRICE_MODE_NOMINAL = "nominal"
@@ -61,7 +61,7 @@ PRICE_MODE_REAL = "real_2016"
 PRICE_MODES = [PRICE_MODE_NOMINAL, PRICE_MODE_REAL]
 PRICE_MODE_LABELS = {
     PRICE_MODE_NOMINAL: "名义值",
-    PRICE_MODE_REAL: "实际值(2016=1)",
+    PRICE_MODE_REAL: "实际值（2016=1）",
 }
 
 SCENARIO_CLEAN = "clean"
@@ -69,9 +69,9 @@ SCENARIO_NOISY = "noisy"
 SCENARIO_CONFOUNDED = "confounded"
 SCENARIOS = [SCENARIO_CLEAN, SCENARIO_NOISY, SCENARIO_CONFOUNDED]
 SCENARIO_LABELS = {
-    SCENARIO_CLEAN: "基准场景(clean)",
-    SCENARIO_NOISY: "测量误差(noisy)",
-    SCENARIO_CONFOUNDED: "前趋势混杂(confounded)",
+    SCENARIO_CLEAN: "基准教学场景",
+    SCENARIO_NOISY: "课堂挑战：加入测量误差",
+    SCENARIO_CONFOUNDED: "课堂挑战：加入冲击前趋势",
 }
 
 # 粒度 → (面板文件, 个体列, 聚类列)。冲击在国家层面高度相关,
@@ -171,7 +171,7 @@ class RegressionDesign:
 
     @property
     def sample_filter(self) -> str:
-        return "排除 ROW(世界其他地区聚合账户)" if self.exclude_row else "包含 ROW"
+        return "排除“世界其他地区”（ROW）聚合账户" if self.exclude_row else "包含“世界其他地区”（ROW）"
 
     def equation_parts(self) -> list[dict[str, str]]:
         """返回可交互渲染的结构化方程片段。
@@ -230,7 +230,7 @@ class RegressionDesign:
                     {
                         "text": "γ·Controls_ct",
                         "term": "controls",
-                        "description": f"国家-年份控制变量：{labels}。",
+                        "description": f"经济体–年份控制变量：{labels}。",
                         "meta_key": "controls",
                     },
                 ]
@@ -276,6 +276,6 @@ def validate_outcome_granularity(outcome: str, granularity: str) -> None:
     supported = OUTCOME_GRANULARITIES[outcome]
     if granularity not in supported:
         raise ValueError(
-            "网络介数中心性回归仅支持国家–行业级；国家级贸易图在全部正流量边下为完全图，"
-            "Gephi 介数中心性恒为 0，不能用于回归。"
+            "网络介数中心性回归仅支持经济体×行业粒度；经济体层贸易图在全部正流量边下为完全图，"
+            "无权介数中心性恒为 0，不能用于回归。"
         )

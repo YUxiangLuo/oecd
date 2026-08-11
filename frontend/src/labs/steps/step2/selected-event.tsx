@@ -23,7 +23,7 @@ export function SelectedEventBar({
   if (!event) {
     return (
       <div className="shock-linkbar" role="status" aria-live="polite">
-        <span className="muted">从左侧列表选一个政策事件,右侧会立即显示它造成的国家×行业冲击。</span>
+        <span className="muted">从左侧选择一个政策事件，右侧会立即显示该事件对应的经济体×行业政策暴露。</span>
       </div>
     );
   }
@@ -36,14 +36,14 @@ export function SelectedEventBar({
         </span>
         <b className="shock-linkbar-name">{event.name}</b>
         <span className="shock-linkbar-arrow">→</span>
-        <span className="shock-linkbar-tag">{filtersDirty ? "面板(已微调)" : "面板已联动"}</span>
+        <span className="shock-linkbar-tag">{filtersDirty ? "面板（已调整）" : "面板已联动"}</span>
         <b className="shock-linkbar-panel">{panelDesc}</b>
       </div>
       <dl className="shock-selected-facts">
         <div><dt>发起方 → 目标</dt><dd>{event.imposer} → {event.targets}</dd></div>
         <div>
           <dt>宣布 → 生效</dt>
-          <dd>{event.announced} → {event.effective}{event.removal ? `(解除 ${event.removal})` : ""}</dd>
+          <dd>{event.announced} → {event.effective}{event.removal ? `（解除 ${event.removal}）` : ""}</dd>
         </div>
         <div>
           <dt>涉及行业</dt>

@@ -56,7 +56,7 @@ export function LengthViz({ rows }: { rows: Row[] }) {
         </div>
       </div>
       <div style={{ marginTop: 12, fontSize: 11, color: "#5f6677" }}>
-        按前向总生产长度 PLv 排序的 Top 15;GVCPs = 前向/后向 GVC 段长度之比,&gt;1 表示更靠上游(WWYZ 2017b)
+        按前向总生产长度（PLv）排序的前 15 名；GVCPs 是前向与后向 GVC 段长度之比，大于 1 表示相对更靠上游（WWYZ 2017b）
       </div>
       {Tip}
     </div>

@@ -15,6 +15,7 @@
 .reg-section-step { color: #4b47e0; font-size: 11px; font-weight: 800; letter-spacing: .04em; }
 .metric-facts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .metric-facts span { display: inline-flex; gap: 5px; padding: 5px 8px; background: #fff; border: 1px solid #e3e4ee; border-radius: 7px; font-size: 11.5px; }
+.reg-method-caution { margin: 10px 0 0; padding: 8px 10px; border-left: 3px solid #7773df; background: #fff; color: #4a5061; font-size: 12px; line-height: 1.65; }
 .lesson-details { margin-top: 9px; border-top: 1px dashed #d9dbea; padding-top: 8px; font-size: 12px; }
 .lesson-details summary, .advanced-settings summary, .technical-details > summary { cursor: pointer; color: #4b47e0; font-weight: 700; }
 .reg-compare-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; }
@@ -100,6 +101,8 @@
 .quiz-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
 .quiz-head h3 { margin: 3px 0 0; font-size: 16px; }
 .quiz-note { color: #5d6480; background: #eef1fa; border-radius: 999px; padding: 5px 10px; font-size: 11px; white-space: nowrap; }
+.quiz-context-note { margin: -2px 0 14px; padding: 9px 11px; border-left: 3px solid #7773df; background: #f1f2ff; color: #4a5061; font-size: 12px; line-height: 1.65; }
+.quiz-context-note b { color: #3531a7; }
 .quiz-questions { display: grid; gap: 12px; }
 .quiz-question { min-width: 0; margin: 0; padding: 12px 14px; border: 1px solid #e0e4ed; border-radius: 10px; background: #fff; }
 .quiz-question.correct { border-color: #a9ddc0; background: #f4fbf7; }

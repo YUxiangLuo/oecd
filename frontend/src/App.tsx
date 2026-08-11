@@ -35,6 +35,7 @@ import type {
   StudentAssignmentContext,
 } from "./types";
 import { useSession } from "./use-session";
+import { studentFacingTechnicalTerms } from "./user-facing-error";
 
 const AUTH_EXPIRES_KEY = "gvcsim_token_expires_at";
 
@@ -119,7 +120,7 @@ export default function App() {
       exported_at: new Date().toISOString(),
       account_id: user?.account_id ?? null,
       username: user?.username ?? null,
-      warning: "这些记录来自旧作用域/旧数据版本，仅供留档，不得合并到当前 attempt。",
+      warning: "这些记录来自旧课程、旧作业或旧数据版本，仅供留档，不得合并到本次实验记录。",
       records: session.recovery,
     };
     const blob = new Blob([JSON.stringify(exported, null, 2)], { type: "application/json" });
@@ -134,7 +135,7 @@ export default function App() {
   }, [session.recovery, user?.account_id, user?.username]);
   const resetAttempt = useCallback(async () => {
     const confirmed = window.confirm(
-      "重新开始会归档当前 attempt，并由服务端创建一个全新的 attempt。旧记录不会合并到新作业；如需留档，请先点击“导出隔离记录”。确定继续吗？",
+      "重新开始会归档本次实验记录，并创建一份全新的实验记录。旧内容不会合并到新记录；如需留档，请先点击“导出隔离记录”。确定继续吗？",
     );
     if (!confirmed) return;
     setResettingAttempt(true);
@@ -142,7 +143,7 @@ export default function App() {
     try {
       await session.reset();
     } catch (cause) {
-      setResetAttemptError(String((cause as Error).message ?? cause));
+      setResetAttemptError(studentFacingTechnicalTerms(String((cause as Error).message ?? cause)));
       setResettingAttempt(false);
     }
   }, [session.reset]);
@@ -157,7 +158,7 @@ export default function App() {
       // meta / progress / session 必须在同一个新边界上重新装载。
       window.location.reload();
     } catch (cause) {
-      setAssignmentSwitchError(String((cause as Error).message ?? cause));
+      setAssignmentSwitchError(studentFacingTechnicalTerms(String((cause as Error).message ?? cause)));
       setSwitchingAssignment(false);
     }
   }, [meta?.assignment_id, session]);
@@ -304,7 +305,7 @@ export default function App() {
     setBannerExpanded(false);
     api.steps().then(
       (value) => { if (live) setStepsData(value); },
-      (error) => { if (live) setFatal(String(error.message ?? error)); },
+      (error) => { if (live) setFatal(studentFacingTechnicalTerms(String(error.message ?? error))); },
     );
     api.classroom.assignmentContexts().then(
       (value) => {
@@ -427,8 +428,9 @@ export default function App() {
     return (
       <div style={{ padding: 40 }}>
         <div className="error-box">
-          无法连接后端 API:{fatal}
-          <br />请先启动服务:<code>uv run gvcsim serve</code>
+          <b>实验平台暂时无法连接。</b>
+          <p>{fatal}</p>
+          <p>请稍后刷新；仍未恢复时请联系教师。</p>
         </div>
       </div>
     );
@@ -509,7 +511,7 @@ export default function App() {
           {session.syncError && !assignmentClosed && (
             <div className="error-box persistent-qc-warning" role="alert">
               <b>实验记录尚未同步到服务器。</b>
-              <p>{session.syncError} 本地记录仍在，可以直接重试。</p>
+              <p>{studentFacingTechnicalTerms(session.syncError)} 本地记录仍在，可以直接重试。</p>
               <button
                 type="button"
                 className="secondary"
@@ -522,42 +524,42 @@ export default function App() {
           )}
           {meta?.manifest_mismatch && (
             <div className="warnbox persistent-qc-warning" role="alert">
-              当前数据 manifest 与这份作业冻结的版本不一致。为避免混用数据，答题、实验记录、报告与提交将保持锁定；请联系教师切换作业版本。
+              当前课程数据版本与这份作业指定的版本不一致。为避免混用数据，答题、实验记录、报告与提交将保持锁定；请联系教师切换作业版本。
             </div>
           )}
           {assignmentClosed && (
             <div className="warnbox persistent-qc-warning assignment-closed-warning" role="alert">
               <b>作业已于 {deadlineLabel(assignmentDueAt)} 截止，现在为只读状态。</b>
-              <p>你仍可浏览既有步骤、答题结果与服务端完成度，但不能继续保存实验状态、答题、生成/提交报告、重置或新建 attempt。既有记录和审计历史不会被删除。</p>
+              <p>你仍可浏览已有步骤、答题结果与服务器完成度，但不能继续保存实验状态、答题、生成或提交报告，也不能重新开始。已有记录和评阅历史不会被删除。</p>
             </div>
           )}
           {assignmentHistorical && (
             <div className="warnbox persistent-qc-warning assignment-closed-warning" role="status">
               <b>正在查看历史作业。</b>
-              <p>既有步骤、报告、提交和教师评分保留可见；历史作用域不接受新写入。可从顶栏切回当前作业。</p>
+              <p>已有步骤、报告、提交和教师评分仍然可见；历史作业不接受新内容。可从顶栏切回当前作业。</p>
             </div>
           )}
           {!assignmentClosed && (meta?.assignment_unavailable || assignmentScopeMissing) && (
             <div className="warnbox persistent-qc-warning" role="alert">
-              无法确认当前课程、作业与 attempt 作用域；实验输入与提交已锁定，本地缓存也已停用。
-              请刷新重试；仍未恢复时联系教师检查选课、作业发布和数据库状态。
+              无法确认当前课程、作业与本次实验记录；实验输入与提交已锁定，本地保存也已停用。
+              请刷新重试；仍未恢复时联系教师检查选课和作业发布状态。
             </div>
           )}
           {session.stale && !assignmentClosed && (
             <div className="warnbox legacy-session-warning" role="status">
               <div>
-                发现旧课程、旧数据版本或用户名作用域的记录。它已被隔离为只读旧记录，
-                不会合并、不会自动回推，也不会计入本次作业完成度。
+                发现来自旧课程、旧作业或旧数据版本的记录。它已被隔离为只读内容，
+                不会合并或同步到当前作业，也不会计入本次作业完成度。
               </div>
               <div className="session-actions" style={{ marginTop: 10 }}>
                 <button type="button" className="secondary" disabled={!session.recovery.length || resettingAttempt} onClick={exportRecovery}>
                   导出隔离记录
                 </button>
                 <button type="button" className="primary" disabled={resettingAttempt} onClick={() => void resetAttempt()}>
-                  {resettingAttempt ? "正在归档并新建…" : "归档旧 attempt 并重新开始"}
+                  {resettingAttempt ? "正在归档并新建…" : "归档旧记录并重新开始"}
                 </button>
               </div>
-              <p className="muted">重新开始是显式操作：旧 attempt 会保留为审计记录，新 attempt 从空白状态开始。</p>
+              <p className="muted">重新开始后，旧记录仍会保留供追溯，新记录将从空白状态开始。</p>
               {resetAttemptError && <div className="error-box">重新开始失败：{resetAttemptError}</div>}
             </div>
           )}
@@ -611,10 +613,10 @@ export default function App() {
                     <h3>实验台已锁定</h3>
                     <p>
                       {meta?.manifest_mismatch
-                        ? "当前产物与作业冻结的数据版本不一致，不能保存实验状态、答题或生成报告。"
+                        ? "当前课程数据与作业指定的数据版本不一致，不能保存实验状态、答题或生成报告。"
                         : session.stale
-                          ? "检测到旧课程、旧数据版本或未验证 attempt 的记录。请先在上方导出留档，并显式归档旧 attempt 后重新开始。"
-                        : "当前账号没有可验证的课程运行、作业或 attempt 上下文；此时填写内容不会被可靠保存，因此表单没有开放。"}
+                          ? "检测到旧课程、旧作业、旧数据版本或无法验证的实验记录。请先在上方导出留档，再归档旧记录并重新开始。"
+                        : "当前账号没有可验证的课程、作业或实验记录；此时填写内容无法可靠保存，因此表单没有开放。"}
                     </p>
                     <p>刷新后仍未恢复，请联系教师确认作业是否已发布并将你加入对应课程运行。</p>
                   </div>

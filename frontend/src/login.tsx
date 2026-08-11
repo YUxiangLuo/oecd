@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { api } from "./api";
 import { LogoMark } from "./brand";
+import { economyAccountCoverageLabel } from "./economy-coverage";
 import type { LoginResponse } from "./types";
 
 export const LOGIN_FLOW = ["数据接入", "指标计算", "可视化", "教学实证", "实验报告"];
@@ -80,14 +81,14 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
 
         <div className="login-hero">
           <h1>
-            从真实指标出发,
+            从真实指标出发，
             <br />
             亲手分析全球价值链变化。
           </h1>
           <p className="login-desc">
             基于 OECD 全球投入产出数据库的教学实验平台。
-            从 77 个经济体、45 个行业的真实贸易流出发，计算价值链指标，
-            再用拟真政策冲击练习实证比较、识别假设与不确定性判断，最终生成实验报告。
+            数据覆盖 {economyAccountCoverageLabel()}，并采用 45 个行业分类。
+            学生从真实贸易流计算价值链指标，再用拟真政策冲击练习实证比较、识别假设与不确定性判断，最终生成实验报告。
           </p>
           <div className="login-flow">
             {LOGIN_FLOW.map((p, i) => (
@@ -140,7 +141,7 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
             {busy ? "正在登录…" : "登录"}
           </button>
           <div className="login-hint">
-            {demoMode && <>课堂演示口令统一为 <b>{DEMO_PASSWORD}</b>;上方可一键切换学生 / 教师身份。<br /></>}
+            {demoMode && <>课堂演示口令统一为 <b>{DEMO_PASSWORD}</b>；上方可一键切换学生或教师身份。<br /></>}
             会话有效期由服务器安全策略决定；登录后页面会显示本次会话的实际到期时间。
           </div>
         </form>

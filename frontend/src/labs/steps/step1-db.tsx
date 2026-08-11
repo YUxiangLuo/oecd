@@ -7,30 +7,30 @@ import { countryLabel, sectorLabel } from "../../viz";
 import { fmtDb, Pager, useAsync } from "../shared";
 
 const DB_TABLES: { key: DbTableKind; label: string; hint: string }[] = [
-  { key: "z", label: "中间投入 Z", hint: "供给国-行业(行) × 使用国-行业(列)" },
-  { key: "y", label: "最终需求 Y", hint: "供给国-行业(行) × 目的国需求类别(列)" },
-  { key: "accounts", label: "账户项", hint: "TLS / VA / OUT 转置为国家-行业行" },
+  { key: "z", label: "中间投入 Z", hint: "供给方经济体×行业（行） × 使用方经济体×行业（列）" },
+  { key: "y", label: "最终需求 Y", hint: "供给方经济体×行业（行） × 目的经济体需求类别（列）" },
+  { key: "accounts", label: "账户项", hint: "TLS、VA 和 OUT 按经济体×行业排列" },
 ];
 
 /** 首列表头。后端返回的列名就是字面的 "row",直接显示对学生没有信息量。 */
 const ROW_HEADER: Record<DbTableKind, { label: string; title: string }> = {
-  z: { label: "供给国×行业(行)", title: "每一行是提供中间投入的一方:某国某行业" },
-  y: { label: "供给国×行业(行)", title: "每一行是提供最终产品的一方:某国某行业" },
-  accounts: { label: "国家×行业(行)", title: "每一行是一个国家×行业;列为该行业的账户项" },
+  z: { label: "供给方经济体×行业（行）", title: "每一行表示提供中间投入的经济体与行业" },
+  y: { label: "供给方经济体×行业（行）", title: "每一行表示提供最终产品的经济体与行业" },
+  accounts: { label: "经济体×行业（行）", title: "每一行表示一个经济体与行业，列为对应账户项" },
 };
 
 /** 表格怎么读:行是供给方、列是使用方——这是投入产出表最容易被看反的一点,
  *  因为"行"虽然横向延伸,它的标签却竖排在最左侧。按表类型给出具体读法。 */
 const HOW_TO_READ: Record<DbTableKind, string> = {
-  z: "行 = 供给方,列 = 使用方。某一格 = 行的「国家×行业」向 列的「国家×行业」提供的中间投入(百万美元)。",
-  y: "行 = 供给方,列 = 最终需求去向。某一格 = 行的「国家×行业」被 列的「目的国 × 需求类别」吸收的金额(百万美元)。",
-  accounts: "每一行是一个「国家×行业」,列是该行业的账户项(TLS / VA / OUT);此表没有列方向的国家维度。",
+  z: "行是供给方，列是使用方。某一格表示行方经济体×行业向列方经济体×行业提供的中间投入，单位为百万美元。",
+  y: "行是供给方，列是最终需求去向。某一格表示行方经济体×行业被列方目的经济体与需求类别吸收的金额，单位为百万美元。",
+  accounts: "每一行表示一个经济体×行业，列是税收减补贴（TLS）、增加值（VA）和总产出（OUT）账户；此表没有列方向的经济体维度。",
 };
 
 const ACCOUNT_HELP: Record<string, string> = {
-  TLS: "产品税减补贴。为负表示该账户合计为净补贴；步骤3 的 taxsub 是其沿投入产出链传导后的出口含量。",
-  VA: "增加值：劳动报酬、资本回报等本地创造的价值，是步骤4生产活动分解的总来源。",
-  OUT: "总产出。按行看应等于中间使用 Z 的行和加最终需求 Y 的行和，步骤2会检验这条会计恒等式。",
+  TLS: "产品税减补贴。负值表示该账户合计为净补贴；步骤 3 的 taxsub 是它沿投入产出链传导后的出口含量。",
+  VA: "增加值：劳动报酬、资本回报等本地创造的价值，是步骤 4 生产活动分解的总来源。",
+  OUT: "总产出。按行计算应等于中间使用 Z 的行和加最终需求 Y 的行和；步骤 2 会检验这条会计恒等式。",
 };
 
 /** OECD ICIO 最终需求类别缩写 → 中文名(Y 表列名形如 USA_HFCE:目的国_需求类别) */
@@ -38,9 +38,9 @@ const FD_HELP: Record<string, string> = {
   HFCE: "居民最终消费支出",
   NPISH: "为居民服务的非营利机构消费",
   GGFC: "政府最终消费支出",
-  GFCF: "固定资本形成总额(投资)",
+  GFCF: "固定资本形成总额（投资）",
   INVNT: "存货变化",
-  DPABR: "居民境外直接购买(出境旅行等消费)",
+  DPABR: "居民境外直接购买（出境旅行等消费）",
 };
 
 /** 列头悬停说明:账户项直接查表;Y 表列拆成「目的国 + 需求类别」组合解释 */
@@ -55,10 +55,10 @@ function columnHelp(column: string): string | undefined {
 /** 主流全球投入产出 / 多区域投入产出(MRIO)数据库速览。覆盖数字随各库版本更新、
  *  且行业/产品分类口径不同,不能直接横向相减;这里给学生一个"还有哪些选择"的地图。 */
 const OTHER_DATABASES: { name: string; org: string; coverage: string; focus: string }[] = [
-  { name: "WIOD", org: "格罗宁根大学", coverage: "43 国 · 56 行业 · 2000–2014", focus: "GVC 研究的经典数据源,含社会经济与环境账户;已停止更新" },
-  { name: "Eora / Eora26", org: "悉尼大学", coverage: "约 190 经济体 · 26 行业(精简版)", focus: "覆盖国家最全 + 环境卫星账户;行业口径较粗" },
-  { name: "EXIOBASE 3", org: "多机构联合", coverage: "约 49 区域 · 约 200 产品", focus: "环境扩展最细(产品级),侧重可持续与足迹分析" },
-  { name: "ADB MRIO", org: "亚洲开发银行", coverage: "60+ 经济体 · 35 行业", focus: "亚太经济体覆盖更细,大体延续 WIOD 口径" },
+  { name: "WIOD", org: "格罗宁根大学", coverage: "43 个经济体 · 56 个行业 · 2000–2014", focus: "GVC 研究的经典数据源，含社会经济与环境账户；已停止更新" },
+  { name: "Eora / Eora26", org: "悉尼大学", coverage: "约 190 个经济体 · 26 个行业（精简版）", focus: "经济体覆盖广，并包含环境卫星账户；行业口径较粗" },
+  { name: "EXIOBASE 3", org: "多机构联合", coverage: "约 49 个区域 · 约 200 种产品", focus: "环境扩展较细，侧重可持续与足迹分析" },
+  { name: "ADB MRIO", org: "亚洲开发银行", coverage: "60 多个经济体 · 35 个行业", focus: "亚太经济体覆盖较细，大体延续 WIOD 口径" },
 ];
 
 /** 数据库速览:说明还有哪些全球投入产出库,并明确本系统默认用 OECD ICIO 及原因。 */
@@ -68,7 +68,7 @@ function DatabaseGuide({ meta }: { meta: DbMeta }) {
     <details className="card accent concept-card db-guide">
       <summary className="kicker">全球投入产出数据库一览 · 本系统默认使用 OECD ICIO</summary>
       <p style={{ maxWidth: 820 }}>
-        研究全球价值链,需要一张“谁向谁供货”的<b>跨国投入产出表</b>。主流数据库各有侧重——覆盖范围、行业/产品口径与更新节奏都不同:
+        研究全球价值链需要一张描述“谁向谁供货”的<b>跨国投入产出表</b>。主流数据库在覆盖范围、行业或产品口径以及更新节奏上各有侧重：
       </p>
       <ScrollableRegion className="table-wrap" label="全球投入产出数据库对比表，可横向滚动" style={{ marginTop: 10 }}>
         <table className="data-table db-guide-table">
@@ -80,7 +80,7 @@ function DatabaseGuide({ meta }: { meta: DbMeta }) {
               <td><b>OECD ICIO</b> ✓ 本系统默认</td>
               <td>OECD</td>
               <td>{icioCoverage}</td>
-              <td>以各国官方国民账户为基础;增加值贸易 / GVC 分解的主流标准(本系统 WWZ、WWYZ 等指标即基于它)</td>
+              <td>以各经济体国民账户为基础；本课程的 WWZ、WWYZ 等增加值贸易指标均由它计算</td>
             </tr>
             {OTHER_DATABASES.map((db) => (
               <tr key={db.name}>
@@ -94,8 +94,8 @@ function DatabaseGuide({ meta }: { meta: DbMeta }) {
         </table>
       </ScrollableRegion>
       <p className="muted" style={{ maxWidth: 820, marginTop: 10 }}>
-        本系统默认并全程使用 <b>OECD ICIO</b>(2023 版,当前载入 {meta.years[0]}–{meta.years.at(-1)}):它口径官方、国家×行业相对平衡,最契合本课程的 GVC 指标计算与教学。
-        切换到其他数据库需替换原始表与解析器,不在本教学系统范围内;各库的覆盖数字随版本更新、分类口径不同,不能直接横向比较。
+        本课程全程使用 <b>OECD ICIO</b>（2023 版，当前载入 {meta.years[0]}–{meta.years.at(-1)}），其经济体×行业口径适合本课程的 GVC 指标计算。
+        各数据库的覆盖数字会随版本更新，分类口径也不同，不能直接横向比较。
       </p>
     </details>
   );
@@ -284,7 +284,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
     return (
       <div>
         <div className="warnbox">
-          未找到本地 OECD ICIO 原始 CSV。请将 ICIO2023_YYYY.csv 放入 OECD_ICIO/ 后刷新本页。
+          课程原始数据尚未准备好。请刷新重试；仍未恢复时联系教师。
         </div>
       </div>
     );
@@ -293,7 +293,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
   return (
     <div>
       <div className="db-summary">
-        <span>原始年份 {meta.years[0]}-{meta.years.at(-1)}</span>
+        <span>原始年份 {meta.years[0]}–{meta.years.at(-1)}</span>
         <span>{meta.countries.length} 个经济体</span>
         <span>{meta.sectors.length} 个行业</span>
         <span>{meta.n_rows.toLocaleString("zh-CN")} 行 × {meta.n_columns.toLocaleString("zh-CN")} 列</span>
@@ -330,14 +330,14 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
       </div>
 
       <div className="controls">
-        <LabeledControl label="供给国(行)">
+        <LabeledControl label="供给方经济体（行）">
           {(id) => (
             <select id={id} value={rowCountry} onChange={(e) => pickRowCountry(e.target.value)}>
               {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
             </select>
           )}
         </LabeledControl>
-        <LabeledControl label="供给行业(行)">
+        <LabeledControl label="供给行业（行）">
           {(id) => (
             <select id={id} value={rowSector} onChange={(e) => pickRowSector(e.target.value)}>
               <option value="">全部</option>
@@ -347,14 +347,14 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
         </LabeledControl>
         {table !== "accounts" && (
           <>
-            <LabeledControl label={table === "y" ? "需求国(列)" : "使用国(列)"}>
+            <LabeledControl label={table === "y" ? "目的经济体（列）" : "使用方经济体（列）"}>
               {(id) => (
                 <select id={id} value={colCountry} onChange={(e) => pickColCountry(e.target.value)}>
                   {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
                 </select>
               )}
             </LabeledControl>
-            <LabeledControl label={table === "y" ? "最终需求(列)" : "使用行业(列)"}>
+            <LabeledControl label={table === "y" ? "最终需求（列）" : "使用行业（列）"}>
               {(id) => (
                 <select id={id} value={colSector} onChange={(e) => pickColSector(e.target.value)}>
                   <option value="">全部</option>
@@ -373,7 +373,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
 
       {sliceError && (
         <div className="error-box async-error" role="alert" style={{ marginBottom: 14 }}>
-          <span>{userFacingRequestError(sliceError, "数据切片加载失败")}</span>
+          <span>{userFacingRequestError(sliceError, "筛选结果加载失败")}</span>
           <button type="button" className="secondary" onClick={retrySlice}>重试</button>
         </div>
       )}
@@ -475,14 +475,14 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
       </ScrollableRegion>
       {table !== "accounts" && slice && (
         <div className="tipbox" style={{ marginTop: 12 }}>
-          每个数据行同时给出当前切片合计与该国家–行业的 OUT。完整口径下，OUT = Z 行和 + Y 行和；当前切片只是一部分，差额来自未展示的目的国或需求列。
+          每个数据行同时给出当前筛选列合计与该经济体×行业的总产出（OUT）。完整口径下，OUT = Z 行和 + Y 行和；当前筛选结果只展示部分列，差额来自未展示的目的经济体或需求类别。
         </div>
       )}
       <div style={{ marginTop: 12 }}>
         <Pager page={page} pages={pages} total={slice?.total} onChange={setPage} />
       </div>
       <div className="observation-strip" aria-live="polite">
-        <b>已选原始数据点</b>
+        <b>已记录的原始数据点</b>
         {selectedObservation ? (
           <span>{selectedObservation.row} × {selectedObservation.column} = {fmtDb(selectedObservation.value)}</span>
         ) : <span>尚未选择</span>}

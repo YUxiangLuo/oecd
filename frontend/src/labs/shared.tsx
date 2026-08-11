@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { LabeledControl } from "../a11y";
 import { formatMetric, stripNegativeZero } from "../format";
 import type { IndicatorSchema } from "../types";
+import { studentFacingTechnicalTerms } from "../user-facing-error";
 
 export function fmtField(v: string | number | null, key: string, schema?: IndicatorSchema | null) {
   if (typeof v !== "number") return v ?? "—";
@@ -57,7 +58,7 @@ export function useAsync<T>(
       },
       (e) => {
         if (!live) return;
-        setError(String(e.message ?? e));
+        setError(studentFacingTechnicalTerms(String(e.message ?? e)));
         setStatus("error");
       },
     );

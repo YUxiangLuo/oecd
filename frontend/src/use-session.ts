@@ -329,9 +329,9 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
         const remoteUntrusted = remoteSessionUntrusted(remote);
         const out = reconcileOnLoad(local, remote.session, manifestId, remoteUntrusted);
         const recoverable: { source: string; data: unknown }[] = [];
-        if (legacy != null) recoverable.push({ source: "旧版用户名作用域本地记录", data: legacy });
+        if (legacy != null) recoverable.push({ source: "旧版账号的本地记录", data: legacy });
         if (out.discardedLocal && local) recoverable.push({ source: "旧数据版本本地记录", data: local });
-        if (out.discardedServer) recoverable.push({ source: "旧 attempt 服务端记录", data: remote.session });
+        if (out.discardedServer) recoverable.push({ source: "旧实验轮次的服务器记录", data: remote.session });
         revision.current = remote.revision;
         replaceSession(out.session);
         setStale(remoteUntrusted || out.discardedServer || out.discardedLocal || legacyQuarantined);
@@ -357,7 +357,7 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
         const usable = local && local.manifest_id === manifestId ? local : emptySession(manifestId);
         replaceSession(usable);
         setStale(legacyQuarantined);
-        setRecovery(legacy == null ? [] : [{ source: "旧版用户名作用域本地记录", data: legacy }]);
+        setRecovery(legacy == null ? [] : [{ source: "旧版账号的本地记录", data: legacy }]);
         setCompletion(null); // 判定只在服务端;拿不到就不显示,不猜。
         updateStatus("unavailable");
       },
@@ -439,7 +439,7 @@ export function useSession(identity: SessionIdentity | null, context: SessionCon
 
   const reset = useCallback(async () => {
     if (!username || !manifestId || !scope) throw new Error("当前没有可重置的学生作业上下文");
-    if (assignmentReadOnly) throw new Error("作业为截止或历史只读状态；既有 attempt 不能重新开始");
+    if (assignmentReadOnly) throw new Error("作业已截止或属于历史作业；已有实验记录不能重新开始");
     // 先让旧 scope 的在途请求自然结束，再让服务端创建新 attempt。否则一个已经
     // 发出的旧 PUT 可能在 reset 之后才抵达，并被服务端解析到新 attempt。
     resetInProgress.current = true;
