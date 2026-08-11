@@ -99,6 +99,47 @@ def test_quiz_receipt_requires_a_live_database_event(monkeypatch):
     )
 
 
+def test_quiz_receipts_use_one_batch_database_lookup(monkeypatch):
+    monkeypatch.setattr(auth, "evidence_secret", lambda: b"receipt-secret" * 4)
+    payload3 = {"version": "course-quiz-v2", "answers": {"q1": "a"}}
+    payload4 = {"version": "course-quiz-v2", "answers": {"q1": "b"}}
+    token3 = _quiz_token(payload3, step=3)
+    token4 = trusted_evidence.issue_quiz_completion(
+        subject="alice",
+        step=4,
+        manifest_id="manifest-a",
+        payload=payload4,
+        event={**EVENT, "event_id": "00000000-0000-0000-0000-000000000002", "step": 4},
+    )
+    calls: list[list[dict]] = []
+
+    def valid(_subject, checks, **kwargs):
+        calls.append(checks)
+        assert kwargs["manifest_id"] == "manifest-a"
+        return {check["event_id"] for check in checks}
+
+    monkeypatch.setattr(db, "valid_evidence_event_ids", valid)
+    monkeypatch.setattr(
+        db,
+        "evidence_event_exists",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("不得逐题查询")),
+    )
+
+    completed = trusted_evidence.verify_quiz_completions(
+        {
+            3: (token3, payload3),
+            4: (token4, payload4),
+            # 同一 token 不能跨步骤复用；它应在数据库查询前就被排除。
+            5: (token3, payload3),
+        },
+        subject="alice",
+        manifest_id="manifest-a",
+    )
+
+    assert completed == {3, 4}
+    assert len(calls) == 1 and {check["step"] for check in calls[0]} == {3, 4}
+
+
 def test_regression_run_id_binds_outcome_settings_and_step(monkeypatch):
     _trust_test_events(monkeypatch)
     design = {

@@ -118,6 +118,27 @@ def test_trusted_completion_rejects_missing_subject_or_invalid_receipt(monkeypat
     assert any("凭证无效" in item for item in result.missing)
 
 
+def test_full_trusted_summary_batches_all_quiz_receipts(monkeypatch):
+    session = _session({step: {**_passed(step), "quiz_id": f"receipt-{step}"} for step in range(1, 16)})
+    calls: list[dict] = []
+
+    def verify(receipts, **kwargs):
+        calls.append({"receipts": receipts, **kwargs})
+        return set(receipts)
+
+    monkeypatch.setattr("gvcsim.evidence.trusted_evidence.verify_quiz_completions", verify)
+    monkeypatch.setattr(
+        "gvcsim.evidence.trusted_evidence.verify_quiz_completion",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("不得逐题查询")),
+    )
+
+    summary = completion_summary(session, subject="student", require_trusted=True)
+
+    assert summary["completed"] == list(range(1, 16))
+    assert len(calls) == 1
+    assert sorted(calls[0]["receipts"]) == list(range(1, 16))
+
+
 def test_report_step_requires_a_real_current_manifest_report(monkeypatch):
     session = _session({16: {"report_key": "report-1"}})
     assert evaluate_step(16, session).complete

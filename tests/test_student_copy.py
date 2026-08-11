@@ -1,5 +1,6 @@
 """学生文案的事实边界与先教后测契约。"""
 
+import re
 from pathlib import Path
 
 from gvcsim.indicator_schema import INDICATOR_SCHEMA
@@ -73,15 +74,40 @@ def test_row_aggregate_is_not_counted_as_an_economy() -> None:
             "frontend/src/economy-coverage.ts",
             "frontend/src/login.tsx",
             "frontend/src/intro.tsx",
+            "frontend/src/labs/steps/step1-db.tsx",
             "frontend/src/labs/steps/step2-shock.tsx",
             "frontend/src/labs/steps/step2/shock-panel.tsx",
         )
     )
     assert "77 个经济体" not in copy
+    assert "meta.countries.length} 个经济体" not in copy
     assert "treated_countries} 个经济体</span>" not in copy
+    assert "economyAccountCoverageLabel(meta.countries)" in copy
     assert "经济体/地区账户达到处理阈值" in copy
     assert "世界其他地区" in copy
     assert "ROW" in copy
+
+
+def test_step_rail_gradient_keeps_small_white_text_above_aa_contrast() -> None:
+    css = (ROOT / "frontend/src/course-shell.css").read_text(encoding="utf-8")
+    rule = re.search(r"\.rail-stage\s*\{[^}]*linear-gradient\([^#]*(#[0-9a-fA-F]{6})[^#]*(#[0-9a-fA-F]{6})", css)
+    assert rule is not None
+
+    def rgb(value: str) -> tuple[float, float, float]:
+        return tuple(int(value[index : index + 2], 16) / 255 for index in (1, 3, 5))  # type: ignore[return-value]
+
+    def luminance(color: tuple[float, float, float]) -> float:
+        def linear(channel: float) -> float:
+            return channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4
+
+        return sum(weight * linear(channel) for weight, channel in zip((0.2126, 0.7152, 0.0722), color))
+
+    white = (1.0, 1.0, 1.0)
+    for endpoint in (rgb(rule.group(1)), rgb(rule.group(2))):
+        # .rail-stage-loc 的 opacity 为 0.85；按实际合成后的文字颜色检查最差端点。
+        text = tuple(0.85 * foreground + 0.15 * background for foreground, background in zip(white, endpoint))
+        high, low = sorted((luminance(text), luminance(endpoint)), reverse=True)
+        assert (high + 0.05) / (low + 0.05) >= 4.5
 
 
 def test_indicator_and_regression_metadata_use_student_labels() -> None:

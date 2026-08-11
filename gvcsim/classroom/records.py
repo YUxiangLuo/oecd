@@ -72,18 +72,33 @@ def get_progress(username: str) -> dict[str, Any] | None:
 # ---------------------------------------------------------------- 实验会话
 
 
+def _get_session_in_conn(
+    c: psycopg.Connection[dict[str, Any]],
+    username: str,
+    manifest_id: str | None = None,
+    *,
+    scope: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """在调用方事务内读取会话；同一 scope 可继续用于批量可信凭证校验。"""
+    # 显式传入的 scope 已由调用方在同一事务中解析；即使它相对服务器当前
+    # manifest 属于历史版本，也要把原会话读出来供只读追溯。普通 get_session
+    # 传 manifest_id 时仍保留“不返回 mismatch 会话”的旧契约。
+    supplied_scope = scope is not None
+    current = scope if supplied_scope else database._attempt_scope(c, username, manifest_id)
+    if not current or (not supplied_scope and current.get("manifest_mismatch")) or current["attempt_id"] is None:
+        return None
+    row = c.execute(
+        "SELECT s.revision,s.manifest_id,s.session,s.legacy_unverified,s.updated_at"
+        " FROM attempt_sessions s WHERE s.attempt_id=%s",
+        (current["attempt_id"],),
+    ).fetchone()
+    return {**row, **current} if row else None
+
+
 def get_session(username: str, manifest_id: str | None = None) -> dict[str, Any] | None:
     """读取学生的实验会话;从未保存过则返回 None。"""
     with database.conn() as c:
-        scope = database._attempt_scope(c, username, manifest_id)
-        if not scope or scope.get("manifest_mismatch") or scope["attempt_id"] is None:
-            return None
-        row = c.execute(
-            "SELECT s.revision,s.manifest_id,s.session,s.legacy_unverified,s.updated_at"
-            " FROM attempt_sessions s WHERE s.attempt_id=%s",
-            (scope["attempt_id"],),
-        ).fetchone()
-        return {**row, **scope} if row else None
+        return _get_session_in_conn(c, username, manifest_id)
 
 
 def save_session(

@@ -128,46 +128,65 @@ def get_session(user: dict = Depends(require_student)):
     里面的回归结果已不对应当前产物,不能被静默当作有效结果继续使用。
     """
     current_manifest = artifacts.manifest_id()
-    scope = db.assignment_context(user["sub"], current_manifest)
-    context = _public_context(scope)
-    row = db.get_session(user["sub"])
-    if row is None:
-        empty = session_model.empty_session(current_manifest)
-        return {
-            "revision": 0,
-            "manifest_id": current_manifest,
-            "session": empty,
-            "stale": bool(context["manifest_mismatch"]),
-            "legacy_unverified": False,
-            "read_only": bool(
-                context["manifest_mismatch"] or context["assignment_closed"] or context["assignment_historical"]
-            ),
-            **context,
-            "updated_at": None,
-            "completion": evidence.completion_summary(empty, subject=user["sub"], require_trusted=True),
-        }
-    legacy = bool(row.get("legacy_unverified"))
-    stale = bool(context["manifest_mismatch"]) or legacy or session_model.is_stale(row["session"], current_manifest)
-    completion = (
-        evidence.completion_summary(
-            session_model.empty_session(current_manifest), subject=user["sub"], require_trusted=True
+    # scope、session 和可信事件必须来自同一事务快照。除去一致性更强，这也把
+    # 完整会话原来的 15 次 assignment/attempt 重解析收敛成一次。
+    with db.conn() as connection:
+        scope = db._attempt_scope(connection, user["sub"], current_manifest)
+        context = _public_context(scope)
+        row = db._get_session_in_conn(connection, user["sub"], current_manifest, scope=scope)
+        if row is None:
+            empty = session_model.empty_session(current_manifest)
+            return {
+                "revision": 0,
+                "manifest_id": current_manifest,
+                "session": empty,
+                "stale": bool(context["manifest_mismatch"]),
+                "legacy_unverified": False,
+                "read_only": bool(
+                    context["manifest_mismatch"] or context["assignment_closed"] or context["assignment_historical"]
+                ),
+                **context,
+                "updated_at": None,
+                "completion": evidence.completion_summary(
+                    empty,
+                    subject=user["sub"],
+                    require_trusted=True,
+                    connection=connection,
+                    trusted_scope=scope,
+                ),
+            }
+        legacy = bool(row.get("legacy_unverified"))
+        stale = bool(context["manifest_mismatch"]) or legacy or session_model.is_stale(row["session"], current_manifest)
+        completion = (
+            evidence.completion_summary(
+                session_model.empty_session(current_manifest),
+                subject=user["sub"],
+                require_trusted=True,
+                connection=connection,
+                trusted_scope=scope,
+            )
+            if legacy
+            else evidence.completion_summary(
+                row["session"],
+                subject=user["sub"],
+                require_trusted=True,
+                connection=connection,
+                trusted_scope=scope,
+            )
         )
-        if legacy
-        else evidence.completion_summary(row["session"], subject=user["sub"], require_trusted=True)
-    )
-    return {
-        "revision": row["revision"],
-        "manifest_id": row["manifest_id"],
-        "session": row["session"],
-        "stale": stale,
-        "legacy_unverified": legacy,
-        "read_only": legacy
-        or bool(context["manifest_mismatch"] or context["assignment_closed"] or context["assignment_historical"]),
-        **context,
-        "updated_at": row["updated_at"],
-        # 完成度由服务端从会话重算,客户端不参与判定,也无法伪造。
-        "completion": completion,
-    }
+        return {
+            "revision": row["revision"],
+            "manifest_id": row["manifest_id"],
+            "session": row["session"],
+            "stale": stale,
+            "legacy_unverified": legacy,
+            "read_only": legacy
+            or bool(context["manifest_mismatch"] or context["assignment_closed"] or context["assignment_historical"]),
+            **context,
+            "updated_at": row["updated_at"],
+            # 完成度由服务端从会话重算,客户端不参与判定,也无法伪造。
+            "completion": completion,
+        }
 
 
 class QuizSubmitRequest(BaseModel):
@@ -331,17 +350,7 @@ def report_progress(req: ProgressRequest, user: dict = Depends(require_student))
 # ---------------------------------------------------------------- 第 16 步:实验报告
 
 
-def _load_session_for_report(username: str) -> tuple[dict[str, Any], int]:
-    """没有会话时当作空会话:这样"还没开始做"和"做了一半"走同一条门槛路径,
-    学生得到的都是"还差哪几步",而不是一句无从下手的"没有会话"。"""
-    row = db.get_session(username)
-    if row is None:
-        return session_model.empty_session(artifacts.manifest_id()), 0
-    return row["session"], row["revision"]
-
-
-def _ensure_current_assignment(username: str) -> dict[str, Any]:
-    scope = db.assignment_context(username, artifacts.manifest_id())
+def _validate_current_assignment_scope(scope: dict[str, Any] | None) -> dict[str, Any]:
     if not scope:
         raise HTTPException(status_code=409, detail="账号没有开放的课程作业/enrollment")
     if scope.get("manifest_mismatch"):
@@ -357,6 +366,23 @@ def _ensure_current_assignment(username: str) -> dict[str, Any]:
             detail=f"作业已于 {scope.get('due_at')} 截止；既有记录仍可查看，但不能继续生成或提交报告",
         )
     return scope
+
+
+def _ensure_current_assignment(username: str) -> dict[str, Any]:
+    return _validate_current_assignment_scope(db.assignment_context(username, artifacts.manifest_id()))
+
+
+def _load_session_for_report(username: str) -> tuple[dict[str, Any], int]:
+    """在一个事务中校验当前作业并读取报告输入会话。"""
+    current_manifest = artifacts.manifest_id()
+    with db.conn() as connection:
+        scope = db._attempt_scope(connection, username, current_manifest)
+        _validate_current_assignment_scope(scope)
+        row = db._get_session_in_conn(connection, username, current_manifest, scope=scope)
+    if row is None:
+        # “还没开始”和“做了一半”走同一门槛路径，统一返回还差哪些步骤。
+        return session_model.empty_session(current_manifest), 0
+    return row["session"], row["revision"]
 
 
 def _step_data_for_gate(session: dict[str, Any], lab: str) -> dict[str, Any]:
@@ -375,7 +401,6 @@ async def generate_report(user: dict = Depends(require_student)):
     """
 
     def prepare() -> tuple[dict[str, Any], int]:
-        _ensure_current_assignment(user["sub"])
         return _load_session_for_report(user["sub"])
 
     session, revision = await anyio.to_thread.run_sync(prepare)
@@ -440,11 +465,26 @@ async def generate_report(user: dict = Depends(require_student)):
 
 @router.get("/report/gate")
 def report_gate(user: dict = Depends(require_student)):
-    """第 16 步的前置门槛状态:还差哪些步骤的理解检查。"""
-    _ensure_current_assignment(user["sub"])
-    row = db.get_session(user["sub"])
-    session = row["session"] if row else session_model.empty_session(artifacts.manifest_id())
-    return {"blocked": teaching_report.check_gate(session, subject=user["sub"], require_trusted=True)}
+    """第 16 步门槛；scope、session 与 15 步事件在同一事务内一次核对。"""
+    current_manifest = artifacts.manifest_id()
+    with db.conn() as connection:
+        scope = db._attempt_scope(connection, user["sub"], current_manifest)
+        _validate_current_assignment_scope(scope)
+        row = db._get_session_in_conn(
+            connection,
+            user["sub"],
+            current_manifest,
+            scope=scope,
+        )
+        session = row["session"] if row else session_model.empty_session(current_manifest)
+        blocked = teaching_report.check_gate(
+            session,
+            subject=user["sub"],
+            require_trusted=True,
+            connection=connection,
+            trusted_scope=scope,
+        )
+    return {"blocked": blocked}
 
 
 @router.get("/report/generated")

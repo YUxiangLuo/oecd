@@ -13,6 +13,7 @@ from gvcsim.teaching_report import (
     GATE_STEPS,
     ReportGateError,
     ReportReplayError,
+    _display_entity_code,
     _fingerprint,
     _rerun_recorded,
     _snapshot_lines,
@@ -89,6 +90,28 @@ def test_report_fingerprint_distinguishes_regression_weight_modes():
     fixed = [{"design": design, "weight_mode": "fixed_pretreatment"}]
     current = [{"design": design, "weight_mode": "contemporaneous"}]
     assert _fingerprint(session, "mid", fixed, "同学") != _fingerprint(session, "mid", current, "同学")
+
+
+def test_observation_snapshot_preserves_industry_codes_and_uses_metric_precision():
+    lines = _snapshot_lines(
+        {
+            "year": 2019,
+            "metric": "FVA_share",
+            "observations": [
+                {
+                    "entity": "USA·A01_02",
+                    "country": "USA",
+                    "industry": "A01_02",
+                    "year": 2019,
+                    "value": 0.0800925449831696,
+                }
+            ],
+        }
+    )
+    assert _display_entity_code("USA_A01_02") == "USA · A01_02"
+    assert _display_entity_code("USA·A01_02") == "USA · A01_02"
+    assert any("USA · A01_02（2019 年） = 8.01%" in line for line in lines)
+    assert "0.0800925449831696" not in "\n".join(lines)
 
 
 def test_untrusted_snapshot_text_is_single_line_bounded_markdown():
@@ -172,7 +195,8 @@ def test_report_binds_provenance_and_selected_quiz_answers():
     assert report.report_key in report.markdown
     assert mid in report.markdown
     assert "Z 表的一格应该怎样解释" in report.markdown
-    assert "行方国家×行业向列方国家×行业提供的中间投入" in report.markdown
+    assert "行方经济体×行业向列方经济体×行业提供的中间投入" in report.markdown
+    assert "国家×行业" not in report.markdown
     assert "个体基期 GVC 减去样本个体均值" in report.markdown
     assert "拟真教学面板" in report.markdown
     assert "报告编号" in report.markdown

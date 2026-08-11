@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LabeledControl, ScrollableRegion } from "../../a11y";
 import { api } from "../../api";
+import { economyAccountCoverageLabel } from "../../economy-coverage";
 import type { DbMeta, DbSlice, DbTableKind, QuizCompletionState, StepStateApi } from "../../types";
 import { userFacingRequestError } from "../../user-facing-error";
 import { countryLabel, sectorLabel } from "../../viz";
@@ -294,7 +295,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
     <div>
       <div className="db-summary">
         <span>原始年份 {meta.years[0]}–{meta.years.at(-1)}</span>
-        <span>{meta.countries.length} 个经济体</span>
+        <span>{economyAccountCoverageLabel(meta.countries)}</span>
         <span>{meta.sectors.length} 个行业</span>
         <span>{meta.n_rows.toLocaleString("zh-CN")} 行 × {meta.n_columns.toLocaleString("zh-CN")} 列</span>
         {selectedFile && <span>{selectedFile.file}</span>}
