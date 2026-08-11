@@ -7,6 +7,8 @@ from gvcsim.config import ROOT
 
 MAIN_GUIDE = ROOT / "DEPLOY_101.201.151.30.md"
 FULL_GUIDE = ROOT / "docs" / "DEMO_FULL_RELEASE.md"
+STUDENT_BROWSER_SMOKE = ROOT / "scripts" / "agent_browser_smoke.sh"
+CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 
 def _bash_blocks(markdown: str) -> str:
@@ -31,6 +33,22 @@ def test_demo_deploy_guide_keeps_routine_frontend_path_short_and_non_disruptive(
     assert "rsync -a --delete --exclude='/dist/' --exclude='/node_modules/'" in commands
     assert "rsync -a --exclude='/index.html'" in commands
     assert commands.index("rsync -a --exclude='/index.html'") < commands.index('mv -Tf "$next_index"')
+
+
+def test_frontend_ci_enforces_the_dependency_audit():
+    workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+    frontend_job = workflow.split("  frontend:", 1)[1].split("  browser-e2e:", 1)[0]
+    assert "bun install --frozen-lockfile" in frontend_job
+    assert "bun audit" in frontend_job
+
+
+def test_student_browser_smoke_audits_every_rendered_step_and_the_network_dialog():
+    script = STUDENT_BROWSER_SMOKE.read_text(encoding="utf-8")
+    loop = script.split("for step in $(seq 1 16); do", 1)[1].split("done", 1)[0]
+    assert "student route mismatch" in loop
+    assert 'assert_a11y "$a11y_dir/student-step${step}-a11y.json"' in loop
+    assert 'assert_a11y "$a11y_dir/student-step10-modal-a11y.json"' in script
+    assert "student-step16-a11y.json" not in script
 
 
 def test_full_demo_release_remains_fail_closed_and_auditable():

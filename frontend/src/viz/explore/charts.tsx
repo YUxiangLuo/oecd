@@ -2,6 +2,10 @@ import { formatMetric } from "../../format";
 import { CAT, KEY_ECONOMIES, Legend, type Row, cardStyle, num, rowLabel, rowName, useTip } from "../shared";
 import { signedDomain, signedStack } from "../signed-layout";
 
+export const EQUALITY_LINE_STROKE = "#e0982a";
+// 11.5px 图例文字需要在白底达到 WCAG AA 4.5:1；线条本身继续使用较亮的语义橙色。
+export const EQUALITY_LINE_LABEL = "#8a5200";
+
 /* ---------------- 步骤7-10 自由探索:排序条形图 / 散点图 ---------------- */
 
 function fmtVal(v: number, format?: string): string {
@@ -127,7 +131,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
           const lo = Math.max(x0, y0);
           const hi = Math.min(x1, y1);
           return lo < hi ? (
-            <line x1={px(lo)} y1={py(lo)} x2={px(hi)} y2={py(hi)} stroke="#e0982a" strokeWidth={1.5} strokeDasharray="7 4">
+            <line x1={px(lo)} y1={py(lo)} x2={px(hi)} y2={py(hi)} stroke={EQUALITY_LINE_STROKE} strokeWidth={1.5} strokeDasharray="7 4">
               <title>PLv_GVC = PLy_GVC；线上方更偏上游，线下方更偏下游</title>
             </line>
           ) : null;
@@ -158,7 +162,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
           );
         })}
       </svg>
-      {equalityLine && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}><span style={{ color: "#e0982a", fontWeight: 700 }}>橙色虚线 y=x</span>：线上方 PLv_GVC &gt; PLy_GVC（GVCPs &gt; 1，更偏上游）；线下方更偏下游。灰色中位数线只表示相对高低。</div>}
+      {equalityLine && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}><span style={{ color: EQUALITY_LINE_LABEL, fontWeight: 700 }}>橙色虚线 y=x</span>：线上方 PLv_GVC &gt; PLy_GVC（GVCPs &gt; 1，更偏上游）；线下方更偏下游。灰色中位数线只表示相对高低。</div>}
       {Tip}
     </div>
   );

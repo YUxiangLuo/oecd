@@ -1,11 +1,20 @@
-import type { Enrollment, ExperimentSession, GeneratedReport, ProgressResponse, ReportGate, SessionResponse } from "./types";
+import type {
+  Enrollment,
+  ExperimentSession,
+  GeneratedReport,
+  ProgressResponse,
+  ReportGate,
+  ReportGateItem,
+  SessionResponse,
+} from "./types";
+import type * as ApiTypes from "./types";
 
 export const AUTH_TOKEN_KEY = "gvcsim_token";
 
 class ApiError extends Error {
   status: number;
   /** 结构化 detail(如第 16 步门槛的 blocked 列表);普通字符串 detail 时为 undefined。 */
-  blocked?: import("./types").ReportGateItem[];
+  blocked?: ReportGateItem[];
 
   constructor(status: number, detail: unknown, fallback: string) {
     // FastAPI 的 detail 可以是字符串,也可以是对象(门槛就返回 {message, blocked})。
@@ -14,7 +23,7 @@ class ApiError extends Error {
     super(typeof detail === "string" ? detail : (structured?.message as string) ?? fallback);
     this.name = "ApiError";
     this.status = status;
-    if (Array.isArray(structured?.blocked)) this.blocked = structured.blocked as import("./types").ReportGateItem[];
+    if (Array.isArray(structured?.blocked)) this.blocked = structured.blocked as ReportGateItem[];
   }
 }
 
@@ -131,10 +140,10 @@ export const api = {
       body: JSON.stringify({ username, password }),
     });
     if (!resp.ok) throw new ApiError(resp.status, (await resp.json()).detail, resp.statusText);
-    return resp.json() as Promise<import("./types").LoginResponse>;
+    return resp.json() as Promise<ApiTypes.LoginResponse>;
   },
   me: (token: string) =>
-    getWithToken<import("./types").AuthUser>("/api/auth/me", token, "令牌无效或已过期"),
+    getWithToken<ApiTypes.AuthUser>("/api/auth/me", token, "令牌无效或已过期"),
   logout: async (token: string) => {
     const resp = await fetch("/api/auth/logout", {
       method: "POST",
@@ -148,13 +157,13 @@ export const api = {
       current_password: currentPassword,
       new_password: newPassword,
     }),
-  steps: () => get<import("./types").StepsResponse>("/api/steps"),
-  meta: () => get<import("./types").Meta>("/api/meta"),
-  indicatorSchema: () => get<import("./types").IndicatorSchema>("/api/indicators/schema"),
-  dbMeta: () => get<import("./types").DbMeta>("/api/db/meta"),
+  steps: () => get<ApiTypes.StepsResponse>("/api/steps"),
+  meta: () => get<ApiTypes.Meta>("/api/meta"),
+  indicatorSchema: () => get<ApiTypes.IndicatorSchema>("/api/indicators/schema"),
+  dbMeta: () => get<ApiTypes.DbMeta>("/api/db/meta"),
   dbSlice: (params: {
     year: number;
-    table: import("./types").DbTableKind;
+    table: ApiTypes.DbTableKind;
     rowCountry?: string;
     colCountry?: string;
     rowSector?: string;
@@ -162,7 +171,7 @@ export const api = {
     page?: number;
     pageSize?: number;
   }) => {
-    return get<import("./types").DbSlice>(withQuery("/api/db/slice", {
+    return get<ApiTypes.DbSlice>(withQuery("/api/db/slice", {
       year: params.year,
       table: params.table,
       page: params.page ?? 1,
@@ -173,38 +182,38 @@ export const api = {
       col_sector: params.colSector,
     }));
   },
-  qc: (year: number) => get<import("./types").QcCheck[]>(`/api/qc/${year}`),
-  qcShocks: () => get<import("./types").QcCheck[]>("/api/qc/shocks"),
-  qcControls: () => get<import("./types").QcCheck[]>("/api/qc/controls"),
+  qc: (year: number) => get<ApiTypes.QcCheck[]>(`/api/qc/${year}`),
+  qcShocks: () => get<ApiTypes.QcCheck[]>("/api/qc/shocks"),
+  qcControls: () => get<ApiTypes.QcCheck[]>("/api/qc/controls"),
   countryIndicators: (year: number) =>
     get<Record<string, string | number | null>[]>(`/api/indicators/country/${year}`),
   industryIndicators: (year: number, country: string, page: number) =>
-    get<import("./types").IndustryPage>(
+    get<ApiTypes.IndustryPage>(
       withQuery(`/api/indicators/industry/${year}`, { page, country }),
     ),
   // 拉取一个国家全部行业的指标行(用于步骤3-5 的拆解演示,一次取回填充行业下拉)
   industryIndicatorsAll: (year: number, country: string) =>
-    get<import("./types").IndustryPage>(
+    get<ApiTypes.IndustryPage>(
       withQuery(`/api/indicators/industry/${year}`, { page: 1, page_size: 200, country }),
     ),
-  network: (year: number) => get<import("./types").NetworkData>(`/api/viz/network/${year}`),
+  network: (year: number) => get<ApiTypes.NetworkData>(`/api/viz/network/${year}`),
   shockEvents: () =>
-    get<{ events: import("./types").ShockEvent[]; disclaimer: string }>("/api/shocks/events"),
+    get<{ events: ApiTypes.ShockEvent[]; disclaimer: string }>("/api/shocks/events"),
   shockSummary: (shockType = "tariff") =>
-    get<import("./types").ShockSummary>(
+    get<ApiTypes.ShockSummary>(
       withQuery("/api/shocks/summary", { shock_type: shockType }),
     ),
   crosswalkDemo: (year = 2019) =>
-    get<import("./types").CrosswalkPayload>(withQuery("/api/crosswalk/demo", { year })),
+    get<ApiTypes.CrosswalkPayload>(withQuery("/api/crosswalk/demo", { year })),
   shockPanel: (year: number, shockType: string, country: string, sector: string, onlyHit: boolean, page: number) =>
-    get<import("./types").PagedRows>(
+    get<ApiTypes.PagedRows>(
       withQuery("/api/shocks/panel", {
         year, shock_type: shockType, only_hit: onlyHit, page, country, sector,
       }),
     ),
-  regressionOptions: () => get<import("./types").RegressionOptions>("/api/regression/options"),
+  regressionOptions: () => get<ApiTypes.RegressionOptions>("/api/regression/options"),
   regressionDesign: (params: {
-    outcome: import("./types").RegressionOutcome;
+    outcome: ApiTypes.RegressionOutcome;
     granularity: string;
     shockType?: string;
     method: string;
@@ -214,7 +223,7 @@ export const api = {
     scenario?: string;
     weightMode?: string;
   }) => {
-    return get<import("./types").RegressionDesignInfo>(withQuery("/api/regression/design", {
+    return get<ApiTypes.RegressionDesignInfo>(withQuery("/api/regression/design", {
       outcome: params.outcome,
       granularity: params.granularity,
       method: params.method,
@@ -227,7 +236,7 @@ export const api = {
     }));
   },
   runRegression: async (
-    outcome: import("./types").RegressionOutcome,
+    outcome: ApiTypes.RegressionOutcome,
     granularity: string,
     shockType: string,
     method: string,
@@ -237,7 +246,7 @@ export const api = {
     scenario: string,
     weightMode: string,
   ) => {
-    return post<import("./types").RegressionResponse>("/api/regression/run", {
+    return post<ApiTypes.RegressionResponse>("/api/regression/run", {
         outcome,
         granularity,
         shock_type: shockType,
@@ -250,7 +259,7 @@ export const api = {
     });
   },
   placeboRegression: async (
-    outcome: import("./types").RegressionOutcome,
+    outcome: ApiTypes.RegressionOutcome,
     granularity: string,
     shockType: string,
     method: string,
@@ -261,7 +270,7 @@ export const api = {
     weightMode: string,
     nDraws = 40,
   ) => {
-    return post<import("./types").PlaceboResponse>("/api/regression/placebo", {
+    return post<ApiTypes.PlaceboResponse>("/api/regression/placebo", {
         outcome,
         granularity,
         shock_type: shockType,
@@ -284,9 +293,9 @@ export const api = {
         quiz?: { version: string; answers: Record<string, string> };
       }>("/api/classroom/quiz/submit", body),
     announcements: () =>
-      get<{ announcements: import("./types").Announcement[] }>("/api/classroom/announcements"),
+      get<{ announcements: ApiTypes.Announcement[] }>("/api/classroom/announcements"),
     assignmentContexts: () =>
-      get<{ assignments: import("./types").StudentAssignmentContext[] }>("/api/classroom/assignment-contexts"),
+      get<{ assignments: ApiTypes.StudentAssignmentContext[] }>("/api/classroom/assignment-contexts"),
     selectAssignmentContext: (assignmentId: number) =>
       post<{
         course_run_id: number;
@@ -319,19 +328,19 @@ export const api = {
     generateReport: () => post<GeneratedReport>("/api/classroom/report/generate"),
     generatedReport: () => get<Partial<GeneratedReport>>("/api/classroom/report/generated"),
     reportGate: () => get<ReportGate>("/api/classroom/report/gate"),
-    myReport: () => get<import("./types").MySubmission>("/api/classroom/report/mine"),
+    myReport: () => get<ApiTypes.MySubmission>("/api/classroom/report/mine"),
     overview: (classId?: number | null) =>
-      get<import("./types").ClassOverview>(
+      get<ApiTypes.ClassOverview>(
         withQuery("/api/classroom/overview", { class_id: classId }),
       ),
-    classes: () => get<{ classes: import("./types").ClassInfo[] }>("/api/classroom/classes"),
-    courseRuns: () => get<{ course_runs: import("./types").CourseRun[] }>("/api/classroom/course-runs"),
+    classes: () => get<{ classes: ApiTypes.ClassInfo[] }>("/api/classroom/classes"),
+    courseRuns: () => get<{ course_runs: ApiTypes.CourseRun[] }>("/api/classroom/course-runs"),
     createCourseRun: (body: { name: string; code: string; term?: string; release_tag?: string }) =>
-      post<import("./types").CourseRun>("/api/classroom/course-runs", body),
+      post<ApiTypes.CourseRun>("/api/classroom/course-runs", body),
     archiveCourseRun: (id: number, archived: boolean) =>
-      post<import("./types").CourseRun>(`/api/classroom/course-runs/${id}/archive`, { archived }),
+      post<ApiTypes.CourseRun>(`/api/classroom/course-runs/${id}/archive`, { archived }),
     assignments: (courseRunId?: number | null) =>
-      get<{ assignments: import("./types").Assignment[] }>(
+      get<{ assignments: ApiTypes.Assignment[] }>(
         withQuery("/api/classroom/assignments", { course_run_id: courseRunId }),
       ),
     createAssignment: (body: {
@@ -342,19 +351,19 @@ export const api = {
       release_tag?: string;
       opens_at?: string | null;
       due_at?: string | null;
-    }) => post<import("./types").Assignment>("/api/classroom/assignments", body),
+    }) => post<ApiTypes.Assignment>("/api/classroom/assignments", body),
     setAssignmentState: (id: number, active: boolean) =>
-      post<import("./types").Assignment>(`/api/classroom/assignments/${id}/state`, { active }),
+      post<ApiTypes.Assignment>(`/api/classroom/assignments/${id}/state`, { active }),
     enrollStudent: (body: { course_run_id: number; account_id: number; class_id?: number | null }) =>
       post<Enrollment>("/api/classroom/enrollments", body),
     enrollments: (courseRunId: number) =>
-      get<{ enrollments: import("./types").EnrollmentRow[] }>(
+      get<{ enrollments: ApiTypes.EnrollmentRow[] }>(
         withQuery("/api/classroom/enrollments", { course_run_id: courseRunId }),
       ),
     createClass: (body: { name: string; code: string; semester?: string; note?: string }) =>
-      post<import("./types").ClassInfo>("/api/classroom/classes", body),
+      post<ApiTypes.ClassInfo>("/api/classroom/classes", body),
     students: (classId?: number | null) =>
-      get<{ students: import("./types").StudentRow[] }>(
+      get<{ students: ApiTypes.StudentRow[] }>(
         withQuery("/api/classroom/students", { class_id: classId }),
       ),
     createStudent: (body: {
@@ -363,21 +372,21 @@ export const api = {
       password: string;
       student_no?: string;
       class_id?: number | null;
-    }) => post<import("./types").StudentRow>("/api/classroom/students", body),
+    }) => post<ApiTypes.StudentRow>("/api/classroom/students", body),
     updateStudent: (
       id: number,
       body: { display_name?: string; student_no?: string; class_id?: number; active?: boolean; password?: string },
-    ) => post<import("./types").StudentRow>(`/api/classroom/students/${id}`, body),
+    ) => post<ApiTypes.StudentRow>(`/api/classroom/students/${id}`, body),
     submissions: () =>
-      get<{ submissions: import("./types").SubmissionRow[] }>("/api/classroom/submissions"),
+      get<{ submissions: ApiTypes.SubmissionRow[] }>("/api/classroom/submissions"),
     submissionDetail: (id: number) =>
-      get<import("./types").SubmissionDetail>(`/api/classroom/submissions/${id}`),
+      get<ApiTypes.SubmissionDetail>(`/api/classroom/submissions/${id}`),
     submissionHistory: (id: number) =>
-      get<import("./types").SubmissionHistory>(`/api/classroom/submissions/${id}/history`),
+      get<ApiTypes.SubmissionHistory>(`/api/classroom/submissions/${id}/history`),
     grade: (id: number, score: number, feedback: string) =>
-      post<import("./types").SubmissionDetail>(`/api/classroom/submissions/${id}/grade`, { score, feedback }),
+      post<ApiTypes.SubmissionDetail>(`/api/classroom/submissions/${id}/grade`, { score, feedback }),
     createAnnouncement: (body: { title: string; body: string; class_id?: number | null }) =>
-      post<import("./types").Announcement>("/api/classroom/announcements", body),
+      post<ApiTypes.Announcement>("/api/classroom/announcements", body),
     deleteAnnouncement: (id: number) =>
       post<{ ok: boolean }>(`/api/classroom/announcements/${id}`, undefined, "DELETE"),
   },

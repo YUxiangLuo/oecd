@@ -75,6 +75,14 @@ jobs:
         uses: oven-sh/setup-bun@v2
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
+      - name: Audit frontend dependency graph
+        run: |
+          for attempt in 1 2 3; do
+            bun audit && exit 0
+            echo "bun audit attempt $attempt failed; retrying" >&2
+            sleep $((attempt * 2))
+          done
+          exit 1
       - name: Build frontend
         run: bun run build  # build 脚本本身是 tsc -b && vite build,已包含类型检查
       - name: Run frontend unit tests
