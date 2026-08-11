@@ -32,8 +32,8 @@ export function Step5Production({ meta, step, state }: { meta: Meta; step: Step;
         eyebrow="计算结果 · 先出数字"
         title="WWYZ 生产分解表(从 ICIO 算出来的)"
         what={<>由步骤 1 的 <b>ICIO 表</b>经 WWYZ 算法算出:每行某国某行业的总增加值 <b>SVA</b>,按去向拆成四段——纯国内(1_VA_D)、传统贸易(2_VA_RT)、简单 GVC(3a)、复杂 GVC(3b),金额百万美元。</>}
-        read={<>怎么读一行:<b>复杂 GVC(3b)</b> 越大 = 增加值跨越了越多次国境、越深地嵌入全球生产网络;<b>纯国内</b> 越大 = 越靠内需自给。</>}
-        find={<>换个国家看数字怎么变。小型开放经济体(如新加坡、卢森堡)的复杂 GVC 通常占比更高;下一节验证四段精确加回 SVA。</>}
+        read={<>怎么读一行:四项<b>绝对金额</b>先反映生产规模。比较复杂 GVC 深度要看 <b>3b / SVA</b> 份额；纯国内份额高表示更多增加值沿不跨境路径满足本国最终需求，不等同于整个经济体“自给”。</>}
+        find={<>换个国家并比较 <b>3b / SVA</b>，观察开放程度与复杂 GVC 构成是否相关；下一节验证四段精确加回 SVA。</>}
       >
         <IndicatorTable
           meta={meta} groupKey="production" schema={schema} state={state}

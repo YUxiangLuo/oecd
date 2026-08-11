@@ -96,7 +96,7 @@ function effectLabel(response: RegressionResponse, coefficient: CoefStat | null)
     : method === "event_study"
       ? coefficient?.name === "k=0" ? "冲击当期变化（k=0）" : `冲击后变化（${coefficient?.name ?? "无可估计时期"}）`
       : "处理后相对变化";
-  return response.design.interaction ? `${base}（基期 GVC 样本均值处）` : base;
+  return response.design.interaction ? `${base}（处理前 GVC 样本均值处）` : base;
 }
 
 const INTERPRETATION: Record<RegressionOutcome, { negative: string; positive: string }> = {
@@ -113,8 +113,8 @@ const INTERPRETATION: Record<RegressionOutcome, { negative: string; positive: st
     positive: "结果与跨境生产链延长一致，但不能单靠该估计判断企业策略。",
   },
   network: {
-    negative: "结果与网络枢纽地位下降一致，但不能单独证明发生脱钩。",
-    positive: "结果与网络枢纽地位增强一致，但可能同时受到网络重组影响。",
+    negative: "结果与拓扑中介位置下降一致，但不能单独证明发生脱钩。",
+    positive: "结果与拓扑中介位置增强一致，但可能同时受到网络重组影响。",
   },
 };
 
@@ -180,7 +180,7 @@ export function buildRegressionVerdict(
     effect: scaled.effect,
     interval: scaled.interval,
     evidence: state === "insufficient"
-      ? "95% 置信区间跨过 0；这不等于“没有效应”，而是当前样本不足以确定方向。"
+      ? "95% 置信区间跨过 0；这不等于“没有效应”，而是当前证据不足以确定方向。"
       : "95% 置信区间未跨过 0；是否作因果解释仍取决于冲击外生性、趋势可比性等假设。",
     interpretation: state === "insufficient"
       ? "当前结果不能支持明确的上升或下降结论。"

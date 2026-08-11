@@ -50,6 +50,11 @@ export function QcLab({ meta, onNavigateStep }: {
           <p>
             这些边界属于当前数据版本，适用于后续所有描述、回归与报告；最终报告会自动带入，无需在这里另行提交。
           </p>
+          {qcRelease.fatal.length > 0 && (
+            <p>
+              <b>使用边界：</b>含 Fatal 的产物不满足正式研究或发布要求。显式 override 只允许继续教学演示，且必须保留上述披露，不能把结果冒充研究结论。
+            </p>
+          )}
         </details>
       )}
 

@@ -114,7 +114,7 @@ function DesignMeta({ design }: { design: RegressionDesignInfo }) {
       <span>观察个体：{ENTITY_LABEL[design.entity] ?? design.entity}</span>
       <span>标准误按{ENTITY_LABEL[design.cluster] ?? design.cluster}聚类</span>
       <span>控制：{controls}</span>
-      <span>交互：{design.interaction ? "冲击 × 中心化基期 GVC" : "未加入"}</span>
+      <span>交互：{design.interaction ? "冲击 × 中心化处理前 GVC" : "未加入"}</span>
       <span>样本：{design.sample_filter}</span>
       <span>暴露权重：{design.weight_mode === "contemporaneous" ? "当期贸易结构（稳健性）" : "首次处理前固定结构（基准）"}</span>
     </div>
@@ -259,6 +259,7 @@ function DidFourCells() {
         </tbody>
       </table>
       <div className="did-formula">DID =（B−A）−（D−C）</div>
+      <p className="muted">四格仅用于建立直觉；实际模型是按个体首次处理年构造、含个体与年份固定效应的分期处理 TWFE。</p>
     </div>
   );
 }
@@ -335,8 +336,8 @@ function MarginalEffectsPanel({ response }: { response: RegressionResponse }) {
     <div className="marginal-effects">
       <div className="marginal-effects-head">
         <div>
-          <b>低 / 中 / 高基期 GVC 的政策边际效应</b>
-          <p>分位点按样本实体等权计算；区间使用主效应、交互项及其协方差，不是把两个系数各自解读。</p>
+          <b>低 / 中 / 高处理前 GVC 的政策边际效应</b>
+          <p>处理个体使用首次处理前最后至多两期，从未处理个体使用样本最早两期；分位点按实体等权计算。区间使用主效应、交互项及其协方差，不是把两个系数各自解读。</p>
         </div>
       </div>
       {groups.map((term) => {
@@ -345,7 +346,7 @@ function MarginalEffectsPanel({ response }: { response: RegressionResponse }) {
           <ScrollableRegion className="table-wrap" key={term} label={`${term} 边际效应表，可横向滚动`}>
             {groups.length > 1 && <div className="muted" style={{ margin: "8px 0" }}>政策项：{term}</div>}
             <table className="data-table">
-              <thead><tr><th>基期 GVC 水平</th><th>相对均值</th><th>边际效应</th><th>95% 置信区间</th><th>p 值</th></tr></thead>
+              <thead><tr><th>处理前 GVC 水平</th><th>相对均值</th><th>边际效应</th><th>95% 置信区间</th><th>p 值</th></tr></thead>
               <tbody>
                 {rows.map((effect) => {
                   const scaled = marginalNaturalScale(effect, response);
@@ -608,7 +609,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
             <b>建议对照实验</b>
             <p>
               {outcome === "trade" && "用完全相同的冲击、方法与粒度，分别运行不加控制和加入 ICIO 派生控制的模型。"}
-              {outcome === "production" && "先运行无交互模型，再运行“冲击 × 基期 GVC”交互模型；交互系数不是平均效应。"}
+              {outcome === "production" && "先运行无交互模型，再运行“冲击 × 处理前 GVC”交互模型；交互系数不是平均效应。"}
               {outcome === "length" && "使用事件研究，并检查冲击前联合检验与冲击后的动态路径。"}
               {outcome === "network" && "可在 DID 基准结果后运行安慰剂检验；随机化尾部位置也不是因果证明。"}
             </p>
@@ -620,7 +621,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
             </>}
             {outcome === "production" && <>
               <button type="button" className={!interaction ? "on" : ""} onClick={() => setSetting("interaction", false)}>① 切换到无交互</button>
-              <button type="button" className={interaction ? "on" : ""} onClick={() => setSetting("interaction", true)}>② 打开基期 GVC 交互</button>
+              <button type="button" className={interaction ? "on" : ""} onClick={() => setSetting("interaction", true)}>② 打开处理前 GVC 交互</button>
             </>}
             {outcome === "length" && (
               <button type="button" className={method === "event_study" ? "on" : ""} onClick={() => setSetting("method", "event_study")}>使用事件研究</button>
@@ -667,7 +668,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
             {event ? (
               <>
                 <EventStudyChart coefs={split?.eventMain ?? []} notes={result.result.notes} title="主政策变化的动态路径" seriesLabel="主效应 βₖ" pretrend={result.result.diagnostics.pretrend} />
-                {(split?.eventInteraction.length ?? 0) > 0 && <EventStudyChart coefs={split?.eventInteraction ?? []} notes={result.result.notes} title="基期 GVC 异质性附加变化" seriesLabel="交互效应 θₖ" />}
+                {(split?.eventInteraction.length ?? 0) > 0 && <EventStudyChart coefs={split?.eventInteraction ?? []} notes={result.result.notes} title="处理前 GVC 异质性附加变化" seriesLabel="交互效应 θₖ" />}
               </>
             ) : <CoefForestChart coefs={split?.policy ?? []} />}
             {outcome === "production" && (
@@ -703,8 +704,8 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
             {outcome === "production" && (
               <div className={`exploration-status${result.design.interaction && (result.result.marginal_effects?.length ?? 0) > 0 ? " done" : ""}`}>
                 {result.design.interaction && (result.result.marginal_effects?.length ?? 0) > 0
-                  ? "✓ 已展示低 / 中 / 高基期 GVC 的边际效应"
-                  : "可打开基期 GVC 交互并运行，查看条件边际效应"}
+                  ? "✓ 已展示低 / 中 / 高处理前 GVC 的边际效应"
+                  : "可打开处理前 GVC 交互并运行，查看条件边际效应"}
               </div>
             )}
             {outcome === "network" && (

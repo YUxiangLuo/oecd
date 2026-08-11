@@ -149,14 +149,32 @@ def _stable_noise(data: pd.DataFrame, cols: list[str]) -> pd.Series:
     return ((hashed % 1_000_003).astype(float) / 500_001.5) - 1.0
 
 
-def _attach_baseline_gvc(data: pd.DataFrame, entity: str, time: str) -> pd.DataFrame:
-    """加入按个体计算、再按个体等权中心化的基期 GVC 生产份额。
+def _attach_baseline_gvc(
+    data: pd.DataFrame,
+    entity: str,
+    time: str,
+    first_by_entity: pd.Series | None = None,
+) -> pd.DataFrame:
+    """加入真正位于首次处理前、再按个体等权中心化的基期 GVC 生产份额。
 
     中心化使交互模型的政策主系数表示“基期 GVC 处于样本个体均值时”的效应，
     避免把几乎没有经济含义的 BaseGVC=0 条件效应当作平均变化。
+
+    曾受处理个体使用首次处理前最后至多两期；从未处理个体使用样本最早两期。
+    这样不会把处理当年或处理后的结果变量特征反向塞进“基期”交互项。
     """
     data = data.sort_values([entity, time]).reset_index(drop=True)
-    base = data.groupby(entity, group_keys=False).head(2).groupby(entity)[BASE_GVC_COL].mean()
+    first_by_entity = first_by_entity if first_by_entity is not None else pd.Series(dtype=float)
+    first_treatment = data[entity].map(first_by_entity)
+    treated = first_treatment.notna()
+    treated_pre = data.loc[treated & (data[time] < first_treatment)].groupby(entity, group_keys=False).tail(2)
+    never_baseline = data.loc[~treated].groupby(entity, group_keys=False).head(2)
+    baseline_rows = pd.concat([treated_pre, never_baseline], ignore_index=True)
+    base = baseline_rows.groupby(entity)[BASE_GVC_COL].mean()
+    missing_treated = sorted(set(first_by_entity.index) - set(base.index))
+    if missing_treated:
+        preview = "、".join(str(item) for item in missing_treated[:5])
+        raise ValueError(f"基期 GVC 交互项要求每个处理个体至少有一期处理前观测；缺少：{preview}")
     centered = (base - float(base.mean())).rename(BASELINE_GVC_COL)
     out = data.merge(centered, left_on=entity, right_index=True, how="left")
     if out[BASELINE_GVC_COL].isna().any():
@@ -603,7 +621,11 @@ def _prepare_fe_model(
         raise ValueError("面板缺少回归变量:" + "、".join(missing))
     data = df[cols].dropna().reset_index(drop=True)
     if interaction:
-        data = _attach_baseline_gvc(data, entity, time)
+        first_by_entity = pd.Series(dtype=float)
+        if has_treated and treated_col is not None:
+            treated = pd.to_numeric(data[treated_col], errors="coerce").fillna(0) > 0
+            first_by_entity = data.loc[treated, [entity, time]].groupby(entity)[time].min()
+        data = _attach_baseline_gvc(data, entity, time, first_by_entity)
         for reg in regressors:
             name = f"{reg}×base_gvc"
             data[name] = data[reg] * data[BASELINE_GVC_COL]
@@ -611,7 +633,7 @@ def _prepare_fe_model(
         xcols = [*regressors, *interaction_cols, *controls]
     notes = ["连续冲击强度直接进方程(强度法)"]
     if interaction:
-        notes.append("已加入冲击×基期GVC生产份额交互项；基期GVC已按样本个体均值中心化")
+        notes.append("已加入冲击×处理前GVC生产份额交互项；处理个体取首次处理前最后至多两期，从未处理个体取样本最早两期，并按个体均值中心化")
     if controls:
         notes.append("已加入国家-年份控制变量")
     return PreparedModel(
@@ -824,7 +846,7 @@ def _prepare_did_model(
     policy_xcols = [did_col]
     xcols = [did_col]
     if interaction:
-        data = _attach_baseline_gvc(data, entity, time)
+        data = _attach_baseline_gvc(data, entity, time, timing.first_by_entity)
         interaction_col = f"{did_col}×base_gvc"
         data[interaction_col] = data[did_col] * data[BASELINE_GVC_COL]
         policy_xcols.append(interaction_col)
@@ -838,7 +860,7 @@ def _prepare_did_model(
         f"首次处理年份(cohort):{cohort_summary}",
     ]
     if interaction:
-        notes.append("已加入处理效应×基期GVC生产份额交互项；基期GVC已按样本个体均值中心化")
+        notes.append("已加入处理效应×处理前GVC生产份额交互项；处理个体取首次处理前最后至多两期，从未处理个体取样本最早两期，并按个体均值中心化")
     if controls:
         notes.append("已加入国家-年份控制变量")
     return PreparedModel(
@@ -918,7 +940,7 @@ def _prepare_event_model(
         raise ValueError("事件研究除基期外没有可估计的事件时间")
     policy_xcols = list(xcols)
     if interaction:
-        data = _attach_baseline_gvc(data, entity, time)
+        data = _attach_baseline_gvc(data, entity, time, timing.first_by_entity)
         interaction_cols = []
         for name in xcols:
             interaction_col = f"{name}×base_gvc"
@@ -934,7 +956,7 @@ def _prepare_event_model(
         f"首次处理年份(cohort):{cohort_summary}",
     ]
     if interaction:
-        notes.append("已加入动态效应×基期GVC生产份额交互项；基期GVC已按样本个体均值中心化")
+        notes.append("已加入动态效应×处理前GVC生产份额交互项；处理个体取首次处理前最后至多两期，从未处理个体取样本最早两期，并按个体均值中心化")
     if controls:
         notes.append("已加入国家-年份控制变量")
     return PreparedModel(

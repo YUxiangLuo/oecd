@@ -48,7 +48,7 @@ def main() -> None:
     )
     p.add_argument("--controls", action="store_true", help="加入 ICIO 派生国家-年份控制变量")
     p.add_argument("--macro-controls", action="store_true", help="加入 WDI/IMF 风格模拟宏观控制变量")
-    p.add_argument("--interaction", action="store_true", help="加入 冲击×基期GVC生产份额 交互项")
+    p.add_argument("--interaction", action="store_true", help="加入 冲击×处理前GVC生产份额 交互项")
     p.add_argument("--real", action="store_true", help="使用 GDP 平减指数切换到实际值口径(2016=1)")
 
     p = sub.add_parser("report", help="生成实验报告")
@@ -170,7 +170,7 @@ def main() -> None:
         if args.controls or args.macro_controls:
             print(f"控制变量:{design.control_mode_label}")
         if args.interaction:
-            print("交互项:冲击×基期GVC参与度")
+            print("交互项:冲击×处理前GVC参与度")
         print(f"模型: {design.equation()}\n")
         print(f"{'变量':<20}{'系数':>12}{'标准误':>12}{'t':>8}{'p':>8}")
         for coef in result.coefs:

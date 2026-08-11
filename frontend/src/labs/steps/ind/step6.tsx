@@ -32,7 +32,7 @@ export function Step6Length({ meta, step, state }: { meta: Meta; step: Step; sta
         eyebrow="计算结果 · 先出数字"
         title="生产长度分解表(从 ICIO 算出来的)"
         what={<>由步骤 1 的 <b>ICIO 表</b>算出的生产长度:<b>PLv</b>(前向,增加值到最终吸收平均经过几道生产环节)、<b>PLy</b>(后向,最终品回溯到初始投入)、<b>GVCPs</b>(价值链位置)。</>}
-        read={<>怎么读一行:PLv / PLy 通常在 2–4 之间,表示增加值平均被计为总产出 2–4 次;<b>GVCPs &gt; 1</b> = 更靠<b>上游</b>(离最终需求远,如资源型经济体)。</>}
+        read={<>怎么读一行:PLv / PLy 表示增加值平均被计为总产出的次数；数值越大，核算到的生产环节越多。应在同一年、同一粒度内作相对比较，不预设固定范围。<b>GVCPs &gt; 1</b> 表示相对更靠上游。</>}
         find={<>换个国家看数字怎么变。资源与原材料供应型经济体的 GVCPs 通常较高;下一节验证各段加权后加回总长度。</>}
       >
         <IndicatorTable

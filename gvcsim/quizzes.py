@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 
-QUIZ_VERSION = "course-quiz-v2"
+QUIZ_VERSION = "course-quiz-v3"
 
 
 def _option(option_id: str, label: str) -> dict[str, str]:
@@ -49,14 +49,14 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
     2: [
         _question(
             "s02-fatal",
-            "质检仍存在 fatal 问题时，哪种处置才允许进入下游分析？",
+            "正式研究或可发布数据仍存在 fatal 问题时，哪种处置才允许进入下游分析？",
             [
                 _option("a", "在报告中披露后直接继续"),
                 _option("b", "停止分析，或修正并复检通过后继续"),
                 _option("c", "把 fatal 手工改成 warning 后继续"),
             ],
             "b",
-            "fatal 是发布门禁；必须停止，或完成真实修正并通过复检，不能只靠披露绕过。",
+            "fatal 是正式研究与发布门禁；必须停止，或完成真实修正并通过复检。教学演示可在显式 override、完整披露且不冒充研究结论的边界内继续。",
         ),
         _question(
             "s02-leontief",
@@ -119,7 +119,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
                 _option("c", "节点的直接贸易伙伴一定最多"),
             ],
             "b",
-            "介数中心性统计节点经过的有向最短路径数量，刻画中转枢纽作用，不等同于总流量或伙伴数。",
+            "介数中心性统计节点经过的有向无权最短路径数量；它刻画拓扑中介位置，不等同于总流量、伙伴数或经济上的不可替代瓶颈。",
         )
     ],
     7: [
@@ -225,14 +225,14 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
     13: [
         _question(
             "s13-marginal",
-            "模型含有“冲击 × 基期 GVC”交互项时，冲击边际效应怎样计算？",
+            "模型含有“冲击 × 处理前 GVC”交互项时，冲击边际效应怎样计算？",
             [
                 _option("a", "只读取交互项系数"),
-                _option("b", "主效应加上交互系数乘以基期 GVC 水平"),
+                _option("b", "主效应加上交互系数乘以处理前 GVC 水平"),
                 _option("c", "直接使用组内 R²"),
             ],
             "b",
-            "有交互项时，特定基期 GVC 水平下的边际效应由主效应与交互部分共同组成。",
+            "有交互项时，特定处理前 GVC 水平下的边际效应由主效应与交互部分共同组成；处理个体的基期不得混入处理当年或处理后观测。",
         ),
         _question(
             "s13-compare",

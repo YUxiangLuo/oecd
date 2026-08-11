@@ -24,8 +24,8 @@ describe("regression lessons", () => {
   });
 
   test("comparison copy explains the selected method without claiming proof", () => {
-    expect(comparisonExplanation("did")).toContain("处理后−处理前");
-    expect(comparisonExplanation("event_study")).toContain("逐期比较");
+    expect(comparisonExplanation("did")).toContain("分期处理 TWFE");
+    expect(comparisonExplanation("event_study")).toContain("分期处理 TWFE");
     expect(comparisonExplanation("twfe_intensity")).toContain("连续冲击强度");
   });
 });

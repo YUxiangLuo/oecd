@@ -89,12 +89,12 @@ export function ShockLab({ meta, step, state }: {
     <div className="shock-workbench">
       <StepIntro
         kicker={`步骤 ${step.n} · 回归设计与建模`}
-        lead="回归前,先接入“外生的因”:政策冲击"
+        lead="回归前，先接入候选政策处理暴露"
         concept={step.concept}
         todo={[
-          "从左侧列表选一个政策事件(行内时间条给出宣布→生效时点),右侧即联动出它的国家×行业冲击",
+          "从左侧列表选一个政策事件(行内时间条给出宣布→生效时点)，右侧按该事件定位国家×行业暴露",
           "可继续查看关税 / 制裁 / 出口管制的差异；打开过的事件会自动进入实验记录",
-          "记住:这些冲击就是接下来第 12–15 步回归的处理变量",
+          "记住:下游回归按冲击类型汇总全部已编码事件；事件选择只用于探索，不证明冲击外生",
         ]}
       />
       <div className="warnbox shock-disclaimer">
@@ -119,12 +119,12 @@ export function ShockLab({ meta, step, state }: {
               <div className="shock-split-head"><span className="shock-split-num">①</span>选择政策事件</div>
               <p className="shock-split-hint">
                 按三类冲击分组;每行的时间条是 ○ 宣布 → ● 生效(○ 解除)。所有行共用顶部年份刻度,
-                因此可以横向比较:谁先发生、谁从宣布到生效拖得更久——这正是第 12–15 步事件研究要用的时点。
+                因此可以横向比较谁先发生、谁从宣布到生效间隔更久。下游事件研究使用各个体在所选冲击类型汇总面板中的首次处理年，并不只使用这里选中的单个事件。
               </p>
               <EventList events={events} selectedKey={selectedKey} onSelect={pickEvent} />
             </div>
             <div className="shock-split-right">
-              <div className="shock-split-head"><span className="shock-split-num">②</span>它造成的国家×行业冲击 <span className="muted">· 随左侧实时联动,也可手动调整</span></div>
+              <div className="shock-split-head"><span className="shock-split-num">②</span>按该事件定位国家×行业暴露 <span className="muted">· 随左侧实时联动,也可手动调整</span></div>
               <ShockPanel meta={meta} filters={filters} onChange={updateFilters} />
             </div>
           </div>

@@ -37,12 +37,12 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "百分点",
     priorStep: 4,
     priorLabel: "GVC 生产分解指标",
-    focus: "区分平均变化与“冲击 × 基期 GVC”异质性",
+    focus: "区分平均变化与“冲击 × 处理前 GVC”异质性",
     definition: "它衡量增加值经过多次跨境生产后被最终吸收的比例，反映全球分工的复杂程度。",
     downMeaning: "负向变化与复杂跨境分工收缩一致，但不能据此确定收缩机制。",
     upMeaning: "正向变化与复杂跨境生产扩张一致，但不能据此排除其他共同变化。",
-    caution: "交互项回答的是不同基期 GVC 参与度个体是否反应不同，不是新的平均效应。",
-    guidedExperiment: "先运行无交互基准，再打开“冲击 × 基期 GVC”运行第二次，比较平均变化和异质性附加变化。",
+    caution: "交互项回答的是不同处理前 GVC 参与度个体是否反应不同，不是新的平均效应；处理个体的基期只使用首次处理前观测。",
+    guidedExperiment: "先运行无交互基准，再打开“冲击 × 处理前 GVC”运行第二次，比较平均变化和异质性附加变化。",
   },
   length: {
     outcome: "length",
@@ -66,10 +66,10 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorStep: 6,
     priorLabel: "全球生产网络指标",
     focus: "用安慰剂和多项证据判断网络位置变化是否稳健",
-    definition: "它衡量全球国家×行业图中的节点位于多少条有向最短供应链路径上，反映其作为中转枢纽的位置。",
-    downMeaning: "负向变化与枢纽地位下降一致，但不能单独证明发生了脱钩。",
-    upMeaning: "正向变化与枢纽地位增强一致，但可能同时受到网络重组影响。",
-    caution: "网络指标来自完整的全球国家×行业图且原始量纲不直观，应同时参考相对于样本标准差的变化；国家级完全图不用于回归。",
+    definition: "它衡量全球国家×行业图中的节点位于多少条有向无权最短路径上，反映拓扑中介位置；路径计算不按流量赋权。",
+    downMeaning: "负向变化与拓扑中介位置下降一致，但不能单独证明发生了脱钩。",
+    upMeaning: "正向变化与拓扑中介位置增强一致，但可能同时受到网络重组影响。",
+    caution: "网络指标来自完整的全球国家×行业图且原始量纲不直观，应同时参考相对于样本标准差的变化；高介数不自动代表经济瓶颈，国家级完全图不用于回归。",
     guidedExperiment: "在 DID 基准结果后运行安慰剂检验，判断原始分组估计值是否位于随机分布尾部。",
   },
 };
@@ -92,10 +92,10 @@ export function lessonQuestion(outcome: RegressionOutcome, shockType: string, me
 
 export function comparisonExplanation(method: string): string {
   if (method === "did") {
-    return "先算处理组冲击前后的变化，再减去对照组同期变化：DID =（处理后−处理前）−（对照后−对照前）。";
+    return "四格差分可帮助理解 DID：DID =（处理后−处理前）−（对照后−对照前）。本系统实际估计含个体与年份固定效应的分期处理 TWFE；不同个体首次处理年不同，比较不止一个四格，处理效应异质时传统 TWFE 可能有偏。";
   }
   if (method === "event_study") {
-    return "以各个体冲击前一年为参照，逐期比较处理组相对对照组的变化；冲击前系数用于发现明显的预先差异。";
+    return "以各个体首次冲击前一年为参照，在分期处理 TWFE 中估计相对时期系数；比较可能隐含尚未处理或已处理个体，处理效应异质时需谨慎。冲击前系数只能用于发现明显预先差异，不能证明平行趋势。";
   }
   return "利用同一个体随时间变化的连续冲击强度，在吸收个体和年份共同差异后比较结果变量的相对变化。";
 }

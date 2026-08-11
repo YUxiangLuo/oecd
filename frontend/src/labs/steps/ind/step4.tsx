@@ -37,7 +37,7 @@ export function Step4Trade({ meta, step, state }: { meta: Meta; step: Step; stat
         eyebrow="计算结果 · 先出数字"
         title="WWZ 分解数据表(从 ICIO 算出来的)"
         what={<>这张表由步骤 1 的 <b>ICIO 表</b>(Z 中间投入、Y 最终需求)经 WWZ 总贸易核算法算出:每一行 = 某国某行业的出口,后面几列是拆出来的六项金额(DVAex / DVArt / DDC / FVA / FDC / taxsub,百万美元)。</>}
-        read={<>怎么读一行:<b>DVAex</b> 越大 = 出口里越多是本国自己创造、被国外最终吸收的价值;<b>FVA</b> 越大 = 越依赖进口的外国中间品(后向 GVC)。列名旁的 ⓘ 可悬停看定义。</>}
+        read={<>怎么读一行:<b>DVAex / FVA 金额</b>先说明该行业的出口规模构成；跨国家或行业判断本国增加值构成、后向依赖时，应分别比较 <b>DVAex_share / FVA_share</b>，不能只用绝对金额。列名旁的 ⓘ 可悬停看定义。</>}
         find={<>换个国家(下方筛选)看数字怎么变。这一步先把"算出来的数字"看明白,下一节再验证它们精确加回总量。</>}
       >
         <IndicatorTable
@@ -51,7 +51,7 @@ export function Step4Trade({ meta, step, state }: { meta: Meta; step: Step; stat
         eyebrow="验证 & 理解 · 挑一个拆开"
         title="动手拆解:六项精确加回毛出口"
         what={<>从上面的数据里挑一个出口(国家 / 行业),把它的毛出口拆成 WWZ 六项的<b>绝对金额</b>画成一条堆叠条,每一项都有释义。</>}
-        read={<>盯住绿框那一行:<b>6 项加总 = 毛出口,误差 ≈ 0</b>——这就是"完全分解"的含义:没有价值被漏掉,也没有被重复算错。</>}
+        read={<>盯住绿框那一行:<b>6 项加总 = 毛出口,误差 ≈ 0</b>——这验证六类核算项能闭合到毛出口。DDC / FDC 本来就是重复计算类别；闭合本身不能证明源数据和算法没有其他错误。</>}
         find={<>点「查看 ICIO 计算示例」看一个 taxsub 为负的真实行业,这解释了为什么某些项会是负数;也可以勾选"双实体并排对比"直接比两个国家/行业。</>}
       >
         <DecompositionDemo

@@ -23,7 +23,7 @@ export function SelectedEventBar({
   if (!event) {
     return (
       <div className="shock-linkbar" role="status" aria-live="polite">
-        <span className="muted">从左侧列表选一个政策事件,右侧会立即显示它造成的国家×行业冲击。</span>
+        <span className="muted">从左侧列表选一个政策事件，右侧会按事件时间、目标与行业定位教学暴露；下游回归仍按冲击类型汇总全部已编码事件。</span>
       </div>
     );
   }

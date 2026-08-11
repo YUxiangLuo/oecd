@@ -267,7 +267,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
     /* ---- 4 动手示意 ---- */
     <div key={3} className="intro-scene">
       <div className="intro-scene-kicker">动手预演</div>
-      <h2 className="intro-h2">政策冲击如何重塑价值链?</h2>
+      <h2 className="intro-h2">政策冲击可能如何传导到价值链?</h2>
       <p className="intro-lede">先预测企业最可能怎样调整，再拖动滑块比较一种机制路径。真实方向必须由后续数据与识别设计回答。</p>
       <div className="intro-mechanisms" role="group" aria-label="先选择政策传导机制">
         <button className={mechanism === "contract" ? "on" : ""} onClick={() => setMechanism("contract")}><b>跨境收缩</b><span>供应链缩短，复杂 GVC 下降</span></button>

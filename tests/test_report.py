@@ -163,7 +163,7 @@ def test_generate_keeps_cli_file_output(tmp_path: Path, monkeypatch):
     output = Path(report.generate(2020))
 
     assert output == tmp_path / "experiment_report_2020.md"
-    assert output.read_text(encoding="utf-8").startswith("# 贸易政策冲击")
+    assert output.read_text(encoding="utf-8").startswith("# GVC 指标与政策冲击")
 
 
 def test_country_report_skips_degenerate_network_regression(monkeypatch):

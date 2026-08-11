@@ -164,7 +164,7 @@ describe("buildRegressionVerdict", () => {
   test("labels event-time and centered-interaction estimands", () => {
     const event = { ...coefficient(-0.02, -0.03, -0.01), name: "k=0" };
     const verdict = buildRegressionVerdict("trade", response("trade", event, 1, 2, "event_study", true));
-    expect(verdict.effectLabel).toBe("冲击当期变化（k=0）（基期 GVC 样本均值处）");
+    expect(verdict.effectLabel).toBe("冲击当期变化（k=0）（处理前 GVC 样本均值处）");
   });
 });
 

@@ -23,7 +23,7 @@ const WWZ_SEGMENTS = [
   { key: "taxsub", name: "taxsub 税收减补贴" },
 ];
 const QUAD_LABELS: [string, string, string, string] = [
-  "双高 · 深度嵌入", "GVC 生产主导 · 前向型", "双低 · 相对自给", "进口依赖 · 后向型",
+  "双高 · 深度嵌入", "GVC 生产主导 · 前向型", "双低 · 参与较低", "进口依赖 · 后向型",
 ];
 
 export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
@@ -102,7 +102,7 @@ export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; stat
           eyebrow="WWZ 总贸易核算"
           title="拆开一国的出口:六项从哪来"
           what={<>每条 = 一个国家的毛出口,按 WWZ 六项归一化到 100%:前三项(蓝系)是<b>本国</b>增加值及其重复计算,FVA / FDC(绿 / 橙)是<b>外国</b>来源,taxsub 是税收。</>}
-          read={<>蓝色段越宽,出口越"实"(本国增加值主导);绿 / 橙段越宽,越靠进口中间品。右侧数字是该国毛出口(百万美元)。</>}
+          read={<>蓝色段越宽，国内增加值及其重复计算占毛出口的份额越高；绿 / 橙段越宽，外国增加值及其重复计算份额越高。右侧数字是该国毛出口(百万美元)。</>}
           find={<>对比大型经济体(美国:DVAex 段主导)与小型开放经济体(越南、卢森堡:FVA 段很宽)。六项之和恒等于毛出口。</>}
           note={picked.length ? "当前显示你选中的国家。" : "未选国家时默认展示毛出口最大的 8 国;在上方「选国家」挑选可替换。"}
         >
@@ -117,7 +117,7 @@ export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; stat
           eyebrow="后向 GVC 参与"
           title="谁的出口最依赖外国增加值(FVA 份额前 20)"
           what={<>横条 = 各国 <b>FVA 份额</b>(出口中外国增加值占比),从高到低取前 20;你选中的国家高亮为红色。</>}
-          read={<>越长 = 后向 GVC 参与越深、越依赖全球供应链的进口投入。这类经济体对上游关税、断供最敏感。</>}
+          read={<>越长 = 后向 GVC 参与越深、出口中的外国增加值份额越高。这可能带来更高的上游政策暴露，但是否更敏感仍需明确冲击、比较组与回归证据。</>}
           find={<>榜首多是加工-再出口型小经济体;把中国、美国这类大国和它们对比,份额通常低不少。</>}
           note="展示前 20，并追加你主动选择但未进入前 20 的国家。"
         >

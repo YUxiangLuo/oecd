@@ -116,7 +116,11 @@ def _pretrend_summary(result: RegressionResult) -> str | None:
 
 def _design_summary(design: RegressionDesign) -> str:
     controls = "、".join(design.control_labels.values()) if design.controls else "不加控制变量"
-    interaction = "开启:冲击×基期GVC生产份额(按样本个体均值中心化)" if design.interaction else "未开启"
+    interaction = (
+        "开启:冲击×处理前GVC生产份额(处理个体取首次处理前最后至多两期；按样本个体均值中心化)"
+        if design.interaction
+        else "未开启"
+    )
     return "\n".join(
         [
             f"- 粒度:{design.granularity_label}",
@@ -256,12 +260,12 @@ def build(
     source_label = report_source_label(data_sources)
 
     sections = [
-        "# 贸易政策冲击对全球价值链结构的影响\n",
+        "# GVC 指标与政策冲击：教学估计报告\n",
         "> 供应链仿真系统自动生成的实验报告(演示版:冲击数据为覆盖全部经济体的"
         "拟真演示面板,以 2018–2020 全球贸易摩擦为原型,结论仅用于验证系统链路,"
         "不构成研究结论)\n",
         f"- 数据:{source_label} {min(years)}–{max(years)}(指标截面:{report_year} 年)",
-        f"- 方法:本报告使用步骤12–15保存的回归设定;{comparison_scope}。因果解释仍依赖冲击外生性、趋势可比性等识别假设",
+        f"- 方法:本报告按下列统一设定重新估计四类教学模型;{comparison_scope}。因果解释仍依赖冲击外生性、趋势可比性等识别假设",
         _design_summary(design_preview),
         f"- 生成日期:{date.today().isoformat()}\n",
         "## 一、数据与质检",
@@ -275,7 +279,7 @@ def build(
         "\n**GVC 位置指数最高(WWYZ 口径,前向/后向 GVC 生产长度之比,越大越上游)**:"
         + "、".join(f"{country} ({value:.3f})" for country, value in top_gvcpos.items()),
         _bar_chart("GVC 位置指数 Top 5", top_gvcpos, "GVCPs"),
-        "\n**全球国家×行业网络介数中心性最高(供应链枢纽)**:"
+        "\n**全球国家×行业网络介数中心性最高(有向无权拓扑中介位置)**:"
         + "、".join(f"{node} ({value:.1f})" for node, value in top_between.items()),
         _bar_chart("国家×行业介数中心性 Top 5", top_between, "介数中心性", "国家×行业节点"),
         "\n## 三、回归结果",
@@ -321,12 +325,12 @@ def build(
                 sections.extend(["#### 主政策效应动态", main_chart])
             if interaction:
                 heterogeneity_chart = _event_chart(
-                    f"{design.depvar_label}基期 GVC 异质性动态",
+                    f"{design.depvar_label}处理前 GVC 异质性动态",
                     result,
                     interaction=True,
                 )
                 if heterogeneity_chart:
-                    sections.extend(["#### 基期 GVC 异质性动态", heterogeneity_chart])
+                    sections.extend(["#### 处理前 GVC 异质性动态", heterogeneity_chart])
         sections.extend(
             [
                 f"PanelOLS 代码实现一致性检查:{'通过' if benchmark['coef_check_passed'] else '需复核'},"

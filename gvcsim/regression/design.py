@@ -217,7 +217,7 @@ class RegressionDesign:
                     {
                         "text": interaction_text,
                         "term": "interaction",
-                        "description": "冲击效应随个体基期 GVC 参与度变化的异质性；基期 GVC 按样本个体均值中心化，因此 β 表示均值处效应。",
+                        "description": "冲击效应随个体处理前 GVC 参与度变化的异质性；处理个体使用首次处理前最后至多两期，从未处理个体使用样本最早两期，再按个体均值中心化，因此 β 表示均值处效应。",
                         "meta_key": "interaction",
                     },
                 ]

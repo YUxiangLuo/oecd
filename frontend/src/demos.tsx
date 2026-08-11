@@ -45,7 +45,7 @@ const DECOMP: Record<number, DecompCfg> = {
     totalLabel: "毛出口",
     unit: "amount",
     parts: [
-      { key: "DVAex", label: "DVAex 国内增加值出口", color: "#4b47e0", desc: "出口中由本国创造、并被国外最终吸收的增加值。占比越高,出口越“实”。" },
+      { key: "DVAex", label: "DVAex 国内增加值出口", color: "#4b47e0", desc: "出口中由本国创造、并被国外最终吸收的增加值；占比越高表示这类国内增加值构成越高。" },
       { key: "DVArt", label: "DVArt 返回国内", color: "#7a6bff", desc: "先随出口离境、绕一圈又回到本国被吸收的国内增加值。" },
       { key: "DDC", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "本国增加值在跨境往返中被海关多次统计的部分。" },
       { key: "FVA", label: "FVA 外国增加值", color: "#159a86", desc: "出口里来自外国的增加值(进口的中间品)。后向 GVC 依赖的核心。" },
@@ -64,7 +64,7 @@ const DECOMP: Record<number, DecompCfg> = {
       { key: "1_VA_D", label: "1_VA_D 纯国内生产", color: "#4b47e0", desc: "增加值只服务本国最终需求,完全不跨境。" },
       { key: "2_VA_RT", label: "2_VA_RT 传统贸易生产", color: "#159a86", desc: "增加值随最终产品直接出口,货物只过一次国境。" },
       { key: "3a_VA_GVC_S", label: "3a 简单 GVC 生产", color: "#e0982a", desc: "增加值随中间品跨境一次后在国外被吸收。" },
-      { key: "3b_VA_GVC_C", label: "3b 复杂 GVC 生产", color: "#f4693b", desc: "增加值至少两次跨越国境,深度嵌入全球生产网络。对政策冲击最敏感。" },
+      { key: "3b_VA_GVC_C", label: "3b 复杂 GVC 生产", color: "#f4693b", desc: "增加值至少两次跨越国境并进入复杂跨境生产；是否对特定政策更敏感需另行检验。" },
     ],
     note: (r) =>
       `3_VA_GVC = 3a + 3b = ${fmt(num(r["3a_VA_GVC_S"]) + num(r["3b_VA_GVC_C"]), "amount")};` +
@@ -574,7 +574,7 @@ export function NetworkCentralityDemo() {
               <div className="ndp-calc">= <b>{C.bet[sel].toFixed(3)}</b></div>
               <p className="ndp-note">
                 {pathNodes.length >= 3
-                  ? <>例如 {pathNodes[0]} → {pathNodes[pathNodes.length - 1]} 的最短路要穿过 {sel}(已高亮)。越多这类“必经”对,介数越高——它是供应链的咽喉。</>
+                  ? <>例如 {pathNodes[0]} → {pathNodes[pathNodes.length - 1]} 的无权最短路要穿过 {sel}(已高亮)。越多这类路径对经过它，拓扑介数越高；这不自动说明它是经济瓶颈。</>
                   : <>{selNode.label} 很少落在别人的最短路径上,介数中心性低。</>}
               </p>
             </>

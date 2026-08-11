@@ -162,7 +162,7 @@ export function ShockPanel({
       </div>
 
       <div className="tipbox shock-panel-note">
-        关税冲击按“事件税率 × 对加征方出口暴露度”汇总；ICIO 暴露度使用真实双边投入产出流。总冲击可能包含多个事件，因此不一定等于主要加征方的单项乘积。
+        关税冲击按“事件税率 × 对加征方出口暴露度”汇总；ICIO 暴露度使用真实双边投入产出流。面板按冲击类型聚合全部已编码事件；左侧选中的单个事件只帮助定位，因此总冲击不一定等于该事件或主要加征方的单项乘积。
       </div>
       {shownPanel && shownPanel.rows.length > 0 && (
         <Pager page={filters.page} pages={pages} total={shownPanel.total} onChange={(page) => onChange({ page })} />

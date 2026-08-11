@@ -16,6 +16,7 @@ from gvcsim.regression.design import (
 )
 from gvcsim.regression.panel import (
     _apply_price_mode,
+    _attach_baseline_gvc,
     _pretrend_diagnostic,
     benchmark_linearmodels,
     did,
@@ -464,7 +465,41 @@ def test_did_with_baseline_gvc_interaction_recovers_heterogeneity():
     assert all(
         item["se"] >= 0 and item["ci_low"] <= item["effect"] <= item["ci_high"] for item in result.marginal_effects
     )
-    assert any("均值中心化" in note for note in result.notes)
+    assert any("首次处理前" in note and "均值中心化" in note for note in result.notes)
+
+
+def test_baseline_gvc_never_uses_treatment_or_post_treatment_rows():
+    df = pd.DataFrame(
+        [
+            {"country": "treated", "year": year, "3_VA_GVC_share": value}
+            for year, value in [(2016, 0.10), (2017, 0.20), (2018, 0.90), (2019, 0.95)]
+        ]
+        + [
+            {"country": "control", "year": year, "3_VA_GVC_share": value}
+            for year, value in [(2016, 0.30), (2017, 0.40), (2018, 0.80), (2019, 0.85)]
+        ]
+    )
+
+    attached = _attach_baseline_gvc(df, "country", "year", pd.Series({"treated": 2018}))
+    values = attached.groupby("country")["base_gvc_participation"].first()
+
+    # treated 基期=(0.10+0.20)/2，control 基期=(0.30+0.40)/2；中心化后相差 0.20。
+    assert values["treated"] == pytest.approx(-0.10)
+    assert values["control"] == pytest.approx(0.10)
+
+
+def test_baseline_gvc_requires_a_pre_treatment_observation():
+    df = pd.DataFrame(
+        [
+            {"country": "treated", "year": 2018, "3_VA_GVC_share": 0.90},
+            {"country": "treated", "year": 2019, "3_VA_GVC_share": 0.95},
+            {"country": "control", "year": 2018, "3_VA_GVC_share": 0.30},
+            {"country": "control", "year": 2019, "3_VA_GVC_share": 0.40},
+        ]
+    )
+
+    with pytest.raises(ValueError, match="至少有一期处理前观测"):
+        _attach_baseline_gvc(df, "country", "year", pd.Series({"treated": 2018}))
 
 
 def test_run_design_with_controls_and_panelols_benchmark():

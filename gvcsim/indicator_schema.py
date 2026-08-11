@@ -167,7 +167,7 @@ _INDICATOR_DESCRIPTIONS = {
     "Eccentricity": "该节点到所有可达节点的最远最短路径距离。",
     "closnesscentrality": "从该节点沿出边可达的节点数除以最短路径距离之和，越高表示向外可达性越强。",
     "harmonicclosnesscentrality": "从该节点沿出边到可达节点的距离倒数平均值，可处理不完全连通网络。",
-    "betweenesscentrality": "经过该节点的有向最短路径原始计数（不归一化），越高表示越可能成为中转枢纽。",
+    "betweenesscentrality": "经过该节点的有向无权最短路径原始计数（不归一化）；流量大小不决定路径长度。越高表示拓扑中介位置更突出，不自动等同于经济瓶颈。",
     "eigencentrality": "按入边邻居的重要性迭代计算并以最大值归一的 Gephi 特征向量中心性。",
 }
 # 国家级贸易图在全部正流量边下是完全图,这些无权中心性因此对所有国家取同一常数
