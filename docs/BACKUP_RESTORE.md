@@ -87,7 +87,7 @@ uv run python scripts/restore_classroom_drill.py \
 恢复使用 `--single-transaction --no-owner --no-acl`；任一 SQL 错误会回滚整个 restore。成功后脚本会：
 
 1. 以目标 DSN 执行当前版本的只读 `gvcsim preflight`；
-2. 核对 `gvcsim-teaching-db-v6`；
+2. 核对 `gvcsim-teaching-db-v7`；
 3. 记录 PostgreSQL、pg_dump/pg_restore 与数据库 collation 版本，并统计所有 public 表行数，但不导出行内容；
 4. 枚举 assignments、reports、attempt/experiment sessions 与学习证据引用的 manifest；
 5. 验证每个引用版本在本地 `data/artifacts/` 中存在且摘要有效；

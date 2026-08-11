@@ -44,6 +44,10 @@
 
 仓库中的 `deploy/gvcsim.env.example` 只提供变量名和安全基线，不应直接作为生产秘密文件。
 
+课堂 schema v7 为每个账号显式保存口令哈希算法和成本。依据 [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)，新口令使用 PBKDF2-HMAC-SHA256 600,000 次；
+从 v3–v6 迁移的 100,000 次旧行不会失效，而是在下一次成功登录时以新盐渐进升级。渐进 rehash 不改变
+口令、`auth_version` 或既有会话；本人改密和教师重置仍会推进认证版本并撤销全部会话。
+
 ## 密钥泄露与事件响应
 
 发现疑似泄露时，应先隔离服务并保存审计证据，再根据影响执行：

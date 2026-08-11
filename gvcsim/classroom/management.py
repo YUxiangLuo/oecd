@@ -452,9 +452,20 @@ def create_student(
     with database.conn() as c:
         row = database._required(
             c.execute(
-                "INSERT INTO accounts(username, display_name, role, class_id, student_no, pw_salt, pw_hash)"
-                f" VALUES (%s, %s, 'student', %s, %s, %s, %s) RETURNING {_STUDENT_COLS.replace('a.', '')}",
-                (username, display_name, class_id, student_no, salt, database.hash_password(password, salt)),
+                "INSERT INTO accounts(username, display_name, role, class_id, student_no, pw_salt, pw_hash,"
+                " pw_algorithm, pw_iterations)"
+                f" VALUES (%s, %s, 'student', %s, %s, %s, %s, %s, %s)"
+                f" RETURNING {_STUDENT_COLS.replace('a.', '')}",
+                (
+                    username,
+                    display_name,
+                    class_id,
+                    student_no,
+                    salt,
+                    database.hash_password(password, salt),
+                    database.PASSWORD_ALGORITHM,
+                    database.PASSWORD_ITERATIONS,
+                ),
             ).fetchone(),
             "create student",
         )
@@ -491,8 +502,13 @@ def update_student(
     if fields.get("password"):
         database._validate_managed_password(fields["password"])
         salt = secrets.token_hex(16)
-        sets += ["pw_salt = %s", "pw_hash = %s"]
-        params += [salt, database.hash_password(fields["password"], salt)]
+        sets += ["pw_salt = %s", "pw_hash = %s", "pw_algorithm = %s", "pw_iterations = %s"]
+        params += [
+            salt,
+            database.hash_password(fields["password"], salt),
+            database.PASSWORD_ALGORITHM,
+            database.PASSWORD_ITERATIONS,
+        ]
     if not sets:
         return None
     with database.conn() as c:

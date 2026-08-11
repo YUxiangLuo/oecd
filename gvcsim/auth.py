@@ -167,16 +167,9 @@ def authenticate(username: str, password: str) -> dict | None:
     from gvcsim.classroom import db as classroom_db
 
     try:
-        account = classroom_db.find_account(username)
+        account = classroom_db.authenticate_account(username, password)
         if not account:
-            classroom_db.hash_password(password, "00" * 16)  # 等时哈希
             return None
-        if not account["active"]:
-            return None
-        supplied = classroom_db.hash_password(password, account["pw_salt"])
-        if not hmac.compare_digest(account["pw_hash"], supplied):
-            return None
-        classroom_db.touch_login(username)
         return {
             "username": username,
             "name": account["display_name"],
@@ -184,8 +177,8 @@ def authenticate(username: str, password: str) -> dict | None:
             "account_id": account["id"],
             "auth_version": account.get("auth_version", 1),
         }
-    except classroom_db.SchemaVersionMismatch as exc:
-        # schema 身份不明不是“暂时断线”，演示账号也不得绕过迁移闸门。
+    except (classroom_db.SchemaVersionMismatch, classroom_db.PasswordHashError) as exc:
+        # schema/口令参数身份不明不是“暂时断线”，演示账号也不得绕过迁移闸门。
         raise AuthenticationUnavailable("认证数据库不可用或未就绪") from exc
     except classroom_db.Unavailable as exc:
         demo = _demo_user(username, password)

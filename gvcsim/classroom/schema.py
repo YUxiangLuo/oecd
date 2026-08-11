@@ -8,9 +8,12 @@ in :mod:`gvcsim.classroom.db`.
 from typing import Any
 
 import psycopg
+from psycopg import sql
+
+from gvcsim.classroom import passwords
 
 _SCHEMA_LOCK_ID = 736_861_016
-TEACHING_DB_VERSION = "gvcsim-teaching-db-v6"
+TEACHING_DB_VERSION = "gvcsim-teaching-db-v7"
 
 
 def _required(row: dict[str, Any] | None, operation: str) -> dict[str, Any]:
@@ -19,7 +22,7 @@ def _required(row: dict[str, Any] | None, operation: str) -> dict[str, Any]:
     return row
 
 
-SCHEMA_SQL = """
+SCHEMA_SQL = f"""
 CREATE TABLE IF NOT EXISTS schema_meta (
   singleton  boolean PRIMARY KEY DEFAULT true CHECK (singleton),
   version    text NOT NULL,
@@ -43,6 +46,10 @@ CREATE TABLE IF NOT EXISTS accounts (
   student_no    text NOT NULL DEFAULT '',
   pw_salt       text NOT NULL,
   pw_hash       text NOT NULL,
+  pw_algorithm  text NOT NULL DEFAULT '{passwords.CURRENT_ALGORITHM}'
+                CHECK (pw_algorithm = '{passwords.PBKDF2_SHA256}'),
+  pw_iterations int NOT NULL DEFAULT {passwords.CURRENT_ITERATIONS}
+                CHECK (pw_iterations BETWEEN {passwords.MIN_ITERATIONS} AND {passwords.MAX_ITERATIONS}),
   active        boolean NOT NULL DEFAULT true,
   auth_version  int NOT NULL DEFAULT 1 CHECK (auth_version > 0),
   last_login_at timestamptz,
@@ -225,7 +232,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
   action      text NOT NULL,
   target_type text NOT NULL DEFAULT '',
   target_id   text NOT NULL DEFAULT '',
-  details     jsonb NOT NULL DEFAULT '{}'::jsonb,
+  details     jsonb NOT NULL DEFAULT '{{}}'::jsonb,
   ip_address  inet,
   created_at  timestamptz NOT NULL DEFAULT now()
 );
@@ -322,6 +329,46 @@ def migrate_v5_to_v6(c: psycopg.Connection[dict[str, Any]]) -> None:
         "CREATE INDEX IF NOT EXISTS auth_login_attempts_key_time_idx ON auth_login_attempts(rate_key_hash,attempted_at)"
     )
     c.execute("CREATE INDEX IF NOT EXISTS auth_login_attempts_time_idx ON auth_login_attempts(attempted_at)")
+    c.execute("UPDATE schema_meta SET version = 'gvcsim-teaching-db-v6' WHERE singleton")
+
+
+def migrate_v6_to_v7(c: psycopg.Connection[dict[str, Any]]) -> None:
+    """参数化旧口令哈希；保留 100k 成本并允许登录后渐进升级。"""
+    c.execute(
+        sql.SQL("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS pw_algorithm text NOT NULL DEFAULT {}").format(
+            sql.Literal(passwords.PBKDF2_SHA256)
+        )
+    )
+    # 旧 schema 的每一行都由隐式 100k 生成；这里必须先忠实标记，不能把旧 hash
+    # 错写成当前 600k。迁移完成后再把新行的数据库默认值提升到当前成本。
+    c.execute(
+        sql.SQL("ALTER TABLE accounts ADD COLUMN IF NOT EXISTS pw_iterations int NOT NULL DEFAULT {}").format(
+            sql.Literal(passwords.LEGACY_ITERATIONS)
+        )
+    )
+    # 版本戳测试和候选版数据库可能已经有列/约束；事务迁移保持幂等，但不会
+    # 改写已显式记录的成本。
+    c.execute(
+        sql.SQL(
+            "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint"
+            " WHERE conrelid='accounts'::regclass AND conname='accounts_pw_algorithm_check') THEN"
+            " ALTER TABLE accounts ADD CONSTRAINT accounts_pw_algorithm_check CHECK (pw_algorithm = {});"
+            " END IF; END $$"
+        ).format(sql.Literal(passwords.PBKDF2_SHA256))
+    )
+    c.execute(
+        sql.SQL(
+            "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint"
+            " WHERE conrelid='accounts'::regclass AND conname='accounts_pw_iterations_check') THEN"
+            " ALTER TABLE accounts ADD CONSTRAINT accounts_pw_iterations_check"
+            " CHECK (pw_iterations BETWEEN {} AND {}); END IF; END $$"
+        ).format(sql.Literal(passwords.MIN_ITERATIONS), sql.Literal(passwords.MAX_ITERATIONS))
+    )
+    c.execute(
+        sql.SQL("ALTER TABLE accounts ALTER COLUMN pw_iterations SET DEFAULT {}").format(
+            sql.Literal(passwords.CURRENT_ITERATIONS)
+        )
+    )
     c.execute("UPDATE schema_meta SET version = %s WHERE singleton", (TEACHING_DB_VERSION,))
 
 
