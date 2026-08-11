@@ -117,7 +117,7 @@ export function ShockPanel({
       )}
 
       {/* 定高区:行数在 1~25 之间跳变(每页 25 条),不锁高度整页会随联动上下弹。 */}
-      <div className={`shock-panel-body${refreshing ? " refreshing" : ""}`}>
+      <div className={`shock-panel-body${refreshing ? " refreshing" : ""}`} aria-busy={refreshing}>
       {panelError ? <div className="error-box">冲击面板读取失败：{panelError}</div> : !shownPanel ? (
         <div className="shock-panel-state">正在按当前条件读取冲击面板…</div>
       ) : shownPanel.rows.length === 0 ? (

@@ -44,10 +44,15 @@ def test_frontend_ci_enforces_the_dependency_audit():
 
 def test_student_browser_smoke_audits_every_rendered_step_and_the_network_dialog():
     script = STUDENT_BROWSER_SMOKE.read_text(encoding="utf-8")
-    loop = script.split("for step in $(seq 1 16); do", 1)[1].split("done", 1)[0]
+    loop = script.split("for step in $(seq 1 16); do", 1)[1].split('\nif [[ -n "$artifact_dir"', 1)[0]
     assert "student route mismatch" in loop
     assert 'assert_a11y "$a11y_dir/student-step${step}-a11y.json"' in loop
-    assert 'assert_a11y "$a11y_dir/student-step10-modal-a11y.json"' in script
+    assert 'assert_a11y "$a11y_dir/student-step10-modal-a11y.json"' in loop
+    assert "student-step11-tariff" in loop
+    assert "'sanctions:制裁清单'" in loop
+    assert "'export_control:出口管制'" in loop
+    assert "student-step11-${shock_type}" in loop
+    assert 'data-shock-type=\\"$shock_type\\"' in loop
     assert "student-step16-a11y.json" not in script
 
 

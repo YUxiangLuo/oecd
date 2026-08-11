@@ -93,6 +93,7 @@ export function EventList({
                   key={key}
                   type="button"
                   className={`shock-event-item${on ? " on" : ""}`}
+                  data-shock-type={type}
                   aria-pressed={on}
                   onClick={() => onSelect(event)}
                   style={on ? { borderColor: color } : undefined}

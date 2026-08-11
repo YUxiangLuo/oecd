@@ -13,6 +13,16 @@ import {
   shockTypeLabel,
 } from "./model";
 
+function contrastRatio(foreground: string, background: string): number {
+  const luminance = (hex: string) => {
+    const channels = [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16) / 255);
+    const linear = channels.map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+  };
+  const [high, low] = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+  return (high + 0.05) / (low + 0.05);
+}
+
 const meta: Meta = {
   years: [2016, 2017, 2018, 2019, 2020],
   countries: ["CHN", "USA", "DEU"],
@@ -94,6 +104,12 @@ describe("冲击类型的键与展示", () => {
   test("三类冲击的颜色互不相同", () => {
     // 颜色是学生一眼区分三类冲击的主要线索;撞色等于没有编码。
     expect(new Set(Object.values(SHOCK_TYPE_COLORS)).size).toBe(SHOCK_TYPES.length);
+  });
+
+  test("所有冲击类型颜色作为白底小字号文字时满足 WCAG AA", () => {
+    for (const color of Object.values(SHOCK_TYPE_COLORS)) {
+      expect(contrastRatio(color, "#ffffff")).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   test("取文案/配色不会把原始键甩到界面上", () => {

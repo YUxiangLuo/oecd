@@ -87,7 +87,23 @@ for step in $(seq 1 16); do
     "${ab[@]}" wait --fn '() => !document.querySelector("[role=dialog]")'
     "${ab[@]}" eval '(() => { const n=document.activeElement; if(!n?.classList.contains("network-node") || n.getAttribute("aria-pressed")!=="true") throw new Error("network dialog did not restore its node focus and selection"); return true; })()'
   fi
-  assert_a11y "$a11y_dir/student-step${step}-a11y.json"
+  if [[ "$step" -eq 11 ]]; then
+    # Step 11 uses different small-text colors after selecting each shock family.
+    # Audit all three states; the default tariff-only audit previously missed an
+    # inaccessible export-control label.
+    assert_a11y "$a11y_dir/student-step11-tariff-a11y.json"
+    for spec in 'sanctions:制裁清单' 'export_control:出口管制'; do
+      shock_type=${spec%%:*}
+      shock_label=${spec#*:}
+      selector="button.shock-event-item[data-shock-type=\"$shock_type\"]:nth-of-type(1)"
+      "${ab[@]}" wait "$selector"
+      "${ab[@]}" click "$selector"
+      "${ab[@]}" wait --fn "() => document.querySelector('.shock-linkbar-tag')?.textContent?.trim() === '$shock_label' && document.querySelector('.shock-panel-body')?.getAttribute('aria-busy') === 'false'"
+      assert_a11y "$a11y_dir/student-step11-${shock_type}-a11y.json"
+    done
+  else
+    assert_a11y "$a11y_dir/student-step${step}-a11y.json"
+  fi
 done
 
 if [[ -n "$artifact_dir" ]]; then

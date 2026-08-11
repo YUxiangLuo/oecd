@@ -18,8 +18,8 @@ export const SHOCK_TYPE_LABELS: Record<ShockType, string> = {
  * model.test.ts 现在断言两张表都覆盖 SHOCK_TYPES。 */
 export const SHOCK_TYPE_COLORS: Record<ShockType, string> = {
   tariff: "#216cc0",
-  sanctions: "#e34948",
-  export_control: "#eda100",
+  sanctions: "#c83335",
+  export_control: "#8a5200",
 };
 
 /** 安全取文案/配色:键未知时不把原始键甩到界面上。 */
