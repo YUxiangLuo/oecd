@@ -21,7 +21,15 @@ uv run gvcsim compute
 uv run gvcsim serve --port 8000
 ```
 
-`compute` 会直接重建 `data/processed/`，在成功计算并清空旧学习记录后最后写入 `dataset.json`。账号、班级和公告会保留；实验进度、会话、报告和提交会清空。
+`compute` 是维护窗口操作：先停止 API，再运行计算。它会在 `data/.processed-releases/` 的同文件系统新目录中完成全部计算、写入 `dataset.json` 并校验，然后通过相对符号链接原子切换固定入口 `data/processed`。切换成功后自动清空实验进度、会话、报告和提交，账号、班级和公告保留；上一份发布目录会保留，不会在本次计算中删除。登录令牌绑定签发时的数据发布身份，因此服务恢复后旧页面会退出登录，不能把清空前的会话或进度重新写回。
+
+文件指针切换与 PostgreSQL 清理之间由 `data/.processed-publication.json` 恢复日志协调。清理普通失败时入口会回滚到旧发布，但服务仍会因恢复日志而拒绝就绪。排除数据库故障后，在维护窗口执行：
+
+```bash
+uv run gvcsim compute --recover-pending
+```
+
+恢复命令会校验待发布目录、重新原子切换入口、幂等清理学习记录并删除恢复日志。不要通过手工删除日志绕过恢复。
 
 开发前端可另开终端运行：
 
@@ -56,7 +64,7 @@ bun run dev
 - 质检 JSON、控制变量和教学冲击面板
 - 成功标记 `dataset.json`
 
-服务启动只检查成功标记、年份文件和必要跨年文件是否存在，不计算文件哈希，也不保留内容寻址历史。
+新生成的 `dataset.json` 使用产物契约 v2：内嵌每个顶层 CSV/JSON 的 SHA-256、字节数、类型，以及 CSV 列/行数或 JSON 顶层形状/条目数。构建发布、恢复和 preflight 都会完整复核清单；频繁的 `/health` 仅在解析后的发布目录及其全部顶层文件状态均未变化时复用成功校验，指针切换或文件变化都会触发重新校验。升级期间仍允许读取没有 `artifact_contract_version` 和 `artifacts` 的旧 `dataset.json`，但它只执行原有的存在性检查；带清单却缺版本、版本未知或 v2 清单不完整时一律拒绝，不会静默降级。固定入口背后使用不可变发布目录，并保留上一份发布以支持失败回滚；部署服务还把版本目录挂载为只读。当前阶段不提供长期历史清理或内容寻址归档。
 
 ## 数据库 v8
 
@@ -82,7 +90,9 @@ uv run gvcsim classroom-init --reset
 
 ## 备份与恢复
 
-PostgreSQL 保存账号、班级、公告及当前学习状态。使用 `pg_dump --format=custom` 备份；恢复到空数据库时使用 `pg_restore --single-transaction`，并通过 `uv run gvcsim preflight` 确认 schema 为 `gvcsim-teaching-db-v8`。`data/processed/` 不需要做版本备份，可通过 `uv run gvcsim compute` 从原始数据重建；成功标记为 `data/processed/dataset.json`。
+PostgreSQL 保存账号、班级、公告及当前学习状态。部署提供 `gvcsim-backup.timer`，每天调用 `scripts/backup_classroom.sh`，内部使用 `pg_dump --format=custom` 生成 dump 和 SHA-256 完成标记；发布、`compute` 或 schema 破坏性操作前还必须同步完成一次备份。建议保留至少 30 份每日备份、保存加密异地副本，并每月用 `scripts/restore_classroom_drill.py` 恢复到隔离空库验证。详细安装和操作步骤见 [DEPLOY.md](DEPLOY.md)。
+
+恢复使用 `pg_restore --single-transaction`，并通过 `uv run gvcsim preflight` 确认 schema 为 `gvcsim-teaching-db-v8`。`data/processed/` 是指向当前不可变发布的固定入口，可通过 `uv run gvcsim compute` 从原始数据重建；成功标记为 `data/processed/dataset.json`。发布恢复日志存在时必须先运行 `uv run gvcsim compute --recover-pending`，preflight 不会自动猜测跨存储状态。
 
 ## Gephi 外部基准
 
@@ -91,6 +101,7 @@ PostgreSQL 保存账号、班级、公告及当前学习状态。使用 `pg_dump
 ## 验证
 
 ```bash
+uv run ruff format --check .
 uv run ruff check .
 uv run mypy gvcsim
 uv run pytest

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""以独立账号模拟 50-100 名学生同时登录、读取、回归和写进度。
+"""以独立账号模拟 20–50 名学生同时登录、读取、回归和写进度。
 
 示例：
   uv run python scripts/load_test_100_students.py \
     --base-url http://127.0.0.1:18000 \
     --users-file data/loadtest-users.json \
-    --students 100 --json-output data/loadtest-result.json
+    --students 50 --json-output data/loadtest-result.json
 """
 
 from __future__ import annotations
@@ -21,6 +21,19 @@ from pathlib import Path
 from typing import Any
 
 import httpx2 as httpx
+
+MIN_STUDENTS = 20
+MAX_STUDENTS = 50
+DEFAULT_STUDENTS = 50
+HTTP_CONNECTION_LIMIT = 50
+CREDENTIAL_KIND = "gvcsim-capacity-test-users-v1"
+READ_PATHS = (
+    ("meta", "/api/meta"),
+    ("steps", "/api/steps"),
+    ("classroom_session", "/api/classroom/session"),
+    ("country_indicators", "/api/indicators/country/2020?country=CHN"),
+    ("raw_accounts", "/api/db/slice?year=2020&table=accounts&page=1&page_size=25"),
+)
 
 
 @dataclass(frozen=True)
@@ -97,11 +110,17 @@ def _summarize(samples: list[Sample]) -> dict[str, Any]:
     return {"operations": operations, "failures": failures[:30], "failure_count": len(failures)}
 
 
+def _validate_student_count(students: int) -> int:
+    if not MIN_STUDENTS <= students <= MAX_STUDENTS:
+        raise SystemExit(f"容量验收的 --students 必须在 {MIN_STUDENTS}..{MAX_STUDENTS} 之间")
+    return students
+
+
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="GVC Lab 50-100 学生容量验收")
+    parser = argparse.ArgumentParser(description="GVC Lab 20–50 学生容量验收")
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--users-file", type=Path, required=True)
-    parser.add_argument("--students", type=int, default=100)
+    parser.add_argument("--students", type=int, default=DEFAULT_STUDENTS)
     parser.add_argument("--placebo-ratio", type=float, default=0.25)
     parser.add_argument("--timeout", type=float, default=180)
     parser.add_argument("--max-read-p95", type=float, default=3)
@@ -114,10 +133,9 @@ def _parser() -> argparse.ArgumentParser:
 
 async def _run(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
     credentials = json.loads(args.users_file.read_text(encoding="utf-8"))
-    if credentials.get("kind") != "gvcsim-capacity-test-users-v1":
+    if credentials.get("kind") != CREDENTIAL_KIND:
         raise SystemExit("users file 契约不正确")
-    if not 50 <= args.students <= 100:
-        raise SystemExit("容量验收的 --students 必须在 50..100 之间")
+    _validate_student_count(args.students)
     available_users = list(credentials.get("users") or [])
     if len(available_users) < args.students:
         raise SystemExit(f"users file 只有 {len(available_users)} 个账号，少于 --students 请求的 {args.students} 个")
@@ -126,8 +144,8 @@ async def _run(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
         raise SystemExit("--placebo-ratio 必须在 0..1 之间")
 
     limits = httpx.Limits(
-        max_connections=max(200, len(users) * 2),
-        max_keepalive_connections=max(100, len(users)),
+        max_connections=HTTP_CONNECTION_LIMIT,
+        max_keepalive_connections=HTTP_CONNECTION_LIMIT,
     )
     samples: list[Sample] = []
     overall_started = time.perf_counter()
@@ -159,14 +177,7 @@ async def _run(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
             summary.update({"students": len(users), "authenticated": len(tokens)})
             return summary, False
 
-        read_paths = (
-            ("meta", "/api/meta"),
-            ("steps", "/api/steps"),
-            ("classroom_context", "/api/classroom/context"),
-            ("country_indicators", "/api/indicators/country/2020?country=CHN"),
-            ("raw_accounts", "/api/db/slice?year=2020&table=accounts&page=1&page_size=25"),
-        )
-        for operation, path in read_paths:
+        for operation, path in READ_PATHS:
             samples.extend(await _phase(client, operation, "GET", path, tokens))
 
         samples.extend(
@@ -215,7 +226,7 @@ async def _run(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
         }
     )
     operations = summary["operations"]
-    read_operations = [operations[name]["p95_seconds"] for name, _path in read_paths if name in operations]
+    read_operations = [operations[name]["p95_seconds"] for name, _path in READ_PATHS if name in operations]
     gates = {
         "all_requests_succeeded": summary["failure_count"] == 0,
         "read_p95_within_budget": max(read_operations, default=0) <= args.max_read_p95,

@@ -20,9 +20,7 @@ REFLECTION_TEXT_LIMIT = 2400
 GATE_STEPS = tuple(step for step in sorted(evidence.STEP_LABS) if evidence.STEP_LABS[step] != "rep")
 _STEP_TITLES = {cast(int, item["n"]): cast(str, item["title"]) for item in STEPS}
 _STEP_OUTCOMES = {
-    cast(int, item["n"]): cast(str, item["regression_outcome"])
-    for item in STEPS
-    if item.get("regression_outcome")
+    cast(int, item["n"]): cast(str, item["regression_outcome"]) for item in STEPS if item.get("regression_outcome")
 }
 _OUTCOME_UNITS = {
     "trade": "份额原始单位（乘以 100 后按百分点解释）",
@@ -75,18 +73,21 @@ def check_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
         observation.get(key) not in (None, "") for key in ("row", "column", "value")
     )
     if not has_observation:
-        blocked.append({
-            "step": 1,
-            "title": _STEP_TITLES.get(1, ""),
-            "missing": ["请在 ICIO 表中点击并记录一个具体单元格"],
-        })
+        blocked.append(
+            {
+                "step": 1,
+                "title": _STEP_TITLES.get(1, ""),
+                "missing": ["请在 ICIO 表中点击并记录一个具体单元格"],
+            }
+        )
 
     has_comparison = False
     for step in range(3, 11):
         data = _step_data(session, step)
         compared = {str(item) for item in _list_values(data.get("compared")) if str(item).strip()}
         observations = [
-            item for item in _list_values(data.get("observations"))
+            item
+            for item in _list_values(data.get("observations"))
             if isinstance(item, dict)
             and item.get("entity", item.get("country")) not in (None, "")
             and item.get("value") not in (None, "")
@@ -95,18 +96,22 @@ def check_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
             has_comparison = True
             break
     if not has_comparison:
-        blocked.append({
-            "step": 7,
-            "title": "指标对比探索",
-            "missing": ["请在步骤 3–10 中保存至少两个比较对象或两条指标观测"],
-        })
+        blocked.append(
+            {
+                "step": 7,
+                "title": "指标对比探索",
+                "missing": ["请在步骤 3–10 中保存至少两个比较对象或两条指标观测"],
+            }
+        )
 
     if not _gate_qualified_runs(session):
-        blocked.append({
-            "step": 12,
-            "title": "回归实验",
-            "missing": ["请在步骤 12–15 中至少运行并保存一次有效回归"],
-        })
+        blocked.append(
+            {
+                "step": 12,
+                "title": "回归实验",
+                "missing": ["请在步骤 12–15 中至少运行并保存一次有效回归"],
+            }
+        )
 
     reflection = _step_data(session, 16)
     reflection_missing = []
@@ -163,9 +168,7 @@ def _gate_qualified_runs(session: dict[str, Any]) -> list[dict[str, Any]]:
         result = run["result"]
         support = result.get("support") if isinstance(result.get("support"), dict) else {}
         statuses = [status for status in (result.get("status"), support.get("status")) if status is not None]
-        if not statuses or any(
-            not isinstance(status, str) or status not in allowed_statuses for status in statuses
-        ):
+        if not statuses or any(not isinstance(status, str) or status not in allowed_statuses for status in statuses):
             continue
         if support.get("suppress_inference") is True:
             continue
@@ -233,8 +236,11 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             selection = "；".join(
                 f"{label}={_safe(slice_.get(key, '—'))}"
                 for key, label in (
-                    ("year", "年份"), ("table", "表"), ("row_country", "供给国"),
-                    ("row_sector", "供给行业"), ("col_country", "使用/需求国"),
+                    ("year", "年份"),
+                    ("table", "表"),
+                    ("row_country", "供给国"),
+                    ("row_sector", "供给行业"),
+                    ("col_country", "使用/需求国"),
                     ("col_sector", "使用行业/最终需求"),
                 )
                 if slice_.get(key) not in (None, "")
@@ -267,7 +273,9 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         if compared:
             lines.append(f"- 主动比较：{'、'.join(_safe(item) for item in compared)}")
         if observations:
-            lines.extend((f"- 记录指标：`{_safe(data.get('metric', '—'))}`", "", "| 实体 | 年份 | 数值 |", "|---|---:|---:|"))
+            lines.extend(
+                (f"- 记录指标：`{_safe(data.get('metric', '—'))}`", "", "| 实体 | 年份 | 数值 |", "|---|---:|---:|")
+            )
             for item in observations:
                 lines.append(
                     f"| {_safe(item.get('entity', item.get('country', '—')))} | "
@@ -288,10 +296,12 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             lines.append(f"- 查看过的政策事件：{'、'.join(_safe(item) for item in viewed_events)}")
         if selected_event:
             lines.append(f"- 最后选择的事件：{_safe(selected_event)}（仅用于探索定位，不限定下游回归样本）")
-        lines.extend((
-            "- 下游回归口径：按所选冲击类型汇总该类型全部已编码事件的国家×行业暴露，不把单个事件选择当作回归筛选。",
-            "",
-        ))
+        lines.extend(
+            (
+                "- 下游回归口径：按所选冲击类型汇总该类型全部已编码事件的国家×行业暴露，不把单个事件选择当作回归筛选。",
+                "",
+            )
+        )
 
     if not captured:
         lines.extend(("- 未保存额外实验快照。", ""))
@@ -317,18 +327,25 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
         reasons = [*_list_values(result.get("status_reasons")), *_list_values(support.get("reasons"))]
         reasons = list(dict.fromkeys(_safe(reason) for reason in reasons))
         suppressed = bool(support.get("suppress_inference")) or status in ("insufficient", "invalid_design")
-        lines.extend((
-            f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}", "",
-            f"- 因变量：{_safe(design.get('depvar_label', run['outcome']))}",
-            f"- 结果量纲：{_OUTCOME_UNITS.get(run['outcome'], '原始单位')}",
-            f"- 方程：`{_safe(design.get('equation', '—'))}`",
-            f"- 设计状态：{_STATUS_LABELS.get(str(status), _safe(status))}（`{_safe(status)}`）；观测数：{_safe(result.get('n_obs', '—'))}",
-        ))
+        lines.extend(
+            (
+                f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}",
+                "",
+                f"- 因变量：{_safe(design.get('depvar_label', run['outcome']))}",
+                f"- 结果量纲：{_OUTCOME_UNITS.get(run['outcome'], '原始单位')}",
+                f"- 方程：`{_safe(design.get('equation', '—'))}`",
+                f"- 设计状态：{_STATUS_LABELS.get(str(status), _safe(status))}（`{_safe(status)}`）；观测数：{_safe(result.get('n_obs', '—'))}",
+            )
+        )
         setting_bits = [
             f"{label}={_safe(design[key])}"
             for key, label in (
-                ("granularity", "粒度"), ("shock_type", "冲击类型"), ("method", "方法"),
-                ("control_mode", "控制变量"), ("price_mode", "价格口径"), ("scenario_label", "教学场景"),
+                ("granularity", "粒度"),
+                ("shock_type", "冲击类型"),
+                ("method", "方法"),
+                ("control_mode", "控制变量"),
+                ("price_mode", "价格口径"),
+                ("scenario_label", "教学场景"),
             )
             if design.get(key) not in (None, "")
         ]
@@ -339,8 +356,10 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
         if support:
             support_bits = []
             for key, label in (
-                ("treated_entities", "处理个体"), ("treated_clusters", "处理聚类"),
-                ("untreated_entities", "从未处理个体"), ("untreated_clusters", "完全未处理聚类"),
+                ("treated_entities", "处理个体"),
+                ("treated_clusters", "处理聚类"),
+                ("untreated_entities", "从未处理个体"),
+                ("untreated_clusters", "完全未处理聚类"),
                 ("reversal_share", "处理撤销行占比"),
             ):
                 if support.get(key) is not None:
@@ -348,13 +367,17 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
             if support_bits:
                 lines.append(f"- 处理支持：{'；'.join(support_bits)}")
         if suppressed:
-            lines.append("- **统计推断已抑制**：下表点估计仅说明计算输出；不得把缺失的 p 值或置信区间解释为无效应，也不得据此形成方向性结论。")
+            lines.append(
+                "- **统计推断已抑制**：下表点估计仅说明计算输出；不得把缺失的 p 值或置信区间解释为无效应，也不得据此形成方向性结论。"
+            )
         lines.extend(("", "| 变量 | 点估计 | 标准误 | 95% 置信区间 | p 值 |", "|---|---:|---:|---:|---:|"))
         for coefficient in result.get("coefs", []):
             if isinstance(coefficient, dict):
                 ci_low, ci_high = coefficient.get("ci_low"), coefficient.get("ci_high")
-                interval = "已抑制" if suppressed and (ci_low is None or ci_high is None) else (
-                    f"[{_safe(ci_low)}, {_safe(ci_high)}]" if ci_low is not None and ci_high is not None else "—"
+                interval = (
+                    "已抑制"
+                    if suppressed and (ci_low is None or ci_high is None)
+                    else (f"[{_safe(ci_low)}, {_safe(ci_high)}]" if ci_low is not None and ci_high is not None else "—")
                 )
                 p_raw = coefficient.get("p")
                 p_value = "已抑制" if suppressed and p_raw is None else (_safe(p_raw) if p_raw is not None else "—")
@@ -362,19 +385,23 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                     f"| {_safe(coefficient.get('name', '—'))} | {_safe(coefficient.get('coef', '—'))} | "
                     f"{_safe(coefficient.get('se', '—'))} | {interval} | {p_value} |"
                 )
-        marginal_effects = [
-            item for item in _list_values(result.get("marginal_effects")) if isinstance(item, dict)
-        ]
+        marginal_effects = [item for item in _list_values(result.get("marginal_effects")) if isinstance(item, dict)]
         if marginal_effects:
-            lines.extend((
-                "", "交互模型边际效应（主效应与交互项的线性组合）：", "",
-                "| 政策项 | 处理前 GVC 水平 | 边际效应 | 95% 置信区间 | p 值 |",
-                "|---|---|---:|---:|---:|",
-            ))
+            lines.extend(
+                (
+                    "",
+                    "交互模型边际效应（主效应与交互项的线性组合）：",
+                    "",
+                    "| 政策项 | 处理前 GVC 水平 | 边际效应 | 95% 置信区间 | p 值 |",
+                    "|---|---|---:|---:|---:|",
+                )
+            )
             for item in marginal_effects:
                 ci_low, ci_high = item.get("ci_low"), item.get("ci_high")
-                interval = "已抑制" if suppressed and (ci_low is None or ci_high is None) else (
-                    f"[{_safe(ci_low)}, {_safe(ci_high)}]" if ci_low is not None and ci_high is not None else "—"
+                interval = (
+                    "已抑制"
+                    if suppressed and (ci_low is None or ci_high is None)
+                    else (f"[{_safe(ci_low)}, {_safe(ci_high)}]" if ci_low is not None and ci_high is not None else "—")
                 )
                 p_raw = item.get("p")
                 p_value = "已抑制" if suppressed and p_raw is None else (_safe(p_raw) if p_raw is not None else "—")
@@ -483,20 +510,31 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
     }
     source = report_source_label(data_sources)
     lines = [
-        "# GVC 指标与政策冲击：教学实验记录", "",
-        f"学生：{_safe(student)}", "",
-        f"> 数据覆盖 {years[0]}–{years[-1]}，指标来源：{_safe(source)}。政策冲击为基于公开事件手工编码的拟真教学面板，不能用于研究结论。", "",
-        "> 本报告汇总描述性探索和已保存的教学估计，不证明政策冲击导致了 GVC 变化。因果解释至少依赖冲击外生性、趋势可比性、无同期混杂、处理定义与模型相容，以及处理效应异质性得到妥善处理。", "",
-        *_reflection_section(session), *_quiz_sections(session), *_experiment_sections(session), *_run_sections(runs), *_qc_disclosure_section(qc_summary),
-        "## 数据与方法说明", "",
+        "# GVC 指标与政策冲击：教学实验记录",
+        "",
+        f"学生：{_safe(student)}",
+        "",
+        f"> 数据覆盖 {years[0]}–{years[-1]}，指标来源：{_safe(source)}。政策冲击为基于公开事件手工编码的拟真教学面板，不能用于研究结论。",
+        "",
+        "> 本报告汇总描述性探索和已保存的教学估计，不证明政策冲击导致了 GVC 变化。因果解释至少依赖冲击外生性、趋势可比性、无同期混杂、处理定义与模型相容，以及处理效应异质性得到妥善处理。",
+        "",
+        *_reflection_section(session),
+        *_quiz_sections(session),
+        *_experiment_sections(session),
+        *_run_sections(runs),
+        *_qc_disclosure_section(qc_summary),
+        "## 数据与方法说明",
+        "",
         "- 指标算法：WWZ 16 个明细项归并为五类，另加由 OECD ICIO TLS 账户计算的 taxsub 扩展项以匹配含税毛出口；taxsub 不是 WWZ 原文分类。生产分解与生产长度采用 WWYZ 口径。",
         "- 网络算法：保留有向正流量边；加权度使用流量权重，介数、距离和特征向量中心性按有向无权网络计算。",
         "- 无权路径口径把每条正流量边视为同样长度，因此高介数表示拓扑上的最短路径中介位置，不自动等于经济规模大、关键瓶颈或不可替代。",
         "- 网络解释顺序：先以加权度观察经济流量规模，再把无权介数作为拓扑基准并比较排序。当前报告没有边阈值敏感性分析，微小正边是否改变最短路径与排序尚未检验。",
         "- 冲击口径：界面中的单个事件用于定位和理解；回归按冲击类型使用该类型全部已编码事件汇总形成的暴露面板。",
         "- 回归结果来自学生会话中保存的最后一次服务端运行，不在报告生成时复算。",
-        f"- 生成时间：{generated_at}；会话摘要：`{fingerprint}`。", "",
-        *report_source_disclosures(data_sources), "",
+        f"- 生成时间：{generated_at}；会话摘要：`{fingerprint}`。",
+        "",
+        *report_source_disclosures(data_sources),
+        "",
     ]
     markdown = "\n".join(lines)
     provenance["content_sha256"] = hashlib.sha256(markdown.encode()).hexdigest()

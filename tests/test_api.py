@@ -1,6 +1,10 @@
+import json
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
-from gvcsim import quizzes
+from gvcsim import api as api_module
+from gvcsim import artifacts, auth, publication, quizzes
 from gvcsim.api import app
 from gvcsim.classroom import db, routes as classroom_routes
 from gvcsim.session import SESSION_VERSION, empty_session, make_record
@@ -17,6 +21,85 @@ def _client(teaching_db, username="student", password="gvclab2026"):
 
 def test_api_requires_bearer(teaching_db):
     assert TestClient(app).get("/api/steps").status_code == 401
+
+
+def test_published_dataset_change_rejects_old_workspace_writes(teaching_db, monkeypatch):
+    release = {"id": "release-a"}
+    monkeypatch.setattr(auth, "_current_release_id", lambda: release["id"])
+    stale_client = _client(teaching_db)
+    session = empty_session()
+    session["steps"]["1"] = make_record({"value": "old release"})
+    assert stale_client.put("/api/classroom/session", json={"session": session}).status_code == 200
+    assert stale_client.post("/api/classroom/progress", json={"step": 8}).status_code == 200
+
+    db.reset_learning_records()
+    release["id"] = "release-b"
+
+    assert stale_client.put("/api/classroom/session", json={"session": session}).status_code == 401
+    assert stale_client.post("/api/classroom/progress", json={"step": 9}).status_code == 401
+    current_client = _client(teaching_db)
+    assert current_client.get("/api/classroom/session").json()["session"] == empty_session()
+    assert current_client.get("/api/classroom/progress").json()["max_step"] is None
+
+
+def test_health_fails_closed_while_publication_is_pending(tmp_path, monkeypatch):
+    current = tmp_path / "processed"
+    monkeypatch.setattr(api_module, "PROCESSED_DIR", current)
+    publication.write_journal(
+        current,
+        publication.PublicationJournal(1, None, ".processed-releases/new", "prepared"),
+    )
+
+    response = api_module.health()
+
+    assert response.status_code == 503
+    assert "recover-pending" in json.loads(response.body)["detail"]
+
+
+def test_health_integrity_cache_switches_with_release_pointer(tmp_path, monkeypatch):
+    releases = tmp_path / ".processed-releases"
+    first = releases / "first"
+    second = releases / "second"
+    first.mkdir(parents=True)
+    second.mkdir()
+    (first / artifacts.DATASET_METADATA).write_text('{"years":[2020]}')
+    (second / artifacts.DATASET_METADATA).write_text('{"years":[2020]}')
+    current = tmp_path / "processed"
+    current.symlink_to(".processed-releases/first", target_is_directory=True)
+
+    checks = []
+
+    def validate(directory, *, verify_integrity=True, allow_legacy=False):
+        assert verify_integrity is True
+        assert allow_legacy is False
+        checks.append(Path(directory).name)
+        return {"files": 1, "years": 1}
+
+    artifacts.clear_release_validation_cache()
+    monkeypatch.setattr(artifacts, "validate_release", validate)
+    monkeypatch.setattr(api_module, "validate_release_cached", artifacts.validate_release_cached)
+    monkeypatch.setattr(api_module, "PROCESSED_DIR", current)
+    monkeypatch.setattr(api_module, "processed_years", lambda: [2020])
+    monkeypatch.setattr(api_module.classroom_db, "readiness", lambda: {"status": "ok"})
+
+    assert api_module.health().status_code == 200
+    assert api_module.health().status_code == 200
+    assert checks == ["first"]
+
+    # Replacing dataset.json at the same release path changes the cache identity.
+    replacement_metadata = first / ".dataset.next"
+    replacement_metadata.write_text('{"years":[2020],"replacement":true}')
+    replacement_metadata.replace(first / artifacts.DATASET_METADATA)
+    assert api_module.health().status_code == 200
+    assert checks == ["first", "first"]
+
+    replacement = tmp_path / ".processed.next"
+    replacement.symlink_to(".processed-releases/second", target_is_directory=True)
+    replacement.replace(current)
+
+    assert api_module.health().status_code == 200
+    assert checks == ["first", "first", "second"]
+    artifacts.clear_release_validation_cache()
 
 
 def test_quiz_returns_normalized_answers_without_receipt(teaching_db):
@@ -46,9 +129,7 @@ def test_session_put_is_full_last_write_and_keeps_student_reflection(teaching_db
 def test_complete_quizzes_do_not_bypass_report_evidence_gate(teaching_db):
     client = _client(teaching_db)
     session = empty_session()
-    session["steps"] = {
-        str(step): make_record({"quiz": quizzes.correct_quiz(step)}) for step in range(1, 16)
-    }
+    session["steps"] = {str(step): make_record({"quiz": quizzes.correct_quiz(step)}) for step in range(1, 16)}
     response = client.put("/api/classroom/session", json={"session": session})
     assert response.json()["completion"]["completed"] == list(range(1, 16))
     blocked = client.get("/api/classroom/report/gate").json()["blocked"]
@@ -115,16 +196,22 @@ def test_teacher_administration_and_grading_flow(teaching_db):
     )
     assert created_class.status_code == 200
     class_id = created_class.json()["id"]
-    assert teacher.post(
-        "/api/classroom/classes",
-        json={"name": "重复", "code": "NEW", "semester": "", "note": ""},
-    ).status_code == 409
+    assert (
+        teacher.post(
+            "/api/classroom/classes",
+            json={"name": "重复", "code": "NEW", "semester": "", "note": ""},
+        ).status_code
+        == 409
+    )
     assert teacher.get("/api/classroom/classes").json()["classes"]
 
-    assert teacher.post(
-        "/api/classroom/students",
-        json={"username": "bad name", "display_name": "坏用户名", "password": "password-1234"},
-    ).status_code == 400
+    assert (
+        teacher.post(
+            "/api/classroom/students",
+            json={"username": "bad name", "display_name": "坏用户名", "password": "password-1234"},
+        ).status_code
+        == 400
+    )
     created_student = teacher.post(
         "/api/classroom/students",
         json={
@@ -137,10 +224,13 @@ def test_teacher_administration_and_grading_flow(teaching_db):
     )
     assert created_student.status_code == 200
     account_id = created_student.json()["id"]
-    assert teacher.post(
-        "/api/classroom/students",
-        json={"username": "student2", "display_name": "重复", "password": "student2-password"},
-    ).status_code == 409
+    assert (
+        teacher.post(
+            "/api/classroom/students",
+            json={"username": "student2", "display_name": "重复", "password": "student2-password"},
+        ).status_code
+        == 409
+    )
     assert teacher.post(f"/api/classroom/students/{account_id}", json={}).status_code == 400
     updated = teacher.post(
         f"/api/classroom/students/{account_id}",
@@ -150,22 +240,30 @@ def test_teacher_administration_and_grading_flow(teaching_db):
     assert "active" not in updated.json()
     assert teacher.post(f"/api/classroom/students/{account_id}", json={"active": False}).status_code == 422
     assert teacher.post("/api/classroom/students/999999", json={"display_name": "无"}).status_code == 404
-    assert teacher.get("/api/classroom/students", params={"class_id": class_id}).json()["students"][0]["username"] == "student2"
+    assert (
+        teacher.get("/api/classroom/students", params={"class_id": class_id}).json()["students"][0]["username"]
+        == "student2"
+    )
     overview = teacher.get("/api/classroom/overview", params={"class_id": class_id}).json()
     assert overview["student_count"] == 1 and "disabled_count" not in overview
     assert teacher.get("/api/classroom/overview", params={"class_id": 999999}).status_code == 404
 
-    assert teacher.post(
-        "/api/classroom/announcements",
-        json={"title": "无效", "body": "", "class_id": 999999},
-    ).status_code == 404
+    assert (
+        teacher.post(
+            "/api/classroom/announcements",
+            json={"title": "无效", "body": "", "class_id": 999999},
+        ).status_code
+        == 404
+    )
     announcement = teacher.post(
         "/api/classroom/announcements",
         json={"title": "新班公告", "body": "欢迎", "class_id": class_id},
     )
     assert announcement.status_code == 200
     announcement_id = announcement.json()["id"]
-    assert any(row["id"] == announcement_id for row in teacher.get("/api/classroom/announcements").json()["announcements"])
+    assert any(
+        row["id"] == announcement_id for row in teacher.get("/api/classroom/announcements").json()["announcements"]
+    )
     assert teacher.delete(f"/api/classroom/announcements/{announcement_id}").json() == {"ok": True}
     assert teacher.delete(f"/api/classroom/announcements/{announcement_id}").status_code == 404
 
@@ -180,6 +278,6 @@ def test_teacher_administration_and_grading_flow(teaching_db):
     )
     assert grade.status_code == 200 and grade.json()["state"] == "graded"
     assert teacher.get("/api/classroom/submissions/999999").status_code == 404
-    assert teacher.post(
-        "/api/classroom/submissions/999999/grade", json={"score": 80, "feedback": ""}
-    ).status_code == 404
+    assert (
+        teacher.post("/api/classroom/submissions/999999/grade", json={"score": 80, "feedback": ""}).status_code == 404
+    )

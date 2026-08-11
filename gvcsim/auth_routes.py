@@ -23,11 +23,12 @@ class PasswordChangeRequest(BaseModel):
 def login(req: LoginRequest):
     try:
         user = auth.authenticate(req.username, req.password)
+        if user is not None:
+            token, expires_at = auth.issue_token(user)
     except auth.AuthenticationUnavailable as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     if user is None:
         raise HTTPException(status_code=401, detail="用户名或密码错误")
-    token, expires_at = auth.issue_token(user)
     return {
         "token": token,
         "expires_at": expires_at,
@@ -44,7 +45,10 @@ def login(req: LoginRequest):
 def me(authorization: str | None = Header(default=None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="缺少 Bearer 令牌")
-    payload = auth.verify_token(authorization.removeprefix("Bearer "))
+    try:
+        payload = auth.verify_token(authorization.removeprefix("Bearer "))
+    except auth.AuthenticationUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     if payload is None:
         raise HTTPException(status_code=401, detail="令牌无效或已过期")
     return {

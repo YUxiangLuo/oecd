@@ -31,6 +31,11 @@ def main() -> None:
         action="store_true",
         help="明确允许 fatal QC 后继续计算（仅用于教学演示）",
     )
+    p.add_argument(
+        "--recover-pending",
+        action="store_true",
+        help="恢复已完成构建但尚未完成学习记录清理的数据发布",
+    )
 
     p = sub.add_parser("regress", help="教学实证回归")
     p.add_argument("--outcome", default="trade", choices=["trade", "production", "length", "network"])
@@ -114,12 +119,15 @@ def main() -> None:
     elif args.command == "compute":
         from gvcsim import pipeline
 
-        try:
-            pipeline.run(args.years, allow_qc_override=args.allow_qc_override)
-        except pipeline.QualityGateError as error:
-            raise SystemExit(
-                f"{error}\n如确认仅用于教学演示，可显式加 --allow-qc-override。"
-            ) from error
+        if args.recover_pending:
+            if args.years is not None or args.allow_qc_override:
+                raise SystemExit("--recover-pending 不能与 --years 或 --allow-qc-override 同时使用")
+            pipeline.recover_pending()
+        else:
+            try:
+                pipeline.run(args.years, allow_qc_override=args.allow_qc_override)
+            except pipeline.QualityGateError as error:
+                raise SystemExit(f"{error}\n如确认仅用于教学演示，可显式加 --allow-qc-override。") from error
 
     elif args.command == "regress":
         from gvcsim.regression.design import (

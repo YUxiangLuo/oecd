@@ -34,6 +34,8 @@ RestrictSUIDSGID=true
 LockPersonality=true
 MemoryDenyWriteExecute=true
 ReadWritePaths=/opt/gvcsim/shared/data /opt/gvcsim/shared/reports
+# compute 在服务外发布；API 命名空间内不可改写已经发布的版本目录。
+ReadOnlyPaths=-/opt/gvcsim/shared/data/.processed-releases
 
 [Install]
 WantedBy=multi-user.target

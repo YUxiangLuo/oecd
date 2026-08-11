@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""为容量验收创建隔离的 50-100 学生数据库与凭证文件。
+"""为容量验收创建隔离的 20–50 学生数据库与凭证文件。
 
 只允许操作名称以 ``_loadtest`` 结尾的数据库；``--reset`` 会重建该库的
 public schema，绝不能对课堂生产库使用。
@@ -17,12 +17,23 @@ from typing import Any
 import psycopg
 from psycopg import sql
 
+MIN_STUDENTS = 20
+MAX_STUDENTS = 50
+DEFAULT_STUDENTS = 50
+CREDENTIAL_KIND = "gvcsim-capacity-test-users-v1"
+
+
+def _validate_student_count(students: int) -> int:
+    if not MIN_STUDENTS <= students <= MAX_STUDENTS:
+        raise SystemExit(f"--students 必须在 {MIN_STUDENTS}..{MAX_STUDENTS} 之间")
+    return students
+
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="准备 GVC Lab 并发压测账号")
     parser.add_argument("--dsn", default=os.environ.get("GVCSIM_LOADTEST_DSN", ""))
     parser.add_argument("--password", default=os.environ.get("GVCSIM_LOADTEST_PASSWORD", ""))
-    parser.add_argument("--students", type=int, default=100)
+    parser.add_argument("--students", type=int, default=DEFAULT_STUDENTS)
     parser.add_argument("--prefix", default="load_student")
     parser.add_argument("--output", type=Path, default=Path("data/loadtest-users.json"))
     parser.add_argument("--reset", action="store_true", help="重建专用 *_loadtest 数据库的 public schema")
@@ -62,8 +73,7 @@ def main() -> None:
     args = _parser().parse_args()
     if not args.dsn:
         raise SystemExit("必须通过 --dsn 或 GVCSIM_LOADTEST_DSN 指定专用数据库")
-    if not 1 <= args.students <= 200:
-        raise SystemExit("--students 必须在 1..200 之间")
+    _validate_student_count(args.students)
     if len(args.password) < 12:
         raise SystemExit("压测口令必须至少 12 个字符")
 
@@ -125,7 +135,7 @@ def main() -> None:
         users.append({"username": username, "password": args.password})
 
     payload = {
-        "kind": "gvcsim-capacity-test-users-v1",
+        "kind": CREDENTIAL_KIND,
         "database": database,
         "users": users,
     }

@@ -108,7 +108,9 @@ def test_data_discovery_qc_and_db_adapters(tmp_path, monkeypatch):
     (tmp_path / "ICIO-demo_2020.csv").write_text("x\n1\n", encoding="utf-8")
     monkeypatch.setattr(data_routes.icio_browser, "slice_table", lambda **kwargs: kwargs)
     assert data_routes.db_slice(2020, table="z", page=2, page_size=10)["page"] == 2
-    monkeypatch.setattr(data_routes.icio_browser, "slice_table", lambda **kwargs: (_ for _ in ()).throw(ValueError("bad")))
+    monkeypatch.setattr(
+        data_routes.icio_browser, "slice_table", lambda **kwargs: (_ for _ in ()).throw(ValueError("bad"))
+    )
     with pytest.raises(HTTPException) as invalid:
         data_routes.db_slice(2020, page=1, page_size=10)
     assert invalid.value.status_code == 400
@@ -209,10 +211,13 @@ def test_regression_options_design_and_validation(teaching_db):
     assert design.json()["outcome"] == "trade"
     assert client.get("/api/regression/design", params={"outcome": "bad"}).status_code == 400
     assert client.get("/api/regression/design", params={"outcome": "trade", "step": 12}).status_code == 422
-    assert client.get(
-        "/api/regression/design",
-        params={"outcome": "trade", "shock_type": "sanctions", "weight_mode": "contemporaneous"},
-    ).status_code == 400
+    assert (
+        client.get(
+            "/api/regression/design",
+            params={"outcome": "trade", "shock_type": "sanctions", "weight_mode": "contemporaneous"},
+        ).status_code
+        == 400
+    )
 
 
 def test_regression_run_and_placebo_are_simple_current_results(teaching_db, monkeypatch):

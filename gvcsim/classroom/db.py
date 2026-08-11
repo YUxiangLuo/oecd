@@ -190,10 +190,13 @@ def readiness() -> dict[str, str]:
 def _seed_if_empty(c: psycopg.Connection[dict[str, Any]]) -> bool:
     if c.execute("SELECT 1 FROM accounts LIMIT 1").fetchone() or not config.DEMO_MODE or not config.BOOTSTRAP_PASSWORD:
         return False
-    class_id = _required(c.execute(
-        "INSERT INTO classes(name,code,semester,note) VALUES (%s,%s,%s,%s) RETURNING id",
-        ("GVC 实验演示班", "GVC-DEMO", config.COURSE_TERM, f"{config.COURSE_TERM}学期演示班级。"),
-    ).fetchone(), "seed class")["id"]
+    class_id = _required(
+        c.execute(
+            "INSERT INTO classes(name,code,semester,note) VALUES (%s,%s,%s,%s) RETURNING id",
+            ("GVC 实验演示班", "GVC-DEMO", config.COURSE_TERM, f"{config.COURSE_TERM}学期演示班级。"),
+        ).fetchone(),
+        "seed class",
+    )["id"]
     for username, name, role, target_class, student_no in (
         ("teacher", "老师", "teacher", None, ""),
         ("student", "同学", "student", class_id, "2026001"),
@@ -225,11 +228,14 @@ def provision_teacher(username: str, display_name: str, password: str) -> dict[s
     _validate_managed_password(password)
     salt = secrets.token_hex(16)
     with conn() as c:
-        return _required(c.execute(
-            "INSERT INTO accounts(username,display_name,role,pw_salt,pw_hash) VALUES (%s,%s,'teacher',%s,%s)"
-            " RETURNING id,username,display_name,role",
-            (username, display_name, salt, hash_password(password, salt)),
-        ).fetchone(), "provision teacher")
+        return _required(
+            c.execute(
+                "INSERT INTO accounts(username,display_name,role,pw_salt,pw_hash) VALUES (%s,%s,'teacher',%s,%s)"
+                " RETURNING id,username,display_name,role",
+                (username, display_name, salt, hash_password(password, salt)),
+            ).fetchone(),
+            "provision teacher",
+        )
 
 
 def change_own_password(username: str, current_password: str, new_password: str) -> bool:
@@ -243,7 +249,10 @@ def change_own_password(username: str, current_password: str, new_password: str)
         if hmac.compare_digest(account["pw_hash"], hash_password(new_password, account["pw_salt"])):
             raise ValueError("新密码不能与当前密码相同")
         salt = secrets.token_hex(16)
-        c.execute("UPDATE accounts SET pw_salt=%s,pw_hash=%s WHERE id=%s", (salt, hash_password(new_password, salt), account["id"]))
+        c.execute(
+            "UPDATE accounts SET pw_salt=%s,pw_hash=%s WHERE id=%s",
+            (salt, hash_password(new_password, salt), account["id"]),
+        )
     return True
 
 

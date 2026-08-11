@@ -26,6 +26,19 @@ def test_token_is_stateless_signed_expiring_and_role_checked(teaching_db, monkey
     assert auth.verify_token(token) is None
 
 
+def test_token_is_invalidated_when_the_dataset_release_changes(teaching_db, monkeypatch):
+    release = {"id": "release-a"}
+    monkeypatch.setattr(auth, "_current_release_id", lambda: release["id"])
+    user = auth.authenticate("student", "gvclab2026")
+    assert user
+    token, _expires_at = auth.issue_token(user)
+    assert auth.verify_token(token)["rid"] == "release-a"
+
+    release["id"] = "release-b"
+
+    assert auth.verify_token(token) is None
+
+
 def test_password_change_updates_credentials_but_existing_token_remains_stateless(teaching_db):
     client = TestClient(app)
     login = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
@@ -38,7 +51,12 @@ def test_password_change_updates_credentials_but_existing_token_remains_stateles
     assert changed.json() == {"ok": True, "reauthenticate": True}
     assert client.get("/api/auth/me", headers=headers).status_code == 200
     assert client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).status_code == 401
-    assert client.post("/api/auth/login", json={"username": "teacher", "password": "teacher-new-private-password"}).status_code == 200
+    assert (
+        client.post(
+            "/api/auth/login", json={"username": "teacher", "password": "teacher-new-private-password"}
+        ).status_code
+        == 200
+    )
     assert teaching_db.change_own_password("teacher", "teacher-new-private-password", "gvclab2026-reset")
 
 

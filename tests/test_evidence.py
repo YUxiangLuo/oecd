@@ -6,9 +6,7 @@ from gvcsim.session import empty_session, make_record
 
 def _complete_through_15():
     session = empty_session()
-    session["steps"] = {
-        str(step): make_record({"quiz": quizzes.correct_quiz(step)}) for step in range(1, 16)
-    }
+    session["steps"] = {str(step): make_record({"quiz": quizzes.correct_quiz(step)}) for step in range(1, 16)}
     return session
 
 

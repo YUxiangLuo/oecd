@@ -19,9 +19,7 @@ database = _DatabaseProxy()
 
 
 def _student(c: psycopg.Connection[dict[str, Any]], username: str) -> dict[str, Any] | None:
-    return c.execute(
-        "SELECT id,username FROM accounts WHERE username=%s AND role='student'", (username,)
-    ).fetchone()
+    return c.execute("SELECT id,username FROM accounts WHERE username=%s AND role='student'", (username,)).fetchone()
 
 
 def upsert_progress(username: str, step: int) -> None:
@@ -80,9 +78,7 @@ def reset_workspace(username: str, confirmation: str) -> dict[str, bool] | None:
         return {"ok": True}
 
 
-def save_generated_report(
-    username: str, markdown: str, provenance: dict[str, Any]
-) -> dict[str, Any] | None:
+def save_generated_report(username: str, markdown: str, provenance: dict[str, Any]) -> dict[str, Any] | None:
     with database.conn() as c:
         account = _student(c, username)
         if not account:
@@ -138,9 +134,7 @@ def my_submission(username: str) -> dict[str, Any] | None:
 
 
 def _teacher_exists(c: psycopg.Connection[dict[str, Any]], username: str) -> bool:
-    return c.execute(
-        "SELECT 1 FROM accounts WHERE username=%s AND role='teacher'", (username,)
-    ).fetchone() is not None
+    return c.execute("SELECT 1 FROM accounts WHERE username=%s AND role='teacher'", (username,)).fetchone() is not None
 
 
 def list_submissions(teacher_username: str | None = None) -> list[dict[str, Any]]:
@@ -167,9 +161,10 @@ def get_submission(submission_id: int, teacher_username: str | None = None) -> d
 
 
 def teacher_can_access_submission_in_conn(c, username: str, submission_id: int) -> bool:
-    return _teacher_exists(c, username) and c.execute(
-        "SELECT 1 FROM submissions WHERE id=%s", (submission_id,)
-    ).fetchone() is not None
+    return (
+        _teacher_exists(c, username)
+        and c.execute("SELECT 1 FROM submissions WHERE id=%s", (submission_id,)).fetchone() is not None
+    )
 
 
 def grade_submission(submission_id: int, score: int, feedback: str, graded_by: str) -> dict[str, Any] | None:
@@ -188,10 +183,7 @@ def list_announcements(username: str) -> list[dict[str, Any]]:
         account = c.execute("SELECT role,class_id FROM accounts WHERE username=%s", (username,)).fetchone()
         if not account:
             return []
-        base = (
-            "SELECT an.*,cl.name AS class_name FROM announcements an"
-            " LEFT JOIN classes cl ON cl.id=an.class_id"
-        )
+        base = "SELECT an.*,cl.name AS class_name FROM announcements an LEFT JOIN classes cl ON cl.id=an.class_id"
         if account["role"] == "teacher":
             return c.execute(base + " ORDER BY an.created_at DESC,an.id DESC").fetchall()
         return c.execute(
@@ -219,4 +211,6 @@ def delete_announcement(announcement_id: int, actor: str | None = None) -> bool:
     with database.conn() as c:
         if actor and not _teacher_exists(c, actor):
             return False
-        return c.execute("DELETE FROM announcements WHERE id=%s RETURNING id", (announcement_id,)).fetchone() is not None
+        return (
+            c.execute("DELETE FROM announcements WHERE id=%s RETURNING id", (announcement_id,)).fetchone() is not None
+        )

@@ -4,12 +4,19 @@ from gvcsim.session import empty_session, make_record
 
 def test_v8_schema_contains_only_minimal_tables(teaching_db):
     with db.conn() as connection:
-        names = {row["tablename"] for row in connection.execute(
-            "SELECT tablename FROM pg_tables WHERE schemaname='public'"
-        ).fetchall()}
+        names = {
+            row["tablename"]
+            for row in connection.execute("SELECT tablename FROM pg_tables WHERE schemaname='public'").fetchall()
+        }
     assert names == {
-        "schema_meta", "classes", "accounts", "step_progress", "experiment_sessions",
-        "reports", "submissions", "announcements",
+        "schema_meta",
+        "classes",
+        "accounts",
+        "step_progress",
+        "experiment_sessions",
+        "reports",
+        "submissions",
+        "announcements",
     }
 
 

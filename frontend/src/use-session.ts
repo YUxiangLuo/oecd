@@ -6,7 +6,7 @@ import type { CompletionSummary, ExperimentSession, SessionResponse, SharedSessi
 const SYNC_DEBOUNCE_MS = 800;
 export type SessionStatus = "loading" | "ready" | "unavailable";
 
-interface SessionApi {
+export interface SessionApi {
   status: SessionStatus;
   session: ExperimentSession;
   syncing: boolean;

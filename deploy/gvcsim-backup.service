@@ -1,0 +1,37 @@
+[Unit]
+Description=GVC Simulation Lab classroom database backup
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=gvcsim
+Group=gvcsim
+WorkingDirectory=/opt/gvcsim/current
+EnvironmentFile=/etc/gvcsim.env
+Environment=GVCSIM_BACKUP_DIR=/opt/gvcsim/shared/backups
+ExecStart=/opt/gvcsim/current/scripts/backup_classroom.sh
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+# 只读 release；备份脚本只能写入预创建的私有备份目录。
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectHostname=true
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RemoveIPC=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/opt/gvcsim/shared/backups

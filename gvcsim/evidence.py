@@ -49,4 +49,9 @@ def evaluate(session: dict[str, Any], *, report_exists: bool = False, **unused: 
 def completion_summary(session: dict[str, Any], *, report_exists: bool = False, **unused: Any) -> dict[str, Any]:
     items = evaluate(session, report_exists=report_exists, **unused)
     completed = [item.step for item in items if item.complete]
-    return {"steps": [item.to_dict() for item in items], "completed": completed, "completed_count": len(completed), "total": len(items)}
+    return {
+        "steps": [item.to_dict() for item in items],
+        "completed": completed,
+        "completed_count": len(completed),
+        "total": len(items),
+    }

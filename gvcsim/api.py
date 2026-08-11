@@ -14,9 +14,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 
-from gvcsim import auth, auth_routes, data_routes, regression_routes
+from gvcsim import auth, auth_routes, data_routes, publication, regression_routes
 from gvcsim import config as app_config
-from gvcsim.artifacts import ArtifactContractError, validate_release
+from gvcsim.artifacts import ArtifactContractError, validate_release_cached
 from gvcsim.classroom import db as classroom_db
 from gvcsim.classroom import routes as classroom_routes
 from gvcsim.config import PROCESSED_DIR, processed_years
@@ -62,7 +62,8 @@ def health() -> JSONResponse:
     摘要契约不合法时返回 503，避免部署脚本把“进程已启动”误当成“数据可用”。
     """
     try:
-        validate_release(PROCESSED_DIR)
+        publication.ensure_no_pending_publication(PROCESSED_DIR)
+        validate_release_cached(PROCESSED_DIR, allow_legacy=not PROCESSED_DIR.is_symlink())
         years = processed_years()
     except (ArtifactContractError, OSError, RuntimeError, ValueError) as error:
         return JSONResponse(status_code=503, content={"status": "unavailable", "detail": str(error)})

@@ -73,6 +73,15 @@ def authenticate(username: str, password: str) -> dict | None:
         raise AuthenticationUnavailable("认证数据库不可用或未就绪") from error
 
 
+def _current_release_id() -> str:
+    from gvcsim import artifacts
+
+    try:
+        return artifacts.release_identity()
+    except (artifacts.ArtifactContractError, OSError) as error:
+        raise AuthenticationUnavailable("当前数据发布不可用") from error
+
+
 def issue_token(user: dict) -> tuple[str, int]:
     now = int(time.time())
     exp = now + config.TOKEN_TTL_SECONDS
@@ -81,6 +90,7 @@ def issue_token(user: dict) -> tuple[str, int]:
         "name": user["name"],
         "role": user["role"],
         "aid": user["account_id"],
+        "rid": _current_release_id(),
         "exp": exp,
     }
     payload = _b64(json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode())
@@ -99,6 +109,10 @@ def verify_token(token: str) -> dict | None:
             return None
         if payload.get("role") not in {"student", "teacher"} or not payload.get("sub"):
             return None
+        if payload.get("rid") != _current_release_id():
+            return None
         return payload
+    except AuthenticationUnavailable:
+        raise
     except Exception:
         return None

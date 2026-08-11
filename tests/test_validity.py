@@ -79,8 +79,13 @@ def test_distinguishes_never_treated_entities_from_fully_untreated_clusters():
                     }
                 )
     s = analyze_support(
-        pd.DataFrame(rows), entity="entity_id", time="year", cluster="country",
-        treated_col="treated", absorbing=True, intensity_col="shock",
+        pd.DataFrame(rows),
+        entity="entity_id",
+        time="year",
+        cluster="country",
+        treated_col="treated",
+        absorbing=True,
+        intensity_col="shock",
     )
     assert s.untreated_clusters == 0
     assert s.treated_entities == 5

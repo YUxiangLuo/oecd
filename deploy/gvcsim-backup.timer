@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily GVC Simulation Lab classroom database backup
+
+[Timer]
+Unit=gvcsim-backup.service
+OnCalendar=*-*-* 02:30:00
+RandomizedDelaySec=15m
+AccuracySec=1m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

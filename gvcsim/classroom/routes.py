@@ -222,7 +222,9 @@ def create_student(req: StudentCreateRequest, user: dict = Depends(require_teach
     if db.find_account(req.username):
         raise HTTPException(status_code=409, detail=f"用户名 {req.username} 已存在")
     try:
-        return db.create_student(req.username, req.display_name, req.password, req.student_no, req.class_id, user["sub"])
+        return db.create_student(
+            req.username, req.display_name, req.password, req.student_no, req.class_id, user["sub"]
+        )
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
 

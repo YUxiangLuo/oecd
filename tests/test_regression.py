@@ -424,9 +424,7 @@ def test_placebo_did_distribution_is_reproducible():
     extreme_count = sum(abs(coef) >= abs(result["true_coef"]) for coef in result["placebo_coefs"])
     assert result["extreme_count"] == extreme_count
     assert result["tail_share"] == pytest.approx(extreme_count / len(result["placebo_coefs"]))
-    assert result["adjusted_tail_share"] == pytest.approx(
-        (extreme_count + 1) / (len(result["placebo_coefs"]) + 1)
-    )
+    assert result["adjusted_tail_share"] == pytest.approx((extreme_count + 1) / (len(result["placebo_coefs"]) + 1))
     assert result["empirical_p"] == result["adjusted_tail_share"]
     assert result["calibrated_inference"] is False
     assert "国家聚类结构" in result["assignment_not_preserved"]

@@ -143,9 +143,11 @@ def analyze_support(
     all_cluster_ids = set(clusters.unique())
     treated_clusters = len(treated_cluster_ids)
     untreated_clusters = len(all_cluster_ids - treated_cluster_ids)
-    entity_exposure = pd.DataFrame(
-        {"entity": data[entity].astype(str).to_numpy(), "exposed": exposure.to_numpy(dtype=bool)}
-    ).groupby("entity", sort=False)["exposed"].any()
+    entity_exposure = (
+        pd.DataFrame({"entity": data[entity].astype(str).to_numpy(), "exposed": exposure.to_numpy(dtype=bool)})
+        .groupby("entity", sort=False)["exposed"]
+        .any()
+    )
     treated_entities = int(entity_exposure.sum())
     untreated_entities = int((~entity_exposure).sum())
     total_entities = int(len(entity_exposure))

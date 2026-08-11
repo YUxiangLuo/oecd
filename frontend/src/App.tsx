@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { beginAccountMetaLoad } from "./account-meta";
-import { AccountPasswordModal } from "./account-password";
 import {
-  AnnouncementBanner,
-  AppBootSkeleton,
-  CourseSidebar,
-  StepFooter,
-  StepHeader,
-  StepRail,
-  StudentTopbar,
-  TeacherWorkspace,
-} from "./app-shell";
+  clearAuthentication,
+  readAuthExpiry,
+  stepFromSearch,
+  storeAuthentication,
+  urlWithoutStep,
+  urlWithStep,
+} from "./app-state";
+import { AppBootSkeleton, TeacherWorkspace } from "./app-shell";
 import { scanAnnouncements } from "./announcement-state";
 import {
   EMPTY_SCOPED_REGRESSION_HISTORY,
@@ -18,8 +16,6 @@ import {
   updateHistoryForAccount,
 } from "./account-regression-history";
 import { AUTH_TOKEN_KEY, api } from "./api";
-import { LabRouter } from "./lab-router";
-import { IntroOverlay } from "./intro";
 import {
   DEFAULT_REGRESSION_SETTINGS,
   SIGNATURE_SETTINGS,
@@ -29,8 +25,7 @@ import {
 } from "./regression";
 import { LoginPage } from "./login";
 import { resetStepScroller } from "./step-navigation";
-import { QuizPanel } from "./step-quiz";
-import { ToastHost } from "./toast";
+import { StudentWorkspace } from "./student-workspace";
 import type {
   Announcement,
   AuthUser,
@@ -40,20 +35,13 @@ import type {
 } from "./types";
 import { useSession } from "./use-session";
 
-const AUTH_EXPIRES_KEY = "gvcsim_token_expires_at";
-
-function stepFromUrl(): number | null {
-  const n = Number(new URLSearchParams(window.location.search).get("step"));
-  return Number.isInteger(n) && n >= 1 && n <= 16 ? n : null;
-}
-
 export default function App() {
   const [stepsData, setStepsData] = useState<StepsResponse | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
   const [metaReady, setMetaReady] = useState(false);
   const [announcementsReady, setAnnouncementsReady] = useState(false);
   // 有效深链优先于服务端进度；应用内部切步只 replace 当前 URL，不污染浏览器历史。
-  const explicitStep = useRef(stepFromUrl());
+  const explicitStep = useRef(stepFromSearch(window.location.search));
   const navigationTouched = useRef(false);
   // 新会话从第 1 步开始:课程顺序是数据接入 → 指标 → 可视化 → 回归,
   // 从中途开始会让学生在没读过数据、mock 边界和质检的情况下直接看指标分解。
@@ -67,10 +55,7 @@ export default function App() {
   // 认证:localStorage 里的令牌先经 /api/auth/me 真实校验再放行
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authChecked, setAuthChecked] = useState(() => !localStorage.getItem(AUTH_TOKEN_KEY));
-  const [authExpiresAt, setAuthExpiresAt] = useState<number | null>(() => {
-    const value = Number(localStorage.getItem(AUTH_EXPIRES_KEY));
-    return Number.isFinite(value) && value > 0 ? value : null;
-  });
+  const [authExpiresAt, setAuthExpiresAt] = useState<number | null>(() => readAuthExpiry(localStorage));
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
@@ -144,8 +129,7 @@ export default function App() {
   // 退出登录:只清认证与界面状态。刻意**不**清实验会话——
   // 学生重新登录后必须能拿回自己的实验,这正是会话存在的意义。
   const logout = useCallback(() => {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    localStorage.removeItem(AUTH_EXPIRES_KEY);
+    clearAuthentication(localStorage);
     setAuthExpiresAt(null);
     setUser(null);
     setStepsData(null);
@@ -167,9 +151,7 @@ export default function App() {
     navigationTouched.current = false;
     setCurrent(1);
     setMaxStep(1);
-    const url = new URL(window.location.href);
-    url.searchParams.delete("step");
-    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    window.history.replaceState(null, "", urlWithoutStep(window.location.href));
   }, []);
 
   const passwordChanged = useCallback(() => {
@@ -188,9 +170,7 @@ export default function App() {
     resetStepScroller(contentRef.current);
     navigationTouched.current = true;
     setCurrent(target);
-    const url = new URL(window.location.href);
-    url.searchParams.set("step", String(target));
-    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    window.history.replaceState(null, "", urlWithStep(window.location.href, target));
   }, [stepsData]);
 
   useEffect(() => {
@@ -199,8 +179,7 @@ export default function App() {
     api.me(token).then(
       (u) => { setUser(u); setAuthChecked(true); },
       () => {
-        localStorage.removeItem(AUTH_TOKEN_KEY);
-        localStorage.removeItem(AUTH_EXPIRES_KEY);
+        clearAuthentication(localStorage);
         setAuthExpiresAt(null);
         setAuthChecked(true);
       },
@@ -320,8 +299,7 @@ export default function App() {
   if (!user)
     return (
       <LoginPage notice={authNotice} onLogin={(r) => {
-        localStorage.setItem(AUTH_TOKEN_KEY, r.token);
-        localStorage.setItem(AUTH_EXPIRES_KEY, String(r.expires_at));
+        storeAuthentication(localStorage, r.token, r.expires_at);
         setAuthExpiresAt(r.expires_at);
         setAuthNotice(null);
         setUser(r.user);
@@ -365,155 +343,41 @@ export default function App() {
     return <AppBootSkeleton />;
   }
 
-  const steps = stepsData.steps;
-  const totalSteps = steps.length;
-  const stepIndex = steps.findIndex((item) => item.n === current);
-  if (stepIndex < 0) return <div style={{ padding: 40 }} className="error-box">步骤不存在，请从课程大纲重新选择。</div>;
-  const step = steps[stepIndex];
-  const stageName = stepsData.stages[String(step.stage)];
-  const prevStep = steps[stepIndex - 1];
-  const nextStep = steps[stepIndex + 1];
-  // 回归工作台自带完整渐进教学结构，主区跳过通用讲解卡避免重复。
-  const isReg = step.lab === "reg";
-  // 可视化步骤(viz)图表是主角:讲解卡默认折叠,给图表让出首屏纵向空间(可点开)
-  const isViz = step.lab === "viz";
   return (
-    <>
-    <div className="layout" inert={showIntro ? true : undefined}>
-      <StudentTopbar
-        user={user}
-        meta={meta}
-        authExpiresAt={authExpiresAt}
-        resettingWorkspace={resettingWorkspace}
-        completion={session.completion}
-        maxStep={maxStep}
-        totalSteps={totalSteps}
-        introTriggerRef={introTriggerRef}
-        onResetWorkspace={() => { void resetWorkspace(); }}
-        onShowIntro={() => setShowIntro(true)}
-        onRequestPasswordChange={() => setShowPasswordChange(true)}
-        onLogout={logout}
-      />
-
-      {resetWorkspaceError && (
-        <div className="error-box workspace-reset-error" role="alert">清空实验失败：{resetWorkspaceError}</div>
-      )}
-
-      {!bannerDismissed && (
-        <AnnouncementBanner
-          announcements={announcements}
-          expanded={bannerExpanded}
-          onToggle={() => setBannerExpanded((value) => !value)}
-          onDismiss={() => setBannerDismissed(true)}
-        />
-      )}
-
-      <div className="main">
-        <CourseSidebar
-          stepsData={stepsData}
-          current={current}
-          maxStep={maxStep}
-          completion={session.completion}
-          onNavigate={navigateStep}
-        />
-
-        <div className="workarea">
-          {session.syncError && (
-            <div className="error-box persistent-qc-warning" role="alert">
-              <b>实验记录尚未同步到服务器。</b>
-              <p>{session.syncError} 本地记录仍在，可以直接重试。</p>
-              <button
-                type="button"
-                className="secondary"
-                disabled={session.syncing}
-                onClick={() => { void session.syncNow().catch(() => {}); }}
-              >
-                {session.syncing ? "正在重试…" : "重试保存"}
-              </button>
-            </div>
-          )}
-          <StepHeader
-            step={step}
-            previous={prevStep}
-            next={nextStep}
-            stageName={stageName}
-            totalSteps={totalSteps}
-            onNavigate={navigateStep}
-          />
-
-          <div className="content-row">
-            <main ref={contentRef} className="content">
-              <div className="content-inner">
-                {/* 已把 concept 并入页内 StepIntro(常驻)的步骤,这里不再重复渲染讲解卡:
-                    可视化(isViz)、指标计算(ind)、政策冲击接入(shock);回归自带渐进教学,也跳过。 */}
-                {!isReg && !isViz && step.lab !== "ind" && step.lab !== "shock" && (
-                  <details className="card accent concept-card" open>
-                    <summary className="kicker">讲解</summary>
-                    <p>{step.concept}</p>
-                  </details>
-                )}
-                <>
-                    <LabRouter
-                      step={step}
-                      meta={meta}
-                      state={stepState}
-                      completionKey={completionKey}
-                      sessionStatus={session.status}
-                      sessionUnsynced={session.unsynced}
-                      sessionSyncing={session.syncing}
-                      sessionSyncError={session.syncError}
-                      onFlushSession={session.syncNow}
-                      onSessionChanged={session.reload}
-                      regressionSettings={regressionSettings}
-                      onRegressionSettingsChange={setRegressionSettings}
-                      regressionHistory={regressionHistory}
-                      onRegressionHistoryChange={setRegressionHistory}
-                      onNavigateStep={navigateStep}
-                    />
-                    <QuizPanel key={step.n} step={step} state={stepState} />
-                </>
-              </div>
-            </main>
-
-            <StepRail
-              step={step}
-              previous={prevStep}
-              next={nextStep}
-              stageName={stageName}
-              totalSteps={totalSteps}
-              onNavigate={navigateStep}
-            />
-          </div>
-
-          <StepFooter
-            steps={steps}
-            step={step}
-            next={nextStep}
-            stageName={stageName}
-            current={current}
-            maxStep={maxStep}
-            completedSteps={completedSteps}
-            onNavigate={navigateStep}
-          />
-        </div>
-      </div>
-      {/* 学生端 ToastHost:与上方教师端实例互斥,任一时刻只挂载一个(见教师分支处说明) */}
-      <ToastHost />
-    </div>
-    {showIntro && (
-      <IntroOverlay
-        user={user}
-        meta={meta}
-        returnFocusRef={introTriggerRef}
-        onDone={(gotoStep) => {
-          setShowIntro(false);
-          if (gotoStep) navigateStep(gotoStep);
-        }}
-      />
-    )}
-    {showPasswordChange && (
-      <AccountPasswordModal onClose={() => setShowPasswordChange(false)} onChanged={passwordChanged} />
-    )}
-    </>
+    <StudentWorkspace
+      user={user}
+      meta={meta}
+      stepsData={stepsData}
+      current={current}
+      maxStep={maxStep}
+      session={session}
+      stepState={stepState}
+      completionKey={completionKey}
+      completedSteps={completedSteps}
+      regressionSettings={regressionSettings}
+      onRegressionSettingsChange={setRegressionSettings}
+      regressionHistory={regressionHistory}
+      onRegressionHistoryChange={setRegressionHistory}
+      announcements={announcements}
+      bannerDismissed={bannerDismissed}
+      bannerExpanded={bannerExpanded}
+      resettingWorkspace={resettingWorkspace}
+      resetWorkspaceError={resetWorkspaceError}
+      authExpiresAt={authExpiresAt}
+      showIntro={showIntro}
+      showPasswordChange={showPasswordChange}
+      contentRef={contentRef}
+      introTriggerRef={introTriggerRef}
+      onNavigateStep={navigateStep}
+      onResetWorkspace={() => { void resetWorkspace(); }}
+      onToggleBanner={() => setBannerExpanded((value) => !value)}
+      onDismissBanner={() => setBannerDismissed(true)}
+      onShowIntro={() => setShowIntro(true)}
+      onCloseIntro={() => setShowIntro(false)}
+      onRequestPasswordChange={() => setShowPasswordChange(true)}
+      onClosePasswordChange={() => setShowPasswordChange(false)}
+      onPasswordChanged={passwordChanged}
+      onLogout={logout}
+    />
   );
 }

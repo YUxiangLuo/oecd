@@ -17,7 +17,7 @@ def _artifacts(path: Path, *, qc=None):
             f"indicators_industry_{year}.csv",
             f"network_edges_{year}.csv",
         ):
-            (path / name).write_text("value\n1\n")
+            (path / name).write_text("[]" if name.endswith(".json") else "value\n1\n")
     write_dataset_metadata(path, [2019, 2020], metadata={"data_sources": {}, "qc": qc or {}})
 
 
@@ -25,18 +25,22 @@ def _complete():
     session = empty_session()
     session["steps"] = {str(step): make_record({"quiz": quizzes.correct_quiz(step)}) for step in GATE_STEPS}
     session["steps"]["1"]["data"]["observation"] = {
-        "row": "CHN_D01T02", "column": "USA_D01T02", "value": 1.0,
+        "row": "CHN_D01T02",
+        "column": "USA_D01T02",
+        "value": 1.0,
     }
     session["steps"]["7"]["data"]["compared"] = ["CHN", "USA"]
     session["steps"]["12"]["data"]["run"] = {
         "design": {"outcome": "trade", "equation": "y = policy + FE"},
         "result": {"status": "ok", "n_obs": 1, "coefs": [{"name": "treated×post", "coef": 0.0}]},
     }
-    session["steps"]["16"] = make_record({
-        "research_question": "关税冲击是否改变出口中的外国增加值份额？",
-        "evidence_interpretation": "我将描述性比较与保存的回归点估计、置信区间一起解读，只把它们视为当前设定下的证据而非自动的因果证明。",
-        "limitations": "冲击是教学编码，平行趋势和无同期混杂未被证明，而且行业可能受到同一国家冲击与网络外溢。",
-    })
+    session["steps"]["16"] = make_record(
+        {
+            "research_question": "关税冲击是否改变出口中的外国增加值份额？",
+            "evidence_interpretation": "我将描述性比较与保存的回归点估计、置信区间一起解读，只把它们视为当前设定下的证据而非自动的因果证明。",
+            "limitations": "冲击是教学编码，平行趋势和无同期混杂未被证明，而且行业可能受到同一国家冲击与网络外溢。",
+        }
+    )
     return session
 
 
@@ -126,10 +130,12 @@ def test_malformed_only_saved_run_blocks_report(tmp_path, monkeypatch):
 @pytest.mark.parametrize("status", ["insufficient", "invalid_design", []])
 def test_non_inferential_saved_run_does_not_satisfy_valid_regression_gate(status):
     session = _complete()
-    session["steps"]["12"]["data"]["run"]["result"].update({
-        "status": status,
-        "support": {"status": status, "suppress_inference": True},
-    })
+    session["steps"]["12"]["data"]["run"]["result"].update(
+        {
+            "status": status,
+            "support": {"status": status, "suppress_inference": True},
+        }
+    )
 
     blocked = check_gate(session)
 
