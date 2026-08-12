@@ -66,6 +66,12 @@ export const SIGNATURE_SETTINGS: Record<RegressionOutcome, RegressionSettings> =
   network: { ...DEFAULT_REGRESSION_SETTINGS, granularity: "country_industry" },
 };
 
+export function normalizeRegressionSettings(settings: RegressionSettings): RegressionSettings {
+  return settings.shockType === "tariff" || settings.weightMode === "fixed_pretreatment"
+    ? settings
+    : { ...settings, weightMode: "fixed_pretreatment" };
+}
+
 /** 会话里 regression_settings 现按 outcome 存(map);历史上的单份扁平设定(含 method
  *  顶层键)一律忽略,让各步重新按招牌默认 seed——与“不做历史格式兼容”一致。 */
 export function asRegressionSettingsMap(value: unknown): Partial<Record<RegressionOutcome, RegressionSettings>> {
@@ -387,7 +393,8 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
   const outcome = step.regression_outcome;
   if (!outcome) return <div className="error-box">当前回归步骤缺少 regression_outcome 配置。</div>;
   const lesson = REGRESSION_LESSONS[outcome];
-  const { granularity, shockType, method, controlMode, interaction, priceMode, scenario, weightMode } = settings;
+  const normalizedSettings = normalizeRegressionSettings(settings);
+  const { granularity, shockType, method, controlMode, interaction, priceMode, scenario, weightMode } = normalizedSettings;
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [resultSettings, setResultSettings] = useState<RegressionSettings | null>(null);
   const [placebo, setPlacebo] = useState<PlaceboResponse | null>(null);
@@ -403,7 +410,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
   const latestRequest = useRef(`${outcome}:${settingsKey(settings)}`);
 
   const setSetting = <K extends keyof RegressionSettings>(key: K, value: RegressionSettings[K]) => {
-    onSettingsChange({ ...settings, [key]: value });
+    onSettingsChange(normalizeRegressionSettings({ ...normalizedSettings, [key]: value }));
   };
   const { data: options, error: optionsError } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
   // 兜底必须用稳定键(与 options.granularities_by_outcome 一致),不能用展示文案:
@@ -415,7 +422,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
   const effectiveGranularity = allowedGranularities.includes(granularity)
     ? granularity
     : allowedGranularities[0];
-  const currentSettings = { ...settings, granularity: effectiveGranularity };
+  const currentSettings = { ...normalizedSettings, granularity: effectiveGranularity };
   latestRequest.current = `${outcome}:${settingsKey(currentSettings)}`;
 
   useEffect(() => {
@@ -640,14 +647,14 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
             <label className="model-control"><span className="model-control-label">异质性</span><input type="checkbox" checked={interaction} onChange={(eventValue) => setSetting("interaction", eventValue.target.checked)} />冲击 × 基期GVC</label>
             {controlMode !== "none" && <div className="model-control"><span className="model-control-label">金额类控制口径</span><Pills label="金额类控制口径" options={options?.price_modes ?? []} value={priceMode} onChange={(value) => setSetting("priceMode", value)} labelMap={options?.price_mode_labels} /></div>}
             <div className="model-control"><span className="model-control-label">课堂场景</span><Pills label="课堂场景" options={options?.scenarios ?? []} value={scenario} onChange={(value) => setSetting("scenario", value)} labelMap={SCENARIO_LABELS} /></div>
-            <div className="model-control"><span className="model-control-label">冲击暴露权重</span><Pills label="冲击暴露权重" options={options?.weight_modes ?? ["fixed_pretreatment", "contemporaneous"]} value={weightMode} onChange={(value) => setSetting("weightMode", value)} labelMap={options?.weight_mode_labels ?? { fixed_pretreatment: "首次处理前固定权重（基准）", contemporaneous: "当期贸易权重（稳健性）" }} /></div>
+            <div className="model-control"><span className="model-control-label">冲击暴露权重</span><Pills label="冲击暴露权重" options={(options?.weight_modes ?? ["fixed_pretreatment", "contemporaneous"]).filter((mode) => shockType === "tariff" || mode !== "contemporaneous")} value={weightMode} onChange={(value) => setSetting("weightMode", value)} labelMap={options?.weight_mode_labels ?? { fixed_pretreatment: "首次处理前固定权重（基准）", contemporaneous: "当期贸易权重（稳健性）" }} /></div>
           </div>
           {scenario !== "clean" && <div className="challenge-note">该场景由系统人为改变估计样本，用于观察测量误差或冲击前趋势如何影响判断；它不是数据筛选条件。</div>}
           {weightMode === "contemporaneous" && <div className="challenge-note">当期贸易结构可能已受政策影响，因此该口径只用于和固定处理前权重对照，不能替代基准识别。</div>}
         </details>
 
         {(optionsError || designError) && <div className="error-box">{optionsError ?? designError}</div>}
-        <div className="run-summary"><b>当前方案：</b>{settingsSummary(settings, options)}</div>
+        <div className="run-summary"><b>当前方案：</b>{settingsSummary(currentSettings, options)}</div>
         <button className="run-btn" onClick={run} disabled={running || !design || Boolean(optionsError || designError)}>
           {/* 改了设定却仍写"重新运行",会让人以为按钮跑的还是上一次那套(点完招牌流程的
               ①/② 后尤其容易误解)。stale 已表示"设定与上次结果不一致",据此分开措辞。 */}

@@ -1,6 +1,7 @@
 import { describe, expect, jest, test } from "bun:test";
 
-import { api, shouldExpireAuth, withQuery } from "./api";
+import { api, getActiveAuthToken, setActiveAuthToken, shouldExpireAuth, withQuery } from "./api";
+import { emptySession } from "./session-store";
 import type { AuthUser } from "./types";
 
 class MemoryStorage {
@@ -19,16 +20,6 @@ function authUser(username: string): AuthUser {
   return { username, name: username, role: "student" };
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((onResolve, onReject) => {
-    resolve = onResolve;
-    reject = onReject;
-  });
-  return { promise, resolve, reject };
-}
-
 describe("auth expiration", () => {
   test("a delayed 401 can only expire the token used by that request", () => {
     expect(shouldExpireAuth("old-token", "old-token")).toBe(true);
@@ -39,123 +30,44 @@ describe("auth expiration", () => {
   test("logout is local-only and has no API method", () => {
     expect("logout" in api).toBe(false);
   });
-});
 
-describe("GET request coalescing", () => {
-  test("shares one parsed request for concurrent calls with the same token and URL", async () => {
-    const originalFetch = globalThis.fetch;
-    const response = deferred<Response>();
-    let calls = 0;
-    globalThis.fetch = (async () => {
-      calls += 1;
-      return response.promise;
-    }) as unknown as typeof fetch;
+  test("mounted tabs keep their validated token when shared storage changes", () => {
+    const originalToken = localStorage.getItem("gvcsim_token");
     try {
-      const first = api.me("same-token");
-      const second = api.me("same-token");
-      expect(calls).toBe(1);
-      response.resolve(new Response(JSON.stringify(authUser("student")), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }));
-      expect(await first).toEqual(authUser("student"));
-      expect(await second).toEqual(authUser("student"));
+      setActiveAuthToken("token-a");
+      localStorage.setItem("gvcsim_token", "token-b");
+      expect(getActiveAuthToken()).toBe("token-a");
     } finally {
-      globalThis.fetch = originalFetch;
+      setActiveAuthToken(originalToken);
+      if (originalToken == null) localStorage.removeItem("gvcsim_token");
+      else localStorage.setItem("gvcsim_token", originalToken);
     }
   });
 
-  test("does not merge requests across bearer tokens", async () => {
-    const originalFetch = globalThis.fetch;
-    let calls = 0;
-    globalThis.fetch = (async () => {
-      calls += 1;
-      return new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
-    }) as unknown as typeof fetch;
-    try {
-      await Promise.all([api.me("token-a"), api.me("token-b")]);
-      expect(calls).toBe(2);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  test("starts a fresh GET after a mutation and keeps coalescing the newer request", async () => {
+  test("a mounted tab sends mutations with its own token, not another tab's stored token", async () => {
     const originalFetch = globalThis.fetch;
     const originalToken = localStorage.getItem("gvcsim_token");
-    const staleResponse = deferred<Response>();
-    const freshResponse = deferred<Response>();
-    let announcementCalls = 0;
-    localStorage.setItem("gvcsim_token", "mutation-token");
-    globalThis.fetch = (async (input: string | URL | Request) => {
-      const url = String(input);
-      if (url === "/api/classroom/announcements") {
-        announcementCalls += 1;
-        return announcementCalls === 1 ? staleResponse.promise : freshResponse.promise;
-      }
-      if (url === "/api/classroom/progress") {
-        return new Response(JSON.stringify({ ok: true }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-      throw new Error(`unexpected request: ${url}`);
-    }) as unknown as typeof fetch;
+    let authorization: string | null = null;
     try {
-      const stale = api.classroom.announcements();
-      await api.classroom.reportProgress(1);
+      setActiveAuthToken("token-a");
+      localStorage.setItem("gvcsim_token", "token-b");
+      globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+        authorization = new Headers(init?.headers).get("Authorization");
+        return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
+      }) as typeof fetch;
 
-      const fresh = api.classroom.announcements();
-      expect(announcementCalls).toBe(2);
-
-      staleResponse.resolve(new Response(JSON.stringify({ announcements: [{ id: 1 }] }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }));
-      expect((await stale).announcements.map((item) => item.id)).toEqual([1]);
-
-      const coalescedFresh = api.classroom.announcements();
-      expect(announcementCalls).toBe(2);
-      freshResponse.resolve(new Response(JSON.stringify({ announcements: [{ id: 2 }] }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }));
-      expect((await fresh).announcements.map((item) => item.id)).toEqual([2]);
-      expect((await coalescedFresh).announcements.map((item) => item.id)).toEqual([2]);
+      await api.classroom.saveSession({ session: emptySession() });
+      expect(String(authorization)).toBe("Bearer token-a");
     } finally {
+      setActiveAuthToken(originalToken);
       if (originalToken == null) localStorage.removeItem("gvcsim_token");
       else localStorage.setItem("gvcsim_token", originalToken);
       globalThis.fetch = originalFetch;
     }
   });
+});
 
-  test("evicts a failed request so an explicit retry reaches the server", async () => {
-    const originalFetch = globalThis.fetch;
-    let calls = 0;
-    globalThis.fetch = (async () => {
-      calls += 1;
-      return calls === 1
-        ? new Response(JSON.stringify({ detail: "temporary" }), {
-            status: 503,
-            headers: { "Content-Type": "application/json" },
-          })
-        : new Response(JSON.stringify(authUser("recovered")), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          });
-    }) as unknown as typeof fetch;
-    try {
-      await expect(api.me("retry-token")).rejects.toThrow("temporary");
-      expect(await api.me("retry-token")).toEqual(authUser("recovered"));
-      expect(calls).toBe(2);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
-  });
-
+describe("GET requests", () => {
   test("times out a stalled GET and allows a later retry", async () => {
     const originalFetch = globalThis.fetch;
     let calls = 0;

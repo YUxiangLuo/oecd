@@ -4,7 +4,8 @@ import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-laz
 import { showToast } from "../../toast";
 import type { GeneratedReport, MySubmission, ReportGateItem, StepStateApi } from "../../types";
 import type { SessionStatus } from "../../use-session";
-import { useAsync } from "../shared";
+import { userFacingRequestError } from "../../user-facing-error";
+import { useAsync, type AsyncStatus } from "../shared";
 
 const fmtTime = (s: string | null | undefined) => (s ? s.slice(0, 16).replace("T", " ") : "—");
 
@@ -30,6 +31,45 @@ export function submissionToastMessage(
   if (previous === "none") return "报告已提交，等待教师评阅";
   if (previous === "graded") return "已重新提交，等待教师重新评阅";
   return "报告已提交，仍在等待教师评阅";
+}
+
+export function submissionActionState(
+  state: MySubmission["state"],
+  status: AsyncStatus,
+  submitting: boolean,
+  generating: boolean,
+): { disabled: boolean; label: string } {
+  if (submitting) return { disabled: true, label: "提交中…" };
+  if (generating) return { disabled: true, label: "正在生成新报告…" };
+  if (status === "loading" || status === "idle") return { disabled: true, label: "正在恢复提交状态…" };
+  if (status === "error") return { disabled: true, label: "提交状态不可用" };
+  return { disabled: false, label: state === "none" ? "提交报告给老师" : "重新提交" };
+}
+
+export function reportActionLabel({
+  sessionStatus,
+  sessionUnsynced,
+  sessionSyncing,
+  gateError,
+  blocked,
+  generating,
+  hasReport,
+}: {
+  sessionStatus: SessionStatus;
+  sessionUnsynced: boolean;
+  sessionSyncing: boolean;
+  gateError: string | null;
+  blocked: ReportGateItem[] | null;
+  generating: boolean;
+  hasReport: boolean;
+}): string {
+  if (sessionStatus === "loading") return "正在恢复实验记录…";
+  if (sessionStatus === "unavailable") return "教学服务不可用";
+  if (sessionUnsynced || sessionSyncing) return "等待最新记录保存…";
+  if (gateError) return "报告条件检查失败";
+  if (blocked === null) return "正在检查生成条件…";
+  if (generating) return "服务端生成中…";
+  return hasReport ? "重新生成报告" : "生成实验报告";
 }
 
 /** 第 16 步:实验报告。
@@ -87,14 +127,26 @@ function GateCard({ blocked, onNavigateStep }: {
   );
 }
 
-function SubmitCard({ report, mine, onSubmitted }: {
+export function ReportGateLoadError({ error, onRetry }: { error: string; onRetry: () => void }) {
+  return (
+    <div className="error-box async-error" role="alert">
+      <span>{error}</span>
+      <button type="button" className="secondary" onClick={onRetry}>重试检查</button>
+    </div>
+  );
+}
+
+function SubmitCard({ report, mine, submissionStatus, generating, onSubmitted }: {
   report: GeneratedReport;
   mine: MySubmission | null;
+  submissionStatus: AsyncStatus;
+  generating: boolean;
   onSubmitted: () => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const state = mine?.state ?? "none";
+  const action = submissionActionState(state, submissionStatus, submitting, generating);
 
   const submit = () => {
     setSubmitting(true);
@@ -117,8 +169,8 @@ function SubmitCard({ report, mine, onSubmitted }: {
   return (
     <section className="submit-card">
       <div className="submit-row">
-        <button className="primary" onClick={submit} disabled={submitting}>
-          {submitting ? "提交中…" : state === "none" ? "提交报告给老师" : "重新提交"}
+        <button className="primary" onClick={submit} disabled={action.disabled}>
+          {action.label}
         </button>
         {state !== "none" && (
           <span className="muted">
@@ -153,17 +205,23 @@ export function ReportLab({
   onFlushSession: () => Promise<void>;
   onNavigateStep: (step: number) => void;
   /** 报告生成后通知外层重取服务端完成度。 */
-  onGenerated: () => void;
+  onGenerated: () => Promise<void>;
 }) {
   const [report, setReport] = useState<GeneratedReport | null>(null);
   const [blocked, setBlocked] = useState<ReportGateItem[] | null>(null);
+  const [gateError, setGateError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [completionRefreshError, setCompletionRefreshError] = useState<string | null>(null);
+  const [refreshingCompletion, setRefreshingCompletion] = useState(false);
   const [rendererReady, setRendererReady] = useState(false);
   const [rendererSettled, setRendererSettled] = useState(false);
-  const [submitRefresh, setSubmitRefresh] = useState(0);
   const [gateRevision, setGateRevision] = useState(0);
-  const mineQuery = useAsync<MySubmission>(() => api.classroom.myReport(), [submitRefresh]);
+  const mineQuery = useAsync<MySubmission>(
+    () => api.classroom.myReport(),
+    [],
+    { keepPreviousData: true },
+  );
   const generatedQuery = useAsync<Partial<GeneratedReport>>(() => api.classroom.generatedReport(), []);
   const mine = mineQuery.data;
 
@@ -188,14 +246,18 @@ export function ReportLab({
 
   useEffect(() => {
     setBlocked(null);
-    if (sessionStatus !== "ready") return;
+    setGateError(null);
+    if (sessionStatus !== "ready" || sessionUnsynced || sessionSyncing) return;
     let live = true;
     api.classroom.reportGate().then((gate) => {
       if (!live) return;
       setBlocked(gate.blocked);
-    }, () => {});
+    }, (cause) => {
+      if (!live) return;
+      setGateError(userFacingRequestError(cause, "检查报告生成条件失败"));
+    });
     return () => { live = false; };
-  }, [completionKey, sessionStatus, gateRevision]);
+  }, [completionKey, sessionStatus, sessionUnsynced, sessionSyncing, gateRevision]);
 
   const reflection = (state.data ?? {}) as ReportReflectionState;
   const saveReflection = (key: typeof REFLECTION_FIELDS[number]["key"], value: string) => {
@@ -218,6 +280,7 @@ export function ReportLab({
   const generate = async () => {
     setGenerating(true);
     setError(null);
+    setCompletionRefreshError(null);
     try {
       // 报告生成前冲刷当前浏览器的防抖保存队列。
       await onFlushSession();
@@ -230,7 +293,14 @@ export function ReportLab({
       const row = await api.classroom.generateReport();
       setReport(row);
       setBlocked([]);
-      onGenerated();
+      setRefreshingCompletion(true);
+      try {
+        await onGenerated();
+      } catch (cause) {
+        setCompletionRefreshError(userFacingRequestError(cause, "报告已生成，但完成进度刷新失败"));
+      } finally {
+        setRefreshingCompletion(false);
+      }
     } catch (cause) {
       const apiError = cause as Error & { blocked?: ReportGateItem[] };
       // 门槛未过:服务端会告诉学生还差什么,原样展示,不在前端另编一套判断。
@@ -243,7 +313,7 @@ export function ReportLab({
 
   const canGenerate = reportGenerationReady(sessionStatus, blocked, sessionUnsynced, sessionSyncing);
   const restoringReport = generatedQuery.status === "loading"
-    || (mineQuery.status === "loading" && submitRefresh === 0)
+    || (mineQuery.status === "loading" && mine === null)
     || !rendererSettled;
 
   return (
@@ -266,6 +336,7 @@ export function ReportLab({
                   rows={field.key === "research_question" ? 2 : 4}
                   maxLength={REFLECTION_MAX_LENGTH}
                   placeholder={field.prompt}
+                  disabled={generating}
                   onChange={(event) => saveReflection(field.key, event.target.value)}
                   onBlur={refreshGateAfterSave}
                 />
@@ -276,6 +347,9 @@ export function ReportLab({
       </section>
 
       {blocked != null && blocked.length > 0 && <GateCard blocked={blocked} onNavigateStep={onNavigateStep} />}
+      {gateError && (
+        <ReportGateLoadError error={gateError} onRetry={() => setGateRevision((value) => value + 1)} />
+      )}
 
       {sessionStatus !== "ready" && (
         <div className={sessionStatus === "unavailable" ? "error-box" : "muted"} role="status">
@@ -305,13 +379,15 @@ export function ReportLab({
 
       <section className="report-actions">
         <button className="run-btn" onClick={() => { void generate(); }} disabled={generating || !canGenerate}>
-          {sessionStatus === "loading"
-            ? "正在恢复实验记录…"
-            : sessionStatus === "unavailable"
-              ? "教学服务不可用"
-              : sessionUnsynced
-            ? "等待最新记录保存…"
-            : generating ? "服务端生成中…" : report ? "重新生成报告" : "生成实验报告"}
+          {reportActionLabel({
+            sessionStatus,
+            sessionUnsynced,
+            sessionSyncing,
+            gateError,
+            blocked,
+            generating,
+            hasReport: Boolean(report),
+          })}
         </button>
         <button
           className="secondary"
@@ -332,6 +408,25 @@ export function ReportLab({
       </section>
 
       {error && <div className="error-box">{error}</div>}
+      {completionRefreshError && (
+        <div className="error-box async-error" role="alert">
+          <span>{completionRefreshError}</span>
+          <button
+            type="button"
+            className="secondary"
+            disabled={refreshingCompletion}
+            onClick={() => {
+              setRefreshingCompletion(true);
+              void onGenerated().then(
+                () => setCompletionRefreshError(null),
+                (cause) => setCompletionRefreshError(userFacingRequestError(cause, "刷新完成进度失败")),
+              ).finally(() => setRefreshingCompletion(false));
+            }}
+          >
+            {refreshingCompletion ? "正在刷新…" : "重试刷新完成状态"}
+          </button>
+        </div>
+      )}
       {generatedQuery.status === "error" && (
         <div className="error-box async-error" role="alert">
           <span>恢复已生成报告失败：{generatedQuery.error}</span>
@@ -354,7 +449,13 @@ export function ReportLab({
         </div>
       ) : report ? (
         <>
-          <SubmitCard report={report} mine={mine ?? null} onSubmitted={() => setSubmitRefresh((n) => n + 1)} />
+          <SubmitCard
+            report={report}
+            mine={mine ?? null}
+            submissionStatus={mineQuery.status}
+            generating={generating}
+            onSubmitted={mineQuery.retry}
+          />
           <div className="report-body">
             <ReportMarkdown markdown={report.markdown} />
           </div>

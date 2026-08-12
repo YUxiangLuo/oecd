@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { beginAccountMetaLoad } from "./account-meta";
 import {
   clearAuthentication,
+  clearAuthenticationIfCurrent,
+  isExternalAuthenticationChange,
   readAuthExpiry,
   stepFromSearch,
   storeAuthentication,
@@ -15,7 +17,7 @@ import {
   historyForAccount,
   updateHistoryForAccount,
 } from "./account-regression-history";
-import { AUTH_TOKEN_KEY, api } from "./api";
+import { AUTH_TOKEN_KEY, api, getActiveAuthToken, setActiveAuthToken } from "./api";
 import {
   DEFAULT_REGRESSION_SETTINGS,
   SIGNATURE_SETTINGS,
@@ -126,10 +128,8 @@ export default function App() {
     syncNow: () => { void session.syncNow().catch(() => {}); },
   };
 
-  // 退出登录:只清认证与界面状态。刻意**不**清实验会话——
-  // 学生重新登录后必须能拿回自己的实验,这正是会话存在的意义。
-  const logout = useCallback(() => {
-    clearAuthentication(localStorage);
+  // 清理当前标签的账号界面。数据库中的实验会话不受影响，重新登录仍可恢复。
+  const resetAuthenticatedUi = useCallback(() => {
     setAuthExpiresAt(null);
     setUser(null);
     setStepsData(null);
@@ -154,6 +154,19 @@ export default function App() {
     window.history.replaceState(null, "", urlWithoutStep(window.location.href));
   }, []);
 
+  const logout = useCallback(() => {
+    setActiveAuthToken(null);
+    clearAuthentication(localStorage);
+    resetAuthenticatedUi();
+  }, [resetAuthenticatedUi]);
+
+  const invalidateAuthentication = useCallback((notice: string) => {
+    setActiveAuthToken(null);
+    setAuthNotice(notice);
+    resetAuthenticatedUi();
+    setAuthChecked(true);
+  }, [resetAuthenticatedUi]);
+
   const passwordChanged = useCallback(() => {
     setAuthNotice("密码已修改。请使用新密码重新登录。");
     setShowPasswordChange(false);
@@ -176,20 +189,35 @@ export default function App() {
   useEffect(() => {
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (!token) { setAuthChecked(true); return; }
-    api.me(token).then(
-      (u) => { setUser(u); setAuthChecked(true); },
-      () => {
-        clearAuthentication(localStorage);
-        setAuthExpiresAt(null);
-        setAuthChecked(true);
+    setActiveAuthToken(token);
+    void api.me(token).then(
+      (verifiedUser) => {
+        if (getActiveAuthToken() === token) setUser(verifiedUser);
       },
-    );
+      () => {
+        // 401 会先由 api.ts 清空 active token；其它失败只清理仍属于本次启动的登录。
+        if (getActiveAuthToken() !== token) return;
+        setActiveAuthToken(null);
+        clearAuthenticationIfCurrent(localStorage, token);
+        setAuthExpiresAt(null);
+      },
+    ).finally(() => setAuthChecked(true));
   }, []);
 
   useEffect(() => {
-    window.addEventListener("gvcsim-auth-expired", logout);
-    return () => window.removeEventListener("gvcsim-auth-expired", logout);
-  }, [logout]);
+    const authExpired = () => invalidateAuthentication("登录已过期，请重新登录。");
+    const authStorageChanged = (event: StorageEvent) => {
+      if (isExternalAuthenticationChange(event.key, event.newValue, getActiveAuthToken())) {
+        invalidateAuthentication("另一个标签页已切换账号，请重新登录以继续使用此页面。");
+      }
+    };
+    window.addEventListener("gvcsim-auth-expired", authExpired);
+    window.addEventListener("storage", authStorageChanged);
+    return () => {
+      window.removeEventListener("gvcsim-auth-expired", authExpired);
+      window.removeEventListener("storage", authStorageChanged);
+    };
+  }, [invalidateAuthentication]);
 
   const accountId = user?.account_id ?? null;
   const accountRole = user?.role ?? null;
@@ -300,6 +328,7 @@ export default function App() {
     return (
       <LoginPage notice={authNotice} onLogin={(r) => {
         storeAuthentication(localStorage, r.token, r.expires_at);
+        setActiveAuthToken(r.token);
         setAuthExpiresAt(r.expires_at);
         setAuthNotice(null);
         setUser(r.user);

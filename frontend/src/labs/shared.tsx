@@ -30,14 +30,21 @@ export type AsyncResult<T> = {
 export function useAsync<T>(
   fn: () => Promise<T>,
   deps: unknown[],
-  options: { enabled?: boolean } = {},
+  options: { enabled?: boolean; keepPreviousData?: boolean } = {},
 ): AsyncResult<T> {
   const enabled = options.enabled ?? true;
+  const keepPreviousData = options.keepPreviousData ?? false;
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<AsyncStatus>(enabled ? "loading" : "idle");
   const [revision, setRevision] = useState(0);
-  const retry = useCallback(() => setRevision((value) => value + 1), []);
+  const retry = useCallback(() => {
+    if (enabled) {
+      setError(null);
+      setStatus("loading");
+    }
+    setRevision((value) => value + 1);
+  }, [enabled]);
   useEffect(() => {
     if (!enabled) {
       setData(null);
@@ -46,7 +53,7 @@ export function useAsync<T>(
       return;
     }
     let live = true;
-    setData(null);
+    if (!keepPreviousData) setData(null);
     setError(null);
     setStatus("loading");
     fn().then(
@@ -65,7 +72,7 @@ export function useAsync<T>(
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, enabled, revision]);
+  }, [...deps, enabled, keepPreviousData, revision]);
   return { data, error, status, retry };
 }
 

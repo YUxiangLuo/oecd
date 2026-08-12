@@ -145,7 +145,10 @@ def test_removed_endpoints_are_not_available(teaching_db):
 
 def test_invalid_session_version_is_rejected(teaching_db):
     client = _client(teaching_db)
-    response = client.put("/api/classroom/session", json={"session": {"version": "old", "steps": {}, "shared": {}}})
+    response = client.put(
+        "/api/classroom/session",
+        json={"session": {"version": "old", "steps": {}, "shared": {}}},
+    )
     assert response.status_code == 422
     assert SESSION_VERSION in response.json()["detail"]
 

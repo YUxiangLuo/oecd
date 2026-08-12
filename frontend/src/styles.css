@@ -333,7 +333,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .shock-only-hit { display: inline-flex; align-items: center; gap: 5px; color: #596173 !important; }
 .shock-panel-summary {
   display: flex; align-items: center; flex-wrap: wrap; gap: 7px 14px; margin-bottom: 10px;
-  padding: 9px 12px; border-radius: 10px; background: #f5f6fa; color: #6d7484; font-size: 11.5px;
+  padding: 9px 12px; border-radius: 10px; background: #f5f6fa; color: var(--text-muted); font-size: 11.5px;
 }
 .shock-panel-summary strong { color: #303647; }
 .shock-panel-state {
@@ -358,8 +358,8 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 }
 /* 提示类状态垂直居中,让预留出来的空间看起来是刻意的,而不是布局塌了。 */
 .shock-panel-body > .shock-panel-state, .shock-panel-body > .error-box { margin: auto 0; }
-/* 重取期间旧表留在原位淡化(stale-while-revalidate),不闪成空白。 */
-.shock-panel-body.refreshing { opacity: .5; }
+/* 重取期间旧表留在原位并用顶部状态线提示(stale-while-revalidate),不闪成空白。 */
+.shock-panel-body.refreshing { box-shadow: inset 0 3px 0 #8b88df; }
 /* 表头在内部滚动时固定,否则滚下去就不知道哪列是哪列。
    border-collapse:collapse 下 sticky 的 border-bottom 会丢,用 inset 阴影补出分隔线。 */
 .shock-panel-body .shock-panel-table thead th {

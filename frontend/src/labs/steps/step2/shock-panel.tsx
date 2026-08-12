@@ -48,6 +48,11 @@ export function ShockPanel({
   const shownSummary = useLastNonNull(summaryError ? null : summary);
   const shownPanel = useLastNonNull(panelError ? null : panel);
   const refreshing = (panel == null && panelError == null) || (summary == null && summaryError == null);
+  const refreshAnnouncement = refreshing
+    ? "正在刷新冲击面板"
+    : panelError || summaryError
+      ? "冲击面板刷新失败"
+      : "冲击面板已更新";
   const summaryYear = shownSummary?.years.find((row) => row.year === filters.year);
   const pages = shownPanel ? Math.max(1, Math.ceil(shownPanel.total / shownPanel.page_size)) : 1;
 
@@ -116,8 +121,11 @@ export function ShockPanel({
         </div>
       )}
 
+      <span className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {refreshAnnouncement}
+      </span>
       {/* 定高区:行数在 1~25 之间跳变(每页 25 条),不锁高度整页会随联动上下弹。 */}
-      <div className={`shock-panel-body${refreshing ? " refreshing" : ""}`}>
+      <div className={`shock-panel-body${refreshing ? " refreshing" : ""}`} aria-busy={refreshing}>
       {panelError ? <div className="error-box">冲击面板读取失败：{panelError}</div> : !shownPanel ? (
         <div className="shock-panel-state">正在按当前条件读取冲击面板…</div>
       ) : shownPanel.rows.length === 0 ? (

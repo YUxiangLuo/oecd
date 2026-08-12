@@ -79,4 +79,103 @@ describe("session hook helpers", () => {
     expect(syncing).toBe(false);
     expect(savedVersions).toHaveLength(1);
   });
+
+  test("reactivating an account serializes fresh work after its old in-flight save", async () => {
+    const saves: Array<{ question: string; request: ReturnType<typeof deferred<SessionResponse>> }> = [];
+    const accepted: string[] = [];
+    const queue = new AccountSessionSaveQueue(
+      (session) => {
+        const request = deferred<SessionResponse>();
+        saves.push({
+          question: String(readStep<Record<string, unknown>>(session, 16)?.research_question),
+          request,
+        });
+        return request.promise;
+      },
+      {
+        onSaved: (response) => accepted.push(
+          String(readStep<Record<string, unknown>>(response.session, 16)?.research_question),
+        ),
+        onError: () => {},
+        onSyncing: () => {},
+        onUnsynced: () => {},
+      },
+    );
+
+    const oldSession = patchSessionStep(emptySession(), 16, { research_question: "old" });
+    queue.activate("student-a");
+    queue.enqueue(oldSession);
+    const oldSave = queue.drain("student-a");
+
+    queue.activate(null);
+    queue.activate("student-a");
+    const freshSession = patchSessionStep(emptySession(), 16, { research_question: "fresh" });
+    queue.enqueue(freshSession);
+    const freshSave = queue.drain("student-a");
+    expect(saves.map((save) => save.question)).toEqual(["old"]);
+
+    saves[0].request.resolve({
+      session: oldSession,
+      completion: { completed: [], completed_count: 0, total: 16, steps: [] },
+      updated_at: null,
+    });
+    await oldSave;
+    await Promise.resolve();
+    expect(saves.map((save) => save.question)).toEqual(["old", "fresh"]);
+
+    saves[1].request.resolve({
+      session: freshSession,
+      completion: { completed: [], completed_count: 0, total: 16, steps: [] },
+      updated_at: null,
+    });
+    await freshSave;
+    expect(accepted).toEqual(["fresh"]);
+  });
+
+  test("an empty drain cannot block a later save", async () => {
+    const savedSteps: number[] = [];
+    const queue = new AccountSessionSaveQueue(
+      async (session) => {
+        savedSteps.push(Object.keys(session.steps).length);
+        return {
+          session,
+          completion: { completed: [], completed_count: 0, total: 16, steps: [] },
+          updated_at: null,
+        };
+      },
+      { onSaved: () => {}, onError: () => {}, onSyncing: () => {}, onUnsynced: () => {} },
+    );
+
+    queue.activate("student-a");
+    await queue.drain("student-a"); // step 16 blur can flush an already empty queue
+    queue.enqueue(patchSessionStep(emptySession(), 16, { research_question: "first" }));
+    await queue.drain("student-a");
+    await queue.drain("student-a"); // another empty blur after the first save
+    queue.enqueue(patchSessionStep(emptySession(), 16, { evidence_interpretation: "second" }));
+    await queue.drain("student-a");
+
+    expect(savedSteps).toEqual([1, 1]);
+  });
+
+  test("reactivating the same account preserves and drains its pending edit", async () => {
+    const savedQuestions: string[] = [];
+    const queue = new AccountSessionSaveQueue(
+      async (session) => {
+        savedQuestions.push(String(readStep<Record<string, unknown>>(session, 16)?.research_question));
+        return {
+          session,
+          completion: { completed: [], completed_count: 0, total: 16, steps: [] },
+          updated_at: null,
+        };
+      },
+      { onSaved: () => {}, onError: () => {}, onSyncing: () => {}, onUnsynced: () => {} },
+    );
+
+    queue.activate("student-a");
+    queue.enqueue(patchSessionStep(emptySession(), 16, { research_question: "keep this edit" }));
+    queue.activate("student-a");
+    await queue.drain("student-a");
+
+    expect(savedQuestions).toEqual(["keep this edit"]);
+  });
 });

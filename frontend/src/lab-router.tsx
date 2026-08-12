@@ -18,8 +18,8 @@ interface LabRouterProps {
   sessionSyncing: boolean;
   sessionSyncError: string | null;
   onFlushSession: () => Promise<void>;
-  /** 服务端改写会话后（如生成报告写入第 16 步完成记录）重新装载完成度。 */
-  onSessionChanged: () => void;
+  /** 服务端状态变化后（如生成报告）重新装载完成度。 */
+  onCompletionChanged: () => Promise<void>;
   regressionSettings: RegressionSettings;
   onRegressionSettingsChange: (settings: RegressionSettings) => void;
   regressionHistory: RegressionHistory;
@@ -38,7 +38,7 @@ export function LabRouter({
   sessionSyncing,
   sessionSyncError,
   onFlushSession,
-  onSessionChanged,
+  onCompletionChanged,
   regressionSettings,
   onRegressionSettingsChange,
   regressionHistory,
@@ -76,7 +76,7 @@ export function LabRouter({
         sessionSyncError={sessionSyncError}
         onFlushSession={onFlushSession}
         onNavigateStep={onNavigateStep}
-        onGenerated={onSessionChanged}
+        onGenerated={onCompletionChanged}
       />
     );
   }

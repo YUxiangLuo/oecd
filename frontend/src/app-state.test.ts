@@ -3,6 +3,8 @@ import { AUTH_TOKEN_KEY } from "./api";
 import {
   AUTH_EXPIRES_KEY,
   clearAuthentication,
+  clearAuthenticationIfCurrent,
+  isExternalAuthenticationChange,
   readAuthExpiry,
   stepFromSearch,
   storeAuthentication,
@@ -45,6 +47,26 @@ describe("application authentication storage", () => {
     clearAuthentication(storage);
     expect(storage.getItem(AUTH_TOKEN_KEY)).toBeNull();
     expect(storage.getItem(AUTH_EXPIRES_KEY)).toBeNull();
+    expect(readAuthExpiry(storage)).toBeNull();
+  });
+
+  test("only a changed token invalidates another mounted tab", () => {
+    expect(isExternalAuthenticationChange(AUTH_TOKEN_KEY, "token-b", "token-a")).toBe(true);
+    expect(isExternalAuthenticationChange(AUTH_TOKEN_KEY, null, "token-a")).toBe(true);
+    expect(isExternalAuthenticationChange(AUTH_TOKEN_KEY, "token-a", "token-a")).toBe(false);
+    expect(isExternalAuthenticationChange(AUTH_EXPIRES_KEY, "123", "token-a")).toBe(false);
+  });
+
+  test("a delayed failure cannot clear a newer tab's login", () => {
+    const storage = new MemoryStorage();
+    storeAuthentication(storage, "token-b", 23456);
+
+    expect(clearAuthenticationIfCurrent(storage, "token-a")).toBe(false);
+    expect(storage.getItem(AUTH_TOKEN_KEY)).toBe("token-b");
+    expect(readAuthExpiry(storage)).toBe(23456);
+
+    expect(clearAuthenticationIfCurrent(storage, "token-b")).toBe(true);
+    expect(storage.getItem(AUTH_TOKEN_KEY)).toBeNull();
     expect(readAuthExpiry(storage)).toBeNull();
   });
 

@@ -19,7 +19,7 @@ export interface SessionApi {
   updateShared: <T>(key: SharedSessionKey, apply: (current: T | undefined) => T) => void;
   syncNow: () => Promise<void>;
   reset: () => Promise<void>;
-  reload: () => void;
+  refreshCompletion: () => Promise<void>;
 }
 
 interface SessionIdentity { username: string; accountId?: string | number | null }
@@ -32,15 +32,21 @@ interface SaveQueueCallbacks {
 }
 
 interface SaveOperation {
-  identity: string;
+  epoch: number;
   promise: Promise<void>;
 }
 
-/** One last-write-wins save queue whose in-flight operation is scoped to an account. */
+interface PendingSave {
+  epoch: number;
+  session: ExperimentSession;
+}
+
+/** Last-write-wins within one login cycle; writes for the same account stay serialized across cycles. */
 export class AccountSessionSaveQueue {
   private activeIdentity: string | null = null;
-  private pending: ExperimentSession | null = null;
-  private saving: SaveOperation | null = null;
+  private activeEpoch = 0;
+  private pending: PendingSave | null = null;
+  private saving = new Map<string, SaveOperation>();
 
   constructor(
     private readonly save: (session: ExperimentSession) => Promise<SessionResponse>,
@@ -50,18 +56,17 @@ export class AccountSessionSaveQueue {
   activate(identity: string | null) {
     const identityChanged = this.activeIdentity !== identity;
     this.activeIdentity = identity;
-    this.pending = null;
     if (identityChanged) {
-      // The old request may still finish, but it no longer owns the active account's queue.
-      this.saving = null;
+      this.activeEpoch += 1;
+      this.pending = null;
       this.callbacks.onSyncing(false);
+      this.callbacks.onUnsynced(false);
     }
-    this.callbacks.onUnsynced(false);
   }
 
   enqueue(session: ExperimentSession) {
     if (this.activeIdentity === null) return;
-    this.pending = session;
+    this.pending = { epoch: this.activeEpoch, session };
     this.callbacks.onUnsynced(true);
   }
 
@@ -70,37 +75,60 @@ export class AccountSessionSaveQueue {
     this.callbacks.onUnsynced(false);
   }
 
+  /** Session restoration must observe any save started by an earlier login of this account. */
+  waitForIdentity(identity: string): Promise<void> {
+    return this.saving.get(identity)?.promise.catch(() => {}) ?? Promise.resolve();
+  }
+
   drain(requestedIdentity: string | null = this.activeIdentity): Promise<void> {
     if (requestedIdentity === null || this.activeIdentity !== requestedIdentity) return Promise.resolve();
-    if (this.saving?.identity === requestedIdentity) return this.saving.promise;
+    const requestedEpoch = this.activeEpoch;
+    const existing = this.saving.get(requestedIdentity);
+    if (existing?.epoch === requestedEpoch) return existing.promise;
+    if (existing) {
+      // A -> logout -> A: do not let the new login's PUT overtake the old PUT.
+      return existing.promise.catch(() => {}).then(() => this.drain(requestedIdentity));
+    }
+    if (this.pending === null) {
+      this.callbacks.onUnsynced(false);
+      return Promise.resolve();
+    }
 
     let run!: Promise<void>;
+    // 空队列 drain 已走上面的快速路径；有待保存内容时第一次 await 会让出执行权，
+    // this.saving 会在请求完成前登记并由 finally 正常清理。
     run = (async () => {
-      this.callbacks.onSyncing(true);
+      if (this.activeIdentity === requestedIdentity && this.activeEpoch === requestedEpoch) {
+        this.callbacks.onSyncing(true);
+      }
       try {
-        while (this.pending && this.activeIdentity === requestedIdentity) {
-          const next = this.pending;
+        while (
+          this.pending?.epoch === requestedEpoch
+          && this.activeIdentity === requestedIdentity
+          && this.activeEpoch === requestedEpoch
+        ) {
+          const next = this.pending.session;
           this.pending = null;
           try {
             const response = await this.save(next);
-            if (this.activeIdentity !== requestedIdentity) return;
+            if (this.activeIdentity !== requestedIdentity || this.activeEpoch !== requestedEpoch) return;
             this.callbacks.onSaved(response);
           } catch (cause) {
-            if (this.activeIdentity !== requestedIdentity) return;
-            this.pending ??= next;
+            if (this.activeIdentity !== requestedIdentity || this.activeEpoch !== requestedEpoch) return;
+            this.pending ??= { epoch: requestedEpoch, session: next };
             this.callbacks.onError(cause);
             throw cause;
           }
         }
       } finally {
-        if (this.activeIdentity === requestedIdentity) {
+        if (this.activeIdentity === requestedIdentity && this.activeEpoch === requestedEpoch) {
           this.callbacks.onSyncing(false);
           this.callbacks.onUnsynced(Boolean(this.pending));
         }
-        if (this.saving?.promise === run) this.saving = null;
+        if (this.saving.get(requestedIdentity)?.promise === run) this.saving.delete(requestedIdentity);
       }
     })();
-    this.saving = { identity: requestedIdentity, promise: run };
+    this.saving.set(requestedIdentity, { epoch: requestedEpoch, promise: run });
     return run;
   }
 }
@@ -122,7 +150,6 @@ export function useSession(identity: SessionIdentity | null): SessionApi {
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [unsynced, setUnsynced] = useState(false);
-  const [reloadToken, setReloadToken] = useState(0);
   const timer = useRef<number | null>(null);
   const activeIdentity = useRef(identityKey);
   const saveQueue = useRef<AccountSessionSaveQueue | null>(null);
@@ -157,20 +184,24 @@ export function useSession(identity: SessionIdentity | null): SessionApi {
     setStatus(identityKey ? "loading" : "unavailable");
     if (!identityKey) return;
     const requestedIdentity = identityKey;
-    api.classroom.session().then(
-      (response) => {
-        if (activeIdentity.current !== requestedIdentity) return;
+    let live = true;
+    void (async () => {
+      await saveQueue.current?.waitForIdentity(requestedIdentity);
+      if (!live || activeIdentity.current !== requestedIdentity) return;
+      try {
+        const response = await api.classroom.session();
+        if (!live || activeIdentity.current !== requestedIdentity) return;
         replace(response.session);
         setCompletion(response.completion);
         setStatus("ready");
-      },
-      (cause) => {
-        if (activeIdentity.current !== requestedIdentity) return;
+      } catch (cause) {
+        if (!live || activeIdentity.current !== requestedIdentity) return;
         setSyncError(cause instanceof Error ? cause.message : String(cause));
         setStatus("unavailable");
-      },
-    );
-  }, [identityKey, reloadToken, replace]);
+      }
+    })();
+    return () => { live = false; };
+  }, [identityKey, replace]);
 
   const drain = useCallback(async () => {
     if (!identityKey || activeIdentity.current !== identityKey) return;
@@ -205,12 +236,23 @@ export function useSession(identity: SessionIdentity | null): SessionApi {
     window.location.reload();
   }, [drain, identityKey, replace]);
 
+  const refreshCompletion = useCallback(async () => {
+    if (!identityKey || activeIdentity.current !== identityKey) return;
+    // 服务端生成报告只会改变完成度，不改写学生 session。先保存最新编辑，
+    // 再只刷新 completion，避免用服务端旧快照覆盖浏览器内的新内容。
+    await drain();
+    const response = await api.classroom.session();
+    if (activeIdentity.current !== identityKey) return;
+    setCompletion(response.completion);
+    setSyncError(null);
+  }, [drain, identityKey]);
+
   return {
     status, session, syncing, syncError, unsynced, completion,
     getStep: useCallback(<T,>(step: number) => readStep<T>(session, step), [session]),
     patchStep: useCallback(<T extends object,>(step: number, patch: Partial<T>) => update((value) => patchStoredStep(value, step, patch)), [update]),
     getShared: useCallback(<T,>(key: SharedSessionKey) => readShared<T>(session, key), [session]),
     updateShared: useCallback(<T,>(key: SharedSessionKey, apply: (current: T | undefined) => T) => update((value) => updateSessionShared(value, key, apply)), [update]),
-    syncNow, reset, reload: useCallback(() => setReloadToken((value) => value + 1), []),
+    syncNow, reset, refreshCompletion,
   };
 }

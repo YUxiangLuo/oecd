@@ -2,6 +2,21 @@ import type { ExperimentSession, GeneratedReport, ProgressResponse, ReportGate, 
 
 export const AUTH_TOKEN_KEY = "gvcsim_token";
 
+// localStorage 只负责跨刷新恢复认证。每个已挂载标签页必须继续使用自己校验过的
+// token；否则另一个标签登录新账号后，旧页面会把自己的 React 状态写给新账号。
+let activeAuthToken: string | null | undefined;
+
+export function setActiveAuthToken(token: string | null): void {
+  activeAuthToken = token;
+}
+
+export function getActiveAuthToken(): string | null {
+  if (activeAuthToken === undefined) {
+    activeAuthToken = globalThis.localStorage?.getItem(AUTH_TOKEN_KEY) ?? null;
+  }
+  return activeAuthToken;
+}
+
 class ApiError extends Error {
   status: number;
   /** 结构化 detail(如第 16 步门槛的 blocked 列表);普通字符串 detail 时为 undefined。 */
@@ -35,8 +50,12 @@ export function shouldExpireAuth(requestToken: string | null, currentToken: stri
 }
 
 function notifyAuthExpired(requestToken: string | null) {
-  if (!shouldExpireAuth(requestToken, localStorage.getItem(AUTH_TOKEN_KEY))) return;
-  localStorage.removeItem(AUTH_TOKEN_KEY);
+  if (!shouldExpireAuth(requestToken, getActiveAuthToken())) return;
+  setActiveAuthToken(null);
+  // 延迟返回的旧请求不能删除另一个标签刚写入的新 token。
+  if (requestToken === localStorage.getItem(AUTH_TOKEN_KEY)) {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+  }
   window.dispatchEvent(new Event("gvcsim-auth-expired"));
 }
 
@@ -45,68 +64,36 @@ function authHeaders(token: string | null, extra?: HeadersInit): HeadersInit {
 }
 
 const GET_TIMEOUT_MS = 10_000;
-interface PendingGet {
-  promise: Promise<unknown>;
-}
-const pendingGets = new Map<string, PendingGet>();
-
-function pendingGetPrefix(requestToken: string | null): string {
-  return `${requestToken ?? "anonymous"}\n`;
-}
-
-/** A successful mutation is a freshness boundary for every pending GET in the same auth scope. */
-function invalidatePendingGets(requestToken: string | null) {
-  const prefix = pendingGetPrefix(requestToken);
-  for (const key of pendingGets.keys()) {
-    if (key.startsWith(prefix)) pendingGets.delete(key);
+async function getWithToken<T>(url: string, requestToken: string | null, fallback?: string): Promise<T> {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), GET_TIMEOUT_MS);
+  try {
+    const resp = await fetch(url, {
+      headers: authHeaders(requestToken),
+      signal: controller.signal,
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => null);
+      if (resp.status === 401) notifyAuthExpired(requestToken);
+      throw new ApiError(resp.status, body?.detail, fallback ?? `${resp.status} ${resp.statusText}`);
+    }
+    return await resp.json() as T;
+  } catch (cause) {
+    if (controller.signal.aborted) {
+      throw new Error(`请求超时（${GET_TIMEOUT_MS / 1000} 秒）：${url}`);
+    }
+    throw cause;
+  } finally {
+    globalThis.clearTimeout(timeout);
   }
 }
 
-function getWithToken<T>(url: string, requestToken: string | null, fallback?: string): Promise<T> {
-  const key = `${pendingGetPrefix(requestToken)}${url}`;
-  const pending = pendingGets.get(key);
-  if (pending) return pending.promise as Promise<T>;
-
-  const controller = new AbortController();
-  const timeout = globalThis.setTimeout(() => controller.abort(), GET_TIMEOUT_MS);
-  const baseRequest = (async () => {
-    try {
-      const resp = await fetch(url, {
-        headers: authHeaders(requestToken),
-        signal: controller.signal,
-      });
-      if (!resp.ok) {
-        const body = await resp.json().catch(() => null);
-        if (resp.status === 401) notifyAuthExpired(requestToken);
-        throw new ApiError(resp.status, body?.detail, fallback ?? `${resp.status} ${resp.statusText}`);
-      }
-      return await resp.json() as T;
-    } catch (cause) {
-      if (controller.signal.aborted) {
-        throw new Error(`请求超时（${GET_TIMEOUT_MS / 1000} 秒）：${url}`);
-      }
-      throw cause;
-    } finally {
-      globalThis.clearTimeout(timeout);
-    }
-  })();
-  const entry: PendingGet = { promise: baseRequest };
-  const request = baseRequest.finally(() => {
-    // A mutation may have invalidated this request and a fresh GET may already occupy
-    // the same key. The older request must not evict that newer coalescing entry.
-    if (pendingGets.get(key) === entry) pendingGets.delete(key);
-  });
-  entry.promise = request;
-  pendingGets.set(key, entry);
-  return request;
-}
-
 function get<T>(url: string): Promise<T> {
-  return getWithToken<T>(url, localStorage.getItem(AUTH_TOKEN_KEY));
+  return getWithToken<T>(url, getActiveAuthToken());
 }
 
 async function post<T>(url: string, body?: unknown, method = "POST"): Promise<T> {
-  const requestToken = localStorage.getItem(AUTH_TOKEN_KEY);
+  const requestToken = getActiveAuthToken();
   const resp = await fetch(url, {
     method,
     headers: authHeaders(requestToken, { "Content-Type": "application/json" }),
@@ -117,9 +104,6 @@ async function post<T>(url: string, body?: unknown, method = "POST"): Promise<T>
     if (resp.status === 401) notifyAuthExpired(requestToken);
     throw new ApiError(resp.status, payload?.detail, `${resp.status} ${resp.statusText}`);
   }
-  // Refreshes triggered after the awaited mutation must never reuse a GET that
-  // started against pre-mutation state.
-  invalidatePendingGets(requestToken);
   return resp.json();
 }
 

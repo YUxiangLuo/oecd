@@ -1,5 +1,10 @@
 import { describe, expect, it } from "bun:test";
-import { DEFAULT_REGRESSION_SETTINGS, SIGNATURE_SETTINGS, asRegressionSettingsMap } from "./regression";
+import {
+  DEFAULT_REGRESSION_SETTINGS,
+  SIGNATURE_SETTINGS,
+  asRegressionSettingsMap,
+  normalizeRegressionSettings,
+} from "./regression";
 
 describe("SIGNATURE_SETTINGS", () => {
   it("每步的招牌默认对应它要教的实验", () => {
@@ -36,5 +41,25 @@ describe("asRegressionSettingsMap", () => {
     expect(asRegressionSettingsMap(undefined)).toEqual({});
     expect(asRegressionSettingsMap(null)).toEqual({});
     expect(asRegressionSettingsMap("x")).toEqual({});
+  });
+});
+
+describe("normalizeRegressionSettings", () => {
+  it("does not let a hidden contemporaneous weight revive after returning to tariffs", () => {
+    const restored = normalizeRegressionSettings({
+      ...DEFAULT_REGRESSION_SETTINGS,
+      shockType: "sanctions",
+      weightMode: "contemporaneous",
+    });
+    const afterAnotherEdit = normalizeRegressionSettings({ ...restored, method: "event_study" });
+    const backToTariff = normalizeRegressionSettings({ ...afterAnotherEdit, shockType: "tariff" });
+
+    expect(restored.weightMode).toBe("fixed_pretreatment");
+    expect(backToTariff.weightMode).toBe("fixed_pretreatment");
+  });
+
+  it("keeps contemporaneous weights available for tariff robustness checks", () => {
+    const tariff = { ...DEFAULT_REGRESSION_SETTINGS, weightMode: "contemporaneous" };
+    expect(normalizeRegressionSettings(tariff)).toBe(tariff);
   });
 });

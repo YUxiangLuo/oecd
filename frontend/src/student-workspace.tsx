@@ -188,7 +188,7 @@ export function StudentWorkspace({
                     sessionSyncing={session.syncing}
                     sessionSyncError={session.syncError}
                     onFlushSession={session.syncNow}
-                    onSessionChanged={session.reload}
+                    onCompletionChanged={session.refreshCompletion}
                     regressionSettings={regressionSettings}
                     onRegressionSettingsChange={onRegressionSettingsChange}
                     regressionHistory={regressionHistory}

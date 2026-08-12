@@ -14,6 +14,8 @@ const HEAT_COLS = [
 
 const fmtVal = (v: number, fmt: string) => formatMetric(v, fmt === "amount" ? "amount" : "number");
 
+export const heatTextColor = (colorIndex: number) => colorIndex >= 4 ? "#fff" : "#1b1f2b";
+
 export function HeatTableViz({ rows, schema }: { rows: Row[]; schema?: IndicatorSchema | null }) {
   const isIndustry = rows.some((row) => row.industry != null);
   const top = [...rows].sort((a, b) => num(b["betweenesscentrality"]) - num(a["betweenesscentrality"])).slice(0, 15);
@@ -25,7 +27,7 @@ export function HeatTableViz({ rows, schema }: { rows: Row[]; schema?: Indicator
     return (
       <div title={`${rowLabel(r)} · ${schema?.fields[key]?.label ?? key}: ${fmtVal(v, fmt)}`} style={{
         width: 104, padding: "5px 0", borderRadius: 7, textAlign: "center",
-        background: SEQ[idx], color: idx >= 3 ? "#fff" : "#1b1f2b",
+        background: SEQ[idx], color: heatTextColor(idx),
         fontSize: 12, fontVariantNumeric: "tabular-nums",
       }}>{fmtVal(v, fmt)}</div>
     );
