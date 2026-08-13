@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LabeledControl, ScrollableRegion } from "../../a11y";
 import { api } from "../../api";
+import { FullscreenPanel } from "../../fullscreen-panel";
 import type { DbMeta, DbSlice, DbTableKind, QuizCompletionState, StepStateApi } from "../../types";
 import { userFacingRequestError } from "../../user-facing-error";
 import { countryLabel, sectorLabel } from "../../viz";
@@ -168,6 +169,12 @@ export function restoreDbSlice(meta: DbMeta, saved?: DbStepState["slice"]) {
   };
 }
 
+/** 账户项不使用列国家；从已恢复的账户切片切回 Z/Y 时补回一个真实受控值。 */
+export function dbColumnCountryForTable(meta: DbMeta, current: string, nextTable: DbTableKind): string {
+  if (nextTable === "accounts" || meta.countries.includes(current)) return current;
+  return meta.countries.includes("USA") ? "USA" : meta.countries[0] ?? "";
+}
+
 export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
   const { data: meta, error: metaError } = useAsync<DbMeta>(() => api.dbMeta(), []);
   const [table, setTable] = useState<DbTableKind>("z");
@@ -302,6 +309,12 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
 
       <DatabaseGuide meta={meta} />
 
+      <FullscreenPanel
+        title={`步骤 1 · ${activeTable.label}原始数据表`}
+        variant="table"
+        buttonLabel="全屏查看"
+        enabled={table !== "accounts"}
+      >
       <div className="controls">
         <LabeledControl label="年份">
           {(id) => (
@@ -317,6 +330,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
               className={table === item.key ? "on" : ""}
               onClick={() => {
                 setTable(item.key);
+                setColCountry((current) => dbColumnCountryForTable(meta, current, item.key));
                 setColSector("");
                 setPage(1);
                 setPickedSlice(true);
@@ -377,10 +391,10 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
           <button type="button" className="secondary" onClick={retrySlice}>重试</button>
         </div>
       )}
-      <div className="tipbox" style={{ marginBottom: 10 }}>
+      <div className="tipbox db-fullscreen-note" style={{ marginBottom: 10 }}>
         <b>怎么读这张表：</b>{HOW_TO_READ[table]}
       </div>
-      <div className="tipbox" style={{ marginBottom: 10 }}>
+      <div className="tipbox db-fullscreen-note" style={{ marginBottom: 10 }}>
         <b>记录一个观察值：</b>点击任意数值单元格，系统会自动保存它的行、列与数值，并在实验报告中作为可选实验快照展示。
       </div>
       <ScrollableRegion className="table-wrap bounded-data-table" label={`${activeTable.label}数据表，可横向滚动`}>
@@ -474,7 +488,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
         </table>
       </ScrollableRegion>
       {table !== "accounts" && slice && (
-        <div className="tipbox" style={{ marginTop: 12 }}>
+        <div className="tipbox db-fullscreen-note" style={{ marginTop: 12 }}>
           每个数据行同时给出当前切片合计与该国家–行业的 OUT。完整口径下，OUT = Z 行和 + Y 行和；当前切片只是一部分，差额来自未展示的目的国或需求列。
         </div>
       )}
@@ -487,6 +501,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
           <span>{selectedObservation.row} × {selectedObservation.column} = {fmtDb(selectedObservation.value)}</span>
         ) : <span>尚未选择</span>}
       </div>
+      </FullscreenPanel>
     </div>
   );
 }

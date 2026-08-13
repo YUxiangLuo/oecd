@@ -12,6 +12,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LabeledControl } from "../../../a11y";
 import { api } from "../../../api";
+import { FullscreenPanel } from "../../../fullscreen-panel";
 import type { IndustryPage, Meta, NetworkData, Step, StepStateApi } from "../../../types";
 import { HeatTableViz, NetworkViz, countryLabel } from "../../../viz";
 import { AsyncStateMessage, useAsync } from "../../shared";
@@ -32,6 +33,7 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
   );
   const fallbackDrill = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
   const [drill, setDrill] = useState(state.data?.drill ?? state.data?.compared?.at(-1) ?? fallbackDrill);
+  const [heatAutoExpandSignal, setHeatAutoExpandSignal] = useState(0);
   const drillTouched = useRef(Boolean(state.data));
   useEffect(() => {
     if (drillTouched.current || !state.data) return;
@@ -60,6 +62,12 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
     state.save({ drill: c });
   };
   const heatRows = (page?.rows ?? []) as Row[];
+  const changeLens = (next: Lens) => {
+    if (next === "heat" && lens !== "heat") {
+      setHeatAutoExpandSignal((signal) => signal + 1);
+    }
+    pickLens(next);
+  };
 
   useEffect(() => {
     if (!page || !picked.includes(drill)) return;
@@ -108,55 +116,63 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
         </span>
       </div>
 
-      <LensNav<Lens> active={lens as Lens} onPick={pickLens} lenses={STEP10_LENSES} />
+      <LensNav<Lens> active={lens as Lens} onPick={changeLens} lenses={STEP10_LENSES} />
 
-      {lens === "heat" ? (
-        <ChartStory
-          eyebrow="国家×行业枢纽"
-          title={`${countryLabel(drill)} 的行业节点中心性(全球图上计算,按介数前 15)`}
-          what={<>选一个国家,每行 = 它的一个行业节点;各列是不同中心性(加权度 = 流量规模,介数 = 有向最短路经过次数 …)。颜色越深 = 该列内相对越大。</>}
-          read={<>介数高 = 更多有向无权最短路径经过该节点，表示拓扑中介位置突出；它不自动等于流量大或经济瓶颈。加权度高 = 直接吞吐的中间品流量大。</>}
-          find={<>换看两三个国家，对比哪些行业的介数或加权度更突出，并观察两种排序是否一致。</>}
-          note="中心性始终在完整全球国家×行业图上计算；路径类指标把每条正边视为同样长度，下钻只筛选展示行。当前没有边阈值敏感性分析，介数排序仅作拓扑基准。"
-        >
-          <div className="controls" style={{ marginBottom: 12 }}>
-            <LabeledControl label="下钻国家">
-              {(id) => (
-                <select id={id} value={drill} onChange={(e) => changeDrill(e.target.value)}>
-                  {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
-                </select>
-              )}
-            </LabeledControl>
-          </div>
-          {pageQuery.status === "loading" || pageQuery.status === "error" ? (
-            <AsyncStateMessage
-              status={pageQuery.status}
-              error={pageQuery.error}
-              loadingLabel={`加载 ${countryLabel(drill)} 行业网络指标中…`}
-              onRetry={pageQuery.retry}
-            />
-          ) : heatRows.length ? <HeatTableViz rows={heatRows} schema={schema} />
-            : <p className="muted">该国无行业数据。</p>}
-        </ChartStory>
-      ) : (
-        <ChartStory
-          eyebrow="双边贸易网络"
-          title="国家间生产贸易网络(有向,按流量)"
-          what={<>节点 = 经济体,有向边 = 跨国中间品 + 最终品贸易流(不含国内边);点大小 / 边粗细反映流量规模。</>}
-          read={<>悬停一个国家可临时高亮伙伴;点击后进入大图并打开流入、流出伙伴表。箭头方向是"卖给谁"。它用于观察国家间流向；国家图使用跨国中间品 + 最终品且不含国内边，行业中心性图只用中间品并保留正自环，两者不只是粒度不同。</>}
-          find={<>找出中国、美国、德国的区域集群;注意国家层几乎两两相连(接近完全图),这正是无权中心性在国家级退化的原因。</>}
-          note="仅渲染流量最大的若干条边以保证可读；行业中心性计算用完整的中间品图，不受此展示阈值影响。因节点与边定义不同，国家图不是行业中心性图的简单下钻。"
-        >
-          {networkQuery.status === "loading" || networkQuery.status === "error" ? (
-            <AsyncStateMessage
-              status={networkQuery.status}
-              error={networkQuery.error}
-              loadingLabel={`加载 ${year} 年贸易网络中…`}
-              onRetry={networkQuery.retry}
-            />
-          ) : net ? <NetworkViz data={net} /> : <p className="muted">该年份暂无网络数据。</p>}
-        </ChartStory>
-      )}
+      <FullscreenPanel
+        title={`步骤 ${step.n} · ${countryLabel(drill)}行业枢纽热力表`}
+        variant="heat"
+        buttonLabel="全屏查看"
+        enabled={lens === "heat"}
+        autoExpandSignal={heatAutoExpandSignal}
+      >
+        {lens === "heat" ? (
+          <ChartStory
+            eyebrow="国家×行业枢纽"
+            title={`${countryLabel(drill)} 的行业节点中心性(全球图上计算,按介数前 15)`}
+            what={<>选一个国家,每行 = 它的一个行业节点;各列是不同中心性(加权度 = 流量规模,介数 = 有向最短路经过次数 …)。颜色越深 = 该列内相对越大。</>}
+            read={<>介数高 = 更多有向无权最短路径经过该节点，表示拓扑中介位置突出；它不自动等于流量大或经济瓶颈。加权度高 = 直接吞吐的中间品流量大。</>}
+            find={<>换看两三个国家，对比哪些行业的介数或加权度更突出，并观察两种排序是否一致。</>}
+            note="中心性始终在完整全球国家×行业图上计算；路径类指标把每条正边视为同样长度，下钻只筛选展示行。当前没有边阈值敏感性分析，介数排序仅作拓扑基准。"
+          >
+            <div className="controls" style={{ marginBottom: 12 }}>
+              <LabeledControl label="下钻国家">
+                {(id) => (
+                  <select id={id} value={drill} onChange={(e) => changeDrill(e.target.value)}>
+                    {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
+                  </select>
+                )}
+              </LabeledControl>
+            </div>
+            {pageQuery.status === "loading" || pageQuery.status === "error" ? (
+              <AsyncStateMessage
+                status={pageQuery.status}
+                error={pageQuery.error}
+                loadingLabel={`加载 ${countryLabel(drill)} 行业网络指标中…`}
+                onRetry={pageQuery.retry}
+              />
+            ) : heatRows.length ? <HeatTableViz rows={heatRows} schema={schema} />
+              : <p className="muted">该国无行业数据。</p>}
+          </ChartStory>
+        ) : (
+          <ChartStory
+            eyebrow="双边贸易网络"
+            title="国家间生产贸易网络(有向,按流量)"
+            what={<>节点 = 经济体,有向边 = 跨国中间品 + 最终品贸易流(不含国内边);点大小 / 边粗细反映流量规模。</>}
+            read={<>悬停一个国家可临时高亮伙伴;点击后进入大图并打开流入、流出伙伴表。箭头方向是"卖给谁"。它用于观察国家间流向；国家图使用跨国中间品 + 最终品且不含国内边，行业中心性图只用中间品并保留正自环，两者不只是粒度不同。</>}
+            find={<>找出中国、美国、德国的区域集群;注意国家层几乎两两相连(接近完全图),这正是无权中心性在国家级退化的原因。</>}
+            note="仅渲染流量最大的若干条边以保证可读；行业中心性计算用完整的中间品图，不受此展示阈值影响。因节点与边定义不同，国家图不是行业中心性图的简单下钻。"
+          >
+            {networkQuery.status === "loading" || networkQuery.status === "error" ? (
+              <AsyncStateMessage
+                status={networkQuery.status}
+                error={networkQuery.error}
+                loadingLabel={`加载 ${year} 年贸易网络中…`}
+                onRetry={networkQuery.retry}
+              />
+            ) : net ? <NetworkViz data={net} /> : <p className="muted">该年份暂无网络数据。</p>}
+          </ChartStory>
+        )}
+      </FullscreenPanel>
     </div>
   );
 }

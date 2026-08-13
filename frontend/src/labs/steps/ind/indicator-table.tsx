@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
+import { FullscreenPanel } from "../../../fullscreen-panel";
 import type { IndicatorSchema, IndustryPage, Meta, QuizCompletionState, StepStateApi } from "../../../types";
 import { countryLabel, sectorLabel } from "../../../viz";
 import { Pager, fieldLabel, fmtField, useAsync } from "../../shared";
@@ -103,6 +104,7 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
   onPage: (page: number) => void;
 }) {
   const [showAllFields, setShowAllFields] = useState(false);
+  const [autoExpandSignal, setAutoExpandSignal] = useState(0);
   const queryKey = JSON.stringify([year, country, page]);
   const { data: result, error } = useAsync<{ queryKey: string; page: IndustryPage }>(async () => ({
     queryKey,
@@ -156,9 +158,18 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
   const visibleMetrics = showAllFields ? metricCols : metricCols.slice(0, 5);
   const cols = data?.rows[0] ? [...baseCols, ...visibleMetrics] : [];
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
+  const toggleAllFields = () => {
+    if (!showAllFields) setAutoExpandSignal((signal) => signal + 1);
+    setShowAllFields((value) => !value);
+  };
 
   return (
-    <>
+    <FullscreenPanel
+      title={`${group?.label ?? "指标"}数据表`}
+      variant="table"
+      buttonLabel="全屏查看"
+      autoExpandSignal={autoExpandSignal}
+    >
       <div className="controls">
         <LabeledControl label="国家">
           {(id) => (
@@ -188,7 +199,7 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
       {metricCols.length > 5 && (
         <div className="table-priority-tools">
           <span className="muted">默认显示 5 个核心指标，减少横向扫表负担。</span>
-          <button type="button" className="secondary" onClick={() => setShowAllFields((value) => !value)}>
+          <button type="button" className="secondary" onClick={toggleAllFields}>
             {showAllFields ? "收起扩展指标" : `展开 ${metricCols.length - 5} 个扩展指标`}
           </button>
         </div>
@@ -225,6 +236,6 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
         </table>
       </ScrollableRegion>
       <Pager page={page} pages={pages} total={data?.total} onChange={onPage} />
-    </>
+    </FullscreenPanel>
   );
 }

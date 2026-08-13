@@ -81,17 +81,19 @@ export function Step9Production({ meta, step, state }: { meta: Meta; step: Step;
         ]}
       />
 
-      <LensNav<Lens>
-        active={lens as Lens}
-        onPick={pickLens}
-        lenses={[
-          { key: "ladder", label: "GVC 阶梯", hint: "四段生产构成" },
-          { key: "rank", label: "复杂 GVC 排名", hint: "3b / SVA 份额" },
-          { key: "industry", label: "行业下钻", hint: "一国内部各行业差别" },
-        ]}
-      />
-
       <VizWorkbench
+        title={`步骤 ${step.n} · GVC 生产指标可视化`}
+        toolbar={(
+          <LensNav<Lens>
+            active={lens as Lens}
+            onPick={pickLens}
+            lenses={[
+              { key: "ladder", label: "GVC 阶梯", hint: "四段生产构成" },
+              { key: "rank", label: "复杂 GVC 排名", hint: "3b / SVA 份额" },
+              { key: "industry", label: "行业下钻", hint: "一国内部各行业差别" },
+            ]}
+          />
+        )}
         years={meta.years} year={year} onYearChange={setYear}
         countries={meta.countries} picked={picked} onPick={selectCountries}
       >

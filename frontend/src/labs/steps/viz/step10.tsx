@@ -43,17 +43,19 @@ export function Step10Length({ meta, step, state }: { meta: Meta; step: Step; st
         ]}
       />
 
-      <LensNav<Lens>
-        active={lens as Lens}
-        onPick={pickLens}
-        lenses={[
-          { key: "position", label: "上下游定位", hint: "前向 × 后向 GVC 段长" },
-          { key: "bars", label: "链长对比", hint: "前向 PLv vs 后向 PLy" },
-          { key: "rank", label: "GVCPs 排名", hint: "位置指数,>1 更上游" },
-        ]}
-      />
-
       <VizWorkbench
+        title={`步骤 ${step.n} · GVC 长度指标可视化`}
+        toolbar={(
+          <LensNav<Lens>
+            active={lens as Lens}
+            onPick={pickLens}
+            lenses={[
+              { key: "position", label: "上下游定位", hint: "前向 × 后向 GVC 段长" },
+              { key: "bars", label: "链长对比", hint: "前向 PLv vs 后向 PLy" },
+              { key: "rank", label: "GVCPs 排名", hint: "位置指数,>1 更上游" },
+            ]}
+          />
+        )}
         years={meta.years} year={year} onYearChange={setYear}
         countries={meta.countries} picked={picked} onPick={pickCountries}
       >

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api";
+import { FullscreenPanel } from "../../fullscreen-panel";
 import type { Meta, QcCheck, QuizCompletionState, ShockEvent, Step, StepStateApi } from "../../types";
 import { countryLabel, sectorLabel } from "../../viz";
 import { CrosswalkDemo } from "./step2/crosswalk-demo";
@@ -40,7 +41,9 @@ export function ShockLab({ meta, step, state }: {
     page: 1,
   });
   const [selectedEvent, setSelectedEvent] = useState<ShockEvent | null>(null);
+  const [autoExpandSignal, setAutoExpandSignal] = useState(0);
   const eventInteraction = useRef(false);
+  const eventAutoExpanded = useRef(false);
   const { data: eventsResponse, error: eventsError } = useAsync(() => api.shockEvents(), []);
   // 冲击面板的专项质检随冲击一起放在回归前(本步),作为回归前的口径检查。
   const { data: shockChecks, error: shockQcError } = useAsync<QcCheck[]>(() => api.qcShocks(), []);
@@ -70,6 +73,10 @@ export function ShockLab({ meta, step, state }: {
     const viewed = state.data?.viewed_shock_types ?? [];
     const viewedEvents = state.data?.viewed_events ?? [];
     eventInteraction.current = true;
+    if (!eventAutoExpanded.current) {
+      eventAutoExpanded.current = true;
+      setAutoExpandSignal((signal) => signal + 1);
+    }
     state.save({
       viewed_shock_types: type && !viewed.includes(type) ? [...viewed, type] : viewed,
       viewed_events: [...viewedEvents.filter((name) => name !== event.name), event.name],
@@ -109,7 +116,11 @@ export function ShockLab({ meta, step, state }: {
       ) : events.length === 0 ? (
         <div className="shock-panel-state">当前没有可展示的政策事件。</div>
       ) : (
-        <>
+        <FullscreenPanel
+          title="步骤 11 · 政策事件与国家行业冲击联动"
+          variant="shock"
+          autoExpandSignal={autoExpandSignal}
+        >
           {/* 左右联动:左选事件 → 右看冲击。中间这条实时显示"选了谁 → 面板同步成什么",
               并展开该事件的完整档案(原"全部政策事件清单"表的信息收敛到这里)。 */}
           <SelectedEventBar event={selectedEvent} panelDesc={panelDesc} filtersDirty={filtersDirty} />
@@ -128,7 +139,7 @@ export function ShockLab({ meta, step, state }: {
               <ShockPanel meta={meta} filters={filters} onChange={updateFilters} />
             </div>
           </div>
-        </>
+        </FullscreenPanel>
       )}
 
       <details className="shock-details" style={{ marginBottom: 18 }}>
