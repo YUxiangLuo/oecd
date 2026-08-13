@@ -19,7 +19,7 @@
 .login-wordmark-en { font-family: monospace; font-size: 11px; letter-spacing: 3px; opacity: 0.55; margin-top: 3px; }
 .login-hero { position: relative; max-width: 640px; }
 .login-hero h1 {
-  font-family: var(--font-display); font-size: clamp(28px, 3vw, 42px);
+  font-family: var(--font-display); font-size: 36px;
   line-height: 1.55; margin: 0; font-weight: 700; letter-spacing: 1.5px;
 }
 .login-desc { margin-top: 24px; max-width: 480px; font-size: 15px; line-height: 2.1; color: rgba(235, 239, 252, 0.8); }
@@ -76,6 +76,7 @@
 /* ===== 沉浸式 intro ===== */
 .intro-overlay {
   position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column;
+  min-width: var(--desktop-min-width);
   align-items: center; justify-content: center; gap: 28px;
   color: #eef1fb; text-align: center;
   padding: 56px 0; overflow-y: auto;
@@ -86,7 +87,7 @@
 .intro-logo { display: flex; justify-content: center; margin-bottom: 28px; animation: logoIn 0.7s ease; }
 @keyframes logoIn { from { opacity: 0; transform: scale(0.86); } to { opacity: 1; transform: none; } }
 .intro-title {
-  font-family: var(--font-display); font-size: clamp(40px, 5vw, 58px);
+  font-family: var(--font-display); font-size: 58px;
   margin: 0; letter-spacing: 3px; font-weight: 700;
 }
 .intro-kicker { font-family: monospace; letter-spacing: 6px; font-size: 14px; opacity: 0.55; margin-top: 14px; }
@@ -94,7 +95,7 @@
   font-family: monospace; font-size: 13px; letter-spacing: 3px; color: #9aa5d6; margin-bottom: 16px;
 }
 .intro-h2 {
-  font-family: var(--font-display); font-size: clamp(30px, 3.6vw, 40px);
+  font-family: var(--font-display); font-size: 40px;
   margin: 0 0 8px; letter-spacing: 2px; font-weight: 700;
 }
 .intro-lede { font-size: 17px; line-height: 2; opacity: 0.88; max-width: 700px; margin: 16px auto 0; }

@@ -97,9 +97,9 @@
 /* ---------- 模态框 ---------- */
 .modal-scrim {
   position: fixed; inset: 0; z-index: 40; background: rgba(24,26,40,0.42);
-  display: flex; align-items: center; justify-content: center; padding: 20px;
+  display: flex; align-items: center; justify-content: center; min-width: var(--desktop-min-width); padding: 20px;
 }
-.modal-card { background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(20,20,60,0.25); max-width: 92vw; }
+.modal-card { background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(20,20,60,0.25); }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #eef0f5; }
 .modal-head b { font-size: 15px; }
 .modal-x { border: none !important; background: none !important; font-size: 20px; line-height: 1; color: var(--text-muted); padding: 0 !important; }
@@ -208,10 +208,12 @@
 .grade-split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 18px; align-items: start; }
 .grade-doc { min-width: 0; }
 .grade-doc-title { margin: 0 0 6px; font-size: 17px; }
-.grade-side { position: sticky; top: 92px; }
-/* 矮视口放不下完整评阅卡时，sticky 会把提交按钮钉在视口外；
-   退回普通文档流后由 teacher-main 统一滚动，全部控件都能完整到达。 */
-@media (max-height: 760px) { .grade-side { position: static; } }
+/* 桌面窗口高度可能不足以容纳整张评阅卡；侧栏始终独立滚动，避免 sticky
+   元素把提交按钮留在视口之外。这里没有设备断点，宽度仍使用固定桌面布局。 */
+.grade-side {
+  position: sticky; top: 92px; max-height: calc(100vh - 116px);
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable;
+}
 .grade-field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
 .grade-field input, .grade-field textarea {
   padding: 8px 11px; border-radius: 8px; border: 1px solid #e0e3ea; background: #fff;
