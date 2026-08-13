@@ -57,17 +57,19 @@ export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; stat
         ]}
       />
 
-      <LensNav<Lens>
-        active={lens as Lens}
-        onPick={pickLens}
-        lenses={[
-          { key: "quadrant", label: "定位图", hint: "后向 × 前向参与,四象限分型" },
-          { key: "decompose", label: "出口拆解", hint: "毛出口 = 五类 WWZ 聚合项 + TLS 扩展" },
-          { key: "rank", label: "FVA 排序", hint: "谁最依赖外国增加值" },
-        ]}
-      />
-
       <VizWorkbench
+        title={`步骤 ${step.n} · GVC 贸易流指标可视化`}
+        toolbar={(
+          <LensNav<Lens>
+            active={lens as Lens}
+            onPick={pickLens}
+            lenses={[
+              { key: "quadrant", label: "定位图", hint: "后向 × 前向参与,四象限分型" },
+              { key: "decompose", label: "出口拆解", hint: "毛出口 = 五类 WWZ 聚合项 + TLS 扩展" },
+              { key: "rank", label: "FVA 排序", hint: "谁最依赖外国增加值" },
+            ]}
+          />
+        )}
         years={meta.years} year={year} onYearChange={setYear}
         countries={meta.countries} picked={picked} onPick={pickCountries}
       >

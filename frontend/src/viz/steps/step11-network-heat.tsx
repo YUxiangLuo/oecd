@@ -1,4 +1,5 @@
 import { formatMetric } from "../../format";
+import { ScrollableRegion } from "../../a11y";
 import type { IndicatorSchema } from "../../types";
 import { type Row, SEQ, cardStyle, num, rowLabel } from "../shared";
 
@@ -33,7 +34,12 @@ export function HeatTableViz({ rows, schema }: { rows: Row[]; schema?: Indicator
     );
   };
   return (
-    <div style={{ ...cardStyle, padding: 0, overflow: "hidden" }}>
+    <ScrollableRegion
+      className="heat-table-scroll"
+      label="行业节点中心性热力表，可横向滚动"
+      style={{ ...cardStyle, padding: 0 }}
+    >
+      <div className="heat-table-grid">
       <div style={{ display: "flex", padding: "11px 18px", background: "#fafbfd", borderBottom: "1px solid #eef0f5", fontSize: 11.5, color: "#5f6677", fontWeight: 600 }}>
         <div style={{ flex: 1 }}>{isIndustry ? "行业节点" : "国家 / 地区"}(按介数排序 Top 15)</div>
         {HEAT_COLS.map((c) => <div key={c.key} title={schema?.fields[c.key]?.desc ?? c.desc} style={{ width: 118, textAlign: "center" }}>{c.name} ⓘ</div>)}
@@ -49,6 +55,7 @@ export function HeatTableViz({ rows, schema }: { rows: Row[]; schema?: Indicator
       <div style={{ padding: "10px 18px", fontSize: 11, color: "#5f6677" }}>
         颜色深浅 = 该列内相对大小(每列独立归一化)；Gephi 有向全正边口径：加权度为流量金额，介数为原始路径计数。行业值在完整全球图上计算。
       </div>
-    </div>
+      </div>
+    </ScrollableRegion>
   );
 }

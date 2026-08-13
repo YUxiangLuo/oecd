@@ -12,6 +12,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
+import { FullscreenPanel } from "../../../fullscreen-panel";
 import type { IndicatorSchema, Meta, QuizCompletionState, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
 import { CountryPicker } from "../../country-picker";
@@ -243,7 +244,9 @@ export function useVizLab(
  * 把"选了谁"和"图上是谁"对上。这里把二者并到同一行:选择器列表 flex:1 内部滚动,
  * 高度由右侧图表决定,所以永远与图表齐平;选完即可在旁边直接看到结果。
  */
-export function VizWorkbench({ years, year, onYearChange, countries, picked, onPick, minPicks = 2, children }: {
+export function VizWorkbench({ title, toolbar, years, year, onYearChange, countries, picked, onPick, minPicks = 2, children }: {
+  title: string;
+  toolbar: ReactNode;
   years: number[];
   year: number;
   onYearChange: (y: number) => void;
@@ -254,21 +257,31 @@ export function VizWorkbench({ years, year, onYearChange, countries, picked, onP
   children: React.ReactNode;
 }) {
   const enough = picked.length >= minPicks;
+  const [autoExpandSignal, setAutoExpandSignal] = useState(0);
+  const pickCountries = (next: string[]) => {
+    if (picked.length < minPicks && next.length >= minPicks) {
+      setAutoExpandSignal((signal) => signal + 1);
+    }
+    onPick(next);
+  };
   return (
-    <div className="viz-split">
-      <aside className="viz-split-side" aria-label="年份与经济体选择">
-        <div className="viz-side-head">
-          <YearSelect years={years} year={year} onChange={onYearChange} />
-          <span className="viz-side-count">
-            已选 <b className={enough ? "ok" : "todo"}>{picked.length}</b> 国{enough ? "" : `(需 ≥${minPicks})`}
-          </span>
-        </div>
-        <CountryPicker countries={countries} picked={picked} onChange={onPick} />
-      </aside>
-      <ScrollableRegion className="viz-split-main" label="可视化图表与说明，可纵向滚动">
-        {children}
-      </ScrollableRegion>
-    </div>
+    <FullscreenPanel title={title} variant="workbench" autoExpandSignal={autoExpandSignal}>
+      {toolbar}
+      <div className="viz-split">
+        <aside className="viz-split-side" aria-label="年份与经济体选择">
+          <div className="viz-side-head">
+            <YearSelect years={years} year={year} onChange={onYearChange} />
+            <span className="viz-side-count">
+              已选 <b className={enough ? "ok" : "todo"}>{picked.length}</b> 国{enough ? "" : `(需 ≥${minPicks})`}
+            </span>
+          </div>
+          <CountryPicker countries={countries} picked={picked} onChange={pickCountries} />
+        </aside>
+        <ScrollableRegion className="viz-split-main" label="可视化图表与说明，可纵向滚动">
+          {children}
+        </ScrollableRegion>
+      </div>
+    </FullscreenPanel>
   );
 }
 

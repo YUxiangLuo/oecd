@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { DbMeta } from "../../types";
-import { captureDbObservation, restoreDbSlice } from "./step1-db";
+import { captureDbObservation, dbColumnCountryForTable, restoreDbSlice } from "./step1-db";
 
 const meta: DbMeta = {
   years: [2019, 2020],
@@ -64,5 +64,11 @@ describe("database slice restoration", () => {
       },
       observation: { row: "CHN_D01T02", column: "USA_D01T02", value: 228.0672 },
     });
+  });
+
+  test("restores a real column country when leaving an accounts-only slice", () => {
+    expect(dbColumnCountryForTable(meta, "", "z")).toBe("USA");
+    expect(dbColumnCountryForTable(meta, "CHN", "y")).toBe("CHN");
+    expect(dbColumnCountryForTable(meta, "", "accounts")).toBe("");
   });
 });
