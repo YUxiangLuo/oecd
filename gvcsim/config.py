@@ -6,11 +6,15 @@ from pathlib import Path
 # 仓库根目录(gvcsim/ 的上一级)
 ROOT = Path(__file__).resolve().parent.parent
 
-# 原始 OECD ICIO 数据(pymrio 下载的 ICIO2023_<year>.csv)
-RAW_DATA_DIR = ROOT / "OECD_ICIO"
+# 原始数据和持久产物在本地开发时沿用仓库内目录；生产部署显式指向
+# /opt/gvcsim/shared，避免代码换版覆盖数据。
+_raw_data_dir_setting = os.environ.get("GVCSIM_RAW_DATA_DIR", "").strip()
+_data_dir_setting = os.environ.get("GVCSIM_DATA_DIR", "").strip()
+RAW_DATA_DIR = Path(_raw_data_dir_setting or ROOT / "OECD_ICIO").resolve()
+DATA_DIR = Path(_data_dir_setting or ROOT / "data").resolve()
 
 # 预计算产物:面板指标 CSV、质检 JSON、网络指标等
-PROCESSED_DIR = ROOT / "data" / "processed"
+PROCESSED_DIR = DATA_DIR / "processed"
 
 # 自动生成的实验报告
 REPORTS_DIR = ROOT / "reports"
@@ -61,6 +65,11 @@ def validate_security_config() -> None:
             raise ConfigurationError("生产环境禁止 GVCSIM_DEMO_MODE")
         if not AUTH_SECRET or len(AUTH_SECRET.encode()) < 32:
             raise ConfigurationError("生产环境必须提供至少 32 字节的 GVCSIM_AUTH_SECRET")
+        if not _data_dir_setting or not _raw_data_dir_setting:
+            raise ConfigurationError("生产环境必须显式配置 GVCSIM_DATA_DIR 和 GVCSIM_RAW_DATA_DIR")
+        configured_paths = (Path(_data_dir_setting), Path(_raw_data_dir_setting))
+        if any(not path.is_absolute() or path.resolve() == ROOT or ROOT in path.resolve().parents for path in configured_paths):
+            raise ConfigurationError("生产数据目录必须是代码目录之外的绝对路径")
         # 空列表表示只允许同源请求，不安装宽松的跨域来源；这是安全默认值。
 
 

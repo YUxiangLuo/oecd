@@ -30,12 +30,14 @@ SECTORS = ["s1", "s2"]
 
 
 @pytest.fixture
-def teaching_db():
-    """Create the intentionally non-migrating v8 test database once."""
+def teaching_db(monkeypatch):
+    """Create the intentionally non-migrating v10 test database once."""
     import psycopg
 
-    from gvcsim import config
+    from gvcsim import artifacts, config
     from gvcsim.classroom import db
+
+    monkeypatch.setattr(artifacts, "release_identity", lambda _path=None: "a" * 32)
 
     db.shutdown()
     with psycopg.connect(config.PG_DSN, autocommit=True) as connection:

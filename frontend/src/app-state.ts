@@ -35,14 +35,12 @@ export function clearAuthentication(storage: StorageWriter): void {
   storage.removeItem(AUTH_EXPIRES_KEY);
 }
 
-/** A delayed request may clear only the login whose token it actually used. */
 export function clearAuthenticationIfCurrent(storage: StorageWriter, expectedToken: string): boolean {
   if (storage.getItem(AUTH_TOKEN_KEY) !== expectedToken) return false;
   clearAuthentication(storage);
   return true;
 }
 
-/** Only token changes invalidate a mounted tab; expiry is metadata for the same login. */
 export function isExternalAuthenticationChange(
   key: string | null,
   newToken: string | null,
@@ -54,11 +52,5 @@ export function isExternalAuthenticationChange(
 export function urlWithStep(href: string, step: number): string {
   const url = new URL(href);
   url.searchParams.set("step", String(step));
-  return `${url.pathname}${url.search}${url.hash}`;
-}
-
-export function urlWithoutStep(href: string): string {
-  const url = new URL(href);
-  url.searchParams.delete("step");
   return `${url.pathname}${url.search}${url.hash}`;
 }

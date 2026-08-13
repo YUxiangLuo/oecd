@@ -4,7 +4,6 @@ import { LogoMark } from "./brand";
 import { TeacherDashboard } from "./teacher";
 import { ToastHost } from "./toast";
 import type {
-  Announcement,
   AuthUser,
   CompletionSummary,
   Meta,
@@ -129,12 +128,7 @@ interface StudentTopbarProps {
   user: AuthUser;
   meta: Meta | null;
   authExpiresAt: number | null;
-  resettingWorkspace: boolean;
-  completion: CompletionSummary | null;
-  maxStep: number;
-  totalSteps: number;
   introTriggerRef: RefObject<HTMLButtonElement | null>;
-  onResetWorkspace: () => void;
   onShowIntro: () => void;
   onRequestPasswordChange: () => void;
   onLogout: () => void;
@@ -144,12 +138,7 @@ export function StudentTopbar({
   user,
   meta,
   authExpiresAt,
-  resettingWorkspace,
-  completion,
-  maxStep,
-  totalSteps,
   introTriggerRef,
-  onResetWorkspace,
   onShowIntro,
   onRequestPasswordChange,
   onLogout,
@@ -166,24 +155,9 @@ export function StudentTopbar({
         <span className="muted">
           数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
         </span>
-        {completion ? (
-          <span
-            className="progress-pill"
-            title={`已完成 ${completion.completed_count} 步；最远到过第 ${maxStep} 步（到过不等于完成）`}
-          >
-            已完成 <b>{completion.completed_count}</b><span>/{totalSteps}</span>
-          </span>
-        ) : (
-          <span className="progress-pill" title={`最远到过第 ${maxStep} 步`}>
-            最远到第 <b>{Math.min(maxStep, totalSteps)}</b> 步
-          </span>
-        )}
         <span className="role-chip" title={`学生账号 · ${user.username}`}>{user.name}</span>
         {expiry && <span className="muted" title="服务端签发的 expires_at">会话至 {expiry}</span>}
         <button ref={introTriggerRef} onClick={onShowIntro}>ⓘ 系统介绍</button>
-        <button className="danger-text" disabled={resettingWorkspace} onClick={onResetWorkspace}>
-          {resettingWorkspace ? "正在清空…" : "清空当前实验"}
-        </button>
         <button onClick={onRequestPasswordChange}>修改密码</button>
         <button onClick={onLogout}>退出</button>
       </div>
@@ -191,48 +165,14 @@ export function StudentTopbar({
   );
 }
 
-interface AnnouncementBannerProps {
-  announcements: Announcement[];
-  expanded: boolean;
-  onToggle: () => void;
-  onDismiss: () => void;
-}
-
-export function AnnouncementBanner({ announcements, expanded, onToggle, onDismiss }: AnnouncementBannerProps) {
-  if (!announcements.length) return null;
-  const first = announcements[0];
-  return (
-    <section className="announce-banner" aria-label="课程公告">
-      <span className="announce-banner-ic">📢</span>
-      <div className="announce-banner-body">
-        <b>{first.title}</b>
-        {first.body && expanded && <p>{first.body}</p>}
-        {expanded && announcements.slice(1).map((announcement) => (
-          <div key={announcement.id} className="announce-banner-more">
-            <b>{announcement.title}</b>
-            {announcement.body && <p>{announcement.body}</p>}
-          </div>
-        ))}
-      </div>
-      {(announcements.length > 1 || first.body) && (
-        <button onClick={onToggle}>
-          {expanded ? "收起" : `展开${announcements.length > 1 ? `全部 ${announcements.length} 条` : ""}`}
-        </button>
-      )}
-      <button type="button" aria-label="关闭课程公告" title="关闭课程公告" onClick={onDismiss}>×</button>
-    </section>
-  );
-}
-
 interface CourseSidebarProps {
   stepsData: StepsResponse;
   current: number;
-  maxStep: number;
   completion: CompletionSummary | null;
   onNavigate: (step: number) => void;
 }
 
-export function CourseSidebar({ stepsData, current, maxStep, completion, onNavigate }: CourseSidebarProps) {
+export function CourseSidebar({ stepsData, current, completion, onNavigate }: CourseSidebarProps) {
   const steps = stepsData.steps;
   const totalSteps = steps.length;
   const stages = [...new Set(steps.map((step) => step.stage))];
@@ -251,18 +191,7 @@ export function CourseSidebar({ stepsData, current, maxStep, completion, onNavig
               style={{ width: `${Math.max(2, (completion.completed_count / totalSteps) * 100)}%` }}
             />
           </div>
-        ) : (
-          <div
-            className="progress-track"
-            role="img"
-            aria-label={`最远到过第 ${Math.min(maxStep, totalSteps)} 步,共 ${totalSteps} 步;这是浏览位置,不代表已完成`}
-          >
-            <div
-              className="progress-bar"
-              style={{ width: `${Math.max(6, (Math.min(maxStep, totalSteps) / totalSteps) * 100)}%` }}
-            />
-          </div>
-        )}
+        ) : <div className="progress-track" />}
         <div className="sidebar-sub">全球价值链实证分析 · 数据→指标→回归→报告</div>
       </div>
       <div className="sidebar-list">
@@ -275,7 +204,7 @@ export function CourseSidebar({ stepsData, current, maxStep, completion, onNavig
             </div>
             {steps.filter((step) => step.stage === stage).map((step) => {
               const done = completedSteps.has(step.n);
-              const state = done ? "done" : step.n === current ? "cur" : step.n <= maxStep ? "past" : "future";
+              const state = done ? "done" : step.n === current ? "cur" : "future";
               const accessibleName = [
                 `第 ${step.n} 步：${step.title}`,
                 step.n === current ? "当前步骤" : null,
@@ -378,7 +307,6 @@ interface StepFooterProps {
   next?: Step;
   stageName: string;
   current: number;
-  maxStep: number;
   completedSteps: Set<number>;
   onNavigate: (step: number) => void;
 }
@@ -389,7 +317,6 @@ export function StepFooter({
   next,
   stageName,
   current,
-  maxStep,
   completedSteps,
   onNavigate,
 }: StepFooterProps) {
@@ -404,7 +331,7 @@ export function StepFooter({
             onClick={() => onNavigate(item.n)}
             aria-label={`前往步骤 ${item.n}：${item.title}`}
             aria-current={item.n === current ? "step" : undefined}
-            className={`fdot${item.n === current ? " on" : completedSteps.has(item.n) ? " done" : item.n <= maxStep ? " past" : ""}`}
+            className={`fdot${item.n === current ? " on" : completedSteps.has(item.n) ? " done" : ""}`}
           />
         ))}
       </div>

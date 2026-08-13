@@ -219,36 +219,3 @@
 }
 .grade-field textarea { line-height: 1.6; resize: vertical; }
 .grade-field input:focus, .grade-field textarea:focus { outline: none; border-color: #4b47e0; }
-
-/* ---------- 课堂公告 ---------- */
-.announce-cols { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 18px; align-items: start; }
-.compose-panel { position: sticky; top: 92px; }
-.announce-list { min-width: 0; }
-.announce-card {
-  display: flex; gap: 12px; align-items: flex-start; background: #fff; border: 1px solid #e7e9f0;
-  border-radius: 12px; padding: 14px 16px; margin-bottom: 10px;
-}
-.announce-avatar {
-  flex: none; width: 34px; height: 34px; border-radius: 50%; background: #edecfd; color: #4b47e0;
-  display: flex; align-items: center; justify-content: center; font-weight: 700; font-family: "Space Grotesk", sans-serif;
-}
-.announce-main { flex: 1; min-width: 0; }
-.announce-top { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
-.announce-top b { font-size: 13.5px; }
-.announce-main p { margin: 6px 0 0; font-size: 12.5px; color: #3a4050; line-height: 1.6; }
-.announce-meta { font-size: 11px; color: var(--text-muted); margin-top: 7px; }
-.icon-btn { flex: none; padding: 5px 8px !important; font-size: 13px; }
-
-/* ---------- 课堂公告横幅(学生端顶栏下方) ---------- */
-.announce-banner {
-  display: flex; align-items: flex-start; gap: 10px; padding: 9px 26px;
-  background: #edecfd; border-bottom: 1px solid #ded9fb; font-size: 12.5px; color: #1b1f2b;
-}
-.announce-banner-ic { font-size: 14px; }
-.announce-banner-body { flex: 1; }
-.announce-banner-body p { margin: 4px 0 0; color: #3a4050; line-height: 1.6; }
-.announce-banner-more { margin-top: 8px; border-top: 1px dashed #ded9fb; padding-top: 8px; }
-.announce-banner button {
-  padding: 3px 10px; border-radius: 7px; border: 1px solid #c9c3f5; background: #fff;
-  color: #4b47e0; font-size: 11.5px; font-weight: 600;
-}

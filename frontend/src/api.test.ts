@@ -1,6 +1,6 @@
 import { describe, expect, jest, test } from "bun:test";
 
-import { api, getActiveAuthToken, setActiveAuthToken, shouldExpireAuth, withQuery } from "./api";
+import { api, getActiveAuthToken, setActiveAuthToken, withQuery } from "./api";
 import { emptySession } from "./session-store";
 import type { AuthUser } from "./types";
 
@@ -21,17 +21,11 @@ function authUser(username: string): AuthUser {
 }
 
 describe("auth expiration", () => {
-  test("a delayed 401 can only expire the token used by that request", () => {
-    expect(shouldExpireAuth("old-token", "old-token")).toBe(true);
-    expect(shouldExpireAuth("old-token", "new-token")).toBe(false);
-    expect(shouldExpireAuth(null, "new-token")).toBe(false);
-  });
-
   test("logout is local-only and has no API method", () => {
     expect("logout" in api).toBe(false);
   });
 
-  test("mounted tabs keep their validated token when shared storage changes", () => {
+  test("a mounted tab keeps its validated token when shared storage changes", () => {
     const originalToken = localStorage.getItem("gvcsim_token");
     try {
       setActiveAuthToken("token-a");
@@ -44,7 +38,7 @@ describe("auth expiration", () => {
     }
   });
 
-  test("a mounted tab sends mutations with its own token, not another tab's stored token", async () => {
+  test("mutations use the mounted tab token, not another tab's stored token", async () => {
     const originalFetch = globalThis.fetch;
     const originalToken = localStorage.getItem("gvcsim_token");
     let authorization: string | null = null;

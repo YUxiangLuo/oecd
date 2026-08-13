@@ -497,6 +497,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
     network_algorithm = str(metadata.get("network_algorithm") or NETWORK_ALGORITHM)
     provenance = {
         "generated_at": generated_at,
+        "release_id": metadata.get("release_id"),
         "years": years,
         "session_version": SESSION_VERSION,
         "quiz_version": quizzes.QUIZ_VERSION,

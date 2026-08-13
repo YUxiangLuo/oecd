@@ -4,7 +4,7 @@ import {
   type RegressionHistory,
   type RegressionSettings,
 } from "./regression";
-import type { Meta, Step, StepStateApi } from "./types";
+import type { ClassroomReport, Meta, ReportMutationResponse, Step, StepStateApi } from "./types";
 import type { SessionStatus } from "./use-session";
 import type { Dispatch, SetStateAction } from "react";
 
@@ -12,14 +12,12 @@ interface LabRouterProps {
   step: Step;
   meta: Meta | null;
   state: StepStateApi;
-  completionKey: string;
+  report: ClassroomReport | null;
   sessionStatus: SessionStatus;
   sessionUnsynced: boolean;
   sessionSyncing: boolean;
-  sessionSyncError: string | null;
   onFlushSession: () => Promise<void>;
-  /** 服务端状态变化后（如生成报告）重新装载完成度。 */
-  onCompletionChanged: () => Promise<void>;
+  onReportChanged: (response: ReportMutationResponse) => void;
   regressionSettings: RegressionSettings;
   onRegressionSettingsChange: (settings: RegressionSettings) => void;
   regressionHistory: RegressionHistory;
@@ -32,13 +30,12 @@ export function LabRouter({
   step,
   meta,
   state,
-  completionKey,
+  report,
   sessionStatus,
   sessionUnsynced,
   sessionSyncing,
-  sessionSyncError,
   onFlushSession,
-  onCompletionChanged,
+  onReportChanged,
   regressionSettings,
   onRegressionSettingsChange,
   regressionHistory,
@@ -69,14 +66,13 @@ export function LabRouter({
       <ReportLab
         key="report"
         state={state}
-        completionKey={completionKey}
+        report={report}
         sessionStatus={sessionStatus}
         sessionUnsynced={sessionUnsynced}
         sessionSyncing={sessionSyncing}
-        sessionSyncError={sessionSyncError}
         onFlushSession={onFlushSession}
         onNavigateStep={onNavigateStep}
-        onGenerated={onCompletionChanged}
+        onReportChanged={onReportChanged}
       />
     );
   }

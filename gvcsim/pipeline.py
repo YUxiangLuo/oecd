@@ -25,6 +25,7 @@ import pandas as pd
 
 from gvcsim import publication, shocks
 from gvcsim.artifacts import validate_release, write_dataset_metadata
+from gvcsim.artifacts import NETWORK_ALGORITHM
 from gvcsim import config as config_module
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, available_years, processed_years
 from gvcsim.data.citations import artifact_data_sources
@@ -274,6 +275,7 @@ def _build_staged_release(
     selected_years: list[int],
     *,
     allow_qc_override: bool,
+    release_id: str,
 ) -> None:
     """Build and validate one complete release without touching the live pointer."""
     with _using_processed_dir(staging):
@@ -283,95 +285,44 @@ def _build_staged_release(
         release_qc = _release_qc_metadata(staging, selected_years, override=allow_qc_override)
         write_dataset_metadata(
             staging,
-            selected_years,
-            metadata={
+            {
+                "release_id": release_id,
+                "years": selected_years,
                 "generated_at": pd.Timestamp.now(tz="UTC").isoformat(),
                 "course_release": config_module.COURSE_RELEASE,
+                "network_algorithm": NETWORK_ALGORITHM,
                 "data_sources": artifact_data_sources(RAW_DATA_DIR),
                 "qc": release_qc,
             },
         )
-        validate_release(staging, verify_integrity=True, allow_legacy=False)
-
-
-def _coordinate_publication(current: Path, final: Path) -> None:
-    """Switch the release pointer, reset learning records, and close the journal."""
-    from gvcsim.classroom import db
-
-    legacy_target = publication.release_store(current) / f"legacy-{final.name}"
-    old_target, migrate_legacy = publication.current_target(current, legacy_target=legacy_target)
-    new_target = publication.relative_target(current, final, new_release=True)
-    journal = publication.PublicationJournal(
-        version=publication.JOURNAL_VERSION,
-        old_target=old_target,
-        new_target=new_target,
-        phase="prepared",
-    )
-    publication.write_journal(current, journal)
-    switched = False
-    try:
-        if migrate_legacy:
-            if old_target is None:  # pragma: no cover - current_target guarantees this
-                raise publication.PublicationError("旧固定产物目录缺少迁移目标")
-            publication.migrate_legacy_directory(current, legacy_target, old_target)
-            journal = publication.update_journal_phase(current, journal, "legacy_migrated")
-        publication.publish_pointer(current, new_target, new_release=True)
-        switched = True
-        journal = publication.update_journal_phase(current, journal, "pointer_switched")
-        db.reset_learning_records()
-    except BaseException:
-        if switched:
-            publication.rollback_pointer(current, old_target)
-            publication.update_journal_phase(current, journal, "reset_failed_rolled_back")
-        raise
-    publication.clear_journal(current)
+        validate_release(staging)
 
 
 def run(years: list[int] | None = None, *, allow_qc_override: bool = False) -> None:
-    """Build in an immutable directory, atomically publish, then reset learning state."""
+    """Build in staging, validate it, then atomically switch the data pointer."""
     selected_years = sorted(set(years or available_years()))
     if not selected_years:
         raise RuntimeError("没有可构建的 OECD ICIO 年份")
     current = PROCESSED_DIR
     with publication.compute_lock(current):
-        publication.ensure_no_pending_publication(current)
         staging, final = publication.create_staging_release(current)
         try:
-            _build_staged_release(staging, selected_years, allow_qc_override=allow_qc_override)
+            _build_staged_release(
+                staging,
+                selected_years,
+                allow_qc_override=allow_qc_override,
+                release_id=final.name,
+            )
             publication.promote_staging(staging, final)
         except BaseException:
             shutil.rmtree(staging, ignore_errors=True)
             raise
-        _coordinate_publication(current, final)
+        previous = publication.publish_release(current, final)
+        retained = [final]
+        if previous is not None:
+            retained.append(previous)
+        for warning in publication.cleanup_old_releases(current, retained):
+            print(f"警告:{warning}")
     print(f"面板构建完成:{current / 'panel_industry.csv'}(行业级,回归默认)")
     print(f"            {current / 'panel_country.csv'}(国家级)")
-    print("已原子切换固定产物并清空学生实验记录")
-
-
-def recover_pending() -> None:
-    """Idempotently finish a journaled pointer switch and learning-record reset."""
-    from gvcsim.classroom import db
-
-    current = PROCESSED_DIR
-    with publication.compute_lock(current):
-        journal = publication.read_journal(current)
-        new_release = (current.parent / journal.new_target).resolve()
-        validate_release(new_release, verify_integrity=True, allow_legacy=False)
-
-        # A crash may have happened after journaling but before the one-time
-        # migration of a legacy real directory. Finish that migration first.
-        if current.exists() and not current.is_symlink():
-            if journal.old_target is None:
-                raise publication.PublicationError("恢复日志无法保留当前旧目录")
-            old_release = (current.parent / journal.old_target).resolve()
-            if old_release.exists():
-                raise publication.PublicationError("旧目录和迁移目标同时存在，拒绝自动恢复")
-            publication.migrate_legacy_directory(current, old_release, journal.old_target)
-            journal = publication.update_journal_phase(current, journal, "legacy_migrated")
-
-        publication.publish_pointer(current, journal.new_target, new_release=True)
-        journal = publication.update_journal_phase(current, journal, "pointer_switched")
-        db.reset_learning_records()
-        publication.clear_journal(current)
-    print(f"已恢复数据发布:{current}")
-    print("已确认学生实验记录清理完成")
+    print("已耐久、原子切换固定产物并保留上一发布；教学记录按新 release 自动隔离")

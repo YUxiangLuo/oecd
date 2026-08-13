@@ -1,23 +1,39 @@
+import pytest
+
+from gvcsim import artifacts
 from gvcsim.classroom import db
 from gvcsim.session import empty_session, make_record
 
 
-def test_v8_schema_contains_only_minimal_tables(teaching_db):
+def test_v10_schema_contains_release_and_auth_bound_contract(teaching_db):
     with db.conn() as connection:
         names = {
             row["tablename"]
             for row in connection.execute("SELECT tablename FROM pg_tables WHERE schemaname='public'").fetchall()
         }
-    assert names == {
-        "schema_meta",
-        "classes",
-        "accounts",
-        "step_progress",
-        "experiment_sessions",
-        "reports",
-        "submissions",
-        "announcements",
-    }
+        account_columns = {
+            row["column_name"]
+            for row in connection.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='accounts'"
+            ).fetchall()
+        }
+        session_columns = {
+            row["column_name"]
+            for row in connection.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name='experiment_sessions'"
+            ).fetchall()
+        }
+    assert names == {"schema_meta", "accounts", "experiment_sessions", "reports"}
+    assert db.TEACHING_DB_VERSION == "gvcsim-teaching-db-v10"
+    assert "auth_version" in account_columns
+    assert "release_id" in session_columns
+
+
+def test_readiness_requires_a_teacher_account(teaching_db):
+    with db.conn() as connection:
+        connection.execute("DELETE FROM accounts WHERE role='teacher'")
+    with pytest.raises(db.Unavailable, match="缺少教师账号"):
+        db.readiness()
 
 
 def test_session_is_account_isolated_last_write_wins(teaching_db):
@@ -32,48 +48,58 @@ def test_session_is_account_isolated_last_write_wins(teaching_db):
     assert db.get_session("student2") is None
 
 
-def test_current_submission_overwrite_resets_grade(teaching_db):
-    provenance = {"years": [2019, 2020], "runs": [{"step": 12, "outcome": "trade"}]}
-    db.save_generated_report("student", "first report", provenance)
-    first = db.submit_report("student", "first")
-    db.grade_submission(first["id"], 90, "good", "teacher")
-    assert db.my_submission("student")["state"] == "graded"
+def test_sessions_and_reports_are_isolated_by_release(teaching_db, monkeypatch):
+    release_a = empty_session()
+    release_a["steps"]["1"] = make_record({"value": "release-a"})
+    db.save_session("student", release_a)
+    db.save_generated_report("student", "release-a-report", {"release_id": "a" * 32})
 
-    db.save_generated_report("student", "second report", provenance)
-    second = db.submit_report("student", "second")
-    assert second["id"] == first["id"]
-    mine = db.my_submission("student")
-    assert mine["state"] == "pending"
-    assert mine["score"] is None and mine["feedback"] == ""
-    assert db.get_submission(first["id"], "teacher")["markdown"] == "second report"
-
-
-def test_workspace_reset_only_deletes_learning_records(teaching_db):
-    db.upsert_progress("student", 4)
-    db.save_session("student", empty_session())
-    db.save_generated_report("student", "report", {"years": [2020], "runs": []})
-    db.submit_report("student", "report")
-    assert db.reset_workspace("student", "清空当前实验") == {"ok": True}
-    assert db.get_progress("student") is None
+    monkeypatch.setattr(artifacts, "release_identity", lambda _path=None: "b" * 32)
     assert db.get_session("student") is None
-    assert db.find_account("student") is not None
-    assert db.list_classes("teacher")
-    assert db.list_announcements("teacher")
-
-
-def test_global_recompute_reset_preserves_administration(teaching_db):
-    db.upsert_progress("student", 3)
-    db.save_generated_report("student", "report", {"years": [2020], "runs": []})
-    db.reset_learning_records()
-    assert db.get_progress("student") is None
     assert db.latest_report("student") is None
-    assert db.find_account("teacher") is not None
-    assert db.list_announcements("teacher")
+    release_b = empty_session()
+    release_b["steps"]["1"] = make_record({"value": "release-b"})
+    db.save_session("student", release_b)
+    db.save_generated_report("student", "release-b-report", {"release_id": "b" * 32})
+
+    monkeypatch.setattr(artifacts, "release_identity", lambda _path=None: "a" * 32)
+    assert db.get_session("student")["session"] == release_a
+    assert db.latest_report("student")["markdown"] == "release-a-report"
 
 
-def test_teacher_sees_all_announcements_and_class_filter_applies(teaching_db):
-    class_two = db.create_class("二班", "TWO", teacher_username="teacher")
-    db.create_student("student2", "学生二", "student2-password", class_id=class_two["id"], teacher_username="teacher")
-    announcement = db.create_announcement("二班公告", "body", "teacher", class_two["id"])
-    assert announcement["id"] in {row["id"] for row in db.list_announcements("teacher")}
-    assert db.overview_stats(class_two["id"], "teacher")["student_count"] == 1
+def test_report_generation_submission_and_grading_rules(teaching_db):
+    provenance = {"years": [2020], "runs": []}
+    assert db.save_generated_report("student", "draft", provenance)["state"] == "draft"
+    pending = db.submit_report("student")
+    assert pending["state"] == "pending"
+    account_id = db.find_account("student")["id"]
+    assert db.grade_report(account_id, 90, "good", "teacher", pending["updated_at"])["state"] == "graded"
+    assert db.submit_report("student")["score"] == 90
+    regenerated = db.save_generated_report("student", "replacement", provenance)
+    assert regenerated["state"] == "pending"
+    assert regenerated["score"] is None and regenerated["feedback"] == ""
+    assert db.get_report(account_id, "teacher")["markdown"] == "replacement"
+
+
+def test_stale_teacher_view_cannot_grade_a_regenerated_report(teaching_db):
+    provenance = {"years": [2020], "runs": []}
+    db.save_generated_report("student", "first", provenance)
+    viewed = db.submit_report("student")
+    account_id = db.find_account("student")["id"]
+    db.save_generated_report("student", "replacement", provenance)
+
+    with pytest.raises(db.ReportChanged, match="重新加载"):
+        db.grade_report(account_id, 70, "based on first", "teacher", viewed["updated_at"])
+    current = db.get_report(account_id, "teacher")
+    assert current["markdown"] == "replacement"
+    assert current["state"] == "pending" and current["score"] is None
+
+
+def test_student_list_uses_verified_completion_and_report_state(teaching_db):
+    session = empty_session()
+    session["steps"]["1"] = make_record({"quiz": {"version": "quiz-v4", "answers": {}}})
+    db.save_session("student", session)
+    db.save_generated_report("student", "draft", {"years": [2020], "runs": []})
+    row = db.list_students("teacher")[0]
+    assert row["report_state"] == "draft"
+    assert "verified_completed_count" in row and "last_valid_activity" in row

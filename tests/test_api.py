@@ -1,10 +1,6 @@
-import json
-from pathlib import Path
-
 from fastapi.testclient import TestClient
 
-from gvcsim import api as api_module
-from gvcsim import artifacts, auth, publication, quizzes
+from gvcsim import quizzes
 from gvcsim.api import app
 from gvcsim.classroom import db, routes as classroom_routes
 from gvcsim.session import SESSION_VERSION, empty_session, make_record
@@ -23,264 +19,126 @@ def test_api_requires_bearer(teaching_db):
     assert TestClient(app).get("/api/steps").status_code == 401
 
 
-def test_published_dataset_change_rejects_old_workspace_writes(teaching_db, monkeypatch):
-    release = {"id": "release-a"}
-    monkeypatch.setattr(auth, "_current_release_id", lambda: release["id"])
-    stale_client = _client(teaching_db)
-    session = empty_session()
-    session["steps"]["1"] = make_record({"value": "old release"})
-    assert stale_client.put("/api/classroom/session", json={"session": session}).status_code == 200
-    assert stale_client.post("/api/classroom/progress", json={"step": 8}).status_code == 200
-
-    db.reset_learning_records()
-    release["id"] = "release-b"
-
-    assert stale_client.put("/api/classroom/session", json={"session": session}).status_code == 401
-    assert stale_client.post("/api/classroom/progress", json={"step": 9}).status_code == 401
-    current_client = _client(teaching_db)
-    assert current_client.get("/api/classroom/session").json()["session"] == empty_session()
-    assert current_client.get("/api/classroom/progress").json()["max_step"] is None
-
-
-def test_health_fails_closed_while_publication_is_pending(tmp_path, monkeypatch):
-    current = tmp_path / "processed"
-    monkeypatch.setattr(api_module, "PROCESSED_DIR", current)
-    publication.write_journal(
-        current,
-        publication.PublicationJournal(1, None, ".processed-releases/new", "prepared"),
-    )
-
-    response = api_module.health()
-
-    assert response.status_code == 503
-    assert "recover-pending" in json.loads(response.body)["detail"]
-
-
-def test_health_integrity_cache_switches_with_release_pointer(tmp_path, monkeypatch):
-    releases = tmp_path / ".processed-releases"
-    first = releases / "first"
-    second = releases / "second"
-    first.mkdir(parents=True)
-    second.mkdir()
-    (first / artifacts.DATASET_METADATA).write_text('{"years":[2020]}')
-    (second / artifacts.DATASET_METADATA).write_text('{"years":[2020]}')
-    current = tmp_path / "processed"
-    current.symlink_to(".processed-releases/first", target_is_directory=True)
-
-    checks = []
-
-    def validate(directory, *, verify_integrity=True, allow_legacy=False):
-        assert verify_integrity is True
-        assert allow_legacy is False
-        checks.append(Path(directory).name)
-        return {"files": 1, "years": 1}
-
-    artifacts.clear_release_validation_cache()
-    monkeypatch.setattr(artifacts, "validate_release", validate)
-    monkeypatch.setattr(api_module, "validate_release_cached", artifacts.validate_release_cached)
-    monkeypatch.setattr(api_module, "PROCESSED_DIR", current)
-    monkeypatch.setattr(api_module, "processed_years", lambda: [2020])
-    monkeypatch.setattr(api_module.classroom_db, "readiness", lambda: {"status": "ok"})
-
-    assert api_module.health().status_code == 200
-    assert api_module.health().status_code == 200
-    assert checks == ["first"]
-
-    # Replacing dataset.json at the same release path changes the cache identity.
-    replacement_metadata = first / ".dataset.next"
-    replacement_metadata.write_text('{"years":[2020],"replacement":true}')
-    replacement_metadata.replace(first / artifacts.DATASET_METADATA)
-    assert api_module.health().status_code == 200
-    assert checks == ["first", "first"]
-
-    replacement = tmp_path / ".processed.next"
-    replacement.symlink_to(".processed-releases/second", target_is_directory=True)
-    replacement.replace(current)
-
-    assert api_module.health().status_code == 200
-    assert checks == ["first", "first", "second"]
-    artifacts.clear_release_validation_cache()
-
-
-def test_quiz_returns_normalized_answers_without_receipt(teaching_db):
+def test_quiz_returns_normalized_answers(teaching_db):
     client = _client(teaching_db)
     correct = quizzes.correct_quiz(1)
     response = client.post("/api/classroom/quiz/submit", json={"step": 1, **correct})
     assert response.status_code == 200
-    assert response.json()["passed"] is True
     assert response.json()["quiz"] == correct
-    assert "quiz_id" not in response.json()
 
 
-def test_session_put_is_full_last_write_and_keeps_student_reflection(teaching_db):
+def test_session_contract_is_last_write_wins(teaching_db):
     client = _client(teaching_db)
     first = empty_session()
-    first["steps"]["1"] = make_record({"value": 1})
     first["steps"]["16"] = make_record({"research_question": "学生自己的问题"})
-    saved_first = client.put("/api/classroom/session", json={"session": first}).json()
-    assert saved_first["session"]["steps"]["16"]["data"]["research_question"] == "学生自己的问题"
+    saved = client.put("/api/classroom/session", json={"session": first})
+    assert set(saved.json()) == {"updated_at", "completion"}
+    assert client.get("/api/classroom/session").json()["session"] == first
+
     second = empty_session()
     second["steps"]["2"] = make_record({"value": 2})
-    saved = client.put("/api/classroom/session", json={"session": second}).json()
-    assert saved["session"] == second
-    assert set(saved) == {"session", "updated_at", "completion"}
-
-
-def test_complete_quizzes_do_not_bypass_report_evidence_gate(teaching_db):
-    client = _client(teaching_db)
-    session = empty_session()
-    session["steps"] = {str(step): make_record({"quiz": quizzes.correct_quiz(step)}) for step in range(1, 16)}
-    response = client.put("/api/classroom/session", json={"session": session})
-    assert response.json()["completion"]["completed"] == list(range(1, 16))
-    blocked = client.get("/api/classroom/report/gate").json()["blocked"]
-    assert {1, 7, 12, 16} <= {item["step"] for item in blocked}
-
-
-def test_removed_endpoints_are_not_available(teaching_db):
-    client = _client(teaching_db)
-    assert client.post("/api/auth/logout").status_code == 404
-    teacher = _client(teaching_db, "teacher")
-    assert teacher.get("/api/classroom/submissions/1/history").status_code == 404
+    client.put("/api/classroom/session", json={"session": second})
+    assert client.get("/api/classroom/session").json()["session"] == second
 
 
 def test_invalid_session_version_is_rejected(teaching_db):
     client = _client(teaching_db)
-    response = client.put(
-        "/api/classroom/session",
-        json={"session": {"version": "old", "steps": {}, "shared": {}}},
-    )
+    response = client.put("/api/classroom/session", json={"session": {"version": "old", "steps": {}, "shared": {}}})
     assert response.status_code == 422
     assert SESSION_VERSION in response.json()["detail"]
 
 
-def test_student_workspace_and_current_report_flow(teaching_db, monkeypatch):
-    client = _client(teaching_db)
-    assert client.get("/api/classroom/announcements").json()["announcements"]
-    assert client.get("/api/classroom/session").json()["session"] == empty_session()
-    assert client.get("/api/classroom/progress").json()["current_step"] is None
-    assert client.post("/api/classroom/progress", json={"step": 4}).json() == {"ok": True}
-    assert client.get("/api/classroom/progress").json()["max_step"] == 4
-    assert client.get("/api/classroom/report/generated").json()["markdown"] is None
-    assert client.get("/api/classroom/report/mine").json() == {"state": "none"}
-    assert client.post("/api/classroom/report/submit", json={"title": "尚未生成"}).status_code == 409
+def test_report_state_machine_and_failure_preserves_grade(teaching_db, monkeypatch):
+    student = _client(teaching_db)
+    teacher = _client(teaching_db, "teacher")
 
-    async def blocked(*args, **kwargs):
-        raise ReportGateError([{"step": 1, "missing": ["quiz"]}])
-
-    monkeypatch.setattr(classroom_routes.concurrency, "run_cpu_bound", blocked)
-    denied = client.post("/api/classroom/report/generate")
-    assert denied.status_code == 409
-    assert denied.json()["detail"]["blocked"][0]["step"] == 1
-
-    async def generated(*args, **kwargs):
-        return TeachingReport("# 当前报告", {"years": [2020], "runs": []}, "report.md")
+    async def generated(*_args, **_kwargs):
+        return TeachingReport("# 第一版", {"years": [2020], "runs": []}, "report.md")
 
     monkeypatch.setattr(classroom_routes.concurrency, "run_cpu_bound", generated)
-    report = client.post("/api/classroom/report/generate")
-    assert report.status_code == 200 and report.json()["suggested_filename"] == "report.md"
-    submitted = client.post("/api/classroom/report/submit", json={"title": "我的报告"})
-    assert submitted.status_code == 200 and submitted.json()["state"] == "pending"
-    assert client.get("/api/classroom/report/mine").json()["title"] == "我的报告"
+    created = student.post("/api/classroom/report/generate")
+    assert created.status_code == 200
+    assert created.json()["report"]["state"] == "draft"
+    assert student.get("/api/classroom/session").json()["report"]["markdown"] == "# 第一版"
 
-    assert client.post("/api/classroom/workspace/reset", json={"confirmation": "不正确"}).status_code == 422
-    assert client.post("/api/classroom/workspace/reset", json={"confirmation": "清空当前实验"}).json() == {"ok": True}
-    assert client.get("/api/classroom/report/mine").json() == {"state": "none"}
+    submitted = student.post("/api/classroom/report/submit")
+    assert submitted.json()["report"]["state"] == "pending"
+    account_id = db.find_account("student")["id"]
+    assert teacher.get("/api/classroom/reports").json()["reports"][0]["account_id"] == account_id
+    graded = teacher.post(
+        f"/api/classroom/reports/{account_id}/grade",
+        json={"score": 91, "feedback": "很好", "expected_updated_at": submitted.json()["report"]["updated_at"]},
+    )
+    assert graded.json()["state"] == "graded"
+
+    # Repeated submit is idempotent and cannot erase a grade.
+    repeated = student.post("/api/classroom/report/submit").json()["report"]
+    assert repeated["state"] == "graded" and repeated["score"] == 91
+
+    async def blocked(*_args, **_kwargs):
+        raise ReportGateError([{"step": 1, "title": "数据", "missing": ["证据"]}])
+
+    monkeypatch.setattr(classroom_routes.concurrency, "run_cpu_bound", blocked)
+    denied = student.post("/api/classroom/report/generate")
+    assert denied.status_code == 409
+    preserved = student.get("/api/classroom/session").json()["report"]
+    assert preserved["state"] == "graded" and preserved["score"] == 91
+
+    async def regenerated(*_args, **_kwargs):
+        return TeachingReport("# 第二版", {"years": [2020], "runs": []}, "report.md")
+
+    monkeypatch.setattr(classroom_routes.concurrency, "run_cpu_bound", regenerated)
+    replacement = student.post("/api/classroom/report/generate").json()["report"]
+    assert replacement["state"] == "pending"
+    assert replacement["markdown"] == "# 第二版"
+    assert replacement["score"] is None and replacement["feedback"] == ""
+    stale = teacher.post(
+        f"/api/classroom/reports/{account_id}/grade",
+        json={"score": 70, "feedback": "旧内容", "expected_updated_at": graded.json()["updated_at"]},
+    )
+    assert stale.status_code == 409
+    assert "重新加载" in stale.json()["detail"]
 
 
-def test_teacher_administration_and_grading_flow(teaching_db):
+def test_teacher_student_management(teaching_db):
     teacher = _client(teaching_db, "teacher")
     student = _client(teaching_db)
-    assert student.get("/api/classroom/classes").status_code == 403
+    assert student.get("/api/classroom/students").status_code == 403
     assert teacher.get("/api/classroom/session").status_code == 403
-
-    created_class = teacher.post(
-        "/api/classroom/classes",
-        json={"name": "新班", "code": "NEW", "semester": "2026", "note": ""},
-    )
-    assert created_class.status_code == 200
-    class_id = created_class.json()["id"]
-    assert (
-        teacher.post(
-            "/api/classroom/classes",
-            json={"name": "重复", "code": "NEW", "semester": "", "note": ""},
-        ).status_code
-        == 409
-    )
-    assert teacher.get("/api/classroom/classes").json()["classes"]
-
-    assert (
-        teacher.post(
-            "/api/classroom/students",
-            json={"username": "bad name", "display_name": "坏用户名", "password": "password-1234"},
-        ).status_code
-        == 400
-    )
-    created_student = teacher.post(
+    created = teacher.post(
         "/api/classroom/students",
         json={
             "username": "student2",
             "display_name": "学生二",
             "password": "student2-password",
             "student_no": "2",
-            "class_id": class_id,
         },
     )
-    assert created_student.status_code == 200
-    account_id = created_student.json()["id"]
-    assert (
-        teacher.post(
-            "/api/classroom/students",
-            json={"username": "student2", "display_name": "重复", "password": "student2-password"},
-        ).status_code
-        == 409
-    )
-    assert teacher.post(f"/api/classroom/students/{account_id}", json={}).status_code == 400
+    assert created.status_code == 200
+    account_id = created.json()["id"]
     updated = teacher.post(
-        f"/api/classroom/students/{account_id}",
-        json={"display_name": "学生二改", "student_no": "002"},
+        f"/api/classroom/students/{account_id}", json={"display_name": "学生二改", "student_no": "002"}
     )
-    assert updated.status_code == 200 and updated.json()["display_name"] == "学生二改"
-    assert "active" not in updated.json()
-    assert teacher.post(f"/api/classroom/students/{account_id}", json={"active": False}).status_code == 422
-    assert teacher.post("/api/classroom/students/999999", json={"display_name": "无"}).status_code == 404
-    assert (
-        teacher.get("/api/classroom/students", params={"class_id": class_id}).json()["students"][0]["username"]
-        == "student2"
-    )
-    overview = teacher.get("/api/classroom/overview", params={"class_id": class_id}).json()
-    assert overview["student_count"] == 1 and "disabled_count" not in overview
-    assert teacher.get("/api/classroom/overview", params={"class_id": 999999}).status_code == 404
+    assert updated.json()["display_name"] == "学生二改"
+    cleared = teacher.post(f"/api/classroom/students/{account_id}", json={"student_no": ""})
+    assert cleared.status_code == 200 and cleared.json()["student_no"] == ""
+    rows = teacher.get("/api/classroom/students").json()["students"]
+    assert next(row for row in rows if row["id"] == account_id)["verified_completed_count"] == 0
 
-    assert (
-        teacher.post(
-            "/api/classroom/announcements",
-            json={"title": "无效", "body": "", "class_id": 999999},
-        ).status_code
-        == 404
-    )
-    announcement = teacher.post(
-        "/api/classroom/announcements",
-        json={"title": "新班公告", "body": "欢迎", "class_id": class_id},
-    )
-    assert announcement.status_code == 200
-    announcement_id = announcement.json()["id"]
-    assert any(
-        row["id"] == announcement_id for row in teacher.get("/api/classroom/announcements").json()["announcements"]
-    )
-    assert teacher.delete(f"/api/classroom/announcements/{announcement_id}").json() == {"ok": True}
-    assert teacher.delete(f"/api/classroom/announcements/{announcement_id}").status_code == 404
 
-    db.save_generated_report("student2", "# 报告", {"years": [2020], "runs": []})
-    submission = db.submit_report("student2", "学生二报告")
-    submission_id = submission["id"]
-    assert teacher.get("/api/classroom/submissions").json()["submissions"][0]["id"] == submission_id
-    assert teacher.get(f"/api/classroom/submissions/{submission_id}").json()["markdown"] == "# 报告"
-    grade = teacher.post(
-        f"/api/classroom/submissions/{submission_id}/grade",
-        json={"score": 88, "feedback": "完成"},
-    )
-    assert grade.status_code == 200 and grade.json()["state"] == "graded"
-    assert teacher.get("/api/classroom/submissions/999999").status_code == 404
-    assert (
-        teacher.post("/api/classroom/submissions/999999/grade", json={"score": 80, "feedback": ""}).status_code == 404
-    )
+def test_deleted_classroom_endpoints_return_404(teaching_db):
+    student = _client(teaching_db)
+    teacher = _client(teaching_db, "teacher")
+    for path in (
+        "announcements",
+        "progress",
+        "classes",
+        "overview",
+        "submissions",
+        "report/gate",
+        "report/generated",
+        "report/mine",
+    ):
+        assert student.get(f"/api/classroom/{path}").status_code == 404
+    assert student.post("/api/classroom/workspace/reset", json={"confirmation": "清空当前实验"}).status_code == 404
+    assert teacher.get("/api/classroom/classes").status_code == 404

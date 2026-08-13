@@ -288,15 +288,12 @@ export interface ReportGateItem {
   missing: string[];
 }
 
-export interface ReportGate {
-  blocked: ReportGateItem[];
-}
-
 /** 服务端生成的实验报告:正文与溯源由服务端从会话快照产出；客户端只保存学生原创文字和实验操作。 */
-export interface GeneratedReport {
+export interface ClassroomReport {
   markdown: string;
   suggested_filename?: string;
   provenance: {
+    release_id?: string;
     session_version: string;
     quiz_version?: string;
     course_release?: string;
@@ -305,7 +302,14 @@ export interface GeneratedReport {
     session_fingerprint: string;
     runs: ReportRun[];
   };
-  updated_at?: string;
+  state: "draft" | "pending" | "graded";
+  score: number | null;
+  feedback: string;
+  graded_by: string | null;
+  generated_at: string;
+  updated_at: string;
+  submitted_at: string | null;
+  graded_at: string | null;
 }
 
 /** 报告里一步回归的摘要:服务端复估后写入 provenance.runs,提交时随 design 一起冻结。 */
@@ -318,6 +322,17 @@ interface ReportRun {
 export interface SessionResponse {
   session: ExperimentSession;
   updated_at?: string | null;
+  completion: CompletionSummary;
+  report: ClassroomReport | null;
+}
+
+export interface SessionSaveResponse {
+  updated_at: string;
+  completion: CompletionSummary;
+}
+
+export interface ReportMutationResponse {
+  report: ClassroomReport;
   completion: CompletionSummary;
 }
 
@@ -499,49 +514,16 @@ export interface PlaceboResponse {
   disclaimer: string;
 }
 
-export interface ProgressResponse {
-  current_step: number | null;
-  max_step: number | null;
-  updated_at: string | null;
-}
-
 // ---------------------------------------------------------------- 教学面板
-
-export interface Announcement {
-  id: number;
-  class_id: number | null;
-  class_name: string | null;
-  title: string;
-  body: string;
-  author: string;
-  created_at: string;
-}
-
-export interface ClassInfo {
-  id: number;
-  name: string;
-  code: string;
-  semester: string;
-  note: string;
-  archived: boolean;
-  created_at: string;
-  student_count?: number;
-}
 
 export interface StudentRow {
   id: number;
   username: string;
   display_name: string;
-  class_id: number | null;
-  class_name: string | null;
   student_no: string;
   last_login_at: string | null;
   created_at: string;
-  current_step: number | null;
-  max_step: number | null;
-  progress_at: string | null;
-  submission_id: number | null;
-  submission_state: string | null;
+  report_state: "draft" | "pending" | "graded" | null;
   score: number | null;
   submitted_at: string | null;
   /** Server-verified completion; never inferred from max_step. */
@@ -551,64 +533,10 @@ export interface StudentRow {
   last_valid_activity: string | null;
 }
 
-/** 学生本人的提交/评阅状态;state === "none" 表示尚未提交 */
-export interface MySubmission {
-  state: "none" | "pending" | "graded";
-  id?: number;
-  title?: string;
-  year?: number;
-  score?: number | null;
-  feedback?: string;
-  graded_by?: string | null;
-  graded_at?: string | null;
-  submitted_at?: string;
-}
-
-export interface SubmissionRow {
-  id: number;
-  title: string;
-  year: number;
+export interface TeacherReport extends ClassroomReport {
+  account_id: number;
   state: "pending" | "graded";
-  score: number | null;
-  graded_by: string | null;
-  graded_at: string | null;
-  submitted_at: string;
   username: string;
   display_name: string;
   student_no: string;
-  class_name: string | null;
-}
-
-export interface SubmissionDetail extends SubmissionRow {
-  design: SubmissionDesign;
-  markdown: string;
-  feedback: string;
-}
-
-/** submissions.design:提交时冻结的溯源标量 + 各步回归摘要
- * (由 gvcsim/classroom/db.py 的 submit_report 用 jsonb_build_object 组装)。
- * 曾是 Record<string, unknown>,于是把 runs 数组 String() 成 "[object Object]" 也能过类型检查。 */
-interface SubmissionDesign {
-  runs: ReportRun[];
-}
-
-export interface ClassOverview {
-  student_count: number;
-  submitted: number;
-  graded: number;
-  avg_score: number | null;
-  score_buckets: { label: string; count: number }[];
-  step_reach: { step: number; reached: number }[];
-  step_completion: { step: number; completed: number }[];
-  active_7d: number;
-  submission_trend: { date: string; submitted: number; graded: number }[];
-  class_breakdown: ClassBreakdown[];
-}
-interface ClassBreakdown {
-  class_id: number;
-  name: string;
-  student_count: number;
-  submitted: number;
-  graded: number;
-  avg_score: number | null;
 }

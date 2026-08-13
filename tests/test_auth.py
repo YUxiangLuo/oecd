@@ -2,7 +2,8 @@ import time
 
 from fastapi.testclient import TestClient
 
-from gvcsim import auth
+from gvcsim import api as api_module
+from gvcsim import artifacts, auth
 from gvcsim.api import app
 
 
@@ -16,7 +17,7 @@ def test_login_me_and_bad_credentials(teaching_db):
     assert client.post("/api/auth/login", json={"username": "student", "password": "wrong"}).status_code == 401
 
 
-def test_token_is_stateless_signed_expiring_and_role_checked(teaching_db, monkeypatch):
+def test_token_is_signed_expiring_and_role_checked(teaching_db, monkeypatch):
     user = auth.authenticate("student", "gvclab2026")
     assert user
     token, expires_at = auth.issue_token(user)
@@ -26,20 +27,18 @@ def test_token_is_stateless_signed_expiring_and_role_checked(teaching_db, monkey
     assert auth.verify_token(token) is None
 
 
-def test_token_is_invalidated_when_the_dataset_release_changes(teaching_db, monkeypatch):
-    release = {"id": "release-a"}
-    monkeypatch.setattr(auth, "_current_release_id", lambda: release["id"])
+def test_token_is_bound_to_dataset_release(teaching_db, monkeypatch):
     user = auth.authenticate("student", "gvclab2026")
     assert user
     token, _expires_at = auth.issue_token(user)
-    assert auth.verify_token(token)["rid"] == "release-a"
-
-    release["id"] = "release-b"
-
+    payload = auth.verify_token(token)
+    assert payload["sub"] == "student"
+    assert payload["rid"] == "a" * 32
+    monkeypatch.setattr(artifacts, "release_identity", lambda _path=None: "b" * 32)
     assert auth.verify_token(token) is None
 
 
-def test_password_change_updates_credentials_but_existing_token_remains_stateless(teaching_db):
+def test_password_change_updates_credentials_and_revokes_existing_token(teaching_db):
     client = TestClient(app)
     login = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
     headers = {"Authorization": f"Bearer {login['token']}"}
@@ -49,7 +48,7 @@ def test_password_change_updates_credentials_but_existing_token_remains_stateles
         json={"current_password": "gvclab2026", "new_password": "teacher-new-private-password"},
     )
     assert changed.json() == {"ok": True, "reauthenticate": True}
-    assert client.get("/api/auth/me", headers=headers).status_code == 200
+    assert client.get("/api/auth/me", headers=headers).status_code == 401
     assert client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).status_code == 401
     assert (
         client.post(
@@ -60,8 +59,39 @@ def test_password_change_updates_credentials_but_existing_token_remains_stateles
     assert teaching_db.change_own_password("teacher", "teacher-new-private-password", "gvclab2026-reset")
 
 
+def test_teacher_password_reset_revokes_student_token(teaching_db):
+    client = TestClient(app)
+    teacher_login = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
+    student_login = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).json()
+    account_id = teaching_db.find_account("student")["id"]
+    response = client.post(
+        f"/api/classroom/students/{account_id}",
+        headers={"Authorization": f"Bearer {teacher_login['token']}"},
+        json={"password": "student-reset-private-password"},
+    )
+    assert response.status_code == 200
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {student_login['token']}"}).status_code == 401
+
+
 def test_role_authorization_uses_signed_claim(teaching_db):
     client = TestClient(app)
     login = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).json()
-    response = client.get("/api/classroom/classes", headers={"Authorization": f"Bearer {login['token']}"})
+    response = client.get("/api/classroom/students", headers={"Authorization": f"Bearer {login['token']}"})
     assert response.status_code == 403
+
+
+def test_authenticated_middleware_offloads_database_check(teaching_db, monkeypatch):
+    original = api_module.anyio.to_thread.run_sync
+    calls = []
+
+    async def recording_run_sync(function, *args, **kwargs):
+        calls.append(function)
+        return await original(function, *args, **kwargs)
+
+    monkeypatch.setattr(api_module.anyio.to_thread, "run_sync", recording_run_sync)
+    client = TestClient(app)
+    login = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).json()
+    response = client.get("/api/steps", headers={"Authorization": f"Bearer {login['token']}"})
+
+    assert response.status_code == 200
+    assert auth.verify_token in calls

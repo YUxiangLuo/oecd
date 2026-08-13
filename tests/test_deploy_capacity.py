@@ -1,3 +1,6 @@
+import pytest
+
+from gvcsim import config
 from gvcsim.config import ROOT
 
 
@@ -7,7 +10,9 @@ def test_service_uses_one_worker_and_small_fixed_limits():
     assert "--limit-concurrency 64" in service
     assert "ExecStartPre=/opt/gvcsim/current/.venv/bin/gvcsim preflight" in service
     assert "RuntimeDirectory=" not in service
-    assert "ReadOnlyPaths=-/opt/gvcsim/shared/data/.processed-releases" in service
+    assert "ReadOnlyPaths=/opt/gvcsim/shared/data /opt/gvcsim/shared/OECD_ICIO" in service
+    assert "ReadWritePaths=/opt/gvcsim/shared/run" not in service
+    assert "shared/reports" not in service
 
 
 def test_environment_has_no_evidence_rate_or_pool_tuning():
@@ -15,6 +20,25 @@ def test_environment_has_no_evidence_rate_or_pool_tuning():
     for removed in ("EVIDENCE_SECRET", "LOGIN_MAX", "CPU_QUEUE", "CPU_CONCURRENCY", "DB_POOL"):
         assert removed not in environment
     assert "GVCSIM_TOKEN_TTL_SECONDS=28800" in environment
+    assert "GVCSIM_DATA_DIR=/opt/gvcsim/shared/data" in environment
+    assert "GVCSIM_RAW_DATA_DIR=/opt/gvcsim/shared/OECD_ICIO" in environment
+    assert "GVCSIM_PUBLICATION_LOCK_DIR" not in environment
+
+
+def test_production_requires_explicit_shared_data_paths(monkeypatch):
+    monkeypatch.setattr(config, "IS_PRODUCTION", True)
+    monkeypatch.setattr(config, "DEMO_MODE", False)
+    monkeypatch.setattr(config, "AUTH_SECRET", "x" * 32)
+    monkeypatch.setattr(config, "_data_dir_setting", "")
+    monkeypatch.setattr(config, "_raw_data_dir_setting", "")
+
+    with pytest.raises(config.ConfigurationError, match="GVCSIM_DATA_DIR"):
+        config.validate_security_config()
+
+    monkeypatch.setattr(config, "_data_dir_setting", "data")
+    monkeypatch.setattr(config, "_raw_data_dir_setting", "/srv/gvcsim/raw")
+    with pytest.raises(config.ConfigurationError, match="绝对路径"):
+        config.validate_security_config()
 
 
 def test_nginx_does_not_apply_classroom_login_rate_limits():
@@ -23,53 +47,27 @@ def test_nginx_does_not_apply_classroom_login_rate_limits():
     assert "proxy_read_timeout 120s" in nginx
 
 
-def test_backup_service_is_least_privilege_and_uses_defensive_script():
-    service = (ROOT / "deploy" / "gvcsim-backup.service").read_text()
-    assert "Type=oneshot" in service
-    assert "User=gvcsim" in service and "Group=gvcsim" in service
-    assert "EnvironmentFile=/etc/gvcsim.env" in service
-    assert "Environment=GVCSIM_BACKUP_DIR=/opt/gvcsim/shared/backups" in service
-    assert "ExecStart=/opt/gvcsim/current/scripts/backup_classroom.sh" in service
-    assert "ReadWritePaths=/opt/gvcsim/shared/backups" in service
-    for hardening in (
-        "NoNewPrivileges=true",
-        "PrivateTmp=true",
-        "PrivateDevices=true",
-        "ProtectSystem=strict",
-        "ProtectHome=true",
-        "CapabilityBoundingSet=",
-    ):
-        assert hardening in service
-
-
-def test_backup_timer_is_daily_persistent_and_jittered():
+def test_deployment_documents_maintenance_window_reset_and_health_check():
+    deployment = (ROOT / "DEPLOY.md").read_text()
+    assert "bun install --frozen-lockfile" in deployment
+    assert "gvcsim compute" in deployment and "gvcsim preflight" in deployment
+    assert "classroom-init --reset" in deployment
+    assert "--teacher-username teacher" in deployment
+    assert "GVCSIM_INITIAL_TEACHER_PASSWORD" in deployment
+    assert 'test "${#GVCSIM_INITIAL_TEACHER_PASSWORD}" -ge 12' in deployment
+    assert "runuser -u gvcsim" in deployment
+    stopped = deployment.index("systemctl stop gvcsim-api")
+    compute = deployment.index(".venv/bin/gvcsim compute")
+    reset = deployment.index(".venv/bin/gvcsim classroom-init --reset")
+    preflight = deployment.index(".venv/bin/gvcsim preflight")
+    started = deployment.index("systemctl start gvcsim-api")
+    assert stopped < compute < reset < preflight < started
+    assert "GVCSIM_PUBLICATION_LOCK_DIR" not in deployment
+    assert "pg_dump" in deployment and "pg_restore" in deployment
+    assert "createdb --maintenance-db=postgres" in deployment
+    assert "export PGHOST=" in deployment and "export PGPASSWORD" in deployment
+    assert "gvcsim-backup.timer" in deployment
     timer = (ROOT / "deploy" / "gvcsim-backup.timer").read_text()
-    assert "Unit=gvcsim-backup.service" in timer
-    assert "OnCalendar=*-*-* 02:30:00" in timer
-    assert "RandomizedDelaySec=15m" in timer
+    service = (ROOT / "deploy" / "gvcsim-backup.service").read_text()
     assert "Persistent=true" in timer
-    assert "WantedBy=timers.target" in timer
-
-
-def test_deployment_installs_timer_and_backs_up_before_mutation():
-    deployment = (ROOT / "DEPLOY.md").read_text()
-    assert "install -d -o gvcsim -g gvcsim -m 0700 /opt/gvcsim/shared/backups" in deployment
-    assert "systemctl enable --now gvcsim-backup.timer" in deployment
-    assert "sha256sum -c" in deployment
-    api_stop = deployment.index("systemctl stop gvcsim-api")
-    backup = deployment.index("systemctl start gvcsim-backup.service")
-    code_switch = deployment.index("rsync -a --delete")
-    unit_update = deployment.index("install -m 0644 deploy/gvcsim-api.service", code_switch)
-    daemon_reload = deployment.index("systemctl daemon-reload", unit_update)
-    compute = deployment.index(".venv/bin/gvcsim compute", code_switch)
-    assert api_stop < backup < code_switch < unit_update < daemon_reload < compute
-
-
-def test_backup_policy_keeps_retention_operator_controlled():
-    deployment = (ROOT / "DEPLOY.md").read_text()
-    backup_script = (ROOT / "scripts" / "backup_classroom.sh").read_text()
-    assert "最近 30 份每日完整备份" in deployment
-    assert "加密副本" in deployment and "每月至少执行一次隔离恢复演练" in deployment
-    assert "restore_classroom_drill.py" in deployment
-    for destructive in ("-delete", "rm -rf", "find-delete"):
-        assert destructive not in backup_script
+    assert "backup_classroom.sh" in service

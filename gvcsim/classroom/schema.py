@@ -5,7 +5,7 @@ from typing import Any
 import psycopg
 
 _SCHEMA_LOCK_ID = 736_861_016
-TEACHING_DB_VERSION = "gvcsim-teaching-db-v8"
+TEACHING_DB_VERSION = "gvcsim-teaching-db-v10"
 
 
 SCHEMA_SQL = """
@@ -14,66 +14,39 @@ CREATE TABLE IF NOT EXISTS schema_meta (
   version    text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
-CREATE TABLE IF NOT EXISTS classes (
-  id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  name       text NOT NULL,
-  code       text NOT NULL UNIQUE,
-  semester   text NOT NULL DEFAULT '',
-  note       text NOT NULL DEFAULT '',
-  archived   boolean NOT NULL DEFAULT false,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
 CREATE TABLE IF NOT EXISTS accounts (
   id            bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   username      text NOT NULL UNIQUE,
   display_name  text NOT NULL,
   role          text NOT NULL CHECK (role IN ('student', 'teacher')),
-  class_id      bigint REFERENCES classes(id),
   student_no    text NOT NULL DEFAULT '',
   pw_salt       text NOT NULL,
   pw_hash       text NOT NULL,
-  active        boolean NOT NULL DEFAULT true,
+  auth_version  bigint NOT NULL DEFAULT 1 CHECK (auth_version > 0),
   last_login_at timestamptz,
   created_at    timestamptz NOT NULL DEFAULT now()
 );
-CREATE TABLE IF NOT EXISTS step_progress (
-  account_id   bigint PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
-  current_step int NOT NULL CHECK (current_step BETWEEN 1 AND 16),
-  max_step     int NOT NULL CHECK (max_step BETWEEN 1 AND 16),
-  updated_at   timestamptz NOT NULL DEFAULT now()
-);
 CREATE TABLE IF NOT EXISTS experiment_sessions (
-  account_id bigint PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+  account_id bigint NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  release_id text NOT NULL CHECK (release_id ~ '^[0-9a-f]{32}$'),
   session    jsonb NOT NULL,
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (account_id, release_id)
 );
 CREATE TABLE IF NOT EXISTS reports (
-  account_id bigint PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
-  markdown   text NOT NULL,
-  provenance jsonb NOT NULL,
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TABLE IF NOT EXISTS submissions (
-  id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  account_id   bigint NOT NULL UNIQUE REFERENCES accounts(id) ON DELETE CASCADE,
-  title        text NOT NULL,
-  year         int NOT NULL,
-  design       jsonb NOT NULL,
+  account_id   bigint NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  release_id   text NOT NULL CHECK (release_id ~ '^[0-9a-f]{32}$'),
   markdown     text NOT NULL,
-  state        text NOT NULL DEFAULT 'pending' CHECK (state IN ('pending', 'graded')),
+  provenance   jsonb NOT NULL,
+  state        text NOT NULL DEFAULT 'draft' CHECK (state IN ('draft', 'pending', 'graded')),
   score        int CHECK (score BETWEEN 0 AND 100),
   feedback     text NOT NULL DEFAULT '',
   graded_by    text,
+  generated_at timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  submitted_at timestamptz,
   graded_at    timestamptz,
-  submitted_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE TABLE IF NOT EXISTS announcements (
-  id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  class_id   bigint REFERENCES classes(id) ON DELETE CASCADE,
-  title      text NOT NULL,
-  body       text NOT NULL DEFAULT '',
-  author     text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
+  PRIMARY KEY (account_id, release_id)
 );
 """
 

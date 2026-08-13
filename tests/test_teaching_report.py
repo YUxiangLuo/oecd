@@ -18,7 +18,18 @@ def _artifacts(path: Path, *, qc=None):
             f"network_edges_{year}.csv",
         ):
             (path / name).write_text("[]" if name.endswith(".json") else "value\n1\n")
-    write_dataset_metadata(path, [2019, 2020], metadata={"data_sources": {}, "qc": qc or {}})
+    write_dataset_metadata(
+        path,
+        {
+            "release_id": "2" * 32,
+            "years": [2019, 2020],
+            "generated_at": "2026-08-13T00:00:00+00:00",
+            "course_release": config.COURSE_RELEASE,
+            "network_algorithm": "gephi-compatible-directed-unweighted-positive-v1",
+            "data_sources": {},
+            "qc": qc or {},
+        },
+    )
 
 
 def _complete():
@@ -71,6 +82,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     }
     report = build(session, "同学")
     assert report.provenance["years"] == [2019, 2020]
+    assert report.provenance["release_id"] == "2" * 32
     assert report.provenance["quiz_version"] == quizzes.QUIZ_VERSION
     assert report.provenance["course_release"] == "2026-fall"
     assert report.provenance["runs"][0]["step"] == 12

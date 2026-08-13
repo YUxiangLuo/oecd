@@ -3,8 +3,6 @@
 download  下载 OECD ICIO 原始数据(步骤1)
 validate  对某年数据做质检并打印结果(步骤2)
 compute   预计算质检、指标、可视化/冲击数据与回归面板(步骤2–11 + 面板)
-regress   跑指定 outcome 的教学实证回归并打印系数表
-report    生成实验报告(步骤16)
 serve     启动 API 服务(供前端使用)
 preflight 启动前验证应用、固定产物与数据库
 classroom-init  初始化教学数据库(建库/建表/播种演示数据)
@@ -31,33 +29,6 @@ def main() -> None:
         action="store_true",
         help="明确允许 fatal QC 后继续计算（仅用于教学演示）",
     )
-    p.add_argument(
-        "--recover-pending",
-        action="store_true",
-        help="恢复已完成构建但尚未完成学习记录清理的数据发布",
-    )
-
-    p = sub.add_parser("regress", help="教学实证回归")
-    p.add_argument("--outcome", default="trade", choices=["trade", "production", "length", "network"])
-    p.add_argument(
-        "--granularity",
-        default="industry",
-        choices=["industry", "country"],
-        help="回归粒度:industry=国家–行业级(默认),country=国家级",
-    )
-    p.add_argument(
-        "--method",
-        default="did",
-        choices=["did", "fe", "event"],
-        help="估计方法:did=双重差分(默认),fe=双向固定效应(强度法),event=事件研究",
-    )
-    p.add_argument("--controls", action="store_true", help="加入 ICIO 派生国家-年份控制变量")
-    p.add_argument("--macro-controls", action="store_true", help="加入 WDI/IMF 风格模拟宏观控制变量")
-    p.add_argument("--interaction", action="store_true", help="加入 冲击×处理前GVC生产份额 交互项")
-    p.add_argument("--real", action="store_true", help="使用 GDP 平减指数切换到实际值口径(2016=1)")
-
-    p = sub.add_parser("report", help="生成实验报告")
-    p.add_argument("--year", type=int, default=None)
 
     p = sub.add_parser("serve", help="启动 API 服务")
     p.add_argument("--host", default=os.environ.get("GVCSIM_BIND_HOST", "127.0.0.1"))
@@ -86,7 +57,7 @@ def main() -> None:
     sub.add_parser("preflight", help="启动前验证 ASGI 应用、产物、容量目录和教学数据库")
 
     p = sub.add_parser("classroom-init", help="显式初始化或迁移教学数据库（serve/preflight 不会修改 schema）")
-    p.add_argument("--reset", action="store_true", help="删除并重建全部教学表(会清空班级/学生/提交数据)")
+    p.add_argument("--reset", action="store_true", help="删除并重建全部教学表（会清空账号、会话和报告）")
     p.add_argument("--teacher-username", help="显式创建首位教师（口令从 GVCSIM_INITIAL_TEACHER_PASSWORD 读取）")
     p.add_argument("--teacher-name", default="课程管理员", help="首位教师显示名")
 
@@ -119,89 +90,10 @@ def main() -> None:
     elif args.command == "compute":
         from gvcsim import pipeline
 
-        if args.recover_pending:
-            if args.years is not None or args.allow_qc_override:
-                raise SystemExit("--recover-pending 不能与 --years 或 --allow-qc-override 同时使用")
-            pipeline.recover_pending()
-        else:
-            try:
-                pipeline.run(args.years, allow_qc_override=args.allow_qc_override)
-            except pipeline.QualityGateError as error:
-                raise SystemExit(f"{error}\n如确认仅用于教学演示，可显式加 --allow-qc-override。") from error
-
-    elif args.command == "regress":
-        from gvcsim.regression.design import (
-            CONTROL_MODE_ICIO,
-            CONTROL_MODE_MACRO,
-            CONTROL_MODE_NONE,
-            GRANULARITY_COUNTRY,
-            GRANULARITY_COUNTRY_INDUSTRY,
-            METHOD_DID,
-            METHOD_EVENT_STUDY,
-            METHOD_TWFE_INTENSITY,
-            PRICE_MODE_NOMINAL,
-            PRICE_MODE_REAL,
-            RegressionDesign,
-        )
-        from gvcsim.report import run_outcome_regression
-
-        if args.controls and args.macro_controls:
-            raise SystemExit("--controls 与 --macro-controls 只能选择一个")
-        granularity = GRANULARITY_COUNTRY if args.granularity == "country" else GRANULARITY_COUNTRY_INDUSTRY
-        method = {"did": METHOD_DID, "fe": METHOD_TWFE_INTENSITY, "event": METHOD_EVENT_STUDY}[args.method]
-        control_mode = (
-            CONTROL_MODE_MACRO if args.macro_controls else CONTROL_MODE_ICIO if args.controls else CONTROL_MODE_NONE
-        )
-        price_mode = PRICE_MODE_REAL if args.real else PRICE_MODE_NOMINAL
         try:
-            design = RegressionDesign(
-                outcome=args.outcome,
-                granularity=granularity,
-                method=method,
-                control_mode=control_mode,
-                interaction=args.interaction,
-                price_mode=price_mode,
-            )
-        except ValueError as error:
-            raise SystemExit(str(error)) from error
-        result = run_outcome_regression(
-            args.outcome,
-            granularity=granularity,
-            method=method,
-            control_mode=control_mode,
-            interaction=args.interaction,
-            price_mode=price_mode,
-        )
-        print(f"{args.outcome}:{design.depvar_label}({design.granularity_label} · {design.method_label})")
-        print(f"价格口径:{design.price_mode_label}")
-        print(f"回归样本:{design.sample_filter}")
-        if args.controls or args.macro_controls:
-            print(f"控制变量:{design.control_mode_label}")
-        if args.interaction:
-            print("交互项:冲击×处理前GVC参与度")
-        print(f"模型: {design.equation()}\n")
-        print(f"{'变量':<20}{'系数':>12}{'标准误':>12}{'t':>8}{'p':>8}")
-        for coef in result.coefs:
-            # 推断被抑制时 p 为 None,不能用 :.3f 直接格式化(也不能拿 0 冒充)。
-            p_text = f"{coef.p:>8.3f}" if coef.p is not None else f"{'—':>8}"
-            print(f"{coef.name:<20}{coef.coef:>12.4f}{coef.se:>12.4f}{coef.t:>8.2f}{p_text} {coef.stars}")
-        if result.status_reasons:
-            print("\n设计有效性:" + (result.status or "ok"))
-            for reason in result.status_reasons:
-                print(f"  · {reason}")
-        print(
-            f"\nN={result.n_obs}({result.n_entities}个体×{result.n_times}年, "
-            f"{result.n_clusters}国聚类), 组内R²={result.r2_within:.4f}"
-        )
-        for note in result.notes:
-            print(f"  · {note}")
-
-    elif args.command == "report":
-        from gvcsim import report
-
-        path = report.generate(args.year)
-        print(f"报告已生成: {path}")
-
+            pipeline.run(args.years, allow_qc_override=args.allow_qc_override)
+        except pipeline.QualityGateError as error:
+            raise SystemExit(f"{error}\n如确认仅用于教学演示，可显式加 --allow-qc-override。") from error
     elif args.command == "serve":
         import uvicorn
 

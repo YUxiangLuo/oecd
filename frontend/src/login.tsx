@@ -14,7 +14,7 @@ export const LOGIN_FLOW = ["数据接入", "指标计算", "可视化", "教学�
 
 const DEMO_ACCOUNTS = [
   { username: "student", label: "学生身份", note: "完成 16 步实验" },
-  { username: "teacher", label: "教师身份", note: "班级管理与报告评阅" },
+  { username: "teacher", label: "教师身份", note: "学生管理与报告评阅" },
 ];
 /** 演示口令;可用 VITE_DEMO_PASSWORD 覆盖,与服务端 GVCSIM_BOOTSTRAP_PASSWORD 对应。 */
 const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD || "gvclab2026";

@@ -1,43 +1,40 @@
 import { describe, expect, test } from "bun:test";
-import { PASSWORD_INPUT_PROPS, filterStudentsByStep } from "./students";
-import type { StudentRow } from "../types";
+import { settleModalSubmission, studentFieldError } from "./students";
 
-const student = (id: number, maxStep: number, verified: number[]): StudentRow => ({
-  id,
-  username: `s${id}`,
-  display_name: `学生${id}`,
-  class_id: 1,
-  class_name: "A",
-  student_no: String(id),
-  last_login_at: null,
-  created_at: "",
-  current_step: maxStep,
-  max_step: maxStep,
-  progress_at: null,
-  submission_id: null,
-  submission_state: null,
-  score: null,
-  submitted_at: null,
-  verified_completed_count: verified.length,
-  verified_completed_steps: verified,
-  completion_missing: [],
-  last_valid_activity: null,
-});
-
-describe("teacher progress filters", () => {
-  const students = [student(1, 16, [1, 2]), student(2, 8, [1, 2, 3, 4, 5])];
-
-  test("reached means navigation position, not completion", () => {
-    expect(filterStudentsByStep(students, 12, "reached").map((item) => item.id)).toEqual([1]);
+describe("teacher student modal submission", () => {
+  test("allows clearing an optional student number but not a display name", () => {
+    expect(studentFieldError("", { label: "学号", required: false })).toBeNull();
+    expect(studentFieldError("  ", { label: "姓名" })).toBe("姓名不能为空");
+    expect(studentFieldError("short", { label: "新密码", password: true })).toBe("密码至少 12 位");
   });
 
-  test("completed uses server-verified step ids", () => {
-    expect(filterStudentsByStep(students, 5, "completed").map((item) => item.id)).toEqual([2]);
-  });
-});
+  test("closes only after a successful request", async () => {
+    const events: string[] = [];
+    const result = await settleModalSubmission(
+      async () => { events.push("request"); },
+      () => events.push("close"),
+      (value) => events.push(`error:${value}`),
+      (value) => events.push(`saving:${value}`),
+    );
 
-describe("teacher password fields", () => {
-  test("password creation/reset inputs are masked and opt out of old-password autofill", () => {
-    expect(PASSWORD_INPUT_PROPS).toEqual({ type: "password", autoComplete: "new-password" });
+    expect(result).toBe(true);
+    expect(events).toEqual(["saving:true", "error:null", "request", "close", "saving:false"]);
+  });
+
+  test("keeps the modal open and exposes the server error on failure", async () => {
+    let closed = false;
+    let error: string | null = null;
+    const saving: boolean[] = [];
+    const result = await settleModalSubmission(
+      async () => { throw new Error("用户名 duplicate 已存在"); },
+      () => { closed = true; },
+      (value) => { error = value; },
+      (value) => saving.push(value),
+    );
+
+    expect(result).toBe(false);
+    expect(closed).toBe(false);
+    expect(String(error)).toContain("已存在");
+    expect(saving).toEqual([true, false]);
   });
 });

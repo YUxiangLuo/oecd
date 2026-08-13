@@ -1,9 +1,8 @@
-"""Fixed-directory artifact access and versioned release integrity checks."""
-
 from __future__ import annotations
 
 import csv
 import hashlib
+import hmac
 import json
 import re
 import stat
@@ -14,12 +13,14 @@ from typing import Any
 
 import pandas as pd
 
+
+ARTIFACT_CONTRACT_VERSION = 3
+ARTIFACT_MANIFEST_ALGORITHM = "sha256"
+ARTIFACT_MANIFEST_NAME = "artifact_manifest"
+METADATA_DIGEST_NAME = "metadata_sha256"
+RELEASE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 DATASET_METADATA = "dataset.json"
-ARTIFACT_CONTRACT_VERSION = 2
 NETWORK_ALGORITHM = "gephi-compatible-directed-unweighted-positive-v1"
-_HASH_CHUNK_SIZE = 1024 * 1024
-_MAX_JSON_BYTES = 16 * 1024 * 1024
-_TRANSIENT_RELEASE_NAMES = {".processed-compute.lock", ".processed-publication.json"}
 _csv_cache_lock = threading.RLock()
 
 
@@ -27,17 +28,71 @@ class ArtifactContractError(RuntimeError):
     pass
 
 
+ArtifactValidationError = ArtifactContractError
+
+
+def _require_regular_file(path: Path, *, label: str) -> None:
+    try:
+        mode = path.lstat().st_mode
+    except FileNotFoundError as exc:
+        raise ArtifactValidationError(f"missing {label}: {path}") from exc
+    if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
+        raise ArtifactValidationError(f"{label} must be a regular file: {path}")
+
+
+def validate_artifact(path: Path, *, label: str | None = None) -> None:
+    label = label or path.name
+    _require_regular_file(path, label=label)
+    if path.stat().st_size <= 0:
+        raise ArtifactValidationError(f"empty {label}: {path}")
+
+
+@lru_cache(maxsize=16)
+def _dataset_metadata_cached(path_text: str, size: int, mtime_ns: int, ctime_ns: int, inode: int) -> dict[str, Any]:
+    del size, mtime_ns, ctime_ns, inode
+    path = Path(path_text)
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ArtifactValidationError(f"invalid dataset metadata: {path}") from exc
+    if not isinstance(value, dict):
+        raise ArtifactValidationError(f"dataset metadata must be an object: {path}")
+    return value
+
+
 def dataset_metadata(processed_dir: Path | None = None) -> dict[str, Any]:
     from gvcsim.config import PROCESSED_DIR
 
-    path = (processed_dir or PROCESSED_DIR) / DATASET_METADATA
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise ArtifactContractError("缺少可用的 dataset.json，请重新运行 `uv run gvcsim compute`") from error
-    if not isinstance(payload, dict) or not isinstance(payload.get("years"), list):
-        raise ArtifactContractError("dataset.json 格式无效，请重新运行 compute")
-    return payload
+    root = (processed_dir or PROCESSED_DIR).resolve()
+    path = root / DATASET_METADATA
+    _require_regular_file(path, label="dataset metadata")
+    file_stat = path.stat()
+    return _dataset_metadata_cached(
+        str(path), file_stat.st_size, file_stat.st_mtime_ns, file_stat.st_ctime_ns, file_stat.st_ino
+    )
+
+
+def _metadata_digest(metadata: dict[str, Any]) -> str:
+    payload = {key: value for key, value in metadata.items() if key != METADATA_DIGEST_NAME}
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def _validate_metadata_digest(metadata: dict[str, Any]) -> None:
+    expected = metadata.get(METADATA_DIGEST_NAME)
+    if not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{64}", expected) is None:
+        raise ArtifactValidationError("dataset metadata_sha256 is missing or invalid")
+    if not hmac.compare_digest(expected, _metadata_digest(metadata)):
+        raise ArtifactValidationError("dataset metadata checksum mismatch")
+
+
+def release_identity(processed_dir: Path | None = None) -> str:
+    metadata = dataset_metadata(processed_dir)
+    release_id = metadata.get("release_id")
+    if not isinstance(release_id, str) or RELEASE_ID_PATTERN.fullmatch(release_id) is None:
+        raise ArtifactValidationError("dataset release_id must be a 32-character lowercase hexadecimal value")
+    _validate_metadata_digest(metadata)
+    return release_id
 
 
 def current_artifact_years(processed_dir: Path) -> list[int]:
@@ -62,344 +117,265 @@ def current_artifact_years(processed_dir: Path) -> list[int]:
     )
 
 
-def validate_artifact(path: Path) -> None:
-    if not path.is_file():
-        raise FileNotFoundError(path)
-
-
 def validate_source(path: Path, processed_dir: Path | None = None) -> None:
     del processed_dir
-    if not path.is_file():
-        raise FileNotFoundError(path)
+    validate_artifact(path)
 
 
-def _is_transient_release_name(name: str) -> bool:
-    return name in _TRANSIENT_RELEASE_NAMES
-
-
-def _release_files(directory: Path) -> dict[str, Path]:
-    files: dict[str, Path] = {}
-    try:
-        entries = list(directory.iterdir())
-    except OSError as error:
-        raise ArtifactContractError("固定产物目录不可读") from error
-    for path in entries:
-        if path.name == DATASET_METADATA or _is_transient_release_name(path.name):
+def _release_files(processed_dir: Path) -> list[Path]:
+    files: list[Path] = []
+    for path in sorted(processed_dir.rglob("*")):
+        if path.name == "dataset.json":
             continue
         try:
             mode = path.lstat().st_mode
-        except OSError as error:
-            raise ArtifactContractError(f"固定产物不可读取:{path.name}") from error
+        except FileNotFoundError as exc:
+            raise ArtifactValidationError(f"artifact disappeared during validation: {path}") from exc
         if stat.S_ISLNK(mode):
-            raise ArtifactContractError(f"固定产物不能是符号链接:{path.name}")
+            raise ArtifactValidationError(f"artifact tree may not contain symlinks: {path}")
+        if stat.S_ISDIR(mode):
+            continue
         if not stat.S_ISREG(mode):
-            raise ArtifactContractError(f"固定产物必须是顶层普通文件:{path.name}")
-        files[path.name] = path
+            raise ArtifactValidationError(f"artifact must be a regular file: {path}")
+        files.append(path)
     return files
 
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
-    try:
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(_HASH_CHUNK_SIZE), b""):
-                digest.update(chunk)
-    except OSError as error:
-        raise ArtifactContractError(f"无法计算固定产物摘要:{path.name}") from error
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
     return digest.hexdigest()
-
-
-def release_identity(processed_dir: Path | None = None) -> str:
-    """Return an opaque identity that changes with every dataset publication."""
-    from gvcsim.config import PROCESSED_DIR
-
-    directory = processed_dir or PROCESSED_DIR
-    metadata_path = directory / DATASET_METADATA
-    try:
-        mode = metadata_path.lstat().st_mode
-    except OSError as error:
-        raise ArtifactContractError("固定产物入口不可用") from error
-    if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
-        raise ArtifactContractError("dataset.json 必须是普通文件")
-    return _sha256(metadata_path)
 
 
 def _csv_shape(path: Path) -> tuple[list[str], int]:
     try:
         with path.open("r", encoding="utf-8", newline="") as handle:
             reader = csv.reader(handle)
-            try:
-                columns = next(reader)
-            except StopIteration as error:
-                raise ArtifactContractError(f"CSV 固定产物为空:{path.name}") from error
-            rows = sum(1 for _row in reader)
-    except (OSError, UnicodeError, csv.Error) as error:
-        if isinstance(error, ArtifactContractError):
-            raise
-        raise ArtifactContractError(f"CSV 固定产物无法解析:{path.name}") from error
-    return columns, rows
+            header = next(reader)
+            row_count = sum(1 for _ in reader)
+    except (OSError, UnicodeError, csv.Error, StopIteration) as exc:
+        raise ArtifactValidationError(f"invalid CSV artifact: {path}") from exc
+    if not header or any(not column for column in header):
+        raise ArtifactValidationError(f"CSV artifact has an invalid header: {path}")
+    return header, row_count
 
 
-def _json_shape(path: Path) -> tuple[str, int | None]:
-    if path.stat().st_size > _MAX_JSON_BYTES:
-        raise ArtifactContractError(f"JSON 固定产物超过结构检查上限:{path.name}")
+def _json_shape(path: Path) -> str:
     try:
-        with path.open("r", encoding="utf-8") as handle:
-            payload = json.load(handle)
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise ArtifactContractError(f"JSON 固定产物无法解析:{path.name}") from error
-    if isinstance(payload, list):
-        return "array", len(payload)
-    if isinstance(payload, dict):
-        return "object", len(payload)
-    if payload is None:
-        return "null", None
-    if isinstance(payload, bool):
-        return "boolean", None
-    if isinstance(payload, (int, float)):
-        return "number", None
-    if isinstance(payload, str):
-        return "string", None
-    raise ArtifactContractError(f"JSON 固定产物顶层类型无效:{path.name}")
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ArtifactValidationError(f"invalid JSON artifact: {path}") from exc
+    if isinstance(value, dict):
+        return "object"
+    if isinstance(value, list):
+        return "array"
+    raise ArtifactValidationError(f"JSON artifact must contain an object or array: {path}")
 
 
-def _manifest_entry(path: Path) -> dict[str, Any]:
+def _manifest_entry(processed_dir: Path, path: Path) -> dict[str, Any]:
     entry: dict[str, Any] = {
-        "sha256": _sha256(path),
-        "size_bytes": path.stat().st_size,
+        "path": path.relative_to(processed_dir).as_posix(),
+        "bytes": path.stat().st_size,
+        ARTIFACT_MANIFEST_ALGORITHM: _sha256(path),
     }
-    suffix = path.suffix.lower()
-    if suffix == ".csv":
-        columns, rows = _csv_shape(path)
-        entry.update({"kind": "csv", "columns": columns, "rows": rows})
-    elif suffix == ".json":
-        top_level, items = _json_shape(path)
-        entry.update({"kind": "json", "top_level": top_level})
-        if items is not None:
-            entry["items"] = items
+    if path.suffix.lower() == ".csv":
+        header, row_count = _csv_shape(path)
+        entry.update({"format": "csv", "header": header, "rows": row_count})
+    elif path.suffix.lower() == ".json":
+        entry.update({"format": "json", "json_type": _json_shape(path)})
     else:
-        entry["kind"] = "binary"
+        entry["format"] = "binary"
     return entry
 
 
-def build_artifact_manifest(processed_dir: Path) -> dict[str, dict[str, Any]]:
-    """Describe every top-level release file without materializing large CSVs."""
-    return {name: _manifest_entry(path) for name, path in sorted(_release_files(processed_dir).items())}
+def build_artifact_manifest(processed_dir: Path) -> list[dict[str, Any]]:
+    root = processed_dir.resolve()
+    return [_manifest_entry(root, path) for path in _release_files(root)]
 
 
-def _require_manifest_entry(name: str, value: Any) -> dict[str, Any]:
+def _require_manifest_entry(value: Any, index: int) -> dict[str, Any]:
     if not isinstance(value, dict):
-        raise ArtifactContractError(f"产物清单条目格式无效:{name}")
-    required = {"sha256", "size_bytes", "kind"}
-    if not required.issubset(value):
-        raise ArtifactContractError(f"产物清单条目缺少字段:{name}")
-    digest = value.get("sha256")
-    size = value.get("size_bytes")
-    kind = value.get("kind")
+        raise ArtifactValidationError(f"artifact manifest entry {index} must be an object")
+    path = value.get("path")
+    if not isinstance(path, str) or not path or path.startswith("/") or ".." in Path(path).parts:
+        raise ArtifactValidationError(f"artifact manifest entry {index} has an invalid path")
+    expected_bytes = value.get("bytes")
+    if not isinstance(expected_bytes, int) or expected_bytes <= 0:
+        raise ArtifactValidationError(f"artifact manifest entry {index} has an invalid byte count")
+    digest = value.get(ARTIFACT_MANIFEST_ALGORITHM)
     if not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
-        raise ArtifactContractError(f"产物清单 SHA-256 无效:{name}")
-    if isinstance(size, bool) or not isinstance(size, int) or size < 0:
-        raise ArtifactContractError(f"产物清单文件大小无效:{name}")
-    if kind not in {"csv", "json", "binary"}:
-        raise ArtifactContractError(f"产物清单类型无效:{name}")
-    if kind == "csv":
-        columns = value.get("columns")
-        rows = value.get("rows")
-        if not isinstance(columns, list) or any(not isinstance(column, str) for column in columns):
-            raise ArtifactContractError(f"产物清单 CSV 列无效:{name}")
-        if isinstance(rows, bool) or not isinstance(rows, int) or rows < 0:
-            raise ArtifactContractError(f"产物清单 CSV 行数无效:{name}")
-    if kind == "json":
-        if value.get("top_level") not in {"array", "object", "null", "boolean", "number", "string"}:
-            raise ArtifactContractError(f"产物清单 JSON 顶层类型无效:{name}")
-        items = value.get("items")
-        if items is not None and (isinstance(items, bool) or not isinstance(items, int) or items < 0):
-            raise ArtifactContractError(f"产物清单 JSON 条目数无效:{name}")
-        if value.get("top_level") in {"array", "object"} and items is None:
-            raise ArtifactContractError(f"产物清单 JSON 缺少条目数:{name}")
-        if value.get("top_level") not in {"array", "object"} and "items" in value:
-            raise ArtifactContractError(f"产物清单 JSON 条目数不适用于当前类型:{name}")
+        raise ArtifactValidationError(f"artifact manifest entry {index} has an invalid SHA-256 digest")
     return value
 
 
-def _validate_v2_manifest(directory: Path, metadata: dict[str, Any]) -> None:
-    manifest = metadata.get("artifacts")
-    if not isinstance(manifest, dict) or any(not isinstance(name, str) or not name for name in manifest):
-        raise ArtifactContractError("dataset.json 的 v2 产物清单格式无效")
-    actual = _release_files(directory)
-    declared_names = set(manifest)
-    actual_names = set(actual)
-    if declared_names != actual_names:
-        missing = sorted(declared_names - actual_names)
-        extra = sorted(actual_names - declared_names)
-        detail = []
-        if missing:
-            detail.append("缺失:" + "、".join(missing))
-        if extra:
-            detail.append("未登记:" + "、".join(extra))
-        raise ArtifactContractError("v2 固定产物文件集合不一致(" + ";".join(detail) + ")")
-    for name in sorted(actual):
-        expected = _require_manifest_entry(name, manifest[name])
-        path = actual[name]
-        expected_kind = (
-            "csv" if path.suffix.lower() == ".csv" else "json" if path.suffix.lower() == ".json" else "binary"
-        )
-        if expected["kind"] != expected_kind:
-            raise ArtifactContractError(f"固定产物类型与扩展名不匹配:{name}")
-        if path.stat().st_size != expected["size_bytes"]:
-            raise ArtifactContractError(f"固定产物文件大小不匹配:{name}")
-        if _sha256(path) != expected["sha256"]:
-            raise ArtifactContractError(f"固定产物 SHA-256 不匹配:{name}")
-        if expected["kind"] == "csv":
-            columns, rows = _csv_shape(path)
-            if columns != expected["columns"]:
-                raise ArtifactContractError(f"固定产物 CSV 列不匹配:{name}")
-            if rows != expected["rows"]:
-                raise ArtifactContractError(f"固定产物 CSV 行数不匹配:{name}")
-        elif expected["kind"] == "json":
-            top_level, items = _json_shape(path)
-            if top_level != expected["top_level"]:
-                raise ArtifactContractError(f"固定产物 JSON 顶层类型不匹配:{name}")
-            if items != expected.get("items"):
-                raise ArtifactContractError(f"固定产物 JSON 条目数不匹配:{name}")
+def _validate_manifest(processed_dir: Path, manifest: Any, *, verify_integrity: bool) -> None:
+    if not isinstance(manifest, list) or not manifest:
+        raise ArtifactValidationError("dataset artifact_manifest must be a non-empty array")
+
+    entries: dict[str, dict[str, Any]] = {}
+    for index, raw_entry in enumerate(manifest):
+        entry = _require_manifest_entry(raw_entry, index)
+        relative_path = str(entry["path"])
+        if relative_path in entries:
+            raise ArtifactValidationError(f"duplicate artifact manifest path: {relative_path}")
+        entries[relative_path] = entry
+
+    actual_paths = {path.relative_to(processed_dir).as_posix() for path in _release_files(processed_dir)}
+    declared_paths = set(entries)
+    if actual_paths != declared_paths:
+        missing = sorted(declared_paths - actual_paths)
+        extra = sorted(actual_paths - declared_paths)
+        raise ArtifactValidationError(f"artifact manifest mismatch; missing={missing}, extra={extra}")
+
+    for relative_path, entry in entries.items():
+        path = processed_dir / relative_path
+        validate_artifact(path, label=f"artifact {relative_path}")
+        if path.stat().st_size != entry["bytes"]:
+            raise ArtifactValidationError(f"artifact byte count mismatch: {relative_path}")
+        if verify_integrity and _sha256(path) != entry[ARTIFACT_MANIFEST_ALGORITHM]:
+            raise ArtifactValidationError(f"artifact checksum mismatch: {relative_path}")
+
+        artifact_format = entry.get("format")
+        expected_format = "csv" if path.suffix.lower() == ".csv" else "json" if path.suffix.lower() == ".json" else "binary"
+        if artifact_format != expected_format:
+            raise ArtifactValidationError(
+                f"artifact format does not match its extension: {relative_path}"
+            )
+        if artifact_format == "csv":
+            header, row_count = _csv_shape(path)
+            if entry.get("header") != header or entry.get("rows") != row_count:
+                raise ArtifactValidationError(f"CSV shape mismatch: {relative_path}")
+        elif artifact_format == "json":
+            if entry.get("json_type") != _json_shape(path):
+                raise ArtifactValidationError(f"JSON shape mismatch: {relative_path}")
+        elif artifact_format != "binary":
+            raise ArtifactValidationError(f"unsupported artifact format in manifest: {relative_path}")
 
 
-def validate_release(
-    processed_dir: Path | None = None,
-    *,
-    validate_sources: bool = False,
-    verify_integrity: bool = True,
-    allow_legacy: bool = False,
-) -> dict[str, int]:
-    del validate_sources
-    from gvcsim.config import COURSE_RELEASE, PROCESSED_DIR
-
-    directory = processed_dir or PROCESSED_DIR
-    metadata_path = directory / DATASET_METADATA
-    try:
-        metadata_mode = metadata_path.lstat().st_mode
-    except OSError as error:
-        raise ArtifactContractError("缺少可用的 dataset.json，请重新运行 `uv run gvcsim compute`") from error
-    if stat.S_ISLNK(metadata_mode) or not stat.S_ISREG(metadata_mode):
-        raise ArtifactContractError("dataset.json 必须是普通文件")
-    metadata = dataset_metadata(directory)
-    if metadata.get("course_release") != COURSE_RELEASE:
-        raise ArtifactContractError(f"固定产物属于其他课程发布，当前需要 {COURSE_RELEASE}；请重新运行 compute")
-    years = current_artifact_years(directory)
-    try:
-        declared = sorted({int(year) for year in metadata["years"]})
-    except (TypeError, ValueError) as error:
-        raise ArtifactContractError("dataset.json 年份格式无效，请重新运行 compute") from error
-    if not declared or years != declared:
-        raise ArtifactContractError("固定产物目录不完整，请重新运行 compute")
-    required = (
+def _required_paths(metadata: dict[str, Any]) -> list[str]:
+    years = metadata.get("years")
+    if not isinstance(years, list) or not years or any(not isinstance(year, int) for year in years):
+        raise ArtifactValidationError("dataset years must be a non-empty integer array")
+    required = [
         "panel_country.csv",
         "panel_industry.csv",
         "controls_country.csv",
         "demo_trade_war_tariffs.csv",
         "qc_controls.json",
         "qc_shocks.json",
-    )
-    missing = [name for name in required if not (directory / name).is_file()]
-    if missing:
-        raise ArtifactContractError("缺少固定产物:" + "、".join(missing))
-
-    version = metadata.get("artifact_contract_version")
-    if version is None:
-        if "artifacts" in metadata:
-            raise ArtifactContractError("dataset.json 含产物清单但缺少 artifact_contract_version")
-        if not allow_legacy:
-            raise ArtifactContractError("不可变发布必须使用 v2 产物契约，请重新运行 compute")
-    elif isinstance(version, bool) or version != ARTIFACT_CONTRACT_VERSION:
-        raise ArtifactContractError(f"不支持的产物契约版本:{version}")
-    elif verify_integrity:
-        _validate_v2_manifest(directory, metadata)
-    elif not isinstance(metadata.get("artifacts"), dict):
-        # Even a shallow v2 read must not silently accept a missing manifest.
-        raise ArtifactContractError("dataset.json 的 v2 产物清单格式无效")
-
-    return {"files": len(list(directory.glob("*"))), "years": len(years)}
-
-
-@lru_cache(maxsize=16)
-def _cached_release_validation(
-    resolved_directory: str,
-    release_state: tuple[tuple[str, int, int, int, int, int, int], ...],
-    allow_legacy: bool,
-) -> dict[str, int]:
-    del release_state
-    return validate_release(Path(resolved_directory), verify_integrity=True, allow_legacy=allow_legacy)
-
-
-def _release_cache_state(directory: Path) -> tuple[tuple[str, int, int, int, int, int, int], ...]:
-    """Cheaply notice any top-level release mutation before reusing a deep check."""
-    try:
-        paths = sorted(directory.iterdir(), key=lambda path: path.name)
-        return tuple(
-            (
-                path.name,
-                metadata.st_dev,
-                metadata.st_ino,
-                metadata.st_mode,
-                metadata.st_size,
-                metadata.st_mtime_ns,
-                metadata.st_ctime_ns,
-            )
-            for path in paths
-            for metadata in (path.lstat(),)
+    ]
+    for year in years:
+        required.extend(
+            [
+                f"qc_{year}.json",
+                f"export_exposure_{year}.csv",
+                f"indicators_country_{year}.csv",
+                f"indicators_industry_{year}.csv",
+                f"network_edges_{year}.csv",
+            ]
         )
-    except OSError as error:
-        raise ArtifactContractError("固定产物入口不可用") from error
+    return required
 
 
-def validate_release_cached(
-    processed_dir: Path | None = None,
-    *,
-    allow_legacy: bool = False,
-) -> dict[str, int]:
-    """Deep-check once per release identity and explicit rollout policy."""
+def validate_release(processed_dir: Path | None = None, *, verify_integrity: bool = True) -> dict[str, Any]:
+    from gvcsim.config import COURSE_RELEASE, PROCESSED_DIR
+
+    root = (processed_dir or PROCESSED_DIR).resolve()
+    metadata = dataset_metadata(root)
+    if metadata.get("course_release") != COURSE_RELEASE:
+        raise ArtifactValidationError(
+            f"dataset course_release mismatch: expected {COURSE_RELEASE}, got {metadata.get('course_release')}"
+        )
+    if metadata.get("artifact_contract_version") != ARTIFACT_CONTRACT_VERSION:
+        raise ArtifactValidationError(
+            f"artifact contract mismatch: expected {ARTIFACT_CONTRACT_VERSION}, "
+            f"got {metadata.get('artifact_contract_version')}"
+        )
+    release_identity(root)
+    for field in ("generated_at", "data_sources", "qc", "network_algorithm"):
+        if field not in metadata:
+            raise ArtifactValidationError(f"dataset metadata is missing {field}")
+
+    manifest = metadata.get(ARTIFACT_MANIFEST_NAME)
+    if not isinstance(manifest, list):
+        raise ArtifactValidationError("dataset artifact_manifest must be a non-empty array")
+    _validate_manifest(root, manifest, verify_integrity=verify_integrity)
+    declared_paths = {entry["path"] for entry in manifest if isinstance(entry, dict) and "path" in entry}
+    missing_required = sorted(set(_required_paths(metadata)) - declared_paths)
+    if missing_required:
+        raise ArtifactValidationError(f"release is missing required artifacts: {missing_required}")
+    return {"release_id": metadata["release_id"], "files": len(declared_paths), "years": len(metadata["years"])}
+
+
+@lru_cache(maxsize=8)
+def _validate_release_cached(
+    root_text: str, release_id: str, state: tuple[tuple[str, int, int, int, int, int, int], ...]
+) -> dict[str, Any]:
+    del release_id, state
+    return validate_release(Path(root_text), verify_integrity=True)
+
+
+_VALIDATION_LOCK = threading.Lock()
+
+
+def validate_release_cached(processed_dir: Path | None = None) -> dict[str, Any]:
     from gvcsim.config import PROCESSED_DIR
 
-    directory = processed_dir or PROCESSED_DIR
-    try:
-        resolved = directory.resolve(strict=True)
-    except OSError as error:
-        raise ArtifactContractError("固定产物入口不可用") from error
-    result = _cached_release_validation(
-        str(resolved),
-        _release_cache_state(resolved),
-        allow_legacy,
+    root = (processed_dir or PROCESSED_DIR).resolve()
+    identity = release_identity(root)
+    state = tuple(
+        (
+            path.relative_to(root).as_posix(),
+            metadata.st_dev,
+            metadata.st_ino,
+            metadata.st_mode,
+            metadata.st_size,
+            metadata.st_mtime_ns,
+            metadata.st_ctime_ns,
+        )
+        for path in [root / DATASET_METADATA, *_release_files(root)]
+        for metadata in (path.lstat(),)
     )
-    return dict(result)
+    with _VALIDATION_LOCK:
+        return _validate_release_cached(str(root), identity, state)
+
+
+def clear_artifact_caches() -> None:
+    _dataset_metadata_cached.cache_clear()
+    _validate_release_cached.cache_clear()
+    _cached_csv.cache_clear()
 
 
 def clear_release_validation_cache() -> None:
-    _cached_release_validation.cache_clear()
+    clear_artifact_caches()
 
 
 @lru_cache(maxsize=32)
-def _cached_csv(path_str: str, mtime_ns: int) -> pd.DataFrame:
-    del mtime_ns
-    return pd.read_csv(path_str, keep_default_na=False, na_values=[""])
+def _cached_csv(path_text: str, size: int, mtime_ns: int) -> pd.DataFrame:
+    del size, mtime_ns
+    return pd.read_csv(path_text, keep_default_na=False, na_values=[""])
 
 
 def read_csv_artifact(path: Path, *, require_current: bool = False) -> pd.DataFrame:
     del require_current
     validate_artifact(path)
     resolved = path.resolve()
+    file_stat = resolved.stat()
     with _csv_cache_lock:
-        return _cached_csv(str(resolved), resolved.stat().st_mtime_ns)
+        return _cached_csv(str(resolved), file_stat.st_size, file_stat.st_mtime_ns)
 
 
-def write_dataset_metadata(processed_dir: Path, years: list[int], *, metadata: dict[str, Any] | None = None) -> None:
-    supplied = metadata or {}
-    payload = {
-        "years": sorted(set(years)),
-        "network_algorithm": NETWORK_ALGORITHM,
-        **supplied,
-        "artifact_contract_version": ARTIFACT_CONTRACT_VERSION,
-        "artifacts": build_artifact_manifest(processed_dir),
-    }
-    (processed_dir / DATASET_METADATA).write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+def write_dataset_metadata(processed_dir: Path, metadata: dict[str, Any]) -> Path:
+    root = processed_dir.resolve()
+    release_id = metadata.get("release_id")
+    if not isinstance(release_id, str) or RELEASE_ID_PATTERN.fullmatch(release_id) is None:
+        raise ArtifactValidationError("release metadata requires a valid release_id")
+    payload = dict(metadata)
+    payload["artifact_contract_version"] = ARTIFACT_CONTRACT_VERSION
+    payload[ARTIFACT_MANIFEST_NAME] = build_artifact_manifest(root)
+    payload[METADATA_DIGEST_NAME] = _metadata_digest(payload)
+    path = root / DATASET_METADATA
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path

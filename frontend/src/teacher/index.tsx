@@ -1,92 +1,55 @@
 import { useState } from "react";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
-import type { AuthUser, SubmissionRow } from "../types";
-import { AnnouncementsTab } from "./announcements";
-import { OverviewTab } from "./overview";
+import type { AuthUser, TeacherReport } from "../types";
 import { ReportsTab } from "./reports";
 import { StudentsTab } from "./students";
 
 const NAV = [
-  { key: "overview", icon: "📊", label: "班级概览", sub: "总览与统计" },
-  { key: "students", icon: "👥", label: "班级与学生", sub: "建班 · 建号 · 进度" },
+  { key: "students", icon: "👥", label: "学生与进度", sub: "账号 · 完成状态" },
   { key: "reports", icon: "📝", label: "报告评阅", sub: "批改与打分" },
-  { key: "announcements", icon: "📢", label: "课堂公告", sub: "发布与管理" },
 ] as const;
 
 type TabKey = (typeof NAV)[number]["key"];
 
-const TITLES: Record<TabKey, { title: string; sub: string }> = {
-  overview: { title: "班级概览", sub: "教学数据一览:提交、评阅进度与实验进度分布" },
-  students: { title: "班级与学生", sub: "创建班级与学生账号,查看每人实验进度" },
-  reports: { title: "报告评阅", sub: "批阅学生在步骤 16 提交的实验报告并打分" },
-  announcements: { title: "课堂公告", sub: "向全体或指定班级发布公告,学生端实时可见" },
-};
-
-/** 教师面板：左侧栏导航 + 主内容区（仅 role=teacher 可进入，替代 16 步实验外壳）。 */
 export function TeacherDashboard({ user }: { user: AuthUser }) {
-  const [tab, setTab] = useState<TabKey>("overview");
-  const [studentFilter, setStudentFilter] = useState<{ classId: number | null; step: number | null; kind: "reached" | "completed" }>({
-    classId: null,
-    step: null,
-    kind: "completed",
-  });
-  // 评阅完成即 bump,让「待评阅」徽标立刻刷新,不用等切 tab
+  const [tab, setTab] = useState<TabKey>("students");
   const [reviewBump, setReviewBump] = useState(0);
-  // 拉一次提交列表算「待评阅」数,用于导航徽标(切 tab 或评阅完成时重新拉取)
-  const { data: subs } = useAsync<{ submissions: SubmissionRow[] }>(() => api.classroom.submissions(), [tab, reviewBump]);
-  const pending = (subs?.submissions ?? []).filter((r) => r.state === "pending").length;
+  const { data } = useAsync<{ reports: TeacherReport[] }>(() => api.classroom.reports(), [tab, reviewBump]);
+  const pending = (data?.reports ?? []).filter((report) => report.state === "pending").length;
 
   return (
     <div className="teacher-layout">
       <nav className="teacher-nav" aria-label="教师工作台主导航">
         <div className="teacher-nav-title">教师工作台</div>
-        {NAV.map((n) => (
+        {NAV.map((item) => (
           <button
-            key={n.key}
-            className={`teacher-nav-item${tab === n.key ? " active" : ""}`}
-            aria-label={n.key === "reports" && pending > 0 ? `${n.label}，${pending} 份待评阅` : n.label}
-            aria-current={tab === n.key ? "page" : undefined}
-            onClick={() => setTab(n.key)}
+            key={item.key}
+            className={`teacher-nav-item${tab === item.key ? " active" : ""}`}
+            aria-current={tab === item.key ? "page" : undefined}
+            onClick={() => setTab(item.key)}
           >
-            <span className="teacher-nav-ic" aria-hidden="true">{n.icon}</span>
+            <span className="teacher-nav-ic" aria-hidden="true">{item.icon}</span>
             <span className="teacher-nav-text">
-              <span className="teacher-nav-label">{n.label}</span>
-              <span className="teacher-nav-sub">{n.sub}</span>
+              <span className="teacher-nav-label">{item.label}</span>
+              <span className="teacher-nav-sub">{item.sub}</span>
             </span>
-            {n.key === "reports" && pending > 0 && <span className="nav-badge">{pending}</span>}
+            {item.key === "reports" && pending > 0 && <span className="nav-badge">{pending}</span>}
           </button>
         ))}
-        <div className="teacher-nav-foot">教学数据存于本地 PostgreSQL;评阅与公告学生端实时可见。</div>
+        <div className="teacher-nav-foot">只保留学生管理、完成状态与报告评阅。</div>
       </nav>
-
       <main className="teacher-main">
         <div className="dash-header">
           <div>
-            <h2>{TITLES[tab].title}</h2>
-            <p>{TITLES[tab].sub}</p>
+            <h2>{tab === "students" ? "学生与进度" : "报告评阅"}</h2>
+            <p>{tab === "students" ? "创建账号、修改基本资料并查看服务端判定的完成状态" : "批阅学生提交的步骤 16 实验报告"}</p>
           </div>
         </div>
         <div className="teacher-content">
-          {tab === "overview" && (
-            <OverviewTab
-              onSelectStep={(step, classId, kind) => {
-                setStudentFilter({ classId, step, kind });
-                setTab("students");
-              }}
-            />
+          {tab === "students" ? <StudentsTab /> : (
+            <ReportsTab user={user} onGraded={() => setReviewBump((value) => value + 1)} />
           )}
-          {tab === "students" && (
-            <StudentsTab
-              key={`${studentFilter.classId ?? "all"}-${studentFilter.step ?? "all"}-${studentFilter.kind}`}
-              initialClassId={studentFilter.classId}
-              filteredStep={studentFilter.step}
-              filterKind={studentFilter.kind}
-              onClearStep={() => setStudentFilter((f) => ({ ...f, step: null }))}
-            />
-          )}
-          {tab === "reports" && <ReportsTab user={user} onGraded={() => setReviewBump((n) => n + 1)} />}
-          {tab === "announcements" && <AnnouncementsTab />}
         </div>
       </main>
     </div>

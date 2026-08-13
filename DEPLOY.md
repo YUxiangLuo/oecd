@@ -1,143 +1,90 @@
 # 远程部署
 
-当前试用服务器：`root@101.201.151.30`，访问端口 `6363`。
+示例目录为 `/opt/gvcsim/current`，共享数据根目录为 `/opt/gvcsim/shared`，环境配置为 `/etc/gvcsim.env`。
 
-- 应用目录：`/opt/gvcsim/current`
-- 持久数据：`/opt/gvcsim/shared/data`、`/opt/gvcsim/shared/reports`
-- 数据库备份：`/opt/gvcsim/shared/backups`（私有目录，不随代码发布覆盖）
-- 环境配置：`/etc/gvcsim.env`（部署时不要覆盖）
-- 服务：`gvcsim-api`、`gvcsim-backup.timer`、`nginx`
+## 准备
 
-## 首次安装备份定时器
-
-在代码和 `/etc/gvcsim.env` 已就绪后，以 root 执行：
+环境文件必须允许服务账号读取，数据目录必须由该账号持有：
 
 ```bash
+chown root:gvcsim /etc/gvcsim.env
+chmod 0640 /etc/gvcsim.env
+install -d -o gvcsim -g gvcsim -m 0750 /opt/gvcsim/shared/data
+install -d -o gvcsim -g gvcsim -m 0750 /opt/gvcsim/shared/OECD_ICIO
+chown -R gvcsim:gvcsim /opt/gvcsim/shared/data /opt/gvcsim/shared/OECD_ICIO
+```
+
+把课程使用的 `ICIO2023_<year>.csv` 放入 `/opt/gvcsim/shared/OECD_ICIO/`。`/etc/gvcsim.env` 必须按 `deploy/gvcsim.env.example` 设置 `GVCSIM_DATA_DIR=/opt/gvcsim/shared/data` 和 `GVCSIM_RAW_DATA_DIR=/opt/gvcsim/shared/OECD_ICIO`；应用不从代码目录保存或读取生产数据。
+
+安装服务文件：
+
+```bash
+install -m 0644 deploy/gvcsim-api.service /etc/systemd/system/
 install -d -o gvcsim -g gvcsim -m 0700 /opt/gvcsim/shared/backups
-install -m 0644 /opt/gvcsim/current/deploy/gvcsim-backup.service /etc/systemd/system/
-install -m 0644 /opt/gvcsim/current/deploy/gvcsim-backup.timer /etc/systemd/system/
+install -m 0644 deploy/gvcsim-backup.service deploy/gvcsim-backup.timer /etc/systemd/system/
 systemctl daemon-reload
+systemctl enable gvcsim-api
 systemctl enable --now gvcsim-backup.timer
-systemctl list-timers gvcsim-backup.timer
 ```
 
-定时器每天按服务器本地时间 02:30 触发，最多随机延迟 15 分钟，并通过 `Persistent=true` 补跑关机期间错过的任务。服务以 `gvcsim` 用户运行，只能写入私有备份目录；`backup_classroom.sh` 会先验证 custom archive 可读，再以 SHA-256 sidecar 作为完成标记。
+## 每次部署
 
-## 更新流程
-
-1. 确认本地改动已提交并推送，然后把当前提交导出到远端 staging 目录。
-
-   ```bash
-   SHA=$(git rev-parse --short HEAD)
-   ssh root@101.201.151.30 "mkdir /opt/gvcsim/staging-$SHA"
-   git archive HEAD | ssh root@101.201.151.30 "tar -xf - -C /opt/gvcsim/staging-$SHA"
-   ```
-
-2. 构建预填演示口令的前端。
-
-   ```bash
-   ssh root@101.201.151.30 "cd /opt/gvcsim/staging-$SHA/frontend && \
-     bun install --frozen-lockfile && \
-     VITE_DEMO_MODE=1 VITE_DEMO_PASSWORD=gvclab2026 bun run build"
-   ```
-
-3. 在服务器上备份旧版本、切换代码并重启。
-
-   ```bash
-   ssh root@101.201.151.30
-   set -euo pipefail
-   SHA=<上一步的提交号>
-   REBUILD_DATASET=0  # 课程发布或固定指标有变化时改为 1
-   test -n "$SHA"
-
-   # 先停止课堂写入，再制作一致且覆盖停服前全部提交的数据库备份。
-   systemctl stop gvcsim-api
-   systemctl reset-failed gvcsim-backup.service || true
-   systemctl start gvcsim-backup.service
-   latest_sidecar=$(find /opt/gvcsim/shared/backups -maxdepth 1 -type f \
-     -name 'classroom-*.dump.sha256' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
-   test -n "$latest_sidecar"
-   (cd /opt/gvcsim/shared/backups && sha256sum -c "$(basename "$latest_sidecar")")
-
-   mkdir -p /opt/gvcsim/backups
-   cp -al /opt/gvcsim/current /opt/gvcsim/backups/current-before-$SHA
-   rsync -a --delete \
-     --exclude=/OECD_ICIO --exclude=/data --exclude=/reports --exclude=/.venv \
-     --exclude=/frontend/node_modules \
-     /opt/gvcsim/staging-$SHA/ /opt/gvcsim/current/
-   cd /opt/gvcsim/current
-   install -m 0644 deploy/gvcsim-api.service /etc/systemd/system/
-   install -m 0644 deploy/gvcsim-backup.service /etc/systemd/system/
-   install -m 0644 deploy/gvcsim-backup.timer /etc/systemd/system/
-   systemctl daemon-reload
-   systemctl enable gvcsim-backup.timer
-   /root/.local/bin/uv sync \
-     --python /opt/gvcsim/python/cpython-3.13-linux-x86_64-gnu/bin/python3.13 \
-     --frozen
-   set -a; . /etc/gvcsim.env; set +a
-   if [[ "$REBUILD_DATASET" == "1" ]]; then
-     runuser -u gvcsim --preserve-environment -- .venv/bin/gvcsim compute
-   fi
-   runuser -u gvcsim --preserve-environment -- .venv/bin/gvcsim preflight
-   systemctl start gvcsim-api
-   rm -rf "/opt/gvcsim/staging-$SHA"
-   ```
-
-   `uv sync` 必须在正式目录执行，否则 editable 安装可能继续引用 staging 路径。发布前备份步骤不得跳过；必须先停止 API 写入，再完成备份并校验最新 SHA-256 sidecar，之后才允许切换代码、运行 `compute` 或执行 schema 破坏性操作。课程发布版本或固定指标产物变化时必须把 `REBUILD_DATASET` 设为 `1`；`compute` 必须在 preflight 和启动服务之前完成。计算会先完整构建并校验不可变发布，再原子切换 `data/processed`，最后清空学生进度、会话、报告和提交；上一份发布保留用于失败回滚。数据发布变化后，旧登录令牌会失效，仍打开的旧页面不能把清空前的进度重新写回。
-
-   如果 compute 报告学习记录清理失败，或 preflight 提示存在未完成发布，不要手工删除 `data/.processed-publication.json`。修复 PostgreSQL 后保持 API 停止并执行：
-
-   ```bash
-   .venv/bin/gvcsim compute --recover-pending
-   .venv/bin/gvcsim preflight
-   ```
-
-## 验证
-
-```bash
-curl -fsS http://127.0.0.1:18000/health
-systemctl is-active gvcsim-api nginx
-systemctl status gvcsim-backup.timer gvcsim-backup.service
-systemctl list-timers gvcsim-backup.timer
-journalctl -u gvcsim-backup.service --since '7 days ago'
-```
-
-浏览器访问 <http://101.201.151.30:6363/>，确认已预填 `student / gvclab2026`，并测试学生、教师身份登录。
-
-新发布的 `dataset.json` 使用产物契约 v2。`preflight` 会重新流式校验全部产物的 SHA-256、大小与 CSV/JSON 结构，不能用 `/health` 代替发布验收；`/health` 只在同一发布的全部顶层文件状态未变化时复用深度校验，指针切换或文件变化会自动重新校验。systemd 同时把 `.processed-releases` 暴露给 API 为只读。升级期间旧的无版本元数据仍按存在性契约读取，任何带清单但缺版本或 v2 清单不完整的发布都会 fail closed。
-
-## 备份保留与恢复演练
-
-仓库不自动删除备份。运维策略建议至少保留最近 30 份每日完整备份，并把加密副本同步到异机或对象存储；在确认异地副本完整、恢复演练通过且满足课程数据保留政策后，再由运维人员显式清理旧文件。不要只保留同一台服务器上的副本。
-
-每月至少执行一次隔离恢复演练。先创建名称以 `_restore_drill` 结尾的全新空数据库，再通过环境变量提供目标 DSN 和精确确认值；不要把含密码的 DSN 放进命令参数：
-
-```bash
-latest_dump=$(find /opt/gvcsim/shared/backups -maxdepth 1 -type f \
-  -name 'classroom-*.dump' -printf '%T@ %p\n' | sort -nr | head -1 | cut -d' ' -f2-)
-test -n "$latest_dump"
-export GVCSIM_RESTORE_DSN='postgresql://.../gvcsim_monthly_restore_drill'
-export GVCSIM_RESTORE_DRILL_CONFIRM='gvcsim_monthly_restore_drill'
-cd /opt/gvcsim/current
-runuser -u gvcsim --preserve-environment -- .venv/bin/python \
-  scripts/restore_classroom_drill.py "$latest_dump" \
-  --receipt /opt/gvcsim/shared/backups/restore-drill-$(date -u +%Y%m%dT%H%M%SZ).json
-```
-
-核对回执中的 schema 版本、各表行数、preflight 和 SHA-256 后，由运维人员显式删除演练数据库。恢复脚本不会自动删除目标库。
-
-## 回滚
+每次部署都进入维护窗口并清空教学数据库。以下命令以 root 执行；任一步失败都会停止，API 保持关闭。首次部署还没有可备份的数据库时，省略备份服务那一行。
 
 ```bash
 set -euo pipefail
+read -rsp '首位教师初始口令（至少 12 位）: ' GVCSIM_INITIAL_TEACHER_PASSWORD
+echo
+test "${#GVCSIM_INITIAL_TEACHER_PASSWORD}" -ge 12
+export GVCSIM_INITIAL_TEACHER_PASSWORD
+trap 'unset GVCSIM_INITIAL_TEACHER_PASSWORD' EXIT
 systemctl stop gvcsim-api
-rsync -a --delete /opt/gvcsim/backups/current-before-<SHA>/ /opt/gvcsim/current/
+systemctl start gvcsim-backup.service
+
 cd /opt/gvcsim/current
-set -a; . /etc/gvcsim.env; set +a
-runuser -u gvcsim --preserve-environment -- .venv/bin/gvcsim preflight
+uv sync --frozen
+cd frontend
+bun install --frozen-lockfile
+bun run build
+cd ..
+
+runuser -u gvcsim --preserve-environment -- /bin/sh -c '
+  set -eu
+  set -a; . /etc/gvcsim.env; set +a
+  cd /opt/gvcsim/current
+  .venv/bin/gvcsim compute
+  .venv/bin/gvcsim classroom-init --reset --teacher-username teacher --teacher-name 老师
+  .venv/bin/gvcsim preflight
+'
 systemctl start gvcsim-api
+curl -fsS http://127.0.0.1:18000/health
+unset GVCSIM_INITIAL_TEACHER_PASSWORD
+trap - EXIT
 ```
 
-如果回滚后的 preflight 报告课程发布与 `dataset.json` 不兼容，保持 API 停止；确认正在运行回滚代码后执行 `.venv/bin/gvcsim compute` 重建与该代码匹配的数据，再重新运行 preflight。不要在 preflight 失败时直接启动，也不要只回滚代码而忽略共享 `data/processed` 指针的兼容性。
+`compute`、数据库重建和 `preflight` 必须以 `gvcsim` 服务账号运行；release 使用 `0700`，用 root 运行会产生服务不可读的目录。`compute` 只重建预计算数据，不修改 PostgreSQL；构建或 QC 失败时旧数据发布仍保留。切换前会校验完整 SHA-256/结构清单并同步落盘，成功后保留当前和上一发布。数据库重建会删除全部账号、会话、报告和评分，旧令牌随之失效。
 
-当前入口是明文 HTTP，且演示密码公开，只用于试用环境，不应录入真实数据。
+数据库重建后必须创建首位教师，否则 `preflight` 和 `/health` 会拒绝放行。初始口令只通过当前部署进程传给初始化命令，不写入环境文件；服务启动后应立即登录并轮换。
+
+## 备份与恢复演练
+
+备份脚本内部使用 `pg_dump --format=custom`；恢复演练使用标准 `pg_restore`，并且不会覆盖已有归档。
+
+```bash
+set -a; . /etc/gvcsim.env; set +a
+GVCSIM_BACKUP_DIR=/opt/gvcsim/shared/backups scripts/backup_classroom.sh
+cd /opt/gvcsim/shared/backups
+sha256sum -c classroom-YYYYmmddTHHMMSSZ.dump.sha256
+pg_restore --list classroom-YYYYmmddTHHMMSSZ.dump >/dev/null
+# 以下是 libpq 命令实际读取的连接变量；按 GVCSIM_PG_DSN 填写主机、端口和用户。
+export PGHOST=127.0.0.1 PGPORT=5432 PGUSER=gvcsim
+read -rsp 'PostgreSQL 口令: ' PGPASSWORD
+echo
+export PGPASSWORD
+createdb --maintenance-db=postgres gvcsim_restore_drill
+pg_restore --single-transaction --no-owner --no-acl --dbname=gvcsim_restore_drill classroom-YYYYmmddTHHMMSSZ.dump
+psql --dbname=gvcsim_restore_drill -Atc "select version from schema_meta where singleton"
+unset PGPASSWORD
+```
+
+演练结果必须为 `gvcsim-teaching-db-v10`。恢复生产库前应停止 API、保留故障库，并先在隔离空库完成上述摘要、目录和 schema 验证；仓库不自动执行生产恢复或删除备份。

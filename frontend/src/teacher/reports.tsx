@@ -4,256 +4,86 @@ import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import { ReportMarkdown } from "../report-renderer-lazy";
 import { showToast } from "../toast";
-import type { AuthUser, SubmissionDetail, SubmissionRow } from "../types";
+import type { AuthUser, TeacherReport } from "../types";
 import { EmptyState, SearchInput, StatusPill, Toolbar } from "./ui";
 
-const fmtTime = (s: string | null | undefined) => (s ? s.slice(0, 16).replace("T", " ") : "—");
-
+const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
 type Filter = "pending" | "graded" | "all";
-const FILTERS: { key: Filter; label: string }[] = [
-  { key: "pending", label: "待评阅" },
-  { key: "graded", label: "已评阅" },
-  { key: "all", label: "全部" },
-];
 
-/** 报告评阅:分段筛选 + 搜索的提交列表 → 左右双栏批阅 */
 export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () => void }) {
   const [refresh, setRefresh] = useState(0);
-  const [openId, setOpenId] = useState<number | null>(null);
+  const [openAccountId, setOpenAccountId] = useState<number | null>(null);
   const [filter, setFilter] = useState<Filter>("pending");
   const [query, setQuery] = useState("");
-  const { data, error } = useAsync<{ submissions: SubmissionRow[] }>(() => api.classroom.submissions(), [refresh]);
-
+  const { data, error } = useAsync<{ reports: TeacherReport[] }>(() => api.classroom.reports(), [refresh]);
   if (error) return <div className="error-box">{error}</div>;
-  if (openId != null) {
-    return (
-      <SubmissionView
-        id={openId}
-        grader={user.username}
-        onBack={(changed) => {
-          setOpenId(null);
-          if (changed) {
-            setRefresh((n) => n + 1);
-            onGraded?.();
-          }
-        }}
-      />
-    );
+  if (openAccountId != null) {
+    return <ReportView accountId={openAccountId} grader={user.username} onBack={(changed) => {
+      setOpenAccountId(null);
+      if (changed) { setRefresh((value) => value + 1); onGraded?.(); }
+    }} />;
   }
-
-  const rows = data?.submissions ?? [];
-  const pending = rows.filter((r) => r.state === "pending").length;
-  const q = query.trim().toLowerCase();
-  const shown = rows
-    .filter((r) => filter === "all" || r.state === filter)
-    .filter((r) => !q || [r.display_name, r.student_no, r.title].some((v) => (v ?? "").toLowerCase().includes(q)));
-
+  const reports = data?.reports ?? [];
+  const pending = reports.filter((report) => report.state === "pending").length;
+  const needle = query.trim().toLowerCase();
+  const shown = reports
+    .filter((report) => filter === "all" || report.state === filter)
+    .filter((report) => !needle || [report.display_name, report.username, report.student_no].some((value) => (value ?? "").toLowerCase().includes(needle)));
   return (
     <div>
       <Toolbar>
         <div className="segmented">
-          {FILTERS.map((f) => (
-            <button
-              key={f.key}
-              className={filter === f.key ? "active" : undefined}
-              onClick={() => setFilter(f.key)}
-            >
-              {f.label}
-              {f.key === "pending" && pending > 0 && <span className="seg-badge">{pending}</span>}
-            </button>
-          ))}
+          {(["pending", "graded", "all"] as Filter[]).map((value) => <button key={value} className={filter === value ? "active" : undefined} onClick={() => setFilter(value)}>{value === "pending" ? "待评阅" : value === "graded" ? "已评阅" : "全部"}{value === "pending" && pending > 0 && <span className="seg-badge">{pending}</span>}</button>)}
         </div>
-        <SearchInput value={query} onChange={setQuery} placeholder="搜索学生 / 学号 / 标题" />
+        <SearchInput value={query} onChange={setQuery} placeholder="搜索学生 / 用户名 / 学号" />
       </Toolbar>
-
       <ScrollableRegion className="table-wrap" label="报告提交列表，可横向滚动">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>学生</th>
-              <th>学号</th>
-              <th>班级</th>
-              <th>报告标题</th>
-              <th>年份</th>
-              <th>提交时间</th>
-              <th>状态</th>
-              <th>得分</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((r) => (
-              <tr key={r.id}>
-                <td>{r.display_name}</td>
-                <td>{r.student_no || "—"}</td>
-                <td>{r.class_name ?? "—"}</td>
-                <td>{r.title}</td>
-                <td>{r.year}</td>
-                <td>{fmtTime(r.submitted_at)}</td>
-                <td>
-                  {r.state === "graded" ? (
-                    <StatusPill tone="ok">已评阅</StatusPill>
-                  ) : (
-                    <StatusPill tone="warn">待评阅</StatusPill>
-                  )}
-                </td>
-                <td>{r.score ?? "—"}</td>
-                <td>
-                  <button className="primary sm" onClick={() => setOpenId(r.id)}>
-                    {r.state === "graded" ? "查看/改评" : "评阅"}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {shown.length === 0 && (
-          <EmptyState
-            icon="📝"
-            title={rows.length ? "没有匹配的提交" : "还没有学生提交报告"}
-            hint={
-              rows.length
-                ? "换个筛选或关键词试试"
-                : "学生在步骤 16 生成报告后点击「提交报告给老师」即会出现在这里"
-            }
-          />
-        )}
+        <table className="data-table"><thead><tr><th>学生</th><th>用户名</th><th>学号</th><th>提交时间</th><th>状态</th><th>得分</th><th /></tr></thead><tbody>
+          {shown.map((report) => <tr key={report.account_id}>
+            <td>{report.display_name}</td><td className="mono">{report.username}</td><td>{report.student_no || "—"}</td><td>{fmtTime(report.submitted_at)}</td>
+            <td>{report.state === "graded" ? <StatusPill tone="ok">已评阅</StatusPill> : <StatusPill tone="warn">待评阅</StatusPill>}</td><td>{report.score ?? "—"}</td>
+            <td><button className="primary sm" onClick={() => setOpenAccountId(report.account_id)}>{report.state === "graded" ? "查看/改评" : "评阅"}</button></td>
+          </tr>)}
+        </tbody></table>
+        {shown.length === 0 && <EmptyState icon="📝" title={reports.length ? "没有匹配的报告" : "还没有学生提交报告"} hint={reports.length ? "换个筛选或关键词试试" : "学生提交报告后会出现在这里"} />}
       </ScrollableRegion>
     </div>
   );
 }
 
-function SubmissionView({ id, grader, onBack }: { id: number; grader: string; onBack: (changed: boolean) => void }) {
-  const { data, error } = useAsync<SubmissionDetail>(() => api.classroom.submissionDetail(id), [id]);
+function ReportView({ accountId, grader, onBack }: { accountId: number; grader: string; onBack: (changed: boolean) => void }) {
+  const { data, error } = useAsync<TeacherReport>(() => api.classroom.reportDetail(accountId), [accountId]);
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted">加载中…</p>;
-  return <SubmissionGradeView key={`${id}-${data.submitted_at}`} data={data} grader={grader} onBack={onBack} />;
+  return <GradeView key={`${accountId}-${data.updated_at}`} data={data} grader={grader} onBack={onBack} />;
 }
 
-const SCORE_PRESETS = [60, 70, 80, 90, 100];
-const FEEDBACK_PRESETS = [
-  "结构完整",
-  "请补充识别假设",
-  "请区分 mock 与真实数据",
-  "请完善显著性和稳健性解读",
-];
-
-function SubmissionGradeView({
-  data,
-  grader,
-  onBack,
-}: {
-  data: SubmissionDetail;
-  grader: string;
-  onBack: (changed: boolean) => void;
-}) {
-  const [score, setScore] = useState(data.score != null ? String(data.score) : "");
-  const [feedback, setFeedback] = useState(data.feedback ?? "");
+function GradeView({ data, grader, onBack }: { data: TeacherReport; grader: string; onBack: (changed: boolean) => void }) {
+  const [score, setScore] = useState(data.score == null ? "" : String(data.score));
+  const [feedback, setFeedback] = useState(data.feedback);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  const submitGrade = () => {
-    // 显式输入才接受:空串会被 Number("") 静默转成 0,须先挡掉
-    if (score.trim() === "") {
-      setSaveError("请填写分数(0-100)");
-      return;
-    }
-    const n = Number(score);
-    if (!Number.isInteger(n) || n < 0 || n > 100) {
-      setSaveError("分数须为 0-100 的整数");
-      return;
-    }
+  const submit = () => {
+    const numeric = Number(score);
+    if (score.trim() === "" || !Number.isInteger(numeric) || numeric < 0 || numeric > 100) return setSaveError("分数须为 0-100 的整数");
     setSaving(true);
-    api.classroom.grade(data.id, n, feedback).then(
-      () => {
-        showToast(`已保存对 ${data.display_name} 的评阅:${n} 分`);
-        onBack(true);
-      },
-      (e) => {
-        setSaving(false);
-        setSaveError(String(e.message ?? e));
-      },
-    );
+    api.classroom.grade(data.account_id, numeric, feedback, data.updated_at).then(() => {
+      showToast(`已保存对 ${data.display_name} 的评阅：${numeric} 分`);
+      onBack(true);
+    }, (cause) => { setSaving(false); setSaveError(String((cause as Error).message ?? cause)); });
   };
-
-  // 只让标量进这行摘要:runs 是对象数组,String() 它只会得到 "[object Object]"。
-  // 结构化的部分单独渲染,新增的对象字段也不会再漏进字符串里。
-  const provenance = Object.entries(data.design ?? {})
-    .filter(([, v]) => v == null || typeof v !== "object")
-    .map(([k, v]) => `${k}=${typeof v === "boolean" ? (v ? "是" : "否") : String(v)}`)
-    .join(" · ");
-  const runs = data.design?.runs ?? [];
-
   return (
     <div>
-      <div className="review-topbar">
-        <button className="back-btn" onClick={() => onBack(false)}>
-          ← 返回列表
-        </button>
-        <span className="stage-chip">
-          {data.display_name}({data.username}){data.student_no ? ` · ${data.student_no}` : ""}
-        </span>
-        {data.state === "graded" ? (
-          <StatusPill tone="ok">已评 {data.score} 分 · {data.graded_by}</StatusPill>
-        ) : (
-          <StatusPill tone="warn">待评阅</StatusPill>
-        )}
-        <span className="muted">提交于 {fmtTime(data.submitted_at)}</span>
-      </div>
-
+      <div className="review-topbar"><button className="back-btn" onClick={() => onBack(false)}>← 返回列表</button><span className="stage-chip">{data.display_name}（{data.username}）</span><span className="muted">提交于 {fmtTime(data.submitted_at)}</span></div>
       <div className="grade-split">
-        <div className="grade-doc">
-          <h3 className="grade-doc-title">
-            {data.title}
-            <span className="muted"> · 数据年份 {data.year}</span>
-          </h3>
-          {runs.length > 0 && (
-            <p className="muted">
-              回归设定:{runs.map((run) => `步骤 ${run.step} · ${run.outcome}`).join("；")}
-            </p>
-          )}
-          {provenance && <p className="muted">溯源:{provenance}</p>}
-          <ReportMarkdown markdown={data.markdown} />
-        </div>
-
-        <aside className="grade-side">
-          <div className="panel">
-            <div className="panel-head">
-              <span className="panel-ic">🖊️</span>评阅
-            </div>
-            <label className="grade-field">
-              分数(0-100)
-              <input type="number" min={0} max={100} value={score} onChange={(e) => setScore(e.target.value)} />
-            </label>
-            <div className="pill-row" role="group" style={{ margin: "-4px 0 12px" }} aria-label="快捷分值">
-              {SCORE_PRESETS.map((value) => (
-                <button key={value} className={`pill${score === String(value) ? " on" : ""}`} onClick={() => setScore(String(value))}>
-                  {value}
-                </button>
-              ))}
-            </div>
-            <label className="grade-field">
-              评语(学生在步骤 16 页面可见)
-              <textarea value={feedback} onChange={(e) => setFeedback(e.target.value)} rows={6} />
-            </label>
-            <div className="pill-row" role="group" style={{ margin: "-4px 0 12px" }} aria-label="评语模板">
-              {FEEDBACK_PRESETS.map((text) => (
-                <button
-                  key={text}
-                  className="pill"
-                  onClick={() => setFeedback((current) => current.trim() ? `${current.trim()}；${text}` : text)}
-                >
-                  {text}
-                </button>
-              ))}
-            </div>
-            {saveError && <div className="error-box">{saveError}</div>}
-            <button className="primary block" disabled={saving} onClick={submitGrade}>
-              {saving ? "提交中…" : data.state === "graded" ? "更新评阅" : "提交评阅"}
-            </button>
-            <p className="muted">评阅人:{grader};学生重新提交会重置评阅状态。</p>
-          </div>
-        </aside>
+        <div className="grade-doc"><ReportMarkdown markdown={data.markdown} /></div>
+        <aside className="grade-side"><div className="panel"><div className="panel-head"><span className="panel-ic">🖊️</span>评阅</div>
+          <label className="grade-field">分数（0-100）<input type="number" min={0} max={100} value={score} onChange={(event) => setScore(event.target.value)} /></label>
+          <label className="grade-field">评语（可空）<textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} rows={8} maxLength={4000} /></label>
+          {saveError && <div className="error-box">{saveError}</div>}
+          <button className="primary block" disabled={saving} onClick={submit}>{saving ? "保存中…" : data.state === "graded" ? "更新评阅" : "提交评阅"}</button>
+          <p className="muted">评阅人：{grader}；学生重新生成已提交报告时，旧评分会被清除。</p>
+        </div></aside>
       </div>
     </div>
   );

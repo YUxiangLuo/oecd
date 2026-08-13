@@ -1,4 +1,4 @@
-"""Password authentication and stateless signed access tokens."""
+"""Password authentication and release/account-bound signed access tokens."""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ import secrets
 import time
 from pathlib import Path
 
-from gvcsim import config
+from gvcsim import artifacts, config
 
-SECRET_FILE = config.ROOT / "data" / ".auth_secret"
+SECRET_FILE = config.DATA_DIR / ".auth_secret"
 
 
 class AuthenticationUnavailable(Exception):
@@ -68,29 +68,26 @@ def authenticate(username: str, password: str) -> dict | None:
             "name": account["display_name"],
             "role": account["role"],
             "account_id": account["id"],
+            "auth_version": account["auth_version"],
         }
     except (db.Unavailable, db.SchemaVersionMismatch) as error:
         raise AuthenticationUnavailable("认证数据库不可用或未就绪") from error
 
 
-def _current_release_id() -> str:
-    from gvcsim import artifacts
-
-    try:
-        return artifacts.release_identity()
-    except (artifacts.ArtifactContractError, OSError) as error:
-        raise AuthenticationUnavailable("当前数据发布不可用") from error
-
-
 def issue_token(user: dict) -> tuple[str, int]:
     now = int(time.time())
     exp = now + config.TOKEN_TTL_SECONDS
+    try:
+        release_id = artifacts.release_identity()
+    except (artifacts.ArtifactContractError, OSError) as error:
+        raise AuthenticationUnavailable("当前数据发布不可用") from error
     body = {
         "sub": user["username"],
         "name": user["name"],
         "role": user["role"],
         "aid": user["account_id"],
-        "rid": _current_release_id(),
+        "av": user["auth_version"],
+        "rid": release_id,
         "exp": exp,
     }
     payload = _b64(json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode())
@@ -99,6 +96,8 @@ def issue_token(user: dict) -> tuple[str, int]:
 
 
 def verify_token(token: str) -> dict | None:
+    from gvcsim.classroom import db
+
     try:
         payload_b64, signature = token.split(".", 1)
         expected = _b64(hmac.new(_secret(), payload_b64.encode(), hashlib.sha256).digest())
@@ -107,10 +106,30 @@ def verify_token(token: str) -> dict | None:
         payload = json.loads(_unb64(payload_b64))
         if payload.get("exp", 0) <= time.time():
             return None
-        if payload.get("role") not in {"student", "teacher"} or not payload.get("sub"):
+        role = payload.get("role")
+        username = payload.get("sub")
+        account_id = payload.get("aid")
+        auth_version = payload.get("av")
+        release_id = payload.get("rid")
+        if (
+            role not in {"student", "teacher"}
+            or not isinstance(username, str)
+            or not username
+            or isinstance(account_id, bool)
+            or not isinstance(account_id, int)
+            or isinstance(auth_version, bool)
+            or not isinstance(auth_version, int)
+            or auth_version <= 0
+            or not isinstance(release_id, str)
+        ):
             return None
-        if payload.get("rid") != _current_release_id():
-            return None
+        try:
+            if not hmac.compare_digest(release_id, artifacts.release_identity()):
+                return None
+            if not db.auth_subject_is_current(account_id, username, role, auth_version):
+                return None
+        except (artifacts.ArtifactContractError, OSError, db.Unavailable, db.SchemaVersionMismatch) as error:
+            raise AuthenticationUnavailable("认证依赖的数据发布或数据库不可用") from error
         return payload
     except AuthenticationUnavailable:
         raise

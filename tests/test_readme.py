@@ -5,8 +5,8 @@ def test_readme_contains_the_single_documentation_contract():
     readme = (ROOT / "README.md").read_text()
     assert "course-quiz-v4" in readme
     assert "experiment-session-simple-v2" in readme
-    assert "gvcsim-teaching-db-v8" in readme
-    assert "不签发答题凭证" in readme
+    assert "gvcsim-teaching-db-v10" in readme
+    assert "不提供班级、公告" in readme
     assert "OECD Terms & Conditions" in readme
     assert "pg_dump --format=custom" in readme
     assert "bun install --frozen-lockfile" in readme

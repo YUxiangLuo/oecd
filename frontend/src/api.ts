@@ -1,9 +1,9 @@
-import type { ExperimentSession, GeneratedReport, ProgressResponse, ReportGate, SessionResponse } from "./types";
+import type { ExperimentSession, ReportMutationResponse, SessionResponse, SessionSaveResponse } from "./types";
 
 export const AUTH_TOKEN_KEY = "gvcsim_token";
 
-// localStorage 只负责跨刷新恢复认证。每个已挂载标签页必须继续使用自己校验过的
-// token；否则另一个标签登录新账号后，旧页面会把自己的 React 状态写给新账号。
+// localStorage 只负责跨刷新共享登录。页面挂载后固定使用已经校验过的 token，
+// 避免另一个标签切换账号后把当前页面的会话写入新账号。
 let activeAuthToken: string | null | undefined;
 
 export function setActiveAuthToken(token: string | null): void {
@@ -45,14 +45,9 @@ export function withQuery(path: string, params: Record<string, QueryValue>): str
   return query ? `${path}?${query}` : path;
 }
 
-export function shouldExpireAuth(requestToken: string | null, currentToken: string | null): boolean {
-  return requestToken !== null && requestToken === currentToken;
-}
-
 function notifyAuthExpired(requestToken: string | null) {
-  if (!shouldExpireAuth(requestToken, getActiveAuthToken())) return;
+  if (!requestToken || requestToken !== getActiveAuthToken()) return;
   setActiveAuthToken(null);
-  // 延迟返回的旧请求不能删除另一个标签刚写入的新 token。
   if (requestToken === localStorage.getItem(AUTH_TOKEN_KEY)) {
     localStorage.removeItem(AUTH_TOKEN_KEY);
   }
@@ -258,56 +253,30 @@ export const api = {
         results: { question_id: string; correct: boolean; explanation: string }[];
         quiz?: { version: string; answers: Record<string, string> };
       }>("/api/classroom/quiz/submit", body),
-    announcements: () =>
-      get<{ announcements: import("./types").Announcement[] }>("/api/classroom/announcements"),
-    progress: () => get<ProgressResponse>("/api/classroom/progress"),
-    reportProgress: (step: number) => post<{ ok: boolean }>("/api/classroom/progress", { step }),
     session: () => get<SessionResponse>("/api/classroom/session"),
     saveSession: (body: { session: ExperimentSession }) =>
-      post<SessionResponse>("/api/classroom/session", body, "PUT"),
-    resetWorkspace: (body: { confirmation: string }) =>
-      post<{ ok: boolean }>("/api/classroom/workspace/reset", body),
-    submitReport: (body: { title: string }) =>
-      post<{
-        id: number;
-        state: "pending" | "graded";
-        submitted_at: string;
-      }>("/api/classroom/report/submit", body),
-    generateReport: () => post<GeneratedReport>("/api/classroom/report/generate"),
-    generatedReport: () => get<Partial<GeneratedReport>>("/api/classroom/report/generated"),
-    reportGate: () => get<ReportGate>("/api/classroom/report/gate"),
-    myReport: () => get<import("./types").MySubmission>("/api/classroom/report/mine"),
-    overview: (classId?: number | null) =>
-      get<import("./types").ClassOverview>(
-        withQuery("/api/classroom/overview", { class_id: classId }),
-      ),
-    classes: () => get<{ classes: import("./types").ClassInfo[] }>("/api/classroom/classes"),
-    createClass: (body: { name: string; code: string; semester?: string; note?: string }) =>
-      post<import("./types").ClassInfo>("/api/classroom/classes", body),
-    students: (classId?: number | null) =>
-      get<{ students: import("./types").StudentRow[] }>(
-        withQuery("/api/classroom/students", { class_id: classId }),
-      ),
+      post<SessionSaveResponse>("/api/classroom/session", body, "PUT"),
+    submitReport: () => post<ReportMutationResponse>("/api/classroom/report/submit"),
+    generateReport: () => post<ReportMutationResponse>("/api/classroom/report/generate"),
+    students: () => get<{ students: import("./types").StudentRow[] }>("/api/classroom/students"),
     createStudent: (body: {
       username: string;
       display_name: string;
       password: string;
       student_no?: string;
-      class_id?: number | null;
     }) => post<import("./types").StudentRow>("/api/classroom/students", body),
     updateStudent: (
       id: number,
-      body: { display_name?: string; student_no?: string; class_id?: number | null; password?: string },
+      body: { display_name?: string; student_no?: string; password?: string },
     ) => post<import("./types").StudentRow>(`/api/classroom/students/${id}`, body),
-    submissions: () =>
-      get<{ submissions: import("./types").SubmissionRow[] }>("/api/classroom/submissions"),
-    submissionDetail: (id: number) =>
-      get<import("./types").SubmissionDetail>(`/api/classroom/submissions/${id}`),
-    grade: (id: number, score: number, feedback: string) =>
-      post<import("./types").SubmissionDetail>(`/api/classroom/submissions/${id}/grade`, { score, feedback }),
-    createAnnouncement: (body: { title: string; body: string; class_id?: number | null }) =>
-      post<import("./types").Announcement>("/api/classroom/announcements", body),
-    deleteAnnouncement: (id: number) =>
-      post<{ ok: boolean }>(`/api/classroom/announcements/${id}`, undefined, "DELETE"),
+    reports: () => get<{ reports: import("./types").TeacherReport[] }>("/api/classroom/reports"),
+    reportDetail: (accountId: number) =>
+      get<import("./types").TeacherReport>(`/api/classroom/reports/${accountId}`),
+    grade: (accountId: number, score: number, feedback: string, expectedUpdatedAt: string) =>
+      post<import("./types").TeacherReport>(`/api/classroom/reports/${accountId}/grade`, {
+        score,
+        feedback,
+        expected_updated_at: expectedUpdatedAt,
+      }),
   },
 };

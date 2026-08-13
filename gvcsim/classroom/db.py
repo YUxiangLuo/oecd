@@ -184,39 +184,46 @@ def readiness() -> dict[str, str]:
         row = c.execute("SELECT version FROM schema_meta WHERE singleton").fetchone()
         if not row or row["version"] != TEACHING_DB_VERSION:
             raise SchemaVersionMismatch("教学数据库 schema 未就绪")
+        if c.execute("SELECT 1 FROM accounts WHERE role='teacher' LIMIT 1").fetchone() is None:
+            raise Unavailable("教学数据库缺少教师账号")
     return {"status": "ok", "schema_version": TEACHING_DB_VERSION}
+
+
+def current_release_id() -> str:
+    from gvcsim.artifacts import release_identity
+
+    return release_identity()
 
 
 def _seed_if_empty(c: psycopg.Connection[dict[str, Any]]) -> bool:
     if c.execute("SELECT 1 FROM accounts LIMIT 1").fetchone() or not config.DEMO_MODE or not config.BOOTSTRAP_PASSWORD:
         return False
-    class_id = _required(
-        c.execute(
-            "INSERT INTO classes(name,code,semester,note) VALUES (%s,%s,%s,%s) RETURNING id",
-            ("GVC 实验演示班", "GVC-DEMO", config.COURSE_TERM, f"{config.COURSE_TERM}学期演示班级。"),
-        ).fetchone(),
-        "seed class",
-    )["id"]
-    for username, name, role, target_class, student_no in (
-        ("teacher", "老师", "teacher", None, ""),
-        ("student", "同学", "student", class_id, "2026001"),
+    for username, name, role, student_no in (
+        ("teacher", "老师", "teacher", ""),
+        ("student", "同学", "student", "2026001"),
     ):
         salt = secrets.token_hex(16)
         c.execute(
-            "INSERT INTO accounts(username,display_name,role,class_id,student_no,pw_salt,pw_hash)"
-            " VALUES (%s,%s,%s,%s,%s,%s,%s)",
-            (username, name, role, target_class, student_no, salt, hash_password(config.BOOTSTRAP_PASSWORD, salt)),
+            "INSERT INTO accounts(username,display_name,role,student_no,pw_salt,pw_hash) VALUES (%s,%s,%s,%s,%s,%s)",
+            (username, name, role, student_no, salt, hash_password(config.BOOTSTRAP_PASSWORD, salt)),
         )
-    c.execute(
-        "INSERT INTO announcements(title,body,author) VALUES (%s,%s,%s)",
-        ("欢迎进入 2026 秋学期", "本学期使用全新的题库与实验会话，请按顺序完成 16 步实验并提交报告。", "teacher"),
-    )
     return True
 
 
 def find_account(username: str) -> dict[str, Any] | None:
     with conn() as c:
         return c.execute("SELECT * FROM accounts WHERE username=%s", (username,)).fetchone()
+
+
+def auth_subject_is_current(account_id: int, username: str, role: str, auth_version: int) -> bool:
+    with conn() as c:
+        return (
+            c.execute(
+                "SELECT 1 FROM accounts WHERE id=%s AND username=%s AND role=%s AND auth_version=%s",
+                (account_id, username, role, auth_version),
+            ).fetchone()
+            is not None
+        )
 
 
 def touch_login(username: str) -> None:
@@ -250,7 +257,7 @@ def change_own_password(username: str, current_password: str, new_password: str)
             raise ValueError("新密码不能与当前密码相同")
         salt = secrets.token_hex(16)
         c.execute(
-            "UPDATE accounts SET pw_salt=%s,pw_hash=%s WHERE id=%s",
+            "UPDATE accounts SET pw_salt=%s,pw_hash=%s,auth_version=auth_version+1 WHERE id=%s",
             (salt, hash_password(new_password, salt), account["id"]),
         )
     return True
@@ -259,7 +266,7 @@ def change_own_password(username: str, current_password: str, new_password: str)
 def reset_learning_records() -> None:
     """Clear only data tied to an experiment recomputation."""
     with conn() as c:
-        for table in ("submissions", "reports", "experiment_sessions", "step_progress"):
+        for table in ("reports", "experiment_sessions"):
             c.execute(f"DELETE FROM {table}")
 
 
@@ -269,29 +276,18 @@ atexit.register(shutdown)
 from gvcsim.classroom.management import (  # noqa: E402
     _STUDENT_COLS as _STUDENT_COLS,
     _learning_status_in_conn as _learning_status_in_conn,
-    create_class as create_class,
     create_student as create_student,
-    list_classes as list_classes,
     list_students as list_students,
-    overview_stats as overview_stats,
-    teacher_can_access_class as teacher_can_access_class,
     update_student as update_student,
 )
 from gvcsim.classroom.records import (  # noqa: E402
-    create_announcement as create_announcement,
-    delete_announcement as delete_announcement,
-    get_progress as get_progress,
+    ReportChanged as ReportChanged,
+    get_report as get_report,
     get_session as get_session,
-    get_submission as get_submission,
-    grade_submission as grade_submission,
+    grade_report as grade_report,
     latest_report as latest_report,
-    list_announcements as list_announcements,
-    list_submissions as list_submissions,
-    my_submission as my_submission,
-    reset_workspace as reset_workspace,
+    list_reports as list_reports,
     save_generated_report as save_generated_report,
     save_session as save_session,
     submit_report as submit_report,
-    teacher_can_access_submission_in_conn as teacher_can_access_submission_in_conn,
-    upsert_progress as upsert_progress,
 )

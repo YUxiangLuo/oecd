@@ -1,7 +1,6 @@
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { AccountPasswordModal } from "./account-password";
 import {
-  AnnouncementBanner,
   CourseSidebar,
   StepFooter,
   StepHeader,
@@ -13,7 +12,7 @@ import { LabRouter } from "./lab-router";
 import type { RegressionHistory, RegressionSettings } from "./regression";
 import { QuizPanel } from "./step-quiz";
 import { ToastHost } from "./toast";
-import type { Announcement, AuthUser, Meta, StepsResponse, StepStateApi } from "./types";
+import type { AuthUser, Meta, StepsResponse, StepStateApi } from "./types";
 import type { SessionApi } from "./use-session";
 
 interface StudentWorkspaceProps {
@@ -21,29 +20,19 @@ interface StudentWorkspaceProps {
   meta: Meta | null;
   stepsData: StepsResponse;
   current: number;
-  maxStep: number;
   session: SessionApi;
   stepState: StepStateApi;
-  completionKey: string;
   completedSteps: Set<number>;
   regressionSettings: RegressionSettings;
   onRegressionSettingsChange: (settings: RegressionSettings) => void;
   regressionHistory: RegressionHistory;
   onRegressionHistoryChange: Dispatch<SetStateAction<RegressionHistory>>;
-  announcements: Announcement[];
-  bannerDismissed: boolean;
-  bannerExpanded: boolean;
-  resettingWorkspace: boolean;
-  resetWorkspaceError: string | null;
   authExpiresAt: number | null;
   showIntro: boolean;
   showPasswordChange: boolean;
   contentRef: RefObject<HTMLElement | null>;
   introTriggerRef: RefObject<HTMLButtonElement | null>;
   onNavigateStep: (step: number) => void;
-  onResetWorkspace: () => void;
-  onToggleBanner: () => void;
-  onDismissBanner: () => void;
   onShowIntro: () => void;
   onCloseIntro: () => void;
   onRequestPasswordChange: () => void;
@@ -58,29 +47,19 @@ export function StudentWorkspace({
   meta,
   stepsData,
   current,
-  maxStep,
   session,
   stepState,
-  completionKey,
   completedSteps,
   regressionSettings,
   onRegressionSettingsChange,
   regressionHistory,
   onRegressionHistoryChange,
-  announcements,
-  bannerDismissed,
-  bannerExpanded,
-  resettingWorkspace,
-  resetWorkspaceError,
   authExpiresAt,
   showIntro,
   showPasswordChange,
   contentRef,
   introTriggerRef,
   onNavigateStep,
-  onResetWorkspace,
-  onToggleBanner,
-  onDismissBanner,
   onShowIntro,
   onCloseIntro,
   onRequestPasswordChange,
@@ -110,35 +89,16 @@ export function StudentWorkspace({
           user={user}
           meta={meta}
           authExpiresAt={authExpiresAt}
-          resettingWorkspace={resettingWorkspace}
-          completion={session.completion}
-          maxStep={maxStep}
-          totalSteps={totalSteps}
           introTriggerRef={introTriggerRef}
-          onResetWorkspace={onResetWorkspace}
           onShowIntro={onShowIntro}
           onRequestPasswordChange={onRequestPasswordChange}
           onLogout={onLogout}
         />
 
-        {resetWorkspaceError && (
-          <div className="error-box workspace-reset-error" role="alert">清空实验失败：{resetWorkspaceError}</div>
-        )}
-
-        {!bannerDismissed && (
-          <AnnouncementBanner
-            announcements={announcements}
-            expanded={bannerExpanded}
-            onToggle={onToggleBanner}
-            onDismiss={onDismissBanner}
-          />
-        )}
-
         <div className="main">
           <CourseSidebar
             stepsData={stepsData}
             current={current}
-            maxStep={maxStep}
             completion={session.completion}
             onNavigate={onNavigateStep}
           />
@@ -182,13 +142,12 @@ export function StudentWorkspace({
                     step={step}
                     meta={meta}
                     state={stepState}
-                    completionKey={completionKey}
+                    report={session.report}
                     sessionStatus={session.status}
                     sessionUnsynced={session.unsynced}
                     sessionSyncing={session.syncing}
-                    sessionSyncError={session.syncError}
                     onFlushSession={session.syncNow}
-                    onCompletionChanged={session.refreshCompletion}
+                    onReportChanged={session.applyReportMutation}
                     regressionSettings={regressionSettings}
                     onRegressionSettingsChange={onRegressionSettingsChange}
                     regressionHistory={regressionHistory}
@@ -215,7 +174,6 @@ export function StudentWorkspace({
               next={nextStep}
               stageName={stageName}
               current={current}
-              maxStep={maxStep}
               completedSteps={completedSteps}
               onNavigate={onNavigateStep}
             />
