@@ -150,6 +150,38 @@
 .qc-release-status { margin: 0 0 16px; }
 .qc-release-status > summary { cursor: pointer; font-weight: 750; }
 .qc-release-status p { margin: 8px 0 0; font-size: 12px; line-height: 1.55; }
+.qc-teaching-guide {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0 16px;
+}
+.qc-teaching-guide > div {
+  border: 1px solid #e0e4ee; border-radius: 10px; background: #fff; padding: 14px 15px;
+}
+.qc-teaching-guide h3 { margin: 0 0 5px; color: #252b38; font-size: 13.5px; }
+.qc-teaching-guide p { margin: 0 0 10px; color: #5d6575; font-size: 12px; line-height: 1.6; }
+.qc-decision-list, .qc-diagnostic-list { display: grid; gap: 7px; margin: 0; }
+.qc-decision-list > div, .qc-diagnostic-list > div {
+  display: grid; grid-template-columns: 108px 1fr; gap: 8px; align-items: baseline;
+}
+.qc-decision-list dt, .qc-diagnostic-list dt { color: #32394a; font-size: 11.5px; font-weight: 750; }
+.qc-decision-list dd, .qc-diagnostic-list dd { margin: 0; color: #606879; font-size: 11.5px; line-height: 1.5; }
+.length-path-guide {
+  margin: 0 0 18px; border: 1px solid #dde3ef; border-left: 4px solid #4b47e0;
+  border-radius: 10px; background: #fff; padding: 14px 16px;
+}
+.length-path-guide > div:first-child { display: flex; align-items: baseline; gap: 10px; }
+.length-path-guide > div:first-child b { color: #252b38; font-size: 13px; }
+.length-path-guide > div:first-child span { color: #6a7282; font-size: 11px; }
+.length-path-nodes { display: flex; align-items: center; margin: 13px 0; }
+.length-path-nodes > span { display: contents; }
+.length-path-nodes b {
+  flex: 1 1 0; min-width: 0; border: 1px solid #dce2ef; border-radius: 8px; background: #f7f9fd;
+  padding: 9px 12px; color: #394155; font-size: 12px; text-align: center;
+}
+.length-path-nodes i { flex: none; padding: 0 7px; color: #4b47e0; font-size: 17px; font-style: normal; font-weight: 750; }
+.length-path-guide dl { display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 8px; margin: 0; }
+.length-path-guide dl > div { border-radius: 7px; background: #f5f7fc; padding: 8px 10px; }
+.length-path-guide dt { color: #3733b4; font-size: 11.5px; font-weight: 750; }
+.length-path-guide dd { margin: 3px 0 0; color: #5f6778; font-size: 11px; line-height: 1.5; }
 .intro-mechanisms { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 8px auto 2px; }
 .intro-mechanisms button { display: grid; gap: 2px; min-width: 170px; border: 1px solid rgba(255,255,255,.2); border-radius: 9px; background: rgba(255,255,255,.06); color: #e8edfb; padding: 8px 11px; text-align: left; cursor: pointer; }
 .intro-mechanisms button.on { border-color: #78a9f2; background: rgba(74,132,220,.25); }

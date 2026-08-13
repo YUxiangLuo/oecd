@@ -312,11 +312,12 @@ export interface ClassroomReport {
   graded_at: string | null;
 }
 
-/** 报告里一步回归的摘要:服务端复估后写入 provenance.runs,提交时随 design 一起冻结。 */
+/** 报告里一步回归的冻结快照：生成报告时把保存的 design/result 一起写入 provenance。 */
 interface ReportRun {
   step: number;
   outcome: string;
   design: RegressionDesignInfo;
+  result: RegressionResponse["result"];
 }
 
 export interface SessionResponse {

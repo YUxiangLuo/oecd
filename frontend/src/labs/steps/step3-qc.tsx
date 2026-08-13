@@ -5,6 +5,28 @@ import { useAsync, YearPicker } from "../shared";
 import { QcChecksTable } from "./qc-checks-table";
 import { summarizeQcRelease } from "./qc-release";
 
+const QC_DECISIONS = [
+  {
+    level: "Fatal（阻断）",
+    action: "停止正式分析与发布；修正数据并复检。教学 override 也必须显式披露。",
+  },
+  {
+    level: "Warning（警告）",
+    action: "可以继续，但结论必须带上风险说明，并做相应稳健性检查。",
+  },
+  {
+    level: "Disclosure（披露）",
+    action: "检查本身可以通过；仍要在报告中说明口径、例外或适用边界。",
+  },
+] as const;
+
+const LEONTIEF_DIAGNOSTICS = [
+  ["谱半径", "看投入需求是否会收敛；接近 1 是放大风险警告，达到或超过 1 表示级数不收敛，属于 Fatal。"],
+  ["条件数", "看输入中的小误差会不会被求逆显著放大；越高越不稳定。"],
+  ["逆残差", "把算出的逆矩阵乘回 (I−A)，检查结果是否足够接近单位矩阵。"],
+  ["非负性", "检查逆矩阵是否出现违背通常投入产出解释的实质负值。"],
+] as const;
+
 /** 第 2 步只展示数据发布质检；处置边界由本步选择题检查。 */
 export function QcLab({ meta, onNavigateStep }: {
   meta: Meta;
@@ -28,6 +50,32 @@ export function QcLab({ meta, onNavigateStep }: {
   return (
     <div>
       <YearPicker years={meta.years} year={year} onChange={setYear} />
+      <section className="qc-teaching-guide" aria-labelledby="qc-guide-title">
+        <div>
+          <h3 id="qc-guide-title">先判断严重度，再决定能否继续</h3>
+          <p>质检等级描述的是处置边界，不只是颜色。Fatal 会阻断发布；Warning 和 Disclosure 都允许继续，但承担的说明义务不同。</p>
+          <dl className="qc-decision-list">
+            {QC_DECISIONS.map((item) => (
+              <div key={item.level}>
+                <dt>{item.level}</dt>
+                <dd>{item.action}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+        <div>
+          <h3>程序能求逆，还要检查什么？</h3>
+          <p><code>(I−A)⁻¹</code> 被算出来，只说明软件返回了一个数值结果；以下四项分别排除不同风险。</p>
+          <dl className="qc-diagnostic-list">
+            {LEONTIEF_DIAGNOSTICS.map(([term, meaning]) => (
+              <div key={term}>
+                <dt>{term}</dt>
+                <dd>{meaning}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
       <div className={failures || failedSections ? "warnbox" : "tipbox"} style={{ marginBottom: 16, fontWeight: 700 }}>
         {loading
           ? `正在汇总质检结果… 已读取 ${allChecks.length} 项`

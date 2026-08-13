@@ -11,6 +11,31 @@ import { useAsync } from "../../shared";
 import { ChartStory, StepIntro } from "../viz/scaffold";
 import { IndicatorTable, type IndicatorStepState, useIndicatorControls } from "./indicator-table";
 
+function LengthPathGuide() {
+  const nodes = ["原材料", "零部件", "整机", "最终消费"];
+  return (
+    <section className="length-path-guide" aria-labelledby="length-path-title">
+      <div>
+        <b id="length-path-title">先用同一条价值路径辨认方向</b>
+        <span>这是方向示意；真实指标是许多路径按增加值份额加权后的平均值。</span>
+      </div>
+      <div className="length-path-nodes" aria-label="原材料到最终消费的价值路径">
+        {nodes.map((node, index) => (
+          <span key={node}>
+            <b>{node}</b>
+            {index < nodes.length - 1 && <i aria-hidden>→</i>}
+          </span>
+        ))}
+      </div>
+      <dl>
+        <div><dt>前向 PLv →</dt><dd>站在增加值来源端，顺着生产链看到最终吸收。</dd></div>
+        <div><dt>← 后向 PLy</dt><dd>站在最终产品端，逆着生产链回溯初始投入。</dd></div>
+        <div><dt>位置 GVCPs</dt><dd>前向 GVC 段 ÷ 后向 GVC 段；大于 1 只表示该口径下相对更上游。</dd></div>
+      </dl>
+    </section>
+  );
+}
+
 export function Step6Length({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }) {
   const controls = useIndicatorControls(meta, state);
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
@@ -28,11 +53,13 @@ export function Step6Length({ meta, step, state }: { meta: Meta; step: Step; sta
         ]}
       />
 
+      <LengthPathGuide />
+
       <ChartStory
         eyebrow="计算结果 · 先出数字"
         title="生产长度分解表(从 ICIO 算出来的)"
-        what={<>由步骤 1 的 <b>ICIO 表</b>算出的生产长度:<b>PLv</b>(前向,增加值到最终吸收平均经过几道生产环节)、<b>PLy</b>(后向,最终品回溯到初始投入)、<b>GVCPs</b>(价值链位置)。</>}
-        read={<>怎么读一行:PLv / PLy 表示增加值平均被计为总产出的次数；数值越大，核算到的生产环节越多。应在同一年、同一粒度内作相对比较，不预设固定范围。<b>GVCPs &gt; 1</b> 表示相对更靠上游。</>}
+        what={<>由步骤 1 的 <b>ICIO 表</b>算出的生产长度：<b>PLv</b> 顺着价值路径向前看，<b>PLy</b> 沿最终产品向后回溯，<b>GVCPs</b> 比较两者的 GVC 段。</>}
+        read={<>PLv / PLy 表示增加值平均被计为总产出的次数；数值越大，核算到的生产环节越多。应在同一年、同一粒度内作相对比较。先看两段实际长度，再由 <b>GVCPs = PLv_GVC / PLy_GVC</b> 判断相对位置。</>}
         find={<>换个国家看数字怎么变。GVCPs 较高表示相对上游，但上游活动可来自原材料、关键中间品或生产性服务；下一节验证各段加权后加回总长度。</>}
       >
         <IndicatorTable

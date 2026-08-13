@@ -86,8 +86,14 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert report.provenance["quiz_version"] == quizzes.QUIZ_VERSION
     assert report.provenance["course_release"] == "2026-fall"
     assert report.provenance["runs"][0]["step"] == 12
+    assert report.provenance["runs"][0]["result"]["coefs"][0]["coef"] == 1.2
     assert "1.2" in report.markdown and "不在报告生成时复算" in report.markdown
     assert "[0.6, 1.8]" in report.markdown
+    assert "## 关键证据摘要" in report.markdown
+    assert "处理后相对变化" in report.markdown
+    assert "+120.00 个百分点" in report.markdown
+    assert "## 技术附录：保存的回归结果" in report.markdown
+    assert "| 政策处理项 | 1.2 | 0.3 | [0.6, 1.8] | 0.01 |" in report.markdown
     assert "政策冲击为基于公开事件手工编码的拟真教学面板" in report.markdown
     assert "有向无权网络" in report.markdown
     assert report.provenance["network_algorithm"] == "gephi-compatible-directed-unweighted-positive-v1"
@@ -200,8 +206,9 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
 
     report = build(session, "同学")
 
-    assert "CHN_D01T02 × USA_D01T02 = 228.0672" in report.markdown
+    assert "CHN_D01T02 × USA_D01T02 = 228.1" in report.markdown
     assert "主动比较：CHN、USA" in report.markdown
+    assert "| CHN | 2020 | 0.12 |" in report.markdown
     assert "仅用于探索定位，不限定下游回归样本" in report.markdown
     assert "按所选冲击类型汇总该类型全部已编码事件" in report.markdown
     assert "## 学生原创分析与反思" in report.markdown
@@ -232,4 +239,108 @@ def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
 
     assert "统计推断已抑制" in report.markdown
     assert "处理聚类不足" in report.markdown
-    assert "| policy | -0.2 | 0.1 | 已抑制 | 已抑制 |" in report.markdown
+    assert "| 政策处理项 | -0.2 | 0.1 | 已抑制 | 已抑制 |" in report.markdown
+
+
+def test_report_translates_settings_controls_and_rounds_display_values(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    session["steps"]["12"]["data"]["run"] = {
+        "design": {
+            "outcome": "trade",
+            "depvar_label": "FVA 份额",
+            "equation": "FVA_share_ijt = treated×post + controls",
+            "granularity": "country_industry",
+            "shock_type": "tariff",
+            "method": "did",
+            "control_mode": "icio_derived",
+            "price_mode": "nominal",
+            "scenario": "clean",
+            "controls": ["log_gdp_proxy"],
+        },
+        "result": {
+            "status": "warning",
+            "n_obs": 16348,
+            "coefs": [
+                {
+                    "name": "treated×post",
+                    "coef": 0.0013729825631389496,
+                    "se": 0.001556326861714243,
+                    "p": 0.38049053387270826,
+                    "ci_low": -0.0017273795304135428,
+                    "ci_high": 0.0044733446566914414,
+                },
+                {"name": "log_gdp_proxy", "coef": -0.028947058783405005, "se": 0.014101910976155195},
+            ],
+        },
+    }
+
+    markdown = build(session, "同学").markdown
+
+    assert "关税冲击 · 双重差分 (DID) · 国家–行业级 · ICIO 派生控制变量" in markdown
+    assert "+0.14 个百分点" in markdown
+    assert "[-0.17, +0.45] 个百分点" in markdown
+    assert "证据不足，无法判断方向" in markdown
+    assert "处理后相对变化（处理组 × 处理后）" in markdown
+    assert "增加值规模(log, ICIO GDP proxy)" in markdown
+    assert "0.0013729825631389496" not in markdown
+    assert "country_industry" not in markdown
+    assert "icio_derived" not in markdown
+
+
+def test_report_summary_prioritizes_failed_pretrend_and_names_scenario(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    session["steps"]["12"]["data"]["run"] = {
+        "design": {
+            "outcome": "trade",
+            "depvar_label": "FVA 份额",
+            "granularity": "country_industry",
+            "shock_type": "tariff",
+            "method": "event_study",
+            "control_mode": "none",
+            "scenario": "confounded",
+            "controls": [],
+            "equation": "y = event time + FE",
+        },
+        "result": {
+            "status": "warning",
+            "status_reasons": ["没有完全未处理的对照聚类"],
+            "support": {
+                "status": "warning",
+                "suppress_inference": False,
+                "treated_clusters": 76,
+                "untreated_clusters": 0,
+                "untreated_entities": 3075,
+                "reasons": ["没有完全未处理的对照聚类"],
+            },
+            "n_obs": 16348,
+            "coefs": [
+                {
+                    "name": "k=0",
+                    "coef": 0.02,
+                    "se": 0.004,
+                    "p": 0.001,
+                    "ci_low": 0.012,
+                    "ci_high": 0.028,
+                }
+            ],
+            "diagnostics": {
+                "pretrend": {
+                    "available": True,
+                    "p": 0.00001,
+                    "interpretation": "检测到明显的冲击前差异，因果解释需谨慎。",
+                }
+            },
+        },
+    }
+
+    markdown = build(session, "同学").markdown
+
+    assert "前趋势混杂教学面板" in markdown
+    assert "冲击前趋势存在明显差异" in markdown
+    assert "只能描述该数值，不能把它解释为冲击后的方向性变化证据" in markdown
+    assert "最重要的设计限制：** 冲击前趋势联合检验 p=<0.0001" in markdown
+    assert "发现正向变化证据" not in markdown

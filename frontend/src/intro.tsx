@@ -16,24 +16,6 @@ import type { AuthUser, Meta, ShockEvent, StepsResponse } from "./types";
 
 const N_SCENES = 5;
 
-/** 数字滚动:0 → value,约 1 秒 */
-function CountUp({ value, suffix }: { value: number; suffix?: string }) {
-  const [v, setV] = useState(0);
-  const started = useRef(false);
-  useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    const t0 = performance.now();
-    const tick = (t: number) => {
-      const p = Math.min(1, (t - t0) / 1000);
-      setV(Math.round(value * (1 - Math.pow(1 - p, 3))));
-      if (p < 1) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  }, [value]);
-  return <span>{v}{suffix ?? ""}</span>;
-}
-
 /** 数据卡左上角的小图标(内联 SVG,替代 emoji) */
 function CardIcon({ kind }: { kind: "icio" | "shock" }) {
   return (
@@ -162,10 +144,12 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
         ))}
       </div>
       <div className="intro-stats">
-        <div><div className="intro-stat-v"><CountUp value={meta?.countries.length ?? 77} /></div><div className="intro-stat-l">经济体</div></div>
-        <div><div className="intro-stat-v"><CountUp value={meta?.sectors.length ?? 45} /></div><div className="intro-stat-l">行业</div></div>
+        {/* 课程范围是数据事实，必须从首帧就显示最终值。数字滚动会在截图或
+            快速阅读时制造“58 / 34 / 12”一类并不存在的中间口径。 */}
+        <div><div className="intro-stat-v">{meta?.countries.length ?? 77}</div><div className="intro-stat-l">经济体</div></div>
+        <div><div className="intro-stat-v">{meta?.sectors.length ?? 45}</div><div className="intro-stat-l">行业</div></div>
         <div><div className="intro-stat-v">{yearSpan}</div><div className="intro-stat-l">年份覆盖</div></div>
-        <div><div className="intro-stat-v"><CountUp value={stepsData?.steps.length ?? 16} /></div><div className="intro-stat-l">实验步骤</div></div>
+        <div><div className="intro-stat-v">{stepsData?.steps.length ?? 16}</div><div className="intro-stat-l">实验步骤</div></div>
       </div>
     </div>,
 

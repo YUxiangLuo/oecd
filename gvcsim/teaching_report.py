@@ -13,7 +13,15 @@ from gvcsim import evidence, quizzes
 from gvcsim.artifacts import NETWORK_ALGORITHM, dataset_metadata
 from gvcsim.config import COURSE_RELEASE, processed_years
 from gvcsim.data.citations import report_source_disclosures, report_source_label
+from gvcsim.data.controls import CONTROL_LABELS
+from gvcsim.regression.design import (
+    CONTROL_MODE_LABELS,
+    GRANULARITY_LABELS,
+    METHOD_LABELS,
+    PRICE_MODE_LABELS,
+)
 from gvcsim.session import SESSION_VERSION
+from gvcsim.shocks import SHOCK_LABELS
 from gvcsim.steps import STEPS
 
 REFLECTION_TEXT_LIMIT = 2400
@@ -34,6 +42,29 @@ _STATUS_LABELS = {
     "insufficient": "处理支持度不足",
     "invalid_design": "设计无效",
     "unknown": "未记录设计状态",
+}
+_SCENARIO_LABELS = {
+    "clean": "基准教学面板",
+    "noisy": "测量误差教学面板",
+    "confounded": "前趋势混杂教学面板",
+}
+_OUTCOME_INTERPRETATIONS = {
+    "trade": {
+        "negative": "结果与外国增加值依赖下降一致，但不能单独证明供应链已经回流。",
+        "positive": "结果与外国增加值依赖上升一致，但仍需检查识别假设和其他共同变化。",
+    },
+    "production": {
+        "negative": "结果与复杂跨境分工收缩一致，但不能单靠该估计确定机制。",
+        "positive": "结果与复杂跨境分工扩张一致，但不能据此排除其他解释。",
+    },
+    "length": {
+        "negative": "结果与跨境生产链缩短一致，可能对应回流、近岸化或其他调整。",
+        "positive": "结果与跨境生产链延长一致，但不能单靠该估计判断企业策略。",
+    },
+    "network": {
+        "negative": "结果与拓扑中介位置下降一致，但不能单独证明发生脱钩。",
+        "positive": "结果与拓扑中介位置增强一致，但可能同时受到网络重组影响。",
+    },
 }
 _REFLECTION_MIN_LENGTHS = {
     "research_question": 12,
@@ -134,6 +165,186 @@ def check_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
 def _safe(value: Any, limit: int = 240) -> str:
     rendered = " ".join(str(value).split()).replace("|", "¦").replace("`", "ʼ")
     return rendered[:limit]
+
+
+def _number(value: Any, *, p_value: bool = False) -> str:
+    """Format report numbers for reading, while keeping full values in provenance."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(float(value)):
+        return "—"
+    numeric = float(value)
+    if p_value and 0 < numeric < 0.0001:
+        return "<0.0001"
+    return f"{numeric:.4g}"
+
+
+def _count(value: Any) -> str:
+    if isinstance(value, int) and not isinstance(value, bool):
+        return f"{value:,}"
+    if isinstance(value, float) and value.is_integer():
+        return f"{int(value):,}"
+    return _number(value)
+
+
+def _signed(value: float, digits: int) -> str:
+    return f"{value:+.{digits}f}"
+
+
+def _setting_value(key: str, value: Any) -> str:
+    mappings = {
+        "granularity": GRANULARITY_LABELS,
+        "shock_type": SHOCK_LABELS,
+        "method": METHOD_LABELS,
+        "control_mode": CONTROL_MODE_LABELS,
+        "price_mode": PRICE_MODE_LABELS,
+        "scenario": _SCENARIO_LABELS,
+    }
+    mapping = mappings.get(key, {})
+    return _safe(mapping.get(str(value), value))
+
+
+def _coefficient_label(name: Any, design: dict[str, Any]) -> str:
+    raw = str(name)
+    raw_labels = design.get("control_labels")
+    labels = cast(dict[str, Any], raw_labels) if isinstance(raw_labels, dict) else {}
+    if raw in labels:
+        return _safe(labels[raw])
+    if raw in CONTROL_LABELS:
+        return CONTROL_LABELS[raw]
+    if raw in {"treated×post", "sanction_treated×post", "export_control_treated×post"}:
+        return "处理后相对变化（处理组 × 处理后）"
+    if raw == "tariff_shock":
+        return "关税冲击强度"
+    if raw == "sanction_shock":
+        return "制裁冲击强度"
+    if raw == "export_control_shock":
+        return "出口管制冲击强度"
+    if raw.startswith("k="):
+        return f"相对处理时期 {raw}"
+    if "×base_gvc" in raw:
+        base = raw.replace("×base_gvc", "")
+        return f"{_coefficient_label(base, design)} × 处理前 GVC"
+    if raw in {"policy", "policy_term"}:
+        return "政策处理项"
+    return _safe(raw)
+
+
+def _primary_coefficient(design: dict[str, Any], result: dict[str, Any]) -> dict[str, Any] | None:
+    controls = {str(item) for item in _list_values(design.get("controls"))}
+    candidates = [
+        item
+        for item in _list_values(result.get("coefs"))
+        if isinstance(item, dict) and str(item.get("name")) not in controls and "×base_gvc" not in str(item.get("name"))
+    ]
+    if design.get("method") == "event_study":
+        return next((item for item in candidates if item.get("name") == "k=0"), None) or next(
+            (item for item in candidates if str(item.get("name", "")).startswith("k=+")), None
+        )
+    return candidates[0] if candidates else None
+
+
+def _natural_effect(
+    outcome: str, design: dict[str, Any], result: dict[str, Any], coefficient: dict[str, Any]
+) -> tuple[str, str, str]:
+    increment = 0.01 if design.get("method") == "twfe_intensity" else 1.0
+    effect = float(coefficient["coef"]) * increment
+    ci_low, ci_high = coefficient.get("ci_low"), coefficient.get("ci_high")
+    ci = (
+        (float(ci_low), float(ci_high))
+        if isinstance(ci_low, (int, float)) and isinstance(ci_high, (int, float))
+        else None
+    )
+    if design.get("method") == "twfe_intensity":
+        effect_label = "冲击强度每增加 1 个百分点"
+    elif design.get("method") == "event_study":
+        name = str(coefficient.get("name", ""))
+        effect_label = "冲击当期变化（k=0）" if name == "k=0" else f"冲击后变化（{name or '所选时期'}）"
+    else:
+        effect_label = "处理后相对变化"
+    if design.get("interaction"):
+        effect_label += "（处理前 GVC 样本均值处）"
+    if outcome in {"trade", "production"}:
+        effect_text = f"{_signed(effect * 100, 2)} 个百分点"
+        interval = (
+            f"[{_signed(ci[0] * increment * 100, 2)}, {_signed(ci[1] * increment * 100, 2)}] 个百分点" if ci else "—"
+        )
+    elif outcome == "network":
+        sd = result.get("depvar_std")
+        relative = effect / float(sd) if isinstance(sd, (int, float)) and float(sd) > 0 else None
+        effect_text = f"{_signed(effect, 2)} 个中心性原始单位"
+        if relative is not None:
+            effect_text += f"（约 {_signed(relative, 2)} 个样本标准差）"
+        interval = f"[{_signed(ci[0] * increment, 2)}, {_signed(ci[1] * increment, 2)}] 个原始单位" if ci else "—"
+    else:
+        effect_text = f"{_signed(effect, 3)} 个长度单位"
+        interval = f"[{_signed(ci[0] * increment, 3)}, {_signed(ci[1] * increment, 3)}] 个长度单位" if ci else "—"
+    return effect_label, effect_text, interval
+
+
+def _failed_pretrend(result: dict[str, Any]) -> str | None:
+    raw_diagnostics = result.get("diagnostics")
+    diagnostics: dict[str, Any] = raw_diagnostics if isinstance(raw_diagnostics, dict) else {}
+    raw_pretrend = diagnostics.get("pretrend")
+    if not isinstance(raw_pretrend, dict) or raw_pretrend.get("available") is not True:
+        return None
+    pretrend: dict[str, Any] = raw_pretrend
+    p_value = pretrend.get("p")
+    if (
+        not isinstance(p_value, (int, float))
+        or isinstance(p_value, bool)
+        or not math.isfinite(float(p_value))
+        or float(p_value) >= 0.05
+    ):
+        return None
+    interpretation = _safe(pretrend.get("interpretation") or "检测到明显的冲击前差异")
+    return f"冲击前趋势联合检验 p={_number(p_value, p_value=True)}；{interpretation}"
+
+
+def _evidence_reading(
+    outcome: str, coefficient: dict[str, Any], suppressed: bool, failed_pretrend: str | None
+) -> tuple[str, str]:
+    if suppressed:
+        return "不可作方向判断", "统计推断已被抑制；点估计只是计算输出，不能据此判断上升或下降。"
+    if failed_pretrend:
+        coef = float(coefficient["coef"])
+        direction = "正向" if coef > 0 else "负向" if coef < 0 else "接近零"
+        return (
+            "冲击前趋势存在明显差异",
+            f"当前模型得到{direction}点估计，但冲击前已经存在明显差异；只能描述该数值，不能把它解释为冲击后的方向性变化证据。",
+        )
+    ci_low, ci_high = coefficient.get("ci_low"), coefficient.get("ci_high")
+    if not isinstance(ci_low, (int, float)) or not isinstance(ci_high, (int, float)):
+        return "证据不足", "置信区间未记录，不能确定估计方向。"
+    if ci_high < 0:
+        return "发现负向变化证据", _OUTCOME_INTERPRETATIONS[outcome]["negative"]
+    if ci_low > 0:
+        return "发现正向变化证据", _OUTCOME_INTERPRETATIONS[outcome]["positive"]
+    return "证据不足，无法判断方向", "95% 置信区间跨过 0；这不等于“没有效应”，而是当前证据不足以确定方向。"
+
+
+def _summary_design_limit(
+    status: str, support: dict[str, Any], reasons: list[Any], failed_pretrend: str | None
+) -> str | None:
+    if status in {"insufficient", "invalid_design"} and reasons:
+        return _safe(reasons[0], 360)
+    if failed_pretrend:
+        return failed_pretrend
+    untreated_clusters = support.get("untreated_clusters")
+    if untreated_clusters == 0:
+        treated_clusters = _count(support.get("treated_clusters"))
+        untreated_entities = _count(support.get("untreated_entities"))
+        return (
+            f"没有完全未处理的对照聚类：{treated_clusters} 个聚类都至少包含一个处理实体；"
+            f"虽有 {untreated_entities} 个从未处理实体，聚类层面的共同冲击识别仍更依赖模型设定。"
+        )
+    reversal_share = support.get("reversal_share")
+    if isinstance(reversal_share, (int, float)) and reversal_share > 0:
+        return (
+            f"约 {float(reversal_share) * 100:.2f}% 的处理后个体—年发生处理撤销；"
+            "吸收型编码仍把撤销后的观测记为已处理，解释时需说明这一偏离。"
+        )
+    if status == "warning" and reasons:
+        return _safe(reasons[0], 360)
+    return None
 
 
 def _saved_runs(session: dict[str, Any]) -> list[dict[str, Any]]:
@@ -247,9 +458,10 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             )
             lines.append(f"- 保存的切片：{selection or '—'}")
         if observation:
+            observation_value = observation.get("value", "—")
             lines.append(
                 f"- 记录的单元格：{_safe(observation.get('row', '—'))} × "
-                f"{_safe(observation.get('column', '—'))} = {_safe(observation.get('value', '—'))}"
+                f"{_safe(observation.get('column', '—'))} = {_number(observation_value) if isinstance(observation_value, (int, float)) else _safe(observation_value)}"
             )
         lines.append("")
 
@@ -277,9 +489,11 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                 (f"- 记录指标：`{_safe(data.get('metric', '—'))}`", "", "| 实体 | 年份 | 数值 |", "|---|---:|---:|")
             )
             for item in observations:
+                observation_value = item.get("value", "—")
                 lines.append(
                     f"| {_safe(item.get('entity', item.get('country', '—')))} | "
-                    f"{_safe(item.get('year', '—'))} | {_safe(item.get('value', '—'))} |"
+                    f"{_safe(item.get('year', '—'))} | "
+                    f"{_number(observation_value) if isinstance(observation_value, (int, float)) else _safe(observation_value)} |"
                 )
         lines.append("")
 
@@ -308,11 +522,63 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _evidence_summary(runs: list[dict[str, Any]]) -> list[str]:
+    lines = [
+        "## 关键证据摘要",
+        "",
+        "本节把保存的主要估计翻译成课堂中的单位和证据判断。完整方程、全部控制项与诊断保留在后面的技术附录。",
+        "",
+    ]
+    if not runs:
+        lines.extend(("- 未保存可展示的回归结果。", ""))
+        return lines
+    for run in runs:
+        step, outcome = run["step"], run["outcome"]
+        design, result = run["design"], run["result"]
+        support = result.get("support") if isinstance(result.get("support"), dict) else {}
+        status = str(result.get("status") or support.get("status") or "unknown")
+        suppressed = bool(support.get("suppress_inference")) or status in {"insufficient", "invalid_design"}
+        coefficient = _primary_coefficient(design, result)
+        lines.extend((f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}", ""))
+        if coefficient is None or not isinstance(coefficient.get("coef"), (int, float)):
+            lines.extend(("- 当前设定没有可解读的主要政策系数。", ""))
+            continue
+        effect_label, effect, interval = _natural_effect(outcome, design, result, coefficient)
+        failed_pretrend = _failed_pretrend(result)
+        evidence, interpretation = _evidence_reading(outcome, coefficient, suppressed, failed_pretrend)
+        setting = " · ".join(
+            _setting_value(key, design.get(key))
+            for key in ("shock_type", "method", "granularity", "control_mode", "scenario")
+            if design.get(key) not in (None, "")
+        )
+        lines.extend(
+            (
+                "| 项目 | 学生可读结果 |",
+                "|---|---|",
+                f"| 研究对象 | {_safe(design.get('depvar_label', outcome))} |",
+                f"| 保存的模型 | {setting or '—'} |",
+                f"| {effect_label} | **{effect}** |",
+                f"| 95% 置信区间 | {interval} |",
+                f"| 证据判断 | **{evidence}** |",
+                f"| 设计状态 | {_STATUS_LABELS.get(status, _STATUS_LABELS['unknown'])} |",
+                "",
+                f"- **可以支持的表述：** {interpretation}",
+                "- **不能支持的表述：** 本结果不能自动证明拟真政策冲击导致了现实中的 GVC 变化。",
+            )
+        )
+        reasons = [*_list_values(result.get("status_reasons")), *_list_values(support.get("reasons"))]
+        design_limit = _summary_design_limit(status, support, reasons, failed_pretrend)
+        if design_limit:
+            lines.append(f"- **最重要的设计限制：** {design_limit}")
+        lines.append("")
+    return lines
+
+
 def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
     lines = [
-        "## 保存的回归结果",
+        "## 技术附录：保存的回归结果",
         "",
-        "报告直接展示实验中最后保存的服务端运行结果，不会重新估计。点估计是条件相关性的估计量；只有设计有效、处理支持充分且识别假设成立时，才可进一步讨论因果解释。",
+        "以下结果来自实验中最后保存的服务端运行，不在报告生成时重新估计。表格数值为便于阅读做了四位有效数字的显示舍入；完整原始值仍保留在报告溯源数据中。",
         "",
     ]
     by_step = {run["step"]: run for run in runs}
@@ -334,25 +600,26 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                 f"- 因变量：{_safe(design.get('depvar_label', run['outcome']))}",
                 f"- 结果量纲：{_OUTCOME_UNITS.get(run['outcome'], '原始单位')}",
                 f"- 方程：`{_safe(design.get('equation', '—'))}`",
-                f"- 设计状态：{_STATUS_LABELS.get(str(status), _safe(status))}（`{_safe(status)}`）；观测数：{_safe(result.get('n_obs', '—'))}",
+                f"- 设计状态：{_STATUS_LABELS.get(str(status), _STATUS_LABELS['unknown'])}；观测数：{_count(result.get('n_obs'))}",
             )
         )
         setting_bits = [
-            f"{label}={_safe(design[key])}"
+            f"{label}={_setting_value(key, design[key])}"
             for key, label in (
                 ("granularity", "粒度"),
                 ("shock_type", "冲击类型"),
                 ("method", "方法"),
                 ("control_mode", "控制变量"),
                 ("price_mode", "价格口径"),
-                ("scenario_label", "教学场景"),
+                ("scenario", "教学场景"),
             )
             if design.get(key) not in (None, "")
         ]
         if setting_bits:
             lines.append(f"- 保存的设定：{'；'.join(setting_bits)}")
         if reasons:
-            lines.append(f"- 状态原因：{'；'.join(reasons)}")
+            lines.append("- 主要设计限制：")
+            lines.extend(f"  - {reason}" for reason in reasons)
         if support:
             support_bits = []
             for key, label in (
@@ -363,7 +630,13 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                 ("reversal_share", "处理撤销行占比"),
             ):
                 if support.get(key) is not None:
-                    support_bits.append(f"{label}={_safe(support[key])}")
+                    value = support[key]
+                    rendered = (
+                        f"{float(value) * 100:.2f}%"
+                        if key == "reversal_share" and isinstance(value, (int, float))
+                        else _count(value)
+                    )
+                    support_bits.append(f"{label}={rendered}")
             if support_bits:
                 lines.append(f"- 处理支持：{'；'.join(support_bits)}")
         if suppressed:
@@ -377,13 +650,17 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                 interval = (
                     "已抑制"
                     if suppressed and (ci_low is None or ci_high is None)
-                    else (f"[{_safe(ci_low)}, {_safe(ci_high)}]" if ci_low is not None and ci_high is not None else "—")
+                    else (
+                        f"[{_number(ci_low)}, {_number(ci_high)}]"
+                        if ci_low is not None and ci_high is not None
+                        else "—"
+                    )
                 )
                 p_raw = coefficient.get("p")
-                p_value = "已抑制" if suppressed and p_raw is None else (_safe(p_raw) if p_raw is not None else "—")
+                p_value = "已抑制" if suppressed and p_raw is None else _number(p_raw, p_value=True)
                 lines.append(
-                    f"| {_safe(coefficient.get('name', '—'))} | {_safe(coefficient.get('coef', '—'))} | "
-                    f"{_safe(coefficient.get('se', '—'))} | {interval} | {p_value} |"
+                    f"| {_coefficient_label(coefficient.get('name', '—'), design)} | {_number(coefficient.get('coef'))} | "
+                    f"{_number(coefficient.get('se'))} | {interval} | {p_value} |"
                 )
         marginal_effects = [item for item in _list_values(result.get("marginal_effects")) if isinstance(item, dict)]
         if marginal_effects:
@@ -401,21 +678,25 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                 interval = (
                     "已抑制"
                     if suppressed and (ci_low is None or ci_high is None)
-                    else (f"[{_safe(ci_low)}, {_safe(ci_high)}]" if ci_low is not None and ci_high is not None else "—")
+                    else (
+                        f"[{_number(ci_low)}, {_number(ci_high)}]"
+                        if ci_low is not None and ci_high is not None
+                        else "—"
+                    )
                 )
                 p_raw = item.get("p")
-                p_value = "已抑制" if suppressed and p_raw is None else (_safe(p_raw) if p_raw is not None else "—")
+                p_value = "已抑制" if suppressed and p_raw is None else _number(p_raw, p_value=True)
                 lines.append(
-                    f"| {_safe(item.get('policy_term', '—'))} | {_safe(item.get('label', '—'))} | "
-                    f"{_safe(item.get('effect', '—'))} | {interval} | {p_value} |"
+                    f"| {_coefficient_label(item.get('policy_term', '—'), design)} | {_safe(item.get('label', '—'))} | "
+                    f"{_number(item.get('effect'))} | {interval} | {p_value} |"
                 )
         diagnostics = result.get("diagnostics") if isinstance(result.get("diagnostics"), dict) else {}
         pretrend = diagnostics.get("pretrend") if isinstance(diagnostics.get("pretrend"), dict) else None
         if pretrend:
             if pretrend.get("available"):
                 lines.append(
-                    f"- 冲击前趋势联合检验：F={_safe(pretrend.get('statistic', '—'))}，"
-                    f"p={_safe(pretrend.get('p', '—'))}；{_safe(pretrend.get('interpretation', ''))}"
+                    f"- 冲击前趋势联合检验：F={_number(pretrend.get('statistic'))}，"
+                    f"p={_number(pretrend.get('p'), p_value=True)}；{_safe(pretrend.get('interpretation', ''))}"
                 )
             else:
                 lines.append(
@@ -503,7 +784,15 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "quiz_version": quizzes.QUIZ_VERSION,
         "course_release": COURSE_RELEASE,
         "session_fingerprint": fingerprint,
-        "runs": [{"step": run["step"], "outcome": run["outcome"], "design": run["design"]} for run in runs],
+        "runs": [
+            {
+                "step": run["step"],
+                "outcome": run["outcome"],
+                "design": run["design"],
+                "result": run["result"],
+            }
+            for run in runs
+        ],
         "algorithm": "WWZ five-category aggregation plus OECD TLS extension; WWYZ indicators; unweighted path centralities; saved classroom regression output",
         "network_algorithm": network_algorithm,
         "data_sources": data_sources,
@@ -520,6 +809,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "> 本报告汇总描述性探索和已保存的教学估计，不证明政策冲击导致了 GVC 变化。因果解释至少依赖冲击外生性、趋势可比性、无同期混杂、处理定义与模型相容，以及处理效应异质性得到妥善处理。",
         "",
         *_reflection_section(session),
+        *_evidence_summary(runs),
         *_quiz_sections(session),
         *_experiment_sections(session),
         *_run_sections(runs),

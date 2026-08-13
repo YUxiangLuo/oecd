@@ -42,7 +42,7 @@ uv run gvcsim serve --port 8000
 uv run gvcsim classroom-init --reset
 ```
 
-这会清空全部旧账号、会话、报告和评分，并重建四张表：`schema_meta`、`accounts`、`experiment_sessions`、`reports`。会话与报告以 `(账号, release_id)` 隔离，口令轮换通过 `auth_version` 撤销既有令牌。当前学期使用题库 `course-quiz-v4` 和会话 `experiment-session-simple-v2`。
+这会清空全部旧账号、会话、报告和评分，并重建四张表：`schema_meta`、`accounts`、`experiment_sessions`、`reports`。会话与报告以 `(账号, release_id)` 隔离，口令轮换通过 `auth_version` 撤销既有令牌。当前学期使用题库 `course-quiz-v5` 和会话 `experiment-session-simple-v2`。
 
 学生编辑在 800 ms 后自动保存；同一时刻最多一个请求，在途编辑合并成最新快照。失败后保留最新快照并显示“重试保存”。理解题完成、报告生成/提交和退出前会主动冲刷保存队列；浏览器突然关闭仍可能丢失最后 800 ms 的编辑。
 
