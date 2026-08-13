@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ClassroomReport } from "../../types";
-import { GateCard, ReportStatus, reportGenerateLabel } from "./step16-report";
+import { GateCard, ReportLab, ReportStatus, reportGenerateLabel } from "./step16-report";
 
 function report(state: ClassroomReport["state"]): ClassroomReport {
   return {
@@ -49,5 +49,26 @@ describe("step 16 report states", () => {
     expect(html).toContain("步骤 12");
     expect(html).toContain("保存有效回归");
     expect(html).toContain("gate-link");
+  });
+
+  test("offers PDF export after a report has been generated", () => {
+    const html = renderToStaticMarkup(<ReportLab
+      state={{
+        data: {},
+        save: () => {},
+        complete: true,
+        syncing: false,
+        syncError: null,
+        syncNow: () => {},
+      }}
+      report={report("graded")}
+      sessionStatus="ready"
+      sessionUnsynced={false}
+      sessionSyncing={false}
+      onFlushSession={async () => {}}
+      onNavigateStep={() => {}}
+      onReportChanged={() => {}}
+    />);
+    expect(html).toContain("导出 PDF");
   });
 });

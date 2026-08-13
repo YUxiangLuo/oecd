@@ -84,12 +84,13 @@ export function ReportLab({
   const [blocked, setBlocked] = useState<ReportGateItem[]>([]);
   const [generating, setGenerating] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [printing, setPrinting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { void preloadReportRenderer().catch(() => {}); }, []);
 
   const reflection = (state.data ?? {}) as ReportReflectionState;
-  const busy = generating || submitting;
+  const busy = generating || submitting || printing;
   const waitForSave = sessionStatus !== "ready" || sessionUnsynced || sessionSyncing;
 
   const generate = async () => {
@@ -122,6 +123,20 @@ export function ReportLab({
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const printReport = async () => {
+    setPrinting(true);
+    setError(null);
+    try {
+      await preloadReportRenderer();
+      await new Promise<void>((resolve) => globalThis.requestAnimationFrame(() => resolve()));
+      globalThis.print();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPrinting(false);
     }
   };
 
@@ -161,6 +176,11 @@ export function ReportLab({
         {report?.state === "draft" && (
           <button className="primary" disabled={busy || waitForSave} onClick={() => { void submit(); }}>
             {submitting ? "提交中…" : "提交报告给老师"}
+          </button>
+        )}
+        {report && (
+          <button className="secondary" disabled={busy} onClick={() => { void printReport(); }}>
+            {printing ? "正在准备 PDF…" : "导出 PDF"}
           </button>
         )}
         {waitForSave && <span className="muted">请先保存最新实验记录</span>}

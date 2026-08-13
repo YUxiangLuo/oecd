@@ -238,11 +238,11 @@ def _validate_manifest(processed_dir: Path, manifest: Any, *, verify_integrity: 
             raise ArtifactValidationError(f"artifact checksum mismatch: {relative_path}")
 
         artifact_format = entry.get("format")
-        expected_format = "csv" if path.suffix.lower() == ".csv" else "json" if path.suffix.lower() == ".json" else "binary"
+        expected_format = (
+            "csv" if path.suffix.lower() == ".csv" else "json" if path.suffix.lower() == ".json" else "binary"
+        )
         if artifact_format != expected_format:
-            raise ArtifactValidationError(
-                f"artifact format does not match its extension: {relative_path}"
-            )
+            raise ArtifactValidationError(f"artifact format does not match its extension: {relative_path}")
         if artifact_format == "csv":
             header, row_count = _csv_shape(path)
             if entry.get("header") != header or entry.get("rows") != row_count:

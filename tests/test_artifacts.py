@@ -81,9 +81,7 @@ def test_manifest_format_must_match_artifact_extension(tmp_path):
     _release(tmp_path)
     metadata_path = tmp_path / artifacts.DATASET_METADATA
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    entry = next(
-        item for item in metadata[artifacts.ARTIFACT_MANIFEST_NAME] if item["path"] == "panel_country.csv"
-    )
+    entry = next(item for item in metadata[artifacts.ARTIFACT_MANIFEST_NAME] if item["path"] == "panel_country.csv")
     entry["format"] = "binary"
     metadata[artifacts.METADATA_DIGEST_NAME] = artifacts._metadata_digest(metadata)
     metadata_path.write_text(json.dumps(metadata), encoding="utf-8")

@@ -398,7 +398,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
           })}
         </g>
       </svg>
-      <div style={{ position: "absolute", left: 18, top: 68, maxWidth: 360 }}>
+      <div className="network-legend">
         <Legend items={
           colorMode === "region"
             ? REGIONS.map((r, i) => ({ name: r, color: CAT[i] }))
@@ -441,7 +441,7 @@ export function NetworkViz({ data }: { data: NetworkData }) {
           </table>
         </div>
       )}
-      <div style={{ position: "absolute", right: 18, bottom: 14, fontSize: 10.5, color: "#b0b5c2", textAlign: "right", lineHeight: 1.6 }}>
+      <div className="network-caption">
         {expanded ? "大图模式 · 按 Esc 或“退出大图”返回" : "点击任意节点进入大图模式"}<br />
         节点大小 = {metricMeta[sizeMetric].label} · 节点颜色 = {colorMode === "region" ? "区域" : metricMeta[colorMode].label}<br />
         显示 {visibleEdges.length}/{data.edges.length} 条 Top 边；箭头表示 source → target<br />

@@ -68,7 +68,10 @@ def validate_security_config() -> None:
         if not _data_dir_setting or not _raw_data_dir_setting:
             raise ConfigurationError("生产环境必须显式配置 GVCSIM_DATA_DIR 和 GVCSIM_RAW_DATA_DIR")
         configured_paths = (Path(_data_dir_setting), Path(_raw_data_dir_setting))
-        if any(not path.is_absolute() or path.resolve() == ROOT or ROOT in path.resolve().parents for path in configured_paths):
+        if any(
+            not path.is_absolute() or path.resolve() == ROOT or ROOT in path.resolve().parents
+            for path in configured_paths
+        ):
             raise ConfigurationError("生产数据目录必须是代码目录之外的绝对路径")
         # 空列表表示只允许同源请求，不安装宽松的跨域来源；这是安全默认值。
 
