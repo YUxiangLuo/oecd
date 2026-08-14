@@ -39,7 +39,11 @@ describe("regression lessons", () => {
     expect(reportTakeaway("length", "insufficient", "—")).toContain("看不出方向");
     expect(reportTakeaway("network", "suppressed", "—")).toContain("不要把点估计当成方向");
     expect(reportTakeaway("production", "positive", "+0.40 个百分点")).not.toContain("证明");
+    expect(reportTakeaway("trade", "pretrend", "+1.20 个百分点")).toContain("冲击前已有明显差异");
+    expect(reportTakeaway("trade", "pretrend", "+1.20 个百分点")).toContain("不能写成");
+    expect(reportTakeaway("trade", "pretrend", "+1.20 个百分点")).not.toContain("相对上升（");
     expect(familyDirectionLabel("insufficient")).toBe("看不出");
+    expect(familyDirectionLabel("pretrend")).toBe("冲击前已有差异");
   });
 
   test("research question follows the selected shock and estimand", () => {

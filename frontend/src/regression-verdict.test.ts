@@ -65,6 +65,21 @@ function response(
 }
 
 describe("buildRegressionVerdict", () => {
+  test("failed pretrend is not a directional evidence claim", () => {
+    const payload = response("trade", { ...coefficient(0.02, 0.012, 0.028), name: "k=0" }, 1, 2, "event_study");
+    payload.result.diagnostics = {
+      pretrend: {
+        available: true, reason: null, terms: [], statistic: 8, df_num: 2, df_denom: 10,
+        p: 0.00001, interpretation: "检测到明显的冲击前差异，因果解释需谨慎。",
+      },
+    };
+    const verdict = buildRegressionVerdict("trade", payload);
+    expect(verdict.state).toBe("pretrend");
+    expect(verdict.title).toContain("冲击前趋势");
+    expect(verdict.evidence).toContain("只能描述该数值");
+    expect(verdict.title).not.toContain("发现正向");
+  });
+
   test("uses confidence interval, not sign alone, for evidence", () => {
     const verdict = buildRegressionVerdict("trade", response("trade", coefficient(-0.01, -0.03, 0.01)));
     expect(verdict.state).toBe("insufficient");

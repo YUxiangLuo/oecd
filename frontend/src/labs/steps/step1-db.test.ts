@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { DbMeta } from "../../types";
-import { captureDbObservation, dbColumnCountryForTable, formatYColumnHeader, restoreDbSlice, sliceAutosave } from "./step1-db";
+import { captureDbObservation, dbColumnCountryForTable, formatYColumnHeader, observationSourceLabel, restoreDbSlice, sliceAutosave } from "./step1-db";
 
 const meta: DbMeta = {
   years: [2019, 2020],
@@ -62,8 +62,44 @@ describe("database slice restoration", () => {
         row_sector: "",
         col_sector: "",
       },
-      observation: { row: "CHN_D01T02", column: "USA_D01T02", value: 228.0672 },
+      observation: {
+        row: "CHN_D01T02",
+        column: "USA_D01T02",
+        value: 228.0672,
+        year: 2020,
+        table: "z",
+        row_country: "CHN",
+        col_country: "USA",
+        row_sector: "",
+        col_sector: "",
+      },
     });
+  });
+
+  test("browsing another slice does not rewrite the captured cell source", () => {
+    const captured = captureDbObservation(
+      {
+        year: 2020,
+        table: "z",
+        rowCountry: "CHN",
+        colCountry: "USA",
+        rowSector: "",
+        colSector: "",
+      },
+      { row: "CHN_D01T02", column: "USA_D01T02", value: 228.0672 },
+    );
+    const browsed = sliceAutosave({
+      year: 2019,
+      table: "y",
+      rowCountry: "USA",
+      colCountry: "CHN",
+      rowSector: "",
+      colSector: "",
+    });
+    expect(browsed.slice?.year).toBe(2019);
+    expect(captured.observation?.year).toBe(2020);
+    expect(captured.observation?.table).toBe("z");
+    expect(captured.observation && observationSourceLabel(captured.observation)).toBe("2020 · 中间投入 Z");
   });
 
   test("restores a real column country when leaving an accounts-only slice", () => {

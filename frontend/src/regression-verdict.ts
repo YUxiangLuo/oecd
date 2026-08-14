@@ -2,7 +2,8 @@ import type { CoefStat, RegressionOutcome, RegressionResponse, RegressionStatus 
 
 // suppressed:设计无效或处理支持度不足,服务端已抽掉 p 值与置信区间。
 // 它与 insufficient 必须分开:前者是“不可评估”,后者是“区间跨过 0”。
-type EvidenceState = "negative" | "positive" | "insufficient" | "suppressed";
+// pretrend:区间可能未过 0,但冲击前已有明显差异,不能写成方向性证据。
+export type EvidenceState = "negative" | "positive" | "insufficient" | "suppressed" | "pretrend";
 
 /** 设计有效性 → 摘要处的短文案。与 gvcsim/teaching_report.py 的 _STATUS_LABELS 同键同义:
  * 那份写进报告正文,这份用于列表/摘要行。二者都以 RegressionStatus 为准,
@@ -33,6 +34,14 @@ interface RegressionVerdict {
   coefficient: CoefStat | null;
   /** 需要在结论旁明示的设计问题(suppressed 的原因,或 warning 的披露)。 */
   warnings: string[];
+}
+
+function failedPretrend(response: RegressionResponse): string | null {
+  const diagnostic = response.result.diagnostics.pretrend;
+  if (!diagnostic?.available || diagnostic.p == null || !Number.isFinite(diagnostic.p) || diagnostic.p >= 0.05) {
+    return null;
+  }
+  return diagnostic.interpretation || "检测到明显的冲击前差异";
 }
 
 function mainPolicyCoefficient(response: RegressionResponse): CoefStat | null {
@@ -148,6 +157,7 @@ export function buildRegressionVerdict(
   }
 
   const scaled = naturalScale(outcome, coefficient, response);
+  const pretrendNote = failedPretrend(response);
 
   // 设计无效或处理支持度不足:必须先于任何区间比较返回,
   // 否则 null 区间会被静默当成“区间跨过 0”,把不可评估说成证据不足。
@@ -164,6 +174,22 @@ export function buildRegressionVerdict(
         : `只有 ${support.treated_clusters} 个处理聚类（下限 ${support.min_treated_clusters}），`
           + `聚类稳健推断在此失效；p 值、置信区间与星号均已抑制。`,
       interpretation: "不能据此判断变化方向——这不是“没有效应”，而是当前设计无法评估。",
+      boundary,
+      coefficient,
+      warnings: reasons,
+    };
+  }
+
+  if (pretrendNote) {
+    const sign = coefficient.coef > 0 ? "正向" : coefficient.coef < 0 ? "负向" : "接近零";
+    return {
+      state: "pretrend",
+      title: "冲击前趋势存在明显差异",
+      effectLabel: effectLabel(response, coefficient),
+      effect: scaled.effect,
+      interval: scaled.interval,
+      evidence: `当前模型得到${sign}点估计，但冲击前已经存在明显差异；只能描述该数值，不能把它解释为冲击后的方向性变化证据。${pretrendNote}`,
+      interpretation: "不能据此判断冲击后的变化方向。",
       boundary,
       coefficient,
       warnings: reasons,
@@ -188,9 +214,9 @@ export function buildRegressionVerdict(
     evidence: state === "insufficient"
       ? "95% 置信区间跨过 0；这不等于“没有效应”，而是当前证据不足以确定方向。"
       : "95% 置信区间未跨过 0；是否作因果解释仍取决于冲击外生性、趋势可比性等假设。",
-    interpretation: state === "insufficient"
-      ? "当前结果不能支持明确的上升或下降结论。"
-      : INTERPRETATION[outcome][state],
+    interpretation: state === "negative" || state === "positive"
+      ? INTERPRETATION[outcome][state]
+      : "当前结果不能支持明确的上升或下降结论。",
     boundary,
     coefficient,
     // warning 级问题(如少量撤销、无对照聚类)不抑制推断,但必须与结论并列展示。

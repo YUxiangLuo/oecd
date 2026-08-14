@@ -267,12 +267,41 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
     report = build(session, "同学")
 
     assert "CHN_D01T02 × USA_D01T02 = 228.1" in report.markdown
+    assert "年份=2020" in report.markdown
+    assert "表=z" in report.markdown
     assert "主动比较：CHN、USA" in report.markdown
     assert "| CHN | 2020 | 0.12 |" in report.markdown
     assert "仅用于探索定位，不限定下游回归样本" in report.markdown
     assert "按所选冲击类型汇总该类型全部已编码事件" in report.markdown
     assert "## 学生原创分析与反思" in report.markdown
     assert "关税冲击是否改变出口中的外国增加值份额" in report.markdown
+
+
+def test_report_binds_step1_cell_to_the_slice_it_was_captured_from(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    session["steps"]["1"]["data"].update(
+        {
+            "slice": {"year": 2019, "table": "y", "row_country": "USA", "col_country": "CHN"},
+            "observation": {
+                "row": "CHN_D01T02",
+                "column": "USA_D01T02",
+                "value": 228.0672,
+                "year": 2020,
+                "table": "z",
+                "row_country": "CHN",
+                "col_country": "USA",
+            },
+        }
+    )
+
+    markdown = build(session, "同学").markdown
+
+    assert "年份=2020" in markdown
+    assert "表=z" in markdown
+    assert "表=y" not in markdown.split("### 步骤 1")[1].split("###")[0]
+    assert "年份=2019" not in markdown.split("### 步骤 1")[1].split("###")[0]
 
 
 def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):

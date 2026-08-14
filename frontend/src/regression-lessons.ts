@@ -1,6 +1,6 @@
 import type { RegressionOutcome } from "./types";
 
-export type ReadingDirection = "negative" | "positive" | "insufficient" | "suppressed";
+export type ReadingDirection = "negative" | "positive" | "insufficient" | "suppressed" | "pretrend";
 
 interface RegressionLesson {
   outcome: RegressionOutcome;
@@ -161,6 +161,7 @@ export function familyDirectionLabel(direction: ReadingDirection): string {
   if (direction === "negative") return "下降";
   if (direction === "positive") return "上升";
   if (direction === "suppressed") return "无法评估";
+  if (direction === "pretrend") return "冲击前已有差异";
   return "看不出";
 }
 
@@ -180,6 +181,9 @@ export function reportTakeaway(outcome: RegressionOutcome, direction: ReadingDir
   }
   if (direction === "suppressed") {
     return `可记进报告：本步「${metric}」当前设计无法评估，不要把点估计当成方向。`;
+  }
+  if (direction === "pretrend") {
+    return `可记进报告：本步「${metric}」冲击前已有明显差异，只能描述点估计（${effect}），不能写成相对上升或下降。`;
   }
   return `可记进报告：本步「${metric}」看不出方向，区间跨过 0。这不等于没有效应。`;
 }

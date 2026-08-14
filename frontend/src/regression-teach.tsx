@@ -47,10 +47,12 @@ export function familyVerdict(
   history: FamilyHistory,
   getStep?: (step: number) => SiblingStepData | undefined,
 ) {
+  const data = getStep?.(FAMILY_STEPS[outcome]);
+  const qualified = verdictFromSaved(outcome, data?.qualified_run);
+  if (qualified) return qualified;
   const snapshot = history[outcome]?.[0];
   if (snapshot) return buildRegressionVerdict(outcome, snapshot.response);
-  const data = getStep?.(FAMILY_STEPS[outcome]);
-  return verdictFromSaved(outcome, data?.qualified_run ?? data?.run);
+  return verdictFromSaved(outcome, data?.run);
 }
 
 export function FamilyMap({

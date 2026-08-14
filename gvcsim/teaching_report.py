@@ -351,7 +351,8 @@ def _summary_design_limit(
 
 
 def _run_fingerprint(design: dict[str, Any], result: dict[str, Any]) -> str:
-    coefs = result.get("coefs") if isinstance(result.get("coefs"), list) else []
+    raw_coefs = result.get("coefs")
+    coefs: list[Any] = raw_coefs if isinstance(raw_coefs, list) else []
     first = next((item for item in coefs if isinstance(item, dict)), {})
     return json.dumps(
         {
@@ -409,7 +410,8 @@ def _saved_runs(session: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _result_is_qualified(result: dict[str, Any]) -> bool:
-    support = result.get("support") if isinstance(result.get("support"), dict) else {}
+    raw_support = result.get("support")
+    support: dict[str, Any] = raw_support if isinstance(raw_support, dict) else {}
     allowed_statuses = {"ok", "warning"}
     statuses = [status for status in (result.get("status"), support.get("status")) if status is not None]
     if not statuses or any(not isinstance(status, str) or status not in allowed_statuses for status in statuses):
@@ -473,14 +475,23 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
     captured = False
 
     db = _step_data(session, 1)
-    slice_ = db.get("slice") if isinstance(db.get("slice"), dict) else None
-    observation = db.get("observation") if isinstance(db.get("observation"), dict) else None
-    if slice_ or observation:
+    raw_slice = db.get("slice")
+    browse_slice: dict[str, Any] | None = raw_slice if isinstance(raw_slice, dict) else None
+    raw_observation = db.get("observation")
+    observation: dict[str, Any] | None = raw_observation if isinstance(raw_observation, dict) else None
+    source_slice = (
+        observation
+        if observation is not None
+        and observation.get("year") not in (None, "")
+        and observation.get("table") not in (None, "")
+        else browse_slice
+    )
+    if source_slice or observation:
         captured = True
         lines.extend(("### 步骤 1 · OECD ICIO 数据浏览", ""))
-        if slice_:
+        if source_slice:
             selection = "；".join(
-                f"{label}={_safe(slice_.get(key, '—'))}"
+                f"{label}={_safe(source_slice.get(key, '—'))}"
                 for key, label in (
                     ("year", "年份"),
                     ("table", "表"),
@@ -489,7 +500,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     ("col_country", "使用/需求国"),
                     ("col_sector", "使用行业/最终需求"),
                 )
-                if slice_.get(key) not in (None, "")
+                if source_slice.get(key) not in (None, "")
             )
             lines.append(f"- 保存的切片：{selection or '—'}")
         if observation:
@@ -640,7 +651,11 @@ def _evidence_summary(runs: list[dict[str, Any]]) -> list[str]:
         status = str(result.get("status") or support.get("status") or "unknown")
         suppressed = bool(support.get("suppress_inference")) or status in {"insufficient", "invalid_design"}
         used_in_table = qualified.get(step) is run
-        marker = "（对照表采用）" if used_in_table else ("（探索结果，未列入对照表）" if not _result_is_qualified(result) else "")
+        marker = (
+            "（对照表采用）"
+            if used_in_table
+            else ("（探索结果，未列入对照表）" if not _result_is_qualified(result) else "")
+        )
         coefficient = _primary_coefficient(design, result)
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}{marker}", ""))
         if coefficient is None or not isinstance(coefficient.get("coef"), (int, float)):
@@ -703,15 +718,15 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
             if len(step_runs) > 1:
                 heading += f"（保存 {index + 1}/{len(step_runs)}）"
             lines.extend(
-            (
-                heading,
-                "",
-                f"- 因变量：{_safe(design.get('depvar_label', run['outcome']))}",
-                f"- 结果量纲：{_OUTCOME_UNITS.get(run['outcome'], '原始单位')}",
-                f"- 方程：`{_safe(design.get('equation', '—'))}`",
-                f"- 设计状态：{_STATUS_LABELS.get(str(status), _STATUS_LABELS['unknown'])}；观测数：{_count(result.get('n_obs'))}",
+                (
+                    heading,
+                    "",
+                    f"- 因变量：{_safe(design.get('depvar_label', run['outcome']))}",
+                    f"- 结果量纲：{_OUTCOME_UNITS.get(run['outcome'], '原始单位')}",
+                    f"- 方程：`{_safe(design.get('equation', '—'))}`",
+                    f"- 设计状态：{_STATUS_LABELS.get(str(status), _STATUS_LABELS['unknown'])}；观测数：{_count(result.get('n_obs'))}",
+                )
             )
-        )
             setting_bits = [
                 f"{label}={_setting_value(key, design[key])}"
                 for key, label in (

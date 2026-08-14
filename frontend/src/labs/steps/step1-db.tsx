@@ -117,6 +117,12 @@ interface DbStepState extends QuizCompletionState, Record<string, unknown> {
     row: string;
     column: string;
     value: number;
+    year?: number;
+    table?: string;
+    row_country?: string;
+    col_country?: string;
+    row_sector?: string;
+    col_sector?: string;
   };
 }
 
@@ -142,14 +148,21 @@ export function dbSliceSnapshot(selection: DbSliceSelection): NonNullable<DbStep
 
 export function captureDbObservation(
   selection: DbSliceSelection,
-  observation: NonNullable<DbStepState["observation"]>,
+  observation: Pick<NonNullable<DbStepState["observation"]>, "row" | "column" | "value">,
 ): Pick<DbStepState, "slice" | "observation"> {
-  return { slice: dbSliceSnapshot(selection), observation };
+  const slice = dbSliceSnapshot(selection);
+  return { slice, observation: { ...observation, ...slice } };
 }
 
-/** 换表/换筛选只更新切片，不得写入 observation: undefined（那会删掉已记录的报告证据）。 */
+/** 换筛选只更新浏览位置；单元格自带记录时的切片，这里不得改写或清空。 */
 export function sliceAutosave(selection: DbSliceSelection): Pick<DbStepState, "slice"> {
   return { slice: dbSliceSnapshot(selection) };
+}
+
+export function observationSourceLabel(observation: NonNullable<DbStepState["observation"]>): string | null {
+  if (observation.year == null || !observation.table) return null;
+  const table = DB_TABLES.find((item) => item.key === observation.table)?.label ?? observation.table;
+  return `${observation.year} · ${table}`;
 }
 
 export function formatYColumnHeader(column: string): string {
@@ -294,6 +307,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
   ]));
   const showSummaries = table !== "accounts" && Boolean(slice?.row_summaries?.length);
   const selectedObservation = state.data?.observation;
+  const observationSource = selectedObservation ? observationSourceLabel(selectedObservation) : null;
 
   if (!meta.years.length) {
     return (
@@ -408,7 +422,10 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
       <div className="observation-strip" aria-live="polite">
         <b>已选原始数据点</b>
         {selectedObservation ? (
-          <span>{selectedObservation.row} × {formatYColumnHeader(selectedObservation.column)} = {fmtDb(selectedObservation.value)}</span>
+          <span>
+            {selectedObservation.row} × {formatYColumnHeader(selectedObservation.column)} = {fmtDb(selectedObservation.value)}
+            {observationSource ? `（${observationSource}）` : ""}
+          </span>
         ) : <span>尚未选择</span>}
       </div>
       <ScrollableRegion className="table-wrap bounded-data-table" label={`${activeTable.label}数据表，可横向滚动`}>

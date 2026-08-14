@@ -40,6 +40,27 @@ describe("familyVerdict", () => {
     expect(verdict?.state).toBe("negative");
   });
 
+  test("prefers the report's qualified run over a later insufficient exploration", () => {
+    const qualified = response("trade", coefficient(-0.02, -0.03, -0.01));
+    const latest = response("trade", coefficient(-0.02, -0.03, -0.01));
+    latest.result.status = "insufficient";
+    latest.result.support = {
+      treated_clusters: 1, untreated_clusters: 75, treated_entities: 4, untreated_entities: 296,
+      total_entities: 300, reversal_entities: [], reversal_share: 0, absorbing: true,
+      status: "insufficient", reasons: ["处理支持度不足"], min_treated_clusters: 5,
+      max_reversal_share: 0.05, suppress_inference: true,
+    };
+    latest.result.coefs = [{
+      name: "treated×post", coef: -0.02, se: 0.01, t: 1, p: null, stars: "", ci_low: null, ci_high: null,
+    }];
+    const verdict = familyVerdict(
+      "trade",
+      { trade: [{ response: latest }] },
+      (step) => step === 12 ? { run: { design: latest.design, result: latest.result }, qualified_run: { design: qualified.design, result: qualified.result } } : undefined,
+    );
+    expect(verdict?.state).toBe("negative");
+  });
+
   test("falls back to the qualified sibling run after refresh", () => {
     const saved = response("production", coefficient(0.01, -0.02, 0.04));
     const verdict = familyVerdict(

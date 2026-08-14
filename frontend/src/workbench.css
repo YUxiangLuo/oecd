@@ -65,7 +65,7 @@
 .verdict-card { border: 1px solid #cbc9f4; border-left: 5px solid #4b47e0; border-radius: 12px; background: #f8f8ff; padding: 16px 18px; }
 .verdict-card h3 { margin: 5px 0 10px; font-size: 21px; }
 .verdict-kicker { color: #4b47e0; font-weight: 800; font-size: 11px; letter-spacing: .04em; }
-.verdict-insufficient { border-left-color: #b27b18; background: #fffaf0; }
+.verdict-insufficient, .verdict-pretrend { border-left-color: #b27b18; background: #fffaf0; }
 .verdict-negative, .verdict-positive { border-left-color: #4b47e0; }
 .verdict-metrics { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; margin: 10px 0; }
 .verdict-metrics > div { background: #fff; border: 1px solid #e4e4ef; border-radius: 8px; padding: 9px 11px; }
