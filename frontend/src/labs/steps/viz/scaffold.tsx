@@ -42,6 +42,16 @@ interface RestoredVizState {
   picked: string[];
 }
 
+/** Never persist a year the current release does not contain (NaN / 0 / stale). */
+export function persistableVizYear(years: readonly number[], year: number): number {
+  return years.includes(year) ? year : years.at(-1)!;
+}
+
+export function addInspectedCountry(picked: string[], country: string, allowed: readonly string[]): string[] {
+  if (!allowed.includes(country) || picked.includes(country)) return picked;
+  return [...picked, country];
+}
+
 /** Pure restoration policy, shared by initial render, async hydration and tests. */
 export function restoreVizState(
   meta: Pick<Meta, "years" | "countries">,
@@ -50,7 +60,7 @@ export function restoreVizState(
   validLenses: readonly string[],
 ): RestoredVizState {
   return {
-    year: saved?.year != null && meta.years.includes(saved.year) ? saved.year : meta.years.at(-1)!,
+    year: persistableVizYear(meta.years, typeof saved?.year === "number" ? saved.year : Number.NaN),
     lens: saved?.chart && validLenses.includes(saved.chart) ? saved.chart : defaultLens,
     picked: Array.isArray(saved?.compared)
       ? saved.compared.filter((code) => meta.countries.includes(code))
@@ -225,14 +235,18 @@ export function useVizLab(
   // 只有学生真正交互过（切镜头 / 选国家）才写入实验快照。
   useEffect(() => {
     if (!interacted) return;
-    state.save({ chart: lens, compared: picked, year });
+    state.save({ chart: lens, compared: picked, year: persistableVizYear(meta.years, year) });
     // state 每次渲染都是新对象,不入依赖(与旧 VizLab 相同做法)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interacted, lens, picked, year]);
 
   const pickLens = (l: string) => { setLens(l); setInteracted(true); };
   const pickCountries = (c: string[]) => { setPicked(c); setInteracted(true); };
-  const setYear = (next: number) => { setYearState(next); setInteracted(true); };
+  const setYear = (next: number) => {
+    if (!meta.years.includes(next)) return;
+    setYearState(next);
+    setInteracted(true);
+  };
   return { year, setYear, lens, pickLens, picked, pickCountries, schema };
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { addInspectedCountry } from "../../labs/steps/viz/scaffold";
 import { networkNodeActivation, nextNetworkNode } from "./step8-network";
 
 describe("network fullscreen activation", () => {
@@ -10,6 +11,18 @@ describe("network fullscreen activation", () => {
   test("node selection can change or clear without closing the large view", () => {
     expect(networkNodeActivation("CHN", "USA", true)).toEqual({ selected: "USA", expanded: true });
     expect(networkNodeActivation("CHN", "CHN", true)).toEqual({ selected: null, expanded: true });
+  });
+
+  test("inspecting a node adds it to the comparison list; clearing does not drop it", () => {
+    const allowed = ["CHN", "USA", "DEU"];
+    const afterOpen = networkNodeActivation(null, "CHN", false).selected;
+    expect(afterOpen).toBe("CHN");
+    const picked = addInspectedCountry([], afterOpen!, allowed);
+    const afterSwitch = networkNodeActivation("CHN", "USA", true).selected;
+    expect(addInspectedCountry(picked, afterSwitch!, allowed)).toEqual(["CHN", "USA"]);
+    const afterClear = networkNodeActivation("USA", "USA", true).selected;
+    expect(afterClear).toBeNull();
+    expect(addInspectedCountry(["CHN", "USA"], afterClear ?? "", allowed)).toEqual(["CHN", "USA"]);
   });
 });
 

@@ -7,7 +7,7 @@
  *
  * 口径:国家级贸易图是完全图 → 无权中心性(度 / 介数 …)恒为常数、无区分度,
  * 因此枢纽识别只在国家–行业级做(见 country_degenerate 处理与回归 network 粒度)。
- * 对比对象 = 学生下钻看过的国家(≥2)。
+ * 对比对象累加网络图点开的国家和热力表下钻；取消选中不回退。
  */
 import { useEffect, useRef, useState } from "react";
 import { LabeledControl } from "../../../a11y";
@@ -16,7 +16,7 @@ import { FullscreenPanel } from "../../../fullscreen-panel";
 import type { IndustryPage, Meta, NetworkData, Step, StepStateApi } from "../../../types";
 import { HeatTableViz, NetworkViz, countryLabel } from "../../../viz";
 import { AsyncStateMessage, useAsync } from "../../shared";
-import { ChartStory, LensNav, StepIntro, YearSelect, useVizLab, type Row, type VizStepState } from "./scaffold";
+import { addInspectedCountry, ChartStory, LensNav, StepIntro, YearSelect, useVizLab, type Row, type VizStepState } from "./scaffold";
 
 type Lens = "heat" | "network";
 
@@ -54,12 +54,11 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
   const page = pageQuery.data;
   const net = networkQuery.data;
 
-  // 对比对象 = 下钻看过的国家;换下钻国家即累加(累加而非覆盖,看过的不丢)。
-  const changeDrill = (c: string) => {
+  const inspectCountry = (country: string) => {
     drillTouched.current = true;
-    setDrill(c);
-    pickCountries(picked.includes(c) ? picked : [...picked, c]);
-    state.save({ drill: c });
+    setDrill(country);
+    pickCountries(addInspectedCountry(picked, country, meta.countries));
+    state.save({ drill: country });
   };
   const heatRows = (page?.rows ?? []) as Row[];
   const changeLens = (next: Lens) => {
@@ -98,8 +97,8 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
         concept={step.concept}
         todo={[
           "先看「贸易网络图」观察国家间的流向与区域集群",
-          "点击任意国家进入大图，查看主要贸易伙伴及流入、流出",
-          "再切「枢纽热力表」对比至少两个国家的枢纽行业",
+          "点击至少两个国家进入大图；点过的国家会计入报告比较",
+          "再切「枢纽热力表」，换一个国家对比行业加权度与介数排序",
         ]}
       />
 
@@ -137,7 +136,7 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
             <div className="controls" style={{ marginBottom: 12 }}>
               <LabeledControl label="下钻国家">
                 {(id) => (
-                  <select id={id} value={drill} onChange={(e) => changeDrill(e.target.value)}>
+                  <select id={id} value={drill} onChange={(e) => inspectCountry(e.target.value)}>
                     {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
                   </select>
                 )}
@@ -169,7 +168,7 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
                 loadingLabel={`加载 ${year} 年贸易网络中…`}
                 onRetry={networkQuery.retry}
               />
-            ) : net ? <NetworkViz data={net} /> : <p className="muted">该年份暂无网络数据。</p>}
+            ) : net ? <NetworkViz data={net} onInspectCountry={inspectCountry} /> : <p className="muted">该年份暂无网络数据。</p>}
           </ChartStory>
         )}
       </FullscreenPanel>

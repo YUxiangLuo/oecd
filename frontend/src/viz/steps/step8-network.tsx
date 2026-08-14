@@ -67,7 +67,14 @@ function NetworkDialogFocus({
   return null;
 }
 
-export function NetworkViz({ data }: { data: NetworkData }) {
+export function NetworkViz({
+  data,
+  onInspectCountry,
+}: {
+  data: NetworkData;
+  /** 节点被选中时调用；取消选中不调用。 */
+  onInspectCountry?: (country: string) => void;
+}) {
   const idBase = useId().replaceAll(":", "");
   const markerId = `network-edge-arrow-${idBase}`;
   const dialogTitleId = `network-dialog-title-${idBase}`;
@@ -198,8 +205,10 @@ export function NetworkViz({ data }: { data: NetworkData }) {
       returnFocusCountryRef.current = country;
       returnFocusRef.current = nodeRefs.current[country] ?? null;
     }
-    setSelected((current) => networkNodeActivation(current, country, expanded).selected);
+    const nextSelected = networkNodeActivation(selected, country, expanded).selected;
+    setSelected(nextSelected);
     setExpanded(true);
+    if (nextSelected) onInspectCountry?.(nextSelected);
   };
   const accessibleNodeLabel = (country: string) => [
     countryLabel(country),
