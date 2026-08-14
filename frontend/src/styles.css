@@ -417,6 +417,11 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .data-table tr:hover td { background: #f7f8fb; }
+.qc-table { table-layout: fixed; }
+.qc-table th, .qc-table td { vertical-align: top; white-space: normal; }
+.qc-table th:nth-child(1), .qc-table td:nth-child(1) { width: 22%; }
+.qc-table th:nth-child(2), .qc-table td:nth-child(2) { width: 10%; }
+.qc-table th:nth-child(3), .qc-table td:nth-child(3) { width: 12%; white-space: nowrap; }
 /* 横向可滚动的表格容器:两侧滚动阴影提示还有内容(background-attachment: local
    的白色遮罩滚到边缘时盖住阴影;1280–1440 宽的课堂笔记本上尤其需要这个暗示) */
 .table-wrap {

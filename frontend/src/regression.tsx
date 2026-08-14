@@ -3,7 +3,7 @@ import { ScrollableRegion } from "./a11y";
 import { api } from "./api";
 import { useAsync } from "./labs";
 import { comparisonExplanation, lessonQuestion, REGRESSION_LESSONS } from "./regression-lessons";
-import { buildRegressionVerdict, placeboInterpretation } from "./regression-verdict";
+import { buildRegressionVerdict, chartDisplayScale, placeboInterpretation } from "./regression-verdict";
 import { splitPolicyCoefficients } from "./regteach";
 import type {
   MarginalEffect,
@@ -20,10 +20,9 @@ import { userFacingRequestError } from "./user-facing-error";
 import { CoefForestChart, EventStudyChart, PlaceboChart } from "./viz";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
-// 教学用词:刻意与后端 labels 不同(后端说“双重差分 (DID)”,课堂说“二元处理 DID”)。
-// 枚举键稳定之后,界面措辞就是界面自己的事,改它不再是 API 变更。
+// 与后端 METHOD_LABELS、题库和报告保持同一套方法名，避免学生以为那是三种不同估计量。
 const METHOD_LABELS: Record<string, string> = {
-  did: "二元处理 DID",
+  did: "双重差分 (DID)",
   twfe_intensity: "连续冲击强度",
   event_study: "动态事件研究",
 };
@@ -567,6 +566,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
 
   const split = result ? splitPolicyCoefficients(result) : null;
   const event = result?.design.method === "event_study";
+  const display = result ? chartDisplayScale(outcome, result.design.method) : { scale: 1 as number, unit: undefined as string | undefined };
   const snapshots = history[outcome] ?? [];
 
   return (
@@ -674,10 +674,16 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
             <span className="reg-section-step">4 · 看效应与不确定性</span>
             {event ? (
               <>
-                <EventStudyChart coefs={split?.eventMain ?? []} notes={result.result.notes} title="主政策变化的动态路径" seriesLabel="主效应 βₖ" pretrend={result.result.diagnostics.pretrend} />
-                {(split?.eventInteraction.length ?? 0) > 0 && <EventStudyChart coefs={split?.eventInteraction ?? []} notes={result.result.notes} title="处理前 GVC 异质性附加变化" seriesLabel="交互效应 θₖ" />}
+                <EventStudyChart coefs={split?.eventMain ?? []} notes={result.result.notes} title="主政策变化的动态路径" seriesLabel="主效应 βₖ" pretrend={result.result.diagnostics.pretrend} scale={display.scale} unit={display.unit} />
+                {(split?.eventInteraction.length ?? 0) > 0 && <EventStudyChart coefs={split?.eventInteraction ?? []} notes={result.result.notes} title="处理前 GVC 异质性附加变化" seriesLabel="交互效应 θₖ" scale={display.scale} unit={display.unit} />}
               </>
-            ) : <CoefForestChart coefs={split?.policy ?? []} />}
+            ) : (
+              <CoefForestChart
+                coefs={split?.policy ?? []}
+                scale={display.scale}
+                unit={display.unit}
+              />
+            )}
             {outcome === "production" && (
               <MarginalEffectsPanel response={result} />
             )}
@@ -699,10 +705,10 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
                 {placebo && <>
                   <p className="placebo-verdict">{placeboInterpretation(placebo.placebo.tail_share)}</p>
                   <p className="muted">保留：{placebo.placebo.assignment_preserved.join("、")}；未保留：{placebo.placebo.assignment_not_preserved.join("、")}。</p>
-                  <PlaceboChart data={placebo.placebo} />
+                  <PlaceboChart data={placebo.placebo} scale={display.scale} unit={display.unit} />
                 </>}
               </div>
-            ) : <p className="muted">当前实体置换只用于二元处理 DID；本方法请结合动态路径、控制变量与样本说明判断。</p>}
+            ) : <p className="muted">当前实体置换只用于双重差分 (DID)；本方法请结合动态路径、控制变量与样本说明判断。</p>}
           </section>
 
           <section className="reg-section-card">
@@ -747,7 +753,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
         {result && (
           <>
             <h3>完整系数表</h3>
-            <p className="muted">此表包含政策项和控制变量；主效应图只展示政策项。</p>
+            <p className="muted">此表为模型原始单位{display.unit ? "（份额为 0–1）；上方主图按" + display.unit + "展示" : ""}。主效应图只展示政策项。</p>
             <ScrollableRegion className="table-wrap" label="完整回归系数表，可横向滚动">
               <table className="data-table">
                 <thead><tr><th>变量</th><th>系数</th><th>95% CI</th><th>聚类SE</th><th>t</th><th>p</th></tr></thead>

@@ -112,7 +112,7 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
       <div className="controls" style={{ marginBottom: 12 }}>
         <YearSelect years={meta.years} year={year} onChange={setYear} />
         <span className="muted" style={{ fontSize: 12 }}>
-          已看过 <b style={{ color: picked.length >= 2 ? "#159a86" : "#e0982a" }}>{picked.length}</b> 国{picked.length < 2 ? "(需 ≥2)" : ""}
+          已看过 <b style={{ color: picked.length >= 2 ? "#159a86" : "#e0982a" }}>{picked.length}</b> 国{picked.length < 2 ? "（报告建议 ≥2）" : ""}
         </span>
       </div>
 

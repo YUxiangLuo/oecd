@@ -15,6 +15,12 @@ interface ReportReflectionState extends Record<string, unknown> {
 
 export const REFLECTION_MAX_LENGTH = 2400;
 
+export function reflectionCountLabel(length: number, min: number): string {
+  return length >= min
+    ? `已写 ${length} 字 · 已达最低 ${min} 字`
+    : `已写 ${length} 字 · 最低 ${min} 字`;
+}
+
 const REFLECTION_FIELDS: {
   key: keyof Pick<ReportReflectionState, "research_question" | "evidence_interpretation" | "limitations">;
   label: string;
@@ -154,7 +160,7 @@ export function ReportLab({
             const length = value.trim().split(/\s+/).join(" ").length;
             return (
               <label key={field.key}>
-                <span><b>{field.label}</b><small>{length}/{field.min} 个最低字符</small></span>
+                <span><b>{field.label}</b><small>{reflectionCountLabel(length, field.min)}</small></span>
                 <textarea
                   value={value}
                   rows={field.key === "research_question" ? 2 : 4}

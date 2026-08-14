@@ -44,13 +44,15 @@ export function QcChecksTable({ rows, onNavigateStep }: {
 }) {
   return (
     <ScrollableRegion className="table-wrap" label="数据质检结果表，可横向滚动">
-      <table className="data-table">
+      <table className="data-table qc-table">
         <thead>
           <tr><th>质检项</th><th>类型</th><th>结果</th><th style={{ textAlign: "left" }}>详情</th></tr>
         </thead>
         <tbody>
           {[...(rows ?? [])].sort((a, b) => Number(a.passed) - Number(b.passed)).map((c) => {
             const result = qcResultLabel(c);
+            const preview = c.warnings.slice(0, 2);
+            const extra = c.warnings.slice(2);
             return (
               <tr key={c.name}>
                 <td>{c.name}</td>
@@ -58,9 +60,19 @@ export function QcChecksTable({ rows, onNavigateStep }: {
                 <td className={result.className}>{result.text}</td>
                 <td style={{ textAlign: "left", whiteSpace: "normal" }}>
                   {c.detail}
-                  {c.warnings.map((w) => (
+                  {preview.map((w) => (
                     <div key={w} className="muted">⚠ {w}</div>
                   ))}
+                  {extra.length > 0 && (
+                    <details style={{ marginTop: 6 }}>
+                      <summary style={{ cursor: "pointer", color: "#4b47e0", fontWeight: 600 }}>
+                        还有 {extra.length} 条明细
+                      </summary>
+                      {extra.map((w) => (
+                        <div key={w} className="muted">⚠ {w}</div>
+                      ))}
+                    </details>
+                  )}
                   <details style={{ marginTop: 7 }}>
                     <summary style={{ cursor: "pointer", color: "#4b47e0", fontWeight: 600 }}>为什么检查？</summary>
                     <div className="muted" style={{ marginTop: 5 }}>{whyCheck(c.name)}</div>

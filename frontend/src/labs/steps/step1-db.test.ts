@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { DbMeta } from "../../types";
-import { captureDbObservation, dbColumnCountryForTable, restoreDbSlice } from "./step1-db";
+import { captureDbObservation, dbColumnCountryForTable, formatYColumnHeader, restoreDbSlice, sliceAutosave } from "./step1-db";
 
 const meta: DbMeta = {
   years: [2019, 2020],
@@ -70,5 +70,34 @@ describe("database slice restoration", () => {
     expect(dbColumnCountryForTable(meta, "", "z")).toBe("USA");
     expect(dbColumnCountryForTable(meta, "CHN", "y")).toBe("CHN");
     expect(dbColumnCountryForTable(meta, "", "accounts")).toBe("");
+  });
+
+  test("slice autosave does not clear a recorded observation", () => {
+    const patch = sliceAutosave({
+      year: 2020,
+      table: "y",
+      rowCountry: "CHN",
+      colCountry: "USA",
+      rowSector: "",
+      colSector: "",
+    });
+    expect(patch).toEqual({
+      slice: {
+        year: 2020,
+        table: "y",
+        row_country: "CHN",
+        col_country: "USA",
+        row_sector: "",
+        col_sector: "",
+      },
+    });
+    expect(patch).not.toHaveProperty("observation");
+  });
+
+  test("Y column headers show the demand category in Chinese", () => {
+    expect(formatYColumnHeader("USA_HFCE")).toBe("USA 居民最终消费支出");
+    expect(formatYColumnHeader("CHN_GFCF")).toBe("CHN 固定资本形成总额(投资)");
+    expect(formatYColumnHeader("USA_A01_02")).toBe("USA_A01_02");
+    expect(formatYColumnHeader("row")).toBe("row");
   });
 });

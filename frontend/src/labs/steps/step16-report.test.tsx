@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ClassroomReport } from "../../types";
-import { GateCard, ReportLab, ReportStatus, reportGenerateLabel } from "./step16-report";
+import { GateCard, ReportLab, ReportStatus, reflectionCountLabel, reportGenerateLabel } from "./step16-report";
 
 function report(state: ClassroomReport["state"]): ClassroomReport {
   return {
@@ -32,6 +32,12 @@ describe("step 16 report states", () => {
     const graded = renderToStaticMarkup(<ReportStatus report={report("graded")} />);
     expect(graded).toContain("93 分");
     expect(graded).toContain("证据链完整");
+  });
+
+  test("describes reflection length as written vs minimum, not as a max", () => {
+    expect(reflectionCountLabel(0, 40)).toBe("已写 0 字 · 最低 40 字");
+    expect(reflectionCountLabel(30, 40)).toBe("已写 30 字 · 最低 40 字");
+    expect(reflectionCountLabel(83, 40)).toBe("已写 83 字 · 已达最低 40 字");
   });
 
   test("uses resubmission semantics after submission or grading", () => {

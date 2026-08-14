@@ -130,7 +130,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
       <h1 className="intro-title">供应链仿真系统</h1>
       <div className="intro-kicker">GVC SIMULATION LAB</div>
       <p className="intro-lede">
-        把<b>OECD ICIO 真实数据</b>变成<b>可复现的实证链条</b> ——
+        把 <b>OECD ICIO 真实数据</b>变成<b>可复现的实证链条</b> ——
         一条从数据接入到实验报告的完整闭环。
       </p>
       <div className="intro-pipeline">
@@ -180,9 +180,10 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
           </button>
           {openCard === "icio" && (
             <div className="intro-card-body" id={icioPanelId}>
-              <div>{meta?.countries.length ?? 77} 经济体 × {meta?.sectors.length ?? 45} 行业,{yearSpan} 逐年</div>
-              <div>每年一张 {nodes.toLocaleString()} × {nodes.toLocaleString()} 的中间品流量矩阵</div>
-              <div>结合 VA/TLS 账户、最终需求和里昂惕夫逆矩阵,追踪增加值、税收与网络位置</div>
+              <div>{meta?.countries.length ?? 77} 经济体 × {meta?.sectors.length ?? 45} 行业节点，{yearSpan} 逐年</div>
+              <div>中间品方阵约 {nodes.toLocaleString()} × {nodes.toLocaleString()}（国家×行业）</div>
+              <div>原始宽表还含最终需求列与账户行，约 3,468 行 × 3,929 列</div>
+              <div>结合 VA/TLS 账户、最终需求和里昂惕夫逆矩阵，追踪增加值、税收与网络位置</div>
             </div>
           )}
         </div>
@@ -310,8 +311,9 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
       </p>
       {/* 进入前讲清完成规则，避免把浏览位置误认为学习进度。 */}
       <p className="intro-lede">
-        步骤 1–15 只需<b>答对本步全部选择题</b>即可完成，不要求额外提交材料。
-        实验台中的切片、筛选与回归运行会自动保存，并按实际情况进入第 16 步的实验报告。
+        步骤 1–15 的大纲打勾<b>只表示本步选择题已答对</b>。
+        生成第 16 步报告还需要：步骤 1 记录一个单元格、步骤 3–10 保存至少两个比较对象、步骤 12–15 跑通一次有效回归，以及三段原创分析。
+        切片与回归会自动保存；缺项会在生成时列出。
       </p>
       <div className="intro-cta-row">
         <button className="intro-cta" onClick={() => onDone(1)}>从第 1 步开始实验</button>

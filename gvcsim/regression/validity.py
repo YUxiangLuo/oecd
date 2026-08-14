@@ -182,7 +182,8 @@ def analyze_support(
                 STATUS_WARNING,
                 f"存在处理撤销:{shown}{more}个体在首次处理后又回到未处理状态,{share_text},"
                 f"未超过教学上限 {MAX_REVERSAL_SHARE:.0%}。吸收型编码把这些个体在撤销后仍记为处理,"
-                f"估计对象因此略有偏离;比例较小,推断仍予保留,解释时应排除这些个体。",
+                f"估计对象因此略有偏离；比例较小，点估计与区间仍展示。"
+                f"解释时请单独说明这些撤销个体，不要把它们当成持续处理。",
             )
 
     if treated_clusters < MIN_TREATED_CLUSTERS:

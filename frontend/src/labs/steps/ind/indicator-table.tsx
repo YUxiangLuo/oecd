@@ -33,6 +33,40 @@ const CORE_METRIC: Record<string, string> = {
   network: "betweenesscentrality",
 };
 
+/** 换国家对比时用国家级指标；国家完全图的介数恒为 0，网络步改用加权度。 */
+export const COUNTRY_METRIC: Record<string, string> = {
+  trade: "FVA_share",
+  production: "3b_VA_GVC_C_share",
+  length: "GVCPs",
+  network: "weighted degree",
+};
+
+export function countryRowsForYear(
+  payload: { year: number; rows: Array<Record<string, unknown>> } | null | undefined,
+  year: number,
+) {
+  return payload?.year === year ? payload.rows : null;
+}
+
+export function countryObservation(
+  rows: Array<Record<string, unknown>>,
+  country: string,
+  year: number,
+  metric: string,
+) {
+  const matches = rows.filter((item) => item.country === country);
+  const row = matches.find((item) => item.industry == null || item.industry === "") ?? matches[0];
+  const value = row?.[metric];
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return {
+    entity: country,
+    value,
+    year,
+    country,
+    industry: "",
+  };
+}
+
 export function restoreIndicatorSelection(meta: Meta, saved?: IndicatorStepState) {
   const fallbackCountry = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
   const savedCountry = typeof saved?.country === "string"
@@ -110,35 +144,36 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
     queryKey,
     page: await api.industryIndicators(year, country, page),
   }), [queryKey]);
+  const { data: countryResult, error: countryError, retry: retryCountry } = useAsync<{
+    year: number;
+    rows: Array<Record<string, unknown>>;
+  }>(
+    async () => ({
+      year,
+      rows: await api.countryIndicators(year) as Array<Record<string, unknown>>,
+    }),
+    [year],
+  );
   // useAsync 在依赖变化后的 effect 才清旧结果；显式核对请求键，避免新筛选在
   // 同一帧误把上一次响应中的数值标成新国家/新年份后保存。
   const data = result?.queryKey === queryKey ? result.page : null;
+  const countryRows = countryRowsForYear(countryResult, year);
 
-  // 该实体的指标取回后保存快照；累加主动查看过的国家，供刷新恢复和报告摘要。
+  // 换国家对比保存国家级指标，避免误把第一行业当成国家结构。
   useEffect(() => {
-    if (!data || !interacted) return;
-    const metric = CORE_METRIC[groupKey];
+    if (!interacted) return;
+    const metric = COUNTRY_METRIC[groupKey] ?? CORE_METRIC[groupKey];
     if (!country) {
       state.save({ year, country, metric });
       return;
     }
+    if (!countryRows) return;
+    const observed = countryObservation(countryRows, country, year, metric);
     const compared = state.data?.compared ?? [];
     const existing = state.data?.observations ?? [];
-    const targetIndustry = existing[0]?.industry;
-    const observedRow = data.rows.find((row) => (
-      (!targetIndustry || String(row.industry ?? "") === targetIndustry)
-      && typeof row[metric] === "number" && Number.isFinite(row[metric])
-    )) ?? data.rows.find((row) => typeof row[metric] === "number" && Number.isFinite(row[metric]));
-    const observations = observedRow ? [
-      ...existing.filter((item) => item.country !== country),
-      {
-        entity: `${country}·${String(observedRow.industry ?? "")}`,
-        value: observedRow[metric] as number,
-        year,
-        country,
-        industry: String(observedRow.industry ?? ""),
-      },
-    ].slice(-2) : existing;
+    const observations = observed
+      ? [...existing.filter((item) => item.country !== country), observed].slice(-2)
+      : existing;
     state.save({
       year,
       country,
@@ -148,7 +183,7 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
     });
     // state 每次渲染都是新对象,不入依赖。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, country, year, interacted, groupKey]);
+  }, [countryRows, country, year, interacted, groupKey]);
 
   if (error) return <div className="error-box">{error}</div>;
   const group = schema?.groups.find((g) => g.key === groupKey);
@@ -188,11 +223,19 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
         </LabeledControl>
         <span className="muted">{data ? `共 ${data.total} 条` : "加载中…"}</span>
       </div>
+      {countryError && (
+        <div className="error-box async-error" role="alert">
+          <span>国家级对比未能加载</span>
+          <button type="button" className="secondary" onClick={retryCountry}>重试</button>
+        </div>
+      )}
       {(state.data?.observations?.length ?? 0) > 0 && (
         <div className="observation-strip" role="group" aria-label="已捕获的对比数值">
-          <b>已捕获 {state.data?.metric}</b>
+          <b>已捕获国家级 {fieldLabel(state.data?.metric ?? "", schema)}</b>
           {state.data?.observations?.map((item) => (
-            <span key={`${item.year}-${item.entity}`}>{item.year} · {item.entity} = {fmtField(item.value, state.data?.metric ?? "", schema)}</span>
+            <span key={`${item.year}-${item.entity}`}>
+              {item.year} · {item.industry ? item.entity : countryLabel(item.country)} = {fmtField(item.value, state.data?.metric ?? "", schema)}
+            </span>
           ))}
         </div>
       )}

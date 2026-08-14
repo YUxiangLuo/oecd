@@ -255,7 +255,9 @@ export function StepHeader({ step, previous, next, stageName, totalSteps, onNavi
       </div>
       <div className="nav-btns">
         <button disabled={!previous} onClick={() => previous && onNavigate(previous.n)}>← 上一步</button>
-        <button className="primary" disabled={!next} onClick={() => next && onNavigate(next.n)}>下一步 →</button>
+        {next
+          ? <button className="primary" onClick={() => onNavigate(next.n)}>下一步 →</button>
+          : <span className="muted">已到最后一步</span>}
       </div>
     </div>
   );

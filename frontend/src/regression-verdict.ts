@@ -50,6 +50,12 @@ function mainPolicyCoefficient(response: RegressionResponse): CoefStat | null {
 
 const signed = (value: number, digits = 3) => `${value >= 0 ? "+" : ""}${value.toFixed(digits)}`;
 
+/** 主图/置换图与结论卡同一套显示单位。强度法结论已是“每增加 1 个百分点”，不再 ×100。 */
+export function chartDisplayScale(outcome: RegressionOutcome, method: string): { scale: number; unit?: string } {
+  if (outcome !== "trade" && outcome !== "production") return { scale: 1 };
+  return { scale: method === "twfe_intensity" ? 1 : 100, unit: "个百分点" };
+}
+
 function naturalScale(
   outcome: RegressionOutcome,
   coefficient: CoefStat,

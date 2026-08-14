@@ -76,8 +76,8 @@ INDICATOR_SCHEMA = {
     ],
     "fields": {
         "gross_exports": {"label": "毛出口(五类 WWZ 聚合项 + TLS)", "format": "amount"},
-        "FVA_share": {"label": "FVA 份额(FVA/毛出口)", "format": "pct"},
-        "DVAex_share": {"label": "DVAex 份额(DVAex/毛出口)", "format": "pct"},
+        "FVA_share": {"label": "FVA 份额(FVA/含 TLS 毛出口)", "format": "pct"},
+        "DVAex_share": {"label": "DVAex 份额(DVAex/含 TLS 毛出口)", "format": "pct"},
         "3_VA_GVC_share": {"label": "GVC 生产份额(3_VA_GVC/SVA)", "format": "pct"},
         "3b_VA_GVC_C_share": {"label": "复杂GVC生产份额(3b/SVA)", "format": "pct"},
         "DVAex": {"label": "国内增加值出口(被国外吸收)", "format": "amount"},
@@ -125,8 +125,8 @@ INDICATOR_SCHEMA = {
 
 _INDICATOR_DESCRIPTIONS = {
     "gross_exports": "五类 WWZ 聚合项与 OECD TLS 扩展项之和；taxsub 用于匹配 OECD 含税毛出口口径，不是 WWZ 原文中的分解项。",
-    "FVA_share": "出口中外国增加值占毛出口的比重；越高表示对进口中间投入的后向依赖越强。",
-    "DVAex_share": "被国外最终吸收的国内增加值占毛出口的比重；越高表示出口保留的本国增加值越多。",
+    "FVA_share": "出口中外国增加值占含 TLS 毛出口的比重；越高表示对进口中间投入的后向依赖越强。",
+    "DVAex_share": "被国外最终吸收的国内增加值占含 TLS 毛出口的比重；越高表示出口保留的本国增加值越多。",
     "3_VA_GVC_share": "通过中间品跨境参与 GVC 的增加值占总增加值 SVA 的比重。",
     "3b_VA_GVC_C_share": "至少经历两次跨境的复杂 GVC 增加值占总增加值 SVA 的比重。",
     "DVAex": "由本国创造、随出口离境并最终被国外吸收的增加值。",

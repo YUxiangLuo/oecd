@@ -147,6 +147,18 @@ export function captureDbObservation(
   return { slice: dbSliceSnapshot(selection), observation };
 }
 
+/** 换表/换筛选只更新切片，不得写入 observation: undefined（那会删掉已记录的报告证据）。 */
+export function sliceAutosave(selection: DbSliceSelection): Pick<DbStepState, "slice"> {
+  return { slice: dbSliceSnapshot(selection) };
+}
+
+export function formatYColumnHeader(column: string): string {
+  const sep = column.lastIndexOf("_");
+  if (sep <= 0) return column;
+  const help = FD_HELP[column.slice(sep + 1)];
+  return help ? `${column.slice(0, sep)} ${help}` : column;
+}
+
 export function restoreDbSlice(meta: DbMeta, saved?: DbStepState["slice"]) {
   if (!saved || !meta.years.includes(saved.year)) return null;
   const table = DB_TABLES.some((item) => item.key === saved.table)
@@ -254,18 +266,14 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
   // 只有主动选择且数据加载成功后才写入自动快照。
   useEffect(() => {
     if (!slice || !year || !pickedSlice) return;
-    state.save({
-      slice: dbSliceSnapshot({
-        year,
-        table,
-        rowCountry,
-        colCountry,
-        rowSector,
-        colSector,
-      }),
-      // 单元格必须属于当前成功返回的切片；筛选变化后清空旧选择。
-      observation: undefined,
-    });
+    state.save(sliceAutosave({
+      year,
+      table,
+      rowCountry,
+      colCountry,
+      rowSector,
+      colSector,
+    }));
     // state 每次渲染都是新对象，不入依赖。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slice, year, table, rowCountry, colCountry, pickedSlice]);
@@ -381,7 +389,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
           </>
         )}
         <span className="muted" role="status">
-          {slice ? `共 ${slice.total} 行` : sliceStatus === "error" ? "加载失败" : "加载中…"}
+          {slice ? `本切片 ${slice.total} 个供给行业行` : sliceStatus === "error" ? "加载失败" : "加载中…"}
         </span>
       </div>
 
@@ -395,7 +403,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
         <b>怎么读这张表：</b>{HOW_TO_READ[table]}
       </div>
       <div className="tipbox db-fullscreen-note" style={{ marginBottom: 10 }}>
-        <b>记录一个观察值：</b>点击任意数值单元格，系统会自动保存它的行、列与数值，并在实验报告中作为可选实验快照展示。
+        <b>记录一个观察值：</b>点击任意数值单元格，系统会保存它的行、列与数值供实验报告使用。切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格；再点另一个单元格才会覆盖。
       </div>
       <ScrollableRegion className="table-wrap bounded-data-table" label={`${activeTable.label}数据表，可横向滚动`}>
         <table className="data-table db-table">
@@ -405,11 +413,14 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
                 <th
                   key={c}
                   title={c === "row" ? ROW_HEADER[table].title : columnHelp(c)}
+                  aria-label={c === "row" ? ROW_HEADER[table].label : (table === "y" ? formatYColumnHeader(c) : c)}
                   style={index === 0 ? { position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" } : undefined}
                 >
                   {/* 首列原样输出后端的 "row",学生看到的就是个英文字段名;这里换成
                       说明它是什么方向的中文表头,与上方筛选器的「(行)」对应。 */}
-                  {c === "row" ? `${ROW_HEADER[table].label} ⓘ` : `${c}${columnHelp(c) ? " ⓘ" : ""}`}
+                  {c === "row"
+                    ? `${ROW_HEADER[table].label} ⓘ`
+                    : `${table === "y" ? formatYColumnHeader(c) : c}${columnHelp(c) ? " ⓘ" : ""}`}
                 </th>
               ))}
               {showSummaries && <th title="当前筛选列在该行的合计">切片合计</th>}
@@ -445,7 +456,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
                           type="button"
                           className={`db-observation-cell${selected ? " selected" : ""}`}
                           aria-pressed={selected}
-                          title={`${rowLabel} × ${c}: ${fmtDb(numericValue)}；点击记录这个观察值`}
+                          title={`${rowLabel} × ${table === "y" ? formatYColumnHeader(c) : c}: ${fmtDb(numericValue)}；点击记录这个观察值`}
                           onClick={() => {
                             if (!slice) return;
                             state.save(captureDbObservation(
@@ -498,7 +509,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
       <div className="observation-strip" aria-live="polite">
         <b>已选原始数据点</b>
         {selectedObservation ? (
-          <span>{selectedObservation.row} × {selectedObservation.column} = {fmtDb(selectedObservation.value)}</span>
+          <span>{selectedObservation.row} × {formatYColumnHeader(selectedObservation.column)} = {fmtDb(selectedObservation.value)}</span>
         ) : <span>尚未选择</span>}
       </div>
       </FullscreenPanel>

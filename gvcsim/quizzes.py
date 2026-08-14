@@ -202,7 +202,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
     12: [
         _question(
             "s12-did",
-            "双重差分 DID 比较的是什么？",
+            "双重差分 (DID) 比较的是什么？",
             [
                 _option("a", "只比较处理组自身的前后变化"),
                 _option("b", "比较处理组相对对照组的处理后变化"),

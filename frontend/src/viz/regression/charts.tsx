@@ -1,19 +1,34 @@
 import type { PlaceboResponse, PretrendDiagnostic } from "../../types";
 import { CAT, cardStyle, useTip } from "../shared";
 
+export function scaleForestCoefs<T extends { coef: number; ci_low: number | null; ci_high: number | null }>(
+  coefs: T[],
+  scale: number,
+): T[] {
+  if (scale === 1) return coefs;
+  return coefs.map((item) => ({
+    ...item,
+    coef: item.coef * scale,
+    ci_low: item.ci_low == null ? null : item.ci_low * scale,
+    ci_high: item.ci_high == null ? null : item.ci_high * scale,
+  }));
+}
+
 /* --------------------------- 事件研究:系数时间轴 --------------------------- */
 
-export function EventStudyChart({ coefs, notes, title, seriesLabel, pretrend }: {
+export function EventStudyChart({ coefs, notes, title, seriesLabel, pretrend, scale = 1, unit }: {
   coefs: { name: string; coef: number; ci_low: number | null; ci_high: number | null }[];
   notes: string[];
   title?: string;
   seriesLabel?: string;
   pretrend?: PretrendDiagnostic;
+  scale?: number;
+  unit?: string;
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   // 推断被抑制时没有区间:只画点,不画须。否则 null→0 会把“不可评估”
   // 画成一条零宽度的须,视觉上等于“估计极其精确”,恰好是反教学效果。
-  const pts = coefs.map((c) => ({ ...c, lo: c.ci_low, hi: c.ci_high }));
+  const pts = scaleForestCoefs(coefs, scale).map((c) => ({ ...c, lo: c.ci_low, hi: c.ci_high }));
   const hasCi = pts.some((p) => p.lo != null && p.hi != null);
   const W = 640, H = 240, padL = 56, padR = 24, padT = 18, padB = 34;
   const ext = Math.max(
@@ -28,6 +43,7 @@ export function EventStudyChart({ coefs, notes, title, seriesLabel, pretrend }: 
       <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050", marginBottom: 6 }}>
         {title ?? "事件研究:处理效应的动态路径"}
         {hasCi ? "(点 = 系数,须 = 95% 置信区间)" : "(点 = 系数;本设计不可作推断,无置信区间)"}
+        {unit ? ` · 单位：${unit}` : ""}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${title ?? "事件研究动态路径"}：点为系数${hasCi ? "，竖线为 95% 置信区间" : "；本设计不可作推断，无置信区间"}`} style={{ display: "block", width: "100%", height: "auto" }}>
         <title>{title ?? "事件研究动态路径"}：点为系数{hasCi ? "，竖线为 95% 置信区间" : "；本设计不可作推断，无置信区间"}</title>
@@ -74,9 +90,14 @@ export function EventStudyChart({ coefs, notes, title, seriesLabel, pretrend }: 
 
 /* -------------------------- 步骤12–15：非校准实体置换分布 -------------------------- */
 
-export function PlaceboChart({ data }: { data: PlaceboResponse["placebo"] }) {
-  const values = data.placebo_coefs;
-  const all = [...values, data.true_coef];
+export function PlaceboChart({ data, scale = 1, unit }: {
+  data: PlaceboResponse["placebo"];
+  scale?: number;
+  unit?: string;
+}) {
+  const values = data.placebo_coefs.map((value) => value * scale);
+  const trueCoef = data.true_coef * scale;
+  const all = [...values, trueCoef];
   const lo0 = Math.min(...all), hi0 = Math.max(...all);
   const pad = (hi0 - lo0) * 0.08 || Math.abs(hi0) * 0.12 || 0.1;
   const lo = lo0 - pad, hi = hi0 + pad;
@@ -96,7 +117,7 @@ export function PlaceboChart({ data }: { data: PlaceboResponse["placebo"] }) {
   return (
     <div style={{ ...cardStyle, marginTop: 14 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050", marginBottom: 6 }}>
-        实体置换敏感性分析（非校准）：伪处理估计值分布
+        实体置换敏感性分析（非校准）：伪处理估计值分布{unit ? ` · 单位：${unit}` : ""}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="非校准实体置换的伪处理估计值分布；竖线为原始分组估计值" style={{ display: "block", width: "100%", height: "auto" }}>
         <title>非校准实体置换的伪处理估计值分布；竖线为原始分组估计值</title>
@@ -117,8 +138,8 @@ export function PlaceboChart({ data }: { data: PlaceboResponse["placebo"] }) {
             />
           );
         })}
-        <line x1={x(data.true_coef)} x2={x(data.true_coef)} y1={m.t - 4} y2={H - m.b} stroke={CAT[5]} strokeWidth={2.5} />
-        <text x={x(data.true_coef)} y={m.t - 8} textAnchor="middle" fontSize={11} fill={CAT[5]} fontWeight={700}>
+        <line x1={x(trueCoef)} x2={x(trueCoef)} y1={m.t - 4} y2={H - m.b} stroke={CAT[5]} strokeWidth={2.5} />
+        <text x={x(trueCoef)} y={m.t - 8} textAnchor="middle" fontSize={11} fill={CAT[5]} fontWeight={700}>
           原始分组估计值
         </text>
         {[lo, 0, hi].filter((v, i, arr) => (i === 0 || v !== arr[i - 1]) && v >= lo && v <= hi).map((v) => (
@@ -159,12 +180,14 @@ function splitCoefName(name: string): string[] {
 }
 
 /** 点=估计值,横条=95% 置信区间,竖线=0 轴;负效应红、正效应绿(与系数表一致)。 */
-export function CoefForestChart({ coefs }: {
+export function CoefForestChart({ coefs, scale = 1, unit }: {
   coefs: { name: string; coef: number; ci_low: number | null; ci_high: number | null; p: number | null; stars: string }[];
+  scale?: number;
+  unit?: string;
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   // 推断被抑制时只画点:零宽度的区间横条会被读成“估计极其精确”。
-  const pts = coefs.map((c) => ({ ...c, lo: c.ci_low, hi: c.ci_high }));
+  const pts = scaleForestCoefs(coefs, scale).map((c) => ({ ...c, lo: c.ci_low, hi: c.ci_high }));
   const hasCi = pts.some((p) => p.lo != null && p.hi != null);
   const rowH = 48, padT = 14, padB = 30, labelW = 132, padR = 18;
   const W = 380, H = padT + pts.length * rowH + padB;
@@ -175,7 +198,7 @@ export function CoefForestChart({ coefs }: {
   ) * 1.12;
   const x = (v: number) => labelW + ((v + ext) / (2 * ext)) * plotW;
   const y = (i: number) => padT + (i + 0.5) * rowH;
-  const fmt = (v: number) => (Math.abs(v) < 0.01 ? v.toFixed(4) : v.toFixed(3));
+  const fmt = (v: number) => (Math.abs(v) < 0.01 && scale === 1 ? v.toFixed(4) : v.toFixed(scale === 100 ? 2 : 3));
   const tip = (p: (typeof pts)[number]): [string, string][] => [
     ["", p.name],
     ["系数", `${fmt(p.coef)}${p.stars}`],
@@ -187,6 +210,7 @@ export function CoefForestChart({ coefs }: {
       <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050" }}>系数图</div>
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
         {hasCi ? "点 = 估计值 · 横线 = 95% 置信区间" : "点 = 估计值 · 本设计不可作推断,无置信区间"}
+        {unit ? ` · 单位：${unit}` : ""}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={hasCi ? "政策系数及 95% 置信区间" : "政策系数；本设计不可作推断，无置信区间"} style={{ display: "block", width: "100%", height: "auto" }}>
         <title>{hasCi ? "政策系数及 95% 置信区间；完整数值见技术细节表" : "政策系数；本设计不可作推断，无置信区间"}</title>

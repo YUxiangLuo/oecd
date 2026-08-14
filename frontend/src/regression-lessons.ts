@@ -18,7 +18,7 @@ interface RegressionLesson {
 export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
   trade: {
     outcome: "trade",
-    metric: "出口中外国增加值份额（FVA / 毛出口）",
+    metric: "出口中外国增加值份额（FVA / 含 TLS 毛出口）",
     shortMetric: "FVA 份额",
     unit: "百分点",
     priorStep: 3,
@@ -92,7 +92,7 @@ export function lessonQuestion(outcome: RegressionOutcome, shockType: string, me
 
 export function comparisonExplanation(method: string): string {
   if (method === "did") {
-    return "四格差分可帮助理解 DID：DID =（处理后−处理前）−（对照后−对照前）。本系统实际估计含个体与年份固定效应的分期处理 TWFE；不同个体首次处理年不同，比较不止一个四格，处理效应异质时传统 TWFE 可能有偏。";
+    return "四格差分帮助理解双重差分：DID =（处理后−处理前）−（对照后−对照前）。本系统用含个体与年份固定效应的分期处理 TWFE 来估计上述 DID；不同个体首次处理年不同，比较不止一个四格。处理效应异质时该估计可能有偏。";
   }
   if (method === "event_study") {
     return "以各个体首次冲击前一年为参照，在分期处理 TWFE 中估计相对时期系数；比较可能隐含尚未处理或已处理个体，处理效应异质时需谨慎。冲击前系数只能用于发现明显预先差异，不能证明平行趋势。";

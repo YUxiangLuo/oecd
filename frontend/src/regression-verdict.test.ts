@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildRegressionVerdict,
+  chartDisplayScale,
   placeboInterpretation,
   REGRESSION_STATUS_LABELS,
   regressionStatusLabel,
@@ -76,6 +77,14 @@ describe("buildRegressionVerdict", () => {
     expect(verdict.state).toBe("negative");
     expect(verdict.effect).toContain("-1.20 个百分点");
     expect(verdict.interpretation).not.toContain("证明");
+  });
+
+  test("chart display scale matches the verdict unit for share outcomes", () => {
+    expect(chartDisplayScale("trade", "did")).toEqual({ scale: 100, unit: "个百分点" });
+    expect(chartDisplayScale("production", "event_study")).toEqual({ scale: 100, unit: "个百分点" });
+    expect(chartDisplayScale("trade", "twfe_intensity")).toEqual({ scale: 1, unit: "个百分点" });
+    expect(chartDisplayScale("length", "did")).toEqual({ scale: 1 });
+    expect(chartDisplayScale("network", "did")).toEqual({ scale: 1 });
   });
 
   test("suppressed inference is not reported as a confidence interval crossing zero", () => {

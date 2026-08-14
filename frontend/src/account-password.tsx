@@ -79,6 +79,7 @@ export function AccountPasswordModal({
           value={newPassword}
           onChange={(event) => setNewPassword(event.target.value)}
         />
+        <p className="muted" style={{ margin: "-4px 0 10px" }}>至少 12 个字符</p>
 
         <label htmlFor="account-confirm-password">再次输入新密码</label>
         <input
