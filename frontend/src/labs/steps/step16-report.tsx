@@ -27,9 +27,9 @@ const REFLECTION_FIELDS: {
   prompt: string;
   min: number;
 }[] = [
-  { key: "research_question", label: "研究问题", prompt: "明确结果变量、冲击与比较对象。", min: 12 },
-  { key: "evidence_interpretation", label: "证据解释", prompt: "引用你保存的比较或回归结果，说明它支持什么、不支持什么。", min: 40 },
-  { key: "limitations", label: "局限与反思", prompt: "讨论数据、处理定义、识别假设、网络干扰或外推边界。", min: 30 },
+  { key: "research_question", label: "研究问题", prompt: "点明同一套壁垒冲击，以及贸易流、生产、长度、网络里你在看哪一类变化。", min: 12 },
+  { key: "evidence_interpretation", label: "证据解释", prompt: "并读四步方向和区间是否过 0：谁像动了、谁看不出。不要把不同单位的系数比大小。", min: 40 },
+  { key: "limitations", label: "局限与反思", prompt: "讨论拟真冲击、对照是否可比、网络外溢，以及「看不出」不等于没有效应。", min: 30 },
 ];
 
 export function GateCard({ blocked, onNavigateStep }: { blocked: ReportGateItem[]; onNavigateStep: (step: number) => void }) {
@@ -247,7 +247,7 @@ export function ReportLab({
           <div className="report-body"><ReportMarkdown markdown={report.markdown} /></div>
         </>
       ) : (
-        <p className="muted">点击生成后，服务端会检查理解题、关键实验证据、有效回归与原创分析；缺项会在这里列出。</p>
+        <p className="muted">点击生成后，服务端会检查理解题、单元格与比较、四步是否各有一次可报告估计，以及三段原创分析；缺项会在这里列出。</p>
       )}
     </div>
   );

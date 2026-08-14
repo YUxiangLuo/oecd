@@ -7,17 +7,13 @@ import {
 } from "./regression";
 
 describe("SIGNATURE_SETTINGS", () => {
-  it("每步的招牌默认对应它要教的实验", () => {
-    // 贸易:基准 DID(与全局默认一致,随后加控制)
-    expect(SIGNATURE_SETTINGS.trade.method).toBe("did");
-    expect(SIGNATURE_SETTINGS.trade.interaction).toBe(false);
-    expect(SIGNATURE_SETTINGS.trade.weightMode).toBe("fixed_pretreatment");
-    // 生产:先跑无交互基准,再打开异质性作第二次运行
-    expect(SIGNATURE_SETTINGS.production.interaction).toBe(false);
-    // 长度:事件研究看动态路径
-    expect(SIGNATURE_SETTINGS.length.method).toBe("event_study");
-    // 网络:DID(随后跑非校准实体置换),且只允许国家–行业级
-    expect(SIGNATURE_SETTINGS.network.method).toBe("did");
+  it("四步共用关税 × DID 基准", () => {
+    for (const settings of Object.values(SIGNATURE_SETTINGS)) {
+      expect(settings.method).toBe("did");
+      expect(settings.interaction).toBe(false);
+      expect(settings.shockType).toBe("tariff");
+      expect(settings.weightMode).toBe("fixed_pretreatment");
+    }
     expect(SIGNATURE_SETTINGS.network.granularity).toBe("country_industry");
   });
 

@@ -41,9 +41,9 @@ METHOD_TWFE_INTENSITY = "twfe_intensity"
 METHOD_EVENT_STUDY = "event_study"
 METHODS = [METHOD_DID, METHOD_TWFE_INTENSITY, METHOD_EVENT_STUDY]
 METHOD_LABELS = {
-    METHOD_DID: "双重差分 (DID)",
-    METHOD_TWFE_INTENSITY: "双向固定效应",
-    METHOD_EVENT_STUDY: "事件研究",
+    METHOD_DID: "双重差分（处理组相对对照组）",
+    METHOD_TWFE_INTENSITY: "按冲击强度看变化",
+    METHOD_EVENT_STUDY: "按冲击前后各年看变化",
 }
 
 CONTROL_MODE_NONE = "none"

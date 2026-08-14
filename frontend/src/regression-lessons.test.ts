@@ -5,8 +5,8 @@ describe("regression lessons", () => {
   test("defines one beginner lesson for every stable outcome", () => {
     expect(Object.keys(REGRESSION_LESSONS)).toEqual(["trade", "production", "length", "network"]);
     expect(REGRESSION_LESSONS.trade.unit).toContain("百分点");
-    expect(REGRESSION_LESSONS.length.focus).toContain("事件研究");
-    expect(REGRESSION_LESSONS.network.focus).toContain("实体置换");
+    expect(REGRESSION_LESSONS.length.focus).toContain("链条");
+    expect(REGRESSION_LESSONS.network.focus).toContain("网络");
     expect([
       REGRESSION_LESSONS.trade.priorStep,
       REGRESSION_LESSONS.production.priorStep,
@@ -19,13 +19,13 @@ describe("regression lessons", () => {
     expect(lessonQuestion("network", "tariff", "did")).toContain("处理组");
     expect(lessonQuestion("network", "sanctions", "event_study")).toContain("制裁暴露");
     const fe = lessonQuestion("network", "export_control", "twfe_intensity");
-    expect(fe).toContain("出口管制暴露强度增加");
+    expect(fe).toContain("出口管制暴露变强");
     expect(fe).not.toContain("处理组");
   });
 
   test("comparison copy explains the selected method without claiming proof", () => {
-    expect(comparisonExplanation("did")).toContain("分期处理 TWFE");
-    expect(comparisonExplanation("event_study")).toContain("分期处理 TWFE");
-    expect(comparisonExplanation("twfe_intensity")).toContain("连续冲击强度");
+    expect(comparisonExplanation("did")).toContain("处理后−处理前");
+    expect(comparisonExplanation("event_study")).toContain("冲击前后各年");
+    expect(comparisonExplanation("twfe_intensity")).toContain("冲击强度");
   });
 });

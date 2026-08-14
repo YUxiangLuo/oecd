@@ -1,6 +1,6 @@
 /** Decide what to persist after a regression run.
 
-The report gate needs at least one inferential result among steps 12–15.
+The report gate needs one qualified run on each of steps 12–15.
 Each step still shows the latest `run`, but an insufficient follow-up must
 not erase a previously qualified estimate. */
 export type RegressionResultStatus = {

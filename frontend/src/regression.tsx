@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ScrollableRegion } from "./a11y";
 import { api } from "./api";
 import { useAsync } from "./labs";
-import { comparisonExplanation, lessonQuestion, REGRESSION_LESSONS } from "./regression-lessons";
+import { comparisonExplanation, lessonQuestion, REGRESSION_LESSONS, REGRESSION_QUESTION } from "./regression-lessons";
 import { isQualifiedRegressionResult, nextRegressionSave } from "./regression-save";
 import { buildRegressionVerdict, chartDisplayScale, placeboInterpretation } from "./regression-verdict";
 import { splitPolicyCoefficients } from "./regteach";
@@ -23,9 +23,9 @@ import { CoefForestChart, EventStudyChart, PlaceboChart } from "./viz";
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
 // 与后端 METHOD_LABELS、题库和报告保持同一套方法名，避免学生以为那是三种不同估计量。
 const METHOD_LABELS: Record<string, string> = {
-  did: "双重差分 (DID)",
-  twfe_intensity: "连续冲击强度",
-  event_study: "动态事件研究",
+  did: "双重差分（处理组相对对照组）",
+  twfe_intensity: "按冲击强度看变化",
+  event_study: "按冲击前后各年看变化",
 };
 const SCENARIO_LABELS: Record<string, string> = {
   clean: "基准教学面板",
@@ -55,14 +55,12 @@ export const DEFAULT_REGRESSION_SETTINGS: RegressionSettings = {
   weightMode: "fixed_pretreatment",
 };
 
-/** 每步的“招牌默认”:首次进入第 12–15 步时,设定直接落在本步要教的实验上——
- *  贸易看基准 DID(随后加控制),生产先跑无交互基准再开异质性,长度用事件研究,
- *  网络用 DID(随后跑非校准实体置换敏感性分析)。学生仍可自由修改,且改动按 outcome 分别保留
- *  (见 App.tsx 里 regression_settings 的 per-outcome 存储)。 */
+/** 四步同一招牌默认:关税 × 处理组相对对照组。方法课进「换一种读法」。
+ *  改动仍按 outcome 分别保留(见 App.tsx 里 regression_settings)。 */
 export const SIGNATURE_SETTINGS: Record<RegressionOutcome, RegressionSettings> = {
   trade: { ...DEFAULT_REGRESSION_SETTINGS },
-  production: { ...DEFAULT_REGRESSION_SETTINGS, interaction: false },
-  length: { ...DEFAULT_REGRESSION_SETTINGS, method: "event_study" },
+  production: { ...DEFAULT_REGRESSION_SETTINGS },
+  length: { ...DEFAULT_REGRESSION_SETTINGS },
   network: { ...DEFAULT_REGRESSION_SETTINGS, granularity: "country_industry" },
 };
 
@@ -265,7 +263,7 @@ function DidFourCells() {
         </tbody>
       </table>
       <div className="did-formula">DID =（B−A）−（D−C）</div>
-      <p className="muted">四格仅用于建立直觉；实际模型是按个体首次处理年构造、含个体与年份固定效应的分期处理 TWFE。</p>
+      <p className="muted">四格只帮助建立直觉。不同对象首次受冲击的年份可以不同，所以实际比较不止一个四格。</p>
     </div>
   );
 }
@@ -578,87 +576,60 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
   const event = result?.design.method === "event_study";
   const display = result ? chartDisplayScale(outcome, result.design.method) : { scale: 1 as number, unit: undefined as string | undefined };
   const snapshots = history[outcome] ?? [];
+  const methodLabels = { ...METHOD_LABELS, ...options?.method_labels };
 
   return (
     <div className="reg-workbench">
       <section className="reg-question-card">
         <div className="reg-question-main">
-          <span className="reg-section-step">1 · 这一步回答什么</span>
+          <span className="reg-section-step">1 · 同一研究问题，本步换指标</span>
+          <p className="muted">{REGRESSION_QUESTION}</p>
           <h3>{lessonQuestion(outcome, shockType, method)}</h3>
           <p>{lesson.definition}</p>
+          <p><b>{lesson.focus}</b></p>
           <div className="metric-facts">
-            <span><b>观察指标</b>{lesson.metric}</span>
+            <span><b>本步指标</b>{lesson.metric}</span>
             <span><b>解释单位</b>{lesson.unit}</span>
-            <span><b>前置知识</b>步骤 {lesson.priorStep} · {lesson.priorLabel}</span>
+            <span><b>前面见过</b>步骤 {lesson.priorStep} · {lesson.priorLabel}</span>
           </div>
         </div>
         <details className="lesson-details">
-          <summary>先理解上升、下降分别可能意味着什么</summary>
+          <summary>上升、下降分别可能意味着什么</summary>
           <p><b>下降：</b>{lesson.downMeaning}</p>
           <p><b>上升：</b>{lesson.upMeaning}</p>
           <p><b>注意：</b>{lesson.caution}</p>
         </details>
       </section>
 
-      <section className="reg-compare-card">
-        <div>
-          <span className="reg-section-step">2 · 谁和谁比较</span>
-          <h3>{METHOD_LABELS[method] ?? method}</h3>
-          <p>{comparisonExplanation(method)}</p>
-        </div>
-        {method === "did" && <DidFourCells />}
-      </section>
-
       <section className="reg-run-card">
-        <span className="reg-section-step">3 · 运行当前方案</span>
-        <div className="reg-boundary">真实 OECD ICIO 指标 + 拟真政策冲击；结果用于教学，不构成现实政策结论。</div>
+        <span className="reg-section-step">2 · 接入步骤 11 的冲击并估计</span>
+        <div className="reg-boundary">真实 OECD ICIO 指标 + 拟真政策冲击；结果用于教学，不构成现实政策结论。默认关税冲击通常能给出可报告估计；制裁和出口管制的支持度更薄。</div>
         <div className="basic-settings">
           <div><span>冲击</span><Pills label="政策冲击" options={options?.shock_types ?? []} value={shockType} onChange={(value) => setSetting("shockType", value)} labelMap={options?.shock_type_labels} /></div>
-          <div><span>方法</span><Pills label="估计方法" options={options?.methods ?? []} value={method} onChange={(value) => setSetting("method", value)} labelMap={METHOD_LABELS} /></div>
-          <div><span>粒度</span><Pills label="分析粒度" options={allowedGranularities} value={effectiveGranularity} onChange={(value) => setSetting("granularity", value)} labelMap={options?.granularity_labels} /></div>
         </div>
+        {method === "did" && (
+          <div className="reg-compare-card" style={{ marginTop: 12 }}>
+            <p>{comparisonExplanation(method)}</p>
+            <DidFourCells />
+          </div>
+        )}
         {outcome === "network" && (
           <p className="muted">网络回归只使用全球国家×行业图。国家级贸易图在全正流量口径下为完全图，Gephi 介数中心性恒为 0。</p>
         )}
 
-        <div className="comparison-plan">
-          <div>
-            <b>建议对照实验</b>
-            <p>
-              {outcome === "trade" && "用完全相同的冲击、方法与粒度，分别运行不加控制和加入 ICIO 派生控制的模型。"}
-              {outcome === "production" && "先运行无交互模型，再运行“冲击 × 处理前 GVC”交互模型；交互系数不是平均效应。"}
-              {outcome === "length" && "使用事件研究，并检查冲击前联合检验与冲击后的动态路径。"}
-              {outcome === "network" && "可在 DID 基准结果后运行非校准实体置换；它只检验结果对这一人为置换规则是否敏感。"}
-            </p>
-          </div>
-          <div className="comparison-actions">
-            {outcome === "trade" && <>
-              <button type="button" className={controlMode === "none" ? "on" : ""} onClick={() => setSetting("controlMode", "none")}>① 切换到无控制基准</button>
-              <button type="button" className={controlMode === "icio_derived" ? "on" : ""} onClick={() => setSetting("controlMode", "icio_derived")}>② 切换到 ICIO 控制</button>
-            </>}
-            {outcome === "production" && <>
-              <button type="button" className={!interaction ? "on" : ""} onClick={() => setSetting("interaction", false)}>① 切换到无交互</button>
-              <button type="button" className={interaction ? "on" : ""} onClick={() => setSetting("interaction", true)}>② 打开处理前 GVC 交互</button>
-            </>}
-            {outcome === "length" && (
-              <button type="button" className={method === "event_study" ? "on" : ""} onClick={() => setSetting("method", "event_study")}>使用事件研究</button>
-            )}
-            {outcome === "network" && (
-              <button type="button" className={method === "did" ? "on" : ""} onClick={() => setSetting("method", "did")}>使用 DID + 实体置换</button>
-            )}
-          </div>
-        </div>
-
         <details className="advanced-settings">
-          <summary>高级设置与课堂挑战</summary>
-          <p className="muted">以下选项用于稳健性与识别假设教学，不是开始基准实验的必要条件。</p>
+          <summary>换一种读法（选做）</summary>
+          <p className="muted">{lesson.guidedExperiment} 三类冲击的支持度不同，见步骤 11；本步主路径默认关税，是因为它通常能给出可报告估计。</p>
           <div className="model-controls">
+            <div className="model-control"><span className="model-control-label">比较方式</span><Pills label="估计方法" options={options?.methods ?? []} value={method} onChange={(value) => setSetting("method", value)} labelMap={methodLabels} /></div>
+            <div className="model-control"><span className="model-control-label">粒度</span><Pills label="分析粒度" options={allowedGranularities} value={effectiveGranularity} onChange={(value) => setSetting("granularity", value)} labelMap={options?.granularity_labels} /></div>
             <div className="model-control"><span className="model-control-label">控制变量</span><Pills label="控制变量" options={options?.control_modes ?? []} value={controlMode} onChange={(value) => setSetting("controlMode", value)} labelMap={options?.control_mode_labels} /></div>
             <label className="model-control"><span className="model-control-label">异质性</span><input type="checkbox" checked={interaction} onChange={(eventValue) => setSetting("interaction", eventValue.target.checked)} />冲击 × 基期GVC</label>
             {controlMode !== "none" && <div className="model-control"><span className="model-control-label">金额类控制口径</span><Pills label="金额类控制口径" options={options?.price_modes ?? []} value={priceMode} onChange={(value) => setSetting("priceMode", value)} labelMap={options?.price_mode_labels} /></div>}
             <div className="model-control"><span className="model-control-label">课堂场景</span><Pills label="课堂场景" options={options?.scenarios ?? []} value={scenario} onChange={(value) => setSetting("scenario", value)} labelMap={SCENARIO_LABELS} /></div>
             <div className="model-control"><span className="model-control-label">冲击暴露权重</span><Pills label="冲击暴露权重" options={(options?.weight_modes ?? ["fixed_pretreatment", "contemporaneous"]).filter((mode) => shockType === "tariff" || mode !== "contemporaneous")} value={weightMode} onChange={(value) => setSetting("weightMode", value)} labelMap={options?.weight_mode_labels ?? { fixed_pretreatment: "首次处理前固定权重（基准）", contemporaneous: "当期贸易权重（稳健性）" }} /></div>
           </div>
+          {method !== "did" && <p className="muted">{comparisonExplanation(method)}</p>}
           {scenario !== "clean" && <div className="challenge-note">该场景由系统人为改变估计样本，用于观察测量误差或冲击前趋势如何影响判断；它不是数据筛选条件。</div>}
           {weightMode === "contemporaneous" && <div className="challenge-note">当期贸易结构可能已受政策影响，因此该口径只用于和固定处理前权重对照，不能替代基准识别。</div>}
         </details>
@@ -666,8 +637,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
         {(optionsError || designError) && <div className="error-box">{optionsError ?? designError}</div>}
         <div className="run-summary"><b>当前方案：</b>{settingsSummary(currentSettings, options)}</div>
         <button className="run-btn" onClick={run} disabled={running || !design || Boolean(optionsError || designError)}>
-          {/* 改了设定却仍写"重新运行",会让人以为按钮跑的还是上一次那套(点完招牌流程的
-              ①/② 后尤其容易误解)。stale 已表示"设定与上次结果不一致",据此分开措辞。 */}
+          {/* stale 表示表单已改、结果仍是上一套。 */}
           {running ? "估计中…" : stale ? "运行修改后的设定" : result ? "重新运行当前设定" : "运行基准回归"}
         </button>
       </section>
@@ -684,7 +654,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           )}
 
           <section className="reg-section-card">
-            <span className="reg-section-step">4 · 看效应与不确定性</span>
+            <span className="reg-section-step">3 · 读区间，并留到第 16 步和另外三类指标并读</span>
             {event ? (
               <>
                 <EventStudyChart coefs={split?.eventMain ?? []} notes={result.result.notes} title="主政策变化的动态路径" seriesLabel="主效应 βₖ" pretrend={result.result.diagnostics.pretrend} scale={display.scale} unit={display.unit} />
@@ -703,13 +673,13 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
             <p className="muted">图只展示政策相关系数；加入控制变量后，完整控制项保留在下方技术细节表中。</p>
           </section>
 
-          <section className="reg-section-card">
-            <span className="reg-section-step">5 · 可信度检查</span>
+          <details className="reg-section-card">
+            <summary>若要进一步检查稳健性</summary>
             <PretrendCheck response={result} />
             {result.design.method === "did" ? (
               <div className="trust-item">
                 <h3>结果对一种简化的实体置换规则有多敏感？</h3>
-                <p>系统只保留处理实体数量与首次处理年份数量分布，再随机改派实体。它不会保留政策的国家定向、行业资格、事件分配机制或聚类结构，因此不是安慰剂检验或随机化推断。</p>
+                <p>系统只保留处理实体数量与首次处理年份数量分布，再随机改派实体。它不是安慰剂检验，尾部占比也不是 p 值。</p>
                 <button className="secondary" onClick={runPlacebo} disabled={running || placeboRunning || stale}>
                   {placeboRunning ? "置换中…" : placebo ? "重新运行实体置换" : "运行实体置换敏感性分析"}
                 </button>
@@ -721,35 +691,8 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
                   <PlaceboChart data={placebo.placebo} scale={display.scale} unit={display.unit} />
                 </>}
               </div>
-            ) : <p className="muted">当前实体置换只用于双重差分 (DID)；本方法请结合动态路径、控制变量与样本说明判断。</p>}
-          </section>
-
-          <section className="reg-section-card">
-            <span className="reg-section-step">6 · 继续探索</span>
-            {outcome === "length" && (
-              <div className={`exploration-status${event ? " done" : ""}`}>
-                {event ? "✓ 已展示冲击前联合检验与冲击后动态路径" : "可切换到事件研究，查看冲击前检验和动态路径"}
-              </div>
-            )}
-            {outcome === "production" && (
-              <div className={`exploration-status${result.design.interaction && (result.result.marginal_effects?.length ?? 0) > 0 ? " done" : ""}`}>
-                {result.design.interaction && (result.result.marginal_effects?.length ?? 0) > 0
-                  ? "✓ 已展示低 / 中 / 高处理前 GVC 的边际效应"
-                  : "可打开处理前 GVC 交互并运行，查看条件边际效应"}
-              </div>
-            )}
-            {outcome === "network" && (
-              <div className={`exploration-status${placebo ? " done" : ""}`}>
-                {placebo ? "✓ 已查看非校准实体置换结果" : "可在上方运行实体置换敏感性分析，观察人为改派后的估计分布"}
-              </div>
-            )}
-          </section>
-
-          <section className="reg-guide-card">
-            <span className="reg-section-step">7 · 下一项引导实验</span>
-            <h3>{lesson.focus}</h3>
-            <p>{lesson.guidedExperiment}</p>
-          </section>
+            ) : <p className="muted">实体置换只用于双重差分（处理组相对对照组）。</p>}
+          </details>
         </div>
       )}
 

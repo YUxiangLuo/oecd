@@ -32,6 +32,26 @@ def _artifacts(path: Path, *, qc=None):
     )
 
 
+def _ok_run(outcome: str, **design):
+    payload = {
+        "outcome": outcome,
+        "equation": "y = policy + FE",
+        "shock_type": "tariff",
+        "method": "did",
+        "depvar_label": {
+            "trade": "出口中外国增加值份额",
+            "production": "复杂GVC生产份额",
+            "length": "前向 GVC 生产长度",
+            "network": "生产网络介数中心性",
+        }.get(outcome, outcome),
+    }
+    payload.update(design)
+    return {
+        "design": payload,
+        "result": {"status": "ok", "n_obs": 1, "coefs": [{"name": "treated×post", "coef": 0.0}]},
+    }
+
+
 def _complete():
     session = empty_session()
     session["steps"] = {str(step): make_record({"quiz": quizzes.correct_quiz(step)}) for step in GATE_STEPS}
@@ -41,10 +61,10 @@ def _complete():
         "value": 1.0,
     }
     session["steps"]["7"]["data"]["compared"] = ["CHN", "USA"]
-    session["steps"]["12"]["data"]["run"] = {
-        "design": {"outcome": "trade", "equation": "y = policy + FE"},
-        "result": {"status": "ok", "n_obs": 1, "coefs": [{"name": "treated×post", "coef": 0.0}]},
-    }
+    session["steps"]["12"]["data"]["run"] = _ok_run("trade")
+    session["steps"]["13"]["data"]["run"] = _ok_run("production")
+    session["steps"]["14"]["data"]["run"] = _ok_run("length")
+    session["steps"]["15"]["data"]["run"] = _ok_run("network")
     session["steps"]["16"] = make_record(
         {
             "research_question": "关税冲击是否改变出口中的外国增加值份额？",
@@ -60,9 +80,14 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection():
     assert set(GATE_STEPS) <= {item["step"] for item in blocked}
     assert any(item["step"] == 1 and "具体单元格" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 7 and "两个比较对象" in "".join(item["missing"]) for item in blocked)
-    assert any(item["step"] == 12 and "有效回归" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 12 and "可报告" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 15 and "可报告" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 16 and "原创" in item["title"] for item in blocked)
     assert check_gate(_complete()) == []
+    missing_one = _complete()
+    del missing_one["steps"]["14"]["data"]["run"]
+    blocked_one = check_gate(missing_one)
+    assert any(item["step"] == 14 and "可报告" in "".join(item["missing"]) for item in blocked_one)
     with pytest.raises(ReportGateError):
         build(empty_session(), "同学")
 
@@ -140,7 +165,7 @@ def test_malformed_only_saved_run_blocks_report(tmp_path, monkeypatch):
     session = _complete()
     session["steps"]["12"]["data"]["run"] = {"design": {"outcome": "trade"}, "result": "forged"}
     blocked = check_gate(session)
-    assert any(item["step"] == 12 and "有效回归" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 12 and "可报告" in "".join(item["missing"]) for item in blocked)
     with pytest.raises(ReportGateError):
         build(session, "同学")
 
@@ -157,7 +182,7 @@ def test_non_inferential_saved_run_does_not_satisfy_valid_regression_gate(status
 
     blocked = check_gate(session)
 
-    assert any(item["step"] == 12 and "有效回归" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 12 and "可报告" in "".join(item["missing"]) for item in blocked)
 
 
 def test_qualified_run_on_same_step_still_satisfies_gate_after_insufficient_latest(tmp_path, monkeypatch):
@@ -177,8 +202,22 @@ def test_qualified_run_on_same_step_still_satisfies_gate_after_insufficient_late
 
     assert check_gate(session) == []
     report = build(session, "同学")
+    assert "四类指标并读" in report.markdown
+    assert "这四步分别估计" in report.markdown
     assert "统计推断已抑制" in report.markdown or "处理支持度不足" in report.markdown
     assert "双重差分" in report.markdown or "treated×post" in report.markdown or "政策处理项" in report.markdown
+
+
+def test_comparison_table_flags_mixed_shocks_and_keeps_estimand_label(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    session["steps"]["13"]["data"]["run"] = _ok_run("production", shock_type="sanctions")
+
+    markdown = build(session, "同学").markdown
+
+    assert "读表注意" in markdown
+    assert "处理后相对变化：+0.00 个百分点" in markdown
 
 
 def test_report_carries_release_qc_disclosures(tmp_path, monkeypatch):
@@ -240,6 +279,7 @@ def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
+    session["steps"]["12"]["data"]["qualified_run"] = session["steps"]["12"]["data"]["run"]
     session["steps"]["12"]["data"]["run"] = {
         "design": {"outcome": "trade", "depvar_label": "FVA 份额", "equation": "y = policy + FE"},
         "result": {
@@ -249,11 +289,6 @@ def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
             "n_obs": 20,
             "coefs": [{"name": "policy", "coef": -0.2, "se": 0.1, "p": None, "ci_low": None, "ci_high": None}],
         },
-    }
-    # 无效/支持不足的运行仍可如实进入报告，但必须另有一次可报告运行才能通过门槛。
-    session["steps"]["13"]["data"]["run"] = {
-        "design": {"outcome": "production", "equation": "y = policy + FE"},
-        "result": {"status": "ok", "n_obs": 20, "coefs": [{"name": "policy", "coef": 0.1}]},
     }
 
     report = build(session, "同学")
@@ -299,7 +334,7 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
 
     markdown = build(session, "同学").markdown
 
-    assert "关税冲击 · 双重差分 (DID) · 国家–行业级 · ICIO 派生控制变量" in markdown
+    assert "关税冲击 · 双重差分（处理组相对对照组） · 国家–行业级 · ICIO 派生控制变量" in markdown
     assert "+0.14 个百分点" in markdown
     assert "[-0.17, +0.45] 个百分点" in markdown
     assert "证据不足，无法判断方向" in markdown
