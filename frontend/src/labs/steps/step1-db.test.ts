@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { DbMeta } from "../../types";
-import { captureDbObservation, dbColumnCountryForTable, formatYColumnHeader, observationSourceLabel, restoreDbSlice, sliceAutosave } from "./step1-db";
+import { captureDbObservation, dbColumnCountryForTable, formatYColumnHeader, isCapturedDbCell, observationSourceLabel, restoreDbSlice, sliceAutosave } from "./step1-db";
 
 const meta: DbMeta = {
   years: [2019, 2020],
@@ -100,6 +100,30 @@ describe("database slice restoration", () => {
     expect(captured.observation?.year).toBe(2020);
     expect(captured.observation?.table).toBe("z");
     expect(captured.observation && observationSourceLabel(captured.observation)).toBe("2020 · 中间投入 Z");
+  });
+
+  test("does not mark the same row, column and value as captured in another year", () => {
+    const captured = captureDbObservation(
+      {
+        year: 2020,
+        table: "z",
+        rowCountry: "ARG",
+        colCountry: "ARG",
+        rowSector: "A01_02",
+        colSector: "B09",
+      },
+      { row: "ARG_A01_02", column: "ARG_B09", value: 0 },
+    ).observation;
+
+    expect(isCapturedDbCell(captured, {
+      year: 2020, table: "z", row: "ARG_A01_02", column: "ARG_B09", value: 0,
+    })).toBe(true);
+    expect(isCapturedDbCell(captured, {
+      year: 2019, table: "z", row: "ARG_A01_02", column: "ARG_B09", value: 0,
+    })).toBe(false);
+    expect(isCapturedDbCell(captured, {
+      year: 2020, table: "accounts", row: "ARG_A01_02", column: "ARG_B09", value: 0,
+    })).toBe(false);
   });
 
   test("restores a real column country when leaving an accounts-only slice", () => {

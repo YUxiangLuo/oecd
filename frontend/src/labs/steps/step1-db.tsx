@@ -165,6 +165,19 @@ export function observationSourceLabel(observation: NonNullable<DbStepState["obs
   return `${observation.year} · ${table}`;
 }
 
+export function isCapturedDbCell(
+  observation: DbStepState["observation"],
+  cell: { year: number | null; table: DbTableKind; row: string; column: string; value: number | null },
+): boolean {
+  return cell.year != null
+    && cell.value != null
+    && observation?.year === cell.year
+    && observation.table === cell.table
+    && observation.row === cell.row
+    && observation.column === cell.column
+    && observation.value === cell.value;
+}
+
 export function formatYColumnHeader(column: string): string {
   const sep = column.lastIndexOf("_");
   if (sep <= 0) return column;
@@ -457,10 +470,13 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
                   const value = r[c];
                   const numericValue = typeof value === "number" ? value : null;
                   const rowLabel = String(r.row ?? "");
-                  const selected = numericValue != null
-                    && selectedObservation?.row === rowLabel
-                    && selectedObservation.column === c
-                    && selectedObservation.value === numericValue;
+                  const selected = isCapturedDbCell(selectedObservation, {
+                    year: slice?.year ?? year,
+                    table,
+                    row: rowLabel,
+                    column: c,
+                    value: numericValue,
+                  });
                   const intensity = c === "row" || numericValue == null || rowHeatMax[i] === 0
                     ? 0
                     : Math.min(1, Math.abs(numericValue) / rowHeatMax[i]);
