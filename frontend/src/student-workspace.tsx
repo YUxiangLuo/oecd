@@ -153,6 +153,7 @@ export function StudentWorkspace({
                     regressionHistory={regressionHistory}
                     onRegressionHistoryChange={onRegressionHistoryChange}
                     onNavigateStep={onNavigateStep}
+                    getStep={session.getStep}
                   />
                   <QuizPanel key={step.n} step={step} state={stepState} />
                 </div>

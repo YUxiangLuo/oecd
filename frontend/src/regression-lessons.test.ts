@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { comparisonExplanation, lessonQuestion, REGRESSION_LESSONS } from "./regression-lessons";
+import {
+  comparisonExplanation,
+  familyDirectionLabel,
+  lessonQuestion,
+  nextRegressionFamily,
+  REGRESSION_FAMILIES,
+  REGRESSION_LESSONS,
+  reportTakeaway,
+} from "./regression-lessons";
 
 describe("regression lessons", () => {
   test("defines one beginner lesson for every stable outcome", () => {
@@ -13,6 +21,25 @@ describe("regression lessons", () => {
       REGRESSION_LESSONS.length.priorStep,
       REGRESSION_LESSONS.network.priorStep,
     ]).toEqual([3, 4, 5, 6]);
+  });
+
+  test("each step teaches one distinct beginner move", () => {
+    expect(REGRESSION_FAMILIES.map((item) => item.step)).toEqual([12, 13, 14, 15]);
+    expect(REGRESSION_LESSONS.trade.learnThis).toContain("处理组相对对照组");
+    expect(REGRESSION_LESSONS.production.learnThis).toContain("比较方式");
+    expect(REGRESSION_LESSONS.length.learnThis).toContain("不是百分点");
+    expect(REGRESSION_LESSONS.network.learnThis).toContain("拓扑");
+    expect(REGRESSION_LESSONS.trade.dontClaim).not.toContain("客户");
+    expect(nextRegressionFamily("trade")?.outcome).toBe("production");
+    expect(nextRegressionFamily("network")).toBeNull();
+  });
+
+  test("report takeaway is a copyable sentence without causal proof", () => {
+    expect(reportTakeaway("trade", "negative", "−1.20 个百分点")).toContain("相对下降");
+    expect(reportTakeaway("length", "insufficient", "—")).toContain("看不出方向");
+    expect(reportTakeaway("network", "suppressed", "—")).toContain("不要把点估计当成方向");
+    expect(reportTakeaway("production", "positive", "+0.40 个百分点")).not.toContain("证明");
+    expect(familyDirectionLabel("insufficient")).toBe("看不出");
   });
 
   test("research question follows the selected shock and estimand", () => {

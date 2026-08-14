@@ -4,6 +4,7 @@ import { api } from "./api";
 import { useAsync } from "./labs";
 import { comparisonExplanation, lessonQuestion, REGRESSION_LESSONS, REGRESSION_QUESTION } from "./regression-lessons";
 import { isQualifiedRegressionResult, nextRegressionSave } from "./regression-save";
+import { DidFourCells, FamilyMap, ReadingCoach, SiblingContrast, type SiblingStepData } from "./regression-teach";
 import { buildRegressionVerdict, chartDisplayScale, placeboInterpretation } from "./regression-verdict";
 import { splitPolicyCoefficients } from "./regteach";
 import type {
@@ -252,22 +253,6 @@ function RunComparison({ outcome, snapshots, onClear, options }: {
   );
 }
 
-function DidFourCells() {
-  return (
-    <div className="did-comparison">
-      <table className="did-table" aria-label="双重差分四格比较">
-        <thead><tr><th scope="col" /><th scope="col">冲击前</th><th scope="col">冲击后</th></tr></thead>
-        <tbody>
-          <tr><th scope="row">处理组</th><td>A</td><td>B</td></tr>
-          <tr><th scope="row">对照组</th><td>C</td><td>D</td></tr>
-        </tbody>
-      </table>
-      <div className="did-formula">DID =（B−A）−（D−C）</div>
-      <p className="muted">四格只帮助建立直觉。不同对象首次受冲击的年份可以不同，所以实际比较不止一个四格。</p>
-    </div>
-  );
-}
-
 function VerdictCard({ outcome, response, stale }: {
   outcome: RegressionOutcome;
   response: RegressionResponse;
@@ -387,11 +372,15 @@ interface RegressionStepState extends QuizCompletionState, Record<string, unknow
   };
 }
 
-export function RegressionRunLab({ step, settings, onSettingsChange, history, onHistoryChange, state }: {
+export function RegressionRunLab({
+  step, settings, onSettingsChange, history, onHistoryChange, state, getStep, onNavigateStep,
+}: {
   step: Step;
   history: RegressionHistory;
   onHistoryChange: React.Dispatch<React.SetStateAction<RegressionHistory>>;
   state: StepStateApi<RegressionStepState>;
+  getStep?: (step: number) => SiblingStepData | undefined;
+  onNavigateStep?: (step: number) => void;
 } & SharedSettingsProps) {
   const outcome = step.regression_outcome;
   if (!outcome) return <div className="error-box">当前回归步骤缺少 regression_outcome 配置。</div>;
@@ -410,6 +399,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
   const placeboRunningRef = useRef(false);
   const placeboRequestRef = useRef(0);
   const verdictAnchorRef = useRef<HTMLDivElement>(null);
+  const scrollToVerdictAfterRun = useRef(false);
   const latestRequest = useRef(`${outcome}:${settingsKey(settings)}`);
 
   const setSetting = <K extends keyof RegressionSettings>(key: K, value: RegressionSettings[K]) => {
@@ -452,6 +442,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
   }, []);
 
   useEffect(() => {
+    scrollToVerdictAfterRun.current = false;
     setResult(null);
     setResultSettings(null);
     setPlacebo(null);
@@ -518,6 +509,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
         ...(saved.qualified_run ? { qualified_run: saved.qualified_run } : {}),
       });
       if (latestRequest.current === requestKey) {
+        scrollToVerdictAfterRun.current = true;
         setResult(response);
         setResultSettings(runSettings);
       }
@@ -533,8 +525,10 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
 
   const stale = Boolean(resultSettings && settingsKey(resultSettings) !== settingsKey(currentSettings));
 
+  // 只在学生点运行之后滚到结论。会话恢复也会 setResult，若一并滚动会把页顶的教学卷走。
   useEffect(() => {
-    if (!result) return;
+    if (!result || !scrollToVerdictAfterRun.current) return;
+    scrollToVerdictAfterRun.current = false;
     const frame = window.requestAnimationFrame(() => {
       verdictAnchorRef.current?.scrollIntoView({
         behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
@@ -573,6 +567,7 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
   };
 
   const split = result ? splitPolicyCoefficients(result) : null;
+  const verdict = result ? buildRegressionVerdict(outcome, result) : null;
   const event = result?.design.method === "event_study";
   const display = result ? chartDisplayScale(outcome, result.design.method) : { scale: 1 as number, unit: undefined as string | undefined };
   const snapshots = history[outcome] ?? [];
@@ -580,11 +575,17 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
 
   return (
     <div className="reg-workbench">
+      <FamilyMap current={outcome} history={history} getStep={getStep} onNavigateStep={onNavigateStep} />
+
       <section className="reg-question-card">
         <div className="reg-question-main">
           <span className="reg-section-step">1 · 同一研究问题，本步换指标</span>
           <p className="muted">{REGRESSION_QUESTION}</p>
           <h3>{lessonQuestion(outcome, shockType, method)}</h3>
+          <div className="reg-learn-this">
+            <b>本步要学会</b>
+            <p>{lesson.learnThis}</p>
+          </div>
           <p>{lesson.definition}</p>
           <p><b>{lesson.focus}</b></p>
           <div className="metric-facts">
@@ -597,7 +598,9 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           <summary>上升、下降分别可能意味着什么</summary>
           <p><b>下降：</b>{lesson.downMeaning}</p>
           <p><b>上升：</b>{lesson.upMeaning}</p>
-          <p><b>注意：</b>{lesson.caution}</p>
+          <p><b>怎么读：</b>{lesson.howToRead}</p>
+          <p><b>跑完记下：</b>{lesson.writeDown}</p>
+          <p><b>不要写成：</b>{lesson.dontClaim}</p>
         </details>
       </section>
 
@@ -608,9 +611,13 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           <div><span>冲击</span><Pills label="政策冲击" options={options?.shock_types ?? []} value={shockType} onChange={(value) => setSetting("shockType", value)} labelMap={options?.shock_type_labels} /></div>
         </div>
         {method === "did" && (
-          <div className="reg-compare-card" style={{ marginTop: 12 }}>
-            <p>{comparisonExplanation(method)}</p>
-            <DidFourCells />
+          <div className={`reg-compare-card${outcome === "trade" ? " numeric" : ""}`} style={{ marginTop: 12 }}>
+            <div>
+              <b>{outcome === "trade" ? "先用示意数字看懂比较" : "比较方式和步骤 12 相同"}</b>
+              <p>{comparisonExplanation(method)}</p>
+              <p className="muted">{lesson.howToRead}</p>
+            </div>
+            <DidFourCells numeric={outcome === "trade"} />
           </div>
         )}
         {outcome === "network" && (
@@ -652,6 +659,17 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           {state.data?.qualified_run && !isQualifiedRegressionResult(result.result) && (
             <p className="muted">本次结果不能作为报告中的有效回归；已保留先前一次可报告的估计。</p>
           )}
+          {verdict && (
+            <ReadingCoach
+              outcome={outcome}
+              direction={verdict.state}
+              effect={verdict.effect}
+              evidence={verdict.evidence}
+              interpretation={verdict.interpretation}
+              onNavigateStep={onNavigateStep}
+            />
+          )}
+          <SiblingContrast current={outcome} history={history} getStep={getStep} />
 
           <section className="reg-section-card">
             <span className="reg-section-step">3 · 读区间，并留到第 16 步和另外三类指标并读</span>

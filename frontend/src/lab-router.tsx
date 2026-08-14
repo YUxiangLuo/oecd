@@ -4,6 +4,7 @@ import {
   type RegressionHistory,
   type RegressionSettings,
 } from "./regression";
+import type { SiblingStepData } from "./regression-teach";
 import type { ClassroomReport, Meta, ReportMutationResponse, Step, StepStateApi } from "./types";
 import type { SessionStatus } from "./use-session";
 import type { Dispatch, SetStateAction } from "react";
@@ -23,6 +24,7 @@ interface LabRouterProps {
   regressionHistory: RegressionHistory;
   onRegressionHistoryChange: Dispatch<SetStateAction<RegressionHistory>>;
   onNavigateStep: (step: number) => void;
+  getStep?: <T>(step: number) => T | undefined;
 }
 
 /** Map the course contract's lab key to one isolated interactive workbench. */
@@ -41,6 +43,7 @@ export function LabRouter({
   regressionHistory,
   onRegressionHistoryChange,
   onNavigateStep,
+  getStep,
 }: LabRouterProps) {
   if (step.lab === "db") return <DbLab state={state} />;
   if (step.lab === "qc") return meta ? <QcLab meta={meta} onNavigateStep={onNavigateStep} /> : null;
@@ -58,6 +61,8 @@ export function LabRouter({
         onSettingsChange={onRegressionSettingsChange}
         history={regressionHistory}
         onHistoryChange={onRegressionHistoryChange}
+        getStep={getStep ? (n) => getStep<SiblingStepData>(n) : undefined}
+        onNavigateStep={onNavigateStep}
       />
     );
   }

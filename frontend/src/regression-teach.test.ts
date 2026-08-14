@@ -1,0 +1,52 @@
+import { describe, expect, test } from "bun:test";
+import { familyVerdict } from "./regression-teach";
+import type { CoefStat, RegressionOutcome, RegressionResponse } from "./types";
+
+const coefficient = (coef: number, low: number, high: number): CoefStat => ({
+  name: "treated×post", coef, se: 0.01, t: 1, p: 0.2, stars: "", ci_low: low, ci_high: high,
+});
+
+function response(outcome: RegressionOutcome, coef: CoefStat): RegressionResponse {
+  return {
+    design: {
+      outcome, depvar: "y", depvar_label: "Y", granularity: "country", shock_type: "tariff",
+      shock_col: "tariff_shock", treated_col: "treated", method: "did", control_mode: "none",
+      interaction: false, price_mode: "nominal", scenario: "clean", scenario_label: "基准", sample_filter: "排除ROW",
+      exclude_row: true, controls: [], control_labels: {}, equation: "y=x", equation_parts: [], panel_file: "panel.csv",
+      entity: "country", cluster: "country",
+    },
+    result: {
+      depvar: "y", coefs: [coef], n_obs: 10, n_entities: 2, n_times: 5, n_clusters: 2, r2_within: 0.1,
+      depvar_mean: 1, depvar_std: 2, diagnostics: {}, notes: [],
+      status: "ok", status_reasons: [], support: null,
+    },
+    benchmark: {
+      backend: "PanelOLS", policy_coefs: [], max_abs_coef_diff: 0, max_abs_se_diff: 0,
+      coef_check_passed: true, se_check_mode: "informational", notes: [],
+    },
+    disclaimer: "mock",
+  };
+}
+
+describe("familyVerdict", () => {
+  test("prefers in-memory history over a saved sibling run", () => {
+    const live = response("trade", coefficient(-0.02, -0.03, -0.01));
+    const saved = response("trade", coefficient(0.02, 0.01, 0.03));
+    const verdict = familyVerdict(
+      "trade",
+      { trade: [{ response: live }] },
+      (step) => step === 12 ? { run: { design: saved.design, result: saved.result } } : undefined,
+    );
+    expect(verdict?.state).toBe("negative");
+  });
+
+  test("falls back to the qualified sibling run after refresh", () => {
+    const saved = response("production", coefficient(0.01, -0.02, 0.04));
+    const verdict = familyVerdict(
+      "production",
+      {},
+      (step) => step === 13 ? { qualified_run: { design: saved.design, result: saved.result } } : undefined,
+    );
+    expect(verdict?.state).toBe("insufficient");
+  });
+});

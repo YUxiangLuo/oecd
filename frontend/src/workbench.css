@@ -6,23 +6,51 @@
 /* grid items default to min-width:auto and otherwise force the centre pane
    wider than its allocation at the documented 1200px desktop minimum. */
 .reg-workbench > *, .reg-results, .reg-results > * { min-width: 0; max-width: 100%; }
-.reg-question-card, .reg-compare-card, .reg-run-card, .reg-section-card, .reg-guide-card, .technical-details {
+.reg-question-card, .reg-compare-card, .reg-run-card, .reg-section-card, .reg-guide-card, .reg-family-map, .technical-details {
   border: 1px solid #e5e7ef; border-radius: 12px; background: #fff; padding: 14px 16px;
 }
 .reg-question-card { background: linear-gradient(135deg, #f7f7ff, #fff); border-color: #dcdaf8; }
 .reg-question-main h3, .reg-compare-card h3, .reg-guide-card h3 { margin: 5px 0 6px; font-size: 18px; line-height: 1.4; }
 .reg-question-main p, .reg-compare-card p, .reg-guide-card p { margin: 4px 0; line-height: 1.65; }
 .reg-section-step { color: #4b47e0; font-size: 11px; font-weight: 800; letter-spacing: .04em; }
+.reg-family-map { background: #f7f8fd; border-color: #dfe3f2; }
+.reg-family-map-head p { margin: 4px 0 0; color: #5d6575; font-size: 12.5px; line-height: 1.6; }
+.reg-family-track {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;
+  list-style: none; margin: 10px 0 0; padding: 0;
+}
+.reg-family-btn {
+  display: grid; gap: 2px; width: 100%; min-height: 86px; box-sizing: border-box;
+  border: 1px solid #dce1ee; border-radius: 9px; background: #fff;
+  padding: 8px 10px; text-align: left; cursor: pointer; color: inherit;
+}
+.reg-family-btn:disabled { cursor: default; }
+.reg-family-item.current .reg-family-btn { border-color: #4b47e0; background: #eef0ff; box-shadow: 0 0 0 1px rgba(75, 71, 224, .18); }
+.reg-family-step { color: #6a7282; font-size: 10.5px; font-weight: 700; }
+.reg-family-btn b { color: #252b38; font-size: 14px; }
+.reg-family-measure { color: #5d6575; font-size: 11.5px; line-height: 1.4; }
+.reg-family-status { margin-top: 4px; color: #4b47e0; font-size: 11px; font-weight: 750; }
+.reg-family-item.has-run:not(.current) .reg-family-status { color: #18745f; }
+.reg-learn-this {
+  margin: 10px 0; padding: 10px 12px; border-left: 4px solid #4b47e0;
+  border-radius: 0 8px 8px 0; background: #f3f3ff;
+}
+.reg-learn-this b { display: block; color: #3733b4; font-size: 11.5px; letter-spacing: .03em; }
+.reg-learn-this p { margin: 4px 0 0; color: #303747; }
 .metric-facts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .metric-facts span { display: inline-flex; gap: 5px; padding: 5px 8px; background: #fff; border: 1px solid #e3e4ee; border-radius: 7px; font-size: 11.5px; }
 .lesson-details { margin-top: 9px; border-top: 1px dashed #d9dbea; padding-top: 8px; font-size: 12px; }
 .lesson-details summary, .advanced-settings summary, .technical-details > summary { cursor: pointer; color: #4b47e0; font-weight: 700; }
 .reg-compare-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; }
+.reg-compare-card.numeric { grid-template-columns: minmax(0, .9fr) minmax(280px, 1.1fr); align-items: start; }
 .did-comparison { width: 211px; text-align: center; font-size: 11px; }
+.did-example { min-width: 0; }
 .did-table { width: 100%; border-collapse: separate; border-spacing: 3px; }
 .did-table th, .did-table td { padding: 5px; border-radius: 5px; background: #f4f4fb; font-weight: 600; }
 .did-table thead th:first-child { background: transparent; }
-.did-formula { color: #4b47e0; font-weight: 700; padding-top: 1px; }
+.did-table-numeric th, .did-table-numeric td { padding: 7px 8px; font-size: 12px; text-align: center; }
+.did-table-numeric tbody th { text-align: left; }
+.did-formula { color: #4b47e0; font-weight: 700; padding-top: 6px; }
 .reg-run-card { box-shadow: 0 5px 18px rgba(35,39,60,.06); }
 .reg-boundary { margin: 7px 0 10px; padding: 7px 10px; border-radius: 7px; background: #fff8e6; color: #75521a; font-size: 11.5px; }
 .basic-settings { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -59,6 +87,17 @@
 .trust-item p { margin: 5px 0; line-height: 1.6; }
 .placebo-verdict { margin: 10px 0; padding: 9px 11px; background: #eeefff; border-radius: 7px; color: #35328d; font-weight: 600; }
 .reg-guide-card { background: #f4f8ff; border-color: #d8e3f7; }
+.reg-reading-list { margin: 8px 0 4px; padding-left: 20px; }
+.reg-reading-list li { margin: 8px 0; color: #303747; font-size: 13px; line-height: 1.65; }
+.reg-reading-list b { margin-right: 4px; }
+.reg-next-move {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
+  margin: 8px 0 0; color: #4e5668; font-size: 12.5px;
+}
+.reg-sibling-contrast {
+  margin: 0; padding: 9px 12px; border: 1px solid #e0e4ed; border-radius: 9px;
+  background: #f7f8fb; color: #4e5668; font-size: 12.5px; line-height: 1.6;
+}
 .technical-details { margin-top: 2px; }
 .technical-details[open] > summary { margin-bottom: 12px; }
 .technical-details h3 { margin: 16px 0 7px; }
