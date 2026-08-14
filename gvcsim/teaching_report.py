@@ -347,27 +347,61 @@ def _summary_design_limit(
     return None
 
 
+def _run_fingerprint(design: dict[str, Any], result: dict[str, Any]) -> str:
+    coefs = result.get("coefs") if isinstance(result.get("coefs"), list) else []
+    first = next((item for item in coefs if isinstance(item, dict)), {})
+    return json.dumps(
+        {
+            "outcome": design.get("outcome"),
+            "shock": design.get("shock_type"),
+            "method": design.get("method"),
+            "status": result.get("status"),
+            "coef": first.get("coef") if isinstance(first, dict) else None,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _parse_saved_run(raw: Any, outcome: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    if not isinstance(raw, dict):
+        return None
+    design, result = raw.get("design"), raw.get("result")
+    if not isinstance(design, dict) or not isinstance(result, dict) or design.get("outcome") != outcome:
+        return None
+    coefs = result.get("coefs")
+    if not isinstance(coefs, list) or not any(
+        isinstance(coef, dict)
+        and isinstance(coef.get("name"), str)
+        and isinstance(coef.get("coef"), (int, float))
+        and not isinstance(coef.get("coef"), bool)
+        and math.isfinite(float(coef["coef"]))
+        for coef in coefs
+    ):
+        return None
+    return design, result
+
+
 def _saved_runs(session: dict[str, Any]) -> list[dict[str, Any]]:
-    """Use stored design/result objects directly; malformed optional runs are ignored."""
+    """Use stored design/result objects directly; malformed optional runs are ignored.
+
+    Each step shows the latest ``run`` and may also keep ``qualified_run`` so a later
+    insufficient estimate does not erase the only inferential result for the report gate.
+    """
     runs: list[dict[str, Any]] = []
     for step, outcome in sorted(_STEP_OUTCOMES.items()):
-        run = _step_data(session, step).get("run")
-        if not isinstance(run, dict):
-            continue
-        design, result = run.get("design"), run.get("result")
-        if not isinstance(design, dict) or not isinstance(result, dict) or design.get("outcome") != outcome:
-            continue
-        coefs = result.get("coefs")
-        if not isinstance(coefs, list) or not any(
-            isinstance(coef, dict)
-            and isinstance(coef.get("name"), str)
-            and isinstance(coef.get("coef"), (int, float))
-            and not isinstance(coef.get("coef"), bool)
-            and math.isfinite(float(coef["coef"]))
-            for coef in coefs
-        ):
-            continue
-        runs.append({"step": step, "outcome": outcome, "design": design, "result": result})
+        data = _step_data(session, step)
+        seen: set[str] = set()
+        for key in ("run", "qualified_run"):
+            parsed = _parse_saved_run(data.get(key), outcome)
+            if parsed is None:
+                continue
+            design, result = parsed
+            fingerprint = _run_fingerprint(design, result)
+            if fingerprint in seen:
+                continue
+            seen.add(fingerprint)
+            runs.append({"step": step, "outcome": outcome, "design": design, "result": result})
     return runs
 
 

@@ -405,6 +405,12 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
       <div className="tipbox db-fullscreen-note" style={{ marginBottom: 10 }}>
         <b>记录一个观察值：</b>点击任意数值单元格，系统会保存它的行、列与数值供实验报告使用。切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格；再点另一个单元格才会覆盖。
       </div>
+      <div className="observation-strip" aria-live="polite">
+        <b>已选原始数据点</b>
+        {selectedObservation ? (
+          <span>{selectedObservation.row} × {formatYColumnHeader(selectedObservation.column)} = {fmtDb(selectedObservation.value)}</span>
+        ) : <span>尚未选择</span>}
+      </div>
       <ScrollableRegion className="table-wrap bounded-data-table" label={`${activeTable.label}数据表，可横向滚动`}>
         <table className="data-table db-table">
           <thead>
@@ -505,12 +511,6 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
       )}
       <div style={{ marginTop: 12 }}>
         <Pager page={page} pages={pages} total={slice?.total} onChange={setPage} />
-      </div>
-      <div className="observation-strip" aria-live="polite">
-        <b>已选原始数据点</b>
-        {selectedObservation ? (
-          <span>{selectedObservation.row} × {formatYColumnHeader(selectedObservation.column)} = {fmtDb(selectedObservation.value)}</span>
-        ) : <span>尚未选择</span>}
       </div>
       </FullscreenPanel>
     </div>

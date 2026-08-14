@@ -54,3 +54,15 @@ export function urlWithStep(href: string, step: number): string {
   url.searchParams.set("step", String(step));
   return `${url.pathname}${url.search}${url.hash}`;
 }
+
+export function introSeenStorageKey(username: string): string {
+  return `gvcsim_intro_seen:${username}`;
+}
+
+export function shouldAutoShowIntro(storage: StorageReader, username: string): boolean {
+  return storage.getItem(introSeenStorageKey(username)) !== "1";
+}
+
+export function markIntroSeen(storage: Pick<StorageWriter, "setItem">, username: string): void {
+  storage.setItem(introSeenStorageKey(username), "1");
+}

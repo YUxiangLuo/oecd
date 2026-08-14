@@ -160,6 +160,27 @@ def test_non_inferential_saved_run_does_not_satisfy_valid_regression_gate(status
     assert any(item["step"] == 12 and "有效回归" in "".join(item["missing"]) for item in blocked)
 
 
+def test_qualified_run_on_same_step_still_satisfies_gate_after_insufficient_latest(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    session["steps"]["12"]["data"]["qualified_run"] = session["steps"]["12"]["data"]["run"]
+    session["steps"]["12"]["data"]["run"] = {
+        "design": {"outcome": "trade", "equation": "y = policy + FE", "shock_type": "export_control"},
+        "result": {
+            "status": "insufficient",
+            "support": {"status": "insufficient", "suppress_inference": True, "treated_clusters": 1},
+            "n_obs": 10,
+            "coefs": [{"name": "export_control_treated×post", "coef": -0.01}],
+        },
+    }
+
+    assert check_gate(session) == []
+    report = build(session, "同学")
+    assert "统计推断已抑制" in report.markdown or "处理支持度不足" in report.markdown
+    assert "双重差分" in report.markdown or "treated×post" in report.markdown or "政策处理项" in report.markdown
+
+
 def test_report_carries_release_qc_disclosures(tmp_path, monkeypatch):
     qc = {
         "years": {"2020": {"requires_disclosure": True, "warning": ["边界检查"]}},

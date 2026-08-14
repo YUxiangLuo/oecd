@@ -7,6 +7,8 @@ import {
   isExternalAuthenticationChange,
   readAuthExpiry,
   stepFromSearch,
+  markIntroSeen,
+  shouldAutoShowIntro,
   storeAuthentication,
   urlWithStep,
 } from "./app-state";
@@ -62,5 +64,15 @@ describe("application authentication storage", () => {
       storage.setItem(AUTH_EXPIRES_KEY, value);
       expect(readAuthExpiry(storage)).toBeNull();
     }
+  });
+});
+
+describe("intro auto-show", () => {
+  test("shows the intro once per username until it is dismissed", () => {
+    const storage = new MemoryStorage();
+    expect(shouldAutoShowIntro(storage, "student")).toBe(true);
+    markIntroSeen(storage, "student");
+    expect(shouldAutoShowIntro(storage, "student")).toBe(false);
+    expect(shouldAutoShowIntro(storage, "edge")).toBe(true);
   });
 });

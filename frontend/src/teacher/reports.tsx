@@ -78,8 +78,8 @@ function GradeView({ data, grader, onBack }: { data: TeacherReport; grader: stri
       <div className="grade-split">
         <div className="grade-doc"><ReportMarkdown markdown={data.markdown} /></div>
         <aside className="grade-side"><div className="panel"><div className="panel-head"><span className="panel-ic">🖊️</span>评阅</div>
-          <label className="grade-field">分数（0-100）<input type="number" min={0} max={100} value={score} onChange={(event) => setScore(event.target.value)} /></label>
-          <label className="grade-field">评语（可空）<textarea value={feedback} onChange={(event) => setFeedback(event.target.value)} rows={8} maxLength={4000} /></label>
+          <label className="grade-field">分数（0-100）<input type="number" min={0} max={100} value={score} onChange={(event) => { setScore(event.target.value); setSaveError(null); }} /></label>
+          <label className="grade-field">评语（可空）<textarea value={feedback} onChange={(event) => { setFeedback(event.target.value); setSaveError(null); }} rows={8} maxLength={4000} /></label>
           {saveError && <div className="error-box">{saveError}</div>}
           <button className="primary block" disabled={saving} onClick={submit}>{saving ? "保存中…" : data.state === "graded" ? "更新评阅" : "提交评阅"}</button>
           <p className="muted">评阅人：{grader}；学生重新生成已提交报告时，旧评分会被清除。</p>

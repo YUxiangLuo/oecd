@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
 import { showToast } from "../../toast";
@@ -68,6 +68,27 @@ export function reportGenerateLabel(report: ClassroomReport | null) {
   return report.state === "pending" || report.state === "graded" ? "重新生成并提交" : "重新生成报告";
 }
 
+export function reportWaitLabel(
+  sessionStatus: SessionStatus,
+  sessionUnsynced: boolean,
+  sessionSyncing: boolean,
+): string | null {
+  if (sessionStatus !== "ready") return "正在恢复实验记录…";
+  if (sessionSyncing || sessionUnsynced) return "正在保存实验记录…";
+  return null;
+}
+
+export function reportGenerateButtonLabel(
+  report: ClassroomReport | null,
+  generating: boolean,
+  sessionStatus: SessionStatus,
+  sessionUnsynced: boolean,
+  sessionSyncing: boolean,
+): string {
+  if (generating) return "服务端生成中…";
+  return reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing) ?? reportGenerateLabel(report);
+}
+
 export function ReportLab({
   state,
   report,
@@ -97,14 +118,38 @@ export function ReportLab({
 
   const reflection = (state.data ?? {}) as ReportReflectionState;
   const busy = generating || submitting || printing;
-  const waitForSave = sessionStatus !== "ready" || sessionUnsynced || sessionSyncing;
+  const readyRef = useRef(sessionStatus === "ready");
+  readyRef.current = sessionStatus === "ready";
+  const flushRef = useRef(onFlushSession);
+  flushRef.current = onFlushSession;
+
+  const waitUntilReady = async () => {
+    if (readyRef.current) return;
+    const deadline = Date.now() + 15_000;
+    await new Promise<void>((resolve, reject) => {
+      const tick = () => {
+        if (readyRef.current) {
+          resolve();
+          return;
+        }
+        if (Date.now() >= deadline) {
+          reject(new Error("实验记录仍在恢复，请稍后再试"));
+          return;
+        }
+        window.setTimeout(tick, 50);
+      };
+      tick();
+    });
+  };
 
   const generate = async () => {
+    if (busy) return;
     setGenerating(true);
     setError(null);
     setBlocked([]);
     try {
-      await onFlushSession();
+      await waitUntilReady();
+      await flushRef.current();
       const response = await api.classroom.generateReport();
       onReportChanged(response);
       showToast(response.report.state === "pending" ? "新报告已重新提交" : "报告草稿已生成");
@@ -118,10 +163,12 @@ export function ReportLab({
   };
 
   const submit = async () => {
+    if (busy) return;
     setSubmitting(true);
     setError(null);
     try {
-      await onFlushSession();
+      await waitUntilReady();
+      await flushRef.current();
       const response = await api.classroom.submitReport();
       onReportChanged(response);
       showToast(response.report.state === "graded" ? "报告已评阅" : "报告已提交，等待教师评阅");
@@ -176,12 +223,12 @@ export function ReportLab({
       </section>
 
       <div className="report-actions">
-        <button className="primary" disabled={busy || waitForSave} onClick={() => { void generate(); }}>
-          {generating ? "服务端生成中…" : reportGenerateLabel(report)}
+        <button className="primary" disabled={busy} onClick={() => { void generate(); }}>
+          {reportGenerateButtonLabel(report, generating, sessionStatus, sessionUnsynced, sessionSyncing)}
         </button>
         {report?.state === "draft" && (
-          <button className="primary" disabled={busy || waitForSave} onClick={() => { void submit(); }}>
-            {submitting ? "提交中…" : "提交报告给老师"}
+          <button className="primary" disabled={busy} onClick={() => { void submit(); }}>
+            {submitting ? "提交中…" : reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing) ?? "提交报告给老师"}
           </button>
         )}
         {report && (
@@ -189,7 +236,6 @@ export function ReportLab({
             {printing ? "正在准备 PDF…" : "导出 PDF"}
           </button>
         )}
-        {waitForSave && <span className="muted">请先保存最新实验记录</span>}
       </div>
 
       {blocked.length > 0 && <GateCard blocked={blocked} onNavigateStep={onNavigateStep} />}

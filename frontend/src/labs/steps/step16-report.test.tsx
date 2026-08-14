@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ClassroomReport } from "../../types";
-import { GateCard, ReportLab, ReportStatus, reflectionCountLabel, reportGenerateLabel } from "./step16-report";
+import { GateCard, ReportLab, ReportStatus, reflectionCountLabel, reportGenerateButtonLabel, reportGenerateLabel, reportWaitLabel } from "./step16-report";
 
 function report(state: ClassroomReport["state"]): ClassroomReport {
   return {
@@ -45,6 +45,14 @@ describe("step 16 report states", () => {
     expect(reportGenerateLabel(report("draft"))).toBe("重新生成报告");
     expect(reportGenerateLabel(report("pending"))).toBe("重新生成并提交");
     expect(reportGenerateLabel(report("graded"))).toBe("重新生成并提交");
+  });
+
+  test("puts restore and save status on the generate button itself", () => {
+    expect(reportWaitLabel("loading", false, false)).toBe("正在恢复实验记录…");
+    expect(reportWaitLabel("ready", true, false)).toBe("正在保存实验记录…");
+    expect(reportWaitLabel("ready", false, false)).toBeNull();
+    expect(reportGenerateButtonLabel(null, false, "loading", false, false)).toBe("正在恢复实验记录…");
+    expect(reportGenerateButtonLabel(null, true, "loading", false, false)).toBe("服务端生成中…");
   });
 
   test("renders actionable report-gate links", () => {

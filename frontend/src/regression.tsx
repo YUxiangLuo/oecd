@@ -3,6 +3,7 @@ import { ScrollableRegion } from "./a11y";
 import { api } from "./api";
 import { useAsync } from "./labs";
 import { comparisonExplanation, lessonQuestion, REGRESSION_LESSONS } from "./regression-lessons";
+import { isQualifiedRegressionResult, nextRegressionSave } from "./regression-save";
 import { buildRegressionVerdict, chartDisplayScale, placeboInterpretation } from "./regression-verdict";
 import { splitPolicyCoefficients } from "./regteach";
 import type {
@@ -381,6 +382,11 @@ interface RegressionStepState extends QuizCompletionState, Record<string, unknow
     design: RegressionResponse["design"];
     result: RegressionResponse["result"];
   };
+  qualified_run?: {
+    settings: RegressionSettings;
+    design: RegressionResponse["design"];
+    result: RegressionResponse["result"];
+  };
 }
 
 export function RegressionRunLab({ step, settings, onSettingsChange, history, onHistoryChange, state }: {
@@ -505,9 +511,13 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
         };
         return { ...current, [outcome]: [snapshot, ...prior].slice(0, 3) };
       });
-      // 保存最近一次运行；报告直接读取这份设计与结果，不再复估。
+      // 最近一次 run 供本页恢复；合格快照单独保留，避免不足设计盖掉报告门槛。
+      const saved = nextRegressionSave(state.data, {
+        settings: runSettings, design: response.design, result: response.result,
+      });
       state.save({
-        run: { settings: runSettings, design: response.design, result: response.result },
+        run: saved.run,
+        ...(saved.qualified_run ? { qualified_run: saved.qualified_run } : {}),
       });
       if (latestRequest.current === requestKey) {
         setResult(response);
@@ -669,6 +679,9 @@ export function RegressionRunLab({ step, settings, onSettingsChange, history, on
           <div ref={verdictAnchorRef} className="verdict-anchor">
             <VerdictCard outcome={outcome} response={result} stale={stale} />
           </div>
+          {state.data?.qualified_run && !isQualifiedRegressionResult(result.result) && (
+            <p className="muted">本次结果不能作为报告中的有效回归；已保留先前一次可报告的估计。</p>
+          )}
 
           <section className="reg-section-card">
             <span className="reg-section-step">4 · 看效应与不确定性</span>

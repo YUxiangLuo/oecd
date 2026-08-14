@@ -3,7 +3,9 @@ import {
   clearAuthentication,
   clearAuthenticationIfCurrent,
   isExternalAuthenticationChange,
+  markIntroSeen,
   readAuthExpiry,
+  shouldAutoShowIntro,
   stepFromSearch,
   storeAuthentication,
   urlWithStep,
@@ -164,7 +166,9 @@ export default function App() {
     return (
       <LoginPage notice={authNotice} onLogin={(response) => {
         storeAuthentication(localStorage, response.token, response.expires_at);
-        if (response.user.role === "student") sessionStorage.setItem("gvcsim_show_intro", "1");
+        if (response.user.role === "student" && shouldAutoShowIntro(localStorage, response.user.username)) {
+          sessionStorage.setItem("gvcsim_show_intro", "1");
+        }
         window.location.reload();
       }} />
     );
@@ -209,7 +213,10 @@ export default function App() {
       introTriggerRef={introTriggerRef}
       onNavigateStep={navigateStep}
       onShowIntro={() => setShowIntro(true)}
-      onCloseIntro={() => setShowIntro(false)}
+      onCloseIntro={() => {
+        markIntroSeen(localStorage, user.username);
+        setShowIntro(false);
+      }}
       onRequestPasswordChange={() => setShowPasswordChange(true)}
       onClosePasswordChange={() => setShowPasswordChange(false)}
       onPasswordChanged={passwordChanged}
