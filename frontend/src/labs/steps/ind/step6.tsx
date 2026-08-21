@@ -5,6 +5,7 @@
  * 加权加总 = 总长度)。长度是加权口径,恒等式比 4/5 略微含蓄。
  */
 import { api } from "../../../api";
+import { explicitDemoCountry } from "../../../decomposition-model";
 import { DecompositionDemo } from "../../../demos";
 import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
@@ -80,7 +81,7 @@ export function Step6Length({ meta, step, state }: { meta: Meta; step: Step; sta
           step={6}
           meta={meta}
           primaryYear={controls.year}
-          primaryCountry={controls.country}
+          primaryCountry={explicitDemoCountry(meta.countries, controls.country)}
           onPrimaryChange={controls.setPrimary}
         />
       </ChartStory>

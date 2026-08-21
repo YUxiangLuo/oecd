@@ -19,7 +19,8 @@ from gvcsim import config as app_config
 from gvcsim.artifacts import ArtifactContractError, validate_release_cached
 from gvcsim.classroom import db as classroom_db
 from gvcsim.classroom import routes as classroom_routes
-from gvcsim.config import PROCESSED_DIR, processed_years
+from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, processed_years
+from gvcsim.data.raw_icio import discover_years
 
 if app_config.IS_PRODUCTION:
     app_config.validate_security_config()
@@ -58,8 +59,8 @@ app.include_router(regression_routes.router)
 def health() -> JSONResponse:
     """供 systemd/nginx 使用的无认证只读就绪检查。
 
-    只暴露稳定契约和年份，不泄露数据库连接或文件路径。产物清单缺失、过期或
-    摘要契约不合法时返回 503，避免部署脚本把“进程已启动”误当成“数据可用”。
+    产物、原始年份或教学数据库未就绪时返回 503，避免部署脚本把“进程已启动”
+    误当成“数据可用”。detail 给出可操作的失败原因，方便课堂机器排查。
     """
     try:
         validate_release_cached(PROCESSED_DIR)
@@ -68,6 +69,16 @@ def health() -> JSONResponse:
         return JSONResponse(status_code=503, content={"status": "unavailable", "detail": str(error)})
     if not years:
         return JSONResponse(status_code=503, content={"status": "unavailable", "detail": "没有完整产物"})
+    try:
+        raw_years = discover_years(RAW_DATA_DIR)
+    except (OSError, RuntimeError, ValueError) as error:
+        return JSONResponse(status_code=503, content={"status": "unavailable", "detail": str(error)})
+    missing_raw = [year for year in years if year not in raw_years]
+    if missing_raw:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unavailable", "detail": f"步骤 1 原始数据缺少年份: {missing_raw}"},
+        )
     try:
         database = classroom_db.readiness()
     except (classroom_db.Unavailable, classroom_db.SchemaVersionMismatch, RuntimeError):

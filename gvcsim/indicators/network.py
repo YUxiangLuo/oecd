@@ -189,8 +189,28 @@ def sector_network(arr: IcioArrays) -> pd.DataFrame:
 
 
 def network_edges(arr: IcioArrays, top_n: int = 120) -> pd.DataFrame:
-    """取流量最大的 ``top_n`` 条国家间边供前端网络图渲染。"""
+    """取有限正流量最大的 ``top_n`` 条国家间边供前端网络图渲染。"""
+    if isinstance(top_n, (bool, np.bool_)) or not isinstance(top_n, (int, np.integer)) or top_n <= 0:
+        raise ValueError("top_n 必须是正整数")
+
     flow = country_flow_matrix(arr)
-    edges = flow.stack().rename("flow").reset_index().rename(columns={"level_0": "source", "level_1": "target"})
-    edges = edges[edges["source"] != edges["target"]]
-    return edges.nlargest(top_n, "flow").reset_index(drop=True)
+    edges = (
+        flow.rename_axis(index="source", columns="target")
+        .stack()
+        .rename("flow")
+        .reset_index()
+        .reindex(columns=["source", "target", "flow"])
+    )
+    edges["flow"] = pd.to_numeric(edges["flow"], errors="coerce")
+    values = edges["flow"].to_numpy(dtype=float)
+    eligible = edges["source"].astype(str).ne(edges["target"].astype(str)) & np.isfinite(values) & (values > 0)
+    edges = edges.loc[eligible, ["source", "target", "flow"]]
+    return (
+        edges.sort_values(
+            ["flow", "source", "target"],
+            ascending=[False, True, True],
+            kind="mergesort",
+        )
+        .head(int(top_n))
+        .reset_index(drop=True)
+    )

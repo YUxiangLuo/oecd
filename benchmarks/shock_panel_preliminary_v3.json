@@ -1,0 +1,33 @@
+{
+  "benchmark": "preliminary_old_v3_shock_panel_microbenchmark",
+  "method": "Preliminary old-v3 direct-function microbenchmark only. It did not validate a v7 release, authenticate, or exercise the normal /api/shocks/panel HTTP path, so it is not a v7 performance attestation.",
+  "environment": {
+    "python": "3.13.11",
+    "platform": "Linux-7.1.8-arch1-3-x86_64-with-glibc2.44",
+    "cpu": "x86_64",
+    "logical_cpus": 12,
+    "release_id": "5b41e5d33157470c846e0a1111c4e7d8",
+    "existing_artifact_contract": 3,
+    "shock_rows": 17325,
+    "page_size": 25
+  },
+  "warm_sequential_ms": {
+    "samples": 40,
+    "min": 7.534888994996436,
+    "median": 8.61208549758885,
+    "p95": 10.58373124251375,
+    "max": 10.965708002913743,
+    "budget_p95": 500,
+    "passed": true
+  },
+  "eight_concurrent_ms": {
+    "samples": 48,
+    "min": 61.22721001156606,
+    "median": 81.93005100474693,
+    "p95": 116.73950765107293,
+    "max": 122.37358800484799,
+    "budget_p95": 1500,
+    "passed": true
+  },
+  "status": "preliminary_not_v7_attestation"
+}

@@ -2,8 +2,59 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from gvcsim.data import quality
+
+
+def _serialized(scope: str) -> list[dict]:
+    return [
+        {
+            "name": name,
+            "kind": "结构",
+            "passed": True,
+            "detail": "ok",
+            "warnings": [],
+            "severity": "ok",
+        }
+        for name in quality.QC_EXPECTED_CHECKS[scope]
+    ]
+
+
+def test_qc_contract_requires_complete_nonempty_supported_scope():
+    checks = _serialized(quality.QC_SCOPE_CONTROLS)
+    assert quality.validate_serialized_checks(checks, scope=quality.QC_SCOPE_CONTROLS) == checks
+    with pytest.raises(ValueError, match="非空"):
+        quality.validate_serialized_checks([], scope=quality.QC_SCOPE_CONTROLS)
+    with pytest.raises(ValueError, match="未知 QC scope"):
+        quality.validate_serialized_checks(checks, scope="unknown")
+    with pytest.raises(ValueError, match="版本"):
+        quality.validate_serialized_checks(
+            checks,
+            scope=quality.QC_SCOPE_CONTROLS,
+            contract_version=99,
+        )
+    with pytest.raises(ValueError, match="不能为空"):
+        quality.summarize_serialized_checks([])
+    with pytest.raises(ValueError, match="布尔值"):
+        quality.summarize_serialized_checks(checks, override="yes")  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="布尔值"):
+        quality.summarize_checks([quality.QcCheck("x", "结构", True)], override=1)  # type: ignore[arg-type]
+
+
+def test_qc_contract_binds_each_check_to_its_failure_severity():
+    annual = _serialized(quality.QC_SCOPE_ICIO)
+    annual[0].update({"passed": False, "severity": "warning"})
+    with pytest.raises(ValueError, match="必须为 fatal"):
+        quality.validate_serialized_checks(annual, scope=quality.QC_SCOPE_ICIO)
+
+    annual = _serialized(quality.QC_SCOPE_ICIO)
+    factor = next(item for item in annual if item["name"] == "因子投入与派生指标定义域(VA/TLS)")
+    factor.update({"passed": False, "severity": "warning"})
+    assert quality.validate_serialized_checks(annual, scope=quality.QC_SCOPE_ICIO) == annual
+    factor["severity"] = "fatal"
+    with pytest.raises(ValueError, match="必须为 warning"):
+        quality.validate_serialized_checks(annual, scope=quality.QC_SCOPE_ICIO)
 
 
 def test_all_checks_pass_on_consistent_system(fake_io):
@@ -113,6 +164,19 @@ def test_shock_panel_quality_passes_on_complete_panel():
                 "announced_date": "2020-01-01" if (c, s, y) == ("AAA", "s1", 2020) else "",
                 "effective_date": "2020-02-01" if (c, s, y) == ("AAA", "s1", 2020) else "",
                 "note": "test" if (c, s, y) == ("AAA", "s1", 2020) else "",
+                "sanction_shock": 0.0,
+                "sanction_treated": 0,
+                "sanction_announced_date": "",
+                "sanction_effective_date": "",
+                "sanction_note": "",
+                "export_control_shock": 0.0,
+                "export_control_treated": 0,
+                "export_control_announced_date": "",
+                "export_control_effective_date": "",
+                "export_control_note": "",
+                "tariff_exposure_source": "oecd_icio_bilateral_flow",
+                "tariff_exposure_mode": "fixed_pretreatment",
+                "tariff_exposure_disclosure": "",
             }
             for c in ["AAA", "BBB"]
             for s in ["s1", "s2"]
@@ -122,8 +186,12 @@ def test_shock_panel_quality_passes_on_complete_panel():
 
     checks = quality.check_shock_panel(df, ["AAA", "BBB"], ["s1", "s2"], [2019, 2020])
 
-    assert len(checks) == 5
+    assert len(checks) == 6
     assert all(c.passed for c in checks), [(c.name, c.detail, c.warnings) for c in checks]
+    coverage = next(c for c in checks if c.name.startswith("关税处理组覆盖比例"))
+    assert "关税处理 1/4" in coverage.detail
+    assert "制裁处理 0（描述性）" in coverage.detail
+    assert "出口管制处理 0（描述性）" in coverage.detail
 
 
 def test_shock_panel_quality_detects_bad_timeline_and_threshold():
@@ -146,3 +214,58 @@ def test_shock_panel_quality_detects_bad_timeline_and_threshold():
 
     assert not by_name["冲击事件时间线(宣布日≤生效日)"].passed
     assert not by_name["treated 标记与阈值一致"].passed
+
+
+def _complete_shock_rows(values: list[float]) -> pd.DataFrame:
+    rows = []
+    for index, value in enumerate(values):
+        hit = value > 0
+        rows.append({
+            "country": f"C{index}", "sector": "s1", "year": 2020, "shock_type": "tariff",
+            "tariff_shock": value, "treated": int(value > 0.001),
+            "announced_date": "2020-01-01" if hit else "",
+            "effective_date": "2020-02-01" if hit else "", "note": "event" if hit else "",
+            "sanction_shock": 0.0, "sanction_treated": 0,
+            "sanction_announced_date": "", "sanction_effective_date": "", "sanction_note": "",
+            "export_control_shock": 0.0, "export_control_treated": 0,
+            "export_control_announced_date": "", "export_control_effective_date": "",
+            "export_control_note": "", "tariff_exposure_source": "oecd_icio_bilateral_flow",
+            "tariff_exposure_mode": "fixed_pretreatment", "tariff_exposure_disclosure": "",
+        })
+    return pd.DataFrame(rows)
+
+
+def test_shock_threshold_is_strict_and_complete_types_are_mandatory():
+    frame = _complete_shock_rows([0.0009, 0.001, 0.0011])
+    checks = quality.check_shock_panel(frame, ["C0", "C1", "C2"], ["s1"], [2020])
+    assert next(check for check in checks if check.name == "treated 标记与阈值一致").passed
+    assert frame["treated"].tolist() == [0, 0, 1]
+
+    missing_half = frame.drop(columns=["sanction_treated"])
+    malformed = quality.check_shock_panel(missing_half, ["C0", "C1", "C2"], ["s1"], [2020])
+    assert len(malformed) == 6
+    assert not malformed[0].passed
+    assert "sanction_treated" in " ".join(malformed[0].warnings)
+
+
+def test_shock_exposure_provenance_rejects_unknown_mixed_and_undisclosed_fallback():
+    frame = _complete_shock_rows([0.0011, 0.0])
+    provenance_name = "关税出口暴露度来源与口径"
+
+    unknown = frame.copy()
+    unknown["tariff_exposure_mode"] = "unknown"
+    assert not next(c for c in quality.check_shock_panel(unknown, ["C0", "C1"], ["s1"], [2020]) if c.name == provenance_name).passed
+
+    mixed = frame.copy()
+    mixed.loc[1, "tariff_exposure_source"] = "stylized_teaching_fallback"
+    mixed.loc[1, "tariff_exposure_disclosure"] = "风格化出口暴露度仅供教学测试，不是 OECD ICIO 观测值，不得表述为官方数据。"
+    assert not next(c for c in quality.check_shock_panel(mixed, ["C0", "C1"], ["s1"], [2020]) if c.name == provenance_name).passed
+
+    fallback = frame.copy()
+    fallback["tariff_exposure_source"] = "stylized_teaching_fallback"
+    assert not next(c for c in quality.check_shock_panel(fallback, ["C0", "C1"], ["s1"], [2020]) if c.name == provenance_name).passed
+
+    fallback["tariff_exposure_disclosure"] = "风格化出口暴露度仅供教学测试，不是 OECD ICIO 观测值，不得表述为官方数据。"
+    check = next(c for c in quality.check_shock_panel(fallback, ["C0", "C1"], ["s1"], [2020]) if c.name == provenance_name)
+    assert check.passed
+    assert check.effective_severity == quality.QC_DISCLOSURE

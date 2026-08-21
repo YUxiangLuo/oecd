@@ -25,6 +25,31 @@ def test_environment_has_no_evidence_rate_or_pool_tuning():
     assert "GVCSIM_PUBLICATION_LOCK_DIR" not in environment
 
 
+def test_shipped_production_placeholders_are_rejected_case_insensitively(monkeypatch):
+    environment = {
+        key: value
+        for line in (ROOT / "deploy" / "gvcsim.env.example").read_text().splitlines()
+        if line and not line.startswith("#") and "=" in line
+        for key, value in [line.split("=", 1)]
+    }
+    monkeypatch.setattr(config, "IS_PRODUCTION", True)
+    monkeypatch.setattr(config, "DEMO_MODE", False)
+    monkeypatch.setattr(config, "_data_dir_setting", environment["GVCSIM_DATA_DIR"])
+    monkeypatch.setattr(config, "_raw_data_dir_setting", environment["GVCSIM_RAW_DATA_DIR"])
+
+    monkeypatch.setattr(config, "PG_DSN", environment["GVCSIM_PG_DSN"].swapcase())
+    monkeypatch.setattr(config, "AUTH_SECRET", "x" * 32)
+    with pytest.raises(config.ConfigurationError, match="GVCSIM_PG_DSN") as dsn_error:
+        config.validate_security_config()
+    assert "change_me" not in str(dsn_error.value).casefold()
+
+    monkeypatch.setattr(config, "PG_DSN", "postgresql://gvcsim:secret@127.0.0.1:5432/gvclab")
+    monkeypatch.setattr(config, "AUTH_SECRET", environment["GVCSIM_AUTH_SECRET"].swapcase())
+    with pytest.raises(config.ConfigurationError, match="GVCSIM_AUTH_SECRET") as secret_error:
+        config.validate_security_config()
+    assert "change_me" not in str(secret_error.value).casefold()
+
+
 def test_production_requires_explicit_shared_data_paths(monkeypatch):
     monkeypatch.setattr(config, "IS_PRODUCTION", True)
     monkeypatch.setattr(config, "DEMO_MODE", False)

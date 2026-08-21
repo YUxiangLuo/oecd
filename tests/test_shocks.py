@@ -2,8 +2,10 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from gvcsim.indicators.core import build_arrays
+from gvcsim import shocks
 from gvcsim.shocks import TREATED_THRESHOLD, build_export_exposure, demo_shock_panel, events_metadata
 
 COUNTRIES = ["CHN", "USA", "DEU", "CAN", "AUS", "BRA", "VNM", "TUR"]
@@ -11,8 +13,55 @@ SECTORS = ["A01_02", "C24", "C26", "C28", "C29", "K", "J62_63"]
 YEARS = [2016, 2017, 2018, 2019, 2020]
 
 
+def _complete_exposure(
+    countries: list[str],
+    years: list[int],
+    overrides: dict[tuple[str, str, int], float] | None = None,
+) -> pd.DataFrame:
+    """Build a self-consistent tiny complete ICIO dimension with both flow columns."""
+    overrides = overrides or {}
+    base = sorted({*countries, *(set(shocks.catalogue_tariff_imposers()) - {"EU"})})
+    rows = []
+    for country in base:
+        for year in years:
+            shares = {destination: overrides.get((country, destination, year), 0.0) for destination in base}
+            shares[country] = 0.0
+            remaining = 1.0 - sum(shares.values())
+            if remaining < -1e-12:
+                raise ValueError("fixture overrides exceed one")
+            residual = next(
+                destination for destination in base if destination != country and shares[destination] == 0.0
+            )
+            shares[residual] += max(remaining, 0.0)
+            for destination in base:
+                rows.append(
+                    {
+                        "country": country,
+                        "imposer": destination,
+                        "year": year,
+                        "bilateral_exports": shares[destination],
+                        "total_exports": 1.0,
+                        "export_exposure": shares[destination],
+                    }
+                )
+            eu_share = sum(shares.get(member, 0.0) for member in shocks.EU27)
+            rows.append(
+                {
+                    "country": country,
+                    "imposer": "EU",
+                    "year": year,
+                    "bilateral_exports": eu_share,
+                    "total_exports": 1.0,
+                    "export_exposure": eu_share,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
 def _panel():
-    return demo_shock_panel(COUNTRIES, SECTORS, YEARS).set_index(["country", "sector", "year"])
+    return demo_shock_panel(COUNTRIES, SECTORS, YEARS, allow_stylized_fallback=True).set_index(
+        ["country", "sector", "year"]
+    )
 
 
 def test_full_coverage_and_bounds():
@@ -24,6 +73,25 @@ def test_full_coverage_and_bounds():
     assert df["tariff_shock"].between(0, 0.5).all()
     # treated 与阈值一致
     assert ((df["tariff_shock"] > TREATED_THRESHOLD) == (df["treated"] == 1)).all()
+
+
+def test_demo_panel_generation_has_deterministic_key_order():
+    generated = demo_shock_panel(
+        ["USA", "CHN"],
+        ["C26", "C24"],
+        [2020, 2018],
+        allow_stylized_fallback=True,
+    )
+    expected = demo_shock_panel(
+        ["CHN", "USA"],
+        ["C24", "C26"],
+        [2018, 2020],
+        allow_stylized_fallback=True,
+    )
+
+    pd.testing.assert_frame_equal(generated, expected, check_exact=True)
+    keys = list(generated[["country", "sector", "year"]].itertuples(index=False, name=None))
+    assert keys == sorted(keys)
 
 
 def test_prewar_years_are_zero():
@@ -78,6 +146,15 @@ def test_event_metadata_discloses_composite_timeline_and_correct_xpcc_date():
     assert "复合处理" in section_301["name"]
     assert "只对应首批" in section_301["timeline_note"]
     assert section_301["source_urls"]
+    assert section_301["source_status"] == "official_event_source"
+    assert "教学编码" in section_301["source_disclosure"]
+
+    uncited = next(event for event in events if event["name"].startswith("美国232"))
+    assert uncited["source_status"] == "teaching_encoding_no_event_source"
+    assert uncited["source_urls"] == []
+    assert uncited["source_disclosure"] == section_301["source_disclosure"]
+    assert uncited["peak_rate"] == 0.24
+    assert uncited["top_sectors"] == ["C24"]
 
     xpcc = next(event for event in events if "XPCC" in event["name"])
     assert xpcc["announced"] == "2020-07-31"
@@ -91,6 +168,7 @@ def test_entity_list_policy_shocks_are_generated():
         ["CHN", "RUS", "USA"],
         ["C24", "C26", "J62_63", "K", "B05_06"],
         YEARS,
+        allow_stylized_fallback=True,
     ).set_index(["country", "sector", "year"])
 
     assert df.loc[("RUS", "C24", 2018), "sanction_shock"] > 0
@@ -112,28 +190,220 @@ def test_export_exposure_from_icio_flows(fake_io):
     assert by_key["BBB", "AAA", 2020] == 1.0
 
 
-def test_demo_panel_uses_passed_export_exposure():
-    exposure = pd.DataFrame(
-        [
-            {"country": "DEU", "imposer": "USA", "year": 2018, "export_exposure": 0.5},
-        ]
+def test_persisted_exposure_and_shock_loaders_preserve_round_trip_floats(tmp_path, monkeypatch):
+    monkeypatch.setattr(shocks, "PROCESSED_DIR", tmp_path)
+    sensitive_exposure = 0.0042146112887785974
+    years = [2017, 2018]
+    raw_exposure = _complete_exposure(
+        ["DEU", "USA"],
+        years,
+        {("DEU", "USA", 2017): sensitive_exposure},
     )
-    df = demo_shock_panel(["DEU", "USA"], ["C24"], [2018], export_exposure=exposure)
+    for year in years:
+        raw_exposure.loc[raw_exposure["year"].eq(year)].to_csv(
+            tmp_path / f"{shocks.EXPOSURE_PREFIX}_{year}.csv",
+            index=False,
+        )
+
+    loaded_exposure = shocks.load_export_exposure(years)
+    assert loaded_exposure is not None
+    exposure_key = (
+        loaded_exposure["country"].eq("DEU")
+        & loaded_exposure["imposer"].eq("USA")
+        & loaded_exposure["year"].eq(2017)
+    )
+    assert loaded_exposure.loc[exposure_key, "export_exposure"].item() == sensitive_exposure
+
+    raw_panel = demo_shock_panel(
+        ["DEU", "USA"],
+        ["C24"],
+        years,
+        export_exposure=raw_exposure,
+    )
+    raw_key = raw_panel["country"].eq("DEU") & raw_panel["sector"].eq("C24") & raw_panel["year"].eq(2018)
+    raw_shock = raw_panel.loc[raw_key, "tariff_shock"].item()
+    assert raw_shock == sensitive_exposure * 0.16
+
+    shocks.write_demo(["DEU", "USA"], ["C24"], years)
+    published = pd.read_csv(
+        tmp_path / shocks.DEMO_FILE,
+        keep_default_na=False,
+        float_precision="round_trip",
+    )
+    published_key = (
+        published["country"].eq("DEU") & published["sector"].eq("C24") & published["year"].eq(2018)
+    )
+    assert published.loc[published_key, "tariff_shock"].item() == raw_shock
+
+    loaded_shocks = shocks.load_shocks()
+    loaded_key = (
+        loaded_shocks["country"].eq("DEU")
+        & loaded_shocks["sector"].eq("C24")
+        & loaded_shocks["year"].eq(2018)
+    )
+    assert loaded_shocks.loc[loaded_key, "tariff_shock"].item() == raw_shock
+    untreated_key = (
+        loaded_shocks["country"].eq("DEU")
+        & loaded_shocks["sector"].eq("C24")
+        & loaded_shocks["year"].eq(2017)
+    )
+    assert loaded_shocks.loc[untreated_key, "note"].item() == ""
+
+
+def test_demo_panel_uses_passed_pretreatment_export_exposure():
+    exposure = _complete_exposure(
+        ["DEU", "USA"],
+        [2017, 2018],
+        {("DEU", "USA", 2017): 0.5},
+    )
+    df = demo_shock_panel(["DEU", "USA"], ["C24"], [2017, 2018], export_exposure=exposure)
     val = df.set_index(["country", "sector", "year"]).loc[("DEU", "C24", 2018), "tariff_shock"]
-    # 232 钢铝 2018 年 C24 基准税率 0.16 × ICIO 暴露度 0.5。
+    # 232 钢铝 2018 年 C24 基准税率 0.16 × 2017 ICIO 暴露度 0.5。
     assert val == 0.08
 
 
+def test_fixed_pretreatment_exposure_rejects_release_without_earlier_year():
+    exposure = _complete_exposure(
+        ["DEU", "USA"],
+        [2018],
+        {("DEU", "USA", 2018): 0.5},
+    )
+    with pytest.raises(ValueError, match="不得回退到最早处理年"):
+        demo_shock_panel(["DEU", "USA"], ["C24"], [2018], export_exposure=exposure)
+
+
 def test_tariff_primary_uses_last_pretreatment_weight_and_keeps_contemporaneous_robustness():
-    exposure = pd.DataFrame(
-        [
-            {"country": "DEU", "imposer": "USA", "year": 2017, "export_exposure": 0.20},
-            {"country": "DEU", "imposer": "USA", "year": 2018, "export_exposure": 0.80},
-            {"country": "DEU", "imposer": "USA", "year": 2019, "export_exposure": 0.90},
-        ]
+    exposure = _complete_exposure(
+        ["DEU", "USA"],
+        [2017, 2018, 2019],
+        {
+            ("DEU", "USA", 2017): 0.20,
+            ("DEU", "USA", 2018): 0.80,
+            ("DEU", "USA", 2019): 0.90,
+        },
     )
     panel = demo_shock_panel(["DEU", "USA"], ["C24"], [2017, 2018, 2019], export_exposure=exposure)
     row = panel.set_index(["country", "sector", "year"]).loc[("DEU", "C24", 2018)]
     assert row["tariff_shock"] == 0.16 * 0.20
     assert row["tariff_shock_contemporaneous"] == 0.16 * 0.80
     assert row["tariff_exposure_mode"] == "fixed_pretreatment"
+    assert row["tariff_exposure_source"] == "oecd_icio_bilateral_flow"
+    assert row["tariff_exposure_disclosure"] == ""
+
+
+def test_stylized_exposure_requires_explicit_opt_in_and_records_disclosure():
+    with pytest.raises(ValueError, match="禁止隐式"):
+        demo_shock_panel(["DEU", "USA"], ["C24"], [2018])
+    with pytest.raises(ValueError, match="非空表"):
+        demo_shock_panel(
+            ["DEU", "USA"],
+            ["C24"],
+            [2018],
+            export_exposure=pd.DataFrame(
+                columns=["country", "imposer", "year", "bilateral_exports", "total_exports", "export_exposure"]
+            ),
+        )
+
+    panel = demo_shock_panel(["DEU", "USA"], ["C24"], [2018], allow_stylized_fallback=True)
+    assert set(panel["tariff_exposure_source"]) == {"stylized_teaching_fallback"}
+    assert set(panel["tariff_exposure_mode"]) == {"fixed_pretreatment"}
+    assert panel["tariff_exposure_disclosure"].str.contains("不是 OECD ICIO").all()
+
+
+@pytest.mark.parametrize("invalid", [-1.0, 1.0001])
+def test_oecd_exposure_rejects_values_outside_unit_interval(invalid):
+    frame = _complete_exposure(["DEU"], [2018])
+    frame.loc[0, "export_exposure"] = invalid
+    with pytest.raises(ValueError, match=r"\[0,1\]"):
+        shocks.validate_export_exposure(frame, countries=["DEU"], years=[2018])
+
+
+def test_oecd_exposure_rejects_duplicate_and_missing_catalogue_coverage():
+    frame = _complete_exposure(["DEU"], [2018])
+    duplicate = pd.concat([frame, frame.iloc[[0]]], ignore_index=True)
+    with pytest.raises(ValueError, match="键重复"):
+        shocks.validate_export_exposure(duplicate, countries=["DEU"], years=[2018])
+
+    missing = frame.iloc[1:].copy()
+    with pytest.raises(ValueError, match="覆盖不精确"):
+        shocks.validate_export_exposure(missing, countries=["DEU"], years=[2018])
+    with pytest.raises(ValueError, match="覆盖不精确"):
+        demo_shock_panel(["DEU"], ["C24"], [2018], export_exposure=missing)
+
+
+def test_oecd_exposure_requires_both_flow_evidence_columns():
+    frame = _complete_exposure(["DEU"], [2018])
+    without_flows = frame.drop(columns=["bilateral_exports", "total_exports"])
+
+    with pytest.raises(ValueError, match="bilateral_exports.*total_exports|total_exports.*bilateral_exports"):
+        shocks.validate_export_exposure(without_flows)
+
+
+def test_oecd_exposure_rejects_impossible_sum_inconsistent_total_and_destination_drift():
+    frame = _complete_exposure(["DEU"], [2018])
+
+    impossible = frame.copy()
+    row = impossible.index[(impossible["country"] == "DEU") & (impossible["imposer"] != "DEU")][0]
+    impossible.loc[row, ["bilateral_exports", "export_exposure"]] *= 0.5
+    with pytest.raises(ValueError, match="加总不等于|加总不可能"):
+        shocks.validate_export_exposure(impossible)
+
+    inconsistent = frame.copy()
+    inconsistent.loc[0, "total_exports"] = 2.0
+    inconsistent.loc[0, "export_exposure"] = inconsistent.loc[0, "bilateral_exports"] / 2.0
+    with pytest.raises(ValueError, match="total_exports 不一致"):
+        shocks.validate_export_exposure(inconsistent)
+
+    missing = frame.drop(index=frame.index[frame["imposer"] == "EU"][0])
+    with pytest.raises(ValueError, match="覆盖不精确"):
+        shocks.validate_export_exposure(missing)
+
+    extra = pd.concat(
+        [
+            frame,
+            frame.iloc[[0]].assign(imposer="EXTRA", bilateral_exports=0.0, export_exposure=0.0),
+        ],
+        ignore_index=True,
+    )
+    with pytest.raises(ValueError, match="覆盖不精确"):
+        shocks.validate_export_exposure(extra)
+
+
+def test_oecd_exposure_rejects_ratio_mismatch_and_enforces_zero_total_policy():
+    frame = _complete_exposure(["DEU"], [2018])
+    frame["bilateral_exports"] = 0.0
+    frame["total_exports"] = 10.0
+    frame.loc[0, ["bilateral_exports", "export_exposure"]] = [2.0, 0.3]
+    with pytest.raises(ValueError, match="不一致"):
+        shocks.validate_export_exposure(frame, countries=["DEU"], years=[2018])
+
+    zero_total = frame.copy()
+    zero_total.loc[0, ["bilateral_exports", "total_exports", "export_exposure"]] = [1.0, 0.0, 0.0]
+    with pytest.raises(ValueError, match="不得超过|零出口规则"):
+        shocks.validate_export_exposure(zero_total, countries=["DEU"], years=[2018])
+
+
+def test_oecd_exposure_requires_nonblank_identifiers_and_integral_finite_year():
+    frame = _complete_exposure(["DEU"], [2018])
+    frame.loc[0, "country"] = " "
+    with pytest.raises(ValueError, match="空白标识符"):
+        shocks.validate_export_exposure(frame)
+
+    frame = _complete_exposure(["DEU"], [2018])
+    frame["year"] = frame["year"].astype(float)
+    frame.loc[0, "year"] = 2018.5
+    with pytest.raises(ValueError, match="有限整数"):
+        shocks.validate_export_exposure(frame)
+
+
+def test_write_demo_fails_without_oecd_exposure_unless_fallback_is_explicit(tmp_path, monkeypatch):
+    monkeypatch.setattr(shocks, "PROCESSED_DIR", tmp_path)
+    monkeypatch.setattr(shocks, "load_export_exposure", lambda _years: None)
+
+    with pytest.raises(ValueError, match="缺少 OECD ICIO"):
+        shocks.write_demo(["DEU", "USA"], ["C24"], [2018])
+    assert not (tmp_path / shocks.DEMO_FILE).exists()
+
+    shocks.write_demo(["DEU", "USA"], ["C24"], [2018], allow_stylized_fallback=True)
+    written = pd.read_csv(tmp_path / shocks.DEMO_FILE)
+    assert set(written["tariff_exposure_source"]) == {"stylized_teaching_fallback"}

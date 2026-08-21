@@ -9,11 +9,15 @@ import {
   eventKey,
   filtersForEvent,
   filtersMatchEvent,
+  shockEventsProvenanceError,
   shockTypeLabel,
+  SHOCK_FILTER_LABELS,
+  SHOCK_SORT_LABELS,
   type ShockPanelFilters,
 } from "./step2/model";
 import { SelectedEventBar } from "./step2/selected-event";
 import { ShockPanel } from "./step2/shock-panel";
+import { inspectShockContract } from "./step2/shock-contract";
 import { QcChecksTable } from "./qc-checks-table";
 import { StepIntro } from "./viz/scaffold";
 import { useAsync } from "../shared";
@@ -37,17 +41,36 @@ export function ShockLab({ meta, step, state }: {
     shockType: "tariff",
     country: "",
     sector: "",
-    onlyHit: true,
+    filter: "treated",
+    sort: "intensity_desc",
     page: 1,
   });
   const [selectedEvent, setSelectedEvent] = useState<ShockEvent | null>(null);
   const [autoExpandSignal, setAutoExpandSignal] = useState(0);
   const eventInteraction = useRef(false);
   const eventAutoExpanded = useRef(false);
-  const { data: eventsResponse, error: eventsError } = useAsync(() => api.shockEvents(), []);
+  const contractState = inspectShockContract(
+    meta.dataset?.shock_contract,
+    meta.dataset?.artifact_contract_version,
+  );
+  const releaseKey = meta.dataset?.release_id ?? "missing-release";
+  const eventsQuery = useAsync(
+    () => api.shockEvents(),
+    [],
+    { enabled: contractState.valid, requestKey: `${releaseKey}:shock-events` },
+  );
+  const { data: eventsResponse, error: eventsError, status: eventsStatus } = eventsQuery;
   // 冲击面板的专项质检随冲击一起放在回归前(本步),作为回归前的口径检查。
-  const { data: shockChecks, error: shockQcError } = useAsync<QcCheck[]>(() => api.qcShocks(), []);
-  const events = eventsResponse?.events ?? [];
+  const shockQcQuery = useAsync<QcCheck[]>(
+    () => api.qcShocks(),
+    [],
+    { enabled: contractState.valid, requestKey: `${releaseKey}:shock-qc` },
+  );
+  const { data: shockChecks, error: shockQcError, status: shockQcStatus } = shockQcQuery;
+  const eventProvenanceError = eventsResponse
+    ? shockEventsProvenanceError(eventsResponse.events)
+    : null;
+  const events = eventProvenanceError ? [] : eventsResponse?.events ?? [];
   const selectedKey = selectedEvent ? eventKey(selectedEvent) : null;
   const expectedFilters = useMemo(
     () => (selectedEvent ? filtersForEvent(selectedEvent, meta, initialYear) : null),
@@ -90,7 +113,7 @@ export function ShockLab({ meta, step, state }: {
     setFilters((current) => ({ ...current, ...patch }));
   };
 
-  const panelDesc = `${filters.year} · ${shockTypeLabel(filters.shockType)} · ${filters.country ? countryLabel(filters.country) : "全部经济体"} · ${filters.sector ? sectorLabel(filters.sector) : "全部行业"}`;
+  const panelDesc = `${filters.year} · ${shockTypeLabel(filters.shockType)} · ${filters.country ? countryLabel(filters.country) : "全部经济体"} · ${filters.sector ? sectorLabel(filters.sector) : "全部行业"} · ${SHOCK_FILTER_LABELS[filters.filter]} · ${SHOCK_SORT_LABELS[filters.sort]}`;
 
   return (
     <div className="shock-workbench">
@@ -105,14 +128,21 @@ export function ShockLab({ meta, step, state }: {
         ]}
       />
       <div className="warnbox shock-disclaimer">
-        ⚠ 拟真演示数据:以 2017–2020 全球贸易摩擦真实事件为原型手工编码(税率量级参考 PIIE/Bown),
-        出口暴露度由真实 OECD ICIO 双边流向计算;覆盖 {meta.countries.length} 经济体 × {meta.sectors.length} 行业,不能用于研究结论。
+        ⚠ {eventsResponse?.disclaimer ?? "正在从当前已验证 release 读取关税出口暴露度来源披露。"}
+        政策事件、日期只有在事件卡列出 URL 时才有官方事件来源；ICIO 行业映射与数值强度均为未逐项引证的教学编码。
       </div>
 
-      {eventsError ? (
-        <div className="error-box">政策事件读取失败:{eventsError}</div>
-      ) : !eventsResponse ? (
+      {!contractState.valid ? (
+        <div className="error-box" role="alert">{contractState.reason}</div>
+      ) : eventsError ? (
+        <div className="error-box" role="alert">
+          当前 release 的政策事件读取失败：{eventsError}
+          <button type="button" className="secondary" onClick={eventsQuery.retry}>按同一 release 重试</button>
+        </div>
+      ) : eventsStatus === "loading" || !eventsResponse ? (
         <div className="shock-panel-state">正在读取政策事件时间线…</div>
+      ) : eventProvenanceError ? (
+        <div className="error-box" role="alert">事件来源契约无效：{eventProvenanceError}</div>
       ) : events.length === 0 ? (
         <div className="shock-panel-state">当前没有可展示的政策事件。</div>
       ) : (
@@ -142,17 +172,30 @@ export function ShockLab({ meta, step, state }: {
         </FullscreenPanel>
       )}
 
+      {eventsResponse?.source_disclosure && (
+        <p className="shock-source-disclosure">{eventsResponse.source_disclosure}</p>
+      )}
+
       <details className="shock-details" style={{ marginBottom: 18 }}>
         <summary>
           <span>冲击数据质检 · 回归前的口径检查</span>
           <span className="shock-details-meta">
-            {shockChecks ? `${shockChecks.length} 项 · ${shockChecks.filter((c) => !c.passed).length} 项异常` : "加载中"}
+            {shockQcStatus === "success" && shockChecks
+              ? `${shockChecks.length} 项 · ${shockChecks.filter((c) => !c.passed).length} 项异常`
+              : "加载中"}
           </span>
         </summary>
-        {shockQcError ? (
-          <div className="error-box">{shockQcError}</div>
+        {!contractState.valid ? (
+          <div className="error-box" role="alert">shock contract 无效，不能把质检结果当作当前 release 的证据。</div>
+        ) : shockQcError ? (
+          <div className="error-box" role="alert">
+            当前 release 的冲击质检读取失败：{shockQcError}
+            <button type="button" className="secondary" onClick={shockQcQuery.retry}>按同一 release 重试</button>
+          </div>
+        ) : shockQcStatus === "loading" ? (
+          <div className="shock-panel-state" role="status">正在读取当前 release 的冲击质检…</div>
         ) : (
-          <QcChecksTable rows={shockChecks} />
+          <QcChecksTable rows={shockChecks} label="冲击面板质检结果表，可横向滚动" />
         )}
       </details>
 

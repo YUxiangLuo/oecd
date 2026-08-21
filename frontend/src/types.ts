@@ -52,15 +52,52 @@ export interface LoginResponse {
   expires_at: number;
 }
 
+export interface QcContractCheck {
+  name: string;
+  failure_severity: "warning" | "fatal";
+}
+
+export interface QcContract {
+  version: number;
+  scopes: Record<"icio" | "controls" | "shocks", QcContractCheck[]>;
+}
+
+export interface ShockContractTypeFields {
+  shock_field: string;
+  treated_field: string;
+  announced_date_field: string;
+  effective_date_field: string;
+  note_field: string;
+}
+
+export interface ShockContract {
+  version: number;
+  treated_threshold: number;
+  treated_operator: string;
+  types: Record<"tariff" | "sanctions" | "export_control", ShockContractTypeFields>;
+  tariff_exposure: {
+    source_field: string;
+    mode_field: string;
+    disclosure_field: string;
+    allowed_sources: string[];
+    allowed_modes: string[];
+  };
+}
+
 export interface Meta {
   years: number[];
   countries: string[];
   sectors: string[];
   dataset?: {
     years: number[];
+    /** Canonical immutable identity of the validated release backing this session. */
+    release_id?: string;
+    artifact_contract_version?: number;
     generated_at?: string;
     network_algorithm?: string;
     data_sources?: Record<string, unknown>;
+    qc_contract?: QcContract;
+    shock_contract?: ShockContract;
     qc?: unknown;
   } | null;
 }
@@ -126,20 +163,35 @@ export interface ShockEvent {
   all_targets?: boolean;
   /** 复合处理或教学映射的时间线边界。 */
   timeline_note?: string | null;
-  /** 支持事件日期/定义的官方来源。 */
-  source_urls?: string[];
+  source_status: "official_event_source" | "teaching_encoding_no_event_source";
+  source_disclosure: string;
+  /** 支持事件/日期的 URL；空数组表示没有逐项事件来源。 */
+  source_urls: string[];
+}
+
+export interface ShockTypeMetadata {
+  key: "tariff" | "sanctions" | "export_control";
+  label: string;
+  definition: string;
+  treated_definition: string;
+  treated_threshold: number;
+  treated_operator: ">";
 }
 
 interface ShockSummaryYear {
   year: number;
   treated_countries: number;
   treated_pairs: number;
+  nonzero_countries: number;
+  nonzero_pairs: number;
   mean_shock_treated: number;
+  mean_shock_nonzero: number;
   max_shock: number;
   max_shock_target: string;
 }
 
 export interface ShockSummary {
+  type: ShockTypeMetadata;
   years: ShockSummaryYear[];
   n_countries: number;
   n_sectors: number;
@@ -225,10 +277,15 @@ export interface IndicatorSchema {
 }
 
 export interface PagedRows {
+  type?: ShockTypeMetadata;
+  filter?: "treated" | "nonzero" | "all";
+  sort?: "intensity_desc" | "intensity_asc" | "country_asc" | "industry_asc";
   total: number;
   page: number;
   page_size: number;
   rows: Record<string, string | number | null>[];
+  /** Shock panel responses bind this disclosure to the validated release source. */
+  disclaimer?: string;
 }
 
 export type IndustryPage = PagedRows;
@@ -328,6 +385,8 @@ export interface SessionResponse {
 }
 
 export interface SessionSaveResponse {
+  /** Exact server-normalized snapshot persisted by this PUT. */
+  session: ExperimentSession;
   updated_at: string;
   completion: CompletionSummary;
 }
@@ -423,15 +482,51 @@ interface EquationPart {
   meta_key?: string;
 }
 
+export type PretrendScope = "main" | "interaction" | "joint";
+
 export interface PretrendDiagnostic {
+  /** Present on v7 diagnostics; omitted only by readable legacy snapshots. */
+  scope?: PretrendScope;
   available: boolean;
   reason: string | null;
   terms: string[];
+  /** Additive in REG-01; unsupported leads excluded from the joint test. */
+  excluded_terms?: { term: string; reasons: string[] }[];
+  /** REG-02 provenance when the whole-run gate prevents the joint test. */
+  support_status?: RegressionStatus;
+  support_reasons?: string[];
   statistic: number | null;
   df_num: number;
   df_denom: number;
   p: number | null;
   interpretation: string;
+}
+
+export interface EventPeriodSupport {
+  term: string;
+  event_time: number;
+  is_reference: boolean;
+  estimated: boolean;
+  contributing_rows: number;
+  contributing_entities: number;
+  contributing_clusters: number;
+  cohorts: Record<string, number>;
+  period_supported: boolean;
+  inference_supported: boolean;
+  suppress_inference: boolean;
+  reason_codes: string[];
+  reasons: string[];
+}
+
+export interface EventSupport {
+  policy: "teaching_min_contributing_clusters_per_event_period";
+  policy_is_statistical_theorem: false;
+  cluster: string;
+  /** Exact omitted event period; v7 requires a true negative base. */
+  base_k: number;
+  reference_term: string;
+  min_contributing_clusters: number;
+  periods: EventPeriodSupport[];
 }
 
 export interface MarginalEffect {
@@ -449,6 +544,32 @@ export interface MarginalEffect {
   ci_high: number | null;
 }
 
+export interface RegressionSampleFlow {
+  input_rows: number;
+  structural_eligible_rows: number;
+  structural_excluded_rows: number;
+  timing_source_rows: number;
+  timing_entities: number;
+  timing_clusters: number;
+  timing_treated_entities: number;
+  timing_cohorts: Record<string, number>;
+  timing_policy: "full_shock_history_before_complete_case" | null;
+  estimation_rows: number;
+  estimation_entities: number;
+  estimation_clusters: number;
+  dropped_rows_total: number;
+  missing_by_field: Record<string, number>;
+  missing_by_field_counts_overlap: boolean;
+  dropped_by_reason: { code: string; field: string; rows: number }[];
+  retained_treated_entities?: number;
+  retained_never_treated_entities?: number;
+  treated_entities_without_post_rows?: number;
+  contributing_treated_entities?: number;
+  contributing_treated_clusters?: number;
+  retained_cohorts?: Record<string, number>;
+  contributing_cohorts?: Record<string, number>;
+}
+
 export interface RegressionResponse {
   design: RegressionDesignInfo;
   result: {
@@ -461,12 +582,19 @@ export interface RegressionResponse {
     r2_within: number;
     depvar_mean: number;
     depvar_std: number;
-    diagnostics: { pretrend?: PretrendDiagnostic };
+    diagnostics: {
+      pretrend?: PretrendDiagnostic;
+      pretrend_tests?: Partial<Record<PretrendScope, PretrendDiagnostic>>;
+    };
     marginal_effects?: MarginalEffect[];
     notes: string[];
     status: RegressionStatus | null;
     status_reasons: string[];
     support: TreatmentSupport | null;
+    /** Additive in REG-01; optional keeps legacy snapshots structurally readable but inference fails closed. */
+    event_support?: EventSupport | null;
+    /** Additive in REG-04; optional keeps legacy saved results renderable. */
+    sample_flow?: RegressionSampleFlow | null;
   };
   benchmark: {
     backend: string;

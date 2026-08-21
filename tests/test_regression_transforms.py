@@ -17,6 +17,7 @@ def test_panel_keeps_transform_compatibility_reexports():
         "_apply_sample_filter",
         "_stable_noise",
         "_attach_baseline_gvc",
+        "_freeze_baseline_gvc",
         "_real_amount",
         "_real_log_from_log",
         "_country_year_real_growth",

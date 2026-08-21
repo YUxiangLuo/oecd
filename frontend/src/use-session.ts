@@ -22,6 +22,7 @@ export interface SessionApi {
   unsynced: boolean;
   completion: CompletionSummary | null;
   getStep: <T>(step: number) => T | undefined;
+  getConfirmedStep: <T>(step: number) => T | undefined;
   patchStep: <T extends object>(step: number, patch: Partial<T>) => void;
   getShared: <T>(key: SharedSessionKey) => T | undefined;
   updateShared: <T>(key: SharedSessionKey, apply: (current: T | undefined) => T) => void;
@@ -30,7 +31,11 @@ export interface SessionApi {
 }
 
 interface SaveQueueCallbacks {
-  onSaved: (response: SessionSaveResponse) => void;
+  onSaved: (
+    response: SessionSaveResponse,
+    savedSnapshot: ExperimentSession,
+    hasNewerPending: boolean,
+  ) => void;
   onError: (cause: unknown) => void;
   onSyncing: (value: boolean) => void;
   onUnsynced: (value: boolean) => void;
@@ -64,14 +69,16 @@ export class SessionSaveQueue {
         while (this.pending) {
           const next = this.pending;
           this.pending = null;
+          let response: SessionSaveResponse;
           try {
-            this.callbacks.onSaved(await this.save(next));
+            response = await this.save(next);
           } catch (cause) {
             // Edits made during this request are newer; otherwise retain this snapshot.
             this.pending ??= next;
             this.callbacks.onError(cause);
             throw cause;
           }
+          this.callbacks.onSaved(response, next, this.pending !== null);
         }
       } finally {
         this.callbacks.onSyncing(false);
@@ -96,6 +103,7 @@ export function useSession(enabled: boolean): SessionApi {
   const [status, setStatus] = useState<SessionStatus>(enabled ? "loading" : "unavailable");
   const [session, setSession] = useState<ExperimentSession>(emptySession);
   const sessionRef = useRef(session);
+  const [confirmedSession, setConfirmedSession] = useState<ExperimentSession>(emptySession);
   const [report, setReport] = useState<ClassroomReport | null>(null);
   const [completion, setCompletion] = useState<CompletionSummary | null>(null);
   const [syncing, setSyncing] = useState(false);
@@ -107,7 +115,14 @@ export function useSession(enabled: boolean): SessionApi {
     queue.current = new SessionSaveQueue(
       (value) => api.classroom.saveSession({ session: value }),
       {
-        onSaved: (response) => {
+        onSaved: (response, savedSnapshot, hasNewerPending) => {
+          // Track every acknowledged snapshot, but only reconcile the optimistic
+          // workspace when this response is still the latest queued edit.
+          setConfirmedSession(response.session);
+          if (!hasNewerPending && sessionRef.current === savedSnapshot) {
+            sessionRef.current = response.session;
+            setSession(response.session);
+          }
           setCompletion(response.completion);
           setSyncError(null);
         },
@@ -131,6 +146,7 @@ export function useSession(enabled: boolean): SessionApi {
       (response) => {
         if (!live) return;
         replace(response.session);
+        setConfirmedSession(response.session);
         setCompletion(response.completion);
         setReport(response.report);
         setSyncError(null);
@@ -177,6 +193,7 @@ export function useSession(enabled: boolean): SessionApi {
   return {
     status, session, report, syncing, syncError, unsynced, completion,
     getStep: useCallback(<T,>(step: number) => readStep<T>(session, step), [session]),
+    getConfirmedStep: useCallback(<T,>(step: number) => readStep<T>(confirmedSession, step), [confirmedSession]),
     patchStep: useCallback(<T extends object,>(step: number, patch: Partial<T>) => update((value) => patchStoredStep(value, step, patch)), [update]),
     getShared: useCallback(<T,>(key: SharedSessionKey) => readShared<T>(session, key), [session]),
     updateShared: useCallback(<T,>(key: SharedSessionKey, apply: (current: T | undefined) => T) => update((value) => updateSessionShared(value, key, apply)), [update]),

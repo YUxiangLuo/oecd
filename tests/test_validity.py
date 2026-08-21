@@ -176,6 +176,23 @@ def test_threshold_flicker_is_not_reported_as_reversal():
     assert scan_reversal(df, "country", "year", "treated").entities == ["A"]
 
 
+def test_frozen_treated_flag_onset_defines_window_despite_pre_g_positive_intensity():
+    df = pd.DataFrame(
+        [
+            # 正但低于 treated 阈值的强度不能提前开启吸收型窗口。
+            {"country": "A", "year": 2016, "shock": 0.0009, "treated": 0},
+            {"country": "A", "year": 2017, "shock": 0.0, "treated": 0},
+            {"country": "A", "year": 2018, "shock": 0.10, "treated": 1},
+            {"country": "A", "year": 2019, "shock": 0.0, "treated": 0},
+        ]
+    )
+    scan = scan_reversal(df, "country", "year", "shock", first_by_entity=pd.Series({"A": 2018}))
+    assert scan.entities == ["A"]
+    assert scan.post_rows == 2
+    assert scan.miscoded_rows == 1
+    assert scan.share == pytest.approx(0.5)
+
+
 def test_reversal_share_measures_post_treatment_entity_years():
     df = _panel(
         [

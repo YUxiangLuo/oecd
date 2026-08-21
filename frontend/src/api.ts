@@ -59,13 +59,37 @@ function authHeaders(token: string | null, extra?: HeadersInit): HeadersInit {
 }
 
 const GET_TIMEOUT_MS = 10_000;
-async function getWithToken<T>(url: string, requestToken: string | null, fallback?: string): Promise<T> {
+const MUTATION_TIMEOUT_MS = 120_000;
+
+async function withRequestTimeout<T>(
+  url: string,
+  timeoutMs: number,
+  operation: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
   const controller = new AbortController();
-  const timeout = globalThis.setTimeout(() => controller.abort(), GET_TIMEOUT_MS);
+  let timedOut = false;
+  const timeout = globalThis.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const aborted = new Promise<never>((_resolve, reject) => {
+    controller.signal.addEventListener("abort", () => reject(new Error("request aborted")), { once: true });
+  });
   try {
+    return await Promise.race([operation(controller.signal), aborted]);
+  } catch (cause) {
+    if (timedOut) throw new Error(`请求超时（${timeoutMs / 1000} 秒）：${url}`);
+    throw cause;
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
+}
+
+async function getWithToken<T>(url: string, requestToken: string | null, fallback?: string): Promise<T> {
+  return withRequestTimeout(url, GET_TIMEOUT_MS, async (signal) => {
     const resp = await fetch(url, {
       headers: authHeaders(requestToken),
-      signal: controller.signal,
+      signal,
     });
     if (!resp.ok) {
       const body = await resp.json().catch(() => null);
@@ -73,14 +97,7 @@ async function getWithToken<T>(url: string, requestToken: string | null, fallbac
       throw new ApiError(resp.status, body?.detail, fallback ?? `${resp.status} ${resp.statusText}`);
     }
     return await resp.json() as T;
-  } catch (cause) {
-    if (controller.signal.aborted) {
-      throw new Error(`请求超时（${GET_TIMEOUT_MS / 1000} 秒）：${url}`);
-    }
-    throw cause;
-  } finally {
-    globalThis.clearTimeout(timeout);
-  }
+  });
 }
 
 function get<T>(url: string): Promise<T> {
@@ -89,29 +106,37 @@ function get<T>(url: string): Promise<T> {
 
 async function post<T>(url: string, body?: unknown, method = "POST"): Promise<T> {
   const requestToken = getActiveAuthToken();
-  const resp = await fetch(url, {
-    method,
-    headers: authHeaders(requestToken, { "Content-Type": "application/json" }),
-    body: body === undefined ? undefined : JSON.stringify(body),
+  return withRequestTimeout(url, MUTATION_TIMEOUT_MS, async (signal) => {
+    const resp = await fetch(url, {
+      method,
+      headers: authHeaders(requestToken, { "Content-Type": "application/json" }),
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
+    });
+    if (!resp.ok) {
+      const payload = await resp.json().catch(() => null);
+      if (resp.status === 401) notifyAuthExpired(requestToken);
+      throw new ApiError(resp.status, payload?.detail, `${resp.status} ${resp.statusText}`);
+    }
+    return await resp.json() as T;
   });
-  if (!resp.ok) {
-    const payload = await resp.json().catch(() => null);
-    if (resp.status === 401) notifyAuthExpired(requestToken);
-    throw new ApiError(resp.status, payload?.detail, `${resp.status} ${resp.statusText}`);
-  }
-  return resp.json();
 }
 
 export const api = {
-  login: async (username: string, password: string) => {
-    const resp = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
-    if (!resp.ok) throw new ApiError(resp.status, (await resp.json()).detail, resp.statusText);
-    return resp.json() as Promise<import("./types").LoginResponse>;
-  },
+  login: (username: string, password: string) =>
+    withRequestTimeout("/api/auth/login", GET_TIMEOUT_MS, async (signal) => {
+      const resp = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+        signal,
+      });
+      if (!resp.ok) {
+        const payload = await resp.json().catch(() => null);
+        throw new ApiError(resp.status, payload?.detail, resp.statusText);
+      }
+      return await resp.json() as import("./types").LoginResponse;
+    }),
   me: (token: string) =>
     getWithToken<import("./types").AuthUser>("/api/auth/me", token, "令牌无效或已过期"),
   changePassword: (currentPassword: string, newPassword: string) =>
@@ -149,30 +174,45 @@ export const api = {
   qcControls: () => get<import("./types").QcCheck[]>("/api/qc/controls"),
   countryIndicators: (year: number) =>
     get<Record<string, string | number | null>[]>(`/api/indicators/country/${year}`),
-  industryIndicators: (year: number, country: string, page: number) =>
+  countryIndicatorsForCountry: (year: number, country: string) => {
+    if (!country) return Promise.reject(new Error("单实体指标请求必须指定国家"));
+    return get<Record<string, string | number | null>[]>(
+      withQuery(`/api/indicators/country/${year}`, { country }),
+    );
+  },
+  industryIndicators: (year: number, country: string, page: number, pageSize?: number) =>
     get<import("./types").IndustryPage>(
-      withQuery(`/api/indicators/industry/${year}`, { page, country }),
+      withQuery(`/api/indicators/industry/${year}`, { page, page_size: pageSize, country }),
     ),
   // 拉取一个国家全部行业的指标行(用于步骤3-5 的拆解演示,一次取回填充行业下拉)
-  industryIndicatorsAll: (year: number, country: string) =>
-    get<import("./types").IndustryPage>(
+  industryIndicatorsAll: (year: number, country: string) => {
+    if (!country) return Promise.reject(new Error("单实体指标请求必须指定国家"));
+    return get<import("./types").IndustryPage>(
       withQuery(`/api/indicators/industry/${year}`, { page: 1, page_size: 200, country }),
-    ),
+    );
+  },
   network: (year: number) => get<import("./types").NetworkData>(`/api/viz/network/${year}`),
   shockEvents: () =>
-    get<{ events: import("./types").ShockEvent[]; disclaimer: string }>("/api/shocks/events"),
+    get<{ events: import("./types").ShockEvent[]; disclaimer: string; source_disclosure: string }>("/api/shocks/events"),
   shockSummary: (shockType = "tariff") =>
     get<import("./types").ShockSummary>(
       withQuery("/api/shocks/summary", { shock_type: shockType }),
     ),
   crosswalkDemo: (year = 2019) =>
     get<import("./types").CrosswalkPayload>(withQuery("/api/crosswalk/demo", { year })),
-  shockPanel: (year: number, shockType: string, country: string, sector: string, onlyHit: boolean, page: number) =>
-    get<import("./types").PagedRows>(
-      withQuery("/api/shocks/panel", {
-        year, shock_type: shockType, only_hit: onlyHit, page, country, sector,
-      }),
-    ),
+  shockPanel: (
+    year: number,
+    shockType: string,
+    country: string,
+    sector: string,
+    filter: "treated" | "nonzero" | "all",
+    sort: "intensity_desc" | "intensity_asc" | "country_asc" | "industry_asc",
+    page: number,
+  ) => get<import("./types").PagedRows>(
+    withQuery("/api/shocks/panel", {
+      year, shock_type: shockType, filter, sort, page, country, sector,
+    }),
+  ),
   regressionOptions: () => get<import("./types").RegressionOptions>("/api/regression/options"),
   regressionDesign: (params: {
     outcome: import("./types").RegressionOutcome;

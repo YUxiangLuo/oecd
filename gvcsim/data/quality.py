@@ -13,6 +13,14 @@ import pandas as pd
 from scipy.sparse.linalg import eigs
 
 from gvcsim.data.controls import ALL_CONTROL_COLUMNS
+from gvcsim.shock_catalog import (
+    EXPOSURE_MODES,
+    EXPOSURE_SOURCE_OECD_ICIO,
+    EXPOSURE_SOURCE_STYLIZED,
+    EXPOSURE_SOURCES,
+    SHOCK_FIELD_SPECS,
+    STYLIZED_EXPOSURE_DISCLOSURE,
+)
 
 # OECD 宽表以 Million USD、四位小数发布。小规模部门汇总数千个舍入单元格时，
 # 单看相对误差会被分母放大，因此只有绝对与缩放相对误差同时越界才判 fatal。
@@ -29,26 +37,30 @@ LEONTIEF_CONDITION_FATAL = 1e12
 # 关键国家:缺了说明解析出了问题
 KEY_REGIONS = ["CHN", "USA", "JPN", "DEU"]
 
+SHOCK_VALUE_PAIRS = [
+    (spec["shock_field"], spec["treated_field"])
+    for spec in SHOCK_FIELD_SPECS.values()
+]
+
+SHOCK_EVENT_COLUMNS = [
+    (
+        spec["shock_field"],
+        spec["announced_date_field"],
+        spec["effective_date_field"],
+        spec["note_field"],
+    )
+    for spec in SHOCK_FIELD_SPECS.values()
+]
+
 SHOCK_COLUMNS = [
     "country",
     "sector",
     "year",
-    "tariff_shock",
-    "treated",
-    "announced_date",
-    "effective_date",
-]
-
-SHOCK_VALUE_PAIRS = [
-    ("tariff_shock", "treated"),
-    ("sanction_shock", "sanction_treated"),
-    ("export_control_shock", "export_control_treated"),
-]
-
-SHOCK_DATE_COLUMNS = [
-    ("tariff_shock", "announced_date", "effective_date"),
-    ("sanction_shock", "sanction_announced_date", "sanction_effective_date"),
-    ("export_control_shock", "export_control_announced_date", "export_control_effective_date"),
+    "shock_type",
+    *(field for spec in SHOCK_FIELD_SPECS.values() for field in spec.values()),
+    "tariff_exposure_source",
+    "tariff_exposure_mode",
+    "tariff_exposure_disclosure",
 ]
 
 CONTROL_REQUIRED_COLUMNS = ["country", "year", *ALL_CONTROL_COLUMNS]
@@ -58,6 +70,139 @@ QC_DISCLOSURE = "disclosure"
 QC_WARNING = "warning"
 QC_FATAL = "fatal"
 QC_SEVERITIES = (QC_OK, QC_DISCLOSURE, QC_WARNING, QC_FATAL)
+
+QC_CONTRACT_VERSION = 2
+QC_SCOPE_ICIO = "icio"
+QC_SCOPE_CONTROLS = "controls"
+QC_SCOPE_SHOCKS = "shocks"
+QC_EXPECTED_CHECKS: dict[str, tuple[str, ...]] = {
+    QC_SCOPE_ICIO: (
+        "维度一致性与索引对齐(Z/Y/A/L/x/OUT)",
+        "缺失值 / 负值检查",
+        "会计恒等式(原始OUT = Z行和 + Y行和)",
+        "因子投入与派生指标定义域(VA/TLS)",
+        "投入侧恒等式(原始OUT = Z列和 + VA + TLS)",
+        "里昂惕夫逆矩阵数值稳定性(残差/谱半径/条件数/非负性)",
+        "国家/行业覆盖范围",
+    ),
+    QC_SCOPE_CONTROLS: (
+        "控制变量 schema(country/year + 控制列)",
+        "控制变量维度对齐(country×year)",
+        "控制变量数值有限性",
+        "控制变量构造恒等式",
+        "控制变量经济范围",
+    ),
+    QC_SCOPE_SHOCKS: (
+        "冲击面板维度对齐(country×sector×year)",
+        "冲击强度值域(*_shock ∈ [0,0.5])",
+        "冲击事件时间线(宣布日≤生效日)",
+        "treated 标记与阈值一致",
+        "关税处理组覆盖比例合理性（制裁/出口管制仅描述）",
+        "关税出口暴露度来源与口径",
+    ),
+}
+QC_FAILURE_SEVERITIES: dict[str, dict[str, str]] = {
+    scope: {
+        name: (
+            QC_WARNING
+            if scope == QC_SCOPE_ICIO and name == "因子投入与派生指标定义域(VA/TLS)"
+            else QC_FATAL
+        )
+        for name in names
+    }
+    for scope, names in QC_EXPECTED_CHECKS.items()
+}
+
+
+def qc_contract_metadata() -> dict:
+    """Return the versioned exact-set and failure-severity contract for every release."""
+    return {
+        "version": QC_CONTRACT_VERSION,
+        "scopes": {
+            scope: [
+                {"name": name, "failure_severity": QC_FAILURE_SEVERITIES[scope][name]}
+                for name in names
+            ]
+            for scope, names in QC_EXPECTED_CHECKS.items()
+        },
+    }
+
+
+def validate_qc_contract_metadata(value: object) -> None:
+    """Reject unsupported or incomplete release QC contracts."""
+    if (
+        not isinstance(value, dict)
+        or type(value.get("version")) is not int
+        or value != qc_contract_metadata()
+    ):
+        raise ValueError(f"不支持或不完整的 QC contract；需要版本 {QC_CONTRACT_VERSION}")
+
+
+def validate_serialized_checks(
+    checks: object,
+    *,
+    scope: str,
+    contract_version: int = QC_CONTRACT_VERSION,
+) -> list[dict]:
+    """Validate one serialized QC scope against the current release contract."""
+    if type(contract_version) is not int or contract_version != QC_CONTRACT_VERSION:
+        raise ValueError(f"不支持的 QC contract 版本:{contract_version}")
+    expected = QC_EXPECTED_CHECKS.get(scope)
+    if expected is None:
+        raise ValueError(f"未知 QC scope:{scope}")
+    if not isinstance(checks, list) or not checks:
+        raise ValueError(f"{scope} QC 结果必须是非空数组")
+
+    required_types = {
+        "name": str,
+        "kind": str,
+        "passed": bool,
+        "detail": str,
+        "warnings": list,
+        "severity": str,
+    }
+    names: list[str] = []
+    validated: list[dict] = []
+    for index, raw in enumerate(checks):
+        if not isinstance(raw, dict):
+            raise ValueError(f"{scope} QC 第 {index + 1} 项必须是对象")
+        for field_name, field_type in required_types.items():
+            if field_name not in raw or type(raw[field_name]) is not field_type:
+                raise ValueError(f"{scope} QC 第 {index + 1} 项字段 {field_name} 无效")
+        name = raw["name"]
+        kind = raw["kind"]
+        detail = raw["detail"]
+        warnings = raw["warnings"]
+        passed = raw["passed"]
+        severity = raw["severity"]
+        if not name or not kind or not isinstance(detail, str):
+            raise ValueError(f"{scope} QC 第 {index + 1} 项文本字段无效")
+        if any(type(warning) is not str for warning in warnings):
+            raise ValueError(f"{scope} QC 第 {index + 1} 项 warnings 无效")
+        if severity not in QC_SEVERITIES:
+            raise ValueError(f"{scope} QC 第 {index + 1} 项 severity 无效:{severity}")
+        expected_severity = (
+            QC_DISCLOSURE if passed and warnings else QC_OK if passed else severity
+        )
+        if passed and severity != expected_severity:
+            raise ValueError(f"{scope} QC 第 {index + 1} 项 passed/severity 矛盾")
+        if not passed and severity not in (QC_WARNING, QC_FATAL):
+            raise ValueError(f"{scope} QC 第 {index + 1} 项 passed/severity 矛盾")
+        allowed_failure_severity = QC_FAILURE_SEVERITIES[scope].get(name)
+        if not passed and allowed_failure_severity is not None and severity != allowed_failure_severity:
+            raise ValueError(
+                f"{scope} QC 第 {index + 1} 项失败严重度必须为 {allowed_failure_severity}"
+            )
+        names.append(name)
+        validated.append(raw)
+
+    if len(names) != len(set(names)):
+        raise ValueError(f"{scope} QC 检查项重复")
+    missing = sorted(set(expected) - set(names))
+    unknown = sorted(set(names) - set(expected))
+    if missing or unknown or len(names) != len(expected):
+        raise ValueError(f"{scope} QC 检查项不完整；missing={missing}, unknown={unknown}")
+    return validated
 
 
 @dataclass
@@ -85,6 +230,10 @@ class QcCheck:
 
 def summarize_checks(checks: list[QcCheck], *, override: bool = False) -> dict:
     """把一组检查归纳为可机器执行、也可持续披露的发布结论。"""
+    if type(override) is not bool:
+        raise ValueError("QC override 必须是布尔值")
+    if not checks:
+        raise ValueError("QC 结果不能为空")
     by_severity: dict[str, list[str]] = {level: [] for level in QC_SEVERITIES}
     for check in checks:
         by_severity[check.effective_severity].append(check.name)
@@ -103,6 +252,10 @@ def summarize_checks(checks: list[QcCheck], *, override: bool = False) -> dict:
 
 def summarize_serialized_checks(checks: list[dict], *, override: bool = False) -> dict:
     """Rebuild the release summary from the exact QC records written to disk."""
+    if type(override) is not bool:
+        raise ValueError("QC override 必须是布尔值")
+    if not checks:
+        raise ValueError("QC 结果不能为空")
     by_severity: dict[str, list[str]] = {level: [] for level in QC_SEVERITIES}
     for check in checks:
         severity = check.get("severity")
@@ -650,15 +803,10 @@ def check_shock_panel(
     checks: list[QcCheck] = []
 
     missing_cols = [c for c in SHOCK_COLUMNS if c not in df.columns]
-    if missing_cols:
-        return [
-            QcCheck(
-                name="冲击面板 schema",
-                kind="结构",
-                passed=False,
-                detail="缺少必要列:" + "、".join(missing_cols),
-            )
-        ]
+    # Keep returning the exact six-check contract even for malformed input. Missing
+    # columns become NA so dependent checks fail closed without an ad-hoc check name.
+    for column in missing_cols:
+        df[column] = pd.NA
 
     expected = pd.MultiIndex.from_product([countries, sectors, years], names=["country", "sector", "year"])
     actual = pd.MultiIndex.from_frame(df[["country", "sector", "year"]])
@@ -669,19 +817,21 @@ def check_shock_panel(
         QcCheck(
             name="冲击面板维度对齐(country×sector×year)",
             kind="结构",
-            passed=len(missing) == 0 and len(extra) == 0 and duplicated == 0,
+            passed=not missing_cols and len(missing) == 0 and len(extra) == 0 and duplicated == 0,
             detail=(
                 f"期望 {len(expected)} 行,实际 {len(df)} 行;"
-                f"缺失组合 {len(missing)} 个,额外组合 {len(extra)} 个,重复组合 {duplicated} 个"
+                f"缺少必要列 {len(missing_cols)} 个,缺失组合 {len(missing)} 个,"
+                f"额外组合 {len(extra)} 个,重复组合 {duplicated} 个"
             ),
             warnings=[
+                *[f"缺少列:{column}" for column in missing_cols[:8]],
                 *[f"缺失:{m}" for m in list(missing[:3])],
                 *[f"额外:{m}" for m in list(extra[:3])],
             ],
         )
     )
 
-    present_pairs = [(s, t) for s, t in SHOCK_VALUE_PAIRS if s in df.columns and t in df.columns]
+    present_pairs = SHOCK_VALUE_PAIRS
     missing_values = 0
     out_rows = []
     numeric_shocks = {}
@@ -710,24 +860,28 @@ def check_shock_panel(
     missing_dates = pd.Series(False, index=df.index)
     reversed_dates = pd.Series(False, index=df.index)
     hit_total = 0
-    for shock_col, ann_col, eff_col in SHOCK_DATE_COLUMNS:
-        if shock_col not in numeric_shocks or ann_col not in df.columns or eff_col not in df.columns:
-            continue
+    missing_notes = pd.Series(False, index=df.index)
+    for shock_col, ann_col, eff_col, note_col in SHOCK_EVENT_COLUMNS:
         hit = numeric_shocks[shock_col] > 0
         hit_total += int(hit.sum())
         ann = pd.to_datetime(df[ann_col].replace("", pd.NA), errors="coerce")
         eff = pd.to_datetime(df[eff_col].replace("", pd.NA), errors="coerce")
+        note = df[note_col].fillna("").astype(str).str.strip()
         missing_dates |= hit & (ann.isna() | eff.isna())
+        missing_notes |= hit & note.eq("")
         reversed_dates |= hit & ann.notna() & eff.notna() & (ann > eff)
     checks.append(
         QcCheck(
             name="冲击事件时间线(宣布日≤生效日)",
             kind="结构",
-            passed=not missing_dates.any() and not reversed_dates.any(),
-            detail=f"受冲击记录 {hit_total} 条;缺少日期 {int(missing_dates.sum())} 条,日期倒置 {int(reversed_dates.sum())} 条",
+            passed=not missing_dates.any() and not missing_notes.any() and not reversed_dates.any(),
+            detail=(
+                f"受冲击记录 {hit_total} 条;缺少日期 {int(missing_dates.sum())} 条,"
+                f"缺少事件说明 {int(missing_notes.sum())} 条,日期倒置 {int(reversed_dates.sum())} 条"
+            ),
             warnings=[
-                f"{r.country}-{r.sector}-{r.year}: announced={r.announced_date}, effective={r.effective_date}"
-                for r in df[missing_dates | reversed_dates].head(5).itertuples(index=False)
+                f"{r.country}-{r.sector}-{r.year}: 事件日期/说明缺失或倒置"
+                for r in df[missing_dates | missing_notes | reversed_dates].head(5).itertuples(index=False)
             ],
         )
     )
@@ -760,22 +914,83 @@ def check_shock_panel(
     yearly = []
     bad_years = []
     main_shock = numeric_shocks.get("tariff_shock", pd.Series(0.0, index=df.index))
-    main_treated = (
-        pd.to_numeric(df["treated"], errors="coerce") if "treated" in df.columns else pd.Series(0, index=df.index)
+    main_treated = pd.to_numeric(df["treated"], errors="coerce")
+    sanction_treated = pd.to_numeric(df["sanction_treated"], errors="coerce")
+    export_control_treated = pd.to_numeric(df["export_control_treated"], errors="coerce")
+    coverage_frame = df.assign(
+        _tariff_shock=main_shock,
+        _tariff_treated=main_treated,
+        _sanction_treated=sanction_treated,
+        _export_control_treated=export_control_treated,
     )
-    for year, g in df.assign(_shock=main_shock, _treated=main_treated).groupby("year"):
-        share = float((g["_treated"] == 1).sum() / total_pairs)
-        mean_hit = float(g.loc[g["_treated"] == 1, "_shock"].mean()) if (g["_treated"] == 1).any() else 0.0
-        yearly.append(f"{int(year)}:处理组合占比 {share:.2%},受处理均值 {mean_hit:.3%}")
-        if g["_shock"].gt(0).any() and not (0 < share <= 0.25):
+    for year, group in coverage_frame.groupby("year"):
+        tariff_count = int((group["_tariff_treated"] == 1).sum())
+        share = float(tariff_count / total_pairs)
+        mean_hit = (
+            float(group.loc[group["_tariff_treated"] == 1, "_tariff_shock"].mean())
+            if tariff_count
+            else 0.0
+        )
+        sanction_count = int((group["_sanction_treated"] == 1).sum())
+        export_control_count = int((group["_export_control_treated"] == 1).sum())
+        yearly.append(
+            f"{int(year)}:关税处理 {tariff_count}/{total_pairs} ({share:.2%}),"
+            f"关税受处理均值 {mean_hit:.3%};制裁处理 {sanction_count}（描述性）;"
+            f"出口管制处理 {export_control_count}（描述性）"
+        )
+        if group["_tariff_shock"].gt(0).any() and not (0 < share <= 0.25):
             bad_years.append(int(year))
     checks.append(
         QcCheck(
-            name="处理组覆盖比例合理性",
+            name="关税处理组覆盖比例合理性（制裁/出口管制仅描述）",
             kind="经济含义",
             passed=not bad_years,
             detail="; ".join(yearly),
-            warnings=[f"{y} 年处理组合占比超出 (0,25%] 合理区间" for y in bad_years],
+            warnings=[f"{year} 年关税处理组合占比超出 (0,25%] 合理区间" for year in bad_years],
+        )
+    )
+
+    source = df["tariff_exposure_source"].fillna("").astype(str).str.strip()
+    mode = df["tariff_exposure_mode"].fillna("").astype(str).str.strip()
+    disclosure = df["tariff_exposure_disclosure"].fillna("").astype(str).str.strip()
+    source_values = sorted(set(source) - {""})
+    mode_values = sorted(set(mode) - {""})
+    unknown_sources = sorted(set(source_values) - set(EXPOSURE_SOURCES))
+    unknown_modes = sorted(set(mode_values) - set(EXPOSURE_MODES))
+    missing_provenance = int(source.eq("").sum() + mode.eq("").sum())
+    mixed = len(source_values) != 1 or len(mode_values) != 1
+    stylized = source.eq(EXPOSURE_SOURCE_STYLIZED)
+    oecd = source.eq(EXPOSURE_SOURCE_OECD_ICIO)
+    missing_stylized_disclosure = int((stylized & disclosure.ne(STYLIZED_EXPOSURE_DISCLOSURE)).sum())
+    invalid_oecd_disclosure = int((oecd & disclosure.ne("")).sum())
+    provenance_ok = (
+        missing_provenance == 0
+        and not mixed
+        and not unknown_sources
+        and not unknown_modes
+        and missing_stylized_disclosure == 0
+        and invalid_oecd_disclosure == 0
+    )
+    warnings = []
+    if stylized.any() and provenance_ok:
+        warnings.append(STYLIZED_EXPOSURE_DISCLOSURE)
+    if not provenance_ok:
+        warnings.append(
+            f"sources={source_values}, modes={mode_values}, unknown_sources={unknown_sources}, "
+            f"unknown_modes={unknown_modes}, missing={missing_provenance}, "
+            f"missing_fallback_disclosure={missing_stylized_disclosure}, "
+            f"invalid_oecd_disclosure={invalid_oecd_disclosure}"
+        )
+    checks.append(
+        QcCheck(
+            name="关税出口暴露度来源与口径",
+            kind="来源",
+            passed=provenance_ok,
+            detail=(
+                f"source={source_values or ['缺失']},mode={mode_values or ['缺失']};"
+                "全表来源/口径必须唯一且属于版本化允许集合"
+            ),
+            warnings=warnings,
         )
     )
 

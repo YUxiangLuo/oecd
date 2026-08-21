@@ -41,6 +41,28 @@ function response(
   interaction = false,
   treatmentSupport: TreatmentSupport | null = null,
 ): RegressionResponse {
+  const eventSupport = method === "event_study" ? {
+    policy: "teaching_min_contributing_clusters_per_event_period" as const,
+    policy_is_statistical_theorem: false as const,
+    cluster: "country",
+    base_k: -1,
+    reference_term: "k=-1",
+    min_contributing_clusters: 5,
+    periods: [
+      {
+        term: coef.name.replace("×base_gvc", ""), event_time: Number(coef.name.replace("k=", "")),
+        is_reference: false, estimated: true, contributing_rows: 6, contributing_entities: 6,
+        contributing_clusters: 6, cohorts: { "2018": 6 }, period_supported: true,
+        inference_supported: true, suppress_inference: false, reason_codes: [], reasons: [],
+      },
+      {
+        term: "k=-1", event_time: -1, is_reference: true, estimated: false,
+        contributing_rows: 6, contributing_entities: 6, contributing_clusters: 6,
+        cohorts: { "2018": 6 }, period_supported: true, inference_supported: true,
+        suppress_inference: false, reason_codes: [], reasons: [],
+      },
+    ],
+  } : undefined;
   return {
     design: {
       outcome, depvar: "y", depvar_label: "Y", granularity: "country", shock_type: "tariff",
@@ -51,10 +73,16 @@ function response(
     },
     result: {
       depvar: "FVA_share", coefs: [coef], n_obs: 10, n_entities: 2, n_times: 5, n_clusters: 2, r2_within: 0.1,
-      depvar_mean: mean, depvar_std: std, diagnostics: {}, notes: [],
+      depvar_mean: mean, depvar_std: std, diagnostics: method === "event_study" ? {
+        pretrend: {
+          scope: "main", available: false, reason: "no_pre_terms", terms: [], excluded_terms: [],
+          statistic: null, df_num: 0, df_denom: 10, p: null, interpretation: "没有可估计的冲击前时期。",
+        },
+      } : {}, notes: [],
       status: treatmentSupport?.status ?? "ok",
       status_reasons: treatmentSupport?.reasons ?? [],
       support: treatmentSupport,
+      event_support: eventSupport,
     },
     benchmark: {
       backend: "PanelOLS", policy_coefs: [], max_abs_coef_diff: 0, max_abs_se_diff: 0,
@@ -67,10 +95,18 @@ function response(
 describe("buildRegressionVerdict", () => {
   test("failed pretrend is not a directional evidence claim", () => {
     const payload = response("trade", { ...coefficient(0.02, 0.012, 0.028), name: "k=0" }, 1, 2, "event_study");
+    payload.result.coefs.unshift({ ...coefficient(-0.01, -0.03, 0.01), name: "k=-2" });
+    payload.result.event_support?.periods.push({
+      term: "k=-2", event_time: -2, is_reference: false, estimated: true,
+      contributing_rows: 6, contributing_entities: 6, contributing_clusters: 6,
+      cohorts: { "2018": 6 }, period_supported: true, inference_supported: true,
+      suppress_inference: false, reason_codes: [], reasons: [],
+    });
     payload.result.diagnostics = {
       pretrend: {
-        available: true, reason: null, terms: [], statistic: 8, df_num: 2, df_denom: 10,
-        p: 0.00001, interpretation: "检测到明显的冲击前差异，因果解释需谨慎。",
+        scope: "main", available: true, reason: null, terms: ["k=-2"], excluded_terms: [],
+        statistic: 8, df_num: 1, df_denom: 10, p: 0.00001,
+        interpretation: "检测到明显的冲击前差异，因果解释需谨慎。",
       },
     };
     const verdict = buildRegressionVerdict("trade", payload);
@@ -80,6 +116,49 @@ describe("buildRegressionVerdict", () => {
     expect(verdict.title).not.toContain("发现正向");
   });
 
+  test("interaction event study uses the joint pretrend, not a passing main test", () => {
+    const k0 = { ...coefficient(0.02, 0.012, 0.028), name: "k=0" };
+    const payload = response("trade", k0, 1, 2, "event_study", true);
+    payload.result.coefs = [
+      { ...coefficient(-0.01, -0.03, 0.01), name: "k=-2" },
+      k0,
+      { ...coefficient(0.001, -0.01, 0.012), name: "k=-2×base_gvc" },
+      { ...coefficient(0.002, -0.01, 0.014), name: "k=0×base_gvc" },
+    ];
+    payload.result.event_support?.periods.push({
+      term: "k=-2", event_time: -2, is_reference: false, estimated: true,
+      contributing_rows: 6, contributing_entities: 6, contributing_clusters: 6,
+      cohorts: { "2018": 6 }, period_supported: true, inference_supported: true,
+      suppress_inference: false, reason_codes: [], reasons: [],
+    });
+    const scoped = (scope: "main" | "interaction" | "joint", terms: string[], p: number) => ({
+      scope,
+      available: true,
+      reason: null,
+      terms,
+      excluded_terms: [],
+      statistic: p < 0.05 ? 8 : 1.2,
+      df_num: terms.length,
+      df_denom: 20,
+      p,
+      interpretation: p < 0.05
+        ? "联合检验检测到明显的冲击前差异。"
+        : `${scope} 冲击前差异不显著。`,
+    });
+    const tests = {
+      main: scoped("main", ["k=-2"], 0.42),
+      interaction: scoped("interaction", ["k=-2×base_gvc"], 0.31),
+      joint: scoped("joint", ["k=-2", "k=-2×base_gvc"], 0.00001),
+    };
+    payload.result.diagnostics = { pretrend: tests.joint, pretrend_tests: tests };
+    const verdict = buildRegressionVerdict("trade", payload);
+    expect(verdict.state).toBe("pretrend");
+    expect(verdict.title).toContain("冲击前趋势");
+    expect(verdict.title).not.toContain("发现正向");
+    expect(verdict.evidence).toContain("只能描述该数值");
+    expect(verdict.evidence).toContain("联合检验检测到明显的冲击前差异");
+  });
+
   test("uses confidence interval, not sign alone, for evidence", () => {
     const verdict = buildRegressionVerdict("trade", response("trade", coefficient(-0.01, -0.03, 0.01)));
     expect(verdict.state).toBe("insufficient");
@@ -87,11 +166,14 @@ describe("buildRegressionVerdict", () => {
     expect(verdict.evidence).toContain("不等于“没有效应”");
   });
 
-  test("renders share outcomes in percentage points", () => {
-    const verdict = buildRegressionVerdict("production", response("production", coefficient(-0.012, -0.02, -0.004)));
-    expect(verdict.state).toBe("negative");
-    expect(verdict.effect).toContain("-1.20 个百分点");
-    expect(verdict.interpretation).not.toContain("证明");
+  test("renders share outcomes in percentage points without scale overstatement", () => {
+    const negative = buildRegressionVerdict("production", response("production", coefficient(-0.012, -0.02, -0.004)));
+    const positive = buildRegressionVerdict("production", response("production", coefficient(0.012, 0.004, 0.02)));
+    expect(negative.state).toBe("negative");
+    expect(negative.effect).toContain("-1.20 个百分点");
+    expect(negative.interpretation).toBe("SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。");
+    expect(positive.interpretation).toBe("SVA 中复杂 GVC 增加值份额提高；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。");
+    expect(`${negative.interpretation} ${positive.interpretation}`).not.toMatch(/与.*(?:扩张|收缩)一致/);
   });
 
   test("chart display scale matches the verdict unit for share outcomes", () => {
@@ -140,6 +222,31 @@ describe("buildRegressionVerdict", () => {
     expect(verdict.effect).toContain("-0.50 个百分点");
   });
 
+  test("stale suppress flags cannot override invalid or insufficient global status", () => {
+    const k0 = { ...coefficient(-0.02, -0.03, -0.01), name: "k=0", p: 0.001 };
+    const staleInvalid = response(
+      "trade", k0, 1, 2, "event_study", false,
+      support({ status: "invalid_design", suppress_inference: false }),
+    );
+    const invalidVerdict = buildRegressionVerdict("trade", staleInvalid);
+    expect(invalidVerdict.state).toBe("suppressed");
+    expect(invalidVerdict.title).toContain("不能用于统计推断");
+    expect(invalidVerdict.interval).toBe("—");
+    expect(invalidVerdict.title).not.toContain("发现负向变化证据");
+
+    const staleInsufficient = response(
+      "trade", k0, 1, 2, "event_study", false,
+      support({ status: "ok", suppress_inference: false, treated_clusters: 6 }),
+    );
+    staleInsufficient.result.status = "insufficient";
+    staleInsufficient.result.status_reasons = ["保存载荷中的整体状态为支持不足"];
+    const insufficientVerdict = buildRegressionVerdict("trade", staleInsufficient);
+    expect(insufficientVerdict.state).toBe("suppressed");
+    expect(insufficientVerdict.title).toContain("处理支持度不足");
+    expect(insufficientVerdict.interval).toBe("—");
+    expect(insufficientVerdict.title).not.toContain("发现负向变化证据");
+  });
+
   test("warning-level design issues keep inference but surface the disclosure", () => {
     const verdict = buildRegressionVerdict(
       "trade",
@@ -176,6 +283,51 @@ describe("buildRegressionVerdict", () => {
     );
     expect(verdict.effectLabel).toBe("冲击强度每增加 1 个百分点");
     expect(verdict.effect).toContain(expected);
+  });
+
+  test("keeps k=0 and fails closed when its period support is thin or unknown", () => {
+    const k0 = { ...coefficient(-0.02, -0.03, -0.01), name: "k=0" };
+    const supportedLater = { ...coefficient(0.04, 0.02, 0.06), name: "k=+1" };
+    const thin = response("trade", k0, 1, 2, "event_study");
+    thin.result.coefs.push(supportedLater);
+    thin.result.event_support?.periods.push({
+      term: "k=+1", event_time: 1, is_reference: false, estimated: true,
+      contributing_rows: 6, contributing_entities: 6, contributing_clusters: 6,
+      cohorts: { "2018": 6 }, period_supported: true, inference_supported: true,
+      suppress_inference: false, reason_codes: [], reasons: [],
+    });
+    const period = thin.result.event_support?.periods.find((item) => item.term === "k=0");
+    if (!period) throw new Error("missing test period");
+    period.contributing_clusters = 4;
+    period.period_supported = false;
+    period.inference_supported = false;
+    period.suppress_inference = true;
+    period.reasons = ["k=0 只有 4 个贡献处理聚类，低于课程政策下限 5。"];
+    const thinVerdict = buildRegressionVerdict("trade", thin);
+    expect(thinVerdict.coefficient?.name).toBe("k=0");
+    expect(thinVerdict.state).toBe("suppressed");
+    expect(thinVerdict.evidence).toContain("4 个贡献处理聚类");
+    expect(thinVerdict.evidence).not.toContain("跨过 0");
+
+    const legacy = response("trade", k0, 1, 2, "event_study");
+    delete legacy.result.event_support;
+    const legacyVerdict = buildRegressionVerdict("trade", legacy);
+    expect(legacyVerdict.title).toContain("支持度未知");
+    expect(legacyVerdict.evidence).toContain("旧结果");
+    expect(legacyVerdict.evidence).not.toContain("未跨过 0");
+  });
+
+  test("stripped noninteraction pretrend remains descriptive and cannot become directional", () => {
+    const payload = response(
+      "trade", { ...coefficient(0.02, 0.012, 0.028), name: "k=0" }, 1, 2, "event_study",
+    );
+    payload.result.diagnostics = {};
+    const verdict = buildRegressionVerdict("trade", payload);
+    expect(verdict.state).toBe("suppressed");
+    expect(verdict.title).toContain("冲击前诊断");
+    expect(verdict.interval).toBe("—");
+    expect(verdict.title).not.toContain("发现正向");
+    expect(verdict.evidence).not.toContain("未跨过 0");
   });
 
   test("does not use a pre-treatment event coefficient as the policy verdict", () => {

@@ -3,6 +3,7 @@
 from typing import Any, cast
 
 import anyio
+import numpy as np
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 from fastapi.requests import Request
@@ -192,13 +193,13 @@ def _regression_preflight(design: RegressionDesign, result: dict[str, Any], weig
             add(
                 "no_fully_untreated_cluster",
                 "warning",
-                f"没有完全未处理的聚类，但仍有 {untreated_entities} 个从未处理实体；比较并非只来自尚未处理者。聚类层面的共同冲击辨识更依赖模型设定，异质处理效应下传统 staggered TWFE 仍可能有偏。",
+                f"估计样本中没有完全未暴露的聚类，但仍有 {untreated_entities} 个未暴露实体（可能包括冻结 cohort 中仅保留冲击前行的实体）；比较并非只来自尚未处理者。聚类层面的共同冲击辨识更依赖模型设定，异质处理效应下传统 staggered TWFE 仍可能有偏。",
             )
         else:
             add(
                 "no_never_treated_entity",
                 "warning",
-                "没有从未处理实体或完全未处理聚类；识别依赖处理时点差异，异质处理效应下传统 staggered TWFE 可能有偏。",
+                "估计样本中没有未暴露实体或完全未暴露聚类；识别依赖处理时点差异，异质处理效应下传统 staggered TWFE 可能有偏。",
             )
     if support.get("reversal_entities"):
         add(
@@ -290,14 +291,17 @@ async def regression_run(req: RegressionRequest, request: Request):
     )
     try:
         result, benchmark = await concurrency.run_cpu_bound(run_design_with_benchmark, panel, design)
+    except (np.linalg.LinAlgError, FloatingPointError, OverflowError) as e:
+        raise HTTPException(status_code=400, detail="回归线性代数计算失败；请检查样本方差、重复键与设计自由度") from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     design_info = _design_info(design, req.weight_mode)
     result_info = result.to_dict()
+    preflight = _regression_preflight(design, result_info, req.weight_mode)
     return {
         "design": design_info,
         "result": result_info,
-        "preflight": _regression_preflight(design, result_info, req.weight_mode),
+        "preflight": preflight,
         "benchmark": benchmark,
         "disclaimer": "冲击变量为拟真演示面板(全经济体覆盖、行业异质),结果仅用于验证系统链路",
     }
@@ -328,6 +332,8 @@ async def regression_placebo(req: PlaceboRequest, request: Request):
             n_draws=req.n_draws,
             seed=req.seed,
         )
+    except (np.linalg.LinAlgError, FloatingPointError, OverflowError) as e:
+        raise HTTPException(status_code=400, detail="回归线性代数计算失败；请检查样本方差、重复键与设计自由度") from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     design_info = _design_info(design, req.weight_mode)

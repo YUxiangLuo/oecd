@@ -1,5 +1,6 @@
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from gvcsim import api as api_module
@@ -36,6 +37,40 @@ def test_token_is_bound_to_dataset_release(teaching_db, monkeypatch):
     assert payload["rid"] == "a" * 32
     monkeypatch.setattr(artifacts, "release_identity", lambda _path=None: "b" * 32)
     assert auth.verify_token(token) is None
+
+
+def test_token_issue_and_verification_require_release_identity(teaching_db, monkeypatch):
+    user = auth.authenticate("student", "gvclab2026")
+    assert user
+    token, _expires_at = auth.issue_token(user)
+
+    def invalid_release(*_args, **_kwargs):
+        raise artifacts.ArtifactContractError("dataset metadata checksum mismatch")
+
+    monkeypatch.setattr(artifacts, "release_identity", invalid_release)
+    with pytest.raises(auth.AuthenticationUnavailable, match="数据发布"):
+        auth.issue_token(user)
+    with pytest.raises(auth.AuthenticationUnavailable, match="数据发布"):
+        auth.verify_token(token)
+
+
+def test_missing_release_identity_blocks_login_and_protected_api(teaching_db, monkeypatch):
+    client = TestClient(app)
+    login = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+    assert login.status_code == 200
+
+    def invalid_release(*_args, **_kwargs):
+        raise artifacts.ArtifactContractError("dataset metadata checksum mismatch")
+
+    monkeypatch.setattr(artifacts, "release_identity", invalid_release)
+    denied_login = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+    assert denied_login.status_code == 503
+    denied_api = client.get(
+        "/api/steps",
+        headers={"Authorization": f"Bearer {login.json()['token']}"},
+    )
+    assert denied_api.status_code == 503
+    assert "数据发布" in denied_api.json()["detail"]
 
 
 def test_password_change_updates_credentials_and_revokes_existing_token(teaching_db):

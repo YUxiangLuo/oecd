@@ -62,7 +62,7 @@ unset GVCSIM_INITIAL_TEACHER_PASSWORD
 trap - EXIT
 ```
 
-`compute`、数据库重建和 `preflight` 必须以 `gvcsim` 服务账号运行；release 使用 `0700`，用 root 运行会产生服务不可读的目录。`compute` 只重建预计算数据，不修改 PostgreSQL；构建或 QC 失败时旧数据发布仍保留。切换前会校验完整 SHA-256/结构清单并同步落盘，成功后保留当前和上一发布。数据库重建会删除全部账号、会话、报告和评分，旧令牌随之失效。
+`compute`、数据库重建和 `preflight` 必须以 `gvcsim` 服务账号运行；release 使用 `0700`，用 root 运行会产生服务不可读的目录。`compute` 只重建预计算数据，不修改 PostgreSQL；构建或 QC 失败时旧数据发布仍保留。`--allow-qc-override` 只保留给 ICIO/控制变量教学质检；冲击 schema、来源与语义 fatal 检查不可 override，发布 metadata 中的 shock override 必须为 false。切换前会校验完整 SHA-256/结构清单并同步落盘，成功后保留当前和上一发布。数据库重建会删除全部账号、会话、报告和评分，旧令牌随之失效。
 
 数据库重建后必须创建首位教师，否则 `preflight` 和 `/health` 会拒绝放行。初始口令只通过当前部署进程传给初始化命令，不写入环境文件；服务启动后应立即登录并轮换。
 

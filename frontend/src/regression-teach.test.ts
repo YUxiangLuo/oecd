@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { familyVerdict } from "./regression-teach";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { DidFourCells, familyVerdict } from "./regression-teach";
 import type { CoefStat, RegressionOutcome, RegressionResponse } from "./types";
 
 const coefficient = (coef: number, low: number, high: number): CoefStat => ({
@@ -27,6 +29,16 @@ function response(outcome: RegressionOutcome, coef: CoefStat): RegressionRespons
     disclaimer: "mock",
   };
 }
+
+describe("DidFourCells", () => {
+  test("names the corner column header in both visual variants", () => {
+    for (const numeric of [false, true]) {
+      const html = renderToStaticMarkup(createElement(DidFourCells, { numeric }));
+      expect(html).toContain('<th scope="col"><span class="sr-only">组别</span></th>');
+      expect(html).not.toContain('<th scope="col"></th>');
+    }
+  });
+});
 
 describe("familyVerdict", () => {
   test("prefers in-memory history over a saved sibling run", () => {

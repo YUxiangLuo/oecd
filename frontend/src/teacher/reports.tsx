@@ -38,7 +38,7 @@ export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () =
         <SearchInput value={query} onChange={setQuery} placeholder="搜索学生 / 用户名 / 学号" />
       </Toolbar>
       <ScrollableRegion className="table-wrap" label="报告提交列表，可横向滚动">
-        <table className="data-table"><thead><tr><th>学生</th><th>用户名</th><th>学号</th><th>提交时间</th><th>状态</th><th>得分</th><th /></tr></thead><tbody>
+        <table className="data-table"><thead><tr><th>学生</th><th>用户名</th><th>学号</th><th>提交时间</th><th>状态</th><th>得分</th><th><span className="sr-only">操作</span></th></tr></thead><tbody>
           {shown.map((report) => <tr key={report.account_id}>
             <td>{report.display_name}</td><td className="mono">{report.username}</td><td>{report.student_no || "—"}</td><td>{fmtTime(report.submitted_at)}</td>
             <td>{report.state === "graded" ? <StatusPill tone="ok">已评阅</StatusPill> : <StatusPill tone="warn">待评阅</StatusPill>}</td><td>{report.score ?? "—"}</td>

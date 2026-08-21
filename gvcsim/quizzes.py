@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from gvcsim.indicator_schema import PRODUCTION_LENGTH_OPERATIONAL_DEFINITION
+
 
 QUIZ_VERSION = "course-quiz-v6"
 
@@ -159,7 +161,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
                 _option("c", "因为是比值，所以无法判断"),
             ],
             "a",
-            "前向 GVC 长度相对更长会使 GVCPs 大于 1，通常对应更上游的位置。",
+            f"{PRODUCTION_LENGTH_OPERATIONAL_DEFINITION}前向 GVC 长度相对更长会使 GVCPs 大于 1，通常对应更上游的位置。",
         )
     ],
     10: [
@@ -252,12 +254,12 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "s14-metric",
             "本步的前向 GVC 生产长度主要衡量什么？",
             [
-                _option("a", "增加值到最终吸收经历的跨境生产环节长短"),
+                _option("a", "GVC 活动诱发累计总产出相对关联增加值的平均生产阶段长度"),
                 _option("b", "毛出口中外国增加值的份额"),
                 _option("c", "一国是否位于最多的贸易协议中"),
             ],
             "a",
-            "PLv_GVC 读的是跨境生产有多长。链条变短可能有多种机制，一个系数不能单独指出回流或近岸。",
+            f"PLv_GVC 采用前向口径。{PRODUCTION_LENGTH_OPERATIONAL_DEFINITION}长度变短可能有多种机制，一个系数不能单独指出回流或近岸。",
         ),
         _question(
             "s14-compare",

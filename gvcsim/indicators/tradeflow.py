@@ -43,8 +43,8 @@ _CLOSURE_COLS = ["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"]
 
 
 def gross_exports(df: pd.DataFrame) -> pd.Series:
-    """毛出口 = 五个 WWZ 聚合项 + OECD TLS 扩展项。"""
-    return df[_CLOSURE_COLS].sum(axis=1)
+    """毛出口 = 五个 WWZ 聚合项 + OECD TLS 扩展项；任一闭合项缺失则总量未定义。"""
+    return df[_CLOSURE_COLS].sum(axis=1, min_count=len(_CLOSURE_COLS))
 
 
 def sector_tradeflow(arr: IcioArrays) -> pd.DataFrame:

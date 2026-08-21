@@ -183,6 +183,13 @@
 }
 .decomp-identity.ok { background: #eafaf1; color: #137a41; border: 1px solid #bfe8d0; }
 .decomp-identity.bad { background: #fff0e6; color: #a2551f; border: 1px solid #f6d6bf; }
+.decomp-identity.neutral { background: #f4f5f8; color: #434957; border: 1px solid #d9dde6; }
+.decomp-unavailable {
+  margin: 12px 0; padding: 12px 14px; border-radius: 10px;
+  color: #714b12; background: #fff8e8; border: 1px solid #ead4a4;
+  line-height: 1.65;
+}
+.decomp-unavailable > div { margin-top: 4px; }
 .decomp-hint {
   margin-top: 10px; padding: 10px 14px; border-radius: 10px;
   font-size: 12.5px; line-height: 1.7; color: #8a5a1f;
@@ -192,8 +199,8 @@
 .decomp-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 12.5px; }
 .decomp-table tr { border-bottom: 1px solid #f2f3f7; }
 .decomp-table tr.on { background: #f7f8fb; }
-.decomp-table td { padding: 9px 8px; vertical-align: top; }
-.dt-name { font-weight: 600; color: #2a3040; white-space: nowrap; }
+.decomp-table td, .decomp-table tbody th { padding: 9px 8px; vertical-align: top; }
+.dt-name { font-weight: 600; color: #2a3040; white-space: nowrap; text-align: left; }
 .dt-swatch { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 8px; vertical-align: middle; }
 .dt-val { text-align: right; font-family: "Space Grotesk", sans-serif; color: #3a4050; white-space: nowrap; }
 .dt-share { text-align: right; color: var(--text-muted); font-variant-numeric: tabular-nums; width: 60px; }
@@ -210,8 +217,15 @@
   border: 1px solid #eef0f5; border-radius: 12px;
 }
 .net-demo-panel {
-  flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 8px;
+  flex: 1; min-width: 280px; display: flex; flex-direction: column; gap: 8px;
   padding: 4px 0;
+}
+.net-demo-node:focus { outline: none; }
+.net-demo-node:focus-visible circle {
+  stroke: #111827; stroke-width: 4px;
+}
+.ndp-live {
+  font-size: 12px; color: #30364a; background: #f0f1ff; border-radius: 8px; padding: 7px 10px;
 }
 .ndp-node { font-size: 13px; color: #3a4050; }
 .ndp-node b { font-size: 15px; color: #4b47e0; }
@@ -221,6 +235,9 @@
 .ndp-calc { font-family: "Space Mono", monospace; font-size: 13px; color: #2a3040; }
 .ndp-calc b { color: #4b47e0; font-size: 15px; }
 .ndp-note { font-size: 12px; color: var(--text-muted); line-height: 1.65; margin: 2px 0; }
+.ndp-edges { max-width: 100%; overflow-x: auto; }
+.net-demo-edge-table { min-width: 430px; font-size: 11px; }
+.net-demo-edge-table caption { text-align: left; font-weight: 700; color: #3a4050; padding: 5px 0; }
 .ndp-disclaim {
   margin-top: auto; font-size: 11px; color: var(--text-muted); line-height: 1.6;
   border-top: 1px solid #eef0f5; padding-top: 10px;

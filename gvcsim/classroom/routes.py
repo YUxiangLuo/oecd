@@ -89,6 +89,7 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
         raise HTTPException(status_code=404, detail="学生账号不存在")
     report_exists = db.latest_report(user["sub"]) is not None
     return {
+        "session": payload,
         "updated_at": saved["updated_at"],
         "completion": evidence.completion_summary(payload, report_exists=report_exists),
     }

@@ -1,4 +1,4 @@
-"""Stable attribution and machine-readable provenance for data used by reports."""
+"""Stable attribution and strict machine-readable provenance for release inputs."""
 
 import json
 import os
@@ -16,55 +16,151 @@ OECD_ICIO_METHODOLOGY_CITATION = (
 )
 CI_SYNTHETIC_MARKER = ".ci-only-synthetic.json"
 CI_SYNTHETIC_KIND = "gvcsim-ci-only-synthetic-oecd-icio"
+DATA_SOURCES_VERSION = 1
+SIMULATED_MACRO_KIND = "deterministic-teaching-mock"
+SIMULATED_MACRO_GENERATOR = "gvcsim.data.controls.build_controls"
+SIMULATED_MACRO_GENERATOR_VERSION = "1.0.0"
+SIMULATED_MACRO_SCALE = {
+    "kind": "icio-derived-value-added-scale",
+    "description": "Country-year scale is anchored to the ICIO-derived SVA value-added proxy, then transformed by deterministic teaching formulas.",
+}
+SIMULATED_MACRO_DISCLOSURE = (
+    "Not WDI data and not IMF observations; these deterministic simulated regression controls must not be presented as observed macroeconomic statistics."
+)
+
+
+class DataSourcesValidationError(ValueError):
+    pass
+
+
+def _simulated_macro_controls() -> dict[str, Any]:
+    return {
+        "kind": SIMULATED_MACRO_KIND,
+        "production_data": False,
+        "generator": SIMULATED_MACRO_GENERATOR,
+        "generator_version": SIMULATED_MACRO_GENERATOR_VERSION,
+        "scale_input": dict(SIMULATED_MACRO_SCALE),
+        "observations_disclosure": SIMULATED_MACRO_DISCLOSURE,
+    }
 
 
 def is_ci_synthetic_source(data_sources: dict[str, Any] | None) -> bool:
     return bool(data_sources and "ci_synthetic_icio" in data_sources)
 
 
+def _require_exact_object(value: object, keys: set[str], label: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != keys:
+        actual = sorted(value) if isinstance(value, dict) else type(value).__name__
+        raise DataSourcesValidationError(f"{label} must contain exactly {sorted(keys)}; got {actual}")
+    return value
+
+
+def validate_data_sources(value: object) -> dict[str, Any]:
+    """Validate the complete versioned source contract; no legacy/unknown fallback."""
+    if not isinstance(value, dict):
+        raise DataSourcesValidationError("data_sources must be an object")
+    if value.get("version") != DATA_SOURCES_VERSION or type(value.get("version")) is not int:
+        raise DataSourcesValidationError(f"data_sources version must be {DATA_SOURCES_VERSION}")
+    primary = {key for key in ("oecd_icio", "ci_synthetic_icio") if key in value}
+    if len(primary) != 1:
+        raise DataSourcesValidationError("data_sources must contain exactly one ICIO input source")
+    expected_top = {"version", "simulated_macro_controls", *primary}
+    if set(value) != expected_top:
+        raise DataSourcesValidationError(f"data_sources has unknown or missing fields: {sorted(set(value) ^ expected_top)}")
+
+    simulated = _require_exact_object(
+        value["simulated_macro_controls"],
+        {"kind", "production_data", "generator", "generator_version", "scale_input", "observations_disclosure"},
+        "simulated_macro_controls",
+    )
+    expected_simulated = _simulated_macro_controls()
+    if simulated != expected_simulated:
+        raise DataSourcesValidationError("simulated_macro_controls contract is invalid")
+
+    if "oecd_icio" in primary:
+        source = _require_exact_object(
+            value["oecd_icio"],
+            {
+                "kind", "production_data", "release", "citation", "dataset_url",
+                "methodology_citation", "methodology_url", "terms_url",
+            },
+            "oecd_icio",
+        )
+        expected_source = {
+            "kind": "observed-indicator-input",
+            "production_data": True,
+            "release": "2023",
+            "citation": OECD_ICIO_CITATION,
+            "dataset_url": OECD_ICIO_DATASET_URL,
+            "methodology_citation": OECD_ICIO_METHODOLOGY_CITATION,
+            "methodology_url": OECD_ICIO_METHODOLOGY_URL,
+            "terms_url": OECD_ICIO_TERMS_URL,
+        }
+        if source != expected_source:
+            raise DataSourcesValidationError("oecd_icio source contract is invalid")
+    else:
+        source = _require_exact_object(
+            value["ci_synthetic_icio"],
+            {"production_data", "kind", "generator", "generator_version", "citation"},
+            "ci_synthetic_icio",
+        )
+        if (
+            source.get("production_data") is not False
+            or source.get("kind") != CI_SYNTHETIC_KIND
+            or source.get("generator") != "scripts/build_ci_synthetic_data.py"
+            or source.get("generator_version") != "1.0.0"
+            or source.get("citation")
+            != "Deterministic CI-only OECD-shaped synthetic fixture; contains no OECD observations."
+        ):
+            raise DataSourcesValidationError("ci_synthetic_icio source contract is invalid")
+    return value
+
+
 def report_source_label(data_sources: dict[str, Any] | None) -> str:
-    if is_ci_synthetic_source(data_sources):
+    sources = validate_data_sources(data_sources)
+    if is_ci_synthetic_source(sources):
         return "CI-only 确定性合成 ICIO-shaped 测试数据（不含 OECD 观测值）"
-    if not data_sources or "oecd_icio" in data_sources:
-        # Empty metadata is accepted for old or hand-built datasets.
-        return "OECD ICIO"
-    return "未识别的数据源"
+    return "OECD ICIO 指标输入及其派生结果"
 
 
 def report_source_disclosures(data_sources: dict[str, Any] | None) -> list[str]:
-    if is_ci_synthetic_source(data_sources):
-        source = data_sources.get("ci_synthetic_icio") if data_sources else None
-        citation = (
-            source.get("citation", "CI-only synthetic fixture")
-            if isinstance(source, dict)
-            else "CI-only synthetic fixture"
-        )
-        return [
-            f"- 数据集：{citation}",
-            "- 许可提示：该合成表只用于 CI，不得冒充 OECD 数据或用于现实政策结论。",
+    sources = validate_data_sources(data_sources)
+    lines: list[str]
+    if is_ci_synthetic_source(sources):
+        source = sources["ci_synthetic_icio"]
+        lines = [
+            f"- 指标输入数据集：{source['citation']}",
+            "- 指标输入许可提示：该合成表只用于 CI，不得冒充 OECD 数据或用于现实政策结论。",
         ]
-    if data_sources and "oecd_icio" not in data_sources:
-        return [
-            "- 数据集：数据源类型无法识别。",
-            "- 许可提示：拒绝推断其权利状态；补齐来源、引用和条款前不得对外发布。",
+    else:
+        lines = [
+            f"- 指标输入数据集：{OECD_ICIO_CITATION}",
+            f"- 指标输入方法文档：{OECD_ICIO_METHODOLOGY_CITATION}",
+            f"- OECD 使用条款：{OECD_ICIO_TERMS_URL}",
+            "- OECD ICIO 声明只覆盖本系统的指标输入与其派生结果；不覆盖模拟回归控制或政策情景。",
+            "- 本报告是教学系统生成的衍生结果，不代表 OECD 审核、参与或背书；再分发前应复核下载时适用的元数据和条款。",
         ]
-    return [
-        f"- 数据集：{OECD_ICIO_CITATION}",
-        f"- 方法文档：{OECD_ICIO_METHODOLOGY_CITATION}",
-        f"- OECD 使用条款：{OECD_ICIO_TERMS_URL}",
-        "- 本报告是教学系统生成的衍生结果，不代表 OECD 审核、参与或背书；再分发前应复核下载时适用的元数据和条款。",
-    ]
+    controls = sources["simulated_macro_controls"]
+    lines.extend(
+        [
+            "- 模拟宏观控制（模型标签：模拟宏观控制）：确定性教学 mock，production_data=false；"
+            f"生成器 {controls['generator']}@{controls['generator_version']}。",
+            f"- 模拟宏观控制的 ICIO 尺度输入：{controls['scale_input']['description']}",
+            f"- 模拟宏观控制披露：{controls['observations_disclosure']}",
+        ]
+    )
+    return lines
 
 
-def artifact_data_sources(raw_data_dir: Path) -> dict[str, dict[str, Any]]:
-    """Describe real OECD input or the guarded CI-only synthetic substitute.
-
-    Merely dropping a marker file is not enough to relabel data: both explicit CI
-    environment gates must be present, and the marker contract must validate.
-    """
+def artifact_data_sources(raw_data_dir: Path) -> dict[str, Any]:
+    """Describe real OECD indicator input or the guarded CI-only substitute."""
     marker = raw_data_dir / CI_SYNTHETIC_MARKER
     synthetic_enabled = os.environ.get("GVCSIM_CI_SYNTHETIC") == "1"
     ci_enabled = os.environ.get("CI", "").strip().lower() in {"1", "true", "yes"}
+    sources: dict[str, Any] = {
+        "version": DATA_SOURCES_VERSION,
+        "simulated_macro_controls": _simulated_macro_controls(),
+    }
     if marker.exists() or synthetic_enabled:
         if not (marker.is_file() and synthetic_enabled and ci_enabled):
             raise RuntimeError("CI synthetic data requires CI=true, GVCSIM_CI_SYNTHETIC=1, and a valid marker")
@@ -74,16 +170,17 @@ def artifact_data_sources(raw_data_dir: Path) -> dict[str, dict[str, Any]]:
             raise RuntimeError("CI synthetic data marker cannot be parsed") from error
         if payload.get("kind") != CI_SYNTHETIC_KIND or payload.get("production_data") is not False:
             raise RuntimeError("CI synthetic data marker contract is invalid")
-        return {
-            "ci_synthetic_icio": {
-                "production_data": False,
-                "kind": CI_SYNTHETIC_KIND,
-                "generator": "scripts/build_ci_synthetic_data.py",
-                "citation": "Deterministic CI-only OECD-shaped synthetic fixture; contains no OECD observations.",
-            }
+        sources["ci_synthetic_icio"] = {
+            "production_data": False,
+            "kind": CI_SYNTHETIC_KIND,
+            "generator": "scripts/build_ci_synthetic_data.py",
+            "generator_version": "1.0.0",
+            "citation": "Deterministic CI-only OECD-shaped synthetic fixture; contains no OECD observations.",
         }
-    return {
-        "oecd_icio": {
+    else:
+        sources["oecd_icio"] = {
+            "kind": "observed-indicator-input",
+            "production_data": True,
             "release": "2023",
             "citation": OECD_ICIO_CITATION,
             "dataset_url": OECD_ICIO_DATASET_URL,
@@ -91,4 +188,4 @@ def artifact_data_sources(raw_data_dir: Path) -> dict[str, dict[str, Any]]:
             "methodology_url": OECD_ICIO_METHODOLOGY_URL,
             "terms_url": OECD_ICIO_TERMS_URL,
         }
-    }
+    return validate_data_sources(sources)

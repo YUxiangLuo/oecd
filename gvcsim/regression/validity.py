@@ -93,6 +93,7 @@ def scan_reversal(
     entity: str,
     time: str,
     status_col: str,
+    first_by_entity: pd.Series | None = None,
 ) -> ReversalScan:
     """扫描处理状态被撤销的个体,并量化吸收型编码的误编码比例。
 
@@ -103,14 +104,20 @@ def scan_reversal(
     ``status_col`` 应优先传**冲击强度**列而非阈值化的处理指示列:后者会把
     "强度略微跌破 treated 阈值"(如 0.0011→0.0009,政策仍在生效)误报为撤销,
     而真正的撤销在 mock 中表现为强度归零(如加拿大钢铝关税 2019 年取消)。
+    ``first_by_entity`` 存在时，它是吸收型窗口的唯一 G_i 来源；强度列只判断
+    窗口内实际 on/off，处理阈值以下的正强度不能提前开启窗口。
     """
     on_series = pd.to_numeric(data[status_col], errors="coerce").fillna(0) > 0
     frame = pd.DataFrame({entity: data[entity].values, time: data[time].values, "on": on_series.values})
-    # 整表排序一次 + 按个体 cummax:累计最大值恰好就是"首次处理起恒为 1"的吸收型窗口,
-    # 与逐组取 path[argmax():] 等价。原本是逐个体 groupby + sort_values 的 Python 循环,
-    # 每次估计多花约 0.3 秒;实体置换要重估几十次,40 draws 因此从 16.5 秒降到 2.4 秒。
     frame = frame.sort_values([entity, time], kind="stable")
-    post = frame.groupby(entity, sort=False)["on"].cummax().to_numpy(dtype=bool)
+    if first_by_entity is not None:
+        frozen = first_by_entity.copy()
+        frozen.index = frozen.index.astype(str)
+        first_year = frame[entity].astype(str).map(frozen)
+        post = (first_year.notna() & (pd.to_numeric(frame[time], errors="coerce") >= first_year)).to_numpy(dtype=bool)
+    else:
+        # 兼容无冻结时点的底层调用:累计最大值等价于从 status_col 首次为正起开启窗口。
+        post = frame.groupby(entity, sort=False)["on"].cummax().to_numpy(dtype=bool)
     on = frame["on"].to_numpy(dtype=bool)
     # 处理后窗口里仍为"未处理"的行,就是吸收型编码与真实路径不符的行。
     off_after_on = post & ~on
@@ -130,6 +137,8 @@ def analyze_support(
     treated_col: str,
     absorbing: bool,
     intensity_col: str | None = None,
+    first_by_entity: pd.Series | None = None,
+    timeline_data: pd.DataFrame | None = None,
 ) -> TreatmentSupport:
     """统计处理/对照聚类数与处理路径,判定设计有效性状态。
 
@@ -137,14 +146,24 @@ def analyze_support(
     (DID 与事件研究为 True;连续强度 TWFE 为 False)。
     ``intensity_col`` 用于识别真正的政策撤销,缺省时退回 ``treated_col``。
     """
-    exposure = pd.to_numeric(data[treated_col], errors="coerce").fillna(0) > 0
+    entity_text = data[entity].astype(str)
+    if absorbing and first_by_entity is not None:
+        frozen = first_by_entity.copy()
+        frozen.index = frozen.index.astype(str)
+        first_year = entity_text.map(frozen)
+        # 推断支持只来自最终样本中真正保留的 post 行；仅保留 pre 行的 cohort
+        # 实体仍在 timeline totals 中，但不能满足处理聚类门槛。
+        exposure = first_year.notna() & (pd.to_numeric(data[time], errors="coerce") >= first_year)
+    else:
+        # 连续强度 FE 保留逐年、最终样本的实际 exposure 语义。
+        exposure = pd.to_numeric(data[treated_col], errors="coerce").fillna(0) > 0
     clusters = data[cluster]
     treated_cluster_ids = set(clusters[exposure].unique())
     all_cluster_ids = set(clusters.unique())
     treated_clusters = len(treated_cluster_ids)
     untreated_clusters = len(all_cluster_ids - treated_cluster_ids)
     entity_exposure = (
-        pd.DataFrame({"entity": data[entity].astype(str).to_numpy(), "exposed": exposure.to_numpy(dtype=bool)})
+        pd.DataFrame({"entity": entity_text.to_numpy(), "exposed": exposure.to_numpy(dtype=bool)})
         .groupby("entity", sort=False)["exposed"]
         .any()
     )
@@ -152,8 +171,17 @@ def analyze_support(
     untreated_entities = int((~entity_exposure).sum())
     total_entities = int(len(entity_exposure))
 
-    status_col = intensity_col if intensity_col and intensity_col in data.columns else treated_col
-    scan = scan_reversal(data, entity, time, status_col) if absorbing else ReversalScan([], 0, 0)
+    scan_source = timeline_data if timeline_data is not None else data
+    retained_ids = (
+        set(entity_exposure[entity_exposure].index) if absorbing and first_by_entity is not None else set(entity_text)
+    )
+    scan_source = scan_source.loc[scan_source[entity].astype(str).isin(retained_ids)]
+    status_col = intensity_col if intensity_col and intensity_col in scan_source.columns else treated_col
+    scan = (
+        scan_reversal(scan_source, entity, time, status_col, first_by_entity=first_by_entity)
+        if absorbing
+        else ReversalScan([], 0, 0)
+    )
     reversal_entities = scan.entities
 
     reasons: list[str] = []
@@ -198,16 +226,16 @@ def analyze_support(
         if untreated_entities > 0:
             escalate(
                 STATUS_WARNING,
-                f"没有完全未处理的对照聚类:全部 {treated_clusters} 个聚类都至少包含一个处理实体,"
-                f"但样本仍有 {untreated_entities} 个从未处理实体。比较并非只来自尚未处理者；"
-                f"不过没有整个聚类都未处理,聚类层面的共同冲击辨识更依赖模型设定。"
+                f"估计样本中没有完全未暴露的对照聚类:全部 {treated_clusters} 个聚类都至少包含一个暴露实体,"
+                f"但样本仍有 {untreated_entities} 个未暴露实体（可能包括冻结 cohort 中仅保留冲击前行的实体）。"
+                f"比较并非只来自尚未处理者；不过没有整个聚类都未暴露,聚类层面的共同冲击辨识更依赖模型设定。"
                 f"传统 staggered TWFE 在处理效应异质时仍可能有偏。",
             )
         else:
             escalate(
                 STATUS_WARNING,
-                f"没有从未处理实体或完全未处理聚类:全部 {treated_clusters} 个聚类和"
-                f"全部 {treated_entities} 个实体都曾受处理,识别依赖处理时点差异。"
+                f"估计样本中没有未暴露实体或完全未暴露聚类:全部 {treated_clusters} 个聚类和"
+                f"全部 {treated_entities} 个实体都包含处理后暴露行,识别依赖处理时点差异。"
                 f"传统 staggered TWFE 在处理效应异质时尤其容易有偏。",
             )
 

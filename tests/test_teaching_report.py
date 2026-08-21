@@ -1,35 +1,347 @@
+import json
+import re
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
-from gvcsim import config, quizzes
-from gvcsim.artifacts import write_dataset_metadata
+from gvcsim import artifacts, config, quizzes, shocks as shock_module, teaching_report
+from gvcsim.data import output_quality, quality, raw_icio, regression_quality
+from gvcsim.data.citations import artifact_data_sources
+from gvcsim.data.raw_icio import DimensionContract, raw_dimensions_metadata
+
 from gvcsim.session import empty_session, make_record
 from gvcsim.teaching_report import REFLECTION_TEXT_LIMIT, GATE_STEPS, ReportGateError, build, check_gate
 
 
-def _artifacts(path: Path, *, qc=None):
-    for year in (2019, 2020):
-        for name in (
-            f"qc_{year}.json",
-            f"export_exposure_{year}.csv",
-            f"indicators_country_{year}.csv",
-            f"indicators_industry_{year}.csv",
-            f"network_edges_{year}.csv",
+REPORT_RAW_CONTRACT = DimensionContract(
+    "teaching-report-release-fixture", 1, ("AAA", "BBB", "CCC", "ROW"), ("s1",), ("HFCE",)
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolated_report_release_raw_source(tmp_path, monkeypatch):
+    raw_dir = tmp_path.parent / f"{tmp_path.name}-raw"
+    raw_dir.mkdir()
+    payload = "\n".join(
+        [
+            "V1,AAA_s1,BBB_s1,CCC_s1,ROW_s1,AAA_HFCE,BBB_HFCE,CCC_HFCE,ROW_HFCE,OUT",
+            "AAA_s1,1,2,0,0,2,0,0,0,5",
+            "BBB_s1,3,1,0,0,0,2,0,0,6",
+            "CCC_s1,0,1,1,0,0,0,2,0,4",
+            "ROW_s1,1,0,0,1,0,0,0,2,4",
+            "TLS,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1",
+            "VA,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1",
+            "OUT,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1",
+        ]
+    )
+    for year in (2018, 2019, 2020):
+        (raw_dir / f"ICIO2023_{year}.csv").write_text(payload, encoding="utf-8")
+    monkeypatch.setattr(config, "RAW_DATA_DIR", raw_dir)
+    monkeypatch.setattr(raw_icio, "production_dimension_contract", lambda: REPORT_RAW_CONTRACT)
+    monkeypatch.setattr(
+        shock_module,
+        "EVENTS",
+        [
+            shock_module.TariffEvent(
+                name="fixture tariff AAA",
+                imposer="BBB",
+                targets=("AAA",),
+                announced="2019-01-01",
+                effective="2019-01-01",
+                rates={"s1": {2019: 0.02}},
+            ),
+            shock_module.TariffEvent(
+                name="fixture tariff BBB",
+                imposer="AAA",
+                targets=("BBB",),
+                announced="2020-01-01",
+                effective="2020-01-01",
+                rates={"s1": {2020: 0.03}},
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        shock_module,
+        "ENTITY_LIST_EVENTS",
+        [
+            shock_module.EntityListEvent(
+                name="fixture sanction BBB",
+                shock_type="sanctions",
+                targets=("BBB",),
+                announced="2019-01-01",
+                effective="2019-01-01",
+                intensities={"s1": {2019: 0.02, 2020: 0.02}},
+                entities=("fixture entity",),
+            ),
+            shock_module.EntityListEvent(
+                name="fixture sanction AAA",
+                shock_type="sanctions",
+                targets=("AAA",),
+                announced="2020-01-01",
+                effective="2020-01-01",
+                intensities={"s1": {2020: 0.03}},
+                entities=("fixture entity",),
+            ),
+            shock_module.EntityListEvent(
+                name="fixture export control AAA",
+                shock_type="export_control",
+                targets=("AAA",),
+                announced="2019-01-01",
+                effective="2019-01-01",
+                intensities={"s1": {2019: 0.02, 2020: 0.02}},
+                entities=("fixture entity",),
+            ),
+            shock_module.EntityListEvent(
+                name="fixture export control BBB",
+                shock_type="export_control",
+                targets=("BBB",),
+                announced="2020-01-01",
+                effective="2020-01-01",
+                intensities={"s1": {2020: 0.03}},
+                entities=("fixture entity",),
+            ),
+        ],
+    )
+    raw_icio.clear_raw_validation_cache()
+    artifacts.clear_artifact_caches()
+    yield
+    raw_icio.clear_raw_validation_cache()
+    artifacts.clear_artifact_caches()
+
+
+def _checks(scope: str) -> list[dict]:
+    return [
+        {
+            "name": name,
+            "kind": "结构",
+            "passed": True,
+            "detail": "ok",
+            "warnings": [],
+            "severity": "ok",
+        }
+        for name in quality.QC_EXPECTED_CHECKS[scope]
+    ]
+
+
+def _rewrite_metadata(path: Path, metadata: dict) -> None:
+    payload = {
+        key: value
+        for key, value in metadata.items()
+        if key
+        not in {
+            artifacts.ARTIFACT_MANIFEST_NAME,
+            artifacts.METADATA_DIGEST_NAME,
+            "artifact_contract_version",
+        }
+    }
+    artifacts.write_dataset_metadata(path, payload)
+    artifacts.clear_artifact_caches()
+
+
+def _write_output_artifacts(path: Path, years: list[int]) -> dict[str, dict]:
+    country_panels = []
+    industry_panels = []
+    for year in years:
+        rows = []
+        for country, weighted_in, weighted_out in (
+            ("AAA", 3.0, 4.0),
+            ("BBB", 4.0, 3.0),
+            ("CCC", 2.0, 2.0),
+            ("ROW", 2.0, 2.0),
         ):
-            (path / name).write_text("[]" if name.endswith(".json") else "value\n1\n")
-    write_dataset_metadata(
+            variant = country == "BBB"
+            plv = 2.2 if variant else 2.0
+            row = {
+                "country": country,
+                "year": year,
+                "DVAex": 4.0,
+                "DVArt": 1.0,
+                "DDC": 0.0 if variant else 1.0,
+                "FVA": 3.0 if variant else 2.0,
+                "FDC": 1.0,
+                "taxsub": 1.0,
+                "EXDVA": 5.0,
+                "SVA": 10.0,
+                "1_VA_D": 3.0 if variant else 4.0,
+                "2_VA_RT": 2.0,
+                "3_VA_GVC": 5.0 if variant else 4.0,
+                "3a_VA_GVC_S": 0.5 if variant else 1.0,
+                "3b_VA_GVC_C": 4.5 if variant else 3.0,
+                "FGY": 10.0,
+                "1_FGY_D": 4.0,
+                "2_FGY_RT": 2.0,
+                "3_FGY_GVC": 4.0,
+                "3a_FGY_GVC_S": 1.0,
+                "3b_FGY_GVC_C": 3.0,
+                "PLv": plv,
+                "PLv_D": plv,
+                "PLv_RT": plv,
+                "PLv_GVC": plv,
+                "PLy": 2.0,
+                "PLy_D": 2.0,
+                "PLy_RT": 2.0,
+                "PLy_GVC": 2.0,
+                "Pos_TPL": plv / 2.0,
+                "GVCPs": plv / 2.0,
+                "degree": 2.0,
+                "indegree": 1.0,
+                "outdegree": 1.0,
+                "weighted degree": weighted_in + weighted_out,
+                "weighted indegree": weighted_in,
+                "weighted outdegree": weighted_out,
+                "Eccentricity": 1.0,
+                "closnesscentrality": 1.0,
+                "harmonicclosnesscentrality": 1.0,
+                "betweenesscentrality": 0.1 if variant else 0.0,
+                "eigencentrality": 1.0,
+            }
+            rows.append(row)
+        country = pd.DataFrame(rows)
+        industry = pd.DataFrame([dict(row, industry="s1") for row in rows])
+        country.to_csv(path / f"indicators_country_{year}.csv", index=False)
+        industry.to_csv(path / f"indicators_industry_{year}.csv", index=False)
+        pd.DataFrame(
+            [
+                {"year": year, "source": "AAA", "target": "BBB", "flow": 4.0},
+                {"year": year, "source": "BBB", "target": "AAA", "flow": 3.0},
+            ]
+        ).to_csv(path / f"network_edges_{year}.csv", index=False)
+        pd.DataFrame(
+            [
+                {
+                    "country": country_code,
+                    "imposer": imposer,
+                    "year": year,
+                    "bilateral_exports": bilateral,
+                    "total_exports": total,
+                    "export_exposure": bilateral / total,
+                }
+                for country_code, total, flows in (
+                    (
+                        "AAA",
+                        2.0,
+                        {"AAA": 0.0, "BBB": 2.0, "CCC": 0.0, "ROW": 0.0, "EU": 0.0},
+                    ),
+                    (
+                        "BBB",
+                        3.0,
+                        {"AAA": 3.0, "BBB": 0.0, "CCC": 0.0, "ROW": 0.0, "EU": 0.0},
+                    ),
+                    (
+                        "CCC",
+                        1.0,
+                        {"AAA": 0.0, "BBB": 1.0, "CCC": 0.0, "ROW": 0.0, "EU": 0.0},
+                    ),
+                    (
+                        "ROW",
+                        1.0,
+                        {"AAA": 1.0, "BBB": 0.0, "CCC": 0.0, "ROW": 0.0, "EU": 0.0},
+                    ),
+                )
+                for imposer, bilateral in flows.items()
+            ]
+        ).to_csv(path / f"export_exposure_{year}.csv", index=False)
+        for frame in (country, industry):
+            frame["gross_exports"] = 10.0
+            frame["FVA_share"] = frame["FVA"] / frame["gross_exports"]
+            frame["3b_VA_GVC_C_share"] = frame["3b_VA_GVC_C"] / frame["SVA"]
+            frame["3_VA_GVC_share"] = frame["3_VA_GVC"] / frame["SVA"]
+            for index, column in enumerate(regression_quality.REGRESSION_CONTROL_FIELDS):
+                frame[column] = float(index + 1)
+        industry["entity_id"] = industry["country"] + "_" + industry["industry"]
+        country_panels.append(country)
+        industry_panels.append(industry)
+    country_panel = pd.concat(country_panels, ignore_index=True)
+    industry_panel = pd.concat(industry_panels, ignore_index=True)
+    exposure = pd.concat(
+        [pd.read_csv(path / f"export_exposure_{year}.csv") for year in years],
+        ignore_index=True,
+    )
+    shock_panel = shock_module.demo_shock_panel(
+        ["AAA", "BBB", "CCC", "ROW"],
+        ["s1"],
+        years,
+        export_exposure=exposure,
+        exposure_mode=shock_module.EXPOSURE_MODE_FIXED_PRETREATMENT,
+    )
+    shock_fields = [
+        *(column for pair in shock_module.SHOCK_SPECS.values() for column in pair),
+        "tariff_shock_contemporaneous",
+        "treated_contemporaneous",
+        "tariff_exposure_mode",
+    ]
+    industry_panel = industry_panel.merge(
+        shock_panel[["country", "sector", "year", *shock_fields]].rename(
+            columns={"sector": "industry"}
+        ),
+        on=["country", "industry", "year"],
+        how="left",
+        validate="one_to_one",
+    )
+    country_panel = country_panel.merge(
+        shock_panel[["country", "year", *shock_fields]].drop_duplicates(["country", "year"]),
+        on=["country", "year"],
+        how="left",
+        validate="one_to_one",
+    )
+    country_panel.to_csv(path / "panel_country.csv", index=False)
+    industry_panel.to_csv(path / "panel_industry.csv", index=False)
+    country_panel[
+        [
+            "country",
+            "year",
+            *regression_quality.REGRESSION_CONTROL_FIELDS,
+        ]
+    ].to_csv(path / "controls_country.csv", index=False)
+    shock_panel.to_csv(path / "demo_trade_war_tariffs.csv", index=False)
+    return {str(year): output_quality.write_output_qc(path, year, expected_years=years)[1] for year in years}
+
+
+def _artifacts(path: Path, *, disclosure: bool = False):
+    annual_by_year = {year: _checks(quality.QC_SCOPE_ICIO) for year in (2018, 2019, 2020)}
+    if disclosure:
+        annual_by_year[2020][0].update({"warnings": ["需披露"], "severity": "disclosure"})
+        factor = next(item for item in annual_by_year[2020] if item["name"] == "因子投入与派生指标定义域(VA/TLS)")
+        factor.update({"passed": False, "warnings": ["需关注"], "severity": "warning"})
+    controls = _checks(quality.QC_SCOPE_CONTROLS)
+    shocks = _checks(quality.QC_SCOPE_SHOCKS)
+    for year, checks in annual_by_year.items():
+        (path / f"qc_{year}.json").write_text(json.dumps(checks, ensure_ascii=False), encoding="utf-8")
+    (path / "qc_controls.json").write_text(json.dumps(controls, ensure_ascii=False), encoding="utf-8")
+    (path / "qc_shocks.json").write_text(json.dumps(shocks, ensure_ascii=False), encoding="utf-8")
+    output_years = _write_output_artifacts(path, [2018, 2019, 2020])
+    regression_input_summary = regression_quality.write_regression_input_qc(path, expected_years=[2018, 2019, 2020])[1]
+    artifacts.write_dataset_metadata(
         path,
         {
             "release_id": "2" * 32,
-            "years": [2019, 2020],
+            "years": [2018, 2019, 2020],
             "generated_at": "2026-08-13T00:00:00+00:00",
             "course_release": config.COURSE_RELEASE,
             "network_algorithm": "gephi-compatible-directed-unweighted-positive-v1",
-            "data_sources": {},
-            "qc": qc or {},
+            "data_sources": artifact_data_sources(config.RAW_DATA_DIR),
+            "raw_dimensions": raw_dimensions_metadata([2018, 2019, 2020], config.RAW_DATA_DIR),
+            "qc_contract": quality.qc_contract_metadata(),
+            "shock_contract": shock_module.shock_contract_metadata(),
+            "qc": {
+                "years": {
+                    str(year): quality.summarize_serialized_checks(checks) for year, checks in annual_by_year.items()
+                },
+                "controls": quality.summarize_serialized_checks(controls),
+                "shocks": quality.summarize_serialized_checks(shocks),
+            },
+            "output_qc_contract": output_quality.output_qc_contract_metadata(),
+            "output_qc": {"years": output_years},
+            "regression_input_qc_contract": regression_quality.regression_input_qc_contract_metadata(),
+            "regression_input_qc": regression_input_summary,
         },
     )
+    artifacts.clear_artifact_caches()
+
+
+def _sign_run(run: dict) -> dict:
+    return run
 
 
 def _ok_run(outcome: str, **design):
@@ -46,9 +358,44 @@ def _ok_run(outcome: str, **design):
         }.get(outcome, outcome),
     }
     payload.update(design)
+    result = {"status": "ok", "n_obs": 1, "coefs": [{"name": "treated×post", "coef": 0.0}]}
+    return _sign_run({"design": payload, "result": result})
+
+
+def _event_support(
+    k0_supported: bool = True, include_thin_lead: bool = False, include_supported_lead: bool = False
+) -> dict:
+    def period(term: str, supported: bool, *, reference: bool = False) -> dict:
+        clusters = 6 if supported else 4
+        return {
+            "term": term,
+            "event_time": -1 if reference else int(term.removeprefix("k=")),
+            "is_reference": reference,
+            "estimated": not reference,
+            "contributing_rows": clusters,
+            "contributing_entities": clusters,
+            "contributing_clusters": clusters,
+            "cohorts": {"2018": clusters},
+            "period_supported": supported,
+            "inference_supported": supported,
+            "suppress_inference": not supported,
+            "reason_codes": [] if supported else ["insufficient_period_clusters"],
+            "reasons": [] if supported else [f"{term} 只有 4 个贡献处理聚类，低于课程政策下限 5。"],
+        }
+
     return {
-        "design": payload,
-        "result": {"status": "ok", "n_obs": 1, "coefs": [{"name": "treated×post", "coef": 0.0}]},
+        "policy": "teaching_min_contributing_clusters_per_event_period",
+        "policy_is_statistical_theorem": False,
+        "cluster": "country",
+        "base_k": -1,
+        "reference_term": "k=-1",
+        "min_contributing_clusters": 5,
+        "periods": [
+            period("k=-1", True, reference=True),
+            period("k=0", k0_supported),
+            *([period("k=-4", False)] if include_thin_lead else []),
+            *([period("k=-2", True)] if include_supported_lead else []),
+        ],
     }
 
 
@@ -73,6 +420,93 @@ def _complete():
         }
     )
     return session
+
+
+def test_production_share_report_copy_forbids_scale_overstatement():
+    copy = teaching_report._OUTCOME_INTERPRETATIONS["production"]
+    assert copy["negative"] == (
+        "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。"
+    )
+    assert copy["positive"] == (
+        "SVA 中复杂 GVC 增加值份额提高；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。"
+    )
+    assert re.search(r"与.*(?:扩张|收缩)一致", " ".join(copy.values())) is None
+
+
+def test_interaction_event_report_gate_requires_exact_diagnostic_scope_set():
+    support = _event_support(include_supported_lead=True)
+
+    def scoped(scope, terms):
+        return {
+            "scope": scope,
+            "available": True,
+            "reason": None,
+            "terms": terms,
+            "excluded_terms": [],
+            "statistic": 1.0,
+            "df_num": len(terms),
+            "df_denom": 20,
+            "p": 0.2,
+            "interpretation": f"{scope} 诊断",
+        }
+
+    tests = {
+        "main": scoped("main", ["k=-2"]),
+        "interaction": scoped("interaction", ["k=-2×base_gvc"]),
+        "joint": scoped("joint", ["k=-2", "k=-2×base_gvc"]),
+    }
+    result = {
+        "status": "ok",
+        "support": {"status": "ok", "suppress_inference": False},
+        "coefs": [
+            {"name": "k=-2", "coef": 0.0},
+            {"name": "k=0", "coef": 0.1},
+            {"name": "k=-2×base_gvc", "coef": 0.0},
+            {"name": "k=0×base_gvc", "coef": 0.0},
+        ],
+        "event_support": support,
+        "diagnostics": {"pretrend": tests["joint"], "pretrend_tests": tests},
+    }
+    design = {"method": "event_study", "interaction": True}
+    assert teaching_report._result_is_qualified(result, design) is True
+
+    empty_interaction_set = json.loads(json.dumps(result))
+    empty_interaction_set["coefs"] = [
+        coefficient for coefficient in empty_interaction_set["coefs"] if "×base_gvc" not in coefficient["name"]
+    ]
+    assert teaching_report._valid_event_support(empty_interaction_set, interaction=True) is None
+
+    coordinated_deletion = json.loads(json.dumps(result))
+    for field in ("coefs", "event_support", "diagnostics"):
+        coordinated_deletion.pop(field, None)
+    assert teaching_report._result_is_qualified(coordinated_deletion, design) is False
+
+    missing = json.loads(json.dumps(result))
+    del missing["diagnostics"]["pretrend_tests"]["interaction"]
+    assert teaching_report._result_is_qualified(missing, design) is False
+    assert teaching_report._failed_pretrend(missing, design) is not None
+
+    mismatched = json.loads(json.dumps(result))
+    mismatched["diagnostics"]["pretrend"] = mismatched["diagnostics"]["pretrend_tests"]["main"]
+    assert teaching_report._result_is_qualified(mismatched, design) is False
+
+    coordinated_omission = json.loads(json.dumps(result))
+    extra_period = dict(
+        next(period for period in coordinated_omission["event_support"]["periods"] if period["term"] == "k=-2")
+    )
+    extra_period.update({"term": "k=-3", "event_time": -3})
+    coordinated_omission["event_support"]["periods"].append(extra_period)
+    coordinated_omission["coefs"].insert(0, {"name": "k=-3", "coef": 0.0})
+    assert teaching_report._result_is_qualified(coordinated_omission, design) is False
+
+    noninteraction = json.loads(json.dumps(result))
+    noninteraction["diagnostics"] = {"pretrend": tests["main"], "pretrend_tests": {"main": tests["main"]}}
+    noninteraction_design = {"method": "event_study", "interaction": False}
+    assert teaching_report._result_is_qualified(noninteraction, noninteraction_design) is True
+    noninteraction["diagnostics"]["pretrend_tests"]["joint"] = tests["joint"]
+    assert (
+        teaching_report._result_is_qualified(noninteraction, {"method": "event_study", "interaction": False}) is False
+    )
 
 
 def test_gate_requires_quizzes_key_operations_run_and_reflection():
@@ -105,8 +539,9 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
             "coefs": [{"name": "policy", "coef": 1.2, "se": 0.3, "p": 0.01, "ci_low": 0.6, "ci_high": 1.8}],
         },
     }
+    _sign_run(session["steps"]["12"]["data"]["run"])
     report = build(session, "同学")
-    assert report.provenance["years"] == [2019, 2020]
+    assert report.provenance["years"] == [2018, 2019, 2020]
     assert report.provenance["release_id"] == "2" * 32
     assert report.provenance["quiz_version"] == quizzes.QUIZ_VERSION
     assert report.provenance["course_release"] == "2026-fall"
@@ -122,6 +557,10 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert "政策冲击为基于公开事件手工编码的拟真教学面板" in report.markdown
     assert "有向无权网络" in report.markdown
     assert report.provenance["network_algorithm"] == "gephi-compatible-directed-unweighted-positive-v1"
+    assert report.provenance["indicator_data_source"]["kind"] == "observed-indicator-input"
+    assert report.provenance["simulated_macro_controls"]["kind"] == "deterministic-teaching-mock"
+    assert "模型标签：模拟宏观控制" in report.markdown
+    assert "Not WDI data and not IMF observations" in report.markdown
 
 
 def test_report_preserves_the_full_accepted_research_question(tmp_path, monkeypatch):
@@ -208,6 +647,34 @@ def test_qualified_run_on_same_step_still_satisfies_gate_after_insufficient_late
     assert "双重差分" in report.markdown or "treated×post" in report.markdown or "政策处理项" in report.markdown
 
 
+def test_exact_run_identity_prevents_unsigned_latest_from_shadowing_distinct_qualified_run(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    qualified = _ok_run("trade")
+    qualified["result"]["notes"] = ["QUALIFIED_COLLISION_FIXTURE"]
+    latest = json.loads(json.dumps(qualified))
+    latest["result"]["status"] = "insufficient"
+    latest["result"]["support"] = {"status": "insufficient", "suppress_inference": True}
+    latest["result"]["notes"] = ["LATEST_COLLISION_FIXTURE"]
+    session["steps"]["12"]["data"].update({"run": latest, "qualified_run": qualified})
+
+    step_runs = [run for run in teaching_report._saved_runs(session) if run["step"] == 12]
+    qualified_runs = [run for run in teaching_report._gate_qualified_runs(session) if run["step"] == 12]
+    markdown = build(session, "同学").markdown
+
+    assert len(step_runs) == 2
+    assert len(qualified_runs) == 1
+    assert qualified_runs[0]["result"]["notes"] == ["QUALIFIED_COLLISION_FIXTURE"]
+    assert "LATEST_COLLISION_FIXTURE" in markdown
+    assert "QUALIFIED_COLLISION_FIXTURE" in markdown
+
+    identical = _complete()
+    identical_run = identical["steps"]["12"]["data"]["run"]
+    identical["steps"]["12"]["data"]["qualified_run"] = identical_run
+    assert len([run for run in teaching_report._saved_runs(identical) if run["step"] == 12]) == 1
+
+
 def test_comparison_table_flags_mixed_shocks_and_keeps_estimand_label(tmp_path, monkeypatch):
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
@@ -221,17 +688,32 @@ def test_comparison_table_flags_mixed_shocks_and_keeps_estimand_label(tmp_path, 
 
 
 def test_report_carries_release_qc_disclosures(tmp_path, monkeypatch):
-    qc = {
-        "years": {"2020": {"requires_disclosure": True, "warning": ["边界检查"]}},
-        "shocks": {"requires_disclosure": True, "disclosure": ["教学模拟冲击"]},
-    }
-    _artifacts(tmp_path, qc=qc)
+    _artifacts(tmp_path, disclosure=True)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     report = build(_complete(), "同学")
-    assert report.provenance["qc"] == qc
+    assert report.provenance["qc"]["years"]["2020"]["requires_disclosure"] is True
     assert "## 数据质量披露" in report.markdown
-    assert "Warning：边界检查" in report.markdown
-    assert "Disclosure：教学模拟冲击" in report.markdown
+    assert "Warning：因子投入与派生指标定义域(VA/TLS)" in report.markdown
+    assert "Disclosure：维度一致性与索引对齐(Z/Y/A/L/x/OUT)" in report.markdown
+
+
+def test_report_rejects_missing_or_unsupported_qc_contract(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    metadata = artifacts.dataset_metadata(tmp_path)
+    metadata.pop("qc_contract")
+    _rewrite_metadata(tmp_path, metadata)
+    with pytest.raises(ReportGateError) as missing:
+        build(_complete(), "同学")
+    assert "质检 contract" in "".join(missing.value.missing[0]["missing"])
+
+    _artifacts(tmp_path)
+    metadata = artifacts.dataset_metadata(tmp_path)
+    metadata["qc_contract"]["version"] = 99
+    _rewrite_metadata(tmp_path, metadata)
+    with pytest.raises(ReportGateError) as unsupported:
+        build(_complete(), "同学")
+    assert "质检 contract" in "".join(unsupported.value.missing[0]["missing"])
 
 
 def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, monkeypatch):
@@ -360,6 +842,7 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
             ],
         },
     }
+    _sign_run(session["steps"]["12"]["data"]["run"])
 
     markdown = build(session, "同学").markdown
 
@@ -403,6 +886,7 @@ def test_report_summary_prioritizes_failed_pretrend_and_names_scenario(tmp_path,
             },
             "n_obs": 16348,
             "coefs": [
+                {"name": "k=-2", "coef": 0.0, "se": 0.01, "p": 1.0, "ci_low": -0.02, "ci_high": 0.02},
                 {
                     "name": "k=0",
                     "coef": 0.02,
@@ -410,17 +894,26 @@ def test_report_summary_prioritizes_failed_pretrend_and_names_scenario(tmp_path,
                     "p": 0.001,
                     "ci_low": 0.012,
                     "ci_high": 0.028,
-                }
+                },
             ],
+            "event_support": _event_support(include_supported_lead=True),
             "diagnostics": {
                 "pretrend": {
+                    "scope": "main",
                     "available": True,
+                    "reason": None,
+                    "terms": ["k=-2"],
+                    "excluded_terms": [],
+                    "statistic": 8.0,
+                    "df_num": 1,
+                    "df_denom": 50,
                     "p": 0.00001,
                     "interpretation": "检测到明显的冲击前差异，因果解释需谨慎。",
                 }
             },
         },
     }
+    _sign_run(session["steps"]["12"]["data"]["run"])
 
     markdown = build(session, "同学").markdown
 
@@ -429,3 +922,414 @@ def test_report_summary_prioritizes_failed_pretrend_and_names_scenario(tmp_path,
     assert "只能描述该数值，不能把它解释为冲击后的方向性变化证据" in markdown
     assert "最重要的设计限制：** 冲击前趋势联合检验 p=<0.0001" in markdown
     assert "发现正向变化证据" not in markdown
+
+
+def test_reg01_report_keeps_supported_k0_with_thin_remote_lead_and_labels_local_suppression(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    session["steps"]["12"]["data"]["run"] = {
+        "design": {
+            "outcome": "trade",
+            "depvar_label": "FVA 份额",
+            "method": "event_study",
+            "shock_type": "tariff",
+            "controls": [],
+            "equation": "y = event time + FE",
+        },
+        "result": {
+            "status": "ok",
+            "support": {"status": "ok", "suppress_inference": False},
+            "n_obs": 100,
+            "coefs": [
+                {"name": "k=-4", "coef": -0.03, "se": 0.02, "p": None, "ci_low": None, "ci_high": None},
+                {"name": "k=0", "coef": -0.02, "se": 0.005, "p": 0.01, "ci_low": -0.03, "ci_high": -0.01},
+            ],
+            "event_support": _event_support(include_thin_lead=True),
+            "diagnostics": {
+                "pretrend": {
+                    "scope": "main",
+                    "available": False,
+                    "reason": "no_supported_pre_terms",
+                    "terms": [],
+                    "excluded_terms": [{"term": "k=-4", "reasons": ["支持不足"]}],
+                    "statistic": None,
+                    "df_num": 0,
+                    "df_denom": 5,
+                    "p": None,
+                    "interpretation": "所有可估计的冲击前系数都因逐期处理聚类支持不足而被排除；冲击前趋势不可评估。",
+                }
+            },
+        },
+    }
+    _sign_run(session["steps"]["12"]["data"]["run"])
+
+    assert check_gate(session) == []
+    markdown = build(session, "同学").markdown
+    assert "发现负向变化证据" in markdown
+    assert "逐期支持不足/未知，已抑制" in markdown
+    assert "所有可估计的冲击前系数都因逐期处理聚类支持不足而被排除" in markdown
+
+
+def test_reg01_report_gate_and_rendering_fail_closed_for_thin_or_legacy_primary_period(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    event_run = {
+        "design": {
+            "outcome": "trade",
+            "depvar_label": "FVA 份额",
+            "method": "event_study",
+            "shock_type": "tariff",
+            "controls": [],
+            "equation": "y = event time + FE",
+        },
+        "result": {
+            "status": "ok",
+            "support": {"status": "ok", "suppress_inference": False},
+            "n_obs": 100,
+            "coefs": [{"name": "k=0", "coef": 0.02, "se": 0.004, "p": 0.001, "ci_low": 0.012, "ci_high": 0.028}],
+            "event_support": _event_support(k0_supported=False),
+            "diagnostics": {"pretrend": {"available": True, "statistic": 9, "p": 0.001, "interpretation": "旧诊断"}},
+        },
+    }
+    _sign_run(event_run)
+    session["steps"]["12"]["data"]["run"] = event_run
+    assert any(item["step"] == 12 for item in check_gate(session))
+
+    # A prior non-event qualified snapshot lets the report render the later legacy exploration,
+    # whose old CI/pretrend values must still fail closed.
+    session["steps"]["12"]["data"]["qualified_run"] = _ok_run("trade")
+    del event_run["result"]["event_support"]
+    markdown = build(session, "同学").markdown
+    assert "逐事件期处理支持度未知" in markdown
+    assert "| 相对处理时期 k=0 | 0.02 |" in markdown
+    assert "[0.012, 0.028]" not in markdown
+    assert "发现正向变化证据" not in markdown
+    assert "F=9" not in markdown
+
+    partial_contract = _event_support()
+    partial_contract["periods"] = [period for period in partial_contract["periods"] if period["is_reference"]]
+    for malformed in ({}, {"periods": "forged"}, partial_contract):
+        event_run["result"]["event_support"] = malformed
+        malformed_markdown = build(session, "同学").markdown
+        assert "逐事件期处理支持度未知" in malformed_markdown
+        assert "[0.012, 0.028]" not in malformed_markdown
+        assert "F=9" not in malformed_markdown
+
+    event_run["result"]["event_support"] = _event_support()
+    event_run["result"]["diagnostics"] = {}
+    assert teaching_report._result_is_qualified(event_run["result"], event_run["design"]) is False
+    stripped_markdown = build(session, "同学").markdown
+    assert "冲击前诊断未知/已抑制" in stripped_markdown
+    assert "方向性推断已关闭" in stripped_markdown
+    assert "[0.012, 0.028]" not in stripped_markdown
+    assert "发现正向变化证据" not in stripped_markdown
+
+
+def test_reg01_report_rejects_semantically_forged_support_and_unsupported_pretrend(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    event_run = {
+        "design": {
+            "outcome": "trade",
+            "depvar_label": "FVA 份额",
+            "method": "event_study",
+            "shock_type": "tariff",
+            "controls": [],
+            "equation": "y = event time + FE",
+        },
+        "result": {
+            "status": "ok",
+            "support": {"status": "ok", "suppress_inference": False},
+            "n_obs": 100,
+            "coefs": [{"name": "k=0", "coef": 0.02, "se": 0.004, "p": 0.001, "ci_low": 0.012, "ci_high": 0.028}],
+            "event_support": _event_support(),
+            "diagnostics": {},
+        },
+    }
+    _sign_run(event_run)
+    session["steps"]["12"]["data"]["run"] = event_run
+    session["steps"]["12"]["data"]["qualified_run"] = _ok_run("trade")
+
+    malformed_contracts = []
+    missing_base = _event_support()
+    del missing_base["base_k"]
+    malformed_contracts.append(missing_base)
+    mismatched_base = _event_support()
+    mismatched_base["base_k"] = -2
+    malformed_contracts.append(mismatched_base)
+    wrong_threshold = _event_support()
+    wrong_threshold["min_contributing_clusters"] = 4
+    malformed_contracts.append(wrong_threshold)
+    noninteger_threshold = _event_support()
+    noninteger_threshold["min_contributing_clusters"] = 5.0
+    malformed_contracts.append(noninteger_threshold)
+
+    forged_thin = _event_support(k0_supported=False)
+    k0 = next(period for period in forged_thin["periods"] if period["term"] == "k=0")
+    k0["inference_supported"] = True
+    k0["suppress_inference"] = False
+    malformed_contracts.append(forged_thin)
+
+    bad_reference = _event_support()
+    reference = next(period for period in bad_reference["periods"] if period["is_reference"])
+    reference["period_supported"] = False
+    malformed_contracts.append(bad_reference)
+
+    duplicate_reference = _event_support()
+    duplicate_reference["periods"][1] = dict(duplicate_reference["periods"][0])
+    malformed_contracts.append(duplicate_reference)
+
+    impossible_cardinality = _event_support()
+    impossible_k0 = next(period for period in impossible_cardinality["periods"] if period["term"] == "k=0")
+    impossible_k0.update(
+        {
+            "contributing_rows": 0,
+            "contributing_entities": 0,
+            "contributing_clusters": 5,
+            "cohorts": {},
+            "period_supported": True,
+            "inference_supported": True,
+            "suppress_inference": False,
+        }
+    )
+    malformed_contracts.append(impossible_cardinality)
+
+    bad_cohort_total = _event_support()
+    next(period for period in bad_cohort_total["periods"] if period["term"] == "k=0")["cohorts"] = {"2018": 5}
+    malformed_contracts.append(bad_cohort_total)
+
+    noncanonical_term = _event_support()
+    next(period for period in noncanonical_term["periods"] if period["term"] == "k=0")["term"] = "k=00"
+    malformed_contracts.append(noncanonical_term)
+
+    for malformed in malformed_contracts:
+        event_run["result"]["event_support"] = malformed
+        _sign_run(event_run)
+        markdown = build(session, "同学").markdown
+        assert "逐事件期处理支持度未知" in markdown
+        assert "[0.012, 0.028]" not in markdown
+        assert "发现正向变化证据" not in markdown
+
+    event_run["result"]["event_support"] = _event_support(include_thin_lead=True)
+    event_run["result"]["diagnostics"] = {
+        "pretrend": {
+            "available": True,
+            "reason": None,
+            "terms": ["k=-4"],
+            "statistic": 9.0,
+            "df_num": 1,
+            "df_denom": 20,
+            "p": 0.001,
+            "interpretation": "不安全的旧 pretrend 解释",
+        }
+    }
+    _sign_run(event_run)
+    markdown = build(session, "同学").markdown
+    assert "支持不足期被错误纳入" in markdown
+    assert "不安全的旧 pretrend 解释" not in markdown
+    assert "F=9" not in markdown
+
+    event_run["result"]["event_support"] = _event_support(include_supported_lead=True)
+    event_run["result"]["coefs"].insert(
+        0, {"name": "k=-2", "coef": 0.0, "se": 0.01, "p": 1.0, "ci_low": -0.02, "ci_high": 0.02}
+    )
+    valid_pretrend = {
+        "scope": "main",
+        "available": True,
+        "reason": None,
+        "terms": ["k=-2"],
+        "excluded_terms": [],
+        "statistic": 1.5,
+        "df_num": 1,
+        "df_denom": 20,
+        "p": 0.25,
+        "interpretation": "有效支持期诊断",
+    }
+    event_run["result"]["diagnostics"] = {"pretrend": valid_pretrend}
+    _sign_run(event_run)
+    assert "有效支持期诊断" in build(session, "同学").markdown
+
+    unavailable_df = {
+        **valid_pretrend,
+        "available": False,
+        "reason": "insufficient_cluster_df",
+        "statistic": None,
+        "p": None,
+        "df_denom": 0,
+        "interpretation": "限制数超过聚类自由度。",
+    }
+    assert teaching_report._event_pretrend_is_safe(event_run["result"], unavailable_df)
+    assert not teaching_report._event_pretrend_is_safe(event_run["result"], {**unavailable_df, "df_denom": 1})
+    assert teaching_report._event_pretrend_is_safe(
+        event_run["result"], {**unavailable_df, "reason": "singular_covariance", "df_denom": 1}
+    )
+
+    malformed_pretrends = [
+        {**valid_pretrend, "terms": ["k=-2", "k=-2"], "df_num": 2},
+        {**valid_pretrend, "df_num": 2},
+        {**valid_pretrend, "statistic": -0.1},
+        {**valid_pretrend, "p": 1.1},
+        {**valid_pretrend, "df_denom": 0},
+    ]
+    for malformed_pretrend in malformed_pretrends:
+        event_run["result"]["diagnostics"] = {"pretrend": malformed_pretrend}
+        _sign_run(event_run)
+        malformed_markdown = build(session, "同学").markdown
+        assert "诊断契约已损坏" in malformed_markdown
+        assert "有效支持期诊断" not in malformed_markdown
+
+    malformed_unavailable_pretrends = [
+        {
+            **valid_pretrend,
+            "available": False,
+            "reason": "no_supported_pre_terms",
+            "terms": [],
+            "statistic": None,
+            "df_num": 99,
+            "p": None,
+            "interpretation": "错误自由度的不可用诊断",
+        },
+        {
+            **valid_pretrend,
+            "available": False,
+            "reason": "no_pre_terms",
+            "statistic": None,
+            "p": None,
+            "interpretation": "错误 reason/terms 组合",
+        },
+    ]
+    for malformed_pretrend in malformed_unavailable_pretrends:
+        event_run["result"]["diagnostics"] = {"pretrend": malformed_pretrend}
+        _sign_run(event_run)
+        malformed_markdown = build(session, "同学").markdown
+        assert "诊断契约已损坏" in malformed_markdown
+        assert malformed_pretrend["interpretation"] not in malformed_markdown
+
+    # A contradictory global-suppression reason is damaged/unknown, never factual gate copy.
+    forged_global_pretrend = {
+        **valid_pretrend,
+        "available": False,
+        "reason": "global_inference_suppressed",
+        "support_status": "ok",
+        "terms": [],
+        "excluded_terms": [{"term": "k=-2", "reasons": ["声称整体抑制"]}],
+        "statistic": None,
+        "df_num": 0,
+        "p": None,
+        "interpretation": "错误整体门禁状态声称显著冲击前差异，p=0.001",
+    }
+    assert not teaching_report._event_pretrend_is_safe(event_run["result"], forged_global_pretrend)
+    event_run["result"]["diagnostics"] = {"pretrend": forged_global_pretrend}
+    _sign_run(event_run)
+    forged_global_markdown = build(session, "同学").markdown
+    assert teaching_report._result_is_qualified(event_run["result"], event_run["design"]) is False
+    assert "诊断已损坏或状态未知" in forged_global_markdown
+    assert "整体设计门禁已抑制统计推断，因此未执行冲击前联合检验" not in forged_global_markdown
+    assert forged_global_pretrend["interpretation"] not in forged_global_markdown
+    assert "p=0.001" not in forged_global_markdown
+
+
+def test_report_rendering_hides_stale_inference_when_whole_run_is_suppressed(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    session["steps"]["12"]["data"]["qualified_run"] = _ok_run("trade")
+    session["steps"]["12"]["data"]["run"] = {
+        "design": {
+            "outcome": "trade",
+            "depvar_label": "FVA 份额",
+            "method": "event_study",
+            "shock_type": "tariff",
+            "controls": [],
+            "interaction": True,
+            "equation": "y = event time + FE",
+        },
+        "result": {
+            "status": "invalid_design",
+            "support": {"status": "invalid_design", "suppress_inference": True},
+            "n_obs": 100,
+            "coefs": [{"name": "k=0", "coef": 0.02, "se": 0.004, "p": 0.0123, "ci_low": 0.1234, "ci_high": 0.2345}],
+            "marginal_effects": [
+                {
+                    "policy_term": "k=0",
+                    "label": "均值",
+                    "effect": 0.02,
+                    "p": 0.0123,
+                    "ci_low": 0.1234,
+                    "ci_high": 0.2345,
+                }
+            ],
+            "event_support": _event_support(include_supported_lead=True),
+            "diagnostics": {
+                "pretrend": {
+                    "available": True,
+                    "reason": None,
+                    "terms": ["k=-2"],
+                    "statistic": 9.0,
+                    "df_num": 1,
+                    "df_denom": 20,
+                    "p": 0.0007,
+                    "interpretation": "整体门禁下不应显示的 pretrend 解释",
+                }
+            },
+        },
+    }
+    _sign_run(session["steps"]["12"]["data"]["run"])
+
+    markdown = build(session, "同学").markdown
+    assert "统计推断已抑制" in markdown
+    assert "[0.1234, 0.2345]" not in markdown
+    assert "[+12.34, +23.45]" not in markdown
+    assert "0.0123" not in markdown
+    assert "F=9" not in markdown
+    assert "0.0007" not in markdown
+    assert "整体门禁下不应显示的 pretrend 解释" not in markdown
+
+    result = session["steps"]["12"]["data"]["run"]["result"]
+    result["diagnostics"]["pretrend"] = {
+        "available": False,
+        "reason": "global_inference_suppressed",
+        "support_status": "invalid_design",
+        "support_reasons": ["处理路径不相容"],
+        "terms": [],
+        "excluded_terms": [{"term": "k=-2", "reasons": ["整体设计门禁"]}],
+        "statistic": None,
+        "df_num": 0,
+        "df_denom": 20,
+        "p": None,
+        "interpretation": "检测到显著冲击前差异，F=9，p=0.001。",
+    }
+    _sign_run(session["steps"]["12"]["data"]["run"])
+    generated_markdown = build(session, "同学").markdown
+    trusted_copy = "整体设计门禁已抑制统计推断，因此未执行冲击前联合检验；不能据此判断冲击前趋势。"
+    assert trusted_copy in generated_markdown
+    assert "检测到显著冲击前差异" not in generated_markdown
+    assert "F=9" not in generated_markdown
+    assert "p=0.001" not in generated_markdown
+
+    # A forged global reason on an actually-ok result is never accepted by a safe qualification validator.
+    result["status"] = "ok"
+    result["support"] = {"status": "ok", "suppress_inference": False}
+    _sign_run(session["steps"]["12"]["data"]["run"])
+    reason_only_markdown = build(session, "同学").markdown
+    assert teaching_report._result_is_qualified(result, session["steps"]["12"]["data"]["run"]["design"]) is False
+    assert "诊断已损坏或状态未知" in reason_only_markdown
+    assert trusted_copy not in reason_only_markdown
+    assert "检测到显著冲击前差异" not in reason_only_markdown
+
+    # Each persisted whole-run source independently fails closed, even when the others say ok.
+    variants = [
+        ("invalid_design", "ok", False),
+        ("ok", "invalid_design", False),
+        ("ok", "ok", True),
+    ]
+    for result_status, support_status, suppress_flag in variants:
+        result["status"] = result_status
+        result["support"] = {"status": support_status, "suppress_inference": suppress_flag}
+        variant_markdown = build(session, "同学").markdown
+        assert "统计推断已抑制" in variant_markdown
+        assert "[0.1234, 0.2345]" not in variant_markdown
+        assert "0.0123" not in variant_markdown

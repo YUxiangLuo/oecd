@@ -38,6 +38,11 @@ def teaching_db(monkeypatch):
     from gvcsim.classroom import db
 
     monkeypatch.setattr(artifacts, "release_identity", lambda _path=None: "a" * 32)
+    monkeypatch.setattr(
+        artifacts,
+        "validate_release_cached",
+        lambda _path=None: {"release_id": "a" * 32, "files": 1, "years": 1},
+    )
 
     db.shutdown()
     with psycopg.connect(config.PG_DSN, autocommit=True) as connection:

@@ -31,6 +31,41 @@ export const REGION_OF: Record<string, number> = {};
 export type Row = Record<string, string | number | null>;
 export const num = (v: string | number | null | undefined) => (typeof v === "number" ? v : 0);
 
+const finiteMetric = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+
+/** Stable Top-N collection with finite-metric eligibility and entity-key deduplication. */
+export function topWithSelected(
+  rows: readonly Row[],
+  metricKey: string,
+  topN: number,
+  selected: Iterable<string> = [],
+  entityKey: (row: Row) => string = (row) => String(row.country ?? row.industry ?? ""),
+): Row[] {
+  const selectedKeys = new Set(selected);
+  const ranked = rows
+    .map((row, sourceIndex) => ({ row, sourceIndex, key: entityKey(row) }))
+    .filter((item) => item.key !== "" && finiteMetric(item.row[metricKey]))
+    .sort((first, second) => {
+      const metricOrder = (second.row[metricKey] as number) - (first.row[metricKey] as number);
+      if (metricOrder) return metricOrder;
+      if (first.key < second.key) return -1;
+      if (first.key > second.key) return 1;
+      return first.sourceIndex - second.sourceIndex;
+    });
+  const seen = new Set<string>();
+  const unique = ranked.filter((item) => {
+    if (seen.has(item.key)) return false;
+    seen.add(item.key);
+    return true;
+  });
+  const base = unique.slice(0, Math.max(0, Math.floor(topN)));
+  const baseKeys = new Set(base.map((item) => item.key));
+  return [
+    ...base,
+    ...unique.filter((item) => selectedKeys.has(item.key) && !baseKeys.has(item.key)),
+  ].map((item) => item.row);
+}
+
 /** OECD ICIO 45 行业代码 → 中文名(学生看不懂 C26/H50 这类裸代码,统一映射) */
 const SECTOR_NAMES: Record<string, string> = {
   A01_02: "农林牧业", A03: "渔业", B05_06: "能源矿产开采", B07_08: "金属矿开采", B09: "采矿支持服务",

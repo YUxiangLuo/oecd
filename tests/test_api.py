@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from gvcsim import api as api_module
 from gvcsim import quizzes
 from gvcsim.api import app
 from gvcsim.classroom import db, routes as classroom_routes
@@ -19,6 +20,62 @@ def test_api_requires_bearer(teaching_db):
     assert TestClient(app).get("/api/steps").status_code == 401
 
 
+def test_health_checks_raw_years_before_database(monkeypatch):
+    calls = []
+    monkeypatch.setattr(api_module, "validate_release_cached", lambda *_args: None)
+    monkeypatch.setattr(api_module, "processed_years", lambda: [2019, 2020])
+    monkeypatch.setattr(
+        api_module,
+        "discover_years",
+        lambda raw_dir: calls.append(("raw", raw_dir)) or [2019, 2020],
+    )
+    monkeypatch.setattr(api_module.classroom_db, "readiness", lambda: calls.append("db") or {"status": "ok"})
+
+    response = TestClient(app).get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "years": [2019, 2020], "database": {"status": "ok"}}
+    assert calls == [("raw", api_module.RAW_DATA_DIR), "db"]
+
+
+def test_health_processed_failure_returns_error_detail(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        api_module,
+        "validate_release_cached",
+        lambda *_args: (_ for _ in ()).throw(FileNotFoundError("/srv/private/processed/release.json")),
+    )
+    monkeypatch.setattr(api_module, "processed_years", lambda: calls.append("years"))
+    monkeypatch.setattr(api_module, "discover_years", lambda *_args: calls.append("raw"))
+    monkeypatch.setattr(api_module.classroom_db, "readiness", lambda: calls.append("db"))
+
+    response = TestClient(app).get("/health")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "unavailable"
+    assert "/srv/private/processed/release.json" in response.json()["detail"]
+    assert calls == []
+
+
+def test_health_raw_failure_is_unavailable_without_database_check(monkeypatch):
+    calls = []
+    monkeypatch.setattr(api_module, "validate_release_cached", lambda *_args: None)
+    monkeypatch.setattr(api_module, "processed_years", lambda: [2020])
+    monkeypatch.setattr(
+        api_module,
+        "discover_years",
+        lambda *_args: (_ for _ in ()).throw(FileNotFoundError("raw missing")),
+    )
+    monkeypatch.setattr(api_module.classroom_db, "readiness", lambda: calls.append("db"))
+
+    response = TestClient(app).get("/health")
+
+    assert response.status_code == 503
+    assert response.json() == {"status": "unavailable", "detail": "raw missing"}
+    assert calls == []
+    assert TestClient(app).get("/health/live").json() == {"status": "ok"}
+
+
 def test_quiz_returns_normalized_answers(teaching_db):
     client = _client(teaching_db)
     correct = quizzes.correct_quiz(1)
@@ -32,7 +89,8 @@ def test_session_contract_is_last_write_wins(teaching_db):
     first = empty_session()
     first["steps"]["16"] = make_record({"research_question": "学生自己的问题"})
     saved = client.put("/api/classroom/session", json={"session": first})
-    assert set(saved.json()) == {"updated_at", "completion"}
+    assert set(saved.json()) == {"session", "updated_at", "completion"}
+    assert saved.json()["session"] == first
     assert client.get("/api/classroom/session").json()["session"] == first
 
     second = empty_session()

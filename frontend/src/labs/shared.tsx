@@ -15,7 +15,14 @@ export function fieldLabel(key: string, schema?: IndicatorSchema | null) {
 export const fmtDb = (v: string | number | null) => {
   if (typeof v !== "number") return v ?? "—";
   if (!Number.isFinite(v)) return "—";
-  return stripNegativeZero(v.toLocaleString("zh-CN", { maximumFractionDigits: Math.abs(v) < 10 ? 3 : 2 }));
+  if (Object.is(v, -0) || v === 0) return "0";
+  const magnitude = Math.abs(v);
+  if (magnitude < 0.0001) {
+    return v.toExponential(2).replace(/\.00e/, "e").replace(/(\.\d*[1-9])0+e/, "$1e").replace("e-", "e−").replace("e+", "e");
+  }
+  return stripNegativeZero(v.toLocaleString("zh-CN", {
+    maximumFractionDigits: magnitude < 1 ? 4 : magnitude < 10 ? 3 : 2,
+  }));
 };
 
 export type AsyncStatus = "idle" | "loading" | "success" | "error";
@@ -25,19 +32,53 @@ export type AsyncResult<T> = {
   error: string | null;
   status: AsyncStatus;
   retry: () => void;
+  /** Stable caller-owned request key; null keeps the legacy useAsync behavior. */
+  requestKey: string | null;
+  /** Increments before every explicit retry so prior results become ineligible immediately. */
+  generation: number;
 };
+
+export function asyncRequestIdentity(requestKey: string, generation: number): string {
+  return `${requestKey}\u0000${generation}`;
+}
+
+/** Pure render-time guard used by useAsync and race-focused tests. */
+export function currentAsyncSnapshot<T>({
+  enabled,
+  requestIdentity,
+  settledIdentity,
+  data,
+  error,
+  status,
+}: {
+  enabled: boolean;
+  requestIdentity: string | null;
+  settledIdentity: string | null;
+  data: T | null;
+  error: string | null;
+  status: AsyncStatus;
+}): Pick<AsyncResult<T>, "data" | "error" | "status"> {
+  if (!enabled) return { data: null, error: null, status: "idle" };
+  const current = requestIdentity === null || settledIdentity === requestIdentity;
+  return current
+    ? { data, error, status }
+    : { data: null, error: null, status: "loading" };
+}
 
 export function useAsync<T>(
   fn: () => Promise<T>,
   deps: unknown[],
-  options: { enabled?: boolean; keepPreviousData?: boolean } = {},
+  options: { enabled?: boolean; keepPreviousData?: boolean; requestKey?: string } = {},
 ): AsyncResult<T> {
   const enabled = options.enabled ?? true;
   const keepPreviousData = options.keepPreviousData ?? false;
+  const requestKey = options.requestKey ?? null;
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<AsyncStatus>(enabled ? "loading" : "idle");
   const [revision, setRevision] = useState(0);
+  const requestIdentity = requestKey === null ? null : asyncRequestIdentity(requestKey, revision);
+  const [settledIdentity, setSettledIdentity] = useState<string | null>(requestIdentity);
   const retry = useCallback(() => {
     if (enabled) {
       setError(null);
@@ -50,30 +91,40 @@ export function useAsync<T>(
       setData(null);
       setError(null);
       setStatus("idle");
+      setSettledIdentity(requestIdentity);
       return;
     }
     let live = true;
-    if (!keepPreviousData) setData(null);
+    // Request-keyed callers may never expose previous data as current evidence,
+    // even if keepPreviousData was accidentally enabled.
+    if (!keepPreviousData || requestIdentity !== null) setData(null);
     setError(null);
     setStatus("loading");
+    setSettledIdentity(requestIdentity);
     fn().then(
       (d) => {
         if (!live) return;
         setData(d);
         setStatus("success");
+        setSettledIdentity(requestIdentity);
       },
       (e) => {
         if (!live) return;
+        setData(null);
         setError(String(e.message ?? e));
         setStatus("error");
+        setSettledIdentity(requestIdentity);
       },
     );
     return () => {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, enabled, keepPreviousData, revision]);
-  return { data, error, status, retry };
+  }, [...deps, enabled, keepPreviousData, requestIdentity, revision]);
+  const snapshot = currentAsyncSnapshot({
+    enabled, requestIdentity, settledIdentity, data, error, status,
+  });
+  return { ...snapshot, retry, requestKey, generation: revision };
 }
 
 export function AsyncStateMessage({

@@ -83,24 +83,17 @@ def save_generated_report(username: str, markdown: str, provenance: dict[str, An
         account = _student(c, username)
         if not account:
             return None
-        existing = c.execute(
-            "SELECT state FROM reports WHERE account_id=%s AND release_id=%s FOR UPDATE",
-            (account["id"], release_id),
-        ).fetchone()
-        if not existing:
-            return c.execute(
-                "INSERT INTO reports(account_id,release_id,markdown,provenance,state) VALUES (%s,%s,%s,%s,'draft')"
-                f" RETURNING {_REPORT_COLUMNS.replace('r.', '')}",
-                (account["id"], release_id, markdown, json.dumps(provenance, ensure_ascii=False)),
-            ).fetchone()
-        resubmitted = existing["state"] in {"pending", "graded"}
-        state = "pending" if resubmitted else "draft"
         return c.execute(
-            "UPDATE reports SET markdown=%s,provenance=%s,state=%s,score=NULL,feedback='',graded_by=NULL,"
-            "graded_at=NULL,generated_at=now(),updated_at=now(),"
-            "submitted_at=CASE WHEN %s THEN now() ELSE NULL END WHERE account_id=%s AND release_id=%s"
+            "INSERT INTO reports(account_id,release_id,markdown,provenance,state,generated_at,updated_at)"
+            " VALUES (%s,%s,%s,%s,'draft',now(),now())"
+            " ON CONFLICT (account_id,release_id) DO UPDATE SET"
+            " markdown=EXCLUDED.markdown,provenance=EXCLUDED.provenance,"
+            " state=CASE WHEN reports.state IN ('pending','graded') THEN 'pending' ELSE 'draft' END,"
+            " score=NULL,feedback='',graded_by=NULL,graded_at=NULL,"
+            " generated_at=now(),updated_at=now(),"
+            " submitted_at=CASE WHEN reports.state IN ('pending','graded') THEN now() ELSE NULL END"
             f" RETURNING {_REPORT_COLUMNS.replace('r.', '')}",
-            (markdown, json.dumps(provenance, ensure_ascii=False), state, resubmitted, account["id"], release_id),
+            (account["id"], release_id, markdown, json.dumps(provenance, ensure_ascii=False)),
         ).fetchone()
 
 

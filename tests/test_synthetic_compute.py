@@ -10,10 +10,23 @@ import json
 import pandas as pd
 import pytest
 
-from gvcsim import pipeline, publication, shocks
-from gvcsim.data import controls
+from gvcsim import artifacts, pipeline, publication, shocks
+from gvcsim.data import controls, output_quality, quality, raw_icio, regression_quality
+from gvcsim.data.citations import artifact_data_sources
 from gvcsim.data.quality import QcCheck
 from gvcsim import config
+
+
+def _install_complete_exposure_writer(monkeypatch):
+    """Keep the tiny IO fixture synthetic while satisfying the production key contract."""
+
+    def write(arr, year):
+        frame = shocks.build_export_exposure(arr, year)
+        shocks.PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+        frame.to_csv(shocks.PROCESSED_DIR / f"export_exposure_{year}.csv", index=False)
+        return frame
+
+    monkeypatch.setattr(shocks, "write_export_exposure", write)
 
 
 def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
@@ -22,16 +35,27 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
         if hasattr(module, "PROCESSED_DIR"):
             monkeypatch.setattr(module, "PROCESSED_DIR", processed)
     monkeypatch.setattr(pipeline.loader, "load", lambda year: fake_io)
+    _install_complete_exposure_writer(monkeypatch)
 
     for year in [2018, 2019]:
         pipeline.compute_year(year, verbose=False, allow_qc_override=True)
     panel = pipeline.build_panel(allow_qc_override=True)
+    output_summaries = {
+        year: output_quality.write_output_qc(processed, year, expected_years=[2018, 2019])[1] for year in [2018, 2019]
+    }
+    with pytest.raises(regression_quality.RegressionInputQualityError, match="configured_outcomes"):
+        regression_quality.write_regression_input_qc(processed, expected_years=[2018, 2019])
+    regression_checks = json.loads(
+        (processed / regression_quality.REGRESSION_INPUT_QC_FILE).read_text(encoding="utf-8")
+    )
 
     expected_files = [
         "indicators_country_2018.csv",
         "indicators_industry_2018.csv",
         "network_edges_2018.csv",
         "export_exposure_2018.csv",
+        "qc_outputs_2018.json",
+        "qc_regression_inputs.json",
         "controls_country.csv",
         "qc_controls.json",
         "qc_shocks.json",
@@ -64,6 +88,55 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
     # 文献指标字段与回归派生列都应进入面板。
     assert {"DVAex", "taxsub", "SVA", "PLv_GVC", "betweenesscentrality"}.issubset(panel.columns)
     assert {"gross_exports", "FVA_share", "3b_VA_GVC_C_share", "3_VA_GVC_share"}.issubset(panel.columns)
+    assert all(summary["publishable"] for summary in output_summaries.values())
+    assert regression_quality.summarize_regression_input_checks(regression_checks)["publishable"] is False
+    assert all(
+        output_quality.recompute_output_checks(processed, year, expected_years=[2018, 2019])
+        == json.loads((processed / f"qc_outputs_{year}.json").read_text(encoding="utf-8"))
+        for year in [2018, 2019]
+    )
+
+
+def test_degenerate_synthetic_staged_release_is_blocked_by_regression_outcome_variance_qc(
+    tmp_path, fake_io, monkeypatch
+):
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    contract = raw_icio.DimensionContract("synthetic-staged-release", 1, ("AAA", "BBB"), ("s1", "s2"), ("HFCE",))
+    header = ["V1", *contract.industry_labels, *contract.final_demand_labels, "OUT"]
+    rows = []
+    for index, label in enumerate(contract.industry_labels):
+        rows.append(
+            [
+                label,
+                *fake_io.Z.iloc[index].tolist(),
+                *fake_io.Y.iloc[index].tolist(),
+                float(fake_io.x.iloc[index, 0]),
+            ]
+        )
+    rows.extend([[account, *([0.1] * (len(header) - 1))] for account in ("TLS", "VA", "OUT")])
+    pd.DataFrame(rows, columns=header).to_csv(raw_dir / "ICIO2023_2020.csv", index=False)
+
+    monkeypatch.setattr(pipeline, "RAW_DATA_DIR", raw_dir)
+    monkeypatch.setattr(config, "RAW_DATA_DIR", raw_dir)
+    monkeypatch.setattr(raw_icio, "production_dimension_contract", lambda: contract)
+    raw_icio.clear_raw_validation_cache()
+    monkeypatch.setattr(pipeline.loader, "load", lambda _year: fake_io)
+    _install_complete_exposure_writer(monkeypatch)
+
+    with pytest.raises(regression_quality.RegressionInputQualityError, match="configured_outcomes"):
+        pipeline._build_staged_release(
+            staging,
+            [2020],
+            allow_qc_override=True,
+            release_id="3" * 32,
+        )
+
+    assert (staging / "qc_outputs_2020.json").is_file()
+    assert (staging / regression_quality.REGRESSION_INPUT_QC_FILE).is_file()
+    assert not (staging / artifacts.DATASET_METADATA).exists()
 
 
 def test_fatal_qc_blocks_release_unless_override_is_explicit():
@@ -74,6 +147,26 @@ def test_fatal_qc_blocks_release_unless_override_is_explicit():
     assert summary["publishable"] is True
     assert summary["override"] is True
     assert summary["fatal"] == ["fatal example"]
+    with pytest.raises(ValueError, match="布尔值"):
+        pipeline._gate_qc("test", failed, "yes")  # type: ignore[arg-type]
+    with pytest.raises(pipeline.QualityGateError, match="不可 override") as blocked:
+        pipeline._gate_qc("shock_panel", failed, True, override_allowed=False)
+    assert blocked.value.override_allowed is False
+    assert blocked.value.summary["override"] is False
+
+
+def _contract_checks(scope: str) -> list[dict]:
+    return [
+        {
+            "name": name,
+            "kind": "结构",
+            "passed": True,
+            "detail": "ok",
+            "warnings": [],
+            "severity": "ok",
+        }
+        for name in quality.QC_EXPECTED_CHECKS[scope]
+    ]
 
 
 def _stub_release_build(monkeypatch, calls, *, fail_year=False):
@@ -81,14 +174,19 @@ def _stub_release_build(monkeypatch, calls, *, fail_year=False):
         calls.append(f"year:{number}")
         if fail_year:
             raise RuntimeError("synthetic build failed")
+        (pipeline.PROCESSED_DIR / f"qc_{number}.json").write_text(
+            json.dumps(_contract_checks(quality.QC_SCOPE_ICIO), ensure_ascii=False)
+        )
+        exposure_name = f"export_exposure_{number}.csv"
+        (pipeline.PROCESSED_DIR / exposure_name).write_text(
+            f"country,imposer,year,bilateral_exports,total_exports,export_exposure\nAAA,AAA,{number},0,0,0\n"
+        )
         for name in (
-            f"qc_{number}.json",
-            f"export_exposure_{number}.csv",
             f"indicators_country_{number}.csv",
             f"indicators_industry_{number}.csv",
             f"network_edges_{number}.csv",
         ):
-            (pipeline.PROCESSED_DIR / name).write_text("[]" if name.startswith("qc_") else "x\n1\n")
+            (pipeline.PROCESSED_DIR / name).write_text("x\n1\n")
 
     def panel(**_kwargs):
         calls.append("panel")
@@ -99,12 +197,74 @@ def _stub_release_build(monkeypatch, calls, *, fail_year=False):
             "demo_trade_war_tariffs.csv",
         ):
             (pipeline.PROCESSED_DIR / name).write_text("x\n1\n")
-        for name in ("qc_controls.json", "qc_shocks.json"):
-            (pipeline.PROCESSED_DIR / name).write_text("[]")
+        (pipeline.PROCESSED_DIR / "qc_controls.json").write_text(
+            json.dumps(_contract_checks(quality.QC_SCOPE_CONTROLS), ensure_ascii=False)
+        )
+        (pipeline.PROCESSED_DIR / "qc_shocks.json").write_text(
+            json.dumps(_contract_checks(quality.QC_SCOPE_SHOCKS), ensure_ascii=False)
+        )
+
+    def output_qc(directory, number, *, expected_years):
+        del expected_years
+        checks = [
+            {
+                "name": spec.name,
+                "kind": spec.kind,
+                "passed": True,
+                "detail": "stubbed publication-order fixture",
+                "severity": "ok",
+            }
+            for spec in output_quality.OUTPUT_CHECK_SPECS
+        ]
+        (directory / f"qc_outputs_{number}.json").write_text(json.dumps(checks), encoding="utf-8")
+        return checks, output_quality.summarize_output_checks(checks)
+
+    def regression_input_qc(directory, *, expected_years):
+        del expected_years
+        checks = [
+            {
+                "name": spec.name,
+                "kind": spec.kind,
+                "passed": True,
+                "detail": "stubbed publication-order fixture",
+                "severity": "ok",
+            }
+            for spec in regression_quality.REGRESSION_INPUT_CHECK_SPECS
+        ]
+        (directory / regression_quality.REGRESSION_INPUT_QC_FILE).write_text(
+            json.dumps(checks), encoding="utf-8"
+        )
+        return checks, regression_quality.summarize_regression_input_checks(checks)
 
     monkeypatch.setattr(pipeline, "compute_year", year)
     monkeypatch.setattr(pipeline, "build_panel", panel)
-    monkeypatch.setattr(pipeline, "artifact_data_sources", lambda _path: {})
+    monkeypatch.setattr(pipeline.output_quality, "write_output_qc", output_qc)
+    monkeypatch.setattr(pipeline.regression_quality, "write_regression_input_qc", regression_input_qc)
+    monkeypatch.setattr(artifacts, "_validate_release_output_qc", lambda *_args: None)
+    monkeypatch.setattr(artifacts, "_validate_release_regression_input_qc", lambda *_args: None)
+    monkeypatch.setattr(pipeline, "artifact_data_sources", lambda _path: artifact_data_sources(config.RAW_DATA_DIR))
+
+
+def test_release_metadata_rejects_empty_qc_before_publication(tmp_path):
+    (tmp_path / "qc_2020.json").write_text("[]", encoding="utf-8")
+    (tmp_path / "qc_controls.json").write_text(
+        json.dumps(_contract_checks(quality.QC_SCOPE_CONTROLS), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (tmp_path / "qc_shocks.json").write_text(
+        json.dumps(_contract_checks(quality.QC_SCOPE_SHOCKS), ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="非空"):
+        pipeline._release_qc_metadata(tmp_path, [2020], override=False)
+
+    (tmp_path / "qc_2020.json").write_text(
+        json.dumps(_contract_checks(quality.QC_SCOPE_ICIO), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="布尔值"):
+        pipeline._release_qc_metadata(tmp_path, [2020], override="yes")  # type: ignore[arg-type]
 
 
 def _old_pointer(tmp_path):
@@ -148,6 +308,13 @@ def test_run_builds_sentinel_switches_pointer_and_never_touches_database(tmp_pat
     assert metadata["years"] == [2020]
     assert metadata["course_release"] == config.COURSE_RELEASE
     assert set(metadata["qc"]) == {"years", "controls", "shocks"}
+    assert metadata["qc_contract"] == quality.qc_contract_metadata()
+    assert metadata["shock_contract"] == shocks.shock_contract_metadata()
+    assert metadata["artifact_contract_version"] == 7
+    assert metadata["output_qc_contract"] == output_quality.output_qc_contract_metadata()
+    assert set(metadata["output_qc"]["years"]) == {"2020"}
+    assert metadata["regression_input_qc_contract"] == regression_quality.regression_input_qc_contract_metadata()
+    assert metadata["regression_input_qc"]["publishable"] is True
 
 
 @pytest.mark.parametrize("failure", ["build", "validation"])

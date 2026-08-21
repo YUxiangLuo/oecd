@@ -34,6 +34,17 @@ describe("regression lessons", () => {
     expect(nextRegressionFamily("network")).toBeNull();
   });
 
+  test("production share copy forbids expansion/contraction overstatement", () => {
+    const productionCopy = [
+      REGRESSION_LESSONS.production.downMeaning,
+      REGRESSION_LESSONS.production.upMeaning,
+    ].join(" ");
+    expect(productionCopy).toContain("SVA 中复杂 GVC 增加值份额降低");
+    expect(productionCopy).toContain("SVA 中复杂 GVC 增加值份额提高");
+    expect(productionCopy).toContain("这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩");
+    expect(productionCopy).not.toMatch(/与.*(?:扩张|收缩)一致/);
+  });
+
   test("report takeaway is a copyable sentence without causal proof", () => {
     expect(reportTakeaway("trade", "negative", "−1.20 个百分点")).toContain("相对下降");
     expect(reportTakeaway("length", "insufficient", "—")).toContain("看不出方向");

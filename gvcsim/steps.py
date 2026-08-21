@@ -8,6 +8,8 @@ status 字段只标记当前步骤所用**数据的真实性**,不表示代码�
 回归的前置接入,而不是与 ICIO 一起放在最前——让"接入冲击→质检→四类回归"连成一段。
 """
 
+from gvcsim.indicator_schema import PRODUCTION_LENGTH_OPERATIONAL_DEFINITION
+
 STAGE_NAMES = {1: "数据接入", 2: "指标计算", 3: "可视化分析", 4: "回归设计与建模", 5: "实验闭环"}
 
 STEPS = [
@@ -17,9 +19,9 @@ STEPS = [
         lab="db",
         status="done",
         title="OECD ICIO 数据浏览",
-        goal="查看本地 OECD ICIO 的原始表结构与账户项。",
-        concept="投入产出表用一张矩阵描述“谁买了谁的东西”:行是供给方、列是使用方(都是「国家×行业」),某一格就是行方向那个行业卖给列方向那个行业的中间投入。系统直接浏览本地 OECD ICIO 的 Z、Y、TLS、VA 与 OUT。",
-        tip="本系统采用 OECD ICIO 作为主数据源,步骤 1 可直接查看 Z 矩阵、最终需求 Y 和 TLS/VA/OUT 账户项。",
+        goal="查看本地 OECD ICIO 指标输入的原始表结构与账户项，并区分教学模拟数据。",
+        concept="投入产出表用一张矩阵描述“谁买了谁的东西”:行是供给方、列是使用方(都是「国家×行业」),某一格就是行方向那个行业卖给列方向那个行业的中间投入。系统直接浏览用作指标输入的 OECD ICIO Z、Y、TLS、VA 与 OUT；回归中的模拟宏观控制和政策情景不属于 OECD 数据。",
+        tip="OECD 来源声明只覆盖指标输入及其派生结果。模拟宏观控制是 ICIO 派生规模锚定的确定性教学 mock（不是 WDI/IMF 观测），政策情景也是教学编码。",
     ),
     dict(
         n=2,
@@ -105,7 +107,7 @@ STEPS = [
         status="done",
         title="GVC 长度指标可视化",
         goal="用上下游定位图、前后向链长对比和 GVCPs 排名判断各国在价值链中的位置。",
-        concept="前向长度 PLv 与后向长度 PLy 各拆成纯国内 / 传统贸易 / GVC 三段;GVC 段越长,增加值在国际生产网络中辗转的环节越多。GVCPs(前向/后向 GVC 长度之比)>1 表示更靠上游。",
+        concept=f"{PRODUCTION_LENGTH_OPERATIONAL_DEFINITION}前向 PLv 从增加值创造端追踪到最终吸收，后向 PLy 从最终产品端回溯初始增加值；GVCPs（前向/后向 GVC 长度之比）>1 表示在该口径下相对更上游。",
         tip="散点图看 PLv_GVC × PLy_GVC 的权衡；GVCPs 高只说明该口径下相对上游，可能来自原材料、关键中间品或生产性服务，需下钻行业后再解释。",
     ),
     dict(
@@ -159,7 +161,7 @@ STEPS = [
         status="demo",
         title="政策冲击对长度指标的计量回归",
         goal="用同一套政策冲击估计前向 GVC 生产长度的相对变化，并与贸易流、生产、网络三步并读。",
-        concept="本步指标是前向 GVC 生产长度 PLv_GVC（步骤 5），描述增加值到最终吸收经历的跨境环节。默认比较与另外三步相同；若要按冲击前后各年看路径，在「换一种读法」里改到按年观察。",
+        concept=f"本步指标是前向 GVC 生产长度 PLv_GVC（步骤 5）。{PRODUCTION_LENGTH_OPERATIONAL_DEFINITION}默认比较与另外三步相同；若要按冲击前后各年看路径，在「换一种读法」里改到按年观察。",
         tip="本步单位不是百分点。并读只看方向和区间是否过 0，不要和份额系数相减或比大小。",
     ),
     dict(

@@ -1,23 +1,97 @@
-import { useRef } from "react";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { Meta, PagedRows, ShockSummary } from "../../../types";
 import { countryLabel, sectorLabel } from "../../../viz";
-import { SHOCK_TYPES, SHOCK_TYPE_LABELS, type ShockType } from "./model";
+import {
+  SHOCK_FILTERS,
+  SHOCK_FILTER_LABELS,
+  SHOCK_SORTS,
+  SHOCK_SORT_LABELS,
+  SHOCK_TYPES,
+  SHOCK_TYPE_LABELS,
+  shockPanelRequestKey,
+  shockSortChange,
+  type ShockSort,
+  type ShockType,
+} from "./model";
 import { Pager, pct, useAsync } from "../../shared";
 import type { ShockPanelFilters } from "./model";
+import { exposureSourceTeaching } from "./shock-contract";
 
-/**
- * 保留上一次的结果,直到新数据到达。
- *
- * useAsync 在依赖变化时会先把 data 置空(shared.tsx),面板每次联动都会经历
- * 「整张表 → 一行"正在读取" → 新表」,配合 1~25 行的行数差,整页会先塌缩再撑开。
- * 这里改成 stale-while-revalidate:旧表留在原位淡化,新表到达再替换。
- */
-function useLastNonNull<T>(value: T | null): T | null {
-  const ref = useRef<T | null>(null);
-  if (value != null) ref.current = value;
-  return value ?? ref.current;
+const INTENSITY_COLUMN_LABELS: Record<ShockType, string> = {
+  tariff: "加权关税冲击强度",
+  sanctions: "制裁暴露强度",
+  export_control: "出口管制暴露强度",
+};
+
+export function ShockPanelSuccessView({
+  panel,
+  shockType,
+  typeLabel,
+  definition,
+  sort,
+}: {
+  panel: PagedRows;
+  shockType: ShockType;
+  typeLabel: string;
+  definition: string;
+  sort: ShockSort;
+}) {
+  const tariff = shockType === "tariff";
+  const formula = tariff
+    ? String(panel.rows.find((row) => row.formula)?.formula
+      ?? "shock_intensity = Σ(事件双边行业平均加征税率 × 对加征方出口暴露度)")
+    : null;
+  return (
+    <>
+      <ScrollableRegion className="table-wrap" label="国家行业冲击面板表，可横向滚动">
+        <table className="data-table shock-panel-table">
+          <caption className="sr-only">国家行业冲击面板，当前排序：{SHOCK_SORT_LABELS[sort]}</caption>
+          <thead>
+            <tr>
+              <th scope="col" aria-sort={sort === "country_asc" ? "ascending" : undefined} style={{ textAlign: "left" }}>国家</th>
+              <th scope="col" aria-sort={sort === "industry_asc" ? "ascending" : undefined}>行业</th>
+              <th scope="col" aria-sort={sort === "intensity_desc" ? "descending" : sort === "intensity_asc" ? "ascending" : undefined}>{INTENSITY_COLUMN_LABELS[shockType]}</th>
+              {tariff && <><th scope="col">主要加征方</th><th scope="col">出口暴露度</th><th scope="col">暴露度来源</th></>}
+              <th scope="col">受处理</th><th scope="col">宣布</th><th scope="col">生效</th><th scope="col" style={{ textAlign: "left" }}>主要事件 / 教学映射</th>
+            </tr>
+          </thead>
+          <tbody>
+            {panel.rows.map((row, index) => {
+              const exposureSource = row.exposure_source == null
+                ? null
+                : exposureSourceTeaching(row.exposure_source);
+              return (
+              <tr key={`${row.country}-${row.sector}-${index}`}>
+                <td style={{ textAlign: "left" }}>{countryLabel(String(row.country))}</td>
+                <td>{sectorLabel(String(row.sector))}</td>
+                <td>{typeof row.shock_intensity === "number" ? pct(row.shock_intensity) : "—"}</td>
+                {tariff && <>
+                  <td>{String(row.main_imposer ?? "—")}</td>
+                  <td title={exposureSource?.disclosure}>
+                    {typeof row.export_exposure === "number" ? pct(row.export_exposure) : "—"}
+                  </td>
+                  <td title={exposureSource?.disclosure}>
+                    {exposureSource?.label ?? "—"}
+                  </td>
+                </>}
+                <td>{row.treated === 1 ? "✓" : ""}</td>
+                <td>{row.announced_date ?? "—"}</td>
+                <td>{row.effective_date ?? "—"}</td>
+                <td style={{ textAlign: "left", whiteSpace: "normal" }}>{row.note ?? "—"}</td>
+              </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </ScrollableRegion>
+      <div className="tipbox shock-panel-note">
+        <b>{typeLabel}定义：</b>{definition}
+        {tariff && <> 只有关税类型使用加征方与出口暴露度。<span className="tariff-formula">公式：{formula}</span></>}
+        面板按冲击类型聚合全部已编码事件；左侧单个事件只用于定位。
+      </div>
+    </>
+  );
 }
 
 export function ShockPanel({
@@ -29,32 +103,37 @@ export function ShockPanel({
   filters: ShockPanelFilters;
   onChange: (patch: Partial<ShockPanelFilters>) => void;
 }) {
-  const { data: summary, error: summaryError } = useAsync<ShockSummary>(
+  const releaseKey = meta.dataset?.release_id ?? "missing-release";
+  const summaryKey = `${releaseKey}:shock-summary:${filters.shockType}`;
+  const panelKey = shockPanelRequestKey(releaseKey, filters);
+  const summaryQuery = useAsync<ShockSummary>(
     () => api.shockSummary(filters.shockType),
     [filters.shockType],
+    { requestKey: summaryKey },
   );
-  const { data: panel, error: panelError } = useAsync<PagedRows>(
+  const panelQuery = useAsync<PagedRows>(
     () => api.shockPanel(
       filters.year,
       filters.shockType,
       filters.country,
       filters.sector,
-      filters.onlyHit,
+      filters.filter,
+      filters.sort,
       filters.page,
     ),
-    [filters.year, filters.shockType, filters.country, filters.sector, filters.onlyHit, filters.page],
+    [filters.year, filters.shockType, filters.country, filters.sector, filters.filter, filters.sort, filters.page],
+    { requestKey: panelKey },
   );
-  // 出错时不沿用旧数据(会把失败伪装成成功);只有"正在重取"才保留上一份。
-  const shownSummary = useLastNonNull(summaryError ? null : summary);
-  const shownPanel = useLastNonNull(panelError ? null : panel);
-  const refreshing = (panel == null && panelError == null) || (summary == null && summaryError == null);
+  const { data: summary, error: summaryError, status: summaryStatus } = summaryQuery;
+  const { data: panel, error: panelError, status: panelStatus } = panelQuery;
+  const refreshing = panelStatus === "loading" || summaryStatus === "loading";
   const refreshAnnouncement = refreshing
-    ? "正在刷新冲击面板"
+    ? "正在按当前筛选读取冲击面板"
     : panelError || summaryError
-      ? "冲击面板刷新失败"
-      : "冲击面板已更新";
-  const summaryYear = shownSummary?.years.find((row) => row.year === filters.year);
-  const pages = shownPanel ? Math.max(1, Math.ceil(shownPanel.total / shownPanel.page_size)) : 1;
+      ? "当前筛选的冲击面板读取失败"
+      : "当前筛选的冲击面板已更新";
+  const summaryYear = summary?.years.find((row) => row.year === filters.year);
+  const pages = panel ? Math.max(1, Math.ceil(panel.total / panel.page_size)) : 1;
 
   return (
     <div className="shock-panel-embedded" role="region" aria-label="国家–行业冲击面板">
@@ -97,27 +176,43 @@ export function ShockPanel({
             )}
           </LabeledControl>
         </span>
-        <label className="shock-only-hit">
-          <input
-            type="checkbox"
-            checked={filters.onlyHit}
-            onChange={(event) => onChange({ onlyHit: event.target.checked, page: 1 })}
-          />
-          只看受冲击
-        </label>
+        <span className="field">
+          <LabeledControl label="记录范围">
+            {(id) => (
+              <select id={id} value={filters.filter} onChange={(event) => onChange({ filter: event.target.value as ShockPanelFilters["filter"], page: 1 })}>
+                {SHOCK_FILTERS.map((value) => <option key={value} value={value}>{SHOCK_FILTER_LABELS[value]}</option>)}
+              </select>
+            )}
+          </LabeledControl>
+        </span>
+        <span className="field">
+          <LabeledControl label="排序">
+            {(id) => (
+              <select id={id} value={filters.sort} onChange={(event) => onChange(shockSortChange(event.target.value as ShockSort))}>
+                {SHOCK_SORTS.map((value) => <option key={value} value={value}>{SHOCK_SORT_LABELS[value]}</option>)}
+              </select>
+            )}
+          </LabeledControl>
+        </span>
       </div>
 
-      {/* 概览行常驻:切换事件会同时改年份与冲击类型,按年份查不到时若整行消失,又是一次高度跳变。 */}
-      {summaryError ? <div className="error-box">冲击概览读取失败：{summaryError}</div> : (
+      {summaryError ? (
+        <div className="error-box" role="alert">
+          当前冲击类型的概览读取失败：{summaryError}
+          <button type="button" className="secondary" onClick={summaryQuery.retry}>按同一类型重试</button>
+        </div>
+      ) : summaryStatus === "loading" ? (
+        <div className="shock-panel-summary" role="status">正在读取当前冲击类型的概览…</div>
+      ) : (
         <div className="shock-panel-summary">
           <strong>{filters.year} 年 · {SHOCK_TYPE_LABELS[filters.shockType as ShockType] ?? filters.shockType}</strong>
           {summaryYear ? (
             <>
-              <span>{summaryYear.treated_countries} 个经济体</span>
-              <span>{summaryYear.treated_pairs} 个国家–行业受冲击</span>
+              <span>受处理：{summaryYear.treated_countries} 个经济体 / {summaryYear.treated_pairs} 个国家–行业</span>
+              <span>非零强度：{summaryYear.nonzero_countries} 个经济体 / {summaryYear.nonzero_pairs} 个国家–行业</span>
               {summaryYear.max_shock > 0 && <span>最高 {pct(summaryYear.max_shock)}（{summaryYear.max_shock_target}）</span>}
             </>
-          ) : <span className="muted">正在读取该口径的冲击概览…</span>}
+          ) : <span className="muted">该年份没有概览记录。</span>}
         </div>
       )}
 
@@ -125,55 +220,37 @@ export function ShockPanel({
         {refreshAnnouncement}
       </span>
       {/* 定高区:行数在 1~25 之间跳变(每页 25 条),不锁高度整页会随联动上下弹。 */}
-      <div className={`shock-panel-body${refreshing ? " refreshing" : ""}`} aria-busy={refreshing}>
-      {panelError ? <div className="error-box">冲击面板读取失败：{panelError}</div> : !shownPanel ? (
+      <div className={`shock-panel-body${refreshing ? " refreshing" : ""}`} aria-busy={panelStatus === "loading"}>
+      {panelError ? (
+        <div className="error-box" role="alert">
+          当前筛选的冲击面板读取失败：{panelError}
+          <button type="button" className="secondary" onClick={panelQuery.retry}>按同一筛选重试</button>
+        </div>
+      ) : panelStatus === "loading" || !panel ? (
         <div className="shock-panel-state">正在按当前条件读取冲击面板…</div>
-      ) : shownPanel.rows.length === 0 ? (
-        <div className="shock-panel-state">当前条件下没有记录；可以放宽国家、行业或“只看受冲击”筛选。</div>
+      ) : panel.rows.length === 0 ? (
+        <div className="shock-panel-state">当前条件下没有记录；可以放宽国家、行业或记录范围筛选。</div>
       ) : (
-        <ScrollableRegion className="table-wrap" label="国家行业冲击面板表，可横向滚动">
-          <table className="data-table shock-panel-table">
-            <thead>
-              <tr>
-                <th style={{ textAlign: "left" }}>国家</th><th>行业</th><th>冲击强度</th><th>主要加征方</th>
-                <th>ICIO 出口暴露度</th><th>受处理</th><th>宣布</th><th>生效</th><th style={{ textAlign: "left" }}>主要事件</th>
-              </tr>
-            </thead>
-            <tbody>
-              {shownPanel.rows.map((row, index) => (
-                <tr key={`${row.country}-${row.sector}-${index}`}>
-                  <td style={{ textAlign: "left" }}>{countryLabel(String(row.country))}</td>
-                  <td>{sectorLabel(String(row.sector))}</td>
-                  <td>{typeof row.tariff_shock === "number" ? pct(row.tariff_shock) : "—"}</td>
-                  <td>{String(row.main_imposer ?? row.primary_imposer ?? row.imposer ?? "—")}</td>
-                  <td title="该经济体全部出口中流向主要加征方的份额（来自真实 OECD ICIO 双边流向）">
-                    {typeof row.export_exposure === "number" ? pct(row.export_exposure) : "—"}
-                  </td>
-                  <td>{row.treated === 1 ? "✓" : ""}</td>
-                  <td>{row.announced_date ?? "—"}</td>
-                  <td>{row.effective_date ?? "—"}</td>
-                  <td style={{ textAlign: "left", whiteSpace: "normal" }}>{row.note ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollableRegion>
+        <ShockPanelSuccessView
+          panel={panel}
+          shockType={filters.shockType as ShockType}
+          typeLabel={summary?.type.label ?? SHOCK_TYPE_LABELS[filters.shockType as ShockType]}
+          definition={summary?.type.definition ?? "正在读取当前冲击类型定义。"}
+          sort={(panel.sort as ShockSort | undefined) ?? filters.sort}
+        />
       )}
       {/* 事件联动常把口径收窄到单个国家×行业,定高后会空出一片。与其留白,
           不如把它变成"怎么看到完整范围"的引导——顺带点明左右两侧是同一套筛选。 */}
-      {shownPanel && shownPanel.rows.length > 0 && shownPanel.total <= shownPanel.page_size && (
+      {panel && panelStatus === "success" && panel.rows.length > 0 && panel.total <= panel.page_size && (
         <p className="shock-panel-hint">
-          以上是当前口径下的全部 {shownPanel.total} 条命中。想看这次冲击波及的完整范围,
+          以上是当前口径下的全部 {panel.total} 条命中。想看这次冲击波及的完整范围,
           可把上方的「国家 / 行业」改回“全部”。
         </p>
       )}
       </div>
 
-      <div className="tipbox shock-panel-note">
-        关税冲击按“事件税率 × 对加征方出口暴露度”汇总；ICIO 暴露度使用真实双边投入产出流。面板按冲击类型聚合全部已编码事件；左侧选中的单个事件只帮助定位，因此总冲击不一定等于该事件或主要加征方的单项乘积。
-      </div>
-      {shownPanel && shownPanel.rows.length > 0 && (
-        <Pager page={filters.page} pages={pages} total={shownPanel.total} onChange={(page) => onChange({ page })} />
+      {panel && panelStatus === "success" && panel.rows.length > 0 && (
+        <Pager page={filters.page} pages={pages} total={panel.total} onChange={(page) => onChange({ page })} />
       )}
     </div>
   );

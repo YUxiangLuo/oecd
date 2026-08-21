@@ -63,6 +63,10 @@ def validate_security_config() -> None:
     if IS_PRODUCTION:
         if DEMO_MODE:
             raise ConfigurationError("生产环境禁止 GVCSIM_DEMO_MODE")
+        if "change_me" in PG_DSN.casefold():
+            raise ConfigurationError("生产环境 GVCSIM_PG_DSN 仍包含部署占位符")
+        if "change_me" in AUTH_SECRET.casefold():
+            raise ConfigurationError("生产环境 GVCSIM_AUTH_SECRET 仍包含部署占位符")
         if not AUTH_SECRET or len(AUTH_SECRET.encode()) < 32:
             raise ConfigurationError("生产环境必须提供至少 32 字节的 GVCSIM_AUTH_SECRET")
         if not _data_dir_setting or not _raw_data_dir_setting:
@@ -77,14 +81,10 @@ def validate_security_config() -> None:
 
 
 def available_years(raw_dir: Path = RAW_DATA_DIR) -> list[int]:
-    """扫描本地已下载的原始数据年份(升序、去重)。"""
-    years = set()
-    for f in raw_dir.glob("ICIO*_*.csv"):
-        try:
-            years.add(int(f.stem.rsplit("_", 1)[1]))
-        except ValueError:
-            continue
-    return sorted(years)
+    """扫描本地原始年份，并拒绝同年多个候选来源。"""
+    from gvcsim.data.raw_icio import discover_years
+
+    return discover_years(raw_dir)
 
 
 def processed_years() -> list[int]:

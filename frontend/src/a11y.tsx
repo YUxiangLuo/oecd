@@ -30,12 +30,15 @@ export function LabeledControl({
 type ScrollableRegionProps = Omit<HTMLAttributes<HTMLDivElement>, "aria-label" | "aria-labelledby"> & {
   label?: string;
   labelledBy?: string;
+  /** Composite widgets can provide their own single roving Tab stop. */
+  focusable?: boolean;
 };
 
-/** A keyboard-focusable, named overflow region. */
+/** A named overflow region, keyboard-focusable by default. */
 export function ScrollableRegion({
   label,
   labelledBy,
+  focusable = true,
   className = "",
   children,
   ...props
@@ -45,7 +48,7 @@ export function ScrollableRegion({
       {...props}
       className={`${className} scrollable-region`.trim()}
       role="region"
-      tabIndex={0}
+      tabIndex={focusable ? 0 : -1}
       aria-label={label}
       aria-labelledby={labelledBy}
     >

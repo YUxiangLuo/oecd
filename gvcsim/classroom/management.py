@@ -72,19 +72,12 @@ def update_student(
         ).fetchone()
 
 
-def _learning_status_in_conn(c: psycopg.Connection[dict[str, Any]], account_id: int) -> dict[str, Any]:
+def _learning_status(
+    session: dict[str, Any] | None,
+    report: dict[str, Any] | None,
+) -> dict[str, Any]:
     from gvcsim import evidence
 
-    release_id = database.current_release_id()
-    session = c.execute(
-        "SELECT session,updated_at FROM experiment_sessions WHERE account_id=%s AND release_id=%s",
-        (account_id, release_id),
-    ).fetchone()
-    report = c.execute(
-        "SELECT state,score,generated_at,submitted_at,graded_at,updated_at FROM reports"
-        " WHERE account_id=%s AND release_id=%s",
-        (account_id, release_id),
-    ).fetchone()
     summary = evidence.completion_summary(session["session"] if session else {"steps": {}}, report_exists=bool(report))
     timestamps = [row["updated_at"] for row in (session, report) if row]
     return {
@@ -100,13 +93,49 @@ def _learning_status_in_conn(c: psycopg.Connection[dict[str, Any]], account_id: 
     }
 
 
+def _learning_status_in_conn(c: psycopg.Connection[dict[str, Any]], account_id: int) -> dict[str, Any]:
+    release_id = database.current_release_id()
+    session = c.execute(
+        "SELECT session,updated_at FROM experiment_sessions WHERE account_id=%s AND release_id=%s",
+        (account_id, release_id),
+    ).fetchone()
+    report = c.execute(
+        "SELECT state,score,generated_at,submitted_at,graded_at,updated_at FROM reports"
+        " WHERE account_id=%s AND release_id=%s",
+        (account_id, release_id),
+    ).fetchone()
+    return _learning_status(session, report)
+
+
 def list_students(teacher_username: str | None = None) -> list[dict[str, Any]]:
+    release_id = database.current_release_id()
     with database.conn() as c:
         if teacher_username and not _teacher_exists(c, teacher_username):
             return []
         rows = c.execute(
-            f"SELECT {_STUDENT_COLS} FROM accounts a WHERE a.role='student' ORDER BY a.student_no,a.username"
+            f"SELECT {_STUDENT_COLS},s.session AS learning_session,s.updated_at AS session_updated_at,"
+            "r.state AS learning_report_state,r.score AS report_score,r.generated_at AS report_generated_at,"
+            "r.submitted_at AS report_submitted_at,r.graded_at AS report_graded_at,"
+            "r.updated_at AS report_updated_at FROM accounts a"
+            " LEFT JOIN experiment_sessions s ON s.account_id=a.id AND s.release_id=%s"
+            " LEFT JOIN reports r ON r.account_id=a.id AND r.release_id=%s"
+            " WHERE a.role='student' ORDER BY a.student_no,a.username",
+            (release_id, release_id),
         ).fetchall()
         for row in rows:
-            row.update(_learning_status_in_conn(c, row["id"]))
+            session_payload = row.pop("learning_session")
+            session_updated_at = row.pop("session_updated_at")
+            report_state = row.pop("learning_report_state")
+            report = {
+                "state": report_state,
+                "score": row.pop("report_score"),
+                "generated_at": row.pop("report_generated_at"),
+                "submitted_at": row.pop("report_submitted_at"),
+                "graded_at": row.pop("report_graded_at"),
+                "updated_at": row.pop("report_updated_at"),
+            }
+            session = {"session": session_payload, "updated_at": session_updated_at}
+            row.update(
+                _learning_status(session if session_payload is not None else None, report if report_state else None)
+            )
         return rows

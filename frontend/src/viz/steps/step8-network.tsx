@@ -7,8 +7,78 @@ import { CAT, Legend, REGION_OF, REGIONS, SEQ, cardStyle, countryLabel, num, use
 
 /* ------------------------------ 步骤10:网络图 ------------------------------ */
 
-type NetworkMetric = "gvc_production_share" | "weighted degree" | "gross_exports";
-type NetworkColorMode = "region" | NetworkMetric;
+export type NetworkMetric = "gvc_production_share" | "weighted degree" | "gross_exports";
+export type NetworkColorMode = "region" | NetworkMetric;
+type NetworkEdge = NetworkData["edges"][number];
+type NetworkMetricValue = number | null;
+
+export interface NetworkNodeEncoding {
+  eligible: boolean;
+  radius: number;
+  color: string;
+}
+
+export interface NetworkNodeEncodingModel {
+  encodedMetrics: NetworkMetric[];
+  nodes: Record<string, NetworkNodeEncoding>;
+  sizeMax: number;
+  colorMax: number | null;
+}
+
+const NETWORK_UNAVAILABLE_COLOR = "#7c828d";
+const NETWORK_UNAVAILABLE_TEXT = "—（该指标不可用）";
+
+export interface NetworkPartner {
+  c: string;
+  inflow: number;
+  outflow: number;
+  total: number;
+}
+
+export interface ThresholdedNetworkModel {
+  publishedEdges: NetworkEdge[];
+  visibleEdges: NetworkEdge[];
+  neighbors: Record<string, NetworkPartner[]>;
+  maxFlow: number;
+  cutoff: number;
+}
+
+/** One thresholded edge contract shared by geometry, highlighting, hover and text details. */
+export function thresholdedNetworkModel(
+  edges: readonly NetworkEdge[],
+  threshold: number,
+): ThresholdedNetworkModel {
+  const publishedEdges = edges.filter((edge) => {
+    const flow = edge.flow;
+    return typeof flow === "number" && Number.isFinite(flow) && flow > 0
+      && String(edge.source ?? "") !== "" && String(edge.target ?? "") !== "";
+  });
+  const maxFlow = Math.max(...publishedEdges.map((edge) => edge.flow as number), 0);
+  const normalizedThreshold = Number.isFinite(threshold) ? Math.max(0, threshold) : 0;
+  const cutoff = maxFlow * normalizedThreshold;
+  const visibleEdges = publishedEdges.filter((edge) => (edge.flow as number) >= cutoff);
+  const partnerFlows: Record<string, Record<string, { inflow: number; outflow: number }>> = {};
+  visibleEdges.forEach((edge) => {
+    const source = String(edge.source), target = String(edge.target), flow = edge.flow as number;
+    const fromSource = (partnerFlows[source] ??= {});
+    const fromTarget = (partnerFlows[target] ??= {});
+    const sourcePartner = (fromSource[target] ??= { inflow: 0, outflow: 0 });
+    const targetPartner = (fromTarget[source] ??= { inflow: 0, outflow: 0 });
+    sourcePartner.outflow += flow;
+    targetPartner.inflow += flow;
+  });
+  const neighbors: Record<string, NetworkPartner[]> = {};
+  Object.entries(partnerFlows).forEach(([country, partners]) => {
+    neighbors[country] = Object.entries(partners)
+      .map(([partner, flow]) => ({ c: partner, ...flow, total: flow.inflow + flow.outflow }))
+      .sort((first, second) => second.total - first.total || first.c.localeCompare(second.c));
+  });
+  return { publishedEdges, visibleEdges, neighbors, maxFlow, cutoff };
+}
+
+export function directedVisibleEdgeText(model: ThresholdedNetworkModel): string[] {
+  return model.visibleEdges.map((edge) => `${String(edge.source)} → ${String(edge.target)}: ${String(edge.flow)}`);
+}
 
 const NETWORK_METRICS: { key: NetworkMetric; label: string; format: "pct" | "number" | "amount" }[] = [
   { key: "gvc_production_share", label: "GVC 生产份额", format: "pct" },
@@ -16,13 +86,77 @@ const NETWORK_METRICS: { key: NetworkMetric; label: string; format: "pct" | "num
   { key: "gross_exports", label: "毛出口(百万美元)", format: "amount" },
 ];
 
+function metricMetaLabel(metric: NetworkMetric): string {
+  return NETWORK_METRICS.find(({ key }) => key === metric)?.label ?? metric;
+}
+
 function fmtNetworkMetric(value: number, format: "pct" | "number" | "amount") {
   return formatMetric(value, format);
+}
+
+/** Node metrics are quantitative only when the published value is a finite number. */
+export function finiteNetworkMetric(value: string | number | null | undefined): NetworkMetricValue {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+export function networkMetricDisplay(
+  value: string | number | null | undefined,
+  format: "pct" | "number" | "amount",
+): string {
+  const finiteValue = finiteNetworkMetric(value);
+  return finiteValue === null ? NETWORK_UNAVAILABLE_TEXT : fmtNetworkMetric(finiteValue, format);
+}
+
+export function networkThresholdAriaValueText(threshold: number): string {
+  return `${(threshold * 100).toFixed(0)}%，相对当前已发布 Top 边最大流量`;
 }
 
 function seqColor(value: number, max: number) {
   const idx = Math.min(SEQ.length - 1, Math.floor((value / Math.max(max, 1e-9)) * SEQ.length));
   return SEQ[idx];
+}
+
+/** Quantitative domains use only nodes that are finite for every currently encoded channel. */
+export function networkNodeEncodingModel(
+  nodes: readonly NetworkData["nodes"][number][],
+  sizeMetric: NetworkMetric,
+  colorMode: NetworkColorMode,
+): NetworkNodeEncodingModel {
+  const encodedMetrics: NetworkMetric[] = colorMode === "region" || colorMode === sizeMetric
+    ? [sizeMetric]
+    : [sizeMetric, colorMode];
+  const values = nodes.map((node) => ({
+    country: String(node.country),
+    metrics: (Object.fromEntries(
+      encodedMetrics.map((metric) => [metric, finiteNetworkMetric(node[metric])]),
+    ) as Partial<Record<NetworkMetric, NetworkMetricValue>>),
+  }));
+  const eligible = values.filter(({ metrics }) =>
+    encodedMetrics.every((metric) => metrics[metric] !== null));
+  const eligibleMax = (metric: NetworkMetric) => Math.max(
+    ...eligible.map(({ metrics }) => metrics[metric] as number),
+    1e-9,
+  );
+  const sizeMax = eligibleMax(sizeMetric);
+  const colorMax = colorMode === "region" ? null : eligibleMax(colorMode);
+  const encodings: Record<string, NetworkNodeEncoding> = {};
+  values.forEach(({ country, metrics }) => {
+    const isEligible = encodedMetrics.every((metric) => metrics[metric] !== null);
+    if (!isEligible) {
+      encodings[country] = { eligible: false, radius: 3.5, color: NETWORK_UNAVAILABLE_COLOR };
+      return;
+    }
+    const sizeValue = metrics[sizeMetric] as number;
+    const color = colorMode === "region"
+      ? CAT[REGION_OF[country] ?? 5]
+      : seqColor(metrics[colorMode] as number, colorMax as number);
+    encodings[country] = {
+      eligible: true,
+      radius: 3.5 + (sizeValue / Math.max(sizeMax, 1e-9)) * 11,
+      color,
+    };
+  });
+  return { encodedMetrics, nodes: encodings, sizeMax, colorMax };
 }
 
 /** Inline activation always opens the dialog; activation inside it only changes selection. */
@@ -96,7 +230,7 @@ export function NetworkViz({
   const model = useMemo(() => {
     const W = 1000, H = 560, cx = W / 2, cy = H / 2;
     const byRegion: string[][] = REGIONS.map(() => []);
-    const metrics: Record<NetworkMetric, Record<string, number>> = {
+    const metrics: Record<NetworkMetric, Record<string, NetworkMetricValue>> = {
       gvc_production_share: {},
       "weighted degree": {},
       gross_exports: {},
@@ -104,12 +238,14 @@ export function NetworkViz({
     data.nodes.forEach((n) => {
       const c = String(n.country);
       NETWORK_METRICS.forEach((m) => {
-        metrics[m.key][c] = num(n[m.key]);
+        metrics[m.key][c] = finiteNetworkMetric(n[m.key]);
       });
       byRegion[REGION_OF[c] ?? 5].push(c);
     });
     byRegion.forEach((list) =>
-      list.sort((a, b) => metrics.gvc_production_share[b] - metrics.gvc_production_share[a]));
+      list.sort((a, b) =>
+        (metrics.gvc_production_share[b] ?? Number.NEGATIVE_INFINITY)
+        - (metrics.gvc_production_share[a] ?? Number.NEGATIVE_INFINITY)));
 
     // 每个区域一个锚点,成员沿环排布;记录“朝外”单位向量供标签放射避让
     const pos: Record<string, { x: number; y: number; ox: number; oy: number }> = {};
@@ -130,58 +266,64 @@ export function NetworkViz({
       });
     });
 
-    const maxFlow = Math.max(...data.edges.map((e) => num(e.flow)), 1);
-    const maxMetric: Record<NetworkMetric, number> = {
-      gvc_production_share: Math.max(...Object.values(metrics.gvc_production_share), 1e-9),
-      "weighted degree": Math.max(...Object.values(metrics["weighted degree"]), 1e-9),
-      gross_exports: Math.max(...Object.values(metrics.gross_exports), 1e-9),
-    };
-    // 伙伴只列一次，但分别保存流出/流入，不能把两条有向边误写成无方向的“双边流量”。
-    const nbFlow: Record<string, Record<string, { inflow: number; outflow: number }>> = {};
-    data.edges.forEach((e) => {
-      const s = String(e.source), t = String(e.target), f = num(e.flow);
-      const fromSource = (nbFlow[s] ??= {});
-      const fromTarget = (nbFlow[t] ??= {});
-      const sourcePartner = (fromSource[t] ??= { inflow: 0, outflow: 0 });
-      const targetPartner = (fromTarget[s] ??= { inflow: 0, outflow: 0 });
-      sourcePartner.outflow += f;
-      targetPartner.inflow += f;
-    });
-    const neighbors: Record<string, { c: string; inflow: number; outflow: number; total: number }[]> = {};
-    Object.entries(nbFlow).forEach(([c, m]) => {
-      neighbors[c] = Object.entries(m)
-        .map(([p, flow]) => ({ c: p, ...flow, total: flow.inflow + flow.outflow }))
-        .sort((a, b) => b.total - a.total);
-    });
-
-    // 静态标签只给贸易流量最大的节点(区域内前 2),其余悬停时显示,避免密集区碰撞
-    const flowSum: Record<string, number> = {};
-    Object.entries(neighbors).forEach(([c, l]) => { flowSum[c] = l.reduce((s, n) => s + n.total, 0); });
-    const topLabeled = new Set<string>();
-    byRegion.forEach((list) =>
-      [...list].sort((a, b) => (flowSum[b] ?? 0) - (flowSum[a] ?? 0)).slice(0, 2)
-        .forEach((c) => topLabeled.add(c)));
-    return { W, H, pos, metrics, maxMetric, maxFlow, neighbors, topLabeled };
+    return { W, H, pos, metrics, byRegion };
   }, [data]);
+  const nodeEncodingModel = useMemo(
+    () => networkNodeEncodingModel(data.nodes, sizeMetric, colorMode),
+    [data.nodes, sizeMetric, colorMode],
+  );
+  const thresholdModel = useMemo(
+    () => thresholdedNetworkModel(data.edges, edgeThreshold),
+    [data.edges, edgeThreshold],
+  );
 
-  const { W, H, pos, metrics, maxMetric, maxFlow, neighbors, topLabeled } = model;
+  const { W, H, pos, metrics, byRegion } = model;
+  const { visibleEdges, neighbors, maxFlow } = thresholdModel;
+  // 静态标签只给当前可见贸易流量最大的节点(区域内前 2)。
+  const flowSum: Record<string, number> = {};
+  Object.entries(neighbors).forEach(([country, partners]) => {
+    flowSum[country] = partners.reduce((sum, partner) => sum + partner.total, 0);
+  });
+  const topLabeled = new Set<string>();
+  byRegion.forEach((list) =>
+    [...list].sort((a, b) => (flowSum[b] ?? 0) - (flowSum[a] ?? 0)).slice(0, 2)
+      .forEach((country) => topLabeled.add(country)));
   const focus = hovered ?? selected;
-  const adj = focus ? new Set([focus, ...(neighbors[focus] ?? []).map((n) => n.c)]) : null;
-  const visibleEdges = data.edges.filter((e) => num(e.flow) / maxFlow >= edgeThreshold);
+  const adj = focus ? new Set([focus, ...(neighbors[focus] ?? []).map((neighbor) => neighbor.c)]) : null;
+  if (data.nodes.length === 0 && data.edges.length === 0) {
+    return (
+      <div style={cardStyle} role="status" aria-live="polite">
+        <strong>贸易网络当前没有可显示的数据。</strong>
+        <p className="muted">已成功加载空网络：0 个节点，0 条边。</p>
+      </div>
+    );
+  }
+  const hasSelectedMetrics = (country: string) => nodeEncodingModel.nodes[country]?.eligible ?? false;
+  if (!Object.keys(pos).some(hasSelectedMetrics)) {
+    const labels = nodeEncodingModel.encodedMetrics.map((metric) => metricMetaLabel(metric)).join("、");
+    return (
+      <div
+        style={cardStyle}
+        role="status"
+        aria-live="polite"
+        aria-label="贸易网络所选指标不可用"
+      >
+        <strong>贸易网络所选指标不可用。</strong>
+        <p className="muted">数据已成功加载，但所有节点均缺少有限的{labels}值；未生成可操作网络图。</p>
+      </div>
+    );
+  }
+  const hasUnavailableContext = Object.keys(pos).some((country) => !hasSelectedMetrics(country));
   const labeledEdges = new Set(selected
     ? visibleEdges.filter((edge) => String(edge.source) === selected || String(edge.target) === selected)
       .sort((a, b) => num(b.flow) - num(a.flow)).slice(0, 5)
     : []);
   const metricMeta = Object.fromEntries(NETWORK_METRICS.map((m) => [m.key, m])) as Record<NetworkMetric, typeof NETWORK_METRICS[number]>;
-  const nodeRadius = (c: string) =>
-    3.5 + ((metrics[sizeMetric][c] ?? 0) / Math.max(maxMetric[sizeMetric], 1e-9)) * 11;
-  const nodeColor = (c: string) =>
-    colorMode === "region"
-      ? CAT[REGION_OF[c] ?? 5]
-      : seqColor(metrics[colorMode][c] ?? 0, maxMetric[colorMode]);
+  const nodeRadius = (country: string) => nodeEncodingModel.nodes[country]?.radius ?? 3.5;
+  const nodeColor = (country: string) => nodeEncodingModel.nodes[country]?.color ?? NETWORK_UNAVAILABLE_COLOR;
   const tooltipLines = (c: string): [string, string][] => [
-    ["", `${countryLabel(c)} · ${REGIONS[REGION_OF[c] ?? 5]}`],
-    ...NETWORK_METRICS.map((m) => [m.label, fmtNetworkMetric(metrics[m.key][c] ?? 0, m.format)] as [string, string]),
+    ["", `${countryLabel(c)} · 预设地理区域：${REGIONS[REGION_OF[c] ?? 5]}`],
+    ...NETWORK_METRICS.map((m) => [m.label, networkMetricDisplay(metrics[m.key][c], m.format)] as [string, string]),
     ["主要伙伴", (neighbors[c] ?? []).slice(0, 4).map((n) => n.c).join("、") || "—"],
   ];
   const selectedNeighbors = selected ? neighbors[selected] ?? [] : [];
@@ -212,9 +354,9 @@ export function NetworkViz({
   };
   const accessibleNodeLabel = (country: string) => [
     countryLabel(country),
-    REGIONS[REGION_OF[country] ?? 5],
+    `预设地理区域 ${REGIONS[REGION_OF[country] ?? 5]}`,
     ...NETWORK_METRICS.map((metric) =>
-      `${metric.label} ${fmtNetworkMetric(metrics[metric.key][country] ?? 0, metric.format)}`),
+      `${metric.label} ${networkMetricDisplay(metrics[metric.key][country], metric.format)}`),
     selected === country ? "已选中" : "未选中",
     expanded ? "当前处于大图模式" : "激活后进入大图模式",
   ].join("，");
@@ -262,7 +404,7 @@ export function NetworkViz({
             </select>
           )}
         </LabeledControl>
-        <LabeledControl label="显示边权阈值">
+        <LabeledControl label="显示截止（当前发布 Top 边最大流量的百分比）">
           {(id) => (
             <input
               id={id}
@@ -271,6 +413,7 @@ export function NetworkViz({
               max={0.5}
               step={0.01}
               value={edgeThreshold}
+              aria-valuetext={networkThresholdAriaValueText(edgeThreshold)}
               onChange={(e) => setEdgeThreshold(Number(e.target.value))}
             />
           )}
@@ -283,8 +426,8 @@ export function NetworkViz({
         style={{ display: "block", width: "100%", height: expanded ? "100%" : "auto" }}
         role="group"
         aria-label={expanded
-          ? "贸易网络大图。按方向键浏览节点，按 Enter 或空格选择节点。"
-          : "全球贸易网络图。激活任意节点进入大图模式；按方向键浏览节点。"}
+          ? "贸易网络大图。节点位置采用预设地理区域布局，不是社区检测结果。按方向键浏览节点，按 Enter 或空格选择节点。"
+          : "全球贸易网络图。节点位置采用预设地理区域布局，不是社区检测结果。激活任意节点进入大图模式；按方向键浏览节点。"}
         onClick={() => setSelected(null)}
       >
         <defs>
@@ -319,7 +462,7 @@ export function NetworkViz({
             const opacity = active ? 0.16 + f * 0.48 : 0.025;
             return (
               <g key={`${s}-${t}-${i}`}>
-              <title>{s} → {t}: {fmtNetworkMetric(num(e.flow), "amount")} 百万美元</title>
+              <title>{`${s} → ${t}: ${fmtNetworkMetric(num(e.flow), "amount")} 百万美元`}</title>
               <path fill="none" stroke={col}
                 d={`M${startX} ${startY} Q${controlX} ${controlY} ${endX} ${endY}`}
                 opacity={opacity} markerEnd={`url(#${markerId})`}
@@ -339,6 +482,7 @@ export function NetworkViz({
             const p = pos[c];
             const r = nodeRadius(c);
             const col = nodeColor(c);
+            const unavailable = !hasSelectedMetrics(c);
             const dim = adj ? !adj.has(c) : false;
             const labeled = focus ? adj!.has(c) : topLabeled.has(c);
             return (
@@ -348,7 +492,7 @@ export function NetworkViz({
                   nodeRefs.current[c] = node;
                   if (returnFocusCountryRef.current === c) returnFocusRef.current = node;
                 }}
-                className="network-node"
+                className={`network-node${unavailable ? " network-node--metric-unavailable" : ""}`}
                 transform={`translate(${p.x} ${p.y})`}
                 opacity={dim ? 0.18 : 1}
                 role="button"
@@ -394,7 +538,13 @@ export function NetworkViz({
                   fill={col}
                   fillOpacity={selected === c ? 0.22 : 0.12}
                 />
-                <circle r={r} fill={col} stroke="#fff" strokeWidth={2} />
+                <circle
+                  r={r}
+                  fill={col}
+                  stroke={unavailable ? "#343a46" : "#fff"}
+                  strokeWidth={2}
+                  strokeDasharray={unavailable ? "2.5 2" : undefined}
+                />
                 {labeled && (
                   <text x={p.ox * (r + 7)} y={p.oy * (r + 9) + 4}
                     textAnchor={p.ox > 0.35 ? "start" : p.ox < -0.35 ? "end" : "middle"}
@@ -407,12 +557,33 @@ export function NetworkViz({
           })}
         </g>
       </svg>
+      <details className="chart-data-disclosure network-edge-disclosure">
+        <summary>查看当前显示的有向边文本表（{visibleEdges.length} 条）</summary>
+        {visibleEdges.length === 0 ? (
+          <p className="muted" role="status">当前截止比例下没有可显示的已发布 Top 边。</p>
+        ) : (
+          <table className="data-table">
+            <caption>当前阈值下绘制、伙伴高亮与详情共同使用的有向边</caption>
+            <thead><tr><th scope="col">源经济体</th><th scope="col">目标经济体</th><th scope="col">流量（百万美元）</th></tr></thead>
+            <tbody>
+              {visibleEdges.map((edge, index) => (
+                <tr key={`${String(edge.source)}-${String(edge.target)}-${index}`}>
+                  <th scope="row">{countryLabel(String(edge.source))}</th>
+                  <td>{countryLabel(String(edge.target))}</td>
+                  <td>{fmtNetworkMetric(edge.flow as number, "amount")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </details>
       <div className="network-legend">
-        <Legend items={
-          colorMode === "region"
+        <Legend items={[
+          ...(colorMode === "region"
             ? REGIONS.map((r, i) => ({ name: r, color: CAT[i] }))
-            : SEQ.map((color, i) => ({ name: i === 0 ? "低" : i === SEQ.length - 1 ? "高" : "", color })).filter((it) => it.name)
-        } />
+            : SEQ.map((color, i) => ({ name: i === 0 ? "低" : i === SEQ.length - 1 ? "高" : "", color })).filter((it) => it.name)),
+          ...(hasUnavailableContext ? [{ name: "该指标不可用", color: NETWORK_UNAVAILABLE_COLOR }] : []),
+        ]} />
       </div>
       {selected && (
         <div className="network-detail">
@@ -431,30 +602,36 @@ export function NetworkViz({
             {NETWORK_METRICS.map((m) => (
               <div key={m.key}>
                 <span>{m.label}</span>
-                <b>{fmtNetworkMetric(metrics[m.key][selected] ?? 0, m.format)}</b>
+                <b>{networkMetricDisplay(metrics[m.key][selected], m.format)}</b>
               </div>
             ))}
           </div>
-          <table>
-            <thead><tr><th>伙伴</th><th>流出</th><th>流入</th><th>合计</th></tr></thead>
-            <tbody>
-              {selectedNeighbors.slice(0, 8).map((n) => (
-                <tr key={n.c}>
-                  <td>{countryLabel(n.c)}</td>
-                  <td>{fmtNetworkMetric(n.outflow, "amount")}</td>
-                  <td>{fmtNetworkMetric(n.inflow, "amount")}</td>
-                  <td>{fmtNetworkMetric(n.total, "amount")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {selectedNeighbors.length === 0 ? (
+            <p className="muted" role="status">当前显示截止下没有与该节点相连的可见伙伴。</p>
+          ) : (
+            <table>
+              <thead><tr><th>伙伴</th><th>流出</th><th>流入</th><th>合计</th></tr></thead>
+              <tbody>
+                {selectedNeighbors.slice(0, 8).map((n) => (
+                  <tr key={n.c}>
+                    <td>{countryLabel(n.c)}</td>
+                    <td>{fmtNetworkMetric(n.outflow, "amount")}</td>
+                    <td>{fmtNetworkMetric(n.inflow, "amount")}</td>
+                    <td>{fmtNetworkMetric(n.total, "amount")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
       <div className="network-caption">
         {expanded ? "大图模式 · 按 Esc 或“退出大图”返回" : "点击任意节点进入大图模式"}<br />
-        节点大小 = {metricMeta[sizeMetric].label} · 节点颜色 = {colorMode === "region" ? "区域" : metricMeta[colorMode].label}<br />
-        显示 {visibleEdges.length}/{data.edges.length} 条 Top 边；箭头表示 source → target<br />
-        阈值仅影响 Top 边显示，不影响 Gephi 指标计算
+        节点位置 = 预设地理区域布局（不是社区检测）；用于观察预设区域内 / 区域间流向<br />
+        节点大小 = {metricMeta[sizeMetric].label} · 节点颜色 = {colorMode === "region" ? "预设地理区域" : metricMeta[colorMode].label}<br />
+        {hasUnavailableContext && <>所选指标不可用节点 = 灰色虚线、固定最小尺寸（仅保留网络上下文）<br /></>}
+        显示条件：边流量 ÷ 当前发布 Top 边中的最大流量 ≥ {(edgeThreshold * 100).toFixed(0)}%；显示 {visibleEdges.length}/{thresholdModel.publishedEdges.length} 条已发布 Top 边；箭头表示 source → target<br />
+        截止比例只影响边的显示、伙伴高亮与详情；完整图上的中心性指标保持不变
       </div>
       {Tip}
     </div>

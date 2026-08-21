@@ -15,6 +15,9 @@ class MemoryStorage {
 if (typeof globalThis.localStorage === "undefined") {
   (globalThis as { localStorage?: unknown }).localStorage = new MemoryStorage();
 }
+if (typeof globalThis.window === "undefined") {
+  (globalThis as unknown as { window: EventTarget }).window = globalThis;
+}
 
 function authUser(username: string): AuthUser {
   return { username, name: username, role: "student" };
@@ -38,6 +41,60 @@ describe("auth expiration", () => {
     }
   });
 
+  test("an active-token 401 expires the mounted session", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalToken = localStorage.getItem("gvcsim_token");
+    let events = 0;
+    const onExpired = () => events += 1;
+    globalThis.addEventListener("gvcsim-auth-expired", onExpired);
+    try {
+      setActiveAuthToken("active-token");
+      localStorage.setItem("gvcsim_token", "active-token");
+      globalThis.fetch = (async () => new Response(JSON.stringify({ detail: "expired" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })) as unknown as typeof fetch;
+
+      await expect(api.me("active-token")).rejects.toThrow("expired");
+      expect(getActiveAuthToken()).toBeNull();
+      expect(localStorage.getItem("gvcsim_token")).toBeNull();
+      expect(events).toBe(1);
+    } finally {
+      globalThis.removeEventListener("gvcsim-auth-expired", onExpired);
+      setActiveAuthToken(originalToken);
+      if (originalToken == null) localStorage.removeItem("gvcsim_token");
+      else localStorage.setItem("gvcsim_token", originalToken);
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("a stale-token 401 does not expire the mounted session", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalToken = localStorage.getItem("gvcsim_token");
+    let events = 0;
+    const onExpired = () => events += 1;
+    globalThis.addEventListener("gvcsim-auth-expired", onExpired);
+    try {
+      setActiveAuthToken("active-token");
+      localStorage.setItem("gvcsim_token", "active-token");
+      globalThis.fetch = (async () => new Response(JSON.stringify({ detail: "expired" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      })) as unknown as typeof fetch;
+
+      await expect(api.me("stale-token")).rejects.toThrow("expired");
+      expect(getActiveAuthToken()).toBe("active-token");
+      expect(localStorage.getItem("gvcsim_token")).toBe("active-token");
+      expect(events).toBe(0);
+    } finally {
+      globalThis.removeEventListener("gvcsim-auth-expired", onExpired);
+      setActiveAuthToken(originalToken);
+      if (originalToken == null) localStorage.removeItem("gvcsim_token");
+      else localStorage.setItem("gvcsim_token", originalToken);
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("mutations use the mounted tab token, not another tab's stored token", async () => {
     const originalFetch = globalThis.fetch;
     const originalToken = localStorage.getItem("gvcsim_token");
@@ -56,6 +113,82 @@ describe("auth expiration", () => {
       setActiveAuthToken(originalToken);
       if (originalToken == null) localStorage.removeItem("gvcsim_token");
       else localStorage.setItem("gvcsim_token", originalToken);
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("login requests", () => {
+  test("times out login after 10 seconds and retries only when called again", async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    jest.useFakeTimers();
+    globalThis.fetch = ((_input: string | URL | Request, init?: RequestInit) => {
+      calls += 1;
+      if (calls > 1) {
+        return Promise.resolve(new Response(JSON.stringify({
+          token: "token",
+          user: authUser("student"),
+          expires_at: 1,
+        }), { status: 200, headers: { "Content-Type": "application/json" } }));
+      }
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+      });
+    }) as unknown as typeof fetch;
+    try {
+      const stalled = api.login("student", "password");
+      jest.advanceTimersByTime(10_000);
+      await expect(stalled).rejects.toThrow("请求超时（10 秒）");
+      expect(calls).toBe(1);
+      expect((await api.login("student", "password")).token).toBe("token");
+      expect(calls).toBe(2);
+    } finally {
+      jest.useRealTimers();
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe("mutations", () => {
+  test("times out response parsing after 120 seconds and allows a manual retry without automatic calls", async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    let firstSignal: AbortSignal | null = null;
+    let markJsonStarted: () => void = () => undefined;
+    const jsonStarted = new Promise<void>((resolve) => {
+      markJsonStarted = resolve;
+    });
+    jest.useFakeTimers();
+    globalThis.fetch = ((_input: string | URL | Request, init?: RequestInit) => {
+      calls += 1;
+      if (calls > 1) {
+        return Promise.resolve(new Response("{}", {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }));
+      }
+      firstSignal = init?.signal ?? null;
+      return Promise.resolve({
+        ok: true,
+        json: () => {
+          markJsonStarted();
+          return new Promise<never>(() => undefined);
+        },
+      } as unknown as Response);
+    }) as unknown as typeof fetch;
+    try {
+      const stalled = api.classroom.submitReport();
+      await jsonStarted;
+      jest.advanceTimersByTime(120_000);
+      await expect(stalled).rejects.toThrow("请求超时（120 秒）");
+      expect(firstSignal).not.toBeNull();
+      expect((firstSignal as unknown as AbortSignal).aborted).toBe(true);
+      expect(calls).toBe(1);
+      await api.classroom.submitReport();
+      expect(calls).toBe(2);
+    } finally {
+      jest.useRealTimers();
       globalThis.fetch = originalFetch;
     }
   });
@@ -91,6 +224,44 @@ describe("GET requests", () => {
   });
 });
 
+describe("single-entity indicator requests", () => {
+  test("rejects global scope before it can call fetch", async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+    try {
+      await expect(api.countryIndicatorsForCountry(2020, "")).rejects.toThrow("必须指定国家");
+      await expect(api.industryIndicatorsAll(2020, "")).rejects.toThrow("必须指定国家");
+      expect(calls).toBe(0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("requests a complete explicit-country network page without changing global pagination", async () => {
+    const originalFetch = globalThis.fetch;
+    const urls: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      urls.push(String(input));
+      return new Response(JSON.stringify({ total: 0, page: 1, page_size: 25, rows: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    try {
+      await api.industryIndicators(2020, "CHN", 1, 200);
+      await api.industryIndicators(2020, "", 3);
+      expect(urls[0]).toBe("/api/indicators/industry/2020?page=1&page_size=200&country=CHN");
+      expect(urls[1]).toBe("/api/indicators/industry/2020?page=3");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
 describe("withQuery", () => {
   test("encodes every user-controlled query value", () => {
     const url = withQuery("/api/items", {
@@ -106,5 +277,25 @@ describe("withQuery", () => {
 
   test("does not append an empty question mark", () => {
     expect(withQuery("/api/items", { country: null })).toBe("/api/items");
+  });
+
+  test("shock panel sends the typed filter and never the ambiguous only_hit parameter", async () => {
+    const originalFetch = globalThis.fetch;
+    let requested = "";
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      requested = String(input);
+      return new Response(JSON.stringify({ total: 0, page: 1, page_size: 25, rows: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as typeof fetch;
+    try {
+      await api.shockPanel(2020, "sanctions", "CHN", "C26", "treated", "country_asc", 2);
+      expect(requested).toContain("filter=treated");
+      expect(requested).toContain("sort=country_asc");
+      expect(requested).not.toContain("only_hit");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });

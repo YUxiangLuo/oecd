@@ -32,7 +32,7 @@ uv run gvcsim compute
 uv run gvcsim serve --port 8000
 ```
 
-开发前端可另开终端运行 `cd frontend && bun run dev`。
+开发前端可另开终端运行 `cd frontend && bun run dev`。Vite 默认把 `/api` 代理到 `http://127.0.0.1:8000`；API 若绑在其他端口（例如 18000），先设置 `GVCSIM_API_PROXY='http://127.0.0.1:18000'`。
 
 ## 会话与数据库
 
@@ -75,3 +75,12 @@ cd frontend && bun test src && bun run build
 ```
 
 Gephi 0.10.1 独立基准可用 `scripts/gephi_golden/generate.sh --check` 校验；该基准采用有向图，路径类中心性按无权最短路计算，边权只进入 weighted degree。
+
+冲击面板性能验收在有效 active v7 release 完成最终重算后运行：
+
+```bash
+GVCSIM_BENCHMARK_USERNAME=student GVCSIM_BENCHMARK_PASSWORD='…' \
+  uv run python scripts/benchmark_shock_panel_v7.py
+```
+
+脚本先执行 release 校验，再通过正常登录中间件访问 `/api/shocks/panel`，记录 release/shock contract、冷索引构建、warm sequential 与 8-concurrent p95，并对照 500ms/1.5s 预算。这是可选性能自测，不是发布门槛。`benchmarks/shock_panel_preliminary_v3.json` 只是旧 v3 直调初测。

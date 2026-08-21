@@ -12,9 +12,11 @@ interface QuizFeedback {
 export function QuizPanel({
   step,
   state,
+  completionBlockedReason = null,
 }: {
   step: Step;
   state: StepStateApi<Record<string, unknown>>;
+  completionBlockedReason?: string | null;
 }) {
   const quiz = step.quiz;
   const data = state.data as (QuizCompletionState & Record<string, unknown>) | undefined;
@@ -34,15 +36,15 @@ export function QuizPanel({
 
   const answeredAll = quiz.questions.every((question) => Boolean(draftAnswers[question.id]));
   const locallyPassed = data?.quiz?.version === quiz.version;
-  const complete = state.complete;
-  const awaitingSave = locallyPassed && !complete && state.syncing;
+  const complete = state.complete && !completionBlockedReason;
+  const awaitingSave = locallyPassed && !state.complete && state.syncing;
   const choose = (questionId: string, optionId: string) => {
     setDraftAnswers((current) => ({ ...current, [questionId]: optionId }));
     setFeedback([]);
     setError(null);
   };
   const submit = async () => {
-    if (!answeredAll || submitting) return;
+    if (!answeredAll || submitting || completionBlockedReason) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -80,6 +82,7 @@ export function QuizPanel({
   if (locallyPassed) completionMessage = "服务器尚未确认完成，请重新提交答案";
   if (locallyPassed && state.syncError) completionMessage = "完成状态尚未保存，可在页面顶部重试或重新提交答案";
   if (awaitingSave) completionMessage = "答案正确，正在保存完成状态…";
+  if (completionBlockedReason) completionMessage = "质检状态有效后才能显示并提交本步完成状态";
   if (complete) completionMessage = "✓ 本步已完成";
 
   return (
@@ -121,11 +124,19 @@ export function QuizPanel({
         })}
       </div>
       <div className="quiz-submit-row">
-        <button type="button" className="primary" disabled={!answeredAll || submitting || awaitingSave} onClick={submit}>
+        <button
+          type="button"
+          className="primary"
+          disabled={!answeredAll || submitting || awaitingSave || Boolean(completionBlockedReason)}
+          onClick={submit}
+        >
           {submitLabel}
         </button>
         <span className={complete ? "quiz-complete" : "muted"}>{completionMessage}</span>
       </div>
+      {completionBlockedReason && (
+        <div className="error-box" role="alert">{completionBlockedReason}</div>
+      )}
       {error && <div className="error-box">{error}</div>}
     </section>
   );

@@ -68,7 +68,7 @@ export function StudentsTab() {
       </Toolbar>
       <ScrollableRegion className="table-wrap" label="学生进度表，可横向滚动">
         <table className="data-table">
-          <thead><tr><th>姓名</th><th>用户名</th><th>学号</th><th>完成步骤</th><th>报告</th><th>得分</th><th>有效活动</th><th>最近登录</th><th /></tr></thead>
+          <thead><tr><th>姓名</th><th>用户名</th><th>学号</th><th>完成步骤</th><th>报告</th><th>得分</th><th>有效活动</th><th>最近登录</th><th><span className="sr-only">操作</span></th></tr></thead>
           <tbody>
             {students.map((student) => (
               <tr key={student.id}>

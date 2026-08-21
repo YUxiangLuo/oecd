@@ -9,6 +9,8 @@ from gvcsim.data.citations import (
     artifact_data_sources,
     report_source_disclosures,
     report_source_label,
+    validate_data_sources,
+    DataSourcesValidationError,
 )
 
 
@@ -22,10 +24,17 @@ def test_real_release_metadata_carries_oecd_attribution(tmp_path, monkeypatch):
 
     metadata = artifact_data_sources(tmp_path)
 
-    assert set(metadata) == {"oecd_icio"}
+    assert set(metadata) == {"version", "oecd_icio", "simulated_macro_controls"}
+    assert metadata["version"] == 1
     assert metadata["oecd_icio"]["release"] == "2023"
     assert metadata["oecd_icio"]["dataset_url"] == OECD_ICIO_DATASET_URL
     assert "Inter-Country Input-Output Tables" in metadata["oecd_icio"]["citation"]
+    controls = metadata["simulated_macro_controls"]
+    assert controls["kind"] == "deterministic-teaching-mock"
+    assert controls["production_data"] is False
+    assert "ICIO-derived" in controls["scale_input"]["description"]
+    assert "Not WDI data" in controls["observations_disclosure"]
+    validate_data_sources(metadata)
 
 
 def test_ci_synthetic_release_is_never_attributed_as_oecd_observations(tmp_path, monkeypatch):
@@ -38,7 +47,7 @@ def test_ci_synthetic_release_is_never_attributed_as_oecd_observations(tmp_path,
 
     metadata = artifact_data_sources(tmp_path)
 
-    assert set(metadata) == {"ci_synthetic_icio"}
+    assert set(metadata) == {"version", "ci_synthetic_icio", "simulated_macro_controls"}
     assert metadata["ci_synthetic_icio"]["production_data"] is False
     assert "contains no OECD observations" in metadata["ci_synthetic_icio"]["citation"]
     assert report_source_label(metadata).startswith("CI-only")
@@ -66,14 +75,15 @@ def test_synthetic_marker_requires_both_environment_gates(tmp_path, monkeypatch,
         artifact_data_sources(tmp_path)
 
 
-def test_unknown_manifest_source_does_not_fall_back_to_an_oecd_claim():
-    metadata = {"future_source": {"citation": "unknown"}}
+def test_unknown_or_tampered_source_fails_closed(tmp_path, monkeypatch):
+    with pytest.raises(DataSourcesValidationError, match="version"):
+        report_source_label({"future_source": {"citation": "unknown"}})
 
-    assert report_source_label(metadata) == "未识别的数据源"
-    disclosure = "\n".join(report_source_disclosures(metadata))
-    assert "无法识别" in disclosure
-    assert "不得对外发布" in disclosure
-    assert OECD_ICIO_DATASET_URL not in disclosure
+    _clear_ci_gates(monkeypatch)
+    metadata = artifact_data_sources(tmp_path)
+    metadata["simulated_macro_controls"]["production_data"] = True
+    with pytest.raises(DataSourcesValidationError, match="simulated_macro_controls"):
+        report_source_disclosures(metadata)
 
 
 def test_synthetic_flag_without_a_valid_marker_fails_closed(tmp_path, monkeypatch):

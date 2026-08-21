@@ -27,13 +27,46 @@ export const finiteBy = (rows: Row[], ...keys: string[]) => rows.filter((r) => k
 /** 讲解性正文的最大阅读行宽(px):容器与图表/表格仍全宽,只有正文不跟着拉长,保证可读。 */
 const PROSE_MAX = 820;
 
+export type ObservationScope = "country" | "country-industry";
+
+export interface VizObservation {
+  entity: string;
+  country: string;
+  industry?: string;
+  year: number;
+  value: number;
+  /** Additive provenance fields; legacy report readers still use the fields above. */
+  metric?: string;
+  release?: string;
+  scope?: ObservationScope;
+  generation?: number;
+  request_key?: string;
+  source?: "explicit-heat-row";
+}
+
+export interface ObservationRequestIdentity {
+  release: string;
+  year: number;
+  scope: ObservationScope;
+  country?: string;
+  generation: number;
+  requestKey: string;
+}
+
+export interface BoundRows {
+  identity: ObservationRequestIdentity;
+  rows: Row[];
+}
+
 export interface VizStepState extends QuizCompletionState, Record<string, unknown> {
   chart?: string;
   compared?: string[];
   year?: number;
   drill?: string;
   metric?: string;
-  observations?: { entity: string; country: string; industry?: string; year: number; value: number }[];
+  heat_sort?: string;
+  heat_coverage?: string;
+  observations?: VizObservation[];
 }
 
 interface RestoredVizState {
@@ -52,6 +85,51 @@ export function addInspectedCountry(picked: string[], country: string, allowed: 
   return [...picked, country];
 }
 
+const RELEASE_ID = /^[0-9a-f]{32}$/;
+
+export function currentReleaseId(meta: Pick<Meta, "dataset">): string | null {
+  const release = meta.dataset?.release_id;
+  return typeof release === "string" && RELEASE_ID.test(release) ? release : null;
+}
+
+export function observationRequestKey(
+  meta: Pick<Meta, "dataset">,
+  year: number,
+  scope: ObservationScope,
+  country?: string,
+): string | null {
+  const release = currentReleaseId(meta);
+  if (!release) return null;
+  return [release, String(year), scope, country ?? ""].join(":");
+}
+
+export function observationRequestIdentity(
+  meta: Pick<Meta, "dataset">,
+  year: number,
+  scope: ObservationScope,
+  generation: number,
+  country?: string,
+): ObservationRequestIdentity | null {
+  const release = currentReleaseId(meta);
+  const requestKey = observationRequestKey(meta, year, scope, country);
+  return release && requestKey
+    ? { release, year, scope, ...(country ? { country } : {}), generation, requestKey }
+    : null;
+}
+
+export function sameObservationIdentity(
+  first: ObservationRequestIdentity | null,
+  second: ObservationRequestIdentity | null,
+): boolean {
+  return first !== null && second !== null
+    && first.release === second.release
+    && first.year === second.year
+    && first.scope === second.scope
+    && first.country === second.country
+    && first.generation === second.generation
+    && first.requestKey === second.requestKey;
+}
+
 /** Pure restoration policy, shared by initial render, async hydration and tests. */
 export function restoreVizState(
   meta: Pick<Meta, "years" | "countries">,
@@ -68,28 +146,70 @@ export function restoreVizState(
   };
 }
 
-/** Capture the exact country-level values behind the current comparison. */
+/** One request-bound country query shared by steps 7–9. */
+export function useCountryIndicatorRows(meta: Meta, year: number) {
+  const evidenceKey = observationRequestKey(meta, year, "country");
+  const requestKey = evidenceKey ?? `missing-release:${year}:country`;
+  const query = useAsync<Row[]>(() => api.countryIndicators(year), [year], { requestKey });
+  const identity = observationRequestIdentity(meta, year, "country", query.generation);
+  const response = query.data !== null && identity !== null
+    ? { identity, rows: query.data } satisfies BoundRows
+    : null;
+  return { ...query, rows: query.data ?? [], identity, response };
+}
+
+export function countryObservationPatch(
+  response: BoundRows | null,
+  expected: ObservationRequestIdentity | null,
+  picked: readonly string[],
+  metric: string,
+): Pick<VizStepState, "metric" | "observations"> {
+  if (!response || !sameObservationIdentity(response.identity, expected) || picked.length < 1) {
+    return { metric, observations: [] };
+  }
+  const observations = picked.map((country): VizObservation | null => {
+    const row = response.rows.find((item) => String(item.country) === country);
+    const value = row?.[metric];
+    return typeof value === "number" && Number.isFinite(value)
+      ? {
+          entity: country,
+          country,
+          year: response.identity.year,
+          value,
+          metric,
+          release: response.identity.release,
+          scope: response.identity.scope,
+          generation: response.identity.generation,
+          request_key: response.identity.requestKey,
+        }
+      : null;
+  }).filter((item): item is VizObservation => item !== null);
+  return { metric, observations };
+}
+
+/** Capture values only from the response accepted for the current request identity. */
 export function useCountryObservations(
-  rows: Row[],
+  response: BoundRows | null,
+  expected: ObservationRequestIdentity | null,
   picked: string[],
-  year: number,
   metric: string,
   state: StepStateApi<VizStepState>,
 ) {
   useEffect(() => {
-    if (picked.length < 1 || rows.length < 1) return;
-    const observations = picked.map((country) => {
-      const row = rows.find((item) => String(item.country) === country);
-      const value = row?.[metric];
-      return typeof value === "number" && Number.isFinite(value)
-        ? { entity: country, country, year, value }
-        : null;
-    }).filter((item): item is { entity: string; country: string; year: number; value: number } => item != null);
-    if (JSON.stringify(observations) === JSON.stringify(state.data?.observations)
+    const patch = countryObservationPatch(response, expected, picked, metric);
+    if (JSON.stringify(patch.observations) === JSON.stringify(state.data?.observations)
       && state.data?.metric === metric) return;
-    state.save({ metric, observations });
+    state.save(patch);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, picked, year, metric]);
+  }, [response, expected, picked, metric]);
+}
+
+export function invalidateVizObservations(state: StepStateApi<VizStepState>) {
+  state.save({ observations: [] });
+}
+
+function sameCountries(first: readonly string[], second: readonly string[]): boolean {
+  return first.length === second.length && first.every((country, index) => country === second[index]);
 }
 
 /* --------------------------- 常驻教学引导(不折叠) --------------------------- */
@@ -241,9 +361,14 @@ export function useVizLab(
   }, [interacted, lens, picked, year]);
 
   const pickLens = (l: string) => { setLens(l); setInteracted(true); };
-  const pickCountries = (c: string[]) => { setPicked(c); setInteracted(true); };
+  const pickCountries = (c: string[]) => {
+    if (!sameCountries(picked, c)) invalidateVizObservations(state);
+    setPicked(c);
+    setInteracted(true);
+  };
   const setYear = (next: number) => {
     if (!meta.years.includes(next)) return;
+    if (next !== year) invalidateVizObservations(state);
     setYearState(next);
     setInteracted(true);
   };

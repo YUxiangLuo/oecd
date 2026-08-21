@@ -100,10 +100,15 @@ export function EventList({
                 >
                   <span className="shock-event-item-top">
                     <span className="shock-event-item-name">{event.name}</span>
-                    {event.peak_rate > 0 && <span className="shock-event-item-rate">{pct(event.peak_rate)}</span>}
+                    {event.peak_rate > 0 && <span className="shock-event-item-rate">教学峰值 {pct(event.peak_rate)}</span>}
                   </span>
                   <span className="shock-event-item-meta">
                     {event.imposer} → {event.targets} · {event.n_sectors} 个行业
+                  </span>
+                  <span className={`shock-event-source ${event.source_status === "official_event_source" ? "official" : "teaching"}`}>
+                    {event.source_status === "official_event_source"
+                      ? "事件/日期：有官方来源"
+                      : "事件/日期：未逐项引证的教学编码"}
                   </span>
                   {span && (
                     <span className="shock-event-spark" title={dates}>

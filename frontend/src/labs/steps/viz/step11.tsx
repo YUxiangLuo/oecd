@@ -15,8 +15,39 @@ import { api } from "../../../api";
 import { FullscreenPanel } from "../../../fullscreen-panel";
 import type { IndustryPage, Meta, NetworkData, Step, StepStateApi } from "../../../types";
 import { HeatTableViz, NetworkViz, countryLabel } from "../../../viz";
+import {
+  HEAT_COVERAGE_OPTIONS,
+  HEAT_EVIDENCE_METRIC,
+  HEAT_SORT_OPTIONS,
+  heatCoverageLabel,
+  heatRowKey,
+  heatSortLabel,
+  normalizeHeatCoverage,
+  normalizeHeatSortMetric,
+  sameHeatView,
+  visibleHeatRows,
+  type HeatActivation,
+  type HeatCoverage,
+  type HeatSortMetric,
+  type HeatViewOptions,
+} from "../../../viz/steps/step11-network-heat";
 import { AsyncStateMessage, useAsync } from "../../shared";
-import { addInspectedCountry, ChartStory, LensNav, StepIntro, YearSelect, useVizLab, type Row, type VizStepState } from "./scaffold";
+import {
+  addInspectedCountry,
+  ChartStory,
+  invalidateVizObservations,
+  LensNav,
+  observationRequestIdentity,
+  observationRequestKey,
+  sameObservationIdentity,
+  StepIntro,
+  YearSelect,
+  useVizLab,
+  type ObservationRequestIdentity,
+  type Row,
+  type VizObservation,
+  type VizStepState,
+} from "./scaffold";
 
 type Lens = "heat" | "network";
 
@@ -27,24 +58,98 @@ export const STEP10_LENSES: { key: Lens; label: string; hint: string }[] = [
 ];
 const STEP10_LENS_KEYS = STEP10_LENSES.map(({ key }) => key);
 
+export function heatObservationFromActivation(
+  activation: HeatActivation,
+  sourceIdentity: ObservationRequestIdentity | null,
+  currentIdentity: ObservationRequestIdentity | null,
+  rows: readonly Row[],
+  currentView: HeatViewOptions,
+): VizObservation | null {
+  if (!sameObservationIdentity(sourceIdentity, currentIdentity)
+    || !sourceIdentity
+    || sourceIdentity.scope !== "country-industry"
+    || !sourceIdentity.country
+    || activation.metric !== HEAT_EVIDENCE_METRIC
+    || heatRowKey(activation.row) !== activation.rowKey
+    || normalizeHeatSortMetric(activation.sortMetric) !== activation.sortMetric
+    || normalizeHeatCoverage(activation.coverage) !== activation.coverage
+    || !sameHeatView(activation, currentView)) return null;
+  const visible = visibleHeatRows(rows, activation.sortMetric, activation.coverage);
+  const authoritative = visible[activation.visibleIndex];
+  if (!authoritative
+    || heatRowKey(authoritative) !== activation.rowKey
+    || activation.row[HEAT_EVIDENCE_METRIC] !== authoritative[HEAT_EVIDENCE_METRIC]
+    || activation.row[activation.sortMetric] !== authoritative[activation.sortMetric]
+    || String(authoritative.country ?? "") !== sourceIdentity.country) return null;
+  const value = authoritative[HEAT_EVIDENCE_METRIC];
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const industry = String(authoritative.industry ?? "");
+  return {
+    entity: `${sourceIdentity.country}·${industry}`,
+    country: sourceIdentity.country,
+    industry,
+    year: sourceIdentity.year,
+    value,
+    metric: HEAT_EVIDENCE_METRIC,
+    release: sourceIdentity.release,
+    scope: sourceIdentity.scope,
+    generation: sourceIdentity.generation,
+    request_key: sourceIdentity.requestKey,
+    source: "explicit-heat-row",
+  };
+}
+
+export function nextExplicitHeatObservations(
+  prior: readonly VizObservation[],
+  next: VizObservation,
+): VizObservation[] {
+  return [
+    ...prior.filter((item) => item.source === "explicit-heat-row"
+      && item.release === next.release
+      && item.year === next.year
+      && item.scope === next.scope
+      && item.country !== next.country),
+    next,
+  ].slice(-2);
+}
+
+function heatIdentityToken(identity: ObservationRequestIdentity): string {
+  return `${identity.requestKey}\u0000${identity.generation}`;
+}
+
 export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
   const { year, setYear, lens, pickLens, picked, pickCountries, schema } = useVizLab(
     meta, step, state, STEP10_DEFAULT_LENS, STEP10_LENS_KEYS,
   );
   const fallbackDrill = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
   const [drill, setDrill] = useState(state.data?.drill ?? state.data?.compared?.at(-1) ?? fallbackDrill);
+  const [heatSort, setHeatSort] = useState<HeatSortMetric>(
+    normalizeHeatSortMetric(state.data?.heat_sort),
+  );
+  const [heatCoverage, setHeatCoverage] = useState<HeatCoverage>(
+    normalizeHeatCoverage(state.data?.heat_coverage),
+  );
   const [heatAutoExpandSignal, setHeatAutoExpandSignal] = useState(0);
+  const [activeHeat, setActiveHeat] = useState<{ identity: string; rowKey: string } | null>(null);
+  const explicitHeatHistory = useRef<VizObservation[]>(
+    (state.data?.observations ?? []).filter((item) => item.source === "explicit-heat-row"),
+  );
   const drillTouched = useRef(Boolean(state.data));
   useEffect(() => {
     if (drillTouched.current || !state.data) return;
     const saved = state.data.drill ?? state.data.compared?.at(-1);
     if (saved && meta.countries.includes(saved)) setDrill(saved);
+    setHeatSort(normalizeHeatSortMetric(state.data.heat_sort));
+    setHeatCoverage(normalizeHeatCoverage(state.data.heat_coverage));
     drillTouched.current = true;
   }, [state.data, meta.countries]);
+
+  const heatRequestKey = observationRequestKey(meta, year, "country-industry", drill)
+    ?? `missing-release:${year}:country-industry:${drill}`;
   const pageQuery = useAsync<IndustryPage>(
     () => api.industryIndicatorsAll(year, drill),
     [lens, year, drill],
-    { enabled: lens === "heat" && Boolean(drill) },
+    { enabled: lens === "heat" && Boolean(drill), requestKey: heatRequestKey },
   );
   const networkQuery = useAsync<NetworkData>(
     () => api.network(year),
@@ -53,41 +158,84 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
   );
   const page = pageQuery.data;
   const net = networkQuery.data;
+  const heatRows = (page?.rows ?? []) as Row[];
+  const acceptedHeatIdentity = page && lens === "heat"
+    ? observationRequestIdentity(meta, year, "country-industry", pageQuery.generation, drill)
+    : null;
+  const currentHeatIdentity = useRef<ObservationRequestIdentity | null>(acceptedHeatIdentity);
+  const heatView: HeatViewOptions = { sortMetric: heatSort, coverage: heatCoverage };
+  const currentHeatView = useRef<HeatViewOptions>(heatView);
+  // Render-time assignment makes queued callbacks compare against the latest request/view,
+  // rather than waiting for an effect after year/country/retry/view changes.
+  currentHeatIdentity.current = acceptedHeatIdentity;
+  currentHeatView.current = heatView;
 
+  const clearHeatEvidence = () => {
+    setActiveHeat(null);
+    invalidateVizObservations(state);
+  };
   const inspectCountry = (country: string) => {
+    if (!meta.countries.includes(country)) return;
     drillTouched.current = true;
+    if (country !== drill) clearHeatEvidence();
     setDrill(country);
     pickCountries(addInspectedCountry(picked, country, meta.countries));
     state.save({ drill: country });
   };
-  const heatRows = (page?.rows ?? []) as Row[];
+  const changeYear = (next: number) => {
+    if (next !== year) {
+      explicitHeatHistory.current = [];
+      setActiveHeat(null);
+    }
+    setYear(next);
+  };
   const changeLens = (next: Lens) => {
     if (next === "heat" && lens !== "heat") {
+      clearHeatEvidence();
       setHeatAutoExpandSignal((signal) => signal + 1);
     }
     pickLens(next);
   };
-
-  useEffect(() => {
-    if (!page || !picked.includes(drill)) return;
-    const metric = "betweenesscentrality";
-    const row = heatRows.find((item) => typeof item[metric] === "number" && Number.isFinite(item[metric]));
-    if (!row) return;
-    const prior = state.data?.observations ?? [];
-    const observations = [
-      ...prior.filter((item) => item.country !== drill),
-      {
-        entity: `${drill}·${String(row.industry ?? "")}`,
-        country: drill,
-        industry: String(row.industry ?? ""),
-        year,
-        value: row[metric] as number,
-      },
-    ].slice(-2);
-    if (JSON.stringify(observations) === JSON.stringify(prior) && state.data?.metric === metric) return;
-    state.save({ metric, observations });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, drill, picked, year]);
+  const retryHeat = () => {
+    clearHeatEvidence();
+    pageQuery.retry();
+  };
+  const changeHeatSort = (next: HeatSortMetric) => {
+    const normalized = normalizeHeatSortMetric(next);
+    currentHeatView.current = { ...currentHeatView.current, sortMetric: normalized };
+    setHeatSort(normalized);
+    state.save({ heat_sort: normalized });
+  };
+  const changeHeatCoverage = (next: HeatCoverage) => {
+    const normalized = normalizeHeatCoverage(next);
+    currentHeatView.current = { ...currentHeatView.current, coverage: normalized };
+    setHeatCoverage(normalized);
+    state.save({ heat_coverage: normalized });
+  };
+  const activateHeatRow = (activation: HeatActivation) => {
+    const sourceIdentity = acceptedHeatIdentity;
+    const observation = heatObservationFromActivation(
+      activation,
+      sourceIdentity,
+      currentHeatIdentity.current,
+      heatRows,
+      currentHeatView.current,
+    );
+    if (!observation || !sourceIdentity) return;
+    const prior = [
+      ...explicitHeatHistory.current,
+      ...(state.data?.observations ?? []).filter((item) => item.source === "explicit-heat-row"),
+    ];
+    const observations = nextExplicitHeatObservations(prior, observation);
+    explicitHeatHistory.current = observations;
+    pickCountries(addInspectedCountry(picked, observation.country, meta.countries));
+    state.save({ metric: HEAT_EVIDENCE_METRIC, observations });
+    setActiveHeat({ identity: heatIdentityToken(sourceIdentity), rowKey: activation.rowKey });
+  };
+  const activeHeatRowKey = acceptedHeatIdentity
+    && activeHeat?.identity === heatIdentityToken(acceptedHeatIdentity)
+    ? activeHeat.rowKey
+    : null;
 
   return (
     <div>
@@ -96,9 +244,9 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
         lead="谁是全球生产的枢纽?"
         concept={step.concept}
         todo={[
-          "先看「贸易网络图」观察国家间的流向与区域集群",
+          "先看「贸易网络图」按预设地理区域观察区域内与区域间流向（位置不是社区检测）",
           "点击至少两个国家进入大图；点过的国家会计入报告比较",
-          "再切「枢纽热力表」，换一个国家对比行业加权度与介数排序",
+          "再切「枢纽热力表」，比较介数与加权度排序、Top 15 与全部行业，并明确点击一行记录介数证据",
         ]}
       />
 
@@ -109,7 +257,7 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
       </div>
 
       <div className="controls" style={{ marginBottom: 12 }}>
-        <YearSelect years={meta.years} year={year} onChange={setYear} />
+        <YearSelect years={meta.years} year={year} onChange={changeYear} />
         <span className="muted" style={{ fontSize: 12 }}>
           已看过 <b style={{ color: picked.length >= 2 ? "#159a86" : "#e0982a" }}>{picked.length}</b> 国{picked.length < 2 ? "（报告建议 ≥2）" : ""}
         </span>
@@ -127,11 +275,11 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
         {lens === "heat" ? (
           <ChartStory
             eyebrow="国家×行业枢纽"
-            title={`${countryLabel(drill)} 的行业节点中心性(全球图上计算,按介数前 15)`}
-            what={<>选一个国家,每行 = 它的一个行业节点;各列是不同中心性(加权度 = 流量规模,介数 = 有向最短路经过次数 …)。颜色越深 = 该列内相对越大。</>}
-            read={<>介数高 = 更多有向无权最短路径经过该节点，表示拓扑中介位置突出；它不自动等于流量大或经济瓶颈。加权度高 = 直接吞吐的中间品流量大。</>}
-            find={<>换看两三个国家，对比哪些行业的介数或加权度更突出，并观察两种排序是否一致。</>}
-            note="中心性始终在完整全球国家×行业图上计算；路径类指标把每条正边视为同样长度，下钻只筛选展示行。当前没有边阈值敏感性分析，介数排序仅作拓扑基准。"
+            title={`${countryLabel(drill)} 的行业节点中心性(全球图上计算,按${heatSortLabel(heatSort)}显示${heatCoverageLabel(heatCoverage)})`}
+            what={<>选一个国家,每行 = 它的一个行业节点;各列是不同中心性(加权度 = 流量规模,介数 = 有向最短路经过次数 …)。可切换按介数或加权度降序，也可查看 Top 15 或全部有限行业。</>}
+            read={<>介数高 = 更多有向无权最短路径经过该节点，表示拓扑中介位置突出；它不自动等于流量大或经济瓶颈。加权度高 = 直接吞吐的中间品流量大。对比两种排序可检查“流量大”与“拓扑中介”是否一致。</>}
+            find={<>换看两三个国家，并分别比较介数、加权度的 Top 15 与全部行业；选择你实际查看的一行，点击“记录介数”保存该行固定的介数中心性证据。</>}
+            note="中心性始终在完整全球国家×行业图上计算；路径类指标把每条正边视为同样长度，下钻只筛选展示行。排序与显示范围不改变报告指标：只有学生明确激活的当前可见行才会记录介数中心性；当前没有边阈值敏感性分析。"
           >
             <div className="controls" style={{ marginBottom: 12 }}>
               <LabeledControl label="下钻国家">
@@ -141,25 +289,50 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
                   </select>
                 )}
               </LabeledControl>
+              <LabeledControl label="排序指标">
+                {(id) => (
+                  <select id={id} value={heatSort} onChange={(e) => changeHeatSort(e.target.value as HeatSortMetric)}>
+                    {HEAT_SORT_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+                  </select>
+                )}
+              </LabeledControl>
+              <LabeledControl label="显示范围">
+                {(id) => (
+                  <select id={id} value={heatCoverage} onChange={(e) => changeHeatCoverage(e.target.value as HeatCoverage)}>
+                    {HEAT_COVERAGE_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+                  </select>
+                )}
+              </LabeledControl>
+              <span className="muted" role="note">排序只改变可见顺序；报告证据固定记录介数中心性。</span>
             </div>
             {pageQuery.status === "loading" || pageQuery.status === "error" ? (
               <AsyncStateMessage
                 status={pageQuery.status}
                 error={pageQuery.error}
                 loadingLabel={`加载 ${countryLabel(drill)} 行业网络指标中…`}
-                onRetry={pageQuery.retry}
+                onRetry={retryHeat}
               />
-            ) : heatRows.length ? <HeatTableViz rows={heatRows} schema={schema} />
+            ) : visibleHeatRows(heatRows, heatSort, heatCoverage).length ? (
+              <HeatTableViz
+                rows={heatRows}
+                schema={schema}
+                onActivate={activateHeatRow}
+                activeRowKey={activeHeatRowKey}
+                sortMetric={heatSort}
+                coverage={heatCoverage}
+                countryName={countryLabel(drill)}
+              />
+            )
               : <p className="muted">该国无行业数据。</p>}
           </ChartStory>
         ) : (
           <ChartStory
             eyebrow="双边贸易网络"
-            title="国家间生产贸易网络(有向,按流量)"
-            what={<>节点 = 经济体,有向边 = 跨国中间品 + 最终品贸易流(不含国内边);点大小 / 边粗细反映流量规模。</>}
-            read={<>悬停一个国家可临时高亮伙伴;点击后进入大图并打开流入、流出伙伴表。箭头方向是"卖给谁"。它用于观察国家间流向；国家图使用跨国中间品 + 最终品且不含国内边，行业中心性图只用中间品并保留正自环，两者不只是粒度不同。</>}
-            find={<>找出中国、美国、德国的区域集群;注意国家层几乎两两相连(接近完全图),这正是无权中心性在国家级退化的原因。</>}
-            note="仅渲染流量最大的若干条边以保证可读；行业中心性计算用完整的中间品图，不受此展示阈值影响。因节点与边定义不同，国家图不是行业中心性图的简单下钻。"
+            title="国家间生产贸易网络(有向,预设地理区域布局)"
+            what={<>节点 = 经济体,有向边 = 跨国中间品 + 最终品贸易流(不含国内边);点大小 / 边粗细反映流量规模。节点位置按预设地理区域排布，不是社区检测结果。</>}
+            read={<>在预设区域内与区域间比较流向；悬停一个国家只高亮当前截止比例下仍显示的伙伴，点击后进入大图并打开同一批可见边的流入、流出伙伴表。箭头方向是"卖给谁"。国家图使用跨国中间品 + 最终品且不含国内边，行业中心性图只用中间品并保留正自环，两者不只是粒度不同。</>}
+            find={<>比较中国、美国、德国在各自预设地理区域内及跨区域的流向；注意国家层几乎两两相连(接近完全图),这正是无权中心性在国家级退化的原因，不表示布局发现了社区。</>}
+            note="显示截止是当前发布 Top 边最大流量的百分比，只同步影响绘边、伙伴高亮、悬停、详情表与有向边文本表；完整图中心性不变。行业中心性计算用完整的中间品图，不受国家图显示截止影响。因节点与边定义不同，国家图不是行业中心性图的简单下钻。"
           >
             {networkQuery.status === "loading" || networkQuery.status === "error" ? (
               <AsyncStateMessage

@@ -17,7 +17,7 @@ describe("shared accessibility primitives", () => {
     expect(html).toContain(`<select id="${controlId}">`);
   });
 
-  test("renders a named, keyboard-focusable scroll region", () => {
+  test("renders a named, keyboard-focusable scroll region by default", () => {
     const html = renderToStaticMarkup(
       <ScrollableRegion label="数据表，可横向滚动">
         <table><tbody><tr><td>值</td></tr></tbody></table>
@@ -27,6 +27,19 @@ describe("shared accessibility primitives", () => {
     expect(html).toContain('role="region"');
     expect(html).toContain('tabindex="0"');
     expect(html).toContain('aria-label="数据表，可横向滚动"');
+  });
+
+  test("allows a composite child to own the only sequential Tab stop", () => {
+    const html = renderToStaticMarkup(
+      <ScrollableRegion label="复合数据表" focusable={false}>
+        <button tabIndex={0}>活动单元格</button>
+      </ScrollableRegion>,
+    );
+
+    expect(html).toContain('role="region"');
+    expect(html).toContain('aria-label="复合数据表"');
+    expect(html.match(/tabindex="0"/g)).toHaveLength(1);
+    expect(html).toContain('tabindex="-1"');
   });
 
   test("uses checkbox-group semantics for the country picker", () => {

@@ -49,18 +49,21 @@ export function SelectedEventBar({
           <dt>涉及行业</dt>
           <dd>{event.n_sectors} 个{event.top_sectors.length ? ` · ${event.top_sectors.map(sectorLabel).join("、")}` : ""}</dd>
         </div>
-        {event.peak_rate > 0 && <div><dt>峰值强度</dt><dd>{pct(event.peak_rate)}</dd></div>}
+        {event.peak_rate > 0 && <div><dt>教学编码峰值</dt><dd>{pct(event.peak_rate)}（不是官方统计）</dd></div>}
         {event.exempt && <div><dt>豁免</dt><dd>{event.exempt}</dd></div>}
         {event.entities && <div><dt>实体</dt><dd>{event.entities}</dd></div>}
         {event.timeline_note && <div><dt>时间线说明</dt><dd>{event.timeline_note}</dd></div>}
-        {event.source_urls && event.source_urls.length > 0 && (
-          <div>
-            <dt>官方来源</dt>
-            <dd>{event.source_urls.map((url, index) => (
-              <span key={url}>{index > 0 ? "、" : ""}<a href={url} target="_blank" rel="noreferrer">来源 {index + 1}</a></span>
-            ))}</dd>
-          </div>
-        )}
+        <div>
+          <dt>事件 / 日期来源</dt>
+          <dd>
+            {event.source_status === "official_event_source"
+              ? <>有官方事件来源：{event.source_urls.map((url, index) => (
+                  <span key={url}>{index > 0 ? "、" : ""}<a href={url} target="_blank" rel="noreferrer">来源 {index + 1}</a></span>
+                ))}</>
+              : "没有逐项事件 URL；按未引证教学编码展示"}
+          </dd>
+        </div>
+        <div><dt>行业 / 数值映射</dt><dd>{event.source_disclosure}</dd></div>
       </dl>
     </div>
   );

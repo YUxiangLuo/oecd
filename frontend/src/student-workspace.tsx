@@ -1,5 +1,19 @@
-import type { Dispatch, RefObject, SetStateAction } from "react";
+import {
+  useCallback,
+  useRef,
+  useState,
+  type Dispatch,
+  type MouseEvent,
+  type RefObject,
+  type SetStateAction,
+} from "react";
 import { AccountPasswordModal } from "./account-password";
+import {
+  completedStepsForPresentation,
+  completionForPresentation,
+  effectiveCompletionBlockReason,
+  type CompletionBlockState,
+} from "./completion-block";
 import {
   CourseSidebar,
   StepFooter,
@@ -14,6 +28,38 @@ import { QuizPanel } from "./step-quiz";
 import { ToastHost } from "./toast";
 import type { AuthUser, Meta, StepsResponse, StepStateApi } from "./types";
 import type { SessionApi } from "./use-session";
+
+export function stepMainContentId(step: number): string {
+  return `step-${step}-main-content`;
+}
+
+export function focusStepMainContent(
+  event: Pick<MouseEvent<HTMLAnchorElement>, "preventDefault">,
+  target: Pick<HTMLElement, "focus" | "scrollIntoView"> | null,
+): void {
+  if (!target) return;
+  event.preventDefault();
+  target.focus({ preventScroll: true });
+  target.scrollIntoView({ block: "start" });
+}
+
+export function StudentWorkspaceSkipLink({
+  targetId,
+  targetRef,
+}: {
+  targetId: string;
+  targetRef: RefObject<HTMLElement | null>;
+}) {
+  return (
+    <a
+      className="skip-to-step-content"
+      href={`#${targetId}`}
+      onClick={(event) => focusStepMainContent(event, targetRef.current)}
+    >
+      跳到本步内容
+    </a>
+  );
+}
 
 interface StudentWorkspaceProps {
   user: AuthUser;
@@ -70,6 +116,15 @@ export function StudentWorkspace({
   const steps = stepsData.steps;
   const totalSteps = steps.length;
   const stepIndex = steps.findIndex((item) => item.n === current);
+  const visitRef = useRef({ step: current, visit: 0 });
+  if (visitRef.current.step !== current) {
+    visitRef.current = { step: current, visit: visitRef.current.visit + 1 };
+  }
+  const visit = visitRef.current.visit;
+  const [completionBlock, setCompletionBlock] = useState<CompletionBlockState | null>(null);
+  const updateCompletionBlock = useCallback((reason: string | null) => {
+    setCompletionBlock({ step: current, visit, reason });
+  }, [current, visit]);
   if (stepIndex < 0) {
     return <div style={{ padding: 40 }} className="error-box">步骤不存在，请从课程大纲重新选择。</div>;
   }
@@ -81,10 +136,23 @@ export function StudentWorkspace({
   const isReg = step.lab === "reg";
   // 可视化步骤(viz)图表是主角:讲解卡默认折叠,给图表让出首屏纵向空间(可点开)
   const isViz = step.lab === "viz";
+  const activeCompletionBlockReason = effectiveCompletionBlockReason(step, completionBlock, visit);
+  const presentationCompletion = completionForPresentation(
+    session.completion,
+    step.n,
+    activeCompletionBlockReason,
+  );
+  const presentationCompletedSteps = completedStepsForPresentation(
+    completedSteps,
+    step.n,
+    activeCompletionBlockReason,
+  );
+  const mainContentId = stepMainContentId(step.n);
 
   return (
     <>
       <div className="layout" inert={showIntro ? true : undefined}>
+        <StudentWorkspaceSkipLink targetId={mainContentId} targetRef={contentRef} />
         <StudentTopbar
           user={user}
           meta={meta}
@@ -99,7 +167,7 @@ export function StudentWorkspace({
           <CourseSidebar
             stepsData={stepsData}
             current={current}
-            completion={session.completion}
+            completion={presentationCompletion}
             onNavigate={onNavigateStep}
           />
 
@@ -128,7 +196,7 @@ export function StudentWorkspace({
             />
 
             <div className="content-row">
-              <main ref={contentRef} className="content">
+              <main id={mainContentId} ref={contentRef} className="content" tabIndex={-1}>
                 <div className="content-inner">
                   {/* 已把 concept 并入页内 StepIntro(常驻)的步骤,这里不再重复渲染讲解卡:
                       可视化(isViz)、指标计算(ind)、政策冲击接入(shock);回归自带渐进教学,也跳过。 */}
@@ -146,6 +214,7 @@ export function StudentWorkspace({
                     sessionStatus={session.status}
                     sessionUnsynced={session.unsynced}
                     sessionSyncing={session.syncing}
+                    sessionSyncError={session.syncError}
                     onFlushSession={session.syncNow}
                     onReportChanged={session.applyReportMutation}
                     regressionSettings={regressionSettings}
@@ -153,9 +222,16 @@ export function StudentWorkspace({
                     regressionHistory={regressionHistory}
                     onRegressionHistoryChange={onRegressionHistoryChange}
                     onNavigateStep={onNavigateStep}
+                    onCompletionBlockChange={updateCompletionBlock}
                     getStep={session.getStep}
+                    getConfirmedStep={session.getConfirmedStep}
                   />
-                  <QuizPanel key={step.n} step={step} state={stepState} />
+                  <QuizPanel
+                    key={step.n}
+                    step={step}
+                    state={stepState}
+                    completionBlockedReason={activeCompletionBlockReason}
+                  />
                 </div>
               </main>
 
@@ -175,7 +251,7 @@ export function StudentWorkspace({
               next={nextStep}
               stageName={stageName}
               current={current}
-              completedSteps={completedSteps}
+              completedSteps={presentationCompletedSteps}
               onNavigate={onNavigateStep}
             />
           </div>

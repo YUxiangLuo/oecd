@@ -10,9 +10,22 @@ EXPOSURE_PREFIX = "export_exposure"
 # treated 阈值:全部出口的平均额外关税超过 0.1 个百分点才算受处理,
 # 避免"土耳其对美反制 × 美国微小对土出口份额"这类痕量项污染处理组。
 TREATED_THRESHOLD = 0.001
+SHOCK_CONTRACT_VERSION = 1
 EXPOSURE_MODE_FIXED_PRETREATMENT = "fixed_pretreatment"
 EXPOSURE_MODE_CONTEMPORANEOUS = "contemporaneous"
 EXPOSURE_MODES = (EXPOSURE_MODE_FIXED_PRETREATMENT, EXPOSURE_MODE_CONTEMPORANEOUS)
+EXPOSURE_SOURCE_OECD_ICIO = "oecd_icio_bilateral_flow"
+EXPOSURE_SOURCE_STYLIZED = "stylized_teaching_fallback"
+EXPOSURE_SOURCES = (EXPOSURE_SOURCE_OECD_ICIO, EXPOSURE_SOURCE_STYLIZED)
+OECD_EXPOSURE_DISCLOSURE = "出口暴露度来自经发布校验的 OECD ICIO 双边流向；政策事件映射与冲击数值编码仍是教学口径。"
+STYLIZED_EXPOSURE_DISCLOSURE = "风格化出口暴露度仅供教学测试，不是 OECD ICIO 观测值，不得表述为官方数据。"
+ZERO_TOTAL_EXPORTS_POLICY = "total_exports=0 时 bilateral_exports 必须为 0，export_exposure 明确定义为 0。"
+EVENT_SOURCE_OFFICIAL = "official_event_source"
+EVENT_SOURCE_TEACHING = "teaching_encoding_no_event_source"
+EVENT_SOURCE_STATUSES = (EVENT_SOURCE_OFFICIAL, EVENT_SOURCE_TEACHING)
+EVENT_SOURCE_DISCLOSURE = (
+    "只有列出 URL 的事件与日期可视为有官方事件来源；ICIO 行业映射与数值强度始终是未逐项引证的教学编码，不是官方统计。"
+)
 
 # 稳定英文键 → (强度列, 处理指示列)。键是 API 契约,展示文案见 SHOCK_LABELS:
 # 界面改个措辞不该变成破坏性 API 变更。
@@ -32,11 +45,72 @@ SHOCK_LABELS = {
     SHOCK_EXPORT_CONTROL: "出口管制",
 }
 
+SHOCK_DEFINITIONS = {
+    SHOCK_TARIFF: (
+        "各关税事件的双边行业平均加征税率乘以目标经济体对加征方的出口暴露度后求和；数值表示全部出口面对的平均额外关税。"
+    ),
+    SHOCK_SANCTIONS: (
+        "把制裁名单事件中的目标实体手工映射到目标经济体×ICIO 行业的教学暴露强度；"
+        "该强度不是关税税率，也不使用出口暴露度加权。"
+    ),
+    SHOCK_EXPORT_CONTROL: (
+        "把出口管制实体清单手工映射到目标经济体×ICIO 行业的教学供应受限强度；"
+        "该强度不是关税税率，也不使用出口暴露度加权。"
+    ),
+}
+
+SHOCK_FIELD_SPECS = {
+    SHOCK_TARIFF: {
+        "shock_field": "tariff_shock",
+        "treated_field": "treated",
+        "announced_date_field": "announced_date",
+        "effective_date_field": "effective_date",
+        "note_field": "note",
+    },
+    SHOCK_SANCTIONS: {
+        "shock_field": "sanction_shock",
+        "treated_field": "sanction_treated",
+        "announced_date_field": "sanction_announced_date",
+        "effective_date_field": "sanction_effective_date",
+        "note_field": "sanction_note",
+    },
+    SHOCK_EXPORT_CONTROL: {
+        "shock_field": "export_control_shock",
+        "treated_field": "export_control_treated",
+        "announced_date_field": "export_control_announced_date",
+        "effective_date_field": "export_control_effective_date",
+        "note_field": "export_control_note",
+    },
+}
+
+
+def shock_contract_metadata() -> dict:
+    """Exact, versioned schema and provenance contract for the wide shock artifact."""
+    return {
+        "version": SHOCK_CONTRACT_VERSION,
+        "treated_threshold": TREATED_THRESHOLD,
+        "treated_operator": ">",
+        "types": {shock_type: dict(spec) for shock_type, spec in SHOCK_FIELD_SPECS.items()},
+        "tariff_exposure": {
+            "source_field": "tariff_exposure_source",
+            "mode_field": "tariff_exposure_mode",
+            "disclosure_field": "tariff_exposure_disclosure",
+            "allowed_sources": list(EXPOSURE_SOURCES),
+            "allowed_modes": list(EXPOSURE_MODES),
+        },
+    }
+
+
+def validate_shock_contract_metadata(value: object) -> None:
+    if value != shock_contract_metadata():
+        raise ValueError(f"unsupported or incomplete shock contract; version {SHOCK_CONTRACT_VERSION} is required")
+
+
 # ---------------------------------------------------------------------------
 # 出口暴露度 fallback:各经济体货物出口中流向美国的份额。
 # 量级参考 2017–2019 UN Comtrade 方向别结构:北美邻国 ~0.75,东亚 0.1–0.2,
 # 欧盟内部国家对美敞口低(0.02–0.1),资源出口国普遍较低。
-# 生产路径优先使用 export_exposure_<year>.csv,这里只服务小型测试和旧产物回退。
+# 正常生产路径必须使用 export_exposure_<year>.csv；这里只服务显式 opt-in 的教学测试。
 # ---------------------------------------------------------------------------
 _EXPOSURE_TO_USA = {
     # 北美
@@ -168,6 +242,10 @@ EU27 = {
     "SVN",
     "SWE",
 }
+
+# Catalogue imposers absent from the base ICIO country dimension are aggregate
+# destinations.  Their flow is the non-overlapping sum of these base destinations.
+COMPOSITE_IMPOSER_MEMBERS = {"EU": frozenset(EU27)}
 
 
 @dataclass(frozen=True)

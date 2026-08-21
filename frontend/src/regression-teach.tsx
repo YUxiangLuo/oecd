@@ -107,7 +107,7 @@ export function DidFourCells({ numeric }: { numeric?: boolean }) {
         <table className="did-table did-table-numeric" aria-label="示意四格：处理组相对对照组">
           <thead>
             <tr>
-              <th scope="col" />
+              <th scope="col"><span className="sr-only">组别</span></th>
               <th scope="col">冲击前</th>
               <th scope="col">冲击后</th>
               <th scope="col">自己变了多少</th>
@@ -140,7 +140,7 @@ export function DidFourCells({ numeric }: { numeric?: boolean }) {
       <table className="did-table" aria-label="双重差分四格比较">
         <thead>
           <tr>
-            <th scope="col" />
+            <th scope="col"><span className="sr-only">组别</span></th>
             <th scope="col">冲击前</th>
             <th scope="col">冲击后</th>
           </tr>

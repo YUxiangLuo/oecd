@@ -7,6 +7,7 @@ import pandas as pd
 import pymrio
 
 from gvcsim.config import RAW_DATA_DIR
+from gvcsim.data.raw_icio import dimension_contract_for, resolve_year_source, validate_raw_file
 
 
 def download(years: list[int]) -> None:
@@ -16,11 +17,8 @@ def download(years: list[int]) -> None:
 
 
 def _source_csv(year: int) -> Path:
-    """返回某年的唯一 OECD 宽表，避免同年多文件时静默选错来源。"""
-    matches = sorted(RAW_DATA_DIR.glob(f"ICIO*_{year}.csv"))
-    if len(matches) != 1:
-        raise FileNotFoundError(f"期望找到 1 个 {year} 年 ICIO CSV，实际找到 {len(matches)} 个: {matches}")
-    return matches[0]
+    """Compatibility seam around the one shared unique-year resolver."""
+    return resolve_year_source(year, RAW_DATA_DIR)
 
 
 def _read_reported_output(path: Path, index: pd.MultiIndex) -> pd.Series:
@@ -64,6 +62,7 @@ def load(year: int):
     N = 国家数 × 行业数(ICIO2023: 77×45 = 3465)。
     """
     source = _source_csv(year)
+    validate_raw_file(source, dimension_contract_for(RAW_DATA_DIR))
     io = pymrio.parse_oecd(path=RAW_DATA_DIR, year=year)
     # 必须在 calc_all 之外独立读取；这是对源表的观测值，不是派生的 x。
     io.reported_output = _read_reported_output(source, io.Z.index)

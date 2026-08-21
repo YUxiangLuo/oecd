@@ -3,9 +3,19 @@ import { ScrollableRegion } from "./a11y";
 import { api } from "./api";
 import { useAsync } from "./labs";
 import { comparisonExplanation, lessonQuestion, REGRESSION_LESSONS, REGRESSION_QUESTION } from "./regression-lessons";
+import {
+  eventInferenceAllowed, eventInferenceGate, eventInferenceMessage, eventMainPretrendContractIsSafe,
+  eventPretrendScopesAreSafe, eventSupportCoversTerms, GLOBAL_PRETREND_SUPPRESSION_COPY,
+  globalInferenceIsSuppressed,
+} from "./regression-event-support";
 import { isQualifiedRegressionResult, nextRegressionSave } from "./regression-save";
 import { DidFourCells, FamilyMap, ReadingCoach, SiblingContrast, type SiblingStepData } from "./regression-teach";
-import { buildRegressionVerdict, chartDisplayScale, placeboInterpretation } from "./regression-verdict";
+import {
+  buildRegressionVerdict,
+  chartDisplayScale,
+  placeboInterpretation,
+  regressionStatusLabel,
+} from "./regression-verdict";
 import { splitPolicyCoefficients } from "./regteach";
 import type {
   MarginalEffect,
@@ -83,12 +93,13 @@ type SharedSettingsProps = {
   onSettingsChange: (settings: RegressionSettings) => void;
 };
 
-function Pills({ options, value, onChange, label, labelMap }: {
+function Pills({ options, value, onChange, label, labelMap, disabled = false }: {
   options: string[];
   value: string;
   onChange: (value: string) => void;
   label: string;
   labelMap?: Record<string, string>;
+  disabled?: boolean;
 }) {
   return (
     <div className="pill-row" role="group" aria-label={label}>
@@ -98,6 +109,7 @@ function Pills({ options, value, onChange, label, labelMap }: {
           key={option}
           className={`pill${value === option ? " on" : ""}`}
           aria-pressed={value === option}
+          disabled={disabled}
           onClick={() => onChange(option)}
         >
           {labelMap?.[option] ?? option}
@@ -168,7 +180,15 @@ const effectiveSettings = (settings: RegressionSettings): RegressionSettings => 
   ...settings,
   priceMode: settings.controlMode === "none" ? "nominal" : settings.priceMode,
 });
-const settingsKey = (settings: RegressionSettings) => JSON.stringify(effectiveSettings(settings));
+export const regressionSettingsKey = (settings: RegressionSettings) => JSON.stringify(effectiveSettings(settings));
+
+export const regressionOptionsRequestKey = (outcome: RegressionOutcome) =>
+  `regression-options:${outcome}`;
+
+export const regressionDesignRequestKey = (
+  outcome: RegressionOutcome,
+  settings: RegressionSettings,
+) => `regression-design:${outcome}:${regressionSettingsKey(settings)}`;
 
 /** 把稳定键翻成展示文案。文案随 /api/regression/options 下发,
  *  拿不到时退回显示键本身——宁可露出 `tariff`,也不猜一个可能过时的中文。 */
@@ -276,8 +296,8 @@ function VerdictCard({ outcome, response, stale }: {
         // 正是“样本很大所以可信”这一误读的来源。
         <p className="verdict-support">
           处理支持度：<b>{support.treated_clusters}</b> 个处理聚类 ·{" "}
-          <b>{support.untreated_clusters}</b> 个完全未处理聚类 · 共 {response.result.n_clusters} 个聚类
-          （{support.treated_entities} 个曾受冲击实体 · {support.untreated_entities ?? "未记录"} 个从未受冲击实体）
+          <b>{support.untreated_clusters}</b> 个估计样本内完全未暴露聚类 · 共 {response.result.n_clusters} 个聚类
+          （{support.treated_entities} 个含处理后暴露行的实体 · {support.untreated_entities ?? "未记录"} 个估计样本内未暴露实体，后者可能包括冻结 cohort 中仅保留冲击前行的实体）
         </p>
       )}
       {verdict.warnings.length > 0 && (
@@ -290,17 +310,73 @@ function VerdictCard({ outcome, response, stale }: {
   );
 }
 
-function PretrendCheck({ response }: { response: RegressionResponse }) {
-  const diagnostic = response.result.diagnostics.pretrend;
+export function PretrendCheck({ response }: { response: RegressionResponse }) {
   if (response.design.method !== "event_study") return null;
-  if (!diagnostic) return <p>当前响应没有冲击前趋势诊断，不能判断趋势可比性。</p>;
+  const diagnostic = response.result.diagnostics.pretrend;
+  const globallySuppressed = globalInferenceIsSuppressed(
+    response.result.status, response.result.support,
+  );
+  if (!diagnostic) {
+    return globallySuppressed ? (
+      <div className="trust-item">
+        <b>冲击前趋势联合检查</b>
+        <p>{GLOBAL_PRETREND_SUPPRESSION_COPY}</p>
+      </div>
+    ) : <p>当前响应没有冲击前趋势诊断，不能判断趋势可比性。</p>;
+  }
+  if (globallySuppressed) {
+    return (
+      <div className="trust-item">
+        <b>冲击前趋势联合检查</b>
+        <p>{GLOBAL_PRETREND_SUPPRESSION_COPY}</p>
+      </div>
+    );
+  }
+  if (diagnostic.reason === "global_inference_suppressed") {
+    return (
+      <div className="trust-item">
+        <b>冲击前趋势联合检查</b>
+        <p>诊断已损坏或状态未知：诊断声称整体推断已抑制，但当前结果并未触发整体门禁；既有统计量与解释不可用。</p>
+      </div>
+    );
+  }
+  const scopesAreSafe = response.design.interaction
+    ? eventPretrendScopesAreSafe(response.result.event_support, response.result.diagnostics, true)
+    : eventMainPretrendContractIsSafe(response.result.event_support, response.result.diagnostics);
+  if (
+    !eventSupportCoversTerms(
+      response.result.event_support,
+      response.result.coefs.map((coefficient) => coefficient.name),
+      response.design.interaction,
+    )
+    || !scopesAreSafe
+  ) {
+    return (
+      <div className="trust-item">
+        <b>冲击前趋势联合检查</b>
+        <p>逐期支持未知或诊断已损坏，旧结果的冲击前趋势统计量与解释不可用于教学推断。</p>
+      </div>
+    );
+  }
+  const scoped = response.design.interaction && response.result.diagnostics.pretrend_tests
+    ? [
+      ["主效应", response.result.diagnostics.pretrend_tests.main],
+      ["交互效应", response.result.diagnostics.pretrend_tests.interaction],
+      ["联合", response.result.diagnostics.pretrend_tests.joint],
+    ] as const
+    : [["主效应", diagnostic]] as const;
   return (
     <div className="trust-item">
       <b>冲击前趋势联合检查</b>
-      <p>{diagnostic.interpretation}</p>
-      {diagnostic.available && diagnostic.p != null && (
-        <p className="muted">F({diagnostic.df_num}, {diagnostic.df_denom}) = {diagnostic.statistic?.toFixed(3)}，p = {diagnostic.p.toFixed(3)}</p>
-      )}
+      {scoped.map(([label, item]) => item && (
+        <div key={label}>
+          {response.design.interaction && <b>{label}</b>}
+          <p>{item.interpretation}</p>
+          {item.available && item.p != null && (
+            <p className="muted">F({item.df_num}, {item.df_denom}) = {item.statistic?.toFixed(3)}，p = {item.p.toFixed(3)}</p>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -317,7 +393,7 @@ function marginalNaturalScale(effect: MarginalEffect, response: RegressionRespon
   };
 }
 
-function MarginalEffectsPanel({ response }: { response: RegressionResponse }) {
+export function MarginalEffectsPanel({ response }: { response: RegressionResponse }) {
   const effects = response.result.marginal_effects ?? [];
   if (!response.design.interaction || effects.length === 0) return null;
   const groups = [...new Set(effects.map((effect) => effect.policy_term))];
@@ -331,21 +407,42 @@ function MarginalEffectsPanel({ response }: { response: RegressionResponse }) {
       </div>
       {groups.map((term) => {
         const rows = effects.filter((effect) => effect.policy_term === term);
+        const periodGate = response.design.method === "event_study"
+          ? eventInferenceGate(response.result.event_support, term)
+          : null;
         return (
           <ScrollableRegion className="table-wrap" key={term} label={`${term} 边际效应表，可横向滚动`}>
             {groups.length > 1 && <div className="muted" style={{ margin: "8px 0" }}>政策项：{term}</div>}
+            {periodGate && eventInferenceMessage(periodGate, response.result.event_support?.min_contributing_clusters) && (
+              <div className="muted" role="note">
+                {eventInferenceMessage(periodGate, response.result.event_support?.min_contributing_clusters)}。
+                {periodGate.state === "unsupported"
+                  ? `${periodGate.period.reasons.join(" ")} 以下边际推断均已抑制。`
+                  : "旧结果缺少支持契约，以下边际推断不可用于教学结论。"}
+              </div>
+            )}
             <table className="data-table">
               <thead><tr><th>处理前 GVC 水平</th><th>相对均值</th><th>边际效应</th><th>95% 置信区间</th><th>p 值</th></tr></thead>
               <tbody>
                 {rows.map((effect) => {
                   const scaled = marginalNaturalScale(effect, response);
+                  const globallySuppressed = globalInferenceIsSuppressed(
+                    response.result.status, response.result.support,
+                  );
+                  const inferenceAllowed = !globallySuppressed
+                    && eventInferenceAllowed(
+                      response.design.method, response.result.event_support, effect.policy_term,
+                    );
+                  const ciLow = inferenceAllowed ? scaled.ciLow : null;
+                  const ciHigh = inferenceAllowed ? scaled.ciHigh : null;
+                  const p = inferenceAllowed ? effect.p : null;
                   return (
                     <tr key={`${effect.policy_term}-${effect.level}`}>
                       <td><b>{effect.label}</b></td>
                       <td>{signedNumber(effect.baseline_gvc_centered * 100)} pp</td>
                       <td>{signedNumber(scaled.effect)} 个百分点</td>
-                      <td>{scaled.ciLow == null || scaled.ciHigh == null ? "已抑制" : `[${signedNumber(scaled.ciLow)}, ${signedNumber(scaled.ciHigh)}] pp`}</td>
-                      <td>{effect.p == null ? "—" : effect.p.toFixed(3)}</td>
+                      <td>{ciLow == null || ciHigh == null ? "已抑制" : `[${signedNumber(ciLow)}, ${signedNumber(ciHigh)}] pp`}</td>
+                      <td>{p == null ? "—" : p.toFixed(3)}</td>
                     </tr>
                   );
                 })}
@@ -358,28 +455,273 @@ function MarginalEffectsPanel({ response }: { response: RegressionResponse }) {
   );
 }
 
+export function RegressionCoefficientTable({ response }: { response: RegressionResponse }) {
+  return (
+    <ScrollableRegion className="table-wrap" label="完整回归系数表，可横向滚动">
+      <table className="data-table">
+        <thead><tr><th>变量</th><th>系数</th><th>95% CI</th><th>聚类SE</th><th>t</th><th>p</th></tr></thead>
+        <tbody>{response.result.coefs.map((coef) => {
+          const periodGate = response.design.method === "event_study" && coef.name.startsWith("k=")
+            ? eventInferenceGate(response.result.event_support, coef.name)
+            : null;
+          const periodLabel = periodGate
+            ? eventInferenceMessage(periodGate, response.result.event_support?.min_contributing_clusters)
+            : null;
+          const globallySuppressed = globalInferenceIsSuppressed(
+            response.result.status, response.result.support,
+          );
+          const inferenceAllowed = !globallySuppressed
+            && eventInferenceAllowed(
+              response.design.method, response.result.event_support, coef.name,
+            );
+          const ciLow = inferenceAllowed ? coef.ci_low : null;
+          const ciHigh = inferenceAllowed ? coef.ci_high : null;
+          const p = inferenceAllowed ? coef.p : null;
+          return (
+            // 推断被抑制时留空,不能显示 0 或 NaN；旧事件结果即使携带数值也 fail closed。
+            <tr key={coef.name}>
+              <td>{coef.name}{periodLabel && <div className="muted">{periodLabel}</div>}</td>
+              <td>{coef.coef.toFixed(4)}</td>
+              <td>{ciLow != null && ciHigh != null ? `[${ciLow.toFixed(4)}, ${ciHigh.toFixed(4)}]` : periodLabel ?? "—"}</td>
+              <td>{coef.se.toFixed(4)}</td><td>{coef.t.toFixed(2)}</td><td>{p != null ? p.toFixed(3) : periodLabel ?? "—"}</td>
+            </tr>
+          );
+        })}</tbody>
+      </table>
+    </ScrollableRegion>
+  );
+}
+
 /** 自动保存最近一次真实运行，供刷新恢复与报告复估。 */
+export interface SavedRegressionRun {
+  settings: RegressionSettings;
+  design: RegressionResponse["design"];
+  result: RegressionResponse["result"];
+}
+
 interface RegressionStepState extends QuizCompletionState, Record<string, unknown> {
-  run?: {
-    settings: RegressionSettings;
-    design: RegressionResponse["design"];
-    result: RegressionResponse["result"];
-  };
-  qualified_run?: {
-    settings: RegressionSettings;
-    design: RegressionResponse["design"];
-    result: RegressionResponse["result"];
+  run?: SavedRegressionRun;
+  qualified_run?: SavedRegressionRun;
+}
+
+const SAVED_REGRESSION_BENCHMARK: RegressionResponse["benchmark"] = {
+  backend: "saved",
+  policy_coefs: [],
+  max_abs_coef_diff: 0,
+  max_abs_se_diff: 0,
+  coef_check_passed: true,
+  se_check_mode: "informational",
+  notes: [],
+};
+
+function savedRegressionResponse(saved: SavedRegressionRun): RegressionResponse {
+  return {
+    design: saved.design,
+    result: saved.result,
+    benchmark: SAVED_REGRESSION_BENCHMARK,
+    disclaimer: "从实验会话恢复的服务端回归结果",
   };
 }
 
+export function regressionSettingsFromSavedDesign(design: RegressionDesignInfo): RegressionSettings {
+  return normalizeRegressionSettings({
+    granularity: design.granularity,
+    shockType: design.shock_type,
+    method: design.method,
+    controlMode: design.control_mode,
+    interaction: design.interaction,
+    priceMode: design.price_mode,
+    scenario: design.scenario,
+    weightMode: design.weight_mode ?? "fixed_pretreatment",
+  });
+}
+
+function savedDesignSummary(design: RegressionDesignInfo, options: Labels): string {
+  return [
+    `冲击=${labelOf(options?.shock_type_labels, design.shock_type)}（${design.shock_type}）`,
+    `方法=${METHOD_LABELS[design.method] ?? design.method}（${design.method}）`,
+    `粒度=${labelOf(options?.granularity_labels, design.granularity)}（${design.granularity}）`,
+    `控制=${labelOf(options?.control_mode_labels, design.control_mode)}`,
+    `交互=${design.interaction ? "是" : "否"}`,
+    `价格口径=${labelOf(options?.price_mode_labels, design.price_mode)}`,
+    `场景=${design.scenario_label || SCENARIO_LABELS[design.scenario] || design.scenario}`,
+    `暴露权重=${labelOf(options?.weight_mode_labels, design.weight_mode ?? "fixed_pretreatment")}`,
+  ].join(" · ");
+}
+
+function canonicalSnapshot(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalSnapshot).join(",")}]`;
+  if (value && typeof value === "object") {
+    const fields = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort(([first], [second]) => first < second ? -1 : first > second ? 1 : 0);
+    return `{${fields.map(([key, item]) => `${JSON.stringify(key)}:${canonicalSnapshot(item)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/** Deterministic identity of every saved setting, design field, and result field. */
+export function regressionRunSnapshotIdentity(saved: SavedRegressionRun): string {
+  return canonicalSnapshot(saved);
+}
+
+/** Exact identity check for a candidate run and the server-confirmed step snapshot. */
+export function sameQualifiedRegressionSnapshot(
+  saved: SavedRegressionRun,
+  confirmed: SavedRegressionRun | undefined,
+): boolean {
+  return confirmed !== undefined
+    && regressionRunSnapshotIdentity(saved) === regressionRunSnapshotIdentity(confirmed);
+}
+
+export function QualifiedRegressionRunCard({
+  saved,
+  confirmedSaved,
+  options,
+  currentSettings,
+  sessionSyncing = false,
+  sessionUnsynced = false,
+  sessionSyncError = null,
+  onSwitch,
+}: {
+  saved: SavedRegressionRun;
+  confirmedSaved?: SavedRegressionRun;
+  options: Labels;
+  currentSettings: RegressionSettings;
+  sessionSyncing?: boolean;
+  sessionUnsynced?: boolean;
+  sessionSyncError?: string | null;
+  onSwitch: (settings: RegressionSettings) => void;
+}) {
+  const response = savedRegressionResponse(saved);
+  const verdict = buildRegressionVerdict(saved.design.outcome, response);
+  const qualified = isQualifiedRegressionResult(
+    saved.result, saved.design.method, saved.design.interaction,
+  );
+  const usable = qualified;
+  const serverConfirmed = usable && sameQualifiedRegressionSnapshot(saved, confirmedSaved);
+  const support = saved.result.support;
+  const eventTerm = verdict.coefficient?.name.replace("×base_gvc", "") ?? null;
+  const eventPeriod = saved.design.method === "event_study" && eventTerm
+    ? saved.result.event_support?.periods.find((period) => period.term === eventTerm) ?? null
+    : null;
+  const signedDesignSettings = regressionSettingsFromSavedDesign(saved.design);
+  const sameSettings = regressionSettingsKey(signedDesignSettings) === regressionSettingsKey(currentSettings);
+  const cardState = !qualified
+    ? "invalid"
+    : serverConfirmed
+      ? "confirmed"
+      : sessionSyncError
+        ? "failed"
+        : "pending";
+  const statusLabel = cardState === "confirmed"
+    ? "已由服务器确认"
+    : cardState === "pending"
+      ? "待服务器确认的本地候选结果"
+      : cardState === "failed"
+        ? "仅保存在本地的候选结果"
+        : "无效的本地回归快照";
+  const heading = cardState === "confirmed"
+    ? "第 16 步将使用的回归结果"
+    : cardState === "pending" || cardState === "failed"
+      ? "等待服务器确认的回归结果"
+      : "第 16 步不会使用的回归结果";
+  const qualificationCopy = !qualified
+    ? "这份结果不再满足可报告门槛；第 16 步服务端不会使用它。"
+    : serverConfirmed
+      ? `服务器已确认这份结果；结果状态为“${regressionStatusLabel(saved.result.status)}”。`
+      : sessionSyncError
+        ? "同步失败；第16步不会在服务器确认前使用"
+        : sessionSyncing
+          ? "正在同步本地候选；服务器确认前，第 16 步不会使用。"
+          : sessionUnsynced
+            ? "本地候选尚未同步；服务器确认前，第 16 步不会使用。"
+            : "本地候选尚未由服务器确认；第 16 步不会使用。";
+  return (
+    <section className={`qualified-run-card ${cardState}`} aria-labelledby="qualified-run-title">
+      <div className="qualified-run-card-head">
+        <div>
+          <span className="reg-section-step">{statusLabel}</span>
+          <h3 id="qualified-run-title">{heading}</h3>
+        </div>
+        <button
+          type="button"
+          className="secondary"
+          disabled={sameSettings}
+          onClick={() => onSwitch(signedDesignSettings)}
+        >
+          切换到这套设定
+        </button>
+      </div>
+      <p className="qualified-run-settings">{savedDesignSummary(saved.design, options)}</p>
+      <dl className="qualified-run-facts">
+        <div><dt>估计对象</dt><dd>{verdict.effectLabel}</dd></div>
+        <div><dt>效应</dt><dd>{verdict.effect}</dd></div>
+        <div><dt>95% 置信区间</dt><dd>{usable ? verdict.interval : "不显示（不可作推断）"}</dd></div>
+        <div>
+          <dt>处理支持</dt>
+          <dd>{support
+            ? [
+              `${support.treated_clusters} 个处理聚类`,
+              `${support.untreated_clusters} 个未处理聚类`,
+              `课程下限 ${support.min_treated_clusters}`,
+              `状态=${support.status}`,
+              eventPeriod
+                ? `${eventPeriod.term}：${eventPeriod.contributing_clusters}/${saved.result.event_support?.min_contributing_clusters} 个贡献聚类`
+                : null,
+            ].filter(Boolean).join(" · ")
+            : "未记录处理支持度"}</dd>
+        </div>
+      </dl>
+      <p
+        className="qualified-run-qualification"
+        role={cardState === "invalid" || cardState === "failed" ? "alert" : "note"}
+      >{qualificationCopy}</p>
+      {sameSettings && <p className="muted">当前控件已经是这套设定；如需替换结果，请重新运行。</p>}
+    </section>
+  );
+}
+
+type BoundRequestError = { requestKey: string; message: string };
+
+export function RegressionRequestLoading({ optionsLoading, designLoading }: {
+  optionsLoading: boolean;
+  designLoading: boolean;
+}) {
+  if (!optionsLoading && !designLoading) return null;
+  const label = optionsLoading && designLoading
+    ? "正在读取回归选项与当前模型设计…"
+    : optionsLoading ? "正在读取回归选项…" : "正在生成当前模型设计…";
+  return <div className="reg-request-state muted" role="status" aria-live="polite" aria-busy="true">{label}</div>;
+}
+
+export function RegressionRequestError({ label, error, onRetry }: {
+  label: string;
+  error: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="error-box async-error" role="alert">
+      <span>{userFacingRequestError(error, `${label}失败`)}</span>
+      <button type="button" className="secondary" onClick={onRetry}>重试{label}</button>
+    </div>
+  );
+}
+
 export function RegressionRunLab({
-  step, settings, onSettingsChange, history, onHistoryChange, state, getStep, onNavigateStep,
+  step, settings, onSettingsChange, history, onHistoryChange, state, getStep,
+  getConfirmedStep, sessionUnsynced = false, sessionSyncing = false,
+  sessionSyncError = null, onNavigateStep,
 }: {
   step: Step;
   history: RegressionHistory;
   onHistoryChange: React.Dispatch<React.SetStateAction<RegressionHistory>>;
   state: StepStateApi<RegressionStepState>;
   getStep?: (step: number) => SiblingStepData | undefined;
+  getConfirmedStep?: <T>(step: number) => T | undefined;
+  sessionUnsynced?: boolean;
+  sessionSyncing?: boolean;
+  sessionSyncError?: string | null;
   onNavigateStep?: (step: number) => void;
 } & SharedSettingsProps) {
   const outcome = step.regression_outcome;
@@ -390,48 +732,60 @@ export function RegressionRunLab({
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [resultSettings, setResultSettings] = useState<RegressionSettings | null>(null);
   const [placebo, setPlacebo] = useState<PlaceboResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [placeboError, setPlaceboError] = useState<string | null>(null);
+  const [error, setError] = useState<BoundRequestError | null>(null);
+  const [placeboError, setPlaceboError] = useState<BoundRequestError | null>(null);
   const [running, setRunning] = useState(false);
+  const [runningRequestKey, setRunningRequestKey] = useState<string | null>(null);
   const [placeboRunning, setPlaceboRunning] = useState(false);
+  const [placeboRunningRequestKey, setPlaceboRunningRequestKey] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const runningRef = useRef(false);
   const placeboRunningRef = useRef(false);
   const placeboRequestRef = useRef(0);
   const verdictAnchorRef = useRef<HTMLDivElement>(null);
   const scrollToVerdictAfterRun = useRef(false);
-  const latestRequest = useRef(`${outcome}:${settingsKey(settings)}`);
+  const latestRequest = useRef(`${outcome}:${regressionSettingsKey(settings)}`);
+  const resultSourceIdentity = useRef<string | null>(null);
+  const previousSavedRun = useRef<SavedRegressionRun | undefined>(state.data?.run);
 
   const setSetting = <K extends keyof RegressionSettings>(key: K, value: RegressionSettings[K]) => {
     onSettingsChange(normalizeRegressionSettings({ ...normalizedSettings, [key]: value }));
   };
-  const { data: options, error: optionsError } = useAsync<RegressionOptions>(() => api.regressionOptions(), []);
-  // 兜底必须用稳定键(与 options.granularities_by_outcome 一致),不能用展示文案:
-  // 否则 options 未到时 allowedGranularities.includes(granularity) 恒为 false,会触发
-  // 下面的 granularity 归一化 effect 把当前设定(加载窗口里可能是招牌默认)写回会话,
-  // 覆盖掉学生已持久化的选择——刷新后设定被重置就是这么来的。
+  const optionsRequestKey = regressionOptionsRequestKey(outcome);
+  const optionsQuery = useAsync<RegressionOptions>(
+    () => api.regressionOptions(),
+    [optionsRequestKey],
+    { requestKey: optionsRequestKey },
+  );
+  const options = optionsQuery.status === "success" ? optionsQuery.data : null;
+  // 兜底只决定 options 到达前的请求键，不在加载或失败窗口写回会话。
+  // 只有当前 requestKey 的 options 成功后，才可据服务端列表归一化粒度。
   const allowedGranularities = options?.granularities_by_outcome[outcome]
     ?? (outcome === "network" ? ["country_industry"] : ["country_industry", "country"]);
   const effectiveGranularity = allowedGranularities.includes(granularity)
     ? granularity
     : allowedGranularities[0];
   const currentSettings = { ...normalizedSettings, granularity: effectiveGranularity };
-  latestRequest.current = `${outcome}:${settingsKey(currentSettings)}`;
+  const currentRequestKey = `${outcome}:${regressionSettingsKey(currentSettings)}`;
+  latestRequest.current = currentRequestKey;
 
   useEffect(() => {
-    if (!allowedGranularities.includes(granularity)) {
+    if (optionsQuery.status === "success" && !allowedGranularities.includes(granularity)) {
       setSetting("granularity", allowedGranularities[0]);
     }
-  }, [outcome, granularity, options]);
+  }, [outcome, granularity, optionsQuery.status, options]);
 
-  const { data: design, error: designError } = useAsync<RegressionDesignInfo>(
+  const designRequestKey = regressionDesignRequestKey(outcome, currentSettings);
+  const designQuery = useAsync<RegressionDesignInfo>(
     () => api.regressionDesign({
       outcome, granularity: effectiveGranularity, shockType, method, controlMode, interaction,
       priceMode: controlMode === "none" ? "nominal" : priceMode,
       scenario, weightMode,
     }),
-    [outcome, effectiveGranularity, shockType, method, controlMode, interaction, priceMode, scenario, weightMode],
+    [designRequestKey],
+    { enabled: optionsQuery.status === "success", requestKey: designRequestKey },
   );
+  const design = designQuery.status === "success" ? designQuery.data : null;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -443,6 +797,8 @@ export function RegressionRunLab({
 
   useEffect(() => {
     scrollToVerdictAfterRun.current = false;
+    resultSourceIdentity.current = null;
+    previousSavedRun.current = undefined;
     setResult(null);
     setResultSettings(null);
     setPlacebo(null);
@@ -454,30 +810,43 @@ export function RegressionRunLab({
   // useState 惰性初始化。刷新或换设备后,学生看到的是自己上次算出的结果,
   // 而不是一个空白的“请运行”面板。设定与结果不一致时 stale 横幅仍会提示。
   const latestSnapshot = (history[outcome] ?? [])[0];
+  const savedRun = state.data?.run;
+  const savedRunIdentity = savedRun ? regressionRunSnapshotIdentity(savedRun) : null;
   useEffect(() => {
-    if (result || running) return;
+    if (running || runningRef.current) return;
+
+    if (result) {
+      if (savedRun && resultSourceIdentity.current === savedRunIdentity) {
+        previousSavedRun.current = savedRun;
+      }
+      return;
+    }
+
+    previousSavedRun.current = savedRun;
     if (latestSnapshot) {
+      const historyRun = {
+        settings: latestSnapshot.settings,
+        design: latestSnapshot.response.design,
+        result: latestSnapshot.response.result,
+      };
+      resultSourceIdentity.current = regressionRunSnapshotIdentity(historyRun);
       setResult(latestSnapshot.response);
       setResultSettings(latestSnapshot.settings);
       return;
     }
-    const saved = state.data?.run;
-    if (!saved) return;
-    setResult({
-      design: saved.design,
-      result: saved.result,
-      benchmark: { backend: "saved", policy_coefs: [], max_abs_coef_diff: 0, max_abs_se_diff: 0, coef_check_passed: true, se_check_mode: "informational", notes: [] },
-      disclaimer: "从实验会话恢复的最近一次服务端回归结果",
-    });
-    setResultSettings(saved.settings);
-  }, [latestSnapshot, result, running, state.data?.run]);
+    if (!savedRun) return;
+    resultSourceIdentity.current = savedRunIdentity;
+    setResult(savedRegressionResponse(savedRun));
+    setResultSettings(savedRun.settings);
+  }, [latestSnapshot, result, running, savedRunIdentity]);
 
   const run = async () => {
     if (runningRef.current || !design) return;
     runningRef.current = true;
     const runSettings = effectiveSettings(currentSettings);
-    const requestKey = `${outcome}:${settingsKey(runSettings)}`;
+    const requestKey = `${outcome}:${regressionSettingsKey(runSettings)}`;
     setRunning(true);
+    setRunningRequestKey(requestKey);
     setError(null);
     // 新主回归开始即使所有在途置换响应失效，避免旧分布覆盖新结果。
     placeboRequestRef.current += 1;
@@ -509,21 +878,30 @@ export function RegressionRunLab({
         ...(saved.qualified_run ? { qualified_run: saved.qualified_run } : {}),
       });
       if (latestRequest.current === requestKey) {
+        const responseRun = {
+          settings: runSettings,
+          design: response.design,
+          result: response.result,
+        };
+        resultSourceIdentity.current = regressionRunSnapshotIdentity(responseRun);
         scrollToVerdictAfterRun.current = true;
         setResult(response);
         setResultSettings(runSettings);
       }
     } catch (cause) {
       if (mountedRef.current && latestRequest.current === requestKey) {
-        setError(userFacingRequestError(cause, "回归运行失败"));
+        setError({ requestKey, message: userFacingRequestError(cause, "回归运行失败") });
       }
     } finally {
       runningRef.current = false;
-      if (mountedRef.current) setRunning(false);
+      if (mountedRef.current) {
+        setRunning(false);
+        setRunningRequestKey(null);
+      }
     }
   };
 
-  const stale = Boolean(resultSettings && settingsKey(resultSettings) !== settingsKey(currentSettings));
+  const stale = Boolean(resultSettings && regressionSettingsKey(resultSettings) !== regressionSettingsKey(currentSettings));
 
   // 只在学生点运行之后滚到结论。会话恢复也会 setResult，若一并滚动会把页顶的教学卷走。
   useEffect(() => {
@@ -539,12 +917,13 @@ export function RegressionRunLab({
   }, [result]);
 
   const runPlacebo = async () => {
-    if (runningRef.current || placeboRunningRef.current || !resultSettings || stale) return;
+    if (runningRef.current || placeboRunningRef.current || !result || !resultSettings || stale) return;
     placeboRunningRef.current = true;
     const placeboSettings = resultSettings;
-    const requestKey = `${outcome}:${settingsKey(placeboSettings)}`;
+    const requestKey = `${outcome}:${regressionSettingsKey(placeboSettings)}`;
     const requestId = ++placeboRequestRef.current;
     setPlaceboRunning(true);
+    setPlaceboRunningRequestKey(requestKey);
     setPlaceboError(null);
     try {
       const response = await api.placeboRegression(
@@ -556,16 +935,26 @@ export function RegressionRunLab({
       }
     } catch (cause) {
       if (placeboRequestRef.current === requestId && latestRequest.current === requestKey) {
-        setPlaceboError(userFacingRequestError(cause, "实体置换敏感性分析失败"));
+        setPlaceboError({
+          requestKey,
+          message: userFacingRequestError(cause, "实体置换敏感性分析失败"),
+        });
       }
     } finally {
       if (placeboRequestRef.current === requestId) {
         placeboRunningRef.current = false;
         setPlaceboRunning(false);
+        setPlaceboRunningRequestKey(null);
       }
     }
   };
 
+  const currentRunError = error?.requestKey === currentRequestKey ? error.message : null;
+  const currentPlaceboError = placeboError?.requestKey === currentRequestKey ? placeboError.message : null;
+  const runningCurrentRequest = running && runningRequestKey === currentRequestKey;
+  const placeboRunningCurrentRequest = placeboRunning
+    && placeboRunningRequestKey === currentRequestKey;
+  const settingsDisabled = optionsQuery.status !== "success";
   const split = result ? splitPolicyCoefficients(result) : null;
   const verdict = result ? buildRegressionVerdict(outcome, result) : null;
   const event = result?.design.method === "event_study";
@@ -576,6 +965,19 @@ export function RegressionRunLab({
   return (
     <div className="reg-workbench">
       <FamilyMap current={outcome} history={history} getStep={getStep} onNavigateStep={onNavigateStep} />
+
+      {state.data?.qualified_run && (
+        <QualifiedRegressionRunCard
+          saved={state.data.qualified_run}
+          confirmedSaved={getConfirmedStep?.<RegressionStepState>(step.n)?.qualified_run}
+          options={options}
+          currentSettings={currentSettings}
+          sessionUnsynced={sessionUnsynced}
+          sessionSyncing={sessionSyncing}
+          sessionSyncError={sessionSyncError}
+          onSwitch={onSettingsChange}
+        />
+      )}
 
       <section className="reg-question-card">
         <div className="reg-question-main">
@@ -608,7 +1010,7 @@ export function RegressionRunLab({
         <span className="reg-section-step">2 · 接入步骤 11 的冲击并估计</span>
         <div className="reg-boundary">真实 OECD ICIO 指标 + 拟真政策冲击；结果用于教学，不构成现实政策结论。默认关税冲击通常能给出可报告估计；制裁和出口管制的支持度更薄。</div>
         <div className="basic-settings">
-          <div><span>冲击</span><Pills label="政策冲击" options={options?.shock_types ?? []} value={shockType} onChange={(value) => setSetting("shockType", value)} labelMap={options?.shock_type_labels} /></div>
+          <div><span>冲击</span><Pills label="政策冲击" options={options?.shock_types ?? []} value={shockType} onChange={(value) => setSetting("shockType", value)} labelMap={options?.shock_type_labels} disabled={settingsDisabled} /></div>
         </div>
         {method === "did" && (
           <div className={`reg-compare-card${outcome === "trade" ? " numeric" : ""}`} style={{ marginTop: 12 }}>
@@ -628,35 +1030,62 @@ export function RegressionRunLab({
           <summary>换一种读法（选做）</summary>
           <p className="muted">{lesson.guidedExperiment} 三类冲击的支持度不同，见步骤 11；本步主路径默认关税，是因为它通常能给出可报告估计。</p>
           <div className="model-controls">
-            <div className="model-control"><span className="model-control-label">比较方式</span><Pills label="估计方法" options={options?.methods ?? []} value={method} onChange={(value) => setSetting("method", value)} labelMap={methodLabels} /></div>
-            <div className="model-control"><span className="model-control-label">粒度</span><Pills label="分析粒度" options={allowedGranularities} value={effectiveGranularity} onChange={(value) => setSetting("granularity", value)} labelMap={options?.granularity_labels} /></div>
-            <div className="model-control"><span className="model-control-label">控制变量</span><Pills label="控制变量" options={options?.control_modes ?? []} value={controlMode} onChange={(value) => setSetting("controlMode", value)} labelMap={options?.control_mode_labels} /></div>
-            <label className="model-control"><span className="model-control-label">异质性</span><input type="checkbox" checked={interaction} onChange={(eventValue) => setSetting("interaction", eventValue.target.checked)} />冲击 × 基期GVC</label>
-            {controlMode !== "none" && <div className="model-control"><span className="model-control-label">金额类控制口径</span><Pills label="金额类控制口径" options={options?.price_modes ?? []} value={priceMode} onChange={(value) => setSetting("priceMode", value)} labelMap={options?.price_mode_labels} /></div>}
-            <div className="model-control"><span className="model-control-label">课堂场景</span><Pills label="课堂场景" options={options?.scenarios ?? []} value={scenario} onChange={(value) => setSetting("scenario", value)} labelMap={SCENARIO_LABELS} /></div>
-            <div className="model-control"><span className="model-control-label">冲击暴露权重</span><Pills label="冲击暴露权重" options={(options?.weight_modes ?? ["fixed_pretreatment", "contemporaneous"]).filter((mode) => shockType === "tariff" || mode !== "contemporaneous")} value={weightMode} onChange={(value) => setSetting("weightMode", value)} labelMap={options?.weight_mode_labels ?? { fixed_pretreatment: "首次处理前固定权重（基准）", contemporaneous: "当期贸易权重（稳健性）" }} /></div>
+            <div className="model-control"><span className="model-control-label">比较方式</span><Pills label="估计方法" options={options?.methods ?? []} value={method} onChange={(value) => setSetting("method", value)} labelMap={methodLabels} disabled={settingsDisabled} /></div>
+            <div className="model-control"><span className="model-control-label">粒度</span><Pills label="分析粒度" options={allowedGranularities} value={effectiveGranularity} onChange={(value) => setSetting("granularity", value)} labelMap={options?.granularity_labels} disabled={settingsDisabled} /></div>
+            <div className="model-control"><span className="model-control-label">控制变量</span><Pills label="控制变量" options={options?.control_modes ?? []} value={controlMode} onChange={(value) => setSetting("controlMode", value)} labelMap={options?.control_mode_labels} disabled={settingsDisabled} /></div>
+            <label className="model-control"><span className="model-control-label">异质性</span><input type="checkbox" checked={interaction} disabled={settingsDisabled} onChange={(eventValue) => setSetting("interaction", eventValue.target.checked)} />冲击 × 基期GVC</label>
+            {controlMode !== "none" && <div className="model-control"><span className="model-control-label">金额类控制口径</span><Pills label="金额类控制口径" options={options?.price_modes ?? []} value={priceMode} onChange={(value) => setSetting("priceMode", value)} labelMap={options?.price_mode_labels} disabled={settingsDisabled} /></div>}
+            <div className="model-control"><span className="model-control-label">课堂场景</span><Pills label="课堂场景" options={options?.scenarios ?? []} value={scenario} onChange={(value) => setSetting("scenario", value)} labelMap={SCENARIO_LABELS} disabled={settingsDisabled} /></div>
+            <div className="model-control"><span className="model-control-label">冲击暴露权重</span><Pills label="冲击暴露权重" options={(options?.weight_modes ?? ["fixed_pretreatment", "contemporaneous"]).filter((mode) => shockType === "tariff" || mode !== "contemporaneous")} value={weightMode} onChange={(value) => setSetting("weightMode", value)} labelMap={options?.weight_mode_labels ?? { fixed_pretreatment: "首次处理前固定权重（基准）", contemporaneous: "当期贸易权重（稳健性）" }} disabled={settingsDisabled} /></div>
           </div>
           {method !== "did" && <p className="muted">{comparisonExplanation(method)}</p>}
           {scenario !== "clean" && <div className="challenge-note">该场景由系统人为改变估计样本，用于观察测量误差或冲击前趋势如何影响判断；它不是数据筛选条件。</div>}
           {weightMode === "contemporaneous" && <div className="challenge-note">当期贸易结构可能已受政策影响，因此该口径只用于和固定处理前权重对照，不能替代基准识别。</div>}
         </details>
 
-        {(optionsError || designError) && <div className="error-box">{optionsError ?? designError}</div>}
+        <RegressionRequestLoading
+          optionsLoading={optionsQuery.status === "loading"}
+          designLoading={designQuery.status === "loading"}
+        />
+        {optionsQuery.status === "error" && optionsQuery.error && (
+          <RegressionRequestError label="回归选项" error={optionsQuery.error} onRetry={optionsQuery.retry} />
+        )}
+        {designQuery.status === "error" && designQuery.error && (
+          <RegressionRequestError label="当前模型设计" error={designQuery.error} onRetry={designQuery.retry} />
+        )}
         <div className="run-summary"><b>当前方案：</b>{settingsSummary(currentSettings, options)}</div>
-        <button className="run-btn" onClick={run} disabled={running || !design || Boolean(optionsError || designError)}>
+        <button
+          className="run-btn"
+          onClick={run}
+          disabled={running || optionsQuery.status !== "success" || designQuery.status !== "success" || !design}
+        >
           {/* stale 表示表单已改、结果仍是上一套。 */}
-          {running ? "估计中…" : stale ? "运行修改后的设定" : result ? "重新运行当前设定" : "运行基准回归"}
+          {runningCurrentRequest
+            ? "估计中…"
+            : running
+              ? "等待上一项估计结束…"
+              : stale ? "运行修改后的设定" : result ? "重新运行当前设定" : "运行基准回归"}
         </button>
+        {runningCurrentRequest && (
+          <span className="muted reg-inline-status" role="status" aria-live="polite" aria-busy="true">正在估计当前设定…</span>
+        )}
       </section>
 
-      {error && <div className="error-box">{error}</div>}
+      {currentRunError && (
+        <div className="error-box async-error" role="alert">
+          <span>{currentRunError}</span>
+          <button type="button" className="secondary" disabled={running || !design} onClick={run}>按当前设定重试</button>
+        </div>
+      )}
 
       {result && (
         <div className="reg-results">
           <div ref={verdictAnchorRef} className="verdict-anchor">
             <VerdictCard outcome={outcome} response={result} stale={stale} />
           </div>
-          {state.data?.qualified_run && !isQualifiedRegressionResult(result.result) && (
+          {state.data?.qualified_run && !isQualifiedRegressionResult(
+            result.result, result.design.method, result.design.interaction,
+          ) && (
             <p className="muted">本次结果不能作为报告中的有效回归；已保留先前一次可报告的估计。</p>
           )}
           {verdict && (
@@ -675,12 +1104,14 @@ export function RegressionRunLab({
             <span className="reg-section-step">3 · 读区间，并留到第 16 步和另外三类指标并读</span>
             {event ? (
               <>
-                <EventStudyChart coefs={split?.eventMain ?? []} notes={result.result.notes} title="主政策变化的动态路径" seriesLabel="主效应 βₖ" pretrend={result.result.diagnostics.pretrend} scale={display.scale} unit={display.unit} />
-                {(split?.eventInteraction.length ?? 0) > 0 && <EventStudyChart coefs={split?.eventInteraction ?? []} notes={result.result.notes} title="处理前 GVC 异质性附加变化" seriesLabel="交互效应 θₖ" scale={display.scale} unit={display.unit} />}
+                <EventStudyChart coefs={split?.eventMain ?? []} notes={result.result.notes} title="主政策变化的动态路径" seriesLabel="主效应 βₖ" pretrend={result.result.diagnostics.pretrend} pretrendDiagnostics={result.result.diagnostics} interaction={result.design.interaction} eventSupport={result.result.event_support} globalSupport={result.result.support} globalStatus={result.result.status} scale={display.scale} unit={display.unit} />
+                {(split?.eventInteraction.length ?? 0) > 0 && <EventStudyChart coefs={split?.eventInteraction ?? []} notes={result.result.notes} title="处理前 GVC 异质性附加变化" seriesLabel="交互效应 θₖ" eventSupport={result.result.event_support} globalSupport={result.result.support} globalStatus={result.result.status} scale={display.scale} unit={display.unit} />}
               </>
             ) : (
               <CoefForestChart
                 coefs={split?.policy ?? []}
+                globalStatus={result.result.status}
+                globalSupport={result.result.support}
                 scale={display.scale}
                 unit={display.unit}
               />
@@ -698,12 +1129,35 @@ export function RegressionRunLab({
               <div className="trust-item">
                 <h3>结果对一种简化的实体置换规则有多敏感？</h3>
                 <p>系统只保留处理实体数量与首次处理年份数量分布，再随机改派实体。它不是安慰剂检验，尾部占比也不是 p 值。</p>
-                <button className="secondary" onClick={runPlacebo} disabled={running || placeboRunning || stale}>
-                  {placeboRunning ? "置换中…" : placebo ? "重新运行实体置换" : "运行实体置换敏感性分析"}
+                <button
+                  className="secondary"
+                  onClick={runPlacebo}
+                  disabled={running || placeboRunning || stale}
+                >
+                  {placeboRunningCurrentRequest
+                    ? "置换中…"
+                    : placeboRunning
+                      ? "等待上一项置换结束…"
+                      : placebo ? "重新运行实体置换" : "运行实体置换敏感性分析"}
                 </button>
                 {stale && <p className="muted">请先重新运行当前设定，再运行匹配的实体置换。</p>}
-                {placeboError && <div className="error-box">{placeboError}</div>}
-                {placebo && <>
+                {placeboRunningCurrentRequest && (
+                  <p className="muted" role="status" aria-live="polite" aria-busy="true">正在按当前主回归设定运行实体置换…</p>
+                )}
+                {currentPlaceboError && (
+                  <div className="error-box async-error" role="alert">
+                    <span>{currentPlaceboError}</span>
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={running || placeboRunning || stale}
+                      onClick={runPlacebo}
+                    >
+                      按同一设定重试实体置换
+                    </button>
+                  </div>
+                )}
+                {placebo && !stale && <>
                   <p className="placebo-verdict">{placeboInterpretation(placebo.placebo.tail_share)}</p>
                   <p className="muted">保留：{placebo.placebo.assignment_preserved.join("、")}；未保留：{placebo.placebo.assignment_not_preserved.join("、")}。</p>
                   <PlaceboChart data={placebo.placebo} scale={display.scale} unit={display.unit} />
@@ -719,27 +1173,32 @@ export function RegressionRunLab({
         {result && stale && <div className="stale-result">以下方程和系数均来自上一次运行；重新运行后才会切换到当前设定。</div>}
         {result?.design ? (
           <DesignEquation design={result.design} />
-        ) : design ? (
+        ) : designQuery.status === "success" && design ? (
           <DesignEquation design={design} />
-        ) : (
+        ) : optionsQuery.status === "error" ? (
+          <p className="muted">当前方程不可用；请先在上方重试回归选项。</p>
+        ) : designQuery.status === "error" ? (
+          <p className="muted">当前方程不可用；请在上方重试当前模型设计。</p>
+        ) : optionsQuery.status === "loading" ? (
+          <p className="muted">正在读取回归选项…</p>
+        ) : designQuery.status === "loading" ? (
           <p className="muted">正在生成当前方程…</p>
-        )}
+        ) : null}
         {result && (
           <>
             <h3>完整系数表</h3>
             <p className="muted">此表为模型原始单位{display.unit ? "（份额为 0–1）；上方主图按" + display.unit + "展示" : ""}。主效应图只展示政策项。</p>
-            <ScrollableRegion className="table-wrap" label="完整回归系数表，可横向滚动">
-              <table className="data-table">
-                <thead><tr><th>变量</th><th>系数</th><th>95% CI</th><th>聚类SE</th><th>t</th><th>p</th></tr></thead>
-                <tbody>{result.result.coefs.map((coef) => (
-                  // 推断被抑制时留空,不能显示 0 或 NaN。
-                  <tr key={coef.name}><td>{coef.name}</td><td>{coef.coef.toFixed(4)}</td><td>{coef.ci_low != null && coef.ci_high != null ? `[${coef.ci_low.toFixed(4)}, ${coef.ci_high.toFixed(4)}]` : "—"}</td><td>{coef.se.toFixed(4)}</td><td>{coef.t.toFixed(2)}</td><td>{coef.p != null ? coef.p.toFixed(3) : "—"}</td></tr>
-                ))}</tbody>
-              </table>
-            </ScrollableRegion>
+            <RegressionCoefficientTable response={result} />
             <p className="muted">N={result.result.n_obs.toLocaleString("zh-CN")} · {result.result.n_entities.toLocaleString("zh-CN")} 个体 × {result.result.n_times} 年 · {result.result.n_clusters} 个聚类 · 组内 R²={result.result.r2_within.toFixed(4)}</p>
             <div className="benchmark-box"><b>PanelOLS 代码实现一致性检查</b><p>政策系数最大差异 {result.benchmark.max_abs_coef_diff.toExponential(2)}；{result.benchmark.coef_check_passed ? "实现对照通过" : "实现对照需复核"}。这只能检查两套代码结果是否一致，不能验证因果识别。</p></div>
             <h3>样本与估计说明</h3>
+            {result.result.sample_flow && (
+              <p className="muted">
+                · 处理时点先由完整冲击历史 {result.result.sample_flow.timing_source_rows.toLocaleString("zh-CN")} 行冻结，
+                再从结构合格样本 {result.result.sample_flow.structural_eligible_rows.toLocaleString("zh-CN")} 行筛至估计样本 {result.result.sample_flow.estimation_rows.toLocaleString("zh-CN")} 行；
+                因 outcome / 控制等缺失合计删除 {result.result.sample_flow.dropped_rows_total.toLocaleString("zh-CN")} 行。
+              </p>
+            )}
             {result.result.notes.map((note) => <p key={note} className="muted">· {note}</p>)}
           </>
         )}

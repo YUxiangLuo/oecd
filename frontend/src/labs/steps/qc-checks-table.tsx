@@ -18,7 +18,7 @@ const WHY_CHECK: [string, string][] = [
   ["冲击强度值域", "税率与暴露度都应在合理范围内；越界通常表示百分数与小数混用。"],
   ["冲击事件时间线", "宣布不能晚于生效，否则事件研究的预期效应与处理时点会被颠倒。"],
   ["treated 标记", "二元处理标记必须严格对应预先约定的冲击阈值，避免结果依赖隐含口径。"],
-  ["处理组覆盖", "处理聚类过少会让聚类稳健推断失效，处理过密则可能缺少对照；覆盖率是回归可行性的第一道检查。"],
+  ["关税处理组覆盖", "只有关税 treated 比例受 (0,25%] 发布政策约束；制裁与出口管制 treated 数量仅作描述，不据此宣称其覆盖合理。"],
   ["控制变量 schema", "固定键列与控制列名称，防止回归静默漏掉变量或把文本列当数值。"],
   ["控制变量维度", "国家级控制变量必须对每个国家–年份唯一，否则合并会复制样本并错误加权。"],
   ["控制变量数值", "NaN 与无穷值会导致估计失败或样本被静默删除。"],
@@ -38,18 +38,33 @@ export function qcResultLabel(check: QcCheck): { className: string; text: string
     : { className: "qc-fail", text: "✗ 异常" };
 }
 
-export function QcChecksTable({ rows, onNavigateStep }: {
+export function QcChecksTable({ rows, label, emptyMessage, emptyState, onNavigateStep }: {
   rows: QcCheck[] | null;
+  label: string;
+  emptyMessage?: string;
+  emptyState?: "loading" | "invalid";
   onNavigateStep?: (step: number) => void;
 }) {
+  const terminalState = emptyState ?? (rows == null ? "loading" : "invalid");
+  const terminalMessage = emptyMessage ?? (
+    terminalState === "loading" ? "正在读取质检结果…" : "未返回任何质检结果，不能判定通过。"
+  );
+  const sortedRows = [...(rows ?? [])].sort((a, b) => Number(a.passed) - Number(b.passed));
   return (
-    <ScrollableRegion className="table-wrap" label="数据质检结果表，可横向滚动">
+    <ScrollableRegion className="table-wrap" label={label}>
       <table className="data-table qc-table">
         <thead>
           <tr><th>质检项</th><th>类型</th><th>结果</th><th style={{ textAlign: "left" }}>详情</th></tr>
         </thead>
         <tbody>
-          {[...(rows ?? [])].sort((a, b) => Number(a.passed) - Number(b.passed)).map((c) => {
+          {sortedRows.length === 0 && (
+            <tr>
+              <td colSpan={4} className={terminalState === "invalid" ? "qc-fail" : "muted"}>
+                {terminalMessage}
+              </td>
+            </tr>
+          )}
+          {sortedRows.map((c) => {
             const result = qcResultLabel(c);
             const preview = c.warnings.slice(0, 2);
             const extra = c.warnings.slice(2);

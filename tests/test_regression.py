@@ -5,6 +5,8 @@ import pandas as pd
 import pytest
 from scipy import stats
 
+from gvcsim import regression_routes, shocks
+from gvcsim.regression import panel as panel_module
 from gvcsim.data.controls import CONTROL_COLUMNS, MACRO_CONTROL_COLUMNS
 from gvcsim.regression.design import (
     CONTROL_MODE_ICIO,
@@ -17,6 +19,11 @@ from gvcsim.regression.design import (
 from gvcsim.regression.panel import (
     _apply_price_mode,
     _attach_baseline_gvc,
+    _freeze_baseline_gvc,
+    _freeze_treatment_timing,
+    _prepare_did_model,
+    _prepare_event_model,
+    _prepare_fe_model,
     _pretrend_diagnostic,
     benchmark_linearmodels,
     did,
@@ -76,6 +83,81 @@ def test_drops_missing_rows():
     df.loc[df.index[:10], "x"] = np.nan
     result = twoway_fe(df, "y", ["x"])
     assert result.n_obs == len(df) - 10
+
+
+def _regrel_boundary_panel() -> pd.DataFrame:
+    local_rng = np.random.default_rng(712)
+    rows = []
+    for index in range(12):
+        for offset in range(5):
+            x = local_rng.normal()
+            rows.append(
+                {
+                    "country": f"B{index:02d}",
+                    "year": 2000 + offset,
+                    "x": x,
+                    "control": local_rng.normal(),
+                    "y": index * 0.1 + offset * 0.2 - 0.4 * x + local_rng.normal(0, 0.05),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def test_null_outcome_and_control_remain_complete_case_attrition():
+    df = _regrel_boundary_panel()
+    df.loc[0, "y"] = np.nan
+    df.loc[1, "control"] = np.nan
+
+    model = _prepare_fe_model(df, "y", ["x"], controls=["control"])
+    result = twoway_fe(df, "y", ["x"], controls=["control"])
+
+    assert result.n_obs == len(df) - 2
+    assert model.sample_flow["dropped_rows_total"] == 2
+    assert model.sample_flow["missing_by_field"]["y"] == 1
+    assert model.sample_flow["missing_by_field"]["control"] == 1
+    assert {item["code"] for item in model.sample_flow["dropped_by_reason"]} == {
+        "missing_outcome",
+        "missing_control",
+    }
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda frame: frame.assign(country=np.where(frame.index == 0, " ", frame["country"])), "标识变量"),
+        (lambda frame: frame.assign(year=np.where(frame.index == 0, "2000", frame["year"])), "数值变量 year"),
+        (lambda frame: frame.assign(year=np.where(frame.index == 0, 2000.5, frame["year"])), "数学整数"),
+        (lambda frame: frame.assign(y=np.where(frame.index == 0, "1.2", frame["y"])), "数值变量 y"),
+        (lambda frame: frame.assign(x=np.where(frame.index == 0, object(), frame["x"])), "数值变量 x"),
+        (lambda frame: frame.assign(x=np.where(frame.index == 0, np.inf, frame["x"])), "数值变量 x"),
+        (lambda frame: frame.assign(control=np.where(frame.index == 0, "3", frame["control"])), "数值变量 control"),
+    ],
+    ids=[
+        "blank-entity",
+        "string-time",
+        "fractional-time",
+        "string-outcome",
+        "object-regressor",
+        "infinite-regressor",
+        "string-control",
+    ],
+)
+def test_regrel_runtime_boundary_rejects_nonsemantic_values(mutation, message):
+    df = _regrel_boundary_panel()
+    with pytest.raises(ValueError, match=message):
+        twoway_fe(mutation(df), "y", ["x"], controls=["control"])
+
+
+def test_regrel_runtime_boundary_rejects_duplicate_keys_constant_outcome_and_inadequate_counts():
+    df = _regrel_boundary_panel()
+    with pytest.raises(ValueError, match="entity-time 唯一"):
+        twoway_fe(pd.concat([df, df.iloc[[0]]], ignore_index=True), "y", ["x"])
+    with pytest.raises(ValueError, match="正的有限方差"):
+        twoway_fe(df.assign(y=1.0), "y", ["x"])
+    with pytest.raises(ValueError, match="至少需要 2 个实体"):
+        twoway_fe(df[df["country"] == "B00"], "y", ["x"])
+    with pytest.raises(ValueError, match="至少需要 2 个时间期"):
+        twoway_fe(df[df["year"] == df["year"].min()], "y", ["x"])
 
 
 def test_controls_recover_policy_effect_with_confounder():
@@ -303,6 +385,271 @@ def test_event_study_dynamic_path():
     assert "不能" in pretrend["interpretation"]
 
 
+def _reg01_staggered_panel(late_cohort: int = 4) -> pd.DataFrame:
+    rows = []
+    n_early = 6
+    n_treated = n_early + late_cohort
+    for i in range(n_treated + 10):
+        country = f"R{i:02d}"
+        first = 2019 if i < n_early else 2020 if i < n_treated else None
+        for year in range(2016, 2023):
+            post = first is not None and year >= first
+            rows.append(
+                {
+                    "country": country,
+                    "year": year,
+                    "treated": int(post),
+                    "y": (
+                        i * 0.013
+                        + (year - 2016) * 0.1
+                        + (i % 3) * (year - 2016) * 0.001
+                        - int(post) * (0.2 + i * 0.003)
+                    ),
+                    "control": (i % 4) * (year - 2015) * 0.002,
+                    "3_VA_GVC_share": 0.1 + i * 0.005,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+@pytest.mark.parametrize(("late_cohort", "supported"), [(4, False), (5, True)])
+def test_reg01_event_period_boundary_is_four_vs_exactly_five_clusters(late_cohort, supported):
+    result = event_study(_reg01_staggered_panel(late_cohort), "y")
+    period = next(item for item in result.event_support["periods"] if item["term"] == "k=-4")
+    coefficient = next(item for item in result.coefs if item.name == "k=-4")
+
+    assert period["contributing_clusters"] == late_cohort
+    assert period["contributing_entities"] == late_cohort
+    assert period["cohorts"] == {"2020": late_cohort}
+    assert period["period_supported"] is supported
+    assert period["inference_supported"] is supported
+    assert (coefficient.p is not None) is supported
+    assert (coefficient.ci_low is not None) is supported
+    assert coefficient.se > 0 and np.isfinite(coefficient.t)
+    assert coefficient.stars == (coefficient.stars if supported else "")
+
+
+def test_reg01_staggered_thin_leads_are_local_and_excluded_from_pretrend():
+    result = event_study(_reg01_staggered_panel(), "y")
+    by_name = {coefficient.name: coefficient for coefficient in result.coefs}
+
+    assert result.status == "ok"
+    assert by_name["k=-4"].p is None
+    assert by_name["k=-3"].ci_low is not None
+    assert by_name["k=-2"].p is not None
+    assert by_name["k=0"].p is not None
+    diagnostic = result.diagnostics["pretrend"]
+    assert diagnostic["available"] is True
+    assert diagnostic["terms"] == ["k=-3", "k=-2"]
+    assert [item["term"] for item in diagnostic["excluded_terms"]] == ["k=-4"]
+    assert "已排除" in diagnostic["interpretation"]
+    serialized = result.to_dict()["event_support"]
+    assert serialized["policy_is_statistical_theorem"] is False
+    assert serialized["cluster"] == "country"
+    assert serialized["reference_term"] == "k=-1"
+    assert serialized["min_contributing_clusters"] == 5
+    assert next(item for item in serialized["periods"] if item["term"] == "k=-1")["estimated"] is False
+
+
+def test_reg01_thin_reference_suppresses_all_event_and_marginal_inference():
+    df = _reg01_staggered_panel()
+    for i in range(6):
+        df.loc[(df["country"] == f"R{i:02d}") & (df["year"] == 2018), "y"] = np.nan
+    result = event_study(df, "y", interaction=True)
+    reference = next(item for item in result.event_support["periods"] if item["is_reference"])
+
+    assert reference["contributing_clusters"] == 4
+    assert reference["period_supported"] is False
+    assert all(coefficient.p is None for coefficient in result.coefs if coefficient.name.startswith("k="))
+    assert all(effect["p"] is None and effect["ci_low"] is None for effect in result.marginal_effects)
+    assert any(
+        "insufficient_reference_clusters" in period["reason_codes"]
+        for period in result.event_support["periods"]
+        if period["estimated"]
+    )
+
+
+def test_reg01_interaction_inherits_main_period_and_industry_clusters_are_deduplicated():
+    df = _reg01_staggered_panel()
+    result = event_study(df, "y", interaction=True)
+    by_name = {coefficient.name: coefficient for coefficient in result.coefs}
+    assert by_name["k=-4"].p is None and by_name["k=-4×base_gvc"].p is None
+    assert by_name["k=0"].p is not None and by_name["k=0×base_gvc"].p is not None
+    assert all(effect["p"] is None for effect in result.marginal_effects if effect["policy_term"] == "k=-4")
+    assert all(effect["p"] is not None for effect in result.marginal_effects if effect["policy_term"] == "k=0")
+    tests = result.diagnostics["pretrend_tests"]
+    assert set(tests) == {"main", "interaction", "joint"}
+    assert [item["term"] for item in tests["main"]["excluded_terms"]] == ["k=-4"]
+    assert [item["term"] for item in tests["interaction"]["excluded_terms"]] == ["k=-4×base_gvc"]
+    assert {item["term"] for item in tests["joint"]["excluded_terms"]} == {
+        "k=-4",
+        "k=-4×base_gvc",
+    }
+    assert result.diagnostics["pretrend"] == tests["joint"]
+
+    industry = pd.concat(
+        [df.assign(entity_id=df["country"] + "_A"), df.assign(entity_id=df["country"] + "_B")],
+        ignore_index=True,
+    )
+    model = _prepare_event_model(industry, "y", entity="entity_id", cluster="country")
+    thin = next(item for item in model.event_support["periods"] if item["term"] == "k=-4")
+    assert thin["contributing_rows"] == 8
+    assert thin["contributing_entities"] == 8
+    assert thin["contributing_clusters"] == 4
+    assert thin["inference_supported"] is False
+
+
+def test_reg01_support_uses_final_rows_frozen_timing_and_is_order_invariant():
+    df = _reg01_staggered_panel()
+    # Remove one thin-period outcome row after G_i has been frozen from the valid shock history.
+    df.loc[(df["country"] == "R06") & (df["year"] == 2016), "y"] = np.nan
+    first = _prepare_event_model(df, "y")
+    shuffled = _prepare_event_model(df.sample(frac=1, random_state=19), "y")
+    first_thin = next(item for item in first.event_support["periods"] if item["term"] == "k=-4")
+    shuffled_thin = next(item for item in shuffled.event_support["periods"] if item["term"] == "k=-4")
+    assert first.timing.first_by_entity["R06"] == 2020
+    assert first_thin == shuffled_thin
+    assert first_thin["contributing_clusters"] == 3
+
+
+def test_reg01_numeric_entity_ids_preserve_frozen_cohort_composition():
+    df = _reg01_staggered_panel()
+    numeric_ids = {country: index for index, country in enumerate(df["country"].unique())}
+    df["country"] = df["country"].map(numeric_ids)
+    model = _prepare_event_model(df, "y")
+    thin = next(item for item in model.event_support["periods"] if item["term"] == "k=-4")
+
+    assert thin["contributing_entities"] == 4
+    assert thin["contributing_clusters"] == 4
+    assert thin["cohorts"] == {"2020": 4}
+
+
+def test_reg02_sparse_global_support_suppresses_pretrend_before_period_gate():
+    df = _simulate_did_panel({0: -0.3, 1: -0.3, 2: -0.3}, n_entities=8)
+    df["control"] = [(i % 3) * (year - 2015) for i, year in enumerate(df["year"])]
+    result = event_study(df, "y", controls=["control"])
+    diagnostic = result.diagnostics["pretrend"]
+    assert result.status == "insufficient"
+    assert result.support["suppress_inference"] is True
+    assert diagnostic["available"] is False
+    assert diagnostic["reason"] == "global_inference_suppressed"
+    assert diagnostic["support_status"] == "insufficient"
+    assert diagnostic["statistic"] is None and diagnostic["p"] is None
+    assert diagnostic["df_num"] == 0
+    assert diagnostic["terms"] == []
+    assert diagnostic["excluded_terms"][0]["term"] == "k=-2"
+    assert "未执行" in diagnostic["interpretation"]
+    assert "不能说明冲击前趋势" in diagnostic["interpretation"]
+    # The whole-run gate has priority and therefore suppresses the control as well.
+    assert all(coefficient.p is None for coefficient in result.coefs)
+
+
+def test_reg02_invalid_global_gate_suppresses_pretrend_with_all_local_periods_supported():
+    df = _reg01_staggered_panel(late_cohort=6)
+    treated_countries = {f"R{i:02d}" for i in range(12)}
+    # A one-year policy reversal makes the absorbing design invalid without thinning any event-time cell.
+    df.loc[df["country"].isin(treated_countries) & (df["year"] == 2021), "treated"] = 0
+    result = event_study(df, "y")
+    diagnostic = result.diagnostics["pretrend"]
+
+    assert result.status == "invalid_design"
+    assert result.support["suppress_inference"] is True
+    assert all(period["period_supported"] for period in result.event_support["periods"])
+    assert all(period["inference_supported"] for period in result.event_support["periods"])
+    assert all(coefficient.p is None and coefficient.ci_low is None for coefficient in result.coefs)
+    assert diagnostic["available"] is False
+    assert diagnostic["reason"] == "global_inference_suppressed"
+    assert diagnostic["support_status"] == "invalid_design"
+    assert diagnostic["terms"] == [] and diagnostic["df_num"] == 0
+    assert diagnostic["statistic"] is None and diagnostic["p"] is None
+    assert {item["term"] for item in diagnostic["excluded_terms"]} == {"k=-4", "k=-3", "k=-2"}
+    assert all(item["reasons"] for item in diagnostic["excluded_terms"])
+
+
+def test_reg02_global_suppression_precedes_covariance_for_every_interaction_scope():
+    df = _simulate_did_panel({0: -0.3, 1: -0.3, 2: -0.3}, n_entities=8)
+    df["3_VA_GVC_share"] = np.tile(np.linspace(0.1, 0.8, 8), 5)
+    result = event_study(df, "y", interaction=True)
+
+    tests = result.diagnostics["pretrend_tests"]
+    assert set(tests) == {"main", "interaction", "joint"}
+    assert result.diagnostics["pretrend"] == tests["joint"]
+    for scope, diagnostic in tests.items():
+        assert diagnostic["scope"] == scope
+        assert diagnostic["available"] is False
+        assert diagnostic["reason"] == "global_inference_suppressed"
+        assert diagnostic["terms"] == []
+        assert diagnostic["statistic"] is None and diagnostic["p"] is None
+        assert diagnostic["excluded_terms"]
+
+
+def test_reg02_warning_design_still_runs_feasible_pretrend():
+    df = _reg01_staggered_panel(late_cohort=6)
+    # One reversal is below the course invalid-design share and therefore remains a warning.
+    df.loc[(df["country"] == "R00") & (df["year"] == 2021), "treated"] = 0
+    result = event_study(df, "y")
+    diagnostic = result.diagnostics["pretrend"]
+
+    assert result.status == "warning"
+    assert result.support["suppress_inference"] is False
+    assert diagnostic["available"] is True
+    assert diagnostic["reason"] is None
+    assert diagnostic["terms"] == ["k=-4", "k=-3", "k=-2"]
+    assert diagnostic["statistic"] is not None and diagnostic["p"] is not None
+
+
+def test_interaction_pretrend_main_can_pass_while_interaction_and_joint_reject():
+    local_rng = np.random.default_rng(2027)
+    rows = []
+    years = range(2016, 2023)
+    for index in range(80):
+        country = f"I{index:02d}"
+        first = 2019 if index < 40 else None
+        baseline = 0.1 + 0.8 * ((index % 40) / 39)
+        entity_effect = local_rng.normal(0, 0.4)
+        for year in years:
+            event_time = year - first if first is not None else None
+            pre_interaction = 1.2 * (baseline - 0.5) if event_time == -2 else 0.0
+            rows.append(
+                {
+                    "country": country,
+                    "year": year,
+                    "treated": int(first is not None and year >= first),
+                    "3_VA_GVC_share": baseline,
+                    "y": entity_effect + 0.08 * (year - 2016) + pre_interaction + local_rng.normal(0, 0.04),
+                }
+            )
+    result = event_study(pd.DataFrame(rows), "y", interaction=True)
+    tests = result.diagnostics["pretrend_tests"]
+
+    assert tests["main"]["available"] is True
+    assert tests["main"]["p"] > 0.05
+    assert tests["interaction"]["available"] is True
+    assert tests["interaction"]["p"] < 0.05
+    assert tests["joint"]["available"] is True
+    assert tests["joint"]["p"] < 0.05
+    assert result.diagnostics["pretrend"] == tests["joint"]
+
+
+def test_diagnostic_scope_refactor_does_not_change_event_coef_se_or_t(monkeypatch):
+    df = _reg01_staggered_panel(late_cohort=6)
+    baseline = event_study(df, "y", interaction=True)
+    monkeypatch.setattr(
+        panel_module,
+        "_pretrend_diagnostic",
+        lambda *_args, **_kwargs: {"pretrend": {"available": False}, "pretrend_tests": {}},
+    )
+    without_diagnostics = event_study(df, "y", interaction=True)
+
+    expected = {coefficient.name: coefficient for coefficient in baseline.coefs}
+    actual = {coefficient.name: coefficient for coefficient in without_diagnostics.coefs}
+    assert set(actual) == set(expected)
+    for name in expected:
+        assert actual[name].coef == pytest.approx(expected[name].coef, abs=1e-14)
+        assert actual[name].se == pytest.approx(expected[name].se, abs=1e-14)
+        assert actual[name].t == pytest.approx(expected[name].t, abs=1e-14)
+
+
 def test_pretrend_diagnostic_rejects_too_many_restrictions_for_cluster_df():
     diagnostic = _pretrend_diagnostic(
         ["k=-3", "k=-2", "k=0"],
@@ -327,6 +674,25 @@ def test_pretrend_diagnostic_rejects_singular_restriction_covariance():
     assert diagnostic["reason"] == "singular_covariance"
     assert diagnostic["p"] is None
     assert "不得据此判断没有" in diagnostic["interpretation"]
+
+
+def test_event_study_rejects_sample_without_any_true_preperiod():
+    df = _simulate_did_panel({0: 0.2, 1: 0.3}, years=range(2018, 2020))
+    with pytest.raises(ValueError, match=r"k<0"):
+        event_study(df, "y")
+
+
+def test_event_study_uses_nearest_negative_base_and_serializes_base_k():
+    df = _simulate_did_panel({0: 0.2, 1: 0.3, 2: 0.4})
+    df.loc[(df["year"] == 2017) & df["country"].str.startswith("E"), "y"] = np.nan
+    # Frozen treatment timing still comes from the complete shock history; after
+    # outcome attrition k=-2 is the nearest observed negative event period.
+    result = event_study(df, "y")
+    assert result.event_support["base_k"] == -2
+    assert result.event_support["reference_term"] == "k=-2"
+    reference = next(period for period in result.event_support["periods"] if period["is_reference"])
+    assert reference["event_time"] == -2
+    assert reference["term"] == "k=-2"
 
 
 def test_event_study_without_estimable_preperiod_reports_unavailable():
@@ -430,6 +796,395 @@ def test_placebo_did_distribution_is_reproducible():
     assert "国家聚类结构" in result["assignment_not_preserved"]
 
 
+def _reg04_panel() -> pd.DataFrame:
+    rows = []
+    for country in ("A", "B", "C", "D", "E", "F"):
+        first = 2018 if country in {"A", "B", "C"} else None
+        for year in range(2016, 2021):
+            treated = int(first is not None and year >= first)
+            rows.append(
+                {
+                    "country": country,
+                    "year": year,
+                    "FVA_share": 0.1 * (year - 2015) - 0.2 * treated + ord(country) / 1000,
+                    "other_outcome": 0.2 * (year - 2015) - 0.1 * treated + ord(country) / 1000,
+                    "control": float(year - 2015),
+                    "treated": treated,
+                    "tariff_shock": 0.1 * treated,
+                    "3_VA_GVC_share": 0.1 + ord(country) / 1000,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def _baseline_freeze_panel() -> pd.DataFrame:
+    rows = []
+    for index, country in enumerate([*[f"T{i}" for i in range(6)], *[f"C{i}" for i in range(6)]]):
+        first = 2019 if country.startswith("T") else None
+        entity_baseline = 0.18 + 0.035 * index
+        for year in range(2017, 2022):
+            treated = int(first is not None and year >= first)
+            shock = treated * (0.06 + 0.004 * (year - 2019))
+            centered = entity_baseline - 0.3725
+            noise = 0.003 * (((index + 2) * (year - 2015)) % 7 - 3)
+            outcome = 0.4 * index + 0.07 * (year - 2017) - 0.45 * treated - 0.9 * treated * centered + noise
+            rows.append(
+                {
+                    "country": country,
+                    "year": year,
+                    "FVA_share": outcome,
+                    "control": 0.2 * index + 0.03 * (year - 2017),
+                    "treated": treated,
+                    "tariff_shock": shock,
+                    "3_VA_GVC_share": entity_baseline + 0.002 * (year - 2017),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def test_interaction_baseline_freezes_before_outcome_attrition_across_model_paths():
+    frame = _baseline_freeze_panel()
+    # KHM-like treated entity: its only pre-estimation outcomes are unavailable,
+    # while the structurally sourced pre-treatment moderator remains finite.
+    frame.loc[frame["country"].eq("T0") & frame["year"].lt(2019), "FVA_share"] = np.nan
+    # A retained post row need not carry the raw moderator after entity baseline freeze.
+    frame.loc[frame["country"].eq("T0") & frame["year"].eq(2020), "3_VA_GVC_share"] = np.nan
+
+    models = [
+        _prepare_did_model(frame, "FVA_share", interaction=True, intensity_col="tariff_shock"),
+        _prepare_event_model(frame, "FVA_share", interaction=True, intensity_col="tariff_shock"),
+        _prepare_fe_model(
+            frame,
+            "FVA_share",
+            ["tariff_shock"],
+            interaction=True,
+            treated_col="treated",
+        ),
+    ]
+    for model in models:
+        retained = model.data.loc[model.data["country"].eq("T0")]
+        assert set(retained["year"]) == {2019, 2020, 2021}
+        assert retained["base_gvc_participation"].nunique() == 1
+        assert model.timing.first_by_entity["T0"] == 2019
+        assert model.sample_flow["baseline_source_structural_null_rows"] == 1
+        assert "3_VA_GVC_share" not in model.sample_flow["missing_by_field"]
+
+    placebo = placebo_did_distribution(
+        frame,
+        RegressionDesign(outcome="trade", granularity="country", method="did", interaction=True),
+        n_draws=2,
+        seed=17,
+    )
+    assert placebo["n_draws"] == 2
+
+
+def test_frozen_baseline_values_are_invariant_to_baseline_year_control_attrition():
+    frame = _baseline_freeze_panel()
+    complete = _prepare_did_model(
+        frame,
+        "FVA_share",
+        controls=["control"],
+        interaction=True,
+        intensity_col="tariff_shock",
+    )
+    frame.loc[frame["country"].eq("T1") & frame["year"].eq(2018), "control"] = np.nan
+    attrited = _prepare_did_model(
+        frame,
+        "FVA_share",
+        controls=["control"],
+        interaction=True,
+        intensity_col="tariff_shock",
+    )
+    complete_values = complete.data.groupby("country")["base_gvc_participation"].first().sort_index()
+    attrited_values = attrited.data.groupby("country")["base_gvc_participation"].first().sort_index()
+    pd.testing.assert_series_equal(attrited_values, complete_values)
+    assert attrited.sample_flow["missing_by_field"]["control"] == 1
+
+
+def test_interaction_baseline_missing_entity_is_dropped_across_model_paths_without_zero_fabrication():
+    frame = _baseline_freeze_panel()
+    missing_rows = frame["country"].eq("T0")
+    frame.loc[missing_rows & frame["year"].lt(2019), "3_VA_GVC_share"] = np.nan
+
+    models = [
+        _prepare_did_model(frame, "FVA_share", interaction=True, intensity_col="tariff_shock"),
+        _prepare_event_model(frame, "FVA_share", interaction=True, intensity_col="tariff_shock"),
+        _prepare_fe_model(
+            frame,
+            "FVA_share",
+            ["tariff_shock"],
+            interaction=True,
+            treated_col="treated",
+        ),
+    ]
+    for model in models:
+        assert "T0" not in set(model.data["country"])
+        assert np.isfinite(model.data["base_gvc_participation"]).all()
+        assert model.sample_flow["baseline_derived_missing_entities"] == ["T0"]
+        assert model.sample_flow["baseline_derived_dropped_entities"] == 1
+        assert model.sample_flow["baseline_derived_dropped_rows"] == int(missing_rows.sum())
+        assert model.sample_flow["missing_by_field"]["base_gvc_participation"] == int(missing_rows.sum())
+        assert model.sample_flow["estimation_rows"] + model.sample_flow["dropped_rows_total"] == len(frame)
+        assert any("1 个实体（T0）" in note and "5 行" in note and "未以 0 填补" in note for note in model.notes)
+
+    placebo_frame = frame.copy()
+    placebo_frame.loc[placebo_frame["country"].eq("T0"), "3_VA_GVC_share"] = np.nan
+    placebo = placebo_did_distribution(
+        placebo_frame,
+        RegressionDesign(outcome="trade", granularity="country", method="did", interaction=True),
+        n_draws=2,
+        seed=23,
+    )
+    assert placebo["n_draws"] == 2
+
+
+def test_frozen_baseline_skips_structural_nulls_before_selecting_last_two_finite_values():
+    frame = pd.DataFrame(
+        [
+            {"country": "treated", "year": 2016, "3_VA_GVC_share": 0.1},
+            {"country": "treated", "year": 2017, "3_VA_GVC_share": 0.2},
+            {"country": "treated", "year": 2018, "3_VA_GVC_share": np.nan},
+            {"country": "treated", "year": 2019, "3_VA_GVC_share": 0.9},
+            {"country": "control", "year": 2016, "3_VA_GVC_share": np.nan},
+            {"country": "control", "year": 2017, "3_VA_GVC_share": 0.3},
+            {"country": "control", "year": 2018, "3_VA_GVC_share": 0.5},
+        ]
+    )
+    frozen = _freeze_baseline_gvc(frame, "country", "year", pd.Series({"treated": 2019}))
+    assert frozen.to_dict() == pytest.approx({"treated": 0.15, "control": 0.4})
+
+
+@pytest.mark.parametrize("bad", [float("inf"), "0.3"])
+def test_frozen_baseline_rejects_nonnull_nonfinite_or_malformed_values(bad):
+    frame = pd.DataFrame({"country": ["A"], "year": [2018], "3_VA_GVC_share": [bad]})
+    with pytest.raises(ValueError, match="真实数值且有限"):
+        _freeze_baseline_gvc(frame, "country", "year")
+
+
+def test_complete_interaction_fixture_has_exact_stable_coefficient_se_and_t():
+    result = run_design(
+        _baseline_freeze_panel(),
+        RegressionDesign(outcome="trade", granularity="country", method="did", interaction=True),
+    )
+    stats_by_name = {coefficient.name: coefficient for coefficient in result.coefs}
+    main = stats_by_name["treated×post"]
+    interaction = stats_by_name["treated×post×base_gvc"]
+    assert (main.coef, main.se, main.t) == pytest.approx(
+        (-0.44974999999999943, 0.004492857445443682, -100.1033318909555), rel=1e-12, abs=1e-12
+    )
+    assert (interaction.coef, interaction.se, interaction.t) == pytest.approx(
+        (-0.885714285714285, 0.024451764981217948, -36.222918320809384), rel=1e-12, abs=1e-12
+    )
+
+
+def test_reg04_freezes_timing_before_outcome_and_control_complete_case():
+    df = _reg04_panel()
+    df.loc[(df["country"] == "A") & (df["year"] == 2018), "FVA_share"] = np.nan
+    event = _prepare_event_model(df, "FVA_share", controls=["control"], intensity_col="tariff_shock")
+    a2019 = event.data[(event.data["country"] == "A") & (event.data["year"] == 2019)].iloc[0]
+    assert a2019["k=+1"] == 1
+    assert a2019.get("k=0", 0) == 0
+    assert event.timing.first_by_entity["A"] == 2018
+
+    df.loc[(df["country"] == "B") & (df["year"] == 2018), "control"] = np.nan
+    did_model = _prepare_did_model(df, "FVA_share", controls=["control"], intensity_col="tariff_shock")
+    b2019 = did_model.data[(did_model.data["country"] == "B") & (did_model.data["year"] == 2019)].iloc[0]
+    assert b2019["treated×post"] == 1
+    assert did_model.timing.first_by_entity["B"] == 2018
+    assert did_model.sample_flow["missing_by_field"]["FVA_share"] == 1
+    assert did_model.sample_flow["missing_by_field"]["control"] == 1
+    assert {item["code"] for item in did_model.sample_flow["dropped_by_reason"]} == {
+        "missing_outcome",
+        "missing_control",
+    }
+
+
+def test_reg04_fully_missing_treated_entity_is_disclosed_not_retimed():
+    df = _reg04_panel()
+    df.loc[df["country"] == "A", "FVA_share"] = np.nan
+    model = _prepare_did_model(df, "FVA_share", interaction=True, intensity_col="tariff_shock")
+    assert model.timing.first_by_entity["A"] == 2018
+    assert "A" not in set(model.data["country"])
+    assert model.sample_flow["timing_treated_entities"] == 3
+    assert model.sample_flow["retained_treated_entities"] == 2
+    assert model.sample_flow["baseline_entities_available"] == 6
+    assert model.sample_flow["baseline_retained_entities"] == 5
+    entity_baselines = model.data.groupby("country")["base_gvc_participation"].first()
+    assert entity_baselines.mean() == pytest.approx(0.0, abs=1e-15)
+
+
+def test_reg04_timeline_cohorts_are_outcome_and_row_order_invariant():
+    df = _reg04_panel()
+    df.loc[(df["country"] == "A") & (df["year"] == 2018), "FVA_share"] = np.nan
+    df.loc[(df["country"] == "B") & (df["year"] == 2019), "other_outcome"] = np.nan
+    first = _prepare_event_model(df, "FVA_share", intensity_col="tariff_shock")
+    second = _prepare_event_model(df.sample(frac=1, random_state=7), "other_outcome", intensity_col="tariff_shock")
+    assert first.sample_flow["timing_cohorts"] == second.sample_flow["timing_cohorts"] == {"2018": 3}
+    assert first.timing.first_by_entity.to_dict() == second.timing.first_by_entity.to_dict()
+    assert set(first.timing.first_by_entity.index) == {"A", "B", "C"}
+    assert set(first.data.loc[first.data["country"].isin(["D", "E", "F"]), "k=0"]) == {0}
+
+
+def test_reg04_reversal_scan_uses_full_timeline_when_outcome_is_missing():
+    df = _reg04_panel()
+    mask = (df["country"] == "A") & (df["year"] == 2019)
+    df.loc[mask, ["treated", "tariff_shock"]] = 0
+    df.loc[mask, "FVA_share"] = np.nan
+    model = _prepare_did_model(df, "FVA_share", intensity_col="tariff_shock")
+    assert model.timing.first_by_entity["A"] == 2018
+    assert "A" in model.support.reversal_entities
+
+
+def test_reg04_country_timing_uses_the_selected_weight_mode_panel():
+    df = _reg04_panel()
+    df["tariff_shock_contemporaneous"] = df["tariff_shock"]
+    df["treated_contemporaneous"] = df["treated"]
+    df.loc[
+        (df["country"] == "A") & (df["year"] == 2018), ["tariff_shock_contemporaneous", "treated_contemporaneous"]
+    ] = 0
+    selected = regression_routes._panel_for_weight_mode(
+        df,
+        RegressionDesign(outcome="trade", granularity="country"),
+        shocks.EXPOSURE_MODE_CONTEMPORANEOUS,
+    )
+    model = prepare_design_model(selected, RegressionDesign(outcome="trade", granularity="country"))
+    assert model.timing.first_by_entity["A"] == 2019
+    assert model.timing.first_by_entity["B"] == 2018
+
+
+def test_reg04_industry_timing_is_entity_specific_while_cluster_is_country():
+    rows = []
+    for country in ("A", "B"):
+        for industry, first in (("s1", 2018), ("s2", 2019)):
+            for year in range(2017, 2021):
+                treated = int(country == "A" and year >= first)
+                rows.append(
+                    {
+                        "country": country,
+                        "entity_id": f"{country}_{industry}",
+                        "year": year,
+                        "y": float(year) + (0.1 if industry == "s2" else 0),
+                        "treated": treated,
+                    }
+                )
+    model = _prepare_event_model(pd.DataFrame(rows), "y", entity="entity_id", cluster="country")
+    assert model.timing.first_by_entity.to_dict() == {"A_s1": 2018, "A_s2": 2019}
+    assert model.sample_flow["timing_clusters"] == 2
+    assert model.sample_flow["timing_entities"] == 4
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (lambda frame: frame.assign(treated=np.where(frame.index == 0, np.nan, frame["treated"])), "处理状态"),
+        (lambda frame: frame.assign(treated=np.where(frame.index == 0, "bad", frame["treated"])), "处理状态"),
+        (lambda frame: frame.assign(treated=np.where(frame.index == 0, 2, frame["treated"])), "严格为 0/1"),
+        (lambda frame: frame.assign(country=np.where(frame.index == 0, None, frame["country"])), "标识"),
+        (lambda frame: frame.assign(year=np.where(frame.index == 0, "bad", frame["year"])), "非数值"),
+        (lambda frame: pd.concat([frame, frame.iloc[[0]]], ignore_index=True), "entity-year 唯一"),
+    ],
+)
+def test_reg04_invalid_timeline_fails_closed(mutate, message):
+    with pytest.raises(ValueError, match=message):
+        _freeze_treatment_timing(mutate(_reg04_panel()), "country", "year", "country", "treated")
+
+
+def test_reg04_entity_cannot_map_to_multiple_clusters():
+    df = _reg04_panel().assign(cluster=lambda frame: frame["country"])
+    df.loc[(df["country"] == "A") & (df["year"] == 2020), "cluster"] = "OTHER"
+    with pytest.raises(ValueError, match="多个 cluster"):
+        _freeze_treatment_timing(df, "country", "year", "cluster", "treated")
+
+
+def test_reg04_interaction_baseline_uses_frozen_true_cutoff():
+    df = _reg04_panel()
+    df.loc[(df["country"] == "A") & (df["year"] == 2018), "FVA_share"] = np.nan
+    model = prepare_design_model(
+        df,
+        RegressionDesign(outcome="trade", granularity="country", method="twfe_intensity", interaction=True),
+    )
+    assert model.timing.first_by_entity["A"] == 2018
+    expected = _attach_baseline_gvc(
+        df.dropna(subset=["FVA_share", "tariff_shock", "3_VA_GVC_share"]),
+        "country",
+        "year",
+        model.timing.first_by_entity,
+    )
+    actual = model.data.groupby("country")["base_gvc_participation"].first()
+    expected_values = expected.groupby("country")["base_gvc_participation"].first()
+    assert actual.to_dict() == pytest.approx(expected_values.to_dict())
+
+
+def test_reg04_absorbing_support_requires_a_retained_post_row_but_fe_uses_actual_exposure():
+    rows = []
+    for country in [*[f"T{i}" for i in range(6)], *[f"C{i}" for i in range(6)]]:
+        frozen_treated = country.startswith("T")
+        for year in range(2016, 2020):
+            treated = int(frozen_treated and year >= 2018)
+            y = float(year)
+            if country in {"T1", "T2", "T3", "T4", "T5"} and year >= 2018:
+                y = np.nan
+            rows.append(
+                {
+                    "country": country,
+                    "year": year,
+                    "y": y,
+                    "treated": treated,
+                    "shock": 0.1 * treated,
+                }
+            )
+    df = pd.DataFrame(rows)
+    did_model = _prepare_did_model(df, "y", intensity_col="shock")
+    assert did_model.sample_flow["timing_treated_entities"] == 6
+    assert did_model.sample_flow["retained_treated_entities"] == 6
+    assert did_model.sample_flow["treated_entities_without_post_rows"] == 5
+    assert did_model.sample_flow["contributing_treated_entities"] == 1
+    assert did_model.sample_flow["contributing_treated_clusters"] == 1
+    assert did_model.sample_flow["contributing_cohorts"] == {"2018": 1}
+    assert did_model.support.treated_entities == 1
+    assert did_model.support.treated_clusters == 1
+    assert did_model.support.status == "insufficient"
+
+    fe_model = _prepare_fe_model(df, "y", ["shock"], treated_col="treated")
+    assert fe_model.support.treated_entities == 1
+    assert fe_model.support.treated_clusters == 1
+
+
+def test_reg04_placebo_uses_only_effective_frozen_cohorts():
+    df = _simulate_did_panel({0: -0.6, 1: -0.6, 2: -0.6}).rename(columns={"y": "FVA_share"})
+    df.loc[(df["treated"] == 1) & (df["year"] == 2018), "FVA_share"] = np.nan
+    # 五个 frozen-treated 实体只保留 pre 行，不能进入真实或伪处理支持。
+    pre_only = [f"E{i:02d}" for i in range(5)]
+    df.loc[df["country"].isin(pre_only) & (df["year"] >= 2018), "FVA_share"] = np.nan
+    result = placebo_did_distribution(
+        df, RegressionDesign(outcome="trade", granularity="country", method="did"), n_draws=4, seed=9
+    )
+    assert result["cohorts"] == {"2018": 25}
+    assert result["treated_entities"] == 25
+
+
+def test_reg04_sample_flow_arithmetic_serialization_and_row_boundary():
+    df = _reg04_panel()
+    df.loc[(df["country"] == "A") & (df["year"] == 2018), "FVA_share"] = np.nan
+    df.loc[(df["country"] == "B") & (df["year"] == 2018), ["FVA_share", "control"]] = np.nan
+    row = df.loc[df["country"] == "F"].copy()
+    row["country"] = "ROW"
+    combined = pd.concat([df, row], ignore_index=True)
+    design = RegressionDesign(outcome="trade", granularity="country", control_mode="none")
+    model = prepare_design_model(combined, design)
+    flow = model.sample_flow
+    assert flow["input_rows"] == len(combined)
+    assert flow["structural_eligible_rows"] == len(df)
+    assert flow["structural_excluded_rows"] == len(row)
+    assert flow["estimation_rows"] + flow["dropped_rows_total"] == flow["structural_eligible_rows"]
+    assert sum(reason["rows"] for reason in flow["dropped_by_reason"]) == flow["dropped_rows_total"]
+    assert flow["missing_by_field"]["FVA_share"] == 2
+    assert flow["timing_cohorts"] == {"2018": 3}
+    assert "ROW" not in set(model.timing.timeline_data["country"])
+    result = run_design(combined, design)
+    assert result.to_dict()["sample_flow"] == result.sample_flow
+
+
 def test_did_with_baseline_gvc_interaction_recovers_heterogeneity():
     rows = []
     beta, theta = -0.35, -0.8
@@ -494,7 +1249,7 @@ def test_baseline_gvc_never_uses_treatment_or_post_treatment_rows():
     assert values["control"] == pytest.approx(0.10)
 
 
-def test_baseline_gvc_requires_a_pre_treatment_observation():
+def test_baseline_gvc_drops_entity_without_pre_treatment_observation():
     df = pd.DataFrame(
         [
             {"country": "treated", "year": 2018, "3_VA_GVC_share": 0.90},
@@ -504,8 +1259,10 @@ def test_baseline_gvc_requires_a_pre_treatment_observation():
         ]
     )
 
-    with pytest.raises(ValueError, match="至少有一期处理前观测"):
-        _attach_baseline_gvc(df, "country", "year", pd.Series({"treated": 2018}))
+    attached = _attach_baseline_gvc(df, "country", "year", pd.Series({"treated": 2018}))
+
+    assert set(attached["country"]) == {"control"}
+    assert attached["base_gvc_participation"].eq(0.0).all()
 
 
 def test_run_design_with_controls_and_panelols_benchmark():

@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../../api";
 import type { Meta, QcCheck } from "../../types";
 import { useAsync, YearPicker } from "../shared";
 import { QcChecksTable } from "./qc-checks-table";
+import { inspectQcSection, summarizeQcSections, type QcSectionState } from "./qc-contract";
+import { inspectShockContract } from "./step2/shock-contract";
 import { summarizeQcRelease } from "./qc-release";
 
 const QC_DECISIONS = [
@@ -28,28 +30,49 @@ const LEONTIEF_DIAGNOSTICS = [
 ] as const;
 
 /** 第 2 步只展示数据发布质检；处置边界由本步选择题检查。 */
-export function QcLab({ meta, onNavigateStep }: {
+export function QcLab({ meta, onNavigateStep, onCompletionBlockChange }: {
   meta: Meta;
   onNavigateStep: (step: number) => void;
+  onCompletionBlockChange?: (reason: string | null) => void;
 }) {
   const [year, setYear] = useState(meta.years.at(-1)!);
-  const { data, error } = useAsync<QcCheck[]>(() => api.qc(year), [year]);
-  const { data: controlChecks, error: controlError } = useAsync<QcCheck[]>(() => api.qcControls(), []);
-  if (error) return <div className="error-box">{error}</div>;
-
+  const { data, error } = useAsync<QcCheck[]>(() => api.qc(year), [year], { requestKey: `qc:icio:${year}` });
+  const { data: controlChecks, error: controlError } = useAsync<QcCheck[]>(
+    () => api.qcControls(),
+    [],
+    { requestKey: "qc:controls" },
+  );
+  const contract = meta.dataset?.qc_contract;
+  const icioState = inspectQcSection(data, contract, "icio");
+  const controlsState = inspectQcSection(controlChecks, contract, "controls");
   const sections = [
-    { rows: data, error: null as string | null },
-    { rows: controlChecks, error: controlError },
+    { label: "OECD ICIO", state: icioState, error },
+    { label: "国家-年份控制变量", state: controlsState, error: controlError },
   ];
-  const loading = sections.some((section) => section.rows == null && section.error == null);
-  const failedSections = sections.filter((section) => section.error != null).length;
-  const allChecks = sections.flatMap((section) => section.rows ?? []);
-  const failures = allChecks.filter((check) => !check.passed).length;
+  const summary = summarizeQcSections(sections);
+  const shockContract = inspectShockContract(
+    meta.dataset?.shock_contract,
+    meta.dataset?.artifact_contract_version,
+  );
+  const completionBlock = summary.blockedReason ?? shockContract.reason;
   const qcRelease = summarizeQcRelease(meta.dataset?.qc);
+  useEffect(() => {
+    onCompletionBlockChange?.(completionBlock);
+  }, [completionBlock, onCompletionBlockChange]);
+
+  const changeYear = (nextYear: number) => {
+    onCompletionBlockChange?.("正在读取新年份质检结果，完成前不能提交本步。");
+    setYear(nextYear);
+  };
+  const tableMessage = (state: QcSectionState, requestError: string | null) => {
+    if (requestError) return `质检读取失败：${requestError}`;
+    if (state.status === "loading") return "正在读取质检结果…";
+    return state.reason ?? "未返回任何质检结果，不能判定通过。";
+  };
 
   return (
     <div>
-      <YearPicker years={meta.years} year={year} onChange={setYear} />
+      <YearPicker years={meta.years} year={year} onChange={changeYear} />
       <section className="qc-teaching-guide" aria-labelledby="qc-guide-title">
         <div>
           <h3 id="qc-guide-title">先判断严重度，再决定能否继续</h3>
@@ -76,14 +99,13 @@ export function QcLab({ meta, onNavigateStep }: {
           </dl>
         </div>
       </section>
-      <div className={failures || failedSections ? "warnbox" : "tipbox"} style={{ marginBottom: 16, fontWeight: 700 }}>
-        {loading
-          ? `正在汇总质检结果… 已读取 ${allChecks.length} 项`
-          : failedSections
-            ? `有 ${failedSections} 组质检未能读取（详见下方错误）；已读取 ${allChecks.length} 项中 ${failures} 项异常。`
-            : failures
-              ? `${allChecks.length} 项质检中 ${allChecks.length - failures} 项通过、${failures} 项异常；异常项已在各表置顶。`
-              : `✓ ${allChecks.length} 项质检全部通过；仍可展开每项查看检查动机与口径。`}
+      <div className={summary.className} role={summary.blockedReason ? "alert" : "status"} style={{ marginBottom: 16, fontWeight: 700 }}>
+        {summary.text}
+      </div>
+      <div className={shockContract.valid ? "tipbox" : "warnbox"} role={shockContract.valid ? "status" : "alert"} style={{ marginBottom: 16 }}>
+        {shockContract.valid
+          ? "Shock contract v1 已精确验证：treated 使用严格 >0.001 阈值并保留三类完整字段。允许集合包含 OECD ICIO 与显式教学 fallback；“允许”不等于“官方”，实际来源/口径必须以步骤 11 的第六项 provenance QC 为准。"
+          : shockContract.reason}
       </div>
 
       {qcRelease.requiresDisclosure && (
@@ -110,15 +132,25 @@ export function QcLab({ meta, onNavigateStep }: {
         <span className="section-head-icon">🧾</span>OECD ICIO 数据质检
         <span className="section-head-line" />
       </div>
-      <QcChecksTable rows={data} onNavigateStep={onNavigateStep} />
+      <QcChecksTable
+        rows={icioState.status === "valid" ? icioState.rows : []}
+        label="OECD ICIO 数据质检结果表，可横向滚动"
+        emptyMessage={tableMessage(icioState, error)}
+        emptyState={icioState.status === "loading" && !error ? "loading" : "invalid"}
+        onNavigateStep={onNavigateStep}
+      />
 
       <div className="section-head" style={{ marginTop: 18 }}>
         <span className="section-head-icon">🧾</span>国家-年份控制变量质检
         <span className="section-head-line" />
       </div>
-      {controlError
-        ? <div className="error-box">{controlError}</div>
-        : <QcChecksTable rows={controlChecks} onNavigateStep={onNavigateStep} />}
+      <QcChecksTable
+        rows={controlsState.status === "valid" ? controlsState.rows : []}
+        label="国家-年份控制变量质检结果表，可横向滚动"
+        emptyMessage={tableMessage(controlsState, controlError)}
+        emptyState={controlsState.status === "loading" && !controlError ? "loading" : "invalid"}
+        onNavigateStep={onNavigateStep}
+      />
 
       <div className="tipbox" style={{ marginTop: 16 }}>
         本步无需提交处置。请阅读异常等级与发布边界，并在下方理解检查中判断何时应停止、修正或披露。

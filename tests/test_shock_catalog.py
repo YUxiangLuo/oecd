@@ -31,6 +31,6 @@ def test_event_metadata_contract_is_unchanged_by_extraction():
     canonical = json.dumps(metadata, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
 
     assert len(metadata) == 16
-    assert hashlib.sha256(canonical).hexdigest() == "f16acbdfa181b9e9338df31da78bf3e68bfa0ddcda4aa4dadaeb2258173fce3e"
+    assert hashlib.sha256(canonical).hexdigest() == "d515d499fb8b978eec4062df15c4933606ce3f11f9fa9cbd7c3ffcbef4583a72"
     assert metadata[0]["name"] == "美国201保障措施(光伏、洗衣机)"
     assert metadata[-1]["name"] == "BIS 实体清单:中芯国际 SMIC"

@@ -6,40 +6,66 @@
  *   出口拆解 选中国家的毛出口拆成五类 WWZ 聚合项与 TLS 扩展,直观看本国 / 外国来源占比
  *   FVA 排序 谁的出口最依赖外国增加值(后向 GVC 参与最深)
  */
-import { api } from "../../../api";
 import type { Meta, Step, StepStateApi } from "../../../types";
 import { CompositionBar, QuadrantScatter, RankBarChart } from "../../../viz";
-import { AsyncStateMessage, useAsync } from "../../shared";
-import { ChartStory, LensNav, StepIntro, VizWorkbench, finiteBy, num, useCountryObservations, useVizLab, type Row, type VizStepState } from "./scaffold";
+import { NEGATIVE_COMPOSITION_STYLE } from "../../../viz/explore/charts";
+import { CAT } from "../../../viz/shared";
+import { AsyncStateMessage } from "../../shared";
+import { ChartStory, LensNav, StepIntro, VizWorkbench, finiteBy, num, useCountryIndicatorRows, useCountryObservations, useVizLab, type Row, type VizStepState } from "./scaffold";
 
 type Lens = "quadrant" | "decompose" | "rank";
 
-const WWZ_SEGMENTS = [
-  { key: "DVAex", name: "DVAex 国内增加值出口" },
-  { key: "DVArt", name: "DVArt 返回国内" },
-  { key: "DDC", name: "DDC 国内重复计算" },
-  { key: "FVA", name: "FVA 外国增加值" },
-  { key: "FDC", name: "FDC 外国重复计算" },
-  { key: "taxsub", name: "taxsub 税收减补贴" },
-];
+type ExportProvenance = "domestic" | "foreign" | "extension";
+
+export const WWZ_SEGMENTS = [
+  { key: "DVAex", name: "DVAex 国内增加值出口", provenance: "domestic", colorName: "蓝色", color: CAT[0] },
+  { key: "DVArt", name: "DVArt 返回国内", provenance: "domestic", colorName: "绿色", color: CAT[1] },
+  { key: "DDC", name: "DDC 国内重复计算", provenance: "domestic", colorName: "琥珀色", color: CAT[2] },
+  { key: "FVA", name: "FVA 外国增加值", provenance: "foreign", colorName: "深绿色", color: CAT[3] },
+  { key: "FDC", name: "FDC 外国重复计算", provenance: "foreign", colorName: "紫色", color: CAT[4] },
+  { key: "taxsub", name: "taxsub 税收减补贴", provenance: "extension", colorName: "红色", color: CAT[5] },
+] as const satisfies readonly {
+  key: string;
+  name: string;
+  provenance: ExportProvenance;
+  colorName: string;
+  color: string;
+}[];
+
+function provenanceItems(provenance: ExportProvenance): string {
+  return WWZ_SEGMENTS
+    .filter((segment) => segment.provenance === provenance)
+    .map((segment) => `${segment.colorName} ${segment.key}`)
+    .join("、");
+}
+
+export const WWZ_READING_GUIDE = `正值时，${provenanceItems("domestic")} 属于国内增加值及其重复计算；`
+  + `${provenanceItems("foreign")} 属于外国增加值及其重复计算；`
+  + `${provenanceItems("extension")} 是 OECD TLS 账户扩展。`
+  + `负分项统一以${NEGATIVE_COMPOSITION_STYLE.colorName}显示在零轴左侧；这里的${NEGATIVE_COMPOSITION_STYLE.colorName}表示负号，不改变其国内、外国或 TLS 扩展归类。`;
 const QUAD_LABELS: [string, string, string, string] = [
   "双高 · 深度嵌入", "GVC 生产主导 · 前向型", "双低 · 参与较低", "进口依赖 · 后向型",
 ];
+
+export function eligibleExportCompositionRows(rows: Row[]): Row[] {
+  return finiteBy(rows, "gross_exports", ...WWZ_SEGMENTS.map((segment) => segment.key));
+}
 
 export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
   const { year, setYear, lens, pickLens, picked, pickCountries } = useVizLab(
     meta, step, state, "quadrant", ["quadrant", "decompose", "rank"],
   );
-  const { data, error, status, retry } = useAsync<Row[]>(() => api.countryIndicators(year), [year]);
-  const rows = data ?? [];
-  useCountryObservations(rows, picked, year, "FVA_share", state);
+  const countryQuery = useCountryIndicatorRows(meta, year);
+  const { rows, error, status, retry } = countryQuery;
+  useCountryObservations(countryQuery.response, countryQuery.identity, picked, "FVA_share", state);
 
   const highlight = new Set(picked);
   const quadRows = finiteBy(rows, "FVA_share", "3_VA_GVC_share");
+  const exportCompositionRows = eligibleExportCompositionRows(rows);
   // 拆解镜头:优先看选中的国家;没选时用毛出口最大的 8 国垫场,保证有东西看。
   const decompRows = picked.length
-    ? rows.filter((r) => picked.includes(String(r.country)))
-    : [...rows].sort((a, b) => num(b.gross_exports) - num(a.gross_exports)).slice(0, 8);
+    ? exportCompositionRows.filter((r) => picked.includes(String(r.country)))
+    : [...exportCompositionRows].sort((a, b) => num(b.gross_exports) - num(a.gross_exports)).slice(0, 8);
   const ranked = [...finiteBy(rows, "FVA_share")].sort((a, b) => num(b.FVA_share) - num(a.FVA_share));
   const topRankRows = ranked.slice(0, 20);
   const rankRows = [...topRankRows, ...ranked.filter((row) => picked.includes(String(row.country)) && !topRankRows.includes(row))];
@@ -104,7 +130,7 @@ export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; stat
           eyebrow="WWZ 聚合项 + OECD TLS 扩展"
           title="拆开一国的出口:五类增加值核算项与 TLS"
           what={<>每条 = 一个国家的含税毛出口,归一化到 100%:DVAex / DVArt / DDC 是<b>本国</b>增加值及其重复计算,FVA / FDC 是<b>外国</b>来源；taxsub 是 OECD TLS 账户扩展,不是 WWZ 原文分类。</>}
-          read={<>蓝色段越宽，国内增加值及其重复计算占毛出口的份额越高；绿 / 橙段越宽，外国增加值及其重复计算份额越高。右侧数字是该国毛出口(百万美元)。</>}
+          read={<>{WWZ_READING_GUIDE}各段越宽，表示对应分项占含税毛出口的份额越高；右侧数字是该国毛出口(百万美元)。</>}
           find={<>对比大型经济体(美国:DVAex 段主导)与小型开放经济体(越南、卢森堡:FVA 段很宽)。五类 WWZ 聚合项加 TLS 扩展恒等于含税毛出口。</>}
           note={picked.length ? "当前显示你选中的国家。" : "未选国家时默认展示毛出口最大的 8 国;在上方「选国家」挑选可替换。"}
         >

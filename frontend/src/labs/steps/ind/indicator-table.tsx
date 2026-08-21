@@ -4,19 +4,132 @@
  * 受控组件:year/country/page 由外层持有,这样「动手拆解」演示的“查看 ICIO 示例”
  * 才能驱动这张表跳到指定实体。主动查看过的国家在本组件内累加保存。
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import { FullscreenPanel } from "../../../fullscreen-panel";
 import type { IndicatorSchema, IndustryPage, Meta, QuizCompletionState, StepStateApi } from "../../../types";
+import { userFacingRequestError } from "../../../user-facing-error";
 import { countryLabel, sectorLabel } from "../../../viz";
-import { Pager, fieldLabel, fmtField, useAsync } from "../../shared";
+import { AsyncStateMessage, Pager, fieldLabel, fmtField, useAsync } from "../../shared";
 
 const BASE_DESC: Record<string, string> = {
   country: "OECD 经济体代码",
   industry: "ICIO 行业代码与中文名",
   year: "指标年份",
 };
+
+export type IndicatorGroupKey = "trade" | "production" | "length" | "network";
+export type NetworkTableSortMetric = "weighted degree" | "betweenesscentrality";
+
+/**
+ * Teaching-first table contracts. These are deliberately independent from schema order:
+ * changing backend field order must not silently change the columns used by each task.
+ */
+export const INDICATOR_TABLE_DISPLAY = {
+  trade: [
+    "gross_exports", "DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub", "DVAex_share", "FVA_share",
+  ],
+  production: [
+    "SVA", "1_VA_D", "2_VA_RT", "3a_VA_GVC_S", "3b_VA_GVC_C", "3b_VA_GVC_C_share",
+  ],
+  length: ["PLv", "PLv_D", "PLv_RT", "PLv_GVC", "PLy", "PLy_GVC", "GVCPs"],
+  network: [
+    "weighted degree", "betweenesscentrality", "degree", "indegree", "outdegree", "closnesscentrality",
+  ],
+} as const satisfies Readonly<Record<IndicatorGroupKey, readonly string[]>>;
+
+export const INDICATOR_IDENTIFIER_COLUMNS = ["country", "industry", "year"] as const;
+
+export const NETWORK_TABLE_SORT_OPTIONS: ReadonlyArray<{ value: NetworkTableSortMetric; label: string }> = [
+  { value: "betweenesscentrality", label: "介数中心性（降序）" },
+  { value: "weighted degree", label: "加权度（降序）" },
+];
+
+export function indicatorRequestKey(year: number, country: string, page: number): string {
+  return JSON.stringify([year, country, page]);
+}
+
+export function indicatorMetricColumns(
+  groupKey: IndicatorGroupKey,
+  groupFields: readonly string[],
+  row: Record<string, unknown> | null | undefined,
+  expanded = false,
+): string[] {
+  if (!row) return [];
+  const rowKeys = new Set(Object.keys(row));
+  const available = groupFields.filter((field) => rowKeys.has(field));
+  if (expanded) return available;
+  const availableSet = new Set(available);
+  return INDICATOR_TABLE_DISPLAY[groupKey].filter((field) => availableSet.has(field));
+}
+
+export function indicatorTableColumns(
+  groupKey: IndicatorGroupKey,
+  groupFields: readonly string[],
+  row: Record<string, unknown> | null | undefined,
+  expanded = false,
+): string[] {
+  return row
+    ? [...INDICATOR_IDENTIFIER_COLUMNS, ...indicatorMetricColumns(groupKey, groupFields, row, expanded)]
+    : [];
+}
+
+/** Sort only a complete single-country response. Original response order is the stable tie-break. */
+export function sortNetworkRows(
+  rows: readonly Record<string, string | number | null>[],
+  metric: NetworkTableSortMetric,
+): Record<string, string | number | null>[] {
+  const sortableValue = (row: Record<string, string | number | null>) => {
+    const value = row[metric];
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+  };
+  return rows.map((row, index) => ({ row, index })).sort((a, b) => {
+    const av = sortableValue(a.row);
+    const bv = sortableValue(b.row);
+    if (av == null && bv != null) return 1;
+    if (av != null && bv == null) return -1;
+    if (av != null && bv != null && av !== bv) return bv - av;
+    return a.index - b.index;
+  }).map(({ row }) => row);
+}
+
+export function IndicatorRequestBoundary({
+  status,
+  error,
+  loadingLabel,
+  empty,
+  onRetry,
+  children,
+}: {
+  status: "idle" | "loading" | "success" | "error";
+  error: string | null;
+  loadingLabel: string;
+  empty: boolean;
+  onRetry: () => void;
+  children: ReactNode;
+}) {
+  if (status === "loading" || status === "idle") {
+    return <AsyncStateMessage status={status} error={null} loadingLabel={loadingLabel} onRetry={onRetry} />;
+  }
+  if (status === "error") {
+    return (
+      <AsyncStateMessage
+        status="error"
+        error={userFacingRequestError(error, "指标表加载失败")}
+        onRetry={onRetry}
+      />
+    );
+  }
+  if (empty) {
+    return (
+      <p className="muted async-empty" role="status">
+        当前国家、年份与页码下没有行业指标数据。请保留或调整筛选条件后继续。
+      </p>
+    );
+  }
+  return <>{children}</>;
+}
 
 export interface IndicatorStepState extends QuizCompletionState, Record<string, unknown> {
   year?: number;
@@ -26,7 +139,7 @@ export interface IndicatorStepState extends QuizCompletionState, Record<string, 
   observations?: { entity: string; value: number; year: number; country: string; industry: string }[];
 }
 
-const CORE_METRIC: Record<string, string> = {
+const CORE_METRIC: Record<IndicatorGroupKey, string> = {
   trade: "FVA_share",
   production: "3b_VA_GVC_C_share",
   length: "GVCPs",
@@ -34,7 +147,7 @@ const CORE_METRIC: Record<string, string> = {
 };
 
 /** 换国家对比时用国家级指标；国家完全图的介数恒为 0，网络步改用加权度。 */
-export const COUNTRY_METRIC: Record<string, string> = {
+export const COUNTRY_METRIC: Record<IndicatorGroupKey, string> = {
   trade: "FVA_share",
   production: "3b_VA_GVC_C_share",
   length: "GVCPs",
@@ -124,9 +237,76 @@ export function useIndicatorControls(meta: Meta, state: StepStateApi<IndicatorSt
   return { year, country, page, interacted, setYear, setCountry, setPage, setPrimary };
 }
 
+export function indicatorRowHeaderLabel(row: Record<string, string | number | null>): string {
+  const country = row.country == null ? "未定义国家" : countryLabel(String(row.country));
+  const industry = row.industry == null ? "未定义行业" : sectorLabel(String(row.industry));
+  return `国家 ${country}；行业 ${industry}`;
+}
+
+export function IndicatorDataTable({
+  groupLabel,
+  schema,
+  columns,
+  rows,
+  year,
+  country,
+  page,
+}: {
+  groupLabel: string;
+  schema: IndicatorSchema | null | undefined;
+  columns: readonly string[];
+  rows: readonly Record<string, string | number | null>[];
+  year: number;
+  country: string;
+  page: number;
+}) {
+  const captionLabel = groupLabel === "指标" ? "指标数据" : `${groupLabel}指标数据`;
+  return (
+    <table className="data-table">
+      <caption className="sr-only">{captionLabel} · {year} 年 · {country ? countryLabel(country) : "全部国家"} · 第 {page} 页</caption>
+      <thead>
+        <tr>
+          {columns.map((column, index) => (
+            <th
+              key={column}
+              scope="col"
+              title={schema?.fields[column]?.desc ?? BASE_DESC[column]}
+              style={index === 0 ? { position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" } : undefined}
+            >
+              {fieldLabel(column, schema)}{schema?.fields[column]?.desc ? " ⓘ" : ""}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, rowIndex) => (
+          <tr key={`${String(row.country ?? "")}-${String(row.industry ?? "")}-${rowIndex}`}>
+            {columns.map((column, index) => {
+              const content = column === "industry"
+                ? row.industry != null ? sectorLabel(String(row.industry)) : "—"
+                : ["year", "country"].includes(column) ? String(row[column] ?? "—")
+                  : fmtField(row[column], column, schema);
+              const stickyStyle = index === 0
+                ? { position: "sticky" as const, left: 0, zIndex: 2, background: "#fff" }
+                : undefined;
+              return index === 0 ? (
+                <th key={column} className="indicator-row-header" scope="row" aria-label={indicatorRowHeaderLabel(row)} style={stickyStyle}>
+                  {content}
+                </th>
+              ) : (
+                <td key={column} style={stickyStyle}>{content}</td>
+              );
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 export function IndicatorTable({ meta, groupKey, schema, state, year, country, page, interacted, onYear, onCountry, onPage }: {
   meta: Meta;
-  groupKey: string;
+  groupKey: IndicatorGroupKey;
   schema: IndicatorSchema | null | undefined;
   state: StepStateApi<IndicatorStepState>;
   year: number;
@@ -139,25 +319,26 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
 }) {
   const [showAllFields, setShowAllFields] = useState(false);
   const [autoExpandSignal, setAutoExpandSignal] = useState(0);
-  const queryKey = JSON.stringify([year, country, page]);
-  const { data: result, error } = useAsync<{ queryKey: string; page: IndustryPage }>(async () => ({
-    queryKey,
-    page: await api.industryIndicators(year, country, page),
-  }), [queryKey]);
-  const { data: countryResult, error: countryError, retry: retryCountry } = useAsync<{
-    year: number;
-    rows: Array<Record<string, unknown>>;
-  }>(
+  const [networkSort, setNetworkSort] = useState<NetworkTableSortMetric>("betweenesscentrality");
+  const requestKey = indicatorRequestKey(year, country, page);
+  const mainQuery = useAsync<IndustryPage>(
+    () => api.industryIndicators(year, country, page, groupKey === "network" && country ? 200 : undefined),
+    [requestKey, groupKey],
+    { requestKey },
+  );
+  const countryRequestKey = JSON.stringify(["country-observations", year]);
+  const countryQuery = useAsync<{ year: number; rows: Array<Record<string, unknown>> }>(
     async () => ({
       year,
       rows: await api.countryIndicators(year) as Array<Record<string, unknown>>,
     }),
-    [year],
+    [countryRequestKey],
+    { requestKey: countryRequestKey },
   );
-  // useAsync 在依赖变化后的 effect 才清旧结果；显式核对请求键，避免新筛选在
-  // 同一帧误把上一次响应中的数值标成新国家/新年份后保存。
-  const data = result?.queryKey === queryKey ? result.page : null;
-  const countryRows = countryRowsForYear(countryResult, year);
+  const data = mainQuery.status === "success" ? mainQuery.data : null;
+  const countryRows = countryQuery.status === "success"
+    ? countryRowsForYear(countryQuery.data, year)
+    : null;
 
   // 换国家对比保存国家级指标，避免误把第一行业当成国家结构。
   useEffect(() => {
@@ -185,18 +366,21 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countryRows, country, year, interacted, groupKey]);
 
-  if (error) return <div className="error-box">{error}</div>;
-  const group = schema?.groups.find((g) => g.key === groupKey);
-  const baseCols = ["country", "industry", "year"];
-  const rowKeys = data?.rows[0] ? new Set(Object.keys(data.rows[0])) : new Set<string>();
-  const metricCols = data?.rows[0] ? (group?.fields ?? []).filter((c) => rowKeys.has(c)) : [];
-  const visibleMetrics = showAllFields ? metricCols : metricCols.slice(0, 5);
-  const cols = data?.rows[0] ? [...baseCols, ...visibleMetrics] : [];
+  const group = schema?.groups.find((candidate) => candidate.key === groupKey);
+  const cols = indicatorTableColumns(groupKey, group?.fields ?? [], data?.rows[0], showAllFields);
+  const displayRows = groupKey === "network" && country && data
+    ? sortNetworkRows(data.rows, networkSort)
+    : (data?.rows ?? []);
   const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
+  const defaultMetricCount = indicatorMetricColumns(groupKey, group?.fields ?? [], data?.rows[0]).length;
+  const allMetricCount = indicatorMetricColumns(groupKey, group?.fields ?? [], data?.rows[0], true).length;
   const toggleAllFields = () => {
     if (!showAllFields) setAutoExpandSignal((signal) => signal + 1);
     setShowAllFields((value) => !value);
   };
+  const countLabel = mainQuery.status === "success" && data
+    ? `共 ${data.total} 条`
+    : mainQuery.status === "error" ? "本次请求失败" : "加载中…";
 
   return (
     <FullscreenPanel
@@ -208,27 +392,54 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
       <div className="controls">
         <LabeledControl label="国家">
           {(id) => (
-            <select id={id} value={country} onChange={(e) => onCountry(e.target.value)}>
+            <select id={id} value={country} onChange={(event) => onCountry(event.target.value)}>
               <option value="">全部</option>
-              {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
+              {meta.countries.map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
             </select>
           )}
         </LabeledControl>
         <LabeledControl label="年份">
           {(id) => (
-            <select id={id} value={year} onChange={(e) => onYear(Number(e.target.value))}>
-              {meta.years.map((y) => <option key={y} value={y}>{y}</option>)}
+            <select id={id} value={year} onChange={(event) => onYear(Number(event.target.value))}>
+              {meta.years.map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
           )}
         </LabeledControl>
-        <span className="muted">{data ? `共 ${data.total} 条` : "加载中…"}</span>
+        <span className="muted">{countLabel}</span>
       </div>
-      {countryError && (
-        <div className="error-box async-error" role="alert">
-          <span>国家级对比未能加载</span>
-          <button type="button" className="secondary" onClick={retryCountry}>重试</button>
+
+      {groupKey === "network" && (
+        <div className="table-priority-tools network-table-sort">
+          <LabeledControl label={country ? "单国行业排序" : "行业排序（仅单国完整结果）"}>
+            {(id) => (
+              <select
+                id={id}
+                value={networkSort}
+                disabled={!country}
+                onChange={(event) => setNetworkSort(event.target.value as NetworkTableSortMetric)}
+              >
+                {NETWORK_TABLE_SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            )}
+          </LabeledControl>
+          <span className="muted" role="note">
+            {country
+              ? "当前国家的完整行业结果在浏览器内排序；排序只改变显示顺序，不改变指标证据或请求页。"
+              : "全球范围按服务端分页顺序显示；请先选择国家，再对该国完整行业结果排序。"}
+          </span>
         </div>
       )}
+
+      {countryQuery.status === "error" && (
+        <AsyncStateMessage
+          status="error"
+          error={userFacingRequestError(countryQuery.error, `${year} 年国家级对比加载失败`)}
+          onRetry={countryQuery.retry}
+        />
+      )}
+
       {(state.data?.observations?.length ?? 0) > 0 && (
         <div className="observation-strip" role="group" aria-label="已捕获的对比数值">
           <b>已捕获国家级 {fieldLabel(state.data?.metric ?? "", schema)}</b>
@@ -239,46 +450,38 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
           ))}
         </div>
       )}
-      {metricCols.length > 5 && (
-        <div className="table-priority-tools">
-          <span className="muted">默认显示 5 个核心指标，减少横向扫表负担。</span>
-          <button type="button" className="secondary" onClick={toggleAllFields}>
-            {showAllFields ? "收起扩展指标" : `展开 ${metricCols.length - 5} 个扩展指标`}
-          </button>
-        </div>
-      )}
-      <ScrollableRegion
-        className="table-wrap bounded-data-table"
-        label={`${group?.label ?? "指标"}数据表，可横向滚动`}
+
+      <IndicatorRequestBoundary
+        status={mainQuery.status}
+        error={mainQuery.error}
+        loadingLabel={`加载 ${year} 年${country ? ` ${countryLabel(country)}` : "全球"}行业指标中…`}
+        empty={!data || data.rows.length === 0}
+        onRetry={mainQuery.retry}
       >
-        <table className="data-table">
-          <thead>
-            <tr>
-              {cols.map((c, index) => (
-                <th key={c} title={schema?.fields[c]?.desc ?? BASE_DESC[c]}
-                  style={index === 0 ? { position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" } : undefined}>
-                  {fieldLabel(c, schema)}{schema?.fields[c]?.desc ? " ⓘ" : ""}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {(data?.rows ?? []).map((r, i) => (
-              <tr key={i}>
-                {cols.map((c, index) => (
-                  <td key={c} style={index === 0 ? { position: "sticky", left: 0, zIndex: 2, background: "#fff" } : undefined}>
-                    {c === "industry"
-                      ? r.industry != null ? sectorLabel(String(r.industry)) : "—"
-                      : ["year", "country"].includes(c) ? String(r[c] ?? "—")
-                        : fmtField(r[c], c, schema)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </ScrollableRegion>
-      <Pager page={page} pages={pages} total={data?.total} onChange={onPage} />
+          {allMetricCount > defaultMetricCount && (
+            <div className="table-priority-tools">
+              <span className="muted">默认显示本任务要求的 {defaultMetricCount} 个核心指标。</span>
+              <button type="button" className="secondary" onClick={toggleAllFields}>
+                {showAllFields ? "收起扩展指标" : `展开 ${allMetricCount - defaultMetricCount} 个扩展指标`}
+              </button>
+            </div>
+          )}
+          <ScrollableRegion
+            className="table-wrap bounded-data-table"
+            label={`${group?.label ?? "指标"}数据表，可横向滚动`}
+          >
+            <IndicatorDataTable
+              groupLabel={group?.label ?? "指标"}
+              schema={schema}
+              columns={cols}
+              rows={displayRows}
+              year={year}
+              country={country}
+              page={page}
+            />
+          </ScrollableRegion>
+          <Pager page={page} pages={pages} total={data?.total} onChange={onPage} />
+      </IndicatorRequestBoundary>
     </FullscreenPanel>
   );
 }

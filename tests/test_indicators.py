@@ -64,6 +64,20 @@ def test_tradeflow_preserves_negative_net_subsidy_and_closure(fake_io):
     assert np.allclose((arr.v + arr.t) @ arr.B, np.ones(4))
 
 
+def test_gross_exports_requires_all_six_closure_components():
+    complete = pd.DataFrame(
+        [{"DVAex": 1.0, "DVArt": 2.0, "DDC": 3.0, "FVA": 4.0, "FDC": 5.0, "taxsub": 6.0}]
+    )
+    one_null = complete.copy()
+    one_null.loc[0, "taxsub"] = np.nan
+    all_null = complete.copy()
+    all_null.loc[0, :] = np.nan
+
+    assert tradeflow.gross_exports(complete).iloc[0] == pytest.approx(21.0)
+    assert pd.isna(tradeflow.gross_exports(one_null).iloc[0])
+    assert pd.isna(tradeflow.gross_exports(all_null).iloc[0])
+
+
 # ---------------------------------------------------------------------------
 # WWZ 16 项暴力实现(逐 (s, r) 双边直译 Table A2,再按伙伴求和)
 # ---------------------------------------------------------------------------
@@ -303,6 +317,62 @@ def test_network_metrics(fake_io):
     assert np.allclose(df["closnesscentrality"], 1.0)
     assert np.allclose(df["harmonicclosnesscentrality"], 1.0)
     assert df["eigencentrality"].max() == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("top_n", [True, False, 0, -1, 1.0, 2.5])
+def test_network_edges_rejects_non_positive_integer_top_n(fake_io, top_n):
+    arr = build_arrays(fake_io)
+    with pytest.raises(ValueError, match="正整数"):
+        network.network_edges(arr, top_n)  # type: ignore[arg-type]
+
+
+def test_network_edges_filters_nonpositive_and_nonfinite_flows_with_deterministic_ties(monkeypatch):
+    flow = pd.DataFrame(
+        [
+            [999.0, 5.0, np.inf],
+            [5.0, 0.0, 0.0],
+            [-1.0, np.nan, 0.0],
+        ],
+        index=["A", "B", "C"],
+        columns=["A", "B", "C"],
+    )
+    flow.index.name = "seller"
+    flow.columns.name = "buyer"
+    monkeypatch.setattr(network, "country_flow_matrix", lambda _arr: flow)
+
+    got = network.network_edges(object(), 10)  # type: ignore[arg-type]
+    assert list(got.columns) == ["source", "target", "flow"]
+    assert got.to_dict("records") == [
+        {"source": "A", "target": "B", "flow": 5.0},
+        {"source": "B", "target": "A", "flow": 5.0},
+    ]
+    assert network.network_edges(object(), 1).to_dict("records") == [  # type: ignore[arg-type]
+        {"source": "A", "target": "B", "flow": 5.0}
+    ]
+
+
+def test_network_edges_empty_result_preserves_schema(monkeypatch):
+    flow = pd.DataFrame([[0.0, np.nan], [-2.0, 0.0]], index=["A", "B"], columns=["A", "B"])
+    monkeypatch.setattr(network, "country_flow_matrix", lambda _arr: flow)
+
+    got = network.network_edges(object(), 5)  # type: ignore[arg-type]
+    assert got.empty
+    assert list(got.columns) == ["source", "target", "flow"]
+
+
+def test_network_edges_keeps_current_real_positive_values(fake_io):
+    arr = build_arrays(fake_io)
+    flow = network.country_flow_matrix(arr)
+    expected = sorted(
+        value
+        for source in flow.index
+        for target, value in flow.loc[source].items()
+        if source != target and np.isfinite(value) and value > 0
+    )
+    got = network.network_edges(arr, 120)
+    assert sorted(got["flow"].tolist()) == pytest.approx(expected)
+    assert np.isfinite(got["flow"]).all()
+    assert (got["flow"] > 0).all()
 
 
 def test_all_network_fields_match_gephi_0_10_1_golden_export():

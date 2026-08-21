@@ -1,0 +1,691 @@
+"""Versioned semantic QC for published indicator, network, and panel outputs.
+
+This contract is intentionally separate from :mod:`gvcsim.data.quality`, which is
+Step 2 input QC.  The checks below certify reproducible file-level identities and
+domains only; they do not certify independent causal or economic validity.
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
+
+import numpy as np
+import pandas as pd
+
+from gvcsim.indicators.network import NETWORK_COLUMNS
+from gvcsim.indicators.production import PRODUCTION_COLUMNS
+from gvcsim.indicators.tradeflow import TRADE_COLUMNS
+
+OUTPUT_QC_CONTRACT_VERSION = 1
+OUTPUT_QC_ABS_TOLERANCE = 1e-8
+OUTPUT_QC_REL_TOLERANCE = 1e-8
+OUTPUT_QC_DENOMINATOR_FLOOR = 1e-12
+OUTPUT_QC_SEVERITIES = ("ok", "fatal")
+OUTPUT_QC_SELF_LOOP_POLICY = "forbidden: country network edge artifacts exclude domestic flows"
+
+TRADE_CLOSURE_COLUMNS = ("DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub")
+ADDITIVE_COLUMNS = tuple(TRADE_COLUMNS) + tuple(PRODUCTION_COLUMNS)
+LENGTH_DENOMINATORS = {
+    "PLv": "SVA",
+    "PLv_D": "1_VA_D",
+    "PLv_RT": "2_VA_RT",
+    "PLv_GVC": "3_VA_GVC",
+    "PLy": "FGY",
+    "PLy_D": "1_FGY_D",
+    "PLy_RT": "2_FGY_RT",
+    "PLy_GVC": "3_FGY_GVC",
+}
+LENGTH_COLUMNS = (*LENGTH_DENOMINATORS, "Pos_TPL", "GVCPs")
+PANEL_SHARE_DENOMINATORS = {
+    "FVA_share": "gross_exports",
+    "3b_VA_GVC_C_share": "SVA",
+    "3_VA_GVC_share": "SVA",
+}
+PANEL_SHARE_NUMERATORS = {
+    "FVA_share": "FVA",
+    "3b_VA_GVC_C_share": "3b_VA_GVC_C",
+    "3_VA_GVC_share": "3_VA_GVC",
+}
+
+
+@dataclass(frozen=True)
+class OutputCheckSpec:
+    name: str
+    kind: str
+    description: str
+
+
+OUTPUT_CHECK_SPECS = (
+    OutputCheckSpec(
+        "row_keys_and_coverage",
+        "structure",
+        "Unique year/country/industry/entity keys and exact yearly coverage across indicator, exposure, and panel files.",
+    ),
+    OutputCheckSpec(
+        "trade_identities",
+        "numeric",
+        "Finite signed trade terms; six closure amounts equal gross_exports where persisted; EXDVA=DVAex+DVArt.",
+    ),
+    OutputCheckSpec(
+        "production_identities",
+        "numeric",
+        "Finite forward and backward amounts; components 1+2+3 equal totals and 3a+3b equal component 3.",
+    ),
+    OutputCheckSpec(
+        "length_domains_and_identities",
+        "numeric",
+        "Lengths are finite exactly on structural denominator support; position ratios and observable segment weighting close.",
+    ),
+    OutputCheckSpec(
+        "country_industry_additivity",
+        "numeric",
+        "Country additive trade/production amounts equal grouped country-industry amounts; ratios and shares are not summed.",
+    ),
+    OutputCheckSpec(
+        "network_edges",
+        "structure",
+        "Country edges use known endpoints, finite positive flow, unique directed keys, and the no-self-loop policy.",
+    ),
+    OutputCheckSpec(
+        "network_indicators",
+        "numeric",
+        "Network metrics are finite/in-domain; degree and weighted-degree component identities hold.",
+    ),
+    OutputCheckSpec(
+        "panel_shares",
+        "numeric",
+        "Panel share fields are null outside positive denominators and finite in [0,1] with their ratio identity otherwise.",
+    ),
+)
+OUTPUT_QC_EXPECTED_CHECKS = tuple(spec.name for spec in OUTPUT_CHECK_SPECS)
+
+
+class OutputQualityError(RuntimeError):
+    """An output semantic QC artifact or recomputation is invalid."""
+
+
+def output_qc_contract_metadata() -> dict:
+    """Return the exact supported output QC v1 contract and documented policies."""
+    return {
+        "version": OUTPUT_QC_CONTRACT_VERSION,
+        "checks": [
+            {
+                "name": spec.name,
+                "kind": spec.kind,
+                "failure_severity": "fatal",
+                "description": spec.description,
+            }
+            for spec in OUTPUT_CHECK_SPECS
+        ],
+        "tolerances": {
+            "absolute": OUTPUT_QC_ABS_TOLERANCE,
+            "relative": OUTPUT_QC_REL_TOLERANCE,
+            "denominator_floor": OUTPUT_QC_DENOMINATOR_FLOOR,
+            "comparison": "abs(lhs-rhs) <= absolute + relative * max(abs(lhs), abs(rhs), 1)",
+        },
+        "network_self_loops": OUTPUT_QC_SELF_LOOP_POLICY,
+        "certification_limit": (
+            "Certifies persisted file semantics and reproducible identities only; "
+            "does not certify independent causal validity."
+        ),
+    }
+
+
+def validate_output_qc_contract_metadata(value: object) -> None:
+    if not isinstance(value, dict) or value != output_qc_contract_metadata():
+        raise ValueError(
+            f"unsupported or incomplete output QC contract; version {OUTPUT_QC_CONTRACT_VERSION} is required"
+        )
+
+
+def _close(lhs: pd.Series | np.ndarray, rhs: pd.Series | np.ndarray) -> np.ndarray:
+    left = np.asarray(lhs, dtype=float)
+    right = np.asarray(rhs, dtype=float)
+    scale = np.maximum(np.maximum(np.abs(left), np.abs(right)), 1.0)
+    return (
+        np.isfinite(left)
+        & np.isfinite(right)
+        & (np.abs(left - right) <= OUTPUT_QC_ABS_TOLERANCE + OUTPUT_QC_REL_TOLERANCE * scale)
+    )
+
+
+def _check(spec_name: str, passed: bool, detail: str) -> dict:
+    spec = next(item for item in OUTPUT_CHECK_SPECS if item.name == spec_name)
+    return {
+        "name": spec.name,
+        "kind": spec.kind,
+        "passed": bool(passed),
+        "detail": detail,
+        "severity": "ok" if passed else "fatal",
+    }
+
+
+def validate_serialized_output_checks(checks: object, *, contract_version: int) -> list[dict]:
+    """Validate exact, nonempty output check names, fields, types, and severities."""
+    if type(contract_version) is not int or contract_version != OUTPUT_QC_CONTRACT_VERSION:
+        raise ValueError(f"unsupported output QC contract version: {contract_version}")
+    if not isinstance(checks, list) or not checks:
+        raise ValueError("output QC checks must be a nonempty array")
+    specs = {spec.name: spec for spec in OUTPUT_CHECK_SPECS}
+    names: list[str] = []
+    for index, raw in enumerate(checks):
+        if not isinstance(raw, dict) or set(raw) != {"name", "kind", "passed", "detail", "severity"}:
+            raise ValueError(f"output QC check {index + 1} has malformed fields")
+        if (
+            type(raw["name"]) is not str
+            or type(raw["kind"]) is not str
+            or type(raw["passed"]) is not bool
+            or type(raw["detail"]) is not str
+            or not raw["detail"]
+            or type(raw["severity"]) is not str
+        ):
+            raise ValueError(f"output QC check {index + 1} has invalid field types")
+        name = raw["name"]
+        spec = specs.get(name)
+        if spec is not None and raw["kind"] != spec.kind:
+            raise ValueError(f"output QC check {name} has invalid kind")
+        expected_severity = "ok" if raw["passed"] else "fatal"
+        if raw["severity"] not in OUTPUT_QC_SEVERITIES or raw["severity"] != expected_severity:
+            raise ValueError(f"output QC check {name} has malformed severity")
+        names.append(name)
+    if len(names) != len(set(names)):
+        raise ValueError("output QC checks contain duplicates")
+    missing = sorted(set(OUTPUT_QC_EXPECTED_CHECKS) - set(names))
+    unknown = sorted(set(names) - set(OUTPUT_QC_EXPECTED_CHECKS))
+    if missing or unknown or len(names) != len(OUTPUT_QC_EXPECTED_CHECKS):
+        raise ValueError(f"output QC check set mismatch; missing={missing}, unknown={unknown}")
+    return checks
+
+
+def summarize_output_checks(checks: list[dict]) -> dict:
+    validate_serialized_output_checks(checks, contract_version=OUTPUT_QC_CONTRACT_VERSION)
+    fatal = [item["name"] for item in checks if not item["passed"]]
+    passed = [item["name"] for item in checks if item["passed"]]
+    return {"publishable": not fatal, "fatal": fatal, "passed": passed}
+
+
+def validate_output_summary(value: object, checks: list[dict]) -> None:
+    if not isinstance(value, dict) or set(value) != {"publishable", "fatal", "passed"}:
+        raise ValueError("output QC summary has malformed fields")
+    if type(value.get("publishable")) is not bool:
+        raise ValueError("output QC summary publishable must be boolean")
+    if not isinstance(value.get("fatal"), list) or not isinstance(value.get("passed"), list):
+        raise ValueError("output QC summary lists are malformed")
+    if any(type(item) is not str for key in ("fatal", "passed") for item in value[key]):
+        raise ValueError("output QC summary names are malformed")
+    if value != summarize_output_checks(checks):
+        raise ValueError("output QC summary does not match its check file")
+
+
+def _read_csv(root: Path, filename: str) -> pd.DataFrame:
+    path = root / filename
+    try:
+        return pd.read_csv(path)
+    except (OSError, UnicodeError, pd.errors.ParserError, pd.errors.EmptyDataError) as exc:
+        raise OutputQualityError(f"cannot recompute output QC from {filename}: {exc}") from exc
+
+
+def _missing(frame: pd.DataFrame, columns: set[str]) -> list[str]:
+    return sorted(columns - set(frame.columns))
+
+
+def _year_mask(frame: pd.DataFrame, year: int) -> pd.Series:
+    numeric = pd.to_numeric(frame["year"], errors="coerce")
+    return numeric.eq(year)
+
+
+def _validate_panel_years(
+    frame: pd.DataFrame,
+    label: str,
+    expected_years: list[int],
+) -> tuple[pd.Series | None, list[str]]:
+    """Validate panel years without dropping malformed values or truncating fractions."""
+    if "year" not in frame:
+        return None, []
+
+    numeric = pd.to_numeric(frame["year"], errors="coerce")
+    values = numeric.to_numpy(dtype=float)
+    finite = np.isfinite(values)
+    integral = finite & (values == np.floor(values))
+    declared = np.asarray(expected_years, dtype=float)
+    in_release = integral & np.isin(values, declared)
+
+    problems: list[str] = []
+    nonnumeric = int(numeric.isna().sum())
+    nonfinite = int((numeric.notna().to_numpy() & ~finite).sum())
+    fractional = int((finite & ~integral).sum())
+    outside_release = int((integral & ~in_release).sum())
+    if nonnumeric:
+        problems.append(f"{label}:year_non_numeric_or_null={nonnumeric}")
+    if nonfinite:
+        problems.append(f"{label}:year_nonfinite={nonfinite}")
+    if fractional:
+        problems.append(f"{label}:year_fractional={fractional}")
+    if outside_release:
+        problems.append(f"{label}:year_outside_release={outside_release}")
+    if problems:
+        return None, problems
+
+    actual_years = set(numeric.tolist())
+    expected = set(expected_years)
+    if actual_years != expected:
+        problems.append(f"{label}:years={sorted(actual_years)}; missing_years={sorted(expected - actual_years)}")
+    memberships = np.zeros(len(frame), dtype=int)
+    for declared_year in expected_years:
+        memberships += numeric.eq(declared_year).to_numpy(dtype=int)
+    if not np.equal(memberships, 1).all():
+        problems.append(f"{label}:rows_without_exactly_one_year_slice={int(np.not_equal(memberships, 1).sum())}")
+    return numeric, problems
+
+
+def _keys_and_coverage(
+    frames: dict[str, pd.DataFrame],
+    year: int,
+    panel_year_problems: list[str],
+) -> dict:
+    required = {
+        "country": {"country", "year"},
+        "industry": {"country", "industry", "year"},
+        "edges": {"source", "target", "year", "flow"},
+        "exposure": {"country", "imposer", "year"},
+        "panel_country": {"country", "year"},
+        "panel_industry": {"country", "industry", "entity_id", "year"},
+    }
+    problems = list(panel_year_problems)
+    missing_problems: list[str] = []
+    for label, columns in required.items():
+        absent = _missing(frames[label], columns)
+        if absent:
+            missing_problems.append(f"{label}:missing={absent}")
+    if missing_problems:
+        return _check("row_keys_and_coverage", False, "; ".join([*problems, *missing_problems]))
+
+    country = frames["country"]
+    industry = frames["industry"]
+    edges = frames["edges"]
+    exposure = frames["exposure"]
+    panel_country = frames["panel_country"]
+    panel_industry = frames["panel_industry"]
+    for label, frame in (
+        ("country", country),
+        ("industry", industry),
+        ("exposure", exposure),
+    ):
+        if frame.empty:
+            problems.append(f"{label}:empty")
+    if panel_country.loc[_year_mask(panel_country, year)].empty:
+        problems.append("panel_country:empty_year")
+    if panel_industry.loc[_year_mask(panel_industry, year)].empty:
+        problems.append("panel_industry:empty_year")
+
+    key_specs = (
+        ("country", country, ["country", "year"]),
+        ("industry", industry, ["country", "industry", "year"]),
+        ("edges", edges, ["source", "target", "year"]),
+        ("exposure", exposure, ["country", "imposer", "year"]),
+        ("panel_country", panel_country, ["country", "year"]),
+        ("panel_industry", panel_industry, ["country", "industry", "year"]),
+        ("panel_industry_entity", panel_industry, ["entity_id", "year"]),
+    )
+    for label, frame, keys in key_specs:
+        if frame[keys].isna().any(axis=None) or frame.duplicated(keys).any():
+            problems.append(f"{label}:null_or_duplicate_keys")
+
+    yearly_files = (country, industry, edges, exposure)
+    if any(not _year_mask(frame, year).all() for frame in yearly_files):
+        problems.append("yearly_file_year_mismatch")
+    country_keys = set(country["country"].astype(str))
+    industry_countries = set(industry["country"].astype(str))
+    exposure_countries = set(exposure["country"].astype(str))
+    panel_country_keys = set(panel_country.loc[_year_mask(panel_country, year), "country"].astype(str))
+    panel_industry_keys = set(
+        map(
+            tuple,
+            panel_industry.loc[_year_mask(panel_industry, year), ["country", "industry"]].astype(str).to_numpy(),
+        )
+    )
+    industry_keys = set(map(tuple, industry[["country", "industry"]].astype(str).to_numpy()))
+    if not (country_keys == industry_countries == exposure_countries == panel_country_keys):
+        problems.append("country_coverage_mismatch")
+    if industry_keys != panel_industry_keys:
+        problems.append("industry_coverage_mismatch")
+    expected_entities = panel_industry["country"].astype(str) + "_" + panel_industry["industry"].astype(str)
+    if not panel_industry["entity_id"].astype(str).eq(expected_entities).all():
+        problems.append("entity_id_mismatch")
+
+    rows = sum(len(frame) for frame in frames.values())
+    return _check(
+        "row_keys_and_coverage",
+        not problems,
+        f"year={year}; rows={rows}; violations={len(problems)}" + (f"; {'; '.join(problems)}" if problems else ""),
+    )
+
+
+def _identity_count(frame: pd.DataFrame, lhs: str, rhs_columns: tuple[str, ...]) -> int:
+    values = frame[[lhs, *rhs_columns]].apply(pd.to_numeric, errors="coerce")
+    rhs = values[list(rhs_columns)].sum(axis=1, min_count=len(rhs_columns))
+    return int((~_close(values[lhs], rhs)).sum())
+
+
+def _trade_identities(frames: dict[str, pd.DataFrame], year: int) -> dict:
+    required = set(TRADE_CLOSURE_COLUMNS) | {"EXDVA"}
+    violations = 0
+    missing: list[str] = []
+    checked = 0
+    for label in ("country", "industry", "panel_country_year", "panel_industry_year"):
+        frame = frames[label]
+        absent = _missing(frame, required)
+        if absent:
+            missing.append(f"{label}:{absent}")
+            continue
+        numeric = frame[list(required)].apply(pd.to_numeric, errors="coerce")
+        violations += int((~np.isfinite(numeric.to_numpy(dtype=float))).sum())
+        violations += _identity_count(frame, "EXDVA", ("DVAex", "DVArt"))
+        if "gross_exports" in frame:
+            violations += _identity_count(frame, "gross_exports", TRADE_CLOSURE_COLUMNS)
+        checked += len(frame)
+    passed = not missing and violations == 0
+    return _check(
+        "trade_identities",
+        passed,
+        f"year={year}; rows={checked}; violations={violations}; abs_tol={OUTPUT_QC_ABS_TOLERANCE}; "
+        f"rel_tol={OUTPUT_QC_REL_TOLERANCE}" + (f"; missing={missing}" if missing else ""),
+    )
+
+
+def _production_identities(frames: dict[str, pd.DataFrame], year: int) -> dict:
+    required = set(PRODUCTION_COLUMNS)
+    violations = 0
+    missing: list[str] = []
+    checked = 0
+    identities = (
+        ("SVA", ("1_VA_D", "2_VA_RT", "3_VA_GVC")),
+        ("3_VA_GVC", ("3a_VA_GVC_S", "3b_VA_GVC_C")),
+        ("FGY", ("1_FGY_D", "2_FGY_RT", "3_FGY_GVC")),
+        ("3_FGY_GVC", ("3a_FGY_GVC_S", "3b_FGY_GVC_C")),
+    )
+    for label in ("country", "industry", "panel_country_year", "panel_industry_year"):
+        frame = frames[label]
+        absent = _missing(frame, required)
+        if absent:
+            missing.append(f"{label}:{absent}")
+            continue
+        numeric = frame[list(required)].apply(pd.to_numeric, errors="coerce")
+        violations += int((~np.isfinite(numeric.to_numpy(dtype=float))).sum())
+        violations += sum(_identity_count(frame, lhs, rhs) for lhs, rhs in identities)
+        checked += len(frame)
+    return _check(
+        "production_identities",
+        not missing and violations == 0,
+        f"year={year}; rows={checked}; identities=4; violations={violations}; "
+        f"abs_tol={OUTPUT_QC_ABS_TOLERANCE}; rel_tol={OUTPUT_QC_REL_TOLERANCE}"
+        + (f"; missing={missing}" if missing else ""),
+    )
+
+
+def _length_frame_violations(frame: pd.DataFrame) -> int:
+    violations = 0
+    numeric = frame[[*LENGTH_COLUMNS, *set(LENGTH_DENOMINATORS.values())]].apply(pd.to_numeric, errors="coerce")
+    for length_name, denominator_name in LENGTH_DENOMINATORS.items():
+        values = numeric[length_name].to_numpy(dtype=float)
+        denominator = numeric[denominator_name].to_numpy(dtype=float)
+        defined = np.isfinite(denominator) & (np.abs(denominator) > OUTPUT_QC_DENOMINATOR_FLOOR)
+        violations += int((defined & ~np.isfinite(values)).sum())
+        violations += int((~defined & ~np.isnan(values)).sum())
+
+    for ratio_name, numerator_name, denominator_name in (
+        ("Pos_TPL", "PLv", "PLy"),
+        ("GVCPs", "PLv_GVC", "PLy_GVC"),
+    ):
+        ratio = numeric[ratio_name].to_numpy(dtype=float)
+        numerator = numeric[numerator_name].to_numpy(dtype=float)
+        denominator = numeric[denominator_name].to_numpy(dtype=float)
+        defined = (
+            np.isfinite(numerator) & np.isfinite(denominator) & (np.abs(denominator) > OUTPUT_QC_DENOMINATOR_FLOOR)
+        )
+        violations += int((defined & ~_close(ratio, numerator / np.where(defined, denominator, 1.0))).sum())
+        violations += int((~defined & ~np.isnan(ratio)).sum())
+
+    for total_length, total_amount, segments in (
+        ("PLv", "SVA", (("PLv_D", "1_VA_D"), ("PLv_RT", "2_VA_RT"), ("PLv_GVC", "3_VA_GVC"))),
+        ("PLy", "FGY", (("PLy_D", "1_FGY_D"), ("PLy_RT", "2_FGY_RT"), ("PLy_GVC", "3_FGY_GVC"))),
+    ):
+        denominator = numeric[total_amount].to_numpy(dtype=float)
+        defined = np.isfinite(denominator) & (np.abs(denominator) > OUTPUT_QC_DENOMINATOR_FLOOR)
+        weighted = np.zeros(len(frame), dtype=float)
+        observable = defined.copy()
+        for length_name, amount_name in segments:
+            amount = numeric[amount_name].to_numpy(dtype=float)
+            length_value = numeric[length_name].to_numpy(dtype=float)
+            active = np.isfinite(amount) & (np.abs(amount) > OUTPUT_QC_DENOMINATOR_FLOOR)
+            observable &= ~active | np.isfinite(length_value)
+            weighted += np.where(active, length_value * amount, 0.0)
+        lhs = numeric[total_length].to_numpy(dtype=float) * denominator
+        violations += int((observable & ~_close(lhs, weighted)).sum())
+    return violations
+
+
+def _length_identities(frames: dict[str, pd.DataFrame], year: int) -> dict:
+    required = set(LENGTH_COLUMNS) | set(LENGTH_DENOMINATORS.values())
+    violations = 0
+    missing: list[str] = []
+    checked = 0
+    for label in ("country", "industry", "panel_country_year", "panel_industry_year"):
+        frame = frames[label]
+        absent = _missing(frame, required)
+        if absent:
+            missing.append(f"{label}:{absent}")
+            continue
+        violations += _length_frame_violations(frame)
+        checked += len(frame)
+    return _check(
+        "length_domains_and_identities",
+        not missing and violations == 0,
+        f"year={year}; rows={checked}; violations={violations}; denominator_floor={OUTPUT_QC_DENOMINATOR_FLOOR}; "
+        f"abs_tol={OUTPUT_QC_ABS_TOLERANCE}; rel_tol={OUTPUT_QC_REL_TOLERANCE}"
+        + (f"; missing={missing}" if missing else ""),
+    )
+
+
+def _country_additivity(frames: dict[str, pd.DataFrame], year: int) -> dict:
+    country = frames["country"]
+    industry = frames["industry"]
+    required = {"country", *ADDITIVE_COLUMNS}
+    missing_country = _missing(country, required)
+    missing_industry = _missing(industry, required)
+    if missing_country or missing_industry:
+        return _check(
+            "country_industry_additivity",
+            False,
+            f"year={year}; missing_country={missing_country}; missing_industry={missing_industry}",
+        )
+    grouped = industry.groupby("country", sort=True, as_index=False)[list(ADDITIVE_COLUMNS)].sum(min_count=1)
+    merged = country[["country", *ADDITIVE_COLUMNS]].merge(
+        grouped,
+        on="country",
+        how="outer",
+        validate="one_to_one",
+        suffixes=("_country", "_industry"),
+        indicator=True,
+    )
+    violations = int(merged["_merge"].ne("both").sum())
+    for column in ADDITIVE_COLUMNS:
+        violations += int((~_close(merged[f"{column}_country"], merged[f"{column}_industry"])).sum())
+    return _check(
+        "country_industry_additivity",
+        violations == 0,
+        f"year={year}; countries={len(merged)}; additive_columns={len(ADDITIVE_COLUMNS)}; violations={violations}; "
+        f"abs_tol={OUTPUT_QC_ABS_TOLERANCE}; rel_tol={OUTPUT_QC_REL_TOLERANCE}; ratios_aggregated=false",
+    )
+
+
+def _network_edges(frames: dict[str, pd.DataFrame], year: int) -> dict:
+    edges = frames["edges"]
+    missing = _missing(edges, {"source", "target", "year", "flow"})
+    if missing:
+        return _check("network_edges", False, f"year={year}; missing={missing}")
+    endpoints = set(frames["country"].get("country", pd.Series(dtype=str)).astype(str))
+    flow = pd.to_numeric(edges["flow"], errors="coerce").to_numpy(dtype=float)
+    violations = int((~np.isfinite(flow) | (flow <= 0)).sum())
+    violations += int((~edges["source"].astype(str).isin(endpoints)).sum())
+    violations += int((~edges["target"].astype(str).isin(endpoints)).sum())
+    violations += int(edges["source"].astype(str).eq(edges["target"].astype(str)).sum())
+    violations += int(edges.duplicated(["year", "source", "target"]).sum())
+    return _check(
+        "network_edges",
+        violations == 0,
+        f"year={year}; edges={len(edges)}; violations={violations}; flow_domain=(0,finite); "
+        f"self_loops={OUTPUT_QC_SELF_LOOP_POLICY}",
+    )
+
+
+def _network_indicators(frames: dict[str, pd.DataFrame], year: int) -> dict:
+    required = set(NETWORK_COLUMNS)
+    missing: list[str] = []
+    violations = 0
+    checked = 0
+    bounded = ("closnesscentrality", "harmonicclosnesscentrality", "eigencentrality")
+    nonnegative = (
+        "degree",
+        "indegree",
+        "outdegree",
+        "weighted degree",
+        "weighted indegree",
+        "weighted outdegree",
+        "Eccentricity",
+        "betweenesscentrality",
+    )
+    for label in ("country", "industry", "panel_country_year", "panel_industry_year"):
+        frame = frames[label]
+        absent = _missing(frame, required)
+        if absent:
+            missing.append(f"{label}:{absent}")
+            continue
+        numeric = frame[list(required)].apply(pd.to_numeric, errors="coerce")
+        values = numeric.to_numpy(dtype=float)
+        violations += int((~np.isfinite(values)).sum())
+        for column in nonnegative:
+            violations += int((numeric[column].to_numpy(dtype=float) < -OUTPUT_QC_ABS_TOLERANCE).sum())
+        for column in bounded:
+            field = numeric[column].to_numpy(dtype=float)
+            violations += int(((field < -OUTPUT_QC_ABS_TOLERANCE) | (field > 1 + OUTPUT_QC_ABS_TOLERANCE)).sum())
+        for column in ("degree", "indegree", "outdegree"):
+            field = numeric[column].to_numpy(dtype=float)
+            violations += int((np.isfinite(field) & (np.abs(field - np.rint(field)) > OUTPUT_QC_ABS_TOLERANCE)).sum())
+        violations += _identity_count(frame, "degree", ("indegree", "outdegree"))
+        violations += _identity_count(frame, "weighted degree", ("weighted indegree", "weighted outdegree"))
+        checked += len(frame)
+    return _check(
+        "network_indicators",
+        not missing and violations == 0,
+        f"year={year}; rows={checked}; violations={violations}; centrality_domain=[0,1] where bounded; "
+        f"nonnegative=true; abs_tol={OUTPUT_QC_ABS_TOLERANCE}; rel_tol={OUTPUT_QC_REL_TOLERANCE}"
+        + (f"; missing={missing}" if missing else ""),
+    )
+
+
+def _panel_shares(frames: dict[str, pd.DataFrame], year: int) -> dict:
+    required = {
+        "gross_exports",
+        *PANEL_SHARE_DENOMINATORS,
+        *PANEL_SHARE_NUMERATORS.values(),
+        *PANEL_SHARE_DENOMINATORS.values(),
+    }
+    missing: list[str] = []
+    violations = 0
+    checked = 0
+    for label in ("panel_country_year", "panel_industry_year"):
+        frame = frames[label]
+        absent = _missing(frame, required)
+        if absent:
+            missing.append(f"{label}:{absent}")
+            continue
+        numeric = frame[list(required)].apply(pd.to_numeric, errors="coerce")
+        gross = numeric["gross_exports"].to_numpy(dtype=float)
+        violations += int((~np.isfinite(gross)).sum())
+        for share_name, denominator_name in PANEL_SHARE_DENOMINATORS.items():
+            share = numeric[share_name].to_numpy(dtype=float)
+            numerator = numeric[PANEL_SHARE_NUMERATORS[share_name]].to_numpy(dtype=float)
+            denominator = numeric[denominator_name].to_numpy(dtype=float)
+            defined = np.isfinite(denominator) & (denominator > 0)
+            expected = numerator / np.where(defined, denominator, 1.0)
+            violations += int((defined & ~_close(share, expected)).sum())
+            violations += int(
+                (defined & ((share < -OUTPUT_QC_ABS_TOLERANCE) | (share > 1 + OUTPUT_QC_ABS_TOLERANCE))).sum()
+            )
+            violations += int((~defined & ~np.isnan(share)).sum())
+        checked += len(frame)
+    return _check(
+        "panel_shares",
+        not missing and violations == 0,
+        f"year={year}; rows={checked}; violations={violations}; defined_when=denominator>0; domain=[0,1]; "
+        f"abs_tol={OUTPUT_QC_ABS_TOLERANCE}; rel_tol={OUTPUT_QC_REL_TOLERANCE}"
+        + (f"; missing={missing}" if missing else ""),
+    )
+
+
+def recompute_output_checks(root: Path, year: int, *, expected_years: list[int]) -> list[dict]:
+    """Recompute all v1 semantic checks from persisted release files for one year."""
+    frames = {
+        "country": _read_csv(root, f"indicators_country_{year}.csv"),
+        "industry": _read_csv(root, f"indicators_industry_{year}.csv"),
+        "edges": _read_csv(root, f"network_edges_{year}.csv"),
+        "exposure": _read_csv(root, f"export_exposure_{year}.csv"),
+        "panel_country": _read_csv(root, "panel_country.csv"),
+        "panel_industry": _read_csv(root, "panel_industry.csv"),
+    }
+    panel_year_problems: list[str] = []
+    validated_panel_years: dict[str, pd.Series] = {}
+    for panel_name in ("panel_country", "panel_industry"):
+        numeric_years, problems = _validate_panel_years(frames[panel_name], panel_name, expected_years)
+        panel_year_problems.extend(problems)
+        if numeric_years is not None:
+            validated_panel_years[panel_name] = numeric_years
+            # Normalize only after mathematical validation so equivalent numeric tokens
+            # cannot bypass the existing entity-year duplicate checks.
+            frames[panel_name]["year"] = numeric_years
+
+    panel_years_valid = not panel_year_problems and len(validated_panel_years) == 2
+    for panel_name in ("panel_country", "panel_industry"):
+        panel = frames[panel_name]
+        frames[f"{panel_name}_year"] = (
+            panel.loc[_year_mask(panel, year)].copy() if panel_years_valid else panel.iloc[0:0].copy()
+        )
+    runners: tuple[Callable[[dict[str, pd.DataFrame], int], dict], ...] = (
+        lambda values, selected_year: _keys_and_coverage(values, selected_year, panel_year_problems),
+        _trade_identities,
+        _production_identities,
+        _length_identities,
+        _country_additivity,
+        _network_edges,
+        _network_indicators,
+        _panel_shares,
+    )
+    checks = [runner(frames, year) for runner in runners]
+    validate_serialized_output_checks(checks, contract_version=OUTPUT_QC_CONTRACT_VERSION)
+    return checks
+
+
+def write_output_qc(root: Path, year: int, *, expected_years: list[int]) -> tuple[list[dict], dict]:
+    """Recompute, persist, and gate one yearly output semantic QC artifact."""
+    checks = recompute_output_checks(root, year, expected_years=expected_years)
+    summary = summarize_output_checks(checks)
+    path = root / f"qc_outputs_{year}.json"
+    path.write_text(json.dumps(checks, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+    if not summary["publishable"]:
+        raise OutputQualityError(f"year {year} output semantic QC failed: {summary['fatal']}")
+    return checks, summary
+
+
+def read_output_qc(path: Path, *, contract: object) -> list[dict]:
+    """Read one persisted output QC artifact under the exact v1 contract."""
+    validate_output_qc_contract_metadata(contract)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid output QC artifact {path}: {exc}") from exc
+    assert isinstance(contract, dict)
+    return validate_serialized_output_checks(payload, contract_version=contract["version"])

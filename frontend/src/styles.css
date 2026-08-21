@@ -39,6 +39,16 @@ button.secondary:hover:not(:disabled) { background: #f5f6fa; }
 button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: default; }
 
 .layout { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.skip-to-step-content {
+  position: fixed; top: 10px; left: 14px; z-index: 120;
+  transform: translateY(calc(-100% - 18px));
+  padding: 10px 14px; border-radius: 8px; border: 2px solid #fff;
+  background: #242096; color: #fff; font-weight: 800; text-decoration: none;
+  box-shadow: 0 0 0 3px #111827, 0 6px 18px rgba(17, 24, 39, .3);
+}
+.skip-to-step-content:focus, .skip-to-step-content:focus-visible {
+  transform: translateY(0); outline: 4px solid #ffcf40; outline-offset: 3px;
+}
 .skeleton-block {
   display: block; border-radius: 8px;
   background: linear-gradient(100deg, #e4e7ef 30%, #f3f4f8 50%, #e4e7ef 70%);
@@ -282,7 +292,11 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .shock-event-item-name { display: block; font-size: 12.5px; font-weight: 600; color: #2c2f3a; line-height: 1.45; }
 .shock-event-item-rate { flex: none; font-size: 11px; font-weight: 700; color: #4b5060; }
 .shock-event-item-meta { display: block; font-size: 10.5px; color: var(--text-muted); margin-top: 3px; line-height: 1.5; }
+.shock-event-source { display: inline-block; margin-top: 4px; font-size: 10px; font-weight: 700; }
+.shock-event-source.official { color: #175a9e; }
+.shock-event-source.teaching { color: #6b5200; }
 .shock-event-item-dates { display: block; font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+.shock-source-disclosure { margin: 8px 0 14px; color: #594800; font-size: 11.5px; line-height: 1.6; }
 
 /* 行内迷你时间条:所有行共用顶部年份刻度,横向位置因此可以跨事件比较(取代了独立时间线组件)。 */
 .shock-event-axis {
@@ -360,7 +374,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 }
 /* 提示类状态垂直居中,让预留出来的空间看起来是刻意的,而不是布局塌了。 */
 .shock-panel-body > .shock-panel-state, .shock-panel-body > .error-box { margin: auto 0; }
-/* 重取期间旧表留在原位并用顶部状态线提示(stale-while-revalidate),不闪成空白。 */
+/* 当前筛选重取期间只显示当前请求状态，不保留上一筛选的表格证据。 */
 .shock-panel-body.refreshing { box-shadow: inset 0 3px 0 #8b88df; }
 /* 表头在内部滚动时固定,否则滚下去就不知道哪列是哪列。
    border-collapse:collapse 下 sticky 的 border-bottom 会丢,用 inset 阴影补出分隔线。 */
@@ -415,6 +429,10 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .data-table td {
   text-align: right; padding: 9px 12px; border-bottom: 1px solid #f4f5f8;
   font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.data-table th.indicator-row-header {
+  padding: 9px 12px; background: #fff; color: inherit; font-size: inherit; font-weight: 400;
+  border-bottom: 1px solid #f4f5f8; font-variant-numeric: tabular-nums;
 }
 .data-table tr:hover td { background: #f7f8fb; }
 .qc-table { table-layout: fixed; }
@@ -663,8 +681,30 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   background: transparent; color: inherit; padding: 3px 5px; font: inherit; cursor: pointer;
   font-variant-numeric: tabular-nums;
 }
-.db-observation-cell:hover, .db-observation-cell:focus-visible { border-color: #7773df; background: rgba(255,255,255,.78); outline: none; }
+.db-observation-cell:hover { border-color: #7773df; background: rgba(255,255,255,.78); }
+.db-observation-cell:focus-visible {
+  border-color: #4b47e0; background: rgba(255,255,255,.9); outline: 2px solid #4b47e0; outline-offset: 1px;
+}
 .db-observation-cell.selected { border-color: #16876f; background: #e9f8f3; color: #116b5a; font-weight: 750; }
+
+.chart-data-disclosure { margin-top: 14px; }
+.chart-data-disclosure > summary { color: #3f4780; font-size: 12px; font-weight: 700; cursor: pointer; }
+.chart-data-table-wrap { margin-top: 8px; }
+.chart-data-table caption { text-align: left; font-weight: 700; color: #3a4050; padding: 6px 8px; }
+.composition-chart-row {
+  display: grid;
+  grid-template-columns: minmax(112px, 128px) minmax(120px, 1fr) 72px;
+  align-items: center;
+  gap: 10px;
+  min-width: 324px;
+}
+.composition-chart-label {
+  min-width: 0; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.composition-chart-track { min-width: 120px; }
+.composition-chart-value {
+  text-align: right; font-size: 11.5px; color: #3a4050; font-variant-numeric: tabular-nums;
+}
 
 @media print {
   @page { margin: 14mm 12mm; }

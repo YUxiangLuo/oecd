@@ -17,6 +17,7 @@ interface LabRouterProps {
   sessionStatus: SessionStatus;
   sessionUnsynced: boolean;
   sessionSyncing: boolean;
+  sessionSyncError: string | null;
   onFlushSession: () => Promise<void>;
   onReportChanged: (response: ReportMutationResponse) => void;
   regressionSettings: RegressionSettings;
@@ -24,7 +25,9 @@ interface LabRouterProps {
   regressionHistory: RegressionHistory;
   onRegressionHistoryChange: Dispatch<SetStateAction<RegressionHistory>>;
   onNavigateStep: (step: number) => void;
+  onCompletionBlockChange?: (reason: string | null) => void;
   getStep?: <T>(step: number) => T | undefined;
+  getConfirmedStep?: <T>(step: number) => T | undefined;
 }
 
 /** Map the course contract's lab key to one isolated interactive workbench. */
@@ -36,6 +39,7 @@ export function LabRouter({
   sessionStatus,
   sessionUnsynced,
   sessionSyncing,
+  sessionSyncError,
   onFlushSession,
   onReportChanged,
   regressionSettings,
@@ -43,10 +47,18 @@ export function LabRouter({
   regressionHistory,
   onRegressionHistoryChange,
   onNavigateStep,
+  onCompletionBlockChange,
   getStep,
+  getConfirmedStep,
 }: LabRouterProps) {
   if (step.lab === "db") return <DbLab state={state} />;
-  if (step.lab === "qc") return meta ? <QcLab meta={meta} onNavigateStep={onNavigateStep} /> : null;
+  if (step.lab === "qc") return meta ? (
+    <QcLab
+      meta={meta}
+      onNavigateStep={onNavigateStep}
+      onCompletionBlockChange={onCompletionBlockChange}
+    />
+  ) : null;
   if (step.lab === "shock") return meta ? <ShockLab meta={meta} step={step} state={state} /> : null;
   // 同一实验台横跨多步时必须按步重挂载，否则步内状态会泄漏到下一步。
   if (step.lab === "ind") return meta ? <IndicatorLab key={step.n} meta={meta} step={step} state={state} /> : null;
@@ -62,6 +74,10 @@ export function LabRouter({
         history={regressionHistory}
         onHistoryChange={onRegressionHistoryChange}
         getStep={getStep ? (n) => getStep<SiblingStepData>(n) : undefined}
+        getConfirmedStep={getConfirmedStep}
+        sessionUnsynced={sessionUnsynced}
+        sessionSyncing={sessionSyncing}
+        sessionSyncError={sessionSyncError}
         onNavigateStep={onNavigateStep}
       />
     );

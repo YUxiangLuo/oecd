@@ -9,6 +9,9 @@ import {
   SHOCK_TYPE_COLORS,
   SHOCK_TYPE_LABELS,
   SHOCK_TYPES,
+  shockEventsProvenanceError,
+  shockPanelRequestKey,
+  shockSortChange,
   shockTypeColor,
   shockTypeLabel,
 } from "./model";
@@ -33,9 +36,22 @@ const event: ShockEvent = {
   target_codes: ["CHN"],
   sector_codes: ["A01_02", "C24", "C29"],
   all_targets: false,
+  source_status: "official_event_source",
+  source_disclosure: "ICIO 行业与数值是教学编码。",
+  source_urls: ["https://example.gov/event"],
 };
 
 describe("step2 shock event model", () => {
+  it("fails closed on missing or contradictory event provenance", () => {
+    expect(shockEventsProvenanceError([event])).toBeNull();
+    expect(shockEventsProvenanceError([{
+      ...event, source_status: "official_event_source", source_urls: [],
+    }])).toContain("没有 URL");
+    expect(shockEventsProvenanceError([{
+      ...event, source_status: "teaching_encoding_no_event_source", source_urls: ["https://example.gov"],
+    }])).toContain("矛盾");
+  });
+
   it("uses a stable event key", () => {
     expect(eventKey(event)).toBe("美国301对华关税::2018-07-06");
   });
@@ -45,7 +61,8 @@ describe("step2 shock event model", () => {
     expect(filters.year).toBe(2018);
     expect(filters.country).toBe("CHN");
     expect(filters.shockType).toBe("tariff");
-    expect(filters.onlyHit).toBe(true);
+    expect(filters.filter).toBe("treated");
+    expect(filters.sort).toBe("intensity_desc");
     expect(filters.page).toBe(1);
   });
 
@@ -71,11 +88,25 @@ describe("step2 shock event model", () => {
     expect(closestSupportedYear("2018-01-01", [], 2020)).toBe(2020);
   });
 
+  it("keys every control-dependent panel request including treated/nonzero/all", () => {
+    const filters = filtersForEvent(event, meta);
+    const treated = shockPanelRequestKey("release", filters);
+    expect(shockPanelRequestKey("release", { ...filters, filter: "nonzero" })).not.toBe(treated);
+    expect(shockPanelRequestKey("release", { ...filters, sort: "country_asc" })).not.toBe(treated);
+    expect(shockPanelRequestKey("release", { ...filters, page: 2 })).not.toBe(treated);
+    expect(shockPanelRequestKey("release", filters)).toBe(treated);
+  });
+
   it("detects manual changes after event synchronization", () => {
     const expected = filtersForEvent(event, meta);
     expect(filtersMatchEvent(expected, expected)).toBe(true);
     expect(filtersMatchEvent({ ...expected, sector: "C24" }, expected)).toBe(false);
+    expect(filtersMatchEvent({ ...expected, sort: "country_asc" }, expected)).toBe(false);
     expect(filtersMatchEvent({ ...expected, page: 2 }, expected)).toBe(true);
+  });
+
+  it("resets pagination whenever the sort changes", () => {
+    expect(shockSortChange("industry_asc")).toEqual({ sort: "industry_asc", page: 1 });
   });
 });
 
@@ -89,6 +120,20 @@ describe("冲击类型的键与展示", () => {
     }
     expect(Object.keys(SHOCK_TYPE_LABELS).sort()).toEqual([...SHOCK_TYPES].sort());
     expect(Object.keys(SHOCK_TYPE_COLORS).sort()).toEqual([...SHOCK_TYPES].sort());
+  });
+
+  test("三类冲击的前景色在白底达到 WCAG AA", () => {
+    const channel = (value: number) => {
+      const normalized = value / 255;
+      return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+    };
+    const luminance = (hex: string) => {
+      const rgb = [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16));
+      return 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2]);
+    };
+    for (const color of Object.values(SHOCK_TYPE_COLORS)) {
+      expect(1.05 / (luminance(color) + 0.05)).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   test("三类冲击的颜色互不相同", () => {

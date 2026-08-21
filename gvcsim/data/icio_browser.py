@@ -15,6 +15,15 @@ from typing import Any
 import pandas as pd
 
 from gvcsim.config import RAW_DATA_DIR, available_years
+from gvcsim.data.raw_icio import (
+    DimensionContract,
+    RawFileIdentity,
+    dimension_contract_for,
+    raw_file_identity,
+    resolve_year_source,
+    validate_raw_file,
+    validate_raw_years,
+)
 
 FINAL_DEMAND_CATEGORIES = ("HFCE", "NPISH", "GGFC", "GFCF", "INVNT", "DPABR")
 ACCOUNT_ROWS = ("TLS", "VA", "OUT")
@@ -23,10 +32,16 @@ _raw_cache_lock = threading.RLock()
 
 
 def _year_file(year: int, raw_dir: Path = RAW_DATA_DIR) -> Path:
-    matches = sorted(raw_dir.glob(f"ICIO*_{year}.csv"))
-    if not matches:
-        raise FileNotFoundError(f"未找到 OECD ICIO 原始文件: ICIO*_{year}.csv")
-    return matches[-1]
+    return resolve_year_source(year, raw_dir)
+
+
+def validate_raw_files(
+    years: list[int],
+    raw_dir: Path = RAW_DATA_DIR,
+    contract: DimensionContract | None = None,
+) -> None:
+    """Strictly validate every raw source and reject cross-year dimension drift."""
+    validate_raw_years(years, raw_dir, contract)
 
 
 def _split_label(label: str) -> tuple[str, str] | None:
@@ -49,8 +64,8 @@ def _is_final_demand_label(label: str) -> bool:
 
 
 @lru_cache(maxsize=16)
-def _metadata(path_str: str, mtime_ns: int) -> dict[str, Any]:
-    path = Path(path_str)
+def _metadata(identity: RawFileIdentity) -> dict[str, Any]:
+    path = Path(identity[0])
     header = pd.read_csv(path, nrows=0).columns.tolist()
     first_col = pd.read_csv(path, usecols=[0], keep_default_na=False).iloc[:, 0].astype(str)
     row_labels = first_col.tolist()
@@ -82,25 +97,35 @@ def _metadata(path_str: str, mtime_ns: int) -> dict[str, Any]:
 
 def _meta_for_path(path: Path) -> dict[str, Any]:
     with _raw_cache_lock:
-        return _metadata(str(path), path.stat().st_mtime_ns)
+        return _metadata(raw_file_identity(path))
 
 
 @lru_cache(maxsize=32)
-def _read_columns_cached(path_str: str, mtime_ns: int, usecols: tuple[str, ...]) -> pd.DataFrame:
-    return pd.read_csv(path_str, usecols=list(usecols), keep_default_na=False, na_values=[""])
+def _read_columns_cached(identity: RawFileIdentity, usecols: tuple[str, ...]) -> pd.DataFrame:
+    return pd.read_csv(identity[0], usecols=list(usecols), keep_default_na=False, na_values=[""])
 
 
 def _read_columns(path: Path, usecols: tuple[str, ...]) -> pd.DataFrame:
-    """按列切片读取原始宽表,并按 (路径, mtime, 列集) 缓存。
+    """按列切片读取原始宽表,并按不可变文件状态与列集缓存。
 
     翻页只换行不换列,命中缓存后无需重扫 ~66MB 的原始文件。
     缓存的 DataFrame 不得原地修改,调用方只能做产生副本的操作。
     """
     with _raw_cache_lock:
-        return _read_columns_cached(str(path), path.stat().st_mtime_ns, usecols)
+        return _read_columns_cached(raw_file_identity(path), usecols)
 
 
-def meta(raw_dir: Path = RAW_DATA_DIR) -> dict[str, Any]:
+def clear_raw_browser_caches() -> None:
+    """Clear raw metadata and page caches for deterministic tests and maintenance."""
+    with _raw_cache_lock:
+        _metadata.cache_clear()
+        _read_columns_cached.cache_clear()
+
+
+def meta(
+    raw_dir: Path = RAW_DATA_DIR,
+    contract: DimensionContract | None = None,
+) -> dict[str, Any]:
     years = available_years(raw_dir)
     files = []
     for year in years:
@@ -120,6 +145,8 @@ def meta(raw_dir: Path = RAW_DATA_DIR) -> dict[str, Any]:
             "n_columns": 0,
         }
 
+    selected_contract = contract or dimension_contract_for(raw_dir)
+    validate_raw_years(years, raw_dir, selected_contract)
     default_year = max(years)
     latest_meta = _meta_for_path(_year_file(default_year, raw_dir))
     return {
@@ -205,6 +232,7 @@ def slice_table(
     page: int = 1,
     page_size: int = 25,
     raw_dir: Path = RAW_DATA_DIR,
+    contract: DimensionContract | None = None,
 ) -> dict[str, Any]:
     if table not in VALID_TABLES:
         raise ValueError(f"table 必须是 {', '.join(VALID_TABLES)}")
@@ -214,6 +242,7 @@ def slice_table(
         raise ValueError("page_size 必须在 1–200 之间")
 
     path = _year_file(year, raw_dir)
+    validate_raw_file(path, contract or dimension_contract_for(raw_dir))
     info = _meta_for_path(path)
     countries: list[str] = info["countries"]
     if not countries:

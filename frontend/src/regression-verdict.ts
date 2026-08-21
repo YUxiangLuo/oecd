@@ -1,3 +1,7 @@
+import {
+  eventInferenceGate, eventMainPretrendContractIsSafe, eventPretrendScopeIsSafe,
+  eventPretrendScopesAreSafe, eventSupportCoversTerms, globalInferenceIsSuppressed, primaryEventTerm,
+} from "./regression-event-support";
 import type { CoefStat, RegressionOutcome, RegressionResponse, RegressionStatus } from "./types";
 
 // suppressed:设计无效或处理支持度不足,服务端已抽掉 p 值与置信区间。
@@ -38,7 +42,27 @@ interface RegressionVerdict {
 
 function failedPretrend(response: RegressionResponse): string | null {
   const diagnostic = response.result.diagnostics.pretrend;
-  if (!diagnostic?.available || diagnostic.p == null || !Number.isFinite(diagnostic.p) || diagnostic.p >= 0.05) {
+  if (
+    response.design.method === "event_study"
+    && response.design.interaction
+    && !eventPretrendScopesAreSafe(
+      response.result.event_support, response.result.diagnostics, true,
+    )
+  ) {
+    return "交互事件研究缺少完整或有效的主效应、交互效应与联合冲击前诊断；方向性推断已关闭。";
+  }
+  if (
+    !diagnostic?.available
+    || diagnostic.p == null
+    || !Number.isFinite(diagnostic.p)
+    || diagnostic.p >= 0.05
+    || (response.design.method === "event_study"
+      && !eventPretrendScopeIsSafe(
+        response.result.event_support,
+        diagnostic,
+        response.design.interaction ? "joint" : "main",
+      ))
+  ) {
     return null;
   }
   return diagnostic.interpretation || "检测到明显的冲击前差异";
@@ -50,9 +74,8 @@ function mainPolicyCoefficient(response: RegressionResponse): CoefStat | null {
     !controls.has(coef.name) && !coef.name.includes("×base_gvc"),
   );
   if (response.design.method === "event_study") {
-    return main.find((coef) => coef.name === "k=0")
-      ?? main.find((coef) => coef.name.startsWith("k=+"))
-      ?? null;
+    const term = primaryEventTerm(main);
+    return main.find((coef) => coef.name === term) ?? null;
   }
   return main[0] ?? null;
 }
@@ -120,8 +143,8 @@ const INTERPRETATION: Record<RegressionOutcome, { negative: string; positive: st
     positive: "结果与外国增加值依赖上升一致，但仍需检查识别假设和其他共同变化。",
   },
   production: {
-    negative: "结果与复杂跨境分工收缩一致，但不能单靠该估计确定机制。",
-    positive: "结果与复杂跨境分工扩张一致，但不能据此排除其他解释。",
+    negative: "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
+    positive: "SVA 中复杂 GVC 增加值份额提高；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
   },
   length: {
     negative: "结果与跨境生产链缩短一致，可能对应回流、近岸化或其他调整。",
@@ -159,10 +182,15 @@ export function buildRegressionVerdict(
   const scaled = naturalScale(outcome, coefficient, response);
   const pretrendNote = failedPretrend(response);
 
-  // 设计无效或处理支持度不足:必须先于任何区间比较返回,
-  // 否则 null 区间会被静默当成“区间跨过 0”,把不可评估说成证据不足。
-  if (support?.suppress_inference) {
-    const invalid = support.status === "invalid_design";
+  // 设计无效或处理支持度不足:必须先于任何区间比较返回。保存载荷中的
+  // suppress_inference 可能来自旧版本，不能覆盖 result/support 的严重状态。
+  const globallySuppressed = globalInferenceIsSuppressed(response.result.status, support);
+  if (globallySuppressed) {
+    const invalid = response.result.status === "invalid_design" || support?.status === "invalid_design";
+    const supportEvidence = support
+      ? `只有 ${support.treated_clusters} 个处理聚类（下限 ${support.min_treated_clusters}），`
+        + "聚类稳健推断在此失效；p 值、置信区间与星号均已抑制。"
+      : "结果状态表明处理支持不足；p 值、置信区间与星号均不可用于推断。";
     return {
       state: "suppressed",
       title: invalid ? "这个设计不能用于统计推断" : "处理支持度不足，无法给出显著性",
@@ -171,13 +199,58 @@ export function buildRegressionVerdict(
       interval: "—",
       evidence: invalid
         ? "估计量与真实政策路径不相容，点估计仍会算出，但它已不是原本想估计的对象；p 值、置信区间与星号均已抑制。"
-        : `只有 ${support.treated_clusters} 个处理聚类（下限 ${support.min_treated_clusters}），`
-          + `聚类稳健推断在此失效；p 值、置信区间与星号均已抑制。`,
+        : supportEvidence,
       interpretation: "不能据此判断变化方向——这不是“没有效应”，而是当前设计无法评估。",
       boundary,
       coefficient,
       warnings: reasons,
     };
+  }
+
+  if (response.design.method === "event_study") {
+    const completeContract = eventSupportCoversTerms(
+      response.result.event_support,
+      response.result.coefs.map((item) => item.name),
+      response.design.interaction,
+    );
+    const gate = completeContract
+      ? eventInferenceGate(response.result.event_support, coefficient.name)
+      : { state: "unknown" as const, period: null };
+    if (gate.state !== "supported") {
+      const unknown = gate.state === "unknown";
+      const periodReasons = gate.period?.reasons ?? [];
+      return {
+        state: "suppressed",
+        title: unknown ? "该事件期的处理支持度未知" : "该事件期处理聚类支持不足",
+        effectLabel: effectLabel(response, coefficient),
+        effect: scaled.effect,
+        interval: "—",
+        evidence: unknown
+          ? "该旧结果没有逐事件期支持契约；不能使用其中的 p 值、置信区间或方向性结论。"
+          : `${periodReasons.join(" ")} 该期只保留描述性点估计与标准误。`,
+        interpretation: "不能据此判断该事件期的变化方向——支持不足或未知不等于没有效应。",
+        boundary,
+        coefficient,
+        warnings: [...reasons, ...periodReasons],
+      };
+    }
+    const pretrendSafe = response.design.interaction
+      ? eventPretrendScopesAreSafe(response.result.event_support, response.result.diagnostics, true)
+      : eventMainPretrendContractIsSafe(response.result.event_support, response.result.diagnostics);
+    if (!pretrendSafe) {
+      return {
+        state: "suppressed",
+        title: "冲击前诊断未知或已损坏",
+        effectLabel: effectLabel(response, coefficient),
+        effect: scaled.effect,
+        interval: "—",
+        evidence: "缺少完整、语义有效且覆盖全部受支持冲击前时期的诊断；已有置信区间仅作描述，不用于方向性推断。",
+        interpretation: "不能据此判断冲击后的变化方向。",
+        boundary,
+        coefficient,
+        warnings: reasons,
+      };
+    }
   }
 
   if (pretrendNote) {

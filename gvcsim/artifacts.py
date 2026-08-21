@@ -14,7 +14,7 @@ from typing import Any
 import pandas as pd
 
 
-ARTIFACT_CONTRACT_VERSION = 3
+ARTIFACT_CONTRACT_VERSION = 7
 ARTIFACT_MANIFEST_ALGORITHM = "sha256"
 ARTIFACT_MANIFEST_NAME = "artifact_manifest"
 METADATA_DIGEST_NAME = "metadata_sha256"
@@ -47,9 +47,38 @@ def validate_artifact(path: Path, *, label: str | None = None) -> None:
         raise ArtifactValidationError(f"empty {label}: {path}")
 
 
+def validate_qc_payload(payload: object, *, scope: str, contract: object) -> list[dict]:
+    """Validate an in-memory QC payload through the release artifact error contract."""
+    from gvcsim.data import quality
+
+    try:
+        quality.validate_qc_contract_metadata(contract)
+        assert isinstance(contract, dict)
+        return quality.validate_serialized_checks(
+            payload,
+            scope=scope,
+            contract_version=contract["version"],
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ArtifactValidationError(f"invalid {scope} QC payload: {exc}") from exc
+
+
+def read_qc_artifact(path: Path, *, scope: str, contract: object) -> list[dict]:
+    """Read one QC artifact only after validating its versioned exact-set contract."""
+    validate_artifact(path, label=f"{scope} QC artifact")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ArtifactValidationError(f"invalid {scope} QC artifact: {path}: {exc}") from exc
+    try:
+        return validate_qc_payload(payload, scope=scope, contract=contract)
+    except ArtifactValidationError as exc:
+        raise ArtifactValidationError(f"invalid {scope} QC artifact: {path}: {exc}") from exc
+
+
 @lru_cache(maxsize=16)
-def _dataset_metadata_cached(path_text: str, size: int, mtime_ns: int, ctime_ns: int, inode: int) -> dict[str, Any]:
-    del size, mtime_ns, ctime_ns, inode
+def _dataset_metadata_cached(path_text: str, size: int, mtime_ns: int) -> dict[str, Any]:
+    del size, mtime_ns
     path = Path(path_text)
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -67,9 +96,7 @@ def dataset_metadata(processed_dir: Path | None = None) -> dict[str, Any]:
     path = root / DATASET_METADATA
     _require_regular_file(path, label="dataset metadata")
     file_stat = path.stat()
-    return _dataset_metadata_cached(
-        str(path), file_stat.st_size, file_stat.st_mtime_ns, file_stat.st_ctime_ns, file_stat.st_ino
-    )
+    return _dataset_metadata_cached(str(path), file_stat.st_size, file_stat.st_mtime_ns)
 
 
 def _metadata_digest(metadata: dict[str, Any]) -> str:
@@ -265,11 +292,13 @@ def _required_paths(metadata: dict[str, Any]) -> list[str]:
         "demo_trade_war_tariffs.csv",
         "qc_controls.json",
         "qc_shocks.json",
+        "qc_regression_inputs.json",
     ]
     for year in years:
         required.extend(
             [
                 f"qc_{year}.json",
+                f"qc_outputs_{year}.json",
                 f"export_exposure_{year}.csv",
                 f"indicators_country_{year}.csv",
                 f"indicators_industry_{year}.csv",
@@ -279,8 +308,127 @@ def _required_paths(metadata: dict[str, Any]) -> list[str]:
     return required
 
 
+def _validate_release_qc(root: Path, metadata: dict[str, Any]) -> None:
+    from gvcsim.data import quality
+
+    contract = metadata.get("qc_contract")
+    try:
+        quality.validate_qc_contract_metadata(contract)
+    except ValueError as exc:
+        raise ArtifactValidationError(str(exc)) from exc
+
+    qc_metadata = metadata.get("qc")
+    if not isinstance(qc_metadata, dict) or set(qc_metadata) != {"years", "controls", "shocks"}:
+        raise ArtifactValidationError("dataset qc metadata must contain years, controls, and shocks")
+    years_metadata = qc_metadata.get("years")
+    expected_year_keys = {str(year) for year in metadata["years"]}
+    if not isinstance(years_metadata, dict) or set(years_metadata) != expected_year_keys:
+        raise ArtifactValidationError("dataset qc years do not match dataset years")
+
+    scopes = [
+        *[(quality.QC_SCOPE_ICIO, f"qc_{year}.json", years_metadata[str(year)]) for year in metadata["years"]],
+        (quality.QC_SCOPE_CONTROLS, "qc_controls.json", qc_metadata["controls"]),
+        (quality.QC_SCOPE_SHOCKS, "qc_shocks.json", qc_metadata["shocks"]),
+    ]
+    for scope, filename, expected_summary in scopes:
+        if not isinstance(expected_summary, dict) or type(expected_summary.get("override")) is not bool:
+            raise ArtifactValidationError(f"dataset {scope} QC summary is invalid")
+        if scope == quality.QC_SCOPE_SHOCKS and expected_summary["override"]:
+            raise ArtifactValidationError("dataset shock QC override is forbidden")
+        checks = read_qc_artifact(root / filename, scope=scope, contract=contract)
+        actual_summary = quality.summarize_serialized_checks(
+            checks,
+            override=expected_summary["override"],
+        )
+        if not actual_summary["publishable"]:
+            raise ArtifactValidationError(f"dataset {scope} QC is not publishable")
+        if actual_summary != expected_summary:
+            raise ArtifactValidationError(f"dataset {scope} QC summary does not match {filename}")
+
+
+def _validate_persisted_raw_dimensions(payload: object, years: list[int]) -> None:
+    """Cheap published-shape check; compute already parsed the raw tables."""
+    if not isinstance(payload, dict):
+        raise ArtifactValidationError("dataset raw_dimensions must be an object")
+    expected_keys = {
+        "metadata_version",
+        "contract_id",
+        "contract_version",
+        "countries",
+        "industries",
+        "final_demand_categories",
+        "rows",
+        "columns",
+        "country_codes_sha256",
+        "industry_codes_sha256",
+        "final_demand_codes_sha256",
+        "layout_sha256",
+        "years",
+    }
+    if set(payload) != expected_keys:
+        raise ArtifactValidationError("dataset raw_dimensions is missing required fields")
+    if payload.get("metadata_version") != 1:
+        raise ArtifactValidationError("dataset raw_dimensions metadata_version is unsupported")
+    year_map = payload.get("years")
+    if not isinstance(year_map, dict) or set(year_map) != {str(year) for year in years}:
+        raise ArtifactValidationError("dataset raw_dimensions years do not match dataset years")
+
+
+def _validate_release_output_qc(root: Path, metadata: dict[str, Any]) -> None:
+    """Require published output QC files and matching summaries; do not recompute."""
+    from gvcsim.data import output_quality
+
+    contract = metadata.get("output_qc_contract")
+    try:
+        output_quality.validate_output_qc_contract_metadata(contract)
+    except ValueError as exc:
+        raise ArtifactValidationError(str(exc)) from exc
+
+    output_metadata = metadata.get("output_qc")
+    expected_year_keys = {str(year) for year in metadata["years"]}
+    if not isinstance(output_metadata, dict) or set(output_metadata) != {"years"}:
+        raise ArtifactValidationError("dataset output_qc metadata must contain only yearly summaries")
+    years_metadata = output_metadata.get("years")
+    if not isinstance(years_metadata, dict) or set(years_metadata) != expected_year_keys:
+        raise ArtifactValidationError("dataset output QC years do not match dataset years")
+
+    for year in metadata["years"]:
+        path = root / f"qc_outputs_{year}.json"
+        try:
+            persisted = output_quality.read_output_qc(path, contract=contract)
+            expected_summary = years_metadata[str(year)]
+            output_quality.validate_output_summary(expected_summary, persisted)
+        except (KeyError, TypeError, ValueError, output_quality.OutputQualityError) as exc:
+            raise ArtifactValidationError(f"invalid output QC for year {year}: {exc}") from exc
+        if not expected_summary["publishable"]:
+            raise ArtifactValidationError(
+                f"output semantic QC is not publishable for year {year}: {expected_summary['fatal']}"
+            )
+
+
+def _validate_release_regression_input_qc(root: Path, metadata: dict[str, Any]) -> None:
+    """Require the published regression-input QC file; do not recompute."""
+    from gvcsim.data import regression_quality
+
+    contract = metadata.get("regression_input_qc_contract")
+    try:
+        regression_quality.validate_regression_input_qc_contract_metadata(contract)
+        persisted = regression_quality.read_regression_input_qc(
+            root / regression_quality.REGRESSION_INPUT_QC_FILE,
+            contract=contract,
+        )
+        expected_summary = metadata.get("regression_input_qc")
+        regression_quality.validate_regression_input_summary(expected_summary, persisted)
+    except (KeyError, TypeError, ValueError, regression_quality.RegressionInputQualityError) as exc:
+        raise ArtifactValidationError(f"invalid regression input QC: {exc}") from exc
+    if not isinstance(expected_summary, dict) or not expected_summary.get("publishable"):
+        raise ArtifactValidationError("regression input QC is not publishable")
+
+
 def validate_release(processed_dir: Path | None = None, *, verify_integrity: bool = True) -> dict[str, Any]:
     from gvcsim.config import COURSE_RELEASE, PROCESSED_DIR
+    from gvcsim.data.citations import DataSourcesValidationError, validate_data_sources
+    from gvcsim.shocks import validate_shock_contract_metadata
 
     root = (processed_dir or PROCESSED_DIR).resolve()
     metadata = dataset_metadata(root)
@@ -294,9 +442,27 @@ def validate_release(processed_dir: Path | None = None, *, verify_integrity: boo
             f"got {metadata.get('artifact_contract_version')}"
         )
     release_identity(root)
-    for field in ("generated_at", "data_sources", "qc", "network_algorithm"):
+    for field in (
+        "generated_at",
+        "data_sources",
+        "raw_dimensions",
+        "qc",
+        "qc_contract",
+        "shock_contract",
+        "output_qc",
+        "output_qc_contract",
+        "regression_input_qc",
+        "regression_input_qc_contract",
+        "network_algorithm",
+    ):
         if field not in metadata:
             raise ArtifactValidationError(f"dataset metadata is missing {field}")
+    try:
+        validate_data_sources(metadata["data_sources"])
+        _validate_persisted_raw_dimensions(metadata["raw_dimensions"], metadata["years"])
+        validate_shock_contract_metadata(metadata["shock_contract"])
+    except (DataSourcesValidationError, OSError, TypeError, ValueError) as exc:
+        raise ArtifactValidationError(f"dataset provenance/raw dimensions invalid: {exc}") from exc
 
     manifest = metadata.get(ARTIFACT_MANIFEST_NAME)
     if not isinstance(manifest, list):
@@ -306,12 +472,15 @@ def validate_release(processed_dir: Path | None = None, *, verify_integrity: boo
     missing_required = sorted(set(_required_paths(metadata)) - declared_paths)
     if missing_required:
         raise ArtifactValidationError(f"release is missing required artifacts: {missing_required}")
+    _validate_release_qc(root, metadata)
+    _validate_release_output_qc(root, metadata)
+    _validate_release_regression_input_qc(root, metadata)
     return {"release_id": metadata["release_id"], "files": len(declared_paths), "years": len(metadata["years"])}
 
 
 @lru_cache(maxsize=8)
 def _validate_release_cached(
-    root_text: str, release_id: str, state: tuple[tuple[str, int, int, int, int, int, int], ...]
+    root_text: str, release_id: str, state: tuple[tuple[str, int, int], ...]
 ) -> dict[str, Any]:
     del release_id, state
     return validate_release(Path(root_text), verify_integrity=True)
@@ -326,15 +495,7 @@ def validate_release_cached(processed_dir: Path | None = None) -> dict[str, Any]
     root = (processed_dir or PROCESSED_DIR).resolve()
     identity = release_identity(root)
     state = tuple(
-        (
-            path.relative_to(root).as_posix(),
-            metadata.st_dev,
-            metadata.st_ino,
-            metadata.st_mode,
-            metadata.st_size,
-            metadata.st_mtime_ns,
-            metadata.st_ctime_ns,
-        )
+        (path.relative_to(root).as_posix(), metadata.st_size, metadata.st_mtime_ns)
         for path in [root / DATASET_METADATA, *_release_files(root)]
         for metadata in (path.lstat(),)
     )
@@ -368,7 +529,10 @@ def read_csv_artifact(path: Path, *, require_current: bool = False) -> pd.DataFr
 
 
 def write_dataset_metadata(processed_dir: Path, metadata: dict[str, Any]) -> Path:
+    from gvcsim.data.citations import validate_data_sources
+
     root = processed_dir.resolve()
+    validate_data_sources(metadata.get("data_sources"))
     release_id = metadata.get("release_id")
     if not isinstance(release_id, str) or RELEASE_ID_PATTERN.fullmatch(release_id) is None:
         raise ArtifactValidationError("release metadata requires a valid release_id")

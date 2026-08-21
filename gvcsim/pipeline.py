@@ -4,7 +4,9 @@
 原始 66MB 大表,保证接口毫秒级响应。
 
 产物(每年):
-  qc_<year>.json                  质检结果(步骤2)
+  qc_<year>.json                  输入质检结果(步骤2)
+  qc_outputs_<year>.json          发布前输出语义质检(独立 contract)
+  qc_regression_inputs.json       发布前回归输入质检(独立 contract)
   indicators_country_<year>.csv   国家级指标汇总(步骤3–6，并供步骤7–10可视化)
   indicators_industry_<year>.csv  国家-行业级指标(步骤3–6，并供步骤7–10可视化)
   network_edges_<year>.csv        双边贸易流 top 边(步骤10 网络图)
@@ -29,19 +31,22 @@ from gvcsim.artifacts import NETWORK_ALGORITHM
 from gvcsim import config as config_module
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, available_years, processed_years
 from gvcsim.data.citations import artifact_data_sources
-from gvcsim.data import controls, loader, quality
+from gvcsim.data.raw_icio import raw_dimensions_metadata
+from gvcsim.data import controls, loader, output_quality, quality, regression_quality
 from gvcsim.indicators import length, network, production, tradeflow
 from gvcsim.indicators.core import build_arrays
 
 
 class QualityGateError(RuntimeError):
-    """fatal QC 未获显式 override，产物不得发布。"""
+    """A fatal QC gate stopped publication, with its override policy attached."""
 
-    def __init__(self, scope: str, summary: dict):
+    def __init__(self, scope: str, summary: dict, *, override_allowed: bool = True):
         self.scope = scope
         self.summary = summary
+        self.override_allowed = override_allowed
         names = "、".join(summary.get("fatal") or [])
-        super().__init__(f"{scope} 存在 fatal 质检失败，已停止发布: {names}")
+        policy = "" if override_allowed else "（该 scope 的 fatal 检查不可 override）"
+        super().__init__(f"{scope} 存在 fatal 质检失败，已停止发布{policy}: {names}")
 
 
 @contextmanager
@@ -65,24 +70,46 @@ def _using_processed_dir(path: Path):
         controls.PROCESSED_DIR = old_controls
 
 
-def _gate_qc(scope: str, checks: list[quality.QcCheck], allow_qc_override: bool) -> dict:
-    summary = quality.summarize_checks(checks, override=allow_qc_override)
+def _gate_qc(
+    scope: str,
+    checks: list[quality.QcCheck],
+    allow_qc_override: bool,
+    *,
+    override_allowed: bool = True,
+) -> dict:
+    """Apply QC policy; shock fatal checks are deliberately non-overridable."""
+    if type(allow_qc_override) is not bool or type(override_allowed) is not bool:
+        raise ValueError("QC override 必须是布尔值")
+    summary = quality.summarize_checks(
+        checks,
+        override=allow_qc_override and override_allowed,
+    )
     if not summary["publishable"]:
-        raise QualityGateError(scope, summary)
+        raise QualityGateError(scope, summary, override_allowed=override_allowed)
     return summary
 
 
 def _release_qc_metadata(directory: Path, years: list[int], *, override: bool) -> dict:
-    def read_summary(filename: str) -> dict:
+    def read_summary(filename: str, scope: str) -> dict:
         payload = json.loads((directory / filename).read_text(encoding="utf-8"))
-        if not isinstance(payload, list) or any(not isinstance(item, dict) for item in payload):
-            raise RuntimeError(f"QC 文件格式无效:{filename}")
-        return quality.summarize_serialized_checks(payload, override=override)
+        checks = quality.validate_serialized_checks(payload, scope=scope)
+        return quality.summarize_serialized_checks(checks, override=override)
 
     return {
-        "years": {str(year): read_summary(f"qc_{year}.json") for year in years},
-        "controls": read_summary("qc_controls.json"),
-        "shocks": read_summary("qc_shocks.json"),
+        "years": {
+            str(year): read_summary(f"qc_{year}.json", quality.QC_SCOPE_ICIO)
+            for year in years
+        },
+        "controls": read_summary("qc_controls.json", quality.QC_SCOPE_CONTROLS),
+        # Shock schema, provenance, and semantic fatal checks are a formal
+        # publication boundary.  CLI teaching override never persists here.
+        "shocks": quality.summarize_serialized_checks(
+            quality.validate_serialized_checks(
+                json.loads((directory / "qc_shocks.json").read_text(encoding="utf-8")),
+                scope=quality.QC_SCOPE_SHOCKS,
+            ),
+            override=False,
+        ),
     }
 
 
@@ -149,7 +176,11 @@ def compute_year(year: int, verbose: bool = True, *, allow_qc_override: bool = F
     log(f"[{year}] 完成,产物已写入 {PROCESSED_DIR}")
 
 
-def build_panel(*, allow_qc_override: bool = False) -> pd.DataFrame:
+def build_panel(
+    *,
+    allow_qc_override: bool = False,
+    allow_stylized_shock_fallback: bool = False,
+) -> pd.DataFrame:
     """合并所有已计算年份为长面板,并 merge 冲击数据(演示版)。
 
     行业级面板(panel_industry.csv)是回归的默认样本;国家级面板的冲击变量
@@ -194,12 +225,22 @@ def build_panel(*, allow_qc_override: bool = False) -> pd.DataFrame:
     # ---- 行业级 ----
     countries = sorted(sector["country"].unique())
     sectors = sorted(sector["industry"].unique())
-    shocks.write_demo(countries, sectors, years)
+    shocks.write_demo(
+        countries,
+        sectors,
+        years,
+        allow_stylized_fallback=allow_stylized_shock_fallback,
+    )
     shock_df = shocks.load_shocks()
     shock_checks = quality.check_shock_panel(shock_df, countries, sectors, years)
     with open(PROCESSED_DIR / "qc_shocks.json", "w", encoding="utf-8") as f:
         json.dump([c.to_dict() for c in shock_checks], f, ensure_ascii=False, indent=2)
-    shocks_qc = _gate_qc("shock_panel", shock_checks, allow_qc_override)
+    shocks_qc = _gate_qc(
+        "shock_panel",
+        shock_checks,
+        allow_qc_override,
+        override_allowed=False,
+    )
     shock_cols = list(dict.fromkeys(col for pair in shocks.SHOCK_SPECS.values() for col in pair))
     robustness_cols = ["tariff_shock_contemporaneous", "treated_contemporaneous"]
 
@@ -222,12 +263,17 @@ def build_panel(*, allow_qc_override: bool = False) -> pd.DataFrame:
 
     # ---- 国家级:主口径使用首次处理前固定行业出口权重 ----
     # 当期 gross_exports 本身可能已被政策改变；再用它给处理强度加权会让结果
-    # 反向决定 treatment。面板存在前期时取首次处理前最后一年，否则取最早年。
+    # 反向决定 treatment。固定权重必须来自首次处理前发布年，不能回退到处理年。
     any_treated = sector[[treated for _, treated in shocks.SHOCK_SPECS.values()]].max(axis=1) > 0
     treated_years = sector.loc[any_treated, "year"]
-    first_treated_year = int(treated_years.min()) if not treated_years.empty else min(years) + 1
-    pre_years = [year for year in years if year < first_treated_year]
-    weight_year = max(pre_years) if pre_years else min(years)
+    first_treated_year = int(treated_years.min()) if not treated_years.empty else None
+    pre_years = [year for year in years if first_treated_year is None or year < first_treated_year]
+    if not pre_years:
+        raise ValueError(
+            f"国家面板固定处理前权重要求首次处理年 {first_treated_year} 之前至少有一个发布年份；"
+            "不得回退到最早处理年"
+        )
+    weight_year = max(pre_years)
     base_weights = (
         sector.loc[sector["year"] == weight_year, ["country", "industry", "gross_exports"]]
         .rename(columns={"gross_exports": "_baseline_w"})
@@ -282,6 +328,20 @@ def _build_staged_release(
         for year in selected_years:
             compute_year(year, allow_qc_override=allow_qc_override)
         build_panel(allow_qc_override=allow_qc_override)
+        # Output QC is a separate release gate, run only after every yearly output
+        # and both cross-year panels exist. It is never covered by the input-QC override.
+        output_qc_years = {
+            str(year): output_quality.write_output_qc(
+                staging,
+                year,
+                expected_years=selected_years,
+            )[1]
+            for year in selected_years
+        }
+        regression_input_qc = regression_quality.write_regression_input_qc(
+            staging,
+            expected_years=selected_years,
+        )[1]
         release_qc = _release_qc_metadata(staging, selected_years, override=allow_qc_override)
         write_dataset_metadata(
             staging,
@@ -292,7 +352,14 @@ def _build_staged_release(
                 "course_release": config_module.COURSE_RELEASE,
                 "network_algorithm": NETWORK_ALGORITHM,
                 "data_sources": artifact_data_sources(RAW_DATA_DIR),
+                "raw_dimensions": raw_dimensions_metadata(selected_years, RAW_DATA_DIR),
+                "qc_contract": quality.qc_contract_metadata(),
+                "shock_contract": shocks.shock_contract_metadata(),
                 "qc": release_qc,
+                "output_qc_contract": output_quality.output_qc_contract_metadata(),
+                "output_qc": {"years": output_qc_years},
+                "regression_input_qc_contract": regression_quality.regression_input_qc_contract_metadata(),
+                "regression_input_qc": regression_input_qc,
             },
         )
         validate_release(staging)

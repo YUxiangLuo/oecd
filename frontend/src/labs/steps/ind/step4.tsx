@@ -10,6 +10,7 @@
  * 步骤 7-9 是多国归一化对比(找规律)。
  */
 import { api } from "../../../api";
+import { explicitDemoCountry } from "../../../decomposition-model";
 import { DecompositionDemo } from "../../../demos";
 import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
@@ -58,7 +59,7 @@ export function Step4Trade({ meta, step, state }: { meta: Meta; step: Step; stat
           step={4}
           meta={meta}
           primaryYear={controls.year}
-          primaryCountry={controls.country}
+          primaryCountry={explicitDemoCountry(meta.countries, controls.country)}
           onPrimaryChange={controls.setPrimary}
         />
       </ChartStory>

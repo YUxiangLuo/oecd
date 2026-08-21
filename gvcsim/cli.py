@@ -27,7 +27,10 @@ def main() -> None:
     p.add_argument(
         "--allow-qc-override",
         action="store_true",
-        help="明确允许 fatal QC 后继续计算（仅用于教学演示）",
+        help=(
+            "仅对 ICIO/控制变量教学质检允许 fatal 后继续；"
+            "冲击 schema、来源与语义 fatal 永不可 override"
+        ),
     )
 
     p = sub.add_parser("serve", help="启动 API 服务")
@@ -93,7 +96,11 @@ def main() -> None:
         try:
             pipeline.run(args.years, allow_qc_override=args.allow_qc_override)
         except pipeline.QualityGateError as error:
-            raise SystemExit(f"{error}\n如确认仅用于教学演示，可显式加 --allow-qc-override。") from error
+            if error.override_allowed:
+                guidance = "如确认仅用于 ICIO/控制变量教学演示，可显式加 --allow-qc-override。"
+            else:
+                guidance = "冲击 schema、来源与语义 fatal 检查不可 override；请修复输入后重新计算。"
+            raise SystemExit(f"{error}\n{guidance}") from error
     elif args.command == "serve":
         import uvicorn
 

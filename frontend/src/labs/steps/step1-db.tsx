@@ -23,24 +23,27 @@ const ROW_HEADER: Record<DbTableKind, { label: string; title: string }> = {
 /** 表格怎么读:行是供给方、列是使用方——这是投入产出表最容易被看反的一点,
  *  因为"行"虽然横向延伸,它的标签却竖排在最左侧。按表类型给出具体读法。 */
 const HOW_TO_READ: Record<DbTableKind, string> = {
-  z: "行 = 供给方,列 = 使用方。某一格 = 行的「国家×行业」向 列的「国家×行业」提供的中间投入(百万美元)。",
-  y: "行 = 供给方,列 = 最终需求去向。某一格 = 行的「国家×行业」被 列的「目的国 × 需求类别」吸收的金额(百万美元)。",
-  accounts: "每一行是一个「国家×行业」,列是该行业的账户项(TLS / VA / OUT);此表没有列方向的国家维度。",
+  z: "行 = 供给方,列 = 使用方。某一格 = 行的「国家×行业」向 列的「国家×行业」提供的中间投入。单位：Million USD（百万美元）。",
+  y: "行 = 供给方,列 = 最终需求去向。某一格 = 行的「国家×行业」被 列的「目的国 × 需求类别」吸收的金额。单位：Million USD（百万美元）。",
+  accounts: "每一行是一个「国家×行业」,列是该行业的账户项(TLS / VA / OUT);此表没有列方向的国家维度。单位：Million USD（百万美元）。",
 };
 
 const ACCOUNT_HELP: Record<string, string> = {
   TLS: "产品税减补贴。为负表示该账户合计为净补贴；步骤3 的 taxsub 是其沿投入产出链传导后的出口含量。",
   VA: "增加值：劳动报酬、资本回报等本地创造的价值，是步骤4生产活动分解的总来源。",
-  OUT: "总产出。按行看应等于中间使用 Z 的行和加最终需求 Y 的行和，步骤2会检验这条会计恒等式。",
+  OUT: "总产出。两种完整恒等式为：按行 OUT = Z 行和 + Y 行和；按列 OUT = Z 列和 + VA + TLS。步骤2会检验这些会计恒等式。",
 };
 
 /** OECD ICIO 最终需求类别缩写 → 中文名(Y 表列名形如 USA_HFCE:目的国_需求类别) */
+export const STEP1_ACCOUNT_LEGEND = "TLS = 产品税减补贴（负 TLS 表示净补贴，不是缺失）；VA = 增加值；OUT = 总产出；INVNT = 存货变化（负 INVNT 表示有符号的存货减少调整，不是缺失）。";
+export const STEP1_OUT_IDENTITY_GUIDE = "按行 OUT = Z 行和 + Y 行和；按列 OUT = Z 列和 + VA + TLS。筛选后的切片合计与本页列合计都只是完整和的一部分。";
+
 const FD_HELP: Record<string, string> = {
   HFCE: "居民最终消费支出",
   NPISH: "为居民服务的非营利机构消费",
   GGFC: "政府最终消费支出",
   GFCF: "固定资本形成总额(投资)",
-  INVNT: "存货变化",
+  INVNT: "存货变化（有符号调整）；负值表示存货减少，不是缺失值",
   DPABR: "居民境外直接购买(出境旅行等消费)",
 };
 
@@ -95,8 +98,8 @@ function DatabaseGuide({ meta }: { meta: DbMeta }) {
         </table>
       </ScrollableRegion>
       <p className="muted" style={{ maxWidth: 820, marginTop: 10 }}>
-        本系统默认并全程使用 <b>OECD ICIO</b>(2023 版,当前载入 {meta.years[0]}–{meta.years.at(-1)}):它口径官方、国家×行业相对平衡,最契合本课程的 GVC 指标计算与教学。
-        切换到其他数据库需替换原始表与解析器,不在本教学系统范围内;各库的覆盖数字随版本更新、分类口径不同,不能直接横向比较。
+        本系统使用 <b>OECD ICIO</b>(2023 版,当前载入 {meta.years[0]}–{meta.years.at(-1)})作为 GVC <b>指标输入</b>并生成派生结果；这项 OECD 来源声明不覆盖回归控制或政策情景。
+        回归里的<b>模拟宏观控制</b>是以 ICIO 派生规模为锚的确定性教学 mock，不是 WDI 数据或 IMF 观测；政策冲击与政策情景也是教学编码，不是 OECD 数据。切换到其他数据库需替换原始表与解析器,不在本教学系统范围内;各库的覆盖数字随版本更新、分类口径不同,不能直接横向比较。
       </p>
     </details>
   );
@@ -104,7 +107,7 @@ function DatabaseGuide({ meta }: { meta: DbMeta }) {
 
 /** 步骤1:本地 OECD ICIO 原始表浏览 */
 /** 自动保存学生主动查看过的切片与单元格，供恢复界面和生成报告。 */
-interface DbStepState extends QuizCompletionState, Record<string, unknown> {
+export interface DbStepState extends QuizCompletionState, Record<string, unknown> {
   slice?: {
     year: number;
     table: string;
@@ -126,7 +129,7 @@ interface DbStepState extends QuizCompletionState, Record<string, unknown> {
   };
 }
 
-interface DbSliceSelection {
+export interface DbSliceSelection {
   year: number;
   table: DbTableKind;
   rowCountry: string;
@@ -211,6 +214,266 @@ export function restoreDbSlice(meta: DbMeta, saved?: DbStepState["slice"]) {
 export function dbColumnCountryForTable(meta: DbMeta, current: string, nextTable: DbTableKind): string {
   if (nextTable === "accounts" || meta.countries.includes(current)) return current;
   return meta.countries.includes("USA") ? "USA" : meta.countries[0] ?? "";
+}
+
+export interface DbCellCoordinate {
+  key: string;
+  rowIndex: number;
+  columnIndex: number;
+  row: string;
+  column: string;
+  value: number;
+}
+
+const dbCellKey = (rowIndex: number, columnIndex: number) => `${rowIndex}:${columnIndex}`;
+
+/** Page-local finite cells in visual row/column order. */
+export function finiteDbCells(
+  rows: DbSlice["rows"],
+  columns: string[],
+): DbCellCoordinate[] {
+  const cells: DbCellCoordinate[] = [];
+  rows.forEach((row, rowIndex) => {
+    columns.forEach((column, columnIndex) => {
+      const value = row[column];
+      if (column === "row" || typeof value !== "number" || !Number.isFinite(value)) return;
+      cells.push({
+        key: dbCellKey(rowIndex, columnIndex),
+        rowIndex,
+        columnIndex,
+        row: String(row.row ?? ""),
+        column,
+        value,
+      });
+    });
+  });
+  return cells;
+}
+
+export function normalizeDbActiveCell(
+  cells: DbCellCoordinate[],
+  requestedKey: string | null,
+  captured?: DbStepState["observation"],
+): DbCellCoordinate | null {
+  const requested = requestedKey ? cells.find((cell) => cell.key === requestedKey) : undefined;
+  if (requested) return requested;
+  const recorded = captured && cells.find((cell) => (
+    cell.row === captured.row
+    && cell.column === captured.column
+    && cell.value === captured.value
+  ));
+  return recorded || cells[0] || null;
+}
+
+export type DbCellNavigationKey = "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | "Home" | "End";
+
+/** Resolve one roving-focus movement without wrapping across row boundaries. */
+export function moveDbCell(
+  cells: DbCellCoordinate[],
+  currentKey: string,
+  key: DbCellNavigationKey,
+  ctrlKey = false,
+): DbCellCoordinate | null {
+  const current = cells.find((cell) => cell.key === currentKey);
+  if (!current) return cells[0] || null;
+  if (ctrlKey && key === "Home") return cells[0] || current;
+  if (ctrlKey && key === "End") return cells.at(-1) || current;
+
+  if (key === "Home" || key === "End") {
+    const row = cells.filter((cell) => cell.rowIndex === current.rowIndex);
+    return (key === "Home" ? row[0] : row.at(-1)) || current;
+  }
+  if (key === "ArrowLeft" || key === "ArrowRight") {
+    const row = cells.filter((cell) => cell.rowIndex === current.rowIndex);
+    const index = row.findIndex((cell) => cell.key === current.key);
+    return row[index + (key === "ArrowLeft" ? -1 : 1)] || current;
+  }
+  const candidates = cells.filter((cell) => (
+    cell.columnIndex === current.columnIndex
+    && (key === "ArrowUp" ? cell.rowIndex < current.rowIndex : cell.rowIndex > current.rowIndex)
+  ));
+  return (key === "ArrowUp" ? candidates.at(-1) : candidates[0]) || current;
+}
+
+export function dbCellAccessibleName(
+  table: DbTableKind,
+  cell: Pick<DbCellCoordinate, "row" | "column" | "value">,
+  recorded: boolean,
+): string {
+  const column = table === "y" ? formatYColumnHeader(cell.column) : cell.column;
+  return `${cell.row}，${column}，值 ${fmtDb(cell.value)} Million USD（百万美元），${recorded ? "已记录" : "未记录"}；按 Enter 或空格记录`;
+}
+
+export function DbSliceTable({
+  slice,
+  table,
+  focusScopeKey,
+  selection,
+  selectedObservation,
+  onCapture,
+}: {
+  slice: DbSlice | null;
+  table: DbTableKind;
+  focusScopeKey: string;
+  selection: DbSliceSelection;
+  selectedObservation?: DbStepState["observation"];
+  onCapture: (patch: Pick<DbStepState, "slice" | "observation">) => void;
+}) {
+  const [roving, setRoving] = useState<{ scope: string; key: string } | null>(null);
+  const buttonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const columns = slice?.columns ?? [];
+  const rows = slice?.rows ?? [];
+  const cells = finiteDbCells(rows, columns);
+  const requestedKey = roving?.scope === focusScopeKey ? roving.key : null;
+  const capturedForSlice = selectedObservation
+    && selectedObservation.year === slice?.year
+    && selectedObservation.table === table
+    ? selectedObservation
+    : undefined;
+  const activeCell = normalizeDbActiveCell(cells, requestedKey, capturedForSlice);
+  const dataColumns = columns.filter((column) => column !== "row");
+  const rowHeatMax = rows.map((row) => (
+    Math.max(...dataColumns.map((column) => Math.abs(typeof row[column] === "number" ? row[column] : 0)), 0)
+  ));
+  const columnTotals = Object.fromEntries(dataColumns.map((column) => [
+    column,
+    rows.reduce((sum, row) => sum + (typeof row[column] === "number" ? row[column] : 0), 0),
+  ]));
+  const showSummaries = table !== "accounts" && Boolean(slice?.row_summaries?.length);
+  const activeTable = DB_TABLES.find((item) => item.key === table)!;
+
+  const focusCell = (cell: DbCellCoordinate) => {
+    setRoving({ scope: focusScopeKey, key: cell.key });
+    const focus = () => {
+      const button = buttonRefs.current.get(cell.key);
+      button?.focus();
+      button?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(focus);
+    else globalThis.setTimeout(focus, 0);
+  };
+
+  return (
+    <ScrollableRegion
+      className="table-wrap bounded-data-table"
+      label={`${activeTable.label}数据表，可横向滚动`}
+      focusable={activeCell == null}
+    >
+      <table className="data-table db-table">
+        <caption>
+          {`${activeTable.label}数据表 · 单位：Million USD（百万美元）。Tab 进入一个数据单元格；方向键和 Home、End 在本页有限数值单元格间移动；Enter 或空格记录；Tab 或 Shift+Tab 离开表格。`}
+        </caption>
+        <thead>
+          <tr>
+            {(slice?.columns ?? ["row"]).map((column, index) => (
+              <th
+                key={column}
+                scope="col"
+                title={column === "row" ? ROW_HEADER[table].title : columnHelp(column)}
+                aria-label={column === "row" ? ROW_HEADER[table].label : (table === "y" ? formatYColumnHeader(column) : column)}
+                style={index === 0 ? { position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" } : undefined}
+              >
+                {column === "row"
+                  ? `${ROW_HEADER[table].label} ⓘ`
+                  : `${table === "y" ? formatYColumnHeader(column) : column}${columnHelp(column) ? " ⓘ" : ""}`}
+              </th>
+            ))}
+            {showSummaries && <th scope="col" title="当前筛选列在该行的合计">切片合计</th>}
+            {showSummaries && <th scope="col" title={ACCOUNT_HELP.OUT}>对应 OUT ⓘ</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIndex) => (
+            <tr key={`${row.row ?? "row"}-${rowIndex}`}>
+              {columns.map((column, columnIndex) => {
+                const value = row[column];
+                const numericValue = typeof value === "number" && Number.isFinite(value) ? value : null;
+                const rowLabel = String(row.row ?? "");
+                if (column === "row") {
+                  return (
+                    <th
+                      key={column}
+                      scope="row"
+                      title={columnHelp(column)}
+                      style={{ position: "sticky", left: 0, zIndex: 2, background: "#fff", textAlign: "left" }}
+                    >
+                      {String(value ?? "—")}
+                    </th>
+                  );
+                }
+                const selected = isCapturedDbCell(selectedObservation, {
+                  year: slice?.year ?? selection.year,
+                  table,
+                  row: rowLabel,
+                  column,
+                  value: numericValue,
+                });
+                const intensity = numericValue == null || rowHeatMax[rowIndex] === 0
+                  ? 0
+                  : Math.min(1, Math.abs(numericValue) / rowHeatMax[rowIndex]);
+                const cell = numericValue == null
+                  ? null
+                  : cells.find((candidate) => candidate.rowIndex === rowIndex && candidate.columnIndex === columnIndex) ?? null;
+                return (
+                  <td
+                    key={column}
+                    title={columnHelp(column) ?? (numericValue != null ? `${column}: ${fmtDb(numericValue)}` : undefined)}
+                    style={intensity > 0
+                      ? { background: numericValue != null && numericValue < 0 ? `rgba(227,73,72,${0.06 + intensity * 0.24})` : `rgba(42,120,214,${0.05 + intensity * 0.25})` }
+                      : undefined}
+                  >
+                    {!cell || numericValue == null ? String(value ?? "—") : (
+                      <button
+                        ref={(button) => {
+                          if (button) buttonRefs.current.set(cell.key, button);
+                          else buttonRefs.current.delete(cell.key);
+                        }}
+                        type="button"
+                        className={`db-observation-cell${selected ? " selected" : ""}`}
+                        tabIndex={activeCell?.key === cell.key ? 0 : -1}
+                        aria-pressed={selected}
+                        aria-label={dbCellAccessibleName(table, cell, selected)}
+                        title={`${rowLabel} × ${table === "y" ? formatYColumnHeader(column) : column}: ${fmtDb(numericValue)} Million USD（百万美元）；点击记录这个观察值`}
+                        onFocus={() => setRoving({ scope: focusScopeKey, key: cell.key })}
+                        onKeyDown={(event) => {
+                          if (!(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"] as string[]).includes(event.key)) return;
+                          event.preventDefault();
+                          const next = moveDbCell(cells, cell.key, event.key as DbCellNavigationKey, event.ctrlKey);
+                          if (next) focusCell(next);
+                        }}
+                        onClick={() => onCapture(captureDbObservation(selection, {
+                          row: rowLabel,
+                          column,
+                          value: numericValue,
+                        }))}
+                      >
+                        {fmtDb(numericValue)}{selected ? " ✓" : ""}
+                      </button>
+                    )}
+                  </td>
+                );
+              })}
+              {showSummaries && <td>{fmtDb(slice?.row_summaries?.[rowIndex]?.slice_total ?? null)}</td>}
+              {showSummaries && <td>{fmtDb(slice?.row_summaries?.[rowIndex]?.out ?? null)}</td>}
+            </tr>
+          ))}
+          {slice && rows.length === 0 && (
+            <tr><td colSpan={slice.columns.length || 1}>无匹配记录</td></tr>
+          )}
+        </tbody>
+        {slice && rows.length > 0 && (
+          <tfoot>
+            <tr style={{ fontWeight: 700, background: "#f7f8fb" }}>
+              <th scope="row" style={{ position: "sticky", left: 0, zIndex: 2, background: "#f7f8fb", textAlign: "left" }}>本页列合计</th>
+              {dataColumns.map((column) => <td key={column}>{fmtDb(columnTotals[column])}</td>)}
+              {showSummaries && <td>{fmtDb((slice.row_summaries ?? []).reduce((sum, item) => sum + item.slice_total, 0))}</td>}
+              {showSummaries && <td>—</td>}
+            </tr>
+          </tfoot>
+        )}
+      </table>
+    </ScrollableRegion>
+  );
 }
 
 export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
@@ -311,14 +574,6 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
   const pages = slice ? Math.max(1, Math.ceil(slice.total / slice.page_size)) : 1;
   const colOptions = table === "y" ? meta.final_demand_categories : meta.sectors;
   const activeTable = DB_TABLES.find((t) => t.key === table)!;
-  const dataColumns = (slice?.columns ?? []).filter((column) => column !== "row");
-  const rowHeatMax = (slice?.rows ?? []).map((row) =>
-    Math.max(...dataColumns.map((column) => Math.abs(typeof row[column] === "number" ? row[column] : 0)), 0));
-  const columnTotals = Object.fromEntries(dataColumns.map((column) => [
-    column,
-    (slice?.rows ?? []).reduce((sum, row) => sum + (typeof row[column] === "number" ? row[column] : 0), 0),
-  ]));
-  const showSummaries = table !== "accounts" && Boolean(slice?.row_summaries?.length);
   const selectedObservation = state.data?.observation;
   const observationSource = selectedObservation ? observationSourceLabel(selectedObservation) : null;
 
@@ -430,116 +685,38 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
         <b>怎么读这张表：</b>{HOW_TO_READ[table]}
       </div>
       <div className="tipbox db-fullscreen-note" style={{ marginBottom: 10 }}>
-        <b>记录一个观察值：</b>点击任意数值单元格，系统会保存它的行、列与数值供实验报告使用。切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格；再点另一个单元格才会覆盖。
+        <b>记录一个观察值：</b>所有数值单位均为 <b>Million USD（百万美元）</b>。点击数值单元格，或按 Tab 进入表格后用方向键 / Home / End 移动、按 Enter 或空格记录；再按 Tab 可离开表格。系统只在明确激活时保存该格的行、列与数值。切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格；记录另一个单元格才会覆盖。
+      </div>
+      <div className="tipbox db-fullscreen-note" style={{ marginBottom: 10 }}>
+        <b>账户与符号图例（始终适用）：</b> {STEP1_ACCOUNT_LEGEND}
       </div>
       <div className="observation-strip" aria-live="polite">
         <b>已选原始数据点</b>
         {selectedObservation ? (
           <span>
-            {selectedObservation.row} × {formatYColumnHeader(selectedObservation.column)} = {fmtDb(selectedObservation.value)}
+            {selectedObservation.row} × {formatYColumnHeader(selectedObservation.column)} = {fmtDb(selectedObservation.value)} Million USD（百万美元）
             {observationSource ? `（${observationSource}）` : ""}
           </span>
         ) : <span>尚未选择</span>}
       </div>
-      <ScrollableRegion className="table-wrap bounded-data-table" label={`${activeTable.label}数据表，可横向滚动`}>
-        <table className="data-table db-table">
-          <thead>
-            <tr>
-              {(slice?.columns ?? ["row"]).map((c, index) => (
-                <th
-                  key={c}
-                  title={c === "row" ? ROW_HEADER[table].title : columnHelp(c)}
-                  aria-label={c === "row" ? ROW_HEADER[table].label : (table === "y" ? formatYColumnHeader(c) : c)}
-                  style={index === 0 ? { position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" } : undefined}
-                >
-                  {/* 首列原样输出后端的 "row",学生看到的就是个英文字段名;这里换成
-                      说明它是什么方向的中文表头,与上方筛选器的「(行)」对应。 */}
-                  {c === "row"
-                    ? `${ROW_HEADER[table].label} ⓘ`
-                    : `${table === "y" ? formatYColumnHeader(c) : c}${columnHelp(c) ? " ⓘ" : ""}`}
-                </th>
-              ))}
-              {showSummaries && <th title="当前筛选列在该行的合计">切片合计</th>}
-              {showSummaries && <th title={ACCOUNT_HELP.OUT}>对应 OUT ⓘ</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {(slice?.rows ?? []).map((r, i) => (
-              <tr key={`${r.row ?? "row"}-${i}`}>
-                {(slice?.columns ?? []).map((c, columnIndex) => {
-                  const value = r[c];
-                  const numericValue = typeof value === "number" ? value : null;
-                  const rowLabel = String(r.row ?? "");
-                  const selected = isCapturedDbCell(selectedObservation, {
-                    year: slice?.year ?? year,
-                    table,
-                    row: rowLabel,
-                    column: c,
-                    value: numericValue,
-                  });
-                  const intensity = c === "row" || numericValue == null || rowHeatMax[i] === 0
-                    ? 0
-                    : Math.min(1, Math.abs(numericValue) / rowHeatMax[i]);
-                  return (
-                    <td
-                      key={c}
-                      title={columnHelp(c) ?? (typeof value === "number" ? `${c}: ${fmtDb(value)}` : undefined)}
-                      style={columnIndex === 0
-                        ? { position: "sticky", left: 0, zIndex: 2, background: "#fff", textAlign: "left" }
-                        : intensity > 0
-                          ? { background: numericValue != null && numericValue < 0 ? `rgba(227,73,72,${0.06 + intensity * 0.24})` : `rgba(42,120,214,${0.05 + intensity * 0.25})` }
-                          : undefined}
-                    >
-                      {c === "row" || numericValue == null ? String(value ?? "—") : (
-                        <button
-                          type="button"
-                          className={`db-observation-cell${selected ? " selected" : ""}`}
-                          aria-pressed={selected}
-                          title={`${rowLabel} × ${table === "y" ? formatYColumnHeader(c) : c}: ${fmtDb(numericValue)}；点击记录这个观察值`}
-                          onClick={() => {
-                            if (!slice) return;
-                            state.save(captureDbObservation(
-                              {
-                                year: slice.year,
-                                table,
-                                rowCountry,
-                                colCountry,
-                                rowSector,
-                                colSector,
-                              },
-                              { row: rowLabel, column: c, value: numericValue },
-                            ));
-                          }}
-                        >
-                          {fmtDb(numericValue)}{selected ? " ✓" : ""}
-                        </button>
-                      )}
-                    </td>
-                  );
-                })}
-                {showSummaries && <td>{fmtDb(slice?.row_summaries?.[i]?.slice_total ?? null)}</td>}
-                {showSummaries && <td>{fmtDb(slice?.row_summaries?.[i]?.out ?? null)}</td>}
-              </tr>
-            ))}
-            {slice && slice.rows.length === 0 && (
-              <tr><td colSpan={slice.columns.length || 1}>无匹配记录</td></tr>
-            )}
-          </tbody>
-          {slice && slice.rows.length > 0 && (
-            <tfoot>
-              <tr style={{ fontWeight: 700, background: "#f7f8fb" }}>
-                <td style={{ position: "sticky", left: 0, zIndex: 2, background: "#f7f8fb", textAlign: "left" }}>本页列合计</td>
-                {dataColumns.map((column) => <td key={column}>{fmtDb(columnTotals[column])}</td>)}
-                {showSummaries && <td>{fmtDb((slice.row_summaries ?? []).reduce((sum, item) => sum + item.slice_total, 0))}</td>}
-                {showSummaries && <td>—</td>}
-              </tr>
-            </tfoot>
-          )}
-        </table>
-      </ScrollableRegion>
+      <DbSliceTable
+        slice={slice}
+        table={table}
+        focusScopeKey={sliceKey}
+        selection={{
+          year: slice?.year ?? year ?? 0,
+          table,
+          rowCountry,
+          colCountry,
+          rowSector,
+          colSector,
+        }}
+        selectedObservation={selectedObservation}
+        onCapture={state.save}
+      />
       {table !== "accounts" && slice && (
         <div className="tipbox db-fullscreen-note" style={{ marginTop: 12 }}>
-          每个数据行同时给出当前切片合计与该国家–行业的 OUT。完整口径下，OUT = Z 行和 + Y 行和；当前切片只是一部分，差额来自未展示的目的国或需求列。
+          两条完整口径恒等式：<b>{STEP1_OUT_IDENTITY_GUIDE}</b> 差额来自未展示的国家、行业或最终需求列。
         </div>
       )}
       <div style={{ marginTop: 12 }}>
