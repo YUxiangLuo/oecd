@@ -359,12 +359,8 @@ def test_shock_panel_applies_global_stable_sort_before_pagination(monkeypatch, s
     frame["sanction_shock"] = [0.2, 0.1, 0.2, 0.2]
     monkeypatch.setattr(data_routes, "_read_shocks", lambda: frame.copy())
 
-    first = data_routes.shock_panel(
-        2020, "sanctions", filter="all", sort=sort, page=1, page_size=2
-    )
-    second = data_routes.shock_panel(
-        2020, "sanctions", filter="all", sort=sort, page=2, page_size=2
-    )
+    first = data_routes.shock_panel(2020, "sanctions", filter="all", sort=sort, page=1, page_size=2)
+    second = data_routes.shock_panel(2020, "sanctions", filter="all", sort=sort, page=2, page_size=2)
 
     combined = [(row["country"], row["sector"]) for row in first["rows"] + second["rows"]]
     assert combined == expected
@@ -388,9 +384,7 @@ def test_shock_intensity_sort_uses_the_selected_type_column(monkeypatch, shock_t
     monkeypatch.setattr(data_routes, "_read_shocks", lambda: frame.copy())
     monkeypatch.setattr(data_routes, "_with_tariff_exposure", lambda page, _year: page)
 
-    result = data_routes.shock_panel(
-        2020, shock_type, filter="all", sort="intensity_desc", page=1, page_size=2
-    )
+    result = data_routes.shock_panel(2020, shock_type, filter="all", sort="intensity_desc", page=1, page_size=2)
     retry_equivalent = data_routes.shock_panel(
         2020, shock_type, filter="all", sort="intensity_desc", page=1, page_size=2
     )
@@ -641,9 +635,7 @@ def test_oecd_page_enrichment_fails_closed_for_missing_lookup_contract(monkeypat
     if case == "unknown-event":
         page = _tariff_enrichment_page(note="not-in-catalogue")
     elif case == "unknown-stylized-event":
-        page = _tariff_enrichment_page(
-            note="not-in-catalogue", source=shocks.EXPOSURE_SOURCE_STYLIZED
-        )
+        page = _tariff_enrichment_page(note="not-in-catalogue", source=shocks.EXPOSURE_SOURCE_STYLIZED)
     elif case == "blank-positive-event":
         page = _tariff_enrichment_page(note=np.nan)
     elif case == "blank-treated-event":
@@ -651,9 +643,7 @@ def test_oecd_page_enrichment_fails_closed_for_missing_lookup_contract(monkeypat
     elif case == "blank-positive-stylized-event":
         page = _tariff_enrichment_page(note=pd.NA, source=shocks.EXPOSURE_SOURCE_STYLIZED)
     elif case == "blank-treated-stylized-event":
-        page = _tariff_enrichment_page(
-            note="", shock_intensity=0.0, treated=1, source=shocks.EXPOSURE_SOURCE_STYLIZED
-        )
+        page = _tariff_enrichment_page(note="", shock_intensity=0.0, treated=1, source=shocks.EXPOSURE_SOURCE_STYLIZED)
     elif case == "absent-coverage":
         available = {}
         fixed = {}
@@ -700,9 +690,7 @@ def test_structural_zero_final_page_is_stable_direct_and_authenticated(teaching_
         "page_size": 1,
     }
 
-    direct = data_routes.shock_panel(
-        2020, "tariff", filter="all", sort="intensity_desc", page=2, page_size=1
-    )
+    direct = data_routes.shock_panel(2020, "tariff", filter="all", sort="intensity_desc", page=2, page_size=1)
     client = _authenticated_client(teaching_db)
     response = client.get("/api/shocks/panel", params=params)
     retry_equivalent = client.get("/api/shocks/panel", params=params)

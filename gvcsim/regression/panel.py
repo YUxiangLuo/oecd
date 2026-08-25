@@ -1208,8 +1208,7 @@ def _refresh_estimation_flow(
                 str(int(year)): int(count) for year, count in retained_first.value_counts().sort_index().items()
             },
             "contributing_cohorts": {
-                str(int(year)): int(count)
-                for year, count in contributing_first.value_counts().sort_index().items()
+                str(int(year)): int(count) for year, count in contributing_first.value_counts().sort_index().items()
             },
         }
     )

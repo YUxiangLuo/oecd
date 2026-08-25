@@ -220,18 +220,32 @@ def _complete_shock_rows(values: list[float]) -> pd.DataFrame:
     rows = []
     for index, value in enumerate(values):
         hit = value > 0
-        rows.append({
-            "country": f"C{index}", "sector": "s1", "year": 2020, "shock_type": "tariff",
-            "tariff_shock": value, "treated": int(value > 0.001),
-            "announced_date": "2020-01-01" if hit else "",
-            "effective_date": "2020-02-01" if hit else "", "note": "event" if hit else "",
-            "sanction_shock": 0.0, "sanction_treated": 0,
-            "sanction_announced_date": "", "sanction_effective_date": "", "sanction_note": "",
-            "export_control_shock": 0.0, "export_control_treated": 0,
-            "export_control_announced_date": "", "export_control_effective_date": "",
-            "export_control_note": "", "tariff_exposure_source": "oecd_icio_bilateral_flow",
-            "tariff_exposure_mode": "fixed_pretreatment", "tariff_exposure_disclosure": "",
-        })
+        rows.append(
+            {
+                "country": f"C{index}",
+                "sector": "s1",
+                "year": 2020,
+                "shock_type": "tariff",
+                "tariff_shock": value,
+                "treated": int(value > 0.001),
+                "announced_date": "2020-01-01" if hit else "",
+                "effective_date": "2020-02-01" if hit else "",
+                "note": "event" if hit else "",
+                "sanction_shock": 0.0,
+                "sanction_treated": 0,
+                "sanction_announced_date": "",
+                "sanction_effective_date": "",
+                "sanction_note": "",
+                "export_control_shock": 0.0,
+                "export_control_treated": 0,
+                "export_control_announced_date": "",
+                "export_control_effective_date": "",
+                "export_control_note": "",
+                "tariff_exposure_source": "oecd_icio_bilateral_flow",
+                "tariff_exposure_mode": "fixed_pretreatment",
+                "tariff_exposure_disclosure": "",
+            }
+        )
     return pd.DataFrame(rows)
 
 
@@ -254,18 +268,28 @@ def test_shock_exposure_provenance_rejects_unknown_mixed_and_undisclosed_fallbac
 
     unknown = frame.copy()
     unknown["tariff_exposure_mode"] = "unknown"
-    assert not next(c for c in quality.check_shock_panel(unknown, ["C0", "C1"], ["s1"], [2020]) if c.name == provenance_name).passed
+    assert not next(
+        c for c in quality.check_shock_panel(unknown, ["C0", "C1"], ["s1"], [2020]) if c.name == provenance_name
+    ).passed
 
     mixed = frame.copy()
     mixed.loc[1, "tariff_exposure_source"] = "stylized_teaching_fallback"
-    mixed.loc[1, "tariff_exposure_disclosure"] = "风格化出口暴露度仅供教学测试，不是 OECD ICIO 观测值，不得表述为官方数据。"
-    assert not next(c for c in quality.check_shock_panel(mixed, ["C0", "C1"], ["s1"], [2020]) if c.name == provenance_name).passed
+    mixed.loc[1, "tariff_exposure_disclosure"] = (
+        "风格化出口暴露度仅供教学测试，不是 OECD ICIO 观测值，不得表述为官方数据。"
+    )
+    assert not next(
+        c for c in quality.check_shock_panel(mixed, ["C0", "C1"], ["s1"], [2020]) if c.name == provenance_name
+    ).passed
 
     fallback = frame.copy()
     fallback["tariff_exposure_source"] = "stylized_teaching_fallback"
-    assert not next(c for c in quality.check_shock_panel(fallback, ["C0", "C1"], ["s1"], [2020]) if c.name == provenance_name).passed
+    assert not next(
+        c for c in quality.check_shock_panel(fallback, ["C0", "C1"], ["s1"], [2020]) if c.name == provenance_name
+    ).passed
 
     fallback["tariff_exposure_disclosure"] = "风格化出口暴露度仅供教学测试，不是 OECD ICIO 观测值，不得表述为官方数据。"
-    check = next(c for c in quality.check_shock_panel(fallback, ["C0", "C1"], ["s1"], [2020]) if c.name == provenance_name)
+    check = next(
+        c for c in quality.check_shock_panel(fallback, ["C0", "C1"], ["s1"], [2020]) if c.name == provenance_name
+    )
     assert check.passed
     assert check.effective_severity == quality.QC_DISCLOSURE

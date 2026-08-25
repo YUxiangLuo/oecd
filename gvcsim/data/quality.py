@@ -37,10 +37,7 @@ LEONTIEF_CONDITION_FATAL = 1e12
 # 关键国家:缺了说明解析出了问题
 KEY_REGIONS = ["CHN", "USA", "JPN", "DEU"]
 
-SHOCK_VALUE_PAIRS = [
-    (spec["shock_field"], spec["treated_field"])
-    for spec in SHOCK_FIELD_SPECS.values()
-]
+SHOCK_VALUE_PAIRS = [(spec["shock_field"], spec["treated_field"]) for spec in SHOCK_FIELD_SPECS.values()]
 
 SHOCK_EVENT_COLUMNS = [
     (
@@ -103,11 +100,7 @@ QC_EXPECTED_CHECKS: dict[str, tuple[str, ...]] = {
 }
 QC_FAILURE_SEVERITIES: dict[str, dict[str, str]] = {
     scope: {
-        name: (
-            QC_WARNING
-            if scope == QC_SCOPE_ICIO and name == "因子投入与派生指标定义域(VA/TLS)"
-            else QC_FATAL
-        )
+        name: (QC_WARNING if scope == QC_SCOPE_ICIO and name == "因子投入与派生指标定义域(VA/TLS)" else QC_FATAL)
         for name in names
     }
     for scope, names in QC_EXPECTED_CHECKS.items()
@@ -119,10 +112,7 @@ def qc_contract_metadata() -> dict:
     return {
         "version": QC_CONTRACT_VERSION,
         "scopes": {
-            scope: [
-                {"name": name, "failure_severity": QC_FAILURE_SEVERITIES[scope][name]}
-                for name in names
-            ]
+            scope: [{"name": name, "failure_severity": QC_FAILURE_SEVERITIES[scope][name]} for name in names]
             for scope, names in QC_EXPECTED_CHECKS.items()
         },
     }
@@ -130,11 +120,7 @@ def qc_contract_metadata() -> dict:
 
 def validate_qc_contract_metadata(value: object) -> None:
     """Reject unsupported or incomplete release QC contracts."""
-    if (
-        not isinstance(value, dict)
-        or type(value.get("version")) is not int
-        or value != qc_contract_metadata()
-    ):
+    if not isinstance(value, dict) or type(value.get("version")) is not int or value != qc_contract_metadata():
         raise ValueError(f"不支持或不完整的 QC contract；需要版本 {QC_CONTRACT_VERSION}")
 
 
@@ -181,18 +167,14 @@ def validate_serialized_checks(
             raise ValueError(f"{scope} QC 第 {index + 1} 项 warnings 无效")
         if severity not in QC_SEVERITIES:
             raise ValueError(f"{scope} QC 第 {index + 1} 项 severity 无效:{severity}")
-        expected_severity = (
-            QC_DISCLOSURE if passed and warnings else QC_OK if passed else severity
-        )
+        expected_severity = QC_DISCLOSURE if passed and warnings else QC_OK if passed else severity
         if passed and severity != expected_severity:
             raise ValueError(f"{scope} QC 第 {index + 1} 项 passed/severity 矛盾")
         if not passed and severity not in (QC_WARNING, QC_FATAL):
             raise ValueError(f"{scope} QC 第 {index + 1} 项 passed/severity 矛盾")
         allowed_failure_severity = QC_FAILURE_SEVERITIES[scope].get(name)
         if not passed and allowed_failure_severity is not None and severity != allowed_failure_severity:
-            raise ValueError(
-                f"{scope} QC 第 {index + 1} 项失败严重度必须为 {allowed_failure_severity}"
-            )
+            raise ValueError(f"{scope} QC 第 {index + 1} 项失败严重度必须为 {allowed_failure_severity}")
         names.append(name)
         validated.append(raw)
 
@@ -926,11 +908,7 @@ def check_shock_panel(
     for year, group in coverage_frame.groupby("year"):
         tariff_count = int((group["_tariff_treated"] == 1).sum())
         share = float(tariff_count / total_pairs)
-        mean_hit = (
-            float(group.loc[group["_tariff_treated"] == 1, "_tariff_shock"].mean())
-            if tariff_count
-            else 0.0
-        )
+        mean_hit = float(group.loc[group["_tariff_treated"] == 1, "_tariff_shock"].mean()) if tariff_count else 0.0
         sanction_count = int((group["_sanction_treated"] == 1).sum())
         export_control_count = int((group["_export_control_treated"] == 1).sum())
         yearly.append(

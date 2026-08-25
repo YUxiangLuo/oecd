@@ -96,10 +96,7 @@ def _release_qc_metadata(directory: Path, years: list[int], *, override: bool) -
         return quality.summarize_serialized_checks(checks, override=override)
 
     return {
-        "years": {
-            str(year): read_summary(f"qc_{year}.json", quality.QC_SCOPE_ICIO)
-            for year in years
-        },
+        "years": {str(year): read_summary(f"qc_{year}.json", quality.QC_SCOPE_ICIO) for year in years},
         "controls": read_summary("qc_controls.json", quality.QC_SCOPE_CONTROLS),
         # Shock schema, provenance, and semantic fatal checks are a formal
         # publication boundary.  CLI teaching override never persists here.
@@ -270,8 +267,7 @@ def build_panel(
     pre_years = [year for year in years if first_treated_year is None or year < first_treated_year]
     if not pre_years:
         raise ValueError(
-            f"国家面板固定处理前权重要求首次处理年 {first_treated_year} 之前至少有一个发布年份；"
-            "不得回退到最早处理年"
+            f"国家面板固定处理前权重要求首次处理年 {first_treated_year} 之前至少有一个发布年份；不得回退到最早处理年"
         )
     weight_year = max(pre_years)
     base_weights = (

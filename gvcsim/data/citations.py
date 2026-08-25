@@ -24,9 +24,7 @@ SIMULATED_MACRO_SCALE = {
     "kind": "icio-derived-value-added-scale",
     "description": "Country-year scale is anchored to the ICIO-derived SVA value-added proxy, then transformed by deterministic teaching formulas.",
 }
-SIMULATED_MACRO_DISCLOSURE = (
-    "Not WDI data and not IMF observations; these deterministic simulated regression controls must not be presented as observed macroeconomic statistics."
-)
+SIMULATED_MACRO_DISCLOSURE = "Not WDI data and not IMF observations; these deterministic simulated regression controls must not be presented as observed macroeconomic statistics."
 
 
 class DataSourcesValidationError(ValueError):
@@ -66,7 +64,9 @@ def validate_data_sources(value: object) -> dict[str, Any]:
         raise DataSourcesValidationError("data_sources must contain exactly one ICIO input source")
     expected_top = {"version", "simulated_macro_controls", *primary}
     if set(value) != expected_top:
-        raise DataSourcesValidationError(f"data_sources has unknown or missing fields: {sorted(set(value) ^ expected_top)}")
+        raise DataSourcesValidationError(
+            f"data_sources has unknown or missing fields: {sorted(set(value) ^ expected_top)}"
+        )
 
     simulated = _require_exact_object(
         value["simulated_macro_controls"],
@@ -81,8 +81,14 @@ def validate_data_sources(value: object) -> dict[str, Any]:
         source = _require_exact_object(
             value["oecd_icio"],
             {
-                "kind", "production_data", "release", "citation", "dataset_url",
-                "methodology_citation", "methodology_url", "terms_url",
+                "kind",
+                "production_data",
+                "release",
+                "citation",
+                "dataset_url",
+                "methodology_citation",
+                "methodology_url",
+                "terms_url",
             },
             "oecd_icio",
         )

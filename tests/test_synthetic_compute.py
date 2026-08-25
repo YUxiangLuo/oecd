@@ -231,9 +231,7 @@ def _stub_release_build(monkeypatch, calls, *, fail_year=False):
             }
             for spec in regression_quality.REGRESSION_INPUT_CHECK_SPECS
         ]
-        (directory / regression_quality.REGRESSION_INPUT_QC_FILE).write_text(
-            json.dumps(checks), encoding="utf-8"
-        )
+        (directory / regression_quality.REGRESSION_INPUT_QC_FILE).write_text(json.dumps(checks), encoding="utf-8")
         return checks, regression_quality.summarize_regression_input_checks(checks)
 
     monkeypatch.setattr(pipeline, "compute_year", year)

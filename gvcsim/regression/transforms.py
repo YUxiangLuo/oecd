@@ -67,8 +67,7 @@ def _freeze_baseline_gvc(
             raw_values.append(float(value))
         else:
             raise ValueError(
-                f"基期 GVC 变量 {BASE_GVC_COL} 的非缺失值必须是真实数值且有限；"
-                "不接受数值字符串、对象或无穷值"
+                f"基期 GVC 变量 {BASE_GVC_COL} 的非缺失值必须是真实数值且有限；不接受数值字符串、对象或无穷值"
             )
 
     numeric_time = pd.to_numeric(data[time], errors="coerce")
@@ -87,9 +86,9 @@ def _freeze_baseline_gvc(
     first = pd.Series(first.to_numpy(), index=first.index.astype(str), dtype=float)
     first_treatment = source["__entity"].map(first)
     treated = first_treatment.notna()
-    treated_pre = source.loc[treated & (source["__time"] < first_treatment)].groupby(
-        "__entity", group_keys=False
-    ).tail(2)
+    treated_pre = (
+        source.loc[treated & (source["__time"] < first_treatment)].groupby("__entity", group_keys=False).tail(2)
+    )
     never_baseline = source.loc[~treated].groupby("__entity", group_keys=False).head(2)
     baseline_rows = pd.concat([treated_pre, never_baseline], ignore_index=True)
     return baseline_rows.groupby("__entity", sort=True)[BASE_GVC_COL].mean().rename(BASE_GVC_COL)

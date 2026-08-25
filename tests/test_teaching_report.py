@@ -272,9 +272,7 @@ def _write_output_artifacts(path: Path, years: list[int]) -> dict[str, dict]:
         "tariff_exposure_mode",
     ]
     industry_panel = industry_panel.merge(
-        shock_panel[["country", "sector", "year", *shock_fields]].rename(
-            columns={"sector": "industry"}
-        ),
+        shock_panel[["country", "sector", "year", *shock_fields]].rename(columns={"sector": "industry"}),
         on=["country", "industry", "year"],
         how="left",
         validate="one_to_one",

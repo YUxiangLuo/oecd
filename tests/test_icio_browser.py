@@ -7,12 +7,8 @@ from gvcsim.data import icio_browser
 from gvcsim.data.raw_icio import DimensionContract, RawICIOValidationError, clear_raw_validation_cache
 
 
-FIXTURE_CONTRACT = DimensionContract(
-    "test-icio", 1, ("AAA", "BBB"), ("s1", "s2"), ("HFCE", "GFCF")
-)
-SUBSTRING_CONTRACT = DimensionContract(
-    "test-substring-icio", 1, ("AAA", "BBB"), ("T", "C10T12"), ("HFCE",)
-)
+FIXTURE_CONTRACT = DimensionContract("test-icio", 1, ("AAA", "BBB"), ("s1", "s2"), ("HFCE", "GFCF"))
+SUBSTRING_CONTRACT = DimensionContract("test-substring-icio", 1, ("AAA", "BBB"), ("T", "C10T12"), ("HFCE",))
 
 
 def _write_fixture(raw_dir: Path) -> None:

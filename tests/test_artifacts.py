@@ -122,9 +122,7 @@ def _write_raw_cache_fixture(raw_dir: Path) -> Path:
     source_dir = raw_dir.parent / "raw-cache-source"
     _write_release_raw_fixture(source_dir)
     for year in (2018, 2019, 2020):
-        (raw_dir / f"ICIO2023_{year}.csv").write_bytes(
-            (source_dir / f"ICIO2023_{year}.csv").read_bytes()
-        )
+        (raw_dir / f"ICIO2023_{year}.csv").write_bytes((source_dir / f"ICIO2023_{year}.csv").read_bytes())
     return raw_dir / "ICIO2023_2020.csv"
 
 
@@ -162,10 +160,7 @@ def _release_metadata(
         "qc_contract": quality.qc_contract_metadata(),
         "shock_contract": shock_module.shock_contract_metadata(),
         "qc": {
-            "years": {
-                str(year): quality.summarize_serialized_checks(annual)
-                for year in (2018, 2019, 2020)
-            },
+            "years": {str(year): quality.summarize_serialized_checks(annual) for year in (2018, 2019, 2020)},
             "controls": quality.summarize_serialized_checks(controls),
             "shocks": quality.summarize_serialized_checks(shocks),
         },
@@ -349,9 +344,7 @@ def _write_semantic_outputs(directory: Path, year: int = 2020) -> dict[str, dict
         "treated_contemporaneous",
         "tariff_exposure_mode",
     ]
-    industry_shocks = shock_panel[["country", "sector", "year", *shock_fields]].rename(
-        columns={"sector": "industry"}
-    )
+    industry_shocks = shock_panel[["country", "sector", "year", *shock_fields]].rename(columns={"sector": "industry"})
     panel_industry = panel_industry.merge(
         industry_shocks,
         on=["country", "industry", "year"],
@@ -379,14 +372,10 @@ def _write_semantic_outputs(directory: Path, year: int = 2020) -> dict[str, dict
     controls_frame.to_csv(directory / "controls_country.csv", index=False)
     shock_panel.to_csv(directory / "demo_trade_war_tariffs.csv", index=False)
     output_summary = {
-        str(artifact_year): output_quality.write_output_qc(
-            directory, artifact_year, expected_years=years
-        )[1]
+        str(artifact_year): output_quality.write_output_qc(directory, artifact_year, expected_years=years)[1]
         for artifact_year in years
     }
-    regression_summary = regression_quality.write_regression_input_qc(
-        directory, expected_years=years
-    )[1]
+    regression_summary = regression_quality.write_regression_input_qc(directory, expected_years=years)[1]
     return output_summary, regression_summary
 
 
@@ -394,10 +383,7 @@ def _release(directory: Path, *, course_release: str | None = None) -> None:
     year = 2020
     output_summary, regression_input_summary = _write_semantic_outputs(directory, year)
     payloads = {
-        **{
-            f"qc_{artifact_year}.json": _valid_checks(quality.QC_SCOPE_ICIO)
-            for artifact_year in (2018, 2019, 2020)
-        },
+        **{f"qc_{artifact_year}.json": _valid_checks(quality.QC_SCOPE_ICIO) for artifact_year in (2018, 2019, 2020)},
         "qc_controls.json": _valid_checks(quality.QC_SCOPE_CONTROLS),
         "qc_shocks.json": _valid_checks(quality.QC_SCOPE_SHOCKS),
     }
@@ -445,9 +431,10 @@ def test_v7_release_requires_regression_shock_output_qc_manifest_and_identity(tm
     interaction_scope = regression_contract["requirements"]["outcome_structural_slices"]["interaction"]
     assert interaction_scope.startswith("canonical_tariff_only;")
     assert "drop_all_rows_for_entities_without_finite_derived_baseline" in interaction_scope
-    assert "availability_not_release_fatal" in regression_contract["requirements"]["outcome_structural_slices"][
-        "optional_runtime_validated_designs"
-    ]
+    assert (
+        "availability_not_release_fatal"
+        in regression_contract["requirements"]["outcome_structural_slices"]["optional_runtime_validated_designs"]
+    )
     assert "does not certify every design cross-product" in regression_contract["certification_limit"]
     assert "causal identification" in regression_contract["certification_limit"]
     assert metadata["raw_dimensions"]["countries"] == 4
@@ -561,22 +548,6 @@ def test_release_shock_generation_schema_includes_all_release_fields(tmp_path):
     assert {"tariff_shock_contemporaneous", "treated_contemporaneous", "shock_type"} <= set(frame.columns)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def _mutate_csv(directory: Path, filename: str, mutation) -> None:
     path = directory / filename
     frame = pd.read_csv(path)
@@ -595,7 +566,6 @@ def _append_panel_year_row(directory: Path, filename: str, year: object, *, dupl
             row["entity_id"] = "EXTRA_s1"
     row["year"] = year
     pd.concat([frame, row], ignore_index=True).to_csv(path, index=False)
-
 
 
 @pytest.mark.parametrize("filename", ["panel_country.csv", "panel_industry.csv"])
@@ -620,7 +590,6 @@ def test_panel_missing_declared_year_fails_semantic_qc_after_recompute_and_manif
     assert "missing_years=[2020]" in coverage["detail"]
 
 
-
 @pytest.mark.parametrize("mutation", ["missing", "empty", "duplicate", "unknown", "severity"])
 def test_output_qc_file_requires_exact_nonempty_v1_check_set(tmp_path, mutation):
     _release(tmp_path)
@@ -641,7 +610,6 @@ def test_output_qc_file_requires_exact_nonempty_v1_check_set(tmp_path, mutation)
 
     with pytest.raises(artifacts.ArtifactContractError, match="output QC"):
         artifacts.validate_release(tmp_path)
-
 
 
 def test_output_qc_contract_version_tamper_fails(tmp_path):
@@ -673,7 +641,6 @@ def test_regression_input_qc_requires_exact_v1_check_set(tmp_path, mutation):
 
     with pytest.raises(artifacts.ArtifactContractError, match="regression input QC"):
         artifacts.validate_release(tmp_path)
-
 
 
 def test_regression_input_numeric_validation_rejects_string_and_infinity_without_coercion():
@@ -714,9 +681,7 @@ def _regression_qc_frame(*, granularity: str, treated_country: str = "BBB") -> p
 def test_regression_input_outcome_claims_apply_row_filter_before_metrics():
     frames = {
         "country": _regression_qc_frame(granularity="country", treated_country="ROW"),
-        "country_industry": _regression_qc_frame(
-            granularity="country_industry", treated_country="ROW"
-        ),
+        "country_industry": _regression_qc_frame(granularity="country_industry", treated_country="ROW"),
     }
     # ROW still supplies every treatment timeline before filtering, but one treated
     # entity cannot supply a full-rank interaction policy pair under the joint gate.
@@ -765,9 +730,7 @@ def test_regression_input_interaction_drops_treated_entity_whose_only_pre_baseli
 
 
 def test_regression_input_interaction_accepts_historical_khm_c26_c27_missing_pre_outcomes():
-    frame = _regression_qc_frame(granularity="country_industry").loc[
-        lambda data: data["country"].ne("ROW")
-    ].copy()
+    frame = _regression_qc_frame(granularity="country_industry").loc[lambda data: data["country"].ne("ROW")].copy()
     # Keep two moderator-distinct treated entities in the complete-case history so
     # the runtime joint policy design remains identified independently of KHM rows.
     aaa_post = frame["country"].eq("AAA") & frame["year"].ge(2019)
@@ -886,8 +849,7 @@ def test_regression_input_interaction_rejects_proportional_joint_policy_columns(
     )
     assert check["passed"] is False
     assert (
-        "country:FVA_share:tariff:scope=certified:method=did:shock=tariff_shock:"
-        "outcome=FVA_share:joint_rank=1/2"
+        "country:FVA_share:tariff:scope=certified:method=did:shock=tariff_shock:outcome=FVA_share:joint_rank=1/2"
     ) in check["detail"]
 
 
@@ -963,9 +925,7 @@ def test_regression_input_qc_allows_sparse_null_interaction_baseline_with_viable
         panel.loc[panel["country"].eq("CCC") & panel["year"].eq(2019), "3_VA_GVC_share"] = float("nan")
         panel.to_csv(path, index=False)
 
-    checks = regression_quality.recompute_regression_input_checks(
-        tmp_path, expected_years=[2018, 2019, 2020]
-    )
+    checks = regression_quality.recompute_regression_input_checks(tmp_path, expected_years=[2018, 2019, 2020])
     outcome = next(item for item in checks if item["name"] == "configured_outcomes")
     numeric = next(item for item in checks if item["name"] == "shock_control_fields")
 
@@ -986,9 +946,7 @@ def test_regression_input_qc_rejects_nonfinite_or_malformed_nonnull_baseline(tmp
     panel.loc[0, "3_VA_GVC_share"] = bad_value
     panel.to_csv(path, index=False)
 
-    checks = regression_quality.recompute_regression_input_checks(
-        tmp_path, expected_years=[2018, 2019, 2020]
-    )
+    checks = regression_quality.recompute_regression_input_checks(tmp_path, expected_years=[2018, 2019, 2020])
     numeric = next(item for item in checks if item["name"] == "shock_control_fields")
 
     assert numeric["passed"] is False
@@ -1007,9 +965,7 @@ def test_regression_input_qc_rejects_interaction_baseline_structural_collapse(tm
             panel["3_VA_GVC_share"] = 0.4
         panel.to_csv(path, index=False)
 
-    checks = regression_quality.recompute_regression_input_checks(
-        tmp_path, expected_years=[2018, 2019, 2020]
-    )
+    checks = regression_quality.recompute_regression_input_checks(tmp_path, expected_years=[2018, 2019, 2020])
     outcome = next(item for item in checks if item["name"] == "configured_outcomes")
     numeric = next(item for item in checks if item["name"] == "shock_control_fields")
 
@@ -1027,9 +983,7 @@ def test_regression_input_qc_rejects_interaction_baseline_structural_collapse(tm
         regression_quality.RegressionInputQualityError,
         match="configured_outcomes",
     ):
-        regression_quality.write_regression_input_qc(
-            tmp_path, expected_years=[2018, 2019, 2020]
-        )
+        regression_quality.write_regression_input_qc(tmp_path, expected_years=[2018, 2019, 2020])
 
 
 def test_regression_input_qc_rejects_fixed_weight_release_without_pretreatment_year(tmp_path):
@@ -1054,9 +1008,7 @@ def test_regression_input_qc_rejects_fixed_weight_release_without_pretreatment_y
     assert outcome["passed"] is False
 
 
-@pytest.mark.parametrize(
-    "collapse", ["constant_outcome", "one_time", "one_cluster", "insufficient_residual"]
-)
+@pytest.mark.parametrize("collapse", ["constant_outcome", "one_time", "one_cluster", "insufficient_residual"])
 def test_regression_input_qc_rejects_outcome_specific_structural_collapse(tmp_path, collapse):
     _release(tmp_path)
     path = tmp_path / "panel_country.csv"
@@ -1071,9 +1023,7 @@ def test_regression_input_qc_rejects_outcome_specific_structural_collapse(tmp_pa
         panel.loc[panel["year"].eq(2018), "FVA_share"] = float("nan")
     panel.to_csv(path, index=False)
 
-    checks = regression_quality.recompute_regression_input_checks(
-        tmp_path, expected_years=[2018, 2019, 2020]
-    )
+    checks = regression_quality.recompute_regression_input_checks(tmp_path, expected_years=[2018, 2019, 2020])
     outcome = next(item for item in checks if item["name"] == "configured_outcomes")
     assert outcome["passed"] is False
     assert "country:FVA_share" in outcome["detail"]
@@ -1216,7 +1166,3 @@ def test_artifact_tree_rejects_symlinks(tmp_path):
     target.symlink_to("panel_industry.csv")
     with pytest.raises(artifacts.ArtifactContractError, match="symlink"):
         artifacts.validate_release(tmp_path)
-
-
-
-

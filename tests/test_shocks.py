@@ -208,9 +208,7 @@ def test_persisted_exposure_and_shock_loaders_preserve_round_trip_floats(tmp_pat
     loaded_exposure = shocks.load_export_exposure(years)
     assert loaded_exposure is not None
     exposure_key = (
-        loaded_exposure["country"].eq("DEU")
-        & loaded_exposure["imposer"].eq("USA")
-        & loaded_exposure["year"].eq(2017)
+        loaded_exposure["country"].eq("DEU") & loaded_exposure["imposer"].eq("USA") & loaded_exposure["year"].eq(2017)
     )
     assert loaded_exposure.loc[exposure_key, "export_exposure"].item() == sensitive_exposure
 
@@ -230,22 +228,14 @@ def test_persisted_exposure_and_shock_loaders_preserve_round_trip_floats(tmp_pat
         keep_default_na=False,
         float_precision="round_trip",
     )
-    published_key = (
-        published["country"].eq("DEU") & published["sector"].eq("C24") & published["year"].eq(2018)
-    )
+    published_key = published["country"].eq("DEU") & published["sector"].eq("C24") & published["year"].eq(2018)
     assert published.loc[published_key, "tariff_shock"].item() == raw_shock
 
     loaded_shocks = shocks.load_shocks()
-    loaded_key = (
-        loaded_shocks["country"].eq("DEU")
-        & loaded_shocks["sector"].eq("C24")
-        & loaded_shocks["year"].eq(2018)
-    )
+    loaded_key = loaded_shocks["country"].eq("DEU") & loaded_shocks["sector"].eq("C24") & loaded_shocks["year"].eq(2018)
     assert loaded_shocks.loc[loaded_key, "tariff_shock"].item() == raw_shock
     untreated_key = (
-        loaded_shocks["country"].eq("DEU")
-        & loaded_shocks["sector"].eq("C24")
-        & loaded_shocks["year"].eq(2017)
+        loaded_shocks["country"].eq("DEU") & loaded_shocks["sector"].eq("C24") & loaded_shocks["year"].eq(2017)
     )
     assert loaded_shocks.loc[untreated_key, "note"].item() == ""
 

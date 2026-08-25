@@ -378,8 +378,7 @@ def _fixed_exposure_year(
     pre = [year for year in available if year < first]
     if not pre:
         raise ValueError(
-            f"固定处理前权重要求 {country}→{imposer} 在首次处理年 {first} 之前至少有一个发布年份；"
-            "不得回退到最早处理年"
+            f"固定处理前权重要求 {country}→{imposer} 在首次处理年 {first} 之前至少有一个发布年份；不得回退到最早处理年"
         )
     return max(pre)
 

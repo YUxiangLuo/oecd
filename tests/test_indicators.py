@@ -65,9 +65,7 @@ def test_tradeflow_preserves_negative_net_subsidy_and_closure(fake_io):
 
 
 def test_gross_exports_requires_all_six_closure_components():
-    complete = pd.DataFrame(
-        [{"DVAex": 1.0, "DVArt": 2.0, "DDC": 3.0, "FVA": 4.0, "FDC": 5.0, "taxsub": 6.0}]
-    )
+    complete = pd.DataFrame([{"DVAex": 1.0, "DVArt": 2.0, "DDC": 3.0, "FVA": 4.0, "FDC": 5.0, "taxsub": 6.0}])
     one_null = complete.copy()
     one_null.loc[0, "taxsub"] = np.nan
     all_null = complete.copy()

@@ -27,10 +27,7 @@ def main() -> None:
     p.add_argument(
         "--allow-qc-override",
         action="store_true",
-        help=(
-            "仅对 ICIO/控制变量教学质检允许 fatal 后继续；"
-            "冲击 schema、来源与语义 fatal 永不可 override"
-        ),
+        help=("仅对 ICIO/控制变量教学质检允许 fatal 后继续；冲击 schema、来源与语义 fatal 永不可 override"),
     )
 
     p = sub.add_parser("serve", help="启动 API 服务")

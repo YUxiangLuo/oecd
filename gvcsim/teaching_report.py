@@ -1040,11 +1040,7 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
         effect_label, effect, interval = _natural_effect(outcome, design, result, coefficient)
         period_limit = _primary_event_limit(design, result, coefficient)
         diagnostic_limit = _event_pretrend_contract_limit(design, result)
-        suppressed = (
-            _global_inference_suppressed(result)
-            or period_limit is not None
-            or diagnostic_limit is not None
-        )
+        suppressed = _global_inference_suppressed(result) or period_limit is not None or diagnostic_limit is not None
         evidence, _interpretation = _evidence_reading(
             outcome, coefficient, suppressed, _failed_pretrend(result, design)
         )
@@ -1084,11 +1080,7 @@ def _evidence_summary(runs: list[dict[str, Any]]) -> list[str]:
         primary = _primary_coefficient(design, result)
         period_limit = _primary_event_limit(design, result, primary)
         diagnostic_limit = _event_pretrend_contract_limit(design, result)
-        suppressed = (
-            _global_inference_suppressed(result)
-            or period_limit is not None
-            or diagnostic_limit is not None
-        )
+        suppressed = _global_inference_suppressed(result) or period_limit is not None or diagnostic_limit is not None
         used_in_table = qualified.get(step) is run
         marker = (
             "（对照表采用）"
@@ -1125,9 +1117,7 @@ def _evidence_summary(runs: list[dict[str, Any]]) -> list[str]:
         )
         reasons = [*_list_values(result.get("status_reasons")), *_list_values(support.get("reasons"))]
         design_limit = (
-            period_limit
-            or diagnostic_limit
-            or _summary_design_limit(status, support, reasons, failed_pretrend)
+            period_limit or diagnostic_limit or _summary_design_limit(status, support, reasons, failed_pretrend)
         )
         if design_limit:
             lines.append(f"- **最重要的设计限制：** {design_limit}")
