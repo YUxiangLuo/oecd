@@ -106,8 +106,23 @@ def _step_data(session: dict[str, Any], step: int) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _merge_gate_blocks(blocked: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep one actionable report-gate entry per course step."""
+    merged: dict[int, dict[str, Any]] = {}
+    for item in blocked:
+        step = int(item["step"])
+        if step not in merged:
+            merged[step] = {**item, "missing": list(item["missing"])}
+            continue
+        missing = merged[step]["missing"]
+        for reason in item["missing"]:
+            if reason not in missing:
+                missing.append(reason)
+    return list(merged.values())
+
+
 def check_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
-    blocked = []
+    blocked: list[dict[str, Any]] = []
     for step in GATE_STEPS:
         result = evidence.evaluate_step(step, session)
         if not result.complete:
@@ -176,7 +191,7 @@ def check_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
             reflection_missing.append(f"{label}不能超过 {REFLECTION_TEXT_LIMIT} 个字符")
     if reflection_missing:
         blocked.append({"step": 16, "title": "原创分析与反思", "missing": reflection_missing})
-    return blocked
+    return _merge_gate_blocks(blocked)
 
 
 def _safe(value: Any, limit: int = 240) -> str:

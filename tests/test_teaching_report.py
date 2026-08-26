@@ -523,6 +523,14 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection():
     assert any(item["step"] == 12 and "可报告" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 15 and "可报告" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 16 and "原创" in item["title"] for item in blocked)
+    assert len(blocked) == len({item["step"] for item in blocked})
+    by_step = {item["step"]: item for item in blocked}
+    assert "理解检查" in "".join(by_step[1]["missing"])
+    assert "具体单元格" in "".join(by_step[1]["missing"])
+    assert "理解检查" in "".join(by_step[7]["missing"])
+    assert "两个比较对象" in "".join(by_step[7]["missing"])
+    assert "理解检查" in "".join(by_step[13]["missing"])
+    assert "可报告" in "".join(by_step[13]["missing"])
     assert check_gate(_complete()) == []
     missing_one = _complete()
     del missing_one["steps"]["14"]["data"]["run"]

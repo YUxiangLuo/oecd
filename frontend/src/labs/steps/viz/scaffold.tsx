@@ -396,15 +396,8 @@ export function VizWorkbench({ title, toolbar, years, year, onYearChange, countr
   children: React.ReactNode;
 }) {
   const enough = picked.length >= minPicks;
-  const [autoExpandSignal, setAutoExpandSignal] = useState(0);
-  const pickCountries = (next: string[]) => {
-    if (picked.length < minPicks && next.length >= minPicks) {
-      setAutoExpandSignal((signal) => signal + 1);
-    }
-    onPick(next);
-  };
   return (
-    <FullscreenPanel title={title} variant="workbench" autoExpandSignal={autoExpandSignal}>
+    <FullscreenPanel title={title} variant="workbench">
       {toolbar}
       <div className="viz-split">
         <aside className="viz-split-side" aria-label="年份与经济体选择">
@@ -414,7 +407,7 @@ export function VizWorkbench({ title, toolbar, years, year, onYearChange, countr
               已选 <b className={enough ? "ok" : "todo"}>{picked.length}</b> 国{enough ? "" : `（报告建议 ≥${minPicks}）`}
             </span>
           </div>
-          <CountryPicker countries={countries} picked={picked} onChange={pickCountries} />
+          <CountryPicker countries={countries} picked={picked} onChange={onPick} />
         </aside>
         <ScrollableRegion className="viz-split-main" label="可视化图表与说明，可纵向滚动">
           {children}
