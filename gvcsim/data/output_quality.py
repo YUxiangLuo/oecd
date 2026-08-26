@@ -290,7 +290,7 @@ def _keys_and_coverage(
         "country": {"country", "year"},
         "industry": {"country", "industry", "year"},
         "edges": {"source", "target", "year", "flow"},
-        "exposure": {"country", "imposer", "year"},
+        "exposure": {"country", "sector", "imposer", "year"},
         "panel_country": {"country", "year"},
         "panel_industry": {"country", "industry", "entity_id", "year"},
     }
@@ -325,7 +325,7 @@ def _keys_and_coverage(
         ("country", country, ["country", "year"]),
         ("industry", industry, ["country", "industry", "year"]),
         ("edges", edges, ["source", "target", "year"]),
-        ("exposure", exposure, ["country", "imposer", "year"]),
+        ("exposure", exposure, ["country", "sector", "imposer", "year"]),
         ("panel_country", panel_country, ["country", "year"]),
         ("panel_industry", panel_industry, ["country", "industry", "year"]),
         ("panel_industry_entity", panel_industry, ["entity_id", "year"]),
@@ -348,9 +348,10 @@ def _keys_and_coverage(
         )
     )
     industry_keys = set(map(tuple, industry[["country", "industry"]].astype(str).to_numpy()))
+    exposure_industry_keys = set(map(tuple, exposure[["country", "sector"]].astype(str).to_numpy()))
     if not (country_keys == industry_countries == exposure_countries == panel_country_keys):
         problems.append("country_coverage_mismatch")
-    if industry_keys != panel_industry_keys:
+    if industry_keys != panel_industry_keys or exposure_industry_keys != industry_keys:
         problems.append("industry_coverage_mismatch")
     expected_entities = panel_industry["country"].astype(str) + "_" + panel_industry["industry"].astype(str)
     if not panel_industry["entity_id"].astype(str).eq(expected_entities).all():

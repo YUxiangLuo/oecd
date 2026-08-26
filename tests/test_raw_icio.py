@@ -147,17 +147,20 @@ def test_independent_raw_bilateral_recomputation_uses_base_and_composite_destina
         SMALL,
         {"GROUP": {"BBB"}},
     )
-    by_key = {(row["country"], row["imposer"]): row for row in rows}
+    by_key = {(row["country"], row["sector"], row["imposer"]): row for row in rows}
 
     assert set(by_key) == {
-        (country, destination) for country in SMALL.countries for destination in (*SMALL.countries, "GROUP")
+        (country, sector, destination)
+        for country in SMALL.countries
+        for sector in SMALL.industries
+        for destination in (*SMALL.countries, "GROUP")
     }
-    assert by_key["AAA", "AAA"]["bilateral_exports"] == 0.0
-    assert by_key["AAA", "BBB"]["bilateral_exports"] == 3.0
-    assert by_key["AAA", "BBB"]["total_exports"] == 3.0
-    assert by_key["AAA", "BBB"]["export_exposure"] == 1.0
-    assert by_key["AAA", "GROUP"]["bilateral_exports"] == 3.0
-    assert by_key["BBB", "GROUP"]["bilateral_exports"] == 0.0
+    assert by_key["AAA", "s1", "AAA"]["bilateral_exports"] == 0.0
+    assert by_key["AAA", "s1", "BBB"]["bilateral_exports"] == 3.0
+    assert by_key["AAA", "s1", "BBB"]["total_exports"] == 3.0
+    assert by_key["AAA", "s1", "BBB"]["export_exposure"] == 1.0
+    assert by_key["AAA", "s1", "GROUP"]["bilateral_exports"] == 3.0
+    assert by_key["BBB", "s1", "GROUP"]["bilateral_exports"] == 0.0
 
 
 def test_cross_year_layout_drift_and_metadata_tampering_fail(tmp_path: Path):

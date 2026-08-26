@@ -132,7 +132,7 @@ const median = (arr: number[]) => {
 };
 
 /** 象限散点图:两条参考线(默认中位数)把平面切成四象限,四角标注角色。
- *  步8「GVC 定位图」(后向×前向参与度)、步11「枢纽地图」(度×介数中心性)。 */
+ *  步8「GVC 定位图」(后向依赖×WWYZ 前向生产参与)、步11「枢纽地图」(度×介数中心性)。 */
 export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabel, xFormat, yFormat, highlight, refMode = "median", quadrantLabels, equalityLine = false }: {
   rows: Row[]; xKey: string; yKey: string; xLabel: string; yLabel: string;
   referenceRows?: Row[];

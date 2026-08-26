@@ -310,8 +310,8 @@ def _raw_bilateral_exports_cached(
     identity: RawFileIdentity,
     contract_key: tuple[Any, ...],
     composite_key: tuple[tuple[str, tuple[str, ...]], ...],
-) -> tuple[tuple[str, str, float, float], ...]:
-    """Re-read one strictly validated raw table and aggregate only export flows.
+) -> tuple[tuple[str, str, str, float, float], ...]:
+    """Re-read one strictly validated raw table and aggregate sector export flows.
 
     This intentionally does not use pymrio, persisted exposure files, shock files,
     or any Leontief/indicator calculation.  The cache key includes every
@@ -327,9 +327,9 @@ def _raw_bilateral_exports_cached(
     )
     country_set = set(contract.countries)
     industry_owner = {
-        label: country
+        f"{country}_{industry}": (country, industry)
         for country in contract.countries
-        for label in (f"{country}_{industry}" for industry in contract.industries)
+        for industry in contract.industries
     }
     destination_by_label = {
         **{
@@ -343,7 +343,12 @@ def _raw_bilateral_exports_cached(
             for label in (f"{country}_{category}" for category in contract.final_demand_categories)
         },
     }
-    flows = {(exporter, destination): 0.0 for exporter in contract.countries for destination in contract.countries}
+    flows = {
+        (exporter, sector, destination): 0.0
+        for exporter in contract.countries
+        for sector in contract.industries
+        for destination in contract.countries
+    }
 
     try:
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -351,26 +356,34 @@ def _raw_bilateral_exports_cached(
             header = next(reader)
             destinations = [destination_by_label.get(label) for label in header]
             for row in reader:
-                exporter = industry_owner.get(row[0])
-                if exporter is None:
+                owner = industry_owner.get(row[0])
+                if owner is None:
                     continue
+                exporter, sector = owner
                 for column, destination in enumerate(destinations[1:-1], start=1):
                     if destination is not None and destination != exporter:
-                        flows[(exporter, destination)] += float(row[column])
+                        flows[(exporter, sector, destination)] += float(row[column])
     except (UnicodeError, csv.Error, StopIteration, ValueError, IndexError) as exc:
         raise _fail(path, f"raw exposure recomputation failed: {exc}") from exc
 
     if raw_file_identity(path) != identity:
         raise RawICIOValidationError(f"raw ICIO file changed during exposure recomputation: {path}")
 
-    rows: list[tuple[str, str, float, float]] = []
+    rows: list[tuple[str, str, str, float, float]] = []
     for exporter in contract.countries:
-        total = math.fsum(flows[(exporter, destination)] for destination in contract.countries)
-        for destination in contract.countries:
-            rows.append((exporter, destination, flows[(exporter, destination)], total))
-        for composite, members in composite_key:
-            bilateral = math.fsum(flows[(exporter, member)] for member in members if member in country_set)
-            rows.append((exporter, composite, bilateral, total))
+        for sector in contract.industries:
+            positive_flows = {
+                destination: max(flows[(exporter, sector, destination)], 0.0)
+                for destination in contract.countries
+            }
+            total = math.fsum(positive_flows.values())
+            for destination in contract.countries:
+                rows.append((exporter, sector, destination, positive_flows[destination], total))
+            for composite, members in composite_key:
+                bilateral = math.fsum(
+                    positive_flows[member] for member in members if member in country_set
+                )
+                rows.append((exporter, sector, composite, bilateral, total))
     return tuple(rows)
 
 
@@ -380,7 +393,7 @@ def raw_bilateral_exports(
     contract: DimensionContract,
     composite_destinations: Mapping[str, Iterable[str]],
 ) -> list[dict[str, Any]]:
-    """Derive country-to-destination exports from the unique strict raw ICIO CSV."""
+    """Derive country-sector-to-destination exports from the unique strict raw ICIO CSV."""
     path = resolve_year_source(year, raw_dir)
     identity = raw_file_identity(path)
     if identity[4] <= 0:
@@ -399,13 +412,14 @@ def raw_bilateral_exports(
     return [
         {
             "country": country,
+            "sector": sector,
             "imposer": destination,
             "year": year,
             "bilateral_exports": bilateral,
             "total_exports": total,
             "export_exposure": bilateral / total if total > 0.0 else 0.0,
         }
-        for country, destination, bilateral, total in values
+        for country, sector, destination, bilateral, total in values
     ]
 
 

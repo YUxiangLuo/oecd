@@ -308,7 +308,7 @@ def test_run_builds_sentinel_switches_pointer_and_never_touches_database(tmp_pat
     assert set(metadata["qc"]) == {"years", "controls", "shocks"}
     assert metadata["qc_contract"] == quality.qc_contract_metadata()
     assert metadata["shock_contract"] == shocks.shock_contract_metadata()
-    assert metadata["artifact_contract_version"] == 7
+    assert metadata["artifact_contract_version"] == 8
     assert metadata["output_qc_contract"] == output_quality.output_qc_contract_metadata()
     assert set(metadata["output_qc"]["years"]) == {"2020"}
     assert metadata["regression_input_qc_contract"] == regression_quality.regression_input_qc_contract_metadata()

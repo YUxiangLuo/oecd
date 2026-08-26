@@ -144,16 +144,14 @@ def _country_year_real_growth(data: pd.DataFrame, amount_col: str, time: str) ->
     base = base.sort_values(["country", time]).copy()
     base["_real_amount"] = _real_amount(base[amount_col], base[DEFLATOR_COL])
     prev = base.groupby("country")["_real_amount"].shift(1)
-    base["_real_growth"] = ((base["_real_amount"] - prev) / prev.where(prev.abs() > 1e-12)).fillna(0.0)
-    return (
-        data[["country", time]]
-        .merge(
-            base[["country", time, "_real_growth"]],
-            on=["country", time],
-            how="left",
-        )["_real_growth"]
-        .fillna(0.0)
+    base["_real_growth"] = ((base["_real_amount"] - prev) / prev.where(prev.abs() > 1e-12)).replace(
+        [np.inf, -np.inf], np.nan
     )
+    return data[["country", time]].merge(
+        base[["country", time, "_real_growth"]],
+        on=["country", time],
+        how="left",
+    )["_real_growth"]
 
 
 def _apply_price_mode(df: pd.DataFrame, design, time: str = "year") -> pd.DataFrame:
@@ -161,7 +159,7 @@ def _apply_price_mode(df: pd.DataFrame, design, time: str = "year") -> pd.DataFr
     if getattr(design, "price_mode", None) != PRICE_MODE_REAL:
         return df
     if DEFLATOR_COL not in df.columns:
-        raise ValueError("实际值口径需要面板包含 gdp_deflator,请先重新运行 gvcsim compute")
+        raise ValueError("教学模拟平减口径需要面板包含 gdp_deflator,请先重新运行 gvcsim compute")
     out = df.copy()
     deflator = out[DEFLATOR_COL].astype(float)
 

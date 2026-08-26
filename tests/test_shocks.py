@@ -16,45 +16,56 @@ YEARS = [2016, 2017, 2018, 2019, 2020]
 def _complete_exposure(
     countries: list[str],
     years: list[int],
-    overrides: dict[tuple[str, str, int], float] | None = None,
+    overrides: dict[tuple[str, ...], float] | None = None,
+    sectors: list[str] | None = None,
 ) -> pd.DataFrame:
-    """Build a self-consistent tiny complete ICIO dimension with both flow columns."""
+    """Build a self-consistent tiny country-sector-destination dimension."""
     overrides = overrides or {}
+    sectors = sectors or ["C24"]
     base = sorted({*countries, *(set(shocks.catalogue_tariff_imposers()) - {"EU"})})
     rows = []
     for country in base:
-        for year in years:
-            shares = {destination: overrides.get((country, destination, year), 0.0) for destination in base}
-            shares[country] = 0.0
-            remaining = 1.0 - sum(shares.values())
-            if remaining < -1e-12:
-                raise ValueError("fixture overrides exceed one")
-            residual = next(
-                destination for destination in base if destination != country and shares[destination] == 0.0
-            )
-            shares[residual] += max(remaining, 0.0)
-            for destination in base:
+        for sector in sectors:
+            for year in years:
+                shares = {
+                    destination: overrides.get(
+                        (country, sector, destination, year),
+                        overrides.get((country, destination, year), 0.0),
+                    )
+                    for destination in base
+                }
+                shares[country] = 0.0
+                remaining = 1.0 - sum(shares.values())
+                if remaining < -1e-12:
+                    raise ValueError("fixture overrides exceed one")
+                residual = next(
+                    destination for destination in base if destination != country and shares[destination] == 0.0
+                )
+                shares[residual] += max(remaining, 0.0)
+                for destination in base:
+                    rows.append(
+                        {
+                            "country": country,
+                            "sector": sector,
+                            "imposer": destination,
+                            "year": year,
+                            "bilateral_exports": shares[destination],
+                            "total_exports": 1.0,
+                            "export_exposure": shares[destination],
+                        }
+                    )
+                eu_share = sum(shares.get(member, 0.0) for member in shocks.EU27)
                 rows.append(
                     {
                         "country": country,
-                        "imposer": destination,
+                        "sector": sector,
+                        "imposer": "EU",
                         "year": year,
-                        "bilateral_exports": shares[destination],
+                        "bilateral_exports": eu_share,
                         "total_exports": 1.0,
-                        "export_exposure": shares[destination],
+                        "export_exposure": eu_share,
                     }
                 )
-            eu_share = sum(shares.get(member, 0.0) for member in shocks.EU27)
-            rows.append(
-                {
-                    "country": country,
-                    "imposer": "EU",
-                    "year": year,
-                    "bilateral_exports": eu_share,
-                    "total_exports": 1.0,
-                    "export_exposure": eu_share,
-                }
-            )
     return pd.DataFrame(rows)
 
 
@@ -146,15 +157,15 @@ def test_event_metadata_discloses_composite_timeline_and_correct_xpcc_date():
     assert "复合处理" in section_301["name"]
     assert "只对应首批" in section_301["timeline_note"]
     assert section_301["source_urls"]
-    assert section_301["source_status"] == "official_event_source"
+    assert section_301["source_status"] == "partial_official_event_source"
     assert "教学编码" in section_301["source_disclosure"]
 
-    uncited = next(event for event in events if event["name"].startswith("美国232"))
-    assert uncited["source_status"] == "teaching_encoding_no_event_source"
-    assert uncited["source_urls"] == []
-    assert uncited["source_disclosure"] == section_301["source_disclosure"]
-    assert uncited["peak_rate"] == 0.24
-    assert uncited["top_sectors"] == ["C24"]
+    sourced_232 = next(event for event in events if event["name"].startswith("美国232"))
+    assert sourced_232["source_status"] == "official_event_source_complete"
+    assert len(sourced_232["source_urls"]) == 2
+    assert sourced_232["source_disclosure"] == section_301["source_disclosure"]
+    assert sourced_232["peak_rate"] == 0.24
+    assert sourced_232["top_sectors"] == ["C24"]
 
     xpcc = next(event for event in events if "XPCC" in event["name"])
     assert xpcc["announced"] == "2020-07-31"
@@ -182,12 +193,35 @@ def test_entity_list_policy_shocks_are_generated():
 def test_export_exposure_from_icio_flows(fake_io):
     arr = build_arrays(fake_io)
     exposure = build_export_exposure(arr, 2020)
-    by_key = exposure.set_index(["country", "imposer", "year"])["export_exposure"]
+    by_key = exposure.set_index(["country", "sector", "imposer", "year"])["export_exposure"]
 
-    # fake_io 只有两个国家,AAA 的全部出口都流向 BBB。
-    assert by_key["AAA", "BBB", 2020] == 1.0
-    assert by_key["AAA", "AAA", 2020] == 0.0
-    assert by_key["BBB", "AAA", 2020] == 1.0
+    # fake_io 只有两个国家；逐行业分母独立，AAA 的每个行业出口都流向 BBB。
+    assert by_key["AAA", "s1", "BBB", 2020] == 1.0
+    assert by_key["AAA", "s1", "AAA", 2020] == 0.0
+    assert by_key["BBB", "s2", "AAA", 2020] == 1.0
+
+
+def test_export_exposure_uses_each_industrys_own_destination_denominator(fake_io):
+    io_type = type(fake_io)
+    regions = ["AAA", "BBB", "CCC"]
+    sectors = ["s1", "s2"]
+    z = np.zeros((6, 6), dtype=float)
+    y = np.zeros((6, 3), dtype=float)
+    # AAA/s1 exports only to BBB; AAA/s2 exports only to CCC. Domestic final
+    # demand keeps every row's output positive without entering exports.
+    y[0] = [1.0, 9.0, 0.0]
+    y[1] = [1.0, 0.0, 9.0]
+    y[2] = [0.0, 1.0, 0.0]
+    y[3] = [0.0, 1.0, 0.0]
+    y[4] = [0.0, 0.0, 1.0]
+    y[5] = [0.0, 0.0, 1.0]
+    exposure = build_export_exposure(build_arrays(io_type(z, y, regions=regions, sectors=sectors)), 2020)
+    by_key = exposure.set_index(["country", "sector", "imposer", "year"])["export_exposure"]
+
+    assert by_key["AAA", "s1", "BBB", 2020] == 1.0
+    assert by_key["AAA", "s1", "CCC", 2020] == 0.0
+    assert by_key["AAA", "s2", "BBB", 2020] == 0.0
+    assert by_key["AAA", "s2", "CCC", 2020] == 1.0
 
 
 def test_persisted_exposure_and_shock_loaders_preserve_round_trip_floats(tmp_path, monkeypatch):
@@ -208,7 +242,10 @@ def test_persisted_exposure_and_shock_loaders_preserve_round_trip_floats(tmp_pat
     loaded_exposure = shocks.load_export_exposure(years)
     assert loaded_exposure is not None
     exposure_key = (
-        loaded_exposure["country"].eq("DEU") & loaded_exposure["imposer"].eq("USA") & loaded_exposure["year"].eq(2017)
+        loaded_exposure["country"].eq("DEU")
+        & loaded_exposure["sector"].eq("C24")
+        & loaded_exposure["imposer"].eq("USA")
+        & loaded_exposure["year"].eq(2017)
     )
     assert loaded_exposure.loc[exposure_key, "export_exposure"].item() == sensitive_exposure
 
@@ -290,7 +327,10 @@ def test_stylized_exposure_requires_explicit_opt_in_and_records_disclosure():
             ["C24"],
             [2018],
             export_exposure=pd.DataFrame(
-                columns=["country", "imposer", "year", "bilateral_exports", "total_exports", "export_exposure"]
+                columns=[
+                    "country", "sector", "imposer", "year",
+                    "bilateral_exports", "total_exports", "export_exposure",
+                ]
             ),
         )
 

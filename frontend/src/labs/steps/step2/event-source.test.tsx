@@ -6,8 +6,8 @@ import { EventList } from "./event-list";
 import { SelectedEventBar } from "./selected-event";
 
 const event = (source: ShockEvent["source_status"]): ShockEvent => ({
-  name: source === "official_event_source" ? "有来源事件" : "教学事件",
-  shock_type: source === "official_event_source" ? "tariff" : "sanctions",
+  name: source === "official_event_source_complete" ? "有来源事件" : "教学或部分来源事件",
+  shock_type: source === "official_event_source_complete" ? "tariff" : "sanctions",
   imposer: "USA",
   targets: "CHN",
   exempt: "",
@@ -18,26 +18,27 @@ const event = (source: ShockEvent["source_status"]): ShockEvent => ({
   peak_rate: 0.02,
   source_status: source,
   source_disclosure: "ICIO 行业映射与数值强度是未逐项引证的教学编码，不是官方统计。",
-  source_urls: source === "official_event_source" ? ["https://example.gov/event"] : [],
+  source_urls: source === "teaching_encoding_no_event_source" ? [] : ["https://example.gov/event"],
 });
 
 describe("shock event provenance teaching", () => {
   test("event cards distinguish official event dates from uncited teaching encodings", () => {
     const markup = renderToStaticMarkup(createElement(EventList, {
-      events: [event("official_event_source"), event("teaching_encoding_no_event_source")],
+      events: [event("official_event_source_complete"), event("partial_official_event_source"), event("teaching_encoding_no_event_source")],
       selectedKey: null,
       onSelect: () => {},
     }));
-    expect(markup).toContain("事件/日期：有官方来源");
+    expect(markup).toContain("事件/日期：官方来源覆盖完整");
+    expect(markup).toContain("事件/日期：官方来源仅部分覆盖");
     expect(markup).toContain("事件/日期：未逐项引证的教学编码");
     expect(markup).toContain("教学峰值");
   });
 
   test("selected facts separate URL-backed event facts from teaching numeric mapping", () => {
     const sourced = renderToStaticMarkup(createElement(SelectedEventBar, {
-      event: event("official_event_source"), panelDesc: "2020", filtersDirty: false,
+      event: event("official_event_source_complete"), panelDesc: "2020", filtersDirty: false,
     }));
-    expect(sourced).toContain("有官方事件来源");
+    expect(sourced).toContain("官方来源覆盖该事件/日期主张");
     expect(sourced).toContain("https://example.gov/event");
     expect(sourced).toContain("行业 / 数值映射");
     expect(sourced).toContain("不是官方统计");

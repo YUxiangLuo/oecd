@@ -178,6 +178,9 @@ describe("Step 6 teaching network accessibility", () => {
       expect(html).toContain(edge);
     }
     expect(html).toContain('role="status" aria-live="polite" aria-atomic="true"');
+    expect(html).toContain('class="ndp-edges scrollable-region"');
+    expect(html).toContain('tabindex="0"');
+    expect(html).toContain('aria-label="节点 DEU 的全部直接入边与出边，可横向滚动"');
   });
 });
 

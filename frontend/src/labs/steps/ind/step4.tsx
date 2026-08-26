@@ -37,7 +37,7 @@ export function Step4Trade({ meta, step, state }: { meta: Meta; step: Step; stat
       <ChartStory
         eyebrow="计算结果 · 先出数字"
         title="WWZ 聚合项与 TLS 扩展数据表(从 ICIO 算出来的)"
-        what={<>这张表由步骤 1 的 <b>ICIO 表</b>算出:每一行 = 某国某行业的出口。WWZ 的 16 个明细项归并为 DVAex / DVArt / DDC / FVA / FDC 五类；taxsub 是由 OECD ICIO 的 TLS 账户计算的扩展项,用于匹配含税毛出口口径,不是 WWZ 原文分类。</>}
+        what={<>这张表由步骤 1 的 <b>ICIO 表</b>算出:每一行 = 某国某行业的出口。WWZ 的 16 个明细项归并为 DVAex / DVArt / DDC / FVA / FDC 五类；taxsub 是由 OECD ICIO 的 TLS 账户计算的扩展项,用于匹配 VA+TLS 账户闭合毛出口口径，不是 WWZ 原文分类；TLS 是产品税减补贴账户，不等于步骤 11 的额外关税。</>}
         read={<>怎么读一行:<b>DVAex / FVA 金额</b>先说明该行业的出口规模构成；跨国家或行业判断本国增加值构成、后向依赖时，应分别比较 <b>DVAex_share / FVA_share</b>，不能只用绝对金额。列名旁的 ⓘ 可悬停看定义。</>}
         find={<>换个国家(下方筛选)看数字怎么变。这一步先把"算出来的数字"看明白,下一节再验证它们精确加回总量。</>}
       >
@@ -51,8 +51,8 @@ export function Step4Trade({ meta, step, state }: { meta: Meta; step: Step; stat
       <ChartStory
         eyebrow="验证 & 理解 · 挑一个拆开"
         title="动手拆解:五类 WWZ 聚合项 + TLS 扩展精确加回毛出口"
-        what={<>从上面的数据里挑一个出口(国家 / 行业),把含税毛出口拆成五类 WWZ 聚合项和一个 TLS 扩展项的<b>绝对金额</b>画成堆叠条,每一项都有释义。</>}
-        read={<>盯住绿框那一行:<b>五类 WWZ 聚合项 + TLS 扩展 = 含税毛出口,误差 ≈ 0</b>。DDC / FDC 本来就是重复计算类别；闭合本身不能证明源数据和算法没有其他错误。</>}
+        what={<>从上面的数据里挑一个出口(国家 / 行业),把 VA+TLS 账户闭合毛出口拆成五类 WWZ 聚合项和一个 TLS 扩展项的<b>绝对金额</b>画成堆叠条,每一项都有释义。</>}
+        read={<>盯住绿框那一行:<b>五类 WWZ 聚合项 + TLS 扩展 = VA+TLS 账户闭合毛出口，误差 ≈ 0</b>。DDC / FDC 本来就是重复计算类别；闭合本身不能证明源数据和算法没有其他错误。</>}
         find={<>点「查看 ICIO 计算示例」看一个 taxsub 为负的真实行业,这解释了为什么某些项会是负数;也可以勾选"双实体并排对比"直接比两个国家/行业。</>}
       >
         <DecompositionDemo

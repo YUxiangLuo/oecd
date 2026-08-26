@@ -16,7 +16,7 @@ from gvcsim.shocks import SHOCK_LABELS, SHOCK_SPECS, SHOCK_TARIFF
 
 # 稳定 outcome → (被解释变量, 中文含义)。列名来自 pipeline 产出的指标面板。
 OUTCOME_DEPVARS = {
-    "trade": ("FVA_share", "出口中外国增加值份额(FVA / 含 TLS 毛出口)"),
+    "trade": ("FVA_share", "出口中外国增加值份额(FVA / VA+TLS 账户闭合毛出口)"),
     "production": ("3b_VA_GVC_C_share", "复杂GVC生产份额(3b_VA_GVC_C / SVA,WWYZ)"),
     "length": ("PLv_GVC", "前向 GVC 生产长度(WWYZ)"),
     "network": ("betweenesscentrality", "生产网络介数中心性"),
@@ -41,9 +41,9 @@ METHOD_TWFE_INTENSITY = "twfe_intensity"
 METHOD_EVENT_STUDY = "event_study"
 METHODS = [METHOD_DID, METHOD_TWFE_INTENSITY, METHOD_EVENT_STUDY]
 METHOD_LABELS = {
-    METHOD_DID: "双重差分（处理组相对对照组）",
-    METHOD_TWFE_INTENSITY: "按冲击强度看变化",
-    METHOD_EVENT_STUDY: "按冲击前后各年看变化",
+    METHOD_DID: "分批处理 cohort-time ATT",
+    METHOD_TWFE_INTENSITY: "连续强度 TWFE（描述性）",
+    METHOD_EVENT_STUDY: "cohort-aware 动态 ATT",
 }
 
 CONTROL_MODE_NONE = "none"
@@ -52,8 +52,8 @@ CONTROL_MODE_MACRO = "macro_sim"
 CONTROL_MODES = [CONTROL_MODE_NONE, CONTROL_MODE_ICIO, CONTROL_MODE_MACRO]
 CONTROL_MODE_LABELS = {
     CONTROL_MODE_NONE: "不加控制变量",
-    CONTROL_MODE_ICIO: "ICIO 派生控制变量",
-    CONTROL_MODE_MACRO: "模拟宏观控制",
+    CONTROL_MODE_ICIO: "同期 ICIO 派生量（公开回归禁用）",
+    CONTROL_MODE_MACRO: "模拟宏观量（公开回归禁用）",
 }
 
 PRICE_MODE_NOMINAL = "nominal"
@@ -61,7 +61,7 @@ PRICE_MODE_REAL = "real_2016"
 PRICE_MODES = [PRICE_MODE_NOMINAL, PRICE_MODE_REAL]
 PRICE_MODE_LABELS = {
     PRICE_MODE_NOMINAL: "名义值",
-    PRICE_MODE_REAL: "实际值(2016=1)",
+    PRICE_MODE_REAL: "教学模拟平减口径(2016=1)",
 }
 
 SCENARIO_CLEAN = "clean"
@@ -87,7 +87,7 @@ class RegressionDesign:
     outcome: str
     granularity: str = GRANULARITY_COUNTRY_INDUSTRY
     shock_type: str = SHOCK_TARIFF
-    # 默认用 DID 展示处理组相对对照组的处理后变化；因果解释仍依赖识别假设。
+    # 默认用 cohort-time ATT；每个 cohort 只与从未或尚未处理实体比较。
     method: str = METHOD_DID
     control_mode: str = CONTROL_MODE_NONE
     interaction: bool = False
@@ -182,18 +182,32 @@ class RegressionDesign:
         unit = "it" if self.granularity == GRANULARITY_COUNTRY else "ijt"
         ent = "i" if self.granularity == GRANULARITY_COUNTRY else "ij"
         y = f"{self.depvar}_{unit}"
-        if self.method == METHOD_DID:
-            x = f"β·({self.treated_col}_{ent} × 1[t≥G_{ent}])"
-            policy_desc = "曾受处理个体自首次冲击年起、相对对照组的平均变化；因果解释依赖识别假设。"
-            interaction_text = f"θ·({self.treated_col}_{ent} × 1[t≥G_{ent}] × (BaseGVC_{ent},0−mean(BaseGVC_0)))"
-        elif self.method == METHOD_EVENT_STUDY:
-            x = f"Σ_k β_k·1[t-G_{ent}=k]"
-            policy_desc = "相对首次冲击年的动态主效应；k=-1 为省略基期。"
-            interaction_text = f"Σ_k θ_k·(1[t-G_{ent}=k] × (BaseGVC_{ent},0−mean(BaseGVC_0)))"
-        else:
-            x = " + ".join(f"β·{r}_{unit}" for r in self.regressors)
-            policy_desc = f"连续冲击强度 {self.shock_col} 的主效应。"
-            interaction_text = f"θ·({self.shock_col}_{unit} × (BaseGVC_{ent},0−mean(BaseGVC_0)))"
+        if self.method in {METHOD_DID, METHOD_EVENT_STUDY}:
+            lhs = "ATT^{overall}" if self.method == METHOD_DID else "ATT_k"
+            rhs = "Σ_{g,t}ω_{g,t}·[(ȳ_{g,t}−ȳ_{g,g−1})−(ȳ_{C_t,t}−ȳ_{C_t,g−1})]"
+            description = (
+                "逐 cohort×时期相对 g−1 做 DID；C_t 只含从未处理或截至比较期尚未处理实体，"
+                "再按可用处理实体数 ω 聚合。动态结果按事件时间 k 分别聚合。"
+            )
+            parts = [
+                {"text": lhs, "term": "dependent", "description": self.depvar_label, "meta_key": "depvar"},
+                {"text": " = "},
+                {"text": rhs, "term": "policy", "description": description, "meta_key": "policy"},
+            ]
+            if self.interaction:
+                parts.append(
+                    {
+                        "text": "（公开接口不支持 cohort-aware 交互结果）",
+                        "term": "interaction",
+                        "description": "公开主结果仅发布无交互 cohort-time ATT。",
+                        "meta_key": "interaction",
+                    }
+                )
+            return parts
+
+        x = " + ".join(f"β·{r}_{unit}" for r in self.regressors)
+        policy_desc = f"连续冲击强度 {self.shock_col} 的主效应；这是描述性 TWFE 关联。"
+        interaction_text = f"θ·({self.shock_col}_{unit} × (BaseGVC_{ent},0−mean(BaseGVC_0)))"
 
         parts: list[dict[str, str]] = [
             {
@@ -248,7 +262,7 @@ class RegressionDesign:
                 {
                     "text": "λ_t",
                     "term": "fixed-effect",
-                    "description": "年份固定效应，吸收同期公共冲击。",
+                    "description": "年份维度用于构造同期比较；只能处理共同年份冲击，不能吸收国家×行业异质疫情冲击。",
                     "meta_key": "entity",
                 },
                 {"text": " + "},

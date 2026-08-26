@@ -51,11 +51,12 @@ def test_build_controls_from_processed_indicators_shape_and_values():
     assert list(controls.columns) == ["country", "year", *ALL_CONTROL_COLUMNS]
     assert controls[["country", "year"]].duplicated().sum() == 0
     assert set(controls["country"]) == {"AAA", "BBB"}
-    assert np.isfinite(controls[ALL_CONTROL_COLUMNS].to_numpy()).all()
+    growth = ["gdp_proxy_growth", "exports_proxy_growth"]
+    assert np.isfinite(controls[[column for column in ALL_CONTROL_COLUMNS if column not in growth]].to_numpy()).all()
 
     first = controls.sort_values(["country", "year"]).groupby("country").head(1)
-    assert np.allclose(first["gdp_proxy_growth"], 0.0)
-    assert np.allclose(first["exports_proxy_growth"], 0.0)
+    assert first["gdp_proxy_growth"].isna().all()
+    assert first["exports_proxy_growth"].isna().all()
     assert np.allclose(first["trade_gross_exports_index"], 1.0)
     assert np.allclose(first["prod_va_total_index"], 1.0)
     assert np.allclose(first["gdp_deflator"], 1.0)
@@ -97,3 +98,19 @@ def test_controls_country_quality_checks_pass_and_fail():
     bad_checks = {c.name: c for c in check_controls_country(bad, countries=countries, years=years)}
     assert not bad_checks["控制变量构造恒等式"].passed
     assert not bad_checks["控制变量经济范围"].passed
+
+
+def test_controls_country_quality_is_independent_of_dataframe_index_labels():
+    country, sector = _fixtures()
+    controls = build_controls(country, sector).sample(frac=1, random_state=9)
+    controls.index = pd.Index(range(100, 100 + len(controls)), name="external_row_id")
+
+    checks = check_controls_country(
+        controls,
+        countries=sorted(country["country"].unique()),
+        years=sorted(country["year"].unique()),
+    )
+
+    assert all(check.passed for check in checks), [
+        (check.name, check.detail, check.warnings) for check in checks
+    ]

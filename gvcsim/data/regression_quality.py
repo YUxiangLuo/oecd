@@ -32,12 +32,13 @@ from gvcsim.shocks import (
     TREATED_THRESHOLD,
 )
 
-REGRESSION_INPUT_QC_CONTRACT_VERSION = 1
+REGRESSION_INPUT_QC_CONTRACT_VERSION = 2
 REGRESSION_INPUT_QC_SEVERITIES = ("ok", "fatal")
 REGRESSION_INPUT_QC_FILE = "qc_regression_inputs.json"
 BASE_GVC_COLUMN = "3_VA_GVC_share"
 CONTEMPORANEOUS_COLUMNS = ("tariff_shock_contemporaneous", "treated_contemporaneous")
 REGRESSION_CONTROL_FIELDS = (*CONTROL_COLUMNS, *MACRO_CONTROL_COLUMNS, "gdp_deflator")
+STRUCTURAL_GROWTH_FIELDS = frozenset({"gdp_proxy_growth", "exports_proxy_growth"})
 DEFAULT_SAMPLE_FILTER = SimpleNamespace(exclude_row=True)
 WITHIN_ABSORPTION_TOLERANCE = 1e-10
 
@@ -63,7 +64,7 @@ REGRESSION_INPUT_CHECK_SPECS = (
     RegressionInputCheckSpec(
         "shock_control_fields",
         "numeric",
-        "All configured shock, treatment, and control fields exist, are nonnull, and are finite; treatment indicators are exact 0/1. The interaction moderator exists and every nonnull value is truly numeric and finite; structural nulls are skipped while freezing entity baselines, and entities with no finite derived baseline are dropped rather than zero-filled. Panel shocks/controls match their source artifacts and country shocks match fixed-weight industry aggregation.",
+        "All configured shock and treatment fields exist, are nonnull and finite; treatment indicators are exact 0/1. Controls are finite except that first-year growth rates must be structurally null because no lag exists. The interaction moderator exists and every nonnull value is truly numeric and finite. Panel shocks/controls match source artifacts and country shocks match fixed-weight industry aggregation.",
     ),
     RegressionInputCheckSpec(
         "treatment_timeline_preperiod",
@@ -741,12 +742,29 @@ def _outcome_check(frames: dict[str, pd.DataFrame], *, excluded_rows: dict[str, 
 def _columns_match(left: pd.Series, right: pd.Series) -> bool:
     left_values = pd.to_numeric(left, errors="coerce").to_numpy(dtype=float)
     right_values = pd.to_numeric(right, errors="coerce").to_numpy(dtype=float)
+    if len(left_values) != len(right_values):
+        return False
+    left_missing = np.isnan(left_values)
+    right_missing = np.isnan(right_values)
+    if not np.array_equal(left_missing, right_missing):
+        return False
+    observed = ~left_missing
     return bool(
-        len(left_values) == len(right_values)
-        and np.isfinite(left_values).all()
-        and np.isfinite(right_values).all()
-        and np.isclose(left_values, right_values, rtol=1e-12, atol=1e-12).all()
+        np.isfinite(left_values[observed]).all()
+        and np.isfinite(right_values[observed]).all()
+        and np.isclose(left_values[observed], right_values[observed], rtol=1e-12, atol=1e-12).all()
     )
+
+
+def _growth_null_policy_valid(frame: pd.DataFrame, column: str) -> bool:
+    """Only the first observed year per country may be null, and it must be null."""
+    if not {"country", "year", column}.issubset(frame.columns):
+        return False
+    year = pd.to_numeric(frame["year"], errors="coerce")
+    first_year = year.groupby(frame["country"].astype(str)).transform("min")
+    expected_null = year.eq(first_year)
+    actual_null = frame[column].isna()
+    return bool(expected_null.equals(actual_null))
 
 
 def _shock_control_check(
@@ -768,9 +786,12 @@ def _shock_control_check(
             problems.append(f"{granularity}:missing={missing}")
             continue
         for column in required_numeric_fields:
-            values, invalid = _finite_numeric(frame[column], allow_null=False)
+            structural_growth = column in STRUCTURAL_GROWTH_FIELDS
+            values, invalid = _finite_numeric(frame[column], allow_null=structural_growth)
             if invalid:
                 problems.append(f"{granularity}:{column}_invalid={invalid}")
+            if structural_growth and not _growth_null_policy_valid(frame, column):
+                problems.append(f"{granularity}:{column}_first_year_null_policy_invalid")
             if column in treatment_fields and not np.isin(values, [0.0, 1.0]).all():
                 problems.append(f"{granularity}:{column}_not_binary")
         _baseline_values, baseline_invalid = _finite_numeric(frame[interaction_baseline], allow_null=True)

@@ -9,24 +9,24 @@ function supportedInteractionDiagnosticsFixture() {
   const eventSupport: EventSupport = {
     policy: "teaching_min_contributing_clusters_per_event_period",
     policy_is_statistical_theorem: false,
-    cluster: "country", base_k: -1, reference_term: "k=-1", min_contributing_clusters: 5,
+    cluster: "country", base_k: -1, reference_term: "k=-1", min_contributing_clusters: 12,
     periods: [
       {
         term: "k=-1", event_time: -1, is_reference: true, estimated: false,
-        contributing_rows: 8, contributing_entities: 8, contributing_clusters: 8,
-        cohorts: { "2018": 8 }, period_supported: true, inference_supported: true,
+        contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+        cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
         suppress_inference: false, reason_codes: [], reasons: [],
       },
       {
         term: "k=-2", event_time: -2, is_reference: false, estimated: true,
-        contributing_rows: 8, contributing_entities: 8, contributing_clusters: 8,
-        cohorts: { "2018": 8 }, period_supported: true, inference_supported: true,
+        contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+        cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
         suppress_inference: false, reason_codes: [], reasons: [],
       },
       {
         term: "k=0", event_time: 0, is_reference: false, estimated: true,
-        contributing_rows: 8, contributing_entities: 8, contributing_clusters: 8,
-        cohorts: { "2018": 8 }, period_supported: true, inference_supported: true,
+        contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+        cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
         suppress_inference: false, reason_codes: [], reasons: [],
       },
     ],
@@ -74,12 +74,12 @@ describe("forest chart display scale", () => {
     const support: EventSupport = {
       policy: "teaching_min_contributing_clusters_per_event_period",
       policy_is_statistical_theorem: false,
-      cluster: "country", base_k: -1, reference_term: "k=-1", min_contributing_clusters: 5,
+      cluster: "country", base_k: -1, reference_term: "k=-1", min_contributing_clusters: 12,
       periods: [
         {
           term: "k=-1", event_time: -1, is_reference: true, estimated: false,
-          contributing_rows: 6, contributing_entities: 6, contributing_clusters: 6,
-          cohorts: { "2018": 6 }, period_supported: true, inference_supported: true,
+          contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+          cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
           suppress_inference: false, reason_codes: [], reasons: [],
         },
         {
@@ -91,8 +91,8 @@ describe("forest chart display scale", () => {
         },
         {
           term: "k=0", event_time: 0, is_reference: false, estimated: true,
-          contributing_rows: 6, contributing_entities: 6, contributing_clusters: 6,
-          cohorts: { "2018": 6 }, period_supported: true, inference_supported: true,
+          contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+          cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
           suppress_inference: false, reason_codes: [], reasons: [],
         },
       ],
@@ -140,18 +140,18 @@ describe("forest chart display scale", () => {
     const localSupport: EventSupport = {
       policy: "teaching_min_contributing_clusters_per_event_period",
       policy_is_statistical_theorem: false,
-      cluster: "country", base_k: -1, reference_term: "k=-1", min_contributing_clusters: 5,
+      cluster: "country", base_k: -1, reference_term: "k=-1", min_contributing_clusters: 12,
       periods: [
         {
           term: "k=-1", event_time: -1, is_reference: true, estimated: false,
-          contributing_rows: 6, contributing_entities: 6, contributing_clusters: 6,
-          cohorts: { "2018": 6 }, period_supported: true, inference_supported: true,
+          contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+          cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
           suppress_inference: false, reason_codes: [], reasons: [],
         },
         {
           term: "k=0", event_time: 0, is_reference: false, estimated: true,
-          contributing_rows: 6, contributing_entities: 6, contributing_clusters: 6,
-          cohorts: { "2018": 6 }, period_supported: true, inference_supported: true,
+          contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+          cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
           suppress_inference: false, reason_codes: [], reasons: [],
         },
       ],

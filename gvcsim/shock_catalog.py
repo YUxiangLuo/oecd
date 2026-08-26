@@ -10,21 +10,24 @@ EXPOSURE_PREFIX = "export_exposure"
 # treated 阈值:全部出口的平均额外关税超过 0.1 个百分点才算受处理,
 # 避免"土耳其对美反制 × 美国微小对土出口份额"这类痕量项污染处理组。
 TREATED_THRESHOLD = 0.001
-SHOCK_CONTRACT_VERSION = 1
+SHOCK_CONTRACT_VERSION = 2
 EXPOSURE_MODE_FIXED_PRETREATMENT = "fixed_pretreatment"
 EXPOSURE_MODE_CONTEMPORANEOUS = "contemporaneous"
 EXPOSURE_MODES = (EXPOSURE_MODE_FIXED_PRETREATMENT, EXPOSURE_MODE_CONTEMPORANEOUS)
 EXPOSURE_SOURCE_OECD_ICIO = "oecd_icio_bilateral_flow"
 EXPOSURE_SOURCE_STYLIZED = "stylized_teaching_fallback"
 EXPOSURE_SOURCES = (EXPOSURE_SOURCE_OECD_ICIO, EXPOSURE_SOURCE_STYLIZED)
-OECD_EXPOSURE_DISCLOSURE = "出口暴露度来自经发布校验的 OECD ICIO 双边流向；政策事件映射与冲击数值编码仍是教学口径。"
+OECD_EXPOSURE_DISCLOSURE = "国家–行业出口暴露度来自经发布校验的 OECD ICIO 双边流向；目的地净流量因有符号存货项为负时按 0 进入权重，分母为非负跨境目的地流量之和；政策映射与冲击数值仍是教学口径。"
 STYLIZED_EXPOSURE_DISCLOSURE = "风格化出口暴露度仅供教学测试，不是 OECD ICIO 观测值，不得表述为官方数据。"
 ZERO_TOTAL_EXPORTS_POLICY = "total_exports=0 时 bilateral_exports 必须为 0，export_exposure 明确定义为 0。"
-EVENT_SOURCE_OFFICIAL = "official_event_source"
+EVENT_SOURCE_COMPLETE = "official_event_source_complete"
+EVENT_SOURCE_PARTIAL = "partial_official_event_source"
+EVENT_SOURCE_OFFICIAL = EVENT_SOURCE_COMPLETE  # compatibility alias
 EVENT_SOURCE_TEACHING = "teaching_encoding_no_event_source"
-EVENT_SOURCE_STATUSES = (EVENT_SOURCE_OFFICIAL, EVENT_SOURCE_TEACHING)
+EVENT_SOURCE_STATUSES = (EVENT_SOURCE_COMPLETE, EVENT_SOURCE_PARTIAL, EVENT_SOURCE_TEACHING)
 EVENT_SOURCE_DISCLOSURE = (
-    "只有列出 URL 的事件与日期可视为有官方事件来源；ICIO 行业映射与数值强度始终是未逐项引证的教学编码，不是官方统计。"
+    "来源状态只覆盖所列 URL 能证明的事件、日期或法定税率主张；partial 表示复合批次或日期未全部覆盖。"
+    "ICIO 行业映射、覆盖率、年内折算与数值强度始终是教学编码，不是官方统计。"
 )
 
 # 稳定英文键 → (强度列, 处理指示列)。键是 API 契约,展示文案见 SHOCK_LABELS:
@@ -47,7 +50,7 @@ SHOCK_LABELS = {
 
 SHOCK_DEFINITIONS = {
     SHOCK_TARIFF: (
-        "各关税事件的双边行业平均加征税率乘以目标经济体对加征方的出口暴露度后求和；数值表示全部出口面对的平均额外关税。"
+        "各关税事件的双边行业平均加征税率乘以目标国家–行业对加征方的行业出口份额后求和；数值表示该行业全部出口面对的教学平均额外关税。"
     ),
     SHOCK_SANCTIONS: (
         "把制裁名单事件中的目标实体手工映射到目标经济体×ICIO 行业的教学暴露强度；"
@@ -266,6 +269,7 @@ class TariffEvent:
     overrides: dict[str, dict[str, dict[int, float]]] = field(default_factory=dict)
     timeline_note: str = ""
     source_urls: tuple[str, ...] = ()
+    source_complete: bool = False
 
     def rate(self, country: str, sector: str, year: int) -> float:
         table = self.overrides.get(country, self.rates)
@@ -291,6 +295,7 @@ class EntityListEvent:
     removal: str = ""
     timeline_note: str = ""
     source_urls: tuple[str, ...] = ()
+    source_complete: bool = False
 
     @property
     def shock_col(self) -> str:
@@ -318,6 +323,11 @@ EVENTS = [
             "C26": {2018: 0.014, 2019: 0.012, 2020: 0.010},
             "C27": {2018: 0.030, 2019: 0.026, 2020: 0.022},
         },
+        source_urls=(
+            "https://www.federalregister.gov/api/v1/documents/2018-01592.json",
+            "https://www.federalregister.gov/api/v1/documents/2018-01604.json",
+        ),
+        source_complete=True,
     ),
     TariffEvent(
         name="美国232钢铝关税",
@@ -338,6 +348,11 @@ EVENTS = [
             # 土耳其 2018-08 起钢税加倍至 50%,2019-05 恢复
             "TUR": {"C24": {2018: 0.24, 2019: 0.24, 2020: 0.20}},
         },
+        source_urls=(
+            "https://www.federalregister.gov/api/v1/documents/2018-05477.json",
+            "https://www.federalregister.gov/api/v1/documents/2018-05478.json",
+        ),
+        source_complete=True,
     ),
     TariffEvent(
         name="美国301对华关税(四批清单复合处理；时间线标首批)",
@@ -377,6 +392,8 @@ EVENTS = [
             "https://www.ustr.gov/issue-areas/enforcement/section-301-investigations/section-301-china/34-billion-trade-action",
             "https://www.ustr.gov/issue-areas/enforcement/section-301-investigations/section-301-china/200-billion-trade-action",
         ),
+        # Only List 1 and List 3 are linked; List 2/4A and annual sector mapping remain partial.
+        source_complete=False,
     ),
     TariffEvent(
         name="中方对美反制关税",
@@ -490,6 +507,10 @@ EVENTS = [
             "C10T12": {2019: 0.02, 2020: 0.075},
             "C28": {2020: 0.02},
         },
+        source_urls=(
+            "https://ustr.gov/about-us/policy-offices/press-office/press-releases/2019/october/us-wins-75-billion-award-airbus",
+        ),
+        source_complete=True,
     ),
 ]
 
@@ -508,6 +529,11 @@ ENTITY_LIST_EVENTS = [
             "B07_08": {2018: 0.025, 2019: 0.010},
             "K": {2018: 0.020, 2019: 0.008},
         },
+        source_urls=(
+            "https://ofac.treasury.gov/recent-actions/20180406",
+            "https://ofac.treasury.gov/recent-actions/20190127",
+        ),
+        source_complete=True,
     ),
     EntityListEvent(
         name="OFAC/二级制裁风格:俄罗斯能源金融限制",
@@ -536,6 +562,7 @@ ENTITY_LIST_EVENTS = [
         },
         timeline_note="本事件只对应 OFAC 于 2020-07-31 作出的 SDN 指定；行业强度是教学映射，不把其他进口限制混入同一事件。",
         source_urls=("https://ofac.treasury.gov/recent-actions/20200731",),
+        source_complete=True,
     ),
     EntityListEvent(
         name="BIS 实体清单:华为及关联公司",
@@ -549,6 +576,8 @@ ENTITY_LIST_EVENTS = [
             "J62_63": {2019: 0.030, 2020: 0.050},
             "C27": {2019: 0.020, 2020: 0.030},
         },
+        source_urls=("https://www.federalregister.gov/api/v1/documents/2019-10616.json",),
+        source_complete=True,
     ),
     EntityListEvent(
         name="BIS 实体清单:中芯国际 SMIC",
@@ -562,5 +591,7 @@ ENTITY_LIST_EVENTS = [
             "C26": {2020: 0.020},
             "C28": {2020: 0.010},
         },
+        source_urls=("https://www.federalregister.gov/api/v1/documents/2020-28031.json",),
+        source_complete=True,
     ),
 ]

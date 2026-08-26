@@ -100,6 +100,10 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
   const years = meta?.years ?? [];
   const yearSpan = years.length ? `${years[0]}–${years.at(-1)}` : "—";
   const nodes = (meta?.countries.length ?? 0) * (meta?.sectors.length ?? 0);
+  const namedEconomies = meta?.countries.includes("ROW")
+    ? meta.countries.length - 1
+    : meta?.countries.length ?? 76;
+  const regionCoverage = `${namedEconomies} 个具名经济体 + ROW 剩余地区账户`;
 
   const stages = useMemo(() => {
     if (!stepsData) return [];
@@ -130,7 +134,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
       <h1 className="intro-title">供应链仿真系统</h1>
       <div className="intro-kicker">GVC SIMULATION LAB</div>
       <p className="intro-lede">
-        把 <b>OECD ICIO 真实数据</b>变成<b>可复现的实证链条</b> ——
+        把 <b>OECD ICIO 真实指标</b>变成<b>边界透明的方法演示链条</b> ——
         一条从数据接入到实验报告的完整闭环。
       </p>
       <div className="intro-pipeline">
@@ -146,7 +150,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
       <div className="intro-stats">
         {/* 课程范围是数据事实，必须从首帧就显示最终值。数字滚动会在截图或
             快速阅读时制造“58 / 34 / 12”一类并不存在的中间口径。 */}
-        <div><div className="intro-stat-v">{meta?.countries.length ?? 77}</div><div className="intro-stat-l">经济体</div></div>
+        <div><div className="intro-stat-v">{namedEconomies} + ROW</div><div className="intro-stat-l">具名经济体 + 剩余账户</div></div>
         <div><div className="intro-stat-v">{meta?.sectors.length ?? 45}</div><div className="intro-stat-l">行业</div></div>
         <div><div className="intro-stat-v">{yearSpan}</div><div className="intro-stat-l">年份覆盖</div></div>
         <div><div className="intro-stat-v">{stepsData?.steps.length ?? 16}</div><div className="intro-stat-l">实验步骤</div></div>
@@ -180,7 +184,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
           </button>
           {openCard === "icio" && (
             <div className="intro-card-body" id={icioPanelId}>
-              <div>{meta?.countries.length ?? 77} 经济体 × {meta?.sectors.length ?? 45} 行业节点，{yearSpan} 逐年</div>
+              <div>{regionCoverage} × {meta?.sectors.length ?? 45} 行业节点，{yearSpan} 逐年</div>
               <div>中间品方阵约 {nodes.toLocaleString()} × {nodes.toLocaleString()}（国家×行业）</div>
               <div>原始宽表还含最终需求列与账户行，约 3,468 行 × 3,929 列</div>
               <div>结合 VA/TLS 账户、最终需求和里昂惕夫逆矩阵，追踪增加值、税收与网络位置</div>

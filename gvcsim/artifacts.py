@@ -14,7 +14,7 @@ from typing import Any
 import pandas as pd
 
 
-ARTIFACT_CONTRACT_VERSION = 7
+ARTIFACT_CONTRACT_VERSION = 8
 ARTIFACT_MANIFEST_ALGORITHM = "sha256"
 ARTIFACT_MANIFEST_NAME = "artifact_manifest"
 METADATA_DIGEST_NAME = "metadata_sha256"

@@ -443,6 +443,7 @@ def _exposure_index_fixture() -> pd.DataFrame:
                 rows.append(
                     {
                         "country": country,
+                        "sector": "s1",
                         "imposer": destination,
                         "year": year,
                         "bilateral_exports": share,
@@ -453,6 +454,7 @@ def _exposure_index_fixture() -> pd.DataFrame:
             rows.append(
                 {
                     "country": country,
+                    "sector": "s1",
                     "imposer": "EU",
                     "year": year,
                     "bilateral_exports": 0.0,
@@ -518,8 +520,8 @@ def test_release_exposure_index_builds_and_reads_once_per_exact_key(monkeypatch)
     assert third is not first
     assert reads == ["export_exposure_2020.csv", "export_exposure_2020.csv"]
     assert dict(first.values) == expected_values
-    assert first.available_years[("AAA", "USA")] == (2017, 2020)
-    assert first.fixed_base_years[("AAA", "USA")] == 2017
+    assert first.available_years[("AAA", "s1", "USA")] == (2017, 2020)
+    assert first.fixed_base_years[("AAA", "s1", "USA")] == 2020
 
 
 @pytest.mark.parametrize(
@@ -618,7 +620,7 @@ def _fixture_tariff_event() -> shocks.TariffEvent:
         ("blank-treated-event", "缺少事件"),
         ("blank-positive-stylized-event", "缺少事件"),
         ("blank-treated-stylized-event", "缺少事件"),
-        ("absent-coverage", "缺少国家/加征方覆盖"),
+        ("absent-coverage", "缺少国家/行业/加征方覆盖"),
         ("missing-fixed-key", "缺少固定权重键"),
         ("missing-fixed-year", "缺少固定年份键"),
         ("missing-requested-year", "缺少请求年份键"),
@@ -627,7 +629,7 @@ def _fixture_tariff_event() -> shocks.TariffEvent:
 )
 def test_oecd_page_enrichment_fails_closed_for_missing_lookup_contract(monkeypatch, case, match):
     monkeypatch.setattr(shocks, "EVENTS", [_fixture_tariff_event()])
-    pair = ("AAA", "USA")
+    pair = ("AAA", "s1", "USA")
     values = {(*pair, 2017): 0.2, (*pair, 2020): 0.3}
     available = {pair: (2017, 2020)}
     fixed = {pair: 2017}
@@ -731,7 +733,7 @@ def test_oecd_page_enrichment_contract_error_is_controlled_by_app(teaching_db, m
     frame = _shock_frame().iloc[[0]].copy()
     monkeypatch.setattr(data_routes, "_read_shocks", lambda: frame.copy())
     monkeypatch.setattr(shocks, "EVENTS", [_fixture_tariff_event()])
-    pair = ("AAA", "USA")
+    pair = ("AAA", "s1", "USA")
     index = data_routes._ExposureIndex(
         values={(*pair, 2017): 0.2},
         available_years={pair: (2017,)},
@@ -806,7 +808,7 @@ def test_regression_run_and_placebo_are_simple_current_results(teaching_db, monk
     run = client.post("/api/regression/run", json={"outcome": "network"})
     assert run.status_code == 200
     codes = {check["code"] for check in run.json()["preflight"]["checks"]}
-    assert {"no_never_treated_entity", "treatment_reversal", "network_interference", "treatment_weighting"} <= codes
+    assert {"no_never_treated_entity", "treatment_reversal", "gvc_interference", "covid_overlap", "treatment_weighting"} <= codes
     assert run.json()["preflight"]["can_infer"] is False
     assert "attestation" not in run.json()["result"]
 

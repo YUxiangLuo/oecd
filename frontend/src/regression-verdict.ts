@@ -188,7 +188,7 @@ export function buildRegressionVerdict(
   if (globallySuppressed) {
     const invalid = response.result.status === "invalid_design" || support?.status === "invalid_design";
     const supportEvidence = support
-      ? `只有 ${support.treated_clusters} 个处理聚类（下限 ${support.min_treated_clusters}），`
+      ? `只有 ${support.treated_clusters} 个处理聚类（课程停止线 ${support.min_treated_clusters}；达到也不等于自动有效），`
         + "聚类稳健推断在此失效；p 值、置信区间与星号均已抑制。"
       : "结果状态表明处理支持不足；p 值、置信区间与星号均不可用于推断。";
     return {

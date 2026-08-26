@@ -36,7 +36,7 @@ const event: ShockEvent = {
   target_codes: ["CHN"],
   sector_codes: ["A01_02", "C24", "C29"],
   all_targets: false,
-  source_status: "official_event_source",
+  source_status: "partial_official_event_source",
   source_disclosure: "ICIO 行业与数值是教学编码。",
   source_urls: ["https://example.gov/event"],
 };
@@ -45,7 +45,7 @@ describe("step2 shock event model", () => {
   it("fails closed on missing or contradictory event provenance", () => {
     expect(shockEventsProvenanceError([event])).toBeNull();
     expect(shockEventsProvenanceError([{
-      ...event, source_status: "official_event_source", source_urls: [],
+      ...event, source_status: "official_event_source_complete", source_urls: [],
     }])).toContain("没有 URL");
     expect(shockEventsProvenanceError([{
       ...event, source_status: "teaching_encoding_no_event_source", source_urls: ["https://example.gov"],

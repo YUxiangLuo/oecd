@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -272,6 +273,7 @@ def _write_semantic_outputs(directory: Path, year: int = 2020) -> dict[str, dict
         [
             {
                 "country": country,
+                "sector": "s1",
                 "imposer": imposer,
                 "year": year,
                 "bilateral_exports": bilateral,
@@ -326,6 +328,8 @@ def _write_semantic_outputs(directory: Path, year: int = 2020) -> dict[str, dict
     for frame in (panel_country, panel_industry):
         for index, column in enumerate(regression_quality.REGRESSION_CONTROL_FIELDS):
             frame[column] = float(index + 1)
+        first_year = frame.groupby("country")["year"].transform("min")
+        frame.loc[frame["year"].eq(first_year), ["gdp_proxy_growth", "exports_proxy_growth"]] = np.nan
 
     exposure = pd.concat(
         [pd.read_csv(directory / f"export_exposure_{artifact_year}.csv") for artifact_year in years],
@@ -369,6 +373,10 @@ def _write_semantic_outputs(directory: Path, year: int = 2020) -> dict[str, dict
     )
     for index, column in enumerate(regression_quality.REGRESSION_CONTROL_FIELDS):
         controls_frame[column] = float(index + 1)
+    first_control_year = controls_frame.groupby("country")["year"].transform("min")
+    controls_frame.loc[
+        controls_frame["year"].eq(first_control_year), ["gdp_proxy_growth", "exports_proxy_growth"]
+    ] = np.nan
     controls_frame.to_csv(directory / "controls_country.csv", index=False)
     shock_panel.to_csv(directory / "demo_trade_war_tariffs.csv", index=False)
     output_summary = {
@@ -399,7 +407,7 @@ def _release(directory: Path, *, course_release: str | None = None) -> None:
     )
 
 
-def test_v7_release_requires_regression_shock_output_qc_manifest_and_identity(tmp_path):
+def test_v8_release_requires_regression_shock_output_qc_manifest_and_identity(tmp_path):
     _release(tmp_path)
 
     result = artifacts.validate_release(tmp_path)
@@ -407,8 +415,8 @@ def test_v7_release_requires_regression_shock_output_qc_manifest_and_identity(tm
 
     assert result == {"release_id": RELEASE_ID, "files": 25, "years": 3}
     assert artifacts.release_identity(tmp_path) == RELEASE_ID
-    assert metadata["artifact_contract_version"] == 7
-    assert metadata["regression_input_qc_contract"]["version"] == 1
+    assert metadata["artifact_contract_version"] == 8
+    assert metadata["regression_input_qc_contract"]["version"] == 2
     sample_scope = metadata["regression_input_qc_contract"]["sample_scope"]
     assert sample_scope["runtime_default"] == "exclude_row"
     assert sample_scope["excluded_country_values"] == ["ROW"]
@@ -1051,10 +1059,10 @@ def test_regression_input_qc_missing_contract_file_and_summary_tamper_fail(tmp_p
         artifacts.validate_release(tmp_path)
 
 
-def test_artifact_v6_is_rejected_and_v7_is_required(tmp_path):
+def test_artifact_v7_is_rejected_and_v8_is_required(tmp_path):
     _release(tmp_path)
-    _tamper_signed_metadata(tmp_path, lambda metadata: metadata.__setitem__("artifact_contract_version", 6))
-    with pytest.raises(artifacts.ArtifactContractError, match="expected 7, got 6"):
+    _tamper_signed_metadata(tmp_path, lambda metadata: metadata.__setitem__("artifact_contract_version", 7))
+    with pytest.raises(artifacts.ArtifactContractError, match="expected 8, got 7"):
         artifacts.validate_release(tmp_path)
 
 

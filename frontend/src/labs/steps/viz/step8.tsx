@@ -2,7 +2,7 @@
  * 步骤 7 · 贸易流可视化 —— 故事:「一国的出口,价值从哪来?」
  *
  * 三个贸易专属镜头(非通用图表标签),各自带读图脚手架:
- *   定位图   FVA 份额(后向参与)× GVC 生产份额(前向参与),四象限给经济体分型
+ *   定位图   FVA 份额(后向依赖)× WWYZ GVC 生产份额(前向生产参与),按样本中位数描述性分型
  *   出口拆解 选中国家的毛出口拆成五类 WWZ 聚合项与 TLS 扩展,直观看本国 / 外国来源占比
  *   FVA 排序 谁的出口最依赖外国增加值(后向 GVC 参与最深)
  */
@@ -90,7 +90,7 @@ export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; stat
             active={lens as Lens}
             onPick={pickLens}
             lenses={[
-              { key: "quadrant", label: "定位图", hint: "后向 × 前向参与,四象限分型" },
+              { key: "quadrant", label: "定位图", hint: "后向依赖 × WWYZ 前向生产参与；样本中位数分型" },
               { key: "decompose", label: "出口拆解", hint: "毛出口 = 五类 WWZ 聚合项 + TLS 扩展" },
               { key: "rank", label: "FVA 排序", hint: "谁最依赖外国增加值" },
             ]}
@@ -111,8 +111,8 @@ export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; stat
       ) : lens === "quadrant" ? (
         <ChartStory
           eyebrow="经济体分型"
-          title="出口价值定位图:后向参与 × 前向参与"
-          what={<>横轴 <b>FVA 份额</b> = 出口里用了多少<b>外国</b>增加值(后向 GVC 依赖);纵轴 <b>GVC 生产份额</b> = 本国增加值有多少经中间品贸易进入全球生产(前向参与)。虚线是全样本中位数。</>}
+          title="出口价值定位图:后向依赖 × WWYZ 前向生产参与"
+          what={<>横轴 <b>FVA 份额</b> = 出口里用了多少<b>外国</b>增加值(后向 GVC 依赖);纵轴 <b>GVC 生产份额</b> = 本国增加值有多少经中间品贸易进入全球生产（WWYZ 前向生产参与）。虚线是全样本中位数；四象限是本项目描述性分型，不是 OECD 官方分类，也不等同于 TiVA forward participation。</>}
           read={<>越靠右,越依赖进口中间品做出口;越靠上,越多本国增加值卷入跨境生产。四个象限对应四种参与模式(见四角标签)。</>}
           find={<>找到你选的国家各落哪个象限:越南、卢森堡、斯洛伐克通常在右侧高 FVA 区(加工-再出口);美国、日本内需大,FVA 份额偏低。</>}
           note={`参考线基于全部有效样本 n=${quadRows.length};份额 = 占毛出口 / 总增加值的比例。`}
@@ -120,7 +120,7 @@ export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; stat
           <QuadrantScatter
             rows={quadRows} referenceRows={quadRows}
             xKey="FVA_share" yKey="3_VA_GVC_share"
-            xLabel="FVA 份额(后向参与)" yLabel="GVC 生产份额(前向参与)"
+            xLabel="FVA 份额(后向依赖)" yLabel="WWYZ GVC 生产份额(前向生产参与)"
             xFormat="pct" yFormat="pct"
             highlight={highlight} quadrantLabels={QUAD_LABELS}
           />
@@ -129,9 +129,9 @@ export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; stat
         <ChartStory
           eyebrow="WWZ 聚合项 + OECD TLS 扩展"
           title="拆开一国的出口:五类增加值核算项与 TLS"
-          what={<>每条 = 一个国家的含税毛出口,归一化到 100%:DVAex / DVArt / DDC 是<b>本国</b>增加值及其重复计算,FVA / FDC 是<b>外国</b>来源；taxsub 是 OECD TLS 账户扩展,不是 WWZ 原文分类。</>}
-          read={<>{WWZ_READING_GUIDE}各段越宽，表示对应分项占含税毛出口的份额越高；右侧数字是该国毛出口(百万美元)。</>}
-          find={<>对比大型经济体(美国:DVAex 段主导)与小型开放经济体(越南、卢森堡:FVA 段很宽)。五类 WWZ 聚合项加 TLS 扩展恒等于含税毛出口。</>}
+          what={<>每条 = 一个国家的 VA+TLS 账户闭合毛出口,归一化到 100%:DVAex / DVArt / DDC 是<b>本国</b>增加值及其重复计算,FVA / FDC 是<b>外国</b>来源；taxsub 是 OECD TLS 账户扩展,不是 WWZ 原文分类。</>}
+          read={<>{WWZ_READING_GUIDE}各段越宽，表示对应分项占 VA+TLS 账户闭合毛出口的份额越高；右侧数字是该国毛出口(百万美元)。</>}
+          find={<>对比大型经济体(美国:DVAex 段主导)与小型开放经济体(越南、卢森堡:FVA 段很宽)。五类 WWZ 聚合项加 TLS 扩展恒等于 VA+TLS 账户闭合毛出口；TLS 是产品税减补贴账户，不等于步骤 11 的额外关税。</>}
           note={picked.length ? "当前显示你选中的国家。" : "未选国家时默认展示毛出口最大的 8 国;在上方「选国家」挑选可替换。"}
         >
           <CompositionBar

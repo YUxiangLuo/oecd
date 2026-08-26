@@ -47,18 +47,18 @@ function response(
     cluster: "country",
     base_k: -1,
     reference_term: "k=-1",
-    min_contributing_clusters: 5,
+    min_contributing_clusters: 12,
     periods: [
       {
         term: coef.name.replace("×base_gvc", ""), event_time: Number(coef.name.replace("k=", "")),
-        is_reference: false, estimated: true, contributing_rows: 6, contributing_entities: 6,
-        contributing_clusters: 6, cohorts: { "2018": 6 }, period_supported: true,
+        is_reference: false, estimated: true, contributing_rows: 13, contributing_entities: 13,
+        contributing_clusters: 13, cohorts: { "2018": 13 }, period_supported: true,
         inference_supported: true, suppress_inference: false, reason_codes: [], reasons: [],
       },
       {
         term: "k=-1", event_time: -1, is_reference: true, estimated: false,
-        contributing_rows: 6, contributing_entities: 6, contributing_clusters: 6,
-        cohorts: { "2018": 6 }, period_supported: true, inference_supported: true,
+        contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+        cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
         suppress_inference: false, reason_codes: [], reasons: [],
       },
     ],
@@ -98,8 +98,8 @@ describe("buildRegressionVerdict", () => {
     payload.result.coefs.unshift({ ...coefficient(-0.01, -0.03, 0.01), name: "k=-2" });
     payload.result.event_support?.periods.push({
       term: "k=-2", event_time: -2, is_reference: false, estimated: true,
-      contributing_rows: 6, contributing_entities: 6, contributing_clusters: 6,
-      cohorts: { "2018": 6 }, period_supported: true, inference_supported: true,
+      contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+      cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
       suppress_inference: false, reason_codes: [], reasons: [],
     });
     payload.result.diagnostics = {
@@ -127,8 +127,8 @@ describe("buildRegressionVerdict", () => {
     ];
     payload.result.event_support?.periods.push({
       term: "k=-2", event_time: -2, is_reference: false, estimated: true,
-      contributing_rows: 6, contributing_entities: 6, contributing_clusters: 6,
-      cohorts: { "2018": 6 }, period_supported: true, inference_supported: true,
+      contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+      cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
       suppress_inference: false, reason_codes: [], reasons: [],
     });
     const scoped = (scope: "main" | "interaction" | "joint", terms: string[], p: number) => ({
@@ -292,8 +292,8 @@ describe("buildRegressionVerdict", () => {
     thin.result.coefs.push(supportedLater);
     thin.result.event_support?.periods.push({
       term: "k=+1", event_time: 1, is_reference: false, estimated: true,
-      contributing_rows: 6, contributing_entities: 6, contributing_clusters: 6,
-      cohorts: { "2018": 6 }, period_supported: true, inference_supported: true,
+      contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+      cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
       suppress_inference: false, reason_codes: [], reasons: [],
     });
     const period = thin.result.event_support?.periods.find((item) => item.term === "k=0");
@@ -302,7 +302,7 @@ describe("buildRegressionVerdict", () => {
     period.period_supported = false;
     period.inference_supported = false;
     period.suppress_inference = true;
-    period.reasons = ["k=0 只有 4 个贡献处理聚类，低于课程政策下限 5。"];
+    period.reasons = ["k=0 只有 4 个贡献处理聚类，低于课程停止线 12。"];
     const thinVerdict = buildRegressionVerdict("trade", thin);
     expect(thinVerdict.coefficient?.name).toBe("k=0");
     expect(thinVerdict.state).toBe("suppressed");

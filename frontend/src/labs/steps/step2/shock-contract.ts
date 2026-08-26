@@ -1,7 +1,7 @@
 import type { ShockContract } from "../../../types";
 
-export const SHOCK_ARTIFACT_CONTRACT_VERSION = 7;
-export const SHOCK_CONTRACT_VERSION = 1;
+export const SHOCK_ARTIFACT_CONTRACT_VERSION = 8;
+export const SHOCK_CONTRACT_VERSION = 2;
 export const SHOCK_TREATED_THRESHOLD = 0.001;
 export const SHOCK_CONTRACT_TYPES = {
   tariff: {
@@ -91,7 +91,7 @@ export function exposureSourceTeaching(source: unknown): { label: string; offici
       label: "OECD ICIO 双边流向",
       official: true,
       valid: true,
-      disclosure: "出口暴露度来自经发布校验的 OECD ICIO 双边流向；政策事件映射与冲击数值编码仍是教学口径。",
+      disclosure: "国家–行业出口暴露度来自经发布校验的 OECD ICIO 双边流向；目的地净流量因有符号存货项为负时按 0 进入权重，分母为非负跨境目的地流量之和；政策映射与冲击数值仍是教学口径。",
     };
   }
   if (source === "stylized_teaching_fallback") {

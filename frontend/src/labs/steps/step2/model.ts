@@ -71,7 +71,7 @@ export function shockEventsProvenanceError(events: ShockEvent[]): string | null 
     if (!event.source_disclosure || !Array.isArray(event.source_urls)) {
       return `事件 ${event.name || "未命名"} 缺少固定来源披露或 URL 数组。`;
     }
-    if (event.source_status === "official_event_source") {
+    if (event.source_status === "official_event_source_complete" || event.source_status === "partial_official_event_source") {
       if (event.source_urls.length === 0) return `事件 ${event.name} 声称有官方来源但没有 URL。`;
     } else if (event.source_status === "teaching_encoding_no_event_source") {
       if (event.source_urls.length !== 0) return `事件 ${event.name} 的教学来源状态与 URL 矛盾。`;

@@ -56,8 +56,8 @@ export function SelectedEventBar({
         <div>
           <dt>事件 / 日期来源</dt>
           <dd>
-            {event.source_status === "official_event_source"
-              ? <>有官方事件来源：{event.source_urls.map((url, index) => (
+            {event.source_status !== "teaching_encoding_no_event_source"
+              ? <>{event.source_status === "official_event_source_complete" ? "官方来源覆盖该事件/日期主张" : "仅部分官方来源，未覆盖全部复合批次/日期"}：{event.source_urls.map((url, index) => (
                   <span key={url}>{index > 0 ? "、" : ""}<a href={url} target="_blank" rel="noreferrer">来源 {index + 1}</a></span>
                 ))}</>
               : "没有逐项事件 URL；按未引证教学编码展示"}

@@ -40,7 +40,7 @@ export function ShockPanelSuccessView({
   const tariff = shockType === "tariff";
   const formula = tariff
     ? String(panel.rows.find((row) => row.formula)?.formula
-      ?? "shock_intensity = Σ(事件双边行业平均加征税率 × 对加征方出口暴露度)")
+      ?? "shock_intensity = Σ(事件双边行业平均加征税率 × 该国家–行业对加征方的出口份额)")
     : null;
   return (
     <>
@@ -52,7 +52,7 @@ export function ShockPanelSuccessView({
               <th scope="col" aria-sort={sort === "country_asc" ? "ascending" : undefined} style={{ textAlign: "left" }}>国家</th>
               <th scope="col" aria-sort={sort === "industry_asc" ? "ascending" : undefined}>行业</th>
               <th scope="col" aria-sort={sort === "intensity_desc" ? "descending" : sort === "intensity_asc" ? "ascending" : undefined}>{INTENSITY_COLUMN_LABELS[shockType]}</th>
-              {tariff && <><th scope="col">主要加征方</th><th scope="col">出口暴露度</th><th scope="col">暴露度来源</th></>}
+              {tariff && <><th scope="col">主要加征方</th><th scope="col">行业出口暴露度</th><th scope="col">暴露度来源</th></>}
               <th scope="col">受处理</th><th scope="col">宣布</th><th scope="col">生效</th><th scope="col" style={{ textAlign: "left" }}>主要事件 / 教学映射</th>
             </tr>
           </thead>
@@ -87,7 +87,7 @@ export function ShockPanelSuccessView({
       </ScrollableRegion>
       <div className="tipbox shock-panel-note">
         <b>{typeLabel}定义：</b>{definition}
-        {tariff && <> 只有关税类型使用加征方与出口暴露度。<span className="tariff-formula">公式：{formula}</span></>}
+        {tariff && <> 只有关税类型使用加征方与国家–行业出口暴露度；分母是该行业全部跨境出口，不是国家总出口。<span className="tariff-formula">公式：{formula}</span></>}
         面板按冲击类型聚合全部已编码事件；左侧单个事件只用于定位。
       </div>
     </>

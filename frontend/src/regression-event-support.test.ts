@@ -9,12 +9,12 @@ import type { EventSupport } from "./types";
 const support: EventSupport = {
   policy: "teaching_min_contributing_clusters_per_event_period",
   policy_is_statistical_theorem: false,
-  cluster: "country", base_k: -1, reference_term: "k=-1", min_contributing_clusters: 5,
+  cluster: "country", base_k: -1, reference_term: "k=-1", min_contributing_clusters: 12,
   periods: [
     {
       term: "k=-1", event_time: -1, is_reference: true, estimated: false,
-      contributing_rows: 6, contributing_entities: 6, contributing_clusters: 6,
-      cohorts: { "2018": 6 }, period_supported: true, inference_supported: true,
+      contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+      cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
       suppress_inference: false, reason_codes: [], reasons: [],
     },
     {
@@ -42,7 +42,7 @@ describe("event-study support consumers", () => {
     const gate = eventInferenceGate(support, "k=0×base_gvc");
     expect(gate.state).toBe("unsupported");
     expect(eventInferenceMessage(gate, support.min_contributing_clusters))
-      .toBe("逐期支持不足（4/5 个聚类），推断已抑制");
+      .toBe("逐期支持不足（4/12 个聚类），推断已抑制");
   });
 
   test("legacy or malformed support is unknown rather than inferred from an existing CI", () => {

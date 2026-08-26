@@ -2,7 +2,7 @@
 
 真实系统应接入 PIIE 中美关税追踪库 / WTO / GTA / OFAC-BIS 清单(见项目
 说明文档 4.2 节)。开发起点阶段提供一份**拟真的演示数据**:以 2017–2020
-全球贸易摩擦为原型,按真实事件逐条编码,覆盖全部 77 个经济体、45 个行业:
+全球贸易摩擦为原型,按真实事件逐条编码,覆盖 76 个具名经济体与 ROW 剩余地区账户、45 个行业:
 
   事件层(税率量级参考 PIIE / Bown (2021) 公布的统计,非精确值):
     · 美国 201 保障措施(光伏/洗衣机)—— 全球所有对美出口国
@@ -12,10 +12,10 @@
     · 欧盟/加拿大/墨西哥/土耳其/俄罗斯/印度对美反制 —— 232 再平衡
     · 美国航空补贴案(空客裁决)对德法西英加税
 
-  冲击变量定义:tariff_shock[c,s,y] = Σ_事件 双边行业平均加征税率 × 出口暴露度,
-  其中"双边行业平均加征税率"已折算清单覆盖面与年内生效月数,"出口暴露度"优先
-  使用 OECD ICIO 真实双边流向计算(c 国出口流向加征方的份额)。
-  因此 tariff_shock 可解读为:该国-行业全部出口面对的平均额外关税。
+  冲击变量定义:tariff_shock[c,s,y] = Σ_事件 双边行业平均加征税率 × 行业出口暴露度,
+  其中"双边行业平均加征税率"已折算清单覆盖面与年内生效月数,"行业出口暴露度"
+  使用 OECD ICIO 真实双边流向计算(c 国 s 行业出口流向加征方的份额)。
+  因此 tariff_shock 可解读为:该国-行业全部出口面对的教学平均额外关税。
 
 ⚠ 演示数据不能用于真实研究结论。接入真实数据(PIIE 面板 + HS→ICIO 官方
 crosswalk)时,实现一个返回同结构 (country, sector, year) 面板的 loader 即可。
@@ -32,8 +32,10 @@ from gvcsim.shock_catalog import (
     DEMO_FILE as DEMO_FILE,
     ENTITY_LIST_EVENTS as ENTITY_LIST_EVENTS,
     EVENTS as EVENTS,
+    EVENT_SOURCE_COMPLETE as EVENT_SOURCE_COMPLETE,
     EVENT_SOURCE_DISCLOSURE as EVENT_SOURCE_DISCLOSURE,
     EVENT_SOURCE_OFFICIAL as EVENT_SOURCE_OFFICIAL,
+    EVENT_SOURCE_PARTIAL as EVENT_SOURCE_PARTIAL,
     EVENT_SOURCE_STATUSES as EVENT_SOURCE_STATUSES,
     EVENT_SOURCE_TEACHING as EVENT_SOURCE_TEACHING,
     EXPOSURE_MODE_CONTEMPORANEOUS as EXPOSURE_MODE_CONTEMPORANEOUS,
@@ -66,7 +68,7 @@ from gvcsim.shock_catalog import (
 )
 
 
-EXPOSURE_KEY_COLUMNS = ("country", "imposer", "year")
+EXPOSURE_KEY_COLUMNS = ("country", "sector", "imposer", "year")
 EXPOSURE_FLOW_COLUMNS = ("bilateral_exports", "total_exports")
 EXPOSURE_REQUIRED_COLUMNS = (*EXPOSURE_KEY_COLUMNS, *EXPOSURE_FLOW_COLUMNS, "export_exposure")
 EXPOSURE_RATIO_RTOL = 1e-12
@@ -92,6 +94,7 @@ def validate_export_exposure(
     export_exposure: pd.DataFrame,
     *,
     countries: list[str] | None = None,
+    sectors: list[str] | None = None,
     years: list[int] | None = None,
     imposers: list[str] | None = None,
 ) -> pd.DataFrame:
@@ -109,7 +112,7 @@ def validate_export_exposure(
         raise ValueError(f"OECD ICIO 出口暴露度 schema 不完整；missing={missing_columns}")
 
     frame = export_exposure.copy()
-    for column in ("country", "imposer"):
+    for column in ("country", "sector", "imposer"):
         normalized = frame[column].fillna("").astype(str).str.strip()
         if normalized.eq("").any():
             raise ValueError(f"OECD ICIO 出口暴露度 {column} 含空白标识符")
@@ -162,6 +165,13 @@ def validate_export_exposure(
         country_values = sorted(set(str(country).strip() for country in countries))
         if not country_values or any(not country for country in country_values):
             raise ValueError("声明的 ICIO countries 必须是非空标识符")
+    actual_sectors = sorted(frame["sector"].unique())
+    if sectors is None:
+        sector_values = actual_sectors
+    else:
+        sector_values = sorted(set(str(sector).strip() for sector in sectors))
+        if not sector_values or any(not sector for sector in sector_values):
+            raise ValueError("声明的 ICIO sectors 必须是非空标识符")
     year_list = sorted(int(value) for value in frame["year"].unique()) if years is None else _declared_years(years)
     composite_names = sorted(COMPOSITE_IMPOSER_MEMBERS)
     destination_values = sorted({*country_values, *composite_names})
@@ -173,7 +183,7 @@ def validate_export_exposure(
         raise ValueError("声明的 ICIO destinations 必须是非空标识符")
 
     expected_keys = pd.MultiIndex.from_product(
-        [country_values, destination_values, year_list], names=list(EXPOSURE_KEY_COLUMNS)
+        [country_values, sector_values, destination_values, year_list], names=list(EXPOSURE_KEY_COLUMNS)
     )
     actual_keys = pd.MultiIndex.from_frame(frame[list(EXPOSURE_KEY_COLUMNS)])
     missing = expected_keys.difference(actual_keys)
@@ -187,47 +197,52 @@ def validate_export_exposure(
 
     indexed = frame.set_index(list(EXPOSURE_KEY_COLUMNS)).sort_index()
     for country in country_values:
-        for year in year_list:
-            group = indexed.loc[(country, slice(None), year), :].reset_index()
-            totals = group["total_exports"].to_numpy(dtype=float)
-            if not np.isclose(totals, totals[0], rtol=EXPOSURE_FLOW_RTOL, atol=EXPOSURE_FLOW_ATOL).all():
-                raise ValueError(f"同一 country/year 的 total_exports 不一致: {(country, year)}")
-            declared_total = float(totals[0])
-            base = group[group["imposer"].isin(country_values)]
-            bilateral_sum = float(base["bilateral_exports"].sum())
-            if not np.isclose(
-                bilateral_sum,
-                declared_total,
-                rtol=EXPOSURE_FLOW_RTOL,
-                atol=EXPOSURE_FLOW_ATOL,
-            ):
-                raise ValueError(f"基础 ICIO 目的地 bilateral_exports 加总不等于 total_exports: {(country, year)}")
-            expected_exposure_sum = 1.0 if declared_total > 0.0 else 0.0
-            if not np.isclose(
-                float(base["export_exposure"].sum()),
-                expected_exposure_sum,
-                rtol=EXPOSURE_RATIO_RTOL,
-                atol=EXPOSURE_RATIO_ATOL,
-            ):
-                raise ValueError(f"基础 ICIO 目的地 export_exposure 加总不可能: {(country, year)}")
-            own = base[base["imposer"] == country]
-            if len(own) != 1 or not np.isclose(
-                own.iloc[0]["bilateral_exports"], 0.0, rtol=0.0, atol=EXPOSURE_FLOW_ATOL
-            ):
-                raise ValueError(f"国内流量不得计入 bilateral_exports: {(country, year)}")
-            for composite, members in COMPOSITE_IMPOSER_MEMBERS.items():
-                if composite not in destination_values:
-                    continue
-                aggregate = base[base["imposer"].isin(set(members))]
-                expected_bilateral = float(aggregate["bilateral_exports"].sum())
-                composite_row = group[group["imposer"] == composite]
-                if len(composite_row) != 1 or not np.isclose(
-                    float(composite_row.iloc[0]["bilateral_exports"]),
-                    expected_bilateral,
+        for sector in sector_values:
+            for year in year_list:
+                group = indexed.loc[(country, sector, slice(None), year), :].reset_index()
+                totals = group["total_exports"].to_numpy(dtype=float)
+                if not np.isclose(totals, totals[0], rtol=EXPOSURE_FLOW_RTOL, atol=EXPOSURE_FLOW_ATOL).all():
+                    raise ValueError(f"同一 country/sector/year 的 total_exports 不一致: {(country, sector, year)}")
+                declared_total = float(totals[0])
+                base = group[group["imposer"].isin(country_values)]
+                bilateral_sum = float(base["bilateral_exports"].sum())
+                if not np.isclose(
+                    bilateral_sum,
+                    declared_total,
                     rtol=EXPOSURE_FLOW_RTOL,
                     atol=EXPOSURE_FLOW_ATOL,
                 ):
-                    raise ValueError(f"复合加征方 {composite} 与基础目的地聚合不一致: {(country, year)}")
+                    raise ValueError(
+                        f"基础 ICIO 目的地 bilateral_exports 加总不等于行业 total_exports: {(country, sector, year)}"
+                    )
+                expected_exposure_sum = 1.0 if declared_total > 0.0 else 0.0
+                if not np.isclose(
+                    float(base["export_exposure"].sum()),
+                    expected_exposure_sum,
+                    rtol=EXPOSURE_RATIO_RTOL,
+                    atol=EXPOSURE_RATIO_ATOL,
+                ):
+                    raise ValueError(f"基础 ICIO 目的地行业 export_exposure 加总不可能: {(country, sector, year)}")
+                own = base[base["imposer"] == country]
+                if len(own) != 1 or not np.isclose(
+                    own.iloc[0]["bilateral_exports"], 0.0, rtol=0.0, atol=EXPOSURE_FLOW_ATOL
+                ):
+                    raise ValueError(f"国内流量不得计入 bilateral_exports: {(country, sector, year)}")
+                for composite, members in COMPOSITE_IMPOSER_MEMBERS.items():
+                    if composite not in destination_values:
+                        continue
+                    aggregate = base[base["imposer"].isin(set(members))]
+                    expected_bilateral = float(aggregate["bilateral_exports"].sum())
+                    composite_row = group[group["imposer"] == composite]
+                    if len(composite_row) != 1 or not np.isclose(
+                        float(composite_row.iloc[0]["bilateral_exports"]),
+                        expected_bilateral,
+                        rtol=EXPOSURE_FLOW_RTOL,
+                        atol=EXPOSURE_FLOW_ATOL,
+                    ):
+                        raise ValueError(
+                            f"复合加征方 {composite} 与基础目的地行业聚合不一致: {(country, sector, year)}"
+                        )
 
     return frame.sort_values(list(EXPOSURE_KEY_COLUMNS)).reset_index(drop=True)
 
@@ -255,53 +270,62 @@ def tariff_exposure_disclaimer(shock_frame: pd.DataFrame) -> str:
 
 
 def build_export_exposure(arr: IcioArrays, year: int) -> pd.DataFrame:
-    """用 ICIO 双边流向计算出口暴露度 exposure[c, imposer, year]。
+    """用 ICIO 双边流向计算行业出口暴露度 exposure[c, s, imposer, year]。
 
-    bilateral_exports = c 卖给 imposer 的中间品 + 最终品(剔除 c 自身);
-    total_exports = c 的全部跨境中间品 + 最终品出口。额外写入一列 imposer=EU,
-    其目的地为 ICIO 中存在的 EU27 成员之和。
+    bilateral_exports 是 c 国 s 行业卖给 imposer 的跨境中间品与最终需求净额。
+    若目的地净额因存货减少等有符号最终需求而为负，则该目的地用于暴露权重的
+    流量截为 0；total_exports 是这些非负目的地流量之和。EU 行是 EU27 基础
+    目的地的非重叠加总。该正流量规则保证暴露度是 [0,1] 内可解释的出口份额。
     """
     rows = []
-    col_of = {r: j for j, r in enumerate(arr.regions)}
+    col_of = {region: index for index, region in enumerate(arr.regions)}
+    position_of = {(country, sector): position for position, (country, sector) in enumerate(arr.index)}
 
-    def country_to_dest(exporter: str, dest: str) -> float:
+    def sector_to_dest(exporter: str, sector: str, dest: str) -> float:
         if exporter == dest:
             return 0.0
-        p = arr.pos[exporter]
-        return float(arr.Z[np.ix_(p, arr.pos[dest])].sum() + arr.Yd[p, col_of[dest]].sum())
+        position = position_of[(exporter, sector)]
+        net_flow = float(arr.Z[position, arr.pos[dest]].sum() + arr.Yd[position, col_of[dest]])
+        return max(net_flow, 0.0)
 
     for country in arr.regions:
-        total = float(arr.E[arr.pos[country]].sum())
-        for imposer in arr.regions:
-            bilateral = country_to_dest(country, imposer)
-            rows.append(
-                {
-                    "country": country,
-                    "imposer": imposer,
-                    "year": year,
-                    "bilateral_exports": bilateral,
-                    "total_exports": total,
-                    "export_exposure": bilateral / total if total > 0 else 0.0,
-                }
-            )
+        for sector in arr.sectors:
+            total = sum(sector_to_dest(country, sector, destination) for destination in arr.regions)
+            for imposer in arr.regions:
+                bilateral = sector_to_dest(country, sector, imposer)
+                rows.append(
+                    {
+                        "country": country,
+                        "sector": sector,
+                        "imposer": imposer,
+                        "year": year,
+                        "bilateral_exports": bilateral,
+                        "total_exports": total,
+                        "export_exposure": bilateral / total if total > 0 else 0.0,
+                    }
+                )
 
-        for composite, members in COMPOSITE_IMPOSER_MEMBERS.items():
-            bilateral = sum(
-                country_to_dest(country, dest) for dest in arr.regions if dest in members and dest != country
-            )
-            rows.append(
-                {
-                    "country": country,
-                    "imposer": composite,
-                    "year": year,
-                    "bilateral_exports": bilateral,
-                    "total_exports": total,
-                    "export_exposure": bilateral / total if total > 0 else 0.0,
-                }
-            )
+            for composite, members in COMPOSITE_IMPOSER_MEMBERS.items():
+                bilateral = sum(
+                    sector_to_dest(country, sector, dest)
+                    for dest in arr.regions
+                    if dest in members and dest != country
+                )
+                rows.append(
+                    {
+                        "country": country,
+                        "sector": sector,
+                        "imposer": composite,
+                        "year": year,
+                        "bilateral_exports": bilateral,
+                        "total_exports": total,
+                        "export_exposure": bilateral / total if total > 0 else 0.0,
+                    }
+                )
 
-    # Generation and release validation share exact dimensions and adding-up rules.
-    return validate_export_exposure(pd.DataFrame(rows), countries=arr.regions, years=[year])
+    return validate_export_exposure(
+        pd.DataFrame(rows), countries=arr.regions, sectors=arr.sectors, years=[year]
+    )
 
 
 def recompute_raw_export_exposure(year: int, raw_dir, contract) -> pd.DataFrame:
@@ -312,6 +336,7 @@ def recompute_raw_export_exposure(year: int, raw_dir, contract) -> pd.DataFrame:
     return validate_export_exposure(
         frame,
         countries=list(contract.countries),
+        sectors=list(contract.industries),
         years=[year],
     )
 
@@ -337,17 +362,17 @@ def load_export_exposure(years: list[int] | None = None) -> pd.DataFrame | None:
     return pd.concat([pd.read_csv(p, float_precision="round_trip") for p in paths], ignore_index=True)
 
 
-def _exposure_map(export_exposure: pd.DataFrame | None) -> dict[tuple[str, str, int], float] | None:
+def _exposure_map(export_exposure: pd.DataFrame | None) -> dict[tuple[str, str, str, int], float] | None:
     if export_exposure is None:
         return None
     validated = validate_export_exposure(export_exposure)
     return {
-        (str(r.country), str(r.imposer), int(r.year)): float(r.export_exposure)
+        (str(r.country), str(r.sector), str(r.imposer), int(r.year)): float(r.export_exposure)
         for r in validated.itertuples(index=False)
     }
 
 
-def _first_tariff_year(country: str, imposer: str, years: list[int]) -> int | None:
+def _first_tariff_year(country: str, sector: str, imposer: str, years: list[int]) -> int | None:
     candidates: list[int] = []
     for ev in EVENTS:
         if ev.imposer != imposer or country in ev.exempt:
@@ -356,29 +381,30 @@ def _first_tariff_year(country: str, imposer: str, years: list[int]) -> int | No
         if not targeted:
             continue
         schedules = ev.overrides.get(country, ev.rates)
-        candidates.extend(y for values in schedules.values() for y, rate in values.items() if y in years and rate > 0)
+        candidates.extend(y for y, rate in schedules.get(sector, {}).items() if y in years and rate > 0)
     return min(candidates) if candidates else None
 
 
 def _fixed_exposure_year(
     country: str,
+    sector: str,
     imposer: str,
     years: list[int],
-    exposure_lookup: dict[tuple[str, str, int], float] | None,
+    exposure_lookup: dict[tuple[str, str, str, int], float] | None,
 ) -> int | None:
     """Select the last strictly pretreatment ICIO year; never use a treated year as baseline."""
     if exposure_lookup is None:
         return None
-    available = sorted(y for c, i, y in exposure_lookup if c == country and i == imposer)
+    available = sorted(y for c, s, i, y in exposure_lookup if c == country and s == sector and i == imposer)
     if not available:
         return None
-    first = _first_tariff_year(country, imposer, years)
+    first = _first_tariff_year(country, sector, imposer, years)
     if first is None:
         return max(available)
     pre = [year for year in available if year < first]
     if not pre:
         raise ValueError(
-            f"固定处理前权重要求 {country}→{imposer} 在首次处理年 {first} 之前至少有一个发布年份；不得回退到最早处理年"
+            f"固定处理前权重要求 {country}/{sector}→{imposer} 在首次处理年 {first} 之前至少有一个发布年份；不得回退到最早处理年"
         )
     return max(pre)
 
@@ -393,24 +419,25 @@ def _stylized_exposure(country: str, imposer: str) -> float:
 
 def _exposure(
     country: str,
+    sector: str,
     imposer: str,
     year: int,
-    exposure_lookup: dict[tuple[str, str, int], float] | None,
+    exposure_lookup: dict[tuple[str, str, str, int], float] | None,
     *,
     mode: str = EXPOSURE_MODE_FIXED_PRETREATMENT,
     panel_years: list[int] | None = None,
 ) -> float:
-    """country 的出口中流向 imposer 的份额(冲击的贸易加权系数)。"""
+    """country/sector 的出口中流向 imposer 的份额。"""
     if exposure_lookup is not None:
         if mode == EXPOSURE_MODE_CONTEMPORANEOUS:
-            key = (country, imposer, year)
+            key = (country, sector, imposer, year)
         else:
             if mode != EXPOSURE_MODE_FIXED_PRETREATMENT:
                 raise ValueError(f"未知出口暴露权重口径: {mode}")
-            base_year = _fixed_exposure_year(country, imposer, panel_years or [year], exposure_lookup)
+            base_year = _fixed_exposure_year(country, sector, imposer, panel_years or [year], exposure_lookup)
             if base_year is None:
-                raise ValueError(f"OECD ICIO 出口暴露度缺少固定权重键: {(country, imposer)}")
-            key = (country, imposer, base_year)
+                raise ValueError(f"OECD ICIO 行业出口暴露度缺少固定权重键: {(country, sector, imposer)}")
+            key = (country, sector, imposer, base_year)
         try:
             return exposure_lookup[key]
         except KeyError as exc:
@@ -445,17 +472,17 @@ def demo_shock_panel(
             "仅教学测试可显式传入 allow_stylized_fallback=True。"
         )
     if export_exposure is not None:
-        export_exposure = validate_export_exposure(export_exposure, years=years)
+        export_exposure = validate_export_exposure(export_exposure, sectors=sectors, years=years)
         missing_countries = sorted(set(countries) - set(export_exposure["country"]))
         if missing_countries:
-            raise ValueError(f"OECD ICIO 出口暴露度缺少面板国家: {missing_countries[:5]}")
+            raise ValueError(f"OECD ICIO 行业出口暴露度缺少面板国家: {missing_countries[:5]}")
     exposure_source = EXPOSURE_SOURCE_OECD_ICIO if export_exposure is not None else EXPOSURE_SOURCE_STYLIZED
     shock: dict[tuple[str, str, int], float] = {}
     shock_contemporaneous: dict[tuple[str, str, int], float] = {}
     main_event: dict[tuple[str, str, int], tuple[float, TariffEvent]] = {}
     exposure_lookup = _exposure_map(export_exposure)
     available_imposers = (
-        {imposer for _country, imposer, _year in exposure_lookup} if exposure_lookup is not None else None
+        {imposer for _country, _sector, imposer, _year in exposure_lookup} if exposure_lookup is not None else None
     )
 
     requested_sectors = set(sectors)
@@ -478,12 +505,15 @@ def demo_shock_panel(
                 for y, rate in by_year.items():
                     if y not in years or rate <= 0:
                         continue
-                    w = _exposure(c, tariff_event.imposer, y, exposure_lookup, mode=exposure_mode, panel_years=years)
+                    w = _exposure(
+                        c, s, tariff_event.imposer, y, exposure_lookup, mode=exposure_mode, panel_years=years
+                    )
                     if w <= 0:
                         continue
                     contrib = rate * w
                     contemporaneous = rate * _exposure(
                         c,
+                        s,
                         tariff_event.imposer,
                         y,
                         exposure_lookup,
@@ -574,6 +604,12 @@ def write_demo(
     ).to_csv(PROCESSED_DIR / DEMO_FILE, index=False)
 
 
+def _event_source_status(source_urls: tuple[str, ...], source_complete: bool) -> str:
+    if not source_urls:
+        return EVENT_SOURCE_TEACHING
+    return EVENT_SOURCE_COMPLETE if source_complete else EVENT_SOURCE_PARTIAL
+
+
 def events_metadata() -> list[dict]:
     """事件表的展示视图(步骤11 前端的事件时间线)。"""
     out = []
@@ -602,7 +638,7 @@ def events_metadata() -> list[dict]:
                 "sector_codes": sorted(sector_codes),
                 "all_targets": tariff_event.targets == "ALL",
                 "timeline_note": tariff_event.timeline_note or None,
-                "source_status": (EVENT_SOURCE_OFFICIAL if tariff_event.source_urls else EVENT_SOURCE_TEACHING),
+                "source_status": _event_source_status(tariff_event.source_urls, tariff_event.source_complete),
                 "source_disclosure": EVENT_SOURCE_DISCLOSURE,
                 "source_urls": list(tariff_event.source_urls),
             }
@@ -628,7 +664,9 @@ def events_metadata() -> list[dict]:
                 "sector_codes": sorted(entity_event_def.intensities),
                 "all_targets": False,
                 "timeline_note": entity_event_def.timeline_note or None,
-                "source_status": (EVENT_SOURCE_OFFICIAL if entity_event_def.source_urls else EVENT_SOURCE_TEACHING),
+                "source_status": _event_source_status(
+                    entity_event_def.source_urls, entity_event_def.source_complete
+                ),
                 "source_disclosure": EVENT_SOURCE_DISCLOSURE,
                 "source_urls": list(entity_event_def.source_urls),
             }

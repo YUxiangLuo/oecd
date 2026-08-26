@@ -294,6 +294,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .shock-event-item-meta { display: block; font-size: 10.5px; color: var(--text-muted); margin-top: 3px; line-height: 1.5; }
 .shock-event-source { display: inline-block; margin-top: 4px; font-size: 10px; font-weight: 700; }
 .shock-event-source.official { color: #175a9e; }
+.shock-event-source.partial { color: #7a4d00; }
 .shock-event-source.teaching { color: #6b5200; }
 .shock-event-item-dates { display: block; font-size: 10px; color: var(--text-muted); margin-top: 3px; }
 .shock-source-disclosure { margin: 8px 0 14px; color: #594800; font-size: 11.5px; line-height: 1.6; }

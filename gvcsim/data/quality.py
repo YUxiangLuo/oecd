@@ -692,19 +692,41 @@ def check_controls_country(
     )
 
     numeric = df[ALL_CONTROL_COLUMNS].apply(pd.to_numeric, errors="coerce")
-    n_missing = int(numeric.isna().sum().sum())
-    finite_mask = np.isfinite(numeric.to_numpy(dtype=float))
-    n_non_finite = int(finite_mask.size - finite_mask.sum())
+    growth_columns = ["gdp_proxy_growth", "exports_proxy_growth"]
+    ordered = df.assign(_row=np.arange(len(df))).sort_values(["country", "year"])
+    first_positions = ordered.groupby("country", sort=False)["_row"].first().astype(int).to_numpy()
+    expected_growth_null = pd.DataFrame(False, index=df.index, columns=growth_columns)
+    expected_growth_null.iloc[first_positions, :] = True
+    unexpected_missing = numeric.isna().copy()
+    unexpected_missing.loc[:, growth_columns] &= ~expected_growth_null
+    required_first_null_missing = sum(
+        int((~numeric.iloc[first_positions][column].isna()).sum()) for column in growth_columns
+    )
+    n_missing = int(unexpected_missing.sum().sum())
+    finite_or_expected_null = np.isfinite(numeric.to_numpy(dtype=float)) | pd.DataFrame(
+        {
+            column: expected_growth_null[column] if column in growth_columns else False
+            for column in ALL_CONTROL_COLUMNS
+        },
+        index=df.index,
+    ).to_numpy(dtype=bool)
+    n_non_finite = int(finite_or_expected_null.size - finite_or_expected_null.sum())
     checks.append(
         QcCheck(
             name="控制变量数值有限性",
             kind="数值",
-            passed=n_missing == 0 and n_non_finite == 0,
-            detail=f"缺失/非数值 {n_missing} 个,非有限值 {n_non_finite} 个",
+            passed=n_missing == 0 and n_non_finite == 0 and required_first_null_missing == 0,
+            detail=(
+                f"非首年缺失/非数值 {n_missing} 个,非有限值 {n_non_finite} 个；"
+                f"首年增长率结构性缺失 {len(first_positions) * len(growth_columns)} 个"
+            ),
             warnings=[
-                f"{col}: 缺失/非数值 {int(numeric[col].isna().sum())} 个"
-                for col in ALL_CONTROL_COLUMNS
-                if numeric[col].isna().any()
+                *[
+                    f"{col}: 非预期缺失/非数值 {int(unexpected_missing[col].sum())} 个"
+                    for col in ALL_CONTROL_COLUMNS
+                    if unexpected_missing[col].any()
+                ],
+                *([f"首年增长率有 {required_first_null_missing} 个值被错误填充"] if required_first_null_missing else []),
             ][:6],
         )
     )

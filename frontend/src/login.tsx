@@ -86,7 +86,7 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
           </h1>
           <p className="login-desc">
             基于 OECD 全球投入产出数据库的教学实验平台。
-            从 77 个经济体、45 个行业的真实贸易流出发，计算价值链指标，
+            从 76 个具名经济体 + ROW 剩余地区账户、45 个行业的真实贸易流出发，计算价值链指标，
             再用拟真政策冲击练习实证比较、识别假设与不确定性判断，最终生成实验报告。
           </p>
           <div className="login-flow">

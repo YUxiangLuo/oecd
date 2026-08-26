@@ -2,7 +2,7 @@ import type {
   CoefStat, EventPeriodSupport, EventSupport, PretrendDiagnostic, PretrendScope, RegressionStatus, TreatmentSupport,
 } from "./types";
 
-export const EVENT_SUPPORT_MIN_CLUSTERS = 5;
+export const EVENT_SUPPORT_MIN_CLUSTERS = 12;
 export const GLOBAL_PRETREND_SUPPRESSION_COPY = "整体设计门禁已抑制统计推断，因此未执行冲击前联合检验；不能据此判断冲击前趋势。";
 const EVENT_SUPPORT_POLICY = "teaching_min_contributing_clusters_per_event_period";
 const SAFE_UNAVAILABLE_PRETREND_REASONS = new Set([

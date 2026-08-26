@@ -256,9 +256,9 @@ def _shock_source_disclaimer(frame: pd.DataFrame) -> str:
 class _ExposureIndex:
     """Immutable lookup built once for one exact resolved release/file identity."""
 
-    values: Mapping[tuple[str, str, int], float]
-    available_years: Mapping[tuple[str, str], tuple[int, ...]]
-    fixed_base_years: Mapping[tuple[str, str], int]
+    values: Mapping[tuple[str, str, str, int], float]
+    available_years: Mapping[tuple[str, str, str], tuple[int, ...]]
+    fixed_base_years: Mapping[tuple[str, str, str], int]
 
 
 @lru_cache(maxsize=8)
@@ -280,7 +280,7 @@ def _build_exposure_index(
         raise ValueError(f"OECD ICIO 出口暴露度索引 schema 不完整；missing={missing_columns}")
 
     key_data = exposure_data.loc[:, list(shocks.EXPOSURE_KEY_COLUMNS)].copy()
-    for column in ("country", "imposer"):
+    for column in ("country", "sector", "imposer"):
         normalized = key_data[column].fillna("").astype(str).str.strip()
         if normalized.eq("").any():
             raise ValueError(f"OECD ICIO 出口暴露度索引 {column} 含空白标识符")
@@ -307,32 +307,33 @@ def _build_exposure_index(
     # Release validation already certified exposure schema and provenance.
     # Rebuild only the lookup here; group-wise economic checks belong at publish.
     raw_values = {
-        (str(country), str(imposer), int(year)): float(exposure)
-        for country, imposer, year, exposure in zip(
+        (str(country), str(sector), str(imposer), int(year)): float(exposure)
+        for country, sector, imposer, year, exposure in zip(
             key_data["country"].to_numpy(),
+            key_data["sector"].to_numpy(),
             key_data["imposer"].to_numpy(),
             key_data["year"].to_numpy(),
             exposure_values,
             strict=True,
         )
     }
-    available: dict[tuple[str, str], list[int]] = {}
-    for country, imposer, exposure_year in raw_values:
-        available.setdefault((country, imposer), []).append(exposure_year)
+    available: dict[tuple[str, str, str], list[int]] = {}
+    for country, sector, imposer, exposure_year in raw_values:
+        available.setdefault((country, sector, imposer), []).append(exposure_year)
     available_sorted = {key: tuple(sorted(set(values))) for key, values in available.items()}
-    fixed: dict[tuple[str, str], int] = {}
-    for (country, imposer), candidate_years in available_sorted.items():
-        first = shocks._first_tariff_year(country, imposer, list(years))
+    fixed: dict[tuple[str, str, str], int] = {}
+    for (country, sector, imposer), candidate_years in available_sorted.items():
+        first = shocks._first_tariff_year(country, sector, imposer, list(years))
         if first is None:
-            fixed[(country, imposer)] = max(candidate_years)
+            fixed[(country, sector, imposer)] = max(candidate_years)
             continue
         pre = [candidate for candidate in candidate_years if candidate < first]
         if not pre:
             raise ArtifactContractError(
-                f"固定处理前权重要求 {country}→{imposer} 在首次处理年 {first} 之前至少有一个发布年份；"
+                f"固定处理前权重要求 {country}/{sector}→{imposer} 在首次处理年 {first} 之前至少有一个发布年份；"
                 "不得回退到最早处理年"
             )
-        fixed[(country, imposer)] = max(pre)
+        fixed[(country, sector, imposer)] = max(pre)
     return _ExposureIndex(
         values=MappingProxyType(raw_values),
         available_years=MappingProxyType(available_sorted),
@@ -422,8 +423,9 @@ def _with_tariff_exposure(df: pd.DataFrame, year: int) -> pd.DataFrame:
     base_years: list[int | None] = []
     exposure_modes: list[str | None] = []
     exposure_sources: list[str | None] = []
-    for country, imposer, source, note, mode, is_zero in zip(
+    for country, sector, imposer, source, note, mode, is_zero in zip(
         out["country"],
+        out["sector"],
         out["main_imposer"],
         out["tariff_exposure_source"],
         out["note"],
@@ -438,9 +440,9 @@ def _with_tariff_exposure(df: pd.DataFrame, year: int) -> pd.DataFrame:
             exposure_modes.append(None)
             exposure_sources.append(None)
             continue
-        key = (str(country), str(imposer)) if imposer is not None else None
+        key = (str(country), str(sector), str(imposer)) if imposer is not None else None
         if key is not None and source == shocks.EXPOSURE_SOURCE_STYLIZED:
-            stylized = shocks._stylized_exposure(*key)
+            stylized = shocks._stylized_exposure(key[0], key[2])
             base_years.append(None)
             fixed_values.append(stylized)
             current_values.append(stylized)
@@ -454,7 +456,7 @@ def _with_tariff_exposure(df: pd.DataFrame, year: int) -> pd.DataFrame:
         if index is None:
             raise ArtifactContractError("OECD ICIO 关税冲击行缺少出口暴露度索引")
         if not index.available_years.get(key):
-            raise ArtifactContractError(f"OECD ICIO 出口暴露度缺少国家/加征方覆盖: {key}")
+            raise ArtifactContractError(f"OECD ICIO 行业出口暴露度缺少国家/行业/加征方覆盖: {key}")
         try:
             base_year = index.fixed_base_years[key]
         except KeyError as exc:
@@ -480,7 +482,7 @@ def _with_tariff_exposure(df: pd.DataFrame, year: int) -> pd.DataFrame:
     out["exposure_base_year"] = base_years
     out["exposure_mode"] = exposure_modes
     out["exposure_source"] = exposure_sources
-    out["formula"] = "shock_intensity = Σ(事件双边行业平均加征税率 × 对加征方出口暴露度)"
+    out["formula"] = "shock_intensity = Σ(事件双边行业平均加征税率 × 该国家–行业对加征方的出口份额)"
     return out
 
 

@@ -59,20 +59,21 @@ function columnHelp(column: string): string | undefined {
 /** 主流全球投入产出 / 多区域投入产出(MRIO)数据库速览。覆盖数字随各库版本更新、
  *  且行业/产品分类口径不同,不能直接横向相减;这里给学生一个"还有哪些选择"的地图。 */
 const OTHER_DATABASES: { name: string; org: string; coverage: string; focus: string }[] = [
-  { name: "WIOD", org: "格罗宁根大学", coverage: "43 国 · 56 行业 · 2000–2014", focus: "GVC 研究的经典数据源,含社会经济与环境账户;已停止更新" },
-  { name: "Eora / Eora26", org: "悉尼大学", coverage: "约 190 经济体 · 26 行业(精简版)", focus: "覆盖国家最全 + 环境卫星账户;行业口径较粗" },
-  { name: "EXIOBASE 3", org: "多机构联合", coverage: "约 49 区域 · 约 200 产品", focus: "环境扩展最细(产品级),侧重可持续与足迹分析" },
-  { name: "ADB MRIO", org: "亚洲开发银行", coverage: "60+ 经济体 · 35 行业", focus: "亚太经济体覆盖更细,大体延续 WIOD 口径" },
+  { name: "WIOD 2016 release", org: "格罗宁根大学", coverage: "43 国 + ROW · 56 行业 · 2000–2014", focus: "课程对比快照；含社会经济与环境账户，当前表不代表实时版本" },
+  { name: "Eora26（课程快照）", org: "悉尼大学", coverage: "约 190 经济体 · 26 行业", focus: "覆盖较广 + 环境卫星账户；具体年份和地区数应以所下载版本元数据为准" },
+  { name: "EXIOBASE 3（课程快照）", org: "多机构联合", coverage: "约 49 区域 · 约 200 产品", focus: "环境扩展较细；具体覆盖随 3.x release 变化" },
+  { name: "ADB MRIO（课程快照）", org: "亚洲开发银行", coverage: "60+ 经济体 · 35 行业", focus: "亚太侧重；具体覆盖应以下载版本为准" },
 ];
 
 /** 数据库速览:说明还有哪些全球投入产出库,并明确本系统默认用 OECD ICIO 及原因。 */
 function DatabaseGuide({ meta }: { meta: DbMeta }) {
-  const icioCoverage = `${meta.countries.length} 经济体 · ${meta.sectors.length} 行业 · ${meta.years[0]}–${meta.years.at(-1)}（载入）`;
+  const namedEconomies = meta.countries.includes("ROW") ? meta.countries.length - 1 : meta.countries.length;
+  const icioCoverage = `${namedEconomies} 个具名经济体 + ROW · ${meta.sectors.length} 行业 · ${meta.years[0]}–${meta.years.at(-1)}（载入）`;
   return (
     <details className="card accent concept-card db-guide">
       <summary className="kicker">全球投入产出数据库一览 · 本系统默认使用 OECD ICIO</summary>
       <p style={{ maxWidth: 820 }}>
-        研究全球价值链,需要一张“谁向谁供货”的<b>跨国投入产出表</b>。主流数据库各有侧重——覆盖范围、行业/产品口径与更新节奏都不同:
+        研究全球价值链,需要一张“谁向谁供货”的<b>跨国投入产出表</b>。主流数据库各有侧重——下表是截至 2026-08 的课程比较快照，不是实时目录；覆盖范围、行业/产品口径与更新节奏都不同:
       </p>
       <ScrollableRegion className="table-wrap" label="全球投入产出数据库对比表，可横向滚动" style={{ marginTop: 10 }}>
         <table className="data-table db-guide-table">
@@ -591,7 +592,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
     <div>
       <div className="db-summary">
         <span>原始年份 {meta.years[0]}-{meta.years.at(-1)}</span>
-        <span>{meta.countries.length} 个经济体</span>
+        <span>{meta.countries.includes("ROW") ? meta.countries.length - 1 : meta.countries.length} 个具名经济体 + ROW 剩余地区账户</span>
         <span>{meta.sectors.length} 个行业</span>
         <span>{meta.n_rows.toLocaleString("zh-CN")} 行 × {meta.n_columns.toLocaleString("zh-CN")} 列</span>
         {selectedFile && <span>{selectedFile.file}</span>}

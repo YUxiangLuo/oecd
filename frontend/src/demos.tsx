@@ -11,7 +11,7 @@
  * NetworkCentralityDemo(步骤6):在一个小网络上演示度/介数中心性怎么算出来。
  */
 import { useId, useMemo, useRef, useState } from "react";
-import { LabeledControl } from "./a11y";
+import { LabeledControl, ScrollableRegion } from "./a11y";
 import {
   buildDecompositionModel,
   decompositionDomainRows,
@@ -702,7 +702,7 @@ function computeCentrality() {
     dist[s] = d; sigma[s] = sg; preds[s] = pr;
   });
 
-  // Brandes 累积介数中心性：有向、无权、原始计数，不归一化。
+  // Brandes 累积介数中心性：有向、无权，累积 σ_st(v)/σ_st，未按节点对数归一化。
   const bet: Record<string, number> = {};
   ids.forEach((i) => (bet[i] = 0));
   ids.forEach((s) => {
@@ -1004,7 +1004,7 @@ export function NetworkCentralityDemo() {
             </>
           ) : mode === "betweenness" ? (
             <>
-              <div className="ndp-formula">介数中心性 = Σ σₛₜ(v) / σₛₜ（有向原始计数）</div>
+              <div className="ndp-formula">介数中心性 = Σ σₛₜ(v) / σₛₜ（有向；未按节点对数归一化）</div>
               <div className="ndp-calc">= <b>{C.bet[sel].toFixed(3)}</b></div>
               <p className="ndp-note">
                 {pathNodes.length >= 3
@@ -1021,12 +1021,18 @@ export function NetworkCentralityDemo() {
                   : <>无可达节点；按 Gephi 约定记为 <b>0.000</b></>}
               </div>
               <p className="ndp-note">高亮边组成从 {sel} 沿箭头出发的最短路径树；不可达节点不进入分子和分母。</p>
-              <div style={{ maxHeight: 150, overflow: "auto", marginBottom: 10 }}>
+              <ScrollableRegion
+                label={`从节点 ${sel} 出发的最短路径明细，可滚动`}
+                style={{ maxHeight: 150, overflow: "auto", marginBottom: 10 }}
+              >
                 <ClosenessPathTable source={sel} paths={distancePaths} />
-              </div>
+              </ScrollableRegion>
             </>
           )}
-          <div className="ndp-edges">
+          <ScrollableRegion
+            className="ndp-edges"
+            label={`节点 ${sel} 的全部直接入边与出边，可横向滚动`}
+          >
             <table className="data-table net-demo-edge-table">
               <caption>节点 {sel} 的全部直接入边与出边；演示网络每条边权重均为 1</caption>
               <thead>
@@ -1043,7 +1049,7 @@ export function NetworkCentralityDemo() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollableRegion>
           <div className="ndp-disclaim">
             这是一个 7 节点的有向演示网络。真实系统保留全部正流量边和正自环，在完整的全球「国家×行业」生产网络上按同一 Gephi 口径计算。
           </div>

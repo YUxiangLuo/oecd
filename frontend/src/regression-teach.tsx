@@ -104,7 +104,7 @@ export function DidFourCells({ numeric }: { numeric?: boolean }) {
   if (numeric) {
     return (
       <div className="did-example">
-        <table className="did-table did-table-numeric" aria-label="示意四格：处理组相对对照组">
+        <table className="did-table did-table-numeric" aria-label="统一处理时点的 DID 四格直觉示意；实际主结果按 cohort 分别计算">
           <thead>
             <tr>
               <th scope="col"><span className="sr-only">组别</span></th>

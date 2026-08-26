@@ -32,6 +32,7 @@ from gvcsim.regression.panel import (
     placebo_did_distribution,
     prepare_design_model,
     run_design,
+    run_design_with_benchmark,
     twoway_fe,
 )
 
@@ -206,17 +207,19 @@ def test_design_equation_text():
     assert d.exclude_row is True
     assert "排除 ROW" in d.sample_filter
     eq = d.equation()
-    assert "α_ij" in eq and "λ_t" in eq and "treated_ij × 1[t≥G_ij]" in eq
+    assert "ATT^{overall}" in eq and "C_t" in eq and "g−1" in eq
     eq_c = RegressionDesign(outcome="trade", granularity="country").equation()
-    assert "α_ij" not in eq_c and "α_i" in eq_c and "treated_i × 1[t≥G_i]" in eq_c
+    assert "ATT^{overall}" in eq_c and "已处理" not in eq_c
 
     eq_fe = RegressionDesign(outcome="trade", method="twfe_intensity").equation()
     assert "tariff_shock" in eq_fe
     eq_ev = RegressionDesign(outcome="trade", method="event_study").equation()
-    assert "Σ_k" in eq_ev and "t-G_ij" in eq_ev
+    assert "ATT_k" in eq_ev and "C_t" in eq_ev
     eq_inter = RegressionDesign(outcome="trade", interaction=True).equation()
-    assert "BaseGVC" in eq_inter
-    eq_ctrl = RegressionDesign(outcome="trade", control_mode=CONTROL_MODE_ICIO).equation()
+    assert "不支持 cohort-aware 交互" in eq_inter
+    eq_ctrl = RegressionDesign(
+        outcome="trade", method="twfe_intensity", control_mode=CONTROL_MODE_ICIO
+    ).equation()
     assert "Controls_ct" in eq_ctrl
     macro = RegressionDesign(outcome="trade", control_mode=CONTROL_MODE_MACRO)
     assert set(macro.controls) == set(MACRO_CONTROL_COLUMNS)
@@ -224,7 +227,7 @@ def test_design_equation_text():
     d_sanction = RegressionDesign(outcome="trade", shock_type="sanctions")
     assert d_sanction.shock_col == "sanction_shock"
     assert d_sanction.treated_col == "sanction_treated"
-    assert "sanction_treated_ij" in d_sanction.equation()
+    assert "ATT^{overall}" in d_sanction.equation()
     real = RegressionDesign(outcome="trade", price_mode=PRICE_MODE_REAL)
     assert real.price_mode == PRICE_MODE_REAL
     noisy = RegressionDesign(outcome="trade", scenario=SCENARIO_NOISY)
@@ -385,9 +388,9 @@ def test_event_study_dynamic_path():
     assert "不能" in pretrend["interpretation"]
 
 
-def _reg01_staggered_panel(late_cohort: int = 4) -> pd.DataFrame:
+def _reg01_staggered_panel(late_cohort: int = 11) -> pd.DataFrame:
     rows = []
-    n_early = 6
+    n_early = 13
     n_treated = n_early + late_cohort
     for i in range(n_treated + 10):
         country = f"R{i:02d}"
@@ -412,8 +415,8 @@ def _reg01_staggered_panel(late_cohort: int = 4) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-@pytest.mark.parametrize(("late_cohort", "supported"), [(4, False), (5, True)])
-def test_reg01_event_period_boundary_is_four_vs_exactly_five_clusters(late_cohort, supported):
+@pytest.mark.parametrize(("late_cohort", "supported"), [(11, False), (12, True)])
+def test_reg01_event_period_boundary_is_eleven_vs_exactly_twelve_clusters(late_cohort, supported):
     result = event_study(_reg01_staggered_panel(late_cohort), "y")
     period = next(item for item in result.event_support["periods"] if item["term"] == "k=-4")
     coefficient = next(item for item in result.coefs if item.name == "k=-4")
@@ -447,18 +450,18 @@ def test_reg01_staggered_thin_leads_are_local_and_excluded_from_pretrend():
     assert serialized["policy_is_statistical_theorem"] is False
     assert serialized["cluster"] == "country"
     assert serialized["reference_term"] == "k=-1"
-    assert serialized["min_contributing_clusters"] == 5
+    assert serialized["min_contributing_clusters"] == 12
     assert next(item for item in serialized["periods"] if item["term"] == "k=-1")["estimated"] is False
 
 
 def test_reg01_thin_reference_suppresses_all_event_and_marginal_inference():
     df = _reg01_staggered_panel()
-    for i in range(6):
+    for i in range(13):
         df.loc[(df["country"] == f"R{i:02d}") & (df["year"] == 2018), "y"] = np.nan
     result = event_study(df, "y", interaction=True)
     reference = next(item for item in result.event_support["periods"] if item["is_reference"])
 
-    assert reference["contributing_clusters"] == 4
+    assert reference["contributing_clusters"] == 11
     assert reference["period_supported"] is False
     assert all(coefficient.p is None for coefficient in result.coefs if coefficient.name.startswith("k="))
     assert all(effect["p"] is None and effect["ci_low"] is None for effect in result.marginal_effects)
@@ -493,23 +496,23 @@ def test_reg01_interaction_inherits_main_period_and_industry_clusters_are_dedupl
     )
     model = _prepare_event_model(industry, "y", entity="entity_id", cluster="country")
     thin = next(item for item in model.event_support["periods"] if item["term"] == "k=-4")
-    assert thin["contributing_rows"] == 8
-    assert thin["contributing_entities"] == 8
-    assert thin["contributing_clusters"] == 4
+    assert thin["contributing_rows"] == 22
+    assert thin["contributing_entities"] == 22
+    assert thin["contributing_clusters"] == 11
     assert thin["inference_supported"] is False
 
 
 def test_reg01_support_uses_final_rows_frozen_timing_and_is_order_invariant():
     df = _reg01_staggered_panel()
     # Remove one thin-period outcome row after G_i has been frozen from the valid shock history.
-    df.loc[(df["country"] == "R06") & (df["year"] == 2016), "y"] = np.nan
+    df.loc[(df["country"] == "R13") & (df["year"] == 2016), "y"] = np.nan
     first = _prepare_event_model(df, "y")
     shuffled = _prepare_event_model(df.sample(frac=1, random_state=19), "y")
     first_thin = next(item for item in first.event_support["periods"] if item["term"] == "k=-4")
     shuffled_thin = next(item for item in shuffled.event_support["periods"] if item["term"] == "k=-4")
-    assert first.timing.first_by_entity["R06"] == 2020
+    assert first.timing.first_by_entity["R13"] == 2020
     assert first_thin == shuffled_thin
-    assert first_thin["contributing_clusters"] == 3
+    assert first_thin["contributing_clusters"] == 10
 
 
 def test_reg01_numeric_entity_ids_preserve_frozen_cohort_composition():
@@ -519,9 +522,9 @@ def test_reg01_numeric_entity_ids_preserve_frozen_cohort_composition():
     model = _prepare_event_model(df, "y")
     thin = next(item for item in model.event_support["periods"] if item["term"] == "k=-4")
 
-    assert thin["contributing_entities"] == 4
-    assert thin["contributing_clusters"] == 4
-    assert thin["cohorts"] == {"2020": 4}
+    assert thin["contributing_entities"] == 11
+    assert thin["contributing_clusters"] == 11
+    assert thin["cohorts"] == {"2020": 11}
 
 
 def test_reg02_sparse_global_support_suppresses_pretrend_before_period_gate():
@@ -545,7 +548,7 @@ def test_reg02_sparse_global_support_suppresses_pretrend_before_period_gate():
 
 
 def test_reg02_invalid_global_gate_suppresses_pretrend_with_all_local_periods_supported():
-    df = _reg01_staggered_panel(late_cohort=6)
+    df = _reg01_staggered_panel(late_cohort=12)
     treated_countries = {f"R{i:02d}" for i in range(12)}
     # A one-year policy reversal makes the absorbing design invalid without thinning any event-time cell.
     df.loc[df["country"].isin(treated_countries) & (df["year"] == 2021), "treated"] = 0
@@ -584,7 +587,7 @@ def test_reg02_global_suppression_precedes_covariance_for_every_interaction_scop
 
 
 def test_reg02_warning_design_still_runs_feasible_pretrend():
-    df = _reg01_staggered_panel(late_cohort=6)
+    df = _reg01_staggered_panel(late_cohort=12)
     # One reversal is below the course invalid-design share and therefore remains a warning.
     df.loc[(df["country"] == "R00") & (df["year"] == 2021), "treated"] = 0
     result = event_study(df, "y")
@@ -744,6 +747,134 @@ def test_run_design_dispatch():
     assert names("did") == ["treated×post"]
     assert names("twfe_intensity") == ["tariff_shock"]
     assert names("event_study") == ["k=-2", "k=0", "k=+1", "k=+2"]
+
+
+def test_public_staggered_estimators_use_cohort_time_att_and_not_yet_treated_controls():
+    rows = []
+    for index in range(40):
+        country = f"C{index:02d}"
+        first = 2018 if index < 12 else 2019 if index < 24 else None
+        effect = 1.0 if index < 12 else 3.0
+        for year in range(2016, 2021):
+            treated = first is not None and year >= first
+            rows.append(
+                {
+                    "country": country,
+                    "year": year,
+                    "FVA_share": (
+                        0.05 * index
+                        + 0.1 * (year - 2016)
+                        + 0.001 * ((index * 7 + year * 3) % 11)
+                        + (effect if treated else 0.0)
+                    ),
+                    "tariff_shock": 0.02 if treated else 0.0,
+                    "treated": int(treated),
+                }
+            )
+    frame = pd.DataFrame(rows)
+
+    did_result, did_audit = run_design_with_benchmark(
+        frame, RegressionDesign(outcome="trade", granularity="country", method="did")
+    )
+    did_coef = next(coefficient for coefficient in did_result.coefs if coefficient.name == "treated×post")
+    assert did_result.diagnostics["estimator"] == "cohort_time_att_not_yet_treated"
+    assert did_audit["backend"] == "cohort_time_cell_reaggregation_and_jackknife_formula_audit"
+    assert did_audit["benchmark_passed"] is True
+    assert did_coef.coef == pytest.approx(1.8, abs=0.02)
+    assert did_coef.se > 0 and did_coef.ci_low is not None
+
+    event_result, event_audit = run_design_with_benchmark(
+        frame, RegressionDesign(outcome="trade", granularity="country", method="event_study")
+    )
+    by_name = {coefficient.name: coefficient for coefficient in event_result.coefs}
+    assert event_audit["benchmark_passed"] is True
+    assert by_name["k=0"].coef == pytest.approx(2.0, abs=0.02)
+    assert by_name["k=+1"].coef == pytest.approx(2.0, abs=0.02)
+    assert by_name["k=+2"].coef == pytest.approx(1.0, abs=0.02)
+    assert abs(by_name["k=-2"].coef) < 0.02
+    assert did_audit["policy_coefs"][0]["audit_coef"] == pytest.approx(did_coef.coef)
+    assert did_audit["policy_coefs"][0]["audit_se"] == pytest.approx(did_coef.se)
+
+
+def test_public_thin_support_keeps_cohort_time_point_without_legacy_twfe_fallback():
+    rows = []
+    for index in range(20):
+        country = f"T{index:02d}"
+        first = 2018 if index == 0 else 2019 if index == 1 else None
+        effect = 1.0 if index == 0 else 3.0
+        for year in range(2016, 2021):
+            treated = first is not None and year >= first
+            rows.append(
+                {
+                    "country": country,
+                    "year": year,
+                    "FVA_share": 0.03 * index + 0.1 * (year - 2016) + (effect if treated else 0.0),
+                    "tariff_shock": 0.02 if treated else 0.0,
+                    "treated": int(treated),
+                }
+            )
+    frame = pd.DataFrame(rows)
+    design = RegressionDesign(outcome="trade", granularity="country", method="did")
+
+    result, audit = run_design_with_benchmark(frame, design)
+    coefficient = next(item for item in result.coefs if item.name == "treated×post")
+
+    assert result.status == "insufficient"
+    assert result.diagnostics["estimator"] == "cohort_time_att_not_yet_treated"
+    assert coefficient.coef == pytest.approx(1.8)
+    assert coefficient.se is None and coefficient.t is None
+    assert coefficient.p is None and coefficient.ci_low is None and coefficient.ci_high is None
+    assert audit["backend"] == "cohort_time_cell_reaggregation_point_audit"
+    assert audit["coef_check_passed"] is True
+    assert audit["se_check_passed"] is False
+    assert audit["policy_coefs"][0]["audit_coef"] == pytest.approx(coefficient.coef)
+    assert any("绝不回退" in note for note in result.notes)
+
+
+def test_cohort_time_arithmetic_audit_can_fail_closed(monkeypatch):
+    frame = pd.DataFrame(
+        [
+            {
+                "country": f"A{index:02d}",
+                "year": year,
+                "FVA_share": 0.01 * index + 0.1 * (year - 2016) + (0.5 if index < 12 and year >= 2018 else 0.0),
+                "tariff_shock": 0.02 if index < 12 and year >= 2018 else 0.0,
+                "treated": int(index < 12 and year >= 2018),
+            }
+            for index in range(24)
+            for year in range(2016, 2021)
+        ]
+    )
+    original = panel_module._reaggregate_cohort_time_cells
+
+    def corrupted(cells, terms):
+        values = original(cells, terms)
+        return {term: value + 0.01 for term, value in values.items()}
+
+    monkeypatch.setattr(panel_module, "_reaggregate_cohort_time_cells", corrupted)
+    with pytest.raises(ValueError, match="算术复核失败"):
+        run_design_with_benchmark(
+            frame,
+            RegressionDesign(outcome="trade", granularity="country", method="did"),
+        )
+
+
+def test_placebo_cohort_points_do_not_run_cluster_jackknife(monkeypatch):
+    frame = _simulate_did_panel({0: -0.6, 1: -0.6, 2: -0.6}).rename(columns={"y": "FVA_share"})
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("placebo point estimates must not run the full cluster jackknife")
+
+    monkeypatch.setattr(panel_module, "_cohort_time_result", forbidden)
+    result = placebo_did_distribution(
+        frame,
+        RegressionDesign(outcome="trade", granularity="country", method="did"),
+        n_draws=10,
+        seed=17,
+    )
+
+    assert result["n_draws"] == 10
+    assert result["estimator"] == "cohort_time_att_not_yet_treated"
 
 
 def test_teaching_scenarios_add_expected_notes_and_pretrend():
@@ -970,10 +1101,10 @@ def test_complete_interaction_fixture_has_exact_stable_coefficient_se_and_t():
     main = stats_by_name["treated×post"]
     interaction = stats_by_name["treated×post×base_gvc"]
     assert (main.coef, main.se, main.t) == pytest.approx(
-        (-0.44974999999999943, 0.004492857445443682, -100.1033318909555), rel=1e-12, abs=1e-12
+        (-0.44974999999999943, 0.005279733365955605, -85.18422594975058), rel=1e-12, abs=1e-12
     )
     assert (interaction.coef, interaction.se, interaction.t) == pytest.approx(
-        (-0.885714285714285, 0.024451764981217948, -36.222918320809384), rel=1e-12, abs=1e-12
+        (-0.885714285714285, 0.028734230051915746, -30.824361192696493), rel=1e-12, abs=1e-12
     )
 
 
@@ -1291,9 +1422,11 @@ def test_run_design_with_controls_and_panelols_benchmark():
     assert bench["backend"] == "linearmodels.PanelOLS"
     assert "passed" not in bench
     assert bench["coef_check_passed"]
-    assert bench["se_check_mode"] == "informational"
+    assert bench["se_check_mode"] == "relative_tolerance_2pct"
+    assert bench["se_check_passed"] is True
+    assert bench["benchmark_passed"] is True
     assert bench["max_abs_coef_diff"] < 1e-8
-    assert any("仅针对政策系数" in n for n in bench["notes"])
+    assert any("同时门禁政策系数与聚类标准误" in n for n in bench["notes"])
 
 
 def test_run_design_with_macro_controls():
@@ -1338,4 +1471,4 @@ def test_real_price_mode_deflates_amount_controls():
 
     assert np.allclose(adjusted["log_gdp_proxy"], expected)
     result = run_design(df, design)
-    assert any("实际值口径" in note for note in result.notes)
+    assert any("教学模拟平减口径" in note for note in result.notes)

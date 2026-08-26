@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Authenticated v7 shock-panel release benchmark.
+"""Authenticated v8 shock-panel release benchmark.
 
 This harness deliberately refuses old/unvalidated artifacts.  It exercises the
 normal FastAPI authentication middleware and ``/api/shocks/panel`` route through
@@ -28,7 +28,7 @@ from gvcsim.config import PROCESSED_DIR
 
 SEQUENTIAL_BUDGET_MS = 500.0
 CONCURRENT_BUDGET_MS = 1500.0
-DEFAULT_OUTPUT = Path("benchmarks/shock_panel_v7.json")
+DEFAULT_OUTPUT = Path("benchmarks/shock_panel_v8.json")
 
 
 def percentile(values: list[float], quantile: float = 0.95) -> float:
@@ -81,7 +81,7 @@ def run_benchmark(
     validation = artifacts.validate_release_cached(PROCESSED_DIR)
     metadata = artifacts.dataset_metadata(PROCESSED_DIR)
     if metadata.get("artifact_contract_version") != artifacts.ARTIFACT_CONTRACT_VERSION:
-        raise RuntimeError("benchmark requires the active artifact contract v7 release")
+        raise RuntimeError("benchmark requires the active artifact contract v8 release")
 
     years = metadata.get("years")
     if not isinstance(years, list) or not years:
@@ -125,7 +125,7 @@ def run_benchmark(
     concurrent = sample_summary(concurrent_ms, CONCURRENT_BUDGET_MS)
     passed = bool(cold["passed"] and sequential["passed"] and concurrent["passed"])
     return {
-        "benchmark": "authenticated_shock_panel_active_v7",
+        "benchmark": "authenticated_shock_panel_active_v8",
         "status": "passed" if passed else "budget_failure",
         "method": (
             "Validated and cached the active release, authenticated through /api/auth/login, then called "

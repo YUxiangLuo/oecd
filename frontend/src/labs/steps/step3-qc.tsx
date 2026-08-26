@@ -6,6 +6,7 @@ import { QcChecksTable } from "./qc-checks-table";
 import { inspectQcSection, summarizeQcSections, type QcSectionState } from "./qc-contract";
 import { inspectShockContract } from "./step2/shock-contract";
 import { summarizeQcRelease } from "./qc-release";
+import { userFacingRequestError } from "../../user-facing-error";
 
 const QC_DECISIONS = [
   {
@@ -36,12 +37,18 @@ export function QcLab({ meta, onNavigateStep, onCompletionBlockChange }: {
   onCompletionBlockChange?: (reason: string | null) => void;
 }) {
   const [year, setYear] = useState(meta.years.at(-1)!);
-  const { data, error } = useAsync<QcCheck[]>(() => api.qc(year), [year], { requestKey: `qc:icio:${year}` });
-  const { data: controlChecks, error: controlError } = useAsync<QcCheck[]>(
+  const icioQuery = useAsync<QcCheck[]>(
+    () => api.qc(year),
+    [year],
+    { requestKey: `qc:icio:${year}` },
+  );
+  const controlsQuery = useAsync<QcCheck[]>(
     () => api.qcControls(),
     [],
     { requestKey: "qc:controls" },
   );
+  const { data, error } = icioQuery;
+  const { data: controlChecks, error: controlError } = controlsQuery;
   const contract = meta.dataset?.qc_contract;
   const icioState = inspectQcSection(data, contract, "icio");
   const controlsState = inspectQcSection(controlChecks, contract, "controls");
@@ -65,7 +72,7 @@ export function QcLab({ meta, onNavigateStep, onCompletionBlockChange }: {
     setYear(nextYear);
   };
   const tableMessage = (state: QcSectionState, requestError: string | null) => {
-    if (requestError) return `质检读取失败：${requestError}`;
+    if (requestError) return userFacingRequestError(requestError, "质检读取失败");
     if (state.status === "loading") return "正在读取质检结果…";
     return state.reason ?? "未返回任何质检结果，不能判定通过。";
   };
@@ -137,6 +144,8 @@ export function QcLab({ meta, onNavigateStep, onCompletionBlockChange }: {
         label="OECD ICIO 数据质检结果表，可横向滚动"
         emptyMessage={tableMessage(icioState, error)}
         emptyState={icioState.status === "loading" && !error ? "loading" : "invalid"}
+        onRetry={error ? icioQuery.retry : undefined}
+        retryLabel={`重试 ${year} 年质检`}
         onNavigateStep={onNavigateStep}
       />
 
@@ -149,6 +158,8 @@ export function QcLab({ meta, onNavigateStep, onCompletionBlockChange }: {
         label="国家-年份控制变量质检结果表，可横向滚动"
         emptyMessage={tableMessage(controlsState, controlError)}
         emptyState={controlsState.status === "loading" && !controlError ? "loading" : "invalid"}
+        onRetry={controlError ? controlsQuery.retry : undefined}
+        retryLabel="重试控制变量质检"
         onNavigateStep={onNavigateStep}
       />
 

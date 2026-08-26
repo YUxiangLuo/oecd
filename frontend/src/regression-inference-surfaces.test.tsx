@@ -9,12 +9,12 @@ function validEventSupportWithThinLead(): EventSupport {
   return {
     policy: "teaching_min_contributing_clusters_per_event_period",
     policy_is_statistical_theorem: false,
-    cluster: "country", base_k: -1, reference_term: "k=-1", min_contributing_clusters: 5,
+    cluster: "country", base_k: -1, reference_term: "k=-1", min_contributing_clusters: 12,
     periods: [
       {
         term: "k=-1", event_time: -1, is_reference: true, estimated: false,
-        contributing_rows: 6, contributing_entities: 6, contributing_clusters: 6,
-        cohorts: { "2018": 6 }, period_supported: true, inference_supported: true,
+        contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+        cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
         suppress_inference: false, reason_codes: [], reasons: [],
       },
       {
@@ -25,8 +25,8 @@ function validEventSupportWithThinLead(): EventSupport {
       },
       {
         term: "k=0", event_time: 0, is_reference: false, estimated: true,
-        contributing_rows: 6, contributing_entities: 6, contributing_clusters: 6,
-        cohorts: { "2018": 6 }, period_supported: true, inference_supported: true,
+        contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+        cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
         suppress_inference: false, reason_codes: [], reasons: [],
       },
     ],
@@ -96,6 +96,24 @@ describe("event-study inference surfaces fail closed for legacy payloads", () =>
     expect(markup).toContain("逐期支持未知");
     expect(markup).not.toContain("[0.0100, 0.0300]");
     expect(markup).not.toContain(">0.001<");
+  });
+
+  test("cohort-time point-only payload renders unavailable SE and t without crashing", () => {
+    const response = legacyEventResponse(validEventSupportWithThinLead());
+    response.result.status = "insufficient";
+    response.result.support = {
+      status: "insufficient", suppress_inference: true,
+    } as RegressionResponse["result"]["support"];
+    response.result.coefs[0].se = null;
+    response.result.coefs[0].t = null;
+    response.result.coefs[0].p = null;
+    response.result.coefs[0].ci_low = null;
+    response.result.coefs[0].ci_high = null;
+
+    const markup = renderToStaticMarkup(createElement(RegressionCoefficientTable, { response }));
+    expect(markup).toContain("0.0200");
+    expect((markup.match(/>—</g) ?? []).length).toBeGreaterThanOrEqual(4);
+    expect(markup).not.toContain("NaN");
   });
 
   test("pretrend panel hides seeded interpretation, F statistic, and p for malformed support", () => {

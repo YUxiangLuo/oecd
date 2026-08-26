@@ -163,7 +163,7 @@ export interface ShockEvent {
   all_targets?: boolean;
   /** 复合处理或教学映射的时间线边界。 */
   timeline_note?: string | null;
-  source_status: "official_event_source" | "teaching_encoding_no_event_source";
+  source_status: "official_event_source_complete" | "partial_official_event_source" | "teaching_encoding_no_event_source";
   source_disclosure: string;
   /** 支持事件/日期的 URL；空数组表示没有逐项事件来源。 */
   source_urls: string[];
@@ -399,8 +399,9 @@ export interface ReportMutationResponse {
 export interface CoefStat {
   name: string;
   coef: number;
-  se: number;
-  t: number;
+  // 整体门禁可能只保留 cohort-time 点估计，此时 SE/t 也不可评估。
+  se: number | null;
+  t: number | null;
   // 推断量在设计无效/支持度不足时为 null,表示“不可评估”,不是“不显著”。
   p: number | null;
   stars: string;
@@ -446,6 +447,11 @@ export interface RegressionOptions {
   scenario_labels: Record<string, string>;
   weight_modes?: string[];
   weight_mode_labels?: Record<string, string>;
+  method_constraints?: {
+    cohort_aware_methods: string[];
+    controls_publicly_disabled: boolean;
+    cohort_aware_interaction_supported: boolean;
+  };
   outcomes: Record<RegressionOutcome, string>;
 }
 
@@ -579,12 +585,14 @@ export interface RegressionResponse {
     n_entities: number;
     n_times: number;
     n_clusters: number;
-    r2_within: number;
+    r2_within: number | null;
     depvar_mean: number;
     depvar_std: number;
     diagnostics: {
       pretrend?: PretrendDiagnostic;
       pretrend_tests?: Partial<Record<PretrendScope, PretrendDiagnostic>>;
+      estimator?: string;
+      cohort_time_cells?: Record<string, number | string>[];
     };
     marginal_effects?: MarginalEffect[];
     notes: string[];
@@ -601,16 +609,20 @@ export interface RegressionResponse {
     policy_coefs: {
       name: string;
       own_coef: number;
-      panelols_coef: number;
+      panelols_coef?: number;
+      audit_coef?: number;
       coef_diff: number;
-      own_se: number;
-      panelols_se: number;
-      se_diff: number;
+      own_se: number | null;
+      panelols_se?: number;
+      audit_se?: number | null;
+      se_diff?: number | null;
     }[];
     max_abs_coef_diff: number;
     max_abs_se_diff: number;
     coef_check_passed: boolean;
-    se_check_mode: "informational";
+    se_check_passed?: boolean;
+    benchmark_passed?: boolean;
+    se_check_mode: string;
     notes: string[];
   };
   disclaimer: string;

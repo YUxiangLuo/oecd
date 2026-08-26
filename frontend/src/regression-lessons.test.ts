@@ -25,7 +25,8 @@ describe("regression lessons", () => {
 
   test("each step teaches one distinct beginner move", () => {
     expect(REGRESSION_FAMILIES.map((item) => item.step)).toEqual([12, 13, 14, 15]);
-    expect(REGRESSION_LESSONS.trade.learnThis).toContain("处理组相对对照组");
+    expect(REGRESSION_LESSONS.trade.learnThis).toContain("逐 cohort");
+    expect(REGRESSION_LESSONS.trade.learnThis).toContain("从未处理或截至比较期尚未处理");
     expect(REGRESSION_LESSONS.production.learnThis).toContain("比较方式");
     expect(REGRESSION_LESSONS.length.learnThis).toContain("不是百分点");
     expect(REGRESSION_LESSONS.network.learnThis).toContain("拓扑");
@@ -58,7 +59,7 @@ describe("regression lessons", () => {
   });
 
   test("research question follows the selected shock and estimand", () => {
-    expect(lessonQuestion("network", "tariff", "did")).toContain("处理组");
+    expect(lessonQuestion("network", "tariff", "did")).toContain("处理 cohort");
     expect(lessonQuestion("network", "sanctions", "event_study")).toContain("制裁暴露");
     const fe = lessonQuestion("network", "export_control", "twfe_intensity");
     expect(fe).toContain("出口管制暴露变强");
@@ -67,7 +68,7 @@ describe("regression lessons", () => {
 
   test("comparison copy explains the selected method without claiming proof", () => {
     expect(comparisonExplanation("did")).toContain("处理后−处理前");
-    expect(comparisonExplanation("event_study")).toContain("冲击前后各年");
+    expect(comparisonExplanation("event_study")).toContain("逐事件时间");
     expect(comparisonExplanation("twfe_intensity")).toContain("冲击强度");
   });
 });

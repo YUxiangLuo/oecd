@@ -15,7 +15,7 @@
   panel_country.csv               国家×年份长面板(冲击按行业出口额加权聚合)
   controls_country.csv            ICIO 派生/宏观mock控制 + 平减指数(四类 outcome)
   qc_controls.json                controls_country.csv 独立质检
-  export_exposure_<year>.csv      ICIO 派生出口目的地暴露度(步骤11 冲击加权)
+  export_exposure_<year>.csv      ICIO 派生国家–行业出口目的地暴露度(步骤11 冲击加权)
 """
 
 import json
@@ -139,7 +139,7 @@ def compute_year(year: int, verbose: bool = True, *, allow_qc_override: bool = F
 
     arr = build_arrays(io)
 
-    log(f"[{year}] 步骤11所需出口暴露度(ICIO 双边流向)...")
+    log(f"[{year}] 步骤11所需国家–行业出口暴露度(ICIO 双边流向)...")
     shocks.write_export_exposure(arr, year)
 
     log(f"[{year}] 步骤3 贸易流分解...")

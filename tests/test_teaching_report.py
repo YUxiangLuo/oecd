@@ -2,6 +2,7 @@ import json
 import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -211,6 +212,7 @@ def _write_output_artifacts(path: Path, years: list[int]) -> dict[str, dict]:
             [
                 {
                     "country": country_code,
+                    "sector": "s1",
                     "imposer": imposer,
                     "year": year,
                     "bilateral_exports": bilateral,
@@ -254,6 +256,9 @@ def _write_output_artifacts(path: Path, years: list[int]) -> dict[str, dict]:
         industry_panels.append(industry)
     country_panel = pd.concat(country_panels, ignore_index=True)
     industry_panel = pd.concat(industry_panels, ignore_index=True)
+    for frame in (country_panel, industry_panel):
+        first_year = frame.groupby("country")["year"].transform("min")
+        frame.loc[frame["year"].eq(first_year), ["gdp_proxy_growth", "exports_proxy_growth"]] = np.nan
     exposure = pd.concat(
         [pd.read_csv(path / f"export_exposure_{year}.csv") for year in years],
         ignore_index=True,
@@ -364,7 +369,7 @@ def _event_support(
     k0_supported: bool = True, include_thin_lead: bool = False, include_supported_lead: bool = False
 ) -> dict:
     def period(term: str, supported: bool, *, reference: bool = False) -> dict:
-        clusters = 6 if supported else 4
+        clusters = 13 if supported else 11
         return {
             "term": term,
             "event_time": -1 if reference else int(term.removeprefix("k=")),
@@ -378,7 +383,7 @@ def _event_support(
             "inference_supported": supported,
             "suppress_inference": not supported,
             "reason_codes": [] if supported else ["insufficient_period_clusters"],
-            "reasons": [] if supported else [f"{term} 只有 4 个贡献处理聚类，低于课程政策下限 5。"],
+            "reasons": [] if supported else [f"{term} 只有 11 个贡献处理聚类，低于课程停止线 12。"],
         }
 
     return {
@@ -387,7 +392,7 @@ def _event_support(
         "cluster": "country",
         "base_k": -1,
         "reference_term": "k=-1",
-        "min_contributing_clusters": 5,
+        "min_contributing_clusters": 12,
         "periods": [
             period("k=-1", True, reference=True),
             period("k=0", k0_supported),
@@ -642,7 +647,7 @@ def test_qualified_run_on_same_step_still_satisfies_gate_after_insufficient_late
     assert "四类指标并读" in report.markdown
     assert "这四步分别估计" in report.markdown
     assert "统计推断已抑制" in report.markdown or "处理支持度不足" in report.markdown
-    assert "双重差分" in report.markdown or "treated×post" in report.markdown or "政策处理项" in report.markdown
+    assert "cohort-time ATT" in report.markdown or "treated×post" in report.markdown or "政策处理项" in report.markdown
 
 
 def test_exact_run_identity_prevents_unsigned_latest_from_shadowing_distinct_qualified_run(tmp_path, monkeypatch):
@@ -844,12 +849,12 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
 
     markdown = build(session, "同学").markdown
 
-    assert "关税冲击 · 双重差分（处理组相对对照组） · 国家–行业级 · ICIO 派生控制变量" in markdown
+    assert "关税冲击 · 分批处理 cohort-time ATT · 国家–行业级 · 同期 ICIO 派生量（公开回归禁用）" in markdown
     assert "+0.14 个百分点" in markdown
     assert "[-0.17, +0.45] 个百分点" in markdown
     assert "证据不足，无法判断方向" in markdown
     assert "处理后相对变化（处理组 × 处理后）" in markdown
-    assert "增加值规模(log, ICIO GDP proxy)" in markdown
+    assert "总增加值规模(log, ICIO GVA proxy)" in markdown
     assert "0.0013729825631389496" not in markdown
     assert "country_industry" not in markdown
     assert "icio_derived" not in markdown

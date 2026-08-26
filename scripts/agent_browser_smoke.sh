@@ -46,7 +46,7 @@ for step in $(seq 1 16); do
     "${ab[@]}" wait '[role="dialog"][aria-modal="true"]'
     "${ab[@]}" eval '(() => { const d=document.querySelector("[role=dialog][aria-modal=true]"); if(document.querySelectorAll(".network-card").length!==1) throw new Error("network dialog duplicated the graph"); if(document.activeElement?.textContent?.trim()!=="退出大图") throw new Error("network dialog did not receive focus"); return true; })()'
     "${ab[@]}" press Escape
-    "${ab[@]}" wait --fn '() => !document.querySelector("[role=dialog]")'
+    "${ab[@]}" wait --fn '!document.querySelector("[role=dialog]")'
     "${ab[@]}" eval '(() => { const n=document.activeElement; if(!n?.classList.contains("network-node") || n.getAttribute("aria-pressed")!=="true") throw new Error("network dialog did not restore its node focus and selection"); return true; })()'
   fi
 done

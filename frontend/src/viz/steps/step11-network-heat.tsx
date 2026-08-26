@@ -51,7 +51,7 @@ export function heatCoverageLabel(coverage: HeatCoverage): string {
 
 const HEAT_COLS = [
   { key: HEAT_WEIGHTED_DEGREE_METRIC, name: "加权度", fmt: "amount", desc: "与该节点直接相连的中间投入边流量总和(百万美元)。" },
-  { key: HEAT_EVIDENCE_METRIC, name: "介数中心性", fmt: "raw", desc: "经过该节点的有向最短路径原始计数，不归一化。" },
+  { key: HEAT_EVIDENCE_METRIC, name: "介数中心性", fmt: "raw", desc: "各有序节点对最短路径经过该节点的份额之和；未按节点对数归一化。" },
   { key: "closnesscentrality", name: "接近中心性", fmt: "num", desc: "沿出边可达节点数除以到这些节点的最短距离之和。" },
   { key: "harmonicclosnesscentrality", name: "调和中心性", fmt: "num", desc: "沿出边到可达节点的距离倒数平均值。" },
   { key: "eigencentrality", name: "特征向量中心性", fmt: "num", desc: "按入边邻居的重要性迭代并以最大值归一。" },

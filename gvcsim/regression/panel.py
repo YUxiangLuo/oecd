@@ -1,7 +1,14 @@
-"""四类 outcome 共用的面板回归引擎:双向固定效应 / DID / 事件研究。
+"""四类 outcome 共用的回归引擎。
 
-教学主引擎仍为纯 numpy 实现,便于单元测试与教学展示;同时提供
-linearmodels.PanelOLS 标准库对照。三种方法共用同一个 within-OLS 核心(_within_ols):
+公开 API 的分批处理 DID 与动态结果使用 cohort-time ATT：只以从未或截至
+比较期尚未处理实体为对照，并用 delete-one cluster jackknife 推断。连续强度
+TWFE 使用 numpy within-OLS，并由 linearmodels.PanelOLS 同时门禁系数与 SE。
+
+本文件仍保留 ``did``/``event_study``/``run_design`` 的传统 TWFE 低层入口，
+用于算法对照与历史测试；产品 API 即使抑制推断也保留 cohort-time 点估计，只能调用
+``run_design_with_benchmark``，不得把这些低层入口当作公开主估计量。
+
+传统 within-OLS 核心(_within_ols):
   1. 交替去均值(entity / time)做双向 within 变换,直到收敛
      (非平衡面板下一次性去均值不精确,迭代投影可收敛到正确的 within 解)
   2. OLS 估计
@@ -55,8 +62,8 @@ from gvcsim.regression.validity import MIN_TREATED_CLUSTERS, TreatmentSupport, a
 class CoefStat:
     name: str
     coef: float
-    se: float
-    t: float
+    se: float | None
+    t: float | None
     # 推断量:处理支持度不足或设计无效时为 None,表示"不可评估"而非"不显著"。
     p: float | None
     ci_low: float | None
@@ -81,7 +88,7 @@ class RegressionResult:
     n_entities: int
     n_times: int
     n_clusters: int
-    r2_within: float
+    r2_within: float | None
     depvar_mean: float
     depvar_std: float
     # 交互模型在低(P25)/均值/高(P75)基期 GVC 水平下的线性组合效应。
@@ -636,7 +643,14 @@ def _within_ols(
         s = X[mask].T @ resid[mask]
         meat += np.outer(s, s)
     n, k = len(y), X.shape[1]
-    correction = (n_g / (n_g - 1)) * ((n - 1) / max(n - k, 1))
+    # CR1 small-sample correction must count absorbed entity/time effects as
+    # estimated nuisance parameters. Omitting them made every displayed SE about
+    # 10% narrower than PanelOLS on the production release.
+    absorbed_rank = len(pd.unique(ent)) + len(pd.unique(tim)) - 1
+    residual_df = n - k - absorbed_rank
+    if residual_df <= 0:
+        raise ValueError("吸收个体/年份固定效应后没有正的协方差残差自由度")
+    correction = (n_g / (n_g - 1)) * ((n - 1) / residual_df)
     V = correction * XtX_inv @ meat @ XtX_inv
     se = np.sqrt(np.clip(np.diag(V), 0.0, None))
     _require_finite_numerical_output("聚类稳健协方差", XtX_inv, meat, V, se)
@@ -861,7 +875,7 @@ def twoway_fe(
 
 
 def run_design(df: pd.DataFrame, design) -> RegressionResult:
-    """按 RegressionDesign 的方法/粒度分发到共用引擎(步骤12–15)。"""
+    """传统低层设计入口；产品步骤 12–15 必须调用 run_design_with_benchmark。"""
     return _within_ols(prepare_design_model(df, design))
 
 
@@ -901,9 +915,13 @@ def placebo_did_distribution(
         input_rows=input_rows,
     )
     true_model.notes = [*filter_notes, *true_model.notes]
-    true_result = _within_ols(true_model)
+    use_cohort_time = not design.controls and not design.interaction
     policy_name = true_model.policy_xcols[0]
-    true_coef = next(c.coef for c in true_result.coefs if c.name == policy_name)
+    true_coef = (
+        _cohort_time_policy_point(true_model)
+        if use_cohort_time
+        else next(c.coef for c in _within_ols(true_model).coefs if c.name == policy_name)
+    )
 
     data = true_model.data.copy()
     entity_text = data[true_model.entity].astype(str)
@@ -965,11 +983,15 @@ def placebo_did_distribution(
                 timing=pseudo_timing,
                 input_rows=input_rows,
             )
-            placebo_result = _within_ols(placebo_model)
+            placebo_name = placebo_model.policy_xcols[0]
+            placebo_coef = (
+                _cohort_time_policy_point(placebo_model)
+                if use_cohort_time
+                else next(c.coef for c in _within_ols(placebo_model).coefs if c.name == placebo_name)
+            )
         except ValueError:
             continue
-        placebo_name = placebo_model.policy_xcols[0]
-        coefs.append(next(c.coef for c in placebo_result.coefs if c.name == placebo_name))
+        coefs.append(placebo_coef)
 
     if not coefs:
         raise ValueError("无法生成可估计的置换样本")
@@ -997,6 +1019,7 @@ def placebo_did_distribution(
         "assignment_preserved": ["处理实体数量", "首次处理年份(cohort)数量分布"],
         "assignment_not_preserved": ["政策的国家定向", "行业资格", "事件分配机制", "国家聚类结构"],
         "note": "非校准实体置换:仅保留处理实体数量与首次处理年份(cohort)数量分布",
+        "estimator": "cohort_time_att_not_yet_treated" if use_cohort_time else "legacy_interaction_or_control_twfe",
     }
 
 
@@ -1062,7 +1085,7 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
     model.notes = [*filter_notes, *model.notes]
     model.notes.extend(scenario_notes)
     if getattr(design, "price_mode", None) == PRICE_MODE_REAL:
-        model.notes.append("实际值口径:金额类控制变量已用 GDP 平减指数调整(基期=1)")
+        model.notes.append("教学模拟平减口径:金额类教学变量已用确定性 mock 指数调整(2016=1)，不是观测到的实际价格指数")
     return model
 
 
@@ -1484,8 +1507,8 @@ def did(
 
     treated_i = 该个体在样本期内是否曾受冲击(时间不变);
     post_it   = 年份 ≥ G_i,其中 G_i 是该个体首次受冲击年份;
-    β         = 处理组相对对照组在处理后的平均变化；因果解释依赖识别假设。
-    处理组/对照组主效应分别被个体/时间固定效应吸收。
+    β         = 传统 staggered TWFE 加权组合，不是普通四格 ATT；异质效应下会受已处理 cohort 比较污染。
+    该函数只供低层对照与测试。公开主结果由 cohort-time ATT 生成。
     """
     return _within_ols(_prepare_did_model(df, depvar, entity, time, cluster, treated_col, controls, interaction))
 
@@ -1525,13 +1548,13 @@ def _build_event_support(
         if not period_supported:
             reason_codes.append("insufficient_period_clusters")
             reasons.append(
-                f"{_event_term(k)} 只有 {contributing_clusters} 个贡献处理聚类，低于课程政策下限 "
+                f"{_event_term(k)} 只有 {contributing_clusters} 个贡献处理聚类，低于课程停止线 "
                 f"{MIN_TREATED_CLUSTERS}。"
             )
         if k != base_k and not reference_supported:
             reason_codes.append("insufficient_reference_clusters")
             reasons.append(
-                f"省略基期 {_event_term(base_k)} 只有 {reference_clusters} 个贡献处理聚类，低于课程政策下限 "
+                f"省略基期 {_event_term(base_k)} 只有 {reference_clusters} 个贡献处理聚类，低于课程停止线 "
                 f"{MIN_TREATED_CLUSTERS}。"
             )
         inference_supported = period_supported and reference_supported
@@ -1713,11 +1736,11 @@ def event_study(
     controls: list[str] | tuple[str, ...] = (),
     interaction: bool = False,
 ) -> RegressionResult:
-    """事件研究:y_it = Σ_{k≠base} β_k·1[t-G_i = k] + α_i + λ_t + ε_it。
+    """传统 TWFE event-study 低层对照入口。
 
-    G_i 是个体 i 的首次受冲击年份;优先以冲击前一年(k=-1)为基期。
-    k<0 的系数用于检查是否存在明显冲击前差异；未拒绝联合零假设不能证明平行趋势。
-    k≥0 的系数描述相对基期的动态路径。
+    该形式在 cohort/动态效应异质时会发生跨期污染，不作为产品主结果。公开 API
+    使用按事件时间聚合的 cohort-time ATT。这里保留用于测试污染风险、局部门禁
+    和处理支持不足时的描述性点估计；不应据此给出方向性因果结论。
     """
     return _within_ols(_prepare_event_model(df, depvar, entity, time, cluster, treated_col, controls, interaction))
 
@@ -1834,32 +1857,372 @@ def _summarize_benchmark(
     max_se = max(abs(float(row["se_diff"])) for row in rows)
     _require_finite_numerical_output("PanelOLS 对照摘要", max_coef, max_se)
     coef_check_passed = max_coef < 1e-8
+    se_scale = max(max(abs(float(row["own_se"])), abs(float(row["panelols_se"])), 1e-12) for row in rows)
+    se_check_passed = max_se / se_scale < 0.02
     return {
         "backend": "linearmodels.PanelOLS",
         "policy_coefs": rows,
         "max_abs_coef_diff": max_coef,
         "max_abs_se_diff": max_se,
         "coef_check_passed": coef_check_passed,
-        "se_check_mode": "informational",
+        "se_check_passed": se_check_passed,
+        "benchmark_passed": coef_check_passed and se_check_passed,
+        "se_check_mode": "relative_tolerance_2pct",
         "notes": [
             *lm.notes,
-            "PanelOLS 对照通过/失败仅针对政策系数;标准误差异受聚类小样本修正与自由度处理影响,仅作参考。",
+            "PanelOLS 对照同时门禁政策系数与聚类标准误；标准误相对差异必须低于 2%。",
         ],
     }
 
 
+def _cohort_time_att_values(
+    model: PreparedModel,
+    event_times: list[int] | None,
+    *,
+    omitted_cluster: str | None = None,
+) -> tuple[dict[str, float], list[dict]]:
+    """Estimate cohort-time DID cells against never/not-yet-treated entities.
+
+    Every cell compares the cohort's change from ``g-1`` with entities that remain
+    untreated through both the cohort date and comparison date. Aggregation weights
+    are the number of treated entities with both observations. This avoids using an
+    already-treated cohort as a control, unlike the legacy staggered TWFE.
+    """
+    if model.timing is None:
+        raise ValueError("cohort-time ATT 需要冻结的首次处理时点")
+    data = model.data.copy()
+    data[model.entity] = data[model.entity].astype(str)
+    data[model.cluster] = data[model.cluster].astype(str)
+    if omitted_cluster is not None:
+        data = data.loc[data[model.cluster] != str(omitted_cluster)].copy()
+    if data.empty:
+        raise ValueError("删除聚类后 cohort-time ATT 样本为空")
+
+    cluster_by_entity = data.groupby(model.entity, sort=False)[model.cluster].first()
+    retained = pd.Index(cluster_by_entity.index)
+    first = model.timing.first_by_entity.copy()
+    first.index = first.index.astype(str)
+    first = first.reindex(retained)
+    values = data.pivot(index=model.entity, columns=model.time, values=model.depvar)
+    years = sorted(int(year) for year in values.columns)
+    weighted: dict[str, list[tuple[float, int]]] = {}
+    cells: list[dict] = []
+
+    for cohort in sorted(int(value) for value in first.dropna().unique()):
+        baseline = cohort - 1
+        if baseline not in values.columns:
+            continue
+        treated_ids = first.index[first.eq(cohort)]
+        targets = (
+            [cohort + event_time for event_time in event_times]
+            if event_times is not None
+            else [year for year in years if year >= cohort]
+        )
+        for target in targets:
+            if target not in values.columns:
+                continue
+            event_time = int(target - cohort)
+            if event_time == -1:
+                continue
+            # For pre-period diagnostics, controls must also remain untreated through
+            # cohort g; for post cells they must remain untreated through target t.
+            untreated_through = max(cohort, int(target))
+            control_ids = first.index[first.isna() | first.gt(untreated_through)]
+            treated_delta = (values.loc[treated_ids, target] - values.loc[treated_ids, baseline]).dropna()
+            control_delta = (values.loc[control_ids, target] - values.loc[control_ids, baseline]).dropna()
+            if treated_delta.empty or control_delta.empty:
+                continue
+            estimate = float(treated_delta.mean() - control_delta.mean())
+            term = _event_term(event_time) if event_times is not None else model.policy_xcols[0]
+            weight = int(len(treated_delta))
+            weighted.setdefault(term, []).append((estimate, weight))
+            cells.append(
+                {
+                    "cohort": cohort,
+                    "time": int(target),
+                    "event_time": event_time,
+                    "term": term,
+                    "att": estimate,
+                    "treated_entities": weight,
+                    "control_entities": int(len(control_delta)),
+                    "treated_clusters": int(cluster_by_entity.reindex(treated_delta.index).nunique()),
+                    "control_clusters": int(cluster_by_entity.reindex(control_delta.index).nunique()),
+                }
+            )
+
+    estimates = {
+        term: float(sum(value * weight for value, weight in entries) / sum(weight for _value, weight in entries))
+        for term, entries in weighted.items()
+        if sum(weight for _value, weight in entries) > 0
+    }
+    if not estimates:
+        raise ValueError("没有可估计的 cohort-time ATT 单元；需要 cohort 基期和未处理/尚未处理比较组")
+    return estimates, cells
+
+
+def _cohort_time_policy_point(model: PreparedModel) -> float:
+    """Return only the public DID point estimate, without any covariance work."""
+    estimates, _cells = _cohort_time_att_values(model, None)
+    policy_name = model.policy_xcols[0]
+    try:
+        return float(estimates[policy_name])
+    except KeyError as exc:
+        raise ValueError("cohort-time ATT 没有与设计契约一致的政策项") from exc
+
+
+def _reaggregate_cohort_time_cells(cells: list[dict], terms: list[str]) -> dict[str, float]:
+    """Independently reaggregate serialized cells for the arithmetic audit."""
+    audited: dict[str, float] = {}
+    for term in terms:
+        rows = [row for row in cells if row.get("term") == term]
+        denominator = sum(int(row["treated_entities"]) for row in rows)
+        if denominator <= 0:
+            raise ValueError(f"cohort-time ATT 算术复核缺少单元权重: {term}")
+        audited[term] = float(
+            math.fsum(float(row["att"]) * int(row["treated_entities"]) for row in rows)
+            / denominator
+        )
+    return audited
+
+
+def _cohort_time_result(model: PreparedModel, method: str) -> tuple[RegressionResult, dict]:
+    """Public staggered DID/event-study result with cluster delete-one jackknife."""
+    if model.control_cols:
+        raise ValueError("cohort-aware DID/事件研究不接受同期 ICIO 或模拟宏观控制；它们可能是处理后变量")
+    if BASELINE_GVC_COL in model.data.columns:
+        raise ValueError("cohort-aware DID/事件研究暂不接受交互项；请使用无交互主结果")
+    event_times = None
+    if method == METHOD_EVENT_STUDY:
+        event_times = [
+            int(period["event_time"])
+            for period in (model.event_support or {}).get("periods", [])
+            if period.get("estimated")
+        ]
+    full, cells = _cohort_time_att_values(model, event_times)
+    terms = [term for term in model.policy_xcols if term in full]
+    if method == METHOD_DID:
+        terms = [model.policy_xcols[0]] if model.policy_xcols[0] in full else []
+    if not terms:
+        raise ValueError("cohort-time ATT 没有与设计契约一致的政策项")
+
+    support = model.support
+    audited_full = _reaggregate_cohort_time_cells(cells, terms)
+    point_diffs = {term: float(full[term] - audited_full[term]) for term in terms}
+    max_point_diff = max(abs(value) for value in point_diffs.values())
+    point_scale = max(
+        (max(abs(float(full[term])), abs(audited_full[term])) for term in terms),
+        default=1.0,
+    )
+    point_check_passed = max_point_diff <= 1e-12 * max(point_scale, 1.0)
+    if not point_check_passed:
+        raise ValueError("cohort-time ATT 单元重聚合算术复核失败，拒绝发布结果")
+
+    clusters = sorted(model.data[model.cluster].astype(str).unique())
+    if support is not None and support.suppress_inference:
+        beta = np.array([full[term] for term in terms], dtype=float)
+        diagnostics = (
+            {
+                **_pretrend_diagnostic(
+                    terms,
+                    beta,
+                    np.zeros((len(terms), len(terms)), dtype=float),
+                    len(clusters),
+                    model.event_support,
+                    support,
+                ),
+                "estimator": "cohort_time_att_not_yet_treated",
+                "cohort_time_cells": cells,
+            }
+            if method == METHOD_EVENT_STUDY
+            else {"estimator": "cohort_time_att_not_yet_treated", "cohort_time_cells": cells}
+        )
+        result = RegressionResult(
+            depvar=model.depvar,
+            coefs=[
+                CoefStat(name=term, coef=float(full[term]), se=None, t=None, p=None, ci_low=None, ci_high=None)
+                for term in terms
+            ],
+            n_obs=int(len(model.data)),
+            n_entities=int(model.data[model.entity].nunique()),
+            n_times=int(model.data[model.time].nunique()),
+            n_clusters=len(clusters),
+            r2_within=None,
+            depvar_mean=float(model.data[model.depvar].mean()),
+            depvar_std=float(model.data[model.depvar].std(ddof=1)),
+            diagnostics=diagnostics,
+            notes=[
+                *model.notes,
+                "点估计仍为 cohort-time ATT；整体设计门禁抑制了聚类 jackknife、标准误、t、p 与置信区间，绝不回退或改标为传统 TWFE。",
+                *(support.reasons if support is not None else []),
+            ],
+            status=support.status if support is not None else None,
+            status_reasons=list(support.reasons) if support is not None else [],
+            support=support.to_dict() if support is not None else None,
+            event_support=model.event_support,
+            sample_flow=model.sample_flow,
+        )
+        benchmark = {
+            "backend": "cohort_time_cell_reaggregation_point_audit",
+            "policy_coefs": [
+                {
+                    "name": term,
+                    "own_coef": full[term],
+                    "audit_coef": audited_full[term],
+                    "coef_diff": point_diffs[term],
+                    "own_se": None,
+                    "audit_se": None,
+                    "se_diff": None,
+                }
+                for term in terms
+            ],
+            "max_abs_coef_diff": max_point_diff,
+            "max_abs_se_diff": 0.0,
+            "coef_check_passed": True,
+            "se_check_passed": False,
+            "benchmark_passed": False,
+            "se_check_mode": "not_run_global_inference_suppressed",
+            "notes": [
+                "已从序列化 cohort×时期单元及其处理实体权重独立重聚合点估计。",
+                "整体设计门禁已抑制推断，因此未运行或宣称通过 jackknife 标准误门禁。",
+            ],
+        }
+        return result, benchmark
+    leave_one_out: list[np.ndarray] = []
+    for cluster_value in clusters:
+        estimates, _cells = _cohort_time_att_values(model, event_times, omitted_cluster=cluster_value)
+        if not all(term in estimates for term in terms):
+            raise ValueError(f"删除聚类 {cluster_value} 后 cohort-time ATT 项缺失，无法形成共同 jackknife 协方差")
+        leave_one_out.append(np.array([estimates[term] for term in terms], dtype=float))
+    matrix = np.vstack(leave_one_out)
+    center = matrix.mean(axis=0)
+    covariance = ((len(clusters) - 1) / len(clusters)) * ((matrix - center).T @ (matrix - center))
+    se = np.sqrt(np.clip(np.diag(covariance), 0.0, None))
+    if not np.isfinite(covariance).all() or (se <= 0).any():
+        raise ValueError("cohort-time ATT 的聚类 jackknife 协方差非有限或非正")
+
+    # Audit the same leave-one estimates through the algebraically equivalent
+    # jackknife pseudo-value formula. This is deliberately a numerical arithmetic
+    # gate, not a claim that a second causal estimator validated identification.
+    full_vector = np.array([audited_full[term] for term in terms], dtype=float)
+    pseudo_values = len(clusters) * full_vector - (len(clusters) - 1) * matrix
+    pseudo_centered = pseudo_values - pseudo_values.mean(axis=0)
+    audit_covariance = (pseudo_centered.T @ pseudo_centered) / (len(clusters) * (len(clusters) - 1))
+    audit_se = np.sqrt(np.clip(np.diag(audit_covariance), 0.0, None))
+    se_diffs = se - audit_se
+    max_se_diff = float(np.max(np.abs(se_diffs)))
+    se_scale = max(float(np.max(np.abs(se))), float(np.max(np.abs(audit_se))), 1.0)
+    se_check_passed = max_se_diff <= 1e-12 * se_scale
+    if not np.isfinite(audit_covariance).all() or not se_check_passed:
+        raise ValueError("cohort-time ATT jackknife 伪值公式算术复核失败，拒绝发布推断")
+
+    critical = float(stats.t.ppf(0.975, len(clusters) - 1))
+    coefs: list[CoefStat] = []
+    for index, term in enumerate(terms):
+        coefficient = float(full[term])
+        standard_error = float(se[index])
+        t_stat = coefficient / standard_error
+        period = _event_period_for_term(model.event_support, term)
+        suppress = bool(period is not None and period.get("inference_supported") is not True)
+        coefs.append(
+            CoefStat(
+                name=term,
+                coef=coefficient,
+                se=standard_error,
+                t=t_stat,
+                p=None if suppress else _cluster_t_pvalue(t_stat, len(clusters)),
+                ci_low=None if suppress else coefficient - critical * standard_error,
+                ci_high=None if suppress else coefficient + critical * standard_error,
+            )
+        )
+
+    beta = np.array([full[term] for term in terms], dtype=float)
+    diagnostics = (
+        {
+            **_pretrend_diagnostic(terms, beta, covariance, len(clusters), model.event_support, support),
+            "estimator": "cohort_time_att_not_yet_treated",
+            "cohort_time_cells": cells,
+        }
+        if method == METHOD_EVENT_STUDY
+        else {"estimator": "cohort_time_att_not_yet_treated", "cohort_time_cells": cells}
+    )
+    result = RegressionResult(
+        depvar=model.depvar,
+        coefs=coefs,
+        n_obs=int(len(model.data)),
+        n_entities=int(model.data[model.entity].nunique()),
+        n_times=int(model.data[model.time].nunique()),
+        n_clusters=len(clusters),
+        r2_within=None,
+        depvar_mean=float(model.data[model.depvar].mean()),
+        depvar_std=float(model.data[model.depvar].std(ddof=1)),
+        diagnostics=diagnostics,
+        notes=[
+            *model.notes,
+            "主估计量为 cohort-time ATT：每个 cohort 以 g-1 为基期，只使用从未处理或截至比较期尚未处理的实体作对照；不使用已处理 cohort 作对照。",
+            "cohort-time 单元按可用处理实体数聚合；协方差为按设计聚类变量做 delete-one cluster jackknife。",
+            "该估计避免传统 staggered TWFE 的跨 cohort 污染，但因果解释仍要求平行趋势、无预期处理和无干扰等识别假设。",
+            *(support.reasons if support is not None else []),
+        ],
+        status=support.status if support is not None else None,
+        status_reasons=list(support.reasons) if support is not None else [],
+        support=support.to_dict() if support is not None else None,
+        event_support=model.event_support,
+        sample_flow=model.sample_flow,
+    )
+    benchmark = {
+        "backend": "cohort_time_cell_reaggregation_and_jackknife_formula_audit",
+        "policy_coefs": [
+            {
+                "name": term,
+                "own_coef": full[term],
+                "audit_coef": audited_full[term],
+                "coef_diff": point_diffs[term],
+                "own_se": float(se[index]),
+                "audit_se": float(audit_se[index]),
+                "se_diff": float(se_diffs[index]),
+            }
+            for index, term in enumerate(terms)
+        ],
+        "max_abs_coef_diff": max_point_diff,
+        "max_abs_se_diff": max_se_diff,
+        "coef_check_passed": point_check_passed,
+        "se_check_passed": se_check_passed,
+        "benchmark_passed": point_check_passed and se_check_passed,
+        "se_check_mode": "delete_one_covariance_vs_jackknife_pseudovalue_formula",
+        "notes": [
+            "点估计由序列化 cohort×时期单元及处理实体权重重新聚合；标准误由同一组 leave-one 估计通过 jackknife 伪值公式复算。",
+            "这是可失败的算术一致性门禁，不是独立因果估计器，也不能验证识别假设。",
+        ],
+    }
+    return result, benchmark
+
+
 def run_design_with_benchmark(df: pd.DataFrame, design) -> tuple[RegressionResult, dict]:
-    """一次预处理跑出自写引擎结果 + PanelOLS 对照(接口的热路径)。
+    """一次预处理跑出公开主估计与可失败的算术/标准库对照。
 
     prepare_design_model 与双向去均值都只做一次,自写引擎与 PanelOLS
     共用同一份样本和共线剔除结果——避免此前每个请求重复三次预处理、
     两次全量去均值。
     """
     model = prepare_design_model(df, design)
+    if design.method in {METHOD_DID, METHOD_EVENT_STUDY}:
+        return _cohort_time_result(model, design.method)
     prepared = _demean_and_prune(model)
     own = _within_ols(model, prepared)
     lm = _panelols_estimate(model, prepared[2], prepared[3])
-    return own, _summarize_benchmark(model, own, lm)
+    benchmark = _summarize_benchmark(model, own, lm)
+    if benchmark["benchmark_passed"] is not True:
+        reason = "标准库实现对照未同时通过系数与标准误门禁；已抑制 p 值和置信区间。"
+        own.coefs = [coefficient.without_inference() for coefficient in own.coefs]
+        own.marginal_effects = [
+            {**effect, "p": None, "ci_low": None, "ci_high": None} for effect in own.marginal_effects
+        ]
+        own.status = "invalid_design"
+        own.status_reasons = [*own.status_reasons, reason]
+        own.notes.append(reason)
+        if own.support is not None:
+            own.support = {**own.support, "status": "invalid_design", "suppress_inference": True}
+    return own, benchmark
 
 
 def benchmark_linearmodels(df: pd.DataFrame, design, own: RegressionResult | None = None) -> dict:

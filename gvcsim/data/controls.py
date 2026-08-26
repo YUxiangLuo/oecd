@@ -51,7 +51,7 @@ ALL_CONTROL_COLUMNS = [
 ]
 
 CONTROL_LABELS = {
-    "log_gdp_proxy": "增加值规模(log, ICIO GDP proxy)",
+    "log_gdp_proxy": "总增加值规模(log, ICIO GVA proxy)",
     "gdp_proxy_growth": "增加值增长率",
     "log_exports_proxy": "出口规模(log)",
     "exports_proxy_growth": "出口增长率",
@@ -100,8 +100,9 @@ def _safe_div(num: pd.Series, den: pd.Series) -> pd.Series:
 
 
 def _growth(s: pd.Series) -> pd.Series:
+    """同比增长；没有上一期或上一期为零时保持缺失，绝不伪造零增长。"""
     prev = s.shift(1)
-    return _safe_div(s - prev, prev).fillna(0.0)
+    return ((s - prev) / prev.where(prev.abs() > 1e-12)).replace([np.inf, -np.inf], np.nan)
 
 
 def _index_to_base(s: pd.Series) -> pd.Series:
@@ -142,7 +143,7 @@ def build_controls(
     country = country_panel.copy()
     sector = sector_panel.copy()
     country = country.sort_values(["country", "year"]).reset_index(drop=True)
-    # 文献/账户口径字段：GDP proxy = SVA（WWYZ 总增加值），毛出口 =
+    # 文献/账户口径字段：GVA proxy = SVA（WWYZ 总增加值；不是正式 GDP），毛出口 =
     # 五类 WWZ 聚合项 + OECD TLS 扩展项的闭合之和。
     country["_va"] = country["SVA"]
     country["_exports"] = tradeflow.gross_exports(country)
@@ -214,7 +215,10 @@ def build_controls(
         on=["country", "year"],
         how="left",
     )
-    out[ALL_CONTROL_COLUMNS] = out[ALL_CONTROL_COLUMNS].replace([np.inf, -np.inf], 0.0).fillna(0.0)
+    growth_columns = ["gdp_proxy_growth", "exports_proxy_growth"]
+    non_growth = [column for column in ALL_CONTROL_COLUMNS if column not in growth_columns]
+    out[non_growth] = out[non_growth].replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    out[growth_columns] = out[growth_columns].replace([np.inf, -np.inf], np.nan)
     return out[["country", "year", *ALL_CONTROL_COLUMNS]].sort_values(["country", "year"]).reset_index(drop=True)
 
 

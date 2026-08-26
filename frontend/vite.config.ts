@@ -6,6 +6,21 @@ const apiOrigin = process.env.GVCSIM_API_PROXY ?? "http://127.0.0.1:8000";
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        // React is shared by the main course UI and the lazy report renderer.
+        // Keep it in a stable vendor chunk so the application entry stays below
+        // Vite's large-chunk warning threshold and can be cached independently.
+        manualChunks(id) {
+          const normalized = id.replaceAll("\\", "/");
+          if (/\/node_modules\/(react|react-dom|scheduler)\//.test(normalized)) {
+            return "react-vendor";
+          }
+        },
+      },
+    },
+  },
   server: {
     proxy: {
       "/api": apiOrigin,

@@ -298,10 +298,13 @@
 .country-picker-row input { accent-color: #4b47e0; }
 .country-picker-row b { font-family: "Space Grotesk", sans-serif; font-weight: 600; color: #3a4050; }
 .country-picker-name { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 国旗用系统 emoji 字体渲染;稍大一点才在 12px 正文里看得清。 */
-.country-flag {
-  flex: none; font-size: 14px; line-height: 1;
-  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+/* 不依赖系统 Emoji 字体的国别标记；精简 Linux 字体环境也不会显示方框。 */
+.country-marker {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 15px; padding: 0 3px; box-sizing: border-box;
+  border: 1px solid #cfd5e2; border-radius: 3px; background: #f7f8fb;
+  color: #46506a; font: 700 8px/1 "Space Grotesk", Arial, sans-serif;
+  letter-spacing: 0.04em;
 }
 
 /* 操作成功 toast(showToast/ToastHost) */

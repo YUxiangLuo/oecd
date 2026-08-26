@@ -16,8 +16,8 @@ const insufficient = {
 const eventPeriod = (term: string, supported: boolean) => ({
   term, event_time: term === "k=0" ? 0 : term === "k=-1" ? -1 : -4,
   is_reference: term === "k=-1", estimated: term !== "k=-1",
-  contributing_rows: supported ? 5 : 4, contributing_entities: supported ? 5 : 4,
-  contributing_clusters: supported ? 5 : 4, cohorts: { "2020": supported ? 5 : 4 },
+  contributing_rows: supported ? 13 : 4, contributing_entities: supported ? 13 : 4,
+  contributing_clusters: supported ? 13 : 4, cohorts: { "2020": supported ? 13 : 4 },
   period_supported: supported, inference_supported: supported, suppress_inference: !supported,
   reason_codes: supported ? [] : ["insufficient_period_clusters"],
   reasons: supported ? [] : [`${term} 支持不足`],
@@ -43,7 +43,7 @@ const eventRun = (k0Supported: boolean, includeThinLead = false) => ({
     event_support: {
       policy: "teaching_min_contributing_clusters_per_event_period" as const,
       policy_is_statistical_theorem: false as const,
-      cluster: "country", base_k: -1, reference_term: "k=-1", min_contributing_clusters: 5,
+      cluster: "country", base_k: -1, reference_term: "k=-1", min_contributing_clusters: 12,
       periods: [
         eventPeriod("k=-1", true), eventPeriod("k=0", k0Supported),
         ...(includeThinLead ? [eventPeriod("k=-4", false)] : []),

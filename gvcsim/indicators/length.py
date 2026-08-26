@@ -125,7 +125,11 @@ def sector_length(arr: IcioArrays) -> pd.DataFrame:
 
 
 def country_length(arr: IcioArrays, sector_df: pd.DataFrame | None = None) -> pd.DataFrame:
-    """国家级长度指标:各段分子/分母分别按国加总后再取比值(即增加值加权平均)。"""
+    """国家级长度：各段分子/分母分别按国加总后取比值。
+
+    VA 全为正时可解释为增加值加权平均；存在负 VA 时是有符号账户加权，
+    不保证普通凸加权平均的区间性质。
+    """
     del sector_df  # 国家级直接从分量聚合,不由行业级表推导
     parts = _components(arr)
     grouped = {k: pd.Series(v, index=arr.index).groupby(level=0).sum().to_numpy() for k, v in parts.items()}

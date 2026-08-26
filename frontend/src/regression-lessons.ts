@@ -35,13 +35,13 @@ export const FAMILY_STEPS: Record<RegressionOutcome, number> = {
 };
 
 export const REGRESSION_QUESTION =
-  "关税与非关税壁垒出现后，这一组指标相对未受冲击的对象发生了怎样的变化？";
+  "在显式识别假设下，壁垒出现后各 cohort 的指标相对从未或尚未受冲击对象如何变化？全球投入链外溢可能使对照组也受影响。";
 
 export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
   trade: {
     outcome: "trade",
     step: 12,
-    metric: "出口中外国增加值份额（FVA / 含 TLS 毛出口）",
+    metric: "出口中外国增加值份额（FVA / VA+TLS 账户闭合毛出口）",
     shortMetric: "FVA 份额",
     family: "贸易流",
     measure: "出口对外国投入的依赖",
@@ -49,15 +49,15 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorStep: 3,
     priorLabel: "GVC 总贸易流分解指标",
     focus: "本步看贸易壁垒有没有改变出口对外国投入的依赖",
-    learnThis: "第一次用「处理组相对对照组」比较。处理组是受到这轮壁垒的对象，对照组是同一时期没受到的；相对变化 = 处理组自己的变化 − 对照组自己的变化。",
+    learnThis: "先用统一处理时点的四格建立 DID 直觉，再看实际分批处理：系统逐 cohort、逐时期比较，并只让从未处理或截至比较期尚未处理的对象进入对照。",
     definition: "它表示一单位出口中有多少价值由外国投入创造。步骤 12–15 问的是同一句话，本步看的是贸易流这一类指标。",
     downMeaning: "负向变化与外国增加值依赖下降一致，但不能单独证明生产已经回流。",
     upMeaning: "正向变化与外国增加值依赖上升一致，但仍需结合不确定性和识别假设。",
-    caution: "份额按百分点读：从 1% 到 2% 是上升 1 个百分点，不是上升 1%。不要和长度、网络系数比大小。",
+    caution: "份额按百分点读。全球投入链会把政策传给未直接处理对象，no-interference/SUTVA 不能自动成立；2018–2020 又与 COVID-19 重叠，年份效应不能吸收国家×行业异质疫情冲击。不要和长度、网络系数比大小。",
     howToRead: "先看 95% 置信区间过不过 0。不过 0，才能说看得出升或降；过 0，就记「看不出」。",
     writeDown: "记下本步方向（升 / 降 / 看不出）和单位（百分点），留到第 16 步和另外三类并读。",
     dontClaim: "不要写成「已经证明生产回流」。FVA 下降只说明出口里外国投入占比相对下降。",
-    guidedExperiment: "若要检查结论对遗漏变量是否敏感，在「换一种读法」里加入控制变量后再跑一次。",
+    guidedExperiment: "检查 cohort 数量、对照组构成与 no-interference 假设；同期出口、增加值和产业份额可能是处理后变量，不能当作普通遗漏变量控制。",
   },
   production: {
     outcome: "production",
@@ -74,7 +74,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     definition: "它衡量增加值经过多次跨境生产后被最终吸收的比例。默认比较方式和上一步相同，本步看的是生产分解这一类指标。",
     downMeaning: "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
     upMeaning: "SVA 中复杂 GVC 增加值份额提高；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
-    caution: "区间跨过 0 是「看不出方向」，不是零效应。若要看参与度不同的个体是否反应不同，再到选做里打开交互。",
+    caution: "区间跨过 0 是「看不出方向」，不是零效应。投入链外溢和贸易转移会污染对照；cohort-aware 主结果当前不发布交互估计。",
     howToRead: "「看不出」是合法结论，不是这步失败。不要拿步骤 12 的 FVA 系数代替本步。",
     writeDown: "和步骤 12 并排记：谁动了、谁看不出。两步单位都是百分点，仍不要比谁的数字更大。",
     dontClaim: "不要把区间过 0 写成「冲击没有影响」。",
@@ -92,10 +92,10 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorLabel: "GVC 长度分解指标",
     focus: "本步看贸易壁垒有没有改变跨境生产链条的长短",
     learnThis: "本步的单位不是百分点。并读只看方向和区间是否过 0，不能和份额的系数相减或比大小。",
-    definition: "它以 GVC 活动诱发的累计总产出除以该段关联增加值，表示增加值加权的平均生产阶段数；不是跨境次数、国家数或网络边数。默认仍是处理组相对对照组；按年看路径是选做。",
+    definition: "它以 GVC 活动诱发的累计总产出除以关联增加值；VA 为正时可理解为增加值加权阶段数，存在负 VA 时是有符号账户比值。它不是跨境次数、国家数或网络边数。默认使用 cohort-time ATT；按年动态路径是选做。",
     downMeaning: "负向变化与链条缩短一致，可能来自回流、近岸化或其他生产调整。",
     upMeaning: "正向变化与链条延长一致，但不能单靠一个系数判断企业策略。",
-    caution: "长度单位不能和份额的百分点相减。选做里的冲击前检验即使不显著，也不能证明趋势可比。",
+    caution: "长度单位不能和份额百分点相减。冲击前检验不显著不能证明趋势可比；投入链外溢、COVID-19 异质冲击仍可能破坏识别。",
     howToRead: "先判断变短、变长还是看不出。链条变短有多种机制，一个数字指不出是回流还是近岸。",
     writeDown: "单独记长度的方向。写报告时明确这是长度单位，不是百分点。",
     dontClaim: "不要写成「比贸易流效应更大 / 更小」。",
@@ -113,10 +113,10 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorLabel: "全球生产网络指标",
     focus: "本步看贸易壁垒有没有改变节点在生产网络里的拓扑位置",
     learnThis: "介数描述拓扑位置，不是出口规模，也不自动等于经济瓶颈。四步凑齐后，并读方向和谁看不出。",
-    definition: "它衡量全球国家×行业图中节点出现在多少条有向无权最短路径上。高介数不是规模，也不自动等于经济瓶颈。",
+    definition: "它加总全球国家×行业图中各有序节点对最短路径经过该节点的份额 σ_st(v)/σ_st；等长路径会分摊贡献，结果未按节点对数归一化。高介数不是规模，也不自动等于经济瓶颈。",
     downMeaning: "负向变化与拓扑中介位置下降一致，但不能单独证明发生了脱钩。",
     upMeaning: "正向变化与拓扑中介位置增强一致，但可能同时受到网络重组影响。",
-    caution: "贸易网络上的冲击可能外溢到未直接处理的节点。选做里的实体置换尾部占比不是 p 值。",
+    caution: "冲击会沿全球投入链外溢到未直接处理节点，网络中心性还会机械联动，因此对照未必干净。实体置换尾部占比不是 p 值。",
     howToRead: "先看方向，再提醒自己：高介数不是枢纽证明。网络冲击可能外溢，对照未必干净。",
     writeDown: "把四步方向排成一排：同向、有的动有的看不出，都要写进第 16 步。",
     dontClaim: "不要挑绝对值最大的系数当「政策总效应」，也不要写成已经脱钩。",
@@ -144,15 +144,15 @@ export function lessonQuestion(outcome: RegressionOutcome, shockType: string, me
   if (method === "twfe_intensity") {
     return `${shock}变强时，${lesson.shortMetric}如何随之变化？`;
   }
-  return `受到${shock}后，处理组的${lesson.shortMetric}相对对照组发生了怎样的变化？`;
+  return `受到${shock}后，各处理 cohort 的${lesson.shortMetric}相对从未或尚未处理对象发生了怎样的变化？`;
 }
 
 export function comparisonExplanation(method: string): string {
   if (method === "did") {
-    return "先用四格建立直觉：相对变化 =（处理后−处理前）−（对照后−对照前）。不同对象首次受冲击的年份可以不同，所以实际比较不止一个四格。";
+    return "四格只建立统一处理时点的直觉：相对变化 =（处理后−处理前）−（对照后−对照前）。实际主结果逐 cohort×时期计算，只用从未或截至比较期尚未处理对象作对照，再按可用处理实体数聚合。";
   }
   if (method === "event_study") {
-    return "按每个对象首次冲击前一年为参照，看冲击前后各年的相对变化。冲击前看不出差别，不能当成已经证明趋势可比。";
+    return "按每个 cohort 首次冲击前一年为参照，逐事件时间聚合 cohort-time ATT；不让已处理 cohort 充当对照。冲击前看不出差别不能证明趋势可比。";
   }
   return "不再把对象分成处理/对照两格，而是看冲击强度变大时，指标如何随之变化。";
 }

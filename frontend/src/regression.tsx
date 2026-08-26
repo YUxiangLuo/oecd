@@ -34,9 +34,9 @@ import { CoefForestChart, EventStudyChart, PlaceboChart } from "./viz";
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
 // 与后端 METHOD_LABELS、题库和报告保持同一套方法名，避免学生以为那是三种不同估计量。
 const METHOD_LABELS: Record<string, string> = {
-  did: "双重差分（处理组相对对照组）",
-  twfe_intensity: "按冲击强度看变化",
-  event_study: "按冲击前后各年看变化",
+  did: "分批处理 cohort-time ATT",
+  twfe_intensity: "连续强度 TWFE（描述性）",
+  event_study: "cohort-aware 动态 ATT",
 };
 const SCENARIO_LABELS: Record<string, string> = {
   clean: "基准教学面板",
@@ -66,7 +66,7 @@ export const DEFAULT_REGRESSION_SETTINGS: RegressionSettings = {
   weightMode: "fixed_pretreatment",
 };
 
-/** 四步同一招牌默认:关税 × 处理组相对对照组。方法课进「换一种读法」。
+/** 四步同一主口径：关税 × cohort-time ATT；方法课进「换一种读法」。
  *  改动仍按 outcome 分别保留(见 App.tsx 里 regression_settings)。 */
 export const SIGNATURE_SETTINGS: Record<RegressionOutcome, RegressionSettings> = {
   trade: { ...DEFAULT_REGRESSION_SETTINGS },
@@ -76,9 +76,21 @@ export const SIGNATURE_SETTINGS: Record<RegressionOutcome, RegressionSettings> =
 };
 
 export function normalizeRegressionSettings(settings: RegressionSettings): RegressionSettings {
-  return settings.shockType === "tariff" || settings.weightMode === "fixed_pretreatment"
-    ? settings
-    : { ...settings, weightMode: "fixed_pretreatment" };
+  const cohortAware = settings.method === "did" || settings.method === "event_study";
+  const mustResetPublicControls = settings.controlMode !== "none" || settings.priceMode !== "nominal";
+  const mustResetInteraction = cohortAware && settings.interaction;
+  let normalized = mustResetPublicControls || mustResetInteraction
+    ? {
+      ...settings,
+      controlMode: "none",
+      priceMode: "nominal",
+      interaction: cohortAware ? false : settings.interaction,
+    }
+    : settings;
+  if (normalized.shockType !== "tariff" && normalized.weightMode !== "fixed_pretreatment") {
+    normalized = { ...normalized, weightMode: "fixed_pretreatment" };
+  }
+  return normalized;
 }
 
 /** 会话里 regression_settings 现按 outcome 存(map);历史上的单份扁平设定(含 method
@@ -483,7 +495,7 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
               <td>{coef.name}{periodLabel && <div className="muted">{periodLabel}</div>}</td>
               <td>{coef.coef.toFixed(4)}</td>
               <td>{ciLow != null && ciHigh != null ? `[${ciLow.toFixed(4)}, ${ciHigh.toFixed(4)}]` : periodLabel ?? "—"}</td>
-              <td>{coef.se.toFixed(4)}</td><td>{coef.t.toFixed(2)}</td><td>{p != null ? p.toFixed(3) : periodLabel ?? "—"}</td>
+              <td>{coef.se != null ? coef.se.toFixed(4) : "—"}</td><td>{coef.t != null ? coef.t.toFixed(2) : "—"}</td><td>{p != null ? p.toFixed(3) : periodLabel ?? "—"}</td>
             </tr>
           );
         })}</tbody>
@@ -664,7 +676,7 @@ export function QualifiedRegressionRunCard({
             ? [
               `${support.treated_clusters} 个处理聚类`,
               `${support.untreated_clusters} 个未处理聚类`,
-              `课程下限 ${support.min_treated_clusters}`,
+              `课程停止线 ${support.min_treated_clusters}（达到不等于自动有效）`,
               `状态=${support.status}`,
               eventPeriod
                 ? `${eventPeriod.term}：${eventPeriod.contributing_clusters}/${saved.result.event_support?.min_contributing_clusters} 个贡献聚类`
@@ -1032,12 +1044,14 @@ export function RegressionRunLab({
           <div className="model-controls">
             <div className="model-control"><span className="model-control-label">比较方式</span><Pills label="估计方法" options={options?.methods ?? []} value={method} onChange={(value) => setSetting("method", value)} labelMap={methodLabels} disabled={settingsDisabled} /></div>
             <div className="model-control"><span className="model-control-label">粒度</span><Pills label="分析粒度" options={allowedGranularities} value={effectiveGranularity} onChange={(value) => setSetting("granularity", value)} labelMap={options?.granularity_labels} disabled={settingsDisabled} /></div>
-            <div className="model-control"><span className="model-control-label">控制变量</span><Pills label="控制变量" options={options?.control_modes ?? []} value={controlMode} onChange={(value) => setSetting("controlMode", value)} labelMap={options?.control_mode_labels} disabled={settingsDisabled} /></div>
-            <label className="model-control"><span className="model-control-label">异质性</span><input type="checkbox" checked={interaction} disabled={settingsDisabled} onChange={(eventValue) => setSetting("interaction", eventValue.target.checked)} />冲击 × 基期GVC</label>
+            <div className="model-control"><span className="model-control-label">控制变量</span><Pills label="控制变量" options={options?.control_modes ?? ["none"]} value={controlMode} onChange={(value) => setSetting("controlMode", value)} labelMap={options?.control_mode_labels} disabled /></div>
+            <label className="model-control"><span className="model-control-label">异质性</span><input type="checkbox" checked={interaction} disabled={settingsDisabled || method === "did" || method === "event_study"} onChange={(eventValue) => setSetting("interaction", eventValue.target.checked)} />冲击 × 基期GVC</label>
             {controlMode !== "none" && <div className="model-control"><span className="model-control-label">金额类控制口径</span><Pills label="金额类控制口径" options={options?.price_modes ?? []} value={priceMode} onChange={(value) => setSetting("priceMode", value)} labelMap={options?.price_mode_labels} disabled={settingsDisabled} /></div>}
             <div className="model-control"><span className="model-control-label">课堂场景</span><Pills label="课堂场景" options={options?.scenarios ?? []} value={scenario} onChange={(value) => setSetting("scenario", value)} labelMap={SCENARIO_LABELS} disabled={settingsDisabled} /></div>
             <div className="model-control"><span className="model-control-label">冲击暴露权重</span><Pills label="冲击暴露权重" options={(options?.weight_modes ?? ["fixed_pretreatment", "contemporaneous"]).filter((mode) => shockType === "tariff" || mode !== "contemporaneous")} value={weightMode} onChange={(value) => setSetting("weightMode", value)} labelMap={options?.weight_mode_labels ?? { fixed_pretreatment: "首次处理前固定权重（基准）", contemporaneous: "当期贸易权重（稳健性）" }} disabled={settingsDisabled} /></div>
           </div>
+          <p className="muted">同期出口、增加值、产业份额和模拟宏观量可能受处理影响，公开主回归不允许把它们当作“遗漏变量控制”；首年增长率也保持缺失而不填 0。</p>
+          {(method === "did" || method === "event_study") && <p className="muted">cohort-aware 主结果只发布无交互设定；它按 cohort×时期构造比较，不让已处理 cohort 充当对照。</p>}
           {method !== "did" && <p className="muted">{comparisonExplanation(method)}</p>}
           {scenario !== "clean" && <div className="challenge-note">该场景由系统人为改变估计样本，用于观察测量误差或冲击前趋势如何影响判断；它不是数据筛选条件。</div>}
           {weightMode === "contemporaneous" && <div className="challenge-note">当期贸易结构可能已受政策影响，因此该口径只用于和固定处理前权重对照，不能替代基准识别。</div>}
@@ -1163,7 +1177,7 @@ export function RegressionRunLab({
                   <PlaceboChart data={placebo.placebo} scale={display.scale} unit={display.unit} />
                 </>}
               </div>
-            ) : <p className="muted">实体置换只用于双重差分（处理组相对对照组）。</p>}
+            ) : <p className="muted">实体置换只用于 DID 教学敏感性分析；它不是校准推断，也不替代 cohort-time ATT。</p>}
           </details>
         </div>
       )}
@@ -1189,8 +1203,8 @@ export function RegressionRunLab({
             <h3>完整系数表</h3>
             <p className="muted">此表为模型原始单位{display.unit ? "（份额为 0–1）；上方主图按" + display.unit + "展示" : ""}。主效应图只展示政策项。</p>
             <RegressionCoefficientTable response={result} />
-            <p className="muted">N={result.result.n_obs.toLocaleString("zh-CN")} · {result.result.n_entities.toLocaleString("zh-CN")} 个体 × {result.result.n_times} 年 · {result.result.n_clusters} 个聚类 · 组内 R²={result.result.r2_within.toFixed(4)}</p>
-            <div className="benchmark-box"><b>PanelOLS 代码实现一致性检查</b><p>政策系数最大差异 {result.benchmark.max_abs_coef_diff.toExponential(2)}；{result.benchmark.coef_check_passed ? "实现对照通过" : "实现对照需复核"}。这只能检查两套代码结果是否一致，不能验证因果识别。</p></div>
+            <p className="muted">N={result.result.n_obs.toLocaleString("zh-CN")} · {result.result.n_entities.toLocaleString("zh-CN")} 个体 × {result.result.n_times} 年 · {result.result.n_clusters} 个聚类 · {result.result.r2_within == null ? "cohort-time ATT 不定义组内 R²" : `组内 R²=${result.result.r2_within.toFixed(4)}`}</p>
+            <div className="benchmark-box"><b>估计算术一致性检查</b><p>后端：{result.benchmark.backend}；政策系数最大差异 {result.benchmark.max_abs_coef_diff.toExponential(2)}；{result.benchmark.backend === "saved" ? "原运行的算术明细未随会话快照保存" : result.benchmark.benchmark_passed ?? result.benchmark.coef_check_passed ? "系数与标准误算术门禁通过" : result.benchmark.coef_check_passed ? "点估计重聚合通过；整体设计门禁已抑制标准误检查" : "算术检查未通过，结果不可发布"}。cohort-aware DID 重新聚合逐单元点估计，并用 jackknife 伪值公式复算标准误；连续强度 TWFE 使用 PanelOLS 对照。该检查不是独立因果估计器，也不能验证识别假设。</p></div>
             <h3>样本与估计说明</h3>
             {result.result.sample_flow && (
               <p className="muted">

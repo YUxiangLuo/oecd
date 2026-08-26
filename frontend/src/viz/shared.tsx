@@ -81,7 +81,7 @@ const SECTOR_NAMES: Record<string, string> = {
 /** 行业代码显示名:有映射则 "代码 中文名",否则原样返回;国家代码原样返回 */
 export const sectorLabel = (code: string) => (SECTOR_NAMES[code] ? `${code} ${SECTOR_NAMES[code]}` : code);
 
-/** OECD ICIO 77 经济体 ISO3 代码 → 中文名(选国家等控件用;图上仍标短代码) */
+/** OECD ICIO 76 个具名经济体 + ROW 剩余地区账户代码 → 中文名(选国家等控件用;图上仍标短代码) */
 export const COUNTRY_NAMES: Record<string, string> = {
   CHN: "中国", JPN: "日本", KOR: "韩国", TWN: "中国台湾", HKG: "中国香港",
   VNM: "越南", THA: "泰国", MYS: "马来西亚", IDN: "印度尼西亚", PHL: "菲律宾",
@@ -105,7 +105,7 @@ export const COUNTRY_NAMES: Record<string, string> = {
 export const countryLabel = (code: string) =>
   (COUNTRY_NAMES[code] ? `${code} ${COUNTRY_NAMES[code]}` : code);
 
-/** ISO3 → ISO2,仅用于渲染国旗。ROW(世界其他地区)是账户闭合的余项,没有对应旗帜。 */
+/** ISO3 → ISO2，用于不依赖系统 Emoji 字体的稳定国别标记。 */
 const ISO3_TO_ISO2: Record<string, string> = {
   ARG: "AR", AUS: "AU", AUT: "AT", BEL: "BE", BGD: "BD", BGR: "BG", BLR: "BY", BRA: "BR",
   BRN: "BN", CAN: "CA", CHE: "CH", CHL: "CL", CHN: "CN", CIV: "CI", CMR: "CM", COL: "CO",
@@ -119,12 +119,11 @@ const ISO3_TO_ISO2: Record<string, string> = {
   UKR: "UA", USA: "US", VNM: "VN", ZAF: "ZA",
 };
 
-/** 国旗 emoji:两个区域指示符号(U+1F1E6..U+1F1FF)拼成。ROW 用地球代替。 */
-export const countryFlag = (code: string): string => {
-  const iso2 = ISO3_TO_ISO2[code];
-  if (!iso2) return "🌍";
-  return String.fromCodePoint(...[...iso2].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65));
-};
+/**
+ * 固定宽度国别标记。使用普通拉丁字母，避免 Linux/精简系统缺少彩色 Emoji
+ * 字体时把区域指示符国旗渲染成方框。ROW 是账户闭合余项，不对应主权旗帜。
+ */
+export const countryMarker = (code: string): string => ISO3_TO_ISO2[code] ?? code.slice(0, 3);
 
 /** 散点/象限图上始终标注的重点经济体(右栏提示常让学生对照中美德日) */
 export const KEY_ECONOMIES = new Set(["CHN", "USA", "DEU", "JPN"]);

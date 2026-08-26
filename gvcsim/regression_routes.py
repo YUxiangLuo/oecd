@@ -19,6 +19,7 @@ from gvcsim.regression.design import (
     GRANULARITY_COUNTRY_INDUSTRY,
     GRANULARITY_LABELS,
     METHOD_DID,
+    METHOD_EVENT_STUDY,
     METHOD_LABELS,
     METHODS,
     OUTCOME_DEPVARS,
@@ -73,7 +74,7 @@ def regression_options():
         "shock_type_labels": SHOCK_LABELS,
         "methods": METHODS,
         "method_labels": METHOD_LABELS,
-        "control_modes": CONTROL_MODES,
+        "control_modes": [CONTROL_MODE_NONE],
         "control_mode_labels": CONTROL_MODE_LABELS,
         "price_modes": PRICE_MODES,
         "price_mode_labels": PRICE_MODE_LABELS,
@@ -83,6 +84,11 @@ def regression_options():
         "weight_mode_labels": {
             shocks.EXPOSURE_MODE_FIXED_PRETREATMENT: "首次处理前固定权重（主口径）",
             shocks.EXPOSURE_MODE_CONTEMPORANEOUS: "当期贸易权重（稳健性）",
+        },
+        "method_constraints": {
+            "cohort_aware_methods": [METHOD_DID, METHOD_EVENT_STUDY],
+            "controls_publicly_disabled": True,
+            "cohort_aware_interaction_supported": False,
         },
         "outcomes": {key: value[1] for key, value in OUTCOME_DEPVARS.items()},
     }
@@ -113,8 +119,17 @@ def _validate_design(
         raise HTTPException(status_code=400, detail=f"method 必须是 {METHODS}")
     if control_mode not in CONTROL_MODES:
         raise HTTPException(status_code=400, detail=f"control_mode 必须是 {CONTROL_MODES}")
+    if control_mode != CONTROL_MODE_NONE:
+        raise HTTPException(
+            status_code=400,
+            detail="公开主回归禁止加入同期 ICIO 派生量或模拟宏观量；它们可能是处理后变量，只保留为数据构造教学材料",
+        )
+    if method in {METHOD_DID, METHOD_EVENT_STUDY} and interaction:
+        raise HTTPException(status_code=400, detail="cohort-aware DID/事件研究当前只发布无交互主结果")
     if price_mode not in PRICE_MODES:
         raise HTTPException(status_code=400, detail=f"price_mode 必须是 {PRICE_MODES}")
+    if control_mode == CONTROL_MODE_NONE and price_mode != PRICE_MODE_NOMINAL:
+        raise HTTPException(status_code=400, detail="未加入金额控制变量时只能使用 nominal 口径")
     if scenario not in SCENARIOS:
         raise HTTPException(status_code=400, detail=f"scenario 必须是 {SCENARIOS}")
     return RegressionDesign(
@@ -193,13 +208,13 @@ def _regression_preflight(design: RegressionDesign, result: dict[str, Any], weig
             add(
                 "no_fully_untreated_cluster",
                 "warning",
-                f"估计样本中没有完全未暴露的聚类，但仍有 {untreated_entities} 个未暴露实体（可能包括冻结 cohort 中仅保留冲击前行的实体）；比较并非只来自尚未处理者。聚类层面的共同冲击辨识更依赖模型设定，异质处理效应下传统 staggered TWFE 仍可能有偏。",
+                f"没有整个聚类始终未暴露，但仍有 {untreated_entities} 个未暴露实体；cohort-time ATT 只使用从未处理或截至比较期尚未处理的实体作对照，聚类 jackknife 仍依赖足够的独立国家聚类。",
             )
         else:
             add(
                 "no_never_treated_entity",
                 "warning",
-                "估计样本中没有未暴露实体或完全未暴露聚类；识别依赖处理时点差异，异质处理效应下传统 staggered TWFE 可能有偏。",
+                "没有从未处理实体；cohort-time ATT 只能使用尚未处理 cohort 作对照，最后处理期可能不可估计。",
             )
     if support.get("reversal_entities"):
         add(
@@ -207,12 +222,19 @@ def _regression_preflight(design: RegressionDesign, result: dict[str, Any], weig
             "fatal" if result.get("status") == "invalid_design" else "warning",
             f"检测到 {len(support['reversal_entities'])} 个处理撤销实体；吸收型 DID/事件研究可能误编码撤销后的年份。",
         )
-    if design.outcome == "network":
-        add(
-            "network_interference",
-            "warning",
-            "网络结果存在单位间干扰：一国政策会同时改变其他节点的边与中心性，传统 SUTVA 不成立。",
-        )
+    add(
+        "gvc_interference",
+        "warning",
+        (
+            "全球投入产出结果存在单位间干扰：政策可能经投入链和贸易转移改变未直接处理对象；"
+            "no-interference/SUTVA 不能自动成立。网络中心性还会因任一节点边变化而联动。"
+        ),
+    )
+    add(
+        "covid_overlap",
+        "warning",
+        "2018–2020 政策窗口与 COVID-19 重叠；年份固定效应只能吸收共同年份冲击，不能吸收国家×行业异质疫情冲击。",
+    )
     add(
         "treatment_weighting",
         "disclosure" if weight_mode == shocks.EXPOSURE_MODE_FIXED_PRETREATMENT else "warning",

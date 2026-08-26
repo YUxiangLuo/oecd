@@ -17,8 +17,10 @@ import pandas as pd
 # 这是**课程政策**,不是统计定理:处理聚类极少时聚类稳健方差退化,t 检验严重
 # 过度拒绝(few treated clusters 文献,如 Conley–Taber、MacKinnon–Webb)。
 # 单个处理聚类下,处理效应的组间方差根本无法从数据中识别。
-# 阈值取 5 是保守的教学取舍;真实研究应改用 wild cluster bootstrap 等方法。
-MIN_TREATED_CLUSTERS = 5
+# 阈值取 12 只是“低于即停止”的课程发布门禁，不是“达到即有效”的统计定理。
+# 对公开 DID/事件研究结果，主引擎另用按聚类 delete-one jackknife 协方差；真实
+# 少处理聚类研究仍应按设计采用 wild cluster bootstrap、随机化推断等专门方法。
+MIN_TREATED_CLUSTERS = 12
 
 # 吸收型编码与真实政策路径不一致的个体-年占比超过此值时判定 invalid_design。
 #
@@ -218,8 +220,8 @@ def analyze_support(
         escalate(
             STATUS_INSUFFICIENT,
             f"处理支持度不足:只有 {treated_clusters} 个处理聚类(按 {cluster} 聚类),"
-            f"低于教学下限 {MIN_TREATED_CLUSTERS}。总聚类数 {len(all_cluster_ids)} 不能补救这一点——"
-            f"聚类稳健方差由处理聚类的组间差异识别,已抑制 p 值、星号与置信区间。",
+            f"低于课程停止线 {MIN_TREATED_CLUSTERS}。该阈值不是达到即有效的统计定理；"
+            f"总聚类数 {len(all_cluster_ids)} 不能补救处理侧信息不足，已抑制 p 值、星号与置信区间。",
         )
 
     if absorbing and untreated_clusters == 0 and treated_clusters > 0:
@@ -228,15 +230,15 @@ def analyze_support(
                 STATUS_WARNING,
                 f"估计样本中没有完全未暴露的对照聚类:全部 {treated_clusters} 个聚类都至少包含一个暴露实体,"
                 f"但样本仍有 {untreated_entities} 个未暴露实体（可能包括冻结 cohort 中仅保留冲击前行的实体）。"
-                f"比较并非只来自尚未处理者；不过没有整个聚类都未暴露,聚类层面的共同冲击辨识更依赖模型设定。"
-                f"传统 staggered TWFE 在处理效应异质时仍可能有偏。",
+                f"公开 cohort-time ATT 只使用从未处理或截至比较期尚未处理的实体作对照；"
+                f"不过没有整个聚类都未暴露，按聚类 delete-one 推断仍更依赖国家聚类之间的独立变化。",
             )
         else:
             escalate(
                 STATUS_WARNING,
                 f"估计样本中没有未暴露实体或完全未暴露聚类:全部 {treated_clusters} 个聚类和"
-                f"全部 {treated_entities} 个实体都包含处理后暴露行,识别依赖处理时点差异。"
-                f"传统 staggered TWFE 在处理效应异质时尤其容易有偏。",
+                f"全部 {treated_entities} 个实体都包含处理后暴露行；不存在从未处理对照。"
+                f"cohort-time ATT 只能使用尚未处理 cohort，最后处理期可能无法估计。",
             )
 
     return TreatmentSupport(

@@ -38,11 +38,21 @@ export function qcResultLabel(check: QcCheck): { className: string; text: string
     : { className: "qc-fail", text: "✗ 异常" };
 }
 
-export function QcChecksTable({ rows, label, emptyMessage, emptyState, onNavigateStep }: {
+export function QcChecksTable({
+  rows,
+  label,
+  emptyMessage,
+  emptyState,
+  onRetry,
+  retryLabel = "重试质检",
+  onNavigateStep,
+}: {
   rows: QcCheck[] | null;
   label: string;
   emptyMessage?: string;
   emptyState?: "loading" | "invalid";
+  onRetry?: () => void;
+  retryLabel?: string;
   onNavigateStep?: (step: number) => void;
 }) {
   const terminalState = emptyState ?? (rows == null ? "loading" : "invalid");
@@ -60,7 +70,12 @@ export function QcChecksTable({ rows, label, emptyMessage, emptyState, onNavigat
           {sortedRows.length === 0 && (
             <tr>
               <td colSpan={4} className={terminalState === "invalid" ? "qc-fail" : "muted"}>
-                {terminalMessage}
+                <span>{terminalMessage}</span>
+                {onRetry && (
+                  <button type="button" className="secondary" onClick={onRetry} style={{ marginLeft: 12 }}>
+                    {retryLabel}
+                  </button>
+                )}
               </td>
             </tr>
           )}

@@ -22,8 +22,8 @@ const POS_LABELS: [string, string, string, string] = [
 ];
 
 export const LENGTH_AXIS_FALLBACK = {
-  forward: "从增加值创造端向最终吸收端追踪：GVC 活动诱发的累计总产出除以该段关联增加值，表示增加值加权平均生产阶段数；不是跨境次数、经过国家数或网络边数。",
-  backward: "从最终品端向初始增加值来源回溯：GVC 活动的累计总产出除以最终产品承载的该段关联增加值，表示增加值加权平均生产阶段数；不是跨境次数、经过国家数或网络边数。",
+  forward: "从增加值创造端向最终吸收端追踪：GVC 活动诱发的累计总产出除以关联增加值。VA 为正时表示增加值加权平均生产阶段数；存在负 VA 时是有符号账户比值，不保证普通加权平均的区间性质；不是跨境次数、经过国家数或网络边数。",
+  backward: "从最终品端向初始增加值来源回溯：GVC 活动累计总产出除以最终产品承载的关联增加值。VA 为正时表示增加值加权平均生产阶段数；存在负 VA 时是有符号账户比值；不是跨境次数、经过国家数或网络边数。",
 } as const;
 
 export function lengthAxisDefinitions(schema?: IndicatorSchema | null) {
@@ -118,7 +118,7 @@ export function Step10Length({ meta, step, state }: { meta: Meta; step: Step; st
         <ChartStory
           eyebrow="国家–行业长度异质性"
           title={`${countryLabel(drill)} 各行业的上下游长度位置`}
-          what={<>每个点是该国一个行业；横轴为后向 GVC 段长 PLy_GVC，纵轴为前向 GVC 段长 PLv_GVC，单位均为增加值加权平均生产阶段数。</>}
+          what={<>每个点是该国一个行业；横轴为后向 GVC 段长 PLy_GVC，纵轴为前向 GVC 段长 PLv_GVC，单位均为生产阶段账户比值；VA 为正时可作增加值加权平均理解，存在负 VA 时是有符号加权。</>}
           read={<>橙色 y=x 线上方表示前向段相对更长、位置更偏上游；线下方表示后向段相对更长。该位置不是跨境次数、经过国家数或网络边数。</>}
           find={<>切换下钻国家，比较同一经济体内部哪些行业更偏上游或下游；国家总量会掩盖这种行业异质性。</>}
           note={`仅绘制 ${year} 年 PLv_GVC 与 PLy_GVC 均为有限值的行业；当前有效行业 n=${industryRows.length}。`}
@@ -169,7 +169,7 @@ export function Step10Length({ meta, step, state }: { meta: Meta; step: Step; st
           what={<>横轴 <b>后向 GVC 段长 PLy_GVC</b>：{lengthDefinitions.backward} 纵轴 <b>前向 GVC 段长 PLv_GVC</b>：{lengthDefinitions.forward} 虚线是全样本中位数。</>}
           read={<>越靠<b>左上</b>(前向长、后向短)= 在该口径下越<b>上游</b>(离最终需求更远);越靠<b>右下</b> = 相对更下游。上游既可能是原材料，也可能是关键中间品或生产性服务。</>}
           find={<>先看你选的国家相对位置，再切到「行业下钻」查看同一国家各行业的 PLv_GVC × PLy_GVC。国家位置是多种行业活动的加权结果，不能直接等同于“资源国”或“组装国”。</>}
-          note={`参考线基于全部有效样本 n=${posRows.length}；段长单位是增加值加权的平均生产阶段数，不是跨境次数或国家数（WWYZ 2017b）。`}
+          note={`参考线基于全部有效样本 n=${posRows.length}；段长是累计总产出/关联增加值的账户比值；VA 为正时可理解为增加值加权阶段数，负 VA 时是有符号加权；不是跨境次数或国家数（WWYZ 2017b）。`}
         >
           <QuadrantScatter
             rows={posRows} referenceRows={posRows}

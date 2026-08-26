@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from scripts import benchmark_shock_panel_v7 as benchmark
-from scripts.benchmark_shock_panel_v7 import percentile, sample_summary
+from scripts import benchmark_shock_panel_v8 as benchmark
+from scripts.benchmark_shock_panel_v8 import percentile, sample_summary
 
 
 def test_benchmark_percentile_and_budget_contract():
@@ -23,7 +23,7 @@ def test_old_v3_result_is_explicitly_preliminary():
     assert payload["status"] == "preliminary_not_v7_attestation"
 
 
-def test_v7_harness_rebuilds_only_cold_index_through_authenticated_route(monkeypatch):
+def test_v8_harness_rebuilds_only_cold_index_through_authenticated_route(monkeypatch):
     events = []
     index_builds = []
 
@@ -105,7 +105,7 @@ def test_v7_harness_rebuilds_only_cold_index_through_authenticated_route(monkeyp
     assert "Only the exposure index is cleared" in result["method"]
 
 
-def test_v7_harness_refuses_old_release_before_login(monkeypatch):
+def test_v8_harness_refuses_old_release_before_login(monkeypatch):
     monkeypatch.setattr(
         benchmark.artifacts,
         "validate_release_cached",
@@ -125,7 +125,7 @@ def test_v7_harness_refuses_old_release_before_login(monkeypatch):
         lambda _app: pytest.fail("old release must be refused before authentication"),
     )
 
-    with pytest.raises(RuntimeError, match="active artifact contract v7"):
+    with pytest.raises(RuntimeError, match="active artifact contract v8"):
         benchmark.run_benchmark(
             username="student",
             password="secret",
