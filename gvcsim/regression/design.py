@@ -189,13 +189,13 @@ class RegressionDesign:
                 "逐 cohort×时期相对 g−1 做 DID；C_t 只含从未处理或截至比较期尚未处理实体，"
                 "再按可用处理实体数 ω 聚合。动态结果按事件时间 k 分别聚合。"
             )
-            parts = [
+            att_parts = [
                 {"text": lhs, "term": "dependent", "description": self.depvar_label, "meta_key": "depvar"},
                 {"text": " = "},
                 {"text": rhs, "term": "policy", "description": description, "meta_key": "policy"},
             ]
             if self.interaction:
-                parts.append(
+                att_parts.append(
                     {
                         "text": "（公开接口不支持 cohort-aware 交互结果）",
                         "term": "interaction",
@@ -203,7 +203,7 @@ class RegressionDesign:
                         "meta_key": "interaction",
                     }
                 )
-            return parts
+            return att_parts
 
         x = " + ".join(f"β·{r}_{unit}" for r in self.regressors)
         policy_desc = f"连续冲击强度 {self.shock_col} 的主效应；这是描述性 TWFE 关联。"

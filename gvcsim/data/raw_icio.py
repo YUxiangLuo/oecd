@@ -373,16 +373,13 @@ def _raw_bilateral_exports_cached(
     for exporter in contract.countries:
         for sector in contract.industries:
             positive_flows = {
-                destination: max(flows[(exporter, sector, destination)], 0.0)
-                for destination in contract.countries
+                destination: max(flows[(exporter, sector, destination)], 0.0) for destination in contract.countries
             }
             total = math.fsum(positive_flows.values())
             for destination in contract.countries:
                 rows.append((exporter, sector, destination, positive_flows[destination], total))
             for composite, members in composite_key:
-                bilateral = math.fsum(
-                    positive_flows[member] for member in members if member in country_set
-                )
+                bilateral = math.fsum(positive_flows[member] for member in members if member in country_set)
                 rows.append((exporter, sector, composite, bilateral, total))
     return tuple(rows)
 

@@ -1548,8 +1548,7 @@ def _build_event_support(
         if not period_supported:
             reason_codes.append("insufficient_period_clusters")
             reasons.append(
-                f"{_event_term(k)} 只有 {contributing_clusters} 个贡献处理聚类，低于课程停止线 "
-                f"{MIN_TREATED_CLUSTERS}。"
+                f"{_event_term(k)} 只有 {contributing_clusters} 个贡献处理聚类，低于课程停止线 {MIN_TREATED_CLUSTERS}。"
             )
         if k != base_k and not reference_supported:
             reason_codes.append("insufficient_reference_clusters")
@@ -1840,15 +1839,19 @@ def _summarize_benchmark(
     for name in model.policy_xcols:
         if name not in own_by or name not in lm_by:
             continue
+        own_stat = own_by[name]
+        lm_stat = lm_by[name]
+        if own_stat.se is None or lm_stat.se is None:
+            raise ValueError(f"PanelOLS 对照缺少政策系数标准误: {name}")
         rows.append(
             {
                 "name": name,
-                "own_coef": own_by[name].coef,
-                "panelols_coef": lm_by[name].coef,
-                "coef_diff": own_by[name].coef - lm_by[name].coef,
-                "own_se": own_by[name].se,
-                "panelols_se": lm_by[name].se,
-                "se_diff": own_by[name].se - lm_by[name].se,
+                "own_coef": own_stat.coef,
+                "panelols_coef": lm_stat.coef,
+                "coef_diff": own_stat.coef - lm_stat.coef,
+                "own_se": own_stat.se,
+                "panelols_se": lm_stat.se,
+                "se_diff": own_stat.se - lm_stat.se,
             }
         )
     if not rows:
@@ -1978,10 +1981,7 @@ def _reaggregate_cohort_time_cells(cells: list[dict], terms: list[str]) -> dict[
         denominator = sum(int(row["treated_entities"]) for row in rows)
         if denominator <= 0:
             raise ValueError(f"cohort-time ATT 算术复核缺少单元权重: {term}")
-        audited[term] = float(
-            math.fsum(float(row["att"]) * int(row["treated_entities"]) for row in rows)
-            / denominator
-        )
+        audited[term] = float(math.fsum(float(row["att"]) * int(row["treated_entities"]) for row in rows) / denominator)
     return audited
 
 

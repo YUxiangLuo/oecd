@@ -704,10 +704,7 @@ def check_controls_country(
     )
     n_missing = int(unexpected_missing.sum().sum())
     finite_or_expected_null = np.isfinite(numeric.to_numpy(dtype=float)) | pd.DataFrame(
-        {
-            column: expected_growth_null[column] if column in growth_columns else False
-            for column in ALL_CONTROL_COLUMNS
-        },
+        {column: expected_growth_null[column] if column in growth_columns else False for column in ALL_CONTROL_COLUMNS},
         index=df.index,
     ).to_numpy(dtype=bool)
     n_non_finite = int(finite_or_expected_null.size - finite_or_expected_null.sum())
@@ -726,7 +723,11 @@ def check_controls_country(
                     for col in ALL_CONTROL_COLUMNS
                     if unexpected_missing[col].any()
                 ],
-                *([f"首年增长率有 {required_first_null_missing} 个值被错误填充"] if required_first_null_missing else []),
+                *(
+                    [f"首年增长率有 {required_first_null_missing} 个值被错误填充"]
+                    if required_first_null_missing
+                    else []
+                ),
             ][:6],
         )
     )

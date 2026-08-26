@@ -217,9 +217,7 @@ def test_design_equation_text():
     assert "ATT_k" in eq_ev and "C_t" in eq_ev
     eq_inter = RegressionDesign(outcome="trade", interaction=True).equation()
     assert "不支持 cohort-aware 交互" in eq_inter
-    eq_ctrl = RegressionDesign(
-        outcome="trade", method="twfe_intensity", control_mode=CONTROL_MODE_ICIO
-    ).equation()
+    eq_ctrl = RegressionDesign(outcome="trade", method="twfe_intensity", control_mode=CONTROL_MODE_ICIO).equation()
     assert "Controls_ct" in eq_ctrl
     macro = RegressionDesign(outcome="trade", control_mode=CONTROL_MODE_MACRO)
     assert set(macro.controls) == set(MACRO_CONTROL_COLUMNS)

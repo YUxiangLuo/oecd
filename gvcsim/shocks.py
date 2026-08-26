@@ -307,9 +307,7 @@ def build_export_exposure(arr: IcioArrays, year: int) -> pd.DataFrame:
 
             for composite, members in COMPOSITE_IMPOSER_MEMBERS.items():
                 bilateral = sum(
-                    sector_to_dest(country, sector, dest)
-                    for dest in arr.regions
-                    if dest in members and dest != country
+                    sector_to_dest(country, sector, dest) for dest in arr.regions if dest in members and dest != country
                 )
                 rows.append(
                     {
@@ -323,9 +321,7 @@ def build_export_exposure(arr: IcioArrays, year: int) -> pd.DataFrame:
                     }
                 )
 
-    return validate_export_exposure(
-        pd.DataFrame(rows), countries=arr.regions, sectors=arr.sectors, years=[year]
-    )
+    return validate_export_exposure(pd.DataFrame(rows), countries=arr.regions, sectors=arr.sectors, years=[year])
 
 
 def recompute_raw_export_exposure(year: int, raw_dir, contract) -> pd.DataFrame:
@@ -505,9 +501,7 @@ def demo_shock_panel(
                 for y, rate in by_year.items():
                     if y not in years or rate <= 0:
                         continue
-                    w = _exposure(
-                        c, s, tariff_event.imposer, y, exposure_lookup, mode=exposure_mode, panel_years=years
-                    )
+                    w = _exposure(c, s, tariff_event.imposer, y, exposure_lookup, mode=exposure_mode, panel_years=years)
                     if w <= 0:
                         continue
                     contrib = rate * w
@@ -664,9 +658,7 @@ def events_metadata() -> list[dict]:
                 "sector_codes": sorted(entity_event_def.intensities),
                 "all_targets": False,
                 "timeline_note": entity_event_def.timeline_note or None,
-                "source_status": _event_source_status(
-                    entity_event_def.source_urls, entity_event_def.source_complete
-                ),
+                "source_status": _event_source_status(entity_event_def.source_urls, entity_event_def.source_complete),
                 "source_disclosure": EVENT_SOURCE_DISCLOSURE,
                 "source_urls": list(entity_event_def.source_urls),
             }

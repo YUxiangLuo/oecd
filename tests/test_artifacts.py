@@ -374,9 +374,9 @@ def _write_semantic_outputs(directory: Path, year: int = 2020) -> dict[str, dict
     for index, column in enumerate(regression_quality.REGRESSION_CONTROL_FIELDS):
         controls_frame[column] = float(index + 1)
     first_control_year = controls_frame.groupby("country")["year"].transform("min")
-    controls_frame.loc[
-        controls_frame["year"].eq(first_control_year), ["gdp_proxy_growth", "exports_proxy_growth"]
-    ] = np.nan
+    controls_frame.loc[controls_frame["year"].eq(first_control_year), ["gdp_proxy_growth", "exports_proxy_growth"]] = (
+        np.nan
+    )
     controls_frame.to_csv(directory / "controls_country.csv", index=False)
     shock_panel.to_csv(directory / "demo_trade_war_tariffs.csv", index=False)
     output_summary = {

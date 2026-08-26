@@ -111,6 +111,4 @@ def test_controls_country_quality_is_independent_of_dataframe_index_labels():
         years=sorted(country["year"].unique()),
     )
 
-    assert all(check.passed for check in checks), [
-        (check.name, check.detail, check.warnings) for check in checks
-    ]
+    assert all(check.passed for check in checks), [(check.name, check.detail, check.warnings) for check in checks]

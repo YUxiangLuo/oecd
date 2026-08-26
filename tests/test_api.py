@@ -91,9 +91,7 @@ def test_session_contract_uses_optimistic_concurrency(teaching_db):
 
     first = empty_session()
     first["steps"]["16"] = make_record({"research_question": "学生自己的问题"})
-    saved = client.put(
-        "/api/classroom/session", json={"session": first, "base_updated_at": initial["updated_at"]}
-    )
+    saved = client.put("/api/classroom/session", json={"session": first, "base_updated_at": initial["updated_at"]})
     assert set(saved.json()) == {"session", "updated_at", "completion"}
     assert saved.json()["session"] == first
     assert client.get("/api/classroom/session").json()["session"] == first
@@ -106,9 +104,7 @@ def test_session_contract_uses_optimistic_concurrency(teaching_db):
     assert replaced.status_code == 200
     assert client.get("/api/classroom/session").json()["session"] == second
 
-    stale = client.put(
-        "/api/classroom/session", json={"session": first, "base_updated_at": saved.json()["updated_at"]}
-    )
+    stale = client.put("/api/classroom/session", json={"session": first, "base_updated_at": saved.json()["updated_at"]})
     assert stale.status_code == 409
     assert stale.json()["detail"]["code"] == "session_changed"
     assert client.get("/api/classroom/session").json()["session"] == second
@@ -124,12 +120,11 @@ def test_new_session_race_rejects_second_null_version_write(teaching_db):
     first_session = {**empty_session(), "steps": {"7": first}}
     second_session = {**empty_session(), "steps": {"7": second}}
 
-    assert first_tab.put(
-        "/api/classroom/session", json={"session": first_session, "base_updated_at": None}
-    ).status_code == 200
-    rejected = second_tab.put(
-        "/api/classroom/session", json={"session": second_session, "base_updated_at": None}
+    assert (
+        first_tab.put("/api/classroom/session", json={"session": first_session, "base_updated_at": None}).status_code
+        == 200
     )
+    rejected = second_tab.put("/api/classroom/session", json={"session": second_session, "base_updated_at": None})
 
     assert rejected.status_code == 409
     assert rejected.json()["detail"]["code"] == "session_changed"

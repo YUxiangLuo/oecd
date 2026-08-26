@@ -328,8 +328,13 @@ def test_stylized_exposure_requires_explicit_opt_in_and_records_disclosure():
             [2018],
             export_exposure=pd.DataFrame(
                 columns=[
-                    "country", "sector", "imposer", "year",
-                    "bilateral_exports", "total_exports", "export_exposure",
+                    "country",
+                    "sector",
+                    "imposer",
+                    "year",
+                    "bilateral_exports",
+                    "total_exports",
+                    "export_exposure",
                 ]
             ),
         )
