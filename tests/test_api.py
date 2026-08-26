@@ -24,10 +24,11 @@ def test_health_checks_raw_years_before_database(monkeypatch):
     calls = []
     monkeypatch.setattr(api_module, "validate_release_cached", lambda *_args: None)
     monkeypatch.setattr(api_module, "processed_years", lambda: [2019, 2020])
+    monkeypatch.setattr(api_module, "dataset_metadata", lambda *_args: {"raw_dimensions": {"bound": True}})
     monkeypatch.setattr(
         api_module,
-        "discover_years",
-        lambda raw_dir: calls.append(("raw", raw_dir)) or [2019, 2020],
+        "validate_raw_source_bindings",
+        lambda payload, years, raw_dir: calls.append(("raw", payload, years, raw_dir)),
     )
     monkeypatch.setattr(api_module.classroom_db, "readiness", lambda: calls.append("db") or {"status": "ok"})
 
@@ -35,7 +36,7 @@ def test_health_checks_raw_years_before_database(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "years": [2019, 2020], "database": {"status": "ok"}}
-    assert calls == [("raw", api_module.RAW_DATA_DIR), "db"]
+    assert calls == [("raw", {"bound": True}, [2019, 2020], api_module.RAW_DATA_DIR), "db"]
 
 
 def test_health_processed_failure_returns_error_detail(monkeypatch):
@@ -46,7 +47,8 @@ def test_health_processed_failure_returns_error_detail(monkeypatch):
         lambda *_args: (_ for _ in ()).throw(FileNotFoundError("/srv/private/processed/release.json")),
     )
     monkeypatch.setattr(api_module, "processed_years", lambda: calls.append("years"))
-    monkeypatch.setattr(api_module, "discover_years", lambda *_args: calls.append("raw"))
+    monkeypatch.setattr(api_module, "dataset_metadata", lambda *_args: calls.append("metadata"))
+    monkeypatch.setattr(api_module, "validate_raw_source_bindings", lambda *_args: calls.append("raw"))
     monkeypatch.setattr(api_module.classroom_db, "readiness", lambda: calls.append("db"))
 
     response = TestClient(app).get("/health")
@@ -61,9 +63,10 @@ def test_health_raw_failure_is_unavailable_without_database_check(monkeypatch):
     calls = []
     monkeypatch.setattr(api_module, "validate_release_cached", lambda *_args: None)
     monkeypatch.setattr(api_module, "processed_years", lambda: [2020])
+    monkeypatch.setattr(api_module, "dataset_metadata", lambda *_args: {"raw_dimensions": {}})
     monkeypatch.setattr(
         api_module,
-        "discover_years",
+        "validate_raw_source_bindings",
         lambda *_args: (_ for _ in ()).throw(FileNotFoundError("raw missing")),
     )
     monkeypatch.setattr(api_module.classroom_db, "readiness", lambda: calls.append("db"))
@@ -144,6 +147,10 @@ def test_invalid_session_version_is_rejected(teaching_db):
 def test_report_state_machine_and_failure_preserves_grade(teaching_db, monkeypatch):
     student = _client(teaching_db)
     teacher = _client(teaching_db, "teacher")
+    assert (
+        student.put("/api/classroom/session", json={"session": empty_session(), "base_updated_at": None}).status_code
+        == 200
+    )
 
     async def generated(*_args, **_kwargs):
         return TeachingReport("# 第一版", {"years": [2020], "runs": []}, "report.md")
@@ -191,6 +198,24 @@ def test_report_state_machine_and_failure_preserves_grade(teaching_db, monkeypat
     )
     assert stale.status_code == 409
     assert "重新加载" in stale.json()["detail"]
+
+
+def test_report_generation_rejects_session_changed_during_cpu_work(teaching_db, monkeypatch):
+    student = _client(teaching_db)
+    initial = student.put("/api/classroom/session", json={"session": empty_session(), "base_updated_at": None}).json()
+
+    async def generated(*_args, **_kwargs):
+        newer = empty_session()
+        newer["steps"]["1"] = make_record({"value": "changed-during-generation"})
+        db.save_session("student", newer, initial["updated_at"])
+        return TeachingReport("# stale", {"years": [2020], "runs": []}, "report.md")
+
+    monkeypatch.setattr(classroom_routes.concurrency, "run_cpu_bound", generated)
+    response = student.post("/api/classroom/report/generate")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "session_changed"
+    assert db.latest_report("student") is None
 
 
 def test_teacher_student_management(teaching_db):

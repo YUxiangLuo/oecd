@@ -54,6 +54,7 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
         "indicators_industry_2018.csv",
         "network_edges_2018.csv",
         "export_exposure_2018.csv",
+        "tariff_exposure_lookup.csv",
         "qc_outputs_2018.json",
         "qc_regression_inputs.json",
         "controls_country.csv",
@@ -195,6 +196,7 @@ def _stub_release_build(monkeypatch, calls, *, fail_year=False):
             "panel_industry.csv",
             "controls_country.csv",
             "demo_trade_war_tariffs.csv",
+            "tariff_exposure_lookup.csv",
         ):
             (pipeline.PROCESSED_DIR / name).write_text("x\n1\n")
         (pipeline.PROCESSED_DIR / "qc_controls.json").write_text(
@@ -308,7 +310,7 @@ def test_run_builds_sentinel_switches_pointer_and_never_touches_database(tmp_pat
     assert set(metadata["qc"]) == {"years", "controls", "shocks"}
     assert metadata["qc_contract"] == quality.qc_contract_metadata()
     assert metadata["shock_contract"] == shocks.shock_contract_metadata()
-    assert metadata["artifact_contract_version"] == 8
+    assert metadata["artifact_contract_version"] == 9
     assert metadata["output_qc_contract"] == output_quality.output_qc_contract_metadata()
     assert set(metadata["output_qc"]["years"]) == {"2020"}
     assert metadata["regression_input_qc_contract"] == regression_quality.regression_input_qc_contract_metadata()

@@ -14,7 +14,7 @@ from typing import Any
 import pandas as pd
 
 
-ARTIFACT_CONTRACT_VERSION = 8
+ARTIFACT_CONTRACT_VERSION = 9
 ARTIFACT_MANIFEST_ALGORITHM = "sha256"
 ARTIFACT_MANIFEST_NAME = "artifact_manifest"
 METADATA_DIGEST_NAME = "metadata_sha256"
@@ -290,6 +290,7 @@ def _required_paths(metadata: dict[str, Any]) -> list[str]:
         "panel_industry.csv",
         "controls_country.csv",
         "demo_trade_war_tariffs.csv",
+        "tariff_exposure_lookup.csv",
         "qc_controls.json",
         "qc_shocks.json",
         "qc_regression_inputs.json",
@@ -367,11 +368,27 @@ def _validate_persisted_raw_dimensions(payload: object, years: list[int]) -> Non
     }
     if set(payload) != expected_keys:
         raise ArtifactValidationError("dataset raw_dimensions is missing required fields")
-    if payload.get("metadata_version") != 1:
+    if payload.get("metadata_version") != 2:
         raise ArtifactValidationError("dataset raw_dimensions metadata_version is unsupported")
     year_map = payload.get("years")
     if not isinstance(year_map, dict) or set(year_map) != {str(year) for year in years}:
         raise ArtifactValidationError("dataset raw_dimensions years do not match dataset years")
+    for year in years:
+        entry = year_map[str(year)]
+        if not isinstance(entry, dict) or set(entry) != {"source_file", "source_bytes", "source_sha256"}:
+            raise ArtifactValidationError(f"dataset raw_dimensions source binding is invalid for {year}")
+        source_file = entry.get("source_file")
+        if (
+            not isinstance(source_file, str)
+            or Path(source_file).name != source_file
+            or re.fullmatch(rf"ICIO.*_{year}\.csv", source_file) is None
+        ):
+            raise ArtifactValidationError(f"dataset raw_dimensions source filename is invalid for {year}")
+        if type(entry.get("source_bytes")) is not int or entry["source_bytes"] <= 0:
+            raise ArtifactValidationError(f"dataset raw_dimensions source byte count is invalid for {year}")
+        source_sha256 = entry.get("source_sha256")
+        if not isinstance(source_sha256, str) or re.fullmatch(r"[0-9a-f]{64}", source_sha256) is None:
+            raise ArtifactValidationError(f"dataset raw_dimensions source SHA-256 is invalid for {year}")
 
 
 def _validate_release_output_qc(root: Path, metadata: dict[str, Any]) -> None:

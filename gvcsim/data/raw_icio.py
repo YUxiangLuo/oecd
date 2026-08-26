@@ -23,7 +23,7 @@ from typing import Any, Iterable, Mapping, TypeAlias
 RawFileIdentity: TypeAlias = tuple[str, int, int, int, int, int, int]
 """Resolved path and immutable stat fields used by every raw-file cache."""
 
-RAW_DIMENSIONS_METADATA_VERSION = 1
+RAW_DIMENSIONS_METADATA_VERSION = 2
 _PRODUCTION_CONTRACT_PATH = Path(__file__).with_name("icio2023_dimensions_v1.json")
 _YEAR_FILE = re.compile(r"^ICIO.*_(\d{4})\.csv$")
 _ACCOUNT_ROWS = ("TLS", "VA", "OUT")
@@ -222,6 +222,23 @@ def raw_file_identity(path: Path) -> RawFileIdentity:
 
 
 @lru_cache(maxsize=32)
+def _raw_source_evidence_cached(identity: RawFileIdentity) -> dict[str, Any]:
+    """Hash one exact regular-file identity and reject changes during the read."""
+    path = Path(identity[0])
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if raw_file_identity(path) != identity:
+        raise RawICIOValidationError(f"raw ICIO file changed during content hashing: {path}")
+    return {
+        "source_file": path.name,
+        "source_bytes": identity[4],
+        "source_sha256": digest.hexdigest(),
+    }
+
+
+@lru_cache(maxsize=32)
 def _validate_raw_file_cached(
     identity: RawFileIdentity,
     contract_key: tuple[Any, ...],
@@ -234,6 +251,7 @@ def _validate_raw_file_cached(
         industries=contract_key[3],
         final_demand_categories=contract_key[4],
     )
+    source_evidence = _raw_source_evidence_cached(identity)
     expected_industry = set(contract.industry_labels)
     expected_demand = set(contract.final_demand_labels)
     expected_rows = expected_industry | set(_ACCOUNT_ROWS)
@@ -283,8 +301,11 @@ def _validate_raw_file_cached(
         if labels.count(account) != 1:
             raise _fail(path, f"account row {account} must occur exactly once")
 
+    if raw_file_identity(path) != identity:
+        raise RawICIOValidationError(f"raw ICIO file changed during strict validation: {path}")
     layout_digest = _digest_codes([*header, "--ROWS--", *labels])
     return {
+        **source_evidence,
         "rows": len(labels),
         "columns": len(header),
         "countries": len(contract.countries),
@@ -436,7 +457,7 @@ def validate_raw_years(
             reference_layout = layout
         elif layout != reference_layout:
             raise RawICIOValidationError(f"raw ICIO cross-year dimension/layout drift detected at {year}")
-        results[year] = {"source_file": path.name, **result}
+        results[year] = result
     return results
 
 
@@ -463,8 +484,41 @@ def raw_dimensions_metadata(
         "industry_codes_sha256": common["industry_codes_sha256"],
         "final_demand_codes_sha256": common["final_demand_codes_sha256"],
         "layout_sha256": common["layout_sha256"],
-        "years": {str(year): results[year]["source_file"] for year in years},
+        "years": {
+            str(year): {
+                "source_file": results[year]["source_file"],
+                "source_bytes": results[year]["source_bytes"],
+                "source_sha256": results[year]["source_sha256"],
+            }
+            for year in years
+        },
     }
+
+
+def validate_raw_source_bindings(
+    payload: object,
+    years: list[int],
+    raw_dir: Path,
+) -> dict[str, dict[str, Any]]:
+    """Cheaply bind an active release to exact raw bytes without reparsing its matrix."""
+    if not isinstance(payload, dict) or payload.get("metadata_version") != RAW_DIMENSIONS_METADATA_VERSION:
+        raise RawICIOValidationError("dataset raw_dimensions source-binding metadata is unsupported")
+    persisted_years = payload.get("years")
+    expected_year_keys = {str(year) for year in years}
+    if not isinstance(persisted_years, dict) or set(persisted_years) != expected_year_keys:
+        raise RawICIOValidationError("dataset raw_dimensions years do not match dataset years")
+
+    actual: dict[str, dict[str, Any]] = {}
+    for year in years:
+        path = resolve_year_source(year, raw_dir)
+        identity = raw_file_identity(path)
+        with _validation_lock:
+            evidence = dict(_raw_source_evidence_cached(identity))
+        expected = persisted_years[str(year)]
+        if expected != evidence:
+            raise RawICIOValidationError(f"dataset raw source binding mismatch for {year}: {path.name}")
+        actual[str(year)] = evidence
+    return actual
 
 
 def validate_raw_dimensions_metadata(
@@ -482,5 +536,6 @@ def validate_raw_dimensions_metadata(
 
 
 def clear_raw_validation_cache() -> None:
+    _raw_source_evidence_cached.cache_clear()
     _validate_raw_file_cached.cache_clear()
     _raw_bilateral_exports_cached.cache_clear()

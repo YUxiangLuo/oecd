@@ -16,6 +16,7 @@
   controls_country.csv            ICIO 派生/宏观mock控制 + 平减指数(四类 outcome)
   qc_controls.json                controls_country.csv 独立质检
   export_exposure_<year>.csv      ICIO 派生国家–行业出口目的地暴露度(步骤11 冲击加权)
+  tariff_exposure_lookup.csv      仅含事件目录加征方的 API 紧凑查询表
 """
 
 import json
@@ -192,6 +193,8 @@ def build_panel(
             raise FileNotFoundError(PROCESSED_DIR / f"indicators_country_{year}.csv")
         if not (PROCESSED_DIR / f"indicators_industry_{year}.csv").is_file():
             raise FileNotFoundError(PROCESSED_DIR / f"indicators_industry_{year}.csv")
+
+    shocks.write_runtime_exposure_lookup(years)
 
     sector = pd.concat(
         [pd.read_csv(PROCESSED_DIR / f"indicators_industry_{y}.csv") for y in years],

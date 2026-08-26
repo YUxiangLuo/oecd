@@ -109,17 +109,29 @@ def latest_report(username: str) -> dict[str, Any] | None:
         ).fetchone()
 
 
-def save_generated_report(username: str, markdown: str, provenance: dict[str, Any]) -> dict[str, Any] | None:
-    """Store a generated report without touching the old row until generation succeeds.
+def save_generated_report(
+    username: str,
+    markdown: str,
+    provenance: dict[str, Any],
+    expected_session_updated_at: datetime,
+) -> dict[str, Any] | None:
+    """Store a report only while the exact source session version remains current.
 
-    A first report is a draft. Regenerating a submitted or graded report immediately
-    replaces the submitted copy and clears its old grade.
+    The locked version check and report upsert share one transaction, so a session
+    update cannot slip between them. A first report is a draft. Regenerating a
+    submitted or graded report replaces the submitted copy and clears its old grade.
     """
     release_id = database.current_release_id()
     with database.conn() as c:
         account = _student(c, username)
         if not account:
             return None
+        current_session = c.execute(
+            "SELECT updated_at FROM experiment_sessions WHERE account_id=%s AND release_id=%s FOR UPDATE",
+            (account["id"], release_id),
+        ).fetchone()
+        if current_session is None or current_session["updated_at"] != expected_session_updated_at:
+            raise SessionChanged("报告生成期间实验记录已更新")
         return c.execute(
             "INSERT INTO reports(account_id,release_id,markdown,provenance,state,generated_at,updated_at)"
             " VALUES (%s,%s,%s,%s,'draft',now(),now())"

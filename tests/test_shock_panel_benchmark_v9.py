@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from scripts import benchmark_shock_panel_v8 as benchmark
-from scripts.benchmark_shock_panel_v8 import percentile, sample_summary
+from scripts import benchmark_shock_panel_v9 as benchmark
+from scripts.benchmark_shock_panel_v9 import percentile, sample_summary
 
 
 def test_benchmark_percentile_and_budget_contract():
@@ -23,7 +23,7 @@ def test_old_v3_result_is_explicitly_preliminary():
     assert payload["status"] == "preliminary_not_v7_attestation"
 
 
-def test_v8_harness_rebuilds_only_cold_index_through_authenticated_route(monkeypatch):
+def test_v9_harness_rebuilds_only_cold_index_through_authenticated_route(monkeypatch):
     events = []
     index_builds = []
 
@@ -85,7 +85,7 @@ def test_v8_harness_rebuilds_only_cold_index_through_authenticated_route(monkeyp
         "clear_artifact_caches",
         lambda: pytest.fail("benchmark must preserve validated release and artifact caches"),
     )
-    monkeypatch.setattr(benchmark.data_routes, "_build_exposure_index", fake_exposure_index)
+    monkeypatch.setattr(benchmark.data_routes, "clear_exposure_index_cache", fake_exposure_index.cache_clear)
     monkeypatch.setattr(benchmark, "TestClient", Client)
 
     result = benchmark.run_benchmark(
@@ -96,16 +96,16 @@ def test_v8_harness_rebuilds_only_cold_index_through_authenticated_route(monkeyp
     )
 
     assert result["passed"] is True
-    assert len(index_builds) == 2  # seeded once, then genuinely rebuilt by the cold request
+    assert len(index_builds) == 3  # seeded once, then rebuilt once for each of the two cold phases
     assert events[0] == "validate_release"
     assert events[1] == ("post", "/api/auth/login", "student")
     assert [event for event in events if isinstance(event, tuple) and event[0] == "get"] == [
         ("get", "/api/shocks/panel")
-    ] * 11
+    ] * 19
     assert "Only the exposure index is cleared" in result["method"]
 
 
-def test_v8_harness_refuses_old_release_before_login(monkeypatch):
+def test_v9_harness_refuses_old_release_before_login(monkeypatch):
     monkeypatch.setattr(
         benchmark.artifacts,
         "validate_release_cached",
@@ -125,7 +125,7 @@ def test_v8_harness_refuses_old_release_before_login(monkeypatch):
         lambda _app: pytest.fail("old release must be refused before authentication"),
     )
 
-    with pytest.raises(RuntimeError, match="active artifact contract v8"):
+    with pytest.raises(RuntimeError, match="active artifact contract v9"):
         benchmark.run_benchmark(
             username="student",
             password="secret",

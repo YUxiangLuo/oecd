@@ -1,6 +1,7 @@
 """Read-only artifact, ICIO browser, indicator, QC, and shock routes."""
 
 import math
+import threading
 from dataclasses import dataclass
 from functools import lru_cache
 from numbers import Real
@@ -23,6 +24,7 @@ from gvcsim.artifacts import (
 )
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, processed_years
 from gvcsim.data import crosswalk, icio_browser, quality
+from gvcsim.data.raw_icio import validate_raw_source_bindings
 from gvcsim.indicator_schema import INDICATOR_SCHEMA
 from gvcsim.indicators import tradeflow
 from gvcsim.shocks import SHOCK_TARIFF
@@ -92,9 +94,23 @@ def indicators_schema():
     return INDICATOR_SCHEMA
 
 
+def _validate_active_raw_sources() -> None:
+    metadata = dataset_metadata()
+    years = metadata.get("years")
+    if not isinstance(years, list) or not years:
+        raise ArtifactContractError("当前 release 缺少原始数据年份契约")
+    try:
+        validate_raw_source_bindings(metadata.get("raw_dimensions"), [int(year) for year in years], RAW_DATA_DIR)
+    except (OSError, RuntimeError, ValueError) as error:
+        raise ArtifactContractError(str(error)) from error
+
+
 @router.get("/api/db/meta")
 def db_meta():
-    return icio_browser.meta()
+    _validate_active_raw_sources()
+    payload = icio_browser.meta()
+    _validate_active_raw_sources()
+    return payload
 
 
 @router.get("/api/db/slice")
@@ -109,7 +125,8 @@ def db_slice(
     page_size: int = Query(25, ge=1, le=200),
 ):
     try:
-        return icio_browser.slice_table(
+        _validate_active_raw_sources()
+        payload = icio_browser.slice_table(
             year=year,
             table=table,
             row_country=row_country,
@@ -120,6 +137,8 @@ def db_slice(
             page_size=page_size,
             raw_dir=RAW_DATA_DIR,
         )
+        _validate_active_raw_sources()
+        return payload
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
@@ -261,23 +280,41 @@ class _ExposureIndex:
     fixed_base_years: Mapping[tuple[str, str, str], int]
 
 
+_EXPOSURE_RUNTIME_COLUMNS = shocks.EXPOSURE_LOOKUP_COLUMNS
+_exposure_index_lock = threading.RLock()
+
+
+def _read_runtime_exposure(path: Path) -> pd.DataFrame:
+    """Read only lookup columns without retaining the full publication table cache."""
+    return pd.read_csv(path, usecols=list(_EXPOSURE_RUNTIME_COLUMNS), keep_default_na=False, na_values=[""])
+
+
 @lru_cache(maxsize=8)
-def _build_exposure_index(
+def _build_exposure_index_cached(
     root_text: str,
     release_id: str,
     release_stat: tuple[int, int, int, int, int],
     years: tuple[int, ...],
+    imposers: tuple[str, ...],
     file_state: tuple[tuple[str, int, int, int, int, int], ...],
 ) -> _ExposureIndex:
     del release_id, release_stat
     root = Path(root_text)
-    frames = [read_csv_artifact(root / relative) for relative, *_stat in file_state]
-    if not frames or any(frame.empty for frame in frames):
+    frames: list[pd.DataFrame] = []
+    for relative, *_stat in file_state:
+        frame = _read_runtime_exposure(root / relative)
+        missing_columns = sorted(set(_EXPOSURE_RUNTIME_COLUMNS) - set(frame.columns))
+        if missing_columns:
+            raise ValueError(f"OECD ICIO 出口暴露度索引 schema 不完整；missing={missing_columns}")
+        # Publication validates the complete bilateral table. Runtime only needs
+        # destinations that a catalogue event can actually request.
+        frame = frame.loc[frame["imposer"].astype(str).isin(imposers), list(_EXPOSURE_RUNTIME_COLUMNS)].copy()
+        if frame.empty:
+            raise ValueError(f"OECD ICIO 出口暴露度索引缺少 catalogue 加征方: {relative}")
+        frames.append(frame)
+    if not frames:
         raise ValueError("OECD ICIO 出口暴露度索引不能从空表建立")
     exposure_data = pd.concat(frames, ignore_index=True)
-    missing_columns = sorted(set(shocks.EXPOSURE_REQUIRED_COLUMNS) - set(exposure_data.columns))
-    if missing_columns:
-        raise ValueError(f"OECD ICIO 出口暴露度索引 schema 不完整；missing={missing_columns}")
 
     key_data = exposure_data.loc[:, list(shocks.EXPOSURE_KEY_COLUMNS)].copy()
     for column in ("country", "sector", "imposer"):
@@ -285,6 +322,9 @@ def _build_exposure_index(
         if normalized.eq("").any():
             raise ValueError(f"OECD ICIO 出口暴露度索引 {column} 含空白标识符")
         key_data[column] = normalized
+    if set(key_data["imposer"].unique()) != set(imposers):
+        missing = sorted(set(imposers) - set(key_data["imposer"].unique()))
+        raise ValueError(f"OECD ICIO 出口暴露度索引缺少 catalogue 加征方；missing={missing}")
     year_values = pd.to_numeric(key_data["year"], errors="coerce").to_numpy(dtype=float)
     if not np.isfinite(year_values).all() or not np.equal(year_values, np.floor(year_values)).all():
         raise ValueError("OECD ICIO 出口暴露度索引 year 必须是有限整数")
@@ -294,18 +334,12 @@ def _build_exposure_index(
         examples = key_data.loc[duplicate, list(shocks.EXPOSURE_KEY_COLUMNS)].head(3).to_dict(orient="records")
         raise ValueError(f"OECD ICIO 出口暴露度索引键重复；examples={examples}")
 
-    numeric: dict[str, np.ndarray] = {}
-    for column in (*shocks.EXPOSURE_FLOW_COLUMNS, "export_exposure"):
-        values = pd.to_numeric(exposure_data[column], errors="coerce").to_numpy(dtype=float)
-        if not np.isfinite(values).all():
-            raise ValueError(f"OECD ICIO 出口暴露度索引 {column} 必须是数值有限值")
-        numeric[column] = values
-    exposure_values = numeric["export_exposure"]
+    exposure_values = pd.to_numeric(exposure_data["export_exposure"], errors="coerce").to_numpy(dtype=float)
+    if not np.isfinite(exposure_values).all():
+        raise ValueError("OECD ICIO 出口暴露度索引 export_exposure 必须是数值有限值")
     if ((exposure_values < 0.0) | (exposure_values > 1.0)).any():
         raise ValueError("OECD ICIO 出口暴露度索引 export_exposure 必须位于 [0,1]")
 
-    # Release validation already certified exposure schema and provenance.
-    # Rebuild only the lookup here; group-wise economic checks belong at publish.
     raw_values = {
         (str(country), str(sector), str(imposer), int(year)): float(exposure)
         for country, sector, imposer, year, exposure in zip(
@@ -341,6 +375,24 @@ def _build_exposure_index(
     )
 
 
+def _build_exposure_index(
+    root_text: str,
+    release_id: str,
+    release_stat: tuple[int, int, int, int, int],
+    years: tuple[int, ...],
+    imposers: tuple[str, ...],
+    file_state: tuple[tuple[str, int, int, int, int, int], ...],
+) -> _ExposureIndex:
+    """Single-flight wrapper: one worker process constructs at most one cold index."""
+    with _exposure_index_lock:
+        return _build_exposure_index_cached(root_text, release_id, release_stat, years, imposers, file_state)
+
+
+def clear_exposure_index_cache() -> None:
+    with _exposure_index_lock:
+        _build_exposure_index_cached.cache_clear()
+
+
 def _current_exposure_index() -> _ExposureIndex:
     root = PROCESSED_DIR.resolve()
     metadata = dataset_metadata(root)
@@ -356,22 +408,23 @@ def _current_exposure_index() -> _ExposureIndex:
         metadata_stat.st_mtime_ns,
         metadata_stat.st_ctime_ns,
     )
-    file_state = []
-    for year in years:
-        path = root / f"{shocks.EXPOSURE_PREFIX}_{year}.csv"
-        validate_artifact(path)
-        stat_result = path.stat()
-        file_state.append(
-            (
-                path.relative_to(root).as_posix(),
-                stat_result.st_dev,
-                stat_result.st_ino,
-                stat_result.st_size,
-                stat_result.st_mtime_ns,
-                stat_result.st_ctime_ns,
-            )
+    path = root / shocks.EXPOSURE_LOOKUP_FILE
+    validate_artifact(path)
+    stat_result = path.stat()
+    file_state = [
+        (
+            path.relative_to(root).as_posix(),
+            stat_result.st_dev,
+            stat_result.st_ino,
+            stat_result.st_size,
+            stat_result.st_mtime_ns,
+            stat_result.st_ctime_ns,
         )
-    return _build_exposure_index(str(root), release_id, release_stat, years, tuple(file_state))
+    ]
+    imposers = tuple(shocks.catalogue_tariff_imposers())
+    if not imposers:
+        raise ValueError("关税事件目录没有可索引的加征方")
+    return _build_exposure_index(str(root), release_id, release_stat, years, imposers, tuple(file_state))
 
 
 def _with_tariff_exposure(df: pd.DataFrame, year: int) -> pd.DataFrame:

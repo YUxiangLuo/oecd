@@ -69,6 +69,26 @@ def _complete_exposure(
     return pd.DataFrame(rows)
 
 
+def test_runtime_exposure_lookup_contains_only_complete_catalogue_keys(tmp_path, monkeypatch):
+    years = [2018, 2019]
+    exposure = _complete_exposure(["CHN", "USA"], years)
+    monkeypatch.setattr(shocks, "PROCESSED_DIR", tmp_path)
+    for year in years:
+        exposure.loc[exposure["year"].eq(year)].to_csv(tmp_path / f"export_exposure_{year}.csv", index=False)
+
+    lookup = shocks.write_runtime_exposure_lookup(years)
+
+    assert list(lookup.columns) == list(shocks.EXPOSURE_LOOKUP_COLUMNS)
+    assert sorted(lookup["imposer"].unique()) == shocks.catalogue_tariff_imposers()
+    assert len(lookup) == (
+        exposure["country"].nunique()
+        * exposure["sector"].nunique()
+        * len(shocks.catalogue_tariff_imposers())
+        * len(years)
+    )
+    assert (tmp_path / shocks.EXPOSURE_LOOKUP_FILE).is_file()
+
+
 def _panel():
     return demo_shock_panel(COUNTRIES, SECTORS, YEARS, allow_stylized_fallback=True).set_index(
         ["country", "sector", "year"]

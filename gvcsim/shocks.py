@@ -71,6 +71,8 @@ from gvcsim.shock_catalog import (
 EXPOSURE_KEY_COLUMNS = ("country", "sector", "imposer", "year")
 EXPOSURE_FLOW_COLUMNS = ("bilateral_exports", "total_exports")
 EXPOSURE_REQUIRED_COLUMNS = (*EXPOSURE_KEY_COLUMNS, *EXPOSURE_FLOW_COLUMNS, "export_exposure")
+EXPOSURE_LOOKUP_COLUMNS = (*EXPOSURE_KEY_COLUMNS, "export_exposure")
+EXPOSURE_LOOKUP_FILE = "tariff_exposure_lookup.csv"
 EXPOSURE_RATIO_RTOL = 1e-12
 EXPOSURE_RATIO_ATOL = 1e-12
 EXPOSURE_FLOW_RTOL = 1e-12
@@ -343,6 +345,51 @@ def write_export_exposure(arr: IcioArrays, year: int) -> pd.DataFrame:
     df = build_export_exposure(arr, year)
     df.to_csv(PROCESSED_DIR / f"{EXPOSURE_PREFIX}_{year}.csv", index=False)
     return df
+
+
+def write_runtime_exposure_lookup(years: list[int]) -> pd.DataFrame:
+    """Publish the compact lookup for catalogue imposers present in this ICIO dimension."""
+    declared_years = _declared_years(years)
+    frames: list[pd.DataFrame] = []
+    for year in declared_years:
+        path = PROCESSED_DIR / f"{EXPOSURE_PREFIX}_{year}.csv"
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        frames.append(pd.read_csv(path, usecols=list(EXPOSURE_LOOKUP_COLUMNS), keep_default_na=False))
+    complete = pd.concat(frames, ignore_index=True)
+    for column in ("country", "sector", "imposer"):
+        complete[column] = complete[column].fillna("").astype(str).str.strip()
+        if complete[column].eq("").any():
+            raise ValueError(f"runtime 出口暴露度 {column} 含空白标识符")
+    year_values = pd.to_numeric(complete["year"], errors="coerce").to_numpy(dtype=float)
+    exposure_values = pd.to_numeric(complete["export_exposure"], errors="coerce").to_numpy(dtype=float)
+    if not np.isfinite(year_values).all() or not np.equal(year_values, np.floor(year_values)).all():
+        raise ValueError("runtime 出口暴露度 year 必须是有限整数")
+    if not np.isfinite(exposure_values).all() or ((exposure_values < 0.0) | (exposure_values > 1.0)).any():
+        raise ValueError("runtime 出口暴露度 export_exposure 必须位于 [0,1]")
+    complete["year"] = year_values.astype(np.int64)
+    complete["export_exposure"] = exposure_values
+
+    catalogue_imposers = catalogue_tariff_imposers()
+    available_imposers = set(complete["imposer"].unique())
+    imposers = sorted(set(catalogue_imposers) & available_imposers)
+    lookup = complete.loc[complete["imposer"].isin(imposers), list(EXPOSURE_LOOKUP_COLUMNS)].copy()
+    countries = sorted(complete["country"].unique())
+    sectors = sorted(complete["sector"].unique())
+    expected = pd.MultiIndex.from_product(
+        [countries, sectors, imposers, declared_years], names=list(EXPOSURE_KEY_COLUMNS)
+    )
+    actual = pd.MultiIndex.from_frame(lookup[list(EXPOSURE_KEY_COLUMNS)])
+    missing = expected.difference(actual)
+    extra = actual.difference(expected)
+    if actual.has_duplicates or len(missing) or len(extra):
+        raise ValueError(
+            "runtime 出口暴露度 catalogue 覆盖不精确；"
+            f"duplicates={actual.has_duplicates}, missing={len(missing)}, extra={len(extra)}"
+        )
+    lookup = lookup.sort_values(list(EXPOSURE_KEY_COLUMNS)).reset_index(drop=True)
+    lookup.to_csv(PROCESSED_DIR / EXPOSURE_LOOKUP_FILE, index=False)
+    return lookup
 
 
 def load_export_exposure(years: list[int] | None = None) -> pd.DataFrame | None:

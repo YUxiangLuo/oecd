@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Authenticated v8 shock-panel release benchmark.
+"""Authenticated v9 shock-panel release benchmark.
 
 This harness deliberately refuses old/unvalidated artifacts.  It exercises the
 normal FastAPI authentication middleware and ``/api/shocks/panel`` route through
@@ -28,7 +28,7 @@ from gvcsim.config import PROCESSED_DIR
 
 SEQUENTIAL_BUDGET_MS = 500.0
 CONCURRENT_BUDGET_MS = 1500.0
-DEFAULT_OUTPUT = Path("benchmarks/shock_panel_v8.json")
+DEFAULT_OUTPUT = Path("benchmarks/shock_panel_v9.json")
 
 
 def percentile(values: list[float], quantile: float = 0.95) -> float:
@@ -81,7 +81,7 @@ def run_benchmark(
     validation = artifacts.validate_release_cached(PROCESSED_DIR)
     metadata = artifacts.dataset_metadata(PROCESSED_DIR)
     if metadata.get("artifact_contract_version") != artifacts.ARTIFACT_CONTRACT_VERSION:
-        raise RuntimeError("benchmark requires the active artifact contract v8 release")
+        raise RuntimeError("benchmark requires the active artifact contract v9 release")
 
     years = metadata.get("years")
     if not isinstance(years, list) or not years:
@@ -103,8 +103,15 @@ def run_benchmark(
         # Clear only the derived lookup.  In a fresh benchmark process the
         # shock/exposure CSV caches are still empty, while release validation
         # remains cached exactly as it is after deployment readiness succeeds.
-        data_routes._build_exposure_index.cache_clear()
+        data_routes.clear_exposure_index_cache()
         cold_ms = _timed_panel_request(client, params)
+
+        # Re-clear and start eight first requests together. The runtime builder is
+        # required to provide single-flight construction rather than multiplying
+        # cold memory by the classroom's request concurrency.
+        data_routes.clear_exposure_index_cache()
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            concurrent_cold_ms = list(executor.map(lambda _index: _timed_panel_request(client, params), range(8)))
 
         warm_ms = [_timed_panel_request(client, params) for _ in range(sequential_samples)]
         with ThreadPoolExecutor(max_workers=8) as executor:
@@ -121,16 +128,18 @@ def run_benchmark(
         "budget_ms": SEQUENTIAL_BUDGET_MS,
         "passed": cold_ms <= SEQUENTIAL_BUDGET_MS,
     }
+    concurrent_cold = sample_summary(concurrent_cold_ms, CONCURRENT_BUDGET_MS)
     sequential = sample_summary(warm_ms, SEQUENTIAL_BUDGET_MS)
     concurrent = sample_summary(concurrent_ms, CONCURRENT_BUDGET_MS)
-    passed = bool(cold["passed"] and sequential["passed"] and concurrent["passed"])
+    passed = bool(cold["passed"] and concurrent_cold["passed"] and sequential["passed"] and concurrent["passed"])
     return {
-        "benchmark": "authenticated_shock_panel_active_v8",
+        "benchmark": "authenticated_shock_panel_active_v9",
         "status": "passed" if passed else "budget_failure",
         "method": (
             "Validated and cached the active release, authenticated through /api/auth/login, then called "
             "/api/shocks/panel through the normal middleware/route. Only the exposure index is cleared; "
-            "in a fresh process the first sample includes cold shock/exposure CSV reads and index construction."
+            "in a fresh process the first sample includes cold shock/exposure CSV reads and index construction. "
+            "A second cold phase starts eight requests together to verify single-flight behavior."
         ),
         "environment": {
             "python": platform.python_version(),
@@ -146,6 +155,7 @@ def run_benchmark(
         },
         "request": params,
         "cold_index_build_ms": cold,
+        "eight_concurrent_cold_ms": concurrent_cold,
         "warm_sequential_ms": sequential,
         "eight_concurrent_ms": concurrent,
         "passed": passed,

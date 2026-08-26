@@ -339,6 +339,9 @@ def _write_semantic_outputs(directory: Path, year: int = 2020) -> dict[str, dict
         [pd.read_csv(directory / f"export_exposure_{artifact_year}.csv") for artifact_year in years],
         ignore_index=True,
     )
+    exposure.loc[exposure["imposer"].eq("EU"), list(shock_module.EXPOSURE_LOOKUP_COLUMNS)].to_csv(
+        directory / shock_module.EXPOSURE_LOOKUP_FILE, index=False
+    )
     shock_panel = shock_module.demo_shock_panel(
         ["AAA", "BBB", "CCC", "ROW"],
         ["s1"],
@@ -411,15 +414,15 @@ def _release(directory: Path, *, course_release: str | None = None) -> None:
     )
 
 
-def test_v8_release_requires_regression_shock_output_qc_manifest_and_identity(tmp_path):
+def test_v9_release_requires_regression_shock_output_qc_manifest_and_identity(tmp_path):
     _release(tmp_path)
 
     result = artifacts.validate_release(tmp_path)
     metadata = artifacts.dataset_metadata(tmp_path)
 
-    assert result == {"release_id": RELEASE_ID, "files": 25, "years": 3}
+    assert result == {"release_id": RELEASE_ID, "files": 26, "years": 3}
     assert artifacts.release_identity(tmp_path) == RELEASE_ID
-    assert metadata["artifact_contract_version"] == 8
+    assert metadata["artifact_contract_version"] == 9
     assert metadata["regression_input_qc_contract"]["version"] == 2
     sample_scope = metadata["regression_input_qc_contract"]["sample_scope"]
     assert sample_scope["runtime_default"] == "exclude_row"
@@ -451,7 +454,7 @@ def test_v8_release_requires_regression_shock_output_qc_manifest_and_identity(tm
     assert "causal identification" in regression_contract["certification_limit"]
     assert metadata["raw_dimensions"]["countries"] == 4
     assert metadata["data_sources"]["simulated_macro_controls"]["production_data"] is False
-    assert len(metadata["artifact_manifest"]) == 25
+    assert len(metadata["artifact_manifest"]) == 26
     assert artifacts.current_artifact_years(tmp_path) == [2018, 2019, 2020]
 
 
@@ -470,6 +473,14 @@ def test_release_rejects_data_source_and_raw_dimension_metadata_tampering(tmp_pa
         lambda metadata: metadata["raw_dimensions"].__setitem__("years", {}),
     )
     with pytest.raises(artifacts.ArtifactContractError, match="raw_dimensions years"):
+        artifacts.validate_release(tmp_path)
+
+    _release(tmp_path)
+    _tamper_signed_metadata(
+        tmp_path,
+        lambda metadata: metadata["raw_dimensions"]["years"]["2020"].__setitem__("source_sha256", "bad"),
+    )
+    with pytest.raises(artifacts.ArtifactContractError, match="source SHA-256"):
         artifacts.validate_release(tmp_path)
 
 
@@ -1063,10 +1074,10 @@ def test_regression_input_qc_missing_contract_file_and_summary_tamper_fail(tmp_p
         artifacts.validate_release(tmp_path)
 
 
-def test_artifact_v7_is_rejected_and_v8_is_required(tmp_path):
+def test_artifact_v8_is_rejected_and_v9_is_required(tmp_path):
     _release(tmp_path)
-    _tamper_signed_metadata(tmp_path, lambda metadata: metadata.__setitem__("artifact_contract_version", 7))
-    with pytest.raises(artifacts.ArtifactContractError, match="expected 8, got 7"):
+    _tamper_signed_metadata(tmp_path, lambda metadata: metadata.__setitem__("artifact_contract_version", 8))
+    with pytest.raises(artifacts.ArtifactContractError, match="expected 9, got 8"):
         artifacts.validate_release(tmp_path)
 
 

@@ -7,7 +7,7 @@ from typing import Any
 
 from gvcsim import artifacts, config
 from gvcsim.classroom import db
-from gvcsim.data.raw_icio import discover_years
+from gvcsim.data.raw_icio import validate_raw_source_bindings
 
 
 def run() -> dict[str, Any]:
@@ -21,12 +21,10 @@ def run() -> dict[str, Any]:
     if not years:
         raise artifacts.ArtifactContractError("没有完整的预计算产物年份")
     try:
-        raw_years = discover_years(config.RAW_DATA_DIR)
+        metadata = artifacts.dataset_metadata(config.PROCESSED_DIR)
+        validate_raw_source_bindings(metadata.get("raw_dimensions"), years, config.RAW_DATA_DIR)
     except (OSError, RuntimeError, ValueError) as error:
         raise artifacts.ArtifactContractError(str(error)) from error
-    missing_raw = [year for year in years if year not in raw_years]
-    if missing_raw:
-        raise artifacts.ArtifactContractError(f"步骤 1 原始数据缺少年份: {missing_raw}")
     try:
         db.startup()
         database = db.readiness()

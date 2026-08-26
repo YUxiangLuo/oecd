@@ -1,6 +1,6 @@
 import type { ShockContract } from "../../../types";
 
-export const SHOCK_ARTIFACT_CONTRACT_VERSION = 8;
+export const SHOCK_ARTIFACT_CONTRACT_VERSION = 9;
 export const SHOCK_CONTRACT_VERSION = 2;
 export const SHOCK_TREATED_THRESHOLD = 0.001;
 export const SHOCK_CONTRACT_TYPES = {

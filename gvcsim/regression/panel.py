@@ -55,7 +55,12 @@ from gvcsim.regression.transforms import (
     _real_log_from_log as _real_log_from_log,
     _stable_noise as _stable_noise,
 )
-from gvcsim.regression.validity import MIN_TREATED_CLUSTERS, TreatmentSupport, analyze_support
+from gvcsim.regression.validity import (
+    MIN_TREATED_CLUSTERS,
+    STATUS_INVALID_DESIGN,
+    TreatmentSupport,
+    analyze_support,
+)
 
 
 @dataclass
@@ -1558,7 +1563,7 @@ def _build_event_support(
             )
         inference_supported = period_supported and reference_supported
         if reasons:
-            reasons[-1] += "保留点估计与标准误，但抑制 p 值、星号和置信区间。"
+            reasons[-1] += "保留点估计；仅在完整 delete-one 序列可用时保留标准误，但始终抑制 p 值、星号和置信区间。"
         periods.append(
             {
                 "term": _event_term(k),
@@ -2087,42 +2092,107 @@ def _cohort_time_result(model: PreparedModel, method: str) -> tuple[RegressionRe
             ],
         }
         return result, benchmark
-    leave_one_out: list[np.ndarray] = []
+    leave_one_estimates: list[dict[str, float]] = []
     for cluster_value in clusters:
         estimates, _cells = _cohort_time_att_values(model, event_times, omitted_cluster=cluster_value)
-        if not all(term in estimates for term in terms):
-            raise ValueError(f"删除聚类 {cluster_value} 后 cohort-time ATT 项缺失，无法形成共同 jackknife 协方差")
-        leave_one_out.append(np.array([estimates[term] for term in terms], dtype=float))
-    matrix = np.vstack(leave_one_out)
-    center = matrix.mean(axis=0)
-    covariance = ((len(clusters) - 1) / len(clusters)) * ((matrix - center).T @ (matrix - center))
-    se = np.sqrt(np.clip(np.diag(covariance), 0.0, None))
-    if not np.isfinite(covariance).all() or (se <= 0).any():
-        raise ValueError("cohort-time ATT 的聚类 jackknife 协方差非有限或非正")
+        leave_one_estimates.append(estimates)
 
-    # Audit the same leave-one estimates through the algebraically equivalent
-    # jackknife pseudo-value formula. This is deliberately a numerical arithmetic
-    # gate, not a claim that a second causal estimator validated identification.
-    full_vector = np.array([audited_full[term] for term in terms], dtype=float)
-    pseudo_values = len(clusters) * full_vector - (len(clusters) - 1) * matrix
-    pseudo_centered = pseudo_values - pseudo_values.mean(axis=0)
-    audit_covariance = (pseudo_centered.T @ pseudo_centered) / (len(clusters) * (len(clusters) - 1))
-    audit_se = np.sqrt(np.clip(np.diag(audit_covariance), 0.0, None))
-    se_diffs = se - audit_se
-    max_se_diff = float(np.max(np.abs(se_diffs)))
-    se_scale = max(float(np.max(np.abs(se))), float(np.max(np.abs(audit_se))), 1.0)
-    se_check_passed = max_se_diff <= 1e-12 * se_scale
-    if not np.isfinite(audit_covariance).all() or not se_check_passed:
-        raise ValueError("cohort-time ATT jackknife 伪值公式算术复核失败，拒绝发布推断")
+    # A locally unsupported remote event period can disappear when its sole
+    # contributing cluster is deleted. It must not abort covariance for every
+    # supported period. Only terms available in every leave-one sample enter the
+    # common jackknife; the missing local term remains a point-only estimate.
+    covariance_terms = [term for term in terms if all(term in estimates for estimates in leave_one_estimates)]
+    missing_delete_terms = [term for term in terms if term not in covariance_terms]
+    point_only_terms = list(missing_delete_terms)
+    for term in missing_delete_terms:
+        period = _event_period_for_term(model.event_support, term)
+        if period is None or period.get("inference_supported") is not False:
+            raise ValueError(f"支持充分的 cohort-time ATT 项 {term} 在删除聚类后缺失，拒绝发布不完整推断")
+
+    covariance = np.zeros((len(terms), len(terms)), dtype=float)
+    standard_errors: dict[str, float] = {}
+    audited_standard_errors: dict[str, float] = {}
+    standard_error_diffs: dict[str, float] = {}
+    max_se_diff = 0.0
+    se_check_passed = True
+    covariance_gate_reason: str | None = None
+    degenerate_terms: list[str] = []
+    if covariance_terms:
+        matrix = np.vstack(
+            [np.array([estimates[term] for term in covariance_terms], dtype=float) for estimates in leave_one_estimates]
+        )
+        center = matrix.mean(axis=0)
+        common_covariance = ((len(clusters) - 1) / len(clusters)) * ((matrix - center).T @ (matrix - center))
+        if not np.isfinite(common_covariance).all():
+            raise ValueError("cohort-time ATT 的聚类 jackknife 协方差非有限")
+        candidate_se = np.sqrt(np.clip(np.diag(common_covariance), 0.0, None))
+        leave_one_range = np.ptp(matrix, axis=0)
+        leave_one_scale = np.maximum(np.max(np.abs(matrix), axis=0), 1.0)
+        positive_positions = [
+            index
+            for index, value in enumerate(candidate_se)
+            if value > 0.0 and leave_one_range[index] > 1e-12 * leave_one_scale[index]
+        ]
+        degenerate_terms = [term for index, term in enumerate(covariance_terms) if index not in set(positive_positions)]
+        if degenerate_terms:
+            point_only_terms.extend(degenerate_terms)
+            globally_supported_degenerate = [
+                term
+                for term in degenerate_terms
+                if (period := _event_period_for_term(model.event_support, term)) is None
+                or period.get("inference_supported") is True
+            ]
+            if globally_supported_degenerate:
+                covariance_gate_reason = (
+                    "支持充分的 cohort-time ATT 项缺少正的 delete-one jackknife 变异，已将整体设计标记为无效并抑制推断："
+                    + "、".join(globally_supported_degenerate)
+                )
+                if support is not None:
+                    support = replace(
+                        support,
+                        status=STATUS_INVALID_DESIGN,
+                        reasons=[*support.reasons, covariance_gate_reason],
+                    )
+            covariance_terms = [covariance_terms[index] for index in positive_positions]
+            matrix = matrix[:, positive_positions]
+            common_covariance = common_covariance[np.ix_(positive_positions, positive_positions)]
+
+        if covariance_terms:
+            se = np.sqrt(np.diag(common_covariance))
+            common_indices = [terms.index(term) for term in covariance_terms]
+            covariance[np.ix_(common_indices, common_indices)] = common_covariance
+
+            # Audit the same common leave-one estimates through the algebraically
+            # equivalent jackknife pseudo-value formula.
+            full_vector = np.array([audited_full[term] for term in covariance_terms], dtype=float)
+            pseudo_values = len(clusters) * full_vector - (len(clusters) - 1) * matrix
+            pseudo_centered = pseudo_values - pseudo_values.mean(axis=0)
+            audit_covariance = (pseudo_centered.T @ pseudo_centered) / (len(clusters) * (len(clusters) - 1))
+            audit_se = np.sqrt(np.clip(np.diag(audit_covariance), 0.0, None))
+            se_diffs = se - audit_se
+            max_se_diff = float(np.max(np.abs(se_diffs)))
+            se_scale = max(float(np.max(np.abs(se))), float(np.max(np.abs(audit_se))), 1.0)
+            se_check_passed = max_se_diff <= 1e-12 * se_scale
+            if not np.isfinite(audit_covariance).all() or not se_check_passed:
+                raise ValueError("cohort-time ATT jackknife 伪值公式算术复核失败，拒绝发布推断")
+            standard_errors = dict(zip(covariance_terms, (float(value) for value in se), strict=True))
+            audited_standard_errors = dict(zip(covariance_terms, (float(value) for value in audit_se), strict=True))
+            standard_error_diffs = dict(zip(covariance_terms, (float(value) for value in se_diffs), strict=True))
 
     critical = float(stats.t.ppf(0.975, len(clusters) - 1))
     coefs: list[CoefStat] = []
-    for index, term in enumerate(terms):
+    for term in terms:
         coefficient = float(full[term])
-        standard_error = float(se[index])
+        standard_error = standard_errors.get(term)
+        if standard_error is None:
+            coefs.append(CoefStat(name=term, coef=coefficient, se=None, t=None, p=None, ci_low=None, ci_high=None))
+            continue
         t_stat = coefficient / standard_error
         period = _event_period_for_term(model.event_support, term)
-        suppress = bool(period is not None and period.get("inference_supported") is not True)
+        suppress = bool(
+            (support is not None and support.suppress_inference)
+            or (period is not None and period.get("inference_supported") is not True)
+        )
         coefs.append(
             CoefStat(
                 name=term,
@@ -2160,6 +2230,19 @@ def _cohort_time_result(model: PreparedModel, method: str) -> tuple[RegressionRe
             *model.notes,
             "主估计量为 cohort-time ATT：每个 cohort 以 g-1 为基期，只使用从未处理或截至比较期尚未处理的实体作对照；不使用已处理 cohort 作对照。",
             "cohort-time 单元按可用处理实体数聚合；协方差为按设计聚类变量做 delete-one cluster jackknife。",
+            *(
+                [
+                    "以下局部支持不足事件期在删除其唯一贡献聚类后不可估计，因此只保留点估计，不生成标准误、t、p 或置信区间："
+                    + "、".join(missing_delete_terms)
+                ]
+                if missing_delete_terms
+                else []
+            ),
+            *(
+                ["以下事件期的 delete-one jackknife 标准误为零，因此只保留点估计：" + "、".join(degenerate_terms)]
+                if degenerate_terms
+                else []
+            ),
             "该估计避免传统 staggered TWFE 的跨 cohort 污染，但因果解释仍要求平行趋势、无预期处理和无干扰等识别假设。",
             *(support.reasons if support is not None else []),
         ],
@@ -2177,20 +2260,33 @@ def _cohort_time_result(model: PreparedModel, method: str) -> tuple[RegressionRe
                 "own_coef": full[term],
                 "audit_coef": audited_full[term],
                 "coef_diff": point_diffs[term],
-                "own_se": float(se[index]),
-                "audit_se": float(audit_se[index]),
-                "se_diff": float(se_diffs[index]),
+                "own_se": standard_errors.get(term),
+                "audit_se": audited_standard_errors.get(term),
+                "se_diff": standard_error_diffs.get(term),
             }
-            for index, term in enumerate(terms)
+            for term in terms
         ],
         "max_abs_coef_diff": max_point_diff,
         "max_abs_se_diff": max_se_diff,
         "coef_check_passed": point_check_passed,
-        "se_check_passed": se_check_passed,
-        "benchmark_passed": point_check_passed and se_check_passed,
-        "se_check_mode": "delete_one_covariance_vs_jackknife_pseudovalue_formula",
+        "se_check_passed": se_check_passed and covariance_gate_reason is None,
+        "benchmark_passed": point_check_passed and se_check_passed and covariance_gate_reason is None,
+        "se_check_mode": "common_estimable_terms_delete_one_vs_jackknife_pseudovalue_formula",
         "notes": [
-            "点估计由序列化 cohort×时期单元及处理实体权重重新聚合；标准误由同一组 leave-one 估计通过 jackknife 伪值公式复算。",
+            "点估计由序列化 cohort×时期单元及处理实体权重重新聚合；可共同估计项的标准误由同一组 leave-one 估计通过 jackknife 伪值公式复算。",
+            *(
+                [
+                    "局部支持不足且无法形成完整 leave-one 序列的事件期仅做点估计算术复核："
+                    + "、".join(missing_delete_terms)
+                ]
+                if missing_delete_terms
+                else []
+            ),
+            *(
+                ["delete-one jackknife 变异为零的事件期仅做点估计算术复核：" + "、".join(degenerate_terms)]
+                if degenerate_terms
+                else []
+            ),
             "这是可失败的算术一致性门禁，不是独立因果估计器，也不能验证识别假设。",
         ],
     }

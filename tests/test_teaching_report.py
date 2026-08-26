@@ -266,6 +266,9 @@ def _write_output_artifacts(path: Path, years: list[int]) -> dict[str, dict]:
         [pd.read_csv(path / f"export_exposure_{year}.csv") for year in years],
         ignore_index=True,
     )
+    exposure.loc[exposure["imposer"].eq("EU"), list(shock_module.EXPOSURE_LOOKUP_COLUMNS)].to_csv(
+        path / shock_module.EXPOSURE_LOOKUP_FILE, index=False
+    )
     shock_panel = shock_module.demo_shock_panel(
         ["AAA", "BBB", "CCC", "ROW"],
         ["s1"],

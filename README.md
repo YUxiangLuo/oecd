@@ -15,7 +15,7 @@
 - 步骤 1–15 由服务端重新判定固定理解题；步骤 16 还要求关键实验证据、有效回归和学生原创分析。
 - 每名学生在当前数据 release 中只有一份会话和一份报告。报告状态为草稿、待评阅或已评阅；已提交报告重新生成后自动重新提交并清空旧评分。
 
-不提供班级、公告、账号停用、学生自行清空、到达进度、跨标签页冲突解决、离线缓存、防作弊凭证或安全审计。登录使用最长 8 小时的 HMAC 签名令牌，并绑定当前数据 release 与账号认证版本；数据换版、本人改密或教师重置密码会立即使旧令牌失效。同时打开多个标签页可能互相覆盖，这是可信课堂的已接受限制。
+不提供班级、公告、账号停用、学生自行清空、到达进度、跨标签页自动合并、离线缓存、防作弊凭证或安全审计。登录使用最长 8 小时的 HMAC 签名令牌，并绑定当前数据 release 与账号认证版本；数据换版、本人改密或教师重置密码会立即使旧令牌失效。同时打开多个标签页时，陈旧标签页的写入会被 409 拒绝，用户必须显式载入服务器版本，不会静默覆盖。
 
 ## 本地运行
 
@@ -52,9 +52,9 @@ uv run gvcsim classroom-init --reset
 
 生产环境通过 `GVCSIM_RAW_DATA_DIR` 和 `GVCSIM_DATA_DIR` 把这两个位置指向代码目录之外的持久目录；本地开发不设置时仍使用上述仓库内默认值。
 
-`compute` 只处理数据，绝不连接或重置教学数据库。生产部署随后显式执行 `classroom-init --reset`，清空并重建教学数据库；因此账号、会话、报告、评分和旧令牌都不会跨部署保留。
+`compute` 只处理数据，绝不连接或重置教学数据库。代码部署、数据发布与教学数据库重建是三个独立生命周期：普通代码部署和数据换版不得执行 `classroom-init --reset`；只有首次建库或明确的新学期清场才允许在备份后执行该破坏性命令。账号可跨代码/数据部署保留，会话与报告则由 `(账号, release_id)` 自动隔离，数据换版也会使旧令牌失效。
 
-`dataset.json` 保存不可省略的 `release_id`、契约版本、年份、生成时间、课程发布、数据来源、QC 摘要、网络算法和完整产物清单。固定产物包括逐年指标/网络/QC、国家与国家–行业面板、控制变量、冲击面板及 QC 文件；旧格式会直接被预检拒绝。
+`dataset.json` 保存不可省略的 `release_id`、契约版本、年份、生成时间、课程发布、数据来源、QC 摘要、网络算法和完整产物清单；还逐年绑定原始 ICIO 文件名、字节数与内容 SHA-256。`preflight`、`/health` 和 `/api/db/*` 都会拒绝与 active release 不一致的原始字节。固定产物包括逐年指标/网络/QC、国家与国家–行业面板、控制变量、冲击面板及 QC 文件；旧格式会直接被预检拒绝。
 
 ## 数据、许可与教学边界
 
@@ -76,11 +76,11 @@ cd frontend && bun test src && bun run build
 
 Gephi 0.10.1 独立基准可用 `scripts/gephi_golden/generate.sh --check` 校验；该基准采用有向图，路径类中心性按无权最短路计算，边权只进入 weighted degree。
 
-冲击面板性能验收在有效 active v8 release 完成最终重算后运行：
+冲击面板性能验收在有效 active v9 release 完成最终重算后运行：
 
 ```bash
 GVCSIM_BENCHMARK_USERNAME=student GVCSIM_BENCHMARK_PASSWORD='…' \
-  uv run python scripts/benchmark_shock_panel_v8.py
+  uv run python scripts/benchmark_shock_panel_v9.py
 ```
 
-脚本先执行 release 校验，再通过正常登录中间件访问 `/api/shocks/panel`，记录 release/shock contract、冷索引构建、warm sequential 与 8-concurrent p95，并对照 500ms/1.5s 预算。这是可选性能自测，不是发布门槛。`benchmarks/shock_panel_preliminary_v3.json` 只是旧 v3 直调初测。
+脚本先执行 release 校验，再通过正常登录中间件访问 `/api/shocks/panel`，记录 release/shock contract、单请求冷索引、8 请求并发冷启动、warm sequential 与 8-concurrent p95，并对照 500ms/1.5s 预算。正式数据发布必须通过该门槛；`benchmarks/shock_panel_preliminary_v3.json` 只是旧 v3 直调初测。

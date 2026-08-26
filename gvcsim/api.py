@@ -16,11 +16,11 @@ from fastapi.responses import JSONResponse
 
 from gvcsim import auth, auth_routes, data_routes, regression_routes
 from gvcsim import config as app_config
-from gvcsim.artifacts import ArtifactContractError, validate_release_cached
+from gvcsim.artifacts import ArtifactContractError, dataset_metadata, validate_release_cached
 from gvcsim.classroom import db as classroom_db
 from gvcsim.classroom import routes as classroom_routes
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, processed_years
-from gvcsim.data.raw_icio import discover_years
+from gvcsim.data.raw_icio import validate_raw_source_bindings
 
 if app_config.IS_PRODUCTION:
     app_config.validate_security_config()
@@ -70,15 +70,10 @@ def health() -> JSONResponse:
     if not years:
         return JSONResponse(status_code=503, content={"status": "unavailable", "detail": "没有完整产物"})
     try:
-        raw_years = discover_years(RAW_DATA_DIR)
+        metadata = dataset_metadata(PROCESSED_DIR)
+        validate_raw_source_bindings(metadata.get("raw_dimensions"), years, RAW_DATA_DIR)
     except (OSError, RuntimeError, ValueError) as error:
         return JSONResponse(status_code=503, content={"status": "unavailable", "detail": str(error)})
-    missing_raw = [year for year in years if year not in raw_years]
-    if missing_raw:
-        return JSONResponse(
-            status_code=503,
-            content={"status": "unavailable", "detail": f"步骤 1 原始数据缺少年份: {missing_raw}"},
-        )
     try:
         database = classroom_db.readiness()
     except (classroom_db.Unavailable, classroom_db.SchemaVersionMismatch, RuntimeError):

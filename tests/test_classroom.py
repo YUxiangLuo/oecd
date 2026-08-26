@@ -3,8 +3,21 @@ from contextlib import contextmanager
 import pytest
 
 from gvcsim import artifacts
-from gvcsim.classroom import db
+from gvcsim.classroom import db, records
 from gvcsim.session import empty_session, make_record
+
+
+def _session_version(username: str = "student"):
+    row = db.get_session(username)
+    if row is None:
+        saved = db.save_session(username, empty_session())
+        assert saved is not None
+        return saved["updated_at"]
+    return row["updated_at"]
+
+
+def _save_report(markdown: str, provenance: dict, username: str = "student"):
+    return db.save_generated_report(username, markdown, provenance, _session_version(username))
 
 
 def test_v10_schema_contains_release_and_auth_bound_contract(teaching_db):
@@ -54,7 +67,7 @@ def test_sessions_and_reports_are_isolated_by_release(teaching_db, monkeypatch):
     release_a = empty_session()
     release_a["steps"]["1"] = make_record({"value": "release-a"})
     db.save_session("student", release_a)
-    db.save_generated_report("student", "release-a-report", {"release_id": "a" * 32})
+    _save_report("release-a-report", {"release_id": "a" * 32})
 
     monkeypatch.setattr(artifacts, "release_identity", lambda _path=None: "b" * 32)
     assert db.get_session("student") is None
@@ -62,7 +75,7 @@ def test_sessions_and_reports_are_isolated_by_release(teaching_db, monkeypatch):
     release_b = empty_session()
     release_b["steps"]["1"] = make_record({"value": "release-b"})
     db.save_session("student", release_b)
-    db.save_generated_report("student", "release-b-report", {"release_id": "b" * 32})
+    _save_report("release-b-report", {"release_id": "b" * 32})
 
     monkeypatch.setattr(artifacts, "release_identity", lambda _path=None: "a" * 32)
     assert db.get_session("student")["session"] == release_a
@@ -71,10 +84,13 @@ def test_sessions_and_reports_are_isolated_by_release(teaching_db, monkeypatch):
 
 def test_concurrent_first_report_generation_atomically_keeps_one_draft(teaching_db):
     provenance = {"years": [2020], "runs": []}
+    expected_session_updated_at = _session_version()
     with ThreadPoolExecutor(max_workers=6) as executor:
         reports = list(
             executor.map(
-                lambda index: db.save_generated_report("student", f"draft-{index}", provenance),
+                lambda index: db.save_generated_report(
+                    "student", f"draft-{index}", provenance, expected_session_updated_at
+                ),
                 range(6),
             )
         )
@@ -91,13 +107,13 @@ def test_concurrent_first_report_generation_atomically_keeps_one_draft(teaching_
 
 def test_report_generation_submission_and_grading_rules(teaching_db):
     provenance = {"years": [2020], "runs": []}
-    assert db.save_generated_report("student", "draft", provenance)["state"] == "draft"
+    assert _save_report("draft", provenance)["state"] == "draft"
     pending = db.submit_report("student")
     assert pending["state"] == "pending"
     account_id = db.find_account("student")["id"]
     assert db.grade_report(account_id, 90, "good", "teacher", pending["updated_at"])["state"] == "graded"
     assert db.submit_report("student")["score"] == 90
-    regenerated = db.save_generated_report("student", "replacement", provenance)
+    regenerated = _save_report("replacement", provenance)
     assert regenerated["state"] == "pending"
     assert regenerated["score"] is None and regenerated["feedback"] == ""
     assert regenerated["graded_by"] is None and regenerated["graded_at"] is None
@@ -108,16 +124,27 @@ def test_report_generation_submission_and_grading_rules(teaching_db):
 
 def test_stale_teacher_view_cannot_grade_a_regenerated_report(teaching_db):
     provenance = {"years": [2020], "runs": []}
-    db.save_generated_report("student", "first", provenance)
+    _save_report("first", provenance)
     viewed = db.submit_report("student")
     account_id = db.find_account("student")["id"]
-    db.save_generated_report("student", "replacement", provenance)
+    _save_report("replacement", provenance)
 
     with pytest.raises(db.ReportChanged, match="重新加载"):
         db.grade_report(account_id, 70, "based on first", "teacher", viewed["updated_at"])
     current = db.get_report(account_id, "teacher")
     assert current["markdown"] == "replacement"
     assert current["state"] == "pending" and current["score"] is None
+
+
+def test_report_save_rejects_a_session_version_changed_during_generation(teaching_db):
+    expected = _session_version()
+    changed = empty_session()
+    changed["steps"]["1"] = make_record({"value": "newer"})
+    db.save_session("student", changed, expected)
+
+    with pytest.raises(records.SessionChanged, match="生成期间"):
+        db.save_generated_report("student", "stale", {"runs": []}, expected)
+    assert db.latest_report("student") is None
 
 
 def test_student_list_query_count_is_constant(teaching_db, monkeypatch):
@@ -157,7 +184,7 @@ def test_student_list_uses_verified_completion_and_report_state(teaching_db):
     session = empty_session()
     session["steps"]["1"] = make_record({"quiz": {"version": "quiz-v4", "answers": {}}})
     db.save_session("student", session)
-    db.save_generated_report("student", "draft", {"years": [2020], "runs": []})
+    _save_report("draft", {"years": [2020], "runs": []})
     row = db.list_students("teacher")[0]
     assert row["report_state"] == "draft"
     assert "verified_completed_count" in row and "last_valid_activity" in row

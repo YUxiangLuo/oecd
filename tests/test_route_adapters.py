@@ -1,4 +1,6 @@
 import json
+import time
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 import numpy as np
@@ -118,8 +120,10 @@ def test_data_discovery_qc_and_db_adapters(tmp_path, monkeypatch):
             "years": [2020],
             "generated_at": "now",
             "qc_contract": quality.qc_contract_metadata(),
+            "raw_dimensions": {"bound": True},
         },
     )
+    monkeypatch.setattr(data_routes, "validate_raw_source_bindings", lambda *_args: None)
 
     country = _indicator_frame()
     industry = _indicator_frame(industry=True)
@@ -166,6 +170,23 @@ def test_data_discovery_qc_and_db_adapters(tmp_path, monkeypatch):
         data_routes.qc(2020)
     with pytest.raises(HTTPException):
         data_routes.qc(2019)
+
+
+def test_db_routes_fail_closed_when_active_raw_bytes_do_not_match_release(monkeypatch):
+    monkeypatch.setattr(data_routes, "dataset_metadata", lambda: {"years": [2020], "raw_dimensions": {}})
+    monkeypatch.setattr(
+        data_routes,
+        "validate_raw_source_bindings",
+        lambda *_args: (_ for _ in ()).throw(ValueError("source binding mismatch")),
+    )
+    monkeypatch.setattr(
+        data_routes.icio_browser,
+        "meta",
+        lambda: pytest.fail("raw browser must not open a mismatched source"),
+    )
+
+    with pytest.raises(ArtifactContractError, match="source binding mismatch"):
+        data_routes.db_meta()
 
 
 def test_indicator_network_and_missing_artifact_views(tmp_path, monkeypatch):
@@ -475,9 +496,9 @@ def _exposure_index_fixture() -> pd.DataFrame:
 
 
 def test_release_exposure_index_rejects_treatment_without_strictly_earlier_release(monkeypatch):
-    data_routes._build_exposure_index.cache_clear()
+    data_routes.clear_exposure_index_cache()
     exposure = _exposure_index_fixture()
-    monkeypatch.setattr(data_routes, "read_csv_artifact", lambda _path: exposure.copy())
+    monkeypatch.setattr(data_routes, "_read_runtime_exposure", lambda _path: exposure.copy())
     monkeypatch.setattr(
         shocks,
         "EVENTS",
@@ -499,21 +520,22 @@ def test_release_exposure_index_rejects_treatment_without_strictly_earlier_relea
             "r" * 32,
             (1, 2, 3, 4, 5),
             (2017, 2020),
+            ("USA",),
             (("export_exposure_2020.csv", 1, 2, 3, 4, 5),),
         )
 
 
 def test_release_exposure_index_builds_and_reads_once_per_exact_key(monkeypatch):
-    data_routes._build_exposure_index.cache_clear()
+    data_routes.clear_exposure_index_cache()
     reads = []
     exposure = _exposure_index_fixture()
-    expected_values = shocks._exposure_map(exposure)
+    expected_values = {key: value for key, value in shocks._exposure_map(exposure).items() if key[2] == "USA"}
 
     def read(path):
         reads.append(path.name)
         return exposure.copy()
 
-    monkeypatch.setattr(data_routes, "read_csv_artifact", read)
+    monkeypatch.setattr(data_routes, "_read_runtime_exposure", read)
     monkeypatch.setattr(
         shocks,
         "_exposure_map",
@@ -521,16 +543,43 @@ def test_release_exposure_index_builds_and_reads_once_per_exact_key(monkeypatch)
     )
     state = (("export_exposure_2020.csv", 1, 2, 3, 4, 5),)
     release_stat = (1, 2, 3, 4, 5)
-    first = data_routes._build_exposure_index("/release", "r" * 32, release_stat, (2017, 2020), state)
-    second = data_routes._build_exposure_index("/release", "r" * 32, release_stat, (2017, 2020), state)
+    first = data_routes._build_exposure_index("/release", "r" * 32, release_stat, (2017, 2020), ("USA",), state)
+    second = data_routes._build_exposure_index("/release", "r" * 32, release_stat, (2017, 2020), ("USA",), state)
 
-    third = data_routes._build_exposure_index("/release", "r" * 32, (1, 2, 3, 4, 6), (2017, 2020), state)
+    third = data_routes._build_exposure_index("/release", "r" * 32, (1, 2, 3, 4, 6), (2017, 2020), ("USA",), state)
     assert first is second
     assert third is not first
     assert reads == ["export_exposure_2020.csv", "export_exposure_2020.csv"]
     assert dict(first.values) == expected_values
     assert first.available_years[("AAA", "s1", "USA")] == (2017, 2020)
     assert first.fixed_base_years[("AAA", "s1", "USA")] == 2020
+
+
+def test_release_exposure_index_cold_build_is_single_flight(monkeypatch):
+    data_routes.clear_exposure_index_cache()
+    exposure = _exposure_index_fixture()
+    reads = 0
+
+    def read(_path):
+        nonlocal reads
+        reads += 1
+        time.sleep(0.03)
+        return exposure.copy()
+
+    monkeypatch.setattr(data_routes, "_read_runtime_exposure", read)
+    state = (("export_exposure_2020.csv", 1, 2, 3, 4, 5),)
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        indices = list(
+            executor.map(
+                lambda _index: data_routes._build_exposure_index(
+                    "/release", "r" * 32, (1, 2, 3, 4, 5), (2017, 2020), ("USA",), state
+                ),
+                range(8),
+            )
+        )
+
+    assert reads == 1
+    assert all(index is indices[0] for index in indices)
 
 
 @pytest.mark.parametrize(
@@ -542,15 +591,16 @@ def test_release_exposure_index_builds_and_reads_once_per_exact_key(monkeypatch)
     ],
 )
 def test_release_exposure_index_fails_closed_for_malformed_direct_fixture(monkeypatch, malformation, match):
-    data_routes._build_exposure_index.cache_clear()
+    data_routes.clear_exposure_index_cache()
     exposure = _exposure_index_fixture()
+    usa_row = exposure.index[exposure["imposer"].eq("USA")][0]
     if malformation == "missing":
-        exposure = exposure.drop(columns=["bilateral_exports"])
+        exposure = exposure.drop(columns=["export_exposure"])
     elif malformation == "duplicate":
-        exposure = pd.concat([exposure, exposure.iloc[[0]]], ignore_index=True)
+        exposure = pd.concat([exposure, exposure.loc[[usa_row]]], ignore_index=True)
     else:
-        exposure.loc[0, "total_exports"] = np.inf
-    monkeypatch.setattr(data_routes, "read_csv_artifact", lambda _path: exposure.copy())
+        exposure.loc[usa_row, "export_exposure"] = np.inf
+    monkeypatch.setattr(data_routes, "_read_runtime_exposure", lambda _path: exposure.copy())
 
     with pytest.raises(ValueError, match=match):
         data_routes._build_exposure_index(
@@ -558,6 +608,7 @@ def test_release_exposure_index_fails_closed_for_malformed_direct_fixture(monkey
             "r" * 32,
             (1, 2, 3, 4, 5),
             (2017, 2020),
+            ("USA",),
             (("export_exposure_2020.csv", 1, 2, 3, 4, 5),),
         )
 

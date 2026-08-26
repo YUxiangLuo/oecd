@@ -452,6 +452,58 @@ def test_reg01_staggered_thin_leads_are_local_and_excluded_from_pretrend():
     assert next(item for item in serialized["periods"] if item["term"] == "k=-1")["estimated"] is False
 
 
+def test_reg01_single_cluster_remote_lead_is_point_only_without_aborting_public_event_study():
+    frame = _reg01_staggered_panel(late_cohort=1).rename(columns={"y": "FVA_share"})
+    frame["tariff_shock"] = frame["treated"] * 0.02
+    design = RegressionDesign(outcome="trade", granularity="country", method="event_study")
+
+    result, benchmark = run_design_with_benchmark(frame, design)
+
+    by_name = {coefficient.name: coefficient for coefficient in result.coefs}
+    thin = next(item for item in result.event_support["periods"] if item["term"] == "k=-4")
+    assert thin["contributing_clusters"] == 1
+    assert thin["inference_supported"] is False
+    assert by_name["k=-4"].coef is not None
+    assert by_name["k=-4"].se is None and by_name["k=-4"].t is None
+    assert by_name["k=-4"].p is None and by_name["k=-4"].ci_low is None
+    assert by_name["k=0"].se is not None and by_name["k=0"].p is not None
+    diagnostic = result.diagnostics["pretrend"]
+    assert "k=-4" not in diagnostic["terms"]
+    assert "k=-4" in {item["term"] for item in diagnostic["excluded_terms"]}
+    audit = next(item for item in benchmark["policy_coefs"] if item["name"] == "k=-4")
+    assert audit["own_se"] is None and audit["audit_se"] is None
+    assert benchmark["benchmark_passed"] is True
+
+
+def test_reg01_zero_jackknife_variation_returns_invalid_point_only_result_instead_of_crashing():
+    rows = []
+    for index in range(30):
+        country = f"Z{index:02d}"
+        first = 2020 if index == 0 else 2018 if index < 12 else None
+        for year in range(2016, 2023):
+            post = first is not None and year >= first
+            rows.append(
+                {
+                    "country": country,
+                    "year": year,
+                    "FVA_share": index * 0.01 + (year - 2016) * 0.1 + (0.2 if post else 0.0),
+                    "tariff_shock": 0.02 if post else 0.0,
+                    "treated": int(post),
+                }
+            )
+    design = RegressionDesign(outcome="trade", granularity="country", method="event_study")
+
+    result, benchmark = run_design_with_benchmark(pd.DataFrame(rows), design)
+
+    thin = next(coefficient for coefficient in result.coefs if coefficient.name == "k=-4")
+    assert thin.se is None and thin.p is None
+    assert result.status == "invalid_design"
+    assert result.support["suppress_inference"] is True
+    assert all(coefficient.p is None and coefficient.ci_low is None for coefficient in result.coefs)
+    assert benchmark["benchmark_passed"] is False
+    assert any("jackknife 变异" in reason for reason in result.status_reasons)
+
+
 def test_reg01_thin_reference_suppresses_all_event_and_marginal_inference():
     df = _reg01_staggered_panel()
     for i in range(13):

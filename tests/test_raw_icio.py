@@ -14,6 +14,7 @@ from gvcsim.data.raw_icio import (
     resolve_year_source,
     validate_raw_dimensions_metadata,
     validate_raw_file,
+    validate_raw_source_bindings,
     validate_raw_years,
     production_dimension_contract,
 )
@@ -177,6 +178,27 @@ def test_cross_year_layout_drift_and_metadata_tampering_fail(tmp_path: Path):
     assert metadata["industries"] == 1
     assert metadata["final_demand_categories"] == 2
     assert set(metadata["years"]) == {"2019", "2020"}
+    assert metadata["metadata_version"] == 2
+    assert metadata["years"]["2020"] == {
+        "source_file": "ICIO2023_2020.csv",
+        "source_bytes": second.stat().st_size,
+        "source_sha256": metadata["years"]["2020"]["source_sha256"],
+    }
+    assert len(metadata["years"]["2020"]["source_sha256"]) == 64
     metadata["country_codes_sha256"] = "0" * 64
     with pytest.raises(RawICIOValidationError, match="does not match"):
         validate_raw_dimensions_metadata(metadata, [2019, 2020], tmp_path, SMALL)
+
+
+def test_raw_source_binding_rejects_same_layout_different_values(tmp_path: Path):
+    path = tmp_path / "ICIO2023_2020.csv"
+    _write(path)
+    metadata = raw_dimensions_metadata([2020], tmp_path, SMALL)
+    original = path.read_bytes()
+    changed = original.replace(b",1,", b",2,", 1)
+    assert len(changed) == len(original)
+    path.write_bytes(changed)
+    clear_raw_validation_cache()
+
+    with pytest.raises(RawICIOValidationError, match="source binding mismatch"):
+        validate_raw_source_bindings(metadata, [2020], tmp_path)
