@@ -107,7 +107,7 @@ describe("auth expiration", () => {
         return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
       }) as typeof fetch;
 
-      await api.classroom.saveSession({ session: emptySession() });
+      await api.classroom.saveSession({ session: emptySession(), base_updated_at: null });
       expect(String(authorization)).toBe("Bearer token-a");
     } finally {
       setActiveAuthToken(originalToken);

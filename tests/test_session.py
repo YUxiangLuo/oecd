@@ -29,17 +29,19 @@ def test_put_session_returns_the_exact_normalized_snapshot_saved(monkeypatch):
     monkeypatch.setattr(
         classroom_routes.db,
         "save_session",
-        lambda username, session: persisted.append((username, session)) or {"updated_at": "saved-at"},
+        lambda username, session, expected: persisted.append((username, session, expected))
+        or {"updated_at": "saved-at"},
     )
     monkeypatch.setattr(classroom_routes.db, "latest_report", lambda _username: None)
 
     response = classroom_routes.put_session(
-        classroom_routes.SessionRequest(session=requested),
+        classroom_routes.SessionRequest(session=requested, base_updated_at=None),
         {"sub": "student"},
     )
 
     assert response["session"] == persisted[0][1]
     assert persisted[0][0] == "student"
+    assert persisted[0][2] is None
     assert response["session"]["steps"]["12"]["data"]["qualified_run"] == run
     assert response["updated_at"] == "saved-at"
 

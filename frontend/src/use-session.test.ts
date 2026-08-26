@@ -29,7 +29,7 @@ describe("session helpers", () => {
 
   test("does not reconcile an earlier normalized response over a newer in-flight edit", async () => {
     const requests: ReturnType<typeof deferred<SessionSaveResponse>>[] = [];
-    const submitted: ExperimentSession[] = [];
+    const submitted: Array<{ session: ExperimentSession; base: string | null }> = [];
     const first = patchSessionStep(emptySession(), 12, {
       research_question: "first",
       qualified_run: { identity: "rotated-signature" },
@@ -49,8 +49,8 @@ describe("session helpers", () => {
     let optimistic = first;
     let confirmed = emptySession();
     const acknowledgements: Array<{ saved: ExperimentSession; hasNewer: boolean }> = [];
-    const queue = new SessionSaveQueue((session) => {
-      submitted.push(session);
+    const queue = new SessionSaveQueue((session, base) => {
+      submitted.push({ session, base });
       const request = deferred<SessionSaveResponse>();
       requests.push(request);
       return request.promise;
@@ -63,6 +63,7 @@ describe("session helpers", () => {
       onError: () => {}, onSyncing: () => {}, onUnsynced: () => {},
     });
 
+    queue.setBaseUpdatedAt("2026-08-12T00:00:00Z");
     queue.enqueue(first);
     const saving = queue.drain();
     optimistic = latest;
@@ -73,7 +74,10 @@ describe("session helpers", () => {
     expect(optimistic).toBe(latest);
     expect(confirmed).toBe(normalizedFirst);
     expect(acknowledgements[0]).toEqual({ saved: first, hasNewer: true });
-    expect(submitted).toEqual([first, latest]);
+    expect(submitted).toEqual([
+      { session: first, base: "2026-08-12T00:00:00Z" },
+      { session: latest, base: "2026-08-13T00:00:00Z" },
+    ]);
 
     requests[1].resolve(response(normalizedLatest));
     await saving;
@@ -92,8 +96,10 @@ describe("session helpers", () => {
     const requests: ReturnType<typeof deferred<SessionSaveResponse>>[] = [];
     const values: string[] = [];
     const errors: unknown[] = [];
-    const queue = new SessionSaveQueue((session) => {
+    const bases: Array<string | null> = [];
+    const queue = new SessionSaveQueue((session, base) => {
       values.push(String(readStep<Record<string, unknown>>(session, 16)?.research_question));
+      bases.push(base);
       const request = deferred<SessionSaveResponse>();
       requests.push(request);
       return request.promise;
@@ -101,6 +107,7 @@ describe("session helpers", () => {
       onSaved: () => {}, onError: (cause) => errors.push(cause),
       onSyncing: () => {}, onUnsynced: () => {},
     });
+    queue.setBaseUpdatedAt("2026-08-12T00:00:00Z");
     queue.enqueue(patchSessionStep(emptySession(), 16, { research_question: "first" }));
     const firstSave = queue.drain();
     const latest = patchSessionStep(emptySession(), 16, { research_question: "latest" });
@@ -110,6 +117,7 @@ describe("session helpers", () => {
 
     const retry = queue.drain();
     expect(values).toEqual(["first", "latest"]);
+    expect(bases).toEqual(["2026-08-12T00:00:00Z", "2026-08-12T00:00:00Z"]);
     requests[1].resolve(response(latest));
     await retry;
     expect(errors).toHaveLength(1);

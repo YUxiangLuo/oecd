@@ -65,6 +65,9 @@ function spreadDomain(arr: number[]): readonly [number, number] {
   return [lo >= 0 ? Math.max(0, lo - pad) : lo - pad, hi + pad] as const;
 }
 
+/** White-background selected-row text; 5.14:1 contrast at small text size. */
+export const RANK_HIGHLIGHT_TEXT = "#c43d3d";
+
 /** 任意指标的排序条形图(学生自选指标 + 对象后驱动) */
 export function RankBarChart({ rows, metricKey, label, format, highlight }: {
   rows: Row[]; metricKey: string; label: string; format?: string; highlight?: Set<string>;
@@ -97,7 +100,7 @@ export function RankBarChart({ rows, metricKey, label, format, highlight }: {
               onMouseMove={(e) => show(e, [["", display], [label, fmtVal(v, format)]])}
               onMouseLeave={hide}>
               <span title={display} style={{ width: 132, flexShrink: 0, fontSize: 11.5,
-                color: hi ? CAT[5] : "#5a6070", fontWeight: hi ? 700 : 400,
+                color: hi ? RANK_HIGHLIGHT_TEXT : "#5a6070", fontWeight: hi ? 700 : 400,
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{display}</span>
               <div style={{ flex: 1, position: "relative", height: 16, background: "#f2f3f7", borderRadius: 5, overflow: "hidden" }}>
                 {domain.negative > 0 && <span aria-hidden style={{ position: "absolute", zIndex: 2, insetBlock: 0, left: `${layout.zeroPct}%`, borderLeft: "1.5px solid #4b5263" }} />}

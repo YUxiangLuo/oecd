@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "./api";
+import { api, isApiErrorStatus } from "./api";
 import { emptySession, patchStep as patchStoredStep, readShared, readStep, writeShared } from "./session-store";
 import type {
   ClassroomReport,
@@ -19,14 +19,18 @@ export interface SessionApi {
   report: ClassroomReport | null;
   syncing: boolean;
   syncError: string | null;
+  syncConflict: boolean;
   unsynced: boolean;
   completion: CompletionSummary | null;
+  /** Incremented when a server conflict deliberately replaces all local step state. */
+  workspaceGeneration: number;
   getStep: <T>(step: number) => T | undefined;
   getConfirmedStep: <T>(step: number) => T | undefined;
   patchStep: <T extends object>(step: number, patch: Partial<T>) => void;
   getShared: <T>(key: SharedSessionKey) => T | undefined;
   updateShared: <T>(key: SharedSessionKey, apply: (current: T | undefined) => T) => void;
   syncNow: () => Promise<void>;
+  resolveSyncConflict: () => Promise<void>;
   applyReportMutation: (response: ReportMutationResponse) => void;
 }
 
@@ -41,15 +45,29 @@ interface SaveQueueCallbacks {
   onUnsynced: (value: boolean) => void;
 }
 
-/** One mounted student's last-write-wins save queue. */
+/** One mounted student's serialized, optimistic-concurrency save queue. */
 export class SessionSaveQueue {
   private pending: ExperimentSession | null = null;
   private saving: Promise<void> | null = null;
+  private baseUpdatedAt: string | null = null;
 
   constructor(
-    private readonly save: (session: ExperimentSession) => Promise<SessionSaveResponse>,
+    private readonly save: (
+      session: ExperimentSession,
+      baseUpdatedAt: string | null,
+    ) => Promise<SessionSaveResponse>,
     private readonly callbacks: SaveQueueCallbacks,
   ) {}
+
+  setBaseUpdatedAt(value: string | null) {
+    this.baseUpdatedAt = value;
+  }
+
+  discardPending(baseUpdatedAt: string | null) {
+    this.pending = null;
+    this.baseUpdatedAt = baseUpdatedAt;
+    this.callbacks.onUnsynced(false);
+  }
 
   enqueue(session: ExperimentSession) {
     this.pending = session;
@@ -71,13 +89,14 @@ export class SessionSaveQueue {
           this.pending = null;
           let response: SessionSaveResponse;
           try {
-            response = await this.save(next);
+            response = await this.save(next, this.baseUpdatedAt);
           } catch (cause) {
             // Edits made during this request are newer; otherwise retain this snapshot.
             this.pending ??= next;
             this.callbacks.onError(cause);
             throw cause;
           }
+          this.baseUpdatedAt = response.updated_at;
           this.callbacks.onSaved(response, next, this.pending !== null);
         }
       } finally {
@@ -106,14 +125,20 @@ export function useSession(enabled: boolean): SessionApi {
   const [confirmedSession, setConfirmedSession] = useState<ExperimentSession>(emptySession);
   const [report, setReport] = useState<ClassroomReport | null>(null);
   const [completion, setCompletion] = useState<CompletionSummary | null>(null);
+  const [workspaceGeneration, setWorkspaceGeneration] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncConflict, setSyncConflict] = useState(false);
+  const syncConflictRef = useRef(false);
   const [unsynced, setUnsynced] = useState(false);
   const timer = useRef<number | null>(null);
   const queue = useRef<SessionSaveQueue | null>(null);
   if (queue.current === null) {
     queue.current = new SessionSaveQueue(
-      (value) => api.classroom.saveSession({ session: value }),
+      (value, baseUpdatedAt) => api.classroom.saveSession({
+        session: value,
+        base_updated_at: baseUpdatedAt,
+      }),
       {
         onSaved: (response, savedSnapshot, hasNewerPending) => {
           // Track every acknowledged snapshot, but only reconcile the optimistic
@@ -125,8 +150,15 @@ export function useSession(enabled: boolean): SessionApi {
           }
           setCompletion(response.completion);
           setSyncError(null);
+          syncConflictRef.current = false;
+          setSyncConflict(false);
         },
-        onError: (cause) => setSyncError(cause instanceof Error ? cause.message : String(cause)),
+        onError: (cause) => {
+          const conflict = isApiErrorStatus(cause, 409);
+          syncConflictRef.current = conflict;
+          setSyncError(cause instanceof Error ? cause.message : String(cause));
+          setSyncConflict(conflict);
+        },
         onSyncing: setSyncing,
         onUnsynced: setUnsynced,
       },
@@ -145,11 +177,14 @@ export function useSession(enabled: boolean): SessionApi {
     api.classroom.session().then(
       (response) => {
         if (!live) return;
+        queue.current?.setBaseUpdatedAt(response.updated_at ?? null);
         replace(response.session);
         setConfirmedSession(response.session);
         setCompletion(response.completion);
         setReport(response.report);
         setSyncError(null);
+        syncConflictRef.current = false;
+        setSyncConflict(false);
         setStatus("ready");
       },
       (cause) => {
@@ -170,20 +205,46 @@ export function useSession(enabled: boolean): SessionApi {
     const next = apply(sessionRef.current);
     replace(next);
     queue.current?.enqueue(next);
-    setSyncError(null);
+    if (!syncConflictRef.current) setSyncError(null);
     if (timer.current != null) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => {
-      timer.current = null;
-      void drain().catch(() => {});
-    }, SYNC_DEBOUNCE_MS);
+    if (!syncConflictRef.current) {
+      timer.current = window.setTimeout(() => {
+        timer.current = null;
+        void drain().catch(() => {});
+      }, SYNC_DEBOUNCE_MS);
+    }
   }, [drain, enabled, replace, status]);
 
   const syncNow = useCallback(async () => {
     if (timer.current != null) window.clearTimeout(timer.current);
     timer.current = null;
     if (status !== "ready") throw new Error("当前无法连接教学服务，不能确认实验记录已保存");
+    if (syncConflict) throw new Error("请先载入服务器版本，再重新操作本页更改");
     await drain();
-  }, [drain, status]);
+  }, [drain, status, syncConflict]);
+
+  const resolveSyncConflict = useCallback(async () => {
+    if (!syncConflict) return;
+    setSyncing(true);
+    try {
+      const response = await api.classroom.session();
+      queue.current?.discardPending(response.updated_at ?? null);
+      replace(response.session);
+      setConfirmedSession(response.session);
+      setCompletion(response.completion);
+      setReport(response.report);
+      setSyncError(null);
+      syncConflictRef.current = false;
+      setSyncConflict(false);
+      setWorkspaceGeneration((value) => value + 1);
+      setStatus("ready");
+    } catch (cause) {
+      setSyncError(cause instanceof Error ? cause.message : String(cause));
+      throw cause;
+    } finally {
+      setSyncing(false);
+    }
+  }, [replace, syncConflict]);
 
   const applyReportMutation = useCallback((response: ReportMutationResponse) => {
     setReport(response.report);
@@ -191,13 +252,14 @@ export function useSession(enabled: boolean): SessionApi {
   }, []);
 
   return {
-    status, session, report, syncing, syncError, unsynced, completion,
+    status, session, report, syncing, syncError, syncConflict, unsynced, completion, workspaceGeneration,
     getStep: useCallback(<T,>(step: number) => readStep<T>(session, step), [session]),
     getConfirmedStep: useCallback(<T,>(step: number) => readStep<T>(confirmedSession, step), [confirmedSession]),
     patchStep: useCallback(<T extends object,>(step: number, patch: Partial<T>) => update((value) => patchStoredStep(value, step, patch)), [update]),
     getShared: useCallback(<T,>(key: SharedSessionKey) => readShared<T>(session, key), [session]),
     updateShared: useCallback(<T,>(key: SharedSessionKey, apply: (current: T | undefined) => T) => update((value) => updateSessionShared(value, key, apply)), [update]),
     syncNow,
+    resolveSyncConflict,
     applyReportMutation,
   };
 }

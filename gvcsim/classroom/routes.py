@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from gvcsim import concurrency, evidence, quizzes
 from gvcsim import session as session_model
 from gvcsim import teaching_report
-from gvcsim.classroom import db
+from gvcsim.classroom import db, records
 
 router = APIRouter(prefix="/api/classroom")
 
@@ -76,6 +76,8 @@ def submit_quiz(req: QuizSubmitRequest, _user: dict = Depends(require_student)):
 
 class SessionRequest(BaseModel):
     session: dict[str, Any]
+    # Required even when null: null means this browser observed no saved row.
+    base_updated_at: datetime | None
 
 
 @router.put("/session")
@@ -84,7 +86,16 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
         payload = session_model.validate_session(req.session)
     except session_model.SessionError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    saved = db.save_session(user["sub"], payload)
+    try:
+        saved = db.save_session(user["sub"], payload, req.base_updated_at)
+    except records.SessionChanged as error:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "检测到其他标签页已保存更新；为避免覆盖，本页更改尚未写入。请载入服务器版本后重新操作。",
+                "code": "session_changed",
+            },
+        ) from error
     if saved is None:
         raise HTTPException(status_code=404, detail="学生账号不存在")
     report_exists = db.latest_report(user["sub"]) is not None

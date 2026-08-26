@@ -175,14 +175,23 @@ export function StudentWorkspace({
             {session.syncError && (
               <div className="error-box persistent-qc-warning" role="alert">
                 <b>实验记录尚未同步到服务器。</b>
-                <p>{session.syncError} 本地记录仍在，可以直接重试。</p>
+                <p>
+                  {session.syncError}{" "}
+                  {session.syncConflict
+                    ? "本页未保存内容仍在当前画面中；载入服务器版本后，请重新执行本页操作。"
+                    : "本地记录仍在，可以直接重试。"}
+                </p>
                 <button
                   type="button"
                   className="secondary"
                   disabled={session.syncing}
-                  onClick={() => { void session.syncNow().catch(() => {}); }}
+                  onClick={() => {
+                    void (session.syncConflict ? session.resolveSyncConflict() : session.syncNow()).catch(() => {});
+                  }}
                 >
-                  {session.syncing ? "正在重试…" : "重试保存"}
+                  {session.syncing
+                    ? session.syncConflict ? "正在载入…" : "正在重试…"
+                    : session.syncConflict ? "载入服务器版本" : "重试保存"}
                 </button>
               </div>
             )}
@@ -207,6 +216,7 @@ export function StudentWorkspace({
                     </details>
                   )}
                   <LabRouter
+                    key={`lab:${step.n}:${session.workspaceGeneration}`}
                     step={step}
                     meta={meta}
                     state={stepState}
@@ -227,7 +237,7 @@ export function StudentWorkspace({
                     getConfirmedStep={session.getConfirmedStep}
                   />
                   <QuizPanel
-                    key={step.n}
+                    key={`quiz:${step.n}:${session.workspaceGeneration}`}
                     step={step}
                     state={stepState}
                     completionBlockedReason={activeCompletionBlockReason}

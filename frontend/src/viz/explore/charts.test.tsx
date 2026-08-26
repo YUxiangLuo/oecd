@@ -1,7 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { LengthViz } from "../steps/step10-length";
-import { CompositionBar, QuadrantScatter, RankBarChart } from "./charts";
+import { CompositionBar, QuadrantScatter, RankBarChart, RANK_HIGHLIGHT_TEXT } from "./charts";
+
+function contrastOnWhite(hex: string): number {
+  const channels = [1, 3, 5].map((index) => Number.parseInt(hex.slice(index, index + 2), 16) / 255);
+  const [r, g, b] = channels.map((value) => value <= 0.04045
+    ? value / 12.92
+    : ((value + 0.055) / 1.055) ** 2.4);
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return 1.05 / (luminance + 0.05);
+}
 
 const rows = [
   { country: "AAA", metric: 0.25, x: 1.25, y: 2.5, a: 4, b: -1, total: 9 },
@@ -30,6 +39,8 @@ describe("Steps 7-9 chart semantic data equivalents", () => {
       />,
     );
     expect(html.match(/data-selected="true"/g)).toHaveLength(1);
+    expect(html).toContain(`color:${RANK_HIGHLIGHT_TEXT}`);
+    expect(contrastOnWhite(RANK_HIGHLIGHT_TEXT)).toBeGreaterThanOrEqual(4.5);
     expect(html).toContain('<th scope="row">SELECTED</th><td>-1.000</td>');
   });
 

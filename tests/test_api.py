@@ -84,24 +84,64 @@ def test_quiz_returns_normalized_answers(teaching_db):
     assert response.json()["quiz"] == correct
 
 
-def test_session_contract_is_last_write_wins(teaching_db):
+def test_session_contract_uses_optimistic_concurrency(teaching_db):
     client = _client(teaching_db)
+    initial = client.get("/api/classroom/session").json()
+    assert initial["updated_at"] is None
+
     first = empty_session()
     first["steps"]["16"] = make_record({"research_question": "学生自己的问题"})
-    saved = client.put("/api/classroom/session", json={"session": first})
+    saved = client.put(
+        "/api/classroom/session", json={"session": first, "base_updated_at": initial["updated_at"]}
+    )
     assert set(saved.json()) == {"session", "updated_at", "completion"}
     assert saved.json()["session"] == first
     assert client.get("/api/classroom/session").json()["session"] == first
 
     second = empty_session()
     second["steps"]["2"] = make_record({"value": 2})
-    client.put("/api/classroom/session", json={"session": second})
+    replaced = client.put(
+        "/api/classroom/session", json={"session": second, "base_updated_at": saved.json()["updated_at"]}
+    )
+    assert replaced.status_code == 200
     assert client.get("/api/classroom/session").json()["session"] == second
+
+    stale = client.put(
+        "/api/classroom/session", json={"session": first, "base_updated_at": saved.json()["updated_at"]}
+    )
+    assert stale.status_code == 409
+    assert stale.json()["detail"]["code"] == "session_changed"
+    assert client.get("/api/classroom/session").json()["session"] == second
+
+
+def test_new_session_race_rejects_second_null_version_write(teaching_db):
+    first_tab = _client(teaching_db)
+    second_tab = _client(teaching_db)
+    assert first_tab.get("/api/classroom/session").json()["updated_at"] is None
+    assert second_tab.get("/api/classroom/session").json()["updated_at"] is None
+    first = make_record({"compared": ["CHN"]})
+    second = make_record({"compared": ["USA"]})
+    first_session = {**empty_session(), "steps": {"7": first}}
+    second_session = {**empty_session(), "steps": {"7": second}}
+
+    assert first_tab.put(
+        "/api/classroom/session", json={"session": first_session, "base_updated_at": None}
+    ).status_code == 200
+    rejected = second_tab.put(
+        "/api/classroom/session", json={"session": second_session, "base_updated_at": None}
+    )
+
+    assert rejected.status_code == 409
+    assert rejected.json()["detail"]["code"] == "session_changed"
+    assert first_tab.get("/api/classroom/session").json()["session"] == first_session
 
 
 def test_invalid_session_version_is_rejected(teaching_db):
     client = _client(teaching_db)
-    response = client.put("/api/classroom/session", json={"session": {"version": "old", "steps": {}, "shared": {}}})
+    response = client.put(
+        "/api/classroom/session",
+        json={"session": {"version": "old", "steps": {}, "shared": {}}, "base_updated_at": None},
+    )
     assert response.status_code == 422
     assert SESSION_VERSION in response.json()["detail"]
 

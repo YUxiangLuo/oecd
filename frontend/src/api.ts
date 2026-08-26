@@ -33,6 +33,10 @@ class ApiError extends Error {
   }
 }
 
+export function isApiErrorStatus(cause: unknown, status: number): boolean {
+  return cause instanceof ApiError && cause.status === status;
+}
+
 type QueryValue = string | number | boolean | null | undefined;
 
 /** 所有查询参数统一在这里编码，避免国家/行业代码中的 &、+ 等字符破坏 URL。 */
@@ -294,7 +298,7 @@ export const api = {
         quiz?: { version: string; answers: Record<string, string> };
       }>("/api/classroom/quiz/submit", body),
     session: () => get<SessionResponse>("/api/classroom/session"),
-    saveSession: (body: { session: ExperimentSession }) =>
+    saveSession: (body: { session: ExperimentSession; base_updated_at: string | null }) =>
       post<SessionSaveResponse>("/api/classroom/session", body, "PUT"),
     submitReport: () => post<ReportMutationResponse>("/api/classroom/report/submit"),
     generateReport: () => post<ReportMutationResponse>("/api/classroom/report/generate"),

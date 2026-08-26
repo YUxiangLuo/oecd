@@ -23,6 +23,15 @@ class ReportChanged(RuntimeError):
     pass
 
 
+class SessionChanged(RuntimeError):
+    """The browser attempted to replace a session version that is no longer current."""
+
+    pass
+
+
+_UNCONDITIONAL_SESSION_WRITE = object()
+
+
 def _student(c: psycopg.Connection[dict[str, Any]], username: str) -> dict[str, Any] | None:
     return c.execute("SELECT id,username FROM accounts WHERE username=%s AND role='student'", (username,)).fetchone()
 
@@ -41,19 +50,47 @@ def get_session(username: str) -> dict[str, Any] | None:
         ).fetchone()
 
 
-def save_session(username: str, session: dict[str, Any]) -> dict[str, Any] | None:
-    """Replace the student's current session; the latest request wins."""
+def save_session(
+    username: str,
+    session: dict[str, Any],
+    expected_updated_at: datetime | None | object = _UNCONDITIONAL_SESSION_WRITE,
+) -> dict[str, Any] | None:
+    """Persist a session, optionally rejecting a stale whole-session replacement.
+
+    Internal maintenance callers may omit ``expected_updated_at``. The classroom
+    HTTP route always supplies the version observed by that browser, including
+    ``None`` when no row existed yet, so two tabs cannot silently overwrite one
+    another.
+    """
     release_id = database.current_release_id()
+    encoded = json.dumps(session, ensure_ascii=False)
     with database.conn() as c:
         account = _student(c, username)
         if not account:
             return None
-        return c.execute(
-            "INSERT INTO experiment_sessions(account_id,release_id,session) VALUES (%s,%s,%s)"
-            " ON CONFLICT (account_id,release_id) DO UPDATE SET session=EXCLUDED.session,updated_at=now()"
-            " RETURNING updated_at",
-            (account["id"], release_id, json.dumps(session, ensure_ascii=False)),
-        ).fetchone()
+        if expected_updated_at is _UNCONDITIONAL_SESSION_WRITE:
+            return c.execute(
+                "INSERT INTO experiment_sessions(account_id,release_id,session) VALUES (%s,%s,%s)"
+                " ON CONFLICT (account_id,release_id) DO UPDATE"
+                " SET session=EXCLUDED.session,updated_at=clock_timestamp()"
+                " RETURNING updated_at",
+                (account["id"], release_id, encoded),
+            ).fetchone()
+        if expected_updated_at is None:
+            saved = c.execute(
+                "INSERT INTO experiment_sessions(account_id,release_id,session) VALUES (%s,%s,%s)"
+                " ON CONFLICT (account_id,release_id) DO NOTHING RETURNING updated_at",
+                (account["id"], release_id, encoded),
+            ).fetchone()
+        else:
+            saved = c.execute(
+                "UPDATE experiment_sessions SET session=%s,updated_at=clock_timestamp()"
+                " WHERE account_id=%s AND release_id=%s AND updated_at=%s RETURNING updated_at",
+                (encoded, account["id"], release_id, expected_updated_at),
+            ).fetchone()
+        if saved is None:
+            raise SessionChanged("实验记录已被另一个标签页更新")
+        return saved
 
 
 _REPORT_COLUMNS = (
