@@ -42,6 +42,10 @@ def _write_release_raw_fixture(raw_dir: Path) -> Path:
 
 @pytest.fixture(autouse=True)
 def _isolated_release_raw_source(tmp_path, monkeypatch):
+    # This module intentionally exercises its own compact raw contract. The
+    # workflow-wide synthetic flag applies only to the generated repository
+    # fixture, never to arbitrary per-test raw directories without its marker.
+    monkeypatch.delenv("GVCSIM_CI_SYNTHETIC", raising=False)
     raw_dir = tmp_path.parent / f"{tmp_path.name}-raw"
     _write_release_raw_fixture(raw_dir)
     monkeypatch.setattr(config, "RAW_DATA_DIR", raw_dir)

@@ -66,7 +66,10 @@ def test_raw_file_validator_uses_unique_year_resolver(tmp_path: Path):
         icio_browser.validate_raw_files([2020], tmp_path, FIXTURE_CONTRACT)
 
 
-def test_raw_file_validator_rejects_non_regular_and_unreadable_files(tmp_path: Path):
+def test_raw_file_validator_rejects_non_regular_and_unreadable_files(tmp_path: Path, monkeypatch):
+    # The temporary directory is deliberately malformed and has no CI marker;
+    # the repository-wide CI synthetic flag must not mask the file-type errors.
+    monkeypatch.delenv("GVCSIM_CI_SYNTHETIC", raising=False)
     directory = tmp_path / "ICIO2023_2019.csv"
     directory.mkdir()
     with pytest.raises(OSError, match="普通文件"):

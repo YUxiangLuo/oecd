@@ -22,6 +22,9 @@ REPORT_RAW_CONTRACT = DimensionContract(
 
 @pytest.fixture(autouse=True)
 def _isolated_report_release_raw_source(tmp_path, monkeypatch):
+    # Report tests build a separate compact raw contract; do not misclassify
+    # that unmarked temporary directory as the workflow's CI synthetic source.
+    monkeypatch.delenv("GVCSIM_CI_SYNTHETIC", raising=False)
     raw_dir = tmp_path.parent / f"{tmp_path.name}-raw"
     raw_dir.mkdir()
     payload = "\n".join(
