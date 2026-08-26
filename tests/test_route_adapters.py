@@ -318,6 +318,15 @@ def test_shock_filters_distinguish_nonzero_from_authoritative_treated(monkeypatc
     assert nonzero["total"] == all_rows["total"] == legacy["total"] == 3
     assert summary["treated_pairs"] == 1
     assert summary["nonzero_pairs"] == 3
+    empty_treated = data_routes.shock_panel(2020, "sanctions", country="LOW", filter="treated")
+    assert empty_treated["total"] == 0
+    assert empty_treated["rows"] == []
+    zero = frame.iloc[[0]].copy()
+    zero[["sanction_shock", "sanction_treated"]] = 0
+    monkeypatch.setattr(data_routes, "_read_shocks", lambda: zero.copy())
+    empty_nonzero = data_routes.shock_panel(2020, "sanctions", filter="nonzero")
+    assert empty_nonzero["total"] == 0
+    assert empty_nonzero["rows"] == []
     with pytest.raises(HTTPException, match="不能同时"):
         data_routes.shock_panel(2020, "sanctions", filter="treated", only_hit=True)
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, isApiErrorStatus } from "./api";
-import { emptySession, patchStep as patchStoredStep, readShared, readStep, writeShared } from "./session-store";
+import { emptySession, isValidSession, patchStep as patchStoredStep, readShared, readStep, writeShared } from "./session-store";
 import type {
   ClassroomReport,
   CompletionSummary,
@@ -11,6 +11,62 @@ import type {
 } from "./types";
 
 const SYNC_DEBOUNCE_MS = 800;
+export const AUTH_RECOVERY_KEY = "gvcsim_unsynced_session_recovery_v1";
+
+type RecoveryStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+export interface AuthSessionRecovery {
+  version: 1;
+  username: string;
+  session: ExperimentSession;
+  base_updated_at: string | null;
+}
+
+export function saveAuthSessionRecovery(
+  storage: RecoveryStorage,
+  username: string,
+  session: ExperimentSession,
+  baseUpdatedAt: string | null,
+): boolean {
+  const recovery: AuthSessionRecovery = {
+    version: 1,
+    username,
+    session,
+    base_updated_at: baseUpdatedAt,
+  };
+  try {
+    storage.setItem(AUTH_RECOVERY_KEY, JSON.stringify(recovery));
+    return true;
+  } catch {
+    // Storage quota/privacy failures must never prevent fail-closed logout.
+    return false;
+  }
+}
+
+export function readAuthSessionRecovery(
+  storage: RecoveryStorage,
+  username: string,
+): AuthSessionRecovery | null {
+  const raw = storage.getItem(AUTH_RECOVERY_KEY);
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<AuthSessionRecovery>;
+    if (
+      value.version !== 1
+      || value.username !== username
+      || !isValidSession(value.session)
+      || (value.base_updated_at !== null && typeof value.base_updated_at !== "string")
+    ) return null;
+    return value as AuthSessionRecovery;
+  } catch {
+    return null;
+  }
+}
+
+export function clearAuthSessionRecovery(storage: RecoveryStorage): void {
+  storage.removeItem(AUTH_RECOVERY_KEY);
+}
+
 export type SessionStatus = "loading" | "ready" | "unavailable";
 
 export interface SessionApi {
@@ -21,6 +77,7 @@ export interface SessionApi {
   syncError: string | null;
   syncConflict: boolean;
   unsynced: boolean;
+  authRecoveryAvailable: boolean;
   completion: CompletionSummary | null;
   /** Incremented when a server conflict deliberately replaces all local step state. */
   workspaceGeneration: number;
@@ -30,6 +87,9 @@ export interface SessionApi {
   getShared: <T>(key: SharedSessionKey) => T | undefined;
   updateShared: <T>(key: SharedSessionKey, apply: (current: T | undefined) => T) => void;
   syncNow: () => Promise<void>;
+  stashAuthRecovery: (username: string) => boolean;
+  restoreAuthRecovery: () => Promise<void>;
+  discardAuthRecovery: () => void;
   resolveSyncConflict: () => Promise<void>;
   applyReportMutation: (response: ReportMutationResponse) => void;
 }
@@ -61,6 +121,10 @@ export class SessionSaveQueue {
 
   setBaseUpdatedAt(value: string | null) {
     this.baseUpdatedAt = value;
+  }
+
+  getBaseUpdatedAt(): string | null {
+    return this.baseUpdatedAt;
   }
 
   discardPending(baseUpdatedAt: string | null) {
@@ -118,7 +182,7 @@ export function updateSessionShared<T>(session: ExperimentSession, key: SharedSe
   return writeShared(session, key, apply(readShared<T>(session, key)));
 }
 
-export function useSession(enabled: boolean): SessionApi {
+export function useSession(enabled: boolean, username?: string): SessionApi {
   const [status, setStatus] = useState<SessionStatus>(enabled ? "loading" : "unavailable");
   const [session, setSession] = useState<ExperimentSession>(emptySession);
   const sessionRef = useRef(session);
@@ -131,6 +195,8 @@ export function useSession(enabled: boolean): SessionApi {
   const [syncConflict, setSyncConflict] = useState(false);
   const syncConflictRef = useRef(false);
   const [unsynced, setUnsynced] = useState(false);
+  const [authRecovery, setAuthRecovery] = useState<AuthSessionRecovery | null>(null);
+  const authRecoveryRef = useRef<AuthSessionRecovery | null>(null);
   const timer = useRef<number | null>(null);
   const queue = useRef<SessionSaveQueue | null>(null);
   if (queue.current === null) {
@@ -185,6 +251,9 @@ export function useSession(enabled: boolean): SessionApi {
         setSyncError(null);
         syncConflictRef.current = false;
         setSyncConflict(false);
+        const recovery = username ? readAuthSessionRecovery(sessionStorage, username) : null;
+        authRecoveryRef.current = recovery;
+        setAuthRecovery(recovery);
         setStatus("ready");
       },
       (cause) => {
@@ -194,7 +263,7 @@ export function useSession(enabled: boolean): SessionApi {
       },
     );
     return () => { live = false; };
-  }, [enabled, replace]);
+  }, [enabled, replace, username]);
 
   const drain = useCallback(async () => {
     await queue.current?.drain();
@@ -222,6 +291,40 @@ export function useSession(enabled: boolean): SessionApi {
     if (syncConflict) throw new Error("请先载入服务器版本，再重新操作本页更改");
     await drain();
   }, [drain, status, syncConflict]);
+
+  const stashAuthRecovery = useCallback((accountUsername: string) => {
+    if (!enabled || !unsynced) return false;
+    return saveAuthSessionRecovery(
+      sessionStorage,
+      accountUsername,
+      sessionRef.current,
+      queue.current?.getBaseUpdatedAt() ?? null,
+    );
+  }, [enabled, unsynced]);
+
+  const restoreAuthRecovery = useCallback(async () => {
+    const recovery = authRecoveryRef.current;
+    if (!recovery || recovery.username !== username) return;
+    replace(recovery.session);
+    setWorkspaceGeneration((value) => value + 1);
+    queue.current?.setBaseUpdatedAt(recovery.base_updated_at);
+    queue.current?.enqueue(recovery.session);
+    try {
+      await drain();
+      clearAuthSessionRecovery(sessionStorage);
+      authRecoveryRef.current = null;
+      setAuthRecovery(null);
+    } catch (cause) {
+      setSyncError(cause instanceof Error ? cause.message : String(cause));
+      throw cause;
+    }
+  }, [drain, replace, username]);
+
+  const discardAuthRecovery = useCallback(() => {
+    clearAuthSessionRecovery(sessionStorage);
+    authRecoveryRef.current = null;
+    setAuthRecovery(null);
+  }, []);
 
   const resolveSyncConflict = useCallback(async () => {
     if (!syncConflict) return;
@@ -252,13 +355,18 @@ export function useSession(enabled: boolean): SessionApi {
   }, []);
 
   return {
-    status, session, report, syncing, syncError, syncConflict, unsynced, completion, workspaceGeneration,
+    status, session, report, syncing, syncError, syncConflict, unsynced,
+    authRecoveryAvailable: authRecovery !== null,
+    completion, workspaceGeneration,
     getStep: useCallback(<T,>(step: number) => readStep<T>(session, step), [session]),
     getConfirmedStep: useCallback(<T,>(step: number) => readStep<T>(confirmedSession, step), [confirmedSession]),
     patchStep: useCallback(<T extends object,>(step: number, patch: Partial<T>) => update((value) => patchStoredStep(value, step, patch)), [update]),
     getShared: useCallback(<T,>(key: SharedSessionKey) => readShared<T>(session, key), [session]),
     updateShared: useCallback(<T,>(key: SharedSessionKey, apply: (current: T | undefined) => T) => update((value) => updateSessionShared(value, key, apply)), [update]),
     syncNow,
+    stashAuthRecovery,
+    restoreAuthRecovery,
+    discardAuthRecovery,
     resolveSyncConflict,
     applyReportMutation,
   };

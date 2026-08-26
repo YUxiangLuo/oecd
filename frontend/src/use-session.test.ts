@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { emptySession, readShared, readStep } from "./session-store";
 import type { ExperimentSession, SessionSaveResponse } from "./types";
-import { SessionSaveQueue, patchSessionStep, updateSessionShared } from "./use-session";
+import {
+  AUTH_RECOVERY_KEY,
+  SessionSaveQueue,
+  clearAuthSessionRecovery,
+  patchSessionStep,
+  readAuthSessionRecovery,
+  saveAuthSessionRecovery,
+  updateSessionShared,
+} from "./use-session";
 
 function response(session: ExperimentSession = emptySession()): SessionSaveResponse {
   return {
@@ -19,6 +27,45 @@ function deferred<T>() {
 }
 
 describe("session helpers", () => {
+  test("stores an unsynced recovery only for the same reauthenticated account", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    const draft = patchSessionStep(emptySession(), 16, { research_question: "未保存问题" });
+
+    saveAuthSessionRecovery(storage, "student-a", draft, "2026-08-12T00:00:00Z");
+    expect(readAuthSessionRecovery(storage, "student-a")).toEqual({
+      version: 1,
+      username: "student-a",
+      session: draft,
+      base_updated_at: "2026-08-12T00:00:00Z",
+    });
+    expect(readAuthSessionRecovery(storage, "student-b")).toBeNull();
+    clearAuthSessionRecovery(storage);
+    expect(values.has(AUTH_RECOVERY_KEY)).toBe(false);
+  });
+
+  test("a storage quota failure cannot block fail-closed authentication handling", () => {
+    const storage = {
+      getItem: () => null,
+      setItem: () => { throw new DOMException("quota", "QuotaExceededError"); },
+      removeItem: () => {},
+    };
+    expect(saveAuthSessionRecovery(storage, "student", emptySession(), null)).toBe(false);
+  });
+
+  test("rejects malformed auth recovery instead of mounting it as a session", () => {
+    const storage = {
+      getItem: () => JSON.stringify({ version: 1, username: "student", session: { version: "forged" }, base_updated_at: null }),
+      setItem: () => {},
+      removeItem: () => {},
+    };
+    expect(readAuthSessionRecovery(storage, "student")).toBeNull();
+  });
+
   test("composes step and shared patches", () => {
     let session = patchSessionStep(emptySession(), 7, { chart: "quadrant" });
     session = patchSessionStep(session, 7, { metric: "FVA_share" });

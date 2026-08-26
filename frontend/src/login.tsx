@@ -5,10 +5,11 @@
  * 而生产构建绝不能内嵌课堂口令。开关取自 import.meta.env,构建期即为字面量,
  * 未开启时下面这段快捷账号 UI 与口令常量会被一起摇掉,不进产物。
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { LogoMark } from "./brand";
 import type { LoginResponse } from "./types";
+import { userFacingRequestError } from "./user-facing-error";
 
 export const LOGIN_FLOW = ["数据接入", "指标计算", "可视化", "教学实证", "实验报告"];
 
@@ -53,6 +54,11 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
   const [password, setPassword] = useState(demoMode ? DEMO_PASSWORD : "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const submitRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (error) submitRef.current?.focus();
+  }, [error]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,7 +67,7 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
     try {
       onLogin(await api.login(username, password));
     } catch (err) {
-      setError(String((err as Error).message));
+      setError(userFacingRequestError(err, "登录失败"));
       setBusy(false);
     }
   };
@@ -135,8 +141,8 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
             id="login-pass" className="login-input" type="password" value={password} required
             autoComplete="current-password" onChange={(e) => setPassword(e.target.value)}
           />
-          {error && <div className="error-box" style={{ marginTop: 14, padding: "10px 14px" }}>{error}</div>}
-          <button className="login-btn" type="submit" disabled={busy}>
+          {error && <div className="error-box" role="alert" style={{ marginTop: 14, padding: "10px 14px" }}>{error}</div>}
+          <button ref={submitRef} className="login-btn" type="submit" disabled={busy}>
             {busy ? "正在登录…" : "登录"}
           </button>
           <div className="login-hint">

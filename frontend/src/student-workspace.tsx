@@ -172,6 +172,30 @@ export function StudentWorkspace({
           />
 
           <div className="workarea">
+            {session.authRecoveryAvailable && (
+              <div className="warnbox persistent-qc-warning" role="alert">
+                <b>找到上次登录失效前未保存的本地内容。</b>
+                <p>旧令牌不会重试。你可以用当前账号显式恢复并保存这份内容，或放弃它并继续使用服务器版本。</p>
+                <div className="button-row">
+                  <button
+                    type="button"
+                    className="primary"
+                    disabled={session.syncing}
+                    onClick={() => { void session.restoreAuthRecovery().catch(() => {}); }}
+                  >
+                    {session.syncing ? "正在恢复并保存…" : "恢复未保存内容"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={session.syncing}
+                    onClick={session.discardAuthRecovery}
+                  >
+                    放弃本地内容
+                  </button>
+                </div>
+              </div>
+            )}
             {session.syncError && (
               <div className="error-box persistent-qc-warning" role="alert">
                 <b>实验记录尚未同步到服务器。</b>

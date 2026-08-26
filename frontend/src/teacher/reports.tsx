@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ScrollableRegion } from "../a11y";
-import { api } from "../api";
+import { api, isApiErrorStatus } from "../api";
 import { useAsync } from "../labs/shared";
 import { ReportMarkdown } from "../report-renderer-lazy";
 import { showToast } from "../toast";
@@ -16,11 +16,12 @@ export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () =
   const [filter, setFilter] = useState<Filter>("pending");
   const [query, setQuery] = useState("");
   const { data, error } = useAsync<{ reports: TeacherReport[] }>(() => api.classroom.reports(), [refresh]);
-  if (error) return <div className="error-box">{error}</div>;
+  if (error) return <div className="error-box" role="alert">{error}</div>;
   if (openAccountId != null) {
     return <ReportView accountId={openAccountId} grader={user.username} onBack={(changed) => {
       setOpenAccountId(null);
-      if (changed) { setRefresh((value) => value + 1); onGraded?.(); }
+      setRefresh((value) => value + 1);
+      if (changed) onGraded?.();
     }} />;
   }
   const reports = data?.reports ?? [];
@@ -52,17 +53,30 @@ export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () =
 }
 
 function ReportView({ accountId, grader, onBack }: { accountId: number; grader: string; onBack: (changed: boolean) => void }) {
-  const { data, error } = useAsync<TeacherReport>(() => api.classroom.reportDetail(accountId), [accountId]);
-  if (error) return <div className="error-box">{error}</div>;
+  const [refresh, setRefresh] = useState(0);
+  const { data, error } = useAsync<TeacherReport>(() => api.classroom.reportDetail(accountId), [accountId, refresh]);
+  if (error) return <div className="error-box" role="alert">{error}</div>;
   if (!data) return <p className="muted">加载中…</p>;
-  return <GradeView key={`${accountId}-${data.updated_at}`} data={data} grader={grader} onBack={onBack} />;
+  return <GradeView
+    key={`${accountId}-${data.updated_at}`}
+    data={data}
+    grader={grader}
+    onBack={onBack}
+    onReload={() => setRefresh((value) => value + 1)}
+  />;
 }
 
-function GradeView({ data, grader, onBack }: { data: TeacherReport; grader: string; onBack: (changed: boolean) => void }) {
+export function GradeView({ data, grader, onBack, onReload }: {
+  data: TeacherReport;
+  grader: string;
+  onBack: (changed: boolean) => void;
+  onReload: () => void;
+}) {
   const [score, setScore] = useState(data.score == null ? "" : String(data.score));
   const [feedback, setFeedback] = useState(data.feedback);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
   const submit = () => {
     const numeric = Number(score);
     if (score.trim() === "" || !Number.isInteger(numeric) || numeric < 0 || numeric > 100) return setSaveError("分数须为 0-100 的整数");
@@ -70,7 +84,11 @@ function GradeView({ data, grader, onBack }: { data: TeacherReport; grader: stri
     api.classroom.grade(data.account_id, numeric, feedback, data.updated_at).then(() => {
       showToast(`已保存对 ${data.display_name} 的评阅：${numeric} 分`);
       onBack(true);
-    }, (cause) => { setSaving(false); setSaveError(String((cause as Error).message ?? cause)); });
+    }, (cause) => {
+      setSaving(false);
+      setStale(isApiErrorStatus(cause, 409));
+      setSaveError(String((cause as Error).message ?? cause));
+    });
   };
   return (
     <div>
@@ -80,8 +98,9 @@ function GradeView({ data, grader, onBack }: { data: TeacherReport; grader: stri
         <aside className="grade-side"><div className="panel"><div className="panel-head"><span className="panel-ic">🖊️</span>评阅</div>
           <label className="grade-field">分数（0-100）<input type="number" min={0} max={100} value={score} onChange={(event) => { setScore(event.target.value); setSaveError(null); }} /></label>
           <label className="grade-field">评语（可空）<textarea value={feedback} onChange={(event) => { setFeedback(event.target.value); setSaveError(null); }} rows={8} maxLength={4000} /></label>
-          {saveError && <div className="error-box">{saveError}</div>}
-          <button className="primary block" disabled={saving} onClick={submit}>{saving ? "保存中…" : data.state === "graded" ? "更新评阅" : "提交评阅"}</button>
+          {saveError && <div className="error-box" role="alert">{saveError}</div>}
+          {stale && <button className="secondary block" disabled={saving} onClick={onReload}>加载最新报告</button>}
+          <button className="primary block" disabled={saving || stale} onClick={submit}>{saving ? "保存中…" : data.state === "graded" ? "更新评阅" : "提交评阅"}</button>
           <p className="muted">评阅人：{grader}；学生重新生成已提交报告时，旧评分会被清除。</p>
         </div></aside>
       </div>

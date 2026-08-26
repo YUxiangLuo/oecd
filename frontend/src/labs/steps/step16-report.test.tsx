@@ -34,10 +34,11 @@ describe("step 16 report states", () => {
     expect(graded).toContain("证据链完整");
   });
 
-  test("describes reflection length as written vs minimum, not as a max", () => {
-    expect(reflectionCountLabel(0, 40)).toBe("已写 0 字 · 最低 40 字");
-    expect(reflectionCountLabel(30, 40)).toBe("已写 30 字 · 最低 40 字");
-    expect(reflectionCountLabel(83, 40)).toBe("已写 83 字 · 已达最低 40 字");
+  test("shows progress against both the minimum and the hard maximum", () => {
+    expect(reflectionCountLabel(0, 40)).toBe("已写 0 / 2400 字 · 最低 40 字");
+    expect(reflectionCountLabel(30, 40)).toBe("已写 30 / 2400 字 · 最低 40 字");
+    expect(reflectionCountLabel(83, 40)).toBe("已写 83 / 2400 字 · 已达最低 40 字");
+    expect(reflectionCountLabel(2400, 40)).toBe("已写 2400 / 2400 字 · 已达上限");
   });
 
   test("uses resubmission semantics after submission or grading", () => {

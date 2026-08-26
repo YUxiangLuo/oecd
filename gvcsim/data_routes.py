@@ -647,6 +647,9 @@ def shock_panel(
         df = df[df[treated_col] == 1]
     elif shock_filter == "nonzero":
         df = df[finite & intensity.gt(0)]
+    # Rebind the sort vector after filtering. Assigning the pre-filter Series to
+    # an empty frame would align its old index back into a synthetic all-null row.
+    intensity = pd.to_numeric(df[shock_col], errors="coerce")
     df = df.assign(_shock_sort=intensity)
     if shock_sort == "intensity_desc":
         by, ascending = ["_shock_sort", "country", "sector"], [False, True, True]

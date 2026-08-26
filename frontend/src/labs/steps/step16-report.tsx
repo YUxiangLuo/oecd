@@ -15,10 +15,11 @@ interface ReportReflectionState extends Record<string, unknown> {
 
 export const REFLECTION_MAX_LENGTH = 2400;
 
-export function reflectionCountLabel(length: number, min: number): string {
+export function reflectionCountLabel(length: number, min: number, max = REFLECTION_MAX_LENGTH): string {
+  if (length >= max) return `已写 ${max} / ${max} 字 · 已达上限`;
   return length >= min
-    ? `已写 ${length} 字 · 已达最低 ${min} 字`
-    : `已写 ${length} 字 · 最低 ${min} 字`;
+    ? `已写 ${length} / ${max} 字 · 已达最低 ${min} 字`
+    : `已写 ${length} / ${max} 字 · 最低 ${min} 字`;
 }
 
 const REFLECTION_FIELDS: {

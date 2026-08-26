@@ -42,7 +42,10 @@ export default function App() {
   const [showIntro, setShowIntro] = useState(() => sessionStorage.getItem("gvcsim_show_intro") === "1");
   const introTriggerRef = useRef<HTMLButtonElement>(null);
 
-  const session = useSession(user?.role === "student");
+  const session = useSession(
+    user?.role === "student",
+    user?.role === "student" ? user.username : undefined,
+  );
   const currentOutcome = stepsData?.steps.find((step) => step.n === current)?.regression_outcome;
   const regressionSettings =
     (currentOutcome && asRegressionSettingsMap(session.getShared("regression_settings"))[currentOutcome])
@@ -90,8 +93,10 @@ export default function App() {
   }, []);
 
   const logout = useCallback(() => {
-    void session.syncNow().catch(() => {}).finally(() => reloadLoggedOut());
-  }, [reloadLoggedOut, session]);
+    void session.syncNow().catch(() => {
+      if (user?.role === "student") session.stashAuthRecovery(user.username);
+    }).finally(() => reloadLoggedOut());
+  }, [reloadLoggedOut, session, user]);
 
   useEffect(() => {
     const notice = sessionStorage.getItem("gvcsim_auth_notice");
@@ -116,9 +121,16 @@ export default function App() {
   }, [reloadLoggedOut]);
 
   useEffect(() => {
-    const expired = () => reloadLoggedOut("登录已过期，请重新登录。");
+    const preserveUnsyncedStudentWork = () => {
+      if (user?.role === "student") session.stashAuthRecovery(user.username);
+    };
+    const expired = () => {
+      preserveUnsyncedStudentWork();
+      reloadLoggedOut("登录已过期，请重新登录。");
+    };
     const storageChanged = (event: StorageEvent) => {
       if (!isExternalAuthenticationChange(event.key, event.newValue, getActiveAuthToken())) return;
+      preserveUnsyncedStudentWork();
       // 先切断当前页面的请求身份，再重新挂载新账号或登录页。
       setActiveAuthToken(null);
       window.location.reload();
@@ -129,7 +141,7 @@ export default function App() {
       window.removeEventListener("gvcsim-auth-expired", expired);
       window.removeEventListener("storage", storageChanged);
     };
-  }, [reloadLoggedOut]);
+  }, [reloadLoggedOut, session, user]);
 
   useEffect(() => {
     if (!user) return;
