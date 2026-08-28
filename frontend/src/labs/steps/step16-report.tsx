@@ -64,8 +64,10 @@ export function ReportStatus({ report }: { report: ClassroomReport }) {
   );
 }
 
+export const REPORT_GENERATE_FIRST_LABEL = "根据实验记录生成报告";
+
 export function reportGenerateLabel(report: ClassroomReport | null) {
-  if (!report) return "生成实验报告";
+  if (!report) return REPORT_GENERATE_FIRST_LABEL;
   return report.state === "pending" || report.state === "graded" ? "重新生成并提交" : "重新生成报告";
 }
 
@@ -231,7 +233,11 @@ export function ReportLab({
       </section>
 
       <div className="report-actions">
-        <button className="primary" disabled={busy} onClick={() => { void generate(); }}>
+        <button
+          className="primary"
+          disabled={busy}
+          onClick={() => { void generate(); }}
+        >
           {reportGenerateButtonLabel(report, generating, sessionStatus, sessionUnsynced, sessionSyncing)}
         </button>
         {report?.state === "draft" && (

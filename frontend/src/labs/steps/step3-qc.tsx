@@ -30,6 +30,37 @@ const LEONTIEF_DIAGNOSTICS = [
   ["非负性", "检查逆矩阵是否出现违背通常投入产出解释的实质负值。"],
 ] as const;
 
+/** Fetch errors must be retryable from the fail-closed decision, not only the empty table row. */
+export function QcRequestRetryActions({
+  year,
+  icioError,
+  controlError,
+  onRetryIcio,
+  onRetryControls,
+}: {
+  year: number;
+  icioError: string | null;
+  controlError: string | null;
+  onRetryIcio: () => void;
+  onRetryControls: () => void;
+}) {
+  if (!icioError && !controlError) return null;
+  return (
+    <div className="qc-retry-actions">
+      {icioError && (
+        <button type="button" className="secondary" onClick={onRetryIcio}>
+          重试 {year} 年 OECD ICIO 质检
+        </button>
+      )}
+      {controlError && (
+        <button type="button" className="secondary" onClick={onRetryControls}>
+          重试国家-年份控制变量质检
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** 第 2 步只展示数据发布质检；处置边界由本步选择题检查。 */
 export function QcLab({ meta, onNavigateStep, onCompletionBlockChange }: {
   meta: Meta;
@@ -116,6 +147,13 @@ export function QcLab({ meta, onNavigateStep, onCompletionBlockChange }: {
       <div className={completionBlock || qcRelease.fatal.length > 0 ? "warnbox" : "tipbox"} role={completionBlock ? "alert" : "status"} style={{ marginBottom: 16 }}>
         <b>本步决定：{decision}</b>
         <p style={{ marginBottom: 0 }}>下一步只使用通过当前发布门禁的数据计算指标；本步的 Warning / Disclosure 会继续带入第 16 步报告。</p>
+        <QcRequestRetryActions
+          year={year}
+          icioError={error}
+          controlError={controlError}
+          onRetryIcio={icioQuery.retry}
+          onRetryControls={controlsQuery.retry}
+        />
       </div>
       <div className={summary.className} role={summary.blockedReason ? "alert" : "status"} style={{ marginBottom: 16, fontWeight: 700 }}>
         {summary.text}

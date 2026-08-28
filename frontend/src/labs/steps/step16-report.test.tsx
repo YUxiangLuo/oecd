@@ -42,10 +42,37 @@ describe("step 16 report states", () => {
   });
 
   test("uses resubmission semantics after submission or grading", () => {
-    expect(reportGenerateLabel(null)).toBe("生成实验报告");
+    expect(reportGenerateLabel(null)).toBe("根据实验记录生成报告");
     expect(reportGenerateLabel(report("draft"))).toBe("重新生成报告");
     expect(reportGenerateLabel(report("pending"))).toBe("重新生成并提交");
     expect(reportGenerateLabel(report("graded"))).toBe("重新生成并提交");
+  });
+
+  test("keeps the generate action distinguishable from the step title", () => {
+    const stepTitle = "生成实验报告";
+    const first = reportGenerateLabel(null);
+    expect(first).toBe("根据实验记录生成报告");
+    expect(first.includes(stepTitle)).toBe(false);
+    const html = renderToStaticMarkup(<ReportLab
+      state={{
+        data: {},
+        save: () => {},
+        complete: true,
+        syncing: false,
+        syncError: null,
+        syncNow: () => {},
+      }}
+      report={null}
+      reportGate={[]}
+      sessionStatus="ready"
+      sessionUnsynced={false}
+      sessionSyncing={false}
+      onFlushSession={async () => {}}
+      onNavigateStep={() => {}}
+      onReportChanged={() => {}}
+    />);
+    expect(html).toContain(">根据实验记录生成报告<");
+    expect(html).not.toContain("aria-label=");
   });
 
   test("puts restore and save status on the generate button itself", () => {

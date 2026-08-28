@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import type { TeacherReport } from "../types";
-import { GradeView } from "./reports";
+import { renderToStaticMarkup } from "react-dom/server";
+import { GradeView, REPORT_FILTER_LABELS, ReportRowAction, reportRowAction } from "./reports";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -28,6 +29,32 @@ const report: TeacherReport = {
   submitted_at: "2026-08-13T00:01:00Z",
   graded_at: "2026-08-13T00:02:00Z",
 };
+
+describe("report list action names", () => {
+  test("row accessible names contain the visible verb and stay off the filter labels", () => {
+    const pending = reportRowAction({ state: "pending", display_name: "深度测试主学生" });
+    const graded = reportRowAction({ state: "graded", display_name: "深度测试主学生" });
+    expect(pending.visible).toBe("评阅报告");
+    expect(pending.accessible).toBe("评阅报告：深度测试主学生");
+    expect(pending.accessible.includes(pending.visible)).toBe(true);
+    expect(graded.visible).toBe("查看/改评");
+    expect(graded.accessible).toBe("查看/改评：深度测试主学生");
+    expect(graded.accessible.includes(graded.visible)).toBe(true);
+    for (const label of Object.values(REPORT_FILTER_LABELS)) {
+      expect(label.includes(pending.visible)).toBe(false);
+      expect(label.includes(graded.visible)).toBe(false);
+    }
+  });
+
+  test("renders the student-specific accessible name on the row button", () => {
+    const html = renderToStaticMarkup(
+      <ReportRowAction report={{ state: "pending", display_name: "深度测试主学生" }} onOpen={() => {}} />,
+    );
+    expect(html).toContain("aria-label=\"评阅报告：深度测试主学生\"");
+    expect(html).toContain("评阅报告");
+    expect(html).not.toContain(">评阅<");
+  });
+});
 
 describe("stale teacher report recovery", () => {
   test("announces a 409 and offers an explicit latest-report reload", async () => {
