@@ -206,6 +206,92 @@ _DEPS = {
     15: ["介数中心性", "步骤 11 冲击"],
     16: ["保存的实验快照", "回归结果", "方法与限制"],
 }
+
+# Every page exposes the same three-part handoff so a beginning student can
+# locate the current action inside the data → evidence → report chain without
+# adding another course step.
+_HANDOFFS = {
+    1: {
+        "input": "OECD ICIO 2023 版原始 Z、Y 与账户表",
+        "action": "读懂并记录一个“供给方行 × 使用方列”单元格",
+        "output": "把方向、单位和数据版本交给第 2 步质检",
+    },
+    2: {
+        "input": "第 1 步确认的数据结构与当前发布契约",
+        "action": "判断 Fatal、Warning、Disclosure 分别允许怎样继续",
+        "output": "把通过门禁且带披露义务的数据交给第 3–6 步",
+    },
+    3: {
+        "input": "质检通过的 ICIO 出口与增加值账户",
+        "action": "把毛出口拆成国内、国外、重复计算与 TLS 扩展",
+        "output": "保存贸易流指标，供第 7 步比较和第 12 步回归",
+    },
+    4: {
+        "input": "第 2 步放行的增加值与最终需求账户",
+        "action": "把增加值分成纯国内、传统、简单和复杂 GVC",
+        "output": "保存生产分解指标，供第 8 步比较和第 13 步回归",
+    },
+    5: {
+        "input": "投入产出路径、增加值权重与里昂惕夫关系",
+        "action": "区分前向、后向生产长度并计算相对位置",
+        "output": "保存长度指标，供第 9 步比较和第 14 步回归",
+    },
+    6: {
+        "input": "ICIO 中间品流构成的完整有向网络",
+        "action": "区分流量规模（加权度）与拓扑位置（介数）",
+        "output": "保存网络指标，供第 10 步比较和第 15 步回归",
+    },
+    7: {
+        "input": "第 3 步算出的贸易流分解指标",
+        "action": "用至少两个经济体比较 FVA 与出口构成",
+        "output": "把明确的数值比较保存为第 16 步证据",
+    },
+    8: {
+        "input": "第 4 步算出的四类生产分解指标",
+        "action": "比较国家构成并下钻行业异质性",
+        "output": "把生产差异保存为第 16 步证据",
+    },
+    9: {
+        "input": "第 5 步算出的前向、后向长度与 GVCPs",
+        "action": "比较至少两个经济体的链长和上下游位置",
+        "output": "把长度与位置比较保存为第 16 步证据",
+    },
+    10: {
+        "input": "第 6 步算出的流量规模与网络拓扑指标",
+        "action": "先读主要流入/流出，再比较行业加权度和介数",
+        "output": "把国家比较和一条行业介数记录保存到第 16 步",
+    },
+    11: {
+        "input": "公开政策事件事实与课程设定的行业暴露映射",
+        "action": "区分官方事实、教学编码，并检查处理支持度",
+        "output": "形成 country × industry × year 处理变量供第 12–15 步共用",
+    },
+    12: {
+        "input": "第 11 步处理变量 + 第 3 步 FVA 份额",
+        "action": "估计贸易流指标的处理后相对变化并读区间",
+        "output": "保存贸易流估计，交给第 16 步与其余三类并读",
+    },
+    13: {
+        "input": "同一处理与比较方法 + 第 4 步复杂 GVC 份额",
+        "action": "只更换结果变量，估计生产构成的相对变化",
+        "output": "保存生产估计，交给第 16 步并读",
+    },
+    14: {
+        "input": "同一处理与比较方法 + 第 5 步前向 GVC 长度",
+        "action": "只更换结果变量，估计生产长度的相对变化",
+        "output": "保存长度估计，交给第 16 步并读",
+    },
+    15: {
+        "input": "同一处理与比较方法 + 第 6 步介数中心性",
+        "action": "只更换结果变量，估计拓扑位置的相对变化",
+        "output": "保存网络估计，凑齐第 16 步四类证据",
+    },
+    16: {
+        "input": "第 1–15 步实际保存的操作、比较、估计与限制",
+        "action": "用自己的话连接研究问题、证据、解释与局限",
+        "output": "生成可复核、可提交、可由教师反馈的实验报告",
+    },
+}
 for _s in STEPS:
     # ``STEPS`` is intentionally a heterogeneous JSON-ready structure; narrow
     # the one field used as an integer key at this boundary.
@@ -213,3 +299,4 @@ for _s in STEPS:
     if not isinstance(_step_number, int):
         raise TypeError("step.n 必须是整数")
     _s["deps"] = _DEPS[_step_number]
+    _s["handoff"] = _HANDOFFS[_step_number]

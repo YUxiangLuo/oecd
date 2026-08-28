@@ -12,6 +12,7 @@ import type { LoginResponse } from "./types";
 import { userFacingRequestError } from "./user-facing-error";
 
 export const LOGIN_FLOW = ["数据接入", "指标计算", "可视化", "教学实证", "实验报告"];
+export const LOGIN_DATA_LABEL = "OECD ICIO 2023 版 · 数据期 2016–2020";
 
 const DEMO_ACCOUNTS = [
   { username: "student", label: "学生身份", note: "完成 16 步实验" },
@@ -105,7 +106,7 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
           </div>
         </div>
 
-        <div className="login-foot">国际经济学 · 全球价值链实验课程 · OECD ICIO 2016–2020</div>
+        <div className="login-foot">国际经济学 · 全球价值链实验课程 · {LOGIN_DATA_LABEL}</div>
       </div>
 
       <div className="login-panel">

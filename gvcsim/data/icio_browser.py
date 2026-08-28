@@ -125,7 +125,15 @@ def clear_raw_browser_caches() -> None:
 def meta(
     raw_dir: Path = RAW_DATA_DIR,
     contract: DimensionContract | None = None,
+    *,
+    strict_validate: bool = True,
 ) -> dict[str, Any]:
+    """Return browser metadata for the available raw ICIO tables.
+
+    ``strict_validate=False`` is reserved for the API adapter, which first
+    proves that the files are byte-for-byte identical to the already strictly
+    validated active release.  Direct callers retain fail-closed validation.
+    """
     years = available_years(raw_dir)
     files = []
     for year in years:
@@ -145,8 +153,9 @@ def meta(
             "n_columns": 0,
         }
 
-    selected_contract = contract or dimension_contract_for(raw_dir)
-    validate_raw_years(years, raw_dir, selected_contract)
+    if strict_validate:
+        selected_contract = contract or dimension_contract_for(raw_dir)
+        validate_raw_years(years, raw_dir, selected_contract)
     default_year = max(years)
     latest_meta = _meta_for_path(_year_file(default_year, raw_dir))
     return {
@@ -233,6 +242,8 @@ def slice_table(
     page_size: int = 25,
     raw_dir: Path = RAW_DATA_DIR,
     contract: DimensionContract | None = None,
+    *,
+    strict_validate: bool = True,
 ) -> dict[str, Any]:
     if table not in VALID_TABLES:
         raise ValueError(f"table 必须是 {', '.join(VALID_TABLES)}")
@@ -242,7 +253,8 @@ def slice_table(
         raise ValueError("page_size 必须在 1–200 之间")
 
     path = _year_file(year, raw_dir)
-    validate_raw_file(path, contract or dimension_contract_for(raw_dir))
+    if strict_validate:
+        validate_raw_file(path, contract or dimension_contract_for(raw_dir))
     info = _meta_for_path(path)
     countries: list[str] = info["countries"]
     if not countries:

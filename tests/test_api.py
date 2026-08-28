@@ -30,6 +30,11 @@ def test_health_checks_raw_years_before_database(monkeypatch):
         "validate_raw_source_bindings",
         lambda payload, years, raw_dir: calls.append(("raw", payload, years, raw_dir)),
     )
+    monkeypatch.setattr(
+        api_module.icio_browser,
+        "meta",
+        lambda *, strict_validate: calls.append(("browser", strict_validate)),
+    )
     monkeypatch.setattr(api_module.classroom_db, "readiness", lambda: calls.append("db") or {"status": "ok"})
 
     response = TestClient(app).get("/health")
@@ -79,6 +84,36 @@ def test_health_raw_failure_is_unavailable_without_database_check(monkeypatch):
     assert TestClient(app).get("/health/live").json() == {"status": "ok"}
 
 
+def test_startup_data_validation_warms_release_and_raw_bindings(monkeypatch):
+    calls = []
+    monkeypatch.setattr(api_module, "validate_release_cached", lambda path: calls.append(("release", path)))
+    monkeypatch.setattr(api_module, "processed_years", lambda: [2019, 2020])
+    monkeypatch.setattr(
+        api_module,
+        "dataset_metadata",
+        lambda path: calls.append(("metadata", path)) or {"raw_dimensions": {"bound": True}},
+    )
+    monkeypatch.setattr(
+        api_module,
+        "validate_raw_source_bindings",
+        lambda payload, years, raw_dir: calls.append(("raw", payload, years, raw_dir)),
+    )
+    monkeypatch.setattr(
+        api_module.icio_browser,
+        "meta",
+        lambda *, strict_validate: calls.append(("browser", strict_validate)),
+    )
+
+    api_module.validate_startup_data()
+
+    assert calls == [
+        ("release", api_module.PROCESSED_DIR),
+        ("metadata", api_module.PROCESSED_DIR),
+        ("raw", {"bound": True}, [2019, 2020], api_module.RAW_DATA_DIR),
+        ("browser", False),
+    ]
+
+
 def test_quiz_returns_normalized_answers(teaching_db):
     client = _client(teaching_db)
     correct = quizzes.correct_quiz(1)
@@ -95,7 +130,7 @@ def test_session_contract_uses_optimistic_concurrency(teaching_db):
     first = empty_session()
     first["steps"]["16"] = make_record({"research_question": "学生自己的问题"})
     saved = client.put("/api/classroom/session", json={"session": first, "base_updated_at": initial["updated_at"]})
-    assert set(saved.json()) == {"session", "updated_at", "completion"}
+    assert set(saved.json()) == {"session", "updated_at", "completion", "report_gate"}
     assert saved.json()["session"] == first
     assert client.get("/api/classroom/session").json()["session"] == first
 

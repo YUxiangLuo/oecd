@@ -63,6 +63,13 @@ export function QcLab({ meta, onNavigateStep, onCompletionBlockChange }: {
   );
   const completionBlock = summary.blockedReason ?? shockContract.reason;
   const qcRelease = summarizeQcRelease(meta.dataset?.qc);
+  const decision = completionBlock
+    ? `暂不能继续：${completionBlock}`
+    : qcRelease.fatal.length > 0
+      ? "只能在明确 override 的教学边界内继续；正式研究必须先修复 Fatal 并重新发布。"
+      : summary.failures > 0 || qcRelease.requiresDisclosure
+        ? "可以继续，但报告必须披露下列 Warning / Disclosure，并据此限制结论。"
+        : "可以继续：当前发布门禁通过；后续仍须按各指标和模型的解释边界作答。";
   useEffect(() => {
     onCompletionBlockChange?.(completionBlock);
   }, [completionBlock, onCompletionBlockChange]);
@@ -106,12 +113,16 @@ export function QcLab({ meta, onNavigateStep, onCompletionBlockChange }: {
           </dl>
         </div>
       </section>
+      <div className={completionBlock || qcRelease.fatal.length > 0 ? "warnbox" : "tipbox"} role={completionBlock ? "alert" : "status"} style={{ marginBottom: 16 }}>
+        <b>本步决定：{decision}</b>
+        <p style={{ marginBottom: 0 }}>下一步只使用通过当前发布门禁的数据计算指标；本步的 Warning / Disclosure 会继续带入第 16 步报告。</p>
+      </div>
       <div className={summary.className} role={summary.blockedReason ? "alert" : "status"} style={{ marginBottom: 16, fontWeight: 700 }}>
         {summary.text}
       </div>
       <div className={shockContract.valid ? "tipbox" : "warnbox"} role={shockContract.valid ? "status" : "alert"} style={{ marginBottom: 16 }}>
         {shockContract.valid
-          ? "Shock contract v1 已精确验证：treated 使用严格 >0.001 阈值并保留三类完整字段。允许集合包含 OECD ICIO 与显式教学 fallback；“允许”不等于“官方”，实际来源/口径必须以步骤 11 的第六项 provenance QC 为准。"
+          ? `Shock contract v${meta.dataset?.shock_contract?.version} 已精确验证：treated 使用严格 ${meta.dataset?.shock_contract?.treated_operator}${meta.dataset?.shock_contract?.treated_threshold} 阈值并保留三类完整字段。允许集合包含 OECD ICIO 与显式教学 fallback；“允许”不等于“官方”，实际来源/口径必须以步骤 11 的第六项 provenance QC 为准。`
           : shockContract.reason}
       </div>
 

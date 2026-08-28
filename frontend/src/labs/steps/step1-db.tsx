@@ -478,7 +478,12 @@ export function DbSliceTable({
 }
 
 export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
-  const { data: meta, error: metaError } = useAsync<DbMeta>(() => api.dbMeta(), []);
+  const {
+    data: meta,
+    error: metaError,
+    status: metaStatus,
+    retry: retryMeta,
+  } = useAsync<DbMeta>(() => api.dbMeta(), []);
   const [table, setTable] = useState<DbTableKind>("z");
   const [year, setYear] = useState<number | null>(null);
   const [rowCountry, setRowCountry] = useState("");
@@ -568,8 +573,21 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slice, year, table, rowCountry, colCountry, pickedSlice]);
 
-  if (metaError) return <div className="error-box">{metaError}</div>;
-  if (!meta) return <p className="muted">正在读取 OECD ICIO 原始文件索引…</p>;
+  if (metaError) {
+    return (
+      <div className="error-box async-error" role="alert">
+        <span>{userFacingRequestError(metaError, "OECD ICIO 原始文件索引读取失败")}</span>
+        <button type="button" className="secondary" onClick={retryMeta}>重新验证并重试</button>
+      </div>
+    );
+  }
+  if (!meta) {
+    return (
+      <p className="muted" role="status" aria-live="polite" aria-busy={metaStatus === "loading"}>
+        正在验证 OECD ICIO 2023 版原始文件并读取索引；全新部署首次启动会先完成完整性校验…
+      </p>
+    );
+  }
 
   const selectedFile = meta.files.find((f) => f.year === year);
   const pages = slice ? Math.max(1, Math.ceil(slice.total / slice.page_size)) : 1;

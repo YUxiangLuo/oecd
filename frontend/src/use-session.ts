@@ -5,6 +5,7 @@ import type {
   ClassroomReport,
   CompletionSummary,
   ExperimentSession,
+  ReportGateItem,
   ReportMutationResponse,
   SessionSaveResponse,
   SharedSessionKey,
@@ -79,6 +80,8 @@ export interface SessionApi {
   unsynced: boolean;
   authRecoveryAvailable: boolean;
   completion: CompletionSummary | null;
+  /** Server-confirmed missing materials for the step-16 report. */
+  reportGate: ReportGateItem[] | null;
   /** Incremented when a server conflict deliberately replaces all local step state. */
   workspaceGeneration: number;
   getStep: <T>(step: number) => T | undefined;
@@ -189,6 +192,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const [confirmedSession, setConfirmedSession] = useState<ExperimentSession>(emptySession);
   const [report, setReport] = useState<ClassroomReport | null>(null);
   const [completion, setCompletion] = useState<CompletionSummary | null>(null);
+  const [reportGate, setReportGate] = useState<ReportGateItem[] | null>(null);
   const [workspaceGeneration, setWorkspaceGeneration] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -215,6 +219,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
             setSession(response.session);
           }
           setCompletion(response.completion);
+          setReportGate(response.report_gate);
           setSyncError(null);
           syncConflictRef.current = false;
           setSyncConflict(false);
@@ -247,6 +252,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         replace(response.session);
         setConfirmedSession(response.session);
         setCompletion(response.completion);
+        setReportGate(response.report_gate);
         setReport(response.report);
         setSyncError(null);
         syncConflictRef.current = false;
@@ -335,6 +341,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       replace(response.session);
       setConfirmedSession(response.session);
       setCompletion(response.completion);
+      setReportGate(response.report_gate);
       setReport(response.report);
       setSyncError(null);
       syncConflictRef.current = false;
@@ -352,12 +359,13 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const applyReportMutation = useCallback((response: ReportMutationResponse) => {
     setReport(response.report);
     setCompletion(response.completion);
+    setReportGate(response.report_gate);
   }, []);
 
   return {
     status, session, report, syncing, syncError, syncConflict, unsynced,
     authRecoveryAvailable: authRecovery !== null,
-    completion, workspaceGeneration,
+    completion, reportGate, workspaceGeneration,
     getStep: useCallback(<T,>(step: number) => readStep<T>(session, step), [session]),
     getConfirmedStep: useCallback(<T,>(step: number) => readStep<T>(confirmedSession, step), [confirmedSession]),
     patchStep: useCallback(<T extends object,>(step: number, patch: Partial<T>) => update((value) => patchStoredStep(value, step, patch)), [update]),

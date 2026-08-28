@@ -17,6 +17,7 @@ const step = (n: number, lab: Step["lab"]): Step => ({
   concept: "concept",
   tip: "tip",
   deps: [],
+  handoff: { input: "input", action: "action", output: "output" },
 });
 
 const completion: CompletionSummary = {

@@ -13,6 +13,7 @@ const step: Step = {
   concept: "质检",
   tip: "质检",
   deps: [],
+  handoff: { input: "input", action: "action", output: "output" },
   quiz: {
     version: "v1",
     questions: [

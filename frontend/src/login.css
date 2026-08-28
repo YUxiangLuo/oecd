@@ -98,7 +98,7 @@
   font-family: var(--font-display); font-size: 40px;
   margin: 0 0 8px; letter-spacing: 2px; font-weight: 700;
 }
-.intro-lede { font-size: 17px; line-height: 2; opacity: 0.88; max-width: 700px; margin: 16px auto 0; }
+.intro-lede { font-size: 17px; line-height: 2; color: #e8ecf8; max-width: 700px; margin: 16px auto 0; }
 .intro-pipeline { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 36px auto 0; flex-wrap: wrap; max-width: 720px; }
 .intro-chip {
   display: inline-flex; align-items: center; gap: 8px;
@@ -162,7 +162,7 @@
 }
 .intro-step-num { font-family: monospace; color: #9d95f5; font-weight: 700; font-size: 14px; }
 .intro-step-title { font-weight: 600; white-space: nowrap; }
-.intro-step-goal { flex: 1; min-width: 0; opacity: 0.62; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.intro-step-goal { flex: 1; min-width: 0; color: #c6cce0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .intro-step-start {
   margin-left: auto; flex: none; border: 1px solid rgba(255,255,255,.28); color: #fff;
   background: rgba(255,255,255,.08); border-radius: 8px; padding: 5px 9px; cursor: pointer;
@@ -172,7 +172,13 @@
 .intro-slider-label { font-size: 14px; color: #a8b6da; }
 .intro-slider-row input[type="range"] { accent-color: #8d83ff; width: 300px; height: 28px; cursor: pointer; }
 .intro-tau { font-size: 22px; font-weight: 700; min-width: 60px; text-align: left; font-variant-numeric: tabular-nums; }
-.intro-note { font-size: 13px; opacity: 0.58; max-width: 680px; margin: 24px auto 0; line-height: 1.9; }
+.intro-note { font-size: 13px; color: #c7cee4; max-width: 680px; margin: 24px auto 0; line-height: 1.9; }
+.intro-ready-rules {
+  display: grid; gap: 7px; max-width: 760px; margin: 18px auto 0; padding: 14px 18px;
+  border: 1px solid rgba(174, 166, 255, .42); border-radius: 12px;
+  background: rgba(255, 255, 255, .07); color: #e8ecf8;
+  font-size: 13.5px; line-height: 1.65; text-align: left;
+}
 .intro-check {
   width: 76px; height: 76px; border-radius: 50%; margin: 0 auto 28px; color: #8fd3b6;
   border: 2px solid rgba(143, 211, 182, 0.5); background: rgba(143, 211, 182, 0.1);

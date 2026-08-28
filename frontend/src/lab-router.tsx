@@ -5,7 +5,7 @@ import {
   type RegressionSettings,
 } from "./regression";
 import type { SiblingStepData } from "./regression-teach";
-import type { ClassroomReport, Meta, ReportMutationResponse, Step, StepStateApi } from "./types";
+import type { ClassroomReport, Meta, ReportGateItem, ReportMutationResponse, Step, StepStateApi } from "./types";
 import type { SessionStatus } from "./use-session";
 import type { Dispatch, SetStateAction } from "react";
 
@@ -14,6 +14,7 @@ interface LabRouterProps {
   meta: Meta | null;
   state: StepStateApi;
   report: ClassroomReport | null;
+  reportGate: ReportGateItem[] | null;
   sessionStatus: SessionStatus;
   sessionUnsynced: boolean;
   sessionSyncing: boolean;
@@ -36,6 +37,7 @@ export function LabRouter({
   meta,
   state,
   report,
+  reportGate,
   sessionStatus,
   sessionUnsynced,
   sessionSyncing,
@@ -88,6 +90,7 @@ export function LabRouter({
         key="report"
         state={state}
         report={report}
+        reportGate={reportGate}
         sessionStatus={sessionStatus}
         sessionUnsynced={sessionUnsynced}
         sessionSyncing={sessionSyncing}

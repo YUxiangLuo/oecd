@@ -29,6 +29,12 @@ export interface Step {
   concept: string;
   tip: string;
   deps: string[];
+  /** Fixed three-part bridge shown on every existing course step. */
+  handoff: {
+    input: string;
+    action: string;
+    output: string;
+  };
   /** 步骤 1–15 的固定理解检查；第 16 步以报告生成作为完成条件。 */
   quiz?: StepQuiz;
 }
@@ -381,6 +387,7 @@ export interface SessionResponse {
   session: ExperimentSession;
   updated_at?: string | null;
   completion: CompletionSummary;
+  report_gate: ReportGateItem[];
   report: ClassroomReport | null;
 }
 
@@ -389,11 +396,13 @@ export interface SessionSaveResponse {
   session: ExperimentSession;
   updated_at: string;
   completion: CompletionSummary;
+  report_gate: ReportGateItem[];
 }
 
 export interface ReportMutationResponse {
   report: ClassroomReport;
   completion: CompletionSummary;
+  report_gate: ReportGateItem[];
 }
 
 export interface CoefStat {

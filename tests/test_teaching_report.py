@@ -416,7 +416,8 @@ def _complete():
         "column": "USA_D01T02",
         "value": 1.0,
     }
-    session["steps"]["7"]["data"]["compared"] = ["CHN", "USA"]
+    for step in range(3, 11):
+        session["steps"][str(step)]["data"]["compared"] = ["CHN", "USA"]
     session["steps"]["12"]["data"]["run"] = _ok_run("trade")
     session["steps"]["13"]["data"]["run"] = _ok_run("production")
     session["steps"]["14"]["data"]["run"] = _ok_run("length")
@@ -522,6 +523,7 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection():
     blocked = check_gate(empty_session())
     assert set(GATE_STEPS) <= {item["step"] for item in blocked}
     assert any(item["step"] == 1 and "具体单元格" in "".join(item["missing"]) for item in blocked)
+    assert all(any(item["step"] == step and "两个比较对象" in "".join(item["missing"]) for item in blocked) for step in range(3, 11))
     assert any(item["step"] == 7 and "两个比较对象" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 12 and "可报告" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 15 and "可报告" in "".join(item["missing"]) for item in blocked)
@@ -772,7 +774,7 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
     assert "| CHN | 2020 | 0.12 |" in report.markdown
     assert "仅用于探索定位，不限定下游回归样本" in report.markdown
     assert "按所选冲击类型汇总该类型全部已编码事件" in report.markdown
-    assert "## 学生原创分析与反思" in report.markdown
+    assert "## 一页结论：我的问题、证据与局限" in report.markdown
     assert "关税冲击是否改变出口中的外国增加值份额" in report.markdown
 
 

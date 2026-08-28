@@ -40,6 +40,13 @@ export function Step7Network({ meta, step, state }: { meta: Meta; step: Step; st
         <NetworkCentralityDemo />
       </ChartStory>
 
+      <section className="network-demo-bridge" aria-labelledby="network-demo-bridge-title">
+        <h3 id="network-demo-bridge-title">把小网络的直觉带到真实全球图</h3>
+        <div><b>小网络的边</b><span>一条手工连接</span><i aria-hidden="true">→</i><b>真实图的边</b><span>一个国家×行业向另一节点提供的正中间品流</span></div>
+        <div><b>小网络的度</b><span>直接连接条数</span><i aria-hidden="true">→</i><b>真实图先看加权度</b><span>直接连接流量规模，作为经济量基准</span></div>
+        <div><b>小网络的介数</b><span>无权最短路径中介位置</span><i aria-hidden="true">→</i><b>真实图的介数</b><span>仍是拓扑基准；完全国家图会退化为常数，因此只在国家×行业图解释</span></div>
+      </section>
+
       <ChartStory
         eyebrow="计算结果 · 真实全球图"
         title="行业节点中心性表(从 ICIO 网络算出来的)"

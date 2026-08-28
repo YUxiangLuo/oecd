@@ -312,6 +312,11 @@ function VerdictCard({ outcome, response, stale }: {
           （{support.treated_entities} 个含处理后暴露行的实体 · {support.untreated_entities ?? "未记录"} 个估计样本内未暴露实体，后者可能包括冻结 cohort 中仅保留冲击前行的实体）
         </p>
       )}
+      {support && support.untreated_clusters <= 3 && (
+        <div className="reg-sparse-control-warning" role="alert">
+          <b>对照基础很薄：</b>只有 {support.untreated_clusters} 个聚类在估计样本内始终未暴露。即使处理聚类数达到课程停止线，也不能据此认定反事实可信；必须在报告中限制因果表述。
+        </div>
+      )}
       {verdict.warnings.length > 0 && (
         <ul className="verdict-warnings">
           {verdict.warnings.map((reason) => <li key={reason}>{reason}</li>)}
@@ -629,14 +634,14 @@ export function QualifiedRegressionRunCard({
   const statusLabel = cardState === "confirmed"
     ? "已由服务器确认"
     : cardState === "pending"
-      ? "待服务器确认的本地候选结果"
+      ? "估计完成，正在保存到第 16 步"
       : cardState === "failed"
-        ? "仅保存在本地的候选结果"
+        ? "估计完成，但保存失败"
         : "无效的本地回归快照";
   const heading = cardState === "confirmed"
     ? "第 16 步将使用的回归结果"
     : cardState === "pending" || cardState === "failed"
-      ? "等待服务器确认的回归结果"
+      ? "正在确认这份回归结果"
       : "第 16 步不会使用的回归结果";
   const qualificationCopy = !qualified
     ? "这份结果不再满足可报告门槛；第 16 步服务端不会使用它。"
@@ -645,10 +650,10 @@ export function QualifiedRegressionRunCard({
       : sessionSyncError
         ? "同步失败；第16步不会在服务器确认前使用"
         : sessionSyncing
-          ? "正在同步本地候选；服务器确认前，第 16 步不会使用。"
+          ? "估计已经完成，系统正在把完全相同的结果保存到服务器；确认后才会交给第 16 步。"
           : sessionUnsynced
-            ? "本地候选尚未同步；服务器确认前，第 16 步不会使用。"
-            : "本地候选尚未由服务器确认；第 16 步不会使用。";
+            ? "估计已经完成，正在等待自动保存；服务器确认前第 16 步不会使用。"
+            : "估计已经完成，但服务器尚未确认；第 16 步暂不使用。";
   return (
     <section className={`qualified-run-card ${cardState}`} aria-labelledby="qualified-run-title">
       <div className="qualified-run-card-head">
@@ -994,6 +999,7 @@ export function RegressionRunLab({
       <section className="reg-question-card">
         <div className="reg-question-main">
           <span className="reg-section-step">1 · 同一研究问题，本步换指标</span>
+          <p className="reg-causal-boundary"><b>先记住：</b>这是在平行趋势、对照可比且没有未处理混杂等假设下的相对变化估计，不是“政策已经造成结果”的证明。</p>
           <p className="muted">{REGRESSION_QUESTION}</p>
           <h3>{lessonQuestion(outcome, shockType, method)}</h3>
           <div className="reg-learn-this">

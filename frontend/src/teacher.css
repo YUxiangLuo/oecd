@@ -220,4 +220,10 @@
   font-size: 13px; font-family: inherit; width: 100%;
 }
 .grade-field textarea { line-height: 1.6; resize: vertical; }
+.grade-rubric { margin: 0 0 14px; border: 1px solid #e2e4ec; border-radius: 9px; background: #fafbfc; }
+.grade-rubric summary { padding: 9px 10px; cursor: pointer; color: #3a4050; font-size: 12px; font-weight: 700; }
+.grade-rubric ol { margin: 0; padding: 0 12px 10px 30px; }
+.grade-rubric li { padding: 5px 0; color: #626a7b; font-size: 11px; line-height: 1.45; }
+.grade-rubric li b, .grade-rubric li span { display: block; }
+.grade-rubric li b { color: #3b4352; margin-bottom: 2px; }
 .grade-field input:focus, .grade-field textarea:focus { outline: none; border-color: #4b47e0; }

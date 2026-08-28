@@ -10,6 +10,13 @@ import { EmptyState, SearchInput, StatusPill, Toolbar } from "./ui";
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
 type Filter = "pending" | "graded" | "all";
 
+const GRADE_RUBRIC = [
+  ["概念与衔接 · 25", "能说明数据→指标→可视化→处理变量→回归→报告的关系，术语使用准确。"],
+  ["证据使用 · 25", "引用实际保存的比较、点估计和区间，数字与报告快照一致。"],
+  ["识别与边界 · 25", "区分描述、相对变化和因果结论，主动说明拟真冲击、薄对照、外溢与同期冲击。"],
+  ["表达与可复核性 · 25", "研究问题明确，结论、证据与局限相互对应，教师可沿报告记录复核。"],
+] as const;
+
 export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () => void }) {
   const [refresh, setRefresh] = useState(0);
   const [openAccountId, setOpenAccountId] = useState<number | null>(null);
@@ -96,6 +103,12 @@ export function GradeView({ data, grader, onBack, onReload }: {
       <div className="grade-split">
         <div className="grade-doc"><ReportMarkdown markdown={data.markdown} /></div>
         <aside className="grade-side"><div className="panel"><div className="panel-head"><span className="panel-ic">🖊️</span>评阅</div>
+          <details className="grade-rubric" open>
+            <summary>四项评分锚点（建议各 25 分）</summary>
+            <ol>
+              {GRADE_RUBRIC.map(([title, detail]) => <li key={title}><b>{title}</b><span>{detail}</span></li>)}
+            </ol>
+          </details>
           <label className="grade-field">分数（0-100）<input type="number" min={0} max={100} value={score} onChange={(event) => { setScore(event.target.value); setSaveError(null); }} /></label>
           <label className="grade-field">评语（可空）<textarea value={feedback} onChange={(event) => { setFeedback(event.target.value); setSaveError(null); }} rows={8} maxLength={4000} /></label>
           {saveError && <div className="error-box" role="alert">{saveError}</div>}

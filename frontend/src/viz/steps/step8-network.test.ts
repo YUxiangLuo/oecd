@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { addInspectedCountry } from "../../labs/steps/viz/scaffold";
 import {
   NetworkViz,
+  DEFAULT_NETWORK_EDGE_THRESHOLD,
   directedVisibleEdgeText,
   finiteNetworkMetric,
   networkMetricDisplay,
@@ -83,8 +84,10 @@ describe("network threshold semantics", () => {
     }));
     expect(html).toContain("预设地理区域布局（不是社区检测）");
     expect(html).toContain("区域内 / 区域间流向");
-    expect(html).toContain("边流量 ÷ 当前发布 Top 边中的最大流量 ≥ 0%");
+    expect(html).toContain("边流量 ÷ 当前发布 Top 边中的最大流量 ≥ 15%");
     expect(html).toContain("显示 1/1 条已发布 Top 边");
+    expect(html).toContain("显示全部 1 条");
+    expect(DEFAULT_NETWORK_EDGE_THRESHOLD).toBe(0.15);
     expect(html).toContain("完整图上的中心性指标保持不变");
     expect(html).toContain("节点位置采用预设地理区域布局，不是社区检测结果");
   });
@@ -151,7 +154,7 @@ describe("network threshold semantics", () => {
     expect(html).toContain('min="0"');
     expect(html).toContain('max="0.5"');
     expect(html).toContain('step="0.01"');
-    expect(html).toContain('aria-valuetext="0%，相对当前已发布 Top 边最大流量"');
+    expect(html).toContain('aria-valuetext="15%，相对当前已发布 Top 边最大流量"');
   });
 });
 

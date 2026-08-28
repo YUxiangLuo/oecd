@@ -77,6 +77,7 @@ describe("step 16 report states", () => {
         syncNow: () => {},
       }}
       report={report("graded")}
+      reportGate={[]}
       sessionStatus="ready"
       sessionUnsynced={false}
       sessionSyncing={false}

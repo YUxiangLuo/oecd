@@ -93,6 +93,7 @@ export function reportGenerateButtonLabel(
 export function ReportLab({
   state,
   report,
+  reportGate,
   sessionStatus,
   sessionUnsynced,
   sessionSyncing,
@@ -102,6 +103,7 @@ export function ReportLab({
 }: {
   state: StepStateApi;
   report: ClassroomReport | null;
+  reportGate: ReportGateItem[] | null;
   sessionStatus: SessionStatus;
   sessionUnsynced: boolean;
   sessionSyncing: boolean;
@@ -114,6 +116,7 @@ export function ReportLab({
   const [submitting, setSubmitting] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const visibleBlocked = blocked.length > 0 ? blocked : reportGate ?? [];
 
   useEffect(() => { void preloadReportRenderer().catch(() => {}); }, []);
 
@@ -203,6 +206,10 @@ export function ReportLab({
           <p>这些文字会完整进入报告；请引用自己实际保存的比较或回归。</p>
         </div>
         <div className="report-reflection-fields">
+          <div className="report-writing-checklist" role="note">
+            <b>写作自检（字数达标不等于论证完整）</b>
+            <span>① 点名比较对象　② 引用具体数字　③ 解释方向与区间　④ 说明不能推出什么</span>
+          </div>
           {REFLECTION_FIELDS.map((field) => {
             const value = String(reflection[field.key] ?? "");
             const length = value.trim().split(/\s+/).join(" ").length;
@@ -239,7 +246,7 @@ export function ReportLab({
         )}
       </div>
 
-      {blocked.length > 0 && <GateCard blocked={blocked} onNavigateStep={onNavigateStep} />}
+      {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} />}
       {error && <div className="error-box" role="alert">{error}</div>}
 
       {report ? (

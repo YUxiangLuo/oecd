@@ -131,6 +131,19 @@ export function ShockLab({ meta, step, state }: {
         ⚠ {eventsResponse?.disclaimer ?? "正在从当前已验证 release 读取关税出口暴露度来源披露。"}
         政策事件、日期只有在事件卡列出 URL 时才有官方事件来源；ICIO 行业映射与数值强度均为未逐项引证的教学编码。
       </div>
+      <div className="shock-provenance-split" role="note" aria-label="官方事实与教学设定的边界">
+        <div>
+          <b>可由官方来源核实</b>
+          <span>事件名称、宣布/生效日期，以及来源明确列出的产品清单或税率。</span>
+        </div>
+        <div>
+          <b>本课程为了教学而设定</b>
+          <span>产品如何映射到 ICIO 行业、暴露度怎样聚合，以及面板中的数值强度；这些不是官方估计。</span>
+        </div>
+      </div>
+      <p className="shock-beginner-route">
+        <b>建议起点：</b>先选择第一张 301 关税事件卡。右侧每一行回答的是：政策打到哪些产品 × 该国家行业原本有多少出口流向目标市场，因此得到这个国家×行业的教学暴露度。
+      </p>
 
       {!contractState.valid ? (
         <div className="error-box" role="alert">{contractState.reason}</div>

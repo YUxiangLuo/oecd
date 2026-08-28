@@ -17,6 +17,7 @@ import {
 import {
   CourseSidebar,
   StepFooter,
+  StepHandoff,
   StepHeader,
   StepRail,
   StudentTopbar,
@@ -122,6 +123,7 @@ export function StudentWorkspace({
   }
   const visit = visitRef.current.visit;
   const [completionBlock, setCompletionBlock] = useState<CompletionBlockState | null>(null);
+  const [comparisonCarryGeneration, setComparisonCarryGeneration] = useState(0);
   const updateCompletionBlock = useCallback((reason: string | null) => {
     setCompletionBlock({ step: current, visit, reason });
   }, [current, visit]);
@@ -148,6 +150,17 @@ export function StudentWorkspace({
     activeCompletionBlockReason,
   );
   const mainContentId = stepMainContentId(step.n);
+  const currentComparison = session.getStep<{ compared?: string[] }>(step.n)?.compared ?? [];
+  let carriedComparison: string[] = [];
+  if (step.n >= 4 && step.n <= 10 && currentComparison.length < 2) {
+    for (let prior = step.n - 1; prior >= 3; prior -= 1) {
+      const candidates = session.getStep<{ compared?: string[] }>(prior)?.compared;
+      if (Array.isArray(candidates) && candidates.length >= 2) {
+        carriedComparison = candidates.slice(-2);
+        break;
+      }
+    }
+  }
 
   return (
     <>
@@ -168,6 +181,7 @@ export function StudentWorkspace({
             stepsData={stepsData}
             current={current}
             completion={presentationCompletion}
+            reportGate={session.reportGate}
             onNavigate={onNavigateStep}
           />
 
@@ -227,10 +241,29 @@ export function StudentWorkspace({
               totalSteps={totalSteps}
               onNavigate={onNavigateStep}
             />
+            <StepHandoff step={step} />
 
             <div className="content-row">
               <main id={mainContentId} ref={contentRef} className="content" tabIndex={-1}>
                 <div className="content-inner">
+                  {carriedComparison.length >= 2 && (
+                    <div className="comparison-carry" role="note">
+                      <div>
+                        <b>保持同一组比较对象</b>
+                        <span>上一页使用了 {carriedComparison.join(" / ")}；沿用后可在本步继续追踪同一条证据链，也可稍后主动更换。</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => {
+                          stepState.save({ compared: carriedComparison });
+                          setComparisonCarryGeneration((value) => value + 1);
+                        }}
+                      >
+                        沿用并记录到本步
+                      </button>
+                    </div>
+                  )}
                   {/* 已把 concept 并入页内 StepIntro(常驻)的步骤,这里不再重复渲染讲解卡:
                       可视化(isViz)、指标计算(ind)、政策冲击接入(shock);回归自带渐进教学,也跳过。 */}
                   {!isReg && !isViz && step.lab !== "ind" && step.lab !== "shock" && (
@@ -240,11 +273,12 @@ export function StudentWorkspace({
                     </details>
                   )}
                   <LabRouter
-                    key={`lab:${step.n}:${session.workspaceGeneration}`}
+                    key={`lab:${step.n}:${session.workspaceGeneration}:${comparisonCarryGeneration}`}
                     step={step}
                     meta={meta}
                     state={stepState}
                     report={session.report}
+                    reportGate={session.reportGate}
                     sessionStatus={session.status}
                     sessionUnsynced={session.unsynced}
                     sessionSyncing={session.syncing}

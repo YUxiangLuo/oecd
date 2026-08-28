@@ -10,6 +10,11 @@
   border: 1px solid #e5e7ef; border-radius: 12px; background: #fff; padding: 14px 16px;
 }
 .reg-question-card { background: linear-gradient(135deg, #f7f7ff, #fff); border-color: #dcdaf8; }
+.reg-causal-boundary, .reg-sparse-control-warning {
+  padding: 8px 10px; border-radius: 8px; background: #fff5ee;
+  color: #7e431f; font-size: 12px; line-height: 1.6;
+}
+.reg-sparse-control-warning { margin-top: 10px; border: 1px solid #f0c7ac; }
 .reg-question-main h3, .reg-compare-card h3, .reg-guide-card h3 { margin: 5px 0 6px; font-size: 18px; line-height: 1.4; }
 .reg-question-main p, .reg-compare-card p, .reg-guide-card p { margin: 4px 0; line-height: 1.65; }
 .reg-section-step { color: #4b47e0; font-size: 11px; font-weight: 800; letter-spacing: .04em; }
@@ -151,6 +156,11 @@
   background: #fff8e8; border: 1px solid #f3dfae;
 }
 .report-gate-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #3a4050; }
+.report-writing-checklist {
+  grid-column: 1 / -1; display: grid; gap: 4px; padding: 10px 12px;
+  border: 1px solid #d9dded; border-radius: 9px; background: #f7f8fc;
+  color: #3a4050; font-size: 12px; line-height: 1.6;
+}
 .report-gate-badge {
   flex: none; width: 18px; height: 18px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;

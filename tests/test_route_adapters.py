@@ -136,8 +136,12 @@ def test_data_discovery_qc_and_db_adapters(tmp_path, monkeypatch):
     assert data_routes.steps()["steps"]
     assert data_routes.indicators_schema()
 
-    monkeypatch.setattr(data_routes.icio_browser, "meta", lambda: {"years": [2020]})
-    assert data_routes.db_meta() == {"years": [2020]}
+    monkeypatch.setattr(
+        data_routes.icio_browser,
+        "meta",
+        lambda *, strict_validate: {"years": [2020], "strict_validate": strict_validate},
+    )
+    assert data_routes.db_meta() == {"years": [2020], "strict_validate": False}
     with pytest.raises(HTTPException) as missing:
         data_routes.db_slice(2020, page=1, page_size=10)
     assert missing.value.status_code == 404
@@ -182,7 +186,7 @@ def test_db_routes_fail_closed_when_active_raw_bytes_do_not_match_release(monkey
     monkeypatch.setattr(
         data_routes.icio_browser,
         "meta",
-        lambda: pytest.fail("raw browser must not open a mismatched source"),
+        lambda **_kwargs: pytest.fail("raw browser must not open a mismatched source"),
     )
 
     with pytest.raises(ArtifactContractError, match="source binding mismatch"):

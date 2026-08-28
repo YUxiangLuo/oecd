@@ -28,6 +28,29 @@ export function lockFullscreenScroll(
   };
 }
 
+/**
+ * Make every branch outside a nested modal inert without disabling the modal's
+ * own ancestors.  This is the DOM equivalent of portaling the dialog while
+ * preserving the component's live state and request cache.
+ */
+export function isolateFullscreenSiblings(container: HTMLElement) {
+  const changed: Array<{ element: HTMLElement; inert: boolean }> = [];
+  let branch: HTMLElement | null = container;
+  while (branch?.parentElement) {
+    const parent: HTMLElement = branch.parentElement;
+    for (const sibling of Array.from(parent.children)) {
+      if (sibling === branch || !(sibling instanceof HTMLElement)) continue;
+      changed.push({ element: sibling, inert: sibling.inert });
+      sibling.inert = true;
+    }
+    branch = parent;
+    if (parent === document.body) break;
+  }
+  return () => {
+    changed.reverse().forEach(({ element, inert }) => { element.inert = inert; });
+  };
+}
+
 function FullscreenDialogBehavior({
   containerRef,
   initialFocusRef,
@@ -43,7 +66,14 @@ function FullscreenDialogBehavior({
 
   useEffect(() => {
     const courseScroller = containerRef.current?.closest<HTMLElement>(".content") ?? null;
-    return lockFullscreenScroll(document.body, courseScroller);
+    const restoreScroll = lockFullscreenScroll(document.body, courseScroller);
+    const restoreIsolation = containerRef.current
+      ? isolateFullscreenSiblings(containerRef.current)
+      : () => {};
+    return () => {
+      restoreIsolation();
+      restoreScroll();
+    };
   }, [containerRef]);
 
   return null;

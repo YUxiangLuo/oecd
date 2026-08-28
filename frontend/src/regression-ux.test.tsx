@@ -92,6 +92,7 @@ const regressionStep: Step = {
   concept: "",
   tip: "",
   deps: [],
+  handoff: { input: "input", action: "action", output: "output" },
 };
 
 function regressionState(data?: { run?: SavedRegressionRun; qualified_run?: SavedRegressionRun }): StepStateApi {
@@ -235,7 +236,7 @@ describe("preserved qualified regression result", () => {
     );
     expect(html).toContain("已由服务器确认");
     expect(html).toContain("第 16 步将使用的回归结果");
-    expect(html).not.toContain("本地候选尚未同步");
+    expect(html).not.toContain("正在等待自动保存");
     expect(html).toContain("tariff");
     expect(html).toContain("country_industry");
     expect(html).toContain("处理后相对变化");
@@ -259,8 +260,8 @@ describe("preserved qualified regression result", () => {
         onSwitch={() => {}}
       />,
     );
-    expect(pendingHtml).toContain("待服务器确认的本地候选结果");
-    expect(pendingHtml).toContain("本地候选尚未同步");
+    expect(pendingHtml).toContain("估计完成，正在保存到第 16 步");
+    expect(pendingHtml).toContain("正在等待自动保存");
     expect(pendingHtml).not.toContain("已由服务器确认");
     expect(pendingHtml).not.toContain("第 16 步将使用的回归结果");
 
@@ -274,7 +275,7 @@ describe("preserved qualified regression result", () => {
         onSwitch={() => {}}
       />,
     );
-    expect(syncingHtml).toContain("正在同步本地候选");
+    expect(syncingHtml).toContain("系统正在把完全相同的结果保存到服务器");
 
     const failedHtml = renderToStaticMarkup(
       <QualifiedRegressionRunCard

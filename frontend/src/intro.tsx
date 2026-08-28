@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import { useDialogFocus } from "./a11y";
 import { api } from "./api";
 import { LogoMark } from "./brand";
+import { oecdIcioEdition } from "./dataset-label";
 import type { AuthUser, Meta, ShockEvent, StepsResponse } from "./types";
 
 const N_SCENES = 5;
@@ -104,6 +105,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
     ? meta.countries.length - 1
     : meta?.countries.length ?? 76;
   const regionCoverage = `${namedEconomies} 个具名经济体 + ROW 剩余地区账户`;
+  const icioEdition = oecdIcioEdition(meta);
 
   const stages = useMemo(() => {
     if (!stepsData) return [];
@@ -176,7 +178,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
           <span className="intro-card-head">
             <CardIcon kind="icio" />
             <span>
-              <span className="intro-card-title">OECD ICIO 投入产出表</span>
+              <span className="intro-card-title">OECD ICIO{icioEdition ? ` ${icioEdition} 版` : ""}投入产出表</span>
               <span className="intro-card-sub">谁买了谁的东西 —— 全球生产网络与增加值路径的账本</span>
             </span>
             <span className="intro-card-toggle">{openCard === "icio" ? "−" : "+"}</span>
@@ -216,7 +218,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
                 <div key={e.name}>{e.name}({e.effective} 生效)</div>
               ))}
               <div style={{ opacity: 0.7, marginTop: 8 }}>
-                共 {events.length} 组事件,保留行业异质和宣布/生效时间线;真实事件库接入后可直接替换
+                共 {events.length} 组事件，保留行业异质和宣布/生效时间线；接入其他事件库时，仍须满足相同的 country × industry × year 契约、行业映射和来源验证
               </div>
             </div>
           )}
@@ -233,6 +235,8 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
         {stages.map((st) => (
           <button
             key={st.n} className={`intro-stage-tab${stage === st.n ? " on" : ""}`}
+            type="button"
+            aria-pressed={stage === st.n}
             onClick={() => setStage(st.n)}
           >
             {st.n}. {st.name}
@@ -245,7 +249,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
             <span className="intro-step-num">{String(s.n).padStart(2, "0")}</span>
             <span className="intro-step-title">{s.title}</span>
             <span className="intro-step-goal">{s.goal}</span>
-            <button className="intro-step-start" onClick={() => onDone(s.n)}>
+            <button type="button" className="intro-step-start" aria-label={`自由浏览第 ${s.n} 步：${s.title}`} onClick={() => onDone(s.n)}>
               自由浏览此步
             </button>
           </div>
@@ -259,9 +263,9 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
       <h2 className="intro-h2">政策冲击可能如何传导到价值链?</h2>
       <p className="intro-lede">先预测企业最可能怎样调整，再拖动滑块比较一种机制路径。真实方向必须由后续数据与识别设计回答。</p>
       <div className="intro-mechanisms" role="group" aria-label="先选择政策传导机制">
-        <button className={mechanism === "contract" ? "on" : ""} onClick={() => setMechanism("contract")}><b>跨境收缩</b><span>供应链缩短，复杂 GVC 下降</span></button>
-        <button className={mechanism === "reroute" ? "on" : ""} onClick={() => setMechanism("reroute")}><b>贸易转移</b><span>改道第三国，原有链条部分保留</span></button>
-        <button className={mechanism === "offset" ? "on" : ""} onClick={() => setMechanism("offset")}><b>替代性扩张</b><span>新供应商接入，复杂度未必下降</span></button>
+        <button type="button" aria-pressed={mechanism === "contract"} className={mechanism === "contract" ? "on" : ""} onClick={() => setMechanism("contract")}><b>跨境收缩</b><span>供应链缩短，复杂 GVC 下降</span></button>
+        <button type="button" aria-pressed={mechanism === "reroute"} className={mechanism === "reroute" ? "on" : ""} onClick={() => setMechanism("reroute")}><b>贸易转移</b><span>改道第三国，原有链条部分保留</span></button>
+        <button type="button" aria-pressed={mechanism === "offset"} className={mechanism === "offset" ? "on" : ""} onClick={() => setMechanism("offset")}><b>替代性扩张</b><span>新供应商接入，复杂度未必下降</span></button>
       </div>
       <svg viewBox="0 0 640 196" style={{ width: "min(720px, 94%)", margin: "10px auto 0" }}>
         {/* 跨境流:宽度随 τ 收缩 */}
@@ -314,11 +318,11 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
         每一步都配有方法说明、动手面板和小贴士。
       </p>
       {/* 进入前讲清完成规则，避免把浏览位置误认为学习进度。 */}
-      <p className="intro-lede">
-        步骤 1–15 的大纲打勾<b>只表示本步选择题已答对</b>。
-        生成第 16 步报告还需要：步骤 1 记录一个单元格、步骤 3–10 保存至少两个比较对象、步骤 12–15 各保存一次可报告估计（贸易流、生产、长度、网络），以及三段原创分析。
-        切片与回归会自动保存；缺项会在生成时列出。
-      </p>
+      <div className="intro-ready-rules">
+        <b>侧栏会分别显示两种进度：</b>
+        <span>“✓”表示本步理解题已答对；“材✓”表示本步用于报告的材料已经保存。</span>
+        <span>第 1 步记录单元格；第 3–10 步各比较至少两个对象；第 12–15 步各保存一次可报告估计；第 16 步完成三段原创分析。</span>
+      </div>
       <div className="intro-cta-row">
         <button className="intro-cta" onClick={() => onDone(1)}>从第 1 步开始实验</button>
       </div>
@@ -353,14 +357,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
           >
             <NavIcon kind="next" />
           </button>
-        ) : (
-          <button
-            className="intro-side-nav intro-side-nav-next intro-side-nav-start" aria-label="开始实验" title="开始实验"
-            onClick={() => onDone(1)}
-          >
-            <NavIcon kind="start" />
-          </button>
-        )}
+        ) : <span aria-hidden="true" />}
       </div>
       <div className="intro-nav">
         <div className="intro-dots">

@@ -1,12 +1,14 @@
 import type { RefObject } from "react";
 import { AccountPasswordModal } from "./account-password";
 import { LogoMark } from "./brand";
+import { oecdIcioDatasetLabel } from "./dataset-label";
 import { TeacherDashboard } from "./teacher";
 import { ToastHost } from "./toast";
 import type {
   AuthUser,
   CompletionSummary,
   Meta,
+  ReportGateItem,
   Step,
   StepsResponse,
 } from "./types";
@@ -106,7 +108,7 @@ export function TeacherWorkspace({
         </div>
         <div className="topbar-user">
           <span className="muted">
-            数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
+            数据：{oecdIcioDatasetLabel(meta)}
           </span>
           {expiry && <span className="muted">会话至 {expiry}</span>}
           <span className="role-chip" title={`教师账号 · ${user.username}`}>{user.name}</span>
@@ -153,7 +155,7 @@ export function StudentTopbar({
       </div>
       <div className="topbar-user">
         <span className="muted">
-          数据:OECD ICIO {meta?.years.length ? `${meta.years[0]}–${meta.years.at(-1)}` : "(未预计算)"}
+          数据：{oecdIcioDatasetLabel(meta)}
         </span>
         <span className="role-chip" title={`学生账号 · ${user.username}`}>{user.name}</span>
         {expiry && <span className="muted" title="服务端签发的 expires_at">会话至 {expiry}</span>}
@@ -169,14 +171,16 @@ interface CourseSidebarProps {
   stepsData: StepsResponse;
   current: number;
   completion: CompletionSummary | null;
+  reportGate: ReportGateItem[] | null;
   onNavigate: (step: number) => void;
 }
 
-export function CourseSidebar({ stepsData, current, completion, onNavigate }: CourseSidebarProps) {
+export function CourseSidebar({ stepsData, current, completion, reportGate, onNavigate }: CourseSidebarProps) {
   const steps = stepsData.steps;
   const totalSteps = steps.length;
   const stages = [...new Set(steps.map((step) => step.stage))];
   const completedSteps = new Set(completion?.completed ?? []);
+  const missingReportSteps = new Set(reportGate?.map((item) => item.step) ?? []);
   return (
     <aside className="sidebar" aria-label="课程大纲">
       <div className="sidebar-head">
@@ -204,11 +208,13 @@ export function CourseSidebar({ stepsData, current, completion, onNavigate }: Co
             </div>
             {steps.filter((step) => step.stage === stage).map((step) => {
               const done = completedSteps.has(step.n);
+              const materialReady = reportGate !== null && !missingReportSteps.has(step.n);
               const state = done ? "done" : step.n === current ? "cur" : "future";
               const accessibleName = [
                 `第 ${step.n} 步：${step.title}`,
                 step.n === current ? "当前步骤" : null,
                 done ? "已完成" : "未完成",
+                materialReady ? "报告材料已齐" : "报告材料未齐",
               ].filter(Boolean).join("，");
               return (
                 <button
@@ -222,7 +228,9 @@ export function CourseSidebar({ stepsData, current, completion, onNavigate }: Co
                 >
                   <span className={`step-badge ${state}`} aria-hidden="true">{done ? "✓" : step.n}</span>
                   <span className="step-row-title" aria-hidden="true">{step.title}</span>
-                  <span className="step-code" aria-hidden="true">{String(step.n).padStart(2, "0")}</span>
+                  <span className={`step-evidence ${materialReady ? "ready" : "todo"}`} aria-hidden="true">
+                    材{materialReady ? "✓" : "·"}
+                  </span>
                 </button>
               );
             })}
@@ -260,6 +268,25 @@ export function StepHeader({ step, previous, next, stageName, totalSteps, onNavi
           : <span className="muted">已到最后一步</span>}
       </div>
     </div>
+  );
+}
+
+export function StepHandoff({ step }: { step: Step }) {
+  const items = [
+    { label: "来自前一步", value: step.handoff.input },
+    { label: "本步动作", value: step.handoff.action },
+    { label: "带到下一步", value: step.handoff.output },
+  ];
+  return (
+    <section className="step-handoff" aria-label="本步在实验流程中的衔接">
+      {items.map((item, index) => (
+        <div key={item.label}>
+          <span>{item.label}</span>
+          <b>{item.value}</b>
+          {index < items.length - 1 && <i aria-hidden="true">→</i>}
+        </div>
+      ))}
+    </section>
   );
 }
 

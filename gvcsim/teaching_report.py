@@ -50,6 +50,13 @@ _OUTCOME_UNITS = {
     "length": "生产环节长度单位",
     "network": "介数中心性原始单位；跨指标比较时另参考样本标准差单位",
 }
+_STUDENT_METRIC_LABELS = {
+    "FVA_share": "外国增加值份额（FVA 份额）",
+    "3b_VA_GVC_C_share": "复杂 GVC 生产份额",
+    "GVCPs": "GVC 相对位置（GVCPs）",
+    # Keep the legacy schema key in provenance, but never teach its misspelling.
+    "betweenesscentrality": "介数中心性",
+}
 _STATUS_LABELS = {
     "ok": "可报告",
     "warning": "需谨慎解释",
@@ -141,7 +148,6 @@ def check_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
             }
         )
 
-    has_comparison = False
     for step in range(3, 11):
         data = _step_data(session, step)
         compared = {str(item) for item in _list_values(data.get("compared")) if str(item).strip()}
@@ -152,17 +158,14 @@ def check_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
             and item.get("entity", item.get("country")) not in (None, "")
             and item.get("value") not in (None, "")
         ]
-        if len(compared) >= 2 or len(observations) >= 2:
-            has_comparison = True
-            break
-    if not has_comparison:
-        blocked.append(
-            {
-                "step": 7,
-                "title": "指标对比探索",
-                "missing": ["请在步骤 3–10 中保存至少两个比较对象或两条指标观测"],
-            }
-        )
+        if len(compared) < 2 and len(observations) < 2:
+            blocked.append(
+                {
+                    "step": step,
+                    "title": _STEP_TITLES.get(step, ""),
+                    "missing": ["请在本步保存至少两个比较对象或两条指标观测"],
+                }
+            )
 
     qualified_steps = {run["step"] for run in _gate_qualified_runs(session)}
     for step in sorted(_STEP_OUTCOMES):
@@ -873,17 +876,19 @@ def _reflection_value(value: Any) -> str:
 def _reflection_section(session: dict[str, Any]) -> list[str]:
     reflection = _step_data(session, 16)
     return [
-        "## 学生原创分析与反思",
+        "## 一页结论：我的问题、证据与局限",
         "",
-        "### 研究问题",
+        "> 先读这一节即可了解学生的主张；后续章节提供可复核数字、理解检查和技术附录。",
+        "",
+        "### 我的研究问题",
         "",
         _reflection_value(reflection.get("research_question")),
         "",
-        "### 证据解释",
+        "### 我的证据解释",
         "",
         _reflection_value(reflection.get("evidence_interpretation")),
         "",
-        "### 局限与反思",
+        "### 我不能据此推出什么",
         "",
         _reflection_value(reflection.get("limitations")),
         "",
@@ -973,7 +978,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             lines.append(f"- 主动比较：{'、'.join(_safe(item) for item in compared)}")
         if observations:
             lines.extend(
-                (f"- 记录指标：`{_safe(data.get('metric', '—'))}`", "", "| 实体 | 年份 | 数值 |", "|---|---:|---:|")
+                (f"- 记录指标：{_STUDENT_METRIC_LABELS.get(str(data.get('metric')), _safe(data.get('metric', '—')))}", "", "| 实体 | 年份 | 数值 |", "|---|---:|---:|")
             )
             for item in observations:
                 observation_value = item.get("value", "—")

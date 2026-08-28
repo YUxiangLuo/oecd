@@ -45,13 +45,21 @@ def _workspace(username: str) -> tuple[dict[str, Any], dict[str, Any] | None, di
     return row["session"] if row else session_model.empty_session(), report, row
 
 
+def _learning_state(session: dict[str, Any], *, report_exists: bool) -> dict[str, Any]:
+    """Authoritative quiz completion and report-material readiness for one snapshot."""
+    return {
+        "completion": evidence.completion_summary(session, report_exists=report_exists),
+        "report_gate": teaching_report.check_gate(session),
+    }
+
+
 @router.get("/session")
 def get_session(user: dict = Depends(require_student)):
     session, report, row = _workspace(user["sub"])
     return {
         "session": session,
         "updated_at": row["updated_at"] if row else None,
-        "completion": evidence.completion_summary(session, report_exists=bool(report)),
+        **_learning_state(session, report_exists=bool(report)),
         "report": report,
     }
 
@@ -102,7 +110,7 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
     return {
         "session": payload,
         "updated_at": saved["updated_at"],
-        "completion": evidence.completion_summary(payload, report_exists=report_exists),
+        **_learning_state(payload, report_exists=report_exists),
     }
 
 
@@ -130,7 +138,7 @@ async def generate_report(user: dict = Depends(require_student)):
     saved["suggested_filename"] = generated.suggested_filename
     return {
         "report": saved,
-        "completion": evidence.completion_summary(session, report_exists=True),
+        **_learning_state(session, report_exists=True),
     }
 
 
@@ -142,7 +150,7 @@ def submit_report(user: dict = Depends(require_student)):
     session, _existing, _row = _workspace(user["sub"])
     return {
         "report": report,
-        "completion": evidence.completion_summary(session, report_exists=True),
+        **_learning_state(session, report_exists=True),
     }
 
 

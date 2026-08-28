@@ -108,9 +108,10 @@ def _validate_active_raw_sources() -> None:
 @router.get("/api/db/meta")
 def db_meta():
     _validate_active_raw_sources()
-    payload = icio_browser.meta()
-    _validate_active_raw_sources()
-    return payload
+    # The active release was strictly validated when published.  Exact source
+    # hashes are checked above, so reparsing five complete wide matrices here
+    # would add latency without adding evidence.
+    return icio_browser.meta(strict_validate=False)
 
 
 @router.get("/api/db/slice")
@@ -136,6 +137,7 @@ def db_slice(
             page=page,
             page_size=page_size,
             raw_dir=RAW_DATA_DIR,
+            strict_validate=False,
         )
         _validate_active_raw_sources()
         return payload

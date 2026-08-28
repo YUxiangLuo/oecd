@@ -20,19 +20,40 @@ from gvcsim.artifacts import ArtifactContractError, dataset_metadata, validate_r
 from gvcsim.classroom import db as classroom_db
 from gvcsim.classroom import routes as classroom_routes
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, processed_years
+from gvcsim.data import icio_browser
 from gvcsim.data.raw_icio import validate_raw_source_bindings
 
 if app_config.IS_PRODUCTION:
     app_config.validate_security_config()
 
 
+def validate_startup_data() -> None:
+    """Validate and warm the immutable teaching release before accepting traffic.
+
+    The raw-source validator hashes each bound ICIO file on the first call and
+    caches the result by exact file identity.  Doing that work in the lifespan
+    keeps a student's first ``/api/db/meta`` request from paying the cold hash
+    cost while preserving the same fail-closed integrity contract.
+    """
+    validate_release_cached(PROCESSED_DIR)
+    years = processed_years()
+    if not years:
+        raise ArtifactContractError("没有完整产物")
+    metadata = dataset_metadata(PROCESSED_DIR)
+    validate_raw_source_bindings(metadata.get("raw_dimensions"), years, RAW_DATA_DIR)
+    # Warm the one-file header/index read needed by Step 1.  At this point the
+    # raw bytes are proven identical to the strictly validated active release.
+    icio_browser.meta(strict_validate=False)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """每个 worker 显式建立/关闭连接池，并限制同步端点线程数。"""
+    """每个 worker 先验证数据并建立连接池，再开始接单。"""
     app_config.validate_capacity_config()
     anyio.to_thread.current_default_thread_limiter().total_tokens = app_config.THREAD_TOKENS
     await anyio.to_thread.run_sync(classroom_db.startup)
     try:
+        await anyio.to_thread.run_sync(validate_startup_data)
         yield
     finally:
         await anyio.to_thread.run_sync(classroom_db.shutdown)

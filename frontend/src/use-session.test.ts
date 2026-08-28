@@ -16,6 +16,7 @@ function response(session: ExperimentSession = emptySession()): SessionSaveRespo
     session,
     updated_at: "2026-08-13T00:00:00Z",
     completion: { completed: [], completed_count: 0, total: 16, steps: [] },
+    report_gate: [],
   };
 }
 
