@@ -978,7 +978,12 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             lines.append(f"- 主动比较：{'、'.join(_safe(item) for item in compared)}")
         if observations:
             lines.extend(
-                (f"- 记录指标：{_STUDENT_METRIC_LABELS.get(str(data.get('metric')), _safe(data.get('metric', '—')))}", "", "| 实体 | 年份 | 数值 |", "|---|---:|---:|")
+                (
+                    f"- 记录指标：{_STUDENT_METRIC_LABELS.get(str(data.get('metric')), _safe(data.get('metric', '—')))}",
+                    "",
+                    "| 实体 | 年份 | 数值 |",
+                    "|---|---:|---:|",
+                )
             )
             for item in observations:
                 observation_value = item.get("value", "—")
