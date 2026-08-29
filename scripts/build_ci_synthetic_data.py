@@ -30,6 +30,7 @@ COUNTRIES = (
     "CAN",
     "CHN",
     "DEU",
+    "IND",  # catalogue imposer (印度对美反制关税); required by the runtime exposure index
     "JPN",
     "KOR",
     "MEX",

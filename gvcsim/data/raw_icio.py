@@ -83,6 +83,7 @@ CI_SYNTHETIC_DIMENSION_CONTRACT = DimensionContract(
         "CAN",
         "CHN",
         "DEU",
+        "IND",
         "JPN",
         "KOR",
         "MEX",
