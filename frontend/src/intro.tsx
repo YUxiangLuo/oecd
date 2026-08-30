@@ -321,7 +321,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
       <div className="intro-ready-rules">
         <b>侧栏会分别显示两种进度：</b>
         <span>“✓”表示本步理解题已答对；“材✓”表示本步用于报告的材料已经保存。</span>
-        <span>第 1 步记录单元格；第 3–10 步各比较至少两个对象；第 12–15 步各保存一次可报告估计；第 16 步完成三段原创分析。</span>
+        <span>第 1 步记录单元格；第 3–6 步各用“记录当前国家”按钮保存两个对象，第 7–10 步各完成指定的显式比较；第 12–15 步各保存一次可报告估计；第 16 步完成三段原创分析。</span>
       </div>
       <div className="intro-cta-row">
         <button className="intro-cta" onClick={() => onDone(1)}>从第 1 步开始实验</button>

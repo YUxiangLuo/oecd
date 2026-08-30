@@ -546,8 +546,12 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection():
     assert set(GATE_STEPS) <= {item["step"] for item in blocked}
     assert any(item["step"] == 1 and "具体单元格" in "".join(item["missing"]) for item in blocked)
     assert all(
+        any(item["step"] == step and "记录当前国家" in "".join(item["missing"]) for item in blocked)
+        for step in range(3, 7)
+    )
+    assert all(
         any(item["step"] == step and "两个比较对象" in "".join(item["missing"]) for item in blocked)
-        for step in range(3, 11)
+        for step in range(7, 11)
     )
     assert any(item["step"] == 7 and "两个比较对象" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 12 and "可报告" in "".join(item["missing"]) for item in blocked)

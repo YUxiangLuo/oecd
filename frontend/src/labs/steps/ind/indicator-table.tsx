@@ -136,7 +136,15 @@ export interface IndicatorStepState extends QuizCompletionState, Record<string, 
   country?: string;
   compared?: string[];
   metric?: string;
-  observations?: { entity: string; value: number; year: number; country: string; industry: string }[];
+  observations?: IndicatorObservation[];
+}
+
+export interface IndicatorObservation {
+  entity: string;
+  value: number;
+  year: number;
+  country: string;
+  industry: string;
 }
 
 const CORE_METRIC: Record<IndicatorGroupKey, string> = {
@@ -177,6 +185,26 @@ export function countryObservation(
     year,
     country,
     industry: "",
+  };
+}
+
+/** Evidence is saved only after an explicit button press; changing filters is browsing. */
+export function indicatorEvidencePatch(
+  saved: Pick<IndicatorStepState, "compared" | "observations"> | undefined,
+  observed: IndicatorObservation,
+  metric: string,
+): Pick<IndicatorStepState, "year" | "country" | "compared" | "metric" | "observations"> {
+  const compared = saved?.compared ?? [];
+  const observations = saved?.observations ?? [];
+  return {
+    year: observed.year,
+    country: observed.country,
+    compared: [...compared.filter((item) => item !== observed.country), observed.country],
+    metric,
+    observations: [
+      ...observations.filter((item) => item.country !== observed.country),
+      observed,
+    ].slice(-2),
   };
 }
 
@@ -340,33 +368,26 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
     ? countryRowsForYear(countryQuery.data, year)
     : null;
 
-  // 换国家对比保存国家级指标，避免误把第一行业当成国家结构。
+  // 筛选只保存当前浏览位置，不能暗中充当报告证据。
   useEffect(() => {
     if (!interacted) return;
     const metric = COUNTRY_METRIC[groupKey] ?? CORE_METRIC[groupKey];
-    if (!country) {
-      state.save({ year, country, metric });
-      return;
-    }
-    if (!countryRows) return;
-    const observed = countryObservation(countryRows, country, year, metric);
-    const compared = state.data?.compared ?? [];
-    const existing = state.data?.observations ?? [];
-    const observations = observed
-      ? [...existing.filter((item) => item.country !== country), observed].slice(-2)
-      : existing;
-    state.save({
-      year,
-      country,
-      compared: [...compared.filter((item) => item !== country), country],
-      metric,
-      observations,
-    });
+    state.save({ year, country, metric });
     // state 每次渲染都是新对象,不入依赖。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [countryRows, country, year, interacted, groupKey]);
+  }, [country, year, interacted, groupKey]);
 
   const group = schema?.groups.find((candidate) => candidate.key === groupKey);
+  const evidenceMetric = COUNTRY_METRIC[groupKey] ?? CORE_METRIC[groupKey];
+  const currentObservation = country && countryRows
+    ? countryObservation(countryRows, country, year, evidenceMetric)
+    : null;
+  const recordedCountries = [...new Set([
+    ...(state.data?.compared ?? []),
+    ...(state.data?.observations ?? []).map((item) => item.country),
+  ])];
+  const recordedCount = Math.min(recordedCountries.length, 2);
+  const currentAlreadyRecorded = Boolean(country && recordedCountries.includes(country));
   const cols = indicatorTableColumns(groupKey, group?.fields ?? [], data?.rows[0], showAllFields);
   const displayRows = groupKey === "network" && country && data
     ? sortNetworkRows(data.rows, networkSort)
@@ -440,16 +461,47 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
         />
       )}
 
-      {(state.data?.observations?.length ?? 0) > 0 && (
-        <div className="observation-strip" role="group" aria-label="已捕获的对比数值">
-          <b>已捕获国家级 {fieldLabel(state.data?.metric ?? "", schema)}</b>
-          {state.data?.observations?.map((item) => (
-            <span key={`${item.year}-${item.entity}`}>
-              {item.year} · {item.industry ? item.entity : countryLabel(item.country)} = {fmtField(item.value, state.data?.metric ?? "", schema)}
-            </span>
-          ))}
+      <section className="indicator-evidence-capture" aria-labelledby={`indicator-evidence-title-${groupKey}`}>
+        <div className="indicator-evidence-copy">
+          <b id={`indicator-evidence-title-${groupKey}`}>报告材料 · 已记录 {recordedCount}/2 个国家</b>
+          <p>国家筛选只切换表格，不会自动保存材料。选择一个具体国家，核对下面的国家级数值，再点击记录；随后切换国家并记录第二条。</p>
+          <p className="indicator-evidence-current" aria-live="polite">
+            {!country
+              ? "当前选择“全部国家”：请先选择一个具体国家。"
+              : countryQuery.status === "loading" || countryQuery.status === "idle"
+                ? "正在加载当前国家的可记录数值…"
+                : countryQuery.status === "error"
+                  ? "国家级对比加载失败；请先重试，成功后再记录。"
+                  : currentObservation
+                    ? `当前待记录：${year} · ${countryLabel(country)} · ${fieldLabel(evidenceMetric, schema)} = ${fmtField(currentObservation.value, evidenceMetric, schema)}`
+                    : "当前国家没有可用的国家级指标值，不能记录。"}
+          </p>
         </div>
-      )}
+        <button
+          type="button"
+          className="primary"
+          disabled={!currentObservation}
+          onClick={() => {
+            if (!currentObservation) return;
+            state.save(indicatorEvidencePatch(state.data, currentObservation, evidenceMetric));
+          }}
+        >
+          {currentAlreadyRecorded ? "更新当前国家记录" : "记录当前国家到报告材料"}
+        </button>
+        <div className="observation-strip" role="group" aria-label="已记录的对比数值">
+          {recordedCountries.length === 0 && <span className="empty">尚未记录。完成两次显式记录后，本步报告材料才会齐全。</span>}
+          {recordedCountries.slice(-2).map((recordedCountry) => {
+            const observation = state.data?.observations?.find((item) => item.country === recordedCountry);
+            return (
+              <span key={recordedCountry}>
+                {observation
+                  ? `${observation.year} · ${countryLabel(observation.country)} = ${fmtField(observation.value, state.data?.metric ?? evidenceMetric, schema)}`
+                  : countryLabel(recordedCountry)}
+              </span>
+            );
+          })}
+        </div>
+      </section>
 
       <IndicatorRequestBoundary
         status={mainQuery.status}

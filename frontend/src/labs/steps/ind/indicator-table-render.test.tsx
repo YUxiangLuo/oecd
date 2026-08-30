@@ -140,6 +140,10 @@ describe("network table sort scope", () => {
     expect(html).not.toContain("全球排名第");
     expect(html).toContain("国家");
     expect(html).toContain("年份");
+    expect(html).toContain("报告材料 · 已记录 0/2 个国家");
+    expect(html).toContain("国家筛选只切换表格，不会自动保存材料");
+    expect(html).toContain("记录当前国家到报告材料");
+    expect(html).toContain("尚未记录。完成两次显式记录后");
   });
 
   test("enables the labelled native sorter only for an explicit country", () => {
@@ -163,5 +167,41 @@ describe("network table sort scope", () => {
     expect(html).toContain("加权总度（入+出；自环双计）");
     expect(html).toContain("完整行业结果在浏览器内排序");
     expect(html).not.toContain("行业排序（仅单国完整结果）");
+  });
+
+  test("shows captured progress and values without hiding the explicit mechanism", () => {
+    const recordedState: StepStateApi<IndicatorStepState> = {
+      ...state,
+      data: {
+        year: 2020,
+        country: "USA",
+        metric: "weighted degree",
+        compared: ["CHN", "USA"],
+        observations: [
+          { entity: "CHN", country: "CHN", industry: "", year: 2020, value: 12 },
+          { entity: "USA", country: "USA", industry: "", year: 2020, value: 9 },
+        ],
+      },
+    };
+    const html = renderToStaticMarkup(
+      <IndicatorTable
+        meta={meta}
+        groupKey="network"
+        schema={schema}
+        state={recordedState}
+        year={2020}
+        country="USA"
+        page={1}
+        interacted={false}
+        onYear={noop}
+        onCountry={noop}
+        onPage={noop}
+      />,
+    );
+
+    expect(html).toContain("报告材料 · 已记录 2/2 个国家");
+    expect(html).toContain("2020 · CHN 中国 = 12");
+    expect(html).toContain("2020 · USA 美国 = 9");
+    expect(html).toContain("更新当前国家记录");
   });
 });

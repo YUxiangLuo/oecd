@@ -4,6 +4,7 @@ import {
   INDICATOR_TABLE_DISPLAY,
   countryObservation,
   countryRowsForYear,
+  indicatorEvidencePatch,
   indicatorMetricColumns,
   indicatorRequestKey,
   indicatorTableColumns,
@@ -71,6 +72,27 @@ describe("indicator selection restoration", () => {
     expect(countryRowsForYear({ year: 2020, rows: [{ country: "USA", FVA_share: 0.12 }] }, 2020)).toEqual([
       { country: "USA", FVA_share: 0.12 },
     ]);
+  });
+
+  test("records report evidence only through the explicit capture patch", () => {
+    const china = {
+      entity: "CHN", country: "CHN", industry: "", year: 2020, value: 0.22,
+    };
+    const usa = {
+      entity: "USA", country: "USA", industry: "", year: 2020, value: 0.14,
+    };
+    const first = indicatorEvidencePatch(undefined, china, "FVA_share");
+    expect(first.compared).toEqual(["CHN"]);
+    expect(first.observations).toEqual([china]);
+
+    const second = indicatorEvidencePatch(first, usa, "FVA_share");
+    expect(second.compared).toEqual(["CHN", "USA"]);
+    expect(second.observations).toEqual([china, usa]);
+
+    const updatedChina = { ...china, year: 2019, value: 0.2 };
+    const updated = indicatorEvidencePatch(second, updatedChina, "FVA_share");
+    expect(updated.compared).toEqual(["USA", "CHN"]);
+    expect(updated.observations).toEqual([usa, updatedChina]);
   });
 });
 

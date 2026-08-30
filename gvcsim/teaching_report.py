@@ -164,7 +164,11 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
                 {
                     "step": step,
                     "title": _STEP_TITLES.get(step, ""),
-                    "missing": ["请在本步保存至少两个比较对象或两条指标观测"],
+                    "missing": [
+                        "请先选择具体国家并点击“记录当前国家到报告材料”，再切换国家记录第二条"
+                        if step <= 6
+                        else "请在本步保存至少两个比较对象或两条指标观测"
+                    ],
                 }
             )
 
