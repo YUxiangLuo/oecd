@@ -29,6 +29,18 @@ REGIONS = ["AAA", "BBB"]
 SECTORS = ["s1", "s2"]
 
 
+@pytest.fixture(autouse=True)
+def clear_process_request_limits():
+    """Keep process-local production limiters isolated between unit tests."""
+    from gvcsim import auth_routes, regression_routes
+
+    auth_routes.clear_rate_limits()
+    regression_routes.clear_rate_limits()
+    yield
+    auth_routes.clear_rate_limits()
+    regression_routes.clear_rate_limits()
+
+
 @pytest.fixture
 def teaching_db(monkeypatch):
     """Create the intentionally non-migrating v10 test database once."""

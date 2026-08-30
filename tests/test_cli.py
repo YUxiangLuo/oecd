@@ -2,7 +2,7 @@ import sys
 
 import pytest
 
-from gvcsim import pipeline, preflight
+from gvcsim import config, pipeline, preflight
 from gvcsim.cli import main
 
 
@@ -59,4 +59,11 @@ def test_preflight_failure_is_nonzero(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["gvcsim", "preflight"])
     monkeypatch.setattr(preflight, "run", lambda: (_ for _ in ()).throw(RuntimeError("database unavailable")))
     with pytest.raises(SystemExit, match="database unavailable"):
+        main()
+
+
+def test_classroom_init_requires_an_explicit_database_dsn(monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["gvcsim", "classroom-init"])
+    monkeypatch.setattr(config, "PG_DSN", "")
+    with pytest.raises(SystemExit, match="缺少 GVCSIM_PG_DSN"):
         main()

@@ -17,6 +17,8 @@
 
 不提供班级、公告、账号停用、学生自行清空、到达进度、跨标签页自动合并、离线缓存、防作弊凭证或安全审计。登录使用最长 8 小时的 HMAC 签名令牌，并绑定当前数据 release 与账号认证版本；数据换版、本人改密或教师重置密码会立即使旧令牌失效。同时打开多个标签页时，陈旧标签页的写入会被 409 拒绝，用户必须显式载入服务器版本，不会静默覆盖。
 
+密码验证与高成本回归均有单 worker 内的滑动窗口限制：默认每来源–用户名每分钟 10 次登录、每来源总计 120 次登录，每账号每分钟 12 次主回归和 4 次置换检验；超限返回 429 与 `Retry-After`。部署可通过 `GVCSIM_*_PER_MINUTE` 环境变量收紧，所有值必须为正整数。
+
 ## 本地运行
 
 需要 Python 3.13、uv、Bun 和 PostgreSQL。
@@ -64,7 +66,7 @@ uv run gvcsim classroom-init --reset
 
 ## 运维与验证
 
-精简远程部署流程见 [DEPLOY.md](DEPLOY.md)。生产部署使用停机维护窗口：停止 API 后，以 `gvcsim` 服务账号依次计算数据、清空并重建教学数据库、执行预检，再启动 API。`scripts/backup_classroom.sh` 使用 `pg_dump --format=custom` 生成带 SHA-256 完成标记的原子备份，`deploy/gvcsim-backup.timer` 每日触发；恢复前必须先校验摘要、`pg_restore --list`，并在隔离空库演练。
+精简远程部署流程见 [DEPLOY.md](DEPLOY.md)。代码部署、数据发布和新学期清场必须分开执行：普通代码/数据部署不得清空教学库，只有已备份且明确的新学期清场才允许 `classroom-init --reset`。`scripts/backup_classroom.sh` 使用 `pg_dump --format=custom` 生成带 SHA-256 完成标记的原子备份，`deploy/gvcsim-backup.timer` 每日触发并默认保留 90 组已完成备份；恢复前必须先校验摘要、`pg_restore --list`，并在隔离空库演练。
 
 ```bash
 uv run ruff format --check .

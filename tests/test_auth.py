@@ -108,6 +108,25 @@ def test_teacher_password_reset_revokes_student_token(teaching_db):
     assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {student_login['token']}"}).status_code == 401
 
 
+def test_existing_token_uses_current_display_name_after_teacher_rename(teaching_db):
+    client = TestClient(app)
+    login = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).json()
+    account_id = teaching_db.find_account("student")["id"]
+
+    updated = teaching_db.update_student(
+        account_id,
+        {"display_name": "改名后的同学"},
+        teacher_username="teacher",
+    )
+
+    assert updated is not None
+    assert updated["display_name"] == "改名后的同学"
+    response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {login['token']}"})
+    assert response.status_code == 200
+    assert response.json()["name"] == "改名后的同学"
+    assert auth.verify_token(login["token"])["name"] == "改名后的同学"
+
+
 def test_role_authorization_uses_signed_claim(teaching_db):
     client = TestClient(app)
     login = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).json()

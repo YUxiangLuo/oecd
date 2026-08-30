@@ -44,6 +44,19 @@ def test_v10_schema_contains_release_and_auth_bound_contract(teaching_db):
     assert "release_id" in session_columns
 
 
+def test_schema_mismatch_requires_migration_without_recommending_reset_as_upgrade(teaching_db):
+    with db.conn() as connection:
+        connection.execute("UPDATE schema_meta SET version='gvcsim-teaching-db-v9' WHERE singleton")
+
+    db._schema_ready = False
+    with pytest.raises(db.SchemaVersionMismatch) as exc_info:
+        db.initialize_schema()
+
+    message = str(exc_info.value)
+    assert "兼容迁移" in message
+    assert "不能用 `uv run gvcsim classroom-init --reset` 代替普通升级" in message
+
+
 def test_readiness_requires_a_teacher_account(teaching_db):
     with db.conn() as connection:
         connection.execute("DELETE FROM accounts WHERE role='teacher'")

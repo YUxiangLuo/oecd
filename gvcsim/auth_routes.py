@@ -3,10 +3,31 @@
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from gvcsim import auth
+from gvcsim import auth, config
 from gvcsim.classroom import db
+from gvcsim.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
+_LOGIN_ACCOUNT_LIMITER = SlidingWindowRateLimiter(config.LOGIN_ATTEMPTS_PER_MINUTE)
+_LOGIN_SOURCE_LIMITER = SlidingWindowRateLimiter(config.LOGIN_SOURCE_ATTEMPTS_PER_MINUTE)
+
+
+def clear_rate_limits() -> None:
+    _LOGIN_ACCOUNT_LIMITER.clear()
+    _LOGIN_SOURCE_LIMITER.clear()
+
+
+def _limit_login(request: Request, username: str) -> None:
+    source = request.client.host if request.client is not None else "unknown"
+    try:
+        _LOGIN_SOURCE_LIMITER.check(source)
+        _LOGIN_ACCOUNT_LIMITER.check((source, username.strip().casefold()))
+    except RateLimitExceeded as error:
+        raise HTTPException(
+            status_code=429,
+            detail="登录尝试过于频繁，请稍后重试",
+            headers={"Retry-After": error.retry_after_header},
+        ) from error
 
 
 class LoginRequest(BaseModel):
@@ -20,7 +41,8 @@ class PasswordChangeRequest(BaseModel):
 
 
 @router.post("/login")
-def login(req: LoginRequest):
+def login(req: LoginRequest, request: Request):
+    _limit_login(request, req.username)
     try:
         user = auth.authenticate(req.username, req.password)
         if user is not None:

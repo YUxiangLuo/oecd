@@ -11,6 +11,21 @@ on:
   pull_request:
 
 jobs:
+  gephi-golden:
+    name: Gephi 0.10.1 golden oracle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+          cache-dependency-path: scripts/gephi_golden/pom.xml
+      - name: Verify independent Gephi fixture
+        run: scripts/gephi_golden/generate.sh --check
+
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
@@ -20,8 +35,8 @@ jobs:
         env:
           POSTGRES_USER: alice
           POSTGRES_PASSWORD: "111111"
-          # test_api.py 会在 collection 阶段取得学生令牌，且回归端点会立即写
-          # learning_evidence_events；服务启动时就创建目标库，不能依赖后续测试模块建库。
+          # API/auth tests import the application during collection and use this
+          # isolated target database; it must exist before pytest starts.
           POSTGRES_DB: gvclab_test
         ports:
           - 5432:5432
@@ -135,7 +150,6 @@ jobs:
           GVCSIM_DEMO_MODE: "1"
           GVCSIM_BOOTSTRAP_PASSWORD: ci-browser-private-password
           GVCSIM_AUTH_SECRET: ci-browser-auth-secret-at-least-32-bytes
-          GVCSIM_EVIDENCE_SECRET: ci-browser-evidence-secret-at-least-32-bytes
         run: |
           set -euo pipefail
           output_dir="$GITHUB_WORKSPACE/dogfood-output/ci-browser"

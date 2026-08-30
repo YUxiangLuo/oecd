@@ -15,14 +15,23 @@ def test_service_uses_one_worker_and_small_fixed_limits():
     assert "shared/reports" not in service
 
 
-def test_environment_has_no_evidence_rate_or_pool_tuning():
+def test_environment_has_bounded_request_rates_without_removed_evidence_or_pool_tuning():
     environment = (ROOT / "deploy" / "gvcsim.env.example").read_text()
     for removed in ("EVIDENCE_SECRET", "LOGIN_MAX", "CPU_QUEUE", "CPU_CONCURRENCY", "DB_POOL"):
         assert removed not in environment
     assert "GVCSIM_TOKEN_TTL_SECONDS=28800" in environment
+    assert "GVCSIM_LOGIN_ATTEMPTS_PER_MINUTE=10" in environment
+    assert "GVCSIM_LOGIN_SOURCE_ATTEMPTS_PER_MINUTE=120" in environment
+    assert "GVCSIM_REGRESSION_RUNS_PER_MINUTE=12" in environment
+    assert "GVCSIM_PLACEBO_RUNS_PER_MINUTE=4" in environment
+    assert "GVCSIM_BACKUP_KEEP=90" in environment
+    assert "1..10000" in environment
     assert "GVCSIM_DATA_DIR=/opt/gvcsim/shared/data" in environment
     assert "GVCSIM_RAW_DATA_DIR=/opt/gvcsim/shared/OECD_ICIO" in environment
     assert "GVCSIM_PUBLICATION_LOCK_DIR" not in environment
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    assert "GVCSIM_EVIDENCE_SECRET" not in workflow
+    assert "learning_evidence_events" not in workflow
 
 
 def test_shipped_production_placeholders_are_rejected_case_insensitively(monkeypatch):
@@ -66,10 +75,16 @@ def test_production_requires_explicit_shared_data_paths(monkeypatch):
         config.validate_security_config()
 
 
-def test_nginx_does_not_apply_classroom_login_rate_limits():
+def test_nginx_keeps_transport_limits_while_application_owns_identity_rates():
     nginx = (ROOT / "deploy" / "nginx-gvcsim.conf").read_text()
     assert "limit_req" not in nginx
     assert "proxy_read_timeout 120s" in nginx
+
+
+def test_capacity_configuration_rejects_nonpositive_request_limits(monkeypatch):
+    monkeypatch.setattr(config, "PLACEBO_RUNS_PER_MINUTE", 0)
+    with pytest.raises(config.ConfigurationError, match="GVCSIM_PLACEBO_RUNS_PER_MINUTE"):
+        config.validate_capacity_config()
 
 
 def test_deployment_documents_bootstrap_and_separate_lifecycles():
@@ -106,3 +121,14 @@ def test_deployment_documents_bootstrap_and_separate_lifecycles():
     service = (ROOT / "deploy" / "gvcsim-backup.service").read_text()
     assert "Persistent=true" in timer
     assert "backup_classroom.sh" in service
+    assert "EnvironmentFile=/etc/gvcsim.env" in service
+    assert "Environment=GVCSIM_BACKUP_KEEP" not in service
+    backup_script = (ROOT / "scripts" / "backup_classroom.sh").read_text()
+    assert "checksum_candidates" in backup_script
+    assert "completed_checksums" in backup_script
+    assert "retention_removed" in backup_script
+    assert '"$backup_dir" != /* || "$backup_dir" == / || -L "$backup_dir"' in backup_script
+    assert '! -L "$old_checksum"' in backup_script and '! -L "$old_dump"' in backup_script
+    assert "1..10000" in deployment
+    assert "它们不占用保留名额" in deployment
+    assert "本机保留不等于灾难备份" in deployment

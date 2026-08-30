@@ -117,7 +117,9 @@ def initialize_schema() -> list[str]:
             if version not in {None, TEACHING_DB_VERSION}:
                 raise SchemaVersionMismatch(
                     f"教学库 schema 版本为 {version}，当前代码需要 {TEACHING_DB_VERSION}；"
-                    "请运行 `uv run gvcsim classroom-init --reset`"
+                    "请停止服务并执行经过测试的兼容迁移；"
+                    "不能用 `uv run gvcsim classroom-init --reset` 代替普通升级，"
+                    "只有完成备份后的新学期清场才允许 reset"
                 )
             if version is None:
                 c.execute(schema.SCHEMA_SQL)
@@ -215,15 +217,23 @@ def find_account(username: str) -> dict[str, Any] | None:
         return c.execute("SELECT * FROM accounts WHERE username=%s", (username,)).fetchone()
 
 
-def auth_subject_is_current(account_id: int, username: str, role: str, auth_version: int) -> bool:
+def current_auth_subject(
+    account_id: int,
+    username: str,
+    role: str,
+    auth_version: int,
+) -> dict[str, Any] | None:
+    """Return the current account identity for a still-valid token subject.
+
+    Display names are profile data, not immutable authorization claims. Returning
+    the current value here lets every verified request observe a teacher rename
+    immediately without forcing the student to sign in again.
+    """
     with conn() as c:
-        return (
-            c.execute(
-                "SELECT 1 FROM accounts WHERE id=%s AND username=%s AND role=%s AND auth_version=%s",
-                (account_id, username, role, auth_version),
-            ).fetchone()
-            is not None
-        )
+        return c.execute(
+            "SELECT display_name FROM accounts WHERE id=%s AND username=%s AND role=%s AND auth_version=%s",
+            (account_id, username, role, auth_version),
+        ).fetchone()
 
 
 def touch_login(username: str) -> None:

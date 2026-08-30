@@ -10,6 +10,8 @@ def test_readme_contains_the_single_documentation_contract():
     assert "OECD Terms & Conditions" in readme
     assert "pg_dump --format=custom" in readme
     assert "bun install --frozen-lockfile" in readme
+    assert "普通代码/数据部署不得清空教学库" in readme
+    assert "只有已备份且明确的新学期清场才允许 `classroom-init --reset`" in readme
 
 
 def test_removed_gephi_document_has_no_dead_reference():
@@ -17,6 +19,12 @@ def test_removed_gephi_document_has_no_dead_reference():
     assert not (project / "README.md").exists()
     pom = (project / "pom.xml").read_text()
     assert "README 的“升级基准”" not in pom
+
+
+def test_ci_executes_the_independent_gephi_oracle():
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    assert "actions/setup-java@v6" in workflow
+    assert "scripts/gephi_golden/generate.sh --check" in workflow
 
 
 def test_wwz_teaching_prompts_keep_tls_as_an_extension():

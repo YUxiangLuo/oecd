@@ -6,6 +6,22 @@ from pathlib import Path
 # 仓库根目录(gvcsim/ 的上一级)
 ROOT = Path(__file__).resolve().parent.parent
 
+
+class ConfigurationError(RuntimeError):
+    """缺少或无效且会导致认证、持久化或容量边界降级的配置。"""
+
+
+def _positive_int_setting(name: str, default: int) -> int:
+    raw = os.environ.get(name, str(default))
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise ConfigurationError(f"{name} 必须为正整数") from error
+    if value <= 0:
+        raise ConfigurationError(f"{name} 必须为正整数")
+    return value
+
+
 # 原始数据和持久产物在本地开发时沿用仓库内目录；生产部署显式指向
 # /opt/gvcsim/shared，避免代码换版覆盖数据。
 _raw_data_dir_setting = os.environ.get("GVCSIM_RAW_DATA_DIR", "").strip()
@@ -29,7 +45,11 @@ DEMO_MODE = os.environ.get("GVCSIM_DEMO_MODE", "0").strip().lower() in {"1", "tr
 # 可读的 503/fail-closed，而不会悄悄连接某个开发者账号。
 PG_DSN = os.environ.get("GVCSIM_PG_DSN", "").strip()
 
-THREAD_TOKENS = int(os.environ.get("GVCSIM_THREAD_TOKENS", "16"))
+THREAD_TOKENS = _positive_int_setting("GVCSIM_THREAD_TOKENS", 16)
+LOGIN_ATTEMPTS_PER_MINUTE = _positive_int_setting("GVCSIM_LOGIN_ATTEMPTS_PER_MINUTE", 10)
+LOGIN_SOURCE_ATTEMPTS_PER_MINUTE = _positive_int_setting("GVCSIM_LOGIN_SOURCE_ATTEMPTS_PER_MINUTE", 120)
+REGRESSION_RUNS_PER_MINUTE = _positive_int_setting("GVCSIM_REGRESSION_RUNS_PER_MINUTE", 12)
+PLACEBO_RUNS_PER_MINUTE = _positive_int_setting("GVCSIM_PLACEBO_RUNS_PER_MINUTE", 4)
 
 # 课程内容发布边界；数据库 schema 可保持不变，但学习记录不能跨学期复用。
 COURSE_RELEASE = "2026-fall"
@@ -38,19 +58,23 @@ COURSE_TERM = "2026 秋"
 # 只在显式 demo 模式播种演示账号。生产启动校验会拒绝 demo 模式和空值。
 BOOTSTRAP_PASSWORD = os.environ.get("GVCSIM_BOOTSTRAP_PASSWORD", "")
 AUTH_SECRET = os.environ.get("GVCSIM_AUTH_SECRET", "")
-TOKEN_TTL_SECONDS = int(os.environ.get("GVCSIM_TOKEN_TTL_SECONDS", "28800"))
+TOKEN_TTL_SECONDS = _positive_int_setting("GVCSIM_TOKEN_TTL_SECONDS", 28800)
 _origins_raw = os.environ.get("GVCSIM_ALLOWED_ORIGINS", "")
 ALLOWED_ORIGINS = [item.strip() for item in _origins_raw.split(",") if item.strip()]
 
 
-class ConfigurationError(RuntimeError):
-    """缺少会导致认证/持久化降级的安全配置。"""
-
-
 def validate_capacity_config() -> None:
-    """Validate the one remaining worker thread setting."""
-    if THREAD_TOKENS <= 0:
-        raise ConfigurationError("GVCSIM_THREAD_TOKENS 必须为正数")
+    """Validate worker and request-capacity settings."""
+    positive_settings = {
+        "GVCSIM_THREAD_TOKENS": THREAD_TOKENS,
+        "GVCSIM_LOGIN_ATTEMPTS_PER_MINUTE": LOGIN_ATTEMPTS_PER_MINUTE,
+        "GVCSIM_LOGIN_SOURCE_ATTEMPTS_PER_MINUTE": LOGIN_SOURCE_ATTEMPTS_PER_MINUTE,
+        "GVCSIM_REGRESSION_RUNS_PER_MINUTE": REGRESSION_RUNS_PER_MINUTE,
+        "GVCSIM_PLACEBO_RUNS_PER_MINUTE": PLACEBO_RUNS_PER_MINUTE,
+    }
+    invalid = [name for name, value in positive_settings.items() if value <= 0]
+    if invalid:
+        raise ConfigurationError("以下容量配置必须为正整数:" + "、".join(invalid))
 
 
 def validate_security_config() -> None:

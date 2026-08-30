@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.requests import Request
 
 from gvcsim import artifacts, concurrency, shocks
+from gvcsim import config as app_config
 from gvcsim.data_routes import _read_csv
 from gvcsim.regression.contracts import (
     PlaceboRequest,
@@ -42,17 +43,36 @@ from gvcsim.regression.design import (
     validate_outcome_granularity,
 )
 from gvcsim.regression.panel import placebo_did_distribution, run_design_with_benchmark
+from gvcsim.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
 from gvcsim.shocks import SHOCK_LABELS, SHOCK_TARIFF
 from gvcsim.singleflight import AsyncSingleFlightCache
 from gvcsim.steps import STEPS
 
 router = APIRouter()
 _RESULT_CACHE: AsyncSingleFlightCache[tuple[str, str, str], dict[str, Any]] = AsyncSingleFlightCache(maxsize=64)
+_RUN_LIMITER = SlidingWindowRateLimiter(app_config.REGRESSION_RUNS_PER_MINUTE)
+_PLACEBO_LIMITER = SlidingWindowRateLimiter(app_config.PLACEBO_RUNS_PER_MINUTE)
 
 
 def clear_result_cache() -> None:
     """Clear completed regression results at process and test boundaries."""
     _RESULT_CACHE.clear()
+
+
+def clear_rate_limits() -> None:
+    _RUN_LIMITER.clear()
+    _PLACEBO_LIMITER.clear()
+
+
+def _limit_expensive_request(limiter: SlidingWindowRateLimiter, account_id: int, label: str) -> None:
+    try:
+        limiter.check(account_id)
+    except RateLimitExceeded as error:
+        raise HTTPException(
+            status_code=429,
+            detail=f"{label}请求过于频繁，请稍后重试",
+            headers={"Retry-After": error.retry_after_header},
+        ) from error
 
 
 @router.get("/api/regression/options", response_model=RegressionOptionsResponse)
@@ -253,11 +273,14 @@ def _regression_step(outcome: str) -> int:
     return next(cast(int, step["n"]) for step in STEPS if step.get("regression_outcome") == outcome)
 
 
-def _require_regression_student(request: Request) -> str:
+def _require_regression_student(request: Request) -> int:
     user = getattr(request.state, "user", None) or {}
     if user.get("role") != "student":
         raise HTTPException(status_code=403, detail="回归学习事件只对当前学生签发")
-    return str(user["sub"])
+    account_id = user.get("aid")
+    if isinstance(account_id, bool) or not isinstance(account_id, int):
+        raise HTTPException(status_code=401, detail="令牌缺少稳定账号标识")
+    return account_id
 
 
 @router.get("/api/regression/design", response_model=RegressionDesignResponse)
@@ -294,7 +317,7 @@ def regression_design(
 
 @router.post("/api/regression/run", response_model=RegressionRunResponse)
 async def regression_run(req: RegressionRequest, request: Request):
-    _require_regression_student(request)
+    account_id = _require_regression_student(request)
     design = _validate_design(
         req.outcome,
         req.granularity,
@@ -309,6 +332,9 @@ async def regression_run(req: RegressionRequest, request: Request):
     key = (artifacts.release_identity(), "run", req.model_dump_json())
 
     async def compute() -> dict[str, Any]:
+        # Charge only a real cache miss. Identical concurrent requests share this
+        # factory through single-flight, and completed cache hits consume no CPU.
+        _limit_expensive_request(_RUN_LIMITER, account_id, "回归计算")
         panel = await anyio.to_thread.run_sync(
             lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
         )
@@ -332,7 +358,7 @@ async def regression_run(req: RegressionRequest, request: Request):
 
 @router.post("/api/regression/placebo", response_model=PlaceboResponse)
 async def regression_placebo(req: PlaceboRequest, request: Request):
-    _require_regression_student(request)
+    account_id = _require_regression_student(request)
     design = _validate_design(
         req.outcome,
         req.granularity,
@@ -347,6 +373,7 @@ async def regression_placebo(req: PlaceboRequest, request: Request):
     key = (artifacts.release_identity(), "placebo", req.model_dump_json())
 
     async def compute() -> dict[str, Any]:
+        _limit_expensive_request(_PLACEBO_LIMITER, account_id, "置换检验")
         panel = await anyio.to_thread.run_sync(
             lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
         )

@@ -83,7 +83,6 @@ def issue_token(user: dict) -> tuple[str, int]:
         raise AuthenticationUnavailable("当前数据发布不可用") from error
     body = {
         "sub": user["username"],
-        "name": user["name"],
         "role": user["role"],
         "aid": user["account_id"],
         "av": user["auth_version"],
@@ -126,8 +125,13 @@ def verify_token(token: str) -> dict | None:
         try:
             if not hmac.compare_digest(release_id, artifacts.release_identity()):
                 return None
-            if not db.auth_subject_is_current(account_id, username, role, auth_version):
+            subject = db.current_auth_subject(account_id, username, role, auth_version)
+            if subject is None:
                 return None
+            # Never use a potentially stale profile snapshot from the signed token
+            # for UI identity or report authorship. Authorization is still bound to
+            # the immutable account id/username/role/auth_version claims above.
+            payload["name"] = subject["display_name"]
         except (artifacts.ArtifactContractError, OSError, db.Unavailable, db.SchemaVersionMismatch) as error:
             raise AuthenticationUnavailable("认证依赖的数据发布或数据库不可用") from error
         return payload

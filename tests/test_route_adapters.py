@@ -888,6 +888,11 @@ def test_regression_route_coalesces_identical_inflight_work(monkeypatch):
 
     monkeypatch.setattr(regression_routes, "_read_csv", read_panel)
     monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: release_id)
+    monkeypatch.setattr(
+        regression_routes,
+        "_RUN_LIMITER",
+        regression_routes.SlidingWindowRateLimiter(2),
+    )
 
     async def scenario():
         nonlocal computations, release_id
@@ -903,7 +908,7 @@ def test_regression_route_coalesces_identical_inflight_work(monkeypatch):
             return Result(), {"method": "benchmark"}
 
         monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", fake_cpu)
-        request = SimpleNamespace(state=SimpleNamespace(user={"role": "student", "sub": "student"}))
+        request = SimpleNamespace(state=SimpleNamespace(user={"role": "student", "sub": "student", "aid": 2}))
         req = RegressionRequest(outcome="network")
         waiters = [asyncio.create_task(regression_routes.regression_run(req, request)) for _ in range(8)]
         await started.wait()

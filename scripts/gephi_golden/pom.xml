@@ -19,7 +19,7 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <!-- 与 fixture 文件名及根 README 的基准版本一致；升级时须重新运行 generate.sh --check 并提交新 fixture。 -->
+    <!-- 与 fixture 文件名及根 README 的基准版本一致；升级时须重新运行 generate.sh 的 check 模式并提交新 fixture。 -->
     <gephi.toolkit.version>0.10.1</gephi.toolkit.version>
     <exec.mainClass>GephiGoldenExport</exec.mainClass>
   </properties>

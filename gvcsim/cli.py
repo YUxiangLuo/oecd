@@ -138,6 +138,9 @@ def main() -> None:
         from gvcsim import config
         from gvcsim.classroom import db as classroom_db
 
+        if not config.PG_DSN:
+            raise SystemExit("缺少 GVCSIM_PG_DSN；classroom-init 拒绝连接或创建未显式指定的数据库")
+
         # 目标库不存在则先经维护库(dbname=postgres)创建
         dsn = psycopg.conninfo.conninfo_to_dict(config.PG_DSN)
         dbname = str(dsn.get("dbname") or "gvclab")

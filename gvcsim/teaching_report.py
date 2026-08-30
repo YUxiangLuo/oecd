@@ -1293,6 +1293,215 @@ def _evidence_summary(runs: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
+def _technical_support_lines(design: dict[str, Any], result: dict[str, Any], support: dict[str, Any]) -> list[str]:
+    lines: list[str] = []
+    if support:
+        support_bits = []
+        for key, label in (
+            ("treated_entities", "处理个体"),
+            ("treated_clusters", "处理聚类"),
+            ("untreated_entities", "估计样本内未暴露个体"),
+            ("untreated_clusters", "估计样本内完全未暴露聚类"),
+            ("reversal_share", "处理撤销行占比"),
+        ):
+            if support.get(key) is not None:
+                value = support[key]
+                rendered = (
+                    f"{float(value) * 100:.2f}%"
+                    if key == "reversal_share" and isinstance(value, (int, float))
+                    else _count(value)
+                )
+                support_bits.append(f"{label}={rendered}")
+        if support_bits:
+            lines.append(f"- 处理支持：{'；'.join(support_bits)}")
+
+    cohort_weights = _did_cohort_weight_rows(design, result)
+    if cohort_weights:
+        rendered_weights = "；".join(
+            f"{row['cohort']} cohort={float(row['share']) * 100:.1f}%"
+            f"（{row['cell_count']} 个时期，{row['treated_entity_periods']} 个实体×时期）"
+            for row in cohort_weights
+        )
+        lines.append(f"- **总体 ATT 实际权重（非 cohort 等权）：** {rendered_weights}")
+        dominant = max(cohort_weights, key=lambda row: float(row["share"]))
+        if float(dominant["share"]) >= 0.75:
+            lines.append(
+                f"- **权重主导提醒：** {dominant['cohort']} cohort 占 {float(dominant['share']) * 100:.1f}%；"
+                "较早 cohort 因拥有更多处理后时期会重复贡献，总体 ATT 主要反映该 cohort。"
+            )
+    return lines
+
+
+def _reported_inference_cells(
+    design: dict[str, Any],
+    result: dict[str, Any],
+    term: str,
+    ci_low: Any,
+    ci_high: Any,
+    p_raw: Any,
+    *,
+    suppressed: bool,
+) -> tuple[str, str]:
+    if _event_period_limit(design, result, term) is not None:
+        return "逐期支持不足/未知，已抑制", "逐期支持不足/未知，已抑制"
+    if suppressed:
+        return "已抑制", "已抑制"
+    interval = f"[{_number(ci_low)}, {_number(ci_high)}]" if ci_low is not None and ci_high is not None else "—"
+    return interval, _number(p_raw, p_value=True)
+
+
+def _technical_estimate_tables(
+    design: dict[str, Any],
+    result: dict[str, Any],
+    *,
+    suppressed: bool,
+) -> list[str]:
+    lines = ["", "| 变量 | 点估计 | 标准误 | 95% 置信区间 | p 值 |", "|---|---:|---:|---:|---:|"]
+    for coefficient in result.get("coefs", []):
+        if not isinstance(coefficient, dict):
+            continue
+        interval, p_value = _reported_inference_cells(
+            design,
+            result,
+            str(coefficient.get("name", "")),
+            coefficient.get("ci_low"),
+            coefficient.get("ci_high"),
+            coefficient.get("p"),
+            suppressed=suppressed,
+        )
+        lines.append(
+            f"| {_coefficient_label(coefficient.get('name', '—'), design)} | {_number(coefficient.get('coef'))} | "
+            f"{_number(coefficient.get('se'))} | {interval} | {p_value} |"
+        )
+
+    marginal_effects = [item for item in _list_values(result.get("marginal_effects")) if isinstance(item, dict)]
+    if marginal_effects:
+        lines.extend(
+            (
+                "",
+                "交互模型边际效应（主效应与交互项的线性组合）：",
+                "",
+                "| 政策项 | 处理前 GVC 水平 | 边际效应 | 95% 置信区间 | p 值 |",
+                "|---|---|---:|---:|---:|",
+            )
+        )
+        for item in marginal_effects:
+            interval, p_value = _reported_inference_cells(
+                design,
+                result,
+                str(item.get("policy_term", "")),
+                item.get("ci_low"),
+                item.get("ci_high"),
+                item.get("p"),
+                suppressed=suppressed,
+            )
+            lines.append(
+                f"| {_coefficient_label(item.get('policy_term', '—'), design)} | {_safe(item.get('label', '—'))} | "
+                f"{_number(item.get('effect'))} | {interval} | {p_value} |"
+            )
+    return lines
+
+
+def _technical_pretrend_lines(
+    design: dict[str, Any],
+    result: dict[str, Any],
+    *,
+    globally_suppressed: bool,
+    diagnostic_limit: str | None,
+    suppressed: bool,
+) -> list[str]:
+    lines: list[str] = []
+    diagnostics_value = result.get("diagnostics")
+    diagnostics: dict[str, Any] = diagnostics_value if isinstance(diagnostics_value, dict) else {}
+    pretrend_value = diagnostics.get("pretrend")
+    pretrend: dict[str, Any] | None = pretrend_value if isinstance(pretrend_value, dict) else None
+    interaction_scopes_valid = design.get("interaction") is True and _interaction_pretrend_scopes_are_safe(result)
+    if interaction_scopes_valid:
+        tests = cast(dict[str, dict[str, Any]], diagnostics["pretrend_tests"])
+        pretrend_items = [
+            ("主效应", tests["main"]),
+            ("交互效应", tests["interaction"]),
+            ("联合", tests["joint"]),
+        ]
+    else:
+        pretrend_items = [("联合", pretrend)] if pretrend else []
+
+    if (
+        design.get("interaction") is True
+        and pretrend
+        and pretrend.get("reason") != "global_inference_suppressed"
+        and not interaction_scopes_valid
+        and not suppressed
+    ):
+        lines.append("- 冲击前趋势联合检验：不可评估；交互诊断 scope 集缺失或损坏，既有检验值与解释不用于教学推断。")
+    else:
+        for scope_label, scoped_pretrend in pretrend_items:
+            prefix = f"冲击前趋势检验（{scope_label}）"
+            if globally_suppressed:
+                lines.append(f"- {prefix}：不可评估；{_GLOBAL_PRETREND_SUPPRESSION_COPY}")
+            elif scoped_pretrend.get("reason") == "global_inference_suppressed":
+                lines.append(
+                    f"- {prefix}：不可评估；诊断已损坏或状态未知：诊断声称整体推断已抑制，"
+                    "但结果状态与处理支持并未触发整体门禁；不得采用该诊断的统计量或解释。"
+                )
+            elif design.get("method") == "event_study" and not _event_pretrend_is_safe(
+                result,
+                scoped_pretrend,
+                str(scoped_pretrend.get("scope") or "main"),
+                design.get("interaction") is True,
+            ):
+                lines.append(
+                    f"- {prefix}：不可评估；旧结果缺少逐事件期支持契约、"
+                    "支持不足期被错误纳入，或诊断契约已损坏，既有检验值与解释不用于教学推断。"
+                )
+            elif scoped_pretrend.get("available"):
+                lines.append(
+                    f"- {prefix}：F={_number(scoped_pretrend.get('statistic'))}，"
+                    f"p={_number(scoped_pretrend.get('p'), p_value=True)}；"
+                    f"{_safe(scoped_pretrend.get('interpretation', ''))}"
+                )
+                df_num = scoped_pretrend.get("df_num")
+                pretrend_p = scoped_pretrend.get("p")
+                period_count = _pretrend_period_count(result, scoped_pretrend, design.get("interaction") is True)
+                if isinstance(df_num, int) and not isinstance(df_num, bool) and period_count is not None:
+                    passing = (
+                        isinstance(pretrend_p, (int, float))
+                        and not isinstance(pretrend_p, bool)
+                        and math.isfinite(float(pretrend_p))
+                        and float(pretrend_p) >= 0.05
+                    )
+                    lines.append(
+                        f"  - 有效冲击前时期：{period_count} 个；Wald 联合限制：{df_num} 条。"
+                        + (
+                            (
+                                "只有一个受支持时期，检验力尤其有限；未检出差异不是平行趋势成立的证据。"
+                                if period_count == 1
+                                else "未检出差异也不是平行趋势成立的证据。"
+                            )
+                            if passing
+                            else (
+                                "已检出冲击前差异，方向性解读已关闭；且只有一个受支持时期，诊断覆盖仍很窄。"
+                                if period_count == 1
+                                else "已检出冲击前差异，方向性解读已关闭。"
+                            )
+                        )
+                    )
+            else:
+                lines.append(
+                    f"- {prefix}：不可评估；"
+                    f"{_safe(scoped_pretrend.get('interpretation') or scoped_pretrend.get('reason') or '未提供原因')}"
+                )
+
+    if not pretrend_items and design.get("method") == "event_study":
+        copy = (
+            _GLOBAL_PRETREND_SUPPRESSION_COPY
+            if globally_suppressed
+            else (diagnostic_limit or "冲击前诊断缺失，方向性推断已关闭。")
+        )
+        lines.append(f"- 冲击前趋势联合检验：不可评估；{copy}")
+    return lines
+
+
 def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
     lines = [
         "## 技术附录：保存的回归结果",
@@ -1347,204 +1556,23 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
             if reasons:
                 lines.append("- 主要设计限制：")
                 lines.extend(f"  - {reason}" for reason in reasons)
-            if support:
-                support_bits = []
-                for key, label in (
-                    ("treated_entities", "处理个体"),
-                    ("treated_clusters", "处理聚类"),
-                    ("untreated_entities", "估计样本内未暴露个体"),
-                    ("untreated_clusters", "估计样本内完全未暴露聚类"),
-                    ("reversal_share", "处理撤销行占比"),
-                ):
-                    if support.get(key) is not None:
-                        value = support[key]
-                        rendered = (
-                            f"{float(value) * 100:.2f}%"
-                            if key == "reversal_share" and isinstance(value, (int, float))
-                            else _count(value)
-                        )
-                        support_bits.append(f"{label}={rendered}")
-                if support_bits:
-                    lines.append(f"- 处理支持：{'；'.join(support_bits)}")
-            cohort_weights = _did_cohort_weight_rows(design, result)
-            if cohort_weights:
-                rendered_weights = "；".join(
-                    f"{row['cohort']} cohort={float(row['share']) * 100:.1f}%"
-                    f"（{row['cell_count']} 个时期，{row['treated_entity_periods']} 个实体×时期）"
-                    for row in cohort_weights
-                )
-                lines.append(f"- **总体 ATT 实际权重（非 cohort 等权）：** {rendered_weights}")
-                dominant = max(cohort_weights, key=lambda row: float(row["share"]))
-                if float(dominant["share"]) >= 0.75:
-                    lines.append(
-                        f"- **权重主导提醒：** {dominant['cohort']} cohort 占 {float(dominant['share']) * 100:.1f}%；"
-                        "较早 cohort 因拥有更多处理后时期会重复贡献，总体 ATT 主要反映该 cohort。"
-                    )
+            lines.extend(_technical_support_lines(design, result, support))
             if suppressed:
                 lines.append(
                     "- **统计推断已抑制**：下表点估计仅说明计算输出；不得把缺失的 p 值或置信区间解释为无效应，也不得据此形成方向性结论。"
                 )
             if diagnostic_limit is not None:
                 lines.append(f"- **冲击前诊断未知/已抑制**：{diagnostic_limit}")
-            lines.extend(("", "| 变量 | 点估计 | 标准误 | 95% 置信区间 | p 值 |", "|---|---:|---:|---:|---:|"))
-            for coefficient in result.get("coefs", []):
-                if isinstance(coefficient, dict):
-                    local_limit = _event_period_limit(design, result, str(coefficient.get("name", "")))
-                    ci_low, ci_high = coefficient.get("ci_low"), coefficient.get("ci_high")
-                    interval = (
-                        "逐期支持不足/未知，已抑制"
-                        if local_limit is not None
-                        else (
-                            "已抑制"
-                            if suppressed
-                            else (
-                                f"[{_number(ci_low)}, {_number(ci_high)}]"
-                                if ci_low is not None and ci_high is not None
-                                else "—"
-                            )
-                        )
-                    )
-                    p_raw = coefficient.get("p")
-                    p_value = (
-                        "逐期支持不足/未知，已抑制"
-                        if local_limit is not None
-                        else "已抑制"
-                        if suppressed
-                        else _number(p_raw, p_value=True)
-                    )
-                    lines.append(
-                        f"| {_coefficient_label(coefficient.get('name', '—'), design)} | {_number(coefficient.get('coef'))} | "
-                        f"{_number(coefficient.get('se'))} | {interval} | {p_value} |"
-                    )
-            marginal_effects = [item for item in _list_values(result.get("marginal_effects")) if isinstance(item, dict)]
-            if marginal_effects:
-                lines.extend(
-                    (
-                        "",
-                        "交互模型边际效应（主效应与交互项的线性组合）：",
-                        "",
-                        "| 政策项 | 处理前 GVC 水平 | 边际效应 | 95% 置信区间 | p 值 |",
-                        "|---|---|---:|---:|---:|",
-                    )
+            lines.extend(_technical_estimate_tables(design, result, suppressed=suppressed))
+            lines.extend(
+                _technical_pretrend_lines(
+                    design,
+                    result,
+                    globally_suppressed=globally_suppressed,
+                    diagnostic_limit=diagnostic_limit,
+                    suppressed=suppressed,
                 )
-                for item in marginal_effects:
-                    local_limit = _event_period_limit(design, result, str(item.get("policy_term", "")))
-                    ci_low, ci_high = item.get("ci_low"), item.get("ci_high")
-                    interval = (
-                        "逐期支持不足/未知，已抑制"
-                        if local_limit is not None
-                        else (
-                            "已抑制"
-                            if suppressed
-                            else (
-                                f"[{_number(ci_low)}, {_number(ci_high)}]"
-                                if ci_low is not None and ci_high is not None
-                                else "—"
-                            )
-                        )
-                    )
-                    p_raw = item.get("p")
-                    p_value = (
-                        "逐期支持不足/未知，已抑制"
-                        if local_limit is not None
-                        else "已抑制"
-                        if suppressed
-                        else _number(p_raw, p_value=True)
-                    )
-                    lines.append(
-                        f"| {_coefficient_label(item.get('policy_term', '—'), design)} | {_safe(item.get('label', '—'))} | "
-                        f"{_number(item.get('effect'))} | {interval} | {p_value} |"
-                    )
-            diagnostics = result.get("diagnostics") if isinstance(result.get("diagnostics"), dict) else {}
-            pretrend = diagnostics.get("pretrend") if isinstance(diagnostics.get("pretrend"), dict) else None
-            interaction_scopes_valid = design.get("interaction") is True and _interaction_pretrend_scopes_are_safe(
-                result
             )
-            if interaction_scopes_valid:
-                tests = cast(dict[str, dict[str, Any]], diagnostics["pretrend_tests"])
-                pretrend_items = [
-                    ("主效应", tests["main"]),
-                    ("交互效应", tests["interaction"]),
-                    ("联合", tests["joint"]),
-                ]
-            else:
-                pretrend_items = [("联合", pretrend)] if pretrend else []
-            if (
-                design.get("interaction") is True
-                and pretrend
-                and pretrend.get("reason") != "global_inference_suppressed"
-                and not interaction_scopes_valid
-                and not suppressed
-            ):
-                lines.append(
-                    "- 冲击前趋势联合检验：不可评估；交互诊断 scope 集缺失或损坏，既有检验值与解释不用于教学推断。"
-                )
-            else:
-                for scope_label, scoped_pretrend in pretrend_items:
-                    prefix = f"冲击前趋势检验（{scope_label}）"
-                    if globally_suppressed:
-                        lines.append(f"- {prefix}：不可评估；{_GLOBAL_PRETREND_SUPPRESSION_COPY}")
-                    elif scoped_pretrend.get("reason") == "global_inference_suppressed":
-                        lines.append(
-                            f"- {prefix}：不可评估；诊断已损坏或状态未知：诊断声称整体推断已抑制，"
-                            "但结果状态与处理支持并未触发整体门禁；不得采用该诊断的统计量或解释。"
-                        )
-                    elif design.get("method") == "event_study" and not _event_pretrend_is_safe(
-                        result,
-                        scoped_pretrend,
-                        str(scoped_pretrend.get("scope") or "main"),
-                        design.get("interaction") is True,
-                    ):
-                        lines.append(
-                            f"- {prefix}：不可评估；旧结果缺少逐事件期支持契约、"
-                            "支持不足期被错误纳入，或诊断契约已损坏，既有检验值与解释不用于教学推断。"
-                        )
-                    elif scoped_pretrend.get("available"):
-                        lines.append(
-                            f"- {prefix}：F={_number(scoped_pretrend.get('statistic'))}，"
-                            f"p={_number(scoped_pretrend.get('p'), p_value=True)}；"
-                            f"{_safe(scoped_pretrend.get('interpretation', ''))}"
-                        )
-                        df_num = scoped_pretrend.get("df_num")
-                        pretrend_p = scoped_pretrend.get("p")
-                        period_count = _pretrend_period_count(
-                            result, scoped_pretrend, design.get("interaction") is True
-                        )
-                        if isinstance(df_num, int) and not isinstance(df_num, bool) and period_count is not None:
-                            passing = (
-                                isinstance(pretrend_p, (int, float))
-                                and not isinstance(pretrend_p, bool)
-                                and math.isfinite(float(pretrend_p))
-                                and float(pretrend_p) >= 0.05
-                            )
-                            lines.append(
-                                f"  - 有效冲击前时期：{period_count} 个；Wald 联合限制：{df_num} 条。"
-                                + (
-                                    (
-                                        "只有一个受支持时期，检验力尤其有限；未检出差异不是平行趋势成立的证据。"
-                                        if period_count == 1
-                                        else "未检出差异也不是平行趋势成立的证据。"
-                                    )
-                                    if passing
-                                    else (
-                                        "已检出冲击前差异，方向性解读已关闭；且只有一个受支持时期，诊断覆盖仍很窄。"
-                                        if period_count == 1
-                                        else "已检出冲击前差异，方向性解读已关闭。"
-                                    )
-                                )
-                            )
-                    else:
-                        lines.append(
-                            f"- {prefix}：不可评估；"
-                            f"{_safe(scoped_pretrend.get('interpretation') or scoped_pretrend.get('reason') or '未提供原因')}"
-                        )
-            if not pretrend_items and design.get("method") == "event_study":
-                copy = (
-                    _GLOBAL_PRETREND_SUPPRESSION_COPY
-                    if globally_suppressed
-                    else (diagnostic_limit or "冲击前诊断缺失，方向性推断已关闭。")
-                )
-                lines.append(f"- 冲击前趋势联合检验：不可评估；{copy}")
             notes = [_safe(note) for note in _list_values(result.get("notes"))]
             if notes:
                 lines.extend(("", "方法与限制："))

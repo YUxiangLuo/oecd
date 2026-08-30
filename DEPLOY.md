@@ -209,7 +209,7 @@ curl -fsS https://gvcsim.example.edu/health
 
 ## 备份与恢复演练
 
-备份脚本使用 `pg_dump --format=custom`，恢复演练不会覆盖已有归档：
+备份脚本使用 `pg_dump --format=custom`，每日服务默认保留最新 90 组已完成的 dump + SHA-256 文件（可用 `GVCSIM_BACKUP_KEEP` 在 `1..10000` 内调整）。轮换先排除缺少 dump 或 checksum 的不完整归档，它们不占用保留名额；恢复演练不会覆盖已有归档：
 
 ```bash
 set -a; . /etc/gvcsim.env; set +a
@@ -228,3 +228,5 @@ unset PGPASSWORD
 ```
 
 结果必须为 `gvcsim-teaching-db-v10`。恢复生产库前应停止 API、保留故障库，并先在隔离空库完成摘要、目录和 schema 验证。
+
+本机保留不等于灾难备份。应只同步已同时存在 `.dump` 与 `.dump.sha256` 的完成文件对到异机或对象存储，并对异机副本定期执行同样的摘要与隔离恢复演练。

@@ -4,9 +4,24 @@ set -euo pipefail
 : "${GVCSIM_PG_DSN:?GVCSIM_PG_DSN must be set}"
 
 backup_dir=${GVCSIM_BACKUP_DIR:-/var/backups/gvcsim}
+backup_keep=${GVCSIM_BACKUP_KEEP:-90}
+if [[ ! "$backup_keep" =~ ^([1-9][0-9]{0,3}|10000)$ ]]; then
+  echo "GVCSIM_BACKUP_KEEP must be an integer in 1..10000" >&2
+  exit 1
+fi
+backup_keep=$((10#$backup_keep))
+if [[ "$backup_dir" != /* || "$backup_dir" == / || -L "$backup_dir" ]]; then
+  echo "GVCSIM_BACKUP_DIR must be an absolute, non-root, real directory" >&2
+  exit 1
+fi
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
 umask 077
 install -d -m 0700 "$backup_dir"
+backup_dir=$(realpath "$backup_dir")
+if [[ "$backup_dir" == / ]]; then
+  echo "refusing to use the filesystem root as GVCSIM_BACKUP_DIR" >&2
+  exit 1
+fi
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
 project_python=${GVCSIM_PYTHON:-"$script_dir/../.venv/bin/python"}
@@ -74,10 +89,40 @@ published_dump=
 rm -f -- "$service_file"
 trap - EXIT
 
+# Retain only complete backup pairs. The checksum is published last and is the
+# completion marker; incomplete files and symlinks are never selected here.
+mapfile -t checksum_candidates < <(
+  find "$backup_dir" -maxdepth 1 -type f -name 'classroom-*.dump.sha256' -printf '%f\n' | LC_ALL=C sort -r
+)
+completed_checksums=()
+for checksum_name in "${checksum_candidates[@]}"; do
+  if [[ ! "$checksum_name" =~ ^classroom-[0-9]{8}T[0-9]{6}Z\.dump\.sha256$ ]]; then
+    continue
+  fi
+  candidate_checksum="$backup_dir/$checksum_name"
+  candidate_dump="$backup_dir/${checksum_name%.sha256}"
+  if [[ -f "$candidate_checksum" && ! -L "$candidate_checksum" && -f "$candidate_dump" && ! -L "$candidate_dump" ]]; then
+    completed_checksums+=("$checksum_name")
+  fi
+done
+retention_removed=0
+for checksum_name in "${completed_checksums[@]:backup_keep}"; do
+  old_checksum="$backup_dir/$checksum_name"
+  old_dump="$backup_dir/${checksum_name%.sha256}"
+  if [[ -f "$old_checksum" && ! -L "$old_checksum" && -f "$old_dump" && ! -L "$old_dump" ]]; then
+    rm -f -- "$old_checksum" "$old_dump"
+    retention_removed=$((retention_removed + 1))
+  fi
+done
+if [[ "$retention_removed" -gt 0 ]]; then
+  sync -f "$backup_dir"
+fi
+
 dump_path=$(realpath "$dump_path")
 backup_parent=$(dirname "$dump_path")
 backup_name=$(basename "$dump_path")
 printf 'backup=%s\n' "$dump_path"
 printf 'pg_dump=%s\n' "$(pg_dump --version)"
+printf 'retention_keep=%s retention_removed=%s\n' "$backup_keep" "$retention_removed"
 printf 'verify=(cd %q && sha256sum -c %q && pg_restore --list %q >/dev/null)\n' \
   "$backup_parent" "$backup_name.sha256" "$backup_name"
