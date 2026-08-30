@@ -99,7 +99,6 @@ export function EventStudyChart({
         <text x={padL - 8} y={y(0) + 3.5} textAnchor="end" fontSize={10} fill="#5f6677">0</text>
         {pts.map((p, i) => (
           <g key={p.name}
-            aria-label={`${p.name}，系数 ${fmt(p.coef)}，${globallySuppressed ? "整体设计门禁已抑制推断" : p.gate.state === "supported" ? "逐期支持充分" : p.gate.state === "unsupported" ? `${p.gate.period.contributing_clusters} 个贡献聚类，逐期推断已抑制` : "逐期支持未知，推断不可用"}`}
             onMouseEnter={(e) => show(e, [
               ["", seriesLabel ? `${seriesLabel} · ${p.name}` : p.name],
               ["系数", fmt(p.coef)],

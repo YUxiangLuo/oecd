@@ -281,7 +281,7 @@ export function RegressionEvidenceMatrix({
                   <th scope="row">{item.step}</th>
                   <td><b>{item.family}</b><span>{lesson.shortMetric}</span></td>
                   <td>{verdict ? familyDirectionLabel(verdict.state) : "待估计"}</td>
-                  <td><b>{verdict?.effect ?? "—"}</b><span>{lesson.unit}</span></td>
+                  <td><b>{verdict?.effect ?? "—"}</b></td>
                   <td>{verdict?.interval ?? "—"}</td>
                   <td>{lesson.dontClaim}</td>
                 </tr>

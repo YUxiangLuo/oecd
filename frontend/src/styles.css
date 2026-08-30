@@ -748,6 +748,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   .stepfooter,
   .announce-banner,
   .persistent-qc-warning,
+  .skip-to-step-content,
   .step-task-card,
   .card.accent,
   .toast-host,

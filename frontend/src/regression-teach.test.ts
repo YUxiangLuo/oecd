@@ -130,6 +130,8 @@ describe("student-first regression reading", () => {
     expect(html).toContain("下降");
     expect(html).toContain("待估计");
     expect(html).toContain("不同指标的系数不能比大小");
+    expect(html).toContain("-2.00 个百分点");
+    expect(html).not.toContain("</b><span>百分点</span>");
   });
 
   test("keeps the current family direction hidden until the student has judged it", () => {

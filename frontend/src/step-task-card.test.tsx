@@ -22,10 +22,11 @@ describe("shared step task card", () => {
     expect(materialStatusForStep(12, [{ step: 13 }])).toBe("ready");
   });
 
-  test("keeps the task card out of the step-16 printed report", async () => {
+  test("keeps application navigation and task chrome out of the step-16 printed report", async () => {
     const styles = await Bun.file(new URL("./styles.css", import.meta.url)).text();
     const printRules = styles.slice(styles.indexOf("@media print"));
     expect(printRules).toMatch(/\.step-task-card,?\s*[\s\S]*?display:\s*none\s*!important/);
+    expect(printRules).toMatch(/\.skip-to-step-content,?\s*[\s\S]*?display:\s*none\s*!important/);
   });
 
   test("renders one goal, exactly three actions, and two independent statuses", () => {
@@ -51,6 +52,7 @@ describe("shared step task card", () => {
     expect(html).toContain("理解题：已完成");
     expect(html).toContain("报告材料：尚未齐全");
     expect(html).toContain("为什么做这一步");
+    expect(html).toContain('class="rail-chips" role="group" aria-label="关联数据与依赖"');
   });
 
   test("focuses the real workbench and scrolls only its nested course container", () => {

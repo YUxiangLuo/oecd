@@ -74,7 +74,7 @@ export function StepTaskCard({
             <span><b>输出</b>{step.handoff.output}</span>
           </div>
           <p className="step-task-tip"><b>解释边界：</b>{step.tip}</p>
-          <div className="rail-chips" aria-label="关联数据与依赖">
+          <div className="rail-chips" role="group" aria-label="关联数据与依赖">
             {step.deps.map((dependency) => <span key={dependency} className="rail-chip">{dependency}</span>)}
           </div>
         </details>

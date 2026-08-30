@@ -108,6 +108,8 @@ describe("forest chart display scale", () => {
     expect(markup).toContain("菱形描述性点");
     expect(markup).toContain("4 个贡献聚类，逐期推断已抑制");
     expect(markup).toContain("k=-4 只有 4 个贡献处理聚类");
+    expect(markup).toContain("<title>k=-4，系数");
+    expect(markup).not.toContain("<g aria-label=");
     expect(markup).toContain("<path");
 
     const unsafePretrendMarkup = renderToStaticMarkup(createElement(EventStudyChart, {
