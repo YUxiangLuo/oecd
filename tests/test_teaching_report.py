@@ -484,8 +484,23 @@ def test_interaction_event_report_gate_requires_exact_diagnostic_scope_set():
         "event_support": support,
         "diagnostics": {"pretrend": tests["joint"], "pretrend_tests": tests},
     }
-    design = {"method": "event_study", "interaction": True}
+    design = {
+        "outcome": "trade",
+        "depvar_label": "课程 FVA 份额",
+        "shock_type": "tariff",
+        "method": "event_study",
+        "interaction": True,
+    }
     assert teaching_report._result_is_qualified(result, design) is True
+    assert teaching_report._pretrend_period_count(result, tests["joint"], True) == 1
+    passing_limit = teaching_report._passing_pretrend_limit(design, result)
+    assert passing_limit is not None
+    assert "仅 1 个受支持的冲击前时期" in passing_limit
+    assert "不是平行趋势成立的证据" in passing_limit
+    summary = "\n".join(
+        teaching_report._evidence_summary([{"step": 12, "outcome": "trade", "design": design, "result": result}])
+    )
+    assert "最重要的设计限制：** 冲击前检验仅 1 个受支持的冲击前时期" in summary
 
     empty_interaction_set = json.loads(json.dumps(result))
     empty_interaction_set["coefs"] = [
@@ -793,8 +808,69 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
     assert "| CHN | 2020 | 0.12 |" in report.markdown
     assert "仅用于探索定位，不限定下游回归样本" in report.markdown
     assert "按所选冲击类型汇总该类型全部已编码事件" in report.markdown
+    assert "当前目录无法确认来源状态" in report.markdown
+    assert "不是政策机关发布的权威处理标记" in report.markdown
     assert "## 一页结论：我的问题、证据与局限" in report.markdown
     assert "关税冲击是否改变出口中的外国增加值份额" in report.markdown
+
+
+def test_report_carries_catalogue_event_source_status_and_urls(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    disclosure = "事件事实与课程数值映射必须分开。"
+    monkeypatch.setattr(
+        teaching_report,
+        "events_metadata",
+        lambda: [
+            {
+                "name": "美国232钢铝关税",
+                "source_status": "official_event_source_complete",
+                "source_disclosure": disclosure,
+                "source_urls": ["https://www.federalregister.gov/api/v1/documents/2018-05477.json"],
+            },
+            {
+                "name": "中方对美反制关税",
+                "source_status": "teaching_encoding_no_event_source",
+                "source_disclosure": disclosure,
+                "source_urls": [],
+            },
+        ],
+    )
+    session = _complete()
+    session["steps"]["11"]["data"].update(
+        {
+            "viewed_events": ["美国232钢铝关税", "中方对美反制关税"],
+            "selected_event_key": "美国232钢铝关税::2018-03-23",
+        }
+    )
+
+    report = build(session, "同学")
+
+    assert "美国232钢铝关税：官方事件/日期来源完整" in report.markdown
+    assert "https://www.federalregister.gov/api/v1/documents/2018-05477.json" in report.markdown
+    assert "中方对美反制关税：没有逐项事件 URL 的教学编码" in report.markdown
+    sources = report.provenance["viewed_shock_event_sources"]
+    assert [item["name"] for item in sources] == ["美国232钢铝关税", "中方对美反制关税"]
+
+
+def test_did_cohort_weight_rows_count_each_available_post_cell():
+    design = {"method": "did"}
+    result = {
+        "coefs": [{"name": "treated×post", "coef": 0.1}],
+        "diagnostics": {
+            "cohort_time_cells": [
+                {"cohort": 2018, "term": "treated×post", "treated_entities": 10},
+                {"cohort": 2018, "term": "treated×post", "treated_entities": 10},
+                {"cohort": 2019, "term": "treated×post", "treated_entities": 5},
+                {"cohort": 2019, "term": "other", "treated_entities": 500},
+            ]
+        },
+    }
+
+    assert teaching_report._did_cohort_weight_rows(design, result) == [
+        {"cohort": 2018, "cell_count": 2, "treated_entity_periods": 20, "share": 0.8},
+        {"cohort": 2019, "cell_count": 1, "treated_entity_periods": 5, "share": 0.2},
+    ]
 
 
 def test_report_binds_step1_cell_to_the_slice_it_was_captured_from(tmp_path, monkeypatch):

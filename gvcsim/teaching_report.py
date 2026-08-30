@@ -27,7 +27,7 @@ from gvcsim.regression.design import (
 )
 from gvcsim.regression.validity import MIN_TREATED_CLUSTERS
 from gvcsim.session import SESSION_VERSION
-from gvcsim.shocks import SHOCK_LABELS
+from gvcsim.shocks import SHOCK_LABELS, events_metadata
 from gvcsim.steps import STEPS
 
 REFLECTION_TEXT_LIMIT = 2400
@@ -48,14 +48,19 @@ _OUTCOME_UNITS = {
     "trade": "份额原始单位（乘以 100 后按百分点解释）",
     "production": "份额原始单位（乘以 100 后按百分点解释）",
     "length": "生产环节长度单位",
-    "network": "介数中心性原始单位；跨指标比较时另参考样本标准差单位",
+    "network": "全正边二值介数原始单位（探索性拓扑基准）；跨指标比较时另参考样本标准差单位",
 }
 _STUDENT_METRIC_LABELS = {
-    "FVA_share": "外国增加值份额（FVA 份额）",
+    "FVA_share": "课程 FVA 份额（纯 VA / VA+TLS；非 OECD EXGR_FVASH）",
     "3b_VA_GVC_C_share": "复杂 GVC 生产份额",
     "GVCPs": "GVC 相对位置（GVCPs）",
     # Keep the legacy schema key in provenance, but never teach its misspelling.
-    "betweenesscentrality": "介数中心性",
+    "betweenesscentrality": "全正边二值介数（探索性拓扑基准）",
+}
+_SHOCK_SOURCE_STATUS_LABELS = {
+    "official_event_source_complete": "官方事件/日期来源完整",
+    "partial_official_event_source": "官方事件/日期来源仅部分覆盖",
+    "teaching_encoding_no_event_source": "没有逐项事件 URL 的教学编码",
 }
 _STATUS_LABELS = {
     "ok": "可报告",
@@ -71,8 +76,8 @@ _SCENARIO_LABELS = {
 }
 _OUTCOME_INTERPRETATIONS = {
     "trade": {
-        "negative": "结果与外国增加值依赖下降一致，但不能单独证明供应链已经回流。",
-        "positive": "结果与外国增加值依赖上升一致，但仍需检查识别假设和其他共同变化。",
+        "negative": "课程纯 VA 口径的 FVA 构成下降；这不是 OECD EXGR_FVASH，也不能单独证明供应链已经回流。",
+        "positive": "课程纯 VA 口径的 FVA 构成上升；这不是 OECD EXGR_FVASH，仍需检查识别假设和其他共同变化。",
     },
     "production": {
         "negative": "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
@@ -83,8 +88,8 @@ _OUTCOME_INTERPRETATIONS = {
         "positive": "结果与跨境生产链延长一致，但不能单靠该估计判断企业策略。",
     },
     "network": {
-        "negative": "结果与拓扑中介位置下降一致，但不能单独证明发生脱钩。",
-        "positive": "结果与拓扑中介位置增强一致，但可能同时受到网络重组影响。",
+        "negative": "全正边二值拓扑基准下降；未经边阈值敏感性检验，不能据此证明枢纽地位下降或发生脱钩。",
+        "positive": "全正边二值拓扑基准上升；未经边阈值敏感性检验，不能据此证明经济重要性增强。",
     },
 }
 _REFLECTION_MIN_LENGTHS = {
@@ -794,6 +799,50 @@ def _summary_design_limit(
     return None
 
 
+def _pretrend_period_count(result: dict[str, Any], pretrend: dict[str, Any], interaction: bool) -> int | None:
+    """Count distinct supported lead event times, not Wald restrictions."""
+    terms = pretrend.get("terms")
+    if not isinstance(terms, list) or not terms:
+        return None
+    event_times: set[int] = set()
+    for term in terms:
+        if not isinstance(term, str):
+            return None
+        period = _event_period(result, term, interaction)
+        event_time = period.get("event_time") if isinstance(period, dict) else None
+        if not isinstance(event_time, int) or isinstance(event_time, bool) or event_time >= 0:
+            return None
+        event_times.add(event_time)
+    return len(event_times) or None
+
+
+def _passing_pretrend_limit(design: dict[str, Any], result: dict[str, Any]) -> str | None:
+    """Passing a pretrend pretest is never affirmative identifying evidence."""
+    if design.get("method") != "event_study":
+        return None
+    raw_diagnostics = result.get("diagnostics")
+    diagnostics: dict[str, Any] = raw_diagnostics if isinstance(raw_diagnostics, dict) else {}
+    pretrend = diagnostics.get("pretrend") if isinstance(diagnostics.get("pretrend"), dict) else None
+    interaction = design.get("interaction") is True
+    contract_is_safe = (
+        _interaction_pretrend_scopes_are_safe(result) if interaction else _main_pretrend_contract_is_safe(result)
+    )
+    if not pretrend or not contract_is_safe:
+        return None
+    p_value = pretrend.get("p")
+    period_count = _pretrend_period_count(result, pretrend, interaction)
+    if (
+        not isinstance(p_value, (int, float))
+        or isinstance(p_value, bool)
+        or not math.isfinite(float(p_value))
+        or float(p_value) < 0.05
+        or period_count is None
+    ):
+        return None
+    coverage = "仅 1 个受支持的冲击前时期，检验力尤其有限" if period_count == 1 else f"覆盖 {period_count} 个冲击前时期"
+    return f"冲击前检验{coverage}；p≥0.05 只表示未检出明显差异，不是平行趋势成立的证据。"
+
+
 def _run_fingerprint(design: dict[str, Any], result: dict[str, Any]) -> str:
     """Return exact deterministic JSON identity for saved-run deduplication.
 
@@ -917,6 +966,77 @@ def _list_values(value: Any) -> list[Any]:
     return value if isinstance(value, list) else []
 
 
+def _viewed_shock_event_sources(session: dict[str, Any]) -> list[dict[str, Any]]:
+    """Resolve saved step-11 event names to the catalogue's source contract."""
+    shock = _step_data(session, 11)
+    requested = [str(item) for item in _list_values(shock.get("viewed_events"))]
+    selected = shock.get("selected_event_key")
+    if isinstance(selected, str) and selected:
+        requested.append(selected.rsplit("::", 1)[0])
+    by_name = {str(item.get("name")): item for item in events_metadata() if item.get("name")}
+    resolved: list[dict[str, Any]] = []
+    for name in dict.fromkeys(requested):
+        item = by_name.get(name)
+        if item is None:
+            resolved.append(
+                {
+                    "name": name,
+                    "source_status": "unknown_saved_event",
+                    "source_disclosure": "保存的事件已不在当前课程目录中；来源状态无法确认。",
+                    "source_urls": [],
+                }
+            )
+            continue
+        resolved.append(
+            {
+                "name": name,
+                "source_status": item.get("source_status"),
+                "source_disclosure": item.get("source_disclosure"),
+                "source_urls": list(item.get("source_urls") or []),
+            }
+        )
+    return resolved
+
+
+def _did_cohort_weight_rows(design: dict[str, Any], result: dict[str, Any]) -> list[dict[str, Any]]:
+    """Reconstruct the published overall-ATT weights from serialized cells."""
+    if design.get("method") != "did":
+        return []
+    coefficients = [item for item in _list_values(result.get("coefs")) if isinstance(item, dict)]
+    if not coefficients or not isinstance(coefficients[0].get("name"), str):
+        return []
+    term = coefficients[0]["name"]
+    raw_diagnostics = result.get("diagnostics")
+    diagnostics: dict[str, Any] = raw_diagnostics if isinstance(raw_diagnostics, dict) else {}
+    cells = [item for item in _list_values(diagnostics.get("cohort_time_cells")) if isinstance(item, dict)]
+    grouped: dict[int, dict[str, int]] = {}
+    for cell in cells:
+        cohort, weight = cell.get("cohort"), cell.get("treated_entities")
+        if (
+            cell.get("term") != term
+            or not isinstance(cohort, int)
+            or isinstance(cohort, bool)
+            or not isinstance(weight, int)
+            or isinstance(weight, bool)
+            or weight <= 0
+        ):
+            continue
+        current = grouped.setdefault(cohort, {"cell_count": 0, "treated_entity_periods": 0})
+        current["cell_count"] += 1
+        current["treated_entity_periods"] += weight
+    denominator = sum(item["treated_entity_periods"] for item in grouped.values())
+    if denominator <= 0:
+        return []
+    return [
+        {
+            "cohort": cohort,
+            **grouped[cohort],
+            "share": grouped[cohort]["treated_entity_periods"] / denominator,
+        }
+        for cohort in sorted(grouped)
+    ]
+
+
 def _experiment_sections(session: dict[str, Any]) -> list[str]:
     """Render only snapshots produced by explicit student interactions."""
     lines = [
@@ -1005,6 +1125,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
     viewed_types = _list_values(shock.get("viewed_shock_types"))
     viewed_events = _list_values(shock.get("viewed_events"))
     selected_event = shock.get("selected_event_key")
+    event_sources = _viewed_shock_event_sources(session)
     if viewed_types or viewed_events or selected_event:
         captured = True
         lines.extend(("### 步骤 11 · 贸易政策冲击数据接入", ""))
@@ -1014,9 +1135,20 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             lines.append(f"- 查看过的政策事件：{'、'.join(_safe(item) for item in viewed_events)}")
         if selected_event:
             lines.append(f"- 最后选择的事件：{_safe(selected_event)}（仅用于探索定位，不限定下游回归样本）")
+        if event_sources:
+            lines.extend(("- 已查看事件的来源状态：", ""))
+            for event in event_sources:
+                status = _SHOCK_SOURCE_STATUS_LABELS.get(str(event.get("source_status")), "当前目录无法确认来源状态")
+                urls = [str(url) for url in _list_values(event.get("source_urls")) if isinstance(url, str)]
+                source_links = "、".join(f"[来源 {index + 1}]({url})" for index, url in enumerate(urls))
+                lines.append(
+                    f"  - {_safe(event.get('name', '—'))}：{status}{f'；{source_links}' if source_links else ''}"
+                )
+                lines.append(f"    - 映射边界：{_safe(event.get('source_disclosure', '—'))}")
         lines.extend(
             (
                 "- 下游回归口径：按所选冲击类型汇总该类型全部已编码事件的国家×行业暴露，不把单个事件选择当作回归筛选。",
+                "- 处理组语义：treated 只表示教学暴露指标超过课程阈值，不是政策机关发布的权威处理标记。",
                 "",
             )
         )
@@ -1037,10 +1169,11 @@ def _qualified_by_step(runs: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
 def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
     qualified = _qualified_by_step(runs)
     lines = [
-        "### 四类指标并读",
+        "### 四类指标并读（预先指定结果族）",
         "",
-        "这四步分别估计贸易流、生产、长度和网络四类指标。"
-        "下表列出各步实际保存的可报告结果；系数因量纲和估计对象不同，不能直接比大小。",
+        "这四步分别估计贸易流、生产、长度和网络；四项结果必须完整报告，不能只挑区间未跨 0 的结果。"
+        "下表列出各步实际保存的可报告结果；系数因量纲和估计对象不同不能比大小，"
+        "网络项还是未经边阈值敏感性检验的探索性拓扑基准。",
         "",
         "| 步骤 | 指标 | 冲击 | 比较方式 | 估计对象与相对变化 | 95% 区间 | 证据判断 |",
         "|---|---|---|---|---|---|---|",
@@ -1149,7 +1282,10 @@ def _evidence_summary(runs: list[dict[str, Any]]) -> list[str]:
         )
         reasons = [*_list_values(result.get("status_reasons")), *_list_values(support.get("reasons"))]
         design_limit = (
-            period_limit or diagnostic_limit or _summary_design_limit(status, support, reasons, failed_pretrend)
+            period_limit
+            or diagnostic_limit
+            or _summary_design_limit(status, support, reasons, failed_pretrend)
+            or _passing_pretrend_limit(design, result)
         )
         if design_limit:
             lines.append(f"- **最重要的设计限制：** {design_limit}")
@@ -1230,6 +1366,20 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                         support_bits.append(f"{label}={rendered}")
                 if support_bits:
                     lines.append(f"- 处理支持：{'；'.join(support_bits)}")
+            cohort_weights = _did_cohort_weight_rows(design, result)
+            if cohort_weights:
+                rendered_weights = "；".join(
+                    f"{row['cohort']} cohort={float(row['share']) * 100:.1f}%"
+                    f"（{row['cell_count']} 个时期，{row['treated_entity_periods']} 个实体×时期）"
+                    for row in cohort_weights
+                )
+                lines.append(f"- **总体 ATT 实际权重（非 cohort 等权）：** {rendered_weights}")
+                dominant = max(cohort_weights, key=lambda row: float(row["share"]))
+                if float(dominant["share"]) >= 0.75:
+                    lines.append(
+                        f"- **权重主导提醒：** {dominant['cohort']} cohort 占 {float(dominant['share']) * 100:.1f}%；"
+                        "较早 cohort 因拥有更多处理后时期会重复贡献，总体 ATT 主要反映该 cohort。"
+                    )
             if suppressed:
                 lines.append(
                     "- **统计推断已抑制**：下表点估计仅说明计算输出；不得把缺失的 p 值或置信区间解释为无效应，也不得据此形成方向性结论。"
@@ -1355,6 +1505,34 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                             f"p={_number(scoped_pretrend.get('p'), p_value=True)}；"
                             f"{_safe(scoped_pretrend.get('interpretation', ''))}"
                         )
+                        df_num = scoped_pretrend.get("df_num")
+                        pretrend_p = scoped_pretrend.get("p")
+                        period_count = _pretrend_period_count(
+                            result, scoped_pretrend, design.get("interaction") is True
+                        )
+                        if isinstance(df_num, int) and not isinstance(df_num, bool) and period_count is not None:
+                            passing = (
+                                isinstance(pretrend_p, (int, float))
+                                and not isinstance(pretrend_p, bool)
+                                and math.isfinite(float(pretrend_p))
+                                and float(pretrend_p) >= 0.05
+                            )
+                            lines.append(
+                                f"  - 有效冲击前时期：{period_count} 个；Wald 联合限制：{df_num} 条。"
+                                + (
+                                    (
+                                        "只有一个受支持时期，检验力尤其有限；未检出差异不是平行趋势成立的证据。"
+                                        if period_count == 1
+                                        else "未检出差异也不是平行趋势成立的证据。"
+                                    )
+                                    if passing
+                                    else (
+                                        "已检出冲击前差异，方向性解读已关闭；且只有一个受支持时期，诊断覆盖仍很窄。"
+                                        if period_count == 1
+                                        else "已检出冲击前差异，方向性解读已关闭。"
+                                    )
+                                )
+                            )
                     else:
                         lines.append(
                             f"- {prefix}：不可评估；"
@@ -1445,6 +1623,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
     qc_metadata: dict[str, Any] = raw_qc_metadata if isinstance(raw_qc_metadata, dict) else {}
     qc_summary = _qc_release_summary(qc_metadata)
     network_algorithm = str(metadata.get("network_algorithm") or NETWORK_ALGORITHM)
+    shock_event_sources = _viewed_shock_event_sources(session)
     provenance = {
         "generated_at": generated_at,
         "release_id": metadata.get("release_id"),
@@ -1464,6 +1643,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         ],
         "algorithm": "WWZ five-category aggregation plus OECD TLS extension; WWYZ indicators; Gephi-compatible unweighted path centralities; cohort-time ATT with never/not-yet-treated controls and cluster jackknife",
         "network_algorithm": network_algorithm,
+        "viewed_shock_event_sources": shock_event_sources,
         "data_sources": data_sources,
         "indicator_data_source": data_sources.get("ci_synthetic_icio") or data_sources.get("oecd_icio"),
         "simulated_macro_controls": data_sources.get("simulated_macro_controls"),
@@ -1477,7 +1657,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "",
         f"> 数据覆盖 {years[0]}–{years[-1]}，指标来源：{_safe(source)}。政策冲击为基于公开事件手工编码的拟真教学面板，不能用于研究结论。",
         "",
-        "> 步骤 12–15 分别估计贸易流、生产、长度和网络四类指标。系数因量纲和估计对象不同不能比大小，但可以并读方向和区间是否过 0。",
+        "> 步骤 12–15 的四项结果是预先指定的探索性结果族，必须全部报告，不能只挑区间未跨 0 的结果。贸易流、生产和长度量纲不同；网络项还是未经边阈值敏感性检验的探索性拓扑基准，四者都不能按系数大小排序。",
         "",
         "> 本报告汇总描述性探索和已保存的教学估计，不证明政策冲击导致了 GVC 变化。因果解释至少依赖冲击外生性、趋势可比性、无同期混杂、处理定义与模型相容，以及处理效应异质性得到妥善处理。全球投入链外溢意味着 no-interference/SUTVA 不能自动成立；2018–2020 与 COVID-19 重叠，年份效应不能吸收国家×行业异质疫情冲击。",
         "",
@@ -1489,12 +1669,13 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         *_qc_disclosure_section(qc_summary),
         "## 数据与方法说明",
         "",
-        "- 指标算法：WWZ 16 个明细项归并为五类，另加由 OECD ICIO TLS（产品税减补贴）账户计算的 taxsub 扩展项以匹配 VA+TLS 账户闭合毛出口；TLS/taxsub 不等于关税冲击，也不是 WWZ 原文分类。生产分解与生产长度采用 WWYZ 口径。",
-        "- 网络算法：保留有向正流量边；加权度使用流量权重，介数、距离和特征向量中心性按有向无权网络计算。",
-        "- 无权路径口径把每条正流量边视为同样长度，因此高介数表示拓扑上的最短路径中介位置，不自动等于经济规模大、关键瓶颈或不可替代。",
+        "- 指标算法：WWZ 16 个明细项归并为五类，另加由 OECD ICIO TLS（产品税减补贴）账户计算的 taxsub 扩展项以匹配 VA+TLS 账户闭合毛出口；TLS/taxsub 不等于关税冲击，也不是 WWZ 原文分类。课程 FVA_share 使用纯 VA FVA 作分子、VA+TLS 毛出口作分母，包含直接与间接外国上游纯增加值，但不是 OECD 官方 EXGR_FVASH。生产分解与生产长度采用 WWYZ 口径。",
+        "- 网络算法：保留全部有向正流量边与正自环。加权总度=加权入度+加权出度，正自环计两次；它不是去重后的贸易额。路径指标按有向无权网络计算。eigencentrality 精确复现 Gephi 0.10.1 累计入边兼容分数，不等于标准 Perron 特征向量幂迭代。",
+        "- 无权路径口径把微小正边与大额边视为同样长度，因此高介数只表示这套二值拓扑上的最短路径中介位置，不自动等于经济规模、关键瓶颈或不可替代。",
         "- 网络解释顺序：先以加权度观察经济流量规模，再把无权介数作为拓扑基准并比较排序。当前报告没有边阈值敏感性分析，微小正边是否改变最短路径与排序尚未检验。",
         "- 冲击口径：界面中的单个事件用于定位和理解；回归按冲击类型使用该类型全部已编码事件汇总形成的暴露面板。",
-        "- 回归主结果：分批处理 DID/事件研究使用 cohort-time ATT，各 cohort 以 g−1 为基期，只使用从未或截至比较期尚未处理实体作对照；按可用处理实体数聚合，协方差按国家 delete-one cluster jackknife。",
+        "- 回归主结果：分批处理 DID/事件研究使用 cohort-time ATT，各 cohort 以 g−1 为基期，只使用从未或截至比较期尚未处理实体作对照；每个 cohort×时期按可用处理实体数聚合，早期 cohort 因更多处理后时期而重复贡献，并非 cohort 等权或实体只计一次。协方差按国家 delete-one cluster jackknife。",
+        "- 多结果与显著性：四项结果必须完整报告；95% 区间与 p 值描述不确定性，不是因果结论开关。事件研究未检出冲击前差异不证明平行趋势，尤其只有一个受支持的冲击前时期时检验力很低。",
         "- 同期 ICIO 派生量与模拟宏观量可能是处理后变量，公开主回归禁止将其作为普通遗漏变量控制；模拟 GDP deflator 只称教学模拟平减指数。",
         "- 回归结果来自学生会话中保存的服务端运行，不在报告生成时复算。",
         f"- 生成时间：{generated_at}；会话摘要：`{fingerprint}`。",
@@ -1502,16 +1683,19 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "## 方法参考文献",
         "",
         "1. Yamano et al. (2023), *Development of the OECD Inter-Country Input-Output Database 2023*, https://doi.org/10.1787/5a5d0665-en",
-        "2. Koopman, Wang & Wei (2014), *Tracing Value-Added and Double Counting in Gross Exports*, https://doi.org/10.1257/aer.104.2.459",
-        "3. Wang, Wei & Zhu, *Quantifying International Production Sharing at the Bilateral and Sector Levels*, NBER w19677, https://www.nber.org/papers/w19677",
-        "4. Wang, Wei, Yu & Zhu, *Measures of Participation in Global Value Chains and Global Business Cycles*, NBER w23222, https://www.nber.org/papers/w23222",
-        "5. Wang, Wei, Yu & Zhu, *Characterizing Global Value Chains: Production Length and Upstreamness*, NBER w23261, https://www.nber.org/papers/w23261",
-        "6. Brandes (2001), *A Faster Algorithm for Betweenness Centrality*, https://doi.org/10.1080/0022250X.2001.9990249",
-        "7. Goodman-Bacon (2021), *Difference-in-Differences with Variation in Treatment Timing*, https://www.nber.org/papers/w25018",
-        "8. Sun & Abraham (2021), *Estimating Dynamic Treatment Effects in Event Studies with Heterogeneous Treatment Effects*, https://doi.org/10.1016/j.jeconom.2020.09.006",
-        "9. Callaway & Sant’Anna (2021), *Difference-in-Differences with Multiple Time Periods*, https://doi.org/10.1016/j.jeconom.2020.12.001",
-        "10. Roth (2022), *Pretest with Caution*, https://www.aeaweb.org/articles?id=10.1257/aeri.20210236",
-        "11. Cameron & Miller (2015), *A Practitioner’s Guide to Cluster-Robust Inference*, https://doi.org/10.3368/jhr.50.2.317",
+        "2. OECD (2023), *Guide to OECD TiVA Indicators*, https://www.oecd.org/content/dam/oecd/en/topics/policy-sub-issues/trade-in-value-added/tiva-indicators-guide-2023.pdf",
+        "3. Koopman, Wang & Wei (2014), *Tracing Value-Added and Double Counting in Gross Exports*, https://doi.org/10.1257/aer.104.2.459",
+        "4. Wang, Wei & Zhu, *Quantifying International Production Sharing at the Bilateral and Sector Levels*, NBER w19677, https://www.nber.org/papers/w19677",
+        "5. Wang, Wei, Yu & Zhu, *Measures of Participation in Global Value Chains and Global Business Cycles*, NBER w23222, https://www.nber.org/papers/w23222",
+        "6. Wang, Wei, Yu & Zhu, *Characterizing Global Value Chains: Production Length and Upstreamness*, NBER w23261, https://www.nber.org/papers/w23261",
+        "7. Brandes (2001), *A Faster Algorithm for Betweenness Centrality*, https://doi.org/10.1080/0022250X.2001.9990249",
+        "8. Gephi issue #2145, *Eigenvector centrality wrong?*, https://github.com/gephi/gephi/issues/2145",
+        "9. Goodman-Bacon (2021), *Difference-in-Differences with Variation in Treatment Timing*, https://www.nber.org/papers/w25018",
+        "10. Sun & Abraham (2021), *Estimating Dynamic Treatment Effects in Event Studies with Heterogeneous Treatment Effects*, https://doi.org/10.1016/j.jeconom.2020.09.006",
+        "11. Callaway & Sant’Anna (2021), *Difference-in-Differences with Multiple Time Periods*, https://doi.org/10.1016/j.jeconom.2020.12.001",
+        "12. Roth (2022), *Pretest with Caution*, https://www.aeaweb.org/articles?id=10.1257/aeri.20210236",
+        "13. Wasserstein & Lazar (2016), *The ASA Statement on p-Values*, https://doi.org/10.1080/00031305.2016.1154108",
+        "14. Cameron & Miller (2015), *A Practitioner’s Guide to Cluster-Robust Inference*, https://doi.org/10.3368/jhr.50.2.317",
         "",
         *report_source_disclosures(data_sources),
         "",

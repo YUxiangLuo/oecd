@@ -128,6 +128,12 @@ details.reg-compare-card[open] > summary { margin-bottom: 10px; }
 .reg-evidence-support > div { padding: 7px 9px; border: 1px solid #e0e4ea; border-radius: 8px; background: #fff; }
 .reg-evidence-support dt { color: #687183; font-size: 10.5px; }
 .reg-evidence-support dd { margin: 2px 0 0; color: #303747; font-size: 11.5px; font-weight: 650; }
+.reg-weight-disclosure {
+  margin: 10px 0; padding: 10px 12px; border: 1px solid #d8daf3; border-radius: 9px;
+  background: #fff; color: #3f4657; font-size: 11.5px; line-height: 1.55;
+}
+.reg-weight-disclosure p { margin: 5px 0; }
+.reg-weight-disclosure ul { display: flex; flex-wrap: wrap; gap: 5px 16px; margin: 6px 0; padding-left: 18px; }
 .reg-reading-check { background: #f7f8ff; border-color: #d8daf3; }
 .reg-reading-check.correct { background: #f2faf6; border-color: #b8dfcc; }
 .reg-reading-check.retry { background: #fffaf3; border-color: #ead7a8; }

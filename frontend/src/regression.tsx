@@ -6,7 +6,7 @@ import { comparisonExplanation, lessonQuestion, REGRESSION_LESSONS, REGRESSION_Q
 import {
   eventInferenceAllowed, eventInferenceGate, eventInferenceMessage, eventMainPretrendContractIsSafe,
   eventPretrendScopesAreSafe, eventSupportCoversTerms, GLOBAL_PRETREND_SUPPRESSION_COPY,
-  globalInferenceIsSuppressed,
+  globalInferenceIsSuppressed, pretrendPeriodCount,
 } from "./regression-event-support";
 import { isQualifiedRegressionResult, nextRegressionSave } from "./regression-save";
 import {
@@ -217,6 +217,36 @@ interface RunSnapshot {
 
 export type RegressionHistory = Partial<Record<RegressionOutcome, RunSnapshot[]>>;
 
+export interface DidCohortWeight {
+  cohort: number;
+  cellCount: number;
+  treatedEntityPeriods: number;
+  share: number;
+}
+
+/** 总体 DID 的真实聚合权重。每个 cohort×post 单元按可用处理实体数计权，
+ * 因而早期 cohort 会通过更多 post 单元重复贡献。只从服务端已发布单元推导，
+ * 不根据时间线总数猜测。 */
+export function didCohortWeights(response: RegressionResponse): DidCohortWeight[] {
+  if (response.design.method !== "did") return [];
+  const cells = response.result.diagnostics.cohort_time_cells ?? [];
+  const term = response.result.coefs[0]?.name;
+  const grouped = new Map<number, { cellCount: number; treatedEntityPeriods: number }>();
+  for (const cell of cells) {
+    if (cell.term !== term || !Number.isInteger(cell.cohort)
+      || !Number.isFinite(cell.treated_entities) || cell.treated_entities <= 0) continue;
+    const current = grouped.get(cell.cohort) ?? { cellCount: 0, treatedEntityPeriods: 0 };
+    current.cellCount += 1;
+    current.treatedEntityPeriods += cell.treated_entities;
+    grouped.set(cell.cohort, current);
+  }
+  const denominator = [...grouped.values()].reduce((sum, item) => sum + item.treatedEntityPeriods, 0);
+  if (denominator <= 0) return [];
+  return [...grouped.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([cohort, value]) => ({ cohort, ...value, share: value.treatedEntityPeriods / denominator }));
+}
+
 const effectiveSettings = (settings: RegressionSettings): RegressionSettings => ({
   ...settings,
   priceMode: settings.controlMode === "none" ? "nominal" : settings.priceMode,
@@ -363,6 +393,8 @@ function RegressionEvidenceCard({ outcome, response, stale }: {
 }) {
   const verdict = buildRegressionVerdict(outcome, response);
   const support = response.result.support;
+  const cohortWeights = didCohortWeights(response);
+  const dominantCohort = cohortWeights.find((row) => row.share >= 0.75);
   return (
     <section className="reg-evidence-card" aria-labelledby="reg-evidence-title">
       <div className="reg-evidence-head">
@@ -386,7 +418,19 @@ function RegressionEvidenceCard({ outcome, response, stale }: {
             : "本次结果未记录支持度"}</dd>
         </div>
       </dl>
-      <p className="muted">判断顺序：先确认推断是否可用，再看区间是否跨过 0，最后才看点估计的正负号。</p>
+      {cohortWeights.length > 0 && (
+        <div className="reg-weight-disclosure" role="note">
+          <b>总体 ATT 的实际权重（不是 cohort 等权）</b>
+          <p>每个 cohort×处理后时期按该单元可用处理实体数计权；早期 cohort 有更多处理后时期，因此同一实体会通过多个时期贡献权重。</p>
+          <ul>
+            {cohortWeights.map((row) => (
+              <li key={row.cohort}>{row.cohort} cohort：{(row.share * 100).toFixed(1)}%（{row.cellCount} 个时期 · {row.treatedEntityPeriods} 个实体×时期）</li>
+            ))}
+          </ul>
+          {dominantCohort && <p><b>主导提醒：</b>{dominantCohort.cohort} cohort 占 {(dominantCohort.share * 100).toFixed(1)}%，所以“总体”结果主要反映该 cohort 的可用处理后时期。</p>}
+        </div>
+      )}
+      <p className="muted">这是四个预先指定结果中的一项。判断顺序：先读效应大小与区间，再确认推断和识别假设；必须报告全部四项，不能只挑区间未跨 0 的结果。</p>
     </section>
   );
 }
@@ -454,7 +498,16 @@ export function PretrendCheck({ response }: { response: RegressionResponse }) {
           {response.design.interaction && <b>{label}</b>}
           <p>{item.interpretation}</p>
           {item.available && item.p != null && (
-            <p className="muted">F({item.df_num}, {item.df_denom}) = {item.statistic?.toFixed(3)}，p = {item.p.toFixed(3)}</p>
+            <>
+              <p className="muted">F({item.df_num}, {item.df_denom}) = {item.statistic?.toFixed(3)}，p = {item.p.toFixed(3)} · 有效冲击前时期 {pretrendPeriodCount(item)} 个 · Wald 联合限制 {item.df_num} 条</p>
+              <p className="muted">{item.p >= 0.05
+                ? pretrendPeriodCount(item) === 1
+                  ? "只有一个受支持的冲击前时期，检验力尤其有限；未检出差异不是平行趋势成立的证据。"
+                  : "未检出差异也不是平行趋势成立的证据；请结合动态路径和研究背景判断。"
+                : pretrendPeriodCount(item) === 1
+                  ? "已检出冲击前差异，方向性解读已关闭；且只有一个受支持时期，诊断覆盖仍很窄。"
+                  : "已检出冲击前差异，方向性解读已关闭；请结合完整动态路径判断偏离范围。"}</p>
+            </>
           )}
         </div>
       ))}
@@ -1167,7 +1220,7 @@ export function RegressionRunLab({
           <p className="muted">{REGRESSION_QUESTION}</p>
           <div className="reg-learn-this"><b>本步要学会</b><p>{lesson.learnThis}</p></div>
           <p>{lesson.definition}</p>
-          {outcome === "network" && <p className="muted">网络回归只使用全球国家×行业图。国家级贸易图在全正流量口径下为完全图，Gephi 介数中心性恒为 0。</p>}
+          {outcome === "network" && <p className="muted">网络回归只使用全球国家×行业图上的全正边二值介数。微小正边与大额边等长，当前未做边阈值敏感性检验，因此本步只作探索性拓扑证据；国家级贸易图在该口径下为完全图、介数恒为 0。</p>}
           <p><b>下降：</b>{lesson.downMeaning}</p>
           <p><b>上升：</b>{lesson.upMeaning}</p>
           <p><b>跑完记下：</b>{lesson.writeDown}</p>

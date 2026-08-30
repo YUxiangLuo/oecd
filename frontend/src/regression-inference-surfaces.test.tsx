@@ -103,6 +103,50 @@ describe("event-study inference surfaces fail closed for legacy payloads", () =>
     expect(markup).toContain("判断前必须检查");
     expect(markup).toContain("冲击前已经存在明显差异");
     expect(markup).toContain("p = 0.001");
+    expect(markup).toContain("已检出冲击前差异，方向性解读已关闭");
+    expect(markup).not.toContain("未检出差异不是平行趋势");
+  });
+
+  test("interaction pretrend panel separates one lead from two joint restrictions", () => {
+    const response = legacyEventResponse(validEventSupportWithThinLead());
+    const lead = response.result.event_support!.periods[1];
+    Object.assign(lead, {
+      term: "k=-2", event_time: -2, contributing_rows: 13, contributing_entities: 13,
+      contributing_clusters: 13, period_supported: true, inference_supported: true,
+      suppress_inference: false, cohorts: { "2018": 13 }, reason_codes: [], reasons: [],
+    });
+    response.result.coefs = [
+      { name: "k=-2", coef: 0, se: 0.01, t: 0, p: 1, stars: "", ci_low: -0.02, ci_high: 0.02 },
+      response.result.coefs[0],
+      { name: "k=-2×base_gvc", coef: 0, se: 0.01, t: 0, p: 1, stars: "", ci_low: -0.02, ci_high: 0.02 },
+      { name: "k=0×base_gvc", coef: 0, se: 0.01, t: 0, p: 1, stars: "", ci_low: -0.02, ci_high: 0.02 },
+    ];
+    const scoped = (scope: "main" | "interaction" | "joint", terms: string[]) => ({
+      scope,
+      available: true,
+      reason: null,
+      terms,
+      excluded_terms: [],
+      statistic: 1.2,
+      df_num: terms.length,
+      df_denom: 20,
+      p: 0.25,
+      interpretation: `${scope} 未检出明显差异。`,
+    });
+    const tests = {
+      main: scoped("main", ["k=-2"]),
+      interaction: scoped("interaction", ["k=-2×base_gvc"]),
+      joint: scoped("joint", ["k=-2", "k=-2×base_gvc"]),
+    };
+    response.result.diagnostics = { pretrend: tests.joint, pretrend_tests: tests };
+
+    const markup = renderToStaticMarkup(createElement(PretrendCheck, { response }));
+
+    expect(markup).toContain("F(2, 20)");
+    expect(markup).toContain("有效冲击前时期 1 个");
+    expect(markup).toContain("Wald 联合限制 2 条");
+    expect(markup).toContain("只有一个受支持的冲击前时期，检验力尤其有限");
+    expect(markup).not.toContain("有效冲击前时期 2 个");
   });
 
   test("marginal table keeps the point estimate but hides seeded CI and p values", () => {

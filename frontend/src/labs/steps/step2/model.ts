@@ -31,7 +31,7 @@ export const shockTypeColor = (key: string | undefined) =>
 export const SHOCK_FILTERS = ["treated", "nonzero", "all"] as const;
 export type ShockFilter = (typeof SHOCK_FILTERS)[number];
 export const SHOCK_FILTER_LABELS: Record<ShockFilter, string> = {
-  treated: "受处理（权威标记）",
+  treated: "课程阈值处理组",
   nonzero: "非零强度",
   all: "全部记录",
 };

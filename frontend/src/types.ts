@@ -602,6 +602,18 @@ export interface RegressionPreflight {
   checks: { code: string; severity: string; message: string }[];
 }
 
+export interface CohortTimeCell {
+  cohort: number;
+  time: number;
+  event_time: number;
+  term: string;
+  att: number;
+  treated_entities: number;
+  control_entities: number;
+  treated_clusters: number;
+  control_clusters: number;
+}
+
 export interface RegressionResponse {
   design: RegressionDesignInfo;
   result: {
@@ -618,7 +630,7 @@ export interface RegressionResponse {
       pretrend?: PretrendDiagnostic;
       pretrend_tests?: Partial<Record<PretrendScope, PretrendDiagnostic>>;
       estimator?: string;
-      cohort_time_cells?: Record<string, number | string>[];
+      cohort_time_cells?: CohortTimeCell[];
     };
     marginal_effects?: MarginalEffect[];
     notes: string[];

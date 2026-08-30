@@ -299,8 +299,8 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
         <span className="intro-tau" style={{ color: tau > 0.02 ? "#ff9d9d" : "#eef1fb" }}>{demoShare}%</span>
       </div>
       <p className="intro-note">
-        本页只展示你选择的一种可能机制，不是估计结果，也不预告真实方向。后续回归会分别检验外国增加值份额(FVA_share)、
-        复杂 GVC 生产份额、前向 GVC 生产长度(PLv_GVC)与介数中心性。
+        本页只展示你选择的一种可能机制，不是估计结果，也不预告真实方向。后续回归会分别检验课程纯 VA 口径 FVA_share（非 OECD EXGR_FVASH）、
+        复杂 GVC 生产份额、前向 GVC 生产长度(PLv_GVC)，并探索全正边二值网络介数；四项不能只挑显著结果。
       </p>
     </div>,
 

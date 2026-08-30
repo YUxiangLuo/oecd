@@ -1,6 +1,7 @@
 import {
   eventInferenceGate, eventMainPretrendContractIsSafe, eventPretrendScopeIsSafe,
-  eventPretrendScopesAreSafe, eventSupportCoversTerms, globalInferenceIsSuppressed, primaryEventTerm,
+  eventPretrendScopesAreSafe, eventSupportCoversTerms, globalInferenceIsSuppressed,
+  pretrendPeriodCount, primaryEventTerm,
 } from "./regression-event-support";
 import type { CoefStat, RegressionOutcome, RegressionResponse, RegressionStatus } from "./types";
 
@@ -66,6 +67,22 @@ function failedPretrend(response: RegressionResponse): string | null {
     return null;
   }
   return diagnostic.interpretation || "检测到明显的冲击前差异";
+}
+
+function passingPretrendCaveat(response: RegressionResponse): string {
+  if (response.design.method !== "event_study") return "";
+  const diagnostic = response.result.diagnostics.pretrend;
+  if (!diagnostic?.available || diagnostic.p == null || diagnostic.p < 0.05) return "";
+  const contractIsSafe = response.design.interaction
+    ? eventPretrendScopesAreSafe(response.result.event_support, response.result.diagnostics, true)
+    : eventMainPretrendContractIsSafe(response.result.event_support, response.result.diagnostics);
+  if (!contractIsSafe) return "";
+  const periodCount = pretrendPeriodCount(diagnostic);
+  if (periodCount < 1) return "";
+  const coverage = periodCount === 1
+    ? "冲击前诊断只覆盖 1 个受支持时期，检验力尤其有限"
+    : `冲击前诊断覆盖 ${periodCount} 个受支持时期`;
+  return ` ${coverage}；p≥0.05 只表示未检出明显差异，不是平行趋势成立的证据。`;
 }
 
 function mainPolicyCoefficient(response: RegressionResponse): CoefStat | null {
@@ -139,8 +156,8 @@ function effectLabel(response: RegressionResponse, coefficient: CoefStat | null)
 
 const INTERPRETATION: Record<RegressionOutcome, { negative: string; positive: string }> = {
   trade: {
-    negative: "结果与外国增加值依赖下降一致，但不能单独证明供应链已经回流。",
-    positive: "结果与外国增加值依赖上升一致，但仍需检查识别假设和其他共同变化。",
+    negative: "课程纯 VA 口径的 FVA 构成下降；它不是 OECD EXGR_FVASH，也不能单独证明供应链已经回流。",
+    positive: "课程纯 VA 口径的 FVA 构成上升；它不是 OECD EXGR_FVASH，仍需检查识别假设和其他共同变化。",
   },
   production: {
     negative: "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
@@ -151,8 +168,8 @@ const INTERPRETATION: Record<RegressionOutcome, { negative: string; positive: st
     positive: "结果与跨境生产链延长一致，但不能单靠该估计判断企业策略。",
   },
   network: {
-    negative: "结果与拓扑中介位置下降一致，但不能单独证明发生脱钩。",
-    positive: "结果与拓扑中介位置增强一致，但可能同时受到网络重组影响。",
+    negative: "全正边二值拓扑基准下降；未经边阈值敏感性检验，不能据此证明枢纽地位下降或发生脱钩。",
+    positive: "全正边二值拓扑基准上升；未经边阈值敏感性检验，不能据此证明经济重要性增强。",
   },
 };
 
@@ -181,6 +198,7 @@ export function buildRegressionVerdict(
 
   const scaled = naturalScale(outcome, coefficient, response);
   const pretrendNote = failedPretrend(response);
+  const pretrendCaveat = passingPretrendCaveat(response);
 
   // 设计无效或处理支持度不足:必须先于任何区间比较返回。保存载荷中的
   // suppress_inference 可能来自旧版本，不能覆盖 result/support 的严重状态。
@@ -285,8 +303,8 @@ export function buildRegressionVerdict(
     effect: scaled.effect,
     interval: scaled.interval,
     evidence: state === "insufficient"
-      ? "95% 置信区间跨过 0；这不等于“没有效应”，而是当前证据不足以确定方向。"
-      : "95% 置信区间未跨过 0；是否作因果解释仍取决于冲击外生性、趋势可比性等假设。",
+      ? `95% 置信区间跨过 0；这不等于“没有效应”，而是当前证据不足以确定方向。${pretrendCaveat}`
+      : `95% 置信区间未跨过 0；是否作因果解释仍取决于冲击外生性、趋势可比性等假设。${pretrendCaveat}`,
     interpretation: state === "negative" || state === "positive"
       ? INTERPRETATION[outcome][state]
       : "当前结果不能支持明确的上升或下降结论。",

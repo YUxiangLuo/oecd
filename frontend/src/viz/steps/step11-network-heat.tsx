@@ -21,8 +21,8 @@ export const DEFAULT_HEAT_VIEW: HeatViewOptions = {
 };
 
 export const HEAT_SORT_OPTIONS: { key: HeatSortMetric; label: string }[] = [
-  { key: HEAT_EVIDENCE_METRIC, label: "介数中心性" },
-  { key: HEAT_WEIGHTED_DEGREE_METRIC, label: "加权度" },
+  { key: HEAT_EVIDENCE_METRIC, label: "全正边二值介数" },
+  { key: HEAT_WEIGHTED_DEGREE_METRIC, label: "加权总度（自环双计）" },
 ];
 export const HEAT_COVERAGE_OPTIONS: { key: HeatCoverage; label: string }[] = [
   { key: "top15", label: "Top 15" },
@@ -42,7 +42,7 @@ export function sameHeatView(first: HeatViewOptions, second: HeatViewOptions): b
 }
 
 export function heatSortLabel(metric: HeatSortMetric): string {
-  return HEAT_SORT_OPTIONS.find((option) => option.key === metric)?.label ?? "介数中心性";
+  return HEAT_SORT_OPTIONS.find((option) => option.key === metric)?.label ?? "全正边二值介数";
 }
 
 export function heatCoverageLabel(coverage: HeatCoverage): string {
@@ -50,11 +50,11 @@ export function heatCoverageLabel(coverage: HeatCoverage): string {
 }
 
 const HEAT_COLS = [
-  { key: HEAT_WEIGHTED_DEGREE_METRIC, name: "加权度", fmt: "amount", desc: "与该节点直接相连的中间投入边流量总和(百万美元)。" },
-  { key: HEAT_EVIDENCE_METRIC, name: "介数中心性", fmt: "raw", desc: "各有序节点对最短路径经过该节点的份额之和；未按节点对数归一化。" },
+  { key: HEAT_WEIGHTED_DEGREE_METRIC, name: "加权总度", fmt: "amount", desc: "加权入度+加权出度(百万美元)；正自环在两个方向各计一次，不是去重贸易额。" },
+  { key: HEAT_EVIDENCE_METRIC, name: "全正边二值介数", fmt: "raw", desc: "微小正边与大额边等长时，各有序节点对最短路径经过该节点的份额之和；未归一化、未做边阈值敏感性。" },
   { key: "closnesscentrality", name: "接近中心性", fmt: "num", desc: "沿出边可达节点数除以到这些节点的最短距离之和。" },
   { key: "harmonicclosnesscentrality", name: "调和中心性", fmt: "num", desc: "沿出边到可达节点的距离倒数平均值。" },
-  { key: "eigencentrality", name: "特征向量中心性", fmt: "num", desc: "按入边邻居的重要性迭代并以最大值归一。" },
+  { key: "eigencentrality", name: "Gephi 0.10.1 兼容入边分数", fmt: "num", desc: "复现 Gephi 0.10.1 的累计入边迭代；不同于标准 Perron 特征向量幂迭代。" },
 ] as const;
 
 const fmtVal = (v: number, fmt: string) => formatMetric(v, fmt === "amount" ? "amount" : "number");
@@ -178,7 +178,7 @@ export function HeatTableViz({
       >
         <caption style={{ textAlign: "left", padding: "12px 16px", color: "#3a4050", lineHeight: 1.6 }}>
           {shownCountry}行业节点中心性；在完整全球国家×行业图上计算，按{sortLabel}降序显示{coverageLabel}。
-          排序与范围只改变可见行；“记录介数”始终保存介数中心性，不随排序指标改变。
+          排序与范围只改变可见行；“记录拓扑基准”始终保存全正边二值介数，不随排序指标改变。
         </caption>
         <thead>
           <tr>
@@ -186,7 +186,7 @@ export function HeatTableViz({
             {HEAT_COLS.map((column) => (
               <th key={column.key} scope="col">{column.name}</th>
             ))}
-            <th scope="col">报告证据（固定介数中心性）</th>
+            <th scope="col">报告证据（固定拓扑基准）</th>
           </tr>
         </thead>
         <tbody>
@@ -205,13 +205,13 @@ export function HeatTableViz({
                   <button
                     type="button"
                     aria-pressed={selected}
-                    aria-label={`${selected ? "已记录" : "记录"}${rowLabel(row)}的介数中心性观测；当前按${sortLabel}排序，记录指标固定为介数中心性`}
+                    aria-label={`${selected ? "已记录" : "记录"}${rowLabel(row)}的全正边二值介数观测；当前按${sortLabel}排序，记录指标固定为拓扑基准`}
                     onClick={() => {
                       const activation = heatActivationForRow(rows, rowKey, sortMetric, coverage);
                       if (activation) onActivate(activation);
                     }}
                   >
-                    {selected ? "已记录介数" : "记录介数"}
+                    {selected ? "已记录拓扑基准" : "记录拓扑基准"}
                   </button>
                 </td>
               </tr>

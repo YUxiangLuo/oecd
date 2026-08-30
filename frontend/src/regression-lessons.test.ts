@@ -14,7 +14,7 @@ describe("regression lessons", () => {
     expect(Object.keys(REGRESSION_LESSONS)).toEqual(["trade", "production", "length", "network"]);
     expect(REGRESSION_LESSONS.trade.unit).toContain("百分点");
     expect(REGRESSION_LESSONS.length.focus).toContain("链条");
-    expect(REGRESSION_LESSONS.network.focus).toContain("网络");
+    expect(REGRESSION_LESSONS.network.focus).toContain("全正边二值");
     expect([
       REGRESSION_LESSONS.trade.priorStep,
       REGRESSION_LESSONS.production.priorStep,

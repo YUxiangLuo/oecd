@@ -63,7 +63,7 @@ INDICATOR_SCHEMA = {
         },
         {
             "key": "network",
-            "label": "生产网络中心性(Gephi 口径)",
+            "label": "生产网络指标（流量规模 + 全正边拓扑基准）",
             "fields": [
                 "degree",
                 "indegree",
@@ -81,7 +81,7 @@ INDICATOR_SCHEMA = {
     ],
     "fields": {
         "gross_exports": {"label": "毛出口(五类 WWZ 聚合项 + TLS)", "format": "amount"},
-        "FVA_share": {"label": "FVA 份额(FVA/VA+TLS 账户闭合毛出口)", "format": "pct"},
+        "FVA_share": {"label": "课程 FVA 份额(纯 VA FVA/VA+TLS 毛出口；非 OECD EXGR_FVASH)", "format": "pct"},
         "DVAex_share": {"label": "DVAex 份额(DVAex/VA+TLS 账户闭合毛出口)", "format": "pct"},
         "3_VA_GVC_share": {"label": "GVC 生产份额(3_VA_GVC/SVA)", "format": "pct"},
         "3b_VA_GVC_C_share": {"label": "复杂GVC生产份额(3b/SVA)", "format": "pct"},
@@ -117,27 +117,27 @@ INDICATOR_SCHEMA = {
         "degree": {"label": "度", "format": "number"},
         "indegree": {"label": "入度", "format": "number"},
         "outdegree": {"label": "出度", "format": "number"},
-        "weighted degree": {"label": "加权度", "format": "amount"},
+        "weighted degree": {"label": "加权总度(入+出；自环双计)", "format": "amount"},
         "weighted indegree": {"label": "加权入度", "format": "amount"},
         "weighted outdegree": {"label": "加权出度", "format": "amount"},
         "Eccentricity": {"label": "离心率", "format": "number"},
         "closnesscentrality": {"label": "接近中心性", "format": "number"},
         "harmonicclosnesscentrality": {"label": "调和中心性", "format": "number"},
-        "betweenesscentrality": {"label": "介数中心性", "format": "number"},
-        "eigencentrality": {"label": "特征向量中心性", "format": "number"},
+        "betweenesscentrality": {"label": "全正边二值介数(拓扑基准)", "format": "number"},
+        "eigencentrality": {"label": "Gephi 0.10.1 兼容入边分数", "format": "number"},
     },
 }
 
 _INDICATOR_DESCRIPTIONS = {
     "gross_exports": "五类 WWZ 聚合项与 OECD TLS（产品税减补贴）扩展项之和；这是 VA+TLS 账户闭合口径，不表示 taxsub 就是关税，也不是 WWZ 原文分解项。",
-    "FVA_share": "出口中外国增加值占 VA+TLS 账户闭合毛出口的比重；越高表示对进口中间投入的后向依赖越强。",
+    "FVA_share": "课程纯增加值口径：出口中由所有外国直接与间接上游生产者创造的纯增加值，占 VA+TLS 账户闭合毛出口的比重。TLS 单列为 taxsub，因此该字段不是 OECD 官方 EXGR_FVASH，不可与官方序列直接混用。",
     "DVAex_share": "被国外最终吸收的国内增加值占 VA+TLS 账户闭合毛出口的比重；越高表示出口中由本国创造且最终被国外吸收的价值构成更高。",
     "3_VA_GVC_share": "通过中间品跨境参与 GVC 的增加值占总增加值 SVA 的比重。",
     "3b_VA_GVC_C_share": "至少经历两次跨境的复杂 GVC 增加值占总增加值 SVA 的比重。",
     "DVAex": "由本国创造、随出口离境并最终被国外吸收的增加值。",
     "DVArt": "随出口离境后又返回本国并在本国最终吸收的国内增加值。",
     "DDC": "本国增加值在跨境生产链中多次计入毛流量形成的国内重复计算。",
-    "FVA": "本国出口中由外国生产者创造的增加值，是后向 GVC 参与的核心量。",
+    "FVA": "本国出口中由所有外国直接与间接上游生产者创造的纯增加值，是本课程后向 GVC 参与量；TLS 另列，因此不直接等同于 OECD TiVA 的官方 EXGR_FVA。",
     "FDC": "外国增加值在跨境生产链中多次计入毛流量形成的重复计算。",
     "taxsub": "由 OECD ICIO 的 TLS 账户沿投入产出链计算的出口税收减补贴含量；这是本系统为匹配 OECD 账户口径加入的扩展项，不是 WWZ 原文分解项。负值表示沿供应链累计后呈净补贴。",
     "EXDVA": "出口中的国内增加值合计，等于 DVAex 与 DVArt 之和。",
@@ -166,14 +166,14 @@ _INDICATOR_DESCRIPTIONS = {
     "degree": "与该节点直接相连的入边和出边数量。",
     "indegree": "指向该节点的直接供应链连接数量。",
     "outdegree": "由该节点指向其他节点的直接供应链连接数量。",
-    "weighted degree": "与该节点相连的全部入向和出向网络边流量之和。",
+    "weighted degree": "加权入度与加权出度之和；正自环同时属于入向和出向，因而在本字段计两次。它不是去重后的贸易额或外部联系总额。",
     "weighted indegree": "流入该节点的网络边流量之和。",
     "weighted outdegree": "由该节点流出的网络边流量之和。",
     "Eccentricity": "该节点到所有可达节点的最远最短路径距离。",
     "closnesscentrality": "从该节点沿出边可达的节点数除以最短路径距离之和，越高表示向外可达性越强。",
     "harmonicclosnesscentrality": "从该节点沿出边到可达节点的距离倒数平均值，可处理不完全连通网络。",
-    "betweenesscentrality": "各有序节点对的有向无权最短路径中经过该节点的份额之和（σ_st(v)/σ_st；未按节点对数归一化）；流量大小不决定路径长度。越高表示拓扑中介位置更突出，不自动等同于经济瓶颈。",
-    "eigencentrality": "按入边邻居的重要性迭代计算并以最大值归一的 Gephi 特征向量中心性。",
+    "betweenesscentrality": "全部有限正流量边等长时，各有序节点对的有向最短路径经过该节点的份额之和（σ_st(v)/σ_st；未按节点对数归一化）。微小正边与大额边同权且未做边阈值敏感性检验；它只是一项拓扑基准，不是经济枢纽、瓶颈或不可替代性的证据。",
+    "eigencentrality": "精确复现 Gephi Toolkit 0.10.1 的 100 次累计入边迭代并以最大值归一。该兼容分数保留软件复现性，但累计迭代不同于标准 Perron 特征向量幂迭代，不能简称为标准特征向量中心性。",
 }
 # 国家级贸易图在全部正流量边下是完全图,这些无权中心性因此对所有国家取同一常数
 # (度=152、介数=0、接近/离心/调和/特征向量恒定),没有横截面区分度,只在国家–行业级

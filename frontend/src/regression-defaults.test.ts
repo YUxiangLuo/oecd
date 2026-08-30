@@ -3,8 +3,10 @@ import {
   DEFAULT_REGRESSION_SETTINGS,
   SIGNATURE_SETTINGS,
   asRegressionSettingsMap,
+  didCohortWeights,
   normalizeRegressionSettings,
 } from "./regression";
+import type { RegressionResponse } from "./types";
 
 describe("SIGNATURE_SETTINGS", () => {
   it("四步共用关税 × DID 基准", () => {
@@ -57,5 +59,37 @@ describe("normalizeRegressionSettings", () => {
   it("keeps contemporaneous weights available for tariff robustness checks", () => {
     const tariff = { ...DEFAULT_REGRESSION_SETTINGS, weightMode: "contemporaneous" };
     expect(normalizeRegressionSettings(tariff)).toBe(tariff);
+  });
+});
+
+describe("didCohortWeights", () => {
+  it("exposes entity-by-post-period weights instead of pretending cohorts are equal", () => {
+    const response = {
+      design: { method: "did" },
+      result: {
+        coefs: [{ name: "treated×post" }],
+        diagnostics: {
+          cohort_time_cells: [
+            { cohort: 2018, term: "treated×post", treated_entities: 10 },
+            { cohort: 2018, term: "treated×post", treated_entities: 10 },
+            { cohort: 2019, term: "treated×post", treated_entities: 5 },
+            { cohort: 2019, term: "unrelated", treated_entities: 999 },
+          ],
+        },
+      },
+    } as unknown as RegressionResponse;
+
+    expect(didCohortWeights(response)).toEqual([
+      { cohort: 2018, cellCount: 2, treatedEntityPeriods: 20, share: 0.8 },
+      { cohort: 2019, cellCount: 1, treatedEntityPeriods: 5, share: 0.2 },
+    ]);
+  });
+
+  it("does not invent weights for event studies or malformed saved cells", () => {
+    const response = {
+      design: { method: "event_study" },
+      result: { coefs: [{ name: "k=0" }], diagnostics: { cohort_time_cells: [] } },
+    } as unknown as RegressionResponse;
+    expect(didCohortWeights(response)).toEqual([]);
   });
 });

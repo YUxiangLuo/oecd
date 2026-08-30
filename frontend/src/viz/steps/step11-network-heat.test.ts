@@ -127,7 +127,7 @@ describe("network heat visibility and evidence activation", () => {
     expect(markup).toContain("<table");
     expect(markup).toContain("<caption");
     expect(markup).toContain("中国行业节点中心性");
-    expect(markup).toContain("按加权度降序显示全部有限行业");
+    expect(markup).toContain("按加权总度（自环双计）降序显示全部有限行业");
     expect(markup).toContain("记录介数");
     expect(markup).toContain("<thead>");
     expect(markup).toContain("<tbody>");

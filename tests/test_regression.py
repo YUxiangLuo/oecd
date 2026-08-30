@@ -684,6 +684,22 @@ def test_interaction_pretrend_main_can_pass_while_interaction_and_joint_reject()
     assert result.diagnostics["pretrend"] == tests["joint"]
 
 
+def test_interaction_joint_pretrend_counts_event_times_not_restrictions():
+    diagnostics = _pretrend_diagnostic(
+        ["k=-2", "k=-2×base_gvc"],
+        np.zeros(2),
+        np.eye(2),
+        n_clusters=20,
+    )
+    joint = diagnostics["pretrend_tests"]["joint"]
+
+    assert joint["df_num"] == 2
+    assert joint["terms"] == ["k=-2", "k=-2×base_gvc"]
+    assert "只有 1 个受支持的冲击前时期" in joint["interpretation"]
+    assert "共 2 条联合限制" in joint["interpretation"]
+    assert "覆盖 2 个受支持的冲击前时期" not in joint["interpretation"]
+
+
 def test_diagnostic_scope_refactor_does_not_change_event_coef_se_or_t(monkeypatch):
     df = _reg01_staggered_panel(late_cohort=6)
     baseline = event_study(df, "y", interaction=True)

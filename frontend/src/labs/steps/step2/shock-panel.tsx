@@ -53,7 +53,7 @@ export function ShockPanelSuccessView({
               <th scope="col" aria-sort={sort === "industry_asc" ? "ascending" : undefined}>行业</th>
               <th scope="col" aria-sort={sort === "intensity_desc" ? "descending" : sort === "intensity_asc" ? "ascending" : undefined}>{INTENSITY_COLUMN_LABELS[shockType]}</th>
               {tariff && <><th scope="col">主要加征方</th><th scope="col">行业出口暴露度</th><th scope="col">暴露度来源</th></>}
-              <th scope="col">受处理</th><th scope="col">宣布</th><th scope="col">生效</th><th scope="col" style={{ textAlign: "left" }}>主要事件 / 教学映射</th>
+              <th scope="col">超过课程阈值</th><th scope="col">宣布</th><th scope="col">生效</th><th scope="col" style={{ textAlign: "left" }}>主要事件 / 教学映射</th>
             </tr>
           </thead>
           <tbody>
@@ -208,7 +208,7 @@ export function ShockPanel({
           <strong>{filters.year} 年 · {SHOCK_TYPE_LABELS[filters.shockType as ShockType] ?? filters.shockType}</strong>
           {summaryYear ? (
             <>
-              <span>受处理：{summaryYear.treated_countries} 个经济体 / {summaryYear.treated_pairs} 个国家–行业</span>
+              <span>超过课程阈值：{summaryYear.treated_countries} 个经济体 / {summaryYear.treated_pairs} 个国家–行业</span>
               <span>非零强度：{summaryYear.nonzero_countries} 个经济体 / {summaryYear.nonzero_pairs} 个国家–行业</span>
               {summaryYear.max_shock > 0 && <span>最高 {pct(summaryYear.max_shock)}（{summaryYear.max_shock_target}）</span>}
             </>

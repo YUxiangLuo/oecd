@@ -1,12 +1,12 @@
 /**
- * 步骤 10 · 网络可视化 —— 故事:「谁是全球生产的枢纽?」
+ * 步骤 10 · 网络可视化 —— 故事:「流量规模与二值拓扑会讲同一个故事吗?」
  *
  * 网络专属镜头(与前三步完全不同的图元):
  *   贸易网络图  国家间双边贸易流的有向网络,悬停看某国的伙伴与区域集群
- *   枢纽热力表  选一国,看它各行业节点在**完整全球国家×行业图**上的中心性(热力)
+ *   网络指标表  选一国,看它各行业节点在**完整全球国家×行业图**上的流量与拓扑指标
  *
  * 口径:国家级贸易图是完全图 → 无权中心性(度 / 介数 …)恒为常数、无区分度,
- * 因此枢纽识别只在国家–行业级做(见 country_degenerate 处理与回归 network 粒度)。
+ * 因此二值拓扑比较只在国家–行业级做(见 country_degenerate 处理与回归 network 粒度)。
  * 对比对象累加网络图点开的国家和热力表下钻；取消选中不回退。
  */
 import { useEffect, useRef, useState } from "react";
@@ -53,7 +53,7 @@ type Lens = "heat" | "network";
 export const STEP10_DEFAULT_LENS: Lens = "network";
 export const STEP10_LENSES: { key: Lens; label: string; hint: string }[] = [
   { key: "network", label: "贸易网络图", hint: "国家间双边流向" },
-  { key: "heat", label: "枢纽热力表", hint: "一国各行业的中心性" },
+  { key: "heat", label: "行业网络指标", hint: "一国各行业的流量与拓扑基准" },
 ];
 const STEP10_LENS_KEYS = STEP10_LENSES.map(({ key }) => key);
 
@@ -254,7 +254,7 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
       <LensNav<Lens> active={lens as Lens} onPick={changeLens} lenses={STEP10_LENSES} />
 
       <FullscreenPanel
-        title={`步骤 ${step.n} · ${countryLabel(drill)}行业枢纽热力表`}
+        title={`步骤 ${step.n} · ${countryLabel(drill)}行业网络指标表`}
         variant="heat"
         buttonLabel="全屏查看"
         enabled={lens === "heat"}
@@ -262,12 +262,12 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
       >
         {lens === "heat" ? (
           <ChartStory
-            eyebrow="国家×行业枢纽"
-            title={`${countryLabel(drill)} 的行业节点中心性(全球图上计算,按${heatSortLabel(heatSort)}显示${heatCoverageLabel(heatCoverage)})`}
-            what={<>选一个国家,每行 = 它的一个行业节点;各列是不同中心性(加权度 = 流量规模,介数 = 各节点对最短路径经过份额之和 …)。可切换按介数或加权度降序，也可查看 Top 15 或全部有限行业。</>}
-            read={<>介数高 = 更多节点对的有向无权最短路径份额经过该节点，表示拓扑中介位置突出；它不自动等于流量大或经济瓶颈。加权度高 = 直接吞吐的中间品流量大。对比两种排序可检查“流量大”与“拓扑中介”是否一致。</>}
-            find={<>换看两三个国家，并分别比较介数、加权度的 Top 15 与全部行业；选择你实际查看的一行，点击“记录介数”保存该行固定的介数中心性证据。</>}
-            note="中心性始终在完整全球国家×行业图上计算；路径类指标把每条正边视为同样长度，下钻只筛选展示行。排序与显示范围不改变报告指标：只有学生明确激活的当前可见行才会记录介数中心性；当前没有边阈值敏感性分析。"
+            eyebrow="国家×行业网络"
+            title={`${countryLabel(drill)} 的行业节点网络指标(全球图上计算,按${heatSortLabel(heatSort)}显示${heatCoverageLabel(heatCoverage)})`}
+            what={<>选一个国家，每行是一个行业节点。加权总度=入向+出向流量（正自环双计）；全正边二值介数把微小正边与大额边视为等长。可切换排序并查看 Top 15 或全部有限行业。</>}
+            read={<>二值介数高只表示在这套全正边拓扑中，更多有向最短路径份额经过该节点；它不是流量大、经济枢纽或瓶颈的证明。对比加权总度与介数排序，观察流量规模和拓扑编码是否给出不同故事。</>}
+            find={<>换看两三个国家，并比较两种排序；选择实际查看的一行，点击“记录拓扑基准”。记录时必须保留“全正边、二值、未归一化、未做边阈值敏感性”四项限定。</>}
+            note="指标在完整全球国家×行业图上计算，下钻只筛选展示行。当前没有边阈值敏感性分析，所以二值介数只作探索性拓扑基准；加权总度中的正自环在入向、出向各计一次。"
           >
             <div className="controls" style={{ marginBottom: 12 }}>
               <LabeledControl label="下钻国家">
@@ -291,7 +291,7 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
                   </select>
                 )}
               </LabeledControl>
-              <span className="muted" role="note">排序只改变可见顺序；报告证据固定记录介数中心性。</span>
+              <span className="muted" role="note">排序只改变可见顺序；报告证据固定记录全正边二值介数。</span>
             </div>
             {pageQuery.status === "loading" || pageQuery.status === "error" ? (
               <AsyncStateMessage

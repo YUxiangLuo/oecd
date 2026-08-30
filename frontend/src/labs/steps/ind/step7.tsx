@@ -1,5 +1,5 @@
 /**
- * 步骤 6 · 指标计算(网络)—— 故事:「把经济当成一张网:谁是枢纽?」
+ * 步骤 6 · 指标计算(网络)—— 故事:「流量规模与二值拓扑位置有何不同?」
  *
  * 网络没有加总恒等式,所以顺序与 3/4/5 相反:先用小网络建立“度 / 介数是怎么数出来
  * 的”直觉,再看真实的全球国家×行业中心性表(否则一堆抽象数字看不懂)。
@@ -21,9 +21,9 @@ export function Step7Network({ meta, step: _step, state }: { meta: Meta; step: S
     <div>
       <ChartStory
         eyebrow="先建直觉 · 在一个小网络上"
-        title="度 / 介数中心性是怎么数出来的"
+        title="流量规模 / 二值介数是怎么数出来的"
         what={<>一个小的有向网络,切换<b>度 / 介数 / 接近</b>三种中心性,看每个节点的值是怎么一步步数出来的。</>}
-        read={<><b>度</b> = 直接连了几条边;<b>介数</b> = 各节点对最短路径经过它的份额之和（等长路径分摊）;<b>接近</b> = 按无权路径到其他节点平均有多近。这里每条正边的路径长度都相同。</>}
+        read={<><b>度</b> = 直接连了几条边；<b>介数</b> = 各节点对最短路径经过它的份额之和（等长路径分摊）；<b>接近</b> = 按无权路径到其他节点平均有多近。这里每条正边的路径长度都相同，所以只是二值拓扑直觉。</>}
         find={<>把这些直觉记住,下一节就用在真实的全球国家×行业生产图上。</>}
       >
         <NetworkCentralityDemo />
@@ -32,7 +32,7 @@ export function Step7Network({ meta, step: _step, state }: { meta: Meta; step: S
       <section className="network-demo-bridge" aria-labelledby="network-demo-bridge-title">
         <h3 id="network-demo-bridge-title">把小网络的直觉带到真实全球图</h3>
         <div><b>小网络的边</b><span>一条手工连接</span><i aria-hidden="true">→</i><b>真实图的边</b><span>一个国家×行业向另一节点提供的正中间品流</span></div>
-        <div><b>小网络的度</b><span>直接连接条数</span><i aria-hidden="true">→</i><b>真实图先看加权度</b><span>直接连接流量规模，作为经济量基准</span></div>
+        <div><b>小网络的度</b><span>直接连接条数</span><i aria-hidden="true">→</i><b>真实图先看加权总度</b><span>入向+出向流量；正自环双计</span></div>
         <div><b>小网络的介数</b><span>无权最短路径中介位置</span><i aria-hidden="true">→</i><b>真实图的介数</b><span>仍是拓扑基准；完全国家图会退化为常数，因此只在国家×行业图解释</span></div>
       </section>
 

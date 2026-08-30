@@ -159,8 +159,8 @@ describe("network table sort scope", () => {
       />,
     );
     expect(html).toContain("单国行业排序");
-    expect(html).toContain("介数中心性（降序）");
-    expect(html).toContain("加权度（降序）");
+    expect(html).toContain("全正边二值介数（降序）");
+    expect(html).toContain("加权总度（入+出；自环双计）");
     expect(html).toContain("完整行业结果在浏览器内排序");
     expect(html).not.toContain("行业排序（仅单国完整结果）");
   });

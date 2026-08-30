@@ -116,6 +116,27 @@ describe("buildRegressionVerdict", () => {
     expect(verdict.title).not.toContain("发现正向");
   });
 
+  test("a passing one-lead pretrend test never becomes affirmative parallel-trends evidence", () => {
+    const payload = response("trade", { ...coefficient(0.02, 0.012, 0.028), name: "k=0" }, 1, 2, "event_study");
+    payload.result.coefs.unshift({ ...coefficient(0.001, -0.01, 0.012), name: "k=-2" });
+    payload.result.event_support?.periods.push({
+      term: "k=-2", event_time: -2, is_reference: false, estimated: true,
+      contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+      cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
+      suppress_inference: false, reason_codes: [], reasons: [],
+    });
+    payload.result.diagnostics.pretrend = {
+      scope: "main", available: true, reason: null, terms: ["k=-2"], excluded_terms: [],
+      statistic: 0.1, df_num: 1, df_denom: 10, p: 0.76,
+      interpretation: "未检出明显差异。",
+    };
+
+    const verdict = buildRegressionVerdict("trade", payload);
+    expect(verdict.state).toBe("positive");
+    expect(verdict.evidence).toContain("只覆盖 1 个受支持时期");
+    expect(verdict.evidence).toContain("不是平行趋势成立的证据");
+  });
+
   test("interaction event study uses the joint pretrend, not a passing main test", () => {
     const k0 = { ...coefficient(0.02, 0.012, 0.028), name: "k=0" };
     const payload = response("trade", k0, 1, 2, "event_study", true);
@@ -157,6 +178,48 @@ describe("buildRegressionVerdict", () => {
     expect(verdict.title).not.toContain("发现正向");
     expect(verdict.evidence).toContain("只能描述该数值");
     expect(verdict.evidence).toContain("联合检验检测到明显的冲击前差异");
+  });
+
+  test("passing interaction pretrend counts one lead rather than two restrictions", () => {
+    const k0 = { ...coefficient(0.02, 0.012, 0.028), name: "k=0" };
+    const payload = response("trade", k0, 1, 2, "event_study", true);
+    payload.result.coefs = [
+      { ...coefficient(0.001, -0.01, 0.012), name: "k=-2" },
+      k0,
+      { ...coefficient(0.001, -0.01, 0.012), name: "k=-2×base_gvc" },
+      { ...coefficient(0.002, -0.01, 0.014), name: "k=0×base_gvc" },
+    ];
+    payload.result.event_support?.periods.push({
+      term: "k=-2", event_time: -2, is_reference: false, estimated: true,
+      contributing_rows: 13, contributing_entities: 13, contributing_clusters: 13,
+      cohorts: { "2018": 13 }, period_supported: true, inference_supported: true,
+      suppress_inference: false, reason_codes: [], reasons: [],
+    });
+    const scoped = (scope: "main" | "interaction" | "joint", terms: string[]) => ({
+      scope,
+      available: true,
+      reason: null,
+      terms,
+      excluded_terms: [],
+      statistic: 1.2,
+      df_num: terms.length,
+      df_denom: 20,
+      p: 0.25,
+      interpretation: `${scope} 未检出明显的冲击前差异。`,
+    });
+    const tests = {
+      main: scoped("main", ["k=-2"]),
+      interaction: scoped("interaction", ["k=-2×base_gvc"]),
+      joint: scoped("joint", ["k=-2", "k=-2×base_gvc"]),
+    };
+    payload.result.diagnostics = { pretrend: tests.joint, pretrend_tests: tests };
+
+    const verdict = buildRegressionVerdict("trade", payload);
+
+    expect(tests.joint.df_num).toBe(2);
+    expect(verdict.state).toBe("positive");
+    expect(verdict.evidence).toContain("只覆盖 1 个受支持时期");
+    expect(verdict.evidence).not.toContain("覆盖 2 个受支持时期");
   });
 
   test("uses confidence interval, not sign alone, for evidence", () => {

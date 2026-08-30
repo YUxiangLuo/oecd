@@ -16,10 +16,10 @@ from gvcsim.shocks import SHOCK_LABELS, SHOCK_SPECS, SHOCK_TARIFF
 
 # 稳定 outcome → (被解释变量, 中文含义)。列名来自 pipeline 产出的指标面板。
 OUTCOME_DEPVARS = {
-    "trade": ("FVA_share", "出口中外国增加值份额(FVA / VA+TLS 账户闭合毛出口)"),
+    "trade": ("FVA_share", "课程 FVA 份额(纯 VA FVA / VA+TLS 毛出口；非 OECD EXGR_FVASH)"),
     "production": ("3b_VA_GVC_C_share", "复杂GVC生产份额(3b_VA_GVC_C / SVA,WWYZ)"),
     "length": ("PLv_GVC", "前向 GVC 生产长度(WWYZ)"),
-    "network": ("betweenesscentrality", "生产网络介数中心性"),
+    "network": ("betweenesscentrality", "全正边二值网络介数(探索性拓扑基准)"),
 }
 OUTCOMES = list(OUTCOME_DEPVARS)
 
@@ -187,7 +187,8 @@ class RegressionDesign:
             rhs = "Σ_{g,t}ω_{g,t}·[(ȳ_{g,t}−ȳ_{g,g−1})−(ȳ_{C_t,t}−ȳ_{C_t,g−1})]"
             description = (
                 "逐 cohort×时期相对 g−1 做 DID；C_t 只含从未处理或截至比较期尚未处理实体，"
-                "再按可用处理实体数 ω 聚合。动态结果按事件时间 k 分别聚合。"
+                "再按每个 cohort×时期单元的可用处理实体数 ω 聚合。同一早期 cohort 会因拥有更多处理后时期而多次贡献权重；"
+                "这不是 cohort 等权或实体只计一次的平均。动态结果按事件时间 k 分别聚合。"
             )
             att_parts = [
                 {"text": lhs, "term": "dependent", "description": self.depvar_label, "meta_key": "depvar"},
@@ -290,6 +291,6 @@ def validate_outcome_granularity(outcome: str, granularity: str) -> None:
     supported = OUTCOME_GRANULARITIES[outcome]
     if granularity not in supported:
         raise ValueError(
-            "网络介数中心性回归仅支持国家–行业级；国家级贸易图在全部正流量边下为完全图，"
-            "Gephi 介数中心性恒为 0，不能用于回归。"
+            "全正边二值网络介数回归仅支持国家–行业级；国家级贸易图在全部正流量边下为完全图，"
+            "全正边二值介数中心性恒为 0，不能用于回归。"
         )

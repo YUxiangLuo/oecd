@@ -479,10 +479,21 @@ def _wald_pretrend_scope(
     statistic = float((coefficients @ np.linalg.inv(restriction_covariance) @ coefficients) / q)
     p_value = float(stats.f.sf(statistic, q, df_denom))
     _require_finite_numerical_output(f"{label}冲击前 Wald 检验", statistic, p_value)
+    # ``q`` is the Wald numerator degrees of freedom: in an interaction model
+    # one event time contributes both a main-effect and an interaction
+    # restriction.  Teaching copy must therefore count distinct event times,
+    # while the F test continues to use every restriction.
+    period_count = len({xcols[index].replace("×base_gvc", "") for index in indices})
+    restriction_note = f"（共 {q} 条联合限制）" if q != period_count else ""
+    coverage = (
+        f"本次只有 1 个受支持的冲击前时期{restriction_note}，检验力尤其有限。"
+        if period_count == 1
+        else f"本次联合检验覆盖 {period_count} 个受支持的冲击前时期{restriction_note}。"
+    )
     interpretation = (
-        f"{label}未发现明显的冲击前差异；不能据此确认平行趋势假设。"
+        f"{label}未检出明显的冲击前差异；不能据此确认平行趋势成立。{coverage}"
         if p_value >= 0.05
-        else f"{label}检测到明显的冲击前差异，因果解释需谨慎。"
+        else f"{label}检测到明显的冲击前差异，因果解释需谨慎。{coverage}"
     )
     if excluded_terms:
         interpretation += (
@@ -2229,7 +2240,8 @@ def _cohort_time_result(model: PreparedModel, method: str) -> tuple[RegressionRe
         notes=[
             *model.notes,
             "主估计量为 cohort-time ATT：每个 cohort 以 g-1 为基期，只使用从未处理或截至比较期尚未处理的实体作对照；不使用已处理 cohort 作对照。",
-            "cohort-time 单元按可用处理实体数聚合；协方差为按设计聚类变量做 delete-one cluster jackknife。",
+            "cohort-time 单元按单元内可用处理实体数聚合；较早 cohort 因拥有更多处理后时期会重复贡献权重，"
+            "因此总体 ATT 不是 cohort 等权，也不是每个处理实体只计一次。协方差为按设计聚类变量做 delete-one cluster jackknife。",
             *(
                 [
                     "以下局部支持不足事件期在删除其唯一贡献聚类后不可估计，因此只保留点估计，不生成标准误、t、p 或置信区间："

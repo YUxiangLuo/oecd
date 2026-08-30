@@ -2,8 +2,8 @@
  * 步骤 8 · 生产可视化 —— 故事:「一国的增加值,有多深地进了 GVC?」
  *
  * 生产专属镜头:
- *   GVC 阶梯   把增加值拆成 纯国内 / 传统贸易 / 简单 GVC / 复杂 GVC 四段,越往右越深
- *   复杂排名   复杂 GVC 生产份额(3b/SVA)—— 深度分工的强度
+ *   GVC 阶梯   把增加值拆成 纯国内 / 传统贸易 / 简单 GVC / 复杂 GVC 四段
+ *   复杂排名   复杂 GVC 生产份额(3b/SVA)—— 多次跨境活动的构成
  *   行业下钻   选一国看它各行业的生产构成,暴露一国内部的巨大异质性
  */
 import { useEffect, useRef, useState } from "react";
@@ -118,7 +118,7 @@ export function Step9Production({ meta, step, state }: { meta: Meta; step: Step;
           title={`${countryLabel(drill)} 各行业的生产构成(按 SVA 前 15)`}
           what={<>选一个国家,每条 = 它的一个行业,增加值按四段(纯国内 / 传统 / 简单 / 复杂 GVC)归一化到 100%。</>}
           read={<>同一个国家的不同行业可能有很不同的复杂 GVC 份额；国家总量会掩盖这种行业异质性。</>}
-          find={<>找出该国复杂 GVC 最深的几个行业;再换一个国家(下方下拉),对比同一行业在不同国家的深度。</>}
+          find={<>找出该国复杂 GVC 构成最高的几个行业；再换一个国家（下方下拉），对比同一行业的多次跨境活动构成。</>}
           note="行业级构成 = 该行业的生产分解；国家–行业级分析可以保留国家汇总会掩盖的异质性。"
         >
           <div className="controls" style={{ marginBottom: 12 }}>

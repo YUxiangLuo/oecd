@@ -6,7 +6,8 @@
 指标字段名沿用既有数据接口（包括 Gephi 使用的历史拼写）。计算语义与
 Gephi Graph Distance / Eigenvector Centrality 的有向无权设置一致：所有正流量
 都是边，自环保留；路径从节点沿出边计算；介数为未归一化的精确 Brandes
-结果；特征向量中心性按 Gephi 的 100 次入边幂迭代实现。
+结果；``eigencentrality`` 精确复现 Gephi Toolkit 0.10.1 的 100 次累计入边
+迭代。该字段是软件兼容分数，不宣称等同于标准 Perron 特征向量幂迭代。
 """
 
 from typing import Any
@@ -126,7 +127,11 @@ def _betweenness_centrality(adj_mask: np.ndarray) -> np.ndarray:
 
 
 def _eigencentrality(adj_mask: np.ndarray) -> np.ndarray:
-    """复现 Gephi 的有向入边特征向量中心性迭代（固定 100 次）。"""
+    """复现 Gephi 0.10.1 的累计入边兼容分数（固定 100 次）。
+
+    ``accumulated`` 有意跨迭代保留，以匹配冻结的 Gephi 外部基准；这不是
+    标准 Perron 特征向量的幂迭代，教学界面必须按兼容分数标注。
+    """
     node_count = adj_mask.shape[0]
     if node_count == 0 or not adj_mask.any():
         return np.zeros(node_count)

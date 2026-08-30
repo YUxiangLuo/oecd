@@ -122,6 +122,17 @@ export function eventPeriodForTerm(
   return eventSupport.periods.find((period) => period.term === mainTerm) ?? null;
 }
 
+/**
+ * Count event-time coverage independently of Wald restrictions. Interaction
+ * diagnostics can contain both `k=-2` and `k=-2×base_gvc`; those are two
+ * restrictions over one pre-treatment period.
+ *
+ * Callers must first validate the diagnostic's scope contract.
+ */
+export function pretrendPeriodCount(diagnostic: Pick<PretrendDiagnostic, "terms">): number {
+  return new Set(diagnostic.terms.map((term) => term.replace("×base_gvc", ""))).size;
+}
+
 export type EventInferenceGate =
   | { state: "supported"; period: EventPeriodSupport }
   | { state: "unsupported"; period: EventPeriodSupport }
