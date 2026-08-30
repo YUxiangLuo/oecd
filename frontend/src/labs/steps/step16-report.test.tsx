@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ClassroomReport } from "../../types";
-import { GateCard, ReportLab, ReportStatus, reflectionCountLabel, reportGenerateButtonLabel, reportGenerateLabel, reportWaitLabel } from "./step16-report";
+import { GateCard, ReportLab, ReportStatus, focusReportGateDestination, reflectionCountLabel, reportGenerateButtonLabel, reportGenerateLabel, reportWaitLabel } from "./step16-report";
 
 function report(state: ClassroomReport["state"]): ClassroomReport {
   return {
@@ -91,6 +91,18 @@ describe("step 16 report states", () => {
     expect(html).toContain("步骤 12");
     expect(html).toContain("保存有效回归");
     expect(html).toContain("gate-link");
+  });
+
+  test("focuses the destination main after a report-gate navigation", () => {
+    const calls: unknown[] = [];
+    const found = focusReportGateDestination(12, {
+      getElementById: (id) => id === "step-12-main-content"
+        ? { focus: (options) => calls.push(options) }
+        : null,
+    });
+    expect(found).toBe(true);
+    expect(calls).toEqual([{ preventScroll: true }]);
+    expect(focusReportGateDestination(9, { getElementById: () => null })).toBe(false);
   });
 
   test("offers PDF export after a report has been generated", () => {

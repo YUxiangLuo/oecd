@@ -11,6 +11,7 @@ import {
   shouldAutoShowIntro,
   storeAuthentication,
   urlWithStep,
+  writeStepHistory,
 } from "./app-state";
 
 class MemoryStorage {
@@ -33,6 +34,22 @@ describe("application URL state", () => {
   test("updates only the step query while preserving other URL state", () => {
     expect(urlWithStep("https://example.test/lab?mode=demo#chart", 7))
       .toBe("/lab?mode=demo&step=7#chart");
+  });
+
+  test("pushes user step changes, replaces canonicalization, and skips duplicate entries", () => {
+    const calls: string[] = [];
+    const history = {
+      pushState: (_data: unknown, _unused: string, url?: string | URL | null) => calls.push(`push:${String(url)}`),
+      replaceState: (_data: unknown, _unused: string, url?: string | URL | null) => calls.push(`replace:${String(url)}`),
+    };
+
+    expect(writeStepHistory(history, "https://example.test/lab?mode=demo&step=2", 3, "push")).toBe(true);
+    expect(writeStepHistory(history, "https://example.test/lab?mode=demo", 7, "replace")).toBe(true);
+    expect(writeStepHistory(history, "https://example.test/lab?mode=demo&step=3", 3, "push")).toBe(false);
+    expect(calls).toEqual([
+      "push:/lab?mode=demo&step=3",
+      "replace:/lab?mode=demo&step=7",
+    ]);
   });
 });
 

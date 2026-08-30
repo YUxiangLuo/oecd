@@ -11,6 +11,7 @@ import {
   regressionDesignRequestKey,
   regressionOptionsRequestKey,
   regressionSettingsFromSavedDesign,
+  scrollRegressionVerdict,
   type RegressionHistory,
   type SavedRegressionRun,
 } from "./regression";
@@ -132,6 +133,28 @@ function contrast(first: string, second: string): number {
   const values = [relativeLuminance(first), relativeLuminance(second)].sort((a, b) => b - a);
   return (values[0] + 0.05) / (values[1] + 0.05);
 }
+
+describe("regression verdict scrolling", () => {
+  test("scrolls only the nested course content container", () => {
+    const calls: ScrollToOptions[] = [];
+    let fallbackCalls = 0;
+    const scroller = {
+      scrollTop: 320,
+      getBoundingClientRect: () => ({ top: 180 }),
+      scrollTo: (options: ScrollToOptions) => calls.push(options),
+    };
+    const target = {
+      closest: (selector: string) => selector === ".content" ? scroller : null,
+      getBoundingClientRect: () => ({ top: 540 }),
+      scrollIntoView: () => { fallbackCalls += 1; },
+    } as unknown as HTMLElement;
+
+    scrollRegressionVerdict(target, "smooth");
+
+    expect(calls).toEqual([{ top: 680, left: 0, behavior: "smooth" }]);
+    expect(fallbackCalls).toBe(0);
+  });
+});
 
 describe("regression request identity and accessible request states", () => {
   test("keys options and every design by the current settings identity", () => {

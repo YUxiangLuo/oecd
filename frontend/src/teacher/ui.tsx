@@ -1,4 +1,4 @@
-import { useId, useRef, type ReactNode } from "react";
+import { useId, useRef, type ReactNode, type RefObject } from "react";
 import { useDialogFocus } from "../a11y";
 
 /** 教师面板共用的轻量 UI 原语:模态框 / 工具条 / 搜索框 / 状态徽标 / 空态。
@@ -10,15 +10,19 @@ export function Modal({
   onClose,
   children,
   width = 420,
+  initialFocusRef,
+  returnFocusRef,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   width?: number;
+  initialFocusRef?: RefObject<HTMLElement | null>;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
-  useDialogFocus({ containerRef: dialogRef, onClose });
+  useDialogFocus({ containerRef: dialogRef, initialFocusRef, returnFocusRef, onClose });
   return (
     <div className="modal-scrim" onMouseDown={onClose}>
       <div

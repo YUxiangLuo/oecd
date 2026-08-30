@@ -33,6 +33,21 @@ const REFLECTION_FIELDS: {
   { key: "limitations", label: "局限与反思", prompt: "讨论拟真冲击、对照是否可比、网络外溢，以及「看不出」不等于没有效应。", min: 30 },
 ];
 
+type ReportGateFocusRoot = {
+  getElementById(id: string): Pick<HTMLElement, "focus"> | null;
+};
+
+/** Restore a useful keyboard position after the gate link itself unmounts. */
+export function focusReportGateDestination(
+  step: number,
+  root: ReportGateFocusRoot = document,
+): boolean {
+  const target = root.getElementById(`step-${step}-main-content`);
+  if (!target) return false;
+  target.focus({ preventScroll: true });
+  return true;
+}
+
 export function GateCard({ blocked, onNavigateStep }: { blocked: ReportGateItem[]; onNavigateStep: (step: number) => void }) {
   return (
     <section className="report-gate-panel">
@@ -41,7 +56,14 @@ export function GateCard({ blocked, onNavigateStep }: { blocked: ReportGateItem[
         {blocked.map((item, index) => (
           <li key={`${item.step}-${index}`}>
             {item.step > 0 ? (
-              <button type="button" className="gate-link" onClick={() => onNavigateStep(item.step)}>
+              <button
+                type="button"
+                className="gate-link"
+                onClick={() => {
+                  onNavigateStep(item.step);
+                  window.requestAnimationFrame(() => { focusReportGateDestination(item.step); });
+                }}
+              >
                 步骤 {item.step} · {item.title}
               </button>
             ) : <b>{item.title}</b>}

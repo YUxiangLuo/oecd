@@ -11,6 +11,13 @@ interface StorageWriter extends StorageReader {
   removeItem(key: string): void;
 }
 
+interface StepHistoryWriter {
+  pushState(data: unknown, unused: string, url?: string | URL | null): void;
+  replaceState(data: unknown, unused: string, url?: string | URL | null): void;
+}
+
+export type StepHistoryMode = "push" | "replace";
+
 export function stepFromSearch(search: string): number | null {
   const n = Number(new URLSearchParams(search).get("step"));
   return Number.isInteger(n) && n >= 1 && n <= 16 ? n : null;
@@ -53,6 +60,21 @@ export function urlWithStep(href: string, step: number): string {
   const url = new URL(href);
   url.searchParams.set("step", String(step));
   return `${url.pathname}${url.search}${url.hash}`;
+}
+
+/** Write a real history entry for a user navigation, but never duplicate the current URL. */
+export function writeStepHistory(
+  history: StepHistoryWriter,
+  href: string,
+  step: number,
+  mode: StepHistoryMode,
+): boolean {
+  const current = new URL(href);
+  const currentRelativeUrl = `${current.pathname}${current.search}${current.hash}`;
+  const nextUrl = urlWithStep(href, step);
+  if (currentRelativeUrl === nextUrl) return false;
+  history[mode === "push" ? "pushState" : "replaceState"](null, "", nextUrl);
+  return true;
 }
 
 export function introSeenStorageKey(username: string): string {

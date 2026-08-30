@@ -125,14 +125,14 @@ export function StudentModal({ onClose, onSubmit }: { onClose: () => void; onSub
     await settleModalSubmission(() => onSubmit(form), onClose, setError, setSaving);
   };
   return (
-    <Modal title="添加学生账号" onClose={close}><div className="modal-form">
+    <Modal title="添加学生账号" onClose={close}><form className="modal-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <LabeledControl label="用户名（登录用）">{(id) => <input id={id} name="student-username" disabled={saving} value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} />}</LabeledControl>
       <LabeledControl label="姓名">{(id) => <input id={id} name="student-display-name" disabled={saving} value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} />}</LabeledControl>
       <LabeledControl label="学号（可空）">{(id) => <input id={id} name="student-number" disabled={saving} value={form.student_no} onChange={(event) => setForm({ ...form, student_no: event.target.value })} />}</LabeledControl>
       <LabeledControl label="初始密码（至少 12 位）">{(id) => <input id={id} name="student-password" disabled={saving} {...PASSWORD_INPUT_PROPS} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />}</LabeledControl>
       {error && <div className="error-box" role="alert">{error}</div>}
-      <div className="modal-actions"><button disabled={saving} onClick={close}>取消</button><button className="primary" disabled={saving} onClick={submit}>{saving ? "创建中…" : "创建账号"}</button></div>
-    </div></Modal>
+      <div className="modal-actions"><button type="button" disabled={saving} onClick={close}>取消</button><button type="submit" className="primary" disabled={saving}>{saving ? "创建中…" : "创建账号"}</button></div>
+    </form></Modal>
   );
 }
 
@@ -152,10 +152,10 @@ export function FieldModal({ title, label, initial, password = false, required =
     );
   };
   return (
-    <Modal title={title} onClose={close}><div className="modal-form">
+    <Modal title={title} onClose={close}><form className="modal-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <LabeledControl label={label}>{(id) => <input id={id} name="student-field" disabled={saving} type={password ? "password" : "text"} autoComplete={password ? "new-password" : undefined} value={value} onChange={(event) => setValue(event.target.value)} />}</LabeledControl>
       {error && <div className="error-box" role="alert">{error}</div>}
-      <div className="modal-actions"><button disabled={saving} onClick={close}>取消</button><button className="primary" disabled={saving} onClick={submit}>{saving ? "保存中…" : "保存"}</button></div>
-    </div></Modal>
+      <div className="modal-actions"><button type="button" disabled={saving} onClick={close}>取消</button><button type="submit" className="primary" disabled={saving}>{saving ? "保存中…" : "保存"}</button></div>
+    </form></Modal>
   );
 }

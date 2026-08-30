@@ -33,9 +33,9 @@ describe("student workspace skip link", () => {
           focused += 1;
           expect(options).toEqual({ preventScroll: true });
         },
-        scrollIntoView: (options) => {
+        scrollTo: (options) => {
           scrolled += 1;
-          expect(options).toEqual({ block: "start" });
+          expect(options).toEqual({ top: 0, left: 0, behavior: "auto" });
         },
       },
     );

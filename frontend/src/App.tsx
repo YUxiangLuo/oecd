@@ -8,7 +8,8 @@ import {
   shouldAutoShowIntro,
   stepFromSearch,
   storeAuthentication,
-  urlWithStep,
+  writeStepHistory,
+  type StepHistoryMode,
 } from "./app-state";
 import { AppBootSkeleton, TeacherWorkspace } from "./app-shell";
 import { AUTH_TOKEN_KEY, api, getActiveAuthToken, setActiveAuthToken } from "./api";
@@ -70,18 +71,39 @@ export default function App() {
     syncNow: () => { void session.syncNow().catch(() => {}); },
   };
 
-  const navigateStep = useCallback((next: number) => {
+  const resolveStep = useCallback((next: number) => {
     const available = stepsData?.steps ?? [];
     const last = available.at(-1)?.n ?? 16;
     const bounded = Math.max(1, Math.min(last, next));
-    const target = available.length && !available.some((item) => item.n === bounded)
+    return available.length && !available.some((item) => item.n === bounded)
       ? (available[0]?.n ?? 1)
       : bounded;
+  }, [stepsData]);
+
+  const selectStep = useCallback((next: number, historyMode: StepHistoryMode) => {
+    const target = resolveStep(next);
     resetStepScroller(contentRef.current);
     initialStepChosen.current = true;
     setCurrent(target);
-    window.history.replaceState(null, "", urlWithStep(window.location.href, target));
-  }, [stepsData]);
+    writeStepHistory(window.history, window.location.href, target, historyMode);
+  }, [resolveStep]);
+
+  const navigateStep = useCallback((next: number) => {
+    selectStep(next, "push");
+  }, [selectStep]);
+
+  useEffect(() => {
+    const restoreHistoryStep = () => {
+      const requested = stepFromSearch(window.location.search);
+      const target = resolveStep(requested ?? 1);
+      resetStepScroller(contentRef.current);
+      initialStepChosen.current = true;
+      setCurrent(target);
+      writeStepHistory(window.history, window.location.href, target, "replace");
+    };
+    window.addEventListener("popstate", restoreHistoryStep);
+    return () => window.removeEventListener("popstate", restoreHistoryStep);
+  }, [resolveStep]);
 
   const reloadLoggedOut = useCallback((notice?: string) => {
     const activeToken = getActiveAuthToken();
@@ -170,8 +192,8 @@ export default function App() {
     if (explicitStep.current != null) return;
     const completed = new Set(session.completion?.completed ?? []);
     const firstIncomplete = stepsData.steps.find((step) => !completed.has(step.n))?.n ?? stepsData.steps[0]?.n ?? 1;
-    navigateStep(firstIncomplete);
-  }, [navigateStep, session.completion, session.status, stepsData]);
+    selectStep(firstIncomplete, "replace");
+  }, [selectStep, session.completion, session.status, stepsData]);
 
   if (!authChecked) return <AppBootSkeleton />;
   if (!user) {

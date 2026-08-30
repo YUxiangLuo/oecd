@@ -44,6 +44,25 @@ const SCENARIO_LABELS: Record<string, string> = {
   confounded: "课堂挑战：人为加入冲击前趋势",
 };
 
+/**
+ * Keep the fixed application shell anchored to the viewport while revealing a
+ * freshly calculated verdict inside the course's own scroll container.
+ * `Element.scrollIntoView()` also scrolls the document in this nested layout,
+ * which can move the entire 100vh application off screen.
+ */
+export function scrollRegressionVerdict(target: HTMLElement | null, behavior: ScrollBehavior): void {
+  if (!target) return;
+  const scroller = target.closest<HTMLElement>(".content");
+  if (!scroller) {
+    target.scrollIntoView({ behavior, block: "start" });
+    return;
+  }
+  const top = scroller.scrollTop
+    + target.getBoundingClientRect().top
+    - scroller.getBoundingClientRect().top;
+  scroller.scrollTo({ top, left: 0, behavior });
+}
+
 export interface RegressionSettings {
   granularity: string;
   shockType: string;
@@ -925,10 +944,10 @@ export function RegressionRunLab({
     if (!result || !scrollToVerdictAfterRun.current) return;
     scrollToVerdictAfterRun.current = false;
     const frame = window.requestAnimationFrame(() => {
-      verdictAnchorRef.current?.scrollIntoView({
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-        block: "start",
-      });
+      scrollRegressionVerdict(
+        verdictAnchorRef.current,
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      );
     });
     return () => window.cancelAnimationFrame(frame);
   }, [result]);

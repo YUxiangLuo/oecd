@@ -36,12 +36,12 @@ export function stepMainContentId(step: number): string {
 
 export function focusStepMainContent(
   event: Pick<MouseEvent<HTMLAnchorElement>, "preventDefault">,
-  target: Pick<HTMLElement, "focus" | "scrollIntoView"> | null,
+  target: Pick<HTMLElement, "focus" | "scrollTo"> | null,
 ): void {
   if (!target) return;
   event.preventDefault();
   target.focus({ preventScroll: true });
-  target.scrollIntoView({ block: "start" });
+  target.scrollTo({ top: 0, left: 0, behavior: "auto" });
 }
 
 export function StudentWorkspaceSkipLink({
@@ -118,6 +118,7 @@ export function StudentWorkspace({
   const totalSteps = steps.length;
   const stepIndex = steps.findIndex((item) => item.n === current);
   const visitRef = useRef({ step: current, visit: 0 });
+  const passwordTriggerRef = useRef<HTMLButtonElement>(null);
   if (visitRef.current.step !== current) {
     visitRef.current = { step: current, visit: visitRef.current.visit + 1 };
   }
@@ -171,6 +172,7 @@ export function StudentWorkspace({
           meta={meta}
           authExpiresAt={authExpiresAt}
           introTriggerRef={introTriggerRef}
+          passwordTriggerRef={passwordTriggerRef}
           onShowIntro={onShowIntro}
           onRequestPasswordChange={onRequestPasswordChange}
           onLogout={onLogout}
@@ -339,7 +341,11 @@ export function StudentWorkspace({
         />
       )}
       {showPasswordChange && (
-        <AccountPasswordModal onClose={onClosePasswordChange} onChanged={onPasswordChanged} />
+        <AccountPasswordModal
+          onClose={onClosePasswordChange}
+          onChanged={onPasswordChanged}
+          returnFocusRef={passwordTriggerRef}
+        />
       )}
     </>
   );

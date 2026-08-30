@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import { useRef, type RefObject } from "react";
 import { AccountPasswordModal } from "./account-password";
 import { LogoMark } from "./brand";
 import { oecdIcioDatasetLabel } from "./dataset-label";
@@ -98,6 +98,7 @@ export function TeacherWorkspace({
   onLogout,
 }: TeacherWorkspaceProps) {
   const expiry = sessionExpiryLabel(authExpiresAt);
+  const passwordTriggerRef = useRef<HTMLButtonElement>(null);
   return (
     <div className="layout">
       <header className="topbar">
@@ -112,7 +113,7 @@ export function TeacherWorkspace({
           </span>
           {expiry && <span className="muted">会话至 {expiry}</span>}
           <span className="role-chip" title={`教师账号 · ${user.username}`}>{user.name}</span>
-          <button onClick={onRequestPasswordChange}>修改密码</button>
+          <button ref={passwordTriggerRef} onClick={onRequestPasswordChange}>修改密码</button>
           <button onClick={onLogout}>退出</button>
         </div>
       </header>
@@ -120,7 +121,11 @@ export function TeacherWorkspace({
       {/* 教师和学生分支互斥，因此任一时刻只挂载一个 ToastHost。 */}
       <ToastHost />
       {showPasswordChange && (
-        <AccountPasswordModal onClose={onClosePasswordChange} onChanged={onPasswordChanged} />
+        <AccountPasswordModal
+          onClose={onClosePasswordChange}
+          onChanged={onPasswordChanged}
+          returnFocusRef={passwordTriggerRef}
+        />
       )}
     </div>
   );
@@ -131,6 +136,7 @@ interface StudentTopbarProps {
   meta: Meta | null;
   authExpiresAt: number | null;
   introTriggerRef: RefObject<HTMLButtonElement | null>;
+  passwordTriggerRef: RefObject<HTMLButtonElement | null>;
   onShowIntro: () => void;
   onRequestPasswordChange: () => void;
   onLogout: () => void;
@@ -141,6 +147,7 @@ export function StudentTopbar({
   meta,
   authExpiresAt,
   introTriggerRef,
+  passwordTriggerRef,
   onShowIntro,
   onRequestPasswordChange,
   onLogout,
@@ -160,7 +167,7 @@ export function StudentTopbar({
         <span className="role-chip" title={`学生账号 · ${user.username}`}>{user.name}</span>
         {expiry && <span className="muted" title="服务端签发的 expires_at">会话至 {expiry}</span>}
         <button ref={introTriggerRef} onClick={onShowIntro}>ⓘ 系统介绍</button>
-        <button onClick={onRequestPasswordChange}>修改密码</button>
+        <button ref={passwordTriggerRef} onClick={onRequestPasswordChange}>修改密码</button>
         <button onClick={onLogout}>退出</button>
       </div>
     </header>

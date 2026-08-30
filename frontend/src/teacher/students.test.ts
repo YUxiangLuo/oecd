@@ -1,7 +1,29 @@
 import { describe, expect, test } from "bun:test";
-import { settleModalSubmission, studentFieldError } from "./students";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { FieldModal, StudentModal, settleModalSubmission, studentFieldError } from "./students";
 
 describe("teacher student modal submission", () => {
+  test("uses native forms so Enter submits create and edit operations", () => {
+    const student = renderToStaticMarkup(createElement(StudentModal, {
+      onClose: () => {},
+      onSubmit: async () => {},
+    }));
+    const field = renderToStaticMarkup(createElement(FieldModal, {
+      title: "修改姓名",
+      label: "姓名",
+      initial: "测试学生",
+      onClose: () => {},
+      onSubmit: async () => {},
+    }));
+
+    for (const html of [student, field]) {
+      expect(html).toContain('<form class="modal-form">');
+      expect(html).toContain('type="submit"');
+      expect(html).toContain('type="button"');
+    }
+  });
+
   test("allows clearing an optional student number but not a display name", () => {
     expect(studentFieldError("", { label: "学号", required: false })).toBeNull();
     expect(studentFieldError("  ", { label: "姓名" })).toBe("姓名不能为空");

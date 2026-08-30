@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type RefObject } from "react";
 import { api } from "./api";
 import { Modal } from "./teacher/ui";
 
@@ -19,10 +19,13 @@ export function validatePasswordChange(
 export function AccountPasswordModal({
   onClose,
   onChanged,
+  returnFocusRef,
 }: {
   onClose: () => void;
   onChanged: () => void;
+  returnFocusRef?: RefObject<HTMLElement | null>;
 }) {
+  const currentPasswordRef = useRef<HTMLInputElement>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -52,7 +55,13 @@ export function AccountPasswordModal({
   };
 
   return (
-    <Modal title="修改登录密码" onClose={close} width={420}>
+    <Modal
+      title="修改登录密码"
+      onClose={close}
+      width={420}
+      initialFocusRef={currentPasswordRef}
+      returnFocusRef={returnFocusRef}
+    >
       <form className="modal-form" onSubmit={submit}>
         <p className="modal-msg account-password-note">
           修改成功后，当前浏览器会退出，你需要使用新密码重新登录。
@@ -60,12 +69,12 @@ export function AccountPasswordModal({
 
         <label htmlFor="account-current-password">当前密码</label>
         <input
+          ref={currentPasswordRef}
           id="account-current-password"
           type="password"
           autoComplete="current-password"
           maxLength={256}
           value={currentPassword}
-          autoFocus
           onChange={(event) => setCurrentPassword(event.target.value)}
         />
 
