@@ -82,7 +82,7 @@ def steps():
         "steps": [
             {
                 **step,
-                **({"quiz": quiz} if (quiz := quizzes.public_quiz(int(step["n"]))) is not None else {}),
+                **({"quiz": quiz} if (quiz := quizzes.public_quiz(cast(int, step["n"]))) is not None else {}),
             }
             for step in STEPS
         ],

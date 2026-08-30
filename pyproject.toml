@@ -49,8 +49,9 @@ python_version = "3.13"
 files = ["gvcsim"]
 ignore_missing_imports = true
 warn_unused_configs = true
+check_untyped_defs = true
 # pandas-heavy paths still have gradually typed internals; keep CI typecheck lightweight
-# while preventing future syntax/signature regressions from going unnoticed.
+# while checking every function body for future syntax/signature regressions.
 
 [tool.coverage.run]
 source = ["gvcsim"]

@@ -252,7 +252,7 @@ export const api = {
     scenario: string,
     weightMode: string,
   ) => {
-    return post<import("./types").RegressionResponse>("/api/regression/run", {
+    return post<import("./types").CurrentRegressionResponse>("/api/regression/run", {
         outcome,
         granularity,
         shock_type: shockType,

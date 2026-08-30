@@ -180,6 +180,10 @@ trap - EXIT
 systemctl start gvcsim-api
 ```
 
+## 教学数据库 schema 演进门槛
+
+当前 `gvcsim-teaching-db-v10` 是保留现有账号、会话、报告和评分的基线；更早版本不在迁移支持范围内。下次提升教学库版本前，代码变更必须同时提供经过测试的、事务内执行的 `v10 -> 下一版` 迁移，并完成备份恢复与生产数据副本演练。未满足这些条件时，版本不匹配应继续让预检失败，不能用 `classroom-init --reset` 代替普通升级。只有明确的新学期清场才允许走上一节的重置流程。
+
 ## 数据 release 回滚
 
 发布前记录 `readlink /opt/gvcsim/shared/data/processed`。回滚时必须同时使用兼容该 artifact contract 的代码版本，并先验证目标 release；不要删除故障 release：

@@ -454,9 +454,9 @@ export interface RegressionOptions {
   price_mode_labels: Record<string, string>;
   scenarios: string[];
   scenario_labels: Record<string, string>;
-  weight_modes?: string[];
-  weight_mode_labels?: Record<string, string>;
-  method_constraints?: {
+  weight_modes: string[];
+  weight_mode_labels: Record<string, string>;
+  method_constraints: {
     cohort_aware_methods: string[];
     controls_publicly_disabled: boolean;
     cohort_aware_interaction_supported: boolean;
@@ -477,7 +477,13 @@ export interface RegressionDesignInfo {
   interaction: boolean;
   price_mode: string;
   scenario: string;
+  /** Optional only for readable regression snapshots saved before the typed HTTP contract. */
   weight_mode?: string;
+  granularity_label?: string;
+  shock_type_label?: string;
+  method_label?: string;
+  control_mode_label?: string;
+  price_mode_label?: string;
   scenario_label: string;
   sample_filter: string;
   exclude_row: boolean;
@@ -585,6 +591,12 @@ export interface RegressionSampleFlow {
   contributing_cohorts?: Record<string, number>;
 }
 
+export interface RegressionPreflight {
+  status: string;
+  can_infer: boolean;
+  checks: { code: string; severity: string; message: string }[];
+}
+
 export interface RegressionResponse {
   design: RegressionDesignInfo;
   result: {
@@ -634,11 +646,27 @@ export interface RegressionResponse {
     se_check_mode: string;
     notes: string[];
   };
+  /** Missing only on a restored legacy session snapshot; every current API response includes it. */
+  preflight?: RegressionPreflight;
   disclaimer: string;
 }
 
+export interface CurrentRegressionDesignInfo extends RegressionDesignInfo {
+  weight_mode: string;
+  granularity_label: string;
+  shock_type_label: string;
+  method_label: string;
+  control_mode_label: string;
+  price_mode_label: string;
+}
+
+export interface CurrentRegressionResponse extends RegressionResponse {
+  design: CurrentRegressionDesignInfo;
+  preflight: RegressionPreflight;
+}
+
 export interface PlaceboResponse {
-  design: RegressionDesignInfo;
+  design: CurrentRegressionDesignInfo;
   placebo: {
     policy_name: string;
     true_coef: number;

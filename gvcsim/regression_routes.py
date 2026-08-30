@@ -7,10 +7,17 @@ import numpy as np
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 from fastapi.requests import Request
-from pydantic import BaseModel, ConfigDict, Field
 
-from gvcsim import concurrency, shocks
+from gvcsim import artifacts, concurrency, shocks
 from gvcsim.data_routes import _read_csv
+from gvcsim.regression.contracts import (
+    PlaceboRequest,
+    PlaceboResponse,
+    RegressionDesignResponse,
+    RegressionOptionsResponse,
+    RegressionRequest,
+    RegressionRunResponse,
+)
 from gvcsim.regression.design import (
     CONTROL_MODE_LABELS,
     CONTROL_MODE_NONE,
@@ -28,7 +35,6 @@ from gvcsim.regression.design import (
     PRICE_MODE_LABELS,
     PRICE_MODE_NOMINAL,
     PRICE_MODES,
-    SCENARIO_CLEAN,
     SCENARIO_LABELS,
     SCENARIOS,
     SHOCK_TYPES,
@@ -37,32 +43,19 @@ from gvcsim.regression.design import (
 )
 from gvcsim.regression.panel import placebo_did_distribution, run_design_with_benchmark
 from gvcsim.shocks import SHOCK_LABELS, SHOCK_TARIFF
+from gvcsim.singleflight import AsyncSingleFlightCache
 from gvcsim.steps import STEPS
 
 router = APIRouter()
+_RESULT_CACHE: AsyncSingleFlightCache[tuple[str, str, str], dict[str, Any]] = AsyncSingleFlightCache(maxsize=64)
 
 
-class RegressionRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    outcome: str
-    granularity: str = GRANULARITY_COUNTRY_INDUSTRY
-    shock_type: str = SHOCK_TARIFF
-    method: str = METHOD_DID
-    control_mode: str = CONTROL_MODE_NONE
-    interaction: bool = False
-    price_mode: str = PRICE_MODE_NOMINAL
-    scenario: str = SCENARIO_CLEAN
-    exclude_row: bool = True
-    weight_mode: str = shocks.EXPOSURE_MODE_FIXED_PRETREATMENT
+def clear_result_cache() -> None:
+    """Clear completed regression results at process and test boundaries."""
+    _RESULT_CACHE.clear()
 
 
-class PlaceboRequest(RegressionRequest):
-    n_draws: int = Field(default=80, ge=10, le=200)
-    seed: int = Field(default=2026, ge=0, le=2_147_483_647)
-
-
-@router.get("/api/regression/options")
+@router.get("/api/regression/options", response_model=RegressionOptionsResponse)
 def regression_options():
     # 键与文案一起下发:界面渲染 labels,请求回传 keys。
     # 前端不再自备一份中文映射,改文案也不会变成破坏性 API 变更。
@@ -151,13 +144,18 @@ def _design_info(design: RegressionDesign, weight_mode: str = shocks.EXPOSURE_MO
         "depvar": design.depvar,
         "depvar_label": design.depvar_label,
         "granularity": design.granularity,
+        "granularity_label": design.granularity_label,
         "shock_type": design.shock_type,
+        "shock_type_label": design.shock_type_label,
         "shock_col": design.shock_col,
         "treated_col": design.treated_col,
         "method": design.method,
+        "method_label": design.method_label,
         "control_mode": design.control_mode,
+        "control_mode_label": design.control_mode_label,
         "interaction": design.interaction,
         "price_mode": design.price_mode,
+        "price_mode_label": design.price_mode_label,
         "scenario": design.scenario,
         "scenario_label": design.scenario_label,
         "sample_filter": design.sample_filter,
@@ -262,7 +260,7 @@ def _require_regression_student(request: Request) -> str:
     return str(user["sub"])
 
 
-@router.get("/api/regression/design")
+@router.get("/api/regression/design", response_model=RegressionDesignResponse)
 def regression_design(
     request: Request,
     outcome: str,
@@ -294,7 +292,7 @@ def regression_design(
     return _design_info(design, weight_mode)
 
 
-@router.post("/api/regression/run")
+@router.post("/api/regression/run", response_model=RegressionRunResponse)
 async def regression_run(req: RegressionRequest, request: Request):
     _require_regression_student(request)
     design = _validate_design(
@@ -308,28 +306,31 @@ async def regression_run(req: RegressionRequest, request: Request):
         req.scenario,
         req.exclude_row,
     )
-    panel = await anyio.to_thread.run_sync(
-        lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
-    )
-    try:
+    key = (artifacts.release_identity(), "run", req.model_dump_json())
+
+    async def compute() -> dict[str, Any]:
+        panel = await anyio.to_thread.run_sync(
+            lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
+        )
         result, benchmark = await concurrency.run_cpu_bound(run_design_with_benchmark, panel, design)
+        result_info = result.to_dict()
+        return {
+            "design": _design_info(design, req.weight_mode),
+            "result": result_info,
+            "preflight": _regression_preflight(design, result_info, req.weight_mode),
+            "benchmark": benchmark,
+            "disclaimer": "冲击变量为拟真演示面板(全经济体覆盖、行业异质),结果仅用于验证系统链路",
+        }
+
+    try:
+        return await _RESULT_CACHE.get_or_compute(key, compute)
     except (np.linalg.LinAlgError, FloatingPointError, OverflowError) as e:
         raise HTTPException(status_code=400, detail="回归线性代数计算失败；请检查样本方差、重复键与设计自由度") from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    design_info = _design_info(design, req.weight_mode)
-    result_info = result.to_dict()
-    preflight = _regression_preflight(design, result_info, req.weight_mode)
-    return {
-        "design": design_info,
-        "result": result_info,
-        "preflight": preflight,
-        "benchmark": benchmark,
-        "disclaimer": "冲击变量为拟真演示面板(全经济体覆盖、行业异质),结果仅用于验证系统链路",
-    }
 
 
-@router.post("/api/regression/placebo")
+@router.post("/api/regression/placebo", response_model=PlaceboResponse)
 async def regression_placebo(req: PlaceboRequest, request: Request):
     _require_regression_student(request)
     design = _validate_design(
@@ -343,10 +344,12 @@ async def regression_placebo(req: PlaceboRequest, request: Request):
         req.scenario,
         req.exclude_row,
     )
-    panel = await anyio.to_thread.run_sync(
-        lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
-    )
-    try:
+    key = (artifacts.release_identity(), "placebo", req.model_dump_json())
+
+    async def compute() -> dict[str, Any]:
+        panel = await anyio.to_thread.run_sync(
+            lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
+        )
         placebo = await concurrency.run_cpu_bound(
             placebo_did_distribution,
             panel,
@@ -354,13 +357,15 @@ async def regression_placebo(req: PlaceboRequest, request: Request):
             n_draws=req.n_draws,
             seed=req.seed,
         )
+        return {
+            "design": _design_info(design, req.weight_mode),
+            "placebo": placebo,
+            "disclaimer": "实体置换仅用于描述性敏感性比较；它没有复现真实政策分配机制，尾部占比不是校准 p 值或因果证据",
+        }
+
+    try:
+        return await _RESULT_CACHE.get_or_compute(key, compute)
     except (np.linalg.LinAlgError, FloatingPointError, OverflowError) as e:
         raise HTTPException(status_code=400, detail="回归线性代数计算失败；请检查样本方差、重复键与设计自由度") from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    design_info = _design_info(design, req.weight_mode)
-    return {
-        "design": design_info,
-        "placebo": placebo,
-        "disclaimer": "实体置换仅用于描述性敏感性比较；它没有复现真实政策分配机制，尾部占比不是校准 p 值或因果证据",
-    }

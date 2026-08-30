@@ -56,6 +56,7 @@ async def lifespan(_app: FastAPI):
         await anyio.to_thread.run_sync(validate_startup_data)
         yield
     finally:
+        regression_routes.clear_result_cache()
         await anyio.to_thread.run_sync(classroom_db.shutdown)
 
 

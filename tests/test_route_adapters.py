@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -14,7 +15,15 @@ from gvcsim.artifacts import ArtifactContractError
 from gvcsim.data import quality
 from gvcsim.api import app
 
+from gvcsim.regression.contracts import RegressionRequest
 from gvcsim.regression.design import RegressionDesign
+
+
+@pytest.fixture(autouse=True)
+def _clear_regression_result_cache():
+    regression_routes.clear_result_cache()
+    yield
+    regression_routes.clear_result_cache()
 
 
 def _qc_checks(scope: str) -> list[dict]:
@@ -844,6 +853,77 @@ def test_regression_options_design_and_validation(teaching_db):
         ).status_code
         == 400
     )
+
+
+def test_regression_http_contracts_are_explicit():
+    schema = app.openapi()
+    expected_responses = {
+        ("/api/regression/options", "get"): "RegressionOptionsResponse",
+        ("/api/regression/design", "get"): "RegressionDesignResponse",
+        ("/api/regression/run", "post"): "RegressionRunResponse",
+        ("/api/regression/placebo", "post"): "PlaceboResponse",
+    }
+    for (path, method), model in expected_responses.items():
+        response_schema = schema["paths"][path][method]["responses"]["200"]["content"]["application/json"]["schema"]
+        assert response_schema["$ref"] == f"#/components/schemas/{model}"
+
+    run_contract = schema["components"]["schemas"]["RegressionRunResponse"]
+    assert {"design", "result", "preflight", "benchmark", "disclaimer"} <= set(run_contract["required"])
+
+
+def test_regression_route_coalesces_identical_inflight_work(monkeypatch):
+    panel = pd.DataFrame({"country": ["AAA"], "entity_id": ["AAA-s1"]})
+    reads = 0
+    computations = 0
+    release_id = "b" * 32
+
+    def read_panel(_name):
+        nonlocal reads
+        reads += 1
+        return panel
+
+    class Result:
+        def to_dict(self):
+            return {"status": "ok", "support": {}}
+
+    monkeypatch.setattr(regression_routes, "_read_csv", read_panel)
+    monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: release_id)
+
+    async def scenario():
+        nonlocal computations, release_id
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def fake_cpu(func, *_args, **_kwargs):
+            nonlocal computations
+            assert func is regression_routes.run_design_with_benchmark
+            computations += 1
+            started.set()
+            await release.wait()
+            return Result(), {"method": "benchmark"}
+
+        monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", fake_cpu)
+        request = SimpleNamespace(state=SimpleNamespace(user={"role": "student", "sub": "student"}))
+        req = RegressionRequest(outcome="network")
+        waiters = [asyncio.create_task(regression_routes.regression_run(req, request)) for _ in range(8)]
+        await started.wait()
+        await asyncio.sleep(0)
+        assert computations == 1
+        release.set()
+        results = await asyncio.gather(*waiters)
+        assert reads == 1
+        assert all(result is results[0] for result in results)
+
+        assert await regression_routes.regression_run(req, request) is results[0]
+        assert computations == 1
+        assert reads == 1
+
+        release_id = "c" * 32
+        assert await regression_routes.regression_run(req, request) is not results[0]
+        assert computations == 2
+        assert reads == 2
+
+    asyncio.run(scenario())
 
 
 def test_regression_run_and_placebo_are_simple_current_results(teaching_db, monkeypatch):
