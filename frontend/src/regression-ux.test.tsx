@@ -90,6 +90,7 @@ const regressionStep: Step = {
   status: "done",
   title: "生产回归",
   goal: "",
+  tasks: ["one", "two", "three"],
   concept: "",
   tip: "",
   deps: [],

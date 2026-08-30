@@ -52,7 +52,7 @@ describe("step 9 production-length operational definitions", () => {
     };
     const step: Step = {
       n: 9, stage: 3, lab: "viz", topic: "length", status: "done", title: "长度",
-      goal: "", concept: "长度定义", tip: "", deps: [],
+      goal: "", tasks: ["one", "two", "three"], concept: "长度定义", tip: "", deps: [],
       handoff: { input: "input", action: "action", output: "output" },
     };
     const state: StepStateApi<VizStepState> = {

@@ -9,26 +9,15 @@ import { explicitDemoCountry } from "../../../decomposition-model";
 import { DecompositionDemo } from "../../../demos";
 import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
-import { ChartStory, StepIntro } from "../viz/scaffold";
+import { ChartStory } from "../viz/scaffold";
 import { IndicatorTable, type IndicatorStepState, useIndicatorControls } from "./indicator-table";
 
-export function Step5Production({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }) {
+export function Step5Production({ meta, step: _step, state }: { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }) {
   const controls = useIndicatorControls(meta, state);
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
 
   return (
     <div>
-      <StepIntro
-        kicker={`步骤 ${step.n} · 指标计算`}
-        lead="一国的增加值,有多深地进了全球分工?"
-        concept={step.concept}
-        todo={[
-          "先看生产分解表:读 SVA、四段增加值与复杂 GVC 份额(3b/SVA)",
-          "再用「动手拆解」挑一个,看四段精确加回总增加值 SVA(误差≈0)",
-          "切换国家进行对比；当前选择会自动保存到实验记录",
-        ]}
-      />
-
       <ChartStory
         eyebrow="计算结果 · 先出数字"
         title="WWYZ 生产分解表(从 ICIO 算出来的)"

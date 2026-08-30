@@ -129,25 +129,22 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .step-badge.past { background: #d7dae3; color: #4a5162; }
 .step-badge.cur { background: #4b47e0; color: #fff; box-shadow: 0 0 0 4px #ded9fb; }
 .step-badge.future { background: #eef0f5; color: var(--text-muted); }
+.step-row-copy { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .step-row-title {
-  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 12.5px; color: #5a6070;
 }
+.step-row-status { color: #687080; font-size: 9.5px; line-height: 1.25; }
 .step-row.active .step-row-title { color: #2c2a6b; font-weight: 600; }
-.step-code { flex: none; font-size: 10px; font-family: monospace; color: var(--text-muted); }
-.step-evidence {
-  flex: none; min-width: 28px; padding: 2px 4px; border-radius: 5px;
-  font-size: 9.5px; font-weight: 700; text-align: center;
-}
-.step-evidence.ready { color: #08723a; background: #e7f7ed; }
-.step-evidence.todo { color: #8a6415; background: #fff4d8; }
-
+.step-row.active .step-row-status { color: #55518e; }
 .workarea { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .content-row { flex: 1; display: flex; min-height: 0; }
-.content { flex: 1; min-width: 0; overflow-y: auto; padding: 24px 30px 40px; }
-.content-inner { max-width: 1360px; margin: 0 auto; }
+.content { flex: 1; min-width: 0; overflow-y: auto; padding: 20px 26px 40px; }
+.content-inner { max-width: 1180px; margin: 0 auto; }
+.step-primary-action { min-width: 0; outline: none; scroll-margin-top: 12px; }
+.step-primary-action:focus-visible { outline: 2px solid #4b47e0; outline-offset: 5px; border-radius: 10px; }
 /* 讲解性正文限制阅读行宽:容器与表格/图表/演示仍全宽,只有正文不跟着拉长,保证可读。
-   数值同 viz/scaffold.tsx 的 PROSE_MAX(步骤 4–11 的 StepIntro/ChartStory 用内联样式)。
+   数值同 viz/scaffold.tsx 的 PROSE_MAX(步骤 4–11 的 ChartStory 用内联样式)。
    覆盖:步骤 1–3 / 16 的讲解卡,与回归步(12–15)工作台里的段落文本与那句长问句。 */
 .concept-card > p,
 .reg-workbench p,
@@ -318,6 +315,13 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .shock-event-source.teaching { color: #6b5200; }
 .shock-event-item-dates { display: block; font-size: 10px; color: var(--text-muted); margin-top: 3px; }
 .shock-source-disclosure { margin: 8px 0 14px; color: #594800; font-size: 11.5px; line-height: 1.6; }
+.shock-primary-boundary {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 10px;
+  margin: 0 0 10px; padding: 10px 12px; border: 1px solid #f0d7aa;
+  border-radius: 9px; background: #fffaf0; color: #5f4b20; font-size: 12px; line-height: 1.55;
+}
+.shock-primary-boundary span { color: #765000; }
+.shock-source-boundary { margin-bottom: 12px; }
 
 /* 行内迷你时间条:所有行共用顶部年份刻度,横向位置因此可以跨事件比较(取代了独立时间线组件)。 */
 .shock-event-axis {
@@ -741,11 +745,10 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   .topbar,
   .sidebar,
   .step-header-bar,
-  .step-handoff,
-  .rightrail,
   .stepfooter,
   .announce-banner,
   .persistent-qc-warning,
+  .step-task-card,
   .card.accent,
   .toast-host,
   .error-box {

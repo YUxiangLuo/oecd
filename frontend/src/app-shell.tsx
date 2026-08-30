@@ -4,6 +4,7 @@ import { LogoMark } from "./brand";
 import { oecdIcioDatasetLabel } from "./dataset-label";
 import { TeacherDashboard } from "./teacher";
 import { ToastHost } from "./toast";
+import { materialStatusForStep } from "./step-task-card";
 import type {
   AuthUser,
   CompletionSummary,
@@ -178,16 +179,15 @@ interface CourseSidebarProps {
   stepsData: StepsResponse;
   current: number;
   completion: CompletionSummary | null;
-  reportGate: ReportGateItem[] | null;
+  materialGate: ReportGateItem[] | null;
   onNavigate: (step: number) => void;
 }
 
-export function CourseSidebar({ stepsData, current, completion, reportGate, onNavigate }: CourseSidebarProps) {
+export function CourseSidebar({ stepsData, current, completion, materialGate, onNavigate }: CourseSidebarProps) {
   const steps = stepsData.steps;
   const totalSteps = steps.length;
   const stages = [...new Set(steps.map((step) => step.stage))];
   const completedSteps = new Set(completion?.completed ?? []);
-  const missingReportSteps = new Set(reportGate?.map((item) => item.step) ?? []);
   return (
     <aside className="sidebar" aria-label="课程大纲">
       <div className="sidebar-head">
@@ -203,7 +203,11 @@ export function CourseSidebar({ stepsData, current, completion, reportGate, onNa
             />
           </div>
         ) : <div className="progress-track" />}
-        <div className="sidebar-sub">全球价值链实证分析 · 数据→指标→回归→报告</div>
+        <div className="sidebar-sub">
+          {completion
+            ? `理解进度 ${completion.completed_count}/${totalSteps} · 数据→指标→回归→报告`
+            : "正在读取理解进度…"}
+        </div>
       </div>
       <div className="sidebar-list">
         {stages.map((stage) => (
@@ -215,13 +219,16 @@ export function CourseSidebar({ stepsData, current, completion, reportGate, onNa
             </div>
             {steps.filter((step) => step.stage === stage).map((step) => {
               const done = completedSteps.has(step.n);
-              const materialReady = reportGate !== null && !missingReportSteps.has(step.n);
+              const materialStatus = materialStatusForStep(step.n, materialGate);
+              const materialLabel = materialStatus === "checking"
+                ? "报告材料检查中"
+                : materialStatus === "ready" ? "报告材料已齐" : "报告材料未齐";
               const state = done ? "done" : step.n === current ? "cur" : "future";
               const accessibleName = [
                 `第 ${step.n} 步：${step.title}`,
                 step.n === current ? "当前步骤" : null,
                 done ? "已完成" : "未完成",
-                materialReady ? "报告材料已齐" : "报告材料未齐",
+                materialLabel,
               ].filter(Boolean).join("，");
               return (
                 <button
@@ -234,9 +241,11 @@ export function CourseSidebar({ stepsData, current, completion, reportGate, onNa
                   title={`第 ${step.n} 步：${step.title}${done ? "（已完成）" : ""}`}
                 >
                   <span className={`step-badge ${state}`} aria-hidden="true">{done ? "✓" : step.n}</span>
-                  <span className="step-row-title" aria-hidden="true">{step.title}</span>
-                  <span className={`step-evidence ${materialReady ? "ready" : "todo"}`} aria-hidden="true">
-                    材{materialReady ? "✓" : "·"}
+                  <span className="step-row-copy" aria-hidden="true">
+                    <span className="step-row-title">{step.title}</span>
+                    <span className="step-row-status">
+                      理解{done ? "已完成" : "未完成"} · 材料{materialStatus === "checking" ? "检查中" : materialStatus === "ready" ? "已齐全" : "未齐全"}
+                    </span>
                   </span>
                 </button>
               );
@@ -275,65 +284,6 @@ export function StepHeader({ step, previous, next, stageName, totalSteps, onNavi
           : <span className="muted">已到最后一步</span>}
       </div>
     </div>
-  );
-}
-
-export function StepHandoff({ step }: { step: Step }) {
-  const items = [
-    { label: "来自前一步", value: step.handoff.input },
-    { label: "本步动作", value: step.handoff.action },
-    { label: "带到下一步", value: step.handoff.output },
-  ];
-  return (
-    <section className="step-handoff" aria-label="本步在实验流程中的衔接">
-      {items.map((item, index) => (
-        <div key={item.label}>
-          <span>{item.label}</span>
-          <b>{item.value}</b>
-          {index < items.length - 1 && <i aria-hidden="true">→</i>}
-        </div>
-      ))}
-    </section>
-  );
-}
-
-export function StepRail({ step, previous, next, stageName, totalSteps, onNavigate }: StepNavigationProps) {
-  return (
-    <aside className="rightrail" aria-label="本步速览">
-      <div className="rail-head"><span className="rail-head-ic">📌</span>本步速览</div>
-      <div className="rail-stage">
-        <div className="rail-stage-loc">阶段{ROMAN[step.stage]} · {stageName}</div>
-        <div className="rail-stage-num"><b>{String(step.n).padStart(2, "0")}</b><span>/ {totalSteps} 步</span></div>
-      </div>
-      <div className="rail-sec">
-        <div className="rail-label">🎯 本步目标</div>
-        <div className="rail-goal">{step.goal}</div>
-      </div>
-      <div className="rail-tip"><span>💡</span><div><b>关键提示 · </b>{step.tip}</div></div>
-      <div className="rail-sec">
-        <div className="rail-label">🔗 关联数据 / 依赖</div>
-        <div className="rail-chips">{step.deps.map((dependency) => <span key={dependency} className="rail-chip">{dependency}</span>)}</div>
-      </div>
-      <div className="rail-flow">
-        <div className="rail-label">流程位置</div>
-        {previous && (
-          <button type="button" className="rail-flow-row" onClick={() => onNavigate(previous.n)}>
-            <span className="rail-flow-k">↑ 上一步</span>
-            <span className="rail-flow-t">{previous.title}</span>
-          </button>
-        )}
-        <div className="rail-flow-row cur">
-          <span className="rail-flow-k">● 当前</span>
-          <span className="rail-flow-t">{step.title}</span>
-        </div>
-        {next && (
-          <button type="button" className="rail-flow-row" onClick={() => onNavigate(next.n)}>
-            <span className="rail-flow-k">↓ 下一步</span>
-            <span className="rail-flow-t">{next.title}</span>
-          </button>
-        )}
-      </div>
-    </aside>
   );
 }
 

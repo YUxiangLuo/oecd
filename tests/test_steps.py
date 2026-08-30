@@ -4,6 +4,8 @@ from gvcsim.steps import STEPS
 def test_every_existing_step_has_one_complete_handoff_without_adding_steps():
     assert [step["n"] for step in STEPS] == list(range(1, 17))
     for step in STEPS:
+        assert len(step["tasks"]) == 3
+        assert all(str(value).strip() for value in step["tasks"])
         assert set(step["handoff"]) == {"input", "action", "output"}
         assert all(str(value).strip() for value in step["handoff"].values())
 

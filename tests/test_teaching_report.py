@@ -12,7 +12,14 @@ from gvcsim.data.citations import artifact_data_sources
 from gvcsim.data.raw_icio import DimensionContract, raw_dimensions_metadata
 
 from gvcsim.session import empty_session, make_record
-from gvcsim.teaching_report import REFLECTION_TEXT_LIMIT, GATE_STEPS, ReportGateError, build, check_gate
+from gvcsim.teaching_report import (
+    REFLECTION_TEXT_LIMIT,
+    GATE_STEPS,
+    ReportGateError,
+    build,
+    check_gate,
+    check_material_gate,
+)
 
 
 REPORT_RAW_CONTRACT = DimensionContract(
@@ -546,6 +553,15 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection():
     assert any(item["step"] == 14 and "可报告" in "".join(item["missing"]) for item in blocked_one)
     with pytest.raises(ReportGateError):
         build(empty_session(), "同学")
+
+
+def test_material_gate_is_independent_of_unfinished_quizzes():
+    session = _complete()
+    for step in range(1, 16):
+        del session["steps"][str(step)]["data"]["quiz"]
+
+    assert check_material_gate(session) == []
+    assert {item["step"] for item in check_gate(session)} == set(range(1, 16))
 
 
 def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatch):

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
+import { RegressionEvidenceMatrix, type SiblingStepData } from "../../regression-teach";
 import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
 import { showToast } from "../../toast";
 import type { ClassroomReport, ReportGateItem, ReportMutationResponse, StepStateApi } from "../../types";
@@ -124,6 +125,7 @@ export function ReportLab({
   onFlushSession,
   onNavigateStep,
   onReportChanged,
+  getStep,
 }: {
   state: StepStateApi;
   report: ClassroomReport | null;
@@ -134,6 +136,7 @@ export function ReportLab({
   onFlushSession: () => Promise<void>;
   onNavigateStep: (step: number) => void;
   onReportChanged: (response: ReportMutationResponse) => void;
+  getStep?: (step: number) => SiblingStepData | undefined;
 }) {
   const [blocked, setBlocked] = useState<ReportGateItem[]>([]);
   const [generating, setGenerating] = useState(false);
@@ -223,6 +226,7 @@ export function ReportLab({
 
   return (
     <div className="report-lab">
+      <RegressionEvidenceMatrix getStep={getStep} />
       <section className="report-reflection" aria-labelledby="report-reflection-title">
         <div>
           <span className="reg-section-step">先完成 · 学生原创分析</span>

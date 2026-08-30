@@ -10,6 +10,7 @@ const step: Step = {
   status: "done",
   title: "质检",
   goal: "质检",
+  tasks: ["one", "two", "three"],
   concept: "质检",
   tip: "质检",
   deps: [],

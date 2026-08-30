@@ -10,26 +10,15 @@ import { api } from "../../../api";
 import { NetworkCentralityDemo } from "../../../demos";
 import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
-import { ChartStory, StepIntro } from "../viz/scaffold";
+import { ChartStory } from "../viz/scaffold";
 import { IndicatorTable, type IndicatorStepState, useIndicatorControls } from "./indicator-table";
 
-export function Step7Network({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }) {
+export function Step7Network({ meta, step: _step, state }: { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }) {
   const controls = useIndicatorControls(meta, state);
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
 
   return (
     <div>
-      <StepIntro
-        kicker={`步骤 ${step.n} · 指标计算`}
-        lead="把经济当成一张网:谁是枢纽?"
-        concept={step.concept}
-        todo={[
-          "先在小网络上看懂度 / 介数中心性是怎么数出来的",
-          "再看真实的行业节点中心性表:选个国家，在完整 45 行业结果内切换加权度 / 介数降序",
-          "切换国家进行对比；当前选择会自动保存到实验记录",
-        ]}
-      />
-
       <ChartStory
         eyebrow="先建直觉 · 在一个小网络上"
         title="度 / 介数中心性是怎么数出来的"

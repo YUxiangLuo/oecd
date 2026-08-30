@@ -118,32 +118,6 @@ export function QcLab({ meta, onNavigateStep, onCompletionBlockChange }: {
   return (
     <div>
       <YearPicker years={meta.years} year={year} onChange={changeYear} />
-      <section className="qc-teaching-guide" aria-labelledby="qc-guide-title">
-        <div>
-          <h3 id="qc-guide-title">先判断严重度，再决定能否继续</h3>
-          <p>质检等级描述的是处置边界，不只是颜色。Fatal 会阻断发布；Warning 和 Disclosure 都允许继续，但承担的说明义务不同。</p>
-          <dl className="qc-decision-list">
-            {QC_DECISIONS.map((item) => (
-              <div key={item.level}>
-                <dt>{item.level}</dt>
-                <dd>{item.action}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-        <div>
-          <h3>程序能求逆，还要检查什么？</h3>
-          <p><code>(I−A)⁻¹</code> 被算出来，只说明软件返回了一个数值结果；以下四项分别排除不同风险。</p>
-          <dl className="qc-diagnostic-list">
-            {LEONTIEF_DIAGNOSTICS.map(([term, meaning]) => (
-              <div key={term}>
-                <dt>{term}</dt>
-                <dd>{meaning}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </section>
       <div className={completionBlock || qcRelease.fatal.length > 0 ? "warnbox" : "tipbox"} role={completionBlock ? "alert" : "status"} style={{ marginBottom: 16 }}>
         <b>本步决定：{decision}</b>
         <p style={{ marginBottom: 0 }}>下一步只使用通过当前发布门禁的数据计算指标；本步的 Warning / Disclosure 会继续带入第 16 步报告。</p>
@@ -158,6 +132,35 @@ export function QcLab({ meta, onNavigateStep, onCompletionBlockChange }: {
       <div className={summary.className} role={summary.blockedReason ? "alert" : "status"} style={{ marginBottom: 16, fontWeight: 700 }}>
         {summary.text}
       </div>
+      <details className="card concept-card qc-guide-details">
+        <summary className="kicker">理解质检等级与数值诊断</summary>
+        <section className="qc-teaching-guide" aria-labelledby="qc-guide-title">
+          <div>
+            <h3 id="qc-guide-title">先判断严重度，再决定能否继续</h3>
+            <p>质检等级描述的是处置边界，不只是颜色。Fatal 会阻断发布；Warning 和 Disclosure 都允许继续，但承担的说明义务不同。</p>
+            <dl className="qc-decision-list">
+              {QC_DECISIONS.map((item) => (
+                <div key={item.level}>
+                  <dt>{item.level}</dt>
+                  <dd>{item.action}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+          <div>
+            <h3>程序能求逆，还要检查什么？</h3>
+            <p><code>(I−A)⁻¹</code> 被算出来，只说明软件返回了一个数值结果；以下四项分别排除不同风险。</p>
+            <dl className="qc-diagnostic-list">
+              {LEONTIEF_DIAGNOSTICS.map(([term, meaning]) => (
+                <div key={term}>
+                  <dt>{term}</dt>
+                  <dd>{meaning}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </section>
+      </details>
       <div className={shockContract.valid ? "tipbox" : "warnbox"} role={shockContract.valid ? "status" : "alert"} style={{ marginBottom: 16 }}>
         {shockContract.valid
           ? `Shock contract v${meta.dataset?.shock_contract?.version} 已精确验证：treated 使用严格 ${meta.dataset?.shock_contract?.treated_operator}${meta.dataset?.shock_contract?.treated_threshold} 阈值并保留三类完整字段。允许集合包含 OECD ICIO 与显式教学 fallback；“允许”不等于“官方”，实际来源/口径必须以步骤 11 的第六项 provenance QC 为准。`

@@ -14,7 +14,7 @@ import { CompositionBar, RankBarChart, countryLabel, topWithSelected } from "../
 import { NEGATIVE_COMPOSITION_STYLE } from "../../../viz/explore/charts";
 import { CAT } from "../../../viz/shared";
 import { AsyncStateMessage, useAsync } from "../../shared";
-import { ChartStory, LensNav, StepIntro, VizWorkbench, finiteBy, num, observationRequestKey, useCountryIndicatorRows, useCountryObservations, useVizLab, type Row, type VizStepState } from "./scaffold";
+import { ChartStory, LensNav, VizWorkbench, finiteBy, num, observationRequestKey, useCountryIndicatorRows, useCountryObservations, useVizLab, type Row, type VizStepState } from "./scaffold";
 
 type Lens = "ladder" | "rank" | "industry";
 
@@ -96,17 +96,6 @@ export function Step9Production({ meta, step, state }: { meta: Meta; step: Step;
 
   return (
     <div>
-      <StepIntro
-        kicker={`步骤 ${step.n} · 生产可视化`}
-        lead="一国的增加值,有多深地进了 GVC?"
-        concept={step.concept}
-        todo={[
-          "在「选国家」里挑至少两个经济体对比",
-          "看 GVC 阶梯:四段构成里复杂 GVC 占多少",
-          "用「行业下钻」看一国内部各行业差别有多大",
-        ]}
-      />
-
       <VizWorkbench
         title={`步骤 ${step.n} · GVC 生产指标可视化`}
         toolbar={(

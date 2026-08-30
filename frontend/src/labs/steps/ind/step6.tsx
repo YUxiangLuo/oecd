@@ -9,7 +9,7 @@ import { explicitDemoCountry } from "../../../decomposition-model";
 import { DecompositionDemo } from "../../../demos";
 import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
-import { ChartStory, StepIntro } from "../viz/scaffold";
+import { ChartStory } from "../viz/scaffold";
 import { IndicatorTable, type IndicatorStepState, useIndicatorControls } from "./indicator-table";
 
 function LengthPathGuide() {
@@ -37,23 +37,12 @@ function LengthPathGuide() {
   );
 }
 
-export function Step6Length({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }) {
+export function Step6Length({ meta, step: _step, state }: { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }) {
   const controls = useIndicatorControls(meta, state);
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
 
   return (
     <div>
-      <StepIntro
-        kicker={`步骤 ${step.n} · 指标计算`}
-        lead="增加值走一趟生产,平均经过几道工序?"
-        concept={step.concept}
-        todo={[
-          "先看长度分解表:选个国家,读前向 PLv、后向 PLy 与位置 GVCPs",
-          "再用「动手拆解」看各段按 VA 份额加权后精确加回总长度",
-          "切换国家进行对比；当前选择会自动保存到实验记录",
-        ]}
-      />
-
       <LengthPathGuide />
 
       <ChartStory

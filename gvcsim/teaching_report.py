@@ -128,13 +128,9 @@ def _merge_gate_blocks(blocked: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return list(merged.values())
 
 
-def check_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
+def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
+    """Return only missing report evidence/actions, independently of quizzes."""
     blocked: list[dict[str, Any]] = []
-    for step in GATE_STEPS:
-        result = evidence.evaluate_step(step, session)
-        if not result.complete:
-            blocked.append({"step": step, "title": _STEP_TITLES.get(step, ""), "missing": result.missing})
-
     observation = _step_data(session, 1).get("observation")
     has_observation = isinstance(observation, dict) and all(
         observation.get(key) not in (None, "") for key in ("row", "column", "value")
@@ -194,6 +190,17 @@ def check_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
             reflection_missing.append(f"{label}不能超过 {REFLECTION_TEXT_LIMIT} 个字符")
     if reflection_missing:
         blocked.append({"step": 16, "title": "原创分析与反思", "missing": reflection_missing})
+    return _merge_gate_blocks(blocked)
+
+
+def check_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
+    """Return the combined quiz and report-material gate used for generation."""
+    blocked: list[dict[str, Any]] = []
+    for step in GATE_STEPS:
+        result = evidence.evaluate_step(step, session)
+        if not result.complete:
+            blocked.append({"step": step, "title": _STEP_TITLES.get(step, ""), "missing": result.missing})
+    blocked.extend(check_material_gate(session))
     return _merge_gate_blocks(blocked)
 
 

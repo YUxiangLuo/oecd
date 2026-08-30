@@ -26,6 +26,8 @@ export interface Step {
   status: "done" | "demo";
   title: string;
   goal: string;
+  /** Three concrete student actions rendered in the shared first-screen task card. */
+  tasks: [string, string, string];
   concept: string;
   tip: string;
   deps: string[];
@@ -388,6 +390,7 @@ export interface SessionResponse {
   updated_at?: string | null;
   completion: CompletionSummary;
   report_gate: ReportGateItem[];
+  material_gate: ReportGateItem[];
   report: ClassroomReport | null;
 }
 
@@ -397,12 +400,14 @@ export interface SessionSaveResponse {
   updated_at: string;
   completion: CompletionSummary;
   report_gate: ReportGateItem[];
+  material_gate: ReportGateItem[];
 }
 
 export interface ReportMutationResponse {
   report: ClassroomReport;
   completion: CompletionSummary;
   report_gate: ReportGateItem[];
+  material_gate: ReportGateItem[];
 }
 
 export interface CoefStat {

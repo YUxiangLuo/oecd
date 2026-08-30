@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MarginalEffectsPanel, PretrendCheck, RegressionCoefficientTable } from "./regression";
+import {
+  MarginalEffectsPanel,
+  PretrendCheck,
+  RegressionCoefficientTable,
+  RegressionPretrendEvidence,
+} from "./regression";
 import { GLOBAL_PRETREND_SUPPRESSION_COPY } from "./regression-event-support";
 import type { EventSupport, RegressionResponse } from "./types";
 
@@ -75,6 +80,31 @@ function legacyEventResponse(eventSupport?: EventSupport): RegressionResponse {
 }
 
 describe("event-study inference surfaces fail closed for legacy payloads", () => {
+  test("surfaces the pretrend gate as evidence students must read before judging", () => {
+    const response = legacyEventResponse(validEventSupportWithThinLead());
+    response.design.interaction = false;
+    const lead = response.result.event_support!.periods[1];
+    Object.assign(lead, {
+      term: "k=-2", event_time: -2, contributing_rows: 13, contributing_entities: 13,
+      contributing_clusters: 13, period_supported: true, inference_supported: true,
+      suppress_inference: false, cohorts: { "2018": 13 }, reason_codes: [], reasons: [],
+    });
+    response.result.coefs.unshift({
+      name: "k=-2", coef: 0.01, se: 0.005, t: 2,
+      p: 0.05, stars: "", ci_low: 0, ci_high: 0.02,
+    });
+    response.result.diagnostics.pretrend = {
+      scope: "main", available: true, reason: null, terms: ["k=-2"], excluded_terms: [],
+      statistic: 9, df_num: 1, df_denom: 20, p: 0.001,
+      interpretation: "冲击前已经存在明显差异，不能按点估计判断方向。",
+    };
+
+    const markup = renderToStaticMarkup(createElement(RegressionPretrendEvidence, { response }));
+    expect(markup).toContain("判断前必须检查");
+    expect(markup).toContain("冲击前已经存在明显差异");
+    expect(markup).toContain("p = 0.001");
+  });
+
   test("marginal table keeps the point estimate but hides seeded CI and p values", () => {
     const markup = renderToStaticMarkup(createElement(MarginalEffectsPanel, {
       response: legacyEventResponse(),

@@ -17,15 +17,14 @@ import {
 import {
   CourseSidebar,
   StepFooter,
-  StepHandoff,
   StepHeader,
-  StepRail,
   StudentTopbar,
 } from "./app-shell";
 import { IntroOverlay } from "./intro";
 import { LabRouter } from "./lab-router";
 import type { RegressionHistory, RegressionSettings } from "./regression";
 import { QuizPanel } from "./step-quiz";
+import { materialStatusForStep, STEP_PRIMARY_ACTION_ID, StepTaskCard } from "./step-task-card";
 import { ToastHost } from "./toast";
 import type { AuthUser, Meta, StepsResponse, StepStateApi } from "./types";
 import type { SessionApi } from "./use-session";
@@ -135,10 +134,6 @@ export function StudentWorkspace({
   const stageName = stepsData.stages[String(step.stage)];
   const prevStep = steps[stepIndex - 1];
   const nextStep = steps[stepIndex + 1];
-  // 回归工作台自带完整渐进教学结构，主区跳过通用讲解卡避免重复。
-  const isReg = step.lab === "reg";
-  // 可视化步骤(viz)图表是主角:讲解卡默认折叠,给图表让出首屏纵向空间(可点开)
-  const isViz = step.lab === "viz";
   const activeCompletionBlockReason = effectiveCompletionBlockReason(step, completionBlock, visit);
   const presentationCompletion = completionForPresentation(
     session.completion,
@@ -183,7 +178,7 @@ export function StudentWorkspace({
             stepsData={stepsData}
             current={current}
             completion={presentationCompletion}
-            reportGate={session.reportGate}
+            materialGate={session.materialGate}
             onNavigate={onNavigateStep}
           />
 
@@ -243,11 +238,15 @@ export function StudentWorkspace({
               totalSteps={totalSteps}
               onNavigate={onNavigateStep}
             />
-            <StepHandoff step={step} />
-
             <div className="content-row">
               <main id={mainContentId} ref={contentRef} className="content" tabIndex={-1}>
                 <div className="content-inner">
+                  <StepTaskCard
+                    step={step}
+                    complete={presentationCompletedSteps.has(step.n)}
+                    materialStatus={materialStatusForStep(step.n, session.materialGate)}
+                    contentRef={contentRef}
+                  />
                   {carriedComparison.length >= 2 && (
                     <div className="comparison-carry" role="note">
                       <div>
@@ -266,36 +265,30 @@ export function StudentWorkspace({
                       </button>
                     </div>
                   )}
-                  {/* 已把 concept 并入页内 StepIntro(常驻)的步骤,这里不再重复渲染讲解卡:
-                      可视化(isViz)、指标计算(ind)、政策冲击接入(shock);回归自带渐进教学,也跳过。 */}
-                  {!isReg && !isViz && step.lab !== "ind" && step.lab !== "shock" && (
-                    <details className="card accent concept-card" open>
-                      <summary className="kicker">讲解</summary>
-                      <p>{step.concept}</p>
-                    </details>
-                  )}
-                  <LabRouter
-                    key={`lab:${step.n}:${session.workspaceGeneration}:${comparisonCarryGeneration}`}
-                    step={step}
-                    meta={meta}
-                    state={stepState}
-                    report={session.report}
-                    reportGate={session.reportGate}
-                    sessionStatus={session.status}
-                    sessionUnsynced={session.unsynced}
-                    sessionSyncing={session.syncing}
-                    sessionSyncError={session.syncError}
-                    onFlushSession={session.syncNow}
-                    onReportChanged={session.applyReportMutation}
-                    regressionSettings={regressionSettings}
-                    onRegressionSettingsChange={onRegressionSettingsChange}
-                    regressionHistory={regressionHistory}
-                    onRegressionHistoryChange={onRegressionHistoryChange}
-                    onNavigateStep={onNavigateStep}
-                    onCompletionBlockChange={updateCompletionBlock}
-                    getStep={session.getStep}
-                    getConfirmedStep={session.getConfirmedStep}
-                  />
+                  <div id={STEP_PRIMARY_ACTION_ID} tabIndex={-1} className="step-primary-action">
+                    <LabRouter
+                      key={`lab:${step.n}:${session.workspaceGeneration}:${comparisonCarryGeneration}`}
+                      step={step}
+                      meta={meta}
+                      state={stepState}
+                      report={session.report}
+                      reportGate={session.reportGate}
+                      sessionStatus={session.status}
+                      sessionUnsynced={session.unsynced}
+                      sessionSyncing={session.syncing}
+                      sessionSyncError={session.syncError}
+                      onFlushSession={session.syncNow}
+                      onReportChanged={session.applyReportMutation}
+                      regressionSettings={regressionSettings}
+                      onRegressionSettingsChange={onRegressionSettingsChange}
+                      regressionHistory={regressionHistory}
+                      onRegressionHistoryChange={onRegressionHistoryChange}
+                      onNavigateStep={onNavigateStep}
+                      onCompletionBlockChange={updateCompletionBlock}
+                      getStep={session.getStep}
+                      getConfirmedStep={session.getConfirmedStep}
+                    />
+                  </div>
                   <QuizPanel
                     key={`quiz:${step.n}:${session.workspaceGeneration}`}
                     step={step}
@@ -305,14 +298,6 @@ export function StudentWorkspace({
                 </div>
               </main>
 
-              <StepRail
-                step={step}
-                previous={prevStep}
-                next={nextStep}
-                stageName={stageName}
-                totalSteps={totalSteps}
-                onNavigate={onNavigateStep}
-              />
             </div>
 
             <StepFooter

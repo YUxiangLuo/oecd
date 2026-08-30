@@ -19,7 +19,6 @@ import { SelectedEventBar } from "./step2/selected-event";
 import { ShockPanel } from "./step2/shock-panel";
 import { inspectShockContract } from "./step2/shock-contract";
 import { QcChecksTable } from "./qc-checks-table";
-import { StepIntro } from "./viz/scaffold";
 import { useAsync } from "../shared";
 
 /** 步骤11:从政策事件到国家×行业冲击面板——左右并排、点事件即联动右侧冲击。 */
@@ -30,7 +29,7 @@ interface ShockStepState extends QuizCompletionState, Record<string, unknown> {
   selected_event_key?: string;
 }
 
-export function ShockLab({ meta, step, state }: {
+export function ShockLab({ meta, step: _step, state }: {
   meta: Meta;
   step: Step;
   state: StepStateApi<ShockStepState>;
@@ -117,33 +116,33 @@ export function ShockLab({ meta, step, state }: {
 
   return (
     <div className="shock-workbench">
-      <StepIntro
-        kicker={`步骤 ${step.n} · 回归设计与建模`}
-        lead="回归前，先接入候选政策处理暴露"
-        concept={step.concept}
-        todo={[
-          "从左侧列表选一个政策事件(行内时间条给出宣布→生效时点)，右侧按该事件定位国家×行业暴露",
-          "可继续查看关税 / 制裁 / 出口管制的差异；打开过的事件会自动进入实验记录",
-          "记住:下游回归按冲击类型汇总全部已编码事件；事件选择只用于探索，不证明冲击外生",
-        ]}
-      />
-      <div className="warnbox shock-disclaimer">
-        ⚠ {eventsResponse?.disclaimer ?? "正在从当前已验证 release 读取关税出口暴露度来源披露。"}
-        政策事件、日期只有在事件卡列出 URL 时才有官方事件来源；ICIO 行业映射与数值强度均为未逐项引证的教学编码。
+      <div className="shock-primary-boundary" role="note">
+        <b>先做：</b>选择一项政策事件，再看它如何映射为国家 × 行业暴露。
+        <span>真实 ICIO 指标 + 教学政策编码；选择事件不证明冲击外生。</span>
       </div>
-      <div className="shock-provenance-split" role="note" aria-label="官方事实与教学设定的边界">
-        <div>
-          <b>可由官方来源核实</b>
-          <span>事件名称、宣布/生效日期，以及来源明确列出的产品清单或税率。</span>
+      <details className="shock-details shock-source-boundary">
+        <summary>
+          <span>数据来源与教学设定边界</span>
+          <span className="shock-details-meta">运行前建议阅读</span>
+        </summary>
+        <div className="warnbox shock-disclaimer">
+          ⚠ {eventsResponse?.disclaimer ?? "正在从当前已验证 release 读取关税出口暴露度来源披露。"}
+          政策事件、日期只有在事件卡列出 URL 时才有官方事件来源；ICIO 行业映射与数值强度均为未逐项引证的教学编码。
         </div>
-        <div>
-          <b>本课程为了教学而设定</b>
-          <span>产品如何映射到 ICIO 行业、暴露度怎样聚合，以及面板中的数值强度；这些不是官方估计。</span>
+        <div className="shock-provenance-split" role="note" aria-label="官方事实与教学设定的边界">
+          <div>
+            <b>可由官方来源核实</b>
+            <span>事件名称、宣布/生效日期，以及来源明确列出的产品清单或税率。</span>
+          </div>
+          <div>
+            <b>本课程为了教学而设定</b>
+            <span>产品如何映射到 ICIO 行业、暴露度怎样聚合，以及面板中的数值强度；这些不是官方估计。</span>
+          </div>
         </div>
-      </div>
-      <p className="shock-beginner-route">
-        <b>建议起点：</b>先选择第一张 301 关税事件卡。右侧每一行回答的是：政策打到哪些产品 × 该国家行业原本有多少出口流向目标市场，因此得到这个国家×行业的教学暴露度。
-      </p>
+        <p className="shock-beginner-route">
+          <b>建议起点：</b>先选择第一张 301 关税事件卡。右侧每一行回答的是：政策打到哪些产品 × 该国家行业原本有多少出口流向目标市场，因此得到这个国家×行业的教学暴露度。
+        </p>
+      </details>
 
       {!contractState.valid ? (
         <div className="error-box" role="alert">{contractState.reason}</div>

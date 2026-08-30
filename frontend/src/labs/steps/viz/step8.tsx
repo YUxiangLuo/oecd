@@ -11,7 +11,7 @@ import { CompositionBar, QuadrantScatter, RankBarChart } from "../../../viz";
 import { NEGATIVE_COMPOSITION_STYLE } from "../../../viz/explore/charts";
 import { CAT } from "../../../viz/shared";
 import { AsyncStateMessage } from "../../shared";
-import { ChartStory, LensNav, StepIntro, VizWorkbench, finiteBy, num, useCountryIndicatorRows, useCountryObservations, useVizLab, type Row, type VizStepState } from "./scaffold";
+import { ChartStory, LensNav, VizWorkbench, finiteBy, num, useCountryIndicatorRows, useCountryObservations, useVizLab, type Row, type VizStepState } from "./scaffold";
 
 type Lens = "quadrant" | "decompose" | "rank";
 
@@ -72,17 +72,6 @@ export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; stat
 
   return (
     <div>
-      <StepIntro
-        kicker={`步骤 ${step.n} · 贸易流可视化`}
-        lead="一国的出口,价值从哪来?"
-        concept={step.concept}
-        todo={[
-          "在「选国家」里挑至少两个经济体(如 中国 vs 越南)",
-          "先看定位图它们各落哪个象限",
-          "再切「出口拆解」比较五类 WWZ 聚合项与 TLS 扩展构成",
-        ]}
-      />
-
       <VizWorkbench
         title={`步骤 ${step.n} · GVC 贸易流指标可视化`}
         toolbar={(

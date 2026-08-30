@@ -40,7 +40,6 @@ import {
   observationRequestIdentity,
   observationRequestKey,
   sameObservationIdentity,
-  StepIntro,
   YearSelect,
   useVizLab,
   type ObservationRequestIdentity,
@@ -239,17 +238,6 @@ export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; s
 
   return (
     <div>
-      <StepIntro
-        kicker={`步骤 ${step.n} · 网络可视化`}
-        lead="谁是全球生产的枢纽?"
-        concept={step.concept}
-        todo={[
-          "先看「贸易网络图」按预设地理区域观察区域内与区域间流向（位置不是社区检测）",
-          "点击至少两个国家进入大图；点过的国家会计入报告比较",
-          "再切「枢纽热力表」，比较介数与加权度排序、Top 15 与全部行业，并明确点击一行记录介数证据",
-        ]}
-      />
-
       <div className="tipbox" style={{ marginBottom: 14 }}>
         国家级贸易图在全部正流量边下是<b>完全图</b>,度、介数、接近等无权中心性对所有国家恒为常数、没有区分度。
         因此拓扑比较在<b>国家–行业级</b>的完整全球图上做:每个数值都在包含全部国家×行业节点和所有正中间品流量边的有向图上计算,下钻只改变展示范围。

@@ -5,7 +5,7 @@
  * 图表用途不明。改造后每步是独立的展示组件(step8/9/10/11.tsx),各自决定布局、
  * 主图与讲解;这里只沉淀真正该复用的三样东西:
  *   1) ChartStory —— 每张图自带「看什么 / 怎么读 / 该发现」读图脚手架;
- *   2) StepIntro / LensNav —— 常驻教学引导与「本步专属」的视角切换(非通用 7 标签);
+ *   2) LensNav —— 「本步专属」的视角切换(非通用 7 标签);
  *   3) useVizLab —— 年份 / 选国家 / 数据拉取 + 自动实验快照({chart, compared})。
  * 只在真实交互后写入，页面默认视图不冒充学生探索。
  */
@@ -16,7 +16,7 @@ import { FullscreenPanel } from "../../../fullscreen-panel";
 import type { IndicatorSchema, Meta, QuizCompletionState, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
 import { CountryPicker } from "../../country-picker";
-import { CAT, cardStyle } from "../../../viz/shared";
+import { CAT } from "../../../viz/shared";
 
 export type Row = Record<string, string | number | null>;
 export const num = (v: string | number | null | undefined): number => (typeof v === "number" ? v : 0);
@@ -210,38 +210,6 @@ export function invalidateVizObservations(state: StepStateApi<VizStepState>) {
 
 function sameCountries(first: readonly string[], second: readonly string[]): boolean {
   return first.length === second.length && first.every((country, index) => country === second[index]);
-}
-
-/* --------------------------- 常驻教学引导(不折叠) --------------------------- */
-
-/** 每步顶部的教学卡:一句主旨 + concept 段落 + “这一步你要做的事”。
- *  取代旧设计里默认折叠、首屏看不到的「讲解」卡。 */
-export function StepIntro({ kicker, lead, concept, todo }: {
-  kicker: string;
-  lead: string;
-  concept: string;
-  todo: ReactNode[];
-}) {
-  return (
-    <section style={{ ...cardStyle, borderLeft: `4px solid ${CAT[0]}`, marginBottom: 16 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".08em", color: CAT[0], textTransform: "uppercase" }}>
-        {kicker}
-      </div>
-      <div style={{ fontSize: 15.5, fontWeight: 700, color: "#1b1f2b", margin: "5px 0 8px", maxWidth: PROSE_MAX }}>{lead}</div>
-      <p style={{ fontSize: 12.8, lineHeight: 1.85, color: "#4a5061", margin: 0, maxWidth: PROSE_MAX }}>{concept}</p>
-      <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {todo.map((item, i) => (
-          <div key={i} style={{
-            display: "flex", alignItems: "baseline", gap: 6, fontSize: 12, color: "#3a4050",
-            background: "#f5f7fc", borderRadius: 8, padding: "6px 11px",
-          }}>
-            <span style={{ fontWeight: 700, color: CAT[0] }}>{i + 1}</span>
-            <span>{item}</span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
 }
 
 /* ----------------------- 读图脚手架:每张图都自带讲解 ----------------------- */

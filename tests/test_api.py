@@ -130,7 +130,7 @@ def test_session_contract_uses_optimistic_concurrency(teaching_db):
     first = empty_session()
     first["steps"]["16"] = make_record({"research_question": "学生自己的问题"})
     saved = client.put("/api/classroom/session", json={"session": first, "base_updated_at": initial["updated_at"]})
-    assert set(saved.json()) == {"session", "updated_at", "completion", "report_gate"}
+    assert set(saved.json()) == {"session", "updated_at", "completion", "report_gate", "material_gate"}
     assert saved.json()["session"] == first
     assert client.get("/api/classroom/session").json()["session"] == first
 

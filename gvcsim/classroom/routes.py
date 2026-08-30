@@ -50,6 +50,7 @@ def _learning_state(session: dict[str, Any], *, report_exists: bool) -> dict[str
     return {
         "completion": evidence.completion_summary(session, report_exists=report_exists),
         "report_gate": teaching_report.check_gate(session),
+        "material_gate": teaching_report.check_material_gate(session),
     }
 
 

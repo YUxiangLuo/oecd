@@ -616,8 +616,6 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
         {selectedFile && <span>{selectedFile.file}</span>}
       </div>
 
-      <DatabaseGuide meta={meta} />
-
       <FullscreenPanel
         title={`步骤 1 · ${activeTable.label}原始数据表`}
         variant="table"
@@ -742,6 +740,11 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
         <Pager page={page} pages={pages} total={slice?.total} onChange={setPage} />
       </div>
       </FullscreenPanel>
+
+      <details className="card concept-card db-structure-details">
+        <summary className="kicker">进一步理解 ICIO 表结构与账户项</summary>
+        <DatabaseGuide meta={meta} />
+      </details>
     </div>
   );
 }

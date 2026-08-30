@@ -9,7 +9,17 @@ import {
   globalInferenceIsSuppressed,
 } from "./regression-event-support";
 import { isQualifiedRegressionResult, nextRegressionSave } from "./regression-save";
-import { DidFourCells, FamilyMap, ReadingCoach, SiblingContrast, type SiblingStepData } from "./regression-teach";
+import {
+  DidFourCells,
+  FamilyMap,
+  ReadingCoach,
+  RegressionReadingCheck,
+  SiblingContrast,
+  readingAnswerForDirection,
+  type RegressionReadingAnswer,
+  type RegressionReadingCheckState,
+  type SiblingStepData,
+} from "./regression-teach";
 import {
   buildRegressionVerdict,
   chartDisplayScale,
@@ -346,6 +356,41 @@ function VerdictCard({ outcome, response, stale }: {
   );
 }
 
+function RegressionEvidenceCard({ outcome, response, stale }: {
+  outcome: RegressionOutcome;
+  response: RegressionResponse;
+  stale: boolean;
+}) {
+  const verdict = buildRegressionVerdict(outcome, response);
+  const support = response.result.support;
+  return (
+    <section className="reg-evidence-card" aria-labelledby="reg-evidence-title">
+      <div className="reg-evidence-head">
+        <div>
+          <span className="reg-section-step">2 · 先读证据，不先看答案</span>
+          <h3 id="reg-evidence-title">这次运行得到的数值</h3>
+        </div>
+        <span className="reg-evidence-unit">单位：{REGRESSION_LESSONS[outcome].unit}</span>
+      </div>
+      {stale && <div className="stale-result">你已经修改了设定；以下数值来自修改前的运行。</div>}
+      <div className="verdict-metrics">
+        <div><span>{verdict.effectLabel}</span><b>{verdict.effect}</b></div>
+        <div><span>95% 置信区间</span><b>{verdict.interval}</b></div>
+      </div>
+      <dl className="reg-evidence-support">
+        <div><dt>结果状态</dt><dd>{regressionStatusLabel(response.result.status)}</dd></div>
+        <div>
+          <dt>处理支持</dt>
+          <dd>{support
+            ? `${support.treated_clusters} 个处理聚类 · ${support.untreated_clusters} 个完全未暴露聚类`
+            : "本次结果未记录支持度"}</dd>
+        </div>
+      </dl>
+      <p className="muted">判断顺序：先确认推断是否可用，再看区间是否跨过 0，最后才看点估计的正负号。</p>
+    </section>
+  );
+}
+
 export function PretrendCheck({ response }: { response: RegressionResponse }) {
   if (response.design.method !== "event_study") return null;
   const diagnostic = response.result.diagnostics.pretrend;
@@ -414,6 +459,16 @@ export function PretrendCheck({ response }: { response: RegressionResponse }) {
         </div>
       ))}
     </div>
+  );
+}
+
+export function RegressionPretrendEvidence({ response }: { response: RegressionResponse }) {
+  if (response.design.method !== "event_study") return null;
+  return (
+    <section className="reg-pretrend-card" aria-label="判断前的冲击前趋势证据">
+      <span className="reg-section-step">判断前必须检查 · 冲击前趋势</span>
+      <PretrendCheck response={response} />
+    </section>
   );
 }
 
@@ -538,6 +593,7 @@ export interface SavedRegressionRun {
 interface RegressionStepState extends QuizCompletionState, Record<string, unknown> {
   run?: SavedRegressionRun;
   qualified_run?: SavedRegressionRun;
+  reading_check?: RegressionReadingCheckState;
 }
 
 const SAVED_REGRESSION_BENCHMARK: RegressionResponse["benchmark"] = {
@@ -674,12 +730,13 @@ export function QualifiedRegressionRunCard({
             ? "估计已经完成，正在等待自动保存；服务器确认前第 16 步不会使用。"
             : "估计已经完成，但服务器尚未确认；第 16 步暂不使用。";
   return (
-    <section className={`qualified-run-card ${cardState}`} aria-labelledby="qualified-run-title">
+    <details className={`qualified-run-card ${cardState}`}>
+      <summary className="qualified-run-summary">
+        <span><b>{heading}</b><small>{statusLabel}</small></span>
+        <span>{usable ? "已保留一份可报告估计 · 展开查看" : "不可作推断 · 展开查看"}</span>
+      </summary>
       <div className="qualified-run-card-head">
-        <div>
-          <span className="reg-section-step">{statusLabel}</span>
-          <h3 id="qualified-run-title">{heading}</h3>
-        </div>
+        <span className="sr-only" id="qualified-run-title">{heading}</span>
         <button
           type="button"
           className="secondary"
@@ -714,7 +771,7 @@ export function QualifiedRegressionRunCard({
         role={cardState === "invalid" || cardState === "failed" ? "alert" : "note"}
       >{qualificationCopy}</p>
       {sameSettings && <p className="muted">当前控件已经是这套设定；如需替换结果，请重新运行。</p>}
-    </section>
+    </details>
   );
 }
 
@@ -997,74 +1054,61 @@ export function RegressionRunLab({
   const display = result ? chartDisplayScale(outcome, result.design.method) : { scale: 1 as number, unit: undefined as string | undefined };
   const snapshots = history[outcome] ?? [];
   const methodLabels = { ...METHOD_LABELS, ...options?.method_labels };
+  const resultRun = result && resultSettings
+    ? { settings: resultSettings, design: result.design, result: result.result }
+    : null;
+  const resultIdentity = resultRun ? regressionRunSnapshotIdentity(resultRun) : null;
+  const savedReadingCheck = state.data?.reading_check;
+  const readingAnswer = resultIdentity && savedReadingCheck?.run_identity === resultIdentity
+    ? savedReadingCheck.answer
+    : undefined;
+  const expectedReadingAnswer = verdict ? readingAnswerForDirection(verdict.state) : null;
+  const readingCorrect = Boolean(
+    expectedReadingAnswer && readingAnswer === expectedReadingAnswer,
+  );
 
   return (
     <div className="reg-workbench">
-      <FamilyMap current={outcome} history={history} getStep={getStep} onNavigateStep={onNavigateStep} />
-
-      {state.data?.qualified_run && (
-        <QualifiedRegressionRunCard
-          saved={state.data.qualified_run}
-          confirmedSaved={getConfirmedStep?.<RegressionStepState>(step.n)?.qualified_run}
-          options={options}
-          currentSettings={currentSettings}
-          sessionUnsynced={sessionUnsynced}
-          sessionSyncing={sessionSyncing}
-          sessionSyncError={sessionSyncError}
-          onSwitch={onSettingsChange}
-        />
-      )}
-
-      <section className="reg-question-card">
-        <div className="reg-question-main">
-          <span className="reg-section-step">1 · 同一研究问题，本步换指标</span>
-          <p className="reg-causal-boundary"><b>先记住：</b>这是在平行趋势、对照可比且没有未处理混杂等假设下的相对变化估计，不是“政策已经造成结果”的证明。</p>
-          <p className="muted">{REGRESSION_QUESTION}</p>
-          <h3>{lessonQuestion(outcome, shockType, method)}</h3>
-          <div className="reg-learn-this">
-            <b>本步要学会</b>
-            <p>{lesson.learnThis}</p>
-          </div>
-          <p>{lesson.definition}</p>
-          <p><b>{lesson.focus}</b></p>
-          <div className="metric-facts">
-            <span><b>本步指标</b>{lesson.metric}</span>
-            <span><b>解释单位</b>{lesson.unit}</span>
-            <span><b>前面见过</b>步骤 {lesson.priorStep} · {lesson.priorLabel}</span>
-          </div>
-        </div>
-        <details className="lesson-details">
-          <summary>上升、下降分别可能意味着什么</summary>
-          <p><b>下降：</b>{lesson.downMeaning}</p>
-          <p><b>上升：</b>{lesson.upMeaning}</p>
-          <p><b>怎么读：</b>{lesson.howToRead}</p>
-          <p><b>跑完记下：</b>{lesson.writeDown}</p>
-          <p><b>不要写成：</b>{lesson.dontClaim}</p>
-        </details>
-      </section>
-
       <section className="reg-run-card">
-        <span className="reg-section-step">2 · 接入步骤 11 的冲击并估计</span>
-        <div className="reg-boundary">真实 OECD ICIO 指标 + 拟真政策冲击；结果用于教学，不构成现实政策结论。默认关税冲击通常能给出可报告估计；制裁和出口管制的支持度更薄。</div>
+        <span className="reg-section-step">1 · 先运行同一套基准比较</span>
+        <h3>{lessonQuestion(outcome, shockType, method)}</h3>
+        <div className="metric-facts">
+          <span><b>本步指标</b>{lesson.metric}</span>
+          <span><b>读数单位</b>{lesson.unit}</span>
+          <span><b>比较方法</b>{METHOD_LABELS[method] ?? method}</span>
+        </div>
+        <div className="reg-boundary">真实 OECD ICIO 指标 + 拟真冲击；默认关税基准用于教学估计，不构成现实政策结论。</div>
         <div className="basic-settings">
           <div><span>冲击</span><Pills label="政策冲击" options={options?.shock_types ?? []} value={shockType} onChange={(value) => setSetting("shockType", value)} labelMap={options?.shock_type_labels} disabled={settingsDisabled} /></div>
         </div>
-        {method === "did" && (
-          <div className={`reg-compare-card${outcome === "trade" ? " numeric" : ""}`} style={{ marginTop: 12 }}>
-            <div>
-              <b>{outcome === "trade" ? "先用示意数字看懂比较" : "比较方式和步骤 12 相同"}</b>
-              <p>{comparisonExplanation(method)}</p>
-              <p className="muted">{lesson.howToRead}</p>
-            </div>
-            <DidFourCells numeric={outcome === "trade"} />
-          </div>
+        <div className="run-summary"><b>当前方案：</b>{settingsSummary(currentSettings, options)}</div>
+        <RegressionRequestLoading
+          optionsLoading={optionsQuery.status === "loading"}
+          designLoading={designQuery.status === "loading"}
+        />
+        {optionsQuery.status === "error" && optionsQuery.error && (
+          <RegressionRequestError label="回归选项" error={optionsQuery.error} onRetry={optionsQuery.retry} />
         )}
-        {outcome === "network" && (
-          <p className="muted">网络回归只使用全球国家×行业图。国家级贸易图在全正流量口径下为完全图，Gephi 介数中心性恒为 0。</p>
+        {designQuery.status === "error" && designQuery.error && (
+          <RegressionRequestError label="当前模型设计" error={designQuery.error} onRetry={designQuery.retry} />
         )}
-
+        <button
+          className="run-btn"
+          onClick={run}
+          disabled={running || optionsQuery.status !== "success" || designQuery.status !== "success" || !design}
+        >
+          {/* stale 表示表单已改、结果仍是上一套。 */}
+          {runningCurrentRequest
+            ? "估计中…"
+            : running
+              ? "等待上一项估计结束…"
+              : stale ? "运行修改后的设定" : result ? "重新运行当前设定" : "运行基准回归"}
+        </button>
+        {runningCurrentRequest && (
+          <span className="muted reg-inline-status" role="status" aria-live="polite" aria-busy="true">正在估计当前设定…</span>
+        )}
         <details className="advanced-settings">
-          <summary>换一种读法（选做）</summary>
+          <summary>换冲击、方法或样本口径（选做）</summary>
           <p className="muted">{lesson.guidedExperiment} 三类冲击的支持度不同，见步骤 11；本步主路径默认关税，是因为它通常能给出可报告估计。</p>
           <div className="model-controls">
             <div className="model-control"><span className="model-control-label">比较方式</span><Pills label="估计方法" options={options?.methods ?? []} value={method} onChange={(value) => setSetting("method", value)} labelMap={methodLabels} disabled={settingsDisabled} /></div>
@@ -1081,34 +1125,55 @@ export function RegressionRunLab({
           {scenario !== "clean" && <div className="challenge-note">该场景由系统人为改变估计样本，用于观察测量误差或冲击前趋势如何影响判断；它不是数据筛选条件。</div>}
           {weightMode === "contemporaneous" && <div className="challenge-note">当期贸易结构可能已受政策影响，因此该口径只用于和固定处理前权重对照，不能替代基准识别。</div>}
         </details>
-
-        <RegressionRequestLoading
-          optionsLoading={optionsQuery.status === "loading"}
-          designLoading={designQuery.status === "loading"}
-        />
-        {optionsQuery.status === "error" && optionsQuery.error && (
-          <RegressionRequestError label="回归选项" error={optionsQuery.error} onRetry={optionsQuery.retry} />
-        )}
-        {designQuery.status === "error" && designQuery.error && (
-          <RegressionRequestError label="当前模型设计" error={designQuery.error} onRetry={designQuery.retry} />
-        )}
-        <div className="run-summary"><b>当前方案：</b>{settingsSummary(currentSettings, options)}</div>
-        <button
-          className="run-btn"
-          onClick={run}
-          disabled={running || optionsQuery.status !== "success" || designQuery.status !== "success" || !design}
-        >
-          {/* stale 表示表单已改、结果仍是上一套。 */}
-          {runningCurrentRequest
-            ? "估计中…"
-            : running
-              ? "等待上一项估计结束…"
-              : stale ? "运行修改后的设定" : result ? "重新运行当前设定" : "运行基准回归"}
-        </button>
-        {runningCurrentRequest && (
-          <span className="muted reg-inline-status" role="status" aria-live="polite" aria-busy="true">正在估计当前设定…</span>
-        )}
       </section>
+
+      <FamilyMap
+        current={outcome}
+        history={history}
+        getStep={getStep}
+        onNavigateStep={onNavigateStep}
+        revealCurrent={readingCorrect}
+        currentDirection={verdict?.state}
+      />
+
+      {state.data?.qualified_run && (
+        <QualifiedRegressionRunCard
+          saved={state.data.qualified_run}
+          confirmedSaved={getConfirmedStep?.<RegressionStepState>(step.n)?.qualified_run}
+          options={options}
+          currentSettings={currentSettings}
+          sessionUnsynced={sessionUnsynced}
+          sessionSyncing={sessionSyncing}
+          sessionSyncError={sessionSyncError}
+          onSwitch={onSettingsChange}
+        />
+      )}
+
+      {method === "did" && (
+        <details className={`reg-compare-card${outcome === "trade" ? " numeric" : ""}`} open={outcome === "trade"}>
+          <summary>{outcome === "trade" ? "步骤 12 · 用四格数字理解比较" : "比较方法与步骤 12 相同（需要时展开复习）"}</summary>
+          <div>
+            <p>{comparisonExplanation(method)}</p>
+            <p className="muted">{lesson.howToRead}</p>
+          </div>
+          <DidFourCells numeric={outcome === "trade"} />
+        </details>
+      )}
+
+      <details className="reg-question-card">
+        <summary><span className="reg-section-step">理解本步指标与因果边界</span><b>{lesson.focus}</b></summary>
+        <div className="reg-question-main">
+          <p className="reg-causal-boundary"><b>先记住：</b>这是在平行趋势、对照可比且没有未处理混杂等假设下的相对变化估计，不是“政策已经造成结果”的证明。</p>
+          <p className="muted">{REGRESSION_QUESTION}</p>
+          <div className="reg-learn-this"><b>本步要学会</b><p>{lesson.learnThis}</p></div>
+          <p>{lesson.definition}</p>
+          {outcome === "network" && <p className="muted">网络回归只使用全球国家×行业图。国家级贸易图在全正流量口径下为完全图，Gephi 介数中心性恒为 0。</p>}
+          <p><b>下降：</b>{lesson.downMeaning}</p>
+          <p><b>上升：</b>{lesson.upMeaning}</p>
+          <p><b>跑完记下：</b>{lesson.writeDown}</p>
+          <p><b>不要写成：</b>{lesson.dontClaim}</p>
+        </div>
+      </details>
 
       {currentRunError && (
         <div className="error-box async-error" role="alert">
@@ -1120,90 +1185,103 @@ export function RegressionRunLab({
       {result && (
         <div className="reg-results">
           <div ref={verdictAnchorRef} className="verdict-anchor">
-            <VerdictCard outcome={outcome} response={result} stale={stale} />
+            <RegressionEvidenceCard outcome={outcome} response={result} stale={stale} />
           </div>
+          <RegressionPretrendEvidence response={result} />
           {state.data?.qualified_run && !isQualifiedRegressionResult(
             result.result, result.design.method, result.design.interaction,
           ) && (
             <p className="muted">本次结果不能作为报告中的有效回归；已保留先前一次可报告的估计。</p>
           )}
-          {verdict && (
-            <ReadingCoach
-              outcome={outcome}
-              direction={verdict.state}
-              effect={verdict.effect}
-              evidence={verdict.evidence}
-              interpretation={verdict.interpretation}
-              onNavigateStep={onNavigateStep}
+          {expectedReadingAnswer && resultIdentity && (
+            <RegressionReadingCheck
+              answer={readingAnswer}
+              expected={expectedReadingAnswer}
+              stale={stale}
+              onAnswer={(answer: RegressionReadingAnswer) => {
+                state.save({ reading_check: { run_identity: resultIdentity, answer } });
+              }}
             />
           )}
-          <SiblingContrast current={outcome} history={history} getStep={getStep} />
-
-          <section className="reg-section-card">
-            <span className="reg-section-step">3 · 读区间，并留到第 16 步和另外三类指标并读</span>
-            {event ? (
-              <>
-                <EventStudyChart coefs={split?.eventMain ?? []} notes={result.result.notes} title="主政策变化的动态路径" seriesLabel="主效应 βₖ" pretrend={result.result.diagnostics.pretrend} pretrendDiagnostics={result.result.diagnostics} interaction={result.design.interaction} eventSupport={result.result.event_support} globalSupport={result.result.support} globalStatus={result.result.status} scale={display.scale} unit={display.unit} />
-                {(split?.eventInteraction.length ?? 0) > 0 && <EventStudyChart coefs={split?.eventInteraction ?? []} notes={result.result.notes} title="处理前 GVC 异质性附加变化" seriesLabel="交互效应 θₖ" eventSupport={result.result.event_support} globalSupport={result.result.support} globalStatus={result.result.status} scale={display.scale} unit={display.unit} />}
-              </>
-            ) : (
-              <CoefForestChart
-                coefs={split?.policy ?? []}
-                globalStatus={result.result.status}
-                globalSupport={result.result.support}
-                scale={display.scale}
-                unit={display.unit}
+          {readingCorrect && verdict && (
+            <>
+              <VerdictCard outcome={outcome} response={result} stale={stale} />
+              <ReadingCoach
+                outcome={outcome}
+                direction={verdict.state}
+                effect={verdict.effect}
+                evidence={verdict.evidence}
+                interpretation={verdict.interpretation}
+                onNavigateStep={onNavigateStep}
               />
-            )}
-            {outcome === "production" && (
-              <MarginalEffectsPanel response={result} />
-            )}
-            <p className="muted">图只展示政策相关系数；加入控制变量后，完整控制项保留在下方技术细节表中。</p>
-          </section>
+              <SiblingContrast current={outcome} history={history} getStep={getStep} />
 
-          <details className="reg-section-card">
-            <summary>若要进一步检查稳健性</summary>
-            <PretrendCheck response={result} />
-            {result.design.method === "did" ? (
-              <div className="trust-item">
-                <h3>结果对一种简化的实体置换规则有多敏感？</h3>
-                <p>系统只保留处理实体数量与首次处理年份数量分布，再随机改派实体。它不是安慰剂检验，尾部占比也不是 p 值。</p>
-                <button
-                  className="secondary"
-                  onClick={runPlacebo}
-                  disabled={running || placeboRunning || stale}
-                >
-                  {placeboRunningCurrentRequest
-                    ? "置换中…"
-                    : placeboRunning
-                      ? "等待上一项置换结束…"
-                      : placebo ? "重新运行实体置换" : "运行实体置换敏感性分析"}
-                </button>
-                {stale && <p className="muted">请先重新运行当前设定，再运行匹配的实体置换。</p>}
-                {placeboRunningCurrentRequest && (
-                  <p className="muted" role="status" aria-live="polite" aria-busy="true">正在按当前主回归设定运行实体置换…</p>
+              <section className="reg-section-card">
+                <span className="reg-section-step">3 · 用图复核，并留到第 16 步和另外三类指标并读</span>
+                {event ? (
+                  <>
+                    <EventStudyChart coefs={split?.eventMain ?? []} notes={result.result.notes} title="主政策变化的动态路径" seriesLabel="主效应 βₖ" pretrend={result.result.diagnostics.pretrend} pretrendDiagnostics={result.result.diagnostics} interaction={result.design.interaction} eventSupport={result.result.event_support} globalSupport={result.result.support} globalStatus={result.result.status} scale={display.scale} unit={display.unit} />
+                    {(split?.eventInteraction.length ?? 0) > 0 && <EventStudyChart coefs={split?.eventInteraction ?? []} notes={result.result.notes} title="处理前 GVC 异质性附加变化" seriesLabel="交互效应 θₖ" eventSupport={result.result.event_support} globalSupport={result.result.support} globalStatus={result.result.status} scale={display.scale} unit={display.unit} />}
+                  </>
+                ) : (
+                  <CoefForestChart
+                    coefs={split?.policy ?? []}
+                    globalStatus={result.result.status}
+                    globalSupport={result.result.support}
+                    scale={display.scale}
+                    unit={display.unit}
+                  />
                 )}
-                {currentPlaceboError && (
-                  <div className="error-box async-error" role="alert">
-                    <span>{currentPlaceboError}</span>
+                {outcome === "production" && (
+                  <MarginalEffectsPanel response={result} />
+                )}
+                <p className="muted">图只展示政策相关系数；加入控制变量后，完整控制项保留在下方技术细节表中。</p>
+              </section>
+
+              <details className="reg-section-card">
+                <summary>若要进一步检查稳健性</summary>
+                {result.design.method === "did" ? (
+                  <div className="trust-item">
+                    <h3>结果对一种简化的实体置换规则有多敏感？</h3>
+                    <p>系统只保留处理实体数量与首次处理年份数量分布，再随机改派实体。它不是安慰剂检验，尾部占比也不是 p 值。</p>
                     <button
-                      type="button"
                       className="secondary"
-                      disabled={running || placeboRunning || stale}
                       onClick={runPlacebo}
+                      disabled={running || placeboRunning || stale}
                     >
-                      按同一设定重试实体置换
+                      {placeboRunningCurrentRequest
+                        ? "置换中…"
+                        : placeboRunning
+                          ? "等待上一项置换结束…"
+                          : placebo ? "重新运行实体置换" : "运行实体置换敏感性分析"}
                     </button>
+                    {stale && <p className="muted">请先重新运行当前设定，再运行匹配的实体置换。</p>}
+                    {placeboRunningCurrentRequest && (
+                      <p className="muted" role="status" aria-live="polite" aria-busy="true">正在按当前主回归设定运行实体置换…</p>
+                    )}
+                    {currentPlaceboError && (
+                      <div className="error-box async-error" role="alert">
+                        <span>{currentPlaceboError}</span>
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={running || placeboRunning || stale}
+                          onClick={runPlacebo}
+                        >
+                          按同一设定重试实体置换
+                        </button>
+                      </div>
+                    )}
+                    {placebo && !stale && <>
+                      <p className="placebo-verdict">{placeboInterpretation(placebo.placebo.tail_share)}</p>
+                      <p className="muted">保留：{placebo.placebo.assignment_preserved.join("、")}；未保留：{placebo.placebo.assignment_not_preserved.join("、")}。</p>
+                      <PlaceboChart data={placebo.placebo} scale={display.scale} unit={display.unit} />
+                    </>}
                   </div>
-                )}
-                {placebo && !stale && <>
-                  <p className="placebo-verdict">{placeboInterpretation(placebo.placebo.tail_share)}</p>
-                  <p className="muted">保留：{placebo.placebo.assignment_preserved.join("、")}；未保留：{placebo.placebo.assignment_not_preserved.join("、")}。</p>
-                  <PlaceboChart data={placebo.placebo} scale={display.scale} unit={display.unit} />
-                </>}
-              </div>
-            ) : <p className="muted">实体置换只用于 DID 教学敏感性分析；它不是校准推断，也不替代 cohort-time ATT。</p>}
-          </details>
+                ) : <p className="muted">实体置换只用于 DID 教学敏感性分析；它不是校准推断，也不替代 cohort-time ATT。</p>}
+              </details>
+            </>
+          )}
         </div>
       )}
 
@@ -1223,7 +1301,7 @@ export function RegressionRunLab({
         ) : designQuery.status === "loading" ? (
           <p className="muted">正在生成当前方程…</p>
         ) : null}
-        {result && (
+        {result && readingCorrect && (
           <>
             <h3>完整系数表</h3>
             <p className="muted">此表为模型原始单位{display.unit ? "（份额为 0–1）；上方主图按" + display.unit + "展示" : ""}。主效应图只展示政策项。</p>
@@ -1243,7 +1321,9 @@ export function RegressionRunLab({
         )}
       </details>
 
-      <RunComparison outcome={outcome} options={options} snapshots={snapshots} onClear={() => onHistoryChange((current) => ({ ...current, [outcome]: [] }))} />
+      {(!result || readingCorrect) && (
+        <RunComparison outcome={outcome} options={options} snapshots={snapshots} onClear={() => onHistoryChange((current) => ({ ...current, [outcome]: [] }))} />
+      )}
     </div>
   );
 }

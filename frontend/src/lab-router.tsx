@@ -97,6 +97,9 @@ export function LabRouter({
         onFlushSession={onFlushSession}
         onNavigateStep={onNavigateStep}
         onReportChanged={onReportChanged}
+        getStep={getConfirmedStep
+          ? (n) => getConfirmedStep<SiblingStepData>(n)
+          : getStep ? (n) => getStep<SiblingStepData>(n) : undefined}
       />
     );
   }

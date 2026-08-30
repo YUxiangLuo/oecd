@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { DidFourCells, familyVerdict } from "./regression-teach";
+import {
+  DidFourCells,
+  FamilyMap,
+  RegressionEvidenceMatrix,
+  RegressionReadingCheck,
+  familyVerdict,
+  readingAnswerForDirection,
+} from "./regression-teach";
 import type { CoefStat, RegressionOutcome, RegressionResponse } from "./types";
 
 const coefficient = (coef: number, low: number, high: number): CoefStat => ({
@@ -81,5 +88,67 @@ describe("familyVerdict", () => {
       (step) => step === 13 ? { qualified_run: { design: saved.design, result: saved.result } } : undefined,
     );
     expect(verdict?.state).toBe("insufficient");
+  });
+});
+
+describe("student-first regression reading", () => {
+  test("maps diagnostic failures to a blocked judgment and uncertainty to look-inconclusive", () => {
+    expect(readingAnswerForDirection("positive")).toBe("positive");
+    expect(readingAnswerForDirection("negative")).toBe("negative");
+    expect(readingAnswerForDirection("insufficient")).toBe("insufficient");
+    expect(readingAnswerForDirection("pretrend")).toBe("blocked");
+    expect(readingAnswerForDirection("suppressed")).toBe("blocked");
+  });
+
+  test("gives retry feedback without changing the four-option formative exercise", () => {
+    const wrong = renderToStaticMarkup(createElement(RegressionReadingCheck, {
+      answer: "positive",
+      expected: "insufficient",
+      onAnswer: () => {},
+    }));
+    expect(wrong.match(/aria-pressed=/g)).toHaveLength(4);
+    expect(wrong).toContain("再试一次");
+    expect(wrong).toContain("不影响完成状态");
+
+    const correct = renderToStaticMarkup(createElement(RegressionReadingCheck, {
+      answer: "insufficient",
+      expected: "insufficient",
+      onAnswer: () => {},
+    }));
+    expect(correct).toContain("判断正确");
+  });
+
+  test("puts all four saved families into one report-ready evidence matrix", () => {
+    const trade = response("trade", coefficient(-0.02, -0.03, -0.01));
+    const html = renderToStaticMarkup(createElement(RegressionEvidenceMatrix, {
+      getStep: (step: number) => step === 12
+        ? { qualified_run: { design: trade.design, result: trade.result } }
+        : undefined,
+    }));
+    expect(html).toContain("四步证据总表");
+    expect(html.match(/<th scope="row">/g)).toHaveLength(4);
+    expect(html).toContain("下降");
+    expect(html).toContain("待估计");
+    expect(html).toContain("不同指标的系数不能比大小");
+  });
+
+  test("keeps the current family direction hidden until the student has judged it", () => {
+    const trade = response("trade", coefficient(-0.02, -0.03, -0.01));
+    const hidden = renderToStaticMarkup(createElement(FamilyMap, {
+      current: "trade",
+      history: { trade: [{ response: trade }] },
+      revealCurrent: false,
+    }));
+    expect(hidden).toContain("当前 · 已估计，待判断");
+    expect(hidden).not.toContain("当前 · 下降");
+
+    const revealed = renderToStaticMarkup(createElement(FamilyMap, {
+      current: "trade",
+      history: { trade: [{ response: trade }] },
+      revealCurrent: true,
+      currentDirection: "suppressed",
+    }));
+    expect(revealed).toContain("当前 · 无法评估");
+    expect(revealed).not.toContain("当前 · 下降");
   });
 });

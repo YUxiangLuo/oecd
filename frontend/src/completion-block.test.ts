@@ -14,6 +14,7 @@ const step = (n: number, lab: Step["lab"]): Step => ({
   status: "done",
   title: "step",
   goal: "goal",
+  tasks: ["one", "two", "three"],
   concept: "concept",
   tip: "tip",
   deps: [],

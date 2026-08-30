@@ -14,26 +14,15 @@ import { explicitDemoCountry } from "../../../decomposition-model";
 import { DecompositionDemo } from "../../../demos";
 import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
-import { ChartStory, StepIntro } from "../viz/scaffold";
+import { ChartStory } from "../viz/scaffold";
 import { IndicatorTable, type IndicatorStepState, useIndicatorControls } from "./indicator-table";
 
-export function Step4Trade({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }) {
+export function Step4Trade({ meta, step: _step, state }: { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }) {
   const controls = useIndicatorControls(meta, state);
   const { data: schema } = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
 
   return (
     <div>
-      <StepIntro
-        kicker={`步骤 ${step.n} · 指标计算`}
-        lead="把一国的出口拆开:钱到底从哪来?"
-        concept={step.concept}
-        todo={[
-          "先看分解数据表:选个国家,读它各行业的五类 WWZ 聚合项与 TLS 扩展",
-          "再用「动手拆解」挑一个出口,看五类聚合项 + TLS 扩展精确加回毛出口(误差≈0)",
-          "切换国家进行对比；当前选择会自动保存到实验记录",
-        ]}
-      />
-
       <ChartStory
         eyebrow="计算结果 · 先出数字"
         title="WWZ 聚合项与 TLS 扩展数据表(从 ICIO 算出来的)"
