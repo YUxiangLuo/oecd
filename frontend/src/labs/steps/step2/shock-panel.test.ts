@@ -59,6 +59,8 @@ describe("shock panel refresh accessibility", () => {
     expect(tariff).toContain("主要加征方");
     expect(tariff).toContain("出口暴露度");
     expect(tariff).toContain("当前排序：冲击强度：从高到低");
+    expect(tariff).toContain("左右滚动查看更多；国家和行业列保持固定");
+    expect(tariff).toContain("shock-panel-table tariff");
     expect(tariff).toContain('aria-sort="descending"');
     expect(tariff).toContain("公式：shock_intensity = Σ(rate × exposure)");
 

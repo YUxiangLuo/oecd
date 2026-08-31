@@ -23,15 +23,30 @@ const event = (source: ShockEvent["source_status"]): ShockEvent => ({
 
 describe("shock event provenance teaching", () => {
   test("event cards distinguish official event dates from uncited teaching encodings", () => {
-    const markup = renderToStaticMarkup(createElement(EventList, {
-      events: [event("official_event_source_complete"), event("partial_official_event_source"), event("teaching_encoding_no_event_source")],
+    const events = [
+      event("official_event_source_complete"),
+      event("partial_official_event_source"),
+      event("teaching_encoding_no_event_source"),
+    ];
+    const renderType = (activeType: string) => renderToStaticMarkup(createElement(EventList, {
+      events,
       selectedKey: null,
+      activeType,
+      viewedTypes: ["tariff"],
+      viewedEventCount: 1,
+      onTypeChange: () => {},
       onSelect: () => {},
     }));
+    const markup = renderType("tariff") + renderType("sanctions");
     expect(markup).toContain("事件/日期：官方来源覆盖完整");
     expect(markup).toContain("事件/日期：官方来源仅部分覆盖");
     expect(markup).toContain("事件/日期：未逐项引证的教学编码");
     expect(markup).toContain("教学峰值");
+    expect(markup).toContain("已查看 1/2 个可选类型");
+    expect(markup).toContain("政策冲击类型");
+    expect(markup).toContain("出口管制 0");
+    expect(markup).toContain("disabled");
+    expect((markup.match(/tabindex="0"/g) ?? []).length).toBe(4);
   });
 
   test("selected facts separate URL-backed event facts from teaching numeric mapping", () => {
@@ -47,5 +62,16 @@ describe("shock event provenance teaching", () => {
       event: event("teaching_encoding_no_event_source"), panelDesc: "2020", filtersDirty: false,
     }));
     expect(uncited).toContain("没有逐项事件 URL");
+  });
+
+  test("manual filters expose a direct restore action", () => {
+    const markup = renderToStaticMarkup(createElement(SelectedEventBar, {
+      event: event("official_event_source_complete"),
+      panelDesc: "2020 · 全部经济体",
+      filtersDirty: true,
+      onRestore: () => {},
+    }));
+    expect(markup).toContain("自由筛选");
+    expect(markup).toContain("恢复事件条件");
   });
 });

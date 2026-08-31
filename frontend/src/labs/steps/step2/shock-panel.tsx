@@ -44,8 +44,11 @@ export function ShockPanelSuccessView({
     : null;
   return (
     <>
+      <div className="shock-table-scroll-cue" role="note">
+        <span aria-hidden="true">↔</span> 左右滚动查看更多；国家和行业列保持固定。
+      </div>
       <ScrollableRegion className="table-wrap" label="国家行业冲击面板表，可横向滚动">
-        <table className="data-table shock-panel-table">
+        <table className={`data-table shock-panel-table${tariff ? " tariff" : ""}`}>
           <caption className="sr-only">国家行业冲击面板，当前排序：{SHOCK_SORT_LABELS[sort]}</caption>
           <thead>
             <tr>
@@ -229,7 +232,21 @@ export function ShockPanel({
       ) : panelStatus === "loading" || !panel ? (
         <div className="shock-panel-state">正在按当前条件读取冲击面板…</div>
       ) : panel.rows.length === 0 ? (
-        <div className="shock-panel-state">当前条件下没有记录；可以放宽国家、行业或记录范围筛选。</div>
+        <div className="shock-panel-state">
+          <p>当前条件下没有记录。旧事件的国家或行业筛选可能不适用于当前冲击类型。</p>
+          <div className="shock-empty-actions">
+            {(filters.country || filters.sector) && (
+              <button type="button" className="secondary" onClick={() => onChange({ country: "", sector: "", page: 1 })}>
+                清除国家与行业
+              </button>
+            )}
+            {filters.filter !== "all" && (
+              <button type="button" className="secondary" onClick={() => onChange({ filter: "all", page: 1 })}>
+                查看全部记录
+              </button>
+            )}
+          </div>
+        </div>
       ) : (
         <ShockPanelSuccessView
           panel={panel}

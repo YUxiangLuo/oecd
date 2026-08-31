@@ -21,6 +21,9 @@
 crosswalk)时,实现一个返回同结构 (country, sector, year) 面板的 loader 即可。
 """
 
+from functools import lru_cache
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
@@ -711,6 +714,76 @@ def events_metadata() -> list[dict]:
             }
         )
     return out
+
+
+def _available_event_names_by_type(frame: pd.DataFrame) -> dict[str, set[str]]:
+    available: dict[str, set[str]] = {}
+    for shock_type, spec in SHOCK_FIELD_SPECS.items():
+        note_column = spec["note_field"]
+        if note_column not in frame.columns:
+            available[shock_type] = set()
+            continue
+        available[shock_type] = {
+            str(value).strip() for value in frame[note_column].array if not pd.isna(value) and str(value).strip()
+        }
+    return available
+
+
+@lru_cache(maxsize=8)
+def _selectable_event_names_cached(
+    path_text: str,
+    size: int,
+    mtime_ns: int,
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    del size, mtime_ns
+    note_columns = {spec["note_field"] for spec in SHOCK_FIELD_SPECS.values()}
+    frame = pd.read_csv(
+        path_text,
+        usecols=lambda column: column in note_columns,
+        keep_default_na=False,
+    )
+    available = _available_event_names_by_type(frame)
+    return tuple((shock_type, tuple(sorted(available[shock_type]))) for shock_type in SHOCK_SPECS)
+
+
+def selectable_events_metadata(
+    frame: pd.DataFrame | None = None,
+    *,
+    processed_dir: Path | None = None,
+) -> list[dict]:
+    """Return only catalogue events selectable in one exact release panel.
+
+    The route and the report material gate share this boundary so a shock type
+    with no event-backed panel row can never become an impossible student task.
+    """
+    if frame is None:
+        path = ((processed_dir or PROCESSED_DIR) / DEMO_FILE).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"未找到冲击数据 {path},请先运行 `gvcsim compute` 生成演示数据")
+        file_stat = path.stat()
+        available_by_type = {
+            shock_type: set(names)
+            for shock_type, names in _selectable_event_names_cached(str(path), file_stat.st_size, file_stat.st_mtime_ns)
+        }
+    else:
+        available_by_type = _available_event_names_by_type(frame)
+    return [
+        event
+        for event in events_metadata()
+        if str(event["name"]) in available_by_type.get(str(event.get("shock_type") or SHOCK_TARIFF), set())
+    ]
+
+
+def selectable_shock_types(
+    frame: pd.DataFrame | None = None,
+    *,
+    processed_dir: Path | None = None,
+) -> tuple[str, ...]:
+    present = {
+        str(event.get("shock_type") or SHOCK_TARIFF)
+        for event in selectable_events_metadata(frame, processed_dir=processed_dir)
+    }
+    return tuple(shock_type for shock_type in SHOCK_SPECS if shock_type in present)
 
 
 def load_shocks() -> pd.DataFrame:

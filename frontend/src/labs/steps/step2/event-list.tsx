@@ -1,7 +1,15 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import type { ShockEvent } from "../../../types";
 import { pct } from "../../shared";
-import { SHOCK_TYPES, SHOCK_TYPE_COLORS, SHOCK_TYPE_LABELS, eventKey, shockTypeColor } from "./model";
+import {
+  SHOCK_TYPES,
+  SHOCK_TYPE_COLORS,
+  SHOCK_TYPE_LABELS,
+  eventKey,
+  normalizeShockType,
+  shockTypeColor,
+  type ShockType,
+} from "./model";
 
 /**
  * 左右联动工作台的左列:按三类冲击分组的事件选择器,点选即联动右侧面板。
@@ -34,13 +42,35 @@ function useDomain(events: ShockEvent[]) {
 export function EventList({
   events,
   selectedKey,
+  activeType,
+  viewedTypes,
+  viewedEventCount,
+  onTypeChange,
   onSelect,
 }: {
   events: ShockEvent[];
   selectedKey: string | null;
+  activeType: string;
+  viewedTypes: string[];
+  viewedEventCount: number;
+  onTypeChange: (type: ShockType) => void;
   onSelect: (event: ShockEvent) => void;
 }) {
   const domain = useDomain(events);
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const selectedType = normalizeShockType(activeType);
+  const eventCountByType = Object.fromEntries(SHOCK_TYPES.map((type) => [
+    type,
+    events.filter((event) => normalizeShockType(event.shock_type) === type).length,
+  ])) as Record<ShockType, number>;
+  const selectableTypes = SHOCK_TYPES.filter((type) => eventCountByType[type] > 0);
+  const viewedTypeSet = new Set(viewedTypes.filter((type): type is ShockType => (
+    SHOCK_TYPES.includes(type as ShockType)
+  )));
+  const viewedSelectableCount = selectableTypes.filter((type) => viewedTypeSet.has(type)).length;
+  const activeItems = events.filter((event) => normalizeShockType(event.shock_type) === selectedType);
+  const selectedIndex = activeItems.findIndex((event) => eventKey(event) === selectedKey);
+  const tabStopType = selectableTypes.includes(selectedType) ? selectedType : selectableTypes[0];
   // 百分比定位:配合 CSS 绝对定位,列宽变化时时间条自动跟随,不会像定宽 SVG 那样变形。
   const at = (value: string | null | undefined) => {
     const timestamp = dateNumber(value);
@@ -54,8 +84,72 @@ export function EventList({
     return Array.from({ length: last - first + 1 }, (_, index) => first + index);
   }, [domain]);
 
+  const moveType = (currentType: ShockType, key: string) => {
+    const activeTabIndex = selectableTypes.indexOf(currentType);
+    const nextIndex = key === "Home" ? 0
+      : key === "End" ? selectableTypes.length - 1
+        : key === "ArrowRight" ? (activeTabIndex + 1) % selectableTypes.length
+          : key === "ArrowLeft" ? (activeTabIndex - 1 + selectableTypes.length) % selectableTypes.length
+            : -1;
+    if (nextIndex < 0 || !selectableTypes[nextIndex]) return false;
+    const nextType = selectableTypes[nextIndex];
+    onTypeChange(nextType);
+    requestAnimationFrame(() => document.getElementById(`shock-type-tab-${nextType}`)?.focus());
+    return true;
+  };
+
+  const moveEvent = (index: number, key: string) => {
+    const nextIndex = key === "Home" ? 0
+      : key === "End" ? activeItems.length - 1
+        : key === "ArrowDown" ? (index + 1) % activeItems.length
+          : key === "ArrowUp" ? (index - 1 + activeItems.length) % activeItems.length
+            : -1;
+    if (nextIndex < 0 || !activeItems[nextIndex]) return false;
+    onSelect(activeItems[nextIndex]);
+    requestAnimationFrame(() => itemRefs.current[nextIndex]?.focus());
+    return true;
+  };
+
   return (
-    <div className="shock-event-list">
+    <div className="shock-event-browser">
+      <div className="shock-event-progress" role="status">
+        <span><b>比较进度</b> 已查看 {viewedSelectableCount}/{selectableTypes.length} 个可选类型</span>
+        <span>{viewedEventCount} 个事件</span>
+      </div>
+      <div className="seg shock-type-tabs" role="tablist" aria-label="政策冲击类型">
+        {SHOCK_TYPES.map((type) => {
+          const count = eventCountByType[type];
+          const selectable = count > 0;
+          const selected = type === selectedType;
+          return (
+            <button
+              key={type}
+              id={`shock-type-tab-${type}`}
+              type="button"
+              role="tab"
+              className={selected ? "on" : ""}
+              tabIndex={selectable && type === tabStopType ? 0 : -1}
+              aria-selected={selected}
+              aria-controls="shock-event-type-panel"
+              disabled={!selectable}
+              onClick={() => onTypeChange(type)}
+              onKeyDown={(event) => {
+                if (moveType(type, event.key)) event.preventDefault();
+              }}
+            >
+              {viewedTypeSet.has(type) && selectable ? "✓ " : ""}{SHOCK_TYPE_LABELS[type]} {count}
+            </button>
+          );
+        })}
+      </div>
+      <span id="shock-event-keyboard-help" className="sr-only">使用上下方向键切换并选择政策事件</span>
+      <div
+        id="shock-event-type-panel"
+        className="shock-event-list"
+        role="tabpanel"
+        aria-labelledby={`shock-type-tab-${selectedType}`}
+        aria-describedby="shock-event-keyboard-help"
+      >
       {/* 刻度轨道必须与行内时间条**同一横向范围**,否则年份读不准。因此这里不放任何
           并排标签(○/● 的含义由左列说明文字给出),并用与事件卡片相同的左右内缩对齐。 */}
       {domain && (
@@ -71,16 +165,14 @@ export function EventList({
         </div>
       )}
 
-      {SHOCK_TYPES.map((type) => {
-        const items = events.filter((event) => (event.shock_type ?? "tariff") === type);
-        if (!items.length) return null;
-        return (
-          <div key={type} className="shock-event-group">
-            <div className="shock-event-group-head" style={{ color: SHOCK_TYPE_COLORS[type] }}>
-              <span>● {SHOCK_TYPE_LABELS[type]}</span>
-              <span className="shock-event-group-count">{items.length} 个</span>
-            </div>
-            {items.map((event) => {
+      <div className="shock-event-group">
+        <div className="shock-event-group-head" style={{ color: SHOCK_TYPE_COLORS[selectedType] }}>
+          <span>● {SHOCK_TYPE_LABELS[selectedType]}</span>
+          <span className="shock-event-group-count">{activeItems.length} 个</span>
+        </div>
+        {activeItems.length === 0 ? (
+          <div className="shock-event-empty">当前 release 没有可选择的{SHOCK_TYPE_LABELS[selectedType]}事件；该类型不计入报告材料门槛。</div>
+        ) : activeItems.map((event, index) => {
               const key = eventKey(event);
               const on = key === selectedKey;
               const color = shockTypeColor(event.shock_type);
@@ -92,10 +184,15 @@ export function EventList({
               return (
                 <button
                   key={key}
+                  ref={(node) => { itemRefs.current[index] = node; }}
                   type="button"
                   className={`shock-event-item${on ? " on" : ""}`}
                   aria-pressed={on}
+                  tabIndex={selectedIndex >= 0 ? (on ? 0 : -1) : (index === 0 ? 0 : -1)}
                   onClick={() => onSelect(event)}
+                  onKeyDown={(keyboardEvent) => {
+                    if (moveEvent(index, keyboardEvent.key)) keyboardEvent.preventDefault();
+                  }}
                   style={on ? { borderColor: color } : undefined}
                 >
                   <span className="shock-event-item-top">
@@ -139,10 +236,9 @@ export function EventList({
                   </span>
                 </button>
               );
-            })}
-          </div>
-        );
-      })}
+        })}
+      </div>
+      </div>
     </div>
   );
 }

@@ -606,19 +606,7 @@ def shock_events():
     """
     frame = _read_shocks()
     disclaimer = _shock_source_disclaimer(frame)
-    available_by_type: dict[str, set[str]] = {}
-    for shock_type in shocks.SHOCK_SPECS:
-        *_unused, note_col = _shock_view_columns(shock_type)
-        available_by_type[shock_type] = (
-            {str(value) for value in frame[note_col].dropna().unique() if str(value)}
-            if note_col in frame.columns
-            else set()
-        )
-    events = [
-        event
-        for event in shocks.events_metadata()
-        if str(event["name"]) in available_by_type.get(str(event.get("shock_type") or SHOCK_TARIFF), set())
-    ]
+    events = shocks.selectable_events_metadata(frame)
     return {
         "events": events,
         "disclaimer": disclaimer,

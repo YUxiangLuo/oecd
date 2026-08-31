@@ -1,10 +1,12 @@
 import { describe, expect, it, test } from "bun:test";
 import type { Meta, ShockEvent } from "../../../types";
 import {
+  applyManualFilterPatch,
   closestSupportedYear,
   eventKey,
   filtersForEvent,
   filtersMatchEvent,
+  restoreSavedEvent,
   representativeSector,
   SHOCK_TYPE_COLORS,
   SHOCK_TYPE_LABELS,
@@ -54,6 +56,15 @@ describe("step2 shock event model", () => {
 
   it("uses a stable event key", () => {
     expect(eventKey(event)).toBe("美国301对华关税::2018-07-06");
+  });
+
+  it("preserves an explicit event deselection while retaining legacy restoration", () => {
+    expect(restoreSavedEvent([event], {
+      selected_event_key: null,
+      viewed_events: [event.name],
+    })).toBeNull();
+    expect(restoreSavedEvent([event], { viewed_events: [event.name] })).toEqual(event);
+    expect(restoreSavedEvent([event], { selected_event_key: eventKey(event), viewed_events: [] })).toEqual(event);
   });
 
   it("maps an event to its supported year and unique target", () => {
@@ -107,6 +118,35 @@ describe("step2 shock event model", () => {
 
   it("resets pagination whenever the sort changes", () => {
     expect(shockSortChange("industry_asc")).toEqual({ sort: "industry_asc", page: 1 });
+  });
+
+  it("clears event-specific scope when the shock type changes manually", () => {
+    const current = filtersForEvent(event, meta);
+    const transition = applyManualFilterPatch(current, { shockType: "sanctions", page: 4 });
+
+    expect(transition.clearSelectedEvent).toBe(true);
+    expect(transition.filters).toEqual({
+      ...current,
+      shockType: "sanctions",
+      country: "",
+      sector: "",
+      filter: "treated",
+      page: 1,
+    });
+  });
+
+  it("keeps the selected event available for reversible within-type filter changes", () => {
+    const current = filtersForEvent(event, meta);
+    const transition = applyManualFilterPatch(current, { sector: "C24", filter: "all", page: 1 });
+
+    expect(transition.clearSelectedEvent).toBe(false);
+    expect(transition.filters.country).toBe("CHN");
+    expect(transition.filters.sector).toBe("C24");
+    expect(transition.filters.filter).toBe("all");
+  });
+
+  it("uses the stable tariff key when legacy event metadata omits its type", () => {
+    expect(filtersForEvent({ ...event, shock_type: undefined }, meta).shockType).toBe("tariff");
   });
 });
 

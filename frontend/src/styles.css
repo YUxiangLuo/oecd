@@ -252,9 +252,14 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   font-size: 10.5px; font-weight: 700; color: var(--text-muted); background: #fff;
   border: 1px solid #dfe3ec; border-radius: 6px; padding: 2px 7px;
 }
+.shock-linkbar-tag.dirty { border-color: #e4bd74; background: #fff8e9; color: #765000; }
 .shock-linkbar-name { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shock-linkbar-panel { font-size: 11.5px; font-weight: 600; color: #4b5060; }
 .shock-linkbar-arrow { color: var(--text-muted); font-weight: 700; }
+.shock-restore-link {
+  margin-left: auto; padding: 3px 8px; border: 1px solid #cfd4e2; border-radius: 7px;
+  background: #fff; color: #4b47e0; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
+}
 /* 已选事件的完整档案:原"全部政策事件清单"表的独有字段收敛到这里,只对选中项展开。 */
 .shock-selected-facts {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 6px 18px;
@@ -292,7 +297,20 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   flex: none; width: 20px; height: 20px; border-radius: 6px; background: #4b47e0; color: #fff;
   font-size: 12px; display: flex; align-items: center; justify-content: center;
 }
-.shock-event-list { display: flex; flex-direction: column; gap: 14px; max-height: 640px; overflow-y: auto; padding-right: 2px; }
+.shock-event-browser { min-height: 0; }
+.shock-event-progress {
+  display: flex; justify-content: space-between; gap: 8px; margin: -2px 0 8px;
+  color: #687083; font-size: 10.5px; line-height: 1.4;
+}
+.shock-event-progress b { color: #394052; }
+.shock-type-tabs { width: 100%; margin-bottom: 9px; }
+.shock-type-tabs button { flex: 1 1 0; min-width: 0; padding: 6px 5px; font-size: 10.5px; white-space: nowrap; }
+.shock-type-tabs button:disabled { opacity: 0.46; cursor: not-allowed; }
+.shock-event-list { display: flex; flex-direction: column; gap: 14px; max-height: 560px; overflow-y: auto; padding-right: 2px; }
+.shock-event-empty {
+  padding: 16px 10px; border: 1px dashed #d8dce6; border-radius: 9px;
+  color: #626a7b; font-size: 11.5px; line-height: 1.6; text-align: center;
+}
 .shock-event-group-head {
   display: flex; align-items: baseline; justify-content: space-between;
   font-size: 12px; font-weight: 700; margin-bottom: 6px;
@@ -315,6 +333,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .shock-event-source.teaching { color: #6b5200; }
 .shock-event-item-dates { display: block; font-size: 10px; color: var(--text-muted); margin-top: 3px; }
 .shock-source-disclosure { margin: 8px 0 14px; color: #594800; font-size: 11.5px; line-height: 1.6; }
+.shock-source-boundary .shock-source-disclosure { margin: 0; padding: 0 14px 12px; }
 .shock-primary-boundary {
   display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 10px;
   margin: 0 0 10px; padding: 10px 12px; border: 1px solid #f0d7aa;
@@ -322,6 +341,10 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 }
 .shock-primary-boundary span { color: #765000; }
 .shock-source-boundary { margin-bottom: 12px; }
+.shock-boundary-notice {
+  margin: 0; padding: 10px 14px; border-bottom: 1px solid #f0d7aa;
+  background: #fff8e9; color: #6b4b12; font-size: 12px; line-height: 1.65;
+}
 
 /* 行内迷你时间条:所有行共用顶部年份刻度,横向位置因此可以跨事件比较(取代了独立时间线组件)。 */
 .shock-event-axis {
@@ -369,7 +392,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .shock-details > summary::before { content: "▸"; flex: 0 0 auto; color: #4b47e0; font-size: 10px; }
 .shock-details[open] > summary::before { transform: rotate(90deg); }
 .shock-details[open] > summary { border-bottom: 1px solid #eceef3; }
-.shock-details-meta { margin-left: auto; color: #9298a7; font-size: 10.5px; font-weight: 500; }
+.shock-details-meta { margin-left: auto; color: #626a7b; font-size: 10.5px; font-weight: 500; }
 .shock-panel-controls { margin-bottom: 10px; }
 .shock-only-hit { display: inline-flex; align-items: center; gap: 5px; color: #596173 !important; }
 .shock-panel-summary {
@@ -381,7 +404,18 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   margin: 10px 0; padding: 18px; border: 1px dashed #d8dce6; border-radius: 10px;
   background: #fafbfc; color: var(--text-muted); font-size: 12px; text-align: center;
 }
-.shock-panel-table { min-width: 1050px; }
+.shock-panel-state p { margin: 0; }
+.shock-empty-actions { display: flex; justify-content: center; gap: 8px; margin-top: 12px; }
+.shock-empty-actions button {
+  padding: 7px 10px; border: 1px solid #d7dbe6; border-radius: 8px;
+  background: #fff; color: #4b47e0; font: inherit; font-weight: 650; cursor: pointer;
+}
+.shock-table-scroll-cue {
+  display: flex; justify-content: flex-end; gap: 5px; margin: -2px 2px 6px;
+  color: #596173; font-size: 11px;
+}
+.shock-panel-table { min-width: 980px; border-collapse: separate; border-spacing: 0; }
+.shock-panel-table.tariff { min-width: 1300px; }
 /* 面板体定高。每页 25 条,但事件联动后常常只剩 1~3 行,不锁高度整页会随每次联动
    上下弹(先塌缩到"正在读取"一行、再撑开)。这里固定高度、超出内部滚动,
    与左列 640px 的事件滚动区对称,整个左右工作台的高度因此不随数据变化。 */
@@ -392,7 +426,10 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 }
 /* flex:0 1 auto —— 行少时表格按自然高度收住(不撑成一个大空框),
    行多时才收缩并内部滚动;空出来的部分交给下方的提示行。 */
-.shock-panel-body > .table-wrap { flex: 0 1 auto; min-height: 0; overflow: auto; margin: 0; }
+.shock-panel-body > .table-wrap {
+  flex: 0 1 auto; min-height: 0; overflow: auto; margin: 0;
+  scrollbar-gutter: stable both-edges;
+}
 /* margin-top:auto 把提示压到预留区底部,中间的空白因此看起来是留白而不是塌陷。 */
 .shock-panel-hint {
   margin: auto 0 0; padding-top: 10px; color: var(--text-muted); font-size: 11px; line-height: 1.6;
@@ -406,6 +443,18 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .shock-panel-body .shock-panel-table thead th {
   position: sticky; top: 0; z-index: 1; box-shadow: inset 0 -1px 0 #eef0f5;
 }
+.shock-panel-table th:first-child, .shock-panel-table td:first-child {
+  position: sticky; left: 0; z-index: 2; width: 112px; min-width: 112px; max-width: 112px;
+  background: #fff; box-shadow: inset -1px 0 #eef0f5;
+}
+.shock-panel-table th:nth-child(2), .shock-panel-table td:nth-child(2) {
+  position: sticky; left: 112px; z-index: 2; width: 190px; min-width: 190px; max-width: 190px;
+  background: #fff; box-shadow: inset -1px 0 #eef0f5;
+}
+.shock-panel-table thead th:first-child, .shock-panel-table thead th:nth-child(2) {
+  z-index: 4; background: #fafbfd;
+}
+.shock-panel-table tr:hover td:first-child, .shock-panel-table tr:hover td:nth-child(2) { background: #f7f8fb; }
 .shock-panel-note { margin: 12px 0; line-height: 1.6; }
 .crosswalk-details > summary { padding: 10px 14px; }
 .crosswalk-content { padding: 14px; }
@@ -567,6 +616,9 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .fullscreen-panel--shock.fullscreen-panel--expanded .shock-split-left,
 .fullscreen-panel--shock.fullscreen-panel--expanded .shock-split-right {
   display: flex; flex-direction: column; min-height: 0;
+}
+.fullscreen-panel--shock.fullscreen-panel--expanded .shock-event-browser {
+  display: flex; flex: 1; flex-direction: column; min-height: 0;
 }
 .fullscreen-panel--shock.fullscreen-panel--expanded .shock-event-list { flex: 1; max-height: none; min-height: 0; }
 .fullscreen-panel--shock.fullscreen-panel--expanded .shock-panel-embedded {

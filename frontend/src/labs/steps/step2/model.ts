@@ -27,6 +27,11 @@ export const shockTypeLabel = (key: string | undefined) =>
   SHOCK_TYPE_LABELS[(key ?? "tariff") as ShockType] ?? SHOCK_TYPE_LABELS.tariff;
 export const shockTypeColor = (key: string | undefined) =>
   SHOCK_TYPE_COLORS[(key ?? "tariff") as ShockType] ?? SHOCK_TYPE_COLORS.tariff;
+export const normalizeShockType = (value: unknown): ShockType => (
+  typeof value === "string" && SHOCK_TYPES.includes(value as ShockType)
+    ? value as ShockType
+    : "tariff"
+);
 
 export const SHOCK_FILTERS = ["treated", "nonzero", "all"] as const;
 export type ShockFilter = (typeof SHOCK_FILTERS)[number];
@@ -66,6 +71,25 @@ export function shockSortChange(sort: ShockSort): Pick<ShockPanelFilters, "sort"
   return { sort, page: 1 };
 }
 
+export function applyManualFilterPatch(
+  current: ShockPanelFilters,
+  patch: Partial<ShockPanelFilters>,
+): { filters: ShockPanelFilters; clearSelectedEvent: boolean } {
+  const clearSelectedEvent = typeof patch.shockType === "string"
+    && patch.shockType !== current.shockType;
+  const filters = { ...current, ...patch };
+  if (clearSelectedEvent) {
+    // A country/industry pair chosen for one event type is usually meaningless
+    // for another. Start the new type from its full treated population instead
+    // of presenting an apparently empty dataset under a stale event heading.
+    filters.country = "";
+    filters.sector = "";
+    filters.filter = "treated";
+    filters.page = 1;
+  }
+  return { filters, clearSelectedEvent };
+}
+
 export function shockEventsProvenanceError(events: ShockEvent[]): string | null {
   for (const event of events) {
     if (!event.source_disclosure || !Array.isArray(event.source_urls)) {
@@ -84,6 +108,24 @@ export function shockEventsProvenanceError(events: ShockEvent[]): string | null 
 
 export function eventKey(event: ShockEvent): string {
   return `${event.name}::${event.effective}`;
+}
+
+export function restoreSavedEvent(
+  events: ShockEvent[],
+  saved: { selected_event_key?: unknown; viewed_events?: unknown },
+): ShockEvent | null {
+  const hasExplicitSelection = Object.prototype.hasOwnProperty.call(saved, "selected_event_key");
+  if (hasExplicitSelection) {
+    const selectedKey = saved.selected_event_key;
+    if (typeof selectedKey !== "string" || !selectedKey) return null;
+    return events.find((event) => eventKey(event) === selectedKey) ?? null;
+  }
+  // Compatibility only for sessions saved before selected_event_key existed.
+  // An explicit null in current sessions means the student deliberately left
+  // event-linked mode and must not be replaced by the last viewed event.
+  const viewedEvents = Array.isArray(saved.viewed_events) ? saved.viewed_events : [];
+  const legacyName = viewedEvents.filter((value): value is string => typeof value === "string").at(-1);
+  return legacyName ? events.find((event) => event.name === legacyName) ?? null : null;
 }
 
 export function closestSupportedYear(effective: string, years: number[], fallback: number): number {
@@ -110,7 +152,7 @@ export function filtersForEvent(
     ? event.target_codes[0]
     : "";
   return {
-    shockType: event.shock_type ?? "关税冲击",
+    shockType: event.shock_type ?? "tariff",
     year: closestSupportedYear(event.effective, meta.years, fallbackYear),
     country: uniqueTarget && meta.countries.includes(uniqueTarget) ? uniqueTarget : "",
     sector: representativeSector(event, meta.sectors),

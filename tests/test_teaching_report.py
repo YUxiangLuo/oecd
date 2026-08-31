@@ -425,6 +425,12 @@ def _complete():
     }
     for step in range(3, 11):
         session["steps"][str(step)]["data"]["compared"] = ["CHN", "USA"]
+    session["steps"]["11"]["data"].update(
+        {
+            "viewed_shock_types": ["tariff", "sanctions", "export_control"],
+            "viewed_events": ["关税示例", "制裁示例", "出口管制示例"],
+        }
+    )
     session["steps"]["12"]["data"]["run"] = _ok_run("trade")
     session["steps"]["13"]["data"]["run"] = _ok_run("production")
     session["steps"]["14"]["data"]["run"] = _ok_run("length")
@@ -541,7 +547,12 @@ def test_interaction_event_report_gate_requires_exact_diagnostic_scope_set():
     )
 
 
-def test_gate_requires_quizzes_key_operations_run_and_reflection():
+def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
+    monkeypatch.setattr(
+        teaching_report,
+        "selectable_shock_types",
+        lambda **_kwargs: ("tariff", "sanctions", "export_control"),
+    )
     blocked = check_gate(empty_session())
     assert set(GATE_STEPS) <= {item["step"] for item in blocked}
     assert any(item["step"] == 1 and "具体单元格" in "".join(item["missing"]) for item in blocked)
@@ -565,6 +576,7 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection():
     assert "两个比较对象" in "".join(by_step[7]["missing"])
     assert "理解检查" in "".join(by_step[13]["missing"])
     assert "可报告" in "".join(by_step[13]["missing"])
+    assert all(label in "".join(by_step[11]["missing"]) for label in ("关税冲击", "制裁清单", "出口管制"))
     assert check_gate(_complete()) == []
     missing_one = _complete()
     del missing_one["steps"]["14"]["data"]["run"]
@@ -581,6 +593,41 @@ def test_material_gate_is_independent_of_unfinished_quizzes():
 
     assert check_material_gate(session) == []
     assert {item["step"] for item in check_gate(session)} == set(range(1, 16))
+
+
+def test_material_gate_requires_one_viewed_event_from_each_selectable_shock_type(monkeypatch):
+    monkeypatch.setattr(
+        teaching_report,
+        "selectable_shock_types",
+        lambda **_kwargs: ("tariff", "sanctions", "export_control"),
+    )
+    session = _complete()
+    session["steps"]["11"]["data"]["viewed_shock_types"] = ["tariff", "sanctions"]
+
+    blocked = check_material_gate(session)
+
+    assert len(blocked) == 1
+    assert blocked[0]["step"] == 11
+    assert "出口管制" in "".join(blocked[0]["missing"])
+
+
+def test_material_gate_ignores_shock_types_without_selectable_events(monkeypatch):
+    monkeypatch.setattr(teaching_report, "selectable_shock_types", lambda **_kwargs: ("tariff",))
+    session = _complete()
+    session["steps"]["11"]["data"].update(
+        {
+            "viewed_shock_types": ["tariff"],
+            "viewed_events": ["fixture tariff AAA"],
+        }
+    )
+
+    assert all(item["step"] != 11 for item in check_material_gate(session))
+
+    session["steps"]["11"]["data"]["viewed_shock_types"] = []
+    blocked = next(item for item in check_material_gate(session) if item["step"] == 11)
+    message = "".join(blocked["missing"])
+    assert "关税冲击" in message
+    assert "制裁清单" not in message and "出口管制" not in message
 
 
 def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatch):
@@ -797,7 +844,7 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
     )
     session["steps"]["11"]["data"].update(
         {
-            "viewed_shock_types": ["tariff"],
+            "viewed_shock_types": ["tariff", "sanctions", "export_control"],
             "viewed_events": ["示例事件"],
             "selected_event_key": "示例事件::2018-07-06",
         }

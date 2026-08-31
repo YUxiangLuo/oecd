@@ -6,12 +6,16 @@ import { countryLabel, sectorLabel } from "../../viz";
 import { CrosswalkDemo } from "./step2/crosswalk-demo";
 import { EventList } from "./step2/event-list";
 import {
+  applyManualFilterPatch,
   eventKey,
   filtersForEvent,
   filtersMatchEvent,
+  normalizeShockType,
+  restoreSavedEvent,
   shockEventsProvenanceError,
   shockTypeLabel,
   SHOCK_FILTER_LABELS,
+  SHOCK_TYPES,
   SHOCK_SORT_LABELS,
   type ShockPanelFilters,
 } from "./step2/model";
@@ -26,7 +30,8 @@ import { useAsync } from "../shared";
 interface ShockStepState extends QuizCompletionState, Record<string, unknown> {
   viewed_shock_types?: string[];
   viewed_events?: string[];
-  selected_event_key?: string;
+  selected_event_key?: string | null;
+  active_shock_type?: string;
 }
 
 export function ShockLab({ meta, step: _step, state }: {
@@ -37,7 +42,7 @@ export function ShockLab({ meta, step: _step, state }: {
   const initialYear = meta.years.at(-1) ?? 2020;
   const [filters, setFilters] = useState<ShockPanelFilters>({
     year: initialYear,
-    shockType: "tariff",
+    shockType: normalizeShockType(state.data?.active_shock_type),
     country: "",
     sector: "",
     filter: "treated",
@@ -45,9 +50,7 @@ export function ShockLab({ meta, step: _step, state }: {
     page: 1,
   });
   const [selectedEvent, setSelectedEvent] = useState<ShockEvent | null>(null);
-  const [autoExpandSignal, setAutoExpandSignal] = useState(0);
   const eventInteraction = useRef(false);
-  const eventAutoExpanded = useRef(false);
   const contractState = inspectShockContract(
     meta.dataset?.shock_contract,
     meta.dataset?.artifact_contract_version,
@@ -76,14 +79,14 @@ export function ShockLab({ meta, step: _step, state }: {
     [initialYear, meta, selectedEvent],
   );
   const filtersDirty = expectedFilters ? !filtersMatchEvent(filters, expectedFilters) : false;
+  const viewedShockTypes = (state.data?.viewed_shock_types ?? []).filter((type) => (
+    SHOCK_TYPES.includes(type as (typeof SHOCK_TYPES)[number])
+  ));
+  const viewedEvents = state.data?.viewed_events ?? [];
 
   useEffect(() => {
     if (eventInteraction.current || selectedEvent || events.length === 0) return;
-    const savedKey = state.data?.selected_event_key;
-    const savedName = state.data?.viewed_events?.at(-1);
-    const restored = events.find((event) => (
-      (savedKey && eventKey(event) === savedKey) || (!savedKey && savedName && event.name === savedName)
-    ));
+    const restored = restoreSavedEvent(events, state.data ?? {});
     if (!restored) return;
     setSelectedEvent(restored);
     setFilters(filtersForEvent(restored, meta, initialYear));
@@ -91,25 +94,32 @@ export function ShockLab({ meta, step: _step, state }: {
 
   const pickEvent = (event: ShockEvent) => {
     // 打开过的事件累加保存，刷新后可恢复，也可进入最终报告的实验摘要。
-    const type = event.shock_type ?? filters.shockType;
+    const type = normalizeShockType(event.shock_type ?? filters.shockType);
     const viewed = state.data?.viewed_shock_types ?? [];
     const viewedEvents = state.data?.viewed_events ?? [];
     eventInteraction.current = true;
-    if (!eventAutoExpanded.current) {
-      eventAutoExpanded.current = true;
-      setAutoExpandSignal((signal) => signal + 1);
-    }
     state.save({
       viewed_shock_types: type && !viewed.includes(type) ? [...viewed, type] : viewed,
       viewed_events: [...viewedEvents.filter((name) => name !== event.name), event.name],
       selected_event_key: eventKey(event),
+      active_shock_type: type,
     });
     setSelectedEvent(event);
     setFilters(filtersForEvent(event, meta, initialYear));
   };
   const updateFilters = (patch: Partial<ShockPanelFilters>) => {
     eventInteraction.current = true;
-    setFilters((current) => ({ ...current, ...patch }));
+    const clearsSelectedEvent = typeof patch.shockType === "string"
+      && patch.shockType !== filters.shockType;
+    if (clearsSelectedEvent) {
+      setSelectedEvent(null);
+      state.save({ selected_event_key: null, active_shock_type: normalizeShockType(patch.shockType) });
+    }
+    setFilters((current) => applyManualFilterPatch(current, patch).filters);
+  };
+  const restoreEventFilters = () => {
+    if (!expectedFilters) return;
+    setFilters(expectedFilters);
   };
 
   const panelDesc = `${filters.year} · ${shockTypeLabel(filters.shockType)} · ${filters.country ? countryLabel(filters.country) : "全部经济体"} · ${filters.sector ? sectorLabel(filters.sector) : "全部行业"} · ${SHOCK_FILTER_LABELS[filters.filter]} · ${SHOCK_SORT_LABELS[filters.sort]}`;
@@ -125,7 +135,7 @@ export function ShockLab({ meta, step: _step, state }: {
           <span>数据来源与教学设定边界</span>
           <span className="shock-details-meta">运行前建议阅读</span>
         </summary>
-        <div className="warnbox shock-disclaimer">
+        <div className="shock-boundary-notice" role="note">
           ⚠ {eventsResponse?.disclaimer ?? "正在从当前已验证 release 读取关税出口暴露度来源披露。"}
           政策事件、日期只有在事件卡列出 URL 时才有官方事件来源；ICIO 行业映射与数值强度均为未逐项引证的教学编码。
         </div>
@@ -142,6 +152,9 @@ export function ShockLab({ meta, step: _step, state }: {
         <p className="shock-beginner-route">
           <b>建议起点：</b>先选择第一张 301 关税事件卡。右侧每一行回答的是：政策打到哪些产品 × 该国家行业原本有多少出口流向目标市场，因此得到这个国家×行业的教学暴露度。
         </p>
+        {eventsResponse?.source_disclosure && (
+          <p className="shock-source-disclosure">{eventsResponse.source_disclosure}</p>
+        )}
       </details>
 
       {!contractState.valid ? (
@@ -161,11 +174,15 @@ export function ShockLab({ meta, step: _step, state }: {
         <FullscreenPanel
           title="步骤 11 · 政策事件与国家行业冲击联动"
           variant="shock"
-          autoExpandSignal={autoExpandSignal}
         >
           {/* 左右联动:左选事件 → 右看冲击。中间这条实时显示"选了谁 → 面板同步成什么",
               并展开该事件的完整档案(原"全部政策事件清单"表的信息收敛到这里)。 */}
-          <SelectedEventBar event={selectedEvent} panelDesc={panelDesc} filtersDirty={filtersDirty} />
+          <SelectedEventBar
+            event={selectedEvent}
+            panelDesc={panelDesc}
+            filtersDirty={filtersDirty}
+            onRestore={restoreEventFilters}
+          />
 
           <div className="shock-split">
             <div className="shock-split-left">
@@ -174,7 +191,15 @@ export function ShockLab({ meta, step: _step, state }: {
                 按三类冲击分组;每行的时间条是 ○ 宣布 → ● 生效(○ 解除)。所有行共用顶部年份刻度,
                 因此可以横向比较谁先发生、谁从宣布到生效间隔更久。下游事件研究使用各个体在所选冲击类型汇总面板中的首次处理年，并不只使用这里选中的单个事件。
               </p>
-              <EventList events={events} selectedKey={selectedKey} onSelect={pickEvent} />
+              <EventList
+                events={events}
+                selectedKey={selectedKey}
+                activeType={filters.shockType}
+                viewedTypes={viewedShockTypes}
+                viewedEventCount={viewedEvents.length}
+                onTypeChange={(shockType) => updateFilters({ shockType, page: 1 })}
+                onSelect={pickEvent}
+              />
             </div>
             <div className="shock-split-right">
               <div className="shock-split-head"><span className="shock-split-num">②</span>按该事件定位国家×行业暴露 <span className="muted">· 随左侧实时联动,也可手动调整</span></div>
@@ -184,16 +209,14 @@ export function ShockLab({ meta, step: _step, state }: {
         </FullscreenPanel>
       )}
 
-      {eventsResponse?.source_disclosure && (
-        <p className="shock-source-disclosure">{eventsResponse.source_disclosure}</p>
-      )}
-
       <details className="shock-details" style={{ marginBottom: 18 }}>
         <summary>
           <span>冲击数据质检 · 回归前的口径检查</span>
           <span className="shock-details-meta">
             {shockQcStatus === "success" && shockChecks
-              ? `${shockChecks.length} 项 · ${shockChecks.filter((c) => !c.passed).length} 项异常`
+              ? shockChecks.every((check) => check.passed)
+                ? `✓ ${shockChecks.length} 项通过 · 可进入回归`
+                : `${shockChecks.length} 项 · ${shockChecks.filter((c) => !c.passed).length} 项异常`
               : "加载中"}
           </span>
         </summary>

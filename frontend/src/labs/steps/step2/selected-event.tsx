@@ -15,15 +15,19 @@ export function SelectedEventBar({
   event,
   panelDesc,
   filtersDirty,
+  onRestore,
 }: {
   event: ShockEvent | null;
   panelDesc: string;
   filtersDirty: boolean;
+  onRestore?: () => void;
 }) {
   if (!event) {
     return (
       <div className="shock-linkbar" role="status" aria-live="polite">
-        <span className="muted">从左侧列表选一个政策事件，右侧会按事件时间、目标与行业定位教学暴露；下游回归仍按冲击类型汇总全部已编码事件。</span>
+        <span className="muted">
+          当前为自由筛选：{panelDesc}。从左侧选择事件可按时间、目标与行业重新联动；下游回归仍按冲击类型汇总全部已编码事件。
+        </span>
       </div>
     );
   }
@@ -36,8 +40,13 @@ export function SelectedEventBar({
         </span>
         <b className="shock-linkbar-name">{event.name}</b>
         <span className="shock-linkbar-arrow">→</span>
-        <span className="shock-linkbar-tag">{filtersDirty ? "面板(已微调)" : "面板已联动"}</span>
+        <span className={`shock-linkbar-tag${filtersDirty ? " dirty" : ""}`}>
+          {filtersDirty ? "自由筛选" : "面板已联动"}
+        </span>
         <b className="shock-linkbar-panel">{panelDesc}</b>
+        {filtersDirty && onRestore && (
+          <button type="button" className="shock-restore-link" onClick={onRestore}>恢复事件条件</button>
+        )}
       </div>
       <dl className="shock-selected-facts">
         <div><dt>发起方 → 目标</dt><dd>{event.imposer} → {event.targets}</dd></div>

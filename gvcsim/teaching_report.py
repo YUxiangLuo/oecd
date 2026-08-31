@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any, cast
 
 from gvcsim import evidence, quizzes
+from gvcsim import config as app_config
 from gvcsim.artifacts import (
     NETWORK_ALGORITHM,
     ArtifactContractError,
@@ -27,7 +28,7 @@ from gvcsim.regression.design import (
 )
 from gvcsim.regression.validity import MIN_TREATED_CLUSTERS
 from gvcsim.session import SESSION_VERSION
-from gvcsim.shocks import SHOCK_LABELS, events_metadata
+from gvcsim.shocks import SHOCK_LABELS, events_metadata, selectable_shock_types
 from gvcsim.steps import STEPS
 
 REFLECTION_TEXT_LIMIT = 2400
@@ -44,6 +45,7 @@ _STEP_TITLES = {cast(int, item["n"]): cast(str, item["title"]) for item in STEPS
 _STEP_OUTCOMES = {
     cast(int, item["n"]): cast(str, item["regression_outcome"]) for item in STEPS if item.get("regression_outcome")
 }
+_REQUIRED_SHOCK_TYPES = ("tariff", "sanctions", "export_control")
 _OUTCOME_UNITS = {
     "trade": "份额原始单位（乘以 100 后按百分点解释）",
     "production": "份额原始单位（乘以 100 后按百分点解释）",
@@ -171,6 +173,26 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
                     ],
                 }
             )
+
+    shock_data = _step_data(session, 11)
+    viewed_shock_types = {
+        str(value) for value in _list_values(shock_data.get("viewed_shock_types")) if str(value).strip()
+    }
+    selectable_types = set(selectable_shock_types(processed_dir=app_config.PROCESSED_DIR))
+    missing_shock_types = [
+        shock_type
+        for shock_type in _REQUIRED_SHOCK_TYPES
+        if shock_type in selectable_types and shock_type not in viewed_shock_types
+    ]
+    if missing_shock_types:
+        missing_labels = "、".join(SHOCK_LABELS[shock_type] for shock_type in missing_shock_types)
+        blocked.append(
+            {
+                "step": 11,
+                "title": _STEP_TITLES.get(11, ""),
+                "missing": [f"请至少各查看一项当前 release 可选的政策事件；尚未查看：{missing_labels}"],
+            }
+        )
 
     qualified_steps = {run["step"] for run in _gate_qualified_runs(session)}
     for step in sorted(_STEP_OUTCOMES):

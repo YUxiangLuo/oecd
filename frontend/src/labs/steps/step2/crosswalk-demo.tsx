@@ -4,6 +4,7 @@ import { api } from "../../../api";
 import type { CrosswalkHsRow, CrosswalkPayload } from "../../../types";
 import { sectorLabel } from "../../../viz";
 import { pct, useAsync } from "../../shared";
+import { shockTypeLabel } from "./model";
 
 const CROSSWALK_YEARS = [2018, 2019, 2020];
 type CrosswalkTab = "summary" | "hs" | "icio";
@@ -42,7 +43,7 @@ function CrosswalkContent({ selectedShockType }: { selectedShockType: string }) 
     <div className="crosswalk-content">
       {selectedShockType !== "tariff" && (
         <div className="crosswalk-scope-note">
-          当前面板选择的是“{selectedShockType}”，不直接使用 HS 商品编码；下方保留美国301关税清单的教学映射示例。
+          当前面板选择的是“{shockTypeLabel(selectedShockType)}”，不直接使用 HS 商品编码；下方保留美国301关税清单的教学映射示例。
         </div>
       )}
       <div className="controls crosswalk-controls">

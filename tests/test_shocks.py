@@ -194,6 +194,31 @@ def test_event_metadata_discloses_composite_timeline_and_correct_xpcc_date():
     assert "进口限制" not in xpcc["name"]
 
 
+def test_selectable_events_follow_the_release_note_columns(monkeypatch):
+    monkeypatch.setattr(
+        shocks,
+        "events_metadata",
+        lambda: [
+            {"name": "tariff-event", "shock_type": "tariff"},
+            {"name": "sanction-event", "shock_type": "sanctions"},
+            {"name": "export-event", "shock_type": "export_control"},
+        ],
+    )
+    frame = pd.DataFrame(
+        {
+            "note": ["tariff-event", ""],
+            "sanction_note": ["", ""],
+            "export_control_note": ["export-event", ""],
+        }
+    )
+
+    assert [event["name"] for event in shocks.selectable_events_metadata(frame)] == [
+        "tariff-event",
+        "export-event",
+    ]
+    assert shocks.selectable_shock_types(frame) == ("tariff", "export_control")
+
+
 def test_entity_list_policy_shocks_are_generated():
     df = demo_shock_panel(
         ["CHN", "RUS", "USA"],
