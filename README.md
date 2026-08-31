@@ -78,6 +78,8 @@ cd frontend && bun test src && bun run build
 
 Gephi 0.10.1 独立基准可用 `scripts/gephi_golden/generate.sh --check` 校验；该基准采用有向图，路径类中心性按无权最短路计算，边权只进入 weighted degree。
 
+CI 的桌面浏览器验收分两层：`agent_browser_smoke.sh` 快速挂载学生 1–16 步与教师关键交互；`agent_browser_full_journey.sh` 通过公开 API 构造一份当前 release 的完整学习记录，再由真实浏览器完成报告生成、提交和教师评分，防止各自通过的组件在完整状态机中断链。
+
 冲击面板性能验收在有效 active v9 release 完成最终重算后运行：
 
 ```bash
@@ -85,4 +87,4 @@ GVCSIM_BENCHMARK_USERNAME=student GVCSIM_BENCHMARK_PASSWORD='…' \
   uv run python scripts/benchmark_shock_panel_v9.py
 ```
 
-脚本先执行 release 校验，再通过正常登录中间件访问 `/api/shocks/panel`，记录 release/shock contract、单请求冷索引、8 请求并发冷启动、warm sequential 与 8-concurrent p95，并对照 500ms/1.5s 预算。正式数据发布必须通过该门槛；`benchmarks/shock_panel_preliminary_v3.json` 只是旧 v3 直调初测。
+脚本先执行 release 校验，再通过正常登录中间件访问 `/api/shocks/panel`，记录 release/shock contract、单请求冷索引、8 请求并发冷启动、warm sequential 与 8-concurrent p95，并对照 500ms/1.5s 预算。正式数据发布必须通过该门槛；最近一次全新本地部署的验收记录为 `benchmarks/shock_panel_v9.json`，`benchmarks/shock_panel_preliminary_v3.json` 只是旧 v3 直调初测。每次正式数据换版仍必须重新运行并覆盖 v9 记录，不能把旧 release 的通过结果沿用到新 release。

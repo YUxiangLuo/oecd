@@ -23,6 +23,18 @@ def test_old_v3_result_is_explicitly_preliminary():
     assert payload["status"] == "preliminary_not_v7_attestation"
 
 
+def test_committed_v9_result_is_an_authenticated_passing_release_attestation():
+    payload = json.loads(Path("benchmarks/shock_panel_v9.json").read_text(encoding="utf-8"))
+    assert payload["benchmark"] == "authenticated_shock_panel_active_v9"
+    assert payload["release"]["artifact_contract_version"] == 9
+    assert len(payload["release"]["release_id"]) == 32
+    assert payload["cold_index_build_ms"]["passed"] is True
+    assert payload["eight_concurrent_cold_ms"]["passed"] is True
+    assert payload["warm_sequential_ms"]["passed"] is True
+    assert payload["eight_concurrent_ms"]["passed"] is True
+    assert payload["passed"] is True
+
+
 def test_v9_harness_rebuilds_only_cold_index_through_authenticated_route(monkeypatch):
     events = []
     index_builds = []

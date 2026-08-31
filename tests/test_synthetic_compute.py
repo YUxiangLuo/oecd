@@ -290,7 +290,7 @@ def test_promote_staging_renames_complete_tree(tmp_path):
     assert final.is_dir() and (final / "nested" / "payload.json").is_file()
 
 
-def test_run_builds_sentinel_switches_pointer_and_never_touches_database(tmp_path, monkeypatch):
+def test_run_builds_sentinel_switches_pointer_and_never_touches_database(tmp_path, monkeypatch, capsys):
     current, _old_release = _old_pointer(tmp_path)
     monkeypatch.setattr(pipeline, "PROCESSED_DIR", current)
     calls = []
@@ -315,6 +315,12 @@ def test_run_builds_sentinel_switches_pointer_and_never_touches_database(tmp_pat
     assert set(metadata["output_qc"]["years"]) == {"2020"}
     assert metadata["regression_input_qc_contract"] == regression_quality.regression_input_qc_contract_metadata()
     assert metadata["regression_input_qc"]["publishable"] is True
+    output = capsys.readouterr().out
+    assert "[release] 构建跨年面板、控制变量与冲击面板" in output
+    assert "[release] 执行逐年输出语义 QC" in output
+    assert "[release] 执行回归输入 QC" in output
+    assert "[release] 校验完整 release 的哈希、结构与 QC contract" in output
+    assert "[release] 暂存 release 已通过全部发布门禁" in output
 
 
 @pytest.mark.parametrize("failure", ["build", "validation"])

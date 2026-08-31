@@ -326,9 +326,11 @@ def _build_staged_release(
     with _using_processed_dir(staging):
         for year in selected_years:
             compute_year(year, allow_qc_override=allow_qc_override)
+        print("[release] 构建跨年面板、控制变量与冲击面板...", flush=True)
         build_panel(allow_qc_override=allow_qc_override)
         # Output QC is a separate release gate, run only after every yearly output
         # and both cross-year panels exist. It is never covered by the input-QC override.
+        print("[release] 执行逐年输出语义 QC...", flush=True)
         output_qc_years = {
             str(year): output_quality.write_output_qc(
                 staging,
@@ -337,10 +339,12 @@ def _build_staged_release(
             )[1]
             for year in selected_years
         }
+        print("[release] 执行回归输入 QC...", flush=True)
         regression_input_qc = regression_quality.write_regression_input_qc(
             staging,
             expected_years=selected_years,
         )[1]
+        print("[release] 生成 release metadata 与完整 artifact manifest...", flush=True)
         release_qc = _release_qc_metadata(staging, selected_years, override=allow_qc_override)
         write_dataset_metadata(
             staging,
@@ -361,7 +365,9 @@ def _build_staged_release(
                 "regression_input_qc": regression_input_qc,
             },
         )
+        print("[release] 校验完整 release 的哈希、结构与 QC contract...", flush=True)
         validate_release(staging)
+        print("[release] 暂存 release 已通过全部发布门禁。", flush=True)
 
 
 def run(years: list[int] | None = None, *, allow_qc_override: bool = False) -> None:

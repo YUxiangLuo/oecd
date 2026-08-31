@@ -27,6 +27,12 @@ def test_ci_executes_the_independent_gephi_oracle():
     assert "scripts/gephi_golden/generate.sh --check" in workflow
 
 
+def test_ci_executes_the_full_report_and_grading_journey():
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    assert "scripts/agent_browser_full_journey.sh" in workflow
+    assert "GVCSIM_E2E_TEACHER_PASSWORD" in workflow
+
+
 def test_wwz_teaching_prompts_keep_tls_as_an_extension():
     step3 = (ROOT / "frontend" / "src" / "labs" / "steps" / "indicator" / "trade.tsx").read_text()
     step7 = (ROOT / "frontend" / "src" / "labs" / "steps" / "viz" / "trade.tsx").read_text()
