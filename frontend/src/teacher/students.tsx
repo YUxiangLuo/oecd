@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LabeledControl, ScrollableRegion } from "../a11y";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
@@ -38,6 +38,14 @@ export function studentFieldError(
 }
 
 type ModalState = null | { type: "student" } | { type: "name" | "student_no" | "password"; student: StudentRow };
+
+function useModalErrorFocus(error: string | null) {
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
+  return errorRef;
+}
 
 export function StudentsTab() {
   const [refresh, setRefresh] = useState(0);
@@ -116,6 +124,7 @@ export function StudentModal({ onClose, onSubmit }: { onClose: () => void; onSub
   const [form, setForm] = useState({ username: "", display_name: "", password: "", student_no: "" });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const errorRef = useModalErrorFocus(error);
   const close = () => { if (!saving) onClose(); };
   const submit = async () => {
     if (!form.username || !form.display_name || form.password.length < 12) {
@@ -130,7 +139,7 @@ export function StudentModal({ onClose, onSubmit }: { onClose: () => void; onSub
       <LabeledControl label="姓名">{(id) => <input id={id} name="student-display-name" disabled={saving} value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} />}</LabeledControl>
       <LabeledControl label="学号（可空）">{(id) => <input id={id} name="student-number" disabled={saving} value={form.student_no} onChange={(event) => setForm({ ...form, student_no: event.target.value })} />}</LabeledControl>
       <LabeledControl label="初始密码（至少 12 位）">{(id) => <input id={id} name="student-password" disabled={saving} {...PASSWORD_INPUT_PROPS} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />}</LabeledControl>
-      {error && <div className="error-box" role="alert">{error}</div>}
+      {error && <div ref={errorRef} className="error-box" role="alert" tabIndex={-1}>{error}</div>}
       <div className="modal-actions"><button type="button" disabled={saving} onClick={close}>取消</button><button type="submit" className="primary" disabled={saving}>{saving ? "创建中…" : "创建账号"}</button></div>
     </form></Modal>
   );
@@ -140,6 +149,7 @@ export function FieldModal({ title, label, initial, password = false, required =
   const [value, setValue] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const errorRef = useModalErrorFocus(error);
   const close = () => { if (!saving) onClose(); };
   const submit = async () => {
     const validationError = studentFieldError(value, { label, password, required });
@@ -154,7 +164,7 @@ export function FieldModal({ title, label, initial, password = false, required =
   return (
     <Modal title={title} onClose={close}><form className="modal-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       <LabeledControl label={label}>{(id) => <input id={id} name="student-field" disabled={saving} type={password ? "password" : "text"} autoComplete={password ? "new-password" : undefined} value={value} onChange={(event) => setValue(event.target.value)} />}</LabeledControl>
-      {error && <div className="error-box" role="alert">{error}</div>}
+      {error && <div ref={errorRef} className="error-box" role="alert" tabIndex={-1}>{error}</div>}
       <div className="modal-actions"><button type="button" disabled={saving} onClick={close}>取消</button><button type="submit" className="primary" disabled={saving}>{saving ? "保存中…" : "保存"}</button></div>
     </form></Modal>
   );

@@ -298,6 +298,11 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   font-size: 12px; display: flex; align-items: center; justify-content: center;
 }
 .shock-event-browser { min-height: 0; }
+.shock-workbench-loading {
+  min-height: 680px; display: flex; align-items: center; justify-content: center;
+  border: 1px dashed #d9deea; border-radius: 12px; background: #f8f9fc;
+  color: #596173; font-weight: 650;
+}
 .shock-event-progress {
   display: flex; justify-content: space-between; gap: 8px; margin: -2px 0 8px;
   color: #687083; font-size: 10.5px; line-height: 1.4;

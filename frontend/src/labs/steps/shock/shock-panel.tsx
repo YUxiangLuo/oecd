@@ -1,6 +1,7 @@
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { Meta, PagedRows, ShockSummary } from "../../../types";
+import { userFacingRequestError } from "../../../user-facing-error";
 import { countryLabel, sectorLabel } from "../../../viz";
 import {
   SHOCK_FILTERS,
@@ -201,7 +202,7 @@ export function ShockPanel({
 
       {summaryError ? (
         <div className="error-box" role="alert">
-          当前冲击类型的概览读取失败：{summaryError}
+          {userFacingRequestError(summaryError, "当前冲击类型的概览读取失败")}
           <button type="button" className="secondary" onClick={summaryQuery.retry}>按同一类型重试</button>
         </div>
       ) : summaryStatus === "loading" ? (
@@ -226,7 +227,7 @@ export function ShockPanel({
       <div className={`shock-panel-body${refreshing ? " refreshing" : ""}`} aria-busy={panelStatus === "loading"}>
       {panelError ? (
         <div className="error-box" role="alert">
-          当前筛选的冲击面板读取失败：{panelError}
+          {userFacingRequestError(panelError, "当前筛选的冲击面板读取失败")}
           <button type="button" className="secondary" onClick={panelQuery.retry}>按同一筛选重试</button>
         </div>
       ) : panelStatus === "loading" || !panel ? (

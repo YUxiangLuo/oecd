@@ -36,6 +36,7 @@
 }
 .step-task-statuses span.done { background: #e7f7ed; color: #08723a; }
 .step-task-statuses span.todo { background: #fff4d8; color: #765000; }
+.step-task-statuses span.saving { background: #edf3ff; color: #315b9b; }
 .step-task-list {
   counter-reset: task; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px; list-style: none; margin: 13px 0 12px; padding: 0;

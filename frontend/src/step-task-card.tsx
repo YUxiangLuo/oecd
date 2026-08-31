@@ -11,13 +11,15 @@ export function stepPrimaryActionLabel(step: Pick<Step, "title">): string {
   return `${step.title} · 操作区`;
 }
 
-export type StepMaterialStatus = "checking" | "ready" | "missing";
+export type StepMaterialStatus = "checking" | "saving" | "ready" | "missing";
 
 export function materialStatusForStep(
   step: number,
   materialGate: Array<{ step: number }> | null,
+  saving = false,
 ): StepMaterialStatus {
   if (materialGate === null) return "checking";
+  if (saving) return "saving";
   return materialGate.some((item) => item.step === step) ? "missing" : "ready";
 }
 
@@ -47,6 +49,7 @@ export function StepTaskCard({
 }) {
   const materialLabel = materialStatus === "checking"
     ? "正在检查"
+    : materialStatus === "saving" ? "正在保存"
     : materialStatus === "ready" ? "已齐全" : "尚未齐全";
   return (
     <section className="step-task-card" aria-labelledby={stepTaskTitleId(step.n)}>
@@ -57,7 +60,7 @@ export function StepTaskCard({
         </div>
         <div className="step-task-statuses" role="group" aria-label="本步状态">
           <span className={complete ? "done" : "todo"}>理解题：{complete ? "已完成" : "未完成"}</span>
-          <span className={materialStatus === "ready" ? "done" : materialStatus === "missing" ? "todo" : "checking"}>
+          <span className={materialStatus === "ready" ? "done" : materialStatus === "missing" ? "todo" : materialStatus}>
             报告材料：{materialLabel}
           </span>
         </div>

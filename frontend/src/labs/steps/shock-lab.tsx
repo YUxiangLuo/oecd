@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api";
 import { FullscreenPanel } from "../../fullscreen-panel";
+import { userFacingRequestError } from "../../user-facing-error";
 import type { Meta, QcCheck, QuizCompletionState, ShockEvent, Step, StepStateApi } from "../../types";
 import { countryLabel, sectorLabel } from "../../viz";
 import { CrosswalkDemo } from "./shock/crosswalk-demo";
@@ -161,11 +162,11 @@ export function ShockLab({ meta, step: _step, state }: {
         <div className="error-box" role="alert">{contractState.reason}</div>
       ) : eventsError ? (
         <div className="error-box" role="alert">
-          当前 release 的政策事件读取失败：{eventsError}
+          {userFacingRequestError(eventsError, "当前 release 的政策事件读取失败")}
           <button type="button" className="secondary" onClick={eventsQuery.retry}>按同一 release 重试</button>
         </div>
       ) : eventsStatus === "loading" || !eventsResponse ? (
-        <div className="shock-panel-state">正在读取政策事件时间线…</div>
+        <div className="shock-panel-state shock-workbench-loading" role="status">正在读取政策事件时间线与冲击面板…</div>
       ) : eventProvenanceError ? (
         <div className="error-box" role="alert">事件来源契约无效：{eventProvenanceError}</div>
       ) : events.length === 0 ? (
@@ -224,7 +225,7 @@ export function ShockLab({ meta, step: _step, state }: {
           <div className="error-box" role="alert">shock contract 无效，不能把质检结果当作当前 release 的证据。</div>
         ) : shockQcError ? (
           <div className="error-box" role="alert">
-            当前 release 的冲击质检读取失败：{shockQcError}
+            {userFacingRequestError(shockQcError, "当前 release 的冲击质检读取失败")}
             <button type="button" className="secondary" onClick={shockQcQuery.retry}>按同一 release 重试</button>
           </div>
         ) : shockQcStatus === "loading" ? (

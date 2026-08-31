@@ -20,6 +20,8 @@ afterEach(() => {
 describe("shared step task card", () => {
   test("distinguishes material-gate loading, missing, and ready states independently", () => {
     expect(materialStatusForStep(12, null)).toBe("checking");
+    expect(materialStatusForStep(12, [{ step: 12 }], true)).toBe("saving");
+    expect(materialStatusForStep(12, [{ step: 13 }], true)).toBe("saving");
     expect(materialStatusForStep(12, [{ step: 12 }])).toBe("missing");
     expect(materialStatusForStep(12, [{ step: 13 }])).toBe("ready");
   });
@@ -58,6 +60,12 @@ describe("shared step task card", () => {
     expect(html).toContain(`id="${stepTaskTitleId(step.n)}" tabindex="-1"`);
     expect(html).toContain('class="rail-chips" role="group" aria-label="关联数据与依赖"');
     expect(stepPrimaryActionLabel(step)).toBe("贸易流回归 · 操作区");
+
+    const saving = renderToStaticMarkup(
+      <StepTaskCard step={step} complete materialStatus="saving" contentRef={{ current: null }} />,
+    );
+    expect(saving).toContain('class="saving"');
+    expect(saving).toContain("报告材料：正在保存");
   });
 
   test("focuses the real workbench and scrolls only its nested course container", () => {

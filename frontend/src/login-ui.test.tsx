@@ -6,6 +6,18 @@ import { LoginPage } from "./login";
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("login failure presentation", () => {
+  test("contains the public login experience in one main landmark", async () => {
+    let renderer: ReactTestRenderer | undefined;
+    try {
+      await act(async () => {
+        renderer = create(<LoginPage onLogin={() => {}} />);
+      });
+      expect(renderer!.root.findAllByType("main")).toHaveLength(1);
+    } finally {
+      if (renderer) await act(async () => renderer?.unmount());
+    }
+  });
+
   test("localizes a browser network failure and announces it as an alert", async () => {
     const original = api.login;
     api.login = async () => { throw new TypeError("Failed to fetch"); };

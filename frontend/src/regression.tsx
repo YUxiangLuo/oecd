@@ -251,7 +251,21 @@ const effectiveSettings = (settings: RegressionSettings): RegressionSettings => 
   ...settings,
   priceMode: settings.controlMode === "none" ? "nominal" : settings.priceMode,
 });
-export const regressionSettingsKey = (settings: RegressionSettings) => JSON.stringify(effectiveSettings(settings));
+export const regressionSettingsKey = (settings: RegressionSettings) => {
+  const effective = effectiveSettings(settings);
+  // PostgreSQL jsonb does not preserve the insertion order of object keys. Build the
+  // identity in one fixed order so a persisted run is not marked stale after reload.
+  return JSON.stringify({
+    granularity: effective.granularity,
+    shockType: effective.shockType,
+    method: effective.method,
+    controlMode: effective.controlMode,
+    interaction: effective.interaction,
+    priceMode: effective.priceMode,
+    scenario: effective.scenario,
+    weightMode: effective.weightMode,
+  });
+};
 
 export const regressionOptionsRequestKey = (outcome: RegressionOutcome) =>
   `regression-options:${outcome}`;

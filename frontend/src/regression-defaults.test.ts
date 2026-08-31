@@ -5,6 +5,7 @@ import {
   asRegressionSettingsMap,
   didCohortWeights,
   normalizeRegressionSettings,
+  regressionSettingsKey,
 } from "./regression";
 import type { RegressionResponse } from "./types";
 
@@ -59,6 +60,22 @@ describe("normalizeRegressionSettings", () => {
   it("keeps contemporaneous weights available for tariff robustness checks", () => {
     const tariff = { ...DEFAULT_REGRESSION_SETTINGS, weightMode: "contemporaneous" };
     expect(normalizeRegressionSettings(tariff)).toBe(tariff);
+  });
+});
+
+describe("regressionSettingsKey", () => {
+  it("is stable after PostgreSQL jsonb reorders otherwise identical keys", () => {
+    const reordered = {
+      method: "did",
+      scenario: "clean",
+      priceMode: "nominal",
+      shockType: "tariff",
+      weightMode: "fixed_pretreatment",
+      controlMode: "none",
+      granularity: "country_industry",
+      interaction: false,
+    };
+    expect(regressionSettingsKey(reordered)).toBe(regressionSettingsKey(DEFAULT_REGRESSION_SETTINGS));
   });
 });
 

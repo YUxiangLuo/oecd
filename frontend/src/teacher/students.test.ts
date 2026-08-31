@@ -24,6 +24,12 @@ describe("teacher student modal submission", () => {
     }
   });
 
+  test("makes asynchronous modal errors programmatically focusable", async () => {
+    const source = await Bun.file(new URL("./students.tsx", import.meta.url)).text();
+    expect(source).toContain('role="alert" tabIndex={-1}');
+    expect(source).toContain("errorRef.current?.focus()");
+  });
+
   test("allows clearing an optional student number but not a display name", () => {
     expect(studentFieldError("", { label: "学号", required: false })).toBeNull();
     expect(studentFieldError("  ", { label: "姓名" })).toBe("姓名不能为空");

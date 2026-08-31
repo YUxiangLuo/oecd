@@ -22,6 +22,13 @@ const event = (source: ShockEvent["source_status"]): ShockEvent => ({
 });
 
 describe("shock event provenance teaching", () => {
+  test("reserves the Step 11 workbench height while event data is loading", async () => {
+    const lab = await Bun.file(new URL("../shock-lab.tsx", import.meta.url)).text();
+    const styles = await Bun.file(new URL("../../../styles.css", import.meta.url)).text();
+    expect(lab).toContain("shock-workbench-loading");
+    expect(styles).toMatch(/\.shock-workbench-loading\s*\{[\s\S]*?min-height:\s*680px/);
+  });
+
   test("event cards distinguish official event dates from uncited teaching encodings", () => {
     const events = [
       event("official_event_source_complete"),

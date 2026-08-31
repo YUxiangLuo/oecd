@@ -74,7 +74,7 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
   };
 
   return (
-    <div className="login-layout">
+    <main className="login-layout">
       <div className="login-brand">
         <NetBackdrop />
         <div className="login-brand-head">
@@ -152,6 +152,6 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
           </div>
         </form>
       </div>
-    </div>
+    </main>
   );
 }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { LabeledControl } from "../../../a11y";
 import { api } from "../../../api";
 import type { CrosswalkHsRow, CrosswalkPayload } from "../../../types";
+import { userFacingRequestError } from "../../../user-facing-error";
 import { sectorLabel } from "../../../viz";
 import { pct, useAsync } from "../../shared";
 import { shockTypeLabel } from "./model";
@@ -58,7 +59,7 @@ function CrosswalkContent({ selectedShockType }: { selectedShockType: string }) 
         </span>
         {data && <span className="muted">HS {data.summary.n_hs_chapters} 章 → ICIO {data.summary.n_icio_sectors} 个商品相关行业</span>}
       </div>
-      {error ? <div className="error-box">HS→ICIO 映射示例读取失败：{error}</div> : !data ? (
+      {error ? <div className="error-box" role="alert">{userFacingRequestError(error, "HS→ICIO 映射示例读取失败")}</div> : !data ? (
         <div className="shock-panel-state">正在读取 HS→ICIO 映射示例…</div>
       ) : (
         <>

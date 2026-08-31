@@ -6,6 +6,7 @@ import { showToast } from "../../toast";
 import { stepTaskTitleId } from "../../step-task-card";
 import type { ClassroomReport, ReportGateItem, ReportMutationResponse, StepStateApi } from "../../types";
 import type { SessionStatus } from "../../use-session";
+import { userFacingRequestError } from "../../user-facing-error";
 
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
 
@@ -275,7 +276,7 @@ export function ReportLab({
     } catch (cause) {
       const requestError = cause as Error & { blocked?: ReportGateItem[] };
       if (requestError.blocked) setBlocked(requestError.blocked);
-      else setError(requestError.message);
+      else setError(userFacingRequestError(cause, "报告生成失败"));
     } finally {
       setGenerating(false);
     }
@@ -292,7 +293,7 @@ export function ReportLab({
       onReportChanged(response);
       showToast(response.report.state === "graded" ? "报告已评阅" : "报告已提交，等待教师评阅");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(userFacingRequestError(cause, "报告提交失败"));
     } finally {
       setSubmitting(false);
     }
@@ -306,7 +307,7 @@ export function ReportLab({
       await new Promise<void>((resolve) => globalThis.requestAnimationFrame(() => resolve()));
       globalThis.print();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(userFacingRequestError(cause, "PDF 导出失败"));
     } finally {
       setPrinting(false);
     }

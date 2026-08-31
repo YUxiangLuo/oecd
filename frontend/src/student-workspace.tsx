@@ -255,7 +255,11 @@ export function StudentWorkspace({
                   <StepTaskCard
                     step={step}
                     complete={presentationCompletedSteps.has(step.n)}
-                    materialStatus={materialStatusForStep(step.n, session.materialGate)}
+                    materialStatus={materialStatusForStep(
+                      step.n,
+                      session.materialGate,
+                      session.unsynced || session.syncing,
+                    )}
                     contentRef={contentRef}
                   />
                   {carriedComparison.length >= 2 && (
