@@ -379,7 +379,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 }
 .shock-section-title > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .shock-section-title strong { font-size: 15px; }
-.shock-section-title small { color: #81889a; font-size: 11.5px; font-weight: 400; line-height: 1.5; }
+.shock-section-title small { color: #596173; font-size: 11.5px; font-weight: 400; line-height: 1.5; }
 .shock-section-title.compact { flex: 1; margin: 0; }
 .shock-details {
   margin: 10px 0 18px; border: 1px solid #e1e4ec; border-radius: 12px; background: #fff;
@@ -467,7 +467,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .crosswalk-stats > div { padding: 9px 10px; border: 1px solid #e7e9f0; border-radius: 9px; background: #fafbfc; }
 .crosswalk-stats strong, .crosswalk-stats span { display: block; }
 .crosswalk-stats strong { color: #353b4b; font-size: 16px; }
-.crosswalk-stats span { margin-top: 2px; color: #858b9b; font-size: 10.5px; }
+.crosswalk-stats span { margin-top: 2px; color: #596173; font-size: 10.5px; }
 .crosswalk-tabs { display: flex; gap: 6px; margin-bottom: 10px; border-bottom: 1px solid #e8eaf0; }
 .crosswalk-tabs button {
   margin-bottom: -1px; padding: 7px 11px; border: 0; border-bottom: 2px solid transparent;
