@@ -3,6 +3,7 @@ import { api } from "../../api";
 import { RegressionEvidenceMatrix, type SiblingStepData } from "../../regression-teach";
 import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
 import { showToast } from "../../toast";
+import { stepTaskTitleId } from "../../step-task-card";
 import type { ClassroomReport, ReportGateItem, ReportMutationResponse, StepStateApi } from "../../types";
 import type { SessionStatus } from "../../use-session";
 
@@ -34,44 +35,131 @@ const REFLECTION_FIELDS: {
   { key: "limitations", label: "局限与反思", prompt: "讨论拟真冲击、对照是否可比、网络外溢，以及「看不出」不等于没有效应。", min: 30 },
 ];
 
+export const REPORT_REFLECTION_TITLE_ID = "report-reflection-title";
+export const REPORT_REFLECTION_INCOMPLETE_SELECTOR = "textarea[data-report-reflection-incomplete='true']:not(:disabled)";
+
 type ReportGateFocusRoot = {
   getElementById(id: string): Pick<HTMLElement, "focus"> | null;
+  querySelector?(selectors: string): Element | null;
 };
+
+type AnimationFrameScheduler = Pick<Window, "requestAnimationFrame">;
 
 /** Restore a useful keyboard position after the gate link itself unmounts. */
 export function focusReportGateDestination(
   step: number,
   root: ReportGateFocusRoot = document,
 ): boolean {
-  const target = root.getElementById(`step-${step}-main-content`);
+  const target = root.getElementById(stepTaskTitleId(step));
   if (!target) return false;
   target.focus({ preventScroll: true });
   return true;
 }
 
+/** Step 16 is already mounted: return the student to the first unfinished writing field. */
+export function focusReportReflection(root: ReportGateFocusRoot = document): boolean {
+  const incomplete = root.querySelector?.(REPORT_REFLECTION_INCOMPLETE_SELECTOR) as Pick<HTMLElement, "focus"> | null | undefined;
+  const target = incomplete ?? root.getElementById(REPORT_REFLECTION_TITLE_ID);
+  if (!target) return false;
+  target.focus();
+  return true;
+}
+
+export function activateReportGateDestination(
+  step: number,
+  onNavigateStep: (step: number) => void,
+  root: ReportGateFocusRoot = document,
+  scheduler: AnimationFrameScheduler = window,
+): boolean {
+  if (step <= 0) return false;
+  if (step === 16) return focusReportReflection(root);
+  onNavigateStep(step);
+  scheduler.requestAnimationFrame(() => { focusReportGateDestination(step, root); });
+  return true;
+}
+
+const REPORT_GATE_STAGES = [
+  { label: "数据接入", first: 1, last: 2 },
+  { label: "指标计算", first: 3, last: 6 },
+  { label: "可视化分析", first: 7, last: 10 },
+  { label: "回归设计与建模", first: 11, last: 15 },
+  { label: "实验闭环", first: 16, last: 16 },
+] as const;
+
+function reportGateStage(step: number): string {
+  return REPORT_GATE_STAGES.find((stage) => step >= stage.first && step <= stage.last)?.label ?? "其他条件";
+}
+
+export function summarizeReportGate(blocked: ReportGateItem[]) {
+  const ordered = [...blocked].sort((left, right) => {
+    if (left.step <= 0 && right.step > 0) return 1;
+    if (left.step > 0 && right.step <= 0) return -1;
+    return left.step - right.step;
+  });
+  const groups = [...REPORT_GATE_STAGES.map(({ label }) => label), "其他条件"]
+    .map((label) => ({ label, items: ordered.filter((item) => reportGateStage(item.step) === label) }))
+    .filter((group) => group.items.length > 0);
+  const stepCount = new Set(blocked.filter((item) => item.step > 0).map((item) => item.step)).size;
+  const globalCount = blocked.filter((item) => item.step <= 0).length;
+  const missingCount = blocked.reduce((total, item) => total + item.missing.length, 0);
+  const scope = [
+    stepCount > 0 ? `${stepCount} 个步骤` : null,
+    globalCount > 0 ? `${globalCount} 项全局条件` : null,
+  ].filter(Boolean).join("、");
+  return {
+    groups,
+    missingCount,
+    next: ordered[0] ?? null,
+    summary: `${scope || "当前记录"}还有 ${missingCount} 项待补齐`,
+  };
+}
+
 export function GateCard({ blocked, onNavigateStep }: { blocked: ReportGateItem[]; onNavigateStep: (step: number) => void }) {
+  const overview = summarizeReportGate(blocked);
+  const next = overview.next;
+  if (!next) return null;
+  const goToStep = (step: number) => { activateReportGateDestination(step, onNavigateStep); };
   return (
-    <section className="report-gate-panel">
-      <div className="report-gate-head"><span className="report-gate-badge">!</span><b>还不能生成报告</b></div>
-      <ul>
-        {blocked.map((item, index) => (
-          <li key={`${item.step}-${index}`}>
-            {item.step > 0 ? (
-              <button
-                type="button"
-                className="gate-link"
-                onClick={() => {
-                  onNavigateStep(item.step);
-                  window.requestAnimationFrame(() => { focusReportGateDestination(item.step); });
-                }}
-              >
-                步骤 {item.step} · {item.title}
-              </button>
-            ) : <b>{item.title}</b>}
-            {" — "}{item.missing.join("；")}
-          </li>
-        ))}
-      </ul>
+    <section className="report-gate-panel" aria-labelledby="report-gate-title">
+      <div className="report-gate-head">
+        <span className="report-gate-badge" aria-hidden="true">!</span>
+        <div className="report-gate-title">
+          <h3 id="report-gate-title">还不能生成报告</h3>
+          <span>{overview.summary}</span>
+        </div>
+        {next.step > 0 && (
+          <button type="button" className="primary report-gate-next-button" onClick={() => goToStep(next.step)}>
+            {next.step === 16 ? "继续填写原创分析" : `继续步骤 ${next.step}`}
+          </button>
+        )}
+      </div>
+      <div className="report-gate-next">
+        <span>建议下一步</span>
+        <b>{next.step > 0 ? `步骤 ${next.step} · ` : ""}{next.title}</b>
+        <p>{next.missing.join("；")}</p>
+      </div>
+      <details className="report-gate-details">
+        <summary>查看全部缺项（{overview.missingCount}）</summary>
+        <div className="report-gate-groups">
+          {overview.groups.map((group, groupIndex) => (
+            <section key={group.label} aria-labelledby={`report-gate-group-${groupIndex}`}>
+              <h4 id={`report-gate-group-${groupIndex}`}>{group.label}<span>{group.items.length}</span></h4>
+              <ul>
+                {group.items.map((item, itemIndex) => (
+                  <li key={`${item.step}-${itemIndex}`}>
+                    {item.step > 0 ? (
+                      <button type="button" className="gate-link" onClick={() => goToStep(item.step)}>
+                        步骤 {item.step} · {item.title}
+                      </button>
+                    ) : <b>{item.title}</b>}
+                    <span>{item.missing.join("；")}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      </details>
     </section>
   );
 }
@@ -227,10 +315,10 @@ export function ReportLab({
   return (
     <div className="report-lab">
       <RegressionEvidenceMatrix getStep={getStep} />
-      <section className="report-reflection" aria-labelledby="report-reflection-title">
+      <section className="report-reflection" aria-labelledby={REPORT_REFLECTION_TITLE_ID}>
         <div>
           <span className="reg-section-step">先完成 · 学生原创分析</span>
-          <h3 id="report-reflection-title">用自己的话把证据连成论证</h3>
+          <h3 id={REPORT_REFLECTION_TITLE_ID} tabIndex={-1}>用自己的话把证据连成论证</h3>
           <p>这些文字会完整进入报告；请引用自己实际保存的比较或回归。</p>
         </div>
         <div className="report-reflection-fields">
@@ -249,6 +337,7 @@ export function ReportLab({
                   rows={field.key === "research_question" ? 2 : 4}
                   maxLength={REFLECTION_MAX_LENGTH}
                   placeholder={field.prompt}
+                  data-report-reflection-incomplete={length < field.min ? "true" : undefined}
                   disabled={busy}
                   onChange={(event) => state.save({ [field.key]: event.target.value })}
                 />

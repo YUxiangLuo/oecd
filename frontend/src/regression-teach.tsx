@@ -267,7 +267,7 @@ export function RegressionEvidenceMatrix({
         </div>
         <p>不同指标的系数不能比大小；空白表示该步还没有可用结果。</p>
       </div>
-      <div className="table-wrap" role="region" aria-labelledby="reg-evidence-matrix-title" tabIndex={0}>
+      <div className="table-wrap" role="region" aria-label="四步证据总表，可横向滚动" tabIndex={0}>
         <table className="data-table reg-evidence-table">
           <thead>
             <tr><th>步骤</th><th>指标家族</th><th>方向判断</th><th>效应与单位</th><th>95% 区间</th><th>写作边界</th></tr>

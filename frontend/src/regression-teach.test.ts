@@ -126,6 +126,7 @@ describe("student-first regression reading", () => {
         : undefined,
     }));
     expect(html).toContain("四步证据总表");
+    expect(html).toContain('aria-label="四步证据总表，可横向滚动"');
     expect(html.match(/<th scope="row">/g)).toHaveLength(4);
     expect(html).toContain("下降");
     expect(html).toContain("待估计");

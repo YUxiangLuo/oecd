@@ -1,7 +1,19 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ClassroomReport } from "../../types";
-import { GateCard, ReportLab, ReportStatus, focusReportGateDestination, reflectionCountLabel, reportGenerateButtonLabel, reportGenerateLabel, reportWaitLabel } from "./report-lab";
+import {
+  GateCard,
+  REPORT_REFLECTION_INCOMPLETE_SELECTOR,
+  ReportLab,
+  ReportStatus,
+  activateReportGateDestination,
+  focusReportGateDestination,
+  reflectionCountLabel,
+  reportGenerateButtonLabel,
+  reportGenerateLabel,
+  reportWaitLabel,
+  summarizeReportGate,
+} from "./report-lab";
 
 function report(state: ClassroomReport["state"]): ClassroomReport {
   return {
@@ -72,7 +84,9 @@ describe("step 16 report states", () => {
       onReportChanged={() => {}}
     />);
     expect(html).toContain(">根据实验记录生成报告<");
-    expect(html).not.toContain("aria-label=");
+    const generateButton = html.match(/<button class="primary"[^>]*>根据实验记录生成报告<\/button>/)?.[0];
+    expect(generateButton).toBeDefined();
+    expect(generateButton).not.toContain("aria-label=");
   });
 
   test("puts restore and save status on the generate button itself", () => {
@@ -91,12 +105,88 @@ describe("step 16 report states", () => {
     expect(html).toContain("步骤 12");
     expect(html).toContain("保存有效回归");
     expect(html).toContain("gate-link");
+    expect(html).toContain("继续步骤 12");
+    expect(html).toContain("查看全部缺项（1）");
   });
 
-  test("focuses the destination main after a report-gate navigation", () => {
+  test("keeps the step-16 action local and focuses the first unfinished reflection field", () => {
+    const html = renderToStaticMarkup(<GateCard
+      blocked={[{ step: 16, title: "原创分析与反思", missing: ["填写证据解释"] }]}
+      onNavigateStep={() => {}}
+    />);
+    expect(html).toContain("继续填写原创分析");
+    expect(html).not.toContain("继续步骤 16");
+
+    const navigated: number[] = [];
+    const focused: string[] = [];
+    let scheduled = 0;
+    const activated = activateReportGateDestination(
+      16,
+      (step) => navigated.push(step),
+      {
+        getElementById: () => null,
+        querySelector: (selector) => {
+          expect(selector).toBe(REPORT_REFLECTION_INCOMPLETE_SELECTOR);
+          return { focus: () => focused.push("unfinished-field") } as unknown as Element;
+        },
+      },
+      {
+        requestAnimationFrame: () => {
+          scheduled += 1;
+          return 1;
+        },
+      },
+    );
+    expect(activated).toBe(true);
+    expect(navigated).toEqual([]);
+    expect(scheduled).toBe(0);
+    expect(focused).toEqual(["unfinished-field"]);
+  });
+
+  test("marks only below-minimum reflection fields as local focus candidates", () => {
+    const html = renderToStaticMarkup(<ReportLab
+      state={{
+        data: {
+          research_question: "123456789012",
+          evidence_interpretation: "不足",
+          limitations: "123456789012345678901234567890",
+        },
+        save: () => {},
+        complete: true,
+        syncing: false,
+        syncError: null,
+        syncNow: () => {},
+      }}
+      report={null}
+      reportGate={[{ step: 16, title: "原创分析与反思", missing: ["填写证据解释"] }]}
+      sessionStatus="ready"
+      sessionUnsynced={false}
+      sessionSyncing={false}
+      onFlushSession={async () => {}}
+      onNavigateStep={() => {}}
+      onReportChanged={() => {}}
+    />);
+    expect(html.match(/data-report-reflection-incomplete="true"/g)).toHaveLength(1);
+  });
+
+  test("summarizes and groups a long gate before revealing every item", () => {
+    const overview = summarizeReportGate([
+      { step: 12, title: "贸易流回归", missing: ["完成理解题", "保存有效回归"] },
+      { step: 1, title: "数据浏览", missing: ["记录单元格"] },
+      { step: 16, title: "原创分析", missing: ["填写研究问题"] },
+      { step: 3, title: "贸易流指标", missing: ["记录两个国家"] },
+    ]);
+    expect(overview.summary).toBe("4 个步骤还有 5 项待补齐");
+    expect(overview.next?.step).toBe(1);
+    expect(overview.groups.map((group) => group.label)).toEqual([
+      "数据接入", "指标计算", "回归设计与建模", "实验闭环",
+    ]);
+  });
+
+  test("focuses the destination task heading after a report-gate navigation", () => {
     const calls: unknown[] = [];
     const found = focusReportGateDestination(12, {
-      getElementById: (id) => id === "step-12-main-content"
+      getElementById: (id) => id === "step-task-title-12"
         ? { focus: (options) => calls.push(options) }
         : null,
     });

@@ -4,6 +4,8 @@ import {
   StepTaskCard,
   focusStepPrimaryAction,
   materialStatusForStep,
+  stepPrimaryActionLabel,
+  stepTaskTitleId,
 } from "./step-task-card";
 import type { Step } from "./types";
 
@@ -52,7 +54,10 @@ describe("shared step task card", () => {
     expect(html).toContain("理解题：已完成");
     expect(html).toContain("报告材料：尚未齐全");
     expect(html).toContain("为什么做这一步");
+    expect(html).toContain(`aria-controls="step-primary-action"`);
+    expect(html).toContain(`id="${stepTaskTitleId(step.n)}" tabindex="-1"`);
     expect(html).toContain('class="rail-chips" role="group" aria-label="关联数据与依赖"');
+    expect(stepPrimaryActionLabel(step)).toBe("贸易流回归 · 操作区");
   });
 
   test("focuses the real workbench and scrolls only its nested course container", () => {

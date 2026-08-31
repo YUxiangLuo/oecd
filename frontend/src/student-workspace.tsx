@@ -24,7 +24,12 @@ import { IntroOverlay } from "./intro";
 import { LabRouter } from "./lab-router";
 import type { RegressionHistory, RegressionSettings } from "./regression";
 import { QuizPanel } from "./step-quiz";
-import { materialStatusForStep, STEP_PRIMARY_ACTION_ID, StepTaskCard } from "./step-task-card";
+import {
+  materialStatusForStep,
+  stepPrimaryActionLabel,
+  STEP_PRIMARY_ACTION_ID,
+  StepTaskCard,
+} from "./step-task-card";
 import { ToastHost } from "./toast";
 import type { AuthUser, Meta, StepsResponse, StepStateApi } from "./types";
 import type { SessionApi } from "./use-session";
@@ -239,7 +244,13 @@ export function StudentWorkspace({
               onNavigate={onNavigateStep}
             />
             <div className="content-row">
-              <main id={mainContentId} ref={contentRef} className="content" tabIndex={-1}>
+              <main
+                id={mainContentId}
+                ref={contentRef}
+                className="content"
+                tabIndex={-1}
+                aria-labelledby="current-step-heading"
+              >
                 <div className="content-inner">
                   <StepTaskCard
                     step={step}
@@ -265,7 +276,13 @@ export function StudentWorkspace({
                       </button>
                     </div>
                   )}
-                  <div id={STEP_PRIMARY_ACTION_ID} tabIndex={-1} className="step-primary-action">
+                  <div
+                    id={STEP_PRIMARY_ACTION_ID}
+                    tabIndex={-1}
+                    className="step-primary-action"
+                    role="region"
+                    aria-label={stepPrimaryActionLabel(step)}
+                  >
                     <LabRouter
                       key={`lab:${step.n}:${session.workspaceGeneration}:${comparisonCarryGeneration}`}
                       step={step}

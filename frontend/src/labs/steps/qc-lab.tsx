@@ -101,6 +101,13 @@ export function QcLab({ meta, onNavigateStep, onCompletionBlockChange }: {
       : summary.failures > 0 || qcRelease.requiresDisclosure
         ? "可以继续，但报告必须披露下列 Warning / Disclosure，并据此限制结论。"
         : "可以继续：当前发布门禁通过；后续仍须按各指标和模型的解释边界作答。";
+  const releaseBoundaryCount = qcRelease.fatal.length + qcRelease.warning.length + qcRelease.disclosure.length;
+  const releaseBoundaryLabel = releaseBoundaryCount > 0
+    ? `${releaseBoundaryCount} 项发布边界`
+    : qcRelease.override ? "显式 override" : "无额外发布边界";
+  const decisionTone = completionBlock
+    ? "blocked"
+    : qcRelease.fatal.length > 0 || summary.failures > 0 || qcRelease.requiresDisclosure ? "caution" : "ready";
   useEffect(() => {
     onCompletionBlockChange?.(completionBlock);
   }, [completionBlock, onCompletionBlockChange]);
@@ -118,9 +125,23 @@ export function QcLab({ meta, onNavigateStep, onCompletionBlockChange }: {
   return (
     <div>
       <YearPicker years={meta.years} year={year} onChange={changeYear} />
-      <div className={completionBlock || qcRelease.fatal.length > 0 ? "warnbox" : "tipbox"} role={completionBlock ? "alert" : "status"} style={{ marginBottom: 16 }}>
-        <b>本步决定：{decision}</b>
-        <p style={{ marginBottom: 0 }}>下一步只使用通过当前发布门禁的数据计算指标；本步的 Warning / Disclosure 会继续带入第 16 步报告。</p>
+      <section className={`qc-decision-card ${decisionTone}`} aria-labelledby="qc-decision-title">
+        <div className="qc-decision-head">
+          <div className="qc-decision-announcement" role={completionBlock ? "alert" : "status"}>
+            <span>当前发布结论</span>
+            <h3 id="qc-decision-title">{decision}</h3>
+          </div>
+          <div className="qc-decision-badges" role="group" aria-label="质检摘要">
+            <span>
+              {summary.allChecks.length > 0
+                ? `${summary.allChecks.length - summary.failures}/${summary.allChecks.length} 项通过`
+                : "状态待确认"}
+            </span>
+            {(releaseBoundaryCount > 0 || qcRelease.override) && <span>{releaseBoundaryLabel}</span>}
+          </div>
+        </div>
+        <p className="qc-decision-summary">{summary.text}</p>
+        <p className="qc-decision-next">下一步只使用通过当前发布门禁的数据计算指标；本步边界会自动带入第 16 步报告。</p>
         <QcRequestRetryActions
           year={year}
           icioError={error}
@@ -128,10 +149,7 @@ export function QcLab({ meta, onNavigateStep, onCompletionBlockChange }: {
           onRetryIcio={icioQuery.retry}
           onRetryControls={controlsQuery.retry}
         />
-      </div>
-      <div className={summary.className} role={summary.blockedReason ? "alert" : "status"} style={{ marginBottom: 16, fontWeight: 700 }}>
-        {summary.text}
-      </div>
+      </section>
       <details className="card concept-card qc-guide-details">
         <summary className="kicker">理解质检等级与数值诊断</summary>
         <section className="qc-teaching-guide" aria-labelledby="qc-guide-title">
@@ -161,31 +179,36 @@ export function QcLab({ meta, onNavigateStep, onCompletionBlockChange }: {
           </div>
         </section>
       </details>
-      <div className={shockContract.valid ? "tipbox" : "warnbox"} role={shockContract.valid ? "status" : "alert"} style={{ marginBottom: 16 }}>
-        {shockContract.valid
-          ? `Shock contract v${meta.dataset?.shock_contract?.version} 已精确验证：treated 使用严格 ${meta.dataset?.shock_contract?.treated_operator}${meta.dataset?.shock_contract?.treated_threshold} 阈值并保留三类完整字段。允许集合包含 OECD ICIO 与显式教学 fallback；“允许”不等于“官方”，实际来源/口径必须以步骤 11 的第六项 provenance QC 为准。`
-          : shockContract.reason}
-      </div>
-
-      {qcRelease.requiresDisclosure && (
-        <details className="warnbox qc-release-status">
-          <summary>
-            数据发布状态：当前产物含需持续披露的 QC 项
-            {qcRelease.override ? "（包含显式 override）" : ""}
-          </summary>
-          {qcRelease.fatal.length > 0 && <p><b>Fatal：</b>{qcRelease.fatal.join("、")}</p>}
-          {qcRelease.warning.length > 0 && <p><b>Warning：</b>{qcRelease.warning.join("、")}</p>}
-          {qcRelease.disclosure.length > 0 && <p><b>Disclosure：</b>{qcRelease.disclosure.join("、")}</p>}
-          <p>
-            这些边界属于当前数据版本，适用于后续所有描述、回归与报告；最终报告会自动带入，无需在这里另行提交。
-          </p>
-          {qcRelease.fatal.length > 0 && (
+      <details className="card concept-card qc-technical-details">
+        <summary className="kicker">
+          <span>技术验证与发布披露</span>
+          <small>{shockContract.valid ? `Shock contract v${meta.dataset?.shock_contract?.version}` : "合约需要处理"} · {releaseBoundaryLabel}</small>
+        </summary>
+        <div className="qc-technical-body">
+          <section className={shockContract.valid ? "valid" : "invalid"}>
+            <h3>冲击数据合约</h3>
             <p>
-              <b>使用边界：</b>含 Fatal 的产物不满足正式研究或发布要求。显式 override 只允许继续教学演示，且必须保留上述披露，不能把结果冒充研究结论。
+              {shockContract.valid
+                ? `已精确验证：treated 使用严格 ${meta.dataset?.shock_contract?.treated_operator}${meta.dataset?.shock_contract?.treated_threshold} 阈值并保留三类完整字段。允许集合包含 OECD ICIO 与显式教学 fallback；“允许”不等于“官方”，实际来源/口径必须以步骤 11 的第六项 provenance QC 为准。`
+                : shockContract.reason}
             </p>
-          )}
-        </details>
-      )}
+          </section>
+          <section className={`qc-release-status${qcRelease.requiresDisclosure ? " has-boundary" : ""}`}>
+            <h3>当前数据发布状态{qcRelease.override ? " · 显式 override" : ""}</h3>
+            {qcRelease.requiresDisclosure ? (
+              <>
+                {qcRelease.fatal.length > 0 && <p><b>Fatal：</b>{qcRelease.fatal.join("、")}</p>}
+                {qcRelease.warning.length > 0 && <p><b>Warning：</b>{qcRelease.warning.join("、")}</p>}
+                {qcRelease.disclosure.length > 0 && <p><b>Disclosure：</b>{qcRelease.disclosure.join("、")}</p>}
+                <p>这些边界适用于后续所有描述、回归与报告；最终报告会自动带入，无需在这里另行提交。</p>
+                {qcRelease.fatal.length > 0 && (
+                  <p><b>使用边界：</b>含 Fatal 的产物不满足正式研究或发布要求。显式 override 只允许继续教学演示，不能把结果冒充研究结论。</p>
+                )}
+              </>
+            ) : <p>当前产物没有需要持续披露的额外发布项。</p>}
+          </section>
+        </div>
+      </details>
 
       <div className="section-head">
         <span className="section-head-icon">🧾</span>OECD ICIO 数据质检

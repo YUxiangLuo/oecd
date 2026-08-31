@@ -3,6 +3,14 @@ import type { Step } from "./types";
 
 export const STEP_PRIMARY_ACTION_ID = "step-primary-action";
 
+export function stepTaskTitleId(step: number): string {
+  return `step-task-title-${step}`;
+}
+
+export function stepPrimaryActionLabel(step: Pick<Step, "title">): string {
+  return `${step.title} · 操作区`;
+}
+
 export type StepMaterialStatus = "checking" | "ready" | "missing";
 
 export function materialStatusForStep(
@@ -41,11 +49,11 @@ export function StepTaskCard({
     ? "正在检查"
     : materialStatus === "ready" ? "已齐全" : "尚未齐全";
   return (
-    <section className="step-task-card" aria-labelledby={`step-task-title-${step.n}`}>
+    <section className="step-task-card" aria-labelledby={stepTaskTitleId(step.n)}>
       <div className="step-task-main">
         <div>
           <span className="step-task-kicker">本步任务</span>
-          <h3 id={`step-task-title-${step.n}`}>{step.goal}</h3>
+          <h3 id={stepTaskTitleId(step.n)} tabIndex={-1}>{step.goal}</h3>
         </div>
         <div className="step-task-statuses" role="group" aria-label="本步状态">
           <span className={complete ? "done" : "todo"}>理解题：{complete ? "已完成" : "未完成"}</span>
@@ -61,6 +69,7 @@ export function StepTaskCard({
         <button
           type="button"
           className="primary"
+          aria-controls={STEP_PRIMARY_ACTION_ID}
           onClick={() => focusStepPrimaryAction(contentRef.current)}
         >
           开始本步
