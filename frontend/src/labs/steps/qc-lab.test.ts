@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { QcRequestRetryActions } from "./step3-qc";
+import { QcRequestRetryActions } from "./qc-lab";
 
 describe("QC request recovery", () => {
   test("puts year-specific retry controls on the fail-closed decision, not only in the table", () => {

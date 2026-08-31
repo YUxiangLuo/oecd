@@ -677,7 +677,7 @@ def test_report_preserves_the_full_accepted_research_question(tmp_path, monkeypa
     report = build(session, "同学")
 
     assert question in report.markdown
-    frontend = (config.ROOT / "frontend" / "src" / "labs" / "steps" / "step16-report.tsx").read_text()
+    frontend = (config.ROOT / "frontend" / "src" / "labs" / "steps" / "report-lab.tsx").read_text()
     assert f"export const REFLECTION_MAX_LENGTH = {REFLECTION_TEXT_LIMIT};" in frontend
 
 

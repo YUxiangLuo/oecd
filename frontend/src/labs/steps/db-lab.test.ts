@@ -18,7 +18,7 @@ import {
   sliceAutosave,
   STEP1_ACCOUNT_LEGEND,
   STEP1_OUT_IDENTITY_GUIDE,
-} from "./step1-db";
+} from "./db-lab";
 
 const meta: DbMeta = {
   years: [2019, 2020],

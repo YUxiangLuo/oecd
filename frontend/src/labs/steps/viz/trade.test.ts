@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { compositionSegmentColor, NEGATIVE_COMPOSITION_STYLE } from "../../../viz/explore/charts";
 import { CAT } from "../../../viz/shared";
-import { eligibleExportCompositionRows, WWZ_READING_GUIDE, WWZ_SEGMENTS } from "./step8";
+import { eligibleExportCompositionRows, WWZ_READING_GUIDE, WWZ_SEGMENTS } from "./trade";
 
 describe("step 7 export decomposition provenance copy", () => {
   test("binds every legend segment to the correct provenance and palette slot", () => {

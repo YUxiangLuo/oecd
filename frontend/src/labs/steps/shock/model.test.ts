@@ -43,7 +43,7 @@ const event: ShockEvent = {
   source_urls: ["https://example.gov/event"],
 };
 
-describe("step2 shock event model", () => {
+describe("shock event model", () => {
   it("fails closed on missing or contradictory event provenance", () => {
     expect(shockEventsProvenanceError([event])).toBeNull();
     expect(shockEventsProvenanceError([{

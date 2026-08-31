@@ -3,7 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
 import type { VizStepState } from "./scaffold";
-import { finiteIndustryLengthRows, gvcPositionRankRows, LENGTH_AXIS_FALLBACK, lengthAxisDefinitions, lengthIndustryRequestKey, restoreLengthDrill, Step10Length } from "./step10";
+import { finiteIndustryLengthRows, gvcPositionRankRows, LENGTH_AXIS_FALLBACK, lengthAxisDefinitions, lengthIndustryRequestKey, restoreLengthDrill, LengthVizStep } from "./length";
 
 describe("step 9 production-length operational definitions", () => {
   test("fallback states the average-stage unit and rejects border/country counts", () => {
@@ -59,7 +59,7 @@ describe("step 9 production-length operational definitions", () => {
       data: { chart: "industry", year: 2019, drill: "USA", compared: [] },
       save: () => {}, complete: false, syncing: false, syncError: null, syncNow: () => {},
     };
-    const html = renderToStaticMarkup(createElement(Step10Length, { meta, step, state }));
+    const html = renderToStaticMarkup(createElement(LengthVizStep, { meta, step, state }));
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain("行业下钻");
     expect(html).toContain("<label");

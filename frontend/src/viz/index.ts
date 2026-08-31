@@ -1,6 +1,6 @@
 export { COUNTRY_NAMES, countryLabel, countryMarker, sectorLabel, topWithSelected } from "./shared";
-export { NetworkViz } from "./steps/step8-network";
-export { LengthViz } from "./steps/step10-length";
-export { HeatTableViz } from "./steps/step11-network-heat";
+export { LengthViz } from "./views/length-comparison";
+export { HeatTableViz } from "./views/network-heat";
+export { NetworkViz } from "./views/trade-network";
 export { CompositionBar, QuadrantScatter, RankBarChart } from "./explore/charts";
 export { CoefForestChart, EventStudyChart, PlaceboChart } from "./regression/charts";

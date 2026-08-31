@@ -7,11 +7,11 @@
  * 共享的只有受控的 IndicatorTable 与讲解脚手架(viz/scaffold)。
  */
 import type { Meta, Step, StepStateApi } from "../../types";
-import type { IndicatorStepState } from "./ind/indicator-table";
-import { Step4Trade } from "./ind/step4";
-import { Step5Production } from "./ind/step5";
-import { Step6Length } from "./ind/step6";
-import { Step7Network } from "./ind/step7";
+import type { IndicatorStepState } from "./indicator/indicator-table";
+import { LengthIndicatorStep } from "./indicator/length";
+import { NetworkIndicatorStep } from "./indicator/network";
+import { ProductionIndicatorStep } from "./indicator/production";
+import { TradeIndicatorStep } from "./indicator/trade";
 
 export function IndicatorLab({ meta, step, state }: {
   meta: Meta;
@@ -19,8 +19,8 @@ export function IndicatorLab({ meta, step, state }: {
   state: StepStateApi<IndicatorStepState>;
 }) {
   // 按主题路由,不依赖步号(步号可能因课程重排而变)。
-  if (step.topic === "production") return <Step5Production meta={meta} step={step} state={state} />;
-  if (step.topic === "length") return <Step6Length meta={meta} step={step} state={state} />;
-  if (step.topic === "network") return <Step7Network meta={meta} step={step} state={state} />;
-  return <Step4Trade meta={meta} step={step} state={state} />;
+  if (step.topic === "production") return <ProductionIndicatorStep meta={meta} step={step} state={state} />;
+  if (step.topic === "length") return <LengthIndicatorStep meta={meta} step={step} state={state} />;
+  if (step.topic === "network") return <NetworkIndicatorStep meta={meta} step={step} state={state} />;
+  return <TradeIndicatorStep meta={meta} step={step} state={state} />;
 }

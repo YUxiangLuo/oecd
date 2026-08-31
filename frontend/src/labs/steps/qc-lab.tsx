@@ -4,7 +4,7 @@ import type { Meta, QcCheck } from "../../types";
 import { useAsync, YearPicker } from "../shared";
 import { QcChecksTable } from "./qc-checks-table";
 import { inspectQcSection, summarizeQcSections, type QcSectionState } from "./qc-contract";
-import { inspectShockContract } from "./step2/shock-contract";
+import { inspectShockContract } from "./shock/shock-contract";
 import { summarizeQcRelease } from "./qc-release";
 import { userFacingRequestError } from "../../user-facing-error";
 

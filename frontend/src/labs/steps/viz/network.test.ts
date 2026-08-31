@@ -5,14 +5,14 @@ import {
   HEAT_WEIGHTED_DEGREE_METRIC,
   heatActivationForRow,
   heatRowKey,
-} from "../../../viz/steps/step11-network-heat";
+} from "../../../viz/views/network-heat";
 import type { ObservationRequestIdentity, Row, VizObservation } from "./scaffold";
 import {
   heatObservationFromActivation,
   nextExplicitHeatObservations,
   STEP10_DEFAULT_LENS,
   STEP10_LENSES,
-} from "./step11";
+} from "./network";
 
 describe("step 10 network lenses", () => {
   test("opens with the trade network first for a new session", () => {

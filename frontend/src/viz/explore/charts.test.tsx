@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { LengthViz } from "../steps/step10-length";
+import { LengthViz } from "../views/length-comparison";
 import { CompositionBar, QuadrantScatter, RankBarChart, RANK_HIGHLIGHT_TEXT } from "./charts";
 
 function contrastOnWhite(hex: string): number {

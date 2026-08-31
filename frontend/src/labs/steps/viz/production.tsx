@@ -47,7 +47,7 @@ const complexGvc = PROD_SEGMENTS.find((segment) => segment.key === "3b_VA_GVC_C"
 export const PRODUCTION_LADDER_GUIDE = `按复杂 GVC 份额从高到低排序，所以从上到下，正值的${complexGvc.colorName} ${complexGvc.name}段占比总体递减；`
   + `${simpleGvc.colorName} ${simpleGvc.name}段表示中间品跨境一次后在国外最终吸收。若出现负分项，则统一以${NEGATIVE_COMPOSITION_STYLE.colorName}显示在零轴左侧。`;
 
-export function Step9Production({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
+export function ProductionVizStep({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
   const { year, setYear, lens, pickLens, picked, pickCountries } = useVizLab(
     meta, step, state, "ladder", ["ladder", "rank", "industry"],
   );

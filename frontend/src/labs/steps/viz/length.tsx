@@ -50,7 +50,7 @@ export function lengthIndustryRequestKey(meta: Pick<Meta, "dataset">, year: numb
   return country ? observationRequestKey(meta, year, "country-industry", country) : null;
 }
 
-export function Step10Length({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
+export function LengthVizStep({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
   const { year, setYear, lens, pickLens, picked, pickCountries, schema } = useVizLab(
     meta, step, state, "position", ["position", "bars", "rank", "industry"],
   );

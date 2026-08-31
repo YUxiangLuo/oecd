@@ -13,7 +13,7 @@ import {
   networkThresholdAriaValueText,
   nextNetworkNode,
   thresholdedNetworkModel,
-} from "./step8-network";
+} from "./trade-network";
 
 describe("network fullscreen activation", () => {
   test("an inline node always opens the large view with that node selected", () => {

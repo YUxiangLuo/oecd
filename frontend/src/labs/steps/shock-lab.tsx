@@ -3,8 +3,8 @@ import { api } from "../../api";
 import { FullscreenPanel } from "../../fullscreen-panel";
 import type { Meta, QcCheck, QuizCompletionState, ShockEvent, Step, StepStateApi } from "../../types";
 import { countryLabel, sectorLabel } from "../../viz";
-import { CrosswalkDemo } from "./step2/crosswalk-demo";
-import { EventList } from "./step2/event-list";
+import { CrosswalkDemo } from "./shock/crosswalk-demo";
+import { EventList } from "./shock/event-list";
 import {
   applyManualFilterPatch,
   eventKey,
@@ -18,10 +18,10 @@ import {
   SHOCK_TYPES,
   SHOCK_SORT_LABELS,
   type ShockPanelFilters,
-} from "./step2/model";
-import { SelectedEventBar } from "./step2/selected-event";
-import { ShockPanel } from "./step2/shock-panel";
-import { inspectShockContract } from "./step2/shock-contract";
+} from "./shock/model";
+import { SelectedEventBar } from "./shock/selected-event";
+import { ShockPanel } from "./shock/shock-panel";
+import { inspectShockContract } from "./shock/shock-contract";
 import { QcChecksTable } from "./qc-checks-table";
 import { useAsync } from "../shared";
 

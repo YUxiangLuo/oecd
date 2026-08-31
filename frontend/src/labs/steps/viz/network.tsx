@@ -30,7 +30,7 @@ import {
   type HeatCoverage,
   type HeatSortMetric,
   type HeatViewOptions,
-} from "../../../viz/steps/step11-network-heat";
+} from "../../../viz/views/network-heat";
 import { AsyncStateMessage, useAsync } from "../../shared";
 import {
   addInspectedCountry,
@@ -116,7 +116,7 @@ function heatIdentityToken(identity: ObservationRequestIdentity): string {
   return `${identity.requestKey}\u0000${identity.generation}`;
 }
 
-export function Step11Network({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
+export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
   const { year, setYear, lens, pickLens, picked, pickCountries, schema } = useVizLab(
     meta, step, state, STEP10_DEFAULT_LENS, STEP10_LENS_KEYS,
   );

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ClassroomReport } from "../../types";
-import { GateCard, ReportLab, ReportStatus, focusReportGateDestination, reflectionCountLabel, reportGenerateButtonLabel, reportGenerateLabel, reportWaitLabel } from "./step16-report";
+import { GateCard, ReportLab, ReportStatus, focusReportGateDestination, reflectionCountLabel, reportGenerateButtonLabel, reportGenerateLabel, reportWaitLabel } from "./report-lab";
 
 function report(state: ClassroomReport["state"]): ClassroomReport {
   return {

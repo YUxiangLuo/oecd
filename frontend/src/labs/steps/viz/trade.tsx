@@ -51,7 +51,7 @@ export function eligibleExportCompositionRows(rows: Row[]): Row[] {
   return finiteBy(rows, "gross_exports", ...WWZ_SEGMENTS.map((segment) => segment.key));
 }
 
-export function Step8Trade({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
+export function TradeVizStep({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
   const { year, setYear, lens, pickLens, picked, pickCountries } = useVizLab(
     meta, step, state, "quadrant", ["quadrant", "decompose", "rank"],
   );

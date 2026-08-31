@@ -13,7 +13,7 @@ import {
   normalizeHeatCoverage,
   normalizeHeatSortMetric,
   visibleHeatRows,
-} from "./step11-network-heat";
+} from "./network-heat";
 
 function relativeLuminance(color: string): number {
   const hex = color.length === 4

@@ -1,7 +1,7 @@
 export { useAsync } from "./shared";
-export { DbLab } from "./steps/step1-db";
-export { ShockLab } from "./steps/step2-shock";
-export { QcLab } from "./steps/step3-qc";
-export { IndicatorLab } from "./steps/steps4-7-indicators";
-export { VizLab } from "./steps/steps8-11-viz-lab";
-export { ReportLab } from "./steps/step16-report";
+export { DbLab } from "./steps/db-lab";
+export { IndicatorLab } from "./steps/indicator-lab";
+export { QcLab } from "./steps/qc-lab";
+export { ReportLab } from "./steps/report-lab";
+export { ShockLab } from "./steps/shock-lab";
+export { VizLab } from "./steps/viz-lab";

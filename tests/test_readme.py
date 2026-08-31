@@ -28,7 +28,7 @@ def test_ci_executes_the_independent_gephi_oracle():
 
 
 def test_wwz_teaching_prompts_keep_tls_as_an_extension():
-    step3 = (ROOT / "frontend" / "src" / "labs" / "steps" / "ind" / "step4.tsx").read_text()
-    step7 = (ROOT / "frontend" / "src" / "labs" / "steps" / "viz" / "step8.tsx").read_text()
+    step3 = (ROOT / "frontend" / "src" / "labs" / "steps" / "indicator" / "trade.tsx").read_text()
+    step7 = (ROOT / "frontend" / "src" / "labs" / "steps" / "viz" / "trade.tsx").read_text()
     assert "读它各行业算出来的六项" not in step3
     assert "比较六项构成" not in step7

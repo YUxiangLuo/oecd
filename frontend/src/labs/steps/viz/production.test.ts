@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { NEGATIVE_COMPOSITION_STYLE, sortCompositionRows } from "../../../viz/explore/charts";
 import { CAT } from "../../../viz/shared";
-import { complexGvcRankRows, eligibleProductionCompositionRows, PROD_SEGMENTS, PRODUCTION_LADDER_GUIDE, PRODUCTION_LADDER_SORT, productionIndustryRequestKey } from "./step9";
+import { complexGvcRankRows, eligibleProductionCompositionRows, PROD_SEGMENTS, PRODUCTION_LADDER_GUIDE, PRODUCTION_LADDER_SORT, productionIndustryRequestKey } from "./production";
 
 describe("step 8 production ladder reading contract", () => {
   test("binds actual segment names to the rendered palette", () => {
