@@ -36,6 +36,9 @@ agent-browser doctor >/dev/null
 for step in $(seq 1 16); do
   "${ab[@]}" open "$GVCSIM_BASE_URL/?step=$step"
   "${ab[@]}" wait '.step-header-mid h2'
+  # 100vh 固定布局下文档级永远不应出现滚动（幻影滚动会卷走顶栏与侧栏）。
+  # sr-only 缺坐标、超高未裁剪元素都曾在这里突破布局，逐步断言防回归。
+  "${ab[@]}" eval '(() => { const d = document.documentElement; if (d.scrollHeight > d.clientHeight + 1) throw new Error(`document scrolls: ${d.scrollHeight} > ${d.clientHeight}`); return true; })()' >/dev/null
   if [[ "$step" -eq 10 ]]; then
     # The network uses one portalled dialog instance: node activation expands it,
     # Escape closes it, and focus/selection return to the invoking SVG node.
