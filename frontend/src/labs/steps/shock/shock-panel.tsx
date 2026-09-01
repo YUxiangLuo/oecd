@@ -53,7 +53,7 @@ export function ShockPanelSuccessView({
           <caption className="sr-only">国家行业冲击面板，当前排序：{SHOCK_SORT_LABELS[sort]}</caption>
           <thead>
             <tr>
-              <th scope="col" aria-sort={sort === "country_asc" ? "ascending" : undefined} style={{ textAlign: "left" }}>国家</th>
+              <th scope="col" aria-sort={sort === "country_asc" ? "ascending" : undefined} style={{ textAlign: "left" }} title="被冲击覆盖的一方;关税类型下即被加征的出口国">国家(受冲击方)</th>
               <th scope="col" aria-sort={sort === "industry_asc" ? "ascending" : undefined}>行业</th>
               <th scope="col" aria-sort={sort === "intensity_desc" ? "descending" : sort === "intensity_asc" ? "ascending" : undefined}>{INTENSITY_COLUMN_LABELS[shockType]}</th>
               {tariff && <><th scope="col">主要加征方</th><th scope="col">行业出口暴露度</th><th scope="col">暴露度来源</th></>}
@@ -69,9 +69,13 @@ export function ShockPanelSuccessView({
               <tr key={`${row.country}-${row.sector}-${index}`}>
                 <td style={{ textAlign: "left" }}>{countryLabel(String(row.country))}</td>
                 <td>{sectorLabel(String(row.sector))}</td>
-                <td>{typeof row.shock_intensity === "number" ? pct(row.shock_intensity) : "—"}</td>
+                <td
+                  title={tariff && row.main_imposer
+                    ? `${countryLabel(String(row.main_imposer))}(加征方) 对 ${countryLabel(String(row.country))}·${sectorLabel(String(row.sector))}(受冲击/出口方) 加征;该行数值是该国家–行业承受的冲击强度`
+                    : undefined}
+                >{typeof row.shock_intensity === "number" ? pct(row.shock_intensity) : "—"}</td>
                 {tariff && <>
-                  <td>{String(row.main_imposer ?? "—")}</td>
+                  <td>{row.main_imposer ? countryLabel(String(row.main_imposer)) : "—"}</td>
                   <td title={exposureSource?.disclosure}>
                     {typeof row.export_exposure === "number" ? pct(row.export_exposure) : "—"}
                   </td>

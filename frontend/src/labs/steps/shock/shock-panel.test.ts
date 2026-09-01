@@ -63,6 +63,8 @@ describe("shock panel refresh accessibility", () => {
     expect(tariff).toContain("shock-panel-table tariff");
     expect(tariff).toContain('aria-sort="descending"');
     expect(tariff).toContain("公式：shock_intensity = Σ(rate × exposure)");
+    expect(tariff).toContain("国家(受冲击方)");
+    expect(tariff).toContain("(加征方) 对");
 
     const sanctions = renderToStaticMarkup(createElement(ShockPanelSuccessView, {
       panel: panel({}), shockType: "sanctions", typeLabel: "制裁清单",
@@ -70,7 +72,7 @@ describe("shock panel refresh accessibility", () => {
     }));
     expect(sanctions).toContain("制裁暴露强度");
     expect(sanctions).toContain("不是关税税率");
-    expect(sanctions).toContain('<th scope="col" aria-sort="ascending" style="text-align:left">国家</th>');
+    expect(sanctions).toContain("国家(受冲击方)");
     expect(sanctions).not.toContain("主要加征方");
     expect(sanctions).not.toContain("出口暴露度");
     expect(sanctions).not.toContain("公式：");

@@ -474,7 +474,7 @@ export function NetworkViz({
             const opacity = active ? 0.16 + f * 0.48 : 0.025;
             return (
               <g key={`${s}-${t}-${i}`}>
-              <title>{`${s} → ${t}: ${fmtNetworkMetric(num(e.flow), "amount")} 百万美元`}</title>
+              <title>{`${s}(出口方) → ${t}(进口方): ${fmtNetworkMetric(num(e.flow), "amount")} 百万美元`}</title>
               <path fill="none" stroke={col}
                 d={`M${startX} ${startY} Q${controlX} ${controlY} ${endX} ${endY}`}
                 opacity={opacity} markerEnd={`url(#${markerId})`}
@@ -622,7 +622,7 @@ export function NetworkViz({
             <p className="muted" role="status">当前显示截止下没有与该节点相连的可见伙伴。</p>
           ) : (
             <table>
-              <thead><tr><th>伙伴</th><th>流出</th><th>流入</th><th>合计</th></tr></thead>
+              <thead><tr><th>伙伴</th><th>流出（该国→伙伴）</th><th>流入（伙伴→该国）</th><th>合计</th></tr></thead>
               <tbody>
                 {selectedNeighbors.slice(0, 8).map((n) => (
                   <tr key={n.c}>
@@ -642,7 +642,7 @@ export function NetworkViz({
         节点位置 = 预设地理区域布局（不是社区检测）；用于观察预设区域内 / 区域间流向<br />
         节点大小 = {metricMeta[sizeMetric].label} · 节点颜色 = {colorMode === "region" ? "预设地理区域" : metricMeta[colorMode].label}<br />
         {hasUnavailableContext && <>所选指标不可用节点 = 灰色虚线、固定最小尺寸（仅保留网络上下文）<br /></>}
-        显示条件：边流量 ÷ 当前发布 Top 边中的最大流量 ≥ {(edgeThreshold * 100).toFixed(0)}%；显示 {visibleEdges.length}/{thresholdModel.publishedEdges.length} 条已发布 Top 边；默认 15% 是读图筛选，不是计算阈值；箭头表示 source → target<br />
+        显示条件：边流量 ÷ 当前发布 Top 边中的最大流量 ≥ {(edgeThreshold * 100).toFixed(0)}%；显示 {visibleEdges.length}/{thresholdModel.publishedEdges.length} 条已发布 Top 边；默认 15% 是读图筛选，不是计算阈值；箭头表示出口流向：source（出口方）→ target（进口方）<br />
         截止比例只影响边的显示、伙伴高亮与详情；完整图上的中心性指标保持不变
       </div>
       {Tip}
