@@ -36,7 +36,10 @@ fi
 "${student[@]}" fill '#login-pass' "$GVCSIM_E2E_PASSWORD"
 "${student[@]}" click 'button[type="submit"]'
 "${student[@]}" wait --text '课程大纲'
-"${student[@]}" eval '(() => { const button=document.querySelector("button[aria-label=\"跳过介绍\"]"); button?.click(); return Boolean(button); })()' >/dev/null
+# 远程延迟下外壳文本（课程大纲）先于介绍遮罩渲染：必须等遮罩真正挂载再跳过，
+# 否则 eval 与后续的 overlay-gone 检查都会落在遮罩未出现的窗口期而误判通过。
+"${student[@]}" wait 'button[aria-label="跳过介绍"]'
+"${student[@]}" click 'button[aria-label="跳过介绍"]'
 "${student[@]}" wait --fn '!document.querySelector(".intro-overlay")'
 "${student[@]}" wait --text '生成实验报告'
 "${student[@]}" find role button click --name '根据实验记录生成报告' --exact
