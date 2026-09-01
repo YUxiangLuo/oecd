@@ -250,6 +250,21 @@ def _number(value: Any, *, p_value: bool = False) -> str:
     return f"{numeric:.4g}"
 
 
+def _observation_reading(observation: dict[str, Any]) -> str:
+    """步骤 1 观察值的完整读法:把无方向的「行 × 列 = 值」写成带供给方向的句子,
+    避免报告读者把行(供给方)误读成使用方——与前端表格的方向标注一致。"""
+    row = _safe(observation.get("row", "—"))
+    column = _safe(observation.get("column", "—"))
+    raw_value = observation.get("value", "—")
+    value = _number(raw_value) if isinstance(raw_value, (int, float)) else _safe(raw_value)
+    table = str(observation.get("table") or "z")
+    if table == "y":
+        return f"{row}(行·供给方) → {column}(列·最终需求) = {value}"
+    if table == "accounts":
+        return f"{row} 的 {column} = {value}"
+    return f"{row}(行·供给方) → {column}(列·使用方) = {value}"
+
+
 def _count(value: Any) -> str:
     if isinstance(value, int) and not isinstance(value, bool):
         return f"{value:,}"
@@ -1103,11 +1118,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             )
             lines.append(f"- 保存的切片：{selection or '—'}")
         if observation:
-            observation_value = observation.get("value", "—")
-            lines.append(
-                f"- 记录的单元格：{_safe(observation.get('row', '—'))} × "
-                f"{_safe(observation.get('column', '—'))} = {_number(observation_value) if isinstance(observation_value, (int, float)) else _safe(observation_value)}"
-            )
+            lines.append(f"- 记录的单元格：{_observation_reading(observation)}")
         lines.append("")
 
     for step in range(3, 11):
