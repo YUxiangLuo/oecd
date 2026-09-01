@@ -66,7 +66,7 @@ uv run gvcsim classroom-init --reset
 
 ## 运维与验证
 
-精简远程部署流程见 [DEPLOY.md](DEPLOY.md)。代码部署、数据发布和新学期清场必须分开执行：普通代码/数据部署不得清空教学库，只有已备份且明确的新学期清场才允许 `classroom-init --reset`。`scripts/backup_classroom.sh` 使用 `pg_dump --format=custom` 生成带 SHA-256 完成标记的原子备份，`deploy/gvcsim-backup.timer` 每日触发并默认保留 90 组已完成备份；恢复前必须先校验摘要、`pg_restore --list`，并在隔离空库演练。
+代码部署、数据发布和新学期清场必须分开执行：普通代码/数据部署不得清空教学库，只有已备份且明确的新学期清场才允许 `classroom-init --reset`。`scripts/backup_classroom.sh` 使用 `pg_dump --format=custom` 生成带 SHA-256 完成标记的原子备份，`deploy/gvcsim-backup.timer` 每日触发并默认保留 90 组已完成备份；恢复前必须先校验摘要、`pg_restore --list`，并在隔离空库演练。
 
 ```bash
 uv run ruff format --check .
