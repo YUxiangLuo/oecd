@@ -98,8 +98,8 @@
   font-family: var(--font-display); font-size: 40px;
   margin: 0 0 8px; letter-spacing: 2px; font-weight: 700;
 }
-.intro-lede { font-size: 17px; line-height: 2; color: #e8ecf8; max-width: 700px; margin: 16px auto 0; }
-.intro-pipeline { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 36px auto 0; flex-wrap: wrap; max-width: 720px; }
+.intro-lede { font-size: 17px; line-height: 2; color: #e8ecf8; max-width: 840px; margin: 16px auto 0; }
+.intro-pipeline { display: flex; justify-content: center; align-items: center; gap: 8px; margin: 36px auto 0; flex-wrap: wrap; max-width: 900px; }
 .intro-chip {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 8px 14px; border-radius: 99px; font-size: 13px; font-weight: 600;
