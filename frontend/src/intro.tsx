@@ -91,6 +91,9 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // 表单控件（如关税滑块）需要原生方向键行为；全局翻页不劫持它们。
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)) return;
       if (e.key === "ArrowRight") setScene((s) => Math.min(N_SCENES - 1, s + 1));
       if (e.key === "ArrowLeft") setScene((s) => Math.max(0, s - 1));
     };
@@ -298,6 +301,9 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
         <span className="intro-slider-label" style={{ marginLeft: 20 }}>复杂 GVC 生产份额(示意)</span>
         <span className="intro-tau" style={{ color: tau > 0.02 ? "#ff9d9d" : "#eef1fb" }}>{demoShare}%</span>
       </div>
+      {!mechanism && (
+        <p className="intro-slider-hint">先在上方选择一种传导机制，滑块才会启用。</p>
+      )}
       <p className="intro-note">
         本页只展示你选择的一种可能机制，不是估计结果，也不预告真实方向。后续回归会分别检验课程纯 VA 口径 FVA_share（非 OECD EXGR_FVASH）、
         复杂 GVC 生产份额、前向 GVC 生产长度(PLv_GVC)，并探索全正边二值网络介数；四项不能只挑显著结果。
