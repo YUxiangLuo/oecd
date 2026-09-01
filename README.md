@@ -21,12 +21,14 @@
 
 ## 本地运行
 
-需要 Python 3.13、uv、Bun 和 PostgreSQL。
+需要 Python 3.13、uv、Bun 和 PostgreSQL。本文档不绑定任何固定 IP 或主机名：数据库、API 与前端代理的位置一律用连接串或环境变量给出，按你的实际环境填写。
 
 ```bash
 uv sync
 cd frontend && bun install --frozen-lockfile && bun run build && cd ..
-export GVCSIM_PG_DSN='postgresql://alice:111111@127.0.0.1:5432/gvclab'
+# 指向课程 PostgreSQL 实例：主机、端口、账号、口令按实际环境填写；
+# 该角色需要建库权限，classroom-init 会在目标库不存在时自动创建
+export GVCSIM_PG_DSN='postgresql://<用户名>:<口令>@<数据库主机>:5432/gvclab'
 export GVCSIM_DEMO_MODE=1
 export GVCSIM_BOOTSTRAP_PASSWORD='your-local-password'
 uv run gvcsim classroom-init --reset
@@ -34,7 +36,11 @@ uv run gvcsim compute
 uv run gvcsim serve --port 8000
 ```
 
-开发前端可另开终端运行 `cd frontend && bun run dev`。Vite 默认把 `/api` 代理到 `http://127.0.0.1:8000`；API 若绑在其他端口（例如 18000），先设置 `GVCSIM_API_PROXY='http://127.0.0.1:18000'`。
+`serve` 默认只监听本机回环地址。要让课堂上的其他机器访问，显式给出监听地址——`uv run gvcsim serve --host 0.0.0.0 --port 8000` 监听本机全部网卡（通配地址，不绑定任何固定 IP），或设置 `GVCSIM_BIND_HOST` 为指定的对外接口地址后照常启动。
+
+开发前端可另开终端运行 `cd frontend && bun run dev`。Vite 默认把 `/api` 代理到本机回环地址的 8000 端口；API 位于其他任何主机或端口时，按实际位置设置 `GVCSIM_API_PROXY`（形式为 `http://<api主机>:<端口>`），dev 与 preview 共用这一配置。
+
+课堂演示可用 `bun run build:demo` 替代 `bun run build`：演示构建在登录页预填 student/teacher 快捷身份与统一口令（默认 `gvclab2026`，可用 `VITE_DEMO_PASSWORD` 覆盖并与服务端 `GVCSIM_BOOTSTRAP_PASSWORD` 保持一致），打开即可一键登录。普通生产构建不含这些凭证，相关代码与口令常量会在构建期被完全摇掉。
 
 ## 会话与数据库
 
@@ -66,7 +72,7 @@ uv run gvcsim classroom-init --reset
 
 ## 运维与验证
 
-代码部署、数据发布和新学期清场必须分开执行：普通代码/数据部署不得清空教学库，只有已备份且明确的新学期清场才允许 `classroom-init --reset`。`scripts/backup_classroom.sh` 使用 `pg_dump --format=custom` 生成带 SHA-256 完成标记的原子备份，`deploy/gvcsim-backup.timer` 每日触发并默认保留 90 组已完成备份；恢复前必须先校验摘要、`pg_restore --list`，并在隔离空库演练。
+代码部署、数据发布和新学期清场必须分开执行：普通代码/数据部署不得清空教学库，只有已备份且明确的新学期清场才允许 `classroom-init --reset`。`scripts/backup_classroom.sh` 使用 `pg_dump --format=custom` 生成带 SHA-256 完成标记的原子备份，`deploy/gvcsim-backup.timer` 每日触发并默认保留 90 组已完成备份；恢复前必须先校验摘要、`pg_restore --list`，并在隔离空库演练。远程部署与三生命周期操作手册见 [DEPLOY.md](DEPLOY.md)。
 
 ```bash
 uv run ruff format --check .
@@ -78,7 +84,7 @@ cd frontend && bun test src && bun run build
 
 Gephi 0.10.1 独立基准可用 `scripts/gephi_golden/generate.sh --check` 校验；该基准采用有向图，路径类中心性按无权最短路计算，边权只进入 weighted degree。
 
-CI 的桌面浏览器验收分两层：`agent_browser_smoke.sh` 快速挂载学生 1–16 步与教师关键交互；`agent_browser_full_journey.sh` 通过公开 API 构造一份当前 release 的完整学习记录，再由真实浏览器完成报告生成、提交和教师评分，防止各自通过的组件在完整状态机中断链。
+CI 的桌面浏览器验收分两层：`agent_browser_smoke.sh` 快速挂载学生 1–16 步与教师关键交互；`agent_browser_full_journey.sh` 通过公开 API 构造一份当前 release 的完整学习记录，再由真实浏览器完成报告生成、提交和教师评分，防止各自通过的组件在完整状态机中断链。两个脚本都以 `GVCSIM_BASE_URL` 指定被测站点地址，不写死任何主机。
 
 冲击面板性能验收在有效 active v9 release 完成最终重算后运行：
 
@@ -87,4 +93,4 @@ GVCSIM_BENCHMARK_USERNAME=student GVCSIM_BENCHMARK_PASSWORD='…' \
   uv run python scripts/benchmark_shock_panel_v9.py
 ```
 
-脚本先执行 release 校验，再通过正常登录中间件访问 `/api/shocks/panel`，记录 release/shock contract、单请求冷索引、8 请求并发冷启动、warm sequential 与 8-concurrent p95，并对照 500ms/1.5s 预算。正式数据发布必须通过该门槛；最近一次全新本地部署的验收记录为 `benchmarks/shock_panel_v9.json`，`benchmarks/shock_panel_preliminary_v3.json` 只是旧 v3 直调初测。每次正式数据换版仍必须重新运行并覆盖 v9 记录，不能把旧 release 的通过结果沿用到新 release。
+脚本在进程内完成 release 校验并经由正常登录中间件访问 `/api/shocks/panel`，记录 release/shock contract、单请求冷索引、8 请求并发冷启动、warm sequential 与 8-concurrent p95，并对照 500ms/1.5s 预算；不经过网络，因此无需也不接受目标主机配置。正式数据发布必须通过该门槛；最近一次全新本地部署的验收记录为 `benchmarks/shock_panel_v9.json`，`benchmarks/shock_panel_preliminary_v3.json` 只是旧 v3 直调初测。每次正式数据换版仍必须重新运行并覆盖 v9 记录，不能把旧 release 的通过结果沿用到新 release。
