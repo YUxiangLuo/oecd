@@ -6,6 +6,7 @@ import { fmtDb } from "../shared";
 import {
   captureDbObservation,
   dbCellAccessibleName,
+  dbObservationSentence,
   dbColumnCountryForTable,
   DbSliceTable,
   finiteDbCells,
@@ -259,7 +260,7 @@ describe("Step 1 bounded roving cell focus", () => {
     expect(html).toContain("Tab 或 Shift+Tab 离开表格");
     expect(html).toContain("单位：Million USD（百万美元）");
     expect(html).toContain('<th scope="row"');
-    expect(html).toContain("R1，C1，值 0 Million USD（百万美元），未记录；按 Enter 或空格记录");
+    expect(html).toContain("R1(行·供给方) → C1(列·使用方)，值 0 Million USD（百万美元），未记录；按 Enter 或空格记录");
   });
 
   test("uses the named region as the sole stop for an all-null page and labels recorded state", () => {
@@ -280,6 +281,14 @@ describe("Step 1 bounded roving cell focus", () => {
     expect(html.match(/tabindex="0"/g)).toHaveLength(1);
     expect(html).toContain('role="region" tabindex="0"');
     expect(dbCellAccessibleName("y", { row: "CHN_A01_02", column: "USA_HFCE", value: 2.5 }, true))
-      .toContain("USA 居民最终消费支出，值 2.5 Million USD（百万美元），已记录");
+      .toContain("USA 居民最终消费支出(列·最终需求)，值 2.5 Million USD（百万美元），已记录");
+  });
+
+  test("observation sentence states the supply direction in one full reading", () => {
+    expect(dbObservationSentence("z", "CHN_A01_02", "USA_C10T12"))
+      .toBe("CHN 中国·A01_02(行·供给方) → USA 美国·C10T12(列·使用方)");
+    expect(dbObservationSentence("y", "CHN_A01_02", "USA_HFCE"))
+      .toBe("CHN 中国·A01_02(行·供给方) → USA 居民最终消费支出(列·最终需求)");
+    expect(dbObservationSentence("accounts", "CHN_A01_02", "VA")).toBe("CHN_A01_02 的 VA");
   });
 });

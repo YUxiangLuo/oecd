@@ -20,12 +20,29 @@ const ROW_HEADER: Record<DbTableKind, { label: string; title: string }> = {
   accounts: { label: "国家×行业(行)", title: "每一行是一个国家×行业;列为该行业的账户项" },
 };
 
+/** 角标:行/列两个方向就地写全,代替容易被贴错轴的单一句子。
+ *  渲染顺序与空间邻近一致:列说明在上(与列轴横跨带同排),行说明在下(贴近行头区)。 */
+const AXIS_CORNER: Record<DbTableKind, { row: string; col: string }> = {
+  z: { row: "行·供给方 ↓", col: "列·使用方 →" },
+  y: { row: "行·供给方 ↓", col: "列·最终需求 →" },
+  accounts: { row: "行·国家×行业 ↓", col: "列·账户项 →" },
+};
+
+/** 列数据区上方的横跨带:角色 + 方向 + 当前选中的列国家,让列轴自我声明。 */
+function columnAxisBand(table: DbTableKind, colCountry: string): string {
+  const country = colCountry ? countryLabel(colCountry) : "";
+  if (table === "z") return `使用国×行业(列)→ ${country}`;
+  if (table === "y") return `目的国×最终需求(列)→ ${country}`;
+  return "账户项(列)";
+}
+
 /** 表格怎么读:行是供给方、列是使用方——这是投入产出表最容易被看反的一点,
- *  因为"行"虽然横向延伸,它的标签却竖排在最左侧。按表类型给出具体读法。 */
+ *  因为"行"虽然横向延伸,它的标签却竖排在最左侧。读法一律锚定标签的视觉位置
+ *  (左侧竖排/上方横排),不再依赖"行/列"抽象词的二次换算。 */
 const HOW_TO_READ: Record<DbTableKind, string> = {
-  z: "行 = 供给方,列 = 使用方。某一格 = 行的「国家×行业」向 列的「国家×行业」提供的中间投入。单位：Million USD（百万美元）。",
-  y: "行 = 供给方,列 = 最终需求去向。某一格 = 行的「国家×行业」被 列的「目的国 × 需求类别」吸收的金额。单位：Million USD（百万美元）。",
-  accounts: "每一行是一个「国家×行业」,列是该行业的账户项(TLS / VA / OUT);此表没有列方向的国家维度。单位：Million USD（百万美元）。",
+  z: "每个数值 = 它左侧竖排标签(行:供给国×行业) 向 它上方横排标签(列:使用国×行业) 供给的中间投入。注意:行的标签虽然竖排在最左,它仍然是「行」。单位:Million USD(百万美元)。",
+  y: "每个数值 = 它左侧竖排标签(行:供给国×行业) 被 它上方横排标签(列:目的国×需求类别) 吸收的最终需求金额。注意:行的标签虽然竖排在最左,它仍然是「行」。单位:Million USD(百万美元)。",
+  accounts: "每一行是一个「国家×行业」,列是该行业的账户项(TLS / VA / OUT);此表没有列方向的国家维度。单位:Million USD(百万美元)。",
 };
 
 const ACCOUNT_HELP: Record<string, string> = {
@@ -302,7 +319,44 @@ export function dbCellAccessibleName(
   recorded: boolean,
 ): string {
   const column = table === "y" ? formatYColumnHeader(cell.column) : cell.column;
-  return `${cell.row}，${column}，值 ${fmtDb(cell.value)} Million USD（百万美元），${recorded ? "已记录" : "未记录"}；按 Enter 或空格记录`;
+  if (table === "accounts") {
+    return `${cell.row}，${column}，值 ${fmtDb(cell.value)} Million USD（百万美元），${recorded ? "已记录" : "未记录"}；按 Enter 或空格记录`;
+  }
+  const colRole = table === "y" ? "列·最终需求" : "列·使用方";
+  return `${cell.row}(行·供给方) → ${column}(${colRole})，值 ${fmtDb(cell.value)} Million USD（百万美元），${recorded ? "已记录" : "未记录"}；按 Enter 或空格记录`;
+}
+
+/** 行/列代码("CHN_A01_02")拆成国家 + 余部,给方向句提供带中文名的可读标签。 */
+function splitRowColumnCode(code: string): { country: string; rest: string } {
+  const sep = code.indexOf("_");
+  if (sep <= 0) return { country: "", rest: code };
+  return { country: code.slice(0, sep), rest: code.slice(sep + 1) };
+}
+
+/** 行/列表头裸代码的悬停说明:国家中文名·行业中文名。 */
+function rowColumnCodeHelp(code: string): string | undefined {
+  const { country, rest } = splitRowColumnCode(code);
+  if (!country || !rest) return undefined;
+  return `${countryLabel(country)}·${sectorLabel(rest)}`;
+}
+
+/** 列表头悬停说明:Y 表需求类别与账户项查表,Z 表退回国家×行业中文名。 */
+function columnHeaderHelp(column: string): string | undefined {
+  return columnHelp(column) ?? rowColumnCodeHelp(column);
+}
+
+/** 观察值方向句:把 "A × B = v" 改写成 "A(行·供给方) → B(列·使用方) = v" 的完整读法,
+ *  让学生在记录现场就地校验行列方向。 */
+export function dbObservationSentence(table: DbTableKind, row: string, column: string): string {
+  if (table === "accounts") return `${row} 的 ${column}`;
+  const rowPart = splitRowColumnCode(row);
+  const rowLabel = rowPart.country ? `${countryLabel(rowPart.country)}·${rowPart.rest}` : row;
+  if (table === "y") {
+    return `${rowLabel}(行·供给方) → ${formatYColumnHeader(column)}(列·最终需求)`;
+  }
+  const colPart = splitRowColumnCode(column);
+  const colLabel = colPart.country ? `${countryLabel(colPart.country)}·${colPart.rest}` : column;
+  return `${rowLabel}(行·供给方) → ${colLabel}(列·使用方)`;
 }
 
 export function DbSliceTable({
@@ -365,18 +419,35 @@ export function DbSliceTable({
           {`${activeTable.label}数据表 · 单位：Million USD（百万美元）。Tab 进入一个数据单元格；方向键和 Home、End 在本页有限数值单元格间移动；Enter 或空格记录；Tab 或 Shift+Tab 离开表格。`}
         </caption>
         <thead>
+          <tr className="db-axis-row">
+            <th
+              rowSpan={2}
+              className="db-axis-corner"
+              title={ROW_HEADER[table].title}
+              aria-label={`${AXIS_CORNER[table].col}，${AXIS_CORNER[table].row}`}
+              style={{ position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" }}
+            >
+              <span className="db-axis-corner-col">{AXIS_CORNER[table].col}</span>
+              <span className="db-axis-corner-row">{AXIS_CORNER[table].row}</span>
+            </th>
+            <th scope="colgroup" colSpan={Math.max(dataColumns.length, 1)} className="db-axis-cols">
+              {columnAxisBand(table, selection.colCountry)}
+            </th>
+            {showSummaries && (
+              <th colSpan={2} className="db-axis-cols" scope="colgroup" title="当前筛选口径下的切片合计与对应 OUT">
+                本页切片口径
+              </th>
+            )}
+          </tr>
           <tr>
-            {(slice?.columns ?? ["row"]).map((column, index) => (
+            {dataColumns.map((column) => (
               <th
                 key={column}
                 scope="col"
-                title={column === "row" ? ROW_HEADER[table].title : columnHelp(column)}
-                aria-label={column === "row" ? ROW_HEADER[table].label : (table === "y" ? formatYColumnHeader(column) : column)}
-                style={index === 0 ? { position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" } : undefined}
+                title={columnHeaderHelp(column)}
+                aria-label={table === "y" ? formatYColumnHeader(column) : (rowColumnCodeHelp(column) ?? column)}
               >
-                {column === "row"
-                  ? `${ROW_HEADER[table].label} ⓘ`
-                  : `${table === "y" ? formatYColumnHeader(column) : column}${columnHelp(column) ? " ⓘ" : ""}`}
+                {`${table === "y" ? formatYColumnHeader(column) : column}${columnHeaderHelp(column) ? " ⓘ" : ""}`}
               </th>
             ))}
             {showSummaries && <th scope="col" title="当前筛选列在该行的合计">切片合计</th>}
@@ -395,8 +466,8 @@ export function DbSliceTable({
                     <th
                       key={column}
                       scope="row"
-                      title={columnHelp(column)}
-                      style={{ position: "sticky", left: 0, zIndex: 2, background: "#fff", textAlign: "left" }}
+                      title={rowColumnCodeHelp(rowLabel)}
+                      style={{ position: "sticky", left: 0, zIndex: 2, textAlign: "left" }}
                     >
                       {String(value ?? "—")}
                     </th>
@@ -418,7 +489,7 @@ export function DbSliceTable({
                 return (
                   <td
                     key={column}
-                    title={columnHelp(column) ?? (numericValue != null ? `${column}: ${fmtDb(numericValue)}` : undefined)}
+                    title={columnHeaderHelp(column) ?? (numericValue != null ? `${column}: ${fmtDb(numericValue)}` : undefined)}
                     style={intensity > 0
                       ? { background: numericValue != null && numericValue < 0 ? `rgba(227,73,72,${0.06 + intensity * 0.24})` : `rgba(42,120,214,${0.05 + intensity * 0.25})` }
                       : undefined}
@@ -434,7 +505,7 @@ export function DbSliceTable({
                         tabIndex={activeCell?.key === cell.key ? 0 : -1}
                         aria-pressed={selected}
                         aria-label={dbCellAccessibleName(table, cell, selected)}
-                        title={`${rowLabel} × ${table === "y" ? formatYColumnHeader(column) : column}: ${fmtDb(numericValue)} Million USD（百万美元）；点击记录这个观察值`}
+                        title={`${dbObservationSentence(table, rowLabel, column)} = ${fmtDb(numericValue)} Million USD（百万美元）；点击记录这个观察值`}
                         onFocus={() => setRoving({ scope: focusScopeKey, key: cell.key })}
                         onKeyDown={(event) => {
                           if (!(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"] as string[]).includes(event.key)) return;
@@ -711,7 +782,8 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
         <b>已选原始数据点</b>
         {selectedObservation ? (
           <span>
-            {selectedObservation.row} × {formatYColumnHeader(selectedObservation.column)} = {fmtDb(selectedObservation.value)} Million USD（百万美元）
+            {/* 观察值跨表页签保留；读法必须用记录时的表类型,不能用当前页签的。 */}
+            {dbObservationSentence((selectedObservation.table as DbTableKind | undefined) ?? table, selectedObservation.row, selectedObservation.column)} = {fmtDb(selectedObservation.value)} Million USD（百万美元）
             {observationSource ? `（${observationSource}）` : ""}
           </span>
         ) : <span>尚未选择</span>}
