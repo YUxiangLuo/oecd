@@ -11,7 +11,7 @@ import { LogoMark } from "./brand";
 import type { LoginResponse } from "./types";
 import { userFacingRequestError } from "./user-facing-error";
 
-export const LOGIN_FLOW = ["数据接入", "指标计算", "可视化", "教学实证", "实验报告"];
+export const LOGIN_FLOW = ["数据接入", "指标计算", "可视化分析", "回归设计与建模", "实验闭环"];
 export const LOGIN_DATA_LABEL = "OECD ICIO 2023 版 · 数据期 2016–2020";
 
 const DEMO_ACCOUNTS = [

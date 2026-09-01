@@ -1,6 +1,6 @@
 /**
  * 登录后的沉浸式系统介绍(5 幕,可跳过、可在顶栏重看):
- *   1 开场:闭环管线动画 + 真实规模计数(经济体/行业/年份/步骤)
+ *   1 开场:闭环管线动画 + 真实规模计数(经济体/行业/年份)
  *   2 数据底座:两张可翻开的数据卡(ICIO 结构 / 拟真政策冲击事件)
  *   3 十六步旅程：五阶段可点击展开（内容来自 /api/steps 真实元数据）
  *   4 动手示意:关税滑块驱动的供应链示意动画(明确标注非真实估计)
@@ -140,7 +140,8 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
         一条从数据接入到实验报告的完整闭环。
       </p>
       <div className="intro-pipeline">
-        {["数据接入", "指标计算", "可视化", "教学实证", "实验报告"].map((p, i) => (
+        {/* 五阶段名称与 /api/steps、侧栏保持一致:学生接触到的旅程只有一套说法。 */}
+        {["数据接入", "指标计算", "可视化分析", "回归设计与建模", "实验闭环"].map((p, i) => (
           <span key={p} style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <span className="intro-chip" style={{ animationDelay: `${0.3 + i * 0.35}s` }}>
               <span className="intro-chip-num">{i + 1}</span>{p}
@@ -155,15 +156,14 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
         <div><div className="intro-stat-v">{namedEconomies} + ROW</div><div className="intro-stat-l">具名经济体 + 剩余账户</div></div>
         <div><div className="intro-stat-v">{meta?.sectors.length ?? 45}</div><div className="intro-stat-l">行业</div></div>
         <div><div className="intro-stat-v">{yearSpan}</div><div className="intro-stat-l">年份覆盖</div></div>
-        <div><div className="intro-stat-v">{stepsData?.steps.length ?? 16}</div><div className="intro-stat-l">实验步骤</div></div>
       </div>
     </div>,
 
     /* ---- 2 数据底座 ---- */
     <div key={1} className="intro-scene">
       <div className="intro-scene-kicker">数据底座</div>
-      <h2 className="intro-h2">两块数据底座</h2>
-      <p className="intro-lede">价值链指标来自真实 ICIO,政策冲击是教学用拟真面板。点开卡片,看看它们如何合并成回归样本。</p>
+      <h2 className="intro-h2">真实账本 × 拟真冲击</h2>
+      <p className="intro-lede">价值链指标来自真实 ICIO,政策冲击是教学用拟真面板。点开卡片,看看两块底座分别装着什么;它们会在第 11–15 步合并成回归样本。</p>
       <div className="intro-cards">
         <div
           className={`intro-card${openCard === "icio" ? " open" : ""}`}
@@ -179,7 +179,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
             <CardIcon kind="icio" />
             <span>
               <span className="intro-card-title">OECD ICIO{icioEdition ? ` ${icioEdition} 版` : ""}投入产出表</span>
-              <span className="intro-card-sub">谁买了谁的东西 —— 全球生产网络与增加值路径的账本</span>
+              <span className="intro-card-sub">谁向谁供货 —— 全球生产网络与增加值路径的账本</span>
             </span>
             <span className="intro-card-toggle">{openCard === "icio" ? "−" : "+"}</span>
           </span>
@@ -218,7 +218,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
                 <div key={e.name}>{e.name}({e.effective} 生效)</div>
               ))}
               <div style={{ opacity: 0.7, marginTop: 8 }}>
-                共 {events.length} 组事件，保留行业异质和宣布/生效时间线；接入其他事件库时，仍须满足相同的 country × industry × year 契约、行业映射和来源验证
+                共 {events.length} 组事件，保留行业间差异和宣布/生效时间线；接入其他事件库时，必须满足同样的 country × industry × year 格式、行业映射和来源验证
               </div>
             </div>
           )}
@@ -261,7 +261,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
     <div key={3} className="intro-scene">
       <div className="intro-scene-kicker">动手预演</div>
       <h2 className="intro-h2">政策冲击可能如何传导到价值链?</h2>
-      <p className="intro-lede">先预测企业最可能怎样调整，再拖动滑块比较一种机制路径。真实方向必须由后续数据与识别设计回答。</p>
+      <p className="intro-lede">先预测企业最可能怎样调整，再拖动滑块，看这条机制路径会怎样变化。真实方向必须由后续数据与识别设计回答。</p>
       <div className="intro-mechanisms" role="group" aria-label="先选择政策传导机制">
         <button type="button" aria-pressed={mechanism === "contract"} className={mechanism === "contract" ? "on" : ""} onClick={() => setMechanism("contract")}><b>跨境收缩</b><span>供应链缩短，复杂 GVC 下降</span></button>
         <button type="button" aria-pressed={mechanism === "reroute"} className={mechanism === "reroute" ? "on" : ""} onClick={() => setMechanism("reroute")}><b>贸易转移</b><span>改道第三国，原有链条部分保留</span></button>
@@ -314,14 +314,14 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
       <h2 className="intro-h2">实验台已就绪</h2>
       <p className="intro-lede">
         你将以<b>{roleName}</b>身份进入。建议从阶段一开始,
-        亲手走完 数据 → 指标 → 可视化 → 回归 → 报告 的完整闭环;
+        亲手走完五个阶段的完整闭环;
         每一步都配有方法说明、动手面板和小贴士。
       </p>
       {/* 进入前讲清完成规则，避免把浏览位置误认为学习进度。 */}
       <div className="intro-ready-rules">
         <b>侧栏会分别显示两种进度：</b>
-        <span>“✓”表示本步理解题已答对；“材✓”表示本步用于报告的材料已经保存。</span>
-        <span>第 1 步记录单元格；第 3–6 步各用“记录当前国家”按钮保存两个对象，第 7–10 步各完成指定的显式比较；第 12–15 步各保存一次可报告估计；第 16 步完成三段原创分析。</span>
+        <span>步骤徽标“✓”= 本步理解题已答对；“材料已齐全”= 本步用于报告的材料已经保存。</span>
+        <span>第 1 步记录单元格；第 3–6 步各用“记录当前国家到报告材料”按钮保存两个对象，第 7–10 步各完成指定的对比并保存；第 12–15 步各保存一次可报告估计；第 16 步完成三段原创分析。</span>
       </div>
       <div className="intro-cta-row">
         <button className="intro-cta" onClick={() => onDone(1)}>从第 1 步开始实验</button>
