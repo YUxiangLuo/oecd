@@ -42,7 +42,7 @@ export function TradeIndicatorStep({ meta, step: _step, state }: { meta: Meta; s
         title="动手拆解:五类 WWZ 聚合项 + TLS 扩展精确加回毛出口"
         what={<>从上面的数据里挑一个出口(国家 / 行业),把 VA+TLS 账户闭合毛出口拆成五类 WWZ 聚合项和一个 TLS 扩展项的<b>绝对金额</b>画成堆叠条,每一项都有释义。</>}
         read={<>盯住绿框那一行:<b>五类 WWZ 聚合项 + TLS 扩展 = VA+TLS 账户闭合毛出口，误差 ≈ 0</b>。DDC / FDC 本来就是重复计算类别；闭合本身不能证明源数据和算法没有其他错误。</>}
-        find={<>点「查看 ICIO 计算示例」看一个 taxsub 为负的真实行业,这解释了为什么某些项会是负数;也可以勾选"双实体并排对比"直接比两个国家/行业。</>}
+        find={<>负值不是错误:DDC / FDC 本来就是重复计算类别,taxsub 为负表示沿供应链累计后呈净补贴(列 tooltip 有完整释义);也可以勾选"双实体并排对比"直接比两个国家/行业。</>}
       >
         <DecompositionDemo
           step={4}

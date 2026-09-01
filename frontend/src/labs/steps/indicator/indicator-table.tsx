@@ -1,8 +1,8 @@
 /**
  * 指标计算阶段（步骤 3–6）的分解数据表：国家/年份筛选、分页与实验快照。
  *
- * 受控组件:year/country/page 由外层持有,这样「动手拆解」演示的“查看 ICIO 示例”
- * 才能驱动这张表跳到指定实体。主动查看过的国家在本组件内累加保存。
+ * 受控组件:year/country/page 由外层持有,与「动手拆解」演示的实体选择
+ * 及实验快照恢复保持同步。主动查看过的国家在本组件内累加保存。
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";

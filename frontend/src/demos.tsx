@@ -294,14 +294,12 @@ export function DecompositionRequestMessage({
 export function DecompositionDemo({
   step,
   meta,
-  onExampleChange,
   primaryYear,
   primaryCountry,
   onPrimaryChange,
 }: {
   step: number;
   meta: Meta;
-  onExampleChange?: (year: number, country: string) => void;
   /** The table may browse globally; the single-entity demo requires an explicit valid country. */
   primaryYear: number;
   primaryCountry: string | null;
@@ -343,28 +341,6 @@ export function DecompositionDemo({
   const countryRowsB = sideBQuery.status === "success" ? sideBQuery.data?.countryRows ?? null : null;
   const pageA = sideAQuery.status === "success" ? sideAQuery.data?.page ?? null : null;
   const pageB = sideBQuery.status === "success" ? sideBQuery.data?.page ?? null : null;
-  const exampleCountry = meta.countries.includes("BRN") ? "BRN" : meta.countries[0] ?? "";
-  const exampleYear = meta.years.includes(2020) ? 2020 : meta.years.at(-1)!;
-  const exampleRequestKey = `example:${decompositionRequestKey(exampleYear, exampleCountry)}`;
-  const exampleQuery = useAsync<IndustryPage>(
-    () => api.industryIndicatorsAll(exampleYear, exampleCountry),
-    [exampleRequestKey],
-    { enabled: demoAvailable && step === 4 && exampleCountry !== "", requestKey: exampleRequestKey },
-  );
-  const examplePage = exampleQuery.status === "success" ? exampleQuery.data : null;
-  const negativeExample = useMemo(() => [...(examplePage?.rows ?? [])]
-    .filter((row) => {
-      const total = finiteNumber(row.gross_exports);
-      const taxsub = finiteNumber(row.taxsub);
-      return total != null && taxsub != null && total > 1 && taxsub < 0 && Math.abs(taxsub / total) >= 0.001;
-    })
-    .sort((a, b) => {
-      const aTax = finiteNumber(a.taxsub)!;
-      const aTotal = finiteNumber(a.gross_exports)!;
-      const bTax = finiteNumber(b.taxsub)!;
-      const bTotal = finiteNumber(b.gross_exports)!;
-      return Math.abs(bTax / bTotal) - Math.abs(aTax / aTotal);
-    })[0], [examplePage]);
 
   const sectorsA = (pageA?.rows ?? []).map((row) => String(row.industry));
   const sectorsB = (pageB?.rows ?? []).map((row) => String(row.industry));
@@ -563,40 +539,6 @@ export function DecompositionDemo({
           <input type="checkbox" checked={compare} onChange={(event) => setCompare(event.target.checked)} /> 双实体并排对比
         </label>
       </div>
-      {step === 4 && <div className="tipbox taxsub-explainer" style={{ marginBottom: 12 }}>
-        <div className="taxsub-explainer-copy">
-          <strong>为什么 taxsub 可能为负？</strong>
-          <span>taxsub 是出口直接及间接所含的产品税减补贴。负值表示沿供应链累计后呈净补贴，不代表该行业直接获得同额补贴。</span>
-        </div>
-        {negativeExample ? <button
-          type="button"
-          className="taxsub-example-button"
-          aria-pressed={gran === "sector" && year === exampleYear && countryA === exampleCountry && effSectorA === String(negativeExample.industry)}
-          title={`该计算示例的 taxsub 为 ${fmt(finiteNumber(negativeExample.taxsub)!, "amount")} 百万美元，占毛出口 ${(finiteNumber(negativeExample.taxsub)! / finiteNumber(negativeExample.gross_exports)! * 100).toFixed(1)}%`}
-          onClick={() => {
-            setGran("sector");
-            setSectorA(String(negativeExample.industry));
-            onPrimaryChange?.(exampleYear, exampleCountry);
-            onExampleChange?.(exampleYear, exampleCountry);
-          }}
-        >
-          <span>查看 ICIO {exampleYear} 计算示例：{countryLabel(exampleCountry)} · {sectorLabel(String(negativeExample.industry))}</span>
-          <small>
-            taxsub {finiteNumber(negativeExample.taxsub)!.toLocaleString("zh-CN", { maximumFractionDigits: 2 })} 百万美元
-            · 占毛出口 {(finiteNumber(negativeExample.taxsub)! / finiteNumber(negativeExample.gross_exports)! * 100).toFixed(1)}%
-          </small>
-        </button> : exampleQuery.status === "error" ? (
-          <AsyncStateMessage
-            status="error"
-            error={userFacingRequestError(exampleQuery.error, "负值计算示例加载失败")}
-            onRetry={exampleQuery.retry}
-          />
-        ) : exampleQuery.status === "success" ? (
-          <span className="taxsub-example-status" role="status">当前数据中没有满足展示条件的负值示例。</span>
-        ) : (
-          <span className="taxsub-example-status" role="status">正在加载负值计算示例…</span>
-        )}
-      </div>}
       <div className="decomp-formula"><span className="df-total">{cfg.totalLabel}</span><span className="df-eq">=</span>{cfg.parts.map((part, index) => <span key={part.key}>{index > 0 && <span className="df-plus">+</span>}<span className={`df-term${hover === part.key ? " on" : ""}`} style={hover === part.key ? { color: part.color, borderColor: part.color } : undefined} onMouseEnter={() => setHover(part.key)} onMouseLeave={() => setHover(null)}>{part.label.split(" ")[0]}</span></span>)}</div>
       <div style={{ display: "grid", gridTemplateColumns: compare ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)", gap: 18 }}>
         {panel(rowA, "A", pageA, effSectorA, countryA, sideAQuery)}
