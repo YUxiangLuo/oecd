@@ -1,14 +1,15 @@
-import { describe, expect, test } from "bun:test";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { afterEach, describe, expect, test } from "bun:test";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api } from "./api";
 import { LoginPage } from "./login";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+afterEach(cleanup);
 
-describe("demo mode build (VITE_DEMO_MODE=1)", () => {
-  // demoMode 是 LoginPage 渲染期读取的,可用进程 env 控制;DEMO_PASSWORD 是 login.tsx
-  // 模块级常量(import 时求值),本组测试固定断言代码默认值 gvclab2026——
-  // 运行测试的进程环境不得设置 VITE_DEMO_PASSWORD(它只是构建期变量)。
+describe("demo-mode login UI source behavior", () => {
+  // 这里只验证交互。production/demo 的 Vite 常量替换、定制口令与 tree-shaking
+  // 由 scripts/verify-build-modes.ts 对真实 bundle 验证。
+  // DEMO_PASSWORD 是模块级常量，本组固定断言默认值 gvclab2026；运行单测的
+  // 进程不得设置 VITE_DEMO_PASSWORD。
   const DEMO_ENV = "VITE_DEMO_MODE";
 
   function withDemoEnv<T>(value: string | undefined, run: () => Promise<T>): Promise<T> {
@@ -21,22 +22,14 @@ describe("demo mode build (VITE_DEMO_MODE=1)", () => {
     });
   }
 
-  const inputValue = (renderer: ReactTestRenderer, id: string) =>
-    renderer.root.findByProps({ id }).props.value as string;
+  const inputValue = (id: string) => (document.getElementById(id) as HTMLInputElement).value;
 
   test("default build keeps the form empty and hides quick-role buttons", async () => {
     await withDemoEnv(undefined, async () => {
-      let renderer: ReactTestRenderer | undefined;
-      try {
-        await act(async () => {
-          renderer = create(<LoginPage onLogin={() => {}} />);
-        });
-        expect(inputValue(renderer!, "login-user")).toBe("");
-        expect(inputValue(renderer!, "login-pass")).toBe("");
-        expect(renderer!.root.findAllByProps({ role: "group" })).toHaveLength(0);
-      } finally {
-        if (renderer) await act(async () => renderer?.unmount());
-      }
+      render(<LoginPage onLogin={() => {}} />);
+      expect(inputValue("login-user")).toBe("");
+      expect(inputValue("login-pass")).toBe("");
+      expect(screen.queryByRole("group", { name: "开发演示快捷账号" })).toBeNull();
     });
   });
 
@@ -48,43 +41,24 @@ describe("demo mode build (VITE_DEMO_MODE=1)", () => {
         logins.push({ username, password });
         throw new Error("stop after capture");
       };
-      let renderer: ReactTestRenderer | undefined;
       try {
-        await act(async () => {
-          renderer = create(<LoginPage onLogin={() => {}} />);
-        });
+        render(<LoginPage onLogin={() => {}} />);
         // 默认落在学生身份并预填演示口令,打开即可直接登录。
-        expect(inputValue(renderer!, "login-user")).toBe("student");
-        expect(inputValue(renderer!, "login-pass")).toBe("gvclab2026");
+        expect(inputValue("login-user")).toBe("student");
+        expect(inputValue("login-pass")).toBe("gvclab2026");
 
-        const roleButtons = renderer!.root.findAllByProps({ role: "group" });
-        expect(roleButtons).toHaveLength(1);
-        const teacherButton = renderer!.root.findAllByType("button").find(
-          (b) => b.findAllByType("span").some((s) => s.children.includes("教师身份")),
-        )!;
-        await act(async () => teacherButton.props.onClick());
-        expect(inputValue(renderer!, "login-user")).toBe("teacher");
-        expect(inputValue(renderer!, "login-pass")).toBe("gvclab2026");
+        expect(screen.getByRole("group", { name: "开发演示快捷账号" })).toBeDefined();
+        fireEvent.click(screen.getByRole("button", { name: /教师身份/ }));
+        expect(inputValue("login-user")).toBe("teacher");
+        expect(inputValue("login-pass")).toBe("gvclab2026");
 
         // 提交会把预填的教师凭证原样发给真实登录 API。
-        await act(async () => {
-          await renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} });
-        });
-        expect(logins).toEqual([{ username: "teacher", password: "gvclab2026" }]);
+        fireEvent.submit(document.querySelector("form")!);
+        await waitFor(() => expect(logins).toEqual([{ username: "teacher", password: "gvclab2026" }]));
         // 演示提示向课堂公开口令,并说明可一键切换身份。
-        const hint = renderer!.root.findByProps({ className: "login-hint" });
-        const textOf = (node: unknown): string => {
-          if (typeof node === "string") return node;
-          if (Array.isArray(node)) return node.map(textOf).join("");
-          if (node && typeof node === "object" && "children" in node) {
-            return textOf((node as { children: unknown }).children);
-          }
-          return "";
-        };
-        expect(textOf(hint)).toContain("gvclab2026");
+        expect(document.querySelector(".login-hint")?.textContent).toContain("gvclab2026");
       } finally {
         api.login = original;
-        if (renderer) await act(async () => renderer?.unmount());
       }
     });
   });
@@ -92,35 +66,22 @@ describe("demo mode build (VITE_DEMO_MODE=1)", () => {
 
 describe("login failure presentation", () => {
   test("contains the public login experience in one main landmark", async () => {
-    let renderer: ReactTestRenderer | undefined;
-    try {
-      await act(async () => {
-        renderer = create(<LoginPage onLogin={() => {}} />);
-      });
-      expect(renderer!.root.findAllByType("main")).toHaveLength(1);
-    } finally {
-      if (renderer) await act(async () => renderer?.unmount());
-    }
+    render(<LoginPage onLogin={() => {}} />);
+    expect(screen.getAllByRole("main")).toHaveLength(1);
   });
 
   test("localizes a browser network failure and announces it as an alert", async () => {
     const original = api.login;
     api.login = async () => { throw new TypeError("Failed to fetch"); };
-    let renderer: ReactTestRenderer | undefined;
     try {
-      await act(async () => {
-        renderer = create(<LoginPage onLogin={() => {}} />);
-      });
-      await act(async () => {
-        await renderer!.root.findByType("form").props.onSubmit({ preventDefault() {} });
-      });
+      render(<LoginPage onLogin={() => {}} />);
+      fireEvent.submit(document.querySelector("form")!);
 
-      const alert = renderer!.root.findByProps({ role: "alert" });
-      expect(alert.children.join("")).toContain("登录失败：网络连接中断，请检查连接后重试。");
-      expect(renderer!.root.findByProps({ type: "submit" }).props.disabled).toBe(false);
+      const alert = await screen.findByRole("alert");
+      expect(alert.textContent).toContain("登录失败：网络连接中断，请检查连接后重试。");
+      expect((screen.getByRole("button", { name: "登录" }) as HTMLButtonElement).disabled).toBe(false);
     } finally {
       api.login = original;
-      if (renderer) await act(async () => renderer?.unmount());
     }
   });
 });

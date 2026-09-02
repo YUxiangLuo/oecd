@@ -1,6 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { api } from "./api";
 import {
   DEFAULT_REGRESSION_SETTINGS,
@@ -18,7 +18,7 @@ import {
 import { FamilyMap } from "./regression-teach";
 import type { Step, StepStateApi } from "./types";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+afterEach(cleanup);
 
 const savedRun: SavedRegressionRun = {
   settings: { ...DEFAULT_REGRESSION_SETTINGS },
@@ -120,10 +120,6 @@ function labProps(state: StepStateApi, confirmed?: { run?: SavedRegressionRun; q
   };
 }
 
-function rendererText(renderer: ReactTestRenderer): string {
-  return JSON.stringify(renderer.toJSON());
-}
-
 function relativeLuminance(hex: string): number {
   const channels = hex.match(/[0-9a-f]{2}/gi)?.map((part) => Number.parseInt(part, 16) / 255) ?? [];
   const linear = channels.map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
@@ -215,24 +211,21 @@ describe("regression request identity and accessible request states", () => {
       designCalls += 1;
       return savedRun.design;
     };
-    let renderer: ReactTestRenderer | undefined;
     try {
-      await act(async () => {
-        renderer = create(<RegressionRunLab {...labProps(regressionState())} />);
-        await Promise.resolve();
-      });
-      const tree = rendererText(renderer!);
+      const { container } = render(<RegressionRunLab {...labProps(regressionState())} />);
+      expect((await screen.findByRole("alert")).textContent).toContain("网络连接中断，请检查连接后重试");
+      await waitFor(() => expect(designCalls).toBe(0));
+      const tree = container.textContent ?? "";
       expect(designCalls).toBe(0);
-      expect(tree.match(/\"role\":\"alert\"/g)).toHaveLength(1);
+      expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
       expect(tree).toContain("网络连接中断，请检查连接后重试");
       expect(tree).toContain("当前方程不可用；请先在上方重试回归选项");
       expect(tree).not.toContain("正在生成当前方程");
       expect(tree).not.toContain("正在生成当前模型设计");
       expect(tree).not.toContain("正在读取回归选项");
-      expect(tree).not.toContain('\"role\":\"status\"');
-      expect(tree).not.toContain("aria-busy");
+      expect(container.querySelector('[role="status"]')).toBeNull();
+      expect(container.querySelector("[aria-busy]")).toBeNull();
     } finally {
-      if (renderer) await act(async () => renderer?.unmount());
       api.regressionOptions = originalOptions;
       api.regressionDesign = originalDesign;
     }

@@ -94,6 +94,8 @@ jobs:
         run: bun run build  # build 脚本本身是 tsc -b && vite build,已包含类型检查
       - name: Run frontend unit tests
         run: bun run test:unit
+      - name: Verify production/demo build boundary
+        run: bun run test:build-modes
 
   browser-e2e:
     name: Desktop browser smoke

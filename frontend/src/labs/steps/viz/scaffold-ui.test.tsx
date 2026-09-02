@@ -1,9 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { VizWorkbench } from "./scaffold";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+afterEach(cleanup);
 
 function WorkbenchHarness() {
   const [picked, setPicked] = useState<string[]>([]);
@@ -25,21 +25,13 @@ function WorkbenchHarness() {
 
 describe("visualization workbench country selection", () => {
   test("keeps the page inline after reaching the suggested two-country comparison", async () => {
-    let renderer: ReactTestRenderer | undefined;
-    try {
-      await act(async () => {
-        renderer = create(<WorkbenchHarness />);
-      });
+    render(<WorkbenchHarness />);
+    const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
+    fireEvent.click(checkboxes[0]);
+    fireEvent.click(checkboxes[1]);
 
-      const checkboxes = () => renderer!.root.findAll((node) => node.type === "input" && node.props.type === "checkbox");
-      await act(async () => checkboxes()[0].props.onChange());
-      await act(async () => checkboxes()[1].props.onChange());
-
-      expect(checkboxes().filter((node) => node.props.checked)).toHaveLength(2);
-      expect(renderer!.root.findAll((node) => node.props.role === "dialog")).toHaveLength(0);
-      expect(renderer!.root.findAll((node) => node.props["aria-label"] === "全屏探索：贸易流指标对比")).toHaveLength(1);
-    } finally {
-      if (renderer) await act(async () => renderer?.unmount());
-    }
+    expect(checkboxes.filter((node) => node.checked)).toHaveLength(2);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByLabelText("全屏探索：贸易流指标对比")).toBeDefined();
   });
 });

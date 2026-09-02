@@ -1,10 +1,10 @@
-import { describe, expect, test } from "bun:test";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { afterEach, describe, expect, test } from "bun:test";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { TeacherReport } from "../types";
 import { renderToStaticMarkup } from "react-dom/server";
 import { GradeView, REPORT_FILTER_LABELS, ReportRowAction, reportRowAction } from "./reports";
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+afterEach(cleanup);
 
 const report: TeacherReport = {
   account_id: 7,
@@ -64,22 +64,18 @@ describe("stale teacher report recovery", () => {
       headers: { "Content-Type": "application/json" },
     })) as unknown as typeof fetch;
     let reloads = 0;
-    let renderer: ReactTestRenderer | undefined;
     try {
-      await act(async () => {
-        renderer = create(<GradeView data={report} grader="teacher" onBack={() => {}} onReload={() => { reloads += 1; }} />);
-      });
-      const update = renderer!.root.findAllByType("button").find((node) => node.children.join("") === "更新评阅")!;
-      await act(async () => update.props.onClick());
+      render(<GradeView data={report} grader="teacher" onBack={() => {}} onReload={() => { reloads += 1; }} />);
+      const update = screen.getByRole("button", { name: "更新评阅" }) as HTMLButtonElement;
+      fireEvent.click(update);
 
-      expect(renderer!.root.findByProps({ role: "alert" }).children.join("")).toContain("报告内容已更新");
-      const reload = renderer!.root.findAllByType("button").find((node) => node.children.join("") === "加载最新报告")!;
-      expect(update.props.disabled).toBe(true);
-      await act(async () => reload.props.onClick());
+      expect((await screen.findByRole("alert")).textContent).toContain("报告内容已更新");
+      const reload = screen.getByRole("button", { name: "加载最新报告" });
+      expect(update.disabled).toBe(true);
+      fireEvent.click(reload);
       expect(reloads).toBe(1);
     } finally {
       globalThis.fetch = originalFetch;
-      if (renderer) await act(async () => renderer?.unmount());
     }
   });
 });

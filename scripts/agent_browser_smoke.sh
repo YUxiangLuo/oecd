@@ -36,6 +36,10 @@ agent-browser doctor >/dev/null
 for step in $(seq 1 16); do
   "${ab[@]}" open "$GVCSIM_BASE_URL/?step=$step"
   "${ab[@]}" wait '.step-header-mid h2'
+  # 步骤标题属于同步外壳；指标表、冲击面板等会在后续 API 成功后才挂载。
+  # 必须等网络安静并再跨过两帧渲染，布局断言才覆盖最终异步内容，而非空壳窗口期。
+  "${ab[@]}" wait --load networkidle
+  "${ab[@]}" eval '(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)))))()' >/dev/null
   # 100vh 固定布局下文档级永远不应出现滚动（幻影滚动会卷走顶栏与侧栏）。
   # sr-only 缺坐标、超高未裁剪元素都曾在这里突破布局，逐步断言防回归。
   "${ab[@]}" eval '(() => { const d = document.documentElement; if (d.scrollHeight > d.clientHeight + 1) throw new Error(`document scrolls: ${d.scrollHeight} > ${d.clientHeight}`); return true; })()' >/dev/null

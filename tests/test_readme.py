@@ -33,6 +33,16 @@ def test_ci_executes_the_full_report_and_grading_journey():
     assert "GVCSIM_E2E_TEACHER_PASSWORD" in workflow
 
 
+def test_browser_scroll_guard_waits_for_async_content_and_rendering():
+    smoke = (ROOT / "scripts" / "agent_browser_smoke.sh").read_text()
+    step_loop = smoke.split("for step in $(seq 1 16); do", 1)[1].split("done", 1)[0]
+    shell_ready = step_loop.index("wait '.step-header-mid h2'")
+    network_ready = step_loop.index("wait --load networkidle")
+    render_ready = step_loop.index("requestAnimationFrame")
+    scroll_guard = step_loop.index("document scrolls")
+    assert shell_ready < network_ready < render_ready < scroll_guard
+
+
 def test_wwz_teaching_prompts_keep_tls_as_an_extension():
     step3 = (ROOT / "frontend" / "src" / "labs" / "steps" / "indicator" / "trade.tsx").read_text()
     step7 = (ROOT / "frontend" / "src" / "labs" / "steps" / "viz" / "trade.tsx").read_text()

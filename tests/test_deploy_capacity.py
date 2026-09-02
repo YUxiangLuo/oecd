@@ -92,6 +92,8 @@ def test_deployment_documents_bootstrap_and_separate_lifecycles():
     assert "一次性主机 bootstrap" in deployment
     assert "useradd --system" in deployment
     assert "createuser --pwprompt gvcsim" in deployment
+    assert "必须登录到**实际数据库主机**执行" in deployment
+    assert "不能在另一台 API 主机上照抄" in deployment
     assert "nginx -t" in deployment and "TLS" in deployment
     assert "bun install --frozen-lockfile" in deployment
     assert "gvcsim compute" in deployment and "gvcsim preflight" in deployment

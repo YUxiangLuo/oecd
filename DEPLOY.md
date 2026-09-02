@@ -32,7 +32,7 @@ install -d -o gvcsim -g gvcsim -m 0750 /opt/gvcsim/shared/OECD_ICIO
 install -d -o gvcsim -g gvcsim -m 0700 /opt/gvcsim/shared/backups
 ```
 
-创建独立 PostgreSQL 角色与数据库；按提示生成并妥善保存数据库口令（PostgreSQL 与 API 是否同机均可，连接串在环境文件中给出）：
+创建独立 PostgreSQL 角色与数据库；按提示生成并妥善保存数据库口令。PostgreSQL 与 API 可以不同机，但以下本地 socket 命令必须登录到**实际数据库主机**执行，不能在另一台 API 主机上照抄；若由远程管理终端建库，应显式指定数据库主机并使用对应的管理员认证。应用最终只通过环境文件中的连接串定位数据库：
 
 ```bash
 sudo -u postgres createuser --pwprompt gvcsim
