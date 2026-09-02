@@ -252,7 +252,7 @@ describe("preserved qualified regression result", () => {
       />,
     );
     expect(html).toContain("已由服务器确认");
-    expect(html).toContain("第 16 步将使用的回归结果");
+    expect(html).toContain("第 15 步将使用的回归结果");
     expect(html).not.toContain("正在等待自动保存");
     expect(html).toContain("tariff");
     expect(html).toContain("country_industry");
@@ -277,10 +277,10 @@ describe("preserved qualified regression result", () => {
         onSwitch={() => {}}
       />,
     );
-    expect(pendingHtml).toContain("估计完成，正在保存到第 16 步");
+    expect(pendingHtml).toContain("估计完成，正在保存到第 15 步");
     expect(pendingHtml).toContain("正在等待自动保存");
     expect(pendingHtml).not.toContain("已由服务器确认");
-    expect(pendingHtml).not.toContain("第 16 步将使用的回归结果");
+    expect(pendingHtml).not.toContain("第 15 步将使用的回归结果");
 
     const syncingHtml = renderToStaticMarkup(
       <QualifiedRegressionRunCard
@@ -305,8 +305,8 @@ describe("preserved qualified regression result", () => {
       />,
     );
     expect(failedHtml).toContain('role="alert"');
-    expect(failedHtml).toContain("同步失败；第16步不会在服务器确认前使用");
-    expect(failedHtml).not.toContain("第 16 步将使用的回归结果");
+    expect(failedHtml).toContain("同步失败；第15步不会在服务器确认前使用");
+    expect(failedHtml).not.toContain("第 15 步将使用的回归结果");
   });
 
   test("keeps the compact card inside the supported 1200px workarea", async () => {

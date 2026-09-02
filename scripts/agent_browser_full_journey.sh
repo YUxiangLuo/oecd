@@ -30,7 +30,7 @@ if [[ -n "$artifact_dir" ]]; then
   install -d -m 0750 "$artifact_dir"
 fi
 
-"${student[@]}" open "$GVCSIM_BASE_URL/?step=16"
+"${student[@]}" open "$GVCSIM_BASE_URL/?step=15"
 "${student[@]}" set viewport "$viewport_width" "$viewport_height"
 "${student[@]}" fill '#login-user' "$GVCSIM_E2E_USERNAME"
 "${student[@]}" fill '#login-pass' "$GVCSIM_E2E_PASSWORD"

@@ -1,4 +1,4 @@
-"""步骤11:贸易政策冲击数据接入。
+"""步骤10:贸易政策冲击数据接入。
 
 真实系统应接入 PIIE 中美关税追踪库 / WTO / GTA / OFAC-BIS 清单(见项目
 说明文档 4.2 节)。开发起点阶段提供一份**拟真的演示数据**:以 2017–2020
@@ -655,7 +655,7 @@ def _event_source_status(source_urls: tuple[str, ...], source_complete: bool) ->
 
 
 def events_metadata() -> list[dict]:
-    """事件表的展示视图(步骤11 前端的事件时间线)。"""
+    """事件表的展示视图(步骤10 前端的事件时间线)。"""
     out = []
     for tariff_event in EVENTS:
         sector_codes = set(tariff_event.rates)

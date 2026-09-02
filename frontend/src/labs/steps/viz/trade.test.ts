@@ -3,7 +3,7 @@ import { compositionSegmentColor, NEGATIVE_COMPOSITION_STYLE } from "../../../vi
 import { CAT } from "../../../viz/shared";
 import { eligibleExportCompositionRows, WWZ_READING_GUIDE, WWZ_SEGMENTS } from "./trade";
 
-describe("step 7 export decomposition provenance copy", () => {
+describe("step 6 export decomposition provenance copy", () => {
   test("binds every legend segment to the correct provenance and palette slot", () => {
     expect(WWZ_SEGMENTS.map(({ key, provenance }) => [key, provenance])).toEqual([
       ["DVAex", "domestic"],

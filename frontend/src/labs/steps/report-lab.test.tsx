@@ -20,7 +20,7 @@ function report(state: ClassroomReport["state"]): ClassroomReport {
     markdown: "# report",
     provenance: {
       release_id: "a".repeat(32),
-      session_version: "experiment-session-simple-v2",
+      session_version: "experiment-session-simple-v3",
       generated_at: "2026-08-13T00:00:00Z",
       years: [2020],
       session_fingerprint: "fingerprint",
@@ -37,7 +37,7 @@ function report(state: ClassroomReport["state"]): ClassroomReport {
   };
 }
 
-describe("step 16 report states", () => {
+describe("step 15 report states", () => {
   test("renders draft, pending, and graded feedback distinctly", () => {
     expect(renderToStaticMarkup(<ReportStatus report={report("draft")} />)).toContain("尚未提交");
     expect(renderToStaticMarkup(<ReportStatus report={report("pending")} />)).toContain("等待教师评阅");
@@ -99,29 +99,29 @@ describe("step 16 report states", () => {
 
   test("renders actionable report-gate links", () => {
     const html = renderToStaticMarkup(<GateCard
-      blocked={[{ step: 12, title: "回归实验", missing: ["保存有效回归"] }]}
+      blocked={[{ step: 11, title: "回归实验", missing: ["保存有效回归"] }]}
       onNavigateStep={() => {}}
     />);
-    expect(html).toContain("步骤 12");
+    expect(html).toContain("步骤 11");
     expect(html).toContain("保存有效回归");
     expect(html).toContain("gate-link");
-    expect(html).toContain("继续步骤 12");
+    expect(html).toContain("继续步骤 11");
     expect(html).toContain("查看全部缺项（1）");
   });
 
-  test("keeps the step-16 action local and focuses the first unfinished reflection field", () => {
+  test("keeps the step-15 action local and focuses the first unfinished reflection field", () => {
     const html = renderToStaticMarkup(<GateCard
-      blocked={[{ step: 16, title: "原创分析与反思", missing: ["填写证据解释"] }]}
+      blocked={[{ step: 15, title: "原创分析与反思", missing: ["填写证据解释"] }]}
       onNavigateStep={() => {}}
     />);
     expect(html).toContain("继续填写原创分析");
-    expect(html).not.toContain("继续步骤 16");
+    expect(html).not.toContain("继续步骤 15");
 
     const navigated: number[] = [];
     const focused: string[] = [];
     let scheduled = 0;
     const activated = activateReportGateDestination(
-      16,
+      15,
       (step) => navigated.push(step),
       {
         getElementById: () => null,
@@ -158,7 +158,7 @@ describe("step 16 report states", () => {
         syncNow: () => {},
       }}
       report={null}
-      reportGate={[{ step: 16, title: "原创分析与反思", missing: ["填写证据解释"] }]}
+      reportGate={[{ step: 15, title: "原创分析与反思", missing: ["填写证据解释"] }]}
       sessionStatus="ready"
       sessionUnsynced={false}
       sessionSyncing={false}
@@ -171,10 +171,10 @@ describe("step 16 report states", () => {
 
   test("summarizes and groups a long gate before revealing every item", () => {
     const overview = summarizeReportGate([
-      { step: 12, title: "贸易流回归", missing: ["完成理解题", "保存有效回归"] },
+      { step: 11, title: "贸易流回归", missing: ["完成理解题", "保存有效回归"] },
       { step: 1, title: "数据浏览", missing: ["记录单元格"] },
-      { step: 16, title: "原创分析", missing: ["填写研究问题"] },
-      { step: 3, title: "贸易流指标", missing: ["记录两个国家"] },
+      { step: 15, title: "原创分析", missing: ["填写研究问题"] },
+      { step: 2, title: "贸易流指标", missing: ["记录两个国家"] },
     ]);
     expect(overview.summary).toBe("4 个步骤还有 5 项待补齐");
     expect(overview.next?.step).toBe(1);
@@ -185,8 +185,8 @@ describe("step 16 report states", () => {
 
   test("focuses the destination task heading after a report-gate navigation", () => {
     const calls: unknown[] = [];
-    const found = focusReportGateDestination(12, {
-      getElementById: (id) => id === "step-task-title-12"
+    const found = focusReportGateDestination(11, {
+      getElementById: (id) => id === "step-task-title-11"
         ? { focus: (options) => calls.push(options) }
         : null,
     });

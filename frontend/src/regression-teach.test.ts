@@ -54,7 +54,7 @@ describe("familyVerdict", () => {
     const verdict = familyVerdict(
       "trade",
       { trade: [{ response: live }] },
-      (step) => step === 12 ? { run: { design: saved.design, result: saved.result } } : undefined,
+      (step) => step === 11 ? { run: { design: saved.design, result: saved.result } } : undefined,
     );
     expect(verdict?.state).toBe("negative");
   });
@@ -75,7 +75,7 @@ describe("familyVerdict", () => {
     const verdict = familyVerdict(
       "trade",
       { trade: [{ response: latest }] },
-      (step) => step === 12 ? { run: { design: latest.design, result: latest.result }, qualified_run: { design: qualified.design, result: qualified.result } } : undefined,
+      (step) => step === 11 ? { run: { design: latest.design, result: latest.result }, qualified_run: { design: qualified.design, result: qualified.result } } : undefined,
     );
     expect(verdict?.state).toBe("negative");
   });
@@ -85,7 +85,7 @@ describe("familyVerdict", () => {
     const verdict = familyVerdict(
       "production",
       {},
-      (step) => step === 13 ? { qualified_run: { design: saved.design, result: saved.result } } : undefined,
+      (step) => step === 12 ? { qualified_run: { design: saved.design, result: saved.result } } : undefined,
     );
     expect(verdict?.state).toBe("insufficient");
   });
@@ -121,7 +121,7 @@ describe("student-first regression reading", () => {
   test("puts all four saved families into one report-ready evidence matrix", () => {
     const trade = response("trade", coefficient(-0.02, -0.03, -0.01));
     const html = renderToStaticMarkup(createElement(RegressionEvidenceMatrix, {
-      getStep: (step: number) => step === 12
+      getStep: (step: number) => step === 11
         ? { qualified_run: { design: trade.design, result: trade.result } }
         : undefined,
     }));

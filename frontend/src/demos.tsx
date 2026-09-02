@@ -1,14 +1,14 @@
 /**
- * 步骤3-6 的交互式「计算方法演示」组件。
+ * 步骤2-5 的交互式「计算方法演示」组件。
  *
- * DecompositionDemo(步骤3/4/5):用真实指标数据把总量拆成各分项,
+ * DecompositionDemo(步骤2/3/4):用真实指标数据把总量拆成各分项,
  *   实时校验恒等式(加总 = 毛出口 / 总增加值 / 总生产长度),每项可 hover 看含义。
  *   恒等式口径与后端引擎及公开文献一致:
- *     步骤3 毛出口 = 五类 WWZ 聚合项 + OECD TLS 扩展项 taxsub
- *     步骤4 SVA = 纯国内 + 传统贸易 + 简单GVC + 复杂GVC(WWYZ 2017a)
- *     步骤5 PLv = 各段长度按对应增加值份额的加权平均(WWYZ 2017b;
+ *     步骤2 毛出口 = 五类 WWZ 聚合项 + OECD TLS 扩展项 taxsub
+ *     步骤3 SVA = 纯国内 + 传统贸易 + 简单GVC + 复杂GVC(WWYZ 2017a)
+ *     步骤4 PLv = 各段长度按对应增加值份额的加权平均(WWYZ 2017b;
  *           分项显示为"VA份额×段长度"的贡献值,贡献加总 = 总长度)
- * NetworkCentralityDemo(步骤6):在一个小网络上演示度/介数中心性怎么算出来。
+ * NetworkCentralityDemo(步骤5):在一个小网络上演示度/介数中心性怎么算出来。
  */
 import { useId, useMemo, useRef, useState } from "react";
 import { LabeledControl, ScrollableRegion } from "./a11y";
@@ -37,7 +37,7 @@ type Part = {
   label: string;
   color: string;
   desc: string;
-  /** 加权模式:分项贡献 = row[key] × row[weightKey] / row[weightTotal](见步骤5) */
+  /** 加权模式:分项贡献 = row[key] × row[weightKey] / row[weightTotal](见步骤4) */
   weightKey?: string;
 };
 type DecompCfg = {
@@ -548,7 +548,7 @@ export function DecompositionDemo({
   );
 }
 
-/* ============================ 步骤6:网络中心性演示 ============================ */
+/* ============================ 步骤5:网络中心性演示 ============================ */
 
 type Node = { id: string; x: number; y: number; label: string };
 export type NetworkDemoMode = "degree" | "betweenness" | "closeness";

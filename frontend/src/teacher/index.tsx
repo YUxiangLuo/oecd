@@ -43,7 +43,7 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
         <div className="dash-header">
           <div>
             <h2>{tab === "students" ? "学生与进度" : "报告评阅"}</h2>
-            <p>{tab === "students" ? "创建账号、修改基本资料并查看服务端判定的完成状态" : "批阅学生提交的步骤 16 实验报告"}</p>
+            <p>{tab === "students" ? "创建账号、修改基本资料并查看服务端判定的完成状态" : "批阅学生提交的步骤 15 实验报告"}</p>
           </div>
         </div>
         <div className="teacher-content">

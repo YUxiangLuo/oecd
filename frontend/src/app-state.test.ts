@@ -23,9 +23,10 @@ class MemoryStorage {
 }
 
 describe("application URL state", () => {
-  test("accepts only the fixed 16-step range", () => {
+  test("accepts only the fixed 15-step range", () => {
     expect(stepFromSearch("?step=1")).toBe(1);
-    expect(stepFromSearch("?step=16")).toBe(16);
+    expect(stepFromSearch("?step=15")).toBe(15);
+    expect(stepFromSearch("?step=16")).toBeNull();
     for (const search of ["", "?step=0", "?step=17", "?step=1.5", "?step=bad"]) {
       expect(stepFromSearch(search)).toBeNull();
     }

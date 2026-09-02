@@ -15,7 +15,7 @@ function response(session: ExperimentSession = emptySession()): SessionSaveRespo
   return {
     session,
     updated_at: "2026-08-13T00:00:00Z",
-    completion: { completed: [], completed_count: 0, total: 16, steps: [] },
+    completion: { completed: [], completed_count: 0, total: 15, steps: [] },
     report_gate: [],
     material_gate: [],
   };
@@ -36,7 +36,7 @@ describe("session helpers", () => {
       setItem: (key: string, value: string) => { values.set(key, value); },
       removeItem: (key: string) => { values.delete(key); },
     };
-    const draft = patchSessionStep(emptySession(), 16, { research_question: "未保存问题" });
+    const draft = patchSessionStep(emptySession(), 15, { research_question: "未保存问题" });
 
     saveAuthSessionRecovery(storage, "student-a", draft, "2026-08-12T00:00:00Z");
     expect(readAuthSessionRecovery(storage, "student-a")).toEqual({
@@ -147,7 +147,7 @@ describe("session helpers", () => {
     const errors: unknown[] = [];
     const bases: Array<string | null> = [];
     const queue = new SessionSaveQueue((session, base) => {
-      values.push(String(readStep<Record<string, unknown>>(session, 16)?.research_question));
+      values.push(String(readStep<Record<string, unknown>>(session, 15)?.research_question));
       bases.push(base);
       const request = deferred<SessionSaveResponse>();
       requests.push(request);
@@ -157,9 +157,9 @@ describe("session helpers", () => {
       onSyncing: () => {}, onUnsynced: () => {},
     });
     queue.setBaseUpdatedAt("2026-08-12T00:00:00Z");
-    queue.enqueue(patchSessionStep(emptySession(), 16, { research_question: "first" }));
+    queue.enqueue(patchSessionStep(emptySession(), 15, { research_question: "first" }));
     const firstSave = queue.drain();
-    const latest = patchSessionStep(emptySession(), 16, { research_question: "latest" });
+    const latest = patchSessionStep(emptySession(), 15, { research_question: "latest" });
     queue.enqueue(latest);
     requests[0].reject(new Error("offline"));
     await expect(firstSave).rejects.toThrow("offline");

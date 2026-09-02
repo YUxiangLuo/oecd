@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { LabeledControl, ScrollableRegion } from "../../a11y";
 import { api } from "../../api";
 import { FullscreenPanel } from "../../fullscreen-panel";
-import type { DbMeta, DbSlice, DbTableKind, QuizCompletionState, StepStateApi } from "../../types";
+import type { DbMeta, DbSlice, DbTableKind, Meta, QuizCompletionState, StepStateApi } from "../../types";
 import { userFacingRequestError } from "../../user-facing-error";
 import { countryLabel, sectorLabel } from "../../viz";
 import { fmtDb, Pager, useAsync } from "../shared";
@@ -46,9 +46,9 @@ const HOW_TO_READ: Record<DbTableKind, string> = {
 };
 
 const ACCOUNT_HELP: Record<string, string> = {
-  TLS: "产品税减补贴。为负表示该账户合计为净补贴；步骤3 的 taxsub 是其沿投入产出链传导后的出口含量。",
-  VA: "增加值：劳动报酬、资本回报等本地创造的价值，是步骤4生产活动分解的总来源。",
-  OUT: "总产出。两种完整恒等式为：按行 OUT = Z 行和 + Y 行和；按列 OUT = Z 列和 + VA + TLS。步骤2会检验这些会计恒等式。",
+  TLS: "产品税减补贴。为负表示该账户合计为净补贴；步骤2 的 taxsub 是其沿投入产出链传导后的出口含量。",
+  VA: "增加值：劳动报酬、资本回报等本地创造的价值，是步骤3生产活动分解的总来源。",
+  OUT: "总产出。两种完整恒等式为：按行 OUT = Z 行和 + Y 行和；按列 OUT = Z 列和 + VA + TLS。系统发布前已自动校验这些会计恒等式并披露诊断。",
 };
 
 /** OECD ICIO 最终需求类别缩写 → 中文名(Y 表列名形如 USA_HFCE:目的国_需求类别) */
@@ -548,7 +548,17 @@ export function DbSliceTable({
   );
 }
 
-export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
+export function ReleaseIntegrityStatus({ meta }: { meta: Meta | null }) {
+  if (meta?.dataset?.integrity?.status !== "passed") return null;
+  return (
+    <div className="integrity-status" role="status">
+      <b>当前数据已通过系统自动完整性验证</b>
+      <span>文件哈希、表结构、键覆盖与来源绑定均已验证；数值、经济含义与研究设计诊断由系统保留并在报告中披露，无需学生另做校验。</span>
+    </div>
+  );
+}
+
+export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>; releaseMeta: Meta | null }) {
   const {
     data: meta,
     error: metaError,
@@ -679,6 +689,7 @@ export function DbLab({ state }: { state: StepStateApi<DbStepState> }) {
 
   return (
     <div>
+      <ReleaseIntegrityStatus meta={releaseMeta} />
       <div className="db-summary">
         <span>原始年份 {meta.years[0]}-{meta.years.at(-1)}</span>
         <span>{meta.countries.includes("ROW") ? meta.countries.length - 1 : meta.countries.length} 个具名经济体 + ROW 剩余地区账户</span>

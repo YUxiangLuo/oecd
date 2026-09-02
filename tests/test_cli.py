@@ -15,6 +15,7 @@ from gvcsim.cli import main
         ["regress"],
         ["report"],
         ["compute", "--recover-pending"],
+        ["compute", "--allow-qc-override"],
     ],
 )
 def test_removed_complexity_commands_and_options_are_not_registered(monkeypatch, command):
@@ -24,24 +25,23 @@ def test_removed_complexity_commands_and_options_are_not_registered(monkeypatch,
     assert exc.value.code == 2
 
 
-def test_compute_help_discloses_non_overridable_shock_qc(monkeypatch, capsys):
+def test_compute_help_has_no_diagnostic_override(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["gvcsim", "compute", "--help"])
     with pytest.raises(SystemExit) as exc:
         main()
     assert exc.value.code == 0
     output = " ".join(capsys.readouterr().out.split())
-    assert "冲击 schema、来源与语义 fatal 永不可 override" in output
+    assert "override" not in output
 
 
-def test_compute_shock_qc_failure_does_not_recommend_override(monkeypatch):
+def test_compute_integrity_failure_recommends_fixing_input(monkeypatch):
     error = pipeline.QualityGateError(
         "shock_panel",
-        {"fatal": ["bad shock"], "publishable": False, "override": False},
-        override_allowed=False,
+        {"passed": False, "failures": ["bad shock"]},
     )
-    monkeypatch.setattr(sys, "argv", ["gvcsim", "compute", "--allow-qc-override"])
+    monkeypatch.setattr(sys, "argv", ["gvcsim", "compute"])
     monkeypatch.setattr(pipeline, "run", lambda *_args, **_kwargs: (_ for _ in ()).throw(error))
-    with pytest.raises(SystemExit, match="不可 override；请修复输入"):
+    with pytest.raises(SystemExit, match="请修复输入完整性"):
         main()
 
 

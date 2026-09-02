@@ -66,7 +66,7 @@ def get_session(user: dict = Depends(require_student)):
 
 
 class QuizSubmitRequest(BaseModel):
-    step: int = Field(ge=1, le=15)
+    step: int = Field(ge=1, le=14)
     version: str = Field(min_length=1, max_length=80)
     answers: dict[str, str]
 

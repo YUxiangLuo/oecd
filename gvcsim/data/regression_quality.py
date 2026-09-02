@@ -32,7 +32,7 @@ from gvcsim.shocks import (
     TREATED_THRESHOLD,
 )
 
-REGRESSION_INPUT_QC_CONTRACT_VERSION = 2
+REGRESSION_INPUT_QC_CONTRACT_VERSION = 4
 REGRESSION_INPUT_QC_SEVERITIES = ("ok", "fatal")
 REGRESSION_INPUT_QC_FILE = "qc_regression_inputs.json"
 BASE_GVC_COLUMN = "3_VA_GVC_share"
@@ -54,7 +54,12 @@ REGRESSION_INPUT_CHECK_SPECS = (
     RegressionInputCheckSpec(
         "panel_keys_years_clusters",
         "structure",
-        "Both panel granularities have nonblank identifiers, finite integral declared years, unique entity-year keys, stable entity-cluster mappings, and at least two entities, times, and clusters.",
+        "Both panel granularities have nonblank identifiers, finite integral declared years, unique entity-year keys, and stable entity-cluster mappings.",
+    ),
+    RegressionInputCheckSpec(
+        "required_runtime_fields",
+        "integrity",
+        "Every configured outcome, shock, treatment, control, and interaction field required by runtime routes exists. Required values are true finite numbers under explicit structural-null policies, and treatment indicators are exact 0/1.",
     ),
     RegressionInputCheckSpec(
         "configured_outcomes",
@@ -108,7 +113,7 @@ def _panel_contract_metadata() -> dict:
 
 
 def regression_input_qc_contract_metadata() -> dict:
-    """Return the exact supported regression-input QC v1 contract."""
+    """Return the exact supported regression-input diagnostic contract."""
     shock_fields = sorted({column for pair in SHOCK_SPECS.values() for column in pair} | set(CONTEMPORANEOUS_COLUMNS))
     return {
         "version": REGRESSION_INPUT_QC_CONTRACT_VERSION,
@@ -118,6 +123,7 @@ def regression_input_qc_contract_metadata() -> dict:
                 "name": spec.name,
                 "kind": spec.kind,
                 "failure_severity": "fatal",
+                "publication_blocking": spec.kind in {"structure", "integrity"},
                 "description": spec.description,
             }
             for spec in REGRESSION_INPUT_CHECK_SPECS
@@ -179,6 +185,11 @@ def regression_input_qc_contract_metadata() -> dict:
                 "shock_treatment_controls_nonnull_finite; outcomes_allow_null_complete_case; "
                 "interaction_moderator_structural_nulls_skipped_when_freezing_entity_baseline; "
                 "nonnull_values_must_be_finite_numeric"
+            ),
+            "runtime_field_integrity": (
+                "all_configured_fields_present; nonnull_outcomes_and_interaction_moderator_true_finite_numeric; "
+                "shock_treatment_controls_nonnull_true_finite_numeric_except_exact_first_year_growth_nulls; "
+                "treatment_indicators_exact_binary"
             ),
             "outcome_variance": (
                 "positive_finite_on_no_control_outcome_complete_case_and_canonical_tariff_interaction_"
@@ -349,18 +360,71 @@ def _panel_key_check(frames: dict[str, pd.DataFrame], years: list[int]) -> dict:
         mapping = frame.groupby(spec["entity"], dropna=False)[spec["cluster"]].nunique(dropna=False)
         if (mapping > 1).any():
             problems.append(f"{granularity}:entity_maps_multiple_clusters")
-        counts = {
-            "entities": int(frame[spec["entity"]].nunique()),
-            "times": int(pd.Series(year_values[integral]).nunique()),
-            "clusters": int(frame[spec["cluster"]].nunique()),
-        }
-        if counts["entities"] < 2 or counts["clusters"] < 2 or counts["times"] < 2:
-            problems.append(f"{granularity}:inadequate_counts={counts}")
     return _check(
         "panel_keys_years_clusters",
         not problems,
         f"panels={len(frames)}; years={years}; violations={len(problems)}"
         + (f"; {'; '.join(problems)}" if problems else ""),
+    )
+
+
+def _required_runtime_field_integrity(root: Path, frames: dict[str, pd.DataFrame]) -> dict:
+    contract = regression_input_qc_contract_metadata()
+    field_contract = contract["fields"]
+    shock_fields = list(field_contract["shock_and_treatment"])
+    control_fields = list(field_contract["controls"])
+    baseline = str(field_contract["interaction_baseline"])
+    treatment_fields = {treated for _shock, treated in SHOCK_SPECS.values()} | {"treated_contemporaneous"}
+    problems: list[str] = []
+    checked = 0
+
+    for granularity, panel_spec in contract["panels"].items():
+        frame = frames[granularity]
+        outcomes = list(panel_spec["outcomes"])
+        required = list(dict.fromkeys([*outcomes, *shock_fields, *control_fields, baseline]))
+        missing = sorted(set(required) - set(frame.columns))
+        if missing:
+            problems.append(f"{granularity}:missing={missing}")
+            continue
+        for column in required:
+            allow_null = column in outcomes or column == baseline or column in STRUCTURAL_GROWTH_FIELDS
+            values, invalid = _finite_numeric(frame[column], allow_null=allow_null)
+            if invalid:
+                problems.append(f"{granularity}:{column}_invalid={invalid}")
+            if column in STRUCTURAL_GROWTH_FIELDS and not _growth_null_policy_valid(frame, column):
+                problems.append(f"{granularity}:{column}_first_year_null_policy_invalid")
+            if column in treatment_fields and not np.isin(values, [0.0, 1.0]).all():
+                problems.append(f"{granularity}:{column}_not_binary")
+            checked += len(frame)
+
+    source_specs: tuple[tuple[str, pd.DataFrame, list[str], frozenset[str]], ...] = (
+        ("controls_country", _read_csv(root, "controls_country.csv"), control_fields, STRUCTURAL_GROWTH_FIELDS),
+        (
+            "shock_artifact",
+            _read_csv(root, "demo_trade_war_tariffs.csv"),
+            shock_fields,
+            frozenset(),
+        ),
+    )
+    for label, frame, fields, nullable_fields in source_specs:
+        missing = sorted(set(fields) - set(frame.columns))
+        if missing:
+            problems.append(f"{label}:missing={missing}")
+            continue
+        for column in fields:
+            values, invalid = _finite_numeric(frame[column], allow_null=column in nullable_fields)
+            if invalid:
+                problems.append(f"{label}:{column}_invalid={invalid}")
+            if column in nullable_fields and not _growth_null_policy_valid(frame, column):
+                problems.append(f"{label}:{column}_first_year_null_policy_invalid")
+            if column in treatment_fields and not np.isin(values, [0.0, 1.0]).all():
+                problems.append(f"{label}:{column}_not_binary")
+            checked += len(frame)
+
+    return _check(
+        "required_runtime_fields",
+        not problems,
+        f"checked_values={checked}; violations={len(problems)}" + (f"; {'; '.join(problems)}" if problems else ""),
     )
 
 
@@ -1001,7 +1065,7 @@ def _fixed_pretreatment_check(root: Path, frames: dict[str, pd.DataFrame], years
 
 
 def recompute_regression_input_checks(root: Path, *, expected_years: list[int]) -> list[dict]:
-    """Recompute all regression-input QC v1 checks from persisted release files."""
+    """Recompute all regression-input checks from persisted release files."""
     years = sorted(expected_years)
     if not years or any(type(year) is not int for year in years):
         raise ValueError("regression input QC expected_years must be a nonempty integer array")
@@ -1012,6 +1076,7 @@ def recompute_regression_input_checks(root: Path, *, expected_years: list[int]) 
         # Persisted schema/key integrity remains a full-artifact claim. Every design-level
         # estimability claim below consumes the exact runtime-default filtered sample.
         _panel_key_check(frames, years),
+        _required_runtime_field_integrity(root, frames),
         _outcome_check(sampled_frames, excluded_rows=excluded_rows),
         _shock_control_check(root, frames, sampled_frames=sampled_frames),
         _timeline_check(sampled_frames),
@@ -1028,8 +1093,11 @@ def write_regression_input_qc(root: Path, *, expected_years: list[int]) -> tuple
         json.dumps(checks, ensure_ascii=False, indent=2, allow_nan=False) + "\n",
         encoding="utf-8",
     )
-    if not summary["publishable"]:
-        raise RegressionInputQualityError(f"regression input semantic QC failed: {summary['fatal']}")
+    integrity_failures = [
+        check["name"] for check in checks if check["kind"] in {"structure", "integrity"} and not check["passed"]
+    ]
+    if integrity_failures:
+        raise RegressionInputQualityError(f"regression input integrity checks failed: {integrity_failures}")
     return checks, summary
 
 

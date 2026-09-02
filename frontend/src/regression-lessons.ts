@@ -28,10 +28,10 @@ interface RegressionLesson {
 }
 
 export const FAMILY_STEPS: Record<RegressionOutcome, number> = {
-  trade: 12,
-  production: 13,
-  length: 14,
-  network: 15,
+  trade: 11,
+  production: 12,
+  length: 13,
+  network: 14,
 };
 
 export const REGRESSION_QUESTION =
@@ -40,55 +40,55 @@ export const REGRESSION_QUESTION =
 export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
   trade: {
     outcome: "trade",
-    step: 12,
+    step: 11,
     metric: "课程 FVA 份额（纯 VA FVA / VA+TLS 毛出口；非 OECD EXGR_FVASH）",
     shortMetric: "课程 FVA 份额",
     family: "贸易流",
     measure: "出口对外国投入的依赖",
     unit: "百分点",
-    priorStep: 3,
+    priorStep: 2,
     priorLabel: "GVC 总贸易流分解指标",
     focus: "本步看贸易壁垒有没有改变出口对外国投入的依赖",
     learnThis: "先用统一处理时点的四格建立 DID 直觉，再看实际分批处理：系统逐 cohort、逐时期比较，并只让从未处理或截至比较期尚未处理的对象进入对照。",
-    definition: "它表示一单位账户闭合毛出口中，有多少纯增加值由所有外国直接与间接上游生产者创造。TLS 单列，所以它不是 OECD 官方 EXGR_FVASH。步骤 12–15 使用同一比较框架，本步看贸易流指标。",
+    definition: "它表示一单位账户闭合毛出口中，有多少纯增加值由所有外国直接与间接上游生产者创造。TLS 单列，所以它不是 OECD 官方 EXGR_FVASH。步骤 11–14 使用同一比较框架，本步看贸易流指标。",
     downMeaning: "负向变化与外国增加值依赖下降一致，但不能单独证明生产已经回流。",
     upMeaning: "正向变化与外国增加值依赖上升一致，但仍需结合不确定性和识别假设。",
     caution: "份额按百分点读。全球投入链会把政策传给未直接处理对象，no-interference/SUTVA 不能自动成立；2018–2020 又与 COVID-19 重叠，年份效应不能吸收国家×行业异质疫情冲击。不要和长度、网络系数比大小。",
     howToRead: "先读效应大小和 95% 区间，再判断方向是否确定。区间未跨 0 也只是这一项结果的统计证据，不能跳过识别假设；区间跨 0 就记「当前证据看不出方向」，不是零效应。",
-    writeDown: "记下本步方向（升 / 降 / 看不出）和单位（百分点），留到第 16 步和另外三类并读。",
+    writeDown: "记下本步方向（升 / 降 / 看不出）和单位（百分点），留到第 15 步和另外三类并读。",
     dontClaim: "不要写成「已经证明生产回流」。FVA 下降只说明出口里外国投入占比相对下降。",
     guidedExperiment: "检查 cohort 数量、对照组构成与 no-interference 假设；同期出口、增加值和产业份额可能是处理后变量，不能当作普通遗漏变量控制。",
   },
   production: {
     outcome: "production",
-    step: 13,
+    step: 12,
     metric: "复杂 GVC 生产份额（多次跨境活动的 SVA 构成）",
     shortMetric: "复杂 GVC 份额",
     family: "生产",
     measure: "多次跨境活动的构成",
     unit: "百分点",
-    priorStep: 4,
+    priorStep: 3,
     priorLabel: "GVC 生产分解指标",
     focus: "本步看贸易壁垒有没有改变多次跨境活动在 SVA 中的构成",
-    learnThis: "比较方式和步骤 12 相同，换的是指标。本步看多次跨境实现的增加值构成是否变化；它不是规模、韧性或嵌入深度的通用标尺。",
+    learnThis: "比较方式和步骤 11 相同，换的是指标。本步看多次跨境实现的增加值构成是否变化；它不是规模、韧性或嵌入深度的通用标尺。",
     definition: "它衡量增加值经过多次跨境生产后被最终吸收的比例。默认比较方式和上一步相同，本步看的是生产分解这一类指标。",
     downMeaning: "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
     upMeaning: "SVA 中复杂 GVC 增加值份额提高；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
     caution: "区间跨过 0 是「看不出方向」，不是零效应。投入链外溢和贸易转移会污染对照；cohort-aware 主结果当前不发布交互估计。",
-    howToRead: "「看不出」是合法结论，不是这步失败。不要拿步骤 12 的 FVA 系数代替本步。",
-    writeDown: "和步骤 12 并排记：谁动了、谁看不出。两步单位都是百分点，仍不要比谁的数字更大。",
+    howToRead: "「看不出」是合法结论，不是这步失败。不要拿步骤 11 的 FVA 系数代替本步。",
+    writeDown: "和步骤 11 并排记：谁动了、谁看不出。两步单位都是百分点，仍不要比谁的数字更大。",
     dontClaim: "不要把区间过 0 写成「冲击没有影响」。",
     guidedExperiment: "选做：先把比较方式切换为“连续强度 TWFE（描述性）”，再打开“冲击 × 处理前 GVC”比较条件关联；该交互不是 cohort-aware ATT 异质性估计。",
   },
   length: {
     outcome: "length",
-    step: 14,
+    step: 13,
     metric: "前向 GVC 生产长度（PLv_GVC）",
     shortMetric: "跨境生产长度",
     family: "长度",
     measure: "生产链条有多长",
     unit: "生产环节长度单位",
-    priorStep: 5,
+    priorStep: 4,
     priorLabel: "GVC 长度分解指标",
     focus: "本步看贸易壁垒有没有改变跨境生产链条的长短",
     learnThis: "本步的单位不是百分点。并读只看方向和区间是否过 0，不能和份额的系数相减或比大小。",
@@ -103,13 +103,13 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
   },
   network: {
     outcome: "network",
-    step: 15,
+    step: 14,
     metric: "全正边二值网络介数（探索性拓扑基准）",
     shortMetric: "全正边二值介数",
     family: "网络",
     measure: "节点的拓扑位置",
     unit: "中心性原始单位，并补充标准差单位",
-    priorStep: 6,
+    priorStep: 5,
     priorLabel: "全球生产网络指标",
     focus: "本步探索贸易壁垒出现后，这套全正边二值编码中的拓扑位置是否变化",
     learnThis: "介数把微小正边与大额边视为等长，且当前没有边阈值敏感性检验。它描述一套拓扑位置，不是出口规模、经济瓶颈，也不是与前三类主指标等价的政策终点。",
@@ -170,7 +170,7 @@ export function nextRegressionFamily(outcome: RegressionOutcome) {
   return index >= 0 ? REGRESSION_FAMILIES[index + 1] ?? null : null;
 }
 
-/** 给学生可抄进第 16 步的一句话；不把点估计说成因果证明。 */
+/** 给学生可抄进第 15 步的一句话；不把点估计说成因果证明。 */
 export function reportTakeaway(outcome: RegressionOutcome, direction: ReadingDirection, effect: string): string {
   const metric = REGRESSION_LESSONS[outcome].shortMetric;
   if (direction === "negative") {

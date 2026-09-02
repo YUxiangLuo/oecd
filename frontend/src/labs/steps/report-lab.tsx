@@ -57,7 +57,7 @@ export function focusReportGateDestination(
   return true;
 }
 
-/** Step 16 is already mounted: return the student to the first unfinished writing field. */
+/** Step 15 is already mounted: return the student to the first unfinished writing field. */
 export function focusReportReflection(root: ReportGateFocusRoot = document): boolean {
   const incomplete = root.querySelector?.(REPORT_REFLECTION_INCOMPLETE_SELECTOR) as Pick<HTMLElement, "focus"> | null | undefined;
   const target = incomplete ?? root.getElementById(REPORT_REFLECTION_TITLE_ID);
@@ -73,18 +73,18 @@ export function activateReportGateDestination(
   scheduler: AnimationFrameScheduler = window,
 ): boolean {
   if (step <= 0) return false;
-  if (step === 16) return focusReportReflection(root);
+  if (step === 15) return focusReportReflection(root);
   onNavigateStep(step);
   scheduler.requestAnimationFrame(() => { focusReportGateDestination(step, root); });
   return true;
 }
 
 const REPORT_GATE_STAGES = [
-  { label: "数据接入", first: 1, last: 2 },
-  { label: "指标计算", first: 3, last: 6 },
-  { label: "可视化分析", first: 7, last: 10 },
-  { label: "回归设计与建模", first: 11, last: 15 },
-  { label: "实验闭环", first: 16, last: 16 },
+  { label: "数据接入", first: 1, last: 1 },
+  { label: "指标计算", first: 2, last: 5 },
+  { label: "可视化分析", first: 6, last: 9 },
+  { label: "回归设计与建模", first: 10, last: 14 },
+  { label: "实验闭环", first: 15, last: 15 },
 ] as const;
 
 function reportGateStage(step: number): string {
@@ -130,7 +130,7 @@ export function GateCard({ blocked, onNavigateStep }: { blocked: ReportGateItem[
         </div>
         {next.step > 0 && (
           <button type="button" className="primary report-gate-next-button" onClick={() => goToStep(next.step)}>
-            {next.step === 16 ? "继续填写原创分析" : `继续步骤 ${next.step}`}
+            {next.step === 15 ? "继续填写原创分析" : `继续步骤 ${next.step}`}
           </button>
         )}
       </div>

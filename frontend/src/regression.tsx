@@ -776,26 +776,26 @@ export function QualifiedRegressionRunCard({
   const statusLabel = cardState === "confirmed"
     ? "已由服务器确认"
     : cardState === "pending"
-      ? "估计完成，正在保存到第 16 步"
+      ? "估计完成，正在保存到第 15 步"
       : cardState === "failed"
         ? "估计完成，但保存失败"
         : "无效的本地回归快照";
   const heading = cardState === "confirmed"
-    ? "第 16 步将使用的回归结果"
+    ? "第 15 步将使用的回归结果"
     : cardState === "pending" || cardState === "failed"
       ? "正在确认这份回归结果"
-      : "第 16 步不会使用的回归结果";
+      : "第 15 步不会使用的回归结果";
   const qualificationCopy = !qualified
-    ? "这份结果不再满足可报告门槛；第 16 步服务端不会使用它。"
+    ? "这份结果不再满足可报告门槛；第 15 步服务端不会使用它。"
     : serverConfirmed
       ? `服务器已确认这份结果；结果状态为“${regressionStatusLabel(saved.result.status)}”。`
       : sessionSyncError
-        ? "同步失败；第16步不会在服务器确认前使用"
+        ? "同步失败；第15步不会在服务器确认前使用"
         : sessionSyncing
-          ? "估计已经完成，系统正在把完全相同的结果保存到服务器；确认后才会交给第 16 步。"
+          ? "估计已经完成，系统正在把完全相同的结果保存到服务器；确认后才会交给第 15 步。"
           : sessionUnsynced
-            ? "估计已经完成，正在等待自动保存；服务器确认前第 16 步不会使用。"
-            : "估计已经完成，但服务器尚未确认；第 16 步暂不使用。";
+            ? "估计已经完成，正在等待自动保存；服务器确认前第 15 步不会使用。"
+            : "估计已经完成，但服务器尚未确认；第 15 步暂不使用。";
   return (
     <details className={`qualified-run-card ${cardState}`}>
       <summary className="qualified-run-summary">
@@ -1176,7 +1176,7 @@ export function RegressionRunLab({
         )}
         <details className="advanced-settings">
           <summary>换冲击、方法或样本口径（选做）</summary>
-          <p className="muted">{lesson.guidedExperiment} 三类冲击的支持度不同，见步骤 11；本步主路径默认关税，是因为它通常能给出可报告估计。</p>
+          <p className="muted">{lesson.guidedExperiment} 三类冲击的支持度不同，见步骤 10；本步主路径默认关税，是因为它通常能给出可报告估计。</p>
           <div className="model-controls">
             <div className="model-control"><span className="model-control-label">比较方式</span><Pills label="估计方法" options={options?.methods ?? []} value={method} onChange={(value) => setSetting("method", value)} labelMap={methodLabels} disabled={settingsDisabled} /></div>
             <div className="model-control"><span className="model-control-label">粒度</span><Pills label="分析粒度" options={allowedGranularities} value={effectiveGranularity} onChange={(value) => setSetting("granularity", value)} labelMap={options?.granularity_labels} disabled={settingsDisabled} /></div>
@@ -1218,7 +1218,7 @@ export function RegressionRunLab({
 
       {method === "did" && (
         <details className={`reg-compare-card${outcome === "trade" ? " numeric" : ""}`} open={outcome === "trade"}>
-          <summary>{outcome === "trade" ? "步骤 12 · 用四格数字理解比较" : "比较方法与步骤 12 相同（需要时展开复习）"}</summary>
+          <summary>{outcome === "trade" ? "步骤 11 · 用四格数字理解比较" : "比较方法与步骤 11 相同（需要时展开复习）"}</summary>
           <div>
             <p>{comparisonExplanation(method)}</p>
             <p className="muted">{lesson.howToRead}</p>
@@ -1284,7 +1284,7 @@ export function RegressionRunLab({
               <SiblingContrast current={outcome} history={history} getStep={getStep} />
 
               <section className="reg-section-card">
-                <span className="reg-section-step">3 · 用图复核，并留到第 16 步和另外三类指标并读</span>
+                <span className="reg-section-step">3 · 用图复核，并留到第 15 步和另外三类指标并读</span>
                 {event ? (
                   <>
                     <EventStudyChart coefs={split?.eventMain ?? []} notes={result.result.notes} title="主政策变化的动态路径" seriesLabel="主效应 βₖ" pretrend={result.result.diagnostics.pretrend} pretrendDiagnostics={result.result.diagnostics} interaction={result.design.interaction} eventSupport={result.result.event_support} globalSupport={result.result.support} globalStatus={result.result.status} scale={display.scale} unit={display.unit} />

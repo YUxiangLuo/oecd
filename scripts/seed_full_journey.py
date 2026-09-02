@@ -130,9 +130,9 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
     year = max(years)
 
     session = empty_session()
-    session["steps"] = {str(step): make_record({"quiz": quizzes.correct_quiz(step)}) for step in range(1, 16)}
+    session["steps"] = {str(step): make_record({"quiz": quizzes.correct_quiz(step)}) for step in range(1, 15)}
     session["steps"]["1"]["data"]["observation"] = _step_one_observation(base_url, token, year, left, right)
-    for step in range(3, 11):
+    for step in range(2, 10):
         session["steps"][str(step)]["data"]["compared"] = [left, right]
 
     events_payload = _request_json(base_url, "GET", "/api/shocks/events", token=token, timeout=20.0)
@@ -148,7 +148,7 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
             selected[shock_type] = name
     if not selected:
         raise RuntimeError("active release has no selectable shock events")
-    session["steps"]["11"]["data"].update(
+    session["steps"]["10"]["data"].update(
         {"viewed_shock_types": list(selected), "viewed_events": list(selected.values())}
     )
 
@@ -174,7 +174,7 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
         "weightMode": "fixed_pretreatment",
     }
     settings_by_outcome: dict[str, dict[str, Any]] = {}
-    for step, outcome in ((12, "trade"), (13, "production"), (14, "length"), (15, "network")):
+    for step, outcome in ((11, "trade"), (12, "production"), (13, "length"), (14, "network")):
         response = _request_json(
             base_url,
             "POST",
@@ -198,7 +198,7 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
         settings_by_outcome[outcome] = dict(stored_settings)
 
     session["shared"] = {"regression_settings": make_record(settings_by_outcome)}
-    session["steps"]["16"] = make_record(
+    session["steps"]["15"] = make_record(
         {
             "research_question": "同一套关税冲击后，贸易流、生产、长度和网络指标分别怎样变化？",
             "evidence_interpretation": (
@@ -220,8 +220,8 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
         payload={"session": session, "base_updated_at": workspace.get("updated_at")},
     )
     completion = saved.get("completion")
-    if not isinstance(completion, dict) or completion.get("completed_count") != 15:
-        raise RuntimeError("server did not confirm all Steps 1-15 after full-journey seed")
+    if not isinstance(completion, dict) or completion.get("completed_count") != 14:
+        raise RuntimeError("server did not confirm quiz completion for Steps 1-14 before report generation")
     if saved.get("report_gate") != [] or saved.get("material_gate") != []:
         raise RuntimeError(
             "server report gate remained blocked: " + json.dumps(saved.get("report_gate"), ensure_ascii=False)

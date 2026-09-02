@@ -91,7 +91,7 @@
 .funnel-point:focus { outline: none; }
 .funnel-point:focus .funnel-hit { stroke: #1b1f2b; stroke-width: 2.5; fill: rgba(255,255,255,.7); }
 
-/* ---------- 步骤12–15 回归工作台 ---------- */
+/* ---------- 步骤11–14 回归工作台 ---------- */
 
 .section-head {
   display: flex; align-items: center; gap: 8px; margin: 26px 0 14px;
@@ -133,7 +133,7 @@
 }
 .benchmark-box b { color: #2a3040; font-variant-numeric: tabular-nums; }
 
-/* ---------- 步骤4-7 交互式计算演示(demos.tsx) ---------- */
+/* ---------- 步骤2-5 交互式计算演示(demos.tsx) ---------- */
 .demo-card {
   background: #fff; border: 1px solid #e7e9f0; border-radius: 14px;
   padding: 18px 20px; margin-bottom: 14px;

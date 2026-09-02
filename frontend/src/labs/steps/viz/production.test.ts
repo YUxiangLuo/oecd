@@ -3,7 +3,7 @@ import { NEGATIVE_COMPOSITION_STYLE, sortCompositionRows } from "../../../viz/ex
 import { CAT } from "../../../viz/shared";
 import { complexGvcRankRows, eligibleProductionCompositionRows, PROD_SEGMENTS, PRODUCTION_LADDER_GUIDE, PRODUCTION_LADDER_SORT, productionIndustryRequestKey } from "./production";
 
-describe("step 8 production ladder reading contract", () => {
+describe("step 7 production ladder reading contract", () => {
   test("binds actual segment names to the rendered palette", () => {
     expect(PROD_SEGMENTS.map(({ key, colorName, color }) => [key, colorName, color])).toEqual([
       ["1_VA_D", "蓝色", CAT[0]],

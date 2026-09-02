@@ -1,6 +1,6 @@
 /**
  * report-renderer 依赖 react-markdown + remark-gfm(及 micromark/mdast 全套),
- * 体积较大且只在步骤16与教师报告页用到。这里用 React.lazy 把它拆成异步 chunk,
+ * 体积较大且只在步骤15与教师报告页用到。这里用 React.lazy 把它拆成异步 chunk,
  * 仅在真正渲染报告时才加载,避免拖累首屏主包。
  *
  * ErrorBoundary:异步 chunk 若因发布滚动(旧 hash 404)或断网加载失败,只降级本区域

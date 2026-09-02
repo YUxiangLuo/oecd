@@ -20,11 +20,11 @@ describe("regression lessons", () => {
       REGRESSION_LESSONS.production.priorStep,
       REGRESSION_LESSONS.length.priorStep,
       REGRESSION_LESSONS.network.priorStep,
-    ]).toEqual([3, 4, 5, 6]);
+    ]).toEqual([2, 3, 4, 5]);
   });
 
   test("each step teaches one distinct beginner move", () => {
-    expect(REGRESSION_FAMILIES.map((item) => item.step)).toEqual([12, 13, 14, 15]);
+    expect(REGRESSION_FAMILIES.map((item) => item.step)).toEqual([11, 12, 13, 14]);
     expect(REGRESSION_LESSONS.trade.learnThis).toContain("逐 cohort");
     expect(REGRESSION_LESSONS.trade.learnThis).toContain("从未处理或截至比较期尚未处理");
     expect(REGRESSION_LESSONS.production.learnThis).toContain("比较方式");

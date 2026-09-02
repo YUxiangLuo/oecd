@@ -73,7 +73,7 @@ export default function App() {
 
   const resolveStep = useCallback((next: number) => {
     const available = stepsData?.steps ?? [];
-    const last = available.at(-1)?.n ?? 16;
+    const last = available.at(-1)?.n ?? 15;
     const bounded = Math.max(1, Math.min(last, next));
     return available.length && !available.some((item) => item.n === bounded)
       ? (available[0]?.n ?? 1)

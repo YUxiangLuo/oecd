@@ -122,16 +122,21 @@ def _isolated_report_release_raw_source(tmp_path, monkeypatch):
 
 
 def _checks(scope: str) -> list[dict]:
+    kinds = {
+        quality.QC_SCOPE_ICIO: list(quality.QC_EXPECTED_KINDS[quality.QC_SCOPE_ICIO]),
+        quality.QC_SCOPE_CONTROLS: list(quality.QC_EXPECTED_KINDS[quality.QC_SCOPE_CONTROLS]),
+        quality.QC_SCOPE_SHOCKS: list(quality.QC_EXPECTED_KINDS[quality.QC_SCOPE_SHOCKS]),
+    }[scope]
     return [
         {
             "name": name,
-            "kind": "结构",
+            "kind": kinds[index],
             "passed": True,
             "detail": "ok",
             "warnings": [],
             "severity": "ok",
         }
-        for name in quality.QC_EXPECTED_CHECKS[scope]
+        for index, name in enumerate(quality.QC_EXPECTED_CHECKS[scope])
     ]
 
 
@@ -328,31 +333,31 @@ def _artifacts(path: Path, *, disclosure: bool = False):
     (path / "qc_shocks.json").write_text(json.dumps(shocks, ensure_ascii=False), encoding="utf-8")
     output_years = _write_output_artifacts(path, [2018, 2019, 2020])
     regression_input_summary = regression_quality.write_regression_input_qc(path, expected_years=[2018, 2019, 2020])[1]
-    artifacts.write_dataset_metadata(
-        path,
-        {
-            "release_id": "2" * 32,
-            "years": [2018, 2019, 2020],
-            "generated_at": "2026-08-13T00:00:00+00:00",
-            "course_release": config.COURSE_RELEASE,
-            "network_algorithm": "gephi-compatible-directed-unweighted-positive-v1",
-            "data_sources": artifact_data_sources(config.RAW_DATA_DIR),
-            "raw_dimensions": raw_dimensions_metadata([2018, 2019, 2020], config.RAW_DATA_DIR),
-            "qc_contract": quality.qc_contract_metadata(),
-            "shock_contract": shock_module.shock_contract_metadata(),
-            "qc": {
-                "years": {
-                    str(year): quality.summarize_serialized_checks(checks) for year, checks in annual_by_year.items()
-                },
-                "controls": quality.summarize_serialized_checks(controls),
-                "shocks": quality.summarize_serialized_checks(shocks),
+    metadata = {
+        "release_id": "2" * 32,
+        "years": [2018, 2019, 2020],
+        "generated_at": "2026-08-13T00:00:00+00:00",
+        "course_release": config.COURSE_RELEASE,
+        "network_algorithm": "gephi-compatible-directed-unweighted-positive-v1",
+        "data_sources": artifact_data_sources(config.RAW_DATA_DIR),
+        "raw_dimensions": raw_dimensions_metadata([2018, 2019, 2020], config.RAW_DATA_DIR),
+        "qc_contract": quality.qc_contract_metadata(),
+        "shock_contract": shock_module.shock_contract_metadata(),
+        "qc": {
+            "years": {
+                str(year): quality.summarize_serialized_checks(checks) for year, checks in annual_by_year.items()
             },
-            "output_qc_contract": output_quality.output_qc_contract_metadata(),
-            "output_qc": {"years": output_years},
-            "regression_input_qc_contract": regression_quality.regression_input_qc_contract_metadata(),
-            "regression_input_qc": regression_input_summary,
+            "controls": quality.summarize_serialized_checks(controls),
+            "shocks": quality.summarize_serialized_checks(shocks),
         },
-    )
+        "output_qc_contract": output_quality.output_qc_contract_metadata(),
+        "output_qc": {"years": output_years},
+        "regression_input_qc_contract": regression_quality.regression_input_qc_contract_metadata(),
+        "regression_input_qc": regression_input_summary,
+        "publication_policy": artifacts.publication_policy_metadata(),
+    }
+    metadata["integrity"] = artifacts.release_integrity_metadata(path, metadata["years"])
+    artifacts.write_dataset_metadata(path, metadata)
     artifacts.clear_artifact_caches()
 
 
@@ -423,19 +428,19 @@ def _complete():
         "column": "USA_D01T02",
         "value": 1.0,
     }
-    for step in range(3, 11):
+    for step in range(2, 10):
         session["steps"][str(step)]["data"]["compared"] = ["CHN", "USA"]
-    session["steps"]["11"]["data"].update(
+    session["steps"]["10"]["data"].update(
         {
             "viewed_shock_types": ["tariff", "sanctions", "export_control"],
             "viewed_events": ["关税示例", "制裁示例", "出口管制示例"],
         }
     )
-    session["steps"]["12"]["data"]["run"] = _ok_run("trade")
-    session["steps"]["13"]["data"]["run"] = _ok_run("production")
-    session["steps"]["14"]["data"]["run"] = _ok_run("length")
-    session["steps"]["15"]["data"]["run"] = _ok_run("network")
-    session["steps"]["16"] = make_record(
+    session["steps"]["11"]["data"]["run"] = _ok_run("trade")
+    session["steps"]["12"]["data"]["run"] = _ok_run("production")
+    session["steps"]["13"]["data"]["run"] = _ok_run("length")
+    session["steps"]["14"]["data"]["run"] = _ok_run("network")
+    session["steps"]["15"] = make_record(
         {
             "research_question": "关税冲击是否改变出口中的外国增加值份额？",
             "evidence_interpretation": "我将描述性比较与保存的回归点估计、置信区间一起解读，只把它们视为当前设定下的证据而非自动的因果证明。",
@@ -504,7 +509,7 @@ def test_interaction_event_report_gate_requires_exact_diagnostic_scope_set():
     assert "仅 1 个受支持的冲击前时期" in passing_limit
     assert "不是平行趋势成立的证据" in passing_limit
     summary = "\n".join(
-        teaching_report._evidence_summary([{"step": 12, "outcome": "trade", "design": design, "result": result}])
+        teaching_report._evidence_summary([{"step": 11, "outcome": "trade", "design": design, "result": result}])
     )
     assert "最重要的设计限制：** 冲击前检验仅 1 个受支持的冲击前时期" in summary
 
@@ -558,25 +563,25 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     assert any(item["step"] == 1 and "具体单元格" in "".join(item["missing"]) for item in blocked)
     assert all(
         any(item["step"] == step and "记录当前国家" in "".join(item["missing"]) for item in blocked)
-        for step in range(3, 7)
+        for step in range(2, 6)
     )
     assert all(
         any(item["step"] == step and "两个比较对象" in "".join(item["missing"]) for item in blocked)
-        for step in range(7, 11)
+        for step in range(6, 10)
     )
-    assert any(item["step"] == 7 and "两个比较对象" in "".join(item["missing"]) for item in blocked)
-    assert any(item["step"] == 12 and "可报告" in "".join(item["missing"]) for item in blocked)
-    assert any(item["step"] == 15 and "可报告" in "".join(item["missing"]) for item in blocked)
-    assert any(item["step"] == 16 and "原创" in item["title"] for item in blocked)
+    assert any(item["step"] == 6 and "两个比较对象" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 11 and "可报告" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 14 and "可报告" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 15 and "原创" in item["title"] for item in blocked)
     assert len(blocked) == len({item["step"] for item in blocked})
     by_step = {item["step"]: item for item in blocked}
     assert "理解检查" in "".join(by_step[1]["missing"])
     assert "具体单元格" in "".join(by_step[1]["missing"])
-    assert "理解检查" in "".join(by_step[7]["missing"])
-    assert "两个比较对象" in "".join(by_step[7]["missing"])
-    assert "理解检查" in "".join(by_step[13]["missing"])
-    assert "可报告" in "".join(by_step[13]["missing"])
-    assert all(label in "".join(by_step[11]["missing"]) for label in ("关税冲击", "制裁清单", "出口管制"))
+    assert "理解检查" in "".join(by_step[6]["missing"])
+    assert "两个比较对象" in "".join(by_step[6]["missing"])
+    assert "理解检查" in "".join(by_step[12]["missing"])
+    assert "可报告" in "".join(by_step[12]["missing"])
+    assert all(label in "".join(by_step[10]["missing"]) for label in ("关税冲击", "制裁清单", "出口管制"))
     assert check_gate(_complete()) == []
     missing_one = _complete()
     del missing_one["steps"]["14"]["data"]["run"]
@@ -588,11 +593,11 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
 
 def test_material_gate_is_independent_of_unfinished_quizzes():
     session = _complete()
-    for step in range(1, 16):
+    for step in range(1, 15):
         del session["steps"][str(step)]["data"]["quiz"]
 
     assert check_material_gate(session) == []
-    assert {item["step"] for item in check_gate(session)} == set(range(1, 16))
+    assert {item["step"] for item in check_gate(session)} == set(range(1, 15))
 
 
 def test_material_gate_requires_one_viewed_event_from_each_selectable_shock_type(monkeypatch):
@@ -602,29 +607,29 @@ def test_material_gate_requires_one_viewed_event_from_each_selectable_shock_type
         lambda **_kwargs: ("tariff", "sanctions", "export_control"),
     )
     session = _complete()
-    session["steps"]["11"]["data"]["viewed_shock_types"] = ["tariff", "sanctions"]
+    session["steps"]["10"]["data"]["viewed_shock_types"] = ["tariff", "sanctions"]
 
     blocked = check_material_gate(session)
 
     assert len(blocked) == 1
-    assert blocked[0]["step"] == 11
+    assert blocked[0]["step"] == 10
     assert "出口管制" in "".join(blocked[0]["missing"])
 
 
 def test_material_gate_ignores_shock_types_without_selectable_events(monkeypatch):
     monkeypatch.setattr(teaching_report, "selectable_shock_types", lambda **_kwargs: ("tariff",))
     session = _complete()
-    session["steps"]["11"]["data"].update(
+    session["steps"]["10"]["data"].update(
         {
             "viewed_shock_types": ["tariff"],
             "viewed_events": ["fixture tariff AAA"],
         }
     )
 
-    assert all(item["step"] != 11 for item in check_material_gate(session))
+    assert all(item["step"] != 10 for item in check_material_gate(session))
 
-    session["steps"]["11"]["data"]["viewed_shock_types"] = []
-    blocked = next(item for item in check_material_gate(session) if item["step"] == 11)
+    session["steps"]["10"]["data"]["viewed_shock_types"] = []
+    blocked = next(item for item in check_material_gate(session) if item["step"] == 10)
     message = "".join(blocked["missing"])
     assert "关税冲击" in message
     assert "制裁清单" not in message and "出口管制" not in message
@@ -634,7 +639,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
-    session["steps"]["12"]["data"]["run"] = {
+    session["steps"]["11"]["data"]["run"] = {
         "settings": {"method": "did"},
         "design": {"outcome": "trade", "equation": "y = policy + FE"},
         "result": {
@@ -643,13 +648,13 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
             "coefs": [{"name": "policy", "coef": 1.2, "se": 0.3, "p": 0.01, "ci_low": 0.6, "ci_high": 1.8}],
         },
     }
-    _sign_run(session["steps"]["12"]["data"]["run"])
+    _sign_run(session["steps"]["11"]["data"]["run"])
     report = build(session, "同学")
     assert report.provenance["years"] == [2018, 2019, 2020]
     assert report.provenance["release_id"] == "2" * 32
     assert report.provenance["quiz_version"] == quizzes.QUIZ_VERSION
-    assert report.provenance["course_release"] == "2026-fall"
-    assert report.provenance["runs"][0]["step"] == 12
+    assert report.provenance["course_release"] == config.COURSE_RELEASE
+    assert report.provenance["runs"][0]["step"] == 11
     assert report.provenance["runs"][0]["result"]["coefs"][0]["coef"] == 1.2
     assert "1.2" in report.markdown and "不在报告生成时复算" in report.markdown
     assert "[0.6, 1.8]" in report.markdown
@@ -672,7 +677,7 @@ def test_report_preserves_the_full_accepted_research_question(tmp_path, monkeypa
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
     question = "问" * (REFLECTION_TEXT_LIMIT - 1) + "终"
-    session["steps"]["16"]["data"]["research_question"] = question
+    session["steps"]["15"]["data"]["research_question"] = question
 
     report = build(session, "同学")
 
@@ -686,7 +691,7 @@ def test_report_preserves_reflection_paragraphs_and_markdown_characters(tmp_path
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
     evidence_text = "第一段引用 `treated×post` | 置信区间。\n\n第二段保留学生自己的段落结构与标点。"
-    session["steps"]["16"]["data"]["evidence_interpretation"] = evidence_text
+    session["steps"]["15"]["data"]["evidence_interpretation"] = evidence_text
 
     report = build(session, "同学")
 
@@ -695,20 +700,20 @@ def test_report_preserves_reflection_paragraphs_and_markdown_characters(tmp_path
 
 def test_reflection_over_the_advertised_limit_blocks_report():
     session = _complete()
-    session["steps"]["16"]["data"]["research_question"] = "问" * (REFLECTION_TEXT_LIMIT + 1)
+    session["steps"]["15"]["data"]["research_question"] = "问" * (REFLECTION_TEXT_LIMIT + 1)
 
     blocked = check_gate(session)
 
-    assert any(item["step"] == 16 and "不能超过" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 15 and "不能超过" in "".join(item["missing"]) for item in blocked)
 
 
 def test_malformed_only_saved_run_blocks_report(tmp_path, monkeypatch):
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
-    session["steps"]["12"]["data"]["run"] = {"design": {"outcome": "trade"}, "result": "forged"}
+    session["steps"]["11"]["data"]["run"] = {"design": {"outcome": "trade"}, "result": "forged"}
     blocked = check_gate(session)
-    assert any(item["step"] == 12 and "可报告" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 11 and "可报告" in "".join(item["missing"]) for item in blocked)
     with pytest.raises(ReportGateError):
         build(session, "同学")
 
@@ -716,7 +721,7 @@ def test_malformed_only_saved_run_blocks_report(tmp_path, monkeypatch):
 @pytest.mark.parametrize("status", ["insufficient", "invalid_design", []])
 def test_non_inferential_saved_run_does_not_satisfy_valid_regression_gate(status):
     session = _complete()
-    session["steps"]["12"]["data"]["run"]["result"].update(
+    session["steps"]["11"]["data"]["run"]["result"].update(
         {
             "status": status,
             "support": {"status": status, "suppress_inference": True},
@@ -725,15 +730,15 @@ def test_non_inferential_saved_run_does_not_satisfy_valid_regression_gate(status
 
     blocked = check_gate(session)
 
-    assert any(item["step"] == 12 and "可报告" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 11 and "可报告" in "".join(item["missing"]) for item in blocked)
 
 
 def test_qualified_run_on_same_step_still_satisfies_gate_after_insufficient_latest(tmp_path, monkeypatch):
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
-    session["steps"]["12"]["data"]["qualified_run"] = session["steps"]["12"]["data"]["run"]
-    session["steps"]["12"]["data"]["run"] = {
+    session["steps"]["11"]["data"]["qualified_run"] = session["steps"]["11"]["data"]["run"]
+    session["steps"]["11"]["data"]["run"] = {
         "design": {"outcome": "trade", "equation": "y = policy + FE", "shock_type": "export_control"},
         "result": {
             "status": "insufficient",
@@ -761,10 +766,10 @@ def test_exact_run_identity_prevents_unsigned_latest_from_shadowing_distinct_qua
     latest["result"]["status"] = "insufficient"
     latest["result"]["support"] = {"status": "insufficient", "suppress_inference": True}
     latest["result"]["notes"] = ["LATEST_COLLISION_FIXTURE"]
-    session["steps"]["12"]["data"].update({"run": latest, "qualified_run": qualified})
+    session["steps"]["11"]["data"].update({"run": latest, "qualified_run": qualified})
 
-    step_runs = [run for run in teaching_report._saved_runs(session) if run["step"] == 12]
-    qualified_runs = [run for run in teaching_report._gate_qualified_runs(session) if run["step"] == 12]
+    step_runs = [run for run in teaching_report._saved_runs(session) if run["step"] == 11]
+    qualified_runs = [run for run in teaching_report._gate_qualified_runs(session) if run["step"] == 11]
     markdown = build(session, "同学").markdown
 
     assert len(step_runs) == 2
@@ -776,14 +781,14 @@ def test_exact_run_identity_prevents_unsigned_latest_from_shadowing_distinct_qua
     identical = _complete()
     identical_run = identical["steps"]["12"]["data"]["run"]
     identical["steps"]["12"]["data"]["qualified_run"] = identical_run
-    assert len([run for run in teaching_report._saved_runs(identical) if run["step"] == 12]) == 1
+    assert len([run for run in teaching_report._saved_runs(identical) if run["step"] == 11]) == 1
 
 
 def test_comparison_table_flags_mixed_shocks_and_keeps_estimand_label(tmp_path, monkeypatch):
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
-    session["steps"]["13"]["data"]["run"] = _ok_run("production", shock_type="sanctions")
+    session["steps"]["12"]["data"]["run"] = _ok_run("production", shock_type="sanctions")
 
     markdown = build(session, "同学").markdown
 
@@ -796,9 +801,9 @@ def test_report_carries_release_qc_disclosures(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     report = build(_complete(), "同学")
     assert report.provenance["qc"]["years"]["2020"]["requires_disclosure"] is True
-    assert "## 数据质量披露" in report.markdown
-    assert "Warning：因子投入与派生指标定义域(VA/TLS)" in report.markdown
-    assert "Disclosure：维度一致性与索引对齐(Z/Y/A/L/x/OUT)" in report.markdown
+    assert "## 数据完整性与诊断披露" in report.markdown
+    assert "警告：因子投入与派生指标定义域(VA/TLS)" in report.markdown
+    assert "补充披露：维度一致性与索引对齐(Z/Y/A/L/x/OUT)" in report.markdown
 
 
 def test_report_rejects_missing_or_unsupported_qc_contract(tmp_path, monkeypatch):
@@ -842,7 +847,7 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
             ],
         }
     )
-    session["steps"]["11"]["data"].update(
+    session["steps"]["10"]["data"].update(
         {
             "viewed_shock_types": ["tariff", "sanctions", "export_control"],
             "viewed_events": ["示例事件"],
@@ -889,7 +894,7 @@ def test_report_carries_catalogue_event_source_status_and_urls(tmp_path, monkeyp
         ],
     )
     session = _complete()
-    session["steps"]["11"]["data"].update(
+    session["steps"]["10"]["data"].update(
         {
             "viewed_events": ["美国232钢铝关税", "中方对美反制关税"],
             "selected_event_key": "美国232钢铝关税::2018-03-23",
@@ -968,8 +973,8 @@ def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
-    session["steps"]["12"]["data"]["qualified_run"] = session["steps"]["12"]["data"]["run"]
-    session["steps"]["12"]["data"]["run"] = {
+    session["steps"]["11"]["data"]["qualified_run"] = session["steps"]["11"]["data"]["run"]
+    session["steps"]["11"]["data"]["run"] = {
         "design": {"outcome": "trade", "depvar_label": "FVA 份额", "equation": "y = policy + FE"},
         "result": {
             "status": "insufficient",
@@ -991,7 +996,7 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
-    session["steps"]["12"]["data"]["run"] = {
+    session["steps"]["11"]["data"]["run"] = {
         "design": {
             "outcome": "trade",
             "depvar_label": "FVA 份额",
@@ -1020,7 +1025,7 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
             ],
         },
     }
-    _sign_run(session["steps"]["12"]["data"]["run"])
+    _sign_run(session["steps"]["11"]["data"]["run"])
 
     markdown = build(session, "同学").markdown
 
@@ -1039,7 +1044,7 @@ def test_report_summary_prioritizes_failed_pretrend_and_names_scenario(tmp_path,
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
-    session["steps"]["12"]["data"]["run"] = {
+    session["steps"]["11"]["data"]["run"] = {
         "design": {
             "outcome": "trade",
             "depvar_label": "FVA 份额",
@@ -1091,7 +1096,7 @@ def test_report_summary_prioritizes_failed_pretrend_and_names_scenario(tmp_path,
             },
         },
     }
-    _sign_run(session["steps"]["12"]["data"]["run"])
+    _sign_run(session["steps"]["11"]["data"]["run"])
 
     markdown = build(session, "同学").markdown
 
@@ -1106,7 +1111,7 @@ def test_reg01_report_keeps_supported_k0_with_thin_remote_lead_and_labels_local_
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
-    session["steps"]["12"]["data"]["run"] = {
+    session["steps"]["11"]["data"]["run"] = {
         "design": {
             "outcome": "trade",
             "depvar_label": "FVA 份额",
@@ -1140,7 +1145,7 @@ def test_reg01_report_keeps_supported_k0_with_thin_remote_lead_and_labels_local_
             },
         },
     }
-    _sign_run(session["steps"]["12"]["data"]["run"])
+    _sign_run(session["steps"]["11"]["data"]["run"])
 
     assert check_gate(session) == []
     markdown = build(session, "同学").markdown
@@ -1172,12 +1177,12 @@ def test_reg01_report_gate_and_rendering_fail_closed_for_thin_or_legacy_primary_
         },
     }
     _sign_run(event_run)
-    session["steps"]["12"]["data"]["run"] = event_run
-    assert any(item["step"] == 12 for item in check_gate(session))
+    session["steps"]["11"]["data"]["run"] = event_run
+    assert any(item["step"] == 11 for item in check_gate(session))
 
     # A prior non-event qualified snapshot lets the report render the later legacy exploration,
     # whose old CI/pretrend values must still fail closed.
-    session["steps"]["12"]["data"]["qualified_run"] = _ok_run("trade")
+    session["steps"]["11"]["data"]["qualified_run"] = _ok_run("trade")
     del event_run["result"]["event_support"]
     markdown = build(session, "同学").markdown
     assert "逐事件期处理支持度未知" in markdown
@@ -1228,8 +1233,8 @@ def test_reg01_report_rejects_semantically_forged_support_and_unsupported_pretre
         },
     }
     _sign_run(event_run)
-    session["steps"]["12"]["data"]["run"] = event_run
-    session["steps"]["12"]["data"]["qualified_run"] = _ok_run("trade")
+    session["steps"]["11"]["data"]["run"] = event_run
+    session["steps"]["11"]["data"]["qualified_run"] = _ok_run("trade")
 
     malformed_contracts = []
     missing_base = _event_support()
@@ -1414,8 +1419,8 @@ def test_report_rendering_hides_stale_inference_when_whole_run_is_suppressed(tmp
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
-    session["steps"]["12"]["data"]["qualified_run"] = _ok_run("trade")
-    session["steps"]["12"]["data"]["run"] = {
+    session["steps"]["11"]["data"]["qualified_run"] = _ok_run("trade")
+    session["steps"]["11"]["data"]["run"] = {
         "design": {
             "outcome": "trade",
             "depvar_label": "FVA 份额",
@@ -1455,7 +1460,7 @@ def test_report_rendering_hides_stale_inference_when_whole_run_is_suppressed(tmp
             },
         },
     }
-    _sign_run(session["steps"]["12"]["data"]["run"])
+    _sign_run(session["steps"]["11"]["data"]["run"])
 
     markdown = build(session, "同学").markdown
     assert "统计推断已抑制" in markdown
@@ -1466,7 +1471,7 @@ def test_report_rendering_hides_stale_inference_when_whole_run_is_suppressed(tmp
     assert "0.0007" not in markdown
     assert "整体门禁下不应显示的 pretrend 解释" not in markdown
 
-    result = session["steps"]["12"]["data"]["run"]["result"]
+    result = session["steps"]["11"]["data"]["run"]["result"]
     result["diagnostics"]["pretrend"] = {
         "available": False,
         "reason": "global_inference_suppressed",
@@ -1480,7 +1485,7 @@ def test_report_rendering_hides_stale_inference_when_whole_run_is_suppressed(tmp
         "p": None,
         "interpretation": "检测到显著冲击前差异，F=9，p=0.001。",
     }
-    _sign_run(session["steps"]["12"]["data"]["run"])
+    _sign_run(session["steps"]["11"]["data"]["run"])
     generated_markdown = build(session, "同学").markdown
     trusted_copy = "整体设计门禁已抑制统计推断，因此未执行冲击前联合检验；不能据此判断冲击前趋势。"
     assert trusted_copy in generated_markdown
@@ -1491,9 +1496,9 @@ def test_report_rendering_hides_stale_inference_when_whole_run_is_suppressed(tmp
     # A forged global reason on an actually-ok result is never accepted by a safe qualification validator.
     result["status"] = "ok"
     result["support"] = {"status": "ok", "suppress_inference": False}
-    _sign_run(session["steps"]["12"]["data"]["run"])
+    _sign_run(session["steps"]["11"]["data"]["run"])
     reason_only_markdown = build(session, "同学").markdown
-    assert teaching_report._result_is_qualified(result, session["steps"]["12"]["data"]["run"]["design"]) is False
+    assert teaching_report._result_is_qualified(result, session["steps"]["11"]["data"]["run"]["design"]) is False
     assert "诊断已损坏或状态未知" in reason_only_markdown
     assert trusted_copy not in reason_only_markdown
     assert "检测到显著冲击前差异" not in reason_only_markdown

@@ -26,7 +26,7 @@ describe("shared step task card", () => {
     expect(materialStatusForStep(12, [{ step: 13 }])).toBe("ready");
   });
 
-  test("keeps application navigation and task chrome out of the step-16 printed report", async () => {
+  test("keeps application navigation and task chrome out of the step-15 printed report", async () => {
     const styles = await Bun.file(new URL("./styles.css", import.meta.url)).text();
     const printRules = styles.slice(styles.indexOf("@media print"));
     expect(printRules).toMatch(/\.step-task-card,?\s*[\s\S]*?display:\s*none\s*!important/);
@@ -66,6 +66,23 @@ describe("shared step task card", () => {
     );
     expect(saving).toContain('class="saving"');
     expect(saving).toContain("报告材料：正在保存");
+  });
+
+  test("labels the final completion state as report rather than a nonexistent quiz", () => {
+    const reportStep: Step = {
+      n: 15, stage: 5, lab: "rep", status: "demo", title: "生成实验报告",
+      goal: "形成闭环。", tasks: ["检查", "生成", "提交"], concept: "汇总证据。",
+      tip: "复核后提交。", deps: ["保存的材料"],
+      handoff: { input: "证据", action: "汇总", output: "报告" },
+    };
+    const html = renderToStaticMarkup(<StepTaskCard
+      step={reportStep}
+      complete={false}
+      materialStatus="missing"
+      contentRef={{ current: null }}
+    />);
+    expect(html).toContain("报告：未完成");
+    expect(html).not.toContain("理解题：未完成");
   });
 
   test("focuses the real workbench and scrolls only its nested course container", () => {

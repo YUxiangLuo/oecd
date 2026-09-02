@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useRef,
   useState,
   type Dispatch,
@@ -8,12 +7,6 @@ import {
   type SetStateAction,
 } from "react";
 import { AccountPasswordModal } from "./account-password";
-import {
-  completedStepsForPresentation,
-  completionForPresentation,
-  effectiveCompletionBlockReason,
-  type CompletionBlockState,
-} from "./completion-block";
 import {
   CourseSidebar,
   StepFooter,
@@ -121,17 +114,8 @@ export function StudentWorkspace({
   const steps = stepsData.steps;
   const totalSteps = steps.length;
   const stepIndex = steps.findIndex((item) => item.n === current);
-  const visitRef = useRef({ step: current, visit: 0 });
   const passwordTriggerRef = useRef<HTMLButtonElement>(null);
-  if (visitRef.current.step !== current) {
-    visitRef.current = { step: current, visit: visitRef.current.visit + 1 };
-  }
-  const visit = visitRef.current.visit;
-  const [completionBlock, setCompletionBlock] = useState<CompletionBlockState | null>(null);
   const [comparisonCarryGeneration, setComparisonCarryGeneration] = useState(0);
-  const updateCompletionBlock = useCallback((reason: string | null) => {
-    setCompletionBlock({ step: current, visit, reason });
-  }, [current, visit]);
   if (stepIndex < 0) {
     return <div style={{ padding: 40 }} className="error-box">步骤不存在，请从课程大纲重新选择。</div>;
   }
@@ -139,22 +123,13 @@ export function StudentWorkspace({
   const stageName = stepsData.stages[String(step.stage)];
   const prevStep = steps[stepIndex - 1];
   const nextStep = steps[stepIndex + 1];
-  const activeCompletionBlockReason = effectiveCompletionBlockReason(step, completionBlock, visit);
-  const presentationCompletion = completionForPresentation(
-    session.completion,
-    step.n,
-    activeCompletionBlockReason,
-  );
-  const presentationCompletedSteps = completedStepsForPresentation(
-    completedSteps,
-    step.n,
-    activeCompletionBlockReason,
-  );
+  const presentationCompletion = session.completion;
+  const presentationCompletedSteps = completedSteps;
   const mainContentId = stepMainContentId(step.n);
   const currentComparison = session.getStep<{ compared?: string[] }>(step.n)?.compared ?? [];
   let carriedComparison: string[] = [];
-  if (step.n >= 4 && step.n <= 10 && currentComparison.length < 2) {
-    for (let prior = step.n - 1; prior >= 3; prior -= 1) {
+  if (step.n >= 3 && step.n <= 9 && currentComparison.length < 2) {
+    for (let prior = step.n - 1; prior >= 2; prior -= 1) {
       const candidates = session.getStep<{ compared?: string[] }>(prior)?.compared;
       if (Array.isArray(candidates) && candidates.length >= 2) {
         carriedComparison = candidates.slice(-2);
@@ -305,7 +280,6 @@ export function StudentWorkspace({
                       regressionHistory={regressionHistory}
                       onRegressionHistoryChange={onRegressionHistoryChange}
                       onNavigateStep={onNavigateStep}
-                      onCompletionBlockChange={updateCompletionBlock}
                       getStep={session.getStep}
                       getConfirmedStep={session.getConfirmedStep}
                     />
@@ -314,7 +288,6 @@ export function StudentWorkspace({
                     key={`quiz:${step.n}:${session.workspaceGeneration}`}
                     step={step}
                     state={stepState}
-                    completionBlockedReason={activeCompletionBlockReason}
                   />
                 </div>
               </main>

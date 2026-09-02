@@ -19,7 +19,7 @@ interface StepQuiz {
 export interface Step {
   n: number;
   stage: number;
-  lab: "db" | "shock" | "qc" | "ind" | "viz" | "reg" | "rep";
+  lab: "db" | "shock" | "ind" | "viz" | "reg" | "rep";
   regression_outcome?: RegressionOutcome;
   /** 指标(ind)与可视化(viz)步的主题,用于按主题路由到定制组件,不依赖步号。 */
   topic?: RegressionOutcome;
@@ -37,7 +37,7 @@ export interface Step {
     action: string;
     output: string;
   };
-  /** 步骤 1–15 的固定理解检查；第 16 步以报告生成作为完成条件。 */
+  /** 步骤 1–14 的固定理解检查；第 15 步以报告生成作为完成条件。 */
   quiz?: StepQuiz;
 }
 
@@ -107,7 +107,30 @@ export interface Meta {
     qc_contract?: QcContract;
     shock_contract?: ShockContract;
     qc?: unknown;
+    output_qc?: unknown;
+    regression_input_qc?: unknown;
+    publication_policy?: {
+      mode: "integrity-only-v1";
+      blocking_kinds: Record<string, string[]>;
+      nonblocking_policy: string;
+    };
+    integrity?: {
+      status: "passed" | "failed";
+      scopes: {
+        years: Record<string, IntegrityCheckSummary>;
+        controls: IntegrityCheckSummary;
+        shocks: IntegrityCheckSummary;
+        outputs: Record<string, IntegrityCheckSummary>;
+        regression_inputs: IntegrityCheckSummary;
+      };
+    };
   } | null;
+}
+
+export interface IntegrityCheckSummary {
+  passed: boolean;
+  checked: string[];
+  failures: string[];
 }
 
 export interface QuizCompletionState {
@@ -300,7 +323,7 @@ export type IndustryPage = PagedRows;
 
 /** 实验会话:逐步实验状态的可恢复模型(契约见 gvcsim/session.py)。 */
 /** 当前学期只接受 simple-v2；其它会话版本一律拒绝。 */
-export const SESSION_VERSION = "experiment-session-simple-v2";
+export const SESSION_VERSION = "experiment-session-simple-v3";
 
 export interface SessionRecord<T = unknown> {
   data: T;
@@ -319,7 +342,7 @@ export interface ExperimentSession {
  * 一步实验台读写自己的自动保存状态。
  *
  * `complete` 一律来自服务端判定,实验台不自行推断是否完成——实验操作不参与
- * 完成判定；步骤 1–15 只由答题结果决定。第 16 步的报告门槛另行检查关键操作与原创分析。
+ * 完成判定；步骤 1–14 只由答题结果决定。第 15 步的报告门槛另行检查关键操作与原创分析。
  */
 export interface StepStateApi<T = Record<string, unknown>> {
   data: T | undefined;
@@ -346,7 +369,7 @@ export interface CompletionSummary {
   total: number;
 }
 
-/** 第 16 步门槛：还差哪项理解检查、关键操作或原创分析。 */
+/** 第 15 步门槛：还差哪项理解检查、关键操作或原创分析。 */
 export interface ReportGateItem {
   step: number;
   title: string;
@@ -724,6 +747,7 @@ export interface StudentRow {
   submitted_at: string | null;
   /** Server-verified completion; never inferred from max_step. */
   verified_completed_count: number;
+  verified_total_steps: number;
   verified_completed_steps: number[];
   completion_missing: number[];
   last_valid_activity: string | null;

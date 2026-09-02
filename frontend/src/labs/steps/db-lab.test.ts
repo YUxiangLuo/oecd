@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { DbMeta, DbSlice } from "../../types";
+import type { DbMeta, DbSlice, Meta } from "../../types";
 import { fmtDb } from "../shared";
 import {
   captureDbObservation,
@@ -15,11 +15,35 @@ import {
   moveDbCell,
   normalizeDbActiveCell,
   observationSourceLabel,
+  ReleaseIntegrityStatus,
   restoreDbSlice,
   sliceAutosave,
   STEP1_ACCOUNT_LEGEND,
   STEP1_OUT_IDENTITY_GUIDE,
 } from "./db-lab";
+
+test("Step 1 shows a compact automatic integrity status without student action", () => {
+  const releaseMeta: Meta = {
+    years: [2020], countries: ["CHN"], sectors: ["D01T02"],
+    dataset: {
+      years: [2020],
+      integrity: {
+        status: "passed",
+        scopes: {
+          years: {}, outputs: {},
+          controls: { passed: true, checked: [], failures: [] },
+          shocks: { passed: true, checked: [], failures: [] },
+          regression_inputs: { passed: true, checked: [], failures: [] },
+        },
+      },
+    },
+  };
+  const html = renderToStaticMarkup(createElement(ReleaseIntegrityStatus, { meta: releaseMeta }));
+  expect(html).toContain("当前数据已通过系统自动完整性验证");
+  expect(html).toContain("无需学生另做校验");
+  expect(html).not.toContain("button");
+  expect(renderToStaticMarkup(createElement(ReleaseIntegrityStatus, { meta: null }))).toBe("");
+});
 
 const meta: DbMeta = {
   years: [2019, 2020],

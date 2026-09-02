@@ -2,7 +2,7 @@ import { formatMetric } from "../../format";
 import { ChartDataDisclosure } from "../explore/charts";
 import { CAT, Legend, type Row, cardStyle, countryLabel, num, topWithSelected, useTip } from "../shared";
 
-/* ------------------------ 步骤9:前向/后向生产长度对比 ------------------------ */
+/* ------------------------ 步骤8:前向/后向生产长度对比 ------------------------ */
 
 const LENGTH_FIELDS = ["PLv", "PLv_GVC", "PLy", "PLy_GVC", "GVCPs"] as const;
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);

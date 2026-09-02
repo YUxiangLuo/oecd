@@ -33,7 +33,7 @@ agent-browser doctor >/dev/null
 
 # 所有学生路由必须能在真实登录态下挂载。这里不伪造答题完成度；完整答题与
 # 报告流程由人工/夜间真实数据审查执行，smoke 负责捕获白屏、路由和请求错误。
-for step in $(seq 1 16); do
+for step in $(seq 1 15); do
   "${ab[@]}" open "$GVCSIM_BASE_URL/?step=$step"
   "${ab[@]}" wait '.step-header-mid h2'
   # 步骤标题属于同步外壳；指标表、冲击面板等会在后续 API 成功后才挂载。
@@ -43,7 +43,7 @@ for step in $(seq 1 16); do
   # 100vh 固定布局下文档级永远不应出现滚动（幻影滚动会卷走顶栏与侧栏）。
   # sr-only 缺坐标、超高未裁剪元素都曾在这里突破布局，逐步断言防回归。
   "${ab[@]}" eval '(() => { const d = document.documentElement; if (d.scrollHeight > d.clientHeight + 1) throw new Error(`document scrolls: ${d.scrollHeight} > ${d.clientHeight}`); return true; })()' >/dev/null
-  if [[ "$step" -eq 10 ]]; then
+  if [[ "$step" -eq 9 ]]; then
     # The network uses one portalled dialog instance: node activation expands it,
     # Escape closes it, and focus/selection return to the invoking SVG node.
     "${ab[@]}" wait '.network-node[aria-label^="USA "]'
@@ -60,12 +60,12 @@ done
 
 if [[ -n "$artifact_dir" ]]; then
   install -d -m 0750 "$artifact_dir"
-  a11y_report="$artifact_dir/student-step16-a11y.json"
-  "${ab[@]}" screenshot "$artifact_dir/student-step16.png" --full
+  a11y_report="$artifact_dir/student-step15-a11y.json"
+  "${ab[@]}" screenshot "$artifact_dir/student-step15.png" --full
   "${ab[@]}" network har start
   "${ab[@]}" reload
   "${ab[@]}" wait --load networkidle
-  "${ab[@]}" network har stop "$artifact_dir/student-step16.har"
+  "${ab[@]}" network har stop "$artifact_dir/student-step15.har"
 else
   temporary_a11y_report=$(mktemp)
   a11y_report=$temporary_a11y_report
@@ -100,4 +100,4 @@ if [[ -n "$failed_requests" ]]; then
   exit 1
 fi
 
-echo "student routes 1-16 rendered without browser/API errors or WCAG 2 A/AA violations"
+echo "student routes 1-15 rendered without browser/API errors or WCAG 2 A/AA violations"

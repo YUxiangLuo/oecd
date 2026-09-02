@@ -1,0 +1,104 @@
+{
+  "benchmark": "authenticated_shock_panel_active_v11",
+  "status": "passed",
+  "method": "Validated and cached the active release, authenticated through /api/auth/login, then called /api/shocks/panel through the normal middleware/route. Only the exposure index is cleared; in a fresh process the first sample includes cold shock/exposure CSV reads and index construction. A second cold phase starts eight requests together to verify single-flight behavior.",
+  "environment": {
+    "python": "3.13.15",
+    "platform": "Linux-7.2.2-arch1-1-x86_64-with-glibc2.44",
+    "logical_cpus": 12
+  },
+  "release": {
+    "release_id": "b26646389a814252946cb5c49ccc426b",
+    "artifact_contract_version": 11,
+    "shock_contract": {
+      "version": 2,
+      "treated_threshold": 0.001,
+      "treated_operator": ">",
+      "types": {
+        "tariff": {
+          "shock_field": "tariff_shock",
+          "treated_field": "treated",
+          "announced_date_field": "announced_date",
+          "effective_date_field": "effective_date",
+          "note_field": "note"
+        },
+        "sanctions": {
+          "shock_field": "sanction_shock",
+          "treated_field": "sanction_treated",
+          "announced_date_field": "sanction_announced_date",
+          "effective_date_field": "sanction_effective_date",
+          "note_field": "sanction_note"
+        },
+        "export_control": {
+          "shock_field": "export_control_shock",
+          "treated_field": "export_control_treated",
+          "announced_date_field": "export_control_announced_date",
+          "effective_date_field": "export_control_effective_date",
+          "note_field": "export_control_note"
+        }
+      },
+      "tariff_exposure": {
+        "source_field": "tariff_exposure_source",
+        "mode_field": "tariff_exposure_mode",
+        "disclosure_field": "tariff_exposure_disclosure",
+        "allowed_sources": [
+          "oecd_icio_bilateral_flow",
+          "stylized_teaching_fallback"
+        ],
+        "allowed_modes": [
+          "fixed_pretreatment",
+          "contemporaneous"
+        ]
+      }
+    },
+    "years": [
+      2016,
+      2017,
+      2018,
+      2019,
+      2020
+    ],
+    "files": 38
+  },
+  "request": {
+    "year": 2020,
+    "shock_type": "tariff",
+    "filter": "treated",
+    "page": 1,
+    "page_size": 25
+  },
+  "cold_index_build_ms": {
+    "samples": 1,
+    "milliseconds": 353.6917210003594,
+    "budget_ms": 500.0,
+    "passed": true
+  },
+  "eight_concurrent_cold_ms": {
+    "samples": 8,
+    "min": 583.6039779969724,
+    "median": 594.893018998846,
+    "p95": 603.7375739979325,
+    "max": 603.7375739979325,
+    "budget_p95_ms": 1500.0,
+    "passed": true
+  },
+  "warm_sequential_ms": {
+    "samples": 40,
+    "min": 29.297029002918862,
+    "median": 30.646721505036112,
+    "p95": 32.99884499574546,
+    "max": 36.03874899999937,
+    "budget_p95_ms": 500.0,
+    "passed": true
+  },
+  "eight_concurrent_ms": {
+    "samples": 48,
+    "min": 240.52427300193813,
+    "median": 314.6004025002185,
+    "p95": 359.72759099968243,
+    "max": 474.28657700220356,
+    "budget_p95_ms": 1500.0,
+    "passed": true
+  },
+  "passed": true
+}

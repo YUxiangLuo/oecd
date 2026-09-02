@@ -14,12 +14,13 @@ from typing import Any
 import pandas as pd
 
 
-ARTIFACT_CONTRACT_VERSION = 9
+ARTIFACT_CONTRACT_VERSION = 11
 ARTIFACT_MANIFEST_ALGORITHM = "sha256"
 ARTIFACT_MANIFEST_NAME = "artifact_manifest"
 METADATA_DIGEST_NAME = "metadata_sha256"
 RELEASE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 DATASET_METADATA = "dataset.json"
+PUBLICATION_POLICY_MODE = "integrity-only-v1"
 NETWORK_ALGORITHM = "gephi-compatible-directed-unweighted-positive-v1"
 _csv_cache_lock = threading.RLock()
 
@@ -29,6 +30,108 @@ class ArtifactContractError(RuntimeError):
 
 
 ArtifactValidationError = ArtifactContractError
+
+
+def publication_policy_metadata() -> dict[str, Any]:
+    """The release blocks malformed structure while retaining numeric diagnostics as disclosure."""
+    return {
+        "mode": PUBLICATION_POLICY_MODE,
+        "blocking_kinds": {
+            "icio": ["结构", "完整性"],
+            "controls": ["结构", "完整性"],
+            "shocks": ["结构", "完整性", "来源"],
+            "outputs": ["structure", "integrity"],
+            "regression_inputs": ["structure", "integrity"],
+        },
+        "nonblocking_policy": "numeric, economic, and design diagnostics are retained for disclosure",
+    }
+
+
+def integrity_check_summary(checks: object, blocking_kinds: list[str]) -> dict[str, Any]:
+    if not isinstance(checks, list) or not checks:
+        raise ArtifactValidationError("integrity source checks must be a nonempty array")
+    blocking = [check for check in checks if isinstance(check, dict) and check.get("kind") in blocking_kinds]
+    if not blocking:
+        raise ArtifactValidationError(f"integrity policy matched no checks for kinds {blocking_kinds}")
+    malformed = [
+        check for check in blocking if not isinstance(check.get("name"), str) or type(check.get("passed")) is not bool
+    ]
+    if malformed:
+        raise ArtifactValidationError("integrity source check fields are malformed")
+    failures = [str(check["name"]) for check in blocking if not check["passed"]]
+    return {
+        "passed": not failures,
+        "checked": [str(check["name"]) for check in blocking],
+        "failures": failures,
+    }
+
+
+def release_integrity_metadata(root: Path, years: list[int]) -> dict[str, Any]:
+    """Rebuild the exact integrity-only decision from persisted diagnostic artifacts."""
+    policy = publication_policy_metadata()["blocking_kinds"]
+
+    def read(filename: str) -> object:
+        try:
+            return json.loads((root / filename).read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            raise ArtifactValidationError(f"cannot read integrity source {filename}: {error}") from error
+
+    scopes: dict[str, Any] = {
+        "years": {str(year): integrity_check_summary(read(f"qc_{year}.json"), policy["icio"]) for year in years},
+        "controls": integrity_check_summary(read("qc_controls.json"), policy["controls"]),
+        "shocks": integrity_check_summary(read("qc_shocks.json"), policy["shocks"]),
+        "outputs": {
+            str(year): integrity_check_summary(read(f"qc_outputs_{year}.json"), policy["outputs"]) for year in years
+        },
+        "regression_inputs": integrity_check_summary(
+            read("qc_regression_inputs.json"),
+            policy["regression_inputs"],
+        ),
+    }
+    summaries = [
+        *scopes["years"].values(),
+        scopes["controls"],
+        scopes["shocks"],
+        *scopes["outputs"].values(),
+        scopes["regression_inputs"],
+    ]
+    return {
+        "status": "passed" if all(summary["passed"] for summary in summaries) else "failed",
+        "scopes": scopes,
+    }
+
+
+def _validate_publication_policy_bindings(metadata: dict[str, Any], policy: dict[str, Any]) -> None:
+    """Ensure contract-level blocking flags and the release decision use identical kinds."""
+
+    def contract_kinds(items: object, label: str) -> set[str]:
+        if not isinstance(items, list):
+            raise ArtifactValidationError(f"dataset {label} contract checks are malformed")
+        selected = {
+            str(item["kind"])
+            for item in items
+            if isinstance(item, dict) and item.get("publication_blocking") is True and isinstance(item.get("kind"), str)
+        }
+        if not selected:
+            raise ArtifactValidationError(f"dataset {label} contract declares no publication-blocking kinds")
+        return selected
+
+    blocking = policy["blocking_kinds"]
+    qc_scopes = metadata["qc_contract"]["scopes"]
+    expected = {
+        "icio": contract_kinds(qc_scopes["icio"], "icio QC"),
+        "controls": contract_kinds(qc_scopes["controls"], "controls QC"),
+        "shocks": contract_kinds(qc_scopes["shocks"], "shocks QC"),
+        "outputs": contract_kinds(metadata["output_qc_contract"]["checks"], "output QC"),
+        "regression_inputs": contract_kinds(
+            metadata["regression_input_qc_contract"]["checks"],
+            "regression input QC",
+        ),
+    }
+    for scope, kinds in expected.items():
+        declared = blocking.get(scope)
+        if not isinstance(declared, list) or len(declared) != len(set(declared)) or set(declared) != kinds:
+            raise ArtifactValidationError(f"dataset publication policy does not match {scope} contract blocking kinds")
 
 
 def _require_regular_file(path: Path, *, label: str) -> None:
@@ -334,15 +437,13 @@ def _validate_release_qc(root: Path, metadata: dict[str, Any]) -> None:
     for scope, filename, expected_summary in scopes:
         if not isinstance(expected_summary, dict) or type(expected_summary.get("override")) is not bool:
             raise ArtifactValidationError(f"dataset {scope} QC summary is invalid")
-        if scope == quality.QC_SCOPE_SHOCKS and expected_summary["override"]:
-            raise ArtifactValidationError("dataset shock QC override is forbidden")
+        if expected_summary["override"]:
+            raise ArtifactValidationError("dataset QC override is forbidden by the integrity-only policy")
         checks = read_qc_artifact(root / filename, scope=scope, contract=contract)
         actual_summary = quality.summarize_serialized_checks(
             checks,
             override=expected_summary["override"],
         )
-        if not actual_summary["publishable"]:
-            raise ArtifactValidationError(f"dataset {scope} QC is not publishable")
         if actual_summary != expected_summary:
             raise ArtifactValidationError(f"dataset {scope} QC summary does not match {filename}")
 
@@ -417,10 +518,6 @@ def _validate_release_output_qc(root: Path, metadata: dict[str, Any]) -> None:
             output_quality.validate_output_summary(expected_summary, persisted)
         except (KeyError, TypeError, ValueError, output_quality.OutputQualityError) as exc:
             raise ArtifactValidationError(f"invalid output QC for year {year}: {exc}") from exc
-        if not expected_summary["publishable"]:
-            raise ArtifactValidationError(
-                f"output semantic QC is not publishable for year {year}: {expected_summary['fatal']}"
-            )
 
 
 def _validate_release_regression_input_qc(root: Path, metadata: dict[str, Any]) -> None:
@@ -438,8 +535,8 @@ def _validate_release_regression_input_qc(root: Path, metadata: dict[str, Any]) 
         regression_quality.validate_regression_input_summary(expected_summary, persisted)
     except (KeyError, TypeError, ValueError, regression_quality.RegressionInputQualityError) as exc:
         raise ArtifactValidationError(f"invalid regression input QC: {exc}") from exc
-    if not isinstance(expected_summary, dict) or not expected_summary.get("publishable"):
-        raise ArtifactValidationError("regression input QC is not publishable")
+    if not isinstance(expected_summary, dict):
+        raise ArtifactValidationError("regression input QC summary is invalid")
 
 
 def validate_release(processed_dir: Path | None = None, *, verify_integrity: bool = True) -> dict[str, Any]:
@@ -471,6 +568,8 @@ def validate_release(processed_dir: Path | None = None, *, verify_integrity: boo
         "regression_input_qc",
         "regression_input_qc_contract",
         "network_algorithm",
+        "publication_policy",
+        "integrity",
     ):
         if field not in metadata:
             raise ArtifactValidationError(f"dataset metadata is missing {field}")
@@ -492,6 +591,15 @@ def validate_release(processed_dir: Path | None = None, *, verify_integrity: boo
     _validate_release_qc(root, metadata)
     _validate_release_output_qc(root, metadata)
     _validate_release_regression_input_qc(root, metadata)
+    expected_policy = publication_policy_metadata()
+    if metadata["publication_policy"] != expected_policy:
+        raise ArtifactValidationError("dataset publication policy is unsupported or incomplete")
+    _validate_publication_policy_bindings(metadata, expected_policy)
+    actual_integrity = release_integrity_metadata(root, metadata["years"])
+    if metadata["integrity"] != actual_integrity:
+        raise ArtifactValidationError("dataset integrity decision does not match persisted diagnostics")
+    if actual_integrity["status"] != "passed":
+        raise ArtifactValidationError("dataset integrity checks failed")
     return {"release_id": metadata["release_id"], "files": len(declared_paths), "years": len(metadata["years"])}
 
 

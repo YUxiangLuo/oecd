@@ -21,7 +21,7 @@ const valid = (): ShockContract => ({
 
 describe("versioned shock contract", () => {
   test("accepts only the complete v2 exact field/source/mode set", () => {
-    expect(inspectShockContract(valid(), 9).valid).toBe(true);
+    expect(inspectShockContract(valid(), 11).valid).toBe(true);
     expect(inspectShockContract(valid(), 7).valid).toBe(false);
     for (const mutation of [
       (contract: ShockContract) => { contract.version = 0; },

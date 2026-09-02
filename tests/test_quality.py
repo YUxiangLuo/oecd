@@ -11,13 +11,13 @@ def _serialized(scope: str) -> list[dict]:
     return [
         {
             "name": name,
-            "kind": "结构",
+            "kind": quality.QC_EXPECTED_KINDS[scope][index],
             "passed": True,
             "detail": "ok",
             "warnings": [],
             "severity": "ok",
         }
-        for name in quality.QC_EXPECTED_CHECKS[scope]
+        for index, name in enumerate(quality.QC_EXPECTED_CHECKS[scope])
     ]
 
 
@@ -56,11 +56,16 @@ def test_qc_contract_binds_each_check_to_its_failure_severity():
     with pytest.raises(ValueError, match="必须为 warning"):
         quality.validate_serialized_checks(annual, scope=quality.QC_SCOPE_ICIO)
 
+    annual = _serialized(quality.QC_SCOPE_ICIO)
+    annual[0]["kind"] = "数值"
+    with pytest.raises(ValueError, match="kind 必须为 结构"):
+        quality.validate_serialized_checks(annual, scope=quality.QC_SCOPE_ICIO)
+
 
 def test_all_checks_pass_on_consistent_system(fake_io):
     checks = quality.run_all(fake_io)
     names = [c.name for c in checks]
-    assert len(checks) == 7
+    assert len(checks) == 8
     for c in checks:
         # 合成系统满足会计恒等式、无缺失值、矩阵性质良好;
         # 覆盖范围检查因缺少 CHN/USA 等关键国家而失败是预期行为
@@ -69,6 +74,15 @@ def test_all_checks_pass_on_consistent_system(fake_io):
         else:
             assert c.passed, f"{c.name}: {c.detail} {c.warnings}"
     assert any("会计恒等式" in n for n in names)
+
+
+def test_factor_input_integrity_is_separate_from_economic_diagnostics(fake_io):
+    fake_io.factor_inputs.F.loc["VA", ("AAA", "s1")] = float("nan")
+    checks = quality.run_all(fake_io)
+    integrity = next(check for check in checks if check.name.startswith("因子投入完整性"))
+    economic = next(check for check in checks if check.name == "因子投入与派生指标定义域(VA/TLS)")
+    assert integrity.kind == "完整性" and integrity.passed is False
+    assert economic.kind == "经济含义" and economic.passed is False
 
 
 def test_accounting_identity_detects_corruption(fake_io):
@@ -186,12 +200,27 @@ def test_shock_panel_quality_passes_on_complete_panel():
 
     checks = quality.check_shock_panel(df, ["AAA", "BBB"], ["s1", "s2"], [2019, 2020])
 
-    assert len(checks) == 6
+    assert len(checks) == 7
     assert all(c.passed for c in checks), [(c.name, c.detail, c.warnings) for c in checks]
     coverage = next(c for c in checks if c.name.startswith("关税处理组覆盖比例"))
     assert "关税处理 1/4" in coverage.detail
     assert "制裁处理 0（描述性）" in coverage.detail
     assert "出口管制处理 0（描述性）" in coverage.detail
+
+    nonfinite = df.copy()
+    nonfinite.loc[nonfinite.index[0], "tariff_shock"] = float("inf")
+    nonfinite_checks = quality.check_shock_panel(nonfinite, ["AAA", "BBB"], ["s1", "s2"], [2019, 2020])
+    integrity = next(c for c in nonfinite_checks if c.name.startswith("冲击数值字段完整性"))
+    assert integrity.kind == "完整性" and integrity.passed is False
+
+    finite_range = df.copy()
+    hit_index = finite_range.index[finite_range["tariff_shock"].gt(0)][0]
+    finite_range.loc[hit_index, ["tariff_shock", "treated"]] = [0.6, 1]
+    range_checks = quality.check_shock_panel(finite_range, ["AAA", "BBB"], ["s1", "s2"], [2019, 2020])
+    integrity = next(c for c in range_checks if c.name.startswith("冲击数值字段完整性"))
+    numeric_range = next(c for c in range_checks if c.name.startswith("冲击强度值域"))
+    assert integrity.passed is True
+    assert numeric_range.kind == "数值" and numeric_range.passed is False
 
 
 def test_shock_panel_quality_detects_bad_timeline_and_threshold():
@@ -257,7 +286,7 @@ def test_shock_threshold_is_strict_and_complete_types_are_mandatory():
 
     missing_half = frame.drop(columns=["sanction_treated"])
     malformed = quality.check_shock_panel(missing_half, ["C0", "C1", "C2"], ["s1"], [2020])
-    assert len(malformed) == 6
+    assert len(malformed) == 7
     assert not malformed[0].passed
     assert "sanction_treated" in " ".join(malformed[0].warnings)
 

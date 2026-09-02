@@ -26,7 +26,7 @@ import { inspectShockContract } from "./shock/shock-contract";
 import { QcChecksTable } from "./qc-checks-table";
 import { useAsync } from "../shared";
 
-/** 步骤11:从政策事件到国家×行业冲击面板——左右并排、点事件即联动右侧冲击。 */
+/** 步骤10:从政策事件到国家×行业冲击面板——左右并排、点事件即联动右侧冲击。 */
 /** 自动保存学生打开过的政策事件，供报告摘要。 */
 interface ShockStepState extends QuizCompletionState, Record<string, unknown> {
   viewed_shock_types?: string[];
@@ -173,7 +173,7 @@ export function ShockLab({ meta, step: _step, state }: {
         <div className="shock-panel-state">当前没有可展示的政策事件。</div>
       ) : (
         <FullscreenPanel
-          title="步骤 11 · 政策事件与国家行业冲击联动"
+          title="步骤 10 · 政策事件与国家行业冲击联动"
           variant="shock"
         >
           {/* 左右联动:左选事件 → 右看冲击。中间这条实时显示"选了谁 → 面板同步成什么",

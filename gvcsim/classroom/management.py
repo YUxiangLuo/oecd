@@ -94,8 +94,9 @@ def _learning_status(
     timestamps = [row["updated_at"] for row in (session, report) if row]
     return {
         "verified_completed_count": len(summary["completed"]),
+        "verified_total_steps": summary["total"],
         "verified_completed_steps": summary["completed"],
-        "completion_missing": [step for step in range(1, 17) if step not in summary["completed"]],
+        "completion_missing": [item["step"] for item in summary["steps"] if not item["complete"]],
         "last_valid_activity": max(timestamps) if timestamps else None,
         "report_state": report["state"] if report else None,
         "score": report["score"] if report else None,

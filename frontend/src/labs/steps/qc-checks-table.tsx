@@ -2,7 +2,7 @@ import { ScrollableRegion } from "../../a11y";
 import type { QcCheck } from "../../types";
 
 /**
- * 质检结果表:ICIO/控制变量质检(第 2 步)与冲击面板质检(第 11 步)共用同一张表。
+ * 维护者诊断与步骤 10 的冲击来源/结构结果共用同一张表。
  * 每项都带「为什么检查?」的口径说明;双侧会计恒等式/维度一致性在提供 onNavigateStep 时
  * 额外给出回步骤 1 核对原始切片的入口。
  */

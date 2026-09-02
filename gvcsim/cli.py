@@ -1,8 +1,8 @@
 """命令行入口:uv run gvcsim <子命令>
 
 download  下载 OECD ICIO 原始数据(步骤1)
-validate  对某年数据做质检并打印结果(步骤2)
-compute   预计算质检、指标、可视化/冲击数据与回归面板(步骤2–11 + 面板)
+validate  对某年数据运行维护者诊断
+compute   预计算诊断、指标、可视化/冲击数据与回归面板
 serve     启动 API 服务(供前端使用)
 preflight 启动前验证应用、固定产物与数据库
 classroom-init  初始化教学数据库(建库/建表/播种演示数据)
@@ -24,11 +24,6 @@ def main() -> None:
 
     p = sub.add_parser("compute", help="预计算指标(默认:本地所有年份)")
     p.add_argument("--years", type=int, nargs="*", default=None)
-    p.add_argument(
-        "--allow-qc-override",
-        action="store_true",
-        help=("仅对 ICIO/控制变量教学质检允许 fatal 后继续；冲击 schema、来源与语义 fatal 永不可 override"),
-    )
 
     p = sub.add_parser("serve", help="启动 API 服务")
     p.add_argument("--host", default=os.environ.get("GVCSIM_BIND_HOST", "127.0.0.1"))
@@ -79,8 +74,11 @@ def main() -> None:
             for w in c.warnings:
                 print(f"      ⚠ {w}")
         summary = quality.summarize_checks(checks)
-        if summary["fatal"]:
-            conclusion = "存在 fatal 异常，数据不得发布。"
+        integrity_failures = [check.name for check in checks if check.kind in {"结构", "完整性"} and not check.passed]
+        if integrity_failures:
+            conclusion = f"存在完整性异常，数据不得发布：{'、'.join(integrity_failures)}。"
+        elif summary["fatal"]:
+            conclusion = "存在数值或经济诊断发现；不阻断发布，但必须持续披露。"
         elif summary["requires_disclosure"]:
             conclusion = "无 fatal 异常；数据可使用，但必须持续披露上述 warning/disclosure。"
         else:
@@ -91,13 +89,9 @@ def main() -> None:
         from gvcsim import pipeline
 
         try:
-            pipeline.run(args.years, allow_qc_override=args.allow_qc_override)
+            pipeline.run(args.years)
         except pipeline.QualityGateError as error:
-            if error.override_allowed:
-                guidance = "如确认仅用于 ICIO/控制变量教学演示，可显式加 --allow-qc-override。"
-            else:
-                guidance = "冲击 schema、来源与语义 fatal 检查不可 override；请修复输入后重新计算。"
-            raise SystemExit(f"{error}\n{guidance}") from error
+            raise SystemExit(f"{error}\n请修复输入完整性后重新计算。") from error
     elif args.command == "serve":
         import uvicorn
 

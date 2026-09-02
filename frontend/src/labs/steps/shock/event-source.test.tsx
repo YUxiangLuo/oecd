@@ -22,7 +22,7 @@ const event = (source: ShockEvent["source_status"]): ShockEvent => ({
 });
 
 describe("shock event provenance teaching", () => {
-  test("reserves the Step 11 workbench height while event data is loading", async () => {
+  test("reserves the Step 10 workbench height while event data is loading", async () => {
     const lab = await Bun.file(new URL("../shock-lab.tsx", import.meta.url)).text();
     const styles = await Bun.file(new URL("../../../styles.css", import.meta.url)).text();
     expect(lab).toContain("shock-workbench-loading");

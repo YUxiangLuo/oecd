@@ -5,7 +5,7 @@ import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
 import type { VizStepState } from "./scaffold";
 import { finiteIndustryLengthRows, gvcPositionRankRows, LENGTH_AXIS_FALLBACK, lengthAxisDefinitions, lengthIndustryRequestKey, restoreLengthDrill, LengthVizStep } from "./length";
 
-describe("step 9 production-length operational definitions", () => {
+describe("step 8 production-length operational definitions", () => {
   test("fallback states the average-stage unit and rejects border/country counts", () => {
     for (const definition of Object.values(LENGTH_AXIS_FALLBACK)) {
       expect(definition).toContain("累计总产出");

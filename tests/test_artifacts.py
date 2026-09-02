@@ -132,20 +132,26 @@ def _write_raw_cache_fixture(raw_dir: Path) -> Path:
 
 
 def _valid_checks(scope: str) -> list[dict]:
+    kinds = {
+        quality.QC_SCOPE_ICIO: list(quality.QC_EXPECTED_KINDS[quality.QC_SCOPE_ICIO]),
+        quality.QC_SCOPE_CONTROLS: list(quality.QC_EXPECTED_KINDS[quality.QC_SCOPE_CONTROLS]),
+        quality.QC_SCOPE_SHOCKS: list(quality.QC_EXPECTED_KINDS[quality.QC_SCOPE_SHOCKS]),
+    }[scope]
     return [
         {
             "name": name,
-            "kind": "结构",
+            "kind": kinds[index],
             "passed": True,
             "detail": "ok",
             "warnings": [],
             "severity": "ok",
         }
-        for name in quality.QC_EXPECTED_CHECKS[scope]
+        for index, name in enumerate(quality.QC_EXPECTED_CHECKS[scope])
     ]
 
 
 def _release_metadata(
+    directory: Path,
     output_summary: dict[str, dict],
     regression_input_summary: dict,
     *,
@@ -154,7 +160,7 @@ def _release_metadata(
     annual = _valid_checks(quality.QC_SCOPE_ICIO)
     controls = _valid_checks(quality.QC_SCOPE_CONTROLS)
     shocks = _valid_checks(quality.QC_SCOPE_SHOCKS)
-    return {
+    metadata = {
         "release_id": RELEASE_ID,
         "years": [2018, 2019, 2020],
         "generated_at": "2026-08-13T00:00:00+00:00",
@@ -173,7 +179,10 @@ def _release_metadata(
         "output_qc": {"years": output_summary},
         "regression_input_qc_contract": regression_quality.regression_input_qc_contract_metadata(),
         "regression_input_qc": regression_input_summary,
+        "publication_policy": artifacts.publication_policy_metadata(),
     }
+    metadata["integrity"] = artifacts.release_integrity_metadata(directory, metadata["years"])
+    return metadata
 
 
 def _rewrite_metadata(directory: Path, metadata: dict) -> None:
@@ -407,6 +416,7 @@ def _release(directory: Path, *, course_release: str | None = None) -> None:
     artifacts.write_dataset_metadata(
         directory,
         _release_metadata(
+            directory,
             output_summary,
             regression_input_summary,
             course_release=course_release,
@@ -414,7 +424,7 @@ def _release(directory: Path, *, course_release: str | None = None) -> None:
     )
 
 
-def test_v9_release_requires_regression_shock_output_qc_manifest_and_identity(tmp_path):
+def test_v11_release_requires_integrity_regression_shock_output_qc_manifest_and_identity(tmp_path):
     _release(tmp_path)
 
     result = artifacts.validate_release(tmp_path)
@@ -422,8 +432,11 @@ def test_v9_release_requires_regression_shock_output_qc_manifest_and_identity(tm
 
     assert result == {"release_id": RELEASE_ID, "files": 26, "years": 3}
     assert artifacts.release_identity(tmp_path) == RELEASE_ID
-    assert metadata["artifact_contract_version"] == 9
-    assert metadata["regression_input_qc_contract"]["version"] == 2
+    assert metadata["artifact_contract_version"] == 11
+    assert metadata["publication_policy"] == artifacts.publication_policy_metadata()
+    assert metadata["integrity"]["status"] == "passed"
+    assert "冲击数值字段完整性(*_shock有限且treated为0/1)" in metadata["integrity"]["scopes"]["shocks"]["checked"]
+    assert metadata["regression_input_qc_contract"]["version"] == 4
     sample_scope = metadata["regression_input_qc_contract"]["sample_scope"]
     assert sample_scope["runtime_default"] == "exclude_row"
     assert sample_scope["excluded_country_values"] == ["ROW"]
@@ -614,7 +627,7 @@ def test_panel_missing_declared_year_fails_semantic_qc_after_recompute_and_manif
 
 
 @pytest.mark.parametrize("mutation", ["missing", "empty", "duplicate", "unknown", "severity"])
-def test_output_qc_file_requires_exact_nonempty_v1_check_set(tmp_path, mutation):
+def test_output_qc_file_requires_exact_nonempty_check_set(tmp_path, mutation):
     _release(tmp_path)
     path = tmp_path / "qc_outputs_2020.json"
     checks = json.loads(path.read_text(encoding="utf-8"))
@@ -645,7 +658,7 @@ def test_output_qc_contract_version_tamper_fails(tmp_path):
 
 
 @pytest.mark.parametrize("mutation", ["missing", "unknown", "duplicate", "malformed", "severity"])
-def test_regression_input_qc_requires_exact_v1_check_set(tmp_path, mutation):
+def test_regression_input_qc_requires_exact_nonempty_check_set(tmp_path, mutation):
     _release(tmp_path)
     path = tmp_path / regression_quality.REGRESSION_INPUT_QC_FILE
     checks = json.loads(path.read_text(encoding="utf-8"))
@@ -977,7 +990,7 @@ def test_regression_input_qc_rejects_nonfinite_or_malformed_nonnull_baseline(tmp
 
 
 @pytest.mark.parametrize("collapse", ["null", "constant"])
-def test_regression_input_qc_rejects_interaction_baseline_structural_collapse(tmp_path, collapse):
+def test_regression_input_qc_discloses_interaction_baseline_design_collapse(tmp_path, collapse):
     _release(tmp_path)
     for filename in ("panel_country.csv", "panel_industry.csv"):
         path = tmp_path / filename
@@ -1002,11 +1015,9 @@ def test_regression_input_qc_rejects_interaction_baseline_structural_collapse(tm
     else:
         assert "'baseline_range': 0.0" in outcome["detail"]
 
-    with pytest.raises(
-        regression_quality.RegressionInputQualityError,
-        match="configured_outcomes",
-    ):
-        regression_quality.write_regression_input_qc(tmp_path, expected_years=[2018, 2019, 2020])
+    _, summary = regression_quality.write_regression_input_qc(tmp_path, expected_years=[2018, 2019, 2020])
+    assert summary["publishable"] is False
+    assert "configured_outcomes" in summary["fatal"]
 
 
 def test_regression_input_qc_rejects_fixed_weight_release_without_pretreatment_year(tmp_path):
@@ -1027,7 +1038,7 @@ def test_regression_input_qc_rejects_fixed_weight_release_without_pretreatment_y
     assert timeline["passed"] is False
     structure = next(item for item in checks if item["name"] == "panel_keys_years_clusters")
     outcome = next(item for item in checks if item["name"] == "configured_outcomes")
-    assert structure["passed"] is False and "times" in structure["detail"]
+    assert structure["passed"] is True
     assert outcome["passed"] is False
 
 
@@ -1074,10 +1085,10 @@ def test_regression_input_qc_missing_contract_file_and_summary_tamper_fail(tmp_p
         artifacts.validate_release(tmp_path)
 
 
-def test_artifact_v8_is_rejected_and_v9_is_required(tmp_path):
+def test_artifact_v10_is_rejected_and_v11_is_required(tmp_path):
     _release(tmp_path)
-    _tamper_signed_metadata(tmp_path, lambda metadata: metadata.__setitem__("artifact_contract_version", 8))
-    with pytest.raises(artifacts.ArtifactContractError, match="expected 9, got 8"):
+    _tamper_signed_metadata(tmp_path, lambda metadata: metadata.__setitem__("artifact_contract_version", 10))
+    with pytest.raises(artifacts.ArtifactContractError, match="expected 11, got 10"):
         artifacts.validate_release(tmp_path)
 
 
@@ -1087,23 +1098,170 @@ def test_artifact_qc_boundary_requires_dataset_contract():
         artifacts.validate_qc_payload(payload, scope=quality.QC_SCOPE_ICIO, contract=None)
 
 
-def test_release_qc_preserves_only_explicit_fatal_override(tmp_path):
+def test_publication_policy_matches_every_contract_blocking_kind():
+    blocking = artifacts.publication_policy_metadata()["blocking_kinds"]
+    qc_contract = quality.qc_contract_metadata()["scopes"]
+    for policy_scope, contract_scope in (("icio", "icio"), ("controls", "controls"), ("shocks", "shocks")):
+        expected = {item["kind"] for item in qc_contract[contract_scope] if item["publication_blocking"]}
+        assert set(blocking[policy_scope]) == expected
+
+    output_contract = output_quality.output_qc_contract_metadata()["checks"]
+    regression_contract = regression_quality.regression_input_qc_contract_metadata()["checks"]
+    assert set(blocking["outputs"]) == {item["kind"] for item in output_contract if item["publication_blocking"]}
+    assert set(blocking["regression_inputs"]) == {
+        item["kind"] for item in regression_contract if item["publication_blocking"]
+    }
+
+
+def test_release_keeps_numeric_fatal_as_disclosure_but_forbids_override(tmp_path):
     _release(tmp_path)
     path = tmp_path / "qc_2020.json"
     checks = json.loads(path.read_text(encoding="utf-8"))
-    checks[0]["passed"] = False
-    checks[0]["severity"] = "fatal"
+    numeric = next(check for check in checks if check["kind"] == "数值")
+    numeric["passed"] = False
+    numeric["severity"] = "fatal"
     path.write_text(json.dumps(checks, ensure_ascii=False), encoding="utf-8")
     metadata = artifacts.dataset_metadata(tmp_path)
-    metadata["qc"]["years"]["2020"] = quality.summarize_serialized_checks(checks, override=True)
+    metadata["qc"]["years"]["2020"] = quality.summarize_serialized_checks(checks, override=False)
+    metadata["integrity"] = artifacts.release_integrity_metadata(tmp_path, metadata["years"])
     _rewrite_metadata(tmp_path, metadata)
     assert artifacts.validate_release(tmp_path)["release_id"] == RELEASE_ID
 
     metadata = artifacts.dataset_metadata(tmp_path)
-    metadata["qc"]["years"]["2020"] = quality.summarize_serialized_checks(checks, override=False)
+    metadata["qc"]["years"]["2020"] = quality.summarize_serialized_checks(checks, override=True)
     _rewrite_metadata(tmp_path, metadata)
-    with pytest.raises(artifacts.ArtifactContractError, match="not publishable"):
+    with pytest.raises(artifacts.ArtifactContractError, match="override is forbidden"):
         artifacts.validate_release(tmp_path)
+
+
+def test_release_rejects_publication_policy_integrity_and_structural_tampering(tmp_path):
+    _release(tmp_path)
+    metadata = artifacts.dataset_metadata(tmp_path)
+    metadata["publication_policy"]["mode"] = "forged"
+    _rewrite_metadata(tmp_path, metadata)
+    with pytest.raises(artifacts.ArtifactContractError, match="publication policy"):
+        artifacts.validate_release(tmp_path)
+
+    _release(tmp_path)
+    metadata = artifacts.dataset_metadata(tmp_path)
+    metadata["integrity"]["status"] = "failed"
+    _rewrite_metadata(tmp_path, metadata)
+    with pytest.raises(artifacts.ArtifactContractError, match="integrity decision"):
+        artifacts.validate_release(tmp_path)
+
+    _release(tmp_path)
+    path = tmp_path / "qc_2020.json"
+    checks = json.loads(path.read_text(encoding="utf-8"))
+    structural = next(check for check in checks if check["kind"] == "结构")
+    structural.update({"passed": False, "severity": "fatal"})
+    path.write_text(json.dumps(checks, ensure_ascii=False), encoding="utf-8")
+    metadata = artifacts.dataset_metadata(tmp_path)
+    metadata["qc"]["years"]["2020"] = quality.summarize_serialized_checks(checks)
+    metadata["integrity"] = artifacts.release_integrity_metadata(tmp_path, metadata["years"])
+    _rewrite_metadata(tmp_path, metadata)
+    with pytest.raises(artifacts.ArtifactContractError, match="integrity checks failed"):
+        artifacts.validate_release(tmp_path)
+
+
+def test_diagnostic_writers_block_structure_and_integrity_but_not_semantic_findings(tmp_path, monkeypatch):
+    output_checks = [
+        {
+            "name": spec.name,
+            "kind": spec.kind,
+            "passed": spec.kind in {"structure", "integrity"},
+            "detail": "fixture",
+            "severity": "ok" if spec.kind in {"structure", "integrity"} else "fatal",
+        }
+        for spec in output_quality.OUTPUT_CHECK_SPECS
+    ]
+    monkeypatch.setattr(output_quality, "recompute_output_checks", lambda *_args, **_kwargs: output_checks)
+    _, output_summary = output_quality.write_output_qc(tmp_path, 2020, expected_years=[2020])
+    assert output_summary["publishable"] is False
+
+    output_checks[0].update({"passed": False, "severity": "fatal"})
+    with pytest.raises(output_quality.OutputQualityError, match="integrity checks failed"):
+        output_quality.write_output_qc(tmp_path, 2020, expected_years=[2020])
+
+    regression_checks = [
+        {
+            "name": spec.name,
+            "kind": spec.kind,
+            "passed": spec.kind in {"structure", "integrity"},
+            "detail": "fixture",
+            "severity": "ok" if spec.kind in {"structure", "integrity"} else "fatal",
+        }
+        for spec in regression_quality.REGRESSION_INPUT_CHECK_SPECS
+    ]
+    monkeypatch.setattr(
+        regression_quality,
+        "recompute_regression_input_checks",
+        lambda *_args, **_kwargs: regression_checks,
+    )
+    _, regression_summary = regression_quality.write_regression_input_qc(tmp_path, expected_years=[2020])
+    assert regression_summary["publishable"] is False
+
+    regression_checks[0].update({"passed": False, "severity": "fatal"})
+    with pytest.raises(regression_quality.RegressionInputQualityError, match="integrity checks failed"):
+        regression_quality.write_regression_input_qc(tmp_path, expected_years=[2020])
+
+
+@pytest.mark.parametrize("mutation", ["missing", "nonfinite"])
+def test_output_runtime_numeric_integrity_blocks_malformed_required_fields(tmp_path, mutation):
+    _release(tmp_path)
+    path = tmp_path / "indicators_country_2020.csv"
+    frame = pd.read_csv(path)
+    if mutation == "missing":
+        frame = frame.drop(columns="DVAex")
+    else:
+        frame.loc[frame.index[0], "DVAex"] = float("inf")
+    frame.to_csv(path, index=False)
+
+    checks = output_quality.recompute_output_checks(tmp_path, 2020, expected_years=[2018, 2019, 2020])
+    integrity = next(check for check in checks if check["name"] == "required_numeric_fields")
+    assert integrity["kind"] == "integrity" and integrity["passed"] is False
+    assert "country:DVAex_" in integrity["detail"] or "country:missing=['DVAex']" in integrity["detail"]
+    with pytest.raises(output_quality.OutputQualityError, match="required_numeric_fields"):
+        output_quality.write_output_qc(tmp_path, 2020, expected_years=[2018, 2019, 2020])
+    persisted = json.loads((tmp_path / "qc_outputs_2020.json").read_text(encoding="utf-8"))
+    metadata = artifacts.dataset_metadata(tmp_path)
+    metadata["output_qc"]["years"]["2020"] = output_quality.summarize_output_checks(persisted)
+    metadata["integrity"] = artifacts.release_integrity_metadata(tmp_path, metadata["years"])
+    _rewrite_metadata(tmp_path, metadata)
+    with pytest.raises(artifacts.ArtifactContractError, match="integrity checks failed"):
+        artifacts.validate_release(tmp_path)
+
+
+def test_output_finite_identity_finding_remains_nonblocking(tmp_path):
+    _release(tmp_path)
+    path = tmp_path / "indicators_country_2020.csv"
+    frame = pd.read_csv(path)
+    frame.loc[frame.index[0], "DVAex"] += 0.25
+    frame.to_csv(path, index=False)
+
+    checks, summary = output_quality.write_output_qc(tmp_path, 2020, expected_years=[2018, 2019, 2020])
+    integrity = next(check for check in checks if check["name"] == "required_numeric_fields")
+    trade = next(check for check in checks if check["name"] == "trade_identities")
+    assert integrity["passed"] is True
+    assert trade["passed"] is False and trade["kind"] == "numeric"
+    assert summary["publishable"] is False
+
+
+@pytest.mark.parametrize("mutation", ["missing_shock", "nonfinite_control"])
+def test_regression_runtime_field_integrity_blocks_malformed_inputs(tmp_path, mutation):
+    _release(tmp_path)
+    path = tmp_path / "panel_country.csv"
+    frame = pd.read_csv(path)
+    if mutation == "missing_shock":
+        frame = frame.drop(columns="tariff_shock")
+    else:
+        frame.loc[frame.index[0], "macro_log_gdp_usd"] = float("inf")
+    frame.to_csv(path, index=False)
+
+    checks = regression_quality.recompute_regression_input_checks(tmp_path, expected_years=[2018, 2019, 2020])
+    integrity = next(check for check in checks if check["name"] == "required_runtime_fields")
+    assert integrity["kind"] == "integrity" and integrity["passed"] is False
+    with pytest.raises(regression_quality.RegressionInputQualityError, match="required_runtime_fields"):
+        regression_quality.write_regression_input_qc(tmp_path, expected_years=[2018, 2019, 2020])
 
 
 def test_release_rejects_persisted_fatal_shock_override_claim(tmp_path):
@@ -1116,7 +1274,7 @@ def test_release_rejects_persisted_fatal_shock_override_claim(tmp_path):
     metadata["qc"]["shocks"] = quality.summarize_serialized_checks(checks, override=True)
     _rewrite_metadata(tmp_path, metadata)
 
-    with pytest.raises(artifacts.ArtifactContractError, match="shock QC override is forbidden"):
+    with pytest.raises(artifacts.ArtifactContractError, match="override is forbidden"):
         artifacts.validate_release(tmp_path)
 
 

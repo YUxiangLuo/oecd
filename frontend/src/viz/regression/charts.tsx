@@ -165,7 +165,7 @@ export function EventStudyChart({
   );
 }
 
-/* -------------------------- 步骤12–15：非校准实体置换分布 -------------------------- */
+/* -------------------------- 步骤11–14：非校准实体置换分布 -------------------------- */
 
 export function PlaceboChart({ data, scale = 1, unit }: {
   data: PlaceboResponse["placebo"];
@@ -239,7 +239,7 @@ export function PlaceboChart({ data, scale = 1, unit }: {
   );
 }
 
-/* --------------------- 步骤12–15：系数森林图（横向 CI） --------------------- */
+/* --------------------- 步骤11–14：系数森林图（横向 CI） --------------------- */
 
 /** 长系数名折成两行:优先在最靠近中点的分隔符(×、_、空格)处断行,避免截断记号。 */
 function splitCoefName(name: string): string[] {

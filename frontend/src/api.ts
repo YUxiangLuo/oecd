@@ -19,7 +19,7 @@ export function getActiveAuthToken(): string | null {
 
 class ApiError extends Error {
   status: number;
-  /** 结构化 detail(如第 16 步门槛的 blocked 列表);普通字符串 detail 时为 undefined。 */
+  /** 结构化 detail(如第 15 步门槛的 blocked 列表);普通字符串 detail 时为 undefined。 */
   blocked?: import("./types").ReportGateItem[];
 
   constructor(status: number, detail: unknown, fallback: string) {
@@ -188,7 +188,7 @@ export const api = {
     get<import("./types").IndustryPage>(
       withQuery(`/api/indicators/industry/${year}`, { page, page_size: pageSize, country }),
     ),
-  // 拉取一个国家全部行业的指标行(用于步骤3-5 的拆解演示,一次取回填充行业下拉)
+  // 拉取一个国家全部行业的指标行(用于步骤2-4 的拆解演示,一次取回填充行业下拉)
   industryIndicatorsAll: (year: number, country: string) => {
     if (!country) return Promise.reject(new Error("单实体指标请求必须指定国家"));
     return get<import("./types").IndustryPage>(

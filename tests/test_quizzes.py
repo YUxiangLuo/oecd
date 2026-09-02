@@ -5,18 +5,18 @@ import pytest
 from gvcsim import quizzes
 
 
-def test_bank_covers_steps_1_through_15_with_21_questions():
-    assert sorted(quizzes.STEP_QUIZZES) == list(range(1, 16))
-    assert sum(len(items) for items in quizzes.STEP_QUIZZES.values()) == 21
+def test_bank_covers_steps_1_through_14_with_19_questions():
+    assert sorted(quizzes.STEP_QUIZZES) == list(range(1, 15))
+    assert sum(len(items) for items in quizzes.STEP_QUIZZES.values()) == 19
     assert all(1 <= len(items) <= 3 for items in quizzes.STEP_QUIZZES.values())
 
 
 def test_public_quiz_never_exposes_answers_or_feedback():
-    for step in range(1, 16):
+    for step in range(1, 15):
         public = quizzes.public_quiz(step)
         assert public and public["version"] == quizzes.QUIZ_VERSION
         assert all("correct" not in question and "explanation" not in question for question in public["questions"])
-    assert quizzes.public_quiz(16) is None
+    assert quizzes.public_quiz(15) is None
 
 
 def test_grade_requires_exact_question_set_and_all_correct():

@@ -6,7 +6,7 @@ import { isolateFullscreenSiblings } from "../../fullscreen-panel";
 import type { NetworkData } from "../../types";
 import { CAT, Legend, REGION_OF, REGIONS, SEQ, cardStyle, countryLabel, num, useTip } from "../shared";
 
-/* ------------------------------ 步骤10:网络图 ------------------------------ */
+/* ------------------------------ 步骤9:网络图 ------------------------------ */
 
 export type NetworkMetric = "gvc_production_share" | "weighted degree" | "gross_exports";
 export type NetworkColorMode = "region" | NetworkMetric;

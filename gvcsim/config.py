@@ -52,7 +52,7 @@ REGRESSION_RUNS_PER_MINUTE = _positive_int_setting("GVCSIM_REGRESSION_RUNS_PER_M
 PLACEBO_RUNS_PER_MINUTE = _positive_int_setting("GVCSIM_PLACEBO_RUNS_PER_MINUTE", 4)
 
 # 课程内容发布边界；数据库 schema 可保持不变，但学习记录不能跨学期复用。
-COURSE_RELEASE = "2026-fall"
+COURSE_RELEASE = "2026-fall-15-step"
 COURSE_TERM = "2026 秋"
 
 # 只在显式 demo 模式播种演示账号。生产启动校验会拒绝 demo 模式和空值。

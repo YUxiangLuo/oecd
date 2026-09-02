@@ -1,14 +1,15 @@
 """Versioned semantic QC for published indicator, network, and panel outputs.
 
-This contract is intentionally separate from :mod:`gvcsim.data.quality`, which is
-Step 2 input QC.  The checks below certify reproducible file-level identities and
-domains only; they do not certify independent causal or economic validity.
+This contract is intentionally separate from :mod:`gvcsim.data.quality`. The
+checks below separate runtime artifact integrity from reproducible identities and
+domains; they do not certify independent causal or economic validity.
 """
 
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from numbers import Real
 from pathlib import Path
 from typing import Callable
 
@@ -19,7 +20,7 @@ from gvcsim.indicators.network import NETWORK_COLUMNS
 from gvcsim.indicators.production import PRODUCTION_COLUMNS
 from gvcsim.indicators.tradeflow import TRADE_COLUMNS
 
-OUTPUT_QC_CONTRACT_VERSION = 1
+OUTPUT_QC_CONTRACT_VERSION = 3
 OUTPUT_QC_ABS_TOLERANCE = 1e-8
 OUTPUT_QC_REL_TOLERANCE = 1e-8
 OUTPUT_QC_DENOMINATOR_FLOOR = 1e-12
@@ -65,6 +66,11 @@ OUTPUT_CHECK_SPECS = (
         "Unique year/country/industry/entity keys and exact yearly coverage across indicator, exposure, and panel files.",
     ),
     OutputCheckSpec(
+        "required_numeric_fields",
+        "integrity",
+        "Every numeric field required by indicator and visualization routes exists; nonnull values are true finite numbers, with nulls allowed only for structurally undefined length fields.",
+    ),
+    OutputCheckSpec(
         "trade_identities",
         "numeric",
         "Finite signed trade terms; six closure amounts equal gross_exports where persisted; EXDVA=DVAex+DVArt.",
@@ -108,7 +114,7 @@ class OutputQualityError(RuntimeError):
 
 
 def output_qc_contract_metadata() -> dict:
-    """Return the exact supported output QC v1 contract and documented policies."""
+    """Return the exact supported output diagnostic contract and publication policy."""
     return {
         "version": OUTPUT_QC_CONTRACT_VERSION,
         "checks": [
@@ -116,6 +122,7 @@ def output_qc_contract_metadata() -> dict:
                 "name": spec.name,
                 "kind": spec.kind,
                 "failure_severity": "fatal",
+                "publication_blocking": spec.kind in {"structure", "integrity"},
                 "description": spec.description,
             }
             for spec in OUTPUT_CHECK_SPECS
@@ -362,6 +369,59 @@ def _keys_and_coverage(
         "row_keys_and_coverage",
         not problems,
         f"year={year}; rows={rows}; violations={len(problems)}" + (f"; {'; '.join(problems)}" if problems else ""),
+    )
+
+
+def _invalid_numeric_source(series: pd.Series, *, allow_null: bool) -> int:
+    invalid = 0
+    for value in series.array:
+        try:
+            missing = bool(pd.isna(value))
+        except (TypeError, ValueError):
+            missing = False
+        if missing and allow_null:
+            continue
+        if missing or not isinstance(value, Real) or isinstance(value, (bool, np.bool_)):
+            invalid += 1
+            continue
+        if not np.isfinite(float(value)):
+            invalid += 1
+    return invalid
+
+
+def _required_numeric_fields(frames: dict[str, pd.DataFrame], year: int) -> dict:
+    annual_required = tuple(dict.fromkeys([*ADDITIVE_COLUMNS, *LENGTH_COLUMNS, *NETWORK_COLUMNS]))
+    problems: list[str] = []
+    checked = 0
+    for label in ("country", "industry"):
+        frame = frames[label]
+        missing = _missing(frame, set(annual_required))
+        if missing:
+            problems.append(f"{label}:missing={missing}")
+            continue
+        for column in annual_required:
+            invalid = _invalid_numeric_source(frame[column], allow_null=column in LENGTH_COLUMNS)
+            if invalid:
+                problems.append(f"{label}:{column}_invalid={invalid}")
+        checked += len(frame) * len(annual_required)
+
+    exposure_fields = ("bilateral_exports", "total_exports", "export_exposure")
+    exposure = frames["exposure"]
+    missing_exposure = _missing(exposure, set(exposure_fields))
+    if missing_exposure:
+        problems.append(f"exposure:missing={missing_exposure}")
+    else:
+        for column in exposure_fields:
+            invalid = _invalid_numeric_source(exposure[column], allow_null=False)
+            if invalid:
+                problems.append(f"exposure:{column}_invalid={invalid}")
+        checked += len(exposure) * len(exposure_fields)
+
+    return _check(
+        "required_numeric_fields",
+        not problems,
+        f"year={year}; checked_values={checked}; violations={len(problems)}"
+        + (f"; {'; '.join(problems)}" if problems else ""),
     )
 
 
@@ -657,6 +717,7 @@ def recompute_output_checks(root: Path, year: int, *, expected_years: list[int])
         )
     runners: tuple[Callable[[dict[str, pd.DataFrame], int], dict], ...] = (
         lambda values, selected_year: _keys_and_coverage(values, selected_year, panel_year_problems),
+        _required_numeric_fields,
         _trade_identities,
         _production_identities,
         _length_identities,
@@ -671,18 +732,21 @@ def recompute_output_checks(root: Path, year: int, *, expected_years: list[int])
 
 
 def write_output_qc(root: Path, year: int, *, expected_years: list[int]) -> tuple[list[dict], dict]:
-    """Recompute, persist, and gate one yearly output semantic QC artifact."""
+    """Persist all diagnostics, blocking publication only on structural integrity."""
     checks = recompute_output_checks(root, year, expected_years=expected_years)
     summary = summarize_output_checks(checks)
     path = root / f"qc_outputs_{year}.json"
     path.write_text(json.dumps(checks, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
-    if not summary["publishable"]:
-        raise OutputQualityError(f"year {year} output semantic QC failed: {summary['fatal']}")
+    integrity_failures = [
+        check["name"] for check in checks if check["kind"] in {"structure", "integrity"} and not check["passed"]
+    ]
+    if integrity_failures:
+        raise OutputQualityError(f"year {year} output integrity checks failed: {integrity_failures}")
     return checks, summary
 
 
 def read_output_qc(path: Path, *, contract: object) -> list[dict]:
-    """Read one persisted output QC artifact under the exact v1 contract."""
+    """Read one persisted output diagnostic artifact under the current exact contract."""
     validate_output_qc_contract_metadata(contract)
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))

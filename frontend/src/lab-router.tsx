@@ -1,4 +1,4 @@
-import { DbLab, IndicatorLab, QcLab, ReportLab, ShockLab, VizLab } from "./labs";
+import { DbLab, IndicatorLab, ReportLab, ShockLab, VizLab } from "./labs";
 import {
   RegressionRunLab,
   type RegressionHistory,
@@ -26,7 +26,6 @@ interface LabRouterProps {
   regressionHistory: RegressionHistory;
   onRegressionHistoryChange: Dispatch<SetStateAction<RegressionHistory>>;
   onNavigateStep: (step: number) => void;
-  onCompletionBlockChange?: (reason: string | null) => void;
   getStep?: <T>(step: number) => T | undefined;
   getConfirmedStep?: <T>(step: number) => T | undefined;
 }
@@ -49,18 +48,10 @@ export function LabRouter({
   regressionHistory,
   onRegressionHistoryChange,
   onNavigateStep,
-  onCompletionBlockChange,
   getStep,
   getConfirmedStep,
 }: LabRouterProps) {
-  if (step.lab === "db") return <DbLab state={state} />;
-  if (step.lab === "qc") return meta ? (
-    <QcLab
-      meta={meta}
-      onNavigateStep={onNavigateStep}
-      onCompletionBlockChange={onCompletionBlockChange}
-    />
-  ) : null;
+  if (step.lab === "db") return <DbLab state={state} releaseMeta={meta} />;
   if (step.lab === "shock") return meta ? <ShockLab meta={meta} step={step} state={state} /> : null;
   // 同一实验台横跨多步时必须按步重挂载，否则步内状态会泄漏到下一步。
   if (step.lab === "ind") return meta ? <IndicatorLab key={step.n} meta={meta} step={step} state={state} /> : null;

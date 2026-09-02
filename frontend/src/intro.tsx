@@ -2,7 +2,7 @@
  * 登录后的沉浸式系统介绍(5 幕,可跳过、可在顶栏重看):
  *   1 开场:闭环管线动画 + 真实规模计数(经济体/行业/年份)
  *   2 数据底座:两张可翻开的数据卡(ICIO 结构 / 拟真政策冲击事件)
- *   3 十六步旅程：五阶段可点击展开（内容来自 /api/steps 真实元数据）
+ *   3 十五步旅程：五阶段可点击展开（内容来自 /api/steps 真实元数据）
  *   4 动手示意:关税滑块驱动的供应链示意动画(明确标注非真实估计)
  *   5 就绪:以当前登录身份进入实验
  * 统计与文案全部取自后端真实接口;仅动手预演为教学示意。
@@ -166,7 +166,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
     <div key={1} className="intro-scene">
       <div className="intro-scene-kicker">数据底座</div>
       <h2 className="intro-h2">真实账本 × 拟真冲击</h2>
-      <p className="intro-lede">价值链指标来自真实 ICIO,政策冲击是教学用拟真面板。点开卡片,看看两块底座分别装着什么;它们会在第 11–15 步合并成回归样本。</p>
+      <p className="intro-lede">价值链指标来自真实 ICIO,政策冲击是教学用拟真面板。点开卡片,看看两块底座分别装着什么；政策事件在第 10 步接入，并在第 11–14 步进入回归样本。</p>
       <div className="intro-cards">
         <div
           className={`intro-card${openCard === "icio" ? " open" : ""}`}
@@ -229,10 +229,10 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
       </div>
     </div>,
 
-    /* ---- 3 十六步旅程 ---- */
+    /* ---- 3 十五步旅程 ---- */
     <div key={2} className="intro-scene">
       <div className="intro-scene-kicker">实验路线</div>
-      <h2 className="intro-h2">五个阶段，十六步</h2>
+      <h2 className="intro-h2">五个阶段，十五步</h2>
       <p className="intro-lede">点击各阶段预览路线。建议按顺序完成；“自由浏览”只改变位置，答对本步选择题才会计入完成度。</p>
       <div className="intro-stage-tabs">
         {stages.map((st) => (
@@ -327,7 +327,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
       <div className="intro-ready-rules">
         <b>侧栏会分别显示两种进度：</b>
         <span>步骤徽标“✓”= 本步理解题已答对；“材料已齐全”= 本步用于报告的材料已经保存。</span>
-        <span>第 1 步记录单元格；第 3–6 步各用“记录当前国家到报告材料”按钮保存两个对象，第 7–10 步各完成指定的对比并保存；第 12–15 步各保存一次可报告估计；第 16 步完成三段原创分析。</span>
+        <span>第 1 步记录单元格；第 2–5 步各用“记录当前国家到报告材料”按钮保存两个对象，第 6–9 步各完成指定的对比并保存；第 11–14 步各保存一次可报告估计；第 15 步完成三段原创分析。</span>
       </div>
       <div className="intro-cta-row">
         <button className="intro-cta" onClick={() => onDone(1)}>从第 1 步开始实验</button>

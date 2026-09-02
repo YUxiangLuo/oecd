@@ -12,7 +12,7 @@ export function isValidSession(value: unknown): value is ExperimentSession {
   const validRecord = (record: unknown) => typeof record === "object" && record !== null && "data" in record;
   return Object.entries(session.steps).every(([key, record]) => {
     const step = Number(key);
-    return Number.isInteger(step) && step >= 1 && step <= 16 && validRecord(record);
+    return Number.isInteger(step) && step >= 1 && step <= 15 && validRecord(record);
   }) && Object.entries(session.shared).every(
     ([key, record]) => key === "regression_settings" && validRecord(record),
   );

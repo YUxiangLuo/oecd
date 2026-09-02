@@ -116,8 +116,9 @@ def test_deployment_documents_bootstrap_and_separate_lifecycles():
     assert ".venv/bin/gvcsim compute" not in semester_reset
     assert "benchmark_shock_panel_v9.py" in data_release
     assert "GVCSIM_PUBLICATION_LOCK_DIR" not in deployment
-    assert "v10 -> 下一版" in deployment
-    assert "不能用 `classroom-init --reset` 代替普通升级" in deployment
+    assert "gvcsim-teaching-db-v11" in deployment
+    assert "不兼容 v10 会话与报告" in deployment
+    assert "后续普通升级仍不得用重置代替迁移" in deployment
     assert "pg_dump" in deployment and "pg_restore" in deployment
     assert "createdb --maintenance-db=postgres" in deployment
     assert "export PGHOST=" in deployment and "export PGPASSWORD" in deployment

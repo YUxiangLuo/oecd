@@ -1,4 +1,4 @@
-"""Generate the step-16 report from the saved experiment session."""
+"""Generate the step-15 report from the saved experiment session."""
 
 from __future__ import annotations
 
@@ -151,7 +151,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             }
         )
 
-    for step in range(3, 11):
+    for step in range(2, 10):
         data = _step_data(session, step)
         compared = {str(item) for item in _list_values(data.get("compared")) if str(item).strip()}
         observations = [
@@ -168,13 +168,13 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
                     "title": _STEP_TITLES.get(step, ""),
                     "missing": [
                         "请先选择具体国家并点击“记录当前国家到报告材料”，再切换国家记录第二条"
-                        if step <= 6
+                        if step <= 5
                         else "请在本步保存至少两个比较对象或两条指标观测"
                     ],
                 }
             )
 
-    shock_data = _step_data(session, 11)
+    shock_data = _step_data(session, 10)
     viewed_shock_types = {
         str(value) for value in _list_values(shock_data.get("viewed_shock_types")) if str(value).strip()
     }
@@ -188,8 +188,8 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
         missing_labels = "、".join(SHOCK_LABELS[shock_type] for shock_type in missing_shock_types)
         blocked.append(
             {
-                "step": 11,
-                "title": _STEP_TITLES.get(11, ""),
+                "step": 10,
+                "title": _STEP_TITLES.get(10, ""),
                 "missing": [f"请至少各查看一项当前 release 可选的政策事件；尚未查看：{missing_labels}"],
             }
         )
@@ -206,7 +206,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             }
         )
 
-    reflection = _step_data(session, 16)
+    reflection = _step_data(session, 15)
     reflection_missing = []
     for key, label in (
         ("research_question", "研究问题"),
@@ -220,7 +220,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
         if isinstance(value, str) and len(value) > REFLECTION_TEXT_LIMIT:
             reflection_missing.append(f"{label}不能超过 {REFLECTION_TEXT_LIMIT} 个字符")
     if reflection_missing:
-        blocked.append({"step": 16, "title": "原创分析与反思", "missing": reflection_missing})
+        blocked.append({"step": 15, "title": "原创分析与反思", "missing": reflection_missing})
     return _merge_gate_blocks(blocked)
 
 
@@ -971,7 +971,7 @@ def _reflection_value(value: Any) -> str:
 
 
 def _reflection_section(session: dict[str, Any]) -> list[str]:
-    reflection = _step_data(session, 16)
+    reflection = _step_data(session, 15)
     return [
         "## 一页结论：我的问题、证据与局限",
         "",
@@ -1008,8 +1008,8 @@ def _list_values(value: Any) -> list[Any]:
 
 
 def _viewed_shock_event_sources(session: dict[str, Any]) -> list[dict[str, Any]]:
-    """Resolve saved step-11 event names to the catalogue's source contract."""
-    shock = _step_data(session, 11)
+    """Resolve saved step-10 event names to the catalogue's source contract."""
+    shock = _step_data(session, 10)
     requested = [str(item) for item in _list_values(shock.get("viewed_events"))]
     selected = shock.get("selected_event_key")
     if isinstance(selected, str) and selected:
@@ -1121,7 +1121,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             lines.append(f"- 记录的单元格：{_observation_reading(observation)}")
         lines.append("")
 
-    for step in range(3, 11):
+    for step in range(2, 10):
         data = _step_data(session, step)
         compared = _list_values(data.get("compared"))
         observations = [item for item in _list_values(data.get("observations")) if isinstance(item, dict)]
@@ -1158,14 +1158,14 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                 )
         lines.append("")
 
-    shock = _step_data(session, 11)
+    shock = _step_data(session, 10)
     viewed_types = _list_values(shock.get("viewed_shock_types"))
     viewed_events = _list_values(shock.get("viewed_events"))
     selected_event = shock.get("selected_event_key")
     event_sources = _viewed_shock_event_sources(session)
     if viewed_types or viewed_events or selected_event:
         captured = True
-        lines.extend(("### 步骤 11 · 贸易政策冲击数据接入", ""))
+        lines.extend(("### 步骤 10 · 贸易政策冲击数据接入", ""))
         if viewed_types:
             lines.append(f"- 查看过的冲击类型：{'、'.join(_safe(item) for item in viewed_types)}")
         if viewed_events:
@@ -1652,13 +1652,15 @@ def _qc_release_summary(qc: Any) -> dict[str, Any]:
     return summary
 
 
-def _qc_disclosure_section(summary: dict[str, Any]) -> list[str]:
-    if not summary["requires_disclosure"]:
-        return []
-    lines = ["## 数据质量披露", ""]
-    if summary["override"]:
-        lines.append("- 本数据版本包含经显式 override 接受的 fatal QC 项，仅可按教学边界使用。")
-    for key, label in (("fatal", "Fatal"), ("warning", "Warning"), ("disclosure", "Disclosure")):
+def _qc_disclosure_section(summary: dict[str, Any], integrity: Any) -> list[str]:
+    status = integrity.get("status") if isinstance(integrity, dict) else "unknown"
+    lines = [
+        "## 数据完整性与诊断披露",
+        "",
+        f"- 自动完整性验证：{'通过' if status == 'passed' else '状态未知'}。文件哈希、结构、键覆盖和来源绑定属于发布门槛。",
+        "- 发布政策：数值恒等式、经济含义和回归设计诊断不阻断学生使用；所有发现仍完整保留并在此披露。",
+    ]
+    for key, label in (("fatal", "非阻断诊断发现"), ("warning", "警告"), ("disclosure", "补充披露")):
         if summary[key]:
             lines.append(f"- {label}：{'、'.join(summary[key])}")
     lines.append("")
@@ -1686,7 +1688,16 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
     data_sources: dict[str, Any] = raw_data_sources if isinstance(raw_data_sources, dict) else {}
     raw_qc_metadata = metadata.get("qc")
     qc_metadata: dict[str, Any] = raw_qc_metadata if isinstance(raw_qc_metadata, dict) else {}
-    qc_summary = _qc_release_summary(qc_metadata)
+    output_qc_metadata = metadata.get("output_qc")
+    regression_input_qc_metadata = metadata.get("regression_input_qc")
+    qc_summary = _qc_release_summary(
+        {
+            "inputs": qc_metadata,
+            "outputs": output_qc_metadata,
+            "regression_inputs": regression_input_qc_metadata,
+        }
+    )
+    integrity_metadata = metadata.get("integrity")
     network_algorithm = str(metadata.get("network_algorithm") or NETWORK_ALGORITHM)
     shock_event_sources = _viewed_shock_event_sources(session)
     provenance = {
@@ -1713,6 +1724,10 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "indicator_data_source": data_sources.get("ci_synthetic_icio") or data_sources.get("oecd_icio"),
         "simulated_macro_controls": data_sources.get("simulated_macro_controls"),
         "qc": qc_metadata,
+        "output_qc": output_qc_metadata,
+        "regression_input_qc": regression_input_qc_metadata,
+        "publication_policy": metadata.get("publication_policy"),
+        "integrity": integrity_metadata,
     }
     source = report_source_label(data_sources)
     lines = [
@@ -1722,7 +1737,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "",
         f"> 数据覆盖 {years[0]}–{years[-1]}，指标来源：{_safe(source)}。政策冲击为基于公开事件手工编码的拟真教学面板，不能用于研究结论。",
         "",
-        "> 步骤 12–15 的四项结果是预先指定的探索性结果族，必须全部报告，不能只挑区间未跨 0 的结果。贸易流、生产和长度量纲不同；网络项还是未经边阈值敏感性检验的探索性拓扑基准，四者都不能按系数大小排序。",
+        "> 步骤 11–14 的四项结果是预先指定的探索性结果族，必须全部报告，不能只挑区间未跨 0 的结果。贸易流、生产和长度量纲不同；网络项还是未经边阈值敏感性检验的探索性拓扑基准，四者都不能按系数大小排序。",
         "",
         "> 本报告汇总描述性探索和已保存的教学估计，不证明政策冲击导致了 GVC 变化。因果解释至少依赖冲击外生性、趋势可比性、无同期混杂、处理定义与模型相容，以及处理效应异质性得到妥善处理。全球投入链外溢意味着 no-interference/SUTVA 不能自动成立；2018–2020 与 COVID-19 重叠，年份效应不能吸收国家×行业异质疫情冲击。",
         "",
@@ -1731,7 +1746,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         *_quiz_sections(session),
         *_experiment_sections(session),
         *_run_sections(runs),
-        *_qc_disclosure_section(qc_summary),
+        *_qc_disclosure_section(qc_summary, integrity_metadata),
         "## 数据与方法说明",
         "",
         "- 指标算法：WWZ 16 个明细项归并为五类，另加由 OECD ICIO TLS（产品税减补贴）账户计算的 taxsub 扩展项以匹配 VA+TLS 账户闭合毛出口；TLS/taxsub 不等于关税冲击，也不是 WWZ 原文分类。课程 FVA_share 使用纯 VA FVA 作分子、VA+TLS 毛出口作分母，包含直接与间接外国上游纯增加值，但不是 OECD 官方 EXGR_FVASH。生产分解与生产长度采用 WWYZ 口径。",

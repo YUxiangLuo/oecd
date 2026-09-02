@@ -20,7 +20,7 @@ export type StepHistoryMode = "push" | "replace";
 
 export function stepFromSearch(search: string): number | null {
   const n = Number(new URLSearchParams(search).get("step"));
-  return Number.isInteger(n) && n >= 1 && n <= 16 ? n : null;
+  return Number.isInteger(n) && n >= 1 && n <= 15 ? n : null;
 }
 
 export function readAuthExpiry(storage: StorageReader): number | null {

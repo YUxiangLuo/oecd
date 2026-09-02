@@ -84,7 +84,7 @@ export function StudentsTab() {
                 <td className="mono">{student.username}</td>
                 <td>{student.student_no || "—"}</td>
                 <td title={`已完成步骤：${student.verified_completed_steps.join("、") || "无"}`}>
-                  <span className="step-cell"><span className="mini-track verified"><span className="mini-bar" style={{ width: `${student.verified_completed_count / 16 * 100}%` }} /></span>{student.verified_completed_count}/16</span>
+                  <span className="step-cell"><span className="mini-track verified"><span className="mini-bar" style={{ width: `${student.verified_completed_count / student.verified_total_steps * 100}%` }} /></span>{student.verified_completed_count}/{student.verified_total_steps}</span>
                 </td>
                 <td>{student.report_state === "graded" ? <StatusPill tone="ok">已评阅</StatusPill> : student.report_state === "pending" ? <StatusPill tone="warn">待评阅</StatusPill> : student.report_state === "draft" ? <StatusPill tone="muted">草稿</StatusPill> : <StatusPill tone="muted">未生成</StatusPill>}</td>
                 <td>{student.score ?? "—"}</td>

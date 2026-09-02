@@ -12,7 +12,7 @@ from typing import Any
 from gvcsim.indicator_schema import PRODUCTION_LENGTH_OPERATIONAL_DEFINITION
 
 
-QUIZ_VERSION = "course-quiz-v6"
+QUIZ_VERSION = "course-quiz-v7"
 
 
 def _option(option_id: str, label: str) -> dict[str, str]:
@@ -51,31 +51,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
     ],
     2: [
         _question(
-            "s02-fatal",
-            "某年度的投入产出账户不闭合并被判为 Fatal。若目标是正式研究，下一步应怎样做？",
-            [
-                _option("a", "记录一条 Disclosure 后直接运行指标"),
-                _option("b", "停止该年度分析，修正数据并复检通过后再继续"),
-                _option("c", "只要其他年份通过，就把该项改成 Warning"),
-            ],
-            "b",
-            "Fatal 是正式研究与发布门禁，披露不能代替修正。必须停止，或完成真实修正并通过复检；教学 override 也只能服务演示并完整披露。",
-        ),
-        _question(
-            "s02-leontief",
-            "程序返回了 (I−A)⁻¹，但谱半径非常接近 1、条件数也很高。最稳妥的判断是什么？",
-            [
-                _option("a", "已经能求逆，所以可以忽略这些诊断"),
-                _option("b", "结果可能放大经济冲击和输入误差，不能仅凭“已求逆”继续"),
-                _option("c", "这只影响运行速度，不影响结果解释"),
-            ],
-            "b",
-            "谱半径接近 1 表示投入需求可能被强烈放大，条件数高表示小误差可能变成大误差；还应结合逆残差和非负性判断可用性。",
-        ),
-    ],
-    3: [
-        _question(
-            "s03-fva",
+            "s02-fva",
             "课程 FVA 份额较高最直接说明什么？",
             [
                 _option("a", "国内增加值返回本国更多"),
@@ -86,9 +62,9 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "课程 FVA_share 衡量直接与间接外国上游纯增加值占 VA+TLS 账户闭合毛出口的比重；TLS 单列，所以它不是 OECD 官方 EXGR_FVASH。",
         )
     ],
-    4: [
+    3: [
         _question(
-            "s04-complex",
+            "s03-complex",
             "下面哪种活动属于复杂 GVC？",
             [
                 _option("a", "增加值只满足国内最终需求"),
@@ -99,9 +75,9 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "复杂 GVC 的关键是增加值在最终吸收前至少经历多次跨境生产分工。",
         )
     ],
-    5: [
+    4: [
         _question(
-            "s05-position",
+            "s04-position",
             "某经济体的前向 GVC 段长度为 5.4，后向 GVC 段长度为 3.0。最稳妥的结论是什么？",
             [
                 _option("a", "GVCPs=1.8，在该口径下位置相对更上游"),
@@ -112,9 +88,9 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "GVCPs=5.4/3.0=1.8，大于 1 表示相对更靠近上游投入端；它是加权平均后的相对位置，不能给所有行业贴标签，也不是跨境国家数。",
         )
     ],
-    6: [
+    5: [
         _question(
-            "s06-between",
+            "s05-between",
             "本课程全正边二值介数较高表示什么？",
             [
                 _option("a", "节点的贸易总额一定最大"),
@@ -125,9 +101,9 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "该介数把每条正流量边视为等长并加总 σ_st(v)/σ_st；它刻画一套未经边阈值敏感性检验的拓扑位置，不等同于总流量、伙伴数或经济上的不可替代瓶颈。",
         )
     ],
-    7: [
+    6: [
         _question(
-            "s07-trade-viz",
+            "s06-trade-viz",
             "一个经济体的课程 FVA 份额较高，最稳妥的读图结论是什么？",
             [
                 _option("a", "它的国内增加值占比一定更高"),
@@ -138,9 +114,9 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "较高课程 FVA 份额支持直接与间接外国上游纯增加值构成更高这一描述性判断；它不是 OECD EXGR_FVASH，也不能单独识别因果。",
         )
     ],
-    8: [
+    7: [
         _question(
-            "s08-prod-viz",
+            "s07-prod-viz",
             "国家复杂 GVC 份额较高，能否说明该国所有行业都同样高？",
             [
                 _option("a", "能，国家汇总可以代表每个行业"),
@@ -151,9 +127,9 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "国家汇总是行业加总结果；必须下钻行业才能判断一国内部异质性。",
         )
     ],
-    9: [
+    8: [
         _question(
-            "s09-length-viz",
+            "s08-length-viz",
             "当 PLv_GVC 大于 PLy_GVC 时，该经济体通常处于什么位置？",
             [
                 _option("a", "相对更上游"),
@@ -164,9 +140,9 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             f"{PRODUCTION_LENGTH_OPERATIONAL_DEFINITION}前向 GVC 长度相对更长会使 GVCPs 大于 1，通常对应更上游的位置。",
         )
     ],
-    10: [
+    9: [
         _question(
-            "s10-network-viz",
+            "s09-network-viz",
             "在网络图中下钻某个国家后，中心性数值是怎样得到的？",
             [
                 _option("a", "只用筛选后的节点重新计算"),
@@ -177,9 +153,9 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "中心性始终基于完整全球国家×行业网络；国家筛选只用于展示，不改变计算图。",
         )
     ],
-    11: [
+    10: [
         _question(
-            "s11-role",
+            "s10-role",
             "ICIO 指标与政策冲击在后续回归中分别扮演什么角色？",
             [
                 _option("a", "ICIO 指标是结果变量，政策冲击是处理变量"),
@@ -190,7 +166,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "ICIO 计算 GVC 结果指标，政策冲击提供用于比较处理与对照的解释变量。",
         ),
         _question(
-            "s11-types",
+            "s10-types",
             "为什么要分别查看关税、制裁和出口管制三类冲击？",
             [
                 _option("a", "它们只是界面颜色不同"),
@@ -201,9 +177,9 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "密集、稀疏和单国处理带来不同的对照支持与识别风险；查看三类并不自动保证因果性。",
         ),
     ],
-    12: [
+    11: [
         _question(
-            "s12-metric",
+            "s11-metric",
             "本步的课程 FVA 份额在「壁垒如何改变全球贸易链」这个问题里，主要衡量什么？",
             [
                 _option("a", "一国生产网络里各节点对最短路径经过该节点的份额之和"),
@@ -214,8 +190,8 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "课程 FVA 份额读的是贸易流构成；TLS 单列，因此不是 OECD EXGR_FVASH。它不直接等于回流，也不宜和长度、网络系数比大小。",
         ),
         _question(
-            "s12-compare",
-            "步骤 12–15 为什么要分别回归四类指标，而不能只看其中一个系数？",
+            "s11-compare",
+            "步骤 11–14 为什么要分别回归四类指标，而不能只看其中一个系数？",
             [
                 _option("a", "四个系数量纲相同，取平均就是总效应"),
                 _option("b", "同一套冲击可能打在贸易结构、生产分工、链条长度和网络位置上，需要并读方向和区间是否过 0"),
@@ -225,9 +201,9 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "四步是同一研究问题换指标。份额、长度、中心性的单位不同，不能把四个数字直接相比；可以并读符号和置信区间是否跨过 0。",
         ),
     ],
-    13: [
+    12: [
         _question(
-            "s13-metric",
+            "s12-metric",
             "本步的复杂 GVC 生产份额主要衡量什么？",
             [
                 _option("a", "出口里外国增加值的比重"),
@@ -238,7 +214,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "复杂 GVC 份额描述多次跨境活动在 SVA 中的构成，不是规模或嵌入深度的通用标尺，也不是贸易流 FVA 或网络介数。",
         ),
         _question(
-            "s13-compare",
+            "s12-compare",
             "如果本步或另外一步的 95% 置信区间跨过 0，最稳妥的读法是什么？",
             [
                 _option("a", "已经证明冲击没有影响复杂 GVC 份额"),
@@ -249,9 +225,9 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "区间跨 0 是「看不出方向」，不是零效应证明。四步并读时，这一步可以记成「看不出」，另一步仍可能看得出方向。",
         ),
     ],
-    14: [
+    13: [
         _question(
-            "s14-metric",
+            "s13-metric",
             "本步的前向 GVC 生产长度主要衡量什么？",
             [
                 _option("a", "GVC 活动诱发累计总产出相对关联增加值的平均生产阶段长度"),
@@ -262,8 +238,8 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             f"PLv_GVC 采用前向口径。{PRODUCTION_LENGTH_OPERATIONAL_DEFINITION}长度变短可能有多种机制，一个系数不能单独指出回流或近岸。",
         ),
         _question(
-            "s14-compare",
-            "把本步的长度系数和步骤 12 的课程 FVA 份额系数直接相减，为什么不妥当？",
+            "s13-compare",
+            "把本步的长度系数和步骤 11 的课程 FVA 份额系数直接相减，为什么不妥当？",
             [
                 _option("a", "两个数字的单位不同，回答的也不是同一个量"),
                 _option("b", "长度系数永远更大，相减没有意义"),
@@ -273,9 +249,9 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "并读看的是方向和区间是否过 0，不是把不同量纲的点估计做算术。四步不必换方法才能比较。",
         ),
     ],
-    15: [
+    14: [
         _question(
-            "s15-metric",
+            "s14-metric",
             "本步的全正边二值网络介数主要衡量什么？",
             [
                 _option("a", "各节点对有向无权最短路径经过该节点的份额之和，即拓扑中介位置"),
@@ -286,7 +262,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "该介数描述全正边二值拓扑位置，微小边与大额边等长且未做边阈值敏感性；它不自动等于经济规模、枢纽或不可替代瓶颈。",
         ),
         _question(
-            "s15-compare",
+            "s14-compare",
             "读完四步回归后，怎样并排使用这些结果最稳妥？",
             [
                 _option("a", "选出绝对值最大的系数作为政策总效应"),
@@ -383,10 +359,10 @@ def selected_answers(step: int, quiz: Any) -> list[dict[str, str]]:
 
 def validate_bank() -> None:
     """导入时守住题库覆盖、数量和稳定 ID 不变量。"""
-    if sorted(STEP_QUIZZES) != list(range(1, 16)):
-        raise RuntimeError("题库必须完整覆盖步骤 1–15")
-    if sum(len(items) for items in STEP_QUIZZES.values()) != 21:
-        raise RuntimeError(f"{QUIZ_VERSION} 必须恰好包含 21 题")
+    if sorted(STEP_QUIZZES) != list(range(1, 15)):
+        raise RuntimeError("题库必须完整覆盖步骤 1–14")
+    if sum(len(items) for items in STEP_QUIZZES.values()) != 19:
+        raise RuntimeError(f"{QUIZ_VERSION} 必须恰好包含 19 题")
     ids = [str(question["id"]) for questions in STEP_QUIZZES.values() for question in questions]
     if len(ids) != len(set(ids)):
         raise RuntimeError("题目 ID 必须全局唯一")

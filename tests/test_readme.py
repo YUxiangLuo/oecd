@@ -3,9 +3,9 @@ from gvcsim.config import ROOT
 
 def test_readme_contains_the_single_documentation_contract():
     readme = (ROOT / "README.md").read_text()
-    assert "course-quiz-v6" in readme
-    assert "experiment-session-simple-v2" in readme
-    assert "gvcsim-teaching-db-v10" in readme
+    assert "course-quiz-v7" in readme
+    assert "experiment-session-simple-v3" in readme
+    assert "gvcsim-teaching-db-v11" in readme
     assert "不提供班级、公告" in readme
     assert "OECD Terms & Conditions" in readme
     assert "pg_dump --format=custom" in readme
@@ -35,7 +35,7 @@ def test_ci_executes_the_full_report_and_grading_journey():
 
 def test_browser_scroll_guard_waits_for_async_content_and_rendering():
     smoke = (ROOT / "scripts" / "agent_browser_smoke.sh").read_text()
-    step_loop = smoke.split("for step in $(seq 1 16); do", 1)[1].split("done", 1)[0]
+    step_loop = smoke.split("for step in $(seq 1 15); do", 1)[1].split("done", 1)[0]
     shell_ready = step_loop.index("wait '.step-header-mid h2'")
     network_ready = step_loop.index("wait --load networkidle")
     render_ready = step_loop.index("requestAnimationFrame")

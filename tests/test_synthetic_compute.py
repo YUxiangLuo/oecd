@@ -35,16 +35,16 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
         if hasattr(module, "PROCESSED_DIR"):
             monkeypatch.setattr(module, "PROCESSED_DIR", processed)
     monkeypatch.setattr(pipeline.loader, "load", lambda year: fake_io)
+    monkeypatch.setattr(quality, "KEY_REGIONS", ["AAA", "BBB"])
     _install_complete_exposure_writer(monkeypatch)
 
     for year in [2018, 2019]:
-        pipeline.compute_year(year, verbose=False, allow_qc_override=True)
-    panel = pipeline.build_panel(allow_qc_override=True)
+        pipeline.compute_year(year, verbose=False)
+    panel = pipeline.build_panel()
     output_summaries = {
         year: output_quality.write_output_qc(processed, year, expected_years=[2018, 2019])[1] for year in [2018, 2019]
     }
-    with pytest.raises(regression_quality.RegressionInputQualityError, match="configured_outcomes"):
-        regression_quality.write_regression_input_qc(processed, expected_years=[2018, 2019])
+    regression_summary = regression_quality.write_regression_input_qc(processed, expected_years=[2018, 2019])[1]
     regression_checks = json.loads(
         (processed / regression_quality.REGRESSION_INPUT_QC_FILE).read_text(encoding="utf-8")
     )
@@ -91,6 +91,7 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
     assert {"gross_exports", "FVA_share", "3b_VA_GVC_C_share", "3_VA_GVC_share"}.issubset(panel.columns)
     assert all(summary["publishable"] for summary in output_summaries.values())
     assert regression_quality.summarize_regression_input_checks(regression_checks)["publishable"] is False
+    assert regression_summary["publishable"] is False
     assert all(
         output_quality.recompute_output_checks(processed, year, expected_years=[2018, 2019])
         == json.loads((processed / f"qc_outputs_{year}.json").read_text(encoding="utf-8"))
@@ -98,9 +99,7 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
     )
 
 
-def test_degenerate_synthetic_staged_release_is_blocked_by_regression_outcome_variance_qc(
-    tmp_path, fake_io, monkeypatch
-):
+def test_degenerate_synthetic_staged_release_discloses_regression_design_findings(tmp_path, fake_io, monkeypatch):
     staging = tmp_path / "staging"
     staging.mkdir()
     raw_dir = tmp_path / "raw"
@@ -125,48 +124,42 @@ def test_degenerate_synthetic_staged_release_is_blocked_by_regression_outcome_va
     monkeypatch.setattr(raw_icio, "production_dimension_contract", lambda: contract)
     raw_icio.clear_raw_validation_cache()
     monkeypatch.setattr(pipeline.loader, "load", lambda _year: fake_io)
+    monkeypatch.setattr(quality, "KEY_REGIONS", ["AAA", "BBB"])
     _install_complete_exposure_writer(monkeypatch)
 
-    with pytest.raises(regression_quality.RegressionInputQualityError, match="configured_outcomes"):
-        pipeline._build_staged_release(
-            staging,
-            [2020],
-            allow_qc_override=True,
-            release_id="3" * 32,
-        )
+    pipeline._build_staged_release(staging, [2020], release_id="3" * 32)
 
     assert (staging / "qc_outputs_2020.json").is_file()
     assert (staging / regression_quality.REGRESSION_INPUT_QC_FILE).is_file()
-    assert not (staging / artifacts.DATASET_METADATA).exists()
+    metadata = artifacts.dataset_metadata(staging)
+    assert metadata["integrity"]["status"] == "passed"
+    assert metadata["regression_input_qc"]["publishable"] is False
+    assert "configured_outcomes" in metadata["regression_input_qc"]["fatal"]
 
 
-def test_fatal_qc_blocks_release_unless_override_is_explicit():
-    failed = [QcCheck(name="fatal example", kind="数值", passed=False)]
+def test_integrity_gate_blocks_structure_but_not_numeric_diagnostics():
+    diagnostics = [
+        QcCheck(name="structure ok", kind="结构", passed=True),
+        QcCheck(name="numeric finding", kind="数值", passed=False),
+    ]
+    summary = pipeline._gate_integrity("test", diagnostics, ["结构", "完整性"])
+    assert summary["passed"] is True
+    failed = [QcCheck(name="structure failed", kind="结构", passed=False)]
     with pytest.raises(pipeline.QualityGateError, match="停止发布"):
-        pipeline._gate_qc("test", failed, False)
-    summary = pipeline._gate_qc("test", failed, True)
-    assert summary["publishable"] is True
-    assert summary["override"] is True
-    assert summary["fatal"] == ["fatal example"]
-    with pytest.raises(ValueError, match="布尔值"):
-        pipeline._gate_qc("test", failed, "yes")  # type: ignore[arg-type]
-    with pytest.raises(pipeline.QualityGateError, match="不可 override") as blocked:
-        pipeline._gate_qc("shock_panel", failed, True, override_allowed=False)
-    assert blocked.value.override_allowed is False
-    assert blocked.value.summary["override"] is False
+        pipeline._gate_integrity("test", failed, ["结构", "完整性"])
 
 
 def _contract_checks(scope: str) -> list[dict]:
     return [
         {
             "name": name,
-            "kind": "结构",
+            "kind": quality.QC_EXPECTED_KINDS[scope][index],
             "passed": True,
             "detail": "ok",
             "warnings": [],
             "severity": "ok",
         }
-        for name in quality.QC_EXPECTED_CHECKS[scope]
+        for index, name in enumerate(quality.QC_EXPECTED_CHECKS[scope])
     ]
 
 
@@ -257,14 +250,14 @@ def test_release_metadata_rejects_empty_qc_before_publication(tmp_path):
     )
 
     with pytest.raises(ValueError, match="非空"):
-        pipeline._release_qc_metadata(tmp_path, [2020], override=False)
+        pipeline._release_qc_metadata(tmp_path, [2020])
 
     (tmp_path / "qc_2020.json").write_text(
         json.dumps(_contract_checks(quality.QC_SCOPE_ICIO), ensure_ascii=False),
         encoding="utf-8",
     )
-    with pytest.raises(ValueError, match="布尔值"):
-        pipeline._release_qc_metadata(tmp_path, [2020], override="yes")  # type: ignore[arg-type]
+    summary = pipeline._release_qc_metadata(tmp_path, [2020])
+    assert summary["years"]["2020"]["override"] is False
 
 
 def _old_pointer(tmp_path):
@@ -310,7 +303,9 @@ def test_run_builds_sentinel_switches_pointer_and_never_touches_database(tmp_pat
     assert set(metadata["qc"]) == {"years", "controls", "shocks"}
     assert metadata["qc_contract"] == quality.qc_contract_metadata()
     assert metadata["shock_contract"] == shocks.shock_contract_metadata()
-    assert metadata["artifact_contract_version"] == 9
+    assert metadata["artifact_contract_version"] == 11
+    assert metadata["publication_policy"] == artifacts.publication_policy_metadata()
+    assert metadata["integrity"]["status"] == "passed"
     assert metadata["output_qc_contract"] == output_quality.output_qc_contract_metadata()
     assert set(metadata["output_qc"]["years"]) == {"2020"}
     assert metadata["regression_input_qc_contract"] == regression_quality.regression_input_qc_contract_metadata()

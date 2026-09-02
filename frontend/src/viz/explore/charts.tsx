@@ -3,7 +3,7 @@ import { formatMetric } from "../../format";
 import { CAT, KEY_ECONOMIES, Legend, type Row, cardStyle, num, rowLabel, rowName, useTip } from "../shared";
 import { signedDomain, signedStack } from "../signed-layout";
 
-/* ---------------- 步骤7-10 自由探索:排序条形图 / 散点图 ---------------- */
+/* ---------------- 步骤6-9 自由探索:排序条形图 / 散点图 ---------------- */
 
 function fmtVal(v: number, format?: string): string {
   return formatMetric(v, format);

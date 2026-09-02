@@ -1,4 +1,4 @@
-"""步骤2:数据质检。
+"""发布流水线的数据完整性检查与非阻断诊断。
 
 每个检查返回 QcCheck(可序列化),供 CLI 打印和 API 前端渲染共用。
 检查内容覆盖 ICIO 原始矩阵、政策冲击面板与国家-年份控制变量:
@@ -68,7 +68,7 @@ QC_WARNING = "warning"
 QC_FATAL = "fatal"
 QC_SEVERITIES = (QC_OK, QC_DISCLOSURE, QC_WARNING, QC_FATAL)
 
-QC_CONTRACT_VERSION = 2
+QC_CONTRACT_VERSION = 4
 QC_SCOPE_ICIO = "icio"
 QC_SCOPE_CONTROLS = "controls"
 QC_SCOPE_SHOCKS = "shocks"
@@ -76,6 +76,7 @@ QC_EXPECTED_CHECKS: dict[str, tuple[str, ...]] = {
     QC_SCOPE_ICIO: (
         "维度一致性与索引对齐(Z/Y/A/L/x/OUT)",
         "缺失值 / 负值检查",
+        "因子投入完整性(VA/TLS账户/索引/有限性)",
         "会计恒等式(原始OUT = Z行和 + Y行和)",
         "因子投入与派生指标定义域(VA/TLS)",
         "投入侧恒等式(原始OUT = Z列和 + VA + TLS)",
@@ -91,12 +92,18 @@ QC_EXPECTED_CHECKS: dict[str, tuple[str, ...]] = {
     ),
     QC_SCOPE_SHOCKS: (
         "冲击面板维度对齐(country×sector×year)",
+        "冲击数值字段完整性(*_shock有限且treated为0/1)",
         "冲击强度值域(*_shock ∈ [0,0.5])",
         "冲击事件时间线(宣布日≤生效日)",
         "treated 标记与阈值一致",
         "关税处理组覆盖比例合理性（制裁/出口管制仅描述）",
         "关税出口暴露度来源与口径",
     ),
+}
+QC_EXPECTED_KINDS: dict[str, tuple[str, ...]] = {
+    QC_SCOPE_ICIO: ("结构", "完整性", "完整性", "经济含义", "经济含义", "经济含义", "数值", "结构"),
+    QC_SCOPE_CONTROLS: ("结构", "结构", "完整性", "经济含义", "经济含义"),
+    QC_SCOPE_SHOCKS: ("结构", "完整性", "数值", "结构", "数值", "经济含义", "来源"),
 }
 QC_FAILURE_SEVERITIES: dict[str, dict[str, str]] = {
     scope: {
@@ -112,7 +119,20 @@ def qc_contract_metadata() -> dict:
     return {
         "version": QC_CONTRACT_VERSION,
         "scopes": {
-            scope: [{"name": name, "failure_severity": QC_FAILURE_SEVERITIES[scope][name]} for name in names]
+            scope: [
+                {
+                    "name": name,
+                    "kind": QC_EXPECTED_KINDS[scope][index],
+                    "failure_severity": QC_FAILURE_SEVERITIES[scope][name],
+                    "publication_blocking": QC_EXPECTED_KINDS[scope][index]
+                    in {
+                        QC_SCOPE_ICIO: {"结构", "完整性"},
+                        QC_SCOPE_CONTROLS: {"结构", "完整性"},
+                        QC_SCOPE_SHOCKS: {"结构", "完整性", "来源"},
+                    }[scope],
+                }
+                for index, name in enumerate(names)
+            ]
             for scope, names in QC_EXPECTED_CHECKS.items()
         },
     }
@@ -172,6 +192,9 @@ def validate_serialized_checks(
             raise ValueError(f"{scope} QC 第 {index + 1} 项 passed/severity 矛盾")
         if not passed and severity not in (QC_WARNING, QC_FATAL):
             raise ValueError(f"{scope} QC 第 {index + 1} 项 passed/severity 矛盾")
+        expected_index = expected.index(name) if name in expected else None
+        if expected_index is not None and kind != QC_EXPECTED_KINDS[scope][expected_index]:
+            raise ValueError(f"{scope} QC 第 {index + 1} 项 kind 必须为 {QC_EXPECTED_KINDS[scope][expected_index]}")
         allowed_failure_severity = QC_FAILURE_SEVERITIES[scope].get(name)
         if not passed and allowed_failure_severity is not None and severity != allowed_failure_severity:
             raise ValueError(f"{scope} QC 第 {index + 1} 项失败严重度必须为 {allowed_failure_severity}")
@@ -354,7 +377,7 @@ def check_missing_and_negative(io) -> QcCheck:
     warnings.extend(fatal_problems)
     return QcCheck(
         name="缺失值 / 负值检查",
-        kind="数值",
+        kind="完整性",
         passed=not fatal_problems,
         detail=(
             f"Z负值 {negative_counts['Z']} 个,Y负值 {negative_counts['Y']} 个,"
@@ -440,6 +463,35 @@ def _factor_frame(io) -> pd.DataFrame | None:
     factor_inputs = getattr(io, "factor_inputs", None)
     frame = getattr(factor_inputs, "F", None)
     return frame if isinstance(frame, pd.DataFrame) else None
+
+
+def check_factor_input_integrity(io) -> QcCheck:
+    """Require the VA/TLS account inputs needed by every downstream decomposition."""
+    frame = _factor_frame(io)
+    problems: list[str] = []
+    if frame is None:
+        problems.append("缺少 factor_inputs.F")
+    else:
+        if not frame.index.is_unique:
+            problems.append("factor_inputs.F 行索引重复")
+        if not frame.columns.is_unique:
+            problems.append("factor_inputs.F 列索引重复")
+        if not {"VA", "TLS"}.issubset(set(frame.index.astype(str))):
+            problems.append("factor_inputs.F 缺少 VA 或 TLS 行")
+        if not frame.columns.equals(io.Z.index):
+            problems.append("factor_inputs.F 列与 Z 行索引未精确对齐")
+        if not problems:
+            values = frame.loc[["VA", "TLS"]].to_numpy(dtype=float)
+            nonfinite = int((~np.isfinite(values)).sum())
+            if nonfinite:
+                problems.append(f"VA/TLS 存在 {nonfinite} 个 NaN/Inf")
+    return QcCheck(
+        name="因子投入完整性(VA/TLS账户/索引/有限性)",
+        kind="完整性",
+        passed=not problems,
+        detail="VA/TLS 账户、唯一索引、Z 列绑定与有限值均完整" if not problems else "；".join(problems),
+        warnings=problems,
+    )
 
 
 def check_factor_inputs(io) -> QcCheck:
@@ -626,6 +678,7 @@ def run_all(io) -> list[QcCheck]:
     return [
         check_shapes(io),
         check_missing_and_negative(io),
+        check_factor_input_integrity(io),
         check_accounting_identity(io),
         check_factor_inputs(io),
         check_input_accounting_identity(io),
@@ -711,7 +764,7 @@ def check_controls_country(
     checks.append(
         QcCheck(
             name="控制变量数值有限性",
-            kind="数值",
+            kind="完整性",
             passed=n_missing == 0 and n_non_finite == 0 and required_first_null_missing == 0,
             detail=(
                 f"非首年缺失/非数值 {n_missing} 个,非有限值 {n_non_finite} 个；"
@@ -800,7 +853,7 @@ def check_shock_panel(
 ) -> list[QcCheck]:
     """政策冲击面板质检。
 
-    目标是补齐步骤11的第二类数据质检:冲击面板必须覆盖完整
+    冲击面板必须覆盖完整
     country×sector×year,与 ICIO 指标维度严格对齐,且事件时间线与
     treated 标记可用于 DID / 事件研究。
     """
@@ -838,23 +891,41 @@ def check_shock_panel(
 
     present_pairs = SHOCK_VALUE_PAIRS
     missing_values = 0
+    invalid_treated = pd.Series(False, index=df.index)
     out_rows = []
     numeric_shocks = {}
-    for shock_col, _treated_col in present_pairs:
+    for shock_col, treated_col in present_pairs:
         shock = pd.to_numeric(df[shock_col], errors="coerce")
+        treated = pd.to_numeric(df[treated_col], errors="coerce")
         numeric_shocks[shock_col] = shock
-        missing_values += int(shock.isna().sum())
-        bad = df[(shock < 0) | (shock > 0.5)].copy()
+        missing_values += int((shock.isna() | ~np.isfinite(shock)).sum())
+        invalid_treated |= treated.isna() | ~np.isfinite(treated) | ~treated.isin([0, 1])
+        bad = df[np.isfinite(shock) & ((shock < 0) | (shock > 0.5))].copy()
         if not bad.empty:
             bad["_shock_col"] = shock_col
             out_rows.append(bad)
+    checks.append(
+        QcCheck(
+            name="冲击数值字段完整性(*_shock有限且treated为0/1)",
+            kind="完整性",
+            passed=missing_values == 0 and not invalid_treated.any(),
+            detail=(
+                f"冲击缺失/非数值/非有限 {missing_values} 个;"
+                f"treated 缺失/非数值/非有限/非二元 {int(invalid_treated.sum())} 行"
+            ),
+            warnings=[
+                f"{r['country']}-{r['sector']}-{r['year']}: 存在不可用的冲击或 treated 字段"
+                for _, r in df[invalid_treated].head(5).iterrows()
+            ],
+        )
+    )
     out_of_range = pd.concat(out_rows, ignore_index=True) if out_rows else pd.DataFrame()
     checks.append(
         QcCheck(
             name="冲击强度值域(*_shock ∈ [0,0.5])",
             kind="数值",
-            passed=missing_values == 0 and out_of_range.empty,
-            detail=f"检查 {len(present_pairs)} 类冲击;缺失/非数值 {missing_values} 个,越界 {len(out_of_range)} 个",
+            passed=out_of_range.empty,
+            detail=f"检查 {len(present_pairs)} 类冲击;有限值中越界 {len(out_of_range)} 个",
             warnings=[
                 f"{r['country']}-{r['sector']}-{r['year']}: {r['_shock_col']}={r[r['_shock_col']]}"
                 for _, r in out_of_range.head(5).iterrows()
@@ -891,26 +962,22 @@ def check_shock_panel(
         )
     )
 
-    invalid_treated = pd.Series(False, index=df.index)
     mismatch = pd.Series(False, index=df.index)
     for shock_col, treated_col in present_pairs:
         shock = numeric_shocks[shock_col]
         treated = pd.to_numeric(df[treated_col], errors="coerce")
-        invalid_treated |= ~treated.isin([0, 1])
-        mismatch |= treated.fillna(-1).astype(int) != (shock > treated_threshold).astype(int)
+        valid = np.isfinite(shock) & treated.isin([0, 1])
+        mismatch |= valid & treated.ne((shock > treated_threshold).astype(float))
     checks.append(
         QcCheck(
             name="treated 标记与阈值一致",
             kind="数值",
-            passed=not invalid_treated.any() and not mismatch.any(),
-            detail=(
-                f"非法 treated 值 {int(invalid_treated.sum())} 个;"
-                f"与 *_shock>{treated_threshold:g} 不一致 {int(mismatch.sum())} 个"
-            ),
+            passed=not mismatch.any(),
+            detail=f"有限且二元记录中与 *_shock>{treated_threshold:g} 不一致 {int(mismatch.sum())} 个",
             warnings=[
                 f"{r['country']}-{r['sector']}-{r['year']}: "
                 + "; ".join(f"{s}={r[s]}, {t}={r[t]}" for s, t in present_pairs)
-                for _, r in df[invalid_treated | mismatch].head(5).iterrows()
+                for _, r in df[mismatch].head(5).iterrows()
             ],
         )
     )

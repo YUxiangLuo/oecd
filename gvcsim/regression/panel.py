@@ -891,7 +891,7 @@ def twoway_fe(
 
 
 def run_design(df: pd.DataFrame, design) -> RegressionResult:
-    """传统低层设计入口；产品步骤 12–15 必须调用 run_design_with_benchmark。"""
+    """传统低层设计入口；产品步骤 11–14 必须调用 run_design_with_benchmark。"""
     return _within_ols(prepare_design_model(df, design))
 
 

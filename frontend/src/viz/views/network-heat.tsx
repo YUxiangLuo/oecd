@@ -4,7 +4,7 @@ import { formatMetric } from "../../format";
 import type { IndicatorSchema } from "../../types";
 import { type Row, SEQ, cardStyle, rowLabel } from "../shared";
 
-/* ----------------------------- 步骤10:热力表 ----------------------------- */
+/* ----------------------------- 步骤9:热力表 ----------------------------- */
 
 export const HEAT_EVIDENCE_METRIC = "betweenesscentrality" as const;
 export const HEAT_WEIGHTED_DEGREE_METRIC = "weighted degree" as const;

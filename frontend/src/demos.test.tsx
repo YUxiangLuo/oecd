@@ -122,7 +122,7 @@ describe("semantic decomposition and path tables", () => {
   });
 });
 
-describe("Step 6 teaching network accessibility", () => {
+describe("Step 5 teaching network accessibility", () => {
   test("keeps one roving node stop and exposes mode and selected-node semantics", () => {
     const html = renderToStaticMarkup(<NetworkCentralityDemo />);
     expect(html.match(/class="net-demo-node"/g)).toHaveLength(7);

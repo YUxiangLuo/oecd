@@ -43,7 +43,7 @@ def clear_process_request_limits():
 
 @pytest.fixture
 def teaching_db(monkeypatch):
-    """Create the intentionally non-migrating v10 test database once."""
+    """Create the intentionally non-migrating v11 test database once."""
     import psycopg
 
     from gvcsim import artifacts, config, demo_accounts

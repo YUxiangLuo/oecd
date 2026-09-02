@@ -30,13 +30,13 @@ def _qc_checks(scope: str) -> list[dict]:
     return [
         {
             "name": name,
-            "kind": "结构",
+            "kind": quality.QC_EXPECTED_KINDS[scope][index],
             "passed": True,
             "detail": "ok",
             "warnings": [],
             "severity": "ok",
         }
-        for name in quality.QC_EXPECTED_CHECKS[scope]
+        for index, name in enumerate(quality.QC_EXPECTED_CHECKS[scope])
     ]
 
 

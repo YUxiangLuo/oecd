@@ -44,7 +44,7 @@ export function AppBootSkeleton() {
           <div className="sidebar-head">
             <div className="sidebar-head-row">
               <span className="sidebar-title">课程大纲</span>
-              <span className="sidebar-steps">16 STEPS</span>
+              <span className="sidebar-steps">15 STEPS</span>
             </div>
             <div className="progress-track"><div className="progress-bar" style={{ width: "35%" }} /></div>
           </div>

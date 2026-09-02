@@ -18,7 +18,7 @@ from psycopg_pool import ConnectionPool, PoolClosed, PoolTimeout, TooManyRequest
 from gvcsim import config, demo_accounts
 from gvcsim.classroom import schema
 
-MAX_STEP = 16
+MAX_STEP = 15
 TEACHING_DB_VERSION = schema.TEACHING_DB_VERSION
 
 

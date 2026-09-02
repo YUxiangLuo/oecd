@@ -14,14 +14,14 @@ import {
   STEP10_LENSES,
 } from "./network";
 
-describe("step 10 network lenses", () => {
+describe("step 9 network lenses", () => {
   test("opens with the trade network first for a new session", () => {
     expect(STEP10_DEFAULT_LENS).toBe("network");
     expect(STEP10_LENSES.map(({ key }) => key)).toEqual(["network", "heat"]);
   });
 });
 
-describe("step 10 explicit heat evidence", () => {
+describe("step 9 explicit heat evidence", () => {
   const identity: ObservationRequestIdentity = {
     release: "a".repeat(32),
     year: 2020,

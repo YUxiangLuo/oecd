@@ -20,7 +20,7 @@ def _save_report(markdown: str, provenance: dict, username: str = "student"):
     return db.save_generated_report(username, markdown, provenance, _session_version(username))
 
 
-def test_v10_schema_contains_release_and_auth_bound_contract(teaching_db):
+def test_v11_schema_contains_release_and_auth_bound_contract(teaching_db):
     with db.conn() as connection:
         names = {
             row["tablename"]
@@ -39,7 +39,7 @@ def test_v10_schema_contains_release_and_auth_bound_contract(teaching_db):
             ).fetchall()
         }
     assert names == {"schema_meta", "accounts", "experiment_sessions", "reports"}
-    assert db.TEACHING_DB_VERSION == "gvcsim-teaching-db-v10"
+    assert db.TEACHING_DB_VERSION == "gvcsim-teaching-db-v11"
     assert "auth_version" in account_columns
     assert "release_id" in session_columns
 

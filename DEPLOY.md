@@ -128,7 +128,7 @@ curl -fsS "$GVCSIM_BASE_URL/health"
 
 ## 数据发布或 artifact contract 升级
 
-进入停机维护窗口并先备份数据库。`compute` 以 `gvcsim` 账号在暂存 release 中完成计算、QC、manifest 和原始输入内容绑定，通过后才原子切换。数据库不会被重置。
+进入停机维护窗口并先备份数据库。`compute` 以 `gvcsim` 账号在暂存 release 中完成计算、诊断、manifest 和原始输入内容绑定，通过后才原子切换。只有完整性检查阻断发布；数值、经济含义与研究设计诊断持续披露。数据库不会被重置。
 
 准备一个可登录的普通学生账号供性能验收，并通过安全交互方式设置 benchmark 口令：
 
@@ -187,7 +187,7 @@ systemctl start gvcsim-api
 
 ## 教学数据库 schema 演进门槛
 
-当前 `gvcsim-teaching-db-v10` 是保留现有账号、会话、报告和评分的基线；更早版本不在迁移支持范围内。下次提升教学库版本前，代码变更必须同时提供经过测试的、事务内执行的 `v10 -> 下一版` 迁移，并完成备份恢复与生产数据副本演练。未满足这些条件时，版本不匹配应继续让预检失败，不能用 `classroom-init --reset` 代替普通升级。只有明确的新学期清场才允许走上一节的重置流程。
+当前 `gvcsim-teaching-db-v11` 是 15 步课程的全新基线，不兼容 v10 会话与报告；从 v10 部署本版本时必须先备份，再按已批准的新课程清场执行上一节的显式重置。后续普通升级仍不得用重置代替迁移；版本不匹配必须让预检失败。
 
 ## 数据 release 回滚
 
@@ -234,6 +234,6 @@ psql --dbname=gvcsim_restore_drill -Atc "select version from schema_meta where s
 unset PGPASSWORD
 ```
 
-结果必须为 `gvcsim-teaching-db-v10`。恢复生产库前应停止 API、保留故障库，并先在隔离空库完成摘要、目录和 schema 验证。
+结果必须为 `gvcsim-teaching-db-v11`。恢复生产库前应停止 API、保留故障库，并先在隔离空库完成摘要、目录和 schema 验证。
 
 本机保留不等于灾难备份。应只同步已同时存在 `.dump` 与 `.dump.sha256` 的完成文件对到异机或对象存储，并对异机副本定期执行同样的摘要与隔离恢复演练。

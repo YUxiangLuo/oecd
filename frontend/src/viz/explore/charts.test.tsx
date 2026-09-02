@@ -17,7 +17,7 @@ const rows = [
   { country: "BBB", metric: 0.5, x: 3.75, y: 4.5, a: 2, b: 3, total: 12 },
 ];
 
-describe("Steps 7-9 chart semantic data equivalents", () => {
+describe("Steps 6-9 chart semantic data equivalents", () => {
   test("rank table contains every plotted entity and identically formatted metric", () => {
     const html = renderToStaticMarkup(
       <RankBarChart rows={rows} metricKey="metric" label="测试份额" format="pct" />,

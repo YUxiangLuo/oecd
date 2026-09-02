@@ -179,7 +179,7 @@ export function DidFourCells({ numeric }: { numeric?: boolean }) {
         </tbody>
       </table>
       <div className="did-formula">相对变化 =（B−A）−（D−C）</div>
-      <p className="muted">和步骤 12 同一套比较。真实估计里，不同对象首次受冲击的年份可以不同。</p>
+      <p className="muted">和步骤 11 同一套比较。真实估计里，不同对象首次受冲击的年份可以不同。</p>
     </div>
   );
 }
@@ -331,9 +331,9 @@ export function ReadingCoach({
       <p className="reg-next-move">
         {next
           ? <>下一类指标是步骤 {next.step} 的{next.family}（{next.measure}）。比较方式不用换。</>
-          : <>四步已经齐了。到第 16 步把方向和「看不出」并排写进原创分析，不要比系数大小。</>}
+          : <>四步已经齐了。到第 15 步把方向和「看不出」并排写进原创分析，不要比系数大小。</>}
         {onNavigateStep && (
-          <button type="button" className="gate-link" onClick={() => onNavigateStep(next ? next.step : 16)}>
+          <button type="button" className="gate-link" onClick={() => onNavigateStep(next ? next.step : 15)}>
             {next ? `去步骤 ${next.step}` : "去写报告"}
           </button>
         )}
