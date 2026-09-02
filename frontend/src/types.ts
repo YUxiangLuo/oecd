@@ -716,6 +716,7 @@ export interface StudentRow {
   username: string;
   display_name: string;
   student_no: string;
+  demo_seed: boolean;
   last_login_at: string | null;
   created_at: string;
   report_state: "draft" | "pending" | "graded" | null;

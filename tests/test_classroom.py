@@ -71,6 +71,9 @@ def test_demo_catalog_has_fifty_unique_student_credentials():
     assert len({student.password for student in students}) == 50
     assert students[0].username == "student" and students[0].password == "gvclab2026"
     assert students[-1].username == "student50" and students[-1].password == "gvclab2026-50"
+    assert demo_accounts.is_demo_student_username("student")
+    assert demo_accounts.is_demo_student_username("student50")
+    assert not demo_accounts.is_demo_student_username("student51")
 
 
 def test_existing_demo_database_is_idempotently_expanded_without_reset(teaching_db, monkeypatch):

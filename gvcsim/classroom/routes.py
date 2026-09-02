@@ -10,7 +10,7 @@ import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from gvcsim import concurrency, evidence, quizzes
+from gvcsim import concurrency, demo_accounts, evidence, quizzes
 from gvcsim import session as session_model
 from gvcsim import teaching_report
 from gvcsim.classroom import db, records
@@ -194,7 +194,12 @@ def update_student(account_id: int, req: StudentUpdateRequest, user: dict = Depe
     fields = req.model_dump(exclude_unset=True)
     if not fields:
         raise HTTPException(status_code=400, detail="没有需要更新的字段")
-    row = db.update_student(account_id, fields, user["sub"])
+    try:
+        row = db.update_student(account_id, fields, user["sub"])
+    except demo_accounts.DemoSeedPasswordProtected as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     if row is None:
         raise HTTPException(status_code=404, detail="学生不存在")
     return row

@@ -32,6 +32,14 @@ export function demoStudentCredentials(basePassword: string): DemoStudentCredent
   });
 }
 
+export function isDemoStudentUsername(username: string): boolean {
+  if (username === "student") return true;
+  const match = /^student(\d{2})$/.exec(username);
+  if (!match) return false;
+  const index = Number(match[1]);
+  return index >= 2 && index <= DEMO_STUDENT_COUNT;
+}
+
 export function chooseDemoStudent(
   students: readonly DemoStudentCredential[],
   seenUsernames: readonly string[],

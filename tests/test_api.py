@@ -276,7 +276,10 @@ def test_teacher_student_management(teaching_db):
     cleared = teacher.post(f"/api/classroom/students/{account_id}", json={"student_no": ""})
     assert cleared.status_code == 200 and cleared.json()["student_no"] == ""
     rows = teacher.get("/api/classroom/students").json()["students"]
-    assert next(row for row in rows if row["id"] == account_id)["verified_completed_count"] == 0
+    created_row = next(row for row in rows if row["id"] == account_id)
+    assert created_row["verified_completed_count"] == 0
+    assert created_row["demo_seed"] is False
+    assert next(row for row in rows if row["username"] == "student")["demo_seed"] is True
 
 
 def test_deleted_classroom_endpoints_return_404(teaching_db):

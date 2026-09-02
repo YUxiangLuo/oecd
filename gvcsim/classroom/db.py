@@ -300,6 +300,8 @@ def provision_teacher(username: str, display_name: str, password: str) -> dict[s
 
 
 def change_own_password(username: str, current_password: str, new_password: str) -> bool:
+    if config.DEMO_MODE and demo_accounts.is_demo_student_username(username):
+        raise demo_accounts.DemoSeedPasswordProtected("演示种子学生使用固定轮换口令，不能修改密码")
     _validate_managed_password(new_password)
     with conn() as c:
         account = c.execute("SELECT id,pw_salt,pw_hash FROM accounts WHERE username=%s", (username,)).fetchone()

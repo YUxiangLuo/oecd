@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api } from "./api";
-import { chooseDemoStudent, demoStudentCredentials, DEMO_STUDENT_COUNT, LoginPage } from "./login";
+import {
+  chooseDemoStudent,
+  demoStudentCredentials,
+  DEMO_STUDENT_COUNT,
+  isDemoStudentUsername,
+  LoginPage,
+} from "./login";
 
 afterEach(cleanup);
 beforeEach(() => sessionStorage.clear());
@@ -32,6 +38,10 @@ describe("demo-mode login UI source behavior", () => {
     expect(new Set(students.map((student) => student.password)).size).toBe(DEMO_STUDENT_COUNT);
     expect(students[0]).toEqual({ username: "student", password: "gvclab2026" });
     expect(students.at(-1)).toEqual({ username: "student50", password: "gvclab2026-50" });
+    expect(isDemoStudentUsername("student")).toBe(true);
+    expect(isDemoStudentUsername("student50")).toBe(true);
+    expect(isDemoStudentUsername("student01")).toBe(false);
+    expect(isDemoStudentUsername("student51")).toBe(false);
     let seen: string[] = [];
     const cycle: string[] = [];
     for (let index = 0; index < DEMO_STUDENT_COUNT; index += 1) {

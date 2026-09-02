@@ -94,7 +94,11 @@ export function StudentsTab() {
                   <details className="row-menu"><summary aria-label="操作">⋯</summary><div className="row-menu-pop">
                     <button onClick={() => setModal({ type: "name", student })}>修改姓名</button>
                     <button onClick={() => setModal({ type: "student_no", student })}>修改学号</button>
-                    <button onClick={() => setModal({ type: "password", student })}>重置密码</button>
+                    <span title={student.demo_seed ? "固定轮换凭证由系统维护；请新建普通学生账号演示改密" : undefined}>
+                      <button disabled={student.demo_seed} onClick={() => setModal({ type: "password", student })}>
+                        {student.demo_seed ? "固定演示口令" : "重置密码"}
+                      </button>
+                    </span>
                   </div></details>
                 </td>
               </tr>

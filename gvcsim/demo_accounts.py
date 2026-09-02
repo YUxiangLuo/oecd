@@ -3,6 +3,13 @@
 from dataclasses import dataclass
 
 DEMO_STUDENT_COUNT = 50
+DEMO_STUDENT_USERNAMES = frozenset(
+    "student" if index == 1 else f"student{index:02d}" for index in range(1, DEMO_STUDENT_COUNT + 1)
+)
+
+
+class DemoSeedPasswordProtected(ValueError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -31,3 +38,7 @@ def demo_student_credentials(base_password: str) -> list[DemoStudentCredential]:
         )
         for index in range(1, DEMO_STUDENT_COUNT + 1)
     ]
+
+
+def is_demo_student_username(username: str) -> bool:
+    return username in DEMO_STUDENT_USERNAMES

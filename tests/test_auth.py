@@ -97,8 +97,11 @@ def test_password_change_updates_credentials_and_revokes_existing_token(teaching
 def test_teacher_password_reset_revokes_student_token(teaching_db):
     client = TestClient(app)
     teacher_login = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
-    student_login = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).json()
-    account_id = teaching_db.find_account("student")["id"]
+    teaching_db.create_student("reset-target", "改密目标", "reset-target-password", teacher_username="teacher")
+    student_login = client.post(
+        "/api/auth/login", json={"username": "reset-target", "password": "reset-target-password"}
+    ).json()
+    account_id = teaching_db.find_account("reset-target")["id"]
     response = client.post(
         f"/api/classroom/students/{account_id}",
         headers={"Authorization": f"Bearer {teacher_login['token']}"},
@@ -106,6 +109,33 @@ def test_teacher_password_reset_revokes_student_token(teaching_db):
     )
     assert response.status_code == 200
     assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {student_login['token']}"}).status_code == 401
+
+
+def test_demo_seed_password_cannot_be_changed_by_teacher(teaching_db):
+    client = TestClient(app)
+    teacher_login = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
+    account_id = teaching_db.find_account("student")["id"]
+    response = client.post(
+        f"/api/classroom/students/{account_id}",
+        headers={"Authorization": f"Bearer {teacher_login['token']}"},
+        json={"password": "student-reset-private-password"},
+    )
+    assert response.status_code == 409
+    assert "固定轮换口令" in response.json()["detail"]
+    assert client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).status_code == 200
+
+
+def test_demo_seed_student_cannot_change_own_password(teaching_db):
+    client = TestClient(app)
+    student_login = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).json()
+    response = client.post(
+        "/api/auth/password",
+        headers={"Authorization": f"Bearer {student_login['token']}"},
+        json={"current_password": "gvclab2026", "new_password": "student-new-private-password"},
+    )
+    assert response.status_code == 400
+    assert "固定轮换口令" in response.json()["detail"]
+    assert client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).status_code == 200
 
 
 def test_existing_token_uses_current_display_name_after_teacher_rename(teaching_db):

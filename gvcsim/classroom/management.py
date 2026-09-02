@@ -7,6 +7,8 @@ from typing import Any
 
 import psycopg
 
+from gvcsim import config, demo_accounts
+
 
 class _DatabaseProxy:
     def __getattr__(self, name: str) -> Any:
@@ -65,6 +67,16 @@ def update_student(
     with database.conn() as c:
         if teacher_username and not _teacher_exists(c, teacher_username):
             return None
+        target = c.execute(
+            "SELECT username FROM accounts WHERE id=%s AND role='student'",
+            (account_id,),
+        ).fetchone()
+        if target is None:
+            return None
+        if fields.get("password") and config.DEMO_MODE and demo_accounts.is_demo_student_username(target["username"]):
+            raise demo_accounts.DemoSeedPasswordProtected(
+                "演示种子学生使用固定轮换口令，不能由教师重置；请新建普通学生账号演示改密"
+            )
         return c.execute(
             f"UPDATE accounts SET {','.join(sets)} WHERE id=%s AND role='student'"
             " RETURNING id,username,display_name,student_no,last_login_at,created_at",
@@ -123,6 +135,7 @@ def list_students(teacher_username: str | None = None) -> list[dict[str, Any]]:
             (release_id, release_id),
         ).fetchall()
         for row in rows:
+            row["demo_seed"] = config.DEMO_MODE and demo_accounts.is_demo_student_username(row["username"])
             session_payload = row.pop("learning_session")
             session_updated_at = row.pop("session_updated_at")
             report_state = row.pop("learning_report_state")

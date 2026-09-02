@@ -79,6 +79,9 @@ def test_nginx_keeps_transport_limits_while_application_owns_identity_rates():
     nginx = (ROOT / "deploy" / "nginx-gvcsim.conf").read_text()
     assert "limit_req" not in nginx
     assert "proxy_read_timeout 120s" in nginx
+    assert "gzip on;" in nginx
+    assert "gzip_vary on;" in nginx
+    assert "application/javascript" in nginx and "application/json" in nginx
 
 
 def test_capacity_configuration_rejects_nonpositive_request_limits(monkeypatch):

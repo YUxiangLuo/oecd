@@ -30,6 +30,13 @@ describe("teacher student modal submission", () => {
     expect(source).toContain("errorRef.current?.focus()");
   });
 
+  test("keeps fixed demo-pool passwords out of the editable password modal", async () => {
+    const source = await Bun.file(new URL("./students.tsx", import.meta.url)).text();
+    expect(source).toContain("disabled={student.demo_seed}");
+    expect(source).toContain("固定演示口令");
+    expect(source).toContain("请新建普通学生账号演示改密");
+  });
+
   test("allows clearing an optional student number but not a display name", () => {
     expect(studentFieldError("", { label: "学号", required: false })).toBeNull();
     expect(studentFieldError("  ", { label: "姓名" })).toBe("姓名不能为空");

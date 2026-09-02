@@ -2,6 +2,7 @@ import { useRef, type RefObject } from "react";
 import { AccountPasswordModal } from "./account-password";
 import { LogoMark } from "./brand";
 import { oecdIcioDatasetLabel } from "./dataset-label";
+import { isDemoStudentUsername } from "./login";
 import { TeacherDashboard } from "./teacher";
 import { ToastHost } from "./toast";
 import { materialStatusForStep } from "./step-task-card";
@@ -154,6 +155,7 @@ export function StudentTopbar({
   onLogout,
 }: StudentTopbarProps) {
   const expiry = sessionExpiryLabel(authExpiresAt);
+  const fixedDemoPassword = import.meta.env.VITE_DEMO_MODE === "1" && isDemoStudentUsername(user.username);
   return (
     <header className="topbar">
       <LogoMark size={30} />
@@ -168,7 +170,14 @@ export function StudentTopbar({
         <span className="role-chip" title={`学生账号 · ${user.username}`}>{user.name}</span>
         {expiry && <span className="muted" title="服务端签发的 expires_at">会话至 {expiry}</span>}
         <button ref={introTriggerRef} onClick={onShowIntro}>ⓘ 系统介绍</button>
-        <button ref={passwordTriggerRef} onClick={onRequestPasswordChange}>修改密码</button>
+        <button
+          ref={passwordTriggerRef}
+          disabled={fixedDemoPassword}
+          title={fixedDemoPassword ? "固定轮换凭证由系统维护" : undefined}
+          onClick={onRequestPasswordChange}
+        >
+          {fixedDemoPassword ? "固定演示口令" : "修改密码"}
+        </button>
         <button onClick={onLogout}>退出</button>
       </div>
     </header>
