@@ -100,6 +100,9 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
 
 
 def test_degenerate_synthetic_staged_release_discloses_regression_design_findings(tmp_path, fake_io, monkeypatch):
+    # This per-test compact raw contract is independent of the repository-wide
+    # CI fixture and deliberately has no .ci-only-synthetic.json marker.
+    monkeypatch.delenv("GVCSIM_CI_SYNTHETIC", raising=False)
     staging = tmp_path / "staging"
     staging.mkdir()
     raw_dir = tmp_path / "raw"
