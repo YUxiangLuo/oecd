@@ -46,7 +46,7 @@ def teaching_db(monkeypatch):
     """Create the intentionally non-migrating v10 test database once."""
     import psycopg
 
-    from gvcsim import artifacts, config
+    from gvcsim import artifacts, config, demo_accounts
     from gvcsim.classroom import db
 
     monkeypatch.setattr(artifacts, "release_identity", lambda _path=None: "a" * 32)
@@ -55,6 +55,9 @@ def teaching_db(monkeypatch):
         "validate_release_cached",
         lambda _path=None: {"release_id": "a" * 32, "files": 1, "years": 1},
     )
+    # Most database tests need only the compatibility student.  The dedicated
+    # demo-pool test expands this to the production default of 50 once.
+    monkeypatch.setattr(demo_accounts, "DEMO_STUDENT_COUNT", 1)
 
     db.shutdown()
     with psycopg.connect(config.PG_DSN, autocommit=True) as connection:

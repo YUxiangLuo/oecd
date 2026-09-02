@@ -40,7 +40,7 @@ uv run gvcsim serve --port 8000
 
 开发前端可另开终端运行 `cd frontend && bun run dev`。Vite 默认把 `/api` 代理到本机回环地址的 8000 端口；API 位于其他任何主机或端口时，按实际位置设置 `GVCSIM_API_PROXY`（形式为 `http://<api主机>:<端口>`），dev 与 preview 共用这一配置。
 
-课堂演示可用 `bun run build:demo` 替代 `bun run build`：演示构建在登录页预填 student/teacher 快捷身份与统一口令（默认 `gvclab2026`，可用 `VITE_DEMO_PASSWORD` 覆盖并与服务端 `GVCSIM_BOOTSTRAP_PASSWORD` 保持一致），打开即可一键登录。普通生产构建不含这些凭证，相关代码与口令常量会在构建期被完全摇掉。
+课堂演示可用 `bun run build:demo` 替代 `bun run build`：演示构建内置 50 组学生凭证，兼容账号 `student` 使用基础口令（默认 `gvclab2026`），`student02`–`student50` 的口令依次在基础口令后追加 `-02`–`-50`；同一标签页刷新时会优先选择本轮未出现过的学生，轮完 50 组后才开启下一轮，且不会与上一轮最后一组立即重复。教师快捷账号仍为 `teacher` + 基础口令。基础口令可用 `VITE_DEMO_PASSWORD` 覆盖，并须与服务端 `GVCSIM_BOOTSTRAP_PASSWORD` 保持一致；服务端运行一次 `classroom-init` 会在不清空现有会话和报告的前提下幂等补齐或同步这些演示账号。普通生产构建不含这些凭证，相关代码与口令常量会在构建期被完全摇掉。
 
 ## 会话与数据库
 

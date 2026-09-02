@@ -5,9 +5,15 @@ const productionForbidden = [
   "开发演示快捷账号",
   "学生身份",
   "教师身份",
-  "课堂演示口令统一为",
+  "同一标签页刷新会无重复轮换账号和口令",
 ];
-const demoRequired = [customDemoPassword, "开发演示快捷账号", "学生身份", "教师身份"];
+const demoRequired = [
+  customDemoPassword,
+  "开发演示快捷账号",
+  "学生身份",
+  "教师身份",
+  "同一标签页刷新会无重复轮换账号和口令",
+];
 
 async function runBuild(script: "build" | "build:demo", extraEnv: Record<string, string> = {}): Promise<void> {
   const child = Bun.spawn(["bun", "run", script], {

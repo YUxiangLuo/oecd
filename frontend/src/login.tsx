@@ -14,12 +14,42 @@ import { userFacingRequestError } from "./user-facing-error";
 export const LOGIN_FLOW = ["数据接入", "指标计算", "可视化分析", "回归设计与建模", "实验闭环"];
 export const LOGIN_DATA_LABEL = "OECD ICIO 2023 版 · 数据期 2016–2020";
 
-const DEMO_ACCOUNTS = [
-  { username: "student", label: "学生身份", note: "完成 16 步实验" },
-  { username: "teacher", label: "教师身份", note: "学生管理与报告评阅" },
-];
-/** 演示口令;可用 VITE_DEMO_PASSWORD 覆盖,与服务端 GVCSIM_BOOTSTRAP_PASSWORD 对应。 */
-const DEMO_PASSWORD = import.meta.env.VITE_DEMO_PASSWORD || "gvclab2026";
+export const DEMO_STUDENT_COUNT = 50;
+const SEEN_DEMO_STUDENTS_KEY = "gvcsim_seen_demo_students";
+
+export interface DemoStudentCredential {
+  username: string;
+  password: string;
+}
+
+export function demoStudentCredentials(basePassword: string): DemoStudentCredential[] {
+  return Array.from({ length: DEMO_STUDENT_COUNT }, (_, offset) => {
+    const index = offset + 1;
+    return {
+      username: index === 1 ? "student" : `student${String(index).padStart(2, "0")}`,
+      password: index === 1 ? basePassword : `${basePassword}-${String(index).padStart(2, "0")}`,
+    };
+  });
+}
+
+export function chooseDemoStudent(
+  students: readonly DemoStudentCredential[],
+  seenUsernames: readonly string[],
+  randomValue = Math.random(),
+): { student: DemoStudentCredential; nextSeen: string[] } {
+  const validUsernames = new Set(students.map((student) => student.username));
+  const seen = [...new Set(seenUsernames.filter((username) => validUsernames.has(username)))];
+  const lastUsername = seen.at(-1) ?? null;
+  const startingNewCycle = seen.length >= students.length;
+  const cycleSeen = startingNewCycle ? [] : seen;
+  const unseen = students.filter((student) => !cycleSeen.includes(student.username));
+  const candidates = startingNewCycle
+    ? unseen.filter((student) => student.username !== lastUsername)
+    : unseen;
+  const normalized = Number.isFinite(randomValue) ? Math.min(Math.max(randomValue, 0), 0.999999999) : 0;
+  const student = candidates[Math.floor(normalized * candidates.length)]!;
+  return { student, nextSeen: [...cycleSeen, student.username] };
+}
 
 /** 左侧背景:静态勾勒的贸易网络(手工布点,非装饰性随机) */
 function NetBackdrop() {
@@ -50,9 +80,25 @@ function NetBackdrop() {
 
 export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin: (r: LoginResponse) => void }) {
   const demoMode = import.meta.env.VITE_DEMO_MODE === "1";
-  // 演示构建默认落在学生身份并预填口令,打开即可直接登录;非演示构建仍是空表单。
-  const [username, setUsername] = useState(demoMode ? DEMO_ACCOUNTS[0].username : "");
-  const [password, setPassword] = useState(demoMode ? DEMO_PASSWORD : "");
+  // 放在组件的编译期 demo 分支内：Bun 单测可按渲染切换环境，Vite production
+  // 又能连同基础口令和整组凭证一起消除。
+  const demoPassword = demoMode ? import.meta.env.VITE_DEMO_PASSWORD || "gvclab2026" : "";
+  const demoStudents = demoMode ? demoStudentCredentials(demoPassword) : [];
+  const [initialDemoSelection] = useState(() => {
+    if (!demoMode) return null;
+    let seen: string[] = [];
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(SEEN_DEMO_STUDENTS_KEY) ?? "[]");
+      if (Array.isArray(stored)) seen = stored.filter((value): value is string => typeof value === "string");
+    } catch {
+      // Restricted or malformed storage still gets a usable random credential; rotation history is unavailable.
+    }
+    return chooseDemoStudent(demoStudents, seen);
+  });
+  const initialDemoStudent = initialDemoSelection?.student ?? null;
+  // 演示构建从 50 组学生凭证中选一组;非演示构建仍是空表单。
+  const [username, setUsername] = useState(initialDemoStudent?.username ?? "");
+  const [password, setPassword] = useState(initialDemoStudent?.password ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submitRef = useRef<HTMLButtonElement>(null);
@@ -60,6 +106,29 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
   useEffect(() => {
     if (error) submitRef.current?.focus();
   }, [error]);
+
+  useEffect(() => {
+    if (!demoMode || !initialDemoSelection) return;
+    try {
+      sessionStorage.setItem(SEEN_DEMO_STUDENTS_KEY, JSON.stringify(initialDemoSelection.nextSeen));
+    } catch {
+      // Login remains usable when storage is unavailable.
+    }
+  }, [demoMode, initialDemoSelection]);
+
+  const demoAccounts = initialDemoStudent ? [
+    {
+      ...initialDemoStudent,
+      label: "学生身份",
+      note: `${DEMO_STUDENT_COUNT} 个种子学生 · 刷新无重复轮换`,
+    },
+    {
+      username: "teacher",
+      password: demoPassword,
+      label: "教师身份",
+      note: "学生管理与报告评阅",
+    },
+  ] : [];
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,14 +185,14 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
           {notice && <div className="success-box login-notice" role="status">{notice}</div>}
 
           {demoMode && <div className="login-roles" role="group" aria-label="开发演示快捷账号">
-            {DEMO_ACCOUNTS.map((a) => (
+            {demoAccounts.map((a) => (
               <button
                 key={a.username}
                 type="button"
                 className={`login-role${username === a.username ? " on" : ""}`}
                 onClick={() => {
                   setUsername(a.username);
-                  setPassword(DEMO_PASSWORD);
+                  setPassword(a.password);
                 }}
               >
                 <span className="login-role-label">{a.label}</span>
@@ -147,7 +216,7 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
             {busy ? "正在登录…" : "登录"}
           </button>
           <div className="login-hint">
-            {demoMode && <>课堂演示口令统一为 <b>{DEMO_PASSWORD}</b>;上方可一键切换学生 / 教师身份。<br /></>}
+            {demoMode && <>当前预填的是 {DEMO_STUDENT_COUNT} 个种子学生中的一组；同一标签页刷新会无重复轮换账号和口令，轮完后再开启下一轮。上方可一键切换学生 / 教师身份。<br /></>}
             会话有效期由服务器安全策略决定；登录后页面会显示本次会话的实际到期时间。
           </div>
         </form>

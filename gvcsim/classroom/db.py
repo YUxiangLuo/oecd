@@ -15,7 +15,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool, PoolClosed, PoolTimeout, TooManyRequests
 
-from gvcsim import config
+from gvcsim import config, demo_accounts
 from gvcsim.classroom import schema
 
 MAX_STEP = 16
@@ -125,7 +125,9 @@ def initialize_schema() -> list[str]:
                 c.execute(schema.SCHEMA_SQL)
                 c.execute("INSERT INTO schema_meta(singleton,version) VALUES (true,%s)", (TEACHING_DB_VERSION,))
                 applied.append(f"创建 schema {TEACHING_DB_VERSION}")
-            _seed_if_empty(c)
+            synced = _sync_demo_accounts(c)
+            if synced["created"] or synced["updated"]:
+                applied.append(f"同步演示账号(created={synced['created']},updated={synced['updated']})")
     finally:
         c.close()
     _schema_ready = True
@@ -197,19 +199,61 @@ def current_release_id() -> str:
     return release_identity()
 
 
-def _seed_if_empty(c: psycopg.Connection[dict[str, Any]]) -> bool:
-    if c.execute("SELECT 1 FROM accounts LIMIT 1").fetchone() or not config.DEMO_MODE or not config.BOOTSTRAP_PASSWORD:
-        return False
-    for username, name, role, student_no in (
-        ("teacher", "老师", "teacher", ""),
-        ("student", "同学", "student", "2026001"),
-    ):
-        salt = secrets.token_hex(16)
-        c.execute(
-            "INSERT INTO accounts(username,display_name,role,student_no,pw_salt,pw_hash) VALUES (%s,%s,%s,%s,%s,%s)",
-            (username, name, role, student_no, salt, hash_password(config.BOOTSTRAP_PASSWORD, salt)),
+def _sync_demo_accounts(c: psycopg.Connection[dict[str, Any]]) -> dict[str, int]:
+    """Idempotently reconcile the public teacher and 50 student demo credentials.
+
+    This runs only under the explicit server-side demo switch.  Existing account
+    ids are preserved so adding the expanded pool never deletes sessions/reports;
+    a changed configured base password rotates only the recognized seed accounts.
+    """
+    if not config.DEMO_MODE or not config.BOOTSTRAP_PASSWORD:
+        return {"created": 0, "updated": 0}
+
+    records = [("teacher", "老师", "teacher", "", config.BOOTSTRAP_PASSWORD)]
+    records.extend(
+        (student.username, student.display_name, "student", student.student_no, student.password)
+        for student in demo_accounts.demo_student_credentials(config.BOOTSTRAP_PASSWORD)
+    )
+    created = 0
+    updated = 0
+    for username, display_name, role, student_no, password in records:
+        existing = c.execute(
+            "SELECT role,display_name,student_no,pw_salt,pw_hash FROM accounts WHERE username=%s",
+            (username,),
+        ).fetchone()
+        if existing is None:
+            salt = secrets.token_hex(16)
+            c.execute(
+                "INSERT INTO accounts(username,display_name,role,student_no,pw_salt,pw_hash)"
+                " VALUES (%s,%s,%s,%s,%s,%s)",
+                (username, display_name, role, student_no, salt, hash_password(password, salt)),
+            )
+            created += 1
+            continue
+        if existing["role"] != role:
+            raise RuntimeError(f"演示种子账号 {username} 已被不同角色占用")
+
+        password_matches = hmac.compare_digest(
+            existing["pw_hash"],
+            hash_password(password, existing["pw_salt"]),
         )
-    return True
+        profile_matches = existing["display_name"] == display_name and existing["student_no"] == student_no
+        if password_matches and profile_matches:
+            continue
+        if password_matches:
+            c.execute(
+                "UPDATE accounts SET display_name=%s,student_no=%s WHERE username=%s",
+                (display_name, student_no, username),
+            )
+        else:
+            salt = secrets.token_hex(16)
+            c.execute(
+                "UPDATE accounts SET display_name=%s,student_no=%s,pw_salt=%s,pw_hash=%s,"
+                "auth_version=auth_version+1 WHERE username=%s",
+                (display_name, student_no, salt, hash_password(password, salt), username),
+            )
+        updated += 1
+    return {"created": created, "updated": updated}
 
 
 def find_account(username: str) -> dict[str, Any] | None:

@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api } from "./api";
-import { LoginPage } from "./login";
+import { chooseDemoStudent, demoStudentCredentials, DEMO_STUDENT_COUNT, LoginPage } from "./login";
 
 afterEach(cleanup);
+beforeEach(() => sessionStorage.clear());
 
 describe("demo-mode login UI source behavior", () => {
   // 这里只验证交互。production/demo 的 Vite 常量替换、定制口令与 tree-shaking
@@ -24,6 +25,26 @@ describe("demo-mode login UI source behavior", () => {
 
   const inputValue = (id: string) => (document.getElementById(id) as HTMLInputElement).value;
 
+  test("defines 50 unique pairs and exhausts one no-repeat cycle before starting another", () => {
+    const students = demoStudentCredentials("gvclab2026");
+    expect(students).toHaveLength(DEMO_STUDENT_COUNT);
+    expect(new Set(students.map((student) => student.username)).size).toBe(DEMO_STUDENT_COUNT);
+    expect(new Set(students.map((student) => student.password)).size).toBe(DEMO_STUDENT_COUNT);
+    expect(students[0]).toEqual({ username: "student", password: "gvclab2026" });
+    expect(students.at(-1)).toEqual({ username: "student50", password: "gvclab2026-50" });
+    let seen: string[] = [];
+    const cycle: string[] = [];
+    for (let index = 0; index < DEMO_STUDENT_COUNT; index += 1) {
+      const selected = chooseDemoStudent(students, seen, 0);
+      cycle.push(selected.student.username);
+      seen = selected.nextSeen;
+    }
+    expect(new Set(cycle).size).toBe(DEMO_STUDENT_COUNT);
+    const nextCycle = chooseDemoStudent(students, seen, 0);
+    expect(nextCycle.student.username).not.toBe(cycle.at(-1));
+    expect(nextCycle.nextSeen).toEqual([nextCycle.student.username]);
+  });
+
   test("default build keeps the form empty and hides quick-role buttons", async () => {
     await withDemoEnv(undefined, async () => {
       render(<LoginPage onLogin={() => {}} />);
@@ -33,8 +54,9 @@ describe("demo-mode login UI source behavior", () => {
     });
   });
 
-  test("demo build prefills student credentials and switches to teacher in one click", async () => {
+  test("demo build prefills one valid student pair and switches to teacher in one click", async () => {
     await withDemoEnv("1", async () => {
+      const students = demoStudentCredentials("gvclab2026");
       const logins: { username: string; password: string }[] = [];
       const original = api.login;
       api.login = async (username: string, password: string) => {
@@ -43,11 +65,13 @@ describe("demo-mode login UI source behavior", () => {
       };
       try {
         render(<LoginPage onLogin={() => {}} />);
-        // 默认落在学生身份并预填演示口令,打开即可直接登录。
-        expect(inputValue("login-user")).toBe("student");
-        expect(inputValue("login-pass")).toBe("gvclab2026");
+        // 默认落在 50 组有效学生凭证之一,打开即可直接登录。
+        const initialStudent = students.find((student) => student.username === inputValue("login-user"));
+        expect(initialStudent).toBeDefined();
+        expect(inputValue("login-pass")).toBe(initialStudent!.password);
 
         expect(screen.getByRole("group", { name: "开发演示快捷账号" })).toBeDefined();
+        expect(screen.getByRole("button", { name: /50 个种子学生/ })).toBeDefined();
         fireEvent.click(screen.getByRole("button", { name: /教师身份/ }));
         expect(inputValue("login-user")).toBe("teacher");
         expect(inputValue("login-pass")).toBe("gvclab2026");
@@ -55,11 +79,23 @@ describe("demo-mode login UI source behavior", () => {
         // 提交会把预填的教师凭证原样发给真实登录 API。
         fireEvent.submit(document.querySelector("form")!);
         await waitFor(() => expect(logins).toEqual([{ username: "teacher", password: "gvclab2026" }]));
-        // 演示提示向课堂公开口令,并说明可一键切换身份。
-        expect(document.querySelector(".login-hint")?.textContent).toContain("gvclab2026");
+        expect(document.querySelector(".login-hint")?.textContent).toContain("同一标签页刷新会无重复轮换账号和口令");
       } finally {
         api.login = original;
       }
+    });
+  });
+
+  test("a same-tab refresh selects a different student username and password", async () => {
+    await withDemoEnv("1", async () => {
+      render(<LoginPage onLogin={() => {}} />);
+      const first = { username: inputValue("login-user"), password: inputValue("login-pass") };
+      cleanup();
+
+      render(<LoginPage onLogin={() => {}} />);
+      const second = { username: inputValue("login-user"), password: inputValue("login-pass") };
+      expect(second.username).not.toBe(first.username);
+      expect(second.password).not.toBe(first.password);
     });
   });
 });

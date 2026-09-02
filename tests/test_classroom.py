@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 import pytest
 
-from gvcsim import artifacts
+from gvcsim import artifacts, auth, config, demo_accounts
 from gvcsim.classroom import db, records
 from gvcsim.session import empty_session, make_record
 
@@ -62,6 +62,27 @@ def test_readiness_requires_a_teacher_account(teaching_db):
         connection.execute("DELETE FROM accounts WHERE role='teacher'")
     with pytest.raises(db.Unavailable, match="缺少教师账号"):
         db.readiness()
+
+
+def test_demo_catalog_has_fifty_unique_student_credentials():
+    students = demo_accounts.demo_student_credentials("gvclab2026")
+    assert len(students) == demo_accounts.DEMO_STUDENT_COUNT == 50
+    assert len({student.username for student in students}) == 50
+    assert len({student.password for student in students}) == 50
+    assert students[0].username == "student" and students[0].password == "gvclab2026"
+    assert students[-1].username == "student50" and students[-1].password == "gvclab2026-50"
+
+
+def test_existing_demo_database_is_idempotently_expanded_without_reset(teaching_db, monkeypatch):
+    monkeypatch.setattr(demo_accounts, "DEMO_STUDENT_COUNT", 50)
+    with db.conn() as connection:
+        synced = db._sync_demo_accounts(connection)
+        counts = connection.execute("SELECT role,count(*) AS n FROM accounts GROUP BY role").fetchall()
+    assert synced == {"created": 49, "updated": 0}
+    assert {row["role"]: row["n"] for row in counts} == {"student": 50, "teacher": 1}
+    assert auth.authenticate("student50", f"{config.BOOTSTRAP_PASSWORD}-50") is not None
+    with db.conn() as connection:
+        assert db._sync_demo_accounts(connection) == {"created": 0, "updated": 0}
 
 
 def test_session_is_account_isolated_last_write_wins(teaching_db):
