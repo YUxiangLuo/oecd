@@ -409,6 +409,8 @@ interface ReportRun {
 }
 
 export interface SessionResponse {
+  /** Data release authenticated by the server for this workspace. */
+  release_id: string;
   session: ExperimentSession;
   updated_at?: string | null;
   completion: CompletionSummary;

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { api } from "./api";
 import { emptySession, readShared, readStep } from "./session-store";
-import type { ExperimentSession, SessionSaveResponse } from "./types";
+import type { ExperimentSession, SessionResponse, SessionSaveResponse } from "./types";
 import {
   AUTH_RECOVERY_KEY,
   SessionSaveQueue,
@@ -16,9 +16,13 @@ import {
 
 afterEach(cleanup);
 
-function response(session: ExperimentSession = emptySession()): SessionSaveResponse {
+const RELEASE_A = "a".repeat(32);
+const RELEASE_B = "b".repeat(32);
+
+function response(session: ExperimentSession = emptySession()): SessionSaveResponse & Pick<SessionResponse, "release_id"> {
   return {
     session,
+    release_id: RELEASE_A,
     updated_at: "2026-08-13T00:00:00Z",
     completion: { completed: [], completed_count: 0, total: 15, steps: [] },
     report_gate: [],
@@ -82,14 +86,15 @@ describe("session helpers", () => {
     };
     const draft = patchSessionStep(emptySession(), 15, { research_question: "未保存问题" });
 
-    saveAuthSessionRecovery(storage, "student-a", draft, "2026-08-12T00:00:00Z");
-    expect(readAuthSessionRecovery(storage, "student-a")).toEqual({
-      version: 1,
+    saveAuthSessionRecovery(storage, "student-a", draft, "2026-08-12T00:00:00Z", RELEASE_A);
+    expect(readAuthSessionRecovery(storage, "student-a", RELEASE_A)).toEqual({
+      version: 2,
+      release_id: RELEASE_A,
       username: "student-a",
       session: draft,
       base_updated_at: "2026-08-12T00:00:00Z",
     });
-    expect(readAuthSessionRecovery(storage, "student-b")).toBeNull();
+    expect(readAuthSessionRecovery(storage, "student-b", RELEASE_A)).toBeNull();
     clearAuthSessionRecovery(storage);
     expect(values.has(AUTH_RECOVERY_KEY)).toBe(false);
   });
@@ -100,7 +105,7 @@ describe("session helpers", () => {
       setItem: () => { throw new DOMException("quota", "QuotaExceededError"); },
       removeItem: () => {},
     };
-    expect(saveAuthSessionRecovery(storage, "student", emptySession(), null)).toBe(false);
+    expect(saveAuthSessionRecovery(storage, "student", emptySession(), null, RELEASE_A)).toBe(false);
   });
 
   test("rejects malformed auth recovery instead of mounting it as a session", () => {
@@ -109,7 +114,7 @@ describe("session helpers", () => {
       setItem: () => {},
       removeItem: () => {},
     };
-    expect(readAuthSessionRecovery(storage, "student")).toBeNull();
+    expect(readAuthSessionRecovery(storage, "student", RELEASE_A)).toBeNull();
   });
 
   test("composes step and shared patches", () => {
@@ -215,4 +220,54 @@ describe("session helpers", () => {
     await retry;
     expect(errors).toHaveLength(1);
   });
+});
+
+
+describe("release-bound recovery", () => {
+  test("a never-saved draft cannot cross a data release but remains available on its original release", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    const draft = patchSessionStep(emptySession(), 15, { research_question: "release A only" });
+    expect(saveAuthSessionRecovery(storage, "student", draft, null, RELEASE_A)).toBe(true);
+    expect(readAuthSessionRecovery(storage, "student", RELEASE_B)).toBeNull();
+    expect(readAuthSessionRecovery(storage, "another", RELEASE_A)).toBeNull();
+    expect(readAuthSessionRecovery(storage, "student", RELEASE_A)?.session).toEqual(draft);
+    expect(readAuthSessionRecovery(storage, "student", RELEASE_A)?.base_updated_at).toBeNull();
+  });
+
+  test("legacy drafts without a verifiable release are never offered for restore", () => {
+    const storage = {
+      getItem: () => JSON.stringify({ version: 1, username: "student", session: emptySession(), base_updated_at: null }),
+      setItem: () => {}, removeItem: () => {},
+    };
+    expect(readAuthSessionRecovery(storage, "student", RELEASE_A)).toBeNull();
+  });
+});
+
+describe("workspace recovery integration", () => {
+  for (const baseUpdatedAt of [null, "2026-09-07T00:00:00Z"]) {
+    test(`a different release cannot restore a draft with base ${baseUpdatedAt}`, async () => {
+      const draft = patchSessionStep(emptySession(), 15, { research_question: "old release evidence" });
+      saveAuthSessionRecovery(sessionStorage, "student", draft, baseUpdatedAt, RELEASE_A);
+      const get = spyOn(api.classroom, "session").mockResolvedValue({ ...response(), release_id: RELEASE_B, report: null });
+      const save = spyOn(api.classroom, "saveSession").mockResolvedValue(response());
+      try {
+        const { result } = renderHook(() => useSession(true, "student"));
+        await waitFor(() => expect(result.current.status).toBe("ready"));
+        expect(result.current.authRecoveryAvailable).toBe(false);
+        await act(async () => { await result.current.restoreAuthRecovery(); });
+        expect(save).not.toHaveBeenCalled();
+        expect(result.current.getStep(15)).toBeUndefined();
+        expect(readAuthSessionRecovery(sessionStorage, "student", RELEASE_A)?.session).toEqual(draft);
+      } finally {
+        get.mockRestore();
+        save.mockRestore();
+        clearAuthSessionRecovery(sessionStorage);
+      }
+    });
+  }
 });

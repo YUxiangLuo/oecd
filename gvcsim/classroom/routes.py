@@ -60,6 +60,7 @@ def _learning_state(session: dict[str, Any], *, report_exists: bool) -> dict[str
 def get_session(user: dict = Depends(require_student)):
     session, report, row = _workspace(user["sub"])
     return {
+        "release_id": user["rid"],
         "session": session,
         "updated_at": row["updated_at"] if row else None,
         **_learning_state(session, report_exists=bool(report)),

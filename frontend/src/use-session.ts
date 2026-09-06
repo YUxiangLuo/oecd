@@ -17,8 +17,9 @@ export const AUTH_RECOVERY_KEY = "gvcsim_unsynced_session_recovery_v1";
 type RecoveryStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 export interface AuthSessionRecovery {
-  version: 1;
+  version: 2;
   username: string;
+  release_id: string;
   session: ExperimentSession;
   base_updated_at: string | null;
 }
@@ -28,10 +29,13 @@ export function saveAuthSessionRecovery(
   username: string,
   session: ExperimentSession,
   baseUpdatedAt: string | null,
+  releaseId: string,
 ): boolean {
+  if (!/^[0-9a-f]{32}$/.test(releaseId)) return false;
   const recovery: AuthSessionRecovery = {
-    version: 1,
+    version: 2,
     username,
+    release_id: releaseId,
     session,
     base_updated_at: baseUpdatedAt,
   };
@@ -47,14 +51,17 @@ export function saveAuthSessionRecovery(
 export function readAuthSessionRecovery(
   storage: RecoveryStorage,
   username: string,
+  releaseId: string,
 ): AuthSessionRecovery | null {
   const raw = storage.getItem(AUTH_RECOVERY_KEY);
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as Partial<AuthSessionRecovery>;
     if (
-      value.version !== 1
+      value.version !== 2
       || value.username !== username
+      || !/^[0-9a-f]{32}$/.test(releaseId)
+      || value.release_id !== releaseId
       || !isValidSession(value.session)
       || (value.base_updated_at !== null && typeof value.base_updated_at !== "string")
     ) return null;
@@ -191,6 +198,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const [status, setStatus] = useState<SessionStatus>(enabled ? "loading" : "unavailable");
   const [session, setSession] = useState<ExperimentSession>(emptySession);
   const sessionRef = useRef(session);
+  const releaseIdRef = useRef<string | null>(null);
   const [confirmedSession, setConfirmedSession] = useState<ExperimentSession>(emptySession);
   const [report, setReport] = useState<ClassroomReport | null>(null);
   const [completion, setCompletion] = useState<CompletionSummary | null>(null);
@@ -256,6 +264,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     api.classroom.session().then(
       (response) => {
         if (!live) return;
+        releaseIdRef.current = response.release_id;
         queue.current?.setBaseUpdatedAt(response.updated_at ?? null);
         replace(response.session);
         setConfirmedSession(response.session);
@@ -266,7 +275,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         setSyncError(null);
         syncConflictRef.current = false;
         setSyncConflict(false);
-        const recovery = username ? readAuthSessionRecovery(sessionStorage, username) : null;
+        const recovery = username ? readAuthSessionRecovery(sessionStorage, username, response.release_id) : null;
         authRecoveryRef.current = recovery;
         setAuthRecovery(recovery);
         setStatus("ready");
@@ -308,18 +317,19 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   }, [drain, status]);
 
   const stashAuthRecovery = useCallback((accountUsername: string) => {
-    if (!enabled || !unsynced) return false;
+    if (!enabled || !unsynced || !releaseIdRef.current) return false;
     return saveAuthSessionRecovery(
       sessionStorage,
       accountUsername,
       sessionRef.current,
       queue.current?.getBaseUpdatedAt() ?? null,
+      releaseIdRef.current,
     );
   }, [enabled, unsynced]);
 
   const restoreAuthRecovery = useCallback(async () => {
     const recovery = authRecoveryRef.current;
-    if (!recovery || recovery.username !== username) return;
+    if (!recovery || recovery.username !== username || recovery.release_id !== releaseIdRef.current) return;
     replace(recovery.session);
     setWorkspaceGeneration((value) => value + 1);
     queue.current?.setBaseUpdatedAt(recovery.base_updated_at);
@@ -346,6 +356,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     setSyncing(true);
     try {
       const response = await api.classroom.session();
+      releaseIdRef.current = response.release_id;
       queue.current?.discardPending(response.updated_at ?? null);
       replace(response.session);
       setConfirmedSession(response.session);

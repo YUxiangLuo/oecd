@@ -12,7 +12,7 @@ import {
   type StepHistoryMode,
 } from "./app-state";
 import { AppBootSkeleton, TeacherWorkspace } from "./app-shell";
-import { AUTH_TOKEN_KEY, api, getActiveAuthToken, setActiveAuthToken } from "./api";
+import { AUTH_TOKEN_KEY, api, getActiveAuthToken, isApiErrorStatus, setActiveAuthToken } from "./api";
 import {
   DEFAULT_REGRESSION_SETTINGS,
   SIGNATURE_SETTINGS,
@@ -25,6 +25,7 @@ import { resetStepScroller } from "./step-navigation";
 import { StudentWorkspace } from "./student-workspace";
 import type { AuthUser, Meta, StepsResponse, StepStateApi } from "./types";
 import { useSession } from "./use-session";
+import { userFacingRequestError } from "./user-facing-error";
 
 export default function App() {
   const [stepsData, setStepsData] = useState<StepsResponse | null>(null);
@@ -39,6 +40,7 @@ export default function App() {
   const [authChecked, setAuthChecked] = useState(() => !localStorage.getItem(AUTH_TOKEN_KEY));
   const [authExpiresAt] = useState<number | null>(() => readAuthExpiry(localStorage));
   const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [authCheckError, setAuthCheckError] = useState<string | null>(null);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [showIntro, setShowIntro] = useState(() => sessionStorage.getItem("gvcsim_show_intro") === "1");
   const introTriggerRef = useRef<HTMLButtonElement>(null);
@@ -138,7 +140,11 @@ export default function App() {
     setActiveAuthToken(token);
     api.me(token).then(
       (verifiedUser) => { if (getActiveAuthToken() === token) setUser(verifiedUser); },
-      () => { if (getActiveAuthToken() === token) reloadLoggedOut("登录已过期，请重新登录。"); },
+      (error) => {
+        if (getActiveAuthToken() !== token) return;
+        if (isApiErrorStatus(error, 401)) reloadLoggedOut("登录已过期，请重新登录。");
+        else setAuthCheckError(userFacingRequestError(error, "暂时无法校验登录"));
+      },
     ).finally(() => setAuthChecked(true));
   }, [reloadLoggedOut]);
 
@@ -196,6 +202,18 @@ export default function App() {
   }, [selectStep, session.completion, session.status, stepsData]);
 
   if (!authChecked) return <AppBootSkeleton />;
+  if (authCheckError) {
+    return (
+      <main className="layout app-boot" style={{ display: "grid", placeItems: "center", padding: 32 }}>
+        <section className="panel" role="alert" style={{ maxWidth: 560 }}>
+          <h1>暂时无法连接教学服务</h1>
+          <p>{authCheckError}</p>
+          <p>登录信息已保留。服务恢复后可重试连接。</p>
+          <button className="primary" onClick={() => window.location.reload()}>重试连接</button>
+        </section>
+      </main>
+    );
+  }
   if (!user) {
     return (
       <LoginPage notice={authNotice} onLogin={(response) => {

@@ -179,3 +179,12 @@ def test_authenticated_middleware_offloads_database_check(teaching_db, monkeypat
 
     assert response.status_code == 200
     assert auth.verify_token in calls
+
+
+def test_workspace_reports_the_authenticated_release_for_draft_recovery(teaching_db):
+    client = TestClient(app)
+    login = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).json()
+    workspace = client.get("/api/classroom/session", headers={"Authorization": f"Bearer {login['token']}"})
+    assert workspace.status_code == 200
+    assert workspace.json()["release_id"] == "a" * 32
+    assert workspace.json()["updated_at"] is None
