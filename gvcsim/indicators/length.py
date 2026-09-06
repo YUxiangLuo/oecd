@@ -116,12 +116,15 @@ def _lengths_from(parts: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
     }
 
 
-def sector_length(arr: IcioArrays) -> pd.DataFrame:
-    """行业级长度/位置指标，索引 ``(country, industry)``，输出 10 个既有字段。"""
-    parts = _components(arr)
+def _sector_length_from(arr: IcioArrays, parts: dict[str, np.ndarray]) -> pd.DataFrame:
     df = pd.DataFrame(_lengths_from(parts), columns=LENGTH_COLUMNS, index=arr.index)
     df.index.names = ["country", "industry"]
     return df
+
+
+def sector_length(arr: IcioArrays) -> pd.DataFrame:
+    """行业级长度/位置指标，索引 ``(country, industry)``，输出 10 个既有字段。"""
+    return _sector_length_from(arr, _components(arr))
 
 
 def country_length(arr: IcioArrays, sector_df: pd.DataFrame | None = None) -> pd.DataFrame:
@@ -131,9 +134,18 @@ def country_length(arr: IcioArrays, sector_df: pd.DataFrame | None = None) -> pd
     不保证普通凸加权平均的区间性质。
     """
     del sector_df  # 国家级直接从分量聚合,不由行业级表推导
-    parts = _components(arr)
+    return _country_length_from(arr, _components(arr))
+
+
+def _country_length_from(arr: IcioArrays, parts: dict[str, np.ndarray]) -> pd.DataFrame:
     grouped = {k: pd.Series(v, index=arr.index).groupby(level=0).sum().to_numpy() for k, v in parts.items()}
     countries = pd.Series(0.0, index=arr.index).groupby(level=0).sum().index
     df = pd.DataFrame(_lengths_from(grouped), columns=LENGTH_COLUMNS, index=countries)
     df.index.name = "country"
     return df
+
+
+def length_tables(arr: IcioArrays) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """流水线同时生成行业/国家长度表，共用一次矩阵分量计算，不缓存可变数组。"""
+    parts = _components(arr)
+    return _sector_length_from(arr, parts), _country_length_from(arr, parts)

@@ -291,6 +291,29 @@ def test_country_length_is_va_weighted(fake_io):
         assert lo - 1e-9 <= country.loc[r, "PLv"] <= hi + 1e-9
 
 
+@pytest.mark.parametrize("fixture_name", ["fake_io", "autarky_io", "cycle_io"])
+def test_length_tables_reuses_components_without_changing_outputs(fixture_name, request, monkeypatch):
+    arr = build_arrays(with_tls(request.getfixturevalue(fixture_name)))
+    expected_sector = length.sector_length(arr)
+    expected_country = length.country_length(arr)
+    components = length._components
+    calls = []
+
+    def counted(value):
+        calls.append(value)
+        return components(value)
+
+    monkeypatch.setattr(length, "_components", counted)
+    sector, country = length.length_tables(arr)
+
+    assert len(calls) == 1
+    pd.testing.assert_frame_equal(sector, expected_sector, check_exact=True)
+    pd.testing.assert_frame_equal(country, expected_country, check_exact=True)
+    # 下一次调用重新计算，不会因进程缓存复用此前的可变分量。
+    length.length_tables(arr)
+    assert len(calls) == 2
+
+
 # ---------------------------------------------------------------------------
 # 网络指标（Gephi-compatible）
 # ---------------------------------------------------------------------------

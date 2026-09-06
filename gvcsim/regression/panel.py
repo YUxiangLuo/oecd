@@ -305,16 +305,30 @@ def _drop_collinear_columns(
 def _twoway_demean(
     values: np.ndarray, ent: np.ndarray, tim: np.ndarray, tol: float = 1e-10, max_iter: int = 200
 ) -> np.ndarray:
-    """对每一列做 entity/time 交替去均值(Guimarães-Portugal 迭代)。"""
+    """对每一列做 entity/time 交替去均值，只返回已收敛的 within 变换。
+
+    相邻迭代变化小不等于固定效应已吸收；返回前同时核验实体与时间组均值。
+    稀疏非平衡面板可能收敛很慢，达到上限时必须明确失败，不能继续估计。
+    """
+    if not math.isfinite(tol) or tol <= 0:
+        raise ValueError("双向去均值容差必须为正的有限数")
+    if max_iter <= 0:
+        raise ValueError("双向去均值迭代次数必须为正数")
     out = values.astype(float).copy()
-    for _ in range(max_iter):
+    _require_finite_numerical_output("双向去均值输入", out)
+    for iteration in range(1, max_iter + 1):
         before = out.copy()
         for groups in (ent, tim):
             df = pd.DataFrame(out)
             out = (df - df.groupby(groups).transform("mean")).values
-        if np.abs(out - before).max() < tol:
-            break
-    return out
+        _require_finite_numerical_output("双向去均值", out)
+        if np.abs(out - before).max() < tol or iteration == max_iter:
+            residual = max(
+                float(pd.DataFrame(out).groupby(groups).mean().abs().to_numpy().max()) for groups in (ent, tim)
+            )
+            if residual < tol:
+                return out
+    raise ValueError(f"双向去均值在 {max_iter} 次迭代后未收敛（最大组均值残差 {residual:.3g}）；无法继续估计")
 
 
 def _cluster_t_pvalue(t_stat: float, n_clusters: int) -> float:
@@ -1854,7 +1868,7 @@ def _summarize_benchmark(
     rows: list[dict[str, str | float]] = []
     for name in model.policy_xcols:
         if name not in own_by or name not in lm_by:
-            continue
+            raise ValueError(f"PanelOLS 对照缺少政策系数: {name}")
         own_stat = own_by[name]
         lm_stat = lm_by[name]
         if own_stat.se is None or lm_stat.se is None:
@@ -1876,8 +1890,11 @@ def _summarize_benchmark(
     max_se = max(abs(float(row["se_diff"])) for row in rows)
     _require_finite_numerical_output("PanelOLS 对照摘要", max_coef, max_se)
     coef_check_passed = max_coef < 1e-8
-    se_scale = max(max(abs(float(row["own_se"])), abs(float(row["panelols_se"])), 1e-12) for row in rows)
-    se_check_passed = max_se / se_scale < 0.02
+    # 逐项按自身量级比较，不能让大标准误掩盖小标准误（如交互项）的偏差。
+    se_check_passed = all(
+        abs(float(row["se_diff"])) / max(abs(float(row["own_se"])), abs(float(row["panelols_se"])), 1e-12) < 0.02
+        for row in rows
+    )
     return {
         "backend": "linearmodels.PanelOLS",
         "policy_coefs": rows,
