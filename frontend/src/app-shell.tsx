@@ -114,7 +114,7 @@ export function TeacherWorkspace({
             数据：{oecdIcioDatasetLabel(meta)}
           </span>
           {expiry && <span className="muted">会话至 {expiry}</span>}
-          <span className="role-chip" title={`教师账号 · ${user.username}`}>{user.name}</span>
+          <span className="role-chip" title={`${user.name} · 教师账号 · ${user.username}`}><span>{user.name}</span></span>
           <button ref={passwordTriggerRef} onClick={onRequestPasswordChange}>修改密码</button>
           <button onClick={onLogout}>退出</button>
         </div>
@@ -167,7 +167,7 @@ export function StudentTopbar({
         <span className="muted">
           数据：{oecdIcioDatasetLabel(meta)}
         </span>
-        <span className="role-chip" title={`学生账号 · ${user.username}`}>{user.name}</span>
+        <span className="role-chip" title={`${user.name} · 学生账号 · ${user.username}`}><span>{user.name}</span></span>
         {expiry && <span className="muted" title="服务端签发的 expires_at">会话至 {expiry}</span>}
         <button ref={introTriggerRef} onClick={onShowIntro}>ⓘ 系统介绍</button>
         <button

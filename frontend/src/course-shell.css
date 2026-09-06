@@ -2,9 +2,11 @@
 /* 身份徽章:圆点 + 文本的状态样式,避免做成染色 pill 后被当成按钮点 */
 .topbar-user .role-chip {
   display: inline-flex; align-items: center; gap: 6px;
+  min-width: 0; max-width: 180px;
   font-size: 12px; font-weight: 600; color: #5a6070;
   cursor: default; user-select: none;
 }
+.topbar-user .role-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topbar-user .role-chip::before {
   content: ""; width: 7px; height: 7px; border-radius: 99px; background: #4b47e0; flex: none;
 }

@@ -146,6 +146,7 @@ def main():
         teacher.run("find", "role", "button", "click", "--name", "报告评阅")
         teacher.run("wait", "--text", username)
         teacher.button("评阅报告：" + username)
+        teacher.run("wait", 'input[type="number"]')
         teacher.run("fill", 'input[type="number"]', "93")
         teacher.run("fill", ".grade-field textarea", "纯浏览器全课程测试：全部步骤、持久化及报告状态通过。")
         teacher.button("提交评阅")

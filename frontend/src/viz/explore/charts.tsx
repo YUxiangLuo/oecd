@@ -223,7 +223,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
         })}
       </svg>
       )}
-      {equalityLine && pts.length > 0 && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}><span style={{ color: "#e0982a", fontWeight: 700 }}>橙色虚线 y=x</span>：线上方 PLv_GVC &gt; PLy_GVC（GVCPs &gt; 1，更偏上游）；线下方更偏下游。灰色中位数线只表示相对高低。</div>}
+      {equalityLine && pts.length > 0 && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}><span style={{ color: "var(--text-warning)", fontWeight: 700 }}>橙色虚线 y=x</span>：线上方 PLv_GVC &gt; PLy_GVC（GVCPs &gt; 1，更偏上游）；线下方更偏下游。灰色中位数线只表示相对高低。</div>}
       <ChartDataDisclosure
         label={`${yLabel}与${xLabel}散点`}
         columns={[{ key: "entity", label: "对象" }, { key: "x", label: xLabel }, { key: "y", label: yLabel }]}
