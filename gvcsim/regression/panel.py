@@ -1911,28 +1911,31 @@ def _summarize_benchmark(
     }
 
 
-def _cohort_time_att_values(
-    model: PreparedModel,
-    event_times: list[int] | None,
-    *,
-    omitted_cluster: str | None = None,
-) -> tuple[dict[str, float], list[dict]]:
-    """Estimate cohort-time DID cells against never/not-yet-treated entities.
+@dataclass(frozen=True)
+class _CohortTimeCell:
+    cohort: int
+    time: int
+    term: str
+    treated_delta: np.ndarray
+    control_delta: np.ndarray
+    treated_clusters: np.ndarray
+    control_clusters: np.ndarray
 
-    Every cell compares the cohort's change from ``g-1`` with entities that remain
-    untreated through both the cohort date and comparison date. Aggregation weights
-    are the number of treated entities with both observations. This avoids using an
-    already-treated cohort as a control, unlike the legacy staggered TWFE.
+
+def _prepare_cohort_time_cells(model: PreparedModel, event_times: list[int] | None) -> list[_CohortTimeCell]:
+    """Freeze paired changes once per run, before any delete-one cluster draws.
+
+    Treatment timing and complete-case selection are already fixed in ``model``.
+    Deleting a country only removes that country's pairs; it cannot change the
+    cohort baseline or turn an already-treated entity into an eligible control.
     """
     if model.timing is None:
         raise ValueError("cohort-time ATT 需要冻结的首次处理时点")
     data = model.data.copy()
     data[model.entity] = data[model.entity].astype(str)
     data[model.cluster] = data[model.cluster].astype(str)
-    if omitted_cluster is not None:
-        data = data.loc[data[model.cluster] != str(omitted_cluster)].copy()
     if data.empty:
-        raise ValueError("删除聚类后 cohort-time ATT 样本为空")
+        raise ValueError("cohort-time ATT 样本为空")
 
     cluster_by_entity = data.groupby(model.entity, sort=False)[model.cluster].first()
     retained = pd.Index(cluster_by_entity.index)
@@ -1941,8 +1944,7 @@ def _cohort_time_att_values(
     first = first.reindex(retained)
     values = data.pivot(index=model.entity, columns=model.time, values=model.depvar)
     years = sorted(int(year) for year in values.columns)
-    weighted: dict[str, list[tuple[float, int]]] = {}
-    cells: list[dict] = []
+    cells: list[_CohortTimeCell] = []
 
     for cohort in sorted(int(value) for value in first.dropna().unique()):
         baseline = cohort - 1
@@ -1968,23 +1970,64 @@ def _cohort_time_att_values(
             control_delta = (values.loc[control_ids, target] - values.loc[control_ids, baseline]).dropna()
             if treated_delta.empty or control_delta.empty:
                 continue
-            estimate = float(treated_delta.mean() - control_delta.mean())
-            term = _event_term(event_time) if event_times is not None else model.policy_xcols[0]
-            weight = int(len(treated_delta))
-            weighted.setdefault(term, []).append((estimate, weight))
             cells.append(
-                {
-                    "cohort": cohort,
-                    "time": int(target),
-                    "event_time": event_time,
-                    "term": term,
-                    "att": estimate,
-                    "treated_entities": weight,
-                    "control_entities": int(len(control_delta)),
-                    "treated_clusters": int(cluster_by_entity.reindex(treated_delta.index).nunique()),
-                    "control_clusters": int(cluster_by_entity.reindex(control_delta.index).nunique()),
-                }
+                _CohortTimeCell(
+                    cohort=cohort,
+                    time=int(target),
+                    term=_event_term(event_time) if event_times is not None else model.policy_xcols[0],
+                    treated_delta=treated_delta.to_numpy(dtype=float),
+                    control_delta=control_delta.to_numpy(dtype=float),
+                    treated_clusters=cluster_by_entity.reindex(treated_delta.index).to_numpy(dtype=str),
+                    control_clusters=cluster_by_entity.reindex(control_delta.index).to_numpy(dtype=str),
+                )
             )
+    return cells
+
+
+def _cohort_time_att_values(
+    model: PreparedModel,
+    event_times: list[int] | None,
+    *,
+    omitted_cluster: str | None = None,
+    prepared_cells: list[_CohortTimeCell] | None = None,
+) -> tuple[dict[str, float], list[dict]]:
+    """Aggregate paired cohort-time changes, optionally deleting one cluster.
+
+    Reuse is local to one prepared model/run, never a process-level data cache.
+    Means are recomputed from retained pairs rather than subtracting large totals,
+    preserving the numerical behavior when a deleted cluster dominates a cell.
+    """
+    if prepared_cells is None:
+        prepared_cells = _prepare_cohort_time_cells(model, event_times)
+    omitted = str(omitted_cluster) if omitted_cluster is not None else None
+    weighted: dict[str, list[tuple[float, int]]] = {}
+    cells: list[dict] = []
+    for cell in prepared_cells:
+        treated_delta, control_delta = cell.treated_delta, cell.control_delta
+        treated_clusters, control_clusters = cell.treated_clusters, cell.control_clusters
+        if omitted is not None:
+            keep_treated = treated_clusters != omitted
+            keep_control = control_clusters != omitted
+            treated_delta, treated_clusters = treated_delta[keep_treated], treated_clusters[keep_treated]
+            control_delta, control_clusters = control_delta[keep_control], control_clusters[keep_control]
+        if not len(treated_delta) or not len(control_delta):
+            continue
+        estimate = float(treated_delta.mean() - control_delta.mean())
+        weight = int(len(treated_delta))
+        weighted.setdefault(cell.term, []).append((estimate, weight))
+        cells.append(
+            {
+                "cohort": cell.cohort,
+                "time": cell.time,
+                "event_time": cell.time - cell.cohort,
+                "term": cell.term,
+                "att": estimate,
+                "treated_entities": weight,
+                "control_entities": int(len(control_delta)),
+                "treated_clusters": int(len(np.unique(treated_clusters))),
+                "control_clusters": int(len(np.unique(control_clusters))),
+            }
+        )
 
     estimates = {
         term: float(sum(value * weight for value, weight in entries) / sum(weight for _value, weight in entries))
@@ -2144,10 +2187,13 @@ def _audit_cohort_time_jackknife(
     clusters: list[str],
     point_audit: _CohortPointAudit,
     support: TreatmentSupport | None,
+    *,
+    prepared_cells: list[_CohortTimeCell],
 ) -> _CohortJackknifeAudit:
     """Build delete-one covariance and independently audit its standard errors."""
     leave_one_estimates = [
-        _cohort_time_att_values(model, event_times, omitted_cluster=cluster_value)[0] for cluster_value in clusters
+        _cohort_time_att_values(model, event_times, omitted_cluster=cluster_value, prepared_cells=prepared_cells)[0]
+        for cluster_value in clusters
     ]
 
     # A locally unsupported remote event period can disappear when its sole
@@ -2254,7 +2300,8 @@ def _cohort_time_result(model: PreparedModel, method: str) -> tuple[RegressionRe
             for period in (model.event_support or {}).get("periods", [])
             if period.get("estimated")
         ]
-    full, cells = _cohort_time_att_values(model, event_times)
+    prepared_cells = _prepare_cohort_time_cells(model, event_times)
+    full, cells = _cohort_time_att_values(model, event_times, prepared_cells=prepared_cells)
     terms = [term for term in model.policy_xcols if term in full]
     if method == METHOD_DID:
         terms = [model.policy_xcols[0]] if model.policy_xcols[0] in full else []
@@ -2282,6 +2329,7 @@ def _cohort_time_result(model: PreparedModel, method: str) -> tuple[RegressionRe
         clusters,
         point_audit,
         support,
+        prepared_cells=prepared_cells,
     )
     support = jackknife.support
 
