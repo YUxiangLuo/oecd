@@ -34,7 +34,7 @@ test("self-service password change preserves the failed-save draft before logout
     await waitFor(() => expect(view.container.querySelector("textarea")).toBeTruthy());
     fireEvent.change(view.container.querySelector("textarea")!, { target: { value: "未保存的研究问题，改密后必须保留。" } });
     await waitFor(() => expect(screen.getByRole("button", { name: "重试保存" })).toBeTruthy(), { timeout: 2500 });
-    fireEvent.click(screen.getByRole("button", { name: "修改密码", exact: true }));
+    fireEvent.click(screen.getByRole("button", { name: "修改密码" }));
     fireEvent.change(document.querySelector("#account-current-password")!, { target: { value: "old-password-2026" } });
     fireEvent.change(document.querySelector("#account-new-password")!, { target: { value: "new-password-2026" } });
     fireEvent.change(document.querySelector("#account-confirm-password")!, { target: { value: "new-password-2026" } });
