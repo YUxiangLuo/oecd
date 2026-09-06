@@ -4,6 +4,7 @@ import csv
 import hashlib
 import hmac
 import json
+import os
 import re
 import stat
 import threading
@@ -23,6 +24,13 @@ DATASET_METADATA = "dataset.json"
 PUBLICATION_POLICY_MODE = "integrity-only-v1"
 NETWORK_ALGORITHM = "gephi-compatible-directed-unweighted-positive-v1"
 _csv_cache_lock = threading.RLock()
+
+FileState = tuple[int, int, int, int, int]
+
+
+def _file_state(value: os.stat_result) -> FileState:
+    """Detect in-place edits and atomic replacements, including preserved mtimes."""
+    return value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns
 
 
 class ArtifactContractError(RuntimeError):
@@ -180,12 +188,12 @@ def read_qc_artifact(path: Path, *, scope: str, contract: object) -> list[dict]:
 
 
 @lru_cache(maxsize=16)
-def _dataset_metadata_cached(path_text: str, size: int, mtime_ns: int) -> dict[str, Any]:
-    del size, mtime_ns
+def _dataset_metadata_cached(path_text: str, state: FileState) -> dict[str, Any]:
+    del state
     path = Path(path_text)
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ArtifactValidationError(f"invalid dataset metadata: {path}") from exc
     if not isinstance(value, dict):
         raise ArtifactValidationError(f"dataset metadata must be an object: {path}")
@@ -199,12 +207,15 @@ def dataset_metadata(processed_dir: Path | None = None) -> dict[str, Any]:
     path = root / DATASET_METADATA
     _require_regular_file(path, label="dataset metadata")
     file_stat = path.stat()
-    return _dataset_metadata_cached(str(path), file_stat.st_size, file_stat.st_mtime_ns)
+    return _dataset_metadata_cached(str(path), _file_state(file_stat))
 
 
 def _metadata_digest(metadata: dict[str, Any]) -> str:
     payload = {key: value for key, value in metadata.items() if key != METADATA_DIGEST_NAME}
-    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    try:
+        canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    except UnicodeError as exc:
+        raise ArtifactValidationError("dataset metadata contains invalid Unicode") from exc
     return hashlib.sha256(canonical).hexdigest()
 
 
@@ -255,7 +266,7 @@ def validate_source(path: Path, processed_dir: Path | None = None) -> None:
 def _release_files(processed_dir: Path) -> list[Path]:
     files: list[Path] = []
     for path in sorted(processed_dir.rglob("*")):
-        if path.name == "dataset.json":
+        if path == processed_dir / DATASET_METADATA:
             continue
         try:
             mode = path.lstat().st_mode
@@ -605,7 +616,7 @@ def validate_release(processed_dir: Path | None = None, *, verify_integrity: boo
 
 @lru_cache(maxsize=8)
 def _validate_release_cached(
-    root_text: str, release_id: str, state: tuple[tuple[str, int, int], ...]
+    root_text: str, release_id: str, state: tuple[tuple[str, FileState], ...]
 ) -> dict[str, Any]:
     del release_id, state
     return validate_release(Path(root_text), verify_integrity=True)
@@ -620,7 +631,7 @@ def validate_release_cached(processed_dir: Path | None = None) -> dict[str, Any]
     root = (processed_dir or PROCESSED_DIR).resolve()
     identity = release_identity(root)
     state = tuple(
-        (path.relative_to(root).as_posix(), metadata.st_size, metadata.st_mtime_ns)
+        (path.relative_to(root).as_posix(), _file_state(metadata))
         for path in [root / DATASET_METADATA, *_release_files(root)]
         for metadata in (path.lstat(),)
     )
@@ -639,8 +650,8 @@ def clear_release_validation_cache() -> None:
 
 
 @lru_cache(maxsize=32)
-def _cached_csv(path_text: str, size: int, mtime_ns: int) -> pd.DataFrame:
-    del size, mtime_ns
+def _cached_csv(path_text: str, state: FileState) -> pd.DataFrame:
+    del state
     return pd.read_csv(path_text, keep_default_na=False, na_values=[""])
 
 
@@ -650,7 +661,7 @@ def read_csv_artifact(path: Path, *, require_current: bool = False) -> pd.DataFr
     resolved = path.resolve()
     file_stat = resolved.stat()
     with _csv_cache_lock:
-        return _cached_csv(str(resolved), file_stat.st_size, file_stat.st_mtime_ns)
+        return _cached_csv(str(resolved), _file_state(file_stat))
 
 
 def write_dataset_metadata(processed_dir: Path, metadata: dict[str, Any]) -> Path:

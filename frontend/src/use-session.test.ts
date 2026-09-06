@@ -271,3 +271,39 @@ describe("workspace recovery integration", () => {
     });
   }
 });
+
+describe("edits during conflict reload", () => {
+  test("a held reload does not discard edits made after the user requested it", async () => {
+    const fetch = spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ detail: "conflict" }), { status: 409 }));
+    const conflict = await api.classroom.saveSession({ session: emptySession(), base_updated_at: null }).catch(error => error);
+    fetch.mockRestore();
+    const reload = deferred<SessionResponse>();
+    const latest = patchSessionStep(emptySession(), 15, { research_question: "server" });
+    const get = spyOn(api.classroom, "session").mockResolvedValueOnce({ ...response(), report: null }).mockImplementationOnce(() => reload.promise).mockResolvedValue({ ...response(latest), report: null });
+    const save = spyOn(api.classroom, "saveSession").mockRejectedValue(conflict);
+    try {
+      const { result } = renderHook(() => useSession(true, "student"));
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+      await act(async () => {
+        result.current.patchStep(15, { research_question: "stale" });
+        await result.current.syncNow().catch(() => {});
+      });
+      let loading!: Promise<void>;
+      act(() => { loading = result.current.resolveSyncConflict(); });
+      act(() => result.current.patchStep(15, { research_question: "typed during reload" }));
+      await act(async () => {
+        await result.current.resolveSyncConflict(); // duplicate clicks do not create another reload
+        reload.resolve({ ...response(latest), report: null });
+        await loading;
+      });
+      expect(get).toHaveBeenCalledTimes(2);
+      expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("typed during reload");
+      expect(result.current.syncConflict).toBe(true);
+      expect(result.current.unsynced).toBe(true);
+      expect(result.current.syncError).toContain("载入期间又有本地修改");
+      await act(async () => { await result.current.resolveSyncConflict(); });
+      expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("server");
+      expect(result.current.syncConflict).toBe(false);
+    } finally { get.mockRestore(); save.mockRestore(); }
+  });
+});

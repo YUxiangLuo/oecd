@@ -226,7 +226,10 @@ export default function App() {
     );
   }
 
-  const passwordChanged = () => reloadLoggedOut("密码已修改。请使用新密码重新登录。");
+  const passwordChanged = () => {
+    if (user.role === "student") session.stashAuthRecovery(user.username);
+    reloadLoggedOut("密码已修改。请使用新密码重新登录。");
+  };
   if (user.role === "teacher") {
     return (
       <TeacherWorkspace

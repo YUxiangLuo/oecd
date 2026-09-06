@@ -147,7 +147,11 @@ def cleanup_old_releases(current: Path, keep: Iterable[Path]) -> list[str]:
     store = release_store(current)
     retained = {path.resolve() for path in keep}
     changed = False
-    for candidate in store.iterdir():
+    try:
+        candidates = list(store.iterdir())
+    except OSError as error:
+        return [f"无法扫描旧发布目录 {store}:{error}"]
+    for candidate in candidates:
         try:
             if candidate.resolve() in retained:
                 continue

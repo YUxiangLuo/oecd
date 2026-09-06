@@ -1347,3 +1347,74 @@ def test_artifact_tree_rejects_symlinks(tmp_path):
     target.symlink_to("panel_industry.csv")
     with pytest.raises(artifacts.ArtifactContractError, match="symlink"):
         artifacts.validate_release(tmp_path)
+
+
+@pytest.mark.parametrize("replace_inode", [False, True])
+@pytest.mark.parametrize("filename", ["dataset.json", "indicators_country_2020.csv"])
+def test_warm_release_validation_rejects_same_size_same_mtime_changes(tmp_path, replace_inode, filename):
+    import os
+
+    _release(tmp_path)
+    artifacts.clear_artifact_caches()
+    assert artifacts.validate_release_cached(tmp_path)["release_id"] == RELEASE_ID
+    path = tmp_path / filename
+    original = path.read_bytes()
+    stamp = path.stat()
+    replacement = (
+        original.replace(RELEASE_ID.encode(), b"2" * 32, 1)
+        if filename == "dataset.json"
+        else original.replace(b"AAA", b"ZZZ", 1)
+    )
+    assert replacement != original and len(replacement) == len(original)
+    if replace_inode:
+        temporary = tmp_path / "swap"
+        temporary.write_bytes(replacement)
+        temporary.replace(path)
+    else:
+        path.write_bytes(replacement)
+    os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+    with pytest.raises(artifacts.ArtifactContractError):
+        artifacts.validate_release_cached(tmp_path)
+
+
+@pytest.mark.parametrize("replace_inode", [False, True])
+def test_csv_cache_refreshes_when_file_changes_without_size_or_mtime_change(tmp_path, replace_inode):
+    import os
+
+    path = tmp_path / "sample.csv"
+    path.write_text("value\n1\n")
+    old = artifacts.read_csv_artifact(path)
+    stamp = path.stat()
+    if replace_inode:
+        replacement = tmp_path / "new.csv"
+        replacement.write_text("value\n2\n")
+        replacement.replace(path)
+    else:
+        path.write_text("value\n2\n")
+    os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+    new = artifacts.read_csv_artifact(path)
+    assert new is not old and new.iloc[0, 0] == 2
+    assert old.iloc[0, 0] == 1
+
+
+@pytest.mark.parametrize("symlink", [False, True])
+def test_nested_dataset_filename_cannot_hide_an_unregistered_file_or_symlink(tmp_path, symlink):
+    _release(tmp_path)
+    artifacts.validate_release_cached(tmp_path)
+    nested = tmp_path / "nested" / "dataset.json"
+    nested.parent.mkdir()
+    if symlink:
+        nested.symlink_to(tmp_path / "dataset.json")
+    else:
+        nested.write_text("{}")
+    with pytest.raises(artifacts.ArtifactContractError):
+        artifacts.validate_release_cached(tmp_path)
+
+
+@pytest.mark.parametrize(
+    "payload", [b"\xff", json.dumps({"release_id": RELEASE_ID, "metadata_sha256": "0" * 64, "note": "\ud800"}).encode()]
+)
+def test_metadata_encoding_failures_are_artifact_errors(tmp_path, payload):
+    (tmp_path / "dataset.json").write_bytes(payload)
+    with pytest.raises(artifacts.ArtifactContractError):
+        artifacts.release_identity(tmp_path)

@@ -209,6 +209,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncConflict, setSyncConflict] = useState(false);
   const syncConflictRef = useRef(false);
+  const resolvingConflictRef = useRef(false);
   const [unsynced, setUnsynced] = useState(false);
   const [authRecovery, setAuthRecovery] = useState<AuthSessionRecovery | null>(null);
   const authRecoveryRef = useRef<AuthSessionRecovery | null>(null);
@@ -352,10 +353,16 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   }, []);
 
   const resolveSyncConflict = useCallback(async () => {
-    if (!syncConflict) return;
+    if (!syncConflictRef.current || resolvingConflictRef.current) return;
+    resolvingConflictRef.current = true;
+    const localSnapshot = sessionRef.current;
     setSyncing(true);
     try {
       const response = await api.classroom.session();
+      if (sessionRef.current !== localSnapshot) {
+        setSyncError("载入期间又有本地修改，已保留这些内容。请确认后再次载入服务器版本。");
+        return;
+      }
       releaseIdRef.current = response.release_id;
       queue.current?.discardPending(response.updated_at ?? null);
       replace(response.session);
@@ -373,9 +380,10 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       setSyncError(cause instanceof Error ? cause.message : String(cause));
       throw cause;
     } finally {
+      resolvingConflictRef.current = false;
       setSyncing(false);
     }
-  }, [replace, syncConflict]);
+  }, [replace]);
 
   const applyReportMutation = useCallback((response: ReportMutationResponse) => {
     setReport(response.report);

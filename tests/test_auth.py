@@ -1,4 +1,5 @@
 import time
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -6,6 +7,8 @@ from fastapi.testclient import TestClient
 from gvcsim import api as api_module
 from gvcsim import artifacts, auth
 from gvcsim.api import app
+
+_REAL_RELEASE_IDENTITY = artifacts.release_identity
 
 
 def test_login_me_and_bad_credentials(teaching_db):
@@ -188,3 +191,33 @@ def test_workspace_reports_the_authenticated_release_for_draft_recovery(teaching
     assert workspace.status_code == 200
     assert workspace.json()["release_id"] == "a" * 32
     assert workspace.json()["updated_at"] is None
+
+
+def test_corrupt_artifacts_block_valid_tokens_and_new_logins(teaching_db, monkeypatch):
+    client = TestClient(app)
+    login = client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"})
+    token = login.json()["token"]
+
+    def corrupted(*_args, **_kwargs):
+        raise artifacts.ArtifactContractError("artifact checksum mismatch")
+
+    monkeypatch.setattr(artifacts, "validate_release_cached", corrupted)
+    response = client.get("/api/classroom/session", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 503
+    assert client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).status_code == 503
+    monkeypatch.setattr(artifacts, "validate_release_cached", lambda: {"release_id": "a" * 32})
+    assert client.get("/api/classroom/session", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+
+
+@pytest.mark.parametrize(
+    "payload", [b"\xff", json.dumps({"release_id": "a" * 32, "metadata_sha256": "0" * 64, "note": "\ud800"}).encode()]
+)
+def test_malformed_metadata_is_dependency_failure_not_invalid_token(teaching_db, monkeypatch, tmp_path, payload):
+    client = TestClient(app, raise_server_exceptions=False)
+    credentials = {"username": "student", "password": "gvclab2026"}
+    login = client.post("/api/auth/login", json=credentials).json()
+    (tmp_path / "dataset.json").write_bytes(payload)
+    monkeypatch.setattr(artifacts, "release_identity", lambda: _REAL_RELEASE_IDENTITY(tmp_path))
+    headers = {"Authorization": f"Bearer {login['token']}"}
+    assert client.get("/api/auth/me", headers=headers).status_code == 503
+    assert client.post("/api/auth/login", json=credentials).status_code == 503

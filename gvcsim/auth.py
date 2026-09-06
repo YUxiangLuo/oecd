@@ -79,6 +79,7 @@ def issue_token(user: dict) -> tuple[str, int]:
     exp = now + config.TOKEN_TTL_SECONDS
     try:
         release_id = artifacts.release_identity()
+        artifacts.validate_release_cached()
     except (artifacts.ArtifactContractError, OSError) as error:
         raise AuthenticationUnavailable("当前数据发布不可用") from error
     body = {
@@ -125,6 +126,9 @@ def verify_token(token: str) -> dict | None:
         try:
             if not hmac.compare_digest(release_id, artifacts.release_identity()):
                 return None
+            # A valid token cannot make a changed/corrupt artifact tree usable.
+            # Warm checks reuse the release validation keyed by exact file identity.
+            artifacts.validate_release_cached()
             subject = db.current_auth_subject(account_id, username, role, auth_version)
             if subject is None:
                 return None
