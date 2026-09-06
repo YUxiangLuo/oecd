@@ -1,11 +1,12 @@
 """Authentication and self-service password routes."""
 
 from fastapi import APIRouter, Header, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from gvcsim import auth, config
 from gvcsim.classroom import db
 from gvcsim.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
+from gvcsim.request_validation import TextRequest
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
 _LOGIN_ACCOUNT_LIMITER = SlidingWindowRateLimiter(config.LOGIN_ATTEMPTS_PER_MINUTE)
@@ -30,12 +31,12 @@ def _limit_login(request: Request, username: str) -> None:
         ) from error
 
 
-class LoginRequest(BaseModel):
+class LoginRequest(TextRequest):
     username: str = Field(min_length=1, max_length=128)
     password: str = Field(min_length=1, max_length=256)
 
 
-class PasswordChangeRequest(BaseModel):
+class PasswordChangeRequest(TextRequest):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=12, max_length=256)
 

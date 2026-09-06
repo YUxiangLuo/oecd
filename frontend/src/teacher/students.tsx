@@ -131,7 +131,7 @@ export function StudentModal({ onClose, onSubmit }: { onClose: () => void; onSub
   const errorRef = useModalErrorFocus(error);
   const close = () => { if (!saving) onClose(); };
   const submit = async () => {
-    if (!form.username || !form.display_name || form.password.length < 12) {
+    if (!form.username.trim() || !form.display_name.trim() || form.password.length < 12) {
       setError("请填写用户名、姓名和至少 12 位的密码");
       return;
     }

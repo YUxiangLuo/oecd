@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from copy import deepcopy
 from typing import Any
 
@@ -27,6 +28,15 @@ def make_record(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def _json_value(value: Any, path: str = "session") -> Any:
+    if isinstance(value, float) and not math.isfinite(value):
+        raise SessionError(f"{path} 包含非有限数值")
+    if isinstance(value, str):
+        if "\x00" in value:
+            raise SessionError("会话不能包含空字符 U+0000")
+        try:
+            value.encode("utf-8")
+        except UnicodeEncodeError as error:
+            raise SessionError("会话包含无效的 Unicode 字符") from error
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     if isinstance(value, list):
@@ -34,6 +44,8 @@ def _json_value(value: Any, path: str = "session") -> Any:
     if isinstance(value, dict):
         if not all(isinstance(key, str) for key in value):
             raise SessionError(f"{path} 的键必须是字符串")
+        for key in value:
+            _json_value(key)
         return {key: _json_value(item, f"{path}.{key}") for key, item in value.items()}
     raise SessionError(f"{path} 包含不能保存的值")
 
@@ -50,7 +62,7 @@ def validate_session(payload: dict[str, Any]) -> dict[str, Any]:
 
     steps: dict[str, Any] = {}
     for key, record in raw_steps.items():
-        if not isinstance(key, str) or not key.isdigit() or not 1 <= int(key) <= MAX_STEPS:
+        if key not in {str(step) for step in range(1, MAX_STEPS + 1)}:
             raise SessionError(f"步骤编号无效:{key!r}")
         if not isinstance(record, dict) or set(record) != {"data"} or not isinstance(record["data"], dict):
             raise SessionError(f"步骤 {key} 记录格式无效")
@@ -58,7 +70,7 @@ def validate_session(payload: dict[str, Any]) -> dict[str, Any]:
 
     unknown = set(raw_shared) - SHARED_KEYS
     if unknown:
-        raise SessionError(f"shared 包含未知字段:{', '.join(sorted(unknown))}")
+        raise SessionError(f"shared 包含未知字段:{', '.join(sorted(unknown))!r}")
     shared = _json_value(raw_shared, "shared")
     normalized = {"version": SESSION_VERSION, "steps": steps, "shared": shared}
     if len(json.dumps(normalized, ensure_ascii=False).encode()) > MAX_SESSION_BYTES:

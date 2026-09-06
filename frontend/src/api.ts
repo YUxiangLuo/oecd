@@ -26,7 +26,10 @@ class ApiError extends Error {
     // FastAPI 的 detail 可以是字符串,也可以是对象(门槛就返回 {message, blocked})。
     // 直接把对象塞进 Error.message 会渲染成 "[object Object]",这里分开处理。
     const structured = typeof detail === "object" && detail !== null ? (detail as Record<string, unknown>) : null;
-    super(typeof detail === "string" ? detail : (structured?.message as string) ?? fallback);
+    const defaultMessage = status >= 500
+      ? "服务暂时不可用，请稍后重试；若持续失败，请联系老师。"
+      : status === 422 ? "提交内容不符合要求，请检查输入后重试。" : fallback;
+    super(typeof detail === "string" ? detail : (structured?.message as string) ?? defaultMessage);
     this.name = "ApiError";
     this.status = status;
     if (Array.isArray(structured?.blocked)) this.blocked = structured.blocked as import("./types").ReportGateItem[];

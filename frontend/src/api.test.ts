@@ -299,3 +299,23 @@ describe("withQuery", () => {
     }
   });
 });
+
+describe("unavailable server responses", () => {
+  test("proxy failures provide a recovery message without expiring auth", async () => {
+    const originalFetch = globalThis.fetch;
+    const originalToken = getActiveAuthToken();
+    try {
+      setActiveAuthToken("still-valid");
+      for (const status of [500, 502, 503, 504]) {
+        globalThis.fetch = (async () => new Response("Internal Server Error", { status })) as unknown as typeof fetch;
+        for (const operation of [() => api.login("student", "password"), () => api.me("still-valid"), () => api.classroom.submitReport()]) {
+          await expect(operation()).rejects.toThrow("服务暂时不可用，请稍后重试");
+          expect(getActiveAuthToken()).toBe("still-valid");
+        }
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+      setActiveAuthToken(originalToken);
+    }
+  });
+});

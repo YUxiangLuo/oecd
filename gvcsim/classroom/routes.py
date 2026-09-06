@@ -9,12 +9,13 @@ from typing import Any
 import anyio
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from gvcsim import concurrency, demo_accounts, evidence, quizzes
 from gvcsim import session as session_model
 from gvcsim import teaching_report
 from gvcsim.classroom import db, records
+from gvcsim.request_validation import TextRequest
 
 router = APIRouter(prefix="/api/classroom")
 
@@ -162,11 +163,18 @@ def students(user: dict = Depends(require_teacher)):
     return {"students": db.list_students(user["sub"])}
 
 
-class StudentCreateRequest(BaseModel):
+class StudentCreateRequest(TextRequest):
     username: str = Field(min_length=2, max_length=40)
     display_name: str = Field(min_length=1, max_length=60)
     password: str = Field(min_length=12, max_length=256)
     student_no: str = ""
+
+    @field_validator("display_name")
+    @classmethod
+    def nonblank_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("姓名不能为空")
+        return value.strip()
 
 
 @router.post("/students")
@@ -183,12 +191,24 @@ def create_student(req: StudentCreateRequest, user: dict = Depends(require_teach
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
-class StudentUpdateRequest(BaseModel):
+class StudentUpdateRequest(TextRequest):
     model_config = ConfigDict(extra="forbid")
 
     display_name: str | None = Field(default=None, min_length=1, max_length=60)
     student_no: str | None = None
     password: str | None = Field(default=None, min_length=12, max_length=256)
+
+    @field_validator("display_name", "student_no", "password", mode="before")
+    @classmethod
+    def supplied_fields_are_not_null(cls, value: Any) -> Any:
+        if value is None:
+            raise ValueError("更新字段不能为 null；不修改请省略该字段，清空学号请使用空字符串")
+        return value
+
+    @field_validator("display_name")
+    @classmethod
+    def nonblank_name(cls, value: str) -> str:
+        return StudentCreateRequest.nonblank_name(value)
 
 
 @router.post("/students/{account_id}")
@@ -220,7 +240,7 @@ def report_detail(account_id: int, user: dict = Depends(require_teacher)):
     return row
 
 
-class GradeRequest(BaseModel):
+class GradeRequest(TextRequest):
     score: int = Field(ge=0, le=100)
     feedback: str = Field(default="", max_length=4000)
     expected_updated_at: datetime

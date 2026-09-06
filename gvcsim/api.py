@@ -7,12 +7,14 @@
 """
 
 from contextlib import asynccontextmanager
+import json
 
 import anyio
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from gvcsim import auth, auth_routes, data_routes, regression_routes
 from gvcsim import config as app_config
@@ -63,6 +65,20 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="供应链仿真系统 API", version="0.2.0", lifespan=lifespan)
+
+
+@app.exception_handler(RequestValidationError)
+async def invalid_request(_request: Request, exc: RequestValidationError):
+    # Invalid input can itself contain NaN or unpaired Unicode surrogates.
+    # Echoing it through JSONResponse turns an intended 422 into a 500, and may
+    # also echo a submitted password. Keep diagnostic locations/types/messages.
+    details = [{key: error[key] for key in ("loc", "msg", "type") if key in error} for error in exc.errors()]
+    return Response(
+        content=json.dumps({"detail": details}, ensure_ascii=True, allow_nan=False),
+        status_code=422,
+        media_type="application/json",
+    )
+
 
 _cors_origins = app_config.ALLOWED_ORIGINS
 if not _cors_origins and not app_config.IS_PRODUCTION:
