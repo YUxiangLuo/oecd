@@ -11,13 +11,15 @@ export function stepPrimaryActionLabel(step: Pick<Step, "title">): string {
   return `${step.title} · 操作区`;
 }
 
-export type StepMaterialStatus = "checking" | "saving" | "ready" | "missing";
+export type StepMaterialStatus = "checking" | "saving" | "unsynced" | "ready" | "missing";
 
 export function materialStatusForStep(
   step: number,
   materialGate: Array<{ step: number }> | null,
   saving = false,
+  saveFailed = false,
 ): StepMaterialStatus {
+  if (saveFailed) return "unsynced";
   if (materialGate === null) return "checking";
   if (saving) return "saving";
   return materialGate.some((item) => item.step === step) ? "missing" : "ready";
@@ -50,6 +52,7 @@ export function StepTaskCard({
   const materialLabel = materialStatus === "checking"
     ? "正在检查"
     : materialStatus === "saving" ? "正在保存"
+    : materialStatus === "unsynced" ? "尚未保存"
     : materialStatus === "ready" ? "已齐全" : "尚未齐全";
   const completionLabel = step.lab === "rep" ? "报告" : "理解题";
   return (
@@ -61,7 +64,7 @@ export function StepTaskCard({
         </div>
         <div className="step-task-statuses" role="group" aria-label="本步状态">
           <span className={complete ? "done" : "todo"}>{completionLabel}：{complete ? "已完成" : "未完成"}</span>
-          <span className={materialStatus === "ready" ? "done" : materialStatus === "missing" ? "todo" : materialStatus}>
+          <span className={materialStatus === "ready" ? "done" : materialStatus === "missing" || materialStatus === "unsynced" ? "todo" : materialStatus}>
             报告材料：{materialLabel}
           </span>
         </div>

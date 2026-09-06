@@ -234,6 +234,7 @@ export function StudentWorkspace({
                       step.n,
                       session.materialGate,
                       session.unsynced || session.syncing,
+                  Boolean(session.syncError),
                     )}
                     contentRef={contentRef}
                   />

@@ -187,7 +187,9 @@ export function reportWaitLabel(
   sessionStatus: SessionStatus,
   sessionUnsynced: boolean,
   sessionSyncing: boolean,
+  syncError: string | null = null,
 ): string | null {
+  if (syncError) return "保存失败，请先重试";
   if (sessionStatus !== "ready") return "正在恢复实验记录…";
   if (sessionSyncing || sessionUnsynced) return "正在保存实验记录…";
   return null;
@@ -199,9 +201,10 @@ export function reportGenerateButtonLabel(
   sessionStatus: SessionStatus,
   sessionUnsynced: boolean,
   sessionSyncing: boolean,
+  syncError: string | null = null,
 ): string {
   if (generating) return "服务端生成中…";
-  return reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing) ?? reportGenerateLabel(report);
+  return reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, syncError) ?? reportGenerateLabel(report);
 }
 
 export function ReportLab({
@@ -235,6 +238,8 @@ export function ReportLab({
   const visibleBlocked = blocked.length > 0 ? blocked : reportGate ?? [];
 
   useEffect(() => { void preloadReportRenderer().catch(() => {}); }, []);
+  // A newer acknowledged session supersedes a gate returned for an older snapshot.
+  useEffect(() => { setBlocked([]); }, [reportGate]);
 
   const reflection = (state.data ?? {}) as ReportReflectionState;
   const busy = generating || submitting || printing;
@@ -354,11 +359,11 @@ export function ReportLab({
           disabled={busy}
           onClick={() => { void generate(); }}
         >
-          {reportGenerateButtonLabel(report, generating, sessionStatus, sessionUnsynced, sessionSyncing)}
+          {reportGenerateButtonLabel(report, generating, sessionStatus, sessionUnsynced, sessionSyncing, state.syncError)}
         </button>
         {report?.state === "draft" && (
           <button className="primary" disabled={busy} onClick={() => { void submit(); }}>
-            {submitting ? "提交中…" : reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing) ?? "提交报告给老师"}
+            {submitting ? "提交中…" : reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, state.syncError) ?? "提交报告给老师"}
           </button>
         )}
         {report && (

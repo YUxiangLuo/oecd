@@ -1,4 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { api } from "../../api";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ClassroomReport } from "../../types";
 import {
@@ -14,6 +16,8 @@ import {
   reportWaitLabel,
   summarizeReportGate,
 } from "./report-lab";
+
+afterEach(cleanup);
 
 function report(state: ClassroomReport["state"]): ClassroomReport {
   return {
@@ -38,6 +42,52 @@ function report(state: ClassroomReport["state"]): ClassroomReport {
 }
 
 describe("step 15 report states", () => {
+  test("discards an old generation gate when a newer saved session has no missing materials", async () => {
+    const blocked = [{ step: 15, title: "原创分析", missing: ["填写研究问题"] }];
+    const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(Object.assign(new Error("缺少材料"), { blocked }));
+    const props = {
+      state: { data: {}, save: () => {}, complete: false, syncing: false, syncError: null, syncNow: () => {} },
+      report: null,
+      reportGate: blocked,
+      sessionStatus: "ready" as const,
+      sessionUnsynced: false,
+      sessionSyncing: false,
+      onFlushSession: async () => {},
+      onNavigateStep: () => {},
+      onReportChanged: () => {},
+    };
+    try {
+      const view = render(<ReportLab {...props} />);
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "根据实验记录生成报告" })); });
+      expect(screen.getByText("还不能生成报告")).toBeDefined();
+      view.rerender(<ReportLab {...props} reportGate={[]} state={{ ...props.state, data: { research_question: "已保存的新分析" } }} />);
+      expect(screen.queryByText("还不能生成报告")).toBeNull();
+      expect(generate).toHaveBeenCalledTimes(1);
+    } finally {
+      generate.mockRestore();
+    }
+  });
+
+  test("does not generate or replace an existing report when flushing session edits fails", async () => {
+    const generate = spyOn(api.classroom, "generateReport");
+    const changed: unknown[] = [];
+    try {
+      render(<ReportLab
+        state={{ data: {}, save: () => {}, complete: true, syncing: false, syncError: "保存失败", syncNow: () => {} }}
+        report={report("graded")} reportGate={[]} sessionStatus="ready" sessionUnsynced={true} sessionSyncing={false}
+        onFlushSession={async () => { throw new Error("保存失败，请重试"); }} onNavigateStep={() => {}}
+        onReportChanged={(response) => changed.push(response)}
+      />);
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "保存失败，请先重试" })); });
+      expect((await screen.findByRole("alert")).textContent).toContain("保存失败");
+      expect(generate).not.toHaveBeenCalled();
+      expect(changed).toEqual([]);
+      expect(screen.getByText(/已评阅 · 93 分/)).toBeDefined();
+    } finally {
+      generate.mockRestore();
+    }
+  });
+
   test("renders draft, pending, and graded feedback distinctly", () => {
     expect(renderToStaticMarkup(<ReportStatus report={report("draft")} />)).toContain("尚未提交");
     expect(renderToStaticMarkup(<ReportStatus report={report("pending")} />)).toContain("等待教师评阅");
@@ -93,6 +143,8 @@ describe("step 15 report states", () => {
     expect(reportWaitLabel("loading", false, false)).toBe("正在恢复实验记录…");
     expect(reportWaitLabel("ready", true, false)).toBe("正在保存实验记录…");
     expect(reportWaitLabel("ready", false, false)).toBeNull();
+    expect(reportWaitLabel("ready", true, false, "session changed")).toBe("保存失败，请先重试");
+    expect(reportGenerateButtonLabel(null, false, "ready", true, false, "offline")).toBe("保存失败，请先重试");
     expect(reportGenerateButtonLabel(null, false, "loading", false, false)).toBe("正在恢复实验记录…");
     expect(reportGenerateButtonLabel(null, true, "loading", false, false)).toBe("服务端生成中…");
   });

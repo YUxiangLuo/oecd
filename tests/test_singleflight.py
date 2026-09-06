@@ -1,4 +1,5 @@
 import asyncio
+import gc
 
 import pytest
 
@@ -73,6 +74,36 @@ def test_singleflight_does_not_cache_failures_and_keeps_shared_work_after_one_wa
 
         assert await cache.get_or_compute("failure", recover) == "recovered"
         assert cache.completed_count == 2
+
+    asyncio.run(scenario())
+
+
+def test_singleflight_observes_failure_after_all_waiters_cancel():
+    async def scenario():
+        cache = AsyncSingleFlightCache()
+        started = asyncio.Event()
+        release = asyncio.Event()
+        errors = []
+        loop = asyncio.get_running_loop()
+        loop.set_exception_handler(lambda _loop, context: errors.append(context))
+
+        async def fail_later():
+            started.set()
+            await release.wait()
+            raise ValueError("background work failed")
+
+        waiter = asyncio.create_task(cache.get_or_compute("key", fail_later))
+        await started.wait()
+        waiter.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiter
+        release.set()
+        for _ in range(5):
+            await asyncio.sleep(0)
+        gc.collect()
+        assert cache.inflight_count == cache.completed_count == 0
+        assert errors == []
+        assert await cache.get_or_compute("key", lambda: asyncio.sleep(0, result="retried")) == "retried"
 
     asyncio.run(scenario())
 

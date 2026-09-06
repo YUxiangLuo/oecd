@@ -24,6 +24,8 @@ describe("shared step task card", () => {
     expect(materialStatusForStep(12, [{ step: 13 }], true)).toBe("saving");
     expect(materialStatusForStep(12, [{ step: 12 }])).toBe("missing");
     expect(materialStatusForStep(12, [{ step: 13 }])).toBe("ready");
+    expect(materialStatusForStep(12, [], true, true)).toBe("unsynced");
+    expect(materialStatusForStep(12, [], false, true)).toBe("unsynced");
   });
 
   test("keeps application navigation and task chrome out of the step-15 printed report", async () => {
@@ -66,6 +68,11 @@ describe("shared step task card", () => {
     );
     expect(saving).toContain('class="saving"');
     expect(saving).toContain("报告材料：正在保存");
+    const failed = renderToStaticMarkup(
+      <StepTaskCard step={step} complete materialStatus="unsynced" contentRef={{ current: null }} />,
+    );
+    expect(failed).toContain("报告材料：尚未保存");
+    expect(failed).not.toContain("正在保存");
   });
 
   test("labels the final completion state as report rather than a nonexistent quiz", () => {

@@ -231,6 +231,10 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         onError: (cause) => {
           const conflict = isApiErrorStatus(cause, 409);
           syncConflictRef.current = conflict;
+          if (conflict && timer.current != null) {
+            window.clearTimeout(timer.current);
+            timer.current = null;
+          }
           setSyncError(cause instanceof Error ? cause.message : String(cause));
           setSyncConflict(conflict);
         },
@@ -290,7 +294,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     if (!syncConflictRef.current) {
       timer.current = window.setTimeout(() => {
         timer.current = null;
-        void drain().catch(() => {});
+        if (!syncConflictRef.current) void drain().catch(() => {});
       }, SYNC_DEBOUNCE_MS);
     }
   }, [drain, enabled, replace, status]);
@@ -299,9 +303,9 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     if (timer.current != null) window.clearTimeout(timer.current);
     timer.current = null;
     if (status !== "ready") throw new Error("当前无法连接教学服务，不能确认实验记录已保存");
-    if (syncConflict) throw new Error("请先载入服务器版本，再重新操作本页更改");
+    if (syncConflictRef.current) throw new Error("请先载入服务器版本，再重新操作本页更改");
     await drain();
-  }, [drain, status, syncConflict]);
+  }, [drain, status]);
 
   const stashAuthRecovery = useCallback((accountUsername: string) => {
     if (!enabled || !unsynced) return false;

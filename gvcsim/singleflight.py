@@ -40,6 +40,9 @@ class AsyncSingleFlightCache(Generic[K, V]):
         task = self._inflight.get(key)
         if task is None:
             task = asyncio.create_task(self._compute(key, factory))
+            # Work survives waiter cancellation. Observe a later failure even if
+            # nobody remains to await it; active waiters still receive the exception.
+            task.add_done_callback(lambda completed: None if completed.cancelled() else completed.exception())
             self._inflight[key] = task
         return await asyncio.shield(task)
 

@@ -1,4 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { api } from "./api";
 import { emptySession, readShared, readStep } from "./session-store";
 import type { ExperimentSession, SessionSaveResponse } from "./types";
 import {
@@ -9,7 +11,10 @@ import {
   readAuthSessionRecovery,
   saveAuthSessionRecovery,
   updateSessionShared,
+  useSession,
 } from "./use-session";
+
+afterEach(cleanup);
 
 function response(session: ExperimentSession = emptySession()): SessionSaveResponse {
   return {
@@ -27,6 +32,45 @@ function deferred<T>() {
   const promise = new Promise<T>((ok, fail) => { resolve = ok; reject = fail; });
   return { promise, resolve, reject };
 }
+
+describe("session conflict recovery", () => {
+  test("stops an already scheduled autosave after 409 until the server version is loaded", async () => {
+    const fetchMock = spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ detail: "session changed" }), {
+      status: 409, headers: { "Content-Type": "application/json" },
+    }));
+    const conflict = await api.classroom.saveSession({ session: emptySession(), base_updated_at: null }).catch((error) => error);
+    fetchMock.mockRestore();
+    const latest = patchSessionStep(emptySession(), 15, { research_question: "server version" });
+    const get = spyOn(api.classroom, "session").mockResolvedValue({ ...response(latest), report: null });
+    const request = deferred<SessionSaveResponse>();
+    const save = spyOn(api.classroom, "saveSession").mockImplementationOnce(() => request.promise).mockRejectedValue(conflict);
+    try {
+      const { result } = renderHook(() => useSession(true, "student"));
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+      let saving!: Promise<void>;
+      act(() => {
+        result.current.patchStep(15, { research_question: "first edit" });
+        saving = result.current.syncNow();
+      });
+      act(() => result.current.patchStep(15, { research_question: "newer edit" }));
+      await act(async () => {
+        request.reject(conflict);
+        await saving.catch(() => {});
+      });
+      expect(result.current.syncConflict).toBe(true);
+      expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("newer edit");
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 950)); });
+      expect(save).toHaveBeenCalledTimes(1);
+      await act(async () => { await result.current.resolveSyncConflict(); });
+      expect(result.current.syncConflict).toBe(false);
+      expect(result.current.unsynced).toBe(false);
+      expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("server version");
+    } finally {
+      get.mockRestore();
+      save.mockRestore();
+    }
+  });
+});
 
 describe("session helpers", () => {
   test("stores an unsynced recovery only for the same reauthenticated account", () => {

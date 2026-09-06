@@ -123,9 +123,11 @@ export function GradeView({ data, grader, onBack, onReload }: {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const submit = () => {
+    if (saving || stale) return;
     const numeric = Number(score);
     if (score.trim() === "" || !Number.isInteger(numeric) || numeric < 0 || numeric > 100) return setSaveError("分数须为 0-100 的整数");
     setSaving(true);
+    setSaveError(null);
     api.classroom.grade(data.account_id, numeric, feedback, data.updated_at).then(() => {
       showToast(`已保存对 ${data.display_name} 的评阅：${numeric} 分`);
       onBack(true);
@@ -137,7 +139,7 @@ export function GradeView({ data, grader, onBack, onReload }: {
   };
   return (
     <div>
-      <div className="review-topbar"><button className="back-btn" onClick={() => onBack(false)}>← 返回列表</button><span className="stage-chip">{data.display_name}（{data.username}）</span><span className="muted">提交于 {fmtTime(data.submitted_at)}</span></div>
+      <div className="review-topbar"><button className="back-btn" disabled={saving} onClick={() => onBack(false)}>← 返回列表</button><span className="stage-chip">{data.display_name}（{data.username}）</span><span className="muted">提交于 {fmtTime(data.submitted_at)}</span></div>
       <div className="grade-split">
         <div className="grade-doc"><ReportMarkdown markdown={data.markdown} /></div>
         <aside className="grade-side"><div className="panel"><div className="panel-head"><span className="panel-ic">🖊️</span>评阅</div>
@@ -147,8 +149,8 @@ export function GradeView({ data, grader, onBack, onReload }: {
               {GRADE_RUBRIC.map(([title, detail]) => <li key={title}><b>{title}</b><span>{detail}</span></li>)}
             </ol>
           </details>
-          <label className="grade-field">分数（0-100）<input type="number" min={0} max={100} value={score} onChange={(event) => { setScore(event.target.value); setSaveError(null); }} /></label>
-          <label className="grade-field">评语（可空）<textarea value={feedback} onChange={(event) => { setFeedback(event.target.value); setSaveError(null); }} rows={8} maxLength={4000} /></label>
+          <label className="grade-field">分数（0-100）<input type="number" min={0} max={100} disabled={saving} value={score} onChange={(event) => { setScore(event.target.value); setSaveError(null); }} /></label>
+          <label className="grade-field">评语（可空）<textarea disabled={saving} value={feedback} onChange={(event) => { setFeedback(event.target.value); setSaveError(null); }} rows={8} maxLength={4000} /></label>
           {saveError && <div className="error-box" role="alert">{saveError}</div>}
           {stale && <button className="secondary block" disabled={saving} onClick={onReload}>加载最新报告</button>}
           <button className="primary block" disabled={saving || stale} onClick={submit}>{saving ? "保存中…" : data.state === "graded" ? "更新评阅" : "提交评阅"}</button>
