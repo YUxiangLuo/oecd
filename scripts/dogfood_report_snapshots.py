@@ -68,7 +68,10 @@ def main():
             raise AssertionError("expected snapshot was not persisted")
 
         original_session, original_report = snapshot()
-        qualified = original_session["steps"]["11"]["data"]["qualified_run"]
+        original_data = original_session["steps"]["11"]["data"]
+        qualified = original_data.get("qualified_run")
+        if qualified is None:
+            assert original_data["run"]["result"]["support"]["suppress_inference"] is True
         browser = Browser(name)
         try:
             browser.login(base, name, password)
@@ -76,12 +79,14 @@ def main():
             browser.run("wait", "--text", "重新运行当前设定")
             browser.button("出口管制")
             browser.run("wait", "--text", "运行修改后的设定")
-            browser.run("click", ".qualified-run-summary")
-            assert "关税" in json.loads(
-                browser.run("eval", 'document.querySelector(".qualified-run-settings").innerText')
-            )
+            if qualified is not None:
+                browser.run("click", ".qualified-run-summary")
+                assert "关税" in json.loads(
+                    browser.run("eval", 'document.querySelector(".qualified-run-settings").innerText')
+                )
             current, report = snapshot()
-            assert current["steps"]["11"]["data"]["qualified_run"] == qualified and report == original_report
+            assert current["steps"]["11"]["data"]["run"] == original_data["run"]
+            assert current["steps"]["11"]["data"].get("qualified_run") == qualified and report == original_report
             browser.run("screenshot", str(output / f"settings-only-{attempt}.png"))
             browser.button("运行修改后的设定")
             current, report = wait_for(
@@ -89,7 +94,7 @@ def main():
             )
             latest = current["steps"]["11"]["data"]
             assert latest["run"]["result"]["support"]["suppress_inference"] is True
-            assert latest["qualified_run"] == qualified and report == original_report
+            assert latest.get("qualified_run") == qualified and report == original_report
             browser.run("screenshot", str(output / f"insufficient-followup-{attempt}.png"))
             browser.run("open", base + "/?step=15")
             browser.run("wait", "textarea")
@@ -106,13 +111,20 @@ def main():
             _, report = wait_for(lambda s, r: r[1] == "pending" and marker in r[0])
             assert report[2] is None
             step_runs = [run for run in report[3]["runs"] if run["step"] == 11]
-            report_run = next(run for run in step_runs if run["design"]["shock_type"] == "tariff")
-            assert report_run["design"] == qualified["design"] and report_run["result"] == qualified["result"]
             exploratory = next(run for run in step_runs if run["design"]["shock_type"] == "export_control")
             assert exploratory["result"]["support"]["suppress_inference"] is True
+            assert exploratory["result"] == latest["run"]["result"]
             comparison = next(line for line in report[0].splitlines() if line.startswith("| 11 |"))
-            assert "关税冲击" in comparison and "出口管制" not in comparison
-            assert "探索结果，未列入对照表" in report[0]
+            if qualified is not None:
+                report_run = next(run for run in step_runs if run["design"]["shock_type"] == "tariff")
+                assert report_run["design"] == qualified["design"] and report_run["result"] == qualified["result"]
+                assert "关税冲击" in comparison and "出口管制" not in comparison
+                assert "探索结果，未列入对照表" in report[0]
+            else:
+                # Current economics contracts can stop inference even for the
+                # baseline. Such a run is reportable, never a qualified estimate.
+                assert len(step_runs) == 1
+                assert "出口管制" in comparison and "关税冲击" not in comparison
             browser.run("eval", 'document.querySelector(".submit-card")?.scrollIntoView({block:"center"})')
             browser.run("screenshot", str(output / f"regenerated-{attempt}.png"))
             results.append(
@@ -120,7 +132,8 @@ def main():
                     "case": "REPORT-03",
                     "attempt": attempt,
                     "passed": True,
-                    "kept_qualified_tariff_run": True,
+                    "kept_qualified_tariff_run": qualified is not None,
+                    "diagnostic_only_baseline": qualified is None,
                     "old_report_immutable_until_regeneration": True,
                     "old_grade_cleared": True,
                 }

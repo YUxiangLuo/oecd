@@ -25,7 +25,15 @@ def request(base, method, path, body=None, token=None):
         with urlopen(Request(base + path, data=data, headers=headers, method=method), timeout=50) as response:
             return response.status, json.load(response)
     except HTTPError as error:
-        return error.code, json.load(error)
+        # Uvicorn's connection limit and Nginx failures can return text/HTML.
+        # Preserve the real HTTP status so overload tests do not misclassify a
+        # deliberate 503 as a JSON parser failure.
+        content = error.read()
+        try:
+            payload = json.loads(content)
+        except (ValueError, UnicodeDecodeError):
+            payload = {"detail": content.decode("utf-8", errors="replace")}
+        return error.code, payload
 
 
 class Browser:
