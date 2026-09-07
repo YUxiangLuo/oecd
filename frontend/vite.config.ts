@@ -1,4 +1,5 @@
-import { defineConfig } from "vite";
+import { fileURLToPath } from "node:url";
+import { defineConfig, searchForWorkspaceRoot } from "vite";
 import react from "@vitejs/plugin-react";
 
 // 开发/preview 把 /api 代理到 FastAPI。默认 8000；本机被占用时可设 GVCSIM_API_PROXY。
@@ -22,6 +23,13 @@ export default defineConfig({
     },
   },
   server: {
+    fs: {
+      allow: [
+        searchForWorkspaceRoot(fileURLToPath(new URL(".", import.meta.url))),
+        // The manual lives beside the technical documentation, outside frontend/.
+        fileURLToPath(new URL("../实验手册.pdf", import.meta.url)),
+      ],
+    },
     proxy: {
       "/api": apiOrigin,
     },

@@ -16,6 +16,8 @@ import type {
 } from "./types";
 
 const ROMAN = ["", "一", "二", "三", "四", "五"];
+// Vite includes the canonical PDF as a versioned asset in both production and demo builds.
+const STUDENT_MANUAL_URL = new URL("../../实验手册.pdf", import.meta.url).href;
 
 export function sessionExpiryLabel(expiresAt: number | null): string | null {
   if (!expiresAt) return null;
@@ -217,6 +219,20 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
             ? `理解进度 ${completion.completed_count}/${totalSteps} · 数据→指标→回归→报告`
             : "正在读取理解进度…"}
         </div>
+        <a
+          className="student-manual-link"
+          href={STUDENT_MANUAL_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="打开实验手册（PDF，新标签页）"
+          title="在新标签页阅读，可下载或打印"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+            <path d="M12 5v15M12 5C9 3 5 3 3 4v15c3-1 6-1 9 1 3-2 6-2 9-1V4c-2-1-6-1-9 1Z" strokeLinejoin="round" />
+          </svg>
+          <span>实验手册</span>
+          <span className="student-manual-format" aria-hidden="true">PDF ↗</span>
+        </a>
       </div>
       <div className="sidebar-list">
         {stages.map((stage) => (

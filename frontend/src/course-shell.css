@@ -21,6 +21,16 @@
 .progress-pill b { font-family: "Space Grotesk", sans-serif; font-weight: 600; color: #1b1f2b; }
 .progress-pill span { color: var(--text-muted); }
 
+.student-manual-link {
+  display: flex; align-items: center; gap: 8px; min-height: 36px; margin-top: 12px; padding: 7px 10px;
+  border: 1px solid #dcdcf3; border-radius: 8px; background: #f7f7ff;
+  color: #4541c5; font-size: 12px; font-weight: 600; text-decoration: none;
+}
+.student-manual-link:hover { background: #edecfd; border-color: #b9b5ed; }
+.student-manual-link:focus-visible { outline: 2px solid #4b47e0; outline-offset: 3px; }
+.student-manual-link svg { flex: none; }
+.student-manual-format { margin-left: auto; font-size: 10px; letter-spacing: .04em; }
+
 /* ---------- 共享首屏任务卡 ---------- */
 .step-task-card {
   margin: 0 0 16px; padding: 16px 18px; border: 1px solid #d9dded;
