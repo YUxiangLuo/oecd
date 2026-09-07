@@ -17,7 +17,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from gvcsim import quizzes
+from gvcsim import quizzes, teaching_report
 from gvcsim.session import empty_session, make_record
 
 
@@ -174,6 +174,7 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
         "weightMode": "fixed_pretreatment",
     }
     settings_by_outcome: dict[str, dict[str, Any]] = {}
+    regression_statuses: dict[str, str] = {}
     for step, outcome in ((11, "trade"), (12, "production"), (13, "length"), (14, "network")):
         response = _request_json(
             base_url,
@@ -184,26 +185,31 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
         )
         result = response.get("result")
         design = response.get("design")
-        support = result.get("support") if isinstance(result, dict) else None
         if (
             not isinstance(result, dict)
             or not isinstance(design, dict)
-            or result.get("status") not in {"ok", "warning"}
-            or not isinstance(support, dict)
-            or support.get("suppress_inference") is True
+            or design.get("outcome") != outcome
+            or not teaching_report._result_is_reportable(result, design)
         ):
-            raise RuntimeError(f"{outcome} default regression is not report-qualified")
+            status = result.get("status") if isinstance(result, dict) else None
+            raise RuntimeError(f"{outcome} default regression is not reportable: status={status}")
         saved = {"settings": dict(stored_settings), "design": design, "result": result}
-        session["steps"][str(step)]["data"].update({"run": saved, "qualified_run": saved})
+        data = session["steps"][str(step)]["data"]
+        data["run"] = saved
+        # A complete stopped-inference diagnosis satisfies the course gate but
+        # must never be stored as the optional inferential reference snapshot.
+        if teaching_report._result_is_qualified(result, design):
+            data["qualified_run"] = saved
         settings_by_outcome[outcome] = dict(stored_settings)
+        regression_statuses[outcome] = str(result.get("status"))
 
     session["shared"] = {"regression_settings": make_record(settings_by_outcome)}
     session["steps"]["15"] = make_record(
         {
             "research_question": "同一套关税冲击后，贸易流、生产、长度和网络指标分别怎样变化？",
             "evidence_interpretation": (
-                "我将四项保存结果并排阅读，引用点估计与区间，同时区分方向、精度和指标量纲，"
-                "不因单项结果醒目就忽略其余预设结果。"
+                "我将四项保存结果并排阅读，区分可推断估计与停止推断的诊断；仅在支持充分时引用区间，"
+                "否则记录样本或设计限制，不将缺少区间解释为没有效应，也不忽略其余预设结果。"
             ),
             "limitations": (
                 "政策冲击与宏观量含教学编码，短面板与同期冲击限制解释，全球投入链外溢也意味着"
@@ -224,7 +230,8 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
         raise RuntimeError("server did not confirm quiz completion for Steps 1-14 before report generation")
     if saved.get("report_gate") != [] or saved.get("material_gate") != []:
         raise RuntimeError(
-            "server report gate remained blocked: " + json.dumps(saved.get("report_gate"), ensure_ascii=False)
+            "server report gate remained blocked: "
+            + json.dumps({key: saved.get(key) for key in ("report_gate", "material_gate")}, ensure_ascii=False)
         )
     dataset = meta.get("dataset")
     return {
@@ -233,6 +240,7 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
         "release_id": dataset.get("release_id") if isinstance(dataset, dict) else None,
         "completed_steps": completion["completed_count"],
         "regression_outcomes": list(settings_by_outcome),
+        "regression_statuses": regression_statuses,
         "viewed_shock_types": list(selected),
         "report_gate": [],
     }
