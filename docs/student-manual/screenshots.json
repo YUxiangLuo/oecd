@@ -1,0 +1,158 @@
+{
+  "captured_on": "2026-09-07",
+  "code_commit": "c2e649a",
+  "data_release": "0dfef645fa13497ea5eaa2077265a4e7",
+  "source": "agent-browser 0.36.0, actual student operations in an isolated classroom",
+  "viewport": {
+    "width": 1280,
+    "height": 960,
+    "device_scale_factor": 2
+  },
+  "note": "Whole-page and native element screenshots; example account and grading only.",
+  "screenshots": [
+    {
+      "file": "screenshots/00-login.png",
+      "width": 2560,
+      "height": 1920,
+      "sha256": "613639ce1ae8e2158c4f34fa94cf2401cc5e11c178e9f7dab3c772db550aebaf"
+    },
+    {
+      "file": "screenshots/01-icio.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "e4d339b867a8c9cea575bf7d43b3d23a76ee14fa54e5a72a66b20c1faeeacb39"
+    },
+    {
+      "file": "screenshots/01-quiz.png",
+      "width": 1880,
+      "height": 634,
+      "sha256": "ffd79a8413a00a35d1316cb6955ccfc004b4f88d3f10814c796a631f1d95f4b0"
+    },
+    {
+      "file": "screenshots/02-indicators.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "7b947cbb43196f336cfe0bea2927be269bb6018ede43aa37b5330cc51ecd3e6f"
+    },
+    {
+      "file": "screenshots/03-indicators.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "8ac64e4e8a506ca238ccbf4a48f27b025daee2efbf015282810dbcd7e4ed7ef7"
+    },
+    {
+      "file": "screenshots/04-indicators.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "6af2f2e914490638b3aa7454108d61a43da3b22a0b008c2f4f4632b78993428c"
+    },
+    {
+      "file": "screenshots/05-indicators.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "d6b7046c20a107e03114548d763f34b6a6c28135b705fbf9e2c5331be233b954"
+    },
+    {
+      "file": "screenshots/06-visualization.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "ebe9b7ef87a1e41b46b4b292491ceada6c3a2d367ee74baf948108fa8a9f7542"
+    },
+    {
+      "file": "screenshots/07-visualization.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "108c62f372c01ff1f17b73cfe9f18c781c1844bfc849b9c378123d416ae07918"
+    },
+    {
+      "file": "screenshots/08-visualization.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "374ac9a72e4aaf9a34572e69553f74ce332caa69dc4135a0a1660a7c15522aba"
+    },
+    {
+      "file": "screenshots/09-network.png",
+      "width": 2496,
+      "height": 1856,
+      "sha256": "ed7288d1ccf9ce19cbbb47a30d3f0b9cfa9395e81c300737cfb22b5fda9cd801"
+    },
+    {
+      "file": "screenshots/10-crosswalk.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "b478468ab5f4bdfc5f9538f7bf1bfbda82c13412f01f884a34bfa893bd663318"
+    },
+    {
+      "file": "screenshots/10-shocks.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "d108fce937dd9b31aa829ed8e9a0e3d98115236bca75ac2e23c4054c4135dabd"
+    },
+    {
+      "file": "screenshots/11-method-options.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "d5ed6e773ae6793cf02ab4dc573b521d79d28dd04ee780925f974785bcb24691"
+    },
+    {
+      "file": "screenshots/11-regression-result.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "79ccb86eb5952717aea8d85eafffe27386aa97a7635ed5873d92a221ac4a9b26"
+    },
+    {
+      "file": "screenshots/11-regression-settings.png",
+      "width": 1880,
+      "height": 732,
+      "sha256": "ad35ec62babdb890f8964b12d80176c5463ad2404c85d8d7d33a5ce0afa1e3f3"
+    },
+    {
+      "file": "screenshots/12-regression-result.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "287e4bc507caaaa68ffc9287cd3c77d7c61bb21b08de426c59b7cd8c93dcd20c"
+    },
+    {
+      "file": "screenshots/13-regression-result.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "91cfda7c3c3661b11760bd4f0fe87937e713248a9c51f0770d773468f5297767"
+    },
+    {
+      "file": "screenshots/14-regression-result.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "bf0a47e724a6432c7ad9e5eaa7e81a0cd17e12677992c27afcc51932ea3fb416"
+    },
+    {
+      "file": "screenshots/15-graded.png",
+      "width": 1880,
+      "height": 100,
+      "sha256": "12d957e1ac4ae798200daef8965e6bc332da4711f0325960e9ad65214494801c"
+    },
+    {
+      "file": "screenshots/15-material-gate.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "631cbfdb0dadfec9bccbfcf8d72993ee76e0495de427f70daad5db2e1673eb2a"
+    },
+    {
+      "file": "screenshots/15-report.png",
+      "width": 1984,
+      "height": 1516,
+      "sha256": "d682b14d2281dbf9d69bffd7b57a373036de8717c06638df96916273bd86e2c9"
+    },
+    {
+      "file": "screenshots/15-submitted.png",
+      "width": 1880,
+      "height": 100,
+      "sha256": "b483c4fe2861718376c4082a05fa94df0c898b50ccb357f119257a3fe963c251"
+    },
+    {
+      "file": "screenshots/15-writing.png",
+      "width": 1880,
+      "height": 1022,
+      "sha256": "e2160e5ee234d5600799840b45aca500629de6847fed9e7fdb120d2344a8f2a9"
+    }
+  ]
+}
