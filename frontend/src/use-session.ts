@@ -11,6 +11,8 @@ import type {
   SharedSessionKey,
 } from "./types";
 
+import { userFacingRequestError } from "./user-facing-error";
+
 const SYNC_DEBOUNCE_MS = 800;
 export const AUTH_RECOVERY_KEY = "gvcsim_unsynced_session_recovery_v1";
 
@@ -81,6 +83,7 @@ export interface SessionApi {
   status: SessionStatus;
   session: ExperimentSession;
   report: ClassroomReport | null;
+  updatedAt?: string | null;
   syncing: boolean;
   syncError: string | null;
   syncConflict: boolean;
@@ -200,6 +203,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const sessionRef = useRef(session);
   const releaseIdRef = useRef<string | null>(null);
   const [confirmedSession, setConfirmedSession] = useState<ExperimentSession>(emptySession);
+  const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [report, setReport] = useState<ClassroomReport | null>(null);
   const [completion, setCompletion] = useState<CompletionSummary | null>(null);
   const [reportGate, setReportGate] = useState<ReportGateItem[] | null>(null);
@@ -226,6 +230,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
           // Track every acknowledged snapshot, but only reconcile the optimistic
           // workspace when this response is still the latest queued edit.
           setConfirmedSession(response.session);
+          setUpdatedAt(response.updated_at ?? null);
           if (!hasNewerPending && sessionRef.current === savedSnapshot) {
             sessionRef.current = response.session;
             setSession(response.session);
@@ -244,7 +249,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
             window.clearTimeout(timer.current);
             timer.current = null;
           }
-          setSyncError(cause instanceof Error ? cause.message : String(cause));
+          setSyncError(userFacingRequestError(cause, "保存失败"));
           setSyncConflict(conflict);
         },
         onSyncing: setSyncing,
@@ -269,6 +274,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         queue.current?.setBaseUpdatedAt(response.updated_at ?? null);
         replace(response.session);
         setConfirmedSession(response.session);
+        setUpdatedAt(response.updated_at ?? null);
         setCompletion(response.completion);
         setReportGate(response.report_gate);
         setMaterialGate(response.material_gate);
@@ -283,7 +289,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       },
       (cause) => {
         if (!live) return;
-        setSyncError(cause instanceof Error ? cause.message : String(cause));
+        setSyncError(userFacingRequestError(cause, "读取实验记录失败"));
         setStatus("unavailable");
       },
     );
@@ -341,7 +347,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       authRecoveryRef.current = null;
       setAuthRecovery(null);
     } catch (cause) {
-      setSyncError(cause instanceof Error ? cause.message : String(cause));
+      setSyncError(userFacingRequestError(cause, "保存失败"));
       throw cause;
     }
   }, [drain, replace, username]);
@@ -367,6 +373,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       queue.current?.discardPending(response.updated_at ?? null);
       replace(response.session);
       setConfirmedSession(response.session);
+      setUpdatedAt(response.updated_at ?? null);
       setCompletion(response.completion);
       setReportGate(response.report_gate);
       setMaterialGate(response.material_gate);
@@ -377,7 +384,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       setWorkspaceGeneration((value) => value + 1);
       setStatus("ready");
     } catch (cause) {
-      setSyncError(cause instanceof Error ? cause.message : String(cause));
+      setSyncError(userFacingRequestError(cause, "保存失败"));
       throw cause;
     } finally {
       resolvingConflictRef.current = false;
@@ -393,7 +400,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   }, []);
 
   return {
-    status, session, report, syncing, syncError, syncConflict, unsynced,
+    status, session, report, updatedAt, syncing, syncError, syncConflict, unsynced,
     authRecoveryAvailable: authRecovery !== null,
     completion, reportGate, materialGate, workspaceGeneration,
     getStep: useCallback(<T,>(step: number) => readStep<T>(session, step), [session]),

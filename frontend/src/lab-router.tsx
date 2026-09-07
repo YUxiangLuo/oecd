@@ -14,6 +14,7 @@ interface LabRouterProps {
   meta: Meta | null;
   state: StepStateApi;
   report: ClassroomReport | null;
+  sessionUpdatedAt?: string | null;
   reportGate: ReportGateItem[] | null;
   sessionStatus: SessionStatus;
   sessionUnsynced: boolean;
@@ -36,6 +37,7 @@ export function LabRouter({
   meta,
   state,
   report,
+  sessionUpdatedAt,
   reportGate,
   sessionStatus,
   sessionUnsynced,
@@ -81,6 +83,7 @@ export function LabRouter({
         key="report"
         state={state}
         report={report}
+        sessionUpdatedAt={sessionUpdatedAt}
         reportGate={reportGate}
         sessionStatus={sessionStatus}
         sessionUnsynced={sessionUnsynced}

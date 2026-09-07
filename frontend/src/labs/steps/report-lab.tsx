@@ -210,6 +210,7 @@ export function reportGenerateButtonLabel(
 export function ReportLab({
   state,
   report,
+  sessionUpdatedAt,
   reportGate,
   sessionStatus,
   sessionUnsynced,
@@ -221,6 +222,7 @@ export function ReportLab({
 }: {
   state: StepStateApi;
   report: ClassroomReport | null;
+  sessionUpdatedAt?: string | null;
   reportGate: ReportGateItem[] | null;
   sessionStatus: SessionStatus;
   sessionUnsynced: boolean;
@@ -243,6 +245,8 @@ export function ReportLab({
 
   const reflection = (state.data ?? {}) as ReportReflectionState;
   const busy = generating || submitting || printing;
+  const reportOutdated = Boolean(report && (sessionUnsynced || sessionSyncing
+    || (sessionUpdatedAt && Date.parse(sessionUpdatedAt) > Date.parse(report.generated_at))));
   const readyRef = useRef(sessionStatus === "ready");
   readyRef.current = sessionStatus === "ready";
   const flushRef = useRef(onFlushSession);
@@ -353,6 +357,13 @@ export function ReportLab({
         </div>
       </section>
 
+      {report && (
+        <div className={`report-version-notice${reportOutdated ? " outdated" : ""}`} role="status">
+          <b>{reportOutdated ? "报告尚未包含最新修改" : "报告为生成时的记录快照"}</b>
+          <p>生成时间：{fmtTime(report.generated_at)}。实验记录自动保存不会更新报告；修改后请先重新生成，再提交或导出。
+            {report.state === "graded" && "重新生成会重新提交报告，并清除原评分。"}</p>
+        </div>
+      )}
       <div className="report-actions">
         <button
           className="primary"
@@ -362,12 +373,12 @@ export function ReportLab({
           {reportGenerateButtonLabel(report, generating, sessionStatus, sessionUnsynced, sessionSyncing, state.syncError)}
         </button>
         {report?.state === "draft" && (
-          <button className="primary" disabled={busy} onClick={() => { void submit(); }}>
+          <button className="primary" disabled={busy || reportOutdated} onClick={() => { void submit(); }}>
             {submitting ? "提交中…" : reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, state.syncError) ?? "提交报告给老师"}
           </button>
         )}
         {report && (
-          <button className="secondary" disabled={busy} onClick={() => { void printReport(); }}>
+          <button className="secondary" disabled={busy || reportOutdated} onClick={() => { void printReport(); }}>
             {printing ? "正在准备 PDF…" : "导出 PDF"}
           </button>
         )}

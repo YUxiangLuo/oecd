@@ -269,3 +269,28 @@ describe("step 15 report states", () => {
     expect(html).toContain("导出 PDF");
   });
 });
+
+
+test("blocks stale snapshot export and submission after edits, saves and reloads until regeneration", () => {
+  const original = report("draft");
+  const props = {
+    state: { data: {}, save: () => {}, complete: true, syncing: false, syncError: null, syncNow: () => {} },
+    report: original, reportGate: [], sessionStatus: "ready" as const,
+    sessionUnsynced: false, sessionSyncing: false, sessionUpdatedAt: "2026-08-12T23:59:00Z",
+    onFlushSession: async () => {}, onNavigateStep: () => {}, onReportChanged: () => {},
+  };
+  const view = render(<ReportLab {...props} />);
+  const disabled = (name: string) => (screen.getByRole("button", { name }) as HTMLButtonElement).disabled;
+  expect(disabled("导出 PDF")).toBe(false);
+  view.rerender(<ReportLab {...props} sessionUnsynced />);
+  expect(screen.getByText("报告尚未包含最新修改")).toBeDefined();
+  expect(disabled("导出 PDF")).toBe(true);
+  expect((view.container.querySelectorAll(".report-actions button")[1] as HTMLButtonElement).disabled).toBe(true);
+  view.unmount();
+  const saved = { ...props, sessionUpdatedAt: "2026-08-13T00:05:00Z" };
+  const restored = render(<ReportLab {...saved} report={{ ...original, updated_at: "2026-08-13T00:10:00Z" }} />);
+  expect(disabled("导出 PDF")).toBe(true);
+  restored.rerender(<ReportLab {...saved} report={{ ...original, generated_at: "2026-08-13T00:06:00Z" }} />);
+  expect(disabled("导出 PDF")).toBe(false);
+  expect(disabled("提交报告给老师")).toBe(false);
+});

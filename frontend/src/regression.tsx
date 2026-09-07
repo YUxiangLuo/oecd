@@ -370,6 +370,7 @@ function VerdictCard({ outcome, response, stale }: {
       <div className="verdict-kicker">本次估计首先告诉你</div>
       <h3>{verdict.title}</h3>
       {stale && <div className="stale-result">你已经修改了设定；以下是旧设定结果，请重新运行后再比较。</div>}
+      {support?.suppress_inference && <p role="note">本次停止推断，不能判断效应方向。完整诊断也可作为报告材料；请解释原因，完成理解题后继续下一步。</p>}
       <div className="verdict-metrics">
         <div><span>{verdict.effectLabel}</span><b>{verdict.effect}</b></div>
         <div><span>95% 置信区间</span><b>{verdict.interval}</b></div>
@@ -421,6 +422,7 @@ function RegressionEvidenceCard({ outcome, response, stale }: {
         <span className="reg-evidence-unit">单位：{REGRESSION_LESSONS[outcome].unit}</span>
       </div>
       {stale && <div className="stale-result">你已经修改了设定；以下数值来自修改前的运行。</div>}
+      {support?.suppress_inference && <p role="note">本次停止推断，不能判断效应方向。完整诊断也可作为报告材料；请解释原因，完成理解题后继续下一步。</p>}
       <div className="verdict-metrics">
         <div><span>{verdict.effectLabel}</span><b>{verdict.effect}</b></div>
         <div><span>95% 置信区间</span><b>{verdict.interval}</b></div>

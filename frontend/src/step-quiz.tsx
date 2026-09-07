@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import type { QuizCompletionState, Step, StepStateApi } from "./types";
 
+export type QuizDraftStore = Map<number, { version: string; answers: Record<string, string> }>;
+
 interface QuizFeedback {
   question_id: string;
   correct: boolean;
@@ -12,8 +14,10 @@ interface QuizFeedback {
 export function QuizPanel({
   step,
   state,
+  draftStore,
 }: {
   step: Step;
+  draftStore?: QuizDraftStore;
   state: StepStateApi<Record<string, unknown>>;
 }) {
   const quiz = step.quiz;
@@ -25,11 +29,13 @@ export function QuizPanel({
     if (!quiz || data?.quiz?.version !== quiz.version) return {};
     return data.quiz.answers ?? {};
   }, [data?.quiz, quiz]);
-  // 错误选择只保留在当前组件内；服务器只保存全部答对的最终答案。
-  const [draftAnswers, setDraftAnswers] = useState<Record<string, string>>(savedAnswers);
+  // 草稿仅属于当前账号、当前工作区，不改变服务端完成状态。
+  const [draftAnswers, setDraftAnswers] = useState<Record<string, string>>(() => draftStore && quiz && draftStore.get(step.n)?.version === quiz.version
+    ? draftStore.get(step.n)!.answers : savedAnswers);
   useEffect(() => {
-    setDraftAnswers(savedAnswers);
-  }, [step.n, quiz?.version, savedAnswers]);
+    setDraftAnswers(draftStore && quiz && draftStore.get(step.n)?.version === quiz.version
+      ? draftStore.get(step.n)!.answers : savedAnswers);
+  }, [step.n, quiz?.version, savedAnswers, draftStore]);
   if (!quiz) return null;
 
   const answeredAll = quiz.questions.every((question) => Boolean(draftAnswers[question.id]));
@@ -37,7 +43,9 @@ export function QuizPanel({
   const complete = state.complete;
   const awaitingSave = locallyPassed && !state.complete && state.syncing;
   const choose = (questionId: string, optionId: string) => {
-    setDraftAnswers((current) => ({ ...current, [questionId]: optionId }));
+    const next = { ...draftAnswers, [questionId]: optionId };
+    draftStore?.set(step.n, { version: quiz.version, answers: next });
+    setDraftAnswers(next);
     setFeedback([]);
     setError(null);
   };
@@ -53,6 +61,7 @@ export function QuizPanel({
       });
       setFeedback(result.results);
       if (result.passed) {
+        draftStore?.delete(step.n);
         setDraftAnswers(result.quiz?.answers ?? draftAnswers);
         state.save({
           quiz: result.quiz ?? { version: result.version, answers: draftAnswers },
@@ -91,6 +100,7 @@ export function QuizPanel({
         </div>
         <span className="quiz-note">不限重试 · 全部答对即完成</span>
       </div>
+      <p className="muted">未提交的选择仅在本次登录的页面内暂存，切换步骤会保留；刷新或退出后不保留。答对并提交后才保存完成状态。</p>
       <div className="quiz-questions">
         {quiz.questions.map((question, index) => {
           const result = feedbackByQuestion.get(question.id);

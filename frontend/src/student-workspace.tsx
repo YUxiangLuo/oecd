@@ -1,5 +1,6 @@
 import {
   useRef,
+  useMemo,
   useState,
   type Dispatch,
   type MouseEvent,
@@ -16,7 +17,7 @@ import {
 import { IntroOverlay } from "./intro";
 import { LabRouter } from "./lab-router";
 import type { RegressionHistory, RegressionSettings } from "./regression";
-import { QuizPanel } from "./step-quiz";
+import { QuizPanel, type QuizDraftStore } from "./step-quiz";
 import {
   materialStatusForStep,
   stepPrimaryActionLabel,
@@ -111,6 +112,7 @@ export function StudentWorkspace({
   onPasswordChanged,
   onLogout,
 }: StudentWorkspaceProps) {
+  const quizDrafts = useMemo<QuizDraftStore>(() => new Map(), [user.account_id, session.workspaceGeneration]);
   const steps = stepsData.steps;
   const totalSteps = steps.length;
   const stepIndex = steps.findIndex((item) => item.n === current);
@@ -269,6 +271,7 @@ export function StudentWorkspace({
                       meta={meta}
                       state={stepState}
                       report={session.report}
+                      sessionUpdatedAt={session.updatedAt}
                       reportGate={session.reportGate}
                       sessionStatus={session.status}
                       sessionUnsynced={session.unsynced}
@@ -287,6 +290,7 @@ export function StudentWorkspace({
                   </div>
                   <QuizPanel
                     key={`quiz:${step.n}:${session.workspaceGeneration}`}
+                    draftStore={quizDrafts}
                     step={step}
                     state={stepState}
                   />
