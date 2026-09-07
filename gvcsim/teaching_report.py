@@ -971,23 +971,34 @@ def _result_is_qualified(result: dict[str, Any], design: dict[str, Any] | None =
 
 def _result_is_reportable(result: dict[str, Any], design: dict[str, Any]) -> bool:
     """A complete stopped-inference diagnosis is valid classroom evidence."""
+    diagnostics = result.get("diagnostics")
+    current_contract = isinstance(diagnostics, dict) and diagnostics.get("study_contract") == "economics-v2"
+    method = design.get("method")
+    if current_contract and (not isinstance(method, str) or method not in {"did", "event_study", "twfe_intensity"}):
+        return False
     if _result_is_qualified(result, design):
         return True
-    diagnostics = result.get("diagnostics")
     support = result.get("support")
-    if not isinstance(diagnostics, dict) or diagnostics.get("study_contract") != "economics-v2":
+    if not isinstance(diagnostics, dict) or not current_contract:
         return False
     if not isinstance(support, dict) or support.get("status") != result.get("status"):
         return False
     status = result.get("status")
-    if status not in {"ok", "warning", "insufficient", "invalid_design"}:
+    if not isinstance(status, str) or status not in {"ok", "warning", "insufficient", "invalid_design"}:
         return False
     coefs = result.get("coefs")
     if not isinstance(coefs, list):
         return False
     stopped = status in {"insufficient", "invalid_design"}
-    if stopped and (support.get("suppress_inference") is not True or not support.get("reasons")):
-        return False
+    if stopped:
+        reasons = support.get("reasons")
+        if (
+            support.get("suppress_inference") is not True
+            or not isinstance(reasons, list)
+            or not reasons
+            or any(not isinstance(reason, str) or not reason.strip() for reason in reasons)
+        ):
+            return False
     if diagnostics.get("diagnostic_only") is True:
         return (
             stopped

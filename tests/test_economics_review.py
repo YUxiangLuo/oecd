@@ -110,3 +110,37 @@ def test_dynamic_equation_restricts_event_time_and_uses_paired_weights():
     assert "g+k" in dynamic.equation() and "ω_{g,k}" in dynamic.equation()
     assert overall.split(" = ")[1] != dynamic.equation().split(" = ")[1]
     assert "n_pair" in dynamic.equation_parts()[2]["description"]
+
+
+@pytest.mark.parametrize(
+    ("field", "bad"),
+    [
+        ("status", {}),
+        ("status", []),
+        ("status", True),
+        ("method", None),
+        ("method", {}),
+        ("method", []),
+        ("method", "unknown"),
+        ("reasons", "reason"),
+        ("reasons", []),
+        ("reasons", [None]),
+        ("reasons", [" "]),
+    ],
+)
+def test_malformed_diagnostic_fields_are_rejected_without_raising(field, bad):
+    result = {
+        "status": "insufficient",
+        "support": {"status": "insufficient", "suppress_inference": True, "reasons": ["No pairs"]},
+        "diagnostics": {"study_contract": "economics-v2", "diagnostic_only": True, "cohort_time_cells": []},
+        "coefs": [],
+    }
+    design = {"method": "did", "interaction": False}
+    if field == "status":
+        result["status"] = bad
+        result["support"]["status"] = bad
+    elif field == "method":
+        design["method"] = bad
+    else:
+        result["support"]["reasons"] = bad
+    assert _result_is_reportable(result, design) is False
