@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 
 DEMO_FILE = "demo_trade_war_tariffs.csv"
 EXPOSURE_PREFIX = "export_exposure"
 
-# treated 阈值:全部出口的平均额外关税超过 0.1 个百分点才算受处理,
-# 避免"土耳其对美反制 × 美国微小对土出口份额"这类痕量项污染处理组。
-TREATED_THRESHOLD = 0.001
-SHOCK_CONTRACT_VERSION = 2
+# 处理起点是本面板所编码政策增量的首次正暴露；低强度不等于无暴露。
+TREATED_THRESHOLD = 0.0
+SHOCK_CONTRACT_VERSION = 3
 EXPOSURE_MODE_FIXED_PRETREATMENT = "fixed_pretreatment"
 EXPOSURE_MODE_CONTEMPORANEOUS = "contemporaneous"
 EXPOSURE_MODES = (EXPOSURE_MODE_FIXED_PRETREATMENT, EXPOSURE_MODE_CONTEMPORANEOUS)
@@ -213,9 +213,7 @@ _USA_EXPOSURE_TO = {
     "IND": 0.02,
 }
 
-# 欧盟作为加征方时按 EU27 聚合。2018 年的欧盟反制事件虽发生在英国脱欧前,
-# 本项目的 ICIO 国家口径与既有 export_exposure_<year>.csv 均按 EU27 口径聚合,
-# 英国相关冲击另在空客案事件中单列。
+# 统计 EU27 集合；政策范围由 composite_imposer_members(year) 按历史年份确定。
 EU27 = {
     "AUT",
     "BEL",
@@ -249,6 +247,11 @@ EU27 = {
 # Catalogue imposers absent from the base ICIO country dimension are aggregate
 # destinations.  Their flow is the non-overlapping sum of these base destinations.
 COMPOSITE_IMPOSER_MEMBERS = {"EU": frozenset(EU27)}
+
+
+def composite_imposer_members(year: int) -> dict[str, frozenset[str]]:
+    """2016–2020 的欧盟反制包括英国；2020 年过渡期结束后才分开。"""
+    return {"EU": frozenset(EU27 | ({"GBR"} if year <= 2020 else set()))}
 
 
 @dataclass(frozen=True)
@@ -306,9 +309,33 @@ class EntityListEvent:
         return SHOCK_SPECS[self.shock_type][1]
 
 
-# 232 钢铝的基准年率:25% 钢 + 10% 铝,按 C24 内钢/铝出口结构混合 ≈ 0.20,
-# 2018 年 3 月 23 日生效(9.3/12 个月)。
-_S232_BASE = {"C24": {2018: 0.16, 2019: 0.20, 2020: 0.20}}
+# 只合成从价税；不把配额影子成本冒充税率。钢/铝商品篮子份额为明确的教学假设。
+_S232_STEEL_SHARE = 2 / 3
+_S232_ALUMINUM_SHARE = 1 / 3
+_S232_MIXED_RATE = 0.25 * _S232_STEEL_SHARE + 0.10 * _S232_ALUMINUM_SHARE
+
+
+def _annual_rate(rate: float, start: str, end: str) -> float:
+    """按 [start,end) 日历天折算，年底用下一年 1 月 1 日。"""
+    first, last = date.fromisoformat(start), date.fromisoformat(end)
+    days = (date(first.year + 1, 1, 1) - date(first.year, 1, 1)).days
+    return rate * (last - first).days / days
+
+
+_S232_BASE = {
+    "C24": {
+        2018: _annual_rate(_S232_MIXED_RATE, "2018-03-23", "2019-01-01"),
+        2019: _S232_MIXED_RATE,
+        2020: _S232_MIXED_RATE,
+    }
+}
+_S232_EU = {
+    "C24": {
+        2018: _annual_rate(_S232_MIXED_RATE, "2018-06-01", "2019-01-01"),
+        2019: _S232_MIXED_RATE,
+        2020: _S232_MIXED_RATE,
+    }
+}
 
 EVENTS = [
     TariffEvent(
@@ -336,21 +363,51 @@ EVENTS = [
         announced="2018-03-08",
         effective="2018-03-23",
         rates=_S232_BASE,
+        timeline_note="只计新增从价税，不把配额折成税率。C24 商品篮子假定钢占 2/3、铝占 1/3，按各国生效/解除日期折算；这是教学篮子，不是实测行业结构。配额约束另作定性说明。",
         exempt=("AUS",),  # 澳大利亚全程豁免
         overrides={
-            # 阿根廷/巴西/韩国以配额换豁免:无从价税,仅配额约束的影子成本
-            "ARG": {"C24": {2018: 0.03, 2019: 0.03, 2020: 0.03}},
-            "BRA": {"C24": {2018: 0.03, 2019: 0.03, 2020: 0.03}},
-            "KOR": {"C24": {2018: 0.03, 2019: 0.03, 2020: 0.03}},
-            # 加墨 2018-06 起被征、2019-05 豁免
-            "CAN": {"C24": {2018: 0.11, 2019: 0.08, 2020: 0.0}},
-            "MEX": {"C24": {2018: 0.11, 2019: 0.08, 2020: 0.0}},
+            # 阿根廷钢铝均为配额；巴西、韩国钢材为配额，铝仍有从价税。
+            "ARG": {},
+            "BRA": {
+                "C24": {
+                    2018: _annual_rate(0.10 * _S232_ALUMINUM_SHARE, "2018-06-01", "2019-01-01"),
+                    2019: 0.10 * _S232_ALUMINUM_SHARE,
+                    2020: 0.10 * _S232_ALUMINUM_SHARE,
+                }
+            },
+            "KOR": {
+                "C24": {
+                    2018: _annual_rate(0.10 * _S232_ALUMINUM_SHARE, "2018-05-01", "2019-01-01"),
+                    2019: 0.10 * _S232_ALUMINUM_SHARE,
+                    2020: 0.10 * _S232_ALUMINUM_SHARE,
+                }
+            },
+            **{country: _S232_EU for country in sorted(EU27 | {"GBR"})},
+            **{
+                country: {
+                    "C24": {
+                        2018: _annual_rate(_S232_MIXED_RATE, "2018-06-01", "2019-01-01"),
+                        2019: _annual_rate(_S232_MIXED_RATE, "2019-01-01", "2019-05-20"),
+                        2020: 0.0,
+                    }
+                }
+                for country in ("CAN", "MEX")
+            },
             # 土耳其 2018-08 起钢税加倍至 50%,2019-05 恢复
-            "TUR": {"C24": {2018: 0.24, 2019: 0.24, 2020: 0.20}},
+            "TUR": {
+                "C24": {
+                    2018: _annual_rate(_S232_MIXED_RATE, "2018-03-23", "2018-08-13")
+                    + _annual_rate(0.5 * _S232_STEEL_SHARE + 0.1 * _S232_ALUMINUM_SHARE, "2018-08-13", "2019-01-01"),
+                    2019: _annual_rate(0.5 * _S232_STEEL_SHARE + 0.1 * _S232_ALUMINUM_SHARE, "2019-01-01", "2019-05-21")
+                    + _annual_rate(_S232_MIXED_RATE, "2019-05-21", "2020-01-01"),
+                    2020: _S232_MIXED_RATE,
+                }
+            },
         },
         source_urls=(
             "https://www.federalregister.gov/api/v1/documents/2018-05477.json",
             "https://www.federalregister.gov/api/v1/documents/2018-05478.json",
+            "https://www.usitc.gov/research_and_analysis/trade_shifts_2018/special_topic.htm",
         ),
         source_complete=True,
     ),
@@ -391,9 +448,11 @@ EVENTS = [
         source_urls=(
             "https://www.ustr.gov/issue-areas/enforcement/section-301-investigations/section-301-china/34-billion-trade-action",
             "https://www.ustr.gov/issue-areas/enforcement/section-301-investigations/section-301-china/200-billion-trade-action",
+            "https://ustr.gov/issue-areas/enforcement/section-301-investigations/section-301-china/16-billion-trade-action",
+            "https://ustr.gov/issue-areas/enforcement/section-301-investigations/section-301-china/300-billion-trade-action",
         ),
-        # Only List 1 and List 3 are linked; List 2/4A and annual sector mapping remain partial.
-        source_complete=False,
+        # All four batch archives are linked; annual industry mapping remains explicitly simulated.
+        source_complete=True,
     ),
     TariffEvent(
         name="中方对美反制关税",
@@ -423,6 +482,9 @@ EVENTS = [
             "C16": {2018: 0.03, 2019: 0.10, 2020: 0.08},
             "C17_18": {2018: 0.03, 2019: 0.10, 2020: 0.08},
         },
+        source_urls=("https://m.mof.gov.cn/czxw/201806/t20180616_2930323.htm",),
+        # Sources identify the event; later revisions and all annual coverage are not fully attested.
+        source_complete=False,
     ),
     TariffEvent(
         name="欧盟对美再平衡关税(232反制)",
@@ -437,6 +499,13 @@ EVENTS = [
             "C10T12": {2018: 0.04, 2019: 0.07, 2020: 0.07},
             "C13T15": {2018: 0.02, 2019: 0.04, 2020: 0.04},
         },
+        source_urls=(
+            "https://www.eeas.europa.eu/node/46001_en",
+            "https://eur-lex.europa.eu/eli/reg_impl/2018/886/oj/eng",
+            "https://www.gov.uk/government/news/eu-measures-in-response-to-us-steel-and-aluminium-tariffs",
+        ),
+        # Sources identify the event; later revisions and all annual coverage are not fully attested.
+        source_complete=False,
     ),
     TariffEvent(
         name="加拿大对美反制关税",
@@ -450,6 +519,12 @@ EVENTS = [
             "C10T12": {2018: 0.02, 2019: 0.01},
             "C31T33": {2018: 0.01, 2019: 0.01},
         },
+        source_urls=(
+            "https://www.canada.ca/en/department-finance/programs/international-trade-finance-policy/measures-steel-aluminum-businesses/countermeasures-response-unjustified-tariffs-canadian-steel-aluminum-products.html",
+            "https://gazette.gc.ca/rp-pr/p2/2018/2018-07-11/html/sor-dors152-eng.html",
+        ),
+        # Sources identify the event; later revisions and all annual coverage are not fully attested.
+        source_complete=False,
     ),
     TariffEvent(
         name="墨西哥对美反制关税",
@@ -462,6 +537,9 @@ EVENTS = [
             "C10T12": {2018: 0.06, 2019: 0.04},
             "A01_02": {2018: 0.03, 2019: 0.02},
         },
+        source_urls=("https://www.usitc.gov/research_and_analysis/trade_shifts_2018/special_topic.htm",),
+        # Sources identify the event; later revisions and all annual coverage are not fully attested.
+        source_complete=False,
     ),
     TariffEvent(
         name="土耳其对美反制关税",
@@ -474,6 +552,11 @@ EVENTS = [
             "C10T12": {2018: 0.10, 2019: 0.10, 2020: 0.10},
             "B05_06": {2018: 0.05, 2019: 0.05, 2020: 0.05},
         },
+        source_urls=(
+            "https://ustr.gov/about-us/policy-offices/press-office/press-releases/2018/july/united-states-challenges-five-wto",
+        ),
+        # Sources identify the event; later revisions and all annual coverage are not fully attested.
+        source_complete=False,
     ),
     TariffEvent(
         name="俄罗斯对美反制关税",
@@ -482,6 +565,11 @@ EVENTS = [
         announced="2018-07-06",
         effective="2018-08-05",
         rates={"C28": {2018: 0.06, 2019: 0.15, 2020: 0.15}},
+        source_urls=(
+            "https://www.oecd.org/content/dam/oecd/en/publications/reports/2018/11/20th-report-on-g20-trade-and-investment-measures_f77bc762/ffb9edfd-en.pdf",
+        ),
+        # Sources identify the event; later revisions and all annual coverage are not fully attested.
+        source_complete=False,
     ),
     TariffEvent(
         name="印度对美反制关税",
@@ -494,6 +582,9 @@ EVENTS = [
             "C20": {2019: 0.02, 2020: 0.03},
             "C24": {2019: 0.05, 2020: 0.08},
         },
+        source_urls=("https://www.pib.gov.in/PressReleasePage.aspx?PRID=1576941&lang=2&reg=3",),
+        # Sources identify the event; later revisions and all annual coverage are not fully attested.
+        source_complete=False,
     ),
     TariffEvent(
         name="美国航空补贴案关税(空客裁决)",
@@ -536,16 +627,19 @@ ENTITY_LIST_EVENTS = [
         source_complete=True,
     ),
     EntityListEvent(
-        name="OFAC/二级制裁风格:俄罗斯能源金融限制",
+        name="OFAC 行业限制:俄罗斯能源金融债务期限收紧(Directives 1/2)",
         shock_type=SHOCK_SANCTIONS,
         targets=("RUS",),
-        announced="2017-08-02",
-        effective="2017-08-02",
-        entities=("Russian energy SOEs", "sanctioned financial institutions"),
+        announced="2017-09-29",
+        effective="2017-11-28",
+        entities=("Directive 1 指定金融实体", "Directive 2 指定能源实体"),
+        timeline_note="本事件仅编码 2017 年 Directives 1/2 新债务期限限制的收紧；此前已有行业制裁，不是首次列入 SDN，也不等同于 CAATSA 成法日。行业覆盖与强度为教学假设。",
+        source_urls=("https://ofac.treasury.gov/recent-actions/20170929", "https://ofac.treasury.gov/faqs/370"),
+        source_complete=True,
         intensities={
-            "B05_06": {2017: 0.018, 2018: 0.026, 2019: 0.026, 2020: 0.026},
-            "B09": {2017: 0.014, 2018: 0.020, 2019: 0.020, 2020: 0.020},
-            "K": {2017: 0.012, 2018: 0.018, 2019: 0.018, 2020: 0.018},
+            "B05_06": {2017: _annual_rate(0.026, "2017-11-28", "2018-01-01"), 2018: 0.026, 2019: 0.026, 2020: 0.026},
+            "B09": {2017: _annual_rate(0.020, "2017-11-28", "2018-01-01"), 2018: 0.020, 2019: 0.020, 2020: 0.020},
+            "K": {2017: _annual_rate(0.018, "2017-11-28", "2018-01-01"), 2018: 0.018, 2019: 0.018, 2020: 0.018},
         },
     ),
     EntityListEvent(

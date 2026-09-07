@@ -55,11 +55,11 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "课程 FVA 份额较高最直接说明什么？",
             [
                 _option("a", "国内增加值返回本国更多"),
-                _option("b", "VA+TLS 毛出口中直接与间接外国上游纯增加值构成更高"),
+                _option("b", "VA+TLS 毛出口中WWZ 分解中不含 FDC 的外国增加值构成更高"),
                 _option("c", "产品跨境次数必然更多"),
             ],
             "b",
-            "课程 FVA_share 衡量直接与间接外国上游纯增加值占 VA+TLS 账户闭合毛出口的比重；TLS 单列，所以它不是 OECD 官方 EXGR_FVASH。",
+            "课程 FVA_share 衡量WWZ 分解中不含 FDC 的外国增加值占 VA+TLS 账户闭合毛出口的比重；FDC 与 TLS 均未计入分子，所以它不是 OECD 官方 EXGR_FVASH。",
         )
     ],
     3: [
@@ -69,10 +69,10 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             [
                 _option("a", "增加值只满足国内最终需求"),
                 _option("b", "最终品直接出口一次后被吸收"),
-                _option("c", "增加值在最终吸收前经历多次跨境生产"),
+                _option("c", "增加值至少一次中间品跨境，最终吸收前累计跨境两次及以上"),
             ],
             "c",
-            "复杂 GVC 的关键是增加值在最终吸收前至少经历多次跨境生产分工。",
+            "复杂 GVC 至少含一次中间品跨境，且累计跨境两次及以上；例如 A 的中间品进入 B，再由 B 以最终品形式出口到 C。",
         )
     ],
     4: [
@@ -107,11 +107,11 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "一个经济体的课程 FVA 份额较高，最稳妥的读图结论是什么？",
             [
                 _option("a", "它的国内增加值占比一定更高"),
-                _option("b", "它的出口更依赖外国投入，后向参与更强"),
+                _option("b", "出口中 WWZ 外国增加值项（不含 FDC）的份额更高"),
                 _option("c", "已经证明关税造成了这种结构"),
             ],
             "b",
-            "较高课程 FVA 份额支持直接与间接外国上游纯增加值构成更高这一描述性判断；它不是 OECD EXGR_FVASH，也不能单独识别因果。",
+            "较高课程 FVA 份额支持WWZ 分解中不含 FDC 的外国增加值构成更高这一描述性判断；它不是 OECD EXGR_FVASH，也不能单独识别因果。",
         )
     ],
     7: [
@@ -183,11 +183,11 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "本步的课程 FVA 份额在「壁垒如何改变全球贸易链」这个问题里，主要衡量什么？",
             [
                 _option("a", "一国生产网络里各节点对最短路径经过该节点的份额之和"),
-                _option("b", "VA+TLS 毛出口中有多少纯增加值来自直接与间接外国上游"),
+                _option("b", "WWZ 外国增加值项（不含 FDC 与 TLS）占毛出口的比重"),
                 _option("c", "增加值到最终吸收经历了多少个跨境生产环节"),
             ],
             "b",
-            "课程 FVA 份额读的是贸易流构成；TLS 单列，因此不是 OECD EXGR_FVASH。它不直接等于回流，也不宜和长度、网络系数比大小。",
+            "课程 FVA 份额读的是贸易流构成；FDC 与 TLS 均未计入分子，因此不是 OECD EXGR_FVASH。它不直接等于回流，也不宜和长度、网络系数比大小。",
         ),
         _question(
             "s11-compare",

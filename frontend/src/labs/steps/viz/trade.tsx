@@ -4,7 +4,7 @@
  * 三个贸易专属镜头(非通用图表标签),各自带读图脚手架:
  *   定位图   课程 FVA 份额× WWYZ GVC 生产份额,按样本中位数描述性分型
  *   出口拆解 选中国家的毛出口拆成五类 WWZ 聚合项与 TLS 扩展,直观看本国 / 外国来源占比
- *   FVA 排序 谁的出口最依赖外国增加值(后向 GVC 参与最深)
+ *   FVA 排序 谁的 WWZ 外国增加值项份额较高（不含 FDC）
  */
 import type { Meta, Step, StepStateApi } from "../../../types";
 import { CompositionBar, QuadrantScatter, RankBarChart } from "../../../viz";
@@ -79,9 +79,9 @@ export function TradeVizStep({ meta, step, state }: { meta: Meta; step: Step; st
             active={lens as Lens}
             onPick={pickLens}
             lenses={[
-              { key: "quadrant", label: "定位图", hint: "后向依赖 × WWYZ 前向生产参与；样本中位数分型" },
+              { key: "quadrant", label: "定位图", hint: "WWZ FVA 构成 × 前向生产参与；样本中位数分型" },
               { key: "decompose", label: "出口拆解", hint: "毛出口 = 五类 WWZ 聚合项 + TLS 扩展" },
-              { key: "rank", label: "FVA 排序", hint: "谁最依赖外国增加值" },
+              { key: "rank", label: "FVA 排序", hint: "比较 WWZ FVA 构成（不含 FDC）" },
             ]}
           />
         )}
@@ -100,8 +100,8 @@ export function TradeVizStep({ meta, step, state }: { meta: Meta; step: Step; st
       ) : lens === "quadrant" ? (
         <ChartStory
           eyebrow="经济体分型"
-          title="出口价值定位图:后向依赖 × WWYZ 前向生产参与"
-          what={<>横轴 <b>课程 FVA 份额</b> = 出口中由直接与间接外国上游创造的纯增加值构成（TLS 单列，非 OECD EXGR_FVASH）；纵轴 <b>GVC 生产份额</b> = 本国增加值有多少经中间品贸易进入全球生产。虚线是全样本中位数；四象限不是 OECD 官方分类，也不等同于 TiVA forward participation。</>}
+          title="出口价值定位图:WWZ FVA 构成 × 前向生产参与"
+          what={<>横轴 <b>课程 FVA 份额</b> = WWZ 分解中不含 FDC 的外国增加值项占毛出口的比重（分子不含 FDC 与 TLS，非 OECD EXGR_FVASH）；纵轴 <b>GVC 生产份额</b> = 本国增加值有多少经中间品贸易进入全球生产。虚线是全样本中位数；四象限不是 OECD 官方分类，也不等同于 TiVA forward participation。</>}
           read={<>越靠右,越依赖进口中间品做出口;越靠上,越多本国增加值卷入跨境生产。四个象限对应四种参与模式(见四角标签)。</>}
           find={<>找到你选的国家各落哪个象限：越南、卢森堡、斯洛伐克通常在右侧较高课程 FVA 区；美国、日本内需大，该份额通常偏低。这里只描述构成，不直接判断政策暴露。</>}
           note={`参考线基于全部有效样本 n=${quadRows.length};份额 = 占毛出口 / 总增加值的比例。`}
@@ -133,8 +133,8 @@ export function TradeVizStep({ meta, step, state }: { meta: Meta; step: Step; st
         <ChartStory
           eyebrow="后向 GVC 参与"
           title="课程 FVA 份额前 20（非 OECD EXGR_FVASH）"
-          what={<>横条 = 各国课程纯 VA 口径的 <b>FVA 份额</b>，从高到低取前 20；你选中的国家高亮为红色。</>}
-          read={<>条越长 = 直接与间接外国上游纯增加值构成越高。TLS 单列，因此不能拿这里的数值直接冒充 OECD 官方 EXGR_FVASH；是否更暴露或更敏感仍需回归证据。</>}
+          what={<>横条 = 各国课程 WWZ 口径（不含 FDC 与 TLS）的 <b>FVA 份额</b>，从高到低取前 20；你选中的国家高亮为红色。</>}
+          read={<>条越长 = WWZ 分解中不含 FDC 的外国增加值构成越高。FDC 与 TLS 均未计入分子，因此不能拿这里的数值直接冒充 OECD 官方 EXGR_FVASH；是否更暴露或更敏感仍需回归证据。</>}
           find={<>榜首多是加工-再出口型小经济体;把中国、美国这类大国和它们对比,份额通常低不少。</>}
           note="展示前 20，并追加你主动选择但未进入前 20 的国家。"
         >

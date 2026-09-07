@@ -177,14 +177,14 @@ def test_event_metadata_discloses_composite_timeline_and_correct_xpcc_date():
     assert "复合处理" in section_301["name"]
     assert "只对应首批" in section_301["timeline_note"]
     assert section_301["source_urls"]
-    assert section_301["source_status"] == "partial_official_event_source"
+    assert section_301["source_status"] == "official_event_source_complete"
     assert "教学编码" in section_301["source_disclosure"]
 
     sourced_232 = next(event for event in events if event["name"].startswith("美国232"))
     assert sourced_232["source_status"] == "official_event_source_complete"
-    assert len(sourced_232["source_urls"]) == 2
+    assert len(sourced_232["source_urls"]) == 3
     assert sourced_232["source_disclosure"] == section_301["source_disclosure"]
-    assert sourced_232["peak_rate"] == 0.24
+    assert sourced_232["peak_rate"] == pytest.approx((0.5 * 2 / 3 + 0.1 / 3) * 140 / 365 + 0.2 * 225 / 365)
     assert sourced_232["top_sectors"] == ["C24"]
 
     xpcc = next(event for event in events if "XPCC" in event["name"])
@@ -302,7 +302,7 @@ def test_persisted_exposure_and_shock_loaders_preserve_round_trip_floats(tmp_pat
     )
     raw_key = raw_panel["country"].eq("DEU") & raw_panel["sector"].eq("C24") & raw_panel["year"].eq(2018)
     raw_shock = raw_panel.loc[raw_key, "tariff_shock"].item()
-    assert raw_shock == sensitive_exposure * 0.16
+    assert raw_shock == pytest.approx(sensitive_exposure * (0.2 * 214 / 365), abs=1e-18)
 
     shocks.write_demo(["DEU", "USA"], ["C24"], years)
     published = pd.read_csv(
@@ -330,8 +330,8 @@ def test_demo_panel_uses_passed_pretreatment_export_exposure():
     )
     df = demo_shock_panel(["DEU", "USA"], ["C24"], [2017, 2018], export_exposure=exposure)
     val = df.set_index(["country", "sector", "year"]).loc[("DEU", "C24", 2018), "tariff_shock"]
-    # 232 钢铝 2018 年 C24 基准税率 0.16 × 2017 ICIO 暴露度 0.5。
-    assert val == 0.08
+    # 欧盟自6月1日实施：教学钢铝篮子0.2 × 214/365 × 2017暴露度。
+    assert val == pytest.approx(0.2 * 214 / 365 * 0.5)
 
 
 def test_fixed_pretreatment_exposure_rejects_release_without_earlier_year():
@@ -356,8 +356,8 @@ def test_tariff_primary_uses_last_pretreatment_weight_and_keeps_contemporaneous_
     )
     panel = demo_shock_panel(["DEU", "USA"], ["C24"], [2017, 2018, 2019], export_exposure=exposure)
     row = panel.set_index(["country", "sector", "year"]).loc[("DEU", "C24", 2018)]
-    assert row["tariff_shock"] == 0.16 * 0.20
-    assert row["tariff_shock_contemporaneous"] == 0.16 * 0.80
+    assert row["tariff_shock"] == pytest.approx(0.2 * 214 / 365 * 0.20)
+    assert row["tariff_shock_contemporaneous"] == pytest.approx(0.2 * 214 / 365 * 0.80)
     assert row["tariff_exposure_mode"] == "fixed_pretreatment"
     assert row["tariff_exposure_source"] == "oecd_icio_bilateral_flow"
     assert row["tariff_exposure_disclosure"] == ""

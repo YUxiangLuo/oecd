@@ -256,7 +256,7 @@ def _complete_shock_rows(values: list[float]) -> pd.DataFrame:
                 "year": 2020,
                 "shock_type": "tariff",
                 "tariff_shock": value,
-                "treated": int(value > 0.001),
+                "treated": int(value > 0),
                 "announced_date": "2020-01-01" if hit else "",
                 "effective_date": "2020-02-01" if hit else "",
                 "note": "event" if hit else "",
@@ -279,10 +279,10 @@ def _complete_shock_rows(values: list[float]) -> pd.DataFrame:
 
 
 def test_shock_threshold_is_strict_and_complete_types_are_mandatory():
-    frame = _complete_shock_rows([0.0009, 0.001, 0.0011])
+    frame = _complete_shock_rows([0, 1e-12, 0.001])
     checks = quality.check_shock_panel(frame, ["C0", "C1", "C2"], ["s1"], [2020])
     assert next(check for check in checks if check.name == "treated 标记与阈值一致").passed
-    assert frame["treated"].tolist() == [0, 0, 1]
+    assert frame["treated"].tolist() == [0, 1, 1]
 
     missing_half = frame.drop(columns=["sanction_treated"])
     malformed = quality.check_shock_panel(missing_half, ["C0", "C1", "C2"], ["s1"], [2020])

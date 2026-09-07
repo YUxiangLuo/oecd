@@ -16,7 +16,7 @@ from gvcsim.shocks import SHOCK_LABELS, SHOCK_SPECS, SHOCK_TARIFF
 
 # 稳定 outcome → (被解释变量, 中文含义)。列名来自 pipeline 产出的指标面板。
 OUTCOME_DEPVARS = {
-    "trade": ("FVA_share", "课程 FVA 份额(纯 VA FVA / VA+TLS 毛出口；非 OECD EXGR_FVASH)"),
+    "trade": ("FVA_share", "课程 FVA 份额(WWZ FVA（不含 FDC） / VA+TLS 毛出口；非 OECD EXGR_FVASH)"),
     "production": ("3b_VA_GVC_C_share", "复杂GVC生产份额(3b_VA_GVC_C / SVA,WWYZ)"),
     "length": ("PLv_GVC", "前向 GVC 生产长度(WWYZ)"),
     "network": ("betweenesscentrality", "全正边二值网络介数(探索性拓扑基准)"),
@@ -184,11 +184,15 @@ class RegressionDesign:
         y = f"{self.depvar}_{unit}"
         if self.method in {METHOD_DID, METHOD_EVENT_STUDY}:
             lhs = "ATT^{overall}" if self.method == METHOD_DID else "ATT_k"
-            rhs = "Σ_{g,t}ω_{g,t}·[(ȳ_{g,t}−ȳ_{g,g−1})−(ȳ_{C_t,t}−ȳ_{C_t,g−1})]"
+            rhs = (
+                "Σ_{g,t≥g}ω_{g,t}·[(ȳ_{g,t}−ȳ_{g,g−1})−(ȳ_{C_{g,t},t}−ȳ_{C_{g,t},g−1})]"
+                if self.method == METHOD_DID
+                else "Σ_{g∈G_k}ω_{g,k}·[(ȳ_{g,g+k}−ȳ_{g,g−1})−(ȳ_{C_{g,g+k},g+k}−ȳ_{C_{g,g+k},g−1})]"
+            )
             description = (
-                "逐 cohort×时期相对 g−1 做 DID；C_t 只含从未处理或截至比较期尚未处理实体，"
+                "逐 cohort×时期相对 g−1 做 DID；G_i 为本面板政策增量首次正暴露年，C_{g,t} 仅含从未正暴露或 G_i>max(g,t) 的实体，"
                 "再按每个 cohort×时期单元的可用处理实体数 ω 聚合。同一早期 cohort 会因拥有更多处理后时期而多次贡献权重；"
-                "这不是 cohort 等权或实体只计一次的平均。动态结果按事件时间 k 分别聚合。"
+                "这不是 cohort 等权或实体只计一次的平均。动态结果限定 t=g+k；G_k 只含该期可配对 cohort，ω_{g,k}=n_pair(g,g+k)/Σ_h n_pair(h,h+k)。k=-1 为归零参照，负 k 是处理前诊断。"
             )
             att_parts = [
                 {"text": lhs, "term": "dependent", "description": self.depvar_label, "meta_key": "depvar"},

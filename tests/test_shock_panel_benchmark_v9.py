@@ -47,10 +47,10 @@ def test_committed_v10_result_remains_a_historical_passing_release_attestation()
     assert payload["passed"] is True
 
 
-def test_committed_v11_result_attests_the_current_authenticated_release():
-    payload = json.loads(Path("benchmarks/shock_panel_v11.json").read_text(encoding="utf-8"))
-    assert payload["benchmark"] == "authenticated_shock_panel_active_v11"
-    assert payload["release"]["artifact_contract_version"] == 11
+def test_committed_v12_result_attests_the_current_authenticated_release():
+    payload = json.loads(Path("benchmarks/shock_panel_v12.json").read_text(encoding="utf-8"))
+    assert payload["benchmark"] == "authenticated_shock_panel_active_v12"
+    assert payload["release"]["artifact_contract_version"] == 12
     assert len(payload["release"]["release_id"]) == 32
     assert payload["cold_index_build_ms"]["passed"] is True
     assert payload["eight_concurrent_cold_ms"]["passed"] is True
@@ -161,7 +161,7 @@ def test_v9_harness_refuses_old_release_before_login(monkeypatch):
         lambda _app: pytest.fail("old release must be refused before authentication"),
     )
 
-    with pytest.raises(RuntimeError, match="active artifact contract v11"):
+    with pytest.raises(RuntimeError, match="active artifact contract v12"):
         benchmark.run_benchmark(
             username="student",
             password="secret",

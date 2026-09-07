@@ -436,3 +436,14 @@ describe("设计有效性的摘要文案", () => {
     }
   });
 });
+
+
+test("no-pair diagnosis means inference blocked, not a zero effect or a CI crossing zero", () => {
+  const result = response("trade", suppressedCoefficient(0), 1, 2, "did", false, support());
+  result.result.coefs = [];
+  result.result.diagnostics = { study_contract: "economics-v2", diagnostic_only: true };
+  const verdict = buildRegressionVerdict("trade", result);
+  expect(verdict.state).toBe("suppressed");
+  expect(verdict.effect).toBe("—");
+  expect(verdict.evidence).toContain("报告该诊断");
+});

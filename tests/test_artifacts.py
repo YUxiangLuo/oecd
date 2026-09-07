@@ -424,7 +424,7 @@ def _release(directory: Path, *, course_release: str | None = None) -> None:
     )
 
 
-def test_v11_release_requires_integrity_regression_shock_output_qc_manifest_and_identity(tmp_path):
+def test_v12_release_requires_integrity_regression_shock_output_qc_manifest_and_identity(tmp_path):
     _release(tmp_path)
 
     result = artifacts.validate_release(tmp_path)
@@ -432,7 +432,7 @@ def test_v11_release_requires_integrity_regression_shock_output_qc_manifest_and_
 
     assert result == {"release_id": RELEASE_ID, "files": 26, "years": 3}
     assert artifacts.release_identity(tmp_path) == RELEASE_ID
-    assert metadata["artifact_contract_version"] == 11
+    assert metadata["artifact_contract_version"] == 12
     assert metadata["publication_policy"] == artifacts.publication_policy_metadata()
     assert metadata["integrity"]["status"] == "passed"
     assert "冲击数值字段完整性(*_shock有限且treated为0/1)" in metadata["integrity"]["scopes"]["shocks"]["checked"]
@@ -1085,10 +1085,10 @@ def test_regression_input_qc_missing_contract_file_and_summary_tamper_fail(tmp_p
         artifacts.validate_release(tmp_path)
 
 
-def test_artifact_v10_is_rejected_and_v11_is_required(tmp_path):
+def test_artifact_v11_is_rejected_and_v12_is_required(tmp_path):
     _release(tmp_path)
-    _tamper_signed_metadata(tmp_path, lambda metadata: metadata.__setitem__("artifact_contract_version", 10))
-    with pytest.raises(artifacts.ArtifactContractError, match="expected 11, got 10"):
+    _tamper_signed_metadata(tmp_path, lambda metadata: metadata.__setitem__("artifact_contract_version", 11))
+    with pytest.raises(artifacts.ArtifactContractError, match="expected 12, got 11"):
         artifacts.validate_release(tmp_path)
 
 

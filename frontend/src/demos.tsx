@@ -59,7 +59,7 @@ const DECOMP: Record<number, DecompCfg> = {
       { key: "DVAex", label: "DVAex 国内增加值出口", color: "#4b47e0", desc: "出口中由本国创造、并被国外最终吸收的增加值；占比越高表示这类国内增加值构成越高。" },
       { key: "DVArt", label: "DVArt 返回国内", color: "#7a6bff", desc: "先随出口离境、绕一圈又回到本国被吸收的国内增加值。" },
       { key: "DDC", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "本国增加值在跨境往返中被海关多次统计的部分。" },
-      { key: "FVA", label: "FVA 外国增加值", color: "#159a86", desc: "出口里来自外国的增加值(进口的中间品)。后向 GVC 依赖的核心。" },
+      { key: "FVA", label: "FVA 外国增加值", color: "#159a86", desc: "WWZ 分解中的外国增加值项，不含外国重复计算 FDC。毛出口全部外国纯 VA 含量为 FVA+FDC。" },
       { key: "FDC", label: "FDC 外国重复计算", color: "#e0982a", desc: "外国增加值在跨境中被重复统计的部分。" },
       { key: "taxsub", label: "taxsub 税收减补贴", color: "#98a0b3", desc: "出口直接及间接所含的产品税减补贴(TLS)，由 ICIO TLS 账户沿投入产出链计算。" },
     ],

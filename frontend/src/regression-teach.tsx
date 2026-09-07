@@ -55,17 +55,18 @@ function verdictFromSaved(outcome: RegressionOutcome, saved: SavedRegression | u
   });
 }
 
+function familyRun(outcome: RegressionOutcome, history: FamilyHistory, getStep?: (step: number) => SiblingStepData | undefined): SavedRegression | undefined {
+  const data = getStep?.(FAMILY_STEPS[outcome]);
+  if (data?.run?.result?.diagnostics?.study_contract === "economics-v2") return data.run;
+  return data?.qualified_run ?? history[outcome]?.[0]?.response ?? data?.run;
+}
+
 export function familyVerdict(
   outcome: RegressionOutcome,
   history: FamilyHistory,
   getStep?: (step: number) => SiblingStepData | undefined,
 ) {
-  const data = getStep?.(FAMILY_STEPS[outcome]);
-  const qualified = verdictFromSaved(outcome, data?.qualified_run);
-  if (qualified) return qualified;
-  const snapshot = history[outcome]?.[0];
-  if (snapshot) return buildRegressionVerdict(outcome, snapshot.response);
-  return verdictFromSaved(outcome, data?.run);
+  return verdictFromSaved(outcome, familyRun(outcome, history, getStep));
 }
 
 export function FamilyMap({
@@ -87,7 +88,7 @@ export function FamilyMap({
     <section className="reg-family-map" aria-label="同一问题下的四类指标">
       <div className="reg-family-map-head">
         <span className="reg-section-step">四步同一句话</span>
-        <p>壁垒出现后，这一组指标相对未受冲击的对象发生了怎样的变化？每步只换一类指标。</p>
+        <p>壁垒出现后，这一组指标相对未受冲击的对象发生了怎样的变化？基准设定相同；选做改设定后须先核对下面的比较口径。</p>
       </div>
       <ol className="reg-family-track">
         {REGRESSION_FAMILIES.map((item) => {
@@ -270,16 +271,23 @@ export function RegressionEvidenceMatrix({
       <div className="table-wrap" role="region" aria-label="四步证据总表，可横向滚动" tabIndex={0}>
         <table className="data-table reg-evidence-table">
           <thead>
-            <tr><th>步骤</th><th>指标家族</th><th>方向判断</th><th>效应与单位</th><th>95% 区间</th><th>写作边界</th></tr>
+            <tr><th>步骤</th><th>指标家族</th><th>比较设定</th><th>方向判断</th><th>效应与单位</th><th>95% 区间</th><th>写作边界</th></tr>
           </thead>
           <tbody>
             {REGRESSION_FAMILIES.map((item) => {
               const verdict = familyVerdict(item.outcome, history, getStep);
               const lesson = REGRESSION_LESSONS[item.outcome];
+              const design = familyRun(item.outcome, history, getStep)?.design;
               return (
                 <tr key={item.outcome} className={item.outcome === current ? "current" : undefined}>
                   <th scope="row">{item.step}</th>
                   <td><b>{item.family}</b><span>{lesson.shortMetric}</span></td>
+                  <td>{design ? <>
+                    {design.shock_type_label || design.shock_type}
+                    <span>{design.method_label || design.method}</span>
+                    <span>{design.granularity_label || design.granularity} · {design.scenario_label || design.scenario}</span>
+                    <span>{design.weight_mode === "contemporaneous" ? "当期权重" : "固定处理前权重"}</span>
+                  </> : "—"}</td>
                   <td>{verdict ? familyDirectionLabel(verdict.state) : "待估计"}</td>
                   <td><b>{verdict?.effect ?? "—"}</b></td>
                   <td>{verdict?.interval ?? "—"}</td>

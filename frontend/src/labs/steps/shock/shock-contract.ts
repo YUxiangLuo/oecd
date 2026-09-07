@@ -1,8 +1,8 @@
 import type { ShockContract } from "../../../types";
 
-export const SHOCK_ARTIFACT_CONTRACT_VERSION = 11;
-export const SHOCK_CONTRACT_VERSION = 2;
-export const SHOCK_TREATED_THRESHOLD = 0.001;
+export const SHOCK_ARTIFACT_CONTRACT_VERSION = 12;
+export const SHOCK_CONTRACT_VERSION = 3;
+export const SHOCK_TREATED_THRESHOLD = 0.0;
 export const SHOCK_CONTRACT_TYPES = {
   tariff: {
     shock_field: "tariff_shock",

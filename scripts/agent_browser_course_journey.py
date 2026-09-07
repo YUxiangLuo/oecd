@@ -121,7 +121,7 @@ def main():
             elif step == 10:
                 assert set(row["viewed_shock_types"]) == {"tariff", "sanctions", "export_control"}
             else:
-                assert row["qualified_run"]["result"], step
+                assert row["run"]["result"], step
             student.run("screenshot", str(output / f"step-{step}.png"))
             results.append({"step": step, "passed": True})
             print(json.dumps(results[-1]), flush=True)

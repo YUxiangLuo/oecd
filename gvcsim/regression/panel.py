@@ -57,6 +57,8 @@ from gvcsim.regression.transforms import (
 )
 from gvcsim.regression.validity import (
     MIN_TREATED_CLUSTERS,
+    MIN_CONTROL_CLUSTERS,
+    STATUS_INSUFFICIENT,
     STATUS_INVALID_DESIGN,
     TreatmentSupport,
     analyze_support,
@@ -94,8 +96,8 @@ class RegressionResult:
     n_times: int
     n_clusters: int
     r2_within: float | None
-    depvar_mean: float
-    depvar_std: float
+    depvar_mean: float | None
+    depvar_std: float | None
     # 交互模型在低(P25)/均值/高(P75)基期 GVC 水平下的线性组合效应。
     # 空列表表示当前模型没有可配对的政策主效应×base_gvc 交互项。
     marginal_effects: list[dict] = field(default_factory=list)
@@ -1920,6 +1922,8 @@ class _CohortTimeCell:
     control_delta: np.ndarray
     treated_clusters: np.ndarray
     control_clusters: np.ndarray
+    treated_ids: np.ndarray
+    control_ids: np.ndarray
 
 
 def _prepare_cohort_time_cells(model: PreparedModel, event_times: list[int] | None) -> list[_CohortTimeCell]:
@@ -1975,6 +1979,8 @@ def _prepare_cohort_time_cells(model: PreparedModel, event_times: list[int] | No
                     cohort=cohort,
                     time=int(target),
                     term=_event_term(event_time) if event_times is not None else model.policy_xcols[0],
+                    treated_ids=treated_delta.index.to_numpy(dtype=str),
+                    control_ids=control_delta.index.to_numpy(dtype=str),
                     treated_delta=treated_delta.to_numpy(dtype=float),
                     control_delta=control_delta.to_numpy(dtype=float),
                     treated_clusters=cluster_by_entity.reindex(treated_delta.index).to_numpy(dtype=str),
@@ -2287,6 +2293,166 @@ def _audit_cohort_time_jackknife(
     )
 
 
+def _paired_cohort_model(model: PreparedModel, cells: list[_CohortTimeCell]) -> PreparedModel:
+    """Derive the estimation sample and support from actual baseline/target pairs."""
+    assert model.timing is not None
+    keys = {
+        (str(entity), year)
+        for cell in cells
+        for entity in [*cell.treated_ids, *cell.control_ids]
+        for year in (cell.cohort - 1, cell.time)
+    }
+    data = model.data.loc[
+        [(str(entity), int(year)) in keys for entity, year in zip(model.data[model.entity], model.data[model.time])]
+    ].copy()
+    support = analyze_support(
+        data,
+        model.entity,
+        model.time,
+        model.cluster,
+        model.timing.treated_col,
+        absorbing=True,
+        intensity_col=model.timing.intensity_col,
+        first_by_entity=model.timing.first_by_entity,
+        timeline_data=model.timing.timeline_data,
+    )
+    post_cells = [cell for cell in cells if cell.time >= cell.cohort]
+    control_clusters = {str(cluster) for cell in post_cells for cluster in cell.control_clusters}
+    support.paired_control_clusters = len(control_clusters)
+    support.support_basis = "paired_baseline_target"
+    if len(control_clusters) < MIN_CONTROL_CLUSTERS:
+        support = replace(
+            support,
+            status=STATUS_INVALID_DESIGN if support.status == STATUS_INVALID_DESIGN else STATUS_INSUFFICIENT,
+            reasons=[
+                *support.reasons,
+                f"实际基期—目标期配对只有 {len(control_clusters)} 个贡献对照聚类，低于课程停止线 {MIN_CONTROL_CLUSTERS}，已抑制推断。",
+            ],
+        )
+    flow = dict(model.sample_flow or {})
+    removed = len(model.data) - len(data)
+    flow["cohort_pairing"] = {"complete_case_rows": len(model.data), "used_rows": len(data), "excluded_rows": removed}
+    flow["dropped_rows_total"] = int(flow.get("dropped_rows_total", 0)) + removed
+    flow["dropped_by_reason"] = [
+        *flow.get("dropped_by_reason", []),
+        *([{"code": "missing_cohort_pair", "field": model.depvar, "rows": removed}] if removed else []),
+    ]
+    _refresh_estimation_flow(flow, data, model.entity, model.time, model.cluster, model.timing)
+    event_support = model.event_support
+    if event_support is not None:
+        periods = []
+        available_terms = {cell.term for cell in cells}
+        for original in event_support["periods"]:
+            reference = original["is_reference"]
+            if not reference and original["term"] not in available_terms:
+                continue  # No paired estimate: omit the period, never fabricate a zero.
+            period_cells = cells if reference else [cell for cell in cells if cell.term == original["term"]]
+            identities = {str(entity): cell.cohort for cell in period_cells for entity in cell.treated_ids}
+            clusters = {str(cluster) for cell in period_cells for cluster in cell.treated_clusters}
+            controls = {str(cluster) for cell in period_cells for cluster in cell.control_clusters}
+            cohorts = {
+                str(cohort): sum(value == cohort for value in identities.values())
+                for cohort in sorted(set(identities.values()))
+            }
+            enough = len(clusters) >= MIN_TREATED_CLUSTERS and len(controls) >= MIN_CONTROL_CLUSTERS
+            reasons = (
+                []
+                if enough
+                else [
+                    f"{original['term']} 的实际基期—目标期配对贡献 {len(clusters)} 个处理、{len(controls)} 个对照聚类；"
+                    f"任一侧低于课程停止线 {MIN_TREATED_CLUSTERS} 时不发布该期推断。"
+                ]
+            )
+            periods.append(
+                {
+                    **original,
+                    "contributing_rows": len(identities),
+                    "contributing_entities": len(identities),
+                    "contributing_clusters": len(clusters),
+                    "control_clusters": len(controls),
+                    "cohorts": cohorts,
+                    "period_supported": enough,
+                    "inference_supported": enough,
+                    "suppress_inference": not enough,
+                    "reason_codes": [] if enough else ["insufficient_paired_clusters"],
+                    "reasons": reasons,
+                }
+            )
+        reference_ok = next(period["period_supported"] for period in periods if period["is_reference"])
+        for period in periods:
+            period["inference_supported"] = period["period_supported"] and reference_ok
+            period["suppress_inference"] = not period["inference_supported"]
+            if not reference_ok and period["period_supported"]:
+                period["reason_codes"] = ["insufficient_reference_clusters"]
+                period["reasons"] = ["基期实际配对支持不足，已抑制该期推断。"]
+        event_support = {**event_support, "support_basis": "paired_baseline_target", "periods": periods}
+    return replace(
+        model,
+        data=data,
+        support=support,
+        event_support=event_support,
+        sample_flow=flow,
+        notes=[
+            *model.notes,
+            f"配对样本：完整案例 {len(model.data)} 行，实际参与 cohort-time 估计 {len(data)} 行；"
+            "支持度按同一实体基期和目标期均有观测的配对计算。",
+        ],
+    )
+
+
+def _no_cohort_pairs_result(model: PreparedModel) -> tuple[RegressionResult, dict]:
+    """A lack of comparison pairs is a reportable teaching diagnosis, not a fake estimate."""
+    assert model.support is not None
+    support = replace(
+        model.support,
+        status=STATUS_INVALID_DESIGN if model.support.status == STATUS_INVALID_DESIGN else STATUS_INSUFFICIENT,
+        treated_clusters=0,
+        untreated_clusters=0,
+        treated_entities=0,
+        untreated_entities=0,
+        total_entities=0,
+        paired_control_clusters=0,
+        support_basis="paired_baseline_target",
+        reasons=["没有可估计的 cohort-time 配对：需同一实体的基期/目标期观测及从未或尚未正暴露的对照。"],
+    )
+    flow = dict(model.sample_flow or {})
+    flow["cohort_pairing"] = {"complete_case_rows": len(model.data), "used_rows": 0, "excluded_rows": len(model.data)}
+    flow["dropped_rows_total"] = int(flow.get("dropped_rows_total", 0)) + len(model.data)
+    flow["dropped_by_reason"] = [
+        *flow.get("dropped_by_reason", []),
+        {"code": "missing_cohort_pair", "field": model.depvar, "rows": len(model.data)},
+    ]
+    _refresh_estimation_flow(flow, model.data.iloc[:0], model.entity, model.time, model.cluster, model.timing)
+    result = RegressionResult(
+        depvar=model.depvar,
+        coefs=[],
+        n_obs=0,
+        n_entities=0,
+        n_times=0,
+        n_clusters=0,
+        r2_within=None,
+        depvar_mean=None,
+        depvar_std=None,
+        diagnostics={"diagnostic_only": True, "estimator": "cohort_time_att_not_yet_treated", "cohort_time_cells": []},
+        notes=[*model.notes, *support.reasons],
+        status=support.status,
+        status_reasons=support.reasons,
+        support=support.to_dict(),
+        sample_flow=flow,
+    )
+    return result, {
+        "backend": "cohort_time_no_estimable_pairs",
+        "policy_coefs": [],
+        "max_abs_coef_diff": 0.0,
+        "max_abs_se_diff": 0.0,
+        "coef_check_passed": False,
+        "se_check_passed": False,
+        "benchmark_passed": False,
+        "se_check_mode": "not_run_no_pairs",
+        "notes": support.reasons,
+    }
+
+
 def _cohort_time_result(model: PreparedModel, method: str) -> tuple[RegressionResult, dict]:
     """Public staggered DID/event-study result with cluster delete-one jackknife."""
     if model.control_cols:
@@ -2301,6 +2467,9 @@ def _cohort_time_result(model: PreparedModel, method: str) -> tuple[RegressionRe
             if period.get("estimated")
         ]
     prepared_cells = _prepare_cohort_time_cells(model, event_times)
+    if not any(cell.time >= cell.cohort for cell in prepared_cells):
+        return _no_cohort_pairs_result(model)
+    model = _paired_cohort_model(model, prepared_cells)
     full, cells = _cohort_time_att_values(model, event_times, prepared_cells=prepared_cells)
     terms = [term for term in model.policy_xcols if term in full]
     if method == METHOD_DID:
@@ -2460,7 +2629,9 @@ def run_design_with_benchmark(df: pd.DataFrame, design) -> tuple[RegressionResul
     """
     model = prepare_design_model(df, design)
     if design.method in {METHOD_DID, METHOD_EVENT_STUDY}:
-        return _cohort_time_result(model, design.method)
+        result, benchmark = _cohort_time_result(model, design.method)
+        result.diagnostics["study_contract"] = "economics-v2"
+        return result, benchmark
     prepared = _demean_and_prune(model)
     own = _within_ols(model, prepared)
     lm = _panelols_estimate(model, prepared[2], prepared[3])
@@ -2476,6 +2647,7 @@ def run_design_with_benchmark(df: pd.DataFrame, design) -> tuple[RegressionResul
         own.notes.append(reason)
         if own.support is not None:
             own.support = {**own.support, "status": "invalid_design", "suppress_inference": True}
+    own.diagnostics["study_contract"] = "economics-v2"
     return own, benchmark
 
 

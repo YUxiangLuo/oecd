@@ -63,6 +63,7 @@ export function isValidEventSupport(value: unknown): value is EventSupport {
       || !isNonnegativeInteger(period.contributing_rows)
       || !isNonnegativeInteger(period.contributing_entities)
       || !isNonnegativeInteger(period.contributing_clusters)
+      || (period.control_clusters !== undefined && !isNonnegativeInteger(period.control_clusters))
       || period.contributing_clusters > period.contributing_entities
       || period.contributing_entities > period.contributing_rows
       || !period.cohorts
@@ -91,11 +92,13 @@ export function isValidEventSupport(value: unknown): value is EventSupport {
     || referencePeriods[0].estimated
   ) return false;
   const reference = referencePeriods[0];
-  const referenceSupported = reference.contributing_clusters >= EVENT_SUPPORT_MIN_CLUSTERS;
+  const referenceSupported = reference.contributing_clusters >= EVENT_SUPPORT_MIN_CLUSTERS
+    && (reference.control_clusters ?? EVENT_SUPPORT_MIN_CLUSTERS) >= EVENT_SUPPORT_MIN_CLUSTERS;
 
   return support.periods.every((period) => {
     const isReference = period.term === support.reference_term;
-    const periodSupported = period.contributing_clusters >= EVENT_SUPPORT_MIN_CLUSTERS;
+    const periodSupported = period.contributing_clusters >= EVENT_SUPPORT_MIN_CLUSTERS
+      && (period.control_clusters ?? EVENT_SUPPORT_MIN_CLUSTERS) >= EVENT_SUPPORT_MIN_CLUSTERS;
     const inferenceSupported = periodSupported && referenceSupported;
     return period.is_reference === isReference
       && period.estimated === !isReference

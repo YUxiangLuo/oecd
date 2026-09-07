@@ -1,0 +1,1149 @@
+{
+  "reviewed_commit": "6ef5ca06b7a58cf46f45d13d1f20cdb7a14fb419",
+  "data_release": "b26646389a814252946cb5c49ccc426b",
+  "cases": {
+    "fva_scale_1": {
+      "exports": [
+        40.0,
+        30.0
+      ],
+      "TLS": [
+        0.0,
+        0.0
+      ],
+      "wwz_fva": [
+        4.342857142857143,
+        7.199999999999999
+      ],
+      "wwz_fdc": [
+        2.0571428571428574,
+        3.5999999999999996
+      ],
+      "foreign_vB_exports": [
+        6.400000000000001,
+        10.799999999999999
+      ],
+      "course_share": [
+        0.10857142857142858,
+        0.23999999999999996
+      ],
+      "gross_foreign_share": [
+        0.16000000000000003,
+        0.36
+      ]
+    },
+    "fva_scale_7": {
+      "exports": [
+        280.0,
+        210.0
+      ],
+      "TLS": [
+        0.0,
+        0.0
+      ],
+      "wwz_fva": [
+        30.400000000000006,
+        50.4
+      ],
+      "wwz_fdc": [
+        14.400000000000002,
+        25.2
+      ],
+      "foreign_vB_exports": [
+        44.80000000000001,
+        75.6
+      ],
+      "course_share": [
+        0.1085714285714286,
+        0.24
+      ],
+      "gross_foreign_share": [
+        0.16000000000000003,
+        0.36
+      ]
+    },
+    "complex_one_intermediate_scale_1": {
+      "description": "R0 intermediate to R1; R1 final good to R2",
+      "R0_complex_VA": 20.0,
+      "R0_simple_VA": 0.0,
+      "R0_PLv_GVC": 2.0
+    },
+    "complex_one_intermediate_scale_3": {
+      "description": "R0 intermediate to R1; R1 final good to R2",
+      "R0_complex_VA": 60.0,
+      "R0_simple_VA": 0.0,
+      "R0_PLv_GVC": 2.0
+    },
+    "paired_support_seed_41": {
+      "status": "ok",
+      "declared_treated_clusters": 20,
+      "actual_cell_treated_clusters": [
+        2,
+        2,
+        2
+      ],
+      "coefs": [
+        {
+          "name": "treated×post",
+          "coef": 0.05913304197252308,
+          "se": 0.0012425036171641042,
+          "t": 47.59184694165205,
+          "p": 3.6691025486103275e-36,
+          "stars": "***",
+          "ci_low": 0.05661984118797241,
+          "ci_high": 0.06164624275707375
+        }
+      ],
+      "benchmark_passed": true
+    },
+    "paired_support_seed_42": {
+      "status": "ok",
+      "declared_treated_clusters": 20,
+      "actual_cell_treated_clusters": [
+        2,
+        2,
+        2
+      ],
+      "coefs": [
+        {
+          "name": "treated×post",
+          "coef": 0.06073681070136792,
+          "se": 0.0021180932880366064,
+          "t": 28.67522929439462,
+          "p": 8.011995189002969e-28,
+          "stars": "***",
+          "ci_low": 0.056452562639865464,
+          "ci_high": 0.06502105876287037
+        }
+      ],
+      "benchmark_passed": true
+    },
+    "event_paired_support_seed_41": {
+      "status": "ok",
+      "declared_treated_clusters": 16,
+      "actual_cells": [
+        {
+          "event_time": -2,
+          "treated_clusters": 16,
+          "control_clusters": 20
+        },
+        {
+          "event_time": 0,
+          "treated_clusters": 2,
+          "control_clusters": 20
+        },
+        {
+          "event_time": 1,
+          "treated_clusters": 2,
+          "control_clusters": 20
+        },
+        {
+          "event_time": 2,
+          "treated_clusters": 2,
+          "control_clusters": 20
+        }
+      ],
+      "event_support": {
+        "policy": "teaching_min_contributing_clusters_per_event_period",
+        "policy_is_statistical_theorem": false,
+        "cluster": "country",
+        "base_k": -1,
+        "reference_term": "k=-1",
+        "min_contributing_clusters": 12,
+        "periods": [
+          {
+            "term": "k=-2",
+            "event_time": -2,
+            "is_reference": false,
+            "estimated": true,
+            "contributing_rows": 30,
+            "contributing_entities": 30,
+            "contributing_clusters": 30,
+            "cohorts": {
+              "2018": 30
+            },
+            "period_supported": true,
+            "inference_supported": true,
+            "suppress_inference": false,
+            "reason_codes": [],
+            "reasons": []
+          },
+          {
+            "term": "k=-1",
+            "event_time": -1,
+            "is_reference": true,
+            "estimated": false,
+            "contributing_rows": 16,
+            "contributing_entities": 16,
+            "contributing_clusters": 16,
+            "cohorts": {
+              "2018": 16
+            },
+            "period_supported": true,
+            "inference_supported": true,
+            "suppress_inference": false,
+            "reason_codes": [],
+            "reasons": []
+          },
+          {
+            "term": "k=0",
+            "event_time": 0,
+            "is_reference": false,
+            "estimated": true,
+            "contributing_rows": 16,
+            "contributing_entities": 16,
+            "contributing_clusters": 16,
+            "cohorts": {
+              "2018": 16
+            },
+            "period_supported": true,
+            "inference_supported": true,
+            "suppress_inference": false,
+            "reason_codes": [],
+            "reasons": []
+          },
+          {
+            "term": "k=+1",
+            "event_time": 1,
+            "is_reference": false,
+            "estimated": true,
+            "contributing_rows": 16,
+            "contributing_entities": 16,
+            "contributing_clusters": 16,
+            "cohorts": {
+              "2018": 16
+            },
+            "period_supported": true,
+            "inference_supported": true,
+            "suppress_inference": false,
+            "reason_codes": [],
+            "reasons": []
+          },
+          {
+            "term": "k=+2",
+            "event_time": 2,
+            "is_reference": false,
+            "estimated": true,
+            "contributing_rows": 16,
+            "contributing_entities": 16,
+            "contributing_clusters": 16,
+            "cohorts": {
+              "2018": 16
+            },
+            "period_supported": true,
+            "inference_supported": true,
+            "suppress_inference": false,
+            "reason_codes": [],
+            "reasons": []
+          }
+        ]
+      },
+      "coefs": [
+        {
+          "name": "k=-2",
+          "coef": 0.0005987583739166843,
+          "se": 0.0008875451464604801,
+          "t": 0.6746230051558795,
+          "p": 0.5030860413171926,
+          "stars": "",
+          "ci_low": -0.0011848303742445405,
+          "ci_high": 0.0023823471220779094
+        },
+        {
+          "name": "k=0",
+          "coef": 0.059257545291706154,
+          "se": 0.0015245178560806883,
+          "t": 38.86969578962401,
+          "p": 1.7399374284770126e-38,
+          "stars": "***",
+          "ci_low": 0.056193911959565045,
+          "ci_high": 0.06232117862384726
+        },
+        {
+          "name": "k=+1",
+          "coef": 0.059150463819495055,
+          "se": 0.002464871464406984,
+          "t": 23.997382692620803,
+          "p": 9.649828015193673e-29,
+          "stars": "***",
+          "ci_low": 0.054197119161916295,
+          "ci_high": 0.06410380847707381
+        },
+        {
+          "name": "k=+2",
+          "coef": 0.057201233760664626,
+          "se": 0.000676531781881705,
+          "t": 84.55069708856125,
+          "p": 9.213628450925836e-55,
+          "stars": "***",
+          "ci_low": 0.05584169224466423,
+          "ci_high": 0.05856077527666502
+        }
+      ]
+    },
+    "event_paired_support_seed_42": {
+      "status": "ok",
+      "declared_treated_clusters": 16,
+      "actual_cells": [
+        {
+          "event_time": -2,
+          "treated_clusters": 16,
+          "control_clusters": 20
+        },
+        {
+          "event_time": 0,
+          "treated_clusters": 2,
+          "control_clusters": 20
+        },
+        {
+          "event_time": 1,
+          "treated_clusters": 2,
+          "control_clusters": 20
+        },
+        {
+          "event_time": 2,
+          "treated_clusters": 2,
+          "control_clusters": 20
+        }
+      ],
+      "event_support": {
+        "policy": "teaching_min_contributing_clusters_per_event_period",
+        "policy_is_statistical_theorem": false,
+        "cluster": "country",
+        "base_k": -1,
+        "reference_term": "k=-1",
+        "min_contributing_clusters": 12,
+        "periods": [
+          {
+            "term": "k=-2",
+            "event_time": -2,
+            "is_reference": false,
+            "estimated": true,
+            "contributing_rows": 30,
+            "contributing_entities": 30,
+            "contributing_clusters": 30,
+            "cohorts": {
+              "2018": 30
+            },
+            "period_supported": true,
+            "inference_supported": true,
+            "suppress_inference": false,
+            "reason_codes": [],
+            "reasons": []
+          },
+          {
+            "term": "k=-1",
+            "event_time": -1,
+            "is_reference": true,
+            "estimated": false,
+            "contributing_rows": 16,
+            "contributing_entities": 16,
+            "contributing_clusters": 16,
+            "cohorts": {
+              "2018": 16
+            },
+            "period_supported": true,
+            "inference_supported": true,
+            "suppress_inference": false,
+            "reason_codes": [],
+            "reasons": []
+          },
+          {
+            "term": "k=0",
+            "event_time": 0,
+            "is_reference": false,
+            "estimated": true,
+            "contributing_rows": 16,
+            "contributing_entities": 16,
+            "contributing_clusters": 16,
+            "cohorts": {
+              "2018": 16
+            },
+            "period_supported": true,
+            "inference_supported": true,
+            "suppress_inference": false,
+            "reason_codes": [],
+            "reasons": []
+          },
+          {
+            "term": "k=+1",
+            "event_time": 1,
+            "is_reference": false,
+            "estimated": true,
+            "contributing_rows": 16,
+            "contributing_entities": 16,
+            "contributing_clusters": 16,
+            "cohorts": {
+              "2018": 16
+            },
+            "period_supported": true,
+            "inference_supported": true,
+            "suppress_inference": false,
+            "reason_codes": [],
+            "reasons": []
+          },
+          {
+            "term": "k=+2",
+            "event_time": 2,
+            "is_reference": false,
+            "estimated": true,
+            "contributing_rows": 16,
+            "contributing_entities": 16,
+            "contributing_clusters": 16,
+            "cohorts": {
+              "2018": 16
+            },
+            "period_supported": true,
+            "inference_supported": true,
+            "suppress_inference": false,
+            "reason_codes": [],
+            "reasons": []
+          }
+        ]
+      },
+      "coefs": [
+        {
+          "name": "k=-2",
+          "coef": 0.00021918604311692855,
+          "se": 0.0008479200406942931,
+          "t": 0.2584984816934564,
+          "p": 0.7971049768140581,
+          "stars": "",
+          "ci_low": -0.0014847730737279398,
+          "ci_high": 0.0019231451599617969
+        },
+        {
+          "name": "k=0",
+          "coef": 0.06126243393951085,
+          "se": 0.0031915036399985126,
+          "t": 19.1954767563854,
+          "p": 1.9283734092946724e-24,
+          "stars": "***",
+          "ci_low": 0.054848867255362005,
+          "ci_high": 0.0676760006236597
+        },
+        {
+          "name": "k=+1",
+          "coef": 0.06225010084913373,
+          "se": 0.0030655345388189105,
+          "t": 20.306442501579987,
+          "p": 1.6558509932480815e-25,
+          "stars": "***",
+          "ci_low": 0.056089678551358844,
+          "ci_high": 0.06841052314690861
+        },
+        {
+          "name": "k=+2",
+          "coef": 0.05864096654198283,
+          "se": 0.0006920836251353757,
+          "t": 84.73104175888038,
+          "p": 8.305969960784302e-55,
+          "stars": "***",
+          "ci_low": 0.057250172426888145,
+          "ci_high": 0.060031760657077514
+        }
+      ]
+    },
+    "event_equation": {
+      "overall": "ATT^{overall} = Σ_{g,t}ω_{g,t}·[(ȳ_{g,t}−ȳ_{g,g−1})−(ȳ_{C_t,t}−ȳ_{C_t,g−1})]",
+      "dynamic": "ATT_k = Σ_{g,t}ω_{g,t}·[(ȳ_{g,t}−ȳ_{g,g−1})−(ȳ_{C_t,t}−ȳ_{C_t,g−1})]",
+      "identical_rhs": true
+    }
+  },
+  "path_oracle": [
+    {
+      "seed": 2026,
+      "max_abs_error": 3.552713678800501e-15,
+      "path_orders": 90,
+      "production_and_length": "passed",
+      "country_aggregation": "passed"
+    },
+    {
+      "seed": 2027,
+      "max_abs_error": 2.6645352591003757e-15,
+      "path_orders": 90,
+      "production_and_length": "passed",
+      "country_aggregation": "passed"
+    },
+    {
+      "seed": 2028,
+      "max_abs_error": 7.105427357601002e-15,
+      "path_orders": 90,
+      "production_and_length": "passed",
+      "country_aggregation": "passed"
+    }
+  ],
+  "reversal": [
+    {
+      "removed_outcome_effect": 10,
+      "status": "warning",
+      "reversal_share": 0.016666666666666666,
+      "result": {
+        "name": "treated×post",
+        "coef": 0.2652450050110697,
+        "se": 0.1671139176493074,
+        "t": 1.5872107406858402,
+        "p": 0.12054057135412102,
+        "stars": "",
+        "ci_low": -0.07277479882995536,
+        "ci_high": 0.6032648088520947
+      }
+    },
+    {
+      "removed_outcome_effect": 100,
+      "status": "warning",
+      "reversal_share": 0.016666666666666666,
+      "result": {
+        "name": "treated×post",
+        "coef": 1.76524500501107,
+        "se": 1.6867215118758112,
+        "t": 1.046553916922499,
+        "p": 0.3017485278214743,
+        "stars": "",
+        "ci_low": -1.6464712816908107,
+        "ci_high": 5.176961291712951
+      }
+    }
+  ],
+  "actual_indicators": {
+    "2016": {
+      "negative_industry_components": {
+        "DVAex": 0,
+        "DVArt": 0,
+        "DDC": 69,
+        "FVA": 0,
+        "FDC": 0,
+        "taxsub": 45
+      },
+      "fdc_share_pp_country_median": 4.08172795495764,
+      "fdc_share_pp_country_max": 12.903998763898842,
+      "max_country": "LUX",
+      "examples": [
+        {
+          "country": "CHN",
+          "course_fva_share_pct": 11.556223066798324,
+          "foreign_pure_va_content_pct": 14.181491034625044
+        },
+        {
+          "country": "DEU",
+          "course_fva_share_pct": 15.999972529847785,
+          "foreign_pure_va_content_pct": 20.932352014702555
+        },
+        {
+          "country": "USA",
+          "course_fva_share_pct": 5.997436905154847,
+          "foreign_pure_va_content_pct": 7.634794858487996
+        }
+      ]
+    },
+    "2017": {
+      "negative_industry_components": {
+        "DVAex": 0,
+        "DVArt": 0,
+        "DDC": 58,
+        "FVA": 0,
+        "FDC": 0,
+        "taxsub": 51
+      },
+      "fdc_share_pp_country_median": 4.209775445243306,
+      "fdc_share_pp_country_max": 12.86592704964832,
+      "max_country": "LUX",
+      "examples": [
+        {
+          "country": "CHN",
+          "course_fva_share_pct": 12.479006797139046,
+          "foreign_pure_va_content_pct": 15.359479254511687
+        },
+        {
+          "country": "DEU",
+          "course_fva_share_pct": 16.358985537771726,
+          "foreign_pure_va_content_pct": 21.60394413315006
+        },
+        {
+          "country": "USA",
+          "course_fva_share_pct": 6.1872249445251155,
+          "foreign_pure_va_content_pct": 7.930214862448611
+        }
+      ]
+    },
+    "2018": {
+      "negative_industry_components": {
+        "DVAex": 0,
+        "DVArt": 0,
+        "DDC": 60,
+        "FVA": 0,
+        "FDC": 0,
+        "taxsub": 51
+      },
+      "fdc_share_pp_country_median": 4.38439891314548,
+      "fdc_share_pp_country_max": 11.64080931372417,
+      "max_country": "SVK",
+      "examples": [
+        {
+          "country": "CHN",
+          "course_fva_share_pct": 12.500108637220166,
+          "foreign_pure_va_content_pct": 15.548852769299973
+        },
+        {
+          "country": "DEU",
+          "course_fva_share_pct": 16.575773148357488,
+          "foreign_pure_va_content_pct": 22.060208646969823
+        },
+        {
+          "country": "USA",
+          "course_fva_share_pct": 6.260209072981167,
+          "foreign_pure_va_content_pct": 8.128292546573727
+        }
+      ]
+    },
+    "2019": {
+      "negative_industry_components": {
+        "DVAex": 0,
+        "DVArt": 0,
+        "DDC": 66,
+        "FVA": 0,
+        "FDC": 0,
+        "taxsub": 48
+      },
+      "fdc_share_pp_country_median": 4.587961954501181,
+      "fdc_share_pp_country_max": 12.508525071276349,
+      "max_country": "LUX",
+      "examples": [
+        {
+          "country": "CHN",
+          "course_fva_share_pct": 11.86978161970731,
+          "foreign_pure_va_content_pct": 14.854292756685766
+        },
+        {
+          "country": "DEU",
+          "course_fva_share_pct": 16.31138365931654,
+          "foreign_pure_va_content_pct": 21.633732153564594
+        },
+        {
+          "country": "USA",
+          "course_fva_share_pct": 5.7839839722444575,
+          "foreign_pure_va_content_pct": 7.521765546015623
+        }
+      ]
+    },
+    "2020": {
+      "negative_industry_components": {
+        "DVAex": 0,
+        "DVArt": 0,
+        "DDC": 67,
+        "FVA": 0,
+        "FDC": 0,
+        "taxsub": 52
+      },
+      "fdc_share_pp_country_median": 4.351540031093282,
+      "fdc_share_pp_country_max": 11.570609560170343,
+      "max_country": "LUX",
+      "examples": [
+        {
+          "country": "CHN",
+          "course_fva_share_pct": 11.73017533137231,
+          "foreign_pure_va_content_pct": 14.529333388753189
+        },
+        {
+          "country": "DEU",
+          "course_fva_share_pct": 15.61264954045253,
+          "foreign_pure_va_content_pct": 20.538493680583212
+        },
+        {
+          "country": "USA",
+          "course_fva_share_pct": 5.5099055760959414,
+          "foreign_pure_va_content_pct": 7.206473134003521
+        }
+      ]
+    }
+  },
+  "threshold_exposure": {
+    "country": {
+      "treated_entities": 16,
+      "baseline_already_positive_entities": 2,
+      "never_treated_positive_rows": 180,
+      "baseline_examples": [
+        {
+          "country": "DEU",
+          "year": 2019,
+          "tariff_shock": 0.0006595633477657,
+          "g": 2020.0
+        },
+        {
+          "country": "FRA",
+          "year": 2019,
+          "tariff_shock": 0.0008090987243751,
+          "g": 2020.0
+        }
+      ]
+    },
+    "industry": {
+      "treated_entities": 210,
+      "baseline_already_positive_entities": 5,
+      "never_treated_positive_rows": 173,
+      "baseline_examples": [
+        {
+          "entity_id": "BGR_C24",
+          "year": 2018,
+          "tariff_shock": 0.000802024284185,
+          "g": 2019.0
+        },
+        {
+          "entity_id": "CHN_A01_02",
+          "year": 2018,
+          "tariff_shock": 0.0009554378228684,
+          "g": 2019.0
+        },
+        {
+          "entity_id": "ISL_C24",
+          "year": 2018,
+          "tariff_shock": 0.0008617825130992,
+          "g": 2019.0
+        },
+        {
+          "entity_id": "NGA_C24",
+          "year": 2018,
+          "tariff_shock": 0.0008297904811738,
+          "g": 2019.0
+        },
+        {
+          "entity_id": "DEU_C10T12",
+          "year": 2019,
+          "tariff_shock": 0.0005829437674961,
+          "g": 2020.0
+        }
+      ]
+    }
+  },
+  "actual_regressions_summary": {
+    "count": 63,
+    "statuses": {
+      "warning": 8,
+      "ok": 13,
+      "invalid_design": 8,
+      "insufficient": 34
+    },
+    "baseline_country_industry_tariff_did": [
+      {
+        "outcome": "trade",
+        "status": "warning",
+        "support": {
+          "treated_clusters": 73,
+          "untreated_clusters": 3,
+          "treated_entities": 210,
+          "untreated_entities": 3100,
+          "total_entities": 3310,
+          "reversal_entities": [
+            "CAN_C24",
+            "MEX_C24",
+            "USA_C31T33"
+          ],
+          "reversal_share": 0.0049833887043189366,
+          "absorbing": true,
+          "status": "warning",
+          "reasons": [
+            "存在处理撤销:CAN_C24、MEX_C24、USA_C31T33个体在首次处理后又回到未处理状态,占处理后个体-年 0.50%(3/602),未超过教学上限 5%。吸收型编码把这些个体在撤销后仍记为处理,估计对象因此略有偏离；比例较小，点估计与区间仍展示。解释时请单独说明这些撤销个体，不要把它们当成持续处理。"
+          ],
+          "min_treated_clusters": 12,
+          "max_reversal_share": 0.05,
+          "suppress_inference": false
+        },
+        "coefs": [
+          {
+            "name": "treated×post",
+            "coef": -0.0005201520312136744,
+            "se": 0.0014490945602763478,
+            "t": -0.358949681734006,
+            "p": 0.7206412751142343,
+            "stars": "",
+            "ci_low": -0.0034068964260931182,
+            "ci_high": 0.0023665923636657696
+          }
+        ],
+        "cells": [
+          {
+            "cohort": 2018,
+            "time": 2018,
+            "event_time": 0,
+            "term": "treated×post",
+            "att": -0.00015474238707963725,
+            "treated_entities": 187,
+            "control_entities": 3065,
+            "treated_clusters": 72,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2018,
+            "time": 2019,
+            "event_time": 1,
+            "term": "treated×post",
+            "att": -0.00016038319813726533,
+            "treated_entities": 187,
+            "control_entities": 3050,
+            "treated_clusters": 72,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2018,
+            "time": 2020,
+            "event_time": 2,
+            "term": "treated×post",
+            "att": -0.0015292655298525422,
+            "treated_entities": 187,
+            "control_entities": 3041,
+            "treated_clusters": 72,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2019,
+            "time": 2019,
+            "event_time": 0,
+            "term": "treated×post",
+            "att": 0.0007436156538950739,
+            "treated_entities": 18,
+            "control_entities": 3051,
+            "treated_clusters": 9,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2019,
+            "time": 2020,
+            "event_time": 1,
+            "term": "treated×post",
+            "att": 0.00253861559616245,
+            "treated_entities": 18,
+            "control_entities": 3043,
+            "treated_clusters": 9,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2020,
+            "time": 2020,
+            "event_time": 0,
+            "term": "treated×post",
+            "att": -0.005462109354736253,
+            "treated_entities": 5,
+            "control_entities": 3048,
+            "treated_clusters": 4,
+            "control_clusters": 76
+          }
+        ]
+      },
+      {
+        "outcome": "production",
+        "status": "warning",
+        "support": {
+          "treated_clusters": 73,
+          "untreated_clusters": 3,
+          "treated_entities": 210,
+          "untreated_entities": 3185,
+          "total_entities": 3395,
+          "reversal_entities": [
+            "CAN_C24",
+            "MEX_C24",
+            "USA_C31T33"
+          ],
+          "reversal_share": 0.0049833887043189366,
+          "absorbing": true,
+          "status": "warning",
+          "reasons": [
+            "存在处理撤销:CAN_C24、MEX_C24、USA_C31T33个体在首次处理后又回到未处理状态,占处理后个体-年 0.50%(3/602),未超过教学上限 5%。吸收型编码把这些个体在撤销后仍记为处理,估计对象因此略有偏离；比例较小，点估计与区间仍展示。解释时请单独说明这些撤销个体，不要把它们当成持续处理。"
+          ],
+          "min_treated_clusters": 12,
+          "max_reversal_share": 0.05,
+          "suppress_inference": false
+        },
+        "coefs": [
+          {
+            "name": "treated×post",
+            "coef": -0.0032091367799553573,
+            "se": 0.0009661516058216265,
+            "t": -3.32156647116088,
+            "p": 0.0013851701457166317,
+            "stars": "***",
+            "ci_low": -0.005133809475005344,
+            "ci_high": -0.0012844640849053704
+          }
+        ],
+        "cells": [
+          {
+            "cohort": 2018,
+            "time": 2018,
+            "event_time": 0,
+            "term": "treated×post",
+            "att": -0.0026239952288643733,
+            "treated_entities": 187,
+            "control_entities": 3206,
+            "treated_clusters": 72,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2018,
+            "time": 2019,
+            "event_time": 1,
+            "term": "treated×post",
+            "att": -0.004347200782877295,
+            "treated_entities": 187,
+            "control_entities": 3188,
+            "treated_clusters": 72,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2018,
+            "time": 2020,
+            "event_time": 2,
+            "term": "treated×post",
+            "att": -0.0034024090015568205,
+            "treated_entities": 187,
+            "control_entities": 3178,
+            "treated_clusters": 72,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2019,
+            "time": 2019,
+            "event_time": 0,
+            "term": "treated×post",
+            "att": 0.003457901450418719,
+            "treated_entities": 18,
+            "control_entities": 3189,
+            "treated_clusters": 9,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2019,
+            "time": 2020,
+            "event_time": 1,
+            "term": "treated×post",
+            "att": -0.0026826076268658223,
+            "treated_entities": 18,
+            "control_entities": 3179,
+            "treated_clusters": 9,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2020,
+            "time": 2020,
+            "event_time": 0,
+            "term": "treated×post",
+            "att": -0.0011982985740519444,
+            "treated_entities": 5,
+            "control_entities": 3180,
+            "treated_clusters": 4,
+            "control_clusters": 76
+          }
+        ]
+      },
+      {
+        "outcome": "length",
+        "status": "warning",
+        "support": {
+          "treated_clusters": 73,
+          "untreated_clusters": 3,
+          "treated_entities": 210,
+          "untreated_entities": 3117,
+          "total_entities": 3327,
+          "reversal_entities": [
+            "CAN_C24",
+            "MEX_C24",
+            "USA_C31T33"
+          ],
+          "reversal_share": 0.0049833887043189366,
+          "absorbing": true,
+          "status": "warning",
+          "reasons": [
+            "存在处理撤销:CAN_C24、MEX_C24、USA_C31T33个体在首次处理后又回到未处理状态,占处理后个体-年 0.50%(3/602),未超过教学上限 5%。吸收型编码把这些个体在撤销后仍记为处理,估计对象因此略有偏离；比例较小，点估计与区间仍展示。解释时请单独说明这些撤销个体，不要把它们当成持续处理。"
+          ],
+          "min_treated_clusters": 12,
+          "max_reversal_share": 0.05,
+          "suppress_inference": false
+        },
+        "coefs": [
+          {
+            "name": "treated×post",
+            "coef": 0.010348494651726891,
+            "se": 0.008184387377723817,
+            "t": 1.2644189692063355,
+            "p": 0.2099949498503694,
+            "stars": "",
+            "ci_low": -0.005955641072625483,
+            "ci_high": 0.026652630376079265
+          }
+        ],
+        "cells": [
+          {
+            "cohort": 2018,
+            "time": 2018,
+            "event_time": 0,
+            "term": "treated×post",
+            "att": 0.0017554034661979925,
+            "treated_entities": 187,
+            "control_entities": 3140,
+            "treated_clusters": 72,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2018,
+            "time": 2019,
+            "event_time": 1,
+            "term": "treated×post",
+            "att": 0.015045628544219997,
+            "treated_entities": 187,
+            "control_entities": 3122,
+            "treated_clusters": 72,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2018,
+            "time": 2020,
+            "event_time": 2,
+            "term": "treated×post",
+            "att": 0.015003330436151728,
+            "treated_entities": 187,
+            "control_entities": 3117,
+            "treated_clusters": 72,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2019,
+            "time": 2019,
+            "event_time": 0,
+            "term": "treated×post",
+            "att": 0.008852954715497735,
+            "treated_entities": 18,
+            "control_entities": 3122,
+            "treated_clusters": 9,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2019,
+            "time": 2020,
+            "event_time": 1,
+            "term": "treated×post",
+            "att": 0.008425149842785935,
+            "treated_entities": 18,
+            "control_entities": 3117,
+            "treated_clusters": 9,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2020,
+            "time": 2020,
+            "event_time": 0,
+            "term": "treated×post",
+            "att": -0.005725575843611023,
+            "treated_entities": 5,
+            "control_entities": 3117,
+            "treated_clusters": 4,
+            "control_clusters": 76
+          }
+        ]
+      },
+      {
+        "outcome": "network",
+        "status": "warning",
+        "support": {
+          "treated_clusters": 73,
+          "untreated_clusters": 3,
+          "treated_entities": 210,
+          "untreated_entities": 3210,
+          "total_entities": 3420,
+          "reversal_entities": [
+            "CAN_C24",
+            "MEX_C24",
+            "USA_C31T33"
+          ],
+          "reversal_share": 0.0049833887043189366,
+          "absorbing": true,
+          "status": "warning",
+          "reasons": [
+            "存在处理撤销:CAN_C24、MEX_C24、USA_C31T33个体在首次处理后又回到未处理状态,占处理后个体-年 0.50%(3/602),未超过教学上限 5%。吸收型编码把这些个体在撤销后仍记为处理,估计对象因此略有偏离；比例较小，点估计与区间仍展示。解释时请单独说明这些撤销个体，不要把它们当成持续处理。"
+          ],
+          "min_treated_clusters": 12,
+          "max_reversal_share": 0.05,
+          "suppress_inference": false
+        },
+        "coefs": [
+          {
+            "name": "treated×post",
+            "coef": -25.61357663267677,
+            "se": 13.194890692844975,
+            "t": -1.941173839853476,
+            "p": 0.055994406012329655,
+            "stars": "*",
+            "ci_low": -51.89914680371738,
+            "ci_high": 0.6719935383638358
+          }
+        ],
+        "cells": [
+          {
+            "cohort": 2018,
+            "time": 2018,
+            "event_time": 0,
+            "term": "treated×post",
+            "att": -11.383398313204369,
+            "treated_entities": 187,
+            "control_entities": 3233,
+            "treated_clusters": 72,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2018,
+            "time": 2019,
+            "event_time": 1,
+            "term": "treated×post",
+            "att": -24.92939497426768,
+            "treated_entities": 187,
+            "control_entities": 3215,
+            "treated_clusters": 72,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2018,
+            "time": 2020,
+            "event_time": 2,
+            "term": "treated×post",
+            "att": -25.90626013213011,
+            "treated_entities": 187,
+            "control_entities": 3210,
+            "treated_clusters": 72,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2019,
+            "time": 2019,
+            "event_time": 0,
+            "term": "treated×post",
+            "att": -82.71173507144131,
+            "treated_entities": 18,
+            "control_entities": 3215,
+            "treated_clusters": 9,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2019,
+            "time": 2020,
+            "event_time": 1,
+            "term": "treated×post",
+            "att": -133.04255634662016,
+            "treated_entities": 18,
+            "control_entities": 3210,
+            "treated_clusters": 9,
+            "control_clusters": 76
+          },
+          {
+            "cohort": 2020,
+            "time": 2020,
+            "event_time": 0,
+            "term": "treated×post",
+            "att": 19.833420423858776,
+            "treated_entities": 5,
+            "control_entities": 3210,
+            "treated_clusters": 4,
+            "control_clusters": 76
+          }
+        ]
+      }
+    ]
+  }
+}

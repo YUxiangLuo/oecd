@@ -35,11 +35,18 @@ def main():
                 audit = json.loads(browser.run("a11y", "--tags", "wcag2a,wcag2aa", "--json"))
                 assert audit["success"], audit
                 (output / f"{step}-{position}.json").write_text(json.dumps(audit, ensure_ascii=False))
-                overflow = json.loads(browser.run(
-                    "eval",
-                    "document.documentElement.scrollWidth>innerWidth+1 || document.documentElement.scrollHeight>innerHeight+1",
-                ))
-                result = {"step": step, "position": position, "violations": len(audit["data"]["violations"]), "overflow": overflow}
+                overflow = json.loads(
+                    browser.run(
+                        "eval",
+                        "document.documentElement.scrollWidth>innerWidth+1 || document.documentElement.scrollHeight>innerHeight+1",
+                    )
+                )
+                result = {
+                    "step": step,
+                    "position": position,
+                    "violations": len(audit["data"]["violations"]),
+                    "overflow": overflow,
+                }
                 results.append(result)
                 if result["violations"] or overflow:
                     browser.run("screenshot", str(output / f"{step}-{position}.png"))

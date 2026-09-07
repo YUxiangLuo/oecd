@@ -1516,3 +1516,30 @@ def test_report_rendering_hides_stale_inference_when_whole_run_is_suppressed(tmp
         assert "统计推断已抑制" in variant_markdown
         assert "[0.1234, 0.2345]" not in variant_markdown
         assert "0.0123" not in variant_markdown
+
+
+@pytest.mark.parametrize("status", ["insufficient", "invalid_design"])
+def test_complete_stopped_diagnosis_satisfies_report_gate_without_hiding_it(tmp_path, monkeypatch, status):
+    from copy import deepcopy
+
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    data = session["steps"]["11"]["data"]
+    data["qualified_run"] = deepcopy(data["run"])
+    result = data["run"]["result"]
+    result["status"] = status
+    result["status_reasons"] = ["实际配对支持不足或处理路径不相容"]
+    result["support"] = {"status": status, "suppress_inference": True, "reasons": result["status_reasons"]}
+    result["diagnostics"] = {"study_contract": "economics-v2"}
+    for coefficient in result["coefs"]:
+        coefficient.update(p=None, ci_low=None, ci_high=None, stars="")
+    assert check_gate(session) == []
+    report = build(session, "诊断学习者")
+    row = next(line for line in report.markdown.splitlines() if line.startswith("| 11 |"))
+    assert "无法" in row or "不可" in row
+    assert "实际配对支持不足或处理路径不相容" in report.markdown
+    # A forged inferential field cannot turn a stopped result into acceptable evidence.
+    data.pop("qualified_run")
+    result["coefs"][0]["p"] = 0.001
+    assert any(item["step"] == 11 for item in check_gate(session))

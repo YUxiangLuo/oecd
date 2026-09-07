@@ -305,7 +305,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
         <p className="intro-slider-hint">先在上方选择一种传导机制，滑块才会启用。</p>
       )}
       <p className="intro-note">
-        本页只展示你选择的一种可能机制，不是估计结果，也不预告真实方向。后续回归会分别检验课程纯 VA 口径 FVA_share（非 OECD EXGR_FVASH）、
+        本页只展示你选择的一种可能机制，不是估计结果，也不预告真实方向。后续回归会分别检验课程 WWZ 口径（不含 FDC 与 TLS） FVA_share（非 OECD EXGR_FVASH）、
         复杂 GVC 生产份额、前向 GVC 生产长度(PLv_GVC)，并探索全正边二值网络介数；四项不能只挑显著结果。
       </p>
     </div>,
@@ -327,7 +327,7 @@ export function IntroOverlay({ user, meta, onDone, returnFocusRef }: {
       <div className="intro-ready-rules">
         <b>侧栏会分别显示两种进度：</b>
         <span>步骤徽标“✓”= 本步理解题已答对；“材料已齐全”= 本步用于报告的材料已经保存。</span>
-        <span>第 1 步记录单元格；第 2–5 步各用“记录当前国家到报告材料”按钮保存两个对象，第 6–9 步各完成指定的对比并保存；第 11–14 步各保存一次可报告估计；第 15 步完成三段原创分析。</span>
+        <span>第 1 步记录单元格；第 2–5 步各用“记录当前国家到报告材料”按钮保存两个对象，第 6–9 步各完成指定的对比并保存；第 11–14 步各保存一次估计或完整的不可推断诊断；第 15 步完成三段原创分析。</span>
       </div>
       <div className="intro-cta-row">
         <button className="intro-cta" onClick={() => onDone(1)}>从第 1 步开始实验</button>

@@ -22,12 +22,10 @@ import pandas as pd
 # 少处理聚类研究仍应按设计采用 wild cluster bootstrap、随机化推断等专门方法。
 MIN_TREATED_CLUSTERS = 12
 
-# 吸收型编码与真实政策路径不一致的个体-年占比超过此值时判定 invalid_design。
-#
-# 同样是课程政策。少量撤销(如关税 mock 中加拿大/墨西哥钢铝关税 2019 年取消,
-# 约占处理后个体-年 0.4%)只需披露,估计对象基本未变;大比例撤销
-# (如制裁 mock 中 RUSAL 解除,约 9.5%)会实质改变估计对象,必须停止推断。
-MAX_REVERSAL_SHARE = 0.05
+# 吸收型 ATT 要求处理不可逆；行数占比不能界定估计对象的偏差。
+# 保留字段供报告读取，0 表示不允许任何撤销，不是容忍区间。
+MAX_REVERSAL_SHARE = 0.0
+MIN_CONTROL_CLUSTERS = 12
 
 STATUS_OK = "ok"
 STATUS_WARNING = "warning"
@@ -52,6 +50,8 @@ class TreatmentSupport:
     absorbing: bool
     status: str
     reasons: list[str] = field(default_factory=list)
+    paired_control_clusters: int | None = None
+    support_basis: str = "row_exposure"
 
     @property
     def suppress_inference(self) -> bool:
@@ -73,6 +73,8 @@ class TreatmentSupport:
             "min_treated_clusters": MIN_TREATED_CLUSTERS,
             "max_reversal_share": MAX_REVERSAL_SHARE,
             "suppress_inference": self.suppress_inference,
+            "paired_control_clusters": self.paired_control_clusters,
+            "support_basis": self.support_basis,
         }
 
 
@@ -101,7 +103,7 @@ def scan_reversal(
 
     吸收型估计量把处理编码为 1[t≥G_i],首次处理后永久为 1。若个体实际
     路径在之后关闭,估计量的处理变量与真实政策路径不一致,估计对象被静默改变。
-    误编码比例衡量这种偏离有多大:少量撤销只需披露,大比例撤销必须停止推断。
+    误编码比例只描述行数；任何撤销都与本课程持续暴露的吸收型 ATT 不相容。
 
     ``status_col`` 应优先传**冲击强度**列而非阈值化的处理指示列:后者会把
     "强度略微跌破 treated 阈值"(如 0.0011→0.0009,政策仍在生效)误报为撤销,
@@ -199,22 +201,12 @@ def analyze_support(
         shown = "、".join(reversal_entities[:3])
         more = f" 等 {len(reversal_entities)} 个" if len(reversal_entities) > 3 else ""
         share_text = f"占处理后个体-年 {scan.share:.2%}({scan.miscoded_rows}/{scan.post_rows})"
-        if scan.share >= MAX_REVERSAL_SHARE:
-            escalate(
-                STATUS_INVALID_DESIGN,
-                f"处理可逆且比例过高:{shown}{more}个体在首次处理后又回到未处理状态,{share_text},"
-                f"超过教学上限 {MAX_REVERSAL_SHARE:.0%}。吸收型估计量把处理编码为首次处理后永久为 1,"
-                f"与真实政策路径不一致,估计对象已被实质改变,不能作推断;"
-                f"改用按冲击强度看变化的设定，可让处理逐年跟随真实路径。",
-            )
-        else:
-            escalate(
-                STATUS_WARNING,
-                f"存在处理撤销:{shown}{more}个体在首次处理后又回到未处理状态,{share_text},"
-                f"未超过教学上限 {MAX_REVERSAL_SHARE:.0%}。吸收型编码把这些个体在撤销后仍记为处理,"
-                f"估计对象因此略有偏离；比例较小，点估计与区间仍展示。"
-                f"解释时请单独说明这些撤销个体，不要把它们当成持续处理。",
-            )
+        escalate(
+            STATUS_INVALID_DESIGN,
+            f"存在处理撤销:{shown}{more}个体在首次正暴露后又回到零暴露状态,{share_text}。"
+            "吸收型 ATT 要求处理不可逆；撤销比例小不能保证偏差小，已抑制 p 值、星号与置信区间。"
+            "可把该诊断写入报告；连续强度 TWFE 可描述逐年强度关联，但不能自动恢复因果识别。",
+        )
 
     if treated_clusters < MIN_TREATED_CLUSTERS:
         escalate(

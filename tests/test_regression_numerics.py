@@ -144,6 +144,8 @@ def test_public_cohort_att_matches_raw_pair_reference(method):
                 }
             )
 
+    participating_countries = set()
+
     def reference(omitted_country=None):
         terms = {}
         for cohort in (2018, 2019):
@@ -151,7 +153,7 @@ def test_public_cohort_att_matches_raw_pair_reference(method):
                 k = year - cohort
                 if k == -1 or (method == "did" and k < 0):
                     continue
-                treated, controls = [], []
+                treated, controls, paired_countries = [], [], []
                 for country in countries:
                     if country == omitted_country:
                         continue
@@ -160,25 +162,31 @@ def test_public_cohort_att_matches_raw_pair_reference(method):
                     delta = observations[country, year] - observations[country, cohort - 1]
                     if first[country] == cohort:
                         treated.append(delta)
+                        paired_countries.append(country)
                     elif first[country] is None or first[country] > max(cohort, year):
                         controls.append(delta)
+                        paired_countries.append(country)
                 if treated and controls:
+                    if omitted_country is None:
+                        participating_countries.update(paired_countries)
                     term = "treated×post" if method == "did" else f"k={k:+d}" if k else "k=0"
                     terms.setdefault(term, []).extend([mean(treated) - mean(controls)] * len(treated))
         return {term: mean(values) for term, values in terms.items()}
 
     expected = reference()
-    leave_one = [reference(country) for country in countries]
+    leave_one = [reference(country) for country in sorted(participating_countries)]
     result, benchmark = panel.run_design_with_benchmark(
         pd.DataFrame(rows), RegressionDesign(outcome="trade", granularity="country", method=method)
     )
 
     assert {coefficient.name for coefficient in result.coefs} == set(expected)
     assert benchmark["benchmark_passed"] is True
-    assert result.n_clusters == len(countries)
+    assert result.n_clusters == len(participating_countries)
     for coefficient in result.coefs:
         assert coefficient.coef == pytest.approx(expected[coefficient.name], abs=1e-12)
         deletes = [values[coefficient.name] for values in leave_one]
         # statistics.variance 与生产代码的矩阵协方差/伪值实现独立。
-        expected_se = np.sqrt(variance(deletes) * (len(countries) - 1) ** 2 / len(countries))
+        expected_se = np.sqrt(
+            variance(deletes) * (len(participating_countries) - 1) ** 2 / len(participating_countries)
+        )
         assert coefficient.se == pytest.approx(expected_se, abs=1e-12)

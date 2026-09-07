@@ -554,7 +554,7 @@ def _shock_type_metadata(shock_type: str) -> dict:
         "definition": shocks.SHOCK_DEFINITIONS[shock_type],
         "treated_definition": (
             f"权威处理标记来自 {shocks.SHOCK_SPECS[shock_type][1]}==1；"
-            f"生成契约使用 shock_intensity>{shocks.TREATED_THRESHOLD:g} 的严格阈值。"
+            f"生成契约使用 shock_intensity>{shocks.TREATED_THRESHOLD:g}，即本面板所编码政策增量的正暴露；低强度不能当作零暴露。"
         ),
         "treated_threshold": shocks.TREATED_THRESHOLD,
         "treated_operator": ">",

@@ -127,8 +127,8 @@ function naturalScale(
   }
   if (outcome === "network") {
     const sd = response.result.depvar_std;
-    const standardized = Number.isFinite(sd) && sd > 0 ? effect / sd : null;
-    const standardizedInterval = Number.isFinite(sd) && sd > 0
+    const standardized = typeof sd === "number" && Number.isFinite(sd) && sd > 0 ? effect / sd : null;
+    const standardizedInterval = typeof sd === "number" && Number.isFinite(sd) && sd > 0
       ? `；约 [${signed(ciLow / sd, 2)}, ${signed(ciHigh / sd, 2)}] 个样本标准差`
       : "";
     return {
@@ -137,7 +137,7 @@ function naturalScale(
     };
   }
   const mean = response.result.depvar_mean;
-  const relative = Number.isFinite(mean) && Math.abs(mean) > 1e-12 ? (effect / Math.abs(mean)) * 100 : null;
+  const relative = typeof mean === "number" && Number.isFinite(mean) && Math.abs(mean) > 1e-12 ? (effect / Math.abs(mean)) * 100 : null;
   return {
     effect: `${signed(effect, 3)} 个长度单位${relative == null ? "" : `（约为样本均值的 ${signed(relative, 2)}%）`}`,
     interval: hasCi ? `[${signed(ciLow, 3)}, ${signed(ciHigh, 3)}] 个长度单位` : NO_CI,
@@ -156,8 +156,8 @@ function effectLabel(response: RegressionResponse, coefficient: CoefStat | null)
 
 const INTERPRETATION: Record<RegressionOutcome, { negative: string; positive: string }> = {
   trade: {
-    negative: "课程纯 VA 口径的 FVA 构成下降；它不是 OECD EXGR_FVASH，也不能单独证明供应链已经回流。",
-    positive: "课程纯 VA 口径的 FVA 构成上升；它不是 OECD EXGR_FVASH，仍需检查识别假设和其他共同变化。",
+    negative: "课程 WWZ 口径（不含 FDC 与 TLS）的 FVA 构成下降；它不是 OECD EXGR_FVASH，也不能单独证明供应链已经回流。",
+    positive: "课程 WWZ 口径（不含 FDC 与 TLS）的 FVA 构成上升；它不是 OECD EXGR_FVASH，仍需检查识别假设和其他共同变化。",
   },
   production: {
     negative: "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
@@ -183,12 +183,12 @@ export function buildRegressionVerdict(
   const reasons = response.result.status_reasons ?? [];
   if (!coefficient) {
     return {
-      state: "insufficient",
+      state: globalInferenceIsSuppressed(response.result.status, support) ? "suppressed" : "insufficient",
       title: "当前设定没有可解读的处理后政策系数",
       effectLabel: effectLabel(response, null),
       effect: "—",
       interval: "—",
-      evidence: "请查看技术细节中的共线性或样本说明。",
+      evidence: "可保存并报告该诊断；请说明缺少配对或对照等原因，不能用不存在的系数判断方向。",
       interpretation: "无法判断变化方向。",
       boundary,
       coefficient: null,

@@ -35,28 +35,28 @@ export const FAMILY_STEPS: Record<RegressionOutcome, number> = {
 };
 
 export const REGRESSION_QUESTION =
-  "在显式识别假设下，壁垒出现后各 cohort 的指标相对从未或尚未受冲击对象如何变化？全球投入链外溢可能使对照组也受影响。";
+  "G_i 是本面板所编码政策增量首次正暴露年，低强度仍是暴露。在显式识别假设下，指标相对从未或尚未正暴露对象如何变化？全球投入链外溢可能使对照组也受影响。";
 
 export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
   trade: {
     outcome: "trade",
     step: 11,
-    metric: "课程 FVA 份额（纯 VA FVA / VA+TLS 毛出口；非 OECD EXGR_FVASH）",
+    metric: "课程 FVA 份额（WWZ FVA（不含 FDC） / VA+TLS 毛出口；非 OECD EXGR_FVASH）",
     shortMetric: "课程 FVA 份额",
     family: "贸易流",
-    measure: "出口对外国投入的依赖",
+    measure: "出口中 WWZ 外国增加值项的构成",
     unit: "百分点",
     priorStep: 2,
     priorLabel: "GVC 总贸易流分解指标",
-    focus: "本步看贸易壁垒有没有改变出口对外国投入的依赖",
+    focus: "本步看贸易壁垒有没有改变出口中 WWZ 外国增加值项的构成",
     learnThis: "先用统一处理时点的四格建立 DID 直觉，再看实际分批处理：系统逐 cohort、逐时期比较，并只让从未处理或截至比较期尚未处理的对象进入对照。",
-    definition: "它表示一单位账户闭合毛出口中，有多少纯增加值由所有外国直接与间接上游生产者创造。TLS 单列，所以它不是 OECD 官方 EXGR_FVASH。步骤 11–14 使用同一比较框架，本步看贸易流指标。",
-    downMeaning: "负向变化与外国增加值依赖下降一致，但不能单独证明生产已经回流。",
-    upMeaning: "正向变化与外国增加值依赖上升一致，但仍需结合不确定性和识别假设。",
+    definition: "它是 WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 毛出口的比重。毛出口全部外国纯 VA 含量为 FVA+FDC；OECD 还采用包含相关 TLS 的 VA 口径，因此本指标不是 EXGR_FVASH。",
+    downMeaning: "负向变化表示课程 WWZ FVA 份额相对下降，但不能单独证明生产已经回流。",
+    upMeaning: "正向变化表示课程 WWZ FVA 份额相对上升，但仍需结合不确定性和识别假设。",
     caution: "份额按百分点读。全球投入链会把政策传给未直接处理对象，no-interference/SUTVA 不能自动成立；2018–2020 又与 COVID-19 重叠，年份效应不能吸收国家×行业异质疫情冲击。不要和长度、网络系数比大小。",
     howToRead: "先读效应大小和 95% 区间，再判断方向是否确定。区间未跨 0 也只是这一项结果的统计证据，不能跳过识别假设；区间跨 0 就记「当前证据看不出方向」，不是零效应。",
     writeDown: "记下本步方向（升 / 降 / 看不出）和单位（百分点），留到第 15 步和另外三类并读。",
-    dontClaim: "不要写成「已经证明生产回流」。FVA 下降只说明出口里外国投入占比相对下降。",
+    dontClaim: "不要写成「已经证明生产回流」。FVA 份额下降只说明不含 FDC 的 WWZ 外国增加值项构成相对下降。",
     guidedExperiment: "检查 cohort 数量、对照组构成与 no-interference 假设；同期出口、增加值和产业份额可能是处理后变量，不能当作普通遗漏变量控制。",
   },
   production: {

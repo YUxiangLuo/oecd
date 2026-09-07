@@ -239,6 +239,7 @@ export interface QcCheck {
 }
 
 interface CrosswalkSummary {
+  n_hs_products: number;
   n_hs_chapters: number;
   n_crosswalk_rows: number;
   n_icio_sectors: number;
@@ -246,6 +247,8 @@ interface CrosswalkSummary {
 }
 
 export interface CrosswalkHsRow {
+  hs_code: string;
+  source_url: string;
   hs_chapter: string;
   list_name: string;
   value_weight: number;
@@ -266,6 +269,10 @@ interface CrosswalkMappedRow {
 }
 
 interface CrosswalkRow {
+  hs_code: string;
+  isic_division: string;
+  source_url: string;
+  industry_source_url: string;
   hs_chapter: string;
   hs_description: string;
   icio_sector: string;
@@ -454,6 +461,8 @@ export type RegressionStatus = "ok" | "warning" | "insufficient" | "invalid_desi
 export interface TreatmentSupport {
   treated_clusters: number;
   untreated_clusters: number;
+  paired_control_clusters?: number | null;
+  support_basis?: string;
   treated_entities: number;
   /** 旧会话保存的回归快照可能没有这两个实体级字段。 */
   untreated_entities?: number;
@@ -561,6 +570,8 @@ export interface EventPeriodSupport {
   contributing_rows: number;
   contributing_entities: number;
   contributing_clusters: number;
+  /** 实际基期—目标期配对中的贡献对照聚类。 */
+  control_clusters?: number;
   cohorts: Record<string, number>;
   period_supported: boolean;
   inference_supported: boolean;
@@ -649,9 +660,11 @@ export interface RegressionResponse {
     n_times: number;
     n_clusters: number;
     r2_within: number | null;
-    depvar_mean: number;
-    depvar_std: number;
+    depvar_mean: number | null;
+    depvar_std: number | null;
     diagnostics: {
+      study_contract?: string;
+      diagnostic_only?: boolean;
       pretrend?: PretrendDiagnostic;
       pretrend_tests?: Partial<Record<PretrendScope, PretrendDiagnostic>>;
       estimator?: string;

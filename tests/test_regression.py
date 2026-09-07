@@ -207,14 +207,14 @@ def test_design_equation_text():
     assert d.exclude_row is True
     assert "排除 ROW" in d.sample_filter
     eq = d.equation()
-    assert "ATT^{overall}" in eq and "C_t" in eq and "g−1" in eq
+    assert "ATT^{overall}" in eq and "C_{g,t}" in eq and "g−1" in eq
     eq_c = RegressionDesign(outcome="trade", granularity="country").equation()
     assert "ATT^{overall}" in eq_c and "已处理" not in eq_c
 
     eq_fe = RegressionDesign(outcome="trade", method="twfe_intensity").equation()
     assert "tariff_shock" in eq_fe
     eq_ev = RegressionDesign(outcome="trade", method="event_study").equation()
-    assert "ATT_k" in eq_ev and "C_t" in eq_ev
+    assert "ATT_k" in eq_ev and "C_{g,g+k}" in eq_ev
     eq_inter = RegressionDesign(outcome="trade", interaction=True).equation()
     assert "不支持 cohort-aware 交互" in eq_inter
     eq_ctrl = RegressionDesign(outcome="trade", method="twfe_intensity", control_mode=CONTROL_MODE_ICIO).equation()
@@ -390,7 +390,7 @@ def _reg01_staggered_panel(late_cohort: int = 11) -> pd.DataFrame:
     rows = []
     n_early = 13
     n_treated = n_early + late_cohort
-    for i in range(n_treated + 10):
+    for i in range(n_treated + 12):
         country = f"R{i:02d}"
         first = 2019 if i < n_early else 2020 if i < n_treated else None
         for year in range(2016, 2023):
@@ -636,19 +636,17 @@ def test_reg02_global_suppression_precedes_covariance_for_every_interaction_scop
         assert diagnostic["excluded_terms"]
 
 
-def test_reg02_warning_design_still_runs_feasible_pretrend():
+def test_reg02_reversal_stops_pretrend_even_when_its_share_is_small():
     df = _reg01_staggered_panel(late_cohort=12)
-    # One reversal is below the course invalid-design share and therefore remains a warning.
+    # Any reversal is incompatible with the absorbing design.
     df.loc[(df["country"] == "R00") & (df["year"] == 2021), "treated"] = 0
     result = event_study(df, "y")
     diagnostic = result.diagnostics["pretrend"]
 
-    assert result.status == "warning"
-    assert result.support["suppress_inference"] is False
-    assert diagnostic["available"] is True
-    assert diagnostic["reason"] is None
-    assert diagnostic["terms"] == ["k=-4", "k=-3", "k=-2"]
-    assert diagnostic["statistic"] is not None and diagnostic["p"] is not None
+    assert result.status == "invalid_design"
+    assert result.support["suppress_inference"] is True
+    assert diagnostic["available"] is False
+    assert diagnostic["statistic"] is None and diagnostic["p"] is None
 
 
 def test_interaction_pretrend_main_can_pass_while_interaction_and_joint_reject():

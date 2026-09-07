@@ -382,7 +382,7 @@ export function ReportLab({
           <div className="report-body"><ReportMarkdown markdown={report.markdown} /></div>
         </>
       ) : (
-        <p className="muted">点击生成后，服务端会检查理解题、单元格与比较、四步是否各有一次可报告估计，以及三段原创分析；缺项会在这里列出。</p>
+        <p className="muted">点击生成后，服务端会检查理解题、单元格与比较、四步是否各有一次估计或完整的不可推断诊断，以及三段原创分析；缺项会在这里列出。</p>
       )}
     </div>
   );

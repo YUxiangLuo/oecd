@@ -53,7 +53,7 @@ _OUTCOME_UNITS = {
     "network": "全正边二值介数原始单位（探索性拓扑基准）；跨指标比较时另参考样本标准差单位",
 }
 _STUDENT_METRIC_LABELS = {
-    "FVA_share": "课程 FVA 份额（纯 VA / VA+TLS；非 OECD EXGR_FVASH）",
+    "FVA_share": "课程 WWZ FVA 份额（不含 FDC 与 TLS；非 OECD EXGR_FVASH）",
     "3b_VA_GVC_C_share": "复杂 GVC 生产份额",
     "GVCPs": "GVC 相对位置（GVCPs）",
     # Keep the legacy schema key in provenance, but never teach its misspelling.
@@ -78,8 +78,8 @@ _SCENARIO_LABELS = {
 }
 _OUTCOME_INTERPRETATIONS = {
     "trade": {
-        "negative": "课程纯 VA 口径的 FVA 构成下降；这不是 OECD EXGR_FVASH，也不能单独证明供应链已经回流。",
-        "positive": "课程纯 VA 口径的 FVA 构成上升；这不是 OECD EXGR_FVASH，仍需检查识别假设和其他共同变化。",
+        "negative": "课程 WWZ 口径（不含 FDC 与 TLS）的 FVA 构成下降；这不是 OECD EXGR_FVASH，也不能单独证明供应链已经回流。",
+        "positive": "课程 WWZ 口径（不含 FDC 与 TLS）的 FVA 构成上升；这不是 OECD EXGR_FVASH，仍需检查识别假设和其他共同变化。",
     },
     "production": {
         "negative": "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
@@ -202,7 +202,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             {
                 "step": step,
                 "title": _STEP_TITLES.get(step, ""),
-                "missing": ["请在本步运行并保存一次可报告的估计（默认关税冲击即可）"],
+                "missing": ["请在本步运行并保存一次可报告的估计或完整的不可推断诊断；无需寻找显著或支持充分的结果"],
             }
         )
 
@@ -390,6 +390,7 @@ def _valid_event_support(result: dict[str, Any], interaction: bool = False) -> d
             or not _nonnegative_int(period.get("contributing_rows"))
             or not _nonnegative_int(period.get("contributing_entities"))
             or not _nonnegative_int(period.get("contributing_clusters"))
+            or ("control_clusters" in period and not _nonnegative_int(period["control_clusters"]))
             or period["contributing_clusters"] > period["contributing_entities"]
             or period["contributing_entities"] > period["contributing_rows"]
             or not isinstance(cohorts, dict)
@@ -417,10 +418,16 @@ def _valid_event_support(result: dict[str, Any], interaction: bool = False) -> d
     reference = references[0]
     if reference["term"] != reference_term or reference["event_time"] != base_k or reference["estimated"] is not False:
         return None
-    reference_supported = reference["contributing_clusters"] >= MIN_TREATED_CLUSTERS
+    reference_supported = (
+        reference["contributing_clusters"] >= MIN_TREATED_CLUSTERS
+        and reference.get("control_clusters", MIN_TREATED_CLUSTERS) >= MIN_TREATED_CLUSTERS
+    )
     for period in typed_periods:
         is_reference = period["term"] == reference_term
-        period_supported = period["contributing_clusters"] >= MIN_TREATED_CLUSTERS
+        period_supported = (
+            period["contributing_clusters"] >= MIN_TREATED_CLUSTERS
+            and period.get("control_clusters", MIN_TREATED_CLUSTERS) >= MIN_TREATED_CLUSTERS
+        )
         inference_supported = period_supported and reference_supported
         if (
             period["is_reference"] is not is_reference
@@ -906,6 +913,8 @@ def _parse_saved_run(raw: Any, outcome: str) -> tuple[dict[str, Any], dict[str, 
     if not isinstance(design, dict) or not isinstance(result, dict) or design.get("outcome") != outcome:
         return None
     coefs = result.get("coefs")
+    if isinstance(result.get("diagnostics"), dict) and result["diagnostics"].get("diagnostic_only") is True:
+        return (design, result) if _result_is_reportable(result, design) else None
     if not isinstance(coefs, list) or not any(
         isinstance(coef, dict)
         and isinstance(coef.get("name"), str)
@@ -960,9 +969,51 @@ def _result_is_qualified(result: dict[str, Any], design: dict[str, Any] | None =
     return not design or _primary_event_limit(design, result) is None
 
 
+def _result_is_reportable(result: dict[str, Any], design: dict[str, Any]) -> bool:
+    """A complete stopped-inference diagnosis is valid classroom evidence."""
+    if _result_is_qualified(result, design):
+        return True
+    diagnostics = result.get("diagnostics")
+    support = result.get("support")
+    if not isinstance(diagnostics, dict) or diagnostics.get("study_contract") != "economics-v2":
+        return False
+    if not isinstance(support, dict) or support.get("status") != result.get("status"):
+        return False
+    status = result.get("status")
+    if status not in {"ok", "warning", "insufficient", "invalid_design"}:
+        return False
+    coefs = result.get("coefs")
+    if not isinstance(coefs, list):
+        return False
+    stopped = status in {"insufficient", "invalid_design"}
+    if stopped and (support.get("suppress_inference") is not True or not support.get("reasons")):
+        return False
+    if diagnostics.get("diagnostic_only") is True:
+        return (
+            stopped
+            and not coefs
+            and diagnostics.get("cohort_time_cells") == []
+            and design.get("method") in {"did", "event_study"}
+        )
+    if not coefs:
+        return False
+    if design.get("method") == "event_study" and _valid_event_support(result) is None:
+        return False
+    for coefficient in coefs:
+        if not isinstance(coefficient, dict):
+            return False
+        value = coefficient.get("coef")
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            return False
+        limited = stopped or _event_period_limit(design, result, str(coefficient.get("name", ""))) is not None
+        if limited and any(coefficient.get(key) is not None for key in ("p", "ci_low", "ci_high")):
+            return False
+    return stopped or _primary_event_limit(design, result) is not None
+
+
 def _gate_qualified_runs(session: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return saved runs whose server result remains eligible for inference."""
-    return [run for run in _saved_runs(session) if _result_is_qualified(run["result"], run["design"])]
+    """Completion needs an estimate OR a complete, honestly reported diagnosis."""
+    return [run for run in _saved_runs(session) if _result_is_reportable(run["result"], run["design"])]
 
 
 def _reflection_value(value: Any) -> str:
@@ -1185,7 +1236,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         lines.extend(
             (
                 "- 下游回归口径：按所选冲击类型汇总该类型全部已编码事件的国家×行业暴露，不把单个事件选择当作回归筛选。",
-                "- 处理组语义：treated 只表示教学暴露指标超过课程阈值，不是政策机关发布的权威处理标记。",
+                "- 处理组语义：treated 表示本面板所编码政策增量的强度严格大于零；首次正暴露定义 G_i。它不是政策机关发布的权威处理标记。低强度仍是暴露，不能把面板中为零理解为现实中不受任何其他政策或外溢影响。",
                 "",
             )
         )
@@ -1195,16 +1246,16 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
     return lines
 
 
-def _qualified_by_step(runs: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
+def _reported_by_step(runs: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
     chosen: dict[int, dict[str, Any]] = {}
     for run in runs:
-        if _result_is_qualified(run["result"], run["design"]) and run["step"] not in chosen:
+        if _result_is_reportable(run["result"], run["design"]) and run["step"] not in chosen:
             chosen[run["step"]] = run
     return chosen
 
 
 def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
-    qualified = _qualified_by_step(runs)
+    qualified = _reported_by_step(runs)
     lines = [
         "### 四类指标并读（预先指定结果族）",
         "",
@@ -1226,6 +1277,8 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
             (
                 design.get("shock_type"),
                 design.get("method"),
+                design.get("granularity"),
+                design.get("weight_mode"),
                 bool(design.get("interaction")),
                 design.get("control_mode"),
                 design.get("scenario"),
@@ -1236,7 +1289,7 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
             lines.append(
                 f"| {step} | {_safe(design.get('depvar_label', outcome))} | "
                 f"{_setting_value('shock_type', design.get('shock_type'))} | "
-                f"{_setting_value('method', design.get('method'))} | — | — | 无可读政策系数 |"
+                f"{_setting_value('method', design.get('method'))} | — | — | 无可估计配对，诊断已记录、不能推断 |"
             )
             continue
         effect_label, effect, interval = _natural_effect(outcome, design, result, coefficient)
@@ -1273,7 +1326,7 @@ def _evidence_summary(runs: list[dict[str, Any]]) -> list[str]:
     if not runs:
         lines.extend(("- 未保存可展示的回归结果。", ""))
         return lines
-    qualified = _qualified_by_step(runs)
+    qualified = _reported_by_step(runs)
     for run in runs:
         step, outcome = run["step"], run["outcome"]
         design, result = run["design"], run["result"]
@@ -1292,7 +1345,13 @@ def _evidence_summary(runs: list[dict[str, Any]]) -> list[str]:
         coefficient = primary
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}{marker}", ""))
         if coefficient is None or not isinstance(coefficient.get("coef"), (int, float)):
-            lines.extend(("- 当前设定没有可解读的主要政策系数。", ""))
+            lines.extend(
+                (
+                    "- 当前设定没有可解读的主要政策系数；这是可提交的实验诊断。",
+                    *[f"- 诊断：{_safe(reason)}" for reason in _list_values(support.get("reasons"))],
+                    "",
+                )
+            )
             continue
         effect_label, effect, interval = _natural_effect(outcome, design, result, coefficient)
         failed_pretrend = _failed_pretrend(result, design)
@@ -1336,7 +1395,8 @@ def _technical_support_lines(design: dict[str, Any], result: dict[str, Any], sup
         support_bits = []
         for key, label in (
             ("treated_entities", "处理个体"),
-            ("treated_clusters", "处理聚类"),
+            ("treated_clusters", "贡献处理聚类"),
+            ("paired_control_clusters", "配对贡献对照聚类"),
             ("untreated_entities", "估计样本内未暴露个体"),
             ("untreated_clusters", "估计样本内完全未暴露聚类"),
             ("reversal_share", "处理撤销行占比"),
@@ -1749,13 +1809,13 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         *_qc_disclosure_section(qc_summary, integrity_metadata),
         "## 数据与方法说明",
         "",
-        "- 指标算法：WWZ 16 个明细项归并为五类，另加由 OECD ICIO TLS（产品税减补贴）账户计算的 taxsub 扩展项以匹配 VA+TLS 账户闭合毛出口；TLS/taxsub 不等于关税冲击，也不是 WWZ 原文分类。课程 FVA_share 使用纯 VA FVA 作分子、VA+TLS 毛出口作分母，包含直接与间接外国上游纯增加值，但不是 OECD 官方 EXGR_FVASH。生产分解与生产长度采用 WWYZ 口径。",
+        "- 指标算法：WWZ 16 个明细项归并为五类，另加由 OECD ICIO TLS（产品税减补贴）账户计算的 taxsub 扩展项以匹配 VA+TLS 账户闭合毛出口；TLS/taxsub 不等于关税冲击，也不是 WWZ 原文分类。课程 FVA_share 使用WWZ FVA（不含 FDC） 作分子、VA+TLS 毛出口作分母，包含WWZ 分解中不含 FDC 的外国增加值，但不是 OECD 官方 EXGR_FVASH。生产分解与生产长度采用 WWYZ 口径。",
         "- 网络算法：保留全部有向正流量边与正自环。加权总度=加权入度+加权出度，正自环计两次；它不是去重后的贸易额。路径指标按有向无权网络计算。eigencentrality 精确复现 Gephi 0.10.1 累计入边兼容分数，不等于标准 Perron 特征向量幂迭代。",
         "- 无权路径口径把微小正边与大额边视为同样长度，因此高介数只表示这套二值拓扑上的最短路径中介位置，不自动等于经济规模、关键瓶颈或不可替代。",
         "- 网络解释顺序：先以加权度观察经济流量规模，再把无权介数作为拓扑基准并比较排序。当前报告没有边阈值敏感性分析，微小正边是否改变最短路径与排序尚未检验。",
         "- 冲击口径：界面中的单个事件用于定位和理解；回归按冲击类型使用该类型全部已编码事件汇总形成的暴露面板。",
         "- 回归主结果：分批处理 DID/事件研究使用 cohort-time ATT，各 cohort 以 g−1 为基期，只使用从未或截至比较期尚未处理实体作对照；每个 cohort×时期按可用处理实体数聚合，早期 cohort 因更多处理后时期而重复贡献，并非 cohort 等权或实体只计一次。协方差按国家 delete-one cluster jackknife。",
-        "- 多结果与显著性：四项结果必须完整报告；95% 区间与 p 值描述不确定性，不是因果结论开关。事件研究未检出冲击前差异不证明平行趋势，尤其只有一个受支持的冲击前时期时检验力很低。",
+        "- 多结果与显著性：四项结果必须完整报告；95% 区间为逐项区间，不是四结果族或整条动态路径的同时置信带；p 值不是因果结论开关。事件研究未检出冲击前差异不证明平行趋势，尤其只有一个受支持的冲击前时期时检验力很低。",
         "- 同期 ICIO 派生量与模拟宏观量可能是处理后变量，公开主回归禁止将其作为普通遗漏变量控制；模拟 GDP deflator 只称教学模拟平减指数。",
         "- 回归结果来自学生会话中保存的服务端运行，不在报告生成时复算。",
         f"- 生成时间：{generated_at}；会话摘要：`{fingerprint}`。",

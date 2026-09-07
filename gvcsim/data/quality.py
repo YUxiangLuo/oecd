@@ -849,7 +849,7 @@ def check_shock_panel(
     countries: list[str],
     sectors: list[str],
     years: list[int],
-    treated_threshold: float = 0.001,
+    treated_threshold: float = 0.0,
 ) -> list[QcCheck]:
     """政策冲击面板质检。
 

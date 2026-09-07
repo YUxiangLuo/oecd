@@ -32,6 +32,7 @@ from gvcsim.indicators.core import IcioArrays
 
 from gvcsim.shock_catalog import (
     COMPOSITE_IMPOSER_MEMBERS as COMPOSITE_IMPOSER_MEMBERS,
+    composite_imposer_members,
     DEMO_FILE as DEMO_FILE,
     ENTITY_LIST_EVENTS as ENTITY_LIST_EVENTS,
     EVENTS as EVENTS,
@@ -233,7 +234,7 @@ def validate_export_exposure(
                     own.iloc[0]["bilateral_exports"], 0.0, rtol=0.0, atol=EXPOSURE_FLOW_ATOL
                 ):
                     raise ValueError(f"国内流量不得计入 bilateral_exports: {(country, sector, year)}")
-                for composite, members in COMPOSITE_IMPOSER_MEMBERS.items():
+                for composite, members in composite_imposer_members(year).items():
                     if composite not in destination_values:
                         continue
                     aggregate = base[base["imposer"].isin(set(members))]
@@ -279,8 +280,8 @@ def build_export_exposure(arr: IcioArrays, year: int) -> pd.DataFrame:
 
     bilateral_exports 是 c 国 s 行业卖给 imposer 的跨境中间品与最终需求净额。
     若目的地净额因存货减少等有符号最终需求而为负，则该目的地用于暴露权重的
-    流量截为 0；total_exports 是这些非负目的地流量之和。EU 行是 EU27 基础
-    目的地的非重叠加总。该正流量规则保证暴露度是 [0,1] 内可解释的出口份额。
+    流量截为 0；total_exports 是这些非负目的地流量之和。EU 行按政策适用年份聚合，2016–2020 包含英国，
+    2021 年起为 EU27；基础目的地非重叠加总。该正流量规则保证暴露度是 [0,1] 内可解释的出口份额。
     """
     rows = []
     col_of = {region: index for index, region in enumerate(arr.regions)}
@@ -310,7 +311,7 @@ def build_export_exposure(arr: IcioArrays, year: int) -> pd.DataFrame:
                     }
                 )
 
-            for composite, members in COMPOSITE_IMPOSER_MEMBERS.items():
+            for composite, members in composite_imposer_members(year).items():
                 bilateral = sum(
                     sector_to_dest(country, sector, dest) for dest in arr.regions if dest in members and dest != country
                 )
@@ -333,7 +334,7 @@ def recompute_raw_export_exposure(year: int, raw_dir, contract) -> pd.DataFrame:
     """Independently recompute exposure evidence from one strict raw ICIO file."""
     from gvcsim.data.raw_icio import raw_bilateral_exports
 
-    frame = pd.DataFrame(raw_bilateral_exports(year, raw_dir, contract, COMPOSITE_IMPOSER_MEMBERS))
+    frame = pd.DataFrame(raw_bilateral_exports(year, raw_dir, contract, composite_imposer_members(year)))
     return validate_export_exposure(
         frame,
         countries=list(contract.countries),

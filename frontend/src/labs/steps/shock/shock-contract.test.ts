@@ -8,8 +8,8 @@ import {
 } from "./shock-contract";
 
 const valid = (): ShockContract => ({
-  version: 2,
-  treated_threshold: 0.001,
+  version: 3,
+  treated_threshold: 0,
   treated_operator: ">",
   types: structuredClone(SHOCK_CONTRACT_TYPES),
   tariff_exposure: {
@@ -20,8 +20,8 @@ const valid = (): ShockContract => ({
 });
 
 describe("versioned shock contract", () => {
-  test("accepts only the complete v2 exact field/source/mode set", () => {
-    expect(inspectShockContract(valid(), 11).valid).toBe(true);
+  test("accepts only the complete v3 exact field/source/mode set", () => {
+    expect(inspectShockContract(valid(), 12).valid).toBe(true);
     expect(inspectShockContract(valid(), 7).valid).toBe(false);
     for (const mutation of [
       (contract: ShockContract) => { contract.version = 0; },
@@ -32,9 +32,9 @@ describe("versioned shock contract", () => {
     ]) {
       const contract = valid();
       mutation(contract);
-      expect(inspectShockContract(contract, 9).valid).toBe(false);
+      expect(inspectShockContract(contract, 12).valid).toBe(false);
     }
-    expect(inspectShockContract(undefined, 9).valid).toBe(false);
+    expect(inspectShockContract(undefined, 12).valid).toBe(false);
   });
 
   test("never describes fallback or unknown provenance as official", () => {

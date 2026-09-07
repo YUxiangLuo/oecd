@@ -133,8 +133,8 @@ def test_large_share_reversal_under_absorbing_is_invalid_design():
     assert s.suppress_inference is True
 
 
-def test_small_share_reversal_is_warning_and_keeps_inference():
-    """少量撤销只需披露:估计对象基本未变,保留推断。"""
+def test_even_small_reversal_stops_absorbing_inference():
+    """行数占比不能界定估计对象偏差，即使少量撤销也停止吸收型推断。"""
     rows = []
     for i in range(40):  # 40 个处理国家,各 2 个处理后年份
         rows += [(f"T{i}", 2016, 0.0), (f"T{i}", 2017, 1.0), (f"T{i}", 2018, 1.0)]
@@ -146,9 +146,9 @@ def test_small_share_reversal_is_warning_and_keeps_inference():
             rows.append((f"C{i}", y, 0.0))
     s = _support(_panel(rows))
     assert s.reversal_entities == ["T0"]
-    assert 0 < s.reversal_share < MAX_REVERSAL_SHARE
-    assert s.status == STATUS_WARNING
-    assert s.suppress_inference is False
+    assert 0 < s.reversal_share < 0.05
+    assert s.status == STATUS_INVALID_DESIGN
+    assert s.suppress_inference is True
 
 
 def test_reversal_ignored_for_non_absorbing_estimator():
@@ -303,14 +303,14 @@ def test_sanctions_intensity_twfe_is_not_invalid_design(panel):
 
 
 @needs_panel
-def test_tariff_did_keeps_inference_but_discloses_small_reversal(panel, ci_synthetic_contract):
-    """关税 mock 只有极少数撤销(钢铝关税取消),披露即可,不必抑制推断。"""
+def test_tariff_did_stops_inference_for_small_reversal(panel, ci_synthetic_contract):
+    """任何撤销都与持续处理的吸收型 ATT 不相容。"""
     result = run_design(panel, RegressionDesign(outcome="trade", shock_type="tariff"))
-    assert result.status == STATUS_WARNING
-    assert 0 < result.support["reversal_share"] < MAX_REVERSAL_SHARE
+    assert result.status == STATUS_INVALID_DESIGN
+    assert 0 < result.support["reversal_share"] < 0.05
     if ci_synthetic_contract is None:
-        assert result.support["untreated_clusters"] == 3  # 行业特定出口暴露使 3 个国家聚类全程未处理
+        assert result.support["untreated_clusters"] == int((panel.groupby("country")["treated"].max() == 0).sum())
         assert result.support["untreated_entities"] > 0  # 但仍有许多从未受处理的国家×行业实体
     else:
         assert result.support["untreated_clusters"] == ci_synthetic_contract["expected_tariff_untreated_clusters"]
-    assert all(coef.p is not None for coef in result.coefs)
+    assert all(coef.p is None and coef.ci_low is None for coef in result.coefs)

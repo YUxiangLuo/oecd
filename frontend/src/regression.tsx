@@ -375,6 +375,7 @@ function VerdictCard({ outcome, response, stale }: {
         <div><span>95% 置信区间</span><b>{verdict.interval}</b></div>
       </div>
       <p>{verdict.evidence}</p>
+      <p className="muted">95% 区间是逐项区间，不是四项结果或整条动态路径的同时置信带。</p>
       <p>{verdict.interpretation}</p>
       {support && (
         // 处理支持度必须和结论一起出现:总聚类很多、处理聚类极少,
@@ -382,6 +383,7 @@ function VerdictCard({ outcome, response, stale }: {
         <p className="verdict-support">
           处理支持度：<b>{support.treated_clusters}</b> 个处理聚类 ·{" "}
           <b>{support.untreated_clusters}</b> 个估计样本内完全未暴露聚类 · 共 {response.result.n_clusters} 个聚类
+          {support.paired_control_clusters != null && <> · {support.paired_control_clusters} 个实际配对贡献对照聚类</>}
           （{support.treated_entities} 个含处理后暴露行的实体 · {support.untreated_entities ?? "未记录"} 个估计样本内未暴露实体，后者可能包括冻结 cohort 中仅保留冲击前行的实体）
         </p>
       )}
@@ -781,14 +783,14 @@ export function QualifiedRegressionRunCard({
         ? "估计完成，但保存失败"
         : "无效的本地回归快照";
   const heading = cardState === "confirmed"
-    ? "第 15 步将使用的回归结果"
+    ? "已保留的可推断回归快照"
     : cardState === "pending" || cardState === "failed"
       ? "正在确认这份回归结果"
-      : "第 15 步不会使用的回归结果";
+      : "这份快照当前不可作推断";
   const qualificationCopy = !qualified
-    ? "这份结果不再满足可报告门槛；第 15 步服务端不会使用它。"
+    ? "这份快照不再满足推断门槛；报告主表采用最近一次完整估计或诊断，不把该快照当作可推断结果。"
     : serverConfirmed
-      ? `服务器已确认这份结果；结果状态为“${regressionStatusLabel(saved.result.status)}”。`
+      ? `服务器已确认这份对照快照；报告主表采用本步最新完整结果。该快照状态为“${regressionStatusLabel(saved.result.status)}”。`
       : sessionSyncError
         ? "同步失败；第15步不会在服务器确认前使用"
         : sessionSyncing
@@ -1029,7 +1031,7 @@ export function RegressionRunLab({
         };
         return { ...current, [outcome]: [snapshot, ...prior].slice(0, 3) };
       });
-      // 最近一次 run 供本页恢复；合格快照单独保留，避免不足设计盖掉报告门槛。
+      // 最新完整 run（含不可推断诊断）进入主表；先前可推断快照另存供对照。
       const saved = nextRegressionSave(state.data, {
         settings: runSettings, design: response.design, result: response.result,
       });
@@ -1176,7 +1178,7 @@ export function RegressionRunLab({
         )}
         <details className="advanced-settings">
           <summary>换冲击、方法或样本口径（选做）</summary>
-          <p className="muted">{lesson.guidedExperiment} 三类冲击的支持度不同，见步骤 10；本步主路径默认关税，是因为它通常能给出可报告估计。</p>
+          <p className="muted">{lesson.guidedExperiment} 三类冲击的支持度不同，见步骤 10；本步主路径默认关税以便比较多国政策路径；撤销和支持不足也是应报告的实验发现。</p>
           <div className="model-controls">
             <div className="model-control"><span className="model-control-label">比较方式</span><Pills label="估计方法" options={options?.methods ?? []} value={method} onChange={(value) => setSetting("method", value)} labelMap={methodLabels} disabled={settingsDisabled} /></div>
             <div className="model-control"><span className="model-control-label">粒度</span><Pills label="分析粒度" options={allowedGranularities} value={effectiveGranularity} onChange={(value) => setSetting("granularity", value)} labelMap={options?.granularity_labels} disabled={settingsDisabled} /></div>
@@ -1258,7 +1260,7 @@ export function RegressionRunLab({
           {state.data?.qualified_run && !isQualifiedRegressionResult(
             result.result, result.design.method, result.design.interaction,
           ) && (
-            <p className="muted">本次结果不能作为报告中的有效回归；已保留先前一次可报告的估计。</p>
+            <p className="muted">本次完整诊断也可写入报告。先前可推断估计保留供核对，不能用它替换或隐藏本次设计限制。</p>
           )}
           {expectedReadingAnswer && resultIdentity && (
             <RegressionReadingCheck
@@ -1380,7 +1382,7 @@ export function RegressionRunLab({
               <p className="muted">
                 · 处理时点先由完整冲击历史 {result.result.sample_flow.timing_source_rows.toLocaleString("zh-CN")} 行冻结，
                 再从结构合格样本 {result.result.sample_flow.structural_eligible_rows.toLocaleString("zh-CN")} 行筛至估计样本 {result.result.sample_flow.estimation_rows.toLocaleString("zh-CN")} 行；
-                因 outcome / 控制等缺失合计删除 {result.result.sample_flow.dropped_rows_total.toLocaleString("zh-CN")} 行。
+                因结果/控制缺失或无法配对合计排除 {result.result.sample_flow.dropped_rows_total.toLocaleString("zh-CN")} 行。
               </p>
             )}
             {result.result.notes.map((note) => <p key={note} className="muted">· {note}</p>)}
