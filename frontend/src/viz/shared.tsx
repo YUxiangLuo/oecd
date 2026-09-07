@@ -115,7 +115,7 @@ const ISO3_TO_ISO2: Record<string, string> = {
   KHM: "KH", KOR: "KR", LAO: "LA", LTU: "LT", LUX: "LU", LVA: "LV", MAR: "MA", MEX: "MX",
   MLT: "MT", MMR: "MM", MYS: "MY", NGA: "NG", NLD: "NL", NOR: "NO", NZL: "NZ", PAK: "PK",
   PER: "PE", PHL: "PH", POL: "PL", PRT: "PT", ROU: "RO", RUS: "RU", SAU: "SA", SEN: "SN",
-  SGP: "SG", SVK: "SK", SVN: "SI", SWE: "SE", THA: "TH", TUN: "TN", TUR: "TR", TWN: "TW",
+  SGP: "SG", SVK: "SK", SVN: "SI", SWE: "SE", THA: "TH", TUN: "TN", TUR: "TR",
   UKR: "UA", USA: "US", VNM: "VN", ZAF: "ZA",
 };
 
@@ -123,7 +123,8 @@ const ISO3_TO_ISO2: Record<string, string> = {
  * 固定宽度国别标记。使用普通拉丁字母，避免 Linux/精简系统缺少彩色 Emoji
  * 字体时把区域指示符国旗渲染成方框。ROW 是账户闭合余项，不对应主权旗帜。
  */
-export const countryMarker = (code: string): string => ISO3_TO_ISO2[code] ?? code.slice(0, 3);
+export const countryMarker = (code: string): string =>
+  code === "TWN" ? "TWN" : ISO3_TO_ISO2[code] ?? code.slice(0, 3);
 
 /** 散点/象限图上始终标注的重点经济体(右栏提示常让学生对照中美德日) */
 export const KEY_ECONOMIES = new Set(["CHN", "USA", "DEU", "JPN"]);
