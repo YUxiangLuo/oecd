@@ -1801,7 +1801,7 @@ def _panelols_estimate(
         entity_effects=True,
         time_effects=True,
         drop_absorbed=True,
-    ).fit(cov_type="clustered", clusters=clusters)
+    ).fit(cov_type="clustered", clusters=clusters, group_debias=True)
 
     critical = float(stats.t.ppf(0.975, n_clusters - 1))
     coefs = []
@@ -1894,7 +1894,7 @@ def _summarize_benchmark(
     coef_check_passed = max_coef < 1e-8
     # 逐项按自身量级比较，不能让大标准误掩盖小标准误（如交互项）的偏差。
     se_check_passed = all(
-        abs(float(row["se_diff"])) / max(abs(float(row["own_se"])), abs(float(row["panelols_se"])), 1e-12) < 0.02
+        abs(float(row["se_diff"])) <= 1e-10 + 1e-6 * max(abs(float(row["own_se"])), abs(float(row["panelols_se"])))
         for row in rows
     )
     return {
@@ -1905,10 +1905,10 @@ def _summarize_benchmark(
         "coef_check_passed": coef_check_passed,
         "se_check_passed": se_check_passed,
         "benchmark_passed": coef_check_passed and se_check_passed,
-        "se_check_mode": "relative_tolerance_2pct",
+        "se_check_mode": "matched_cr1_atol_1e-10_rtol_1e-6",
         "notes": [
             *lm.notes,
-            "PanelOLS 对照同时门禁政策系数与聚类标准误；标准误相对差异必须低于 2%。",
+            "PanelOLS 与自写引擎均使用含吸收固定效应自由度的国家聚类 CR1 修正；标准误容差为 1e-10 + 1e-6 × SE 量级。",
         ],
     }
 

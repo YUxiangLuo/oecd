@@ -45,13 +45,13 @@ from gvcsim.indicators.core import build_arrays
 
 
 class QualityGateError(RuntimeError):
-    """An integrity failure stopped publication."""
+    """An integrity or mathematical failure stopped publication."""
 
     def __init__(self, scope: str, summary: dict):
         self.scope = scope
         self.summary = summary
         names = "、".join(summary.get("failures") or [])
-        super().__init__(f"{scope} 存在完整性检查失败，已停止发布: {names}")
+        super().__init__(f"{scope} 存在完整性或数学检查失败，已停止发布: {names}")
 
 
 @contextmanager
@@ -76,7 +76,7 @@ def _using_processed_dir(path: Path):
 
 
 def _gate_integrity(scope: str, checks: list[quality.QcCheck], blocking_kinds: list[str]) -> dict:
-    """Block malformed inputs while leaving economic/numeric findings as disclosure."""
+    """Block integrity/mathematical failures; retain economic diagnostics."""
     summary = integrity_check_summary([check.to_dict() for check in checks], blocking_kinds)
     if not summary["passed"]:
         raise QualityGateError(scope, summary)

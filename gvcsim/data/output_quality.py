@@ -20,11 +20,11 @@ from gvcsim.indicators.network import NETWORK_COLUMNS
 from gvcsim.indicators.production import PRODUCTION_COLUMNS
 from gvcsim.indicators.tradeflow import TRADE_COLUMNS
 
-OUTPUT_QC_CONTRACT_VERSION = 3
+OUTPUT_QC_CONTRACT_VERSION = 4
 OUTPUT_QC_ABS_TOLERANCE = 1e-8
 OUTPUT_QC_REL_TOLERANCE = 1e-8
 OUTPUT_QC_DENOMINATOR_FLOOR = 1e-12
-OUTPUT_QC_SEVERITIES = ("ok", "fatal")
+OUTPUT_QC_SEVERITIES = ("ok", "warning", "fatal")
 OUTPUT_QC_SELF_LOOP_POLICY = "forbidden: country network edge artifacts exclude domestic flows"
 
 TRADE_CLOSURE_COLUMNS = ("DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub")
@@ -72,22 +72,22 @@ OUTPUT_CHECK_SPECS = (
     ),
     OutputCheckSpec(
         "trade_identities",
-        "numeric",
+        "mathematical",
         "Finite signed trade terms; six closure amounts equal gross_exports where persisted; EXDVA=DVAex+DVArt.",
     ),
     OutputCheckSpec(
         "production_identities",
-        "numeric",
+        "mathematical",
         "Finite forward and backward amounts; components 1+2+3 equal totals and 3a+3b equal component 3.",
     ),
     OutputCheckSpec(
         "length_domains_and_identities",
-        "numeric",
+        "mathematical",
         "Lengths are finite exactly on structural denominator support; position ratios and observable segment weighting close.",
     ),
     OutputCheckSpec(
         "country_industry_additivity",
-        "numeric",
+        "mathematical",
         "Country additive trade/production amounts equal grouped country-industry amounts; ratios and shares are not summed.",
     ),
     OutputCheckSpec(
@@ -97,13 +97,18 @@ OUTPUT_CHECK_SPECS = (
     ),
     OutputCheckSpec(
         "network_indicators",
-        "numeric",
+        "mathematical",
         "Network metrics are finite/in-domain; degree and weighted-degree component identities hold.",
     ),
     OutputCheckSpec(
         "panel_shares",
-        "numeric",
-        "Panel share fields are null outside positive denominators and finite in [0,1] with their ratio identity otherwise.",
+        "mathematical",
+        "Panel share fields are null outside positive denominators and otherwise finite and equal to numerator/denominator, including signed values.",
+    ),
+    OutputCheckSpec(
+        "panel_share_economic_domains",
+        "economic",
+        "Shares outside [0,1] require economic disclosure (signed VA/TLS or source rounding), independently of the mathematical ratio identity.",
     ),
 )
 OUTPUT_QC_EXPECTED_CHECKS = tuple(spec.name for spec in OUTPUT_CHECK_SPECS)
@@ -121,8 +126,8 @@ def output_qc_contract_metadata() -> dict:
             {
                 "name": spec.name,
                 "kind": spec.kind,
-                "failure_severity": "fatal",
-                "publication_blocking": spec.kind in {"structure", "integrity"},
+                "failure_severity": "warning" if spec.kind == "economic" else "fatal",
+                "publication_blocking": spec.kind in {"structure", "integrity", "mathematical"},
                 "description": spec.description,
             }
             for spec in OUTPUT_CHECK_SPECS
@@ -166,7 +171,7 @@ def _check(spec_name: str, passed: bool, detail: str) -> dict:
         "kind": spec.kind,
         "passed": bool(passed),
         "detail": detail,
-        "severity": "ok" if passed else "fatal",
+        "severity": "ok" if passed else "warning" if spec.kind == "economic" else "fatal",
     }
 
 
@@ -194,7 +199,7 @@ def validate_serialized_output_checks(checks: object, *, contract_version: int) 
         spec = specs.get(name)
         if spec is not None and raw["kind"] != spec.kind:
             raise ValueError(f"output QC check {name} has invalid kind")
-        expected_severity = "ok" if raw["passed"] else "fatal"
+        expected_severity = "ok" if raw["passed"] else "warning" if spec and spec.kind == "economic" else "fatal"
         if raw["severity"] not in OUTPUT_QC_SEVERITIES or raw["severity"] != expected_severity:
             raise ValueError(f"output QC check {name} has malformed severity")
         names.append(name)
@@ -209,19 +214,20 @@ def validate_serialized_output_checks(checks: object, *, contract_version: int) 
 
 def summarize_output_checks(checks: list[dict]) -> dict:
     validate_serialized_output_checks(checks, contract_version=OUTPUT_QC_CONTRACT_VERSION)
-    fatal = [item["name"] for item in checks if not item["passed"]]
+    fatal = [item["name"] for item in checks if item["severity"] == "fatal"]
+    warnings = [item["name"] for item in checks if item["severity"] == "warning"]
     passed = [item["name"] for item in checks if item["passed"]]
-    return {"publishable": not fatal, "fatal": fatal, "passed": passed}
+    return {"publishable": not fatal, "fatal": fatal, "warnings": warnings, "passed": passed}
 
 
 def validate_output_summary(value: object, checks: list[dict]) -> None:
-    if not isinstance(value, dict) or set(value) != {"publishable", "fatal", "passed"}:
+    if not isinstance(value, dict) or set(value) != {"publishable", "fatal", "warnings", "passed"}:
         raise ValueError("output QC summary has malformed fields")
     if type(value.get("publishable")) is not bool:
         raise ValueError("output QC summary publishable must be boolean")
-    if not isinstance(value.get("fatal"), list) or not isinstance(value.get("passed"), list):
+    if any(not isinstance(value.get(key), list) for key in ("fatal", "warnings", "passed")):
         raise ValueError("output QC summary lists are malformed")
-    if any(type(item) is not str for key in ("fatal", "passed") for item in value[key]):
+    if any(type(item) is not str for key in ("fatal", "warnings", "passed") for item in value[key]):
         raise ValueError("output QC summary names are malformed")
     if value != summarize_output_checks(checks):
         raise ValueError("output QC summary does not match its check file")
@@ -674,17 +680,29 @@ def _panel_shares(frames: dict[str, pd.DataFrame], year: int) -> dict:
             defined = np.isfinite(denominator) & (denominator > 0)
             expected = numerator / np.where(defined, denominator, 1.0)
             violations += int((defined & ~_close(share, expected)).sum())
-            violations += int(
-                (defined & ((share < -OUTPUT_QC_ABS_TOLERANCE) | (share > 1 + OUTPUT_QC_ABS_TOLERANCE))).sum()
-            )
             violations += int((~defined & ~np.isnan(share)).sum())
         checked += len(frame)
     return _check(
         "panel_shares",
         not missing and violations == 0,
-        f"year={year}; rows={checked}; violations={violations}; defined_when=denominator>0; domain=[0,1]; "
+        f"year={year}; rows={checked}; violations={violations}; defined_when=denominator>0; signed_ratio_identity=true; "
         f"abs_tol={OUTPUT_QC_ABS_TOLERANCE}; rel_tol={OUTPUT_QC_REL_TOLERANCE}"
         + (f"; missing={missing}" if missing else ""),
+    )
+
+
+def _panel_share_economic_domains(frames: dict[str, pd.DataFrame], year: int) -> dict:
+    violations = 0
+    for label in ("panel_country_year", "panel_industry_year"):
+        for share_name in PANEL_SHARE_DENOMINATORS:
+            if share_name not in frames[label]:
+                continue  # Missing columns are handled by the integrity/identity checks.
+            values = pd.to_numeric(frames[label][share_name], errors="coerce")
+            violations += int(((values < -OUTPUT_QC_ABS_TOLERANCE) | (values > 1 + OUTPUT_QC_ABS_TOLERANCE)).sum())
+    return _check(
+        "panel_share_economic_domains",
+        violations == 0,
+        f"year={year}; outside_[0,1]={violations}; signed VA/TLS and source rounding require disclosure, not clipping",
     )
 
 
@@ -725,6 +743,7 @@ def recompute_output_checks(root: Path, year: int, *, expected_years: list[int])
         _network_edges,
         _network_indicators,
         _panel_shares,
+        _panel_share_economic_domains,
     )
     checks = [runner(frames, year) for runner in runners]
     validate_serialized_output_checks(checks, contract_version=OUTPUT_QC_CONTRACT_VERSION)
@@ -732,13 +751,15 @@ def recompute_output_checks(root: Path, year: int, *, expected_years: list[int])
 
 
 def write_output_qc(root: Path, year: int, *, expected_years: list[int]) -> tuple[list[dict], dict]:
-    """Persist all diagnostics, blocking publication only on structural integrity."""
+    """Persist diagnostics before rejecting integrity or mathematical failures."""
     checks = recompute_output_checks(root, year, expected_years=expected_years)
     summary = summarize_output_checks(checks)
     path = root / f"qc_outputs_{year}.json"
     path.write_text(json.dumps(checks, ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     integrity_failures = [
-        check["name"] for check in checks if check["kind"] in {"structure", "integrity"} and not check["passed"]
+        check["name"]
+        for check in checks
+        if check["kind"] in {"structure", "integrity", "mathematical"} and not check["passed"]
     ]
     if integrity_failures:
         raise OutputQualityError(f"year {year} output integrity checks failed: {integrity_failures}")

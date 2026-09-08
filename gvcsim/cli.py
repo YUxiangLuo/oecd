@@ -74,11 +74,14 @@ def main() -> None:
             for w in c.warnings:
                 print(f"      ⚠ {w}")
         summary = quality.summarize_checks(checks)
-        integrity_failures = [check.name for check in checks if check.kind in {"结构", "完整性"} and not check.passed]
+        from gvcsim.artifacts import publication_policy_metadata
+
+        blocking = publication_policy_metadata()["blocking_kinds"]["icio"]
+        integrity_failures = [check.name for check in checks if check.kind in blocking and not check.passed]
         if integrity_failures:
-            conclusion = f"存在完整性异常，数据不得发布：{'、'.join(integrity_failures)}。"
+            conclusion = f"存在完整性或数学异常，数据不得发布：{'、'.join(integrity_failures)}。"
         elif summary["fatal"]:
-            conclusion = "存在数值或经济诊断发现；不阻断发布，但必须持续披露。"
+            conclusion = "存在经济账户诊断发现；不阻断发布，但必须持续披露。"
         elif summary["requires_disclosure"]:
             conclusion = "无 fatal 异常；数据可使用，但必须持续披露上述 warning/disclosure。"
         else:
@@ -91,7 +94,7 @@ def main() -> None:
         try:
             pipeline.run(args.years)
         except pipeline.QualityGateError as error:
-            raise SystemExit(f"{error}\n请修复输入完整性后重新计算。") from error
+            raise SystemExit(f"{error}\n请修复完整性或数学检查失败后重新计算。") from error
     elif args.command == "serve":
         import uvicorn
 

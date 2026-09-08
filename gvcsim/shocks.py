@@ -5,7 +5,7 @@
 全球贸易摩擦为原型,按真实事件逐条编码,覆盖 76 个具名经济体与 ROW 剩余地区账户、45 个行业:
 
   事件层(税率量级参考 PIIE / Bown (2021) 公布的统计,非精确值):
-    · 美国 201 保障措施(光伏/洗衣机)—— 全球所有对美出口国
+    · 美国 201 保障措施 —— 光伏/洗衣机各自的国别豁免及 2019 年印度、土耳其取消豁免
     · 美国 232 钢铝关税 —— 全球(澳豁免、阿/巴/韩配额、加墨中途豁免、土一度加倍)
     · 美国 301 对华关税四批清单 —— 行业异质、逐年加码、第一阶段协议后部分回调
     · 中方对美反制 —— 农产品/能源/汽车为主
@@ -553,8 +553,6 @@ def demo_shock_panel(
                     if y not in years or rate <= 0:
                         continue
                     w = _exposure(c, s, tariff_event.imposer, y, exposure_lookup, mode=exposure_mode, panel_years=years)
-                    if w <= 0:
-                        continue
                     contrib = rate * w
                     contemporaneous = rate * _exposure(
                         c,
@@ -568,7 +566,9 @@ def demo_shock_panel(
                     tariff_key = (c, s, y)
                     shock[tariff_key] = shock.get(tariff_key, 0.0) + contrib
                     shock_contemporaneous[tariff_key] = shock_contemporaneous.get(tariff_key, 0.0) + contemporaneous
-                    if tariff_key not in main_event or contrib > main_event[tariff_key][0]:
+                    # Fixed and contemporaneous weights have independent support.
+                    # A zero baseline must not discard newly appearing trade.
+                    if contrib > 0 and (tariff_key not in main_event or contrib > main_event[tariff_key][0]):
                         main_event[tariff_key] = (contrib, tariff_event)
 
     base = pd.MultiIndex.from_product([countries, sectors, years], names=["country", "sector", "year"]).to_frame(

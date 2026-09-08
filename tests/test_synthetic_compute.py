@@ -140,16 +140,17 @@ def test_degenerate_synthetic_staged_release_discloses_regression_design_finding
     assert "configured_outcomes" in metadata["regression_input_qc"]["fatal"]
 
 
-def test_integrity_gate_blocks_structure_but_not_numeric_diagnostics():
+def test_integrity_gate_blocks_structure_but_not_economic_diagnostics():
     diagnostics = [
         QcCheck(name="structure ok", kind="结构", passed=True),
-        QcCheck(name="numeric finding", kind="数值", passed=False),
+        QcCheck(name="economic finding", kind="经济含义", passed=False),
     ]
-    summary = pipeline._gate_integrity("test", diagnostics, ["结构", "完整性"])
+    blocking = artifacts.publication_policy_metadata()["blocking_kinds"]["icio"]
+    summary = pipeline._gate_integrity("test", diagnostics, blocking)
     assert summary["passed"] is True
     failed = [QcCheck(name="structure failed", kind="结构", passed=False)]
     with pytest.raises(pipeline.QualityGateError, match="停止发布"):
-        pipeline._gate_integrity("test", failed, ["结构", "完整性"])
+        pipeline._gate_integrity("test", failed, blocking)
 
 
 def _contract_checks(scope: str) -> list[dict]:
@@ -306,7 +307,7 @@ def test_run_builds_sentinel_switches_pointer_and_never_touches_database(tmp_pat
     assert set(metadata["qc"]) == {"years", "controls", "shocks"}
     assert metadata["qc_contract"] == quality.qc_contract_metadata()
     assert metadata["shock_contract"] == shocks.shock_contract_metadata()
-    assert metadata["artifact_contract_version"] == 12
+    assert metadata["artifact_contract_version"] == 13
     assert metadata["publication_policy"] == artifacts.publication_policy_metadata()
     assert metadata["integrity"]["status"] == "passed"
     assert metadata["output_qc_contract"] == output_quality.output_qc_contract_metadata()

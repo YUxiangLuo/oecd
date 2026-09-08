@@ -243,8 +243,10 @@ describe("buildRegressionVerdict", () => {
     expect(chartDisplayScale("trade", "did")).toEqual({ scale: 100, unit: "个百分点" });
     expect(chartDisplayScale("production", "event_study")).toEqual({ scale: 100, unit: "个百分点" });
     expect(chartDisplayScale("trade", "twfe_intensity")).toEqual({ scale: 1, unit: "个百分点" });
-    expect(chartDisplayScale("length", "did")).toEqual({ scale: 1 });
-    expect(chartDisplayScale("network", "did")).toEqual({ scale: 1 });
+    expect(chartDisplayScale("length", "did")).toEqual({ scale: 1, unit: "长度单位" });
+    expect(chartDisplayScale("network", "did")).toEqual({ scale: 1, unit: "中心性原始单位" });
+    expect(chartDisplayScale("length", "twfe_intensity")).toEqual({ scale: 0.01, unit: "长度单位" });
+    expect(chartDisplayScale("network", "twfe_intensity")).toEqual({ scale: 0.01, unit: "中心性原始单位" });
   });
 
   test("suppressed inference is not reported as a confidence interval crossing zero", () => {

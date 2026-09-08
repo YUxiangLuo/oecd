@@ -424,7 +424,7 @@ def _release(directory: Path, *, course_release: str | None = None) -> None:
     )
 
 
-def test_v12_release_requires_integrity_regression_shock_output_qc_manifest_and_identity(tmp_path):
+def test_v13_release_requires_integrity_mathematics_regression_qc_manifest_and_identity(tmp_path):
     _release(tmp_path)
 
     result = artifacts.validate_release(tmp_path)
@@ -432,7 +432,7 @@ def test_v12_release_requires_integrity_regression_shock_output_qc_manifest_and_
 
     assert result == {"release_id": RELEASE_ID, "files": 26, "years": 3}
     assert artifacts.release_identity(tmp_path) == RELEASE_ID
-    assert metadata["artifact_contract_version"] == 12
+    assert metadata["artifact_contract_version"] == 13
     assert metadata["publication_policy"] == artifacts.publication_policy_metadata()
     assert metadata["integrity"]["status"] == "passed"
     assert "冲击数值字段完整性(*_shock有限且treated为0/1)" in metadata["integrity"]["scopes"]["shocks"]["checked"]
@@ -1085,10 +1085,11 @@ def test_regression_input_qc_missing_contract_file_and_summary_tamper_fail(tmp_p
         artifacts.validate_release(tmp_path)
 
 
-def test_artifact_v11_is_rejected_and_v12_is_required(tmp_path):
+@pytest.mark.parametrize("old_version", [11, 12])
+def test_old_artifacts_are_rejected_and_v13_is_required(tmp_path, old_version):
     _release(tmp_path)
-    _tamper_signed_metadata(tmp_path, lambda metadata: metadata.__setitem__("artifact_contract_version", 11))
-    with pytest.raises(artifacts.ArtifactContractError, match="expected 12, got 11"):
+    _tamper_signed_metadata(tmp_path, lambda metadata: metadata.__setitem__("artifact_contract_version", old_version))
+    with pytest.raises(artifacts.ArtifactContractError, match=f"expected 13, got {old_version}"):
         artifacts.validate_release(tmp_path)
 
 
@@ -1113,11 +1114,11 @@ def test_publication_policy_matches_every_contract_blocking_kind():
     }
 
 
-def test_release_keeps_numeric_fatal_as_disclosure_but_forbids_override(tmp_path):
+def test_release_rejects_mathematical_fatal_even_with_valid_manifest_and_summary(tmp_path):
     _release(tmp_path)
     path = tmp_path / "qc_2020.json"
     checks = json.loads(path.read_text(encoding="utf-8"))
-    numeric = next(check for check in checks if check["kind"] == "数值")
+    numeric = next(check for check in checks if check["kind"] == "数学")
     numeric["passed"] = False
     numeric["severity"] = "fatal"
     path.write_text(json.dumps(checks, ensure_ascii=False), encoding="utf-8")
@@ -1125,7 +1126,8 @@ def test_release_keeps_numeric_fatal_as_disclosure_but_forbids_override(tmp_path
     metadata["qc"]["years"]["2020"] = quality.summarize_serialized_checks(checks, override=False)
     metadata["integrity"] = artifacts.release_integrity_metadata(tmp_path, metadata["years"])
     _rewrite_metadata(tmp_path, metadata)
-    assert artifacts.validate_release(tmp_path)["release_id"] == RELEASE_ID
+    with pytest.raises(artifacts.ArtifactContractError, match="integrity"):
+        artifacts.validate_release(tmp_path)
 
     metadata = artifacts.dataset_metadata(tmp_path)
     metadata["qc"]["years"]["2020"] = quality.summarize_serialized_checks(checks, override=True)
@@ -1163,20 +1165,27 @@ def test_release_rejects_publication_policy_integrity_and_structural_tampering(t
         artifacts.validate_release(tmp_path)
 
 
-def test_diagnostic_writers_block_structure_and_integrity_but_not_semantic_findings(tmp_path, monkeypatch):
+def test_diagnostic_writers_block_mathematics_but_retain_economic_and_design_findings(tmp_path, monkeypatch):
     output_checks = [
         {
             "name": spec.name,
             "kind": spec.kind,
-            "passed": spec.kind in {"structure", "integrity"},
+            "passed": spec.kind != "economic",
             "detail": "fixture",
-            "severity": "ok" if spec.kind in {"structure", "integrity"} else "fatal",
+            "severity": "warning" if spec.kind == "economic" else "ok",
         }
         for spec in output_quality.OUTPUT_CHECK_SPECS
     ]
     monkeypatch.setattr(output_quality, "recompute_output_checks", lambda *_args, **_kwargs: output_checks)
     _, output_summary = output_quality.write_output_qc(tmp_path, 2020, expected_years=[2020])
-    assert output_summary["publishable"] is False
+    assert output_summary["publishable"] is True
+    assert output_summary["warnings"] == ["panel_share_economic_domains"]
+
+    mathematical = next(check for check in output_checks if check["kind"] == "mathematical")
+    mathematical.update({"passed": False, "severity": "fatal"})
+    with pytest.raises(output_quality.OutputQualityError, match="trade_identities"):
+        output_quality.write_output_qc(tmp_path, 2020, expected_years=[2020])
+    mathematical.update({"passed": True, "severity": "ok"})
 
     output_checks[0].update({"passed": False, "severity": "fatal"})
     with pytest.raises(output_quality.OutputQualityError, match="integrity checks failed"):
@@ -1231,18 +1240,21 @@ def test_output_runtime_numeric_integrity_blocks_malformed_required_fields(tmp_p
         artifacts.validate_release(tmp_path)
 
 
-def test_output_finite_identity_finding_remains_nonblocking(tmp_path):
+def test_output_finite_identity_corruption_blocks_publication_and_retains_diagnostics(tmp_path):
     _release(tmp_path)
     path = tmp_path / "indicators_country_2020.csv"
     frame = pd.read_csv(path)
     frame.loc[frame.index[0], "DVAex"] += 0.25
     frame.to_csv(path, index=False)
 
-    checks, summary = output_quality.write_output_qc(tmp_path, 2020, expected_years=[2018, 2019, 2020])
+    with pytest.raises(output_quality.OutputQualityError, match="trade_identities"):
+        output_quality.write_output_qc(tmp_path, 2020, expected_years=[2018, 2019, 2020])
+    checks = json.loads((tmp_path / "qc_outputs_2020.json").read_text())
+    summary = output_quality.summarize_output_checks(checks)
     integrity = next(check for check in checks if check["name"] == "required_numeric_fields")
     trade = next(check for check in checks if check["name"] == "trade_identities")
     assert integrity["passed"] is True
-    assert trade["passed"] is False and trade["kind"] == "numeric"
+    assert trade["passed"] is False and trade["kind"] == "mathematical"
     assert summary["publishable"] is False
 
 

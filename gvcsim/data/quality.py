@@ -68,7 +68,7 @@ QC_WARNING = "warning"
 QC_FATAL = "fatal"
 QC_SEVERITIES = (QC_OK, QC_DISCLOSURE, QC_WARNING, QC_FATAL)
 
-QC_CONTRACT_VERSION = 4
+QC_CONTRACT_VERSION = 5
 QC_SCOPE_ICIO = "icio"
 QC_SCOPE_CONTROLS = "controls"
 QC_SCOPE_SHOCKS = "shocks"
@@ -101,9 +101,9 @@ QC_EXPECTED_CHECKS: dict[str, tuple[str, ...]] = {
     ),
 }
 QC_EXPECTED_KINDS: dict[str, tuple[str, ...]] = {
-    QC_SCOPE_ICIO: ("结构", "完整性", "完整性", "经济含义", "经济含义", "经济含义", "数值", "结构"),
-    QC_SCOPE_CONTROLS: ("结构", "结构", "完整性", "经济含义", "经济含义"),
-    QC_SCOPE_SHOCKS: ("结构", "完整性", "数值", "结构", "数值", "经济含义", "来源"),
+    QC_SCOPE_ICIO: ("结构", "完整性", "完整性", "数学", "经济含义", "数学", "数学", "结构"),
+    QC_SCOPE_CONTROLS: ("结构", "结构", "完整性", "数学", "经济含义"),
+    QC_SCOPE_SHOCKS: ("结构", "完整性", "数值", "结构", "数学", "经济含义", "来源"),
 }
 QC_FAILURE_SEVERITIES: dict[str, dict[str, str]] = {
     scope: {
@@ -126,9 +126,9 @@ def qc_contract_metadata() -> dict:
                     "failure_severity": QC_FAILURE_SEVERITIES[scope][name],
                     "publication_blocking": QC_EXPECTED_KINDS[scope][index]
                     in {
-                        QC_SCOPE_ICIO: {"结构", "完整性"},
-                        QC_SCOPE_CONTROLS: {"结构", "完整性"},
-                        QC_SCOPE_SHOCKS: {"结构", "完整性", "来源"},
+                        QC_SCOPE_ICIO: {"结构", "完整性", "数学"},
+                        QC_SCOPE_CONTROLS: {"结构", "完整性", "数学"},
+                        QC_SCOPE_SHOCKS: {"结构", "完整性", "来源", "数学"},
                     }[scope],
                 }
                 for index, name in enumerate(names)
@@ -404,7 +404,7 @@ def _accounting_check(name: str, formula: str, computed: pd.Series, reported: pd
     if reported is None:
         return QcCheck(
             name=name,
-            kind="经济含义",
+            kind="数学",
             passed=False,
             detail="无法读取并对齐 OECD 原始 OUT 账户，不能进行独立对账",
         )
@@ -415,7 +415,7 @@ def _accounting_check(name: str, formula: str, computed: pd.Series, reported: pd
         count = int((~finite).sum())
         return QcCheck(
             name=name,
-            kind="经济含义",
+            kind="数学",
             passed=False,
             detail=f"{formula} 对账中存在 {count} 个 NaN/Inf",
         )
@@ -438,7 +438,7 @@ def _accounting_check(name: str, formula: str, computed: pd.Series, reported: pd
 
     return QcCheck(
         name=name,
-        kind="经济含义",
+        kind="数学",
         passed=not bad.any(),
         detail=(
             f"{formula};最大绝对误差 {absolute.max():.4f} Million USD,"
@@ -573,7 +573,7 @@ def check_input_accounting_identity(io) -> QcCheck:
     if not valid:
         return QcCheck(
             name="投入侧恒等式(原始OUT = Z列和 + VA + TLS)",
-            kind="经济含义",
+            kind="数学",
             passed=False,
             detail="缺少 VA/TLS，无法执行投入侧独立对账",
         )
@@ -610,14 +610,14 @@ def check_leontief_inverse(io) -> QcCheck:
     if A.ndim != 2 or A.shape[0] != A.shape[1] or L.shape != A.shape:
         return QcCheck(
             name="里昂惕夫逆矩阵数值稳定性(残差/谱半径/条件数/非负性)",
-            kind="数值",
+            kind="数学",
             passed=False,
             detail=f"A{A.shape} 与 L{L.shape} 不是同维方阵",
         )
     if not np.isfinite(A).all() or not np.isfinite(L).all():
         return QcCheck(
             name="里昂惕夫逆矩阵数值稳定性(残差/谱半径/条件数/非负性)",
-            kind="数值",
+            kind="数学",
             passed=False,
             detail="A 或 L 含 NaN/Inf",
         )
@@ -633,7 +633,7 @@ def check_leontief_inverse(io) -> QcCheck:
     except Exception as error:  # ARPACK 失败意味着无法完成发布所需的稳定性证明
         return QcCheck(
             name="里昂惕夫逆矩阵数值稳定性(残差/谱半径/条件数/非负性)",
-            kind="数值",
+            kind="数学",
             passed=False,
             detail=f"谱半径计算失败: {type(error).__name__}: {error}",
         )
@@ -655,7 +655,7 @@ def check_leontief_inverse(io) -> QcCheck:
 
     return QcCheck(
         name="里昂惕夫逆矩阵数值稳定性(残差/谱半径/条件数/非负性)",
-        kind="数值",
+        kind="数学",
         passed=not fatal,
         detail=(f"(I-A)L 最大误差 {max_err:.2e},谱半径 {rho:.6f},1-范数条件数 {condition_1:.3e},L最小值 {min_l:.3e}"),
         warnings=warnings,
@@ -804,7 +804,7 @@ def check_controls_country(
     checks.append(
         QcCheck(
             name="控制变量构造恒等式",
-            kind="经济含义",
+            kind="数学",
             passed=max_identity_diff < 1e-9 and not base_checks,
             detail=f"log GDP - log population - log per capita 最大误差 {max_identity_diff:.2e}",
             warnings=base_checks,
@@ -971,7 +971,7 @@ def check_shock_panel(
     checks.append(
         QcCheck(
             name="treated 标记与阈值一致",
-            kind="数值",
+            kind="数学",
             passed=not mismatch.any(),
             detail=f"有限且二元记录中与 *_shock>{treated_threshold:g} 不一致 {int(mismatch.sum())} 个",
             warnings=[

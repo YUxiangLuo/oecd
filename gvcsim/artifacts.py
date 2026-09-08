@@ -15,13 +15,13 @@ from typing import Any
 import pandas as pd
 
 
-ARTIFACT_CONTRACT_VERSION = 12
+ARTIFACT_CONTRACT_VERSION = 13
 ARTIFACT_MANIFEST_ALGORITHM = "sha256"
 ARTIFACT_MANIFEST_NAME = "artifact_manifest"
 METADATA_DIGEST_NAME = "metadata_sha256"
 RELEASE_ID_PATTERN = re.compile(r"^[0-9a-f]{32}$")
 DATASET_METADATA = "dataset.json"
-PUBLICATION_POLICY_MODE = "integrity-only-v1"
+PUBLICATION_POLICY_MODE = "integrity-and-mathematics-v2"
 NETWORK_ALGORITHM = "gephi-compatible-directed-unweighted-positive-v1"
 _csv_cache_lock = threading.RLock()
 
@@ -41,17 +41,17 @@ ArtifactValidationError = ArtifactContractError
 
 
 def publication_policy_metadata() -> dict[str, Any]:
-    """The release blocks malformed structure while retaining numeric diagnostics as disclosure."""
+    """Block integrity and mathematical failures; retain economic/design diagnostics."""
     return {
         "mode": PUBLICATION_POLICY_MODE,
         "blocking_kinds": {
-            "icio": ["结构", "完整性"],
-            "controls": ["结构", "完整性"],
-            "shocks": ["结构", "完整性", "来源"],
-            "outputs": ["structure", "integrity"],
+            "icio": ["结构", "完整性", "数学"],
+            "controls": ["结构", "完整性", "数学"],
+            "shocks": ["结构", "完整性", "来源", "数学"],
+            "outputs": ["structure", "integrity", "mathematical"],
             "regression_inputs": ["structure", "integrity"],
         },
-        "nonblocking_policy": "numeric, economic, and design diagnostics are retained for disclosure",
+        "nonblocking_policy": "Economic-range and regression-design diagnostics remain disclosures; failed source-account/inverse/identity checks block publication, while rounding within account tolerances and near-boundary warnings remain visible.",
     }
 
 
@@ -75,7 +75,7 @@ def integrity_check_summary(checks: object, blocking_kinds: list[str]) -> dict[s
 
 
 def release_integrity_metadata(root: Path, years: list[int]) -> dict[str, Any]:
-    """Rebuild the exact integrity-only decision from persisted diagnostic artifacts."""
+    """Rebuild the integrity and mathematics decision from persisted diagnostics."""
     policy = publication_policy_metadata()["blocking_kinds"]
 
     def read(filename: str) -> object:
@@ -449,7 +449,7 @@ def _validate_release_qc(root: Path, metadata: dict[str, Any]) -> None:
         if not isinstance(expected_summary, dict) or type(expected_summary.get("override")) is not bool:
             raise ArtifactValidationError(f"dataset {scope} QC summary is invalid")
         if expected_summary["override"]:
-            raise ArtifactValidationError("dataset QC override is forbidden by the integrity-only policy")
+            raise ArtifactValidationError("dataset QC override is forbidden by the publication policy")
         checks = read_qc_artifact(root / filename, scope=scope, contract=contract)
         actual_summary = quality.summarize_serialized_checks(
             checks,

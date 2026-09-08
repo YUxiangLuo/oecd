@@ -101,7 +101,12 @@ const signed = (value: number, digits = 3) => `${value >= 0 ? "+" : ""}${value.t
 
 /** 主图/置换图与结论卡同一套显示单位。强度法结论已是“每增加 1 个百分点”，不再 ×100。 */
 export function chartDisplayScale(outcome: RegressionOutcome, method: string): { scale: number; unit?: string } {
-  if (outcome !== "trade" && outcome !== "production") return { scale: 1 };
+  if (outcome !== "trade" && outcome !== "production") {
+    return {
+      scale: method === "twfe_intensity" ? 0.01 : 1,
+      unit: outcome === "length" ? "长度单位" : "中心性原始单位",
+    };
+  }
   return { scale: method === "twfe_intensity" ? 1 : 100, unit: "个百分点" };
 }
 

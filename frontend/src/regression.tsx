@@ -1289,6 +1289,7 @@ export function RegressionRunLab({
 
               <section className="reg-section-card">
                 <span className="reg-section-step">3 · 用图复核，并留到第 15 步和另外三类指标并读</span>
+                {result.design.method === "twfe_intensity" && <p className="muted">图与结论卡均展示冲击强度增加 1 个百分点时的结果变化。</p>}
                 {event ? (
                   <>
                     <EventStudyChart coefs={split?.eventMain ?? []} notes={result.result.notes} title="主政策变化的动态路径" seriesLabel="主效应 βₖ" pretrend={result.result.diagnostics.pretrend} pretrendDiagnostics={result.result.diagnostics} interaction={result.design.interaction} eventSupport={result.result.event_support} globalSupport={result.result.support} globalStatus={result.result.status} scale={display.scale} unit={display.unit} />
@@ -1375,7 +1376,7 @@ export function RegressionRunLab({
         {result && readingCorrect && (
           <>
             <h3>完整系数表</h3>
-            <p className="muted">此表为模型原始单位{display.unit ? "（份额为 0–1）；上方主图按" + display.unit + "展示" : ""}。主效应图只展示政策项。</p>
+            <p className="muted">此表为模型原始单位{outcome === "trade" || outcome === "production" ? "（份额为 0–1）" : ""}；上方主图按{display.unit}展示{result.design.method === "twfe_intensity" ? "冲击强度增加 1 个百分点的变化" : "政策效应"}。主效应图只展示政策项。</p>
             <RegressionCoefficientTable response={result} />
             <p className="muted">N={result.result.n_obs.toLocaleString("zh-CN")} · {result.result.n_entities.toLocaleString("zh-CN")} 个体 × {result.result.n_times} 年 · {result.result.n_clusters} 个聚类 · {result.result.r2_within == null ? "cohort-time ATT 不定义组内 R²" : `组内 R²=${result.result.r2_within.toFixed(4)}`}</p>
             <div className="benchmark-box"><b>估计算术一致性检查</b><p>后端：{result.benchmark.backend}；政策系数最大差异 {result.benchmark.max_abs_coef_diff.toExponential(2)}；{result.benchmark.backend === "saved" ? "原运行的算术明细未随会话快照保存" : result.benchmark.benchmark_passed ?? result.benchmark.coef_check_passed ? "系数与标准误算术门禁通过" : result.benchmark.coef_check_passed ? "点估计重聚合通过；整体设计门禁已抑制标准误检查" : "算术检查未通过，结果不可发布"}。cohort-aware DID 重新聚合逐单元点估计，并用 jackknife 伪值公式复算标准误；连续强度 TWFE 使用 PanelOLS 对照。该检查不是独立因果估计器，也不能验证识别假设。</p></div>

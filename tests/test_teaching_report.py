@@ -806,6 +806,46 @@ def test_report_carries_release_qc_disclosures(tmp_path, monkeypatch):
     assert "补充披露：维度一致性与索引对齐(Z/Y/A/L/x/OUT)" in report.markdown
 
 
+def test_report_discloses_output_economic_warnings_without_blocking_publication(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    metadata = artifacts.dataset_metadata(tmp_path)
+    # A valid signed ratio can lie outside [0, 1]. Exercise the real check and
+    # summary serializer before persisting the warning into a signed release.
+    frame = pd.DataFrame({"FVA_share": [-0.02]})
+    warning = output_quality._panel_share_economic_domains(
+        {"panel_country_year": frame, "panel_industry_year": frame}, 2020
+    )
+    path = tmp_path / "qc_outputs_2020.json"
+    checks = json.loads(path.read_text())
+    checks = [warning if check["name"] == warning["name"] else check for check in checks]
+    path.write_text(json.dumps(checks), encoding="utf-8")
+    output_summary = output_quality.summarize_output_checks(checks)
+    metadata["output_qc"]["years"]["2020"] = output_summary
+    metadata["integrity"] = artifacts.release_integrity_metadata(tmp_path, metadata["years"])
+    _rewrite_metadata(tmp_path, metadata)
+
+    assert output_summary["publishable"] is True
+    summary = teaching_report._qc_release_summary({"outputs": metadata["output_qc"]})
+    assert summary["requires_disclosure"] is True
+    assert summary["warning"] == [warning["name"]]
+    report = build(_complete(), "同学")
+    assert "警告：panel_share_economic_domains" in report.markdown
+    assert report.provenance["output_qc"]["years"]["2020"]["warnings"] == [warning["name"]]
+
+
+def test_report_merges_singular_and_plural_warnings_once():
+    summary = teaching_report._qc_release_summary(
+        {
+            "inputs": {"warning": ["shared", "input"]},
+            "outputs": {"years": {"2020": {"warnings": ["shared", "output"]}}},
+        }
+    )
+    assert summary["warning"] == ["shared", "input", "output"]
+    assert summary["requires_disclosure"] is True
+    assert teaching_report._qc_release_summary({"warnings": []})["requires_disclosure"] is False
+
+
 def test_report_rejects_missing_or_unsupported_qc_contract(tmp_path, monkeypatch):
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)

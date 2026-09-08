@@ -1,0 +1,397 @@
+{
+  "local_release": {
+    "release_id": "b26646389a814252946cb5c49ccc426b",
+    "artifact_contract_version": 11,
+    "course_release": "2026-fall-15-step",
+    "generated_at": "2026-09-02T08:49:20.755463+00:00",
+    "shock_contract": {
+      "version": 2,
+      "treated_threshold": 0.001,
+      "treated_operator": ">",
+      "types": {
+        "tariff": {
+          "shock_field": "tariff_shock",
+          "treated_field": "treated",
+          "announced_date_field": "announced_date",
+          "effective_date_field": "effective_date",
+          "note_field": "note"
+        },
+        "sanctions": {
+          "shock_field": "sanction_shock",
+          "treated_field": "sanction_treated",
+          "announced_date_field": "sanction_announced_date",
+          "effective_date_field": "sanction_effective_date",
+          "note_field": "sanction_note"
+        },
+        "export_control": {
+          "shock_field": "export_control_shock",
+          "treated_field": "export_control_treated",
+          "announced_date_field": "export_control_announced_date",
+          "effective_date_field": "export_control_effective_date",
+          "note_field": "export_control_note"
+        }
+      },
+      "tariff_exposure": {
+        "source_field": "tariff_exposure_source",
+        "mode_field": "tariff_exposure_mode",
+        "disclosure_field": "tariff_exposure_disclosure",
+        "allowed_sources": [
+          "oecd_icio_bilateral_flow",
+          "stylized_teaching_fallback"
+        ],
+        "allowed_modes": [
+          "fixed_pretreatment",
+          "contemporaneous"
+        ]
+      }
+    },
+    "validation_error": "dataset course_release mismatch: expected 2026-fall-15-step-economics-v2, got 2026-fall-15-step"
+  },
+  "independent_path_oracle": [
+    {
+      "seed": 91,
+      "orders": 70,
+      "max_abs_error": 1.0658141036401503e-14
+    },
+    {
+      "seed": 92,
+      "orders": 70,
+      "max_abs_error": 1.0658141036401503e-14
+    },
+    {
+      "seed": 93,
+      "orders": 70,
+      "max_abs_error": 8.881784197001252e-15
+    }
+  ],
+  "twfe_benchmark": [
+    {
+      "clusters": 12,
+      "support_before_benchmark": "ok",
+      "status_after_benchmark": "invalid_design",
+      "benchmark_passed": false,
+      "name": "tariff_shock",
+      "own_coef": 0.6296913421314605,
+      "panelols_coef": 0.629691342131461,
+      "coef_diff": -5.551115123125783e-16,
+      "own_se": 0.3307029227902762,
+      "panelols_se": 0.3192959222725216,
+      "se_diff": 0.011407000517754562,
+      "matched_cr1_se": 0.3307029227902768
+    },
+    {
+      "clusters": 16,
+      "support_before_benchmark": "ok",
+      "status_after_benchmark": "invalid_design",
+      "benchmark_passed": false,
+      "name": "tariff_shock",
+      "own_coef": 0.776489000950318,
+      "panelols_coef": 0.7764890009503184,
+      "coef_diff": -3.3306690738754696e-16,
+      "own_se": 0.2921713721667409,
+      "panelols_se": 0.28467855075494025,
+      "se_diff": 0.007492821411800632,
+      "matched_cr1_se": 0.29217137216674094
+    },
+    {
+      "clusters": 20,
+      "support_before_benchmark": "ok",
+      "status_after_benchmark": "invalid_design",
+      "benchmark_passed": false,
+      "name": "tariff_shock",
+      "own_coef": 0.7415909893321332,
+      "panelols_coef": 0.741590989332133,
+      "coef_diff": 2.220446049250313e-16,
+      "own_se": 0.27827378360109534,
+      "panelols_se": 0.2725941292483986,
+      "se_diff": 0.005679654352696739,
+      "matched_cr1_se": 0.27827378360109517
+    },
+    {
+      "clusters": 24,
+      "support_before_benchmark": "ok",
+      "status_after_benchmark": "ok",
+      "benchmark_passed": true,
+      "name": "tariff_shock",
+      "own_coef": 0.6871922790617632,
+      "panelols_coef": 0.6871922790617632,
+      "coef_diff": 0.0,
+      "own_se": 0.2733031854932253,
+      "panelols_se": 0.2686705925382177,
+      "se_diff": 0.0046325929550076195,
+      "matched_cr1_se": 0.2733031854932254
+    },
+    {
+      "clusters": 76,
+      "support_before_benchmark": "ok",
+      "status_after_benchmark": "ok",
+      "benchmark_passed": true,
+      "name": "tariff_shock",
+      "own_coef": 0.4985587245471935,
+      "panelols_coef": 0.4985587245471937,
+      "coef_diff": -1.6653345369377348e-16,
+      "own_se": 0.14642056892256453,
+      "panelols_se": 0.14564585148126047,
+      "se_diff": 0.000774717441304057,
+      "matched_cr1_se": 0.14642056892256475
+    }
+  ],
+  "contemporaneous_weights": {
+    "fixed_pretreatment": {
+      "tariff_shock": 0.0,
+      "tariff_shock_contemporaneous": 0.0,
+      "treated_contemporaneous": 0.0
+    },
+    "contemporaneous": {
+      "tariff_shock": 0.2,
+      "tariff_shock_contemporaneous": 0.2,
+      "treated_contemporaneous": 1.0
+    }
+  },
+  "macro_and_price": {
+    "source_sva_million_usd": 1000.0,
+    "generated_gdp_usd": 957112312312.312,
+    "usd_with_same_mock_scale_and_correct_conversion": 957112312.3123124,
+    "scale_error_factor": 999.9999999999997,
+    "growth_2017_by_row_order": [
+      1.0,
+      0.0
+    ],
+    "growth_from_country_total": 0.1,
+    "public_control_and_real_price_paths_disabled": true
+  },
+  "hard_math_gate": {
+    "inverse_check": {
+      "name": "里昂惕夫逆矩阵数值稳定性(残差/谱半径/条件数/非负性)",
+      "kind": "数值",
+      "passed": false,
+      "detail": "(I-A)L 最大误差 4.00e-01,谱半径 0.300000,1-范数条件数 1.736e+00,L最小值 1.587e-01",
+      "warnings": [
+        "逆残差 4.00e-01 超过 1e-08"
+      ],
+      "severity": "fatal"
+    },
+    "publication_input_gate": {
+      "passed": true,
+      "checked": [
+        "structure"
+      ],
+      "failures": []
+    },
+    "scope": "Gate-only witness; no data release was published."
+  },
+  "section_201_canada": {
+    "targets": "ALL",
+    "exempt": [],
+    "canada_C27_rate_2018": 0.03,
+    "source_complete": true
+  },
+  "raw_audit": [
+    {
+      "year": 2016,
+      "nodes": 3465,
+      "unit": [
+        "Million USD"
+      ],
+      "raw_supply_account": {
+        "name": "会计恒等式(原始OUT = Z行和 + Y行和)",
+        "kind": "经济含义",
+        "passed": true,
+        "detail": "原始OUT = 中间使用行和 + 最终需求行和;最大绝对误差 0.5113 Million USD,最大缩放相对误差 0.6500%,双阈值异常 0 个",
+        "warnings": [],
+        "severity": "ok"
+      },
+      "raw_input_account": {
+        "name": "投入侧恒等式(原始OUT = Z列和 + VA + TLS)",
+        "kind": "经济含义",
+        "passed": true,
+        "detail": "原始OUT = 中间投入列和 + VA + TLS;最大绝对误差 0.0998 Million USD,最大缩放相对误差 0.8500%,双阈值异常 0 个",
+        "warnings": [],
+        "severity": "ok"
+      },
+      "leontief": {
+        "name": "里昂惕夫逆矩阵数值稳定性(残差/谱半径/条件数/非负性)",
+        "kind": "数值",
+        "passed": true,
+        "detail": "(I-A)L 最大误差 2.89e-15,谱半径 0.632743,1-范数条件数 7.405e+00,L最小值 0.000e+00",
+        "warnings": [],
+        "severity": "ok"
+      },
+      "max_export_closure_abs_error": 0.2054793082510855,
+      "max_forward_va_closure_abs_error": 3.14321368932724e-09,
+      "saved_indicator_max_abs_difference": 1.6298145055770874e-09,
+      "saved_indicator_max_scaled_difference": 1.5594645150469142e-12,
+      "saved_indicator_null_support_equal": true,
+      "negative_va_nodes": 2,
+      "negative_tls_nodes": 49
+    },
+    {
+      "year": 2017,
+      "nodes": 3465,
+      "unit": [
+        "Million USD"
+      ],
+      "raw_supply_account": {
+        "name": "会计恒等式(原始OUT = Z行和 + Y行和)",
+        "kind": "经济含义",
+        "passed": true,
+        "detail": "原始OUT = 中间使用行和 + 最终需求行和;最大绝对误差 0.8691 Million USD,最大缩放相对误差 0.9800%,双阈值异常 0 个",
+        "warnings": [],
+        "severity": "ok"
+      },
+      "raw_input_account": {
+        "name": "投入侧恒等式(原始OUT = Z列和 + VA + TLS)",
+        "kind": "经济含义",
+        "passed": true,
+        "detail": "原始OUT = 中间投入列和 + VA + TLS;最大绝对误差 0.4330 Million USD,最大缩放相对误差 0.7845%,双阈值异常 0 个",
+        "warnings": [],
+        "severity": "ok"
+      },
+      "leontief": {
+        "name": "里昂惕夫逆矩阵数值稳定性(残差/谱半径/条件数/非负性)",
+        "kind": "数值",
+        "passed": true,
+        "detail": "(I-A)L 最大误差 2.89e-15,谱半径 0.664774,1-范数条件数 8.761e+00,L最小值 0.000e+00",
+        "warnings": [],
+        "severity": "ok"
+      },
+      "max_export_closure_abs_error": 0.09190266207474451,
+      "max_forward_va_closure_abs_error": 3.812601789832115e-09,
+      "saved_indicator_max_abs_difference": 1.2478267308324575e-09,
+      "saved_indicator_max_scaled_difference": 2.908682022285098e-12,
+      "saved_indicator_null_support_equal": true,
+      "negative_va_nodes": 2,
+      "negative_tls_nodes": 55,
+      "canada_washers_2018_using_raw_2017_exposure": {
+        "bilateral_million_usd": 1662.2527,
+        "total_positive_exports_million_usd": 2603.2762,
+        "exposure": 0.6385233729713352,
+        "catalog_rate": 0.03,
+        "wrong_positive_shock": 0.019155701189140055,
+        "policy_contribution_under_exemption": 0.0
+      }
+    },
+    {
+      "year": 2018,
+      "nodes": 3465,
+      "unit": [
+        "Million USD"
+      ],
+      "raw_supply_account": {
+        "name": "会计恒等式(原始OUT = Z行和 + Y行和)",
+        "kind": "经济含义",
+        "passed": true,
+        "detail": "原始OUT = 中间使用行和 + 最终需求行和;最大绝对误差 0.4945 Million USD,最大缩放相对误差 0.4703%,双阈值异常 0 个",
+        "warnings": [],
+        "severity": "ok"
+      },
+      "raw_input_account": {
+        "name": "投入侧恒等式(原始OUT = Z列和 + VA + TLS)",
+        "kind": "经济含义",
+        "passed": true,
+        "detail": "原始OUT = 中间投入列和 + VA + TLS;最大绝对误差 0.2474 Million USD,最大缩放相对误差 1.0200%,双阈值异常 0 个",
+        "warnings": [
+          "('CYP', 'B09'): 仅单项容差越界，绝对误差=0.0102,缩放相对误差=1.0200%，按舍入/规模效应披露"
+        ],
+        "severity": "disclosure"
+      },
+      "leontief": {
+        "name": "里昂惕夫逆矩阵数值稳定性(残差/谱半径/条件数/非负性)",
+        "kind": "数值",
+        "passed": true,
+        "detail": "(I-A)L 最大误差 2.89e-15,谱半径 0.649565,1-范数条件数 8.277e+00,L最小值 0.000e+00",
+        "warnings": [],
+        "severity": "ok"
+      },
+      "max_export_closure_abs_error": 0.09758137630831243,
+      "max_forward_va_closure_abs_error": 3.725290298461914e-09,
+      "saved_indicator_max_abs_difference": 1.6298145055770874e-09,
+      "saved_indicator_max_scaled_difference": 1.6525114610033143e-12,
+      "saved_indicator_null_support_equal": true,
+      "negative_va_nodes": 1,
+      "negative_tls_nodes": 59
+    },
+    {
+      "year": 2019,
+      "nodes": 3465,
+      "unit": [
+        "Million USD"
+      ],
+      "raw_supply_account": {
+        "name": "会计恒等式(原始OUT = Z行和 + Y行和)",
+        "kind": "经济含义",
+        "passed": true,
+        "detail": "原始OUT = 中间使用行和 + 最终需求行和;最大绝对误差 0.4724 Million USD,最大缩放相对误差 1.1000%,双阈值异常 0 个",
+        "warnings": [
+          "('SVN', 'C19'): 仅单项容差越界，绝对误差=0.0110,缩放相对误差=1.1000%，按舍入/规模效应披露"
+        ],
+        "severity": "disclosure"
+      },
+      "raw_input_account": {
+        "name": "投入侧恒等式(原始OUT = Z列和 + VA + TLS)",
+        "kind": "经济含义",
+        "passed": true,
+        "detail": "原始OUT = 中间投入列和 + VA + TLS;最大绝对误差 0.8149 Million USD,最大缩放相对误差 1.0200%,双阈值异常 0 个",
+        "warnings": [
+          "('CYP', 'B09'): 仅单项容差越界，绝对误差=0.0102,缩放相对误差=1.0200%，按舍入/规模效应披露"
+        ],
+        "severity": "disclosure"
+      },
+      "leontief": {
+        "name": "里昂惕夫逆矩阵数值稳定性(残差/谱半径/条件数/非负性)",
+        "kind": "数值",
+        "passed": true,
+        "detail": "(I-A)L 最大误差 3.55e-15,谱半径 0.634194,1-范数条件数 7.283e+00,L最小值 0.000e+00",
+        "warnings": [],
+        "severity": "ok"
+      },
+      "max_export_closure_abs_error": 0.47306164080509916,
+      "max_forward_va_closure_abs_error": 4.336470738053322e-09,
+      "saved_indicator_max_abs_difference": 1.6079866327345371e-09,
+      "saved_indicator_max_scaled_difference": 2.632283280235015e-12,
+      "saved_indicator_null_support_equal": true,
+      "negative_va_nodes": 0,
+      "negative_tls_nodes": 59
+    },
+    {
+      "year": 2020,
+      "nodes": 3465,
+      "unit": [
+        "Million USD"
+      ],
+      "raw_supply_account": {
+        "name": "会计恒等式(原始OUT = Z行和 + Y行和)",
+        "kind": "经济含义",
+        "passed": true,
+        "detail": "原始OUT = 中间使用行和 + 最终需求行和;最大绝对误差 0.5828 Million USD,最大缩放相对误差 0.7476%,双阈值异常 0 个",
+        "warnings": [],
+        "severity": "ok"
+      },
+      "raw_input_account": {
+        "name": "投入侧恒等式(原始OUT = Z列和 + VA + TLS)",
+        "kind": "经济含义",
+        "passed": true,
+        "detail": "原始OUT = 中间投入列和 + VA + TLS;最大绝对误差 0.3800 Million USD,最大缩放相对误差 1.0800%,双阈值异常 0 个",
+        "warnings": [
+          "('CYP', 'B09'): 仅单项容差越界，绝对误差=0.0108,缩放相对误差=1.0800%，按舍入/规模效应披露"
+        ],
+        "severity": "disclosure"
+      },
+      "leontief": {
+        "name": "里昂惕夫逆矩阵数值稳定性(残差/谱半径/条件数/非负性)",
+        "kind": "数值",
+        "passed": true,
+        "detail": "(I-A)L 最大误差 2.89e-15,谱半径 0.637016,1-范数条件数 7.742e+00,L最小值 0.000e+00",
+        "warnings": [],
+        "severity": "ok"
+      },
+      "max_export_closure_abs_error": 0.24197138170711696,
+      "max_forward_va_closure_abs_error": 5.122274160385132e-09,
+      "saved_indicator_max_abs_difference": 1.862645149230957e-09,
+      "saved_indicator_max_scaled_difference": 2.8686889396436617e-12,
+      "saved_indicator_null_support_equal": true,
+      "negative_va_nodes": 5,
+      "negative_tls_nodes": 59
+    }
+  ]
+}

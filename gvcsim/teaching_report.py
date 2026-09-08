@@ -1703,8 +1703,15 @@ def _qc_release_summary(qc: Any) -> dict[str, Any]:
             return
         summary["requires_disclosure"] = summary["requires_disclosure"] or value.get("requires_disclosure") is True
         summary["override"] = summary["override"] or value.get("override") is True
-        for severity in ("fatal", "warning", "disclosure"):
-            names = value.get(severity)
+        # Input/regression summaries use "warning"; output QC v4 uses
+        # "warnings". Normalize both before deduplicating the report findings.
+        for field, severity in (
+            ("fatal", "fatal"),
+            ("warning", "warning"),
+            ("warnings", "warning"),
+            ("disclosure", "disclosure"),
+        ):
+            names = value.get(field)
             if isinstance(names, list):
                 summary[severity].extend(str(name) for name in names)
         for child in value.values():
@@ -1729,7 +1736,7 @@ def _qc_disclosure_section(summary: dict[str, Any], integrity: Any) -> list[str]
         "## 数据完整性与诊断披露",
         "",
         f"- 自动完整性验证：{'通过' if status == 'passed' else '状态未知'}。文件哈希、结构、键覆盖和来源绑定属于发布门槛。",
-        "- 发布政策：数值恒等式、经济含义和回归设计诊断不阻断学生使用；所有发现仍完整保留并在此披露。",
+        "- 发布政策：完整性、逆矩阵有效性及计算恒等式失败阻断发布；经济账户异常、范围诊断和回归设计限制仍完整保留并在此披露。",
     ]
     for key, label in (("fatal", "非阻断诊断发现"), ("warning", "警告"), ("disclosure", "补充披露")):
         if summary[key]:

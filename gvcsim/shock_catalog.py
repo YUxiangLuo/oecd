@@ -337,23 +337,85 @@ _S232_EU = {
     }
 }
 
+# Proclamation 9693, Annex I, Note 18(b), and 9694, Annex, Note 17(b).
+# Intersection of the original annex lists with the named ICIO 2023 economies;
+# do not infer exemptions from a generic "developing country" classification.
+# Canada is excluded only for washers; the Philippines is also on the washer
+# list but not the solar list. India/Turkey's 2019 removals are separate events.
+_S201_SOLAR_EXEMPT_2018 = (
+    "BRA",
+    "CIV",
+    "CMR",
+    "EGY",
+    "IDN",
+    "IND",
+    "JOR",
+    "KAZ",
+    "KHM",
+    "MMR",
+    "NGA",
+    "PAK",
+    "SEN",
+    "TUN",
+    "TUR",
+    "UKR",
+    "ZAF",
+)
+_S201_WASHER_EXEMPT_2018 = (*_S201_SOLAR_EXEMPT_2018, "CAN", "PHL")
+
+
 EVENTS = [
     TariffEvent(
-        name="美国201保障措施(光伏、洗衣机)",
+        name="美国201保障措施(光伏)",
         imposer="USA",
         targets="ALL",
         announced="2018-01-22",
         effective="2018-02-07",
-        # 30%/20–50% 的品目税率 × 行业内覆盖面(光伏占 C26 出口 ~5%,
-        # 家电占 C27 出口 ~8%),税率逐年退坡
+        # 品目税率、行业内覆盖面及年内折算仍为教学近似。
+        rates={"C26": {2018: 0.014, 2019: 0.012, 2020: 0.010}},
+        exempt=_S201_SOLAR_EXEMPT_2018,
+        timeline_note="按公告 Annex I Note 18(b) 编码 ICIO 具名经济体豁免；加拿大不在光伏豁免名单。印度、土耳其 2019 年取消豁免另列事件。",
+        source_urls=("https://www.federalregister.gov/api/v1/documents/2018-01592.json",),
+        source_complete=True,
+    ),
+    TariffEvent(
+        name="美国201保障措施(洗衣机)",
+        imposer="USA",
+        targets="ALL",
+        announced="2018-01-22",
+        effective="2018-02-07",
+        rates={"C27": {2018: 0.030, 2019: 0.026, 2020: 0.022}},
+        exempt=_S201_WASHER_EXEMPT_2018,
+        timeline_note="按公告 Annex Note 17(b) 排除加拿大及列明的发展中经济体；菲律宾享有洗衣机豁免。印度、土耳其 2019 年取消豁免另列事件。",
+        source_urls=("https://www.federalregister.gov/api/v1/documents/2018-01604.json",),
+        source_complete=True,
+    ),
+    TariffEvent(
+        name="美国201保障措施取消土耳其豁免",
+        imposer="USA",
+        targets=("TUR",),
+        announced="2019-05-16",
+        effective="2019-05-17",
         rates={
-            "C26": {2018: 0.014, 2019: 0.012, 2020: 0.010},
-            "C27": {2018: 0.030, 2019: 0.026, 2020: 0.022},
+            "C26": {2019: _annual_rate(0.012, "2019-05-17", "2020-01-01"), 2020: 0.010},
+            "C27": {2019: _annual_rate(0.026, "2019-05-17", "2020-01-01"), 2020: 0.022},
         },
-        source_urls=(
-            "https://www.federalregister.gov/api/v1/documents/2018-01592.json",
-            "https://www.federalregister.gov/api/v1/documents/2018-01604.json",
-        ),
+        timeline_note="Proclamation 9887 自 2019-05-17 取消光伏和洗衣机豁免；2019 年教学行业税率按当年剩余天数折算。",
+        source_urls=("https://www.federalregister.gov/api/v1/documents/2019-10761.json",),
+        source_complete=True,
+    ),
+    TariffEvent(
+        name="美国201保障措施取消印度豁免",
+        imposer="USA",
+        targets=("IND",),
+        announced="2019-05-31",
+        effective="2019-06-05",
+        rates={
+            "C26": {2019: _annual_rate(0.012, "2019-06-05", "2020-01-01"), 2020: 0.010},
+            "C27": {2019: _annual_rate(0.026, "2019-06-05", "2020-01-01"), 2020: 0.022},
+        },
+        timeline_note="Proclamation 9902 自 2019-06-05 取消光伏和洗衣机豁免；2019 年教学行业税率按当年剩余天数折算。",
+        source_urls=("https://www.federalregister.gov/api/v1/documents/2019-11986.json",),
         source_complete=True,
     ),
     TariffEvent(

@@ -87,7 +87,7 @@ def _benchmark_inputs():
     return model, own
 
 
-@pytest.mark.parametrize(("small_se", "passed"), [(0.0101, True), (0.02, False)])
+@pytest.mark.parametrize(("small_se", "passed"), [(0.010000001, True), (0.0101, False), (0.02, False)])
 def test_panelols_standard_error_gate_checks_each_policy_term(small_se, passed):
     model, own = _benchmark_inputs()
     reference = replace(own, coefs=[own.coefs[0], replace(own.coefs[1], se=small_se)])

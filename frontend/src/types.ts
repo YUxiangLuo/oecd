@@ -110,7 +110,7 @@ export interface Meta {
     output_qc?: unknown;
     regression_input_qc?: unknown;
     publication_policy?: {
-      mode: "integrity-only-v1";
+      mode: "integrity-and-mathematics-v2";
       blocking_kinds: Record<string, string[]>;
       nonblocking_policy: string;
     };

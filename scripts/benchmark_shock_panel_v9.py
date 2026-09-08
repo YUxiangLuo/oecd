@@ -28,7 +28,7 @@ from gvcsim.config import PROCESSED_DIR
 
 SEQUENTIAL_BUDGET_MS = 500.0
 CONCURRENT_BUDGET_MS = 1500.0
-DEFAULT_OUTPUT = Path("benchmarks/shock_panel_v12.json")
+DEFAULT_OUTPUT = Path(f"benchmarks/shock_panel_v{artifacts.ARTIFACT_CONTRACT_VERSION}.json")
 
 
 def percentile(values: list[float], quantile: float = 0.95) -> float:

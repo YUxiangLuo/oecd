@@ -139,23 +139,72 @@ def _real_log_from_log(log_s: pd.Series, deflator: pd.Series) -> pd.Series:
     return np.log(_real_amount(nominal, deflator) + 1.0)
 
 
-def _country_year_real_growth(data: pd.DataFrame, amount_col: str, time: str) -> pd.Series:
-    base = data[["country", time, amount_col, DEFLATOR_COL]].drop_duplicates(["country", time])
-    base = base.sort_values(["country", time]).copy()
-    base["_real_amount"] = _real_amount(base[amount_col], base[DEFLATOR_COL])
+def _country_year_real_growth(
+    data: pd.DataFrame,
+    amount_col: str,
+    time: str,
+    *,
+    country_totals: pd.DataFrame | None = None,
+) -> pd.Series:
+    """Country annual growth, preserving national totals on industry slices.
+
+    Use signed raw amounts, never log proxies (their negative values were clipped
+    before logging). Input must contain unique country rows or a full industry
+    partition. Industry subsets can pass explicit, untrimmed country_totals with
+    country/time keys and the raw amount column; these totals are not summed.
+    """
+    keys = ["country", time]
+    grouped = data.groupby(keys, sort=False, dropna=False)
+    if grouped[DEFLATOR_COL].nunique(dropna=False).ne(1).any():
+        raise ValueError("同一国家年份必须使用唯一的平减指数")
+    deflator = data[DEFLATOR_COL].to_numpy(dtype=float)
+    if not np.isfinite(deflator).all() or (deflator <= 0).any():
+        raise ValueError("平减指数必须为正的有限值")
+    if country_totals is not None:
+        if not {*keys, amount_col}.issubset(country_totals.columns) or country_totals.duplicated(keys).any():
+            raise ValueError("显式国家总额必须包含国家/年份和原始金额列，且国家年份键唯一")
+        totals = country_totals.set_index(keys)[[amount_col]]
+        needed = grouped.size().index
+        if not needed.difference(totals.index).empty:
+            raise ValueError("显式国家总额缺少输入面板中的国家年份")
+        base = totals.reindex(needed).copy()
+    else:
+        industry = next((column for column in ("industry", "sector") if column in data), None)
+        grain = [*keys, *([industry] if industry else [])]
+        if data.duplicated(grain).any():
+            raise ValueError("国家增长率输入的金额粒度不唯一；需国家总额或完整且不重复的行业分区")
+        base = grouped[amount_col].sum(min_count=1).to_frame()
+        # Missing industry amounts must not silently become partial country totals.
+        base.loc[grouped[amount_col].count().ne(grouped.size()), amount_col] = np.nan
+    base[DEFLATOR_COL] = grouped[DEFLATOR_COL].first()
+    base = base.reset_index()
+    base = base.sort_values(keys).copy()
+    base["_real_amount"] = base[amount_col].astype(float) / base[DEFLATOR_COL].astype(float)
     prev = base.groupby("country")["_real_amount"].shift(1)
-    base["_real_growth"] = ((base["_real_amount"] - prev) / prev.where(prev.abs() > 1e-12)).replace(
-        [np.inf, -np.inf], np.nan
+    consecutive = base[time] - base.groupby("country")[time].shift(1) == 1
+    base["_real_growth"] = (
+        ((base["_real_amount"] - prev) / prev.where(prev.abs() > 1e-12))
+        .where(consecutive)
+        .replace([np.inf, -np.inf], np.nan)
     )
-    return data[["country", time]].merge(
-        base[["country", time, "_real_growth"]],
-        on=["country", time],
+    merged = data[keys].merge(
+        base[[*keys, "_real_growth"]],
+        on=keys,
         how="left",
-    )["_real_growth"]
+        validate="many_to_one",
+        sort=False,
+    )
+    return pd.Series(merged["_real_growth"].to_numpy(), index=data.index)
 
 
-def _apply_price_mode(df: pd.DataFrame, design, time: str = "year") -> pd.DataFrame:
-    """实际值模式:用 GDP deflator 平减金额类控制变量。"""
+def _apply_price_mode(
+    df: pd.DataFrame,
+    design,
+    time: str = "year",
+    *,
+    country_totals: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """平减金额控制；行业子集须显式提供未裁剪的国家总额以计算全国增长率。"""
     if getattr(design, "price_mode", None) != PRICE_MODE_REAL:
         return df
     if DEFLATOR_COL not in df.columns:
@@ -172,9 +221,11 @@ def _apply_price_mode(df: pd.DataFrame, design, time: str = "year") -> pd.DataFr
     if {"macro_log_gdp_usd", "macro_log_population"}.issubset(out.columns):
         out["macro_log_gdp_per_capita"] = out["macro_log_gdp_usd"] - out["macro_log_population"]
     if {"country", time, "SVA", DEFLATOR_COL}.issubset(out.columns):
-        out["gdp_proxy_growth"] = _country_year_real_growth(out, "SVA", time)
+        out["gdp_proxy_growth"] = _country_year_real_growth(df, "SVA", time, country_totals=country_totals)
     if {"country", time, "gross_exports", DEFLATOR_COL}.issubset(out.columns):
-        out["exports_proxy_growth"] = _country_year_real_growth(out, "gross_exports", time)
+        out["exports_proxy_growth"] = _country_year_real_growth(
+            df, "gross_exports", time, country_totals=country_totals
+        )
     return out
 
 

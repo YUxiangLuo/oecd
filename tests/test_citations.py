@@ -32,7 +32,8 @@ def test_real_release_metadata_carries_oecd_attribution(tmp_path, monkeypatch):
     controls = metadata["simulated_macro_controls"]
     assert controls["kind"] == "deterministic-teaching-mock"
     assert controls["production_data"] is False
-    assert "ICIO-derived" in controls["scale_input"]["description"]
+    assert "million USD" in controls["scale_input"]["description"]
+    assert controls["generator_version"] == "2.0.0"
     assert "Not WDI data" in controls["observations_disclosure"]
     validate_data_sources(metadata)
 

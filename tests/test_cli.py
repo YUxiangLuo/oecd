@@ -41,7 +41,7 @@ def test_compute_integrity_failure_recommends_fixing_input(monkeypatch):
     )
     monkeypatch.setattr(sys, "argv", ["gvcsim", "compute"])
     monkeypatch.setattr(pipeline, "run", lambda *_args, **_kwargs: (_ for _ in ()).throw(error))
-    with pytest.raises(SystemExit, match="请修复输入完整性"):
+    with pytest.raises(SystemExit, match="请修复完整性或数学检查失败"):
         main()
 
 

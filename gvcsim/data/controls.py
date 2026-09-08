@@ -163,8 +163,9 @@ def build_controls(
     score = country["country"].map(_stable_unit).astype(float)
     t = country.groupby("country").cumcount().astype(float)
     gdp_proxy = country["_va"].clip(lower=0.0).astype(float)
-    # WDI/IMF 风格 mock:锚定 ICIO 规模,但加入国家异质和趋势,避免与 ICIO 控制完全同列。
-    gdp_usd = (gdp_proxy + 1.0) * 1_000_000_000.0 * (0.80 + 0.40 * score) * (1.0 + 0.025 * t)
+    # 教学校准明确保留 ICIO 的经济规模：SVA 与 +1 平移均以百万美元计，
+    # 先按 1e6 转美元，再施加无量纲国家系数和时间趋势；不是观测 GDP。
+    gdp_usd = (gdp_proxy + 1.0) * 1_000_000.0 * (0.80 + 0.40 * score) * (1.0 + 0.025 * t)
     income_usd = 4_000.0 + 45_000.0 * score + 600.0 * t
     population = gdp_usd / income_usd
     phase = 2 * np.pi * score + 0.8 * t

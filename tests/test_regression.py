@@ -1486,11 +1486,11 @@ def test_run_design_with_controls_and_panelols_benchmark():
     assert bench["backend"] == "linearmodels.PanelOLS"
     assert "passed" not in bench
     assert bench["coef_check_passed"]
-    assert bench["se_check_mode"] == "relative_tolerance_2pct"
+    assert bench["se_check_mode"] == "matched_cr1_atol_1e-10_rtol_1e-6"
     assert bench["se_check_passed"] is True
     assert bench["benchmark_passed"] is True
     assert bench["max_abs_coef_diff"] < 1e-8
-    assert any("同时门禁政策系数与聚类标准误" in n for n in bench["notes"])
+    assert any("国家聚类 CR1 修正" in n for n in bench["notes"])
 
 
 def test_run_design_with_macro_controls():

@@ -19,10 +19,10 @@ CI_SYNTHETIC_KIND = "gvcsim-ci-only-synthetic-oecd-icio"
 DATA_SOURCES_VERSION = 1
 SIMULATED_MACRO_KIND = "deterministic-teaching-mock"
 SIMULATED_MACRO_GENERATOR = "gvcsim.data.controls.build_controls"
-SIMULATED_MACRO_GENERATOR_VERSION = "1.0.0"
+SIMULATED_MACRO_GENERATOR_VERSION = "2.0.0"
 SIMULATED_MACRO_SCALE = {
     "kind": "icio-derived-value-added-scale",
-    "description": "Country-year scale is anchored to the ICIO-derived SVA value-added proxy, then transformed by deterministic teaching formulas.",
+    "description": "Preserves ICIO SVA's economic scale: (max(SVA,0)+1) in million USD is converted to USD by 1e6, then multiplied by dimensionless country and time teaching factors. Population is simulated GDP divided by simulated USD income per person; neither series is observed macroeconomic data.",
 }
 SIMULATED_MACRO_DISCLOSURE = "Not WDI data and not IMF observations; these deterministic simulated regression controls must not be presented as observed macroeconomic statistics."
 

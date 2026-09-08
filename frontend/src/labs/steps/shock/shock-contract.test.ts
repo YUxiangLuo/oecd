@@ -5,6 +5,7 @@ import {
   inspectShockContract,
   SHOCK_CONTRACT_TYPES,
   SHOCK_EXPOSURE_CONTRACT,
+  SHOCK_ARTIFACT_CONTRACT_VERSION,
 } from "./shock-contract";
 
 const valid = (): ShockContract => ({
@@ -21,7 +22,8 @@ const valid = (): ShockContract => ({
 
 describe("versioned shock contract", () => {
   test("accepts only the complete v3 exact field/source/mode set", () => {
-    expect(inspectShockContract(valid(), 12).valid).toBe(true);
+    expect(inspectShockContract(valid(), SHOCK_ARTIFACT_CONTRACT_VERSION).valid).toBe(true);
+    expect(inspectShockContract(valid(), 12).valid).toBe(false);
     expect(inspectShockContract(valid(), 7).valid).toBe(false);
     for (const mutation of [
       (contract: ShockContract) => { contract.version = 0; },
@@ -32,9 +34,9 @@ describe("versioned shock contract", () => {
     ]) {
       const contract = valid();
       mutation(contract);
-      expect(inspectShockContract(contract, 12).valid).toBe(false);
+      expect(inspectShockContract(contract, SHOCK_ARTIFACT_CONTRACT_VERSION).valid).toBe(false);
     }
-    expect(inspectShockContract(undefined, 12).valid).toBe(false);
+    expect(inspectShockContract(undefined, SHOCK_ARTIFACT_CONTRACT_VERSION).valid).toBe(false);
   });
 
   test("never describes fallback or unknown provenance as official", () => {

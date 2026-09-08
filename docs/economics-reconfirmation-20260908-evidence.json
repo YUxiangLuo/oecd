@@ -1,0 +1,427 @@
+{
+  "covariance_independent_dummy_ols": [
+    {
+      "clusters": 20,
+      "sectors_per_country": 1,
+      "unbalanced": false,
+      "observations": 100,
+      "full_design_rank": 25,
+      "status_before_benchmark": "ok",
+      "status_after_benchmark": "invalid_design",
+      "own_se": 0.18168458339751534,
+      "dummy_ols_cr1_se": 0.18168458339751348,
+      "current_panelols_se": 0.177976344620733,
+      "predicted_se_ratio": 1.0208355710680808,
+      "status_with_same_group_correction": "ok",
+      "matched_max_abs_se_difference": 1.942890293094024e-16
+    },
+    {
+      "clusters": 20,
+      "sectors_per_country": 1,
+      "unbalanced": true,
+      "observations": 93,
+      "full_design_rank": 25,
+      "status_before_benchmark": "ok",
+      "status_after_benchmark": "invalid_design",
+      "own_se": 0.20590483315770594,
+      "dummy_ols_cr1_se": 0.20590483316065616,
+      "current_panelols_se": 0.20177897152514068,
+      "predicted_se_ratio": 1.02044743118835,
+      "status_with_same_group_correction": "ok",
+      "matched_max_abs_se_difference": 2.9510838217561286e-12
+    },
+    {
+      "clusters": 20,
+      "sectors_per_country": 3,
+      "unbalanced": false,
+      "observations": 300,
+      "full_design_rank": 65,
+      "status_before_benchmark": "ok",
+      "status_after_benchmark": "invalid_design",
+      "own_se": 0.09013276068766451,
+      "dummy_ols_cr1_se": 0.09013276068766732,
+      "current_panelols_se": 0.08799733285932775,
+      "predicted_se_ratio": 1.0242669608151693,
+      "status_with_same_group_correction": "ok",
+      "matched_max_abs_se_difference": 4.163336342344337e-17
+    },
+    {
+      "clusters": 76,
+      "sectors_per_country": 1,
+      "unbalanced": false,
+      "observations": 380,
+      "full_design_rank": 81,
+      "status_before_benchmark": "ok",
+      "status_after_benchmark": "ok",
+      "own_se": 0.07756777837388291,
+      "dummy_ols_cr1_se": 0.07756777837387885,
+      "current_panelols_se": 0.07715736396809503,
+      "predicted_se_ratio": 1.0053191864610298,
+      "status_with_same_group_correction": "ok",
+      "matched_max_abs_se_difference": 5.551115123125783e-17
+    }
+  ],
+  "zero_exposure_controls": [
+    {
+      "before_export": 0,
+      "after_export": 10,
+      "fixed_shock": 0.0,
+      "contemporaneous_column": 0.0,
+      "expected_contemporaneous": 0.2,
+      "public_weight_switch_shock": 0.0
+    },
+    {
+      "before_export": 10,
+      "after_export": 0,
+      "fixed_shock": 0.2,
+      "contemporaneous_column": 0.0,
+      "expected_contemporaneous": 0,
+      "public_weight_switch_shock": 0.0
+    },
+    {
+      "before_export": 10,
+      "after_export": 10,
+      "fixed_shock": 0.2,
+      "contemporaneous_column": 0.2,
+      "expected_contemporaneous": 0.2,
+      "public_weight_switch_shock": 0.2
+    },
+    {
+      "before_export": 0,
+      "after_export": 0,
+      "fixed_shock": 0.0,
+      "contemporaneous_column": 0.0,
+      "expected_contemporaneous": 0,
+      "public_weight_switch_shock": 0.0
+    }
+  ],
+  "growth_and_public_reachability": {
+    "sector_permutations_with_reset_index": [
+      {
+        "order": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "growth_2017": [
+          0.818181818181818,
+          0.818181818181818
+        ]
+      },
+      {
+        "order": [
+          1,
+          0,
+          3,
+          2
+        ],
+        "growth_2017": [
+          -0.09090909090909097,
+          -0.09090909090909097
+        ]
+      }
+    ],
+    "country_total_growth_2017_expected": 0.0,
+    "country_grain_positive_control": -1.4210854715202004e-16,
+    "public_design_validation": [
+      {
+        "controls": "none",
+        "price_mode": "nominal",
+        "accepted": true
+      },
+      {
+        "controls": "icio_derived",
+        "price_mode": "nominal",
+        "accepted": false,
+        "status": 400,
+        "reason": "公开主回归禁止加入同期 ICIO 派生量或模拟宏观量；它们可能是处理后变量，只保留为数据构造教学材料"
+      },
+      {
+        "controls": "macro_sim",
+        "price_mode": "nominal",
+        "accepted": false,
+        "status": 400,
+        "reason": "公开主回归禁止加入同期 ICIO 派生量或模拟宏观量；它们可能是处理后变量，只保留为数据构造教学材料"
+      },
+      {
+        "controls": "none",
+        "price_mode": "real_2016",
+        "accepted": false,
+        "status": 400,
+        "reason": "未加入金额控制变量时只能使用 nominal 口径"
+      }
+    ]
+  },
+  "macro_counterfactual_scale": {
+    "source_sva_million_usd": 1000.0,
+    "generated_gdp_usd": 957112312312.312,
+    "growth_2017_by_row_order": [
+      1.0,
+      0.0
+    ],
+    "growth_from_country_total": 0.1,
+    "public_control_and_real_price_paths_disabled": true,
+    "hypothetical_gdp_usd_with_million_conversion": 957112312.3123124,
+    "ratio_to_hypothetical_conversion": 999.9999999999997,
+    "interpretation": "A comparison conditional on treating the scale as million-to-USD conversion; the code contract explicitly calls this a deterministic teaching mock. It does not prove an unintended unit conversion."
+  },
+  "local_default_release": {
+    "release_id": "b26646389a814252946cb5c49ccc426b",
+    "artifact_contract_version": 11,
+    "course_release": "2026-fall-15-step",
+    "generated_at": "2026-09-02T08:49:20.755463+00:00",
+    "shock_contract": {
+      "version": 2,
+      "treated_threshold": 0.001,
+      "treated_operator": ">",
+      "types": {
+        "tariff": {
+          "shock_field": "tariff_shock",
+          "treated_field": "treated",
+          "announced_date_field": "announced_date",
+          "effective_date_field": "effective_date",
+          "note_field": "note"
+        },
+        "sanctions": {
+          "shock_field": "sanction_shock",
+          "treated_field": "sanction_treated",
+          "announced_date_field": "sanction_announced_date",
+          "effective_date_field": "sanction_effective_date",
+          "note_field": "sanction_note"
+        },
+        "export_control": {
+          "shock_field": "export_control_shock",
+          "treated_field": "export_control_treated",
+          "announced_date_field": "export_control_announced_date",
+          "effective_date_field": "export_control_effective_date",
+          "note_field": "export_control_note"
+        }
+      },
+      "tariff_exposure": {
+        "source_field": "tariff_exposure_source",
+        "mode_field": "tariff_exposure_mode",
+        "disclosure_field": "tariff_exposure_disclosure",
+        "allowed_sources": [
+          "oecd_icio_bilateral_flow",
+          "stylized_teaching_fallback"
+        ],
+        "allowed_modes": [
+          "fixed_pretreatment",
+          "contemporaneous"
+        ]
+      }
+    },
+    "validation_error": "dataset course_release mismatch: expected 2026-fall-15-step-economics-v2, got 2026-fall-15-step"
+  },
+  "resolved_processed_path": "/home/alice/pros/oecd-icio-analysis/data/.processed-releases/b26646389a814252946cb5c49ccc426b",
+  "raw_policy_countercheck": {
+    "source": "Five original ICIO CSVs, read afresh; no old release exposure files used",
+    "exposure_rows": 1351350,
+    "active_event_country_sector_years": 850,
+    "zero_baseline_positive_current_event_cases": [
+      {
+        "event": "美国232钢铝关税",
+        "country": "BRN",
+        "sector": "C24",
+        "imposer": "USA",
+        "year": 2018,
+        "baseline_year": 2017,
+        "baseline_exposure": 0.0,
+        "current_exposure": 0.5089723701312314,
+        "omitted_current_shock": 0.07920446746151764,
+        "generator_current_column_in_fixed_mode": 0.0,
+        "generator_current_column_in_current_mode": 0.07920446746151764
+      },
+      {
+        "event": "美国232钢铝关税",
+        "country": "BRN",
+        "sector": "C24",
+        "imposer": "USA",
+        "year": 2019,
+        "baseline_year": 2017,
+        "baseline_exposure": 0.0,
+        "current_exposure": 0.9368563367035033,
+        "omitted_current_shock": 0.18737126734070064,
+        "generator_current_column_in_fixed_mode": 0.0,
+        "generator_current_column_in_current_mode": 0.18737126734070064
+      },
+      {
+        "event": "美国232钢铝关税",
+        "country": "BRN",
+        "sector": "C24",
+        "imposer": "USA",
+        "year": 2020,
+        "baseline_year": 2017,
+        "baseline_exposure": 0.0,
+        "current_exposure": 0.20633307933282535,
+        "omitted_current_shock": 0.04126661586656507,
+        "generator_current_column_in_fixed_mode": 0.0,
+        "generator_current_column_in_current_mode": 0.04126661586656507
+      },
+      {
+        "event": "美国232钢铝关税",
+        "country": "CIV",
+        "sector": "C24",
+        "imposer": "USA",
+        "year": 2019,
+        "baseline_year": 2017,
+        "baseline_exposure": 0.0,
+        "current_exposure": 0.0005164159800505249,
+        "omitted_current_shock": 0.00010328319601010496,
+        "generator_current_column_in_fixed_mode": 0.0,
+        "generator_current_column_in_current_mode": 0.00010328319601010496
+      },
+      {
+        "event": "美国232钢铝关税",
+        "country": "CMR",
+        "sector": "C24",
+        "imposer": "USA",
+        "year": 2018,
+        "baseline_year": 2017,
+        "baseline_exposure": 0.0,
+        "current_exposure": 5.816373090249053e-05,
+        "omitted_current_shock": 9.05123264455195e-06,
+        "generator_current_column_in_fixed_mode": 0.0,
+        "generator_current_column_in_current_mode": 9.05123264455195e-06
+      },
+      {
+        "event": "美国232钢铝关税",
+        "country": "CMR",
+        "sector": "C24",
+        "imposer": "USA",
+        "year": 2019,
+        "baseline_year": 2017,
+        "baseline_exposure": 0.0,
+        "current_exposure": 0.0005705127184533002,
+        "omitted_current_shock": 0.00011410254369066004,
+        "generator_current_column_in_fixed_mode": 0.0,
+        "generator_current_column_in_current_mode": 0.00011410254369066004
+      },
+      {
+        "event": "美国232钢铝关税",
+        "country": "CMR",
+        "sector": "C24",
+        "imposer": "USA",
+        "year": 2020,
+        "baseline_year": 2017,
+        "baseline_exposure": 0.0,
+        "current_exposure": 0.01577000669896904,
+        "omitted_current_shock": 0.0031540013397938073,
+        "generator_current_column_in_fixed_mode": 0.0,
+        "generator_current_column_in_current_mode": 0.0031540013397938073
+      },
+      {
+        "event": "美国232钢铝关税",
+        "country": "LAO",
+        "sector": "C24",
+        "imposer": "USA",
+        "year": 2018,
+        "baseline_year": 2017,
+        "baseline_exposure": 0.0,
+        "current_exposure": 0.0004802025581699919,
+        "omitted_current_shock": 7.472741179193298e-05,
+        "generator_current_column_in_fixed_mode": 0.0,
+        "generator_current_column_in_current_mode": 7.472741179193298e-05
+      }
+    ],
+    "unique_affected_entity_years": 8,
+    "canada_C27_catalogue_contributions": [
+      {
+        "event": "美国201保障措施(光伏、洗衣机)",
+        "year": 2018,
+        "fixed_weight": 0.6385233729713352,
+        "rate": 0.03,
+        "contribution": 0.019155701189140055
+      },
+      {
+        "event": "美国201保障措施(光伏、洗衣机)",
+        "year": 2019,
+        "fixed_weight": 0.6385233729713352,
+        "rate": 0.026,
+        "contribution": 0.016601607697254713
+      },
+      {
+        "event": "美国201保障措施(光伏、洗衣机)",
+        "year": 2020,
+        "fixed_weight": 0.6385233729713352,
+        "rate": 0.022,
+        "contribution": 0.014047514205369373
+      }
+    ],
+    "canada_C27_current_generator": [
+      {
+        "year": 2016,
+        "tariff_shock": 0.0,
+        "treated": 0,
+        "tariff_shock_contemporaneous": 0.0,
+        "treated_contemporaneous": 0
+      },
+      {
+        "year": 2017,
+        "tariff_shock": 0.0,
+        "treated": 0,
+        "tariff_shock_contemporaneous": 0.0,
+        "treated_contemporaneous": 0
+      },
+      {
+        "year": 2018,
+        "tariff_shock": 0.019155701189140055,
+        "treated": 1,
+        "tariff_shock_contemporaneous": 0.019349135462025883,
+        "treated_contemporaneous": 1
+      },
+      {
+        "year": 2019,
+        "tariff_shock": 0.016601607697254713,
+        "treated": 1,
+        "tariff_shock_contemporaneous": 0.016880782518223923,
+        "treated_contemporaneous": 1
+      },
+      {
+        "year": 2020,
+        "tariff_shock": 0.014047514205369373,
+        "treated": 1,
+        "tariff_shock_contemporaneous": 0.014501848323689321,
+        "treated_contemporaneous": 1
+      }
+    ],
+    "canada_C27_with_washer_exclusion_only": [
+      {
+        "year": 2016,
+        "tariff_shock": 0.0,
+        "treated": 0,
+        "tariff_shock_contemporaneous": 0.0,
+        "treated_contemporaneous": 0
+      },
+      {
+        "year": 2017,
+        "tariff_shock": 0.0,
+        "treated": 0,
+        "tariff_shock_contemporaneous": 0.0,
+        "treated_contemporaneous": 0
+      },
+      {
+        "year": 2018,
+        "tariff_shock": 0.0,
+        "treated": 0,
+        "tariff_shock_contemporaneous": 0.0,
+        "treated_contemporaneous": 0
+      },
+      {
+        "year": 2019,
+        "tariff_shock": 0.0,
+        "treated": 0,
+        "tariff_shock_contemporaneous": 0.0,
+        "treated_contemporaneous": 0
+      },
+      {
+        "year": 2020,
+        "tariff_shock": 0.0,
+        "treated": 0,
+        "tariff_shock_contemporaneous": 0.0,
+        "treated_contemporaneous": 0
+      }
+    ]
+  }
+}
