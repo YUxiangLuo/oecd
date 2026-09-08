@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 
-from gvcsim.data.controls import CONTROL_COLUMNS, MACRO_CONTROL_COLUMNS
+from gvcsim.data.controls import CONTROL_COLUMNS, MACRO_CONTROL_COLUMNS, has_consecutive_control_years
 from gvcsim.regression import panel as regression_panel
 from gvcsim.regression.design import OUTCOME_DEPVARS, OUTCOME_GRANULARITIES
 from gvcsim.regression.transforms import (
@@ -821,8 +821,8 @@ def _columns_match(left: pd.Series, right: pd.Series) -> bool:
 
 
 def _growth_null_policy_valid(frame: pd.DataFrame, column: str) -> bool:
-    """Only the first observed year per country may be null, and it must be null."""
-    if not {"country", "year", column}.issubset(frame.columns):
+    """Consecutive annual releases: only each country's first year may/must be null."""
+    if not {"country", "year", column}.issubset(frame.columns) or not has_consecutive_control_years(frame):
         return False
     year = pd.to_numeric(frame["year"], errors="coerce")
     first_year = year.groupby(frame["country"].astype(str)).transform("min")

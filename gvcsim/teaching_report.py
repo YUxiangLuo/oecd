@@ -67,7 +67,7 @@ _SHOCK_SOURCE_STATUS_LABELS = {
 _STATUS_LABELS = {
     "ok": "可报告",
     "warning": "需谨慎解释",
-    "insufficient": "处理支持度不足",
+    "insufficient": "样本支持度不足",
     "invalid_design": "设计无效",
     "unknown": "未记录设计状态",
 }

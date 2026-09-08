@@ -16,8 +16,8 @@ export type EvidenceState = "negative" | "positive" | "insufficient" | "suppress
 export const REGRESSION_STATUS_LABELS: Record<RegressionStatus, string> = {
   ok: "可按课程口径解释",
   warning: "可展示,但须披露设计问题",
-  insufficient: "处理支持度不足,已抑制推断",
-  invalid_design: "设计与处理路径不相容,已停止推断",
+  insufficient: "样本支持度不足,已抑制推断",
+  invalid_design: "设计不能用于统计推断,已停止推断",
 };
 
 /** 安全取文案:状态缺失或未知时说“未知”,而不是默认成 ok——
@@ -185,7 +185,9 @@ export function buildRegressionVerdict(
   const coefficient = mainPolicyCoefficient(response);
   const boundary = "真实 OECD ICIO 指标 + 拟真政策冲击；本结果用于教学，不构成现实政策结论。";
   const support = response.result.support;
-  const reasons = response.result.status_reasons ?? [];
+  const reasons = [...new Set([
+    ...(response.result.status_reasons ?? []), ...(support?.reasons ?? []),
+  ].filter((reason) => typeof reason === "string" && reason.trim()))];
   if (!coefficient) {
     return {
       state: globalInferenceIsSuppressed(response.result.status, support) ? "suppressed" : "insufficient",
@@ -210,19 +212,19 @@ export function buildRegressionVerdict(
   const globallySuppressed = globalInferenceIsSuppressed(response.result.status, support);
   if (globallySuppressed) {
     const invalid = response.result.status === "invalid_design" || support?.status === "invalid_design";
-    const supportEvidence = support
-      ? `只有 ${support.treated_clusters} 个处理聚类（课程停止线 ${support.min_treated_clusters}；达到也不等于自动有效），`
-        + "聚类稳健推断在此失效；p 值、置信区间与星号均已抑制。"
-      : "结果状态表明处理支持不足；p 值、置信区间与星号均不可用于推断。";
+    // invalid_design also covers failed numerical audits and degenerate variance;
+    // insufficient can be a paired-control shortage, not a treated-cluster shortage.
+    // Use the recorded diagnosis, never infer a specific mechanism from status alone.
+    const diagnostic = reasons.length
+      ? `停止推断原因：${reasons.join("；")}`
+      : "结果已停止统计推断，但未提供具体原因；请核对完整诊断。";
     return {
       state: "suppressed",
-      title: invalid ? "这个设计不能用于统计推断" : "处理支持度不足，无法给出显著性",
+      title: invalid ? "这个设计不能用于统计推断" : "样本支持度不足，无法给出显著性",
       effectLabel: effectLabel(response, coefficient),
       effect: scaled.effect,
       interval: "—",
-      evidence: invalid
-        ? "估计量与真实政策路径不相容，点估计仍会算出，但它已不是原本想估计的对象；p 值、置信区间与星号均已抑制。"
-        : supportEvidence,
+      evidence: `${diagnostic} 点估计仅作描述性展示；p 值、置信区间与星号均已抑制。`,
       interpretation: "不能据此判断变化方向——这不是“没有效应”，而是当前设计无法评估。",
       boundary,
       coefficient,

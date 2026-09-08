@@ -99,10 +99,29 @@ def _safe_div(num: pd.Series, den: pd.Series) -> pd.Series:
     return out.replace([np.inf, -np.inf], 0.0).fillna(0.0)
 
 
-def _growth(s: pd.Series) -> pd.Series:
-    """同比增长；没有上一期或上一期为零时保持缺失，绝不伪造零增长。"""
+def _growth(s: pd.Series, *, year: pd.Series) -> pd.Series:
+    """同比增长；缺少上一日历年或上一年为零时保持缺失，不年化跨年增幅。"""
     prev = s.shift(1)
-    return ((s - prev) / prev.where(prev.abs() > 1e-12)).replace([np.inf, -np.inf], np.nan)
+    annual_lag = year.loc[s.index].diff().eq(1)
+    return ((s - prev) / prev.where(prev.abs() > 1e-12)).where(annual_lag).replace([np.inf, -np.inf], np.nan)
+
+
+def has_consecutive_control_years(frame: pd.DataFrame) -> bool:
+    """Annual release controls require consecutive years within each country.
+
+    Keep the existing first-year-only structural-null release contract. A gap
+    produces undefined growth in build_controls, but is not publishable. This
+    also guards the annual mock/deflator path without silently rescaling it.
+    Country-industry panels may repeat the same country-year control values.
+    """
+    if frame.empty or not {"country", "year"}.issubset(frame.columns) or frame["country"].isna().any():
+        return False
+    schedule = frame[["country", "year"]].drop_duplicates()
+    year = pd.to_numeric(schedule["year"], errors="coerce")
+    if not np.isfinite(year).all() or not year.eq(np.floor(year)).all():
+        return False
+    schedule = schedule.assign(year=year).sort_values(["country", "year"])
+    return bool(schedule.groupby("country")["year"].diff().dropna().eq(1).all())
 
 
 def _index_to_base(s: pd.Series) -> pd.Series:
@@ -126,6 +145,8 @@ def build_controls(
 
     参数允许测试直接传入小面板;生产路径默认从 data/processed 下读取
     indicators_country_<year>.csv 与 indicators_industry_<year>.csv。
+    缺少上一日历年的名义同比保留 NaN；现有发布 QC 仍拒绝不连续年度输入，
+    不将额外缺失加入首年结构性空值白名单，也不把年度 mock 趋势改为跨年趋势。
     """
     if country_panel is None or sector_panel is None:
         years = processed_years()
@@ -153,8 +174,12 @@ def build_controls(
     out["log_exports_proxy"] = _safe_log(country["_exports"])
     out["export_intensity"] = _safe_div(country["_exports"], country["_va"])
 
-    out["gdp_proxy_growth"] = country.groupby("country", group_keys=False)["_va"].apply(_growth).to_numpy()
-    out["exports_proxy_growth"] = country.groupby("country", group_keys=False)["_exports"].apply(_growth).to_numpy()
+    out["gdp_proxy_growth"] = country.groupby("country")["_va"].transform(
+        lambda values: _growth(values, year=country["year"])
+    )
+    out["exports_proxy_growth"] = country.groupby("country")["_exports"].transform(
+        lambda values: _growth(values, year=country["year"])
+    )
     out["trade_gross_exports_index"] = (
         country.groupby("country", group_keys=False)["_exports"].apply(_index_to_base).to_numpy()
     )

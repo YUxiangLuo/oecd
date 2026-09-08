@@ -54,6 +54,42 @@ describe("zero-total decomposition copy", () => {
   });
 });
 
+describe("production-length formula", () => {
+  test("renders every VA weight in the actual Step 4 formula, not an unweighted sum", () => {
+    const html = renderToStaticMarkup(
+      <DecompositionDemo step={6} meta={meta} primaryYear={2020} primaryCountry="CHN" />,
+    );
+    const formula = html.match(/<div class="decomp-formula">.*?<\/div>/)?.[0];
+    expect(formula).toBeDefined();
+    for (const term of ["(1_VA_D/SVA) × PLv_D", "(2_VA_RT/SVA) × PLv_RT", "(3_VA_GVC/SVA) × PLv_GVC"]) {
+      expect(formula).toContain(term);
+    }
+    const model = buildDecompositionModel(
+      { PLv: 2.75, SVA: 100, "1_VA_D": 50, "2_VA_RT": 25, "3_VA_GVC": 25, PLv_D: 2, PLv_RT: 3, PLv_GVC: 4 },
+      {
+        total: "PLv", weightTotal: "SVA",
+        parts: [
+          { key: "PLv_D", weightKey: "1_VA_D" },
+          { key: "PLv_RT", weightKey: "2_VA_RT" },
+          { key: "PLv_GVC", weightKey: "3_VA_GVC" },
+        ],
+      },
+    );
+    expect(model.values).toEqual([1, 0.75, 1]);
+    expect(model.sum).toBe(2.75);
+  });
+
+  test.each([4, 5])("keeps step=%s additive monetary decompositions unweighted", (step) => {
+    const html = renderToStaticMarkup(
+      <DecompositionDemo step={step} meta={meta} primaryYear={2020} primaryCountry="CHN" />,
+    );
+    const formula = html.match(/<div class="decomp-formula">.*?<\/div>/)?.[0];
+    expect(formula).toBeDefined();
+    expect(formula).not.toContain("/SVA");
+    expect(formula).not.toContain("×");
+  });
+});
+
 describe("semantic decomposition and path tables", () => {
   test("names decomposition details and exposes scoped columns and component row headers without changing signed/null copy", () => {
     const html = renderToStaticMarkup(

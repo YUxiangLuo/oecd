@@ -87,9 +87,9 @@ const DECOMP: Record<number, DecompCfg> = {
     unit: "number",
     weightTotal: "SVA",
     parts: [
-      { key: "PLv_D", label: "纯国内段长度", color: "#4b47e0", desc: "纯国内生产活动的平均长度,按 1_VA_D/SVA 份额加权计入总长度。", weightKey: "1_VA_D" },
-      { key: "PLv_RT", label: "传统贸易段长度", color: "#159a86", desc: "传统贸易生产活动的平均长度,按 2_VA_RT/SVA 份额加权计入。", weightKey: "2_VA_RT" },
-      { key: "PLv_GVC", label: "GVC 段长度", color: "#f4693b", desc: "GVC 生产活动的平均长度(通常最长,增加值多次被计为产出),按 3_VA_GVC/SVA 份额加权计入。", weightKey: "3_VA_GVC" },
+      { key: "PLv_D", label: "纯国内加权贡献", color: "#4b47e0", desc: "纯国内生产活动的平均长度,按 1_VA_D/SVA 份额加权计入总长度。", weightKey: "1_VA_D" },
+      { key: "PLv_RT", label: "传统贸易加权贡献", color: "#159a86", desc: "传统贸易生产活动的平均长度,按 2_VA_RT/SVA 份额加权计入。", weightKey: "2_VA_RT" },
+      { key: "PLv_GVC", label: "GVC 加权贡献", color: "#f4693b", desc: "GVC 生产活动的平均长度(通常最长,增加值多次被计为产出),按 3_VA_GVC/SVA 份额加权计入。", weightKey: "3_VA_GVC" },
     ],
     note: (r) => {
       const lengths = [finiteNumber(r.PLv_D), finiteNumber(r.PLv_RT), finiteNumber(r.PLv_GVC)];
@@ -539,7 +539,21 @@ export function DecompositionDemo({
           <input type="checkbox" checked={compare} onChange={(event) => setCompare(event.target.checked)} /> 双实体并排对比
         </label>
       </div>
-      <div className="decomp-formula"><span className="df-total">{cfg.totalLabel}</span><span className="df-eq">=</span>{cfg.parts.map((part, index) => <span key={part.key}>{index > 0 && <span className="df-plus">+</span>}<span className={`df-term${hover === part.key ? " on" : ""}`} style={hover === part.key ? { color: part.color, borderColor: part.color } : undefined} onMouseEnter={() => setHover(part.key)} onMouseLeave={() => setHover(null)}>{part.label.split(" ")[0]}</span></span>)}</div>
+      <div className="decomp-formula">
+        <span className="df-total">{cfg.totalLabel}</span><span className="df-eq">=</span>
+        {cfg.parts.map((part, index) => (
+          <span key={part.key}>
+            {index > 0 && <span className="df-plus">+</span>}
+            <span
+              className={`df-term${hover === part.key ? " on" : ""}`}
+              style={hover === part.key ? { color: part.color, borderColor: part.color } : undefined}
+              onMouseEnter={() => setHover(part.key)} onMouseLeave={() => setHover(null)}
+            >{cfg.weightTotal && part.weightKey
+                ? `(${part.weightKey}/${cfg.weightTotal}) × ${part.key}`
+                : part.label.split(" ")[0]}</span>
+          </span>
+        ))}
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: compare ? "minmax(0, 1fr) minmax(0, 1fr)" : "minmax(0, 1fr)", gap: 18 }}>
         {panel(rowA, "A", pageA, effSectorA, countryA, sideAQuery)}
         {compare && panel(rowB, "B", pageB, effSectorB, countryB, sideBQuery)}

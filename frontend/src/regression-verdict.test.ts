@@ -260,7 +260,7 @@ describe("buildRegressionVerdict", () => {
     expect(verdict.evidence).not.toContain("置信区间跨过 0");
     expect(verdict.evidence).not.toContain("未跨过 0");
     expect(verdict.interval).toBe("—");
-    expect(verdict.title).toContain("处理支持度不足");
+    expect(verdict.title).toContain("样本支持度不足");
     expect(verdict.warnings.length).toBeGreaterThan(0);
   });
 
@@ -287,6 +287,60 @@ describe("buildRegressionVerdict", () => {
     expect(verdict.effect).toContain("-0.50 个百分点");
   });
 
+  test.each([
+    "支持充分的 cohort-time ATT 项缺少正的 delete-one jackknife 变异，已抑制推断。",
+    "PanelOLS 系数/标准误对照未通过，已抑制推断。",
+    "处理路径出现撤销，与吸收型 ATT 不相容，已抑制推断。",
+  ])("uses the actual invalid-design reason: %s", (reason) => {
+    const payload = response("trade", { ...suppressedCoefficient(0.05), se: null, t: null }, 1, 2, "did", false,
+      support({ treated_clusters: 12, paired_control_clusters: 12, status: "invalid_design", reasons: [reason] }));
+    const verdict = buildRegressionVerdict("trade", payload);
+    expect(verdict.state).toBe("suppressed");
+    expect(verdict.evidence).toContain(reason);
+    expect(verdict.evidence).not.toContain("真实政策路径不相容");
+    expect(verdict.evidence).not.toContain("已不是原本想估计的对象");
+    expect(verdict.effect).toBe("+5.00 个百分点");
+    expect(verdict.interval).toBe("—");
+    expect(verdict.warnings).toEqual([reason]);
+  });
+
+  test("control-side shortages do not falsely blame adequate treatment-side counts", () => {
+    const reason = "实际配对对照聚类只有 4 个，低于课程门禁 12 个。";
+    const payload = response("trade", suppressedCoefficient(0.05), 1, 2, "did", false,
+      support({ treated_clusters: 24, min_treated_clusters: 12, paired_control_clusters: 4, reasons: [reason] }));
+    const verdict = buildRegressionVerdict("trade", payload);
+    expect(verdict.state).toBe("suppressed");
+    expect(verdict.title).toContain("样本支持度不足");
+    expect(verdict.evidence).toContain(reason);
+    expect(verdict.evidence).not.toContain("只有 24 个处理聚类");
+    expect(verdict.interval).toBe("—");
+  });
+
+  test("merges result and support reasons without duplication and supports old snapshots", () => {
+    const payload = response("trade", suppressedCoefficient(0.05), 1, 2, "did", false,
+      support({ status: "invalid_design", reasons: ["方差退化", "对照未通过"] }));
+    payload.result.status_reasons = ["方差退化"];
+    let verdict = buildRegressionVerdict("trade", payload);
+    expect(verdict.warnings).toEqual(["方差退化", "对照未通过"]);
+    expect(verdict.evidence.match(/方差退化/g)).toHaveLength(1);
+    expect(verdict.evidence).toContain("对照未通过");
+    payload.result.status_reasons = [];
+    verdict = buildRegressionVerdict("trade", payload);
+    expect(verdict.evidence).toContain("方差退化");
+    expect(verdict.interval).toBe("—");
+  });
+
+  test.each(["invalid_design", "insufficient"] as const)("missing reasons for %s never invent a mechanism", (status) => {
+    const payload = response("trade", suppressedCoefficient(0.05));
+    payload.result.status = status;
+    const verdict = buildRegressionVerdict("trade", payload);
+    expect(verdict.state).toBe("suppressed");
+    expect(verdict.evidence).toContain("未提供具体原因");
+    expect(verdict.evidence).not.toContain("政策路径");
+    expect(verdict.evidence).not.toContain("只有");
+    expect(verdict.interval).toBe("—");
+  });
+
   test("stale suppress flags cannot override invalid or insufficient global status", () => {
     const k0 = { ...coefficient(-0.02, -0.03, -0.01), name: "k=0", p: 0.001 };
     const staleInvalid = response(
@@ -307,7 +361,7 @@ describe("buildRegressionVerdict", () => {
     staleInsufficient.result.status_reasons = ["保存载荷中的整体状态为支持不足"];
     const insufficientVerdict = buildRegressionVerdict("trade", staleInsufficient);
     expect(insufficientVerdict.state).toBe("suppressed");
-    expect(insufficientVerdict.title).toContain("处理支持度不足");
+    expect(insufficientVerdict.title).toContain("样本支持度不足");
     expect(insufficientVerdict.interval).toBe("—");
     expect(insufficientVerdict.title).not.toContain("发现负向变化证据");
   });
@@ -426,6 +480,11 @@ describe("设计有效性的摘要文案", () => {
       expect(regressionStatusLabel(status)).toBe(REGRESSION_STATUS_LABELS[status]);
     }
     expect(Object.keys(REGRESSION_STATUS_LABELS).sort()).toEqual([...ALL_STATUSES].sort());
+  });
+
+  test("摘要标签不把所有推断失败都归因于处理路径或处理侧样本", () => {
+    expect(regressionStatusLabel("invalid_design")).not.toContain("处理路径");
+    expect(regressionStatusLabel("insufficient")).toContain("样本支持度不足");
   });
 
   test("状态缺失或未知时不冒充 ok,也不显示裸键", () => {

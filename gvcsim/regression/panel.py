@@ -31,6 +31,8 @@ import numpy as np
 import pandas as pd
 from linearmodels.panel import PanelOLS
 from scipy import stats
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
 
 from gvcsim.concurrency import check_cancelled
 from gvcsim.regression.design import (
@@ -172,6 +174,37 @@ class PreparedModel:
 # from this module while implementations live in the focused transform module.
 
 
+@dataclass(frozen=True)
+class _FixedEffectStructure:
+    rank: int
+    components: int
+    nonreference_times: pd.Index
+
+
+def _fixed_effect_structure(data: pd.DataFrame, entity: str, time: str) -> _FixedEffectStructure:
+    """Rank E+T-C of two fixed effects on the validated estimation sample.
+
+    Each observation is an edge of the entity-time bipartite graph. Every
+    connected component contributes one redundant dummy, not just one globally.
+    Sparse graph traversal avoids an observations-by-entities dummy matrix.
+    Dropping one time dummy per component leaves a full-rank time basis after
+    entity absorption; PanelOLS uses that basis on disconnected samples.
+    """
+    check_cancelled()
+    entity_codes, entities = pd.factorize(data[entity], sort=False)
+    time_codes, times = pd.factorize(data[time], sort=True)
+    vertices = len(entities) + len(times)
+    graph = csr_matrix(
+        (np.ones(len(data), dtype=bool), (entity_codes, len(entities) + time_codes)),
+        shape=(vertices, vertices),
+    )
+    components, labels = connected_components(graph, directed=False)
+    _, reference_positions = np.unique(labels[len(entities) :], return_index=True)
+    nonreference = np.ones(len(times), dtype=bool)
+    nonreference[reference_positions] = False
+    return _FixedEffectStructure(vertices - int(components), int(components), times[nonreference])
+
+
 def _is_true_finite_number(value: object) -> bool:
     """Accept real numeric scalars only; strings, booleans, and arbitrary objects are not data."""
     return isinstance(value, Real) and not isinstance(value, (bool, np.bool_)) and math.isfinite(float(value))
@@ -251,7 +284,7 @@ def _validate_final_estimation_sample(model: "PreparedModel") -> None:
         raise ValueError("聚类稳健推断至少需要 2 个聚类")
     if n_rows <= len(model.xcols) + 2:
         raise ValueError("最终回归样本行数不足以估计当前解释变量集合")
-    residual_capacity = n_rows - n_entities - n_times + 1 - len(model.xcols)
+    residual_capacity = n_rows - _fixed_effect_structure(data, model.entity, model.time).rank - len(model.xcols)
     if residual_capacity <= 0:
         raise ValueError("最终回归样本在实体、时间固定效应和解释变量之外没有足够自由度")
 
@@ -676,11 +709,10 @@ def _within_ols(
         s = X[mask].T @ resid[mask]
         meat += np.outer(s, s)
     n, k = len(y), X.shape[1]
-    # CR1 small-sample correction must count absorbed entity/time effects as
-    # estimated nuisance parameters. Omitting them made every displayed SE about
-    # 10% narrower than PanelOLS on the production release.
-    absorbed_rank = len(pd.unique(ent)) + len(pd.unique(tim)) - 1
-    residual_df = n - k - absorbed_rank
+    # Count the actual nuisance rank, including each disconnected component's
+    # redundant dummy. The E+T-1 shortcut overcorrects CR1 when C > 1.
+    effects = _fixed_effect_structure(data, entity, time)
+    residual_df = n - k - effects.rank
     if residual_df <= 0:
         raise ValueError("吸收个体/年份固定效应后没有正的协方差残差自由度")
     correction = (n_g / (n_g - 1)) * ((n - 1) / residual_df)
@@ -717,6 +749,11 @@ def _within_ols(
     notes = list(model.notes)
     if dropped:
         notes.append("控制变量被固定效应吸收/完全共线,已剔除:" + "、".join(dropped))
+    if effects.components > 1:
+        notes.append(
+            f"实体—年份二部图有 {effects.components} 个连通分量；固定效应秩 {effects.rank}，"
+            f"CR1 残差自由度 {residual_df}；政策系数仍为各分量共同斜率。"
+        )
 
     support = model.support
     # 处理支持度不足或处理路径与估计量不相容时,点估计与标准误照常返回,
@@ -1786,7 +1823,9 @@ def _panelols_estimate(
     """用 linearmodels.PanelOLS 估计标准库对照。
 
     keep_xcols 为共线剔除后保留的解释变量(与自写引擎同一份),
-    因此这里不再重复做 within 变换判定,只让 PanelOLS 内部吸收固定效应。
+    因此这里不再重复做 within 变换判定。对不连通样本显式加入每个连通分量
+    省略一个基期后的时间虚拟变量,只吸收实体效应,避免 PanelOLS 将冗余度
+    固定计为 1。系数、残差、聚类协方差仍由 PanelOLS 独立计算。
     """
     data = model.data.set_index([model.entity, model.time])
     y = data[model.depvar].astype(float)
@@ -1797,17 +1836,34 @@ def _panelols_estimate(
     if n_clusters <= 1:
         raise ValueError("聚类稳健推断至少需要 2 个聚类；当前样本只有 1 个聚类，无法计算有效的 p 值和置信区间")
 
+    effects = _fixed_effect_structure(model.data, model.entity, model.time)
+    absorb_time = effects.components == 1
+    if not absorb_time:
+        for index, period in enumerate(effects.nonreference_times):
+            name = f"__gvcsim_time_effect_{index}"
+            while name in X.columns:
+                name += "_"
+            X[name] = (data.index.get_level_values(model.time) == period).astype(float)
     res = PanelOLS(
         y,
         X,
         entity_effects=True,
-        time_effects=True,
+        time_effects=absorb_time,
         drop_absorbed=True,
-    ).fit(cov_type="clustered", clusters=clusters, group_debias=True)
+    ).fit(
+        cov_type="clustered",
+        clusters=clusters,
+        group_debias=True,
+        # Entity-only absorption would otherwise auto-detect nested clusters
+        # and omit the entity degrees of freedom. Our CR1 counts all FE ranks.
+        auto_df=False,
+        count_effects=True,
+    )
 
     critical = float(stats.t.ppf(0.975, n_clusters - 1))
     coefs = []
-    for name, b in res.params.items():
+    for name in keep_xcols:
+        b = res.params[name]
         se = float(res.std_errors[name])
         t_stat = float(res.tstats[name])
         pval = _cluster_t_pvalue(t_stat, n_clusters)
@@ -1830,6 +1886,14 @@ def _panelols_estimate(
     if dropped:
         notes.append("控制变量被固定效应吸收/完全共线,已剔除:" + "、".join(dropped))
     panel_r2 = float(res.rsquared_within)
+    if not absorb_time:
+        # Preserve PanelOLS's entity-within R² for the original regressors,
+        # excluding the explicit nuisance time dummies added above.
+        original = data[[model.depvar, *keep_xcols]].astype(float)
+        within_entity = (original - original.groupby(level=model.entity).transform("mean")).to_numpy()
+        residual = within_entity[:, 0] - within_entity[:, 1:] @ res.params[keep_xcols].to_numpy()
+        total_ss = float(within_entity[:, 0] @ within_entity[:, 0])
+        panel_r2 = 1 - float(residual @ residual) / total_ss if total_ss > 0 else 0.0
     depvar_mean = float(model.data[model.depvar].mean())
     depvar_std = float(model.data[model.depvar].std(ddof=1))
     _require_finite_numerical_output("PanelOLS 汇总统计量", panel_r2, depvar_mean, depvar_std)

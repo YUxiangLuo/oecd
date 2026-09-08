@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 from scipy.sparse.linalg import eigs
 
-from gvcsim.data.controls import ALL_CONTROL_COLUMNS
+from gvcsim.data.controls import ALL_CONTROL_COLUMNS, has_consecutive_control_years
 from gvcsim.shock_catalog import (
     EXPOSURE_MODES,
     EXPOSURE_SOURCE_OECD_ICIO,
@@ -728,11 +728,12 @@ def check_controls_country(
     missing = expected.difference(actual)
     extra = actual.difference(expected)
     duplicated = int(actual.duplicated().sum())
+    annual = has_consecutive_control_years(df)
     checks.append(
         QcCheck(
             name="控制变量维度对齐(country×year)",
             kind="结构",
-            passed=len(missing) == 0 and len(extra) == 0 and duplicated == 0,
+            passed=len(missing) == 0 and len(extra) == 0 and duplicated == 0 and annual,
             detail=(
                 f"期望 {len(expected)} 行,实际 {len(df)} 行;"
                 f"缺失组合 {len(missing)} 个,额外组合 {len(extra)} 个,重复组合 {duplicated} 个"
@@ -740,6 +741,7 @@ def check_controls_country(
             warnings=[
                 *[f"缺失:{m}" for m in list(missing[:3])],
                 *[f"额外:{m}" for m in list(extra[:3])],
+                *([] if annual else ["控制变量要求各国年份逐年连续；缺年累计增幅不能作为同比发布"]),
             ],
         )
     )

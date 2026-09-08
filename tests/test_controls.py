@@ -1,5 +1,8 @@
 import numpy as np
 import pandas as pd
+import pytest
+
+from gvcsim.data import regression_quality
 
 from gvcsim.data.controls import (
     ALL_CONTROL_COLUMNS,
@@ -98,6 +101,54 @@ def test_controls_country_quality_checks_pass_and_fail():
     bad_checks = {c.name: c for c in check_controls_country(bad, countries=countries, years=years)}
     assert not bad_checks["控制变量构造恒等式"].passed
     assert not bad_checks["控制变量经济范围"].passed
+
+
+def test_nominal_growth_requires_the_previous_calendar_year_and_recovers_after_gap():
+    country, sector = _fixtures()
+    # Keep BBB continuous; AAA has 2016, 2018, 2019 with values 100, 121, 133.1.
+    country["year"] -= 2
+    sector["year"] -= 2
+    for frame in (country, sector):
+        frame.loc[frame.country.eq("AAA") & frame.year.ge(2017), "year"] += 1
+    country["SVA"] = country["SVA"].astype(float)
+    country.loc[country.country.eq("AAA"), "SVA"] = [100.0, 121.0, 133.1]
+    for column in ["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"]:
+        country.loc[country.country.eq("AAA"), column] = [100.0, 121.0, 133.1] if column == "DVAex" else 0.0
+    controls = build_controls(country.sample(frac=1, random_state=13), sector).set_index(["country", "year"])
+
+    for column in ("gdp_proxy_growth", "exports_proxy_growth"):
+        assert np.isnan(controls.loc[("AAA", 2016), column])
+        assert np.isnan(controls.loc[("AAA", 2018), column])  # not 21%, and not annualized to 10%
+        assert controls.loc[("AAA", 2019), column] == pytest.approx(0.1)
+        assert np.isfinite(controls.loc[("BBB", 2018), column])
+
+
+@pytest.mark.parametrize("gap_value", [0.21, np.nan])
+def test_release_qc_rejects_nonannual_controls_even_if_gap_growth_is_filled(gap_value):
+    country, sector = _fixtures()
+    controls = build_controls(country, sector).query("year != 2019").copy()
+    for column in ("gdp_proxy_growth", "exports_proxy_growth"):
+        controls.loc[controls.year.eq(2020), column] = gap_value
+        # The current release contract allows only first-year structural nulls;
+        # do not widen it to publish gapped annual control/price/mock trajectories.
+        assert regression_quality._growth_null_policy_valid(controls, column) is False
+        industry_panel = pd.concat([controls.assign(industry="A"), controls.assign(industry="B")], ignore_index=True)
+        assert regression_quality._growth_null_policy_valid(industry_panel, column) is False
+    checks = {c.name: c for c in check_controls_country(controls, years=[2018, 2020])}
+    assert checks["控制变量维度对齐(country×year)"].passed is False
+    assert any("连续" in warning for warning in checks["控制变量维度对齐(country×year)"].warnings)
+
+
+def test_growth_null_qc_keeps_valid_country_and_industry_panels():
+    country, sector = _fixtures()
+    controls = build_controls(country, sector)
+    for frame in (controls, pd.concat([controls, controls], ignore_index=True)):
+        frame = frame.sample(frac=1, random_state=53)
+        frame.index = pd.Index(np.arange(len(frame)) + 100)
+        for column in ("gdp_proxy_growth", "exports_proxy_growth"):
+            assert regression_quality._growth_null_policy_valid(frame, column) is True
+            filled = frame.fillna({column: 0.0})
+            assert regression_quality._growth_null_policy_valid(filled, column) is False
 
 
 def test_controls_country_quality_is_independent_of_dataframe_index_labels():
