@@ -21,6 +21,7 @@ _CPU_ADMISSION = anyio.CapacityLimiter(64)
 _RAW_LIMITER = anyio.CapacityLimiter(2)
 _RAW_THREADS = anyio.CapacityLimiter(2)
 _RAW_ADMISSION = anyio.CapacityLimiter(64)
+_SYNC_ADMISSION = anyio.CapacityLimiter(64)
 QUEUE_TIMEOUT_SECONDS = 15.0
 WORK_TIMEOUT_SECONDS = 90.0
 
@@ -40,6 +41,7 @@ class _Work:
 
 _CURRENT_WORK: ContextVar[_Work | None] = ContextVar("gvcsim_work", default=None)
 _workers: dict[asyncio.Task, _Work] = {}
+_sync_workers: dict[asyncio.Task, anyio.CancelScope] = {}
 
 
 def check_cancelled() -> None:
@@ -117,6 +119,44 @@ async def run_raw_io(function: Callable[P, T], *args: P.args, **kwargs: P.kwargs
     return await _run_limited(lambda: function(*args, **kwargs), _RAW_LIMITER, _RAW_ADMISSION, _RAW_THREADS)
 
 
+async def run_sync(function: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
+    """Track ordinary synchronous I/O without abandoning its default thread token.
+
+    Cancel the AnyIO scope, never the worker task: queued calls can leave the
+    default thread queue, while run_sync's shield protects an already dispatched
+    call until it really finishes. This also closes the dispatch/start race that
+    a flag set inside the thread cannot safely detect. Running transactions get
+    no artificial work deadline; their existing database semantics still apply.
+    """
+    scope = anyio.CancelScope()
+    admission = _SYNC_ADMISSION
+    try:
+        admission.acquire_on_behalf_of_nowait(scope)
+    except anyio.WouldBlock as error:
+        raise WorkUnavailable() from error
+
+    async def execute() -> T:
+        with scope:
+            return await anyio.to_thread.run_sync(lambda: function(*args, **kwargs))
+        raise WorkUnavailable("work_cancelled")
+
+    worker = asyncio.create_task(execute())
+    _sync_workers[worker] = scope
+
+    def finished(task: asyncio.Task) -> None:
+        _sync_workers.pop(task, None)
+        admission.release_on_behalf_of(scope)
+        if not task.cancelled():
+            task.exception()
+
+    worker.add_done_callback(finished)
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        scope.cancel()
+        raise
+
+
 async def for_request(request: Request, operation: Callable[[], Awaitable[T]]) -> T:
     """Cancel this waiter on disconnect, after FastAPI has parsed its body.
 
@@ -148,8 +188,12 @@ async def for_request(request: Request, operation: Callable[[], Awaitable[T]]) -
 
 async def shutdown() -> None:
     workers = list(_workers.items())
+    sync_workers = list(_sync_workers.items())
     for task, work in workers:
         work.cancelled.set()
         if not work.started:
             task.cancel()
-    await asyncio.gather(*(task for task, _ in workers), return_exceptions=True)
+    for _task, scope in sync_workers:
+        scope.cancel()
+    # In particular, drain detached database work before lifespan closes its pool.
+    await asyncio.gather(*(task for task, _ in [*workers, *sync_workers]), return_exceptions=True)

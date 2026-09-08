@@ -6,7 +6,6 @@ import re
 from datetime import datetime
 from typing import Any
 
-import anyio
 import psycopg
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -118,9 +117,9 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
     }
 
 
-async def generate_report(user: dict = Depends(require_student)):
+async def _prepare_report(user: dict) -> tuple[dict[str, Any], teaching_report.TeachingReport, datetime]:
     # PostgreSQL pool/row-lock waits must not block unrelated requests on the event loop.
-    session, _report, row = await anyio.to_thread.run_sync(_workspace, user["sub"])
+    session, _report, row = await concurrency.run_sync(_workspace, user["sub"])
     try:
         generated = await concurrency.run_cpu_bound(teaching_report.build, session, user.get("name") or user["sub"])
     except teaching_report.ReportGateError as error:
@@ -130,9 +129,19 @@ async def generate_report(user: dict = Depends(require_student)):
             status_code=409,
             detail={"message": "报告生成所依据的实验记录已变化，请保存并重试。", "code": "session_changed"},
         )
+    return session, generated, row["updated_at"]
+
+
+async def generate_report(user: dict = Depends(require_student), *, request: Request | None = None):
+    if request is None:
+        session, generated, version = await _prepare_report(user)
+    else:
+        session, generated, version = await concurrency.for_request(request, lambda: _prepare_report(user))
+    # Only preparation observes disconnects. Once persistence begins, retain the
+    # transaction and response bookkeeping even when the response is lost.
     try:
-        saved = await anyio.to_thread.run_sync(
-            db.save_generated_report, user["sub"], generated.markdown, generated.provenance, row["updated_at"]
+        saved = await concurrency.run_sync(
+            db.save_generated_report, user["sub"], generated.markdown, generated.provenance, version
         )
     except records.SessionChanged as error:
         raise HTTPException(
@@ -142,13 +151,13 @@ async def generate_report(user: dict = Depends(require_student)):
     if saved is None:
         raise HTTPException(status_code=404, detail="学生账号不存在")
     saved["suggested_filename"] = generated.suggested_filename
-    learning_state = await anyio.to_thread.run_sync(lambda: _learning_state(session, report_exists=True))
+    learning_state = await concurrency.run_sync(lambda: _learning_state(session, report_exists=True))
     return {"report": saved, **learning_state}
 
 
 @router.post("/report/generate")
 async def generate_report_http(request: Request, user: dict = Depends(require_student)):
-    return await concurrency.for_request(request, lambda: generate_report(user))
+    return await generate_report(user, request=request)
 
 
 @router.post("/report/submit")

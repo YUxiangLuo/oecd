@@ -28,7 +28,9 @@ class AsyncSingleFlightCache(Generic[K, V]):
     process share one event loop. Dictionary operations before the first await are
     therefore sufficient to elect exactly one task without a cross-thread lock.
     Failed computations are never cached, and cancelling one waiting request does
-    not cancel work that another student is still awaiting.
+    not cancel work that another student is still awaiting. Factories must protect
+    synchronous work with concurrency.run_sync/run_cpu_bound: the last waiter may
+    cancel the factory task, but must not abandon its physical worker thread.
     """
 
     def __init__(self, maxsize: int = 64, *, max_inflight: int = 64):

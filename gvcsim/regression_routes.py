@@ -2,7 +2,6 @@
 
 from typing import Any, cast
 
-import anyio
 import numpy as np
 import pandas as pd
 from fastapi import APIRouter, HTTPException
@@ -331,7 +330,7 @@ async def regression_run(req: RegressionRequest, request: Request):
     key = (artifacts.release_identity(), "run", req.model_dump_json())
 
     async def compute() -> dict[str, Any]:
-        panel = await anyio.to_thread.run_sync(
+        panel = await concurrency.run_sync(
             lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
         )
         result, benchmark = await concurrency.run_cpu_bound(run_design_with_benchmark, panel, design)
@@ -373,7 +372,7 @@ async def regression_placebo(req: PlaceboRequest, request: Request):
     key = (artifacts.release_identity(), "placebo", req.model_dump_json())
 
     async def compute() -> dict[str, Any]:
-        panel = await anyio.to_thread.run_sync(
+        panel = await concurrency.run_sync(
             lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
         )
         placebo = await concurrency.run_cpu_bound(
