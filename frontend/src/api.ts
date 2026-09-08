@@ -72,6 +72,7 @@ async function withRequestTimeout<T>(
   url: string,
   timeoutMs: number,
   operation: (signal: AbortSignal) => Promise<T>,
+  callerSignal?: AbortSignal,
 ): Promise<T> {
   const controller = new AbortController();
   let timedOut = false;
@@ -80,8 +81,11 @@ async function withRequestTimeout<T>(
     controller.abort();
   }, timeoutMs);
   const aborted = new Promise<never>((_resolve, reject) => {
-    controller.signal.addEventListener("abort", () => reject(new Error("request aborted")), { once: true });
+    controller.signal.addEventListener("abort", () => reject(new Error("请求已取消")), { once: true });
   });
+  const cancel = () => controller.abort();
+  callerSignal?.addEventListener("abort", cancel, { once: true });
+  if (callerSignal?.aborted) controller.abort();
   try {
     return await Promise.race([operation(controller.signal), aborted]);
   } catch (cause) {
@@ -89,31 +93,52 @@ async function withRequestTimeout<T>(
     throw cause;
   } finally {
     globalThis.clearTimeout(timeout);
+    callerSignal?.removeEventListener("abort", cancel);
   }
 }
 
-async function getWithToken<T>(url: string, requestToken: string | null, fallback?: string): Promise<T> {
-  return withRequestTimeout(url, GET_TIMEOUT_MS, async (signal) => {
-    const resp = await fetch(url, {
-      headers: authHeaders(requestToken),
-      signal,
-    });
-    if (!resp.ok) {
-      const body = await resp.json().catch(() => null);
-      if (resp.status === 401) notifyAuthExpired(requestToken);
-      throw new ApiError(resp.status, body?.detail, fallback ?? `${resp.status} ${resp.statusText}`);
-    }
-    return await resp.json() as T;
+async function retryDelay(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) throw new Error("请求已取消");
+  await new Promise<void>((resolve, reject) => {
+    const cancel = () => {
+      globalThis.clearTimeout(timer);
+      reject(new Error("请求已取消"));
+    };
+    const timer = globalThis.setTimeout(() => {
+      signal.removeEventListener("abort", cancel);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", cancel, { once: true });
   });
 }
 
-function get<T>(url: string): Promise<T> {
-  return getWithToken<T>(url, getActiveAuthToken());
+async function getWithToken<T>(url: string, requestToken: string | null, fallback?: string, callerSignal?: AbortSignal): Promise<T> {
+  return withRequestTimeout(url, GET_TIMEOUT_MS, async (signal) => {
+    for (let attempt = 0; ; attempt += 1) {
+      if (signal.aborted) throw new Error("请求已取消");
+      const resp = await fetch(url, { headers: authHeaders(requestToken), signal });
+      if (resp.ok) return await resp.json() as T;
+      const body = await resp.json().catch(() => null);
+      if (attempt < 2 && [502, 503, 504].includes(resp.status)) {
+        const retryAfter = Number(resp.headers.get("Retry-After"));
+        const backoff = 150 * 2 ** attempt + Math.random() * 100;
+        await retryDelay(Math.max(backoff, Number.isFinite(retryAfter) ? retryAfter * 1000 : 0), signal);
+        continue;
+      }
+      if (resp.status === 401) notifyAuthExpired(requestToken);
+      throw new ApiError(resp.status, body?.detail, fallback ?? `${resp.status} ${resp.statusText}`);
+    }
+  }, callerSignal);
 }
 
-async function post<T>(url: string, body?: unknown, method = "POST"): Promise<T> {
+function get<T>(url: string, signal?: AbortSignal): Promise<T> {
+  return getWithToken<T>(url, getActiveAuthToken(), undefined, signal);
+}
+
+async function post<T>(url: string, body?: unknown, method = "POST", callerSignal?: AbortSignal): Promise<T> {
   const requestToken = getActiveAuthToken();
   return withRequestTimeout(url, MUTATION_TIMEOUT_MS, async (signal) => {
+    if (signal.aborted) throw new Error("请求已取消");
     const resp = await fetch(url, {
       method,
       headers: authHeaders(requestToken, { "Content-Type": "application/json" }),
@@ -126,7 +151,7 @@ async function post<T>(url: string, body?: unknown, method = "POST"): Promise<T>
       throw new ApiError(resp.status, payload?.detail, `${resp.status} ${resp.statusText}`);
     }
     return await resp.json() as T;
-  });
+  }, callerSignal);
 }
 
 export const api = {
@@ -154,7 +179,7 @@ export const api = {
   steps: () => get<import("./types").StepsResponse>("/api/steps"),
   meta: () => get<import("./types").Meta>("/api/meta"),
   indicatorSchema: () => get<import("./types").IndicatorSchema>("/api/indicators/schema"),
-  dbMeta: () => get<import("./types").DbMeta>("/api/db/meta"),
+  dbMeta: (signal?: AbortSignal) => get<import("./types").DbMeta>("/api/db/meta", signal),
   dbSlice: (params: {
     year: number;
     table: import("./types").DbTableKind;
@@ -164,7 +189,7 @@ export const api = {
     colSector?: string;
     page?: number;
     pageSize?: number;
-  }) => {
+  }, signal?: AbortSignal) => {
     return get<import("./types").DbSlice>(withQuery("/api/db/slice", {
       year: params.year,
       table: params.table,
@@ -174,7 +199,7 @@ export const api = {
       col_country: params.colCountry,
       row_sector: params.rowSector,
       col_sector: params.colSector,
-    }));
+    }), signal);
   },
   qc: (year: number) => get<import("./types").QcCheck[]>(`/api/qc/${year}`),
   qcShocks: () => get<import("./types").QcCheck[]>("/api/qc/shocks"),
@@ -254,6 +279,7 @@ export const api = {
     priceMode: string,
     scenario: string,
     weightMode: string,
+    signal?: AbortSignal,
   ) => {
     return post<import("./types").CurrentRegressionResponse>("/api/regression/run", {
         outcome,
@@ -265,7 +291,7 @@ export const api = {
         price_mode: priceMode,
         scenario,
         weight_mode: weightMode,
-    });
+    }, "POST", signal);
   },
   placeboRegression: async (
     outcome: import("./types").RegressionOutcome,
@@ -278,6 +304,7 @@ export const api = {
     scenario: string,
     weightMode: string,
     nDraws = 40,
+    signal?: AbortSignal,
   ) => {
     return post<import("./types").PlaceboResponse>("/api/regression/placebo", {
         outcome,
@@ -290,7 +317,7 @@ export const api = {
         scenario,
         weight_mode: weightMode,
         n_draws: nDraws,
-    });
+    }, "POST", signal);
   },
   classroom: {
     submitQuiz: (body: { step: number; version: string; answers: Record<string, string> }) =>

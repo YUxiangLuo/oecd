@@ -7,7 +7,7 @@ from gvcsim.config import ROOT
 def test_service_uses_one_worker_and_small_fixed_limits():
     service = (ROOT / "deploy" / "gvcsim-api.service").read_text()
     assert "--workers" not in service
-    assert "--limit-concurrency 64" in service
+    assert "--limit-concurrency 512" in service
     assert "ExecStartPre=/opt/gvcsim/current/.venv/bin/gvcsim preflight" in service
     assert "RuntimeDirectory=" not in service
     assert "ReadOnlyPaths=/opt/gvcsim/shared/data /opt/gvcsim/shared/OECD_ICIO" in service
@@ -79,6 +79,7 @@ def test_nginx_keeps_transport_limits_while_application_owns_identity_rates():
     nginx = (ROOT / "deploy" / "nginx-gvcsim.conf").read_text()
     assert "limit_req" not in nginx
     assert "proxy_read_timeout 120s" in nginx
+    assert "keepalive 8;" in nginx and "keepalive_timeout 2s;" in nginx
     assert "gzip on;" in nginx
     assert "gzip_vary on;" in nginx
     assert "application/javascript" in nginx and "application/json" in nginx

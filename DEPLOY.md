@@ -109,6 +109,8 @@ curl -fsS "$GVCSIM_BASE_URL/health"
 
 普通代码部署不运行 `compute`，更不能运行 `classroom-init --reset`。新代码若要求更高的 artifact contract，应改走下一节的数据发布流程。
 
+更新课堂并发修复时，还需安装本仓库的新 systemd 与 Nginx 模板：Uvicorn 连接限制为 512，upstream 每个 Nginx worker 保留 8 个空闲连接、2 秒回收。保留实际域名、证书和 upstream 地址，执行 `nginx -t`、`systemctl daemon-reload` 并重载 Nginx；只更新代码不会改变已经安装的旧模板。单 API worker、16 个普通线程和 4 个计算名额保持配套使用，详见[运行容量](技术手册.md#112-运行容量)。
+
 ```bash
 set -euo pipefail
 GVCSIM_BASE_URL='https://<课程域名>'   # 替换为站点实际对外地址

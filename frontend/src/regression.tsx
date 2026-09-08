@@ -906,6 +906,8 @@ export function RegressionRunLab({
   const runningRef = useRef(false);
   const placeboRunningRef = useRef(false);
   const placeboRequestRef = useRef(0);
+  const runController = useRef<{ key: string; controller: AbortController } | null>(null);
+  const placeboController = useRef<{ key: string; controller: AbortController } | null>(null);
   const verdictAnchorRef = useRef<HTMLDivElement>(null);
   const scrollToVerdictAfterRun = useRef(false);
   const latestRequest = useRef(`${outcome}:${regressionSettingsKey(settings)}`);
@@ -956,8 +958,16 @@ export function RegressionRunLab({
     return () => {
       mountedRef.current = false;
       placeboRequestRef.current += 1;
+      runController.current?.controller.abort();
+      placeboController.current?.controller.abort();
     };
   }, []);
+
+  useEffect(() => {
+    for (const request of [runController.current, placeboController.current]) {
+      if (request && request.key !== currentRequestKey) request.controller.abort();
+    }
+  }, [currentRequestKey]);
 
   useEffect(() => {
     scrollToVerdictAfterRun.current = false;
@@ -1009,11 +1019,14 @@ export function RegressionRunLab({
     runningRef.current = true;
     const runSettings = effectiveSettings(currentSettings);
     const requestKey = `${outcome}:${regressionSettingsKey(runSettings)}`;
+    const controller = new AbortController();
+    runController.current = { key: requestKey, controller };
     setRunning(true);
     setRunningRequestKey(requestKey);
     setError(null);
     // 新主回归开始即使所有在途置换响应失效，避免旧分布覆盖新结果。
     placeboRequestRef.current += 1;
+    placeboController.current?.controller.abort();
     placeboRunningRef.current = false;
     setPlaceboRunning(false);
     setPlacebo(null);
@@ -1022,6 +1035,7 @@ export function RegressionRunLab({
       const response = await api.runRegression(
         outcome, runSettings.granularity, runSettings.shockType, runSettings.method,
         runSettings.controlMode, runSettings.interaction, runSettings.priceMode, runSettings.scenario, runSettings.weightMode,
+        controller.signal,
       );
       if (!mountedRef.current) return;
       onHistoryChange((current) => {
@@ -1057,6 +1071,7 @@ export function RegressionRunLab({
         setError({ requestKey, message: userFacingRequestError(cause, "回归运行失败") });
       }
     } finally {
+      if (runController.current?.controller === controller) runController.current = null;
       runningRef.current = false;
       if (mountedRef.current) {
         setRunning(false);
@@ -1086,6 +1101,8 @@ export function RegressionRunLab({
     const placeboSettings = resultSettings;
     const requestKey = `${outcome}:${regressionSettingsKey(placeboSettings)}`;
     const requestId = ++placeboRequestRef.current;
+    const controller = new AbortController();
+    placeboController.current = { key: requestKey, controller };
     setPlaceboRunning(true);
     setPlaceboRunningRequestKey(requestKey);
     setPlaceboError(null);
@@ -1093,6 +1110,7 @@ export function RegressionRunLab({
       const response = await api.placeboRegression(
         outcome, placeboSettings.granularity, placeboSettings.shockType, placeboSettings.method,
         placeboSettings.controlMode, placeboSettings.interaction, placeboSettings.priceMode, placeboSettings.scenario, placeboSettings.weightMode, 40,
+        controller.signal,
       );
       if (placeboRequestRef.current === requestId && latestRequest.current === requestKey) {
         setPlacebo(response);
@@ -1105,6 +1123,7 @@ export function RegressionRunLab({
         });
       }
     } finally {
+      if (placeboController.current?.controller === controller) placeboController.current = null;
       if (placeboRequestRef.current === requestId) {
         placeboRunningRef.current = false;
         setPlaceboRunning(false);

@@ -9,6 +9,7 @@ from gvcsim import auth_routes, regression_routes
 from gvcsim.api import app
 from gvcsim.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
 from gvcsim.regression.contracts import PlaceboRequest, RegressionRequest
+from gvcsim.singleflight import AsyncSingleFlightCache
 
 
 @pytest.mark.parametrize(
@@ -80,7 +81,8 @@ def test_expensive_regression_routes_limit_each_account_before_repeating_work(
     limiter_name,
 ):
     class Uncached:
-        async def get_or_compute(self, _key, factory):
+        async def get_or_compute(self, _key, factory, *, admit, owner):
+            admit()
             return await factory()
 
     class Result:
@@ -112,3 +114,44 @@ def test_regression_limit_requires_stable_account_identity():
     with pytest.raises(HTTPException) as exc_info:
         regression_routes._require_regression_student(request)
     assert exc_info.value.status_code == 401
+
+
+@pytest.mark.parametrize("operation", ["run", "placebo"])
+def test_exhausted_initiator_does_not_publish_429_to_49_other_students(monkeypatch, operation):
+    async def scenario():
+        limit = 12 if operation == "run" else 4
+        limiter = SlidingWindowRateLimiter(limit)
+        for _ in range(limit):
+            limiter.check(1)
+        monkeypatch.setattr(regression_routes, "_RUN_LIMITER" if operation == "run" else "_PLACEBO_LIMITER", limiter)
+        monkeypatch.setattr(regression_routes, "_RESULT_CACHE", AsyncSingleFlightCache())
+        monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: "a" * 32)
+        monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: object())
+        computations = []
+
+        async def compute(function, *_args, **_kwargs):
+            computations.append(function)
+            await asyncio.sleep(0.01)
+            if operation == "run":
+                return SimpleNamespace(to_dict=lambda: {"status": "ok", "support": {}}), {}
+            return {"draws": []}
+
+        monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", compute)
+        route = regression_routes.regression_run if operation == "run" else regression_routes.regression_placebo
+        payload = RegressionRequest(outcome="trade") if operation == "run" else PlaceboRequest(outcome="trade")
+
+        async def call(account_id):
+            request = SimpleNamespace(state=SimpleNamespace(user={"role": "student", "aid": account_id}))
+            try:
+                return await route(payload, request)
+            except HTTPException as error:
+                return error.status_code
+
+        results = await asyncio.gather(*(call(i) for i in range(1, 51)))
+        assert results[0] == 429
+        assert all(isinstance(result, dict) for result in results[1:])
+        assert len(computations) == 1
+        # Even the exhausted student may consume the now-cached result for free.
+        assert isinstance(await call(1), dict)
+
+    asyncio.run(scenario())

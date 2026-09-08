@@ -7,6 +7,8 @@
   accounts TLS/VA/OUT 账户行转置后的国家-行业表
 """
 
+from collections import OrderedDict
+from concurrent.futures import Future
 from functools import lru_cache
 from pathlib import Path
 import threading
@@ -29,6 +31,10 @@ FINAL_DEMAND_CATEGORIES = ("HFCE", "NPISH", "GGFC", "GFCF", "INVNT", "DPABR")
 ACCOUNT_ROWS = ("TLS", "VA", "OUT")
 VALID_TABLES = ("z", "y", "accounts")
 _raw_cache_lock = threading.RLock()
+_TABLE_CACHE_SIZE = 5
+_tables: OrderedDict[RawFileIdentity, pd.DataFrame] = OrderedDict()
+_table_reads: dict[RawFileIdentity, Future[pd.DataFrame]] = {}
+_cache_generation = 0
 
 
 def _year_file(year: int, raw_dir: Path = RAW_DATA_DIR) -> Path:
@@ -100,26 +106,60 @@ def _meta_for_path(path: Path) -> dict[str, Any]:
         return _metadata(raw_file_identity(path))
 
 
-@lru_cache(maxsize=32)
-def _read_columns_cached(identity: RawFileIdentity, usecols: tuple[str, ...]) -> pd.DataFrame:
-    return pd.read_csv(identity[0], usecols=list(usecols), keep_default_na=False, na_values=[""])
+def _read_table(identity: RawFileIdentity) -> pd.DataFrame:
+    """Share a year across different countries without serial CSV rescans.
+
+    Retain at most five full tables (about 520 MiB for the current OECD release).
+    The short dictionary lock never covers a full-table read or a Future wait.
+    """
+    with _raw_cache_lock:
+        cached = _tables.get(identity)
+        if cached is not None:
+            _tables.move_to_end(identity)
+            return cached
+        future = _table_reads.get(identity)
+        owns_read = future is None
+        generation = _cache_generation
+        if future is None:
+            future = Future()
+            _table_reads[identity] = future
+    if not owns_read:
+        return future.result()
+    try:
+        frame = pd.read_csv(identity[0], keep_default_na=False, na_values=[""])
+        with _raw_cache_lock:
+            if generation == _cache_generation:
+                _tables[identity] = frame
+                while len(_tables) > _TABLE_CACHE_SIZE:
+                    _tables.popitem(last=False)
+        future.set_result(frame)
+        return frame
+    except BaseException as error:
+        future.set_exception(error)
+        raise
+    finally:
+        with _raw_cache_lock:
+            if _table_reads.get(identity) is future:
+                _table_reads.pop(identity)
 
 
 def _read_columns(path: Path, usecols: tuple[str, ...]) -> pd.DataFrame:
-    """按列切片读取原始宽表,并按不可变文件状态与列集缓存。
-
-    翻页只换行不换列,命中缓存后无需重扫 ~66MB 的原始文件。
-    缓存的 DataFrame 不得原地修改,调用方只能做产生副本的操作。
-    """
-    with _raw_cache_lock:
-        return _read_columns_cached(raw_file_identity(path), usecols)
+    """Return an isolated column selection from the immutable per-year cache."""
+    frame = _read_table(raw_file_identity(path))
+    # Preserve file column order, matching pandas.read_csv(usecols=...).
+    wanted = set(usecols)
+    if missing := wanted.difference(frame.columns):
+        raise ValueError(f"Usecols do not match columns: {sorted(missing)}")
+    return frame.loc[:, [column for column in frame.columns if column in wanted]].copy()
 
 
 def clear_raw_browser_caches() -> None:
     """Clear raw metadata and page caches for deterministic tests and maintenance."""
+    global _cache_generation
     with _raw_cache_lock:
         _metadata.cache_clear()
-        _read_columns_cached.cache_clear()
+        _tables.clear()
+        _cache_generation += 1
 
 
 def meta(

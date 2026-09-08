@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse, Response
 
-from gvcsim import auth, auth_routes, data_routes, regression_routes
+from gvcsim import auth, auth_routes, concurrency, data_routes, regression_routes
 from gvcsim import config as app_config
 from gvcsim.artifacts import ArtifactContractError, dataset_metadata, validate_release_cached
 from gvcsim.classroom import db as classroom_db
@@ -58,13 +58,23 @@ async def lifespan(_app: FastAPI):
         await anyio.to_thread.run_sync(validate_startup_data)
         yield
     finally:
-        regression_routes.clear_result_cache()
+        await regression_routes._RESULT_CACHE.aclose()
+        await concurrency.shutdown()
         auth_routes.clear_rate_limits()
         regression_routes.clear_rate_limits()
         await anyio.to_thread.run_sync(classroom_db.shutdown)
 
 
 app = FastAPI(title="供应链仿真系统 API", version="0.2.0", lifespan=lifespan)
+
+
+@app.exception_handler(concurrency.WorkUnavailable)
+async def work_unavailable(_request: Request, error: concurrency.WorkUnavailable):
+    return JSONResponse(
+        status_code=503,
+        content={"detail": {"message": str(error), "code": error.code}},
+        headers={"Retry-After": "5"},
+    )
 
 
 @app.exception_handler(RequestValidationError)

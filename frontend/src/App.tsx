@@ -36,6 +36,7 @@ export default function App() {
   const [current, setCurrent] = useState(() => explicitStep.current ?? 1);
   const contentRef = useRef<HTMLElement>(null);
   const [fatal, setFatal] = useState<string | null>(null);
+  const [bootAttempt, setBootAttempt] = useState(0);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authChecked, setAuthChecked] = useState(() => !localStorage.getItem(AUTH_TOKEN_KEY));
   const [authExpiresAt] = useState<number | null>(() => readAuthExpiry(localStorage));
@@ -174,6 +175,8 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     let live = true;
+    setFatal(null);
+    setMetaReady(false);
     api.meta().then((value) => {
       if (!live) return;
       setMeta(value);
@@ -190,7 +193,7 @@ export default function App() {
       );
     }
     return () => { live = false; };
-  }, [user]);
+  }, [user, bootAttempt]);
 
   useEffect(() => {
     if (!stepsData || session.status !== "ready" || initialStepChosen.current) return;
@@ -245,7 +248,13 @@ export default function App() {
     );
   }
 
-  if (fatal) return <div style={{ padding: 40 }}><div className="error-box">无法连接后端 API：{fatal}</div></div>;
+  if (fatal) return (
+    <main className="app-boot" style={{ padding: 40 }}>
+      <div className="error-box" role="alert">课程加载失败：{fatal}</div>
+      <p>登录信息已保留，可以重试加载课程。</p>
+      <button className="primary" onClick={() => { setFatal(null); setBootAttempt((value) => value + 1); }}>重试加载课程</button>
+    </main>
+  );
   if (!stepsData || !metaReady || session.status === "loading") return <AppBootSkeleton />;
 
   return (

@@ -66,7 +66,7 @@ export function currentAsyncSnapshot<T>({
 }
 
 export function useAsync<T>(
-  fn: () => Promise<T>,
+  fn: (signal: AbortSignal) => Promise<T>,
   deps: unknown[],
   options: { enabled?: boolean; keepPreviousData?: boolean; requestKey?: string } = {},
 ): AsyncResult<T> {
@@ -95,13 +95,14 @@ export function useAsync<T>(
       return;
     }
     let live = true;
+    const controller = new AbortController();
     // Request-keyed callers may never expose previous data as current evidence,
     // even if keepPreviousData was accidentally enabled.
     if (!keepPreviousData || requestIdentity !== null) setData(null);
     setError(null);
     setStatus("loading");
     setSettledIdentity(requestIdentity);
-    fn().then(
+    fn(controller.signal).then(
       (d) => {
         if (!live) return;
         setData(d);
@@ -118,6 +119,7 @@ export function useAsync<T>(
     );
     return () => {
       live = false;
+      controller.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, enabled, keepPreviousData, requestIdentity, revision]);

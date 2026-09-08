@@ -32,6 +32,7 @@ import pandas as pd
 from linearmodels.panel import PanelOLS
 from scipy import stats
 
+from gvcsim.concurrency import check_cancelled
 from gvcsim.regression.design import (
     METHOD_DID,
     METHOD_EVENT_STUDY,
@@ -973,6 +974,7 @@ def placebo_did_distribution(
     attempts = 0
     pseudo_col = "__placebo_treated"
     while len(coefs) < n_draws and attempts < n_draws * 4:
+        check_cancelled()
         attempts += 1
         assigned_year: dict[str, int] = {}
         remaining = set(str(item) for item in entities)
@@ -1951,6 +1953,7 @@ def _prepare_cohort_time_cells(model: PreparedModel, event_times: list[int] | No
     cells: list[_CohortTimeCell] = []
 
     for cohort in sorted(int(value) for value in first.dropna().unique()):
+        check_cancelled()
         baseline = cohort - 1
         if baseline not in values.columns:
             continue
@@ -2197,10 +2200,12 @@ def _audit_cohort_time_jackknife(
     prepared_cells: list[_CohortTimeCell],
 ) -> _CohortJackknifeAudit:
     """Build delete-one covariance and independently audit its standard errors."""
-    leave_one_estimates = [
-        _cohort_time_att_values(model, event_times, omitted_cluster=cluster_value, prepared_cells=prepared_cells)[0]
-        for cluster_value in clusters
-    ]
+    leave_one_estimates = []
+    for cluster_value in clusters:
+        check_cancelled()
+        leave_one_estimates.append(
+            _cohort_time_att_values(model, event_times, omitted_cluster=cluster_value, prepared_cells=prepared_cells)[0]
+        )
 
     # A locally unsupported remote event period can disappear when its sole
     # contributing cluster is deleted. Only common terms enter covariance.

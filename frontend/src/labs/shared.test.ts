@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { asyncRequestIdentity, currentAsyncSnapshot } from "./shared";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { asyncRequestIdentity, currentAsyncSnapshot, useAsync } from "./shared";
 
 const success = <T>(requestIdentity: string | null, settledIdentity: string | null, data: T | null) => (
   currentAsyncSnapshot({
@@ -13,6 +14,26 @@ const success = <T>(requestIdentity: string | null, settledIdentity: string | nu
 );
 
 describe("request-bound async snapshots", () => {
+  test("switching the query and leaving the step aborts obsolete requests", async () => {
+    const requests: Array<{ signal: AbortSignal; resolve: (value: number) => void }> = [];
+    const query = (signal: AbortSignal) => new Promise<number>((resolve) => requests.push({ signal, resolve }));
+    const view = renderHook(({ year }) => useAsync(query, [year], { requestKey: String(year) }), { initialProps: { year: 2019 } });
+    try {
+      await waitFor(() => expect(requests.length).toBe(1));
+      view.rerender({ year: 2020 });
+      await waitFor(() => expect(requests.length).toBe(2));
+      expect(requests[0].signal.aborted).toBe(true);
+      expect(requests[1].signal.aborted).toBe(false);
+      await act(async () => requests[0].resolve(2019));
+      expect(view.result.current.data).toBeNull();
+      await act(async () => requests[1].resolve(2020));
+      expect(view.result.current.data).toBe(2020);
+    } finally {
+      view.unmount();
+    }
+    expect(requests[1].signal.aborted).toBe(true);
+  });
+
   test("does not expose a delayed old-year result under a new request key", () => {
     const oldYear = asyncRequestIdentity("release:2019:country", 0);
     const newYear = asyncRequestIdentity("release:2020:country", 0);

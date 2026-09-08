@@ -5,10 +5,20 @@ from __future__ import annotations
 import asyncio
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Hashable
+from dataclasses import dataclass
 from typing import Generic, TypeVar
+
+from gvcsim.concurrency import WorkUnavailable
 
 K = TypeVar("K", bound=Hashable)
 V = TypeVar("V")
+
+
+@dataclass
+class _Flight(Generic[V]):
+    task: asyncio.Task[V]
+    owner: Hashable | None = None
+    waiters: int = 0
 
 
 class AsyncSingleFlightCache(Generic[K, V]):
@@ -21,14 +31,29 @@ class AsyncSingleFlightCache(Generic[K, V]):
     not cancel work that another student is still awaiting.
     """
 
-    def __init__(self, maxsize: int = 64):
-        if maxsize <= 0:
-            raise ValueError("maxsize must be positive")
+    def __init__(self, maxsize: int = 64, *, max_inflight: int = 64):
+        if maxsize <= 0 or max_inflight <= 0:
+            raise ValueError("cache limits must be positive")
         self._maxsize = maxsize
+        self._max_inflight = max_inflight
         self._values: OrderedDict[K, V] = OrderedDict()
-        self._inflight: dict[K, asyncio.Task[V]] = {}
+        self._inflight: dict[K, _Flight[V]] = {}
+        self._owners: dict[Hashable, _Flight[V]] = {}
 
-    async def get_or_compute(self, key: K, factory: Callable[[], Awaitable[V]]) -> V:
+    def _forget(self, key: K, flight: _Flight[V]) -> None:
+        if self._inflight.get(key) is flight:
+            self._inflight.pop(key)
+        if flight.owner is not None and self._owners.get(flight.owner) is flight:
+            self._owners.pop(flight.owner)
+
+    async def get_or_compute(
+        self,
+        key: K,
+        factory: Callable[[], Awaitable[V]],
+        *,
+        admit: Callable[[], None] | None = None,
+        owner: Hashable | None = None,
+    ) -> V:
         try:
             value = self._values.pop(key)
         except KeyError:
@@ -37,22 +62,42 @@ class AsyncSingleFlightCache(Generic[K, V]):
             self._values[key] = value
             return value
 
-        task = self._inflight.get(key)
-        if task is None:
+        flight = self._inflight.get(key)
+        if flight is None:
+            if len(self._inflight) >= self._max_inflight:
+                raise WorkUnavailable()
+            if owner is not None and owner in self._owners:
+                raise WorkUnavailable("account_work_inflight")
+            # Admission is synchronous and happens BEFORE publishing the flight.
+            # A rejected account cannot publish its 429 to unrelated students.
+            if admit is not None:
+                admit()
             task = asyncio.create_task(self._compute(key, factory))
-            # Work survives waiter cancellation. Observe a later failure even if
-            # nobody remains to await it; active waiters still receive the exception.
-            task.add_done_callback(lambda completed: None if completed.cancelled() else completed.exception())
-            self._inflight[key] = task
-        return await asyncio.shield(task)
+            flight = _Flight(task, owner)
+            self._inflight[key] = flight
+            if owner is not None:
+                self._owners[owner] = flight
+
+            def finished(completed: asyncio.Task[V]) -> None:
+                self._forget(key, flight)
+                if not completed.cancelled():
+                    completed.exception()
+
+            task.add_done_callback(finished)
+        flight.waiters += 1
+        try:
+            return await asyncio.shield(flight.task)
+        finally:
+            flight.waiters -= 1
+            if flight.waiters == 0 and not flight.task.done():
+                flight.task.cancel()
+                self._forget(key, flight)
 
     async def _compute(self, key: K, factory: Callable[[], Awaitable[V]]) -> V:
-        try:
-            value = await factory()
-        except BaseException:
-            self._inflight.pop(key, None)
-            raise
-        self._inflight.pop(key, None)
+        value = await factory()
+        flight = self._inflight.get(key)
+        if flight is None or flight.task is not asyncio.current_task() or not flight.waiters:
+            return value
         self._values[key] = value
         self._values.move_to_end(key)
         while len(self._values) > self._maxsize:
@@ -62,6 +107,13 @@ class AsyncSingleFlightCache(Generic[K, V]):
     def clear(self) -> None:
         """Drop completed values; already running work remains valid for its waiters."""
         self._values.clear()
+
+    async def aclose(self) -> None:
+        tasks = [flight.task for flight in self._inflight.values()]
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        self.clear()
 
     @property
     def completed_count(self) -> int:

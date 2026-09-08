@@ -1,0 +1,558 @@
+{
+  "date": "2026-09-08",
+  "base_commit": "27db4ffb55307276ddd8f82f42bd256cb9ee725d",
+  "reviewed_state": "working tree concurrency fixes",
+  "release_id": "2de76298d79646509efe0dfb49d8065d",
+  "environment": {
+    "platform": "Linux-7.2.3-arch1-3-x86_64-with-glibc2.44",
+    "python": "3.13.15",
+    "uvicorn": "0.49.0",
+    "logical_cpus": 12,
+    "students": 50,
+    "workers": 1,
+    "uvicorn_limit_concurrency": 512,
+    "backlog": 256,
+    "anyio_thread_tokens": 16,
+    "cpu_task_limit": 4,
+    "postgres_pool_max": 8,
+    "numerical_library_threads": 2,
+    "dedicated_database": "gvclab_concurrency_capacity_20260908",
+    "raw_thread_tokens": 2,
+    "raw_admission_limit": 64,
+    "cpu_admission_limit": 64,
+    "queue_timeout_seconds": 15,
+    "work_timeout_seconds": 90,
+    "nginx_workers": 1,
+    "nginx_upstream_keepalive": 8,
+    "nginx_upstream_keepalive_timeout_seconds": 2
+  },
+  "scope_notes": [
+    "Real current OECD 2016-2020 release, isolated PostgreSQL, local Nginx HTTP -> Uvicorn TCP; no production TLS/HTTP2 or campus network simulation.",
+    "Server wrapper adds a localhost-only metrics route and CPU invocation counts; production application contains no metrics/test route. Scheduling limits and operations are real.",
+    "Bootstrap waits for health readiness; one request set before readiness returned 502 and was discarded.",
+    "Raw same-year 50-column test uses one authenticated read-only account. Five-year cold/warm test, natural bootstrap, saves, CAS, cancellation, regression, report phases use 50 independent student accounts.",
+    "Cold means empty application cache; OS page cache was not flushed.",
+    "Report fixture is populated via public APIs and cloned to 50 session owners with individual research-question suffixes. Four prescribed regression diagnostics are invalid_design, accepted as reportable diagnostic evidence; timing does not cover every possible inferential result.",
+    "Distinct jobs use legal API seeds at n_draws=40; stock UI uses a fixed seed. Cold identical UI parameter test used a new API process and observed one computation.",
+    "Client-disconnect lifecycle tests use real HTTP cancellations through Nginx; ordinary read/write probes use independent clients to avoid load-generator pool queueing.",
+    "No production service was deployed or modified. Temporary local resources are cleaned after verification."
+  ],
+  "checks": {
+    "backend_full": {
+      "passed": 653,
+      "failed": 0,
+      "seconds": 191.73,
+      "coverage_percent": 89.95
+    },
+    "frontend_full": {
+      "passed": 372,
+      "failed": 0,
+      "seconds": 5.85
+    },
+    "ruff_check": "passed",
+    "ruff_format": "passed",
+    "mypy": "passed (53 source files)",
+    "frontend_production_build": "passed",
+    "production_demo_boundary": "passed",
+    "git_diff_check": "passed"
+  },
+  "nginx_bootstrap": {
+    "method": "50 independent login -> me -> parallel meta,steps,session; real Nginx/Uvicorn TCP; no barrier between stages",
+    "paths": {
+      "login": {
+        "200": 50
+      },
+      "me": {
+        "200": 50
+      },
+      "/api/meta": {
+        "200": 50
+      },
+      "/api/steps": {
+        "200": 50
+      },
+      "/api/classroom/session": {
+        "200": 50
+      }
+    },
+    "students_completed": 50
+  },
+  "http": {
+    "environment": {
+      "python": "3.13.15",
+      "cpu_count": 12,
+      "base_url": "http://127.0.0.1:18082"
+    },
+    "phases": {
+      "login_50": {
+        "count": 50,
+        "status_counts": {
+          "200": 50
+        },
+        "p50_ms": 157.91,
+        "p95_ms": 212.49,
+        "max_ms": 213.8
+      },
+      "bootstrap_50_x_3": {
+        "count": 150,
+        "status_counts": {
+          "200": 150
+        },
+        "p50_ms": 601.4,
+        "p95_ms": 749.78,
+        "max_ms": 753.7,
+        "by_endpoint": {
+          "/api/meta": {
+            "count": 50,
+            "status_counts": {
+              "200": 50
+            },
+            "p50_ms": 575.06,
+            "p95_ms": 666.89,
+            "max_ms": 680.28
+          },
+          "/api/steps": {
+            "count": 50,
+            "status_counts": {
+              "200": 50
+            },
+            "p50_ms": 544.36,
+            "p95_ms": 643.28,
+            "max_ms": 661.61
+          },
+          "/api/classroom/session": {
+            "count": 50,
+            "status_counts": {
+              "200": 50
+            },
+            "p50_ms": 732.96,
+            "p95_ms": 750.57,
+            "max_ms": 753.7
+          }
+        },
+        "students_all_three_ok": 50
+      },
+      "autosave_50": {
+        "count": 50,
+        "status_counts": {
+          "200": 50
+        },
+        "p50_ms": 243.61,
+        "p95_ms": 283.62,
+        "max_ms": 284.36
+      },
+      "two_tabs_50_same_base": {
+        "count": 100,
+        "status_counts": {
+          "200": 50,
+          "409": 50
+        },
+        "p50_ms": 372.68,
+        "p95_ms": 487.12,
+        "max_ms": 491.79,
+        "correctly_conflicted_pairs": 50
+      },
+      "same_regression_50": {
+        "count": 50,
+        "status_counts": {
+          "200": 50
+        },
+        "p50_ms": 563.6,
+        "p95_ms": 566.09,
+        "max_ms": 566.64,
+        "unique_success_bodies": 1
+      },
+      "distinct_placebo_50_seed_api": {
+        "count": 50,
+        "status_counts": {
+          "200": 4,
+          "503": 46
+        },
+        "p50_ms": 15334.06,
+        "p95_ms": 20604.6,
+        "max_ms": 20612.82
+      },
+      "liveness_with_63_idle_sockets": {
+        "count": 1,
+        "status_counts": {
+          "200": 1
+        },
+        "p50_ms": 1.73,
+        "p95_ms": 1.73,
+        "max_ms": 1.73
+      }
+    }
+  },
+  "raw": {
+    "raw_50_distinct_country_cold": {
+      "count": 50,
+      "codes": {
+        "200": 50
+      },
+      "p50_ms": 1715.02,
+      "p95_ms": 2065.09,
+      "max_ms": 2096.72,
+      "above_frontend_10s_timeout": 0
+    },
+    "independent_session_probes": [
+      {
+        "status": 200,
+        "ms": 11.657351002213545,
+        "delay": 1,
+        "metrics_before": {
+          "inflight": 0,
+          "completed_cache": 0,
+          "thread_borrowed": 0,
+          "thread_waiting": 0,
+          "workers": 50,
+          "raw_borrowed": 2,
+          "raw_waiting": 48,
+          "cpu_admitted": 0,
+          "raw_admitted": 50,
+          "cpu_borrowed": 0,
+          "cpu_waiting": 0,
+          "cpu_calls": {},
+          "cpu_active": {}
+        }
+      },
+      {
+        "status": 200,
+        "ms": 8.494652007357217,
+        "delay": 3,
+        "metrics_before": {
+          "inflight": 0,
+          "completed_cache": 0,
+          "thread_borrowed": 0,
+          "thread_waiting": 0,
+          "workers": 0,
+          "raw_borrowed": 0,
+          "raw_waiting": 0,
+          "cpu_admitted": 0,
+          "raw_admitted": 0,
+          "cpu_borrowed": 0,
+          "cpu_waiting": 0,
+          "cpu_calls": {},
+          "cpu_active": {}
+        }
+      }
+    ],
+    "client_connection_limit": 80
+  },
+  "lifecycle": {
+    "all_50_disconnect": {
+      "before_disconnect": {
+        "inflight": 50,
+        "completed_cache": 5,
+        "thread_borrowed": 4,
+        "thread_waiting": 0,
+        "workers": 50,
+        "raw_borrowed": 0,
+        "raw_waiting": 0,
+        "cpu_admitted": 50,
+        "raw_admitted": 0,
+        "cpu_borrowed": 4,
+        "cpu_waiting": 46,
+        "cpu_calls": {
+          "run_design_with_benchmark": 1,
+          "placebo_did_distribution": 8
+        },
+        "cpu_active": {
+          "run_design_with_benchmark": 0,
+          "placebo_did_distribution": 4
+        }
+      },
+      "after_disconnect": {
+        "inflight": 0,
+        "completed_cache": 5,
+        "thread_borrowed": 0,
+        "thread_waiting": 0,
+        "workers": 0,
+        "raw_borrowed": 0,
+        "raw_waiting": 0,
+        "cpu_admitted": 0,
+        "raw_admitted": 0,
+        "cpu_borrowed": 0,
+        "cpu_waiting": 0,
+        "cpu_calls": {
+          "run_design_with_benchmark": 1,
+          "placebo_did_distribution": 8
+        },
+        "cpu_active": {
+          "run_design_with_benchmark": 0,
+          "placebo_did_distribution": 0
+        }
+      },
+      "reclaimed_ms": 501.4255900023272,
+      "numerical_jobs_started": 4
+    },
+    "one_shared_waiter_disconnect": {
+      "remaining_status": 200,
+      "numerical_jobs_started": 1
+    },
+    "distinct_placebo_50": {
+      "count": 50,
+      "codes": {
+        "200": 4,
+        "503": 46
+      },
+      "p95_ms": 22165.556121006375,
+      "max_ms": 22175.64193200087,
+      "successful": {
+        "count": 4,
+        "codes": {
+          "200": 4
+        },
+        "p95_ms": 22175.64193200087,
+        "max_ms": 22175.64193200087
+      },
+      "busy": {
+        "count": 46,
+        "codes": {
+          "503": 46
+        },
+        "p95_ms": 15444.64152099681,
+        "max_ms": 15445.482016992173
+      },
+      "busy_codes": {
+        "work_queue_timeout": 46
+      },
+      "retry_after": {
+        "5": 46
+      },
+      "peak_cpu_threads": 4,
+      "peak_cpu_admitted": 50,
+      "independent_probes": [
+        {
+          "during": {
+            "inflight": 50,
+            "completed_cache": 6,
+            "thread_borrowed": 4,
+            "thread_waiting": 0,
+            "workers": 50,
+            "raw_borrowed": 0,
+            "raw_waiting": 0,
+            "cpu_admitted": 50,
+            "raw_admitted": 0,
+            "cpu_borrowed": 4,
+            "cpu_waiting": 46,
+            "cpu_calls": {
+              "run_design_with_benchmark": 1,
+              "placebo_did_distribution": 13
+            },
+            "cpu_active": {
+              "run_design_with_benchmark": 0,
+              "placebo_did_distribution": 4
+            }
+          },
+          "read_ms": 95.91341899067629,
+          "save_ms": 99.51111901318654,
+          "read_status": 200,
+          "save_status": 200
+        },
+        {
+          "during": {
+            "inflight": 50,
+            "completed_cache": 6,
+            "thread_borrowed": 4,
+            "thread_waiting": 0,
+            "workers": 50,
+            "raw_borrowed": 0,
+            "raw_waiting": 0,
+            "cpu_admitted": 50,
+            "raw_admitted": 0,
+            "cpu_borrowed": 4,
+            "cpu_waiting": 46,
+            "cpu_calls": {
+              "run_design_with_benchmark": 1,
+              "placebo_did_distribution": 13
+            },
+            "cpu_active": {
+              "run_design_with_benchmark": 0,
+              "placebo_did_distribution": 4
+            }
+          },
+          "read_ms": 123.80110198864713,
+          "save_ms": 92.04465700895526,
+          "read_status": 200,
+          "save_status": 200
+        }
+      ],
+      "after": {
+        "inflight": 0,
+        "completed_cache": 10,
+        "thread_borrowed": 0,
+        "thread_waiting": 0,
+        "workers": 0,
+        "raw_borrowed": 0,
+        "raw_waiting": 0,
+        "cpu_admitted": 0,
+        "raw_admitted": 0,
+        "cpu_borrowed": 0,
+        "cpu_waiting": 0,
+        "cpu_calls": {
+          "run_design_with_benchmark": 1,
+          "placebo_did_distribution": 13
+        },
+        "cpu_active": {
+          "run_design_with_benchmark": 0,
+          "placebo_did_distribution": 0
+        }
+      }
+    }
+  },
+  "cold": {
+    "identical_placebo_50_cold": {
+      "count": 50,
+      "codes": {
+        "200": 50
+      },
+      "p95_ms": 5038.360637990991,
+      "max_ms": 5039.204783999594,
+      "computations": 1,
+      "unique_results": 1
+    },
+    "raw_50_over_five_years_cold": {
+      "count": 50,
+      "codes": {
+        "200": 50
+      },
+      "p95_ms": 5693.083596997894,
+      "max_ms": 5712.231881989283,
+      "cache_years": [
+        "ICIO2023_2018",
+        "ICIO2023_2017",
+        "ICIO2023_2016",
+        "ICIO2023_2019",
+        "ICIO2023_2020"
+      ],
+      "cache_mib": 519.8971748352051,
+      "rss_mib": 970.80078125
+    },
+    "raw_50_over_five_years_warm": {
+      "count": 50,
+      "codes": {
+        "200": 50
+      },
+      "p95_ms": 985.8249300013995,
+      "max_ms": 1016.207516004215,
+      "cache_years": [
+        "ICIO2023_2016",
+        "ICIO2023_2017",
+        "ICIO2023_2018",
+        "ICIO2023_2019",
+        "ICIO2023_2020"
+      ],
+      "cache_mib": 519.8971748352051,
+      "rss_mib": 979.66015625
+    }
+  },
+  "reports": {
+    "save_full_sessions_50": {
+      "count": 50,
+      "status_counts": {
+        "200": 50
+      },
+      "p50_ms": 384.76,
+      "p95_ms": 483.71,
+      "max_ms": 487.79
+    },
+    "generate_reports_50": {
+      "count": 50,
+      "status_counts": {
+        "200": 50
+      },
+      "p50_ms": 703.22,
+      "p95_ms": 910.77,
+      "max_ms": 916.17,
+      "states": {
+        "draft": 50
+      }
+    },
+    "submit_reports_50": {
+      "count": 50,
+      "status_counts": {
+        "200": 50
+      },
+      "p50_ms": 386.78,
+      "p95_ms": 509.0,
+      "max_ms": 514.44
+    },
+    "repeat_submit_reports_50": {
+      "count": 50,
+      "status_counts": {
+        "200": 50
+      },
+      "p50_ms": 365.25,
+      "p95_ms": 486.89,
+      "max_ms": 490.23,
+      "unchanged_versions": 50
+    },
+    "teacher_reads_class_reports": {
+      "count": 1,
+      "status_counts": {
+        "200": 1
+      },
+      "p50_ms": 106.25,
+      "p95_ms": 106.25,
+      "max_ms": 106.25,
+      "visible_reports": 50
+    },
+    "identical_ui_placebo_50": {
+      "count": 50,
+      "status_counts": {
+        "200": 50
+      },
+      "p50_ms": 188.89,
+      "p95_ms": 199.1,
+      "max_ms": 200.07,
+      "numerical_computations": 0
+    }
+  },
+  "database": {
+    "students": 50,
+    "sessions": 50,
+    "pending_reports": 50,
+    "reports_with_own_name": 50
+  },
+  "rate_isolation": {
+    "evidence": "tests/test_rate_limit.py::test_exhausted_initiator_does_not_publish_429_to_49_other_students",
+    "operations": [
+      "run",
+      "placebo"
+    ],
+    "exhausted_initiator_status": 429,
+    "unexhausted_successful_followers": 49,
+    "computations": 1,
+    "cached_access_for_exhausted_initiator": "passed"
+  },
+  "browser": {
+    "tool": "agent-browser 0.37.0",
+    "build": "production",
+    "meta_503_injection": "three GET attempts then retry screen; authentication retained",
+    "manual_retry_after_fault_removed": "course workspace loaded without a new login",
+    "uncaught_page_errors": 0,
+    "screenshots": [
+      "../dogfood-output/concurrency-fix-20260908/boot-retry.png",
+      "../dogfood-output/concurrency-fix-20260908/boot-recovered.png"
+    ]
+  },
+  "excluded_samples": {
+    "save_context_while_placebos": {
+      "count": 1,
+      "status_counts": {
+        "200": 1
+      },
+      "p50_ms": 14434.48,
+      "p95_ms": 14434.48,
+      "max_ms": 14434.48,
+      "reason": "This legacy probe shared the 50-connection load-generator pool. Its latency includes client-side queueing and is excluded from server responsiveness results; lifecycle.json uses separate clients during measured active work."
+    }
+  },
+  "cleanup": {
+    "temporary_api_stopped": true,
+    "temporary_nginx_stopped": true,
+    "named_agent_browser_closed": true,
+    "dedicated_databases_dropped": true,
+    "deployed": false
+  }
+}

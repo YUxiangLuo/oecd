@@ -118,7 +118,6 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
     }
 
 
-@router.post("/report/generate")
 async def generate_report(user: dict = Depends(require_student)):
     # PostgreSQL pool/row-lock waits must not block unrelated requests on the event loop.
     session, _report, row = await anyio.to_thread.run_sync(_workspace, user["sub"])
@@ -145,6 +144,11 @@ async def generate_report(user: dict = Depends(require_student)):
     saved["suggested_filename"] = generated.suggested_filename
     learning_state = await anyio.to_thread.run_sync(lambda: _learning_state(session, report_exists=True))
     return {"report": saved, **learning_state}
+
+
+@router.post("/report/generate")
+async def generate_report_http(request: Request, user: dict = Depends(require_student)):
+    return await concurrency.for_request(request, lambda: generate_report(user))
 
 
 @router.post("/report/submit")

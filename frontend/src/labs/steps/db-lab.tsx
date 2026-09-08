@@ -564,7 +564,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
     error: metaError,
     status: metaStatus,
     retry: retryMeta,
-  } = useAsync<DbMeta>(() => api.dbMeta(), []);
+  } = useAsync<DbMeta>((signal) => api.dbMeta(signal), []);
   const [table, setTable] = useState<DbTableKind>("z");
   const [year, setYear] = useState<number | null>(null);
   const [rowCountry, setRowCountry] = useState("");
@@ -620,7 +620,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
     status: sliceStatus,
     retry: retrySlice,
   } = useAsync<{ sliceKey: string; slice: DbSlice | null }>(
-    async () => ({
+    async (signal) => ({
       sliceKey,
       slice: ready && year
         ? await api.dbSlice({
@@ -632,7 +632,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
           colSector: table === "accounts" ? undefined : colSector,
           page,
           pageSize: 25,
-        })
+        }, signal)
         : null,
     }),
     [sliceKey],

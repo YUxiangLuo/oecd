@@ -195,6 +195,69 @@ describe("mutations", () => {
 });
 
 describe("GET requests", () => {
+  test("recovers from transient gateway failures within three attempts", async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return calls < 3
+        ? new Response("gateway busy", { status: calls === 1 ? 502 : 504 })
+        : new Response(JSON.stringify(authUser("recovered")), { status: 200 });
+    }) as unknown as typeof fetch;
+    try {
+      expect(await api.me("valid-token")).toEqual(authUser("recovered"));
+      expect(calls).toBe(3);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("stops after three busy responses and never retries a mutation", async () => {
+    const originalFetch = globalThis.fetch;
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ detail: "busy" }), { status: 503 });
+    }) as unknown as typeof fetch;
+    try {
+      await expect(api.me("valid-token")).rejects.toThrow("busy");
+      expect(calls).toBe(3);
+      await expect(api.classroom.submitReport()).rejects.toThrow("busy");
+      expect(calls).toBe(4);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("cancelling a busy request stops its Retry-After wait and further attempts", async () => {
+    const originalFetch = globalThis.fetch;
+    const controller = new AbortController();
+    let calls = 0;
+    let signal: AbortSignal | null = null;
+    let received!: () => void;
+    const responseReceived = new Promise<void>((resolve) => { received = resolve; });
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      calls += 1;
+      signal = init?.signal ?? null;
+      received();
+      return new Response("{}", { status: 503, headers: { "Retry-After": "5" } });
+    }) as typeof fetch;
+    try {
+      const request = api.dbMeta(controller.signal);
+      await responseReceived;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(calls).toBe(1);
+      controller.abort();
+      await expect(request).rejects.toThrow("请求已取消");
+      expect((signal as unknown as AbortSignal).aborted).toBe(true);
+      await expect(api.dbMeta(controller.signal)).rejects.toThrow("请求已取消");
+      expect(calls).toBe(1);
+    } finally {
+      controller.abort();
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test("times out a stalled GET and allows a later retry", async () => {
     const originalFetch = globalThis.fetch;
     let calls = 0;

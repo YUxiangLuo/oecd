@@ -1,4 +1,6 @@
 import os
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -9,6 +11,64 @@ from gvcsim.data.raw_icio import DimensionContract, RawICIOValidationError, clea
 
 FIXTURE_CONTRACT = DimensionContract("test-icio", 1, ("AAA", "BBB"), ("s1", "s2"), ("HFCE", "GFCF"))
 SUBSTRING_CONTRACT = DimensionContract("test-substring-icio", 1, ("AAA", "BBB"), ("T", "C10T12"), ("HFCE",))
+
+
+def test_different_column_requests_share_one_read_and_cannot_mutate_the_cache(tmp_path, monkeypatch):
+    _write_fixture(tmp_path)
+    path = tmp_path / "ICIO2023_2020.csv"
+    icio_browser.clear_raw_browser_caches()
+    original = icio_browser.pd.read_csv
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(args[0])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(icio_browser.pd, "read_csv", counted)
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        frames = list(
+            executor.map(lambda i: icio_browser._read_columns(path, ("V1", "AAA_s1" if i % 2 else "BBB_s1")), range(50))
+        )
+    assert len(calls) == 1
+    frames[0].loc[0, "BBB_s1"] = 999
+    assert icio_browser._read_columns(path, ("V1", "BBB_s1")).loc[0, "BBB_s1"] == 3
+
+
+def test_different_years_load_without_holding_one_global_read_lock(tmp_path, monkeypatch):
+    _write_fixture(tmp_path)
+    path = tmp_path / "ICIO2023_2020.csv"
+    second = tmp_path / "ICIO2023_2019.csv"
+    second.write_bytes(path.read_bytes())
+    icio_browser.clear_raw_browser_caches()
+    original = icio_browser.pd.read_csv
+    barrier = threading.Barrier(2)
+
+    def simultaneous(*args, **kwargs):
+        barrier.wait(timeout=3)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(icio_browser.pd, "read_csv", simultaneous)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        frames = list(executor.map(lambda p: icio_browser._read_columns(p, ("V1", "BBB_s1")), (path, second)))
+    assert all(frame.loc[0, "BBB_s1"] == 3 for frame in frames)
+
+
+def test_full_table_cache_is_bounded_and_failed_reads_are_retryable(tmp_path, monkeypatch):
+    _write_fixture(tmp_path)
+    path = tmp_path / "ICIO2023_2020.csv"
+    icio_browser.clear_raw_browser_caches()
+    monkeypatch.setattr(icio_browser, "_TABLE_CACHE_SIZE", 2)
+    with monkeypatch.context() as patch:
+        patch.setattr(icio_browser.pd, "read_csv", lambda *a, **k: (_ for _ in ()).throw(OSError("read failed")))
+        with pytest.raises(OSError, match="read failed"):
+            icio_browser._read_columns(path, ("V1",))
+    assert not icio_browser._table_reads
+    for year in (2018, 2019, 2020):
+        target = tmp_path / f"ICIO2023_{year}.csv"
+        if target != path:
+            target.write_bytes(path.read_bytes())
+        assert len(icio_browser._read_columns(target, ("V1",))) == 7
+    assert len(icio_browser._tables) == 2
 
 
 def _write_fixture(raw_dir: Path) -> None:

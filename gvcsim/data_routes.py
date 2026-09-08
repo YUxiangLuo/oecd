@@ -11,9 +11,9 @@ from typing import Annotated, Literal, Mapping, cast
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
-from gvcsim import quizzes, shocks
+from gvcsim import concurrency, quizzes, shocks
 from gvcsim.artifacts import (
     ArtifactContractError,
     dataset_metadata,
@@ -105,7 +105,6 @@ def _validate_active_raw_sources() -> None:
         raise ArtifactContractError(str(error)) from error
 
 
-@router.get("/api/db/meta")
 def db_meta():
     _validate_active_raw_sources()
     # The active release was strictly validated when published.  Exact source
@@ -114,7 +113,6 @@ def db_meta():
     return icio_browser.meta(strict_validate=False)
 
 
-@router.get("/api/db/slice")
 def db_slice(
     year: int,
     table: str = "z",
@@ -145,6 +143,39 @@ def db_slice(
         raise HTTPException(status_code=404, detail=str(e)) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.get("/api/db/meta")
+async def db_meta_http(request: Request):
+    return await concurrency.for_request(request, lambda: concurrency.run_raw_io(db_meta))
+
+
+@router.get("/api/db/slice")
+async def db_slice_http(
+    request: Request,
+    year: int,
+    table: str = "z",
+    row_country: str | None = None,
+    col_country: str | None = None,
+    row_sector: str | None = None,
+    col_sector: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=200),
+):
+    return await concurrency.for_request(
+        request,
+        lambda: concurrency.run_raw_io(
+            db_slice,
+            year,
+            table,
+            row_country,
+            col_country,
+            row_sector,
+            col_sector,
+            page,
+            page_size,
+        ),
+    )
 
 
 def _qc_contract() -> object:

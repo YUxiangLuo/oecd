@@ -315,7 +315,6 @@ def regression_design(
     return _design_info(design, weight_mode)
 
 
-@router.post("/api/regression/run", response_model=RegressionRunResponse)
 async def regression_run(req: RegressionRequest, request: Request):
     account_id = _require_regression_student(request)
     design = _validate_design(
@@ -332,9 +331,6 @@ async def regression_run(req: RegressionRequest, request: Request):
     key = (artifacts.release_identity(), "run", req.model_dump_json())
 
     async def compute() -> dict[str, Any]:
-        # Charge only a real cache miss. Identical concurrent requests share this
-        # factory through single-flight, and completed cache hits consume no CPU.
-        _limit_expensive_request(_RUN_LIMITER, account_id, "回归计算")
         panel = await anyio.to_thread.run_sync(
             lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
         )
@@ -349,14 +345,18 @@ async def regression_run(req: RegressionRequest, request: Request):
         }
 
     try:
-        return await _RESULT_CACHE.get_or_compute(key, compute)
+        return await _RESULT_CACHE.get_or_compute(
+            key,
+            compute,
+            owner=account_id,
+            admit=lambda: _limit_expensive_request(_RUN_LIMITER, account_id, "回归计算"),
+        )
     except (np.linalg.LinAlgError, FloatingPointError, OverflowError) as e:
         raise HTTPException(status_code=400, detail="回归线性代数计算失败；请检查样本方差、重复键与设计自由度") from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-@router.post("/api/regression/placebo", response_model=PlaceboResponse)
 async def regression_placebo(req: PlaceboRequest, request: Request):
     account_id = _require_regression_student(request)
     design = _validate_design(
@@ -373,7 +373,6 @@ async def regression_placebo(req: PlaceboRequest, request: Request):
     key = (artifacts.release_identity(), "placebo", req.model_dump_json())
 
     async def compute() -> dict[str, Any]:
-        _limit_expensive_request(_PLACEBO_LIMITER, account_id, "置换检验")
         panel = await anyio.to_thread.run_sync(
             lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
         )
@@ -391,8 +390,23 @@ async def regression_placebo(req: PlaceboRequest, request: Request):
         }
 
     try:
-        return await _RESULT_CACHE.get_or_compute(key, compute)
+        return await _RESULT_CACHE.get_or_compute(
+            key,
+            compute,
+            owner=account_id,
+            admit=lambda: _limit_expensive_request(_PLACEBO_LIMITER, account_id, "置换检验"),
+        )
     except (np.linalg.LinAlgError, FloatingPointError, OverflowError) as e:
         raise HTTPException(status_code=400, detail="回归线性代数计算失败；请检查样本方差、重复键与设计自由度") from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.post("/api/regression/run", response_model=RegressionRunResponse)
+async def regression_run_http(req: RegressionRequest, request: Request):
+    return await concurrency.for_request(request, lambda: regression_run(req, request))
+
+
+@router.post("/api/regression/placebo", response_model=PlaceboResponse)
+async def regression_placebo_http(req: PlaceboRequest, request: Request):
+    return await concurrency.for_request(request, lambda: regression_placebo(req, request))

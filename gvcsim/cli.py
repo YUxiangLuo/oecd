@@ -32,7 +32,7 @@ def main() -> None:
     p.add_argument(
         "--limit-concurrency",
         type=int,
-        default=int(os.environ.get("GVCSIM_WORKER_CONNECTION_LIMIT", "64")),
+        default=int(os.environ.get("GVCSIM_WORKER_CONNECTION_LIMIT", "512")),
         help="每 worker 同时连接/任务上限，超过时由 Uvicorn 返回 503",
     )
     p.add_argument("--backlog", type=int, default=int(os.environ.get("GVCSIM_SOCKET_BACKLOG", "2048")))

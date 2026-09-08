@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "./App";
-import { AUTH_TOKEN_KEY, setActiveAuthToken } from "./api";
+import { api, AUTH_TOKEN_KEY, setActiveAuthToken } from "./api";
+import { emptySession } from "./session-store";
 
 const restorers: Array<() => void> = [];
 afterEach(() => {
@@ -20,6 +21,32 @@ function retainedLogin() {
 }
 
 describe("authentication dependency recovery", () => {
+  test("course retry recovers a failed bootstrap without reauthentication or losing the session", async () => {
+    const reload = retainedLogin();
+    const releaseId = "a".repeat(32);
+    const me = spyOn(api, "me").mockResolvedValue({ username: "retry-student", name: "学生", role: "student" });
+    const meta = spyOn(api, "meta").mockRejectedValueOnce(new Error("课程服务繁忙"))
+      .mockResolvedValue({ years: [2020], countries: ["CHN"], sectors: ["C26"], dataset: { years: [2020], release_id: releaseId } });
+    const steps = spyOn(api, "steps").mockResolvedValue({ stages: { "5": "实验闭环" }, steps: [{
+      n: 15, stage: 5, lab: "rep", status: "demo", title: "生成实验报告", goal: "汇总实验", tasks: ["记录", "比较", "报告"],
+      concept: "实验", tip: "保存", deps: [], handoff: { input: "记录", action: "汇总", output: "报告" },
+    }] });
+    const saved = emptySession();
+    saved.steps["15"] = { data: { research_question: "服务恢复后保留的研究问题" } };
+    const session = spyOn(api.classroom, "session").mockResolvedValue({ release_id: releaseId, session: saved, updated_at: null, report: null,
+      completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_gate: [], material_gate: [],
+    });
+    restorers.push(...[me, meta, steps, session].map((mock) => () => mock.mockRestore()));
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "重试加载课程" }));
+    await waitFor(() => expect(screen.getByDisplayValue("服务恢复后保留的研究问题")).toBeTruthy());
+    expect(meta).toHaveBeenCalledTimes(2);
+    expect(me).toHaveBeenCalledTimes(1);
+    expect(session).toHaveBeenCalledTimes(1);
+    expect(reload).not.toHaveBeenCalled();
+    expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBe("valid-session");
+  });
+
   for (const status of [500, 503]) {
     test(`a ${status} during boot retains authentication and offers retry`, async () => {
       const reload = retainedLogin();
