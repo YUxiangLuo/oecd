@@ -17,9 +17,11 @@ from typing import Any
 import pandas as pd
 
 from gvcsim.config import RAW_DATA_DIR, available_years
+from gvcsim.file_identity import verified_source
 from gvcsim.data.raw_icio import (
     DimensionContract,
     RawFileIdentity,
+    RawICIOValidationError,
     dimension_contract_for,
     raw_file_identity,
     resolve_year_source,
@@ -72,8 +74,11 @@ def _is_final_demand_label(label: str) -> bool:
 @lru_cache(maxsize=16)
 def _metadata(identity: RawFileIdentity) -> dict[str, Any]:
     path = Path(identity[0])
-    header = pd.read_csv(path, nrows=0).columns.tolist()
-    first_col = pd.read_csv(path, usecols=[0], keep_default_na=False).iloc[:, 0].astype(str)
+    source = verified_source(path, identity[1:])
+    header = pd.read_csv(source, nrows=0).columns.tolist()
+    if not isinstance(source, Path):
+        source.seek(0)
+    first_col = pd.read_csv(source, usecols=[0], keep_default_na=False).iloc[:, 0].astype(str)
     row_labels = first_col.tolist()
 
     value_columns = header[1:]
@@ -86,6 +91,8 @@ def _metadata(identity: RawFileIdentity) -> dict[str, Any]:
     sectors = list(dict.fromkeys(parts[1] for parts in industry_parts))
     fd_categories = list(dict.fromkeys(parts[1] for parts in demand_parts))
     account_rows = [r for r in ACCOUNT_ROWS if r in row_labels]
+    if raw_file_identity(path) != identity:
+        raise RawICIOValidationError(f"raw ICIO file changed during metadata reading: {path}")
 
     return {
         "header": header,
@@ -126,7 +133,9 @@ def _read_table(identity: RawFileIdentity) -> pd.DataFrame:
     if not owns_read:
         return future.result()
     try:
-        frame = pd.read_csv(identity[0], keep_default_na=False, na_values=[""])
+        frame = pd.read_csv(verified_source(Path(identity[0]), identity[1:]), keep_default_na=False, na_values=[""])
+        if raw_file_identity(Path(identity[0])) != identity:
+            raise RawICIOValidationError(f"raw ICIO file changed during table reading: {identity[0]}")
         with _raw_cache_lock:
             if generation == _cache_generation:
                 _tables[identity] = frame

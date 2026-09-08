@@ -1363,13 +1363,17 @@ def test_artifact_tree_rejects_symlinks(tmp_path):
 
 @pytest.mark.parametrize("replace_inode", [False, True])
 @pytest.mark.parametrize("filename", ["dataset.json", "indicators_country_2020.csv"])
-def test_warm_release_validation_rejects_same_size_same_mtime_changes(tmp_path, replace_inode, filename):
+def test_warm_release_validation_rejects_same_size_same_mtime_changes(
+    tmp_path, replace_inode, filename, freeze_file_metadata, file_identity_backend
+):
     import os
 
     _release(tmp_path)
     artifacts.clear_artifact_caches()
-    assert artifacts.validate_release_cached(tmp_path)["release_id"] == RELEASE_ID
     path = tmp_path / filename
+    if not replace_inode:
+        freeze_file_metadata(path)
+    assert artifacts.validate_release_cached(tmp_path)["release_id"] == RELEASE_ID
     original = path.read_bytes()
     stamp = path.stat()
     replacement = (
@@ -1390,11 +1394,15 @@ def test_warm_release_validation_rejects_same_size_same_mtime_changes(tmp_path, 
 
 
 @pytest.mark.parametrize("replace_inode", [False, True])
-def test_csv_cache_refreshes_when_file_changes_without_size_or_mtime_change(tmp_path, replace_inode):
+def test_csv_cache_refreshes_when_file_changes_without_size_or_mtime_change(
+    tmp_path, replace_inode, freeze_file_metadata, file_identity_backend
+):
     import os
 
     path = tmp_path / "sample.csv"
     path.write_text("value\n1\n")
+    if not replace_inode:
+        freeze_file_metadata(path)
     old = artifacts.read_csv_artifact(path)
     stamp = path.stat()
     if replace_inode:
@@ -1407,6 +1415,30 @@ def test_csv_cache_refreshes_when_file_changes_without_size_or_mtime_change(tmp_
     new = artifacts.read_csv_artifact(path)
     assert new is not old and new.iloc[0, 0] == 2
     assert old.iloc[0, 0] == 1
+
+
+def test_release_changed_during_validation_is_not_cached(
+    tmp_path, monkeypatch, freeze_file_metadata, file_identity_backend
+):
+    _release(tmp_path)
+    path = tmp_path / "indicators_country_2020.csv"
+    freeze_file_metadata(path)
+    original = artifacts.validate_release
+    content = path.read_bytes()
+
+    def changed(*args, **kwargs):
+        result = original(*args, **kwargs)
+        path.write_bytes(content.replace(b"AAA", b"ZZZ", 1))
+        return result
+
+    with monkeypatch.context() as patch:
+        patch.setattr(artifacts, "validate_release", changed)
+        with pytest.raises(artifacts.ArtifactContractError, match="changed during validation"):
+            artifacts.validate_release_cached(tmp_path)
+    with pytest.raises(artifacts.ArtifactContractError, match="checksum mismatch"):
+        artifacts.validate_release_cached(tmp_path)
+    path.write_bytes(content)
+    assert artifacts.validate_release_cached(tmp_path)["release_id"] == RELEASE_ID
 
 
 @pytest.mark.parametrize("symlink", [False, True])

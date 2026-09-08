@@ -97,18 +97,19 @@ def test_strict_raw_validator_invalidates_atomic_same_size_replacement_with_rest
 
     replaced = path.stat()
     assert replaced.st_ino != original.st_ino
-    assert replaced.st_ctime_ns != original.st_ctime_ns
     assert raw_file_identity(path) != original_identity
     with pytest.raises(RawICIOValidationError, match="bad numeric"):
         validate_raw_file(path, SMALL)
 
 
-def test_raw_file_identity_uses_ctime_when_inode_size_and_mtime_are_unchanged(tmp_path: Path):
+def test_raw_file_identity_changes_even_when_all_stat_fields_collide(
+    tmp_path: Path, freeze_file_metadata, file_identity_backend
+):
     path = tmp_path / "ICIO2023_2020.csv"
     _write(path)
-    original = path.stat()
+    original = freeze_file_metadata(path)
     original_identity = raw_file_identity(path)
-    assert original_identity == (
+    assert original_identity[:7] == (
         str(path.resolve()),
         original.st_dev,
         original.st_ino,
@@ -127,8 +128,36 @@ def test_raw_file_identity_uses_ctime_when_inode_size_and_mtime_are_unchanged(tm
     assert changed.st_ino == original.st_ino
     assert changed.st_size == original.st_size
     assert changed.st_mtime_ns == original.st_mtime_ns
-    assert changed.st_ctime_ns != original.st_ctime_ns
+    assert changed.st_ctime_ns == original.st_ctime_ns
     assert raw_file_identity(path) != original_identity
+
+
+@pytest.mark.parametrize("check", ["strict", "binding", "browser"])
+def test_raw_caches_do_not_trust_colliding_stat_fields(
+    tmp_path: Path, freeze_file_metadata, file_identity_backend, check
+):
+    from gvcsim.data import icio_browser
+
+    path = tmp_path / "ICIO2023_2020.csv"
+    _write(path)
+    freeze_file_metadata(path)
+    clear_raw_validation_cache()
+    published = raw_dimensions_metadata([2020], tmp_path, SMALL)
+    old = icio_browser._read_columns(path, ("AAA_s1",))
+    original = path.read_bytes()
+    changed = original.replace(b",1,", b",x," if check == "strict" else b",2,", 1)
+    assert changed != original and len(changed) == len(original)
+    path.write_bytes(changed)
+
+    if check == "strict":
+        with pytest.raises(RawICIOValidationError, match="bad numeric"):
+            validate_raw_file(path, SMALL)
+    elif check == "binding":
+        with pytest.raises(RawICIOValidationError, match="source binding mismatch"):
+            validate_raw_source_bindings(published, [2020], tmp_path)
+    else:
+        assert icio_browser._read_columns(path, ("AAA_s1",)).iloc[0, 0] == 2
+        assert old.iloc[0, 0] == 1
 
 
 def test_strict_raw_validator_rejects_contract_dimension_code_drift(tmp_path: Path):

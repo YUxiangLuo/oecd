@@ -25,6 +25,7 @@ from gvcsim.artifacts import (
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, processed_years
 from gvcsim.data import crosswalk, icio_browser, quality
 from gvcsim.data.raw_icio import validate_raw_source_bindings
+from gvcsim.file_identity import FileSource, FileState, file_state as file_cache_state, verified_source
 from gvcsim.indicator_schema import INDICATOR_SCHEMA
 from gvcsim.indicators import tradeflow
 from gvcsim.shocks import SHOCK_TARIFF
@@ -317,7 +318,7 @@ _EXPOSURE_RUNTIME_COLUMNS = shocks.EXPOSURE_LOOKUP_COLUMNS
 _exposure_index_lock = threading.RLock()
 
 
-def _read_runtime_exposure(path: Path) -> pd.DataFrame:
+def _read_runtime_exposure(path: FileSource) -> pd.DataFrame:
     """Read only lookup columns without retaining the full publication table cache."""
     return pd.read_csv(path, usecols=list(_EXPOSURE_RUNTIME_COLUMNS), keep_default_na=False, na_values=[""])
 
@@ -326,16 +327,19 @@ def _read_runtime_exposure(path: Path) -> pd.DataFrame:
 def _build_exposure_index_cached(
     root_text: str,
     release_id: str,
-    release_stat: tuple[int, int, int, int, int],
+    release_stat: FileState,
     years: tuple[int, ...],
     imposers: tuple[str, ...],
-    file_state: tuple[tuple[str, int, int, int, int, int], ...],
+    file_state: tuple[tuple[str, FileState], ...],
 ) -> _ExposureIndex:
     del release_id, release_stat
     root = Path(root_text)
     frames: list[pd.DataFrame] = []
-    for relative, *_stat in file_state:
-        frame = _read_runtime_exposure(root / relative)
+    for relative, expected_state in file_state:
+        path = root / relative
+        frame = _read_runtime_exposure(verified_source(path, expected_state))
+        if file_cache_state(path) != expected_state:
+            raise ArtifactContractError(f"export exposure lookup changed during reading: {path}")
         missing_columns = sorted(set(_EXPOSURE_RUNTIME_COLUMNS) - set(frame.columns))
         if missing_columns:
             raise ValueError(f"OECD ICIO 出口暴露度索引 schema 不完整；missing={missing_columns}")
@@ -411,10 +415,10 @@ def _build_exposure_index_cached(
 def _build_exposure_index(
     root_text: str,
     release_id: str,
-    release_stat: tuple[int, int, int, int, int],
+    release_stat: FileState,
     years: tuple[int, ...],
     imposers: tuple[str, ...],
-    file_state: tuple[tuple[str, int, int, int, int, int], ...],
+    file_state: tuple[tuple[str, FileState], ...],
 ) -> _ExposureIndex:
     """Single-flight wrapper: one worker process constructs at most one cold index."""
     with _exposure_index_lock:
@@ -433,31 +437,14 @@ def _current_exposure_index() -> _ExposureIndex:
     if not isinstance(release_id, str):
         raise ValueError("当前 release 缺少稳定 release_id，不能建立出口暴露度索引")
     years = tuple(int(year) for year in metadata.get("years", processed_years()))
-    metadata_stat = (root / "dataset.json").stat()
-    release_stat = (
-        metadata_stat.st_dev,
-        metadata_stat.st_ino,
-        metadata_stat.st_size,
-        metadata_stat.st_mtime_ns,
-        metadata_stat.st_ctime_ns,
-    )
+    release_stat = file_cache_state(root / "dataset.json")
     path = root / shocks.EXPOSURE_LOOKUP_FILE
     validate_artifact(path)
-    stat_result = path.stat()
-    file_state = [
-        (
-            path.relative_to(root).as_posix(),
-            stat_result.st_dev,
-            stat_result.st_ino,
-            stat_result.st_size,
-            stat_result.st_mtime_ns,
-            stat_result.st_ctime_ns,
-        )
-    ]
+    file_state = ((path.relative_to(root).as_posix(), file_cache_state(path)),)
     imposers = tuple(shocks.catalogue_tariff_imposers())
     if not imposers:
         raise ValueError("关税事件目录没有可索引的加征方")
-    return _build_exposure_index(str(root), release_id, release_stat, years, imposers, tuple(file_state))
+    return _build_exposure_index(str(root), release_id, release_stat, years, imposers, file_state)
 
 
 def _with_tariff_exposure(df: pd.DataFrame, year: int) -> pd.DataFrame:

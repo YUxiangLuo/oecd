@@ -41,6 +41,36 @@ def clear_process_request_limits():
     regression_routes.clear_rate_limits()
 
 
+@pytest.fixture(params=["hash", "notify"])
+def file_identity_backend(request, monkeypatch):
+    from gvcsim import file_identity
+
+    monkeypatch.setenv("GVCSIM_FILE_CACHE_MODE", request.param)
+    monitor = file_identity._new_monitor()
+    monkeypatch.setattr(file_identity, "_monitor", monitor)
+    yield request.param
+    if monitor is not None:
+        monitor.close()
+
+
+@pytest.fixture
+def freeze_file_metadata(monkeypatch):
+    """Force stat-key collisions without depending on filesystem clock precision."""
+    snapshots = {}
+    original = Path.stat
+
+    def frozen(path, *args, **kwargs):
+        return snapshots[path] if path in snapshots else original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", frozen)
+
+    def freeze(path):
+        snapshots[path] = original(path)
+        return snapshots[path]
+
+    return freeze
+
+
 @pytest.fixture
 def teaching_db(monkeypatch):
     """Create the intentionally non-migrating v11 test database once."""

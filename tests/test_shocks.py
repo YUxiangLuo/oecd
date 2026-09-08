@@ -219,6 +219,23 @@ def test_selectable_events_follow_the_release_note_columns(monkeypatch):
     assert shocks.selectable_shock_types(frame) == ("tariff", "export_control")
 
 
+def test_selectable_events_refresh_when_all_file_stat_fields_collide(
+    tmp_path, monkeypatch, freeze_file_metadata, file_identity_backend
+):
+    monkeypatch.setattr(
+        shocks,
+        "events_metadata",
+        lambda: [{"name": name, "shock_type": "tariff"} for name in ("tariff-old", "tariff-new")],
+    )
+    path = tmp_path / shocks.DEMO_FILE
+    path.write_text("note\ntariff-old\n")
+    freeze_file_metadata(path)
+    old = shocks.selectable_events_metadata(processed_dir=tmp_path)
+    path.write_text("note\ntariff-new\n")
+    assert [event["name"] for event in shocks.selectable_events_metadata(processed_dir=tmp_path)] == ["tariff-new"]
+    assert [event["name"] for event in old] == ["tariff-old"]
+
+
 def test_entity_list_policy_shocks_are_generated():
     df = demo_shock_panel(
         ["CHN", "RUS", "USA"],

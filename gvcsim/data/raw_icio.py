@@ -20,8 +20,11 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, TypeAlias
 
 
-RawFileIdentity: TypeAlias = tuple[str, int, int, int, int, int, int]
-"""Resolved path and immutable stat fields used by every raw-file cache."""
+from gvcsim.file_identity import file_state, open_text
+
+
+RawFileIdentity: TypeAlias = tuple[str, int, int, int, int, int, int, int | str]
+"""Resolved path, stat fields, and independent change/content key for raw caches."""
 
 RAW_DIMENSIONS_METADATA_VERSION = 2
 _PRODUCTION_CONTRACT_PATH = Path(__file__).with_name("icio2023_dimensions_v1.json")
@@ -208,18 +211,7 @@ def raw_file_identity(path: Path) -> RawFileIdentity:
         raise OSError(f"OECD ICIO 原始文件不是普通文件: {path.name}")
 
     resolved = path.resolve(strict=True)
-    file_stat = resolved.stat()
-    if not stat.S_ISREG(file_stat.st_mode):
-        raise OSError(f"OECD ICIO 原始文件不是普通文件: {path.name}")
-    return (
-        str(resolved),
-        file_stat.st_dev,
-        file_stat.st_ino,
-        file_stat.st_mode,
-        file_stat.st_size,
-        file_stat.st_mtime_ns,
-        file_stat.st_ctime_ns,
-    )
+    return (str(resolved), *file_state(resolved))
 
 
 @lru_cache(maxsize=32)
@@ -230,12 +222,13 @@ def _raw_source_evidence_cached(identity: RawFileIdentity) -> dict[str, Any]:
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
-    if raw_file_identity(path) != identity:
+    source_sha256 = digest.hexdigest()
+    if (isinstance(identity[-1], str) and source_sha256 != identity[-1]) or raw_file_identity(path) != identity:
         raise RawICIOValidationError(f"raw ICIO file changed during content hashing: {path}")
     return {
         "source_file": path.name,
         "source_bytes": identity[4],
-        "source_sha256": digest.hexdigest(),
+        "source_sha256": source_sha256,
     }
 
 
@@ -259,7 +252,7 @@ def _validate_raw_file_cached(
     expected_width = 2 + len(expected_industry) + len(expected_demand)
 
     try:
-        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        with open_text(path, identity[1:], encoding="utf-8-sig") as handle:
             reader = csv.reader(handle, strict=True)
             try:
                 header = next(reader)
@@ -336,8 +329,8 @@ def _raw_bilateral_exports_cached(
     """Re-read one strictly validated raw table and aggregate sector export flows.
 
     This intentionally does not use pymrio, persisted exposure files, shock files,
-    or any Leontief/indicator calculation.  The cache key includes every
-    tamper-sensitive stat field from :class:`RawFileIdentity`.
+    or any Leontief/indicator calculation. The cache key includes stat fields
+    and an independent change/content key from :class:`RawFileIdentity`.
     """
     path = Path(identity[0])
     contract = DimensionContract(
@@ -373,7 +366,7 @@ def _raw_bilateral_exports_cached(
     }
 
     try:
-        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        with open_text(path, identity[1:], encoding="utf-8-sig") as handle:
             reader = csv.reader(handle, strict=True)
             header = next(reader)
             destinations = [destination_by_label.get(label) for label in header]

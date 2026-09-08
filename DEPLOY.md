@@ -109,6 +109,8 @@ curl -fsS "$GVCSIM_BASE_URL/health"
 
 普通代码部署不运行 `compute`，更不能运行 `classroom-init --reset`。新代码若要求更高的 artifact contract，应改走下一节的数据发布流程。
 
+文件缓存修复不改变 artifact contract 或数据库 schema，无需重算数据或重建教学库。更新 API 代码并重启即可使用默认的 `GVCSIM_FILE_CACHE_MODE=hash`。只读本地课堂部署还应安装新版 `deploy/gvcsim-api.service` 并执行 `systemctl daemon-reload`：模板显式设置 `notify`，避免热请求反复扫描全部大表；仅支持 ext 系列、tmpfs、XFS、Btrfs 的普通文件写入／替换通知，其他文件系统及监听失败自动回退哈希。API 运行期间，外部维护程序也不得改写 active release 或原始输入；尤其不能依赖 inotify 发现 mmap／原始块设备写入。不满足不可变数据前提时，在 `/etc/gvcsim.env` 显式设置 `GVCSIM_FILE_CACHE_MODE=hash` 覆盖模板，接受额外的哈希 I/O 和解析快照内存开销。修改变量后需重启进程。完整边界与验证见[文件缓存修复](docs/file-cache-identity-fixes-20260908.md)。
+
 更新课堂并发修复时，还需安装本仓库的新 systemd 与 Nginx 模板：Uvicorn 连接限制为 512，upstream 每个 Nginx worker 保留 8 个空闲连接、2 秒回收。保留实际域名、证书和 upstream 地址，执行 `nginx -t`、`systemctl daemon-reload` 并重载 Nginx；只更新代码不会改变已经安装的旧模板。单 API worker、16 个普通线程和 4 个计算名额保持配套使用，详见[运行容量](技术手册.md#112-运行容量)。
 
 ```bash

@@ -508,7 +508,14 @@ def _exposure_index_fixture() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def test_release_exposure_index_rejects_treatment_without_strictly_earlier_release(monkeypatch):
+@pytest.fixture
+def exposure_file_state(monkeypatch):
+    state = (1, 2, 3, 4, 5, 6, 7)
+    monkeypatch.setattr(data_routes, "file_cache_state", lambda _path: state)
+    return state
+
+
+def test_release_exposure_index_rejects_treatment_without_strictly_earlier_release(monkeypatch, exposure_file_state):
     data_routes.clear_exposure_index_cache()
     exposure = _exposure_index_fixture()
     monkeypatch.setattr(data_routes, "_read_runtime_exposure", lambda _path: exposure.copy())
@@ -531,14 +538,14 @@ def test_release_exposure_index_rejects_treatment_without_strictly_earlier_relea
         data_routes._build_exposure_index(
             "/release",
             "r" * 32,
-            (1, 2, 3, 4, 5),
+            exposure_file_state,
             (2017, 2020),
             ("USA",),
-            (("export_exposure_2020.csv", 1, 2, 3, 4, 5),),
+            (("export_exposure_2020.csv", exposure_file_state),),
         )
 
 
-def test_release_exposure_index_builds_and_reads_once_per_exact_key(monkeypatch):
+def test_release_exposure_index_builds_and_reads_once_per_exact_key(monkeypatch, exposure_file_state):
     data_routes.clear_exposure_index_cache()
     reads = []
     exposure = _exposure_index_fixture()
@@ -554,12 +561,14 @@ def test_release_exposure_index_builds_and_reads_once_per_exact_key(monkeypatch)
         "_exposure_map",
         lambda _frame: pytest.fail("release-keyed index must not repeat full exposure validation"),
     )
-    state = (("export_exposure_2020.csv", 1, 2, 3, 4, 5),)
-    release_stat = (1, 2, 3, 4, 5)
+    state = (("export_exposure_2020.csv", exposure_file_state),)
+    release_stat = exposure_file_state
     first = data_routes._build_exposure_index("/release", "r" * 32, release_stat, (2017, 2020), ("USA",), state)
     second = data_routes._build_exposure_index("/release", "r" * 32, release_stat, (2017, 2020), ("USA",), state)
 
-    third = data_routes._build_exposure_index("/release", "r" * 32, (1, 2, 3, 4, 6), (2017, 2020), ("USA",), state)
+    third = data_routes._build_exposure_index(
+        "/release", "r" * 32, (*release_stat[:-1], "changed"), (2017, 2020), ("USA",), state
+    )
     assert first is second
     assert third is not first
     assert reads == ["export_exposure_2020.csv", "export_exposure_2020.csv"]
@@ -568,7 +577,7 @@ def test_release_exposure_index_builds_and_reads_once_per_exact_key(monkeypatch)
     assert first.fixed_base_years[("AAA", "s1", "USA")] == 2020
 
 
-def test_release_exposure_index_cold_build_is_single_flight(monkeypatch):
+def test_release_exposure_index_cold_build_is_single_flight(monkeypatch, exposure_file_state):
     data_routes.clear_exposure_index_cache()
     exposure = _exposure_index_fixture()
     reads = 0
@@ -580,12 +589,12 @@ def test_release_exposure_index_cold_build_is_single_flight(monkeypatch):
         return exposure.copy()
 
     monkeypatch.setattr(data_routes, "_read_runtime_exposure", read)
-    state = (("export_exposure_2020.csv", 1, 2, 3, 4, 5),)
+    state = (("export_exposure_2020.csv", exposure_file_state),)
     with ThreadPoolExecutor(max_workers=8) as executor:
         indices = list(
             executor.map(
                 lambda _index: data_routes._build_exposure_index(
-                    "/release", "r" * 32, (1, 2, 3, 4, 5), (2017, 2020), ("USA",), state
+                    "/release", "r" * 32, exposure_file_state, (2017, 2020), ("USA",), state
                 ),
                 range(8),
             )
@@ -603,7 +612,9 @@ def test_release_exposure_index_cold_build_is_single_flight(monkeypatch):
         ("nonfinite", "数值有限值"),
     ],
 )
-def test_release_exposure_index_fails_closed_for_malformed_direct_fixture(monkeypatch, malformation, match):
+def test_release_exposure_index_fails_closed_for_malformed_direct_fixture(
+    monkeypatch, malformation, match, exposure_file_state
+):
     data_routes.clear_exposure_index_cache()
     exposure = _exposure_index_fixture()
     usa_row = exposure.index[exposure["imposer"].eq("USA")][0]
@@ -619,11 +630,32 @@ def test_release_exposure_index_fails_closed_for_malformed_direct_fixture(monkey
         data_routes._build_exposure_index(
             "/release",
             "r" * 32,
-            (1, 2, 3, 4, 5),
+            exposure_file_state,
             (2017, 2020),
             ("USA",),
-            (("export_exposure_2020.csv", 1, 2, 3, 4, 5),),
+            (("export_exposure_2020.csv", exposure_file_state),),
         )
+
+
+def test_release_exposure_index_refreshes_when_all_stat_fields_collide(
+    tmp_path, monkeypatch, freeze_file_metadata, file_identity_backend
+):
+    monkeypatch.setattr(data_routes, "PROCESSED_DIR", tmp_path)
+    monkeypatch.setattr(shocks, "catalogue_tariff_imposers", lambda: ("USA",))
+    (tmp_path / "dataset.json").write_text('{"release_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "years": [2017, 2020]}')
+    path = tmp_path / shocks.EXPOSURE_LOOKUP_FILE
+    _exposure_index_fixture().to_csv(path, index=False)
+    freeze_file_metadata(path)
+    old = data_routes._current_exposure_index()
+    assert data_routes._current_exposure_index() is old
+    original = path.read_bytes()
+    changed = original.replace(b",0.8,1.0,0.8", b",0.7,1.0,0.7")
+    assert changed != original and len(changed) == len(original)
+    path.write_bytes(changed)
+    new = data_routes._current_exposure_index()
+    assert new is not old
+    assert new.values[("AAA", "s1", "USA", 2020)] == 0.7
+    assert old.values[("AAA", "s1", "USA", 2020)] == 0.8
 
 
 def _tariff_enrichment_page(

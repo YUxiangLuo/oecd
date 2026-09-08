@@ -71,6 +71,36 @@ def test_full_table_cache_is_bounded_and_failed_reads_are_retryable(tmp_path, mo
     assert len(icio_browser._tables) == 2
 
 
+@pytest.mark.parametrize("operation", ["table", "metadata"])
+def test_file_changed_during_browser_read_is_not_cached(
+    tmp_path, monkeypatch, freeze_file_metadata, file_identity_backend, operation
+):
+    _write_fixture(tmp_path)
+    path = tmp_path / "ICIO2023_2020.csv"
+    freeze_file_metadata(path)
+    icio_browser.clear_raw_browser_caches()
+    original = icio_browser.pd.read_csv
+    calls = 0
+
+    def changed(*args, **kwargs):
+        nonlocal calls
+        frame = original(*args, **kwargs)
+        calls += 1
+        if calls == 1:
+            path.write_bytes(path.read_bytes().replace(b"AAA_s1,1,2,3,4", b"AAA_s1,1,2,9,4", 1))
+        return frame
+
+    with monkeypatch.context() as patch:
+        patch.setattr(icio_browser.pd, "read_csv", changed)
+        with pytest.raises(RawICIOValidationError, match=f"changed during {operation} reading"):
+            if operation == "table":
+                icio_browser._read_columns(path, ("BBB_s1",))
+            else:
+                icio_browser._meta_for_path(path)
+    assert not icio_browser._table_reads
+    assert icio_browser._read_columns(path, ("BBB_s1",)).iloc[0, 0] == 9
+
+
 def _write_fixture(raw_dir: Path) -> None:
     (raw_dir / "ICIO2023_2020.csv").write_text(
         "\n".join(

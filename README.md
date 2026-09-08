@@ -72,6 +72,8 @@ uv run gvcsim classroom-init --reset
 
 生产环境通过 `GVCSIM_RAW_DATA_DIR` 和 `GVCSIM_DATA_DIR` 把这两个位置指向代码目录之外的持久目录；本地开发不设置时仍使用上述仓库内默认值。
 
+文件缓存默认使用 `GVCSIM_FILE_CACHE_MODE=hash`：每次按内容 SHA-256 判定身份，缓存解析读取与摘要一致的字节快照，不把 `ctime_ns` 当作唯一版本。systemd 只读本地部署模板显式启用 `notify`，以同步文件变更通知避免热请求反复扫描大表；监听不可用或文件系统不受支持时回退哈希。`notify` 仅适用于运行期不可变的数据，不能监控 mmap／原始块设备写入；不满足此前提时保留 `hash`。两种模式的成本、限制和测试见[文件缓存修复](docs/file-cache-identity-fixes-20260908.md)。
+
 `compute` 只处理数据，绝不连接或重置教学数据库。代码部署、数据发布与教学数据库重建是三个独立生命周期：普通代码部署和数据换版不得执行 `classroom-init --reset`；只有首次建库或明确的新学期清场才允许在备份后执行该破坏性命令。账号可跨代码/数据部署保留，会话与报告则由 `(账号, release_id)` 自动隔离，数据换版也会使旧令牌失效。
 
 `dataset.json` 保存不可省略的 `release_id`、契约版本、年份、生成时间、课程发布、数据来源、QC 摘要、网络算法和完整产物清单；还逐年绑定原始 ICIO 文件名、字节数与内容 SHA-256。`preflight`、`/health` 和 `/api/db/*` 都会拒绝与 active release 不一致的原始字节。固定产物包括逐年指标/网络/QC、国家与国家–行业面板、控制变量、冲击面板及 QC 文件；旧格式会直接被预检拒绝。
@@ -101,6 +103,8 @@ CI 的桌面浏览器验收分两层：`agent_browser_smoke.sh` 快速挂载学�
 冲击面板性能验收在有效 active v13 release 完成最终重算后运行：
 
 ```bash
+# 对照只读本地生产部署；运行期间不得改写原始输入或 release。
+GVCSIM_FILE_CACHE_MODE=notify \
 GVCSIM_BENCHMARK_USERNAME=student GVCSIM_BENCHMARK_PASSWORD='…' \
   uv run python scripts/benchmark_shock_panel_v9.py
 ```

@@ -41,4 +41,6 @@ uv run pytest tests/test_io_cancellation.py -q -k 'not real_row_lock'
 - 前端 **372 项通过**；TypeScript／生产构建、Ruff 格式与 lint、Mypy 通过。
 - 另以临时 CI 合成 release 执行后端全套：**662 通过、1 跳过、3 失败**；该次收集后补充的两个竞争用例已纳入上述最终针对性验证。
 
+后续已单独修复上述时间戳断言及真实缓存缺口，见[文件缓存身份修复](file-cache-identity-fixes-20260908.md)；以下保留本轮历史结果，不改记为通过。
+
 全套失败均与既有文件时间戳假设有关：`test_csv_cache_refreshes_when_file_changes_without_size_or_mtime_change[False]`、`test_strict_raw_validator_invalidates_atomic_same_size_replacement_with_restored_mtime` 和 `test_raw_file_identity_uses_ctime_when_inode_size_and_mtime_are_unchanged`。快速改写后本机返回相同 `ctime_ns`；在未修改的 `99f3e47` 干净导出上三项同样可以复现（CSV 缓存用例为间歇失败）。本次未修改相关实现，也未放宽断言或把失败记为通过。root 环境验证时去掉 DAC 读取权限绕过能力，以正常检验不可读文件，而未修改仓库权限。

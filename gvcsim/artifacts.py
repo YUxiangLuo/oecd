@@ -4,7 +4,6 @@ import csv
 import hashlib
 import hmac
 import json
-import os
 import re
 import stat
 import threading
@@ -13,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+from gvcsim.file_identity import FileState, file_state, open_text, verified_source
 
 
 ARTIFACT_CONTRACT_VERSION = 13
@@ -24,13 +25,6 @@ DATASET_METADATA = "dataset.json"
 PUBLICATION_POLICY_MODE = "integrity-and-mathematics-v2"
 NETWORK_ALGORITHM = "gephi-compatible-directed-unweighted-positive-v1"
 _csv_cache_lock = threading.RLock()
-
-FileState = tuple[int, int, int, int, int]
-
-
-def _file_state(value: os.stat_result) -> FileState:
-    """Detect in-place edits and atomic replacements, including preserved mtimes."""
-    return value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns
 
 
 class ArtifactContractError(RuntimeError):
@@ -189,14 +183,16 @@ def read_qc_artifact(path: Path, *, scope: str, contract: object) -> list[dict]:
 
 @lru_cache(maxsize=16)
 def _dataset_metadata_cached(path_text: str, state: FileState) -> dict[str, Any]:
-    del state
     path = Path(path_text)
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        with open_text(path, state, encoding="utf-8") as handle:
+            value = json.load(handle)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ArtifactValidationError(f"invalid dataset metadata: {path}") from exc
     if not isinstance(value, dict):
         raise ArtifactValidationError(f"dataset metadata must be an object: {path}")
+    if file_state(path) != state:
+        raise ArtifactValidationError(f"dataset metadata changed during reading: {path}")
     return value
 
 
@@ -206,8 +202,7 @@ def dataset_metadata(processed_dir: Path | None = None) -> dict[str, Any]:
     root = (processed_dir or PROCESSED_DIR).resolve()
     path = root / DATASET_METADATA
     _require_regular_file(path, label="dataset metadata")
-    file_stat = path.stat()
-    return _dataset_metadata_cached(str(path), _file_state(file_stat))
+    return _dataset_metadata_cached(str(path), file_state(path))
 
 
 def _metadata_digest(metadata: dict[str, Any]) -> str:
@@ -618,11 +613,22 @@ def validate_release(processed_dir: Path | None = None, *, verify_integrity: boo
 def _validate_release_cached(
     root_text: str, release_id: str, state: tuple[tuple[str, FileState], ...]
 ) -> dict[str, Any]:
-    del release_id, state
-    return validate_release(Path(root_text), verify_integrity=True)
+    del release_id
+    root = Path(root_text)
+    result = validate_release(root, verify_integrity=True)
+    if _release_state(root) != state:
+        raise ArtifactValidationError(f"artifact tree changed during validation: {root}")
+    return result
 
 
 _VALIDATION_LOCK = threading.Lock()
+
+
+def _release_state(root: Path) -> tuple[tuple[str, FileState], ...]:
+    return tuple(
+        (path.relative_to(root).as_posix(), file_state(path))
+        for path in [root / DATASET_METADATA, *_release_files(root)]
+    )
 
 
 def validate_release_cached(processed_dir: Path | None = None) -> dict[str, Any]:
@@ -630,11 +636,7 @@ def validate_release_cached(processed_dir: Path | None = None) -> dict[str, Any]
 
     root = (processed_dir or PROCESSED_DIR).resolve()
     identity = release_identity(root)
-    state = tuple(
-        (path.relative_to(root).as_posix(), _file_state(metadata))
-        for path in [root / DATASET_METADATA, *_release_files(root)]
-        for metadata in (path.lstat(),)
-    )
+    state = _release_state(root)
     with _VALIDATION_LOCK:
         return _validate_release_cached(str(root), identity, state)
 
@@ -651,17 +653,18 @@ def clear_release_validation_cache() -> None:
 
 @lru_cache(maxsize=32)
 def _cached_csv(path_text: str, state: FileState) -> pd.DataFrame:
-    del state
-    return pd.read_csv(path_text, keep_default_na=False, na_values=[""])
+    frame = pd.read_csv(verified_source(Path(path_text), state), keep_default_na=False, na_values=[""])
+    if file_state(Path(path_text)) != state:
+        raise ArtifactValidationError(f"CSV artifact changed during reading: {path_text}")
+    return frame
 
 
 def read_csv_artifact(path: Path, *, require_current: bool = False) -> pd.DataFrame:
     del require_current
     validate_artifact(path)
     resolved = path.resolve()
-    file_stat = resolved.stat()
     with _csv_cache_lock:
-        return _cached_csv(str(resolved), _file_state(file_stat))
+        return _cached_csv(str(resolved), file_state(resolved))
 
 
 def write_dataset_metadata(processed_dir: Path, metadata: dict[str, Any]) -> Path:

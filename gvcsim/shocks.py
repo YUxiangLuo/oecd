@@ -28,6 +28,7 @@ import numpy as np
 import pandas as pd
 
 from gvcsim.config import PROCESSED_DIR
+from gvcsim.file_identity import FileState, file_state, verified_source
 from gvcsim.indicators.core import IcioArrays
 
 from gvcsim.shock_catalog import (
@@ -733,16 +734,16 @@ def _available_event_names_by_type(frame: pd.DataFrame) -> dict[str, set[str]]:
 @lru_cache(maxsize=8)
 def _selectable_event_names_cached(
     path_text: str,
-    size: int,
-    mtime_ns: int,
+    state: FileState,
 ) -> tuple[tuple[str, tuple[str, ...]], ...]:
-    del size, mtime_ns
     note_columns = {spec["note_field"] for spec in SHOCK_FIELD_SPECS.values()}
     frame = pd.read_csv(
-        path_text,
+        verified_source(Path(path_text), state),
         usecols=lambda column: column in note_columns,
         keep_default_na=False,
     )
+    if file_state(Path(path_text)) != state:
+        raise OSError(f"shock panel changed during reading: {path_text}")
     available = _available_event_names_by_type(frame)
     return tuple((shock_type, tuple(sorted(available[shock_type]))) for shock_type in SHOCK_SPECS)
 
@@ -761,10 +762,8 @@ def selectable_events_metadata(
         path = ((processed_dir or PROCESSED_DIR) / DEMO_FILE).resolve()
         if not path.is_file():
             raise FileNotFoundError(f"未找到冲击数据 {path},请先运行 `gvcsim compute` 生成演示数据")
-        file_stat = path.stat()
         available_by_type = {
-            shock_type: set(names)
-            for shock_type, names in _selectable_event_names_cached(str(path), file_stat.st_size, file_stat.st_mtime_ns)
+            shock_type: set(names) for shock_type, names in _selectable_event_names_cached(str(path), file_state(path))
         }
     else:
         available_by_type = _available_event_names_by_type(frame)
