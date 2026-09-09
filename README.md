@@ -88,13 +88,19 @@ uv run gvcsim classroom-init --reset
 
 代码部署、数据发布和新学期清场必须分开执行：普通代码/数据部署不得清空教学库，只有已备份且明确的新学期清场才允许 `classroom-init --reset`。`scripts/backup_classroom.sh` 使用 `pg_dump --format=custom` 生成带 SHA-256 完成标记的原子备份，`deploy/gvcsim-backup.timer` 每日触发并默认保留 90 组已完成备份；恢复前必须先校验摘要、`pg_restore --list`，并在隔离空库演练。远程部署与三生命周期操作手册见 [DEPLOY.md](DEPLOY.md)。
 
+**测试隔离：** `tests/conftest.py::teaching_db` 会删除目标数据库的 `public` schema。运行 pytest 前必须将 `GVCSIM_PG_DSN` 指向专门的一次性测试库；不得使用课堂库或保留测试证据的开发库。数据库进程故障测试还需独立 PGDATA/端口，发布损坏测试需另一份数据副本，不能停止共享 PostgreSQL 或破坏当前 release。
+
 ```bash
 uv run ruff format --check .
 uv run ruff check .
 uv run mypy gvcsim
 uv run pytest
-cd frontend && bun test src && bun run build
+cd frontend && bun run test:unit && bun run build
 ```
+
+本机浏览器测试使用 `agent-browser`。多标签开发模式若出现空白页或 `ERR_INSUFFICIENT_RESOURCES`，先检查浏览器临时目录所在文件系统的剩余空间；必要时为整轮测试设置位于有足够空间的磁盘上的私有 `TMPDIR`，启动、截图和关闭命令保持同一环境。不要靠延长等待或清理其他项目的临时文件掩盖资源不足。
+
+阶段性测试计划、逐批报告和环境排查日志不作为长期文档维护；历史记录可从 Git 查询，本地产物继续放在忽略的 `dogfood-output/`。API 预填的辅助流程、纯浏览器主旅程、单元回归和容量测试分别记录，不能互相替代或据此宣称所有范围已验收。
 
 Gephi 0.10.1 独立基准可用 `scripts/gephi_golden/generate.sh --check` 校验；该基准采用有向图，路径类中心性按无权最短路计算，边权只进入 weighted degree。
 

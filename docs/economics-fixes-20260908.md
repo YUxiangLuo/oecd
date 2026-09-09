@@ -49,7 +49,7 @@ CR1 对照统一为 `G/(G−1) × (N−1)/(N−K)`，K 包含吸收的固定效�
 - [新 release 数值证据](economics-fixes-20260908-evidence.json) 与[只读验证脚本](../scripts/verify_economics_fixes_20260908.py)。
 - [经济反例回归测试](../tests/test_economics_fixes.py) 与 [v13 性能记录](../benchmarks/shock_panel_v13.json)。
 - 本地浏览器记录和截图：`dogfood-output/economics-fixes-20260908/` 中的 `length-twfe.png`、`network-twfe.png`、`washer-canada.png`、`browser-routes.json`；该目录不纳入版本控制。
-- [二次确认报告](economics-reconfirmation-20260908.md) 和两轮旧 JSON 保留为修复前证据，不能拿旧结果判断当前版本。
+- [首轮数值记录](economics-review-20260908-evidence.json) 与[二次确认数值记录](economics-reconfirmation-20260908-evidence.json)保留为修复前证据；后者也是只读验证脚本的对照输入。旧审查正文可从 Git 历史查询，不能拿旧结果判断当前版本。
 
 在有效 v13 本地产物上重跑独立数值验证：
 
