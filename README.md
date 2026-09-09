@@ -104,7 +104,7 @@ cd frontend && bun run test:unit && bun run build
 
 Gephi 0.10.1 独立基准可用 `scripts/gephi_golden/generate.sh --check` 校验；该基准采用有向图，路径类中心性按无权最短路计算，边权只进入 weighted degree。
 
-CI 的桌面浏览器验收分两层：`agent_browser_smoke.sh` 快速挂载学生 1–15 步与教师关键交互；`agent_browser_full_journey.sh` 通过公开 API 构造一份当前 release 的完整学习记录，再由真实浏览器完成报告生成、提交和教师评分，防止各自通过的组件在完整状态机中断链。两个脚本都以 `GVCSIM_BASE_URL` 指定被测站点地址，不写死任何主机。
+CI 的桌面浏览器验收分两层：`agent_browser_smoke.sh` 快速挂载学生 1–15 步与教师关键交互；`agent_browser_full_journey.sh` 通过公开 API 构造一份当前 release 的完整学习记录，再由真实浏览器完成报告生成、提交和教师评分，防止各自通过的组件在完整状态机中断链。两个脚本都以 `GVCSIM_BASE_URL` 指定被测站点地址，不写死任何主机。完整旅程在设置 `GVCSIM_E2E_ARTIFACT_DIR` 时还会通过浏览器打印 PDF，并用独立的 `pdftotext` 检查四类指标对照表七列均未被截断；本地需安装 Poppler（Debian/Ubuntu：`poppler-utils`），CI 已包含此依赖。
 
 冲击面板性能验收在有效 active v13 release 完成最终重算后运行：
 

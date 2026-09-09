@@ -3,6 +3,35 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseReportChart, ReportMarkdown } from "./report-renderer";
 
+describe("report tables", () => {
+  test("names each scroll region by its heading and document order, including repeated headings", () => {
+    const table = "| 项目 | 结果 |\n|---|---|\n| 系数 | 0.01 |";
+    const markdown = `${table}\n\n### 步骤 11 · **贸易**结果\n\n${table}\n\n${table}\n\n### 步骤 12 · 生产结果\n\n${table}`;
+    const render = () => renderToStaticMarkup(createElement(ReportMarkdown, { markdown }));
+    const element = document.createElement("div");
+    element.innerHTML = render();
+    const regions = [...element.querySelectorAll('[role="region"]')];
+    expect(regions.map((region) => region.getAttribute("aria-label"))).toEqual([
+      "报告数据表 1，可横向滚动",
+      "报告数据表 2：步骤 11 · 贸易结果，可横向滚动",
+      "报告数据表 3：步骤 11 · 贸易结果，可横向滚动",
+      "报告数据表 4：步骤 12 · 生产结果，可横向滚动",
+    ]);
+    expect(regions.every((region) => region.getAttribute("tabindex") === "0")).toBe(true);
+    expect(render()).toBe(render()); // No render-time counters shared between reports/renders.
+  });
+
+  test("print rules fit report tables to paper without changing screen tables", async () => {
+    const css = await Bun.file(new URL("./styles.css", import.meta.url)).text();
+    const print = css.slice(css.indexOf("@media print"));
+    expect(print).toMatch(/\.report-md \.table-wrap\s*\{[^}]*overflow:\s*visible/);
+    expect(print).toMatch(/\.report-md \.data-table\s*\{[^}]*table-layout:\s*fixed/);
+    expect(print).toMatch(/\.report-md \.data-table td\s*\{[^}]*white-space:\s*normal/);
+    expect(print).toMatch(/\.report-md \.data-table td\s*\{[^}]*overflow-wrap:\s*anywhere/);
+    expect(print).toMatch(/\.report-md \.data-table tr\s*\{[^}]*break-inside:\s*avoid/);
+  });
+});
+
 describe("parseReportChart", () => {
   test("accepts the versioned bar and event-study schemas", () => {
     expect(parseReportChart(JSON.stringify({

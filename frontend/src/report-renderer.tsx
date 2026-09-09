@@ -203,21 +203,57 @@ function ReportPre({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
   return <pre {...props}>{children}</pre>;
 }
 
+// Minimal HAST shape: this transformer only reads headings/text and names tables.
+// Work on the parsed tree rather than a render-time counter (React may re-render
+// children independently) or a Markdown regex (code fences may contain headings).
+type ReportNode = {
+  type: string;
+  tagName?: string;
+  value?: string;
+  children?: ReportNode[];
+  properties?: Record<string, unknown>;
+};
+
+function rehypeReportTableLabels() {
+  return (tree: ReportNode) => {
+    let heading = "";
+    let tableIndex = 0;
+    const text = (node: ReportNode): string => node.type === "text"
+      ? node.value ?? ""
+      : (node.children ?? []).map(text).join("");
+    const visit = (node: ReportNode) => {
+      if (node.type === "element" && /^h[1-6]$/.test(node.tagName ?? "")) {
+        heading = text(node).replace(/\s+/g, " ").trim();
+      }
+      if (node.type === "element" && node.tagName === "table") {
+        tableIndex += 1;
+        node.properties = {
+          ...node.properties,
+          ariaLabel: `报告数据表 ${tableIndex}${heading ? `：${heading}` : ""}，可横向滚动`,
+        };
+      }
+      node.children?.forEach(visit);
+    };
+    visit(tree);
+  };
+}
+
 /** Shared student/teacher report body. Raw HTML is intentionally not enabled. */
 export function ReportMarkdown({ markdown, className = "report-md" }: { markdown: string; className?: string }) {
   return (
     <article className={className} style={{ whiteSpace: "normal" }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeReportTableLabels]}
         skipHtml
         components={{
           code: ReportCode,
           pre: ReportPre,
-          table: ({ children, ...props }) => (
+          table: ({ node: _node, children, ...props }) => (
             <ScrollableRegion
               className="table-wrap"
-              label="报告数据表，可横向滚动"
-              style={{ breakInside: "avoid", margin: "14px 0" }}
+              label={props["aria-label"]}
+              style={{ margin: "14px 0" }}
             >
               <table className="data-table" {...props}>{children}</table>
             </ScrollableRegion>

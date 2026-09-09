@@ -851,4 +851,24 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
     overflow: visible;
     white-space: pre-wrap;
   }
+  /* Paper has no horizontal scrollbar. Keep all report columns in the printable
+     width, including long indicator names/URLs, and allow long tables to paginate. */
+  .report-md .table-wrap {
+    overflow: visible;
+    background: #fff;
+    break-inside: auto;
+  }
+  .report-md .data-table {
+    width: 100%;
+    table-layout: fixed;
+  }
+  .report-md .data-table th,
+  .report-md .data-table td {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    vertical-align: top;
+    padding: 6px;
+  }
+  .report-md .data-table thead { display: table-header-group; }
+  .report-md .data-table tr { break-inside: avoid; }
 }

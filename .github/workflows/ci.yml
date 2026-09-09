@@ -147,6 +147,8 @@ jobs:
           bun add --global --trust "agent-browser@${AGENT_BROWSER_VERSION}"
           agent-browser install --with-deps
           agent-browser doctor
+          sudo apt-get update
+          sudo apt-get install -y poppler-utils
       - name: Run student and teacher browser smoke
         env:
           GVCSIM_DEMO_MODE: "1"

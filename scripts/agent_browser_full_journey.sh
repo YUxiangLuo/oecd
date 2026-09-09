@@ -16,6 +16,10 @@ viewport_height=${GVCSIM_E2E_VIEWPORT_HEIGHT:-1000}
   exit 2
 }
 
+if [[ -n "$artifact_dir" ]]; then
+  command -v pdftotext >/dev/null || { echo "PDF checks require poppler-utils (pdftotext)" >&2; exit 2; }
+fi
+
 uv run python scripts/seed_full_journey.py
 
 student=(agent-browser --namespace "$browser_namespace" --session full-student)
@@ -48,6 +52,8 @@ fi
 "${student[@]}" wait --text '等待教师评阅'
 if [[ -n "$artifact_dir" ]]; then
   "${student[@]}" screenshot "$artifact_dir/student-submitted.png" --full
+  "${student[@]}" pdf "$artifact_dir/student-report.pdf"
+  uv run python scripts/verify_report_pdf.py "$artifact_dir/student-report.pdf"
 fi
 student_errors=$("${student[@]}" errors)
 if [[ -n "$student_errors" ]]; then
