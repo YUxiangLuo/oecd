@@ -111,20 +111,23 @@ def main():
             _, report = wait_for(lambda s, r: r[1] == "pending" and marker in r[0])
             assert report[2] is None
             step_runs = [run for run in report[3]["runs"] if run["step"] == 11]
-            exploratory = next(run for run in step_runs if run["design"]["shock_type"] == "export_control")
-            assert exploratory["result"]["support"]["suppress_inference"] is True
-            assert exploratory["result"] == latest["run"]["result"]
+            latest_report_run = next(run for run in step_runs if run["design"]["shock_type"] == "export_control")
+            assert latest_report_run["result"]["support"]["suppress_inference"] is True
+            assert latest_report_run["design"] == latest["run"]["design"]
+            assert latest_report_run["result"] == latest["run"]["result"]
             comparison = next(line for line in report[0].splitlines() if line.startswith("| 11 |"))
+            # The latest complete diagnosis belongs in the comparison table.
+            # An older inferential estimate must not hide its design limitations.
+            assert "出口管制" in comparison and "关税冲击" not in comparison
+            assert "无法" in comparison or "不可" in comparison
             if qualified is not None:
                 report_run = next(run for run in step_runs if run["design"]["shock_type"] == "tariff")
                 assert report_run["design"] == qualified["design"] and report_run["result"] == qualified["result"]
-                assert "关税冲击" in comparison and "出口管制" not in comparison
-                assert "探索结果，未列入对照表" in report[0]
+                assert len(step_runs) == 2
             else:
                 # Current economics contracts can stop inference even for the
                 # baseline. Such a run is reportable, never a qualified estimate.
                 assert len(step_runs) == 1
-                assert "出口管制" in comparison and "关税冲击" not in comparison
             browser.run("eval", 'document.querySelector(".submit-card")?.scrollIntoView({block:"center"})')
             browser.run("screenshot", str(output / f"regenerated-{attempt}.png"))
             results.append(
@@ -134,6 +137,8 @@ def main():
                     "passed": True,
                     "kept_qualified_tariff_run": qualified is not None,
                     "diagnostic_only_baseline": qualified is None,
+                    "latest_diagnosis_in_comparison": True,
+                    "baseline_method": original_data["run"]["design"]["method"],
                     "old_report_immutable_until_regeneration": True,
                     "old_grade_cleared": True,
                 }
