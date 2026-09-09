@@ -16,7 +16,9 @@ import pandas as pd
 from gvcsim.file_identity import FileState, file_state, open_text, verified_source
 
 
-ARTIFACT_CONTRACT_VERSION = 13
+# v14: foreign-flow sums preserve structural zero exports and undefined shares.
+# v13 panels may persist false zero-valued observations from cancellation noise.
+ARTIFACT_CONTRACT_VERSION = 14
 ARTIFACT_MANIFEST_ALGORITHM = "sha256"
 ARTIFACT_MANIFEST_NAME = "artifact_manifest"
 METADATA_DIGEST_NAME = "metadata_sha256"

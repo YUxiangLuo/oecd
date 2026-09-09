@@ -10,6 +10,8 @@
 2. **数据发布**：执行 `compute` 并原子切换 release，不清空教学库；会话和报告按 `release_id` 自动隔离。
 3. **新学期重置**：仅在明确清场时执行 `classroom-init --reset`，会删除全部账号、会话、报告和评分。
 
+**v14 数值修复不是普通代码更新：** 新契约拒绝 v13 产物，以免继续读取浮点抵消导致的错误零出口份额及回归观察。先在独立 `GVCSIM_DATA_DIR` 完整重算并验收新 release，再安排代码与数据的协调切换；不得修改旧 CSV/版本号冒充升级，也不得执行教学库重置。当前部署在新 release 验收前保持原样，旧代码与旧 release 成对保留供回滚，原会话/报告不迁移绑定。参见 [README 的 v14 升级要求](README.md#数据发布)。
+
 ## 一次性主机 bootstrap
 
 先由系统管理员安装 Python 3.13、uv、Bun、PostgreSQL、Nginx、OpenSSL 和所用 ACME/TLS 客户端。确认以下命令都可用：

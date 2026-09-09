@@ -15,6 +15,13 @@ import numpy as np
 import pandas as pd
 
 
+def _foreign_final_demand(Yd: np.ndarray, home_cols: np.ndarray) -> np.ndarray:
+    """直接加总外国最终需求，避免总和减内销的抵消；保留真实小额与负值。"""
+    foreign = Yd.copy()
+    foreign[np.arange(len(Yd)), home_cols] = 0.0
+    return foreign.sum(axis=1)
+
+
 @dataclass
 class IcioArrays:
     regions: list[str]  # 国家/地区代码,按矩阵中出现顺序
@@ -50,7 +57,7 @@ class IcioArrays:
 
     def y_export(self) -> np.ndarray:
         """最终品出口 Σ_{r≠s} Y_sr,N。"""
-        return self.Yd.sum(axis=1) - self.y_domestic()
+        return _foreign_final_demand(self.Yd, self.home_cols())
 
     def apply_L(self, vec: np.ndarray) -> np.ndarray:
         """块对角国内里昂惕夫逆左乘:out[p_r] = L_rr @ vec[p_r]。"""
@@ -120,13 +127,15 @@ def build_arrays(io) -> IcioArrays:
     pos = {r: np.where(row_regions == r)[0] for r in regions}
     col_region_of = {r: regions.index(r) for r in regions}
 
-    # 出口 = 卖给外国的中间品 + 卖给外国的最终品
-    E = np.zeros_like(x)
+    # 直接加总跨境块，不用“总和 - 国内和”：结构性零出口必须精确为零，
+    # 否则微小正尾差会让下游 gross > 0 将 0/0 误判为有效的 0% 份额。
+    # 不设金额阈值，以免裁掉真实的小额贸易或有符号库存需求。
+    home_cols = np.array([col_region_of[r] for r in row_regions])
+    E = _foreign_final_demand(Yd, home_cols)
     for r in regions:
         p = pos[r]
-        z_row = Z[p, :].sum(axis=1) - Z[np.ix_(p, p)].sum(axis=1)
-        y_row = Yd[p, :].sum(axis=1) - Yd[p, col_region_of[r]]
-        E[p] = z_row + y_row
+        foreign = np.flatnonzero(row_regions != r)
+        E[p] += Z[np.ix_(p, foreign)].sum(axis=1)
 
     # 国内里昂惕夫逆:每国一个 S×S 小矩阵求逆
     n_sec = len(sectors)

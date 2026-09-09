@@ -66,7 +66,9 @@ uv run gvcsim classroom-init --reset
 
 ## 数据发布
 
-原始表位于 `OECD_ICIO/`，固定产物入口是 `data/processed`。`compute` 只在 API 已停止的维护窗口运行：它在 `data/.processed-releases/` 的暂存目录完成计算与诊断，为每个普通文件生成 SHA-256、字节数和 CSV/JSON 结构清单，完整校验并 `fsync` 后才通过相对符号链接原子切换。v13 产物同时要求完整性与数学有效性：文件哈希、结构、键覆盖、有限性和来源绑定失败，以及逆矩阵稳定性、计算恒等式或聚合一致性失败，都阻断发布。源账户误差同时超过 1 Million USD 和 1% 时也阻断发布；容差内舍入、负 VA/TLS、份额超出常见范围与回归设计限制仍作为经济诊断披露，不通过裁剪负值掩盖；接近稳定性边界但未越过失败阈值的警告也保留。所有检查写入 QC 产物、`dataset.json` 和实验报告。成功后保留当前与上一发布供故障回滚；更旧发布清理失败只输出警告。构建或发布校验失败不会改变旧入口。
+原始表位于 `OECD_ICIO/`，固定产物入口是 `data/processed`。`compute` 只在 API 已停止的维护窗口运行：它在 `data/.processed-releases/` 的暂存目录完成计算与诊断，为每个普通文件生成 SHA-256、字节数和 CSV/JSON 结构清单，完整校验并 `fsync` 后才通过相对符号链接原子切换。v14 产物同时要求完整性与数学有效性：文件哈希、结构、键覆盖、有限性和来源绑定失败，以及逆矩阵稳定性、计算恒等式或聚合一致性失败，都阻断发布。源账户误差同时超过 1 Million USD 和 1% 时也阻断发布；容差内舍入、负 VA/TLS、份额超出常见范围与回归设计限制仍作为经济诊断披露，不通过裁剪负值掩盖；接近稳定性边界但未越过失败阈值的警告也保留。所有检查写入 QC 产物、`dataset.json` 和实验报告。成功后保留当前与上一发布供故障回滚；更旧发布清理失败只输出警告。构建或发布校验失败不会改变旧入口。
+
+**v14 升级要求：** 出口改为直接加总外国中间品与最终需求，避免“总和减国内和”的浮点尾差把结构性零出口变成有效的 0% 份额。真实小额贸易与负最终需求不设阈值裁剪。旧 v13 回归基表可能已持久化错误零值，因此新代码拒绝旧契约；必须在独立数据目录完整重算并验收新的 release 后再安排部署，不能只改前端、改旧 CSV 或改元数据版本号。保留旧代码/数据供回滚，旧会话与报告仍绑定原 release；不重置教学库。
 
 宏观教学模拟生成器 v2 明确保留 ICIO 的经济规模：`(max(SVA,0)+1) × 10^6 × 国家系数 × 时间系数`，其中 SVA 和加一项的单位是百万美元，两个系数无量纲；人口由该模拟美元金额除以模拟人均美元收入得到。这是明确校准的教学数据，仍不是 WDI/IMF 观测 GDP 或人口，且禁止进入公开主回归。
 
@@ -106,7 +108,7 @@ Gephi 0.10.1 独立基准可用 `scripts/gephi_golden/generate.sh --check` 校�
 
 CI 的桌面浏览器验收分两层：`agent_browser_smoke.sh` 快速挂载学生 1–15 步与教师关键交互；`agent_browser_full_journey.sh` 通过公开 API 构造一份当前 release 的完整学习记录，再由真实浏览器完成报告生成、提交和教师评分，防止各自通过的组件在完整状态机中断链。两个脚本都以 `GVCSIM_BASE_URL` 指定被测站点地址，不写死任何主机。完整旅程在设置 `GVCSIM_E2E_ARTIFACT_DIR` 时还会通过浏览器打印 PDF，并用独立的 `pdftotext` 检查四类指标对照表七列均未被截断；本地需安装 Poppler（Debian/Ubuntu：`poppler-utils`），CI 已包含此依赖。
 
-冲击面板性能验收在有效 active v13 release 完成最终重算后运行：
+冲击面板性能验收在有效 active v14 release 完成最终重算后运行：
 
 ```bash
 # 对照只读本地生产部署；运行期间不得改写原始输入或 release。
@@ -115,4 +117,4 @@ GVCSIM_BENCHMARK_USERNAME=student GVCSIM_BENCHMARK_PASSWORD='…' \
   uv run python scripts/benchmark_shock_panel_v9.py
 ```
 
-脚本在进程内完成 release 校验并经由正常登录中间件访问 `/api/shocks/panel`，记录 release/shock contract、单请求冷索引、8 请求并发冷启动、warm sequential 与 8-concurrent p95，并对照 500ms/1.5s 预算；不经过网络，因此无需也不接受目标主机配置。正式数据发布必须通过该门槛；当前契约的验收记录写入 `benchmarks/shock_panel_v13.json`，旧 `benchmarks/shock_panel_v12.json`、`benchmarks/shock_panel_v11.json`、`benchmarks/shock_panel_v10.json`、`benchmarks/shock_panel_v9.json` 与 `benchmarks/shock_panel_preliminary_v3.json` 仅保留作历史记录。每次正式数据换版仍必须重新运行当前版本的验收，不能沿用旧 release 的结果。
+脚本在进程内完成 release 校验并经由正常登录中间件访问 `/api/shocks/panel`，记录 release/shock contract、单请求冷索引、8 请求并发冷启动、warm sequential 与 8-concurrent p95，并对照 500ms/1.5s 预算；不经过网络，因此无需也不接受目标主机配置。正式数据发布必须通过该门槛；v14 正式部署前需生成新的当前契约验收记录；`benchmarks/shock_panel_v13.json` 和更早的 `benchmarks/shock_panel_v12.json`、`benchmarks/shock_panel_v11.json`、`benchmarks/shock_panel_v10.json`、`benchmarks/shock_panel_v9.json` 与 `benchmarks/shock_panel_preliminary_v3.json` 仅保留作历史记录。每次正式数据换版仍必须重新运行当前版本的验收，不能沿用旧 release 的结果。
