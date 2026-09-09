@@ -1241,7 +1241,7 @@ export function RegressionRunLab({
 
       {method === "did" && (
         <details className={`reg-compare-card${outcome === "trade" ? " numeric" : ""}`} open={outcome === "trade"}>
-          <summary>{outcome === "trade" ? "步骤 11 · 用四格数字理解比较" : "比较方法与步骤 11 相同（需要时展开复习）"}</summary>
+          <summary>{outcome === "trade" ? "步骤 11 · 用四格数字理解比较" : "用四格理解当前 ATT 比较（选做复习）"}</summary>
           <div>
             <p>{comparisonExplanation(method)}</p>
             <p className="muted">{lesson.howToRead}</p>

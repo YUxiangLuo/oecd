@@ -232,6 +232,43 @@ describe("regression request identity and accessible request states", () => {
   });
 });
 
+describe("cross-step comparison guidance", () => {
+  for (const previousMethod of ["did", "twfe_intensity", "event_study"] as const) {
+    for (const [index, outcome] of (["production", "length", "network"] as const).entries()) {
+      test(`${outcome} ATT does not claim to match step 11 ${previousMethod}`, () => {
+        const previousRun: SavedRegressionRun = {
+          ...savedRun,
+          settings: { ...savedRun.settings, method: previousMethod },
+          design: { ...savedRun.design, outcome: "trade", method: previousMethod },
+        };
+        const html = renderToStaticMarkup(
+          <RegressionRunLab
+            {...labProps(regressionState())}
+            step={{ ...regressionStep, n: 12 + index, regression_outcome: outcome }}
+            getStep={<T,>(n: number) => n === 11 ? { run: previousRun } as T : undefined}
+          />,
+        );
+        expect(html).toContain("用四格理解当前 ATT 比较（选做复习）");
+        expect(html).toContain("跨步骤并读前，请核对各步实际保存的比较方法与设定");
+        expect(html).not.toContain("比较方法与步骤 11 相同");
+        expect(html).not.toContain("和步骤 11 同一套比较");
+        expect(html).toContain("相对变化 =（B−A）−（D−C）");
+      });
+    }
+  }
+
+  test("step 11 retains its numerical four-cell teaching example", () => {
+    const html = renderToStaticMarkup(
+      <RegressionRunLab
+        {...labProps(regressionState())}
+        step={{ ...regressionStep, n: 11, regression_outcome: "trade" }}
+      />,
+    );
+    expect(html).toContain("步骤 11 · 用四格数字理解比较");
+    expect(html).toContain("这组数字只用来讲清四格，不是本步估计结果");
+  });
+});
+
 describe("preserved qualified regression result", () => {
   test("renders the saved design/result rather than a current invalid run", () => {
     const restored = structuredClone(savedRun);

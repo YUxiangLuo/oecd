@@ -180,7 +180,7 @@ export function DidFourCells({ numeric }: { numeric?: boolean }) {
         </tbody>
       </table>
       <div className="did-formula">相对变化 =（B−A）−（D−C）</div>
-      <p className="muted">和步骤 11 同一套比较。真实估计里，不同对象首次受冲击的年份可以不同。</p>
+      <p className="muted">四格仅用于理解双重差分；跨步骤并读前，请核对各步实际保存的比较方法与设定。真实估计里，不同对象首次受冲击的年份可以不同。</p>
     </div>
   );
 }
