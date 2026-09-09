@@ -103,7 +103,11 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
         raise HTTPException(
             status_code=409,
             detail={
-                "message": "检测到其他标签页已保存更新；为避免覆盖，本页更改尚未写入。请载入服务器版本后重新操作。",
+                "message": (
+                    "服务器记录版本已变化，本次请求未覆盖服务器内容。"
+                    "可能是其他页面已更新，也可能是此前保存成功但未收到响应。"
+                    "请载入服务器版本并核对内容后再操作。"
+                ),
                 "code": "session_changed",
             },
         ) from error

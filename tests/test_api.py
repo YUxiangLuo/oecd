@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from gvcsim import api as api_module
@@ -146,6 +147,35 @@ def test_session_contract_uses_optimistic_concurrency(teaching_db):
     assert stale.status_code == 409
     assert stale.json()["detail"]["code"] == "session_changed"
     assert client.get("/api/classroom/session").json()["session"] == second
+
+
+@pytest.mark.parametrize("existing_session", [False, True])
+def test_session_retry_after_unacknowledged_commit_keeps_saved_content(teaching_db, existing_session):
+    client = _client(teaching_db)
+    if existing_session:
+        assert (
+            client.put("/api/classroom/session", json={"session": empty_session(), "base_updated_at": None}).status_code
+            == 200
+        )
+    baseline = client.get("/api/classroom/session").json()["updated_at"]
+    draft = empty_session()
+    draft["steps"]["15"] = make_record({"research_question": "响应丢失后必须保留的本人最新研究问题"})
+    request = {"session": draft, "base_updated_at": baseline}
+
+    # One client commits successfully but never adopts the response's new version,
+    # just as when the connection drops after the server commits. No other writer.
+    committed = client.put("/api/classroom/session", json=request)
+    assert committed.status_code == 200
+    retried = client.put("/api/classroom/session", json=request)
+    assert retried.status_code == 409
+    detail = retried.json()["detail"]
+    assert detail["code"] == "session_changed"
+    restored = client.get("/api/classroom/session").json()
+    assert restored["session"] == draft
+    assert restored["updated_at"] == committed.json()["updated_at"]
+    assert "本次请求未覆盖服务器内容" in detail["message"]
+    assert "此前保存成功但未收到响应" in detail["message"]
+    assert "检测到其他标签页已保存更新" not in detail["message"]
 
 
 def test_new_session_race_rejects_second_null_version_write(teaching_db):
