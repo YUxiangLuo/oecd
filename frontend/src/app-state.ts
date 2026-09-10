@@ -77,14 +77,11 @@ export function writeStepHistory(
   return true;
 }
 
-export function introSeenStorageKey(username: string): string {
-  return `gvcsim_intro_seen:${username}`;
-}
-
-export function shouldAutoShowIntro(storage: StorageReader, username: string): boolean {
-  return storage.getItem(introSeenStorageKey(username)) !== "1";
-}
-
-export function markIntroSeen(storage: Pick<StorageWriter, "setItem">, username: string): void {
-  storage.setItem(introSeenStorageKey(username), "1");
+/**
+ * 系统介绍在**每次学生登录**后都自动显示，不按账号记忆“已读”。
+ * 登录页据此写入 sessionStorage 标记，加载后的 App 读取并弹出一次；
+ * 同一会话内的刷新不会重复弹出。
+ */
+export function shouldAutoShowIntro(role: string): boolean {
+  return role === "student";
 }

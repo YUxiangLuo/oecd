@@ -7,7 +7,6 @@ import {
   isExternalAuthenticationChange,
   readAuthExpiry,
   stepFromSearch,
-  markIntroSeen,
   shouldAutoShowIntro,
   storeAuthentication,
   urlWithStep,
@@ -86,11 +85,11 @@ describe("application authentication storage", () => {
 });
 
 describe("intro auto-show", () => {
-  test("shows the intro once per username until it is dismissed", () => {
-    const storage = new MemoryStorage();
-    expect(shouldAutoShowIntro(storage, "student")).toBe(true);
-    markIntroSeen(storage, "student");
-    expect(shouldAutoShowIntro(storage, "student")).toBe(false);
-    expect(shouldAutoShowIntro(storage, "edge")).toBe(true);
+  test("every student login shows the intro, regardless of account history", () => {
+    expect(shouldAutoShowIntro("student")).toBe(true);
+    // 不按账号记忆已读：同一账号下次登录仍然展示。
+    expect(shouldAutoShowIntro("student")).toBe(true);
+    expect(shouldAutoShowIntro("teacher")).toBe(false);
+    expect(shouldAutoShowIntro("")).toBe(false);
   });
 });

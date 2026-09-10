@@ -3,7 +3,6 @@ import {
   clearAuthentication,
   clearAuthenticationIfCurrent,
   isExternalAuthenticationChange,
-  markIntroSeen,
   readAuthExpiry,
   shouldAutoShowIntro,
   stepFromSearch,
@@ -221,7 +220,8 @@ export default function App() {
     return (
       <LoginPage notice={authNotice} onLogin={(response) => {
         storeAuthentication(localStorage, response.token, response.expires_at);
-        if (response.user.role === "student" && shouldAutoShowIntro(localStorage, response.user.username)) {
+        // 每次学生登录都重新展示系统介绍（不按账号记忆已读）。
+        if (shouldAutoShowIntro(response.user.role)) {
           sessionStorage.setItem("gvcsim_show_intro", "1");
         }
         window.location.reload();
@@ -278,7 +278,6 @@ export default function App() {
       onNavigateStep={navigateStep}
       onShowIntro={() => setShowIntro(true)}
       onCloseIntro={() => {
-        markIntroSeen(localStorage, user.username);
         setShowIntro(false);
       }}
       onRequestPasswordChange={() => setShowPasswordChange(true)}
