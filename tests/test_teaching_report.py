@@ -626,7 +626,8 @@ def test_step_nine_requires_both_a_comparison_and_an_industry_observation():
     comparison_only["steps"]["9"]["data"]["observations"] = []
     blocked = [item for item in check_material_gate(comparison_only) if item["step"] == 9]
     assert len(blocked) == 1
-    assert "介数观测" in "".join(blocked[0]["missing"])
+    # The message must name the control the student actually sees.
+    assert "记录拓扑基准" in "".join(blocked[0]["missing"])
     assert any(item["step"] == 9 for item in check_gate(comparison_only))
 
     # The comparison is still required alongside the observation.
@@ -634,6 +635,8 @@ def test_step_nine_requires_both_a_comparison_and_an_industry_observation():
     observation_only["steps"]["9"]["data"]["compared"] = []
     message = "".join(next(item["missing"] for item in check_material_gate(observation_only) if item["step"] == 9))
     assert "两个经济体" in message
+    # Carrying over is not always offered, so the message also names in-step selection.
+    assert "网络图中的节点" in message
 
 
 def test_report_labels_step_nine_observation_without_a_step_level_metric(tmp_path, monkeypatch):

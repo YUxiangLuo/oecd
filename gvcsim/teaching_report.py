@@ -164,11 +164,14 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
         if step == 9:
             # 步骤 9 的任务同时要求“一条国家比较”与“一条行业介数观测”，
             # 两者缺一不可：只沿用比较对象并不构成该步要求的行业拓扑证据。
+            # Messages name the controls the student actually sees on this step:
+            # inspecting graph nodes also records the comparison, and the carry
+            # button only renders when an earlier step already saved two countries.
             missing: list[str] = []
             if len(compared) < 2:
-                missing.append("请选择至少两个经济体，并点击“沿用并记录到本步”")
+                missing.append("请在本步选择至少两个经济体：点击网络图中的节点，或使用“沿用并记录到本步”")
             if not observations:
-                missing.append("请在下钻的行业表中选择一项，并点击“记录…介数观测”")
+                missing.append("请在下钻的行业表中，对实际查看的一行点击“记录拓扑基准”，保存一条行业介数观测")
             if missing:
                 blocked.append({"step": step, "title": _STEP_TITLES.get(step, ""), "missing": missing})
             continue

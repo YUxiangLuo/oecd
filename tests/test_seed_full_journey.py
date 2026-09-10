@@ -71,6 +71,21 @@ def api(monkeypatch):
     return state
 
 
+def test_seed_json_helpers_enforce_expected_shape(api, monkeypatch):
+    """The object/array wrappers must reject the wrong JSON shape.
+
+    The seed's stub replaces the shared HTTP seam, so without this the shape
+    checks that guard real requests would go untested.
+    """
+    monkeypatch.setattr(journey, "_request_json_value", lambda *_a, **_k: [1, 2])
+    with pytest.raises(RuntimeError, match="did not return a JSON object"):
+        journey._request_json("http://test", "GET", "/x")
+
+    monkeypatch.setattr(journey, "_request_json_value", lambda *_a, **_k: {"rows": []})
+    with pytest.raises(RuntimeError, match="did not return a JSON array"):
+        journey._request_json_rows("http://test", "token", "/x")
+
+
 def test_seed_records_step_observations_like_the_ui(api):
     """Steps 2-8 carry their metric and country values, not just ``compared``."""
     journey.seed_full_journey("http://test", "student", "test-password")
