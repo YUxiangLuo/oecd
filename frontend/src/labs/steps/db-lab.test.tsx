@@ -29,6 +29,32 @@ const SLICE: DbSlice = {
   row_summaries: [],
 };
 
+describe("step 1 further-reading card", () => {
+  test("reveals its guide content without a second nested disclosure", async () => {
+    spyOn(api, "dbMeta").mockResolvedValue(DB_META);
+    spyOn(api, "dbSlice").mockResolvedValue(SLICE);
+    const state = {
+      data: undefined,
+      save: () => {},
+      complete: false,
+      syncing: false,
+      syncError: null,
+      syncNow: () => {},
+    };
+
+    render(<DbLab state={state} releaseMeta={null as Meta | null} />);
+
+    const summary = await screen.findByText("进一步理解 ICIO 表结构与账户项");
+    const card = summary.closest("details") as HTMLDetailsElement;
+    expect(card).toBeTruthy();
+    // 早前这里是外层 details 里再套一个折叠 details，学生需点击两次才能看到正文。
+    expect(card.querySelectorAll("details")).toHaveLength(0);
+    expect(card.textContent).toContain("全球投入产出数据库一览");
+    expect(card.querySelector(".db-guide-table")).toBeTruthy();
+  });
+});
+
+
 describe("step 1 cell activation", () => {
   test("clicking a value cell records it and opens the fullscreen table", async () => {
     spyOn(api, "dbMeta").mockResolvedValue(DB_META);

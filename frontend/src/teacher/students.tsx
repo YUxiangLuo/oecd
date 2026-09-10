@@ -39,6 +39,39 @@ export function studentFieldError(
 
 type ModalState = null | { type: "student" } | { type: "name" | "student_no" | "password"; student: StudentRow };
 
+/**
+ * 行内操作菜单。可访问名必须带上学生身份：否则一页里会出现成百上千个同名的“操作 /
+ * 修改姓名 / 重置密码”，屏幕阅读器无法判断菜单属于哪个学生。可见文字保持不变。
+ */
+export function StudentRowMenu({
+  student,
+  onPick,
+}: {
+  student: StudentRow;
+  onPick: (type: "name" | "student_no" | "password", student: StudentRow) => void;
+}) {
+  const who = `${student.display_name}（${student.username}）`;
+  const passwordLabel = student.demo_seed ? "固定演示口令" : "重置密码";
+  return (
+    <details className="row-menu">
+      <summary aria-label={`操作：${who}`}>⋯</summary>
+      <div className="row-menu-pop">
+        <button aria-label={`修改姓名：${who}`} onClick={() => onPick("name", student)}>修改姓名</button>
+        <button aria-label={`修改学号：${who}`} onClick={() => onPick("student_no", student)}>修改学号</button>
+        <span title={student.demo_seed ? "固定轮换凭证由系统维护；请新建普通学生账号演示改密" : undefined}>
+          <button
+            disabled={student.demo_seed}
+            aria-label={`${passwordLabel}：${who}`}
+            onClick={() => onPick("password", student)}
+          >
+            {passwordLabel}
+          </button>
+        </span>
+      </div>
+    </details>
+  );
+}
+
 function useModalErrorFocus(error: string | null) {
   const errorRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -91,15 +124,7 @@ export function StudentsTab() {
                 <td>{fmtTime(student.last_valid_activity)}</td>
                 <td>{fmtTime(student.last_login_at)}</td>
                 <td>
-                  <details className="row-menu"><summary aria-label="操作">⋯</summary><div className="row-menu-pop">
-                    <button onClick={() => setModal({ type: "name", student })}>修改姓名</button>
-                    <button onClick={() => setModal({ type: "student_no", student })}>修改学号</button>
-                    <span title={student.demo_seed ? "固定轮换凭证由系统维护；请新建普通学生账号演示改密" : undefined}>
-                      <button disabled={student.demo_seed} onClick={() => setModal({ type: "password", student })}>
-                        {student.demo_seed ? "固定演示口令" : "重置密码"}
-                      </button>
-                    </span>
-                  </div></details>
+                  <StudentRowMenu student={student} onPick={(type, picked) => setModal({ type, student: picked })} />
                 </td>
               </tr>
             ))}

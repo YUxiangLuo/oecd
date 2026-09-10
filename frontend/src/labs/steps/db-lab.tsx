@@ -87,8 +87,8 @@ function DatabaseGuide({ meta }: { meta: DbMeta }) {
   const namedEconomies = meta.countries.includes("ROW") ? meta.countries.length - 1 : meta.countries.length;
   const icioCoverage = `${namedEconomies} 个具名经济体 + ROW · ${meta.sectors.length} 行业 · ${meta.years[0]}–${meta.years.at(-1)}（载入）`;
   return (
-    <details className="card accent concept-card db-guide">
-      <summary className="kicker">全球投入产出数据库一览 · 本系统默认使用 OECD ICIO</summary>
+    <div className="db-guide">
+      <h3 className="kicker">全球投入产出数据库一览 · 本系统默认使用 OECD ICIO</h3>
       <p style={{ maxWidth: 820 }}>
         研究全球价值链,需要一张“谁向谁供货”的<b>跨国投入产出表</b>。主流数据库各有侧重——下表是截至 2026-08 的课程比较快照，不是实时目录；覆盖范围、行业/产品口径与更新节奏都不同:
       </p>
@@ -119,7 +119,7 @@ function DatabaseGuide({ meta }: { meta: DbMeta }) {
         本系统使用 <b>OECD ICIO</b>(2023 版,当前载入 {meta.years[0]}–{meta.years.at(-1)})作为 GVC <b>指标输入</b>并生成派生结果；这项 OECD 来源声明不覆盖回归控制或政策情景。
         回归里的<b>模拟宏观控制</b>是以 ICIO 派生规模为锚的确定性教学 mock，不是 WDI 数据或 IMF 观测；政策冲击与政策情景也是教学编码，不是 OECD 数据。切换到其他数据库需替换原始表与解析器,不在本教学系统范围内;各库的覆盖数字随版本更新、分类口径不同,不能直接横向比较。
       </p>
-    </details>
+    </div>
   );
 }
 
@@ -837,7 +837,8 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
       </div>
       </FullscreenPanel>
 
-      <details className="card concept-card db-structure-details">
+      {/* 单层折叠：早前这里是“外层 details 套一个内层 details”，学生要点击两次才能看到正文。 */}
+      <details className="card accent concept-card db-structure-details">
         <summary className="kicker">进一步理解 ICIO 表结构与账户项</summary>
         <DatabaseGuide meta={meta} />
       </details>

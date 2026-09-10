@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { FieldModal, StudentModal, settleModalSubmission, studentFieldError } from "./students";
+import { FieldModal, StudentModal, StudentRowMenu, settleModalSubmission, studentFieldError } from "./students";
+import type { StudentRow } from "../types";
 
 describe("teacher student modal submission", () => {
   test("uses native forms so Enter submits create and edit operations", () => {
@@ -71,5 +72,55 @@ describe("teacher student modal submission", () => {
     expect(closed).toBe(false);
     expect(String(error)).toContain("已存在");
     expect(saving).toEqual([true, false]);
+  });
+});
+
+describe("teacher student row menu accessible names", () => {
+  const student: StudentRow = {
+    id: 7,
+    username: "student07",
+    display_name: "演示学生 07",
+    student_no: "2026007",
+    demo_seed: false,
+    last_login_at: null,
+    created_at: "2026-09-01T00:00:00Z",
+    report_state: "draft",
+    score: null,
+    submitted_at: null,
+    verified_completed_count: 3,
+    verified_total_steps: 15,
+    verified_completed_steps: [1, 2, 3],
+    completion_missing: [],
+    last_valid_activity: null,
+  };
+
+  test("carries the student identity so repeated menus stay distinguishable", () => {
+    const html = renderToStaticMarkup(createElement(StudentRowMenu, { student, onPick: () => {} }));
+
+    expect(html).toContain('aria-label="操作：演示学生 07（student07）"');
+    expect(html).toContain('aria-label="修改姓名：演示学生 07（student07）"');
+    expect(html).toContain('aria-label="修改学号：演示学生 07（student07）"');
+    expect(html).toContain('aria-label="重置密码：演示学生 07（student07）"');
+    // 可见文字不变
+    expect(html).toContain(">修改姓名<");
+    expect(html).toContain(">重置密码<");
+  });
+
+  test("keeps the fixed-demo wording and still names the row", () => {
+    const seeded = { ...student, username: "student08", display_name: "演示学生 08", demo_seed: true };
+    const html = renderToStaticMarkup(createElement(StudentRowMenu, { student: seeded, onPick: () => {} }));
+
+    expect(html).toContain('aria-label="固定演示口令：演示学生 08（student08）"');
+    expect(html).toContain(">固定演示口令<");
+  });
+
+  test("每个自定义可访问名都包含可见文字（WCAG 2.5.3）", () => {
+    const html = renderToStaticMarkup(createElement(StudentRowMenu, { student, onPick: () => {} }));
+    // 只检查以文字作为可见标签的按钮；"⋯" 是装饰字形，其含义由列头的 sr-only "操作" 提供。
+    const pairs = [...html.matchAll(/<button[^>]*aria-label="([^"]*)"[^>]*>(.*?)<\/button>/g)];
+    expect(pairs.length).toBe(3);
+    for (const [, name, visible] of pairs) {
+      expect(name).toContain(visible);
+    }
   });
 });

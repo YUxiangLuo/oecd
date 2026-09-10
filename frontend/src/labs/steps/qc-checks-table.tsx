@@ -95,7 +95,10 @@ export function QcChecksTable({
                   ))}
                   {extra.length > 0 && (
                     <details style={{ marginTop: 6 }}>
-                      <summary style={{ cursor: "pointer", color: "#4b47e0", fontWeight: 600 }}>
+                      <summary
+                        aria-label={`${c.name}：还有 ${extra.length} 条明细`}
+                        style={{ cursor: "pointer", color: "#4b47e0", fontWeight: 600 }}
+                      >
                         还有 {extra.length} 条明细
                       </summary>
                       {extra.map((w) => (
@@ -104,7 +107,12 @@ export function QcChecksTable({
                     </details>
                   )}
                   <details style={{ marginTop: 7 }}>
-                    <summary style={{ cursor: "pointer", color: "#4b47e0", fontWeight: 600 }}>为什么检查？</summary>
+                    <summary
+                      aria-label={`${c.name}：为什么检查？`}
+                      style={{ cursor: "pointer", color: "#4b47e0", fontWeight: 600 }}
+                    >
+                      为什么检查？
+                    </summary>
                     <div className="muted" style={{ marginTop: 5 }}>{whyCheck(c.name)}</div>
                     {onNavigateStep && (
                       c.name.startsWith("会计恒等式")
