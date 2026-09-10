@@ -317,11 +317,9 @@ export function StudentWorkspace({
         <IntroOverlay
           user={user}
           meta={meta}
+          stepsData={stepsData}
           returnFocusRef={introTriggerRef}
-          onDone={(gotoStep) => {
-            onCloseIntro();
-            if (gotoStep) onNavigateStep(gotoStep);
-          }}
+          onDone={onCloseIntro}
         />
       )}
       {showPasswordChange && (
