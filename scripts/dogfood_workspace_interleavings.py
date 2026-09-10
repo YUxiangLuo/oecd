@@ -133,6 +133,8 @@ def main():
             browser.run("fill", "#login-pass", changed_password)
             browser.run("click", 'button[type="submit"]')
             browser.run("wait", "textarea")
+            # Dismiss the per-login intro before any accessibility-tree lookup.
+            browser.dismiss_intro()
             browser.run("tab", "t1")
             browser.run("wait", "--text", "恢复未保存内容")
             browser.button("恢复未保存内容")

@@ -93,6 +93,8 @@ def main():
                     browser.run("fill", "#login-user", name)
                     browser.run("fill", "#login-pass", password)
                     browser.run("click", 'button[type="submit"]')
+                    # Dismiss the per-login intro before the accessibility-based button click.
+                    browser.dismiss_intro()
                     browser.run("wait", "--text", "恢复未保存内容")
                     browser.button("恢复未保存内容")
                     browser.run("wait", "--load", "networkidle")

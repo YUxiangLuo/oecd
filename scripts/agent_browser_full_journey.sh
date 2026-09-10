@@ -40,10 +40,18 @@ fi
 "${student[@]}" fill '#login-pass' "$GVCSIM_E2E_PASSWORD"
 "${student[@]}" click 'button[type="submit"]'
 "${student[@]}" wait --text '课程大纲'
-# 远程延迟下外壳文本（课程大纲）先于介绍遮罩渲染：必须等遮罩真正挂载再跳过，
-# 否则 eval 与后续的 overlay-gone 检查都会落在遮罩未出现的窗口期而误判通过。
-"${student[@]}" wait 'button[aria-label="跳过介绍"]'
-"${student[@]}" click 'button[aria-label="跳过介绍"]'
+# 远程延迟下外壳文本（课程大纲）先于介绍遮罩渲染：必须确认遮罩真正挂载后再关闭，
+# 否则后续的 overlay-gone 检查会落在遮罩尚未出现的窗口期而误判通过。
+# 介绍层是模态，开启时工作区对可访问性树不可见；在单次页面求值内查询并点击，
+# 避免 wait 与 click 之间按钮被重建而丢失。
+# The intro is a modal shown on every student login, and it makes the workspace
+# inert for accessibility-tree lookups. Click it inside a single page evaluation
+# so the skip button cannot disappear between a separate wait and click.
+intro_deadline=$((SECONDS + 20))
+until "${student[@]}" eval '(() => { const b = document.querySelector("button[aria-label=\"跳过介绍\"]"); if (!b) return false; b.click(); return true; })()' | grep -q true; do
+  (( SECONDS > intro_deadline )) && { echo "intro skip button never became clickable" >&2; exit 1; }
+  sleep 0.2
+done
 "${student[@]}" wait --fn '!document.querySelector(".intro-overlay")'
 "${student[@]}" wait --text '生成实验报告'
 "${student[@]}" find role button click --name '根据实验记录生成报告' --exact

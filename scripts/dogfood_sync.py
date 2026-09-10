@@ -37,6 +37,21 @@ def request(base, method, path, body=None, token=None):
 
 
 class Browser:
+    # The system intro is shown on *every* student login and is a modal: while it
+    # is open the workspace underneath is inert, so agent-browser's
+    # accessibility-based lookups (``find role button ...``) cannot see it.
+    # Query and click inside a single page evaluation so the skip button cannot
+    # disappear between a separate wait and click.
+    _INTRO_PROBE = (
+        "(() => {"
+        ' const overlay = document.querySelector(".intro-overlay");'
+        " const skip = document.querySelector('button[aria-label=\"跳过介绍\"]');"
+        ' if (overlay && skip) { skip.click(); return "clicked"; }'
+        ' const ready = document.querySelector(".layout") || document.querySelector("textarea");'
+        ' return ready ? "absent" : "loading";'
+        " })()"
+    )
+
     def __init__(self, name):
         self.prefix = [
             "agent-browser",
@@ -56,14 +71,38 @@ class Browser:
             raise RuntimeError(f"browser {args[0]} failed: {result.stdout} {result.stderr}")
         return result.stdout.strip()
 
+    def dismiss_intro(self, timeout=15.0, grace=4.0):
+        """Close the login intro overlay if it appears; True when dismissed.
+
+        The overlay mounts right after the post-login reload, so absence is only
+        accepted once the workspace is up *and* the grace window has passed.
+        """
+        started = time.monotonic()
+        while time.monotonic() - started < timeout:
+            try:
+                state = json.loads(self.run("eval", self._INTRO_PROBE))
+            except (RuntimeError, ValueError):
+                # The page may be mid-navigation between submit and mount.
+                time.sleep(0.2)
+                continue
+            if state == "clicked":
+                try:
+                    self.run("wait", "--fn", '!document.querySelector(".intro-overlay")')
+                except RuntimeError:
+                    pass
+                return True
+            if state == "absent" and time.monotonic() - started > grace:
+                return False
+            time.sleep(0.2)
+        return False
+
     def login(self, base, username, password):
         self.run("open", base + "/?step=15")
         self.run("set", "viewport", "1440", "1000")
         self.run("fill", "#login-user", username)
         self.run("fill", "#login-pass", password)
         self.run("click", 'button[type="submit"]')
-        self.run("wait", 'button[aria-label="跳过介绍"]')
-        self.run("click", 'button[aria-label="跳过介绍"]')
+        self.dismiss_intro()
         self.run("wait", "textarea")
 
     def value(self):

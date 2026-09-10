@@ -52,6 +52,9 @@ def main():
             browser.run("fill", "#login-pass", password + "-new")
             browser.run("click", 'button[type="submit"]')
             browser.run("wait", "textarea")
+            # The intro is shown on every student login and its modal makes the
+            # workspace inert for accessibility-based lookups.
+            browser.dismiss_intro()
             offered = json.loads(
                 browser.run(
                     "eval", 'Array.from(document.querySelectorAll("button")).some(e=>e.textContent==="恢复未保存内容")'
