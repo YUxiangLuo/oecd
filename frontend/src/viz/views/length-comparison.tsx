@@ -1,5 +1,5 @@
 import { formatMetric } from "../../format";
-import { ChartDataDisclosure } from "../explore/charts";
+import { ChartDataDisclosure, RANK_HIGHLIGHT_TEXT } from "../explore/charts";
 import { CAT, Legend, type Row, cardStyle, countryLabel, num, topWithSelected, useTip } from "../shared";
 
 /* ------------------------ 步骤8:前向/后向生产长度对比 ------------------------ */
@@ -50,12 +50,12 @@ export function LengthViz({ rows, highlight = new Set<string>() }: { rows: Row[]
                     style={{ display: "flex", alignItems: "center", gap: 12, fontWeight: selected ? 700 : 500 }}
                     onMouseEnter={(e) => show(e, tipLines(r))}
                     onMouseMove={(e) => show(e, tipLines(r))} onMouseLeave={hide}>
-                    <div style={{ width: 44, fontSize: 12, textAlign: "right", color: selected ? CAT[5] : undefined }}>{String(r.country)}</div>
+                    <div style={{ width: 44, fontSize: 12, textAlign: "right", color: selected ? RANK_HIGHLIGHT_TEXT : undefined }}>{String(r.country)}</div>
                     <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
                       <div style={{ width: `${(num(r.PLv) / maxLen) * 100}%`, height: 8, background: selected ? CAT[5] : CAT[0], borderRadius: "0 4px 4px 0" }} />
                       <div style={{ width: `${(num(r.PLy) / maxLen) * 100}%`, height: 8, background: selected ? "#8d3f8f" : CAT[1], borderRadius: "0 4px 4px 0" }} />
                     </div>
-                    <div style={{ width: 78, fontSize: 12.5, fontWeight: 600, color: selected ? CAT[5] : "#3a4050", fontVariantNumeric: "tabular-nums" }}
+                    <div style={{ width: 78, fontSize: 12.5, fontWeight: 600, color: selected ? RANK_HIGHLIGHT_TEXT : "#3a4050", fontVariantNumeric: "tabular-nums" }}
                       title="GVC 位置指数 = PLv_GVC / PLy_GVC">
                       GVCPs {formatMetric(num(r.GVCPs), "number")}
                     </div>
@@ -67,7 +67,7 @@ export function LengthViz({ rows, highlight = new Set<string>() }: { rows: Row[]
               {ticks.map((t) => (
                 <span key={t} style={{
                   position: "absolute", left: `${(t / maxLen) * 100}%`, transform: "translateX(-50%)",
-                  fontSize: 10.5, color: "#b0b5c2", fontVariantNumeric: "tabular-nums",
+                  fontSize: 10.5, color: "#5f6677", fontVariantNumeric: "tabular-nums",
                 }}>{t}</span>
               ))}
             </div>

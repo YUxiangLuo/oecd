@@ -18,6 +18,26 @@ export function isValidSession(value: unknown): value is ExperimentSession {
   );
 }
 
+/** Compare JSON-shaped snapshots without treating object-key order as an edit. */
+function sameJsonValue(first: unknown, second: unknown): boolean {
+  if (first === second) return true;
+  if (Array.isArray(first) || Array.isArray(second)) {
+    return Array.isArray(first) && Array.isArray(second)
+      && first.length === second.length && first.every((value, index) => sameJsonValue(value, second[index]));
+  }
+  if (first === null || second === null || typeof first !== "object" || typeof second !== "object") return false;
+  const left = first as Record<string, unknown>;
+  const right = second as Record<string, unknown>;
+  // JSON request serialization omits undefined object fields.
+  const keys = Object.keys(left).filter((key) => left[key] !== undefined);
+  const otherKeys = Object.keys(right).filter((key) => right[key] !== undefined);
+  return keys.length === otherKeys.length && keys.every((key) => Object.hasOwn(right, key) && sameJsonValue(left[key], right[key]));
+}
+
+export function sameSessionContent(first: ExperimentSession, second: ExperimentSession): boolean {
+  return sameJsonValue(first, second);
+}
+
 export function readStep<T>(session: ExperimentSession, step: number): T | undefined {
   return session.steps[String(step)]?.data as T | undefined;
 }

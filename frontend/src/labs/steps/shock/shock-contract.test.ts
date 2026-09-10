@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import type { ShockContract } from "../../../types";
 import {
   exposureSourceTeaching,
@@ -21,6 +22,20 @@ const valid = (): ShockContract => ({
 });
 
 describe("versioned shock contract", () => {
+  test("accepts the backend's current artifact version and rejects the previous release", () => {
+    // Do not derive the fixture version from the frontend constant: doing so
+    // hid a v14 deployment regression while every frontend test still passed.
+    const backend = readFileSync(new URL("../../../../../gvcsim/artifacts.py", import.meta.url), "utf8");
+    const match = backend.match(/^ARTIFACT_CONTRACT_VERSION\s*=\s*(\d+)\s*$/m);
+    expect(match).not.toBeNull();
+    const version = Number(match![1]);
+    expect(SHOCK_ARTIFACT_CONTRACT_VERSION).toBe(version);
+    expect(inspectShockContract(valid(), version).valid).toBe(true);
+    expect(inspectShockContract(valid(), version - 1).valid).toBe(false);
+    expect(inspectShockContract(valid(), version + 1).valid).toBe(false);
+    expect(inspectShockContract(valid(), undefined).valid).toBe(false);
+  });
+
   test("accepts only the complete v3 exact field/source/mode set", () => {
     expect(inspectShockContract(valid(), SHOCK_ARTIFACT_CONTRACT_VERSION).valid).toBe(true);
     expect(inspectShockContract(valid(), 12).valid).toBe(false);

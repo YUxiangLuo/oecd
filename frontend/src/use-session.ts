@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, isApiErrorStatus } from "./api";
-import { emptySession, isValidSession, patchStep as patchStoredStep, readShared, readStep, writeShared } from "./session-store";
+import { emptySession, isValidSession, patchStep as patchStoredStep, readShared, readStep, sameSessionContent, writeShared } from "./session-store";
 import type {
   ClassroomReport,
   CompletionSummary,
@@ -125,6 +125,8 @@ export class SessionSaveQueue {
   private pending: ExperimentSession | null = null;
   private saving: Promise<void> | null = null;
   private baseUpdatedAt: string | null = null;
+  private confirmed: ExperimentSession | null = null;
+  private outcomeUncertain = false;
 
   constructor(
     private readonly save: (
@@ -136,15 +138,27 @@ export class SessionSaveQueue {
 
   setBaseUpdatedAt(value: string | null) {
     this.baseUpdatedAt = value;
+    // A revision alone does not acknowledge any snapshot. Explicit recovery
+    // must still check its original base, even if a fresh GET looks identical.
+    this.outcomeUncertain = true;
+  }
+
+  setConfirmedSession(session: ExperimentSession) {
+    this.confirmed = session;
+    this.outcomeUncertain = false;
   }
 
   getBaseUpdatedAt(): string | null {
     return this.baseUpdatedAt;
   }
 
+  hasUnsynced(): boolean {
+    return this.pending !== null || this.saving !== null;
+  }
+
   discardPending(baseUpdatedAt: string | null) {
     this.pending = null;
-    this.baseUpdatedAt = baseUpdatedAt;
+    this.setBaseUpdatedAt(baseUpdatedAt);
     this.callbacks.onUnsynced(false);
   }
 
@@ -166,7 +180,13 @@ export class SessionSaveQueue {
         while (this.pending) {
           const next = this.pending;
           this.pending = null;
+          // Hydration can enqueue intermediate defaults and then return to the
+          // acknowledged snapshot before the debounce fires. That is not a write.
+          // After a failed response, however, the server may already have changed:
+          // retain the original optimistic version and require a real retry.
+          if (!this.outcomeUncertain && this.confirmed && sameSessionContent(next, this.confirmed)) continue;
           let response: SessionSaveResponse;
+          this.outcomeUncertain = true;
           try {
             response = await this.save(next, this.baseUpdatedAt);
           } catch (cause) {
@@ -176,14 +196,18 @@ export class SessionSaveQueue {
             throw cause;
           }
           this.baseUpdatedAt = response.updated_at;
+          this.setConfirmedSession(response.session);
           this.callbacks.onSaved(response, next, this.pending !== null);
         }
       } finally {
         this.callbacks.onSyncing(false);
         this.callbacks.onUnsynced(Boolean(this.pending));
-        if (this.saving === run) this.saving = null;
       }
-    })();
+    })().finally(() => {
+      // Even a no-op drain or a synchronously thrown save must clear the promise
+      // after it has actually been assigned to this.saving.
+      if (this.saving === run) this.saving = null;
+    });
     this.saving = run;
     return run;
   }
@@ -272,6 +296,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         if (!live) return;
         releaseIdRef.current = response.release_id;
         queue.current?.setBaseUpdatedAt(response.updated_at ?? null);
+        queue.current?.setConfirmedSession(response.session);
         replace(response.session);
         setConfirmedSession(response.session);
         setUpdatedAt(response.updated_at ?? null);
@@ -303,6 +328,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const update = useCallback((apply: (value: ExperimentSession) => ExperimentSession) => {
     if (!enabled || status !== "ready") return;
     const next = apply(sessionRef.current);
+    if (sameSessionContent(next, sessionRef.current)) return;
     replace(next);
     queue.current?.enqueue(next);
     if (!syncConflictRef.current) setSyncError(null);
@@ -324,7 +350,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   }, [drain, status]);
 
   const stashAuthRecovery = useCallback((accountUsername: string) => {
-    if (!enabled || !unsynced || !releaseIdRef.current) return false;
+    if (!enabled || !queue.current?.hasUnsynced() || !releaseIdRef.current) return false;
     return saveAuthSessionRecovery(
       sessionStorage,
       accountUsername,
@@ -332,7 +358,26 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       queue.current?.getBaseUpdatedAt() ?? null,
       releaseIdRef.current,
     );
-  }, [enabled, unsynced]);
+  }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled || !username) return;
+    const preserveBeforeLeaving = (event: Event) => {
+      if (!queue.current?.hasUnsynced()) return;
+      const saved = stashAuthRecovery(username);
+      if (!saved && event.type === "beforeunload") {
+        // Quota/privacy failures must not turn a refresh into silent data loss.
+        event.preventDefault();
+        (event as BeforeUnloadEvent).returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", preserveBeforeLeaving);
+    window.addEventListener("pagehide", preserveBeforeLeaving);
+    return () => {
+      window.removeEventListener("beforeunload", preserveBeforeLeaving);
+      window.removeEventListener("pagehide", preserveBeforeLeaving);
+    };
+  }, [enabled, username, stashAuthRecovery]);
 
   const restoreAuthRecovery = useCallback(async () => {
     const recovery = authRecoveryRef.current;
@@ -371,6 +416,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       }
       releaseIdRef.current = response.release_id;
       queue.current?.discardPending(response.updated_at ?? null);
+      queue.current?.setConfirmedSession(response.session);
       replace(response.session);
       setConfirmedSession(response.session);
       setUpdatedAt(response.updated_at ?? null);

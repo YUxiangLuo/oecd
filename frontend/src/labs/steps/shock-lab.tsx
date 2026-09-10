@@ -137,7 +137,9 @@ export function ShockLab({ meta, step: _step, state }: {
           <span className="shock-details-meta">运行前建议阅读</span>
         </summary>
         <div className="shock-boundary-notice" role="note">
-          ⚠ {eventsResponse?.disclaimer ?? "正在从当前已验证 release 读取关税出口暴露度来源披露。"}
+          ⚠ {!contractState.valid
+            ? "产物契约校验失败，未读取来源披露。"
+            : eventsResponse?.disclaimer ?? "正在从当前已验证 release 读取关税出口暴露度来源披露。"}
           政策事件、日期只有在事件卡列出 URL 时才有官方事件来源；ICIO 行业映射与数值强度均为未逐项引证的教学编码。
         </div>
         <div className="shock-provenance-split" role="note" aria-label="官方事实与教学设定的边界">
@@ -214,11 +216,13 @@ export function ShockLab({ meta, step: _step, state }: {
         <summary>
           <span>冲击数据质检 · 回归前的口径检查</span>
           <span className="shock-details-meta">
-            {shockQcStatus === "success" && shockChecks
-              ? shockChecks.every((check) => check.passed)
-                ? `✓ ${shockChecks.length} 项通过 · 可进入回归`
-                : `${shockChecks.length} 项 · ${shockChecks.filter((c) => !c.passed).length} 项异常`
-              : "加载中"}
+            {!contractState.valid
+              ? "未读取：产物契约无效"
+              : shockQcStatus === "success" && shockChecks
+                ? shockChecks.every((check) => check.passed)
+                  ? `✓ ${shockChecks.length} 项通过 · 可进入回归`
+                  : `${shockChecks.length} 项 · ${shockChecks.filter((c) => !c.passed).length} 项异常`
+                : "加载中"}
           </span>
         </summary>
         {!contractState.valid ? (

@@ -215,7 +215,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
               <circle cx={px(p.x)} cy={py(p.y)} r={hi ? 6 : 4.5}
                 fill={hi ? CAT[5] : CAT[0]} fillOpacity={hi ? 0.95 : 0.62} stroke="#fff" strokeWidth={1} />
               {(showLabels || hi || key) && (
-                <text x={px(p.x) + 7} y={py(p.y) + 3.5} fontSize="10" fill={hi ? CAT[5] : key ? "#3a4050" : "#5f6677"}
+                <text x={px(p.x) + 7} y={py(p.y) + 3.5} fontSize="10" fill={hi ? RANK_HIGHLIGHT_TEXT : key ? "#3a4050" : "#5f6677"}
                   fontWeight={hi || key ? 700 : 400}>{p.tag}</text>
               )}
             </g>

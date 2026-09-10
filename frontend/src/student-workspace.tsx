@@ -167,8 +167,8 @@ export function StudentWorkspace({
           <div className="workarea">
             {session.authRecoveryAvailable && (
               <div className="warnbox persistent-qc-warning" role="alert">
-                <b>找到上次登录失效前未保存的本地内容。</b>
-                <p>旧令牌不会重试。你可以用当前账号显式恢复并保存这份内容，或放弃它并继续使用服务器版本。</p>
+                <b>找到上次刷新、离开或登录失效前尚未确认保存的本地内容。</b>
+                <p>只会使用当前已校验的账号与数据版本。你可以显式恢复并保存，或放弃本地内容；恢复仍需核对服务器记录版本，不会自动覆盖更新。</p>
                 <div className="button-row">
                   <button
                     type="button"
@@ -196,7 +196,7 @@ export function StudentWorkspace({
                   {session.syncError}{" "}
                   {session.syncConflict
                     ? "本页未保存内容仍在当前画面中；载入服务器版本后，请重新执行本页操作。"
-                    : "本地记录仍在，可以直接重试。"}
+                    : "本地记录仍在，可以直接重试。刷新会尝试在本标签页保留草稿，关闭标签页仍可能丢失。"}
                 </p>
                 <button
                   type="button"

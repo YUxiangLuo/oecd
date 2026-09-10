@@ -577,6 +577,35 @@ def test_release_exposure_index_builds_and_reads_once_per_exact_key(monkeypatch,
     assert first.fixed_base_years[("AAA", "s1", "USA")] == 2020
 
 
+def test_exposure_index_bulk_conversion_preserves_normalized_keys_and_exact_values(monkeypatch, exposure_file_state):
+    data_routes.clear_exposure_index_cache()
+    exposure = _exposure_index_fixture().sample(frac=1, random_state=42)
+    exposure["country"] = " " + exposure["country"] + " "
+    exposure["sector"] = " " + exposure["sector"] + " "
+    selected = exposure["imposer"].eq("USA") & exposure["country"].eq(" AAA ")
+    exposure.loc[selected, "export_exposure"] = [1e-20, 0.12345678901234567]
+    expected = {
+        (str(row.country).strip(), str(row.sector).strip(), str(row.imposer), int(row.year)): float(row.export_exposure)
+        for row in exposure.itertuples(index=False)
+        if row.imposer == "USA"
+    }
+    monkeypatch.setattr(data_routes, "_read_runtime_exposure", lambda _path: exposure.copy())
+    index = data_routes._build_exposure_index(
+        "/release",
+        "b" * 32,
+        exposure_file_state,
+        (2017, 2020),
+        ("USA",),
+        (("export_exposure.csv", exposure_file_state),),
+    )
+    assert dict(index.values) == expected
+    assert index.available_years[("AAA", "s1", "USA")] == (2017, 2020)
+    assert all(type(year) is int and type(value) is float for (*_, year), value in index.values.items())
+    assert all(type(part) is str for key in index.values for part in key[:3])
+    with pytest.raises(TypeError):
+        index.values[("AAA", "s1", "USA", 2017)] = 1.0
+
+
 def test_release_exposure_index_cold_build_is_single_flight(monkeypatch, exposure_file_state):
     data_routes.clear_exposure_index_cache()
     exposure = _exposure_index_fixture()

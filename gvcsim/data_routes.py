@@ -377,17 +377,17 @@ def _build_exposure_index_cached(
     if ((exposure_values < 0.0) | (exposure_values > 1.0)).any():
         raise ValueError("OECD ICIO 出口暴露度索引 export_exposure 必须位于 [0,1]")
 
-    raw_values = {
-        (str(country), str(sector), str(imposer), int(year)): float(exposure)
-        for country, sector, imposer, year, exposure in zip(
-            key_data["country"].to_numpy(),
-            key_data["sector"].to_numpy(),
-            key_data["imposer"].to_numpy(),
-            key_data["year"].to_numpy(),
-            exposure_values,
-            strict=True,
-        )
-    }
+    # Validation above has already normalized identifiers and integer years.
+    # Bulk conversion produces native Python scalars; constructing the mapping
+    # in C avoids repeatedly boxing NumPy scalars in a classroom's cold request.
+    keys = zip(
+        key_data["country"].to_list(),
+        key_data["sector"].to_list(),
+        key_data["imposer"].to_list(),
+        key_data["year"].to_list(),
+        strict=True,
+    )
+    raw_values: dict[tuple[str, str, str, int], float] = dict(zip(keys, exposure_values.tolist(), strict=True))
     available: dict[tuple[str, str, str], list[int]] = {}
     for country, sector, imposer, exposure_year in raw_values:
         available.setdefault((country, sector, imposer), []).append(exposure_year)
