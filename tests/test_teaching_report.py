@@ -430,6 +430,19 @@ def _complete():
     }
     for step in range(2, 10):
         session["steps"][str(step)]["data"]["compared"] = ["CHN", "USA"]
+    # Step 9 additionally requires a recorded industry betweenness observation.
+    session["steps"]["9"]["data"]["observations"] = [
+        {
+            "entity": "CHN·C26",
+            "country": "CHN",
+            "industry": "C26",
+            "year": 2020,
+            "value": 12.5,
+            "metric": "betweenesscentrality",
+            "scope": "country-industry",
+            "source": "explicit-heat-row",
+        }
+    ]
     session["steps"]["10"]["data"].update(
         {
             "viewed_shock_types": ["tariff", "sanctions", "export_control"],
@@ -567,8 +580,12 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     )
     assert all(
         any(item["step"] == step and "两个比较对象" in "".join(item["missing"]) for item in blocked)
-        for step in range(6, 10)
+        for step in range(6, 9)
     )
+    # Step 9 requires a country comparison *and* an industry observation, so its
+    # message names both actions instead of the steps 6-8 wording.
+    assert any(item["step"] == 9 and "两个经济体" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 9 and "介数观测" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 6 and "两个比较对象" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 11 and "可报告" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 14 and "可报告" in "".join(item["missing"]) for item in blocked)
@@ -598,6 +615,38 @@ def test_material_gate_is_independent_of_unfinished_quizzes():
 
     assert check_material_gate(session) == []
     assert {item["step"] for item in check_gate(session)} == set(range(1, 15))
+
+
+def test_step_nine_requires_both_a_comparison_and_an_industry_observation():
+    """Step 9 asks for a country comparison *and* an industry betweenness observation."""
+    assert check_material_gate(_complete()) == []
+
+    # A carried-over country comparison alone must no longer satisfy step 9.
+    comparison_only = _complete()
+    comparison_only["steps"]["9"]["data"]["observations"] = []
+    blocked = [item for item in check_material_gate(comparison_only) if item["step"] == 9]
+    assert len(blocked) == 1
+    assert "介数观测" in "".join(blocked[0]["missing"])
+    assert any(item["step"] == 9 for item in check_gate(comparison_only))
+
+    # The comparison is still required alongside the observation.
+    observation_only = _complete()
+    observation_only["steps"]["9"]["data"]["compared"] = []
+    message = "".join(next(item["missing"] for item in check_material_gate(observation_only) if item["step"] == 9))
+    assert "两个经济体" in message
+
+
+def test_report_labels_step_nine_observation_without_a_step_level_metric(tmp_path, monkeypatch):
+    """The observation carries its own metric; the report must name it, not print “—”."""
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    session["steps"]["9"]["data"].pop("metric", None)
+
+    report = build(session, "同学")
+
+    assert "全正边二值介数（探索性拓扑基准）" in report.markdown
+    assert "记录指标：—" not in report.markdown
 
 
 def test_material_gate_requires_one_viewed_event_from_each_selectable_shock_type(monkeypatch):

@@ -50,6 +50,8 @@ def api(monkeypatch):
             }
         if path.startswith("/api/db/slice?"):
             return {"rows": [{"row": "CHN_C26", "USA_C26": 1.2}], "columns": ["row", "USA_C26"]}
+        if path.startswith("/api/indicators/industry/"):
+            return {"rows": [{"industry": "C26"}, {"industry": "C27", "betweenesscentrality": 12.5}], "total": 2}
         if path == "/api/shocks/events":
             return {"events": [{"shock_type": "tariff", "name": "Tariff event"}]}
         if path == "/api/regression/run":

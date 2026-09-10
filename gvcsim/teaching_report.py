@@ -161,6 +161,17 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             and item.get("entity", item.get("country")) not in (None, "")
             and item.get("value") not in (None, "")
         ]
+        if step == 9:
+            # 步骤 9 的任务同时要求“一条国家比较”与“一条行业介数观测”，
+            # 两者缺一不可：只沿用比较对象并不构成该步要求的行业拓扑证据。
+            missing: list[str] = []
+            if len(compared) < 2:
+                missing.append("请选择至少两个经济体，并点击“沿用并记录到本步”")
+            if not observations:
+                missing.append("请在下钻的行业表中选择一项，并点击“记录…介数观测”")
+            if missing:
+                blocked.append({"step": step, "title": _STEP_TITLES.get(step, ""), "missing": missing})
+            continue
         if len(compared) < 2 and len(observations) < 2:
             blocked.append(
                 {
@@ -1203,9 +1214,14 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         if compared:
             lines.append(f"- 主动比较：{'、'.join(_safe(item) for item in compared)}")
         if observations:
+            # Steps 2-5 carry one step-level metric; step 9 records the metric on
+            # each observation, so fall back to it instead of printing “—”.
+            metric_label = data.get("metric") or next(
+                (item.get("metric") for item in observations if item.get("metric")), None
+            )
             lines.extend(
                 (
-                    f"- 记录指标：{_STUDENT_METRIC_LABELS.get(str(data.get('metric')), _safe(data.get('metric', '—')))}",
+                    f"- 记录指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}",
                     "",
                     "| 实体 | 年份 | 数值 |",
                     "|---|---:|---:|",

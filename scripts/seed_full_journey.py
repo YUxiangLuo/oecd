@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -107,6 +108,45 @@ def _step_one_observation(
     }
 
 
+def _step_nine_observation(
+    base_url: str,
+    token: str,
+    year: int,
+    country: str,
+    release_id: Any,
+) -> dict[str, Any]:
+    """One recorded industry betweenness row, shaped like the UI heat-table record.
+
+    Step 9 asks for a country comparison *and* an industry betweenness observation,
+    and the report gate requires both, so the seed cannot stop at ``compared``.
+    """
+    query = urlencode({"country": country, "page_size": 200})
+    payload = _request_json(base_url, "GET", f"/api/indicators/industry/{year}?{query}", token=token)
+    rows = payload.get("rows")
+    if not isinstance(rows, list):
+        raise RuntimeError("Step 9 industry table is malformed")
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        industry = row.get("industry")
+        if not isinstance(industry, str) or not industry:
+            continue
+        value = row.get("betweenesscentrality")
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+            return {
+                "entity": f"{country}·{industry}",
+                "country": country,
+                "industry": industry,
+                "year": year,
+                "value": value,
+                "metric": "betweenesscentrality",
+                "release": release_id,
+                "scope": "country-industry",
+                "source": "explicit-heat-row",
+            }
+    raise RuntimeError("Step 9 industry table has no finite betweenness value")
+
+
 def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, Any]:
     login = _request_json(
         base_url,
@@ -128,12 +168,22 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
         raise RuntimeError("active release metadata has no valid years")
     left, right = _countries(meta)
     year = max(years)
+    dataset = meta.get("dataset")
+    release_id = dataset.get("release_id") if isinstance(dataset, dict) else None
 
     session = empty_session()
     session["steps"] = {str(step): make_record({"quiz": quizzes.correct_quiz(step)}) for step in range(1, 15)}
     session["steps"]["1"]["data"]["observation"] = _step_one_observation(base_url, token, year, left, right)
     for step in range(2, 10):
         session["steps"][str(step)]["data"]["compared"] = [left, right]
+    # Mirror the UI's heat-table save, which writes the step-level metric and the
+    # observation together (frontend network-heat record).
+    session["steps"]["9"]["data"].update(
+        {
+            "metric": "betweenesscentrality",
+            "observations": [_step_nine_observation(base_url, token, year, left, release_id)],
+        }
+    )
 
     events_payload = _request_json(base_url, "GET", "/api/shocks/events", token=token, timeout=20.0)
     events = events_payload.get("events")
