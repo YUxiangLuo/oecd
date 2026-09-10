@@ -366,6 +366,7 @@ export function DbSliceTable({
   selection,
   selectedObservation,
   onCapture,
+  expandOnCapture = false,
 }: {
   slice: DbSlice | null;
   table: DbTableKind;
@@ -373,6 +374,11 @@ export function DbSliceTable({
   selection: DbSliceSelection;
   selectedObservation?: DbStepState["observation"];
   onCapture: (patch: Pick<DbStepState, "slice" | "observation">) => void;
+  /**
+   * 只是文案开关：激活单元格是否还会进入全屏。账户项页签不提供全屏，因此不能向学生
+   * 宣称它会展开。实际展开由父组件的 autoExpandSignal 控制。
+   */
+  expandOnCapture?: boolean;
 }) {
   const [roving, setRoving] = useState<{ scope: string; key: string } | null>(null);
   const buttonRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -505,7 +511,7 @@ export function DbSliceTable({
                         tabIndex={activeCell?.key === cell.key ? 0 : -1}
                         aria-pressed={selected}
                         aria-label={dbCellAccessibleName(table, cell, selected)}
-                        title={`${dbObservationSentence(table, rowLabel, column)} = ${fmtDb(numericValue)} Million USD（百万美元）；点击记录这个观察值`}
+                        title={`${dbObservationSentence(table, rowLabel, column)} = ${fmtDb(numericValue)} Million USD（百万美元）；点击记录这个观察值${expandOnCapture ? "并进入全屏查看" : ""}`}
                         onFocus={() => setRoving({ scope: focusScopeKey, key: cell.key })}
                         onKeyDown={(event) => {
                           if (!(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"] as string[]).includes(event.key)) return;
@@ -572,6 +578,8 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
   const [rowSector, setRowSector] = useState("");
   const [colSector, setColSector] = useState("");
   const [page, setPage] = useState(1);
+  // 点击单元格记录观测时，把同一棵表格子树切到全屏，便于就地核对行列方向。
+  const [cellExpandSignal, setCellExpandSignal] = useState(0);
 
   useEffect(() => {
     if (!meta || !meta.default_year) return;
@@ -703,6 +711,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
         variant="table"
         buttonLabel="全屏查看"
         enabled={table !== "accounts"}
+        autoExpandSignal={cellExpandSignal}
       >
       <div className="controls">
         <LabeledControl label="年份">
@@ -784,7 +793,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
         <b>怎么读这张表：</b>{HOW_TO_READ[table]}
       </div>
       <div className="tipbox db-fullscreen-note" style={{ marginBottom: 10 }}>
-        <b>记录一个观察值：</b>所有数值单位均为 <b>Million USD（百万美元）</b>。点击数值单元格，或按 Tab 进入表格后用方向键 / Home / End 移动、按 Enter 或空格记录；再按 Tab 可离开表格。系统只在明确激活时保存该格的行、列与数值。切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格；记录另一个单元格才会覆盖。
+        <b>记录一个观察值：</b>所有数值单位均为 <b>Million USD（百万美元）</b>。点击数值单元格即记录该值{table === "accounts" ? "" : "并自动进入全屏查看，便于核对行列方向"}；也可按 Tab 进入表格后用方向键 / Home / End 移动、按 Enter 或空格记录；再按 Tab 可离开表格。系统只在明确激活时保存该格的行、列与数值。切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格；记录另一个单元格才会覆盖。
       </div>
       <div className="tipbox db-fullscreen-note" style={{ marginBottom: 10 }}>
         <b>账户与符号图例（始终适用）：</b> {STEP1_ACCOUNT_LEGEND}
@@ -812,7 +821,11 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
           colSector,
         }}
         selectedObservation={selectedObservation}
-        onCapture={state.save}
+        expandOnCapture={table !== "accounts"}
+        onCapture={(patch) => {
+          state.save(patch);
+          setCellExpandSignal((value) => value + 1);
+        }}
       />
       {table !== "accounts" && slice && (
         <div className="tipbox db-fullscreen-note" style={{ marginTop: 12 }}>
