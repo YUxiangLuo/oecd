@@ -50,6 +50,11 @@ def api(monkeypatch):
             }
         if path.startswith("/api/db/slice?"):
             return {"rows": [{"row": "CHN_C26", "USA_C26": 1.2}], "columns": ["row", "USA_C26"]}
+        if path.startswith("/api/indicators/country/"):
+            return [
+                {"country": "CHN", "FVA_share": 0.11, "3b_VA_GVC_C_share": 0.02, "GVCPs": 0.9, "weighted degree": 10.0},
+                {"country": "USA", "FVA_share": 0.12, "3b_VA_GVC_C_share": 0.03, "GVCPs": 1.1, "weighted degree": 20.0},
+            ]
         if path.startswith("/api/indicators/industry/"):
             return {"rows": [{"industry": "C26"}, {"industry": "C27", "betweenesscentrality": 12.5}], "total": 2}
         if path == "/api/shocks/events":
@@ -62,8 +67,26 @@ def api(monkeypatch):
             }
         raise AssertionError(f"Unexpected request: {method} {path}")
 
-    monkeypatch.setattr(journey, "_request_json", request)
+    monkeypatch.setattr(journey, "_request_json_value", request)
     return state
+
+
+def test_seed_records_step_observations_like_the_ui(api):
+    """Steps 2-8 carry their metric and country values, not just ``compared``."""
+    journey.seed_full_journey("http://test", "student", "test-password")
+
+    saved = api["saved"]
+    for step, metric in journey._STEP_METRICS.items():
+        data = saved["steps"][str(step)]["data"]
+        assert data["metric"] == metric
+        assert data["compared"] == ["CHN", "USA"]
+        assert [item["entity"] for item in data["observations"]] == ["CHN", "USA"]
+        assert all(item["metric"] == metric and item["value"] is not None for item in data["observations"])
+    # Step 9 records an industry betweenness row instead of a country value.
+    step_nine = saved["steps"]["9"]["data"]
+    assert step_nine["compared"] == ["CHN", "USA"]
+    assert step_nine["metric"] == "betweenesscentrality"
+    assert step_nine["observations"][0]["entity"] == "CHN·C27"
 
 
 @pytest.mark.parametrize("status", ["ok", "warning", "insufficient", "invalid_design", "no_pairs"])

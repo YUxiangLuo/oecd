@@ -22,7 +22,7 @@ from gvcsim import quizzes, teaching_report
 from gvcsim.session import empty_session, make_record
 
 
-def _request_json(
+def _request_json_value(
     base_url: str,
     method: str,
     path: str,
@@ -30,7 +30,8 @@ def _request_json(
     token: str | None = None,
     payload: dict[str, Any] | None = None,
     timeout: float = 120.0,
-) -> dict[str, Any]:
+) -> Any:
+    """Single HTTP/JSON seam so tests can stub every request in one place."""
     body = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
     headers = {"Accept": "application/json"}
     if body is not None:
@@ -40,14 +41,34 @@ def _request_json(
     request = Request(f"{base_url.rstrip('/')}{path}", data=body, headers=headers, method=method)
     try:
         with urlopen(request, timeout=timeout) as response:
-            value = json.loads(response.read().decode("utf-8"))
+            return json.loads(response.read().decode("utf-8"))
     except HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"{method} {path} returned {error.code}: {detail}") from error
     except URLError as error:
         raise RuntimeError(f"{method} {path} failed: {error.reason}") from error
+
+
+def _request_json(
+    base_url: str,
+    method: str,
+    path: str,
+    *,
+    token: str | None = None,
+    payload: dict[str, Any] | None = None,
+    timeout: float = 120.0,
+) -> dict[str, Any]:
+    value = _request_json_value(base_url, method, path, token=token, payload=payload, timeout=timeout)
     if not isinstance(value, dict):
         raise RuntimeError(f"{method} {path} did not return a JSON object")
+    return value
+
+
+def _request_json_rows(base_url: str, token: str, path: str, *, timeout: float = 120.0) -> list[Any]:
+    """Fetch a JSON array endpoint (country indicators return a bare list)."""
+    value = _request_json_value(base_url, "GET", path, token=token, timeout=timeout)
+    if not isinstance(value, list):
+        raise RuntimeError(f"GET {path} did not return a JSON array")
     return value
 
 
@@ -105,6 +126,46 @@ def _step_one_observation(
         "table": "z",
         "row_country": left,
         "col_country": right,
+    }
+
+
+# The metric each visualization/indicator step reports, matching what the UI
+# captures automatically when a student picks countries.
+_STEP_METRICS = {
+    2: "FVA_share",
+    3: "3b_VA_GVC_C_share",
+    4: "GVCPs",
+    5: "weighted degree",
+    6: "FVA_share",
+    7: "3b_VA_GVC_C_share",
+    8: "GVCPs",
+}
+
+
+def _country_value_rows(base_url: str, token: str, year: int) -> dict[str, dict[str, Any]]:
+    payload = _request_json_rows(base_url, token, f"/api/indicators/country/{year}")
+    return {str(row["country"]): row for row in payload if isinstance(row, dict) and "country" in row}
+
+
+def _country_observation(
+    rows: dict[str, dict[str, Any]],
+    country: str,
+    year: int,
+    metric: str,
+    release_id: Any,
+) -> dict[str, Any]:
+    row = rows.get(country)
+    value = row.get(metric) if isinstance(row, dict) else None
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+        raise RuntimeError(f"country metric {metric} is missing for {country}")
+    return {
+        "entity": country,
+        "country": country,
+        "year": year,
+        "value": value,
+        "metric": metric,
+        "scope": "country",
+        "release": release_id,
     }
 
 
@@ -174,12 +235,25 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
     session = empty_session()
     session["steps"] = {str(step): make_record({"quiz": quizzes.correct_quiz(step)}) for step in range(1, 15)}
     session["steps"]["1"]["data"]["observation"] = _step_one_observation(base_url, token, year, left, right)
-    for step in range(2, 10):
-        session["steps"][str(step)]["data"]["compared"] = [left, right]
-    # Mirror the UI's heat-table save, which writes the step-level metric and the
-    # observation together (frontend network-heat record).
+    # Steps 2-8 record the country comparison and the country values for that step's
+    # metric, mirroring what the UI captures when students pick countries. Seeding
+    # ``compared`` alone would leave the report's per-step value tables empty and
+    # unlike a real student's report.
+    country_rows = _country_value_rows(base_url, token, year)
+    for step, metric in _STEP_METRICS.items():
+        session["steps"][str(step)]["data"].update(
+            {
+                "compared": [left, right],
+                "metric": metric,
+                "observations": [
+                    _country_observation(country_rows, country, year, metric, release_id) for country in (left, right)
+                ],
+            }
+        )
+    # Step 9's observation is an industry heat row, not a country value.
     session["steps"]["9"]["data"].update(
         {
+            "compared": [left, right],
             "metric": "betweenesscentrality",
             "observations": [_step_nine_observation(base_url, token, year, left, release_id)],
         }
