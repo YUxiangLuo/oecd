@@ -56,6 +56,9 @@ _STUDENT_METRIC_LABELS = {
     "FVA_share": "课程 WWZ FVA 份额（不含 FDC 与 TLS；非 OECD EXGR_FVASH）",
     "3b_VA_GVC_C_share": "复杂 GVC 生产份额",
     "GVCPs": "GVC 相对位置（GVCPs）",
+    # Match the label the step itself shows; without this the report printed the
+    # raw field key for step 5's network metric.
+    "weighted degree": "加权总度(入+出；自环双计)",
     # Keep the legacy schema key in provenance, but never teach its misspelling.
     "betweenesscentrality": "全正边二值介数（探索性拓扑基准）",
 }

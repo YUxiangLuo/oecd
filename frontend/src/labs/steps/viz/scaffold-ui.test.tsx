@@ -24,7 +24,14 @@ function WorkbenchHarness() {
 }
 
 describe("visualization workbench country selection", () => {
-  test("keeps the page inline after reaching the suggested two-country comparison", async () => {
+  test("states the report requirement instead of a suggestion while under two picks", () => {
+    render(<WorkbenchHarness />);
+
+    expect(screen.getByText(/报告材料需 ≥2/)).toBeDefined();
+    expect(screen.queryByText(/报告建议/)).toBeNull();
+  });
+
+  test("keeps the page inline after reaching the required two-country comparison", async () => {
     render(<WorkbenchHarness />);
     const checkboxes = screen.getAllByRole("checkbox") as HTMLInputElement[];
     fireEvent.click(checkboxes[0]);

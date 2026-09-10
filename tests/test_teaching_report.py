@@ -652,6 +652,26 @@ def test_report_labels_step_nine_observation_without_a_step_level_metric(tmp_pat
     assert "记录指标：—" not in report.markdown
 
 
+def test_report_labels_step_five_network_metric_like_the_step_does(tmp_path, monkeypatch):
+    """Step 5's metric must use its taught label, not the raw field key."""
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    session["steps"]["5"]["data"].update(
+        {
+            "metric": "weighted degree",
+            "observations": [
+                {"entity": "CHN", "country": "CHN", "year": 2020, "value": 4583517.2, "metric": "weighted degree"}
+            ],
+        }
+    )
+
+    report = build(session, "同学")
+
+    assert "加权总度(入+出；自环双计)" in report.markdown
+    assert "记录指标：weighted degree" not in report.markdown
+
+
 def test_material_gate_requires_one_viewed_event_from_each_selectable_shock_type(monkeypatch):
     monkeypatch.setattr(
         teaching_report,

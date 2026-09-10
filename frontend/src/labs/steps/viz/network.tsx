@@ -247,7 +247,7 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
       <div className="controls" style={{ marginBottom: 12 }}>
         <YearSelect years={meta.years} year={year} onChange={changeYear} />
         <span className="muted" style={{ fontSize: 12 }}>
-          已看过 <b style={{ color: picked.length >= 2 ? "#159a86" : "#e0982a" }}>{picked.length}</b> 国{picked.length < 2 ? "（报告建议 ≥2）" : ""}
+          已看过 <b style={{ color: picked.length >= 2 ? "#159a86" : "#e0982a" }}>{picked.length}</b> 国{picked.length < 2 ? "（报告材料需 ≥2）" : ""}
         </span>
       </div>
 

@@ -372,7 +372,7 @@ export function VizWorkbench({ title, toolbar, years, year, onYearChange, countr
           <div className="viz-side-head">
             <YearSelect years={years} year={year} onChange={onYearChange} />
             <span className="viz-side-count">
-              已选 <b className={enough ? "ok" : "todo"}>{picked.length}</b> 国{enough ? "" : `（报告建议 ≥${minPicks}）`}
+              已选 <b className={enough ? "ok" : "todo"}>{picked.length}</b> 国{enough ? "" : `（报告材料需 ≥${minPicks}）`}
             </span>
           </div>
           <CountryPicker countries={countries} picked={picked} onChange={onPick} />
