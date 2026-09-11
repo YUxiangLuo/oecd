@@ -763,8 +763,14 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .db-axis-corner-col { color: #37339f; }
 .db-axis-cols {
   background: #f4f4fe !important; color: #37339f; font-weight: 700;
-  text-align: left; font-size: 12px; border-bottom: 1px solid #e3e3f5 !important;
+  font-size: 12px; border-bottom: 1px solid #e3e3f5 !important;
 }
+/* 轴带标签要与数据区一起从左起读：必须带 .data-table 才盖得住 .data-table th 的右对齐
+   （同文件 db-guide-table 的写法）。否则 text-align:left 是死规则、标签会跑到右侧。 */
+.data-table .db-axis-cols { text-align: left; }
+/* 该表表头有两行（轴带 + 列名），第二行只放数据列，于是“第一个数据列”会命中
+   .data-table th:first-child 的左对齐——那是给角标与行标签的，列名必须跟它自己的数字同锚点。 */
+.db-table thead tr:last-child th:first-child { text-align: right; }
 .db-table tbody th[scope="row"] { background: #f2f8f7; }
 /* 全屏时两层表头各自 sticky：第一层贴顶，第二层偏移一个层高，避免互相覆盖。 */
 .fullscreen-panel--table.fullscreen-panel--expanded .db-table thead tr:nth-child(2) th {
@@ -777,6 +783,9 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   width: 100%; min-width: max-content; border: 1px solid transparent; border-radius: 5px;
   background: transparent; color: inherit; padding: 3px 5px; font: inherit; cursor: pointer;
   font-variant-numeric: tabular-nums;
+  /* button 的 UA 默认是 text-align:center，会静默盖掉 .data-table td 的右对齐，
+     使 tabular-nums 失效、数字不按位对齐、与右对齐表头错开。显式继承单元格的对齐。 */
+  text-align: inherit;
 }
 .db-observation-cell:hover { border-color: #7773df; background: rgba(255,255,255,.78); }
 .db-observation-cell:focus-visible {

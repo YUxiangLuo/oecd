@@ -17,6 +17,59 @@ viewport_height=${GVCSIM_E2E_VIEWPORT_HEIGHT:-1000}
 ab=(agent-browser --namespace "$browser_namespace" --session "$browser_session")
 temporary_a11y_report=
 
+
+# 表头与它下面的数值必须用同一对齐锚点：左对齐比左缘、右对齐比右缘、居中比中心，
+# 内部控件（width:100% 的按钮/色块）自身的对齐也必须与表头一致。偏差 > 2px 或锚点不同即失败。
+# 这类缺陷对单元测试与 axe 都不可见（右对齐表头压在居中色块上、button 的 UA 居中盖掉 td 的右对齐），
+# 只能实测几何。行头 th[scope=row] 在表头最后一行没有对应格，配对时先摘掉。
+read -r -d '' table_align_probe <<'JS' || true
+(() => {
+  const textRect = (el) => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect(); };
+  const expanded = (row) => {
+    const out = [];
+    for (const cell of row.children) {
+      const span = Number(cell.getAttribute("colspan") || 1);
+      for (let k = 0; k < span; k += 1) out.push(cell);
+    }
+    return out;
+  };
+  const norm = (a) => (a === "start" ? "left" : a === "end" ? "right" : a);
+  const problems = [];
+  document.querySelectorAll("main table").forEach((table, tableIndex) => {
+    const headRow = table.querySelector("thead tr:last-child");
+    const bodyRow = table.querySelector("tbody tr");
+    if (!headRow || !bodyRow) return;
+    const heads = expanded(headRow);
+    let cells = expanded(bodyRow);
+    if (cells.length === heads.length + 1 && cells[0].tagName === "TH") cells = cells.slice(1);
+    if (heads.length !== cells.length) return;
+    heads.forEach((head, i) => {
+      const cell = cells[i];
+      if (!head.textContent.trim()) return;
+      const inner = cell.querySelector("span, button");
+      const anchor = norm(getComputedStyle(head).textAlign);
+      const innerAnchor = norm(getComputedStyle(inner || cell).textAlign);
+      const hr = textRect(head);
+      const tr = inner ? inner.getBoundingClientRect() : textRect(cell);
+      const offset = anchor === "left" ? hr.left - tr.left
+        : anchor === "right" ? hr.right - tr.right
+        : (hr.left + hr.right) / 2 - (tr.left + tr.right) / 2;
+      const flags = [];
+      if (innerAnchor !== anchor) flags.push(`内部控件自身对齐=${innerAnchor}`);
+      if (Math.abs(offset) > 2) flags.push(`锚点偏差=${Math.round(offset)}px`);
+      if (flags.length) problems.push(`table${tableIndex} col${i} "${head.textContent.trim().slice(0, 14)}" 表头=${anchor} ${flags.join(" ")}`);
+    });
+  });
+  if (problems.length) throw new Error("表格对齐异常：\n" + problems.join("\n"));
+  return true;
+})()
+JS
+
+# 表头与数值同锚点，且不出现幻影滚动
+assert_table_alignment() {
+  "${ab[@]}" eval "$table_align_probe" >/dev/null
+}
+
 cleanup() {
   "${ab[@]}" close >/dev/null 2>&1 || true
   [[ -z "$temporary_a11y_report" ]] || rm -f "$temporary_a11y_report"
@@ -57,6 +110,41 @@ for step in $(seq 1 15); do
     "${ab[@]}" eval '(() => { const n=document.activeElement; if(!n?.classList.contains("network-node") || n.getAttribute("aria-pressed")!=="true") throw new Error("network dialog did not restore its node focus and selection"); return true; })()'
   fi
 done
+
+# ---------------------------------------------------------------- 表格对齐门禁
+# 覆盖本次修过的三处：步骤 1 三个页签的数值列、步骤 5 最短路径明细的行标签、
+# 步骤 9 行业热力表（普通 + 全屏，全屏列最宽、偏移最容易暴露）。
+"${ab[@]}" open "$GVCSIM_BASE_URL/?step=1"
+"${ab[@]}" wait --load networkidle
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="开始本步")?.click()' >/dev/null
+sleep 1
+for table_tab in "账户项" "中间投入 Z" "最终需求 Y"; do
+  "${ab[@]}" eval "(() => { Array.from(document.querySelectorAll('main button')).find(b=>b.textContent.trim()==='${table_tab}')?.click(); return true; })()" >/dev/null
+  "${ab[@]}" wait --load networkidle
+  assert_table_alignment
+done
+
+"${ab[@]}" open "$GVCSIM_BASE_URL/?step=5"
+"${ab[@]}" wait --load networkidle
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="开始本步")?.click()' >/dev/null
+sleep 1
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>/显示接近中心性/.test(b.getAttribute("aria-label")||""))?.click()' >/dev/null
+sleep 1
+"${ab[@]}" eval 'document.querySelector(".net-demo-node")?.dispatchEvent(new MouseEvent("click",{bubbles:true}))' >/dev/null
+sleep 1
+assert_table_alignment
+
+"${ab[@]}" open "$GVCSIM_BASE_URL/?step=9"
+"${ab[@]}" wait --load networkidle
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="开始本步")?.click()' >/dev/null
+sleep 1
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="行业网络指标")?.click()' >/dev/null
+"${ab[@]}" wait --load networkidle
+assert_table_alignment
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>/全屏查看/.test(b.getAttribute("aria-label")||""))?.click()' >/dev/null
+sleep 2
+assert_table_alignment
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>/退出步骤|退出全屏/.test((b.getAttribute("aria-label")||"")+b.textContent))?.click()' >/dev/null
 
 if [[ -n "$artifact_dir" ]]; then
   install -d -m 0750 "$artifact_dir"

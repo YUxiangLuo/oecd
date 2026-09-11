@@ -760,7 +760,7 @@ export function ClosenessPathTable({
       </thead>
       <tbody>{sortedPaths.map((item) => (
         <tr key={item.target}>
-          <th scope="row">{item.target}</th>
+          <th scope="row" style={{ textAlign: "left" }}>{item.target}</th>
           <td style={{ textAlign: "center" }}>{Number.isFinite(item.distance) ? item.distance : "不可达"}</td>
           <td>{item.path.length ? item.path.join(" → ") : "—"}</td>
         </tr>
