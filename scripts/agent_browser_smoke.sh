@@ -35,7 +35,7 @@ read -r -d '' table_align_probe <<'JS' || true
   };
   const norm = (a) => (a === "start" ? "left" : a === "end" ? "right" : a);
   const problems = [];
-  document.querySelectorAll("main table").forEach((table, tableIndex) => {
+  document.querySelectorAll("__SELECTOR__").forEach((table, tableIndex) => {
     const headRow = table.querySelector("thead tr:last-child");
     const bodyRow = table.querySelector("tbody tr");
     if (!headRow || !bodyRow) return;
@@ -43,6 +43,8 @@ read -r -d '' table_align_probe <<'JS' || true
     let cells = expanded(bodyRow);
     if (cells.length === heads.length + 1 && cells[0].tagName === "TH") cells = cells.slice(1);
     if (heads.length !== cells.length) return;
+    // body 行里有 colSpan 时逐列配对不可靠，跳过（这类表的表头锚点另行人工核对）
+    if (Array.from(bodyRow.children).some((c) => Number(c.getAttribute("colspan") || 1) > 1)) return;
     heads.forEach((head, i) => {
       const cell = cells[i];
       if (!head.textContent.trim()) return;
@@ -65,9 +67,27 @@ read -r -d '' table_align_probe <<'JS' || true
 })()
 JS
 
-# 表头与数值同锚点，且不出现幻影滚动
+# 探针为空时立即失败：否则 eval "" 恒真，门禁会静默失效
+[[ -n "$table_align_probe" ]] || { echo "alignment probe failed to load" >&2; exit 2; }
+
+# 表头与数值同锚点。
+#
+# 只对"数值列"表断言，默认覆盖本次修过的三张（步骤 1 的 db 表、步骤 9 的热力表）；
+# 不做全站通用断言：无 .data-table 的小表里 th 默认居中、标签列左对齐是既有观感
+# （review 实测步骤 2/3/4 的分解表、11–15 的回归表、教师端操作列都是这种列），
+# 当成失败会让门禁常年变红，反而失去信号。
 assert_table_alignment() {
-  "${ab[@]}" eval "$table_align_probe" >/dev/null
+  local selector="${1:-table.db-table, table.heat-table-grid}"
+  "${ab[@]}" eval "${table_align_probe/__SELECTOR__/$selector}" >/dev/null
+}
+
+# 目标表必须在页面上：交互（点页签/开全屏）失败时探针会退化成"在别的表上空转通过"，
+# 所以覆盖范围必须显式断言，不能只依赖探针本身。
+require_table() {
+  "${ab[@]}" wait --fn "Boolean(document.querySelector(${1@Q}))" || {
+    echo "required table missing: $1" >&2
+    exit 1
+  }
 }
 
 cleanup() {
@@ -97,6 +117,10 @@ for step in $(seq 1 15); do
   # sr-only 缺坐标、超高未裁剪元素都曾在这里突破布局，逐步断言防回归。
   "${ab[@]}" eval '(() => { const d = document.documentElement; if (d.scrollHeight > d.clientHeight + 1) throw new Error(`document scrolls: ${d.scrollHeight} > ${d.clientHeight}`); return true; })()' >/dev/null
   if [[ "$step" -eq 9 ]]; then
+    # 步骤 9 的镜头（贸易网络图 / 行业网络指标）会被保存到会话，历史状态可能是 heat；
+    # 先显式选中网络图，断言才不依赖账号上次留下的镜头。
+    "${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="贸易网络图")?.click()' >/dev/null || true
+    "${ab[@]}" wait --load networkidle
     # The network uses one portalled dialog instance: node activation expands it,
     # Escape closes it, and focus/selection return to the invoking SVG node.
     "${ab[@]}" wait '.network-node[aria-label^="USA "]'
@@ -121,6 +145,7 @@ sleep 1
 for table_tab in "账户项" "中间投入 Z" "最终需求 Y"; do
   "${ab[@]}" eval "(() => { Array.from(document.querySelectorAll('main button')).find(b=>b.textContent.trim()==='${table_tab}')?.click(); return true; })()" >/dev/null
   "${ab[@]}" wait --load networkidle
+  require_table 'table.db-table'
   assert_table_alignment
 done
 
@@ -132,6 +157,8 @@ sleep 1
 sleep 1
 "${ab[@]}" eval 'document.querySelector(".net-demo-node")?.dispatchEvent(new MouseEvent("click",{bubbles:true}))' >/dev/null
 sleep 1
+# 最短路径明细表只在接近中心性 + 选中节点后出现，必须确认它真的渲染了
+"${ab[@]}" wait --fn 'Array.from(document.querySelectorAll("main table")).some(t=>/最短路径明细/.test(t.textContent))'
 assert_table_alignment
 
 "${ab[@]}" open "$GVCSIM_BASE_URL/?step=9"
@@ -140,11 +167,17 @@ assert_table_alignment
 sleep 1
 "${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="行业网络指标")?.click()' >/dev/null
 "${ab[@]}" wait --load networkidle
+require_table 'table.heat-table-grid'
 assert_table_alignment
 "${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>/全屏查看/.test(b.getAttribute("aria-label")||""))?.click()' >/dev/null
 sleep 2
+"${ab[@]}" wait --fn 'Boolean(document.querySelector(".fullscreen-panel--heat.fullscreen-panel--expanded"))'
+require_table 'table.heat-table-grid'
 assert_table_alignment
 "${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>/退出步骤|退出全屏/.test((b.getAttribute("aria-label")||"")+b.textContent))?.click()' >/dev/null
+# 收尾：把步骤 9 镜头切回网络图，避免本门禁给下一次运行留下 heat 状态（镜头会被保存进会话）
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="贸易网络图")?.click()' >/dev/null
+"${ab[@]}" wait --load networkidle
 
 if [[ -n "$artifact_dir" ]]; then
   install -d -m 0750 "$artifact_dir"
