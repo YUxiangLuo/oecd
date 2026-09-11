@@ -590,7 +590,7 @@ const NET_EDGES: [string, string][] = [
 
 const ekey = (a: string, b: string) => `${a}→${b}`;
 
-/** Step 6 uses one roving Tab stop; arrow navigation wraps and Home/End jump to bounds. */
+/** Step 6 uses a single roving focus stop; directional navigation wraps and jumps to bounds. */
 export function nextNetworkDemoNode(
   nodes: readonly string[],
   current: string,
@@ -605,7 +605,7 @@ export function nextNetworkDemoNode(
   return null;
 }
 
-/** Roving keys move focus only; explicit Enter/Space activation changes selection. */
+/** Roving focus movement only moves focus; explicit activation changes selection. */
 export function networkDemoKeyTransition(
   nodes: readonly string[],
   state: { focused: string; selected: string },
@@ -856,7 +856,7 @@ export function NetworkCentralityDemo() {
           ))}
         </div>
         <span className="muted" id={instructionId}>
-          鼠标点击或用 Tab 进入节点；方向键循环浏览，Home / End 跳到首尾，Enter / 空格选择。
+          选择节点后可查看它的指标值与相关边。
         </span>
       </div>
 

@@ -281,10 +281,13 @@ describe("Step 1 bounded roving cell focus", () => {
     expect(html.match(/class="db-observation-cell[^>]*tabindex="0"/g)).toHaveLength(1);
     expect(html.match(/class="db-observation-cell[^>]*tabindex="-1"/g)).toHaveLength(1124);
     expect(html).toContain('role="region" tabindex="-1"');
-    expect(html).toContain("Tab 或 Shift+Tab 离开表格");
-    expect(html).toContain("单位：Million USD（百万美元）");
+    // 界面不展示任何键盘操作说明（caption 只保留表名与单位）
+    const caption = html.match(/<caption>([^<]*)<\/caption>/)?.[1] ?? "";
+    expect(caption).toContain("单位：Million USD（百万美元）");
+    expect(caption).not.toMatch(/Tab|方向键|Enter|空格/);
     expect(html).toContain('<th scope="row"');
-    expect(html).toContain("R1(行·供给方) → C1(列·使用方)，值 0 Million USD（百万美元），未记录；按 Enter 或空格记录");
+    expect(html).toContain("R1(行·供给方) → C1(列·使用方)，值 0 Million USD（百万美元），未记录");
+    expect(html).not.toContain("按 Enter");
   });
 
   test("uses the named region as the sole stop for an all-null page and labels recorded state", () => {

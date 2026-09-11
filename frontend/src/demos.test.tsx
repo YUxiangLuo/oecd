@@ -167,8 +167,8 @@ describe("Step 5 teaching network accessibility", () => {
     expect(html).toContain("德（DEU），度中心性 4，已选择");
     expect(html).toContain('aria-pressed="true" aria-label="显示度中心性"');
     expect(html).toContain('aria-pressed="false" aria-label="显示介数中心性"');
-    expect(html).toContain("方向键循环浏览");
-    expect(html).not.toContain("点节点查看");
+    expect(html).toContain("选择节点后可查看它的指标值与相关边");
+    expect(html).not.toMatch(/方向键|按 Tab|Enter|空格|点击/);
   });
 
   test("documents wrapping arrow navigation and Home/End bounds", () => {

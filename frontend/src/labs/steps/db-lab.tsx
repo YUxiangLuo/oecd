@@ -320,10 +320,10 @@ export function dbCellAccessibleName(
 ): string {
   const column = table === "y" ? formatYColumnHeader(cell.column) : cell.column;
   if (table === "accounts") {
-    return `${cell.row}，${column}，值 ${fmtDb(cell.value)} Million USD（百万美元），${recorded ? "已记录" : "未记录"}；按 Enter 或空格记录`;
+    return `${cell.row}，${column}，值 ${fmtDb(cell.value)} Million USD（百万美元），${recorded ? "已记录" : "未记录"}`;
   }
   const colRole = table === "y" ? "列·最终需求" : "列·使用方";
-  return `${cell.row}(行·供给方) → ${column}(${colRole})，值 ${fmtDb(cell.value)} Million USD（百万美元），${recorded ? "已记录" : "未记录"}；按 Enter 或空格记录`;
+  return `${cell.row}(行·供给方) → ${column}(${colRole})，值 ${fmtDb(cell.value)} Million USD（百万美元），${recorded ? "已记录" : "未记录"}`;
 }
 
 /** 行/列代码("CHN_A01_02")拆成国家 + 余部,给方向句提供带中文名的可读标签。 */
@@ -422,7 +422,7 @@ export function DbSliceTable({
     >
       <table className="data-table db-table">
         <caption>
-          {`${activeTable.label}数据表 · 单位：Million USD（百万美元）。Tab 进入一个数据单元格；方向键和 Home、End 在本页有限数值单元格间移动；Enter 或空格记录；Tab 或 Shift+Tab 离开表格。`}
+          {`${activeTable.label}数据表 · 单位：Million USD（百万美元）。`}
         </caption>
         <thead>
           <tr className="db-axis-row">
@@ -793,7 +793,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
         <b>怎么读这张表：</b>{HOW_TO_READ[table]}
       </div>
       <div className="tipbox db-fullscreen-note" style={{ marginBottom: 10 }}>
-        <b>记录一个观察值：</b>所有数值单位均为 <b>Million USD（百万美元）</b>。点击数值单元格即记录该值{table === "accounts" ? "" : "并自动进入全屏查看，便于核对行列方向"}；也可按 Tab 进入表格后用方向键 / Home / End 移动、按 Enter 或空格记录；再按 Tab 可离开表格。系统只在明确激活时保存该格的行、列与数值。切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格；记录另一个单元格才会覆盖。
+        <b>记录一个观察值：</b>所有数值单位均为 <b>Million USD（百万美元）</b>。点击数值单元格即记录该值{table === "accounts" ? "" : "并自动进入全屏查看，便于核对行列方向"}。系统只在明确激活时保存该格的行、列与数值。切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格；记录另一个单元格才会覆盖。
       </div>
       <div className="tipbox db-fullscreen-note" style={{ marginBottom: 10 }}>
         <b>账户与符号图例（始终适用）：</b> {STEP1_ACCOUNT_LEGEND}

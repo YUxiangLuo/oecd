@@ -4,7 +4,7 @@ import { useDialogFocus } from "../a11y";
 /** 教师面板共用的轻量 UI 原语:模态框 / 工具条 / 搜索框 / 状态徽标 / 空态。
  *  替代原来散落的 window.prompt / window.confirm 与常驻内联表单。 */
 
-/** 居中模态对话框:遮罩点击关闭 + Esc 关闭 + 标题栏。参考 intro.tsx 的 overlay 画法。 */
+/** 居中模态对话框:遮罩点击关闭 + 关闭按钮 + 标题栏。参考 intro.tsx 的 overlay 画法。 */
 export function Modal({
   title,
   onClose,

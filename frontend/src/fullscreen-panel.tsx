@@ -146,7 +146,7 @@ export function FullscreenPanel({
             {expanded && <strong id={titleId}>{title}</strong>}
             {expanded && (
               <span id={descriptionId} className="sr-only">
-                已进入全屏工作区。可继续操作当前内容，按 Escape 或“退出全屏”返回步骤页面。
+                已进入全屏工作区。可继续操作当前内容，或使用“退出全屏”返回步骤页面。
               </span>
             )}
             <button

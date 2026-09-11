@@ -169,7 +169,7 @@ export function networkNodeActivation(selected: string | null, country: string, 
   };
 }
 
-/** Roving-tabindex navigation keeps a dense country graph to one Tab stop. */
+/** Roving-focus navigation keeps a dense country graph to a single focus stop. */
 export function nextNetworkNode(
   nodes: readonly string[],
   current: string,
@@ -382,7 +382,7 @@ export function NetworkViz({
         <>
           <h2 id={dialogTitleId} className="sr-only">贸易网络大图</h2>
           <p id={dialogDescriptionId} className="sr-only">
-            已进入贸易网络大图模式。可继续选择节点，按 Escape 或“退出大图”返回步骤页面。
+            已进入贸易网络大图模式。可继续选择节点，或使用“退出大图”返回步骤页面。
           </p>
           <button
             ref={(node) => { dialogInitialFocusRef.current = node; }}
@@ -438,8 +438,8 @@ export function NetworkViz({
         style={{ display: "block", width: "100%", height: expanded ? "100%" : "auto" }}
         role="group"
         aria-label={expanded
-          ? "贸易网络大图。节点位置采用预设地理区域布局，不是社区检测结果。按方向键浏览节点，按 Enter 或空格选择节点。"
-          : "全球贸易网络图。节点位置采用预设地理区域布局，不是社区检测结果。激活任意节点进入大图模式；按方向键浏览节点。"}
+          ? "贸易网络大图。节点位置采用预设地理区域布局，不是社区检测结果。"
+          : "全球贸易网络图。节点位置采用预设地理区域布局，不是社区检测结果。"}
         onClick={() => setSelected(null)}
       >
         <defs>
@@ -638,7 +638,7 @@ export function NetworkViz({
         </div>
       )}
       <div className="network-caption">
-        {expanded ? "大图模式 · 按 Esc 或“退出大图”返回" : "推荐读图顺序：选一个国家 → 读主要流入/流出 → 再选第二个国家比较"}<br />
+        {expanded ? "大图模式 · 使用“退出大图”返回" : "推荐读图顺序：选一个国家 → 读主要流入/流出 → 再选第二个国家比较"}<br />
         节点位置 = 预设地理区域布局（不是社区检测）；用于观察预设区域内 / 区域间流向<br />
         节点大小 = {metricMeta[sizeMetric].label} · 节点颜色 = {colorMode === "region" ? "预设地理区域" : metricMeta[colorMode].label}<br />
         {hasUnavailableContext && <>所选指标不可用节点 = 灰色虚线、固定最小尺寸（仅保留网络上下文）<br /></>}

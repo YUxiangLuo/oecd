@@ -248,7 +248,6 @@
 }
 .intro-dot::after { content: ""; width: 10px; height: 10px; border-radius: 99px; background: #737b99; transition: width 0.2s, background 0.2s; }
 .intro-dot.on::after { width: 28px; background: #a398ff; }
-.intro-keyhint { font-size: 12px; line-height: 20px; color: #a8b6da; }
 .intro-overlay :focus-visible,
 .login-role:focus-visible,
 .login-btn:focus-visible { outline: 2px solid #8d83ff; outline-offset: 2px; }

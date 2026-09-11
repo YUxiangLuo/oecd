@@ -30,7 +30,7 @@ export function LabeledControl({
 type ScrollableRegionProps = Omit<HTMLAttributes<HTMLDivElement>, "aria-label" | "aria-labelledby"> & {
   label?: string;
   labelledBy?: string;
-  /** Composite widgets can provide their own single roving Tab stop. */
+  /** Composite widgets can provide their own single roving focus stop. */
   focusable?: boolean;
 };
 
@@ -80,8 +80,8 @@ function focusableWithin(container: HTMLElement): DialogFocusTarget[] {
 }
 
 /**
- * Implements the modal-dialog keyboard contract: initial focus, Tab trapping,
- * Escape to close, and focus restoration.
+ * Implements the modal-dialog keyboard contract: initial focus, focus trapping,
+ * close handling, and focus restoration.
  */
 export function useDialogFocus({
   containerRef,

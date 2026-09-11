@@ -482,7 +482,6 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
             ))}
           </div>
         </div>
-        <div className="intro-keyhint">正文聚焦时 ← → 翻页 · Esc 关闭介绍</div>
       </div>
     </div>,
     document.body,

@@ -142,13 +142,11 @@ export function EventList({
           );
         })}
       </div>
-      <span id="shock-event-keyboard-help" className="sr-only">使用上下方向键切换并选择政策事件</span>
       <div
         id="shock-event-type-panel"
         className="shock-event-list"
         role="tabpanel"
         aria-labelledby={`shock-type-tab-${selectedType}`}
-        aria-describedby="shock-event-keyboard-help"
       >
       {/* 刻度轨道必须与行内时间条**同一横向范围**,否则年份读不准。因此这里不放任何
           并排标签(○/● 的含义由左列说明文字给出),并用与事件卡片相同的左右内缩对齐。 */}
