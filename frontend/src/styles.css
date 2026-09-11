@@ -616,6 +616,10 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 
 .heat-table-scroll { overflow: auto; }
 .heat-table-grid { width: 100%; min-width: 790px; }
+/* 该表的数据格是居中的热力色块（最后一列是居中按钮），表头必须用同一锚点，
+   否则 .data-table 的右对齐表头会压在色块右侧：普通列偏差 ~16px，长表头列可达 ~33px，
+   全屏宽列下更明显。首列仍按 .data-table 约定左对齐。 */
+.heat-table-grid thead th:not(:first-child) { text-align: center; }
 .fullscreen-panel--heat.fullscreen-panel--expanded .fullscreen-panel-content { min-height: 0; overflow: auto; }
 .fullscreen-panel--heat.fullscreen-panel--expanded .heat-table-scroll { max-height: none; }
 
