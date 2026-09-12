@@ -64,7 +64,7 @@ export function LengthIndicatorStep({ meta, step: _step, state }: { meta: Meta; 
         title="动手拆解:各段加权后加回总长度"
         what={<>挑一个实体,把前向总长度 PLv 拆成三段(纯国内 / 传统 / GVC);每段显示的是<b>"VA 份额 × 段长度"的贡献值</b>,不是段长度本身。</>}
         read={<>盯住绿框:<b>各段贡献加总 = 总长度,误差 ≈ 0</b>——VA 为正时，总长度可理解为段长度按增加值份额的<b>加权平均</b>（WWYZ）；存在负 VA 时则是有符号账户加权，不保证落在各段最小值与最大值之间。它不是简单相加。</>}
-        find={<>注意 GVC 段通常最长(增加值多次被计为产出);GVCPs = 前向 GVC 段 / 后向 GVC 段。</>}
+        find={<>比较各段长度和加权贡献：最长的段，是否也对总长度贡献最大？注意长度与份额共同决定贡献。</>}
       >
         <DecompositionDemo
           step={6}

@@ -3,9 +3,17 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
 import type { VizStepState } from "./scaffold";
-import { finiteIndustryLengthRows, gvcPositionRankRows, LENGTH_AXIS_FALLBACK, lengthAxisDefinitions, lengthIndustryRequestKey, restoreLengthDrill, LengthVizStep } from "./length";
+import { finiteIndustryLengthRows, gvcPositionRankRows, LENGTH_AXIS_FALLBACK, LENGTH_POSITION_GUIDE, LENGTH_QUADRANT_LABELS, lengthAxisDefinitions, lengthIndustryRequestKey, restoreLengthDrill, LengthVizStep } from "./length";
 
 describe("step 8 production-length operational definitions", () => {
+  test("median quadrants describe axis levels, not upstream/downstream positions", () => {
+    expect(LENGTH_QUADRANT_LABELS).toEqual([
+      "前后向均较高", "前向较高 · 后向较低", "前后向均较低", "前向较低 · 后向较高",
+    ]);
+    expect(LENGTH_QUADRANT_LABELS.join(" ")).not.toMatch(/上游|下游|两端都深|靠近两端/);
+    expect(LENGTH_POSITION_GUIDE).toContain("GVCPs > 1");
+    expect(LENGTH_POSITION_GUIDE).toContain("不划分上下游");
+  });
   test("fallback states the average-stage unit and rejects border/country counts", () => {
     for (const definition of Object.values(LENGTH_AXIS_FALLBACK)) {
       expect(definition).toContain("累计总产出");

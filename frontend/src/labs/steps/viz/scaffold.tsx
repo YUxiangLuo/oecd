@@ -228,7 +228,7 @@ export function ChartStory({ eyebrow, title, what, read, find, note, children }:
   const guide: [string, ReactNode, string][] = [
     ["看什么", what, CAT[0]],
     ["怎么读", read, CAT[1]],
-    ...(find ? ([["该发现", find, CAT[2]]] as [string, ReactNode, string][]) : []),
+    ...(find ? ([["试着观察", find, CAT[2]]] as [string, ReactNode, string][]) : []),
   ];
   return (
     <section style={{ marginBottom: 18 }}>

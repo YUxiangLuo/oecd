@@ -89,7 +89,7 @@ const DECOMP: Record<number, DecompCfg> = {
     parts: [
       { key: "PLv_D", label: "纯国内加权贡献", color: "#4b47e0", desc: "纯国内生产活动的平均长度,按 1_VA_D/SVA 份额加权计入总长度。", weightKey: "1_VA_D" },
       { key: "PLv_RT", label: "传统贸易加权贡献", color: "#159a86", desc: "传统贸易生产活动的平均长度,按 2_VA_RT/SVA 份额加权计入。", weightKey: "2_VA_RT" },
-      { key: "PLv_GVC", label: "GVC 加权贡献", color: "#f4693b", desc: "GVC 生产活动的平均长度(通常最长,增加值多次被计为产出),按 3_VA_GVC/SVA 份额加权计入。", weightKey: "3_VA_GVC" },
+      { key: "PLv_GVC", label: "GVC 加权贡献", color: "#f4693b", desc: "GVC 生产活动的段长度，按 3_VA_GVC/SVA 份额加权计入；段长度与加权贡献不是同一个数。", weightKey: "3_VA_GVC" },
     ],
     note: (r) => {
       const lengths = [finiteNumber(r.PLv_D), finiteNumber(r.PLv_RT), finiteNumber(r.PLv_GVC)];
@@ -477,7 +477,7 @@ export function DecompositionDemo({
               className={`decomp-seg${hover && hover !== part.key ? " dim" : ""}`}
               style={{ position: "absolute", top: 0, bottom: 0, left: `${segment.leftPct}%`, width: `${segment.widthPct}%`, background: segment.negative ? "#e34948" : part.color }}
               onMouseEnter={() => setHover(part.key)} onMouseLeave={() => setHover(null)}
-              title={`${part.label} · 真实值 ${fmt(value, cfg.unit)} · ${shareText}${segment.negative ? "（负值，位于零轴左侧）" : ""}`} />;
+              title={`${part.label} · 当前值 ${fmt(value, cfg.unit)} · ${shareText}${segment.negative ? "（负值，位于零轴左侧）" : ""}`} />;
           })}
         </div>
         {model.closure != null ? (

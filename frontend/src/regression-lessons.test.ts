@@ -25,7 +25,7 @@ describe("regression lessons", () => {
 
   test("each step teaches one distinct beginner move", () => {
     expect(REGRESSION_FAMILIES.map((item) => item.step)).toEqual([11, 12, 13, 14]);
-    expect(REGRESSION_LESSONS.trade.learnThis).toContain("逐 cohort");
+    expect(REGRESSION_LESSONS.trade.learnThis).toContain("逐批次");
     expect(REGRESSION_LESSONS.trade.learnThis).toContain("从未处理或截至比较期尚未处理");
     expect(REGRESSION_LESSONS.production.learnThis).toContain("比较方式");
     expect(REGRESSION_LESSONS.length.learnThis).toContain("不是百分点");
@@ -44,6 +44,15 @@ describe("regression lessons", () => {
     expect(productionCopy).toContain("SVA 中复杂 GVC 增加值份额提高");
     expect(productionCopy).toContain("这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩");
     expect(productionCopy).not.toMatch(/与.*(?:扩张|收缩)一致/);
+  });
+
+  test("reading starts with inference eligibility and keeps blocked distinct from uncertain", () => {
+    expect(REGRESSION_LESSONS.trade.howToRead).toContain("先看结果状态");
+    expect(REGRESSION_LESSONS.trade.howToRead).toContain("区间跨 0 是「看不出方向」");
+    expect(REGRESSION_LESSONS.trade.howToRead).toContain("停止推断则记「无法评估」");
+    expect(REGRESSION_LESSONS.production.writeDown).toContain("无法评估");
+    expect(REGRESSION_LESSONS.production.guidedExperiment).toContain("冲击 × 基期GVC");
+    expect(familyDirectionLabel("suppressed")).not.toBe(familyDirectionLabel("insufficient"));
   });
 
   test("report takeaway is a copyable sentence without causal proof", () => {

@@ -103,7 +103,7 @@ export function ProductionVizStep({ meta, step, state }: { meta: Meta; step: Ste
             active={lens as Lens}
             onPick={pickLens}
             lenses={[
-              { key: "ladder", label: "GVC 阶梯", hint: "四段生产构成" },
+              { key: "ladder", label: "生产构成", hint: "四类活动的占比" },
               { key: "rank", label: "复杂 GVC 排名", hint: "3b / SVA 份额" },
               { key: "industry", label: "行业下钻", hint: "一国内部各行业差别" },
             ]}
@@ -114,12 +114,12 @@ export function ProductionVizStep({ meta, step, state }: { meta: Meta; step: Ste
       >
       {lens === "industry" ? (
         <ChartStory
-          eyebrow="一国内部的异质性"
+          eyebrow="同一国家的行业差异"
           title={`${countryLabel(drill)} 各行业的生产构成(按 SVA 前 15)`}
           what={<>选一个国家,每条 = 它的一个行业,增加值按四段(纯国内 / 传统 / 简单 / 复杂 GVC)归一化到 100%。</>}
-          read={<>同一个国家的不同行业可能有很不同的复杂 GVC 份额；国家总量会掩盖这种行业异质性。</>}
+          read={<>同一个国家的不同行业可能有很不同的复杂 GVC 份额；国家汇总会掩盖这些行业差异。</>}
           find={<>找出该国复杂 GVC 构成最高的几个行业；再换一个国家（下方下拉），对比同一行业的多次跨境活动构成。</>}
-          note="行业级构成 = 该行业的生产分解；国家–行业级分析可以保留国家汇总会掩盖的异质性。"
+          note="行业读数用于观察，请写入个人笔记；系统自动记录的是已选国家的复杂 GVC 份额，不保存行业分项。"
         >
           <div className="controls" style={{ marginBottom: 12 }}>
             <LabeledControl label="下钻国家">
@@ -153,10 +153,10 @@ export function ProductionVizStep({ meta, step, state }: { meta: Meta; step: Ste
       ) : lens === "ladder" ? (
         <ChartStory
           eyebrow="WWYZ 生产分解"
-          title="GVC 阶梯:增加值走到哪一步"
+          title="四类生产活动各占多少？"
           what={<>每条 = 一个国家的总增加值 SVA,按四段归一化:<b>纯国内</b>(不跨境)→ <b>传统贸易</b>(随最终品出一次境)→ <b>简单 GVC</b>(中间品跨一次)→ <b>复杂 GVC</b>(至少两次跨境)。按复杂 GVC 份额排序。</>}
           read={<>{PRODUCTION_LADDER_GUIDE}纯国内段宽 = 更多增加值沿不跨境路径满足本国最终需求，不等同于整个经济体自给。</>}
-          find={<>小型开放经济体(如卢森堡、斯洛伐克)复杂 GVC 段最宽;大型经济体纯国内段更厚。看你选的国家排在阶梯哪一档。</>}
+          find={<>你选的两个经济体，哪类生产活动的占比差异最大？再到「行业下钻」看看国家汇总是否掩盖了行业差异。</>}
           note="展示总增加值前 15 的经济体 + 你选中的国家;归一化到 100%,右侧数字为该国排序指标。"
         >
           <CompositionBar rows={ladderRows} segments={PROD_SEGMENTS} sortKey={PRODUCTION_LADDER_SORT.key} sortDirection={PRODUCTION_LADDER_SORT.direction} sortLabel="复杂 GVC 份额" sortFormat="pct" valueFormat="amount" highlight={highlight} />
@@ -167,7 +167,7 @@ export function ProductionVizStep({ meta, step, state }: { meta: Meta; step: Ste
           title="复杂 GVC 生产份额排名(前 20 + 已选国家)"
           what={<>横条 = <b>复杂 GVC 增加值 / 总增加值</b>(3b / SVA)，按有限值取前 20，并追加你主动选择但未进入前 20 的国家。复杂 = 增加值至少两次跨越国境才被最终吸收。</>}
           read={<>越长 = 复杂 GVC 增加值份额越高。它可能面临更多跨境政策暴露，但是否表现出更强响应要由后续回归和识别假设检验。</>}
-          find={<>榜首多是深度融入区域生产网络的中小经济体;你选的国家高亮为红色,看它离榜首有多远。</>}
+          find={<>你选的国家高亮为红色。比较它们与榜首的份额差异，不预设哪个国家一定更高。</>}
           note="展示前 20 + 已选国家；已选国家只扩展当前显示，不改变保存的国家观测值。"
         >
           <RankBarChart rows={rankRows} metricKey="3b_VA_GVC_C_share" label="复杂 GVC 份额" format="pct" highlight={highlight} />

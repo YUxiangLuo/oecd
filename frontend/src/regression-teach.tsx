@@ -211,9 +211,9 @@ export function RegressionReadingCheck({
   const feedback = answer == null
     ? null
     : correct
-      ? "判断正确。现在展开系统解释，对照你的读法。"
+      ? "判断正确。下方已显示系统解释，请对照你的读法。"
       : expected === "blocked"
-        ? "再看一次支持度和冲击前诊断：只要推断门禁没有通过，就不能用点估计判断升降。"
+        ? "再看一次支持度和冲击前诊断：只要推断条件检查没有通过，就不能用点估计判断升降。"
         : expected === "insufficient"
           ? "再看一次 95% 置信区间是否跨过 0。跨过 0 时应保留“不确定”。"
           : "再同时检查区间是否跨过 0，以及点估计前面的正负号。";
@@ -222,7 +222,7 @@ export function RegressionReadingCheck({
       <div className="reg-reading-check-head">
         <div>
           <span className="reg-section-step">先由你判断</span>
-          <h3 id="reg-reading-check-title">根据上面的点估计和区间，这次结果该怎么说？</h3>
+          <h3 id="reg-reading-check-title">先看结果状态，再看估计与区间：这次结果该怎么说？</h3>
         </div>
         <span className="reg-formative-badge">练习 · 不影响完成状态</span>
       </div>
@@ -324,7 +324,7 @@ export function ReadingCoach({
       <span className="reg-section-step">老师带读 · 按你这次结果</span>
       <ol className="reg-reading-list">
         <li>
-          <b>先看区间。</b>
+          <b>先看是否允许推断，再读估计与区间。</b>
           {evidence}
         </li>
         <li>
@@ -339,7 +339,7 @@ export function ReadingCoach({
       <p className="reg-next-move">
         {next
           ? <>下一类指标是步骤 {next.step} 的{next.family}（{next.measure}）。比较方式不用换。</>
-          : <>四步已经齐了。到第 15 步把方向和「看不出」并排写进原创分析，不要比系数大小。</>}
+          : <>四步已经齐了。到第 15 步并排写清方向、区间或无法评估的原因，不要比系数大小。</>}
         {onNavigateStep && (
           <button type="button" className="gate-link" onClick={() => onNavigateStep(next ? next.step : 15)}>
             {next ? `去步骤 ${next.step}` : "去写报告"}

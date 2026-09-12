@@ -95,7 +95,7 @@ export const DEFAULT_REGRESSION_SETTINGS: RegressionSettings = {
   weightMode: "fixed_pretreatment",
 };
 
-/** 四步同一主口径：关税 × cohort-time ATT；方法课进「换一种读法」。
+/** 四步同一主口径：关税 × cohort-time ATT；方法课进「换冲击、方法或样本口径（选做）」。
  *  改动仍按 outcome 分别保留(见 App.tsx 里 regression_settings)。 */
 export const SIGNATURE_SETTINGS: Record<RegressionOutcome, RegressionSettings> = {
   trade: { ...DEFAULT_REGRESSION_SETTINGS },
@@ -438,17 +438,17 @@ function RegressionEvidenceCard({ outcome, response, stale }: {
       </dl>
       {cohortWeights.length > 0 && (
         <div className="reg-weight-disclosure" role="note">
-          <b>总体 ATT 的实际权重（不是 cohort 等权）</b>
-          <p>每个 cohort×处理后时期按该单元可用处理实体数计权；早期 cohort 有更多处理后时期，因此同一实体会通过多个时期贡献权重。</p>
+          <b>总体 ATT 的实际权重（不是各批次等权）</b>
+          <p>每个批次在每个处理后时期，按可用处理对象数计权；早期批次有更多处理后时期，因此同一对象可能多次贡献权重。</p>
           <ul>
             {cohortWeights.map((row) => (
-              <li key={row.cohort}>{row.cohort} cohort：{(row.share * 100).toFixed(1)}%（{row.cellCount} 个时期 · {row.treatedEntityPeriods} 个实体×时期）</li>
+              <li key={row.cohort}>{row.cohort} 年首次受冲击批次：{(row.share * 100).toFixed(1)}%（{row.cellCount} 个时期 · {row.treatedEntityPeriods} 个实体×时期）</li>
             ))}
           </ul>
-          {dominantCohort && <p><b>主导提醒：</b>{dominantCohort.cohort} cohort 占 {(dominantCohort.share * 100).toFixed(1)}%，所以“总体”结果主要反映该 cohort 的可用处理后时期。</p>}
+          {dominantCohort && <p><b>主导提醒：</b>{dominantCohort.cohort} 年首次受冲击批次占 {(dominantCohort.share * 100).toFixed(1)}%，所以“总体”结果主要反映该批次的可用处理后时期。</p>}
         </div>
       )}
-      <p className="muted">这是四个预先指定结果中的一项。判断顺序：先读效应大小与区间，再确认推断和识别假设；必须报告全部四项，不能只挑区间未跨 0 的结果。</p>
+      <p className="muted">这是四个预先指定结果中的一项。判断顺序：先看结果状态，允许推断时再读估计与区间，并核对因果解释所需的假设；必须报告全部四项，不能只挑区间未跨 0 的结果。</p>
     </section>
   );
 }

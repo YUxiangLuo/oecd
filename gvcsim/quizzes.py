@@ -9,9 +9,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from gvcsim.indicator_schema import PRODUCTION_LENGTH_OPERATIONAL_DEFINITION
-
-
 QUIZ_VERSION = "course-quiz-v7"
 
 
@@ -98,7 +95,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
                 _option("c", "节点的直接贸易伙伴一定最多"),
             ],
             "b",
-            "该介数把每条正流量边视为等长并加总 σ_st(v)/σ_st；它刻画一套未经边阈值敏感性检验的拓扑位置，不等同于总流量、伙伴数或经济上的不可替代瓶颈。",
+            "介数看最短路径经过节点的份额，等长路径会分摊；每条正流量边都视为等长。它不是总流量或伙伴数，也不能在未做边阈值敏感性检验时当作经济瓶颈证据。",
         )
     ],
     6: [
@@ -120,11 +117,11 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "国家复杂 GVC 份额较高，能否说明该国所有行业都同样高？",
             [
                 _option("a", "能，国家汇总可以代表每个行业"),
-                _option("b", "不能，国家汇总可能掩盖显著的行业异质性"),
+                _option("b", "不能，国家汇总可能掩盖明显的行业差异"),
                 _option("c", "不能，因为国家之间完全无法比较"),
             ],
             "b",
-            "国家汇总是行业加总结果；必须下钻行业才能判断一国内部异质性。",
+            "国家汇总不代表每个行业。切到行业明细，才能看出一国内部的差异。",
         )
     ],
     8: [
@@ -137,7 +134,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
                 _option("c", "因为是比值，所以无法判断"),
             ],
             "a",
-            f"{PRODUCTION_LENGTH_OPERATIONAL_DEFINITION}前向 GVC 长度相对更长会使 GVCPs 大于 1，通常对应更上游的位置。",
+            "按本课程位置口径，GVCPs 大于 1 表示相对更上游。应比较前后向 GVC 长度，而不是用图中的中位数象限判断上下游；长度不是跨境次数或国家数。",
         )
     ],
     9: [
@@ -198,7 +195,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
                 _option("c", "每一步必须换一种估计方法，否则回归无效"),
             ],
             "b",
-            "四步是同一研究问题换指标。份额、长度、中心性的单位不同，不能把四个数字直接相比；可以并读符号和置信区间是否跨过 0。",
+            "四步是同一研究问题换指标。先看是否允许推断，再并读方向与区间；无法评估时写明原因。不同指标的系数不能直接比大小。",
         ),
     ],
     12: [
@@ -235,7 +232,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
                 _option("c", "一国是否位于最多的贸易协议中"),
             ],
             "a",
-            f"PLv_GVC 采用前向口径。{PRODUCTION_LENGTH_OPERATIONAL_DEFINITION}长度变短可能有多种机制，一个系数不能单独指出回流或近岸。",
+            "PLv_GVC 用 GVC 活动的累计总产出除以关联增加值。VA 为正时可理解为加权阶段数，负 VA 时为有符号比值；不是跨境次数。长度变短有多种机制，不能单凭系数判定回流或近岸。",
         ),
         _question(
             "s13-compare",
@@ -246,7 +243,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
                 _option("c", "只有事件研究的结果才能和份额相比"),
             ],
             "a",
-            "并读看的是方向和区间是否过 0，不是把不同量纲的点估计做算术。四步不必换方法才能比较。",
+            "先核对结果状态，再并读方向与区间；不要对不同单位的点估计做算术。四步不必换方法才能比较。",
         ),
     ],
     14: [

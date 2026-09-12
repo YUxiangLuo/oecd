@@ -32,8 +32,8 @@ const REFLECTION_FIELDS: {
   min: number;
 }[] = [
   { key: "research_question", label: "研究问题", prompt: "点明同一套壁垒冲击，以及贸易流、生产、长度、网络里你在看哪一类变化。", min: 12 },
-  { key: "evidence_interpretation", label: "证据解释", prompt: "并读四步方向和区间是否过 0：谁像动了、谁看不出。不要把不同单位的系数比大小。", min: 40 },
-  { key: "limitations", label: "局限与反思", prompt: "讨论拟真冲击、对照是否可比、网络外溢，以及「看不出」不等于没有效应。", min: 30 },
+  { key: "evidence_interpretation", label: "证据解释", prompt: "先写四步是否允许推断，再引用估计与区间；停止推断时说明原因，不写成没有效应。不要把不同单位的系数比大小。", min: 40 },
+  { key: "limitations", label: "局限与反思", prompt: "说明教学冲击设定、对照是否可比，以及政策是否通过投入链影响了其他对象；网络项还需交代未做边阈值敏感性检验。", min: 30 },
 ];
 
 export const REPORT_REFLECTION_TITLE_ID = "report-reflection-title";

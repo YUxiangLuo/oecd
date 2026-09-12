@@ -1,8 +1,8 @@
 {
   "captured_on": "2026-09-12",
-  "code_commit": "9225a78",
-  "code_state": "Base commit plus uncommitted teaching-clarity changes; not a clean-commit capture. Capture predates the final step 6 handoff wording fix and its test; that collapsed detail is not visible in these screenshots.",
-  "code_sources_sha256": "09a5a90367e1ef35fd505a806de2949d4dd76aebc3cbc0166d66f029c8cd3aad",
+  "code_commit": "fd6926c",
+  "code_state": "Base commit plus uncommitted teaching-copy refinement and regression tests; all 24 screenshots recaptured from this worktree, not a clean-commit capture.",
+  "code_sources_sha256": "b27d315b1ba2ca1649b6f9ad923ad5714d75cfb3e3bd7bb3cce9dad12a7f91a2",
   "code_sources_hash_rule": "Sorted frontend/src and gvcsim .ts/.tsx/.css/.py paths: path UTF-8 + NUL + file bytes + NUL.",
   "data_release": "4e25ace5843d4fdd9363f12d22780bb4",
   "data_source": "ci_synthetic_icio",
@@ -19,7 +19,7 @@
       "file": "screenshots/00-login.png",
       "width": 2560,
       "height": 1920,
-      "sha256": "5e203cc655f623e8c1cc3cdeba09d5ddf2c20cb40fd7ac3eb0324c389b413090"
+      "sha256": "81f18002d5e23672609f91807001218847db53d40183f6c9aeef4a1bda3b3742"
     },
     {
       "file": "screenshots/01-icio.png",
@@ -55,25 +55,25 @@
       "file": "screenshots/05-indicators.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "ec379bee015b55d6c9545b857918e9054e2df3e98c819f67f077131b393df7f2"
+      "sha256": "de440b6ccff949e261397578a03aeb2e3a0216c82834cc1ccebf4d7f702183c3"
     },
     {
       "file": "screenshots/06-visualization.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "5f2e466608b3c9a5ff81fafa7fbcb7a90c2dca3cfdddbc111dd82a07e510a247"
+      "sha256": "8f8d129df89566804618b1704a432de04052883115ae0ba7a25ccf4335070ed2"
     },
     {
       "file": "screenshots/07-visualization.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "da2de8e1c0b33b1396728804d793bbc4370ff20fa7827adfc989a2ba3dbbaa88"
+      "sha256": "85f6d109c277b51ef528a996d880279e556f82c20e971f9cf121e35d58e8150c"
     },
     {
       "file": "screenshots/08-visualization.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "801e2959b374629fd4ef642fdca07d2fdc2df251fb7592f30f1771834bd90f9c"
+      "sha256": "48bf5e5aac9ebb3b8b79faf4afce46064a76304c211b4a85258397c391fa1620"
     },
     {
       "file": "screenshots/09-network.png",
@@ -97,61 +97,61 @@
       "file": "screenshots/11-method-options.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "375af0a21ec066a459657681229be9af83639107a48a98208457256dd3a3d4de"
+      "sha256": "ff8037913d196e780c0145fc83555ef5257d44cb4ad79a8d5c6e1257aefb12e7"
     },
     {
       "file": "screenshots/11-regression-result.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "42fe61a9405d369c7a765809d93ad14d6b1ca8d1d86e26aa954cf02afcb513c0"
+      "sha256": "5df9665c151ec6b02b2b347dcc94fd1364391ad7ac5651a1c15fdf15787319c5"
     },
     {
       "file": "screenshots/11-regression-settings.png",
-      "width": 2560,
-      "height": 1920,
-      "sha256": "b6e5205086d123f319c034163c72ab34dae8de1b21dbea4f90e7a060e37530c5"
+      "width": 1984,
+      "height": 1518,
+      "sha256": "ba4bb69f5c6258c253c3420918486f681b27db0860131c54d7786d63859ad5e4"
     },
     {
       "file": "screenshots/12-regression-result.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "f124f4f3260c1794a36c4602a44a4cf1d621dfbe2c2568fad48bcc0b4c1e0321"
+      "sha256": "de9fac46b3a435fd83a68bcf10910bbcd686e79cf6e46544b8768016c91e07d0"
     },
     {
       "file": "screenshots/13-regression-result.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "886e3591ef90f2a0d6a952b66a60a33556c3adb015999d341eb2068a7cdc8438"
+      "sha256": "e51cbec768d9c0e5293cf1260f5faddb25ebd97f3be68dfafbee0600a34c99c8"
     },
     {
       "file": "screenshots/14-regression-result.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "917f3a0549f386aebd66a7c294e62d7bd9f71c7b280df574626a0d42773d932a"
+      "sha256": "23e57c2ffbc683b9937fb3f688610db3a9420a215da65c9cfee5446bbf887586"
     },
     {
       "file": "screenshots/15-graded.png",
       "width": 1880,
       "height": 100,
-      "sha256": "43ab0a7f34bcb4aac98cb2f798ae1052636fc3816a113186abef8f16c80e3743"
+      "sha256": "881e7b924af0c05b387972c54aa51f5db0ca337d67ce21a58b93f52f31606ed4"
     },
     {
       "file": "screenshots/15-material-gate.png",
-      "width": 2560,
-      "height": 1920,
-      "sha256": "4c49880dfd7cde0cd137c64ae58f62ce73078b8bdfcf07a6ee11e4befd512293"
+      "width": 1984,
+      "height": 1518,
+      "sha256": "e198885aae4840f707629871ea29358a954b5ce60a107da6df8339421bba6088"
     },
     {
       "file": "screenshots/15-report.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "5ce8d474a8026752ea76704f10f56061ef852d62c629a4283c8b71af5a291bde"
+      "sha256": "604390d52bf27bda07dce568393706fa5bef553782b83c301ae6e4d71f092424"
     },
     {
       "file": "screenshots/15-submitted.png",
       "width": 1880,
       "height": 100,
-      "sha256": "897119b3cfc4cc228e7e915154b90a46976b3cc71bcaf00dcef6599a0efdaa7f"
+      "sha256": "ea05cdf46922e315894a462a1363b8b89cb38de8647a197031e8cde46081b825"
     },
     {
       "file": "screenshots/15-writing.png",

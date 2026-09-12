@@ -33,6 +33,26 @@ def test_beginner_copy_names_the_observation_without_repeated_accounting_disclai
     assert STEPS[5]["handoff"]["output"] == "保存比较对象及可用的代表指标，供第 15 步引用"
 
 
+def test_visualization_tasks_disclose_only_the_saved_representative_metric():
+    production, length = STEPS[6], STEPS[7]
+    assert "个人笔记" in production["tasks"][2]
+    assert "国家级复杂 GVC 份额" in production["handoff"]["output"]
+    assert "不保存行业读数或全部分项" in production["tip"]
+    assert "个人笔记" in length["tasks"][2]
+    assert "国家级 GVCPs" in length["handoff"]["output"]
+    assert "不保存前后向长度的完整读数" in length["tip"]
+
+
+def test_source_and_actions_follow_current_data_and_actual_controls():
+    assert "以课程来源标签为准" in STEPS[0]["concept"]
+    assert "新加坡" not in STEPS[6]["tip"]
+    assert "行业网络指标" in STEPS[8]["tip"]
+    assert "记录拓扑基准" in STEPS[8]["tip"]
+    assert "先看结果状态" in STEPS[10]["tasks"][2]
+    assert "换冲击、方法或样本口径（选做）" in STEPS[12]["concept"]
+    assert "不能代替提交" in STEPS[14]["tip"]
+
+
 def test_regression_handoffs_keep_treatment_fixed_and_change_the_outcome():
     by_number = {step["n"]: step for step in STEPS}
     assert "第 10 步" in by_number[11]["handoff"]["input"]
