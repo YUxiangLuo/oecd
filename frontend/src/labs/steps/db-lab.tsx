@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LabeledControl, ScrollableRegion } from "../../a11y";
 import { api } from "../../api";
+import { icioDatasetName } from "../../dataset-label";
 import { FullscreenPanel } from "../../fullscreen-panel";
 import type { DbMeta, DbSlice, DbTableKind, Meta, QuizCompletionState, StepStateApi } from "../../types";
 import { userFacingRequestError } from "../../user-facing-error";
@@ -82,13 +83,13 @@ const OTHER_DATABASES: { name: string; org: string; coverage: string; focus: str
   { name: "ADB MRIO（课程快照）", org: "亚洲开发银行", coverage: "60+ 经济体 · 35 行业", focus: "亚太侧重；具体覆盖应以下载版本为准" },
 ];
 
-/** 数据库速览:说明还有哪些全球投入产出库,并明确本系统默认用 OECD ICIO 及原因。 */
-function DatabaseGuide({ meta }: { meta: DbMeta }) {
+/** 区分数据库目录与当前载入来源，不能把合成表的覆盖范围归给 OECD。 */
+export function DatabaseGuide({ meta, releaseMeta }: { meta: DbMeta; releaseMeta: Meta | null }) {
   const namedEconomies = meta.countries.includes("ROW") ? meta.countries.length - 1 : meta.countries.length;
-  const icioCoverage = `${namedEconomies} 个具名经济体 + ROW · ${meta.sectors.length} 行业 · ${meta.years[0]}–${meta.years.at(-1)}（载入）`;
+  const icioCoverage = `${namedEconomies} 个具名经济体${meta.countries.includes("ROW") ? " + ROW" : ""} · ${meta.sectors.length} 行业 · ${meta.years[0]}–${meta.years.at(-1)}`;
   return (
     <div className="db-guide">
-      <h3 className="kicker">全球投入产出数据库一览 · 本系统默认使用 OECD ICIO</h3>
+      <h3 className="kicker">全球投入产出数据库一览</h3>
       <p style={{ maxWidth: 820 }}>
         研究全球价值链,需要一张“谁向谁供货”的<b>跨国投入产出表</b>。主流数据库各有侧重——下表是截至 2026-08 的课程比较快照，不是实时目录；覆盖范围、行业/产品口径与更新节奏都不同:
       </p>
@@ -99,10 +100,10 @@ function DatabaseGuide({ meta }: { meta: DbMeta }) {
           </thead>
           <tbody>
             <tr className="db-guide-default">
-              <td><b>OECD ICIO</b> ✓ 本系统默认</td>
+              <td><b>OECD ICIO</b></td>
               <td>OECD</td>
-              <td>{icioCoverage}</td>
-              <td>以各国官方国民账户为基础;适合计算增加值贸易 / GVC 指标(本系统的 WWZ 聚合项、OECD TLS 扩展与 WWYZ 指标均基于它)</td>
+              <td>以所用发行版本为准</td>
+              <td>以各国国民账户为基础，适合分析增加值贸易和全球价值链。</td>
             </tr>
             {OTHER_DATABASES.map((db) => (
               <tr key={db.name}>
@@ -116,8 +117,8 @@ function DatabaseGuide({ meta }: { meta: DbMeta }) {
         </table>
       </ScrollableRegion>
       <p className="muted" style={{ maxWidth: 820, marginTop: 10 }}>
-        本系统使用 <b>OECD ICIO</b>(2023 版,当前载入 {meta.years[0]}–{meta.years.at(-1)})作为 GVC <b>指标输入</b>并生成派生结果；这项 OECD 来源声明不覆盖回归控制或政策情景。
-        回归里的<b>模拟宏观控制</b>是以 ICIO 派生规模为锚的确定性教学 mock，不是 WDI 数据或 IMF 观测；政策冲击与政策情景也是教学编码，不是 OECD 数据。切换到其他数据库需替换原始表与解析器,不在本教学系统范围内;各库的覆盖数字随版本更新、分类口径不同,不能直接横向比较。
+        当前载入：<b>{icioDatasetName(releaseMeta)}</b>，{icioCoverage}。上表介绍数据库类型，不替代当前数据的来源说明。
+        政策冲击和模拟宏观控制是另行构造的教学材料。切换到其他数据库需要替换原始表与解析器；各库分类口径不同，覆盖数字不能直接横向比较。
       </p>
     </div>
   );
@@ -840,7 +841,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
       {/* 单层折叠：早前这里是“外层 details 套一个内层 details”，学生要点击两次才能看到正文。 */}
       <details className="card accent concept-card db-structure-details">
         <summary className="kicker">进一步理解 ICIO 表结构与账户项</summary>
-        <DatabaseGuide meta={meta} />
+        <DatabaseGuide meta={meta} releaseMeta={releaseMeta} />
       </details>
     </div>
   );

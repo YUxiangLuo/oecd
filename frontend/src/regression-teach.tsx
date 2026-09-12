@@ -87,7 +87,7 @@ export function FamilyMap({
   return (
     <section className="reg-family-map" aria-label="同一问题下的四类指标">
       <div className="reg-family-map-head">
-        <span className="reg-section-step">四步同一句话</span>
+        <span className="reg-section-step">四个观察角度</span>
         <p>壁垒出现后，这一组指标相对未受冲击的对象发生了怎样的变化？基准设定相同；选做改设定后须先核对下面的比较口径。</p>
       </div>
       <ol className="reg-family-track">

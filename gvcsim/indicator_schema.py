@@ -81,7 +81,7 @@ INDICATOR_SCHEMA = {
     ],
     "fields": {
         "gross_exports": {"label": "毛出口(五类 WWZ 聚合项 + TLS)", "format": "amount"},
-        "FVA_share": {"label": "课程 FVA 份额(WWZ FVA（不含 FDC）/VA+TLS 毛出口；非 OECD EXGR_FVASH)", "format": "pct"},
+        "FVA_share": {"label": "外国增加值项占比", "format": "pct"},
         "DVAex_share": {"label": "DVAex 份额(DVAex/VA+TLS 账户闭合毛出口)", "format": "pct"},
         "3_VA_GVC_share": {"label": "GVC 生产份额(3_VA_GVC/SVA)", "format": "pct"},
         "3b_VA_GVC_C_share": {"label": "复杂GVC生产份额(3b/SVA)", "format": "pct"},

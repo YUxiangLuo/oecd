@@ -608,6 +608,25 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
         build(empty_session(), "同学")
 
 
+def test_representative_capture_stays_optional_and_report_does_not_imply_a_full_chart_snapshot():
+    session = _complete()
+    session["steps"]["6"]["data"].update({"chart": "decompose", "observations": []})
+    assert not any(item["step"] == 6 for item in check_material_gate(session))
+    text = "\n".join(teaching_report._experiment_sections(session))
+    assert "本步仅保存比较对象，未记录代表指标数值" in text
+    session["steps"]["6"]["data"].update(
+        {
+            "metric": "FVA_share",
+            "observations": [{"entity": "CHN", "country": "CHN", "year": 2020, "value": 0.2}],
+        }
+    )
+    text = "\n".join(teaching_report._experiment_sections(session))
+    section = text.split("### 步骤 6", 1)[1].split("### 步骤 7", 1)[0]
+    assert "记录的代表指标：外国增加值项占比" in section
+    assert "未记录代表指标数值" not in section
+    assert "EXGR_FVASH" not in section
+
+
 def test_material_gate_is_independent_of_unfinished_quizzes():
     session = _complete()
     for step in range(1, 15):
@@ -649,7 +668,7 @@ def test_report_labels_step_nine_observation_without_a_step_level_metric(tmp_pat
     report = build(session, "同学")
 
     assert "全正边二值介数（探索性拓扑基准）" in report.markdown
-    assert "记录指标：—" not in report.markdown
+    assert "记录的代表指标：—" not in report.markdown
 
 
 def test_report_labels_step_five_network_metric_like_the_step_does(tmp_path, monkeypatch):
@@ -669,7 +688,7 @@ def test_report_labels_step_five_network_metric_like_the_step_does(tmp_path, mon
     report = build(session, "同学")
 
     assert "加权总度(入+出；自环双计)" in report.markdown
-    assert "记录指标：weighted degree" not in report.markdown
+    assert "记录的代表指标：weighted degree" not in report.markdown
 
 
 def test_material_gate_requires_one_viewed_event_from_each_selectable_shock_type(monkeypatch):

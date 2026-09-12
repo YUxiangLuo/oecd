@@ -59,7 +59,8 @@ describe("regression lessons", () => {
   });
 
   test("research question follows the selected shock and estimand", () => {
-    expect(lessonQuestion("network", "tariff", "did")).toContain("处理 cohort");
+    expect(lessonQuestion("network", "tariff", "did")).toContain("从未或尚未受冲击的对象");
+    expect(lessonQuestion("trade", "tariff", "did")).not.toMatch(/cohort|课程 FVA|EXGR_FVASH/);
     expect(lessonQuestion("network", "sanctions", "event_study")).toContain("制裁暴露");
     const fe = lessonQuestion("network", "export_control", "twfe_intensity");
     expect(fe).toContain("出口管制暴露变强");

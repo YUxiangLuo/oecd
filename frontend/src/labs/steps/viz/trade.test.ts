@@ -1,7 +1,51 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { createElement } from "react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
+import { api } from "../../../api";
+import type { Meta, Step, StepStateApi } from "../../../types";
+import { restoreVizState, type VizStepState } from "./scaffold";
 import { compositionSegmentColor, NEGATIVE_COMPOSITION_STYLE } from "../../../viz/explore/charts";
 import { CAT } from "../../../viz/shared";
-import { eligibleExportCompositionRows, WWZ_READING_GUIDE, WWZ_SEGMENTS } from "./trade";
+import { eligibleExportCompositionRows, TradeVizStep, TRADE_DEFAULT_LENS, TRADE_LENSES, WWZ_READING_GUIDE, WWZ_SEGMENTS } from "./trade";
+
+const meta: Meta = {
+  years: [2020], countries: ["CHN", "USA"], sectors: ["A"],
+  dataset: { years: [2020], release_id: "a".repeat(32) },
+};
+
+test("new trade sessions start with the whole export, but saved lenses are preserved", () => {
+  expect(restoreVizState(meta, undefined, TRADE_DEFAULT_LENS, TRADE_LENSES).lens).toBe("decompose");
+  for (const chart of TRADE_LENSES) {
+    expect(restoreVizState(meta, { chart }, TRADE_DEFAULT_LENS, TRADE_LENSES).lens).toBe(chart);
+  }
+});
+
+test("trade views use plain bounded labels and disclose representative-only report capture", async () => {
+  const rows = meta.countries.map((country, i) => ({
+    country, gross_exports: 100, DVAex: 60 - 10 * i, DVArt: 10, DDC: 5,
+    FVA: 20 + 10 * i, FDC: 3, taxsub: 2, FVA_share: 0.2 + 0.1 * i, "3_VA_GVC_share": 0.4 + 0.1 * i,
+  }));
+  const request = spyOn(api, "countryIndicators").mockResolvedValue(rows);
+  const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+  const state: StepStateApi<VizStepState> = {
+    data: { compared: ["CHN", "USA"] }, save: () => {}, complete: false,
+    syncing: false, syncError: null, syncNow: () => {},
+  };
+  try {
+    const view = render(createElement(TradeVizStep, { meta, step: { n: 6 } as Step, state }));
+    await view.findByRole("heading", { name: "拆开一国的出口：各项价值从哪里来？" });
+    expect(view.getByRole("button", { name: "出口拆解" }).getAttribute("aria-pressed")).toBe("true");
+    expect(view.container.textContent).toContain("不保存图表全部分项");
+    fireEvent.click(view.getByRole("button", { name: "定位图" }));
+    expect(view.getByText("两项占比均较高")).toBeTruthy();
+    expect(view.container.textContent).not.toContain("深度嵌入");
+    expect(view.container.textContent).not.toContain("进口依赖");
+    fireEvent.click(view.getByRole("button", { name: "占比排名" }));
+    expect(view.getByRole("heading", { name: "外国增加值项占比排名" })).toBeTruthy();
+    expect(view.container.textContent).not.toContain("EXGR_FVASH");
+    expect(view.container.textContent).not.toContain("课程 FVA");
+  } finally { cleanup(); request.mockRestore(); schema.mockRestore(); }
+});
 
 describe("step 6 export decomposition provenance copy", () => {
   test("binds every legend segment to the correct provenance and palette slot", () => {

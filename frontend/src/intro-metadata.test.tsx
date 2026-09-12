@@ -13,13 +13,30 @@ test("missing metadata and empty routes never fabricate coverage or stage output
   try {
     const view = render(<IntroOverlay user={user} meta={null} stepsData={empty} onDone={onDone} />);
     expect([...view.getByRole("dialog").querySelectorAll(".intro-stat-v")].map(e => e.textContent)).toEqual(["—", "—", "—"]);
+    expect(view.getByRole("dialog").textContent).not.toContain("真实投入产出数据");
     fireEvent.click(view.getByRole("button", { name: "介绍页 2" }));
-    fireEvent.click(view.getByRole("button", { name: /OECD ICIO/ }));
+    fireEvent.click(view.getByRole("button", { name: /投入产出数据（来源待确认）/ }));
     expect(view.getByRole("status").textContent).toBe("课程数据范围暂不可用。");
     expect(view.queryByText(/中间品方阵约/) === null).toBe(true);
     fireEvent.click(view.getByRole("button", { name: "介绍页 3" }));
     expect(view.getByRole("status").textContent).toBe("当前课程暂无实验路线信息。");
     expect(view.getByRole("dialog").querySelectorAll(".intro-stage-output").length).toBe(0);
+  } finally { cleanup(); request.mockRestore(); }
+});
+
+test("synthetic source is disclosed in the introduction rather than called real OECD data", () => {
+  const request = spyOn(api, "shockEvents").mockResolvedValue({ events: [], disclaimer: "", source_disclosure: "" });
+  const meta: Meta = {
+    countries: ["CHN", "USA"], sectors: ["A"], years: [2020],
+    dataset: { years: [2020], data_sources: { ci_synthetic_icio: { production_data: false } } },
+  };
+  try {
+    const view = render(<IntroOverlay user={user} meta={meta} stepsData={empty} onDone={onDone} />);
+    expect(view.getByRole("dialog").textContent).toContain("模拟投入产出数据（教学用）");
+    fireEvent.click(view.getByRole("button", { name: "介绍页 2" }));
+    expect(view.getByRole("button", { name: /模拟投入产出数据/ })).toBeTruthy();
+    expect(view.getByRole("dialog").textContent).not.toContain("真实投入产出数据");
+    expect(view.getByRole("dialog").textContent).not.toContain("投入产出数据来自 OECD");
   } finally { cleanup(); request.mockRestore(); }
 });
 

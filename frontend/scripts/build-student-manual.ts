@@ -9,7 +9,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 const root = resolve(import.meta.dir, "../..");
-const output = resolve(root, process.argv[2] ?? "dogfood-output/student-manual-20260907/render/实验手册.html");
+const output = resolve(root, process.argv[2] ?? "dogfood-output/student-manual/render/实验手册.html");
 const source = await readFile(resolve(root, "实验手册.md"), "utf8");
 const pages = source.split("<!-- page -->").map((page) => page.trim());
 const imagePaths = [...source.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g)].map((match) => match[1]);

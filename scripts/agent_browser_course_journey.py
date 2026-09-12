@@ -74,9 +74,11 @@ def main():
             student.run("wait", "--load", "networkidle")
             if step == 1:
                 student.run("click", "tbody tr:first-child td:first-of-type button")
+                student.run("wait", '[role="dialog"]')
+                student.run("press", "Escape")
             elif 2 <= step <= 5:
                 student.button("记录当前国家到报告材料")
-                student.run("select", "main select", "USA")
+                student.run("select", 'main select:has(option[value="USA"])', "USA")
                 student.run("wait", "--load", "networkidle")
                 student.button("记录当前国家到报告材料")
             elif 6 <= step <= 8:
@@ -89,6 +91,11 @@ def main():
                     student.run("press", "Enter")
                     student.run("wait", '[role="dialog"]')
                     student.run("press", "Escape")
+                student.button("行业网络指标")
+                student.run("wait", ".heat-table-grid tbody button")
+                student.run("click", ".heat-table-grid tbody tr:first-child button")
+                student.run("wait", '[role="dialog"]')
+                student.run("press", "Escape")
             elif step == 10:
                 for kind in ("tariff", "sanctions", "export_control"):
                     student.run("click", f"#shock-type-tab-{kind}")
@@ -118,6 +125,8 @@ def main():
                 assert row["observation"]["row"].startswith("CHN_")
             elif step <= 9:
                 assert {"CHN", "USA"}.issubset(row["compared"]), (step, row)
+                if step == 9:
+                    assert any(o["metric"] == "betweenesscentrality" and o.get("industry") for o in row["observations"])
             elif step == 10:
                 assert set(row["viewed_shock_types"]) == {"tariff", "sanctions", "export_control"}
             else:

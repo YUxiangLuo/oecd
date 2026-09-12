@@ -63,7 +63,7 @@ test("scene headings receive focus and local controls never trigger global arrow
     fireEvent.keyDown(heading(), { key: "ArrowRight", ctrlKey: true });
     expect(heading().textContent).toBe("供应链仿真系统");
     fireEvent.keyDown(heading(), { key: "ArrowRight" });
-    expect(heading().textContent).toBe("真实数据与教学设定");
+    expect(heading().textContent).toBe("数据来源与教学设定");
     fireEvent.keyDown(view.getByRole("button", { name: /贸易政策冲击面板/ }), { key: "ArrowRight" });
     expect(view.queryAllByRole("button", { name: /贸易政策冲击面板/ }).length).toBe(1);
     fireEvent.click(view.getByRole("button", { name: "介绍页 3" }));

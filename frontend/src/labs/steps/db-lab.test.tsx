@@ -2,7 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api } from "../../api";
 import type { DbMeta, DbSlice, Meta } from "../../types";
-import { DbLab } from "./db-lab";
+import { DatabaseGuide, DbLab } from "./db-lab";
 
 afterEach(cleanup);
 
@@ -30,6 +30,24 @@ const SLICE: DbSlice = {
 };
 
 describe("step 1 further-reading card", () => {
+  test("distinguishes a synthetic loaded table from the database catalogue", () => {
+    const releaseMeta: Meta = {
+      years: [2020], countries: ["CHN", "USA"], sectors: ["D01T02"],
+      dataset: { years: [2020], data_sources: { ci_synthetic_icio: { production_data: false } } },
+    };
+    const view = render(<DatabaseGuide meta={DB_META} releaseMeta={releaseMeta} />);
+    const copy = view.container.textContent;
+    expect(copy).toContain("模拟投入产出数据（教学用）");
+    expect(copy).toContain("2 个具名经济体 · 1 行业");
+    expect(view.container.querySelector("p.muted")?.textContent).not.toContain("+ ROW");
+    expect(copy).not.toContain("本系统使用 OECD ICIO");
+    const oecdRow = view.container.querySelector(".db-guide-default")?.textContent;
+    expect(oecdRow).toContain("以所用发行版本为准");
+    expect(oecdRow).not.toContain("2 个具名经济体");
+    view.rerender(<DatabaseGuide meta={DB_META} releaseMeta={null} />);
+    expect(view.container.textContent).toContain("来源待确认");
+  });
+
   test("reveals its guide content without a second nested disclosure", async () => {
     spyOn(api, "dbMeta").mockResolvedValue(DB_META);
     spyOn(api, "dbSlice").mockResolvedValue(SLICE);

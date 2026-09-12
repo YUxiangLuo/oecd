@@ -129,7 +129,7 @@ export function ShockLab({ meta, step: _step, state }: {
     <div className="shock-workbench">
       <div className="shock-primary-boundary" role="note">
         <b>先做：</b>选择一项政策事件，再看它如何映射为国家 × 行业暴露。
-        <span>真实 ICIO 指标 + 教学政策编码；选择事件不证明冲击外生。</span>
+        <span>当前发布指标 + 教学政策编码；数据来源见课程数据说明，选择事件不证明冲击外生。</span>
       </div>
       <details className="shock-details shock-source-boundary">
         <summary>

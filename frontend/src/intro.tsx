@@ -12,7 +12,7 @@ import { createPortal } from "react-dom";
 import { useDialogFocus } from "./a11y";
 import { api } from "./api";
 import { LogoMark } from "./brand";
-import { oecdIcioEdition } from "./dataset-label";
+import { icioDatasetName } from "./dataset-label";
 import type { AuthUser, Meta, ShockEvent, StepsResponse } from "./types";
 
 const SCENE_NAMES = ["认识实验", "数据与设定", "实验路线", "机制预演", "完成规则"];
@@ -148,7 +148,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
   const regionCoverage = meta
     ? `${namedEconomies} 个经济体${hasRestOfWorld ? " + ROW 世界其他地区账户" : ""}`
     : "覆盖范围暂不可用";
-  const icioEdition = oecdIcioEdition(meta);
+  const datasetName = icioDatasetName(meta);
 
   const stages = useMemo(() => {
     return Object.entries(stepsData.stages).map(([n, name]) => ({
@@ -181,10 +181,10 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       <h1 className="intro-title">供应链仿真系统</h1>
       <div className="intro-kicker">GVC SIMULATION LAB</div>
       <p className="intro-lede">
-        从全球生产联系，理解价值链变化。基于 OECD ICIO 数据，计算和比较价值链指标，
+        从全球生产联系，理解价值链变化。利用投入产出数据，计算和比较价值链指标，
         练习分析政策冲击，并完成有依据的实验报告。
       </p>
-      <p className="intro-boundary">真实投入产出数据 · 教学情景 · 不作真实政策效果预测</p>
+      <p className="intro-boundary">{datasetName} · 教学情景 · 不作真实政策效果预测</p>
       <div className="intro-pipeline">
         {/* 五阶段名称与 /api/steps、侧栏保持一致:学生接触到的旅程只有一套说法。 */}
         {stages.map((st, i) => (
@@ -208,8 +208,8 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
     /* ---- 2 数据底座 ---- */
     <div key={1} className="intro-scene">
       <div className="intro-scene-kicker">数据底座</div>
-      <h2 className="intro-h2">真实数据与教学设定</h2>
-      <p className="intro-lede">投入产出数据来自 OECD；指标按课程方法计算。政策事件有来源披露，但冲击参数与行业映射包含教学设定。</p>
+      <h2 className="intro-h2">数据来源与教学设定</h2>
+      <p className="intro-lede">指标由当前发布的投入产出表计算。政策事件有来源披露，但冲击参数与行业映射包含教学设定。</p>
       <div className="intro-cards">
         <div
           className={`intro-card${openCards.icio ? " open" : ""}`}
@@ -224,16 +224,15 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
           <span className="intro-card-head">
             <CardIcon kind="icio" />
             <span>
-              <span className="intro-card-title">OECD ICIO{icioEdition ? ` ${icioEdition} 版` : ""}投入产出表</span>
+              <span className="intro-card-title">{datasetName}</span>
               <span className="intro-card-sub">展开或收起数据结构说明</span>
             </span>
             <span className="intro-card-toggle" aria-hidden>{openCards.icio ? "−" : "+"}</span>
           </span>
           </button>
           <ul className="intro-card-facts">
-            <li>来源：OECD ICIO 真实投入产出数据。</li>
             <li>描述经济体与行业间的供货联系。</li>
-            <li>价值链指标按本课程口径计算，不等同于 OECD 官方已发布指标。</li>
+            <li>据此计算出口构成、生产分工、链条长度与网络位置。</li>
           </ul>
           {openCards.icio && (
             <div className="intro-card-body" id={icioPanelId}>
@@ -412,7 +411,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       <p className="intro-note">这是机制示意，不是估计结果。真实分析需要比较多项指标，并如实报告不显著或无法推断的结果。</p>
       <details className="intro-details intro-method-details">
         <summary>查看指标口径与解释边界</summary>
-        <p>后续回归分别检验课程 WWZ 口径（不含 FDC 与 TLS）的 FVA_share（非 OECD EXGR_FVASH）、复杂 GVC 生产份额、前向 GVC 生产长度（PLv_GVC），并探索全正边二值网络介数；四项不能只挑显著结果。</p>
+        <p>后续从出口构成、多次跨境生产占比、生产链长度三个角度观察变化，再探索网络位置。四项结果都要报告，不能只挑显著结果；网络项只作探索性证据。</p>
       </details>
     </div>,
 

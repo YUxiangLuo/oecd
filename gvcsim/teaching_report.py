@@ -53,7 +53,7 @@ _OUTCOME_UNITS = {
     "network": "全正边二值介数原始单位（探索性拓扑基准）；跨指标比较时另参考样本标准差单位",
 }
 _STUDENT_METRIC_LABELS = {
-    "FVA_share": "课程 WWZ FVA 份额（不含 FDC 与 TLS；非 OECD EXGR_FVASH）",
+    "FVA_share": "外国增加值项占比",
     "3b_VA_GVC_C_share": "复杂 GVC 生产份额",
     "GVCPs": "GVC 相对位置（GVCPs）",
     # Match the label the step itself shows; without this the report printed the
@@ -81,8 +81,8 @@ _SCENARIO_LABELS = {
 }
 _OUTCOME_INTERPRETATIONS = {
     "trade": {
-        "negative": "课程 WWZ 口径（不含 FDC 与 TLS）的 FVA 构成下降；这不是 OECD EXGR_FVASH，也不能单独证明供应链已经回流。",
-        "positive": "课程 WWZ 口径（不含 FDC 与 TLS）的 FVA 构成上升；这不是 OECD EXGR_FVASH，仍需检查识别假设和其他共同变化。",
+        "negative": "出口分解中外国增加值这一项的占比下降，但不能单独证明供应链已经回流。",
+        "positive": "出口分解中外国增加值这一项的占比上升，仍需检查比较条件和其他共同变化。",
     },
     "production": {
         "negative": "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
@@ -1227,7 +1227,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             )
             lines.extend(
                 (
-                    f"- 记录指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}",
+                    f"- 记录的代表指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}",
                     "",
                     "| 实体 | 年份 | 数值 |",
                     "|---|---:|---:|",
@@ -1240,6 +1240,8 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     f"{_safe(item.get('year', '—'))} | "
                     f"{_number(observation_value) if isinstance(observation_value, (int, float)) else _safe(observation_value)} |"
                 )
+        elif compared:
+            lines.append("- 本步仅保存比较对象，未记录代表指标数值。")
         lines.append("")
 
     shock = _step_data(session, 10)

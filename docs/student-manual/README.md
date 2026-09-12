@@ -10,7 +10,7 @@
 
 ## 重新生成
 
-需要 Bun、前端锁定依赖、agent-browser／Chrome，以及中文字体（制作环境使用思源黑体 CN）。从仓库根目录执行：
+需要 Bun、前端锁定依赖、agent-browser／Chrome，以及中文字体（本次制作使用 Noto Sans CJK SC）。从仓库根目录执行：
 
 ```bash
 bun install --cwd frontend --frozen-lockfile
@@ -21,7 +21,7 @@ bun run frontend/scripts/build-student-manual.ts
 
 ```bash
 python3 -m http.server 4191 --bind 127.0.0.1 \
-  --directory dogfood-output/student-manual-20260907/render
+  --directory dogfood-output/student-manual/render
 ```
 
 回到仓库根目录导出：
@@ -35,10 +35,10 @@ bun run frontend/scripts/export-student-manual.ts \
 
 ## 更新时核对
 
-1. 实际打开对应页面操作，再用 agent-browser 截图。截图中只使用示例账号，不包含密码、真实学生信息或后台凭证。
+1. 在独立 PostgreSQL 实例和数据副本中，通过 `scripts/agent_browser_course_journey.py` 验证实际学生流程，再用 agent-browser 截图。该脚本只通过 UI 写入学习记录；数据库仅用于独立核验。截图只使用示例账号，不包含密码、真实学生信息或后台凭证。
 2. 同步正文中的按钮名、条件、截图说明和数据口径；不要以新说明解释不匹配的旧截图。
 3. 若增减页面，更新正文导航表页码和本说明中的总页数。
-4. 更新截图清单，核对 PDF 中的分页、字体、图像、正文和报告状态。
+4. 更新截图清单，核对 PDF 中的分页、字体、图像、正文和报告状态。`code_commit` 记录基础提交；工作区有未提交修改时，必须另记其状态，不能声称截图只对应该提交。
 5. 文档截图中的报告评分仅用于说明流程；它不构成正式评分标准。
 
 可用以下工具复核导出文件：
@@ -50,4 +50,6 @@ qpdf --check 实验手册.pdf
 pdftotext -layout 实验手册.pdf /tmp/gvcsim-student-manual.txt
 ```
 
-本次制作已通过学生 15 步、报告提交和示例教师评阅，当前四类关税基准均保留 `invalid_design` 诊断。截图为整个页面或由浏览器直接截取的操作区，业务画面未经替换。
+2026-09-12 制作使用 `ci_synthetic_icio` 模拟输入，已通过学生 15 步、报告提交、重新生成并提交、示例教师评阅及个人报告 PDF 导出；四类关税基准均保留 `invalid_design` 诊断。不要将截图样本称为真实 OECD 观测。截图为整个页面或由浏览器直接截取的操作区，业务画面未经替换。
+
+完整后端测试另用该隔离实例中的第二个数据库及单独数据副本。`tests/conftest.py` 会重置 schema；不能只设置 `GVCSIM_PG_DSN_TEST`，必须确认测试进程实际使用的 `GVCSIM_PG_DSN` 不指向课堂库或浏览器流程库。

@@ -2,9 +2,9 @@
  * 步骤 6 · 贸易流可视化 —— 故事:「一国的出口,价值从哪来?」
  *
  * 三个贸易专属镜头(非通用图表标签),各自带读图脚手架:
- *   定位图   课程 FVA 份额× WWYZ GVC 生产份额,按样本中位数描述性分型
- *   出口拆解 选中国家的毛出口拆成五类 WWZ 聚合项与 TLS 扩展,直观看本国 / 外国来源占比
- *   FVA 排序 谁的 WWZ 外国增加值项份额较高（不含 FDC）
+ *   出口拆解 先看选中国家的完整出口构成
+ *   定位图   外国增加值项占比 × 跨境生产占比，只比较相对高低
+ *   占比排名 比较外国增加值项占比（字段仍为 FVA_share）
  */
 import type { Meta, Step, StepStateApi } from "../../../types";
 import { CompositionBar, QuadrantScatter, RankBarChart } from "../../../viz";
@@ -44,8 +44,10 @@ export const WWZ_READING_GUIDE = `正值时，${provenanceItems("domestic")} 属
   + `${provenanceItems("extension")} 是 OECD TLS 账户扩展。`
   + `负分项统一以${NEGATIVE_COMPOSITION_STYLE.colorName}显示在零轴左侧；这里的${NEGATIVE_COMPOSITION_STYLE.colorName}表示负号，不改变其国内、外国或 TLS 扩展归类。`;
 const QUAD_LABELS: [string, string, string, string] = [
-  "双高 · 深度嵌入", "GVC 生产主导 · 前向型", "双低 · 参与较低", "进口依赖 · 后向型",
+  "两项占比均较高", "外国增加值项较低 · 跨境生产较高", "两项占比均较低", "外国增加值项较高 · 跨境生产较低",
 ];
+export const TRADE_DEFAULT_LENS = "decompose";
+export const TRADE_LENSES = ["decompose", "quadrant", "rank"] as const;
 
 export function eligibleExportCompositionRows(rows: Row[]): Row[] {
   return finiteBy(rows, "gross_exports", ...WWZ_SEGMENTS.map((segment) => segment.key));
@@ -53,7 +55,7 @@ export function eligibleExportCompositionRows(rows: Row[]): Row[] {
 
 export function TradeVizStep({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
   const { year, setYear, lens, pickLens, picked, pickCountries } = useVizLab(
-    meta, step, state, "quadrant", ["quadrant", "decompose", "rank"],
+    meta, step, state, TRADE_DEFAULT_LENS, TRADE_LENSES,
   );
   const countryQuery = useCountryIndicatorRows(meta, year);
   const { rows, error, status, retry } = countryQuery;
@@ -79,9 +81,9 @@ export function TradeVizStep({ meta, step, state }: { meta: Meta; step: Step; st
             active={lens as Lens}
             onPick={pickLens}
             lenses={[
-              { key: "quadrant", label: "定位图", hint: "WWZ FVA 构成 × 前向生产参与；样本中位数分型" },
-              { key: "decompose", label: "出口拆解", hint: "毛出口 = 五类 WWZ 聚合项 + TLS 扩展" },
-              { key: "rank", label: "FVA 排序", hint: "比较 WWZ FVA 构成（不含 FDC）" },
+              { key: "decompose", label: "出口拆解", hint: "先比较出口各分项的构成" },
+              { key: "quadrant", label: "定位图", hint: "比较外国增加值项占比与跨境生产占比" },
+              { key: "rank", label: "占比排名", hint: "比较外国增加值项占比" },
             ]}
           />
         )}
@@ -99,28 +101,28 @@ export function TradeVizStep({ meta, step, state }: { meta: Meta; step: Step; st
         <p className="muted">该年份暂无国家指标数据。</p>
       ) : lens === "quadrant" ? (
         <ChartStory
-          eyebrow="经济体分型"
-          title="出口价值定位图:WWZ FVA 构成 × 前向生产参与"
-          what={<>横轴 <b>课程 FVA 份额</b> = WWZ 分解中不含 FDC 的外国增加值项占毛出口的比重（分子不含 FDC 与 TLS，非 OECD EXGR_FVASH）；纵轴 <b>GVC 生产份额</b> = 本国增加值有多少经中间品贸易进入全球生产。虚线是全样本中位数；四象限不是 OECD 官方分类，也不等同于 TiVA forward participation。</>}
-          read={<>越靠右,越依赖进口中间品做出口;越靠上,越多本国增加值卷入跨境生产。四个象限对应四种参与模式(见四角标签)。</>}
-          find={<>找到你选的国家各落哪个象限：越南、卢森堡、斯洛伐克通常在右侧较高课程 FVA 区；美国、日本内需大，该份额通常偏低。这里只描述构成，不直接判断政策暴露。</>}
+          eyebrow="两种构成一起看"
+          title="出口构成与跨境生产占比"
+          what={<>横轴是出口分解中<b>外国增加值这一项的占比</b>；纵轴是本国增加值中经中间品贸易进入跨境生产的占比。两条虚线分别是当前样本的中位数。</>}
+          read={<>越靠右，外国增加值项占比越高；越靠上，跨境生产占比越高。象限只表示相对高低，不代表经济体的嵌入深度或政策敏感程度。</>}
+          find={<>你选的两个经济体在哪个方向差别更大？切回出口拆解，看看还有哪些分项不同。</>}
           note={`参考线基于全部有效样本 n=${quadRows.length};份额 = 占毛出口 / 总增加值的比例。`}
         >
           <QuadrantScatter
             rows={quadRows} referenceRows={quadRows}
             xKey="FVA_share" yKey="3_VA_GVC_share"
-            xLabel="课程 FVA 份额(非 OECD EXGR_FVASH)" yLabel="WWYZ GVC 生产份额(前向生产参与)"
+            xLabel="外国增加值项占比" yLabel="跨境生产占比"
             xFormat="pct" yFormat="pct"
             highlight={highlight} quadrantLabels={QUAD_LABELS}
           />
         </ChartStory>
       ) : lens === "decompose" ? (
         <ChartStory
-          eyebrow="WWZ 聚合项 + OECD TLS 扩展"
-          title="拆开一国的出口:五类增加值核算项与 TLS"
-          what={<>每条 = 一个国家的 VA+TLS 账户闭合毛出口,归一化到 100%:DVAex / DVArt / DDC 是<b>本国</b>增加值及其重复计算,FVA / FDC 是<b>外国</b>来源；taxsub 是 OECD TLS 账户扩展,不是 WWZ 原文分类。</>}
+          eyebrow="先看完整构成"
+          title="拆开一国的出口：各项价值从哪里来？"
+          what={<>每条代表一个国家的出口，各分项按毛出口换算成比例。先区分<b>国内来源、外国来源和税收减补贴</b>，再比较相同分项的宽度；金额与详细定义可查看图例和数据表。</>}
           read={<>{WWZ_READING_GUIDE}各段越宽，表示对应分项占 VA+TLS 账户闭合毛出口的份额越高；右侧数字是该国毛出口(百万美元)。</>}
-          find={<>对比大型经济体(美国:DVAex 段主导)与小型开放经济体(越南、卢森堡:FVA 段很宽)。五类 WWZ 聚合项加 TLS 扩展恒等于 VA+TLS 账户闭合毛出口；TLS 是产品税减补贴账户，不等于步骤 10 的额外关税。</>}
+          find={<>两国最大的分项分别是什么？除了外国增加值这一项，国内来源和重复计算部分的占比还有哪些差别？</>}
           note={picked.length ? "当前显示你选中的国家。" : "未选国家时默认展示毛出口最大的 8 国;在上方「选国家」挑选可替换。"}
         >
           <CompositionBar
@@ -131,17 +133,18 @@ export function TradeVizStep({ meta, step, state }: { meta: Meta; step: Step; st
         </ChartStory>
       ) : (
         <ChartStory
-          eyebrow="后向 GVC 参与"
-          title="课程 FVA 份额前 20（非 OECD EXGR_FVASH）"
-          what={<>横条 = 各国课程 WWZ 口径（不含 FDC 与 TLS）的 <b>FVA 份额</b>，从高到低取前 20；你选中的国家高亮为红色。</>}
-          read={<>条越长 = WWZ 分解中不含 FDC 的外国增加值构成越高。FDC 与 TLS 均未计入分子，因此不能拿这里的数值直接冒充 OECD 官方 EXGR_FVASH；是否更暴露或更敏感仍需回归证据。</>}
-          find={<>榜首多是加工-再出口型小经济体;把中国、美国这类大国和它们对比,份额通常低不少。</>}
+          eyebrow="选一项比较"
+          title="外国增加值项占比排名"
+          what={<>横条表示出口分解中<b>外国增加值这一项的占比</b>，从高到低取前 20；你选中的国家高亮为红色。</>}
+          read={<>条越长，这一项在出口中占的比例越高。占比高不代表出口总额大，也不能直接说明对政策更敏感。</>}
+          find={<>你选的国家在排名中处于什么位置？回到出口拆解，对照其他分项一起解释。</>}
           note="展示前 20，并追加你主动选择但未进入前 20 的国家。"
         >
-          <RankBarChart rows={rankRows} metricKey="FVA_share" label="课程 FVA 份额（非 EXGR_FVASH）" format="pct" highlight={highlight} />
+          <RankBarChart rows={rankRows} metricKey="FVA_share" label="外国增加值项占比" format="pct" highlight={highlight} />
         </ChartStory>
       )}
       </VizWorkbench>
+      <p className="muted">报告保留所选比较对象，并在数值可用时记录外国增加值项占比作为代表指标；不保存图表全部分项。完整指标定义见第 2 步数据表的列说明。</p>
     </div>
   );
 }

@@ -8,11 +8,11 @@ test("data boundaries remain visible and both technical cards can expand indepen
   try {
     const view = render(<IntroOverlay user={{ username: "student", name: "学生", role: "student" }} meta={null} stepsData={{ stages: {}, steps: [] }} onDone={() => {}} />);
     fireEvent.click(view.getByRole("button", { name: "介绍页 2" }));
-    const icio = view.getByRole("button", { name: /OECD ICIO/ });
+    const icio = view.getByRole("button", { name: /投入产出数据（来源待确认）/ });
     const shock = view.getByRole("button", { name: /贸易政策冲击面板/ });
     expect(icio.getAttribute("aria-expanded")).toBe("false");
     expect(shock.getAttribute("aria-expanded")).toBe("false");
-    expect(view.getByRole("dialog").querySelectorAll(".intro-card-facts li").length).toBe(6);
+    expect(view.getByRole("dialog").querySelectorAll(".intro-card-facts li").length).toBe(5);
     fireEvent.click(icio);
     fireEvent.click(shock);
     expect(icio.getAttribute("aria-expanded")).toBe("true");

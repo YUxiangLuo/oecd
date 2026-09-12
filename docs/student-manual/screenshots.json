@@ -1,158 +1,163 @@
 {
-  "captured_on": "2026-09-07",
-  "code_commit": "c2e649a",
-  "data_release": "0dfef645fa13497ea5eaa2077265a4e7",
-  "source": "agent-browser 0.36.0, actual student operations in an isolated classroom",
+  "captured_on": "2026-09-12",
+  "code_commit": "9225a78",
+  "code_state": "Base commit plus uncommitted teaching-clarity changes; not a clean-commit capture. Capture predates the final step 6 handoff wording fix and its test; that collapsed detail is not visible in these screenshots.",
+  "code_sources_sha256": "09a5a90367e1ef35fd505a806de2949d4dd76aebc3cbc0166d66f029c8cd3aad",
+  "code_sources_hash_rule": "Sorted frontend/src and gvcsim .ts/.tsx/.css/.py paths: path UTF-8 + NUL + file bytes + NUL.",
+  "data_release": "4e25ace5843d4fdd9363f12d22780bb4",
+  "data_source": "ci_synthetic_icio",
+  "production_data": false,
+  "source": "agent-browser 0.37.1, actual student operations in an isolated PostgreSQL instance and copied dataset",
   "viewport": {
     "width": 1280,
     "height": 960,
     "device_scale_factor": 2
   },
-  "note": "Whole-page and native element screenshots; example account and grading only.",
+  "note": "Whole-page and native element screenshots. Generated example account; no real student data. All four regressions retain invalid_design diagnostics. The 93-point grade only demonstrates the workflow.",
   "screenshots": [
     {
       "file": "screenshots/00-login.png",
       "width": 2560,
       "height": 1920,
-      "sha256": "613639ce1ae8e2158c4f34fa94cf2401cc5e11c178e9f7dab3c772db550aebaf"
+      "sha256": "5e203cc655f623e8c1cc3cdeba09d5ddf2c20cb40fd7ac3eb0324c389b413090"
     },
     {
       "file": "screenshots/01-icio.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "e4d339b867a8c9cea575bf7d43b3d23a76ee14fa54e5a72a66b20c1faeeacb39"
+      "height": 1518,
+      "sha256": "fc9564aef56065c262dc4e058eab38993a2f303663b396e1d08e98842be2ce18"
     },
     {
       "file": "screenshots/01-quiz.png",
       "width": 1880,
-      "height": 634,
-      "sha256": "ffd79a8413a00a35d1316cb6955ccfc004b4f88d3f10814c796a631f1d95f4b0"
+      "height": 690,
+      "sha256": "5e1fe6ba5472ae6e49db525964277b46fad2ce7fd79948391733889abe6e6f31"
     },
     {
       "file": "screenshots/02-indicators.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "7b947cbb43196f336cfe0bea2927be269bb6018ede43aa37b5330cc51ecd3e6f"
+      "height": 1518,
+      "sha256": "5591984a9db9ca4cebdaf11de4e09732fab84211edb0ba995e53ce8eb04a8b20"
     },
     {
       "file": "screenshots/03-indicators.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "8ac64e4e8a506ca238ccbf4a48f27b025daee2efbf015282810dbcd7e4ed7ef7"
+      "height": 1518,
+      "sha256": "c5f88e296d8f7c9320e143e6f6d8a6a93dcf43c37e87b137859107e66b08038c"
     },
     {
       "file": "screenshots/04-indicators.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "6af2f2e914490638b3aa7454108d61a43da3b22a0b008c2f4f4632b78993428c"
+      "height": 1518,
+      "sha256": "7e7f601dd974c2c0986fde478ca24954566371d5b22de48dcdeecbc54a8c6182"
     },
     {
       "file": "screenshots/05-indicators.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "d6b7046c20a107e03114548d763f34b6a6c28135b705fbf9e2c5331be233b954"
+      "height": 1518,
+      "sha256": "ec379bee015b55d6c9545b857918e9054e2df3e98c819f67f077131b393df7f2"
     },
     {
       "file": "screenshots/06-visualization.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "ebe9b7ef87a1e41b46b4b292491ceada6c3a2d367ee74baf948108fa8a9f7542"
+      "height": 1518,
+      "sha256": "5f2e466608b3c9a5ff81fafa7fbcb7a90c2dca3cfdddbc111dd82a07e510a247"
     },
     {
       "file": "screenshots/07-visualization.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "108c62f372c01ff1f17b73cfe9f18c781c1844bfc849b9c378123d416ae07918"
+      "height": 1518,
+      "sha256": "da2de8e1c0b33b1396728804d793bbc4370ff20fa7827adfc989a2ba3dbbaa88"
     },
     {
       "file": "screenshots/08-visualization.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "374ac9a72e4aaf9a34572e69553f74ce332caa69dc4135a0a1660a7c15522aba"
+      "height": 1518,
+      "sha256": "801e2959b374629fd4ef642fdca07d2fdc2df251fb7592f30f1771834bd90f9c"
     },
     {
       "file": "screenshots/09-network.png",
       "width": 2496,
       "height": 1856,
-      "sha256": "ed7288d1ccf9ce19cbbb47a30d3f0b9cfa9395e81c300737cfb22b5fda9cd801"
+      "sha256": "bcc0db409ba46933733fa092ed4542770a8ae274754d6f7dac9c5af98783e775"
     },
     {
       "file": "screenshots/10-crosswalk.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "b478468ab5f4bdfc5f9538f7bf1bfbda82c13412f01f884a34bfa893bd663318"
+      "height": 1518,
+      "sha256": "f03b4767b4c1088e6ebc418a91a7ad6da5cb54b675103352a496ae2bf298d732"
     },
     {
       "file": "screenshots/10-shocks.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "d108fce937dd9b31aa829ed8e9a0e3d98115236bca75ac2e23c4054c4135dabd"
+      "height": 1518,
+      "sha256": "f1a95a7c4f12d09031b6217706157cb731fdaf9588cffaa88980018a5cc01608"
     },
     {
       "file": "screenshots/11-method-options.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "d5ed6e773ae6793cf02ab4dc573b521d79d28dd04ee780925f974785bcb24691"
+      "height": 1518,
+      "sha256": "375af0a21ec066a459657681229be9af83639107a48a98208457256dd3a3d4de"
     },
     {
       "file": "screenshots/11-regression-result.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "79ccb86eb5952717aea8d85eafffe27386aa97a7635ed5873d92a221ac4a9b26"
+      "height": 1518,
+      "sha256": "42fe61a9405d369c7a765809d93ad14d6b1ca8d1d86e26aa954cf02afcb513c0"
     },
     {
       "file": "screenshots/11-regression-settings.png",
-      "width": 1880,
-      "height": 732,
-      "sha256": "ad35ec62babdb890f8964b12d80176c5463ad2404c85d8d7d33a5ce0afa1e3f3"
+      "width": 2560,
+      "height": 1920,
+      "sha256": "b6e5205086d123f319c034163c72ab34dae8de1b21dbea4f90e7a060e37530c5"
     },
     {
       "file": "screenshots/12-regression-result.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "287e4bc507caaaa68ffc9287cd3c77d7c61bb21b08de426c59b7cd8c93dcd20c"
+      "height": 1518,
+      "sha256": "f124f4f3260c1794a36c4602a44a4cf1d621dfbe2c2568fad48bcc0b4c1e0321"
     },
     {
       "file": "screenshots/13-regression-result.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "91cfda7c3c3661b11760bd4f0fe87937e713248a9c51f0770d773468f5297767"
+      "height": 1518,
+      "sha256": "886e3591ef90f2a0d6a952b66a60a33556c3adb015999d341eb2068a7cdc8438"
     },
     {
       "file": "screenshots/14-regression-result.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "bf0a47e724a6432c7ad9e5eaa7e81a0cd17e12677992c27afcc51932ea3fb416"
+      "height": 1518,
+      "sha256": "917f3a0549f386aebd66a7c294e62d7bd9f71c7b280df574626a0d42773d932a"
     },
     {
       "file": "screenshots/15-graded.png",
       "width": 1880,
       "height": 100,
-      "sha256": "12d957e1ac4ae798200daef8965e6bc332da4711f0325960e9ad65214494801c"
+      "sha256": "43ab0a7f34bcb4aac98cb2f798ae1052636fc3816a113186abef8f16c80e3743"
     },
     {
       "file": "screenshots/15-material-gate.png",
-      "width": 1984,
-      "height": 1516,
-      "sha256": "631cbfdb0dadfec9bccbfcf8d72993ee76e0495de427f70daad5db2e1673eb2a"
+      "width": 2560,
+      "height": 1920,
+      "sha256": "4c49880dfd7cde0cd137c64ae58f62ce73078b8bdfcf07a6ee11e4befd512293"
     },
     {
       "file": "screenshots/15-report.png",
       "width": 1984,
-      "height": 1516,
-      "sha256": "d682b14d2281dbf9d69bffd7b57a373036de8717c06638df96916273bd86e2c9"
+      "height": 1518,
+      "sha256": "5ce8d474a8026752ea76704f10f56061ef852d62c629a4283c8b71af5a291bde"
     },
     {
       "file": "screenshots/15-submitted.png",
       "width": 1880,
       "height": 100,
-      "sha256": "b483c4fe2861718376c4082a05fa94df0c898b50ccb357f119257a3fe963c251"
+      "sha256": "897119b3cfc4cc228e7e915154b90a46976b3cc71bcaf00dcef6599a0efdaa7f"
     },
     {
       "file": "screenshots/15-writing.png",
       "width": 1880,
-      "height": 1022,
-      "sha256": "e2160e5ee234d5600799840b45aca500629de6847fed9e7fdb120d2344a8f2a9"
+      "height": 1010,
+      "sha256": "ebce33057c9ffa612b06d26b4eb7e54b380361e26360dc9be11b6848d595bae6"
     }
   ]
 }

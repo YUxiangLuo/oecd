@@ -1159,15 +1159,23 @@ export function RegressionRunLab({
 
   return (
     <div className="reg-workbench">
+      <FamilyMap
+        current={outcome}
+        history={history}
+        getStep={getStep}
+        onNavigateStep={onNavigateStep}
+        revealCurrent={readingCorrect}
+        currentDirection={verdict?.state}
+      />
       <section className="reg-run-card">
         <span className="reg-section-step">1 · 先运行同一套基准比较</span>
         <h3>{lessonQuestion(outcome, shockType, method)}</h3>
         <div className="metric-facts">
-          <span><b>本步指标</b>{lesson.metric}</span>
+          <span><b>本步指标</b>{lesson.shortMetric}</span>
           <span><b>读数单位</b>{lesson.unit}</span>
           <span><b>比较方法</b>{METHOD_LABELS[method] ?? method}</span>
         </div>
-        <div className="reg-boundary">真实 OECD ICIO 指标 + 拟真冲击；默认关税基准用于教学估计，不构成现实政策结论。</div>
+        <div className="reg-boundary">当前发布指标 + 教学政策冲击；数据来源见课程数据标签，结果不构成现实政策结论。</div>
         <div className="basic-settings">
           <div><span>冲击</span><Pills label="政策冲击" options={options?.shock_types ?? []} value={shockType} onChange={(value) => setSetting("shockType", value)} labelMap={options?.shock_type_labels} disabled={settingsDisabled} /></div>
         </div>
@@ -1216,15 +1224,6 @@ export function RegressionRunLab({
           {weightMode === "contemporaneous" && <div className="challenge-note">当期贸易结构可能已受政策影响，因此该口径只用于和固定处理前权重对照，不能替代基准识别。</div>}
         </details>
       </section>
-
-      <FamilyMap
-        current={outcome}
-        history={history}
-        getStep={getStep}
-        onNavigateStep={onNavigateStep}
-        revealCurrent={readingCorrect}
-        currentDirection={verdict?.state}
-      />
 
       {state.data?.qualified_run && (
         <QualifiedRegressionRunCard

@@ -161,8 +161,8 @@ function effectLabel(response: RegressionResponse, coefficient: CoefStat | null)
 
 const INTERPRETATION: Record<RegressionOutcome, { negative: string; positive: string }> = {
   trade: {
-    negative: "课程 WWZ 口径（不含 FDC 与 TLS）的 FVA 构成下降；它不是 OECD EXGR_FVASH，也不能单独证明供应链已经回流。",
-    positive: "课程 WWZ 口径（不含 FDC 与 TLS）的 FVA 构成上升；它不是 OECD EXGR_FVASH，仍需检查识别假设和其他共同变化。",
+    negative: "出口分解中外国增加值这一项的占比下降，但不能单独证明供应链已经回流。",
+    positive: "出口分解中外国增加值这一项的占比上升，仍需检查比较条件和其他共同变化。",
   },
   production: {
     negative: "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
@@ -183,7 +183,7 @@ export function buildRegressionVerdict(
   response: RegressionResponse,
 ): RegressionVerdict {
   const coefficient = mainPolicyCoefficient(response);
-  const boundary = "真实 OECD ICIO 指标 + 拟真政策冲击；本结果用于教学，不构成现实政策结论。";
+  const boundary = "当前发布指标 + 教学政策冲击；数据来源见课程数据标签，本结果不构成现实政策结论。";
   const support = response.result.support;
   const reasons = [...new Set([
     ...(response.result.status_reasons ?? []), ...(support?.reasons ?? []),

@@ -5,9 +5,8 @@ export type ReadingDirection = "negative" | "positive" | "insufficient" | "suppr
 interface RegressionLesson {
   outcome: RegressionOutcome;
   step: number;
-  metric: string;
   shortMetric: string;
-  /** 家族图上的两个字。 */
+  /** 家族图上的类别名。 */
   family: string;
   /** 家族图上“这一类在量什么”。 */
   measure: string;
@@ -41,31 +40,29 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
   trade: {
     outcome: "trade",
     step: 11,
-    metric: "课程 FVA 份额（WWZ FVA（不含 FDC） / VA+TLS 毛出口；非 OECD EXGR_FVASH）",
-    shortMetric: "课程 FVA 份额",
+    shortMetric: "外国增加值项占比",
     family: "贸易流",
-    measure: "出口中 WWZ 外国增加值项的构成",
+    measure: "出口价值构成变了吗？",
     unit: "百分点",
     priorStep: 2,
     priorLabel: "GVC 总贸易流分解指标",
-    focus: "本步看贸易壁垒有没有改变出口中 WWZ 外国增加值项的构成",
+    focus: "观察出口分解中的外国增加值这一项，看它所占的比例如何变化",
     learnThis: "先用统一处理时点的四格建立 DID 直觉，再看实际分批处理：系统逐 cohort、逐时期比较，并只让从未处理或截至比较期尚未处理的对象进入对照。",
     definition: "它是 WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 毛出口的比重。毛出口全部外国纯 VA 含量为 FVA+FDC；OECD 还采用包含相关 TLS 的 VA 口径，因此本指标不是 EXGR_FVASH。",
-    downMeaning: "负向变化表示课程 WWZ FVA 份额相对下降，但不能单独证明生产已经回流。",
-    upMeaning: "正向变化表示课程 WWZ FVA 份额相对上升，但仍需结合不确定性和识别假设。",
+    downMeaning: "负向变化表示外国增加值这一项的占比相对下降，但不能单独证明生产已经回流。",
+    upMeaning: "正向变化表示外国增加值这一项的占比相对上升，但仍需结合不确定性和比较条件。",
     caution: "份额按百分点读。全球投入链会把政策传给未直接处理对象，no-interference/SUTVA 不能自动成立；2018–2020 又与 COVID-19 重叠，年份效应不能吸收国家×行业异质疫情冲击。不要和长度、网络系数比大小。",
     howToRead: "先读效应大小和 95% 区间，再判断方向是否确定。区间未跨 0 也只是这一项结果的统计证据，不能跳过识别假设；区间跨 0 就记「当前证据看不出方向」，不是零效应。",
     writeDown: "记下本步方向（升 / 降 / 看不出）和单位（百分点），留到第 15 步和另外三类并读。",
-    dontClaim: "不要写成「已经证明生产回流」。FVA 份额下降只说明不含 FDC 的 WWZ 外国增加值项构成相对下降。",
+    dontClaim: "不要写成「已经证明生产回流」。这一项占比下降，不能告诉我们企业是否把生产搬回国内。",
     guidedExperiment: "检查 cohort 数量、对照组构成与 no-interference 假设；同期出口、增加值和产业份额可能是处理后变量，不能当作普通遗漏变量控制。",
   },
   production: {
     outcome: "production",
     step: 12,
-    metric: "复杂 GVC 生产份额（多次跨境活动的 SVA 构成）",
     shortMetric: "复杂 GVC 份额",
     family: "生产",
-    measure: "多次跨境活动的构成",
+    measure: "多次跨境生产的占比变了吗？",
     unit: "百分点",
     priorStep: 3,
     priorLabel: "GVC 生产分解指标",
@@ -83,10 +80,9 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
   length: {
     outcome: "length",
     step: 13,
-    metric: "前向 GVC 生产长度（PLv_GVC）",
     shortMetric: "跨境生产长度",
     family: "长度",
-    measure: "生产链条有多长",
+    measure: "生产链变长还是变短了？",
     unit: "生产环节长度单位",
     priorStep: 4,
     priorLabel: "GVC 长度分解指标",
@@ -104,10 +100,9 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
   network: {
     outcome: "network",
     step: 14,
-    metric: "全正边二值网络介数（探索性拓扑基准）",
     shortMetric: "全正边二值介数",
-    family: "网络",
-    measure: "节点的拓扑位置",
+    family: "网络（探索性）",
+    measure: "网络中的连接位置变了吗？",
     unit: "中心性原始单位，并补充标准差单位",
     priorStep: 5,
     priorLabel: "全球生产网络指标",
@@ -144,7 +139,7 @@ export function lessonQuestion(outcome: RegressionOutcome, shockType: string, me
   if (method === "twfe_intensity") {
     return `${shock}变强时，${lesson.shortMetric}如何随之变化？`;
   }
-  return `受到${shock}后，各处理 cohort 的${lesson.shortMetric}相对从未或尚未处理对象发生了怎样的变化？`;
+  return `受到${shock}后，${lesson.shortMetric}相对从未或尚未受冲击的对象如何变化？`;
 }
 
 export function comparisonExplanation(method: string): string {

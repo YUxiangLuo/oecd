@@ -266,6 +266,16 @@ describe("cross-step comparison guidance", () => {
     );
     expect(html).toContain("步骤 11 · 用四格数字理解比较");
     expect(html).toContain("这组数字只用来讲清四格，不是本步估计结果");
+    const dom = new DOMParser().parseFromString(html, "text/html");
+    expect(dom.querySelectorAll(".reg-family-map").length).toBe(1);
+    expect(dom.querySelector(".reg-workbench")?.firstElementChild?.className).toBe("reg-family-map");
+    expect(dom.querySelector(".metric-facts")?.textContent).toContain("外国增加值项占比");
+    expect(dom.querySelector(".reg-run-card")?.textContent).not.toMatch(/课程 FVA|EXGR_FVASH|真实 OECD/);
+    expect(dom.querySelector(".reg-family-map")?.textContent).toContain("网络（探索性）");
+    // Detailed accounting definitions remain available in the existing collapsed explanation.
+    expect(dom.querySelector(".reg-question-card")?.hasAttribute("open")).toBe(false);
+    expect(dom.querySelector(".reg-question-card")?.textContent).toContain("FVA+FDC");
+    expect(dom.querySelector(".reg-question-card")?.textContent).toContain("EXGR_FVASH");
   });
 });
 

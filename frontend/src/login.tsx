@@ -12,7 +12,7 @@ import type { LoginResponse } from "./types";
 import { userFacingRequestError } from "./user-facing-error";
 
 export const LOGIN_FLOW = ["数据接入", "指标计算", "可视化分析", "回归设计与建模", "实验闭环"];
-export const LOGIN_DATA_LABEL = "OECD ICIO 2023 版 · 数据期 2016–2020";
+export const LOGIN_DATA_LABEL = "数据来源与范围以登录后的课程数据说明为准";
 
 export const DEMO_STUDENT_COUNT = 50;
 const SEEN_DEMO_STUDENTS_KEY = "gvcsim_seen_demo_students";
@@ -164,14 +164,13 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
 
         <div className="login-hero">
           <h1>
-            从真实指标出发,
+            从投入产出数据出发，
             <br />
             亲手分析全球价值链变化。
           </h1>
           <p className="login-desc">
-            基于 OECD 全球投入产出数据库的教学实验平台。
-            从 76 个具名经济体 + ROW 剩余地区账户、45 个行业的真实贸易流出发，计算价值链指标，
-            再用拟真政策冲击练习实证比较、识别假设与不确定性判断，最终生成实验报告。
+            使用跨国投入产出表，计算价值链指标、比较经济体，
+            再用教学政策冲击练习实证比较、识别假设与不确定性判断，最终生成实验报告。
           </p>
           <div className="login-flow">
             {LOGIN_FLOW.map((p, i) => (
