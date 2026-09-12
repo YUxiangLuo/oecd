@@ -279,6 +279,66 @@ describe("cross-step comparison guidance", () => {
   });
 });
 
+describe("task-first regression setup", () => {
+  for (const outcome of ["trade", "production", "length", "network"] as const) {
+    test(`${outcome} keeps optional controls in one existing disclosure`, () => {
+      const html = renderToStaticMarkup(<RegressionRunLab {...labProps(regressionState())}
+        step={{ ...regressionStep, regression_outcome: outcome }} />);
+      const dom = new DOMParser().parseFromString(html, "text/html");
+      const run = dom.querySelector(".reg-run-card")!;
+      const advanced = run.querySelector(".advanced-settings")!;
+      const focus = run.querySelector(".reg-lesson-focus")!;
+      expect(advanced.hasAttribute("open")).toBe(false);
+      expect(advanced.querySelector('[aria-label="政策冲击"]')).not.toBeNull();
+      expect(advanced.querySelector('[aria-label="控制变量"]')).toBeNull();
+      expect(advanced.querySelector('input[type="checkbox"]')).toBeNull();
+      expect(advanced.textContent).toContain("控制变量不开放");
+      expect(advanced.textContent).toContain("当前分批处理方法不开放交互项");
+      expect(run.querySelectorAll(":scope > button")).toHaveLength(1);
+      expect(run.querySelectorAll("details")).toHaveLength(1);
+      const summary = run.querySelector(":scope > .run-summary")!.textContent!;
+      expect(summary).toContain("tariff");
+      expect(summary).toContain("country_industry");
+      expect(summary).toContain("固定处理前权重");
+      expect(summary).not.toMatch(/无交互|基准教学面板|cohort/);
+      expect(advanced.textContent).toContain("完整设定");
+      expect(advanced.textContent).toContain("无交互");
+      expect(focus.textContent).toContain({ trade: "四格例子", production: "生产规模", length: "不是百分点", network: "探索性拓扑" }[outcome]);
+      expect(dom.querySelector(".reg-compare-card")?.hasAttribute("open")).toBe(outcome === "trade");
+    });
+  }
+
+  test("a restored nondefault scenario and interaction remain visible without opening settings", () => {
+    const settings = { ...DEFAULT_REGRESSION_SETTINGS, shockType: "sanctions", method: "twfe_intensity", scenario: "noisy", interaction: true };
+    const html = renderToStaticMarkup(<RegressionRunLab {...labProps(regressionState())}
+      step={{ ...regressionStep, regression_outcome: "trade" }} settings={settings} />);
+    const dom = new DOMParser().parseFromString(html, "text/html");
+    const run = dom.querySelector(".reg-run-card")!;
+    const summary = run.querySelector(":scope > .run-summary")!.textContent!;
+    expect(run.querySelector(".metric-facts")?.textContent).toContain("TWFE（描述性）");
+    const focus = run.querySelector(".reg-lesson-focus")!.textContent!;
+    expect(focus).toContain("看冲击强度变大时");
+    expect(focus).not.toMatch(/逐批次|从未处理|四格例子/);
+    expect(summary).toContain("sanctions");
+    expect(summary).toContain("含交互");
+    expect(summary).toContain("人为加入测量噪声");
+    expect(run.querySelector('input[type="checkbox"]')?.hasAttribute("checked")).toBe(true);
+    expect(run.querySelector(".reg-compare-card")).toBeNull();
+  });
+});
+
+test("restored dynamic ATT guidance describes event time, not an absent four-cell example", () => {
+  const settings = { ...DEFAULT_REGRESSION_SETTINGS, method: "event_study" };
+  const html = renderToStaticMarkup(<RegressionRunLab {...labProps(regressionState())}
+    step={{ ...regressionStep, regression_outcome: "trade" }} settings={settings} />);
+  const dom = new DOMParser().parseFromString(html, "text/html");
+  const focus = dom.querySelector(".reg-lesson-focus")!.textContent!;
+  expect(focus).toContain("逐事件时间汇总各批次的 ATT");
+  expect(focus).toContain("冲击前看不出差别不能证明趋势可比");
+  expect(focus).not.toContain("四格例子");
+  expect(dom.querySelector(".reg-compare-card")).toBeNull();
+});
+
 describe("preserved qualified regression result", () => {
   test("renders the saved design/result rather than a current invalid run", () => {
     const restored = structuredClone(savedRun);
@@ -299,6 +359,7 @@ describe("preserved qualified regression result", () => {
       />,
     );
     expect(html).toContain("已由服务器确认");
+    expect(html).toContain("已保留一份对照快照");
     expect(html).toContain("已保留的可推断回归快照");
     expect(html).not.toContain("正在等待自动保存");
     expect(html).toContain("tariff");
@@ -326,6 +387,8 @@ describe("preserved qualified regression result", () => {
     );
     expect(pendingHtml).toContain("估计完成，正在保存到第 15 步");
     expect(pendingHtml).toContain("正在等待自动保存");
+    expect(pendingHtml).toContain("尚未由服务器确认");
+    expect(pendingHtml).not.toContain("已保留一份");
     expect(pendingHtml).not.toContain("已由服务器确认");
     expect(pendingHtml).not.toContain("已保留的可推断回归快照");
 
@@ -352,6 +415,8 @@ describe("preserved qualified regression result", () => {
       />,
     );
     expect(failedHtml).toContain('role="alert"');
+    expect(failedHtml).toContain("尚未由服务器确认");
+    expect(failedHtml).not.toContain("已保留一份");
     expect(failedHtml).toContain("同步失败；第15步不会在服务器确认前使用");
     expect(failedHtml).not.toContain("已保留的可推断回归快照");
   });

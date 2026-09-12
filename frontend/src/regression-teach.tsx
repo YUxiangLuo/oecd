@@ -1,10 +1,8 @@
 import {
   FAMILY_STEPS,
   familyDirectionLabel,
-  nextRegressionFamily,
   REGRESSION_FAMILIES,
   REGRESSION_LESSONS,
-  reportTakeaway,
   type ReadingDirection,
 } from "./regression-lessons";
 import { buildRegressionVerdict } from "./regression-verdict";
@@ -74,14 +72,12 @@ export function FamilyMap({
   history,
   getStep,
   onNavigateStep,
-  revealCurrent = true,
   currentDirection,
 }: {
   current: RegressionOutcome;
   history: FamilyHistory;
   getStep?: (step: number) => SiblingStepData | undefined;
   onNavigateStep?: (step: number) => void;
-  revealCurrent?: boolean;
   currentDirection?: ReadingDirection;
 }) {
   return (
@@ -97,7 +93,7 @@ export function FamilyMap({
           const directionState = currentStep && currentDirection ? currentDirection : verdict?.state;
           const direction = directionState ? familyDirectionLabel(directionState) : null;
           const status = currentStep
-            ? direction && revealCurrent ? `当前 · ${direction}` : direction ? "当前 · 已估计，待判断" : "当前"
+            ? direction ? `当前 · ${direction}` : "当前"
             : (direction ?? "未估计");
           return (
             <li key={item.outcome} className={`reg-family-item${currentStep ? " current" : ""}${verdict ? " has-run" : ""}`}>
@@ -211,7 +207,7 @@ export function RegressionReadingCheck({
   const feedback = answer == null
     ? null
     : correct
-      ? "判断正确。下方已显示系统解释，请对照你的读法。"
+      ? "判断正确。请对照上方结果说明，检查自己的理由。"
       : expected === "blocked"
         ? "再看一次支持度和冲击前诊断：只要推断条件检查没有通过，就不能用点估计判断升降。"
         : expected === "insufficient"
@@ -221,7 +217,7 @@ export function RegressionReadingCheck({
     <section className={`reg-reading-check${correct ? " correct" : answer ? " retry" : ""}`} aria-labelledby="reg-reading-check-title">
       <div className="reg-reading-check-head">
         <div>
-          <span className="reg-section-step">先由你判断</span>
+          <span className="reg-section-step">练习 · 再判断一次</span>
           <h3 id="reg-reading-check-title">先看结果状态，再看估计与区间：这次结果该怎么说？</h3>
         </div>
         <span className="reg-formative-badge">练习 · 不影响完成状态</span>
@@ -298,54 +294,6 @@ export function RegressionEvidenceMatrix({
           </tbody>
         </table>
       </div>
-    </section>
-  );
-}
-
-export function ReadingCoach({
-  outcome,
-  direction,
-  effect,
-  evidence,
-  interpretation,
-  onNavigateStep,
-}: {
-  outcome: RegressionOutcome;
-  direction: ReadingDirection;
-  effect: string;
-  evidence: string;
-  interpretation: string;
-  onNavigateStep?: (step: number) => void;
-}) {
-  const lesson = REGRESSION_LESSONS[outcome];
-  const next = nextRegressionFamily(outcome);
-  return (
-    <section className="reg-guide-card">
-      <span className="reg-section-step">老师带读 · 按你这次结果</span>
-      <ol className="reg-reading-list">
-        <li>
-          <b>先看是否允许推断，再读估计与区间。</b>
-          {evidence}
-        </li>
-        <li>
-          <b>再用本步指标说一遍。</b>
-          {interpretation}
-        </li>
-        <li>
-          <b>能写进报告的一句话。</b>
-          {reportTakeaway(outcome, direction, effect)} {lesson.dontClaim}
-        </li>
-      </ol>
-      <p className="reg-next-move">
-        {next
-          ? <>下一类指标是步骤 {next.step} 的{next.family}（{next.measure}）。比较方式不用换。</>
-          : <>四步已经齐了。到第 15 步并排写清方向、区间或无法评估的原因，不要比系数大小。</>}
-        {onNavigateStep && (
-          <button type="button" className="gate-link" onClick={() => onNavigateStep(next ? next.step : 15)}>
-            {next ? `去步骤 ${next.step}` : "去写报告"}
-          </button>
-        )}
-      </p>
     </section>
   );
 }

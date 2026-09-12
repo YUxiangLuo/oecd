@@ -6,8 +6,10 @@ import {
   PretrendCheck,
   RegressionCoefficientTable,
   RegressionPretrendEvidence,
+  RegressionResultCard,
 } from "./regression";
 import { GLOBAL_PRETREND_SUPPRESSION_COPY } from "./regression-event-support";
+import { EventStudyChart } from "./viz/regression/charts";
 import type { EventSupport, RegressionResponse } from "./types";
 
 function validEventSupportWithThinLead(): EventSupport {
@@ -105,6 +107,43 @@ describe("event-study inference surfaces fail closed for legacy payloads", () =>
     expect(markup).toContain("p = 0.001");
     expect(markup).toContain("已检出冲击前差异，方向性解读已关闭");
     expect(markup).not.toContain("未检出差异不是平行趋势");
+    const card = renderToStaticMarkup(createElement(RegressionResultCard, { outcome: "trade", response, stale: false }));
+    expect(card).toContain("冲击前趋势存在明显差异");
+    expect(card).not.toContain("verdict-metrics");
+    expect(card).not.toContain("+2.00");
+    expect(card).toContain("逐项区间，不是四项结果或整条动态路径的同时置信带");
+    const chart = renderToStaticMarkup(createElement(EventStudyChart, {
+      coefs: response.result.coefs, notes: [], pretrend: response.result.diagnostics.pretrend,
+      eventSupport: response.result.event_support, globalSupport: response.result.support,
+      globalStatus: response.result.status,
+    }));
+    expect(chart).toContain("须 = 95% 置信区间");
+  });
+
+  test("an unsupported main event period keeps interval coverage guidance for other supported periods", () => {
+    const response = legacyEventResponse(validEventSupportWithThinLead());
+    response.design.interaction = false;
+    const support = response.result.event_support!;
+    const current = support.periods[2];
+    support.periods.push({ ...current, term: "k=+1", event_time: 1 });
+    support.periods = support.periods.filter((period) => period.term !== "k=-4");
+    Object.assign(current, {
+      contributing_rows: 4, contributing_entities: 4, contributing_clusters: 4,
+      cohorts: { "2018": 4 }, period_supported: false, inference_supported: false,
+      suppress_inference: true, reason_codes: ["insufficient_period_clusters"], reasons: ["当期支持不足"],
+    });
+    response.result.coefs.push({ ...response.result.coefs[0], name: "k=+1" });
+    response.result.coefs[0].ci_low = null;
+    response.result.coefs[0].ci_high = null;
+    const card = renderToStaticMarkup(createElement(RegressionResultCard, { outcome: "trade", response, stale: false }));
+    expect(card).toContain("该事件期处理聚类支持不足");
+    expect(card).not.toContain("verdict-metrics");
+    expect(card).toContain("不是四项结果或整条动态路径的同时置信带");
+    const chart = renderToStaticMarkup(createElement(EventStudyChart, {
+      coefs: response.result.coefs, notes: [], eventSupport: support,
+      globalSupport: response.result.support, globalStatus: response.result.status,
+    }));
+    expect(chart).toContain("支持充分期：点和 95% 置信区间");
   });
 
   test("interaction pretrend panel separates one lead from two joint restrictions", () => {
@@ -248,6 +287,10 @@ describe("event-study inference surfaces fail closed for legacy payloads", () =>
       expect(pretrendMarkup).toContain("整体设计门禁已抑制");
       expect(pretrendMarkup).not.toContain("旧诊断不应泄漏");
       expect(pretrendMarkup).not.toContain("9.000");
+      const card = renderToStaticMarkup(createElement(RegressionResultCard, { outcome: "trade", response, stale: false }));
+      expect(card).not.toContain("verdict-metrics");
+      expect(card).not.toContain("+2.00");
+      expect(card).not.toContain("+3.00");
     }
   });
 

@@ -116,6 +116,8 @@ describe("student-first regression reading", () => {
       onAnswer: () => {},
     }));
     expect(correct).toContain("判断正确");
+    expect(correct).toContain("上方结果说明");
+    expect(correct).not.toMatch(/已显示|解锁/);
   });
 
   test("puts all four saved families into one report-ready evidence matrix", () => {
@@ -135,20 +137,18 @@ describe("student-first regression reading", () => {
     expect(html).not.toContain("</b><span>百分点</span>");
   });
 
-  test("keeps the current family direction hidden until the student has judged it", () => {
+  test("shows the current evidence state without an exercise gate, preferring the displayed run", () => {
     const trade = response("trade", coefficient(-0.02, -0.03, -0.01));
-    const hidden = renderToStaticMarkup(createElement(FamilyMap, {
+    const current = renderToStaticMarkup(createElement(FamilyMap, {
       current: "trade",
       history: { trade: [{ response: trade }] },
-      revealCurrent: false,
     }));
-    expect(hidden).toContain("当前 · 已估计，待判断");
-    expect(hidden).not.toContain("当前 · 下降");
+    expect(current).toContain("当前 · 下降");
+    expect(current).not.toContain("待判断");
 
     const revealed = renderToStaticMarkup(createElement(FamilyMap, {
       current: "trade",
       history: { trade: [{ response: trade }] },
-      revealCurrent: true,
       currentDirection: "suppressed",
     }));
     expect(revealed).toContain("当前 · 无法评估");

@@ -6,7 +6,6 @@ import {
   nextRegressionFamily,
   REGRESSION_FAMILIES,
   REGRESSION_LESSONS,
-  reportTakeaway,
 } from "./regression-lessons";
 
 describe("regression lessons", () => {
@@ -50,19 +49,15 @@ describe("regression lessons", () => {
     expect(REGRESSION_LESSONS.trade.howToRead).toContain("先看结果状态");
     expect(REGRESSION_LESSONS.trade.howToRead).toContain("区间跨 0 是「看不出方向」");
     expect(REGRESSION_LESSONS.trade.howToRead).toContain("停止推断则记「无法评估」");
-    expect(REGRESSION_LESSONS.production.writeDown).toContain("无法评估");
+    expect(REGRESSION_LESSONS.production.writeDown).toContain("不能把构成变化解释为产量变化");
     expect(REGRESSION_LESSONS.production.guidedExperiment).toContain("冲击 × 基期GVC");
     expect(familyDirectionLabel("suppressed")).not.toBe(familyDirectionLabel("insufficient"));
   });
 
-  test("report takeaway is a copyable sentence without causal proof", () => {
-    expect(reportTakeaway("trade", "negative", "−1.20 个百分点")).toContain("相对下降");
-    expect(reportTakeaway("length", "insufficient", "—")).toContain("看不出方向");
-    expect(reportTakeaway("network", "suppressed", "—")).toContain("不要把点估计当成方向");
-    expect(reportTakeaway("production", "positive", "+0.40 个百分点")).not.toContain("证明");
-    expect(reportTakeaway("trade", "pretrend", "+1.20 个百分点")).toContain("冲击前已有明显差异");
-    expect(reportTakeaway("trade", "pretrend", "+1.20 个百分点")).toContain("不能写成");
-    expect(reportTakeaway("trade", "pretrend", "+1.20 个百分点")).not.toContain("相对上升（");
+  test("family summaries distinguish all five evidence states", () => {
+    expect(familyDirectionLabel("positive")).toBe("上升");
+    expect(familyDirectionLabel("negative")).toBe("下降");
+    expect(familyDirectionLabel("suppressed")).toBe("无法评估");
     expect(familyDirectionLabel("insufficient")).toBe("看不出");
     expect(familyDirectionLabel("pretrend")).toBe("冲击前已有差异");
   });

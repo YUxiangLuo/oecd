@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from gvcsim.steps import STEPS
 
 
@@ -51,6 +54,28 @@ def test_source_and_actions_follow_current_data_and_actual_controls():
     assert "先看结果状态" in STEPS[10]["tasks"][2]
     assert "换冲击、方法或样本口径（选做）" in STEPS[12]["concept"]
     assert "不能代替提交" in STEPS[14]["tip"]
+
+
+def test_regression_tasks_progress_from_one_worked_example_to_indicator_specific_reading():
+    assert "四格例子" in STEPS[10]["tasks"][0]
+    assert "练习不阻挡结果阅读" in STEPS[10]["tasks"][2]
+    assert "构成变化与生产规模变化" in STEPS[11]["tasks"][0]
+    assert "不是百分点或跨境次数" in STEPS[12]["tasks"][0]
+    assert "探索性拓扑证据" in STEPS[13]["tasks"][0]
+    for item in STEPS[10:14]:
+        assert "实体置换" not in " ".join(item["tasks"])
+
+
+def test_student_manual_source_note_matches_screenshot_manifest():
+    root = Path(__file__).resolve().parents[1]
+    manifest = json.loads((root / "docs/student-manual/screenshots.json").read_text())
+    source_note = (root / "实验手册.md").read_text().split("### 版本与截图说明", 1)[1]
+    assert f"`{manifest['code_commit']}`" in source_note
+    assert f"`{manifest['data_release']}`" in source_note
+    if "uncommitted" in manifest["code_state"]:
+        assert "未提交" in source_note
+        assert "不是干净提交版本" in source_note
+    assert "docs/student-manual/screenshots.json" in source_note
 
 
 def test_regression_handoffs_keep_treatment_fixed_and_change_the_outcome():

@@ -1,8 +1,8 @@
 {
   "captured_on": "2026-09-12",
-  "code_commit": "fd6926c",
-  "code_state": "Base commit plus uncommitted teaching-copy refinement and regression tests; all 24 screenshots recaptured from this worktree, not a clean-commit capture.",
-  "code_sources_sha256": "b27d315b1ba2ca1649b6f9ad923ad5714d75cfb3e3bd7bb3cce9dad12a7f91a2",
+  "code_commit": "b673e23",
+  "code_state": "Base commit plus uncommitted regression simplification, review fixes and tests; all 24 screenshots recaptured after the review fixes from this worktree, not a clean-commit capture.",
+  "code_sources_sha256": "732e9497f0a2b43bb90ed626f660c8b93d03b4c9b7daecaecfbe1c39304c6edb",
   "code_sources_hash_rule": "Sorted frontend/src and gvcsim .ts/.tsx/.css/.py paths: path UTF-8 + NUL + file bytes + NUL.",
   "data_release": "4e25ace5843d4fdd9363f12d22780bb4",
   "data_source": "ci_synthetic_icio",
@@ -19,7 +19,7 @@
       "file": "screenshots/00-login.png",
       "width": 2560,
       "height": 1920,
-      "sha256": "81f18002d5e23672609f91807001218847db53d40183f6c9aeef4a1bda3b3742"
+      "sha256": "f49b9400d8b62869801925df11443a28baa07bcb6d23ffd390c2be77ab42bea9"
     },
     {
       "file": "screenshots/01-icio.png",
@@ -97,43 +97,43 @@
       "file": "screenshots/11-method-options.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "ff8037913d196e780c0145fc83555ef5257d44cb4ad79a8d5c6e1257aefb12e7"
+      "sha256": "a131040a67804028b1b2ced9c121f0daa69c304505b88104eb6df7463a25f052"
     },
     {
       "file": "screenshots/11-regression-result.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "5df9665c151ec6b02b2b347dcc94fd1364391ad7ac5651a1c15fdf15787319c5"
+      "sha256": "cd2b582819589c1a5162a93a0d2beb2aa755c6d94f20fd9b18314eb5f1f31781"
     },
     {
       "file": "screenshots/11-regression-settings.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "ba4bb69f5c6258c253c3420918486f681b27db0860131c54d7786d63859ad5e4"
+      "sha256": "866bde32f80ee03d874a65bdb0ba5e904a02f454ad1b757778106787897aaaa4"
     },
     {
       "file": "screenshots/12-regression-result.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "de9fac46b3a435fd83a68bcf10910bbcd686e79cf6e46544b8768016c91e07d0"
+      "sha256": "547b844410e22244251c810ef0f74ecad16b47f1142e72c39fdd50f8743a11a5"
     },
     {
       "file": "screenshots/13-regression-result.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "e51cbec768d9c0e5293cf1260f5faddb25ebd97f3be68dfafbee0600a34c99c8"
+      "sha256": "dd240cb17baba1cfdc1703159276904fda073cdc6d158cc341a6c04140c0c302"
     },
     {
       "file": "screenshots/14-regression-result.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "23e57c2ffbc683b9937fb3f688610db3a9420a215da65c9cfee5446bbf887586"
+      "sha256": "17063753305c667950b89c49128d37af1fa99ff15b6708492ff4cae08f0faab4"
     },
     {
       "file": "screenshots/15-graded.png",
       "width": 1880,
       "height": 100,
-      "sha256": "881e7b924af0c05b387972c54aa51f5db0ca337d67ce21a58b93f52f31606ed4"
+      "sha256": "d9d74b70162703db9d29fbc741ae31e131979c7c4ff0edaf634f405179d37f13"
     },
     {
       "file": "screenshots/15-material-gate.png",
@@ -145,13 +145,13 @@
       "file": "screenshots/15-report.png",
       "width": 1984,
       "height": 1518,
-      "sha256": "604390d52bf27bda07dce568393706fa5bef553782b83c301ae6e4d71f092424"
+      "sha256": "46275ac436bc8ef2a7ced332547897bf3d784ff3e9b20bb3f77d8d401a9735f2"
     },
     {
       "file": "screenshots/15-submitted.png",
       "width": 1880,
       "height": 100,
-      "sha256": "ea05cdf46922e315894a462a1363b8b89cb38de8647a197031e8cde46081b825"
+      "sha256": "fdbfaa18476d027a3c1ca4142d8f085a9b5ac7974a35d7c0d48c3cb86655af27"
     },
     {
       "file": "screenshots/15-writing.png",

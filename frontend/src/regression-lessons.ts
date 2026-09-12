@@ -47,7 +47,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorStep: 2,
     priorLabel: "GVC 总贸易流分解指标",
     focus: "观察出口分解中的外国增加值这一项，看它所占的比例如何变化",
-    learnThis: "先用统一处理时点的四格理解 DID，再看实际分批处理：系统逐批次、逐时期比较，只用从未处理或截至比较期尚未处理的对象作对照。",
+    learnThis: "先用四格例子理解相对变化，再练习读状态、估计与区间。实际主结果逐批次计算，只用从未处理或截至比较期尚未处理的对象作对照。",
     definition: "它是 WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 毛出口的比重。毛出口全部外国纯 VA 含量为 FVA+FDC；OECD 还采用包含相关 TLS 的 VA 口径，因此本指标不是 EXGR_FVASH。",
     downMeaning: "负向变化表示外国增加值这一项的占比相对下降，但不能单独证明生产已经回流。",
     upMeaning: "正向变化表示外国增加值这一项的占比相对上升，但仍需结合不确定性和比较条件。",
@@ -55,7 +55,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     howToRead: "先看结果状态；允许推断时，再读估计与 95% 区间。区间跨 0 是「看不出方向」，不是零效应；停止推断则记「无法评估」。区间未跨 0 也不能跳过因果解释所需的假设。",
     writeDown: "记下结果状态、估计与单位（百分点）；停止推断时写明原因，留到第 15 步和另外三类并读。",
     dontClaim: "不要写成「已经证明生产回流」。这一项占比下降，不能告诉我们企业是否把生产搬回国内。",
-    guidedExperiment: "检查首次受冲击批次数、对照组构成，以及对照是否也受外溢影响；同期出口、增加值和产业份额可能已受政策影响，不能当作普通控制变量。",
+    guidedExperiment: "选做：查看技术细节中的批次权重与对照支持；这些诊断不能自动证明对照可比，还须考虑投入链外溢。",
   },
   production: {
     outcome: "production",
@@ -67,13 +67,13 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorStep: 3,
     priorLabel: "GVC 生产分解指标",
     focus: "本步看贸易壁垒有没有改变多次跨境活动在 SVA 中的构成",
-    learnThis: "比较方式和步骤 11 相同，换的是指标。本步看多次跨境实现的增加值构成是否变化；它不是规模、韧性或嵌入深度的通用标尺。",
+    learnThis: "基准比较方式不变，本步换看复杂 GVC 份额：构成变化不等于生产规模变化，也不是韧性或嵌入深度的通用标尺。",
     definition: "它衡量增加值经过多次跨境生产后被最终吸收的比例。默认比较方式和上一步相同，本步看的是生产分解这一类指标。",
     downMeaning: "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
     upMeaning: "SVA 中复杂 GVC 增加值份额提高；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
     caution: "区间跨过 0 是「看不出方向」，不是零效应。投入链外溢和贸易转移会污染对照；cohort-aware 主结果当前不发布交互估计。",
     howToRead: "「看不出」是合法结论，不是这步失败。不要拿步骤 11 的 FVA 系数代替本步。",
-    writeDown: "和步骤 11 并排记录：有方向证据、看不出方向，还是无法评估？两步单位都是百分点，仍不要比谁的数字更大。",
+    writeDown: "与步骤 11 并读方向和区间；同为百分点，仍不能把构成变化解释为产量变化。",
     dontClaim: "不要把区间过 0 写成「冲击没有影响」。",
     guidedExperiment: "选做：先把比较方式切换为“连续强度 TWFE（描述性）”，再勾选“冲击 × 基期GVC”比较条件关联；该交互不是 cohort-aware ATT 异质性估计。",
   },
@@ -87,7 +87,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorStep: 4,
     priorLabel: "GVC 长度分解指标",
     focus: "本步看贸易壁垒有没有改变跨境生产链条的长短",
-    learnThis: "本步的单位不是百分点。先核对是否允许推断，再并读方向与区间；不能和份额的系数相减或比大小。",
+    learnThis: "沿用状态优先的读法，但本步的单位不是百分点。长度不是跨境次数，也不能与份额系数相减或比大小。",
     definition: "它以 GVC 活动诱发的累计总产出除以关联增加值；VA 为正时可理解为增加值加权阶段数，存在负 VA 时是有符号账户比值。它不是跨境次数、国家数或网络边数。默认使用 cohort-time ATT；按年动态路径是选做。",
     downMeaning: "负向变化与链条缩短一致，可能来自回流、近岸化或其他生产调整。",
     upMeaning: "正向变化与链条延长一致，但不能单靠一个系数判断企业策略。",
@@ -107,7 +107,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorStep: 5,
     priorLabel: "全球生产网络指标",
     focus: "本步探索贸易壁垒出现后，这套全正边二值编码中的拓扑位置是否变化",
-    learnThis: "介数把微小正边与大额边视为等长，且当前没有边阈值敏感性检验。它描述一套拓扑位置，不是出口规模、经济瓶颈，也不是与前三类主指标等价的政策终点。",
+    learnThis: "本步是探索性拓扑证据：微小边与大额边等长，未做边阈值敏感性检验；不能据此认定经济瓶颈或脱钩。",
     definition: "它在全球国家×行业图中保留每条正流量边，再加总各有序节点对最短路径经过该节点的份额 σ_st(v)/σ_st；等长路径会分摊，结果未按节点对数归一化。",
     downMeaning: "负向变化与拓扑中介位置下降一致，但不能单独证明发生了脱钩。",
     upMeaning: "正向变化与拓扑中介位置增强一致，但可能同时受到网络重组影响。",
@@ -115,7 +115,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     howToRead: "先看结果状态，允许推断时才判断这套拓扑编码中的方向。无论结果如何，都要披露未做边阈值敏感性；不能据此证明经济枢纽、瓶颈或脱钩。",
     writeDown: "把前三类主结果与本步探索性网络结果分栏记录；四个结果构成预先指定的结果族，不只挑显著项。",
     dontClaim: "不要挑绝对值最大的系数当「政策总效应」，也不要写成已经脱钩。",
-    guidedExperiment: "跑完基准后，到「若要进一步检查稳健性」里运行实体置换，看原始估计在这套人为改派规则下是否靠尾部。",
+    guidedExperiment: "选做：在「若要进一步检查稳健性（选做）」中运行实体置换，观察对人为改派规则的敏感性；尾部占比不是 p 值，不能恢复因果识别。",
   },
 };
 
@@ -163,22 +163,4 @@ export function familyDirectionLabel(direction: ReadingDirection): string {
 export function nextRegressionFamily(outcome: RegressionOutcome) {
   const index = REGRESSION_FAMILIES.findIndex((item) => item.outcome === outcome);
   return index >= 0 ? REGRESSION_FAMILIES[index + 1] ?? null : null;
-}
-
-/** 给学生可抄进第 15 步的一句话；不把点估计说成因果证明。 */
-export function reportTakeaway(outcome: RegressionOutcome, direction: ReadingDirection, effect: string): string {
-  const metric = REGRESSION_LESSONS[outcome].shortMetric;
-  if (direction === "negative") {
-    return `可记进报告：本步「${metric}」相对下降（${effect}），区间未过 0。`;
-  }
-  if (direction === "positive") {
-    return `可记进报告：本步「${metric}」相对上升（${effect}），区间未过 0。`;
-  }
-  if (direction === "suppressed") {
-    return `可记进报告：本步「${metric}」当前设计无法评估，不要把点估计当成方向。`;
-  }
-  if (direction === "pretrend") {
-    return `可记进报告：本步「${metric}」冲击前已有明显差异，只能描述点估计（${effect}），不能写成相对上升或下降。`;
-  }
-  return `可记进报告：本步「${metric}」看不出方向，区间跨过 0。这不等于没有效应。`;
 }
