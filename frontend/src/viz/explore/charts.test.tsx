@@ -18,6 +18,16 @@ const rows = [
 ];
 
 describe("Steps 6-9 chart semantic data equivalents", () => {
+  test("composition preserves year order and uses the authoritative denominator", () => {
+    const html = renderToStaticMarkup(<CompositionBar
+      rows={[{ country: "2019", a: 20, total: 100 }, { country: "2020", a: 60, total: 200 }]}
+      segments={[{ key: "a", name: "分项" }]} sortKey="total" sortDirection="input" normalizationKey="total"
+    />);
+    expect(html.indexOf('title="2019"')).toBeLessThan(html.indexOf('title="2020"'));
+    expect(html).toContain("width:20%");
+    expect(html).toContain("width:30%");
+  });
+
   test("rank table contains every plotted entity and identically formatted metric", () => {
     const html = renderToStaticMarkup(
       <RankBarChart rows={rows} metricKey="metric" label="测试份额" format="pct" />,

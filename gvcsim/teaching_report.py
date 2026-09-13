@@ -56,6 +56,9 @@ _STUDENT_METRIC_LABELS = {
     **{key: value["label"] for key, value in cast(dict[str, dict[str, Any]], INDICATOR_SCHEMA["fields"]).items()},
     "FVA_share": "外国增加值项占比",
     "3b_VA_GVC_C_share": "复杂 GVC 生产份额",
+    "1_VA_D_share": "纯国内生产份额（1_VA_D/SVA）",
+    "2_VA_RT_share": "传统贸易份额（2_VA_RT/SVA）",
+    "3a_VA_GVC_S_share": "简单 GVC 份额（3a_VA_GVC_S/SVA）",
     "GVCPs": "GVC 相对位置（GVCPs）",
     # Match the label the step itself shows; without this the report printed the
     # raw field key for step 5's network metric.
@@ -103,6 +106,11 @@ _REFLECTION_MIN_LENGTHS = {
     "evidence_interpretation": 40,
     "limitations": 30,
 }
+_INDICATOR_SOURCES = {
+    "explicit-indicator-trend",
+    "explicit-indicator-comparison",
+    "explicit-indicator-composition",
+}
 
 
 class ReportGateError(RuntimeError):
@@ -139,6 +147,107 @@ def _merge_gate_blocks(blocked: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return list(merged.values())
 
 
+def _valid_indicator_observations(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return schema-complete, finite, explicitly saved step 6–8 readings."""
+    result = []
+    for raw in _list_values(data.get("observations")):
+        if not isinstance(raw, dict) or raw.get("source") not in _INDICATOR_SOURCES:
+            continue
+        required = ("entity", "country", "year", "value", "metric", "unit", "release", "scope")
+        if any(raw.get(key) in (None, "") for key in required):
+            continue
+        if isinstance(raw.get("year"), bool) or not isinstance(raw.get("year"), int):
+            continue
+        value = raw.get("value")
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            continue
+        if raw.get("scope") not in {"country", "country-industry"}:
+            continue
+        if raw.get("scope") == "country-industry" and raw.get("industry") in (None, ""):
+            continue
+        if raw.get("scope") == "country" and raw.get("industry") not in (None, ""):
+            continue
+        result.append(raw)
+    return result
+
+
+def _indicator_material_complete(data: dict[str, Any], step: int) -> bool:
+    compared = [str(item) for item in _list_values(data.get("compared")) if str(item).strip()]
+    if len(compared) != 2 or len(set(compared)) != 2:
+        return False
+    observations = _valid_indicator_observations(data)
+    if not observations or {str(item["country"]) for item in observations} != set(compared):
+        return False
+    if (
+        len({str(item["scope"]) for item in observations}) != 1
+        or len({str(item["release"]) for item in observations}) != 1
+    ):
+        return False
+    metric_units = {(str(item["metric"]), str(item["unit"])) for item in observations}
+    if len({metric for metric, _unit in metric_units}) != len(metric_units):
+        return False
+    sources = {str(item["source"]) for item in observations}
+    if len(sources) != 1:
+        return False
+    source = next(iter(sources))
+    if source == "explicit-indicator-composition":
+        required_components = {
+            6: {"DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub", "gross_exports"},
+            7: {"1_VA_D", "2_VA_RT", "3a_VA_GVC_S", "3b_VA_GVC_C", "SVA"},
+        }.get(step)
+        if required_components is None or {item["metric"] for item in observations} != required_components:
+            return False
+    keys_by_country: dict[str, set[tuple[str, str, int]]] = {
+        country: {
+            (str(item["metric"]), str(item.get("industry", "")), int(item["year"]))
+            for item in observations
+            if item["country"] == country
+        }
+        for country in compared
+    }
+    if source == "explicit-indicator-trend":
+        series = {(str(item["metric"]), str(item.get("industry", ""))) for item in observations}
+        return (
+            bool(series)
+            and all(
+                len(
+                    {
+                        year
+                        for metric_name, industry, year in keys_by_country[country]
+                        if (metric_name, industry) == item
+                    }
+                )
+                >= 2
+                for country in compared
+                for item in series
+            )
+            and all(
+                {
+                    year
+                    for metric_name, industry, year in keys_by_country[compared[0]]
+                    if (metric_name, industry) == item
+                }
+                == {
+                    year
+                    for metric_name, industry, year in keys_by_country[compared[1]]
+                    if (metric_name, industry) == item
+                }
+                for item in series
+            )
+        )
+    # Same-year comparisons and compositions must be pairwise complete.  A
+    # composition contains multiple components; all saved components survive.
+    return (
+        keys_by_country[compared[0]] == keys_by_country[compared[1]]
+        and bool(keys_by_country[compared[0]])
+        and len({year for _metric, _industry, year in keys_by_country[compared[0]]}) == 1
+        and (
+            source != "explicit-indicator-composition"
+            or len({metric for metric, _industry, _year in keys_by_country[compared[0]]}) >= 2
+        )
+    )
+
+
 def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
     """Return only missing report evidence/actions, independently of quizzes."""
     blocked: list[dict[str, Any]] = []
@@ -165,20 +274,27 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             and item.get("entity", item.get("country")) not in (None, "")
             and item.get("value") not in (None, "")
         ]
+        if step in (6, 7, 8):
+            if not _indicator_material_complete(data, step):
+                blocked.append(
+                    {
+                        "step": step,
+                        "title": _STEP_TITLES.get(step, ""),
+                        "missing": ["请在显式报告材料卡保存恰好两个国家的完整、同口径指标图表材料"],
+                    }
+                )
+            continue
         if step == 9:
             observations = [
-                item for item in observations
+                item
+                for item in observations
                 if item.get("source") in {"explicit-network-trend", "explicit-network-ranking"}
             ]
             missing: list[str] = []
             if len(compared) < 2:
-                missing.append(
-                    "请在“行业指标可视化”选择两个经济体，在报告材料卡点击“保存为报告材料”或“更新报告材料”"
-                )
+                missing.append("请在“行业指标可视化”选择两个经济体，在报告材料卡点击“保存为报告材料”或“更新报告材料”")
             if len({item.get("country") for item in observations} & compared) < 2:
-                missing.append(
-                    "请在报告材料卡点击“保存为报告材料”或“更新报告材料”，保存两国的行业指标读数"
-                )
+                missing.append("请在报告材料卡点击“保存为报告材料”或“更新报告材料”，保存两国的行业指标读数")
             if missing:
                 blocked.append({"step": step, "title": _STEP_TITLES.get(step, ""), "missing": missing})
             continue
@@ -1250,8 +1366,16 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         data = _step_data(session, step)
         compared = _list_values(data.get("compared"))
         observations = [item for item in _list_values(data.get("observations")) if isinstance(item, dict)]
-        if step == 9:
-            observations = [item for item in observations if item.get("source") in {"explicit-network-trend", "explicit-network-ranking"}]
+        if step in (6, 7, 8):
+            observations = _valid_indicator_observations(data)
+            if not _indicator_material_complete(data, step):
+                continue
+        elif step == 9:
+            observations = [
+                item
+                for item in observations
+                if item.get("source") in {"explicit-network-trend", "explicit-network-ranking"}
+            ]
             if not observations:
                 continue
         has_snapshot = any(
@@ -1263,7 +1387,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}", ""))
         context = []
         for key, label in (("year", "年份"), ("country", "国家"), ("chart", "图表视角"), ("drill", "下钻")):
-            if step != 9 and data.get(key) not in (None, ""):
+            if step not in (6, 7, 8, 9) and data.get(key) not in (None, ""):
                 context.append(f"{label}={_safe(data[key])}")
         if context:
             lines.append(f"- 保存的视图：{'；'.join(context)}")
@@ -1285,19 +1409,23 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                 lines.append(
                     "- 行业指标来自完整国家×行业中间品网络，不对应国家贸易概览的位置；加权流量为当年价格，拓扑指标不等同经济重要性。"
                 )
-            lines.extend(
-                (
-                    f"- 记录的代表指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}",
-                    "",
-                    "| 实体 | 年份 | 数值 |",
-                    "|---|---:|---:|",
+            if step in (6, 7, 8):
+                lines.append("- 记录的显式图表材料（指标与单位逐行列示）：")
+                lines.append(f"- 数据版本：{_safe(observations[0]['release'])}。金额为当年价格；份额以百分数列示，变化按百分点解释。")
+            else:
+                lines.append(
+                    f"- 记录的代表指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}"
                 )
-            )
+            lines.extend(("", "| 实体 | 年份 | 指标 | 单位 | 数值 |", "|---|---:|---|---|---:|"))
             for item in observations:
                 observation_value = item.get("value", "—")
+                if step in (6, 7, 8) and item.get("unit") == "%" and isinstance(observation_value, (int, float)):
+                    observation_value *= 100
                 lines.append(
                     f"| {_safe(item.get('entity', item.get('country', '—')))} | "
                     f"{_safe(item.get('year', '—'))} | "
+                    f"{_STUDENT_METRIC_LABELS.get(str(item.get('metric')), _safe(item.get('metric', '—')))} | "
+                    f"{_safe(item.get('unit', '—'))} | "
                     f"{_number(observation_value) if isinstance(observation_value, (int, float)) else _safe(observation_value)} |"
                 )
         elif compared:

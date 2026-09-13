@@ -17,6 +17,7 @@ import type { IndicatorSchema, Meta, QuizCompletionState, Step, StepStateApi } f
 import { useAsync } from "../../shared";
 import { CountryPicker } from "../../country-picker";
 import { CAT } from "../../../viz/shared";
+import type { IndicatorSelection } from "./indicator-model";
 
 export type Row = Record<string, string | number | null>;
 export const num = (v: string | number | null | undefined): number => (typeof v === "number" ? v : 0);
@@ -42,7 +43,7 @@ export interface VizObservation {
   scope?: ObservationScope;
   generation?: number;
   request_key?: string;
-  source?: "explicit-network-trend" | "explicit-network-ranking";
+  source?: "explicit-network-trend" | "explicit-network-ranking" | "explicit-indicator-trend" | "explicit-indicator-comparison" | "explicit-indicator-composition";
 }
 
 export interface ObservationRequestIdentity {
@@ -60,6 +61,7 @@ export interface BoundRows {
 }
 
 export interface VizStepState extends QuizCompletionState, Record<string, unknown> {
+  indicator_selection?: IndicatorSelection;
   chart?: string;
   compared?: string[];
   year?: number;
@@ -145,64 +147,6 @@ export function restoreVizState(
       ? saved.compared.filter((code) => meta.countries.includes(code))
       : [],
   };
-}
-
-/** One request-bound country query shared by steps 7–9. */
-export function useCountryIndicatorRows(meta: Meta, year: number) {
-  const evidenceKey = observationRequestKey(meta, year, "country");
-  const requestKey = evidenceKey ?? `missing-release:${year}:country`;
-  const query = useAsync<Row[]>(() => api.countryIndicators(year), [year], { requestKey });
-  const identity = observationRequestIdentity(meta, year, "country", query.generation);
-  const response = query.data !== null && identity !== null
-    ? { identity, rows: query.data } satisfies BoundRows
-    : null;
-  return { ...query, rows: query.data ?? [], identity, response };
-}
-
-export function countryObservationPatch(
-  response: BoundRows | null,
-  expected: ObservationRequestIdentity | null,
-  picked: readonly string[],
-  metric: string,
-): Pick<VizStepState, "metric" | "observations"> {
-  if (!response || !sameObservationIdentity(response.identity, expected) || picked.length < 1) {
-    return { metric, observations: [] };
-  }
-  const observations = picked.map((country): VizObservation | null => {
-    const row = response.rows.find((item) => String(item.country) === country);
-    const value = row?.[metric];
-    return typeof value === "number" && Number.isFinite(value)
-      ? {
-          entity: country,
-          country,
-          year: response.identity.year,
-          value,
-          metric,
-          release: response.identity.release,
-          scope: response.identity.scope,
-          generation: response.identity.generation,
-          request_key: response.identity.requestKey,
-        }
-      : null;
-  }).filter((item): item is VizObservation => item !== null);
-  return { metric, observations };
-}
-
-/** Capture values only from the response accepted for the current request identity. */
-export function useCountryObservations(
-  response: BoundRows | null,
-  expected: ObservationRequestIdentity | null,
-  picked: string[],
-  metric: string,
-  state: StepStateApi<VizStepState>,
-) {
-  useEffect(() => {
-    const patch = countryObservationPatch(response, expected, picked, metric);
-    if (JSON.stringify(patch.observations) === JSON.stringify(state.data?.observations)
-      && state.data?.metric === metric) return;
-    state.save(patch);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [response, expected, picked, metric]);
 }
 
 export function invalidateVizObservations(state: StepStateApi<VizStepState>) {

@@ -258,29 +258,30 @@ export function compositionSegmentColor(
   return negative ? NEGATIVE_COMPOSITION_STYLE.color : (segment.color ?? CAT[index]);
 }
 
-export type CompositionSortDirection = "ascending" | "descending";
+export type CompositionSortDirection = "ascending" | "descending" | "input";
 
 export function sortCompositionRows(
   rows: readonly Row[],
   sortKey: string,
   direction: CompositionSortDirection = "descending",
 ): Row[] {
+  if (direction === "input") return [...rows];
   const sign = direction === "descending" ? -1 : 1;
   return [...rows].sort((first, second) => sign * (num(first[sortKey]) - num(second[sortKey])));
 }
 
-export function CompositionBar({ rows, segments, sortKey, sortDirection = "descending", sortLabel, sortFormat, normalize = true, valueFormat = "pct", highlight }: {
+export function CompositionBar({ rows, segments, sortKey, sortDirection = "descending", sortLabel, sortFormat, normalize = true, normalizationKey, valueFormat = "pct", highlight }: {
   rows: Row[]; segments: readonly CompositionSegment[]; sortKey?: string;
   sortDirection?: CompositionSortDirection; sortLabel?: string; sortFormat?: string;
-  normalize?: boolean; valueFormat?: string; highlight?: Set<string>;
+  normalize?: boolean; normalizationKey?: string; valueFormat?: string; highlight?: Set<string>;
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const skey = sortKey ?? segments[segments.length - 1]?.key ?? "";
   const segKeys = new Set(segments.map((s) => s.key));
   const total = (r: Row) => segments.reduce((s, seg) => s + num(r[seg.key]), 0);
-  const eligible = rows.filter((row) => finite(row[skey]) && segments.every((segment) => finite(row[segment.key])));
+  const eligible = rows.filter((row) => finite(row[skey]) && (!normalizationKey || (finite(row[normalizationKey]) && num(row[normalizationKey]) > 0)) && segments.every((segment) => finite(row[segment.key])));
   const data = sortCompositionRows(eligible, skey, sortDirection);
-  const domain = signedDomain(data.map((row) => segments.map((segment) => num(row[segment.key]))), normalize);
+  const domain = signedDomain(data.map((row) => segments.map((segment) => num(row[segment.key]))), normalize, normalizationKey ? data.map((row) => num(row[normalizationKey])) : undefined);
   const hasNegative = data.some((row) => segments.some((segment) => num(row[segment.key]) < 0));
   const tipLines = (r: Row): [string, string][] => [
     ["", rowLabel(r)],
@@ -299,7 +300,7 @@ export function CompositionBar({ rows, segments, sortKey, sortDirection = "desce
           const entity = rowName(r);
           const display = rowLabel(r);
           const hi = highlight?.has(entity);
-          const layout = signedStack(segments.map((segment) => num(r[segment.key])), domain, normalize);
+          const layout = signedStack(segments.map((segment) => num(r[segment.key])), domain, normalize, normalizationKey ? num(r[normalizationKey]) : undefined);
           return (
             <div key={entity} className="composition-chart-row"
               onMouseMove={(e) => show(e, tipLines(r))} onMouseLeave={hide}>

@@ -529,6 +529,21 @@ def _complete():
     }
     for step in range(2, 10):
         session["steps"][str(step)]["data"]["compared"] = ["CHN", "USA"]
+    for step, metric in ((6, "FVA_share"), (7, "3b_VA_GVC_C_share"), (8, "GVCPs")):
+        session["steps"][str(step)]["data"]["observations"] = [
+            {
+                "entity": country,
+                "country": country,
+                "year": 2020,
+                "value": value,
+                "metric": metric,
+                "unit": "比例",
+                "release": "ICIO-2023",
+                "scope": "country",
+                "source": "explicit-indicator-comparison",
+            }
+            for country, value in (("CHN", 0.2), ("USA", 0.1))
+        ]
     # Step 9 requires an explicitly saved two-country chart comparison.
     session["steps"]["9"]["data"]["observations"] = [
         {
@@ -677,14 +692,14 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
         for step in range(2, 6)
     )
     assert all(
-        any(item["step"] == step and "两个比较对象" in "".join(item["missing"]) for item in blocked)
+        any(item["step"] == step and "恰好两个国家" in "".join(item["missing"]) for item in blocked)
         for step in range(6, 9)
     )
     # Step 9 requires a country comparison *and* an industry observation, so its
     # message names both actions instead of the steps 6-8 wording.
     assert any(item["step"] == 9 and "两个经济体" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 9 and "行业指标读数" in "".join(item["missing"]) for item in blocked)
-    assert any(item["step"] == 6 and "两个比较对象" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 6 and "恰好两个国家" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 11 and "可报告" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 14 and "可报告" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 15 and "原创" in item["title"] for item in blocked)
@@ -693,7 +708,7 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     assert "理解检查" in "".join(by_step[1]["missing"])
     assert "具体单元格" in "".join(by_step[1]["missing"])
     assert "理解检查" in "".join(by_step[6]["missing"])
-    assert "两个比较对象" in "".join(by_step[6]["missing"])
+    assert "恰好两个国家" in "".join(by_step[6]["missing"])
     assert "理解检查" in "".join(by_step[12]["missing"])
     assert "可报告" in "".join(by_step[12]["missing"])
     assert TEACHING_VERSION in "".join(by_step[10]["missing"])
@@ -706,23 +721,58 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
         build(empty_session(), "同学")
 
 
-def test_representative_capture_stays_optional_and_report_does_not_imply_a_full_chart_snapshot():
+def test_steps_six_to_eight_require_explicit_complete_material():
     session = _complete()
-    session["steps"]["6"]["data"].update({"chart": "decompose", "observations": []})
-    assert not any(item["step"] == 6 for item in check_material_gate(session))
-    text = "\n".join(teaching_report._experiment_sections(session))
-    assert "本步仅保存比较对象，未记录代表指标数值" in text
-    session["steps"]["6"]["data"].update(
-        {
-            "metric": "FVA_share",
-            "observations": [{"entity": "CHN", "country": "CHN", "year": 2020, "value": 0.2}],
-        }
-    )
+    for source in (None, "automatic-representative"):
+        session["steps"]["6"]["data"]["observations"][0]["source"] = source
+        assert any(item["step"] == 6 for item in check_material_gate(session))
+
+
+def test_indicator_report_formats_percentages_without_changing_saved_values():
+    session = _complete()
+    data = session["steps"]["6"]["data"]
+    data.update(year=1999, chart="unrelated-browse", drill="DEU", metric="wrong-level-metric")
+    for item in data["observations"]:
+        item.update(metric="FVA_share", unit="%", value=0.237)
     text = "\n".join(teaching_report._experiment_sections(session))
     section = text.split("### 步骤 6", 1)[1].split("### 步骤 7", 1)[0]
-    assert "记录的代表指标：外国增加值项占比" in section
-    assert "未记录代表指标数值" not in section
-    assert "EXGR_FVASH" not in section
+    assert "| 外国增加值项占比 | % | 23.7 |" in section
+    assert "wrong-level-metric" not in section
+    assert "unrelated-browse" not in section
+    assert "1999" not in section
+    assert data["observations"][0]["value"] == 0.237
+
+
+def test_indicator_trend_requires_two_common_years_per_metric():
+    session = _complete()
+    data = session["steps"]["6"]["data"]
+    data["observations"] = [
+        dict(item, source="explicit-indicator-trend", year=year, value=float(year))
+        for item in data["observations"]
+        for year in (2019, 2020)
+    ]
+    assert not any(item["step"] == 6 for item in check_material_gate(session))
+    data["observations"] = [
+        item for item in data["observations"] if not (item["country"] == "USA" and item["year"] == 2019)
+    ]
+    assert any(item["step"] == 6 for item in check_material_gate(session))
+
+
+def test_composition_requires_all_trade_components_and_reports_each_reading():
+    session = _complete()
+    data = session["steps"]["6"]["data"]
+    base = data["observations"]
+    components = {"DVAex": 50, "DVArt": 5, "DDC": 3, "FVA": 20, "FDC": 4, "taxsub": -2, "gross_exports": 80}
+    data["observations"] = [
+        dict(item, metric=metric, value=value, unit="百万美元", source="explicit-indicator-composition")
+        for item in base for metric, value in components.items()
+    ]
+    assert not any(item["step"] == 6 for item in check_material_gate(session))
+    text = "\n".join(teaching_report._experiment_sections(session))
+    assert "| 出口中的税收减补贴 | 百万美元 | -2 |" in text
+    # Omitting the same component for both countries is paired, but incomplete.
+    data["observations"] = [item for item in data["observations"] if item["metric"] != "taxsub"]
+    assert any(item["step"] == 6 for item in check_material_gate(session))
 
 
 def test_material_gate_is_independent_of_unfinished_quizzes():
@@ -815,10 +865,10 @@ def test_report_preserves_two_country_industry_trend_years(tmp_path, monkeypatch
     assert f"记录的代表指标：{label}" in markdown
     assert f"记录方式：历年趋势；单位：{unit}" in markdown
     for expected in (
-        "| CHN·C26 | 2016 | 31 |",
-        "| CHN·C26 | 2020 | 44 |",
-        "| USA·C26 | 2016 | 9 |",
-        "| USA·C26 | 2020 | 7 |",
+        f"| CHN·C26 | 2016 | {label}",
+        f"| CHN·C26 | 2020 | {label}",
+        f"| USA·C26 | 2016 | {label}",
+        f"| USA·C26 | 2020 | {label}",
     ):
         assert expected in markdown
 
@@ -1112,8 +1162,18 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
             "compared": ["CHN", "USA"],
             "metric": "FVA_share",
             "observations": [
-                {"entity": "CHN", "year": 2020, "value": 0.12},
-                {"entity": "USA", "year": 2020, "value": 0.08},
+                {
+                    "entity": country,
+                    "country": country,
+                    "year": 2020,
+                    "value": value,
+                    "metric": "FVA_share",
+                    "unit": "比例",
+                    "release": "ICIO-2023",
+                    "scope": "country",
+                    "source": "explicit-indicator-comparison",
+                }
+                for country, value in (("CHN", 0.12), ("USA", 0.08))
             ],
         }
     )
@@ -1132,7 +1192,7 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
     assert "年份=2020" in report.markdown
     assert "表=z" in report.markdown
     assert "主动比较：CHN、USA" in report.markdown
-    assert "| CHN | 2020 | 0.12 |" in report.markdown
+    assert "| CHN | 2020 | 外国增加值项占比 | 比例 | 0.12 |" in report.markdown
     assert "仅用于探索定位，不限定下游回归样本" in report.markdown
     assert "按所选冲击类型汇总该类型全部已编码事件" in report.markdown
     assert "当前目录无法确认来源状态" in report.markdown
