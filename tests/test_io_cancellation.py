@@ -35,7 +35,7 @@ def student_request(disconnected: asyncio.Event) -> Request:
     )
 
 
-@pytest.mark.parametrize("operation", ["run", "placebo"])
+@pytest.mark.parametrize("operation", ["run"])
 def test_regression_disconnect_during_panel_read_keeps_thread_and_cancels_queued_retry(monkeypatch, operation):
     async def scenario():
         limiter = anyio.to_thread.current_default_thread_limiter()

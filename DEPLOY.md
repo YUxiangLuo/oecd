@@ -10,7 +10,7 @@
 2. **数据发布**：执行 `compute` 并原子切换 release，不清空教学库；会话和报告按 `release_id` 自动隔离。
 3. **新学期重置**：仅在明确清场时执行 `classroom-init --reset`，会删除全部账号、会话、报告和评分。
 
-**v14 数值修复不是普通代码更新：** 新契约拒绝 v13 产物，以免继续读取浮点抵消导致的错误零出口份额及回归观察。先在独立 `GVCSIM_DATA_DIR` 完整重算并验收新 release，再安排代码与数据的协调切换；不得修改旧 CSV/版本号冒充升级，也不得执行教学库重置。当前部署在新 release 验收前保持原样，旧代码与旧 release 成对保留供回滚，原会话/报告不迁移绑定。参见 [README 的 v14 升级要求](README.md#数据发布)。
+**v15 不是普通代码更新：** 新契约要求来源绑定的 `panel_teaching.csv`，并校验 `step10-tariff-teaching-v1`、seed `20260913`、生成参数和源文件哈希；seed 不能替代 release 来源绑定。v14 产物不满足该契约。先在独立 `GVCSIM_DATA_DIR` 用新代码完整重算并验收新的 release，再安排代码与数据协调切换；不得向旧 release 补文件或改版本号，也不得执行教学库重置。当前部署在新 release 验收前保持原样；本文不表示部署已经完成。旧代码与旧 release 成对保留供回滚，原会话／报告继续绑定原 release。参见 [README 的 v15 升级要求](README.md#数据发布)。
 
 ## 一次性主机 bootstrap
 

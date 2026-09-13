@@ -11,7 +11,7 @@ from typing import Any
 
 from gvcsim.indicator_schema import PRODUCTION_LENGTH_OPERATIONAL_DEFINITION
 
-QUIZ_VERSION = "course-quiz-v7"
+QUIZ_VERSION = "course-quiz-v8"
 
 
 def _option(option_id: str, label: str) -> dict[str, str]:
@@ -154,26 +154,26 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
     ],
     10: [
         _question(
-            "s10-role",
-            "ICIO 指标与政策冲击在后续回归中分别扮演什么角色？",
+            "s10-x-definition-v8",
+            "步骤 10 的教学关税 X 怎样计算？",
             [
-                _option("a", "ICIO 指标是结果变量，政策冲击是处理变量"),
-                _option("b", "ICIO 指标是处理变量，政策冲击是结果变量"),
-                _option("c", "两者都是结果变量"),
+                _option("a", "固定冲击前销往模拟加税市场的出口份额 × 模拟税率"),
+                _option("b", "当年 OECD 外国增加值份额 × 真实税率"),
+                _option("c", "模拟税率减去出口份额"),
             ],
             "a",
-            "ICIO 计算 GVC 结果指标，政策冲击提供用于比较处理与对照的解释变量。",
+            "w 是固定冲击前出口份额，τ 是小数形式模拟税率，X=w×τ；X 不是历史政策观测。",
         ),
         _question(
-            "s10-types",
-            "为什么要分别查看关税、制裁和出口管制三类冲击？",
+            "s10-unit-v8",
+            "若 w=0.25、模拟税率 τ=0.20，则 X 及其方向如何解释？",
             [
-                _option("a", "它们只是界面颜色不同"),
-                _option("b", "它们的处理密度、支持度和识别难度不同"),
-                _option("c", "同时查看三类即可保证因果识别"),
+                _option("a", "X=0.05，数值越大表示模拟关税暴露越强"),
+                _option("b", "X=0.45，数值越大表示暴露越弱"),
+                _option("c", "X=5%，因此已证明现实关税造成结果变化"),
             ],
-            "b",
-            "密集、稀疏和单国处理带来不同的对照支持与识别风险；查看三类并不自动保证因果性。",
+            "a",
+            "0.25×0.20=0.05，单位为 share×decimal tariff rate；这是模拟暴露，不支持现实因果结论。",
         ),
     ],
     11: [

@@ -86,6 +86,12 @@ function passingPretrendCaveat(response: RegressionResponse): string {
 }
 
 function mainPolicyCoefficient(response: RegressionResponse): CoefStat | null {
+  const teachingColumns = response.model_snapshot?.version === "step10-tariff-teaching-v1"
+    ? response.model_snapshot.x_columns
+    : [];
+  if (teachingColumns.length) {
+    return response.result.coefs.find((coef) => teachingColumns.includes(coef.name)) ?? null;
+  }
   const controls = new Set(response.design.controls);
   const main = response.result.coefs.filter((coef) =>
     !controls.has(coef.name) && !coef.name.includes("×base_gvc"),
@@ -189,7 +195,7 @@ export function buildRegressionVerdict(
   response: RegressionResponse,
 ): RegressionVerdict {
   const coefficient = mainPolicyCoefficient(response);
-  const boundary = "当前发布指标 + 教学政策冲击；数据来源见课程数据标签，本结果不构成现实政策结论。";
+  const boundary = response.disclaimer;
   const support = response.result.support;
   const reasons = [...new Set([
     ...(response.result.status_reasons ?? []), ...(support?.reasons ?? []),

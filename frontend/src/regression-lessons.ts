@@ -34,7 +34,7 @@ export const FAMILY_STEPS: Record<RegressionOutcome, number> = {
 };
 
 export const REGRESSION_QUESTION =
-  "按首次正暴露年份（G_i）划分处理批次（cohort），低强度也算暴露。与从未或截至比较期尚未暴露的对象比较变化；这些对照仍可能受到投入链外溢影响，不能自动视为可比。";
+  "固定使用步骤 10 的教学关税暴露 X，以国家×行业和年份固定效应描述 X 与 Y 的关联。";
 
 export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
   trade: {
@@ -47,15 +47,15 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorStep: 2,
     priorLabel: "GVC 总贸易流分解指标",
     focus: "观察出口分解中的外国增加值这一项，看它所占的比例如何变化",
-    learnThis: "先看结果状态，再读估计与区间。下方四格例子只帮助理解相对变化；实际主结果逐批次计算，只用从未处理或截至比较期尚未处理的对象作对照。",
-    definition: "它是 WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 毛出口的比重。毛出口全部外国纯 VA 含量为 FVA+FDC；OECD 还采用包含相关 TLS 的 VA 口径，因此本指标不是 EXGR_FVASH。",
+    learnThis: "运行固定模型，读出 X 增加 1 个百分点时外国增加值占比改变多少个百分点。",
+    definition: "真实指标中，它是 WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 毛出口的比重；这一定义只说明模拟 Y 所对应的概念，不表示本步 Y 是 OECD 观测值。",
     downMeaning: "负向变化表示外国增加值这一项的占比相对下降，但不能单独证明生产已经回流。",
     upMeaning: "正向变化表示外国增加值这一项的占比相对上升，但仍需结合不确定性和比较条件。",
     caution: "份额按百分点读。全球投入链会把政策传给未直接处理对象，no-interference/SUTVA 不能自动成立；2018–2020 又与 COVID-19 重叠，年份效应不能吸收国家×行业异质疫情冲击。不要和长度、网络系数比大小。",
     howToRead: "先看结果状态；允许推断时，再读估计与 95% 区间。区间跨 0 是「看不出方向」，不是零效应；停止推断则记「无法评估」。区间未跨 0 也不能跳过因果解释所需的假设。",
     writeDown: "记下结果状态、估计与单位（百分点）；停止推断时写明原因，留到第 15 步和另外三类并读。",
     dontClaim: "不要写成「已经证明生产回流」。这一项占比下降，不能告诉我们企业是否把生产搬回国内。",
-    guidedExperiment: "选做：使用“分批处理 cohort-time ATT”并运行后，查看技术细节中的对照支持和可用的批次权重；这些诊断不能自动证明对照可比，还须考虑投入链外溢。",
+    guidedExperiment: "固定教学模型不要求调整设定。",
   },
   production: {
     outcome: "production",
@@ -67,15 +67,15 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorStep: 3,
     priorLabel: "GVC 生产分解指标",
     focus: "本步看贸易壁垒有没有改变多次跨境活动在 SVA 中的构成",
-    learnThis: "基准比较方式不变，本步换看复杂 GVC 份额：构成变化不等于生产规模变化，也不是韧性或嵌入深度的通用标尺。",
-    definition: "它衡量增加值经过多次跨境生产后被最终吸收的比例。默认比较方式和上一步相同，本步看的是生产分解这一类指标。",
+    learnThis: "X 不变，只把 Y 换成复杂 GVC 份额；构成变化不等于生产规模变化。",
+    definition: "真实指标衡量增加值经过多次跨境生产后被最终吸收的比例；本步 Y 只是对应这一概念的模拟值。",
     downMeaning: "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
     upMeaning: "SVA 中复杂 GVC 增加值份额提高；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
     caution: "区间跨过 0 是「看不出方向」，不是零效应。投入链外溢和贸易转移会污染对照；cohort-aware 主结果当前不发布交互估计。",
     howToRead: "「看不出」是合法结论，不是这步失败。不要拿步骤 11 的 FVA 系数代替本步。",
     writeDown: "与步骤 11 并读方向和区间；同为百分点，仍不能把构成变化解释为产量变化。",
     dontClaim: "不要把区间过 0 写成「冲击没有影响」。",
-    guidedExperiment: "选做：先把比较方式切换为“连续强度 TWFE（描述性）”，再勾选“冲击 × 基期GVC”比较条件关联；该交互不是 cohort-aware ATT 异质性估计。",
+    guidedExperiment: "固定教学模型不要求调整设定。",
   },
   length: {
     outcome: "length",
@@ -87,15 +87,15 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorStep: 4,
     priorLabel: "GVC 长度分解指标",
     focus: "本步看贸易壁垒有没有改变跨境生产链条的长短",
-    learnThis: "沿用状态优先的读法，但本步的单位不是百分点。长度不是跨境次数，也不能与份额系数相减或比大小。",
-    definition: "它以 GVC 活动诱发的累计总产出除以关联增加值；VA 为正时可理解为增加值加权阶段数，存在负 VA 时是有符号账户比值。它不是跨境次数、国家数或网络边数。默认使用 cohort-time ATT；按年动态路径是选做。",
+    learnThis: "X 不变，只把 Y 换成生产长度；长度不是百分点，也不能与份额系数比大小。",
+    definition: "真实指标以 GVC 活动诱发的累计总产出除以关联增加值；本步 Y 是对应这一概念的模拟值，不是机械计算出的真实生产长度。",
     downMeaning: "负向变化与链条缩短一致，可能来自回流、近岸化或其他生产调整。",
     upMeaning: "正向变化与链条延长一致，但不能单靠一个系数判断企业策略。",
     caution: "长度单位不能和份额百分点相减。冲击前检验不显著不能证明趋势可比；投入链外溢、COVID-19 异质冲击仍可能破坏识别。",
     howToRead: "先核对是否允许推断，再判断变短、变长还是看不出。链条变短有多种机制，一个数字指不出是回流还是近岸。",
     writeDown: "单独记长度的方向。写报告时明确这是长度单位，不是百分点。",
     dontClaim: "不要写成「比贸易流效应更大 / 更小」。",
-    guidedExperiment: "选做：改到按冲击前后各年观察，分别记下一项冲击前诊断和一项冲击后动态。",
+    guidedExperiment: "固定教学模型不要求调整设定。",
   },
   network: {
     outcome: "network",
@@ -108,14 +108,14 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorLabel: "全球生产网络指标",
     focus: "本步探索贸易壁垒出现后，这套全正边二值编码中的拓扑位置是否变化",
     learnThis: "本步是探索性拓扑证据：微小边与大额边等长，未做边阈值敏感性检验；不能据此认定经济瓶颈或脱钩。",
-    definition: "它在全球国家×行业图中保留每条正流量边，再加总各有序节点对最短路径经过该节点的份额 σ_st(v)/σ_st；等长路径会分摊，结果未按节点对数归一化。",
+    definition: "真实指标在全球国家×行业图上计算最短路径介数；本步 Y 只是对应这一概念的模拟值，不是由现实网络机械计算出的中心性。",
     downMeaning: "负向变化与拓扑中介位置下降一致，但不能单独证明发生了脱钩。",
     upMeaning: "正向变化与拓扑中介位置增强一致，但可能同时受到网络重组影响。",
     caution: "冲击会沿全球投入链外溢到未直接处理节点，网络中心性还会机械联动，因此对照未必干净。全正边口径对微小流量边敏感；实体置换尾部占比不是 p 值。",
     howToRead: "先看结果状态，允许推断时才判断这套拓扑编码中的方向。无论结果如何，都要披露未做边阈值敏感性；不能据此证明经济枢纽、瓶颈或脱钩。",
     writeDown: "把前三类主结果与本步探索性网络结果分栏记录；四个结果构成预先指定的结果族，不只挑显著项。",
     dontClaim: "不要挑绝对值最大的系数当「政策总效应」，也不要写成已经脱钩。",
-    guidedExperiment: "选做：使用“分批处理 cohort-time ATT”并运行后，可在「若要进一步检查稳健性（选做）」中运行实体置换，观察对人为改派规则的敏感性；尾部占比不是 p 值，不能恢复因果识别。",
+    guidedExperiment: "固定教学模型不要求调整设定。",
   },
 };
 
@@ -126,20 +126,11 @@ export const REGRESSION_FAMILIES = (["trade", "production", "length", "network"]
   measure: REGRESSION_LESSONS[outcome].measure,
 }));
 
-// 按稳定键索引;值是课堂问句里的说法(与后端 SHOCK_LABELS 刻意不同)。
-const SHOCK_SUBJECT: Record<string, string> = {
-  tariff: "额外关税冲击",
-  sanctions: "制裁暴露",
-  export_control: "出口管制暴露",
-};
-
 export function lessonQuestion(outcome: RegressionOutcome, shockType: string, method: string): string {
   const lesson = REGRESSION_LESSONS[outcome];
-  const shock = SHOCK_SUBJECT[shockType] ?? shockType;
-  if (method === "twfe_intensity") {
-    return `${shock}变强时，${lesson.shortMetric}如何随之变化？`;
-  }
-  return `受到${shock}后，${lesson.shortMetric}相对从未或尚未受冲击的对象如何变化？`;
+  void shockType;
+  void method;
+  return `教学关税暴露 X 增加 1 个百分点时，${lesson.shortMetric}如何变化？`;
 }
 
 export function comparisonExplanation(method: string): string {

@@ -71,7 +71,6 @@ def test_login_limit_is_scoped_by_source_and_username(teaching_db, monkeypatch):
     ("route", "request_payload", "limiter_name"),
     [
         (regression_routes.regression_run, RegressionRequest(outcome="network"), "_RUN_LIMITER"),
-        (regression_routes.regression_placebo, PlaceboRequest(outcome="network"), "_PLACEBO_LIMITER"),
     ],
 )
 def test_expensive_regression_routes_limit_each_account_before_repeating_work(
@@ -116,7 +115,7 @@ def test_regression_limit_requires_stable_account_identity():
     assert exc_info.value.status_code == 401
 
 
-@pytest.mark.parametrize("operation", ["run", "placebo"])
+@pytest.mark.parametrize("operation", ["run"])
 def test_exhausted_initiator_does_not_publish_429_to_49_other_students(monkeypatch, operation):
     async def scenario():
         limit = 12 if operation == "run" else 4

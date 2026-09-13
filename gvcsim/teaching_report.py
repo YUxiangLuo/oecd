@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 from typing import Any, cast
 
 from gvcsim import evidence, quizzes
-from gvcsim import config as app_config
 from gvcsim.artifacts import (
     NETWORK_ALGORITHM,
     ArtifactContractError,
@@ -27,8 +26,9 @@ from gvcsim.regression.design import (
     PRICE_MODE_LABELS,
 )
 from gvcsim.regression.validity import MIN_TREATED_CLUSTERS
+from gvcsim.regression.teaching import VERSION as TEACHING_VERSION, X_COLUMN, Y_COLUMNS
 from gvcsim.session import SESSION_VERSION
-from gvcsim.shocks import SHOCK_LABELS, events_metadata, selectable_shock_types
+from gvcsim.shocks import SHOCK_LABELS, events_metadata
 from gvcsim.steps import STEPS
 
 REFLECTION_TEXT_LIMIT = 2400
@@ -45,7 +45,6 @@ _STEP_TITLES = {cast(int, item["n"]): cast(str, item["title"]) for item in STEPS
 _STEP_OUTCOMES = {
     cast(int, item["n"]): cast(str, item["regression_outcome"]) for item in STEPS if item.get("regression_outcome")
 }
-_REQUIRED_SHOCK_TYPES = ("tariff", "sanctions", "export_control")
 _OUTCOME_UNITS = {
     "trade": "份额原始单位（乘以 100 后按百分点解释）",
     "production": "份额原始单位（乘以 100 后按百分点解释）",
@@ -192,22 +191,23 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             )
 
     shock_data = _step_data(session, 10)
-    viewed_shock_types = {
-        str(value) for value in _list_values(shock_data.get("viewed_shock_types")) if str(value).strip()
+    required_panel = {
+        "teaching_country": str,
+        "teaching_year": int,
+        "viewed_teaching_panel": bool,
+        "teaching_panel_version": str,
     }
-    selectable_types = set(selectable_shock_types(processed_dir=app_config.PROCESSED_DIR))
-    missing_shock_types = [
-        shock_type
-        for shock_type in _REQUIRED_SHOCK_TYPES
-        if shock_type in selectable_types and shock_type not in viewed_shock_types
-    ]
-    if missing_shock_types:
-        missing_labels = "、".join(SHOCK_LABELS[shock_type] for shock_type in missing_shock_types)
+    panel_valid = all(isinstance(shock_data.get(key), kind) for key, kind in required_panel.items())
+    panel_valid = panel_valid and not isinstance(shock_data.get("teaching_year"), bool)
+    panel_valid = panel_valid and bool(str(shock_data.get("teaching_country", "")).strip())
+    panel_valid = panel_valid and shock_data.get("viewed_teaching_panel") is True
+    panel_valid = panel_valid and shock_data.get("teaching_panel_version") == TEACHING_VERSION
+    if not panel_valid:
         blocked.append(
             {
                 "step": 10,
                 "title": _STEP_TITLES.get(10, ""),
-                "missing": [f"请至少各查看一项当前 release 可选的政策事件；尚未查看：{missing_labels}"],
+                "missing": [f"请查看并保存版本 {TEACHING_VERSION} 的教学关税面板（国家、年份与 viewed 标记须完整）"],
             }
         )
 
@@ -317,6 +317,8 @@ def _coefficient_label(name: Any, design: dict[str, Any]) -> str:
         return _safe(labels[raw])
     if raw in CONTROL_LABELS:
         return CONTROL_LABELS[raw]
+    if raw == X_COLUMN:
+        return "模拟关税暴露强度"
     if raw in {"treated×post", "sanction_treated×post", "export_control_treated×post"}:
         return "处理后相对变化（处理组 × 处理后）"
     if raw == "tariff_shock":
@@ -931,12 +933,40 @@ def _parse_saved_run(raw: Any, outcome: str) -> tuple[dict[str, Any], dict[str, 
     design, result = raw.get("design"), raw.get("result")
     if not isinstance(design, dict) or not isinstance(result, dict) or design.get("outcome") != outcome:
         return None
+    snapshot, catalog = raw.get("model_snapshot"), raw.get("variable_catalog")
+    expected_design = {
+        "granularity": "country_industry",
+        "shock_type": "tariff",
+        "method": "twfe_intensity",
+        "control_mode": "none",
+        "interaction": False,
+        "scenario": "clean",
+    }
+    if any(design.get(key) != value for key, value in expected_design.items()):
+        return None
+    if not isinstance(snapshot, dict) or snapshot.get("version") != TEACHING_VERSION:
+        return None
+    if snapshot.get("x_columns") != [X_COLUMN] or snapshot.get("y_column") != Y_COLUMNS[outcome]:
+        return None
+    if snapshot.get("controls") != [] or snapshot.get("interactions") != []:
+        return None
+    if (
+        not isinstance(catalog, list)
+        or not any(
+            isinstance(item, dict) and item.get("role") == "X" and item.get("name") == X_COLUMN for item in catalog
+        )
+        or not any(
+            isinstance(item, dict) and item.get("role") == "Y" and item.get("name") == Y_COLUMNS[outcome]
+            for item in catalog
+        )
+    ):
+        return None
     coefs = result.get("coefs")
     if isinstance(result.get("diagnostics"), dict) and result["diagnostics"].get("diagnostic_only") is True:
         return (design, result) if _result_is_reportable(result, design) else None
     if not isinstance(coefs, list) or not any(
         isinstance(coef, dict)
-        and isinstance(coef.get("name"), str)
+        and coef.get("name") == X_COLUMN
         and isinstance(coef.get("coef"), (int, float))
         and not isinstance(coef.get("coef"), bool)
         and math.isfinite(float(coef["coef"]))
@@ -965,7 +995,16 @@ def _saved_runs(session: dict[str, Any]) -> list[dict[str, Any]]:
             if fingerprint in seen:
                 continue
             seen.add(fingerprint)
-            runs.append({"step": step, "outcome": outcome, "design": design, "result": result})
+            runs.append(
+                {
+                    "step": step,
+                    "outcome": outcome,
+                    "design": design,
+                    "result": result,
+                    "model_snapshot": data[key]["model_snapshot"],
+                    "variable_catalog": data[key]["variable_catalog"],
+                }
+            )
     return runs
 
 
@@ -1247,6 +1286,18 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         lines.append("")
 
     shock = _step_data(session, 10)
+    if shock.get("viewed_teaching_panel"):
+        captured = True
+        lines.extend(
+            (
+                "### 步骤 10 · 模拟关税数据",
+                "",
+                f"- 查看对象：{_safe(shock.get('teaching_country'))} · {_safe(shock.get('teaching_year'))}",
+                f"- 模拟版本：{_safe(shock.get('teaching_panel_version'))}",
+                "- X = 首年销往美国的出口份额 × 虚构税率；并非美国真实政策。",
+                "",
+            )
+        )
     viewed_types = _list_values(shock.get("viewed_shock_types"))
     viewed_events = _list_values(shock.get("viewed_events"))
     selected_event = shock.get("selected_event_key")
@@ -1811,6 +1862,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "session_version": SESSION_VERSION,
         "quiz_version": quizzes.QUIZ_VERSION,
         "course_release": COURSE_RELEASE,
+        "teaching_panel_version": TEACHING_VERSION,
         "session_fingerprint": fingerprint,
         "runs": [
             {
@@ -1818,10 +1870,13 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
                 "outcome": run["outcome"],
                 "design": run["design"],
                 "result": run["result"],
+                "model_snapshot": run["model_snapshot"],
+                "variable_catalog": run["variable_catalog"],
             }
             for run in runs
         ],
-        "algorithm": "WWZ five-category aggregation plus OECD TLS extension; WWYZ indicators; Gephi-compatible unweighted path centralities; cohort-time ATT with never/not-yet-treated controls and cluster jackknife",
+        "algorithm": "WWZ/TLS and WWYZ observed indicators; separate seeded tariff simulation; entity/year fixed effects with country-clustered standard errors",
+        "simulation_contract": metadata.get("simulation_contract"),
         "network_algorithm": network_algorithm,
         "viewed_shock_event_sources": shock_event_sources,
         "data_sources": data_sources,
@@ -1839,11 +1894,11 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "",
         f"学生：{_safe(student)}",
         "",
-        f"> 数据覆盖 {years[0]}–{years[-1]}，指标来源：{_safe(source)}。政策冲击为基于公开事件手工编码的拟真教学面板，不能用于研究结论。",
+        f"> **真实数据部分（步骤 1–9）**：覆盖 {years[0]}–{years[-1]}，指标来源：{_safe(source)}。模拟 Y 仅以首年有效指标的排名校准基准，不保留真实水平或轨迹。",
         "",
-        "> 步骤 11–14 的四项结果是预先指定的探索性结果族，必须全部报告，不能只挑区间未跨 0 的结果。贸易流、生产和长度量纲不同；网络项还是未经边阈值敏感性检验的探索性拓扑基准，四者都不能按系数大小排序。",
+        f"> **模拟教学部分（步骤 10–14）**：版本 `{TEACHING_VERSION}` 的 X 与四个独立模拟 Y 均非 OECD 真实指标；X=固定冲击前销往模拟加税市场出口份额×模拟税率。",
         "",
-        "> 本报告汇总描述性探索和已保存的教学估计，不证明政策冲击导致了 GVC 变化。因果解释至少依赖冲击外生性、趋势可比性、无同期混杂、处理定义与模型相容，以及处理效应异质性得到妥善处理。全球投入链外溢意味着 no-interference/SUTVA 不能自动成立；2018–2020 与 COVID-19 重叠，年份效应不能吸收国家×行业异质疫情冲击。",
+        "> 步骤 11–14 固定使用 country_industry × tariff × twfe_intensity × 无控制 × 无交互 × clean。系数与区间只描述模拟 X、Y 的关联，不是因果效果；四个 Y 量纲不同且必须完整报告。",
         "",
         *_reflection_section(session),
         *_evidence_summary(runs),
@@ -1857,9 +1912,8 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "- 网络算法：保留全部有向正流量边与正自环。加权总度=加权入度+加权出度，正自环计两次；它不是去重后的贸易额。路径指标按有向无权网络计算。eigencentrality 精确复现 Gephi 0.10.1 累计入边兼容分数，不等于标准 Perron 特征向量幂迭代。",
         "- 无权路径口径把微小正边与大额边视为同样长度，因此高介数只表示这套二值拓扑上的最短路径中介位置，不自动等于经济规模、关键瓶颈或不可替代。",
         "- 网络解释顺序：先以加权度观察经济流量规模，再把无权介数作为拓扑基准并比较排序。当前报告没有边阈值敏感性分析，微小正边是否改变最短路径与排序尚未检验。",
-        "- 冲击口径：界面中的单个事件用于定位和理解；回归按冲击类型使用该类型全部已编码事件汇总形成的暴露面板。",
-        "- 回归主结果：分批处理 DID/事件研究使用 cohort-time ATT，各 cohort 以 g−1 为基期，只使用从未或截至比较期尚未处理实体作对照；每个 cohort×时期按可用处理实体数聚合，早期 cohort 因更多处理后时期而重复贡献，并非 cohort 等权或实体只计一次。协方差按国家 delete-one cluster jackknife。",
-        "- 多结果与显著性：四项结果必须完整报告；95% 区间为逐项区间，不是四结果族或整条动态路径的同时置信带；p 值不是因果结论开关。事件研究未检出冲击前差异不证明平行趋势，尤其只有一个受支持的冲击前时期时检验力很低。",
+        f"- 模拟契约：`{TEACHING_VERSION}`；X=`{X_COLUMN}`，四个 Y 为独立 seeded teaching simulation。固定国家×行业及年份效应，无控制、无交互。",
+        "- 多结果与显著性：四项结果必须完整报告；95% 区间为逐项区间，不是四结果族的同时置信带；p 值不是因果结论开关。",
         "- 同期 ICIO 派生量与模拟宏观量可能是处理后变量，公开主回归禁止将其作为普通遗漏变量控制；模拟 GDP deflator 只称教学模拟平减指数。",
         "- 回归结果来自学生会话中保存的服务端运行，不在报告生成时复算。",
         f"- 生成时间：{generated_at}；会话摘要：`{fingerprint}`。",

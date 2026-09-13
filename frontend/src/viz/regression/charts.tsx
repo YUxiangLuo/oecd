@@ -258,13 +258,15 @@ function splitCoefName(name: string): string[] {
 
 /** 点=估计值,横条=95% 置信区间,竖线=0 轴;负效应红、正效应绿(与系数表一致)。 */
 export function CoefForestChart({
-  coefs, globalStatus, globalSupport, scale = 1, unit,
+  coefs, globalStatus, globalSupport, scale = 1, unit, labels, title = "系数图",
 }: {
   coefs: { name: string; coef: number; ci_low: number | null; ci_high: number | null; p: number | null; stars: string }[];
   globalStatus?: RegressionStatus | null;
   globalSupport?: TreatmentSupport | null;
   scale?: number;
   unit?: string;
+  labels?: Record<string, string>;
+  title?: string;
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const globallySuppressed = globalInferenceIsSuppressed(globalStatus, globalSupport);
@@ -273,6 +275,7 @@ export function CoefForestChart({
   // 推断被抑制时只画点:零宽度的区间横条会被读成“估计极其精确”。
   const pts = scaleForestCoefs(coefs, scale).map((c) => ({
     ...c,
+    displayName: labels?.[c.name] ?? c.name,
     p: inferenceAllowed ? c.p : null,
     stars: inferenceAllowed ? c.stars : "",
     lo: inferenceAllowed ? c.ci_low : null,
@@ -290,12 +293,12 @@ export function CoefForestChart({
   const y = (i: number) => padT + (i + 0.5) * rowH;
   const fmt = (v: number) => (Math.abs(v) < 0.01 && scale === 1 ? v.toFixed(4) : v.toFixed(scale === 100 ? 2 : 3));
   const tip = (p: (typeof pts)[number]): [string, string][] => inferenceAllowed ? [
-    ["", p.name],
+    ["", p.displayName],
     ["系数", `${fmt(p.coef)}${p.stars}`],
     ["95% CI", p.lo != null && p.hi != null ? `[${fmt(p.lo)}, ${fmt(p.hi)}]` : "不可评估"],
     ["p 值", p.p != null ? p.p.toFixed(3) : "不可评估"],
   ] : [
-    ["", p.name],
+    ["", p.displayName],
     ["描述性点估计", fmt(p.coef)],
     ["显示状态", globalSuppressionCopy],
   ];
@@ -306,7 +309,7 @@ export function CoefForestChart({
       : "政策系数；本设计不可作推断，无置信区间";
   return (
     <div ref={wrapRef} style={{ ...cardStyle, flex: "1 1 260px", minWidth: 260 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050" }}>系数图</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050" }}>{title}{unit ? `（${unit}）` : ""}</div>
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
         {globallySuppressed
           ? globalSuppressionCopy
@@ -325,7 +328,7 @@ export function CoefForestChart({
         {pts.map((p, i) => {
           const dot = "#4b47e0";
           const ci = "#aaa7eb";
-          const parts = splitCoefName(p.name);
+          const parts = splitCoefName(p.displayName);
           return (
             <g key={p.name}
               onMouseEnter={(e) => show(e, tip(p))}

@@ -97,6 +97,30 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
         payload = session_model.validate_session(req.session)
     except session_model.SessionError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    step10 = payload.get("steps", {}).get("10", {}).get("data", {})
+    if isinstance(step10, dict) and step10.get("viewed_teaching_panel") is True:
+        valid_step10 = (
+            isinstance(step10.get("teaching_country"), str)
+            and bool(step10["teaching_country"].strip())
+            and isinstance(step10.get("teaching_year"), int)
+            and not isinstance(step10.get("teaching_year"), bool)
+            and step10.get("teaching_panel_version") == teaching_report.TEACHING_VERSION
+        )
+        if not valid_step10:
+            raise HTTPException(status_code=422, detail="步骤 10 教学面板的国家、年份或版本无效")
+    # A stale DID or renamed-column snapshot may remain visible to the student,
+    # but it must never be silently persisted as completion evidence for v1.
+    for step in range(11, 15):
+        data = payload.get("steps", {}).get(str(step), {}).get("data", {})
+        if not isinstance(data, dict):
+            continue
+        for key in ("run", "qualified_run"):
+            raw = data.get(key)
+            if raw is not None and teaching_report._parse_saved_run(raw, teaching_report._STEP_OUTCOMES[step]) is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"步骤 {step} 保存的是旧版或不匹配的模型快照；请明确重新运行 {teaching_report.TEACHING_VERSION}",
+                )
     try:
         saved = db.save_session(user["sub"], payload, req.base_updated_at)
     except records.SessionChanged as error:

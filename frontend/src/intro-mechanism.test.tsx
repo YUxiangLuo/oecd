@@ -1,14 +1,10 @@
-import { expect, spyOn, test } from "bun:test";
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
-import { api } from "./api";
+import { expect, test } from "bun:test";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import { IntroOverlay } from "./intro";
 
 test("trade rerouting is selected by default and the enabled slider drives distinct illustrative paths", async () => {
-  const stepsMock = spyOn(api, "steps").mockResolvedValue({ stages: {}, steps: [] });
-  const eventsMock = spyOn(api, "shockEvents").mockResolvedValue({ events: [], disclaimer: "", source_disclosure: "" });
   try {
     const view = render(<IntroOverlay user={{ username: "student", name: "学生", role: "student" }} meta={null} stepsData={{ stages: {}, steps: [] }} onDone={() => {}} />);
-    await waitFor(() => expect(eventsMock).toHaveBeenCalled());
     fireEvent.click(view.getByRole("button", { name: "介绍页 4" }));
     const slider = view.getByRole("slider", { name: "假设加征税率" }) as HTMLInputElement;
     expect(slider.disabled).toBe(false);
@@ -54,6 +50,6 @@ test("trade rerouting is selected by default and the enabled slider drives disti
     expect(view.queryByText("12.0%") === null).toBe(true);
     expect(view.getByText(/尚未加征关税/).textContent).toBeTruthy();
   } finally {
-    cleanup(); stepsMock.mockRestore(); eventsMock.mockRestore();
+    cleanup();
   }
 });

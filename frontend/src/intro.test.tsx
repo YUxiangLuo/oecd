@@ -18,7 +18,6 @@ afterEach(cleanup);
 
 test("intro previews every stage without providing experiment-step navigation", async () => {
   const stepsMock = spyOn(api, "steps").mockResolvedValue(steps);
-  const eventsMock = spyOn(api, "shockEvents").mockResolvedValue({ events: [], disclaimer: "", source_disclosure: "" });
   const calls: unknown[][] = [];
   try {
     const view = render(<IntroOverlay user={{ username: "student", name: "学生", role: "student" }} meta={null} stepsData={steps} onDone={(...args) => { calls.push(args); }} />);
@@ -48,21 +47,19 @@ test("intro previews every stage without providing experiment-step navigation", 
     fireEvent.click(view.getByRole("button", { name: "关闭介绍" }));
     expect(calls).toEqual([[]]);
   } finally {
-    cleanup(); stepsMock.mockRestore(); eventsMock.mockRestore();
+    cleanup(); stepsMock.mockRestore();
   }
 });
 
 test("skip and Escape only dismiss the introduction without a step argument", async () => {
   const stepsMock = spyOn(api, "steps").mockResolvedValue(steps);
-  const eventsMock = spyOn(api, "shockEvents").mockResolvedValue({ events: [], disclaimer: "", source_disclosure: "" });
   const calls: unknown[][] = [];
   try {
     const view = render(<IntroOverlay user={{ username: "student", name: "学生", role: "student" }} meta={null} stepsData={steps} onDone={(...args) => { calls.push(args); }} />);
-    await waitFor(() => expect(eventsMock).toHaveBeenCalled());
     fireEvent.click(view.getByRole("button", { name: "跳过介绍" }));
     fireEvent.keyDown(view.getByRole("dialog"), { key: "Escape" });
     expect(calls).toEqual([[], []]);
   } finally {
-    cleanup(); stepsMock.mockRestore(); eventsMock.mockRestore();
+    cleanup(); stepsMock.mockRestore();
   }
 });

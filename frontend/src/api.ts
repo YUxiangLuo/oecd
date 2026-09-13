@@ -226,6 +226,10 @@ export const api = {
   network: (year: number) => get<import("./types").NetworkData>(`/api/viz/network/${year}`),
   shockEvents: () =>
     get<{ events: import("./types").ShockEvent[]; disclaimer: string; source_disclosure: string }>("/api/shocks/events"),
+  teachingPanel: (country: string, year: number, limit = 200) =>
+    get<import("./types").TeachingPanelResponse>(
+      withQuery("/api/regression/teaching-panel", { country, year, limit }),
+    ),
   shockSummary: (shockType = "tariff") =>
     get<import("./types").ShockSummary>(
       withQuery("/api/shocks/summary", { shock_type: shockType }),

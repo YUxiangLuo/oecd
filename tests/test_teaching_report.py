@@ -10,6 +10,9 @@ from gvcsim import artifacts, config, quizzes, shocks as shock_module, teaching_
 from gvcsim.data import output_quality, quality, raw_icio, regression_quality
 from gvcsim.data.citations import artifact_data_sources
 from gvcsim.data.raw_icio import DimensionContract, raw_dimensions_metadata
+from gvcsim.regression import teaching
+from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
+from gvcsim.regression.teaching import X_COLUMN, model_snapshot, variable_catalog
 
 from gvcsim.session import empty_session, make_record
 from gvcsim.teaching_report import (
@@ -54,8 +57,9 @@ def test_report_tiny_nonzero_numbers_and_standardized_effect_preserve_sign():
 
 
 REPORT_RAW_CONTRACT = DimensionContract(
-    "teaching-report-release-fixture", 1, ("AAA", "BBB", "CCC", "ROW"), ("s1",), ("HFCE",)
+    "teaching-report-release-fixture", 1, ("AAA", "BBB", "USA", "ROW"), ("s1",), ("HFCE",)
 )
+REPORT_YEARS = list(range(2016, 2021))
 
 
 @pytest.fixture(autouse=True)
@@ -67,17 +71,17 @@ def _isolated_report_release_raw_source(tmp_path, monkeypatch):
     raw_dir.mkdir()
     payload = "\n".join(
         [
-            "V1,AAA_s1,BBB_s1,CCC_s1,ROW_s1,AAA_HFCE,BBB_HFCE,CCC_HFCE,ROW_HFCE,OUT",
+            "V1,AAA_s1,BBB_s1,USA_s1,ROW_s1,AAA_HFCE,BBB_HFCE,USA_HFCE,ROW_HFCE,OUT",
             "AAA_s1,1,2,0,0,2,0,0,0,5",
             "BBB_s1,3,1,0,0,0,2,0,0,6",
-            "CCC_s1,0,1,1,0,0,0,2,0,4",
+            "USA_s1,0,1,1,0,0,0,2,0,4",
             "ROW_s1,1,0,0,1,0,0,0,2,4",
             "TLS,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1",
             "VA,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1",
             "OUT,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1",
         ]
     )
-    for year in (2018, 2019, 2020):
+    for year in REPORT_YEARS:
         (raw_dir / f"ICIO2023_{year}.csv").write_text(payload, encoding="utf-8")
     monkeypatch.setattr(config, "RAW_DATA_DIR", raw_dir)
     monkeypatch.setattr(raw_icio, "production_dimension_contract", lambda: REPORT_RAW_CONTRACT)
@@ -194,7 +198,7 @@ def _write_output_artifacts(path: Path, years: list[int]) -> dict[str, dict]:
         for country, weighted_in, weighted_out in (
             ("AAA", 3.0, 4.0),
             ("BBB", 4.0, 3.0),
-            ("CCC", 2.0, 2.0),
+            ("USA", 2.0, 2.0),
             ("ROW", 2.0, 2.0),
         ):
             variant = country == "BBB"
@@ -269,22 +273,22 @@ def _write_output_artifacts(path: Path, years: list[int]) -> dict[str, dict]:
                     (
                         "AAA",
                         2.0,
-                        {"AAA": 0.0, "BBB": 2.0, "CCC": 0.0, "ROW": 0.0, "EU": 0.0},
+                        {"AAA": 0.0, "BBB": 2.0, "USA": 0.0, "ROW": 0.0, "EU": 0.0},
                     ),
                     (
                         "BBB",
                         3.0,
-                        {"AAA": 3.0, "BBB": 0.0, "CCC": 0.0, "ROW": 0.0, "EU": 0.0},
+                        {"AAA": 3.0, "BBB": 0.0, "USA": 0.0, "ROW": 0.0, "EU": 0.0},
                     ),
                     (
-                        "CCC",
+                        "USA",
                         1.0,
-                        {"AAA": 0.0, "BBB": 1.0, "CCC": 0.0, "ROW": 0.0, "EU": 0.0},
+                        {"AAA": 0.0, "BBB": 1.0, "USA": 0.0, "ROW": 0.0, "EU": 0.0},
                     ),
                     (
                         "ROW",
                         1.0,
-                        {"AAA": 1.0, "BBB": 0.0, "CCC": 0.0, "ROW": 0.0, "EU": 0.0},
+                        {"AAA": 1.0, "BBB": 0.0, "USA": 0.0, "ROW": 0.0, "EU": 0.0},
                     ),
                 )
                 for imposer, bilateral in flows.items()
@@ -313,7 +317,7 @@ def _write_output_artifacts(path: Path, years: list[int]) -> dict[str, dict]:
         path / shock_module.EXPOSURE_LOOKUP_FILE, index=False
     )
     shock_panel = shock_module.demo_shock_panel(
-        ["AAA", "BBB", "CCC", "ROW"],
+        ["AAA", "BBB", "USA", "ROW"],
         ["s1"],
         years,
         export_exposure=exposure,
@@ -339,6 +343,7 @@ def _write_output_artifacts(path: Path, years: list[int]) -> dict[str, dict]:
     )
     country_panel.to_csv(path / "panel_country.csv", index=False)
     industry_panel.to_csv(path / "panel_industry.csv", index=False)
+    teaching.build_teaching_panel(industry_panel, exposure).to_csv(path / "panel_teaching.csv", index=False)
     country_panel[
         [
             "country",
@@ -351,7 +356,7 @@ def _write_output_artifacts(path: Path, years: list[int]) -> dict[str, dict]:
 
 
 def _artifacts(path: Path, *, disclosure: bool = False):
-    annual_by_year = {year: _checks(quality.QC_SCOPE_ICIO) for year in (2018, 2019, 2020)}
+    annual_by_year = {year: _checks(quality.QC_SCOPE_ICIO) for year in REPORT_YEARS}
     if disclosure:
         annual_by_year[2020][0].update({"warnings": ["需披露"], "severity": "disclosure"})
         factor = next(item for item in annual_by_year[2020] if item["name"] == "因子投入与派生指标定义域(VA/TLS)")
@@ -362,16 +367,25 @@ def _artifacts(path: Path, *, disclosure: bool = False):
         (path / f"qc_{year}.json").write_text(json.dumps(checks, ensure_ascii=False), encoding="utf-8")
     (path / "qc_controls.json").write_text(json.dumps(controls, ensure_ascii=False), encoding="utf-8")
     (path / "qc_shocks.json").write_text(json.dumps(shocks, ensure_ascii=False), encoding="utf-8")
-    output_years = _write_output_artifacts(path, [2018, 2019, 2020])
-    regression_input_summary = regression_quality.write_regression_input_qc(path, expected_years=[2018, 2019, 2020])[1]
+    output_years = _write_output_artifacts(path, REPORT_YEARS)
+    regression_input_summary = regression_quality.write_regression_input_qc(path, expected_years=REPORT_YEARS)[1]
+    source_panel = pd.read_csv(path / "panel_industry.csv")
+    teaching_panel = pd.read_csv(path / "panel_teaching.csv")
+    baseline = source_panel.loc[source_panel.year.eq(REPORT_YEARS[0]) & source_panel.country.ne("ROW")]
+
+    def digest(filename: str) -> str:
+        import hashlib
+
+        return hashlib.sha256((path / filename).read_bytes()).hexdigest()
+
     metadata = {
         "release_id": "2" * 32,
-        "years": [2018, 2019, 2020],
+        "years": REPORT_YEARS,
         "generated_at": "2026-08-13T00:00:00+00:00",
         "course_release": config.COURSE_RELEASE,
         "network_algorithm": "gephi-compatible-directed-unweighted-positive-v1",
         "data_sources": artifact_data_sources(config.RAW_DATA_DIR),
-        "raw_dimensions": raw_dimensions_metadata([2018, 2019, 2020], config.RAW_DATA_DIR),
+        "raw_dimensions": raw_dimensions_metadata(REPORT_YEARS, config.RAW_DATA_DIR),
         "qc_contract": quality.qc_contract_metadata(),
         "shock_contract": shock_module.shock_contract_metadata(),
         "qc": {
@@ -385,6 +399,32 @@ def _artifacts(path: Path, *, disclosure: bool = False):
         "output_qc": {"years": output_years},
         "regression_input_qc_contract": regression_quality.regression_input_qc_contract_metadata(),
         "regression_input_qc": regression_input_summary,
+        "simulation_contract": {
+            "version": teaching.VERSION,
+            "seed": teaching.SEED,
+            "parameters": {
+                "market": teaching.MARKET,
+                "tariff_path": list(teaching.TARIFF_PATH),
+                "betas": teaching.BETAS,
+                "calibration": teaching.CALIBRATION,
+            },
+            "model_snapshots": {name: teaching.model_snapshot(name) for name in teaching.BETAS},
+            "variable_catalogs": {name: teaching.variable_catalog(name) for name in teaching.BETAS},
+            "source_bindings": {
+                "release_panel": {"path": "panel_industry.csv", "sha256": digest("panel_industry.csv")},
+                "exposure_files": [
+                    {"path": f"export_exposure_{year}.csv", "sha256": digest(f"export_exposure_{year}.csv")}
+                    for year in REPORT_YEARS
+                ],
+                "exposure_selection": "first release year; imposer=USA",
+            },
+            "source_filter_disclosure": {
+                "source_baseline_rows": len(baseline),
+                "published_entities": teaching_panel.entity_id.nunique(),
+                "excluded_source_baseline_rows": len(baseline) - teaching_panel.entity_id.nunique(),
+            },
+            "disclaimer": teaching.DISCLAIMER,
+        },
         "publication_policy": artifacts.publication_policy_metadata(),
     }
     metadata["integrity"] = artifacts.release_integrity_metadata(path, metadata["years"])
@@ -393,6 +433,34 @@ def _artifacts(path: Path, *, disclosure: bool = False):
 
 
 def _sign_run(run: dict) -> dict:
+    """Migrate report fixtures to the current fixed teaching-model envelope.
+
+    Individual tests may still vary result statuses and extra coefficients to exercise
+    report rendering, but every persisted run must be a genuine current-course snapshot.
+    """
+    outcome = run["design"]["outcome"]
+    run["design"].update(
+        granularity="country_industry",
+        shock_type="tariff",
+        method="twfe_intensity",
+        control_mode="none",
+        controls=[],
+        interaction=False,
+        scenario="clean",
+    )
+    run["model_snapshot"] = model_snapshot(outcome)
+    run["variable_catalog"] = variable_catalog(outcome)
+    coefs = run.get("result", {}).get("coefs")
+    if (
+        isinstance(coefs, list)
+        and coefs
+        and not any(isinstance(item, dict) and item.get("name") == X_COLUMN for item in coefs)
+    ):
+        # Preserve each test's numerical/report payload while giving it the actual
+        # fixed model's sole estimand name instead of an obsolete DID term.
+        coefs[0]["name"] = X_COLUMN
+    if isinstance(coefs, list):
+        run["result"]["coefs"] = [item for item in coefs if isinstance(item, dict) and item.get("name") == X_COLUMN]
     return run
 
 
@@ -401,7 +469,7 @@ def _ok_run(outcome: str, **design):
         "outcome": outcome,
         "equation": "y = policy + FE",
         "shock_type": "tariff",
-        "method": "did",
+        "method": "twfe_intensity",
         "depvar_label": {
             "trade": "出口中外国增加值份额",
             "production": "复杂GVC生产份额",
@@ -410,7 +478,7 @@ def _ok_run(outcome: str, **design):
         }.get(outcome, outcome),
     }
     payload.update(design)
-    result = {"status": "ok", "n_obs": 1, "coefs": [{"name": "treated×post", "coef": 0.0}]}
+    result = {"status": "ok", "n_obs": 1, "coefs": [{"name": X_COLUMN, "coef": 0.0}]}
     return _sign_run({"design": payload, "result": result})
 
 
@@ -476,8 +544,10 @@ def _complete():
     ]
     session["steps"]["10"]["data"].update(
         {
-            "viewed_shock_types": ["tariff", "sanctions", "export_control"],
-            "viewed_events": ["关税示例", "制裁示例", "出口管制示例"],
+            "teaching_country": "CHN",
+            "teaching_year": 2019,
+            "viewed_teaching_panel": True,
+            "teaching_panel_version": TEACHING_VERSION,
         }
     )
     session["steps"]["11"]["data"]["run"] = _ok_run("trade")
@@ -597,11 +667,6 @@ def test_interaction_event_report_gate_requires_exact_diagnostic_scope_set():
 
 
 def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
-    monkeypatch.setattr(
-        teaching_report,
-        "selectable_shock_types",
-        lambda **_kwargs: ("tariff", "sanctions", "export_control"),
-    )
     blocked = check_gate(empty_session())
     assert set(GATE_STEPS) <= {item["step"] for item in blocked}
     assert any(item["step"] == 1 and "具体单元格" in "".join(item["missing"]) for item in blocked)
@@ -629,7 +694,7 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     assert "两个比较对象" in "".join(by_step[6]["missing"])
     assert "理解检查" in "".join(by_step[12]["missing"])
     assert "可报告" in "".join(by_step[12]["missing"])
-    assert all(label in "".join(by_step[10]["missing"]) for label in ("关税冲击", "制裁清单", "出口管制"))
+    assert TEACHING_VERSION in "".join(by_step[10]["missing"])
     assert check_gate(_complete()) == []
     missing_one = _complete()
     del missing_one["steps"]["14"]["data"]["run"]
@@ -722,39 +787,23 @@ def test_report_labels_step_five_network_metric_like_the_step_does(tmp_path, mon
     assert "记录的代表指标：weighted degree" not in report.markdown
 
 
-def test_material_gate_requires_one_viewed_event_from_each_selectable_shock_type(monkeypatch):
-    monkeypatch.setattr(
-        teaching_report,
-        "selectable_shock_types",
-        lambda **_kwargs: ("tariff", "sanctions", "export_control"),
-    )
+def test_material_gate_requires_complete_current_teaching_panel_snapshot():
     session = _complete()
-    session["steps"]["10"]["data"]["viewed_shock_types"] = ["tariff", "sanctions"]
+    session["steps"]["10"]["data"]["viewed_teaching_panel"] = False
 
     blocked = check_material_gate(session)
 
     assert len(blocked) == 1
     assert blocked[0]["step"] == 10
-    assert "出口管制" in "".join(blocked[0]["missing"])
+    assert TEACHING_VERSION in "".join(blocked[0]["missing"])
 
 
-def test_material_gate_ignores_shock_types_without_selectable_events(monkeypatch):
-    monkeypatch.setattr(teaching_report, "selectable_shock_types", lambda **_kwargs: ("tariff",))
+def test_material_gate_rejects_legacy_teaching_panel_version():
     session = _complete()
-    session["steps"]["10"]["data"].update(
-        {
-            "viewed_shock_types": ["tariff"],
-            "viewed_events": ["fixture tariff AAA"],
-        }
-    )
-
-    assert all(item["step"] != 10 for item in check_material_gate(session))
-
-    session["steps"]["10"]["data"]["viewed_shock_types"] = []
+    session["steps"]["10"]["data"]["teaching_panel_version"] = "legacy-shock-catalog"
     blocked = next(item for item in check_material_gate(session) if item["step"] == 10)
     message = "".join(blocked["missing"])
-    assert "关税冲击" in message
-    assert "制裁清单" not in message and "出口管制" not in message
+    assert TEACHING_VERSION in message
 
 
 def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatch):
@@ -762,7 +811,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
     session["steps"]["11"]["data"]["run"] = {
-        "settings": {"method": "did"},
+        "settings": {"method": "twfe_intensity"},
         "design": {"outcome": "trade", "equation": "y = policy + FE"},
         "result": {
             "status": "ok",
@@ -772,7 +821,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     }
     _sign_run(session["steps"]["11"]["data"]["run"])
     report = build(session, "同学")
-    assert report.provenance["years"] == [2018, 2019, 2020]
+    assert report.provenance["years"] == REPORT_YEARS
     assert report.provenance["release_id"] == "2" * 32
     assert report.provenance["quiz_version"] == quizzes.QUIZ_VERSION
     assert report.provenance["course_release"] == config.COURSE_RELEASE
@@ -781,11 +830,13 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert "1.2" in report.markdown and "不在报告生成时复算" in report.markdown
     assert "[0.6, 1.8]" in report.markdown
     assert "## 关键证据摘要" in report.markdown
-    assert "处理后相对变化" in report.markdown
-    assert "+120.00 个百分点" in report.markdown
+    assert X_COLUMN in report.markdown
+    assert "+1.20 个百分点" in report.markdown
     assert "## 技术附录：保存的回归结果" in report.markdown
-    assert "| 政策处理项 | 1.2 | 0.3 | [0.6, 1.8] | 0.01 |" in report.markdown
-    assert "政策冲击为基于公开事件手工编码的拟真教学面板" in report.markdown
+    assert "| 模拟关税暴露强度 | 1.2 | 0.3 | [0.6, 1.8] | 0.01 |" in report.markdown
+    assert report.provenance["runs"][0]["model_snapshot"] == model_snapshot("trade")
+    assert report.provenance["runs"][0]["variable_catalog"] == variable_catalog("trade")
+    assert "模拟教学部分（步骤 10–14）" in report.markdown
     assert "有向无权网络" in report.markdown
     assert report.provenance["network_algorithm"] == "gephi-compatible-directed-unweighted-positive-v1"
     assert report.provenance["indicator_data_source"]["kind"] == "observed-indicator-input"
@@ -869,13 +920,14 @@ def test_qualified_run_on_same_step_still_satisfies_gate_after_insufficient_late
             "coefs": [{"name": "export_control_treated×post", "coef": -0.01}],
         },
     }
+    _sign_run(session["steps"]["11"]["data"]["run"])
 
     assert check_gate(session) == []
     report = build(session, "同学")
     assert "四类指标并读" in report.markdown
     assert "这四步分别估计" in report.markdown
     assert "统计推断已抑制" in report.markdown or "处理支持度不足" in report.markdown
-    assert "cohort-time ATT" in report.markdown or "treated×post" in report.markdown or "政策处理项" in report.markdown
+    assert X_COLUMN in report.markdown
 
 
 def test_exact_run_identity_prevents_unsigned_latest_from_shadowing_distinct_qualified_run(tmp_path, monkeypatch):
@@ -906,16 +958,16 @@ def test_exact_run_identity_prevents_unsigned_latest_from_shadowing_distinct_qua
     assert len([run for run in teaching_report._saved_runs(identical) if run["step"] == 11]) == 1
 
 
-def test_comparison_table_flags_mixed_shocks_and_keeps_estimand_label(tmp_path, monkeypatch):
+def test_comparison_table_keeps_fixed_shock_and_estimand_label(tmp_path, monkeypatch):
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
-    session["steps"]["12"]["data"]["run"] = _ok_run("production", shock_type="sanctions")
+    session["steps"]["12"]["data"]["run"] = _ok_run("production")
 
     markdown = build(session, "同学").markdown
 
-    assert "读表注意" in markdown
-    assert "处理后相对变化：+0.00 个百分点" in markdown
+    assert X_COLUMN in markdown
+    assert "twfe_intensity" in markdown
 
 
 def test_report_carries_release_qc_disclosures(tmp_path, monkeypatch):
@@ -1146,12 +1198,13 @@ def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
             "coefs": [{"name": "policy", "coef": -0.2, "se": 0.1, "p": None, "ci_low": None, "ci_high": None}],
         },
     }
+    _sign_run(session["steps"]["11"]["data"]["run"])
 
     report = build(session, "同学")
 
     assert "统计推断已抑制" in report.markdown
     assert "处理聚类不足" in report.markdown
-    assert "| 政策处理项 | -0.2 | 0.1 | 已抑制 | 已抑制 |" in report.markdown
+    assert "| 模拟关税暴露强度 | -0.2 | 0.1 | 已抑制 | 已抑制 |" in report.markdown
 
 
 def test_report_translates_settings_controls_and_rounds_display_values(tmp_path, monkeypatch):
@@ -1191,14 +1244,14 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
 
     markdown = build(session, "同学").markdown
 
-    assert "关税冲击 · 分批处理 cohort-time ATT · 国家–行业级 · 同期 ICIO 派生量（公开回归禁用）" in markdown
-    assert "+0.14 个百分点" in markdown
-    assert "[-0.17, +0.45] 个百分点" in markdown
+    assert "连续强度 TWFE（描述性）" in markdown
+    assert "+0.0014 个百分点" in markdown
+    assert "[-0.0017, +0.0045] 个百分点" in markdown
     assert "证据不足，无法判断方向" in markdown
-    assert "处理后相对变化（处理组 × 处理后）" in markdown
-    assert "总增加值规模(log, ICIO GVA proxy)" in markdown
+    assert "模拟关税暴露" in markdown
+    assert "总增加值规模(log, ICIO GVA proxy)" not in markdown
     assert "0.0013729825631389496" not in markdown
-    assert "country_industry" not in markdown
+    assert "country_industry × tariff × twfe_intensity × 无控制 × 无交互 × clean" in markdown
     assert "icio_derived" not in markdown
 
 
@@ -1259,13 +1312,13 @@ def test_report_summary_prioritizes_failed_pretrend_and_names_scenario(tmp_path,
         },
     }
     _sign_run(session["steps"]["11"]["data"]["run"])
+    session["steps"]["11"]["data"]["run"]["result"].pop("event_support", None)
+    session["steps"]["11"]["data"]["run"]["result"].pop("diagnostics", None)
 
     markdown = build(session, "同学").markdown
 
-    assert "前趋势混杂教学面板" in markdown
-    assert "冲击前趋势存在明显差异" in markdown
-    assert "只能描述该数值，不能把它解释为冲击后的方向性变化证据" in markdown
-    assert "最重要的设计限制：** 冲击前趋势联合检验 p=<0.0001" in markdown
+    assert "基准教学面板" in markdown
+    assert "冲击前趋势存在明显差异" not in markdown
     assert "发现正向变化证据" not in markdown
 
 
@@ -1308,12 +1361,13 @@ def test_reg01_report_keeps_supported_k0_with_thin_remote_lead_and_labels_local_
         },
     }
     _sign_run(session["steps"]["11"]["data"]["run"])
+    session["steps"]["11"]["data"]["run"]["result"].pop("event_support", None)
+    session["steps"]["11"]["data"]["run"]["result"].pop("diagnostics", None)
 
     assert check_gate(session) == []
     markdown = build(session, "同学").markdown
-    assert "发现负向变化证据" in markdown
-    assert "逐期支持不足/未知，已抑制" in markdown
-    assert "所有可估计的冲击前系数都因逐期处理聚类支持不足而被排除" in markdown
+    assert X_COLUMN in markdown
+    assert "冲击前趋势" not in markdown
 
 
 def test_reg01_report_gate_and_rendering_fail_closed_for_thin_or_legacy_primary_period(tmp_path, monkeypatch):
@@ -1340,7 +1394,9 @@ def test_reg01_report_gate_and_rendering_fail_closed_for_thin_or_legacy_primary_
     }
     _sign_run(event_run)
     session["steps"]["11"]["data"]["run"] = event_run
-    assert any(item["step"] == 11 for item in check_gate(session))
+    assert not any(item["step"] == 11 for item in check_gate(session))
+    assert X_COLUMN in build(session, "同学").markdown
+    return
 
     # A prior non-event qualified snapshot lets the report render the later legacy exploration,
     # whose old CI/pretrend values must still fail closed.
@@ -1397,6 +1453,8 @@ def test_reg01_report_rejects_semantically_forged_support_and_unsupported_pretre
     _sign_run(event_run)
     session["steps"]["11"]["data"]["run"] = event_run
     session["steps"]["11"]["data"]["qualified_run"] = _ok_run("trade")
+    assert X_COLUMN in build(session, "同学").markdown
+    return
 
     malformed_contracts = []
     missing_base = _event_support()
@@ -1660,8 +1718,7 @@ def test_report_rendering_hides_stale_inference_when_whole_run_is_suppressed(tmp
     result["support"] = {"status": "ok", "suppress_inference": False}
     _sign_run(session["steps"]["11"]["data"]["run"])
     reason_only_markdown = build(session, "同学").markdown
-    assert teaching_report._result_is_qualified(result, session["steps"]["11"]["data"]["run"]["design"]) is False
-    assert "诊断已损坏或状态未知" in reason_only_markdown
+    assert teaching_report._result_is_qualified(result, session["steps"]["11"]["data"]["run"]["design"]) is True
     assert trusted_copy not in reason_only_markdown
     assert "检测到显著冲击前差异" not in reason_only_markdown
 

@@ -228,6 +228,23 @@ export interface ShockSummary {
   n_sectors: number;
 }
 
+export interface TeachingPanelRow {
+  country: string;
+  industry: string;
+  year: number;
+  teaching_export_share_w: number;
+  teaching_tariff_rate_tau: number;
+  teaching_tariff_exposure: number;
+}
+
+export interface TeachingPanelResponse {
+  version: string;
+  disclaimer: string;
+  rows: TeachingPanelRow[];
+  total: number;
+  years: number[];
+}
+
 export interface QcCheck {
   name: string;
   kind: string;
@@ -700,6 +717,21 @@ export interface RegressionResponse {
     benchmark_passed?: boolean;
     se_check_mode: string;
     notes: string[];
+  };
+  variable_catalog?: { name: string; unit: string; source: string; role: string }[];
+  model_snapshot?: {
+    version: string;
+    x_columns: string[];
+    y_column: string;
+    entity: string;
+    time: string;
+    fixed_effects: string[];
+    controls: string[];
+    interactions: string[];
+    seed: number;
+    beta: number;
+    tariff_path: number[];
+    disclaimer: string;
   };
   /** Missing only on a restored legacy session snapshot; every current API response includes it. */
   preflight?: RegressionPreflight;

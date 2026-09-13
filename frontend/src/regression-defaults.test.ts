@@ -10,9 +10,9 @@ import {
 import type { RegressionResponse } from "./types";
 
 describe("SIGNATURE_SETTINGS", () => {
-  it("四步共用关税 × DID 基准", () => {
+  it("四步共用关税 × 连续强度 TWFE 教学基准", () => {
     for (const settings of Object.values(SIGNATURE_SETTINGS)) {
-      expect(settings.method).toBe("did");
+      expect(settings.method).toBe("twfe_intensity");
       expect(settings.interaction).toBe(false);
       expect(settings.shockType).toBe("tariff");
       expect(settings.weightMode).toBe("fixed_pretreatment");
@@ -66,7 +66,7 @@ describe("normalizeRegressionSettings", () => {
 describe("regressionSettingsKey", () => {
   it("is stable after PostgreSQL jsonb reorders otherwise identical keys", () => {
     const reordered = {
-      method: "did",
+      method: "twfe_intensity",
       scenario: "clean",
       priceMode: "nominal",
       shockType: "tariff",

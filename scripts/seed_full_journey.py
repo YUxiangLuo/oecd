@@ -19,6 +19,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from gvcsim import quizzes, teaching_report
+from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.session import empty_session, make_record
 
 
@@ -259,27 +260,26 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
         }
     )
 
-    events_payload = _request_json(base_url, "GET", "/api/shocks/events", token=token, timeout=20.0)
-    events = events_payload.get("events")
-    if not isinstance(events, list):
-        raise RuntimeError("shock event catalogue is malformed")
-    selected: dict[str, str] = {}
-    for event in events:
-        if not isinstance(event, dict):
-            continue
-        shock_type, name = event.get("shock_type"), event.get("name")
-        if isinstance(shock_type, str) and isinstance(name, str) and shock_type not in selected:
-            selected[shock_type] = name
-    if not selected:
-        raise RuntimeError("active release has no selectable shock events")
+    teaching_query = urlencode({"country": left, "year": year, "limit": 60})
+    teaching_panel = _request_json(
+        base_url, "GET", f"/api/regression/teaching-panel?{teaching_query}", token=token, timeout=20.0
+    )
+    teaching_rows = teaching_panel.get("rows")
+    if teaching_panel.get("version") != TEACHING_VERSION or not isinstance(teaching_rows, list) or not teaching_rows:
+        raise RuntimeError("Step 10 teaching panel is missing or uses an unsupported simulation contract")
     session["steps"]["10"]["data"].update(
-        {"viewed_shock_types": list(selected), "viewed_events": list(selected.values())}
+        {
+            "teaching_country": left,
+            "teaching_year": year,
+            "viewed_teaching_panel": True,
+            "teaching_panel_version": TEACHING_VERSION,
+        }
     )
 
     request_settings = {
         "granularity": "country_industry",
         "shock_type": "tariff",
-        "method": "did",
+        "method": "twfe_intensity",
         "control_mode": "none",
         "interaction": False,
         "price_mode": "nominal",
@@ -290,7 +290,7 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
     stored_settings = {
         "granularity": "country_industry",
         "shockType": "tariff",
-        "method": "did",
+        "method": "twfe_intensity",
         "controlMode": "none",
         "interaction": False,
         "priceMode": "nominal",
@@ -309,15 +309,28 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
         )
         result = response.get("result")
         design = response.get("design")
+        snapshot = response.get("model_snapshot")
+        catalog = response.get("variable_catalog")
         if (
             not isinstance(result, dict)
             or not isinstance(design, dict)
             or design.get("outcome") != outcome
+            or design.get("method") != "twfe_intensity"
+            or not isinstance(snapshot, dict)
+            or snapshot.get("version") != TEACHING_VERSION
+            or not isinstance(catalog, list)
+            or not catalog
             or not teaching_report._result_is_reportable(result, design)
         ):
             status = result.get("status") if isinstance(result, dict) else None
             raise RuntimeError(f"{outcome} default regression is not reportable: status={status}")
-        saved = {"settings": dict(stored_settings), "design": design, "result": result}
+        saved = {
+            "settings": dict(stored_settings),
+            "design": design,
+            "result": result,
+            "model_snapshot": snapshot,
+            "variable_catalog": catalog,
+        }
         data = session["steps"][str(step)]["data"]
         data["run"] = saved
         # A complete stopped-inference diagnosis satisfies the course gate but
@@ -365,7 +378,7 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
         "completed_steps": completion["completed_count"],
         "regression_outcomes": list(settings_by_outcome),
         "regression_statuses": regression_statuses,
-        "viewed_shock_types": list(selected),
+        "teaching_panel_version": TEACHING_VERSION,
         "report_gate": [],
     }
 

@@ -10,7 +10,7 @@ const step: Step = {
   handoff: { input: "", action: "", output: "" },
 };
 
-test("a rejected artifact never claims its disabled QC or source request is loading", () => {
+test("step 10 uses the dedicated teaching tariff panel independently of the old shock contract", () => {
   const meta: Meta = {
     years: [2016, 2020], countries: ["CHN", "USA"], sectors: ["C26"],
     dataset: { years: [2016, 2020], artifact_contract_version: SHOCK_ARTIFACT_CONTRACT_VERSION - 1 },
@@ -19,8 +19,8 @@ test("a rejected artifact never claims its disabled QC or source request is load
     data: undefined, save: () => {}, complete: false, syncing: false,
     syncError: null, syncNow: () => {},
   }} />);
-  expect(html).toContain("不支持冲击产物版本");
-  expect(html).toContain("未读取：产物契约无效");
-  expect(html).toContain("产物契约校验失败，未读取来源披露");
-  expect(html.match(/冲击数据质检[\s\S]*?<\/summary>/)?.[0]).not.toContain("加载中");
+  expect(html).toContain("教学关税暴露");
+  expect(html).toContain("teaching_tariff_exposure");
+  expect(html).toContain("正在读取教学关税面板");
+  expect(html).not.toContain("政策事件");
 });

@@ -10,32 +10,34 @@ from gvcsim.data import output_quality, quality, raw_icio, regression_quality
 from gvcsim.data.citations import artifact_data_sources
 from gvcsim.data.raw_icio import DimensionContract, raw_dimensions_metadata
 from gvcsim.regression import panel as regression_panel
+from gvcsim.regression import teaching
 
 
 RELEASE_ID = "1" * 32
 RELEASE_RAW_CONTRACT = DimensionContract(
-    "artifact-release-fixture", 1, ("AAA", "BBB", "CCC", "ROW"), ("s1",), ("HFCE",)
+    "artifact-release-fixture", 1, ("AAA", "BBB", "USA", "ROW"), ("s1",), ("HFCE",)
 )
 RAW_CACHE_CONTRACT = DimensionContract(
-    "artifact-raw-cache-fixture", 1, ("AAA", "BBB", "CCC", "ROW"), ("s1",), ("HFCE",)
+    "artifact-raw-cache-fixture", 1, ("AAA", "BBB", "USA", "ROW"), ("s1",), ("HFCE",)
 )
+FIXTURE_YEARS = list(range(2016, 2021))
 
 
 def _write_release_raw_fixture(raw_dir: Path) -> Path:
     raw_dir.mkdir()
     payload = "\n".join(
         [
-            "V1,AAA_s1,BBB_s1,CCC_s1,ROW_s1,AAA_HFCE,BBB_HFCE,CCC_HFCE,ROW_HFCE,OUT",
+            "V1,AAA_s1,BBB_s1,USA_s1,ROW_s1,AAA_HFCE,BBB_HFCE,USA_HFCE,ROW_HFCE,OUT",
             "AAA_s1,1,2,0,0,2,0,0,0,5",
             "BBB_s1,3,1,0,0,0,2,0,0,6",
-            "CCC_s1,0,1,1,0,0,0,2,0,4",
+            "USA_s1,0,1,1,0,0,0,2,0,4",
             "ROW_s1,1,0,0,1,0,0,0,2,4",
             "TLS,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1",
             "VA,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1",
             "OUT,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1",
         ]
     )
-    for year in (2018, 2019, 2020):
+    for year in FIXTURE_YEARS:
         (raw_dir / f"ICIO2023_{year}.csv").write_text(payload, encoding="utf-8")
     return raw_dir / "ICIO2023_2020.csv"
 
@@ -126,7 +128,7 @@ def _isolated_release_raw_source(tmp_path, monkeypatch):
 def _write_raw_cache_fixture(raw_dir: Path) -> Path:
     source_dir = raw_dir.parent / "raw-cache-source"
     _write_release_raw_fixture(source_dir)
-    for year in (2018, 2019, 2020):
+    for year in FIXTURE_YEARS:
         (raw_dir / f"ICIO2023_{year}.csv").write_bytes((source_dir / f"ICIO2023_{year}.csv").read_bytes())
     return raw_dir / "ICIO2023_2020.csv"
 
@@ -160,18 +162,27 @@ def _release_metadata(
     annual = _valid_checks(quality.QC_SCOPE_ICIO)
     controls = _valid_checks(quality.QC_SCOPE_CONTROLS)
     shocks = _valid_checks(quality.QC_SCOPE_SHOCKS)
+    source_panel = pd.read_csv(directory / "panel_industry.csv")
+    teaching_panel = pd.read_csv(directory / "panel_teaching.csv")
+    baseline = source_panel.loc[source_panel.year.eq(FIXTURE_YEARS[0]) & source_panel.country.ne("ROW")]
+
+    def digest(filename: str) -> str:
+        import hashlib
+
+        return hashlib.sha256((directory / filename).read_bytes()).hexdigest()
+
     metadata = {
         "release_id": RELEASE_ID,
-        "years": [2018, 2019, 2020],
+        "years": FIXTURE_YEARS,
         "generated_at": "2026-08-13T00:00:00+00:00",
         "course_release": course_release or config.COURSE_RELEASE,
         "network_algorithm": artifacts.NETWORK_ALGORITHM,
         "data_sources": artifact_data_sources(config.RAW_DATA_DIR),
-        "raw_dimensions": raw_dimensions_metadata([2018, 2019, 2020], config.RAW_DATA_DIR),
+        "raw_dimensions": raw_dimensions_metadata(FIXTURE_YEARS, config.RAW_DATA_DIR),
         "qc_contract": quality.qc_contract_metadata(),
         "shock_contract": shock_module.shock_contract_metadata(),
         "qc": {
-            "years": {str(year): quality.summarize_serialized_checks(annual) for year in (2018, 2019, 2020)},
+            "years": {str(year): quality.summarize_serialized_checks(annual) for year in FIXTURE_YEARS},
             "controls": quality.summarize_serialized_checks(controls),
             "shocks": quality.summarize_serialized_checks(shocks),
         },
@@ -179,6 +190,32 @@ def _release_metadata(
         "output_qc": {"years": output_summary},
         "regression_input_qc_contract": regression_quality.regression_input_qc_contract_metadata(),
         "regression_input_qc": regression_input_summary,
+        "simulation_contract": {
+            "version": teaching.VERSION,
+            "seed": teaching.SEED,
+            "parameters": {
+                "market": teaching.MARKET,
+                "tariff_path": list(teaching.TARIFF_PATH),
+                "betas": teaching.BETAS,
+                "calibration": teaching.CALIBRATION,
+            },
+            "model_snapshots": {name: teaching.model_snapshot(name) for name in teaching.BETAS},
+            "variable_catalogs": {name: teaching.variable_catalog(name) for name in teaching.BETAS},
+            "source_bindings": {
+                "release_panel": {"path": "panel_industry.csv", "sha256": digest("panel_industry.csv")},
+                "exposure_files": [
+                    {"path": f"export_exposure_{year}.csv", "sha256": digest(f"export_exposure_{year}.csv")}
+                    for year in FIXTURE_YEARS
+                ],
+                "exposure_selection": "first release year; imposer=USA",
+            },
+            "source_filter_disclosure": {
+                "source_baseline_rows": len(baseline),
+                "published_entities": teaching_panel.entity_id.nunique(),
+                "excluded_source_baseline_rows": len(baseline) - teaching_panel.entity_id.nunique(),
+            },
+            "disclaimer": teaching.DISCLAIMER,
+        },
         "publication_policy": artifacts.publication_policy_metadata(),
     }
     metadata["integrity"] = artifacts.release_integrity_metadata(directory, metadata["years"])
@@ -214,7 +251,7 @@ def _indicator_rows(year: int) -> tuple[list[dict], list[dict]]:
     for country, weighted_in, weighted_out in (
         ("AAA", 3.0, 4.0),
         ("BBB", 4.0, 3.0),
-        ("CCC", 2.0, 2.0),
+        ("USA", 2.0, 2.0),
         ("ROW", 2.0, 2.0),
     ):
         variant = country == "BBB"
@@ -270,7 +307,7 @@ def _indicator_rows(year: int) -> tuple[list[dict], list[dict]]:
 
 
 def _write_semantic_outputs(directory: Path, year: int = 2020) -> dict[str, dict]:
-    years = [2018, 2019, 2020]
+    years = FIXTURE_YEARS
     country_rows, industry_rows = _indicator_rows(year)
     for artifact_year in years:
         annual_country, annual_industry = _indicator_rows(artifact_year)
@@ -297,22 +334,22 @@ def _write_semantic_outputs(directory: Path, year: int = 2020) -> dict[str, dict
                 (
                     "AAA",
                     2.0,
-                    {"AAA": 0.0, "BBB": 2.0, "CCC": 0.0, "ROW": 0.0, "EU": 0.0},
+                    {"AAA": 0.0, "BBB": 1.0, "USA": 1.0, "ROW": 0.0, "EU": 0.0},
                 ),
                 (
                     "BBB",
                     3.0,
-                    {"AAA": 3.0, "BBB": 0.0, "CCC": 0.0, "ROW": 0.0, "EU": 0.0},
+                    {"AAA": 2.0, "BBB": 0.0, "USA": 1.0, "ROW": 0.0, "EU": 0.0},
                 ),
                 (
-                    "CCC",
+                    "USA",
                     1.0,
-                    {"AAA": 0.0, "BBB": 1.0, "CCC": 0.0, "ROW": 0.0, "EU": 0.0},
+                    {"AAA": 0.0, "BBB": 1.0, "USA": 0.0, "ROW": 0.0, "EU": 0.0},
                 ),
                 (
                     "ROW",
                     1.0,
-                    {"AAA": 1.0, "BBB": 0.0, "CCC": 0.0, "ROW": 0.0, "EU": 0.0},
+                    {"AAA": 1.0, "BBB": 0.0, "USA": 0.0, "ROW": 0.0, "EU": 0.0},
                 ),
             )
             for imposer, bilateral in flows.items()
@@ -352,7 +389,7 @@ def _write_semantic_outputs(directory: Path, year: int = 2020) -> dict[str, dict
         directory / shock_module.EXPOSURE_LOOKUP_FILE, index=False
     )
     shock_panel = shock_module.demo_shock_panel(
-        ["AAA", "BBB", "CCC", "ROW"],
+        ["AAA", "BBB", "USA", "ROW"],
         ["s1"],
         years,
         export_exposure=exposure,
@@ -380,11 +417,12 @@ def _write_semantic_outputs(directory: Path, year: int = 2020) -> dict[str, dict
     )
     panel_country.to_csv(directory / "panel_country.csv", index=False)
     panel_industry.to_csv(directory / "panel_industry.csv", index=False)
+    teaching.build_teaching_panel(panel_industry, exposure).to_csv(directory / "panel_teaching.csv", index=False)
     controls_frame = pd.DataFrame(
         [
             {"country": country, "year": artifact_year}
             for artifact_year in years
-            for country in ("AAA", "BBB", "CCC", "ROW")
+            for country in ("AAA", "BBB", "USA", "ROW")
         ]
     )
     for index, column in enumerate(regression_quality.REGRESSION_CONTROL_FIELDS):
@@ -407,7 +445,7 @@ def _release(directory: Path, *, course_release: str | None = None) -> None:
     year = 2020
     output_summary, regression_input_summary = _write_semantic_outputs(directory, year)
     payloads = {
-        **{f"qc_{artifact_year}.json": _valid_checks(quality.QC_SCOPE_ICIO) for artifact_year in (2018, 2019, 2020)},
+        **{f"qc_{artifact_year}.json": _valid_checks(quality.QC_SCOPE_ICIO) for artifact_year in FIXTURE_YEARS},
         "qc_controls.json": _valid_checks(quality.QC_SCOPE_CONTROLS),
         "qc_shocks.json": _valid_checks(quality.QC_SCOPE_SHOCKS),
     }
@@ -430,9 +468,9 @@ def test_v13_release_requires_integrity_mathematics_regression_qc_manifest_and_i
     result = artifacts.validate_release(tmp_path)
     metadata = artifacts.dataset_metadata(tmp_path)
 
-    assert result == {"release_id": RELEASE_ID, "files": 26, "years": 3}
+    assert result == {"release_id": RELEASE_ID, "files": 39, "years": 5}
     assert artifacts.release_identity(tmp_path) == RELEASE_ID
-    assert metadata["artifact_contract_version"] == 14
+    assert metadata["artifact_contract_version"] == 15
     assert metadata["publication_policy"] == artifacts.publication_policy_metadata()
     assert metadata["integrity"]["status"] == "passed"
     assert "冲击数值字段完整性(*_shock有限且treated为0/1)" in metadata["integrity"]["scopes"]["shocks"]["checked"]
@@ -467,8 +505,8 @@ def test_v13_release_requires_integrity_mathematics_regression_qc_manifest_and_i
     assert "causal identification" in regression_contract["certification_limit"]
     assert metadata["raw_dimensions"]["countries"] == 4
     assert metadata["data_sources"]["simulated_macro_controls"]["production_data"] is False
-    assert len(metadata["artifact_manifest"]) == 26
-    assert artifacts.current_artifact_years(tmp_path) == [2018, 2019, 2020]
+    assert len(metadata["artifact_manifest"]) == 39
+    assert artifacts.current_artifact_years(tmp_path) == FIXTURE_YEARS
 
 
 def test_release_rejects_data_source_and_raw_dimension_metadata_tampering(tmp_path):
@@ -571,11 +609,11 @@ def test_release_shock_generation_schema_includes_all_release_fields(tmp_path):
 
     assert list(frame.columns) == list(
         shock_module.demo_shock_panel(
-            ["AAA", "BBB", "CCC", "ROW"],
+            ["AAA", "BBB", "USA", "ROW"],
             ["s1"],
-            [2018, 2019, 2020],
+            FIXTURE_YEARS,
             export_exposure=pd.concat(
-                [pd.read_csv(tmp_path / f"export_exposure_{year}.csv") for year in (2018, 2019, 2020)],
+                [pd.read_csv(tmp_path / f"export_exposure_{year}.csv") for year in FIXTURE_YEARS],
                 ignore_index=True,
             ),
             exposure_mode=shock_module.EXPOSURE_MODE_FIXED_PRETREATMENT,
@@ -958,10 +996,10 @@ def test_regression_input_qc_allows_sparse_null_interaction_baseline_with_viable
     for filename in ("panel_country.csv", "panel_industry.csv"):
         path = tmp_path / filename
         panel = pd.read_csv(path)
-        panel.loc[panel["country"].eq("CCC") & panel["year"].eq(2019), "3_VA_GVC_share"] = float("nan")
+        panel.loc[panel["country"].eq("USA") & panel["year"].eq(2019), "3_VA_GVC_share"] = float("nan")
         panel.to_csv(path, index=False)
 
-    checks = regression_quality.recompute_regression_input_checks(tmp_path, expected_years=[2018, 2019, 2020])
+    checks = regression_quality.recompute_regression_input_checks(tmp_path, expected_years=FIXTURE_YEARS)
     outcome = next(item for item in checks if item["name"] == "configured_outcomes")
     numeric = next(item for item in checks if item["name"] == "shock_control_fields")
 
@@ -982,7 +1020,7 @@ def test_regression_input_qc_rejects_nonfinite_or_malformed_nonnull_baseline(tmp
     panel.loc[0, "3_VA_GVC_share"] = bad_value
     panel.to_csv(path, index=False)
 
-    checks = regression_quality.recompute_regression_input_checks(tmp_path, expected_years=[2018, 2019, 2020])
+    checks = regression_quality.recompute_regression_input_checks(tmp_path, expected_years=FIXTURE_YEARS)
     numeric = next(item for item in checks if item["name"] == "shock_control_fields")
 
     assert numeric["passed"] is False
@@ -1001,7 +1039,7 @@ def test_regression_input_qc_discloses_interaction_baseline_design_collapse(tmp_
             panel["3_VA_GVC_share"] = 0.4
         panel.to_csv(path, index=False)
 
-    checks = regression_quality.recompute_regression_input_checks(tmp_path, expected_years=[2018, 2019, 2020])
+    checks = regression_quality.recompute_regression_input_checks(tmp_path, expected_years=FIXTURE_YEARS)
     outcome = next(item for item in checks if item["name"] == "configured_outcomes")
     numeric = next(item for item in checks if item["name"] == "shock_control_fields")
 
@@ -1015,7 +1053,7 @@ def test_regression_input_qc_discloses_interaction_baseline_design_collapse(tmp_
     else:
         assert "'baseline_range': 0.0" in outcome["detail"]
 
-    _, summary = regression_quality.write_regression_input_qc(tmp_path, expected_years=[2018, 2019, 2020])
+    _, summary = regression_quality.write_regression_input_qc(tmp_path, expected_years=FIXTURE_YEARS)
     assert summary["publishable"] is False
     assert "configured_outcomes" in summary["fatal"]
 
@@ -1054,10 +1092,10 @@ def test_regression_input_qc_rejects_outcome_specific_structural_collapse(tmp_pa
     elif collapse == "one_cluster":
         panel.loc[panel["country"].ne("AAA"), "FVA_share"] = float("nan")
     else:
-        panel.loc[panel["year"].eq(2018), "FVA_share"] = float("nan")
+        panel.loc[panel["year"].le(2018), "FVA_share"] = float("nan")
     panel.to_csv(path, index=False)
 
-    checks = regression_quality.recompute_regression_input_checks(tmp_path, expected_years=[2018, 2019, 2020])
+    checks = regression_quality.recompute_regression_input_checks(tmp_path, expected_years=FIXTURE_YEARS)
     outcome = next(item for item in checks if item["name"] == "configured_outcomes")
     assert outcome["passed"] is False
     assert "country:FVA_share" in outcome["detail"]
@@ -1089,7 +1127,7 @@ def test_regression_input_qc_missing_contract_file_and_summary_tamper_fail(tmp_p
 def test_old_artifacts_are_rejected_and_v14_is_required(tmp_path, old_version):
     _release(tmp_path)
     _tamper_signed_metadata(tmp_path, lambda metadata: metadata.__setitem__("artifact_contract_version", old_version))
-    with pytest.raises(artifacts.ArtifactContractError, match=f"expected 14, got {old_version}"):
+    with pytest.raises(artifacts.ArtifactContractError, match=f"expected 15, got {old_version}"):
         artifacts.validate_release(tmp_path)
 
 
@@ -1225,12 +1263,12 @@ def test_output_runtime_numeric_integrity_blocks_malformed_required_fields(tmp_p
         frame.loc[frame.index[0], "DVAex"] = float("inf")
     frame.to_csv(path, index=False)
 
-    checks = output_quality.recompute_output_checks(tmp_path, 2020, expected_years=[2018, 2019, 2020])
+    checks = output_quality.recompute_output_checks(tmp_path, 2020, expected_years=FIXTURE_YEARS)
     integrity = next(check for check in checks if check["name"] == "required_numeric_fields")
     assert integrity["kind"] == "integrity" and integrity["passed"] is False
     assert "country:DVAex_" in integrity["detail"] or "country:missing=['DVAex']" in integrity["detail"]
     with pytest.raises(output_quality.OutputQualityError, match="required_numeric_fields"):
-        output_quality.write_output_qc(tmp_path, 2020, expected_years=[2018, 2019, 2020])
+        output_quality.write_output_qc(tmp_path, 2020, expected_years=FIXTURE_YEARS)
     persisted = json.loads((tmp_path / "qc_outputs_2020.json").read_text(encoding="utf-8"))
     metadata = artifacts.dataset_metadata(tmp_path)
     metadata["output_qc"]["years"]["2020"] = output_quality.summarize_output_checks(persisted)
@@ -1248,7 +1286,7 @@ def test_output_finite_identity_corruption_blocks_publication_and_retains_diagno
     frame.to_csv(path, index=False)
 
     with pytest.raises(output_quality.OutputQualityError, match="trade_identities"):
-        output_quality.write_output_qc(tmp_path, 2020, expected_years=[2018, 2019, 2020])
+        output_quality.write_output_qc(tmp_path, 2020, expected_years=FIXTURE_YEARS)
     checks = json.loads((tmp_path / "qc_outputs_2020.json").read_text())
     summary = output_quality.summarize_output_checks(checks)
     integrity = next(check for check in checks if check["name"] == "required_numeric_fields")
@@ -1269,11 +1307,11 @@ def test_regression_runtime_field_integrity_blocks_malformed_inputs(tmp_path, mu
         frame.loc[frame.index[0], "macro_log_gdp_usd"] = float("inf")
     frame.to_csv(path, index=False)
 
-    checks = regression_quality.recompute_regression_input_checks(tmp_path, expected_years=[2018, 2019, 2020])
+    checks = regression_quality.recompute_regression_input_checks(tmp_path, expected_years=FIXTURE_YEARS)
     integrity = next(check for check in checks if check["name"] == "required_runtime_fields")
     assert integrity["kind"] == "integrity" and integrity["passed"] is False
     with pytest.raises(regression_quality.RegressionInputQualityError, match="required_runtime_fields"):
-        regression_quality.write_regression_input_qc(tmp_path, expected_years=[2018, 2019, 2020])
+        regression_quality.write_regression_input_qc(tmp_path, expected_years=FIXTURE_YEARS)
 
 
 def test_release_rejects_persisted_fatal_shock_override_claim(tmp_path):

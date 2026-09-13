@@ -16,9 +16,9 @@ import pandas as pd
 from gvcsim.file_identity import FileState, file_state, open_text, verified_source
 
 
-# v14: foreign-flow sums preserve structural zero exports and undefined shares.
+# v15: publishes a source-bound, independently simulated tariff teaching panel.
 # v13 panels may persist false zero-valued observations from cancellation noise.
-ARTIFACT_CONTRACT_VERSION = 14
+ARTIFACT_CONTRACT_VERSION = 15
 ARTIFACT_MANIFEST_ALGORITHM = "sha256"
 ARTIFACT_MANIFEST_NAME = "artifact_manifest"
 METADATA_DIGEST_NAME = "metadata_sha256"
@@ -399,6 +399,7 @@ def _required_paths(metadata: dict[str, Any]) -> list[str]:
     required = [
         "panel_country.csv",
         "panel_industry.csv",
+        "panel_teaching.csv",
         "controls_country.csv",
         "demo_trade_war_tariffs.csv",
         "tariff_exposure_lookup.csv",
@@ -575,6 +576,7 @@ def validate_release(processed_dir: Path | None = None, *, verify_integrity: boo
         "output_qc_contract",
         "regression_input_qc",
         "regression_input_qc_contract",
+        "simulation_contract",
         "network_algorithm",
         "publication_policy",
         "integrity",
@@ -596,6 +598,51 @@ def validate_release(processed_dir: Path | None = None, *, verify_integrity: boo
     missing_required = sorted(set(_required_paths(metadata)) - declared_paths)
     if missing_required:
         raise ArtifactValidationError(f"release is missing required artifacts: {missing_required}")
+    simulation = metadata["simulation_contract"]
+    from gvcsim.regression import teaching
+
+    if (
+        not isinstance(simulation, dict)
+        or simulation.get("version") != teaching.VERSION
+        or simulation.get("seed") != teaching.SEED
+    ):
+        raise ArtifactValidationError("dataset simulation contract version or seed is invalid")
+    bindings = simulation.get("source_bindings")
+    disclosure = simulation.get("source_filter_disclosure")
+    expected_exposure_bindings = [
+        {"path": f"export_exposure_{year}.csv", "sha256": _sha256(root / f"export_exposure_{year}.csv")}
+        for year in metadata["years"]
+    ]
+    expected_parameters = {
+        "market": teaching.MARKET,
+        "tariff_path": list(teaching.TARIFF_PATH),
+        "betas": teaching.BETAS,
+        "calibration": {name: list(values) for name, values in teaching.CALIBRATION.items()},
+    }
+    expected_snapshots = {name: teaching.model_snapshot(name) for name in teaching.BETAS}
+    # JSON persistence converts calibration tuples in snapshots to arrays.
+    for snapshot in expected_snapshots.values():
+        snapshot["calibration"] = list(snapshot["calibration"])
+    expected_catalogs = {name: teaching.variable_catalog(name) for name in teaching.BETAS}
+    if (
+        not isinstance(bindings, dict)
+        or bindings.get("release_panel")
+        != {"path": "panel_industry.csv", "sha256": _sha256(root / "panel_industry.csv")}
+        or bindings.get("exposure_files") != expected_exposure_bindings
+        or bindings.get("exposure_selection") != "first release year; imposer=USA"
+        or simulation.get("parameters") != expected_parameters
+        or simulation.get("model_snapshots") != expected_snapshots
+        or simulation.get("variable_catalogs") != expected_catalogs
+        or simulation.get("disclaimer") != teaching.DISCLAIMER
+        or not isinstance(disclosure, dict)
+        or any(
+            type(disclosure.get(key)) is not int or disclosure[key] < 0
+            for key in ("source_baseline_rows", "published_entities", "excluded_source_baseline_rows")
+        )
+        or disclosure["source_baseline_rows"]
+        != disclosure["published_entities"] + disclosure["excluded_source_baseline_rows"]
+    ):
+        raise ArtifactValidationError("dataset simulation contract is unsupported or incomplete")
     _validate_release_qc(root, metadata)
     _validate_release_output_qc(root, metadata)
     _validate_release_regression_input_qc(root, metadata)

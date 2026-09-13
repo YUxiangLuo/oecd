@@ -1,163 +1,31 @@
 {
-  "captured_on": "2026-09-12",
-  "code_commit": "b673e23",
-  "code_state": "Base commit plus uncommitted regression simplification, review fixes and tests; all 24 screenshots recaptured after the review fixes from this worktree, not a clean-commit capture.",
-  "code_sources_sha256": "732e9497f0a2b43bb90ed626f660c8b93d03b4c9b7daecaecfbe1c39304c6edb",
-  "code_sources_hash_rule": "Sorted frontend/src and gvcsim .ts/.tsx/.css/.py paths: path UTF-8 + NUL + file bytes + NUL.",
-  "data_release": "4e25ace5843d4fdd9363f12d22780bb4",
-  "data_source": "ci_synthetic_icio",
+  "captured_on": "2026-09-14",
+  "code_commit": "f856c80925c00d392c0535612681446b6d27c53b",
+  "code_state": "Base commit plus uncommitted v15 teaching-simulation implementation and tests; not a clean-commit capture.",
+  "code_sources_sha256": "0ea2ef2c370ea63ff5f65aa3fccc6ad2976200616a85d69cee2571d5ef0a2614",
+  "code_sources_hash_rule": "SHA-256 of sorted sha256sum output for frontend/src and gvcsim .ts/.tsx/.css/.py files.",
+  "data_release": "4cd6e33d8f3e449f9f1528120ba5be87",
+  "data_source": "Current step 10-11 captures: OECD ICIO 2023 baseline with v15 fictional tariff and outcome simulation. Retained earlier captures: ci_synthetic_icio.",
   "production_data": false,
-  "source": "agent-browser 0.37.1, actual student operations in an isolated PostgreSQL instance and copied dataset",
-  "viewport": {
-    "width": 1280,
-    "height": 960,
-    "device_scale_factor": 2
-  },
-  "note": "Whole-page and native element screenshots. Generated example account; no real student data. All four regressions retain invalid_design diagnostics. The 93-point grade only demonstrates the workflow.",
+  "simulation_contract": "step10-tariff-teaching-v1",
+  "simulation_seed": 20260913,
+  "source": "agent-browser and inspected v15 dogfood artifacts; independent test accounts only",
+  "journey_note": "The retained submission and grading evidence was produced by the API-assisted full-journey harness and checked in a real browser; it is not a pure-UI journey.",
+  "note": "The manual still uses unchanged pre-step-10 and report screenshots from the earlier synthetic classroom. Old step 10-14 screenshots are not embedded. The two records below are the current v15 screenshots embedded for steps 10-11.",
   "screenshots": [
     {
-      "file": "screenshots/00-login.png",
-      "width": 2560,
-      "height": 1920,
-      "sha256": "f49b9400d8b62869801925df11443a28baa07bcb6d23ffd390c2be77ab42bea9"
-    },
-    {
-      "file": "screenshots/01-icio.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "fc9564aef56065c262dc4e058eab38993a2f303663b396e1d08e98842be2ce18"
-    },
-    {
-      "file": "screenshots/01-quiz.png",
-      "width": 1880,
-      "height": 690,
-      "sha256": "5e1fe6ba5472ae6e49db525964277b46fad2ce7fd79948391733889abe6e6f31"
-    },
-    {
-      "file": "screenshots/02-indicators.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "5591984a9db9ca4cebdaf11de4e09732fab84211edb0ba995e53ce8eb04a8b20"
-    },
-    {
-      "file": "screenshots/03-indicators.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "c5f88e296d8f7c9320e143e6f6d8a6a93dcf43c37e87b137859107e66b08038c"
-    },
-    {
-      "file": "screenshots/04-indicators.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "7e7f601dd974c2c0986fde478ca24954566371d5b22de48dcdeecbc54a8c6182"
-    },
-    {
-      "file": "screenshots/05-indicators.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "de440b6ccff949e261397578a03aeb2e3a0216c82834cc1ccebf4d7f702183c3"
-    },
-    {
-      "file": "screenshots/06-visualization.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "8f8d129df89566804618b1704a432de04052883115ae0ba7a25ccf4335070ed2"
-    },
-    {
-      "file": "screenshots/07-visualization.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "85f6d109c277b51ef528a996d880279e556f82c20e971f9cf121e35d58e8150c"
-    },
-    {
-      "file": "screenshots/08-visualization.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "48bf5e5aac9ebb3b8b79faf4afce46064a76304c211b4a85258397c391fa1620"
-    },
-    {
-      "file": "screenshots/09-network.png",
-      "width": 2496,
-      "height": 1856,
-      "sha256": "bcc0db409ba46933733fa092ed4542770a8ae274754d6f7dac9c5af98783e775"
-    },
-    {
-      "file": "screenshots/10-crosswalk.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "f03b4767b4c1088e6ebc418a91a7ad6da5cb54b675103352a496ae2bf298d732"
-    },
-    {
       "file": "screenshots/10-shocks.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "f1a95a7c4f12d09031b6217706157cb731fdaf9588cffaa88980018a5cc01608"
-    },
-    {
-      "file": "screenshots/11-method-options.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "a131040a67804028b1b2ced9c121f0daa69c304505b88104eb6df7463a25f052"
+      "width": 1280,
+      "height": 960,
+      "sha256": "e5ccff18362e9aade85d3566d23bd9862323359563eef18acdf53d6158a2eff4",
+      "capture": "read-only agent-browser session student02 at http://127.0.0.1:5188"
     },
     {
       "file": "screenshots/11-regression-result.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "cd2b582819589c1a5162a93a0d2beb2aa755c6d94f20fd9b18314eb5f1f31781"
-    },
-    {
-      "file": "screenshots/11-regression-settings.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "866bde32f80ee03d874a65bdb0ba5e904a02f454ad1b757778106787897aaaa4"
-    },
-    {
-      "file": "screenshots/12-regression-result.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "547b844410e22244251c810ef0f74ecad16b47f1142e72c39fdd50f8743a11a5"
-    },
-    {
-      "file": "screenshots/13-regression-result.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "dd240cb17baba1cfdc1703159276904fda073cdc6d158cc341a6c04140c0c302"
-    },
-    {
-      "file": "screenshots/14-regression-result.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "17063753305c667950b89c49128d37af1fa99ff15b6708492ff4cae08f0faab4"
-    },
-    {
-      "file": "screenshots/15-graded.png",
-      "width": 1880,
-      "height": 100,
-      "sha256": "d9d74b70162703db9d29fbc741ae31e131979c7c4ff0edaf634f405179d37f13"
-    },
-    {
-      "file": "screenshots/15-material-gate.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "e198885aae4840f707629871ea29358a954b5ce60a107da6df8339421bba6088"
-    },
-    {
-      "file": "screenshots/15-report.png",
-      "width": 1984,
-      "height": 1518,
-      "sha256": "46275ac436bc8ef2a7ced332547897bf3d784ff3e9b20bb3f77d8d401a9735f2"
-    },
-    {
-      "file": "screenshots/15-submitted.png",
-      "width": 1880,
-      "height": 100,
-      "sha256": "fdbfaa18476d027a3c1ca4142d8f085a9b5ac7974a35d7c0d48c3cb86655af27"
-    },
-    {
-      "file": "screenshots/15-writing.png",
-      "width": 1880,
-      "height": 1010,
-      "sha256": "ebce33057c9ffa612b06d26b4eb7e54b380361e26360dc9be11b6848d595bae6"
+      "width": 1440,
+      "height": 1000,
+      "sha256": "4409919069d328b0f6775b1e2c4acb5518132006d83969413410d2f921b448f8",
+      "capture": "inspected dogfood-output/teaching-v15/final-chart.png"
     }
   ]
 }

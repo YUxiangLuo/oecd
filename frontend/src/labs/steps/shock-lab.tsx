@@ -1,245 +1,79 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
-import { FullscreenPanel } from "../../fullscreen-panel";
 import { userFacingRequestError } from "../../user-facing-error";
-import type { Meta, QcCheck, QuizCompletionState, ShockEvent, Step, StepStateApi } from "../../types";
+import type { Meta, QuizCompletionState, Step, StepStateApi, TeachingPanelResponse } from "../../types";
 import { countryLabel, sectorLabel } from "../../viz";
-import { CrosswalkDemo } from "./shock/crosswalk-demo";
-import { EventList } from "./shock/event-list";
-import {
-  applyManualFilterPatch,
-  eventKey,
-  filtersForEvent,
-  filtersMatchEvent,
-  normalizeShockType,
-  restoreSavedEvent,
-  shockEventsProvenanceError,
-  shockTypeLabel,
-  SHOCK_FILTER_LABELS,
-  SHOCK_TYPES,
-  SHOCK_SORT_LABELS,
-  type ShockPanelFilters,
-} from "./shock/model";
-import { SelectedEventBar } from "./shock/selected-event";
-import { ShockPanel } from "./shock/shock-panel";
-import { inspectShockContract } from "./shock/shock-contract";
-import { QcChecksTable } from "./qc-checks-table";
 import { useAsync } from "../shared";
 
-/** 步骤10:从政策事件到国家×行业冲击面板——左右并排、点事件即联动右侧冲击。 */
-/** 自动保存学生打开过的政策事件，供报告摘要。 */
-interface ShockStepState extends QuizCompletionState, Record<string, unknown> {
-  viewed_shock_types?: string[];
-  viewed_events?: string[];
-  selected_event_key?: string | null;
-  active_shock_type?: string;
+export interface ShockStepState extends QuizCompletionState, Record<string, unknown> {
+  teaching_country?: string;
+  teaching_year?: number;
+  viewed_teaching_panel?: boolean;
+  teaching_panel_version?: string;
 }
 
+/** 步骤 10 只介绍四个后续回归共同使用的虚构关税暴露 X。 */
 export function ShockLab({ meta, step: _step, state }: {
   meta: Meta;
   step: Step;
   state: StepStateApi<ShockStepState>;
 }) {
-  const initialYear = meta.years.at(-1) ?? 2020;
-  const [filters, setFilters] = useState<ShockPanelFilters>({
-    year: initialYear,
-    shockType: normalizeShockType(state.data?.active_shock_type),
-    country: "",
-    sector: "",
-    filter: "treated",
-    sort: "intensity_desc",
-    page: 1,
-  });
-  const [selectedEvent, setSelectedEvent] = useState<ShockEvent | null>(null);
-  const eventInteraction = useRef(false);
-  const contractState = inspectShockContract(
-    meta.dataset?.shock_contract,
-    meta.dataset?.artifact_contract_version,
+  const defaultCountry = meta.countries.find((code) => code !== "ROW") ?? meta.countries[0] ?? "";
+  const savedCountry = state.data?.teaching_country;
+  const [country, setCountry] = useState(
+    typeof savedCountry === "string" && meta.countries.includes(savedCountry) && savedCountry !== "ROW"
+      ? savedCountry
+      : defaultCountry,
   );
-  const releaseKey = meta.dataset?.release_id ?? "missing-release";
-  const eventsQuery = useAsync(
-    () => api.shockEvents(),
-    [],
-    { enabled: contractState.valid, requestKey: `${releaseKey}:shock-events` },
+  const savedYear = state.data?.teaching_year;
+  const [year, setYear] = useState<number>(
+    typeof savedYear === "number" && meta.years.includes(savedYear) ? savedYear : meta.years.at(-1) ?? 2020,
   );
-  const { data: eventsResponse, error: eventsError, status: eventsStatus } = eventsQuery;
-  // 冲击面板的专项质检随冲击一起放在回归前(本步),作为回归前的口径检查。
-  const shockQcQuery = useAsync<QcCheck[]>(
-    () => api.qcShocks(),
-    [],
-    { enabled: contractState.valid, requestKey: `${releaseKey}:shock-qc` },
-  );
-  const { data: shockChecks, error: shockQcError, status: shockQcStatus } = shockQcQuery;
-  const eventProvenanceError = eventsResponse
-    ? shockEventsProvenanceError(eventsResponse.events)
-    : null;
-  const events = eventProvenanceError ? [] : eventsResponse?.events ?? [];
-  const selectedKey = selectedEvent ? eventKey(selectedEvent) : null;
-  const expectedFilters = useMemo(
-    () => (selectedEvent ? filtersForEvent(selectedEvent, meta, initialYear) : null),
-    [initialYear, meta, selectedEvent],
-  );
-  const filtersDirty = expectedFilters ? !filtersMatchEvent(filters, expectedFilters) : false;
-  const viewedShockTypes = (state.data?.viewed_shock_types ?? []).filter((type) => (
-    SHOCK_TYPES.includes(type as (typeof SHOCK_TYPES)[number])
-  ));
-  const viewedEvents = state.data?.viewed_events ?? [];
+  const requestKey = `teaching-panel:${country}:${year}`;
+  const query = useAsync<TeachingPanelResponse>(() => api.teachingPanel(country, year), [requestKey], { requestKey });
+  const panel = query.status === "success" ? query.data : null;
 
   useEffect(() => {
-    if (eventInteraction.current || selectedEvent || events.length === 0) return;
-    const restored = restoreSavedEvent(events, state.data ?? {});
-    if (!restored) return;
-    setSelectedEvent(restored);
-    setFilters(filtersForEvent(restored, meta, initialYear));
-  }, [events, initialYear, meta, selectedEvent, state.data]);
-
-  const pickEvent = (event: ShockEvent) => {
-    // 打开过的事件累加保存，刷新后可恢复，也可进入最终报告的实验摘要。
-    const type = normalizeShockType(event.shock_type ?? filters.shockType);
-    const viewed = state.data?.viewed_shock_types ?? [];
-    const viewedEvents = state.data?.viewed_events ?? [];
-    eventInteraction.current = true;
+    if (!panel) return;
     state.save({
-      viewed_shock_types: type && !viewed.includes(type) ? [...viewed, type] : viewed,
-      viewed_events: [...viewedEvents.filter((name) => name !== event.name), event.name],
-      selected_event_key: eventKey(event),
-      active_shock_type: type,
+      teaching_country: country,
+      teaching_year: year,
+      viewed_teaching_panel: true,
+      teaching_panel_version: panel.version,
     });
-    setSelectedEvent(event);
-    setFilters(filtersForEvent(event, meta, initialYear));
-  };
-  const updateFilters = (patch: Partial<ShockPanelFilters>) => {
-    eventInteraction.current = true;
-    const clearsSelectedEvent = typeof patch.shockType === "string"
-      && patch.shockType !== filters.shockType;
-    if (clearsSelectedEvent) {
-      setSelectedEvent(null);
-      state.save({ selected_event_key: null, active_shock_type: normalizeShockType(patch.shockType) });
-    }
-    setFilters((current) => applyManualFilterPatch(current, patch).filters);
-  };
-  const restoreEventFilters = () => {
-    if (!expectedFilters) return;
-    setFilters(expectedFilters);
-  };
+  }, [panel, country, year]);
 
-  const panelDesc = `${filters.year} · ${shockTypeLabel(filters.shockType)} · ${filters.country ? countryLabel(filters.country) : "全部经济体"} · ${filters.sector ? sectorLabel(filters.sector) : "全部行业"} · ${SHOCK_FILTER_LABELS[filters.filter]} · ${SHOCK_SORT_LABELS[filters.sort]}`;
+  const rows = useMemo(() => panel?.rows ?? [], [panel]);
 
-  return (
-    <div className="shock-workbench">
-      <div className="shock-primary-boundary" role="note">
-        <b>先做：</b>选择一项政策事件，再看它如何映射为国家 × 行业暴露。
-        <span>当前发布指标 + 教学政策编码；数据来源见课程数据说明，选择事件不证明冲击外生。</span>
+  return <div className="shock-workbench">
+    <section className="reg-run-card">
+      <h3>构造四个回归共同的 X：教学关税暴露</h3>
+      <div className="reg-boundary" role="note">
+        X = 冲击前出口份额 w × 虚构关税税率 τ。税率路径及生成值仅为教学模拟，不是现实政策事实，也不能据此作因果结论。
       </div>
-      <details className="shock-details shock-source-boundary">
-        <summary>
-          <span>数据来源与教学设定边界</span>
-          <span className="shock-details-meta">运行前建议阅读</span>
-        </summary>
-        <div className="shock-boundary-notice" role="note">
-          ⚠ {!contractState.valid
-            ? "产物契约校验失败，未读取来源披露。"
-            : eventsResponse?.disclaimer ?? "正在从当前已验证 release 读取关税出口暴露度来源披露。"}
-          政策事件、日期只有在事件卡列出 URL 时才有官方事件来源；ICIO 行业映射与数值强度均为未逐项引证的教学编码。
-        </div>
-        <div className="shock-provenance-split" role="note" aria-label="官方事实与教学设定的边界">
-          <div>
-            <b>可由官方来源核实</b>
-            <span>事件名称、宣布/生效日期，以及来源明确列出的产品清单或税率。</span>
-          </div>
-          <div>
-            <b>本课程为了教学而设定</b>
-            <span>产品如何映射到 ICIO 行业、暴露度怎样聚合，以及面板中的数值强度；这些不是官方估计。</span>
-          </div>
-        </div>
-        <p className="shock-beginner-route">
-          <b>建议起点：</b>先选择第一张 301 关税事件卡。右侧每一行回答的是：政策打到哪些产品 × 该国家行业原本有多少出口流向目标市场，因此得到这个国家×行业的教学暴露度。
-        </p>
-        {eventsResponse?.source_disclosure && (
-          <p className="shock-source-disclosure">{eventsResponse.source_disclosure}</p>
-        )}
-      </details>
-
-      {!contractState.valid ? (
-        <div className="error-box" role="alert">{contractState.reason}</div>
-      ) : eventsError ? (
-        <div className="error-box" role="alert">
-          {userFacingRequestError(eventsError, "当前 release 的政策事件读取失败")}
-          <button type="button" className="secondary" onClick={eventsQuery.retry}>按同一 release 重试</button>
-        </div>
-      ) : eventsStatus === "loading" || !eventsResponse ? (
-        <div className="shock-panel-state shock-workbench-loading" role="status">正在读取政策事件时间线与冲击面板…</div>
-      ) : eventProvenanceError ? (
-        <div className="error-box" role="alert">事件来源契约无效：{eventProvenanceError}</div>
-      ) : events.length === 0 ? (
-        <div className="shock-panel-state">当前没有可展示的政策事件。</div>
-      ) : (
-        <FullscreenPanel
-          title="步骤 10 · 政策事件与国家行业冲击联动"
-          variant="shock"
-        >
-          {/* 左右联动:左选事件 → 右看冲击。中间这条实时显示"选了谁 → 面板同步成什么",
-              并展开该事件的完整档案(原"全部政策事件清单"表的信息收敛到这里)。 */}
-          <SelectedEventBar
-            event={selectedEvent}
-            panelDesc={panelDesc}
-            filtersDirty={filtersDirty}
-            onRestore={restoreEventFilters}
-          />
-
-          <div className="shock-split">
-            <div className="shock-split-left">
-              <div className="shock-split-head"><span className="shock-split-num">①</span>选择政策事件</div>
-              <p className="shock-split-hint">
-                按三类冲击分组;每行的时间条是 ○ 宣布 → ● 生效(○ 解除)。所有行共用顶部年份刻度,
-                因此可以横向比较谁先发生、谁从宣布到生效间隔更久。下游事件研究使用各个体在所选冲击类型汇总面板中的首次处理年，并不只使用这里选中的单个事件。
-              </p>
-              <EventList
-                events={events}
-                selectedKey={selectedKey}
-                activeType={filters.shockType}
-                viewedTypes={viewedShockTypes}
-                viewedEventCount={viewedEvents.length}
-                onTypeChange={(shockType) => updateFilters({ shockType, page: 1 })}
-                onSelect={pickEvent}
-              />
-            </div>
-            <div className="shock-split-right">
-              <div className="shock-split-head"><span className="shock-split-num">②</span>按该事件定位国家×行业暴露 <span className="muted">· 随左侧实时联动,也可手动调整</span></div>
-              <ShockPanel meta={meta} filters={filters} onChange={updateFilters} />
-            </div>
-          </div>
-        </FullscreenPanel>
-      )}
-
-      <details className="shock-details" style={{ marginBottom: 18 }}>
-        <summary>
-          <span>冲击数据质检 · 回归前的口径检查</span>
-          <span className="shock-details-meta">
-            {!contractState.valid
-              ? "未读取：产物契约无效"
-              : shockQcStatus === "success" && shockChecks
-                ? shockChecks.every((check) => check.passed)
-                  ? `✓ ${shockChecks.length} 项通过 · 可进入回归`
-                  : `${shockChecks.length} 项 · ${shockChecks.filter((c) => !c.passed).length} 项异常`
-                : "加载中"}
-          </span>
-        </summary>
-        {!contractState.valid ? (
-          <div className="error-box" role="alert">shock contract 无效，不能把质检结果当作当前 release 的证据。</div>
-        ) : shockQcError ? (
-          <div className="error-box" role="alert">
-            {userFacingRequestError(shockQcError, "当前 release 的冲击质检读取失败")}
-            <button type="button" className="secondary" onClick={shockQcQuery.retry}>按同一 release 重试</button>
-          </div>
-        ) : shockQcStatus === "loading" ? (
-          <div className="shock-panel-state" role="status">正在读取当前 release 的冲击质检…</div>
-        ) : (
-          <QcChecksTable rows={shockChecks} label="冲击面板质检结果表，可横向滚动" />
-        )}
-      </details>
-
-      <CrosswalkDemo selectedShockType={filters.shockType} />
-    </div>
-  );
+      <p>步骤 11–14 都固定使用 <code>teaching_tariff_exposure</code>；改变的是 Y，而不是 X。</p>
+      <div className="model-controls">
+        <label className="model-control"><span className="model-control-label">国家</span>
+          <select value={country} onChange={(event) => { setCountry(event.target.value); state.save({ teaching_country: event.target.value }); }}>
+            {meta.countries.filter((code) => code !== "ROW").map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
+          </select>
+        </label>
+        <label className="model-control"><span className="model-control-label">年份</span>
+          <select value={year} onChange={(event) => { const value = Number(event.target.value); setYear(value); state.save({ teaching_year: value }); }}>
+            {meta.years.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>
+      </div>
+    </section>
+    {query.status === "loading" && <div className="shock-panel-state shock-workbench-loading" role="status">正在读取教学关税面板…</div>}
+    {query.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(query.error, "教学关税面板读取失败")} <button className="secondary" onClick={query.retry}>重试</button></div>}
+    {panel && <>
+      <p className="muted">{panel.disclaimer} · 当前显示 {rows.length} 行（接口匹配 {panel.total} 行）。</p>
+      <div className="table-scroll" role="region" aria-label="教学关税暴露表" tabIndex={0}>
+        <table><thead><tr><th>国家</th><th>行业</th><th>年份</th><th>冲击前出口份额 w</th><th>虚构税率 τ</th><th>教学暴露 X = w × τ</th></tr></thead>
+          <tbody>{rows.map((row) => <tr key={`${row.country}-${row.industry}-${row.year}`}><td>{countryLabel(row.country)}</td><td>{sectorLabel(row.industry)}</td><td>{row.year}</td><td>{(row.teaching_export_share_w * 100).toFixed(2)}%</td><td>{(row.teaching_tariff_rate_tau * 100).toFixed(2)}%</td><td><b>{(row.teaching_export_share_w * 100).toFixed(2)}% × {(row.teaching_tariff_rate_tau * 100).toFixed(2)}% = {(row.teaching_tariff_exposure * 100).toFixed(3)} 个百分点</b></td></tr>)}</tbody>
+        </table>
+      </div>
+    </>}
+  </div>;
 }

@@ -4,7 +4,7 @@ from typing import Any, cast
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.requests import Request
 
 from gvcsim import artifacts, concurrency, shocks
@@ -41,7 +41,8 @@ from gvcsim.regression.design import (
     RegressionDesign,
     validate_outcome_granularity,
 )
-from gvcsim.regression.panel import placebo_did_distribution, run_design_with_benchmark
+from gvcsim.regression.panel import run_design_with_benchmark
+from gvcsim.regression.teaching import DISCLAIMER, VERSION, model_snapshot, variable_catalog
 from gvcsim.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
 from gvcsim.shocks import SHOCK_LABELS, SHOCK_TARIFF
 from gvcsim.singleflight import AsyncSingleFlightCache
@@ -79,20 +80,20 @@ def regression_options():
     # 键与文案一起下发:界面渲染 labels,请求回传 keys。
     # 前端不再自备一份中文映射,改文案也不会变成破坏性 API 变更。
     return {
-        "granularities": GRANULARITIES,
+        "granularities": [GRANULARITY_COUNTRY_INDUSTRY],
         "granularity_labels": GRANULARITY_LABELS,
         "granularities_by_outcome": OUTCOME_GRANULARITIES,
-        "shock_types": SHOCK_TYPES,
+        "shock_types": [SHOCK_TARIFF],
         "shock_type_labels": SHOCK_LABELS,
-        "methods": METHODS,
+        "methods": ["twfe_intensity"],
         "method_labels": METHOD_LABELS,
         "control_modes": [CONTROL_MODE_NONE],
         "control_mode_labels": CONTROL_MODE_LABELS,
-        "price_modes": PRICE_MODES,
+        "price_modes": [PRICE_MODE_NOMINAL],
         "price_mode_labels": PRICE_MODE_LABELS,
-        "scenarios": SCENARIOS,
+        "scenarios": ["clean"],
         "scenario_labels": SCENARIO_LABELS,
-        "weight_modes": list(shocks.EXPOSURE_MODES),
+        "weight_modes": [shocks.EXPOSURE_MODE_FIXED_PRETREATMENT],
         "weight_mode_labels": {
             shocks.EXPOSURE_MODE_FIXED_PRETREATMENT: "首次处理前固定权重（主口径）",
             shocks.EXPOSURE_MODE_CONTEMPORANEOUS: "当期贸易权重（稳健性）",
@@ -144,6 +145,19 @@ def _validate_design(
         raise HTTPException(status_code=400, detail="未加入金额控制变量时只能使用 nominal 口径")
     if scenario not in SCENARIOS:
         raise HTTPException(status_code=400, detail=f"scenario 必须是 {SCENARIOS}")
+    if (
+        granularity != GRANULARITY_COUNTRY_INDUSTRY
+        or shock_type != SHOCK_TARIFF
+        or method != "twfe_intensity"
+        or control_mode != CONTROL_MODE_NONE
+        or interaction
+        or price_mode != PRICE_MODE_NOMINAL
+        or scenario != "clean"
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="步骤10仅发布固定 tariff × country_industry × twfe_intensity 的无控制、无交互教学模型",
+        )
     return RegressionDesign(
         outcome=outcome,
         granularity=granularity,
@@ -154,6 +168,7 @@ def _validate_design(
         price_mode=price_mode,
         scenario=scenario,
         exclude_row=exclude_row,
+        teaching=True,
     )
 
 
@@ -193,6 +208,8 @@ def _design_info(design: RegressionDesign, weight_mode: str = shocks.EXPOSURE_MO
 def _validate_weight_mode(design: RegressionDesign, weight_mode: str) -> None:
     if weight_mode not in shocks.EXPOSURE_MODES:
         raise HTTPException(status_code=400, detail=f"weight_mode 必须是 {shocks.EXPOSURE_MODES}")
+    if design.teaching and weight_mode != shocks.EXPOSURE_MODE_FIXED_PRETREATMENT:
+        raise HTTPException(status_code=400, detail="步骤10教学模型仅允许固定冲击前出口份额")
     if weight_mode == shocks.EXPOSURE_MODE_CONTEMPORANEOUS and design.shock_type != SHOCK_TARIFF:
         raise HTTPException(status_code=400, detail="当期贸易权重稳健性只适用于 tariff 冲击")
 
@@ -218,6 +235,20 @@ def _regression_preflight(design: RegressionDesign, result: dict[str, Any], weig
 
     def add(code: str, severity: str, message: str) -> None:
         checks.append({"code": code, "severity": severity, "message": message})
+
+    if design.teaching:
+        add("teaching_simulation", "disclosure", DISCLAIMER)
+        add(
+            "source_calibration",
+            "disclosure",
+            "Y 基准按首年指标排名校准，不是 OECD 真实水平；网络 Y 未重新构造贸易网络。",
+        )
+        add("fixed_exposure", "disclosure", "X 使用首年销往美国的出口份额乘虚构税率；不代表美国真实政策。")
+        return {
+            "status": result.get("status") or "ok",
+            "can_infer": result.get("status") in {"ok", "warning"} and not bool(support.get("suppress_inference")),
+            "checks": checks,
+        }
 
     if support.get("untreated_clusters") == 0 and support.get("treated_clusters", 0) > 0:
         untreated_entities = int(support.get("untreated_entities") or 0)
@@ -282,13 +313,43 @@ def _require_regression_student(request: Request) -> int:
     return account_id
 
 
+@router.get("/api/regression/teaching-panel")
+async def teaching_panel(country: str = "", year: int | None = None, limit: int = Query(60, ge=1, le=200)):
+    def read() -> dict:
+        panel = _read_csv("panel_teaching.csv")
+        years = sorted(int(value) for value in panel.year.unique())
+        if year is not None and year not in years:
+            raise HTTPException(status_code=422, detail="年份不在当前教学面板中")
+        if country:
+            panel = panel.loc[panel.country.eq(country)]
+        if year is not None:
+            panel = panel.loc[panel.year.eq(year)]
+        columns = [
+            "country",
+            "industry",
+            "year",
+            "teaching_export_share_w",
+            "teaching_tariff_rate_tau",
+            "teaching_tariff_exposure",
+        ]
+        return {
+            "version": VERSION,
+            "disclaimer": DISCLAIMER,
+            "years": years,
+            "total": len(panel),
+            "rows": panel.sort_values(["country", "industry", "year"])[columns].head(limit).to_dict("records"),
+        }
+
+    return await concurrency.run_sync(read)
+
+
 @router.get("/api/regression/design", response_model=RegressionDesignResponse)
 def regression_design(
     request: Request,
     outcome: str,
     granularity: str = GRANULARITY_COUNTRY_INDUSTRY,
     shock_type: str = SHOCK_TARIFF,
-    method: str = METHOD_DID,
+    method: str = "twfe_intensity",
     control_mode: str = CONTROL_MODE_NONE,
     interaction: bool = False,
     price_mode: str = PRICE_MODE_NOMINAL,
@@ -327,12 +388,11 @@ async def regression_run(req: RegressionRequest, request: Request):
         req.scenario,
         req.exclude_row,
     )
+    _validate_weight_mode(design, req.weight_mode)
     key = (artifacts.release_identity(), "run", req.model_dump_json())
 
     async def compute() -> dict[str, Any]:
-        panel = await concurrency.run_sync(
-            lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
-        )
+        panel = await concurrency.run_sync(_read_csv, "panel_teaching.csv")
         result, benchmark = await concurrency.run_cpu_bound(run_design_with_benchmark, panel, design)
         result_info = result.to_dict()
         return {
@@ -340,7 +400,9 @@ async def regression_run(req: RegressionRequest, request: Request):
             "result": result_info,
             "preflight": _regression_preflight(design, result_info, req.weight_mode),
             "benchmark": benchmark,
-            "disclaimer": "冲击变量为拟真演示面板(全经济体覆盖、行业异质),结果仅用于验证系统链路",
+            "disclaimer": DISCLAIMER,
+            "variable_catalog": variable_catalog(req.outcome),
+            "model_snapshot": model_snapshot(req.outcome),
         }
 
     try:
@@ -357,48 +419,8 @@ async def regression_run(req: RegressionRequest, request: Request):
 
 
 async def regression_placebo(req: PlaceboRequest, request: Request):
-    account_id = _require_regression_student(request)
-    design = _validate_design(
-        req.outcome,
-        req.granularity,
-        req.shock_type,
-        req.method,
-        req.control_mode,
-        req.interaction,
-        req.price_mode,
-        req.scenario,
-        req.exclude_row,
-    )
-    key = (artifacts.release_identity(), "placebo", req.model_dump_json())
-
-    async def compute() -> dict[str, Any]:
-        panel = await concurrency.run_sync(
-            lambda: _panel_for_weight_mode(_read_csv(design.panel_file), design, req.weight_mode)
-        )
-        placebo = await concurrency.run_cpu_bound(
-            placebo_did_distribution,
-            panel,
-            design,
-            n_draws=req.n_draws,
-            seed=req.seed,
-        )
-        return {
-            "design": _design_info(design, req.weight_mode),
-            "placebo": placebo,
-            "disclaimer": "实体置换仅用于描述性敏感性比较；它没有复现真实政策分配机制，尾部占比不是校准 p 值或因果证据",
-        }
-
-    try:
-        return await _RESULT_CACHE.get_or_compute(
-            key,
-            compute,
-            owner=account_id,
-            admit=lambda: _limit_expensive_request(_PLACEBO_LIMITER, account_id, "置换检验"),
-        )
-    except (np.linalg.LinAlgError, FloatingPointError, OverflowError) as e:
-        raise HTTPException(status_code=400, detail="回归线性代数计算失败；请检查样本方差、重复键与设计自由度") from e
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    _require_regression_student(request)
+    raise HTTPException(status_code=400, detail="基础教学不提供置换检验")
 
 
 @router.post("/api/regression/run", response_model=RegressionRunResponse)

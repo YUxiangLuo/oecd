@@ -31,6 +31,25 @@ def _domestic_io(order="C"):
     return io
 
 
+def _domestic_io_with_usa(order="C"):
+    io = _domestic_io(order)
+    io._regions = ["USA", "BBB", "CCC"]
+    labels = io.Z.index
+    renamed = [("USA" if country == "AAA" else country, sector) for country, sector in labels]
+    for frame_name in ("Z", "A", "L"):
+        frame = getattr(io, frame_name)
+        frame.index = pd.MultiIndex.from_tuples(renamed, names=frame.index.names)
+        frame.columns = pd.MultiIndex.from_tuples(renamed, names=frame.columns.names)
+    io.Y.index = pd.MultiIndex.from_tuples(renamed, names=io.Y.index.names)
+    io.Y.columns = pd.MultiIndex.from_tuples(
+        [("USA" if country == "AAA" else country, category) for country, category in io.Y.columns],
+        names=io.Y.columns.names,
+    )
+    io.x.index = pd.MultiIndex.from_tuples(renamed, names=io.x.index.names)
+    io.factor_inputs.F.columns = pd.MultiIndex.from_tuples(renamed, names=io.factor_inputs.F.columns.names)
+    return io
+
+
 @pytest.mark.parametrize("order", ["C", "F"])
 def test_decimal_autarky_has_exact_zero_exports_and_null_api_shares(order):
     arr = build_arrays(_domestic_io(order))
@@ -100,7 +119,7 @@ def test_pipeline_persists_structural_zero_export_shares_as_missing(tmp_path, mo
     processed = tmp_path / "processed"
     for module in (config, pipeline, controls, shocks):
         monkeypatch.setattr(module, "PROCESSED_DIR", processed)
-    base = _domestic_io("F")
+    base = _domestic_io_with_usa("F")
     z = base.Z.to_numpy(copy=True)
     # Keep national exports positive (required for the controls growth domain),
     # while all 44 other industries per country have structurally zero exports.
@@ -111,7 +130,7 @@ def test_pipeline_persists_structural_zero_export_shares_as_missing(tmp_path, mo
     factors.loc["TLS"] = factors.loc["VA"] * 0.2
     factors.loc["VA"] *= 0.8
     monkeypatch.setattr(pipeline.loader, "load", lambda _year: io)
-    monkeypatch.setattr(quality, "KEY_REGIONS", ["AAA", "BBB", "CCC"])
+    monkeypatch.setattr(quality, "KEY_REGIONS", ["USA", "BBB", "CCC"])
 
     def write_exposure(arr, year):
         # Synthetic country/sector codes, but the genuine flow calculation and
@@ -121,13 +140,13 @@ def test_pipeline_persists_structural_zero_export_shares_as_missing(tmp_path, mo
         return frame
 
     monkeypatch.setattr(shocks, "write_export_exposure", write_exposure)
-    for year in (2018, 2019):
+    for year in range(2018, 2023):
         pipeline.compute_year(year, verbose=False)
     pipeline.build_panel()
     persisted = pd.read_csv(processed / "panel_industry.csv")
-    assert len(persisted) == 270
+    assert len(persisted) == 675
     no_exports = persisted[persisted["industry"] != "s0"]
-    assert len(no_exports) == 264
+    assert len(no_exports) == 660
     assert (no_exports["gross_exports"] == 0).all()
     assert no_exports["FVA_share"].isna().all()
     assert (persisted.loc[persisted["industry"] == "s0", "gross_exports"] > 0).all()

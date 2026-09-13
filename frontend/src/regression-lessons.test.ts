@@ -47,16 +47,14 @@ describe("regression lessons", () => {
     expect(familyDirectionLabel("pretrend")).toBe("冲击前已有差异");
   });
 
-  test("research question follows the selected shock and estimand", () => {
+  test("research question stays on the fixed teaching X", () => {
     const network = lessonQuestion("network", "tariff", "did");
     const sanctions = lessonQuestion("network", "sanctions", "event_study");
     const exportControl = lessonQuestion("network", "export_control", "twfe_intensity");
-    expect(network).toContain("从未或尚未受冲击的对象");
-    expect(sanctions).toContain("制裁");
-    expect(sanctions).not.toBe(network);
-    expect(exportControl).toContain("出口管制");
-    expect(exportControl).not.toContain("处理组");
-    expect(lessonQuestion("trade", "tariff", "did")).not.toMatch(/cohort|课程 FVA|EXGR_FVASH/);
+    expect(network).toContain("教学关税暴露 X 增加 1 个百分点");
+    expect(sanctions).toBe(network);
+    expect(exportControl).toBe(network);
+    expect(lessonQuestion("trade", "tariff", "did")).not.toMatch(/cohort|处理组|对照组/);
   });
 
   test("comparison copy explains the selected method without claiming proof", () => {

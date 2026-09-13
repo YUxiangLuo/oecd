@@ -992,7 +992,7 @@ def test_regression_route_coalesces_identical_inflight_work(monkeypatch):
     asyncio.run(scenario())
 
 
-def test_regression_run_and_placebo_are_simple_current_results(teaching_db, monkeypatch):
+def test_regression_run_discloses_teaching_simulation_and_placebo_is_not_public(teaching_db, monkeypatch):
     client = _authenticated_client(teaching_db)
     panel = pd.DataFrame({"country": ["AAA"], "entity_id": ["AAA-s1"]})
     monkeypatch.setattr(regression_routes, "_read_csv", lambda name: panel)
@@ -1018,34 +1018,34 @@ def test_regression_run_and_placebo_are_simple_current_results(teaching_db, monk
     run = client.post("/api/regression/run", json={"outcome": "network"})
     assert run.status_code == 200
     codes = {check["code"] for check in run.json()["preflight"]["checks"]}
-    assert {
-        "no_never_treated_entity",
-        "treatment_reversal",
-        "gvc_interference",
-        "covid_overlap",
-        "treatment_weighting",
-    } <= codes
+    assert codes == {"teaching_simulation", "source_calibration", "fixed_exposure"}
     assert run.json()["preflight"]["can_infer"] is False
     assert "attestation" not in run.json()["result"]
 
     placebo = client.post("/api/regression/placebo", json={"outcome": "trade", "n_draws": 10, "seed": 7})
-    assert placebo.status_code == 200
-    assert placebo.json()["placebo"] == {"draws": 10, "seed": 7}
+    assert placebo.status_code == 400
+    assert placebo.json()["detail"] == "基础教学不提供置换检验"
+
+    old_did = client.post("/api/regression/run", json={"outcome": "trade", "method": "did"})
+    assert old_did.status_code == 400
+    assert "仅发布固定 tariff × country_industry × twfe_intensity" in old_did.json()["detail"]
 
 
 @pytest.mark.parametrize(
     ("mutation", "detail"),
     [
-        (lambda frame: frame.assign(country=np.where(frame.index == 0, " ", frame["country"])), "标识变量"),
+        (lambda frame: frame.assign(entity_id=np.where(frame.index == 0, " ", frame["entity_id"])), "标识变量"),
         (
-            lambda frame: frame.assign(FVA_share=np.where(frame.index == 0, "0.2", frame["FVA_share"])),
-            "数值变量 FVA_share",
+            lambda frame: frame.assign(teaching_y_trade=np.where(frame.index == 0, "0.2", frame["teaching_y_trade"])),
+            "数值变量 teaching_y_trade",
         ),
         (
-            lambda frame: frame.assign(tariff_shock=np.where(frame.index == 0, np.inf, frame["tariff_shock"])),
-            "数值变量 tariff_shock",
+            lambda frame: frame.assign(
+                teaching_tariff_exposure=np.where(frame.index == 0, np.inf, frame["teaching_tariff_exposure"])
+            ),
+            "数值变量 teaching_tariff_exposure",
         ),
-        (lambda frame: pd.concat([frame, frame.iloc[[0]]], ignore_index=True), "entity-time 唯一"),
+        (lambda frame: pd.concat([frame, frame.iloc[[0]]], ignore_index=True), "entity-year 唯一"),
     ],
     ids=["blank-entity", "string-outcome", "infinite-regressor", "duplicate-key"],
 )
@@ -1055,12 +1055,15 @@ def test_regression_runtime_boundary_maps_to_controlled_route_400(teaching_db, m
         [
             {
                 "country": f"C{entity}",
+                "industry": "s0",
+                "entity_id": f"C{entity}_s0",
                 "year": 2018 + year,
-                "FVA_share": 0.1 * entity + 0.03 * year,
-                "tariff_shock": 0.02 * entity * year + 0.01 * (entity % 2),
+                "teaching_y_trade": 0.1 * entity + 0.03 * year,
+                "teaching_tariff_exposure": 0.02 * entity * year + 0.01 * (entity % 2),
+                "teaching_treated": int(year > 0 and entity % 2),
             }
             for entity in range(6)
-            for year in range(4)
+            for year in range(5)
         ]
     )
     monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: mutation(panel.copy()))
@@ -1071,7 +1074,7 @@ def test_regression_runtime_boundary_maps_to_controlled_route_400(teaching_db, m
     monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", direct_cpu)
     response = client.post(
         "/api/regression/run",
-        json={"outcome": "trade", "granularity": "country", "method": "twfe_intensity"},
+        json={"outcome": "trade"},
     )
     assert response.status_code == 400
     assert detail in response.json()["detail"]
@@ -1088,7 +1091,7 @@ def test_regression_route_maps_numerical_failure_to_chinese_400(teaching_db, mon
     monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", fail_numerically)
     response = client.post(
         "/api/regression/run",
-        json={"outcome": "trade", "granularity": "country", "method": "twfe_intensity"},
+        json={"outcome": "trade"},
     )
     assert response.status_code == 400
     assert response.json()["detail"].startswith("回归线性代数计算失败")

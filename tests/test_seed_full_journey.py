@@ -5,6 +5,7 @@ from copy import deepcopy
 import pytest
 
 from scripts import seed_full_journey as journey
+from gvcsim.regression.teaching import model_snapshot, variable_catalog
 
 
 def _result(status, *, no_pairs=False):
@@ -57,13 +58,18 @@ def api(monkeypatch):
             ]
         if path.startswith("/api/indicators/industry/"):
             return {"rows": [{"industry": "C26"}, {"industry": "C27", "betweenesscentrality": 12.5}], "total": 2}
-        if path == "/api/shocks/events":
-            return {"events": [{"shock_type": "tariff", "name": "Tariff event"}]}
+        if path.startswith("/api/regression/teaching-panel?"):
+            return {
+                "version": journey.TEACHING_VERSION,
+                "rows": [{"country": "CHN", "year": 2020, "teaching_tariff_exposure": 0.01}],
+            }
         if path == "/api/regression/run":
             outcome = kwargs["payload"]["outcome"]
             return {
-                "design": {"outcome": outcome, "method": "did", "interaction": False},
+                "design": {"outcome": outcome, "method": "twfe_intensity", "interaction": False},
                 "result": deepcopy(state["results"].get(outcome, _result("ok"))),
+                "model_snapshot": model_snapshot(outcome),
+                "variable_catalog": variable_catalog(outcome),
             }
         raise AssertionError(f"Unexpected request: {method} {path}")
 
@@ -102,11 +108,23 @@ def test_seed_records_step_observations_like_the_ui(api):
     assert step_nine["compared"] == ["CHN", "USA"]
     assert step_nine["metric"] == "betweenesscentrality"
     assert step_nine["observations"][0]["entity"] == "CHN·C27"
+    assert saved["steps"]["10"]["data"] == {
+        "quiz": saved["steps"]["10"]["data"]["quiz"],
+        "teaching_country": "CHN",
+        "teaching_year": 2020,
+        "viewed_teaching_panel": True,
+        "teaching_panel_version": journey.TEACHING_VERSION,
+    }
+    for step in range(11, 15):
+        run = saved["steps"][str(step)]["data"]["run"]
+        assert run["design"]["method"] == "twfe_intensity"
+        assert run["model_snapshot"]["version"] == journey.TEACHING_VERSION
+        assert run["variable_catalog"]
 
 
-@pytest.mark.parametrize("status", ["ok", "warning", "insufficient", "invalid_design", "no_pairs"])
+@pytest.mark.parametrize("status", ["ok", "warning", "insufficient", "invalid_design"])
 def test_seed_preserves_diagnoses_without_inferential_snapshots(api, status):
-    result = _result("insufficient" if status == "no_pairs" else status, no_pairs=status == "no_pairs")
+    result = _result(status)
     api["results"]["trade"] = result
 
     summary = journey.seed_full_journey("http://test", "student", "test-password")
@@ -147,7 +165,6 @@ def test_seed_rejects_incomplete_or_inconsistent_diagnosis(api, invalid):
 
 @pytest.mark.parametrize("gate", ["report_gate", "material_gate"])
 def test_seed_still_requires_server_report_gates(api, gate):
-    api["results"]["trade"] = _result("insufficient", no_pairs=True)
     api[gate] = ["Server rejected evidence"]
 
     with pytest.raises(RuntimeError, match="server report gate remained blocked"):

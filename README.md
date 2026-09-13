@@ -1,5 +1,7 @@
 # GVC Simulation Lab
 
+> **当前课程契约（`step10-tariff-teaching-v1`）**：步骤 1–9 继续使用发布的真实数据与派生指标；步骤 10 只展示透明 mock 关税 `X=固定冲击前销往模拟加税市场的出口份额×模拟税率`；步骤 11–14 固定为 `country_industry / tariff / twfe_intensity / no controls / no interaction / clean`，分别使用四个独立模拟 Y。回归结果仅描述模拟变量的关联，不作因果解释，也不是 OECD 真实指标。旧 DID 快照不能完成新版课程。
+
 基于 OECD ICIO 的 15 步全球价值链教学实验。后端预计算增加值贸易、生产长度、网络指标与教学回归面板；浏览器负责交互，PostgreSQL 按数据 release 保存账号、实验会话和报告。
 
 完整的架构、功能、计算方法、接口和运维说明见 [技术手册](技术手册.md)，生产部署操作见 [DEPLOY.md](DEPLOY.md)。
@@ -16,12 +18,12 @@
 
 - 学生自由访问 15 个教学步骤，自动保存实验会话，生成并提交报告，查看教师评分。
 - 教师创建学生账号、修改姓名/学号/密码，查看服务端判定的完成状态，批改报告。
-- 步骤 1–14 由服务端重新判定固定理解题；步骤 15 还要求关键实验证据、估计或完整的不可推断诊断，以及学生原创分析。
+- 步骤 1–14 由服务端重新判定固定理解题；步骤 10 还须保存当前教学面板状态，步骤 11–14 各须保存一次实际运行产生的同版本固定 TWFE 估计或完整的不可估计诊断；步骤 15 要求学生原创分析。完成判定不依赖额外阅读练习。
 - 每名学生在当前数据 release 中只有一份会话和一份报告。报告状态为草稿、待评阅或已评阅；已提交报告重新生成后自动重新提交并清空旧评分。
 
 不提供班级、公告、账号停用、学生自行清空、到达进度、跨标签页自动合并、离线缓存、防作弊凭证或安全审计。登录只用于区分实验记录和教师权限。每个标签页独立保存登录，刷新保留，退出或切换账号不影响其他已打开标签；新标签需登录（浏览器复制标签可能复制初始登录，此后仍独立）。HMAC 令牌默认有效 30 天，可通过 `GVCSIM_TOKEN_TTL_SECONDS` 覆盖；不新增自动续期或服务端登录会话表。数据换版、本人改密或教师重置密码仍使旧令牌失效。升级到此版本需重新登录一次，不读取旧的跨标签 localStorage 登录；服务器上的实验记录和报告不变。同一学生同时在多个标签写入时，陈旧版本仍返回 409，需要显式载入服务器版本，不会静默覆盖。
 
-密码验证与高成本回归均有单 worker 内的滑动窗口限制：默认每来源–用户名每分钟 10 次登录、每来源总计 120 次登录，每账号每分钟 12 次主回归和 4 次置换检验；超限返回 429 与 `Retry-After`。部署可通过 `GVCSIM_*_PER_MINUTE` 环境变量收紧，所有值必须为正整数。
+密码验证与高成本回归均有单 worker 内的滑动窗口限制：默认每来源–用户名每分钟 10 次登录、每来源总计 120 次登录，每账号每分钟 12 次主回归；超限返回 429 与 `Retry-After`。基础课程不提供置换检验，旧入口明确拒绝。部署可通过 `GVCSIM_*_PER_MINUTE` 环境变量收紧，所有值必须为正整数。
 
 50 人课堂默认使用 512 个连接名额、4 个计算名额及独立的 2 个原始表读取线程；CPU 与原始表任务分别最多接纳 64 项，排队超过 15 秒返回可重试的 503。同参数回归共享计算，最后一位等待者离开后回收无用任务。配置、内存代价与真实 HTTP 验证见[课堂并发修复验收](docs/classroom-concurrency-fixes-20260908.md)。
 
@@ -58,7 +60,7 @@ uv run gvcsim serve --port 8000
 uv run gvcsim classroom-init --reset
 ```
 
-这会清空全部旧账号、会话、报告和评分，并重建四张表：`schema_meta`、`accounts`、`experiment_sessions`、`reports`。会话与报告以 `(账号, release_id)` 隔离，口令轮换通过 `auth_version` 撤销既有令牌。当前学期使用题库 `course-quiz-v7` 和会话 `experiment-session-simple-v3`。
+这会清空全部旧账号、会话、报告和评分，并重建四张表：`schema_meta`、`accounts`、`experiment_sessions`、`reports`。会话与报告以 `(账号, release_id)` 隔离，口令轮换通过 `auth_version` 撤销既有令牌。当前学期使用题库 `course-quiz-v8` 和会话 `experiment-session-simple-v3`。
 
 学生编辑在 800 ms 后自动保存；同一标签页同一时刻最多一个请求，在途编辑合并成最新快照。每次 PUT 携带该标签页最后确认的 `updated_at` 版本：另一标签页已先保存时，服务端返回 409 而不覆盖，并要求学生载入服务器版本后重新操作。普通网络失败则保留最新快照并显示“重试保存”。理解题完成、报告生成/提交和退出前会主动冲刷保存队列；重新读取相同设置不会触发无意义的自动保存。刷新或离开页面前会尝试把未确认的快照保存在本标签页的 `sessionStorage`，刷新后须显式恢复。它不是持久备份：关闭标签页、浏览器崩溃或存储受限仍可能丢失未保存内容；存储写入失败时会请求浏览器显示离开确认。
 
@@ -66,9 +68,9 @@ uv run gvcsim classroom-init --reset
 
 ## 数据发布
 
-原始表位于 `OECD_ICIO/`，固定产物入口是 `data/processed`。`compute` 只在 API 已停止的维护窗口运行：它在 `data/.processed-releases/` 的暂存目录完成计算与诊断，为每个普通文件生成 SHA-256、字节数和 CSV/JSON 结构清单，完整校验并 `fsync` 后才通过相对符号链接原子切换。v14 产物同时要求完整性与数学有效性：文件哈希、结构、键覆盖、有限性和来源绑定失败，以及逆矩阵稳定性、计算恒等式或聚合一致性失败，都阻断发布。源账户误差同时超过 1 Million USD 和 1% 时也阻断发布；容差内舍入、负 VA/TLS、份额超出常见范围与回归设计限制仍作为经济诊断披露，不通过裁剪负值掩盖；接近稳定性边界但未越过失败阈值的警告也保留。所有检查写入 QC 产物、`dataset.json` 和实验报告。成功后保留当前与上一发布供故障回滚；更旧发布清理失败只输出警告。构建或发布校验失败不会改变旧入口。
+原始表位于 `OECD_ICIO/`，固定产物入口是 `data/processed`。`compute` 只在 API 已停止的维护窗口运行：它在 `data/.processed-releases/` 的暂存目录完成计算与诊断，为每个普通文件生成 SHA-256、字节数和 CSV/JSON 结构清单，完整校验并 `fsync` 后才通过相对符号链接原子切换。v15 产物同时要求完整性与数学有效性，并新增来源绑定的 `panel_teaching.csv`：其模拟契约版本、seed、参数、源 `panel_industry.csv` 与逐年出口暴露哈希都写入 `dataset.json` 并在预检时复核。文件哈希、结构、键覆盖、有限性和来源绑定失败，以及逆矩阵稳定性、计算恒等式或聚合一致性失败，都阻断发布。源账户误差同时超过 1 Million USD 和 1% 时也阻断发布；容差内舍入、负 VA/TLS、份额超出常见范围与回归设计限制仍作为经济诊断披露。成功后保留当前与上一发布供故障回滚；构建或发布校验失败不会改变旧入口。
 
-**v14 升级要求：** 出口改为直接加总外国中间品与最终需求，避免“总和减国内和”的浮点尾差把结构性零出口变成有效的 0% 份额。真实小额贸易与负最终需求不设阈值裁剪。旧 v13 回归基表可能已持久化错误零值，因此新代码拒绝旧契约；必须在独立数据目录完整重算并验收新的 release 后再安排部署，不能只改前端、改旧 CSV 或改元数据版本号。保留旧代码/数据供回滚，旧会话与报告仍绑定原 release；不重置教学库。
+**v15 升级要求：** v15 在 v14 数值修复基础上发布独立、确定性生成的教学回归面板。模拟 seed 固定为 `20260913`，但结果还绑定当前 release 的行业面板和逐年出口暴露，不能把 seed 当成可跨 release 复用的数据身份。旧 v14 没有该面板及完整来源绑定，必须用新代码在独立数据目录完整重算并验收**新的 release**，不能只补 CSV、沿用旧 release id 或改元数据版本号。保留旧代码与旧 release 成对回滚；旧会话和报告仍绑定原 release，不重置教学库。本仓库文档只说明待执行流程，不表示 v15 已部署。
 
 宏观教学模拟生成器 v2 明确保留 ICIO 的经济规模：`(max(SVA,0)+1) × 10^6 × 国家系数 × 时间系数`，其中 SVA 和加一项的单位是百万美元，两个系数无量纲；人口由该模拟美元金额除以模拟人均美元收入得到。这是明确校准的教学数据，仍不是 WDI/IMF 观测 GDP 或人口，且禁止进入公开主回归。
 
@@ -108,7 +110,7 @@ Gephi 0.10.1 独立基准可用 `scripts/gephi_golden/generate.sh --check` 校�
 
 CI 的桌面浏览器验收分两层：`agent_browser_smoke.sh` 快速挂载学生 1–15 步与教师关键交互；`agent_browser_full_journey.sh` 通过公开 API 构造一份当前 release 的完整学习记录，再由真实浏览器完成报告生成、提交和教师评分，防止各自通过的组件在完整状态机中断链。两个脚本都以 `GVCSIM_BASE_URL` 指定被测站点地址，不写死任何主机。完整旅程在设置 `GVCSIM_E2E_ARTIFACT_DIR` 时还会通过浏览器打印 PDF，并用独立的 `pdftotext` 检查四类指标对照表七列均未被截断；本地需安装 Poppler（Debian/Ubuntu：`poppler-utils`），CI 已包含此依赖。
 
-冲击面板性能验收在有效 active v14 release 完成最终重算后运行：
+冲击面板性能验收在有效 active v15 release 完成最终重算后运行：
 
 ```bash
 # 对照只读本地生产部署；运行期间不得改写原始输入或 release。
@@ -117,4 +119,4 @@ GVCSIM_BENCHMARK_USERNAME=student GVCSIM_BENCHMARK_PASSWORD='…' \
   uv run python scripts/benchmark_shock_panel_v9.py
 ```
 
-脚本在进程内完成 release 校验并经由正常登录中间件访问 `/api/shocks/panel`，记录 release/shock contract、单请求冷索引、8 请求并发冷启动、warm sequential 与 8-concurrent p95，并对照 500ms/1.5s 预算；不经过网络，因此无需也不接受目标主机配置。正式数据发布必须通过该门槛；v14 正式部署前需生成新的当前契约验收记录；`benchmarks/shock_panel_v13.json` 和更早的 `benchmarks/shock_panel_v12.json`、`benchmarks/shock_panel_v11.json`、`benchmarks/shock_panel_v10.json`、`benchmarks/shock_panel_v9.json` 与 `benchmarks/shock_panel_preliminary_v3.json` 仅保留作历史记录。每次正式数据换版仍必须重新运行当前版本的验收，不能沿用旧 release 的结果。
+脚本在进程内完成 release 校验并经由正常登录中间件访问 `/api/shocks/panel`，记录 release/shock contract、单请求冷索引、8 请求并发冷启动、warm sequential 与 8-concurrent p95，并对照 500ms/1.5s 预算；不经过网络，因此无需也不接受目标主机配置。正式数据发布必须通过该门槛；v15 正式部署前需生成 `benchmarks/shock_panel_v15.json`，并核对其中 release id 与待发布 release 一致；v14 及更早记录仅作历史证据。每次正式数据换版仍必须重新运行，不能沿用旧 release 的结果。

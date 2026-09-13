@@ -10,10 +10,9 @@
 import { useEffect, useLayoutEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { useDialogFocus } from "./a11y";
-import { api } from "./api";
 import { LogoMark } from "./brand";
 import { icioDatasetName } from "./dataset-label";
-import type { AuthUser, Meta, ShockEvent, StepsResponse } from "./types";
+import type { AuthUser, Meta, StepsResponse } from "./types";
 
 const SCENE_NAMES = ["认识实验", "数据与设定", "实验路线", "机制预演", "完成规则"];
 const N_SCENES = SCENE_NAMES.length;
@@ -82,13 +81,8 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
   const alternateArrowId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const skipRef = useRef<HTMLButtonElement>(null);
-  const eventCardRef = useRef<HTMLButtonElement>(null);
   const [scene, setScene] = useState(0);
-  const [events, setEvents] = useState<ShockEvent[] | null>(null);
-  const [eventsError, setEventsError] = useState(false);
-  const [eventsAttempt, setEventsAttempt] = useState(0);
   const [openCards, setOpenCards] = useState({ icio: false, shock: false });
-  const [eventsDisclosure, setEventsDisclosure] = useState("");
   const [stage, setStage] = useState(1);
   const [tau, setTau] = useState(0);
   const [mechanism, setMechanism] = useState<"contract" | "reroute" | "offset">("reroute");
@@ -98,18 +92,6 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
     returnFocusRef,
     onClose: () => onDone(),
   });
-
-  useEffect(() => {
-    let active = true;
-    setEvents(null);
-    setEventsError(false);
-    setEventsDisclosure("");
-    api.shockEvents().then(
-      (r) => { if (active) { setEvents(r.events); setEventsDisclosure(r.source_disclosure); } },
-      () => { if (active) setEventsError(true); },
-    );
-    return () => { active = false; };
-  }, [eventsAttempt]);
 
   useLayoutEffect(() => {
     // A scene can remove the focused next button. Announce the new heading
@@ -209,7 +191,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
     <div key={1} className="intro-scene">
       <div className="intro-scene-kicker">数据底座</div>
       <h2 className="intro-h2">数据来源与教学设定</h2>
-      <p className="intro-lede">指标由当前发布的投入产出表计算。政策事件有来源披露，但冲击参数与行业映射包含教学设定。</p>
+      <p className="intro-lede">真实投入产出表用于讲解指标概念；回归练习中的关税 X 与结果 Y 均为教学模拟。</p>
       <div className="intro-cards">
         <div
           className={`intro-card${openCards.icio ? " open" : ""}`}
@@ -253,7 +235,6 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
           <button
             type="button"
             className="intro-card-toggle-button"
-            ref={eventCardRef}
             aria-expanded={openCards.shock}
             aria-controls={shockPanelId}
             onClick={() => setOpenCards((cards) => ({ ...cards, shock: !cards.shock }))}
@@ -261,40 +242,21 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
           <span className="intro-card-head">
             <CardIcon kind="shock" />
             <span>
-              <span className="intro-card-title">贸易政策冲击面板</span>
-              <span className="intro-card-sub">展开或收起事件目录与来源说明</span>
+              <span className="intro-card-title">教学模拟关税</span>
+              <span className="intro-card-sub">展开或收起模拟规则</span>
             </span>
             <span className="intro-card-toggle" aria-hidden>{openCards.shock ? "−" : "+"}</span>
           </span>
           </button>
           <ul className="intro-card-facts">
-            <li>以贸易政策事件为背景，来源完整性需逐项核对。</li>
-            <li>税率、覆盖范围与行业映射含教学设定。</li>
-            <li>用于练习分析，不直接支持真实政策效果结论。</li>
+            <li>关税路径与暴露值全部由课程生成。</li>
+            <li>X 使用首年美国目的地出口份额与模拟税率构造。</li>
+            <li>Y 也是模拟结果，仅用于练习读回归。</li>
           </ul>
           {openCards.shock && (
             <div className="intro-card-body" id={shockPanelId}>
-              {eventsError ? (
-                <div className="intro-load-state">
-                  <p role="alert">事件信息暂时无法加载，请重试。未加载到数据不代表没有事件。</p>
-                  <button type="button" className="intro-stage-tab" onClick={() => { eventCardRef.current?.focus(); setEventsAttempt((n) => n + 1); }}>重试加载事件</button>
-                </div>
-              ) : events === null ? (
-                <p role="status">正在加载事件信息…</p>
-              ) : events.length === 0 ? (
-                <p role="status">当前事件目录为空。</p>
-              ) : (
-                <>
-                  <div role="status">当前目录共 {events.length} 组事件。事件与日期的来源，不等于冲击参数已获官方核验。</div>
-                  {eventsDisclosure && <p>{eventsDisclosure}</p>}
-                  <details className="intro-details">
-                    <summary>查看完整事件目录</summary>
-                    {events.map((e) => (
-                      <div key={e.name}>{e.name}（{e.effective} 生效）</div>
-                    ))}
-                  </details>
-                </>
-              )}
+              <p>前两年税率为 0，随后按预设阶段变化；暴露强度等于首年美国目的地份额乘以当年模拟税率。</p>
+              <p><b>边界：</b>这里没有真实事件目录、现实税率或现实政策效果。模拟 Y 只借首年真实指标排名校准，不保留真实指标水平。</p>
             </div>
           )}
         </div>

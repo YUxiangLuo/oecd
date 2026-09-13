@@ -10,7 +10,7 @@ from gvcsim import shocks
 from gvcsim.regression.design import (
     CONTROL_MODE_NONE,
     GRANULARITY_COUNTRY_INDUSTRY,
-    METHOD_DID,
+    METHOD_TWFE_INTENSITY,
     PRICE_MODE_NOMINAL,
     SCENARIO_CLEAN,
 )
@@ -25,7 +25,7 @@ class RegressionRequest(StrictContract):
     outcome: str
     granularity: str = GRANULARITY_COUNTRY_INDUSTRY
     shock_type: str = SHOCK_TARIFF
-    method: str = METHOD_DID
+    method: str = METHOD_TWFE_INTENSITY
     control_mode: str = CONTROL_MODE_NONE
     interaction: bool = False
     price_mode: str = PRICE_MODE_NOMINAL
@@ -121,6 +121,8 @@ class RegressionRunResponse(StrictContract):
     preflight: RegressionPreflight
     benchmark: dict[str, Any]
     disclaimer: str
+    variable_catalog: list[dict[str, str]]
+    model_snapshot: dict[str, Any]
 
 
 class PlaceboResponse(StrictContract):

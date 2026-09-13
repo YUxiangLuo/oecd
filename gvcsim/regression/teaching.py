@@ -1,0 +1,138 @@
+"""Versioned fictional tariff experiment; observed ICIO columns remain untouched."""
+
+from __future__ import annotations
+
+import hashlib
+
+import numpy as np
+import pandas as pd
+
+VERSION = "step10-tariff-teaching-v1"
+X_COLUMN = "teaching_tariff_exposure"
+Y_COLUMNS = {outcome: f"teaching_y_{outcome}" for outcome in ("trade", "production", "length", "network")}
+BETAS = {"trade": -0.55, "production": -0.40, "length": -1.8, "network": -6000.0}
+SEED = 20260913
+MARKET = "USA"
+TARIFF_PATH = (0.0, 0.0, 0.65, 1.0, 0.55)
+DISCLAIMER = "虚构关税政策与模拟教学结果，不是历史事件、真实政策效果或 OECD 发布结果。"
+# Rank calibration preserves ordering, not observed levels or accounting identities.
+# These ranges ensure valid simulated domains without clipping generated outcomes.
+CALIBRATION = {
+    "trade": (0.25, 0.30, 0.012),
+    "production": (0.20, 0.25, 0.010),
+    "length": (3.0, 2.0, 0.060),
+    "network": (2000.0, 2000.0, 120.0),
+}
+UNITS = {
+    "trade": "比例（展示为百分点）",
+    "production": "比例（展示为百分点）",
+    "length": "长度单位",
+    "network": "中心性单位",
+}
+
+
+def _unit_number(value: str, salt: str, seed: int = SEED) -> float:
+    raw = hashlib.sha256(f"{VERSION}|{seed}|{salt}|{value}".encode()).digest()
+    return int.from_bytes(raw[:8], "big") / (2**64 - 1)
+
+
+def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *, seed: int = SEED) -> pd.DataFrame:
+    """Join fixed pre-policy destination shares and generate separate, bounded Y.
+
+    Missing or signed/out-of-domain source observations are ineligible, not filled
+    or clipped. Rank calibration is explicitly a teaching construction, not an
+    estimate of the actual trajectory. Hash noise is independent of row ordering.
+    """
+    from gvcsim.regression.design import OUTCOME_DEPVARS
+
+    source_columns = [value[0] for value in OUTCOME_DEPVARS.values()]
+    required = {"country", "industry", "year", "entity_id", *source_columns}
+    if missing := required - set(release_panel.columns):
+        raise ValueError("教学面板缺少源列:" + "、".join(sorted(missing)))
+    years = sorted(int(y) for y in release_panel["year"].unique())
+    if len(years) != 5 or years != list(range(years[0], years[0] + 5)):
+        raise ValueError("教学关税设计需要连续五年面板")
+    if release_panel.duplicated(["country", "industry", "year"]).any():
+        raise ValueError("教学源面板包含重复记录")
+    required_exposure = {"country", "sector", "imposer", "year", "export_exposure"}
+    if not required_exposure.issubset(exposure.columns):
+        raise ValueError("教学关税缺少目的地出口份额")
+    weights = exposure.loc[
+        exposure.year.eq(years[0]) & exposure.imposer.eq(MARKET), ["country", "sector", "export_exposure"]
+    ].rename(columns={"sector": "industry", "export_exposure": "teaching_export_share_w"})
+    if weights.duplicated(["country", "industry"]).any():
+        raise ValueError("目的地出口份额包含重复键")
+    base = release_panel.loc[release_panel.year.eq(years[0]) & release_panel.country.ne("ROW")].copy()
+    base = base.merge(weights, on=["country", "industry"], how="inner", validate="one_to_one")
+    finite = np.isfinite(base[source_columns].to_numpy(dtype=float)).all(axis=1)
+    eligible = finite & base.teaching_export_share_w.between(0, 1)
+    eligible &= base.FVA_share.between(0, 1) & base["3b_VA_GVC_C_share"].between(0, 1)
+    eligible &= base.PLv_GVC.gt(0) & base.betweenesscentrality.ge(0)
+    base = base.loc[eligible].copy()
+    if base.empty:
+        raise ValueError("无有效冲击前指标与目的地份额，无法生成教学面板")
+    for outcome, column in OUTCOME_DEPVARS.items():
+        low, span, _ = CALIBRATION[outcome]
+        base[f"_baseline_{outcome}"] = low + span * base[column[0]].rank(method="average", pct=True)
+    baseline_columns = [f"_baseline_{outcome}" for outcome in Y_COLUMNS]
+    out = release_panel.merge(
+        base[["entity_id", "teaching_export_share_w", *baseline_columns]],
+        on="entity_id",
+        how="inner",
+        validate="many_to_one",
+    )
+    out = out.sort_values(["country", "industry", "year"]).reset_index(drop=True)
+    entities = out.entity_id.astype(str)
+    exposed = out.country.astype(str).map(lambda value: _unit_number(value, "policy") < 0.60)
+    rates = out.industry.astype(str).map(lambda value: 0.06 if _unit_number(value, "rate") < 0.5 else 0.18)
+    out["teaching_tariff_rate_tau"] = rates * out.year.map(dict(zip(years, TARIFF_PATH, strict=True))) * exposed
+    out[X_COLUMN] = out.teaching_export_share_w * out.teaching_tariff_rate_tau
+    out["teaching_treated"] = out[X_COLUMN].gt(0).astype(int)
+    for outcome, target in Y_COLUMNS.items():
+        _, _, noise_scale = CALIBRATION[outcome]
+        # Include country-year noise so clustered uncertainty is meaningful.
+        individual = entities + "|" + out.year.astype(str)
+        cluster = out.country.astype(str) + "|" + out.year.astype(str)
+        noise = individual.map(lambda value: 2 * _unit_number(value, outcome, seed) - 1)
+        noise += cluster.map(lambda value: 2 * _unit_number(value, f"cluster-{outcome}", seed) - 1)
+        trend = out.year.map(dict(zip(years, (-0.4, -0.2, 0.0, 0.2, 0.4), strict=True)))
+        out[target] = out[f"_baseline_{outcome}"] + BETAS[outcome] * out[X_COLUMN] + noise_scale * (noise + trend)
+    return out.drop(columns=baseline_columns)
+
+
+def variable_catalog(outcome: str) -> list[dict[str, str]]:
+    return [
+        {
+            "name": X_COLUMN,
+            "label": "模拟关税暴露强度",
+            "unit": "比例（展示为百分点）",
+            "source": "首年销往美国的 ICIO 出口份额 × 虚构税率；并非美国真实政策",
+            "role": "X",
+        },
+        {
+            "name": Y_COLUMNS[outcome],
+            "label": f"教学模拟{outcome}",
+            "unit": UNITS[outcome],
+            "source": "首年真实指标排名校准基准 + 预设关系 + 固定种子扰动；不保留真实水平",
+            "role": "Y",
+        },
+    ]
+
+
+def model_snapshot(outcome: str) -> dict:
+    return {
+        "version": VERSION,
+        "x_columns": [X_COLUMN],
+        "y_column": Y_COLUMNS[outcome],
+        "entity": "entity_id",
+        "time": "year",
+        "fixed_effects": ["entity_id", "year"],
+        "controls": [],
+        "interactions": [],
+        "seed": SEED,
+        "beta": BETAS[outcome],
+        "tariff_path": list(TARIFF_PATH),
+        "market": MARKET,
+        "calibration": CALIBRATION[outcome],
+        "disclaimer": DISCLAIMER,
+    }

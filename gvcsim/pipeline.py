@@ -20,6 +20,7 @@
 """
 
 import json
+import hashlib
 import shutil
 from contextlib import contextmanager
 from pathlib import Path
@@ -42,6 +43,18 @@ from gvcsim.data.raw_icio import raw_dimensions_metadata
 from gvcsim.data import controls, loader, output_quality, quality, regression_quality
 from gvcsim.indicators import length, network, production, tradeflow
 from gvcsim.indicators.core import build_arrays
+from gvcsim.regression.teaching import (
+    BETAS as TEACHING_BETAS,
+    CALIBRATION as TEACHING_CALIBRATION,
+    DISCLAIMER as TEACHING_DISCLAIMER,
+    MARKET as TEACHING_MARKET,
+    SEED as TEACHING_SEED,
+    TARIFF_PATH as TEACHING_TARIFF_PATH,
+    VERSION as TEACHING_VERSION,
+    build_teaching_panel,
+    model_snapshot,
+    variable_catalog,
+)
 
 
 class QualityGateError(RuntimeError):
@@ -244,6 +257,14 @@ def build_panel(
     sector["entity_id"] = sector["country"] + "_" + sector["industry"]
     sector.to_csv(PROCESSED_DIR / "panel_industry.csv", index=False)
 
+    # 独立教学数据只绑定发布面板和逐年 ICIO 目的地份额，不改写步骤1–9面板。
+    exposure = pd.concat(
+        [pd.read_csv(PROCESSED_DIR / f"export_exposure_{year}.csv") for year in years],
+        ignore_index=True,
+    )
+    teaching = build_teaching_panel(sector, exposure, seed=TEACHING_SEED)
+    teaching.to_csv(PROCESSED_DIR / "panel_teaching.csv", index=False)
+
     # ---- 国家级:主口径使用首次处理前固定行业出口权重 ----
     # 当期 gross_exports 本身可能已被政策改变；再用它给处理强度加权会让结果
     # 反向决定 treatment。固定权重必须来自首次处理前发布年，不能回退到处理年。
@@ -297,16 +318,9 @@ def build_panel(
     return sector
 
 
-def _build_staged_release(
-    staging: Path,
-    selected_years: list[int],
-    *,
-    release_id: str,
-) -> None:
-    """Build and validate one complete release without touching the live pointer."""
+def finalize_release(staging: Path, selected_years: list[int], *, release_id: str) -> dict:
+    """Build panels/QC/metadata from already-computed annual artifacts and validate them."""
     with _using_processed_dir(staging):
-        for year in selected_years:
-            compute_year(year)
         print("[release] 构建跨年面板、控制变量与冲击面板...", flush=True)
         build_panel()
         print("[release] 执行逐年输出语义 QC...", flush=True)
@@ -327,6 +341,13 @@ def _build_staged_release(
         release_qc = _release_qc_metadata(staging, selected_years)
         publication_policy = publication_policy_metadata()
         integrity = release_integrity_metadata(staging, selected_years)
+        source_panel = pd.read_csv(staging / "panel_industry.csv")
+        teaching_panel = pd.read_csv(staging / "panel_teaching.csv")
+        baseline = source_panel.loc[source_panel["year"].eq(selected_years[0]) & source_panel["country"].ne("ROW")]
+
+        def digest(filename: str) -> str:
+            return hashlib.sha256((staging / filename).read_bytes()).hexdigest()
+
         write_dataset_metadata(
             staging,
             {
@@ -344,13 +365,53 @@ def _build_staged_release(
                 "output_qc": {"years": output_qc_years},
                 "regression_input_qc_contract": regression_quality.regression_input_qc_contract_metadata(),
                 "regression_input_qc": regression_input_qc,
+                "simulation_contract": {
+                    "version": TEACHING_VERSION,
+                    "seed": TEACHING_SEED,
+                    "parameters": {
+                        "market": TEACHING_MARKET,
+                        "tariff_path": list(TEACHING_TARIFF_PATH),
+                        "betas": TEACHING_BETAS,
+                        "calibration": TEACHING_CALIBRATION,
+                    },
+                    "model_snapshots": {name: model_snapshot(name) for name in TEACHING_BETAS},
+                    "variable_catalogs": {name: variable_catalog(name) for name in TEACHING_BETAS},
+                    "source_bindings": {
+                        "release_panel": {"path": "panel_industry.csv", "sha256": digest("panel_industry.csv")},
+                        "exposure_files": [
+                            {"path": f"export_exposure_{year}.csv", "sha256": digest(f"export_exposure_{year}.csv")}
+                            for year in selected_years
+                        ],
+                        "exposure_selection": "first release year; imposer=USA",
+                    },
+                    "source_filter_disclosure": {
+                        "source_baseline_rows": int(len(baseline)),
+                        "published_entities": int(teaching_panel["entity_id"].nunique()),
+                        "excluded_source_baseline_rows": int(len(baseline) - teaching_panel["entity_id"].nunique()),
+                    },
+                    "disclaimer": TEACHING_DISCLAIMER,
+                },
                 "publication_policy": publication_policy,
                 "integrity": integrity,
             },
         )
         print("[release] 校验完整 release 的哈希、结构与 QC contract...", flush=True)
-        validate_release(staging)
+        validation = validate_release(staging)
         print("[release] 暂存 release 已通过全部发布门禁。", flush=True)
+        return validation
+
+
+def _build_staged_release(
+    staging: Path,
+    selected_years: list[int],
+    *,
+    release_id: str,
+) -> None:
+    """Build and validate one complete release without touching the live pointer."""
+    with _using_processed_dir(staging):
+        for year in selected_years:
+            compute_year(year)
+    finalize_release(staging, selected_years, release_id=release_id)
 
 
 def run(years: list[int] | None = None) -> None:

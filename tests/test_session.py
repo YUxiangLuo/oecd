@@ -1,7 +1,10 @@
+import json
+
 import pytest
 
 from gvcsim.classroom import routes as classroom_routes
 from gvcsim.config import ROOT
+from gvcsim.regression.teaching import model_snapshot, variable_catalog
 from gvcsim.session import SESSION_VERSION, SessionError, empty_session, make_record, validate_session
 
 
@@ -19,9 +22,23 @@ def test_frontend_and_backend_use_the_same_session_version():
 
 
 def test_put_session_returns_the_exact_normalized_snapshot_saved(monkeypatch):
+    outcome = "production"
     run = {
-        "design": {"outcome": "trade", "method": "did", "interaction": False},
-        "result": {"status": "ok"},
+        "design": {
+            "outcome": outcome,
+            "granularity": "country_industry",
+            "shock_type": "tariff",
+            "method": "twfe_intensity",
+            "control_mode": "none",
+            "interaction": False,
+            "scenario": "clean",
+        },
+        "result": {
+            "status": "ok",
+            "coefs": [{"name": "teaching_tariff_exposure", "coef": -0.5}],
+        },
+        "model_snapshot": json.loads(json.dumps(model_snapshot(outcome))),
+        "variable_catalog": variable_catalog(outcome),
     }
     requested = empty_session()
     requested["steps"]["12"] = make_record({"run": run, "qualified_run": run})

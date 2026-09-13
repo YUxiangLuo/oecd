@@ -29,22 +29,41 @@ def _install_complete_exposure_writer(monkeypatch):
     monkeypatch.setattr(shocks, "write_export_exposure", write)
 
 
+def _rename_fake_destination_to_usa(fake_io):
+    """Make the compact two-country IO table satisfy the explicit USA contract."""
+    fake_io._regions = ["AAA", "USA"]
+    for name in ("Z", "A", "L"):
+        frame = getattr(fake_io, name)
+        frame.index = frame.index.set_levels(["AAA", "USA"], level="region")
+        frame.columns = frame.columns.set_levels(["AAA", "USA"], level="region")
+    for name in ("Y",):
+        frame = getattr(fake_io, name)
+        frame.index = frame.index.set_levels(["AAA", "USA"], level="region")
+        frame.columns = frame.columns.set_levels(["AAA", "USA"], level="region")
+    for value in (fake_io.x, fake_io.unit):
+        value.index = value.index.set_levels(["AAA", "USA"], level="region")
+    fake_io.reported_output.index = fake_io.reported_output.index.set_levels(["AAA", "USA"], level="region")
+    fake_io.factor_inputs.F.columns = fake_io.factor_inputs.F.columns.set_levels(["AAA", "USA"], level="region")
+
+
 def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
+    _rename_fake_destination_to_usa(fake_io)
     processed = tmp_path / "processed"
     for module in (config, pipeline, controls, shocks):
         if hasattr(module, "PROCESSED_DIR"):
             monkeypatch.setattr(module, "PROCESSED_DIR", processed)
     monkeypatch.setattr(pipeline.loader, "load", lambda year: fake_io)
-    monkeypatch.setattr(quality, "KEY_REGIONS", ["AAA", "BBB"])
+    monkeypatch.setattr(quality, "KEY_REGIONS", ["AAA", "USA"])
     _install_complete_exposure_writer(monkeypatch)
 
-    for year in [2018, 2019]:
+    years = list(range(2016, 2021))
+    for year in years:
         pipeline.compute_year(year, verbose=False)
     panel = pipeline.build_panel()
     output_summaries = {
-        year: output_quality.write_output_qc(processed, year, expected_years=[2018, 2019])[1] for year in [2018, 2019]
+        year: output_quality.write_output_qc(processed, year, expected_years=years)[1] for year in years
     }
-    regression_summary = regression_quality.write_regression_input_qc(processed, expected_years=[2018, 2019])[1]
+    regression_summary = regression_quality.write_regression_input_qc(processed, expected_years=years)[1]
     regression_checks = json.loads(
         (processed / regression_quality.REGRESSION_INPUT_QC_FILE).read_text(encoding="utf-8")
     )
@@ -62,6 +81,7 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
         "qc_shocks.json",
         "panel_industry.csv",
         "panel_country.csv",
+        "panel_teaching.csv",
     ]
     for name in expected_files:
         assert (processed / name).exists(), name
@@ -71,13 +91,13 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
 
     controls_df = pd.read_csv(processed / "controls_country.csv")
     assert {"country", "year", "macro_log_gdp_usd", "gdp_deflator"}.issubset(controls_df.columns)
-    assert len(controls_df) == 4  # 2 countries × 2 years
+    assert len(controls_df) == 10  # 2 countries × 5 years
 
     controls_qc = json.loads((processed / "qc_controls.json").read_text(encoding="utf-8"))
     assert len(controls_qc) == 5
     assert all(c["passed"] for c in controls_qc), controls_qc
 
-    assert len(panel) == 8  # 2 countries × 2 sectors × 2 years
+    assert len(panel) == 20  # 2 countries × 2 sectors × 5 years
     assert {
         "entity_id",
         "tariff_shock",
@@ -93,13 +113,14 @@ def test_synthetic_compute_writes_panel_and_qc(tmp_path, fake_io, monkeypatch):
     assert regression_quality.summarize_regression_input_checks(regression_checks)["publishable"] is False
     assert regression_summary["publishable"] is False
     assert all(
-        output_quality.recompute_output_checks(processed, year, expected_years=[2018, 2019])
+        output_quality.recompute_output_checks(processed, year, expected_years=years)
         == json.loads((processed / f"qc_outputs_{year}.json").read_text(encoding="utf-8"))
-        for year in [2018, 2019]
+        for year in years
     )
 
 
 def test_degenerate_synthetic_staged_release_discloses_regression_design_findings(tmp_path, fake_io, monkeypatch):
+    _rename_fake_destination_to_usa(fake_io)
     # This per-test compact raw contract is independent of the repository-wide
     # CI fixture and deliberately has no .ci-only-synthetic.json marker.
     monkeypatch.delenv("GVCSIM_CI_SYNTHETIC", raising=False)
@@ -107,7 +128,7 @@ def test_degenerate_synthetic_staged_release_discloses_regression_design_finding
     staging.mkdir()
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
-    contract = raw_icio.DimensionContract("synthetic-staged-release", 1, ("AAA", "BBB"), ("s1", "s2"), ("HFCE",))
+    contract = raw_icio.DimensionContract("synthetic-staged-release", 1, ("AAA", "USA"), ("s1", "s2"), ("HFCE",))
     header = ["V1", *contract.industry_labels, *contract.final_demand_labels, "OUT"]
     rows = []
     for index, label in enumerate(contract.industry_labels):
@@ -120,17 +141,18 @@ def test_degenerate_synthetic_staged_release_discloses_regression_design_finding
             ]
         )
     rows.extend([[account, *([0.1] * (len(header) - 1))] for account in ("TLS", "VA", "OUT")])
-    pd.DataFrame(rows, columns=header).to_csv(raw_dir / "ICIO2023_2020.csv", index=False)
+    for year in range(2016, 2021):
+        pd.DataFrame(rows, columns=header).to_csv(raw_dir / f"ICIO2023_{year}.csv", index=False)
 
     monkeypatch.setattr(pipeline, "RAW_DATA_DIR", raw_dir)
     monkeypatch.setattr(config, "RAW_DATA_DIR", raw_dir)
     monkeypatch.setattr(raw_icio, "production_dimension_contract", lambda: contract)
     raw_icio.clear_raw_validation_cache()
     monkeypatch.setattr(pipeline.loader, "load", lambda _year: fake_io)
-    monkeypatch.setattr(quality, "KEY_REGIONS", ["AAA", "BBB"])
+    monkeypatch.setattr(quality, "KEY_REGIONS", ["AAA", "USA"])
     _install_complete_exposure_writer(monkeypatch)
 
-    pipeline._build_staged_release(staging, [2020], release_id="3" * 32)
+    pipeline._build_staged_release(staging, list(range(2016, 2021)), release_id="3" * 32)
 
     assert (staging / "qc_outputs_2020.json").is_file()
     assert (staging / regression_quality.REGRESSION_INPUT_QC_FILE).is_file()
@@ -188,14 +210,15 @@ def _stub_release_build(monkeypatch, calls, *, fail_year=False):
 
     def panel(**_kwargs):
         calls.append("panel")
-        for name in (
-            "panel_country.csv",
-            "panel_industry.csv",
-            "controls_country.csv",
-            "demo_trade_war_tariffs.csv",
-            "tariff_exposure_lookup.csv",
-        ):
+        for name in ("controls_country.csv", "demo_trade_war_tariffs.csv", "tariff_exposure_lookup.csv"):
             (pipeline.PROCESSED_DIR / name).write_text("x\n1\n")
+        (pipeline.PROCESSED_DIR / "panel_country.csv").write_text("country,year\nAAA,2020\n")
+        (pipeline.PROCESSED_DIR / "panel_industry.csv").write_text(
+            "country,industry,entity_id,year\nAAA,s1,AAA_s1,2020\n"
+        )
+        (pipeline.PROCESSED_DIR / "panel_teaching.csv").write_text(
+            "country,industry,entity_id,year\nAAA,s1,AAA_s1,2020\n"
+        )
         (pipeline.PROCESSED_DIR / "qc_controls.json").write_text(
             json.dumps(_contract_checks(quality.QC_SCOPE_CONTROLS), ensure_ascii=False)
         )
@@ -307,7 +330,7 @@ def test_run_builds_sentinel_switches_pointer_and_never_touches_database(tmp_pat
     assert set(metadata["qc"]) == {"years", "controls", "shocks"}
     assert metadata["qc_contract"] == quality.qc_contract_metadata()
     assert metadata["shock_contract"] == shocks.shock_contract_metadata()
-    assert metadata["artifact_contract_version"] == 14
+    assert metadata["artifact_contract_version"] == 15
     assert metadata["publication_policy"] == artifacts.publication_policy_metadata()
     assert metadata["integrity"]["status"] == "passed"
     assert metadata["output_qc_contract"] == output_quality.output_qc_contract_metadata()

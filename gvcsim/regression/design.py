@@ -96,20 +96,27 @@ class RegressionDesign:
     # ROW(Rest of World)是投入产出表闭合用的剩余地区,不是可解释的政策处理对象。
     # 指标计算仍保留 ROW;回归估计默认剔除,避免 DID/事件研究把聚合残差当成真实国家。
     exclude_row: bool = True
+    teaching: bool = False
 
     def __post_init__(self) -> None:
         validate_outcome_granularity(self.outcome, self.granularity)
 
     @property
     def depvar(self) -> str:
+        if self.teaching:
+            from gvcsim.regression.teaching import Y_COLUMNS
+
+            return Y_COLUMNS[self.outcome]
         return OUTCOME_DEPVARS[self.outcome][0]
 
     @property
     def depvar_label(self) -> str:
-        return OUTCOME_DEPVARS[self.outcome][1]
+        return ("教学模拟：" if self.teaching else "") + OUTCOME_DEPVARS[self.outcome][1]
 
     @property
     def panel_file(self) -> str:
+        if self.teaching:
+            return "panel_teaching.csv"
         return _PANEL_SPECS[self.granularity][0]
 
     @property
@@ -130,10 +137,16 @@ class RegressionDesign:
 
     @property
     def shock_col(self) -> str:
+        if self.teaching:
+            from gvcsim.regression.teaching import X_COLUMN
+
+            return X_COLUMN
         return SHOCK_SPECS[self.shock_type][0]
 
     @property
     def treated_col(self) -> str:
+        if self.teaching:
+            return "teaching_treated"
         return SHOCK_SPECS[self.shock_type][1]
 
     @property

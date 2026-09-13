@@ -24,5 +24,9 @@ export function classifyPolicyCoefficients(coefs: CoefStat[], controls: string[]
 }
 
 export function splitPolicyCoefficients(resp: RegressionResponse): PolicyCoefficientGroups {
-  return classifyPolicyCoefficients(resp.result.coefs, resp.design.controls);
+  const groups = classifyPolicyCoefficients(resp.result.coefs, resp.design.controls);
+  const xColumns = resp.model_snapshot?.x_columns ?? [];
+  if (!xColumns.length) return groups;
+  const policy = resp.result.coefs.filter((coef) => xColumns.includes(coef.name));
+  return { policy, main: policy, interactions: [], eventMain: [], eventInteraction: [] };
 }

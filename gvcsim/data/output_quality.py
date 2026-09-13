@@ -20,7 +20,7 @@ from gvcsim.indicators.network import NETWORK_COLUMNS
 from gvcsim.indicators.production import PRODUCTION_COLUMNS
 from gvcsim.indicators.tradeflow import TRADE_COLUMNS
 
-OUTPUT_QC_CONTRACT_VERSION = 4
+OUTPUT_QC_CONTRACT_VERSION = 5
 OUTPUT_QC_ABS_TOLERANCE = 1e-8
 OUTPUT_QC_REL_TOLERANCE = 1e-8
 OUTPUT_QC_DENOMINATOR_FLOOR = 1e-12
@@ -109,6 +109,11 @@ OUTPUT_CHECK_SPECS = (
         "panel_share_economic_domains",
         "economic",
         "Shares outside [0,1] require economic disclosure (signed VA/TLS or source rounding), independently of the mathematical ratio identity.",
+    ),
+    OutputCheckSpec(
+        "teaching_panel_contract",
+        "mathematical",
+        "Teaching panel has unique country-industry-year keys, five continuous years, finite teaching fields, bounded outcomes, and X=w*tariff with two zero pre-policy years.",
     ),
 )
 OUTPUT_QC_EXPECTED_CHECKS = tuple(spec.name for spec in OUTPUT_CHECK_SPECS)
@@ -306,6 +311,7 @@ def _keys_and_coverage(
         "exposure": {"country", "sector", "imposer", "year"},
         "panel_country": {"country", "year"},
         "panel_industry": {"country", "industry", "entity_id", "year"},
+        "panel_teaching": {"country", "industry", "entity_id", "year"},
     }
     problems = list(panel_year_problems)
     missing_problems: list[str] = []
@@ -322,6 +328,7 @@ def _keys_and_coverage(
     exposure = frames["exposure"]
     panel_country = frames["panel_country"]
     panel_industry = frames["panel_industry"]
+    panel_teaching = frames["panel_teaching"]
     for label, frame in (
         ("country", country),
         ("industry", industry),
@@ -333,6 +340,8 @@ def _keys_and_coverage(
         problems.append("panel_country:empty_year")
     if panel_industry.loc[_year_mask(panel_industry, year)].empty:
         problems.append("panel_industry:empty_year")
+    if panel_teaching.loc[_year_mask(panel_teaching, year)].empty:
+        problems.append("panel_teaching:empty_year")
 
     key_specs = (
         ("country", country, ["country", "year"]),
@@ -342,6 +351,8 @@ def _keys_and_coverage(
         ("panel_country", panel_country, ["country", "year"]),
         ("panel_industry", panel_industry, ["country", "industry", "year"]),
         ("panel_industry_entity", panel_industry, ["entity_id", "year"]),
+        ("panel_teaching", panel_teaching, ["country", "industry", "year"]),
+        ("panel_teaching_entity", panel_teaching, ["entity_id", "year"]),
     )
     for label, frame, keys in key_specs:
         if frame[keys].isna().any(axis=None) or frame.duplicated(keys).any():
@@ -706,6 +717,58 @@ def _panel_share_economic_domains(frames: dict[str, pd.DataFrame], year: int) ->
     )
 
 
+def _teaching_panel_contract(frames: dict[str, pd.DataFrame], year: int) -> dict:
+    from gvcsim.regression.teaching import X_COLUMN, Y_COLUMNS
+
+    frame = frames["panel_teaching"]
+    required = {
+        "country",
+        "industry",
+        "entity_id",
+        "year",
+        "teaching_export_share_w",
+        "teaching_tariff_rate_tau",
+        "teaching_treated",
+        X_COLUMN,
+        *Y_COLUMNS.values(),
+    }
+    missing = _missing(frame, required)
+    violations = 0
+    details: list[str] = []
+    if missing:
+        return _check("teaching_panel_contract", False, f"year={year}; missing={missing}")
+    years = pd.to_numeric(frame["year"], errors="coerce")
+    unique_years = sorted(years.dropna().unique().tolist())
+    if len(unique_years) != 5 or unique_years != list(range(int(unique_years[0]), int(unique_years[0]) + 5)):
+        violations += 1
+        details.append(f"years={unique_years}")
+    numeric_columns = [column for column in frame if column.startswith("teaching_")]
+    numeric = frame[numeric_columns].apply(pd.to_numeric, errors="coerce")
+    violations += int((~np.isfinite(numeric.to_numpy(dtype=float))).sum())
+    violations += int(frame.duplicated(["country", "industry", "year"]).sum())
+    violations += int(frame.duplicated(["entity_id", "year"]).sum())
+    expected_entity = frame["country"].astype(str) + "_" + frame["industry"].astype(str)
+    violations += int((~frame["entity_id"].astype(str).eq(expected_entity)).sum())
+    w = numeric["teaching_export_share_w"]
+    tau = numeric["teaching_tariff_rate_tau"]
+    x = numeric[X_COLUMN]
+    violations += int((~w.between(0, 1)).sum())
+    violations += int((tau < 0).sum())
+    violations += int((~_close(x, w * tau)).sum())
+    violations += int((~numeric["teaching_treated"].isin([0, 1])).sum())
+    if len(unique_years) >= 2:
+        violations += int((x.loc[years.isin(unique_years[:2])].abs() > OUTPUT_QC_ABS_TOLERANCE).sum())
+    violations += int((~numeric[Y_COLUMNS["trade"]].between(0, 1)).sum())
+    violations += int((~numeric[Y_COLUMNS["production"]].between(0, 1)).sum())
+    violations += int((numeric[Y_COLUMNS["length"]] <= 0).sum())
+    violations += int((numeric[Y_COLUMNS["network"]] < 0).sum())
+    return _check(
+        "teaching_panel_contract",
+        violations == 0,
+        f"year={year}; rows={len(frame)}; violations={violations}" + (f"; {'; '.join(details)}" if details else ""),
+    )
+
+
 def recompute_output_checks(root: Path, year: int, *, expected_years: list[int]) -> list[dict]:
     """Recompute all v1 semantic checks from persisted release files for one year."""
     frames = {
@@ -715,10 +778,11 @@ def recompute_output_checks(root: Path, year: int, *, expected_years: list[int])
         "exposure": _read_csv(root, f"export_exposure_{year}.csv"),
         "panel_country": _read_csv(root, "panel_country.csv"),
         "panel_industry": _read_csv(root, "panel_industry.csv"),
+        "panel_teaching": _read_csv(root, "panel_teaching.csv"),
     }
     panel_year_problems: list[str] = []
     validated_panel_years: dict[str, pd.Series] = {}
-    for panel_name in ("panel_country", "panel_industry"):
+    for panel_name in ("panel_country", "panel_industry", "panel_teaching"):
         numeric_years, problems = _validate_panel_years(frames[panel_name], panel_name, expected_years)
         panel_year_problems.extend(problems)
         if numeric_years is not None:
@@ -727,8 +791,8 @@ def recompute_output_checks(root: Path, year: int, *, expected_years: list[int])
             # cannot bypass the existing entity-year duplicate checks.
             frames[panel_name]["year"] = numeric_years
 
-    panel_years_valid = not panel_year_problems and len(validated_panel_years) == 2
-    for panel_name in ("panel_country", "panel_industry"):
+    panel_years_valid = not panel_year_problems and len(validated_panel_years) == 3
+    for panel_name in ("panel_country", "panel_industry", "panel_teaching"):
         panel = frames[panel_name]
         frames[f"{panel_name}_year"] = (
             panel.loc[_year_mask(panel, year)].copy() if panel_years_valid else panel.iloc[0:0].copy()
@@ -744,6 +808,7 @@ def recompute_output_checks(root: Path, year: int, *, expected_years: list[int])
         _network_indicators,
         _panel_shares,
         _panel_share_economic_domains,
+        _teaching_panel_contract,
     )
     checks = [runner(frames, year) for runner in runners]
     validate_serialized_output_checks(checks, contract_version=OUTPUT_QC_CONTRACT_VERSION)
