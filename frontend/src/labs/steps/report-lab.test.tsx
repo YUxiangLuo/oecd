@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { api } from "../../api";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { ClassroomReport } from "../../types";
+import type { ClassroomReport, ReportMutationResponse } from "../../types";
 import {
   GateCard,
   REPORT_REFLECTION_INCOMPLETE_SELECTOR,
@@ -134,7 +134,7 @@ describe("step 15 report states", () => {
       onReportChanged={() => {}}
     />);
     expect(html).toContain(">根据实验记录生成报告<");
-    const generateButton = html.match(/<button class="primary"[^>]*>根据实验记录生成报告<\/button>/)?.[0];
+    const generateButton = html.match(/<button class="secondary"[^>]*>根据实验记录生成报告<\/button>/)?.[0];
     expect(generateButton).toBeDefined();
     expect(generateButton).not.toContain("aria-label=");
   });
@@ -293,4 +293,86 @@ test("blocks stale snapshot export and submission after edits, saves and reloads
   restored.rerender(<ReportLab {...saved} report={{ ...original, generated_at: "2026-08-13T00:06:00Z" }} />);
   expect(disabled("导出 PDF")).toBe(false);
   expect(disabled("提交报告给老师")).toBe(false);
+});
+
+const mutation = (state: ClassroomReport["state"]): ReportMutationResponse => ({
+  report: report(state), report_gate: [], material_gate: [],
+  completion: { steps: [], completed: [], completed_count: 0, total: 15 },
+});
+const finishProps = {
+  state: { data: {}, save: () => {}, complete: false, syncing: false, syncError: null, syncNow: () => {} },
+  report: null, reportGate: [], sessionStatus: "ready" as const, sessionUnsynced: false, sessionSyncing: false,
+  onFlushSession: async () => {}, onNavigateStep: () => {}, onReportChanged: (_response: ReportMutationResponse) => {},
+};
+
+test("one-click finish flushes then generates then submits; outro appears only after acknowledged submission", async () => {
+  const order: string[] = [];
+  let acknowledge!: (value: ReportMutationResponse) => void;
+  const generate = spyOn(api.classroom, "generateReport").mockImplementation(async () => { order.push("generate"); return mutation("draft"); });
+  const submit = spyOn(api.classroom, "submitReport").mockImplementation(() => { order.push("submit"); return new Promise((resolve) => { acknowledge = resolve; }); });
+  try {
+    render(<ReportLab {...finishProps} onFlushSession={async () => { order.push("flush"); }} onReportChanged={(r) => order.push(r.report.state)} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" })); });
+    expect(order).toEqual(["flush", "generate", "draft", "submit"]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await act(async () => { acknowledge(mutation("pending")); });
+    const dialog = screen.getByRole("dialog", { name: "报告已提交，感谢你的探索" });
+    expect(within(dialog).getByText("提交成功 · 等待教师评阅")).toBeTruthy();
+    expect(document.activeElement?.textContent).toBe("报告已提交，感谢你的探索");
+    expect(order).toEqual(["flush", "generate", "draft", "submit", "pending"]);
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  } finally { generate.mockRestore(); submit.mockRestore(); }
+});
+
+test("failed submission retains generated draft and never opens a success outro", async () => {
+  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("draft"));
+  const submit = spyOn(api.classroom, "submitReport").mockRejectedValue(new Error("网络中断"));
+  const changed: string[] = [];
+  try {
+    render(<ReportLab {...finishProps} onReportChanged={(r) => changed.push(r.report.state)} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" })); });
+    expect(changed).toEqual(["draft"]);
+    expect(screen.getByRole("alert").textContent).toContain("网络中断");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  } finally { generate.mockRestore(); submit.mockRestore(); }
+});
+
+test("material gate stops one-click submission and stays above the writing fields", async () => {
+  const blocked = [{ step: 9, title: "网络图表材料", missing: ["记录两个国家"] }];
+  const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(Object.assign(new Error("缺项"), { blocked }));
+  const submit = spyOn(api.classroom, "submitReport");
+  try {
+    const view = render(<ReportLab {...finishProps} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" })); });
+    expect(submit).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "继续步骤 9" })).toBeTruthy();
+    const html = view.container.innerHTML;
+    expect(html.indexOf("report-gate-panel")).toBeLessThan(html.indexOf('class="report-reflection"'));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  } finally { generate.mockRestore(); submit.mockRestore(); }
+});
+
+test("regenerating a submitted report uses server resubmission directly without a second submit", async () => {
+  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("pending"));
+  const submit = spyOn(api.classroom, "submitReport");
+  try {
+    render(<ReportLab {...finishProps} report={report("pending")} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" })); });
+    expect(submit).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "报告已提交，感谢你的探索" })).toBeTruthy();
+  } finally { generate.mockRestore(); submit.mockRestore(); }
+});
+
+test("restored graded receipt is available without submitting again; outdated export remains disabled", () => {
+  const submit = spyOn(api.classroom, "submitReport");
+  try {
+    render(<ReportLab {...finishProps} report={report("graded")} sessionUnsynced />);
+    fireEvent.click(screen.getByRole("button", { name: "查看提交回执与实验总结" }));
+    const dialog = screen.getByRole("dialog", { name: "你的报告已获评阅" });
+    expect(within(dialog).getByText("已评阅 · 93 分")).toBeTruthy();
+    expect(within(dialog).getByText("教师评语：证据链完整")).toBeTruthy();
+    expect((within(dialog).getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(submit).not.toHaveBeenCalled();
+  } finally { submit.mockRestore(); }
 });

@@ -1,0 +1,28 @@
+.report-roadmap { padding: 24px; border: 1px solid #deddf0; border-radius: 14px; background: linear-gradient(130deg, #f5f3ff, #f8fbff); margin-bottom: 18px; }
+.report-roadmap h2 { font-size: 23px; margin: 7px 0; }
+.report-roadmap > p { color: #59647a; line-height: 1.8; font-size: 13px; }
+.report-roadmap ol { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 18px 0 0; }
+.report-roadmap li { padding: 14px; border: 1px solid #dedff0; border-radius: 9px; background: #fff; }
+.report-roadmap li b, .report-roadmap li span { display: block; }
+.report-roadmap li span { color: #59647a; font-size: 12px; margin-top: 7px; }
+.report-reference { border: 1px solid #e0e3ed; border-radius: 10px; margin: 16px 0; padding: 12px 16px; }
+.report-reference > summary { cursor: pointer; color: #51458b; font-weight: 600; }
+.report-reference[open] > summary { margin-bottom: 14px; }
+.report-writing-hint { display: block; margin: 8px 0; color: #59647a; font-size: 12px; line-height: 1.8; }
+.report-lab .report-reflection p, .report-lab .report-reflection-fields small { font-size: 13px; color: #536078; }
+.report-submit-panel { padding: 20px; border: 1px solid #dcdfee; border-radius: 12px; margin: 18px 0; background: #f7f8fc; }
+.report-submit-panel h3 { margin: 0 0 8px; }
+.report-submit-panel p { font-size: 13px; line-height: 1.7; color: #59647a; }
+.report-submit-panel button { margin-right: 10px; }
+.report-outro .intro-title { font-size: 40px; letter-spacing: 1px; margin: 18px 0; }
+.outro-receipt { display: grid; gap: 10px; padding: 20px; margin: 22px 0; border: 1px solid #625a96; border-radius: 12px; background: #ffffff08; }
+.outro-receipt b { color: #90e0bd; font-size: 18px; }
+.outro-receipt span, .outro-receipt small { color: #c5cee5; }
+.outro-receipt p { margin: 0; white-space: pre-wrap; }
+.outro-journey { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; text-align: left; }
+.outro-journey article { padding: 18px; border: 1px solid #ffffff24; border-radius: 12px; }
+.outro-journey span { display: block; color: #b5a3ed; font-size: 12px; margin-bottom: 10px; }
+.outro-journey p { color: #bdc6dc; font-size: 13px; line-height: 1.8; }
+.outro-export { border: 1px solid #8d83bb; border-radius: 10px; background: transparent; color: #eef1fb; padding: 14px 24px; cursor: pointer; }
+.outro-export:disabled { opacity: .5; cursor: not-allowed; }
+.report-outro .intro-cta-row { gap: 14px; }

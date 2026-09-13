@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import { RegressionEvidenceMatrix, type SiblingStepData } from "../../regression-teach";
 import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
+import { ReportOutro } from "../../report-outro";
 import { showToast } from "../../toast";
 import { stepTaskTitleId } from "../../step-task-card";
 import type { ClassroomReport, ReportGateItem, ReportMutationResponse, StepStateApi } from "../../types";
@@ -31,9 +32,9 @@ const REFLECTION_FIELDS: {
   prompt: string;
   min: number;
 }[] = [
-  { key: "research_question", label: "研究问题", prompt: "点明同一套壁垒冲击，以及贸易流、生产、长度、网络里你在看哪一类变化。", min: 12 },
-  { key: "evidence_interpretation", label: "证据解释", prompt: "先写四步是否允许推断，再引用估计与区间；停止推断时说明原因，不写成没有效应。不要把不同单位的系数比大小。", min: 40 },
-  { key: "limitations", label: "局限与反思", prompt: "说明教学冲击设定、对照是否可比，以及政策是否通过投入链影响了其他对象；网络项还需交代未做边阈值敏感性检验。", min: 30 },
+  { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请区分真实ICIO比较和模拟关税回归。", min: 12 },
+  { key: "evidence_interpretation", label: "证据解释", prompt: "引用自己保存的数字：对象、年份、指标、方向与区间。结合四项回归说明一致与不一致之处；无法推断时说明原因，不写成“没有效应”。", min: 40 },
+  { key: "limitations", label: "局限与反思", prompt: "模拟关税X与结果Y不能证明真实政策效果。我的比较还有哪些限制？哪些结论不能推出？下一步需要什么数据或检验？", min: 30 },
 ];
 
 export const REPORT_REFLECTION_TITLE_ID = "report-reflection-title";
@@ -125,7 +126,7 @@ export function GateCard({ blocked, onNavigateStep }: { blocked: ReportGateItem[
       <div className="report-gate-head">
         <span className="report-gate-badge" aria-hidden="true">!</span>
         <div className="report-gate-title">
-          <h3 id="report-gate-title">还不能生成报告</h3>
+          <h3 id="report-gate-title" tabIndex={-1}>还不能生成报告</h3>
           <span>{overview.summary}</span>
         </div>
         {next.step > 0 && (
@@ -237,13 +238,20 @@ export function ReportLab({
   const [submitting, setSubmitting] = useState(false);
   const [printing, setPrinting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [outro, setOutro] = useState<ClassroomReport | null>(null);
+  const operationRef = useRef(false);
   const visibleBlocked = blocked.length > 0 ? blocked : reportGate ?? [];
 
   useEffect(() => { void preloadReportRenderer().catch(() => {}); }, []);
   // A newer acknowledged session supersedes a gate returned for an older snapshot.
   useEffect(() => { setBlocked([]); }, [reportGate]);
+  useEffect(() => {
+    if (blocked.length > 0) document.getElementById("report-gate-title")?.focus();
+  }, [blocked]);
 
   const reflection = (state.data ?? {}) as ReportReflectionState;
+  const writtenCount = REFLECTION_FIELDS.filter((field) => String(reflection[field.key] ?? "").trim().replace(/\s+/g, " ").length >= field.min).length;
+  const materialMissing = visibleBlocked.filter((item) => item.step !== 15);
   const busy = generating || submitting || printing;
   const reportOutdated = Boolean(report && (sessionUnsynced || sessionSyncing
     || (sessionUpdatedAt && Date.parse(sessionUpdatedAt) > Date.parse(report.generated_at))));
@@ -271,8 +279,9 @@ export function ReportLab({
     });
   };
 
-  const generate = async () => {
-    if (busy) return;
+  const generate = async (submitAfter = false) => {
+    if (busy || operationRef.current) return;
+    operationRef.current = true;
     setGenerating(true);
     setError(null);
     setBlocked([]);
@@ -281,18 +290,29 @@ export function ReportLab({
       await flushRef.current();
       const response = await api.classroom.generateReport();
       onReportChanged(response);
-      showToast(response.report.state === "pending" ? "新报告已重新提交" : "报告草稿已生成");
+      if (submitAfter && response.report.state === "draft") {
+        setSubmitting(true);
+        const submitted = await api.classroom.submitReport();
+        onReportChanged(submitted);
+        if (submitted.report.state !== "draft") setOutro(submitted.report);
+      } else if (response.report.state !== "draft") {
+        setOutro(response.report);
+      }
+      showToast(submitAfter || response.report.state === "pending" ? "报告已提交，等待教师评阅" : "报告草稿已生成，请预览后提交");
     } catch (cause) {
       const requestError = cause as Error & { blocked?: ReportGateItem[] };
       if (requestError.blocked) setBlocked(requestError.blocked);
-      else setError(userFacingRequestError(cause, "报告生成失败"));
+      else setError(userFacingRequestError(cause, submitAfter ? "报告生成或提交失败；已生成的草稿会保留，请核对状态后重试" : "报告生成失败"));
     } finally {
       setGenerating(false);
+      setSubmitting(false);
+      operationRef.current = false;
     }
   };
 
   const submit = async () => {
-    if (busy) return;
+    if (busy || operationRef.current) return;
+    operationRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -300,15 +320,18 @@ export function ReportLab({
       await flushRef.current();
       const response = await api.classroom.submitReport();
       onReportChanged(response);
+      if (response.report.state !== "draft") setOutro(response.report);
       showToast(response.report.state === "graded" ? "报告已评阅" : "报告已提交，等待教师评阅");
     } catch (cause) {
       setError(userFacingRequestError(cause, "报告提交失败"));
     } finally {
       setSubmitting(false);
+      operationRef.current = false;
     }
   };
 
   const printReport = async () => {
+    if (busy || reportOutdated) return;
     setPrinting(true);
     setError(null);
     try {
@@ -324,29 +347,46 @@ export function ReportLab({
 
   return (
     <div className="report-lab">
-      <RegressionEvidenceMatrix getStep={getStep} />
+      <section className="report-roadmap" aria-label="报告完成清单">
+        <span className="reg-section-step">最后一步 · 整理发现，完成提交</span>
+        <h2>材料由系统整理，分析由你完成</h2>
+        <p>不必重新抄表或排版。系统会汇总已保存的实验材料与回归结果；你只需写清三个问题，核对后提交给老师。</p>
+        <ol>
+          <li><b>1 · 检查实验材料</b><span>{state.syncError ? "保存失败，请先重试保存" : reportGate == null || sessionStatus !== "ready" ? "正在核对服务器记录" : sessionUnsynced || sessionSyncing ? "保存后将重新核对材料" : materialMissing.length ? `${materialMissing.length} 个步骤或条件待补齐，见下方入口` : "已保存材料与理解题已齐"}</span></li>
+          <li><b>2 · 写下自己的分析</b><span>{writtenCount} / 3 段达到最低字数 · 内容仍需自己核对</span></li>
+          <li><b>3 · 提交给老师</b><span>{report?.state === "pending" ? "已提交，等待评阅" : report?.state === "graded" ? "已评阅，可查看反馈" : report ? "已有草稿，尚未提交" : "生成报告不等于提交"}</span></li>
+        </ol>
+      </section>
+      {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} />}
+      <details className="report-reference"><summary>写作时参考：查看已保存的四项回归证据</summary>
+        <RegressionEvidenceMatrix getStep={getStep} />
+        <p className="muted">图表比较的具体数值可回到步骤6–9核对。这里只展示已保存证据，不替你撰写结论。</p>
+      </details>
       <section className="report-reflection" aria-labelledby={REPORT_REFLECTION_TITLE_ID}>
         <div>
-          <span className="reg-section-step">先完成 · 学生原创分析</span>
-          <h3 id={REPORT_REFLECTION_TITLE_ID} tabIndex={-1}>用自己的话把证据连成论证</h3>
-          <p>这些文字会完整进入报告；请引用自己实际保存的比较或回归。</p>
+          <span className="reg-section-step">学生原创分析 · 自动保存</span>
+          <h3 id={REPORT_REFLECTION_TITLE_ID} tabIndex={-1}>回答三个问题，就能组织一份报告</h3>
+          <p>研究了什么？发现了什么？还有什么不能确定？不需要长篇论文，具体、诚实地解释自己的证据即可。</p>
         </div>
         <div className="report-reflection-fields">
           <div className="report-writing-checklist" role="note">
             <b>写作自检（字数达标不等于论证完整）</b>
             <span>① 点名比较对象　② 引用具体数字　③ 解释方向与区间　④ 说明不能推出什么</span>
           </div>
-          {REFLECTION_FIELDS.map((field) => {
+          {REFLECTION_FIELDS.map((field, index) => {
             const value = String(reflection[field.key] ?? "");
             const length = value.trim().split(/\s+/).join(" ").length;
             return (
               <label key={field.key}>
-                <span><b>{field.label}</b><small>{reflectionCountLabel(length, field.min)}</small></span>
+                <span><b>{index + 1}. {field.label}</b><small>{reflectionCountLabel(length, field.min)}</small></span>
+                <small id={`report-hint-${field.key}`} className="report-writing-hint">{field.prompt}</small>
                 <textarea
+                  aria-label={field.label}
+                  aria-describedby={`report-hint-${field.key}`}
                   value={value}
                   rows={field.key === "research_question" ? 2 : 4}
                   maxLength={REFLECTION_MAX_LENGTH}
-                  placeholder={field.prompt}
+                  placeholder="在这里写下你的分析，输入后自动保存…"
                   data-report-reflection-incomplete={length < field.min ? "true" : undefined}
                   disabled={busy}
                   onChange={(event) => state.save({ [field.key]: event.target.value })}
@@ -364,9 +404,18 @@ export function ReportLab({
             {report.state === "graded" && "重新生成会重新提交报告，并清除原评分。"}</p>
         </div>
       )}
+      <section className="report-submit-panel" aria-label="提交报告">
+        <h3>{report && report.state !== "draft" ? "报告已交给老师" : "核对完毕后，完成提交"}</h3>
+        <p>提交时会先保存文字，再由服务端检查材料并整理报告。无需另行上传PDF；导出仅用于个人留存。
+          {report?.state === "graded" && "重新生成并提交会替换已评阅报告并清除原评分，请确认需要修改。"}</p>
+        {(!report || reportOutdated) && <button type="button" className="primary" disabled={busy} onClick={() => { void generate(true); }}>
+          {submitting ? "正在提交报告…" : generating ? "正在整理报告…" : report ? "更新报告并提交给老师" : "生成并提交报告"}
+        </button>}
+        {report && report.state !== "draft" && <button type="button" className="secondary" disabled={busy} onClick={() => setOutro(report)}>查看提交回执与实验总结</button>}
+      </section>
       <div className="report-actions">
         <button
-          className="primary"
+          className="secondary"
           disabled={busy}
           onClick={() => { void generate(); }}
         >
@@ -384,17 +433,20 @@ export function ReportLab({
         )}
       </div>
 
-      {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} />}
       {error && <div className="error-box" role="alert">{error}</div>}
 
       {report ? (
         <>
           <section className="submit-card"><ReportStatus report={report} /></section>
-          <div className="report-body"><ReportMarkdown markdown={report.markdown} /></div>
+          <div className="report-body" tabIndex={-1} aria-label="报告正文"><ReportMarkdown markdown={report.markdown} /></div>
         </>
       ) : (
-        <p className="muted">点击生成后，服务端会检查理解题、单元格与比较、四步是否各有一次估计或完整的不可推断诊断，以及三段原创分析；缺项会在这里列出。</p>
+        <p className="muted">也可以先用“根据实验记录生成报告”生成草稿预览，再点击“提交报告给老师”。不显著或无法推断的完整诊断也可以用于报告，不必追求显著结果。</p>
       )}
+      {outro && <ReportOutro report={outro} exportDisabled={reportOutdated || busy} onClose={() => {
+        setOutro(null);
+        requestAnimationFrame(() => document.querySelector<HTMLElement>(".report-body")?.focus());
+      }} onExport={() => { setOutro(null); void printReport(); }} />}
     </div>
   );
 }
