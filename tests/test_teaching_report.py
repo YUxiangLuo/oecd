@@ -529,18 +529,20 @@ def _complete():
     }
     for step in range(2, 10):
         session["steps"][str(step)]["data"]["compared"] = ["CHN", "USA"]
-    # Step 9 additionally requires a recorded industry betweenness observation.
+    # Step 9 requires an explicitly saved two-country chart comparison.
     session["steps"]["9"]["data"]["observations"] = [
         {
-            "entity": "CHN·C26",
-            "country": "CHN",
+            "entity": f"{country}·C26",
+            "country": country,
             "industry": "C26",
             "year": 2020,
             "value": 12.5,
             "metric": "betweenesscentrality",
+            "unit": "未归一化介数",
             "scope": "country-industry",
-            "source": "explicit-heat-row",
+            "source": "explicit-network-ranking",
         }
+        for country in ("CHN", "USA")
     ]
     session["steps"]["10"]["data"].update(
         {
@@ -681,7 +683,7 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     # Step 9 requires a country comparison *and* an industry observation, so its
     # message names both actions instead of the steps 6-8 wording.
     assert any(item["step"] == 9 and "两个经济体" in "".join(item["missing"]) for item in blocked)
-    assert any(item["step"] == 9 and "介数观测" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 9 and "行业指标读数" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 6 and "两个比较对象" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 11 and "可报告" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 14 and "可报告" in "".join(item["missing"]) for item in blocked)
@@ -742,7 +744,7 @@ def test_step_nine_requires_both_a_comparison_and_an_industry_observation():
     blocked = [item for item in check_material_gate(comparison_only) if item["step"] == 9]
     assert len(blocked) == 1
     # The message must name the control the student actually sees.
-    assert "记录拓扑基准" in "".join(blocked[0]["missing"])
+    assert "保存为报告材料" in "".join(blocked[0]["missing"])
     assert any(item["step"] == 9 for item in check_gate(comparison_only))
 
     # The comparison is still required alongside the observation.
@@ -750,8 +752,17 @@ def test_step_nine_requires_both_a_comparison_and_an_industry_observation():
     observation_only["steps"]["9"]["data"]["compared"] = []
     message = "".join(next(item["missing"] for item in check_material_gate(observation_only) if item["step"] == 9))
     assert "两个经济体" in message
-    # Carrying over is not always offered, so the message also names in-step selection.
-    assert "网络图中的节点" in message
+    assert "报告材料卡" in message
+    assert "网络图中的节点" not in message
+
+
+@pytest.mark.parametrize("source", [None, "explicit-heat-row"])
+def test_step_nine_rejects_old_material(source):
+    session = _complete()
+    for item in session["steps"]["9"]["data"]["observations"]:
+        item["source"] = source
+    assert any(item["step"] == 9 for item in check_material_gate(session))
+    assert "### 步骤 9" not in "\n".join(teaching_report._experiment_sections(session))
 
 
 def test_report_labels_step_nine_observation_without_a_step_level_metric(tmp_path, monkeypatch):
@@ -765,6 +776,51 @@ def test_report_labels_step_nine_observation_without_a_step_level_metric(tmp_pat
 
     assert "全正边二值介数（探索性拓扑基准）" in report.markdown
     assert "记录的代表指标：—" not in report.markdown
+
+
+@pytest.mark.parametrize(
+    ("metric", "unit", "label"),
+    [
+        ("betweenesscentrality", "未归一化介数", "全正边二值介数"),
+        ("weighted indegree", "百万美元", "加权入度"),
+        ("closnesscentrality", "无量纲", "接近中心性"),
+    ],
+)
+def test_report_preserves_two_country_industry_trend_years(tmp_path, monkeypatch, metric, unit, label):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    data = session["steps"]["9"]["data"]
+    data["compared"] = ["CHN", "USA"]
+    data.update(year=2019, chart="network", drill="DEU")
+    data["metric"] = metric
+    data["observations"] = [
+        {
+            "entity": f"{country}·C26",
+            "country": country,
+            "industry": "C26",
+            "year": year,
+            "value": value,
+            "metric": metric,
+            "unit": unit,
+            "source": "explicit-network-trend",
+        }
+        for country, year, value in [("CHN", 2016, 31), ("CHN", 2020, 44), ("USA", 2016, 9), ("USA", 2020, 7)]
+    ]
+    assert check_material_gate(session) == []
+    markdown = build(session, "同学").markdown
+    section = markdown.split("### 步骤 9", 1)[1].split("### 步骤 10", 1)[0]
+    assert "保存的视图" not in section
+    assert "DEU" not in section
+    assert f"记录的代表指标：{label}" in markdown
+    assert f"记录方式：历年趋势；单位：{unit}" in markdown
+    for expected in (
+        "| CHN·C26 | 2016 | 31 |",
+        "| CHN·C26 | 2020 | 44 |",
+        "| USA·C26 | 2016 | 9 |",
+        "| USA·C26 | 2020 | 7 |",
+    ):
+        assert expected in markdown
 
 
 def test_report_labels_step_five_network_metric_like_the_step_does(tmp_path, monkeypatch):

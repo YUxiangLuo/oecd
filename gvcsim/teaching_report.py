@@ -19,6 +19,7 @@ from gvcsim.artifacts import (
 from gvcsim.config import COURSE_RELEASE, processed_years
 from gvcsim.data.citations import report_source_disclosures, report_source_label
 from gvcsim.data.controls import CONTROL_LABELS
+from gvcsim.indicator_schema import INDICATOR_SCHEMA
 from gvcsim.regression.design import (
     CONTROL_MODE_LABELS,
     GRANULARITY_LABELS,
@@ -52,6 +53,7 @@ _OUTCOME_UNITS = {
     "network": "全正边二值介数原始单位（探索性拓扑基准）；跨指标比较时另参考样本标准差单位",
 }
 _STUDENT_METRIC_LABELS = {
+    **{key: value["label"] for key, value in cast(dict[str, dict[str, Any]], INDICATOR_SCHEMA["fields"]).items()},
     "FVA_share": "外国增加值项占比",
     "3b_VA_GVC_C_share": "复杂 GVC 生产份额",
     "GVCPs": "GVC 相对位置（GVCPs）",
@@ -164,16 +166,19 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             and item.get("value") not in (None, "")
         ]
         if step == 9:
-            # 步骤 9 的任务同时要求“一条国家比较”与“一条行业介数观测”，
-            # 两者缺一不可：只沿用比较对象并不构成该步要求的行业拓扑证据。
-            # Messages name the controls the student actually sees on this step:
-            # inspecting graph nodes also records the comparison, and the carry
-            # button only renders when an earlier step already saved two countries.
+            observations = [
+                item for item in observations
+                if item.get("source") in {"explicit-network-trend", "explicit-network-ranking"}
+            ]
             missing: list[str] = []
             if len(compared) < 2:
-                missing.append("请在本步选择至少两个经济体：点击网络图中的节点，或使用“沿用并记录到本步”")
-            if not observations:
-                missing.append("请在下钻的行业表中，对实际查看的一行点击“记录拓扑基准”，保存一条行业介数观测")
+                missing.append(
+                    "请在“行业指标可视化”选择两个经济体，在报告材料卡点击“保存为报告材料”或“更新报告材料”"
+                )
+            if len({item.get("country") for item in observations} & compared) < 2:
+                missing.append(
+                    "请在报告材料卡点击“保存为报告材料”或“更新报告材料”，保存两国的行业指标读数"
+                )
             if missing:
                 blocked.append({"step": step, "title": _STEP_TITLES.get(step, ""), "missing": missing})
             continue
@@ -1245,6 +1250,10 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         data = _step_data(session, step)
         compared = _list_values(data.get("compared"))
         observations = [item for item in _list_values(data.get("observations")) if isinstance(item, dict)]
+        if step == 9:
+            observations = [item for item in observations if item.get("source") in {"explicit-network-trend", "explicit-network-ranking"}]
+            if not observations:
+                continue
         has_snapshot = any(
             data.get(key) not in (None, "", []) for key in ("year", "country", "chart", "drill", "metric")
         ) or bool(compared or observations)
@@ -1254,7 +1263,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}", ""))
         context = []
         for key, label in (("year", "年份"), ("country", "国家"), ("chart", "图表视角"), ("drill", "下钻")):
-            if data.get(key) not in (None, ""):
+            if step != 9 and data.get(key) not in (None, ""):
                 context.append(f"{label}={_safe(data[key])}")
         if context:
             lines.append(f"- 保存的视图：{'；'.join(context)}")
@@ -1266,6 +1275,16 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             metric_label = data.get("metric") or next(
                 (item.get("metric") for item in observations if item.get("metric")), None
             )
+            if step == 9 and observations[0].get("source") in {"explicit-network-trend", "explicit-network-ranking"}:
+                view_label = (
+                    "历年趋势"
+                    if observations[0]["source"] == "explicit-network-trend"
+                    else "行业排名（按国家 A 降序，记录展示范围）"
+                )
+                lines.append(f"- 记录方式：{view_label}；单位：{_safe(observations[0].get('unit', '未记录'))}")
+                lines.append(
+                    "- 行业指标来自完整国家×行业中间品网络，不对应国家贸易概览的位置；加权流量为当年价格，拓扑指标不等同经济重要性。"
+                )
             lines.extend(
                 (
                     f"- 记录的代表指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}",

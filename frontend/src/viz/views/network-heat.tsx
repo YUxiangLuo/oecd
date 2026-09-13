@@ -37,10 +37,6 @@ export function normalizeHeatCoverage(value: unknown): HeatCoverage {
   return value === "all" ? value : "top15";
 }
 
-export function sameHeatView(first: HeatViewOptions, second: HeatViewOptions): boolean {
-  return first.sortMetric === second.sortMetric && first.coverage === second.coverage;
-}
-
 export function heatSortLabel(metric: HeatSortMetric): string {
   return HEAT_SORT_OPTIONS.find((option) => option.key === metric)?.label ?? "全正边二值介数";
 }
@@ -66,15 +62,14 @@ export function heatRowKey(row: Row): string {
   return `${String(row.country ?? "")}\u0000${String(row.industry ?? "")}`;
 }
 
-/** The sole collection used for both rendering and evidence eligibility. */
+/** Sorting affects display only; unavailable secondary metrics remain visible. */
 export function visibleHeatRows(
   rows: readonly Row[],
   sortMetric: HeatSortMetric = DEFAULT_HEAT_VIEW.sortMetric,
   coverage: HeatCoverage = DEFAULT_HEAT_VIEW.coverage,
 ): Row[] {
   const sorted = rows
-    // Every visible row must support both the chosen ordering and the fixed report metric.
-    .filter((row) => finite(row[sortMetric]) && finite(row[HEAT_EVIDENCE_METRIC]))
+    .filter((row) => finite(row[sortMetric]))
     .map((row, sourceIndex) => ({ row, sourceIndex }))
     .sort((first, second) => {
       const valueOrder = (second.row[sortMetric] as number) - (first.row[sortMetric] as number);
@@ -83,48 +78,15 @@ export function visibleHeatRows(
   return (coverage === "top15" ? sorted.slice(0, 15) : sorted).map(({ row }) => row);
 }
 
-export interface HeatActivation {
-  row: Row;
-  rowKey: string;
-  metric: typeof HEAT_EVIDENCE_METRIC;
-  visibleIndex: number;
-  sortMetric: HeatSortMetric;
-  coverage: HeatCoverage;
-}
-
-export function heatActivationForRow(
-  rows: readonly Row[],
-  requestedRowKey: string,
-  sortMetric: HeatSortMetric = DEFAULT_HEAT_VIEW.sortMetric,
-  coverage: HeatCoverage = DEFAULT_HEAT_VIEW.coverage,
-): HeatActivation | null {
-  const visible = visibleHeatRows(rows, sortMetric, coverage);
-  const visibleIndex = visible.findIndex((row) => heatRowKey(row) === requestedRowKey);
-  if (visibleIndex < 0) return null;
-  const row = visible[visibleIndex];
-  return {
-    row,
-    rowKey: heatRowKey(row),
-    metric: HEAT_EVIDENCE_METRIC,
-    visibleIndex,
-    sortMetric,
-    coverage,
-  };
-}
-
 export function HeatTableViz({
   rows,
   schema,
-  onActivate,
-  activeRowKey = null,
   sortMetric = DEFAULT_HEAT_VIEW.sortMetric,
   coverage = DEFAULT_HEAT_VIEW.coverage,
   countryName,
 }: {
   rows: Row[];
   schema?: IndicatorSchema | null;
-  onActivate: (activation: HeatActivation) => void;
-  activeRowKey?: string | null;
   sortMetric?: HeatSortMetric;
   coverage?: HeatCoverage;
   countryName?: string;
@@ -178,7 +140,7 @@ export function HeatTableViz({
       >
         <caption style={{ textAlign: "left", padding: "12px 16px", color: "#3a4050", lineHeight: 1.6 }}>
           {shownCountry}行业节点中心性；在完整全球国家×行业图上计算，按{sortLabel}降序显示{coverageLabel}。
-          排序与范围只改变可见行；“记录拓扑基准”始终保存全正边二值介数，不随排序指标改变。
+          本表仅供查数。报告材料请在上方行业图表的材料卡中统一保存。
         </caption>
         <thead>
           <tr>
@@ -186,34 +148,19 @@ export function HeatTableViz({
             {HEAT_COLS.map((column) => (
               <th key={column.key} scope="col">{column.name}</th>
             ))}
-            <th scope="col">报告证据（固定拓扑基准）</th>
           </tr>
         </thead>
         <tbody>
           {visible.map((row) => {
             const rowKey = heatRowKey(row);
-            const selected = rowKey === activeRowKey;
             return (
-              <tr key={rowKey} className={selected ? "heat-row-recorded" : undefined}>
+              <tr key={rowKey}>
                 <th scope="row" title={row.industry != null ? String(row.industry) : undefined}>{rowLabel(row)}</th>
                 {HEAT_COLS.map((column) => (
                   <td key={column.key} style={{ textAlign: "center" }}>
                     {cell(row, column.key, column.fmt, column.name)}
                   </td>
                 ))}
-                <td style={{ textAlign: "center" }}>
-                  <button
-                    type="button"
-                    aria-pressed={selected}
-                    aria-label={`${selected ? "已记录" : "记录"}${rowLabel(row)}的全正边二值介数观测；当前按${sortLabel}排序，记录指标固定为拓扑基准`}
-                    onClick={() => {
-                      const activation = heatActivationForRow(rows, rowKey, sortMetric, coverage);
-                      if (activation) onActivate(activation);
-                    }}
-                  >
-                    {selected ? "已记录拓扑基准" : "记录拓扑基准"}
-                  </button>
-                </td>
               </tr>
             );
           })}
@@ -225,7 +172,7 @@ export function HeatTableViz({
           <span key={column.key}> {schema?.fields[column.key]?.label ?? column.name}：{schema?.fields[column.key]?.desc ?? column.desc}</span>
         ))}
         <div>
-          颜色深浅表示该列当前可见行内的相对大小（每列独立归一化）。只有明确按下可见行的“记录介数”按钮才会保存报告证据；排序、切换范围、渲染、悬停和聚焦都不会记录。
+          颜色深浅表示该列当前可见行内的相对大小（每列独立归一化）。排序、切换范围、渲染、悬停和聚焦都不会改变报告材料。
         </div>
       </div>
     </ScrollableRegion>

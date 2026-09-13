@@ -3,11 +3,11 @@
  *
  * 网络专属镜头(与前三步完全不同的图元):
  *   贸易网络图  国家间双边贸易流的有向网络,悬停看某国的伙伴与区域集群
- *   网络指标表  选一国,看它各行业节点在**完整全球国家×行业图**上的流量与拓扑指标
+ *   行业趋势  同一行业的单国时间序列或两国比较；行业指标表作为可选明细保留
  *
  * 口径:国家级贸易图是完全图 → 无权中心性(度 / 介数 …)恒为常数、无区分度,
  * 因此二值拓扑比较只在国家–行业级做(见 country_degenerate 处理与回归 network 粒度)。
- * 对比对象累加网络图点开的国家和热力表下钻；取消选中不回退。
+ * 只有行业图表材料卡保存报告快照；概览与明细只供浏览。
  */
 import { useEffect, useRef, useState } from "react";
 import { LabeledControl } from "../../../a11y";
@@ -17,34 +17,24 @@ import type { IndustryPage, Meta, NetworkData, Step, StepStateApi } from "../../
 import { HeatTableViz, NetworkViz, countryLabel } from "../../../viz";
 import {
   HEAT_COVERAGE_OPTIONS,
-  HEAT_EVIDENCE_METRIC,
   HEAT_SORT_OPTIONS,
   heatCoverageLabel,
-  heatRowKey,
   heatSortLabel,
   normalizeHeatCoverage,
   normalizeHeatSortMetric,
-  sameHeatView,
   visibleHeatRows,
-  type HeatActivation,
   type HeatCoverage,
   type HeatSortMetric,
-  type HeatViewOptions,
 } from "../../../viz/views/network-heat";
 import { AsyncStateMessage, useAsync } from "../../shared";
+import { NetworkTrend } from "./network-trend";
 import {
-  addInspectedCountry,
   ChartStory,
-  invalidateVizObservations,
   LensNav,
-  observationRequestIdentity,
   observationRequestKey,
-  sameObservationIdentity,
   YearSelect,
   useVizLab,
-  type ObservationRequestIdentity,
   type Row,
-  type VizObservation,
   type VizStepState,
 } from "./scaffold";
 
@@ -52,74 +42,17 @@ type Lens = "heat" | "network";
 
 export const STEP10_DEFAULT_LENS: Lens = "network";
 export const STEP10_LENSES: { key: Lens; label: string; hint: string }[] = [
-  { key: "network", label: "贸易网络图", hint: "国家间双边流向" },
-  { key: "heat", label: "行业网络指标", hint: "一国各行业的流量与拓扑基准" },
+  { key: "network", label: "贸易联系概览", hint: "国家间双边流向 · 补充探索" },
+  { key: "heat", label: "行业指标可视化", hint: "历年趋势 / 行业排名 / 两国比较" },
 ];
 const STEP10_LENS_KEYS = STEP10_LENSES.map(({ key }) => key);
 
-export function heatObservationFromActivation(
-  activation: HeatActivation,
-  sourceIdentity: ObservationRequestIdentity | null,
-  currentIdentity: ObservationRequestIdentity | null,
-  rows: readonly Row[],
-  currentView: HeatViewOptions,
-): VizObservation | null {
-  if (!sameObservationIdentity(sourceIdentity, currentIdentity)
-    || !sourceIdentity
-    || sourceIdentity.scope !== "country-industry"
-    || !sourceIdentity.country
-    || activation.metric !== HEAT_EVIDENCE_METRIC
-    || heatRowKey(activation.row) !== activation.rowKey
-    || normalizeHeatSortMetric(activation.sortMetric) !== activation.sortMetric
-    || normalizeHeatCoverage(activation.coverage) !== activation.coverage
-    || !sameHeatView(activation, currentView)) return null;
-  const visible = visibleHeatRows(rows, activation.sortMetric, activation.coverage);
-  const authoritative = visible[activation.visibleIndex];
-  if (!authoritative
-    || heatRowKey(authoritative) !== activation.rowKey
-    || activation.row[HEAT_EVIDENCE_METRIC] !== authoritative[HEAT_EVIDENCE_METRIC]
-    || activation.row[activation.sortMetric] !== authoritative[activation.sortMetric]
-    || String(authoritative.country ?? "") !== sourceIdentity.country) return null;
-  const value = authoritative[HEAT_EVIDENCE_METRIC];
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  const industry = String(authoritative.industry ?? "");
-  return {
-    entity: `${sourceIdentity.country}·${industry}`,
-    country: sourceIdentity.country,
-    industry,
-    year: sourceIdentity.year,
-    value,
-    metric: HEAT_EVIDENCE_METRIC,
-    release: sourceIdentity.release,
-    scope: sourceIdentity.scope,
-    generation: sourceIdentity.generation,
-    request_key: sourceIdentity.requestKey,
-    source: "explicit-heat-row",
-  };
-}
-
-export function nextExplicitHeatObservations(
-  prior: readonly VizObservation[],
-  next: VizObservation,
-): VizObservation[] {
-  return [
-    ...prior.filter((item) => item.source === "explicit-heat-row"
-      && item.release === next.release
-      && item.year === next.year
-      && item.scope === next.scope
-      && item.country !== next.country),
-    next,
-  ].slice(-2);
-}
-
-function heatIdentityToken(identity: ObservationRequestIdentity): string {
-  return `${identity.requestKey}\u0000${identity.generation}`;
-}
-
 export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
-  const { year, setYear, lens, pickLens, picked, pickCountries, schema } = useVizLab(
+  const { year, setYear, lens, pickLens, pickCountries, schema } = useVizLab(
     meta, step, state, STEP10_DEFAULT_LENS, STEP10_LENS_KEYS,
   );
+  const observations = (state.data?.observations ?? []).filter((item) => item.source === "explicit-network-trend" || item.source === "explicit-network-ranking");
+  const picked = [...new Set(observations.map((item) => item.country))];
   const fallbackDrill = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
   const [drill, setDrill] = useState(state.data?.drill ?? state.data?.compared?.at(-1) ?? fallbackDrill);
   const [heatSort, setHeatSort] = useState<HeatSortMetric>(
@@ -127,11 +60,6 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
   );
   const [heatCoverage, setHeatCoverage] = useState<HeatCoverage>(
     normalizeHeatCoverage(state.data?.heat_coverage),
-  );
-  const [heatAutoExpandSignal, setHeatAutoExpandSignal] = useState(0);
-  const [activeHeat, setActiveHeat] = useState<{ identity: string; rowKey: string } | null>(null);
-  const explicitHeatHistory = useRef<VizObservation[]>(
-    (state.data?.observations ?? []).filter((item) => item.source === "explicit-heat-row"),
   );
   const drillTouched = useRef(Boolean(state.data));
   useEffect(() => {
@@ -158,107 +86,68 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
   const page = pageQuery.data;
   const net = networkQuery.data;
   const heatRows = (page?.rows ?? []) as Row[];
-  const acceptedHeatIdentity = page && lens === "heat"
-    ? observationRequestIdentity(meta, year, "country-industry", pageQuery.generation, drill)
-    : null;
-  const currentHeatIdentity = useRef<ObservationRequestIdentity | null>(acceptedHeatIdentity);
-  const heatView: HeatViewOptions = { sortMetric: heatSort, coverage: heatCoverage };
-  const currentHeatView = useRef<HeatViewOptions>(heatView);
-  // Render-time assignment makes queued callbacks compare against the latest request/view,
-  // rather than waiting for an effect after year/country/retry/view changes.
-  currentHeatIdentity.current = acceptedHeatIdentity;
-  currentHeatView.current = heatView;
-
-  const clearHeatEvidence = () => {
-    setActiveHeat(null);
-    invalidateVizObservations(state);
-  };
   const inspectCountry = (country: string) => {
     if (!meta.countries.includes(country)) return;
     drillTouched.current = true;
-    if (country !== drill) clearHeatEvidence();
     setDrill(country);
-    pickCountries(addInspectedCountry(picked, country, meta.countries));
     state.save({ drill: country });
   };
   const changeYear = (next: number) => {
-    if (next !== year) {
-      explicitHeatHistory.current = [];
-      setActiveHeat(null);
-    }
     setYear(next);
   };
   const changeLens = (next: Lens) => {
-    if (next === "heat" && lens !== "heat") {
-      clearHeatEvidence();
-      setHeatAutoExpandSignal((signal) => signal + 1);
-    }
     pickLens(next);
   };
   const retryHeat = () => {
-    clearHeatEvidence();
     pageQuery.retry();
   };
   const changeHeatSort = (next: HeatSortMetric) => {
     const normalized = normalizeHeatSortMetric(next);
-    currentHeatView.current = { ...currentHeatView.current, sortMetric: normalized };
     setHeatSort(normalized);
     state.save({ heat_sort: normalized });
   };
   const changeHeatCoverage = (next: HeatCoverage) => {
     const normalized = normalizeHeatCoverage(next);
-    currentHeatView.current = { ...currentHeatView.current, coverage: normalized };
     setHeatCoverage(normalized);
     state.save({ heat_coverage: normalized });
   };
-  const activateHeatRow = (activation: HeatActivation) => {
-    const sourceIdentity = acceptedHeatIdentity;
-    const observation = heatObservationFromActivation(
-      activation,
-      sourceIdentity,
-      currentHeatIdentity.current,
-      heatRows,
-      currentHeatView.current,
-    );
-    if (!observation || !sourceIdentity) return;
-    const prior = [
-      ...explicitHeatHistory.current,
-      ...(state.data?.observations ?? []).filter((item) => item.source === "explicit-heat-row"),
-    ];
-    const observations = nextExplicitHeatObservations(prior, observation);
-    explicitHeatHistory.current = observations;
-    pickCountries(addInspectedCountry(picked, observation.country, meta.countries));
-    state.save({ metric: HEAT_EVIDENCE_METRIC, observations });
-    setActiveHeat({ identity: heatIdentityToken(sourceIdentity), rowKey: activation.rowKey });
-  };
-  const activeHeatRowKey = acceptedHeatIdentity
-    && activeHeat?.identity === heatIdentityToken(acceptedHeatIdentity)
-    ? activeHeat.rowKey
-    : null;
 
   return (
     <div>
+      <section className="reg-section-card" aria-label="步骤9完成清单" style={{ marginBottom: 14 }}>
+        <h3>本步完成清单</h3>
+        <p>① {picked.length >= 2 ? "✓ 已记录至少两个经济体" : "待完成：记录两个经济体的比较"}</p>
+        <p>② {observations.length ? "✓ 已保存行业指标读数" : "待完成：保存当前指标读数"}</p>
+        <p>③ 在页面下方完成本步单选题。报告材料与答题分别检查。</p>
+        <div className="controls"><button className="primary" onClick={() => changeLens("heat")}>前往行业图表，记录报告材料</button></div>
+        <p className="muted">选择两个国家和一个指标 → 查看趋势或行业排名 → 在报告材料卡点击“保存为报告材料”，一次完成前两项；更换比较后可点击“更新报告材料”。贸易联系概览仅作补充探索。</p>
+      </section>
       <div className="tipbox" style={{ marginBottom: 14 }}>
-        国家级贸易图在全部正流量边下是<b>完全图</b>,度、介数、接近等无权中心性对所有国家恒为常数、没有区分度。
-        因此拓扑比较在<b>国家–行业级</b>的完整全球图上做:每个数值都在包含全部国家×行业节点和所有正中间品流量边的有向图上计算,下钻只改变展示范围。
-        先把<b>加权度</b>当作经济流量规模基准，再把无权介数作为拓扑敏感性视角；当前未检验删去微小边后排序是否稳定。
+        <b>两类图不能直接对应：</b>贸易联系概览以国家为节点，展示跨国中间品＋最终品流量，不含国内边，位置按预设地理区域排布。
+        行业图表与<b>步骤 5 同源</b>，指标在完整国家×行业中间品网络上计算，包含国内联系和正自环。
+        不要用概览中的位置解释某行业的中心性；国家级完全图的无权中心性没有区分度。
       </div>
 
       <div className="controls" style={{ marginBottom: 12 }}>
-        <YearSelect years={meta.years} year={year} onChange={changeYear} />
+        {lens === "network" && <YearSelect years={meta.years} year={year} onChange={changeYear} />}
         <span className="muted" style={{ fontSize: 12 }}>
-          已看过 <b style={{ color: picked.length >= 2 ? "#159a86" : "#e0982a" }}>{picked.length}</b> 国{picked.length < 2 ? "（报告材料需 ≥2）" : ""}
+          报告材料已记录 <b style={{ color: picked.length >= 2 ? "#159a86" : "#e0982a" }}>{picked.length}</b> 国{picked.length < 2 ? "（报告材料需 ≥2）" : ""}
         </span>
       </div>
 
       <LensNav<Lens> active={lens as Lens} onPick={changeLens} lenses={STEP10_LENSES} />
 
+      {lens === "heat" && <NetworkTrend meta={meta} schema={schema} initialCountry={drill} observations={observations} syncing={state.syncing} syncError={state.syncError} onRetrySync={state.syncNow} onRecord={(countries, observations) => {
+        pickCountries(countries);
+        state.save({ compared: countries, metric: observations[0]?.metric, observations });
+      }} />}
+      <details open={lens === "network"} key={lens} className={lens === "heat" ? "technical-details" : undefined}>
+      <summary hidden={lens === "network"}>查看行业明细表（可选）</summary>
       <FullscreenPanel
         title={`步骤 ${step.n} · ${countryLabel(drill)}行业网络指标表`}
         variant="heat"
         buttonLabel="全屏查看"
         enabled={lens === "heat"}
-        autoExpandSignal={heatAutoExpandSignal}
       >
         {lens === "heat" ? (
           <ChartStory
@@ -266,10 +155,11 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
             title={`${countryLabel(drill)} 的行业节点网络指标(全球图上计算,按${heatSortLabel(heatSort)}显示${heatCoverageLabel(heatCoverage)})`}
             what={<>选一个国家，每行是一个行业节点。加权总度=入向+出向流量（正自环双计）；全正边二值介数把微小正边与大额边视为等长。可切换排序并查看 Top 15 或全部有限行业。</>}
             read={<>二值介数高只表示在这套全正边拓扑中，更多有向最短路径份额经过该节点；它不是流量大、经济枢纽或瓶颈的证明。对比加权总度与介数排序，观察流量规模和拓扑编码是否给出不同故事。</>}
-            find={<>换看两三个国家，并比较两种排序；选择实际查看的一行，点击“记录拓扑基准”。记录时必须保留“全正边、二值、未归一化、未做边阈值敏感性”四项限定。</>}
+            find={<>本表仅供查数，不参与报告材料收集。要保存比较，请回到上方行业图表，在报告材料卡中核对并保存。</>}
             note="指标在完整全球国家×行业图上计算，下钻只筛选展示行。当前没有边阈值敏感性分析，所以二值介数只作探索性拓扑基准；加权总度中的正自环在入向、出向各计一次。"
           >
             <div className="controls" style={{ marginBottom: 12 }}>
+              <YearSelect years={meta.years} year={year} onChange={changeYear} />
               <LabeledControl label="下钻国家">
                 {(id) => (
                   <select id={id} value={drill} onChange={(e) => inspectCountry(e.target.value)}>
@@ -291,7 +181,7 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
                   </select>
                 )}
               </LabeledControl>
-              <span className="muted" role="note">排序只改变可见顺序；报告证据固定记录全正边二值介数。</span>
+              <span className="muted" role="note">明细仅供查阅；切换国家、年份和排序不会改变已保存材料。</span>
             </div>
             {pageQuery.status === "loading" || pageQuery.status === "error" ? (
               <AsyncStateMessage
@@ -304,8 +194,6 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
               <HeatTableViz
                 rows={heatRows}
                 schema={schema}
-                onActivate={activateHeatRow}
-                activeRowKey={activeHeatRowKey}
                 sortMetric={heatSort}
                 coverage={heatCoverage}
                 countryName={countryLabel(drill)}
@@ -333,6 +221,7 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
           </ChartStory>
         )}
       </FullscreenPanel>
+      </details>
     </div>
   );
 }

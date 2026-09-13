@@ -35,13 +35,14 @@ export interface VizObservation {
   industry?: string;
   year: number;
   value: number;
-  /** Additive provenance fields; legacy report readers still use the fields above. */
+  /** Indicator and request provenance for explicitly saved readings. */
   metric?: string;
+  unit?: string;
   release?: string;
   scope?: ObservationScope;
   generation?: number;
   request_key?: string;
-  source?: "explicit-heat-row";
+  source?: "explicit-network-trend" | "explicit-network-ranking";
 }
 
 export interface ObservationRequestIdentity {
@@ -336,7 +337,8 @@ export function useVizLab(
   };
   const setYear = (next: number) => {
     if (!meta.years.includes(next)) return;
-    if (next !== year) invalidateVizObservations(state);
+    // Step 9's report material is an explicit snapshot, independent of browsing.
+    if (next !== year && _step.n !== 9) invalidateVizObservations(state);
     setYearState(next);
     setInteracted(true);
   };
