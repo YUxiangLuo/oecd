@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
+import { ScrollableRegion } from "../../a11y";
 import { userFacingRequestError } from "../../user-facing-error";
 import type { Meta, QuizCompletionState, Step, StepStateApi, TeachingPanelResponse } from "../../types";
 import { countryLabel, sectorLabel } from "../../viz";
@@ -52,7 +53,7 @@ export function ShockLab({ meta, step: _step, state }: {
         X = 冲击前出口份额 w × 虚构关税税率 τ。税率路径及生成值仅为教学模拟，不是现实政策事实，也不能据此作因果结论。
       </div>
       <p>步骤 11–14 都固定使用 <code>teaching_tariff_exposure</code>；改变的是 Y，而不是 X。</p>
-      <div className="model-controls">
+      <div className="controls">
         <label className="model-control"><span className="model-control-label">国家</span>
           <select value={country} onChange={(event) => { setCountry(event.target.value); state.save({ teaching_country: event.target.value }); }}>
             {meta.countries.filter((code) => code !== "ROW").map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
@@ -69,11 +70,11 @@ export function ShockLab({ meta, step: _step, state }: {
     {query.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(query.error, "教学关税面板读取失败")} <button className="secondary" onClick={query.retry}>重试</button></div>}
     {panel && <>
       <p className="muted">{panel.disclaimer} · 当前显示 {rows.length} 行（接口匹配 {panel.total} 行）。</p>
-      <div className="table-scroll" role="region" aria-label="教学关税暴露表" tabIndex={0}>
-        <table><thead><tr><th>国家</th><th>行业</th><th>年份</th><th>冲击前出口份额 w</th><th>虚构税率 τ</th><th>教学暴露 X = w × τ</th></tr></thead>
+      <ScrollableRegion className="table-wrap bounded-data-table" label="教学关税暴露表">
+        <table className="data-table"><thead><tr><th>国家</th><th>行业</th><th>年份</th><th>冲击前出口份额 w</th><th>虚构税率 τ</th><th>教学暴露 X = w × τ</th></tr></thead>
           <tbody>{rows.map((row) => <tr key={`${row.country}-${row.industry}-${row.year}`}><td>{countryLabel(row.country)}</td><td>{sectorLabel(row.industry)}</td><td>{row.year}</td><td>{(row.teaching_export_share_w * 100).toFixed(2)}%</td><td>{(row.teaching_tariff_rate_tau * 100).toFixed(2)}%</td><td><b>{(row.teaching_export_share_w * 100).toFixed(2)}% × {(row.teaching_tariff_rate_tau * 100).toFixed(2)}% = {(row.teaching_tariff_exposure * 100).toFixed(3)} 个百分点</b></td></tr>)}</tbody>
         </table>
-      </div>
+      </ScrollableRegion>
     </>}
   </div>;
 }
