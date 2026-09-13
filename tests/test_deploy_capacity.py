@@ -1,7 +1,25 @@
+import os
+import subprocess
+import sys
+
 import pytest
 
 from gvcsim import config
 from gvcsim.config import ROOT
+
+
+@pytest.mark.parametrize("configured,expected", [(None, 2592000), ("28800", 28800)])
+def test_teaching_login_default_and_explicit_override(configured, expected):
+    environment = os.environ.copy()
+    environment.pop("GVCSIM_TOKEN_TTL_SECONDS", None)
+    if configured is not None:
+        environment["GVCSIM_TOKEN_TTL_SECONDS"] = configured
+    actual = subprocess.check_output(
+        [sys.executable, "-c", "from gvcsim.config import TOKEN_TTL_SECONDS; print(TOKEN_TTL_SECONDS)"],
+        env=environment,
+        text=True,
+    )
+    assert int(actual) == expected
 
 
 def test_service_uses_one_worker_and_small_fixed_limits():
@@ -19,7 +37,7 @@ def test_environment_has_bounded_request_rates_without_removed_evidence_or_pool_
     environment = (ROOT / "deploy" / "gvcsim.env.example").read_text()
     for removed in ("EVIDENCE_SECRET", "LOGIN_MAX", "CPU_QUEUE", "CPU_CONCURRENCY", "DB_POOL"):
         assert removed not in environment
-    assert "GVCSIM_TOKEN_TTL_SECONDS=28800" in environment
+    assert "GVCSIM_TOKEN_TTL_SECONDS=2592000" in environment
     assert "GVCSIM_LOGIN_ATTEMPTS_PER_MINUTE=10" in environment
     assert "GVCSIM_LOGIN_SOURCE_ATTEMPTS_PER_MINUTE=120" in environment
     assert "GVCSIM_REGRESSION_RUNS_PER_MINUTE=12" in environment

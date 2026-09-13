@@ -20,12 +20,6 @@ const ROMAN = ["", "一", "二", "三", "四", "五"];
 // Vite includes the canonical PDF as a versioned asset in both production and demo builds.
 const STUDENT_MANUAL_URL = new URL("../../实验手册.pdf", import.meta.url).href;
 
-export function sessionExpiryLabel(expiresAt: number | null): string | null {
-  if (!expiresAt) return null;
-  const date = new Date(expiresAt * 1000);
-  return Number.isNaN(date.getTime()) ? null : date.toLocaleString("zh-CN", { hour12: false });
-}
-
 export function AppBootSkeleton() {
   return (
     <div className="layout app-boot" role="region" aria-busy="true" aria-label="正在恢复实验">
@@ -84,7 +78,6 @@ export function AppBootSkeleton() {
 interface TeacherWorkspaceProps {
   user: AuthUser;
   meta: Meta | null;
-  authExpiresAt: number | null;
   showPasswordChange: boolean;
   onRequestPasswordChange: () => void;
   onClosePasswordChange: () => void;
@@ -95,14 +88,12 @@ interface TeacherWorkspaceProps {
 export function TeacherWorkspace({
   user,
   meta,
-  authExpiresAt,
   showPasswordChange,
   onRequestPasswordChange,
   onClosePasswordChange,
   onPasswordChanged,
   onLogout,
 }: TeacherWorkspaceProps) {
-  const expiry = sessionExpiryLabel(authExpiresAt);
   const passwordTriggerRef = useRef<HTMLButtonElement>(null);
   return (
     <div className="layout">
@@ -116,7 +107,6 @@ export function TeacherWorkspace({
           <span className="muted">
             数据：{oecdIcioDatasetLabel(meta)}
           </span>
-          {expiry && <span className="muted">会话至 {expiry}</span>}
           <span className="role-chip" title={`${user.name} · 教师账号 · ${user.username}`}><span>{user.name}</span></span>
           <button ref={passwordTriggerRef} onClick={onRequestPasswordChange}>修改密码</button>
           <button onClick={onLogout}>退出</button>
@@ -139,7 +129,6 @@ export function TeacherWorkspace({
 interface StudentTopbarProps {
   user: AuthUser;
   meta: Meta | null;
-  authExpiresAt: number | null;
   introTriggerRef: RefObject<HTMLButtonElement | null>;
   passwordTriggerRef: RefObject<HTMLButtonElement | null>;
   onShowIntro: () => void;
@@ -150,14 +139,12 @@ interface StudentTopbarProps {
 export function StudentTopbar({
   user,
   meta,
-  authExpiresAt,
   introTriggerRef,
   passwordTriggerRef,
   onShowIntro,
   onRequestPasswordChange,
   onLogout,
 }: StudentTopbarProps) {
-  const expiry = sessionExpiryLabel(authExpiresAt);
   const fixedDemoPassword = import.meta.env.VITE_DEMO_MODE === "1" && isDemoStudentUsername(user.username);
   return (
     <header className="topbar">
@@ -171,7 +158,6 @@ export function StudentTopbar({
           数据：{oecdIcioDatasetLabel(meta)}
         </span>
         <span className="role-chip" title={`${user.name} · 学生账号 · ${user.username}`}><span>{user.name}</span></span>
-        {expiry && <span className="muted" title="服务端签发的 expires_at">会话至 {expiry}</span>}
         <button ref={introTriggerRef} onClick={onShowIntro}>ⓘ 系统介绍</button>
         <button
           ref={passwordTriggerRef}

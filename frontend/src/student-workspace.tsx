@@ -72,7 +72,6 @@ interface StudentWorkspaceProps {
   onRegressionSettingsChange: (settings: RegressionSettings) => void;
   regressionHistory: RegressionHistory;
   onRegressionHistoryChange: Dispatch<SetStateAction<RegressionHistory>>;
-  authExpiresAt: number | null;
   showIntro: boolean;
   showPasswordChange: boolean;
   contentRef: RefObject<HTMLElement | null>;
@@ -99,7 +98,6 @@ export function StudentWorkspace({
   onRegressionSettingsChange,
   regressionHistory,
   onRegressionHistoryChange,
-  authExpiresAt,
   showIntro,
   showPasswordChange,
   contentRef,
@@ -147,7 +145,6 @@ export function StudentWorkspace({
         <StudentTopbar
           user={user}
           meta={meta}
-          authExpiresAt={authExpiresAt}
           introTriggerRef={introTriggerRef}
           passwordTriggerRef={passwordTriggerRef}
           onShowIntro={onShowIntro}

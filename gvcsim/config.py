@@ -58,7 +58,7 @@ COURSE_TERM = "2026 秋"
 # 只在显式 demo 模式播种演示账号。生产启动校验会拒绝 demo 模式和空值。
 BOOTSTRAP_PASSWORD = os.environ.get("GVCSIM_BOOTSTRAP_PASSWORD", "")
 AUTH_SECRET = os.environ.get("GVCSIM_AUTH_SECRET", "")
-TOKEN_TTL_SECONDS = _positive_int_setting("GVCSIM_TOKEN_TTL_SECONDS", 28800)
+TOKEN_TTL_SECONDS = _positive_int_setting("GVCSIM_TOKEN_TTL_SECONDS", 30 * 24 * 60 * 60)
 _origins_raw = os.environ.get("GVCSIM_ALLOWED_ORIGINS", "")
 ALLOWED_ORIGINS = [item.strip() for item in _origins_raw.split(",") if item.strip()]
 

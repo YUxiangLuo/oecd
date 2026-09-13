@@ -6,13 +6,13 @@ import { emptySession } from "./session-store";
 import { AUTH_RECOVERY_KEY } from "./use-session";
 
 test("self-service password change preserves the failed-save draft before logout", async () => {
-  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  const token = sessionStorage.getItem(AUTH_TOKEN_KEY);
   const active = getActiveAuthToken();
   const href = window.location.href;
   const recovery = sessionStorage.getItem(AUTH_RECOVERY_KEY);
   const intro = sessionStorage.getItem("gvcsim_show_intro");
   const releaseId = "a".repeat(32);
-  localStorage.setItem(AUTH_TOKEN_KEY, "valid-session");
+  sessionStorage.setItem(AUTH_TOKEN_KEY, "valid-session");
   setActiveAuthToken("valid-session");
   sessionStorage.removeItem(AUTH_RECOVERY_KEY);
   sessionStorage.removeItem("gvcsim_show_intro");
@@ -44,11 +44,11 @@ test("self-service password change preserves the failed-save draft before logout
     expect(draft.release_id).toBe(releaseId);
     expect(draft.username).toBe("draft-student");
     expect(draft.session.steps["15"].data.research_question).toBe("未保存的研究问题，改密后必须保留。");
-    expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
+    expect(sessionStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
   } finally {
     cleanup();
     for (const mock of [reload, password, save, session, steps, meta, me]) mock.mockRestore();
-    if (token == null) localStorage.removeItem(AUTH_TOKEN_KEY); else localStorage.setItem(AUTH_TOKEN_KEY, token);
+    if (token == null) sessionStorage.removeItem(AUTH_TOKEN_KEY); else sessionStorage.setItem(AUTH_TOKEN_KEY, token);
     setActiveAuthToken(active);
     if (recovery == null) sessionStorage.removeItem(AUTH_RECOVERY_KEY); else sessionStorage.setItem(AUTH_RECOVERY_KEY, recovery);
     if (intro == null) sessionStorage.removeItem("gvcsim_show_intro"); else sessionStorage.setItem("gvcsim_show_intro", intro);

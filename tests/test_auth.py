@@ -31,6 +31,19 @@ def test_token_is_signed_expiring_and_role_checked(teaching_db, monkeypatch):
     assert auth.verify_token(token) is None
 
 
+def test_long_teaching_login_survives_multiple_days_but_still_expires(teaching_db, monkeypatch):
+    user = auth.authenticate("student", "gvclab2026")
+    monkeypatch.setattr(auth.config, "TOKEN_TTL_SECONDS", 30 * 24 * 60 * 60)
+    issued_at = int(time.time())
+    monkeypatch.setattr(auth.time, "time", lambda: issued_at)
+    token, expires_at = auth.issue_token(user)
+    assert expires_at == issued_at + 30 * 24 * 60 * 60
+    monkeypatch.setattr(auth.time, "time", lambda: issued_at + 20 * 24 * 60 * 60)
+    assert auth.verify_token(token)["sub"] == "student"
+    monkeypatch.setattr(auth.time, "time", lambda: expires_at)
+    assert auth.verify_token(token) is None
+
+
 def test_token_is_bound_to_dataset_release(teaching_db, monkeypatch):
     user = auth.authenticate("student", "gvclab2026")
     assert user

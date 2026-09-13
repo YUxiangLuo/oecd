@@ -2,8 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   clearAuthentication,
   clearAuthenticationIfCurrent,
-  isExternalAuthenticationChange,
-  readAuthExpiry,
   shouldAutoShowIntro,
   stepFromSearch,
   storeAuthentication,
@@ -37,8 +35,7 @@ export default function App() {
   const [fatal, setFatal] = useState<string | null>(null);
   const [bootAttempt, setBootAttempt] = useState(0);
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [authChecked, setAuthChecked] = useState(() => !localStorage.getItem(AUTH_TOKEN_KEY));
-  const [authExpiresAt] = useState<number | null>(() => readAuthExpiry(localStorage));
+  const [authChecked, setAuthChecked] = useState(() => !sessionStorage.getItem(AUTH_TOKEN_KEY));
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [authCheckError, setAuthCheckError] = useState<string | null>(null);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
@@ -110,8 +107,8 @@ export default function App() {
   const reloadLoggedOut = useCallback((notice?: string) => {
     const activeToken = getActiveAuthToken();
     setActiveAuthToken(null);
-    if (activeToken !== null) clearAuthenticationIfCurrent(localStorage, activeToken);
-    else if (localStorage.getItem(AUTH_TOKEN_KEY) === null) clearAuthentication(localStorage);
+    if (activeToken !== null) clearAuthenticationIfCurrent(sessionStorage, activeToken);
+    else if (sessionStorage.getItem(AUTH_TOKEN_KEY) === null) clearAuthentication(sessionStorage);
     if (notice) sessionStorage.setItem("gvcsim_auth_notice", notice);
     window.location.reload();
   }, []);
@@ -131,7 +128,7 @@ export default function App() {
     if (sessionStorage.getItem("gvcsim_show_intro") === "1") {
       sessionStorage.removeItem("gvcsim_show_intro");
     }
-    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    const token = sessionStorage.getItem(AUTH_TOKEN_KEY);
     if (!token) {
       setActiveAuthToken(null);
       setAuthChecked(true);
@@ -142,7 +139,7 @@ export default function App() {
       (verifiedUser) => { if (getActiveAuthToken() === token) setUser(verifiedUser); },
       (error) => {
         if (getActiveAuthToken() !== token) return;
-        if (isApiErrorStatus(error, 401)) reloadLoggedOut("登录已过期，请重新登录。");
+        if (isApiErrorStatus(error, 401)) reloadLoggedOut("登录已失效，请重新登录。");
         else setAuthCheckError(userFacingRequestError(error, "暂时无法校验登录"));
       },
     ).finally(() => setAuthChecked(true));
@@ -154,21 +151,10 @@ export default function App() {
     };
     const expired = () => {
       preserveUnsyncedStudentWork();
-      reloadLoggedOut("登录已过期，请重新登录。");
-    };
-    const storageChanged = (event: StorageEvent) => {
-      if (!isExternalAuthenticationChange(event.key, event.newValue, getActiveAuthToken())) return;
-      preserveUnsyncedStudentWork();
-      // 先切断当前页面的请求身份，再重新挂载新账号或登录页。
-      setActiveAuthToken(null);
-      window.location.reload();
+      reloadLoggedOut("登录已失效，请重新登录。");
     };
     window.addEventListener("gvcsim-auth-expired", expired);
-    window.addEventListener("storage", storageChanged);
-    return () => {
-      window.removeEventListener("gvcsim-auth-expired", expired);
-      window.removeEventListener("storage", storageChanged);
-    };
+    return () => window.removeEventListener("gvcsim-auth-expired", expired);
   }, [reloadLoggedOut, session, user]);
 
   useEffect(() => {
@@ -219,7 +205,7 @@ export default function App() {
   if (!user) {
     return (
       <LoginPage notice={authNotice} onLogin={(response) => {
-        storeAuthentication(localStorage, response.token, response.expires_at);
+        storeAuthentication(sessionStorage, response.token);
         // 每次学生登录都重新展示系统介绍（不按账号记忆已读）。
         if (shouldAutoShowIntro(response.user.role)) {
           sessionStorage.setItem("gvcsim_show_intro", "1");
@@ -238,7 +224,6 @@ export default function App() {
       <TeacherWorkspace
         user={user}
         meta={meta}
-        authExpiresAt={authExpiresAt}
         showPasswordChange={showPasswordChange}
         onRequestPasswordChange={() => setShowPasswordChange(true)}
         onClosePasswordChange={() => setShowPasswordChange(false)}
@@ -270,7 +255,6 @@ export default function App() {
       onRegressionSettingsChange={setRegressionSettings}
       regressionHistory={regressionHistory}
       onRegressionHistoryChange={setRegressionHistory}
-      authExpiresAt={authExpiresAt}
       showIntro={showIntro}
       showPasswordChange={showPasswordChange}
       contentRef={contentRef}

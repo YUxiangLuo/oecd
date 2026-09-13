@@ -23,94 +23,56 @@ function authUser(username: string): AuthUser {
   return { username, name: username, role: "student" };
 }
 
-describe("auth expiration", () => {
+describe("tab authentication", () => {
   test("logout is local-only and has no API method", () => {
     expect("logout" in api).toBe(false);
   });
 
-  test("a mounted tab keeps its validated token when shared storage changes", () => {
-    const originalToken = localStorage.getItem("gvcsim_token");
-    try {
-      setActiveAuthToken("token-a");
-      localStorage.setItem("gvcsim_token", "token-b");
-      expect(getActiveAuthToken()).toBe("token-a");
-    } finally {
-      setActiveAuthToken(originalToken);
-      if (originalToken == null) localStorage.removeItem("gvcsim_token");
-      else localStorage.setItem("gvcsim_token", originalToken);
-    }
-  });
+  for (const current of [true, false]) {
+    test(`${current ? "current" : "stale"}-token 401 only expires its own mounted identity`, async () => {
+      const originalFetch = globalThis.fetch;
+      const originalToken = sessionStorage.getItem("gvcsim_token");
+      const originalActive = getActiveAuthToken();
+      let events = 0;
+      const onExpired = () => events += 1;
+      globalThis.addEventListener("gvcsim-auth-expired", onExpired);
+      try {
+        setActiveAuthToken("active-token");
+        sessionStorage.setItem("gvcsim_token", "active-token");
+        globalThis.fetch = (async () => new Response(JSON.stringify({ detail: "expired" }), {
+          status: 401, headers: { "Content-Type": "application/json" },
+        })) as unknown as typeof fetch;
+        await expect(api.me(current ? "active-token" : "stale-token")).rejects.toThrow("expired");
+        expect(getActiveAuthToken()).toBe(current ? null : "active-token");
+        expect(sessionStorage.getItem("gvcsim_token")).toBe(current ? null : "active-token");
+        expect(events).toBe(current ? 1 : 0);
+      } finally {
+        globalThis.removeEventListener("gvcsim-auth-expired", onExpired);
+        setActiveAuthToken(originalActive);
+        if (originalToken == null) sessionStorage.removeItem("gvcsim_token");
+        else sessionStorage.setItem("gvcsim_token", originalToken);
+        globalThis.fetch = originalFetch;
+      }
+    });
+  }
 
-  test("an active-token 401 expires the mounted session", async () => {
+  test("shared login changes cannot replace the mounted identity or mutation token", async () => {
     const originalFetch = globalThis.fetch;
     const originalToken = localStorage.getItem("gvcsim_token");
-    let events = 0;
-    const onExpired = () => events += 1;
-    globalThis.addEventListener("gvcsim-auth-expired", onExpired);
-    try {
-      setActiveAuthToken("active-token");
-      localStorage.setItem("gvcsim_token", "active-token");
-      globalThis.fetch = (async () => new Response(JSON.stringify({ detail: "expired" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      })) as unknown as typeof fetch;
-
-      await expect(api.me("active-token")).rejects.toThrow("expired");
-      expect(getActiveAuthToken()).toBeNull();
-      expect(localStorage.getItem("gvcsim_token")).toBeNull();
-      expect(events).toBe(1);
-    } finally {
-      globalThis.removeEventListener("gvcsim-auth-expired", onExpired);
-      setActiveAuthToken(originalToken);
-      if (originalToken == null) localStorage.removeItem("gvcsim_token");
-      else localStorage.setItem("gvcsim_token", originalToken);
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  test("a stale-token 401 does not expire the mounted session", async () => {
-    const originalFetch = globalThis.fetch;
-    const originalToken = localStorage.getItem("gvcsim_token");
-    let events = 0;
-    const onExpired = () => events += 1;
-    globalThis.addEventListener("gvcsim-auth-expired", onExpired);
-    try {
-      setActiveAuthToken("active-token");
-      localStorage.setItem("gvcsim_token", "active-token");
-      globalThis.fetch = (async () => new Response(JSON.stringify({ detail: "expired" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      })) as unknown as typeof fetch;
-
-      await expect(api.me("stale-token")).rejects.toThrow("expired");
-      expect(getActiveAuthToken()).toBe("active-token");
-      expect(localStorage.getItem("gvcsim_token")).toBe("active-token");
-      expect(events).toBe(0);
-    } finally {
-      globalThis.removeEventListener("gvcsim-auth-expired", onExpired);
-      setActiveAuthToken(originalToken);
-      if (originalToken == null) localStorage.removeItem("gvcsim_token");
-      else localStorage.setItem("gvcsim_token", originalToken);
-      globalThis.fetch = originalFetch;
-    }
-  });
-
-  test("mutations use the mounted tab token, not another tab's stored token", async () => {
-    const originalFetch = globalThis.fetch;
-    const originalToken = localStorage.getItem("gvcsim_token");
+    const originalActive = getActiveAuthToken();
     let authorization: string | null = null;
     try {
       setActiveAuthToken("token-a");
       localStorage.setItem("gvcsim_token", "token-b");
+      expect(getActiveAuthToken()).toBe("token-a");
       globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
         authorization = new Headers(init?.headers).get("Authorization");
         return new Response("{}", { status: 200, headers: { "Content-Type": "application/json" } });
       }) as typeof fetch;
-
       await api.classroom.saveSession({ session: emptySession(), base_updated_at: null });
       expect(String(authorization)).toBe("Bearer token-a");
     } finally {
-      setActiveAuthToken(originalToken);
+      setActiveAuthToken(originalActive);
       if (originalToken == null) localStorage.removeItem("gvcsim_token");
       else localStorage.setItem("gvcsim_token", originalToken);
       globalThis.fetch = originalFetch;

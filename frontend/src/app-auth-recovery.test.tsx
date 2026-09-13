@@ -8,12 +8,14 @@ const restorers: Array<() => void> = [];
 afterEach(() => {
   cleanup();
   for (const restore of restorers.splice(0).reverse()) restore();
+  sessionStorage.removeItem(AUTH_TOKEN_KEY);
+  sessionStorage.removeItem("gvcsim_auth_notice");
   localStorage.removeItem(AUTH_TOKEN_KEY);
   setActiveAuthToken(null);
 });
 
 function retainedLogin() {
-  localStorage.setItem(AUTH_TOKEN_KEY, "valid-session");
+  sessionStorage.setItem(AUTH_TOKEN_KEY, "valid-session");
   setActiveAuthToken("valid-session");
   const reload = spyOn(window.location, "reload").mockImplementation(() => {});
   restorers.push(() => reload.mockRestore());
@@ -21,6 +23,18 @@ function retainedLogin() {
 }
 
 describe("authentication dependency recovery", () => {
+  test("a new tab does not silently import an old shared account", async () => {
+    localStorage.setItem(AUTH_TOKEN_KEY, "legacy-teacher");
+    sessionStorage.removeItem(AUTH_TOKEN_KEY);
+    setActiveAuthToken(null);
+    const me = spyOn(api, "me");
+    restorers.push(() => me.mockRestore());
+    render(<App />);
+    expect(await screen.findByLabelText("用户名")).toBeTruthy();
+    expect(me).not.toHaveBeenCalled();
+    expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBe("legacy-teacher");
+  });
+
   test("course retry recovers a failed bootstrap without reauthentication or losing the session", async () => {
     const reload = retainedLogin();
     const releaseId = "a".repeat(32);
@@ -44,7 +58,15 @@ describe("authentication dependency recovery", () => {
     expect(me).toHaveBeenCalledTimes(1);
     expect(session).toHaveBeenCalledTimes(1);
     expect(reload).not.toHaveBeenCalled();
-    expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBe("valid-session");
+    expect(sessionStorage.getItem(AUTH_TOKEN_KEY)).toBe("valid-session");
+    // Other tabs (including old clients using localStorage) cannot reload this work.
+    localStorage.setItem(AUTH_TOKEN_KEY, "other-tab");
+    window.dispatchEvent(new StorageEvent("storage", { key: AUTH_TOKEN_KEY, newValue: "other-tab" }));
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    window.dispatchEvent(new StorageEvent("storage", { key: AUTH_TOKEN_KEY, newValue: null }));
+    expect(reload).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue("服务恢复后保留的研究问题")).toBeTruthy();
+    expect(sessionStorage.getItem(AUTH_TOKEN_KEY)).toBe("valid-session");
   });
 
   for (const status of [500, 503]) {
@@ -56,7 +78,7 @@ describe("authentication dependency recovery", () => {
       restorers.push(() => fetch.mockRestore());
       render(<App />);
       await waitFor(() => expect(screen.getByRole("button", { name: "重试连接" })).toBeTruthy());
-      expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBe("valid-session");
+      expect(sessionStorage.getItem(AUTH_TOKEN_KEY)).toBe("valid-session");
       expect(reload).not.toHaveBeenCalled();
       expect(screen.queryByLabelText("密码")).toBeNull();
     });
@@ -70,6 +92,6 @@ describe("authentication dependency recovery", () => {
     restorers.push(() => fetch.mockRestore());
     render(<App />);
     await waitFor(() => expect(reload).toHaveBeenCalled());
-    expect(localStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
+    expect(sessionStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
   });
 });

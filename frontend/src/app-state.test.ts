@@ -1,11 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { AUTH_TOKEN_KEY } from "./api";
 import {
-  AUTH_EXPIRES_KEY,
   clearAuthentication,
   clearAuthenticationIfCurrent,
-  isExternalAuthenticationChange,
-  readAuthExpiry,
   stepFromSearch,
   shouldAutoShowIntro,
   storeAuthentication,
@@ -54,33 +51,31 @@ describe("application URL state", () => {
 });
 
 describe("application authentication storage", () => {
-  test("stores, reads and clears the token pair together", () => {
+  test("stores and clears just the tab token", () => {
     const storage = new MemoryStorage();
-    storeAuthentication(storage, "signed-token", 12345);
-    expect(storage.getItem(AUTH_TOKEN_KEY)).toBe("signed-token");
-    expect(readAuthExpiry(storage)).toBe(12345);
-
+    storeAuthentication(storage, "signed-token");
+    expect([...storage.values.keys()]).toEqual([AUTH_TOKEN_KEY]);
     clearAuthentication(storage);
     expect(storage.getItem(AUTH_TOKEN_KEY)).toBeNull();
-    expect(storage.getItem(AUTH_EXPIRES_KEY)).toBeNull();
-    expect(readAuthExpiry(storage)).toBeNull();
   });
 
-  test("detects an external account switch without deleting the newer login", () => {
+  test("a delayed logout cannot delete a newer login", () => {
     const storage = new MemoryStorage();
-    storeAuthentication(storage, "token-b", 23456);
-    expect(isExternalAuthenticationChange(AUTH_TOKEN_KEY, "token-b", "token-a")).toBe(true);
-    expect(isExternalAuthenticationChange(AUTH_EXPIRES_KEY, "23456", "token-a")).toBe(false);
+    storeAuthentication(storage, "token-b");
     expect(clearAuthenticationIfCurrent(storage, "token-a")).toBe(false);
     expect(storage.getItem(AUTH_TOKEN_KEY)).toBe("token-b");
+    expect(clearAuthenticationIfCurrent(storage, "token-b")).toBe(true);
+    expect(storage.getItem(AUTH_TOKEN_KEY)).toBeNull();
   });
 
-  test("rejects absent, non-finite and non-positive expiry values", () => {
-    const storage = new MemoryStorage();
-    for (const value of ["", "not-a-number", "0", "-1", "Infinity"]) {
-      storage.setItem(AUTH_EXPIRES_KEY, value);
-      expect(readAuthExpiry(storage)).toBeNull();
-    }
+  test("logging out of one tab leaves another tab's login intact", () => {
+    const a = new MemoryStorage();
+    const b = new MemoryStorage();
+    storeAuthentication(a, "student-a");
+    storeAuthentication(b, "teacher-b");
+    clearAuthentication(b);
+    expect(a.getItem(AUTH_TOKEN_KEY)).toBe("student-a");
+    expect(b.getItem(AUTH_TOKEN_KEY)).toBeNull();
   });
 });
 

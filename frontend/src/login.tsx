@@ -224,7 +224,7 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
           </button>
           <div className="login-hint">
             {demoMode && <>当前预填的是 {DEMO_STUDENT_COUNT} 个种子学生中的一组；同一标签页刷新会无重复轮换账号和口令，轮完后再开启下一轮。上方可一键切换学生 / 教师身份。<br /></>}
-            会话有效期由服务器安全策略决定；登录后页面会显示本次会话的实际到期时间。
+            登录用于区分每位同学的实验记录。刷新可继续实验；退出只影响当前标签页。
           </div>
         </form>
       </div>

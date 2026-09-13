@@ -2,8 +2,8 @@ import type { ExperimentSession, ReportMutationResponse, SessionResponse, Sessio
 
 export const AUTH_TOKEN_KEY = "gvcsim_token";
 
-// localStorage 只负责跨刷新共享登录。页面挂载后固定使用已经校验过的 token，
-// 避免另一个标签切换账号后把当前页面的会话写入新账号。
+// 登录只属于当前标签页；刷新保留，其他标签登录/退出不干扰本页。
+// 挂载后仍固定请求身份，避免迟到请求跨账号读写。
 let activeAuthToken: string | null | undefined;
 
 export function setActiveAuthToken(token: string | null): void {
@@ -12,7 +12,7 @@ export function setActiveAuthToken(token: string | null): void {
 
 export function getActiveAuthToken(): string | null {
   if (activeAuthToken === undefined) {
-    activeAuthToken = globalThis.localStorage?.getItem(AUTH_TOKEN_KEY) ?? null;
+    activeAuthToken = globalThis.sessionStorage?.getItem(AUTH_TOKEN_KEY) ?? null;
   }
   return activeAuthToken;
 }
@@ -55,8 +55,8 @@ export function withQuery(path: string, params: Record<string, QueryValue>): str
 function notifyAuthExpired(requestToken: string | null) {
   if (!requestToken || requestToken !== getActiveAuthToken()) return;
   setActiveAuthToken(null);
-  if (requestToken === localStorage.getItem(AUTH_TOKEN_KEY)) {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
+  if (requestToken === sessionStorage.getItem(AUTH_TOKEN_KEY)) {
+    sessionStorage.removeItem(AUTH_TOKEN_KEY);
   }
   window.dispatchEvent(new Event("gvcsim-auth-expired"));
 }
