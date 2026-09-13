@@ -924,6 +924,7 @@ export function RegressionRunLab({
     ? granularity
     : allowedGranularities[0];
   const currentSettings = { ...normalizedSettings, granularity: effectiveGranularity };
+  const isBaseline = regressionSettingsKey(currentSettings) === regressionSettingsKey(SIGNATURE_SETTINGS[outcome]);
   const currentRequestKey = `${outcome}:${regressionSettingsKey(currentSettings)}`;
   latestRequest.current = currentRequestKey;
 
@@ -1164,7 +1165,8 @@ export function RegressionRunLab({
             ? "估计中…"
             : running
               ? "等待上一项估计结束…"
-              : stale ? "运行修改后的设定" : result ? "重新运行当前设定" : "运行基准回归"}
+              : stale ? "运行修改后的设定" : result ? "重新运行当前设定"
+                : isBaseline ? "运行基准回归" : "运行当前设定"}
         </button>
         {runningCurrentRequest && (
           <span className="muted reg-inline-status" role="status" aria-live="polite" aria-busy="true">正在估计当前设定…</span>
@@ -1217,8 +1219,12 @@ export function RegressionRunLab({
       <details className="reg-question-card">
         <summary><span className="reg-section-step">理解本步指标与因果边界</span><b>{lesson.focus}</b></summary>
         <div className="reg-question-main">
-          <p className="reg-causal-boundary"><b>先记住：</b>这是在平行趋势、对照可比且没有未处理混杂等假设下的相对变化估计，不是“政策已经造成结果”的证明。</p>
-          <p className="muted">{REGRESSION_QUESTION}</p>
+          <p className="reg-causal-boundary"><b>先记住：</b>{method === "twfe_intensity"
+            ? "本次是连续强度 TWFE 的描述性关联，不自动恢复因果识别，也不能证明政策造成了变化。"
+            : "这是在平行趋势、对照可比且没有未处理混杂等假设下的相对变化估计，不是“政策已经造成结果”的证明。"}</p>
+          <p className="muted">{method === "twfe_intensity"
+            ? "不按首次受冲击批次选取 ATT 对照；冲击会沿投入链外溢，同期冲击也可能同时影响暴露强度与结果。"
+            : REGRESSION_QUESTION}</p>
           <p>{lesson.definition}</p>
           {outcome === "network" && <p className="muted">网络回归只使用全球国家×行业图上的全正边二值介数。微小正边与大额边等长，当前未做边阈值敏感性检验，因此本步只作探索性拓扑证据；国家级贸易图在该口径下为完全图、介数恒为 0。</p>}
           <p><b>下降：</b>{lesson.downMeaning}</p>

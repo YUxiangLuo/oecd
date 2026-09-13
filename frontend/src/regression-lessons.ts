@@ -55,7 +55,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     howToRead: "先看结果状态；允许推断时，再读估计与 95% 区间。区间跨 0 是「看不出方向」，不是零效应；停止推断则记「无法评估」。区间未跨 0 也不能跳过因果解释所需的假设。",
     writeDown: "记下结果状态、估计与单位（百分点）；停止推断时写明原因，留到第 15 步和另外三类并读。",
     dontClaim: "不要写成「已经证明生产回流」。这一项占比下降，不能告诉我们企业是否把生产搬回国内。",
-    guidedExperiment: "选做：查看技术细节中的批次权重与对照支持；这些诊断不能自动证明对照可比，还须考虑投入链外溢。",
+    guidedExperiment: "选做：使用“分批处理 cohort-time ATT”并运行后，查看技术细节中的对照支持和可用的批次权重；这些诊断不能自动证明对照可比，还须考虑投入链外溢。",
   },
   production: {
     outcome: "production",
@@ -115,7 +115,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     howToRead: "先看结果状态，允许推断时才判断这套拓扑编码中的方向。无论结果如何，都要披露未做边阈值敏感性；不能据此证明经济枢纽、瓶颈或脱钩。",
     writeDown: "把前三类主结果与本步探索性网络结果分栏记录；四个结果构成预先指定的结果族，不只挑显著项。",
     dontClaim: "不要挑绝对值最大的系数当「政策总效应」，也不要写成已经脱钩。",
-    guidedExperiment: "选做：在「若要进一步检查稳健性（选做）」中运行实体置换，观察对人为改派规则的敏感性；尾部占比不是 p 值，不能恢复因果识别。",
+    guidedExperiment: "选做：使用“分批处理 cohort-time ATT”并运行后，可在「若要进一步检查稳健性（选做）」中运行实体置换，观察对人为改派规则的敏感性；尾部占比不是 p 值，不能恢复因果识别。",
   },
 };
 

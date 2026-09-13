@@ -339,6 +339,71 @@ test("restored dynamic ATT guidance describes event time, not an absent four-cel
   expect(dom.querySelector(".reg-compare-card")).toBeNull();
 });
 
+describe("method-aware explanation and first-run labels", () => {
+  for (const outcome of ["trade", "production", "length", "network"] as const) {
+    for (const method of ["did", "event_study", "twfe_intensity"]) {
+      test(`${outcome} expanded explanation matches ${method}`, () => {
+        const html = renderToStaticMarkup(<RegressionRunLab {...labProps(regressionState())}
+          step={{ ...regressionStep, regression_outcome: outcome }}
+          settings={{ ...DEFAULT_REGRESSION_SETTINGS, method }} />);
+        const dom = new DOMParser().parseFromString(html, "text/html");
+        const explanation = dom.querySelector(".reg-question-card")!.textContent!;
+        if (method === "twfe_intensity") {
+          expect(explanation).toContain("连续强度 TWFE 的描述性关联");
+          expect(explanation).toContain("不自动恢复因果识别");
+          expect(explanation).toContain("不按首次受冲击批次选取 ATT 对照");
+          expect(explanation).toContain("投入链外溢");
+          expect(explanation).toContain("同期冲击");
+          expect(explanation).not.toMatch(/G_i|与从未或截至比较期尚未暴露的对象比较变化|这是在平行趋势/);
+        } else {
+          expect(explanation).toContain("G_i");
+          expect(explanation).toContain("与从未或截至比较期尚未暴露的对象比较变化");
+          expect(explanation).toContain("平行趋势");
+          expect(explanation).not.toContain("不按首次受冲击批次选取 ATT 对照");
+        }
+        if (outcome === "trade" || outcome === "network") {
+          expect(dom.querySelector(".advanced-settings")?.textContent).toContain("使用“分批处理 cohort-time ATT”并运行后");
+        }
+      });
+    }
+
+    test(`${outcome} first-run caption describes the effective settings, not merely an empty result`, () => {
+      const variants = [
+        {}, { method: "twfe_intensity" }, { method: "event_study" },
+        { shockType: "sanctions" }, { shockType: "export_control" },
+        { scenario: "noisy" }, { weightMode: "contemporaneous" },
+        { granularity: "country" }, { method: "twfe_intensity", interaction: true },
+        // These unavailable controls are normalized away and must not invent a nonbaseline run.
+        { interaction: true, controlMode: "macro", priceMode: "real" },
+      ];
+      for (const [index, variant] of variants.entries()) {
+        const html = renderToStaticMarkup(<RegressionRunLab {...labProps(regressionState())}
+          step={{ ...regressionStep, regression_outcome: outcome }}
+          settings={{ ...DEFAULT_REGRESSION_SETTINGS, ...variant }} />);
+        const dom = new DOMParser().parseFromString(html, "text/html");
+        const baseline = index === 0 || index === 9 || (index === 7 && outcome === "network");
+        expect(dom.querySelector(".reg-run-card > button")?.textContent).toBe(baseline ? "运行基准回归" : "运行当前设定");
+      }
+    });
+  }
+
+  test("restored and modified runs retain their existing rerun labels", async () => {
+    const original = api.regressionOptions;
+    api.regressionOptions = async () => { throw new Error("offline label test"); };
+    try {
+      const props = labProps(regressionState({ run: savedRun }));
+      const { container, rerender } = render(<RegressionRunLab {...props} />);
+      await waitFor(() => expect(container.querySelector(".reg-run-card > button")?.textContent).toBe("重新运行当前设定"));
+      rerender(<RegressionRunLab {...props} settings={{ ...DEFAULT_REGRESSION_SETTINGS, method: "twfe_intensity" }} />);
+      expect(container.querySelector(".reg-run-card > button")?.textContent).toBe("运行修改后的设定");
+      rerender(<RegressionRunLab {...props} />);
+      expect(container.querySelector(".reg-run-card > button")?.textContent).toBe("重新运行当前设定");
+    } finally {
+      api.regressionOptions = original;
+    }
+  });
+});
+
 describe("preserved qualified regression result", () => {
   test("renders the saved design/result rather than a current invalid run", () => {
     const restored = structuredClone(savedRun);

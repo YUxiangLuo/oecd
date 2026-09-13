@@ -54,6 +54,22 @@ describe("regression lessons", () => {
     expect(familyDirectionLabel("suppressed")).not.toBe(familyDirectionLabel("insufficient"));
   });
 
+  test("cohort-weight exploration requires running the supported ATT method", () => {
+    const hint = REGRESSION_LESSONS.trade.guidedExperiment;
+    expect(hint).toContain("使用“分批处理 cohort-time ATT”并运行后");
+    expect(hint).toContain("可用的批次权重");
+    expect(hint).toContain("不能自动证明对照可比");
+    expect(hint).toContain("投入链外溢");
+  });
+
+  test("entity-permutation exploration names its method prerequisite and scientific limits", () => {
+    const hint = REGRESSION_LESSONS.network.guidedExperiment;
+    expect(hint).toContain("使用“分批处理 cohort-time ATT”并运行后");
+    expect(hint).toContain("运行实体置换");
+    expect(hint).toContain("不是 p 值");
+    expect(hint).toContain("不能恢复因果识别");
+  });
+
   test("family summaries distinguish all five evidence states", () => {
     expect(familyDirectionLabel("positive")).toBe("上升");
     expect(familyDirectionLabel("negative")).toBe("下降");
