@@ -1,3 +1,13 @@
+/** Reveal the current outline item without scrolling the course or stealing focus. */
+export function revealOutlineStep(scroller: HTMLElement | null): void {
+  const active = scroller?.querySelector<HTMLElement>('[aria-current="step"]');
+  if (!scroller || !active) return;
+  const viewport = scroller.getBoundingClientRect();
+  const row = active.getBoundingClientRect();
+  if (row.top < viewport.top) scroller.scrollTop += row.top - viewport.top;
+  else if (row.bottom > viewport.bottom) scroller.scrollTop += row.bottom - viewport.bottom;
+}
+
 export interface StepScroller {
   scrollTo(options: ScrollToOptions): void;
 }

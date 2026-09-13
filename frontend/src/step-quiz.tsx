@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import type { QuizCompletionState, Step, StepStateApi } from "./types";
+import { userFacingRequestError } from "./user-facing-error";
 
 export type QuizDraftStore = Map<number, { version: string; answers: Record<string, string> }>;
 
@@ -42,11 +43,14 @@ export function QuizPanel({
   const locallyPassed = data?.quiz?.version === quiz.version;
   const complete = state.complete;
   const awaitingSave = locallyPassed && !state.complete && state.syncing;
+  const choicesLocked = submitting || awaitingSave;
+  const draftChanged = quiz.questions.some((question) => draftAnswers[question.id] !== savedAnswers[question.id]);
   const choose = (questionId: string, optionId: string) => {
+    if (choicesLocked) return;
     const next = { ...draftAnswers, [questionId]: optionId };
     draftStore?.set(step.n, { version: quiz.version, answers: next });
     setDraftAnswers(next);
-    setFeedback([]);
+    setFeedback((current) => current.filter((item) => item.question_id !== questionId));
     setError(null);
   };
   const submit = async () => {
@@ -61,7 +65,12 @@ export function QuizPanel({
       });
       setFeedback(result.results);
       if (result.passed) {
-        draftStore?.delete(step.n);
+        // A student may navigate away and edit a newer draft before this reply.
+        // Save the submitted success, but do not delete that newer local draft.
+        const submittedDraft = draftStore?.get(step.n);
+        if (submittedDraft?.version === quiz.version && submittedDraft.answers === draftAnswers) {
+          draftStore?.delete(step.n);
+        }
         setDraftAnswers(result.quiz?.answers ?? draftAnswers);
         state.save({
           quiz: result.quiz ?? { version: result.version, answers: draftAnswers },
@@ -70,7 +79,7 @@ export function QuizPanel({
         state.syncNow();
       }
     } catch (cause) {
-      setError(String((cause as Error).message ?? cause));
+      setError(userFacingRequestError(cause, "答案提交失败，选择已保留，可重试"));
     } finally {
       setSubmitting(false);
     }
@@ -89,10 +98,12 @@ export function QuizPanel({
   if (locallyPassed) completionMessage = "服务器尚未确认完成，请重新提交答案";
   if (locallyPassed && state.syncError) completionMessage = "完成状态尚未保存，可在页面顶部重试或重新提交答案";
   if (awaitingSave) completionMessage = "答案正确，正在保存完成状态…";
-  if (complete) completionMessage = "✓ 本步已完成";
+  if (complete) completionMessage = draftChanged
+    ? "✓ 已保存答案已通过；当前修改尚未提交"
+    : "✓ 本步已完成";
 
   return (
-    <section className={`quiz-box${complete ? " done" : ""}`} aria-labelledby={`quiz-title-${step.n}`}>
+    <section className={`quiz-box${complete ? " done" : ""}`} aria-labelledby={`quiz-title-${step.n}`} aria-busy={choicesLocked}>
       <div className="quiz-head">
         <div>
           <span className="kicker">本步完成条件</span>
@@ -105,7 +116,7 @@ export function QuizPanel({
         {quiz.questions.map((question, index) => {
           const result = feedbackByQuestion.get(question.id);
           return (
-            <fieldset key={question.id} className={`quiz-question${result ? result.correct ? " correct" : " incorrect" : ""}`}>
+            <fieldset key={question.id} disabled={choicesLocked} className={`quiz-question${result ? result.correct ? " correct" : " incorrect" : ""}`}>
               <legend>{index + 1}. {question.prompt}</legend>
               <div className="quiz-options">
                 {question.options.map((option) => (
@@ -141,7 +152,7 @@ export function QuizPanel({
         </button>
         <span className={complete ? "quiz-complete" : "muted"}>{completionMessage}</span>
       </div>
-      {error && <div className="error-box">{error}</div>}
+      {error && <div className="error-box" role="alert">{error}</div>}
     </section>
   );
 }

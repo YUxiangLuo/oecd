@@ -290,6 +290,8 @@ details.reg-compare-card[open] > summary { margin-bottom: 10px; }
 .quiz-options { display: grid; gap: 7px; margin-top: 5px; }
 .quiz-options label { display: flex; align-items: flex-start; gap: 8px; padding: 7px 9px; border-radius: 7px; color: #4e5668; font-size: 12.5px; line-height: 1.5; cursor: pointer; }
 .quiz-options label:hover { background: #f3f5fb; }
+.quiz-question:disabled .quiz-options label { cursor: progress; }
+.quiz-question:disabled .quiz-options label:hover { background: transparent; }
 .quiz-options input { flex: none; margin-top: 3px; accent-color: #4b47e0; }
 .quiz-feedback { margin: 8px 4px 0; color: #76502d; font-size: 12px; line-height: 1.6; }
 .quiz-question.correct .quiz-feedback { color: #147866; }

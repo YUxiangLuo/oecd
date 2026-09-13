@@ -1,4 +1,4 @@
-import { useRef, type RefObject } from "react";
+import { useLayoutEffect, useRef, type RefObject } from "react";
 import { AccountPasswordModal } from "./account-password";
 import { LogoMark } from "./brand";
 import { oecdIcioDatasetLabel } from "./dataset-label";
@@ -6,6 +6,7 @@ import { isDemoStudentUsername } from "./login";
 import { TeacherDashboard } from "./teacher";
 import { ToastHost } from "./toast";
 import { materialStatusForStep } from "./step-task-card";
+import { revealOutlineStep } from "./step-navigation";
 import type {
   AuthUser,
   CompletionSummary,
@@ -196,6 +197,8 @@ interface CourseSidebarProps {
 
 export function CourseSidebar({ stepsData, current, completion, materialGate, onNavigate }: CourseSidebarProps) {
   const steps = stepsData.steps;
+  const outlineRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => { revealOutlineStep(outlineRef.current); }, [current, steps]);
   const totalSteps = steps.length;
   const stages = [...new Set(steps.map((step) => step.stage))];
   const completedSteps = new Set(completion?.completed ?? []);
@@ -234,7 +237,7 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
           <span className="student-manual-format" aria-hidden="true">PDF ↗</span>
         </a>
       </div>
-      <div className="sidebar-list">
+      <div ref={outlineRef} className="sidebar-list">
         {stages.map((stage) => (
           <div key={stage}>
             <div className="stage-label">
