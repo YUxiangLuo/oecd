@@ -92,6 +92,30 @@ function response(
   };
 }
 
+describe("small estimates retain their sign rather than rounding to zero", () => {
+  test("TWFE length and zero-crossing interval keep nonzero digits", () => {
+    const value = buildRegressionVerdict("length", response("length", coefficient(0.0305694, -0.04700555, 0.10814435), 1, 2, "twfe_intensity"));
+    expect(value.effect).toContain("+0.00031 个长度单位");
+    expect(value.interval).toBe("[-0.00047, +0.001] 个长度单位");
+    expect(value.state).toBe("insufficient");
+  });
+  test("trade interval and network standardized effect do not print negative zero", () => {
+    const trade = buildRegressionVerdict("trade", response("trade", coefficient(0.37101, -0.00428547, 0.746307), 1, 2, "twfe_intensity"));
+    expect(trade.interval).toBe("[-0.0043, +0.75] 个百分点");
+    const network = buildRegressionVerdict("network", response("network", coefficient(-690.746, -15099, 13718), 1, 2000, "twfe_intensity"));
+    expect(network.effect).toContain("约 -0.0035 个样本标准差");
+  });
+  test("tiny same-sign bounds stay distinguishable from zero, while exact zero stays zero", () => {
+    const tiny = buildRegressionVerdict("length", response("length", coefficient(1e-30, 0.5e-30, 2e-30)));
+    expect(tiny.state).toBe("positive");
+    expect(tiny.effect).toContain("+1.0e-30 个长度单位");
+    expect(tiny.interval).not.toContain("0.000");
+    const zero = buildRegressionVerdict("trade", response("trade", coefficient(0, -0.01, 0.01)));
+    expect(zero.effect).toBe("+0.00 个百分点");
+    expect(zero.state).toBe("insufficient");
+  });
+});
+
 describe("buildRegressionVerdict", () => {
   test("failed pretrend is not a directional evidence claim", () => {
     const payload = response("trade", { ...coefficient(0.02, 0.012, 0.028), name: "k=0" }, 1, 2, "event_study");

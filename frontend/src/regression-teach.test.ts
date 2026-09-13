@@ -48,7 +48,7 @@ describe("DidFourCells", () => {
 });
 
 describe("familyVerdict", () => {
-  test("prefers in-memory history over a saved sibling run", () => {
+  test("prefers the chosen session over leftover in-memory history, including legacy runs", () => {
     const live = response("trade", coefficient(-0.02, -0.03, -0.01));
     const saved = response("trade", coefficient(0.02, 0.01, 0.03));
     const verdict = familyVerdict(
@@ -56,8 +56,17 @@ describe("familyVerdict", () => {
       { trade: [{ response: live }] },
       (step) => step === 11 ? { run: { design: saved.design, result: saved.result } } : undefined,
     );
-    expect(verdict?.state).toBe("negative");
+    expect(verdict?.state).toBe("positive");
   });
+
+  for (const outcome of ["trade", "production", "length", "network"] as const) {
+    test(`${outcome}: an empty chosen session does not invent a family result from discarded history`, () => {
+      const history = { [outcome]: [{ response: response(outcome, coefficient(-0.02, -0.03, -0.01)) }] };
+      expect(familyVerdict(outcome, history, () => undefined)).toBeNull();
+      expect(familyVerdict(outcome, history, () => ({}))).toBeNull();
+      expect(familyVerdict(outcome, history)?.state).toBe("negative");
+    });
+  }
 
   test("prefers the report's qualified run over a later insufficient exploration", () => {
     const qualified = response("trade", coefficient(-0.02, -0.03, -0.01));

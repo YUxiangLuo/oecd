@@ -97,7 +97,13 @@ function mainPolicyCoefficient(response: RegressionResponse): CoefStat | null {
   return main[0] ?? null;
 }
 
-const signed = (value: number, digits = 3) => `${value >= 0 ? "+" : ""}${value.toFixed(digits)}`;
+const signed = (value: number, digits = 3) => {
+  const fixed = value.toFixed(digits);
+  // Keep small nonzero effects and CI endpoints distinguishable from zero.
+  // This affects presentation only; direction/inference still use raw values.
+  const text = value !== 0 && Number(fixed) === 0 ? value.toPrecision(2) : fixed;
+  return `${value >= 0 ? "+" : ""}${text}`;
+};
 
 /** 主图/置换图与结论卡同一套显示单位。强度法结论已是“每增加 1 个百分点”，不再 ×100。 */
 export function chartDisplayScale(outcome: RegressionOutcome, method: string): { scale: number; unit?: string } {

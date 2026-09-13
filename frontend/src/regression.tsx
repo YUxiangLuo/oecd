@@ -331,6 +331,7 @@ function RunComparison({ outcome, snapshots, onClear, options }: {
         <div><span className="reg-section-step">比较</span><h3>改变设定后，结论变化了吗？</h3></div>
         <button className="secondary" onClick={onClear}>清空比较</button>
       </div>
+      <p className="muted">此表是本次页面中的运行历史，不代表服务器已保存；报告以已确认的会话记录为准。</p>
       {new Set(snapshots.map((snapshot) => snapshot.response.design.method)).size > 1 && (
         <p className="comparison-warning">不同方法估计的对象不同，只能并列检查证据是否稳健，不能把系数直接相减。</p>
       )}
@@ -904,8 +905,6 @@ export function RegressionRunLab({
   const verdictAnchorRef = useRef<HTMLDivElement>(null);
   const scrollToVerdictAfterRun = useRef(false);
   const latestRequest = useRef(`${outcome}:${regressionSettingsKey(settings)}`);
-  const resultSourceIdentity = useRef<string | null>(null);
-  const previousSavedRun = useRef<SavedRegressionRun | undefined>(state.data?.run);
 
   const setSetting = <K extends keyof RegressionSettings>(key: K, value: RegressionSettings[K]) => {
     onSettingsChange(normalizeRegressionSettings({ ...normalizedSettings, [key]: value }));
@@ -964,8 +963,6 @@ export function RegressionRunLab({
 
   useEffect(() => {
     scrollToVerdictAfterRun.current = false;
-    resultSourceIdentity.current = null;
-    previousSavedRun.current = undefined;
     setResult(null);
     setResultSettings(null);
     setPlacebo(null);
@@ -976,36 +973,21 @@ export function RegressionRunLab({
   // 从实验会话恢复最近一次运行:会话是异步到达的,所以只能用 effect 而不是
   // useState 惰性初始化。刷新或换设备后,学生看到的是自己上次算出的结果,
   // 而不是一个空白的“请运行”面板。设定与结果不一致时 stale 横幅仍会提示。
-  const latestSnapshot = (history[outcome] ?? [])[0];
   const savedRun = state.data?.run;
   const savedRunIdentity = savedRun ? regressionRunSnapshotIdentity(savedRun) : null;
   useEffect(() => {
-    if (running || runningRef.current) return;
-
-    if (result) {
-      if (savedRun && resultSourceIdentity.current === savedRunIdentity) {
-        previousSavedRun.current = savedRun;
-      }
-      return;
-    }
-
-    previousSavedRun.current = savedRun;
-    if (latestSnapshot) {
-      const historyRun = {
-        settings: latestSnapshot.settings,
-        design: latestSnapshot.response.design,
-        result: latestSnapshot.response.result,
-      };
-      resultSourceIdentity.current = regressionRunSnapshotIdentity(historyRun);
-      setResult(latestSnapshot.response);
-      setResultSettings(latestSnapshot.settings);
-      return;
-    }
-    if (!savedRun) return;
-    resultSourceIdentity.current = savedRunIdentity;
-    setResult(savedRegressionResponse(savedRun));
+    if (running || runningRef.current || result || !savedRun) return;
+    // Resolving a save conflict remounts the workbench with the chosen server
+    // session. In-memory comparison history can still contain discarded runs;
+    // it must never override (or invent a fallback for) that session's run.
+    const matchingSnapshot = (history[outcome] ?? []).find(({ settings, response }) => (
+      regressionRunSnapshotIdentity({ settings, design: response.design, result: response.result }) === savedRunIdentity
+    ));
+    // Keep the full arithmetic check only when history exactly matches the
+    // session's run; benchmark details are intentionally not persisted.
+    setResult(matchingSnapshot?.response ?? savedRegressionResponse(savedRun));
     setResultSettings(savedRun.settings);
-  }, [latestSnapshot, result, running, savedRunIdentity]);
+  }, [history, outcome, result, running, savedRunIdentity]);
 
   const run = async () => {
     if (runningRef.current || !design) return;
@@ -1049,12 +1031,6 @@ export function RegressionRunLab({
         ...(saved.qualified_run ? { qualified_run: saved.qualified_run } : {}),
       });
       if (latestRequest.current === requestKey) {
-        const responseRun = {
-          settings: runSettings,
-          design: response.design,
-          result: response.result,
-        };
-        resultSourceIdentity.current = regressionRunSnapshotIdentity(responseRun);
         scrollToVerdictAfterRun.current = true;
         setResult(response);
         setResultSettings(runSettings);

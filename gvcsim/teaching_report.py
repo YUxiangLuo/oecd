@@ -291,7 +291,9 @@ def _count(value: Any) -> str:
 
 
 def _signed(value: float, digits: int) -> str:
-    return f"{value:+.{digits}f}"
+    rounded = f"{value:+.{digits}f}"
+    # Match the result card: a small nonzero estimate/CI endpoint is not zero.
+    return f"{value:+.2g}" if value != 0 and float(rounded) == 0 else rounded
 
 
 def _setting_value(key: str, value: Any) -> str:

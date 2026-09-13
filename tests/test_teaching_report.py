@@ -22,6 +22,37 @@ from gvcsim.teaching_report import (
 )
 
 
+@pytest.mark.parametrize(
+    ("outcome", "coef", "low", "high", "effect", "interval"),
+    [
+        ("length", 0.0305694, -0.04700555, 0.10814435, "+0.00031 个长度单位", "[-0.00047, +0.001] 个长度单位"),
+        ("trade", 0.37101, -0.00428547, 0.746307, "+0.37 个百分点", "[-0.0043, +0.75] 个百分点"),
+        ("production", 0, -0.01, 0.01, "+0.00 个百分点", "[-0.01, +0.01] 个百分点"),
+    ],
+)
+def test_report_small_effects_match_card_precision(outcome, coef, low, high, effect, interval):
+    _, rendered_effect, rendered_interval = teaching_report._natural_effect(
+        outcome,
+        {"method": "twfe_intensity"},
+        {"status": "ok"},
+        {"name": "tariff_shock", "coef": coef, "ci_low": low, "ci_high": high},
+    )
+    assert rendered_effect == effect
+    assert rendered_interval == interval
+
+
+def test_report_tiny_nonzero_numbers_and_standardized_effect_preserve_sign():
+    assert float(teaching_report._signed(1e-30, 3)) > 0
+    assert float(teaching_report._signed(-1e-30, 3)) < 0
+    _, effect, _ = teaching_report._natural_effect(
+        "network",
+        {"method": "twfe_intensity"},
+        {"status": "ok", "depvar_std": 2000},
+        {"name": "tariff_shock", "coef": -690.746, "ci_low": -15099, "ci_high": 13718},
+    )
+    assert "约 -0.0035 个样本标准差" in effect
+
+
 REPORT_RAW_CONTRACT = DimensionContract(
     "teaching-report-release-fixture", 1, ("AAA", "BBB", "CCC", "ROW"), ("s1",), ("HFCE",)
 )

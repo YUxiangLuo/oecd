@@ -56,7 +56,9 @@ function verdictFromSaved(outcome: RegressionOutcome, saved: SavedRegression | u
 function familyRun(outcome: RegressionOutcome, history: FamilyHistory, getStep?: (step: number) => SiblingStepData | undefined): SavedRegression | undefined {
   const data = getStep?.(FAMILY_STEPS[outcome]);
   if (data?.run?.result?.diagnostics?.study_contract === "economics-v2") return data.run;
-  return data?.qualified_run ?? history[outcome]?.[0]?.response ?? data?.run;
+  // A chosen session (including an empty step after conflict resolution) is
+  // authoritative. History alone is a fallback only without a session reader.
+  return data?.qualified_run ?? data?.run ?? (getStep ? undefined : history[outcome]?.[0]?.response);
 }
 
 export function familyVerdict(

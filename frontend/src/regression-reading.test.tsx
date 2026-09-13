@@ -5,13 +5,13 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
 import {
   DEFAULT_REGRESSION_SETTINGS, RegressionResultCard, RegressionRunLab,
-  regressionRunSnapshotIdentity, type SavedRegressionRun,
+  regressionRunSnapshotIdentity, type SavedRegressionRun, type RegressionHistory, type RegressionSettings,
 } from "./regression";
 import type { RegressionReadingCheckState } from "./regression-teach";
 import { buildRegressionVerdict } from "./regression-verdict";
 import type { RegressionOutcome, RegressionResponse, Step, StepStateApi } from "./types";
 
-type RegressionStepState = { run: SavedRegressionRun; reading_check?: RegressionReadingCheckState };
+type RegressionStepState = { run?: SavedRegressionRun; reading_check?: RegressionReadingCheckState };
 
 afterEach(cleanup);
 
@@ -72,19 +72,25 @@ function step(outcome: RegressionOutcome): Step {
   };
 }
 
-function Harness({ initial, onSave = () => {} }: {
+function Harness({ initial, onSave = () => {}, history = {},
+  outcome = initial.run?.design.outcome ?? "trade",
+  settings = initial.run?.settings ?? DEFAULT_REGRESSION_SETTINGS,
+}: {
   initial: RegressionStepState;
   onSave?: (patch: Partial<RegressionStepState>) => void;
+  history?: RegressionHistory;
+  outcome?: RegressionOutcome;
+  settings?: RegressionSettings;
 }) {
   const [data, setData] = useState(initial);
   const state: StepStateApi = {
     data, complete: false, syncing: false, syncError: null, syncNow: () => {},
     save: (patch) => { onSave(patch); setData((current) => ({ ...current, ...patch })); },
   };
-  const outcome = initial.run!.design.outcome;
   return <RegressionRunLab step={step(outcome)} state={state}
-    settings={initial.run!.settings} onSettingsChange={() => {}}
-    history={{}} onHistoryChange={() => {}} />;
+    settings={settings} onSettingsChange={() => {}}
+    history={history} onHistoryChange={() => {}}
+    getStep={(n) => n === step(outcome).n ? data : undefined} />;
 }
 
 // Restored results must remain readable even offline. Do not contact any API/DB.
@@ -93,6 +99,53 @@ async function offline(check: () => Promise<void>) {
   api.regressionOptions = async () => { throw new Error("test offline"); };
   try { await check(); } finally { api.regressionOptions = original; }
 }
+
+describe("server-session restoration never resurrects discarded comparison history", () => {
+  for (const outcome of ["trade", "production", "length", "network"] as const) {
+    test(`${outcome}: preserve full arithmetic details only from an exact matching history entry`, async () => {
+      await offline(async () => {
+        const selectedResponse = stopped(outcome);
+        selectedResponse.benchmark.backend = "matching-live-benchmark";
+        const selected = saved(selectedResponse);
+        const discardedResponse = response(outcome);
+        const discarded = saved(discardedResponse);
+        const history = { [outcome]: [
+          { id: 2, settings: discarded.settings, response: discardedResponse },
+          { id: 1, settings: selected.settings, response: selectedResponse },
+        ] };
+        const { container } = render(<Harness initial={{ run: selected }} history={history} />);
+        await waitFor(() => expect(container.querySelector(".benchmark-box")?.textContent).toContain("matching-live-benchmark"));
+        expect(container.querySelector(".verdict-card")?.textContent).toContain("这个设计不能用于统计推断");
+      });
+    });
+    for (const hasServerRun of [true, false]) {
+      test(`${outcome}: restore ${hasServerRun ? "server diagnosis" : "empty server step"} over local history`, async () => {
+        await offline(async () => {
+          const localResponse = response(outcome);
+          localResponse.design.method = "twfe_intensity";
+          const local = saved(localResponse);
+          const history = { [outcome]: [1, 2].map((id) => ({ id, settings: local.settings, response: localResponse })) };
+          const writes: Partial<RegressionStepState>[] = [];
+          const { container } = render(<Harness
+            initial={hasServerRun ? { run: saved(stopped(outcome)) } : {}}
+            outcome={outcome} settings={local.settings} history={history}
+            onSave={(patch) => writes.push(patch)} />);
+          await waitFor(() => expect(container.querySelector(".async-error")).not.toBeNull());
+          if (hasServerRun) {
+            expect(container.querySelector(".verdict-card")?.textContent).toContain("这个设计不能用于统计推断");
+            expect(container.querySelector(".verdict-card .stale-result")).not.toBeNull();
+          } else {
+            expect(container.querySelector(".verdict-card")).toBeNull();
+            expect(container.querySelector(".reg-reading-check")).toBeNull();
+            expect(container.querySelector(".reg-family-item.current .reg-family-status")?.textContent).toBe("当前");
+          }
+          expect(container.textContent).toContain("不代表服务器已保存");
+          expect(writes).toHaveLength(0);
+        });
+      });
+    }
+  }
+});
 
 describe("one status-first regression result", () => {
   for (const outcome of ["trade", "production", "length", "network"] as const) {
