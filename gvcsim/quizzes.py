@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from gvcsim.indicator_schema import PRODUCTION_LENGTH_OPERATIONAL_DEFINITION
+
 QUIZ_VERSION = "course-quiz-v7"
 
 
@@ -134,7 +136,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
                 _option("c", "因为是比值，所以无法判断"),
             ],
             "a",
-            "按本课程位置口径，GVCPs 大于 1 表示相对更上游。应比较前后向 GVC 长度，而不是用图中的中位数象限判断上下游；长度不是跨境次数或国家数。",
+            f"{PRODUCTION_LENGTH_OPERATIONAL_DEFINITION}按本课程位置口径，GVCPs 大于 1 表示相对更上游；应比较前后向 GVC 长度，而不是用图中的中位数象限判断上下游。",
         )
     ],
     9: [
@@ -232,7 +234,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
                 _option("c", "一国是否位于最多的贸易协议中"),
             ],
             "a",
-            "PLv_GVC 用 GVC 活动的累计总产出除以关联增加值。VA 为正时可理解为加权阶段数，负 VA 时为有符号比值；不是跨境次数。长度变短有多种机制，不能单凭系数判定回流或近岸。",
+            f"PLv_GVC 采用前向口径。{PRODUCTION_LENGTH_OPERATIONAL_DEFINITION}VA 为正时可理解为加权阶段数，负 VA 时为有符号比值。长度变短有多种机制，不能单凭系数判定回流或近岸。",
         ),
         _question(
             "s13-compare",
