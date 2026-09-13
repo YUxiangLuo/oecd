@@ -513,8 +513,8 @@ export function DecompositionDemo({
       <div className="demo-card">
         <div className="demo-title">🧮 动手拆解 · 需要一个明确实体</div>
         <div className="decomp-unavailable" role="status">
-          <b>数据表当前范围为“全部国家”，单实体分解已暂停。</b>
-          <div>请先在上方数据表选择一个国家；系统不会沿用旧国家，也不会从全球结果中自动挑选实体。</div>
+          <b>尚未选择具体国家，单实体分解已暂停。</b>
+          <div>请在“选择真实国家”中选择一个国家，再查看行业的分项。</div>
         </div>
       </div>
     );
@@ -522,7 +522,7 @@ export function DecompositionDemo({
 
   return (
     <div className="demo-card">
-      <div className="demo-title">🧮 动手拆解 · 看着分项加回总量</div>
+      <div className="demo-title">🧮 动手拆解 · 点看每一项的含义与贡献</div>
       <div className="demo-controls">
         <div className="pill-group">
           <button className={gran === "sector" ? "on" : ""} onClick={() => setGran("sector")}>国家–行业级</button>

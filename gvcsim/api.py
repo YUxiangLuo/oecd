@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse, Response
 
-from gvcsim import auth, auth_routes, concurrency, data_routes, regression_routes
+from gvcsim import auth, auth_routes, concurrency, data_routes, regression_routes, teaching_icio
 from gvcsim import config as app_config
 from gvcsim.artifacts import ArtifactContractError, dataset_metadata, validate_release_cached
 from gvcsim.classroom import db as classroom_db
@@ -103,6 +103,7 @@ app.add_middleware(
 app.include_router(auth_routes.router)
 app.include_router(data_routes.router)
 app.include_router(regression_routes.router)
+app.include_router(teaching_icio.router)
 
 
 @app.get("/health", include_in_schema=False)

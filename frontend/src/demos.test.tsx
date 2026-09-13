@@ -268,8 +268,8 @@ describe("single-entity decomposition scope", () => {
     const html = renderToStaticMarkup(
       <DecompositionDemo step={4} meta={meta} primaryYear={2020} primaryCountry={null} />,
     );
-    expect(html).toContain("数据表当前范围为“全部国家”");
-    expect(html).toContain("不会沿用旧国家");
+    expect(html).toContain("尚未选择具体国家");
+    expect(html).toContain("选择真实国家");
     expect(html).not.toContain("加载实体 A");
     expect(html).not.toContain("decomp-formula");
   });
@@ -278,7 +278,7 @@ describe("single-entity decomposition scope", () => {
     const html = renderToStaticMarkup(
       <DecompositionDemo step={4} meta={meta} primaryYear={2020} primaryCountry="CHN" />,
     );
-    expect(html).not.toContain("数据表当前范围为“全部国家”");
+    expect(html).not.toContain("尚未选择具体国家");
     expect(html).toContain("加载实体 A");
     expect(html).toContain("decomp-formula");
   });

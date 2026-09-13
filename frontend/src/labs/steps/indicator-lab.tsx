@@ -1,10 +1,9 @@
 /**
  * 步骤 2–5 路由。
  *
- * 这四步是“把原始数据算成指标”的计算阶段。原先共用一个 IndicatorLab(演示 + 数据表),
- * 现按步拆成四个定制组件,统一为计算阶段三段式(讲清 → 分解数据表 → 动手拆解/验证);
- * 网络步无加总恒等式,改为“先小网络建直觉 → 再看真实中心性表”。
- * 共享的只有受控的 IndicatorTable 与讲解脚手架(viz/scaffold)。
+ * 步骤2–4：教学ICIO计算小实验 → 真实数据动手拆解 → 完整数据与记录。
+ * 步骤5：小网络建直觉 → 真实中心性表。
+ * 教学账户只用于解释算法；报告材料仍来自真实指标表。
  */
 import type { Meta, Step, StepStateApi } from "../../types";
 import type { IndicatorStepState } from "./indicator/indicator-table";

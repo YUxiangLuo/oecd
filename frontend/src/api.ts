@@ -179,6 +179,7 @@ export const api = {
   steps: () => get<import("./types").StepsResponse>("/api/steps"),
   meta: () => get<import("./types").Meta>("/api/meta"),
   indicatorSchema: () => get<import("./types").IndicatorSchema>("/api/indicators/schema"),
+  teachingIcio: () => get<import("./labs/steps/indicator/icio-experiment").TeachingIcio>("/api/teaching/icio"),
   dbMeta: (signal?: AbortSignal) => get<import("./types").DbMeta>("/api/db/meta", signal),
   dbSlice: (params: {
     year: number;
