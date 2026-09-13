@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ScrollableRegion } from "./a11y";
 import { api } from "./api";
 import { useAsync } from "./labs";
-import { comparisonExplanation, lessonQuestion, nextRegressionFamily, REGRESSION_LESSONS, REGRESSION_QUESTION } from "./regression-lessons";
+import { comparisonExplanation, lessonQuestion, REGRESSION_LESSONS, REGRESSION_QUESTION } from "./regression-lessons";
 import {
   eventInferenceAllowed, eventInferenceGate, eventInferenceMessage, eventMainPretrendContractIsSafe,
   eventPretrendScopesAreSafe, eventSupportCoversTerms, GLOBAL_PRETREND_SUPPRESSION_COPY,
@@ -11,13 +11,10 @@ import {
 import { isQualifiedRegressionResult, nextRegressionSave } from "./regression-save";
 import {
   DidFourCells,
-  FamilyMap,
   RegressionReadingCheck,
-  SiblingContrast,
   readingAnswerForDirection,
   type RegressionReadingAnswer,
   type RegressionReadingCheckState,
-  type SiblingStepData,
 } from "./regression-teach";
 import {
   buildRegressionVerdict,
@@ -374,7 +371,7 @@ export function RegressionResultCard({ outcome, response, stale }: {
   const additionalWarnings = verdict.warnings.filter((reason) => !verdict.evidence.includes(reason));
   return (
     <section className={`verdict-card verdict-${verdict.state}`} aria-labelledby="reg-result-title" aria-live="polite">
-      <div className="verdict-kicker">2 · 先看状态，再解释本步结果</div>
+      <div className="verdict-kicker">回归结果 · 先看状态，再作解释</div>
       {stale && <div className="stale-result">你已经修改了设定；以下是旧设定结果，请重新运行后再比较。</div>}
       <h3 id="reg-result-title">{verdict.title}</h3>
       {response.design.method === "twfe_intensity" && (
@@ -867,20 +864,18 @@ export function RegressionRequestError({ label, error, onRetry }: {
 }
 
 export function RegressionRunLab({
-  step, settings, onSettingsChange, history, onHistoryChange, state, getStep,
+  step, settings, onSettingsChange, history, onHistoryChange, state,
   getConfirmedStep, sessionUnsynced = false, sessionSyncing = false,
-  sessionSyncError = null, onNavigateStep,
+  sessionSyncError = null,
 }: {
   step: Step;
   history: RegressionHistory;
   onHistoryChange: React.Dispatch<React.SetStateAction<RegressionHistory>>;
   state: StepStateApi<RegressionStepState>;
-  getStep?: (step: number) => SiblingStepData | undefined;
   getConfirmedStep?: <T>(step: number) => T | undefined;
   sessionUnsynced?: boolean;
   sessionSyncing?: boolean;
   sessionSyncError?: string | null;
-  onNavigateStep?: (step: number) => void;
 } & SharedSettingsProps) {
   const outcome = step.regression_outcome;
   if (!outcome) return <div className="error-box">当前回归步骤缺少 regression_outcome 配置。</div>;
@@ -1123,27 +1118,35 @@ export function RegressionRunLab({
     ? savedReadingCheck.answer
     : undefined;
   const expectedReadingAnswer = verdict ? readingAnswerForDirection(verdict.state) : null;
-  const nextFamily = nextRegressionFamily(outcome);
+  // Keep the dynamic path visible when selected; the static forest duplicates
+  // the main reading and is available in the existing technical disclosure.
+  const graphReview = result && (
+    <section className="reg-section-card">
+      <h3>图表复核（仍按本次推断条件展示）</h3>
+      {result.design.method === "twfe_intensity" && <p className="muted">图与结果卡均展示冲击强度增加 1 个百分点时的结果变化。</p>}
+      {event ? <>
+        <EventStudyChart coefs={split?.eventMain ?? []} notes={result.result.notes} title="主政策变化的动态路径" seriesLabel="主效应 βₖ" pretrend={result.result.diagnostics.pretrend} pretrendDiagnostics={result.result.diagnostics} interaction={result.design.interaction} eventSupport={result.result.event_support} globalSupport={result.result.support} globalStatus={result.result.status} scale={display.scale} unit={display.unit} />
+        {(split?.eventInteraction.length ?? 0) > 0 && <EventStudyChart coefs={split?.eventInteraction ?? []} notes={result.result.notes} title="处理前 GVC 异质性附加变化" seriesLabel="交互效应 θₖ" eventSupport={result.result.event_support} globalSupport={result.result.support} globalStatus={result.result.status} scale={display.scale} unit={display.unit} />}
+      </> : <CoefForestChart coefs={split?.policy ?? []} globalStatus={result.result.status} globalSupport={result.result.support} scale={display.scale} unit={display.unit} />}
+      {outcome === "production" && <MarginalEffectsPanel response={result} />}
+      <p className="muted">图只展示政策相关系数；完整系数见技术细节表。</p>
+    </section>
+  );
 
   return (
     <div className="reg-workbench">
-      <FamilyMap
-        current={outcome}
-        history={history}
-        getStep={getStep}
-        onNavigateStep={onNavigateStep}
-        currentDirection={verdict?.state}
-      />
       <section className="reg-run-card">
-        <span className="reg-section-step">{outcome === "trade" ? "1 · 学会一次基准比较" : outcome === "network" ? "1 · 应用同一读法，注意探索性边界" : "1 · 应用同一读法，换一个指标"}</span>
-        <h3>{lessonQuestion(outcome, shockType, method)}</h3>
+        <h3>运行回归</h3>
         <div className="metric-facts">
           <span><b>本步指标</b>{lesson.shortMetric}</span>
           <span><b>读数单位</b>{lesson.unit}</span>
           <span><b>比较方法</b>{METHOD_LABELS[method] ?? method}</span>
         </div>
-        <p className="reg-lesson-focus">{outcome === "trade" && method !== "did" ? comparisonExplanation(method) : lesson.learnThis}</p>
-        <div className="reg-boundary">当前发布指标 + 教学政策冲击；数据来源见课程数据标签，结果不构成现实政策结论。</div>
+        <div className="reg-boundary">
+          教学政策冲击，结果不构成现实政策结论。
+          {method === "twfe_intensity" && "本次 TWFE 只描述关联，不能证明因果。"}
+          {outcome === "network" && lesson.learnThis}
+        </div>
         <div className="run-summary"><b>当前样本与冲击：</b>{settingsSummary(currentSettings, options, true)}</div>
         <RegressionRequestLoading
           optionsLoading={optionsQuery.status === "loading"}
@@ -1192,48 +1195,6 @@ export function RegressionRunLab({
         </details>
       </section>
 
-      {state.data?.qualified_run && (
-        <QualifiedRegressionRunCard
-          saved={state.data.qualified_run}
-          confirmedSaved={getConfirmedStep?.<RegressionStepState>(step.n)?.qualified_run}
-          options={options}
-          currentSettings={currentSettings}
-          sessionUnsynced={sessionUnsynced}
-          sessionSyncing={sessionSyncing}
-          sessionSyncError={sessionSyncError}
-          onSwitch={onSettingsChange}
-        />
-      )}
-
-      {method === "did" && (
-        <details className={`reg-compare-card${outcome === "trade" ? " numeric" : ""}`} open={outcome === "trade"}>
-          <summary>{outcome === "trade" ? "步骤 11 · 用四格数字理解比较" : "用四格理解当前 ATT 比较（选做复习）"}</summary>
-          <div>
-            <p>{comparisonExplanation(method)}</p>
-            <p className="muted">{lesson.howToRead}</p>
-          </div>
-          <DidFourCells numeric={outcome === "trade"} />
-        </details>
-      )}
-
-      <details className="reg-question-card">
-        <summary><span className="reg-section-step">理解本步指标与因果边界</span><b>{lesson.focus}</b></summary>
-        <div className="reg-question-main">
-          <p className="reg-causal-boundary"><b>先记住：</b>{method === "twfe_intensity"
-            ? "本次是连续强度 TWFE 的描述性关联，不自动恢复因果识别，也不能证明政策造成了变化。"
-            : "这是在平行趋势、对照可比且没有未处理混杂等假设下的相对变化估计，不是“政策已经造成结果”的证明。"}</p>
-          <p className="muted">{method === "twfe_intensity"
-            ? "不按首次受冲击批次选取 ATT 对照；冲击会沿投入链外溢，同期冲击也可能同时影响暴露强度与结果。"
-            : REGRESSION_QUESTION}</p>
-          <p>{lesson.definition}</p>
-          {outcome === "network" && <p className="muted">网络回归只使用全球国家×行业图上的全正边二值介数。微小正边与大额边等长，当前未做边阈值敏感性检验，因此本步只作探索性拓扑证据；国家级贸易图在该口径下为完全图、介数恒为 0。</p>}
-          <p><b>下降：</b>{lesson.downMeaning}</p>
-          <p><b>上升：</b>{lesson.upMeaning}</p>
-          <p><b>跑完记下：</b>{lesson.writeDown}</p>
-          <p><b>不要写成：</b>{lesson.dontClaim}</p>
-        </div>
-      </details>
-
       {currentRunError && (
         <div className="error-box async-error" role="alert">
           <span>{currentRunError}</span>
@@ -1252,28 +1213,7 @@ export function RegressionRunLab({
           ) && (
             <p className="muted">本次完整诊断也可写入报告。先前可推断估计保留供核对，不能用它替换或隐藏本次设计限制。</p>
           )}
-          <section className="reg-section-card">
-            <span className="reg-section-step">3 · 图表复核（仍按本次推断条件展示）</span>
-            {result.design.method === "twfe_intensity" && <p className="muted">图与结果卡均展示冲击强度增加 1 个百分点时的结果变化。</p>}
-            {event ? (
-              <>
-                <EventStudyChart coefs={split?.eventMain ?? []} notes={result.result.notes} title="主政策变化的动态路径" seriesLabel="主效应 βₖ" pretrend={result.result.diagnostics.pretrend} pretrendDiagnostics={result.result.diagnostics} interaction={result.design.interaction} eventSupport={result.result.event_support} globalSupport={result.result.support} globalStatus={result.result.status} scale={display.scale} unit={display.unit} />
-                {(split?.eventInteraction.length ?? 0) > 0 && <EventStudyChart coefs={split?.eventInteraction ?? []} notes={result.result.notes} title="处理前 GVC 异质性附加变化" seriesLabel="交互效应 θₖ" eventSupport={result.result.event_support} globalSupport={result.result.support} globalStatus={result.result.status} scale={display.scale} unit={display.unit} />}
-              </>
-            ) : (
-              <CoefForestChart
-                coefs={split?.policy ?? []}
-                globalStatus={result.result.status}
-                globalSupport={result.result.support}
-                scale={display.scale}
-                unit={display.unit}
-              />
-            )}
-            {outcome === "production" && (
-              <MarginalEffectsPanel response={result} />
-            )}
-            <p className="muted">图只展示政策相关系数；加入控制变量后，完整控制项保留在下方技术细节表中。</p>
-          </section>
+          {event && graphReview}
           {expectedReadingAnswer && resultIdentity && (
             <RegressionReadingCheck
               answer={readingAnswer}
@@ -1326,20 +1266,44 @@ export function RegressionRunLab({
               </div>
             ) : <p className="muted">实体置换只用于 DID 教学敏感性分析；它不是校准推断，也不替代 cohort-time ATT。</p>}
           </details>
-          <SiblingContrast current={outcome} history={history} getStep={getStep} />
-          <p className="reg-next-move">
-            {nextFamily
-              ? <>下一类是步骤 {nextFamily.step} 的{nextFamily.family}（{nextFamily.measure}），比较方式不用换。</>
-              : <>到第 15 步并排写清方向、区间或无法评估的原因，不要比系数大小。</>}
-            {onNavigateStep && <button type="button" className="gate-link" onClick={() => onNavigateStep(nextFamily ? nextFamily.step : 15)}>
-              {nextFamily ? `去步骤 ${nextFamily.step}` : "去写报告"}
-            </button>}
-          </p>
         </div>
       )}
 
+      {state.data?.qualified_run && (
+        <QualifiedRegressionRunCard
+          saved={state.data.qualified_run}
+          confirmedSaved={getConfirmedStep?.<RegressionStepState>(step.n)?.qualified_run}
+          options={options}
+          currentSettings={currentSettings}
+          sessionUnsynced={sessionUnsynced}
+          sessionSyncing={sessionSyncing}
+          sessionSyncError={sessionSyncError}
+          onSwitch={onSettingsChange}
+        />
+      )}
       <details className="technical-details">
         <summary>模型与技术细节</summary>
+        <div className="reg-question-main">
+          <h3>当前设定：{lessonQuestion(outcome, shockType, method)}</h3>
+          <p>{method === "did" ? lesson.learnThis : comparisonExplanation(method)}</p>
+          <p className="reg-causal-boundary"><b>解释边界：</b>{method === "twfe_intensity"
+            ? "本次是连续强度 TWFE 的描述性关联，不自动恢复因果识别，也不能证明政策造成了变化。"
+            : "这是在平行趋势、对照可比且没有未处理混杂等假设下的相对变化估计，不是“政策已经造成结果”的证明。"}</p>
+          <p className="muted">{method === "twfe_intensity"
+            ? "不按首次受冲击批次选取 ATT 对照；冲击会沿投入链外溢，同期冲击也可能同时影响暴露强度与结果。"
+            : REGRESSION_QUESTION}</p>
+          <p>{lesson.definition}</p>
+          <p className="muted">{lesson.caution}</p>
+          {outcome === "network" && <p className="muted">国家级贸易图在全正边口径下为完全图、介数恒为 0；本步使用全球国家×行业图。</p>}
+          <p><b>下降：</b>{lesson.downMeaning}</p>
+          <p><b>上升：</b>{lesson.upMeaning}</p>
+          <p><b>不要写成：</b>{lesson.dontClaim}</p>
+          {outcome === "trade" && method === "did" && <>
+            <h3>四格数字示例（不是本次结果）</h3>
+            <p>{comparisonExplanation(method)}</p>
+            <DidFourCells numeric />
+          </>}
+        </div>
         {result && stale && <div className="stale-result">以下方程和系数均来自上一次运行；重新运行后才会切换到当前设定。</div>}
         {result?.design ? (
           <DesignEquation design={result.design} />
@@ -1356,6 +1320,7 @@ export function RegressionRunLab({
         ) : null}
         {result && (
           <>
+            {!event && graphReview}
             <RegressionSupportDetails response={result} />
             <h3>完整系数表</h3>
             <p className="muted">此表为模型原始单位{outcome === "trade" || outcome === "production" ? "（份额为 0–1）" : ""}；上方主图按{display.unit}展示{result.design.method === "twfe_intensity" ? "冲击强度增加 1 个百分点的变化" : "政策效应"}。主效应图只展示政策项。</p>

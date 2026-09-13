@@ -89,8 +89,7 @@ function Harness({ initial, onSave = () => {}, history = {},
   };
   return <RegressionRunLab step={step(outcome)} state={state}
     settings={settings} onSettingsChange={() => {}}
-    history={history} onHistoryChange={() => {}}
-    getStep={(n) => n === step(outcome).n ? data : undefined} />;
+    history={history} onHistoryChange={() => {}} />;
 }
 
 // Restored results must remain readable even offline. Do not contact any API/DB.
@@ -137,7 +136,7 @@ describe("server-session restoration never resurrects discarded comparison histo
           } else {
             expect(container.querySelector(".verdict-card")).toBeNull();
             expect(container.querySelector(".reg-reading-check")).toBeNull();
-            expect(container.querySelector(".reg-family-item.current .reg-family-status")?.textContent).toBe("当前");
+            expect(container.querySelector(".reg-family-map")).toBeNull();
           }
           expect(container.textContent).toContain("不代表服务器已保存");
           expect(writes).toHaveLength(0);
@@ -239,7 +238,10 @@ describe("exercises never unlock scientific evidence", () => {
           expect(container.querySelector(".reg-evidence-card, .reg-guide-card")).toBeNull();
           expect(container.textContent).toContain("图表复核");
           expect(container.querySelector(".technical-details table")).not.toBeNull();
-          expect(container.querySelector(".reg-family-map")?.textContent).toContain("当前 · 无法评估");
+          expect(container.querySelector(".reg-family-map")).toBeNull();
+          expect(container.querySelector(".verdict-card")?.textContent).toContain("这个设计不能用于统计推断");
+          expect(container.querySelector(".reg-results > section.reg-section-card")).toBeNull();
+          expect(container.querySelector(".technical-details .reg-section-card")).not.toBeNull();
           expect(container.querySelector(".verdict-card .verdict-metrics")).toBeNull();
           expect(container.querySelector(".technical-details")?.textContent).toContain("0.0200");
           expect(container.querySelector(".technical-details")?.textContent).not.toContain("[0.0100, 0.0300]");

@@ -55,12 +55,13 @@ export function StepTaskCard({
     : materialStatus === "unsynced" ? "尚未保存"
     : materialStatus === "ready" ? "已齐全" : "尚未齐全";
   const completionLabel = step.lab === "rep" ? "报告" : "理解题";
+  const compact = step.n >= 11 && step.n <= 14 && Boolean(step.regression_outcome);
   return (
-    <section className="step-task-card" aria-labelledby={stepTaskTitleId(step.n)}>
+    <section className={`step-task-card${compact ? " compact" : ""}`} aria-labelledby={stepTaskTitleId(step.n)}>
       <div className="step-task-main">
         <div>
           <span className="step-task-kicker">本步任务</span>
-          <h3 id={stepTaskTitleId(step.n)} tabIndex={-1}>{step.goal}</h3>
+          <h3 id={stepTaskTitleId(step.n)} tabIndex={-1}>{compact ? "先运行回归，再看结果、完成理解题。" : step.goal}</h3>
         </div>
         <div className="step-task-statuses" role="group" aria-label="本步状态">
           <span className={complete ? "done" : "todo"}>{completionLabel}：{complete ? "已完成" : "未完成"}</span>
@@ -69,6 +70,7 @@ export function StepTaskCard({
           </span>
         </div>
       </div>
+      {!compact && <>
       <ol className="step-task-list">
         {step.tasks.map((task) => <li key={task}>{task}</li>)}
       </ol>
@@ -95,6 +97,7 @@ export function StepTaskCard({
           </div>
         </details>
       </div>
+      </>}
     </section>
   );
 }

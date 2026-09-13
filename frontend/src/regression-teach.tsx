@@ -69,56 +69,6 @@ export function familyVerdict(
   return verdictFromSaved(outcome, familyRun(outcome, history, getStep));
 }
 
-export function FamilyMap({
-  current,
-  history,
-  getStep,
-  onNavigateStep,
-  currentDirection,
-}: {
-  current: RegressionOutcome;
-  history: FamilyHistory;
-  getStep?: (step: number) => SiblingStepData | undefined;
-  onNavigateStep?: (step: number) => void;
-  currentDirection?: ReadingDirection;
-}) {
-  return (
-    <section className="reg-family-map" aria-label="同一问题下的四类指标">
-      <div className="reg-family-map-head">
-        <span className="reg-section-step">四个观察角度</span>
-        <p>壁垒出现后，这一组指标相对未受冲击的对象发生了怎样的变化？基准设定相同；选做改设定后须先核对下面的比较口径。</p>
-      </div>
-      <ol className="reg-family-track">
-        {REGRESSION_FAMILIES.map((item) => {
-          const currentStep = item.outcome === current;
-          const verdict = familyVerdict(item.outcome, history, getStep);
-          const directionState = currentStep && currentDirection ? currentDirection : verdict?.state;
-          const direction = directionState ? familyDirectionLabel(directionState) : null;
-          const status = currentStep
-            ? direction ? `当前 · ${direction}` : "当前"
-            : (direction ?? "未估计");
-          return (
-            <li key={item.outcome} className={`reg-family-item${currentStep ? " current" : ""}${verdict ? " has-run" : ""}`}>
-              <button
-                type="button"
-                className="reg-family-btn"
-                aria-current={currentStep ? "step" : undefined}
-                onClick={() => onNavigateStep?.(item.step)}
-                disabled={!onNavigateStep}
-              >
-                <span className="reg-family-step">步骤 {item.step}</span>
-                <b>{item.family}</b>
-                <span className="reg-family-measure">{item.measure}</span>
-                <span className="reg-family-status">{status}</span>
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-    </section>
-  );
-}
-
 export function DidFourCells({ numeric }: { numeric?: boolean }) {
   if (numeric) {
     return (
@@ -297,30 +247,5 @@ export function RegressionEvidenceMatrix({
         </table>
       </div>
     </section>
-  );
-}
-
-export function SiblingContrast({
-  current,
-  history,
-  getStep,
-}: {
-  current: RegressionOutcome;
-  history: FamilyHistory;
-  getStep?: (step: number) => SiblingStepData | undefined;
-}) {
-  const prior = REGRESSION_FAMILIES.filter((item) => item.outcome !== current)
-    .map((item) => {
-      const verdict = familyVerdict(item.outcome, history, getStep);
-      return verdict ? { ...item, label: familyDirectionLabel(verdict.state) } : null;
-    })
-    .filter((item): item is NonNullable<typeof item> => item != null);
-  if (prior.length === 0) return null;
-  return (
-    <p className="reg-sibling-contrast">
-      前面已经记下：
-      {prior.map((item) => `步骤 ${item.step} ${item.family}「${item.label}」`).join("；")}
-      。本步再记一笔方向，不要和它们比系数大小。
-    </p>
   );
 }

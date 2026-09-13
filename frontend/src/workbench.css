@@ -6,37 +6,17 @@
 /* grid items default to min-width:auto and otherwise force the centre pane
    wider than its allocation at the documented 1200px desktop minimum. */
 .reg-workbench > *, .reg-results, .reg-results > * { min-width: 0; max-width: 100%; }
-.reg-question-card, .reg-compare-card, .reg-run-card, .reg-section-card, .reg-family-map, .technical-details {
+.reg-run-card, .reg-section-card, .technical-details {
   border: 1px solid #e5e7ef; border-radius: 12px; background: #fff; padding: 14px 16px;
 }
-.reg-question-card { background: linear-gradient(135deg, #f7f7ff, #fff); border-color: #dcdaf8; }
 .reg-causal-boundary, .reg-sparse-control-warning {
   padding: 8px 10px; border-radius: 8px; background: #fff5ee;
   color: #7e431f; font-size: 12px; line-height: 1.6;
 }
 .reg-sparse-control-warning { margin-top: 10px; border: 1px solid #f0c7ac; }
-.reg-question-main h3, .reg-compare-card h3 { margin: 5px 0 6px; font-size: 18px; line-height: 1.4; }
-.reg-question-main p, .reg-compare-card p { margin: 4px 0; line-height: 1.65; }
+.reg-question-main h3 { margin: 10px 0 6px; font-size: 16px; line-height: 1.4; }
+.reg-question-main p { margin: 4px 0; line-height: 1.65; }
 .reg-section-step { color: #4b47e0; font-size: 11px; font-weight: 800; letter-spacing: .04em; }
-.reg-family-map { background: #f7f8fd; border-color: #dfe3f2; }
-.reg-family-map-head p { margin: 4px 0 0; color: #5d6575; font-size: 12.5px; line-height: 1.6; }
-.reg-family-track {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;
-  list-style: none; margin: 10px 0 0; padding: 0;
-}
-.reg-family-btn {
-  display: grid; gap: 2px; width: 100%; min-height: 86px; box-sizing: border-box;
-  border: 1px solid #dce1ee; border-radius: 9px; background: #fff;
-  padding: 8px 10px; text-align: left; cursor: pointer; color: inherit;
-}
-.reg-family-btn:disabled { cursor: default; }
-.reg-family-item.current .reg-family-btn { border-color: #4b47e0; background: #eef0ff; box-shadow: 0 0 0 1px rgba(75, 71, 224, .18); }
-.reg-family-step { color: #596173; font-size: 10.5px; font-weight: 700; }
-.reg-family-item.current .reg-family-step { color: #4f5769; }
-.reg-family-btn b { color: #252b38; font-size: 14px; }
-.reg-family-measure { color: #5d6575; font-size: 11.5px; line-height: 1.4; }
-.reg-family-status { margin-top: 4px; color: #4b47e0; font-size: 11px; font-weight: 750; }
-.reg-family-item.has-run:not(.current) .reg-family-status { color: #18745f; }
 .qualified-run-card {
   min-width: 0; padding: 12px 14px; border: 1px solid #b9dacb; border-left: 4px solid #18745f;
   border-radius: 11px; background: #f4fbf7;
@@ -75,16 +55,10 @@
 .qualified-run-card.pending .qualified-run-qualification { color: #6d5118; }
 .reg-request-state { margin: 8px 0; padding: 8px 10px; border-radius: 7px; background: #f4f5f8; }
 .reg-inline-status { display: inline-block; margin-left: 10px; }
-.reg-lesson-focus { margin: 9px 0; color: #303747; font-size: 13px; line-height: 1.6; }
 .metric-facts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .metric-facts span { display: inline-flex; gap: 5px; padding: 5px 8px; background: #fff; border: 1px solid #e3e4ee; border-radius: 7px; font-size: 11.5px; }
 .lesson-details { margin-top: 9px; border-top: 1px dashed #d9dbea; padding-top: 8px; font-size: 12px; }
 .lesson-details summary, .advanced-settings summary, .technical-details > summary { cursor: pointer; color: #4b47e0; font-weight: 700; }
-.reg-compare-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; }
-.reg-compare-card.numeric { grid-template-columns: minmax(0, .9fr) minmax(280px, 1.1fr); align-items: start; }
-details.reg-compare-card { display: block; }
-details.reg-compare-card > summary { cursor: pointer; color: #4b47e0; font-weight: 750; }
-details.reg-compare-card[open] > summary { margin-bottom: 10px; }
 .did-comparison { width: 211px; text-align: center; font-size: 11px; }
 .did-example { min-width: 0; }
 .did-table { width: 100%; border-collapse: separate; border-spacing: 3px; }
@@ -167,14 +141,6 @@ details.reg-compare-card[open] > summary { margin-bottom: 10px; }
 .reg-pretrend-card .trust-item { margin-bottom: 0; background: #fff; }
 .placebo-verdict { margin: 10px 0; padding: 9px 11px; background: #eeefff; border-radius: 7px; color: #35328d; font-weight: 600; }
 .reg-writing-hint { border-top: 1px solid #dce2ed; padding-top: 8px; }
-.reg-next-move {
-  display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
-  margin: 8px 0 0; color: #4e5668; font-size: 12.5px;
-}
-.reg-sibling-contrast {
-  margin: 0; padding: 9px 12px; border: 1px solid #e0e4ed; border-radius: 9px;
-  background: #f7f8fb; color: #4e5668; font-size: 12.5px; line-height: 1.6;
-}
 .reg-evidence-matrix { margin-bottom: 14px; background: #f8fbff; }
 .reg-evidence-matrix-head { margin-bottom: 11px; }
 .reg-evidence-matrix-head p { max-width: 360px; margin: 0; color: #5d6575; font-size: 11.5px; line-height: 1.5; text-align: right; }

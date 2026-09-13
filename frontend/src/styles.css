@@ -151,7 +151,6 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
    覆盖:步骤 1–2 / 15 的讲解卡,与回归步(11–14)工作台里的段落文本与那句长问句。 */
 .concept-card > p,
 .reg-workbench p,
-.reg-question-card h3 { max-width: 820px; }
 /* 步骤 1 · 数据库速览:表格占满卡片宽度、长文本(侧重列)折行而非撑宽横向滚动。
    用 .data-table.db-guide-table 提高特异性,覆盖 .data-table td 的 nowrap / 右对齐。 */
 .db-guide-table { width: 100%; }

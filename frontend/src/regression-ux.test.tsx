@@ -15,7 +15,6 @@ import {
   type RegressionHistory,
   type SavedRegressionRun,
 } from "./regression";
-import { FamilyMap } from "./regression-teach";
 import type { Step, StepStateApi } from "./types";
 
 afterEach(cleanup);
@@ -120,17 +119,6 @@ function labProps(state: StepStateApi, confirmed?: { run?: SavedRegressionRun; q
   };
 }
 
-function relativeLuminance(hex: string): number {
-  const channels = hex.match(/[0-9a-f]{2}/gi)?.map((part) => Number.parseInt(part, 16) / 255) ?? [];
-  const linear = channels.map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
-  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
-}
-
-function contrast(first: string, second: string): number {
-  const values = [relativeLuminance(first), relativeLuminance(second)].sort((a, b) => b - a);
-  return (values[0] + 0.05) / (values[1] + 0.05);
-}
-
 describe("regression verdict scrolling", () => {
   test("scrolls only the nested course content container", () => {
     const calls: ScrollToOptions[] = [];
@@ -233,28 +221,17 @@ describe("regression request identity and accessible request states", () => {
 });
 
 describe("cross-step comparison guidance", () => {
-  for (const previousMethod of ["did", "twfe_intensity", "event_study"] as const) {
-    for (const [index, outcome] of (["production", "length", "network"] as const).entries()) {
-      test(`${outcome} ATT does not claim to match step 11 ${previousMethod}`, () => {
-        const previousRun: SavedRegressionRun = {
-          ...savedRun,
-          settings: { ...savedRun.settings, method: previousMethod },
-          design: { ...savedRun.design, outcome: "trade", method: previousMethod },
-        };
-        const html = renderToStaticMarkup(
-          <RegressionRunLab
-            {...labProps(regressionState())}
-            step={{ ...regressionStep, n: 12 + index, regression_outcome: outcome }}
-            getStep={<T,>(n: number) => n === 11 ? { run: previousRun } as T : undefined}
-          />,
-        );
-        expect(html).toContain("用四格理解当前 ATT 比较（选做复习）");
-        expect(html).toContain("跨步骤并读前，请核对各步实际保存的比较方法与设定");
-        expect(html).not.toContain("比较方法与步骤 11 相同");
-        expect(html).not.toContain("和步骤 11 同一套比较");
-        expect(html).toContain("相对变化 =（B−A）−（D−C）");
-      });
-    }
+  for (const [index, outcome] of (["production", "length", "network"] as const).entries()) {
+    test(`${outcome} focuses on its own settings without repeated four-cell or sibling cards`, () => {
+      const html = renderToStaticMarkup(<RegressionRunLab {...labProps(regressionState())}
+        step={{ ...regressionStep, n: 12 + index, regression_outcome: outcome }} />);
+      const dom = new DOMParser().parseFromString(html, "text/html");
+      expect(dom.querySelector(".did-example, .did-comparison")).toBeNull();
+      expect(dom.querySelector(".reg-family-map, .reg-sibling-contrast, .reg-next-move")).toBeNull();
+      expect(html).not.toContain("比较方法与步骤 11 相同");
+      expect(html).not.toContain("和步骤 11 同一套比较");
+      expect(dom.querySelector(".metric-facts")?.textContent).toContain("分批处理 cohort-time ATT");
+    });
   }
 
   test("step 11 retains its numerical four-cell teaching example", () => {
@@ -264,18 +241,21 @@ describe("cross-step comparison guidance", () => {
         step={{ ...regressionStep, n: 11, regression_outcome: "trade" }}
       />,
     );
-    expect(html).toContain("步骤 11 · 用四格数字理解比较");
+    expect(html).toContain("四格数字示例（不是本次结果）");
     expect(html).toContain("这组数字只用来讲清四格，不是本步估计结果");
     const dom = new DOMParser().parseFromString(html, "text/html");
-    expect(dom.querySelectorAll(".reg-family-map").length).toBe(1);
-    expect(dom.querySelector(".reg-workbench")?.firstElementChild?.className).toBe("reg-family-map");
+    expect(dom.querySelectorAll(".reg-family-map")).toHaveLength(0);
+    expect(dom.querySelector(".reg-workbench")?.firstElementChild?.className).toBe("reg-run-card");
+    expect(dom.querySelectorAll(".reg-workbench > *")).toHaveLength(2);
+    expect(dom.querySelector(".technical-details .did-example")).not.toBeNull();
     expect(dom.querySelector(".metric-facts")?.textContent).toContain("外国增加值项占比");
     expect(dom.querySelector(".reg-run-card")?.textContent).not.toMatch(/课程 FVA|EXGR_FVASH|真实 OECD/);
-    expect(dom.querySelector(".reg-family-map")?.textContent).toContain("网络（探索性）");
-    // Detailed accounting definitions remain available in the existing collapsed explanation.
-    expect(dom.querySelector(".reg-question-card")?.hasAttribute("open")).toBe(false);
-    expect(dom.querySelector(".reg-question-card")?.textContent).toContain("FVA+FDC");
-    expect(dom.querySelector(".reg-question-card")?.textContent).toContain("EXGR_FVASH");
+    // Teaching support uses the existing technical disclosure, not another card/fold.
+    expect(dom.querySelector(".reg-question-card, .reg-compare-card")).toBeNull();
+    expect(dom.querySelector(".technical-details")?.hasAttribute("open")).toBe(false);
+    expect(dom.querySelector(".technical-details details")).toBeNull();
+    expect(dom.querySelector(".technical-details")?.textContent).toContain("FVA+FDC");
+    expect(dom.querySelector(".technical-details")?.textContent).toContain("EXGR_FVASH");
   });
 });
 
@@ -287,7 +267,7 @@ describe("task-first regression setup", () => {
       const dom = new DOMParser().parseFromString(html, "text/html");
       const run = dom.querySelector(".reg-run-card")!;
       const advanced = run.querySelector(".advanced-settings")!;
-      const focus = run.querySelector(".reg-lesson-focus")!;
+      const focus = dom.querySelector(".technical-details .reg-question-main")!;
       expect(advanced.hasAttribute("open")).toBe(false);
       expect(advanced.querySelector('[aria-label="政策冲击"]')).not.toBeNull();
       expect(advanced.querySelector('[aria-label="控制变量"]')).toBeNull();
@@ -304,7 +284,9 @@ describe("task-first regression setup", () => {
       expect(advanced.textContent).toContain("完整设定");
       expect(advanced.textContent).toContain("无交互");
       expect(focus.textContent).toContain({ trade: "四格例子", production: "生产规模", length: "不是百分点", network: "探索性拓扑" }[outcome]);
-      expect(dom.querySelector(".reg-compare-card")?.hasAttribute("open")).toBe(outcome === "trade");
+      expect(run.querySelector(".reg-lesson-focus")).toBeNull();
+      expect(dom.querySelector(".reg-compare-card")).toBeNull();
+      if (outcome === "network") expect(run.querySelector(".reg-boundary")?.textContent).toContain("未做边阈值敏感性检验");
     });
   }
 
@@ -316,7 +298,7 @@ describe("task-first regression setup", () => {
     const run = dom.querySelector(".reg-run-card")!;
     const summary = run.querySelector(":scope > .run-summary")!.textContent!;
     expect(run.querySelector(".metric-facts")?.textContent).toContain("TWFE（描述性）");
-    const focus = run.querySelector(".reg-lesson-focus")!.textContent!;
+    const focus = dom.querySelector(".technical-details .reg-question-main")!.textContent!;
     expect(focus).toContain("看冲击强度变大时");
     expect(focus).not.toMatch(/逐批次|从未处理|四格例子/);
     expect(summary).toContain("sanctions");
@@ -332,7 +314,7 @@ test("restored dynamic ATT guidance describes event time, not an absent four-cel
   const html = renderToStaticMarkup(<RegressionRunLab {...labProps(regressionState())}
     step={{ ...regressionStep, regression_outcome: "trade" }} settings={settings} />);
   const dom = new DOMParser().parseFromString(html, "text/html");
-  const focus = dom.querySelector(".reg-lesson-focus")!.textContent!;
+  const focus = dom.querySelector(".technical-details .reg-question-main")!.textContent!;
   expect(focus).toContain("逐事件时间汇总各批次的 ATT");
   expect(focus).toContain("冲击前看不出差别不能证明趋势可比");
   expect(focus).not.toContain("四格例子");
@@ -347,7 +329,7 @@ describe("method-aware explanation and first-run labels", () => {
           step={{ ...regressionStep, regression_outcome: outcome }}
           settings={{ ...DEFAULT_REGRESSION_SETTINGS, method }} />);
         const dom = new DOMParser().parseFromString(html, "text/html");
-        const explanation = dom.querySelector(".reg-question-card")!.textContent!;
+        const explanation = dom.querySelector(".technical-details .reg-question-main")!.textContent!;
         if (method === "twfe_intensity") {
           expect(explanation).toContain("连续强度 TWFE 的描述性关联");
           expect(explanation).toContain("不自动恢复因果识别");
@@ -492,23 +474,5 @@ describe("preserved qualified regression result", () => {
     expect(css).toMatch(/\.qualified-run-card\s*\{[^}]*min-width:\s*0/);
     expect(css).toMatch(/\.qualified-run-facts\s*\{[^}]*repeat\(4, minmax\(0, 1fr\)\)/);
     expect(css).toMatch(/\.qualified-run-settings\s*\{[^}]*overflow-wrap:\s*anywhere/);
-  });
-
-});
-
-describe("active regression-family contrast", () => {
-  test("keeps visible current semantics and at least 4.5:1 step-text contrast", async () => {
-    const css = await Bun.file(new URL("./workbench.css", import.meta.url)).text();
-    const activeColor = css.match(/\.reg-family-item\.current \.reg-family-step\s*\{\s*color:\s*(#[0-9a-f]{6})/i)?.[1];
-    const activeBackground = css.match(/\.reg-family-item\.current \.reg-family-btn\s*\{[^}]*background:\s*(#[0-9a-f]{6})/i)?.[1];
-    expect(activeColor).toBeDefined();
-    expect(activeBackground).toBe("#eef0ff");
-    expect(contrast(activeColor!, activeBackground!)).toBeGreaterThanOrEqual(4.5);
-
-    const html = renderToStaticMarkup(
-      <FamilyMap current="production" history={{}} onNavigateStep={() => {}} />,
-    );
-    expect(html.match(/aria-current="step"/g)).toHaveLength(1);
-    expect(html).toContain("当前");
   });
 });

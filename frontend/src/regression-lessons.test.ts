@@ -3,7 +3,6 @@ import {
   comparisonExplanation,
   familyDirectionLabel,
   lessonQuestion,
-  nextRegressionFamily,
   REGRESSION_FAMILIES,
   REGRESSION_LESSONS,
 } from "./regression-lessons";
@@ -30,8 +29,6 @@ describe("regression lessons", () => {
     expect(REGRESSION_LESSONS.length.learnThis).toContain("不是百分点");
     expect(REGRESSION_LESSONS.network.learnThis).toContain("拓扑");
     expect(REGRESSION_LESSONS.trade.dontClaim).not.toContain("客户");
-    expect(nextRegressionFamily("trade")?.outcome).toBe("production");
-    expect(nextRegressionFamily("network")).toBeNull();
   });
 
   test("production share copy forbids expansion/contraction overstatement", () => {

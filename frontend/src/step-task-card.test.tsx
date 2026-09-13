@@ -37,10 +37,9 @@ describe("shared step task card", () => {
 
   test("renders one goal, exactly three actions, and two independent statuses", () => {
     const step: Step = {
-      n: 12,
-      stage: 4,
-      lab: "reg",
-      regression_outcome: "trade",
+      n: 6,
+      stage: 3,
+      lab: "viz",
       status: "demo",
       title: "贸易流回归",
       goal: "先运行，再判断。",
@@ -74,6 +73,29 @@ describe("shared step task card", () => {
     expect(failed).toContain("报告材料：尚未保存");
     expect(failed).not.toContain("正在保存");
   });
+
+  for (const [index, outcome] of (["trade", "production", "length", "network"] as const).entries()) {
+    test(`step ${11 + index} has a single-line task and truthful statuses, without a second start button`, () => {
+      const step: Step = {
+        n: 11 + index, stage: 4, lab: "reg", regression_outcome: outcome, status: "demo",
+        title: "回归", goal: "原来很长的任务目标", tasks: ["旧任务一", "旧任务二", "旧任务三"],
+        concept: "原来单独展开的说明", tip: "边界", deps: [], handoff: { input: "输入", action: "运行", output: "结果" },
+      };
+      for (const [status, label] of [
+        ["checking", "正在检查"], ["saving", "正在保存"], ["unsynced", "尚未保存"], ["ready", "已齐全"], ["missing", "尚未齐全"],
+      ] as const) {
+        const html = renderToStaticMarkup(<StepTaskCard step={step} complete={false} materialStatus={status} contentRef={{ current: null }} />);
+        const dom = new DOMParser().parseFromString(html, "text/html");
+        expect(dom.querySelector(".step-task-card.compact")).not.toBeNull();
+        expect(dom.querySelector("button, details, ol")).toBeNull();
+        expect(html).toContain("先运行回归，再看结果、完成理解题");
+        expect(html).not.toContain("原来很长的任务目标");
+        expect(html).toContain("理解题：未完成");
+        expect(html).toContain(`报告材料：${label}`);
+        expect(dom.querySelector("h3")?.id).toBe(stepTaskTitleId(step.n));
+      }
+    });
+  }
 
   test("labels the final completion state as report rather than a nonexistent quiz", () => {
     const reportStep: Step = {

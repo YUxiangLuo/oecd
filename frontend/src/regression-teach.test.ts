@@ -3,7 +3,6 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   DidFourCells,
-  FamilyMap,
   RegressionEvidenceMatrix,
   RegressionReadingCheck,
   familyVerdict,
@@ -146,21 +145,4 @@ describe("student-first regression reading", () => {
     expect(html).not.toContain("</b><span>百分点</span>");
   });
 
-  test("shows the current evidence state without an exercise gate, preferring the displayed run", () => {
-    const trade = response("trade", coefficient(-0.02, -0.03, -0.01));
-    const current = renderToStaticMarkup(createElement(FamilyMap, {
-      current: "trade",
-      history: { trade: [{ response: trade }] },
-    }));
-    expect(current).toContain("当前 · 下降");
-    expect(current).not.toContain("待判断");
-
-    const revealed = renderToStaticMarkup(createElement(FamilyMap, {
-      current: "trade",
-      history: { trade: [{ response: trade }] },
-      currentDirection: "suppressed",
-    }));
-    expect(revealed).toContain("当前 · 无法评估");
-    expect(revealed).not.toContain("当前 · 下降");
-  });
 });

@@ -47,7 +47,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     priorStep: 2,
     priorLabel: "GVC 总贸易流分解指标",
     focus: "观察出口分解中的外国增加值这一项，看它所占的比例如何变化",
-    learnThis: "先用四格例子理解相对变化，再练习读状态、估计与区间。实际主结果逐批次计算，只用从未处理或截至比较期尚未处理的对象作对照。",
+    learnThis: "先看结果状态，再读估计与区间。下方四格例子只帮助理解相对变化；实际主结果逐批次计算，只用从未处理或截至比较期尚未处理的对象作对照。",
     definition: "它是 WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 毛出口的比重。毛出口全部外国纯 VA 含量为 FVA+FDC；OECD 还采用包含相关 TLS 的 VA 口径，因此本指标不是 EXGR_FVASH。",
     downMeaning: "负向变化表示外国增加值这一项的占比相对下降，但不能单独证明生产已经回流。",
     upMeaning: "正向变化表示外国增加值这一项的占比相对上升，但仍需结合不确定性和比较条件。",
@@ -158,9 +158,4 @@ export function familyDirectionLabel(direction: ReadingDirection): string {
   if (direction === "suppressed") return "无法评估";
   if (direction === "pretrend") return "冲击前已有差异";
   return "看不出";
-}
-
-export function nextRegressionFamily(outcome: RegressionOutcome) {
-  const index = REGRESSION_FAMILIES.findIndex((item) => item.outcome === outcome);
-  return index >= 0 ? REGRESSION_FAMILIES[index + 1] ?? null : null;
 }

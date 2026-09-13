@@ -68,12 +68,10 @@ export function LabRouter({
         onSettingsChange={onRegressionSettingsChange}
         history={regressionHistory}
         onHistoryChange={onRegressionHistoryChange}
-        getStep={getStep ? (n) => getStep<SiblingStepData>(n) : undefined}
         getConfirmedStep={getConfirmedStep}
         sessionUnsynced={sessionUnsynced}
         sessionSyncing={sessionSyncing}
         sessionSyncError={sessionSyncError}
-        onNavigateStep={onNavigateStep}
       />
     );
   }
