@@ -23,6 +23,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
+# 检出目录的原始数据形态决定数据集分支。CI 合成夹具必须同时带上生成器要求的
+# 两道环境闸门，否则 ``artifact_data_sources`` / ``dimension_contract_for`` 会
+# fail-closed，而真实数据断言又会跑在 15×24 的合成表上。显式设置的值优先；
+# 这段必须在 import ``gvcsim.config`` 之前执行，它会在导入时读取这些变量。
+if (
+    Path(os.environ.get("GVCSIM_RAW_DATA_DIR") or (Path(__file__).resolve().parents[1] / "OECD_ICIO"))
+    / ".ci-only-synthetic.json"
+).is_file():
+    os.environ.setdefault("CI", "true")
+    os.environ.setdefault("GVCSIM_CI_SYNTHETIC", "1")
+
 from gvcsim.config import RAW_DATA_DIR
 
 REGIONS = ["AAA", "BBB"]

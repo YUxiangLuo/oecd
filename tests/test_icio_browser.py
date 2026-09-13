@@ -156,6 +156,7 @@ def test_raw_file_validator_uses_unique_year_resolver(tmp_path: Path):
         icio_browser.validate_raw_files([2020], tmp_path, FIXTURE_CONTRACT)
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses file read permissions")
 def test_raw_file_validator_rejects_non_regular_and_unreadable_files(tmp_path: Path, monkeypatch):
     # The temporary directory is deliberately malformed and has no CI marker;
     # the repository-wide CI synthetic flag must not mask the file-type errors.

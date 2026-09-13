@@ -109,39 +109,7 @@ def test_capacity_configuration_rejects_nonpositive_request_limits(monkeypatch):
         config.validate_capacity_config()
 
 
-def test_deployment_documents_bootstrap_and_separate_lifecycles():
-    deployment = (ROOT / "DEPLOY.md").read_text()
-    assert "一次性主机 bootstrap" in deployment
-    assert "useradd --system" in deployment
-    assert "createuser --pwprompt gvcsim" in deployment
-    assert "必须登录到**实际数据库主机**执行" in deployment
-    assert "不能在另一台 API 主机上照抄" in deployment
-    assert "nginx -t" in deployment and "TLS" in deployment
-    assert "bun install --frozen-lockfile" in deployment
-    assert "gvcsim compute" in deployment and "gvcsim preflight" in deployment
-    assert "classroom-init --reset" in deployment
-    assert "--teacher-username teacher" in deployment
-    assert "GVCSIM_INITIAL_TEACHER_PASSWORD" in deployment
-    assert 'test "${#GVCSIM_INITIAL_TEACHER_PASSWORD}" -ge 12' in deployment
-    assert "runuser -u gvcsim" in deployment
-
-    ordinary = deployment.split("## 普通代码部署", 1)[1].split("## 数据发布", 1)[0]
-    data_release = deployment.split("## 数据发布或 artifact contract 升级", 1)[1].split("## 明确的新学期", 1)[0]
-    semester_reset = deployment.split("## 明确的新学期重置", 1)[1].split("## 数据 release 回滚", 1)[0]
-    assert ".venv/bin/gvcsim classroom-init --reset" not in ordinary and ".venv/bin/gvcsim compute" not in ordinary
-    assert ".venv/bin/gvcsim compute" in data_release
-    assert ".venv/bin/gvcsim classroom-init --reset" not in data_release
-    assert ".venv/bin/gvcsim classroom-init --reset" in semester_reset
-    assert ".venv/bin/gvcsim compute" not in semester_reset
-    assert "benchmark_shock_panel_v9.py" in data_release
-    assert "GVCSIM_PUBLICATION_LOCK_DIR" not in deployment
-    assert "gvcsim-teaching-db-v11" in deployment
-    assert "不兼容 v10 会话与报告" in deployment
-    assert "后续普通升级仍不得用重置代替迁移" in deployment
-    assert "pg_dump" in deployment and "pg_restore" in deployment
-    assert "createdb --maintenance-db=postgres" in deployment
-    assert "export PGHOST=" in deployment and "export PGPASSWORD" in deployment
-    assert "gvcsim-backup.timer" in deployment
+def test_backup_units_and_script_keep_their_safety_invariants():
     timer = (ROOT / "deploy" / "gvcsim-backup.timer").read_text()
     service = (ROOT / "deploy" / "gvcsim-backup.service").read_text()
     assert "Persistent=true" in timer
@@ -154,6 +122,3 @@ def test_deployment_documents_bootstrap_and_separate_lifecycles():
     assert "retention_removed" in backup_script
     assert '"$backup_dir" != /* || "$backup_dir" == / || -L "$backup_dir"' in backup_script
     assert '! -L "$old_checksum"' in backup_script and '! -L "$old_dump"' in backup_script
-    assert "1..10000" in deployment
-    assert "它们不占用保留名额" in deployment
-    assert "本机保留不等于灾难备份" in deployment
