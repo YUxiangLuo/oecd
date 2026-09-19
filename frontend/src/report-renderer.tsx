@@ -6,6 +6,7 @@ import { ScrollableRegion } from "./a11y";
 
 type ChartItem = { label: string; value: number };
 type ChartPoint = ChartItem & { se?: number; ci_low?: number; ci_high?: number };
+type LineSeries = { label: string; points: ChartItem[] };
 
 type ReportChart =
   | {
@@ -23,6 +24,14 @@ type ReportChart =
       x_label?: string;
       y_label?: string;
       points: ChartPoint[];
+    }
+  | {
+      version: 1;
+      type: "line";
+      title?: string;
+      x_label?: string;
+      y_label?: string;
+      series: LineSeries[];
     };
 
 const MAX_POINTS = 100;
@@ -62,6 +71,17 @@ function isPoint(value: unknown): value is ChartPoint {
   return typeof point.se === "number" && Number.isFinite(point.se) && point.se >= 0;
 }
 
+function isLineSeries(value: unknown): value is LineSeries {
+  if (!value || typeof value !== "object") return false;
+  const series = value as Record<string, unknown>;
+  return hasOnlyKeys(series, ["label", "points"])
+    && isLabel(series.label)
+    && Array.isArray(series.points)
+    && series.points.length > 0
+    && series.points.every(isItem)
+    && new Set(series.points.map((point) => point.label)).size === series.points.length;
+}
+
 /** Parse only the versioned report-chart schema; arbitrary JSON/HTML never reaches the DOM. */
 export function parseReportChart(source: string): ReportChart | null {
   let raw: unknown;
@@ -88,6 +108,14 @@ export function parseReportChart(source: string): ReportChart | null {
     if (!value.points.every(isPoint)) return null;
     return value as ReportChart;
   }
+  if (value.type === "line") {
+    if (!hasOnlyKeys(value, ["version", "type", "title", "x_label", "y_label", "series"])) return null;
+    if (!Array.isArray(value.series) || value.series.length < 2 || value.series.length > 8) return null;
+    if (!value.series.every(isLineSeries)) return null;
+    if (new Set(value.series.map((series) => series.label)).size !== value.series.length) return null;
+    if (value.series.reduce((count, series) => count + series.points.length, 0) > MAX_POINTS) return null;
+    return value as ReportChart;
+  }
   return null;
 }
 
@@ -101,7 +129,7 @@ const fmt = (value: number) => {
 function BarChart({ chart }: { chart: Extract<ReportChart, { type: "bar" }> }) {
   const W = 720;
   const rowH = 34;
-  const m = { l: 142, r: 62, t: 20, b: 36 };
+  const m = { l: 220, r: 62, t: 20, b: 36 };
   const H = m.t + chart.items.length * rowH + m.b;
   const values = chart.items.map((item) => item.value);
   const min = Math.min(0, ...values);
@@ -172,6 +200,58 @@ function EventChart({ chart }: { chart: Extract<ReportChart, { type: "event-stud
   );
 }
 
+function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> }) {
+  const W = 720;
+  const H = 310;
+  const m = { l: 68, r: 26, t: 42, b: 48 };
+  const colors = ["#4b47e0", "#d95f45", "#198a78", "#b36b00", "#7b4ab5", "#3274a1", "#657000", "#a44078"];
+  const labels = [...new Set(chart.series.flatMap((series) => series.points.map((point) => point.label)))];
+  const values = chart.series.flatMap((series) => series.points.map((point) => point.value));
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const padding = (rawMax - rawMin || Math.max(Math.abs(rawMax), 1)) * 0.12;
+  const min = rawMin - padding;
+  const max = rawMax + padding;
+  const plotW = W - m.l - m.r;
+  const plotH = H - m.t - m.b;
+  const x = (label: string) => m.l + (labels.length === 1 ? plotW / 2 : labels.indexOf(label) / (labels.length - 1) * plotW);
+  const y = (value: number) => m.t + (max - value) / (max - min) * plotH;
+  const ticks = [min, (min + max) / 2, max];
+
+  return (
+    <ReportFigure title={chart.title ?? "两国历年趋势"}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "两国历年趋势折线图"} style={{ width: "100%", height: "auto" }}>
+        {ticks.map((tick) => (
+          <g key={tick}>
+            <line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke="#e5e7ed" />
+            <text x={m.l - 8} y={y(tick) + 4} textAnchor="end" fontSize={10} fill="#5f6677">{fmt(tick)}</text>
+          </g>
+        ))}
+        {chart.series.map((series, seriesIndex) => {
+          const color = colors[seriesIndex];
+          return (
+            <g key={series.label}>
+              <polyline
+                points={series.points.map((point) => `${x(point.label)},${y(point.value)}`).join(" ")}
+                fill="none"
+                stroke={color}
+                strokeWidth={2.5}
+                strokeLinejoin="round"
+              />
+              {series.points.map((point) => <circle key={point.label} cx={x(point.label)} cy={y(point.value)} r={4} fill={color} stroke="#fff" strokeWidth={1.5} />)}
+              <line x1={m.l + seriesIndex * 112} x2={m.l + 18 + seriesIndex * 112} y1={18} y2={18} stroke={color} strokeWidth={3} />
+              <text x={m.l + 24 + seriesIndex * 112} y={22} fontSize={11} fill="#4b5563">{series.label}</text>
+            </g>
+          );
+        })}
+        {labels.map((label) => <text key={label} x={x(label)} y={H - m.b + 18} textAnchor="middle" fontSize={10} fill="#596173">{label}</text>)}
+        {chart.y_label && <text x={14} y={m.t + plotH / 2} textAnchor="middle" fontSize={11} fill="#5f6677" transform={`rotate(-90 14 ${m.t + plotH / 2})`}>{chart.y_label}</text>}
+        {chart.x_label && <text x={m.l + plotW / 2} y={H - 7} textAnchor="middle" fontSize={11} fill="#5f6677">{chart.x_label}</text>}
+      </svg>
+    </ReportFigure>
+  );
+}
+
 function ReportFigure({ title, children }: { title: string; children: ReactNode }) {
   return (
     <figure style={{ margin: "18px 0", padding: "14px 16px", border: "1px solid #e7e9f0", borderRadius: 12, breakInside: "avoid" }}>
@@ -187,6 +267,7 @@ function ReportCode({ className, children, ...props }: ComponentPropsWithoutRef<
     const chart = parseReportChart(source);
     if (chart?.type === "bar") return <BarChart chart={chart} />;
     if (chart?.type === "event-study") return <EventChart chart={chart} />;
+    if (chart?.type === "line") return <LineChart chart={chart} />;
   }
   return <code className={className} {...props}>{children}</code>;
 }
@@ -198,6 +279,7 @@ function ReportPre({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
       const chart = parseReportChart(String(children.props.children ?? "").replace(/\n$/, ""));
       if (chart?.type === "bar") return <BarChart chart={chart} />;
       if (chart?.type === "event-study") return <EventChart chart={chart} />;
+      if (chart?.type === "line") return <LineChart chart={chart} />;
     }
   }
   return <pre {...props}>{children}</pre>;

@@ -184,6 +184,22 @@ def test_report_save_rejects_a_session_version_changed_during_generation(teachin
     assert db.latest_report("student") is None
 
 
+def test_draft_submission_rejects_a_report_generated_from_an_older_session(teaching_db):
+    first = empty_session()
+    saved = db.save_session("student", first)
+    assert saved is not None
+    report = db.save_generated_report("student", "first", {}, saved["updated_at"])
+    assert report is not None and report["state"] == "draft"
+    changed = empty_session()
+    changed["steps"]["1"] = make_record({"value": "changed after generation"})
+    db.save_session("student", changed, saved["updated_at"])
+
+    with pytest.raises(db.ReportChanged, match="重新生成"):
+        db.submit_report("student")
+
+    assert db.latest_report("student")["state"] == "draft"
+
+
 def test_student_list_query_count_is_constant(teaching_db, monkeypatch):
     for index in range(3):
         db.create_student(

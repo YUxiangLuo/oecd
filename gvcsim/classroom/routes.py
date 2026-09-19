@@ -190,7 +190,13 @@ async def generate_report_http(request: Request, user: dict = Depends(require_st
 
 @router.post("/report/submit")
 def submit_report(user: dict = Depends(require_student)):
-    report = db.submit_report(user["sub"])
+    try:
+        report = db.submit_report(user["sub"])
+    except db.ReportChanged as error:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "实验记录已更新，请重新生成报告。", "code": "report_outdated"},
+        ) from error
     if report is None:
         raise HTTPException(status_code=409, detail="请先生成报告")
     session, _existing, _row = _workspace(user["sub"])

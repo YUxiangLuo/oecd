@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime
 from typing import Any
@@ -30,6 +31,10 @@ class SessionChanged(RuntimeError):
 
 
 _UNCONDITIONAL_SESSION_WRITE = object()
+
+
+def _session_fingerprint(session: dict[str, Any]) -> str:
+    return hashlib.sha256(json.dumps(session, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12]
 
 
 def _student(c: psycopg.Connection[dict[str, Any]], username: str) -> dict[str, Any] | None:
@@ -127,11 +132,12 @@ def save_generated_report(
         if not account:
             return None
         current_session = c.execute(
-            "SELECT updated_at FROM experiment_sessions WHERE account_id=%s AND release_id=%s FOR UPDATE",
+            "SELECT session,updated_at FROM experiment_sessions WHERE account_id=%s AND release_id=%s FOR UPDATE",
             (account["id"], release_id),
         ).fetchone()
         if current_session is None or current_session["updated_at"] != expected_session_updated_at:
             raise SessionChanged("报告生成期间实验记录已更新")
+        stored_provenance = {**provenance, "session_fingerprint": _session_fingerprint(current_session["session"])}
         return c.execute(
             "INSERT INTO reports(account_id,release_id,markdown,provenance,state,generated_at,updated_at)"
             " VALUES (%s,%s,%s,%s,'draft',now(),now())"
@@ -142,24 +148,33 @@ def save_generated_report(
             " generated_at=now(),updated_at=now(),"
             " submitted_at=CASE WHEN reports.state IN ('pending','graded') THEN now() ELSE NULL END"
             f" RETURNING {_REPORT_COLUMNS.replace('r.', '')}",
-            (account["id"], release_id, markdown, json.dumps(provenance, ensure_ascii=False)),
+            (account["id"], release_id, markdown, json.dumps(stored_provenance, ensure_ascii=False)),
         ).fetchone()
 
 
 def submit_report(username: str) -> dict[str, Any] | None:
-    """Submit a draft; repeated submission of pending/graded work is idempotent."""
+    """Submit a current draft; repeated submission of pending/graded work is idempotent."""
     release_id = database.current_release_id()
     with database.conn() as c:
         account = _student(c, username)
         if not account:
             return None
+        current_session = c.execute(
+            "SELECT session FROM experiment_sessions WHERE account_id=%s AND release_id=%s FOR UPDATE",
+            (account["id"], release_id),
+        ).fetchone()
         row = c.execute(
-            "SELECT state FROM reports WHERE account_id=%s AND release_id=%s FOR UPDATE",
+            "SELECT state,provenance FROM reports WHERE account_id=%s AND release_id=%s FOR UPDATE",
             (account["id"], release_id),
         ).fetchone()
         if not row:
             return None
         if row["state"] == "draft":
+            provenance = row["provenance"] if isinstance(row["provenance"], dict) else {}
+            if current_session is None or provenance.get("session_fingerprint") != _session_fingerprint(
+                current_session["session"]
+            ):
+                raise ReportChanged("实验记录已更新，请重新生成报告")
             c.execute(
                 "UPDATE reports SET state='pending',submitted_at=now(),updated_at=now()"
                 " WHERE account_id=%s AND release_id=%s",

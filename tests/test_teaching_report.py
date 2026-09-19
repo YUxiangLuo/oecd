@@ -526,9 +526,37 @@ def _complete():
         "row": "CHN_D01T02",
         "column": "USA_D01T02",
         "value": 1.0,
+        "year": 2020,
+        "table": "intermediate",
     }
     for step in range(2, 10):
         session["steps"][str(step)]["data"]["compared"] = ["CHN", "USA"]
+    for step, metric, unit in (
+        (2, "FVA_share", "%"),
+        (3, "3b_VA_GVC_C_share", "%"),
+        (4, "GVCPs", "长度"),
+        (5, "weighted degree", "加权流量"),
+    ):
+        session["steps"][str(step)]["data"].update(
+            {
+                "metric": metric,
+                "observations": [
+                    {
+                        "entity": country,
+                        "country": country,
+                        "industry": "",
+                        "year": 2020,
+                        "value": value,
+                        "metric": metric,
+                        "unit": unit,
+                        "release": "ICIO-2023",
+                        "scope": "country",
+                        "source": "explicit-indicator-table-comparison",
+                    }
+                    for country, value in (("CHN", 0.2), ("USA", 0.1))
+                ],
+            }
+        )
     for step, metric in ((6, "FVA_share"), (7, "3b_VA_GVC_C_share"), (8, "GVCPs")):
         session["steps"][str(step)]["data"]["observations"] = [
             {
@@ -554,6 +582,7 @@ def _complete():
             "value": 12.5,
             "metric": "betweenesscentrality",
             "unit": "未归一化介数",
+            "release": "ICIO-2023",
             "scope": "country-industry",
             "source": "explicit-network-ranking",
         }
@@ -565,6 +594,15 @@ def _complete():
             "teaching_year": 2019,
             "viewed_teaching_panel": True,
             "teaching_panel_version": TEACHING_VERSION,
+            "teaching_observation": {
+                "country": "CHN",
+                "industry": "s1",
+                "year": 2019,
+                "teaching_export_share_w": 0.2,
+                "teaching_tariff_rate_tau": 0.1,
+                "teaching_tariff_exposure": 0.02,
+                "version": TEACHING_VERSION,
+            },
         }
     )
     session["steps"]["11"]["data"]["run"] = _ok_run("trade")
@@ -688,7 +726,7 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     assert set(GATE_STEPS) <= {item["step"] for item in blocked}
     assert any(item["step"] == 1 and "具体单元格" in "".join(item["missing"]) for item in blocked)
     assert all(
-        any(item["step"] == step and "记录当前国家" in "".join(item["missing"]) for item in blocked)
+        any(item["step"] == step and "保存两国同年比较" in "".join(item["missing"]) for item in blocked)
         for step in range(2, 6)
     )
     assert all(
@@ -697,8 +735,8 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     )
     # Step 9 requires a country comparison *and* an industry observation, so its
     # message names both actions instead of the steps 6-8 wording.
-    assert any(item["step"] == 9 and "两个经济体" in "".join(item["missing"]) for item in blocked)
-    assert any(item["step"] == 9 and "行业指标读数" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 9 and "两国行业比较" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 9 and "保存为报告材料" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 6 and "恰好两个国家" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 11 and "可报告" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 14 and "可报告" in "".join(item["missing"]) for item in blocked)
@@ -728,6 +766,23 @@ def test_steps_six_to_eight_require_explicit_complete_material():
         assert any(item["step"] == 6 for item in check_material_gate(session))
 
 
+@pytest.mark.parametrize(
+    "corrupt",
+    [
+        lambda observations: observations[1].update(year=2019),
+        lambda observations: observations[1].pop("unit"),
+        lambda observations: observations[1].update(value=float("nan")),
+        lambda observations: observations[1].update(source="legacy-two-click"),
+    ],
+)
+def test_steps_two_to_five_require_one_complete_same_year_pair(corrupt):
+    session = _complete()
+    observations = session["steps"]["2"]["data"]["observations"]
+    corrupt(observations)
+
+    assert any(item["step"] == 2 for item in check_material_gate(session))
+
+
 def test_indicator_report_formats_percentages_without_changing_saved_values():
     session = _complete()
     data = session["steps"]["6"]["data"]
@@ -741,6 +796,17 @@ def test_indicator_report_formats_percentages_without_changing_saved_values():
     assert "unrelated-browse" not in section
     assert "1999" not in section
     assert data["observations"][0]["value"] == 0.237
+
+
+def test_table_comparison_report_formats_saved_ratio_as_a_percentage():
+    session = _complete()
+
+    text = "\n".join(teaching_report._experiment_sections(session))
+    section = text.split("### 步骤 2", 1)[1].split("### 步骤 3", 1)[0]
+
+    assert "| CHN | 2020 | 外国增加值项占比 | % | 20 |" in section
+    assert "| USA | 2020 | 外国增加值项占比 | % | 10 |" in section
+    assert "| % | 0.2 |" not in section
 
 
 def test_indicator_trend_requires_two_common_years_per_metric():
@@ -771,9 +837,46 @@ def test_composition_requires_all_trade_components_and_reports_each_reading():
     assert not any(item["step"] == 6 for item in check_material_gate(session))
     text = "\n".join(teaching_report._experiment_sections(session))
     assert "| 出口中的税收减补贴 | 百万美元 | -2 |" in text
+    chart = teaching_report._observed_chart(data, 6, data["observations"])
+    assert len(chart["items"]) == 12
+    assert {item["label"] for item in chart["items"]} == {
+        f"{country} · {teaching_report._STUDENT_METRIC_LABELS[metric]}"
+        for country in ("CHN", "USA")
+        for metric in components
+        if metric != "gross_exports"
+    }
     # Omitting the same component for both countries is paired, but incomplete.
     data["observations"] = [item for item in data["observations"] if item["metric"] != "taxsub"]
     assert any(item["step"] == 6 for item in check_material_gate(session))
+
+
+def test_composition_evolution_generates_each_component_as_a_two_country_trend():
+    session = _complete()
+    data = session["steps"]["6"]["data"]
+    components = {"DVAex": 50, "DVArt": 5, "DDC": 3, "FVA": 20, "FDC": 4, "taxsub": -2, "gross_exports": 80}
+    data["indicator_selection"] = {"view": "evolution", "metric": "FVA_share"}
+    data["observations"] = [
+        dict(
+            item,
+            metric=metric,
+            value=value + year - 2019,
+            year=year,
+            unit="百万美元",
+            source="explicit-indicator-trend",
+        )
+        for item in data["observations"]
+        for year in (2019, 2020)
+        for metric, value in components.items()
+    ]
+
+    charts = teaching_report._observed_charts(data, 6, data["observations"])
+
+    assert len(charts) == 6
+    assert all(chart["type"] == "line" and len(chart["series"]) == 2 for chart in charts)
+    assert all({series["label"] for series in chart["series"]} == {"CHN", "USA"} for chart in charts)
+    assert all("构成演变" in chart["title"] for chart in charts)
+    assert all("毛出口" not in chart["title"] for chart in charts)
+    assert any("出口中的外国增加值" in chart["title"] for chart in charts)
 
 
 def test_material_gate_is_independent_of_unfinished_quizzes():
@@ -802,7 +905,7 @@ def test_step_nine_requires_both_a_comparison_and_an_industry_observation():
     observation_only = _complete()
     observation_only["steps"]["9"]["data"]["compared"] = []
     message = "".join(next(item["missing"] for item in check_material_gate(observation_only) if item["step"] == 9))
-    assert "两个经济体" in message
+    assert "两国行业比较" in message
     assert "报告材料卡" in message
     assert "网络图中的节点" not in message
 
@@ -854,6 +957,8 @@ def test_report_preserves_two_country_industry_trend_years(tmp_path, monkeypatch
             "value": value,
             "metric": metric,
             "unit": unit,
+            "release": "ICIO-2023",
+            "scope": "country-industry",
             "source": "explicit-network-trend",
         }
         for country, year, value in [("CHN", 2016, 31), ("CHN", 2020, 44), ("USA", 2016, 9), ("USA", 2020, 7)]
@@ -865,6 +970,9 @@ def test_report_preserves_two_country_industry_trend_years(tmp_path, monkeypatch
     assert "DEU" not in section
     assert f"记录的代表指标：{label}" in markdown
     assert f"记录方式：历年趋势；单位：{unit}" in markdown
+    assert '"type":"line"' in markdown
+    assert '"label":"CHN","points":[{"label":"2016","value":31.0},{"label":"2020","value":44.0}]' in markdown
+    assert "CHN 从 2016 年 31 变为 2020 年 44（变化 +13.000）" in markdown
     for expected in (
         f"| CHN·C26 | 2016 | {label}",
         f"| CHN·C26 | 2020 | {label}",
@@ -879,14 +987,6 @@ def test_report_labels_step_five_network_metric_like_the_step_does(tmp_path, mon
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
-    session["steps"]["5"]["data"].update(
-        {
-            "metric": "weighted degree",
-            "observations": [
-                {"entity": "CHN", "country": "CHN", "year": 2020, "value": 4583517.2, "metric": "weighted degree"}
-            ],
-        }
-    )
 
     report = build(session, "同学")
 
@@ -911,6 +1011,27 @@ def test_material_gate_rejects_legacy_teaching_panel_version():
     blocked = next(item for item in check_material_gate(session) if item["step"] == 10)
     message = "".join(blocked["missing"])
     assert TEACHING_VERSION in message
+
+
+def test_material_gate_rejects_an_unverifiable_teaching_exposure():
+    session = _complete()
+    session["steps"]["10"]["data"]["teaching_observation"]["teaching_tariff_exposure"] = 0.99
+
+    blocked = check_material_gate(session)
+
+    assert any(item["step"] == 10 for item in blocked)
+
+
+def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+
+    markdown = build(_complete(), "同学").markdown
+
+    assert "自动保存的代表行：CHN · s1 · 2019" in markdown
+    assert "w=20%；τ=10%；X=w×τ=0.02" in markdown
+    assert markdown.index("## 真实指标：时间变化与国家比较") < markdown.index("## 关键证据摘要")
+    assert markdown.count("```gvcsim-chart") == 4
 
 
 def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatch):
@@ -1153,7 +1274,13 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
     session["steps"]["1"]["data"].update(
         {
             "slice": {"year": 2020, "table": "z", "row_country": "CHN", "col_country": "USA"},
-            "observation": {"row": "CHN_D01T02", "column": "USA_D01T02", "value": 228.0672},
+            "observation": {
+                "row": "CHN_D01T02",
+                "column": "USA_D01T02",
+                "value": 228.0672,
+                "year": 2020,
+                "table": "z",
+            },
         }
     )
     session["steps"]["7"]["data"].update(
@@ -1161,14 +1288,14 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
             "year": 2020,
             "chart": "quadrant",
             "compared": ["CHN", "USA"],
-            "metric": "FVA_share",
+            "metric": "3b_VA_GVC_C_share",
             "observations": [
                 {
                     "entity": country,
                     "country": country,
                     "year": 2020,
                     "value": value,
-                    "metric": "FVA_share",
+                    "metric": "3b_VA_GVC_C_share",
                     "unit": "比例",
                     "release": "ICIO-2023",
                     "scope": "country",
@@ -1193,7 +1320,7 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
     assert "年份=2020" in report.markdown
     assert "表=z" in report.markdown
     assert "主动比较：CHN、USA" in report.markdown
-    assert "| CHN | 2020 | 外国增加值项占比 | 比例 | 0.12 |" in report.markdown
+    assert "| CHN | 2020 | 复杂 GVC 生产份额 | 比例 | 0.12 |" in report.markdown
     assert "仅用于探索定位，不限定下游回归样本" in report.markdown
     assert "按所选冲击类型汇总该类型全部已编码事件" in report.markdown
     assert "当前目录无法确认来源状态" in report.markdown

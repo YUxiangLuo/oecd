@@ -100,7 +100,8 @@ describe("indicator table semantics", () => {
 });
 
 describe("network table sort scope", () => {
-  const meta: Meta = { years: [2020], countries: ["CHN", "USA"], sectors: ["A"], dataset: null };
+  const release = "a".repeat(32);
+  const meta: Meta = { years: [2020], countries: ["CHN", "USA"], sectors: ["A"], dataset: { years: [2020], release_id: release } };
   const schema: IndicatorSchema = {
     groups: [{
       key: "network",
@@ -141,9 +142,11 @@ describe("network table sort scope", () => {
     expect(html).toContain("国家");
     expect(html).toContain("年份");
     expect(html).toContain("报告材料 · 已记录 0/2 个国家");
-    expect(html).toContain("国家筛选只切换表格，不会自动保存材料");
-    expect(html).toContain("记录当前国家到报告材料");
-    expect(html).toContain("尚未记录。完成两次显式记录后");
+    expect(html).toContain("系统会一次保存两个国家在同一年、同一指标下的数值");
+    expect(html).toContain("比较国家 A");
+    expect(html).toContain("比较国家 B");
+    expect(html).toContain("保存两国同年比较");
+    expect(html).toContain("尚未记录。点击一次即可完成本步报告材料");
   });
 
   test("enables the labelled native sorter only for an explicit country", () => {
@@ -178,8 +181,8 @@ describe("network table sort scope", () => {
         metric: "weighted degree",
         compared: ["CHN", "USA"],
         observations: [
-          { entity: "CHN", country: "CHN", industry: "", year: 2020, value: 12 },
-          { entity: "USA", country: "USA", industry: "", year: 2020, value: 9 },
+          { entity: "CHN", country: "CHN", industry: "", year: 2020, value: 12, metric: "weighted degree", unit: "加权流量", release, scope: "country", source: "explicit-indicator-table-comparison" },
+          { entity: "USA", country: "USA", industry: "", year: 2020, value: 9, metric: "weighted degree", unit: "加权流量", release, scope: "country", source: "explicit-indicator-table-comparison" },
         ],
       },
     };
@@ -202,6 +205,6 @@ describe("network table sort scope", () => {
     expect(html).toContain("报告材料 · 已记录 2/2 个国家");
     expect(html).toContain("2020 · CHN 中国 = 12");
     expect(html).toContain("2020 · USA 美国 = 9");
-    expect(html).toContain("更新当前国家记录");
+    expect(html).toContain("更新两国同年比较");
   });
 });

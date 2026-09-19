@@ -44,6 +44,18 @@ def test_step10_gate_requires_complete_current_panel_state():
     session = {"steps": {"10": {"data": {"viewed_teaching_panel": True, "teaching_panel_version": VERSION}}}}
     blocked = teaching_report.check_material_gate(session)
     assert any(item["step"] == 10 for item in blocked)
-    session["steps"]["10"]["data"].update(teaching_country="CHN", teaching_year=2019)
+    session["steps"]["10"]["data"].update(
+        teaching_country="CHN",
+        teaching_year=2019,
+        teaching_observation={
+            "country": "CHN",
+            "industry": "C26",
+            "year": 2019,
+            "teaching_export_share_w": 0.2,
+            "teaching_tariff_rate_tau": 0.1,
+            "teaching_tariff_exposure": 0.02,
+            "version": VERSION,
+        },
+    )
     blocked = teaching_report.check_material_gate(session)
     assert not any(item["step"] == 10 for item in blocked)

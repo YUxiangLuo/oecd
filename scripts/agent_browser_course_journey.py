@@ -77,10 +77,12 @@ def main():
                 student.run("wait", '[role="dialog"]')
                 student.run("press", "Escape")
             elif 2 <= step <= 5:
-                student.button("记录当前国家到报告材料")
-                student.run("select", 'main select:has(option[value="USA"])', "USA")
-                student.run("wait", "--load", "networkidle")
-                student.button("记录当前国家到报告材料")
+                student.run(
+                    "wait",
+                    "--fn",
+                    'Array.from(document.querySelectorAll("button")).some(e=>e.textContent.trim()==="保存两国同年比较"&&!e.disabled)',
+                )
+                student.button("保存两国同年比较")
             elif 6 <= step <= 8:
                 student.button("沿用并记录到本步")
             elif step == 9:

@@ -265,6 +265,32 @@ def test_report_state_machine_and_failure_preserves_grade(teaching_db, monkeypat
     assert "重新加载" in stale.json()["detail"]
 
 
+def test_submit_api_rejects_a_draft_after_the_session_changes(teaching_db):
+    student = _client(teaching_db)
+    first = empty_session()
+    saved = student.put("/api/classroom/session", json={"session": first, "base_updated_at": None})
+    assert saved.status_code == 200
+    current = db.get_session("student")
+    assert current is not None
+    db.save_generated_report("student", "# old draft", {}, current["updated_at"])
+    changed = empty_session()
+    changed["steps"]["1"] = make_record({"value": "new material"})
+    updated = student.put(
+        "/api/classroom/session",
+        json={"session": changed, "base_updated_at": saved.json()["updated_at"]},
+    )
+    assert updated.status_code == 200
+
+    response = student.post("/api/classroom/report/submit")
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == {
+        "message": "实验记录已更新，请重新生成报告。",
+        "code": "report_outdated",
+    }
+    assert db.latest_report("student")["state"] == "draft"
+
+
 def test_report_generation_rejects_session_changed_during_cpu_work(teaching_db, monkeypatch):
     student = _client(teaching_db)
     initial = student.put("/api/classroom/session", json={"session": empty_session(), "base_updated_at": None}).json()

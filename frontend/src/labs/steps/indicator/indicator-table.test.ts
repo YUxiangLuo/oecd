@@ -4,7 +4,7 @@ import {
   INDICATOR_TABLE_DISPLAY,
   countryObservation,
   countryRowsForYear,
-  indicatorEvidencePatch,
+  indicatorComparisonPatch,
   indicatorMetricColumns,
   indicatorRequestKey,
   indicatorTableColumns,
@@ -46,12 +46,19 @@ describe("indicator selection restoration", () => {
       "SGP",
       2020,
       "FVA_share",
+      "比例",
+      "release-1",
     )).toEqual({
       entity: "SGP",
       value: 0.28,
       year: 2020,
       country: "SGP",
       industry: "",
+      metric: "FVA_share",
+      unit: "比例",
+      release: "release-1",
+      scope: "country",
+      source: "explicit-indicator-table-comparison",
     });
   });
 
@@ -64,6 +71,8 @@ describe("indicator selection restoration", () => {
       "USA",
       2019,
       "FVA_share",
+      "比例",
+      "release-1",
     )?.value).toBe(0.19);
   });
 
@@ -74,25 +83,46 @@ describe("indicator selection restoration", () => {
     ]);
   });
 
-  test("records report evidence only through the explicit capture patch", () => {
-    const china = {
-      entity: "CHN", country: "CHN", industry: "", year: 2020, value: 0.22,
-    };
-    const usa = {
-      entity: "USA", country: "USA", industry: "", year: 2020, value: 0.14,
-    };
-    const first = indicatorEvidencePatch(undefined, china, "FVA_share");
-    expect(first.compared).toEqual(["CHN"]);
-    expect(first.observations).toEqual([china]);
+  test("records exactly two countries from one shared year with complete provenance", () => {
+    expect(indicatorComparisonPatch(
+      [
+        { country: "CHN", FVA_share: 0.22 },
+        { country: "USA", FVA_share: 0.14 },
+      ],
+      ["CHN", "USA"],
+      2020,
+      "FVA_share",
+      "比例",
+      "release-1",
+    )).toEqual({
+      year: 2020,
+      country: "CHN",
+      metric: "FVA_share",
+      compared: ["CHN", "USA"],
+      observations: [
+        {
+          entity: "CHN", country: "CHN", industry: "", year: 2020, value: 0.22,
+          metric: "FVA_share", unit: "比例", release: "release-1", scope: "country",
+          source: "explicit-indicator-table-comparison",
+        },
+        {
+          entity: "USA", country: "USA", industry: "", year: 2020, value: 0.14,
+          metric: "FVA_share", unit: "比例", release: "release-1", scope: "country",
+          source: "explicit-indicator-table-comparison",
+        },
+      ],
+    });
+  });
 
-    const second = indicatorEvidencePatch(first, usa, "FVA_share");
-    expect(second.compared).toEqual(["CHN", "USA"]);
-    expect(second.observations).toEqual([china, usa]);
-
-    const updatedChina = { ...china, year: 2019, value: 0.2 };
-    const updated = indicatorEvidencePatch(second, updatedChina, "FVA_share");
-    expect(updated.compared).toEqual(["USA", "CHN"]);
-    expect(updated.observations).toEqual([usa, updatedChina]);
+  test("refuses a partial pair instead of silently saving one country", () => {
+    expect(indicatorComparisonPatch(
+      [{ country: "CHN", FVA_share: 0.22 }],
+      ["CHN", "USA"],
+      2019,
+      "FVA_share",
+      "比例",
+      "release-1",
+    )).toBeNull();
   });
 });
 

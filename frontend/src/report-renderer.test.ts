@@ -33,13 +33,22 @@ describe("report tables", () => {
 });
 
 describe("parseReportChart", () => {
-  test("accepts the versioned bar and event-study schemas", () => {
+  test("accepts the versioned bar, line and event-study schemas", () => {
     expect(parseReportChart(JSON.stringify({
       version: 1,
       type: "bar",
       title: "Top 5",
       items: [{ label: "CHN", value: 0.42 }],
     }))).toMatchObject({ type: "bar" });
+    expect(parseReportChart(JSON.stringify({
+      version: 1,
+      type: "line",
+      title: "两国趋势",
+      series: [
+        { label: "CHN", points: [{ label: "2019", value: 10 }, { label: "2020", value: 12 }] },
+        { label: "USA", points: [{ label: "2019", value: 8 }, { label: "2020", value: 7 }] },
+      ],
+    }))).toMatchObject({ type: "line" });
     expect(parseReportChart(JSON.stringify({
       version: 1,
       type: "event-study",
@@ -87,6 +96,19 @@ describe("parseReportChart", () => {
       type: "bar",
       items: [{ label: "A", value: 1, color: "red" }],
     }))).toBeNull();
+    expect(parseReportChart(JSON.stringify({
+      version: 1,
+      type: "line",
+      series: [{ label: "CHN", points: [{ label: "2020", value: 1 }] }],
+    }))).toBeNull();
+    expect(parseReportChart(JSON.stringify({
+      version: 1,
+      type: "line",
+      series: [
+        { label: "CHN", points: [{ label: "2020", value: 1, html: "bad" }] },
+        { label: "USA", points: [{ label: "2020", value: 2 }] },
+      ],
+    }))).toBeNull();
   });
 
   test("caps chart size", () => {
@@ -105,5 +127,22 @@ describe("parseReportChart", () => {
     expect(html).not.toContain("<img");
     expect(html).not.toContain("attacker.example");
     expect(html).not.toContain("language-gvcsim-chart");
+  });
+
+  test("renders a validated two-series line chart with a legend", () => {
+    const chart = JSON.stringify({
+      version: 1,
+      type: "line",
+      title: "两国历年趋势",
+      series: [
+        { label: "CHN", points: [{ label: "2019", value: 1 }, { label: "2020", value: 2 }] },
+        { label: "USA", points: [{ label: "2019", value: 2 }, { label: "2020", value: 1 }] },
+      ],
+    });
+    const html = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: `\`\`\`gvcsim-chart\n${chart}\n\`\`\`` }));
+    expect(html).toContain("两国历年趋势");
+    expect(html).toContain("CHN");
+    expect(html).toContain("USA");
+    expect(html.match(/<polyline/g)).toHaveLength(2);
   });
 });

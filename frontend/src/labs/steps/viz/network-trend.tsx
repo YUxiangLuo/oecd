@@ -70,7 +70,8 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
     && (view === "trend" ? commonYears.length >= 2
       : ranked.some((row) => row.values.every((value) => value !== null)));
   const readings = view === "trend" ? finite.filter((point) => commonYears.includes(point.year)).map((point) => ({ ...point, industry }))
-    : ranked.flatMap((row) => row.values.flatMap((value, index) => value === null ? [] : [{ country: selected[index], industry: row.industry, year, value }]));
+    : ranked.filter((row) => row.values.every((value) => value !== null))
+      .flatMap((row) => row.values.map((value, index) => ({ country: selected[index], industry: row.industry, year, value: value! })));
   const pendingObservations: VizObservation[] = readings.map((point) => ({
       entity: `${point.country}·${point.industry}`, country: point.country, industry: point.industry,
       year: point.year, value: point.value!, metric, unit,

@@ -11,6 +11,15 @@ export interface ShockStepState extends QuizCompletionState, Record<string, unkn
   teaching_year?: number;
   viewed_teaching_panel?: boolean;
   teaching_panel_version?: string;
+  teaching_observation?: {
+    country: string;
+    industry: string;
+    year: number;
+    teaching_export_share_w: number;
+    teaching_tariff_rate_tau: number;
+    teaching_tariff_exposure: number;
+    version: string;
+  };
 }
 
 /** 步骤 10 只介绍四个后续回归共同使用的虚构关税暴露 X。 */
@@ -36,11 +45,23 @@ export function ShockLab({ meta, step: _step, state }: {
 
   useEffect(() => {
     if (!panel) return;
+    const representative = panel.rows.find((row) => row.industry === "C26") ?? panel.rows[0];
     state.save({
       teaching_country: country,
       teaching_year: year,
       viewed_teaching_panel: true,
       teaching_panel_version: panel.version,
+      teaching_observation: representative
+        ? {
+          country: representative.country,
+          industry: representative.industry,
+          year: representative.year,
+          teaching_export_share_w: representative.teaching_export_share_w,
+          teaching_tariff_rate_tau: representative.teaching_tariff_rate_tau,
+          teaching_tariff_exposure: representative.teaching_tariff_exposure,
+          version: panel.version,
+        }
+        : undefined,
     });
   }, [panel, country, year]);
 
