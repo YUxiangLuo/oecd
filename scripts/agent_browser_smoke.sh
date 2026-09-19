@@ -117,7 +117,7 @@ for step in $(seq 1 15); do
   # sr-only 缺坐标、超高未裁剪元素都曾在这里突破布局，逐步断言防回归。
   "${ab[@]}" eval '(() => { const d = document.documentElement; if (d.scrollHeight > d.clientHeight + 1) throw new Error(`document scrolls: ${d.scrollHeight} > ${d.clientHeight}`); return true; })()' >/dev/null
   if [[ "$step" -eq 9 ]]; then
-    # 步骤 9 的镜头（贸易联系概览 / 行业指标可视化）会被保存到会话，历史状态可能是 heat；
+    # 步骤 9 的镜头（贸易联系概览 / 两国行业比较）会被保存到会话，历史状态可能是 heat；
     # 先显式选中网络图，断言才不依赖账号上次留下的镜头。
     "${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="贸易联系概览")?.click()' >/dev/null || true
     "${ab[@]}" wait --load networkidle
@@ -165,7 +165,7 @@ assert_table_alignment
 "${ab[@]}" wait --load networkidle
 "${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="开始本步")?.click()' >/dev/null
 sleep 1
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="行业指标可视化")?.click()' >/dev/null
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="两国行业比较")?.click()' >/dev/null
 "${ab[@]}" wait --load networkidle
 require_table 'table.heat-table-grid'
 assert_table_alignment

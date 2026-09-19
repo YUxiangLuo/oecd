@@ -40,10 +40,10 @@ import {
 
 type Lens = "heat" | "network";
 
-export const STEP10_DEFAULT_LENS: Lens = "network";
+export const STEP10_DEFAULT_LENS: Lens = "heat";
 export const STEP10_LENSES: { key: Lens; label: string; hint: string }[] = [
+  { key: "heat", label: "两国行业比较", hint: "历年趋势 / 行业排名 / 两国同口径比较" },
   { key: "network", label: "贸易联系概览", hint: "国家间双边流向 · 补充探索" },
-  { key: "heat", label: "行业指标可视化", hint: "历年趋势 / 行业排名 / 两国比较" },
 ];
 const STEP10_LENS_KEYS = STEP10_LENSES.map(({ key }) => key);
 
@@ -114,20 +114,6 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
 
   return (
     <div>
-      <section className="reg-section-card" aria-label="步骤9完成清单" style={{ marginBottom: 14 }}>
-        <h3>本步完成清单</h3>
-        <p>① {picked.length >= 2 ? "✓ 已记录至少两个经济体" : "待完成：记录两个经济体的比较"}</p>
-        <p>② {observations.length ? "✓ 已保存行业指标读数" : "待完成：保存当前指标读数"}</p>
-        <p>③ 在页面下方完成本步单选题。报告材料与答题分别检查。</p>
-        <div className="controls"><button className="primary" onClick={() => changeLens("heat")}>前往行业图表，记录报告材料</button></div>
-        <p className="muted">选择两个国家和一个指标 → 查看趋势或行业排名 → 在报告材料卡点击“保存为报告材料”，一次完成前两项；更换比较后可点击“更新报告材料”。贸易联系概览仅作补充探索。</p>
-      </section>
-      <div className="tipbox" style={{ marginBottom: 14 }}>
-        <b>两类图不能直接对应：</b>贸易联系概览以国家为节点，展示跨国中间品＋最终品流量，不含国内边，位置按预设地理区域排布。
-        行业图表与<b>步骤 5 同源</b>，指标在完整国家×行业中间品网络上计算，包含国内联系和正自环。
-        不要用概览中的位置解释某行业的中心性；国家级完全图的无权中心性没有区分度。
-      </div>
-
       <div className="controls" style={{ marginBottom: 12 }}>
         {lens === "network" && <YearSelect years={meta.years} year={year} onChange={changeYear} />}
         <span className="muted" style={{ fontSize: 12 }}>
@@ -221,6 +207,19 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
           </ChartStory>
         )}
       </FullscreenPanel>
+      </details>
+      <details className="technical-details" aria-label="步骤9完成清单">
+        <summary>本步完成清单与口径说明</summary>
+        <p>① {picked.length >= 2 ? "✓ 已记录至少两个经济体" : "待完成：记录两个经济体的比较"}</p>
+        <p>② {observations.length ? "✓ 已保存行业指标读数" : "待完成：保存当前指标读数"}</p>
+        <p>③ 在页面下方完成本步单选题。报告材料与答题分别检查。</p>
+        <div className="controls"><button className="primary" onClick={() => changeLens("heat")}>前往行业图表，记录报告材料</button></div>
+        <p className="muted">选择两个国家和一个指标 → 查看趋势或行业排名 → 在报告材料卡点击“保存为报告材料”，一次完成前两项；更换比较后可点击“更新报告材料”。贸易联系概览仅作补充探索。</p>
+        <div className="tipbox">
+          <b>两类图不能直接对应：</b>贸易联系概览以国家为节点，展示跨国中间品＋最终品流量，不含国内边，位置按预设地理区域排布。
+          行业图表与<b>步骤 5 同源</b>，指标在完整国家×行业中间品网络上计算，包含国内联系和正自环。
+          不要用概览中的位置解释某行业的中心性；国家级完全图的无权中心性没有区分度。
+        </div>
       </details>
     </div>
   );

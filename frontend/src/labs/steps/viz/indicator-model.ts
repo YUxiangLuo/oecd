@@ -3,6 +3,7 @@ import type { Row, VizObservation } from "./scaffold";
 export interface IndicatorTopic {
   key: "trade" | "production" | "length";
   defaultMetric: string;
+  defaultView?: IndicatorView;
   question: string;
   note: string;
   metrics: {
@@ -42,6 +43,24 @@ export interface IndicatorSelection {
   year: number;
   view: IndicatorView;
   limit: number;
+}
+
+export function defaultComparison(
+  countries: string[],
+  compared: string[] = [],
+): [string, string] {
+  const carried = compared.filter(
+    (country, index) =>
+      countries.includes(country) && compared.indexOf(country) === index,
+  );
+  const first =
+    carried[0] ?? (countries.includes("CHN") ? "CHN" : countries[0] ?? "");
+  const second =
+    carried.find((country) => country !== first) ??
+    (first !== "USA" && countries.includes("USA")
+      ? "USA"
+      : countries.find((country) => country !== first) ?? "");
+  return [first, second];
 }
 export const finiteValue = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);

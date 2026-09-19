@@ -57,6 +57,17 @@
 .reg-inline-status { display: inline-block; margin-left: 10px; }
 .metric-facts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .metric-facts span { display: inline-flex; gap: 5px; padding: 5px 8px; background: #fff; border: 1px solid #e3e4ee; border-radius: 7px; font-size: 11.5px; }
+.comparison-summary {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 0 18px;
+}
+.comparison-summary > div {
+  min-width: 0; padding: 10px 11px; border: 1px solid #dfe4ee; border-radius: 9px; background: #f8faff;
+}
+.comparison-summary span, .comparison-summary small { display: block; color: #616b7d; font-size: 10.5px; line-height: 1.4; }
+.comparison-summary b { display: block; margin: 4px 0 3px; color: #293342; font-size: 13px; line-height: 1.35; }
+.comparison-facets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.comparison-facet { min-width: 0; padding: 11px; border: 1px solid #e1e5ee; border-radius: 10px; background: #fbfcff; }
+.comparison-facet h4 { margin: 0 0 8px; }
 .lesson-details { margin-top: 9px; border-top: 1px dashed #d9dbea; padding-top: 8px; font-size: 12px; }
 .lesson-details summary, .advanced-settings summary, .technical-details > summary { cursor: pointer; color: #4b47e0; font-weight: 700; }
 .did-comparison { width: 211px; text-align: center; font-size: 11px; }

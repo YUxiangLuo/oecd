@@ -84,6 +84,7 @@ def main():
             elif 6 <= step <= 8:
                 student.button("沿用并记录到本步")
             elif step == 9:
+                student.button("贸易联系概览")
                 for country in ("CHN", "USA"):
                     selector = f'.network-node[aria-label^="{country} "]'
                     student.run("wait", selector)
@@ -91,11 +92,29 @@ def main():
                     student.run("press", "Enter")
                     student.run("wait", '[role="dialog"]')
                     student.run("press", "Escape")
-                student.button("行业指标可视化")
-                student.run("wait", ".heat-table-grid tbody button")
-                student.run("click", ".heat-table-grid tbody tr:first-child button")
-                student.run("wait", '[role="dialog"]')
-                student.run("press", "Escape")
+                student.button("两国行业比较")
+                student.run(
+                    "select",
+                    'section[aria-label="行业网络指标趋势"] select[name="network-country-a"]',
+                    "CHN",
+                )
+                student.run(
+                    "select",
+                    'section[aria-label="行业网络指标趋势"] select[name="network-country-b"]',
+                    "USA",
+                )
+                student.run(
+                    "select",
+                    'section[aria-label="行业网络指标趋势"] select[name="network-metric"]',
+                    "betweenesscentrality",
+                )
+                student.run(
+                    "wait",
+                    "--fn",
+                    'Array.from(document.querySelectorAll("button")).some(e=>e.textContent.trim()==="保存为报告材料"&&!e.disabled)',
+                )
+                student.button("保存为报告材料")
+                student.run("wait", "--text", "当前比较已记录")
             elif step == 10:
                 for kind in ("tariff", "sanctions", "export_control"):
                     student.run("click", f"#shock-type-tab-{kind}")

@@ -8,7 +8,7 @@ import type { VizStepState } from "./scaffold";
 afterEach(() => { cleanup(); mock.restore(); });
 
 test("step 9 details are read-only and browsing never clears saved report material", async () => {
-  expect(STEP10_DEFAULT_LENS).toBe("network");
+  expect(STEP10_DEFAULT_LENS).toBe("heat");
   const meta: Meta = { countries: ["CHN", "USA"], sectors: ["C26"], years: [2019, 2020], dataset: { release_id: "a".repeat(32), years: [2019, 2020] } };
   const step: Step = { n: 9, stage: 3, lab: "viz", status: "done", title: "网络指标可视化", goal: "", tasks: ["", "", ""], concept: "", tip: "", deps: [], handoff: { input: "", action: "", output: "" } };
   const data: VizStepState = { chart: "heat", year: 2020, compared: ["CHN", "USA"], observations: [
@@ -21,6 +21,8 @@ test("step 9 details are read-only and browsing never clears saved report materi
   const save = mock((_patch: Partial<VizStepState>) => {});
   render(<NetworkVizStep meta={meta} step={step} state={{ data, save, syncing: false, syncError: null, syncNow: () => {}, complete: false }} />);
   await screen.findByRole("img");
+  const checklist = screen.getByText("本步完成清单与口径说明").closest("details") as HTMLDetailsElement;
+  expect(checklist.open).toBe(false);
   fireEvent.click(screen.getByText("查看行业明细表（可选）"));
   await screen.findByText(/本表仅供查数/, { selector: "caption" });
   expect(screen.queryByText("记录拓扑基准")).toBeNull();

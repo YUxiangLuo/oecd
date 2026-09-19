@@ -292,7 +292,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             ]
             missing: list[str] = []
             if len(compared) < 2:
-                missing.append("请在“行业指标可视化”选择两个经济体，在报告材料卡点击“保存为报告材料”或“更新报告材料”")
+                missing.append("请在“两国行业比较”选择两个经济体，在报告材料卡点击“保存为报告材料”或“更新报告材料”")
             if len({item.get("country") for item in observations} & compared) < 2:
                 missing.append("请在报告材料卡点击“保存为报告材料”或“更新报告材料”，保存两国的行业指标读数")
             if missing:

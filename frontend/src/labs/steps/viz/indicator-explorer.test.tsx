@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { api } from "../../../api";
 import type { Meta, Step, StepStateApi } from "../../../types";
 import type { VizStepState } from "./scaffold";
+import { LengthPositionTrajectory } from "./indicator-charts";
 import { LengthVizStep } from "./length";
 import { TradeVizStep } from "./trade";
 
@@ -63,7 +64,7 @@ function setup(Component = TradeVizStep, data?: VizStepState) {
 }
 
 describe("explicit indicator explorer", () => {
-  test("starts at CHN country trend without saving; two-country save and update are explicit", async () => {
+  test("starts with a two-country trend without saving; report capture and update remain explicit", async () => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(
       async (year) => countryRows(year),
     );
@@ -76,13 +77,16 @@ describe("explicit indicator explorer", () => {
     expect((view.getByLabelText("国家 A") as HTMLSelectElement).value).toBe(
       "CHN",
     );
+    expect((view.getByLabelText("对比国家 B") as HTMLSelectElement).value).toBe(
+      "USA",
+    );
     expect((view.getByLabelText("比较范围") as HTMLSelectElement).value).toBe(
       "",
     );
     expect(view.saves).toHaveLength(0);
-    fireEvent.change(view.getByLabelText("对比国家 B"), {
-      target: { value: "USA" },
-    });
+    expect(await view.findByLabelText("两国趋势结论")).toBeTruthy();
+    expect(view.getByText(/两国差距/)).toBeTruthy();
+    expect(view.getByText(/差距缩小 .* 个百分点/)).toBeTruthy();
     await waitFor(() =>
       expect(
         view
@@ -113,7 +117,7 @@ describe("explicit indicator explorer", () => {
         .getByRole("button", { name: "当前比较已记录" })
         .hasAttribute("disabled"),
     ).toBeTrue();
-    fireEvent.click(view.getByRole("button", { name: "同年比较" }));
+    fireEvent.click(view.getByRole("button", { name: "同年差异" }));
     expect(view.saves).toHaveLength(1);
     await waitFor(() =>
       expect(
@@ -133,7 +137,7 @@ describe("explicit indicator explorer", () => {
     schema.mockRestore();
   });
 
-  test("restores only new source plus indicator_selection, not legacy compared/observations", async () => {
+  test("carries a legacy country pair without treating legacy observations as saved material", async () => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(
       async (year) => countryRows(year),
     );
@@ -147,11 +151,11 @@ describe("explicit indicator explorer", () => {
     });
     await legacy.findByRole("heading", { name: /外国增加值项占比/ });
     expect((legacy.getByLabelText("国家 A") as HTMLSelectElement).value).toBe(
-      "CHN",
+      "USA",
     );
     expect(
       (legacy.getByLabelText("对比国家 B") as HTMLSelectElement).value,
-    ).toBe("");
+    ).toBe("CHN");
     expect(legacy.getByText(/尚未保存/)).toBeTruthy();
     cleanup();
     const selection = {
@@ -230,10 +234,7 @@ describe("explicit indicator explorer", () => {
     });
     const view = setup();
     await view.findByRole("heading", { name: /外国增加值项占比/ });
-    fireEvent.change(view.getByLabelText("对比国家 B"), {
-      target: { value: "USA" },
-    });
-    fireEvent.click(view.getByRole("button", { name: "两国构成" }));
+    fireEvent.click(view.getByRole("button", { name: "解释构成" }));
     await waitFor(() => expect(view.getByText(/14 条有效读数/)).toBeTruthy());
     fireEvent.click(view.getByRole("button", { name: "保存为报告材料" }));
     expect(new Set(view.saves[0].observations!.map((x) => x.metric))).toEqual(
@@ -256,7 +257,7 @@ describe("explicit indicator explorer", () => {
     schema.mockRestore();
   });
 
-  test("length directions render separate forward/backward charts", async () => {
+  test("length defaults to separate forward/backward trends plus a time trajectory", async () => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(
       async (year) => countryRows(year),
     );
@@ -266,14 +267,31 @@ describe("explicit indicator explorer", () => {
     });
     const view = setup(LengthVizStep);
     await view.findByRole("heading", { name: /前向GVC段长度/ });
-    fireEvent.click(view.getByRole("button", { name: "前后向对照" }));
     expect(
       await view.findByRole("img", { name: /前向GVC段长度历年变化/ }),
     ).toBeTruthy();
     expect(
       view.getByRole("img", { name: /后向GVC段长度历年变化/ }),
     ).toBeTruthy();
+    expect(
+      view.getByRole("img", { name: /前向与后向GVC段长度历年轨迹/ }),
+    ).toBeTruthy();
     rows.mockRestore();
     schema.mockRestore();
+  });
+
+  test("length trajectory does not bridge a missing middle year", () => {
+    const rows = [
+      { country: "CHN", year: 2019, PLv_GVC: 2, PLy_GVC: 3 },
+      { country: "CHN", year: 2021, PLv_GVC: 4, PLy_GVC: 5 },
+    ];
+    render(
+      <LengthPositionTrajectory
+        rows={rows}
+        countries={["CHN"]}
+        years={[2019, 2020, 2021]}
+      />,
+    );
+    expect(document.querySelectorAll('line[data-series="CHN"]')).toHaveLength(0);
   });
 });

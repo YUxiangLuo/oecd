@@ -20,6 +20,7 @@ import {
   type VizStepState,
 } from "./scaffold";
 import {
+  defaultComparison,
   finiteValue,
   indicatorMaterial,
   indicatorRows,
@@ -32,6 +33,7 @@ import {
 import {
   IndicatorPairBars,
   IndicatorTrendChart,
+  LengthPositionTrajectory,
   indicatorNumber,
 } from "./indicator-charts";
 
@@ -54,15 +56,19 @@ export function IndicatorExplorer({
       item.source?.startsWith("explicit-indicator-") &&
       item.release === release,
   );
+  const [defaultFirst, defaultSecond] = defaultComparison(
+    countries,
+    state.data?.compared,
+  );
   const defaults: IndicatorSelection = {
-    first: countries.includes("CHN") ? "CHN" : countries[0],
-    second: "",
+    first: defaultFirst,
+    second: defaultSecond,
     industry: "",
     metric: topic.defaultMetric,
     start: years[0],
     end: years.at(-1)!,
     year: years.at(-1)!,
-    view: "trend",
+    view: topic.defaultView ?? "trend",
     limit: 10,
   };
   const [selection, setSelection] = useState<IndicatorSelection>(
@@ -211,16 +217,16 @@ export function IndicatorExplorer({
     });
   };
   const lenses: { key: IndicatorView; label: string }[] = [
-    { key: "trend", label: "历年变化" },
-    { key: "comparison", label: "同年比较" },
+    { key: "trend", label: "比较变化" },
+    { key: "comparison", label: "同年差异" },
     ...(topic.composition
       ? [
-          { key: "composition" as const, label: "两国构成" },
+          { key: "composition" as const, label: "解释构成" },
           { key: "evolution" as const, label: "构成演变" },
         ]
-      : [{ key: "directions" as const, label: "前后向对照" }]),
-    { key: "industry", label: "行业差异" },
-    { key: "explore", label: "更多探索" },
+      : [{ key: "directions" as const, label: "前后向与位置" }]),
+    { key: "industry", label: "定位行业" },
+    { key: "explore", label: "进一步探索" },
   ];
   const valuesFor = (key: string, sector = industry) =>
     selected.map((country) => {
@@ -283,8 +289,8 @@ export function IndicatorExplorer({
     >
       <h3>{topic.question}</h3>
       <p>
-        选择国家与指标 → 看历年变化或同年差异 →
-        保存一份两国比较。国家整体和同一行业使用各自的原始指标，不能混为一谈。
+        固定两个国家和同一口径，先比较跨年变化，再解释构成或定位行业差异。
+        国家整体和同一行业使用各自的原始指标，不能混为一谈。
       </p>
       <div className="controls">
         <LabeledControl label="国家 A">
@@ -314,7 +320,7 @@ export function IndicatorExplorer({
               value={second}
               onChange={(e) => select({ second: e.target.value })}
             >
-              <option value="">不对比（单国浏览）</option>
+              <option value="">暂不对比（不能保存报告材料）</option>
               {countries
                 .filter((country) => country !== first)
                 .map((country) => (
@@ -577,17 +583,24 @@ export function IndicatorExplorer({
             />
           )}
           {view === "directions" &&
-            metrics.map((key) => (
-              <IndicatorTrendChart
-                key={key}
+            <>
+              {metrics.map((key) => (
+                <IndicatorTrendChart
+                  key={key}
+                  rows={scoped}
+                  countries={selected}
+                  years={chartYears}
+                  metric={key}
+                  label={label(key)}
+                  unit={unit(key)}
+                />
+              ))}
+              <LengthPositionTrajectory
                 rows={scoped}
                 countries={selected}
                 years={chartYears}
-                metric={key}
-                label={label(key)}
-                unit={unit(key)}
               />
-            ))}
+            </>}
           {view === "comparison" && (
             <IndicatorPairBars
               countries={selected}
@@ -605,38 +618,47 @@ export function IndicatorExplorer({
             <>
               <p>
                 {topic.composition.note}{" "}
-                按国家、年份排列，分项颜色固定；金额和份额不能混读。
+                {view === "evolution"
+                  ? "两国分面使用相同分项颜色和年份顺序，先比较各自变化，再比较国家差异。"
+                  : "两国使用相同分项颜色和共同刻度；金额和份额不能混读。"}
               </p>
-              <CompositionBar
-                rows={selected.flatMap((country) =>
-                  chartYears.flatMap((value) => {
-                    const row = scoped.find(
-                      (row) => row.country === country && row.year === value,
-                    );
-                    return row &&
-                      finiteValue(row[topic.composition!.total]) &&
-                      (row[topic.composition!.total] as number) > 0 &&
-                      topic.composition!.segments.every((segment) =>
-                        finiteValue(row[segment.key]),
-                      )
-                      ? [
-                          {
-                            ...row,
-                            country: `${countryLabel(country)} · ${value}`,
-                            industry: null,
-                          },
-                        ]
-                      : [];
-                  }),
-                )}
-                segments={topic.composition.segments}
-                normalizationKey={topic.composition.total}
-                sortKey={topic.composition.total}
-                sortDirection="input"
-                sortLabel={label(topic.composition.total)}
-                sortFormat="amount"
-                valueFormat="amount"
-              />
+              <div className={view === "evolution" ? "comparison-facets" : undefined}>
+                {(view === "evolution" ? selected.map((country) => [country]) : [selected]).map((facetCountries) => (
+                  <section key={facetCountries.join(":")} className={view === "evolution" ? "comparison-facet" : undefined}>
+                    {view === "evolution" && <h4>{countryLabel(facetCountries[0])} · 构成演变</h4>}
+                    <CompositionBar
+                      rows={facetCountries.flatMap((country) =>
+                        chartYears.flatMap((value) => {
+                          const row = scoped.find(
+                            (row) => row.country === country && row.year === value,
+                          );
+                          return row &&
+                            finiteValue(row[topic.composition!.total]) &&
+                            (row[topic.composition!.total] as number) > 0 &&
+                            topic.composition!.segments.every((segment) =>
+                              finiteValue(row[segment.key]),
+                            )
+                            ? [{
+                                ...row,
+                                country: view === "evolution"
+                                  ? String(value)
+                                  : `${countryLabel(country)} · ${value}`,
+                                industry: null,
+                              }]
+                            : [];
+                        }),
+                      )}
+                      segments={topic.composition!.segments}
+                      normalizationKey={topic.composition!.total}
+                      sortKey={topic.composition!.total}
+                      sortDirection="input"
+                      sortLabel={label(topic.composition!.total)}
+                      sortFormat="amount"
+                      valueFormat="amount"
+                    />
+                  </section>
+                ))}
+              </div>
             </>
           )}
           {view === "industry" && (

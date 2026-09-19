@@ -20,6 +20,30 @@ test("sorts time, separates countries and industries, and preserves zero versus 
   ]);
 });
 
+test("requires at least two years that are valid for both countries", async () => {
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) =>
+    page([
+      row(
+        country,
+        year,
+        country === "CHN"
+          ? year === 2020 ? null : 10 + year
+          : year === 2018 ? null : 20 + year,
+      ),
+    ]),
+  );
+  render(<NetworkTrend meta={meta} initialCountry="CHN" onRecord={() => {}} />);
+  fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
+  await screen.findByRole("img");
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "保存为报告材料" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true),
+  );
+  expect(screen.getByText(/至少有两个共同有效年份/)).toBeTruthy();
+});
+
 test("renders gaps without joining them, records only explicit two-country views, and blocks stale requests", async () => {
   let resolveGerman!: (page: IndustryPage) => void;
   spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => {
@@ -29,20 +53,20 @@ test("renders gaps without joining them, records only explicit two-country views
   const save = mock(() => {});
   render(<NetworkTrend meta={meta} initialCountry="CHN" onRecord={save} />);
   fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
-  await screen.findByRole("img");
+  const chart = await screen.findByRole("img");
   const button = screen.getByRole("button", { name: "保存为报告材料" }) as HTMLButtonElement;
-  expect(button.disabled).toBe(true);
+  expect(button.disabled).toBe(false);
   expect(save).not.toHaveBeenCalled();
+  expect(document.querySelectorAll('[aria-label="趋势图图例"]')).toHaveLength(1);
+  expect(chart.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   // Two isolated observations must not be connected over the missing 2019 value.
-  expect(document.querySelectorAll('svg line[stroke="#216cc0"]').length).toBe(0);
-  fireEvent.change(screen.getByLabelText("对比国家 B"), { target: { value: "USA" } });
-  await waitFor(() => expect(button.disabled).toBe(false));
+  expect(document.querySelectorAll('svg line[data-series="CHN"]').length).toBe(0);
   fireEvent.click(button);
   expect(save).toHaveBeenCalledTimes(1);
   const [countries, observations] = save.mock.calls[0] as unknown as [string[], Array<Record<string, unknown>>];
   expect(countries).toEqual(["CHN", "USA"]);
   expect(observations.map(({ country, year, value }) => [country, year, value])).toEqual([
-    ["CHN", 2018, 10], ["CHN", 2020, 12], ["USA", 2018, 70], ["USA", 2019, 71], ["USA", 2020, 72],
+    ["CHN", 2018, 10], ["CHN", 2020, 12], ["USA", 2018, 70], ["USA", 2020, 72],
   ]);
   expect(observations.every((item) => item.source === "explicit-network-trend" && item.release === "a".repeat(32))).toBe(true);
   fireEvent.change(screen.getByLabelText("对比国家 B"), { target: { value: "DEU" } });
@@ -66,8 +90,7 @@ test("ranking saves the selected metric and displayed industries, then drills in
   }));
   const save = mock(() => {});
   render(<NetworkTrend meta={meta} initialCountry="CHN" onRecord={save} />);
-  fireEvent.change(screen.getByLabelText("对比国家 B"), { target: { value: "USA" } });
-  fireEvent.click(screen.getByRole("button", { name: "看行业排名" }));
+  fireEvent.click(screen.getByRole("button", { name: "定位行业" }));
   await screen.findByRole("region", { name: "行业排名条形图" });
   fireEvent.click(screen.getByRole("button", { name: "保存为报告材料" }));
   const [countries, observations] = save.mock.calls[0] as unknown as [string[], Array<Record<string, unknown>>];
@@ -92,7 +115,6 @@ test("saved material changes only on explicit update and exposes sync failures",
   const retry = mock(() => {});
   const props = { meta, initialCountry: "CHN", onRecord: save, onRetrySync: retry };
   const { rerender } = render(<NetworkTrend {...props} />);
-  fireEvent.change(screen.getByLabelText("对比国家 B"), { target: { value: "USA" } });
   await waitFor(() => expect((screen.getByRole("button", { name: "保存为报告材料" }) as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(screen.getByRole("button", { name: "保存为报告材料" }));
   const saved = save.mock.calls[0][1];
