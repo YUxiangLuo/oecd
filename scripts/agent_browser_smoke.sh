@@ -117,9 +117,9 @@ for step in $(seq 1 15); do
   # sr-only 缺坐标、超高未裁剪元素都曾在这里突破布局，逐步断言防回归。
   "${ab[@]}" eval '(() => { const d = document.documentElement; if (d.scrollHeight > d.clientHeight + 1) throw new Error(`document scrolls: ${d.scrollHeight} > ${d.clientHeight}`); return true; })()' >/dev/null
   if [[ "$step" -eq 9 ]]; then
-    # 步骤 9 的镜头（贸易网络图 / 行业网络指标）会被保存到会话，历史状态可能是 heat；
+    # 步骤 9 的镜头（贸易联系概览 / 行业指标可视化）会被保存到会话，历史状态可能是 heat；
     # 先显式选中网络图，断言才不依赖账号上次留下的镜头。
-    "${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="贸易网络图")?.click()' >/dev/null || true
+    "${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="贸易联系概览")?.click()' >/dev/null || true
     "${ab[@]}" wait --load networkidle
     # The network uses one portalled dialog instance: node activation expands it,
     # Escape closes it, and focus/selection return to the invoking SVG node.
@@ -165,7 +165,7 @@ assert_table_alignment
 "${ab[@]}" wait --load networkidle
 "${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="开始本步")?.click()' >/dev/null
 sleep 1
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="行业网络指标")?.click()' >/dev/null
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="行业指标可视化")?.click()' >/dev/null
 "${ab[@]}" wait --load networkidle
 require_table 'table.heat-table-grid'
 assert_table_alignment
@@ -176,7 +176,12 @@ require_table 'table.heat-table-grid'
 assert_table_alignment
 "${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>/退出步骤|退出全屏/.test((b.getAttribute("aria-label")||"")+b.textContent))?.click()' >/dev/null
 # 收尾：把步骤 9 镜头切回网络图，避免本门禁给下一次运行留下 heat 状态（镜头会被保存进会话）
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="贸易网络图")?.click()' >/dev/null
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="贸易联系概览")?.click()' >/dev/null
+"${ab[@]}" wait --load networkidle
+
+# 最终截图、HAR 与 WCAG 审计属于步骤 15；上面的几何门禁最后停在步骤 9，
+# 必须显式返回报告页，不能让文件名和实际覆盖页面不一致。
+"${ab[@]}" open "$GVCSIM_BASE_URL/?step=15"
 "${ab[@]}" wait --load networkidle
 
 if [[ -n "$artifact_dir" ]]; then

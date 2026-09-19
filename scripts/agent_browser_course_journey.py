@@ -91,7 +91,7 @@ def main():
                     student.run("press", "Enter")
                     student.run("wait", '[role="dialog"]')
                     student.run("press", "Escape")
-                student.button("行业网络指标")
+                student.button("行业指标可视化")
                 student.run("wait", ".heat-table-grid tbody button")
                 student.run("click", ".heat-table-grid tbody tr:first-child button")
                 student.run("wait", '[role="dialog"]')

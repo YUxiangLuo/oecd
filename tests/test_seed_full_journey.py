@@ -103,11 +103,34 @@ def test_seed_records_step_observations_like_the_ui(api):
         assert data["compared"] == ["CHN", "USA"]
         assert [item["entity"] for item in data["observations"]] == ["CHN", "USA"]
         assert all(item["metric"] == metric and item["value"] is not None for item in data["observations"])
-    # Step 9 records an industry betweenness row instead of a country value.
+        if step in journey._EXPLICIT_INDICATOR_UNITS:
+            assert all(
+                item
+                == {
+                    **item,
+                    "unit": journey._EXPLICIT_INDICATOR_UNITS[step],
+                    "release": "a" * 32,
+                    "scope": "country",
+                    "source": "explicit-indicator-comparison",
+                }
+                for item in data["observations"]
+            )
+    # Step 9 records one industry betweenness ranking row per country.
     step_nine = saved["steps"]["9"]["data"]
     assert step_nine["compared"] == ["CHN", "USA"]
     assert step_nine["metric"] == "betweenesscentrality"
-    assert step_nine["observations"][0]["entity"] == "CHN·C27"
+    assert [item["entity"] for item in step_nine["observations"]] == ["CHN·C27", "USA·C27"]
+    assert all(
+        item
+        == {
+            **item,
+            "unit": "未归一化介数",
+            "release": "a" * 32,
+            "scope": "country-industry",
+            "source": "explicit-network-ranking",
+        }
+        for item in step_nine["observations"]
+    )
     assert saved["steps"]["10"]["data"] == {
         "quiz": saved["steps"]["10"]["data"]["quiz"],
         "teaching_country": "CHN",

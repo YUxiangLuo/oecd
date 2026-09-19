@@ -88,7 +88,13 @@ fi
 "${teacher[@]}" fill 'input[type="number"]' '92'
 "${teacher[@]}" fill '.grade-field textarea' '自动化完整旅程：报告生成、提交与评阅均通过。'
 "${teacher[@]}" find role button click --name '提交评阅' --exact
-"${teacher[@]}" wait --text '已评阅'
+"${teacher[@]}" wait --text "已保存对"
+# The default pending filter removes the row after grading. Re-open it from the
+# graded filter so the final assertion and screenshot prove the persisted score,
+# rather than only matching the transient save confirmation.
+"${teacher[@]}" find role button click --name '已评阅' --exact
+"${teacher[@]}" wait --text "$GVCSIM_E2E_USERNAME"
+"${teacher[@]}" wait --text '92'
 if [[ -n "$artifact_dir" ]]; then
   "${teacher[@]}" screenshot "$artifact_dir/teacher-graded.png" --full
 fi

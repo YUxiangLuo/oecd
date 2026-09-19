@@ -142,6 +142,12 @@ _STEP_METRICS = {
     8: "GVCPs",
 }
 
+_EXPLICIT_INDICATOR_UNITS = {
+    6: "%",
+    7: "%",
+    8: "无量纲",
+}
+
 
 def _country_value_rows(base_url: str, token: str, year: int) -> dict[str, dict[str, Any]]:
     payload = _request_json_rows(base_url, token, f"/api/indicators/country/{year}")
@@ -154,12 +160,14 @@ def _country_observation(
     year: int,
     metric: str,
     release_id: Any,
+    *,
+    unit: str | None = None,
 ) -> dict[str, Any]:
     row = rows.get(country)
     value = row.get(metric) if isinstance(row, dict) else None
     if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
         raise RuntimeError(f"country metric {metric} is missing for {country}")
-    return {
+    observation = {
         "entity": country,
         "country": country,
         "year": year,
@@ -168,6 +176,9 @@ def _country_observation(
         "scope": "country",
         "release": release_id,
     }
+    if unit is not None:
+        observation.update(unit=unit, source="explicit-indicator-comparison")
+    return observation
 
 
 def _step_nine_observation(
@@ -177,10 +188,10 @@ def _step_nine_observation(
     country: str,
     release_id: Any,
 ) -> dict[str, Any]:
-    """One recorded industry betweenness row, shaped like the UI heat-table record.
+    """One recorded industry betweenness row, shaped like the UI ranking record.
 
-    Step 9 asks for a country comparison *and* an industry betweenness observation,
-    and the report gate requires both, so the seed cannot stop at ``compared``.
+    Step 9 asks for readings from both compared countries, so the caller records
+    one ranking row for each country rather than stopping at ``compared``.
     """
     query = urlencode({"country": country, "page_size": 200})
     payload = _request_json(base_url, "GET", f"/api/indicators/industry/{year}?{query}", token=token)
@@ -202,9 +213,10 @@ def _step_nine_observation(
                 "year": year,
                 "value": value,
                 "metric": "betweenesscentrality",
+                "unit": "未归一化介数",
                 "release": release_id,
                 "scope": "country-industry",
-                "source": "explicit-heat-row",
+                "source": "explicit-network-ranking",
             }
     raise RuntimeError("Step 9 industry table has no finite betweenness value")
 
@@ -247,16 +259,26 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
                 "compared": [left, right],
                 "metric": metric,
                 "observations": [
-                    _country_observation(country_rows, country, year, metric, release_id) for country in (left, right)
+                    _country_observation(
+                        country_rows,
+                        country,
+                        year,
+                        metric,
+                        release_id,
+                        unit=_EXPLICIT_INDICATOR_UNITS.get(step),
+                    )
+                    for country in (left, right)
                 ],
             }
         )
-    # Step 9's observation is an industry heat row, not a country value.
+    # Step 9's observations are industry ranking rows, not country values.
     session["steps"]["9"]["data"].update(
         {
             "compared": [left, right],
             "metric": "betweenesscentrality",
-            "observations": [_step_nine_observation(base_url, token, year, left, release_id)],
+            "observations": [
+                _step_nine_observation(base_url, token, year, country, release_id) for country in (left, right)
+            ],
         }
     )
 
