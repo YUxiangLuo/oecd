@@ -765,7 +765,8 @@ def test_composition_requires_all_trade_components_and_reports_each_reading():
     components = {"DVAex": 50, "DVArt": 5, "DDC": 3, "FVA": 20, "FDC": 4, "taxsub": -2, "gross_exports": 80}
     data["observations"] = [
         dict(item, metric=metric, value=value, unit="百万美元", source="explicit-indicator-composition")
-        for item in base for metric, value in components.items()
+        for item in base
+        for metric, value in components.items()
     ]
     assert not any(item["step"] == 6 for item in check_material_gate(session))
     text = "\n".join(teaching_report._experiment_sections(session))

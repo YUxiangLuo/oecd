@@ -1411,7 +1411,9 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                 )
             if step in (6, 7, 8):
                 lines.append("- 记录的显式图表材料（指标与单位逐行列示）：")
-                lines.append(f"- 数据版本：{_safe(observations[0]['release'])}。金额为当年价格；份额以百分数列示，变化按百分点解释。")
+                lines.append(
+                    f"- 数据版本：{_safe(observations[0]['release'])}。金额为当年价格；份额以百分数列示，变化按百分点解释。"
+                )
             else:
                 lines.append(
                     f"- 记录的代表指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}"

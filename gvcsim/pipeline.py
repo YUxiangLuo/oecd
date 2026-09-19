@@ -1,7 +1,8 @@
 """预计算流水线:原始 ICIO → 质检 → 指标 → 面板。
 
-计算一次落盘为 CSV/JSON(data/processed/),API 与前端只读产物、不碰
-原始 66MB 大表,保证接口毫秒级响应。
+计算一次落盘为 CSV/JSON(data/processed/)。指标、可视化与回归 API 只读
+这些固定产物；步骤 1 的 ``/api/db/*`` 在校验 release 来源绑定后按需读取
+原始 ICIO 切片，不做在线指标重算。
 
 产物(每年):
   qc_<year>.json                  输入诊断结果（系统自动运行）

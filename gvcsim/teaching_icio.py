@@ -24,11 +24,41 @@ INDEX = pd.MultiIndex.from_product([REGIONS, SECTORS], names=["region", "sector"
 
 _SCENARIOS = [
     ("direct", "直接生产", "甲国加工品不使用中间投入，直接创造100增加值，形成100最终品并由甲国消费。", "甲国", "甲国"),
-    ("domestic", "国内生产与吸收", "甲国以40增加值生产初级品，投入甲国加工；加工再增加60，形成100并由甲国消费。", "甲国", "甲国"),
-    ("final-export", "最终品出口", "甲国以40初级品和60加工增加值生产100最终品，最终品出口并由乙国消费。", "甲国", "乙国"),
-    ("simple-gvc", "简单全球价值链", "甲国以40增加值生产中间品并出口乙国；乙国增加60加工价值，100最终品由乙国消费。", "乙国", "乙国"),
-    ("complex-gvc", "复杂全球价值链", "甲国以40增加值生产中间品并出口乙国；乙国增加60加工价值后，将100最终品出口丙国消费。", "乙国", "丙国"),
-    ("return-home", "返回本国的价值链", "乙国进口甲国40中间投入，增加60加工价值后，将100最终品返回甲国消费。", "乙国", "甲国"),
+    (
+        "domestic",
+        "国内生产与吸收",
+        "甲国以40增加值生产初级品，投入甲国加工；加工再增加60，形成100并由甲国消费。",
+        "甲国",
+        "甲国",
+    ),
+    (
+        "final-export",
+        "最终品出口",
+        "甲国以40初级品和60加工增加值生产100最终品，最终品出口并由乙国消费。",
+        "甲国",
+        "乙国",
+    ),
+    (
+        "simple-gvc",
+        "简单全球价值链",
+        "甲国以40增加值生产中间品并出口乙国；乙国增加60加工价值，100最终品由乙国消费。",
+        "乙国",
+        "乙国",
+    ),
+    (
+        "complex-gvc",
+        "复杂全球价值链",
+        "甲国以40增加值生产中间品并出口乙国；乙国增加60加工价值后，将100最终品出口丙国消费。",
+        "乙国",
+        "丙国",
+    ),
+    (
+        "return-home",
+        "返回本国的价值链",
+        "乙国进口甲国40中间投入，增加60加工价值后，将100最终品返回甲国消费。",
+        "乙国",
+        "甲国",
+    ),
 ]
 
 
@@ -69,7 +99,9 @@ class _TeachingIO:
 def _records(frame: pd.DataFrame) -> list[dict[str, float | None]]:
     records = []
     for row in frame.to_numpy(dtype=float):
-        records.append({col: (float(value) if math.isfinite(value) else None) for col, value in zip(frame.columns, row)})
+        records.append(
+            {col: (float(value) if math.isfinite(value) else None) for col, value in zip(frame.columns, row)}
+        )
     return records
 
 

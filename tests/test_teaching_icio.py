@@ -38,7 +38,9 @@ def test_teaching_icio_account_shapes_and_balances(authenticated_client):
 
     for scenario in scenarios.values():
         assert scenario["regions"] == ["甲国", "乙国", "丙国"]
-        assert scenario["nodes"] == [f"{country}·{sector}" for country in scenario["regions"] for sector in ("初级品", "加工品")]
+        assert scenario["nodes"] == [
+            f"{country}·{sector}" for country in scenario["regions"] for sector in ("初级品", "加工品")
+        ]
         z, y = np.array(scenario["Z"]), np.array(scenario["Y"])
         x, va, a = map(np.array, (scenario["x"], scenario["va"], scenario["A"]))
         assert z.shape == (6, 6) and y.shape == (6, 3)
@@ -85,6 +87,7 @@ def test_teaching_icio_inactive_nodes_use_json_null_for_undefined_lengths(authen
     inactive = _node(scenarios["domestic"], "丙国·加工品")
     assert scenarios["domestic"]["x"][inactive] == 0
     assert all(value is None for value in scenarios["domestic"]["length"][inactive].values())
+
     # 响应必须是严格 JSON 数值域，不泄漏 NaN/Infinity。
     def finite(value):
         if isinstance(value, dict):
