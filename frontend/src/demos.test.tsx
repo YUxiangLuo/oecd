@@ -1,11 +1,14 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { cleanup, render, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { api } from "./api";
 import { buildDecompositionModel, type DecompositionSpec } from "./decomposition-model";
 import {
   ClosenessPathTable,
   DecompositionDemo,
   DecompositionDetailTable,
   DecompositionRequestMessage,
+  IndicatorCalculationDisclosure,
   NetworkCentralityDemo,
   decompositionModelReason,
   networkDemoKeyTransition,
@@ -28,11 +31,13 @@ const directAmount: DecompositionSpec = {
   parts: [{ key: "a" }, { key: "b" }],
 };
 
+afterEach(cleanup);
+
 describe("zero-total decomposition copy", () => {
   test("reserves structural or inactive context for a complete all-zero row", () => {
     const model = buildDecompositionModel({ total: 0, a: 0, b: 0 }, directAmount);
     const allZero = decompositionModelReason(model);
-    const hint = zeroTotalDecompositionHint(model, "毛出口");
+    const hint = zeroTotalDecompositionHint(model, "总出口");
     expect(allZero).toContain("所有分项均为 0");
     expect(allZero).toContain("可能为结构零");
     expect(hint).toContain("所有分项均为 0");
@@ -43,7 +48,7 @@ describe("zero-total decomposition copy", () => {
     const model = buildDecompositionModel({ total: 0, a: 2, b: -2 }, directAmount);
     const copy = [
       decompositionModelReason(model),
-      zeroTotalDecompositionHint(model, "毛出口"),
+      zeroTotalDecompositionHint(model, "总出口"),
     ].join(" ");
     expect(copy).toContain("正负有符号分项相互抵消");
     expect(copy).toContain("构成占比未定义");
@@ -51,6 +56,108 @@ describe("zero-total decomposition copy", () => {
     expect(copy).not.toContain("结构零");
     expect(copy).not.toContain("没有活动");
     expect(copy).not.toContain("活跃行业");
+  });
+});
+
+describe("indicator calculation disclosure", () => {
+  test("shows the Step 2 FVA share formula with independently substituted values", () => {
+    const html = renderToStaticMarkup(
+      <IndicatorCalculationDisclosure step={4} row={{ FVA: 20, gross_exports: 80 }} />,
+    );
+    expect(html).toContain("外国增加值项占比 = FVA / 总出口");
+    expect(html).toContain("= 20 / 80 = <b>25.0%</b>");
+    expect(html).toContain("FVA 不含外国重复计算 FDC");
+  });
+
+  test("shows the Step 3 complex-GVC share rather than the total GVC share", () => {
+    const html = renderToStaticMarkup(
+      <IndicatorCalculationDisclosure step={5} row={{ "3b_VA_GVC_C": 15, "3_VA_GVC": 40, SVA: 60 }} />,
+    );
+    expect(html).toContain("复杂 GVC 生产份额 = 3b_VA_GVC_C / 总增加值 SVA");
+    expect(html).toContain("= 15 / 60 = <b>25.0%</b>");
+    expect(html).not.toContain("40 / 60");
+  });
+
+  test("preserves small real-data operands instead of displaying a false zero calculation", () => {
+    const step2 = renderToStaticMarkup(
+      <IndicatorCalculationDisclosure
+        step={4}
+        row={{ FVA: 1.180410305310168e-5, gross_exports: 9.999997853224356e-5 }}
+      />,
+    );
+    expect(step2).toContain("= 0.0000118041 / 0.0001 = <b>11.8%</b>");
+    expect(step2).not.toContain("= 0 / 0");
+
+    const step3 = renderToStaticMarkup(
+      <IndicatorCalculationDisclosure
+        step={5}
+        row={{ "3b_VA_GVC_C": 0.0002487161528365, SVA: 0.0117999999999999 }}
+      />,
+    );
+    expect(step3).toContain("= 0.000248716 / 0.0118 = <b>2.1%</b>");
+    expect(step3).not.toContain("= 0 / 0.01");
+  });
+
+  test("shows the Step 4 position formula and does not substitute total lengths", () => {
+    const html = renderToStaticMarkup(
+      <IndicatorCalculationDisclosure step={6} row={{ PLv_GVC: 2.4, PLy_GVC: 1.6, PLv: 9, PLy: 3 }} />,
+    );
+    expect(html).toContain("GVCPs = PLv_GVC / PLy_GVC");
+    expect(html).toContain("= 2.4 / 1.6 = <b>1.500</b>");
+    expect(html).not.toContain("= 9 / 3");
+  });
+
+  test("keeps a defined signed Step 4 position ratio when the backward length is negative", () => {
+    const html = renderToStaticMarkup(
+      <IndicatorCalculationDisclosure step={6} row={{ PLv_GVC: 2.4, PLy_GVC: -1.6 }} />,
+    );
+    expect(html).toContain("= 2.4 / -1.6 = <b>-1.500</b>");
+  });
+
+  test("does not display a rounded negative zero for a tiny signed position ratio", () => {
+    const html = renderToStaticMarkup(
+      <IndicatorCalculationDisclosure step={6} row={{ PLv_GVC: -0.0001, PLy_GVC: 1 }} />,
+    );
+    expect(html).toContain("= -0.0001 / 1 = <b>0.000</b>");
+    expect(html).not.toContain("<b>-0.000</b>");
+  });
+
+  test("does not manufacture a ratio for a zero denominator", () => {
+    const html = renderToStaticMarkup(
+      <IndicatorCalculationDisclosure step={4} row={{ FVA: 2, gross_exports: 0 }} />,
+    );
+    expect(html).toContain("—（分母非正或数据缺失）");
+    expect(html).not.toContain("Infinity");
+  });
+
+  test("keeps a valid Step 4 position calculation visible when negative SVA blocks only the PLv decomposition", async () => {
+    const row = {
+      country: "CYP", industry: "H51", year: 2016,
+      SVA: -3.7579, PLv: 1.6426754975,
+      "1_VA_D": -1.7848700902, "2_VA_RT": -1.0071156465, "3_VA_GVC": -0.9659142633,
+      PLv_D: 1.0608326699, PLv_RT: 1.0614992997,
+      PLv_GVC: 3.3238034859, PLy_GVC: 3.5453989331, GVCPs: 0.9374977396,
+    };
+    const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockResolvedValue([row]);
+    const industryRequest = spyOn(api, "industryIndicatorsAll").mockResolvedValue({
+      total: 1, page: 1, page_size: 200, rows: [row],
+    });
+    try {
+      const view = render(
+        <DecompositionDemo
+          step={6}
+          meta={{ years: [2016], countries: ["CYP"], sectors: ["H51"], dataset: null }}
+          primaryYear={2016}
+          primaryCountry="CYP"
+        />,
+      );
+      await waitFor(() => expect(view.getByText("当前分解不可用")).toBeTruthy());
+      const disclosure = view.getByLabelText("GVC 位置指数计算公示");
+      expect(disclosure.textContent).toContain("3.3238 / 3.5454 = 0.937");
+    } finally {
+      countryRequest.mockRestore();
+      industryRequest.mockRestore();
+    }
   });
 });
 
@@ -94,7 +201,7 @@ describe("semantic decomposition and path tables", () => {
   test("names decomposition details and exposes scoped columns and component row headers without changing signed/null copy", () => {
     const html = renderToStaticMarkup(
       <DecompositionDetailTable
-        caption="实体 A：2020 年 CHN 中国 · 制造业 · 毛出口分解明细"
+        caption="实体 A：2020 年 CHN 中国 · 制造业 · 总出口分解明细"
         parts={[
           { key: "signed", label: "有符号分项", color: "#123456", desc: "负值说明" },
           { key: "missing", label: "缺失分项", color: "#654321", desc: "缺失说明" },
@@ -105,7 +212,7 @@ describe("semantic decomposition and path tables", () => {
       />,
     );
 
-    expect(html).toContain('<caption class="sr-only">实体 A：2020 年 CHN 中国 · 制造业 · 毛出口分解明细</caption>');
+    expect(html).toContain('<caption class="sr-only">实体 A：2020 年 CHN 中国 · 制造业 · 总出口分解明细</caption>');
     expect(html).toContain('<thead class="sr-only">');
     expect(html.match(/scope="col"/g)).toHaveLength(4);
     expect(html.match(/scope="row"/g)).toHaveLength(2);
@@ -117,7 +224,7 @@ describe("semantic decomposition and path tables", () => {
   });
 
   test("provides a native entity/decomposition caption for each decomposition teaching step", () => {
-    for (const decomposition of ["毛出口", "总增加值 SVA", "前向总生产长度 PLv"]) {
+    for (const decomposition of ["总出口", "总增加值 SVA", "前向总生产长度 PLv"]) {
       const caption = `实体 B：2019 年 USA 美国 · 国家级 · ${decomposition}分解明细`;
       const html = renderToStaticMarkup(
         <DecompositionDetailTable
@@ -125,7 +232,7 @@ describe("semantic decomposition and path tables", () => {
           parts={[{ key: "part", label: "组成项", color: "#123456", desc: "组成说明" }]}
           values={[1]}
           shares={[100]}
-          unit={decomposition === "毛出口" || decomposition === "总增加值 SVA" ? "amount" : "number"}
+          unit={decomposition === "总出口" || decomposition === "总增加值 SVA" ? "amount" : "number"}
         />,
       );
       expect(html).toContain(`<caption class="sr-only">${caption}</caption>`);

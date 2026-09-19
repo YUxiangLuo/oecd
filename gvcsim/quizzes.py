@@ -230,7 +230,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "本步的前向 GVC 生产长度主要衡量什么？",
             [
                 _option("a", "GVC 活动诱发累计总产出相对关联增加值的平均生产阶段长度"),
-                _option("b", "毛出口中外国增加值的份额"),
+                _option("b", "总出口中外国增加值的份额"),
                 _option("c", "一国是否位于最多的贸易协议中"),
             ],
             "a",

@@ -228,7 +228,7 @@ def qc(year: int):
 
 
 def _with_derived(df: pd.DataFrame) -> pd.DataFrame:
-    """在公开文献指标列之外派生毛出口与教学用份额列（不改变 CSV schema）。"""
+    """在公开文献指标列之外派生总出口与教学用份额列（不改变 CSV schema）。"""
     out = df.copy()
     out["gross_exports"] = tradeflow.gross_exports(out)
     gross = out["gross_exports"]

@@ -55,7 +55,7 @@ CONTROL_LABELS = {
     "gdp_proxy_growth": "增加值增长率",
     "log_exports_proxy": "出口规模(log)",
     "exports_proxy_growth": "出口增长率",
-    "export_intensity": "出口强度(毛出口/增加值)",
+    "export_intensity": "出口强度(总出口/增加值)",
     "manufacturing_va_share": "制造业增加值份额",
     "services_va_share": "服务业增加值份额",
     "macro_log_gdp_usd": "GDP规模(log, WDI风格mock)",
@@ -164,7 +164,7 @@ def build_controls(
     country = country_panel.copy()
     sector = sector_panel.copy()
     country = country.sort_values(["country", "year"]).reset_index(drop=True)
-    # 文献/账户口径字段：GVA proxy = SVA（WWYZ 总增加值；不是正式 GDP），毛出口 =
+    # 文献/账户口径字段：GVA proxy = SVA（WWYZ 总增加值；不是正式 GDP），总出口 =
     # 五类 WWZ 聚合项 + OECD TLS 扩展项的闭合之和。
     country["_va"] = country["SVA"]
     country["_exports"] = tradeflow.gross_exports(country)

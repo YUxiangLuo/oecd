@@ -184,6 +184,23 @@
 .decomp-total-line { font-size: 13.5px; color: #3a4050; margin-bottom: 8px; }
 .decomp-total-line b { font-family: "Space Grotesk", sans-serif; font-size: 16px; color: #1b1f2b; }
 
+.indicator-calculation-disclosure {
+  margin: 10px 0 14px; padding: 13px 15px; border-radius: 11px;
+  background: #f4f3ff; border: 1px solid #d9d6ff; color: #30354a;
+}
+.icd-kicker {
+  color: #5a55c9; font-size: 11px; font-weight: 800; letter-spacing: 0.08em;
+}
+.icd-title { margin-top: 3px; font-size: 14px; font-weight: 750; color: #24283a; }
+.icd-formula, .icd-calc {
+  margin-top: 7px; font-family: "Space Mono", monospace; font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+.icd-calc b { color: #423dc0; font-size: 14px; }
+.indicator-calculation-disclosure p {
+  margin: 8px 0 0; color: #5d6272; font-size: 11.5px; line-height: 1.65;
+}
+
 .decomp-bar {
   display: flex; height: 42px; border-radius: 9px; overflow: hidden;
   border: 1px solid #e7e9f0; background: #f7f8fb;

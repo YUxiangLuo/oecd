@@ -24,7 +24,7 @@ export const TRADE_TOPIC: IndicatorTopic = {
       numerator: "DVAex",
       denominator: "gross_exports",
     },
-    { key: "gross_exports", label: "毛出口（VA+TLS）", unit: "百万美元" },
+    { key: "gross_exports", label: "总出口（VA+TLS）", unit: "百万美元" },
     { key: "DVAex", label: "国内增加值出口", unit: "百万美元" },
     { key: "DVArt", label: "返回国内的增加值", unit: "百万美元" },
     { key: "DDC", label: "国内重复计算", unit: "百万美元" },
@@ -43,7 +43,7 @@ export const TRADE_TOPIC: IndicatorTopic = {
       { key: "FDC", name: "外国重复计算", color: CAT[4] },
       { key: "taxsub", name: "税收减补贴", color: CAT[5] },
     ],
-    note: "每条为六项之和的构成，分母为 VA+TLS 账户闭合毛出口。负分项以红色放在零轴左侧，不改变其国内、外国或TLS来源归类；负值不能按普通100%条形图解释。",
+    note: "每条为六项之和的构成，分母为 VA+TLS 账户闭合总出口。负分项以红色放在零轴左侧，不改变其国内、外国或TLS来源归类；负值不能按普通100%条形图解释。",
   },
   axes: {
     x: "FVA_share",

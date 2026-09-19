@@ -875,7 +875,7 @@ def test_composition_evolution_generates_each_component_as_a_two_country_trend()
     assert all(chart["type"] == "line" and len(chart["series"]) == 2 for chart in charts)
     assert all({series["label"] for series in chart["series"]} == {"CHN", "USA"} for chart in charts)
     assert all("构成演变" in chart["title"] for chart in charts)
-    assert all("毛出口" not in chart["title"] for chart in charts)
+    assert all("总出口" not in chart["title"] for chart in charts)
     assert any("出口中的外国增加值" in chart["title"] for chart in charts)
 
 

@@ -5,11 +5,11 @@
   DVAex   国内增加值出口并被其他地区最终吸收(WWZ 16 项中的第 1-5 项,VAX_G)
   DVArt   国内增加值出口但最终返回国内(第 6-8 项,RDV)
   DDC     纯国内重复计算(第 9-10 项)
-  FVA     毛出口中的外国增加值(第 11-14 项)
-  FDC     毛出口中来自外国的纯重复计算(第 15-16 项)
+  FVA     总出口中的外国增加值(第 11-14 项)
+  FDC     总出口中来自外国的纯重复计算(第 15-16 项)
 再增加一个 OECD ICIO 账户扩展:
 
-  taxsub  毛出口中的产品税减补贴(TLS)含量；不是 WWZ 原文的分解项
+  taxsub  总出口中的产品税减补贴(TLS)含量；不是 WWZ 原文的分解项
 并派生 EXDVA = DVAex + DVArt(出口的国内增加值总额)。
 
 实现说明:WWZ 的 16 项定义在双边 (s→r) 层面;本模块对进口伙伴求和,输出
@@ -27,7 +27,7 @@
   FDC   = f ⊙ (A^F_s [L_rr E_r])
   taxsub = (tB)[p] ⊙ E_s
 
-五个 WWZ 聚合项与 taxsub 扩展项加总恒等于 OECD 毛出口 E
+五个 WWZ 聚合项与 taxsub 扩展项加总恒等于 OECD 总出口 E
 (由 (v+t)'B = 1 保证),单元测试与全量重算均校验。
 """
 
@@ -43,7 +43,7 @@ _CLOSURE_COLS = ["DVAex", "DVArt", "DDC", "FVA", "FDC", "taxsub"]
 
 
 def gross_exports(df: pd.DataFrame) -> pd.Series:
-    """毛出口 = 五个 WWZ 聚合项 + OECD TLS 扩展项；任一闭合项缺失则总量未定义。"""
+    """总出口 = 五个 WWZ 聚合项 + OECD TLS 扩展项；任一闭合项缺失则总量未定义。"""
     return df[_CLOSURE_COLS].sum(axis=1, min_count=len(_CLOSURE_COLS))
 
 

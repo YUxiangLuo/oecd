@@ -2316,7 +2316,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         *_qc_disclosure_section(qc_summary, integrity_metadata),
         "## 数据与方法说明",
         "",
-        "- 指标算法：WWZ 16 个明细项归并为五类，另加由 OECD ICIO TLS（产品税减补贴）账户计算的 taxsub 扩展项以匹配 VA+TLS 账户闭合毛出口；TLS/taxsub 不等于关税冲击，也不是 WWZ 原文分类。课程 FVA_share 使用WWZ FVA（不含 FDC） 作分子、VA+TLS 毛出口作分母，包含WWZ 分解中不含 FDC 的外国增加值，但不是 OECD 官方 EXGR_FVASH。生产分解与生产长度采用 WWYZ 口径。",
+        "- 指标算法：WWZ 16 个明细项归并为五类，另加由 OECD ICIO TLS（产品税减补贴）账户计算的 taxsub 扩展项以匹配 VA+TLS 账户闭合总出口（gross exports）；TLS/taxsub 不等于关税冲击，也不是 WWZ 原文分类。课程 FVA_share 使用 WWZ FVA（不含 FDC）作分子、VA+TLS 总出口作分母，包含 WWZ 分解中不含 FDC 的外国增加值，但不是 OECD 官方 EXGR_FVASH。生产分解与生产长度采用 WWYZ 口径。",
         "- 网络算法：保留全部有向正流量边与正自环。加权总度=加权入度+加权出度，正自环计两次；它不是去重后的贸易额。路径指标按有向无权网络计算。eigencentrality 精确复现 Gephi 0.10.1 累计入边兼容分数，不等于标准 Perron 特征向量幂迭代。",
         "- 无权路径口径把微小正边与大额边视为同样长度，因此高介数只表示这套二值拓扑上的最短路径中介位置，不自动等于经济规模、关键瓶颈或不可替代。",
         "- 网络解释顺序：先以加权度观察经济流量规模，再把无权介数作为拓扑基准并比较排序。当前报告没有边阈值敏感性分析，微小正边是否改变最短路径与排序尚未检验。",

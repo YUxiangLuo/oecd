@@ -160,7 +160,7 @@ def test_tradeflow_matches_wwz_bruteforce(fixture_name, request):
 
 
 def test_tradeflow_closure(fake_io, cycle_io):
-    """六个闭合项之和恒等于毛出口(含 TLS 与不含 TLS 两种口径)。"""
+    """六个闭合项之和恒等于总出口(含 TLS 与不含 TLS 两种口径)。"""
     for io in (fake_io, with_tls(cycle_io)):
         arr = build_arrays(io)
         df = tradeflow.sector_tradeflow(arr)

@@ -212,7 +212,7 @@ def build_panel(
         publication_policy_metadata()["blocking_kinds"]["controls"],
     )
 
-    # 回归用派生列：毛出口与文献指标份额（作为四类 outcome 因变量/交互基线）。
+    # 回归用派生列：总出口与文献指标份额（作为四类 outcome 因变量/交互基线）。
     for df in (sector, country):
         df["gross_exports"] = tradeflow.gross_exports(df)
         gross = df["gross_exports"]

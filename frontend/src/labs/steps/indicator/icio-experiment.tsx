@@ -83,8 +83,8 @@ export function IcioExperiment({ topic }: { topic: IndicatorTopic }) {
           <div className="icio-equation">{fmtDb(scenario.Z.reduce((sum, row) => sum + row[node], 0))} ÷ {fmtDb(scenario.x[node])} = {fmtDb(scenario.A.reduce((sum, row) => sum + row[node], 0))}</div>
           <p>其中新创造的价值：{fmtDb(scenario.va[node])} ÷ {fmtDb(scenario.x[node])} = {fmtDb(scenario.va[node] / scenario.x[node])} 元。</p>
           {topic === "trade" && <>
-            <p>先加总这一行卖给国外的中间品和最终品，得到毛出口；再沿投入链追溯价值来源与最终吸收地。</p>
-            <div className="icio-equation">毛出口 = {fmtDb(scenario.trade[node].gross_exports)}</div>
+            <p>先加总这一行卖给国外的中间品和最终品，得到总出口；再沿投入链追溯价值来源与最终吸收地。</p>
+            <div className="icio-equation">总出口 = {fmtDb(scenario.trade[node].gross_exports)}</div>
             {scenario.trade[node].gross_exports !== 0 && <>
               <p>在本例中，各来源的价值含量 = 来源增加值系数 × 累计投入系数 × 出口额：</p>
               {active.filter((i) => scenario.B[i][node] > 0).map((i) => <p key={i}>

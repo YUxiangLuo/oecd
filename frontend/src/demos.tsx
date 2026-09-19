@@ -2,9 +2,9 @@
  * 步骤2-5 的交互式「计算方法演示」组件。
  *
  * DecompositionDemo(步骤2/3/4):用真实指标数据把总量拆成各分项,
- *   实时校验恒等式(加总 = 毛出口 / 总增加值 / 总生产长度),每项可 hover 看含义。
+ *   实时校验恒等式(加总 = 总出口 / 总增加值 / 总生产长度),每项可 hover 看含义。
  *   恒等式口径与后端引擎及公开文献一致:
- *     步骤2 毛出口 = 五类 WWZ 聚合项 + OECD TLS 扩展项 taxsub
+ *     步骤2 总出口 = 五类 WWZ 聚合项 + OECD TLS 扩展项 taxsub
  *     步骤3 SVA = 纯国内 + 传统贸易 + 简单GVC + 复杂GVC(WWYZ 2017a)
  *     步骤4 PLv = 各段长度按对应增加值份额的加权平均(WWYZ 2017b;
  *           分项显示为"VA份额×段长度"的贡献值,贡献加总 = 总长度)
@@ -53,13 +53,13 @@ type DecompCfg = {
 const DECOMP: Record<number, DecompCfg> = {
   4: {
     total: "gross_exports",
-    totalLabel: "毛出口",
+    totalLabel: "总出口",
     unit: "amount",
     parts: [
       { key: "DVAex", label: "DVAex 国内增加值出口", color: "#4b47e0", desc: "出口中由本国创造、并被国外最终吸收的增加值；占比越高表示这类国内增加值构成越高。" },
       { key: "DVArt", label: "DVArt 返回国内", color: "#7a6bff", desc: "先随出口离境、绕一圈又回到本国被吸收的国内增加值。" },
       { key: "DDC", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "本国增加值在跨境往返中被海关多次统计的部分。" },
-      { key: "FVA", label: "FVA 外国增加值", color: "#159a86", desc: "WWZ 分解中的外国增加值项，不含外国重复计算 FDC。毛出口全部外国纯 VA 含量为 FVA+FDC。" },
+      { key: "FVA", label: "FVA 外国增加值", color: "#159a86", desc: "WWZ 分解中的外国增加值项，不含外国重复计算 FDC。总出口中全部外国纯 VA 含量为 FVA+FDC。" },
       { key: "FDC", label: "FDC 外国重复计算", color: "#e0982a", desc: "外国增加值在跨境中被重复统计的部分。" },
       { key: "taxsub", label: "taxsub 税收减补贴", color: "#98a0b3", desc: "出口直接及间接所含的产品税减补贴(TLS)，由 ICIO TLS 账户沿投入产出链计算。" },
     ],
@@ -105,6 +105,60 @@ function fmt(v: number, unit: "amount" | "number"): string {
   return stripNegativeZero(unit === "amount"
     ? v.toLocaleString("zh-CN", { maximumFractionDigits: 0 })
     : v.toFixed(3));
+}
+
+function disclosureAmount(value: number | null): string {
+  return value == null
+    ? "—"
+    : stripNegativeZero(value.toLocaleString("zh-CN", { maximumSignificantDigits: 6 }));
+}
+
+function disclosureRatio(numerator: number | null, denominator: number | null): number | null {
+  return numerator != null && denominator != null && denominator > 0
+    ? numerator / denominator
+    : null;
+}
+
+export function IndicatorCalculationDisclosure({ step, row }: { step: number; row: Row }) {
+  if (step === 4 || step === 5) {
+    const numeratorKey = step === 4 ? "FVA" : "3b_VA_GVC_C";
+    const denominatorKey = step === 4 ? "gross_exports" : "SVA";
+    const numerator = finiteNumber(row[numeratorKey]);
+    const denominator = finiteNumber(row[denominatorKey]);
+    const ratio = disclosureRatio(numerator, denominator);
+    const title = step === 4 ? "外国增加值项占比" : "复杂 GVC 生产份额";
+    const denominatorLabel = step === 4 ? "总出口" : "总增加值 SVA";
+    return (
+      <section className="indicator-calculation-disclosure" aria-label={`${title}计算公示`}>
+        <div className="icd-kicker">指标计算公示</div>
+        <div className="icd-title">{title}</div>
+        <div className="icd-formula">{title} = {numeratorKey} / {denominatorLabel}</div>
+        <div className="icd-calc">
+          = {disclosureAmount(numerator)} / {disclosureAmount(denominator)} = <b>{ratio == null ? "—（分母非正或数据缺失）" : `${stripNegativeZero((ratio * 100).toFixed(1))}%`}</b>
+        </div>
+        <p>{step === 4
+          ? "FVA 不含外国重复计算 FDC；分母是六项加总得到的 VA+TLS 账户口径总出口（gross exports），不是 OECD 官方 EXGR_FVASH 口径。"
+          : "3b 只统计增加值至少两次跨境的复杂 GVC 路径；该份额反映生产活动构成，不直接代表技术水平或收益。"}</p>
+      </section>
+    );
+  }
+
+  const forward = finiteNumber(row.PLv_GVC);
+  const backward = finiteNumber(row.PLy_GVC);
+  const position = forward != null && backward != null && Math.abs(backward) > 1e-12
+    ? forward / backward
+    : null;
+  return (
+    <section className="indicator-calculation-disclosure" aria-label="GVC 位置指数计算公示">
+      <div className="icd-kicker">指标计算公示</div>
+      <div className="icd-title">GVC 位置指数 GVCPs</div>
+      <div className="icd-formula">GVCPs = PLv_GVC / PLy_GVC</div>
+      <div className="icd-calc">
+        = {disclosureAmount(forward)} / {disclosureAmount(backward)} = <b>{position == null ? "—（分母为零或数据缺失）" : stripNegativeZero(position.toFixed(3))}</b>
+      </div>
+      <p>这里比较前向与后向的 GVC 段长度。上方 PLv 恒等式中的每一项是“增加值份额 × 段长度”的加权贡献，不是段长度本身。</p>
+    </section>
+  );
 }
 
 export function DecompositionDetailTable({
@@ -433,6 +487,7 @@ export function DecompositionDemo({
             {cfg.totalLabel} = <b>{model.total == null ? "—（未定义）" : fmt(model.total, cfg.unit)}</b>
             {cfg.unit === "amount" && model.total != null && <span className="muted"> (百万美元)</span>}
           </div>
+          <IndicatorCalculationDisclosure step={step} row={row} />
           <div className="decomp-unavailable" role="status">
             <b>当前分解不可用</b>
             <div>{decompositionModelReason(model, cfg.weightTotal)}</div>
@@ -466,6 +521,7 @@ export function DecompositionDemo({
         <div className="decomp-total-line">
           {cfg.totalLabel} = <b>{fmt(model.total, cfg.unit)}</b>{cfg.unit === "amount" && <span className="muted"> (百万美元)</span>}
         </div>
+        <IndicatorCalculationDisclosure step={step} row={row} />
         <div className="decomp-bar" style={{ position: "relative", display: "block", overflow: "hidden" }}>
           {panelDomain.negative > 0 && <span aria-hidden style={{ position: "absolute", zIndex: 3, left: `${layout.zeroPct}%`, top: -2, bottom: -2, borderLeft: "2px solid #4b5263" }} />}
           {cfg.parts.map((part, index) => {

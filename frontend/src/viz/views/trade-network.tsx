@@ -85,7 +85,7 @@ export function directedVisibleEdgeText(model: ThresholdedNetworkModel): string[
 const NETWORK_METRICS: { key: NetworkMetric; label: string; format: "pct" | "number" | "amount" }[] = [
   { key: "gvc_production_share", label: "GVC 生产份额", format: "pct" },
   { key: "weighted degree", label: "双向贸易加权度", format: "amount" },
-  { key: "gross_exports", label: "毛出口(百万美元)", format: "amount" },
+  { key: "gross_exports", label: "总出口(百万美元)", format: "amount" },
 ];
 
 function metricMetaLabel(metric: NetworkMetric): string {

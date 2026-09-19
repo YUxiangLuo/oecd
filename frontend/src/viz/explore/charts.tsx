@@ -286,7 +286,7 @@ export function CompositionBar({ rows, segments, sortKey, sortDirection = "desce
   const tipLines = (r: Row): [string, string][] => [
     ["", rowLabel(r)],
     ...segments.map((s) => [s.name, fmtVal(num(r[s.key]), valueFormat)] as [string, string]),
-    // 排序指标若不在分段里(如按毛出口/总量排序),额外单列,用它自己的格式
+    // 排序指标若不在分段里(如按总出口/总量排序),额外单列,用它自己的格式
     ...(sortLabel && !segKeys.has(skey) ? [[sortLabel, fmtVal(num(r[skey]), sortFormat)] as [string, string]] : []),
   ];
   return (

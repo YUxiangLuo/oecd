@@ -39,12 +39,12 @@ test("trade links asymmetric input cells, source calculation and selected result
   const mock = setup();
   try {
     const view = render(<IcioExperiment topic="trade" />);
-    await view.findByText("毛出口 = 100");
+    await view.findByText("总出口 = 100");
     const results = view.getByRole("region", { name: "教学指标计算结果" });
     expect(within(results).getByText("外国增加值").parentElement?.textContent).toBe("外国增加值40元");
     expect(view.getByText(/1 × 0.4 × 100/).textContent).toContain("= 40 元");
     fireEvent.click(view.getByRole("button", { name: "甲国·初级品" }));
-    expect(view.getByText("毛出口 = 40")).toBeTruthy();
+    expect(view.getByText("总出口 = 40")).toBeTruthy();
     expect(within(results).getByText("外国增加值").parentElement?.textContent).toBe("外国增加值0元");
     fireEvent.click(view.getByRole("button", { name: "简单全球价值链" }));
     expect(view.getByRole("heading", { name: "② 跟着数字算 · 乙国·加工品" })).toBeTruthy();
@@ -92,6 +92,6 @@ test("failed teaching request offers retry without invented results", async () =
     await view.findByRole("alert");
     expect(view.queryByRole("region", { name: "教学指标计算结果" })).toBeNull();
     fireEvent.click(view.getByRole("button", { name: /重试/ }));
-    await waitFor(() => expect(view.getByText("毛出口 = 100")).toBeTruthy());
+    await waitFor(() => expect(view.getByText("总出口 = 100")).toBeTruthy());
   } finally { mock.mockRestore(); }
 });
