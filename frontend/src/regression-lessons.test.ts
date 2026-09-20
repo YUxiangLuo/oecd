@@ -51,7 +51,7 @@ describe("regression lessons", () => {
     const network = lessonQuestion("network", "tariff", "did");
     const sanctions = lessonQuestion("network", "sanctions", "event_study");
     const exportControl = lessonQuestion("network", "export_control", "twfe_intensity");
-    expect(network).toContain("教学关税暴露 X 增加 1 个百分点");
+    expect(network).toContain("模拟关税暴露（X）增加 1 个百分点");
     expect(sanctions).toBe(network);
     expect(exportControl).toBe(network);
     expect(lessonQuestion("trade", "tariff", "did")).not.toMatch(/cohort|处理组|对照组/);

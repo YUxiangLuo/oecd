@@ -61,7 +61,7 @@ export function StepTaskCard({
       <div className="step-task-main">
         <div>
           <span className="step-task-kicker">本步任务</span>
-          <h3 id={stepTaskTitleId(step.n)} tabIndex={-1}>{compact ? "先运行回归，再看结果、完成理解题。" : step.goal}</h3>
+          <h3 id={stepTaskTitleId(step.n)} tabIndex={-1}>{step.goal}</h3>
         </div>
         <div className="step-task-statuses" role="group" aria-label="本步状态">
           <span className={complete ? "done" : "todo"}>{completionLabel}：{complete ? "已完成" : "未完成"}</span>

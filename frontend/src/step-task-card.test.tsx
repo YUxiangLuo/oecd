@@ -88,8 +88,8 @@ describe("shared step task card", () => {
         const dom = new DOMParser().parseFromString(html, "text/html");
         expect(dom.querySelector(".step-task-card.compact")).not.toBeNull();
         expect(dom.querySelector("button, details, ol")).toBeNull();
-        expect(html).toContain("先运行回归，再看结果、完成理解题");
-        expect(html).not.toContain("原来很长的任务目标");
+        expect(html).toContain("原来很长的任务目标");
+        expect(html).not.toContain("先运行回归，再看结果、完成理解题");
         expect(html).toContain("理解题：未完成");
         expect(html).toContain(`报告材料：${label}`);
         expect(dom.querySelector("h3")?.id).toBe(stepTaskTitleId(step.n));

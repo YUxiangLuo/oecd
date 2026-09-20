@@ -19,8 +19,25 @@ test("step 10 uses the dedicated teaching tariff panel independently of the old 
     data: undefined, save: () => {}, complete: false, syncing: false,
     syncError: null, syncNow: () => {},
   }} />);
-  expect(html).toContain("教学关税暴露");
-  expect(html).toContain("teaching_tariff_exposure");
+  expect(html).toContain("拿来比较的因素（X）");
+  expect(html).toContain("国家 A");
+  expect(html).toContain("国家 B");
+  expect(html).toContain("五年变化");
   expect(html).toContain("正在读取教学关税面板");
   expect(html).not.toContain("政策事件");
+});
+
+test("step 10 prefers the configured two-country industry example", () => {
+  const meta: Meta = {
+    years: [2016, 2017, 2018, 2019, 2020],
+    countries: ["CAN", "CHN", "KOR", "USA"],
+    sectors: ["C26", "C29"],
+  };
+  const html = renderToStaticMarkup(<ShockLab meta={meta} step={step} state={{
+    data: undefined, save: () => {}, complete: false, syncing: false,
+    syncError: null, syncNow: () => {},
+  }} />);
+  expect(html).toContain('<option value="CAN" selected="">CAN 加拿大</option>');
+  expect(html).toContain('<option value="KOR" selected="">KOR 韩国</option>');
+  expect(html).toContain('<option value="C29" selected="">C29 汽车及零部件</option>');
 });

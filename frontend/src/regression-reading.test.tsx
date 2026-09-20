@@ -16,10 +16,11 @@ function response(): RegressionResponse {
 describe("fixed teaching regression reading", () => {
   test("uses the snapshot X and reports a one-percentage-point X increment", () => {
     const html = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={response()} stale={false} />);
-    expect(html).toContain("X 每增加 1 个百分点，Y 的关联变化");
-    expect(html).toContain("因变量 Y");
+    expect(html).toContain("两者在模拟数据中怎样一起变化");
+    expect(html).toContain("想观察的结果（Y）");
     expect(html).toContain("教学模拟：外国增加值项占比");
-    expect(html).toContain("样本量");
+    expect(html).toContain("使用的年度记录");
+    expect(html).toContain("平均上升 2.00 个百分点");
     expect(html).toContain("X 与 Y 都由课程生成");
     expect(html).not.toMatch(/处理组|对照组|处理聚类|同时置信带/);
     expect(html).toContain("+2.00 个百分点");

@@ -1688,7 +1688,12 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             (
                 "### 步骤 10 · 模拟关税数据",
                 "",
-                f"- 查看对象：{_safe(shock.get('teaching_country'))} · {_safe(shock.get('teaching_year'))}",
+                (
+                    f"- 两国趋势示例：{'、'.join(_safe(value) for value in shock.get('compared', []))} · "
+                    f"{_safe(shock.get('teaching_industry'))} · 全部可用年份"
+                    if isinstance(shock.get("compared"), list) and len(shock["compared"]) == 2
+                    else f"- 查看对象：{_safe(shock.get('teaching_country'))} · {_safe(shock.get('teaching_year'))}"
+                ),
                 f"- 模拟版本：{_safe(shock.get('teaching_panel_version'))}",
                 "- X = 首年销往美国的出口份额 × 虚构税率；并非美国真实政策。",
             )

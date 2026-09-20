@@ -59,7 +59,7 @@ export function ComparisonSummary({
         ? `差距扩大 ${gapMagnitude}`
         : `差距缩小 ${gapMagnitude}`;
   return (
-    <div className="comparison-summary" aria-label="两国趋势结论">
+    <div className="comparison-summary" role="group" aria-label="两国趋势结论">
       {countries.map((country, index) => (
         <div key={country}>
           <span>{countryLabel(country)} · {firstYear}→{lastYear}</span>

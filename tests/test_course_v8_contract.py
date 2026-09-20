@@ -1,5 +1,6 @@
 from gvcsim import quizzes, teaching_report
 from gvcsim.regression.teaching import VERSION, X_COLUMN, Y_COLUMNS, model_snapshot, variable_catalog
+from gvcsim.steps import STEPS
 
 
 def _run(outcome: str, *, version: str = VERSION, coefficient: str = X_COLUMN) -> dict:
@@ -59,3 +60,15 @@ def test_step10_gate_requires_complete_current_panel_state():
     )
     blocked = teaching_report.check_material_gate(session)
     assert not any(item["step"] == 10 for item in blocked)
+
+
+def test_regression_stage_task_goals_match_the_beginner_workflow():
+    by_number = {step["n"]: step for step in STEPS}
+    assert "两个国家和一个行业" in by_number[10]["tasks"][0]
+    assert "年份" not in by_number[10]["tasks"][0]
+    assert "跨境生产长度" in by_number[13]["goal"]
+    assert "模拟网络位置" in by_number[14]["goal"]
+    for step in (13, 14):
+        assert "Y₃" not in by_number[step]["goal"]
+        assert "Y₄" not in by_number[step]["goal"]
+        assert "固定模型" not in by_number[step]["goal"]

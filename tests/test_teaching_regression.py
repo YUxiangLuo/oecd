@@ -122,3 +122,18 @@ def test_step10_filters_before_limiting_and_reads_the_regression_artifact(monkey
     with pytest.raises(HTTPException) as error:
         asyncio.run(regression_routes.teaching_panel(country="DDD", year=2021, limit=1))
     assert error.value.status_code == 422
+
+
+def test_step10_series_returns_two_countries_all_years_and_teaching_outcomes(monkeypatch):
+    import asyncio
+    from gvcsim import regression_routes
+
+    panel = build_teaching_panel(_source(), _exposure(_source()))
+    monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: panel)
+
+    response = asyncio.run(regression_routes.teaching_panel(countries="AAA,DDD", industry="s1", limit=200))
+
+    assert response["total"] == 10
+    assert {(row["country"], row["industry"]) for row in response["rows"]} == {("AAA", "s1"), ("DDD", "s1")}
+    assert {row["year"] for row in response["rows"]} == {2016, 2017, 2018, 2019, 2020}
+    assert all(set(Y_COLUMNS.values()).issubset(row) for row in response["rows"])

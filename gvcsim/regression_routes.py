@@ -42,7 +42,7 @@ from gvcsim.regression.design import (
     validate_outcome_granularity,
 )
 from gvcsim.regression.panel import run_design_with_benchmark
-from gvcsim.regression.teaching import DISCLAIMER, VERSION, model_snapshot, variable_catalog
+from gvcsim.regression.teaching import DISCLAIMER, VERSION, Y_COLUMNS, model_snapshot, variable_catalog
 from gvcsim.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
 from gvcsim.shocks import SHOCK_LABELS, SHOCK_TARIFF
 from gvcsim.singleflight import AsyncSingleFlightCache
@@ -314,14 +314,29 @@ def _require_regression_student(request: Request) -> int:
 
 
 @router.get("/api/regression/teaching-panel")
-async def teaching_panel(country: str = "", year: int | None = None, limit: int = Query(60, ge=1, le=200)):
+async def teaching_panel(
+    country: str = "",
+    countries: str = "",
+    industry: str = "",
+    year: int | None = None,
+    limit: int = Query(60, ge=1, le=200),
+):
     def read() -> dict:
         panel = _read_csv("panel_teaching.csv")
         years = sorted(int(value) for value in panel.year.unique())
         if year is not None and year not in years:
             raise HTTPException(status_code=422, detail="年份不在当前教学面板中")
+        requested_countries = [value.strip() for value in countries.split(",") if value.strip()]
+        if len(requested_countries) > 2 or len(set(requested_countries)) != len(requested_countries):
+            raise HTTPException(status_code=422, detail="教学趋势最多选择两个不同国家")
+        if country and requested_countries:
+            raise HTTPException(status_code=422, detail="country 与 countries 不能同时使用")
         if country:
             panel = panel.loc[panel.country.eq(country)]
+        elif requested_countries:
+            panel = panel.loc[panel.country.isin(requested_countries)]
+        if industry:
+            panel = panel.loc[panel.industry.eq(industry)]
         if year is not None:
             panel = panel.loc[panel.year.eq(year)]
         columns = [
@@ -331,6 +346,7 @@ async def teaching_panel(country: str = "", year: int | None = None, limit: int 
             "teaching_export_share_w",
             "teaching_tariff_rate_tau",
             "teaching_tariff_exposure",
+            *Y_COLUMNS.values(),
         ]
         return {
             "version": VERSION,

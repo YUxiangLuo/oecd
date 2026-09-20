@@ -128,4 +128,23 @@ describe("trend rendering", () => {
     );
     expect(html).toContain("位置基准 = 1");
   });
+
+  test("names the two-country trend conclusion as a semantic group", () => {
+    const html = renderToStaticMarkup(
+      createElement(IndicatorTrendChart, {
+        rows: [
+          { country: "CHN", year: 2019, value: 1 },
+          { country: "CHN", year: 2020, value: 2 },
+          { country: "USA", year: 2019, value: 2 },
+          { country: "USA", year: 2020, value: 3 },
+        ],
+        countries: ["CHN", "USA"],
+        years: [2019, 2020],
+        metric: "value",
+        label: "示例指标",
+        unit: "单位",
+      }),
+    );
+    expect(html).toContain('class="comparison-summary" role="group" aria-label="两国趋势结论"');
+  });
 });

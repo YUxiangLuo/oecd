@@ -229,12 +229,17 @@ export interface ShockSummary {
 }
 
 export interface TeachingPanelRow {
+  [key: string]: string | number;
   country: string;
   industry: string;
   year: number;
   teaching_export_share_w: number;
   teaching_tariff_rate_tau: number;
   teaching_tariff_exposure: number;
+  teaching_y_trade: number;
+  teaching_y_production: number;
+  teaching_y_length: number;
+  teaching_y_network: number;
 }
 
 export interface TeachingPanelResponse {

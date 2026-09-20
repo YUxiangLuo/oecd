@@ -17,19 +17,20 @@ const step: Step = {
 const state: StepStateApi = {
   data: undefined, save: () => {}, complete: false, syncing: false, syncError: null, syncNow: () => {},
 };
+const meta = { years: [2016, 2017, 2018, 2019, 2020], countries: ["CHN", "USA"], sectors: ["C26"] };
 
 describe("simple regression workbench", () => {
   test("shows one action, fixed X/Y/model, and no advanced, placebo, or history UI", () => {
     const html = renderToStaticMarkup(<RegressionRunLab
-      step={step} state={state} settings={{ ...DEFAULT_REGRESSION_SETTINGS, method: "did" }}
+      step={step} meta={meta} state={state} settings={{ ...DEFAULT_REGRESSION_SETTINGS, method: "did" }}
       onSettingsChange={() => {}} history={{} as RegressionHistory} onHistoryChange={() => {}} />);
     const dom = new DOMParser().parseFromString(html, "text/html");
     expect(dom.querySelectorAll(".reg-run-card > button")).toHaveLength(1);
-    expect(dom.querySelector(".metric-facts")?.textContent).toContain("解释变量 X模拟关税暴露强度");
-    expect(dom.querySelector(".metric-facts")?.textContent).toContain("因变量 Y教学模拟：外国增加值项占比");
+    expect(dom.querySelector(".metric-facts")?.textContent).toContain("拿来比较的因素（X）模拟关税暴露强度");
+    expect(dom.querySelector(".metric-facts")?.textContent).toContain("想观察的结果（Y）教学模拟：外国增加值项占比");
     expect(dom.querySelector(".metric-facts")?.textContent).not.toContain("teaching_tariff_exposure");
-    expect(dom.querySelector(".metric-facts")?.textContent).toContain("连续强度 TWFE");
-    expect(dom.querySelector(".technical-details > summary")?.textContent).toBe("简短技术详情");
+    expect(dom.querySelector(".metric-facts")?.textContent).toContain("学生无需选择计算方法");
+    expect(dom.querySelector(".technical-details > summary")?.textContent).toBe("计算方法说明（可选）");
     expect(html).not.toMatch(/advanced-settings|实体置换|运行历史|四格数字示例/);
   });
 

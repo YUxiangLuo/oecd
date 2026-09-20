@@ -231,6 +231,12 @@ export const api = {
     get<import("./types").TeachingPanelResponse>(
       withQuery("/api/regression/teaching-panel", { country, year, limit }),
     ),
+  teachingSeries: (countries: string[], industry: string) =>
+    get<import("./types").TeachingPanelResponse>(
+      withQuery("/api/regression/teaching-panel", {
+        countries: countries.join(","), industry, limit: 200,
+      }),
+    ),
   shockSummary: (shockType = "tariff") =>
     get<import("./types").ShockSummary>(
       withQuery("/api/shocks/summary", { shock_type: shockType }),

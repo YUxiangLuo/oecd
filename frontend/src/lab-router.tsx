@@ -59,21 +59,23 @@ export function LabRouter({
   if (step.lab === "ind") return meta ? <IndicatorLab key={step.n} meta={meta} step={step} state={state} /> : null;
   if (step.lab === "viz") return meta ? <VizLab key={step.n} meta={meta} step={step} state={state} /> : null;
   if (step.lab === "reg") {
-    return (
+    return meta ? (
       <RegressionRunLab
         key={step.regression_outcome}
         step={step}
+        meta={meta}
         state={state}
         settings={regressionSettings}
         onSettingsChange={onRegressionSettingsChange}
         history={regressionHistory}
         onHistoryChange={onRegressionHistoryChange}
+        getStep={getStep}
         getConfirmedStep={getConfirmedStep}
         sessionUnsynced={sessionUnsynced}
         sessionSyncing={sessionSyncing}
         sessionSyncError={sessionSyncError}
       />
-    );
+    ) : null;
   }
   if (step.lab === "rep") {
     return (

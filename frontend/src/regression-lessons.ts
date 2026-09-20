@@ -34,7 +34,7 @@ export const FAMILY_STEPS: Record<RegressionOutcome, number> = {
 };
 
 export const REGRESSION_QUESTION =
-  "固定使用步骤 10 的教学关税暴露 X，以国家×行业和年份固定效应描述 X 与 Y 的关联。";
+  "固定使用步骤 10 的模拟关税暴露（X），观察不同结果指标（Y）怎样随它一起变化。";
 
 export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
   trade: {
@@ -130,7 +130,7 @@ export function lessonQuestion(outcome: RegressionOutcome, shockType: string, me
   const lesson = REGRESSION_LESSONS[outcome];
   void shockType;
   void method;
-  return `教学关税暴露 X 增加 1 个百分点时，${lesson.shortMetric}如何变化？`;
+  return `模拟关税暴露（X）增加 1 个百分点时，${lesson.shortMetric}如何变化？`;
 }
 
 export function comparisonExplanation(method: string): string {

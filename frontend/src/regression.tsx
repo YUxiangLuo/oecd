@@ -9,7 +9,7 @@ import {
   globalInferenceIsSuppressed, pretrendPeriodCount,
 } from "./regression-event-support";
 import { isQualifiedRegressionResult, nextRegressionSave } from "./regression-save";
-import { type RegressionReadingCheckState } from "./regression-teach";
+import { RegressionEvidenceMatrix, type RegressionReadingCheckState } from "./regression-teach";
 import {
   buildRegressionVerdict,
   chartDisplayScale,
@@ -18,6 +18,7 @@ import {
 import { splitPolicyCoefficients } from "./regteach";
 import type {
   MarginalEffect,
+  Meta,
   QuizCompletionState,
   RegressionDesignInfo,
   RegressionOptions,
@@ -25,9 +26,11 @@ import type {
   RegressionResponse,
   Step,
   StepStateApi,
+  TeachingPanelResponse,
 } from "./types";
 import { userFacingRequestError } from "./user-facing-error";
-import { CoefForestChart, EventStudyChart } from "./viz";
+import { CoefForestChart, EventStudyChart, countryLabel, sectorLabel } from "./viz";
+import { IndicatorTrendChart } from "./labs/steps/viz/indicator-charts";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
 // 与后端 METHOD_LABELS、题库和报告保持同一套方法名，避免学生以为那是三种不同估计量。
@@ -358,19 +361,26 @@ export function RegressionResultCard({ outcome, response, stale }: {
   const lesson = REGRESSION_LESSONS[outcome];
   const teaching = response.model_snapshot?.version === TEACHING_MODEL_VERSION;
   if (teaching) {
+    const unsignedEffect = verdict.effect.replace(/^[+−-]/, "");
+    const plainResult = verdict.state === "negative"
+      ? `平均下降 ${unsignedEffect}`
+      : verdict.state === "positive"
+        ? `平均上升 ${unsignedEffect}`
+        : `平均变化为 ${verdict.effect}`;
     return (
       <section className={`verdict-card verdict-${verdict.state}`} aria-labelledby="reg-result-title" aria-live="polite">
         <div className="verdict-kicker">教学模拟结果</div>
         {stale && <div className="stale-result">以下是上一次模拟结果，请重新运行。</div>}
-        <h3 id="reg-result-title">X 每增加 1 个百分点，Y 的关联变化</h3>
+        <h3 id="reg-result-title">两者在模拟数据中怎样一起变化？</h3>
         <dl className="reg-evidence-support">
-          <div><dt>解释变量 X</dt><dd>模拟关税暴露强度</dd></div>
-          <div><dt>因变量 Y</dt><dd>教学模拟：{lesson.shortMetric}</dd></div>
+          <div><dt>拿来比较的因素（X）</dt><dd>模拟关税暴露强度</dd></div>
+          <div><dt>想观察的结果（Y）</dt><dd>教学模拟：{lesson.shortMetric}</dd></div>
         </dl>
+        <p className="reg-plain-verdict">当模拟关税暴露增加 1 个百分点时，{lesson.shortMetric}<b>{plainResult}</b>。</p>
         <div className="verdict-metrics">
-          <div><span>Y 的关联变化</span><b>{verdict.effect}</b></div>
-          <div><span>95% 置信区间</span><b>{verdict.interval}</b></div>
-          <div><span>样本量</span><b>{response.result.n_obs.toLocaleString("zh-CN")}</b></div>
+          <div><span>平均变化</span><b>{verdict.effect}</b></div>
+          <div><span>合理范围（95% 置信区间）</span><b>{verdict.interval}</b></div>
+          <div><span>使用的年度记录</span><b>{response.result.n_obs.toLocaleString("zh-CN")}</b></div>
         </div>
         <p className="verdict-boundary"><b>模拟免责声明：</b>X 与 Y 都由课程生成，仅用于练习读数；不是现实关税、OECD 观测结果或政策因果效应。</p>
       </section>
@@ -674,6 +684,26 @@ interface RegressionStepState extends QuizCompletionState, Record<string, unknow
   run?: SavedRegressionRun;
   qualified_run?: SavedRegressionRun;
   reading_check?: RegressionReadingCheckState;
+  comparison_outcome?: RegressionOutcome | "";
+}
+
+const TEACHING_Y_COLUMN: Record<RegressionOutcome, string> = {
+  trade: "teaching_y_trade",
+  production: "teaching_y_production",
+  length: "teaching_y_length",
+  network: "teaching_y_network",
+};
+
+const TEACHING_TREND_UNIT: Record<RegressionOutcome, string> = {
+  trade: "%",
+  production: "%",
+  length: "长度单位",
+  network: "中心性单位",
+};
+
+interface TeachingSelectionState {
+  compared?: string[];
+  teaching_industry?: string;
 }
 
 const SAVED_REGRESSION_BENCHMARK: RegressionResponse["benchmark"] = {
@@ -884,14 +914,16 @@ export function RegressionRequestError({ label, error, onRetry }: {
 }
 
 export function RegressionRunLab({
-  step, settings, onSettingsChange, history, onHistoryChange, state,
+  step, meta, settings, onSettingsChange, history, onHistoryChange, state, getStep,
   getConfirmedStep, sessionUnsynced = false, sessionSyncing = false,
   sessionSyncError = null,
 }: {
   step: Step;
+  meta: Meta;
   history: RegressionHistory;
   onHistoryChange: React.Dispatch<React.SetStateAction<RegressionHistory>>;
   state: StepStateApi<RegressionStepState>;
+  getStep?: <T>(step: number) => T | undefined;
   getConfirmedStep?: <T>(step: number) => T | undefined;
   sessionUnsynced?: boolean;
   sessionSyncing?: boolean;
@@ -909,12 +941,34 @@ export function RegressionRunLab({
   const [error, setError] = useState<BoundRequestError | null>(null);
   const [running, setRunning] = useState(false);
   const [runningRequestKey, setRunningRequestKey] = useState<string | null>(null);
+  const storedComparison = state.data?.comparison_outcome;
+  const [comparisonOutcome, setComparisonOutcome] = useState<RegressionOutcome | "">(
+    storedComparison && storedComparison !== outcome ? storedComparison : "",
+  );
   const mountedRef = useRef(true);
   const runningRef = useRef(false);
   const runController = useRef<{ key: string; controller: AbortController } | null>(null);
   const verdictAnchorRef = useRef<HTMLDivElement>(null);
   const scrollToVerdictAfterRun = useRef(false);
   const latestRequest = useRef(`${outcome}:${regressionSettingsKey(settings)}`);
+
+  const step10 = getStep?.<TeachingSelectionState>(10);
+  const availableCountries = meta.countries.filter((country) => country !== "ROW");
+  const carriedCountries = step10?.compared?.filter((country) => availableCountries.includes(country)) ?? [];
+  const firstCountry = carriedCountries[0] ?? (availableCountries.includes("CAN") ? "CAN" : availableCountries[0] ?? "");
+  const secondCountry = carriedCountries.find((country) => country !== firstCountry)
+    ?? (firstCountry !== "KOR" && availableCountries.includes("KOR") ? "KOR" : availableCountries.find((country) => country !== firstCountry) ?? "");
+  const teachingCountries = [firstCountry, secondCountry].filter(Boolean);
+  const teachingIndustry = step10?.teaching_industry && meta.sectors.includes(step10.teaching_industry)
+    ? step10.teaching_industry
+    : meta.sectors.includes("C29") ? "C29" : meta.sectors[0] ?? "";
+  const teachingYears = [...meta.years].sort((a, b) => a - b);
+  const teachingSeriesKey = `${teachingCountries.join(",")}:${teachingIndustry}`;
+  const teachingSeries = useAsync<TeachingPanelResponse>(
+    () => api.teachingSeries(teachingCountries, teachingIndustry),
+    [teachingSeriesKey],
+    { requestKey: teachingSeriesKey, enabled: teachingCountries.length === 2 && Boolean(teachingIndustry) },
+  );
 
   const optionsRequestKey = regressionOptionsRequestKey(outcome);
   const optionsQuery = useAsync<RegressionOptions>(
@@ -1091,14 +1145,66 @@ export function RegressionRunLab({
 
   return (
     <div className="reg-workbench">
+      <section className="reg-section-card reg-variable-story">
+        <span className="reg-section-step">先用普通语言看变量</span>
+        <h3>{lessonQuestion(outcome, shockType, method)}</h3>
+        <div className="reg-variable-plain-grid">
+          <div><b>拿来比较的因素（X）</b><span>模拟关税暴露，数值越大表示模拟暴露越强。</span></div>
+          <div><b>想观察的结果（Y）</b><span>教学模拟：{lesson.shortMetric}。</span></div>
+        </div>
+        <p className="muted">沿用步骤 10 选出的 {countryLabel(firstCountry)}、{countryLabel(secondCountry)} 和 {sectorLabel(teachingIndustry)}，先看五年示例。它帮助理解数据，但正式计算使用完整国家×行业面板。</p>
+        {teachingSeries.status === "loading" && <p className="muted" role="status">正在读取两国五年示例…</p>}
+        {teachingSeries.status === "error" && teachingSeries.error && (
+          <RegressionRequestError label="两国五年示例" error={teachingSeries.error} onRetry={teachingSeries.retry} />
+        )}
+        {teachingSeries.status === "success" && teachingSeries.data && (
+          <IndicatorTrendChart
+            rows={teachingSeries.data.rows}
+            countries={teachingCountries}
+            years={teachingYears}
+            metric={TEACHING_Y_COLUMN[outcome]}
+            label={`教学模拟：${lesson.shortMetric}`}
+            unit={TEACHING_TREND_UNIT[outcome]}
+          />
+        )}
+        <label className="reg-optional-variable">
+          <span><b>可选趋势对照</b><small>只增加一张帮助理解的趋势图，不改变本步回归或报告主结果。</small></span>
+          <select
+            value={comparisonOutcome}
+            onChange={(event) => {
+              const value = event.target.value as RegressionOutcome | "";
+              setComparisonOutcome(value);
+              state.save({ comparison_outcome: value });
+            }}
+          >
+            <option value="">不添加对照指标</option>
+            {(Object.keys(REGRESSION_LESSONS) as RegressionOutcome[])
+              .filter((candidate) => candidate !== outcome)
+              .map((candidate) => (
+                <option key={candidate} value={candidate}>{REGRESSION_LESSONS[candidate].shortMetric}</option>
+              ))}
+          </select>
+        </label>
+        {comparisonOutcome && teachingSeries.status === "success" && teachingSeries.data && (
+          <IndicatorTrendChart
+            rows={teachingSeries.data.rows}
+            countries={teachingCountries}
+            years={teachingYears}
+            metric={TEACHING_Y_COLUMN[comparisonOutcome]}
+            label={`可选对照：${REGRESSION_LESSONS[comparisonOutcome].shortMetric}`}
+            unit={TEACHING_TREND_UNIT[comparisonOutcome]}
+          />
+        )}
+      </section>
       <section className="reg-run-card">
-        <h3>运行回归</h3>
+        <span className="reg-section-step">固定计算 · 无需调整复杂参数</span>
+        <h3>计算 X 与 Y 的关系</h3>
         <div className="metric-facts">
-          <span><b>解释变量 X</b>模拟关税暴露强度</span>
-          <span><b>因变量 Y</b>教学模拟：{lesson.shortMetric}</span>
+          <span><b>拿来比较的因素（X）</b>模拟关税暴露强度</span>
+          <span><b>想观察的结果（Y）</b>教学模拟：{lesson.shortMetric}</span>
           <span><b>读数单位</b>{lesson.unit}</span>
-          <span><b>单位与样本</b>国家×行业年度面板 · X 每增加 1 个百分点</span>
-          <span><b>固定模型</b>{METHOD_LABELS[method] ?? method} · 无控制 · 无交互</span>
+          <span><b>怎样比较</b>X 每增加 1 个百分点时，观察 Y 平均怎样变化</span>
+          <span><b>系统固定</b>使用完整国家×行业年度面板；学生无需选择计算方法</span>
         </div>
         <div className="reg-boundary">X 与 Y 都是教学模拟数据，不代表现实政策或 OECD 观测结果。</div>
         <RegressionRequestLoading
@@ -1122,7 +1228,7 @@ export function RegressionRunLab({
             : running
               ? "等待上一项估计结束…"
               : stale ? "运行修改后的设定" : result ? "重新运行当前设定"
-                : isBaseline ? "运行基准回归" : "运行当前设定"}
+                : isBaseline ? "计算两者的关系" : "按当前设定计算"}
         </button>
         {runningCurrentRequest && (
           <span className="muted reg-inline-status" role="status" aria-live="polite" aria-busy="true">正在估计当前设定…</span>
@@ -1141,11 +1247,13 @@ export function RegressionRunLab({
           <div ref={verdictAnchorRef} className="verdict-anchor">
             <RegressionResultCard outcome={outcome} response={result} stale={stale} />
           </div>
-          {graphReview}
         </div>
       )}
+      {outcome === "network" && result && (
+        <RegressionEvidenceMatrix history={history} getStep={getConfirmedStep} current={outcome} />
+      )}
       <details className="technical-details">
-        <summary>简短技术详情</summary>
+        <summary>计算方法说明（可选）</summary>
         <div className="reg-question-main">
           <h3>当前设定：{lessonQuestion(outcome, shockType, method)}</h3>
           <p><b>真实指标定义（仅用于说明概念）：</b>{lesson.definition}</p>
@@ -1173,6 +1281,7 @@ export function RegressionRunLab({
         ) : null}
         {result && (
           <>
+            {graphReview}
             <h3>原始列与系数</h3>
             <p className="muted">X 原始列：{result.model_snapshot?.x_columns.join("、")}；Y 原始列：{result.model_snapshot?.y_column}。表内保留计算键与模型原始单位。</p>
             <RegressionCoefficientTable response={result} />
