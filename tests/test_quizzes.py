@@ -45,8 +45,8 @@ def test_selected_answers_renders_only_a_fully_correct_current_quiz():
     selected = quizzes.selected_answers(1, quizzes.correct_quiz(1))
     assert selected == [
         {
-            "question": "Z 表的一格应该怎样解释？",
-            "answer": "行方国家×行业向列方国家×行业提供的中间投入",
+            "question": "Z 表的一格表示什么？",
+            "answer": "行方向列方提供的中间投入",
         }
     ]
     assert quizzes.selected_answers(1, {"version": "old", "answers": {}}) == []
