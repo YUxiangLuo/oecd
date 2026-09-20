@@ -1,0 +1,81 @@
+.indicator-reading-library {
+  margin-top: 24px; border: 1px solid #d8deeb; border-radius: 14px;
+  background: #fff; overflow: clip;
+}
+.indicator-reading-library > summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 16px 18px; cursor: pointer; list-style: none; background: #f8f9fd;
+}
+.indicator-reading-library > summary::-webkit-details-marker { display: none; }
+.indicator-reading-library > summary > span:first-child { display: grid; gap: 4px; }
+.indicator-reading-library > summary b { color: #2a3040; font-size: 14px; }
+.indicator-reading-library > summary small { color: #687187; font-size: 11.5px; font-weight: 400; }
+.indicator-reading-library > summary::before {
+  content: "▸"; flex: none; color: #4b47e0; font-size: 12px; transition: transform .15s;
+}
+.indicator-reading-library[open] > summary::before { transform: rotate(90deg); }
+.indicator-reading-demo-badge {
+  flex: none; border: 1px solid #d8d4fb; border-radius: 999px;
+  background: #efedff; color: #514bb4; padding: 5px 9px; font-size: 10.5px; font-weight: 700;
+}
+.indicator-reading-intro {
+  padding: 11px 18px; border-top: 1px solid #e4e7ef; border-bottom: 1px solid #e4e7ef;
+  background: #fffaf0; color: #765626; font-size: 11.5px; line-height: 1.6;
+}
+.indicator-reading-workspace {
+  display: grid; grid-template-columns: minmax(210px, .34fr) minmax(0, 1fr); min-height: 510px;
+}
+.indicator-reading-list {
+  display: flex; flex-direction: column; gap: 8px; padding: 14px;
+  border-right: 1px solid #e4e7ef; background: #fbfcfe;
+}
+.indicator-reading-list button {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 9px;
+  width: 100%; border: 1px solid #dfe3ec; border-radius: 10px; background: #fff;
+  padding: 11px; color: #4b5365; text-align: left; cursor: pointer; font: inherit;
+}
+.indicator-reading-list button[aria-pressed="true"] {
+  border-color: #8580df; background: #f1f0ff; box-shadow: inset 3px 0 0 #4b47e0;
+}
+.indicator-reading-list button > span {
+  grid-row: 1 / 4; color: #6b66c8; font: 700 10px/1.4 "Space Grotesk", sans-serif;
+}
+.indicator-reading-list button b { color: #30364a; font-size: 12.5px; line-height: 1.45; }
+.indicator-reading-list button small { color: #697286; font-size: 10.5px; line-height: 1.5; }
+.indicator-reading-citation { color: #4d5670 !important; font-weight: 650; }
+.indicator-reading-list button:focus-visible,
+.indicator-reading-library > summary:focus-visible,
+.indicator-reading-links a:focus-visible,
+.indicator-reading-pdf-fallback a:focus-visible { outline: 3px solid #8272c4; outline-offset: 2px; }
+.indicator-reading-viewer { min-width: 0; display: flex; flex-direction: column; background: #eef1f6; }
+.indicator-reading-viewer-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 66px; padding: 11px 14px; background: #fff;
+}
+.indicator-reading-meta { display: grid; gap: 3px; min-width: 0; }
+.indicator-reading-viewer-head b { color: #293044; font-size: 12.5px; }
+.indicator-reading-viewer-head small { color: #6b7384; font-size: 10.5px; line-height: 1.45; }
+.indicator-reading-links { flex: none; display: flex; align-items: center; gap: 7px; }
+.indicator-reading-links a {
+  flex: none; border: 1px solid #d5d9e6; border-radius: 8px; padding: 7px 9px;
+  background: #fff; color: #4540ad; font-size: 11px; font-weight: 650; text-decoration: none;
+}
+.indicator-reading-viewer object { width: 100%; flex: 1; min-height: 410px; border: 0; background: #eef1f6; }
+.indicator-reading-pdf-fallback {
+  display: grid; place-content: center; gap: 10px; min-height: 410px; padding: 24px;
+  color: #50596d; text-align: center;
+}
+.indicator-reading-pdf-fallback a { color: #4540ad; font-weight: 700; }
+.indicator-reading-preview-help {
+  padding: 8px 14px; border-top: 1px solid #dce1ea; background: #fff;
+  color: #687187; font-size: 10.5px; line-height: 1.5;
+}
+
+@media (max-width: 760px) {
+  .indicator-reading-library > summary { align-items: flex-start; padding: 14px; }
+  .indicator-reading-workspace { grid-template-columns: 1fr; }
+  .indicator-reading-list { border-right: 0; border-bottom: 1px solid #e4e7ef; }
+  .indicator-reading-viewer-head { align-items: flex-start; flex-direction: column; }
+  .indicator-reading-links { flex-wrap: wrap; }
+  .indicator-reading-viewer object { min-height: 380px; }
+}

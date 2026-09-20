@@ -11,6 +11,7 @@ import { NetworkCentralityDemo } from "../../../demos";
 import type { IndicatorSchema, Meta, Step, StepStateApi } from "../../../types";
 import { useAsync } from "../../shared";
 import { ChartStory } from "../viz/scaffold";
+import { IndicatorReadingLibrary } from "./indicator-reading-library";
 import { IndicatorTable, type IndicatorStepState, useIndicatorControls } from "./indicator-table";
 
 export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }) {
@@ -50,6 +51,7 @@ export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta;
           onYear={controls.setYear} onCountry={controls.setCountry} onPage={controls.setPage}
         />
       </ChartStory>
+      <IndicatorReadingLibrary topic="network" />
     </div>
   );
 }

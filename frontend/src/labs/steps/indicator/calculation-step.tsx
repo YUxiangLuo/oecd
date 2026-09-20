@@ -5,6 +5,7 @@ import type { Meta, Step, StepStateApi } from "../../../types";
 import { countryLabel } from "../../../viz";
 import { useAsync } from "../../shared";
 import { IcioExperiment, type IndicatorTopic } from "./icio-experiment";
+import { IndicatorReadingLibrary } from "./indicator-reading-library";
 import { IndicatorTable, type IndicatorStepState, useIndicatorControls } from "./indicator-table";
 
 export interface CalculationStepProps { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }
@@ -39,5 +40,6 @@ export function CalculationStep({ topic, meta, state }: CalculationStepProps & {
         year={controls.year} country={controls.country} page={controls.page} interacted={controls.interacted}
         onYear={controls.setYear} onCountry={controls.setCountry} onPage={controls.setPage} />
     </details>
+    <IndicatorReadingLibrary topic={topic} />
   </div>;
 }
