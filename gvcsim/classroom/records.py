@@ -37,6 +37,14 @@ def _session_fingerprint(session: dict[str, Any]) -> str:
     return hashlib.sha256(json.dumps(session, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12]
 
 
+def report_matches_session(session: dict[str, Any], report: dict[str, Any] | None) -> bool:
+    """Return whether a report was generated from this exact session snapshot."""
+    if report is None:
+        return False
+    provenance = report.get("provenance")
+    return isinstance(provenance, dict) and provenance.get("session_fingerprint") == _session_fingerprint(session)
+
+
 def _student(c: psycopg.Connection[dict[str, Any]], username: str) -> dict[str, Any] | None:
     return c.execute("SELECT id,username FROM accounts WHERE username=%s AND role='student'", (username,)).fetchone()
 

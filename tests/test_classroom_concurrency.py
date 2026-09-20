@@ -48,6 +48,47 @@ def test_report_database_and_learning_state_run_outside_event_loop(monkeypatch):
     anyio.run(scenario)
 
 
+def test_duplicate_report_requests_share_one_build_but_later_request_rebuilds(monkeypatch):
+    async def scenario():
+        started = asyncio.Event()
+        release = asyncio.Event()
+        builds = 0
+
+        def workspace(_username):
+            return {}, None, {"updated_at": "version-1"}
+
+        async def run_cpu_bound(_function, *_args):
+            nonlocal builds
+            builds += 1
+            started.set()
+            await release.wait()
+            return SimpleNamespace(markdown="# report", provenance={}, suggested_filename="report.md")
+
+        async def run_sync(function, *args):
+            return function(*args)
+
+        monkeypatch.setattr(routes, "_REPORT_FLIGHTS", AsyncSingleFlightCache())
+        monkeypatch.setattr(routes, "_workspace", workspace)
+        monkeypatch.setattr(routes.concurrency, "run_cpu_bound", run_cpu_bound)
+        monkeypatch.setattr(routes.concurrency, "run_sync", run_sync)
+        monkeypatch.setattr(routes.db, "save_generated_report", lambda *_args: {"state": "draft"})
+        monkeypatch.setattr(routes, "_learning_state", lambda *_args, **_kwargs: {"completion": {}})
+        user = {"sub": "student", "rid": "release", "aid": 1}
+
+        requests = [asyncio.create_task(routes.generate_report(user)) for _ in range(50)]
+        await started.wait()
+        await asyncio.sleep(0)
+        assert builds == 1
+        release.set()
+        assert len(await asyncio.gather(*requests)) == 50
+        assert routes._REPORT_FLIGHTS.inflight_count == routes._REPORT_FLIGHTS.completed_count == 0
+
+        await routes.generate_report(user)
+        assert builds == 2
+
+    anyio.run(scenario)
+
+
 def test_mixed_cpu_jobs_are_bounded_and_coalesced_without_starving_saves(monkeypatch):
     async def scenario():
         monkeypatch.setattr(concurrency, "_CPU_LIMITER", anyio.CapacityLimiter(4))

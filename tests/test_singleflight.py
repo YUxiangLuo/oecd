@@ -38,6 +38,36 @@ def test_singleflight_coalesces_concurrent_calls_and_reuses_success():
     asyncio.run(scenario())
 
 
+def test_singleflight_can_coalesce_without_reusing_completed_success():
+    async def scenario():
+        cache: AsyncSingleFlightCache[str, int] = AsyncSingleFlightCache()
+        started = asyncio.Event()
+        release = asyncio.Event()
+        calls = 0
+
+        async def factory():
+            nonlocal calls
+            calls += 1
+            started.set()
+            await release.wait()
+            return calls
+
+        waiters = [
+            asyncio.create_task(cache.get_or_compute("same", factory, cache_success=False)) for _ in range(8)
+        ]
+        await started.wait()
+        await asyncio.sleep(0)
+        assert calls == 1
+        release.set()
+        assert await asyncio.gather(*waiters) == [1] * 8
+        assert cache.inflight_count == cache.completed_count == 0
+
+        assert await cache.get_or_compute("same", factory, cache_success=False) == 2
+        assert calls == 2
+
+    asyncio.run(scenario())
+
+
 def test_singleflight_does_not_cache_failures_and_keeps_shared_work_after_one_waiter_cancels():
     async def scenario():
         cache: AsyncSingleFlightCache[str, str] = AsyncSingleFlightCache()

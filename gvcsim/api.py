@@ -59,6 +59,7 @@ async def lifespan(_app: FastAPI):
         yield
     finally:
         await regression_routes._RESULT_CACHE.aclose()
+        await classroom_routes._REPORT_FLIGHTS.aclose()
         await concurrency.shutdown()
         auth_routes.clear_rate_limits()
         regression_routes.clear_rate_limits()

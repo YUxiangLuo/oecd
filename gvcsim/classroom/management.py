@@ -8,6 +8,7 @@ from typing import Any
 import psycopg
 
 from gvcsim import config, demo_accounts
+from gvcsim.classroom import records
 
 
 class _DatabaseProxy:
@@ -246,7 +247,11 @@ def _learning_status(
 ) -> dict[str, Any]:
     from gvcsim import evidence
 
-    summary = evidence.completion_summary(session["session"] if session else {"steps": {}}, report_exists=bool(report))
+    session_payload = session["session"] if session else {"steps": {}}
+    summary = evidence.completion_summary(
+        session_payload,
+        report_exists=records.report_matches_session(session_payload, report),
+    )
     timestamps = [row["updated_at"] for row in (session, report) if row]
     return {
         "verified_completed_count": len(summary["completed"]),
@@ -269,7 +274,7 @@ def _learning_status_in_conn(c: psycopg.Connection[dict[str, Any]], account_id: 
         (account_id, release_id),
     ).fetchone()
     report = c.execute(
-        "SELECT state,score,generated_at,submitted_at,graded_at,updated_at FROM reports"
+        "SELECT state,score,provenance,generated_at,submitted_at,graded_at,updated_at FROM reports"
         " WHERE account_id=%s AND release_id=%s",
         (account_id, release_id),
     ).fetchone()
@@ -285,7 +290,7 @@ def list_students(teacher_username: str | None = None) -> list[dict[str, Any]]:
             f"SELECT {_STUDENT_COLS},s.session AS learning_session,s.updated_at AS session_updated_at,"
             "r.state AS learning_report_state,r.score AS report_score,r.generated_at AS report_generated_at,"
             "r.submitted_at AS report_submitted_at,r.graded_at AS report_graded_at,"
-            "r.updated_at AS report_updated_at,"
+            "r.updated_at AS report_updated_at,r.provenance AS report_provenance,"
             "COALESCE((SELECT jsonb_agg(jsonb_build_object('term_id',ce.term_id,'term_name',t.name,"
             "'class_id',ce.class_id,'class_name',cg.name) ORDER BY t.created_at DESC,t.id DESC) "
             "FROM class_enrollments ce JOIN academic_terms t ON t.id=ce.term_id "
@@ -304,6 +309,7 @@ def list_students(teacher_username: str | None = None) -> list[dict[str, Any]]:
             report = {
                 "state": report_state,
                 "score": row.pop("report_score"),
+                "provenance": row.pop("report_provenance"),
                 "generated_at": row.pop("report_generated_at"),
                 "submitted_at": row.pop("report_submitted_at"),
                 "graded_at": row.pop("report_graded_at"),

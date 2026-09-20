@@ -55,6 +55,7 @@ class AsyncSingleFlightCache(Generic[K, V]):
         *,
         admit: Callable[[], None] | None = None,
         owner: Hashable | None = None,
+        cache_success: bool = True,
     ) -> V:
         try:
             value = self._values.pop(key)
@@ -74,7 +75,7 @@ class AsyncSingleFlightCache(Generic[K, V]):
             # A rejected account cannot publish its 429 to unrelated students.
             if admit is not None:
                 admit()
-            task = asyncio.create_task(self._compute(key, factory))
+            task = asyncio.create_task(self._compute(key, factory, cache_success=cache_success))
             flight = _Flight(task, owner)
             self._inflight[key] = flight
             if owner is not None:
@@ -95,10 +96,10 @@ class AsyncSingleFlightCache(Generic[K, V]):
                 flight.task.cancel()
                 self._forget(key, flight)
 
-    async def _compute(self, key: K, factory: Callable[[], Awaitable[V]]) -> V:
+    async def _compute(self, key: K, factory: Callable[[], Awaitable[V]], *, cache_success: bool) -> V:
         value = await factory()
         flight = self._inflight.get(key)
-        if flight is None or flight.task is not asyncio.current_task() or not flight.waiters:
+        if not cache_success or flight is None or flight.task is not asyncio.current_task() or not flight.waiters:
             return value
         self._values[key] = value
         self._values.move_to_end(key)

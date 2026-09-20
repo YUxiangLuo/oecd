@@ -15,8 +15,12 @@ from gvcsim import session as session_model
 from gvcsim import teaching_report
 from gvcsim.classroom import db, records
 from gvcsim.request_validation import TextRequest
+from gvcsim.singleflight import AsyncSingleFlightCache
 
 router = APIRouter(prefix="/api/classroom")
+_REPORT_FLIGHTS: AsyncSingleFlightCache[
+    tuple[str, str], tuple[dict[str, Any], teaching_report.TeachingReport, datetime]
+] = AsyncSingleFlightCache(maxsize=64)
 
 
 def current_user(request: Request) -> dict[str, Any]:
@@ -46,10 +50,10 @@ def _workspace(username: str) -> tuple[dict[str, Any], dict[str, Any] | None, di
     return row["session"] if row else session_model.empty_session(), report, row
 
 
-def _learning_state(session: dict[str, Any], *, report_exists: bool) -> dict[str, Any]:
+def _learning_state(session: dict[str, Any], *, report_current: bool) -> dict[str, Any]:
     """Authoritative quiz completion and report-material readiness for one snapshot."""
     return {
-        "completion": evidence.completion_summary(session, report_exists=report_exists),
+        "completion": evidence.completion_summary(session, report_exists=report_current),
         "report_gate": teaching_report.check_gate(session),
         "material_gate": teaching_report.check_material_gate(session),
     }
@@ -62,7 +66,7 @@ def get_session(user: dict = Depends(require_student)):
         "release_id": user["rid"],
         "session": session,
         "updated_at": row["updated_at"] if row else None,
-        **_learning_state(session, report_exists=bool(report)),
+        **_learning_state(session, report_current=records.report_matches_session(session, report)),
         "report": report,
     }
 
@@ -137,11 +141,11 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
         ) from error
     if saved is None:
         raise HTTPException(status_code=404, detail="学生账号不存在")
-    report_exists = db.latest_report(user["sub"]) is not None
+    report = db.latest_report(user["sub"])
     return {
         "session": payload,
         "updated_at": saved["updated_at"],
-        **_learning_state(payload, report_exists=report_exists),
+        **_learning_state(payload, report_current=records.report_matches_session(payload, report)),
     }
 
 
@@ -161,10 +165,18 @@ async def _prepare_report(user: dict) -> tuple[dict[str, Any], teaching_report.T
 
 
 async def generate_report(user: dict = Depends(require_student), *, request: Request | None = None):
+    async def prepare() -> tuple[dict[str, Any], teaching_report.TeachingReport, datetime]:
+        return await _REPORT_FLIGHTS.get_or_compute(
+            (str(user.get("rid") or ""), user["sub"]),
+            lambda: _prepare_report(user),
+            owner=user.get("aid") or user["sub"],
+            cache_success=False,
+        )
+
     if request is None:
-        session, generated, version = await _prepare_report(user)
+        session, generated, version = await prepare()
     else:
-        session, generated, version = await concurrency.for_request(request, lambda: _prepare_report(user))
+        session, generated, version = await concurrency.for_request(request, prepare)
     # Only preparation observes disconnects. Once persistence begins, retain the
     # transaction and response bookkeeping even when the response is lost.
     try:
@@ -179,7 +191,9 @@ async def generate_report(user: dict = Depends(require_student), *, request: Req
     if saved is None:
         raise HTTPException(status_code=404, detail="学生账号不存在")
     saved["suggested_filename"] = generated.suggested_filename
-    learning_state = await concurrency.run_sync(lambda: _learning_state(session, report_exists=True))
+    learning_state = await concurrency.run_sync(
+        lambda: _learning_state(session, report_current=records.report_matches_session(session, saved))
+    )
     return {"report": saved, **learning_state}
 
 
@@ -202,7 +216,7 @@ def submit_report(user: dict = Depends(require_student)):
     session, _existing, _row = _workspace(user["sub"])
     return {
         "report": report,
-        **_learning_state(session, report_exists=True),
+        **_learning_state(session, report_current=records.report_matches_session(session, report)),
     }
 
 

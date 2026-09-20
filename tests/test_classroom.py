@@ -277,7 +277,13 @@ def test_student_list_uses_verified_completion_and_report_state(teaching_db):
     _save_report("draft", {"years": [2020], "runs": []})
     row = db.list_students("teacher")[0]
     assert row["report_state"] == "draft"
+    assert 15 in row["verified_completed_steps"]
     assert "verified_completed_count" in row and "last_valid_activity" in row
+
+    changed = empty_session()
+    changed["steps"]["1"] = make_record({"value": "changed after report generation"})
+    db.save_session("student", changed)
+    assert 15 not in db.list_students("teacher")[0]["verified_completed_steps"]
 
 
 def test_academic_terms_classes_and_enrollments_group_students_without_changing_work(teaching_db):

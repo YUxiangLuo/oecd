@@ -280,6 +280,8 @@ def test_submit_api_rejects_a_draft_after_the_session_changes(teaching_db):
         json={"session": changed, "base_updated_at": saved.json()["updated_at"]},
     )
     assert updated.status_code == 200
+    assert 15 not in updated.json()["completion"]["completed"]
+    assert 15 not in student.get("/api/classroom/session").json()["completion"]["completed"]
 
     response = student.post("/api/classroom/report/submit")
 
