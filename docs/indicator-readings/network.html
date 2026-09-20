@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>步骤 5｜全球生产网络指标说明</title>
+  <link rel="stylesheet" href="reading.css">
+</head>
+<body>
+  <section class="page">
+    <div class="eyebrow">GVC Simulation Lab · Step 05</div>
+    <h1>全球生产网络指标说明</h1>
+    <p class="lead">把国家×行业看成节点、正的中间投入流看成有向边，同时区分流量规模与拓扑位置。</p>
+
+    <div class="scope">
+      <b>当前课程图定义</b><br>
+      节点是 OECD ICIO 2023 edition 中的国家×行业；边从投入供给方指向使用方。全部有限正流量边和正自环均保留。
+      加权指标使用当年价百万美元；路径指标把每条正边视为相同长度，不把金额倒数当作距离。
+    </div>
+
+    <h2>1. 连接数量与流量规模</h2>
+    <table>
+      <thead><tr><th>指标</th><th>定义</th><th>边界</th></tr></thead>
+      <tbody>
+        <tr><td>入度</td><td>指向该节点的正边数量。</td><td>表示直接供应来源数量，不反映金额。</td></tr>
+        <tr><td>出度</td><td>由该节点指向其他节点的正边数量。</td><td>表示直接使用方数量，不反映金额。</td></tr>
+        <tr><td>度</td><td>入度与出度之和。</td><td>有向连接计数；不能与无向网络的度混用。</td></tr>
+        <tr><td>加权入度</td><td>流入该节点的边权重之和。</td><td>对应中间投入流量规模。</td></tr>
+        <tr><td>加权出度</td><td>由该节点流出的边权重之和。</td><td>对应中间供给流量规模。</td></tr>
+        <tr><td>加权总度</td><td>加权入度与加权出度之和。</td><td>正自环同时属于入向和出向，因此计两次。</td></tr>
+      </tbody>
+    </table>
+    <div class="formula">weighted degree = weighted indegree + weighted outdegree</div>
+
+    <h2>2. 为什么要同时看度与加权度</h2>
+    <p>连接很多但每条流量很小的节点可能度很高、加权度不高；少数大额连接则可能产生相反结果。因此“伙伴多”和“流量大”是两个不同问题。</p>
+    <div class="footer">课程指标说明 · 根据委托方提供的网络指标资料校订 · 1 / 2</div>
+  </section>
+
+  <section class="page">
+    <div class="eyebrow">Directed Unweighted Shortest Paths</div>
+    <h2>3. 路径类指标</h2>
+    <table>
+      <thead><tr><th>指标</th><th>当前课程的精确定义</th></tr></thead>
+      <tbody>
+        <tr><td>离心率</td><td>该节点沿出边到所有可达节点的最远最短路径距离。</td></tr>
+        <tr><td>接近中心性</td><td>可达节点数量除以有向最短路径距离之和，越高表示向外可达性越强。</td></tr>
+        <tr><td>调和中心性</td><td>沿出边到可达节点的距离倒数平均值，可处理不完全连通网络。</td></tr>
+        <tr><td>介数中心性</td><td>各有序节点对的有向最短路径经过该节点的份额之和；采用 Brandes 精确算法，未按节点对数归一化。</td></tr>
+      </tbody>
+    </table>
+    <div class="formula">BC(v) = Σₛ₍ₛ≠ᵥ≠ₜ₎ σₛₜ(v) ÷ σₛₜ</div>
+    <p>这里的 <code>σₛₜ</code> 是从 s 到 t 的最短路径条数，<code>σₛₜ(v)</code> 是其中经过 v 的条数。微小正边与大额边同权，所以该介数只是一项全正边二值拓扑基准。</p>
+
+    <h2>4. 特征向量兼容分数与解释边界</h2>
+    <p>课程字段 <code>eigencentrality</code> 精确复现 Gephi Toolkit 0.10.1 的 100 次累计入边迭代，并按最大值归一。它保留软件复现性，但不等同于标准 Perron 特征向量幂迭代。</p>
+    <div class="notice">
+      <b>写作边界：</b>中心性高不单独证明经济瓶颈、不可替代性、系统重要性或因果影响。当前课程未做边阈值敏感性分析；国家级图在全部正边下接近完全图，路径指标缺少横截面区分度，因此重点阅读国家×行业网络。
+    </div>
+
+    <h2>5. 依据与延伸阅读</h2>
+    <ol class="references">
+      <li>委托方提供：《基于投入产出数据库的全球生产网络指标构建（含若干年份的原始指标数据）》。</li>
+      <li>Brandes, U. (2001), “A Faster Algorithm for Betweenness Centrality,” <i>Journal of Mathematical Sociology</i>, 25(2), 163–177. https://doi.org/10.1080/0022250X.2001.9990249</li>
+      <li>李磊、陆林、孙小龙、虞虎（2020）：《高铁沿线旅游流网络结构及其互动关系研究——以合福高铁沿线地区为例》，《人文地理》35(1)，132–140。该文只作为网络分析应用示例，不是生产网络算法口径来源。</li>
+    </ol>
+    <div class="footer">课程指标说明 · 当前实现口径优先于历史网络表 · 2 / 2</div>
+  </section>
+</body>
+</html>

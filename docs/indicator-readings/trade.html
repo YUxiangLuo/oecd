@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>步骤 2｜总贸易流分解指标说明</title>
+  <link rel="stylesheet" href="reading.css">
+</head>
+<body>
+  <section class="page">
+    <div class="eyebrow">GVC Simulation Lab · Step 02</div>
+    <h1>总贸易流分解指标说明</h1>
+    <p class="lead">从“出口了多少”转向“出口价值由谁创造、最终在哪里吸收、是否被重复计算”。</p>
+
+    <div class="scope">
+      <b>当前课程口径</b><br>
+      指标由 OECD ICIO 2023 edition 的 2016–2020 年表计算，金额单位为当年价百万美元。课程采用
+      WWZ 总出口分解的五类聚合项，并增加由 ICIO 产品税减补贴账户计算的 <code>taxsub</code>，使总出口在
+      VA+TLS 账户口径下闭合。委托方提供的历史指标表用于说明和核对，不替换当前数据发布。
+    </div>
+
+    <h2>1. 核心恒等式</h2>
+    <div class="formula">总出口 = DVAex + DVArt + DDC + FVA + FDC + taxsub</div>
+    <div class="formula">EXDVA = DVAex + DVArt</div>
+    <div class="formula">外国增加值项占比 = FVA ÷ 总出口</div>
+    <p>分解的关键不是把所有分项都称为“增加值”，而是区分真实增加值、返回国内的增加值以及跨境生产链中的重复计算。</p>
+
+    <h2>2. 指标逐项解释</h2>
+    <table>
+      <thead><tr><th>字段</th><th>课程含义</th><th>阅读重点</th></tr></thead>
+      <tbody>
+        <tr><td><code>DVAex</code></td><td>由本国创造、随出口离境并最终被国外吸收的增加值。</td><td>体现出口中最终留在国外的本国价值。</td></tr>
+        <tr><td><code>DVArt</code></td><td>随出口离境后又返回本国，并在本国最终吸收的国内增加值。</td><td>虽曾出口，但最终吸收地仍是本国。</td></tr>
+        <tr><td><code>DDC</code></td><td>本国增加值在跨境生产链中多次进入毛流量形成的国内重复计算。</td><td>不是新增增加值。</td></tr>
+        <tr><td><code>FVA</code></td><td>WWZ 第 11–14 项聚合的外国增加值。</td><td>不含另列的外国重复计算 <code>FDC</code>。</td></tr>
+        <tr><td><code>FDC</code></td><td>外国增加值在跨境生产链中被多次计入毛流量形成的重复计算。</td><td>不能并入课程的 <code>FVA</code> 字段。</td></tr>
+        <tr><td><code>taxsub</code></td><td>由 ICIO 的 TLS 账户沿投入产出链计算的出口税收减补贴含量。</td><td>是课程扩展项，不是关税，也不是 WWZ 原文分类。</td></tr>
+      </tbody>
+    </table>
+    <div class="footer">课程指标说明 · 根据委托方提供的贸易分解资料校订 · 1 / 2</div>
+  </section>
+
+  <section class="page">
+    <div class="eyebrow">Interpretation Boundaries</div>
+    <h2>3. FVA 为什么不能简写成“全部外国含量”</h2>
+    <p>委托方说明中使用了“总出口中的国外增加值”这一简写。为了与当前课程字段保持一致，需要补上两个边界：</p>
+    <ol>
+      <li>课程中的 <code>FVA</code> 不含 <code>FDC</code>；在同一纯 VA 分解口径下，讨论总出口的全部外国纯 VA 内容时，应同时说明 <code>FVA + FDC</code>。</li>
+      <li>OECD TiVA 指标还涉及产品税减补贴的账户处理，因此课程字段不能直接冒充 OECD 官方 <code>EXGR_FVASH</code>。</li>
+    </ol>
+
+    <div class="notice">
+      <b>写作边界：</b>占比升高只说明出口价值构成发生变化。它可能来自 FVA 上升、总出口下降或二者共同变化，不能单凭占比推出竞争力、政策效果或福利变化。
+    </div>
+
+    <h2>4. 推荐的结果表述</h2>
+    <ul>
+      <li>先交代经济体、行业、年份、金额单位和当前数据版本。</li>
+      <li>比较占比时用“百分点”；比较金额时用“百万美元”，二者不要混写。</li>
+      <li>明确区分 DVA、FVA 与重复计算项；如引用官方 TiVA 指标，应另列其官方定义。</li>
+      <li><code>taxsub</code> 可能为负，表示沿供应链累计后呈净补贴，不能改写为“负关税”。</li>
+    </ul>
+
+    <h2>5. 依据与延伸阅读</h2>
+    <ol class="references">
+      <li>委托方提供：《基于投入产出数据库的双边总贸易流分解指标构建（含若干年份的原始指标数据）》。</li>
+      <li>Wang, Z., Wei, S.-J., and Zhu, K. (2013; revised 2018), <i>Quantifying International Production Sharing at the Bilateral and Sector Levels</i>, NBER Working Paper 19677. https://www.nber.org/papers/w19677</li>
+      <li>王直、魏尚进、祝坤福（2015）：《总贸易核算法：官方贸易统计与全球价值链的度量》，《中国社会科学》第 9 期。</li>
+      <li>OECD (2023), <i>Guide to OECD TiVA Indicators</i>.</li>
+    </ol>
+    <div class="footer">课程指标说明 · 当前实现口径优先于历史指标表 · 2 / 2</div>
+  </section>
+</body>
+</html>

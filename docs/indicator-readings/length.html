@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>步骤 4｜生产长度与 GVC 位置指标说明</title>
+  <link rel="stylesheet" href="reading.css">
+</head>
+<body>
+  <section class="page">
+    <div class="eyebrow">GVC Simulation Lab · Step 04</div>
+    <h1>生产长度与 GVC 位置指标说明</h1>
+    <p class="lead">生产长度刻画增加值在连续生产中被计入总产出的平均次数，而不是跨境次数或经过国家数。</p>
+
+    <div class="scope">
+      <b>当前课程口径</b><br>
+      指标基于 OECD ICIO 2023 edition 的 2016–2020 年表，采用 Wang、Wei、Yu、Zhu 的生产长度分解。
+      课程同时呈现前向长度、后向长度和二者构成的 GVC 位置指数。
+    </div>
+
+    <h2>1. 操作性定义</h2>
+    <div class="formula">某段生产长度 = 该段活动诱发的累计总产出 ÷ 该段关联增加值</div>
+    <p>当关联增加值为正时，这个比值可理解为增加值加权的平均生产阶段数。它反映的是投入产出账户中生产活动的累计程度，不等于一件产品实际经过的企业数、国家数或边数。</p>
+
+    <h2>2. 前向与后向视角</h2>
+    <table>
+      <thead><tr><th>视角</th><th>追踪方向</th><th>主要字段</th></tr></thead>
+      <tbody>
+        <tr><td>前向</td><td>从增加值创造端出发，追踪到最终吸收。</td><td><code>PLv</code>、<code>PLv_D</code>、<code>PLv_RT</code>、<code>PLv_GVC</code></td></tr>
+        <tr><td>后向</td><td>从最终产品端回溯其初始增加值来源。</td><td><code>PLy</code>、<code>PLy_D</code>、<code>PLy_RT</code>、<code>PLy_GVC</code></td></tr>
+      </tbody>
+    </table>
+    <p><code>D</code>、<code>RT</code> 与 <code>GVC</code> 分别表示纯国内、传统贸易和全球价值链生产段。分段长度是各段条件下的比值，不能直接相加为总长度。</p>
+
+    <h2>3. 为什么国内加工也会增加长度</h2>
+    <p>长度统计连续生产过程中的累计产出。即使没有新增跨境，一项中间投入在国内继续加工，也会增加累计生产阶段。因此“生产链更长”不能改写为“跨境更多”。</p>
+    <div class="footer">课程指标说明 · 根据委托方提供的生产长度资料校订 · 1 / 2</div>
+  </section>
+
+  <section class="page">
+    <div class="eyebrow">Position on Global Value Chains</div>
+    <h2>4. GVC 位置指数</h2>
+    <div class="formula">GVCPs = PLv_GVC ÷ PLy_GVC</div>
+    <table>
+      <thead><tr><th>读数</th><th>在这一指标口径下的含义</th></tr></thead>
+      <tbody>
+        <tr><td><code>GVCPs &gt; 1</code></td><td>前向 GVC 长度相对更长，通常称为相对更上游。</td></tr>
+        <tr><td><code>GVCPs = 1</code></td><td>前向与后向 GVC 长度相当。</td></tr>
+        <tr><td><code>GVCPs &lt; 1</code></td><td>后向 GVC 长度相对更长，通常称为相对更下游。</td></tr>
+      </tbody>
+    </table>
+
+    <div class="notice">
+      <b>写作边界：</b>“相对上游”不是“更先进”“附加值更高”或“议价能力更强”的同义词。它只描述前向与后向 GVC 生产长度的相对关系。
+    </div>
+
+    <h2>5. 数值与比较边界</h2>
+    <ul>
+      <li>分母缺失、非有限或绝对值不超过 <code>1e-12</code> 时，相关长度或位置指数不可用，不能强行填 0；负分母仍按有符号比值保留。</li>
+      <li>当基础账户存在负增加值时，比值是有符号账户加权，不再保证普通加权平均的区间性质。</li>
+      <li>比较国家或年份时，应固定行业层级、价格口径和数据版本。</li>
+      <li><code>Pos_TPL</code> 比较总生产长度，<code>GVCPs</code> 比较 GVC 段长度，二者不是同一指标。</li>
+    </ul>
+
+    <h2>6. 依据与延伸阅读</h2>
+    <ol class="references">
+      <li>委托方提供：《基于投入产出数据库的全球价值链长度分解指标构建（含若干年份的原始指标数据）》。</li>
+      <li>Wang, Z., Wei, S.-J., Yu, X., and Zhu, K. (2017), <i>Characterizing Global Value Chains: Production Length and Upstreamness</i>, NBER Working Paper 23261. https://www.nber.org/papers/w23261</li>
+    </ol>
+    <div class="footer">课程指标说明 · 当前实现口径优先于历史指标表 · 2 / 2</div>
+  </section>
+</body>
+</html>
