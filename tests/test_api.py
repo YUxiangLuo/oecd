@@ -338,13 +338,52 @@ def test_teacher_student_management(teaching_db):
     assert next(row for row in rows if row["username"] == "student")["demo_seed"] is True
 
 
+def test_teacher_semester_class_and_enrollment_api(teaching_db):
+    teacher = _client(teaching_db, "teacher")
+    student = _client(teaching_db)
+    assert student.get("/api/classroom/semesters").status_code == 403
+
+    term = teacher.post("/api/classroom/semesters", json={"name": "2026 秋"})
+    assert term.status_code == 200
+    duplicate = teacher.post("/api/classroom/semesters", json={"name": "2026 秋"})
+    assert duplicate.status_code == 409
+    group = teacher.post(
+        "/api/classroom/classes",
+        json={"term_id": term.json()["id"], "name": "供应链 1 班"},
+    )
+    assert group.status_code == 200
+
+    account_id = db.find_account("student")["id"]
+    assigned = teacher.post(
+        f"/api/classroom/students/{account_id}/enrollment",
+        json={"term_id": term.json()["id"], "class_id": group.json()["id"]},
+    )
+    assert assigned.status_code == 200
+    assert assigned.json()["enrollments"][0]["class_name"] == "供应链 1 班"
+    assert teacher.get("/api/classroom/students").json()["students"][0]["enrollments"] == assigned.json()["enrollments"]
+
+    archived = teacher.post(f"/api/classroom/semesters/{term.json()['id']}", json={"is_active": False})
+    assert archived.status_code == 200 and archived.json()["is_active"] is False
+    rejected_class = teacher.post(
+        "/api/classroom/classes",
+        json={"term_id": term.json()["id"], "name": "归档后新班"},
+    )
+    assert rejected_class.status_code == 409
+    missing_term = teacher.post(
+        f"/api/classroom/students/{account_id}/enrollment",
+        json={"term_id": 999_999, "class_id": None},
+    )
+    assert missing_term.status_code == 404
+    structure = teacher.get("/api/classroom/semesters").json()["semesters"]
+    assert structure[0]["classes"][0]["student_count"] == 1
+
+
 def test_deleted_classroom_endpoints_return_404(teaching_db):
     student = _client(teaching_db)
     teacher = _client(teaching_db, "teacher")
     for path in (
         "announcements",
         "progress",
-        "classes",
         "overview",
         "submissions",
         "report/gate",
@@ -353,4 +392,4 @@ def test_deleted_classroom_endpoints_return_404(teaching_db):
     ):
         assert student.get(f"/api/classroom/{path}").status_code == 404
     assert student.post("/api/classroom/workspace/reset", json={"confirmation": "清空当前实验"}).status_code == 404
-    assert teacher.get("/api/classroom/classes").status_code == 404
+    assert teacher.get("/api/classroom/classes").status_code == 405

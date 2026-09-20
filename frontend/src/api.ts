@@ -343,17 +343,32 @@ export const api = {
       post<SessionSaveResponse>("/api/classroom/session", body, "PUT"),
     submitReport: () => post<ReportMutationResponse>("/api/classroom/report/submit"),
     generateReport: () => post<ReportMutationResponse>("/api/classroom/report/generate"),
+    semesters: () => get<{ semesters: import("./types").AcademicSemester[] }>("/api/classroom/semesters"),
+    createSemester: (name: string) =>
+      post<Omit<import("./types").AcademicSemester, "student_count" | "classes">>("/api/classroom/semesters", { name }),
+    updateSemester: (id: number, body: { name?: string; is_active?: boolean }) =>
+      post<Omit<import("./types").AcademicSemester, "student_count" | "classes">>(`/api/classroom/semesters/${id}`, body),
+    createClass: (termId: number, name: string) =>
+      post<Omit<import("./types").ClassGroup, "student_count">>("/api/classroom/classes", { term_id: termId, name }),
+    updateClass: (id: number, body: { name?: string; is_active?: boolean }) =>
+      post<Omit<import("./types").ClassGroup, "student_count">>(`/api/classroom/classes/${id}`, body),
     students: () => get<{ students: import("./types").StudentRow[] }>("/api/classroom/students"),
     createStudent: (body: {
       username: string;
       display_name: string;
       password: string;
       student_no?: string;
+      class_id?: number;
     }) => post<import("./types").StudentRow>("/api/classroom/students", body),
     updateStudent: (
       id: number,
       body: { display_name?: string; student_no?: string; password?: string },
     ) => post<import("./types").StudentRow>(`/api/classroom/students/${id}`, body),
+    setEnrollment: (id: number, termId: number, classId: number | null) =>
+      post<{ enrollments: import("./types").ClassEnrollment[] }>(
+        `/api/classroom/students/${id}/enrollment`,
+        { term_id: termId, class_id: classId },
+      ),
     reports: () => get<{ reports: import("./types").TeacherReport[] }>("/api/classroom/reports"),
     reportDetail: (accountId: number) =>
       get<import("./types").TeacherReport>(`/api/classroom/reports/${accountId}`),

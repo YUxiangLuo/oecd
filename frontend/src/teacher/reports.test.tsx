@@ -12,6 +12,7 @@ const report: TeacherReport = {
   username: "student",
   display_name: "学生",
   student_no: "S-1",
+  enrollments: [],
   markdown: "# report",
   provenance: {
     release_id: "a".repeat(32),

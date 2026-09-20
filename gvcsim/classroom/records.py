@@ -102,6 +102,12 @@ _REPORT_COLUMNS = (
     "r.release_id,r.markdown,r.provenance,r.state,r.score,r.feedback,r.graded_by,"
     "r.generated_at,r.updated_at,r.submitted_at,r.graded_at"
 )
+_REPORT_ENROLLMENTS = (
+    "COALESCE((SELECT jsonb_agg(jsonb_build_object('term_id',ce.term_id,'term_name',t.name,"
+    "'class_id',ce.class_id,'class_name',cg.name) ORDER BY t.created_at DESC,t.id DESC) "
+    "FROM class_enrollments ce JOIN academic_terms t ON t.id=ce.term_id "
+    "JOIN class_groups cg ON cg.id=ce.class_id WHERE ce.account_id=a.id),'[]'::jsonb) AS enrollments"
+)
 
 
 def latest_report(username: str) -> dict[str, Any] | None:
@@ -192,7 +198,8 @@ def list_reports(teacher_username: str) -> list[dict[str, Any]]:
         if not _teacher_exists(c, teacher_username):
             return []
         return c.execute(
-            f"SELECT a.id AS account_id,a.username,a.display_name,a.student_no,{_REPORT_COLUMNS}"
+            f"SELECT a.id AS account_id,a.username,a.display_name,a.student_no,{_REPORT_COLUMNS},"
+            f"{_REPORT_ENROLLMENTS}"
             " FROM reports r JOIN accounts a ON a.id=r.account_id"
             " WHERE r.release_id=%s AND r.state IN ('pending','graded')"
             " ORDER BY CASE r.state WHEN 'pending' THEN 0 ELSE 1 END,r.submitted_at DESC,a.username",
@@ -206,7 +213,8 @@ def get_report(account_id: int, teacher_username: str) -> dict[str, Any] | None:
         if not _teacher_exists(c, teacher_username):
             return None
         return c.execute(
-            f"SELECT a.id AS account_id,a.username,a.display_name,a.student_no,{_REPORT_COLUMNS}"
+            f"SELECT a.id AS account_id,a.username,a.display_name,a.student_no,{_REPORT_COLUMNS},"
+            f"{_REPORT_ENROLLMENTS}"
             " FROM reports r JOIN accounts a ON a.id=r.account_id"
             " WHERE a.id=%s AND r.release_id=%s AND r.state IN ('pending','graded')",
             (account_id, release_id),

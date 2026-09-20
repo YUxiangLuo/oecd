@@ -114,7 +114,7 @@ def initialize_schema() -> list[str]:
         with c:
             schema.lock_schema(c)
             version = schema.existing_version(c)
-            if version not in {None, TEACHING_DB_VERSION}:
+            if version not in {None, "gvcsim-teaching-db-v11", TEACHING_DB_VERSION}:
                 raise SchemaVersionMismatch(
                     f"教学库 schema 版本为 {version}，当前代码需要 {TEACHING_DB_VERSION}；"
                     "请停止服务并执行经过测试的兼容迁移；"
@@ -125,6 +125,9 @@ def initialize_schema() -> list[str]:
                 c.execute(schema.SCHEMA_SQL)
                 c.execute("INSERT INTO schema_meta(singleton,version) VALUES (true,%s)", (TEACHING_DB_VERSION,))
                 applied.append(f"创建 schema {TEACHING_DB_VERSION}")
+            elif version == "gvcsim-teaching-db-v11":
+                c.execute(schema.MIGRATION_V11_TO_V12_SQL)
+                applied.append("迁移 schema gvcsim-teaching-db-v11 → gvcsim-teaching-db-v12")
             synced = _sync_demo_accounts(c)
             if synced["created"] or synced["updated"]:
                 applied.append(f"同步演示账号(created={synced['created']},updated={synced['updated']})")
@@ -332,9 +335,15 @@ atexit.register(shutdown)
 from gvcsim.classroom.management import (  # noqa: E402
     _STUDENT_COLS as _STUDENT_COLS,
     _learning_status_in_conn as _learning_status_in_conn,
+    create_class_group as create_class_group,
     create_student as create_student,
+    create_term as create_term,
+    list_academic_structure as list_academic_structure,
     list_students as list_students,
+    set_student_enrollment as set_student_enrollment,
+    update_class_group as update_class_group,
     update_student as update_student,
+    update_term as update_term,
 )
 from gvcsim.classroom.records import (  # noqa: E402
     ReportChanged as ReportChanged,

@@ -20,7 +20,7 @@ def _save_report(markdown: str, provenance: dict, username: str = "student"):
     return db.save_generated_report(username, markdown, provenance, _session_version(username))
 
 
-def test_v11_schema_contains_release_and_auth_bound_contract(teaching_db):
+def test_v12_schema_contains_release_auth_and_class_contracts(teaching_db):
     with db.conn() as connection:
         names = {
             row["tablename"]
@@ -38,8 +38,16 @@ def test_v11_schema_contains_release_and_auth_bound_contract(teaching_db):
                 "SELECT column_name FROM information_schema.columns WHERE table_name='experiment_sessions'"
             ).fetchall()
         }
-    assert names == {"schema_meta", "accounts", "experiment_sessions", "reports"}
-    assert db.TEACHING_DB_VERSION == "gvcsim-teaching-db-v11"
+    assert names == {
+        "schema_meta",
+        "accounts",
+        "academic_terms",
+        "class_groups",
+        "class_enrollments",
+        "experiment_sessions",
+        "reports",
+    }
+    assert db.TEACHING_DB_VERSION == "gvcsim-teaching-db-v12"
     assert "auth_version" in account_columns
     assert "release_id" in session_columns
 
@@ -55,6 +63,35 @@ def test_schema_mismatch_requires_migration_without_recommending_reset_as_upgrad
     message = str(exc_info.value)
     assert "兼容迁移" in message
     assert "不能用 `uv run gvcsim classroom-init --reset` 代替普通升级" in message
+
+
+def test_v11_schema_migrates_without_losing_accounts_sessions_or_reports(teaching_db):
+    session = empty_session()
+    session["steps"]["1"] = make_record({"value": "preserved by migration"})
+    saved = db.save_session("student", session)
+    assert saved is not None
+    report = db.save_generated_report("student", "preserved report", {"runs": []}, saved["updated_at"])
+    assert report is not None
+    pending = db.submit_report("student")
+    account_id = db.find_account("student")["id"]
+    graded = db.grade_report(account_id, 88, "preserved feedback", "teacher", pending["updated_at"])
+
+    with db.conn() as connection:
+        connection.execute("DROP TABLE class_enrollments,class_groups,academic_terms")
+        connection.execute("UPDATE schema_meta SET version='gvcsim-teaching-db-v11' WHERE singleton")
+    db.shutdown()
+    db._schema_ready = False
+
+    applied = db.initialize_schema()
+
+    assert applied == ["迁移 schema gvcsim-teaching-db-v11 → gvcsim-teaching-db-v12"]
+    assert db.find_account("student") is not None
+    assert db.get_session("student")["session"] == session
+    migrated_report = db.get_report(account_id, "teacher")
+    assert migrated_report["markdown"] == "preserved report"
+    assert migrated_report["score"] == graded["score"] == 88
+    assert migrated_report["feedback"] == "preserved feedback"
+    assert db.verify_schema()["schema_version"] == "gvcsim-teaching-db-v12"
 
 
 def test_readiness_requires_a_teacher_account(teaching_db):
@@ -241,3 +278,65 @@ def test_student_list_uses_verified_completion_and_report_state(teaching_db):
     row = db.list_students("teacher")[0]
     assert row["report_state"] == "draft"
     assert "verified_completed_count" in row and "last_valid_activity" in row
+
+
+def test_academic_terms_classes_and_enrollments_group_students_without_changing_work(teaching_db):
+    term = db.create_term("2026 秋", "teacher")
+    first_class = db.create_class_group(term["id"], "国际商务 1 班", "teacher")
+    second_class = db.create_class_group(term["id"], "国际商务 2 班", "teacher")
+    assert first_class is not None and second_class is not None
+    account_id = db.find_account("student")["id"]
+
+    enrollments = db.set_student_enrollment(account_id, term["id"], first_class["id"], "teacher")
+    assert enrollments == [
+        {
+            "term_id": term["id"],
+            "term_name": "2026 秋",
+            "class_id": first_class["id"],
+            "class_name": "国际商务 1 班",
+        }
+    ]
+    db.save_session("student", empty_session())
+    moved = db.set_student_enrollment(account_id, term["id"], second_class["id"], "teacher")
+    assert moved[0]["class_name"] == "国际商务 2 班"
+    assert db.get_session("student") is not None
+    assert db.list_students("teacher")[0]["enrollments"] == moved
+
+    structure = db.list_academic_structure("teacher")
+    assert structure[0]["student_count"] == 1
+    assert [group["student_count"] for group in structure[0]["classes"]] == [0, 1]
+
+    assert db.set_student_enrollment(account_id, term["id"], None, "teacher") == []
+    assert db.get_session("student") is not None
+
+
+def test_archived_academic_groups_keep_history_but_reject_new_activity(teaching_db):
+    term = db.create_term("2025 秋", "teacher")
+    first_class = db.create_class_group(term["id"], "历史班", "teacher")
+    second_class = db.create_class_group(term["id"], "仍使用班", "teacher")
+    assert first_class is not None and second_class is not None
+    account_id = db.find_account("student")["id"]
+    db.set_student_enrollment(account_id, term["id"], first_class["id"], "teacher")
+
+    db.update_class_group(first_class["id"], {"is_active": False}, "teacher")
+    existing = db.set_student_enrollment(account_id, term["id"], first_class["id"], "teacher")
+    assert existing[0]["class_id"] == first_class["id"]
+    db.set_student_enrollment(account_id, term["id"], None, "teacher")
+    with pytest.raises(ValueError, match="已归档"):
+        db.set_student_enrollment(account_id, term["id"], first_class["id"], "teacher")
+
+    db.set_student_enrollment(account_id, term["id"], second_class["id"], "teacher")
+    db.update_term(term["id"], {"is_active": False}, "teacher")
+    with pytest.raises(ValueError, match="已归档学期"):
+        db.create_class_group(term["id"], "不能新建", "teacher")
+    with pytest.raises(ValueError, match="已归档"):
+        db.create_student("archived-student", "归档学生", "archived-password", "", "teacher", second_class["id"])
+    assert (
+        db.set_student_enrollment(account_id, term["id"], second_class["id"], "teacher")[0]["class_id"]
+        == second_class["id"]
+    )
+    assert db.set_student_enrollment(account_id, term["id"], None, "teacher") == []
+    with pytest.raises(ValueError, match="已归档"):
+        db.set_student_enrollment(account_id, term["id"], second_class["id"], "teacher")
+    with pytest.raises(LookupError, match="学期不存在"):
+        db.set_student_enrollment(account_id, 999_999, None, "teacher")

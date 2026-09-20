@@ -5,6 +5,7 @@ import { useAsync } from "../labs/shared";
 import { ReportMarkdown } from "../report-renderer-lazy";
 import { showToast } from "../toast";
 import type { AuthUser, TeacherReport } from "../types";
+import { AcademicFilters, matchesAcademicFilter } from "./academic-filter";
 import { EmptyState, SearchInput, StatusPill, Toolbar } from "./ui";
 
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
@@ -50,8 +51,11 @@ export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () =
   const [openAccountId, setOpenAccountId] = useState<number | null>(null);
   const [filter, setFilter] = useState<Filter>("pending");
   const [query, setQuery] = useState("");
+  const [semesterId, setSemesterId] = useState<number | null>(null);
+  const [classId, setClassId] = useState<number | null>(null);
   const { data, error } = useAsync<{ reports: TeacherReport[] }>(() => api.classroom.reports(), [refresh]);
-  if (error) return <div className="error-box" role="alert">{error}</div>;
+  const { data: academic, error: academicError } = useAsync(() => api.classroom.semesters(), [refresh]);
+  if (error || academicError) return <div className="error-box" role="alert">{error ?? academicError}</div>;
   if (openAccountId != null) {
     return <ReportView accountId={openAccountId} grader={user.username} onBack={(changed) => {
       setOpenAccountId(null);
@@ -60,10 +64,12 @@ export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () =
     }} />;
   }
   const reports = data?.reports ?? [];
+  const semesters = academic?.semesters ?? [];
   const pending = reports.filter((report) => report.state === "pending").length;
   const needle = query.trim().toLowerCase();
   const shown = reports
     .filter((report) => filter === "all" || report.state === filter)
+    .filter((report) => matchesAcademicFilter(report.enrollments, semesterId, classId))
     .filter((report) => !needle || [report.display_name, report.username, report.student_no].some((value) => (value ?? "").toLowerCase().includes(needle)));
   return (
     <div>
@@ -81,12 +87,22 @@ export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () =
             </button>
           ))}
         </div>
+        <AcademicFilters
+          semesters={semesters}
+          semesterId={semesterId}
+          classId={classId}
+          onSemesterChange={setSemesterId}
+          onClassChange={setClassId}
+        />
         <SearchInput value={query} onChange={setQuery} placeholder="搜索学生 / 用户名 / 学号" />
       </Toolbar>
       <ScrollableRegion className="table-wrap" label="报告提交列表，可横向滚动">
-        <table className="data-table"><thead><tr><th>学生</th><th>用户名</th><th>学号</th><th>提交时间</th><th>状态</th><th>得分</th><th><span className="sr-only">操作</span></th></tr></thead><tbody>
+        <table className="data-table"><thead><tr><th>学生</th><th>用户名</th><th>学号</th><th>班级</th><th>提交时间</th><th>状态</th><th>得分</th><th><span className="sr-only">操作</span></th></tr></thead><tbody>
           {shown.map((report) => <tr key={report.account_id}>
-            <td>{report.display_name}</td><td className="mono">{report.username}</td><td>{report.student_no || "—"}</td><td>{fmtTime(report.submitted_at)}</td>
+            <td>{report.display_name}</td><td className="mono">{report.username}</td><td>{report.student_no || "—"}</td>
+            <td className="class-memberships">{report.enrollments.length
+              ? report.enrollments.map((item) => <span key={item.term_id}>{item.term_name} · {item.class_name}</span>)
+              : "未分班"}</td><td>{fmtTime(report.submitted_at)}</td>
             <td>{report.state === "graded" ? <StatusPill tone="ok">已评阅</StatusPill> : <StatusPill tone="warn">待评阅</StatusPill>}</td><td>{report.score ?? "—"}</td>
             <td><ReportRowAction report={report} onOpen={() => setOpenAccountId(report.account_id)} /></td>
           </tr>)}
@@ -139,7 +155,7 @@ export function GradeView({ data, grader, onBack, onReload }: {
   };
   return (
     <div>
-      <div className="review-topbar"><button className="back-btn" disabled={saving} onClick={() => onBack(false)}>← 返回列表</button><span className="stage-chip">{data.display_name}（{data.username}）</span><span className="muted">提交于 {fmtTime(data.submitted_at)}</span></div>
+      <div className="review-topbar"><button className="back-btn" disabled={saving} onClick={() => onBack(false)}>← 返回列表</button><span className="stage-chip">{data.display_name}（{data.username}）</span><span className="muted">{data.enrollments.map((item) => `${item.term_name} · ${item.class_name}`).join("；") || "未分班"} · 提交于 {fmtTime(data.submitted_at)}</span></div>
       <div className="grade-split">
         <div className="grade-doc"><ReportMarkdown markdown={data.markdown} /></div>
         <aside className="grade-side"><div className="panel"><div className="panel-head"><span className="panel-ic">🖊️</span>评阅</div>

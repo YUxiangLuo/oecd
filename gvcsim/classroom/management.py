@@ -19,10 +19,146 @@ class _DatabaseProxy:
 
 database = _DatabaseProxy()
 _STUDENT_COLS = "a.id,a.username,a.display_name,a.student_no,a.last_login_at,a.created_at"
+_ENROLLMENTS_SQL = (
+    "SELECT ce.term_id,t.name AS term_name,ce.class_id,cg.name AS class_name "
+    "FROM class_enrollments ce JOIN academic_terms t ON t.id=ce.term_id "
+    "JOIN class_groups cg ON cg.id=ce.class_id WHERE ce.account_id=%s "
+    "ORDER BY t.created_at DESC,t.id DESC,cg.name"
+)
 
 
 def _teacher_exists(c: psycopg.Connection[dict[str, Any]], username: str) -> bool:
     return c.execute("SELECT 1 FROM accounts WHERE username=%s AND role='teacher'", (username,)).fetchone() is not None
+
+
+def _student_enrollments(c: psycopg.Connection[dict[str, Any]], account_id: int) -> list[dict[str, Any]]:
+    return c.execute(_ENROLLMENTS_SQL, (account_id,)).fetchall()
+
+
+def list_academic_structure(teacher_username: str) -> list[dict[str, Any]]:
+    with database.conn() as c:
+        if not _teacher_exists(c, teacher_username):
+            return []
+        terms = c.execute(
+            "SELECT t.id,t.name,t.is_active,t.created_at,count(DISTINCT ce.account_id) AS student_count "
+            "FROM academic_terms t LEFT JOIN class_enrollments ce ON ce.term_id=t.id "
+            "GROUP BY t.id ORDER BY t.created_at DESC,t.id DESC"
+        ).fetchall()
+        classes = c.execute(
+            "SELECT cg.id,cg.term_id,cg.name,cg.is_active,cg.created_at,count(ce.account_id) AS student_count "
+            "FROM class_groups cg LEFT JOIN class_enrollments ce ON ce.class_id=cg.id "
+            "GROUP BY cg.id ORDER BY cg.name,cg.id"
+        ).fetchall()
+    by_term: dict[int, list[dict[str, Any]]] = {term["id"]: [] for term in terms}
+    for row in classes:
+        by_term[row["term_id"]].append(row)
+    for term in terms:
+        term["classes"] = by_term[term["id"]]
+    return terms
+
+
+def create_term(name: str, teacher_username: str) -> dict[str, Any]:
+    with database.conn() as c:
+        if not _teacher_exists(c, teacher_username):
+            raise PermissionError("教师账号无效")
+        return database._required(
+            c.execute(
+                "INSERT INTO academic_terms(name) VALUES (%s) RETURNING id,name,is_active,created_at",
+                (name,),
+            ).fetchone(),
+            "create term",
+        )
+
+
+def update_term(term_id: int, fields: dict[str, Any], teacher_username: str) -> dict[str, Any] | None:
+    sets: list[str] = []
+    params: list[Any] = []
+    for key in ("name", "is_active"):
+        if key in fields:
+            sets.append(f"{key}=%s")
+            params.append(fields[key])
+    if not sets:
+        return None
+    with database.conn() as c:
+        if not _teacher_exists(c, teacher_username):
+            return None
+        return c.execute(
+            f"UPDATE academic_terms SET {','.join(sets)} WHERE id=%s RETURNING id,name,is_active,created_at",
+            (*params, term_id),
+        ).fetchone()
+
+
+def create_class_group(term_id: int, name: str, teacher_username: str) -> dict[str, Any] | None:
+    with database.conn() as c:
+        if not _teacher_exists(c, teacher_username):
+            raise PermissionError("教师账号无效")
+        term = c.execute("SELECT is_active FROM academic_terms WHERE id=%s", (term_id,)).fetchone()
+        if term is None:
+            return None
+        if not term["is_active"]:
+            raise ValueError("已归档学期不能添加班级；请先恢复学期")
+        return c.execute(
+            "INSERT INTO class_groups(term_id,name) VALUES (%s,%s) RETURNING id,term_id,name,is_active,created_at",
+            (term_id, name),
+        ).fetchone()
+
+
+def update_class_group(class_id: int, fields: dict[str, Any], teacher_username: str) -> dict[str, Any] | None:
+    sets: list[str] = []
+    params: list[Any] = []
+    for key in ("name", "is_active"):
+        if key in fields:
+            sets.append(f"{key}=%s")
+            params.append(fields[key])
+    if not sets:
+        return None
+    with database.conn() as c:
+        if not _teacher_exists(c, teacher_username):
+            return None
+        return c.execute(
+            f"UPDATE class_groups SET {','.join(sets)} WHERE id=%s RETURNING id,term_id,name,is_active,created_at",
+            (*params, class_id),
+        ).fetchone()
+
+
+def set_student_enrollment(
+    account_id: int,
+    term_id: int,
+    class_id: int | None,
+    teacher_username: str,
+) -> list[dict[str, Any]] | None:
+    with database.conn() as c:
+        if not _teacher_exists(c, teacher_username):
+            return None
+        student = c.execute("SELECT 1 FROM accounts WHERE id=%s AND role='student'", (account_id,)).fetchone()
+        if student is None:
+            return None
+        term = c.execute("SELECT is_active FROM academic_terms WHERE id=%s", (term_id,)).fetchone()
+        if term is None:
+            raise LookupError("学期不存在")
+        if class_id is None:
+            c.execute("DELETE FROM class_enrollments WHERE term_id=%s AND account_id=%s", (term_id, account_id))
+        else:
+            class_group = c.execute(
+                "SELECT is_active FROM class_groups WHERE id=%s AND term_id=%s",
+                (class_id, term_id),
+            ).fetchone()
+            if class_group is None:
+                raise ValueError("班级不属于所选学期")
+            current = c.execute(
+                "SELECT class_id FROM class_enrollments WHERE term_id=%s AND account_id=%s",
+                (term_id, account_id),
+            ).fetchone()
+            if (not term["is_active"] or not class_group["is_active"]) and (
+                current is None or current["class_id"] != class_id
+            ):
+                raise ValueError("不能分配到已归档的学期或班级；请先恢复教学分组")
+            c.execute(
+                "INSERT INTO class_enrollments(term_id,class_id,account_id) VALUES (%s,%s,%s) "
+                "ON CONFLICT (term_id,account_id) DO UPDATE SET class_id=EXCLUDED.class_id,created_at=now()",
+                (term_id, class_id, account_id),
+            )
+        return _student_enrollments(c, account_id)
 
 
 def create_student(
@@ -31,13 +167,14 @@ def create_student(
     password: str,
     student_no: str = "",
     teacher_username: str | None = None,
+    class_id: int | None = None,
 ) -> dict[str, Any]:
     database._validate_managed_password(password)
     salt = secrets.token_hex(16)
     with database.conn() as c:
         if teacher_username and not _teacher_exists(c, teacher_username):
             raise PermissionError("教师账号无效")
-        return database._required(
+        row = database._required(
             c.execute(
                 "INSERT INTO accounts(username,display_name,role,student_no,pw_salt,pw_hash)"
                 " VALUES (%s,%s,'student',%s,%s,%s)"
@@ -46,6 +183,22 @@ def create_student(
             ).fetchone(),
             "create student",
         )
+        if class_id is not None:
+            class_group = c.execute(
+                "SELECT cg.term_id,cg.is_active,t.is_active AS term_is_active "
+                "FROM class_groups cg JOIN academic_terms t ON t.id=cg.term_id WHERE cg.id=%s",
+                (class_id,),
+            ).fetchone()
+            if class_group is None:
+                raise ValueError("班级不存在")
+            if not class_group["is_active"] or not class_group["term_is_active"]:
+                raise ValueError("不能分配到已归档的学期或班级；请先恢复教学分组")
+            c.execute(
+                "INSERT INTO class_enrollments(term_id,class_id,account_id) VALUES (%s,%s,%s)",
+                (class_group["term_id"], class_id, row["id"]),
+            )
+        row["enrollments"] = _student_enrollments(c, row["id"])
+        return row
 
 
 def update_student(
@@ -77,11 +230,14 @@ def update_student(
             raise demo_accounts.DemoSeedPasswordProtected(
                 "演示种子学生使用固定轮换口令，不能由教师重置；请新建普通学生账号演示改密"
             )
-        return c.execute(
+        row = c.execute(
             f"UPDATE accounts SET {','.join(sets)} WHERE id=%s AND role='student'"
             " RETURNING id,username,display_name,student_no,last_login_at,created_at",
             (*params, account_id),
         ).fetchone()
+        if row is not None:
+            row["enrollments"] = _student_enrollments(c, account_id)
+        return row
 
 
 def _learning_status(
@@ -129,7 +285,12 @@ def list_students(teacher_username: str | None = None) -> list[dict[str, Any]]:
             f"SELECT {_STUDENT_COLS},s.session AS learning_session,s.updated_at AS session_updated_at,"
             "r.state AS learning_report_state,r.score AS report_score,r.generated_at AS report_generated_at,"
             "r.submitted_at AS report_submitted_at,r.graded_at AS report_graded_at,"
-            "r.updated_at AS report_updated_at FROM accounts a"
+            "r.updated_at AS report_updated_at,"
+            "COALESCE((SELECT jsonb_agg(jsonb_build_object('term_id',ce.term_id,'term_name',t.name,"
+            "'class_id',ce.class_id,'class_name',cg.name) ORDER BY t.created_at DESC,t.id DESC) "
+            "FROM class_enrollments ce JOIN academic_terms t ON t.id=ce.term_id "
+            "JOIN class_groups cg ON cg.id=ce.class_id WHERE ce.account_id=a.id),'[]'::jsonb) AS enrollments "
+            "FROM accounts a"
             " LEFT JOIN experiment_sessions s ON s.account_id=a.id AND s.release_id=%s"
             " LEFT JOIN reports r ON r.account_id=a.id AND r.release_id=%s"
             " WHERE a.role='student' ORDER BY a.student_no,a.username",

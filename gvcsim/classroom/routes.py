@@ -211,11 +211,100 @@ def students(user: dict = Depends(require_teacher)):
     return {"students": db.list_students(user["sub"])}
 
 
+class AcademicNameRequest(TextRequest):
+    name: str = Field(min_length=1, max_length=80)
+
+    @field_validator("name")
+    @classmethod
+    def nonblank_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("名称不能为空")
+        return value.strip()
+
+
+class AcademicUpdateRequest(TextRequest):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    is_active: bool | None = None
+
+    @field_validator("name", "is_active", mode="before")
+    @classmethod
+    def supplied_fields_are_not_null(cls, value: Any) -> Any:
+        if value is None:
+            raise ValueError("更新字段不能为 null；不修改请省略该字段")
+        return value
+
+    @field_validator("name")
+    @classmethod
+    def nonblank_name(cls, value: str) -> str:
+        return AcademicNameRequest.nonblank_name(value)
+
+
+class ClassCreateRequest(AcademicNameRequest):
+    term_id: int = Field(gt=0)
+
+
+@router.get("/semesters")
+def semesters(user: dict = Depends(require_teacher)):
+    return {"semesters": db.list_academic_structure(user["sub"])}
+
+
+@router.post("/semesters")
+def create_semester(req: AcademicNameRequest, user: dict = Depends(require_teacher)):
+    try:
+        return db.create_term(req.name, user["sub"])
+    except psycopg.errors.UniqueViolation as error:
+        raise HTTPException(status_code=409, detail=f"学期 {req.name} 已存在") from error
+
+
+@router.post("/semesters/{term_id}")
+def update_semester(term_id: int, req: AcademicUpdateRequest, user: dict = Depends(require_teacher)):
+    fields = req.model_dump(exclude_unset=True)
+    if not fields:
+        raise HTTPException(status_code=400, detail="没有需要更新的字段")
+    try:
+        row = db.update_term(term_id, fields, user["sub"])
+    except psycopg.errors.UniqueViolation as error:
+        raise HTTPException(status_code=409, detail="学期名称已存在") from error
+    if row is None:
+        raise HTTPException(status_code=404, detail="学期不存在")
+    return row
+
+
+@router.post("/classes")
+def create_class(req: ClassCreateRequest, user: dict = Depends(require_teacher)):
+    try:
+        row = db.create_class_group(req.term_id, req.name, user["sub"])
+    except psycopg.errors.UniqueViolation as error:
+        raise HTTPException(status_code=409, detail=f"该学期已存在班级 {req.name}") from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if row is None:
+        raise HTTPException(status_code=404, detail="学期不存在")
+    return row
+
+
+@router.post("/classes/{class_id}")
+def update_class(class_id: int, req: AcademicUpdateRequest, user: dict = Depends(require_teacher)):
+    fields = req.model_dump(exclude_unset=True)
+    if not fields:
+        raise HTTPException(status_code=400, detail="没有需要更新的字段")
+    try:
+        row = db.update_class_group(class_id, fields, user["sub"])
+    except psycopg.errors.UniqueViolation as error:
+        raise HTTPException(status_code=409, detail="该学期已存在同名班级") from error
+    if row is None:
+        raise HTTPException(status_code=404, detail="班级不存在")
+    return row
+
+
 class StudentCreateRequest(TextRequest):
     username: str = Field(min_length=2, max_length=40)
     display_name: str = Field(min_length=1, max_length=60)
     password: str = Field(min_length=12, max_length=256)
     student_no: str = ""
+    class_id: int | None = Field(default=None, gt=0)
 
     @field_validator("display_name")
     @classmethod
@@ -232,7 +321,14 @@ def create_student(req: StudentCreateRequest, user: dict = Depends(require_teach
     if db.find_account(req.username):
         raise HTTPException(status_code=409, detail=f"用户名 {req.username} 已存在")
     try:
-        return db.create_student(req.username, req.display_name, req.password, req.student_no, user["sub"])
+        return db.create_student(
+            req.username,
+            req.display_name,
+            req.password,
+            req.student_no,
+            user["sub"],
+            req.class_id,
+        )
     except psycopg.errors.UniqueViolation as error:
         raise HTTPException(status_code=409, detail=f"用户名 {req.username} 已存在") from error
     except (PermissionError, ValueError) as error:
@@ -273,6 +369,26 @@ def update_student(account_id: int, req: StudentUpdateRequest, user: dict = Depe
     if row is None:
         raise HTTPException(status_code=404, detail="学生不存在")
     return row
+
+
+class EnrollmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    term_id: int = Field(gt=0)
+    class_id: int | None
+
+
+@router.post("/students/{account_id}/enrollment")
+def update_student_enrollment(account_id: int, req: EnrollmentRequest, user: dict = Depends(require_teacher)):
+    try:
+        enrollments = db.set_student_enrollment(account_id, req.term_id, req.class_id, user["sub"])
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    if enrollments is None:
+        raise HTTPException(status_code=404, detail="学生不存在")
+    return {"enrollments": enrollments}
 
 
 @router.get("/reports")

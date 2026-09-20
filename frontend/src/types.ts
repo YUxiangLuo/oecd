@@ -786,6 +786,31 @@ export interface PlaceboResponse {
 
 // ---------------------------------------------------------------- 教学面板
 
+export interface ClassEnrollment {
+  term_id: number;
+  term_name: string;
+  class_id: number;
+  class_name: string;
+}
+
+export interface ClassGroup {
+  id: number;
+  term_id: number;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  student_count: number;
+}
+
+export interface AcademicSemester {
+  id: number;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  student_count: number;
+  classes: ClassGroup[];
+}
+
 export interface StudentRow {
   id: number;
   username: string;
@@ -803,6 +828,7 @@ export interface StudentRow {
   verified_completed_steps: number[];
   completion_missing: number[];
   last_valid_activity: string | null;
+  enrollments: ClassEnrollment[];
 }
 
 export interface TeacherReport extends ClassroomReport {
@@ -811,4 +837,5 @@ export interface TeacherReport extends ClassroomReport {
   username: string;
   display_name: string;
   student_no: string;
+  enrollments: ClassEnrollment[];
 }

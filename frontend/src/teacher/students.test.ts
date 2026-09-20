@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { FieldModal, StudentModal, StudentRowMenu, settleModalSubmission, studentFieldError } from "./students";
-import type { StudentRow } from "../types";
+import { EnrollmentModal, FieldModal, StudentModal, StudentRowMenu, settleModalSubmission, studentFieldError } from "./students";
+import type { AcademicSemester, StudentRow } from "../types";
 
 describe("teacher student modal submission", () => {
   test("uses native forms so Enter submits create and edit operations", () => {
@@ -73,6 +73,67 @@ describe("teacher student modal submission", () => {
     expect(String(error)).toContain("已存在");
     expect(saving).toEqual([true, false]);
   });
+
+  test("offers only active groups for new assignments but preserves an archived existing assignment", () => {
+    const semesters: AcademicSemester[] = [
+      {
+        id: 1,
+        name: "2026 秋",
+        is_active: true,
+        created_at: "2026-09-01T00:00:00Z",
+        student_count: 0,
+        classes: [
+          { id: 11, term_id: 1, name: "使用中班", is_active: true, created_at: "2026-09-01T00:00:00Z", student_count: 0 },
+          { id: 12, term_id: 1, name: "归档班", is_active: false, created_at: "2026-09-01T00:00:00Z", student_count: 1 },
+        ],
+      },
+      {
+        id: 2,
+        name: "2025 秋",
+        is_active: false,
+        created_at: "2025-09-01T00:00:00Z",
+        student_count: 1,
+        classes: [
+          { id: 21, term_id: 2, name: "历史班", is_active: true, created_at: "2025-09-01T00:00:00Z", student_count: 1 },
+        ],
+      },
+    ];
+    const createHtml = renderToStaticMarkup(createElement(StudentModal, {
+      semesters,
+      onClose: () => {},
+      onSubmit: async () => {},
+    }));
+    expect(createHtml).toContain("使用中班");
+    expect(createHtml).not.toContain("归档班");
+    expect(createHtml).not.toContain("历史班");
+
+    const archivedStudent: StudentRow = {
+      id: 7,
+      username: "student07",
+      display_name: "演示学生 07",
+      student_no: "2026007",
+      demo_seed: false,
+      last_login_at: null,
+      created_at: "2026-09-01T00:00:00Z",
+      report_state: null,
+      score: null,
+      submitted_at: null,
+      verified_completed_count: 0,
+      verified_total_steps: 15,
+      verified_completed_steps: [],
+      completion_missing: [],
+      last_valid_activity: null,
+      enrollments: [{ term_id: 2, term_name: "2025 秋", class_id: 21, class_name: "历史班" }],
+    };
+    const editHtml = renderToStaticMarkup(createElement(EnrollmentModal, {
+      student: archivedStudent,
+      semesters: [semesters[1]],
+      onClose: () => {},
+      onSubmit: async () => {},
+    }));
+    expect(editHtml).toContain("2025 秋（已归档，仅可移出）");
+    expect(editHtml).toContain("历史班（已归档，仅保留现有归属）");
+  });
 });
 
 describe("teacher student row menu accessible names", () => {
@@ -92,6 +153,7 @@ describe("teacher student row menu accessible names", () => {
     verified_completed_steps: [1, 2, 3],
     completion_missing: [],
     last_valid_activity: null,
+    enrollments: [],
   };
 
   test("carries the student identity so repeated menus stay distinguishable", () => {
@@ -100,6 +162,7 @@ describe("teacher student row menu accessible names", () => {
     expect(html).toContain('aria-label="操作：演示学生 07（student07）"');
     expect(html).toContain('aria-label="修改姓名：演示学生 07（student07）"');
     expect(html).toContain('aria-label="修改学号：演示学生 07（student07）"');
+    expect(html).toContain('aria-label="调整班级：演示学生 07（student07）"');
     expect(html).toContain('aria-label="重置密码：演示学生 07（student07）"');
     // 可见文字不变
     expect(html).toContain(">修改姓名<");
@@ -118,7 +181,7 @@ describe("teacher student row menu accessible names", () => {
     const html = renderToStaticMarkup(createElement(StudentRowMenu, { student, onPick: () => {} }));
     // 只检查以文字作为可见标签的按钮；"⋯" 是装饰字形，其含义由列头的 sr-only "操作" 提供。
     const pairs = [...html.matchAll(/<button[^>]*aria-label="([^"]*)"[^>]*>(.*?)<\/button>/g)];
-    expect(pairs.length).toBe(3);
+    expect(pairs.length).toBe(4);
     for (const [, name, visible] of pairs) {
       expect(name).toContain(visible);
     }

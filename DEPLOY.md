@@ -193,7 +193,7 @@ systemctl start gvcsim-api
 
 ## 教学数据库 schema 演进门槛
 
-当前 `gvcsim-teaching-db-v11` 是 15 步课程的全新基线，不兼容 v10 会话与报告；从 v10 部署本版本时必须先备份，再按已批准的新课程清场执行上一节的显式重置。后续普通升级仍不得用重置代替迁移；版本不匹配必须让预检失败。
+当前 `gvcsim-teaching-db-v12` 在 v11 基础上增加学期、班级和学生归属表。v11 升级时先停 API 并备份，再执行不带 `--reset` 的 `gvcsim classroom-init`；该兼容迁移保留账号、会话和报告。从 v10 或更早版本升级仍需制定单独迁移或按已批准的新课程清场。普通升级不得用重置代替迁移；其他版本不匹配必须让预检失败。
 
 ## 数据 release 回滚
 
@@ -240,6 +240,6 @@ psql --dbname=gvcsim_restore_drill -Atc "select version from schema_meta where s
 unset PGPASSWORD
 ```
 
-结果必须为 `gvcsim-teaching-db-v11`。恢复生产库前应停止 API、保留故障库，并先在隔离空库完成摘要、目录和 schema 验证。
+结果必须为 `gvcsim-teaching-db-v12`。恢复生产库前应停止 API、保留故障库，并先在隔离空库完成摘要、目录和 schema 验证。
 
 本机保留不等于灾难备份。应只同步已同时存在 `.dump` 与 `.dump.sha256` 的完成文件对到异机或对象存储，并对异机副本定期执行同样的摘要与隔离恢复演练。

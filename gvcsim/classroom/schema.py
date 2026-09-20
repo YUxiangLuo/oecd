@@ -5,7 +5,7 @@ from typing import Any
 import psycopg
 
 _SCHEMA_LOCK_ID = 736_861_016
-TEACHING_DB_VERSION = "gvcsim-teaching-db-v11"
+TEACHING_DB_VERSION = "gvcsim-teaching-db-v12"
 
 
 SCHEMA_SQL = """
@@ -25,6 +25,29 @@ CREATE TABLE IF NOT EXISTS accounts (
   auth_version  bigint NOT NULL DEFAULT 1 CHECK (auth_version > 0),
   last_login_at timestamptz,
   created_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS academic_terms (
+  id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name       text NOT NULL UNIQUE CHECK (length(btrim(name)) > 0),
+  is_active  boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS class_groups (
+  id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  term_id    bigint NOT NULL REFERENCES academic_terms(id) ON DELETE CASCADE,
+  name       text NOT NULL CHECK (length(btrim(name)) > 0),
+  is_active  boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (term_id, name),
+  UNIQUE (term_id, id)
+);
+CREATE TABLE IF NOT EXISTS class_enrollments (
+  term_id    bigint NOT NULL,
+  class_id   bigint NOT NULL,
+  account_id bigint NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (term_id, account_id),
+  FOREIGN KEY (term_id, class_id) REFERENCES class_groups(term_id, id) ON DELETE CASCADE
 );
 CREATE TABLE IF NOT EXISTS experiment_sessions (
   account_id bigint NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
@@ -48,6 +71,34 @@ CREATE TABLE IF NOT EXISTS reports (
   graded_at    timestamptz,
   PRIMARY KEY (account_id, release_id)
 );
+"""
+
+
+MIGRATION_V11_TO_V12_SQL = """
+CREATE TABLE academic_terms (
+  id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  name       text NOT NULL UNIQUE CHECK (length(btrim(name)) > 0),
+  is_active  boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE class_groups (
+  id         bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  term_id    bigint NOT NULL REFERENCES academic_terms(id) ON DELETE CASCADE,
+  name       text NOT NULL CHECK (length(btrim(name)) > 0),
+  is_active  boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (term_id, name),
+  UNIQUE (term_id, id)
+);
+CREATE TABLE class_enrollments (
+  term_id    bigint NOT NULL,
+  class_id   bigint NOT NULL,
+  account_id bigint NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (term_id, account_id),
+  FOREIGN KEY (term_id, class_id) REFERENCES class_groups(term_id, id) ON DELETE CASCADE
+);
+UPDATE schema_meta SET version = 'gvcsim-teaching-db-v12' WHERE singleton;
 """
 
 
