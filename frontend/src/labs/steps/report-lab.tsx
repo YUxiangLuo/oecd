@@ -290,15 +290,15 @@ export function ReportLab({
       await flushRef.current();
       const response = await api.classroom.generateReport();
       onReportChanged(response);
+      let finalReport = response.report;
       if (submitAfter && response.report.state === "draft") {
         setSubmitting(true);
         const submitted = await api.classroom.submitReport();
         onReportChanged(submitted);
-        if (submitted.report.state !== "draft") setOutro(submitted.report);
-      } else if (response.report.state !== "draft") {
-        setOutro(response.report);
+        finalReport = submitted.report;
       }
-      showToast(submitAfter || response.report.state === "pending" ? "报告已提交，等待教师评阅" : "报告草稿已生成，请预览后提交");
+      if (finalReport.state !== "draft") setOutro(finalReport);
+      else showToast("报告草稿已生成，请预览后提交");
     } catch (cause) {
       const requestError = cause as Error & { blocked?: ReportGateItem[] };
       if (requestError.blocked) setBlocked(requestError.blocked);
@@ -321,7 +321,7 @@ export function ReportLab({
       const response = await api.classroom.submitReport();
       onReportChanged(response);
       if (response.report.state !== "draft") setOutro(response.report);
-      showToast(response.report.state === "graded" ? "报告已评阅" : "报告已提交，等待教师评阅");
+      else showToast("报告仍为草稿，请核对后重试提交");
     } catch (cause) {
       setError(userFacingRequestError(cause, "报告提交失败"));
     } finally {

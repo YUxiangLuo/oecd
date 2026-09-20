@@ -347,8 +347,4 @@
 .length-path-guide dl > div { border-radius: 7px; background: #f5f7fc; padding: 8px 10px; }
 .length-path-guide dt { color: #3733b4; font-size: 11.5px; font-weight: 750; }
 .length-path-guide dd { margin: 3px 0 0; color: #5f6778; font-size: 11px; line-height: 1.5; }
-.intro-mechanisms { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 8px auto 2px; }
-.intro-mechanisms button { display: grid; gap: 2px; min-width: 170px; border: 1px solid rgba(255,255,255,.2); border-radius: 9px; background: rgba(255,255,255,.06); color: #e8edfb; padding: 8px 11px; text-align: left; cursor: pointer; }
-.intro-mechanisms button.on { border-color: #78a9f2; background: rgba(74,132,220,.25); }
-.intro-mechanisms button span { color: #aebbd8; font-size: 10.5px; }
 .workspace-reset-error { flex: none; margin: 8px 18px 0; }

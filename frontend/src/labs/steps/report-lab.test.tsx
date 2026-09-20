@@ -2,6 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { api } from "../../api";
 import { renderToStaticMarkup } from "react-dom/server";
+import { ToastHost } from "../../toast";
 import type { ClassroomReport, ReportMutationResponse } from "../../types";
 import {
   GateCard,
@@ -311,18 +312,33 @@ test("one-click finish flushes then generates then submits; outro appears only a
   const generate = spyOn(api.classroom, "generateReport").mockImplementation(async () => { order.push("generate"); return mutation("draft"); });
   const submit = spyOn(api.classroom, "submitReport").mockImplementation(() => { order.push("submit"); return new Promise((resolve) => { acknowledge = resolve; }); });
   try {
-    render(<ReportLab {...finishProps} onFlushSession={async () => { order.push("flush"); }} onReportChanged={(r) => order.push(r.report.state)} />);
+    render(<><ReportLab {...finishProps} onFlushSession={async () => { order.push("flush"); }} onReportChanged={(r) => order.push(r.report.state)} /><ToastHost /></>);
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" })); });
     expect(order).toEqual(["flush", "generate", "draft", "submit"]);
     expect(screen.queryByRole("dialog")).toBeNull();
     await act(async () => { acknowledge(mutation("pending")); });
     const dialog = screen.getByRole("dialog", { name: "报告已提交，感谢你的探索" });
     expect(within(dialog).getByText("提交成功 · 等待教师评阅")).toBeTruthy();
+    expect(within(dialog).getByText("计算并理解指标")).toBeTruthy();
+    expect(within(dialog).getByText("两国与时间比较")).toBeTruthy();
+    expect(within(dialog).getByText("汇总四项回归证据")).toBeTruthy();
+    expect(within(dialog).queryByText("比较与验证")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
     expect(document.activeElement?.textContent).toBe("报告已提交，感谢你的探索");
     expect(order).toEqual(["flush", "generate", "draft", "submit", "pending"]);
     fireEvent.keyDown(dialog, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
   } finally { generate.mockRestore(); submit.mockRestore(); }
+});
+
+test("draft generation keeps toast feedback when no outro is shown", async () => {
+  const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("draft"));
+  try {
+    render(<><ReportLab {...finishProps} /><ToastHost /></>);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "根据实验记录生成报告" })); });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain("报告草稿已生成，请预览后提交");
+  } finally { generate.mockRestore(); }
 });
 
 test("failed submission retains generated draft and never opens a success outro", async () => {

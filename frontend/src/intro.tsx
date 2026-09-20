@@ -3,9 +3,9 @@
  *   1 开场:闭环管线动画 + 真实规模计数(经济体/行业/年份)
  *   2 数据底座：两张可独立展开的数据卡（真实数据 / 教学设定）
  *   3 十五步旅程：五阶段可点击展开（内容来自 /api/steps 真实元数据）
- *   4 动手示意:关税滑块驱动的供应链示意动画(明确标注非真实估计)
+ *   4 证据预演：两国五年趋势 → 模拟 X/Y → 四项结果
  *   5 就绪:说明当前身份与完成规则，关闭介绍后返回实验台
- * 覆盖范围与目录来自课程元数据；机制图仅为教学示意，不生成估计数值。
+ * 覆盖范围与目录来自课程元数据；趋势图仅为界面示意，不生成估计数值。
  */
 import { useEffect, useLayoutEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
@@ -19,8 +19,8 @@ const N_SCENES = SCENE_NAMES.length;
 const STAGE_OUTPUTS: Record<number, string> = {
   1: "认识投入产出表，记录观察对象。",
   2: "计算并保存不同对象的价值链指标。",
-  3: "比较差异，形成图表证据。",
-  4: "核对冲击来源，保存估计或诊断结果。",
+  3: "比较两个国家的时间趋势，形成图表证据。",
+  4: "比较两国五年 X/Y 变化，汇总四项模拟回归证据。",
   5: "整合材料，完成原创分析与报告。",
 };
 
@@ -75,17 +75,11 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
   const titleId = useId();
   const icioPanelId = useId();
   const shockPanelId = useId();
-  const tariffSliderId = useId();
-  const mechanismHintId = useId();
-  const flowArrowId = useId();
-  const alternateArrowId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const skipRef = useRef<HTMLButtonElement>(null);
   const [scene, setScene] = useState(0);
   const [openCards, setOpenCards] = useState({ icio: false, shock: false });
   const [stage, setStage] = useState(1);
-  const [tau, setTau] = useState(0);
-  const [mechanism, setMechanism] = useState<"contract" | "reroute" | "offset">("reroute");
   useDialogFocus({
     containerRef: dialogRef,
     initialFocusRef: skipRef,
@@ -95,7 +89,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
 
   useLayoutEffect(() => {
     // A scene can remove the focused next button. Announce the new heading
-    // through focus, without making every slider change a live announcement.
+    // through focus without turning the whole dialog into a live region.
     const container = dialogRef.current;
     const heading = container?.querySelector<HTMLElement>(".intro-scene h1, .intro-scene h2");
     if (heading) {
@@ -138,21 +132,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
     }));
   }, [stepsData]);
   const selectedStage = stages.find((s) => s.n === stage) ?? stages[0];
-
-  // Animation widths illustrate a chosen assumption, not calibrated trade
-  // volumes. Do not derive or display an invented GVC share from this diagram.
-  const shrink = mechanism === "offset"
-    ? Math.min(1.25, 1 + tau * 0.7)
-    : mechanism === "reroute"
-      ? Math.max(0.7, 1 - tau * 0.8)
-      : Math.max(0.25, 1 - tau * 2.6);
-  const mechanismFeedback = tau === 0
-    ? "尚未加征关税：当前展示示意基线，尚未施加额外冲击。"
-    : mechanism === "contract"
-      ? "当前假设：原跨境路径减弱，国内替代增强。"
-      : mechanism === "reroute"
-        ? "当前假设：部分生产改经第三国，原供货路径部分保留。"
-        : "当前假设：新增境外供应商与原供货路径并存，跨境活动可能扩张。";
+  const previewYears = years.length >= 5 ? years.slice(0, 5).map(String) : ["第1年", "第2年", "第3年", "第4年", "第5年"];
 
   const roleName = user.role === "teacher" ? "教师" : "学生";
 
@@ -163,8 +143,8 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       <h1 className="intro-title">供应链仿真系统</h1>
       <div className="intro-kicker">GVC SIMULATION LAB</div>
       <p className="intro-lede">
-        从全球生产联系，理解价值链变化。利用投入产出数据，计算和比较价值链指标，
-        练习分析政策冲击，并完成有依据的实验报告。
+        从全球生产联系，理解价值链变化。利用投入产出数据计算指标，比较两个国家的五年趋势，
+        再用教学模拟练习读取回归，完成有依据的实验报告。
       </p>
       <p className="intro-boundary">{datasetName} · 教学情景 · 不作真实政策效果预测</p>
       <div className="intro-pipeline">
@@ -302,79 +282,45 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       )}
     </div>,
 
-    /* ---- 4 动手示意 ---- */
+    /* ---- 4 证据链预演 ---- */
     <div key={3} className="intro-scene">
-      <div className="intro-scene-kicker">动手预演</div>
-      <h2 className="intro-h2">同一种冲击，可能有不同调整路径</h2>
-      <p className="intro-lede">假设原供货通道受到额外关税冲击。默认展示贸易转移；拖动滑块或切换机制，观察不同假设下的路径变化。</p>
-      <div className="intro-mechanisms" role="group" aria-label="选择政策传导机制">
-        <button type="button" aria-pressed={mechanism === "contract"} className={mechanism === "contract" ? "on" : ""} onClick={() => setMechanism("contract")}><b>跨境收缩</b><span>假设跨境路径减弱、国内替代增强</span></button>
-        <button type="button" aria-pressed={mechanism === "reroute"} className={mechanism === "reroute" ? "on" : ""} onClick={() => setMechanism("reroute")}><b>贸易转移</b><span>改道第三国，原有链条部分保留</span></button>
-        <button type="button" aria-pressed={mechanism === "offset"} className={mechanism === "offset" ? "on" : ""} onClick={() => setMechanism("offset")}><b>替代性扩张</b><span>假设新增境外供应商与原路径并存</span></button>
+      <div className="intro-scene-kicker">证据预演</div>
+      <h2 className="intro-h2">先比较趋势，再读 X 与 Y 的关系</h2>
+      <p className="intro-lede">后半程只需选择两个国家和一个行业。系统沿用这组对象，带你从五年趋势走到四项结果。</p>
+      <div className="intro-preview-selection" role="group" aria-label="分析对象示意">
+        <span><small>国家 A</small>由你选择</span>
+        <span><small>国家 B</small>由你选择</span>
+        <span><small>行业</small>由你选择</span>
       </div>
-      <svg viewBox="0 0 640 244" role="img"
-        aria-label={mechanism === "contract" ? "跨境收缩示意：原跨境路径减弱，假设国内替代增强" : mechanism === "reroute" ? "贸易转移示意：部分生产经第三国制造枢纽到达最终消费国" : "替代性扩张示意：新增境外供应商接入跨境生产路径"}
-        style={{ width: "min(720px, 94%)", margin: "10px auto 0" }}>
-        <defs>
-          <marker id={flowArrowId} viewBox="0 0 10 10" refX="5" refY="5" markerWidth="16" markerHeight="16" orient="auto" markerUnits="userSpaceOnUse">
-            <path d="M0 0 L10 5 L0 10 Z" fill="#7aa5e8" />
-          </marker>
-          <marker id={alternateArrowId} viewBox="0 0 10 10" refX="5" refY="5" markerWidth="16" markerHeight="16" orient="auto" markerUnits="userSpaceOnUse">
-            <path d="M0 0 L10 5 L0 10 Z" fill="#49c39b" />
-          </marker>
-        </defs>
-        {/* 箭头表示供货方向，不是已经识别的政策因果效应。 */}
-        <path data-flow="original" d="M118 95 C 190 40, 250 40, 292 88" fill="none" stroke="#7aa5e8"
-          strokeWidth={10 * shrink} markerEnd={`url(#${flowArrowId})`} />
-        <path data-flow="original" d="M348 88 C 400 40, 460 40, 522 95" fill="none" stroke="#7aa5e8"
-          strokeWidth={9 * shrink} markerEnd={`url(#${flowArrowId})`} />
-        {mechanism === "contract" ? (
-          <g>
-            <path data-flow="domestic" d="M310 122 C 262 183, 378 183, 330 122" fill="none" stroke="#49c39b"
-              strokeWidth={4 + tau * 26} markerEnd={`url(#${alternateArrowId})`} />
-            <text x={320} y={201} textAnchor="middle" fontSize={12.5} fill="#a8b6da">假设：国内替代增强</text>
-          </g>
-        ) : (
-          <g>
-            <path data-flow="alternate" d="M108 115 Q190 208 292 202" fill="none" stroke="#49c39b"
-              strokeWidth={1 + tau * (mechanism === "reroute" ? 28 : 36)} strokeDasharray={tau === 0 ? "5 5" : undefined}
-              markerEnd={`url(#${alternateArrowId})`} />
-            <path data-flow="alternate" d="M348 202 Q450 208 532 115" fill="none" stroke="#49c39b"
-              strokeWidth={1 + tau * (mechanism === "reroute" ? 28 : 36)} strokeDasharray={tau === 0 ? "5 5" : undefined}
-              markerEnd={`url(#${alternateArrowId})`} />
-            <circle cx={320} cy={202} r={26} fill="#49c39b" opacity={0.16} />
-            <circle cx={320} cy={202} r={18} fill="#49c39b" stroke="#101528" strokeWidth={3} />
-            <text x={320} y={238} textAnchor="middle" fontSize={13} fill="#eef1fb">{mechanism === "reroute" ? "第三国制造枢纽" : "新增境外供应商"}</text>
-          </g>
-        )}
-        {[["上游资源国", 90, "#eda100"], ["制造枢纽国", 320, "#3987e5"], ["最终消费国", 550, "#e34948"]].map(([label, x, col]) => (
-          <g key={String(label)} transform={`translate(${x} 95)`}>
-            <circle r={27} fill={String(col)} opacity={0.16} />
-            <circle r={18} fill={String(col)} stroke="#101528" strokeWidth={3} />
-            <text y={-34} textAnchor="middle" fontSize={14} fontWeight={600} fill="#eef1fb">{label}</text>
-          </g>
-        ))}
-        <text x={215} y={34} textAnchor="middle" fontSize={12.5} fill="#a8b6da">中间品出口</text>
-        <text x={435} y={34} textAnchor="middle" fontSize={12.5} fill="#a8b6da">最终品出口</text>
-      </svg>
-      <div className="intro-slider-row">
-        <label className="intro-slider-label" htmlFor={tariffSliderId}>假设加征税率</label>
-        <input
-          id={tariffSliderId}
-          type="range" min={0} max={25} step={1} value={tau * 100}
-          aria-valuetext={`假设加征税率 ${(tau * 100).toFixed(0)}%`}
-          aria-describedby={mechanismHintId}
-          onChange={(e) => setTau(Number(e.target.value) / 100)}
-        />
-        <span className="intro-tau">{(tau * 100).toFixed(0)}%</span>
+      <div className="intro-evidence-preview">
+        <div className="intro-trend-card">
+          <div className="intro-preview-heading"><b>01 · 比较五年模拟关税暴露（X）</b><span><i className="country-a" />国家 A <i className="country-b" />国家 B</span></div>
+          <svg viewBox="0 0 520 180" role="img" aria-label="国家 A 与国家 B 的五年模拟关税暴露 X 趋势界面示意，线条不代表真实数值">
+            <path className="grid" d="M42 30H500M42 75H500M42 120H500" />
+            <path className="country-a" d="M50 118L160 100L270 105L380 65L490 46" />
+            <path className="country-b" d="M50 72L160 78L270 62L380 88L490 70" />
+            <text x="42" y="18">X 示意强弱</text>
+            {[50, 160, 270, 380, 490].map((x, index) => (
+              <g key={x}>
+                <circle className="country-a" cx={x} cy={[118, 100, 105, 65, 46][index]} r="4" />
+                <circle className="country-b" cx={x} cy={[72, 78, 62, 88, 70][index]} r="4" />
+                <text x={x} y="158" textAnchor="middle">{previewYears[index]}</text>
+              </g>
+            ))}
+          </svg>
+        </div>
+        <div className="intro-xy-card">
+          <b>02 · 用固定方法读关系</b>
+          <div className="intro-xy-item"><strong>X</strong><span><b>模拟关税暴露</b><small>模型用来比较的课程变量</small></span></div>
+          <div className="intro-xy-link" aria-hidden>↓ 与什么一起变化？</div>
+          <div className="intro-xy-item"><strong>Y</strong><span><b>模拟指标结果</b><small>模型要观察的课程变量</small></span></div>
+        </div>
       </div>
-      <p className="intro-mechanism-feedback">{mechanismFeedback}</p>
-      <p id={mechanismHintId} className="intro-slider-hint">箭头表示供货方向，虚线表示候选路径；线宽仅表示动画强弱，不代表可加总的贸易流量。本图不计算 GVC 份额，也不预测政策效果。</p>
-      <p className="intro-note">这是机制示意，不是估计结果。真实分析需要比较多项指标，并如实报告不显著或无法推断的结果。</p>
-      <details className="intro-details intro-method-details">
-        <summary>查看指标口径与解释边界</summary>
-        <p>后续从出口构成、多次跨境生产占比、生产链长度三个角度观察变化，再探索网络位置。四项结果都要报告，不能只挑显著结果；网络项只作探索性证据。</p>
-      </details>
+      <div className="intro-four-results" role="group" aria-label="四项结果都要汇总">
+        <b>03 · 四项结果一起报告</b>
+        <span>出口构成</span><span>复杂生产</span><span>链条长度</span><span>网络位置</span>
+      </div>
+      <p className="intro-note intro-preview-note">这是学习流程示意，图中线条不是实际结果。X 与 Y 均为教学模拟；关系不显著或无法推断也要如实报告，不能解释为真实政策效果。</p>
     </div>,
 
     /* ---- 5 就绪 ---- */
@@ -386,12 +332,12 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       </div>
       <h2 className="intro-h2">实验台已就绪</h2>
       <p className="intro-lede">
-        当前身份：<b>{roleName}</b>。按实验台中的任务提示完成操作、记录材料并回答理解题，最后整合证据，形成原创分析。
+        当前身份：<b>{roleName}</b>。按实验台中的任务提示完成操作并回答理解题，系统会整理材料，最后由你完成原创分析。
       </p>
       {/* 进入前讲清完成规则，避免把浏览位置误认为学习进度。 */}
       <div className="intro-ready-rules">
         <div><b>理解进度</b><p>答对本步理解题后，步骤显示“✓”。浏览过步骤，不等于已经完成。</p></div>
-        <div><b>报告材料</b><p>按页面提示记录分析结果；所需材料保存齐全后，显示“材料已齐全”。查看过结果，不等于已经保存报告材料。</p></div>
+        <div><b>报告材料</b><p>系统会自动整理大部分结果；仅在页面明确提示时点击一次保存。材料齐全后，步骤会显示“材料已齐全”。</p></div>
       </div>
       <div className="intro-cta-row">
         <button type="button" className="intro-cta" onClick={() => onDone()}>关闭介绍</button>

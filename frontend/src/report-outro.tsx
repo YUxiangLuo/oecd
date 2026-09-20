@@ -28,9 +28,9 @@ export function ReportOutro({ report, onClose, onExport, exportDisabled = false 
         <small>报告已保存到服务器。你可以离开页面，之后回到第15步查看报告与教师反馈。</small>
       </section>
       <div className="outro-journey">
-        <article><span>01</span><b>读懂数据</b><p>从ICIO账户理解生产联系与价值来源。</p></article>
-        <article><span>02</span><b>比较与验证</b><p>用时间趋势和国家比较组织图表证据。</p></article>
-        <article><span>03</span><b>解释与反思</b><p>阅读模拟回归，说明不确定性与局限。</p></article>
+        <article><span>01</span><b>计算并理解指标</b><p>从 ICIO 账户理解生产联系与价值来源。</p></article>
+        <article><span>02</span><b>两国与时间比较</b><p>用两个国家的五年趋势组织图表证据。</p></article>
+        <article><span>03</span><b>汇总四项回归证据</b><p>阅读模拟 X/Y 关系，说明不确定性与局限。</p></article>
       </div>
       <p className="intro-note">教学模拟帮助练习方法，不代表真实关税的政策效果。实验结束，保持追问。</p>
       <div className="intro-cta-row">
