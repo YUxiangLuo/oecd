@@ -61,7 +61,16 @@ def api(monkeypatch):
         if path.startswith("/api/regression/teaching-panel?"):
             return {
                 "version": journey.TEACHING_VERSION,
-                "rows": [{"country": "CHN", "year": 2020, "teaching_tariff_exposure": 0.01}],
+                "rows": [
+                    {
+                        "country": "CHN",
+                        "industry": "C26",
+                        "year": 2020,
+                        "teaching_export_share_w": 0.2,
+                        "teaching_tariff_rate_tau": 0.1,
+                        "teaching_tariff_exposure": 0.02,
+                    }
+                ],
             }
         if path == "/api/regression/run":
             outcome = kwargs["payload"]["outcome"]
@@ -111,7 +120,11 @@ def test_seed_records_step_observations_like_the_ui(api):
                     "unit": journey._EXPLICIT_INDICATOR_UNITS[step],
                     "release": "a" * 32,
                     "scope": "country",
-                    "source": "explicit-indicator-comparison",
+                    "source": (
+                        "explicit-indicator-table-comparison"
+                        if step in (2, 3, 4, 5)
+                        else "explicit-indicator-comparison"
+                    ),
                 }
                 for item in data["observations"]
             )
@@ -133,10 +146,21 @@ def test_seed_records_step_observations_like_the_ui(api):
     )
     assert saved["steps"]["10"]["data"] == {
         "quiz": saved["steps"]["10"]["data"]["quiz"],
+        "compared": ["CHN", "USA"],
+        "teaching_industry": "C26",
         "teaching_country": "CHN",
         "teaching_year": 2020,
         "viewed_teaching_panel": True,
         "teaching_panel_version": journey.TEACHING_VERSION,
+        "teaching_observation": {
+            "country": "CHN",
+            "industry": "C26",
+            "year": 2020,
+            "teaching_export_share_w": 0.2,
+            "teaching_tariff_rate_tau": 0.1,
+            "teaching_tariff_exposure": 0.02,
+            "version": journey.TEACHING_VERSION,
+        },
     }
     for step in range(11, 15):
         run = saved["steps"][str(step)]["data"]["run"]

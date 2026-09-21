@@ -47,9 +47,9 @@ def test_environment_has_bounded_request_rates_without_removed_evidence_or_pool_
     assert "GVCSIM_DATA_DIR=/opt/gvcsim/shared/data" in environment
     assert "GVCSIM_RAW_DATA_DIR=/opt/gvcsim/shared/OECD_ICIO" in environment
     assert "GVCSIM_PUBLICATION_LOCK_DIR" not in environment
-    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
-    assert "GVCSIM_EVIDENCE_SECRET" not in workflow
-    assert "learning_evidence_events" not in workflow
+    local_ci = (ROOT / "scripts" / "local_ci.sh").read_text()
+    assert "GVCSIM_EVIDENCE_SECRET" not in local_ci
+    assert "learning_evidence_events" not in local_ci
 
 
 def test_shipped_production_placeholders_are_rejected_case_insensitively(monkeypatch):

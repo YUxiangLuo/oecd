@@ -52,9 +52,7 @@ def test_singleflight_can_coalesce_without_reusing_completed_success():
             await release.wait()
             return calls
 
-        waiters = [
-            asyncio.create_task(cache.get_or_compute("same", factory, cache_success=False)) for _ in range(8)
-        ]
+        waiters = [asyncio.create_task(cache.get_or_compute("same", factory, cache_success=False)) for _ in range(8)]
         await started.wait()
         await asyncio.sleep(0)
         assert calls == 1

@@ -34,7 +34,7 @@ export default defineConfig({
       "/api": apiOrigin,
     },
   },
-  // CI browser smoke runs the compiled bundle through `vite preview`; keep its
+  // Local browser smoke runs the compiled bundle through `vite preview`; keep its
   // same-origin API behavior aligned with development and the production Nginx route.
   preview: {
     proxy: {

@@ -306,7 +306,10 @@ def _network_material_complete(data: dict[str, Any]) -> bool:
     identities = [(str(item["country"]), str(item["industry"]), int(item["year"])) for item in observations]
     if len(identities) != len(set(identities)):
         return False
-    if len({str(item["metric"]) for item in observations}) != 1 or len({str(item["unit"]) for item in observations}) != 1:
+    if (
+        len({str(item["metric"]) for item in observations}) != 1
+        or len({str(item["unit"]) for item in observations}) != 1
+    ):
         return False
     if len({str(item["release"]) for item in observations}) != 1:
         return False
@@ -314,11 +317,7 @@ def _network_material_complete(data: dict[str, Any]) -> bool:
     if len(sources) != 1 or not sources <= {"explicit-network-trend", "explicit-network-ranking"}:
         return False
     keys = {
-        country: {
-            (str(item["industry"]), int(item["year"]))
-            for item in observations
-            if item["country"] == country
-        }
+        country: {(str(item["industry"]), int(item["year"])) for item in observations if item["country"] == country}
         for country in compared
     }
     if keys[compared[0]] != keys[compared[1]] or not keys[compared[0]]:
@@ -1416,8 +1415,7 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
     else:
         identities = list(
             dict.fromkeys(
-                (str(item.get("industry") or ""), int(item["year"]), str(item["metric"]))
-                for item in observations
+                (str(item.get("industry") or ""), int(item["year"]), str(item["metric"])) for item in observations
             )
         )[:6]
     selected = [
@@ -1437,9 +1435,7 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
                 for part in (
                     str(item["country"]),
                     str(item.get("industry") or ""),
-                    ""
-                    if single_metric
-                    else _STUDENT_METRIC_LABELS.get(str(item["metric"]), str(item["metric"])),
+                    "" if single_metric else _STUDENT_METRIC_LABELS.get(str(item["metric"]), str(item["metric"])),
                 )
                 if part
             ),

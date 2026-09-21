@@ -143,6 +143,10 @@ _STEP_METRICS = {
 }
 
 _EXPLICIT_INDICATOR_UNITS = {
+    2: "%",
+    3: "%",
+    4: "无量纲",
+    5: "百万美元",
     6: "%",
     7: "%",
     8: "无量纲",
@@ -162,6 +166,7 @@ def _country_observation(
     release_id: Any,
     *,
     unit: str | None = None,
+    source: str = "explicit-indicator-comparison",
 ) -> dict[str, Any]:
     row = rows.get(country)
     value = row.get(metric) if isinstance(row, dict) else None
@@ -177,7 +182,7 @@ def _country_observation(
         "release": release_id,
     }
     if unit is not None:
-        observation.update(unit=unit, source="explicit-indicator-comparison")
+        observation.update(unit=unit, source=source)
     return observation
 
 
@@ -266,6 +271,11 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
                         metric,
                         release_id,
                         unit=_EXPLICIT_INDICATOR_UNITS.get(step),
+                        source=(
+                            "explicit-indicator-table-comparison"
+                            if step in (2, 3, 4, 5)
+                            else "explicit-indicator-comparison"
+                        ),
                     )
                     for country in (left, right)
                 ],
@@ -289,12 +299,49 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
     teaching_rows = teaching_panel.get("rows")
     if teaching_panel.get("version") != TEACHING_VERSION or not isinstance(teaching_rows, list) or not teaching_rows:
         raise RuntimeError("Step 10 teaching panel is missing or uses an unsupported simulation contract")
+    teaching_row = next(
+        (
+            row
+            for row in teaching_rows
+            if isinstance(row, dict)
+            and row.get("country") == left
+            and row.get("year") == year
+            and isinstance(row.get("industry"), str)
+            and all(
+                isinstance(row.get(key), (int, float))
+                and not isinstance(row.get(key), bool)
+                and math.isfinite(row[key])
+                for key in (
+                    "teaching_export_share_w",
+                    "teaching_tariff_rate_tau",
+                    "teaching_tariff_exposure",
+                )
+            )
+        ),
+        None,
+    )
+    if teaching_row is None:
+        raise RuntimeError("Step 10 teaching panel has no complete observation for the selected country and year")
     session["steps"]["10"]["data"].update(
         {
-            "teaching_country": left,
-            "teaching_year": year,
+            "compared": [left, right],
+            "teaching_industry": teaching_row["industry"],
+            "teaching_country": teaching_row["country"],
+            "teaching_year": teaching_row["year"],
             "viewed_teaching_panel": True,
             "teaching_panel_version": TEACHING_VERSION,
+            "teaching_observation": {
+                key: teaching_row[key]
+                for key in (
+                    "country",
+                    "industry",
+                    "year",
+                    "teaching_export_share_w",
+                    "teaching_tariff_rate_tau",
+                    "teaching_tariff_exposure",
+                )
+            }
+            | {"version": TEACHING_VERSION},
         }
     )
 

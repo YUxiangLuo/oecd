@@ -94,13 +94,15 @@ uv run gvcsim classroom-init --reset
 
 **测试隔离：** `tests/conftest.py::teaching_db` 会删除目标数据库的 `public` schema。运行 pytest 前必须将 `GVCSIM_PG_DSN` 指向专门的一次性测试库；不得使用课堂库或保留测试证据的开发库。数据库进程故障测试还需独立 PGDATA/端口，发布损坏测试需另一份数据副本，不能停止共享 PostgreSQL 或破坏当前 release。
 
+本地完整检查执行原 GitHub CI 的四组门禁：Gephi golden fixture、后端静态检查和覆盖率测试、前端构建与单测、学生／教师浏览器验收。需要 Docker、uv、Bun、JDK 17+、Maven、agent-browser（已安装 Chrome）和 Poppler 的 `pdftotext`。首次运行会下载 PostgreSQL 17 镜像和项目依赖。
+
 ```bash
-uv run ruff format --check .
-uv run ruff check .
-uv run mypy gvcsim
-uv run pytest
-cd frontend && bun run test:unit && bun run build
+scripts/local_ci.sh
+# 在当前检出目录启用每次 push 前的完整本地检查：
+git config core.hooksPath .githooks
 ```
+
+脚本把当前工作区源码复制到临时目录，生成合成 OECD release，并启动一次性的 PostgreSQL 容器与两个独立数据库。测试夹具只会重置该临时数据库；原始 OECD 文件、现有 release 和课堂数据库不会被写入。临时目录和容器在退出时清理；浏览器证据与服务日志留在忽略目录 `dogfood-output/local-ci/`。本地检查需要完成后才能推送；GitHub Actions 工作流已移除，仓库级 Actions 开关也已关闭。
 
 本机浏览器测试使用 `agent-browser`。多标签开发模式若出现空白页或 `ERR_INSUFFICIENT_RESOURCES`，先检查浏览器临时目录所在文件系统的剩余空间；必要时为整轮测试设置位于有足够空间的磁盘上的私有 `TMPDIR`，启动、截图和关闭命令保持同一环境。不要靠延长等待或清理其他项目的临时文件掩盖资源不足。
 
@@ -108,7 +110,7 @@ cd frontend && bun run test:unit && bun run build
 
 Gephi 0.10.1 独立基准可用 `scripts/gephi_golden/generate.sh --check` 校验；该基准采用有向图，路径类中心性按无权最短路计算，边权只进入 weighted degree。
 
-CI 的桌面浏览器验收分两层：`agent_browser_smoke.sh` 快速挂载学生 1–15 步与教师关键交互；`agent_browser_full_journey.sh` 通过公开 API 构造一份当前 release 的完整学习记录，再由真实浏览器完成报告生成、提交和教师评分，防止各自通过的组件在完整状态机中断链。两个脚本都以 `GVCSIM_BASE_URL` 指定被测站点地址，不写死任何主机。完整旅程在设置 `GVCSIM_E2E_ARTIFACT_DIR` 时还会通过浏览器打印 PDF，并用独立的 `pdftotext` 检查四类指标对照表七列均未被截断；本地需安装 Poppler（Debian/Ubuntu：`poppler-utils`），CI 已包含此依赖。
+本地桌面浏览器验收分两层：`agent_browser_smoke.sh` 快速挂载学生 1–15 步与教师关键交互；`agent_browser_full_journey.sh` 通过公开 API 构造一份当前 release 的完整学习记录，再由真实浏览器完成报告生成、提交和教师评分，防止各自通过的组件在完整状态机中断链。两个脚本都以 `GVCSIM_BASE_URL` 指定被测站点地址，不写死任何主机。完整旅程在设置 `GVCSIM_E2E_ARTIFACT_DIR` 时还会通过浏览器打印 PDF，并用独立的 `pdftotext` 检查四类指标对照表七列均未被截断。
 
 冲击面板性能验收在有效 active v15 release 完成最终重算后运行：
 
