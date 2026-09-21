@@ -7,67 +7,154 @@ type IndicatorReading = {
   id: string;
   title: string;
   authors: string;
-  year: number;
+  year: number | null;
   publication: string;
   focus: string;
   file: string;
   sourceUrl?: string;
 };
 
-const pdfUrl = (file: string) => `${import.meta.env.BASE_URL}readings/${file}`;
+const readingAssetUrl = (file: string) => `${import.meta.env.BASE_URL}readings/${file}`;
+const citation = (reading: IndicatorReading) =>
+  `${reading.authors} · ${reading.year ?? "年份未标注"} · ${reading.publication}`;
 
 export const INDICATOR_READINGS: Record<IndicatorReadingTopic, IndicatorReading[]> = {
   trade: [
     {
-      id: "trade-decomposition",
-      title: "总出口分解与外国增加值占比",
-      authors: "课程项目组（示范）",
+      id: "trade-guide",
+      title: "总贸易流分解指标说明（课程校订版）",
+      authors: "课程项目组",
       year: 2026,
-      publication: "界面占位材料",
-      focus: "示范：从六项账户分解理解 FVA、FDC 与总出口口径。",
-      file: "demo-trade-decomposition.pdf",
+      publication: "课程指标说明",
+      focus: "结合当前 OECD 2023 数据口径，逐项解释 DVAex、FVA、FDC、taxsub 和占比边界。",
+      file: "trade-decomposition-guide.pdf",
     },
     {
-      id: "share-interpretation",
-      title: "占比指标的国家比较与解释边界",
-      authors: "课程项目组（示范）",
-      year: 2026,
-      publication: "界面占位材料",
-      focus: "示范：如何报告百分点差异，同时避免把描述性比较写成因果结论。",
-      file: "demo-share-interpretation.pdf",
+      id: "source-trade-note",
+      title: "双边总贸易流分解指标构建",
+      authors: "原始资料",
+      year: null,
+      publication: "方法说明（历史资料）",
+      focus: "原始指标表与简要定义；FVA 与 taxsub 的当前课程口径以校订版为准。",
+      file: "source-trade-decomposition-note.pdf",
+    },
+    {
+      id: "trade-paper-en",
+      title: "Quantifying International Production Sharing at the Bilateral and Sector Levels",
+      authors: "Zhi Wang、Shang-Jin Wei、Kunfu Zhu",
+      year: 2018,
+      publication: "NBER Working Paper 19677",
+      focus: "总出口在双边和行业层面的增加值及重复计算分解方法。",
+      file: "wang-wei-zhu-trade-decomposition.pdf",
+      sourceUrl: "https://www.nber.org/papers/w19677",
+    },
+    {
+      id: "trade-paper-cn",
+      title: "总贸易核算法：官方贸易统计与全球价值链的度量",
+      authors: "王直、魏尚进、祝坤福",
+      year: 2015,
+      publication: "中国社会科学",
+      focus: "以中文讨论增加值出口、返回国内增加值、外国增加值和重复计算。",
+      file: "wang-wei-zhu-total-trade-accounting-cn.pdf",
     },
   ],
   production: [
     {
-      id: "production-decomposition",
-      title: "GVC 生产活动分解导读",
-      authors: "课程项目组（示范）",
+      id: "production-guide",
+      title: "GVC 生产分解指标说明（课程校订版）",
+      authors: "课程项目组",
       year: 2026,
-      publication: "界面占位材料",
-      focus: "示范：区分纯国内、传统贸易、简单 GVC 与复杂 GVC 生产路径。",
-      file: "demo-production-decomposition.pdf",
+      publication: "课程指标说明",
+      focus: "区分前向与后向账户，并纠正原始资料中重复的 3b_FGY_GVC_C 字段名。",
+      file: "production-decomposition-guide.pdf",
+    },
+    {
+      id: "source-production-note",
+      title: "全球价值链生产分解指标构建",
+      authors: "原始资料",
+      year: null,
+      publication: "方法说明（历史资料）",
+      focus: "原始公式、ICIO 表结构和十二项生产分解指标说明；数据年份以当前课程为准。",
+      file: "source-production-decomposition-note.pdf",
+    },
+    {
+      id: "production-paper",
+      title: "Measures of Participation in Global Value Chains and Global Business Cycles",
+      authors: "Zhi Wang、Shang-Jin Wei、Xinding Yu、Kunfu Zhu",
+      year: 2017,
+      publication: "NBER Working Paper 23222",
+      focus: "纯国内、传统贸易、简单 GVC 与复杂 GVC 生产活动的理论分解。",
+      file: "wang-et-al-gvc-participation.pdf",
+      sourceUrl: "https://www.nber.org/papers/w23222",
     },
   ],
   length: [
     {
-      id: "length-position",
-      title: "生产长度与 GVC 位置指数导读",
-      authors: "课程项目组（示范）",
+      id: "length-guide",
+      title: "生产长度与 GVC 位置指标说明（课程校订版）",
+      authors: "课程项目组",
       year: 2026,
-      publication: "界面占位材料",
-      focus: "示范：理解增加值加权长度、前向/后向视角及 GVCPs。",
-      file: "demo-length-position.pdf",
+      publication: "课程指标说明",
+      focus: "解释前向/后向生产长度、GVCPs，以及“长度不是跨境次数”的边界。",
+      file: "production-length-guide.pdf",
+    },
+    {
+      id: "source-length-note",
+      title: "全球价值链长度分解指标构建",
+      authors: "原始资料",
+      year: null,
+      publication: "方法说明（历史资料）",
+      focus: "原始矩阵公式、生产长度分解框架和十项指标说明；数据年份以当前课程为准。",
+      file: "source-production-length-note.pdf",
+    },
+    {
+      id: "length-paper",
+      title: "Characterizing Global Value Chains: Production Length and Upstreamness",
+      authors: "Zhi Wang、Shang-Jin Wei、Xinding Yu、Kunfu Zhu",
+      year: 2017,
+      publication: "NBER Working Paper 23261",
+      focus: "生产长度分段与相对上游位置指标的理论来源。",
+      file: "wang-et-al-production-length.pdf",
+      sourceUrl: "https://www.nber.org/papers/w23261",
     },
   ],
   network: [
     {
-      id: "network-centrality",
-      title: "生产网络中心性指标导读",
-      authors: "课程项目组（示范）",
+      id: "network-guide",
+      title: "全球生产网络指标说明（课程校订版）",
+      authors: "课程项目组",
       year: 2026,
-      publication: "界面占位材料",
-      focus: "示范：区分度、加权度、介数与接近中心性。",
-      file: "demo-network-centrality.pdf",
+      publication: "课程指标说明",
+      focus: "明确全部正边、有向无权路径、自环双计、未归一化 Brandes 等当前口径。",
+      file: "production-network-guide.pdf",
+    },
+    {
+      id: "source-network-note",
+      title: "全球生产网络指标构建",
+      authors: "原始资料",
+      year: null,
+      publication: "方法说明（历史资料）",
+      focus: "原始 Gephi 指标清单及中文定义；数据年份和精确算法口径以课程校订版为准。",
+      file: "source-production-network-note.pdf",
+    },
+    {
+      id: "brandes-paper",
+      title: "A Faster Algorithm for Betweenness Centrality",
+      authors: "Ulrik Brandes",
+      year: 2001,
+      publication: "Journal of Mathematical Sociology",
+      focus: "课程所用精确介数算法的原始方法论文。",
+      file: "brandes-betweenness-centrality.pdf",
+      sourceUrl: "https://doi.org/10.1080/0022250X.2001.9990249",
+    },
+    {
+      id: "tourism-network-example",
+      title: "高铁沿线旅游流网络结构及其互动关系研究",
+      authors: "李磊、陆林、孙小龙、虞虎",
+      year: 2020,
+      publication: "人文地理",
+      focus: "Gephi 网络指标的中文应用示例；用于帮助理解，不作为生产网络算法口径来源。",
+      file: "li-et-al-tourism-network-cn.pdf",
     },
   ],
 };
@@ -77,7 +164,7 @@ export function IndicatorReadingLibrary({ topic }: { topic: IndicatorReadingTopi
   const [expanded, setExpanded] = useState(false);
   const [selectedId, setSelectedId] = useState(readings[0].id);
   const selected = readings.find((reading) => reading.id === selectedId) ?? readings[0];
-  const selectedUrl = pdfUrl(selected.file);
+  const selectedUrl = readingAssetUrl(selected.file);
 
   return (
     <details
@@ -86,13 +173,15 @@ export function IndicatorReadingLibrary({ topic }: { topic: IndicatorReadingTopi
     >
       <summary>
         <span>
-          <b>延伸阅读 · 指标相关文章</b>
-          <small>{readings.length} 篇 PDF · 可选阅读，不影响本步完成</small>
+          <b>指标说明与相关文档</b>
+          <small>{readings.length} 篇 PDF · 课程说明、原始方法资料与论文</small>
         </span>
-        <span className="indicator-reading-demo-badge">示范文档</span>
+        <span className="indicator-reading-badge">课程资料</span>
       </summary>
       <div className="indicator-reading-intro">
-        当前文件仅用于演示文献组件和教学排版，不是正式学术论文。以后可直接替换 PDF 与文档信息。
+        本页汇总课程指标说明、原始方法说明与相关论文。课程说明已按当前 OECD ICIO 2023 edition（2016–2020）
+        的计算口径校订；历史资料中的年份不代表本系统的数据范围。原始资料沿用原文件编号，与课程步骤编号不同，
+        本页已按指标主题对应。建议先读课程校订版，再对照原始说明和方法论文。
       </div>
       <div className="indicator-reading-workspace">
         <div className="indicator-reading-list" aria-label="选择指标相关文章">
@@ -107,7 +196,7 @@ export function IndicatorReadingLibrary({ topic }: { topic: IndicatorReadingTopi
             >
               <span>{String(index + 1).padStart(2, "0")}</span>
               <b>{reading.title}</b>
-              <small className="indicator-reading-citation">{reading.authors} · {reading.year} · {reading.publication}</small>
+              <small className="indicator-reading-citation">{citation(reading)}</small>
               <small>{reading.focus}</small>
             </button>
           ))}
@@ -120,7 +209,7 @@ export function IndicatorReadingLibrary({ topic }: { topic: IndicatorReadingTopi
           <div className="indicator-reading-viewer-head">
             <div className="indicator-reading-meta">
               <b>{selected.title}</b>
-              <small className="indicator-reading-citation">{selected.authors} · {selected.year} · {selected.publication}</small>
+              <small className="indicator-reading-citation">{citation(selected)}</small>
               <small>{selected.focus}</small>
             </div>
             <div className="indicator-reading-links">

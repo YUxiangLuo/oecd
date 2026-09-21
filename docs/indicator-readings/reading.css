@@ -1,0 +1,116 @@
+@page {
+  size: A4;
+  margin: 12mm 14mm;
+}
+
+* { box-sizing: border-box; }
+
+html {
+  color: #22283a;
+  font-family: "Source Han Sans CN", "Noto Sans CJK SC", sans-serif;
+  font-size: 9.8pt;
+  line-height: 1.52;
+}
+
+body { margin: 0; }
+
+.page {
+  min-height: 270mm;
+  break-after: page;
+  position: relative;
+  padding-bottom: 13mm;
+}
+
+.page:last-child { break-after: auto; }
+
+.eyebrow {
+  color: #5147b8;
+  font-size: 8.5pt;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+h1 {
+  color: #222645;
+  font-size: 22pt;
+  line-height: 1.25;
+  margin: 5mm 0 2.5mm;
+}
+
+.lead {
+  color: #50596d;
+  font-size: 10.5pt;
+  margin: 0 0 5mm;
+}
+
+h2 {
+  border-bottom: 1px solid #dfe2eb;
+  color: #303552;
+  font-size: 14pt;
+  margin: 5mm 0 2.5mm;
+  padding-bottom: 1.5mm;
+}
+
+h3 { color: #343a59; font-size: 11.5pt; margin: 5mm 0 1.5mm; }
+p { margin: 1.5mm 0; }
+ul, ol { margin: 1.5mm 0 2.5mm; padding-left: 6mm; }
+li { margin: .7mm 0; }
+
+.formula {
+  background: #f4f3fb;
+  border-left: 3px solid #6258c7;
+  color: #2c3150;
+  font-family: "Noto Sans Mono CJK SC", "Source Han Sans CN", monospace;
+  font-size: 10.5pt;
+  margin: 2.5mm 0;
+  padding: 2mm 3mm;
+}
+
+.notice {
+  background: #fff8eb;
+  border: 1px solid #edd9ad;
+  border-radius: 3mm;
+  color: #5d4823;
+  margin: 3mm 0;
+  padding: 2.5mm 3.5mm;
+}
+
+.scope {
+  background: #f2f7f6;
+  border: 1px solid #cfe2dd;
+  border-radius: 3mm;
+  margin: 3.5mm 0;
+  padding: 2.5mm 3.5mm;
+}
+
+table {
+  border-collapse: collapse;
+  font-size: 8.7pt;
+  margin: 2.5mm 0 3.5mm;
+  width: 100%;
+}
+
+th, td {
+  border: 1px solid #d9dce6;
+  padding: 1.4mm 2mm;
+  text-align: left;
+  vertical-align: top;
+}
+
+th { background: #eff0f7; color: #303552; }
+code { color: #37317c; font-family: "Noto Sans Mono CJK SC", monospace; }
+
+.references { font-size: 8.8pt; }
+.references li { overflow-wrap: anywhere; }
+
+.footer {
+  bottom: 0;
+  color: #747b8d;
+  font-size: 8pt;
+  left: 0;
+  position: absolute;
+  right: 0;
+}
+
+.avoid-break { break-inside: avoid; }

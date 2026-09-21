@@ -98,11 +98,9 @@ uv run gvcsim classroom-init --reset
 
 ```bash
 scripts/local_ci.sh
-# 在当前检出目录启用每次 push 前的完整本地检查：
-git config core.hooksPath .githooks
 ```
 
-脚本把当前工作区源码复制到临时目录，生成合成 OECD release，并启动一次性的 PostgreSQL 容器与两个独立数据库。测试夹具只会重置该临时数据库；原始 OECD 文件、现有 release 和课堂数据库不会被写入。临时目录和容器在退出时清理；浏览器证据与服务日志留在忽略目录 `dogfood-output/local-ci/`。本地检查需要完成后才能推送；GitHub Actions 工作流已移除，仓库级 Actions 开关也已关闭。
+脚本把当前工作区源码复制到临时目录，生成合成 OECD release，并启动一次性的 PostgreSQL 容器与两个独立数据库。测试夹具只会重置该临时数据库；原始 OECD 文件、现有 release 和课堂数据库不会被写入。临时目录和容器在退出时清理；浏览器证据与服务日志留在忽略目录 `dogfood-output/local-ci/`。完整检查不绑定 `git push`；准备提交 PR 或发布时手动运行。GitHub Actions 工作流已移除，仓库级 Actions 开关也已关闭。
 
 本机浏览器测试使用 `agent-browser`。多标签开发模式若出现空白页或 `ERR_INSUFFICIENT_RESOURCES`，先检查浏览器临时目录所在文件系统的剩余空间；必要时为整轮测试设置位于有足够空间的磁盘上的私有 `TMPDIR`，启动、截图和关闭命令保持同一环境。不要靠延长等待或清理其他项目的临时文件掩盖资源不足。
 

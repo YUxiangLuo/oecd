@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>步骤 3｜GVC 生产分解指标说明</title>
+  <link rel="stylesheet" href="reading.css">
+</head>
+<body>
+  <section class="page">
+    <div class="eyebrow">GVC Simulation Lab · Step 03</div>
+    <h1>GVC 生产分解指标说明</h1>
+    <p class="lead">识别增加值通过何种生产路径被最终使用：纯国内、传统贸易、简单 GVC 或复杂 GVC。</p>
+
+    <div class="scope">
+      <b>当前课程口径</b><br>
+      指标基于 OECD ICIO 2023 edition 的 2016–2020 年表，采用 Wang、Wei、Yu、Zhu 的生产活动分解框架。
+      前向口径从增加值创造地追踪去向，后向口径从最终产品回溯增加值来源。
+    </div>
+
+    <h2>1. 四类生产活动</h2>
+    <table>
+      <thead><tr><th>类别</th><th>判定方式</th><th>直观含义</th></tr></thead>
+      <tbody>
+        <tr><td>纯国内生产</td><td>生产与最终吸收均在国内，没有跨境。</td><td>服务本国最终需求。</td></tr>
+        <tr><td>传统贸易</td><td>增加值随最终品直接出口，只跨境一次。</td><td>跨境后直接进入国外最终需求。</td></tr>
+        <tr><td>简单 GVC</td><td>增加值随中间品跨境一次，随后被最终吸收。</td><td>参与国外生产，但不再发生第二次跨境。</td></tr>
+        <tr><td>复杂 GVC</td><td>至少一次由中间品承载，最终吸收前累计跨境至少两次。</td><td>经过第三国或再出口等更长的跨境路径。</td></tr>
+      </tbody>
+    </table>
+
+    <h2>2. 前向增加值分解</h2>
+    <div class="formula">SVA = 1_VA_D + 2_VA_RT + 3a_VA_GVC_S + 3b_VA_GVC_C</div>
+    <table>
+      <tbody>
+        <tr><th><code>SVA</code></th><td>从增加值来源端核算的生产活动总增加值。</td></tr>
+        <tr><th><code>1_VA_D</code></th><td>纯国内生产增加值。</td></tr>
+        <tr><th><code>2_VA_RT</code></th><td>随最终品直接出口的传统贸易增加值。</td></tr>
+        <tr><th><code>3a_VA_GVC_S</code></th><td>简单 GVC 增加值。</td></tr>
+        <tr><th><code>3b_VA_GVC_C</code></th><td>复杂 GVC 增加值。</td></tr>
+      </tbody>
+    </table>
+    <div class="formula">复杂 GVC 生产份额 = 3b_VA_GVC_C ÷ SVA</div>
+    <div class="footer">课程指标说明 · 按当前数据与实现口径校订 · 1 / 2</div>
+  </section>
+
+  <section class="page">
+    <div class="eyebrow">Forward and Backward Accounts</div>
+    <h2>3. 后向最终产品分解</h2>
+    <div class="formula">FGY = 1_FGY_D + 2_FGY_RT + 3a_FGY_GVC_S + 3b_FGY_GVC_C</div>
+    <table>
+      <tbody>
+        <tr><th><code>FGY</code></th><td>从最终产品生产端核算、为最终需求服务的全球增加值总量。</td></tr>
+        <tr><th><code>1_FGY_D</code></th><td>本国最终品中由本国生产且全程不跨境的增加值。</td></tr>
+        <tr><th><code>2_FGY_RT</code></th><td>最终品直接出口中包含的本国增加值。</td></tr>
+        <tr><th><code>3a_FGY_GVC_S</code></th><td>从最终品端回溯，只经历一次中间品跨境的增加值。</td></tr>
+        <tr><th><code>3b_FGY_GVC_C</code></th><td>从最终品端回溯，累计跨境至少两次的复杂 GVC 增加值。</td></tr>
+      </tbody>
+    </table>
+
+    <div class="notice">
+      <b>资料校订：</b>原始 DOCX 和 XLSX 最后一列重复写成了 <code>3b_VA_GVC_C</code>。结合其表中含义和 Wang 等（2017）的后向分解，正确字段应为 <code>3b_FGY_GVC_C</code>；当前课程已使用正确字段。
+    </div>
+
+    <h2>4. 解释边界</h2>
+    <ul>
+      <li>简单与复杂描述跨境生产路径，不是产品技术含量、企业能力或收益率评级。</li>
+      <li>复杂 GVC 份额更高不自动表示“更先进”，也不自动表示风险更高或更低。</li>
+      <li>前向与后向是两种记账视角，不能把同一数值机械相加。</li>
+      <li>比较国家或年份时，应固定指标、行业聚合、价格口径和数据版本。</li>
+    </ul>
+
+    <h2>5. 依据与延伸阅读</h2>
+    <ol class="references">
+      <li>《基于投入产出数据库的全球价值链生产（最终产品和行业增加值）分解指标构建》。</li>
+      <li>Wang, Z., Wei, S.-J., Yu, X., and Zhu, K. (2017), <i>Measures of Participation in Global Value Chains and Global Business Cycles</i>, NBER Working Paper 23222. https://www.nber.org/papers/w23222</li>
+    </ol>
+    <div class="footer">课程指标说明 · 当前数据与实现口径优先于历史资料中的年份和字段表述 · 2 / 2</div>
+  </section>
+</body>
+</html>

@@ -7,14 +7,16 @@ import { INDICATOR_READINGS, IndicatorReadingLibrary } from "./indicator-reading
 afterEach(cleanup);
 
 describe("indicator PDF reading library", () => {
-  test("provides at least one replaceable PDF for every indicator step and demonstrates multiple documents", () => {
+  test("provides the corrected guide and source materials for every indicator step", () => {
     expect(Object.keys(INDICATOR_READINGS).sort()).toEqual(["length", "network", "production", "trade"]);
-    expect(Object.values(INDICATOR_READINGS).every((readings) => readings.length > 0)).toBe(true);
-    expect(INDICATOR_READINGS.trade.length).toBeGreaterThan(1);
+    expect(INDICATOR_READINGS.trade.length).toBe(4);
+    expect(INDICATOR_READINGS.production.length).toBe(3);
+    expect(INDICATOR_READINGS.length.length).toBe(3);
+    expect(INDICATOR_READINGS.network.length).toBe(4);
     for (const reading of Object.values(INDICATOR_READINGS).flat()) {
       expect(reading.file.endsWith(".pdf")).toBe(true);
       expect(reading.authors).not.toBe("");
-      expect(reading.year).toBeGreaterThan(1900);
+      if (reading.year !== null) expect(reading.year).toBeGreaterThan(1900);
       expect(reading.publication).not.toBe("");
       const header = readFileSync(resolve(import.meta.dir, "../../../../public/readings", reading.file), { encoding: "utf8", flag: "r" }).slice(0, 5);
       expect(header).toBe("%PDF-");
@@ -26,22 +28,26 @@ describe("indicator PDF reading library", () => {
     const details = view.container.querySelector("details") as HTMLDetailsElement;
     expect(details).toBeTruthy();
     expect(view.queryByLabelText(/PDF 预览/)).toBeNull();
-    expect(view.getByText("2 篇 PDF · 可选阅读，不影响本步完成")).toBeTruthy();
+    expect(view.getByText("4 篇 PDF · 课程说明、原始方法资料与论文")).toBeTruthy();
+    expect(view.getByText(/当前 OECD ICIO 2023 edition（2016–2020）/)).toBeTruthy();
+    expect(view.getByText(/历史资料中的年份不代表本系统的数据范围/)).toBeTruthy();
+    expect(view.getByText(/原始资料沿用原文件编号，与课程步骤编号不同/)).toBeTruthy();
 
     act(() => {
       details.open = true;
       fireEvent(details, new Event("toggle"));
     });
-    expect(view.getByLabelText("总出口分解与外国增加值占比 PDF 预览").getAttribute("data"))
-      .toContain("demo-trade-decomposition.pdf#view=FitH");
+    expect(view.getByLabelText("总贸易流分解指标说明（课程校订版） PDF 预览").getAttribute("data"))
+      .toContain("trade-decomposition-guide.pdf#view=FitH");
     expect(view.getByRole("link", { name: /新标签页打开 PDF/ }).getAttribute("target")).toBe("_blank");
     expect(view.getByText(/如果预览空白或加载失败/)).toBeTruthy();
     expect(view.getByText("当前浏览器无法内嵌显示这份 PDF。")).toBeTruthy();
 
-    fireEvent.click(view.getByRole("button", { name: /占比指标的国家比较与解释边界/ }));
-    expect(view.getByLabelText("占比指标的国家比较与解释边界 PDF 预览").getAttribute("data"))
-      .toContain("demo-share-interpretation.pdf#view=FitH");
-    expect(view.queryByLabelText("总出口分解与外国增加值占比 PDF 预览")).toBeNull();
-    expect(view.getAllByText("课程项目组（示范） · 2026 · 界面占位材料").length).toBeGreaterThanOrEqual(2);
+    fireEvent.click(view.getByRole("button", { name: /双边总贸易流分解指标构建/ }));
+    expect(view.getByLabelText("双边总贸易流分解指标构建 PDF 预览").getAttribute("data"))
+      .toContain("source-trade-decomposition-note.pdf#view=FitH");
+    expect(view.queryByLabelText("总贸易流分解指标说明（课程校订版） PDF 预览")).toBeNull();
+    expect(view.getAllByText("原始资料 · 年份未标注 · 方法说明（历史资料）").length)
+      .toBeGreaterThanOrEqual(2);
   });
 });
