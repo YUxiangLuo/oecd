@@ -10,13 +10,7 @@ import {
 } from "./app-state";
 import { AppBootSkeleton, TeacherWorkspace } from "./app-shell";
 import { AUTH_TOKEN_KEY, api, getActiveAuthToken, isApiErrorStatus, setActiveAuthToken } from "./api";
-import {
-  DEFAULT_REGRESSION_SETTINGS,
-  SIGNATURE_SETTINGS,
-  asRegressionSettingsMap,
-  type RegressionHistory,
-  type RegressionSettings,
-} from "./regression";
+import type { RegressionHistory } from "./regression";
 import { LoginPage } from "./login";
 import { resetStepScroller } from "./step-navigation";
 import { StudentWorkspace } from "./student-workspace";
@@ -46,18 +40,7 @@ export default function App() {
     user?.role === "student",
     user?.role === "student" ? user.username : undefined,
   );
-  const currentOutcome = stepsData?.steps.find((step) => step.n === current)?.regression_outcome;
-  const regressionSettings =
-    (currentOutcome && asRegressionSettingsMap(session.getShared("regression_settings"))[currentOutcome])
-    || (currentOutcome ? SIGNATURE_SETTINGS[currentOutcome] : DEFAULT_REGRESSION_SETTINGS);
   const [regressionHistory, setRegressionHistory] = useState<RegressionHistory>({});
-  const setRegressionSettings = useCallback((next: RegressionSettings) => {
-    if (!currentOutcome) return;
-    session.updateShared("regression_settings", (stored) => ({
-      ...asRegressionSettingsMap(stored),
-      [currentOutcome]: next,
-    }));
-  }, [currentOutcome, session]);
 
   const completedSteps = new Set(session.completion?.completed ?? []);
   const currentCompletion = session.completion?.steps.find((item) => item.step === current);
@@ -251,8 +234,6 @@ export default function App() {
       session={session}
       stepState={stepState}
       completedSteps={completedSteps}
-      regressionSettings={regressionSettings}
-      onRegressionSettingsChange={setRegressionSettings}
       regressionHistory={regressionHistory}
       onRegressionHistoryChange={setRegressionHistory}
       showIntro={showIntro}

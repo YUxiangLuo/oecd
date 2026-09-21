@@ -18,7 +18,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from gvcsim import quizzes, teaching_report
+from gvcsim import quizzes
+from gvcsim.report_saved_run import _result_is_qualified, _result_is_reportable
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.session import empty_session, make_record
 
@@ -345,28 +346,6 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
         }
     )
 
-    request_settings = {
-        "granularity": "country_industry",
-        "shock_type": "tariff",
-        "method": "twfe_intensity",
-        "control_mode": "none",
-        "interaction": False,
-        "price_mode": "nominal",
-        "scenario": "clean",
-        "exclude_row": True,
-        "weight_mode": "fixed_pretreatment",
-    }
-    stored_settings = {
-        "granularity": "country_industry",
-        "shockType": "tariff",
-        "method": "twfe_intensity",
-        "controlMode": "none",
-        "interaction": False,
-        "priceMode": "nominal",
-        "scenario": "clean",
-        "weightMode": "fixed_pretreatment",
-    }
-    settings_by_outcome: dict[str, dict[str, Any]] = {}
     regression_statuses: dict[str, str] = {}
     for step, outcome in ((11, "trade"), (12, "production"), (13, "length"), (14, "network")):
         response = _request_json(
@@ -374,7 +353,7 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
             "POST",
             "/api/regression/run",
             token=token,
-            payload={"outcome": outcome, **request_settings},
+            payload={"outcome": outcome},
         )
         result = response.get("result")
         design = response.get("design")
@@ -389,12 +368,11 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
             or snapshot.get("version") != TEACHING_VERSION
             or not isinstance(catalog, list)
             or not catalog
-            or not teaching_report._result_is_reportable(result, design)
+            or not _result_is_reportable(result, design)
         ):
             status = result.get("status") if isinstance(result, dict) else None
             raise RuntimeError(f"{outcome} default regression is not reportable: status={status}")
         saved = {
-            "settings": dict(stored_settings),
             "design": design,
             "result": result,
             "model_snapshot": snapshot,
@@ -404,12 +382,10 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
         data["run"] = saved
         # A complete stopped-inference diagnosis satisfies the course gate but
         # must never be stored as the optional inferential reference snapshot.
-        if teaching_report._result_is_qualified(result, design):
+        if _result_is_qualified(result, design):
             data["qualified_run"] = saved
-        settings_by_outcome[outcome] = dict(stored_settings)
         regression_statuses[outcome] = str(result.get("status"))
 
-    session["shared"] = {"regression_settings": make_record(settings_by_outcome)}
     session["steps"]["15"] = make_record(
         {
             "research_question": "同一套关税冲击后，贸易流、生产、长度和网络指标分别怎样变化？",
@@ -445,7 +421,7 @@ def seed_full_journey(base_url: str, username: str, password: str) -> dict[str, 
         "display_name": (login.get("user") or {}).get("name"),
         "release_id": dataset.get("release_id") if isinstance(dataset, dict) else None,
         "completed_steps": completion["completed_count"],
-        "regression_outcomes": list(settings_by_outcome),
+        "regression_outcomes": list(regression_statuses),
         "regression_statuses": regression_statuses,
         "teaching_panel_version": TEACHING_VERSION,
         "report_gate": [],

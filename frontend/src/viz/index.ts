@@ -3,4 +3,4 @@ export { LengthViz } from "./views/length-comparison";
 export { HeatTableViz } from "./views/network-heat";
 export { NetworkViz } from "./views/trade-network";
 export { CompositionBar, QuadrantScatter, RankBarChart } from "./explore/charts";
-export { CoefForestChart, EventStudyChart, PlaceboChart } from "./regression/charts";
+export { CoefForestChart } from "./regression/charts";

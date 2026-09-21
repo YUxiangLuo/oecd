@@ -16,7 +16,7 @@ import {
 } from "./app-shell";
 import { IntroOverlay } from "./intro";
 import { LabRouter } from "./lab-router";
-import type { RegressionHistory, RegressionSettings } from "./regression";
+import type { RegressionHistory } from "./regression";
 import { QuizPanel, type QuizDraftStore } from "./step-quiz";
 import {
   materialStatusForStep,
@@ -68,8 +68,6 @@ interface StudentWorkspaceProps {
   session: SessionApi;
   stepState: StepStateApi;
   completedSteps: Set<number>;
-  regressionSettings: RegressionSettings;
-  onRegressionSettingsChange: (settings: RegressionSettings) => void;
   regressionHistory: RegressionHistory;
   onRegressionHistoryChange: Dispatch<SetStateAction<RegressionHistory>>;
   showIntro: boolean;
@@ -94,8 +92,6 @@ export function StudentWorkspace({
   session,
   stepState,
   completedSteps,
-  regressionSettings,
-  onRegressionSettingsChange,
   regressionHistory,
   onRegressionHistoryChange,
   showIntro,
@@ -273,11 +269,8 @@ export function StudentWorkspace({
                       sessionStatus={session.status}
                       sessionUnsynced={session.unsynced}
                       sessionSyncing={session.syncing}
-                      sessionSyncError={session.syncError}
                       onFlushSession={session.syncNow}
                       onReportChanged={session.applyReportMutation}
-                      regressionSettings={regressionSettings}
-                      onRegressionSettingsChange={onRegressionSettingsChange}
                       regressionHistory={regressionHistory}
                       onRegressionHistoryChange={onRegressionHistoryChange}
                       onNavigateStep={onNavigateStep}

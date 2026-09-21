@@ -15,7 +15,7 @@ function response(): RegressionResponse {
 
 describe("fixed teaching regression reading", () => {
   test("uses the snapshot X and reports a one-percentage-point X increment", () => {
-    const html = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={response()} stale={false} />);
+    const html = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={response()} />);
     expect(html).toContain("两者在模拟数据中怎样一起变化");
     expect(html).toContain("想观察的结果（Y）");
     expect(html).toContain("教学模拟：外国增加值项占比");

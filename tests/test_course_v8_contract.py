@@ -1,4 +1,5 @@
 from gvcsim import quizzes, teaching_report
+from gvcsim.report_saved_run import _parse_saved_run
 from gvcsim.regression.teaching import VERSION, X_COLUMN, Y_COLUMNS, model_snapshot, variable_catalog
 from gvcsim.steps import STEPS
 
@@ -16,7 +17,15 @@ def _run(outcome: str, *, version: str = VERSION, coefficient: str = X_COLUMN) -
             "interaction": False,
             "scenario": "clean",
         },
-        "result": {"coefs": [{"name": coefficient, "coef": 1.0}]},
+        "result": {
+            "status": "ok",
+            "support": {"status": "ok", "suppress_inference": False, "reasons": []},
+            "diagnostics": {"study_contract": "economics-v2"},
+            "coefs": [{
+                "name": coefficient, "coef": 1.0, "se": 0.2, "t": 5.0,
+                "p": 0.01, "ci_low": 0.6, "ci_high": 1.4,
+            }],
+        },
         "model_snapshot": snapshot,
         "variable_catalog": variable_catalog(outcome),
     }
@@ -33,12 +42,12 @@ def test_v8_quiz_rejects_old_answers():
 
 
 def test_saved_run_requires_version_and_actual_x_y_contract():
-    assert teaching_report._parse_saved_run(_run("trade"), "trade") is not None
-    assert teaching_report._parse_saved_run(_run("trade", version="old-did"), "trade") is None
-    assert teaching_report._parse_saved_run(_run("trade", coefficient="treated"), "trade") is None
+    assert _parse_saved_run(_run("trade"), "trade") is not None
+    assert _parse_saved_run(_run("trade", version="old-did"), "trade") is None
+    assert _parse_saved_run(_run("trade", coefficient="treated"), "trade") is None
     wrong_y = _run("trade")
     wrong_y["model_snapshot"]["y_column"] = Y_COLUMNS["network"]
-    assert teaching_report._parse_saved_run(wrong_y, "trade") is None
+    assert _parse_saved_run(wrong_y, "trade") is None
 
 
 def test_step10_gate_requires_complete_current_panel_state():

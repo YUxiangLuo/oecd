@@ -1,20 +1,8 @@
-"""Versioned HTTP shapes for the public regression teaching API."""
-
-from __future__ import annotations
+"""Versioned HTTP shapes for the fixed teaching regression API."""
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from gvcsim import shocks
-from gvcsim.regression.design import (
-    CONTROL_MODE_NONE,
-    GRANULARITY_COUNTRY_INDUSTRY,
-    METHOD_TWFE_INTENSITY,
-    PRICE_MODE_NOMINAL,
-    SCENARIO_CLEAN,
-)
-from gvcsim.shocks import SHOCK_TARIFF
+from pydantic import BaseModel, ConfigDict
 
 
 class StrictContract(BaseModel):
@@ -23,46 +11,6 @@ class StrictContract(BaseModel):
 
 class RegressionRequest(StrictContract):
     outcome: str
-    granularity: str = GRANULARITY_COUNTRY_INDUSTRY
-    shock_type: str = SHOCK_TARIFF
-    method: str = METHOD_TWFE_INTENSITY
-    control_mode: str = CONTROL_MODE_NONE
-    interaction: bool = False
-    price_mode: str = PRICE_MODE_NOMINAL
-    scenario: str = SCENARIO_CLEAN
-    exclude_row: bool = True
-    weight_mode: str = shocks.EXPOSURE_MODE_FIXED_PRETREATMENT
-
-
-class PlaceboRequest(RegressionRequest):
-    n_draws: int = Field(default=80, ge=10, le=200)
-    seed: int = Field(default=2026, ge=0, le=2_147_483_647)
-
-
-class MethodConstraints(StrictContract):
-    cohort_aware_methods: list[str]
-    controls_publicly_disabled: bool
-    cohort_aware_interaction_supported: bool
-
-
-class RegressionOptionsResponse(StrictContract):
-    granularities: list[str]
-    granularity_labels: dict[str, str]
-    granularities_by_outcome: dict[str, list[str]]
-    shock_types: list[str]
-    shock_type_labels: dict[str, str]
-    methods: list[str]
-    method_labels: dict[str, str]
-    control_modes: list[str]
-    control_mode_labels: dict[str, str]
-    price_modes: list[str]
-    price_mode_labels: dict[str, str]
-    scenarios: list[str]
-    scenario_labels: dict[str, str]
-    weight_modes: list[str]
-    weight_mode_labels: dict[str, str]
-    method_constraints: MethodConstraints
-    outcomes: dict[str, str]
 
 
 class EquationPart(StrictContract):
@@ -123,9 +71,3 @@ class RegressionRunResponse(StrictContract):
     disclaimer: str
     variable_catalog: list[dict[str, str]]
     model_snapshot: dict[str, Any]
-
-
-class PlaceboResponse(StrictContract):
-    design: RegressionDesignResponse
-    placebo: dict[str, Any]
-    disclaimer: str

@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import {
-  comparisonExplanation,
   familyDirectionLabel,
   lessonQuestion,
   REGRESSION_FAMILIES,
@@ -39,29 +38,16 @@ describe("regression lessons", () => {
     expect(familyDirectionLabel("suppressed")).not.toBe(familyDirectionLabel("insufficient"));
   });
 
-  test("family summaries distinguish all five evidence states", () => {
+  test("family summaries distinguish the published evidence states", () => {
     expect(familyDirectionLabel("positive")).toBe("上升");
     expect(familyDirectionLabel("negative")).toBe("下降");
     expect(familyDirectionLabel("suppressed")).toBe("无法评估");
     expect(familyDirectionLabel("insufficient")).toBe("看不出");
-    expect(familyDirectionLabel("pretrend")).toBe("冲击前已有差异");
   });
 
   test("research question stays on the fixed teaching X", () => {
-    const network = lessonQuestion("network", "tariff", "did");
-    const sanctions = lessonQuestion("network", "sanctions", "event_study");
-    const exportControl = lessonQuestion("network", "export_control", "twfe_intensity");
+    const network = lessonQuestion("network");
     expect(network).toContain("模拟关税暴露（X）增加 1 个百分点");
-    expect(sanctions).toBe(network);
-    expect(exportControl).toBe(network);
-    expect(lessonQuestion("trade", "tariff", "did")).not.toMatch(/cohort|处理组|对照组/);
-  });
-
-  test("comparison copy explains the selected method without claiming proof", () => {
-    const did = comparisonExplanation("did");
-    const eventStudy = comparisonExplanation("event_study");
-    const intensity = comparisonExplanation("twfe_intensity");
-    expect(did).toContain("处理后−处理前");
-    expect(new Set([did, eventStudy, intensity]).size).toBe(3);
+    expect(lessonQuestion("trade")).not.toMatch(/cohort|处理组|对照组/);
   });
 });

@@ -603,6 +603,8 @@ def _interaction_slice_metrics(
         )
     except ValueError as exc:
         return {"timing_error": str(exc)}, False
+    if timing.first_by_entity.empty:
+        return {"timing_error": "样本中没有处理实体"}, False
 
     numeric: dict[str, np.ndarray] = {}
     invalid: dict[str, int] = {}

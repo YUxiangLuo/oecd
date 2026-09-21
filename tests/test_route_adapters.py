@@ -16,7 +16,6 @@ from gvcsim.data import quality
 from gvcsim.api import app
 
 from gvcsim.regression.contracts import RegressionRequest
-from gvcsim.regression.design import RegressionDesign
 
 
 @pytest.fixture(autouse=True)
@@ -899,9 +898,9 @@ def test_malformed_qc_api_uses_controlled_artifact_error(teaching_db, tmp_path, 
     assert "QC" in response.json()["detail"]
 
 
-def test_regression_options_design_and_validation(teaching_db):
+def test_regression_design_and_validation(teaching_db):
     client = _authenticated_client(teaching_db)
-    assert client.get("/api/regression/options").status_code == 200
+    assert client.get("/api/regression/options").status_code == 404
     design = client.get("/api/regression/design", params={"outcome": "trade"})
     assert design.status_code == 200
     assert design.json()["outcome"] == "trade"
@@ -919,10 +918,8 @@ def test_regression_options_design_and_validation(teaching_db):
 def test_regression_http_contracts_are_explicit():
     schema = app.openapi()
     expected_responses = {
-        ("/api/regression/options", "get"): "RegressionOptionsResponse",
         ("/api/regression/design", "get"): "RegressionDesignResponse",
         ("/api/regression/run", "post"): "RegressionRunResponse",
-        ("/api/regression/placebo", "post"): "PlaceboResponse",
     }
     for (path, method), model in expected_responses.items():
         response_schema = schema["paths"][path][method]["responses"]["200"]["content"]["application/json"]["schema"]
@@ -992,7 +989,7 @@ def test_regression_route_coalesces_identical_inflight_work(monkeypatch):
     asyncio.run(scenario())
 
 
-def test_regression_run_discloses_teaching_simulation_and_placebo_is_not_public(teaching_db, monkeypatch):
+def test_regression_run_discloses_teaching_simulation_and_rejects_retired_contracts(teaching_db, monkeypatch):
     client = _authenticated_client(teaching_db)
     panel = pd.DataFrame({"country": ["AAA"], "entity_id": ["AAA-s1"]})
     monkeypatch.setattr(regression_routes, "_read_csv", lambda name: panel)
@@ -1023,12 +1020,10 @@ def test_regression_run_discloses_teaching_simulation_and_placebo_is_not_public(
     assert "attestation" not in run.json()["result"]
 
     placebo = client.post("/api/regression/placebo", json={"outcome": "trade", "n_draws": 10, "seed": 7})
-    assert placebo.status_code == 400
-    assert placebo.json()["detail"] == "基础教学不提供置换检验"
+    assert placebo.status_code == 404
 
     old_did = client.post("/api/regression/run", json={"outcome": "trade", "method": "did"})
-    assert old_did.status_code == 400
-    assert "仅发布固定 tariff × country_industry × twfe_intensity" in old_did.json()["detail"]
+    assert old_did.status_code == 422
 
 
 @pytest.mark.parametrize(
@@ -1045,7 +1040,7 @@ def test_regression_run_discloses_teaching_simulation_and_placebo_is_not_public(
             ),
             "数值变量 teaching_tariff_exposure",
         ),
-        (lambda frame: pd.concat([frame, frame.iloc[[0]]], ignore_index=True), "entity-year 唯一"),
+        (lambda frame: pd.concat([frame, frame.iloc[[0]]], ignore_index=True), "entity-time 唯一"),
     ],
     ids=["blank-entity", "string-outcome", "infinite-regressor", "duplicate-key"],
 )
@@ -1097,16 +1092,6 @@ def test_regression_route_maps_numerical_failure_to_chinese_400(teaching_db, mon
     assert response.json()["detail"].startswith("回归线性代数计算失败")
 
 
-def test_regression_weight_panel_and_teacher_rejection(teaching_db):
-    design = RegressionDesign("trade")
-    fixed = pd.DataFrame({"tariff_shock": [0.1], "treated": [1]})
-    assert regression_routes._panel_for_weight_mode(fixed, design, shocks.EXPOSURE_MODE_FIXED_PRETREATMENT) is fixed
-    with pytest.raises(HTTPException) as missing:
-        regression_routes._panel_for_weight_mode(fixed, design, shocks.EXPOSURE_MODE_CONTEMPORANEOUS)
-    assert missing.value.status_code == 409
-    current = fixed.assign(tariff_shock_contemporaneous=0.3, treated_contemporaneous=0)
-    selected = regression_routes._panel_for_weight_mode(current, design, shocks.EXPOSURE_MODE_CONTEMPORANEOUS)
-    assert selected[design.shock_col].iloc[0] == 0.3
-
+def test_regression_rejects_teacher(teaching_db):
     teacher = _authenticated_client(teaching_db, "teacher")
     assert teacher.post("/api/regression/run", json={"outcome": "trade"}).status_code == 403

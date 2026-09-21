@@ -13,7 +13,7 @@ from starlette.requests import Request
 
 from gvcsim import api, concurrency, config, regression_routes
 from gvcsim.classroom import routes
-from gvcsim.regression.contracts import PlaceboRequest, RegressionRequest
+from gvcsim.regression.contracts import RegressionRequest
 from gvcsim.session import empty_session
 from gvcsim.singleflight import AsyncSingleFlightCache
 
@@ -63,10 +63,8 @@ def test_regression_disconnect_during_panel_read_keeps_thread_and_cancels_queued
 
         monkeypatch.setattr(regression_routes, "_read_csv", read)
         monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", compute)
-        route = (
-            regression_routes.regression_run_http if operation == "run" else regression_routes.regression_placebo_http
-        )
-        payload = RegressionRequest(outcome="trade") if operation == "run" else PlaceboRequest(outcome="trade")
+        route = regression_routes.regression_run_http
+        payload = RegressionRequest(outcome="trade")
         disconnected, retry_disconnected = asyncio.Event(), asyncio.Event()
         first = asyncio.create_task(route(payload, student_request(disconnected)))
         retry = None

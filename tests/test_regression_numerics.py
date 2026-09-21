@@ -1,7 +1,6 @@
 """当前回归数值实现的收敛与对照门禁，不依赖课堂数据库。"""
 
 from dataclasses import replace
-from statistics import mean, variance
 
 import numpy as np
 import pandas as pd
@@ -87,6 +86,42 @@ def _benchmark_inputs():
     return model, own
 
 
+def _industry_model_input():
+    return pd.DataFrame(
+        {
+            "country": ["A", "A", "B", "B"],
+            "entity_id": ["A_S1", "A_S1", "B_S1", "B_S1"],
+            "year": [2019, 2020, 2019, 2020],
+            "FVA_share": [0.1, 0.2, 0.3, 0.5],
+            "tariff_shock": [0.0, 0.1, 0.0, 0.2],
+        }
+    )
+
+
+def test_prepare_design_rejects_missing_year_instead_of_silently_dropping_it():
+    frame = _industry_model_input()
+    frame.loc[0, "year"] = np.nan
+
+    with pytest.raises(ValueError, match="year.*不得缺失"):
+        panel.prepare_design_model(frame, RegressionDesign(outcome="trade"))
+
+
+def test_prepare_design_rejects_entity_that_moves_between_clusters():
+    frame = _industry_model_input()
+    frame.loc[1, "country"] = "B"
+
+    with pytest.raises(ValueError, match="一个实体只能映射到一个聚类"):
+        panel.prepare_design_model(frame, RegressionDesign(outcome="trade"))
+
+
+def test_within_estimator_rejects_zero_cluster_robust_standard_error():
+    model, _ = _benchmark_inputs()
+    x = np.arange(1, len(model.data) + 1, dtype=float).reshape(-1, 1)
+
+    with pytest.raises(ValueError, match="标准误必须为正"):
+        panel._within_ols(model, (np.zeros(len(model.data)), x, [model.xcols[0]], []))
+
+
 @pytest.mark.parametrize(("small_se", "passed"), [(0.010000001, True), (0.0101, False), (0.02, False)])
 def test_panelols_standard_error_gate_checks_each_policy_term(small_se, passed):
     model, own = _benchmark_inputs()
@@ -112,81 +147,11 @@ def test_panelols_gate_requires_every_policy_term(missing_from):
         panel._summarize_benchmark(model, own, reference)
 
 
-@pytest.mark.parametrize("method", ["did", "event_study"])
-def test_public_cohort_att_matches_raw_pair_reference(method):
-    """从原始观察对独立复算当前 ATT 和删国家标准误，不复用引擎单元或样本。"""
-    years = range(2016, 2021)
-    countries = [f"C{i:02d}" for i in range(30)]
-    first = {country: 2018 if i < 12 else 2019 if i < 24 else None for i, country in enumerate(countries)}
-    observations = {}
-    rows = []
-    for i, country in enumerate(countries):
-        cohort = first[country]
-        for year in years:
-            post = cohort is not None and year >= cohort
-            value = (
-                i * 0.1
-                + (year - 2016) * (0.01 * i + 0.2)
-                + ((i * 7 + year * 3) % 11) * 0.003
-                + ((1 + i * 0.02) * (year - cohort + 1) if post else 0)
-            )
-            # 缺基期、缺某一 post、缺对照观察：参考必须按每个单元的成对观察计权。
-            missing = (country, year) in {("C00", 2017), ("C01", 2019), ("C24", 2017)}
-            if not missing:
-                observations[country, year] = value
-            rows.append(
-                {
-                    "country": country,
-                    "year": year,
-                    "FVA_share": np.nan if missing else value,
-                    "treated": int(post),
-                    "tariff_shock": 0.02 if post else 0.0,
-                }
-            )
+@pytest.mark.parametrize(("field", "value"), [("coef", np.nan), ("se", np.inf)])
+def test_panelols_gate_rejects_nonfinite_comparison_values(field, value):
+    model, own = _benchmark_inputs()
+    reference = replace(own, coefs=[replace(coef) for coef in own.coefs])
+    reference.coefs[0] = replace(reference.coefs[0], **{field: value})
 
-    participating_countries = set()
-
-    def reference(omitted_country=None):
-        terms = {}
-        for cohort in (2018, 2019):
-            for year in years:
-                k = year - cohort
-                if k == -1 or (method == "did" and k < 0):
-                    continue
-                treated, controls, paired_countries = [], [], []
-                for country in countries:
-                    if country == omitted_country:
-                        continue
-                    if (country, year) not in observations or (country, cohort - 1) not in observations:
-                        continue
-                    delta = observations[country, year] - observations[country, cohort - 1]
-                    if first[country] == cohort:
-                        treated.append(delta)
-                        paired_countries.append(country)
-                    elif first[country] is None or first[country] > max(cohort, year):
-                        controls.append(delta)
-                        paired_countries.append(country)
-                if treated and controls:
-                    if omitted_country is None:
-                        participating_countries.update(paired_countries)
-                    term = "treated×post" if method == "did" else f"k={k:+d}" if k else "k=0"
-                    terms.setdefault(term, []).extend([mean(treated) - mean(controls)] * len(treated))
-        return {term: mean(values) for term, values in terms.items()}
-
-    expected = reference()
-    leave_one = [reference(country) for country in sorted(participating_countries)]
-    result, benchmark = panel.run_design_with_benchmark(
-        pd.DataFrame(rows), RegressionDesign(outcome="trade", granularity="country", method=method)
-    )
-
-    assert {coefficient.name for coefficient in result.coefs} == set(expected)
-    assert benchmark["benchmark_passed"] is True
-    assert result.n_clusters == len(participating_countries)
-    for coefficient in result.coefs:
-        assert coefficient.coef == pytest.approx(expected[coefficient.name], abs=1e-12)
-        deletes = [values[coefficient.name] for values in leave_one]
-        # statistics.variance 与生产代码的矩阵协方差/伪值实现独立。
-        expected_se = np.sqrt(
-            variance(deletes) * (len(participating_countries) - 1) ** 2 / len(participating_countries)
-        )
-        assert coefficient.se == pytest.approx(expected_se, abs=1e-12)
+    with pytest.raises(ValueError, match="非有限"):
+        panel._summarize_benchmark(model, own, reference)

@@ -1,6 +1,6 @@
 import type { RegressionOutcome } from "./types";
 
-export type ReadingDirection = "negative" | "positive" | "insufficient" | "suppressed" | "pretrend";
+export type ReadingDirection = "negative" | "positive" | "insufficient" | "suppressed";
 
 interface RegressionLesson {
   outcome: RegressionOutcome;
@@ -126,27 +126,14 @@ export const REGRESSION_FAMILIES = (["trade", "production", "length", "network"]
   measure: REGRESSION_LESSONS[outcome].measure,
 }));
 
-export function lessonQuestion(outcome: RegressionOutcome, shockType: string, method: string): string {
+export function lessonQuestion(outcome: RegressionOutcome): string {
   const lesson = REGRESSION_LESSONS[outcome];
-  void shockType;
-  void method;
   return `模拟关税暴露（X）增加 1 个百分点时，${lesson.shortMetric}如何变化？`;
-}
-
-export function comparisonExplanation(method: string): string {
-  if (method === "did") {
-    return "四格只建立统一处理时点的直觉：相对变化 =（处理后−处理前）−（对照后−对照前）。实际主结果按首次受冲击批次逐时期计算，只用从未或截至比较期尚未处理对象作对照，再按可用处理对象数聚合。";
-  }
-  if (method === "event_study") {
-    return "以每批对象首次受冲击的前一年为参照，逐事件时间汇总各批次的 ATT；不让已处理批次充当对照。冲击前看不出差别不能证明趋势可比。";
-  }
-  return "不再把对象分成处理/对照两格，而是看冲击强度变大时，指标如何随之变化。";
 }
 
 export function familyDirectionLabel(direction: ReadingDirection): string {
   if (direction === "negative") return "下降";
   if (direction === "positive") return "上升";
   if (direction === "suppressed") return "无法评估";
-  if (direction === "pretrend") return "冲击前已有差异";
   return "看不出";
 }
