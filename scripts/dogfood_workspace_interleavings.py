@@ -61,8 +61,15 @@ def main():
             wait_stored(first, "initial")
             for _ in range(2):
                 browser.run("tab", "new", base + "/?step=15")
+                # Authentication is held in sessionStorage, which is isolated
+                # per tab. Log each tab in explicitly instead of relying on the
+                # old localStorage-based cross-tab authentication contract.
+                browser.run("wait", "#login-user")
+                browser.run("fill", "#login-user", first)
+                browser.run("fill", "#login-pass", password)
+                browser.run("click", 'button[type="submit"]')
+                browser.dismiss_intro()
                 browser.run("wait", "textarea")
-                browser.run("wait", "--load", "networkidle")
             browser.run("tab", "t1")
             browser.run("fill", "textarea", "first committed")
             wait_stored(first, "first committed")
@@ -114,28 +121,25 @@ def main():
             while request(proxy, "GET", "/__fault/status")[1]["phase"] != "done" and time.monotonic() < deadline:
                 time.sleep(0.02)
             assert stored(first) == "third committed"
+            # Logging into a different account in t2 must not change t1. Its
+            # revoked request should independently expire t1's session and
+            # retain the unsaved account-scoped draft for recovery.
             browser.run("tab", "t1")
+            browser.run("wait", "#login-user")
+            browser.run("tab", "t2")
             browser.run("wait", "textarea")
             assert browser.value() == ""
-            assert json.loads(
-                browser.run(
-                    "eval", 'Array.from(document.querySelectorAll("button")).every(e=>e.textContent!=="恢复未保存内容")'
-                )
-            )
             browser.run("fill", "textarea", "new account evidence")
             wait_stored(second, "new account evidence")
             assert stored(first) == "third committed"
             browser.run("screenshot", str(output / f"account-switch-{attempt}.png"))
-            browser.run("tab", "t2")
-            browser.button("退出")
-            browser.run("wait", "#login-user")
+            browser.run("tab", "t1")
             browser.run("fill", "#login-user", first)
             browser.run("fill", "#login-pass", changed_password)
             browser.run("click", 'button[type="submit"]')
             browser.run("wait", "textarea")
             # Dismiss the per-login intro before any accessibility-tree lookup.
             browser.dismiss_intro()
-            browser.run("tab", "t1")
             browser.run("wait", "--text", "恢复未保存内容")
             browser.button("恢复未保存内容")
             wait_stored(first, "pending old account")

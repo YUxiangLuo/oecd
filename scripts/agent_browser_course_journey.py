@@ -6,6 +6,7 @@ state. PostgreSQL is read to independently verify durability after each step.
 
 import json
 import os
+import time
 import uuid
 from pathlib import Path
 
@@ -13,7 +14,7 @@ import psycopg
 
 from dogfood_sync import Browser
 
-# Independently reviewed choices for course-quiz-v7, not imported from the grader.
+# Choices derived from the question wording and the rendered course explanations.
 QUIZ_CHOICES = {
     1: "a",
     2: "b",
@@ -24,7 +25,7 @@ QUIZ_CHOICES = {
     7: "b",
     8: "a",
     9: "b",
-    10: "ab",
+    10: "aa",
     11: "bb",
     12: "bb",
     13: "aa",
@@ -48,6 +49,16 @@ def main():
                 (username,),
             ).fetchone()
         return row[0] if row else None
+
+    def wait_saved(step, predicate, timeout=15):
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            session = saved()
+            row = session and session.get("steps", {}).get(str(step), {}).get("data", {})
+            if row and predicate(row):
+                return row
+            time.sleep(0.1)
+        raise AssertionError(f"step {step} material was not durably saved")
 
     try:
         teacher.run("open", base)
@@ -77,14 +88,29 @@ def main():
                 student.run("wait", '[role="dialog"]')
                 student.run("press", "Escape")
             elif 2 <= step <= 5:
+                if step <= 4:
+                    student.run("click", ".indicator-full-data > summary")
                 student.run(
                     "wait",
                     "--fn",
                     'Array.from(document.querySelectorAll("button")).some(e=>e.textContent.trim()==="保存两国同年比较"&&!e.disabled)',
                 )
                 student.button("保存两国同年比较")
+                wait_saved(step, lambda row: {"CHN", "USA"}.issubset(row.get("compared", [])))
             elif 6 <= step <= 8:
                 student.button("沿用并记录到本步")
+                student.run(
+                    "wait",
+                    "--fn",
+                    'Array.from(document.querySelectorAll("button")).some(e=>e.textContent.trim()==="保存为报告材料"&&!e.disabled)',
+                )
+                student.button("保存为报告材料")
+                wait_saved(
+                    step,
+                    lambda row: (
+                        {"CHN", "USA"}.issubset(row.get("compared", [])) and len(row.get("observations", [])) >= 2
+                    ),
+                )
             elif step == 9:
                 student.button("贸易联系概览")
                 for country in ("CHN", "USA"):
@@ -117,14 +143,15 @@ def main():
                 )
                 student.button("保存为报告材料")
                 student.run("wait", "--text", "当前比较已记录")
+                wait_saved(step, lambda row: any(o.get("industry") for o in row.get("observations", [])))
             elif step == 10:
-                for kind in ("tariff", "sanctions", "export_control"):
-                    student.run("click", f"#shock-type-tab-{kind}")
-                    student.run("click", ".shock-event-item")
-                    student.run("wait", "--load", "networkidle")
+                student.run("wait", ".bounded-data-table tbody tr")
+                student.run("wait", "--fn", 'document.querySelectorAll(".bounded-data-table tbody tr").length === 10')
+                wait_saved(step, lambda row: bool(row.get("teaching_observation")))
             else:
-                student.button("运行基准回归")
-                student.run("wait", "--text", "重新运行当前设定")
+                student.button("计算两者的关系")
+                student.run("wait", "--text", "重新计算")
+                wait_saved(step, lambda row: bool(row.get("qualified_run")), timeout=30)
             names = json.loads(
                 student.run(
                     "eval",
@@ -141,7 +168,7 @@ def main():
             student.button("提交答案")
             student.run("wait", ".quiz-complete")
             row = saved()["steps"][str(step)]["data"]
-            assert row["quiz"]["version"] == "course-quiz-v7"
+            assert row["quiz"]["version"] == "course-quiz-v8"
             if step == 1:
                 assert row["observation"]["row"].startswith("CHN_")
             elif step <= 9:
@@ -149,9 +176,16 @@ def main():
                 if step == 9:
                     assert any(o["metric"] == "betweenesscentrality" and o.get("industry") for o in row["observations"])
             elif step == 10:
-                assert set(row["viewed_shock_types"]) == {"tariff", "sanctions", "export_control"}
+                observation = row["teaching_observation"]
+                assert row["viewed_teaching_panel"] is True
+                assert row["teaching_panel_version"] == observation["version"]
+                expected_exposure = observation["teaching_export_share_w"] * observation["teaching_tariff_rate_tau"]
+                assert abs(observation["teaching_tariff_exposure"] - expected_exposure) < 1e-12
             else:
                 assert row["run"]["result"], step
+                assert row["run"]["design"]["method"] == "twfe_intensity"
+                assert row["run"]["model_snapshot"]["version"] == "step10-tariff-teaching-v1"
+                assert row["qualified_run"] == row["run"]
             student.run("screenshot", str(output / f"step-{step}.png"))
             results.append({"step": step, "passed": True})
             print(json.dumps(results[-1]), flush=True)
@@ -171,8 +205,10 @@ def main():
         )
         student.button("根据实验记录生成报告")
         student.run("wait", "--text", "草稿 · 尚未提交")
+        student.run("screenshot", str(output / "report-draft.png"))
         student.button("提交报告给老师")
         student.run("wait", "--text", "等待教师评阅")
+        student.run("screenshot", str(output / "report-submitted.png"))
         teacher.run("find", "role", "button", "click", "--name", "报告评阅")
         teacher.run("wait", "--text", username)
         teacher.button("评阅报告：" + username)

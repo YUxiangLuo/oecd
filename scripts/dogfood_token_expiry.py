@@ -83,9 +83,22 @@ def main():
                 browser = Browser(name)
                 try:
                     browser.login(base, name, password)
-                    browser.run(
-                        "wait", "--fn", 'Date.now()/1000 > Number(localStorage.getItem("gvcsim_token_expires_at"))'
+                    expiry = json.loads(
+                        browser.run(
+                            "eval",
+                            """(() => {
+                              const token = sessionStorage.getItem('gvcsim_token');
+                              if (!token) return null;
+                              const encoded = token.split('.')[0].replace(/-/g, '+').replace(/_/g, '/');
+                              const payload = JSON.parse(atob(encoded.padEnd(Math.ceil(encoded.length / 4) * 4, '=')));
+                              return {exp: payload.exp, now: Date.now() / 1000};
+                            })()""",
+                        )
                     )
+                    assert expiry is not None
+                    assert isinstance(expiry["exp"], (int, float))
+                    assert expiry["exp"] > expiry["now"] and expiry["exp"] < expiry["now"] + 30
+                    browser.run("wait", "--fn", f"Date.now()/1000 > {expiry['exp']}")
                     note = "令牌自然到期后的未保存研究问题，重新登录后应该恢复。"
                     browser.run("fill", "textarea", note)
                     browser.run("wait", "#login-user")

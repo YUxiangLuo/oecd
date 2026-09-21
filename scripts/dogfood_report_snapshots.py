@@ -1,4 +1,4 @@
-"""Verify report snapshots while settings, latest estimates and reflections change."""
+"""Verify fixed-TWFE report snapshots while display context and reflections change."""
 
 import json
 import os
@@ -69,36 +69,73 @@ def main():
 
         original_session, original_report = snapshot()
         original_data = original_session["steps"]["11"]["data"]
-        qualified = original_data.get("qualified_run")
-        if qualified is None:
-            assert original_data["run"]["result"]["support"]["suppress_inference"] is True
+        original_run = original_data["run"]
+        assert original_run["design"]["method"] == "twfe_intensity"
+        assert original_run["design"]["shock_type"] == "tariff"
         browser = Browser(name)
         try:
             browser.login(base, name, password)
             browser.run("open", base + "/?step=11")
-            browser.run("wait", "--text", "重新运行当前设定")
-            browser.button("出口管制")
-            browser.run("wait", "--text", "运行修改后的设定")
-            if qualified is not None:
-                browser.run("click", ".qualified-run-summary")
-                assert "关税" in json.loads(
-                    browser.run("eval", 'document.querySelector(".qualified-run-settings").innerText')
-                )
+            browser.run("wait", "--text", "重新计算")
+            # Loading the display-only two-country chart must not rewrite the
+            # estimate that the report already snapshots.
             current, report = snapshot()
-            assert current["steps"]["11"]["data"]["run"] == original_data["run"]
-            assert current["steps"]["11"]["data"].get("qualified_run") == qualified and report == original_report
-            browser.run("screenshot", str(output / f"settings-only-{attempt}.png"))
-            browser.button("运行修改后的设定")
-            current, report = wait_for(
-                lambda s, r: s["steps"]["11"]["data"]["run"]["design"]["shock_type"] == "export_control"
+            assert current["steps"]["11"]["data"]["run"] == original_run and report == original_report
+
+            browser.run("open", base + "/?step=10")
+            browser.run("wait", ".controls select")
+            changed = json.loads(
+                browser.run(
+                    "eval",
+                    """(() => {
+                      const selects = [...document.querySelectorAll('.controls select')];
+                      const before = selects.map(e => e.value);
+                      for (const select of [selects[0], selects[2]]) {
+                        const option = [...select.options].find(e => e.value !== select.value);
+                        if (!option) throw new Error('no alternate display option');
+                        select.value = option.value;
+                        select.dispatchEvent(new Event('change', {bubbles: true}));
+                      }
+                      return {before, after: selects.map(e => e.value)};
+                    })()""",
+                )
             )
-            latest = current["steps"]["11"]["data"]
-            assert latest["run"]["result"]["support"]["suppress_inference"] is True
-            assert latest.get("qualified_run") == qualified and report == original_report
-            browser.run("screenshot", str(output / f"insufficient-followup-{attempt}.png"))
+            assert changed["before"][0] != changed["after"][0]
+            assert changed["before"][2] != changed["after"][2]
+            current, report = wait_for(
+                lambda s, r: s["steps"]["10"]["data"].get("teaching_industry") == changed["after"][2]
+            )
+            assert current["steps"]["11"]["data"]["run"] == original_run and report == original_report
+            browser.run("screenshot", str(output / f"display-only-{attempt}.png"))
+
+            browser.run("open", base + "/?step=11")
+            browser.run("wait", "--text", "重新计算")
+            browser.run(
+                "eval",
+                """(() => {
+                  window.__reportRerunComplete = false;
+                  const originalFetch = window.fetch;
+                  window.fetch = async (...args) => {
+                    const response = await originalFetch(...args);
+                    if (String(args[0]).includes('/api/regression/run')) window.__reportRerunComplete = true;
+                    return response;
+                  };
+                })()""",
+            )
+            browser.button("重新计算")
+            browser.run("wait", "--fn", "window.__reportRerunComplete === true")
+            current, report = wait_for(
+                lambda s, r: s["steps"]["11"]["data"]["run"]["design"]["method"] == "twfe_intensity"
+            )
+            rerun = current["steps"]["11"]["data"]["run"]
+            assert rerun["design"] == original_run["design"]
+            assert rerun["result"] == original_run["result"]
+            assert report == original_report
+            browser.run("screenshot", str(output / f"fixed-twfe-rerun-{attempt}.png"))
+
             browser.run("open", base + "/?step=15")
             browser.run("wait", "textarea")
-            marker = f"新研究问题 {name}：比较四种指标的关税估计，同时明确出口管制的支持度不足。"
+            marker = f"新研究问题 {name}：比较四种指标的固定双向效应关税估计，并说明教学模拟边界。"
             browser.run("fill", "textarea", marker)
             _, report = wait_for(lambda s, r: s["steps"]["15"]["data"]["research_question"] == marker)
             assert report == original_report and marker not in report[0]
@@ -111,23 +148,13 @@ def main():
             _, report = wait_for(lambda s, r: r[1] == "pending" and marker in r[0])
             assert report[2] is None
             step_runs = [run for run in report[3]["runs"] if run["step"] == 11]
-            latest_report_run = next(run for run in step_runs if run["design"]["shock_type"] == "export_control")
-            assert latest_report_run["result"]["support"]["suppress_inference"] is True
-            assert latest_report_run["design"] == latest["run"]["design"]
-            assert latest_report_run["result"] == latest["run"]["result"]
+            assert len(step_runs) == 1
+            latest_report_run = step_runs[0]
+            assert latest_report_run["design"] == rerun["design"]
+            assert latest_report_run["result"] == rerun["result"]
             comparison = next(line for line in report[0].splitlines() if line.startswith("| 11 |"))
-            # The latest complete diagnosis belongs in the comparison table.
-            # An older inferential estimate must not hide its design limitations.
-            assert "出口管制" in comparison and "关税冲击" not in comparison
-            assert "无法" in comparison or "不可" in comparison
-            if qualified is not None:
-                report_run = next(run for run in step_runs if run["design"]["shock_type"] == "tariff")
-                assert report_run["design"] == qualified["design"] and report_run["result"] == qualified["result"]
-                assert len(step_runs) == 2
-            else:
-                # Current economics contracts can stop inference even for the
-                # baseline. Such a run is reportable, never a qualified estimate.
-                assert len(step_runs) == 1
+            assert "关税" in comparison
+            assert "country_industry × tariff × twfe_intensity" in report[0]
             browser.run("eval", 'document.querySelector(".submit-card")?.scrollIntoView({block:"center"})')
             browser.run("screenshot", str(output / f"regenerated-{attempt}.png"))
             results.append(
@@ -135,9 +162,8 @@ def main():
                     "case": "REPORT-03",
                     "attempt": attempt,
                     "passed": True,
-                    "kept_qualified_tariff_run": qualified is not None,
-                    "diagnostic_only_baseline": qualified is None,
-                    "latest_diagnosis_in_comparison": True,
+                    "display_context_did_not_rewrite_run": True,
+                    "fixed_twfe_rerun_preserved_contract": True,
                     "baseline_method": original_data["run"]["design"]["method"],
                     "old_report_immutable_until_regeneration": True,
                     "old_grade_cleared": True,

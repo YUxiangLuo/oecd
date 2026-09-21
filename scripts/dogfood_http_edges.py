@@ -4,6 +4,7 @@ Requires GVCSIM_BASE_URL and GVCSIM_E2E_{PASSWORD,TEACHER_USERNAME,
 TEACHER_PASSWORD,ARTIFACT_DIR}. Records no credentials or bearer tokens.
 """
 
+import argparse
 import json
 import os
 import time
@@ -15,6 +16,9 @@ from urllib.request import Request, urlopen
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--dev-server", action="store_true", help="Expect Vite fallback and no nginx body limit")
+    args = parser.parse_args()
     base = os.environ["GVCSIM_BASE_URL"].rstrip("/")
     output = Path(os.environ["GVCSIM_E2E_ARTIFACT_DIR"])
     output.mkdir(parents=True, exist_ok=True)
@@ -120,8 +124,23 @@ def main():
                 {"username": "rate-" + username, "password": "wrong-password"},
             )
         assert int(next(value for key, value in headers.items() if key.lower() == "retry-after")) > 0
-        check("nginx-body-limit", {413}, "POST", "/api/auth/login", raw=b" " * (2 * 1024 * 1024 + 1))
-        check("missing-static-asset", {404}, "GET", "/assets/does-not-exist.js")
+        # Production's nginx rejects this body with 413; the local fault-proxy
+        # topology intentionally has no nginx and the application parses it,
+        # then rejects the invalid JSON with 422. Both are safe rejection.
+        check(
+            "oversized-invalid-body",
+            {422} if args.dev_server else {413},
+            "POST",
+            "/api/auth/login",
+            raw=b" " * (2 * 1024 * 1024 + 1),
+        )
+        missing_content, _ = check(
+            "missing-static-asset", {200} if args.dev_server else {404}, "GET", "/assets/does-not-exist.js"
+        )
+        # Vite's development history fallback returns the SPA shell for unknown
+        # asset paths, unlike the production static server's 404.
+        if results[-1]["status"] == 200:
+            assert b"<!doctype html>" in missing_content.lower()
         check("health-after-boundaries", {200}, "GET", "/health")
     finally:
         (output / "results.json").write_text(json.dumps(results, ensure_ascii=False, indent=2) + "\n")
