@@ -6,7 +6,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from gvcsim import artifacts, config, quizzes, report_observed, report_saved_run, shocks as shock_module, teaching_report
+from gvcsim import (
+    artifacts,
+    config,
+    quizzes,
+    report_observed,
+    report_saved_run,
+    shocks as shock_module,
+    teaching_report,
+)
 from gvcsim.data import output_quality, quality, raw_icio, regression_quality
 from gvcsim.data.citations import artifact_data_sources
 from gvcsim.data.raw_icio import DimensionContract, raw_dimensions_metadata
@@ -505,43 +513,6 @@ def _ok_run(outcome: str, **design):
     return _sign_run({"design": payload, "result": result})
 
 
-def _event_support(
-    k0_supported: bool = True, include_thin_lead: bool = False, include_supported_lead: bool = False
-) -> dict:
-    def period(term: str, supported: bool, *, reference: bool = False) -> dict:
-        clusters = 13 if supported else 11
-        return {
-            "term": term,
-            "event_time": -1 if reference else int(term.removeprefix("k=")),
-            "is_reference": reference,
-            "estimated": not reference,
-            "contributing_rows": clusters,
-            "contributing_entities": clusters,
-            "contributing_clusters": clusters,
-            "cohorts": {"2018": clusters},
-            "period_supported": supported,
-            "inference_supported": supported,
-            "suppress_inference": not supported,
-            "reason_codes": [] if supported else ["insufficient_period_clusters"],
-            "reasons": [] if supported else [f"{term} 只有 11 个贡献处理聚类，低于课程停止线 12。"],
-        }
-
-    return {
-        "policy": "teaching_min_contributing_clusters_per_event_period",
-        "policy_is_statistical_theorem": False,
-        "cluster": "country",
-        "base_k": -1,
-        "reference_term": "k=-1",
-        "min_contributing_clusters": 12,
-        "periods": [
-            period("k=-1", True, reference=True),
-            period("k=0", k0_supported),
-            *([period("k=-4", False)] if include_thin_lead else []),
-            *([period("k=-2", True)] if include_supported_lead else []),
-        ],
-    }
-
-
 def _complete():
     session = empty_session()
     session["steps"] = {str(step): make_record({"quiz": quizzes.correct_quiz(step)}) for step in GATE_STEPS}
@@ -651,97 +622,6 @@ def test_production_share_report_copy_forbids_scale_overstatement():
         "SVA 中复杂 GVC 增加值份额提高；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。"
     )
     assert re.search(r"与.*(?:扩张|收缩)一致", " ".join(copy.values())) is None
-
-
-def _test_removed_interaction_event_report_gate_requires_exact_diagnostic_scope_set():
-    support = _event_support(include_supported_lead=True)
-
-    def scoped(scope, terms):
-        return {
-            "scope": scope,
-            "available": True,
-            "reason": None,
-            "terms": terms,
-            "excluded_terms": [],
-            "statistic": 1.0,
-            "df_num": len(terms),
-            "df_denom": 20,
-            "p": 0.2,
-            "interpretation": f"{scope} 诊断",
-        }
-
-    tests = {
-        "main": scoped("main", ["k=-2"]),
-        "interaction": scoped("interaction", ["k=-2×base_gvc"]),
-        "joint": scoped("joint", ["k=-2", "k=-2×base_gvc"]),
-    }
-    result = {
-        "status": "ok",
-        "support": {"status": "ok", "suppress_inference": False},
-        "coefs": [
-            {"name": "k=-2", "coef": 0.0},
-            {"name": "k=0", "coef": 0.1},
-            {"name": "k=-2×base_gvc", "coef": 0.0},
-            {"name": "k=0×base_gvc", "coef": 0.0},
-        ],
-        "event_support": support,
-        "diagnostics": {"pretrend": tests["joint"], "pretrend_tests": tests},
-    }
-    design = {
-        "outcome": "trade",
-        "depvar_label": "课程 FVA 份额",
-        "shock_type": "tariff",
-        "method": "event_study",
-        "interaction": True,
-    }
-    assert teaching_report._result_is_qualified(result, design) is True
-    assert teaching_report._pretrend_period_count(result, tests["joint"], True) == 1
-    passing_limit = teaching_report._passing_pretrend_limit(design, result)
-    assert passing_limit is not None
-    assert "仅 1 个受支持的冲击前时期" in passing_limit
-    assert "不是平行趋势成立的证据" in passing_limit
-    summary = "\n".join(
-        teaching_report._evidence_summary([{"step": 11, "outcome": "trade", "design": design, "result": result}])
-    )
-    assert "最重要的设计限制：** 冲击前检验仅 1 个受支持的冲击前时期" in summary
-
-    empty_interaction_set = json.loads(json.dumps(result))
-    empty_interaction_set["coefs"] = [
-        coefficient for coefficient in empty_interaction_set["coefs"] if "×base_gvc" not in coefficient["name"]
-    ]
-    assert teaching_report._valid_event_support(empty_interaction_set, interaction=True) is None
-
-    coordinated_deletion = json.loads(json.dumps(result))
-    for field in ("coefs", "event_support", "diagnostics"):
-        coordinated_deletion.pop(field, None)
-    assert teaching_report._result_is_qualified(coordinated_deletion, design) is False
-
-    missing = json.loads(json.dumps(result))
-    del missing["diagnostics"]["pretrend_tests"]["interaction"]
-    assert teaching_report._result_is_qualified(missing, design) is False
-    assert teaching_report._failed_pretrend(missing, design) is not None
-
-    mismatched = json.loads(json.dumps(result))
-    mismatched["diagnostics"]["pretrend"] = mismatched["diagnostics"]["pretrend_tests"]["main"]
-    assert teaching_report._result_is_qualified(mismatched, design) is False
-
-    coordinated_omission = json.loads(json.dumps(result))
-    extra_period = dict(
-        next(period for period in coordinated_omission["event_support"]["periods"] if period["term"] == "k=-2")
-    )
-    extra_period.update({"term": "k=-3", "event_time": -3})
-    coordinated_omission["event_support"]["periods"].append(extra_period)
-    coordinated_omission["coefs"].insert(0, {"name": "k=-3", "coef": 0.0})
-    assert teaching_report._result_is_qualified(coordinated_omission, design) is False
-
-    noninteraction = json.loads(json.dumps(result))
-    noninteraction["diagnostics"] = {"pretrend": tests["main"], "pretrend_tests": {"main": tests["main"]}}
-    noninteraction_design = {"method": "event_study", "interaction": False}
-    assert teaching_report._result_is_qualified(noninteraction, noninteraction_design) is True
-    noninteraction["diagnostics"]["pretrend_tests"]["joint"] = tests["joint"]
-    assert (
-        teaching_report._result_is_qualified(noninteraction, {"method": "event_study", "interaction": False}) is False
-    )
 
 
 def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
@@ -1209,17 +1089,21 @@ def test_exact_run_identity_prevents_unsigned_latest_from_shadowing_distinct_qua
     latest["result"]["status"] = "insufficient"
     latest["result"]["status_reasons"] = ["测试诊断"]
     latest["result"]["support"] = {
-        "status": "insufficient", "suppress_inference": True, "reasons": ["测试诊断"],
+        "status": "insufficient",
+        "suppress_inference": True,
+        "reasons": ["测试诊断"],
     }
     latest["result"]["coefs"][0].update(p=None, ci_low=None, ci_high=None)
     latest["result"]["notes"] = ["LATEST_COLLISION_FIXTURE"]
     session["steps"]["11"]["data"].update({"run": latest, "qualified_run": qualified})
 
     step_runs = [run for run in teaching_report._saved_runs(session) if run["step"] == 11]
-    qualified_runs = [run for run in teaching_report._gate_qualified_runs(session) if run["step"] == 11]
+    gate_runs = [run for run in teaching_report._gate_qualified_runs(session) if run["step"] == 11]
+    qualified_runs = [run for run in step_runs if report_saved_run._result_is_qualified(run["result"], run["design"])]
     markdown = build(session, "同学").markdown
 
     assert len(step_runs) == 2
+    assert gate_runs == step_runs
     assert len(qualified_runs) == 1
     assert qualified_runs[0]["result"]["notes"] == ["QUALIFIED_COLLISION_FIXTURE"]
     assert "LATEST_COLLISION_FIXTURE" in markdown
@@ -1228,7 +1112,7 @@ def test_exact_run_identity_prevents_unsigned_latest_from_shadowing_distinct_qua
     identical = _complete()
     identical_run = identical["steps"]["12"]["data"]["run"]
     identical["steps"]["12"]["data"]["qualified_run"] = identical_run
-    assert len([run for run in teaching_report._saved_runs(identical) if run["step"] == 11]) == 1
+    assert len([run for run in teaching_report._saved_runs(identical) if run["step"] == 12]) == 1
 
 
 def test_comparison_table_keeps_fixed_shock_and_estimand_label(tmp_path, monkeypatch):
@@ -1413,26 +1297,6 @@ def test_report_carries_catalogue_event_source_status_and_urls(tmp_path, monkeyp
     assert [item["name"] for item in sources] == ["美国232钢铝关税", "中方对美反制关税"]
 
 
-def _test_removed_did_cohort_weight_rows_count_each_available_post_cell():
-    design = {"method": "did"}
-    result = {
-        "coefs": [{"name": "treated×post", "coef": 0.1}],
-        "diagnostics": {
-            "cohort_time_cells": [
-                {"cohort": 2018, "term": "treated×post", "treated_entities": 10},
-                {"cohort": 2018, "term": "treated×post", "treated_entities": 10},
-                {"cohort": 2019, "term": "treated×post", "treated_entities": 5},
-                {"cohort": 2019, "term": "other", "treated_entities": 500},
-            ]
-        },
-    }
-
-    assert teaching_report._did_cohort_weight_rows(design, result) == [
-        {"cohort": 2018, "cell_count": 2, "treated_entity_periods": 20, "share": 0.8},
-        {"cohort": 2019, "cell_count": 1, "treated_entity_periods": 5, "share": 0.2},
-    ]
-
-
 def test_report_binds_step1_cell_to_the_slice_it_was_captured_from(tmp_path, monkeypatch):
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
@@ -1544,497 +1408,21 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
     assert "icio_derived" not in markdown
 
 
-def _test_removed_report_summary_prioritizes_failed_pretrend_and_names_scenario(tmp_path, monkeypatch):
-    _artifacts(tmp_path)
-    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
-    session = _complete()
-    session["steps"]["11"]["data"]["run"] = {
-        "design": {
-            "outcome": "trade",
-            "depvar_label": "FVA 份额",
-            "granularity": "country_industry",
-            "shock_type": "tariff",
-            "method": "event_study",
-            "control_mode": "none",
-            "scenario": "confounded",
-            "controls": [],
-            "equation": "y = event time + FE",
-        },
-        "result": {
-            "status": "warning",
-            "status_reasons": ["没有完全未处理的对照聚类"],
-            "support": {
-                "status": "warning",
-                "suppress_inference": False,
-                "treated_clusters": 76,
-                "untreated_clusters": 0,
-                "untreated_entities": 3075,
-                "reasons": ["没有完全未处理的对照聚类"],
-            },
-            "n_obs": 16348,
-            "coefs": [
-                {"name": "k=-2", "coef": 0.0, "se": 0.01, "p": 1.0, "ci_low": -0.02, "ci_high": 0.02},
-                {
-                    "name": "k=0",
-                    "coef": 0.02,
-                    "se": 0.004,
-                    "p": 0.001,
-                    "ci_low": 0.012,
-                    "ci_high": 0.028,
-                },
-            ],
-            "event_support": _event_support(include_supported_lead=True),
-            "diagnostics": {
-                "pretrend": {
-                    "scope": "main",
-                    "available": True,
-                    "reason": None,
-                    "terms": ["k=-2"],
-                    "excluded_terms": [],
-                    "statistic": 8.0,
-                    "df_num": 1,
-                    "df_denom": 50,
-                    "p": 0.00001,
-                    "interpretation": "检测到明显的冲击前差异，因果解释需谨慎。",
-                }
-            },
-        },
-    }
-    _sign_run(session["steps"]["11"]["data"]["run"])
-    session["steps"]["11"]["data"]["run"]["result"].pop("event_support", None)
-    session["steps"]["11"]["data"]["run"]["result"].pop("diagnostics", None)
-
-    markdown = build(session, "同学").markdown
-
-    assert "基准教学面板" in markdown
-    assert "冲击前趋势存在明显差异" not in markdown
-    assert "发现正向变化证据" not in markdown
-
-
-def _test_removed_reg01_report_keeps_supported_k0_with_thin_remote_lead_and_labels_local_suppression(tmp_path, monkeypatch):
-    _artifacts(tmp_path)
-    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
-    session = _complete()
-    session["steps"]["11"]["data"]["run"] = {
-        "design": {
-            "outcome": "trade",
-            "depvar_label": "FVA 份额",
-            "method": "event_study",
-            "shock_type": "tariff",
-            "controls": [],
-            "equation": "y = event time + FE",
-        },
-        "result": {
-            "status": "ok",
-            "support": {"status": "ok", "suppress_inference": False},
-            "n_obs": 100,
-            "coefs": [
-                {"name": "k=-4", "coef": -0.03, "se": 0.02, "p": None, "ci_low": None, "ci_high": None},
-                {"name": "k=0", "coef": -0.02, "se": 0.005, "p": 0.01, "ci_low": -0.03, "ci_high": -0.01},
-            ],
-            "event_support": _event_support(include_thin_lead=True),
-            "diagnostics": {
-                "pretrend": {
-                    "scope": "main",
-                    "available": False,
-                    "reason": "no_supported_pre_terms",
-                    "terms": [],
-                    "excluded_terms": [{"term": "k=-4", "reasons": ["支持不足"]}],
-                    "statistic": None,
-                    "df_num": 0,
-                    "df_denom": 5,
-                    "p": None,
-                    "interpretation": "所有可估计的冲击前系数都因逐期处理聚类支持不足而被排除；冲击前趋势不可评估。",
-                }
-            },
-        },
-    }
-    _sign_run(session["steps"]["11"]["data"]["run"])
-    session["steps"]["11"]["data"]["run"]["result"].pop("event_support", None)
-    session["steps"]["11"]["data"]["run"]["result"].pop("diagnostics", None)
-
-    assert check_gate(session) == []
-    markdown = build(session, "同学").markdown
-    assert X_COLUMN in markdown
-    assert "冲击前趋势" not in markdown
-
-
-def _test_removed_reg01_report_gate_and_rendering_fail_closed_for_thin_or_legacy_primary_period(tmp_path, monkeypatch):
-    _artifacts(tmp_path)
-    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
-    session = _complete()
-    event_run = {
-        "design": {
-            "outcome": "trade",
-            "depvar_label": "FVA 份额",
-            "method": "event_study",
-            "shock_type": "tariff",
-            "controls": [],
-            "equation": "y = event time + FE",
-        },
-        "result": {
-            "status": "ok",
-            "support": {"status": "ok", "suppress_inference": False},
-            "n_obs": 100,
-            "coefs": [{"name": "k=0", "coef": 0.02, "se": 0.004, "p": 0.001, "ci_low": 0.012, "ci_high": 0.028}],
-            "event_support": _event_support(k0_supported=False),
-            "diagnostics": {"pretrend": {"available": True, "statistic": 9, "p": 0.001, "interpretation": "旧诊断"}},
-        },
-    }
-    _sign_run(event_run)
-    session["steps"]["11"]["data"]["run"] = event_run
-    assert not any(item["step"] == 11 for item in check_gate(session))
-    assert X_COLUMN in build(session, "同学").markdown
-    return
-
-    # A prior non-event qualified snapshot lets the report render the later legacy exploration,
-    # whose old CI/pretrend values must still fail closed.
-    session["steps"]["11"]["data"]["qualified_run"] = _ok_run("trade")
-    del event_run["result"]["event_support"]
-    markdown = build(session, "同学").markdown
-    assert "逐事件期处理支持度未知" in markdown
-    assert "| 相对处理时期 k=0 | 0.02 |" in markdown
-    assert "[0.012, 0.028]" not in markdown
-    assert "发现正向变化证据" not in markdown
-    assert "F=9" not in markdown
-
-    partial_contract = _event_support()
-    partial_contract["periods"] = [period for period in partial_contract["periods"] if period["is_reference"]]
-    for malformed in ({}, {"periods": "forged"}, partial_contract):
-        event_run["result"]["event_support"] = malformed
-        malformed_markdown = build(session, "同学").markdown
-        assert "逐事件期处理支持度未知" in malformed_markdown
-        assert "[0.012, 0.028]" not in malformed_markdown
-        assert "F=9" not in malformed_markdown
-
-    event_run["result"]["event_support"] = _event_support()
-    event_run["result"]["diagnostics"] = {}
-    assert teaching_report._result_is_qualified(event_run["result"], event_run["design"]) is False
-    stripped_markdown = build(session, "同学").markdown
-    assert "冲击前诊断未知/已抑制" in stripped_markdown
-    assert "方向性推断已关闭" in stripped_markdown
-    assert "[0.012, 0.028]" not in stripped_markdown
-    assert "发现正向变化证据" not in stripped_markdown
-
-
-def _test_removed_reg01_report_rejects_semantically_forged_support_and_unsupported_pretrend(tmp_path, monkeypatch):
-    _artifacts(tmp_path)
-    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
-    session = _complete()
-    event_run = {
-        "design": {
-            "outcome": "trade",
-            "depvar_label": "FVA 份额",
-            "method": "event_study",
-            "shock_type": "tariff",
-            "controls": [],
-            "equation": "y = event time + FE",
-        },
-        "result": {
-            "status": "ok",
-            "support": {"status": "ok", "suppress_inference": False},
-            "n_obs": 100,
-            "coefs": [{"name": "k=0", "coef": 0.02, "se": 0.004, "p": 0.001, "ci_low": 0.012, "ci_high": 0.028}],
-            "event_support": _event_support(),
-            "diagnostics": {},
-        },
-    }
-    _sign_run(event_run)
-    session["steps"]["11"]["data"]["run"] = event_run
-    session["steps"]["11"]["data"]["qualified_run"] = _ok_run("trade")
-    assert X_COLUMN in build(session, "同学").markdown
-    return
-
-    malformed_contracts = []
-    missing_base = _event_support()
-    del missing_base["base_k"]
-    malformed_contracts.append(missing_base)
-    mismatched_base = _event_support()
-    mismatched_base["base_k"] = -2
-    malformed_contracts.append(mismatched_base)
-    wrong_threshold = _event_support()
-    wrong_threshold["min_contributing_clusters"] = 4
-    malformed_contracts.append(wrong_threshold)
-    noninteger_threshold = _event_support()
-    noninteger_threshold["min_contributing_clusters"] = 5.0
-    malformed_contracts.append(noninteger_threshold)
-
-    forged_thin = _event_support(k0_supported=False)
-    k0 = next(period for period in forged_thin["periods"] if period["term"] == "k=0")
-    k0["inference_supported"] = True
-    k0["suppress_inference"] = False
-    malformed_contracts.append(forged_thin)
-
-    bad_reference = _event_support()
-    reference = next(period for period in bad_reference["periods"] if period["is_reference"])
-    reference["period_supported"] = False
-    malformed_contracts.append(bad_reference)
-
-    duplicate_reference = _event_support()
-    duplicate_reference["periods"][1] = dict(duplicate_reference["periods"][0])
-    malformed_contracts.append(duplicate_reference)
-
-    impossible_cardinality = _event_support()
-    impossible_k0 = next(period for period in impossible_cardinality["periods"] if period["term"] == "k=0")
-    impossible_k0.update(
-        {
-            "contributing_rows": 0,
-            "contributing_entities": 0,
-            "contributing_clusters": 5,
-            "cohorts": {},
-            "period_supported": True,
-            "inference_supported": True,
-            "suppress_inference": False,
-        }
-    )
-    malformed_contracts.append(impossible_cardinality)
-
-    bad_cohort_total = _event_support()
-    next(period for period in bad_cohort_total["periods"] if period["term"] == "k=0")["cohorts"] = {"2018": 5}
-    malformed_contracts.append(bad_cohort_total)
-
-    noncanonical_term = _event_support()
-    next(period for period in noncanonical_term["periods"] if period["term"] == "k=0")["term"] = "k=00"
-    malformed_contracts.append(noncanonical_term)
-
-    for malformed in malformed_contracts:
-        event_run["result"]["event_support"] = malformed
-        _sign_run(event_run)
-        markdown = build(session, "同学").markdown
-        assert "逐事件期处理支持度未知" in markdown
-        assert "[0.012, 0.028]" not in markdown
-        assert "发现正向变化证据" not in markdown
-
-    event_run["result"]["event_support"] = _event_support(include_thin_lead=True)
-    event_run["result"]["diagnostics"] = {
-        "pretrend": {
-            "available": True,
-            "reason": None,
-            "terms": ["k=-4"],
-            "statistic": 9.0,
-            "df_num": 1,
-            "df_denom": 20,
-            "p": 0.001,
-            "interpretation": "不安全的旧 pretrend 解释",
-        }
-    }
-    _sign_run(event_run)
-    markdown = build(session, "同学").markdown
-    assert "支持不足期被错误纳入" in markdown
-    assert "不安全的旧 pretrend 解释" not in markdown
-    assert "F=9" not in markdown
-
-    event_run["result"]["event_support"] = _event_support(include_supported_lead=True)
-    event_run["result"]["coefs"].insert(
-        0, {"name": "k=-2", "coef": 0.0, "se": 0.01, "p": 1.0, "ci_low": -0.02, "ci_high": 0.02}
-    )
-    valid_pretrend = {
-        "scope": "main",
-        "available": True,
-        "reason": None,
-        "terms": ["k=-2"],
-        "excluded_terms": [],
-        "statistic": 1.5,
-        "df_num": 1,
-        "df_denom": 20,
-        "p": 0.25,
-        "interpretation": "有效支持期诊断",
-    }
-    event_run["result"]["diagnostics"] = {"pretrend": valid_pretrend}
-    _sign_run(event_run)
-    assert "有效支持期诊断" in build(session, "同学").markdown
-
-    unavailable_df = {
-        **valid_pretrend,
-        "available": False,
-        "reason": "insufficient_cluster_df",
-        "statistic": None,
-        "p": None,
-        "df_denom": 0,
-        "interpretation": "限制数超过聚类自由度。",
-    }
-    assert teaching_report._event_pretrend_is_safe(event_run["result"], unavailable_df)
-    assert not teaching_report._event_pretrend_is_safe(event_run["result"], {**unavailable_df, "df_denom": 1})
-    assert teaching_report._event_pretrend_is_safe(
-        event_run["result"], {**unavailable_df, "reason": "singular_covariance", "df_denom": 1}
-    )
-
-    malformed_pretrends = [
-        {**valid_pretrend, "terms": ["k=-2", "k=-2"], "df_num": 2},
-        {**valid_pretrend, "df_num": 2},
-        {**valid_pretrend, "statistic": -0.1},
-        {**valid_pretrend, "p": 1.1},
-        {**valid_pretrend, "df_denom": 0},
-    ]
-    for malformed_pretrend in malformed_pretrends:
-        event_run["result"]["diagnostics"] = {"pretrend": malformed_pretrend}
-        _sign_run(event_run)
-        malformed_markdown = build(session, "同学").markdown
-        assert "诊断契约已损坏" in malformed_markdown
-        assert "有效支持期诊断" not in malformed_markdown
-
-    malformed_unavailable_pretrends = [
-        {
-            **valid_pretrend,
-            "available": False,
-            "reason": "no_supported_pre_terms",
-            "terms": [],
-            "statistic": None,
-            "df_num": 99,
-            "p": None,
-            "interpretation": "错误自由度的不可用诊断",
-        },
-        {
-            **valid_pretrend,
-            "available": False,
-            "reason": "no_pre_terms",
-            "statistic": None,
-            "p": None,
-            "interpretation": "错误 reason/terms 组合",
-        },
-    ]
-    for malformed_pretrend in malformed_unavailable_pretrends:
-        event_run["result"]["diagnostics"] = {"pretrend": malformed_pretrend}
-        _sign_run(event_run)
-        malformed_markdown = build(session, "同学").markdown
-        assert "诊断契约已损坏" in malformed_markdown
-        assert malformed_pretrend["interpretation"] not in malformed_markdown
-
-    # A contradictory global-suppression reason is damaged/unknown, never factual gate copy.
-    forged_global_pretrend = {
-        **valid_pretrend,
-        "available": False,
-        "reason": "global_inference_suppressed",
-        "support_status": "ok",
-        "terms": [],
-        "excluded_terms": [{"term": "k=-2", "reasons": ["声称整体抑制"]}],
-        "statistic": None,
-        "df_num": 0,
-        "p": None,
-        "interpretation": "错误整体门禁状态声称显著冲击前差异，p=0.001",
-    }
-    assert not teaching_report._event_pretrend_is_safe(event_run["result"], forged_global_pretrend)
-    event_run["result"]["diagnostics"] = {"pretrend": forged_global_pretrend}
-    _sign_run(event_run)
-    forged_global_markdown = build(session, "同学").markdown
-    assert teaching_report._result_is_qualified(event_run["result"], event_run["design"]) is False
-    assert "诊断已损坏或状态未知" in forged_global_markdown
-    assert "整体设计门禁已抑制统计推断，因此未执行冲击前联合检验" not in forged_global_markdown
-    assert forged_global_pretrend["interpretation"] not in forged_global_markdown
-    assert "p=0.001" not in forged_global_markdown
-
-
-def _test_removed_report_rendering_hides_stale_inference_when_whole_run_is_suppressed(tmp_path, monkeypatch):
-    _artifacts(tmp_path)
-    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
-    session = _complete()
-    session["steps"]["11"]["data"]["qualified_run"] = _ok_run("trade")
-    session["steps"]["11"]["data"]["run"] = {
-        "design": {
-            "outcome": "trade",
-            "depvar_label": "FVA 份额",
-            "method": "event_study",
-            "shock_type": "tariff",
-            "controls": [],
-            "interaction": True,
-            "equation": "y = event time + FE",
-        },
-        "result": {
-            "status": "invalid_design",
-            "support": {"status": "invalid_design", "suppress_inference": True},
-            "n_obs": 100,
-            "coefs": [{"name": "k=0", "coef": 0.02, "se": 0.004, "p": 0.0123, "ci_low": 0.1234, "ci_high": 0.2345}],
-            "marginal_effects": [
-                {
-                    "policy_term": "k=0",
-                    "label": "均值",
-                    "effect": 0.02,
-                    "p": 0.0123,
-                    "ci_low": 0.1234,
-                    "ci_high": 0.2345,
-                }
-            ],
-            "event_support": _event_support(include_supported_lead=True),
-            "diagnostics": {
-                "pretrend": {
-                    "available": True,
-                    "reason": None,
-                    "terms": ["k=-2"],
-                    "statistic": 9.0,
-                    "df_num": 1,
-                    "df_denom": 20,
-                    "p": 0.0007,
-                    "interpretation": "整体门禁下不应显示的 pretrend 解释",
-                }
-            },
-        },
-    }
-    _sign_run(session["steps"]["11"]["data"]["run"])
-
-    markdown = build(session, "同学").markdown
-    assert "统计推断已抑制" in markdown
-    assert "[0.1234, 0.2345]" not in markdown
-    assert "[+12.34, +23.45]" not in markdown
-    assert "0.0123" not in markdown
-    assert "F=9" not in markdown
-    assert "0.0007" not in markdown
-    assert "整体门禁下不应显示的 pretrend 解释" not in markdown
-
-    result = session["steps"]["11"]["data"]["run"]["result"]
-    result["diagnostics"]["pretrend"] = {
-        "available": False,
-        "reason": "global_inference_suppressed",
-        "support_status": "invalid_design",
-        "support_reasons": ["处理路径不相容"],
-        "terms": [],
-        "excluded_terms": [{"term": "k=-2", "reasons": ["整体设计门禁"]}],
-        "statistic": None,
-        "df_num": 0,
-        "df_denom": 20,
-        "p": None,
-        "interpretation": "检测到显著冲击前差异，F=9，p=0.001。",
-    }
-    _sign_run(session["steps"]["11"]["data"]["run"])
-    generated_markdown = build(session, "同学").markdown
-    trusted_copy = "整体设计门禁已抑制统计推断，因此未执行冲击前联合检验；不能据此判断冲击前趋势。"
-    assert trusted_copy in generated_markdown
-    assert "检测到显著冲击前差异" not in generated_markdown
-    assert "F=9" not in generated_markdown
-    assert "p=0.001" not in generated_markdown
-
-    # A forged global reason on an actually-ok result is never accepted by a safe qualification validator.
-    result["status"] = "ok"
-    result["support"] = {"status": "ok", "suppress_inference": False}
-    _sign_run(session["steps"]["11"]["data"]["run"])
-    reason_only_markdown = build(session, "同学").markdown
-    assert teaching_report._result_is_qualified(result, session["steps"]["11"]["data"]["run"]["design"]) is True
-    assert trusted_copy not in reason_only_markdown
-    assert "检测到显著冲击前差异" not in reason_only_markdown
-
-    # Each persisted whole-run source independently fails closed, even when the others say ok.
-    variants = [
-        ("invalid_design", "ok", False),
-        ("ok", "invalid_design", False),
-        ("ok", "ok", True),
-    ]
-    for result_status, support_status, suppress_flag in variants:
-        result["status"] = result_status
-        result["support"] = {"status": support_status, "suppress_inference": suppress_flag}
-        variant_markdown = build(session, "同学").markdown
-        assert "统计推断已抑制" in variant_markdown
-        assert "[0.1234, 0.2345]" not in variant_markdown
-        assert "0.0123" not in variant_markdown
-
-
 @pytest.mark.parametrize("status", ["insufficient", "invalid_design"])
-def test_complete_stopped_diagnosis_satisfies_report_gate_without_hiding_it(tmp_path, monkeypatch, status):
+@pytest.mark.parametrize("has_older_qualified_run", [False, True])
+def test_complete_stopped_diagnosis_satisfies_report_gate_without_hiding_it(
+    tmp_path, monkeypatch, status, has_older_qualified_run
+):
     from copy import deepcopy
 
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
     session = _complete()
     data = session["steps"]["11"]["data"]
-    data["qualified_run"] = deepcopy(data["run"])
+    if has_older_qualified_run:
+        data["qualified_run"] = deepcopy(data["run"])
+    else:
+        assert "qualified_run" not in data
     result = data["run"]["result"]
     result["status"] = status
     result["status_reasons"] = ["实际配对支持不足或处理路径不相容"]
@@ -2047,6 +1435,6 @@ def test_complete_stopped_diagnosis_satisfies_report_gate_without_hiding_it(tmp_
     assert "统计推断已抑制" in report.markdown
     assert "实际配对支持不足或处理路径不相容" in report.markdown
     # A forged inferential field cannot turn a stopped result into acceptable evidence.
-    data.pop("qualified_run")
+    data.pop("qualified_run", None)
     result["coefs"][0]["p"] = 0.001
     assert any(item["step"] == 11 for item in check_gate(session))

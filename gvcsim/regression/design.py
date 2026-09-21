@@ -151,11 +151,26 @@ class RegressionDesign:
     def equation_parts(self) -> list[dict[str, str]]:
         unit, ent = ("ijt", "ij") if self.granularity == GRANULARITY_COUNTRY_INDUSTRY else ("it", "i")
         return [
-            {"text": f"{self.depvar}_{unit}", "term": "dependent", "description": self.depvar_label, "meta_key": "depvar"},
+            {
+                "text": f"{self.depvar}_{unit}",
+                "term": "dependent",
+                "description": self.depvar_label,
+                "meta_key": "depvar",
+            },
             {"text": " = "},
-            {"text": f"β·{self.shock_col}_{unit}", "term": "policy", "description": "连续关税冲击强度的描述性 TWFE 主效应。", "meta_key": "policy"},
+            {
+                "text": f"β·{self.shock_col}_{unit}",
+                "term": "policy",
+                "description": "连续关税冲击强度的描述性 TWFE 主效应。",
+                "meta_key": "policy",
+            },
             {"text": " + "},
-            {"text": f"α_{ent}", "term": "fixed-effect", "description": f"{self.entity} 个体固定效应。", "meta_key": "entity"},
+            {
+                "text": f"α_{ent}",
+                "term": "fixed-effect",
+                "description": f"{self.entity} 个体固定效应。",
+                "meta_key": "entity",
+            },
             {"text": " + "},
             {"text": "λ_t", "term": "fixed-effect", "description": "年份固定效应。", "meta_key": "entity"},
             {"text": " + "},

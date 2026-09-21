@@ -346,4 +346,3 @@ def check_gate(session: dict[str, Any], **_unused: Any) -> list[dict[str, Any]]:
             blocked.append({"step": step, "title": _STEP_TITLES.get(step, ""), "missing": result.missing})
     blocked.extend(check_material_gate(session))
     return _merge_gate_blocks(blocked)
-

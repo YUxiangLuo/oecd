@@ -15,9 +15,7 @@ from gvcsim.regression.teaching import X_COLUMN, Y_COLUMNS
 from gvcsim.steps import STEPS
 
 _STEP_OUTCOMES = {
-    cast(int, item["n"]): str(item["regression_outcome"])
-    for item in STEPS
-    if item.get("regression_outcome")
+    cast(int, item["n"]): str(item["regression_outcome"]) for item in STEPS if item.get("regression_outcome")
 }
 _FIXED_DESIGN = {
     "granularity": "country_industry",
@@ -46,7 +44,7 @@ def _parse_saved_run(raw: Any, outcome: str) -> tuple[dict[str, Any], dict[str, 
         return None
     if not isinstance(catalog, list):
         return None
-    roles = {(item.get("role"), item.get("name")) for item in catalog if isinstance(item, dict)}
+    roles = [(item.get("role"), item.get("name")) for item in catalog if isinstance(item, dict)]
     if ("X", X_COLUMN) not in roles or ("Y", Y_COLUMNS[outcome]) not in roles:
         return None
     if not _result_is_reportable(result, design):
@@ -60,7 +58,11 @@ def _result_is_qualified(result: dict[str, Any], design: dict[str, Any] | None =
     support = result.get("support")
     support = support if isinstance(support, dict) else {}
     statuses = [value for value in (result.get("status"), support.get("status")) if isinstance(value, str)]
-    return bool(statuses) and all(value in {"ok", "warning"} for value in statuses) and support.get("suppress_inference") is not True
+    return (
+        bool(statuses)
+        and all(value in {"ok", "warning"} for value in statuses)
+        and support.get("suppress_inference") is not True
+    )
 
 
 def _result_is_reportable(result: dict[str, Any], design: dict[str, Any]) -> bool:
@@ -102,15 +104,13 @@ def _result_is_reportable(result: dict[str, Any], design: dict[str, Any]) -> boo
             for field in inference
         ):
             return False
-        return (
-            0 <= float(coefficient["p"]) <= 1
-            and float(coefficient["ci_low"]) <= float(coefficient["ci_high"])
-        )
+        return 0 <= float(coefficient["p"]) <= 1 and float(coefficient["ci_low"]) <= float(coefficient["ci_high"])
     reasons = support.get("reasons")
     return (
         support.get("suppress_inference") is True
         and isinstance(reasons, list)
         and bool(reasons)
+        and all(isinstance(reason, str) and reason.strip() for reason in reasons)
         and all(coefficient.get(key) is None for key in ("p", "ci_low", "ci_high"))
     )
 
@@ -131,13 +131,23 @@ def _saved_runs(session: dict[str, Any]) -> list[dict[str, Any]]:
                 continue
             seen.add(identity)
             assert isinstance(raw, dict)
-            runs.append({"step": step, "outcome": outcome, "design": design, "result": result,
-                         "model_snapshot": raw["model_snapshot"], "variable_catalog": raw["variable_catalog"]})
+            runs.append(
+                {
+                    "step": step,
+                    "outcome": outcome,
+                    "design": design,
+                    "result": result,
+                    "model_snapshot": raw["model_snapshot"],
+                    "variable_catalog": raw["variable_catalog"],
+                }
+            )
     return runs
 
 
 def _gate_qualified_runs(session: dict[str, Any]) -> list[dict[str, Any]]:
-    return [run for run in _saved_runs(session) if _result_is_qualified(run["result"], run["design"])]
+    # Completion accepts a complete stopped-inference diagnosis, not only an
+    # inferential estimate. _saved_runs already validates reportability.
+    return _saved_runs(session)
 
 
 __all__ = ["_gate_qualified_runs", "_parse_saved_run", "_result_is_qualified", "_result_is_reportable", "_saved_runs"]

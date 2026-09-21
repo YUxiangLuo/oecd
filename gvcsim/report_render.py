@@ -521,4 +521,4 @@ def _qc_disclosure_section(summary: dict[str, Any], integrity: Any) -> list[str]
     return lines
 
 
-__all__=[n for n in globals() if not n.startswith("__")]
+__all__ = [n for n in globals() if not n.startswith("__")]

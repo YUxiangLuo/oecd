@@ -31,6 +31,6 @@
 - 63 种公开回归组合复跑完成，无计算异常：7 `ok`、16 `invalid_design`、40 `insufficient`。不可推断是明确的实验诊断，不作为测试失败，也不隐去。
 - agent-browser 完整走通15步、报告生成/提交/评阅；已完成课程在1200px宽度下45个滚动位置的无障碍扫描通过。
 - 额外通过 HS6 来源/零税商品分母、无对照配对诊断的方向练习和报告重新提交。
-- 原始证据与本轮运行日志保留于 `dogfood-output/economics-review-20260907/`；[复现脚本](../scripts/review_economics_witnesses.py)已改为断言缺陷不再重现。
+- 原始证据与本轮运行日志保留于 `dogfood-output/economics-review-20260907/`；[历史复现脚本](https://github.com/YUxiangLuo/oecd/blob/2e1eab0fc45d92a4854109229339905a74e496a8/scripts/review_economics_witnesses.py)当时已改为断言缺陷不再重现。该脚本已随高级工作台删除，链接固定在删除前版本，不是当前固定 TWFE 的验收入口。
 
 部署采用源码、静态文件和数据的协调切换：先在远端暂存目录校验与构建，再备份课堂库及现有源码/指针，停止 GVC API 后切换并验证。旧数据与旧记录保留；新数据上线后需刷新并重新登录。其他演示应用不参与停服或数据操作。实际远端发布、回滚位置和数据保全记录由服务器本次部署目录记录。

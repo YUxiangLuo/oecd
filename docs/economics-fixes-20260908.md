@@ -46,12 +46,12 @@ CR1 对照统一为 `G/(G−1) × (N−1)/(N−K)`，K 包含吸收的固定效�
 
 可复核材料：
 
-- [新 release 数值证据](economics-fixes-20260908-evidence.json) 与[只读验证脚本](../scripts/verify_economics_fixes_20260908.py)。
+- [新 release 数值证据](economics-fixes-20260908-evidence.json) 与[历史只读验证脚本](https://github.com/YUxiangLuo/oecd/blob/2e1eab0fc45d92a4854109229339905a74e496a8/scripts/verify_economics_fixes_20260908.py)。该脚本已随高级工作台删除，链接固定在删除前版本。
 - [经济反例回归测试](../tests/test_economics_fixes.py) 与 [v13 性能记录](../benchmarks/shock_panel_v13.json)。
 - 本地浏览器记录和截图：`dogfood-output/economics-fixes-20260908/` 中的 `length-twfe.png`、`network-twfe.png`、`washer-canada.png`、`browser-routes.json`；该目录不纳入版本控制。
 - [首轮数值记录](economics-review-20260908-evidence.json) 与[二次确认数值记录](economics-reconfirmation-20260908-evidence.json)保留为修复前证据；后者也是只读验证脚本的对照输入。旧审查正文可从 Git 历史查询，不能拿旧结果判断当前版本。
 
-在有效 v13 本地产物上重跑独立数值验证：
+历史复现命令（仅适用于删除前源码及与其匹配的 v13 产物，不能在当前固定 TWFE 版本运行）：
 
 ```bash
 PYTHONPATH=. OPENBLAS_NUM_THREADS=2 OMP_NUM_THREADS=2 \

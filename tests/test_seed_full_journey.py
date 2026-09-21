@@ -20,15 +20,17 @@ def _result(status):
         "diagnostics": {
             "study_contract": "economics-v2",
         },
-        "coefs": [{
-            "name": X_COLUMN,
-            "coef": 0.1,
-            "se": 0.025,
-            "t": 4.0,
-            "p": None if stopped else 0.04,
-            "ci_low": None if stopped else 0.05,
-            "ci_high": None if stopped else 0.15,
-        }],
+        "coefs": [
+            {
+                "name": X_COLUMN,
+                "coef": 0.1,
+                "se": 0.025,
+                "t": 4.0,
+                "p": None if stopped else 0.04,
+                "ci_low": None if stopped else 0.05,
+                "ci_high": None if stopped else 0.15,
+            }
+        ],
     }
 
 

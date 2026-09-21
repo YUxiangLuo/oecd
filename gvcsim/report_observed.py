@@ -249,4 +249,4 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
     return lines
 
 
-__all__=[n for n in globals() if not n.startswith("__")]
+__all__ = [n for n in globals() if not n.startswith("__")]

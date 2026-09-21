@@ -32,10 +32,15 @@ def panelols_estimate(model: PreparedModel, keep: list[str], dropped: list[str])
         if se <= 0:
             raise ValueError(f"PanelOLS 系数 {name} 的聚类稳健标准误必须为正")
         t = b / se
-        coefficient = CoefStat(name, b, se, t, float(2*stats.t.sf(abs(t), groups-1)), b-critical*se, b+critical*se)
+        coefficient = CoefStat(
+            name, b, se, t, float(2 * stats.t.sf(abs(t), groups - 1)), b - critical * se, b + critical * se
+        )
         require_finite(
             f"PanelOLS 系数 {name}",
-            coefficient.t, coefficient.p, coefficient.ci_low, coefficient.ci_high,
+            coefficient.t,
+            coefficient.p,
+            coefficient.ci_low,
+            coefficient.ci_high,
         )
         coefs.append(coefficient)
     panel_r2 = float(result.rsquared_within)
@@ -48,8 +53,15 @@ def panelols_estimate(model: PreparedModel, keep: list[str], dropped: list[str])
     depvar_std = float(model.data[model.depvar].std())
     require_finite("PanelOLS 汇总统计量", panel_r2, depvar_mean, depvar_std)
     return RegressionResult(
-        model.depvar, coefs, int(result.nobs), model.data[model.entity].nunique(), model.data[model.time].nunique(), groups,
-        panel_r2, depvar_mean, depvar_std,
+        model.depvar,
+        coefs,
+        int(result.nobs),
+        model.data[model.entity].nunique(),
+        model.data[model.time].nunique(),
+        groups,
+        panel_r2,
+        depvar_mean,
+        depvar_std,
         notes=["标准库对照:linearmodels.PanelOLS", "PanelOLS 仅用于检查实现结果一致性，不验证因果识别假设。"],
         sample_flow=model.sample_flow,
     )
@@ -69,8 +81,17 @@ def summarize_benchmark(model: PreparedModel, own: RegressionResult, reference: 
             raise ValueError(f"PanelOLS 对照缺少政策标准误: {name}")
         coef_diff = a.coef - b.coef
         se_diff = a.se - b.se
-        rows.append({"name": name, "own_coef": a.coef, "panelols_coef": b.coef, "coef_diff": coef_diff,
-                     "own_se": a.se, "panelols_se": b.se, "se_diff": se_diff})
+        rows.append(
+            {
+                "name": name,
+                "own_coef": a.coef,
+                "panelols_coef": b.coef,
+                "coef_diff": coef_diff,
+                "own_se": a.se,
+                "panelols_se": b.se,
+                "se_diff": se_diff,
+            }
+        )
         coef_diffs.append(abs(coef_diff))
         se_diffs.append(abs(se_diff))
         se_tolerances.append(1e-10 + 1e-6 * max(abs(a.se), abs(b.se)))
@@ -79,7 +100,14 @@ def summarize_benchmark(model: PreparedModel, own: RegressionResult, reference: 
     require_finite("PanelOLS 对照摘要", max_coef, max_se, coef_diffs, se_diffs, se_tolerances)
     coef_passed = max_coef < 1e-8
     se_passed = all(diff <= tolerance for diff, tolerance in zip(se_diffs, se_tolerances, strict=True))
-    return {"backend": "linearmodels.PanelOLS", "policy_coefs": rows, "max_abs_coef_diff": max_coef,
-            "max_abs_se_diff": max_se, "coef_check_passed": coef_passed, "se_check_passed": se_passed,
-            "benchmark_passed": coef_passed and se_passed, "se_check_mode": "matched_cr1_atol_1e-10_rtol_1e-6",
-            "notes": reference.notes}
+    return {
+        "backend": "linearmodels.PanelOLS",
+        "policy_coefs": rows,
+        "max_abs_coef_diff": max_coef,
+        "max_abs_se_diff": max_se,
+        "coef_check_passed": coef_passed,
+        "se_check_passed": se_passed,
+        "benchmark_passed": coef_passed and se_passed,
+        "se_check_mode": "matched_cr1_atol_1e-10_rtol_1e-6",
+        "notes": reference.notes,
+    }

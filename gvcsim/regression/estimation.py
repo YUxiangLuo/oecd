@@ -9,6 +9,7 @@ from scipy import stats
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 
+from gvcsim.concurrency import check_cancelled
 from gvcsim.regression.model import CoefStat, PreparedModel, RegressionResult
 
 
@@ -20,12 +21,13 @@ class FixedEffectStructure:
 
 
 def fixed_effect_structure(data: pd.DataFrame, entity: str, time: str) -> FixedEffectStructure:
+    check_cancelled()
     ec, entities = pd.factorize(data[entity], sort=False)
     tc, times = pd.factorize(data[time], sort=True)
     vertices = len(entities) + len(times)
     graph = csr_matrix((np.ones(len(data), dtype=bool), (ec, len(entities) + tc)), shape=(vertices, vertices))
     components, labels = connected_components(graph, directed=False)
-    _, references = np.unique(labels[len(entities):], return_index=True)
+    _, references = np.unique(labels[len(entities) :], return_index=True)
     keep = np.ones(len(times), dtype=bool)
     keep[references] = False
     return FixedEffectStructure(vertices - int(components), int(components), times[keep])
@@ -36,7 +38,9 @@ def require_finite(label: str, *values) -> None:
         raise ValueError(f"{label}产生非有限数值，已停止返回结果")
 
 
-def twoway_demean(values: np.ndarray, ent: np.ndarray, tim: np.ndarray, tol: float = 1e-10, max_iter: int = 200) -> np.ndarray:
+def twoway_demean(
+    values: np.ndarray, ent: np.ndarray, tim: np.ndarray, tol: float = 1e-10, max_iter: int = 200
+) -> np.ndarray:
     if not math.isfinite(tol) or tol <= 0:
         raise ValueError("双向去均值容差必须为正的有限数")
     if max_iter <= 0:
@@ -79,7 +83,9 @@ def demean_and_prune(model: PreparedModel):
         raise ValueError("最终回归样本在实体、时间固定效应和解释变量之外没有足够自由度")
     if data[model.depvar].var() <= 0:
         raise ValueError(f"最终回归样本因变量 {model.depvar} 必须具有正的有限方差")
-    transformed = twoway_demean(data[[model.depvar, *model.xcols]].to_numpy(float), data[model.entity].values, data[model.time].values)
+    transformed = twoway_demean(
+        data[[model.depvar, *model.xcols]].to_numpy(float), data[model.entity].values, data[model.time].values
+    )
     X, names, dropped = drop_collinear_columns(transformed[:, 1:], list(model.xcols), set(model.policy_xcols))
     return transformed[:, 0], X, names, dropped
 
@@ -103,18 +109,33 @@ def within_ols(model: PreparedModel, prepared=None) -> RegressionResult:
     if (se <= 0).any():
         raise ValueError("聚类稳健标准误必须为正")
     critical = stats.t.ppf(0.975, len(groups) - 1)
-    coefs = [CoefStat(n, float(b), float(s), float(b/s), float(2*stats.t.sf(abs(b/s), len(groups)-1)), float(b-critical*s), float(b+critical*s)) for n, b, s in zip(names, beta, se)]
+    coefs = [
+        CoefStat(
+            n,
+            float(b),
+            float(s),
+            float(b / s),
+            float(2 * stats.t.sf(abs(b / s), len(groups) - 1)),
+            float(b - critical * s),
+            float(b + critical * s),
+        )
+        for n, b, s in zip(names, beta, se)
+    ]
     require_finite(
         "回归推断",
-        *(value for coefficient in coefs for value in (
-            coefficient.t, coefficient.p, coefficient.ci_low, coefficient.ci_high
-        )),
+        *(
+            value
+            for coefficient in coefs
+            for value in (coefficient.t, coefficient.p, coefficient.ci_low, coefficient.ci_high)
+        ),
     )
     if model.support and model.support.suppress_inference:
         coefs = [coef.without_inference() for coef in coefs]
     notes = [*model.notes, f"双向固定效应({model.entity} + {model.time}),within 变换后 OLS"]
     if effects.components > 1:
-        notes.append(f"实体—年份二部图有 {effects.components} 个连通分量；固定效应秩 {effects.rank}，CR1 残差自由度 {df}；政策系数仍为各分量共同斜率。")
+        notes.append(
+            f"实体—年份二部图有 {effects.components} 个连通分量；固定效应秩 {effects.rank}，CR1 残差自由度 {df}；政策系数仍为各分量共同斜率。"
+        )
     support = model.support
     total_ss = float(y @ y)
     if not math.isfinite(total_ss) or total_ss <= 0:
@@ -124,9 +145,18 @@ def within_ols(model: PreparedModel, prepared=None) -> RegressionResult:
     depvar_std = float(model.data[model.depvar].std())
     require_finite("回归汇总统计量", r2_within, depvar_mean, depvar_std)
     return RegressionResult(
-        model.depvar, coefs, len(y), model.data[model.entity].nunique(), model.data[model.time].nunique(), len(groups),
-        r2_within, depvar_mean, depvar_std,
-        notes=notes + (support.reasons if support else []), status=support.status if support else None,
-        status_reasons=list(support.reasons) if support else [], support=support.to_dict() if support else None,
+        model.depvar,
+        coefs,
+        len(y),
+        model.data[model.entity].nunique(),
+        model.data[model.time].nunique(),
+        len(groups),
+        r2_within,
+        depvar_mean,
+        depvar_std,
+        notes=notes + (support.reasons if support else []),
+        status=support.status if support else None,
+        status_reasons=list(support.reasons) if support else [],
+        support=support.to_dict() if support else None,
         sample_flow=model.sample_flow,
     )

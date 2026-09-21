@@ -22,7 +22,9 @@ class CoefStat:
 
     @property
     def stars(self) -> str:
-        return "" if self.p is None else "***" if self.p < 0.01 else "**" if self.p < 0.05 else "*" if self.p < 0.1 else ""
+        return (
+            "" if self.p is None else "***" if self.p < 0.01 else "**" if self.p < 0.05 else "*" if self.p < 0.1 else ""
+        )
 
     def without_inference(self) -> "CoefStat":
         return replace(self, p=None, ci_low=None, ci_high=None)
@@ -99,17 +101,15 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
     data = df.loc[df["country"].astype(str).ne("ROW")].copy() if "country" in df else df.copy()
 
     for column in dict.fromkeys([design.entity, design.cluster]):
-        invalid = data[column].isna() | data[column].map(
-            lambda value: isinstance(value, str) and not value.strip()
-        )
+        invalid = data[column].isna() | data[column].map(lambda value: isinstance(value, str) and not value.strip())
         if invalid.any():
             raise ValueError(f"回归标识变量 {column} 含缺失或空白值")
 
     for column in [design.depvar, design.shock_col, "year", *([design.treated_col] if has_treated else [])]:
         invalid = data[column].notna() & ~data[column].map(
-            lambda value: isinstance(value, Real)
-            and not isinstance(value, (bool, np.bool_))
-            and math.isfinite(float(value))
+            lambda value: (
+                isinstance(value, Real) and not isinstance(value, (bool, np.bool_)) and math.isfinite(float(value))
+            )
         )
         if invalid.any():
             raise ValueError(f"回归数值变量 {column} 非缺失值必须是真实数值且有限")
@@ -120,7 +120,11 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
         raise ValueError("回归数值变量 year 必须是数学整数")
     if has_treated and not data[design.treated_col].dropna().isin([0, 1]).all():
         raise ValueError(f"处理状态 {design.treated_col} 必须严格为 0/1")
-    timing = freeze_treatment_timing(data, design.entity, "year", design.cluster, design.treated_col) if has_treated else None
+    timing = (
+        freeze_treatment_timing(data, design.entity, "year", design.cluster, design.treated_col)
+        if has_treated
+        else None
+    )
     input_rows = len(df)
     missing_by = {column: int(data[column].isna().sum()) for column in [design.depvar, design.shock_col]}
     data = data.dropna(subset=columns).copy()
@@ -140,12 +144,24 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
     support = None
     if has_treated:
         support = analyze_support(
-            data, design.entity, "year", design.cluster, design.treated_col, absorbing=False,
+            data,
+            design.entity,
+            "year",
+            design.cluster,
+            design.treated_col,
+            absorbing=False,
             first_by_entity=timing.first_by_entity if timing else None,
             timeline_data=timing.timeline_data if timing else None,
         )
     return PreparedModel(
-        data=data, depvar=design.depvar, xcols=[design.shock_col], policy_xcols=[design.shock_col],
-        entity=design.entity, time="year", cluster=design.cluster,
-        notes=["连续冲击强度直接进方程(强度法)"], support=support, sample_flow=flow,
+        data=data,
+        depvar=design.depvar,
+        xcols=[design.shock_col],
+        policy_xcols=[design.shock_col],
+        entity=design.entity,
+        time="year",
+        cluster=design.cluster,
+        notes=["连续冲击强度直接进方程(强度法)"],
+        support=support,
+        sample_flow=flow,
     )

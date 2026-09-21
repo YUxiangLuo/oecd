@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from gvcsim import concurrency
 from gvcsim.regression import panel
 from gvcsim.regression.design import RegressionDesign
 
@@ -96,6 +97,39 @@ def _industry_model_input():
             "tariff_shock": [0.0, 0.1, 0.0, 0.2],
         }
     )
+
+
+@pytest.mark.parametrize("expired", [False, True], ids=["last-waiter-cancelled", "deadline-expired"])
+def test_regression_stops_before_benchmark_when_work_ends_after_demeaning(monkeypatch, expired):
+    model, _ = _benchmark_inputs()
+    original = panel._demean_and_prune
+    work = concurrency._Work()
+    benchmark_called = False
+
+    def finish_waiting(prepared_model):
+        prepared = original(prepared_model)
+        if expired:
+            work.deadline = 0
+        else:
+            work.cancelled.set()
+        return prepared
+
+    def benchmark(*args):
+        nonlocal benchmark_called
+        benchmark_called = True
+        return original_benchmark(*args)
+
+    original_benchmark = panel._panelols_estimate
+    monkeypatch.setattr(panel, "_demean_and_prune", finish_waiting)
+    monkeypatch.setattr(panel, "_panelols_estimate", benchmark)
+    token = concurrency._CURRENT_WORK.set(work)
+    try:
+        with pytest.raises(concurrency.WorkUnavailable) as error:
+            panel.run_design_with_benchmark(model.data, RegressionDesign("trade", granularity="country"))
+        assert error.value.code == "work_cancelled_or_expired"
+        assert not benchmark_called
+    finally:
+        concurrency._CURRENT_WORK.reset(token)
 
 
 def test_prepare_design_rejects_missing_year_instead_of_silently_dropping_it():

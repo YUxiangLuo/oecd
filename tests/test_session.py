@@ -37,10 +37,17 @@ def test_put_session_returns_the_exact_normalized_snapshot_saved(monkeypatch):
             "status": "ok",
             "support": {"status": "ok", "suppress_inference": False, "reasons": []},
             "diagnostics": {"study_contract": "economics-v2"},
-            "coefs": [{
-                "name": "teaching_tariff_exposure", "coef": -0.5, "se": 0.1,
-                "t": -5.0, "p": 0.01, "ci_low": -0.7, "ci_high": -0.3,
-            }],
+            "coefs": [
+                {
+                    "name": "teaching_tariff_exposure",
+                    "coef": -0.5,
+                    "se": 0.1,
+                    "t": -5.0,
+                    "p": 0.01,
+                    "ci_low": -0.7,
+                    "ci_high": -0.3,
+                }
+            ],
         },
         "model_snapshot": json.loads(json.dumps(model_snapshot(outcome))),
         "variable_catalog": variable_catalog(outcome),

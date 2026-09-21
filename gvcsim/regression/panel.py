@@ -45,4 +45,11 @@ def run_design_with_benchmark(df: pd.DataFrame, design) -> tuple[RegressionResul
     return own, benchmark
 
 
-__all__ = ["CoefStat", "PreparedModel", "RegressionResult", "TreatmentTiming", "prepare_design_model", "run_design_with_benchmark"]
+__all__ = [
+    "CoefStat",
+    "PreparedModel",
+    "RegressionResult",
+    "TreatmentTiming",
+    "prepare_design_model",
+    "run_design_with_benchmark",
+]

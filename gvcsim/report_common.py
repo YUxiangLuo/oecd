@@ -162,9 +162,7 @@ def _coefficient_label(name: Any, design: dict[str, Any]) -> str:
 
 def _primary_coefficient(design: dict[str, Any], result: dict[str, Any]) -> dict[str, Any] | None:
     candidates = [
-        item
-        for item in _list_values(result.get("coefs"))
-        if isinstance(item, dict) and item.get("name") == X_COLUMN
+        item for item in _list_values(result.get("coefs")) if isinstance(item, dict) and item.get("name") == X_COLUMN
     ]
     return candidates[0] if len(candidates) == 1 else None
 
@@ -218,9 +216,7 @@ def _natural_effect(
     return effect_label, effect_text, interval
 
 
-def _evidence_reading(
-    outcome: str, coefficient: dict[str, Any], suppressed: bool
-) -> tuple[str, str]:
+def _evidence_reading(outcome: str, coefficient: dict[str, Any], suppressed: bool) -> tuple[str, str]:
     if suppressed:
         return "不可作方向判断", "统计推断已被抑制；点估计只是计算输出，不能据此判断上升或下降。"
     ci_low, ci_high = coefficient.get("ci_low"), coefficient.get("ci_high")
@@ -233,9 +229,7 @@ def _evidence_reading(
     return "证据不足，无法判断方向", "95% 置信区间跨过 0；这不等于“没有效应”，而是当前证据不足以确定方向。"
 
 
-def _summary_design_limit(
-    status: str, support: dict[str, Any], reasons: list[Any]
-) -> str | None:
+def _summary_design_limit(status: str, support: dict[str, Any], reasons: list[Any]) -> str | None:
     if status in {"insufficient", "invalid_design"} and reasons:
         return _safe(reasons[0], 360)
     untreated_clusters = support.get("untreated_clusters")
@@ -252,6 +246,8 @@ def _summary_design_limit(
     return None
 
 
+def _list_values(value: Any) -> list[Any]:
+    return value if isinstance(value, list) else []
 
-def _list_values(value: Any) -> list[Any]: return value if isinstance(value,list) else []
-__all__=[n for n in globals() if not n.startswith("__")]
+
+__all__ = [n for n in globals() if not n.startswith("__")]
