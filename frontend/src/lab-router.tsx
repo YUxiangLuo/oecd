@@ -2,7 +2,6 @@ import { DbLab, IndicatorLab, ReportLab, ShockLab, VizLab } from "./labs";
 import {
   RegressionRunLab,
   type RegressionHistory,
-  type RegressionSettings,
 } from "./regression";
 import type { SiblingStepData } from "./regression-teach";
 import type { ClassroomReport, Meta, ReportGateItem, ReportMutationResponse, Step, StepStateApi } from "./types";
@@ -19,11 +18,8 @@ interface LabRouterProps {
   sessionStatus: SessionStatus;
   sessionUnsynced: boolean;
   sessionSyncing: boolean;
-  sessionSyncError: string | null;
   onFlushSession: () => Promise<void>;
   onReportChanged: (response: ReportMutationResponse) => void;
-  regressionSettings: RegressionSettings;
-  onRegressionSettingsChange: (settings: RegressionSettings) => void;
   regressionHistory: RegressionHistory;
   onRegressionHistoryChange: Dispatch<SetStateAction<RegressionHistory>>;
   onNavigateStep: (step: number) => void;
@@ -42,11 +38,8 @@ export function LabRouter({
   sessionStatus,
   sessionUnsynced,
   sessionSyncing,
-  sessionSyncError,
   onFlushSession,
   onReportChanged,
-  regressionSettings,
-  onRegressionSettingsChange,
   regressionHistory,
   onRegressionHistoryChange,
   onNavigateStep,
@@ -65,15 +58,10 @@ export function LabRouter({
         step={step}
         meta={meta}
         state={state}
-        settings={regressionSettings}
-        onSettingsChange={onRegressionSettingsChange}
         history={regressionHistory}
         onHistoryChange={onRegressionHistoryChange}
         getStep={getStep}
         getConfirmedStep={getConfirmedStep}
-        sessionUnsynced={sessionUnsynced}
-        sessionSyncing={sessionSyncing}
-        sessionSyncError={sessionSyncError}
       />
     ) : null;
   }

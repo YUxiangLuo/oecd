@@ -2,26 +2,23 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  DidFourCells,
   RegressionEvidenceMatrix,
-  RegressionReadingCheck,
   familyVerdict,
-  readingAnswerForDirection,
 } from "./regression-teach";
 import type { CoefStat, RegressionOutcome, RegressionResponse } from "./types";
 
 const coefficient = (coef: number, low: number, high: number): CoefStat => ({
-  name: "treated×post", coef, se: 0.01, t: 1, p: 0.2, stars: "", ci_low: low, ci_high: high,
+  name: "teaching_tariff_exposure", coef, se: 0.01, t: 1, p: 0.2, stars: "", ci_low: low, ci_high: high,
 });
 
 function response(outcome: RegressionOutcome, coef: CoefStat): RegressionResponse {
   return {
     design: {
-      outcome, depvar: "y", depvar_label: "Y", granularity: "country", shock_type: "tariff",
-      shock_col: "tariff_shock", treated_col: "treated", method: "did", control_mode: "none",
+      outcome, depvar: "y", depvar_label: "Y", granularity: "country_industry", shock_type: "tariff",
+      shock_col: "teaching_tariff_exposure", treated_col: "teaching_treated", method: "twfe_intensity", control_mode: "none",
       interaction: false, price_mode: "nominal", scenario: "clean", scenario_label: "基准", sample_filter: "排除ROW",
-      exclude_row: true, controls: [], control_labels: {}, equation: "y=x", equation_parts: [], panel_file: "panel.csv",
-      entity: "country", cluster: "country",
+      exclude_row: true, controls: [], control_labels: {}, equation: "y=x", equation_parts: [], panel_file: "panel_teaching.csv",
+      entity: "entity_id", cluster: "country",
     },
     result: {
       depvar: "y", coefs: [coef], n_obs: 10, n_entities: 2, n_times: 5, n_clusters: 2, r2_within: 0.1,
@@ -35,16 +32,6 @@ function response(outcome: RegressionOutcome, coef: CoefStat): RegressionRespons
     disclaimer: "mock",
   };
 }
-
-describe("DidFourCells", () => {
-  test("names the corner column header in both visual variants", () => {
-    for (const numeric of [false, true]) {
-      const html = renderToStaticMarkup(createElement(DidFourCells, { numeric }));
-      expect(html).toContain('<th scope="col"><span class="sr-only">组别</span></th>');
-      expect(html).not.toContain('<th scope="col"></th>');
-    }
-  });
-});
 
 describe("familyVerdict", () => {
   test("prefers the chosen session over leftover in-memory history, including legacy runs", () => {
@@ -78,7 +65,7 @@ describe("familyVerdict", () => {
       max_reversal_share: 0.05, suppress_inference: true,
     };
     latest.result.coefs = [{
-      name: "treated×post", coef: -0.02, se: 0.01, t: 1, p: null, stars: "", ci_low: null, ci_high: null,
+      name: "teaching_tariff_exposure", coef: -0.02, se: 0.01, t: 1, p: null, stars: "", ci_low: null, ci_high: null,
     }];
     const verdict = familyVerdict(
       "trade",
@@ -100,34 +87,6 @@ describe("familyVerdict", () => {
 });
 
 describe("student-first regression reading", () => {
-  test("maps diagnostic failures to a blocked judgment and uncertainty to look-inconclusive", () => {
-    expect(readingAnswerForDirection("positive")).toBe("positive");
-    expect(readingAnswerForDirection("negative")).toBe("negative");
-    expect(readingAnswerForDirection("insufficient")).toBe("insufficient");
-    expect(readingAnswerForDirection("pretrend")).toBe("blocked");
-    expect(readingAnswerForDirection("suppressed")).toBe("blocked");
-  });
-
-  test("gives retry feedback without changing the four-option formative exercise", () => {
-    const wrong = renderToStaticMarkup(createElement(RegressionReadingCheck, {
-      answer: "positive",
-      expected: "insufficient",
-      onAnswer: () => {},
-    }));
-    expect(wrong.match(/aria-pressed=/g)).toHaveLength(4);
-    expect(wrong).toContain("再试一次");
-    expect(wrong).toContain("不影响完成状态");
-
-    const correct = renderToStaticMarkup(createElement(RegressionReadingCheck, {
-      answer: "insufficient",
-      expected: "insufficient",
-      onAnswer: () => {},
-    }));
-    expect(correct).toContain("判断正确");
-    expect(correct).toContain("上方结果说明");
-    expect(correct).not.toMatch(/已显示|解锁/);
-  });
-
   test("puts all four saved families into one report-ready evidence matrix", () => {
     const trade = response("trade", coefficient(-0.02, -0.03, -0.01));
     const html = renderToStaticMarkup(createElement(RegressionEvidenceMatrix, {
@@ -141,7 +100,7 @@ describe("student-first regression reading", () => {
     expect(html).toContain("下降");
     expect(html).toContain("待估计");
     expect(html).toContain("不同指标的系数不能比大小");
-    expect(html).toContain("-2.00 个百分点");
+    expect(html).toContain("-0.02 个百分点");
     expect(html).not.toContain("</b><span>百分点</span>");
   });
 

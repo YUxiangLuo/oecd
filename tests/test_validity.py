@@ -8,8 +8,6 @@ import pandas as pd
 import pytest
 
 from gvcsim.config import PROCESSED_DIR
-from gvcsim.regression.design import RegressionDesign
-from gvcsim.regression.panel import run_design
 from gvcsim.regression.validity import (
     MAX_REVERSAL_SHARE,
     MIN_TREATED_CLUSTERS,
@@ -252,65 +250,3 @@ def test_reversal_scan_does_not_depend_on_row_order():
         ordered.post_rows,
     )
     assert ordered.entities == ["A"]
-
-
-# --------------------------------------------------------------- 真实教学面板
-#
-# 下面几条把真实 mock 政策面板上的判定固定下来:这些正是 HEAD 会给出
-# 星号、却不该给的组合。
-
-
-@pytest.fixture(scope="module")
-def panel() -> pd.DataFrame:
-    return pd.read_csv(PROCESSED_DIR / "panel_industry.csv")
-
-
-@needs_panel
-def test_export_control_did_is_insufficient_and_hides_stars(panel, ci_synthetic_contract):
-    """出口管制只处理 CHN 一个国家:76 个聚类不能让单处理聚类变得可推断。"""
-    result = run_design(panel, RegressionDesign(outcome="trade", shock_type="export_control"))
-    assert result.support["treated_clusters"] == 1
-    if ci_synthetic_contract is None:
-        assert result.n_clusters > 50  # 真实数据总聚类很多,但与处理支持度无关
-    else:
-        assert result.n_clusters == ci_synthetic_contract["expected_regression_countries"]
-    assert result.status == STATUS_INSUFFICIENT
-    for coef in result.coefs:
-        assert coef.p is None
-        assert coef.stars == ""
-        assert coef.ci_low is None and coef.ci_high is None
-
-
-@needs_panel
-def test_sanctions_did_is_invalid_design_due_to_rusal_removal(panel):
-    """制裁 mock 含 RUSAL 解除:吸收型 DID 与真实路径不符,停止推断。"""
-    result = run_design(panel, RegressionDesign(outcome="trade", shock_type="sanctions"))
-    assert result.support["reversal_entities"]  # RUS 在 2020 年撤销
-    assert result.support["reversal_share"] > MAX_REVERSAL_SHARE
-    assert result.status == STATUS_INVALID_DESIGN
-    for coef in result.coefs:
-        assert coef.p is None
-        assert coef.stars == ""
-
-
-@needs_panel
-def test_sanctions_intensity_twfe_is_not_invalid_design(panel):
-    """强度法逐年跟随真实路径,同一份数据不再是 invalid_design。"""
-    result = run_design(panel, RegressionDesign(outcome="trade", shock_type="sanctions", method="twfe_intensity"))
-    assert result.status != STATUS_INVALID_DESIGN
-    # 处理聚类仍只有 2 个,推断依然应被抑制。
-    assert result.status == STATUS_INSUFFICIENT
-
-
-@needs_panel
-def test_tariff_did_stops_inference_for_small_reversal(panel, ci_synthetic_contract):
-    """任何撤销都与持续处理的吸收型 ATT 不相容。"""
-    result = run_design(panel, RegressionDesign(outcome="trade", shock_type="tariff"))
-    assert result.status == STATUS_INVALID_DESIGN
-    assert 0 < result.support["reversal_share"] < 0.05
-    if ci_synthetic_contract is None:
-        assert result.support["untreated_clusters"] == int((panel.groupby("country")["treated"].max() == 0).sum())
-        assert result.support["untreated_entities"] > 0  # 但仍有许多从未受处理的国家×行业实体
-    else:
-        assert result.support["untreated_clusters"] == ci_synthetic_contract["expected_tariff_untreated_clusters"]
-    assert all(coef.p is None and coef.ci_low is None for coef in result.coefs)

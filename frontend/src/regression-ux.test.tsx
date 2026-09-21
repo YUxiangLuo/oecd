@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  DEFAULT_REGRESSION_SETTINGS, RegressionRequestError, RegressionRequestLoading,
+  RegressionRequestError, RegressionRequestLoading,
   RegressionRunLab, scrollRegressionVerdict, type RegressionHistory,
 } from "./regression";
 import type { Step, StepStateApi } from "./types";
@@ -22,8 +22,8 @@ const meta = { years: [2016, 2017, 2018, 2019, 2020], countries: ["CHN", "USA"],
 describe("simple regression workbench", () => {
   test("shows one action, fixed X/Y/model, and no advanced, placebo, or history UI", () => {
     const html = renderToStaticMarkup(<RegressionRunLab
-      step={step} meta={meta} state={state} settings={{ ...DEFAULT_REGRESSION_SETTINGS, method: "did" }}
-      onSettingsChange={() => {}} history={{} as RegressionHistory} onHistoryChange={() => {}} />);
+      step={step} meta={meta} state={state}
+      history={{} as RegressionHistory} onHistoryChange={() => {}} />);
     const dom = new DOMParser().parseFromString(html, "text/html");
     expect(dom.querySelectorAll(".reg-run-card > button")).toHaveLength(1);
     expect(dom.querySelector(".metric-facts")?.textContent).toContain("拿来比较的因素（X）模拟关税暴露强度");
@@ -35,7 +35,7 @@ describe("simple regression workbench", () => {
   });
 
   test("keeps request states accessible", () => {
-    expect(renderToStaticMarkup(<RegressionRequestLoading optionsLoading designLoading />)).toContain('role="status"');
+    expect(renderToStaticMarkup(<RegressionRequestLoading designLoading />)).toContain('role="status"');
     expect(renderToStaticMarkup(<RegressionRequestError label="回归选项" error="Failed to fetch" onRetry={() => {}} />)).toContain('role="alert"');
   });
 

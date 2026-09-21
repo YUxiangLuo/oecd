@@ -256,78 +256,17 @@ export const api = {
       year, shock_type: shockType, filter, sort, page, country, sector,
     }),
   ),
-  regressionOptions: () => get<import("./types").RegressionOptions>("/api/regression/options"),
-  regressionDesign: (params: {
-    outcome: import("./types").RegressionOutcome;
-    granularity: string;
-    shockType?: string;
-    method: string;
-    controlMode?: string;
-    interaction?: boolean;
-    priceMode?: string;
-    scenario?: string;
-    weightMode?: string;
-  }) => {
+  regressionDesign: (outcome: import("./types").RegressionOutcome) => {
     return get<import("./types").RegressionDesignInfo>(withQuery("/api/regression/design", {
-      outcome: params.outcome,
-      granularity: params.granularity,
-      method: params.method,
-      shock_type: params.shockType,
-      control_mode: params.controlMode,
-      interaction: params.interaction || undefined,
-      price_mode: params.priceMode,
-      scenario: params.scenario,
-      weight_mode: params.weightMode,
+      outcome,
     }));
   },
   runRegression: async (
     outcome: import("./types").RegressionOutcome,
-    granularity: string,
-    shockType: string,
-    method: string,
-    controlMode: string,
-    interaction: boolean,
-    priceMode: string,
-    scenario: string,
-    weightMode: string,
     signal?: AbortSignal,
   ) => {
     return post<import("./types").CurrentRegressionResponse>("/api/regression/run", {
-        outcome,
-        granularity,
-        shock_type: shockType,
-        method,
-        control_mode: controlMode,
-        interaction,
-        price_mode: priceMode,
-        scenario,
-        weight_mode: weightMode,
-    }, "POST", signal);
-  },
-  placeboRegression: async (
-    outcome: import("./types").RegressionOutcome,
-    granularity: string,
-    shockType: string,
-    method: string,
-    controlMode: string,
-    interaction: boolean,
-    priceMode: string,
-    scenario: string,
-    weightMode: string,
-    nDraws = 40,
-    signal?: AbortSignal,
-  ) => {
-    return post<import("./types").PlaceboResponse>("/api/regression/placebo", {
-        outcome,
-        granularity,
-        shock_type: shockType,
-        method,
-        control_mode: controlMode,
-        interaction,
-        price_mode: priceMode,
-        scenario,
-        weight_mode: weightMode,
-        n_draws: nDraws,
+      outcome,
     }, "POST", signal);
   },
   classroom: {

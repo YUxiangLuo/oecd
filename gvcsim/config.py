@@ -49,7 +49,6 @@ THREAD_TOKENS = _positive_int_setting("GVCSIM_THREAD_TOKENS", 16)
 LOGIN_ATTEMPTS_PER_MINUTE = _positive_int_setting("GVCSIM_LOGIN_ATTEMPTS_PER_MINUTE", 10)
 LOGIN_SOURCE_ATTEMPTS_PER_MINUTE = _positive_int_setting("GVCSIM_LOGIN_SOURCE_ATTEMPTS_PER_MINUTE", 120)
 REGRESSION_RUNS_PER_MINUTE = _positive_int_setting("GVCSIM_REGRESSION_RUNS_PER_MINUTE", 12)
-PLACEBO_RUNS_PER_MINUTE = _positive_int_setting("GVCSIM_PLACEBO_RUNS_PER_MINUTE", 4)
 
 # 课程内容发布边界；数据库 schema 可保持不变，但学习记录不能跨学期复用。
 COURSE_RELEASE = "2026-fall-15-step-economics-v2"
@@ -70,7 +69,6 @@ def validate_capacity_config() -> None:
         "GVCSIM_LOGIN_ATTEMPTS_PER_MINUTE": LOGIN_ATTEMPTS_PER_MINUTE,
         "GVCSIM_LOGIN_SOURCE_ATTEMPTS_PER_MINUTE": LOGIN_SOURCE_ATTEMPTS_PER_MINUTE,
         "GVCSIM_REGRESSION_RUNS_PER_MINUTE": REGRESSION_RUNS_PER_MINUTE,
-        "GVCSIM_PLACEBO_RUNS_PER_MINUTE": PLACEBO_RUNS_PER_MINUTE,
     }
     invalid = [name for name, value in positive_settings.items() if value <= 0]
     if invalid:

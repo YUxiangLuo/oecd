@@ -14,6 +14,8 @@ from gvcsim import concurrency, demo_accounts, evidence, quizzes
 from gvcsim import session as session_model
 from gvcsim import teaching_report
 from gvcsim.classroom import db, records
+from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
+from gvcsim.report_saved_run import _STEP_OUTCOMES, _parse_saved_run
 from gvcsim.request_validation import TextRequest
 from gvcsim.singleflight import AsyncSingleFlightCache
 
@@ -108,7 +110,7 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
             and bool(step10["teaching_country"].strip())
             and isinstance(step10.get("teaching_year"), int)
             and not isinstance(step10.get("teaching_year"), bool)
-            and step10.get("teaching_panel_version") == teaching_report.TEACHING_VERSION
+            and step10.get("teaching_panel_version") == TEACHING_VERSION
         )
         if not valid_step10:
             raise HTTPException(status_code=422, detail="步骤 10 教学面板的国家、年份或版本无效")
@@ -120,10 +122,10 @@ def put_session(req: SessionRequest, user: dict = Depends(require_student)):
             continue
         for key in ("run", "qualified_run"):
             raw = data.get(key)
-            if raw is not None and teaching_report._parse_saved_run(raw, teaching_report._STEP_OUTCOMES[step]) is None:
+            if raw is not None and _parse_saved_run(raw, _STEP_OUTCOMES[step]) is None:
                 raise HTTPException(
                     status_code=422,
-                    detail=f"步骤 {step} 保存的是旧版或不匹配的模型快照；请明确重新运行 {teaching_report.TEACHING_VERSION}",
+                    detail=f"步骤 {step} 保存的是旧版或不匹配的模型快照；请明确重新运行 {TEACHING_VERSION}",
                 )
     try:
         saved = db.save_session(user["sub"], payload, req.base_updated_at)

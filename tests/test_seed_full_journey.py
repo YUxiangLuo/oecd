@@ -5,28 +5,32 @@ from copy import deepcopy
 import pytest
 
 from scripts import seed_full_journey as journey
-from gvcsim.regression.teaching import model_snapshot, variable_catalog
+from gvcsim.regression.teaching import X_COLUMN, model_snapshot, variable_catalog
 
 
-def _result(status, *, no_pairs=False):
+def _result(status):
     stopped = status in {"insufficient", "invalid_design"}
     return {
         "status": status,
         "support": {
             "status": status,
             "suppress_inference": stopped,
-            "reasons": ["No paired comparisons" if no_pairs else "Insufficient paired control countries"]
-            if stopped
-            else [],
+            "reasons": ["Insufficient treated clusters"] if stopped else [],
         },
         "diagnostics": {
             "study_contract": "economics-v2",
-            "diagnostic_only": no_pairs,
-            "cohort_time_cells": [] if no_pairs else [{"cohort": 2018, "year": 2019}],
         },
-        "coefs": []
-        if no_pairs
-        else [{"name": "ATT", "coef": 0.1, "p": None if stopped else 0.04, "ci_low": None, "ci_high": None}],
+        "coefs": [
+            {
+                "name": X_COLUMN,
+                "coef": 0.1,
+                "se": 0.025,
+                "t": 4.0,
+                "p": None if stopped else 0.04,
+                "ci_low": None if stopped else 0.05,
+                "ci_high": None if stopped else 0.15,
+            }
+        ],
     }
 
 
@@ -75,7 +79,15 @@ def api(monkeypatch):
         if path == "/api/regression/run":
             outcome = kwargs["payload"]["outcome"]
             return {
-                "design": {"outcome": outcome, "method": "twfe_intensity", "interaction": False},
+                "design": {
+                    "outcome": outcome,
+                    "granularity": "country_industry",
+                    "shock_type": "tariff",
+                    "method": "twfe_intensity",
+                    "control_mode": "none",
+                    "interaction": False,
+                    "scenario": "clean",
+                },
                 "result": deepcopy(state["results"].get(outcome, _result("ok"))),
                 "model_snapshot": model_snapshot(outcome),
                 "variable_catalog": variable_catalog(outcome),

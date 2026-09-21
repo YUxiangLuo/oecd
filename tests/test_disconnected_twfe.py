@@ -79,7 +79,6 @@ def test_twfe_and_panelols_match_independent_dummy_cr1(blocks, per_block, shared
             model,
             data=model.data.assign(**{control: np.random.default_rng(31).normal(size=len(model.data))}),
             xcols=[*model.xcols, control],
-            control_cols=[control],
         )
     beta, covariance, _ = _dummy_reference(model)
 

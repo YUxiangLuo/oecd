@@ -225,7 +225,7 @@ FVA^{gross,pureVA}_s
 
 ## 5. 验证记录与修复顺序
 
-数值证据：[economics-review-20260907-evidence.json](economics-review-20260907-evidence.json)。复现脚本：[review_economics_witnesses.py](../scripts/review_economics_witnesses.py)。原始执行日志、论文下载文本和补充路径程序在本地 `dogfood-output/economics-review-20260907/`；论文未作为项目源码再分发。
+数值证据：[economics-review-20260907-evidence.json](economics-review-20260907-evidence.json)。历史复现脚本：[review_economics_witnesses.py](https://github.com/YUxiangLuo/oecd/blob/2e1eab0fc45d92a4854109229339905a74e496a8/scripts/review_economics_witnesses.py)（链接固定在删除前版本；当前固定 TWFE 已删除该脚本）。原始执行日志、论文下载文本和补充路径程序在本地 `dogfood-output/economics-review-20260907/`；论文未作为项目源码再分发。
 
 - 正式数据 63 种公开基准回归组合均完成：13 `ok`、8 `warning`、34 `insufficient`、8 `invalid_design`，没有未处理的计算异常。被抑制的结果不是测试失败，正是部分教学情景应揭示的限制。
 - 合成支持度反例：DID 两次、动态 ATT 两次，均确认当前错误发布推断。
@@ -233,7 +233,7 @@ FVA^{gross,pureVA}_s
 - 90 阶路径求和：三种随机矩阵，前后向生产分解、长度及国家聚合通过。
 - 现有相关数学/分类测试 68 项通过；Gephi 0.10.1 外部生成器现场复核通过。这说明现有测试没有覆盖本轮揭示的全部专业边界。
 
-复现命令（从仓库根目录运行；只使用内存合成数据）：
+历史复现命令（仅在删除前源码的仓库根目录运行；只使用内存合成数据）：
 
 ```bash
 PYTHONPATH=. uv run python scripts/review_economics_witnesses.py

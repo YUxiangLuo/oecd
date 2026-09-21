@@ -10,7 +10,6 @@ from gvcsim.data import controls, output_quality, quality
 from gvcsim.indicators.core import build_arrays
 from gvcsim.regression import panel
 from gvcsim.regression.design import RegressionDesign
-from gvcsim.regression.transforms import _apply_price_mode
 
 
 def test_section_201_product_specific_exemptions_and_2019_removals():
@@ -110,95 +109,6 @@ def test_twfe_cr1_matches_full_dummy_ols_and_does_not_reject_supported_design(gr
     assert benchmark["benchmark_passed"] is True
     assert result.coefs[0].coef == pytest.approx(beta[1], abs=1e-10)
     assert result.coefs[0].se == pytest.approx(np.sqrt(covariance[1, 1]), abs=1e-10)
-
-
-def _industry_amounts():
-    return pd.DataFrame(
-        {
-            "country": ["AAA"] * 4,
-            "industry": ["a", "b", "a", "b"],
-            "year": [2016, 2016, 2017, 2017],
-            "SVA": [10.0, 90.0, 20.0, 90.0],
-            "gross_exports": [10.0, 90.0, 20.0, 90.0],
-            "gdp_deflator": [1.0, 1.0, 1.1, 1.1],
-        }
-    )
-
-
-@pytest.mark.parametrize("order", [[0, 1, 2, 3], [1, 0, 3, 2], [3, 1, 2, 0]])
-def test_real_country_growth_aggregates_industries_and_preserves_row_alignment(order):
-    data = _industry_amounts().iloc[order]  # deliberately preserve permuted indices
-    result = _apply_price_mode(data, RegressionDesign("trade", price_mode="real_2016"))
-    np.testing.assert_array_equal(result.index, data.index)
-    for column in ("gdp_proxy_growth", "exports_proxy_growth"):
-        assert result.loc[result.year.eq(2016), column].isna().all()
-        np.testing.assert_allclose(result.loc[result.year.eq(2017), column], 0.0, atol=1e-12)
-
-
-def test_growth_uses_explicit_country_totals_on_industry_subset_without_double_counting_or_deflating():
-    data = _industry_amounts()
-    data["log_gdp_proxy"] = np.log1p([100.0, 100.0, 110.0, 110.0])
-    data["log_exports_proxy"] = data.log_gdp_proxy
-    totals = data.groupby(["country", "year"], as_index=False)[["SVA", "gross_exports"]].sum()
-    for subset in (data, data[data.industry.eq("a")], data[data.industry.eq("b")]):
-        result = _apply_price_mode(subset, RegressionDesign("trade", price_mode="real_2016"), country_totals=totals)
-        np.testing.assert_allclose(result.loc[result.year.eq(2017), "gdp_proxy_growth"], 0.0, atol=1e-12)
-        np.testing.assert_allclose(result.log_gdp_proxy, np.log1p(100.0), atol=1e-12)
-
-
-@pytest.mark.parametrize("scope", ["country", "industry", "industry_subset"])
-def test_real_growth_preserves_signed_amounts_despite_clipped_log_proxies(scope):
-    amounts = np.array([100.0, -100.0, 100.0, 0.0, 100.0])
-    deflators = np.array([1.0, 1.1, 1.2, 1.3, 1.4])
-    totals = pd.DataFrame(
-        {
-            "country": "AAA",
-            "year": range(2016, 2021),
-            "SVA": amounts * deflators,
-            "gross_exports": amounts * deflators,
-            "gdp_deflator": deflators,
-        }
-    )
-    totals["log_gdp_proxy"] = controls._safe_log(totals.SVA)
-    totals["log_exports_proxy"] = controls._safe_log(totals.gross_exports)
-    if scope == "country":
-        data = totals.copy()
-    else:
-        data = pd.concat([totals.assign(industry="a"), totals.assign(industry="b")], ignore_index=True)
-        data[["SVA", "gross_exports"]] *= np.repeat([0.25, 0.75], len(totals))[:, None]
-        if scope == "industry_subset":
-            data = data[data.industry.eq("a")]
-    data = data.sample(frac=1, random_state=19)  # preserve a nontrivial index
-    result = _apply_price_mode(
-        data,
-        RegressionDesign("trade", price_mode="real_2016"),
-        country_totals=totals if scope == "industry_subset" else None,
-    )
-    expected = data.year.map({2016: np.nan, 2017: -2.0, 2018: -2.0, 2019: -1.0, 2020: np.nan})
-    for field in ("gdp_proxy_growth", "exports_proxy_growth"):
-        np.testing.assert_allclose(result[field], expected, atol=1e-12, equal_nan=True)
-    pd.testing.assert_index_equal(result.index, data.index)
-
-
-def test_real_growth_rejects_incomplete_or_ambiguous_explicit_country_totals():
-    data = _industry_amounts()
-    totals = data.groupby(["country", "year"], as_index=False)[["SVA", "gross_exports"]].sum()
-    design = RegressionDesign("trade", price_mode="real_2016")
-    with pytest.raises(ValueError, match="国家年份键唯一"):
-        _apply_price_mode(data, design, country_totals=pd.concat([totals, totals]))
-    with pytest.raises(ValueError, match="缺少输入面板中的国家年份"):
-        _apply_price_mode(data, design, country_totals=totals.iloc[:1])
-    with pytest.raises(ValueError, match="原始金额列"):
-        _apply_price_mode(data, design, country_totals=totals.drop(columns="SVA"))
-
-
-def test_growth_rejects_ambiguous_grain_and_leaves_nonannual_gaps_undefined():
-    data = _industry_amounts()
-    design = RegressionDesign("trade", price_mode="real_2016")
-    with pytest.raises(ValueError, match="粒度不唯一"):
-        _apply_price_mode(data.drop(columns="industry"), design)
-    data.loc[data.year.eq(2017), "year"] = 2018
-    assert _apply_price_mode(data, design).gdp_proxy_growth.isna().all()
 
 
 def test_macro_calibration_preserves_million_usd_scale_and_population_identity():

@@ -1,10 +1,18 @@
+import json
+
+import pytest
+from fastapi import HTTPException
+
 from gvcsim import quizzes, teaching_report
+from gvcsim.classroom import routes as classroom_routes
+from gvcsim.report_saved_run import _parse_saved_run
 from gvcsim.regression.teaching import VERSION, X_COLUMN, Y_COLUMNS, model_snapshot, variable_catalog
+from gvcsim.session import empty_session, make_record
 from gvcsim.steps import STEPS
 
 
 def _run(outcome: str, *, version: str = VERSION, coefficient: str = X_COLUMN) -> dict:
-    snapshot = model_snapshot(outcome)
+    snapshot = json.loads(json.dumps(model_snapshot(outcome)))
     snapshot["version"] = version
     return {
         "design": {
@@ -16,7 +24,22 @@ def _run(outcome: str, *, version: str = VERSION, coefficient: str = X_COLUMN) -
             "interaction": False,
             "scenario": "clean",
         },
-        "result": {"coefs": [{"name": coefficient, "coef": 1.0}]},
+        "result": {
+            "status": "ok",
+            "support": {"status": "ok", "suppress_inference": False, "reasons": []},
+            "diagnostics": {"study_contract": "economics-v2"},
+            "coefs": [
+                {
+                    "name": coefficient,
+                    "coef": 1.0,
+                    "se": 0.2,
+                    "t": 5.0,
+                    "p": 0.01,
+                    "ci_low": 0.6,
+                    "ci_high": 1.4,
+                }
+            ],
+        },
         "model_snapshot": snapshot,
         "variable_catalog": variable_catalog(outcome),
     }
@@ -33,12 +56,41 @@ def test_v8_quiz_rejects_old_answers():
 
 
 def test_saved_run_requires_version_and_actual_x_y_contract():
-    assert teaching_report._parse_saved_run(_run("trade"), "trade") is not None
-    assert teaching_report._parse_saved_run(_run("trade", version="old-did"), "trade") is None
-    assert teaching_report._parse_saved_run(_run("trade", coefficient="treated"), "trade") is None
+    assert _parse_saved_run(_run("trade"), "trade") is not None
+    assert _parse_saved_run(_run("trade", version="old-did"), "trade") is None
+    assert _parse_saved_run(_run("trade", coefficient="treated"), "trade") is None
     wrong_y = _run("trade")
     wrong_y["model_snapshot"]["y_column"] = Y_COLUMNS["network"]
-    assert teaching_report._parse_saved_run(wrong_y, "trade") is None
+    assert _parse_saved_run(wrong_y, "trade") is None
+
+
+@pytest.mark.parametrize("field", ["role", "name"])
+@pytest.mark.parametrize("value", [[], {}], ids=["list", "object"])
+def test_session_rejects_nontext_variable_identity_without_server_error(field, value):
+    run = _run("trade")
+    run["variable_catalog"][0][field] = value
+    session = empty_session()
+    session["steps"]["11"] = make_record({"run": run})
+
+    with pytest.raises(HTTPException) as error:
+        classroom_routes.put_session(
+            classroom_routes.SessionRequest(session=session, base_updated_at=None), {"sub": "student"}
+        )
+
+    assert error.value.status_code == 422
+    assert "模型快照" in error.value.detail
+
+
+@pytest.mark.parametrize("reasons", [None, [], [" "], [None], ["支持不足", 42]])
+def test_stopped_run_requires_nonempty_text_diagnostic_reasons(reasons):
+    run = _run("trade")
+    run["result"].update(
+        status="insufficient",
+        support={"status": "insufficient", "suppress_inference": True, "reasons": reasons},
+    )
+    run["result"]["coefs"][0].update(p=None, ci_low=None, ci_high=None)
+
+    assert _parse_saved_run(run, "trade") is None
 
 
 def test_step10_gate_requires_complete_current_panel_state():

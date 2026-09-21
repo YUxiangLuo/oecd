@@ -87,63 +87,28 @@
 .comparison-facet { min-width: 0; padding: 11px; border: 1px solid #e1e5ee; border-radius: 10px; background: #fbfcff; }
 .comparison-facet h4 { margin: 0 0 8px; }
 .lesson-details { margin-top: 9px; border-top: 1px dashed #d9dbea; padding-top: 8px; font-size: 12px; }
-.lesson-details summary, .advanced-settings summary, .technical-details > summary { cursor: pointer; color: #4b47e0; font-weight: 700; }
-.did-comparison { width: 211px; text-align: center; font-size: 11px; }
-.did-example { min-width: 0; }
-.did-table { width: 100%; border-collapse: separate; border-spacing: 3px; }
-.did-table th, .did-table td { padding: 5px; border-radius: 5px; background: #f4f4fb; font-weight: 600; }
-.did-table thead th:first-child { background: transparent; }
-.did-table-numeric th, .did-table-numeric td { padding: 7px 8px; font-size: 12px; text-align: center; }
-.did-table-numeric tbody th { text-align: left; }
-.did-formula { color: #4b47e0; font-weight: 700; padding-top: 6px; }
+.lesson-details summary, .technical-details > summary { cursor: pointer; color: #4b47e0; font-weight: 700; }
 .reg-run-card { box-shadow: 0 5px 18px rgba(35,39,60,.06); }
 .reg-run-card h3 { margin: 5px 0 8px; font-size: 18px; line-height: 1.45; }
 .reg-run-card .run-btn { min-width: 240px; min-height: 42px; font-size: 14px; }
 .reg-boundary { margin: 7px 0 10px; padding: 7px 10px; border-radius: 7px; background: #fff8e6; color: #75521a; font-size: 11.5px; }
 .pill:disabled { opacity: .5; cursor: default; }
-.advanced-settings { margin: 10px 0; border: 1px dashed #d9dbe7; border-radius: 8px; padding: 8px 10px; }
-.challenge-note { margin-top: 8px; padding: 8px 10px; border-radius: 7px; background: #fff4e8; color: #8c4c08; font-size: 11.5px; }
-.run-summary { margin: 9px 0 7px; font-size: 11.5px; color: #596173; }
 .verdict-anchor { scroll-margin-top: 12px; }
-.reg-reading-check, .reg-evidence-matrix {
+.reg-evidence-matrix {
   border: 1px solid #dce2ed; border-radius: 12px; background: #fff; padding: 15px 17px;
 }
-.reg-reading-check-head, .reg-evidence-matrix-head {
+.reg-evidence-matrix-head {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
 }
-.reg-reading-check-head h3, .reg-evidence-matrix-head h3 { margin: 4px 0 0; font-size: 17px; }
-.reg-formative-badge {
-  flex: none; padding: 5px 9px; border-radius: 999px; background: #eef1f5;
-  color: #535e6f; font-size: 10.5px; font-weight: 750;
-}
+.reg-evidence-matrix-head h3 { margin: 4px 0 0; font-size: 17px; }
 .reg-evidence-support { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
 .reg-evidence-support > div { padding: 7px 9px; border: 1px solid #e0e4ea; border-radius: 8px; background: #fff; }
 .reg-evidence-support dt { color: #687183; font-size: 10.5px; }
 .reg-evidence-support dd { margin: 2px 0 0; color: #303747; font-size: 11.5px; font-weight: 650; }
-.reg-weight-disclosure {
-  margin: 10px 0; padding: 10px 12px; border: 1px solid #d8daf3; border-radius: 9px;
-  background: #fff; color: #3f4657; font-size: 11.5px; line-height: 1.55;
-}
-.reg-weight-disclosure p { margin: 5px 0; }
-.reg-weight-disclosure ul { display: flex; flex-wrap: wrap; gap: 5px 16px; margin: 6px 0; padding-left: 18px; }
-.reg-reading-check { background: #f7f8ff; border-color: #d8daf3; }
-.reg-reading-check.correct { background: #f2faf6; border-color: #b8dfcc; }
-.reg-reading-check.retry { background: #fffaf3; border-color: #ead7a8; }
-.reg-reading-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
-.reg-reading-options button {
-  display: grid; gap: 3px; min-height: 62px; padding: 9px 11px; border: 1px solid #dce1ec;
-  border-radius: 9px; background: #fff; color: #303747; text-align: left; cursor: pointer;
-}
-.reg-reading-options button:hover { border-color: #9e9be9; background: #f8f8ff; }
-.reg-reading-options button.selected { border-color: #4b47e0; box-shadow: 0 0 0 1px rgba(75, 71, 224, .18); }
-.reg-reading-options button span { color: #5d6575; font-size: 11px; line-height: 1.45; }
-.reg-reading-feedback { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; background: #fff; color: #7d5222; font-size: 12px; line-height: 1.6; }
-.reg-reading-check.correct .reg-reading-feedback { color: #176d59; }
-.reg-reading-feedback b { margin-right: 7px; }
 .verdict-card { border: 1px solid #cbc9f4; border-left: 5px solid #4b47e0; border-radius: 12px; background: #f8f8ff; padding: 16px 18px; }
 .verdict-card h3 { margin: 5px 0 10px; font-size: 21px; }
 .verdict-kicker { color: #4b47e0; font-weight: 800; font-size: 11px; letter-spacing: .04em; }
-.verdict-insufficient, .verdict-pretrend, .verdict-suppressed { border-left-color: #b27b18; background: #fffaf0; }
+.verdict-insufficient, .verdict-suppressed { border-left-color: #b27b18; background: #fffaf0; }
 .verdict-negative, .verdict-positive { border-left-color: #4b47e0; }
 .verdict-metrics { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; margin: 10px 0; }
 .verdict-metrics > div { background: #fff; border: 1px solid #e4e4ef; border-radius: 8px; padding: 9px 11px; }
@@ -159,18 +124,8 @@
 .comparison-warning { margin: 8px 0; padding: 8px 10px; border-radius: 7px; background: #fff8e6; color: #75521a; font-size: 11.5px; }
 .exploration-status { margin: 8px 0; padding: 8px 10px; border: 1px solid #dfe3ed; border-radius: 7px; background: #f7f8fb; color: #616a7d; font-size: 11.5px; }
 .exploration-status.done { border-color: #b8dfcc; background: #f2faf6; color: #18745f; }
-.marginal-effects { margin: 14px 0; padding: 13px; border: 1px solid #dce2ed; border-radius: 10px; background: #f8fbff; }
-.marginal-effects-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
-.marginal-effects-head p { margin: 4px 0 0; color: var(--text-muted); font-size: 11.5px; line-height: 1.5; }
-.marginal-effects .data-table { background: #fff; }
 .trust-item { margin-top: 10px; padding: 10px 12px; background: #f8f9fc; border-radius: 8px; }
 .trust-item p { margin: 5px 0; line-height: 1.6; }
-.reg-pretrend-card {
-  margin: 10px 0; padding: 12px 14px; border: 1px solid #ead8ad; border-radius: 10px;
-  background: #fffaf0;
-}
-.reg-pretrend-card .trust-item { margin-bottom: 0; background: #fff; }
-.placebo-verdict { margin: 10px 0; padding: 9px 11px; background: #eeefff; border-radius: 7px; color: #35328d; font-weight: 600; }
 .reg-writing-hint { border-top: 1px solid #dce2ed; padding-top: 8px; }
 .reg-evidence-matrix { margin-bottom: 14px; background: #f8fbff; }
 .reg-evidence-matrix-head { margin-bottom: 11px; }

@@ -4,8 +4,7 @@
 本模块把"能否算出数字"与"结果能否用于推断"分开:估计照常进行,但当处理
 支持度不足、或处理路径与估计量不相容时,明确抑制 p 值、星号与置信区间。
 
-与 :func:`gvcsim.regression.panel._pretrend_diagnostic` 同一原则:宁可返回
-"不可评估",也不制造一个看似有效的显著性。
+课程采用保守的停止规则：宁可返回“不可评估”，也不制造一个看似有效的显著性。
 """
 
 from dataclasses import dataclass, field
@@ -18,8 +17,8 @@ import pandas as pd
 # 过度拒绝(few treated clusters 文献,如 Conley–Taber、MacKinnon–Webb)。
 # 单个处理聚类下,处理效应的组间方差根本无法从数据中识别。
 # 阈值取 12 只是“低于即停止”的课程发布门禁，不是“达到即有效”的统计定理。
-# 对公开 DID/事件研究结果，主引擎另用按聚类 delete-one jackknife 协方差；真实
-# 少处理聚类研究仍应按设计采用 wild cluster bootstrap、随机化推断等专门方法。
+# 真实的少处理聚类研究仍应按设计采用 wild cluster bootstrap、随机化推断等专门方法；
+# 固定教学 TWFE 不试图替代这些研究工具。
 MIN_TREATED_CLUSTERS = 12
 
 # 吸收型 ATT 要求处理不可逆；行数占比不能界定估计对象的偏差。

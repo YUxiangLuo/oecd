@@ -499,32 +499,6 @@ export interface TreatmentSupport {
   suppress_inference: boolean;
 }
 
-/** 回归选项:键是稳定 API 契约,*_labels 是与之配对的展示文案。
- *  界面渲染 labels、请求回传 keys——改文案不再是破坏性 API 变更。 */
-export interface RegressionOptions {
-  granularities: string[];
-  granularity_labels: Record<string, string>;
-  granularities_by_outcome: Record<RegressionOutcome, string[]>;
-  shock_types: string[];
-  shock_type_labels: Record<string, string>;
-  methods: string[];
-  method_labels: Record<string, string>;
-  control_modes: string[];
-  control_mode_labels: Record<string, string>;
-  price_modes: string[];
-  price_mode_labels: Record<string, string>;
-  scenarios: string[];
-  scenario_labels: Record<string, string>;
-  weight_modes: string[];
-  weight_mode_labels: Record<string, string>;
-  method_constraints: {
-    cohort_aware_methods: string[];
-    controls_publicly_disabled: boolean;
-    cohort_aware_interaction_supported: boolean;
-  };
-  outcomes: Record<RegressionOutcome, string>;
-}
-
 export interface RegressionDesignInfo {
   outcome: RegressionOutcome;
   depvar: string;
@@ -564,70 +538,6 @@ interface EquationPart {
   meta_key?: string;
 }
 
-export type PretrendScope = "main" | "interaction" | "joint";
-
-export interface PretrendDiagnostic {
-  /** Present on v7 diagnostics; omitted only by readable legacy snapshots. */
-  scope?: PretrendScope;
-  available: boolean;
-  reason: string | null;
-  terms: string[];
-  /** Additive in REG-01; unsupported leads excluded from the joint test. */
-  excluded_terms?: { term: string; reasons: string[] }[];
-  /** REG-02 provenance when the whole-run gate prevents the joint test. */
-  support_status?: RegressionStatus;
-  support_reasons?: string[];
-  statistic: number | null;
-  df_num: number;
-  df_denom: number;
-  p: number | null;
-  interpretation: string;
-}
-
-export interface EventPeriodSupport {
-  term: string;
-  event_time: number;
-  is_reference: boolean;
-  estimated: boolean;
-  contributing_rows: number;
-  contributing_entities: number;
-  contributing_clusters: number;
-  /** 实际基期—目标期配对中的贡献对照聚类。 */
-  control_clusters?: number;
-  cohorts: Record<string, number>;
-  period_supported: boolean;
-  inference_supported: boolean;
-  suppress_inference: boolean;
-  reason_codes: string[];
-  reasons: string[];
-}
-
-export interface EventSupport {
-  policy: "teaching_min_contributing_clusters_per_event_period";
-  policy_is_statistical_theorem: false;
-  cluster: string;
-  /** Exact omitted event period; v7 requires a true negative base. */
-  base_k: number;
-  reference_term: string;
-  min_contributing_clusters: number;
-  periods: EventPeriodSupport[];
-}
-
-export interface MarginalEffect {
-  policy_term: string;
-  interaction_term: string;
-  level: "low" | "mean" | "high";
-  label: string;
-  reference: "p25" | "mean" | "p75";
-  baseline_gvc_centered: number;
-  effect: number;
-  se: number;
-  t: number;
-  p: number | null;
-  ci_low: number | null;
-  ci_high: number | null;
-}
-
 export interface RegressionSampleFlow {
   input_rows: number;
   structural_eligible_rows: number;
@@ -660,18 +570,6 @@ export interface RegressionPreflight {
   checks: { code: string; severity: string; message: string }[];
 }
 
-export interface CohortTimeCell {
-  cohort: number;
-  time: number;
-  event_time: number;
-  term: string;
-  att: number;
-  treated_entities: number;
-  control_entities: number;
-  treated_clusters: number;
-  control_clusters: number;
-}
-
 export interface RegressionResponse {
   design: RegressionDesignInfo;
   result: {
@@ -687,19 +585,12 @@ export interface RegressionResponse {
     diagnostics: {
       study_contract?: string;
       diagnostic_only?: boolean;
-      pretrend?: PretrendDiagnostic;
-      pretrend_tests?: Partial<Record<PretrendScope, PretrendDiagnostic>>;
       estimator?: string;
-      cohort_time_cells?: CohortTimeCell[];
     };
-    marginal_effects?: MarginalEffect[];
     notes: string[];
     status: RegressionStatus | null;
     status_reasons: string[];
     support: TreatmentSupport | null;
-    /** Additive in REG-01; optional keeps legacy snapshots structurally readable but inference fails closed. */
-    event_support?: EventSupport | null;
-    /** Additive in REG-04; optional keeps legacy saved results renderable. */
     sample_flow?: RegressionSampleFlow | null;
   };
   benchmark: {
@@ -755,33 +646,6 @@ export interface CurrentRegressionDesignInfo extends RegressionDesignInfo {
 export interface CurrentRegressionResponse extends RegressionResponse {
   design: CurrentRegressionDesignInfo;
   preflight: RegressionPreflight;
-}
-
-export interface PlaceboResponse {
-  design: CurrentRegressionDesignInfo;
-  placebo: {
-    policy_name: string;
-    true_coef: number;
-    placebo_coefs: number[];
-    /** 抽样系数中至少和原始估计一样极端的实际占比。 */
-    tail_share: number;
-    extreme_count: number;
-    /** 加一修正后的有限次 Monte Carlo 统计量；置换机制未校准，不能作为 p 值。 */
-    adjusted_tail_share: number;
-    /** @deprecated adjusted_tail_share 的旧字段别名，不得作 p 值解释。 */
-    empirical_p: number;
-    n_draws: number;
-    requested_draws: number;
-    seed: number;
-    treated_entities: number;
-    total_entities: number;
-    cohorts: Record<string, number>;
-    calibrated_inference: false;
-    assignment_preserved: string[];
-    assignment_not_preserved: string[];
-    note: string;
-  };
-  disclaimer: string;
 }
 
 // ---------------------------------------------------------------- 教学面板

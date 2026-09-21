@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from gvcsim import auth_routes, regression_routes
 from gvcsim.api import app
 from gvcsim.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
-from gvcsim.regression.contracts import PlaceboRequest, RegressionRequest
+from gvcsim.regression.contracts import RegressionRequest
 from gvcsim.singleflight import AsyncSingleFlightCache
 
 
@@ -118,11 +118,11 @@ def test_regression_limit_requires_stable_account_identity():
 @pytest.mark.parametrize("operation", ["run"])
 def test_exhausted_initiator_does_not_publish_429_to_49_other_students(monkeypatch, operation):
     async def scenario():
-        limit = 12 if operation == "run" else 4
+        limit = 12
         limiter = SlidingWindowRateLimiter(limit)
         for _ in range(limit):
             limiter.check(1)
-        monkeypatch.setattr(regression_routes, "_RUN_LIMITER" if operation == "run" else "_PLACEBO_LIMITER", limiter)
+        monkeypatch.setattr(regression_routes, "_RUN_LIMITER", limiter)
         monkeypatch.setattr(regression_routes, "_RESULT_CACHE", AsyncSingleFlightCache())
         monkeypatch.setattr(regression_routes.artifacts, "release_identity", lambda: "a" * 32)
         monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: object())
@@ -136,8 +136,8 @@ def test_exhausted_initiator_does_not_publish_429_to_49_other_students(monkeypat
             return {"draws": []}
 
         monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", compute)
-        route = regression_routes.regression_run if operation == "run" else regression_routes.regression_placebo
-        payload = RegressionRequest(outcome="trade") if operation == "run" else PlaceboRequest(outcome="trade")
+        route = regression_routes.regression_run
+        payload = RegressionRequest(outcome="trade")
 
         async def call(account_id):
             request = SimpleNamespace(state=SimpleNamespace(user={"role": "student", "aid": account_id}))
