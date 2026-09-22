@@ -78,7 +78,9 @@ postgres_container="$(docker run --rm -d \
   -p 127.0.0.1::5432 postgres:17)"
 ready=0
 for _ in $(seq 1 60); do
-  if docker exec "$postgres_container" pg_isready -U gvcsim_ci -d postgres >/dev/null 2>&1; then
+  # The image's initialization server accepts Unix sockets but shuts down before
+  # normal startup. TCP readiness excludes that temporary server.
+  if docker exec "$postgres_container" pg_isready -h 127.0.0.1 -U gvcsim_ci -d postgres >/dev/null 2>&1; then
     ready=1
     break
   fi
