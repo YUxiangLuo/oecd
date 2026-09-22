@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   StepTaskCard,
+  STEP_MATERIAL_ACTION_ID,
   focusStepPrimaryAction,
   materialStatusForStep,
   stepPrimaryActionLabel,
@@ -136,5 +137,27 @@ describe("shared step task card", () => {
     expect(focused).toBe(1);
     expect(received).toEqual({ top: 338, left: 0, behavior: "auto" });
     expect(focusStepPrimaryAction(null)).toBe(false);
+  });
+
+  test("opens collapsed material collection before positioning and focusing it", () => {
+    runtime.window = { matchMedia: () => ({ matches: true }) as MediaQueryList };
+    const content = document.createElement("div");
+    const details = document.createElement("details");
+    details.id = STEP_MATERIAL_ACTION_ID;
+    details.tabIndex = -1;
+    content.append(details);
+    document.body.append(content);
+    let scrolled: ScrollToOptions | undefined;
+    details.getBoundingClientRect = () => {
+      expect(details.open).toBe(true);
+      return { top: 700 } as DOMRect;
+    };
+    content.getBoundingClientRect = () => ({ top: 150 }) as DOMRect;
+    content.scrollTo = ((options: ScrollToOptions) => { scrolled = options; }) as typeof content.scrollTo;
+    try {
+      expect(focusStepPrimaryAction(content, STEP_MATERIAL_ACTION_ID)).toBe(true);
+      expect(document.activeElement).toBe(details);
+      expect(scrolled?.top).toBe(538);
+    } finally { content.remove(); }
   });
 });

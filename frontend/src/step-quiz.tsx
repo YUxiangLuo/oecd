@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api";
+import { MATERIAL_STATUS_LABELS, STEP_MATERIAL_ACTION_ID, type StepMaterialStatus } from "./step-task-card";
 import type { QuizCompletionState, Step, StepStateApi } from "./types";
 import { userFacingRequestError } from "./user-facing-error";
 
@@ -16,9 +17,13 @@ export function QuizPanel({
   step,
   state,
   draftStore,
+  materialStatus,
+  onRecordMaterials,
 }: {
   step: Step;
   draftStore?: QuizDraftStore;
+  materialStatus?: StepMaterialStatus;
+  onRecordMaterials?: () => void;
   state: StepStateApi<Record<string, unknown>>;
 }) {
   const quiz = step.quiz;
@@ -100,16 +105,16 @@ export function QuizPanel({
   if (awaitingSave) completionMessage = "答案正确，正在保存完成状态…";
   if (complete) completionMessage = draftChanged
     ? "✓ 已保存答案已通过；当前修改尚未提交"
-    : "✓ 本步已完成";
+    : "✓ 理解题已完成";
 
   return (
     <section className={`quiz-box${complete ? " done" : ""}`} aria-labelledby={`quiz-title-${step.n}`} aria-busy={choicesLocked}>
       <div className="quiz-head">
         <div>
-          <span className="kicker">本步完成条件</span>
+          <span className="kicker">理解题完成条件</span>
           <h3 id={`quiz-title-${step.n}`}>答对本步 {quiz.questions.length} 道单选题</h3>
         </div>
-        <span className="quiz-note">不限重试 · 全部答对即完成</span>
+        <span className="quiz-note">不限重试 · 全部答对即完成理解题</span>
       </div>
       <p className="muted">未提交的选择仅在本次登录的页面内暂存，切换步骤会保留；刷新或退出后不保留。答对并提交后才保存完成状态。</p>
       <div className="quiz-questions">
@@ -152,6 +157,12 @@ export function QuizPanel({
         </button>
         <span className={complete ? "quiz-complete" : "muted"}>{completionMessage}</span>
       </div>
+      {materialStatus && <div className="quiz-submit-row">
+        <span className="muted">报告材料：{MATERIAL_STATUS_LABELS[materialStatus]}。理解题与报告材料分别记录。</span>
+        {onRecordMaterials && <button type="button" className="secondary" aria-controls={STEP_MATERIAL_ACTION_ID} onClick={onRecordMaterials}>
+          {materialStatus === "missing" ? "去补齐材料" : "查看实验材料"}
+        </button>}
+      </div>}
       {error && <div className="error-box" role="alert">{error}</div>}
     </section>
   );

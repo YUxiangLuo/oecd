@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ScrollableRegion } from "../a11y";
 import { api, isApiErrorStatus } from "../api";
 import { useAsync } from "../labs/shared";
@@ -7,6 +7,7 @@ import { showToast } from "../toast";
 import type { AuthUser, TeacherReport } from "../types";
 import { AcademicFilters, matchesAcademicFilter } from "./academic-filter";
 import { EmptyState, SearchInput, StatusPill, Toolbar } from "./ui";
+import { LEAVE_MESSAGE, useTeacherReviewGuard } from "./review-guard";
 
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
 type Filter = "pending" | "graded" | "all";
@@ -138,14 +139,29 @@ export function GradeView({ data, grader, onBack, onReload }: {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
+  const reviewGuard = useTeacherReviewGuard();
+  const initialScore = data.score == null ? "" : String(data.score);
+  const dirty = score !== initialScore || feedback !== data.feedback;
+  useEffect(() => {
+    reviewGuard.publish({ dirty, saving });
+    return reviewGuard.clear;
+  }, [dirty, saving, reviewGuard]);
+  const attemptLocalLeave = (leave: () => void) => {
+    if (saving) return;
+    if (dirty && !window.confirm(LEAVE_MESSAGE)) return;
+    reviewGuard.clear();
+    leave();
+  };
   const submit = () => {
     if (saving || stale) return;
     const numeric = Number(score);
     if (score.trim() === "" || !Number.isInteger(numeric) || numeric < 0 || numeric > 100) return setSaveError("分数须为 0-100 的整数");
+    reviewGuard.publish({ dirty, saving: true });
     setSaving(true);
     setSaveError(null);
     api.classroom.grade(data.account_id, numeric, feedback, data.updated_at).then(() => {
       showToast(`已保存对 ${data.display_name} 的评阅：${numeric} 分`);
+      reviewGuard.clear();
       onBack(true);
     }, (cause) => {
       setSaving(false);
@@ -155,7 +171,7 @@ export function GradeView({ data, grader, onBack, onReload }: {
   };
   return (
     <div>
-      <div className="review-topbar"><button className="back-btn" disabled={saving} onClick={() => onBack(false)}>← 返回列表</button><span className="stage-chip">{data.display_name}（{data.username}）</span><span className="muted">{data.enrollments.map((item) => `${item.term_name} · ${item.class_name}`).join("；") || "未分班"} · 提交于 {fmtTime(data.submitted_at)}</span></div>
+      <div className="review-topbar"><button className="back-btn" disabled={saving} onClick={() => attemptLocalLeave(() => onBack(false))}>← 返回列表</button><span className="stage-chip">{data.display_name}（{data.username}）</span><span className="muted">{data.enrollments.map((item) => `${item.term_name} · ${item.class_name}`).join("；") || "未分班"} · 提交于 {fmtTime(data.submitted_at)}</span></div>
       <div className="grade-split">
         <div className="grade-doc"><ReportMarkdown markdown={data.markdown} /></div>
         <aside className="grade-side"><div className="panel"><div className="panel-head"><span className="panel-ic">🖊️</span>评阅</div>
@@ -165,10 +181,10 @@ export function GradeView({ data, grader, onBack, onReload }: {
               {GRADE_RUBRIC.map(([title, detail]) => <li key={title}><b>{title}</b><span>{detail}</span></li>)}
             </ol>
           </details>
-          <label className="grade-field">分数（0-100）<input type="number" min={0} max={100} disabled={saving} value={score} onChange={(event) => { setScore(event.target.value); setSaveError(null); }} /></label>
-          <label className="grade-field">评语（可空）<textarea disabled={saving} value={feedback} onChange={(event) => { setFeedback(event.target.value); setSaveError(null); }} rows={8} maxLength={4000} /></label>
+          <label className="grade-field">分数（0-100）<input type="number" min={0} max={100} disabled={saving} value={score} onChange={(event) => { const next = event.target.value; setScore(next); reviewGuard.publish({ dirty: next !== initialScore || feedback !== data.feedback, saving: false }); setSaveError(null); }} /></label>
+          <label className="grade-field">评语（可空）<textarea disabled={saving} value={feedback} onChange={(event) => { const next = event.target.value; setFeedback(next); reviewGuard.publish({ dirty: score !== initialScore || next !== data.feedback, saving: false }); setSaveError(null); }} rows={8} maxLength={4000} /></label>
           {saveError && <div className="error-box" role="alert">{saveError}</div>}
-          {stale && <button className="secondary block" disabled={saving} onClick={onReload}>加载最新报告</button>}
+          {stale && <button className="secondary block" disabled={saving} onClick={() => attemptLocalLeave(onReload)}>加载最新报告</button>}
           <button className="primary block" disabled={saving || stale} onClick={submit}>{saving ? "保存中…" : data.state === "graded" ? "更新评阅" : "提交评阅"}</button>
           <p className="muted">评阅人：{grader}；学生重新生成已提交报告时，旧评分会被清除。</p>
         </div></aside>

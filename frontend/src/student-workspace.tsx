@@ -19,8 +19,10 @@ import { LabRouter } from "./lab-router";
 import type { RegressionHistory } from "./regression";
 import { QuizPanel, type QuizDraftStore } from "./step-quiz";
 import {
+  focusStepPrimaryAction,
   materialStatusForStep,
   stepPrimaryActionLabel,
+  STEP_MATERIAL_ACTION_ID,
   STEP_PRIMARY_ACTION_ID,
   StepTaskCard,
 } from "./step-task-card";
@@ -122,6 +124,8 @@ export function StudentWorkspace({
   const presentationCompletion = session.completion;
   const presentationCompletedSteps = completedSteps;
   const mainContentId = stepMainContentId(step.n);
+  const materialStatus = materialStatusForStep(step.n, session.materialGate,
+    session.unsynced || session.syncing, Boolean(session.syncError));
   const currentComparison = session.getStep<{ compared?: string[] }>(step.n)?.compared ?? [];
   let carriedComparison: string[] = [];
   if (step.n >= 3 && step.n <= 9 && currentComparison.length < 2) {
@@ -225,12 +229,7 @@ export function StudentWorkspace({
                   <StepTaskCard
                     step={step}
                     complete={presentationCompletedSteps.has(step.n)}
-                    materialStatus={materialStatusForStep(
-                      step.n,
-                      session.materialGate,
-                      session.unsynced || session.syncing,
-                  Boolean(session.syncError),
-                    )}
+                    materialStatus={materialStatus}
                     contentRef={contentRef}
                   />
                   {carriedComparison.length >= 2 && (
@@ -283,6 +282,10 @@ export function StudentWorkspace({
                     draftStore={quizDrafts}
                     step={step}
                     state={stepState}
+                    materialStatus={materialStatus}
+                    onRecordMaterials={step.n >= 2 && step.n <= 4
+                      ? () => { focusStepPrimaryAction(contentRef.current, STEP_MATERIAL_ACTION_ID); }
+                      : undefined}
                   />
                 </div>
               </main>

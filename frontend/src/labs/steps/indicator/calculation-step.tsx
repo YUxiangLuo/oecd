@@ -1,6 +1,7 @@
 import { api } from "../../../api";
 import { explicitDemoCountry } from "../../../decomposition-model";
 import { DecompositionDemo } from "../../../demos";
+import { STEP_MATERIAL_ACTION_ID } from "../../../step-task-card";
 import type { Meta, Step, StepStateApi } from "../../../types";
 import { countryLabel } from "../../../viz";
 import { useAsync } from "../../shared";
@@ -34,7 +35,7 @@ export function CalculationStep({ topic, meta, state }: CalculationStepProps & {
         primaryCountry={explicitDemoCountry(meta.countries, controls.country)} onPrimaryChange={controls.setPrimary} />
       <details><summary>如何准确理解这次拆解？</summary><p>{cfg.note}</p></details>
     </section>
-    <details className="indicator-full-data"><summary>03 / 查看完整真实数据与记录实验结果</summary>
+    <details id={STEP_MATERIAL_ACTION_ID} tabIndex={-1} className="indicator-full-data"><summary>03 / 查看完整真实数据与记录实验结果</summary>
       <p className="muted">教学小实验不会写入报告。这里保留真实数据明细、列定义与实验结果记录。</p>
       <IndicatorTable meta={meta} groupKey={topic} schema={schema.data} state={state}
         year={controls.year} country={controls.country} page={controls.page} interacted={controls.interacted}

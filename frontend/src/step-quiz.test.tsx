@@ -39,6 +39,23 @@ const state: StepStateApi<Record<string, unknown>> = {
 };
 
 describe("QuizPanel completion", () => {
+  test("keeps passed understanding separate from missing, saving and confirmed materials", () => {
+    let opened = 0;
+    const view = (materialStatus: "missing" | "saving" | "ready") => <QuizPanel step={step}
+      state={{ ...state, complete: true }} materialStatus={materialStatus} onRecordMaterials={() => { opened++; }} />;
+    const { rerender } = render(view("missing"));
+    expect(screen.getByText("✓ 理解题已完成")).toBeTruthy();
+    expect(screen.queryByText("✓ 本步已完成")).toBeNull();
+    expect(screen.getByText(/报告材料：尚未齐全/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "去补齐材料" }));
+    expect(opened).toBe(1);
+    rerender(view("saving"));
+    expect(screen.getByText(/报告材料：正在保存/)).toBeTruthy();
+    expect(screen.queryByText(/报告材料：已齐全/)).toBeNull();
+    rerender(view("ready"));
+    expect(screen.getByText(/报告材料：已齐全/)).toBeTruthy();
+  });
+
   test("keeps normal valid-release quiz submission available", () => {
     const html = renderToStaticMarkup(<QuizPanel step={step} state={state} />);
     expect(html).not.toMatch(/<button[^>]*disabled/);
@@ -144,7 +161,7 @@ test("ordinary passed submission clears only its own draft and keeps the origina
     fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
     await waitFor(() => expect(saved).toEqual({ quiz: passed.quiz }));
     expect(drafts.has(step.n)).toBe(false);
-    expect(screen.queryByText("✓ 本步已完成")).toBeNull();
+    expect(screen.queryByText("✓ 理解题已完成")).toBeNull();
   } finally { api.classroom.submitQuiz = original; }
 });
 
@@ -158,7 +175,7 @@ test("keeps unsubmitted choices across step remounts without marking completion 
   const second = render(<QuizPanel step={step} state={empty} draftStore={drafts} />);
   expect((screen.getByLabelText("始终") as HTMLInputElement).checked).toBe(true);
   expect(writes).toBe(0);
-  expect(screen.queryByText("✓ 本步已完成")).toBeNull();
+  expect(screen.queryByText("✓ 理解题已完成")).toBeNull();
   second.rerender(<QuizPanel step={{ ...step, quiz: { ...step.quiz!, version: "v2" } }} state={empty} draftStore={drafts} />);
   expect((screen.getByLabelText("始终") as HTMLInputElement).checked).toBe(false);
   second.rerender(<QuizPanel step={step} state={empty} draftStore={new Map()} />);

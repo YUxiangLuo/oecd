@@ -5,6 +5,7 @@ import type { AuthUser, TeacherReport } from "../types";
 import { ReportsTab } from "./reports";
 import { SemestersTab } from "./semesters";
 import { StudentsTab } from "./students";
+import { useTeacherReviewGuard } from "./review-guard";
 
 const NAV = [
   { key: "semesters", icon: "🗓️", label: "学期与班级", sub: "分组 · 归属" },
@@ -19,6 +20,7 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
   const [reviewBump, setReviewBump] = useState(0);
   const { data } = useAsync<{ reports: TeacherReport[] }>(() => api.classroom.reports(), [tab, reviewBump]);
   const pending = (data?.reports ?? []).filter((report) => report.state === "pending").length;
+  const reviewGuard = useTeacherReviewGuard();
 
   return (
     <div className="teacher-layout">
@@ -29,7 +31,7 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
             key={item.key}
             className={`teacher-nav-item${tab === item.key ? " active" : ""}`}
             aria-current={tab === item.key ? "page" : undefined}
-            onClick={() => setTab(item.key)}
+            onClick={() => item.key === tab || reviewGuard.attempt(() => setTab(item.key))}
           >
             <span className="teacher-nav-ic" aria-hidden="true">{item.icon}</span>
             <span className="teacher-nav-text">

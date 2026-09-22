@@ -54,7 +54,15 @@ export function StudentRowMenu({
   const who = `${student.display_name}（${student.username}）`;
   const passwordLabel = student.demo_seed ? "固定演示口令" : "重置密码";
   return (
-    <details className="row-menu">
+    <details className="row-menu" onToggle={(event) => {
+      const menu = event.currentTarget;
+      if (!menu.open) return;
+      const region = menu.closest<HTMLElement>(".student-table-scroll");
+      const popup = menu.querySelector<HTMLElement>(".row-menu-pop");
+      if (!region || !popup) return;
+      const overflow = popup.getBoundingClientRect().bottom - region.getBoundingClientRect().bottom;
+      if (overflow > 0) region.scrollTop += overflow + 8;
+    }}>
       <summary aria-label={`操作：${who}`}>⋯</summary>
       <div className="row-menu-pop">
         <button aria-label={`修改姓名：${who}`} onClick={() => onPick("name", student)}>修改姓名</button>
@@ -120,9 +128,9 @@ export function StudentsTab() {
           <button className="primary" onClick={() => setModal({ type: "student" })}>+ 添加学生</button>
         </div>
       </Toolbar>
-      <ScrollableRegion className="table-wrap" label="学生进度表，可横向滚动">
+      <ScrollableRegion className="table-wrap student-table-scroll" label="学生进度表，可横向及纵向滚动">
         <table className="data-table">
-          <thead><tr><th>姓名</th><th>用户名</th><th>学号</th><th>班级</th><th>完成步骤</th><th>报告</th><th>得分</th><th>有效活动</th><th>最近登录</th><th><span className="sr-only">操作</span></th></tr></thead>
+          <thead><tr><th>姓名</th><th>用户名</th><th>学号</th><th>班级</th><th>完成步骤</th><th>报告</th><th>得分</th><th>有效活动</th><th>最近登录</th><th>操作</th></tr></thead>
           <tbody>
             {students.map((student) => (
               <tr key={student.id}>

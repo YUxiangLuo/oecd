@@ -4,6 +4,7 @@ import { LogoMark } from "./brand";
 import { oecdIcioDatasetLabel } from "./dataset-label";
 import { isDemoStudentUsername } from "./login";
 import { TeacherDashboard } from "./teacher";
+import { TeacherReviewGuardProvider, useTeacherReviewGuard } from "./teacher/review-guard";
 import { ToastHost } from "./toast";
 import { materialStatusForStep } from "./step-task-card";
 import { revealOutlineStep } from "./step-navigation";
@@ -94,7 +95,18 @@ export function TeacherWorkspace({
   onPasswordChanged,
   onLogout,
 }: TeacherWorkspaceProps) {
+  return <TeacherReviewGuardProvider><TeacherWorkspaceContent
+    user={user} meta={meta} showPasswordChange={showPasswordChange}
+    onRequestPasswordChange={onRequestPasswordChange} onClosePasswordChange={onClosePasswordChange}
+    onPasswordChanged={onPasswordChanged} onLogout={onLogout}
+  /></TeacherReviewGuardProvider>;
+}
+
+function TeacherWorkspaceContent({
+  user, meta, showPasswordChange, onRequestPasswordChange, onClosePasswordChange, onPasswordChanged, onLogout,
+}: TeacherWorkspaceProps) {
   const passwordTriggerRef = useRef<HTMLButtonElement>(null);
+  const reviewGuard = useTeacherReviewGuard();
   return (
     <div className="layout">
       <header className="topbar">
@@ -108,8 +120,8 @@ export function TeacherWorkspace({
             数据：{oecdIcioDatasetLabel(meta)}
           </span>
           <span className="role-chip" title={`${user.name} · 教师账号 · ${user.username}`}><span>{user.name}</span></span>
-          <button ref={passwordTriggerRef} onClick={onRequestPasswordChange}>修改密码</button>
-          <button onClick={onLogout}>退出</button>
+          <button ref={passwordTriggerRef} onClick={() => reviewGuard.attempt(onRequestPasswordChange)}>修改密码</button>
+          <button onClick={() => reviewGuard.attempt(() => { reviewGuard.clear(); onLogout(); })}>退出</button>
         </div>
       </header>
       <TeacherDashboard user={user} />
@@ -118,7 +130,7 @@ export function TeacherWorkspace({
       {showPasswordChange && (
         <AccountPasswordModal
           onClose={onClosePasswordChange}
-          onChanged={onPasswordChanged}
+          onChanged={() => { reviewGuard.clear(); onPasswordChanged(); }}
           returnFocusRef={passwordTriggerRef}
         />
       )}

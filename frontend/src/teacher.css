@@ -200,6 +200,16 @@
 .chart-legend { display: flex; gap: 16px; font-size: 12px; color: #5a6070; margin-top: 6px; padding-left: 6px; }
 
 /* ---------- 表格补充(行内菜单 / 等宽) ---------- */
+.student-table-scroll { max-height: calc(100vh - 250px); overflow: auto; scrollbar-gutter: stable; }
+.student-table-scroll thead th { position: sticky; top: 0; z-index: 3; }
+.student-table-scroll th:last-child, .student-table-scroll td:last-child {
+  position: sticky; right: 0; min-width: 60px; background: #fff;
+  box-shadow: -4px 0 8px rgba(20, 20, 60, 0.06); z-index: 1;
+}
+.student-table-scroll th:last-child { background: #fafbfd; z-index: 4; }
+.student-table-scroll td:last-child:has(.row-menu[open]) { z-index: 2; }
+.student-table-scroll tr:nth-child(n+4):nth-last-child(-n+3) .row-menu-pop { top: auto; bottom: 30px; }
+.student-table-scroll:has(tbody tr:last-child:nth-child(-n+3)):has(.row-menu[open]) { padding-bottom: 160px; }
 .data-table td .mono, .mono { font-family: "Space Grotesk", monospace; font-size: 12px; color: var(--text-muted); }
 .data-table.compact th, .data-table.compact td { padding-top: 7px; padding-bottom: 7px; }
 .row-menu { position: relative; display: inline-block; }

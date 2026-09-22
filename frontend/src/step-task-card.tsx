@@ -2,6 +2,7 @@ import type { RefObject } from "react";
 import type { Step } from "./types";
 
 export const STEP_PRIMARY_ACTION_ID = "step-primary-action";
+export const STEP_MATERIAL_ACTION_ID = "step-material-action";
 
 export function stepTaskTitleId(step: number): string {
   return `step-task-title-${step}`;
@@ -12,6 +13,10 @@ export function stepPrimaryActionLabel(step: Pick<Step, "title">): string {
 }
 
 export type StepMaterialStatus = "checking" | "saving" | "unsynced" | "ready" | "missing";
+
+export const MATERIAL_STATUS_LABELS: Record<StepMaterialStatus, string> = {
+  checking: "正在检查", saving: "正在保存", unsynced: "尚未保存", ready: "已齐全", missing: "尚未齐全",
+};
 
 export function materialStatusForStep(
   step: number,
@@ -25,9 +30,10 @@ export function materialStatusForStep(
   return materialGate.some((item) => item.step === step) ? "missing" : "ready";
 }
 
-export function focusStepPrimaryAction(content: HTMLElement | null): boolean {
-  const target = content?.querySelector<HTMLElement>(`#${STEP_PRIMARY_ACTION_ID}`) ?? null;
+export function focusStepPrimaryAction(content: HTMLElement | null, targetId = STEP_PRIMARY_ACTION_ID): boolean {
+  const target = content?.querySelector<HTMLElement>(`#${targetId}`) ?? null;
   if (!content || !target) return false;
+  if (target instanceof HTMLDetailsElement) target.open = true;
   const top = content.scrollTop + target.getBoundingClientRect().top - content.getBoundingClientRect().top - 12;
   target.focus({ preventScroll: true });
   content.scrollTo({
@@ -49,11 +55,7 @@ export function StepTaskCard({
   materialStatus: StepMaterialStatus;
   contentRef: RefObject<HTMLElement | null>;
 }) {
-  const materialLabel = materialStatus === "checking"
-    ? "正在检查"
-    : materialStatus === "saving" ? "正在保存"
-    : materialStatus === "unsynced" ? "尚未保存"
-    : materialStatus === "ready" ? "已齐全" : "尚未齐全";
+  const materialLabel = MATERIAL_STATUS_LABELS[materialStatus];
   const completionLabel = step.lab === "rep" ? "报告" : "理解题";
   const compact = step.n >= 11 && step.n <= 14 && Boolean(step.regression_outcome);
   return (
@@ -83,6 +85,12 @@ export function StepTaskCard({
         >
           开始本步
         </button>
+        {step.n >= 2 && step.n <= 4 && <button
+          type="button"
+          className="secondary"
+          aria-controls={STEP_MATERIAL_ACTION_ID}
+          onClick={() => focusStepPrimaryAction(contentRef.current, STEP_MATERIAL_ACTION_ID)}
+        >记录实验结果</button>}
         <details className="step-task-context">
           <summary>为什么做这一步</summary>
           <p>{step.concept}</p>
