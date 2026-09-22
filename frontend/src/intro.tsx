@@ -286,7 +286,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
     <div key={3} className="intro-scene">
       <div className="intro-scene-kicker">证据预演</div>
       <h2 className="intro-h2">先比较趋势，再读 X 与 Y 的关系</h2>
-      <p className="intro-lede">后半程只需选择两个国家和一个行业。系统沿用这组对象，带你从五年趋势走到四项结果。</p>
+      <p className="intro-lede">选择两个国家和一个行业查看示例趋势；正式回归使用完整国家×行业面板，不限于所选两国。</p>
       <div className="intro-preview-selection" role="group" aria-label="分析对象示意">
         <span><small>国家 A</small>由你选择</span>
         <span><small>国家 B</small>由你选择</span>
@@ -297,13 +297,14 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
           <div className="intro-preview-heading"><b>01 · 比较五年模拟关税暴露（X）</b><span><i className="country-a" />国家 A <i className="country-b" />国家 B</span></div>
           <svg viewBox="0 0 520 180" role="img" aria-label="国家 A 与国家 B 的五年模拟关税暴露 X 趋势界面示意，线条不代表真实数值">
             <path className="grid" d="M42 30H500M42 75H500M42 120H500" />
-            <path className="country-a" d="M50 118L160 100L270 105L380 65L490 46" />
-            <path className="country-b" d="M50 72L160 78L270 62L380 88L490 70" />
+            <path className="country-a" d="M50 120L160 120L270 68L380 40L490 76" />
+            <path className="country-b" d="M50 120L160 120L270 94L380 80L490 98" />
             <text x="42" y="18">X 示意强弱</text>
+            <text x="28" y="124">0</text>
             {[50, 160, 270, 380, 490].map((x, index) => (
               <g key={x}>
-                <circle className="country-a" cx={x} cy={[118, 100, 105, 65, 46][index]} r="4" />
-                <circle className="country-b" cx={x} cy={[72, 78, 62, 88, 70][index]} r="4" />
+                <circle className="country-a" cx={x} cy={[120, 120, 68, 40, 76][index]} r="4" />
+                <circle className="country-b" cx={x} cy={[120, 120, 94, 80, 98][index]} r="4" />
                 <text x={x} y="158" textAnchor="middle">{previewYears[index]}</text>
               </g>
             ))}
@@ -320,7 +321,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
         <b>03 · 四项结果一起报告</b>
         <span>出口构成</span><span>复杂生产</span><span>链条长度</span><span>网络位置</span>
       </div>
-      <p className="intro-note intro-preview-note">这是学习流程示意，图中线条不是实际结果。X 与 Y 均为教学模拟；关系不显著或无法推断也要如实报告，不能解释为真实政策效果。</p>
+      <p className="intro-note intro-preview-note">图示为两个正暴露对象：前两年 X 为零，之后按共同税率路径变化；也可能有全期零暴露对象。线条不是实际读数。X 与 Y 均为教学模拟；关系不显著或无法推断也要如实报告，不能解释为真实政策效果。</p>
     </div>,
 
     /* ---- 5 就绪 ---- */
@@ -337,12 +338,13 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       {/* 进入前讲清完成规则，避免把浏览位置误认为学习进度。 */}
       <div className="intro-ready-rules">
         <div><b>理解进度</b><p>答对本步理解题后，步骤显示“✓”。浏览过步骤，不等于已经完成。</p></div>
-        <div><b>报告材料</b><p>系统会自动整理大部分结果；仅在页面明确提示时点击一次保存。材料齐全后，步骤会显示“材料已齐全”。</p></div>
+        <div><b>报告材料</b><p>第 2–9 步须主动保存两国比较；其他步骤按提示记录或计算。等待同步成功，再核对材料是否齐全。</p></div>
+        <div><b>报告提交</b><p>生成草稿不等于提交。复核后提交给老师，确认“等待教师评阅”；完成进度不能代替提交状态。</p></div>
       </div>
       <div className="intro-cta-row">
-        <button type="button" className="intro-cta" onClick={() => onDone()}>关闭介绍</button>
+        <button type="button" className="intro-cta" onClick={() => onDone()}>开始实验</button>
       </div>
-      <p className="intro-note">关闭不会改变当前实验步骤，可随时从顶栏重新查看。</p>
+      <p className="intro-note">进入实验台不会改变当前实验步骤，可随时从顶栏重新查看介绍。</p>
     </div>,
   ];
 

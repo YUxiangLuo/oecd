@@ -44,7 +44,7 @@ test("intro previews every stage without providing experiment-step navigation", 
       expect(view.getByRole("dialog").querySelectorAll("[aria-current='page']").length).toBe(1);
     }
     expect(calls).toEqual([]);
-    fireEvent.click(view.getByRole("button", { name: "关闭介绍" }));
+    fireEvent.click(view.getByRole("button", { name: "开始实验" }));
     expect(calls).toEqual([[]]);
   } finally {
     cleanup(); stepsMock.mockRestore();

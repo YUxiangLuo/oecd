@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { api } from "../../api";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ToastHost } from "../../toast";
+import { ReportOutro } from "../../report-outro";
 import type { ClassroomReport, ReportMutationResponse } from "../../types";
 import {
   GateCard,
@@ -322,7 +323,7 @@ test("one-click finish flushes then generates then submits; outro appears only a
     const dialog = screen.getByRole("dialog", { name: "报告已提交，感谢你的探索" });
     expect(within(dialog).getByText("提交成功 · 等待教师评阅")).toBeTruthy();
     expect(within(dialog).getByText("计算并理解指标")).toBeTruthy();
-    expect(within(dialog).getByText("两国与时间比较")).toBeTruthy();
+    expect(within(dialog).getByText("两国同口径比较")).toBeTruthy();
     expect(within(dialog).getByText("汇总四项回归证据")).toBeTruthy();
     expect(within(dialog).queryByText("比较与验证")).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
@@ -420,7 +421,26 @@ test("restored graded receipt is available without submitting again; outdated ex
     const dialog = screen.getByRole("dialog", { name: "你的报告已获评阅" });
     expect(within(dialog).getByText("已评阅 · 93 分")).toBeTruthy();
     expect(within(dialog).getByText("教师评语：证据链完整")).toBeTruthy();
+    const receipt = within(dialog).getByRole("region", { name: "报告提交回执" });
+    expect(within(receipt).getByText(/后续修改尚未纳入这份报告/)).toBeTruthy();
+    expect(within(receipt).getByText(/重新生成会清除当前评分与评语/)).toBeTruthy();
+    expect(within(dialog).queryByText(/你可以离开页面/)).toBeNull();
     expect((within(dialog).getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(true);
     expect(submit).not.toHaveBeenCalled();
   } finally { submit.mockRestore(); }
+});
+
+test("receipt distinguishes busy export from outdated content and preserves pending state", () => {
+  const props = { report: report("pending"), onClose: () => {}, onExport: () => {} };
+  const { rerender } = render(<ReportOutro {...props} exportDisabled />);
+  expect(screen.queryByText(/后续修改尚未纳入/)).toBeNull();
+  expect((screen.getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(true);
+  rerender(<ReportOutro {...props} reportOutdated />);
+  expect(screen.getByText(/后续修改尚未纳入/)).toBeTruthy();
+  expect(screen.queryByText(/清除当前评分/)).toBeNull();
+  expect(screen.getByText("提交成功 · 等待教师评阅")).toBeTruthy();
+  expect((screen.getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(true);
+  rerender(<ReportOutro {...props} />);
+  expect(screen.getByText(/你可以离开页面/)).toBeTruthy();
+  expect((screen.getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(false);
 });

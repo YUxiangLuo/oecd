@@ -446,7 +446,7 @@ export function ReportLab({
       ) : (
         <p className="muted">也可以先用“根据实验记录生成报告”生成草稿预览，再点击“提交报告给老师”。不显著或无法推断的完整诊断也可以用于报告，不必追求显著结果。</p>
       )}
-      {outro && <ReportOutro report={outro} exportDisabled={reportOutdated || busy} onClose={() => {
+      {outro && <ReportOutro report={outro} reportOutdated={reportOutdated} exportDisabled={busy} onClose={() => {
         setOutro(null);
         requestAnimationFrame(() => document.querySelector<HTMLElement>(".report-body")?.focus());
       }} onExport={() => { setOutro(null); void printReport(); }} />}
