@@ -71,6 +71,7 @@ describe("step 15 report states", () => {
 
   test("does not generate or replace an existing report when flushing session edits fails", async () => {
     const generate = spyOn(api.classroom, "generateReport");
+    const confirm = spyOn(window, "confirm").mockReturnValue(true);
     const changed: unknown[] = [];
     try {
       render(<ReportLab
@@ -86,6 +87,7 @@ describe("step 15 report states", () => {
       expect(screen.getByText(/已评阅 · 93 分/)).toBeDefined();
     } finally {
       generate.mockRestore();
+      confirm.mockRestore();
     }
   });
 
@@ -369,15 +371,45 @@ test("material gate stops one-click submission and stays above the writing field
   } finally { generate.mockRestore(); submit.mockRestore(); }
 });
 
+for (const button of ["重新生成并提交", "更新报告并提交给老师"]) {
+  test(`graded report requires confirmation through ${button}, and cancelling does not mutate it`, async () => {
+    const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("pending"));
+    const submit = spyOn(api.classroom, "submitReport");
+    const confirm = spyOn(window, "confirm").mockReturnValue(false);
+    let flushes = 0;
+    let mutations = 0;
+    try {
+      render(<ReportLab {...finishProps} report={report("graded")}
+        sessionUpdatedAt="2026-08-14T00:00:00Z"
+        onFlushSession={async () => { flushes++; }} onReportChanged={() => { mutations++; }} />);
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: button })); });
+      expect(confirm.mock.calls[0]?.[0]).toContain("清除现有评分和评语");
+      expect(generate).not.toHaveBeenCalled();
+      expect(flushes).toBe(0);
+      expect(mutations).toBe(0);
+      expect(screen.getByText(/已评阅 · 93 分/)).toBeTruthy();
+      confirm.mockReturnValue(true);
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: button })); });
+      expect(generate).toHaveBeenCalledTimes(1);
+      expect(flushes).toBe(1);
+      expect(mutations).toBe(1);
+      expect(submit).not.toHaveBeenCalled();
+      expect(screen.getByRole("dialog", { name: "报告已提交，感谢你的探索" })).toBeTruthy();
+    } finally { generate.mockRestore(); submit.mockRestore(); confirm.mockRestore(); }
+  });
+}
+
 test("regenerating a submitted report uses server resubmission directly without a second submit", async () => {
   const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("pending"));
   const submit = spyOn(api.classroom, "submitReport");
+  const confirm = spyOn(window, "confirm");
   try {
     render(<ReportLab {...finishProps} report={report("pending")} />);
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" })); });
+    expect(confirm).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog", { name: "报告已提交，感谢你的探索" })).toBeTruthy();
-  } finally { generate.mockRestore(); submit.mockRestore(); }
+  } finally { generate.mockRestore(); submit.mockRestore(); confirm.mockRestore(); }
 });
 
 test("restored graded receipt is available without submitting again; outdated export remains disabled", () => {

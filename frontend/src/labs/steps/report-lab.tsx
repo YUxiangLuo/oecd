@@ -281,6 +281,9 @@ export function ReportLab({
 
   const generate = async (submitAfter = false) => {
     if (busy || operationRef.current) return;
+    if (report?.state === "graded" && !window.confirm(
+      "此报告已经评阅。重新生成会替换报告、清除现有评分和评语，并重新提交给老师。确定继续吗？",
+    )) return;
     operationRef.current = true;
     setGenerating(true);
     setError(null);

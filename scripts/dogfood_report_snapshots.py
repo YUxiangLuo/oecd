@@ -145,6 +145,11 @@ def main():
                 'Array.from(document.querySelectorAll("button")).some(e=>e.textContent==="重新生成并提交")',
             )
             browser.button("重新生成并提交")
+            assert "清除现有评分和评语" in browser.run("dialog", "status")
+            browser.run("dialog", "dismiss")
+            assert snapshot()[1] == original_report
+            browser.button("重新生成并提交")
+            browser.run("dialog", "accept")
             _, report = wait_for(lambda s, r: r[1] == "pending" and marker in r[0])
             assert report[2] is None
             step_runs = [run for run in report[3]["runs"] if run["step"] == 11]
