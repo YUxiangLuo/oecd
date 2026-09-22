@@ -14,7 +14,7 @@ def test_bank_covers_steps_1_through_14_with_19_questions():
 def test_public_quiz_never_exposes_answers_or_feedback():
     for step in range(1, 15):
         public = quizzes.public_quiz(step)
-        assert public and public["version"] == quizzes.QUIZ_VERSION
+        assert public and public["version"] == ("course-quiz-v9" if step == 11 else "course-quiz-v8")
         assert all("correct" not in question and "explanation" not in question for question in public["questions"])
     assert quizzes.public_quiz(15) is None
 
@@ -50,3 +50,36 @@ def test_selected_answers_renders_only_a_fully_correct_current_quiz():
         }
     ]
     assert quizzes.selected_answers(1, {"version": "old", "answers": {}}) == []
+
+
+@pytest.mark.parametrize("answer, expected", [("a", True), ("b", False), ("c", False)])
+def test_step_11_reads_percentage_points_without_claiming_real_causation(answer, expected):
+    answers = {"s11-metric": "b", "s11-reading-v9": answer}
+    passed, _, feedback = quizzes.grade(11, "course-quiz-v9", answers)
+    assert passed is expected
+    assert feedback[1]["correct"] is expected
+    assert "平均下降 0.60 个百分点" in feedback[1]["explanation"]
+    assert "不是相对下降 0.60%" in feedback[1]["explanation"]
+    assert "不能证明真实政策的因果效果" in feedback[1]["explanation"]
+    assert len(quizzes.public_quiz(11)["questions"]) == 2
+
+
+def test_step_11_old_answers_cannot_pass_under_either_version():
+    old = {"s11-metric": "b", "s11-compare": "b"}
+    with pytest.raises(ValueError, match="版本已更新"):
+        quizzes.grade(11, "course-quiz-v8", old)
+    with pytest.raises(ValueError, match="未作答"):
+        quizzes.grade(11, "course-quiz-v9", old)
+    assert quizzes.selected_answers(11, {"version": "course-quiz-v8", "answers": old}) == []
+
+
+@pytest.mark.parametrize("step, version", [(10, "course-quiz-v8"), (11, "course-quiz-v9"), (12, "course-quiz-v8")])
+def test_submission_response_preserves_step_version_for_session_save(step, version):
+    from gvcsim.classroom.routes import QuizSubmitRequest, submit_quiz
+
+    canonical = quizzes.correct_quiz(step)
+    result = submit_quiz(QuizSubmitRequest(step=step, version=version, answers=canonical["answers"]), _user={})
+    assert result["passed"]
+    assert result["version"] == version
+    assert result["quiz"]["version"] == version
+    assert quizzes.grade(step, result["quiz"]["version"], result["quiz"]["answers"])[0]

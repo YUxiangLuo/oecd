@@ -37,3 +37,19 @@ def test_wrong_or_old_answers_fail_and_unknown_step_is_rejected():
     assert not evidence.evaluate_step(5, session).complete
     with pytest.raises(ValueError, match="未知步骤"):
         evidence.evaluate_step(99, session)
+
+
+def test_reading_question_upgrade_invalidates_only_step_11():
+    session = _complete_through_14()
+    session["steps"]["11"]["data"]["quiz"] = {
+        "version": "course-quiz-v8",
+        "answers": {"s11-metric": "b", "s11-compare": "b"},
+    }
+    for step in range(1, 15):
+        assert session["steps"][str(step)]["data"]["quiz"]["version"] == "course-quiz-v8"
+    assert evidence.completion_summary(session)["completed"] == [step for step in range(1, 15) if step != 11]
+    session["steps"]["11"]["data"]["quiz"] = {
+        "version": "course-quiz-v9",
+        "answers": {"s11-metric": "b", "s11-reading-v9": "a"},
+    }
+    assert evidence.completion_summary(session)["completed"] == list(range(1, 15))

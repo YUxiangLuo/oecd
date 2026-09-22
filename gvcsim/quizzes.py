@@ -1,8 +1,8 @@
 """课程步骤的固定单选题题库。
 
 题干和选项可以公开给前端；正确答案与反馈只在服务端判题后返回。题库版本
-随不兼容的题目/答案变更提升；仅澄清措辞且题目 ID、选项 ID 和正确答案不变时
-保持版本，避免让学生无意义地重答全部步骤。
+随不兼容的题目/答案变更按步骤提升；仅澄清措辞且题目 ID、选项 ID 和正确答案不变时
+保持版本，避免让学生无意义地重答其他步骤。
 """
 
 from __future__ import annotations
@@ -12,6 +12,12 @@ from typing import Any
 from gvcsim.indicator_schema import PRODUCTION_LENGTH_OPERATIONAL_DEFINITION
 
 QUIZ_VERSION = "course-quiz-v8"
+STEP_QUIZ_VERSIONS = {11: "course-quiz-v9"}
+
+
+def quiz_version(step: int) -> str:
+    """未修改的步骤沿用默认版本，局部换题只使本步旧答案失效。"""
+    return STEP_QUIZ_VERSIONS.get(step, QUIZ_VERSION)
 
 
 def _option(option_id: str, label: str) -> dict[str, str]:
@@ -189,15 +195,18 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
             "步骤 11 看出口的价值构成，不是生产链长度或网络位置。",
         ),
         _question(
-            "s11-compare",
-            "为什么步骤 11–14 要观察四种不同结果？",
+            "s11-reading-v9",
+            "独立读数练习：X 每增加 1 个百分点，Y 的估计变化为 −0.60 个百分点，"
+            "95% 置信区间为 [−0.90, −0.30] 个百分点。哪种表述正确？",
             [
-                _option("a", "因为四个结果可以直接相加"),
-                _option("b", "因为它们反映贸易、生产、长度和网络的不同方面"),
-                _option("c", "因为每一步都必须更换计算方法"),
+                _option("a", "X 每增加 1 个百分点，Y 平均下降 0.60 个百分点；这只是模拟数据中的关系"),
+                _option("b", "X 每增加 1 个百分点，Y 相对原值下降 0.60%"),
+                _option("c", "已经证明真实关税导致外国增加值占比下降"),
             ],
-            "b",
-            "四种结果回答不同问题，应分别查看方向和区间，不能把系数直接相加或比较大小。",
+            "a",
+            "−0.60 表示 X 每增加 1 个百分点，Y 平均下降 0.60 个百分点，不是相对下降 0.60%。"
+            "区间完全低于 0，支持下降方向；但 X 和 Y 都是教学模拟，不能证明真实政策的因果效果。"
+            "这是独立算例，不是你本次回归的实际结果。",
         ),
     ],
     12: [
@@ -281,7 +290,7 @@ def public_quiz(step: int) -> dict[str, Any] | None:
     if not questions:
         return None
     return {
-        "version": QUIZ_VERSION,
+        "version": quiz_version(step),
         "questions": [
             {"id": question["id"], "prompt": question["prompt"], "options": question["options"]}
             for question in questions
@@ -294,7 +303,7 @@ def grade(step: int, version: str, answers: Any) -> tuple[bool, dict[str, str], 
     questions = STEP_QUIZZES.get(step)
     if not questions:
         raise ValueError(f"步骤 {step} 没有理解检查题")
-    if version != QUIZ_VERSION:
+    if version != quiz_version(step):
         raise ValueError("题目版本已更新，请刷新页面后重新作答")
     if not isinstance(answers, dict):
         raise ValueError("answers 必须是题号到选项的对象")
@@ -333,7 +342,7 @@ def correct_quiz(step: int) -> dict[str, Any]:
     if not questions:
         raise ValueError(f"步骤 {step} 没有理解检查题")
     return {
-        "version": QUIZ_VERSION,
+        "version": quiz_version(step),
         "answers": {str(question["id"]): str(question["correct"]) for question in questions},
     }
 

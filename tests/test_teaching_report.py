@@ -955,6 +955,9 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert report.provenance["years"] == REPORT_YEARS
     assert report.provenance["release_id"] == "2" * 32
     assert report.provenance["quiz_version"] == quizzes.QUIZ_VERSION
+    assert report.provenance["quiz_versions"] == {
+        str(step): "course-quiz-v9" if step == 11 else "course-quiz-v8" for step in range(1, 15)
+    }
     assert report.provenance["course_release"] == config.COURSE_RELEASE
     assert report.provenance["runs"][0]["step"] == 11
     assert report.provenance["runs"][0]["result"]["coefs"][0]["coef"] == 1.2

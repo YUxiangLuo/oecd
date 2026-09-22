@@ -85,9 +85,9 @@ def submit_quiz(req: QuizSubmitRequest, _user: dict = Depends(require_student)):
         passed, normalized, results = quizzes.grade(req.step, req.version, req.answers)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    response: dict[str, Any] = {"passed": passed, "version": quizzes.QUIZ_VERSION, "results": results}
+    response: dict[str, Any] = {"passed": passed, "version": quizzes.quiz_version(req.step), "results": results}
     if passed:
-        response["quiz"] = {"version": quizzes.QUIZ_VERSION, "answers": normalized}
+        response["quiz"] = {"version": quizzes.quiz_version(req.step), "answers": normalized}
     return response
 
 

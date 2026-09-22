@@ -69,6 +69,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "years": years,
         "session_version": SESSION_VERSION,
         "quiz_version": quizzes.QUIZ_VERSION,
+        "quiz_versions": {str(step): quizzes.quiz_version(step) for step in quizzes.STEP_QUIZZES},
         "course_release": COURSE_RELEASE,
         "teaching_panel_version": TEACHING_VERSION,
         "session_fingerprint": fingerprint,
