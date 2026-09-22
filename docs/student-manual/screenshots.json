@@ -1,88 +1,383 @@
 {
-  "captured_on": "2026-09-20",
+  "captured_on": "2026-09-22",
+  "viewport": {
+    "width": 1280,
+    "height": 960
+  },
+  "baseline_commit": "5312bd0733cd5ee6f4b8051c2e979d4f7c8f8f02",
+  "code_state": "Business code unchanged from baseline. The manuals, screenshot assets and document rendering are updated together in an uncommitted documentation worktree.",
   "code_sources_hash_rule": "SHA-256 of sorted sha256sum output for frontend/src and gvcsim .ts/.tsx/.css/.py files.",
-  "provenance_scope": "Code and data provenance is recorded per screenshot because this manual deliberately retains captures from two worktrees and releases.",
+  "code_sources_sha256": "027077af884b865a0b1a180897c84a9fd2e40978b9ad7c411c033a39a9f594a3",
+  "data_release": "40c6a5d0d5d94084961a2dca04b9b260",
   "simulation_contract": "step10-tariff-teaching-v1",
-  "simulation_seed": 20260913,
-  "source": "agent-browser and inspected v15 dogfood artifacts; local demo or independent test accounts only",
-  "journey_note": "The retained submission and grading evidence was produced by the API-assisted full-journey harness and checked in a real browser; it is not a pure-UI journey.",
-  "note": "Steps 2 and 6 were recaptured from the current uncommitted worktree on 2026-09-20 after the calculation-disclosure and total-export terminology update. Other pre-step-10 and report screenshots are retained from the earlier synthetic classroom. Old step 10-14 screenshots are not embedded.",
+  "source": "All 18 PNG files were freshly captured with agent-browser in a 1280x960 viewport. Three report-status images are element captures for readable print layout; their actual dimensions are recorded per image. Passwords are not visible.",
+  "provenance_scope": "Only screenshots embedded by 实验手册.md are listed. Historical, non-embedded PNG files remain on disk but are intentionally omitted.",
   "screenshots": [
+    {
+      "file": "screenshots/00-login.png",
+      "width": 1280,
+      "height": 960,
+      "sha256": "4fdffaf97ea5252b3b099972450f2580c647f1c7453b238248600f400073376d",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "pure-ui",
+      "account": null,
+      "capture_note": "Public unauthenticated login page; no credentials entered.",
+      "data_sources": [
+        {
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+        }
+      ]
+    },
+    {
+      "file": "screenshots/01-icio.png",
+      "width": 1280,
+      "height": 960,
+      "sha256": "8c9cac82e9ca742efe7cef1eabbe2db1d97df0c2d7cfb3b4ba9785fc18faebf8",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "pure-ui",
+      "account": "browser-course-5be813ad",
+      "capture_note": "Read-only browser capture from the completed 93-point pure-UI course account.",
+      "data_sources": [
+        {
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+        }
+      ]
+    },
+    {
+      "file": "screenshots/01-quiz.png",
+      "width": 1280,
+      "height": 960,
+      "sha256": "0229b18cb603f370239e1e1d50160c8ec1d20704cebfd92a511fb184f61213ec",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "pure-ui",
+      "account": "browser-course-5be813ad",
+      "capture_note": "Read-only browser capture from the completed 93-point pure-UI course account.",
+      "data_sources": [
+        {
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+        }
+      ]
+    },
     {
       "file": "screenshots/02-indicators.png",
       "width": 1280,
       "height": 960,
-      "sha256": "e6144d0d2c471a22a6e247e655fc621f8a1f3f91de43839ad162e9686062d193",
-      "code_commit": "90b03e00245a3a96a4b9dd489c4cd72093447574",
-      "code_state": "Base commit plus uncommitted indicator-calculation disclosure, total-export terminology, and review-fix changes.",
-      "code_sources_sha256": "a22b5677c3f072915b7caa7108525c6ec2630a6fad646d74b908dbb6c035e976",
-      "data_release": "40c6a5d0d5d94084961a2dca04b9b260",
+      "sha256": "c4f7025cfaa67bd16ae02d7345a792050549d4c58bbd23eaeead480bbe03d428",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "pure-ui",
+      "account": "browser-course-5be813ad",
+      "capture_note": "Read-only browser capture from the completed 93-point pure-UI course account.",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed indicator input",
-          "production_data": true
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
         }
-      ],
-      "capture": "agent-browser local demo student at http://127.0.0.1:5174; current uncommitted worktree; captured 2026-09-20"
+      ]
+    },
+    {
+      "file": "screenshots/03-indicators.png",
+      "width": 1280,
+      "height": 960,
+      "sha256": "928ee61cf2b82529e87fed04e03c861bbb16023d5adbd0a8d8d3a9024d867d47",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "pure-ui",
+      "account": "browser-course-5be813ad",
+      "capture_note": "Read-only browser capture from the completed 93-point pure-UI course account.",
+      "data_sources": [
+        {
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+        }
+      ]
+    },
+    {
+      "file": "screenshots/04-indicators.png",
+      "width": 1280,
+      "height": 960,
+      "sha256": "ef01b6c99160b28b1ed0c66f9ee36e34844f215926017097d998166c7597e9cb",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "pure-ui",
+      "account": "browser-course-5be813ad",
+      "capture_note": "Read-only browser capture from the completed 93-point pure-UI course account.",
+      "data_sources": [
+        {
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+        }
+      ]
+    },
+    {
+      "file": "screenshots/05-indicators.png",
+      "width": 1280,
+      "height": 960,
+      "sha256": "1ecdfa94dc564be28cab5159d28dd1eec87bd2e6b55efdb7b7868a78e1470a77",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "pure-ui",
+      "account": "browser-course-5be813ad",
+      "capture_note": "Read-only browser capture from the completed 93-point pure-UI course account.",
+      "data_sources": [
+        {
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+        }
+      ]
     },
     {
       "file": "screenshots/06-visualization.png",
       "width": 1280,
       "height": 960,
-      "sha256": "ff325b7cdeb06e9f27dcdd299a2104fb23c6253cd5ee58464ea2aa657fd56233",
-      "code_commit": "90b03e00245a3a96a4b9dd489c4cd72093447574",
-      "code_state": "Base commit plus uncommitted indicator-calculation disclosure, total-export terminology, and review-fix changes.",
-      "code_sources_sha256": "a22b5677c3f072915b7caa7108525c6ec2630a6fad646d74b908dbb6c035e976",
-      "data_release": "40c6a5d0d5d94084961a2dca04b9b260",
+      "sha256": "58da6395ffc37269b4108e08edf5c4ca68a24513de0a0f9eaa1e6243fa54f131",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "pure-ui",
+      "account": "browser-course-5be813ad",
+      "capture_note": "Read-only browser capture from the completed 93-point pure-UI course account.",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 observed indicator input",
-          "production_data": true
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
         }
-      ],
-      "capture": "agent-browser local demo student at http://127.0.0.1:5174; current uncommitted worktree; captured 2026-09-20"
+      ]
+    },
+    {
+      "file": "screenshots/07-visualization.png",
+      "width": 1280,
+      "height": 960,
+      "sha256": "d2a43524e29547827268440a6ba72c09867def9ab5d1a77cc3c273c0356ec113",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "pure-ui",
+      "account": "browser-course-5be813ad",
+      "capture_note": "Read-only browser capture from the completed 93-point pure-UI course account.",
+      "data_sources": [
+        {
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+        }
+      ]
+    },
+    {
+      "file": "screenshots/08-visualization.png",
+      "width": 1280,
+      "height": 960,
+      "sha256": "f7ecc5f97f0c064e5d601adfe017050e752d7a89aea4c7d4249e9724b50bb92e",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "pure-ui",
+      "account": "browser-course-5be813ad",
+      "capture_note": "Read-only browser capture from the completed 93-point pure-UI course account.",
+      "data_sources": [
+        {
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+        }
+      ]
+    },
+    {
+      "file": "screenshots/09-network.png",
+      "width": 1280,
+      "height": 960,
+      "sha256": "9cf2659ed1d821aa0a524f1b2df7ccf09c44252c37ccacd76a5d90dd884f24ac",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "pure-ui",
+      "account": "browser-course-5be813ad",
+      "capture_note": "Read-only browser capture from the completed 93-point pure-UI course account.",
+      "data_sources": [
+        {
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+        }
+      ]
     },
     {
       "file": "screenshots/10-shocks.png",
       "width": 1280,
       "height": 960,
-      "sha256": "e5ccff18362e9aade85d3566d23bd9862323359563eef18acdf53d6158a2eff4",
-      "code_commit": "f856c80925c00d392c0535612681446b6d27c53b",
-      "code_state": "Base commit plus uncommitted v15 teaching-simulation implementation and tests.",
-      "code_sources_sha256": "0ea2ef2c370ea63ff5f65aa3fccc6ad2976200616a85d69cee2571d5ef0a2614",
-      "data_release": "4cd6e33d8f3e449f9f1528120ba5be87",
+      "sha256": "ea7963a3be3e9de272fc5441811c55a285528809dad2ca839e6c6ea2fa8fba70",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "pure-ui",
+      "account": "browser-course-5be813ad",
+      "capture_note": "Read-only browser capture from the completed 93-point pure-UI course account.",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 baseline",
-          "production_data": true
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
         },
         {
-          "name": "v15 fictional tariff and outcome simulation",
+          "name": "step10-tariff-teaching-v1 fictional tariff and outcome simulation",
           "production_data": false
         }
-      ],
-      "capture": "read-only agent-browser session student02 at http://127.0.0.1:5188"
+      ]
     },
     {
       "file": "screenshots/11-regression-result.png",
-      "width": 1440,
-      "height": 1000,
-      "sha256": "4409919069d328b0f6775b1e2c4acb5518132006d83969413410d2f921b448f8",
-      "code_commit": "f856c80925c00d392c0535612681446b6d27c53b",
-      "code_state": "Base commit plus uncommitted v15 teaching-simulation implementation and tests.",
-      "code_sources_sha256": "0ea2ef2c370ea63ff5f65aa3fccc6ad2976200616a85d69cee2571d5ef0a2614",
-      "data_release": "4cd6e33d8f3e449f9f1528120ba5be87",
+      "width": 1280,
+      "height": 960,
+      "sha256": "1b11f490a69dd610c9b3c06f7e7a626bab8be09af2c775d58781e9da54136670",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "pure-ui",
+      "account": "browser-course-5be813ad",
+      "capture_note": "Read-only browser capture from the completed 93-point pure-UI course account.",
       "data_sources": [
         {
-          "name": "OECD ICIO 2023 baseline",
-          "production_data": true
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
         },
         {
-          "name": "v15 fictional tariff and outcome simulation",
+          "name": "step10-tariff-teaching-v1 fictional tariff and outcome simulation",
           "production_data": false
         }
-      ],
-      "capture": "inspected dogfood-output/teaching-v15/final-chart.png"
+      ]
+    },
+    {
+      "file": "screenshots/15-material-gate.png",
+      "width": 940,
+      "height": 168,
+      "sha256": "e8d84562884c2b77e1af15dbe81a981fdaef097ea77c82aeed0f67f2ff6932d3",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "api-assisted",
+      "account": "manual-gate-20260922",
+      "capture_note": "Public teacher API created an independent empty student; browser element capture of .report-gate-panel after scrolling into view.",
+      "data_sources": [
+        {
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+        }
+      ]
+    },
+    {
+      "file": "screenshots/15-writing.png",
+      "width": 1280,
+      "height": 960,
+      "sha256": "390ce23419d583f923c7aef47335bff7d09f2f446793763c3a346eb01fd32e7e",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "api-assisted",
+      "account": "manual-draft-20260922",
+      "capture_note": "Public teacher API created an independent student; seed_full_journey.py populated prerequisite materials and draft fields; browser UI used for capture.",
+      "data_sources": [
+        {
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+        },
+        {
+          "name": "step10-tariff-teaching-v1 fictional tariff and outcome simulation",
+          "production_data": false
+        }
+      ]
+    },
+    {
+      "file": "screenshots/15-report.png",
+      "width": 1280,
+      "height": 960,
+      "sha256": "cccc3e9bda5db1a495af4cb2bab91be35f3c24f827c593cc6450d0f2ce207c31",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "pure-ui",
+      "account": "browser-course-5be813ad",
+      "capture_note": "Read-only browser capture from the completed 93-point pure-UI course account.",
+      "data_sources": [
+        {
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+        },
+        {
+          "name": "step10-tariff-teaching-v1 fictional tariff and outcome simulation",
+          "production_data": false
+        }
+      ]
+    },
+    {
+      "file": "screenshots/15-submitted.png",
+      "width": 940,
+      "height": 50,
+      "sha256": "486bd8ea22b53670b7f1c11841959277311ec4e7a591019e96bc1bb1d2e86943",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "api-assisted",
+      "account": "manual-draft-20260922",
+      "capture_note": "API-assisted independent journey submitted through the browser UI; later read-only element capture of .submit-card after scrolling into view.",
+      "data_sources": [
+        {
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+        },
+        {
+          "name": "step10-tariff-teaching-v1 fictional tariff and outcome simulation",
+          "production_data": false
+        }
+      ]
+    },
+    {
+      "file": "screenshots/15-graded.png",
+      "width": 940,
+      "height": 50,
+      "sha256": "3e033a7b3aa9db1b680bcbb5122be1adced8de5b2c8056bed338b728798b43e5",
+      "captured_on": "2026-09-22",
+      "capture_url": "http://127.0.0.1:5186",
+      "capture_tool": "agent-browser",
+      "journey": "pure-ui",
+      "account": "browser-course-5be813ad",
+      "capture_note": "Read-only element capture of .submit-card from the completed 93-point pure-UI course account, after scrolling into view.",
+      "data_sources": [
+        {
+          "name": "OECD ICIO 2023 observed classroom release",
+          "production_data": true,
+          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+        },
+        {
+          "name": "step10-tariff-teaching-v1 fictional tariff and outcome simulation",
+          "production_data": false
+        }
+      ]
     }
   ]
 }
