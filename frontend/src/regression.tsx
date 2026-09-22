@@ -4,7 +4,7 @@ import { api } from "./api";
 import { useAsync } from "./labs";
 import { lessonQuestion, REGRESSION_LESSONS } from "./regression-lessons";
 import { nextRegressionSave } from "./regression-save";
-import { RegressionEvidenceMatrix } from "./regression-teach";
+import { IntervalReadingExercise, RegressionEvidenceMatrix } from "./regression-teach";
 import {
   buildRegressionVerdict,
   chartDisplayScale,
@@ -105,6 +105,7 @@ export function RegressionResultCard({ outcome, response }: {
 }) {
   const verdict = buildRegressionVerdict(outcome, response);
   const lesson = REGRESSION_LESSONS[outcome];
+  const suppressed = verdict.state === "suppressed";
   const unsignedEffect = verdict.effect.replace(/^[+−-]/, "");
   const plainResult = verdict.state === "negative"
     ? `平均下降 ${unsignedEffect}`
@@ -119,12 +120,26 @@ export function RegressionResultCard({ outcome, response }: {
         <div><dt>拿来比较的因素（X）</dt><dd>模拟关税暴露强度</dd></div>
         <div><dt>想观察的结果（Y）</dt><dd>教学模拟：{lesson.shortMetric}</dd></div>
       </dl>
-      <p className="reg-plain-verdict">当模拟关税暴露增加 1 个百分点时，{lesson.shortMetric}<b>{plainResult}</b>。</p>
-      <div className="verdict-metrics">
-        <div><span>平均变化</span><b>{verdict.effect}</b></div>
-        <div><span>合理范围（95% 置信区间）</span><b>{verdict.interval}</b></div>
-        <div><span>使用的年度记录</span><b>{response.result.n_obs.toLocaleString("zh-CN")}</b></div>
-      </div>
+      <p className="reg-plain-verdict"><strong>方向判断：{verdict.title}</strong></p>
+      <p>{verdict.evidence}</p>
+      {verdict.warnings.length > 0 && (!suppressed || !verdict.coefficient) && (
+        <ul aria-label="本次计算的限制">{verdict.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+      )}
+      {verdict.coefficient && (suppressed ? (
+        <details className="lesson-details">
+          <summary>描述性数值（不能据此判断方向）</summary>
+          <p>X 每增加 1 个百分点时的点估计：{verdict.effect}。当前不提供置信区间，也不能把这个数字当作可靠的上升或下降证据。</p>
+        </details>
+      ) : <>
+        <p>当模拟关税暴露增加 1 个百分点时，{lesson.shortMetric}<b>{plainResult}</b>。</p>
+        <div className="verdict-metrics">
+          <div><span>平均变化（点估计）</span><b>{verdict.effect}</b></div>
+          <div><span>估计的不确定性（95% 置信区间）</span><b>{verdict.interval}</b></div>
+        </div>
+        <p className="muted">区间表达平均关系估计的不确定性，不是各个国家结果的分布范围；包含 0 时，暂不能确定方向，不等于证明没有变化。</p>
+      </>)}
+      <p className="reg-writing-hint"><b>不能推出什么：</b>{lesson.dontClaim}</p>
+      <p className="muted">使用的年度记录：{response.result.n_obs.toLocaleString("zh-CN")}。模型扣除了各国家×行业的固定差异和各年份的共同变化，但这不自动证明因果关系。</p>
       <p className="verdict-boundary"><b>模拟免责声明：</b>X 与 Y 都由课程生成，仅用于练习读数；不是现实关税、OECD 观测结果或政策因果效应。</p>
     </section>
   );
@@ -448,6 +463,7 @@ export function RegressionRunLab({
       <section className="reg-section-card reg-variable-story">
         <span className="reg-section-step">先用普通语言看变量</span>
         <h3>{lessonQuestion(outcome)}</h3>
+        <p className="reg-learning-focus"><b>本步学会一件事：</b>{lesson.learnThis}</p>
         <div className="reg-variable-plain-grid">
           <div><b>拿来比较的因素（X）</b><span>模拟关税暴露，数值越大表示模拟暴露越强。</span></div>
           <div><b>想观察的结果（Y）</b><span>教学模拟：{lesson.shortMetric}。</span></div>
@@ -544,6 +560,7 @@ export function RegressionRunLab({
       {outcome === "network" && result && (
         <RegressionEvidenceMatrix history={history} getStep={getConfirmedStep} current={outcome} />
       )}
+      {outcome === "production" && result && <IntervalReadingExercise />}
       <details className="technical-details">
         <summary>计算方法说明（可选）</summary>
         <div className="reg-question-main">

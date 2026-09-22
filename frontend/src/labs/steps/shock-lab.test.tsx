@@ -25,6 +25,9 @@ test("step 10 uses the dedicated teaching tariff panel independently of the old 
   expect(html).toContain("五年变化");
   expect(html).toContain("正在读取教学关税面板");
   expect(html).not.toContain("政策事件");
+  expect(html).toContain("0.25 × 0.20 = 0.05，即 5%");
+  expect(html).toContain("X 从 5% 变为 6%，增加的是 1 个百分点");
+  expect(html).toContain("不是下方所选国家的实际读数");
 });
 
 test("step 10 prefers the configured two-country industry example", () => {

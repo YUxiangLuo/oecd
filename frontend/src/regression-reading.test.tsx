@@ -1,7 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { RegressionResultCard } from "./regression";
+import { IntervalReadingExercise } from "./regression-teach";
 import type { RegressionResponse } from "./types";
+
+afterEach(cleanup);
 
 function response(): RegressionResponse {
   return {
@@ -25,5 +29,73 @@ describe("fixed teaching regression reading", () => {
     expect(html).not.toMatch(/处理组|对照组|处理聚类|同时置信带/);
     expect(html).toContain("+2.00 个百分点");
     expect(html).toContain("[+1.00, +3.00] 个百分点");
+    expect(html).toContain("方向判断：发现正向变化证据");
+    expect(html).toContain("不是各个国家结果的分布范围");
+    expect(html).toContain("不能推出什么");
+    expect(html).toContain("不要写成「已经证明生产回流」");
+    expect(html).not.toContain("合理范围");
   });
+
+  test.each([
+    [-0.8, -0.2, "发现负向变化证据", true],
+    [-0.9, 0.1, "证据不足，无法判断变化方向", false],
+    [-0.8, 0, "证据不足，无法判断变化方向", false],
+  ])("negative point estimate with interval [%s, %s] is interpreted using the interval", (low, high, title, negative) => {
+    const data = response();
+    Object.assign(data.result.coefs[0], { coef: -0.4, ci_low: low, ci_high: high });
+    const { container } = render(<RegressionResultCard outcome="production" response={data} />);
+    expect(container.querySelector(".reg-plain-verdict")?.textContent).toBe(`方向判断：${title}`);
+    expect(container.textContent?.includes("平均下降")).toBe(negative);
+    expect(container.querySelector(".verdict-metrics")?.textContent).toContain("-0.40 个百分点");
+  });
+
+  test("suppressed inference takes priority even over an apparently positive interval", () => {
+    const data = response();
+    data.result.status = "invalid_design";
+    data.result.status_reasons = ["可用于比较的国家太少"];
+    const { container } = render(<RegressionResultCard outcome="trade" response={data} />);
+    expect(screen.getByText(/方向判断：这个设计不能用于统计推断/)).toBeTruthy();
+    expect(screen.getByText(/停止推断原因：可用于比较的国家太少/)).toBeTruthy();
+    expect(container.querySelector(".verdict-metrics")).toBeNull();
+    expect(container.textContent).not.toMatch(/平均上升|平均下降|区间未跨过/);
+    const details = container.querySelector("details")!;
+    expect(details.open).toBe(false);
+    expect(details.textContent).toContain("+2.00 个百分点");
+    expect(container.textContent).not.toContain("[+1.00, +3.00]");
+  });
+
+  test("a missing coefficient never produces a numeric reading sentence", () => {
+    const data = response();
+    data.result.coefs = [];
+    const { container } = render(<RegressionResultCard outcome="trade" response={data} />);
+    expect(screen.getByText(/当前设定没有可解读的政策系数/)).toBeTruthy();
+    expect(container.querySelector(".verdict-metrics")).toBeNull();
+    expect(container.textContent).not.toContain("平均变化为 —");
+  });
+
+  test("allowed estimates still disclose design warnings", () => {
+    const data = response();
+    data.result.status = "warning";
+    data.result.status_reasons = ["部分国家年度记录缺失"];
+    render(<RegressionResultCard outcome="trade" response={data} />);
+    expect(screen.getByRole("list", { name: "本次计算的限制" }).textContent).toContain("部分国家年度记录缺失");
+    expect(screen.getByText("平均上升 2.00 个百分点")).toBeTruthy();
+  });
+});
+
+test("optional interval exercise corrects both misconceptions without creating a required task", () => {
+  const { container } = render(<IntervalReadingExercise />);
+  const details = container.querySelector("details")!;
+  expect(details.open).toBe(false);
+  fireEvent.click(screen.getByText("可选小练习：都是负数，结论一样吗？"));
+  expect(screen.getByText(/不计分、不影响完成进度，也不进入报告/)).toBeTruthy();
+  expect(screen.queryByRole("status")).toBeNull();
+  fireEvent.click(screen.getByLabelText("两组都支持，因为点估计都是负数"));
+  expect(screen.getByRole("status").textContent).toContain("不能只看点估计的正负");
+  fireEvent.click(screen.getByLabelText("A 支持下降，B 证明没有变化"));
+  expect(screen.getByRole("status").textContent).toContain("不能把证据不足当作没有变化");
+  fireEvent.click(screen.getByLabelText("只有 A 支持，B 暂不能确定方向"));
+  expect(screen.getByRole("status").textContent).toContain("答对了");
+  expect(container.querySelectorAll("input:checked")).toHaveLength(1);
+  expect(container.querySelectorAll("input[required], button[type=submit]")).toHaveLength(0);
 });

@@ -144,7 +144,7 @@ export function buildRegressionVerdict(
       title: invalid ? "这个设计不能用于统计推断" : "样本支持度不足，无法给出显著性",
       effect: scaled.effect,
       interval: "—",
-      evidence: `${diagnostic} 点估计仅作描述性展示；p 值、置信区间与星号均已抑制。`,
+      evidence: `${diagnostic} 点估计仅供描述，不提供置信区间，不能据此判断上升或下降。`,
       interpretation: "不能据此判断变化方向——这不是“没有效应”，而是当前设计无法评估。",
       coefficient,
     };
@@ -162,8 +162,8 @@ export function buildRegressionVerdict(
     effect: scaled.effect,
     interval: scaled.interval,
     evidence: state === "insufficient"
-      ? "95% 置信区间跨过 0；这不等于“没有效应”，而是当前证据不足以确定方向。"
-      : "95% 置信区间未跨过 0；是否作因果解释仍取决于冲击外生性、趋势可比性等假设。",
+      ? "95% 置信区间包含 0（跨过或触及）；这不等于“没有效应”，而是当前证据不足以确定方向。"
+      : "95% 置信区间完全位于 0 的一侧，支持这一变化方向；但不能仅凭回归就认定 X 导致了 Y 的变化。",
     interpretation: state === "negative" || state === "positive"
       ? INTERPRETATION[outcome][state]
       : "当前结果不能支持明确的上升或下降结论。",

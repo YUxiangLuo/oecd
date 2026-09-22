@@ -5,7 +5,7 @@ import {
   RegressionRequestError, RegressionRequestLoading,
   RegressionRunLab, scrollRegressionVerdict, type RegressionHistory,
 } from "./regression";
-import type { Step, StepStateApi } from "./types";
+import type { RegressionOutcome, Step, StepStateApi } from "./types";
 
 afterEach(cleanup);
 
@@ -32,6 +32,19 @@ describe("simple regression workbench", () => {
     expect(dom.querySelector(".metric-facts")?.textContent).toContain("学生无需选择计算方法");
     expect(dom.querySelector(".technical-details > summary")?.textContent).toBe("计算方法说明（可选）");
     expect(html).not.toMatch(/advanced-settings|实体置换|运行历史|四格数字示例/);
+  });
+
+  test("each step exposes its own learning focus without adding a required action", () => {
+    for (const [outcome, focus] of [
+      ["trade", "读数："], ["production", "读区间："], ["length", "读单位："], ["network", "综合判断："],
+    ] as [RegressionOutcome, string][]) {
+      const html = renderToStaticMarkup(<RegressionRunLab
+        step={{ ...step, regression_outcome: outcome }} meta={meta} state={state}
+        history={{}} onHistoryChange={() => {}} />);
+      const dom = new DOMParser().parseFromString(html, "text/html");
+      expect(dom.querySelector(".reg-learning-focus")?.textContent).toContain(focus);
+      expect(dom.querySelectorAll(".reg-run-card > button")).toHaveLength(1);
+    }
   });
 
   test("keeps request states accessible", () => {
