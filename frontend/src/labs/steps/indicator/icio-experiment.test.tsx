@@ -17,7 +17,7 @@ const chain: TeachingScenario = {
     { SVA: 60, "1_VA_D": 0, "2_VA_RT": 60, "3a_VA_GVC_S": 0, "3b_VA_GVC_C": 0 },
   ],
   length: [
-    { PLv: 2, PLy: 1, PLv_GVC: 2, PLy_GVC: null, GVCPs: null },
+    { PLv: 2, PLy: null, PLv_GVC: 2, PLy_GVC: null, GVCPs: null },
     { PLv: 1, PLy: 1.4, PLv_GVC: null, PLy_GVC: 2, GVCPs: null },
   ],
 };
@@ -93,5 +93,21 @@ test("failed teaching request offers retry without invented results", async () =
     expect(view.queryByRole("region", { name: "教学指标计算结果" })).toBeNull();
     fireEvent.click(view.getByRole("button", { name: /重试/ }));
     await waitFor(() => expect(view.getByText("总出口 = 100")).toBeTruthy());
+  } finally { mock.mockRestore(); }
+});
+
+test("backward reading treats zero final demand as undefined when selecting an intermediate producer", async () => {
+  const mock = setup();
+  try {
+    const view = render(<IcioExperiment topic="length" />);
+    await view.findByRole("button", { name: "复杂全球价值链" });
+    fireEvent.click(view.getByRole("button", { name: "复杂全球价值链" }));
+    fireEvent.click(view.getByRole("button", { name: "后向：从最终产品回溯" }));
+    fireEvent.click(view.getByRole("button", { name: "甲国·初级品" }));
+    expect(view.getByText("后向长度 = —")).toBeTruthy();
+    expect(view.getByText("该行业没有实际最终需求，因此本场景后向长度未定义；请选择有最终需求的加工品行业。")).toBeTruthy();
+    expect(view.queryByText(/此值是其技术结构对应的单位产品后向长度/)).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "乙国·加工品" }));
+    expect(view.getByText("(40 × 2 + 60 × 1) ÷ 100 = 1.4")).toBeTruthy();
   } finally { mock.mockRestore(); }
 });

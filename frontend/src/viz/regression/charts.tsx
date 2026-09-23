@@ -1,4 +1,5 @@
 import { globalInferenceIsSuppressed } from "../../regression-verdict";
+import { CLUSTER_INTERVAL_LABEL, formatPValue } from "../../regression-statistics";
 import type { RegressionStatus, TreatmentSupport } from "../../types";
 import { cardStyle, useTip } from "../shared";
 
@@ -64,17 +65,17 @@ export function CoefForestChart({
   const tip = (point: (typeof pts)[number]): [string, string][] => inferenceAllowed ? [
     ["", point.displayName],
     ["系数", `${format(point.coef)}${point.stars}`],
-    ["95% CI", point.lo != null && point.hi != null ? `[${format(point.lo)}, ${format(point.hi)}]` : "不可评估"],
-    ["p 值", point.p != null ? point.p.toFixed(3) : "不可评估"],
+    ["标称 95% CI", point.lo != null && point.hi != null ? `[${format(point.lo)}, ${format(point.hi)}]` : "不可评估"],
+    ["p 值", formatPValue(point.p, "不可评估")],
   ] : [["", point.displayName], ["描述性点估计", format(point.coef)], ["显示状态", suppressionCopy]];
   const description = hasCi
-    ? "政策系数及 95% 置信区间"
+    ? `政策系数及${CLUSTER_INTERVAL_LABEL}`
     : inferenceAllowed ? "政策系数；本设计不可作推断，无置信区间" : "政策系数描述性点；整体设计门禁已抑制统计推断";
   return (
     <div ref={wrapRef} style={{ ...cardStyle, flex: "1 1 260px", minWidth: 260 }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: "#3a4050" }}>{title}{unit ? `（${unit}）` : ""}</div>
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
-        {!inferenceAllowed ? suppressionCopy : hasCi ? "点 = 估计值 · 横线 = 95% 置信区间" : "点 = 估计值 · 无置信区间"}
+        {!inferenceAllowed ? suppressionCopy : hasCi ? `点 = 估计值 · 横线 = ${CLUSTER_INTERVAL_LABEL}` : "点 = 估计值 · 无置信区间"}
         {unit ? ` · 单位：${unit}` : ""}
       </div>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={description} style={{ display: "block", width: "100%", height: "auto" }}>

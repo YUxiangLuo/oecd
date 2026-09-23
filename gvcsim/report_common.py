@@ -106,8 +106,12 @@ def _number(value: Any, *, p_value: bool = False) -> str:
     if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(float(value)):
         return "—"
     numeric = float(value)
-    if p_value and 0 < numeric < 0.0001:
-        return "<0.0001"
+    if p_value:
+        if not 0 <= numeric <= 1:
+            return "—"
+        # A numerical tail probability may underflow to zero; do not print an exact zero.
+        if numeric < 0.0001:
+            return "<0.0001"
     return f"{numeric:.4g}"
 
 

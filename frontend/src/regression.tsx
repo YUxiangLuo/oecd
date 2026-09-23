@@ -4,6 +4,7 @@ import { api } from "./api";
 import { useAsync } from "./labs";
 import { lessonQuestion, REGRESSION_LESSONS } from "./regression-lessons";
 import { nextRegressionSave } from "./regression-save";
+import { CLUSTER_INTERVAL_LABEL, CLUSTER_INTERVAL_NOTE, formatPValue } from "./regression-statistics";
 import { IntervalReadingExercise, RegressionEvidenceMatrix } from "./regression-teach";
 import {
   buildRegressionVerdict,
@@ -137,9 +138,10 @@ export function RegressionResultCard({ outcome, response, sourceFilter }: {
         <p>当模拟关税暴露增加 1 个百分点时，模拟 Y（{lesson.shortMetric}）<b>{plainResult}</b>。</p>
         <div className="verdict-metrics">
           <div><span>平均变化（点估计）</span><b>{verdict.effect}</b></div>
-          <div><span>估计的不确定性（95% 置信区间）</span><b>{verdict.interval}</b></div>
+          <div><span>估计的不确定性（{CLUSTER_INTERVAL_LABEL}）</span><b>{verdict.interval}</b></div>
         </div>
         <p className="muted">区间表达平均关系估计的不确定性，不是各个国家结果的分布范围；包含 0 时，暂不能确定方向，不等于证明没有变化。</p>
+        {verdict.coefficient.ci_low != null && verdict.coefficient.ci_high != null && <p className="muted reg-inference-note">{CLUSTER_INTERVAL_NOTE}</p>}
       </>)}
       {!suppressed && verdict.coefficient && response.model_snapshot && <div className="reg-simulation-comparison">
         <p><b>与生成时的预设关系比较</b>（同按 X 增加 1 个百分点换算）</p>
@@ -163,7 +165,7 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
   return (
     <ScrollableRegion className="table-wrap" label="完整回归系数表，可横向滚动">
       <table className="data-table">
-        <thead><tr><th>变量</th><th>系数</th><th>95% CI</th><th>聚类SE</th><th>t</th><th>p</th></tr></thead>
+        <thead><tr><th>变量</th><th>系数</th><th>标称 95% CI</th><th>聚类SE</th><th>t</th><th>p</th></tr></thead>
         <tbody>{response.result.coefs.map((coef) => {
           const globallySuppressed = globalInferenceIsSuppressed(
             response.result.status, response.result.support,
@@ -177,7 +179,7 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
               <td>{coef.name}</td>
               <td>{coef.coef.toFixed(4)}</td>
               <td>{ciLow != null && ciHigh != null ? `[${ciLow.toFixed(4)}, ${ciHigh.toFixed(4)}]` : "—"}</td>
-              <td>{coef.se != null ? coef.se.toFixed(4) : "—"}</td><td>{coef.t != null ? coef.t.toFixed(2) : "—"}</td><td>{p != null ? p.toFixed(3) : "—"}</td>
+              <td>{coef.se != null ? coef.se.toFixed(4) : "—"}</td><td>{coef.t != null ? coef.t.toFixed(2) : "—"}</td><td>{formatPValue(p)}</td>
             </tr>
           );
         })}</tbody>
@@ -605,6 +607,7 @@ export function RegressionRunLab({
             <h3>原始列与系数</h3>
             <p className="muted">X 原始列：{result.model_snapshot?.x_columns.join("、")}；Y 原始列：{result.model_snapshot?.y_column}。表内保留计算键与模型原始单位。</p>
             <RegressionCoefficientTable response={result} />
+            <p className="muted">极小 p 值以 &lt;0.0001 展示，不能读作概率为零。</p>
             <p className="muted">N={result.result.n_obs.toLocaleString("zh-CN")} · {result.result.n_entities.toLocaleString("zh-CN")} 个体 × {result.result.n_times} 年 · {result.result.n_clusters} 个聚类 · {result.result.r2_within == null ? "本次 TWFE 结果未提供组内 R²" : `组内 R²=${result.result.r2_within.toFixed(4)}`}</p>
           </>
         )}

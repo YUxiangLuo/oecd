@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from gvcsim.regression.validity import CLUSTER_INTERVAL_NOTE
 from gvcsim.report_common import (
     _OUTCOME_UNITS,
     _SHOCK_SOURCE_STATUS_LABELS,
@@ -233,7 +234,7 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
         "下表列出各步实际保存的可报告结果；系数因量纲和估计对象不同不能比大小，"
         "网络 Y 是人工生成的标量，没有对应的新图，不能解释为拓扑已经变化。",
         "",
-        "| 步骤 | 指标 | 冲击 | 比较方式 | 估计对象与相对变化 | 95% 区间 | 证据判断 |",
+        "| 步骤 | 指标 | 冲击 | 比较方式 | 估计对象与相对变化 | 标称 95% 近似区间 | 证据判断 |",
         "|---|---|---|---|---|---|---|",
     ]
     designs = []
@@ -293,6 +294,8 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
         "本节把保存的主要估计翻译成课堂中的单位和证据判断。完整方程、全部控制项与诊断保留在后面的技术附录。",
         "",
         *_teaching_sample_lines(source_filter),
+        "区间口径：如提供区间，均为**标称 95% 的近似聚类区间**。" + CLUSTER_INTERVAL_NOTE,
+        "",
         *_comparison_table(runs),
     ]
     if not runs:
@@ -337,7 +340,7 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
                 f"| 研究对象 | {_safe(design.get('depvar_label', outcome))} |",
                 f"| 保存的模型 | {setting or '—'} |",
                 f"| {effect_label} | **{effect}** |",
-                f"| 95% 置信区间 | {interval} |",
+                f"| 标称 95% 的近似聚类区间 | {interval} |",
                 f"| 证据判断 | **{evidence}** |",
                 f"| 设计状态 | {_STATUS_LABELS.get(status, _STATUS_LABELS['unknown'])} |",
                 "",
@@ -422,7 +425,7 @@ def _technical_estimate_tables(
     *,
     suppressed: bool,
 ) -> list[str]:
-    lines = ["", "| 变量 | 点估计 | 标准误 | 95% 置信区间 | p 值 |", "|---|---:|---:|---:|---:|"]
+    lines = ["", "| 变量 | 点估计 | 标准误 | 标称 95% 近似区间 | p 值 |", "|---|---:|---:|---:|---:|"]
     for coefficient in result.get("coefs", []):
         if not isinstance(coefficient, dict):
             continue
@@ -448,6 +451,7 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
         "## 技术附录：保存的回归结果",
         "",
         "以下结果来自会话中保存的服务端运行，不在报告生成时重新估计。同一步可能有最近一次探索和一份可报告快照。表格数值为便于阅读做了四位有效数字的显示舍入；完整原始值仍保留在报告溯源数据中。",
+        "极小 p 值以 <0.0001 展示，不能读作概率为零。",
         "",
     ]
     grouped: dict[int, list[dict[str, Any]]] = {step: [] for step in _STEP_OUTCOMES}

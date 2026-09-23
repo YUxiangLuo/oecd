@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { RegressionResultCard } from "./regression";
+import { RegressionCoefficientTable, RegressionResultCard } from "./regression";
 import { IntervalReadingExercise } from "./regression-teach";
 import type { RegressionResponse } from "./types";
+import { CoefForestChart } from "./viz/regression/charts";
 
 afterEach(cleanup);
 
@@ -31,6 +32,9 @@ describe("fixed teaching regression reading", () => {
     expect(html).toContain("[+1.00, +3.00] 个百分点");
     expect(html).toContain("方向判断：本次模拟样本支持正向关联");
     expect(html).toContain("不是各个国家结果的分布范围");
+    expect(html).toContain("标称 95% 的近似聚类区间");
+    expect(html).toContain("实际覆盖率可能低于 95%");
+    expect(html).toContain("国家数量多也不保证达到标称覆盖率");
     expect(html).toContain("不能推出什么");
     expect(html).toContain("不要写成「已经证明生产回流」");
     expect(html).not.toContain("合理范围");
@@ -58,6 +62,7 @@ describe("fixed teaching regression reading", () => {
     expect(screen.getByText(/停止推断原因：可用于比较的国家太少/)).toBeTruthy();
     expect(container.querySelector(".reg-simulation-comparison")).toBeNull();
     expect(container.querySelector(".verdict-metrics")).toBeNull();
+    expect(container.querySelector(".reg-inference-note")).toBeNull();
     expect(container.textContent).not.toMatch(/平均上升|平均下降|区间未跨过/);
     const details = container.querySelector("details")!;
     expect(details.open).toBe(false);
@@ -115,6 +120,25 @@ describe("fixed teaching regression reading", () => {
     expect(screen.getByRole("list", { name: "本次计算的限制" }).textContent).toContain("部分国家年度记录缺失");
     expect(screen.getByText("平均上升 2.00 个百分点")).toBeTruthy();
   });
+});
+
+test.each([
+  [2.7231068455073544e-24, "<0.0001"],
+  [0, "<0.0001"],
+  [0.00009999, "<0.0001"],
+  [0.0001, "0.0001"],
+  [0.0256, "0.0256"],
+  [1, "1"],
+  [null, "—"],
+] as const)("p=%s is legible in both the raw table and forest tooltip", (p, expected) => {
+  const data = response();
+  data.result.coefs[0].p = p;
+  const table = render(<RegressionCoefficientTable response={data} />);
+  expect(table.container.querySelector("tbody td:last-child")?.textContent).toBe(expected);
+  table.unmount();
+  const plot = render(<CoefForestChart coefs={data.result.coefs} />);
+  fireEvent.mouseEnter(plot.container.querySelector("circle")!.closest("g")!);
+  expect(plot.container.textContent).toContain(`p 值 · ${p == null ? "不可评估" : expected}`);
 });
 
 test("optional interval exercise corrects both misconceptions without creating a required task", () => {

@@ -21,6 +21,7 @@ from gvcsim.data.raw_icio import DimensionContract, raw_dimensions_metadata
 from gvcsim.regression import teaching
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.regression.teaching import X_COLUMN, model_snapshot, variable_catalog
+from gvcsim.report_common import _number
 
 from gvcsim.session import empty_session, make_record
 from gvcsim.teaching_report import (
@@ -62,6 +63,24 @@ def test_report_tiny_nonzero_numbers_and_standardized_effect_preserve_sign():
         {"name": "tariff_shock", "coef": -690.746, "ci_low": -15099, "ci_high": 13718},
     )
     assert "约 -0.0035 个样本标准差" in effect
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (2.7231068455073544e-24, "<0.0001"),
+        (0, "<0.0001"),
+        (0.00009999, "<0.0001"),
+        (0.0001, "0.0001"),
+        (0.0256, "0.0256"),
+        (1, "1"),
+        (None, "—"),
+    ],
+)
+def test_report_p_value_precision_matches_table_and_tooltip(value, expected):
+    assert _number(value, p_value=True) == expected
+    # Formatting a p value must not alter ordinary numeric zeroes in the report.
+    assert _number(0) == "0"
 
 
 REPORT_RAW_CONTRACT = DimensionContract(
@@ -1031,6 +1050,9 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert "预设 -0.55 个百分点；估计 +1.20 个百分点；差值（估计 − 预设）+1.75 个百分点" in report.markdown
     assert "模拟 Y 的数值上升" in report.markdown
     assert "本实验没有生成冲击后的投入产出表或网络" in report.markdown
+    assert "标称 95% 的近似聚类区间" in report.markdown
+    assert "实际覆盖率可能低于 95%" in report.markdown
+    assert "国家数量多也不保证达到标称覆盖率" in report.markdown
     assert "Goodman-Bacon" not in report.markdown
 
     assert "有向无权网络" in report.markdown

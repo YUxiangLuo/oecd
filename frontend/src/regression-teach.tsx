@@ -107,7 +107,7 @@ export function RegressionEvidenceMatrix({
       <div className="table-wrap" role="region" aria-label="四步证据总表，可横向滚动" tabIndex={0}>
         <table className="data-table reg-evidence-table">
           <thead>
-            <tr><th>步骤</th><th>指标家族</th><th>比较设定</th><th>方向判断</th><th>效应与单位</th><th>95% 区间</th><th>写作边界</th></tr>
+            <tr><th>步骤</th><th>指标家族</th><th>比较设定</th><th>方向判断</th><th>效应与单位</th><th>标称 95% 近似区间</th><th>写作边界</th></tr>
           </thead>
           <tbody>
             {REGRESSION_FAMILIES.map((item) => {

@@ -113,7 +113,7 @@ export function IcioExperiment({ topic }: { topic: IndicatorTopic }) {
               <div className="icio-equation">{scenario.Y[node].some((v) => v > 0)
                 ? `(${active.map((i) => `${fmtDb(scenario.va[i])} × ${i === node ? "1" : "2"}`).join(" + ")}) ÷ 100 = ${fmtDb(scenario.length[node].PLy)}`
                 : `后向长度 = ${fmtDb(scenario.length[node].PLy)}`}</div>
-              <p>{scenario.Y[node].some((v) => v > 0) ? active.length === 1 ? "没有中间加工，全部增加值只经过一次生产。" : "初级品价值经过初级生产和加工，加工新增价值只经过加工。" : "该行业没有实际最终需求；此值是其技术结构对应的单位产品后向长度，不代表本场景有最终产品在这里完成。"}</p>
+              <p>{scenario.Y[node].some((v) => v > 0) ? active.length === 1 ? "没有中间加工，全部增加值只经过一次生产。" : "初级品价值经过初级生产和加工，加工新增价值只经过加工。" : "该行业没有实际最终需求，因此本场景后向长度未定义；请选择有最终需求的加工品行业。"}</p>
             </>}
           </>}
         </section>

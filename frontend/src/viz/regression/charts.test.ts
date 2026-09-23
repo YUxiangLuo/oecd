@@ -31,7 +31,7 @@ describe("fixed regression forest chart", () => {
       coefs: [{ name: "x", coef: -0.2, ci_low: -0.3, ci_high: -0.1, p: 0.001, stars: "***" }],
       globalStatus: "ok",
     }));
-    expect(markup).toContain("点 = 估计值 · 横线 = 95% 置信区间");
+    expect(markup).toContain("点 = 估计值 · 横线 = 标称 95% 的近似聚类区间");
     expect(markup).toContain('stroke="#aaa7eb"');
   });
 });
