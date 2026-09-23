@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, cast
 
 from gvcsim import quizzes
@@ -24,8 +25,10 @@ from gvcsim.shocks import events_metadata
 
 
 def _reflection_value(value: Any) -> str:
-    """Keep accepted student prose byte-for-byte instead of normalizing Markdown."""
-    return value if isinstance(value, str) else "—"
+    """Preserve prose inside a literal block that cannot consume later sections."""
+    text = value if isinstance(value, str) else "—"
+    fence = "`" * max(3, 1 + max((len(run) for run in re.findall(r"`+", text)), default=0))
+    return f"{fence}gvcsim-reflection\n{text}\n{fence}"
 
 
 def _reflection_section(session: dict[str, Any]) -> list[str]:
@@ -109,7 +112,8 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
         selection = data.get("indicator_selection")
         selected_metric = selection.get("metric") if isinstance(selection, dict) else None
         metric = str(selected_metric) if selected_metric in available_metrics else available_metrics[0]
-        context = "构成演变 · " if isinstance(selection, dict) and selection.get("view") == "evolution" else ""
+        view = selection.get("view") if isinstance(selection, dict) else None
+        context = "构成演变 · " if view == "evolution" else "前后向 · " if view == "directions" else ""
         countries = [str(item) for item in _list_values(data.get("compared"))]
         series = []
         for country in countries:
@@ -143,7 +147,7 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
             dict.fromkeys(
                 (str(item.get("industry") or ""), int(item["year"]), str(item["metric"])) for item in observations
             )
-        )[:6]
+        )
     selected = [
         item
         for industry, year, metric in identities
@@ -183,23 +187,23 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
 
 
 def _observed_charts(data: dict[str, Any], step: int, observations: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Keep every selected composition component while retaining two-country trend charts."""
+    """Keep every saved trend metric, with composition totals excluded explicitly."""
     selection = data.get("indicator_selection")
     is_evolution = isinstance(selection, dict) and selection.get("view") == "evolution"
     source = str(observations[0]["source"])
     components = _COMPOSITION_COMPONENT_METRICS.get(step)
-    if source != "explicit-indicator-trend" or not is_evolution or components is None:
+    if source not in {"explicit-indicator-trend", "explicit-network-trend"}:
         return [_observed_chart(data, step, observations)]
-    assert isinstance(selection, dict)
-    available = {str(item["metric"]) for item in observations}
+    available = list(dict.fromkeys(str(item["metric"]) for item in observations))
+    metrics = [metric for metric in components if metric in available] if is_evolution and components else available
+    selection = selection if isinstance(selection, dict) else {}
     return [
         _observed_chart(
             {**data, "indicator_selection": {**selection, "metric": metric}},
             step,
             observations,
         )
-        for metric in components
-        if metric in available
+        for metric in metrics
     ]
 
 
@@ -208,7 +212,7 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
     lines = [
         "## 真实指标：时间变化与国家比较",
         "",
-        "> 图表由步骤 6–9 已保存的同口径读数自动生成；无需学生重复抄录。图下保留完整数值表供复核。",
+        "> 图表由步骤 6–9 已保存的同口径读数自动生成；无需学生重复抄录。完整数值表见后文“保存的实验快照”。",
         "",
     ]
     for step in range(6, 10):
@@ -224,10 +228,23 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES[step]}", ""))
         charts = _observed_charts(data, step, observations)
         if len(charts) > 1:
-            lines.extend(("> 构成演变按构成项拆成多张两国同口径趋势图，避免把不同分项连接成一条线。", ""))
+            selection = data.get("indicator_selection")
+            view = selection.get("view") if isinstance(selection, dict) else None
+            context = "前后向指标" if view == "directions" else "构成演变" if view == "evolution" else "已保存指标"
+            lines.extend((f"> {context}按指标拆成多张两国同口径趋势图，保留每项读数与变化。", ""))
         for chart in charts:
+            display_chart = chart
+            if chart["type"] == "bar" and len(chart["items"]) > 12:
+                display_chart = {**chart, "items": chart["items"][:12]}
+                lines.extend(
+                    (
+                        f"> 主图按保存顺序展示前 12 / {len(chart['items'])} 条读数；"
+                        "下方极值使用全部保存读数。完整数值表见后文“保存的实验快照”。",
+                        "",
+                    )
+                )
             lines.append("```gvcsim-chart")
-            lines.append(json.dumps(chart, ensure_ascii=False, separators=(",", ":")))
+            lines.append(json.dumps(display_chart, ensure_ascii=False, separators=(",", ":")))
             lines.extend(("```", ""))
             if chart["type"] == "line":
                 changes = []
@@ -241,9 +258,18 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
             else:
                 largest = max(chart["items"], key=lambda item: item["value"])
                 smallest = min(chart["items"], key=lambda item: item["value"])
+                largest_labels = "、".join(
+                    item["label"] for item in chart["items"] if item["value"] == largest["value"]
+                )
+                smallest_labels = "、".join(
+                    item["label"] for item in chart["items"] if item["value"] == smallest["value"]
+                )
+                scope = (
+                    "保存的构成项中" if observations[0]["source"] == "explicit-indicator-composition" else "保存范围内"
+                )
                 lines.append(
-                    f"- 自动读图：保存范围内最高为 {largest['label']}（{_number(largest['value'])}），"
-                    f"最低为 {smallest['label']}（{_number(smallest['value'])}）。这是同口径描述性比较。"
+                    f"- 自动读图：{scope}最高为 {largest_labels}（{_number(largest['value'])}），"
+                    f"最低为 {smallest_labels}（{_number(smallest['value'])}）。这是同口径描述性比较。"
                 )
             lines.append("")
     return lines

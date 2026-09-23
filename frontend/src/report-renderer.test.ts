@@ -4,6 +4,19 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { parseReportChart, ReportMarkdown } from "./report-renderer";
 
 describe("report tables", () => {
+  test("isolates literal reflection text from following report headings, tables and charts", () => {
+    const prose = "段落 `指标` | 原文\n\n~~~\n```\n</div><script>文本</script>\n## 学生粘贴的标题";
+    const chart = JSON.stringify({ version: 1, type: "bar", items: [{ label: "CHN", value: 1 }] });
+    const markdown = `\`\`\`\`gvcsim-reflection\n${prose}\n\`\`\`\`\n\n## 系统证据\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n\`\`\`gvcsim-chart\n${chart}\n\`\`\``;
+    const element = document.createElement("div");
+    element.innerHTML = renderToStaticMarkup(createElement(ReportMarkdown, { markdown }));
+    expect(element.querySelector(".report-student-prose")?.textContent).toBe(prose);
+    expect([...element.querySelectorAll("h2")].map((e) => e.textContent)).toEqual(["系统证据"]);
+    expect(element.querySelectorAll("table")).toHaveLength(1);
+    expect(element.querySelectorAll("figure")).toHaveLength(1);
+    expect(element.querySelector("pre, script")).toBeNull();
+  });
+
   test("names each scroll region by its heading and document order, including repeated headings", () => {
     const table = "| 项目 | 结果 |\n|---|---|\n| 系数 | 0.01 |";
     const markdown = `${table}\n\n### 步骤 11 · **贸易**结果\n\n${table}\n\n${table}\n\n### 步骤 12 · 生产结果\n\n${table}`;

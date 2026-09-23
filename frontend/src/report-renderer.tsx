@@ -275,6 +275,11 @@ function ReportCode({ className, children, ...props }: ComponentPropsWithoutRef<
 function ReportPre({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
   if (isValidElement<{ className?: string; children?: ReactNode }>(children)) {
     const className = children.props.className;
+    if (className?.split(" ").includes("language-gvcsim-reflection")) {
+      return <div className="report-student-prose" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", margin: "14px 0" }}>
+        {String(children.props.children ?? "").replace(/\n$/, "")}
+      </div>;
+    }
     if (className?.split(" ").includes("language-gvcsim-chart")) {
       const chart = parseReportChart(String(children.props.children ?? "").replace(/\n$/, ""));
       if (chart?.type === "bar") return <BarChart chart={chart} />;

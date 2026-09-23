@@ -780,6 +780,61 @@ def test_composition_evolution_generates_each_component_as_a_two_country_trend()
     assert any("出口中的外国增加值" in chart["title"] for chart in charts)
 
 
+@pytest.mark.parametrize("step", [6, 9])
+def test_report_ranking_extrema_use_all_saved_industries(step):
+    session = _complete()
+    data = session["steps"][str(step)]["data"]
+    data["observations"] = [
+        dict(
+            item,
+            industry=f"S{industry}",
+            entity=f"{item['country']}·S{industry}",
+            scope="country-industry",
+            value=0 if industry == 8 else (0.99 if industry == 7 and item["country"] == "USA" else 0.2),
+            unit="%",
+        )
+        for industry in range(9)
+        for item in data["observations"]
+    ]
+    assert not any(item["step"] == step for item in check_material_gate(session))
+    section = "\n".join(report_observed._observed_evidence_section(session)).split(f"### 步骤 {step}", 1)[1]
+    section = section.split("### 步骤", 1)[0]
+    assert "最高为 USA · S7（99）" in section
+    assert "最低为 CHN · S8、USA · S8（0）" in section
+    assert "12 / 18 条读数" in section
+    chart = json.loads(section.split("```gvcsim-chart\n", 1)[1].split("\n```", 1)[0])
+    assert len(chart["items"]) == 12
+
+
+def test_report_directions_retains_both_length_metrics_and_their_readouts():
+    session = _complete()
+    data = session["steps"]["8"]["data"]
+    data["indicator_selection"] = {"view": "directions", "metric": "PLv_GVC"}
+    data["observations"] = [
+        dict(
+            item,
+            metric=metric,
+            value=value + (year - 2016) / 10,
+            year=year,
+            unit="生产阶段（账户比值）",
+            source="explicit-indicator-trend",
+        )
+        for item in data["observations"]
+        for year in range(2016, 2021)
+        for metric, value in (("PLv_GVC", 4), ("PLy_GVC", 5))
+    ]
+    assert not any(item["step"] == 8 for item in check_material_gate(session))
+    charts = teaching_report._observed_charts(data, 8, data["observations"])
+    assert len(charts) == 2
+    assert sum(len(series["points"]) for chart in charts for series in chart["series"]) == 20
+    section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 8", 1)[1]
+    section = section.split("### 步骤 9", 1)[0]
+    assert "前向 GVC 段长度" in section and "后向 GVC 段长度" in section
+    assert "前后向" in section and "构成演变" not in section
+    assert section.count("自动读图") == 2
+    assert "2016 年 5 变为 2020 年 5.4" in section
+
+
 def test_material_gate_is_independent_of_unfinished_quizzes():
     session = _complete()
     for step in range(1, 15):
@@ -1019,6 +1074,16 @@ def test_reflection_over_the_advertised_limit_blocks_report():
     blocked = check_gate(session)
 
     assert any(item["step"] == 15 and "不能超过" in "".join(item["missing"]) for item in blocked)
+
+
+@pytest.mark.parametrize("prose", ["说明\n\n~~~\n未闭合", "说明\n```\n代码", "``````\n\n# 标题\n```\n"])
+def test_reflection_preserves_text_inside_an_unbreakable_literal_block(prose):
+    block = report_observed._reflection_value(prose)
+    opening, body = block.split("\n", 1)
+    fence = opening.removesuffix("gvcsim-reflection")
+    assert set(fence) == {"`"} and len(fence) >= 3
+    assert body == prose + "\n" + fence
+    assert fence not in prose
 
 
 def test_malformed_only_saved_run_blocks_report(tmp_path, monkeypatch):

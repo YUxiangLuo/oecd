@@ -3,6 +3,7 @@ import { LabeledControl } from "../a11y";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import type { AcademicSemester, ClassGroup } from "../types";
+import { userFacingRequestError } from "../user-facing-error";
 import { EmptyState, Modal, StatusPill, Toolbar } from "./ui";
 
 type Editor =
@@ -46,12 +47,8 @@ export function SemestersTab() {
               </div>
               <div className="semester-actions">
                 <button className="sm" onClick={() => setEditor({ kind: "rename-semester", semester })}>重命名</button>
-                <button
-                  className="sm"
-                  onClick={() => { void mutate(api.classroom.updateSemester(semester.id, { is_active: !semester.is_active })); }}
-                >
-                  {semester.is_active ? "归档" : "恢复"}
-                </button>
+                <ArchiveAction active={semester.is_active}
+                  onChange={() => mutate(api.classroom.updateSemester(semester.id, { is_active: !semester.is_active }))} />
               </div>
             </header>
             <div className="class-list">
@@ -63,12 +60,8 @@ export function SemestersTab() {
                   </div>
                   <div className="semester-actions">
                     <button className="sm" onClick={() => setEditor({ kind: "rename-class", group })}>重命名</button>
-                    <button
-                      className="sm"
-                      onClick={() => { void mutate(api.classroom.updateClass(group.id, { is_active: !group.is_active })); }}
-                    >
-                      {group.is_active ? "归档" : "恢复"}
-                    </button>
+                    <ArchiveAction active={group.is_active}
+                      onChange={() => mutate(api.classroom.updateClass(group.id, { is_active: !group.is_active }))} />
                   </div>
                 </div>
               ))}
@@ -102,6 +95,32 @@ export function SemestersTab() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+function ArchiveAction({ active, onChange }: { active: boolean; onChange: () => Promise<void> }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const action = active ? "归档" : "恢复";
+  const submit = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onChange();
+    } catch (cause) {
+      setError(userFacingRequestError(cause, `${action}失败`));
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="semester-archive-action">
+      <button className="sm" disabled={saving} onClick={() => { void submit(); }}>
+        {saving ? `${action}中…` : action}
+      </button>
+      {error && <div className="error-box" role="alert">{error}</div>}
     </div>
   );
 }
