@@ -85,6 +85,7 @@ describe("explicit indicator explorer", () => {
     );
     expect(view.saves).toHaveLength(0);
     expect(await view.findByLabelText("两国趋势结论")).toBeTruthy();
+    expect(view.getByLabelText("2020 年数据解释边界")).toBeTruthy();
     expect(view.getByText(/两国差距/)).toBeTruthy();
     expect(view.getByText(/差距缩小 .* 个百分点/)).toBeTruthy();
     await waitFor(() =>
@@ -118,6 +119,7 @@ describe("explicit indicator explorer", () => {
         .hasAttribute("disabled"),
     ).toBeTrue();
     fireEvent.click(view.getByRole("button", { name: "同年差异" }));
+    expect(view.queryByLabelText("2020 年数据解释边界")).toBeNull();
     expect(view.saves).toHaveLength(1);
     await waitFor(() =>
       expect(

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { IcioYearNote } from "./icio-year-note";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { IndicatorSchema, Meta } from "../../../types";
@@ -98,6 +99,7 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
     </div>
     <h3>{view === "trend" ? "同一行业的历年变化" : "同一年份的行业排名"} · {label}</h3>
     <p>两国使用同一指标、同一刻度。单位：{unit}。{view === "trend" ? "横轴为年份；缺失值留空，不补零、不跨缺失年份连线。" : "排名不等于综合重要性；不同指标回答不同问题。"}</p>
+    <IcioYearNote years={view === "trend" ? years : [year]} />
     <div className="controls">
       <LabeledControl label="网络指标">{(id) => <select id={id} name="network-metric" value={metric} onChange={(event) => setMetric(event.target.value)}>
         <optgroup label="常用指标">{COMMON_METRICS.filter((key) => metrics.includes(key)).map((key) => <option key={key} value={key}>{schema?.fields[key]?.label ?? key}</option>)}</optgroup>

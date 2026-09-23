@@ -9,6 +9,7 @@ import {
   buildRegressionVerdict,
   chartDisplayScale,
   globalInferenceIsSuppressed,
+  teachingEffect,
 } from "./regression-verdict";
 import { splitPolicyCoefficients } from "./regteach";
 import type {
@@ -20,6 +21,7 @@ import type {
   Step,
   StepStateApi,
   TeachingPanelResponse,
+  TeachingSourceFilter,
 } from "./types";
 import { userFacingRequestError } from "./user-facing-error";
 import { CoefForestChart, countryLabel, sectorLabel } from "./viz";
@@ -99,9 +101,10 @@ interface RunSnapshot {
 
 export type RegressionHistory = Partial<Record<RegressionOutcome, RunSnapshot[]>>;
 
-export function RegressionResultCard({ outcome, response }: {
+export function RegressionResultCard({ outcome, response, sourceFilter }: {
   outcome: RegressionOutcome;
   response: RegressionResponse;
+  sourceFilter?: TeachingSourceFilter;
 }) {
   const verdict = buildRegressionVerdict(outcome, response);
   const lesson = REGRESSION_LESSONS[outcome];
@@ -114,7 +117,7 @@ export function RegressionResultCard({ outcome, response }: {
       : `平均变化为 ${verdict.effect}`;
   return (
     <section className={`verdict-card verdict-${verdict.state}`} aria-labelledby="reg-result-title" aria-live="polite">
-      <div className="verdict-kicker">教学模拟结果</div>
+      <div className="verdict-kicker">教学模拟结果 · 预设模拟关系的估计</div>
       <h3 id="reg-result-title">两者在模拟数据中怎样一起变化？</h3>
       <dl className="reg-evidence-support">
         <div><dt>拿来比较的因素（X）</dt><dd>模拟关税暴露强度</dd></div>
@@ -131,16 +134,27 @@ export function RegressionResultCard({ outcome, response }: {
           <p>X 每增加 1 个百分点时的点估计：{verdict.effect}。当前不提供置信区间，也不能把这个数字当作可靠的上升或下降证据。</p>
         </details>
       ) : <>
-        <p>当模拟关税暴露增加 1 个百分点时，{lesson.shortMetric}<b>{plainResult}</b>。</p>
+        <p>当模拟关税暴露增加 1 个百分点时，模拟 Y（{lesson.shortMetric}）<b>{plainResult}</b>。</p>
         <div className="verdict-metrics">
           <div><span>平均变化（点估计）</span><b>{verdict.effect}</b></div>
           <div><span>估计的不确定性（95% 置信区间）</span><b>{verdict.interval}</b></div>
         </div>
         <p className="muted">区间表达平均关系估计的不确定性，不是各个国家结果的分布范围；包含 0 时，暂不能确定方向，不等于证明没有变化。</p>
       </>)}
+      {!suppressed && verdict.coefficient && response.model_snapshot && <div className="reg-simulation-comparison">
+        <p><b>与生成时的预设关系比较</b>（同按 X 增加 1 个百分点换算）</p>
+        <p>预设：{teachingEffect(outcome, response.model_snapshot.beta)}；估计：{teachingEffect(outcome, verdict.coefficient.coef)}；差值（估计 − 预设）：{teachingEffect(outcome, verdict.coefficient.coef - response.model_snapshot.beta)}。</p>
+        <p className="muted">扰动使估计与预设不必相同；单次 95% 区间也不保证包含预设值。</p>
+      </div>}
       <p className="reg-writing-hint"><b>不能推出什么：</b>{lesson.dontClaim}</p>
-      <p className="muted">使用的年度记录：{response.result.n_obs.toLocaleString("zh-CN")}。模型扣除了各国家×行业的固定差异和各年份的共同变化，但这不自动证明因果关系。</p>
+      <p className="muted">使用的年度记录：{response.result.n_obs.toLocaleString("zh-CN")}，来自 {response.result.n_entities.toLocaleString("zh-CN")} 个国家×行业单元、{response.result.n_clusters} 个国家聚类。模型扣除了各单元的固定差异和各年份的共同变化。</p>
+      {sourceFilter && <div className="reg-source-filter">
+        <p><b>教学样本的来源：</b>首年排除 ROW 后有 {sourceFilter.source_baseline_rows.toLocaleString("zh-CN")} 个候选单元，生成面板时剔除 {sourceFilter.excluded_source_baseline_rows.toLocaleString("zh-CN")} 个，保留 {sourceFilter.published_entities.toLocaleString("zh-CN")} 个供四项回归共同使用。</p>
+        <p className="muted">共同规则：首年四类指标及销往美国的出口份额均有效；两类份额和出口份额在 0–1 内，长度大于 0，介数不小于 0。这些单元用于构造模拟样本，不能据此概括全部国家—行业的现实变化。</p>
+      </div>}
+      {response.result.sample_flow && <p className="muted">回归阶段：输入 {response.result.sample_flow.input_rows.toLocaleString("zh-CN")} 行模拟年度记录，另剔除 {response.result.sample_flow.dropped_rows_total.toLocaleString("zh-CN")} 行；上述生成阶段的剔除以单元计。</p>}
       <p className="verdict-boundary"><b>模拟免责声明：</b>X 与 Y 都由课程生成，仅用于练习读数；不是现实关税、OECD 观测结果或政策因果效应。</p>
+      <p className="muted">本实验没有生成冲击后的投入产出表或网络，模拟 Y 的方向不表示实际生产结构、链长或拓扑位置已经改变。</p>
     </section>
   );
 }
@@ -386,7 +400,6 @@ export function RegressionRunLab({
     setRunning(true);
     setRunningRequestKey(requestKey);
     setError(null);
-    // 新主回归开始即使所有在途置换响应失效，避免旧分布覆盖新结果。
     try {
       const response = await api.runRegression(
         outcome, controller.signal,
@@ -553,14 +566,17 @@ export function RegressionRunLab({
       {result && (
         <div className="reg-results">
           <div ref={verdictAnchorRef} className="verdict-anchor">
-            <RegressionResultCard outcome={outcome} response={result} />
+            <RegressionResultCard outcome={outcome} response={result} sourceFilter={meta.dataset?.simulation_contract?.source_filter_disclosure} />
           </div>
         </div>
       )}
       {outcome === "network" && result && (
         <RegressionEvidenceMatrix history={history} getStep={getConfirmedStep} current={outcome} />
       )}
-      {outcome === "production" && result && <IntervalReadingExercise />}
+      {outcome === "production" && result && <section aria-label="补充区间读数练习">
+        <p className="muted">四项生成关系都预设为负。用下面的可选练习比较区间跨零与不跨零的读法，避免仅凭点估计的负号下结论。</p>
+        <IntervalReadingExercise />
+      </section>}
       <details className="technical-details">
         <summary>计算方法说明（可选）</summary>
         <div className="reg-question-main">
@@ -589,7 +605,7 @@ export function RegressionRunLab({
             <h3>原始列与系数</h3>
             <p className="muted">X 原始列：{result.model_snapshot?.x_columns.join("、")}；Y 原始列：{result.model_snapshot?.y_column}。表内保留计算键与模型原始单位。</p>
             <RegressionCoefficientTable response={result} />
-            <p className="muted">N={result.result.n_obs.toLocaleString("zh-CN")} · {result.result.n_entities.toLocaleString("zh-CN")} 个体 × {result.result.n_times} 年 · {result.result.n_clusters} 个聚类 · {result.result.r2_within == null ? "cohort-time ATT 不定义组内 R²" : `组内 R²=${result.result.r2_within.toFixed(4)}`}</p>
+            <p className="muted">N={result.result.n_obs.toLocaleString("zh-CN")} · {result.result.n_entities.toLocaleString("zh-CN")} 个体 × {result.result.n_times} 年 · {result.result.n_clusters} 个聚类 · {result.result.r2_within == null ? "本次 TWFE 结果未提供组内 R²" : `组内 R²=${result.result.r2_within.toFixed(4)}`}</p>
           </>
         )}
       </details>

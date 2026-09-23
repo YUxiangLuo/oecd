@@ -13,17 +13,12 @@ interface RegressionLesson {
   unit: string;
   priorStep: number;
   priorLabel: string;
-  focus: string;
-  /** 本步要学会的一件事，比 focus 更像老师开场。 */
+  /** 本步要学会的一件事，用于老师开场。 */
   learnThis: string;
   definition: string;
   downMeaning: string;
   upMeaning: string;
-  caution: string;
-  howToRead: string;
-  writeDown: string;
   dontClaim: string;
-  guidedExperiment: string;
 }
 
 export const FAMILY_STEPS: Record<RegressionOutcome, number> = {
@@ -46,16 +41,11 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "百分点",
     priorStep: 2,
     priorLabel: "GVC 总贸易流分解指标",
-    focus: "观察出口分解中的外国增加值这一项，看它所占的比例如何变化",
     learnThis: "读数：把结果说成一句话——X 增加 1 个百分点时，Y 平均变化多少个百分点。",
     definition: "真实指标中，它是 WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 总出口的比重；这一定义只说明模拟 Y 所对应的概念，不表示本步 Y 是 OECD 观测值。",
-    downMeaning: "负向变化表示外国增加值这一项的占比相对下降，但不能单独证明生产已经回流。",
-    upMeaning: "正向变化表示外国增加值这一项的占比相对上升，但仍需结合不确定性和比较条件。",
-    caution: "份额按百分点读。全球投入链会把政策传给未直接处理对象，no-interference/SUTVA 不能自动成立；2018–2020 又与 COVID-19 重叠，年份效应不能吸收国家×行业异质疫情冲击。不要和长度、网络系数比大小。",
-    howToRead: "先看结果状态；允许推断时，再读估计与 95% 区间。区间跨 0 是「看不出方向」，不是零效应；停止推断则记「无法评估」。区间未跨 0 也不能跳过因果解释所需的假设。",
-    writeDown: "记下结果状态、估计与单位（百分点）；停止推断时写明原因，留到第 15 步和另外三类并读。",
+    downMeaning: "模拟 Y 的数值下降。若真实同定义指标下降，才表示外国增加值项占比降低，仍不能单独证明生产回流。",
+    upMeaning: "模拟 Y 的数值上升。若真实同定义指标上升，才表示外国增加值项占比提高；本实验没有重算出口分解。",
     dontClaim: "不要写成「已经证明生产回流」。这一项占比下降，不能告诉我们企业是否把生产搬回国内。",
-    guidedExperiment: "固定教学模型不要求调整设定。",
   },
   production: {
     outcome: "production",
@@ -66,16 +56,11 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "百分点",
     priorStep: 3,
     priorLabel: "GVC 生产分解指标",
-    focus: "本步看贸易壁垒有没有改变多次跨境活动在 SVA 中的构成",
     learnThis: "读区间：X 不变，Y 换成复杂 GVC 份额。估计值为负，不一定有足够证据判断下降；还要看区间是否包含 0。",
     definition: "真实指标衡量增加值经过多次跨境生产后被最终吸收的比例；本步 Y 只是对应这一概念的模拟值。",
-    downMeaning: "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
-    upMeaning: "SVA 中复杂 GVC 增加值份额提高；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
-    caution: "区间跨过 0 是「看不出方向」，不是零效应。投入链外溢和贸易转移会污染对照；cohort-aware 主结果当前不发布交互估计。",
-    howToRead: "「看不出」是合法结论，不是这步失败。不要拿步骤 11 的 FVA 系数代替本步。",
-    writeDown: "与步骤 11 并读方向和区间；同为百分点，仍不能把构成变化解释为产量变化。",
+    downMeaning: "模拟 Y 的数值下降。若真实同定义指标下降，才表示 SVA 中复杂 GVC 的构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
+    upMeaning: "模拟 Y 的数值上升。若真实同定义指标上升，才表示复杂 GVC 份额提高；本实验没有重算生产分解。",
     dontClaim: "不要把区间过 0 写成「冲击没有影响」。",
-    guidedExperiment: "固定教学模型不要求调整设定。",
   },
   length: {
     outcome: "length",
@@ -86,16 +71,11 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "生产环节长度单位",
     priorStep: 4,
     priorLabel: "GVC 长度分解指标",
-    focus: "本步看贸易壁垒有没有改变跨境生产链条的长短",
     learnThis: "读单位：X 不变，Y 换成生产长度。长度不是百分点，不能与前两步的份额系数直接比大小。",
     definition: "真实指标以 GVC 活动诱发的累计总产出除以关联增加值；本步 Y 是对应这一概念的模拟值，不是机械计算出的真实生产长度。",
-    downMeaning: "负向变化与链条缩短一致，可能来自回流、近岸化或其他生产调整。",
-    upMeaning: "正向变化与链条延长一致，但不能单靠一个系数判断企业策略。",
-    caution: "长度单位不能和份额百分点相减。冲击前检验不显著不能证明趋势可比；投入链外溢、COVID-19 异质冲击仍可能破坏识别。",
-    howToRead: "先核对是否允许推断，再判断变短、变长还是看不出。链条变短有多种机制，一个数字指不出是回流还是近岸。",
-    writeDown: "单独记长度的方向。写报告时明确这是长度单位，不是百分点。",
+    downMeaning: "模拟 Y 的数值下降。若真实同定义长度下降，才可能与生产链缩短一致；本实验没有生成冲击后的投入产出表。",
+    upMeaning: "模拟 Y 的数值上升。若真实同定义长度上升，才可能与生产链延长一致，仍不能单靠一个系数判断企业策略。",
     dontClaim: "不要写成「比贸易流效应更大 / 更小」。",
-    guidedExperiment: "固定教学模型不要求调整设定。",
   },
   network: {
     outcome: "network",
@@ -106,16 +86,11 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "中心性原始单位，并补充标准差单位",
     priorStep: 5,
     priorLabel: "全球生产网络指标",
-    focus: "本步探索贸易壁垒出现后，这套全正边二值编码中的拓扑位置是否变化",
-    learnThis: "综合判断：把前三步与本步并排阅读，四项都报告；本步网络结果仅作探索，不能据此认定经济瓶颈或脱钩。",
+    learnThis: "综合判断：把前三步与本步并排阅读，四项都报告；本步网络 Y 也是人工生成的数值，不能据此认定网络改变或脱钩。",
     definition: "真实指标在全球国家×行业图上计算最短路径介数；本步 Y 只是对应这一概念的模拟值，不是由现实网络机械计算出的中心性。",
-    downMeaning: "负向变化与拓扑中介位置下降一致，但不能单独证明发生了脱钩。",
-    upMeaning: "正向变化与拓扑中介位置增强一致，但可能同时受到网络重组影响。",
-    caution: "冲击会沿全球投入链外溢到未直接处理节点，网络中心性还会机械联动，因此对照未必干净。全正边口径对微小流量边敏感；实体置换尾部占比不是 p 值。",
-    howToRead: "先看结果状态，允许推断时才判断这套拓扑编码中的方向。无论结果如何，都要披露未做边阈值敏感性；不能据此证明经济枢纽、瓶颈或脱钩。",
-    writeDown: "把前三类主结果与本步探索性网络结果分栏记录；四个结果构成预先指定的结果族，不只挑显著项。",
+    downMeaning: "模拟 Y 的数值下降。本实验没有生成对应的新网络，不能称为拓扑位置下降；只有重新计算真实网络的同定义介数后，才能讨论其拓扑变化。",
+    upMeaning: "模拟 Y 的数值上升。本实验没有生成对应的新网络，不能称为拓扑位置增强，也不能据此判断经济重要性。",
     dontClaim: "不要挑绝对值最大的系数当「政策总效应」，也不要写成已经脱钩。",
-    guidedExperiment: "固定教学模型不要求调整设定。",
   },
 };
 
@@ -128,7 +103,7 @@ export const REGRESSION_FAMILIES = (["trade", "production", "length", "network"]
 
 export function lessonQuestion(outcome: RegressionOutcome): string {
   const lesson = REGRESSION_LESSONS[outcome];
-  return `模拟关税暴露（X）增加 1 个百分点时，${lesson.shortMetric}如何变化？`;
+  return `模拟关税暴露（X）增加 1 个百分点时，模拟 Y（${lesson.shortMetric}）如何变化？`;
 }
 
 export function familyDirectionLabel(direction: ReadingDirection): string {

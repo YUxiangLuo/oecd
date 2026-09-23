@@ -34,7 +34,6 @@ interface RegressionVerdict {
   effect: string;
   interval: string;
   evidence: string;
-  interpretation: string;
   boundary: string;
   coefficient: CoefStat | null;
   warnings: string[];
@@ -49,6 +48,11 @@ const signed = (value: number, digits = 3) => {
 export function chartDisplayScale(outcome: RegressionOutcome): { scale: number; unit?: string } {
   if (outcome === "trade" || outcome === "production") return { scale: 1, unit: "个百分点" };
   return { scale: 0.01, unit: outcome === "length" ? "长度单位" : "中心性原始单位" };
+}
+
+export function teachingEffect(outcome: RegressionOutcome, beta: number): string {
+  const { scale, unit } = chartDisplayScale(outcome);
+  return `${signed(beta * scale, outcome === "length" ? 3 : 2)} ${scale === 1 ? unit : `个${unit}`}`;
 }
 
 function naturalScale(
@@ -86,25 +90,6 @@ function naturalScale(
   };
 }
 
-const INTERPRETATION: Record<RegressionOutcome, { negative: string; positive: string }> = {
-  trade: {
-    negative: "出口分解中外国增加值这一项的占比下降，但不能单独证明供应链已经回流。",
-    positive: "出口分解中外国增加值这一项的占比上升，仍需检查比较条件和其他共同变化。",
-  },
-  production: {
-    negative: "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
-    positive: "SVA 中复杂 GVC 增加值份额提高；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
-  },
-  length: {
-    negative: "结果与跨境生产链缩短一致，可能对应回流、近岸化或其他调整。",
-    positive: "结果与跨境生产链延长一致，但不能单靠该估计判断企业策略。",
-  },
-  network: {
-    negative: "全正边二值拓扑基准下降；未经边阈值敏感性检验，不能据此证明枢纽地位下降或发生脱钩。",
-    positive: "全正边二值拓扑基准上升；未经边阈值敏感性检验，不能据此证明经济重要性增强。",
-  },
-};
-
 export function buildRegressionVerdict(
   outcome: RegressionOutcome,
   response: RegressionResponse,
@@ -128,7 +113,6 @@ export function buildRegressionVerdict(
       effect: "—",
       interval: "—",
       evidence: "可保存并报告该诊断；请说明缺少支持的原因，不能用不存在的系数判断方向。",
-      interpretation: "无法判断变化方向。",
       coefficient: null,
     };
   }
@@ -145,7 +129,6 @@ export function buildRegressionVerdict(
       effect: scaled.effect,
       interval: "—",
       evidence: `${diagnostic} 点估计仅供描述，不提供置信区间，不能据此判断上升或下降。`,
-      interpretation: "不能据此判断变化方向——这不是“没有效应”，而是当前设计无法评估。",
       coefficient,
     };
   }
@@ -157,16 +140,13 @@ export function buildRegressionVerdict(
   return {
     ...base,
     state,
-    title: state === "negative" ? "发现负向变化证据"
-      : state === "positive" ? "发现正向变化证据" : "证据不足，无法判断变化方向",
+    title: state === "negative" ? "本次模拟样本支持负向关联"
+      : state === "positive" ? "本次模拟样本支持正向关联" : "本次模拟样本不足以判断方向",
     effect: scaled.effect,
     interval: scaled.interval,
     evidence: state === "insufficient"
       ? "95% 置信区间包含 0（跨过或触及）；这不等于“没有效应”，而是当前证据不足以确定方向。"
-      : "95% 置信区间完全位于 0 的一侧，支持这一变化方向；但不能仅凭回归就认定 X 导致了 Y 的变化。",
-    interpretation: state === "negative" || state === "positive"
-      ? INTERPRETATION[outcome][state]
-      : "当前结果不能支持明确的上升或下降结论。",
+      : "95% 置信区间完全位于 0 的一侧，支持本次模拟样本中的关联方向；不能作为现实政策证据。",
     coefficient,
   };
 }

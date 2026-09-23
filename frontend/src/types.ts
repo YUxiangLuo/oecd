@@ -92,6 +92,12 @@ export interface ShockContract {
   };
 }
 
+export interface TeachingSourceFilter {
+  source_baseline_rows: number;
+  published_entities: number;
+  excluded_source_baseline_rows: number;
+}
+
 export interface Meta {
   years: number[];
   countries: string[];
@@ -103,6 +109,9 @@ export interface Meta {
     artifact_contract_version?: number;
     generated_at?: string;
     network_algorithm?: string;
+    simulation_contract?: {
+      source_filter_disclosure: TeachingSourceFilter;
+    };
     data_sources?: Record<string, unknown>;
     qc_contract?: QcContract;
     shock_contract?: ShockContract;
@@ -467,7 +476,7 @@ export interface ReportMutationResponse {
 export interface CoefStat {
   name: string;
   coef: number;
-  // 整体门禁可能只保留 cohort-time 点估计，此时 SE/t 也不可评估。
+  // 完整诊断可能缺少可用推断量，缺失值不能按零显示。
   se: number | null;
   t: number | null;
   // 推断量在设计无效/支持度不足时为 null,表示“不可评估”,不是“不显著”。

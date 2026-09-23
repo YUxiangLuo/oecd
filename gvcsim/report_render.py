@@ -103,6 +103,14 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         if compared:
             lines.append(f"- 主动比较：{'、'.join(_safe(item) for item in compared)}")
         if observations:
+            if step in (6, 7, 8, 9) and any(item.get("year") == 2020 for item in observations):
+                lines.append(
+                    "- **2020 年：现价与疫情期外推限制。** 金额按当年价格计，变化可能包含价格因素。"
+                    "OECD 2023 版中部分国家的投入产出结构由此前基准表外推，疫情对行业的冲击并不均匀；"
+                    "请区分价格、统计编制与实际数量或结构变化，不能仅凭该年转折判断生产调整。"
+                    "参见 [OECD TiVA 2023 指南第 42 页]"
+                    "(https://www.oecd.org/content/dam/oecd/en/topics/policy-sub-issues/trade-in-value-added/tiva-indicators-guide-2023.pdf#page=42)。"
+                )
             # Steps 2-5 carry one step-level metric; step 9 records the metric on
             # each observation, so fall back to it instead of printing “—”.
             metric_label = data.get("metric") or next(
@@ -223,7 +231,7 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
         "",
         "这四步分别估计贸易流、生产、长度和网络；四项结果必须完整报告，不能只挑区间未跨 0 的结果。"
         "下表列出各步实际保存的可报告结果；系数因量纲和估计对象不同不能比大小，"
-        "网络项还是未经边阈值敏感性检验的探索性拓扑基准。",
+        "网络 Y 是人工生成的标量，没有对应的新图，不能解释为拓扑已经变化。",
         "",
         "| 步骤 | 指标 | 冲击 | 比较方式 | 估计对象与相对变化 | 95% 区间 | 证据判断 |",
         "|---|---|---|---|---|---|---|",
@@ -263,12 +271,28 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
-def _evidence_summary(runs: list[dict[str, Any]]) -> list[str]:
+def _teaching_sample_lines(source_filter: dict[str, Any] | None) -> list[str]:
+    if source_filter is None:
+        return []
+    return [
+        "### 教学样本的来源",
+        "",
+        f"- 首年排除 ROW 后有 {_count(source_filter.get('source_baseline_rows'))} 个候选国家×行业单元；"
+        f"生成面板时剔除 {_count(source_filter.get('excluded_source_baseline_rows'))} 个，"
+        f"保留 {_count(source_filter.get('published_entities'))} 个供四项回归共同使用。",
+        "- 共同规则：首年四类指标及销往美国的出口份额均有效；两类份额和出口份额在 0–1 内，长度大于 0，介数不小于 0。",
+        "- 这些单元用于构造模拟样本，不能据此概括全部国家—行业的现实变化。下列回归记录数以年度行计，与生成阶段的单元数区分。",
+        "",
+    ]
+
+
+def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] | None = None) -> list[str]:
     lines = [
         "## 关键证据摘要",
         "",
         "本节把保存的主要估计翻译成课堂中的单位和证据判断。完整方程、全部控制项与诊断保留在后面的技术附录。",
         "",
+        *_teaching_sample_lines(source_filter),
         *_comparison_table(runs),
     ]
     if not runs:
@@ -321,6 +345,27 @@ def _evidence_summary(runs: list[dict[str, Any]]) -> list[str]:
                 "- **不能支持的表述：** 本结果不能自动证明拟真政策冲击导致了现实中的 GVC 变化。",
             )
         )
+        snapshot = run.get("model_snapshot", {})
+        beta = snapshot.get("beta")
+        if not suppressed and isinstance(beta, (int, float)):
+            preset = _natural_effect(outcome, design, {}, {"coef": beta})[1]
+            estimate = _natural_effect(outcome, design, {}, coefficient)[1]
+            difference = _natural_effect(outcome, design, {}, {"coef": coefficient["coef"] - beta})[1]
+            lines.append(
+                f"- **预设模拟关系的估计**（同按 X 增加 1 个百分点换算）：预设 {preset}；"
+                f"估计 {estimate}；差值（估计 − 预设）{difference}。"
+                "扰动使估计与预设不必相同；单次 95% 区间也不保证包含预设值。"
+            )
+        lines.append(
+            f"- 使用的年度记录：{_count(result.get('n_obs'))}；"
+            f"国家×行业单元：{_count(result.get('n_entities'))}；国家聚类：{_count(result.get('n_clusters'))}。"
+        )
+        flow = result.get("sample_flow")
+        if isinstance(flow, dict):
+            lines.append(
+                f"- 回归阶段：输入 {_count(flow.get('input_rows'))} 行模拟年度记录，"
+                f"另剔除 {_count(flow.get('dropped_rows_total'))} 行。"
+            )
         reasons = [*_list_values(result.get("status_reasons")), *_list_values(support.get("reasons"))]
         design_limit = _summary_design_limit(status, support, reasons)
         if design_limit:

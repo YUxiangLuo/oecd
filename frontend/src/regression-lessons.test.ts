@@ -33,8 +33,6 @@ describe("regression lessons", () => {
   });
 
   test("reading starts with inference eligibility and keeps blocked distinct from uncertain", () => {
-    expect(REGRESSION_LESSONS.trade.howToRead).toContain("先看结果状态");
-    expect(REGRESSION_LESSONS.production.writeDown).toContain("构成变化");
     expect(familyDirectionLabel("suppressed")).not.toBe(familyDirectionLabel("insufficient"));
   });
 

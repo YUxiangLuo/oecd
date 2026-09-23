@@ -29,7 +29,7 @@ describe("fixed teaching regression reading", () => {
     expect(html).not.toMatch(/处理组|对照组|处理聚类|同时置信带/);
     expect(html).toContain("+2.00 个百分点");
     expect(html).toContain("[+1.00, +3.00] 个百分点");
-    expect(html).toContain("方向判断：发现正向变化证据");
+    expect(html).toContain("方向判断：本次模拟样本支持正向关联");
     expect(html).toContain("不是各个国家结果的分布范围");
     expect(html).toContain("不能推出什么");
     expect(html).toContain("不要写成「已经证明生产回流」");
@@ -37,9 +37,9 @@ describe("fixed teaching regression reading", () => {
   });
 
   test.each([
-    [-0.8, -0.2, "发现负向变化证据", true],
-    [-0.9, 0.1, "证据不足，无法判断变化方向", false],
-    [-0.8, 0, "证据不足，无法判断变化方向", false],
+    [-0.8, -0.2, "本次模拟样本支持负向关联", true],
+    [-0.9, 0.1, "本次模拟样本不足以判断方向", false],
+    [-0.8, 0, "本次模拟样本不足以判断方向", false],
   ])("negative point estimate with interval [%s, %s] is interpreted using the interval", (low, high, title, negative) => {
     const data = response();
     Object.assign(data.result.coefs[0], { coef: -0.4, ci_low: low, ci_high: high });
@@ -56,6 +56,7 @@ describe("fixed teaching regression reading", () => {
     const { container } = render(<RegressionResultCard outcome="trade" response={data} />);
     expect(screen.getByText(/方向判断：这个设计不能用于统计推断/)).toBeTruthy();
     expect(screen.getByText(/停止推断原因：可用于比较的国家太少/)).toBeTruthy();
+    expect(container.querySelector(".reg-simulation-comparison")).toBeNull();
     expect(container.querySelector(".verdict-metrics")).toBeNull();
     expect(container.textContent).not.toMatch(/平均上升|平均下降|区间未跨过/);
     const details = container.querySelector("details")!;
@@ -69,8 +70,41 @@ describe("fixed teaching regression reading", () => {
     data.result.coefs = [];
     const { container } = render(<RegressionResultCard outcome="trade" response={data} />);
     expect(screen.getByText(/当前设定没有可解读的政策系数/)).toBeTruthy();
+    expect(container.querySelector(".reg-simulation-comparison")).toBeNull();
     expect(container.querySelector(".verdict-metrics")).toBeNull();
     expect(container.textContent).not.toContain("平均变化为 —");
+  });
+
+  test("distinguishes generated entities from subsequent regression row filtering", () => {
+    const data = response();
+    data.result.sample_flow = { input_rows: 205, estimation_rows: 200, dropped_rows_total: 5 } as NonNullable<RegressionResponse["result"]["sample_flow"]>;
+    const { container, rerender } = render(<RegressionResultCard outcome="trade" response={data} sourceFilter={{ source_baseline_rows: 45, published_entities: 41, excluded_source_baseline_rows: 4 }} />);
+    const source = container.querySelector(".reg-source-filter")!.textContent;
+    expect(source).toContain("45 个候选单元");
+    expect(source).toContain("剔除 4 个");
+    expect(source).toContain("保留 41 个");
+    expect(container.textContent).toContain("输入 205 行模拟年度记录，另剔除 5 行");
+    expect(source).toContain("四项回归共同使用");
+    rerender(<RegressionResultCard outcome="trade" response={data} />);
+    expect(container.querySelector(".reg-source-filter")).toBeNull();
+  });
+
+  test.each([
+    ["trade", -0.55, -0.57, "-0.55 个百分点", "-0.02 个百分点"],
+    ["production", -0.4, -0.28, "-0.40 个百分点", "+0.12 个百分点"],
+    ["length", -1.8, -1.7, "-0.018 个长度单位", "+0.001 个长度单位"],
+    ["network", -6000, -5977, "-60.00 个中心性原始单位", "+0.23 个中心性原始单位"],
+  ] as const)("compares %s truth and estimate in the same display units", (outcome, beta, estimate, preset, difference) => {
+    const data = response();
+    data.model_snapshot!.beta = beta;
+    data.result.coefs[0].coef = estimate;
+    const { container, rerender } = render(<RegressionResultCard outcome={outcome} response={data} />);
+    const comparison = container.querySelector(".reg-simulation-comparison")!.textContent;
+    expect(comparison).toContain(`预设：${preset}`);
+    expect(comparison).toContain(`差值（估计 − 预设）：${difference}`);
+    delete data.model_snapshot;
+    rerender(<RegressionResultCard outcome={outcome} response={data} />);
+    expect(container.querySelector(".reg-simulation-comparison")).toBeNull();
   });
 
   test("allowed estimates still disclose design warnings", () => {

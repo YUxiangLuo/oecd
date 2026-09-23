@@ -20,7 +20,7 @@ _OUTCOME_UNITS = {
     "trade": "份额原始单位（乘以 100 后按百分点解释）",
     "production": "份额原始单位（乘以 100 后按百分点解释）",
     "length": "生产环节长度单位",
-    "network": "全正边二值介数原始单位（探索性拓扑基准）；跨指标比较时另参考样本标准差单位",
+    "network": "模拟中心性原始单位；跨指标比较时另参考样本标准差单位",
 }
 _STUDENT_METRIC_LABELS = {
     **{key: value["label"] for key, value in cast(dict[str, dict[str, Any]], INDICATOR_SCHEMA["fields"]).items()},
@@ -50,20 +50,20 @@ _STATUS_LABELS = {
 }
 _OUTCOME_INTERPRETATIONS = {
     "trade": {
-        "negative": "出口分解中外国增加值这一项的占比下降，但不能单独证明供应链已经回流。",
-        "positive": "出口分解中外国增加值这一项的占比上升，仍需检查比较条件和其他共同变化。",
+        "negative": "模拟 Y 的数值下降。若真实同定义指标下降，才表示外国增加值项占比降低，仍不能单独证明生产回流。",
+        "positive": "模拟 Y 的数值上升。若真实同定义指标上升，才表示外国增加值项占比提高；本实验没有重算出口分解。",
     },
     "production": {
-        "negative": "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
-        "positive": "SVA 中复杂 GVC 增加值份额提高；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
+        "negative": "模拟 Y 的数值下降。若真实同定义指标下降，才表示 SVA 中复杂 GVC 的构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
+        "positive": "模拟 Y 的数值上升。若真实同定义指标上升，才表示复杂 GVC 份额提高；本实验没有重算生产分解。",
     },
     "length": {
-        "negative": "结果与跨境生产链缩短一致，可能对应回流、近岸化或其他调整。",
-        "positive": "结果与跨境生产链延长一致，但不能单靠该估计判断企业策略。",
+        "negative": "模拟 Y 的数值下降。若真实同定义长度下降，才可能与生产链缩短一致；本实验没有生成冲击后的投入产出表。",
+        "positive": "模拟 Y 的数值上升。若真实同定义长度上升，才可能与生产链延长一致，仍不能单靠一个系数判断企业策略。",
     },
     "network": {
-        "negative": "全正边二值拓扑基准下降；未经边阈值敏感性检验，不能据此证明枢纽地位下降或发生脱钩。",
-        "positive": "全正边二值拓扑基准上升；未经边阈值敏感性检验，不能据此证明经济重要性增强。",
+        "negative": "模拟 Y 的数值下降。本实验没有生成对应的新网络，不能称为拓扑位置下降；只有重新计算真实网络的同定义介数后，才能讨论其拓扑变化。",
+        "positive": "模拟 Y 的数值上升。本实验没有生成对应的新网络，不能称为拓扑位置增强，也不能据此判断经济重要性。",
     },
 }
 _REFLECTION_MIN_LENGTHS = {
@@ -223,10 +223,13 @@ def _evidence_reading(outcome: str, coefficient: dict[str, Any], suppressed: boo
     if not isinstance(ci_low, (int, float)) or not isinstance(ci_high, (int, float)):
         return "证据不足", "置信区间未记录，不能确定估计方向。"
     if ci_high < 0:
-        return "发现负向变化证据", _OUTCOME_INTERPRETATIONS[outcome]["negative"]
+        return "本次模拟样本支持负向关联", _OUTCOME_INTERPRETATIONS[outcome]["negative"]
     if ci_low > 0:
-        return "发现正向变化证据", _OUTCOME_INTERPRETATIONS[outcome]["positive"]
-    return "证据不足，无法判断方向", "95% 置信区间跨过 0；这不等于“没有效应”，而是当前证据不足以确定方向。"
+        return "本次模拟样本支持正向关联", _OUTCOME_INTERPRETATIONS[outcome]["positive"]
+    return (
+        "证据不足，无法判断方向",
+        "95% 置信区间包含 0（跨过或触及）；这不等于“没有效应”，而是当前证据不足以确定方向。",
+    )
 
 
 def _summary_design_limit(status: str, support: dict[str, Any], reasons: list[Any]) -> str | None:
@@ -238,7 +241,7 @@ def _summary_design_limit(status: str, support: dict[str, Any], reasons: list[An
         untreated_entities = _count(support.get("untreated_entities"))
         return (
             f"估计样本中没有完全未暴露的对照聚类：{treated_clusters} 个聚类都至少包含一个暴露实体；"
-            f"仍有 {untreated_entities} 个未暴露实体（可能包括冻结 cohort 中仅保留冲击前行的实体），"
+            f"仍有 {untreated_entities} 个未暴露实体，"
             "聚类层面的共同冲击识别仍更依赖模型设定。"
         )
     if status == "warning" and reasons:

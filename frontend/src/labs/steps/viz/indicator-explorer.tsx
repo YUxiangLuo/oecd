@@ -10,6 +10,7 @@ import {
   sectorLabel,
 } from "../../../viz";
 import { CAT } from "../../../viz/shared";
+import { IcioYearNote } from "./icio-year-note";
 import { AsyncStateMessage, useAsync } from "../../shared";
 import {
   currentReleaseId,
@@ -563,6 +564,7 @@ export function IndicatorExplorer({
           </span>
         ))}
       </div>
+      <IcioYearNote years={chartYears} />
       {query.status !== "success" ? (
         <AsyncStateMessage
           status={query.status}

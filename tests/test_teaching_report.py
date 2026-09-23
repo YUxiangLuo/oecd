@@ -615,12 +615,10 @@ def _complete():
 
 def test_production_share_report_copy_forbids_scale_overstatement():
     copy = teaching_report._OUTCOME_INTERPRETATIONS["production"]
-    assert copy["negative"] == (
-        "SVA 中复杂 GVC 增加值份额降低；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。"
-    )
-    assert copy["positive"] == (
-        "SVA 中复杂 GVC 增加值份额提高；这是构成占比变化，不能单凭该比例判断生产规模扩张/收缩。"
-    )
+    assert copy["negative"].startswith("模拟 Y 的数值下降")
+    assert copy["positive"].startswith("模拟 Y 的数值上升")
+    assert "若真实同定义指标" in copy["negative"]
+    assert "不能单凭该比例判断生产规模" in copy["negative"]
     assert re.search(r"与.*(?:扩张|收缩)一致", " ".join(copy.values())) is None
 
 
@@ -971,6 +969,15 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert report.provenance["runs"][0]["model_snapshot"] == model_snapshot("trade")
     assert report.provenance["runs"][0]["variable_catalog"] == variable_catalog("trade")
     assert "模拟教学部分（步骤 10–14）" in report.markdown
+    disclosure = report.provenance["simulation_contract"]["source_filter_disclosure"]
+    assert f"{disclosure['source_baseline_rows']} 个候选国家×行业单元" in report.markdown
+    assert f"剔除 {disclosure['excluded_source_baseline_rows']} 个" in report.markdown
+    assert f"保留 {disclosure['published_entities']} 个供四项回归共同使用" in report.markdown
+    assert "预设 -0.55 个百分点；估计 +1.20 个百分点；差值（估计 − 预设）+1.75 个百分点" in report.markdown
+    assert "模拟 Y 的数值上升" in report.markdown
+    assert "本实验没有生成冲击后的投入产出表或网络" in report.markdown
+    assert "Goodman-Bacon" not in report.markdown
+
     assert "有向无权网络" in report.markdown
     assert report.provenance["network_algorithm"] == "gephi-compatible-directed-unweighted-positive-v1"
     assert report.provenance["indicator_data_source"]["kind"] == "observed-indicator-input"
