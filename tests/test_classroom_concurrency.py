@@ -30,7 +30,7 @@ def test_report_database_and_learning_state_run_outside_event_loop(monkeypatch):
 
         def save(*args):
             check("save")
-            assert args[-1] == "version-1"
+            assert args[-2:] == ("version-1", None)
             return {"state": "draft"}
 
         def learning(*args, **kwargs):

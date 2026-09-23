@@ -166,7 +166,12 @@ async def _prepare_report(user: dict) -> tuple[dict[str, Any], teaching_report.T
     return session, generated, row["updated_at"]
 
 
-async def generate_report(user: dict = Depends(require_student), *, request: Request | None = None):
+async def generate_report(
+    user: dict = Depends(require_student),
+    *,
+    request: Request | None = None,
+    expected_report_updated_at: datetime | None = None,
+):
     async def prepare() -> tuple[dict[str, Any], teaching_report.TeachingReport, datetime]:
         return await _REPORT_FLIGHTS.get_or_compute(
             (str(user.get("rid") or ""), user["sub"]),
@@ -183,8 +188,18 @@ async def generate_report(user: dict = Depends(require_student), *, request: Req
     # transaction and response bookkeeping even when the response is lost.
     try:
         saved = await concurrency.run_sync(
-            db.save_generated_report, user["sub"], generated.markdown, generated.provenance, version
+            db.save_generated_report,
+            user["sub"],
+            generated.markdown,
+            generated.provenance,
+            version,
+            expected_report_updated_at,
         )
+    except records.ReportChanged as error:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": str(error), "code": "report_changed"},
+        ) from error
     except records.SessionChanged as error:
         raise HTTPException(
             status_code=409,
@@ -199,9 +214,22 @@ async def generate_report(user: dict = Depends(require_student), *, request: Req
     return {"report": saved, **learning_state}
 
 
+class ReportGenerateRequest(BaseModel):
+    expected_report_updated_at: datetime | None = None
+
+
 @router.post("/report/generate")
-async def generate_report_http(request: Request, user: dict = Depends(require_student)):
-    return await generate_report(user, request=request)
+async def generate_report_http(
+    request: Request,
+    user: dict = Depends(require_student),
+    req: ReportGenerateRequest | None = None,
+):
+    # Legacy body-less first generation remains valid; it can never replace a report.
+    return await generate_report(
+        user,
+        request=request,
+        expected_report_updated_at=req.expected_report_updated_at if req else None,
+    )
 
 
 @router.post("/report/submit")

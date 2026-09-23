@@ -198,7 +198,7 @@ def test_report_disconnect_does_not_cancel_the_commit_phase(monkeypatch):
         started, release = threading.Event(), threading.Event()
 
         def save(*args):
-            assert args[-1] == "version-1"
+            assert args[-2:] == ("version-1", None)
             started.set()
             assert release.wait(5)
             return {"state": "draft"}
@@ -429,7 +429,7 @@ def test_report_disconnect_during_real_row_lock_preserves_transaction(teaching_d
     started = threading.Event()
 
     def save(*args):
-        assert args[-1] == saved["updated_at"]
+        assert args[-2:] == (saved["updated_at"], None)
         started.set()
         return original(*args)
 

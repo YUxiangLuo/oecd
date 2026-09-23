@@ -318,6 +318,7 @@ test("one-click finish flushes then generates then submits; outro appears only a
     render(<><ReportLab {...finishProps} onFlushSession={async () => { order.push("flush"); }} onReportChanged={(r) => order.push(r.report.state)} /><ToastHost /></>);
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "生成并提交报告" })); });
     expect(order).toEqual(["flush", "generate", "draft", "submit"]);
+    expect(generate).toHaveBeenCalledWith(null);
     expect(screen.queryByRole("dialog")).toBeNull();
     await act(async () => { acknowledge(mutation("pending")); });
     const dialog = screen.getByRole("dialog", { name: "报告已提交，感谢你的探索" });
@@ -379,8 +380,9 @@ for (const button of ["重新生成并提交", "更新报告并提交给老师"]
     const confirm = spyOn(window, "confirm").mockReturnValue(false);
     let flushes = 0;
     let mutations = 0;
+    const gradedReport = { ...report("graded"), updated_at: "2026-08-13T00:02:00.123456Z" };
     try {
-      render(<ReportLab {...finishProps} report={report("graded")}
+      render(<ReportLab {...finishProps} report={gradedReport}
         sessionUpdatedAt="2026-08-14T00:00:00Z"
         onFlushSession={async () => { flushes++; }} onReportChanged={() => { mutations++; }} />);
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: button })); });
@@ -392,6 +394,7 @@ for (const button of ["重新生成并提交", "更新报告并提交给老师"]
       confirm.mockReturnValue(true);
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: button })); });
       expect(generate).toHaveBeenCalledTimes(1);
+      expect(generate).toHaveBeenCalledWith(gradedReport.updated_at);
       expect(flushes).toBe(1);
       expect(mutations).toBe(1);
       expect(submit).not.toHaveBeenCalled();
@@ -399,6 +402,24 @@ for (const button of ["重新生成并提交", "更新报告并提交给老师"]
     } finally { generate.mockRestore(); submit.mockRestore(); confirm.mockRestore(); }
   });
 }
+
+test("a stale report conflict does not retry, submit, or replace the displayed report", async () => {
+  const message = "报告或评分已更新，请刷新页面核对后再确认重新生成";
+  const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new Error(message));
+  const submit = spyOn(api.classroom, "submitReport");
+  const changed = spyOn(finishProps, "onReportChanged");
+  const pending = { ...report("pending"), updated_at: "2026-08-13T00:01:00.654321Z" };
+  try {
+    render(<ReportLab {...finishProps} report={pending} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" })); });
+    expect(generate).toHaveBeenCalledTimes(1);
+    expect(generate).toHaveBeenCalledWith(pending.updated_at);
+    expect(submit).not.toHaveBeenCalled();
+    expect(changed).not.toHaveBeenCalled();
+    expect(screen.getByText(message, { exact: false })).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  } finally { generate.mockRestore(); submit.mockRestore(); changed.mockRestore(); }
+});
 
 test("regenerating a submitted report uses server resubmission directly without a second submit", async () => {
   const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("pending"));

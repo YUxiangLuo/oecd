@@ -281,7 +281,8 @@ export const api = {
     saveSession: (body: { session: ExperimentSession; base_updated_at: string | null }) =>
       post<SessionSaveResponse>("/api/classroom/session", body, "PUT"),
     submitReport: () => post<ReportMutationResponse>("/api/classroom/report/submit"),
-    generateReport: () => post<ReportMutationResponse>("/api/classroom/report/generate"),
+    generateReport: (expectedReportUpdatedAt: string | null) =>
+      post<ReportMutationResponse>("/api/classroom/report/generate", { expected_report_updated_at: expectedReportUpdatedAt }),
     semesters: () => get<{ semesters: import("./types").AcademicSemester[] }>("/api/classroom/semesters"),
     createSemester: (name: string) =>
       post<Omit<import("./types").AcademicSemester, "student_count" | "classes">>("/api/classroom/semesters", { name }),

@@ -17,7 +17,10 @@ def _session_version(username: str = "student"):
 
 
 def _save_report(markdown: str, provenance: dict, username: str = "student"):
-    return db.save_generated_report(username, markdown, provenance, _session_version(username))
+    current = db.latest_report(username)
+    return db.save_generated_report(
+        username, markdown, provenance, _session_version(username), current["updated_at"] if current else None
+    )
 
 
 def test_v12_schema_contains_release_auth_and_class_contracts(teaching_db):
@@ -159,17 +162,19 @@ def test_sessions_and_reports_are_isolated_by_release(teaching_db, monkeypatch):
 def test_concurrent_first_report_generation_atomically_keeps_one_draft(teaching_db):
     provenance = {"years": [2020], "runs": []}
     expected_session_updated_at = _session_version()
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        reports = list(
-            executor.map(
-                lambda index: db.save_generated_report(
-                    "student", f"draft-{index}", provenance, expected_session_updated_at
-                ),
-                range(6),
-            )
-        )
 
-    assert all(report is not None and report["state"] == "draft" for report in reports)
+    def generate(index):
+        try:
+            return db.save_generated_report("student", f"draft-{index}", provenance, expected_session_updated_at)
+        except db.ReportChanged:
+            return None
+
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        reports = list(executor.map(generate, range(6)))
+
+    winners = [report for report in reports if report is not None]
+    assert len(winners) == 1 and winners[0]["state"] == "draft"
+    assert db.latest_report("student")["markdown"] == winners[0]["markdown"]
     account_id = db.find_account("student")["id"]
     with db.conn() as connection:
         rows = connection.execute(

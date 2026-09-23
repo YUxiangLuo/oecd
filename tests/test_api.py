@@ -253,7 +253,14 @@ def test_report_state_machine_and_failure_preserves_grade(teaching_db, monkeypat
         return TeachingReport("# 第二版", {"years": [2020], "runs": []}, "report.md")
 
     monkeypatch.setattr(classroom_routes.concurrency, "run_cpu_bound", regenerated)
-    replacement = student.post("/api/classroom/report/generate").json()["report"]
+    for payload in (None, {}, {"expected_report_updated_at": None}):
+        rejected = student.post("/api/classroom/report/generate", json=payload)
+        assert rejected.status_code == 409
+        assert rejected.json()["detail"]["code"] == "report_changed"
+        assert db.latest_report("student")["score"] == 91
+    replacement = student.post(
+        "/api/classroom/report/generate", json={"expected_report_updated_at": preserved["updated_at"]}
+    ).json()["report"]
     assert replacement["state"] == "pending"
     assert replacement["markdown"] == "# 第二版"
     assert replacement["score"] is None and replacement["feedback"] == ""

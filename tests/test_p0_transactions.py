@@ -29,6 +29,41 @@ def seed_report():
     return saved, report, db.find_account("student")["id"]
 
 
+@pytest.mark.parametrize("grade_during_build", [False, True])
+def test_stale_student_generation_preserves_grade_and_allows_confirmed_retry(
+    teaching_db, monkeypatch, grade_during_build
+):
+    _, _, account_id = seed_report()
+    student = client()
+    viewed = student.get("/api/classroom/session").json()["report"]
+    graded = None
+
+    def grade():
+        nonlocal graded
+        graded = db.grade_report(account_id, 96, "preserve this feedback", "teacher", viewed["updated_at"])
+
+    def build(_session, _name):
+        if grade_during_build and graded is None:
+            grade()
+        return teaching_report.TeachingReport("replacement", {}, "test.md")
+
+    monkeypatch.setattr(teaching_report, "build", build)
+    if not grade_during_build:
+        grade()
+    rejected = student.post("/api/classroom/report/generate", json={"expected_report_updated_at": viewed["updated_at"]})
+    assert rejected.status_code == 409, rejected.text
+    assert rejected.json()["detail"]["code"] == "report_changed"
+    assert db.latest_report("student") == graded
+    refreshed = student.get("/api/classroom/session").json()["report"]
+    accepted = student.post(
+        "/api/classroom/report/generate", json={"expected_report_updated_at": refreshed["updated_at"]}
+    )
+    assert accepted.status_code == 200, accepted.text
+    replacement = accepted.json()["report"]
+    assert replacement["state"] == "pending" and replacement["markdown"] == "replacement"
+    assert replacement["score"] is None and replacement["feedback"] == ""
+
+
 @pytest.mark.parametrize("existing_report", [False, True])
 def test_session_saved_during_report_build_rejects_stale_source(teaching_db, monkeypatch, existing_report):
     student = client()
@@ -45,7 +80,11 @@ def test_session_saved_during_report_build_rejects_stale_source(teaching_db, mon
 
     monkeypatch.setattr(teaching_report, "build", blocked_build)
     with ThreadPoolExecutor(max_workers=1) as executor:
-        generation = executor.submit(student.post, "/api/classroom/report/generate")
+        generation = executor.submit(
+            student.post,
+            "/api/classroom/report/generate",
+            json={"expected_report_updated_at": original["updated_at"].isoformat() if original else None},
+        )
         try:
             assert entered.wait(5)
             updated = empty_session()
@@ -114,9 +153,13 @@ def hold_after_write(monkeypatch, query_prefix):
 
 @pytest.mark.parametrize("first", ["grade", "regenerate"])
 def test_grade_and_regeneration_have_a_legal_serial_outcome(teaching_db, monkeypatch, first):
-    saved, _, account_id = seed_report()
+    _, _, account_id = seed_report()
     pending = db.latest_report("student")
     teacher = client("teacher")
+    student = client()
+    monkeypatch.setattr(
+        teaching_report, "build", lambda *_args: teaching_report.TeachingReport("new report", {}, "test.md")
+    )
 
     def grade():
         return teacher.post(
@@ -129,7 +172,10 @@ def test_grade_and_regeneration_have_a_legal_serial_outcome(teaching_db, monkeyp
         )
 
     def regenerate():
-        return db.save_generated_report("student", "new report", {}, saved["updated_at"])
+        return student.post(
+            "/api/classroom/report/generate",
+            json={"expected_report_updated_at": pending["updated_at"].isoformat()},
+        )
 
     prefix = "UPDATE reports SET state='graded'" if first == "grade" else "INSERT INTO reports"
     with (
@@ -145,11 +191,17 @@ def test_grade_and_regeneration_have_a_legal_serial_outcome(teaching_db, monkeyp
             release.set()
         first_result, second_result = first_job.result(timeout=10), second_job.result(timeout=10)
     grading = first_result if first == "grade" else second_result
+    generation = second_result if first == "grade" else first_result
     assert grading.status_code == (200 if first == "grade" else 409), grading.text
+    assert generation.status_code == (409 if first == "grade" else 200), generation.text
     final = db.latest_report("student")
-    assert final["markdown"] == "new report"
-    assert final["state"] == "pending"
-    assert final["score"] is None and final["feedback"] == "" and final["graded_by"] is None
+    if first == "grade":
+        assert generation.json()["detail"]["code"] == "report_changed"
+        assert final["markdown"] == "old report" and final["state"] == "graded"
+        assert final["score"] == 88 and final["feedback"] == "old report feedback"
+    else:
+        assert final["markdown"] == "new report" and final["state"] == "pending"
+        assert final["score"] is None and final["feedback"] == "" and final["graded_by"] is None
 
 
 def test_two_teacher_views_cannot_both_grade_the_same_version(teaching_db, monkeypatch):

@@ -291,7 +291,8 @@ export function ReportLab({
     try {
       await waitUntilReady();
       await flushRef.current();
-      const response = await api.classroom.generateReport();
+      // Bind replacement to the report the student saw (and, if graded, confirmed).
+      const response = await api.classroom.generateReport(report?.updated_at ?? null);
       onReportChanged(response);
       let finalReport = response.report;
       if (submitAfter && response.report.state === "draft") {

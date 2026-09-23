@@ -23,6 +23,23 @@ function authUser(username: string): AuthUser {
   return { username, name: username, role: "student" };
 }
 
+test("report generation sends the observed report revision without rounding it", async () => {
+  const originalFetch = globalThis.fetch;
+  const bodies: unknown[] = [];
+  globalThis.fetch = (async (_url, init) => {
+    bodies.push(JSON.parse(String(init?.body)));
+    return new Response("{}", { status: 200 });
+  }) as typeof fetch;
+  try {
+    await api.classroom.generateReport(null);
+    await api.classroom.generateReport("2026-09-23T00:01:02.123456+00:00");
+    expect(bodies).toEqual([
+      { expected_report_updated_at: null },
+      { expected_report_updated_at: "2026-09-23T00:01:02.123456+00:00" },
+    ]);
+  } finally { globalThis.fetch = originalFetch; }
+});
+
 describe("tab authentication", () => {
   test("logout is local-only and has no API method", () => {
     expect("logout" in api).toBe(false);

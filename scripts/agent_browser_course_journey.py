@@ -235,6 +235,10 @@ def main():
         teacher.run("fill", ".grade-field textarea", "纯浏览器全课程测试：全部步骤、持久化及报告状态通过。")
         teacher.button("提交评阅")
         teacher.run("wait", "--text", f"已保存对 {username} 的评阅")
+        # The student's still-open pending view must not erase the teacher's new grade.
+        student.button("查看已提交报告")
+        student.button("重新生成并提交")
+        student.run("wait", "--text", "报告或评分已更新，请刷新页面核对后再确认重新生成")
         student.run("reload")
         student.run("wait", "--text", "93")
         student.run("eval", 'document.querySelector(".submit-card")?.scrollIntoView({block:"center"})')

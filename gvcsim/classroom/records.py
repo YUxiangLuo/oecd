@@ -133,12 +133,13 @@ def save_generated_report(
     markdown: str,
     provenance: dict[str, Any],
     expected_session_updated_at: datetime,
+    expected_report_updated_at: datetime | None = None,
 ) -> dict[str, Any] | None:
-    """Store a report only while the exact source session version remains current.
+    """Store only against the source session and report versions the caller saw.
 
-    The locked version check and report upsert share one transaction, so a session
-    update cannot slip between them. A first report is a draft. Regenerating a
-    submitted or graded report replaces the submitted copy and clears its old grade.
+    None means no report was observed, not an unconditional overwrite. Lock the
+    session before the report, as submission does; the session lock also serializes
+    first insertions. Confirmed regeneration clears the old grade and resubmits.
     """
     release_id = database.current_release_id()
     with database.conn() as c:
@@ -151,6 +152,12 @@ def save_generated_report(
         ).fetchone()
         if current_session is None or current_session["updated_at"] != expected_session_updated_at:
             raise SessionChanged("报告生成期间实验记录已更新")
+        current_report = c.execute(
+            "SELECT updated_at FROM reports WHERE account_id=%s AND release_id=%s FOR UPDATE",
+            (account["id"], release_id),
+        ).fetchone()
+        if (current_report["updated_at"] if current_report else None) != expected_report_updated_at:
+            raise ReportChanged("报告或评分已更新，请刷新页面核对后再确认重新生成")
         stored_provenance = {**provenance, "session_fingerprint": _session_fingerprint(current_session["session"])}
         return c.execute(
             "INSERT INTO reports(account_id,release_id,markdown,provenance,state,generated_at,updated_at)"
