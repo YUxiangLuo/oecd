@@ -1,7 +1,8 @@
-"""Check that the printed report keeps every column of its four-outcome summary.
+"""Check report summary columns and reject a printed submission overlay.
 
 Uses Poppler's independent PDF text extraction, not the HTML/CSS under test.
-Run after agent-browser pdf. This guards clipping; it is not a full visual audit.
+Run after agent-browser pdf. This catches the known overlay as well as missing
+columns; arbitrary visual occlusion still requires inspecting rendered pages.
 """
 
 import argparse
@@ -16,6 +17,10 @@ SUMMARY_COLUMNS = ("步骤", "指标", "冲击", "比较方式", "估计对象�
 def validate_report_text(text: str) -> None:
     # Raw PDF extraction preserves cell order but wraps text within narrow cells.
     normalized = re.sub(r"\s+", "", text)
+    # The fixed portal can cover every page while the underlying table remains
+    # extractable. Its kicker is clipped after “实验回” on Letter paper.
+    if "GVCSIMULATIONLAB·实验回" in normalized:
+        raise ValueError("PDF 包含提交回执遮罩，不能作为报告留存")
     if SUMMARY_TITLE not in normalized:
         raise ValueError("PDF 缺少四类指标并读表")
     summary = normalized.split(SUMMARY_TITLE, 1)[1]

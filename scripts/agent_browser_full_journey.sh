@@ -59,6 +59,10 @@ done
 "${student[@]}" find role button click --name '提交报告给老师' --exact
 "${student[@]}" wait --text '等待教师评阅'
 if [[ -n "$artifact_dir" ]]; then
+  # Print with the receipt still open: print CSS must hide its body-level portal,
+  # not just the controls inside .report-lab. The underlying report must be ready.
+  "${student[@]}" wait '.report-outro'
+  "${student[@]}" wait '.report-md'
   "${student[@]}" screenshot "$artifact_dir/student-submitted.png" --full
   "${student[@]}" pdf "$artifact_dir/student-report.pdf"
   uv run python scripts/verify_report_pdf.py "$artifact_dir/student-report.pdf"

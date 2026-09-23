@@ -60,7 +60,7 @@ uv run gvcsim serve --port 8000
 uv run gvcsim classroom-init --reset
 ```
 
-这会清空全部旧账号、会话、报告、评分和教学分组，并重建教学表。会话与报告仍以 `(账号, release_id)` 隔离，口令轮换通过 `auth_version` 撤销既有令牌。当前学期使用题库 `course-quiz-v8` 和会话 `experiment-session-simple-v3`。
+这会清空全部旧账号、会话、报告、评分和教学分组，并重建教学表。会话与报告仍以 `(账号, release_id)` 隔离，口令轮换通过 `auth_version` 撤销既有令牌。当前会话为 `experiment-session-simple-v3`；题库默认沿用 `course-quiz-v8`，仅步骤 11 的读数题升级为 `course-quiz-v9`，该步旧答案需重新提交，其他步骤不受影响。
 
 学生编辑在 800 ms 后自动保存；同一标签页同一时刻最多一个请求，在途编辑合并成最新快照。每次 PUT 携带该标签页最后确认的 `updated_at` 版本：另一标签页已先保存时，服务端返回 409 而不覆盖，并要求学生载入服务器版本后重新操作。普通网络失败则保留最新快照并显示“重试保存”。理解题完成、报告生成/提交和退出前会主动冲刷保存队列；重新读取相同设置不会触发无意义的自动保存。刷新或离开页面前会尝试把未确认的快照保存在本标签页的 `sessionStorage`，刷新后须显式恢复。它不是持久备份：关闭标签页、浏览器崩溃或存储受限仍可能丢失未保存内容；存储写入失败时会请求浏览器显示离开确认。
 
@@ -108,7 +108,7 @@ scripts/local_ci.sh
 
 Gephi 0.10.1 独立基准可用 `scripts/gephi_golden/generate.sh --check` 校验；该基准采用有向图，路径类中心性按无权最短路计算，边权只进入 weighted degree。
 
-本地桌面浏览器验收分两层：`agent_browser_smoke.sh` 快速挂载学生 1–15 步与教师关键交互；`agent_browser_full_journey.sh` 通过公开 API 构造一份当前 release 的完整学习记录，再由真实浏览器完成报告生成、提交和教师评分，防止各自通过的组件在完整状态机中断链。两个脚本都以 `GVCSIM_BASE_URL` 指定被测站点地址，不写死任何主机。完整旅程在设置 `GVCSIM_E2E_ARTIFACT_DIR` 时还会通过浏览器打印 PDF，并用独立的 `pdftotext` 检查四类指标对照表七列均未被截断。
+本地桌面浏览器验收包含快速挂载、API 辅助旅程和纯 UI 全课程三层：`agent_browser_smoke.sh` 快速挂载学生 1–15 步；`agent_browser_full_journey.sh` 通过公开 API 构造完整学习记录，再由浏览器完成报告生成、提交和教师评分；`agent_browser_course_journey.py` 从新学生账号开始，通过 UI 完成 15 步并逐步核对持久化结果。三者均纳入 `local_ci.sh`，以 `GVCSIM_BASE_URL` 指定被测站点地址，不写死任何主机。API 辅助旅程在设置 `GVCSIM_E2E_ARTIFACT_DIR` 时会保留提交回执打开的状态直接打印 PDF，用独立的 `pdftotext` 检查四类指标对照表七列并拒绝回执遮罩文字；这仍不能替代对打印页面的视觉检查。
 
 冲击面板性能验收在有效 active v15 release 完成最终重算后运行：
 

@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -43,12 +44,16 @@ def test_student_manual_source_note_matches_screenshot_manifest():
     root = Path(__file__).resolve().parents[1]
     manifest = json.loads((root / "docs/student-manual/screenshots.json").read_text())
     manual = (root / "实验手册.md").read_text()
+    assert manifest["baseline_commit"] in manual
+    assert f"`{manifest['data_release']}`" in manual
+    assert manifest["code_state"]
     assert manifest["screenshots"]
     for screenshot in manifest["screenshots"]:
-        assert f"`{screenshot['code_commit']}`" in manual
-        assert f"`{screenshot['data_release']}`" in manual
+        image = root / "docs/student-manual" / screenshot["file"]
+        assert hashlib.sha256(image.read_bytes()).hexdigest() == screenshot["sha256"]
         assert screenshot["data_sources"]
         assert all("production_data" in source for source in screenshot["data_sources"])
-        if "uncommitted" in screenshot["code_state"]:
-            assert "未提交" in manual
+        for source in screenshot["data_sources"]:
+            if source["production_data"]:
+                assert source["release_id"] == manifest["data_release"]
     assert "docs/student-manual/screenshots.json" in manual

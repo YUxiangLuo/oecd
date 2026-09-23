@@ -157,6 +157,10 @@ GVCSIM_E2E_USERNAME=student GVCSIM_E2E_SESSION=student \
 GVCSIM_E2E_USERNAME=student GVCSIM_E2E_TEACHER_USERNAME=teacher \
   GVCSIM_E2E_TEACHER_PASSWORD="$GVCSIM_BOOTSTRAP_PASSWORD" \
   GVCSIM_E2E_ARTIFACT_DIR="$output_dir/full-journey" scripts/agent_browser_full_journey.sh
+# Keep the namespace short: this journey generates longer per-account socket names.
+GVCSIM_E2E_NAMESPACE="gvc-course-$$" GVCSIM_E2E_TEACHER_USERNAME=teacher \
+  GVCSIM_E2E_TEACHER_PASSWORD="$GVCSIM_BOOTSTRAP_PASSWORD" \
+  GVCSIM_E2E_ARTIFACT_DIR="$output_dir/pure-ui-course" uv run python scripts/agent_browser_course_journey.py
 GVCSIM_E2E_USERNAME=teacher GVCSIM_E2E_NEW_PASSWORD=ci-browser-rotated-private-password \
   GVCSIM_E2E_SESSION=teacher GVCSIM_E2E_ARTIFACT_DIR="$output_dir/teacher" \
   scripts/agent_browser_teacher_smoke.sh

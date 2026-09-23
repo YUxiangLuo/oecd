@@ -832,6 +832,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   .step-task-card,
   .card.accent,
   .toast-host,
+  .report-outro,
   .error-box {
     display: none !important;
   }

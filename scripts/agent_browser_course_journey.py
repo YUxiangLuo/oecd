@@ -26,7 +26,7 @@ QUIZ_CHOICES = {
     8: "a",
     9: "b",
     10: "aa",
-    11: "bb",
+    11: "ba",
     12: "bb",
     13: "aa",
     14: "ab",
@@ -151,7 +151,7 @@ def main():
             else:
                 student.button("计算两者的关系")
                 student.run("wait", "--text", "重新计算")
-                wait_saved(step, lambda row: bool(row.get("qualified_run")), timeout=30)
+                wait_saved(step, lambda row: bool(row.get("run")), timeout=30)
             names = json.loads(
                 student.run(
                     "eval",
@@ -168,7 +168,7 @@ def main():
             student.button("提交答案")
             student.run("wait", ".quiz-complete")
             row = saved()["steps"][str(step)]["data"]
-            assert row["quiz"]["version"] == "course-quiz-v8"
+            assert row["quiz"]["version"] == ("course-quiz-v9" if step == 11 else "course-quiz-v8")
             if step == 1:
                 assert row["observation"]["row"].startswith("CHN_")
             elif step <= 9:
@@ -185,7 +185,25 @@ def main():
                 assert row["run"]["result"], step
                 assert row["run"]["design"]["method"] == "twfe_intensity"
                 assert row["run"]["model_snapshot"]["version"] == "step10-tariff-teaching-v1"
-                assert row["qualified_run"] == row["run"]
+                result = row["run"]["result"]
+                support = result["support"]
+                assert result["status"] == support["status"]
+                assert result["diagnostics"]["study_contract"] == "economics-v2"
+                assert len(result["coefs"]) == 1
+                coefficient = result["coefs"][0]
+                if result["status"] == "insufficient":
+                    # Small CI panels must stop inference without blocking the course.
+                    assert not row.get("qualified_run")
+                    assert support["suppress_inference"] is True
+                    assert support["reasons"] and all(reason.strip() for reason in support["reasons"])
+                    assert all(coefficient[key] is None for key in ("p", "ci_low", "ci_high"))
+                    student.run("wait", "--text", "停止推断原因")
+                else:
+                    assert result["status"] in {"ok", "warning"}
+                    assert support.get("suppress_inference") is not True
+                    assert 0 <= coefficient["p"] <= 1
+                    assert coefficient["ci_low"] <= coefficient["ci_high"]
+                    assert row["qualified_run"] == row["run"]
             student.run("screenshot", str(output / f"step-{step}.png"))
             results.append({"step": step, "passed": True})
             print(json.dumps(results[-1]), flush=True)
