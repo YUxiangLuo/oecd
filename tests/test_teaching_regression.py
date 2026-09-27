@@ -137,3 +137,46 @@ def test_step10_series_returns_two_countries_all_years_and_teaching_outcomes(mon
     assert {(row["country"], row["industry"]) for row in response["rows"]} == {("AAA", "s1"), ("DDD", "s1")}
     assert {row["year"] for row in response["rows"]} == {2016, 2017, 2018, 2019, 2020}
     assert all(set(Y_COLUMNS.values()).issubset(row) for row in response["rows"])
+
+
+@pytest.mark.parametrize("has_treated", [True, False])
+def test_sample_flow_reconciles_exclusions_and_overlapping_missing_values(has_treated):
+    from gvcsim.regression.design import RegressionDesign
+    from gvcsim.regression.model import prepare_design_model
+
+    design = RegressionDesign("trade", teaching=True)
+    frame = pd.DataFrame(
+        {
+            "country": ["ROW", "A", "B", "C", "D", "E"],
+            "entity_id": ["ROW_s1", "A_s1", "B_s1", "C_s1", "D_s1", "E_s1"],
+            "year": [2020] * 6,
+            design.depvar: [np.nan, np.nan, np.nan, 0.4, 0.5, 0.6],
+            design.shock_col: [np.nan, np.nan, 0.2, np.nan, 0.3, 0.4],
+            design.treated_col: [0, 0, 0, 0, np.nan, 0],
+        }
+    )
+    if not has_treated:
+        frame = frame.drop(columns=design.treated_col)
+    original = frame.copy(deep=True)
+    model = prepare_design_model(frame, design)
+    pd.testing.assert_frame_equal(frame, original)
+    flow = model.sample_flow
+    assert list(model.data.country) == (["E"] if has_treated else ["D", "E"])
+    assert flow["input_rows"] == 6
+    assert flow["row_excluded_rows"] == 1
+    assert flow["complete_case_input_rows"] == 5
+    assert flow["estimation_rows"] == (1 if has_treated else 2)
+    assert flow["dropped_rows_total"] == (5 if has_treated else 4)
+    assert flow["missing_by_field"] == {
+        design.depvar: 2,
+        design.shock_col: 2,
+        **({design.treated_col: 1} if has_treated else {}),
+    }
+    assert flow["missing_by_field_counts_overlap"] is True
+    assert flow["dropped_by_reason"] == [
+        {"code": "excluded_row", "field": "country", "rows": 1},
+        {"code": "missing", "field": design.depvar, "rows": 2},
+        {"code": "missing", "field": design.shock_col, "rows": 1},
+        *([{"code": "missing", "field": design.treated_col, "rows": 1}] if has_treated else []),
+    ]
+    assert sum(reason["rows"] for reason in flow["dropped_by_reason"]) == flow["dropped_rows_total"]

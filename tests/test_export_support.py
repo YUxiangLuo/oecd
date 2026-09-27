@@ -6,7 +6,7 @@ import pytest
 
 from conftest import FakeIOSystem
 from gvcsim.data_routes import _clean, _with_derived
-from gvcsim.indicators import production, tradeflow
+from gvcsim.indicators import length, production, tradeflow
 from gvcsim.indicators.core import build_arrays
 
 
@@ -156,3 +156,100 @@ def test_one_country_has_no_foreign_columns():
     io = FakeIOSystem(np.array([[0.1]]), np.array([[1.0]]), regions=["AAA"], sectors=["s0"])
     arr = build_arrays(io)
     assert arr.E[0] == arr.y_export()[0] == 0
+    assert arr.apply_AF(arr.x)[0] == arr.apply_AF_T(arr.v)[0] == 0
+
+
+@pytest.mark.parametrize("order", ["C", "F"])
+def test_autarky_has_exact_zero_gvc_amounts_and_undefined_lengths(order):
+    arr = build_arrays(_domestic_io(order))
+    np.testing.assert_array_equal(arr.apply_AF(arr.x), np.zeros(135))
+    np.testing.assert_array_equal(arr.apply_AF_T(arr.v), np.zeros(135))
+    amounts = production.sector_production(arr)
+    assert (amounts.filter(like="GVC") == 0).all().all()
+    for frame in length.length_tables(arr):
+        assert frame[["PLv_GVC", "PLy_GVC", "GVCPs"]].isna().all().all()
+
+
+@pytest.mark.parametrize("amount", [1e-20, -1e-20, 0.125])
+def test_foreign_multiplication_preserves_small_signed_flows_and_interleaved_labels(amount):
+    io = _domestic_io()
+    # Isolate the linear operators with asymmetric operands; do not derive the
+    # expectation from apply_AF or subtract two large domestic products.
+    io.A.iloc[0, 45] = amount
+    permutation = np.arange(135).reshape(3, 45)[[2, 0, 1]].T.ravel()
+    for key in ("Z", "A", "L"):
+        setattr(io, key, getattr(io, key).iloc[permutation, permutation])
+    io.Y = io.Y.iloc[permutation]
+    io.x = io.x.iloc[permutation]
+    arr = build_arrays(io)
+    before = arr.A.copy()
+    source = arr.index.get_loc(("AAA", "s0"))
+    target = arr.index.get_loc(("BBB", "s0"))
+    operand = np.arange(1, 136, dtype=float)
+    forward, backward = np.zeros(135), np.zeros(135)
+    forward[source] = amount * operand[target]
+    backward[target] = amount * operand[source]
+    np.testing.assert_array_equal(arr.apply_AF(operand), forward)
+    np.testing.assert_array_equal(arr.apply_AF_T(operand), backward)
+    np.testing.assert_array_equal(arr.A, before)
+
+
+@pytest.mark.parametrize("level", ["industry", "country"])
+@pytest.mark.parametrize(
+    "field,value",
+    [("PLv_GVC", 1.0), ("PLy_GVC", 1.0), ("3_VA_GVC", 1e-20), ("3_FGY_GVC", -1e-20), ("GVCPs", 1.0)],
+)
+def test_source_gvc_gate_rejects_fabricated_activity(level, field, value):
+    from gvcsim.data.output_quality import OutputQualityError, validate_gvc_structure
+
+    arr = build_arrays(_domestic_io())
+    sector = production.sector_production(arr).join(length.sector_length(arr))
+    country = production.country_production(arr).join(length.country_length(arr))
+    validate_gvc_structure(arr, sector, country)
+    frame = sector if level == "industry" else country
+    frame.loc[frame.index[0], field] = value
+    with pytest.raises(OutputQualityError, match="GVC structural zero"):
+        validate_gvc_structure(arr, sector, country)
+
+
+def test_source_gvc_gate_follows_domestic_paths_in_both_directions():
+    from gvcsim.data.output_quality import OutputQualityError, validate_gvc_structure
+
+    # AAA s1 -> AAA s2 -> BBB s1 -> BBB s2: the two end nodes
+    # participate indirectly, despite having no incident foreign edge.
+    z = np.zeros((4, 4))
+    z[0, 1], z[1, 2], z[2, 3] = 2, 3, 5
+    y = np.array([[100, 0], [200, 0], [0, 300], [0, 400]])
+    arr = build_arrays(FakeIOSystem(z, y))
+    sector = production.sector_production(arr).join(length.sector_length(arr))
+    country = production.country_production(arr).join(length.country_length(arr))
+    assert sector.loc[("AAA", "s1"), "PLv_GVC"] > 0
+    assert sector.loc[("BBB", "s2"), "PLy_GVC"] > 0
+    validate_gvc_structure(arr, sector, country)
+    sector.loc[("AAA", "s1"), "PLy_GVC"] = 2
+    with pytest.raises(OutputQualityError, match="GVC structural zero"):
+        validate_gvc_structure(arr, sector, country)
+
+
+def test_pipeline_blocks_structurally_impossible_gvc_before_writing_indicators(tmp_path, monkeypatch):
+    from gvcsim import pipeline
+    from gvcsim.data import quality
+    from gvcsim.data.output_quality import OutputQualityError
+
+    base = _domestic_io_with_usa()
+    io = FakeIOSystem(base.Z.to_numpy(), base.Y.to_numpy(), regions=base.get_regions(), sectors=base.get_sectors())
+    monkeypatch.setattr(pipeline, "PROCESSED_DIR", tmp_path)
+    monkeypatch.setattr(pipeline.loader, "load", lambda _year: io)
+    monkeypatch.setattr(quality, "KEY_REGIONS", io.get_regions())
+    monkeypatch.setattr(pipeline.shocks, "write_export_exposure", lambda *_args: None)
+    original = length.length_tables
+
+    def corrupt_length(arr):
+        sector, country = original(arr)
+        sector.iloc[0, sector.columns.get_loc("PLv_GVC")] = 1.0
+        return sector, country
+
+    monkeypatch.setattr(length, "length_tables", corrupt_length)
+    with pytest.raises(OutputQualityError, match="GVC structural zero"):
+        pipeline.compute_year(2020, verbose=False)
+    assert not list(tmp_path.glob("indicators_*.csv"))

@@ -150,6 +150,7 @@ def compute_year(year: int, verbose: bool = True) -> None:
 
     log(f"[{year}] 步骤4 长度分解...")
     len_sector, len_country = length.length_tables(arr)
+    output_quality.validate_gvc_structure(arr, prod_sector.join(len_sector), prod.join(len_country))
 
     log(f"[{year}] 步骤5 Gephi-compatible 网络指标（全部正边、精确介数）...")
     net = network.country_network(arr)

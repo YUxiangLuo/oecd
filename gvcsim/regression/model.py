@@ -126,14 +126,30 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
         else None
     )
     input_rows = len(df)
-    missing_by = {column: int(data[column].isna().sum()) for column in [design.depvar, design.shock_col]}
+    complete_case_input_rows = len(data)
+    row_excluded_rows = input_rows - complete_case_input_rows
+    missing_fields = [design.depvar, design.shock_col, *([design.treated_col] if has_treated else [])]
+    missing_by = {column: int(data[column].isna().sum()) for column in missing_fields}
+    reasons = [{"code": "excluded_row", "field": "country", "rows": row_excluded_rows}] if row_excluded_rows else []
+    # Field counts overlap; reason counts do not. Attribute each incomplete row
+    # to its first missing field in Y, X, treated order, after excluding ROW.
+    remaining = pd.Series(True, index=data.index)
+    for column in missing_fields:
+        missing_mask = data[column].isna()
+        count = int((remaining & missing_mask).sum())
+        if count:
+            reasons.append({"code": "missing", "field": column, "rows": count})
+        remaining &= ~missing_mask
     data = data.dropna(subset=columns).copy()
     flow = {
         "input_rows": input_rows,
+        "row_excluded_rows": row_excluded_rows,
+        "complete_case_input_rows": complete_case_input_rows,
         "estimation_rows": len(data),
         "dropped_rows_total": input_rows - len(data),
         "missing_by_field": missing_by,
-        "dropped_by_reason": [],
+        "missing_by_field_counts_overlap": True,
+        "dropped_by_reason": reasons,
     }
     duplicate = data.duplicated([design.entity, "year"], keep=False)
     if duplicate.any():

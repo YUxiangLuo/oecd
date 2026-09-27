@@ -549,28 +549,14 @@ interface EquationPart {
 
 export interface RegressionSampleFlow {
   input_rows: number;
-  structural_eligible_rows: number;
-  structural_excluded_rows: number;
-  timing_source_rows: number;
-  timing_entities: number;
-  timing_clusters: number;
-  timing_treated_entities: number;
-  timing_cohorts: Record<string, number>;
-  timing_policy: "full_shock_history_before_complete_case" | null;
+  row_excluded_rows: number;
+  complete_case_input_rows: number;
   estimation_rows: number;
-  estimation_entities: number;
-  estimation_clusters: number;
   dropped_rows_total: number;
   missing_by_field: Record<string, number>;
   missing_by_field_counts_overlap: boolean;
+  // Mutually exclusive: ROW first, then first missing field in Y, X, treated order.
   dropped_by_reason: { code: string; field: string; rows: number }[];
-  retained_treated_entities?: number;
-  retained_never_treated_entities?: number;
-  treated_entities_without_post_rows?: number;
-  contributing_treated_entities?: number;
-  contributing_treated_clusters?: number;
-  retained_cohorts?: Record<string, number>;
-  contributing_cohorts?: Record<string, number>;
 }
 
 export interface RegressionPreflight {

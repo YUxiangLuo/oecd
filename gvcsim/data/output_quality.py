@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from gvcsim.indicators.network import NETWORK_COLUMNS
+from gvcsim.indicators.core import IcioArrays
 from gvcsim.indicators.production import PRODUCTION_COLUMNS
 from gvcsim.indicators.tradeflow import TRADE_COLUMNS
 
@@ -121,6 +122,44 @@ OUTPUT_QC_EXPECTED_CHECKS = tuple(spec.name for spec in OUTPUT_CHECK_SPECS)
 
 class OutputQualityError(RuntimeError):
     """An output semantic QC artifact or recomputation is invalid."""
+
+
+def validate_gvc_structure(arr: IcioArrays, industry: pd.DataFrame, country: pd.DataFrame) -> None:
+    """Build-time gate using source paths, independent of computed denominators.
+
+    No foreign edge reachable through domestic production implies exact zero
+    GVC activity. The converse is not required (signed flows can cancel, and VA
+    or final demand can vanish). This source-dependent gate complements, rather
+    than changes, the persisted-only output QC contract.
+    """
+    homes = arr.index.get_level_values(0)
+    for forward, prefix, length_name in ((True, "VA", "PLv_GVC"), (False, "FGY", "PLy_GVC")):
+        supported = np.zeros(len(arr.x), dtype=bool)
+        for region in arr.regions:
+            p = arr.pos[region]
+            foreign = np.flatnonzero(homes != region)
+            domestic = arr.A[np.ix_(p, p)] != 0
+            if forward:
+                reachable = (arr.A[np.ix_(p, foreign)] != 0).any(axis=1)
+            else:
+                reachable = (arr.A[np.ix_(foreign, p)] != 0).any(axis=0)
+                domestic = domestic.T
+            while True:
+                expanded = reachable | (domestic @ reachable)
+                if np.array_equal(expanded, reachable):
+                    break
+                reachable = expanded
+            supported[p] = reachable
+        support = pd.Series(supported, index=arr.index)
+        amounts = [f"3_{prefix}_GVC", f"3a_{prefix}_GVC_S", f"3b_{prefix}_GVC_C"]
+        for label, frame, mask in (
+            ("industry", industry, support),
+            ("country", country, support.groupby(level=0).any()),
+        ):
+            inactive = frame.loc[~mask.reindex(frame.index)]
+            invalid = inactive[amounts].ne(0).any(axis=1) | inactive[[length_name, "GVCPs"]].notna().any(axis=1)
+            if invalid.any():
+                raise OutputQualityError(f"GVC structural zero violated: {label} {prefix}, {int(invalid.sum())} rows")
 
 
 def output_qc_contract_metadata() -> dict:

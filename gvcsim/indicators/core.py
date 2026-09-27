@@ -76,19 +76,23 @@ class IcioArrays:
         return out
 
     def apply_AF(self, vec: np.ndarray) -> np.ndarray:
-        """跨境技术系数 A^F(A 去掉国内块)左乘,不显式物化 N×N 副本。"""
-        out = self.A @ vec
+        """直接乘国外块，避免总量减国内量抵消；只临时物化 S×(N-S) 块。"""
+        out = np.zeros_like(vec, dtype=float)
+        homes = self.index.get_level_values(0)
         for r in self.regions:
             p = self.pos[r]
-            out[p] -= self.A[np.ix_(p, p)] @ vec[p]
+            foreign = np.flatnonzero(homes != r)
+            out[p] = self.A[np.ix_(p, foreign)] @ vec[foreign]
         return out
 
     def apply_AF_T(self, rowvec: np.ndarray) -> np.ndarray:
         """跨境技术系数 A^F 右乘(行向量)。"""
-        out = rowvec @ self.A
+        out = np.zeros_like(rowvec, dtype=float)
+        homes = self.index.get_level_values(0)
         for r in self.regions:
             p = self.pos[r]
-            out[p] -= rowvec[p] @ self.A[np.ix_(p, p)]
+            foreign = np.flatnonzero(homes != r)
+            out[p] = rowvec[foreign] @ self.A[np.ix_(foreign, p)]
         return out
 
 
