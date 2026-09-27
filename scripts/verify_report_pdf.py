@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 
 SUMMARY_TITLE = "四类指标并读（预先指定结果族）"
-SUMMARY_COLUMNS = ("步骤", "指标", "冲击", "比较方式", "估计对象与相对变化", "95%区间", "证据判断")
+SUMMARY_COLUMNS = ("步骤", "指标", "冲击", "比较方式", "估计对象与相对变化", "标称95%近似区间", "证据判断")
 
 
 def validate_report_text(text: str) -> None:
