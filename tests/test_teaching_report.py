@@ -465,16 +465,12 @@ def _sign_run(run: dict) -> dict:
     Individual tests may still vary result statuses and extra coefficients to exercise
     report rendering, but every persisted run must be a genuine current-course snapshot.
     """
+    from scipy import stats
+    from gvcsim.regression.design import RegressionDesign
+    from gvcsim.regression_routes import _design_info
+
     outcome = run["design"]["outcome"]
-    run["design"].update(
-        granularity="country_industry",
-        shock_type="tariff",
-        method="twfe_intensity",
-        control_mode="none",
-        controls=[],
-        interaction=False,
-        scenario="clean",
-    )
+    run["design"] = _design_info(RegressionDesign(outcome, teaching=True))
     run["model_snapshot"] = model_snapshot(outcome)
     run["variable_catalog"] = variable_catalog(outcome)
     coefs = run.get("result", {}).get("coefs")
@@ -492,6 +488,9 @@ def _sign_run(run: dict) -> dict:
             coefficient.setdefault("se", 0.1)
             coefficient.setdefault("t", float(coefficient["coef"]) / float(coefficient["se"]))
     result = run["result"]
+    result.setdefault("n_entities", 2)
+    result.setdefault("n_times", result["n_obs"])
+    result.setdefault("n_clusters", 2)
     status = result.setdefault("status", "ok")
     stopped = status in {"insufficient", "invalid_design"}
     reasons = result.setdefault("status_reasons", ["测试诊断"] if stopped else [])
@@ -508,9 +507,14 @@ def _sign_run(run: dict) -> dict:
         if stopped:
             coefficient.update(p=None, ci_low=None, ci_high=None)
         else:
-            coefficient.setdefault("p", 1.0)
-            coefficient.setdefault("ci_low", float(coefficient["coef"]) - 0.2)
-            coefficient.setdefault("ci_high", float(coefficient["coef"]) + 0.2)
+            beta, se = coefficient["coef"], coefficient["se"]
+            critical = stats.t.ppf(0.975, result["n_clusters"] - 1)
+            coefficient.update(
+                t=beta / se,
+                p=float(2 * stats.t.sf(abs(beta / se), result["n_clusters"] - 1)),
+                ci_low=float(beta - critical * se),
+                ci_high=float(beta + critical * se),
+            )
     return run
 
 
@@ -528,7 +532,7 @@ def _ok_run(outcome: str, **design):
         }.get(outcome, outcome),
     }
     payload.update(design)
-    result = {"status": "ok", "n_obs": 1, "coefs": [{"name": X_COLUMN, "coef": 0.0}]}
+    result = {"status": "ok", "n_obs": 4, "coefs": [{"name": X_COLUMN, "coef": 0.0}]}
     return _sign_run({"design": payload, "result": result})
 
 
@@ -1019,6 +1023,9 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
         "result": {
             "status": "ok",
             "n_obs": 42,
+            "n_entities": 21,
+            "n_times": 2,
+            "n_clusters": 20,
             "coefs": [{"name": "policy", "coef": 1.2, "se": 0.3, "p": 0.01, "ci_low": 0.6, "ci_high": 1.8}],
         },
     }
@@ -1034,12 +1041,12 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert report.provenance["runs"][0]["step"] == 11
     assert report.provenance["runs"][0]["result"]["coefs"][0]["coef"] == 1.2
     assert "1.2" in report.markdown and "不在报告生成时复算" in report.markdown
-    assert "[0.6, 1.8]" in report.markdown
+    assert "[0.5721, 1.828]" in report.markdown
     assert "## 关键证据摘要" in report.markdown
     assert X_COLUMN in report.markdown
     assert "+1.20 个百分点" in report.markdown
     assert "## 技术附录：保存的回归结果" in report.markdown
-    assert "| 模拟关税暴露强度 | 1.2 | 0.3 | [0.6, 1.8] | 0.01 |" in report.markdown
+    assert "| 模拟关税暴露强度 | 1.2 | 0.3 | [0.5721, 1.828] | 0.0007662 |" in report.markdown
     assert report.provenance["runs"][0]["model_snapshot"] == model_snapshot("trade")
     assert report.provenance["runs"][0]["variable_catalog"] == variable_catalog("trade")
     assert "模拟教学部分（步骤 10–14）" in report.markdown
@@ -1477,6 +1484,9 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
         "result": {
             "status": "warning",
             "n_obs": 16348,
+            "n_entities": 4000,
+            "n_times": 5,
+            "n_clusters": 76,
             "coefs": [
                 {
                     "name": "treated×post",

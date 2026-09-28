@@ -11,7 +11,10 @@ import json
 import math
 from typing import Any, cast
 
-from gvcsim.regression.teaching import X_COLUMN, Y_COLUMNS
+from scipy import stats
+
+from gvcsim.regression.design import RegressionDesign
+from gvcsim.regression.teaching import X_COLUMN, Y_COLUMNS, model_snapshot, variable_catalog
 from gvcsim.steps import STEPS
 
 _STEP_OUTCOMES = {
@@ -36,16 +39,35 @@ def _parse_saved_run(raw: Any, outcome: str) -> tuple[dict[str, Any], dict[str, 
         return None
     if any(design.get(key) != value for key, value in _FIXED_DESIGN.items()):
         return None
-    if not isinstance(snapshot, dict) or snapshot.get("version") != "step10-tariff-teaching-v1":
+    # JSON persistence changes calibration tuples to lists. Compare the complete
+    # published model, not just its version and variable names.
+    if json.loads(json.dumps(snapshot)) != json.loads(json.dumps(model_snapshot(outcome))):
         return None
-    if snapshot.get("x_columns") != [X_COLUMN] or snapshot.get("y_column") != Y_COLUMNS[outcome]:
+    if catalog != variable_catalog(outcome):
         return None
-    if snapshot.get("controls") != [] or snapshot.get("interactions") != []:
+    canonical = RegressionDesign(outcome, teaching=True)
+    fields = (
+        "depvar",
+        "depvar_label",
+        "shock_col",
+        "treated_col",
+        "entity",
+        "cluster",
+        "price_mode",
+        "price_mode_label",
+        "exclude_row",
+        "sample_filter",
+        "panel_file",
+        "granularity_label",
+        "shock_type_label",
+        "method_label",
+        "control_mode_label",
+        "scenario_label",
+        "control_labels",
+    )
+    if any(design.get(key) != getattr(canonical, key) for key in fields):
         return None
-    if not isinstance(catalog, list):
-        return None
-    roles = [(item.get("role"), item.get("name")) for item in catalog if isinstance(item, dict)]
-    if ("X", X_COLUMN) not in roles or ("Y", Y_COLUMNS[outcome]) not in roles:
+    if design.get("controls") != [] or design.get("equation") != canonical.equation():
         return None
     if not _result_is_reportable(result, design):
         return None
@@ -82,6 +104,12 @@ def _result_is_reportable(result: dict[str, Any], design: dict[str, Any]) -> boo
         return False
     if diagnostics.get("study_contract") != "economics-v2":
         return False
+    counts = [result.get(key) for key in ("n_obs", "n_entities", "n_times", "n_clusters")]
+    if any(type(value) is not int or value <= 0 for value in counts):
+        return False
+    n_obs, n_entities, n_times, n_clusters = cast(list[int], counts)
+    if not (2 <= n_clusters <= n_entities <= n_obs and 2 <= n_times <= n_obs <= n_entities * n_times):
+        return False
     if len(coefs) != 1 or not isinstance(coefs[0], dict) or coefs[0].get("name") != X_COLUMN:
         return False
     coefficient = coefs[0]
@@ -95,6 +123,9 @@ def _result_is_reportable(result: dict[str, Any], design: dict[str, Any]) -> boo
         return False
     if float(coefficient["se"]) <= 0:
         return False
+    beta, se = float(coefficient["coef"]), float(coefficient["se"])
+    if not math.isclose(float(coefficient["t"]), beta / se, rel_tol=1e-8, abs_tol=1e-10):
+        return False
     if status in {"ok", "warning"}:
         inference = ("p", "ci_low", "ci_high")
         if support.get("suppress_inference") is True or any(
@@ -104,7 +135,17 @@ def _result_is_reportable(result: dict[str, Any], design: dict[str, Any]) -> boo
             for field in inference
         ):
             return False
-        return 0 <= float(coefficient["p"]) <= 1 and float(coefficient["ci_low"]) <= float(coefficient["ci_high"])
+        if not (0 <= coefficient["p"] <= 1 and coefficient["ci_low"] <= beta <= coefficient["ci_high"]):
+            return False
+        critical = float(stats.t.ppf(0.975, n_clusters - 1))
+        expected = {
+            "p": float(2 * stats.t.sf(abs(beta / se), n_clusters - 1)),
+            "ci_low": beta - critical * se,
+            "ci_high": beta + critical * se,
+        }
+        return all(
+            math.isclose(float(coefficient[key]), value, rel_tol=1e-8, abs_tol=1e-10) for key, value in expected.items()
+        )
     reasons = support.get("reasons")
     return (
         support.get("suppress_inference") is True

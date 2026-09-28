@@ -38,6 +38,34 @@ const blockedSupport = (status: "insufficient" | "invalid_design"): TreatmentSup
 });
 
 describe("fixed TWFE verdict", () => {
+  test.each([
+    [-0.03, -0.01, "negative"], [0.01, 0.03, "positive"],
+    [-0.03, 0, "insufficient"], [0, 0.03, "insufficient"],
+  ] as const)("uses both valid interval endpoints %s, %s", (low, high, state) => {
+    expect(buildRegressionVerdict("trade", response("trade", coefficient((low + high) / 2, low, high))).state)
+      .toBe(state);
+  });
+
+  test.each([
+    [null, -0.01], [0.01, null], [null, null],
+    [0.02, -0.02], [Number.NaN, 0.02], [-0.02, Infinity], [0.01, 0.02],
+  ])("does not infer direction from malformed interval %s, %s", (low, high) => {
+    const verdict = buildRegressionVerdict("trade", response("trade", coefficient(-0.01, low, high)));
+    expect(verdict.state).toBe("insufficient");
+    expect(verdict.interval).toBe("—");
+    expect(verdict.evidence).toContain("置信区间缺失或不合法");
+    expect(verdict.evidence).not.toContain("95% 置信区间包含 0");
+  });
+
+  test.each([null, undefined, "unknown"])("suppresses an unknown result status %s", (status) => {
+    const payload = response("trade", coefficient(-0.02, -0.03, -0.01));
+    payload.result.status = status as RegressionResponse["result"]["status"];
+    const verdict = buildRegressionVerdict("trade", payload);
+    expect(verdict.state).toBe("suppressed");
+    expect(verdict.title).toContain("有效性未知");
+    expect(verdict.interval).toBe("—");
+  });
+
   test("uses confidence intervals rather than coefficient sign", () => {
     const verdict = buildRegressionVerdict("trade", response("trade", coefficient(-0.01, -0.03, 0.01)));
     expect(verdict.state).toBe("insufficient");

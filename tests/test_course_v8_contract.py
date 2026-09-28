@@ -2,9 +2,12 @@ import json
 
 import pytest
 from fastapi import HTTPException
+from scipy import stats
 
 from gvcsim import quizzes, teaching_report
 from gvcsim.classroom import routes as classroom_routes
+from gvcsim.regression.design import RegressionDesign
+from gvcsim.regression_routes import _design_info
 from gvcsim.report_saved_run import _parse_saved_run
 from gvcsim.regression.teaching import VERSION, X_COLUMN, Y_COLUMNS, model_snapshot, variable_catalog
 from gvcsim.session import empty_session, make_record
@@ -15,17 +18,13 @@ def _run(outcome: str, *, version: str = VERSION, coefficient: str = X_COLUMN) -
     snapshot = json.loads(json.dumps(model_snapshot(outcome)))
     snapshot["version"] = version
     return {
-        "design": {
-            "outcome": outcome,
-            "granularity": "country_industry",
-            "shock_type": "tariff",
-            "method": "twfe_intensity",
-            "control_mode": "none",
-            "interaction": False,
-            "scenario": "clean",
-        },
+        "design": _design_info(RegressionDesign(outcome, teaching=True)),
         "result": {
             "status": "ok",
+            "n_obs": 20,
+            "n_entities": 4,
+            "n_times": 5,
+            "n_clusters": 4,
             "support": {"status": "ok", "suppress_inference": False, "reasons": []},
             "diagnostics": {"study_contract": "economics-v2"},
             "coefs": [
@@ -34,9 +33,9 @@ def _run(outcome: str, *, version: str = VERSION, coefficient: str = X_COLUMN) -
                     "coef": 1.0,
                     "se": 0.2,
                     "t": 5.0,
-                    "p": 0.01,
-                    "ci_low": 0.6,
-                    "ci_high": 1.4,
+                    "p": float(2 * stats.t.sf(5, 3)),
+                    "ci_low": float(1 - stats.t.ppf(0.975, 3) * 0.2),
+                    "ci_high": float(1 + stats.t.ppf(0.975, 3) * 0.2),
                 }
             ],
         },

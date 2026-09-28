@@ -1,9 +1,12 @@
 import json
 
 import pytest
+from scipy import stats
 
 from gvcsim.classroom import routes as classroom_routes
 from gvcsim.config import ROOT
+from gvcsim.regression.design import RegressionDesign
+from gvcsim.regression_routes import _design_info
 from gvcsim.regression.teaching import model_snapshot, variable_catalog
 from gvcsim.session import SESSION_VERSION, SessionError, empty_session, make_record, validate_session
 
@@ -24,17 +27,13 @@ def test_frontend_and_backend_use_the_same_session_version():
 def test_put_session_returns_the_exact_normalized_snapshot_saved(monkeypatch):
     outcome = "production"
     run = {
-        "design": {
-            "outcome": outcome,
-            "granularity": "country_industry",
-            "shock_type": "tariff",
-            "method": "twfe_intensity",
-            "control_mode": "none",
-            "interaction": False,
-            "scenario": "clean",
-        },
+        "design": _design_info(RegressionDesign(outcome, teaching=True)),
         "result": {
             "status": "ok",
+            "n_obs": 20,
+            "n_entities": 4,
+            "n_times": 5,
+            "n_clusters": 4,
             "support": {"status": "ok", "suppress_inference": False, "reasons": []},
             "diagnostics": {"study_contract": "economics-v2"},
             "coefs": [
@@ -43,9 +42,9 @@ def test_put_session_returns_the_exact_normalized_snapshot_saved(monkeypatch):
                     "coef": -0.5,
                     "se": 0.1,
                     "t": -5.0,
-                    "p": 0.01,
-                    "ci_low": -0.7,
-                    "ci_high": -0.3,
+                    "p": float(2 * stats.t.sf(5, 3)),
+                    "ci_low": float(-0.5 - stats.t.ppf(0.975, 3) * 0.1),
+                    "ci_high": float(-0.5 + stats.t.ppf(0.975, 3) * 0.1),
                 }
             ],
         },

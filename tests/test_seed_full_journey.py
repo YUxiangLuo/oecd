@@ -3,6 +3,7 @@
 from copy import deepcopy
 
 import pytest
+from scipy import stats
 
 from scripts import seed_full_journey as journey
 from gvcsim.regression.teaching import X_COLUMN, model_snapshot, variable_catalog
@@ -12,6 +13,10 @@ def _result(status):
     stopped = status in {"insufficient", "invalid_design"}
     return {
         "status": status,
+        "n_obs": 20,
+        "n_entities": 4,
+        "n_times": 5,
+        "n_clusters": 4,
         "support": {
             "status": status,
             "suppress_inference": stopped,
@@ -26,9 +31,9 @@ def _result(status):
                 "coef": 0.1,
                 "se": 0.025,
                 "t": 4.0,
-                "p": None if stopped else 0.04,
-                "ci_low": None if stopped else 0.05,
-                "ci_high": None if stopped else 0.15,
+                "p": None if stopped else float(2 * stats.t.sf(4, 3)),
+                "ci_low": None if stopped else float(0.1 - stats.t.ppf(0.975, 3) * 0.025),
+                "ci_high": None if stopped else float(0.1 + stats.t.ppf(0.975, 3) * 0.025),
             }
         ],
     }

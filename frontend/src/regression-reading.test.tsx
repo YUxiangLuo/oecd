@@ -115,11 +115,27 @@ describe("fixed teaching regression reading", () => {
   test("allowed estimates still disclose design warnings", () => {
     const data = response();
     data.result.status = "warning";
+    data.result.support!.status = "warning";
     data.result.status_reasons = ["部分国家年度记录缺失"];
     render(<RegressionResultCard outcome="trade" response={data} />);
     expect(screen.getByRole("list", { name: "本次计算的限制" }).textContent).toContain("部分国家年度记录缺失");
     expect(screen.getByText("平均上升 2.00 个百分点")).toBeTruthy();
   });
+});
+
+test.each(["unknown", "conflicting"])("%s status suppresses table and forest inference", (status) => {
+  const data = response();
+  if (status === "unknown") data.result.status = null;
+  else data.result.support!.status = "warning";
+  const table = render(<RegressionCoefficientTable response={data} />);
+  const cells = table.container.querySelectorAll("tbody td");
+  expect(cells[2].textContent).toBe("—");
+  expect(cells[5].textContent).toBe("—");
+  table.unmount();
+  const plot = render(<CoefForestChart coefs={data.result.coefs} globalStatus={data.result.status} globalSupport={data.result.support} />);
+  fireEvent.mouseEnter(plot.container.querySelector("circle")!.closest("g")!);
+  expect(plot.container.textContent).toContain("仅显示描述性点估计");
+  expect(plot.container.textContent).not.toContain("p 值 ·");
 });
 
 test.each([
@@ -136,7 +152,7 @@ test.each([
   const table = render(<RegressionCoefficientTable response={data} />);
   expect(table.container.querySelector("tbody td:last-child")?.textContent).toBe(expected);
   table.unmount();
-  const plot = render(<CoefForestChart coefs={data.result.coefs} />);
+  const plot = render(<CoefForestChart coefs={data.result.coefs} globalStatus={data.result.status} globalSupport={data.result.support} />);
   fireEvent.mouseEnter(plot.container.querySelector("circle")!.closest("g")!);
   expect(plot.container.textContent).toContain(`p 值 · ${p == null ? "不可评估" : expected}`);
 });
