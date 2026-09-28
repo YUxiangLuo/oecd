@@ -4,7 +4,6 @@ import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import type { AcademicSemester, StudentRow } from "../types";
 import { AcademicFilters, matchesAcademicFilter } from "./academic-filter";
-import { StudentBatchModal } from "./student-batch";
 import { EmptyState, Modal, SearchInput, StatusPill, Toolbar } from "./ui";
 
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
@@ -97,7 +96,6 @@ export function StudentsTab() {
   const [semesterId, setSemesterId] = useState<number | null>(null);
   const [classId, setClassId] = useState<number | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
-  const [batchOpen, setBatchOpen] = useState(false);
   const { data, error } = useAsync<{ students: StudentRow[] }>(() => api.classroom.students(), [refresh]);
   const { data: academic, error: academicError } = useAsync(() => api.classroom.semesters(), [refresh]);
 
@@ -127,7 +125,6 @@ export function StudentsTab() {
           onClassChange={setClassId}
         />
         <div className="toolbar-actions">
-          <button onClick={() => setBatchOpen(true)}>批量添加学生</button>
           <button className="primary" onClick={() => setModal({ type: "student" })}>+ 添加学生</button>
         </div>
       </Toolbar>
@@ -166,7 +163,6 @@ export function StudentsTab() {
         />}
       </ScrollableRegion>
 
-      {batchOpen && <StudentBatchModal semesters={semesters} initialClassId={classId} onClose={() => setBatchOpen(false)} onCreated={() => setRefresh((value) => value + 1)} />}
       {modal?.type === "student" && <StudentModal semesters={semesters} onClose={() => setModal(null)} onSubmit={(body) => run(api.classroom.createStudent(body))} />}
       {modal?.type === "enrollment" && (
         <EnrollmentModal

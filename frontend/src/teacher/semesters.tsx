@@ -4,6 +4,7 @@ import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import type { AcademicSemester, ClassGroup } from "../types";
 import { userFacingRequestError } from "../user-facing-error";
+import { StudentBatchModal } from "./student-batch";
 import { EmptyState, Modal, StatusPill, Toolbar } from "./ui";
 
 type Editor =
@@ -16,6 +17,7 @@ type Editor =
 export function SemestersTab() {
   const [refresh, setRefresh] = useState(0);
   const [editor, setEditor] = useState<Editor>(null);
+  const [batchClassId, setBatchClassId] = useState<number | null>(null);
   const { data, error } = useAsync(() => api.classroom.semesters(), [refresh]);
   const semesters = data?.semesters ?? [];
   const mutate = async (operation: Promise<unknown>) => {
@@ -59,6 +61,9 @@ export function SemestersTab() {
                     <span>{group.student_count} 名学生{group.is_active ? "" : " · 已归档"}</span>
                   </div>
                   <div className="semester-actions">
+                    {semester.is_active && group.is_active && <button className="sm"
+                      aria-label={`导入学生：${semester.name} · ${group.name}`}
+                      onClick={() => setBatchClassId(group.id)}>导入学生</button>}
                     <button className="sm" onClick={() => setEditor({ kind: "rename-class", group })}>重命名</button>
                     <ArchiveAction active={group.is_active}
                       onChange={() => mutate(api.classroom.updateClass(group.id, { is_active: !group.is_active }))} />
@@ -78,6 +83,8 @@ export function SemestersTab() {
       {semesters.length === 0 && (
         <EmptyState icon="🗓️" title="还没有学期" hint="先创建学期，再在学期下添加班级并给学生分班。" />
       )}
+      {batchClassId !== null && <StudentBatchModal semesters={semesters} initialClassId={batchClassId}
+        onClose={() => setBatchClassId(null)} onCreated={() => setRefresh((value) => value + 1)} />}
       {editor && (
         <NameModal
           title={editor.kind === "semester" ? "新建学期"

@@ -6,6 +6,27 @@ import { SemestersTab } from "./semesters";
 
 afterEach(cleanup);
 
+test("class import selects its class and is unavailable for archived groups", async () => {
+  const semester: AcademicSemester = {
+    id: 1, name: "秋季", is_active: true, student_count: 0, created_at: "2026-09-24",
+    classes: [2, 3, 4].map((id) => ({ id, term_id: 1, name: `${id}班`, is_active: id !== 4,
+      student_count: 0, created_at: "2026-09-24" })),
+  };
+  const list = spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [semester,
+    { ...semester, id: 5, name: "旧学期", is_active: false,
+      classes: [{ ...semester.classes[0], id: 6, term_id: 5 }] },
+  ] });
+  try {
+    render(<SemestersTab />);
+    await screen.findByText("3班");
+    expect(screen.getAllByRole("button", { name: /^导入学生：/ })).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "导入学生：秋季 · 3班" }));
+    expect((screen.getByLabelText("所属班级") as HTMLSelectElement).value).toBe("3");
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  } finally { list.mockRestore(); }
+});
+
 for (const target of ["semester", "class"] as const) {
   for (const active of [true, false]) {
     test(`${target} ${active ? "archive" : "restore"} blocks duplicates, reports failure and allows retry`, async () => {
