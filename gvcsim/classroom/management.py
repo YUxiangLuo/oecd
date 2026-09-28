@@ -202,6 +202,53 @@ def create_student(
         return row
 
 
+def create_student_batch(
+    students: list[dict[str, Any]], class_id: int, teacher_username: str, preview: bool
+) -> dict[str, Any]:
+    """Validate again at commit and create the entire roster in one transaction."""
+    with database.conn() as c:
+        if not _teacher_exists(c, teacher_username):
+            raise PermissionError("教师账号无效")
+        group = c.execute(
+            "SELECT cg.term_id,cg.is_active,t.is_active AS term_is_active "
+            "FROM class_groups cg JOIN academic_terms t ON t.id=cg.term_id WHERE cg.id=%s FOR SHARE OF cg,t",
+            (class_id,),
+        ).fetchone()
+        if group is None or not group["is_active"] or not group["term_is_active"]:
+            raise ValueError("请选择未归档的学期和班级")
+        existing = c.execute(
+            "SELECT username FROM accounts WHERE username=ANY(%s)",
+            ([student["username"] for student in students],),
+        ).fetchall()
+        conflicts = [row["username"] for row in existing]
+        if preview:
+            return {"existing": conflicts, "created": 0}
+        if conflicts:
+            raise ValueError("账号已存在，本次未添加任何学生；请返回修改名单并重新预览")
+        for student in sorted(students, key=lambda row: row["username"]):
+            database._validate_managed_password(student["password"])
+            salt = secrets.token_hex(16)
+            row = database._required(
+                c.execute(
+                    "INSERT INTO accounts(username,display_name,role,student_no,pw_salt,pw_hash) "
+                    "VALUES (%s,%s,'student',%s,%s,%s) RETURNING id",
+                    (
+                        student["username"],
+                        student["display_name"],
+                        student["username"],
+                        salt,
+                        database.hash_password(student["password"], salt),
+                    ),
+                ).fetchone(),
+                "batch student",
+            )
+            c.execute(
+                "INSERT INTO class_enrollments(term_id,class_id,account_id) VALUES (%s,%s,%s)",
+                (group["term_id"], class_id, row["id"]),
+            )
+        return {"existing": [], "created": len(students)}
+
+
 def update_student(
     account_id: int, fields: dict[str, Any], teacher_username: str | None = None
 ) -> dict[str, Any] | None:

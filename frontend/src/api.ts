@@ -293,6 +293,8 @@ export const api = {
     updateClass: (id: number, body: { name?: string; is_active?: boolean }) =>
       post<Omit<import("./types").ClassGroup, "student_count">>(`/api/classroom/classes/${id}`, body),
     students: () => get<{ students: import("./types").StudentRow[] }>("/api/classroom/students"),
+    createStudentBatch: (body: { class_id: number; students: { username: string; display_name: string; password: string }[]; preview: boolean }) =>
+      post<{ existing: string[]; created: number }>("/api/classroom/students/batch", body),
     createStudent: (body: {
       username: string;
       display_name: string;

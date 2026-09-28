@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from gvcsim import concurrency, demo_accounts, evidence, quizzes
 from gvcsim import session as session_model
 from gvcsim import teaching_report
-from gvcsim.classroom import db, records
+from gvcsim.classroom import db, management, records
 from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.report_saved_run import _STEP_OUTCOMES, _parse_saved_run
 from gvcsim.request_validation import TextRequest
@@ -377,6 +377,29 @@ def create_student(req: StudentCreateRequest, user: dict = Depends(require_teach
         raise HTTPException(status_code=409, detail=f"用户名 {req.username} 已存在") from error
     except (PermissionError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+class StudentBatchRequest(BaseModel):
+    class_id: int = Field(gt=0)
+    students: list[StudentCreateRequest] = Field(min_length=1, max_length=200)
+    preview: bool = True
+
+
+@router.post("/students/batch")
+def create_student_batch(req: StudentBatchRequest, user: dict = Depends(require_teacher)):
+    names = [student.username for student in req.students]
+    if len(set(names)) != len(names):
+        raise HTTPException(status_code=400, detail="名单中有重复学号")
+    if any(not re.fullmatch(r"[a-zA-Z0-9_.-]{2,40}", name) for name in names):
+        raise HTTPException(status_code=400, detail="学号须为 2–40 位字母、数字、下划线、点或连字符")
+    try:
+        return management.create_student_batch(
+            [student.model_dump() for student in req.students], req.class_id, user["sub"], req.preview
+        )
+    except psycopg.errors.UniqueViolation as error:
+        raise HTTPException(status_code=409, detail="账号已被创建，本次未添加任何学生；请重新预览名单") from error
+    except (ValueError, PermissionError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 class StudentUpdateRequest(TextRequest):
