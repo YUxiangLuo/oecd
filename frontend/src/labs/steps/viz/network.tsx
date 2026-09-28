@@ -12,6 +12,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LabeledControl } from "../../../a11y";
 import { api } from "../../../api";
+import { focusStepPrimaryAction } from "../../../step-task-card";
 import { FullscreenPanel } from "../../../fullscreen-panel";
 import type { IndustryPage, Meta, NetworkData, Step, StepStateApi } from "../../../types";
 import { HeatTableViz, NetworkViz, countryLabel } from "../../../viz";
@@ -121,7 +122,7 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
         </span>
       </div>
 
-      <LensNav<Lens> active={lens as Lens} onPick={changeLens} lenses={STEP10_LENSES} />
+      <LensNav<Lens> active={lens as Lens} onPick={changeLens} lenses={STEP10_LENSES.filter(({ key }) => key === "heat")} />
 
       {lens === "heat" && <NetworkTrend meta={meta} schema={schema} initialCountry={drill} observations={observations} syncing={state.syncing} syncError={state.syncError} onRetrySync={state.syncNow} onRecord={(countries, observations) => {
         pickCountries(countries);
@@ -207,6 +208,13 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
           </ChartStory>
         )}
       </FullscreenPanel>
+      </details>
+      <details className="technical-details" key={`supplement-${lens}`} open={lens === "network"}>
+        <summary>补充图表</summary>
+        <LensNav<Lens> active={lens as Lens} onPick={(next) => {
+          changeLens(next);
+          requestAnimationFrame(() => focusStepPrimaryAction(document.querySelector(".content")));
+        }} lenses={STEP10_LENSES.filter(({ key }) => key === "network")} />
       </details>
       <details className="technical-details" aria-label="步骤9完成清单">
         <summary>本步完成清单与口径说明</summary>

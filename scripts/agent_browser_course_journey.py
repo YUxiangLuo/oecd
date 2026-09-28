@@ -113,6 +113,7 @@ def main():
                     ),
                 )
             elif step == 9:
+                student.run("find", "text", "补充图表", "click", "--exact")
                 student.button("贸易联系概览")
                 for country in ("CHN", "USA"):
                     selector = f'.network-node[aria-label^="{country} "]'

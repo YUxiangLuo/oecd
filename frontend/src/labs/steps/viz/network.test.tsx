@@ -21,6 +21,12 @@ test("step 9 details are read-only and browsing never clears saved report materi
   const save = mock((_patch: Partial<VizStepState>) => {});
   render(<NetworkVizStep meta={meta} step={step} state={{ data, save, syncing: false, syncError: null, syncNow: () => {}, complete: false }} />);
   await screen.findByRole("img");
+  const supplement = screen.getByText("补充图表").closest("details") as HTMLDetailsElement;
+  expect(supplement.open).toBe(false);
+  expect(supplement.querySelector("button")?.textContent).toContain("贸易联系概览");
+  // Legacy observations without a release do not restore the trend selection;
+  // the last compared country (USA) supplies the initial drill-down instead.
+  expect(screen.getByLabelText("当前比较口径").textContent).toContain("USA 美国与CHN 中国 · C26");
   const checklist = screen.getByText("本步完成清单与口径说明").closest("details") as HTMLDetailsElement;
   expect(checklist.open).toBe(false);
   fireEvent.click(screen.getByText("查看行业明细表（可选）"));

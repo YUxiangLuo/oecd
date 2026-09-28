@@ -64,6 +64,43 @@ function setup(Component = TradeVizStep, data?: VizStepState) {
 }
 
 describe("explicit indicator explorer", () => {
+  for (const delayed of [false, true]) {
+    for (const invalid of [
+      { view: "trend" as const, start: 2021, end: 2019, year: 2021 },
+      { view: "trend" as const, start: 2018, end: 2021, year: 2021 },
+      { view: "comparison" as const, start: 2019, end: 2021, year: 2099 },
+    ]) {
+      test(`invalid restored years are actionable without overwriting materials (${JSON.stringify(invalid)}, delayed=${delayed})`, async () => {
+        const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
+        const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+        const data: VizStepState = {
+          observations: [{ country: "CHN", entity: "CHN", year: 2019, metric: "FVA_share", value: 0.1, source: "explicit-indicator-trend", release }],
+          indicator_selection: { first: "CHN", second: "USA", industry: "", metric: "FVA_share", limit: 10, ...invalid },
+        };
+        const original = JSON.stringify(data);
+        const saves: VizStepState[] = [];
+        const state = (value?: VizStepState): StepStateApi<VizStepState> => ({ data: value, save: (value) => saves.push(value), complete: false, syncing: false, syncError: null, syncNow: () => {} });
+        try {
+          const view = render(<TradeVizStep meta={meta} step={step} state={state(delayed ? undefined : data)} />);
+          if (delayed) view.rerender(<TradeVizStep meta={meta} step={step} state={state(data)} />);
+          expect((await view.findByRole("alert")).textContent).toContain("年份范围无效");
+          expect(view.queryByText("正在加载所选年份的指标…")).toBeNull();
+          expect((view.getByRole("button", { name: "更新报告材料" }) as HTMLButtonElement).disabled).toBe(true);
+          if (!delayed) expect(rows).not.toHaveBeenCalled();
+          fireEvent.click(view.getByRole("button", { name: "重置年份" }));
+          await waitFor(() => expect((view.getByRole("button", { name: "更新报告材料" }) as HTMLButtonElement).disabled).toBe(false));
+          expect(view.queryByRole("alert")).toBeNull();
+          expect(saves).toHaveLength(0);
+          expect(JSON.stringify(data)).toBe(original);
+          fireEvent.click(view.getByRole("button", { name: "更新报告材料" }));
+          expect(saves).toHaveLength(1);
+          expect(saves[0].indicator_selection).toMatchObject({ start: 2019, end: 2021, year: 2021 });
+          expect(rows.mock.calls.every(([year]) => meta.years.includes(year))).toBe(true);
+        } finally { rows.mockRestore(); schema.mockRestore(); }
+      });
+    }
+  }
+
   test("starts with a two-country trend without saving; report capture and update remain explicit", async () => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(
       async (year) => countryRows(year),
@@ -86,6 +123,11 @@ describe("explicit indicator explorer", () => {
     expect(view.saves).toHaveLength(0);
     expect(await view.findByLabelText("两国趋势结论")).toBeTruthy();
     expect(view.getByLabelText("2020 年数据解释边界")).toBeTruthy();
+    const chart = view.getByRole("img");
+    const materials = view.getByRole("region", { name: "报告材料" });
+    expect(chart.compareDocumentPosition(materials) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(materials.compareDocumentPosition(view.getByText("补充图表")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect((view.getByText("指标口径").closest("details") as HTMLDetailsElement).open).toBe(false);
     expect(view.getByText(/两国差距/)).toBeTruthy();
     expect(view.getByText(/差距缩小 .* 个百分点/)).toBeTruthy();
     await waitFor(() =>
@@ -236,7 +278,9 @@ describe("explicit indicator explorer", () => {
     });
     const view = setup();
     await view.findByRole("heading", { name: /外国增加值项占比/ });
-    fireEvent.click(view.getByRole("button", { name: "解释构成" }));
+    expect((view.getByText("补充图表").closest("details") as HTMLDetailsElement).open).toBe(false);
+    expect(view.getByLabelText("当前比较口径").textContent).toContain("CHN 中国与USA 美国 · 国家整体 · 2019–2021");
+    fireEvent.click(view.getByRole("button", { name: "构成分析" }));
     await waitFor(() => expect(view.getByText(/14 条有效读数/)).toBeTruthy());
     fireEvent.click(view.getByRole("button", { name: "保存为报告材料" }));
     expect(new Set(view.saves[0].observations!.map((x) => x.metric))).toEqual(
@@ -255,6 +299,21 @@ describe("explicit indicator explorer", () => {
         (x) => x.metric === "taxsub" && x.value < 0,
       ),
     ).toBeTrue();
+    fireEvent.click(view.getByRole("button", { name: "历年" }));
+    await waitFor(() => expect(view.getByText(/42 条有效读数/)).toBeTruthy());
+    expect(view.getByRole("button", { name: "构成分析" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(view.getByRole("button", { name: "保存为报告材料" }));
+    expect(view.saves.at(-1)?.indicator_selection?.view).toBe("evolution");
+    expect(new Set(view.saves.at(-1)?.observations?.map((item) => item.year))).toEqual(new Set([2019, 2020, 2021]));
+    view.accept();
+    expect(view.getByRole("button", { name: "历年" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(view.getByRole("button", { name: "单年" }));
+    expect(view.getByLabelText("当前比较口径").textContent).toContain("2021 · 构成分析");
+    view.unmount();
+    const restored = setup(TradeVizStep, view.saves.at(-1));
+    expect(restored.getByRole("button", { name: "构成分析" }).getAttribute("aria-pressed")).toBe("true");
+    expect(restored.getByRole("button", { name: "历年" }).getAttribute("aria-pressed")).toBe("true");
+    expect(restored.saves).toHaveLength(0);
     rows.mockRestore();
     schema.mockRestore();
   });
