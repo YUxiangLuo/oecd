@@ -11,7 +11,7 @@ import { LogoMark } from "./brand";
 import type { LoginResponse } from "./types";
 import { userFacingRequestError } from "./user-facing-error";
 
-export const LOGIN_FLOW = ["数据接入", "指标计算", "可视化分析", "回归设计与建模", "实验闭环"];
+export const LOGIN_FLOW = ["数据接入", "指标计算", "图表比较", "模拟回归", "实验报告"];
 export const LOGIN_DATA_LABEL = "数据来源与范围以登录后的课程数据说明为准";
 
 export const DEMO_STUDENT_COUNT = 50;
@@ -170,7 +170,7 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
           </h1>
           <p className="login-desc">
             使用跨国投入产出表，计算价值链指标、比较经济体，
-            再用教学政策冲击练习实证比较、识别假设与不确定性判断，最终生成实验报告。
+            再用教学模拟练习回归分析，判断结果及其不确定性，最后完成实验报告。
           </p>
           <div className="login-flow">
             {LOGIN_FLOW.map((p, i) => (

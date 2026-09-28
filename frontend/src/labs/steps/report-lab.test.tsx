@@ -235,7 +235,7 @@ describe("step 15 report states", () => {
     expect(overview.summary).toBe("4 个步骤还有 5 项待补齐");
     expect(overview.next?.step).toBe(1);
     expect(overview.groups.map((group) => group.label)).toEqual([
-      "数据接入", "指标计算", "回归设计与建模", "实验闭环",
+      "数据接入", "指标计算", "模拟回归", "实验报告",
     ]);
   });
 
@@ -321,14 +321,14 @@ test("one-click finish flushes then generates then submits; outro appears only a
     expect(generate).toHaveBeenCalledWith(null);
     expect(screen.queryByRole("dialog")).toBeNull();
     await act(async () => { acknowledge(mutation("pending")); });
-    const dialog = screen.getByRole("dialog", { name: "报告已提交，感谢你的探索" });
+    const dialog = screen.getByRole("dialog", { name: "报告已提交" });
     expect(within(dialog).getByText("提交成功 · 等待教师评阅")).toBeTruthy();
     expect(within(dialog).getByText("计算并理解指标")).toBeTruthy();
-    expect(within(dialog).getByText("两国同口径比较")).toBeTruthy();
-    expect(within(dialog).getByText("汇总四项回归证据")).toBeTruthy();
+    expect(within(dialog).getByText("比较两个国家")).toBeTruthy();
+    expect(within(dialog).getByText("汇总四项回归结果")).toBeTruthy();
     expect(within(dialog).queryByText("比较与验证")).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
-    expect(document.activeElement?.textContent).toBe("报告已提交，感谢你的探索");
+    expect(document.activeElement?.textContent).toBe("报告已提交");
     expect(order).toEqual(["flush", "generate", "draft", "submit", "pending"]);
     fireEvent.keyDown(dialog, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -398,7 +398,7 @@ for (const button of ["重新生成并提交", "更新报告并提交给老师"]
       expect(flushes).toBe(1);
       expect(mutations).toBe(1);
       expect(submit).not.toHaveBeenCalled();
-      expect(screen.getByRole("dialog", { name: "报告已提交，感谢你的探索" })).toBeTruthy();
+      expect(screen.getByRole("dialog", { name: "报告已提交" })).toBeTruthy();
     } finally { generate.mockRestore(); submit.mockRestore(); confirm.mockRestore(); }
   });
 }
@@ -430,7 +430,7 @@ test("regenerating a submitted report uses server resubmission directly without 
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" })); });
     expect(confirm).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: "报告已提交，感谢你的探索" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "报告已提交" })).toBeTruthy();
   } finally { generate.mockRestore(); submit.mockRestore(); confirm.mockRestore(); }
 });
 
@@ -439,7 +439,7 @@ test("restored graded receipt is available without submitting again; outdated ex
   try {
     render(<ReportLab {...finishProps} report={report("graded")} sessionUnsynced />);
     fireEvent.click(screen.getByRole("button", { name: "查看提交回执与实验总结" }));
-    const dialog = screen.getByRole("dialog", { name: "你的报告已获评阅" });
+    const dialog = screen.getByRole("dialog", { name: "报告已评阅" });
     expect(within(dialog).getByText("已评阅 · 93 分")).toBeTruthy();
     expect(within(dialog).getByText("教师评语：证据链完整")).toBeTruthy();
     const receipt = within(dialog).getByRole("region", { name: "报告提交回执" });

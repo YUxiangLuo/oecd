@@ -5,7 +5,7 @@ import { LoginPage, LOGIN_DATA_LABEL, LOGIN_FLOW } from "./login";
 
 describe("login course map", () => {
   test("shows all five current course stages", () => {
-    expect(LOGIN_FLOW).toEqual(["数据接入", "指标计算", "可视化分析", "回归设计与建模", "实验闭环"]);
+    expect(LOGIN_FLOW).toEqual(["数据接入", "指标计算", "图表比较", "模拟回归", "实验报告"]);
   });
 
   test("does not claim an unverified source or coverage before login", () => {

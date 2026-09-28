@@ -26,8 +26,8 @@ describe("simple regression workbench", () => {
       history={{} as RegressionHistory} onHistoryChange={() => {}} />);
     const dom = new DOMParser().parseFromString(html, "text/html");
     expect(dom.querySelectorAll(".reg-run-card > button")).toHaveLength(1);
-    expect(dom.querySelector(".metric-facts")?.textContent).toContain("拿来比较的因素（X）模拟关税暴露强度");
-    expect(dom.querySelector(".metric-facts")?.textContent).toContain("想观察的结果（Y）教学模拟：外国增加值项占比");
+    expect(dom.querySelector(".metric-facts")?.textContent).toContain("解释变量（X）模拟关税暴露强度");
+    expect(dom.querySelector(".metric-facts")?.textContent).toContain("结果变量（Y）教学模拟：外国增加值项占比");
     expect(dom.querySelector(".metric-facts")?.textContent).not.toContain("teaching_tariff_exposure");
     expect(dom.querySelector(".metric-facts")?.textContent).toContain("学生无需选择计算方法");
     expect(dom.querySelector(".technical-details > summary")?.textContent).toBe("计算方法说明（可选）");

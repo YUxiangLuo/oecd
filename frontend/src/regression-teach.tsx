@@ -99,15 +99,15 @@ export function RegressionEvidenceMatrix({
     <section className="reg-evidence-matrix" aria-labelledby="reg-evidence-matrix-title">
       <div className="reg-evidence-matrix-head">
         <div>
-          <span className="reg-section-step">四步证据总表</span>
-          <h3 id="reg-evidence-matrix-title">并排读方向、不确定性、单位和边界</h3>
+          <span className="reg-section-step">四步结果汇总</span>
+          <h3 id="reg-evidence-matrix-title">比较方向、不确定性和单位</h3>
         </div>
         <p>不同指标的系数不能比大小；空白表示该步还没有可用结果。</p>
       </div>
-      <div className="table-wrap" role="region" aria-label="四步证据总表，可横向滚动" tabIndex={0}>
+      <div className="table-wrap" role="region" aria-label="四步结果汇总表，可横向滚动" tabIndex={0}>
         <table className="data-table reg-evidence-table">
           <thead>
-            <tr><th>步骤</th><th>指标家族</th><th>比较设定</th><th>方向判断</th><th>效应与单位</th><th>标称 95% 近似区间</th><th>写作边界</th></tr>
+            <tr><th>步骤</th><th>指标类型</th><th>模型设置</th><th>方向</th><th>估计值与单位</th><th>标称 95% 近似区间</th><th>解释限制</th></tr>
           </thead>
           <tbody>
             {REGRESSION_FAMILIES.map((item) => {

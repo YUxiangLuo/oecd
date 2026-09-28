@@ -99,7 +99,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
     }
     source = report_source_label(data_sources)
     lines = [
-        "# GVC 指标与政策冲击：教学实验记录",
+        "# GVC 指标与模拟关税实验报告",
         "",
         f"学生：{_safe(student)}",
         "",
@@ -109,7 +109,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "",
         "> 步骤 11–14 固定使用 country_industry × tariff × twfe_intensity × 无控制 × 无交互 × clean。系数与区间只描述模拟 X、Y 的关联，不是因果效果；四个 Y 量纲不同且必须完整报告。",
         "",
-        "> 本实验没有生成冲击后的投入产出表或网络，模拟 Y 的方向不表示实际生产结构、链长或拓扑位置已经改变。",
+        "> 本实验没有生成冲击后的投入产出表或网络，因此不能用模拟 Y 判断真实结构、链长或网络位置的变化。",
         "",
         *_reflection_section(session),
         *_observed_evidence_section(session),

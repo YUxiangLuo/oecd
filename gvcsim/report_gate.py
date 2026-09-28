@@ -303,7 +303,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             {
                 "step": 10,
                 "title": _STEP_TITLES.get(10, ""),
-                "missing": [f"请查看并保存版本 {TEACHING_VERSION} 的教学关税面板（国家、年份与 viewed 标记须完整）"],
+                "missing": [f"请查看并保存版本 {TEACHING_VERSION} 的模拟关税面板"],
             }
         )
 
@@ -315,7 +315,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             {
                 "step": step,
                 "title": _STEP_TITLES.get(step, ""),
-                "missing": ["请在本步运行并保存一次可报告的估计或完整的不可推断诊断；无需寻找显著或支持充分的结果"],
+                "missing": ["请运行并保存回归结果；若无法推断，请保存诊断结果"],
             }
         )
 
@@ -323,7 +323,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
     reflection_missing = []
     for key, label in (
         ("research_question", "研究问题"),
-        ("evidence_interpretation", "证据解释"),
+        ("evidence_interpretation", "结果解释"),
         ("limitations", "局限与反思"),
     ):
         minimum = _REFLECTION_MIN_LENGTHS[key]

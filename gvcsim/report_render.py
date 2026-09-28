@@ -34,7 +34,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
     lines = [
         "## 保存的实验快照",
         "",
-        "以下内容来自会话中实际保存的切片、筛选和观察；未操作的默认视图不会被写成学生发现。",
+        "本节只记录学生实际保存的操作和结果，不记录默认视图。",
         "",
     ]
     captured = False
@@ -228,7 +228,7 @@ def _reported_by_step(runs: list[dict[str, Any]]) -> dict[int, dict[str, Any]]:
 def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
     qualified = _reported_by_step(runs)
     lines = [
-        "### 四类指标并读（预先指定结果族）",
+        "### 四项回归结果汇总",
         "",
         "这四步分别估计贸易流、生产、长度和网络；四项结果必须完整报告，不能只挑区间未跨 0 的结果。"
         "下表列出各步实际保存的可报告结果；系数因量纲和估计对象不同不能比大小，"
@@ -265,7 +265,7 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
     if len({item for item in designs}) > 1:
         lines.extend(
             (
-                "- **读表注意：** 上表各行的冲击、比较方式或控制设定并不相同，只能并列查看，不能当成同一个系数比较。",
+                "- **注意：** 各行设定不同，不能直接比较系数。",
                 "",
             )
         )
@@ -291,7 +291,7 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
     lines = [
         "## 关键证据摘要",
         "",
-        "本节把保存的主要估计翻译成课堂中的单位和证据判断。完整方程、全部控制项与诊断保留在后面的技术附录。",
+        "本节按课堂单位说明估计结果。完整方程和诊断见技术附录。",
         "",
         *_teaching_sample_lines(source_filter),
         "区间口径：如提供区间，均为**标称 95% 的近似聚类区间**。" + CLUSTER_INTERVAL_NOTE,
@@ -345,7 +345,7 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
                 f"| 设计状态 | {_STATUS_LABELS.get(status, _STATUS_LABELS['unknown'])} |",
                 "",
                 f"- **可以支持的表述：** {interpretation}",
-                "- **不能支持的表述：** 本结果不能自动证明拟真政策冲击导致了现实中的 GVC 变化。",
+                "- **不能支持的表述：** 本结果不能证明真实关税导致了 GVC 变化。",
             )
         )
         snapshot = run.get("model_snapshot", {})

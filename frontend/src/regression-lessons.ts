@@ -86,7 +86,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "中心性原始单位，并补充标准差单位",
     priorStep: 5,
     priorLabel: "全球生产网络指标",
-    learnThis: "综合判断：把前三步与本步并排阅读，四项都报告；本步网络 Y 也是人工生成的数值，不能据此认定网络改变或脱钩。",
+    learnThis: "综合判断：汇总四项结果；网络 Y 也是模拟值，不能据此认定网络已经改变或脱钩。",
     definition: "真实指标在全球国家×行业图上计算最短路径介数；本步 Y 只是对应这一概念的模拟值，不是由现实网络机械计算出的中心性。",
     downMeaning: "模拟 Y 的数值下降。本实验没有生成对应的新网络，不能称为拓扑位置下降；只有重新计算真实网络的同定义介数后，才能讨论其拓扑变化。",
     upMeaning: "模拟 Y 的数值上升。本实验没有生成对应的新网络，不能称为拓扑位置增强，也不能据此判断经济重要性。",

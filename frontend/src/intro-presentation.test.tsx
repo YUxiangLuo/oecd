@@ -18,7 +18,7 @@ test("data boundaries remain visible and both technical cards can expand indepen
     expect(view.getByRole("dialog").querySelectorAll(".intro-card.open").length).toBe(2);
     fireEvent.click(icio);
     expect(shock.getAttribute("aria-expanded")).toBe("true");
-    expect(view.getByText(/这里没有真实事件目录、现实税率或现实政策效果/)).toBeTruthy();
+    expect(view.getByText(/这里没有真实事件、现实税率或现实政策效果/)).toBeTruthy();
     fireEvent.click(view.getByRole("button", { name: "介绍页 5" }));
     expect(view.getByText(/进入实验台不会改变当前实验步骤/).textContent).toBeTruthy();
     expect(view.queryByText(/建议从阶段一开始/) === null).toBe(true);

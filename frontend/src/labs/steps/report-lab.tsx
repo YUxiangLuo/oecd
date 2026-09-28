@@ -33,7 +33,7 @@ const REFLECTION_FIELDS: {
   min: number;
 }[] = [
   { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请区分真实ICIO比较和模拟关税回归。", min: 12 },
-  { key: "evidence_interpretation", label: "证据解释", prompt: "引用自己保存的数字：对象、年份、指标、方向与区间。结合四项回归说明一致与不一致之处；无法推断时说明原因，不写成“没有效应”。", min: 40 },
+  { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间。比较四项回归结果；无法推断时写明原因，不要写成“没有效应”。", min: 40 },
   { key: "limitations", label: "局限与反思", prompt: "模拟关税X与结果Y不能证明真实政策效果。我的比较还有哪些限制？哪些结论不能推出？下一步需要什么数据或检验？", min: 30 },
 ];
 
@@ -83,9 +83,9 @@ export function activateReportGateDestination(
 const REPORT_GATE_STAGES = [
   { label: "数据接入", first: 1, last: 1 },
   { label: "指标计算", first: 2, last: 5 },
-  { label: "可视化分析", first: 6, last: 9 },
-  { label: "回归设计与建模", first: 10, last: 14 },
-  { label: "实验闭环", first: 15, last: 15 },
+  { label: "图表比较", first: 6, last: 9 },
+  { label: "模拟回归", first: 10, last: 14 },
+  { label: "实验报告", first: 15, last: 15 },
 ] as const;
 
 function reportGateStage(step: number): string {
@@ -352,9 +352,9 @@ export function ReportLab({
   return (
     <div className="report-lab">
       <section className="report-roadmap" aria-label="报告完成清单">
-        <span className="reg-section-step">最后一步 · 整理发现，完成提交</span>
-        <h2>材料由系统整理，分析由你完成</h2>
-        <p>不必重新抄表或排版。系统会汇总已保存的实验材料与回归结果；你只需写清三个问题，核对后提交给老师。</p>
+        <span className="reg-section-step">最后一步 · 完成报告</span>
+        <h2>检查材料，写出分析并提交</h2>
+        <p>系统会汇总已保存的实验材料和回归结果，不必重新抄表。回答三个问题，核对后提交给老师。</p>
         <ol>
           <li><b>1 · 检查实验材料</b><span>{state.syncError ? "保存失败，请先重试保存" : reportGate == null || sessionStatus !== "ready" ? "正在核对服务器记录" : sessionUnsynced || sessionSyncing ? "保存后将重新核对材料" : materialMissing.length ? `${materialMissing.length} 个步骤或条件待补齐，见下方入口` : "已保存材料与理解题已齐"}</span></li>
           <li><b>2 · 写下自己的分析</b><span>{writtenCount} / 3 段达到最低字数 · 内容仍需自己核对</span></li>
@@ -362,15 +362,15 @@ export function ReportLab({
         </ol>
       </section>
       {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} />}
-      <details className="report-reference"><summary>写作时参考：查看已保存的四项回归证据</summary>
+      <details className="report-reference"><summary>查看已保存的四项回归结果</summary>
         <RegressionEvidenceMatrix getStep={getStep} />
         <p className="muted">图表比较的具体数值可回到步骤6–9核对。这里只展示已保存证据，不替你撰写结论。</p>
       </details>
       <section className="report-reflection" aria-labelledby={REPORT_REFLECTION_TITLE_ID}>
         <div>
-          <span className="reg-section-step">学生原创分析 · 自动保存</span>
-          <h3 id={REPORT_REFLECTION_TITLE_ID} tabIndex={-1}>回答三个问题，就能组织一份报告</h3>
-          <p>研究了什么？发现了什么？还有什么不能确定？不需要长篇论文，具体、诚实地解释自己的证据即可。</p>
+          <span className="reg-section-step">你的分析 · 自动保存</span>
+          <h3 id={REPORT_REFLECTION_TITLE_ID} tabIndex={-1}>回答三个问题</h3>
+          <p>写清研究对象、主要结果和仍不能确定的内容。引用具体数字，并说明结论限制。</p>
         </div>
         <div className="report-reflection-fields">
           <div className="report-writing-checklist" role="note">

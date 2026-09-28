@@ -21,8 +21,8 @@ function response(): RegressionResponse {
 describe("fixed teaching regression reading", () => {
   test("uses the snapshot X and reports a one-percentage-point X increment", () => {
     const html = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={response()} />);
-    expect(html).toContain("两者在模拟数据中怎样一起变化");
-    expect(html).toContain("想观察的结果（Y）");
+    expect(html).toContain("回归结果");
+    expect(html).toContain("结果变量（Y）");
     expect(html).toContain("教学模拟：外国增加值项占比");
     expect(html).toContain("使用的年度记录");
     expect(html).toContain("平均上升 2.00 个百分点");
@@ -35,7 +35,7 @@ describe("fixed teaching regression reading", () => {
     expect(html).toContain("标称 95% 的近似聚类区间");
     expect(html).toContain("实际覆盖率可能低于 95%");
     expect(html).toContain("国家数量多也不保证达到标称覆盖率");
-    expect(html).toContain("不能推出什么");
+    expect(html).toContain("解释限制");
     expect(html).toContain("不要写成「已经证明生产回流」");
     expect(html).not.toContain("合理范围");
   });
@@ -59,7 +59,7 @@ describe("fixed teaching regression reading", () => {
     data.result.status_reasons = ["可用于比较的国家太少"];
     const { container } = render(<RegressionResultCard outcome="trade" response={data} />);
     expect(screen.getByText(/方向判断：这个设计不能用于统计推断/)).toBeTruthy();
-    expect(screen.getByText(/停止推断原因：可用于比较的国家太少/)).toBeTruthy();
+    expect(screen.getByText(/无法推断：可用于比较的国家太少/)).toBeTruthy();
     expect(container.querySelector(".reg-simulation-comparison")).toBeNull();
     expect(container.querySelector(".verdict-metrics")).toBeNull();
     expect(container.querySelector(".reg-inference-note")).toBeNull();

@@ -210,7 +210,7 @@ def analyze_support(
             STATUS_INVALID_DESIGN,
             f"存在处理撤销:{shown}{more}个体在首次正暴露后又回到零暴露状态,{share_text}。"
             "吸收型 ATT 要求处理不可逆；撤销比例小不能保证偏差小，已抑制 p 值、星号与置信区间。"
-            "可把该诊断写入报告；连续强度 TWFE 可描述逐年强度关联，但不能自动恢复因果识别。",
+            "可把该诊断写入报告；连续强度 TWFE 只能描述逐年强度关联，不能据此作因果推断。",
         )
 
     if treated_clusters < MIN_TREATED_CLUSTERS:

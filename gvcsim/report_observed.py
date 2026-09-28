@@ -34,19 +34,19 @@ def _reflection_value(value: Any) -> str:
 def _reflection_section(session: dict[str, Any]) -> list[str]:
     reflection = _step_data(session, 15)
     return [
-        "## 一页结论：我的问题、证据与局限",
+        "## 结论",
         "",
-        "> 先读这一节即可了解学生的主张；后续章节提供可复核数字、理解检查和技术附录。",
+        "> 本节由学生填写。相关数字见后文。",
         "",
         "### 我的研究问题",
         "",
         _reflection_value(reflection.get("research_question")),
         "",
-        "### 我的证据解释",
+        "### 我的结果解释",
         "",
         _reflection_value(reflection.get("evidence_interpretation")),
         "",
-        "### 我不能据此推出什么",
+        "### 局限",
         "",
         _reflection_value(reflection.get("limitations")),
         "",
@@ -210,9 +210,9 @@ def _observed_charts(data: dict[str, Any], step: int, observations: list[dict[st
 def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
     """Place saved observed comparisons before simulated regression evidence."""
     lines = [
-        "## 真实指标：时间变化与国家比较",
+        "## 真实指标比较",
         "",
-        "> 图表由步骤 6–9 已保存的同口径读数自动生成；无需学生重复抄录。完整数值表见后文“保存的实验快照”。",
+        "> 图表使用步骤 6–9 保存的同口径读数。完整数值见“保存的实验快照”。",
         "",
     ]
     for step in range(6, 10):

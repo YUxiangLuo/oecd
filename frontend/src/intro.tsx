@@ -14,7 +14,7 @@ import { LogoMark } from "./brand";
 import { icioDatasetName } from "./dataset-label";
 import type { AuthUser, Meta, StepsResponse } from "./types";
 
-const SCENE_NAMES = ["认识实验", "数据与设定", "实验路线", "机制预演", "完成规则"];
+const SCENE_NAMES = ["认识实验", "数据与设定", "实验路线", "分析示例", "完成规则"];
 const N_SCENES = SCENE_NAMES.length;
 const STAGE_OUTPUTS: Record<number, string> = {
   1: "认识投入产出表，记录观察对象。",
@@ -167,9 +167,9 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       </div>
     </div>,
 
-    /* ---- 2 数据底座 ---- */
+    /* ---- 2 数据来源 ---- */
     <div key={1} className="intro-scene">
-      <div className="intro-scene-kicker">数据底座</div>
+      <div className="intro-scene-kicker">数据来源</div>
       <h2 className="intro-h2">数据来源与教学设定</h2>
       <p className="intro-lede">真实投入产出表用于讲解指标概念；回归练习中的关税 X 与结果 Y 均为教学模拟。</p>
       <div className="intro-cards">
@@ -235,8 +235,8 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
           </ul>
           {openCards.shock && (
             <div className="intro-card-body" id={shockPanelId}>
-              <p>前两年税率为 0，随后按预设阶段变化；暴露强度等于首年美国目的地份额乘以当年模拟税率。</p>
-              <p><b>边界：</b>这里没有真实事件目录、现实税率或现实政策效果。模拟 Y 只借首年真实指标排名校准，不保留真实指标水平。</p>
+              <p>前两年税率为 0，受影响国家后三年为 10%，其余国家为 0。暴露强度等于首年销往美国的出口份额乘以模拟税率。</p>
+              <p><b>注意：</b>这里没有真实事件、现实税率或现实政策效果。模拟 Y 参考首年真实指标的排序生成，但不保留真实指标值。</p>
             </div>
           )}
         </div>
@@ -261,7 +261,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
           </button>
         ))}
       </div>
-      {selectedStage && STAGE_OUTPUTS[selectedStage.n] && <p className="intro-stage-output"><b>阶段产出：</b>{STAGE_OUTPUTS[selectedStage.n]}</p>}
+      {selectedStage && STAGE_OUTPUTS[selectedStage.n] && <p className="intro-stage-output"><b>本阶段任务：</b>{STAGE_OUTPUTS[selectedStage.n]}</p>}
       <div className="intro-steps">
         {(selectedStage?.steps ?? []).map((s) => (
           <div key={s.n} className="intro-step-row">
@@ -282,9 +282,9 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       )}
     </div>,
 
-    /* ---- 4 证据链预演 ---- */
+    /* ---- 4 分析示例 ---- */
     <div key={3} className="intro-scene">
-      <div className="intro-scene-kicker">证据预演</div>
+      <div className="intro-scene-kicker">分析示例</div>
       <h2 className="intro-h2">先比较趋势，再读 X 与 Y 的关系</h2>
       <p className="intro-lede">选择两个国家和一个行业查看示例趋势；正式回归使用完整国家×行业面板，不限于所选两国。</p>
       <div className="intro-preview-selection" role="group" aria-label="分析对象示意">
@@ -312,9 +312,9 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
         </div>
         <div className="intro-xy-card">
           <b>02 · 用固定方法读关系</b>
-          <div className="intro-xy-item"><strong>X</strong><span><b>模拟关税暴露</b><small>模型用来比较的课程变量</small></span></div>
+          <div className="intro-xy-item"><strong>X</strong><span><b>模拟关税暴露</b><small>解释变量：用于比较的变量</small></span></div>
           <div className="intro-xy-link" aria-hidden>↓ 与什么一起变化？</div>
-          <div className="intro-xy-item"><strong>Y</strong><span><b>模拟指标结果</b><small>模型要观察的课程变量</small></span></div>
+          <div className="intro-xy-item"><strong>Y</strong><span><b>模拟指标结果</b><small>结果变量：要观察的变量</small></span></div>
         </div>
       </div>
       <div className="intro-four-results" role="group" aria-label="四项结果都要汇总">

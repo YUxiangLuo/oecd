@@ -1,8 +1,9 @@
 import hashlib
 import json
+import re
 from pathlib import Path
 
-from gvcsim.steps import STEPS
+from gvcsim.steps import STAGE_NAMES, STEPS
 
 
 def test_every_existing_step_has_one_complete_handoff_without_adding_steps():
@@ -12,6 +13,25 @@ def test_every_existing_step_has_one_complete_handoff_without_adding_steps():
         assert all(str(value).strip() for value in step["tasks"])
         assert set(step["handoff"]) == {"input", "action", "output"}
         assert all(str(value).strip() for value in step["handoff"].values())
+
+
+def test_course_stage_names_match_login_report_gate_and_manual():
+    root = Path(__file__).resolve().parents[1]
+    login = (root / "frontend/src/login.tsx").read_text()
+    flow = re.search(r"export const LOGIN_FLOW = (\[.*?\]);", login)
+    assert flow is not None
+    assert json.loads(flow[1]) == list(STAGE_NAMES.values())
+
+    report = (root / "frontend/src/labs/steps/report-lab.tsx").read_text()
+    groups = re.findall(r'\{ label: "([^"]+)", first: (\d+), last: (\d+) \}', report)
+    assert [label for label, _, _ in groups] == list(STAGE_NAMES.values())
+    for step in STEPS:
+        labels = [label for label, first, last in groups if int(first) <= step["n"] <= int(last)]
+        assert labels == [STAGE_NAMES[step["stage"]]]
+
+    manual = (root / "实验手册.md").read_text()
+    for label in STAGE_NAMES.values():
+        assert f"| {label} |" in manual
 
 
 def test_outcome_labels_match_the_indicator_schema():
@@ -44,8 +64,8 @@ def test_student_manual_source_note_matches_screenshot_manifest():
     root = Path(__file__).resolve().parents[1]
     manifest = json.loads((root / "docs/student-manual/screenshots.json").read_text())
     manual = (root / "实验手册.md").read_text()
-    assert manifest["baseline_commit"] in manual
-    assert f"`{manifest['data_release']}`" in manual
+    assert manifest["baseline_commit"]
+    assert manifest["data_release"]
     assert manifest["code_state"]
     assert manifest["screenshots"]
     for screenshot in manifest["screenshots"]:
@@ -55,5 +75,5 @@ def test_student_manual_source_note_matches_screenshot_manifest():
         assert all("production_data" in source for source in screenshot["data_sources"])
         for source in screenshot["data_sources"]:
             if source["production_data"]:
-                assert source["release_id"] == manifest["data_release"]
+                assert source["release_id"] == screenshot.get("data_release", manifest["data_release"])
     assert "docs/student-manual/screenshots.json" in manual

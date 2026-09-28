@@ -236,7 +236,7 @@ export function StudentWorkspace({
                     <div className="comparison-carry" role="note">
                       <div>
                         <b>保持同一组比较对象</b>
-                        <span>上一页使用了 {carriedComparison.join(" / ")}；沿用后可在本步继续追踪同一条证据链，也可稍后主动更换。</span>
+                        <span>上一页使用了 {carriedComparison.join(" / ")}；本步可沿用，也可更换比较对象。</span>
                       </div>
                       <button
                         type="button"

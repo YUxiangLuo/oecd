@@ -19,7 +19,7 @@ test("step 10 uses the dedicated teaching tariff panel independently of the old 
     data: undefined, save: () => {}, complete: false, syncing: false,
     syncError: null, syncNow: () => {},
   }} />);
-  expect(html).toContain("拿来比较的因素（X）");
+  expect(html).toContain("解释变量（X）");
   expect(html).toContain("国家 A");
   expect(html).toContain("国家 B");
   expect(html).toContain("五年变化");

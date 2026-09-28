@@ -118,11 +118,11 @@ export function RegressionResultCard({ outcome, response, sourceFilter }: {
       : `平均变化为 ${verdict.effect}`;
   return (
     <section className={`verdict-card verdict-${verdict.state}`} aria-labelledby="reg-result-title" aria-live="polite">
-      <div className="verdict-kicker">教学模拟结果 · 预设模拟关系的估计</div>
-      <h3 id="reg-result-title">两者在模拟数据中怎样一起变化？</h3>
+      <div className="verdict-kicker">教学模拟</div>
+      <h3 id="reg-result-title">回归结果</h3>
       <dl className="reg-evidence-support">
-        <div><dt>拿来比较的因素（X）</dt><dd>模拟关税暴露强度</dd></div>
-        <div><dt>想观察的结果（Y）</dt><dd>教学模拟：{lesson.shortMetric}</dd></div>
+        <div><dt>解释变量（X）</dt><dd>模拟关税暴露强度</dd></div>
+        <div><dt>结果变量（Y）</dt><dd>教学模拟：{lesson.shortMetric}</dd></div>
       </dl>
       <p className="reg-plain-verdict"><strong>方向判断：{verdict.title}</strong></p>
       <p>{verdict.evidence}</p>
@@ -148,7 +148,7 @@ export function RegressionResultCard({ outcome, response, sourceFilter }: {
         <p>预设：{teachingEffect(outcome, response.model_snapshot.beta)}；估计：{teachingEffect(outcome, verdict.coefficient.coef)}；差值（估计 − 预设）：{teachingEffect(outcome, verdict.coefficient.coef - response.model_snapshot.beta)}。</p>
         <p className="muted">扰动使估计与预设不必相同；单次 95% 区间也不保证包含预设值。</p>
       </div>}
-      <p className="reg-writing-hint"><b>不能推出什么：</b>{lesson.dontClaim}</p>
+      <p className="reg-writing-hint"><b>解释限制：</b>{lesson.dontClaim}</p>
       <p className="muted">使用的年度记录：{response.result.n_obs.toLocaleString("zh-CN")}，来自 {response.result.n_entities.toLocaleString("zh-CN")} 个国家×行业单元、{response.result.n_clusters} 个国家聚类。模型扣除了各单元的固定差异和各年份的共同变化。</p>
       {sourceFilter && <div className="reg-source-filter">
         <p><b>教学样本的来源：</b>首年排除 ROW 后有 {sourceFilter.source_baseline_rows.toLocaleString("zh-CN")} 个候选单元，生成面板时剔除 {sourceFilter.excluded_source_baseline_rows.toLocaleString("zh-CN")} 个，保留 {sourceFilter.published_entities.toLocaleString("zh-CN")} 个供四项回归共同使用。</p>
@@ -476,12 +476,12 @@ export function RegressionRunLab({
   return (
     <div className="reg-workbench">
       <section className="reg-section-card reg-variable-story">
-        <span className="reg-section-step">先用普通语言看变量</span>
+        <span className="reg-section-step">本步变量</span>
         <h3>{lessonQuestion(outcome)}</h3>
         <p className="reg-learning-focus"><b>本步学会一件事：</b>{lesson.learnThis}</p>
         <div className="reg-variable-plain-grid">
-          <div><b>拿来比较的因素（X）</b><span>模拟关税暴露，数值越大表示模拟暴露越强。</span></div>
-          <div><b>想观察的结果（Y）</b><span>教学模拟：{lesson.shortMetric}。</span></div>
+          <div><b>解释变量（X）</b><span>模拟关税暴露，数值越大表示模拟暴露越强。</span></div>
+          <div><b>结果变量（Y）</b><span>教学模拟：{lesson.shortMetric}。</span></div>
         </div>
         <p className="muted">沿用步骤 10 选出的 {countryLabel(firstCountry)}、{countryLabel(secondCountry)} 和 {sectorLabel(teachingIndustry)}，先看五年示例。它帮助理解数据，但正式计算使用完整国家×行业面板。</p>
         {teachingSeries.status === "loading" && <p className="muted" role="status">正在读取两国五年示例…</p>}
@@ -531,8 +531,8 @@ export function RegressionRunLab({
         <span className="reg-section-step">固定计算 · 无需调整复杂参数</span>
         <h3>计算 X 与 Y 的关系</h3>
         <div className="metric-facts">
-          <span><b>拿来比较的因素（X）</b>模拟关税暴露强度</span>
-          <span><b>想观察的结果（Y）</b>教学模拟：{lesson.shortMetric}</span>
+          <span><b>解释变量（X）</b>模拟关税暴露强度</span>
+          <span><b>结果变量（Y）</b>教学模拟：{lesson.shortMetric}</span>
           <span><b>读数单位</b>{lesson.unit}</span>
           <span><b>怎样比较</b>X 每增加 1 个百分点时，观察 Y 平均怎样变化</span>
           <span><b>系统固定</b>使用完整国家×行业年度面板；学生无需选择计算方法</span>

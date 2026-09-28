@@ -6,13 +6,13 @@ from scripts.verify_report_pdf import SUMMARY_COLUMNS, SUMMARY_TITLE, validate_r
 
 
 def test_complete_summary_with_wrapped_headers():
-    text = "四类指标并读（预先指定结果族）\n步骤 指标 冲击 比较方式 估计对象与相对\n变化 标称 95% 近似\n区间 证据判断"
+    text = "四项回归结果汇总\n步骤 指标 冲击 比较方式 估计对象与相对\n变化 标称 95% 近似\n区间 证据判断"
     validate_report_text(text + "\n11\n12\n13\n14\n步骤 11 · 贸易流详情")
 
 
 def test_missing_interval_header_cannot_borrow_from_details():
     text = (
-        "四类指标并读（预先指定结果族）\n"
+        "四项回归结果汇总\n"
         "步骤 指标 冲击 比较方式 估计对象与相对变化 证据判断\n"
         "步骤 11 · 贸易流详情\n标称 95% 近似区间"
     )

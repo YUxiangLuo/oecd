@@ -5,10 +5,10 @@ import type {
 export type EvidenceState = "negative" | "positive" | "insufficient" | "suppressed";
 
 export const REGRESSION_STATUS_LABELS: Record<RegressionStatus, string> = {
-  ok: "可按课程口径解释",
-  warning: "可展示,但须披露设计问题",
-  insufficient: "样本支持度不足,已抑制推断",
-  invalid_design: "设计不能用于统计推断,已停止推断",
+  ok: "可以解释结果",
+  warning: "可以解释，但须说明设计问题",
+  insufficient: "样本支持不足，无法推断",
+  invalid_design: "设计无效，无法推断",
 };
 
 export function regressionStatusLabel(status: string | null | undefined): string {
@@ -124,8 +124,8 @@ export function buildRegressionVerdict(
   if (globalInferenceIsSuppressed(response.result.status, support)) {
     const invalid = response.result.status === "invalid_design" || support?.status === "invalid_design";
     const diagnostic = reasons.length
-      ? `停止推断原因：${reasons.join("；")}`
-      : "结果已停止统计推断，但未提供具体原因；请核对完整诊断。";
+      ? `无法推断：${reasons.join("；")}`
+      : "无法进行统计推断，且未提供具体原因；请核对完整诊断。";
     return {
       ...base,
       state: "suppressed",

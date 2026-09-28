@@ -198,7 +198,7 @@ def main():
                     assert support["suppress_inference"] is True
                     assert support["reasons"] and all(reason.strip() for reason in support["reasons"])
                     assert all(coefficient[key] is None for key in ("p", "ci_low", "ci_high"))
-                    student.run("wait", "--text", "停止推断原因")
+                    student.run("wait", "--text", "无法推断：")
                 else:
                     assert result["status"] in {"ok", "warning"}
                     assert support.get("suppress_inference") is not True

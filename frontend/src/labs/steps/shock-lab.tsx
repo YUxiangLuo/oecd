@@ -83,11 +83,11 @@ export function ShockLab({ meta, step: _step, state }: {
 
   return <div className="shock-workbench">
     <section className="reg-run-card">
-      <span className="reg-section-step">先认识两个角色</span>
-      <h3>拿来比较的因素（X）与想观察的结果（Y）</h3>
+      <span className="reg-section-step">先认识两个变量</span>
+      <h3>解释变量 X 与结果变量 Y</h3>
       <div className="reg-variable-plain-grid">
-        <div><b>拿来比较的因素（X）</b><span>模拟关税暴露：不同国家和行业承受的模拟关税强弱。</span></div>
-        <div><b>想观察的结果（Y）</b><span>步骤 11–14 分别观察贸易、生产、长度和网络指标是否随 X 一起变化。</span></div>
+        <div><b>解释变量（X）</b><span>模拟关税暴露：不同国家和行业的模拟暴露强度。</span></div>
+        <div><b>结果变量（Y）</b><span>步骤 11–14 分别检验贸易、生产、长度和网络指标是否随 X 变化。</span></div>
       </div>
       <div className="reg-boundary" role="note">
         X = 冲击前出口份额 w × 虚构关税税率 τ。税率路径及生成值仅为教学模拟，不是现实政策事实，也不能据此作因果结论。

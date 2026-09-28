@@ -10,7 +10,7 @@ import re
 import subprocess
 from pathlib import Path
 
-SUMMARY_TITLE = "四类指标并读（预先指定结果族）"
+SUMMARY_TITLE = "四项回归结果汇总"
 SUMMARY_COLUMNS = ("步骤", "指标", "冲击", "比较方式", "估计对象与相对变化", "标称95%近似区间", "证据判断")
 
 
@@ -22,7 +22,7 @@ def validate_report_text(text: str) -> None:
     if "GVCSIMULATIONLAB·实验回" in normalized:
         raise ValueError("PDF 包含提交回执遮罩，不能作为报告留存")
     if SUMMARY_TITLE not in normalized:
-        raise ValueError("PDF 缺少四类指标并读表")
+        raise ValueError("PDF 缺少四项回归结果汇总表")
     summary = normalized.split(SUMMARY_TITLE, 1)[1]
     if "步骤11·" not in summary:
         raise ValueError("PDF 缺少对照表后的步骤11详情")
