@@ -9,7 +9,7 @@ import {
 
 /**
  * Keep visible form labels and their controls programmatically associated
- * without changing the existing label/control sibling layout.
+ * and keep each label/control pair together when a flex row wraps.
  */
 export function LabeledControl({
   label,
@@ -20,10 +20,10 @@ export function LabeledControl({
 }) {
   const id = useId();
   return (
-    <>
+    <span className="labeled-control">
       <label htmlFor={id}>{label}</label>
       {children(id)}
-    </>
+    </span>
   );
 }
 

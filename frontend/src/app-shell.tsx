@@ -250,10 +250,11 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
                 ? "报告材料检查中"
                 : materialStatus === "ready" ? "报告材料已齐" : "报告材料未齐";
               const state = done ? "done" : step.n === current ? "cur" : "future";
+              const completionLabel = step.lab === "rep" ? (done ? "报告已生成" : "报告未生成") : (done ? "理解已完成" : "理解未完成");
               const accessibleName = [
                 `第 ${step.n} 步：${step.title}`,
                 step.n === current ? "当前步骤" : null,
-                done ? "已完成" : "未完成",
+                completionLabel,
                 materialLabel,
               ].filter(Boolean).join("，");
               return (
@@ -264,13 +265,13 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
                   aria-label={accessibleName}
                   aria-current={step.n === current ? "step" : undefined}
                   onClick={() => onNavigate(step.n)}
-                  title={`第 ${step.n} 步：${step.title}${done ? "（已完成）" : ""}`}
+                  title={`第 ${step.n} 步：${step.title}（${completionLabel}）`}
                 >
                   <span className={`step-badge ${state}`} aria-hidden="true">{done ? "✓" : step.n}</span>
                   <span className="step-row-copy" aria-hidden="true">
                     <span className="step-row-title">{step.title}</span>
                     <span className="step-row-status">
-                      理解{done ? "已完成" : "未完成"} · 材料{materialStatus === "checking" ? "检查中" : materialStatus === "ready" ? "已齐全" : "未齐全"}
+                      {completionLabel} · 材料{materialStatus === "checking" ? "检查中" : materialStatus === "ready" ? "已齐全" : "未齐全"}
                     </span>
                   </span>
                 </button>

@@ -3,7 +3,7 @@ import { api } from "../../api";
 import { RegressionEvidenceMatrix, type SiblingStepData } from "../../regression-teach";
 import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
 import { ReportOutro } from "../../report-outro";
-import { showToast } from "../../toast";
+import { clearToasts, showToast } from "../../toast";
 import { stepTaskTitleId } from "../../step-task-card";
 import type { ClassroomReport, ReportGateItem, ReportMutationResponse, StepStateApi } from "../../types";
 import type { SessionStatus } from "../../use-session";
@@ -301,7 +301,10 @@ export function ReportLab({
         onReportChanged(submitted);
         finalReport = submitted.report;
       }
-      if (finalReport.state !== "draft") setOutro(finalReport);
+      if (finalReport.state !== "draft") {
+        clearToasts();
+        setOutro(finalReport);
+      }
       else showToast("报告草稿已生成，请预览后提交");
     } catch (cause) {
       const requestError = cause as Error & { blocked?: ReportGateItem[] };
@@ -324,7 +327,10 @@ export function ReportLab({
       await flushRef.current();
       const response = await api.classroom.submitReport();
       onReportChanged(response);
-      if (response.report.state !== "draft") setOutro(response.report);
+      if (response.report.state !== "draft") {
+        clearToasts();
+        setOutro(response.report);
+      }
       else showToast("报告仍为草稿，请核对后重试提交");
     } catch (cause) {
       setError(userFacingRequestError(cause, "报告提交失败"));

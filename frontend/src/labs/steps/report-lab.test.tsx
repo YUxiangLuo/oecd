@@ -358,6 +358,27 @@ test("failed submission retains generated draft and never opens a success outro"
   } finally { generate.mockRestore(); submit.mockRestore(); }
 });
 
+for (const action of ["提交报告给老师", "生成并提交报告"]) {
+  test(`${action} removes earlier draft feedback only after submission succeeds`, async () => {
+    const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("draft"));
+    let acknowledge!: (value: ReportMutationResponse) => void;
+    const submit = spyOn(api.classroom, "submitReport").mockImplementation(() => new Promise((resolve) => { acknowledge = resolve; }));
+    try {
+      const view = render(<><ReportLab {...finishProps} /><ToastHost /></>);
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "根据实验记录生成报告" })); });
+      if (action === "提交报告给老师") {
+        view.rerender(<><ReportLab {...finishProps} report={report("draft")} /><ToastHost /></>);
+      }
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: action })); });
+      expect(view.container.querySelector(".toast-host")?.textContent).toContain("报告草稿已生成");
+      expect(screen.queryByRole("dialog")).toBeNull();
+      await act(async () => { acknowledge(mutation("pending")); });
+      expect(screen.getByRole("dialog", { name: "报告已提交" })).toBeTruthy();
+      expect(view.container.querySelector(".toast-host")).toBeNull();
+    } finally { generate.mockRestore(); submit.mockRestore(); }
+  });
+}
+
 test("material gate stops one-click submission and stays above the writing fields", async () => {
   const blocked = [{ step: 9, title: "网络图表材料", missing: ["记录两个国家"] }];
   const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(Object.assign(new Error("缺项"), { blocked }));

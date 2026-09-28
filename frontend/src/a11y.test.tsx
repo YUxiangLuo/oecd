@@ -15,6 +15,11 @@ describe("shared accessibility primitives", () => {
 
     expect(controlId).toBeTruthy();
     expect(html).toContain(`<select id="${controlId}">`);
+    const dom = document.createElement("div");
+    dom.innerHTML = html;
+    const group = dom.querySelector(".labeled-control");
+    expect(group?.querySelector("label")).toBeTruthy();
+    expect(group?.querySelector("select")).toBeTruthy();
   });
 
   test("renders a named, keyboard-focusable scroll region by default", () => {

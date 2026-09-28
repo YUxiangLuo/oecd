@@ -5,9 +5,14 @@
 import { useEffect, useState } from "react";
 
 const TOAST_EVENT = "gvcsim-toast";
+const CLEAR_TOASTS_EVENT = "gvcsim-clear-toasts";
 
 export function showToast(message: string) {
   window.dispatchEvent(new CustomEvent(TOAST_EVENT, { detail: message }));
+}
+
+export function clearToasts() {
+  window.dispatchEvent(new Event(CLEAR_TOASTS_EVENT));
 }
 
 interface ToastItem {
@@ -29,8 +34,13 @@ export function ToastHost() {
         setItems((current) => current.filter((item) => item.id !== id));
       }, 2600);
     };
+    const onClear = () => setItems([]);
     window.addEventListener(TOAST_EVENT, onToast);
-    return () => window.removeEventListener(TOAST_EVENT, onToast);
+    window.addEventListener(CLEAR_TOASTS_EVENT, onClear);
+    return () => {
+      window.removeEventListener(TOAST_EVENT, onToast);
+      window.removeEventListener(CLEAR_TOASTS_EVENT, onClear);
+    };
   }, []);
   if (!items.length) return null;
   return (

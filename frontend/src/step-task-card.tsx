@@ -66,7 +66,7 @@ export function StepTaskCard({
           <h3 id={stepTaskTitleId(step.n)} tabIndex={-1}>{step.goal}</h3>
         </div>
         <div className="step-task-statuses" role="group" aria-label="本步状态">
-          <span className={complete ? "done" : "todo"}>{completionLabel}：{complete ? "已完成" : "未完成"}</span>
+          <span className={complete ? "done" : "todo"}>{completionLabel}：{step.lab === "rep" ? (complete ? "已生成" : "未生成") : (complete ? "已完成" : "未完成")}</span>
           <span className={materialStatus === "ready" ? "done" : materialStatus === "missing" || materialStatus === "unsynced" ? "todo" : materialStatus}>
             报告材料：{materialLabel}
           </span>

@@ -111,8 +111,14 @@ describe("shared step task card", () => {
       materialStatus="missing"
       contentRef={{ current: null }}
     />);
-    expect(html).toContain("报告：未完成");
+    expect(html).toContain("报告：未生成");
     expect(html).not.toContain("理解题：未完成");
+    const generated = renderToStaticMarkup(<StepTaskCard
+      step={reportStep} complete materialStatus="ready" contentRef={{ current: null }}
+    />);
+    expect(generated).toContain("报告：已生成");
+    expect(generated).not.toContain("已完成");
+    expect(generated).not.toContain("已提交");
   });
 
   test("focuses the real workbench and scrolls only its nested course container", () => {

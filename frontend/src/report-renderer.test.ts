@@ -37,6 +37,7 @@ describe("report tables", () => {
   test("print rules fit report tables to paper without changing screen tables", async () => {
     const css = await Bun.file(new URL("./styles.css", import.meta.url)).text();
     const print = css.slice(css.indexOf("@media print"));
+    expect(print).toMatch(/\.report-md p:has\(\+ \.table-wrap\)\s*\{[^}]*break-after:\s*avoid/);
     expect(print).toMatch(/\.report-md \.table-wrap\s*\{[^}]*overflow:\s*visible/);
     expect(print).toMatch(/\.report-md \.data-table\s*\{[^}]*table-layout:\s*fixed/);
     expect(print).toMatch(/\.report-md \.data-table td\s*\{[^}]*white-space:\s*normal/);
