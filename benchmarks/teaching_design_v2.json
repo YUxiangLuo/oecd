@@ -1,0 +1,491 @@
+{
+  "seeds": [
+    1000,
+    1001,
+    1002,
+    1003,
+    1004,
+    1005,
+    1006,
+    1007,
+    1008,
+    1009,
+    1010,
+    1011,
+    1012,
+    1013,
+    1014,
+    1015,
+    1016,
+    1017,
+    1018,
+    1019,
+    1020,
+    1021,
+    1022,
+    1023,
+    1024,
+    1025,
+    1026,
+    1027,
+    1028,
+    1029,
+    1030,
+    1031,
+    1032,
+    1033,
+    1034,
+    1035,
+    1036,
+    1037,
+    1038,
+    1039,
+    1040,
+    1041,
+    1042,
+    1043,
+    1044,
+    1045,
+    1046,
+    1047,
+    1048,
+    1049,
+    1050,
+    1051,
+    1052,
+    1053,
+    1054,
+    1055,
+    1056,
+    1057,
+    1058,
+    1059,
+    1060,
+    1061,
+    1062,
+    1063,
+    1064,
+    1065,
+    1066,
+    1067,
+    1068,
+    1069,
+    1070,
+    1071,
+    1072,
+    1073,
+    1074,
+    1075,
+    1076,
+    1077,
+    1078,
+    1079,
+    1080,
+    1081,
+    1082,
+    1083,
+    1084,
+    1085,
+    1086,
+    1087,
+    1088,
+    1089,
+    1090,
+    1091,
+    1092,
+    1093,
+    1094,
+    1095,
+    1096,
+    1097,
+    1098,
+    1099,
+    1100,
+    1101,
+    1102,
+    1103,
+    1104,
+    1105,
+    1106,
+    1107,
+    1108,
+    1109,
+    1110,
+    1111,
+    1112,
+    1113,
+    1114,
+    1115,
+    1116,
+    1117,
+    1118,
+    1119,
+    1120,
+    1121,
+    1122,
+    1123,
+    1124,
+    1125,
+    1126,
+    1127,
+    1128,
+    1129,
+    1130,
+    1131,
+    1132,
+    1133,
+    1134,
+    1135,
+    1136,
+    1137,
+    1138,
+    1139,
+    1140,
+    1141,
+    1142,
+    1143,
+    1144,
+    1145,
+    1146,
+    1147,
+    1148,
+    1149,
+    1150,
+    1151,
+    1152,
+    1153,
+    1154,
+    1155,
+    1156,
+    1157,
+    1158,
+    1159,
+    1160,
+    1161,
+    1162,
+    1163,
+    1164,
+    1165,
+    1166,
+    1167,
+    1168,
+    1169,
+    1170,
+    1171,
+    1172,
+    1173,
+    1174,
+    1175,
+    1176,
+    1177,
+    1178,
+    1179,
+    1180,
+    1181,
+    1182,
+    1183,
+    1184,
+    1185,
+    1186,
+    1187,
+    1188,
+    1189,
+    1190,
+    1191,
+    1192,
+    1193,
+    1194,
+    1195,
+    1196,
+    1197,
+    1198,
+    1199
+  ],
+  "release_seed_unchanged": 20260913,
+  "source_panel_sha256": "758d157a914ea5581c6f88a765ef9270f4d2317476c371f27543180f5d6afdbd",
+  "source_exposure": {
+    "path": "export_exposure_2016.csv",
+    "sha256": "05abf328b1af27b119a8a3e20746235bcdebb84717c28821518528845c4455d3"
+  },
+  "generator_snapshots": {
+    "trade": {
+      "version": "step10-tariff-teaching-v2",
+      "randomization_version": "step10-tariff-teaching-v1",
+      "x_columns": [
+        "teaching_tariff_exposure"
+      ],
+      "y_column": "teaching_y_trade",
+      "entity": "entity_id",
+      "time": "year",
+      "fixed_effects": [
+        "entity_id",
+        "year"
+      ],
+      "controls": [],
+      "interactions": [],
+      "seed": 20260913,
+      "beta": -0.55,
+      "tariff_path": [
+        0.0,
+        0.0,
+        0.1,
+        0.1,
+        0.1
+      ],
+      "market": "USA",
+      "calibration": [
+        0.25,
+        0.3,
+        0.006
+      ],
+      "disclaimer": "\u865a\u6784\u5173\u7a0e\u653f\u7b56\u4e0e\u6a21\u62df\u6559\u5b66\u7ed3\u679c\uff0c\u4e0d\u662f\u5386\u53f2\u4e8b\u4ef6\u3001\u771f\u5b9e\u653f\u7b56\u6548\u679c\u6216 OECD \u53d1\u5e03\u7ed3\u679c\u3002"
+    },
+    "production": {
+      "version": "step10-tariff-teaching-v2",
+      "randomization_version": "step10-tariff-teaching-v1",
+      "x_columns": [
+        "teaching_tariff_exposure"
+      ],
+      "y_column": "teaching_y_production",
+      "entity": "entity_id",
+      "time": "year",
+      "fixed_effects": [
+        "entity_id",
+        "year"
+      ],
+      "controls": [],
+      "interactions": [],
+      "seed": 20260913,
+      "beta": -0.4,
+      "tariff_path": [
+        0.0,
+        0.0,
+        0.1,
+        0.1,
+        0.1
+      ],
+      "market": "USA",
+      "calibration": [
+        0.2,
+        0.25,
+        0.005
+      ],
+      "disclaimer": "\u865a\u6784\u5173\u7a0e\u653f\u7b56\u4e0e\u6a21\u62df\u6559\u5b66\u7ed3\u679c\uff0c\u4e0d\u662f\u5386\u53f2\u4e8b\u4ef6\u3001\u771f\u5b9e\u653f\u7b56\u6548\u679c\u6216 OECD \u53d1\u5e03\u7ed3\u679c\u3002"
+    },
+    "length": {
+      "version": "step10-tariff-teaching-v2",
+      "randomization_version": "step10-tariff-teaching-v1",
+      "x_columns": [
+        "teaching_tariff_exposure"
+      ],
+      "y_column": "teaching_y_length",
+      "entity": "entity_id",
+      "time": "year",
+      "fixed_effects": [
+        "entity_id",
+        "year"
+      ],
+      "controls": [],
+      "interactions": [],
+      "seed": 20260913,
+      "beta": -1.8,
+      "tariff_path": [
+        0.0,
+        0.0,
+        0.1,
+        0.1,
+        0.1
+      ],
+      "market": "USA",
+      "calibration": [
+        3.0,
+        2.0,
+        0.03
+      ],
+      "disclaimer": "\u865a\u6784\u5173\u7a0e\u653f\u7b56\u4e0e\u6a21\u62df\u6559\u5b66\u7ed3\u679c\uff0c\u4e0d\u662f\u5386\u53f2\u4e8b\u4ef6\u3001\u771f\u5b9e\u653f\u7b56\u6548\u679c\u6216 OECD \u53d1\u5e03\u7ed3\u679c\u3002"
+    },
+    "network": {
+      "version": "step10-tariff-teaching-v2",
+      "randomization_version": "step10-tariff-teaching-v1",
+      "x_columns": [
+        "teaching_tariff_exposure"
+      ],
+      "y_column": "teaching_y_network",
+      "entity": "entity_id",
+      "time": "year",
+      "fixed_effects": [
+        "entity_id",
+        "year"
+      ],
+      "controls": [],
+      "interactions": [],
+      "seed": 20260913,
+      "beta": -6000.0,
+      "tariff_path": [
+        0.0,
+        0.0,
+        0.1,
+        0.1,
+        0.1
+      ],
+      "market": "USA",
+      "calibration": [
+        2000.0,
+        2000.0,
+        60.0
+      ],
+      "disclaimer": "\u865a\u6784\u5173\u7a0e\u653f\u7b56\u4e0e\u6a21\u62df\u6559\u5b66\u7ed3\u679c\uff0c\u4e0d\u662f\u5386\u53f2\u4e8b\u4ef6\u3001\u771f\u5b9e\u653f\u7b56\u6548\u679c\u6216 OECD \u53d1\u5e03\u7ed3\u679c\u3002"
+    }
+  },
+  "legacy_noise_scales": {
+    "trade": 0.012,
+    "production": 0.01,
+    "length": 0.06,
+    "network": 120.0
+  },
+  "implementation_sha256": {
+    "benchmark": "d3bb580ba8f0d53e3e0ca29b3452243989733944660ed2a52154f7afd2363230",
+    "generator": "5fd7b86379e7b087e31c9959396a58f47bb4dde57bd7ae1bddb5be1fcd52fe3d"
+  },
+  "candidates": {
+    "legacy": 1.0,
+    "flat_10pct": 1.0,
+    "flat_half_noise": 0.5,
+    "flat_quarter_noise": 0.25
+  },
+  "summary": {
+    "legacy": {
+      "trade": {
+        "mean_bias": 0.003036981247301003,
+        "rmse": 0.03754406923985408,
+        "coverage_95": 0.95,
+        "power": 1.0,
+        "null_false_positive_rate": 0.05
+      },
+      "production": {
+        "mean_bias": 0.000727682205927051,
+        "rmse": 0.03288670044361756,
+        "coverage_95": 0.94,
+        "power": 1.0,
+        "null_false_positive_rate": 0.06
+      },
+      "length": {
+        "mean_bias": 0.012933197692053984,
+        "rmse": 0.19711306696272632,
+        "coverage_95": 0.945,
+        "power": 1.0,
+        "null_false_positive_rate": 0.055
+      },
+      "network": {
+        "mean_bias": -1.9545263646385729,
+        "rmse": 339.36841165406554,
+        "coverage_95": 0.965,
+        "power": 1.0,
+        "null_false_positive_rate": 0.035
+      }
+    },
+    "flat_10pct": {
+      "trade": {
+        "mean_bias": 0.0017339205228874951,
+        "rmse": 0.045114197808112044,
+        "coverage_95": 0.925,
+        "power": 1.0,
+        "null_false_positive_rate": 0.075
+      },
+      "production": {
+        "mean_bias": 0.0002626795539768742,
+        "rmse": 0.036759407158710386,
+        "coverage_95": 0.93,
+        "power": 1.0,
+        "null_false_positive_rate": 0.07
+      },
+      "length": {
+        "mean_bias": 0.017999792660073958,
+        "rmse": 0.22748008234230793,
+        "coverage_95": 0.94,
+        "power": 1.0,
+        "null_false_positive_rate": 0.06
+      },
+      "network": {
+        "mean_bias": 9.360255426924663,
+        "rmse": 399.6959189922815,
+        "coverage_95": 0.97,
+        "power": 1.0,
+        "null_false_positive_rate": 0.03
+      }
+    },
+    "flat_half_noise": {
+      "trade": {
+        "mean_bias": 0.0008669602614433733,
+        "rmse": 0.022557098904055994,
+        "coverage_95": 0.925,
+        "power": 1.0,
+        "null_false_positive_rate": 0.075
+      },
+      "production": {
+        "mean_bias": 0.0001313397769881436,
+        "rmse": 0.018379703579355203,
+        "coverage_95": 0.93,
+        "power": 1.0,
+        "null_false_positive_rate": 0.07
+      },
+      "length": {
+        "mean_bias": 0.008999896330035331,
+        "rmse": 0.11374004117115424,
+        "coverage_95": 0.94,
+        "power": 1.0,
+        "null_false_positive_rate": 0.06
+      },
+      "network": {
+        "mean_bias": 4.680127713457418,
+        "rmse": 199.84795949614178,
+        "coverage_95": 0.97,
+        "power": 1.0,
+        "null_false_positive_rate": 0.03
+      }
+    },
+    "flat_quarter_noise": {
+      "trade": {
+        "mean_bias": 0.0004334801307213698,
+        "rmse": 0.011278549452027942,
+        "coverage_95": 0.925,
+        "power": 1.0,
+        "null_false_positive_rate": 0.075
+      },
+      "production": {
+        "mean_bias": 6.566988849378313e-05,
+        "rmse": 0.00918985178967766,
+        "coverage_95": 0.93,
+        "power": 1.0,
+        "null_false_positive_rate": 0.07
+      },
+      "length": {
+        "mean_bias": 0.004499948165016945,
+        "rmse": 0.0568700205855768,
+        "coverage_95": 0.94,
+        "power": 1.0,
+        "null_false_positive_rate": 0.06
+      },
+      "network": {
+        "mean_bias": 2.340063856723859,
+        "rmse": 99.92397974807153,
+        "coverage_95": 0.97,
+        "power": 1.0,
+        "null_false_positive_rate": 0.03
+      }
+    }
+  },
+  "domain_failures": {
+    "legacy": 0,
+    "flat_10pct": 0,
+    "flat_half_noise": 0,
+    "flat_quarter_noise": 0
+  },
+  "independent_benchmark_checks": [
+    "legacy",
+    "flat_10pct",
+    "flat_half_noise",
+    "flat_quarter_noise"
+  ],
+  "notes": "Paired noise draws; fixed beta; country-clustered CR1 and t(G-1). Null uses the same residuals with beta=0. Coverage is empirical, not a guarantee."
+}

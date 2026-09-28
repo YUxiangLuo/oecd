@@ -14,6 +14,8 @@
 
 ## 一次性主机 bootstrap
 
+**模拟 v2 同样需要新 release：** 当前代码校验 `step10-tariff-teaching-v2`（统一政策后 10% 税率、半幅噪声、原 seed 与随机序列）。即使已有 v15 产物，其 v1 教学面板也不能与新代码混用。按下述数据发布流程在独立目录构建并验收，保留旧代码和旧数据成对回滚，不迁移或重置历史会话／报告。评估与升级说明见 README 的“模拟 v2 升级”。
+
 先由系统管理员安装 Python 3.13、uv、Bun、PostgreSQL、Nginx、OpenSSL 和所用 ACME/TLS 客户端。确认以下命令都可用：
 
 ```bash

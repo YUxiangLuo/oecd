@@ -11,7 +11,7 @@
   "data_release": "40c6a5d0d5d94084961a2dca04b9b260",
   "simulation_contract": "step10-tariff-teaching-v1",
   "source": "All 18 PNG files were freshly captured with agent-browser in a 1280x960 viewport. Three report-status images are element captures for readable print layout; their actual dimensions are recorded per image. Passwords are not visible.",
-  "provenance_scope": "Mixed capture baselines. Per-image baseline_commit, code_state and code_sources_sha256 override the original top-level defaults. Screenshot 11 was refreshed for manual 1.7; screenshots 06 and 09 retain their 1.6 capture metadata.",
+  "provenance_scope": "Mixed capture baselines. Per-image metadata overrides the original top-level defaults. Screenshots 10, 11, 15-writing and 15-report were refreshed for manual 1.8 using simulation v2; other images retain their original provenance, including the version-independent submitted/graded status strips.",
   "screenshots": [
     {
       "file": "screenshots/00-login.png",
@@ -232,21 +232,26 @@
       "file": "screenshots/10-shocks.png",
       "width": 1280,
       "height": 960,
-      "sha256": "ea7963a3be3e9de272fc5441811c55a285528809dad2ca839e6c6ea2fa8fba70",
-      "captured_on": "2026-09-22",
-      "capture_url": "http://127.0.0.1:5186",
+      "sha256": "abaecec746a7c8025030488765f2a8e2bbf1b7d32cedb3e8a2aae4982e05e7b9",
+      "captured_on": "2026-09-28",
+      "capture_url": "http://127.0.0.1:5191",
       "capture_tool": "agent-browser",
-      "journey": "pure-ui",
-      "account": "browser-course-5be813ad",
-      "capture_note": "Read-only browser capture from the completed 93-point pure-UI course account.",
+      "journey": "api-assisted-browser",
+      "account": "teaching-v2-5692be37",
+      "capture_note": "Independent local v2 release and synthetic student; prerequisite records prepared through public APIs, then browser verification and capture. Not a pure-UI journey.",
+      "baseline_commit": "27024d0bf3271bc6b86108e319f26acd38bd21ba",
+      "code_state": "Baseline plus uncommitted teaching-design v2 optimization and review fixes.",
+      "code_sources_sha256": "5886c30b049dec9e119578ec743a35bab75e9537cbac00889ecd9382c6058e7d",
+      "data_release": "cd50de1bfe9945d6b5280d73bad1640d",
+      "simulation_contract": "step10-tariff-teaching-v2",
       "data_sources": [
         {
           "name": "OECD ICIO 2023 observed classroom release",
           "production_data": true,
-          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+          "release_id": "cd50de1bfe9945d6b5280d73bad1640d"
         },
         {
-          "name": "step10-tariff-teaching-v1 fictional tariff and outcome simulation",
+          "name": "step10-tariff-teaching-v2 fictional tariff and outcome simulation",
           "production_data": false
         }
       ]
@@ -255,27 +260,29 @@
       "file": "screenshots/11-regression-result.png",
       "width": 1280,
       "height": 960,
-      "sha256": "eaf9b6db5e44020842d7d251308feaf42e46991f61d959110035d2013a2e003d",
-      "captured_on": "2026-09-24",
-      "capture_url": "http://127.0.0.1:5173",
+      "sha256": "b5a18b28c381f79011cff11081562f6d930a0a41f008dd933c1e7ffeee70b71a",
+      "captured_on": "2026-09-28",
+      "capture_url": "http://127.0.0.1:5191",
       "capture_tool": "agent-browser",
-      "journey": "existing-test-account-ui-verification",
-      "account": "browser-course-23b6be44",
-      "capture_note": "Existing completed development student; UI verification at 1280x960 after statistics fixes. No fresh-account end-to-end journey in this capture.",
+      "journey": "api-assisted-browser",
+      "account": "teaching-v2-5692be37",
+      "capture_note": "Independent local v2 release and synthetic student; prerequisite records prepared through public APIs, then browser verification and capture. Not a pure-UI journey.",
+      "data_release": "cd50de1bfe9945d6b5280d73bad1640d",
+      "simulation_contract": "step10-tariff-teaching-v2",
       "data_sources": [
         {
           "name": "OECD ICIO 2023 observed classroom release",
           "production_data": true,
-          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+          "release_id": "cd50de1bfe9945d6b5280d73bad1640d"
         },
         {
-          "name": "step10-tariff-teaching-v1 fictional tariff and outcome simulation",
+          "name": "step10-tariff-teaching-v2 fictional tariff and outcome simulation",
           "production_data": false
         }
       ],
-      "baseline_commit": "d53966987ec484f65e71367cffac282599bff308",
-      "code_state": "Baseline plus uncommitted statistics fixes: approximate cluster interval disclosure, undefined backward length copy, and p-value formatting.",
-      "code_sources_sha256": "e24c8bebf74a0447458ffda945df0d43792ba00b689836c6894342e53c4045b8"
+      "baseline_commit": "27024d0bf3271bc6b86108e319f26acd38bd21ba",
+      "code_state": "Baseline plus uncommitted teaching-design v2 optimization and review fixes.",
+      "code_sources_sha256": "5886c30b049dec9e119578ec743a35bab75e9537cbac00889ecd9382c6058e7d"
     },
     {
       "file": "screenshots/15-material-gate.png",
@@ -300,21 +307,26 @@
       "file": "screenshots/15-writing.png",
       "width": 1280,
       "height": 960,
-      "sha256": "390ce23419d583f923c7aef47335bff7d09f2f446793763c3a346eb01fd32e7e",
-      "captured_on": "2026-09-22",
-      "capture_url": "http://127.0.0.1:5186",
+      "sha256": "4d0191548d11a94ff13aab8b17572dabad520de153c2832ff7c24e776f78792e",
+      "captured_on": "2026-09-28",
+      "capture_url": "http://127.0.0.1:5191",
       "capture_tool": "agent-browser",
-      "journey": "api-assisted",
-      "account": "manual-draft-20260922",
-      "capture_note": "Public teacher API created an independent student; seed_full_journey.py populated prerequisite materials and draft fields; browser UI used for capture.",
+      "journey": "api-assisted-browser",
+      "account": "teaching-v2-5692be37",
+      "capture_note": "Independent local v2 release and synthetic student; prerequisite records prepared through public APIs, then browser verification, report regeneration and capture. Not a pure-UI journey.",
+      "baseline_commit": "27024d0bf3271bc6b86108e319f26acd38bd21ba",
+      "code_state": "Baseline plus uncommitted teaching-design v2 optimization and review fixes.",
+      "code_sources_sha256": "5886c30b049dec9e119578ec743a35bab75e9537cbac00889ecd9382c6058e7d",
+      "data_release": "cd50de1bfe9945d6b5280d73bad1640d",
+      "simulation_contract": "step10-tariff-teaching-v2",
       "data_sources": [
         {
           "name": "OECD ICIO 2023 observed classroom release",
           "production_data": true,
-          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+          "release_id": "cd50de1bfe9945d6b5280d73bad1640d"
         },
         {
-          "name": "step10-tariff-teaching-v1 fictional tariff and outcome simulation",
+          "name": "step10-tariff-teaching-v2 fictional tariff and outcome simulation",
           "production_data": false
         }
       ]
@@ -323,21 +335,26 @@
       "file": "screenshots/15-report.png",
       "width": 1280,
       "height": 960,
-      "sha256": "cccc3e9bda5db1a495af4cb2bab91be35f3c24f827c593cc6450d0f2ce207c31",
-      "captured_on": "2026-09-22",
-      "capture_url": "http://127.0.0.1:5186",
+      "sha256": "ae4b277bc1ce397e93355e2638687d71507b78de1f970b812effff5ae79e3239",
+      "captured_on": "2026-09-28",
+      "capture_url": "http://127.0.0.1:5191",
       "capture_tool": "agent-browser",
-      "journey": "pure-ui",
-      "account": "browser-course-5be813ad",
-      "capture_note": "Read-only browser capture from the completed 93-point pure-UI course account.",
+      "journey": "api-assisted-browser",
+      "account": "teaching-v2-5692be37",
+      "capture_note": "Independent local v2 release and synthetic student; prerequisite records prepared through public APIs, then browser verification, report regeneration and capture. Not a pure-UI journey.",
+      "baseline_commit": "27024d0bf3271bc6b86108e319f26acd38bd21ba",
+      "code_state": "Baseline plus uncommitted teaching-design v2 optimization and review fixes.",
+      "code_sources_sha256": "5886c30b049dec9e119578ec743a35bab75e9537cbac00889ecd9382c6058e7d",
+      "data_release": "cd50de1bfe9945d6b5280d73bad1640d",
+      "simulation_contract": "step10-tariff-teaching-v2",
       "data_sources": [
         {
           "name": "OECD ICIO 2023 observed classroom release",
           "production_data": true,
-          "release_id": "40c6a5d0d5d94084961a2dca04b9b260"
+          "release_id": "cd50de1bfe9945d6b5280d73bad1640d"
         },
         {
-          "name": "step10-tariff-teaching-v1 fictional tariff and outcome simulation",
+          "name": "step10-tariff-teaching-v2 fictional tariff and outcome simulation",
           "production_data": false
         }
       ]
@@ -389,5 +406,5 @@
       ]
     }
   ],
-  "updated_on": "2026-09-24"
+  "updated_on": "2026-09-28"
 }

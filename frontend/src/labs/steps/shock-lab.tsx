@@ -92,6 +92,7 @@ export function ShockLab({ meta, step: _step, state }: {
       <div className="reg-boundary" role="note">
         X = 冲击前出口份额 w × 虚构关税税率 τ。税率路径及生成值仅为教学模拟，不是现实政策事实，也不能据此作因果结论。
       </div>
+      <p>本版设定：前两年税率为 0；模拟加税国家在后三年统一为 10%，未加税国家仍为 0。同一国家、行业的出口份额固定，所以政策后三年的 X 保持不变，Y 仍会因扰动而变化。</p>
       <div className="reg-variable-plain-grid" role="group" aria-label="理解 X 的独立算例">
         <div><b>算一次：税率不等于暴露</b><span>假设出口份额为 25%，模拟税率为 20%，X = 0.25 × 0.20 = 0.05，即 5%。同样税率下，出口依赖程度不同，暴露也不同。</span></div>
         <div><b>读一次：什么是 1 个百分点？</b><span>X 从 5% 变为 6%，增加的是 1 个百分点，不是相对增加 1%。后四步都按“X 增加 1 个百分点”读结果。</span></div>

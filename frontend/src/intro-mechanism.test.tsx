@@ -20,11 +20,11 @@ test("mechanism preview follows the actual two-country five-year X/Y evidence ch
     expect(chart.textContent).toContain("2020");
     expect(chart.textContent).toContain("X 示意强弱");
     expect(view.getByText(/正式回归使用完整国家×行业面板，不限于所选两国/)).toBeTruthy();
-    // Independent expected amplitudes: tariff path 0, 0, .65, 1, .55.
+    // Two pre-policy years, followed by three equal positive tariff rates.
     for (const [series, amplitude] of [["a", 80], ["b", 40]] as const) {
       const circles = [...chart.querySelectorAll(`circle.country-${series}`)];
       const ys = circles.map((circle) => Number(circle.getAttribute("cy")));
-      expect(ys.map((y) => (120 - y) / amplitude)).toEqual([0, 0, 0.65, 1, 0.55]);
+      expect(ys.map((y) => (120 - y) / amplitude)).toEqual([0, 0, 1, 1, 1]);
       const path = circles.map((circle, index) => `${index ? "L" : "M"}${circle.getAttribute("cx")} ${circle.getAttribute("cy")}`).join("");
       expect(chart.querySelector(`path.country-${series}`)?.getAttribute("d")).toBe(path);
     }

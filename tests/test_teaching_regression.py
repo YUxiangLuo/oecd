@@ -44,11 +44,56 @@ def test_teaching_panel_is_separate_reproducible_and_has_transparent_tariff_path
     pd.testing.assert_frame_equal(first, second)
     assert set(Y_COLUMNS.values()).isdisjoint(source.columns)
     assert first.loc[first.year.isin([2016, 2017]), X_COLUMN].eq(0).all()
-    assert first.loc[first.year.eq(2020), X_COLUMN].max() == 0.55 * first.loc[first.year.eq(2019), X_COLUMN].max()
+    assert set(first.teaching_tariff_rate_tau.unique()) == {0.0, 0.1}
+    post = first.loc[first.year.ge(2018)]
+    assert post.groupby("entity_id")[X_COLUMN].nunique().eq(1).all()
+    assert post.groupby("country").teaching_tariff_rate_tau.nunique().eq(1).all()
     assert first.groupby("entity_id")[X_COLUMN].max().eq(0).any()
     assert first.loc[first.industry.eq("s1"), "teaching_export_share_w"].eq(0.4).all()
     assert first.loc[first.industry.eq("s3"), "teaching_export_share_w"].eq(0.8).all()
     np.testing.assert_allclose(first[X_COLUMN], first.teaching_export_share_w * first.teaching_tariff_rate_tau)
+
+
+def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
+    import hashlib
+    from gvcsim.regression import teaching
+    from gvcsim.regression.design import OUTCOME_DEPVARS
+
+    source = _source()
+    panel = build_teaching_panel(source, _exposure(source))
+    alternate = build_teaching_panel(source, _exposure(source), seed=1000)
+    np.testing.assert_array_equal(panel[X_COLUMN], alternate[X_COLUMN])
+    assert not panel[Y_COLUMNS["trade"]].equals(alternate[Y_COLUMNS["trade"]])
+
+    def draw(value, salt):
+        raw = hashlib.sha256(f"step10-tariff-teaching-v1|20260913|{salt}|{value}".encode()).digest()
+        return 2 * int.from_bytes(raw[:8], "big") / (2**64 - 1) - 1
+
+    # Independent fixed acceptance values, not expectations read from CALIBRATION.
+    for outcome, low, span, beta, scale in (
+        ("trade", 0.25, 0.30, -0.55, 0.006),
+        ("production", 0.20, 0.25, -0.40, 0.005),
+        ("length", 3.0, 2.0, -1.8, 0.030),
+        ("network", 2000.0, 2000.0, -6000.0, 60.0),
+    ):
+        baseline = panel.loc[panel.year.eq(2016)].set_index("entity_id")[OUTCOME_DEPVARS[outcome][0]].rank(pct=True)
+        expected = []
+        for row in panel.itertuples():
+            noise = draw(f"{row.entity_id}|{row.year}", outcome) + draw(
+                f"{row.country}|{row.year}", f"cluster-{outcome}"
+            )
+            expected.append(
+                low
+                + span * baseline[row.entity_id]
+                + beta * row.teaching_tariff_exposure
+                + scale * (noise + (row.year - 2018) * 0.2)
+            )
+        np.testing.assert_allclose(panel[Y_COLUMNS[outcome]], expected, rtol=1e-12, atol=1e-12)
+    snapshot = model_snapshot("trade")
+    assert snapshot["version"] == "step10-tariff-teaching-v2"
+    assert snapshot["randomization_version"] == "step10-tariff-teaching-v1"
+    assert snapshot["tariff_path"] == [0, 0, 0.1, 0.1, 0.1]
+    assert teaching.SEED == 20260913
 
 
 def test_invalid_baselines_are_excluded_not_clipped_and_years_are_checked():
@@ -87,6 +132,31 @@ def test_prespecified_seed_family_recovers_relations_without_selecting_significa
         ("network", -6000, 900),
     ):
         assert abs(np.mean(estimates[outcome]) - expected) < tolerance
+
+
+def test_benchmark_binds_exposure_bytes_and_generator_parameters(tmp_path):
+    import hashlib
+    from scripts.benchmark_teaching_design import evaluate
+
+    source = _source(tuple(f"C{i:02}" for i in range(30)))
+    exposure = _exposure(source)
+    source.to_csv(tmp_path / "panel_industry.csv", index=False)
+    path = tmp_path / "export_exposure_2016.csv"
+    exposure.to_csv(path, index=False)
+    first = evaluate(tmp_path, range(1000, 1001))
+    assert first["source_exposure"] == {"path": path.name, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    snapshot = first["generator_snapshots"]["trade"]
+    assert snapshot["randomization_version"] == "step10-tariff-teaching-v1"
+    assert snapshot["beta"] == -0.55
+    assert snapshot["calibration"] == (0.25, 0.30, 0.006)
+    exposure["export_exposure"] *= 0.5
+    exposure.to_csv(path, index=False)
+    second = evaluate(tmp_path, range(1000, 1001))
+    assert first["source_panel_sha256"] == second["source_panel_sha256"]
+    assert first["source_exposure"]["sha256"] != second["source_exposure"]["sha256"]
+    assert second["summary"]["flat_half_noise"]["trade"]["rmse"] == pytest.approx(
+        2 * first["summary"]["flat_half_noise"]["trade"]["rmse"]
+    )
 
 
 def test_snapshot_publishes_actual_columns_and_prespecified_parameters():

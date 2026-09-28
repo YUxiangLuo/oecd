@@ -28,6 +28,9 @@ test("step 10 uses the dedicated teaching tariff panel independently of the old 
   expect(html).toContain("0.25 × 0.20 = 0.05，即 5%");
   expect(html).toContain("X 从 5% 变为 6%，增加的是 1 个百分点");
   expect(html).toContain("不是下方所选国家的实际读数");
+  expect(html).toContain("前两年税率为 0");
+  expect(html).toContain("后三年统一为 10%");
+  expect(html).toContain("Y 仍会因扰动而变化");
 });
 
 test("step 10 prefers the configured two-country industry example", () => {

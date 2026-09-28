@@ -57,6 +57,7 @@ def test_v8_quiz_rejects_old_answers():
 def test_saved_run_requires_version_and_actual_x_y_contract():
     assert _parse_saved_run(_run("trade"), "trade") is not None
     assert _parse_saved_run(_run("trade", version="old-did"), "trade") is None
+    assert _parse_saved_run(_run("trade", version="step10-tariff-teaching-v1"), "trade") is None
     assert _parse_saved_run(_run("trade", coefficient="treated"), "trade") is None
     wrong_y = _run("trade")
     wrong_y["model_snapshot"]["y_column"] = Y_COLUMNS["network"]

@@ -297,14 +297,14 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
           <div className="intro-preview-heading"><b>01 · 比较五年模拟关税暴露（X）</b><span><i className="country-a" />国家 A <i className="country-b" />国家 B</span></div>
           <svg viewBox="0 0 520 180" role="img" aria-label="国家 A 与国家 B 的五年模拟关税暴露 X 趋势界面示意，线条不代表真实数值">
             <path className="grid" d="M42 30H500M42 75H500M42 120H500" />
-            <path className="country-a" d="M50 120L160 120L270 68L380 40L490 76" />
-            <path className="country-b" d="M50 120L160 120L270 94L380 80L490 98" />
+            <path className="country-a" d="M50 120L160 120L270 40L380 40L490 40" />
+            <path className="country-b" d="M50 120L160 120L270 80L380 80L490 80" />
             <text x="42" y="18">X 示意强弱</text>
             <text x="28" y="124">0</text>
             {[50, 160, 270, 380, 490].map((x, index) => (
               <g key={x}>
-                <circle className="country-a" cx={x} cy={[120, 120, 68, 40, 76][index]} r="4" />
-                <circle className="country-b" cx={x} cy={[120, 120, 94, 80, 98][index]} r="4" />
+                <circle className="country-a" cx={x} cy={[120, 120, 40, 40, 40][index]} r="4" />
+                <circle className="country-b" cx={x} cy={[120, 120, 80, 80, 80][index]} r="4" />
                 <text x={x} y="158" textAnchor="middle">{previewYears[index]}</text>
               </g>
             ))}

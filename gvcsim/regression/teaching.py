@@ -7,21 +7,23 @@ import hashlib
 import numpy as np
 import pandas as pd
 
-VERSION = "step10-tariff-teaching-v1"
+VERSION = "step10-tariff-teaching-v2"
+# A contract upgrade must not silently redraw policy assignment or noise.
+RANDOMIZATION_VERSION = "step10-tariff-teaching-v1"
 X_COLUMN = "teaching_tariff_exposure"
 Y_COLUMNS = {outcome: f"teaching_y_{outcome}" for outcome in ("trade", "production", "length", "network")}
 BETAS = {"trade": -0.55, "production": -0.40, "length": -1.8, "network": -6000.0}
 SEED = 20260913
 MARKET = "USA"
-TARIFF_PATH = (0.0, 0.0, 0.65, 1.0, 0.55)
+TARIFF_PATH = (0.0, 0.0, 0.10, 0.10, 0.10)
 DISCLAIMER = "虚构关税政策与模拟教学结果，不是历史事件、真实政策效果或 OECD 发布结果。"
 # Rank calibration preserves ordering, not observed levels or accounting identities.
 # These ranges ensure valid simulated domains without clipping generated outcomes.
 CALIBRATION = {
-    "trade": (0.25, 0.30, 0.012),
-    "production": (0.20, 0.25, 0.010),
-    "length": (3.0, 2.0, 0.060),
-    "network": (2000.0, 2000.0, 120.0),
+    "trade": (0.25, 0.30, 0.006),
+    "production": (0.20, 0.25, 0.005),
+    "length": (3.0, 2.0, 0.030),
+    "network": (2000.0, 2000.0, 60.0),
 }
 UNITS = {
     "trade": "比例（展示为百分点）",
@@ -32,7 +34,7 @@ UNITS = {
 
 
 def _unit_number(value: str, salt: str, seed: int = SEED) -> float:
-    raw = hashlib.sha256(f"{VERSION}|{seed}|{salt}|{value}".encode()).digest()
+    raw = hashlib.sha256(f"{RANDOMIZATION_VERSION}|{seed}|{salt}|{value}".encode()).digest()
     return int.from_bytes(raw[:8], "big") / (2**64 - 1)
 
 
@@ -84,8 +86,7 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
     out = out.sort_values(["country", "industry", "year"]).reset_index(drop=True)
     entities = out.entity_id.astype(str)
     exposed = out.country.astype(str).map(lambda value: _unit_number(value, "policy") < 0.60)
-    rates = out.industry.astype(str).map(lambda value: 0.06 if _unit_number(value, "rate") < 0.5 else 0.18)
-    out["teaching_tariff_rate_tau"] = rates * out.year.map(dict(zip(years, TARIFF_PATH, strict=True))) * exposed
+    out["teaching_tariff_rate_tau"] = out.year.map(dict(zip(years, TARIFF_PATH, strict=True))) * exposed
     out[X_COLUMN] = out.teaching_export_share_w * out.teaching_tariff_rate_tau
     out["teaching_treated"] = out[X_COLUMN].gt(0).astype(int)
     for outcome, target in Y_COLUMNS.items():
@@ -122,6 +123,7 @@ def variable_catalog(outcome: str) -> list[dict[str, str]]:
 def model_snapshot(outcome: str) -> dict:
     return {
         "version": VERSION,
+        "randomization_version": RANDOMIZATION_VERSION,
         "x_columns": [X_COLUMN],
         "y_column": Y_COLUMNS[outcome],
         "entity": "entity_id",

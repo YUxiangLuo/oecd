@@ -13,6 +13,7 @@ from pathlib import Path
 import psycopg
 
 from dogfood_sync import Browser
+from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 
 # Choices derived from the question wording and the rendered course explanations.
 QUIZ_CHOICES = {
@@ -184,7 +185,7 @@ def main():
             else:
                 assert row["run"]["result"], step
                 assert row["run"]["design"]["method"] == "twfe_intensity"
-                assert row["run"]["model_snapshot"]["version"] == "step10-tariff-teaching-v1"
+                assert row["run"]["model_snapshot"]["version"] == TEACHING_VERSION
                 result = row["run"]["result"]
                 support = result["support"]
                 assert result["status"] == support["status"]

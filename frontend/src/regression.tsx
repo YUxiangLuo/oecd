@@ -29,7 +29,7 @@ import { CoefForestChart, countryLabel, sectorLabel } from "./viz";
 import { IndicatorTrendChart } from "./labs/steps/viz/indicator-charts";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
-export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v1";
+export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v2";
 
 /**
  * Keep the fixed application shell anchored to the viewport while revealing a
