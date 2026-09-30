@@ -12,9 +12,7 @@ def test_complete_summary_with_wrapped_headers():
 
 def test_missing_interval_header_cannot_borrow_from_details():
     text = (
-        "四项回归结果汇总\n"
-        "步骤 指标 冲击 比较方式 估计对象与相对变化 证据判断\n"
-        "步骤 11 · 贸易流详情\n标称 95% 近似区间"
+        "四项回归结果汇总\n步骤 指标 冲击 比较方式 估计对象与相对变化 证据判断\n步骤 11 · 贸易流详情\n标称 95% 近似区间"
     )
     with pytest.raises(ValueError, match="截断列: 标称95%近似区间"):
         validate_report_text(text)

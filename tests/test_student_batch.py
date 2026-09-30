@@ -75,9 +75,9 @@ def test_concurrent_batches_do_not_partially_create(batch):
     with ThreadPoolExecutor(max_workers=2) as pool:
         statuses = list(
             pool.map(
-                lambda students: client.post(
-                    "/api/classroom/students/batch", json={**body, "students": students}
-                ).status_code,
+                lambda students: (
+                    client.post("/api/classroom/students/batch", json={**body, "students": students}).status_code
+                ),
                 [body["students"], list(reversed(body["students"]))],
             )
         )
@@ -125,8 +125,7 @@ def test_archived_group_and_duplicate_and_size_rejected(batch):
 def test_full_class_limit(batch):
     client, body, _ = batch
     body["students"] = [
-        {"username": f"s{i:04}", "display_name": f"学生{i}", "password": f"initial-password-{i}"}
-        for i in range(200)
+        {"username": f"s{i:04}", "display_name": f"学生{i}", "password": f"initial-password-{i}"} for i in range(200)
     ]
     body["preview"] = False
     result = client.post("/api/classroom/students/batch", json=body)
