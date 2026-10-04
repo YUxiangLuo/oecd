@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Meta } from "../../../types";
-import { autoComparisonCountries } from "./calculation-step";
+import { autoComparisonCountries } from "./auto-comparison";
 import { indicatorComparisonPatch } from "./indicator-table";
 
 const meta = { countries: ["ARG", "CHN", "DEU", "ROW", "USA"] } as unknown as Meta;
@@ -27,5 +27,25 @@ describe("steps 2–4 automatic report material", () => {
     // Step 5 keeps the explicit default.
     expect(indicatorComparisonPatch(rows, ["CHN", "USA"], 2020, "FVA_share", "%", "rel-1")?.observations?.[0].source)
       .toBe("explicit-indicator-table-comparison");
+  });
+});
+
+describe("automatic material status line", () => {
+  test("shows what was recorded once two observations exist", async () => {
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { createElement } = await import("react");
+    const { AutoMaterialStatus } = await import("./auto-comparison");
+    const observations = ["CHN", "USA"].map((country, index) => ({
+      entity: country, country, industry: "", year: 2020, value: index ? 9 : 12, metric: "weighted degree",
+      unit: "百万美元", release: "rel-1", scope: "country" as const, source: "auto-indicator-comparison" as const,
+    }));
+    const html = renderToStaticMarkup(createElement(AutoMaterialStatus, {
+      state: { data: { observations }, save: () => {}, complete: false, syncing: false, syncError: null, syncNow: () => {} },
+      schema: null, loadFailed: false, where: "上方表格所选国家",
+    }));
+    expect(html).toContain("报告材料 · 自动记录");
+    expect(html).toContain("2020 年 · CHN 中国");
+    expect(html).toContain("USA 美国");
+    expect(html).toContain("按上方表格所选国家与美国");
   });
 });

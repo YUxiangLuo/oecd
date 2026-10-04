@@ -1,11 +1,12 @@
 /**
- * 步骤 2–4 的“01 / 计算方法”：用几步文字说明指标如何从 ICIO 表算出，每一步链接到
+ * 步骤 2–5 的“01 / 计算方法”：用几步文字说明指标如何从 ICIO 表算出，每一步链接到
  * 课程校订版说明或原始论文；文档库直接嵌在本区块，不再放在页面底部。
  * 代表指标公式与下方“动手拆解”的公式一致。
  */
+import type { ReactNode } from "react";
 import { INDICATOR_READINGS, IndicatorReadingLibrary, readingAssetUrl } from "./indicator-reading-library";
 
-export type MethodTopic = "trade" | "production" | "length";
+export type MethodTopic = "trade" | "production" | "length" | "network";
 
 interface MethodStep {
   title: string;
@@ -106,9 +107,36 @@ const METHOD: Record<MethodTopic, MethodContent> = {
     formula: "PLv = Σ（增加值份额 × 段长度）；GVCPs = PLv_GVC ÷ PLy_GVC",
     caveat: "长度不是跨境次数：增加国内加工也能拉长生产链。存在负增加值时是有符号加权。",
   },
+  network: {
+    label: "全球生产网络（Gephi 口径）",
+    question: "把投入产出表看成网络，哪些国家–行业处在中心位置？",
+    lead: "ICIO 记录了谁向谁提供中间投入，可以直接看成一张有向网络。中心性从流量规模和路径位置两个角度描述节点。",
+    steps: [
+      {
+        title: "把 ICIO 表变成有向网络",
+        body: "节点是国家×行业；每一笔正的中间品流量 Z 是一条从供给方指向使用方的边。国内联系与正自环都保留，在完整全球图上计算。",
+        source: "network-guide",
+        sourceLabel: "课程校订版说明",
+      },
+      {
+        title: "流量规模：加权度",
+        body: "加权总度 = 加权入度 + 加权出度，即流入与流出的中间品金额之和；正自环在入向和出向各计一次。它衡量规模，不是去重后的贸易额。",
+        source: "source-network-note",
+        sourceLabel: "原始方法说明",
+      },
+      {
+        title: "路径位置：介数",
+        body: "所有正边按等长处理，统计各有序节点对的最短路径中经过该节点的份额之和（精确、未归一化的 Brandes 算法）。它描述拓扑中介位置，不看流量大小。",
+        source: "brandes-paper",
+        sourceLabel: "Brandes（2001）",
+      },
+    ],
+    formula: "加权总度 = 加权入度 + 加权出度；介数 = Σ σₛₜ(v) ÷ σₛₜ",
+    caveat: "介数未做边阈值敏感性分析，只是探索性拓扑基准；国家级网络是完全图、介数恒为 0。中心性高不等于经济枢纽或瓶颈。",
+  },
 };
 
-export function IndicatorMethodIntro({ topic }: { topic: MethodTopic }) {
+export function IndicatorMethodIntro({ topic, children }: { topic: MethodTopic; children?: ReactNode }) {
   const content = METHOD[topic];
   const readings = INDICATOR_READINGS[topic];
   return (
@@ -137,6 +165,7 @@ export function IndicatorMethodIntro({ topic }: { topic: MethodTopic }) {
         <b>{content.formula}</b>
         <small>{content.caveat}</small>
       </div>
+      {children}
       <IndicatorReadingLibrary topic={topic} />
     </section>
   );

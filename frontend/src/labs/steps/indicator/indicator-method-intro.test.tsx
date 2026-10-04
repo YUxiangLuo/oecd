@@ -13,8 +13,9 @@ describe("indicator method intro", () => {
       trade: "外国增加值项占比 = FVA ÷ 总出口",
       production: "复杂 GVC 生产份额 = 3b_VA_GVC_C ÷ SVA",
       length: "GVCPs = PLv_GVC ÷ PLy_GVC",
+      network: "加权总度 = 加权入度 + 加权出度",
     };
-    for (const topic of ["trade", "production", "length"] as MethodTopic[]) {
+    for (const topic of ["trade", "production", "length", "network"] as MethodTopic[]) {
       const dom = render(topic);
       const steps = dom.querySelectorAll(".method-steps li");
       expect(steps).toHaveLength(3);

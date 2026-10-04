@@ -140,7 +140,7 @@ def _indicator_material_complete(data: dict[str, Any], step: int) -> bool:
     )
 
 
-# Steps 2–4 record the comparison automatically from the “动手拆解” country; step 5 still saves it explicitly.
+# Steps 2–5 record the comparison automatically from the country being viewed; older explicit saves stay valid.
 AUTO_COMPARISON_SOURCE = "auto-indicator-comparison"
 EXPLICIT_COMPARISON_SOURCE = "explicit-indicator-table-comparison"
 
@@ -243,7 +243,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
     for step in range(2, 10):
         data = _step_data(session, step)
         if step in (2, 3, 4, 5):
-            if not _table_comparison_complete(data, allow_auto=step != 5):
+            if not _table_comparison_complete(data, allow_auto=True):
                 blocked.append(
                     {
                         "step": step,
@@ -251,7 +251,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
                         "missing": [
                             "请打开本步“动手拆解”并等待数据加载，系统会自动记录两国同年的代表指标"
                             if step != 5
-                            else "请点击一次“保存两国同年比较”，由系统自动记录两国、指标、单位与数值"
+                            else "请打开本步中心性表并等待数据加载，系统会自动记录两国同年的加权总度"
                         ],
                     }
                 )

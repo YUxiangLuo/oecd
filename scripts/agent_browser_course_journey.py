@@ -88,8 +88,8 @@ def main():
                 student.run("click", "tbody tr:first-child td:first-of-type button")
                 student.run("wait", '[role="dialog"]')
                 student.run("press", "Escape")
-            elif 2 <= step <= 4:
-                # The comparison is recorded automatically once the decomposition data loads.
+            elif 2 <= step <= 5:
+                # The comparison is recorded automatically once the step's data loads.
                 wait_saved(
                     step,
                     lambda row: (
@@ -99,14 +99,6 @@ def main():
                         )
                     ),
                 )
-            elif step == 5:
-                student.run(
-                    "wait",
-                    "--fn",
-                    'Array.from(document.querySelectorAll("button")).some(e=>e.textContent.trim()==="保存两国同年比较"&&!e.disabled)',
-                )
-                student.button("保存两国同年比较")
-                wait_saved(step, lambda row: {"CHN", "USA"}.issubset(row.get("compared", [])))
             elif 6 <= step <= 8:
                 student.button("沿用这组比较对象")
                 student.run(

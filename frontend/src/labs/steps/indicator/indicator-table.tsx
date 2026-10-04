@@ -1,8 +1,8 @@
 /**
- * 指标计算阶段（步骤 2–5）的分解数据表：国家/年份筛选、分页与两国同年材料。
+ * 指标数据表（步骤 5 中心性表）：国家/年份筛选、分页与排序。
  *
- * 受控组件:year/country/page 由外层持有,与「动手拆解」演示的实体选择
- * 及实验快照恢复保持同步。报告材料由独立的两国选择器一次配对保存。
+ * 受控组件:year/country/page 由外层持有,并与实验快照恢复保持同步。
+ * 两国同年报告材料由 auto-comparison 按所选国家自动记录，本表不再提供保存按钮。
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
@@ -372,19 +372,7 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
     [requestKey, groupKey],
     { requestKey },
   );
-  const countryRequestKey = JSON.stringify(["country-observations", year]);
-  const countryQuery = useAsync<{ year: number; rows: Array<Record<string, unknown>> }>(
-    async () => ({
-      year,
-      rows: await api.countryIndicators(year) as Array<Record<string, unknown>>,
-    }),
-    [countryRequestKey],
-    { requestKey: countryRequestKey },
-  );
   const data = mainQuery.status === "success" ? mainQuery.data : null;
-  const countryRows = countryQuery.status === "success"
-    ? countryRowsForYear(countryQuery.data, year)
-    : null;
 
   // 筛选只保存当前浏览位置，不能暗中充当报告证据。
   useEffect(() => {
@@ -396,37 +384,6 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
   }, [country, year, interacted, groupKey]);
 
   const group = schema?.groups.find((candidate) => candidate.key === groupKey);
-  const evidenceMetric = COUNTRY_METRIC[groupKey] ?? CORE_METRIC[groupKey];
-  const availableCountries = meta.countries.filter((code) => code !== "ROW");
-  const savedPair = (state.data?.compared ?? []).filter((code) => availableCountries.includes(code));
-  const defaultFirst = savedPair[0] ?? (availableCountries.includes("CHN") ? "CHN" : availableCountries[0] ?? "");
-  const defaultSecond = savedPair.find((code) => code !== defaultFirst)
-    ?? (availableCountries.includes("USA") && defaultFirst !== "USA" ? "USA" : availableCountries.find((code) => code !== defaultFirst) ?? "");
-  const [comparisonFirst, setComparisonFirst] = useState(defaultFirst);
-  const [comparisonSecond, setComparisonSecond] = useState(defaultSecond);
-  const evidenceUnit = schema?.fields[evidenceMetric]?.format === "pct"
-    ? "%"
-    : schema?.fields[evidenceMetric]?.format === "amount" || evidenceMetric.startsWith("weighted ")
-      ? "百万美元"
-      : "无量纲";
-  const release = meta.dataset?.release_id ?? "";
-  const pendingComparison = countryRows
-    ? indicatorComparisonPatch(
-        countryRows,
-        [comparisonFirst, comparisonSecond],
-        year,
-        evidenceMetric,
-        evidenceUnit,
-        release,
-      )
-    : null;
-  const recordedCountries = [...new Set((state.data?.observations ?? []).map((item) => item.country))];
-  const recordedCount = Math.min(recordedCountries.length, 2);
-  const comparisonMatches = Boolean(
-    pendingComparison
-    && JSON.stringify(pendingComparison.observations) === JSON.stringify(state.data?.observations)
-    && JSON.stringify(pendingComparison.compared) === JSON.stringify(state.data?.compared),
-  );
   const cols = indicatorTableColumns(groupKey, group?.fields ?? [], data?.rows[0], showAllFields);
   const displayRows = groupKey === "network" && country && data
     ? sortNetworkRows(data.rows, networkSort)
@@ -491,69 +448,6 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
           </span>
         </div>
       )}
-
-      {countryQuery.status === "error" && (
-        <AsyncStateMessage
-          status="error"
-          error={userFacingRequestError(countryQuery.error, `${year} 年国家级对比加载失败`)}
-          onRetry={countryQuery.retry}
-        />
-      )}
-
-      <section className="indicator-evidence-capture" aria-labelledby={`indicator-evidence-title-${groupKey}`}>
-        <div className="indicator-evidence-copy">
-          <b id={`indicator-evidence-title-${groupKey}`}>报告材料 · 已记录 {recordedCount}/2 个国家</b>
-          <p>系统会一次保存两个国家在同一年、同一指标下的数值。默认使用中国与美国，也可直接更换比较对象。</p>
-          <div className="controls">
-            <LabeledControl label="比较国家 A">{(id) => <select id={id} value={comparisonFirst} onChange={(event) => {
-              const previousFirst = comparisonFirst;
-              setComparisonFirst(event.target.value);
-              // Picking B's country as A swaps the pair instead of silently replacing B with the first country.
-              if (event.target.value === comparisonSecond) {
-                setComparisonSecond(previousFirst && previousFirst !== event.target.value
-                  ? previousFirst
-                  : availableCountries.find((code) => code !== event.target.value) ?? "");
-              }
-            }}>{availableCountries.map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}</select>}</LabeledControl>
-            <LabeledControl label="比较国家 B">{(id) => <select id={id} value={comparisonSecond} onChange={(event) => setComparisonSecond(event.target.value)}>
-              {availableCountries.filter((code) => code !== comparisonFirst).map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
-            </select>}</LabeledControl>
-          </div>
-          <p className="indicator-evidence-current" aria-live="polite">
-            {countryQuery.status === "loading" || countryQuery.status === "idle"
-                ? "正在加载两国可记录数值…"
-                : countryQuery.status === "error"
-                  ? "国家级对比加载失败；请先重试，成功后再记录。"
-                  : pendingComparison
-                    ? `当前待记录：${year} · ${countryLabel(comparisonFirst)} ${fmtField(pendingComparison.observations![0].value, evidenceMetric, schema)}；${countryLabel(comparisonSecond)} ${fmtField(pendingComparison.observations![1].value, evidenceMetric, schema)} · ${fieldLabel(evidenceMetric, schema)}`
-                    : "当前两国没有完整的同年指标值，不能记录。"}
-          </p>
-        </div>
-        <button
-          type="button"
-          className="primary"
-          disabled={!pendingComparison || comparisonMatches}
-          onClick={() => {
-            if (!pendingComparison) return;
-            state.save(pendingComparison);
-          }}
-        >
-          {comparisonMatches ? "当前两国比较已记录" : recordedCount === 2 ? "更新两国同年比较" : "保存两国同年比较"}
-        </button>
-        <div className="observation-strip" role="group" aria-label="已记录的对比数值">
-          {recordedCountries.length === 0 && <span className="empty">尚未记录。点击一次即可完成本步报告材料。</span>}
-          {recordedCountries.slice(-2).map((recordedCountry) => {
-            const observation = state.data?.observations?.find((item) => item.country === recordedCountry);
-            return (
-              <span key={recordedCountry}>
-                {observation
-                  ? `${observation.year} · ${countryLabel(observation.country)} = ${fmtField(observation.value, state.data?.metric ?? evidenceMetric, schema)}`
-                  : countryLabel(recordedCountry)}
-              </span>
-            );
-          })}
-        </div>
-      </section>
 
       <IndicatorRequestBoundary
         status={mainQuery.status}
