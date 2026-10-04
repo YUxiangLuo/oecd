@@ -69,6 +69,13 @@ describe("indicator calculation disclosure", () => {
     expect(html).toContain("FVA 不含外国重复计算 FDC");
   });
 
+  test("keeps every integer digit of large operands so they match the displayed total", () => {
+    const html = renderToStaticMarkup(
+      <IndicatorCalculationDisclosure step={4} row={{ FVA: 88206.5, gross_exports: 1067093.2 }} />,
+    );
+    expect(html).toContain("= 88,206.5 / 1,067,093 = <b>8.3%</b>");
+  });
+
   test("shows the Step 3 complex-GVC share rather than the total GVC share", () => {
     const html = renderToStaticMarkup(
       <IndicatorCalculationDisclosure step={5} row={{ "3b_VA_GVC_C": 15, "3_VA_GVC": 40, SVA: 60 }} />,

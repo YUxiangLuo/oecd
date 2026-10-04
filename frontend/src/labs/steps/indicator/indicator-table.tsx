@@ -503,8 +503,14 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
           <p>系统会一次保存两个国家在同一年、同一指标下的数值。默认使用中国与美国，也可直接更换比较对象。</p>
           <div className="controls">
             <LabeledControl label="比较国家 A">{(id) => <select id={id} value={comparisonFirst} onChange={(event) => {
+              const previousFirst = comparisonFirst;
               setComparisonFirst(event.target.value);
-              if (event.target.value === comparisonSecond) setComparisonSecond(availableCountries.find((code) => code !== event.target.value) ?? "");
+              // Picking B's country as A swaps the pair instead of silently replacing B with the first country.
+              if (event.target.value === comparisonSecond) {
+                setComparisonSecond(previousFirst && previousFirst !== event.target.value
+                  ? previousFirst
+                  : availableCountries.find((code) => code !== event.target.value) ?? "");
+              }
             }}>{availableCountries.map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}</select>}</LabeledControl>
             <LabeledControl label="比较国家 B">{(id) => <select id={id} value={comparisonSecond} onChange={(event) => setComparisonSecond(event.target.value)}>
               {availableCountries.filter((code) => code !== comparisonFirst).map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}

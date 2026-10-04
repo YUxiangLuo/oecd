@@ -108,9 +108,11 @@ function fmt(v: number, unit: "amount" | "number"): string {
 }
 
 function disclosureAmount(value: number | null): string {
-  return value == null
-    ? "—"
-    : stripNegativeZero(value.toLocaleString("zh-CN", { maximumSignificantDigits: 6 }));
+  if (value == null) return "—";
+  // Six significant digits would round 1,067,093 to 1,067,090 and contradict the total shown
+  // above (formatted as a whole number), so large amounts keep every integer digit.
+  const options = Math.abs(value) >= 1e5 ? { maximumFractionDigits: 0 } : { maximumSignificantDigits: 6 };
+  return stripNegativeZero(value.toLocaleString("zh-CN", options));
 }
 
 function disclosureRatio(numerator: number | null, denominator: number | null): number | null {

@@ -211,6 +211,19 @@ export function IndicatorExplorer({
     query.status === "success" &&
     completeComposition &&
     materialComplete(pending, selected, metrics, timeView);
+  // Name the actual reason the material cannot be saved instead of one catch-all sentence.
+  const blockedReason =
+    selected.length < 2
+      ? "请选择两个不同国家后再保存。"
+      : query.status === "error"
+        ? "当前比较的数据加载失败，请重试后再保存。"
+        : query.status !== "success"
+          ? "正在加载当前比较的数据，请稍候。"
+          : timeView && chartYears.length < 2
+            ? "趋势至少需要两个年份；请把起始年份和结束年份设为不同年份。"
+            : !completeComposition
+              ? "构成图需要所有分项及正总量齐全；请更换国家、行业或年份。"
+              : "两国在所选范围内的读数不完整或不能配对（缺失不补零）；请调整年份范围或更换比较对象。";
   const matches =
     canSave &&
     materialKey(saved) === materialKey(pending) &&
@@ -311,7 +324,8 @@ export function IndicatorExplorer({
               onChange={(e) =>
                 select({
                   first: e.target.value,
-                  second: e.target.value === second ? "" : second,
+                  // Choosing B's country as A swaps the pair rather than dropping the comparison.
+                  second: e.target.value === second ? (first !== e.target.value ? first : "") : second,
                 })
               }
             >
@@ -664,9 +678,9 @@ export function IndicatorExplorer({
         <IcioYearNote years={chartYears} />
       </details>
       <section className="qualified-run-card" aria-label="报告材料">
-        <h3>报告材料 · {saved.length ? "已保存一份比较" : "尚未保存"}</h3>
+        <h3>报告材料 · {saved.length ? `已保存一份比较（${saved.length} 条读数）` : "尚未保存"}</h3>
         <p>
-          {composition ? "保存全部构成分项及总量，金额单位：百万美元" : metrics.map((key) => `${label(key)}（${unit(key)}）`).join("、")}
+          当前图表：{composition ? "保存全部构成分项及总量，金额单位：百万美元" : metrics.map((key) => `${label(key)}（${unit(key)}）`).join("、")}
           {" "}· {pending.length} 条有效读数{pending.length < expectedCount ? `，缺少 ${expectedCount - pending.length} 条` : ""}
         </p>
         <button className="primary" disabled={!canSave || matches || state.syncing} onClick={save}>
@@ -676,7 +690,7 @@ export function IndicatorExplorer({
           {view === "explore"
             ? "补充图表仅供探索；请回到主要图表保存材料。"
             : !validYears ? "请先修正年份范围，再保存当前比较。" : !canSave
-              ? "请选择两个不同国家并等待加载。趋势需至少两个共同有效年份，各指标的两国读数须配对；构成图还需所有分项及正总量齐全。缺失年份可调整范围，不补零。"
+              ? blockedReason
               : matches ? "当前图表与已记录材料一致。" : "保存将替换本步已有材料；浏览和切换图表不会修改已保存内容。"}
         </p>
         {saved.length > 0 && <details>

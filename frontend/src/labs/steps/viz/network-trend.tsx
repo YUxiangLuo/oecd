@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { IcioYearNote } from "./icio-year-note";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
@@ -45,6 +45,14 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
   const [industry, setIndustry] = useState(meta.sectors.includes(restored[0]?.industry ?? "") ? restored[0].industry! : meta.sectors.includes("C26") ? "C26" : meta.sectors[0] ?? "");
   const [metric, setMetric] = useState(restored[0]?.metric ?? "weighted degree");
   const [view, setView] = useState<"trend" | "ranking">(restored[0]?.source === "explicit-network-ranking" ? "ranking" : "trend");
+  // Picking an industry in the ranking unmounts the clicked button; move focus to the new scope line.
+  const scopeRef = useRef<HTMLParagraphElement>(null);
+  const [focusScope, setFocusScope] = useState(false);
+  useEffect(() => {
+    if (!focusScope) return;
+    scopeRef.current?.focus();
+    setFocusScope(false);
+  }, [focusScope]);
   const [year, setYear] = useState(restored[0]?.source === "explicit-network-ranking" && years.includes(restored[0].year) ? restored[0].year : years.at(-1)!);
   const [limit, setLimit] = useState(new Set(restored.map((item) => item.industry)).size > 10 ? 200 : 10);
   const metrics = schema?.groups.find((group) => group.key === "network")?.fields ?? COMMON_METRICS;
@@ -106,7 +114,8 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
       </select>}</LabeledControl>
       <LabeledControl label="国家 A">{(id) => <select id={id} name="network-country-a" value={first} onChange={(event) => {
         setFirst(event.target.value);
-        if (event.target.value === second) setSecond("");
+        // Choosing B's country as A swaps the pair rather than dropping the comparison.
+        if (event.target.value === second) setSecond(first !== event.target.value ? first : "");
       }}>{countries.map((country) => <option key={country} value={country}>{countryLabel(country)}</option>)}</select>}</LabeledControl>
       <LabeledControl label="对比国家 B">{(id) => <select id={id} name="network-country-b" value={second} onChange={(event) => setSecond(event.target.value)}>
         <option value="">暂不对比（不能保存报告材料）</option>
@@ -119,13 +128,13 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
         <LabeledControl label="显示行业">{(id) => <select id={id} value={limit} onChange={(event) => setLimit(Number(event.target.value))}><option value={10}>Top 10</option><option value={200}>全部行业</option></select>}</LabeledControl>
       </>}
     </div>
-    <p aria-label="当前比较口径"><strong>
+    <p ref={scopeRef} tabIndex={-1} aria-label="当前比较口径"><strong>
       {selected.map(countryLabel).join("与")} · {view === "trend" ? sectorLabel(industry) : "行业排名"} · {view === "trend" ? `${years[0]}–${years.at(-1)}` : year} · {label}
     </strong></p>
     <p className="muted">单位：{unit}。缺失不补零；网络指标不等于经济重要性，不能直接推断因果。</p>
     {(view === "trend" ? years.includes(2020) : year === 2020) && <p className="reg-boundary">2020 年含疫情期及统计外推影响，不宜仅凭该年转折判断生产调整。详见下方“指标口径”。</p>}
     {query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : <>
-      {view === "ranking" ? ranked.length ? <NetworkRanking rows={ranked} countries={selected} unit={unit} onIndustry={(next) => { setIndustry(next); setView("trend"); }} /> : <p role="status">该年份没有可用的行业排名，请更换指标或国家。</p> : <>
+      {view === "ranking" ? ranked.length ? <NetworkRanking rows={ranked} countries={selected} unit={unit} onIndustry={(next) => { setIndustry(next); setView("trend"); setFocusScope(true); }} /> : <p role="status">该年份没有可用的行业排名，请更换指标或国家。</p> : <>
       {finite.length ? <svg viewBox="0 0 800 335" role="img" aria-label={`${sectorLabel(industry)}历年${label}趋势，${selected.map(countryLabel).join("与")}；详细读数见下方表格`} style={{ width: "100%", display: "block" }}>
         <g aria-label="趋势图图例">
           {selected.map((country, index) => <g key={`legend-${country}`} transform={`translate(${470 + index * 145} 18)`}>

@@ -128,11 +128,13 @@ export function StudentWorkspace({
     session.unsynced || session.syncing, Boolean(session.syncError));
   const currentComparison = session.getStep<{ compared?: string[] }>(step.n)?.compared ?? [];
   let carriedComparison: string[] = [];
+  let carriedFromStep = 0;
   if (step.n >= 3 && step.n <= 9 && currentComparison.length < 2) {
     for (let prior = step.n - 1; prior >= 2; prior -= 1) {
       const candidates = session.getStep<{ compared?: string[] }>(prior)?.compared;
       if (Array.isArray(candidates) && candidates.length >= 2) {
         carriedComparison = candidates.slice(-2);
+        carriedFromStep = prior;
         break;
       }
     }
@@ -236,7 +238,7 @@ export function StudentWorkspace({
                     <div className="comparison-carry" role="note">
                       <div>
                         <b>保持同一组比较对象</b>
-                        <span>上一页使用了 {carriedComparison.join(" / ")}；本步可沿用，也可更换比较对象。沿用只设定比较对象，仍需在下方报告材料卡保存本步材料。</span>
+                        <span>{carriedFromStep === step.n - 1 ? "上一步" : `步骤 ${carriedFromStep} `}使用了 {carriedComparison.join(" / ")}；本步可沿用，也可更换比较对象。沿用只设定比较对象，仍需在下方报告材料卡保存本步材料。</span>
                       </div>
                       <button
                         type="button"

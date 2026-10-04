@@ -116,6 +116,11 @@ export function ShockLab({ meta, step: _step, state }: {
           </select>
         </label>
       </div>
+      {selectedCountries.includes("USA") && (
+        <p className="reg-boundary" role="note">
+          美国本身就是模拟加税的市场：w 是“销往美国的出口份额”，美国不会向自己出口，所以美国各年的 w、τ 和 X 都是 0。这不是数据缺失；它在回归中始终是未受模拟加税影响的单元。
+        </p>
+      )}
     </section>
     {query.status === "loading" && <div className="shock-panel-state shock-workbench-loading" role="status">正在读取教学关税面板…</div>}
     {query.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(query.error, "教学关税面板读取失败")} <button className="secondary" onClick={query.retry}>重试</button></div>}
