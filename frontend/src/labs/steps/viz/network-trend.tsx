@@ -7,6 +7,7 @@ import { countryLabel, sectorLabel } from "../../../viz";
 import { CAT } from "../../../viz/shared";
 import { HEAT_EVIDENCE_METRIC } from "../../../viz/views/network-heat";
 import { AsyncStateMessage, fmtDb, useAsync } from "../../shared";
+import { niceDomain } from "../../../viz/nice-ticks";
 import { currentReleaseId, type Row, type VizObservation } from "./scaffold";
 import { ComparisonSummary } from "./indicator-charts";
 import { defaultComparison } from "./indicator-model";
@@ -88,7 +89,8 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
     if (!canRecord || !release || matchesSaved) return;
     onRecord(selected, pendingObservations);
   };
-  const max = (Math.max(0, ...finite.map((point) => point.value!)) || 1) * 1.1;
+  const axis = niceDomain(0, Math.max(0, ...finite.map((point) => point.value!)) || 1);
+  const max = axis.hi;
   const x = (year: number) => 95 + (year - years[0]) / Math.max(1, years.at(-1)! - years[0]) * 650;
   const y = (value: number) => 280 - value / max * 235;
 
@@ -132,9 +134,9 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
             <text x={31} y={4} fontSize={12} fill="#374151">{countryLabel(country)}</text>
           </g>)}
         </g>
-        {[0, 1, 2, 3, 4].map((tick) => <g key={tick}>
-          <line x1={95} x2={745} y1={y(max * tick / 4)} y2={y(max * tick / 4)} stroke="#e5e7ef" />
-          <text x={85} y={y(max * tick / 4) + 4} textAnchor="end" fontSize={12} fill="#596173">{fmtDb(max * tick / 4)}</text>
+        {axis.ticks.map((tick) => <g key={tick}>
+          <line x1={95} x2={745} y1={y(tick)} y2={y(tick)} stroke="#e5e7ef" />
+          <text x={85} y={y(tick) + 4} textAnchor="end" fontSize={12} fill="#596173">{fmtDb(tick)}</text>
         </g>)}
         <text x={95} y={20} fontSize={12} fill="#596173">{unit}</text>
         {years.map((year) => <text key={year} x={x(year)} y={307} textAnchor="middle" fontSize={13} fill="#596173">{year}</text>)}

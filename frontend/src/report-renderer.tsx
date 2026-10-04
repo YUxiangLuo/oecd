@@ -3,6 +3,7 @@ import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ScrollableRegion } from "./a11y";
+import { niceDomain } from "./viz/nice-ticks";
 
 type ChartItem = { label: string; value: number };
 type ChartPoint = ChartItem & { se?: number; ci_low?: number; ci_high?: number };
@@ -210,13 +211,15 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
   const rawMin = Math.min(...values);
   const rawMax = Math.max(...values);
   const padding = (rawMax - rawMin || Math.max(Math.abs(rawMax), 1)) * 0.12;
-  const min = rawMin - padding;
-  const max = rawMax + padding;
+  // Non-negative series (amounts, shares, lengths) must not get a negative axis tick from padding.
+  const axis = niceDomain(rawMin >= 0 ? Math.max(0, rawMin - padding) : rawMin - padding, rawMax + padding, 3);
+  const min = axis.lo;
+  const max = axis.hi;
   const plotW = W - m.l - m.r;
   const plotH = H - m.t - m.b;
   const x = (label: string) => m.l + (labels.length === 1 ? plotW / 2 : labels.indexOf(label) / (labels.length - 1) * plotW);
   const y = (value: number) => m.t + (max - value) / (max - min) * plotH;
-  const ticks = [min, (min + max) / 2, max];
+  const ticks = axis.ticks;
 
   return (
     <ReportFigure title={chart.title ?? "两国历年趋势"}>

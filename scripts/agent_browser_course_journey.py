@@ -99,7 +99,7 @@ def main():
                 student.button("保存两国同年比较")
                 wait_saved(step, lambda row: {"CHN", "USA"}.issubset(row.get("compared", [])))
             elif 6 <= step <= 8:
-                student.button("沿用并记录到本步")
+                student.button("沿用这组比较对象")
                 student.run(
                     "wait",
                     "--fn",

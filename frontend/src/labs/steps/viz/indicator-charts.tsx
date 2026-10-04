@@ -1,6 +1,7 @@
 import { countryLabel } from "../../../viz";
 import { CAT } from "../../../viz/shared";
 import { changeReading, finiteValue } from "./indicator-model";
+import { niceDomain } from "../../../viz/nice-ticks";
 import type { Row } from "./scaffold";
 
 export const indicatorNumber = (value: number | null, unit: string) =>
@@ -110,13 +111,12 @@ export function IndicatorTrendChart({
   );
   if (!values.length)
     return <p role="status">该指标没有有效读数，请更换国家、行业或年份。</p>;
-  const lo = Math.min(0, ...values),
-    hi = Math.max(
-      0,
-      ...values,
-      metric === "GVCPs" || metric === "Pos_TPL" ? 1 : 0,
-    );
-  const extent = hi - lo || 1;
+  const axis = niceDomain(
+    Math.min(0, ...values),
+    Math.max(0, ...values, metric === "GVCPs" || metric === "Pos_TPL" ? 1 : 0),
+  );
+  const lo = axis.lo;
+  const extent = axis.hi - lo || 1;
   const y = (value: number) => 250 - ((value - lo) / extent) * 210;
   const x = (year: number) =>
     110 + ((year - years[0]) / Math.max(1, years.at(-1)! - years[0])) * 620;
@@ -144,23 +144,23 @@ export function IndicatorTrendChart({
             <text x={31} y={4} fontSize={12} fill="#374151">{countryLabel(country)}</text>
           </g>
         ))}
-        {[0, 1, 2, 3, 4].map((tick) => (
+        {axis.ticks.map((tick) => (
           <g key={tick}>
             <line
               x1={110}
               x2={730}
-              y1={y(lo + (extent * tick) / 4)}
-              y2={y(lo + (extent * tick) / 4)}
+              y1={y(tick)}
+              y2={y(tick)}
               stroke="#e2e5ee"
             />
             <text
               x={100}
-              y={y(lo + (extent * tick) / 4) + 4}
+              y={y(tick) + 4}
               textAnchor="end"
               fontSize={12}
               fill="#596173"
             >
-              {indicatorNumber(lo + (extent * tick) / 4, unit)}
+              {indicatorNumber(tick, unit)}
             </text>
           </g>
         ))}
@@ -249,12 +249,9 @@ export function LengthPositionTrajectory({
     points.flatMap((point) => [point.x, point.y]),
   );
   if (!values.length) return null;
-  const rawLo = Math.min(0, ...values);
-  const rawHi = Math.max(0, ...values);
-  const padding = (rawHi - rawLo || 1) * 0.06;
-  const lo = rawLo < 0 ? rawLo - padding : 0;
-  const hi = rawHi + padding;
-  const extent = hi - lo || 1;
+  const axis = niceDomain(Math.min(0, ...values), Math.max(0, ...values));
+  const lo = axis.lo;
+  const extent = axis.hi - lo || 1;
   const scale = (value: number) => ((value - lo) / extent) * 540;
   const x = (value: number) => 120 + scale(value);
   const y = (value: number) => 590 - scale(value);
@@ -291,17 +288,16 @@ export function LengthPositionTrajectory({
           <circle cx={58} cy={0} r={5} fill="#596173" />
           <text x={68} y={4} fontSize={11} fill="#596173">终点</text>
         </g>
-        {[0, 1, 2, 3, 4].map((tick) => {
-          const tickValue = lo + (extent * tick) / 4;
-          return <g key={tick}>
+        {axis.ticks.map((tickValue) => {
+          return <g key={tickValue}>
             <line x1={120} x2={660} y1={y(tickValue)} y2={y(tickValue)} stroke="#e2e5ee" />
             <line x1={x(tickValue)} x2={x(tickValue)} y1={50} y2={590} stroke="#e2e5ee" />
             <text x={110} y={y(tickValue) + 4} textAnchor="end" fontSize={12}>{indicatorNumber(tickValue, "生产阶段")}</text>
             <text x={x(tickValue)} y={615} textAnchor="middle" fontSize={12}>{indicatorNumber(tickValue, "生产阶段")}</text>
           </g>;
         })}
-        <line x1={x(lo)} y1={y(lo)} x2={x(hi)} y2={y(hi)} stroke="#8a6415" strokeDasharray="6 4" />
-        <text x={650} y={y(hi) + 18} textAnchor="end" fontSize={11}>前向 = 后向</text>
+        <line x1={x(lo)} y1={y(lo)} x2={x(axis.hi)} y2={y(axis.hi)} stroke="#8a6415" strokeDasharray="6 4" />
+        <text x={650} y={y(axis.hi) + 18} textAnchor="end" fontSize={11}>前向 = 后向</text>
         <text x={390} y={642} textAnchor="middle" fontSize={12}>后向 GVC 段长度</text>
         <text x={18} y={320} textAnchor="middle" fontSize={12} transform="rotate(-90 18 320)">前向 GVC 段长度</text>
         {series.map((points, countryIndex) => (

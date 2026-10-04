@@ -112,6 +112,9 @@ def _number(value: Any, *, p_value: bool = False) -> str:
         # A numerical tail probability may underflow to zero; do not print an exact zero.
         if numeric < 0.0001:
             return "<0.0001"
+    # Large amounts (e.g. million-USD flows) read better as grouped integers than as 4.584e+06.
+    if abs(numeric) >= 1000:
+        return f"{numeric:,.0f}"
     return f"{numeric:.4g}"
 
 
@@ -139,9 +142,9 @@ def _count(value: Any) -> str:
 
 
 def _signed(value: float, digits: int) -> str:
-    rounded = f"{value:+.{digits}f}"
+    rounded = f"{value:+,.{digits}f}"
     # Match the result card: a small nonzero estimate/CI endpoint is not zero.
-    return f"{value:+.2g}" if value != 0 and float(rounded) == 0 else rounded
+    return f"{value:+.2g}" if value != 0 and float(rounded.replace(",", "")) == 0 else rounded
 
 
 def _setting_value(key: str, value: Any) -> str:

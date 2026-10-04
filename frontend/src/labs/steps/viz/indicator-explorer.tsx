@@ -38,6 +38,13 @@ import {
   indicatorNumber,
 } from "./indicator-charts";
 
+/** "2020" for a single-year material (composition / same-year), "2016–2020" for a range. */
+function savedYearSpan(years: number[]): string {
+  const first = Math.min(...years);
+  const last = Math.max(...years);
+  return first === last ? `${first} 年` : `${first}–${last}`;
+}
+
 export function IndicatorExplorer({
   meta,
   step,
@@ -675,7 +682,7 @@ export function IndicatorExplorer({
         {saved.length > 0 && <details>
           <summary>核对已保存材料 · {saved.length} 条读数</summary>
           <p>
-            {[...new Set(saved.map((item) => item.country))].map(countryLabel).join(" 与 ")} · {Math.min(...saved.map((item) => item.year))}–{Math.max(...saved.map((item) => item.year))}
+            {[...new Set(saved.map((item) => item.country))].map(countryLabel).join(" 与 ")} · {savedYearSpan(saved.map((item) => item.year))}
             {" "}· {[...new Set(saved.map((item) => item.industry ?? ""))].map((industry) => industry ? sectorLabel(industry) : "国家整体").join("、")}
           </p>
           {table(saved)}

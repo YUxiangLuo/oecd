@@ -1,4 +1,5 @@
 import { ScrollableRegion } from "../../a11y";
+import { niceDomain } from "../nice-ticks";
 import { formatMetric } from "../../format";
 import { CAT, KEY_ECONOMIES, Legend, type Row, cardStyle, num, rowLabel, rowName, useTip } from "../shared";
 import { signedDomain, signedStack } from "../signed-layout";
@@ -156,10 +157,10 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
   const referencePts = requestedReferencePts.length ? requestedReferencePts : pts;
   const xs = referencePts.map((p) => p.x), ys = referencePts.map((p) => p.y);
   const avg = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / (arr.length || 1);
-  const [x0, x1] = spreadDomain(xs), [y0, y1] = spreadDomain(ys);
+  const xAxis = niceDomain(...spreadDomain(xs)), yAxis = niceDomain(...spreadDomain(ys));
+  const [x0, x1] = [xAxis.lo, xAxis.hi], [y0, y1] = [yAxis.lo, yAxis.hi];
   const px = (x: number) => m.l + ((x - x0) / (x1 - x0 || 1)) * (W - m.l - m.r);
   const py = (y: number) => H - m.b - ((y - y0) / (y1 - y0 || 1)) * (H - m.t - m.b);
-  const ticks = (lo: number, hi: number) => [0, 1, 2, 3, 4].map((i) => lo + ((hi - lo) / 4) * i);
   const xRef = refMode === "mean" ? avg(xs) : median(xs);
   const yRef = refMode === "mean" ? avg(ys) : median(ys);
   const showLabels = pts.length <= 24;
@@ -175,13 +176,13 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
       <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{yLabel} × {xLabel} <span style={{ fontSize: 10.5, color: "#5f6677", fontWeight: 400 }}>（参考线基于完整有效样本 n={referencePts.length}）</span></div>
       {pts.length === 0 ? <p className="muted" role="status">{yLabel} × {xLabel} 当前没有可显示的有效数据。</p> : (
       <svg viewBox={`0 0 ${W} ${H}`} width="100%">
-        {ticks(y0, y1).map((t, i) => (
+        {yAxis.ticks.map((t, i) => (
           <g key={`y${i}`}>
             <line x1={m.l} y1={py(t)} x2={W - m.r} y2={py(t)} stroke="#eef0f5" strokeWidth={1} />
             <text x={m.l - 8} y={py(t) + 4} textAnchor="end" fontSize="10.5" fill="#5f6677">{fmtAxis(t, yFormat)}</text>
           </g>
         ))}
-        {ticks(x0, x1).map((t, i) => (
+        {xAxis.ticks.map((t, i) => (
           <text key={`x${i}`} x={px(t)} y={H - m.b + 18} textAnchor="middle" fontSize="10.5" fill="#5f6677">{fmtAxis(t, xFormat)}</text>
         ))}
         {/* 象限参考线(中位数) */}

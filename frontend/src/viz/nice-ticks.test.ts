@@ -1,0 +1,23 @@
+import { describe, expect, test } from "bun:test";
+import { niceDomain } from "./nice-ticks";
+
+describe("niceDomain", () => {
+  test("rounds a share axis to readable steps instead of max ÷ 4", () => {
+    expect(niceDomain(0, 12.5).ticks).toEqual([0, 5, 10, 15]);
+    expect(niceDomain(0, 54.22).ticks).toEqual([0, 20, 40, 60]);
+  });
+
+  test("covers the data and keeps non-negative data at or above zero", () => {
+    const { lo, hi, ticks } = niceDomain(230_000, 2_813_427);
+    expect(lo).toBeLessThanOrEqual(230_000);
+    expect(lo).toBeGreaterThanOrEqual(0);
+    expect(hi).toBeGreaterThanOrEqual(2_813_427);
+    expect(ticks.every((tick) => Number.isInteger(tick / 500_000))).toBe(true);
+  });
+
+  test("handles negative ranges, a flat series and non-finite input", () => {
+    expect(niceDomain(-0.37, -0.3).ticks.every((tick) => tick <= 0)).toBe(true);
+    expect(niceDomain(3, 3).ticks.length).toBeGreaterThan(1);
+    expect(niceDomain(Number.NaN, 1)).toEqual({ lo: 0, hi: 1, ticks: [0, 0.25, 0.5, 0.75, 1] });
+  });
+});

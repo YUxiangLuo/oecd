@@ -114,6 +114,12 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
         metric = str(selected_metric) if selected_metric in available_metrics else available_metrics[0]
         view = selection.get("view") if isinstance(selection, dict) else None
         context = "构成演变 · " if view == "evolution" else "前后向 · " if view == "directions" else ""
+        # Industry-level trends (e.g. step 9) must name the industry, or the chart reads as a national total.
+        industries = sorted(
+            {str(item.get("industry") or "") for item in observations if item["metric"] == metric} - {""}
+        )
+        if len(industries) == 1:
+            context += f"{industries[0]} 行业 · "
         countries = [str(item) for item in _list_values(data.get("compared"))]
         series = []
         for country in countries:
@@ -173,13 +179,19 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
         }
         for item in selected
     ]
+    # Name the single year / industry the bars come from; otherwise the comparison has no stated scope.
+    selected_years = sorted({int(item["year"]) for item in selected})
+    selected_industries = sorted({str(item.get("industry") or "") for item in selected} - {""})
+    scope = f"{selected_years[0]} 年 · " if len(selected_years) == 1 else ""
+    if len(selected_industries) == 1:
+        scope += f"{selected_industries[0]} 行业 · "
     return {
         "version": 1,
         "type": "bar",
         "title": (
-            f"{title}：{_STUDENT_METRIC_LABELS.get(available_metrics[0], available_metrics[0])}同口径国家比较"
+            f"{title}：{scope}{_STUDENT_METRIC_LABELS.get(available_metrics[0], available_metrics[0])}同口径国家比较"
             if single_metric
-            else f"{title}：同口径国家比较"
+            else f"{title}：{scope}同口径国家比较"
         ),
         "y_label": y_label,
         "items": items,
