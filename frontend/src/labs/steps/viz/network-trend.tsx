@@ -130,9 +130,10 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
     </div>
     <p ref={scopeRef} tabIndex={-1} aria-label="当前比较口径"><strong>
       {selected.map(countryLabel).join("与")} · {view === "trend" ? sectorLabel(industry) : "行业排名"} · {view === "trend" ? `${years[0]}–${years.at(-1)}` : year} · {label}
-    </strong></p>
-    <p className="muted">单位：{unit}。缺失不补零；网络指标不等于经济重要性，不能直接推断因果。</p>
-    {(view === "trend" ? years.includes(2020) : year === 2020) && <p className="reg-boundary">2020 年含疫情期及统计外推影响，不宜仅凭该年转折判断生产调整。详见下方“指标口径”。</p>}
+    </strong>
+      {(view === "trend" ? years.includes(2020) : year === 2020) && <span className="viz-scope-caveat">含 2020 年：现价与疫情期外推，见下方“指标口径”</span>}
+    </p>
+    <p className="muted">单位：{unit}</p>
     {query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : <>
       {view === "ranking" ? ranked.length ? <NetworkRanking rows={ranked} countries={selected} unit={unit} onIndustry={(next) => { setIndustry(next); setView("trend"); setFocusScope(true); }} /> : <p role="status">该年份没有可用的行业排名，请更换指标或国家。</p> : <>
       {finite.length ? <svg viewBox="0 0 800 335" role="img" aria-label={`${sectorLabel(industry)}历年${label}趋势，${selected.map(countryLabel).join("与")}；详细读数见下方表格`} style={{ width: "100%", display: "block" }}>
@@ -174,16 +175,16 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
     </>}
     <details className="technical-details"><summary>指标口径</summary>
       <p>{schema?.fields[metric]?.desc}</p>
-      <p>两国使用同一指标、同一刻度。{view === "trend" ? "横轴为年份；缺失值留空，不跨缺失年份连线。" : "排名按国家 A 排序，不等于综合重要性。"}</p>
+      <p>缺失不补零；网络指标不等于经济重要性，不能直接推断因果。两国使用同一指标、同一刻度。{view === "trend" ? "横轴为年份；缺失值留空，不跨缺失年份连线。" : "排名按国家 A 排序，不等于综合重要性。"}</p>
       <IcioYearNote years={view === "trend" ? years : [year]} />
       <p>与步骤 5 同源：每年在完整全球国家×行业中间品网络上计算，包含国内联系与正自环。加权流量使用当年价格；拓扑指标未做边阈值敏感性分析。</p>
     </details>
     <section className="qualified-run-card" aria-label="步骤9报告材料">
-      <h3>报告材料 · 保存一份两国比较即可</h3>
+      <h3>报告材料 · {observations.length ? `已保存一份比较（${observations.length} 条读数）` : "尚未保存，保存一份两国比较即可"}</h3>
       <p><b>本次准备保存：</b>{selected.map(countryLabel).join(" 与 ")} · {label}（{unit}）</p>
       <p>{view === "trend" ? `${sectorLabel(industry)} · ${years[0]}–${years.at(-1)} 年趋势` : `${year} 年行业排名 · ${limit === 10 ? "Top 10" : "全部行业"} · 按国家 A 排序`} · {query.status === "success" ? `${pendingObservations.length} 条有效读数` : "等待数据加载"}</p>
       <div className="controls"><button className="primary" disabled={!canRecord || matchesSaved || syncing} onClick={record}>{matchesSaved ? "当前比较已记录" : observations.length ? "更新报告材料" : "保存为报告材料"}</button></div>
-      <p role="status">{!canRecord ? view === "trend" ? "尚不能保存：请选择两个不同国家，且两国至少有两个共同有效年份。" : "尚不能保存：请选择两个不同国家，且至少一个展示行业有两国有效读数。" : matchesSaved ? "当前图表与本步材料一致，无需重复记录。" : observations.length ? "当前图表尚未替换已有材料；点击更新后，以本次比较替换下面的记录。" : "点击保存，一次完成比较对象和指标读数的收集，不需要到明细表逐行操作。"}</p>
+      <p role="status">{!canRecord ? view === "trend" ? "尚不能保存：请选择两个不同国家，且两国至少有两个共同有效年份。" : "尚不能保存：请选择两个不同国家，且至少一个展示行业有两国有效读数。" : matchesSaved ? "当前图表与本步材料一致，无需重复记录。" : observations.length ? "当前图表尚未替换已有材料；点击更新后，以本次比较替换下面的记录。" : "点击保存，一次记录比较对象和全部读数。"}</p>
       {observations.length ? <details>
         <summary>核对已记录读数 · {observations.length} 条</summary>
         <p>{savedCountries.map(countryLabel).join(" 与 ")} · {schema?.fields[observations[0].metric ?? ""]?.label ?? observations[0].metric} · {observations[0].unit}</p>
@@ -192,8 +193,8 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
           <thead><tr><th>国家与行业</th><th>年份</th><th>数值</th></tr></thead>
           <tbody>{observations.map((item, index) => <tr key={index}><td>{countryLabel(item.country)} · {sectorLabel(item.industry ?? "")}</td><td>{item.year}</td><td>{fmtDb(item.value)}</td></tr>)}</tbody>
         </table></ScrollableRegion>
-      </details> : <p>已有材料：尚未收集。</p>}
-      {syncError ? <div role="alert">材料尚未成功同步，请重试。{onRetrySync && <button className="secondary" onClick={onRetrySync}>重试同步</button>}</div> : <p className="muted" role="status">{syncing ? "正在同步实验记录…" : "材料随本步实验记录自动同步；答题完成情况单独检查。"}</p>}
+      </details> : null}
+      {syncError ? <div role="alert">材料尚未成功同步，请重试。{onRetrySync && <button className="secondary" onClick={onRetrySync}>重试同步</button>}</div> : syncing && <p className="muted" role="status">正在同步实验记录…</p>}
     </section>
   </section>;
 }

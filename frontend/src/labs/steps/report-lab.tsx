@@ -360,7 +360,6 @@ export function ReportLab({
       <section className="report-roadmap" aria-label="报告完成清单">
         <span className="reg-section-step">最后一步 · 完成报告</span>
         <h2>检查材料，写出分析并提交</h2>
-        <p>系统会汇总已保存的实验材料和回归结果，不必重新抄表。回答三个问题，核对后提交给老师。</p>
         <ol>
           <li><b>1 · 检查实验材料</b><span>{state.syncError ? "保存失败，请先重试保存" : reportGate == null || sessionStatus !== "ready" ? "正在核对服务器记录" : sessionUnsynced || sessionSyncing ? "保存后将重新核对材料" : materialMissing.length ? `${materialMissing.length} 个步骤或条件待补齐，见下方入口` : "已保存材料与理解题已齐"}</span></li>
           <li><b>2 · 写下自己的分析</b><span>{writtenCount} / 3 段达到最低字数 · 内容仍需自己核对</span></li>
@@ -407,17 +406,18 @@ export function ReportLab({
         </div>
       </section>
 
-      {report && (
-        <div className={`report-version-notice${reportOutdated ? " outdated" : ""}`} role="status">
-          <b>{reportOutdated ? "报告尚未包含最新修改" : "报告为生成时的记录快照"}</b>
+      {/* Only an outdated snapshot needs a notice; the generation time is also on the status card below. */}
+      {report && reportOutdated && (
+        <div className="report-version-notice outdated" role="status">
+          <b>报告尚未包含最新修改</b>
           <p>生成时间：{fmtTime(report.generated_at)}。实验记录自动保存不会更新报告；修改后请先重新生成，再提交或导出。
             {report.state === "graded" && "重新生成会重新提交报告，并清除原评分。"}</p>
         </div>
       )}
       <section className="report-submit-panel" aria-label="提交报告">
         <h3>{report && report.state !== "draft" ? "报告已交给老师" : "核对完毕后，完成提交"}</h3>
-        <p>提交时会先保存文字，再由服务端检查材料并整理报告。无需另行上传PDF；导出仅用于个人留存。
-          {report?.state === "graded" && "重新生成并提交会替换已评阅报告并清除原评分，请确认需要修改。"}</p>
+        <p>提交前会先保存文字并检查材料；导出 PDF 仅供个人留存，不能代替提交。
+          {report?.state === "graded" && "重新生成并提交会替换已评阅报告并清除原评分。"}</p>
         {(!report || reportOutdated) && <button type="button" className="primary" disabled={busy} onClick={() => { void generate(true); }}>
           {submitting ? "正在提交报告…" : generating ? "正在整理报告…" : report ? "更新报告并提交给老师" : "生成并提交报告"}
         </button>}
@@ -451,7 +451,7 @@ export function ReportLab({
           <div className="report-body" tabIndex={-1} aria-label="报告正文"><ReportMarkdown markdown={report.markdown} /></div>
         </>
       ) : (
-        <p className="muted">也可以先用“根据实验记录生成报告”生成草稿预览，再点击“提交报告给老师”。不显著或无法推断的完整诊断也可以用于报告，不必追求显著结果。</p>
+        <p className="muted">也可以先生成草稿预览再提交；不显著或无法推断的诊断同样可以写进报告。</p>
       )}
       {outro && <ReportOutro report={outro} reportOutdated={reportOutdated} exportDisabled={busy} onClose={() => {
         setOutro(null);

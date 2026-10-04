@@ -484,9 +484,10 @@ export function IndicatorExplorer({
       </div>
       <p aria-label="当前比较口径"><strong>
         {selected.map(countryLabel).join("与")} · {view === "industry" ? "行业排名" : industry ? sectorLabel(industry) : "国家整体"} · {timeView ? `${start}–${end}` : year} · {composition ? "构成分析" : view === "directions" ? "前后向GVC段长度与位置" : view === "explore" ? `${label(topic.axes.x)} / ${label(topic.axes.y)}` : label(metric)}
-      </strong></p>
-      <p className="muted">{topic.key === "length" ? "长度是生产阶段的账户比值，不是跨境次数；国家结果不能用行业均值代替。" : "金额为当年价格，跨年变化不等于实际增长；国家份额不是行业份额的简单平均。"}</p>
-      {chartYears.includes(2020) && <p className="reg-boundary">2020 年含疫情期及统计外推影响，不宜仅凭该年转折判断生产调整。详见下方“指标口径”。</p>}
+      </strong>
+        {/* The 2020 caveat stays visible as a short pointer; its full text lives in “指标口径”. */}
+        {chartYears.includes(2020) && <span className="viz-scope-caveat">含 2020 年：现价与疫情期外推，见下方“指标口径”</span>}
+      </p>
       <div className="viz-chart">
       {!validYears ? <div className="error-box" role="alert">
         <p>保存记录中的年份范围无效，请重新选择年份。原有报告材料未更改。</p>
@@ -670,6 +671,7 @@ export function IndicatorExplorer({
       </div>
       <details className="technical-details">
         <summary>指标口径</summary>
+        <p className="muted">{topic.key === "length" ? "长度是生产阶段的账户比值，不是跨境次数；国家结果不能用行业均值代替。" : "金额为当年价格，跨年变化不等于实际增长；国家份额不是行业份额的简单平均。"}</p>
         <p className="muted">{topic.note}</p>
         {!composition && view !== "directions" && <p className="muted">
           {schema.data?.fields[metric]?.desc}
@@ -702,7 +704,7 @@ export function IndicatorExplorer({
           {table(saved)}
         </details>}
         {state.syncError ? <p role="alert">材料尚未同步成功。<button className="secondary" onClick={state.syncNow}>重试同步</button></p>
-          : <p className="muted">{state.syncing ? "正在同步实验记录…" : "材料随实验记录同步；还需在页面下方完成本步单选题。"}</p>}
+          : state.syncing && <p className="muted">正在同步实验记录…</p>}
       </section>
       <details className="technical-details" key={view === "explore" ? "explore" : "main"} open={view === "explore"}>
         <summary>补充图表</summary>

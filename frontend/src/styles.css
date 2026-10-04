@@ -743,13 +743,27 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 }
 .integrity-status b { color: #116b50; }
 
-.db-summary {
-  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  margin: 0 0 14px; color: #596173; font-size: 12px;
+/* 步骤 1：表格上方只留一行操作提示，读表规则、图例与恒等式收进同一行的折叠说明。 */
+.db-reading {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px;
+  margin: 0 0 10px; color: #596173; font-size: 12.5px; line-height: 1.6;
 }
-.db-summary span {
-  padding: 5px 8px; border: 1px solid #e7e9f0; border-radius: 7px; background: #fff;
+.db-reading-notes > summary {
+  cursor: pointer; color: #4b47e0; font-weight: 600; list-style: none;
 }
+.db-reading-notes > summary::-webkit-details-marker { display: none; }
+.db-reading-notes > summary::after { content: " ▸"; font-size: 10px; }
+.db-reading-notes[open] > summary::after { content: " ▾"; }
+.db-reading-notes[open] { flex-basis: 100%; }
+.db-reading-notes ul {
+  margin: 8px 0 2px; padding: 10px 14px 10px 28px; border: 1px solid #e7e9f0;
+  border-radius: 9px; background: #fafbfd; color: #4a5265;
+}
+.db-reading-notes li { margin: 3px 0; }
+.db-observation { margin: 0 0 8px; font-size: 12.5px; }
+.db-observation span { background: #ecebff; color: #3a37b8; font-weight: 600; }
+.db-observation span.empty { background: transparent; color: var(--text-muted); font-weight: 400; padding-left: 0; }
+.db-facts { margin: 4px 0 12px; }
 .db-table-seg button { min-width: 92px; }
 .db-table th, .db-table td { font-size: 12px; }
 
@@ -887,3 +901,15 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   .report-md .data-table thead { display: table-header-group; }
   .report-md .data-table tr { break-inside: avoid; }
 }
+
+/* 图表口径行末尾的 2020 年提醒：可见但不再单独占一个黄框。 */
+.viz-scope-caveat {
+  display: inline-block; margin-left: 10px; padding: 1px 8px; border-radius: 999px;
+  background: #fff4e5; color: #8a5a1f; font-size: 11px; font-weight: 600; vertical-align: 1px;
+}
+/* ChartStory：图上只留“看什么”，怎么读、试着观察与口径提醒收进同一个折叠。 */
+.chart-story-guide > summary { cursor: pointer; color: #4b47e0; font-size: 12px; font-weight: 600; }
+/* 第 10–14 步：参考性说明（税率设定、区间读法、样本与限制）统一收进一个折叠。 */
+.reg-fold { margin: 10px 0 2px; }
+.reg-fold > summary { cursor: pointer; color: #4b47e0; font-size: 12px; font-weight: 600; }
+.reg-fold[open] > summary { margin-bottom: 8px; }

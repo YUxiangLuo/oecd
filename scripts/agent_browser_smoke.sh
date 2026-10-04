@@ -140,7 +140,7 @@ done
 # 步骤 9 行业热力表（普通 + 全屏，全屏列最宽、偏移最容易暴露）。
 "${ab[@]}" open "$GVCSIM_BASE_URL/?step=1"
 "${ab[@]}" wait --load networkidle
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="开始本步")?.click()' >/dev/null
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="开始本步 ↓")?.click()' >/dev/null
 sleep 1
 for table_tab in "账户项" "中间投入 Z" "最终需求 Y"; do
   "${ab[@]}" eval "(() => { Array.from(document.querySelectorAll('main button')).find(b=>b.textContent.trim()==='${table_tab}')?.click(); return true; })()" >/dev/null
@@ -151,7 +151,7 @@ done
 
 "${ab[@]}" open "$GVCSIM_BASE_URL/?step=5"
 "${ab[@]}" wait --load networkidle
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="开始本步")?.click()' >/dev/null
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="开始本步 ↓")?.click()' >/dev/null
 sleep 1
 "${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>/显示接近中心性/.test(b.getAttribute("aria-label")||""))?.click()' >/dev/null
 sleep 1
@@ -163,7 +163,7 @@ assert_table_alignment
 
 "${ab[@]}" open "$GVCSIM_BASE_URL/?step=9"
 "${ab[@]}" wait --load networkidle
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="开始本步")?.click()' >/dev/null
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="开始本步 ↓")?.click()' >/dev/null
 sleep 1
 "${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="两国行业比较")?.click()' >/dev/null
 "${ab[@]}" wait --load networkidle

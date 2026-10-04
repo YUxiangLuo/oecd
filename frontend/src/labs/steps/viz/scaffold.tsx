@@ -170,31 +170,31 @@ export function ChartStory({ eyebrow, title, what, read, find, note, children }:
   note?: ReactNode;  // 口径 / 提醒(小字)
   children: ReactNode;
 }) {
-  const guide: [string, ReactNode, string][] = [
-    ["看什么", what, CAT[0]],
-    ["怎么读", read, CAT[1]],
-    ...(find ? ([["试着观察", find, CAT[2]]] as [string, ReactNode, string][]) : []),
+  // Only "what" stays above the chart; how to read, what to try and the caveat fold into one disclosure.
+  const guide: [string, ReactNode][] = [
+    ["怎么读", read],
+    ...(find ? ([["试着观察", find]] as [string, ReactNode][]) : []),
+    ...(note ? ([["口径提醒", note]] as [string, ReactNode][]) : []),
   ];
   return (
     <section style={{ marginBottom: 18 }}>
       <div style={{ marginBottom: 9 }}>
         {eyebrow && <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: ".06em", color: "#5f6677", textTransform: "uppercase" }}>{eyebrow}</div>}
         <h3 style={{ fontSize: 15, fontWeight: 700, color: "#1b1f2b", margin: "2px 0 0" }}>{title}</h3>
+        <p style={{ fontSize: 12.3, lineHeight: 1.65, color: "#4a5061", margin: "4px 0 0", maxWidth: PROSE_MAX }}>{what}</p>
       </div>
-      <div style={{ display: "grid", gap: 6, marginBottom: 11, maxWidth: PROSE_MAX }}>
-        {guide.map(([label, body, color]) => (
-          <div key={label} style={{ display: "flex", gap: 9, fontSize: 12.3, lineHeight: 1.65 }}>
-            <span style={{
-              flexShrink: 0, alignSelf: "flex-start", fontSize: 10.5, fontWeight: 700,
-              color: color === CAT[0] ? "#fff" : "#1b1f2b",
-              background: color, borderRadius: 5, padding: "2px 7px",
-            }}>{label}</span>
-            <span style={{ color: "#4a5061" }}>{body}</span>
-          </div>
-        ))}
-      </div>
+      <details className="chart-story-guide" style={{ marginBottom: 11, maxWidth: PROSE_MAX }}>
+        <summary>怎么读这张图</summary>
+        <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+          {guide.map(([label, body]) => (
+            <div key={label} style={{ display: "flex", gap: 9, fontSize: 12.3, lineHeight: 1.65 }}>
+              <b style={{ flexShrink: 0, color: "#1b1f2b", fontSize: 11.5 }}>{label}</b>
+              <span style={{ color: "#4a5061" }}>{body}</span>
+            </div>
+          ))}
+        </div>
+      </details>
       {children}
-      {note && <p style={{ fontSize: 11, color: "#5f6677", margin: "9px 2px 0", lineHeight: 1.6, maxWidth: PROSE_MAX }}>{note}</p>}
     </section>
   );
 }

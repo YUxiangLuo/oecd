@@ -53,7 +53,9 @@ describe("QuizPanel completion", () => {
     expect(screen.getByText(/报告材料：正在保存/)).toBeTruthy();
     expect(screen.queryByText(/报告材料：已齐全/)).toBeNull();
     rerender(view("ready"));
-    expect(screen.getByText(/报告材料：已齐全/)).toBeTruthy();
+    // Ready materials are already shown in the step task card, so the quiz block stays quiet.
+    expect(screen.queryByText(/报告材料：/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "去补齐材料" })).toBeNull();
   });
 
   test("keeps normal valid-release quiz submission available", () => {

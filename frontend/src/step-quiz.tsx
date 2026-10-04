@@ -111,12 +111,14 @@ export function QuizPanel({
     <section className={`quiz-box${complete ? " done" : ""}`} aria-labelledby={`quiz-title-${step.n}`} aria-busy={choicesLocked}>
       <div className="quiz-head">
         <div>
-          <span className="kicker">理解题完成条件</span>
+          <span className="kicker">理解题</span>
           <h3 id={`quiz-title-${step.n}`}>答对本步 {quiz.questions.length} 道单选题</h3>
         </div>
-        <span className="quiz-note">不限重试 · 全部答对即完成理解题</span>
+        {/* The draft-persistence rule is reference detail, so it lives in the badge's tooltip. */}
+        <span className="quiz-note" title="未提交的选择仅在本次登录的页面内暂存，切换步骤会保留；刷新或退出后不保留。答对并提交后才保存完成状态。">
+          不限重试 · 全部答对即完成
+        </span>
       </div>
-      <p className="muted">未提交的选择仅在本次登录的页面内暂存，切换步骤会保留；刷新或退出后不保留。答对并提交后才保存完成状态。</p>
       <div className="quiz-questions">
         {quiz.questions.map((question, index) => {
           const result = feedbackByQuestion.get(question.id);
@@ -157,10 +159,11 @@ export function QuizPanel({
         </button>
         <span className={complete ? "quiz-complete" : "muted"}>{completionMessage}</span>
       </div>
-      {materialStatus && <div className="quiz-submit-row">
+      {/* Ready materials are already shown in the task card; only a gap needs a prompt here. */}
+      {materialStatus && materialStatus !== "ready" && <div className="quiz-submit-row">
         <span className="muted">报告材料：{MATERIAL_STATUS_LABELS[materialStatus]}。理解题与报告材料分别记录。</span>
-        {onRecordMaterials && <button type="button" className="secondary" aria-controls={STEP_MATERIAL_ACTION_ID} onClick={onRecordMaterials}>
-          {materialStatus === "missing" ? "去补齐材料" : "查看实验材料"}
+        {onRecordMaterials && materialStatus === "missing" && <button type="button" className="secondary" aria-controls={STEP_MATERIAL_ACTION_ID} onClick={onRecordMaterials}>
+          去补齐材料
         </button>}
       </div>}
       {error && <div className="error-box" role="alert">{error}</div>}

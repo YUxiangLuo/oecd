@@ -140,23 +140,30 @@ export function RegressionResultCard({ outcome, response, sourceFilter }: {
           <div><span>平均变化（点估计）</span><b>{verdict.effect}</b></div>
           <div><span>估计的不确定性（{CLUSTER_INTERVAL_LABEL}）</span><b>{verdict.interval}</b></div>
         </div>
-        <p className="muted">区间表达平均关系估计的不确定性，不是各个国家结果的分布范围；包含 0 时，暂不能确定方向，不等于证明没有变化。</p>
-        {verdict.coefficient.ci_low != null && verdict.coefficient.ci_high != null && <p className="muted reg-inference-note">{CLUSTER_INTERVAL_NOTE}</p>}
       </>)}
-      {!suppressed && verdict.coefficient && response.model_snapshot && <div className="reg-simulation-comparison">
-        <p><b>与生成时的预设关系比较</b>（同按 X 增加 1 个百分点换算）</p>
-        <p>预设：{teachingEffect(outcome, response.model_snapshot.beta)}；估计：{teachingEffect(outcome, verdict.coefficient.coef)}；差值（估计 − 预设）：{teachingEffect(outcome, verdict.coefficient.coef - response.model_snapshot.beta)}。</p>
-        <p className="muted">扰动使估计与预设不必相同；单次 95% 区间也不保证包含预设值。</p>
-      </div>}
       <p className="reg-writing-hint"><b>解释限制：</b>{lesson.dontClaim}</p>
-      <p className="muted">使用的年度记录：{response.result.n_obs.toLocaleString("zh-CN")}，来自 {response.result.n_entities.toLocaleString("zh-CN")} 个国家×行业单元、{response.result.n_clusters} 个国家聚类。模型扣除了各单元的固定差异和各年份的共同变化。</p>
-      {sourceFilter && <div className="reg-source-filter">
-        <p><b>教学样本的来源：</b>首年排除 ROW 后有 {sourceFilter.source_baseline_rows.toLocaleString("zh-CN")} 个候选单元，生成面板时剔除 {sourceFilter.excluded_source_baseline_rows.toLocaleString("zh-CN")} 个，保留 {sourceFilter.published_entities.toLocaleString("zh-CN")} 个供四项回归共同使用。</p>
-        <p className="muted">共同规则：首年四类指标及销往美国的出口份额均有效；两类份额和出口份额在 0–1 内，长度大于 0，介数不小于 0。这些单元用于构造模拟样本，不能据此概括全部国家—行业的现实变化。</p>
-      </div>}
-      {response.result.sample_flow && <p className="muted">回归阶段：输入 {response.result.sample_flow.input_rows.toLocaleString("zh-CN")} 行模拟年度记录，另剔除 {response.result.sample_flow.dropped_rows_total.toLocaleString("zh-CN")} 行；上述生成阶段的剔除以单元计。</p>}
-      <p className="verdict-boundary"><b>模拟免责声明：</b>X 与 Y 都由课程生成，仅用于练习读数；不是现实关税、OECD 观测结果或政策因果效应。</p>
-      <p className="muted">本实验没有生成冲击后的投入产出表或网络，模拟 Y 的方向不表示实际生产结构、链长或拓扑位置已经改变。</p>
+      {/* Reading notes, the preset comparison, sample accounting and the repeated disclaimer are reference
+          detail; the page-level boundary note and the card's “教学模拟” label keep the simulation status visible. */}
+      <details className="reg-fold">
+        <summary>结果说明：区间读法、与预设关系比较、样本与限制</summary>
+        {!suppressed && verdict.coefficient && <>
+          <p className="muted">区间表达平均关系估计的不确定性，不是各个国家结果的分布范围；包含 0 时，暂不能确定方向，不等于证明没有变化。</p>
+          {verdict.coefficient.ci_low != null && verdict.coefficient.ci_high != null && <p className="muted reg-inference-note">{CLUSTER_INTERVAL_NOTE}</p>}
+        </>}
+        {!suppressed && verdict.coefficient && response.model_snapshot && <div className="reg-simulation-comparison">
+          <p><b>与生成时的预设关系比较</b>（同按 X 增加 1 个百分点换算）</p>
+          <p>预设：{teachingEffect(outcome, response.model_snapshot.beta)}；估计：{teachingEffect(outcome, verdict.coefficient.coef)}；差值（估计 − 预设）：{teachingEffect(outcome, verdict.coefficient.coef - response.model_snapshot.beta)}。</p>
+          <p className="muted">扰动使估计与预设不必相同；单次 95% 区间也不保证包含预设值。</p>
+        </div>}
+        <p className="muted">使用的年度记录：{response.result.n_obs.toLocaleString("zh-CN")}，来自 {response.result.n_entities.toLocaleString("zh-CN")} 个国家×行业单元、{response.result.n_clusters} 个国家聚类。模型扣除了各单元的固定差异和各年份的共同变化。</p>
+        {sourceFilter && <div className="reg-source-filter">
+          <p><b>教学样本的来源：</b>首年排除 ROW 后有 {sourceFilter.source_baseline_rows.toLocaleString("zh-CN")} 个候选单元，生成面板时剔除 {sourceFilter.excluded_source_baseline_rows.toLocaleString("zh-CN")} 个，保留 {sourceFilter.published_entities.toLocaleString("zh-CN")} 个供四项回归共同使用。</p>
+          <p className="muted">共同规则：首年四类指标及销往美国的出口份额均有效；两类份额和出口份额在 0–1 内，长度大于 0，介数不小于 0。这些单元用于构造模拟样本，不能据此概括全部国家—行业的现实变化。</p>
+        </div>}
+        {response.result.sample_flow && <p className="muted">回归阶段：输入 {response.result.sample_flow.input_rows.toLocaleString("zh-CN")} 行模拟年度记录，另剔除 {response.result.sample_flow.dropped_rows_total.toLocaleString("zh-CN")} 行；上述生成阶段的剔除以单元计。</p>}
+        <p className="verdict-boundary"><b>模拟免责声明：</b>X 与 Y 都由课程生成，仅用于练习读数；不是现实关税、OECD 观测结果或政策因果效应。</p>
+        <p className="muted">本实验没有生成冲击后的投入产出表或网络，模拟 Y 的方向不表示实际生产结构、链长或拓扑位置已经改变。</p>
+      </details>
     </section>
   );
 }
@@ -479,11 +486,8 @@ export function RegressionRunLab({
         <span className="reg-section-step">本步变量</span>
         <h3>{lessonQuestion(outcome)}</h3>
         <p className="reg-learning-focus"><b>本步学会一件事：</b>{lesson.learnThis}</p>
-        <div className="reg-variable-plain-grid">
-          <div><b>解释变量（X）</b><span>模拟关税暴露，数值越大表示模拟暴露越强。</span></div>
-          <div><b>结果变量（Y）</b><span>教学模拟：{lesson.shortMetric}。</span></div>
-        </div>
-        <p className="muted">沿用步骤 10 选出的 {countryLabel(firstCountry)}、{countryLabel(secondCountry)} 和 {sectorLabel(teachingIndustry)}，先看五年示例。它帮助理解数据，但正式计算使用完整国家×行业面板。</p>
+        {/* X and Y are defined once, in the run card below. */}
+        <p className="muted">五年示例：{countryLabel(firstCountry)}、{countryLabel(secondCountry)} · {sectorLabel(teachingIndustry)}（沿用步骤 10；正式计算使用完整国家×行业面板）</p>
         {teachingSeries.status === "loading" && <p className="muted" role="status">正在读取两国五年示例…</p>}
         {teachingSeries.status === "error" && teachingSeries.error && (
           <RegressionRequestError label="两国五年示例" error={teachingSeries.error} onRetry={teachingSeries.retry} />
@@ -534,7 +538,6 @@ export function RegressionRunLab({
           <span><b>解释变量（X）</b>模拟关税暴露强度</span>
           <span><b>结果变量（Y）</b>教学模拟：{lesson.shortMetric}</span>
           <span><b>读数单位</b>{lesson.unit}</span>
-          <span><b>怎样比较</b>X 每增加 1 个百分点时，观察 Y 平均怎样变化</span>
           <span><b>系统固定</b>使用完整国家×行业年度面板；学生无需选择计算方法</span>
         </div>
         <div className="reg-boundary">X 与 Y 都是教学模拟数据，不代表现实政策或 OECD 观测结果。</div>

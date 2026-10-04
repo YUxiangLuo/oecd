@@ -121,8 +121,8 @@ export function IcioExperiment({ topic }: { topic: IndicatorTopic }) {
       <section className="icio-results" aria-label="教学指标计算结果"><h3>③ 看见指标结果</h3>
         <div>{fields[topic].map(([key, label]) => <article key={key}><span>{label}</span><strong>{fmtDb(scenario[topic][node][key])}</strong><small>{topic === "length" ? "无量纲" : "元"}</small></article>)}</div>
       </section>
-      <p className="icio-boundary">{topic === "trade" ? "这些无循环示例的重复计算项为0；重复跨境不自动等于重复计算。税收项也设为0，真实ICIO另计产品税减补贴（TLS）。" : topic === "length" ? "长度不是跨境次数。试着在国内加工与跨国加工之间切换：跨境改变了，长度不一定变。— 表示对应活动不存在、比值未定义。" : "简单与复杂GVC按价值经过的跨境路径区分；第二次跨境也可以是最终品。复杂GVC占比高不自动代表收益更高。"}</p>
       <details><summary>从这个小例子到真实ICIO：完整计算口径</summary>
+        <p className="icio-boundary">{topic === "trade" ? "这些无循环示例的重复计算项为0；重复跨境不自动等于重复计算。税收项也设为0，真实ICIO另计产品税减补贴（TLS）。" : topic === "length" ? "长度不是跨境次数。试着在国内加工与跨国加工之间切换：跨境改变了，长度不一定变。— 表示对应活动不存在、比值未定义。" : "简单与复杂GVC按价值经过的跨境路径区分；第二次跨境也可以是最终品。复杂GVC占比高不自动代表收益更高。"}</p>
         <p>Z是中间投入，Y是最终需求。Aᵢⱼ = Zᵢⱼ / xⱼ，vᵢ = VAᵢ / xᵢ，B = (I − A)⁻¹。B把直接和间接的生产需求全部累计起来；各国国内逆矩阵与跨境投入块进一步区分价值路径。</p>
         <p>本例只有最多两道生产环节，没有循环投入，因此A² = 0，B = I + A。下表每格显示“直接系数A → 累计系数B”。</p>
         <div className="icio-table-scroll"><table><caption>投入系数的计算结果</caption><thead><tr><th scope="col">来源 / 生产行业</th>{active.map((j) => <th key={j} scope="col">{scenario.nodes[j]}</th>)}</tr></thead>

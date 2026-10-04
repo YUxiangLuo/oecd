@@ -73,24 +73,25 @@ export function StepTaskCard({
         </div>
       </div>
       {!compact && <>
-      <ol className="step-task-list">
-        {step.tasks.map((task) => <li key={task}>{task}</li>)}
-      </ol>
-      <div className="step-task-actions">
+      {/* Tasks read as one light flow line; jump links and the rationale share the row's end. */}
+      <div className="step-task-row">
+        <ol className="step-task-list">
+          {step.tasks.map((task) => <li key={task}>{task}</li>)}
+        </ol>
         <button
           type="button"
-          className="primary"
+          className="step-task-link"
           aria-controls={STEP_PRIMARY_ACTION_ID}
           onClick={() => focusStepPrimaryAction(contentRef.current)}
         >
-          开始本步
+          开始本步 ↓
         </button>
         {step.n >= 2 && step.n <= 4 && <button
           type="button"
-          className="secondary"
+          className="step-task-link"
           aria-controls={STEP_MATERIAL_ACTION_ID}
           onClick={() => focusStepPrimaryAction(contentRef.current, STEP_MATERIAL_ACTION_ID)}
-        >记录实验结果</button>}
+        >记录实验结果 ↓</button>}
         <details className="step-task-context">
           <summary>为什么做这一步</summary>
           <p>{step.concept}</p>

@@ -698,15 +698,6 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
 
   return (
     <div>
-      <ReleaseIntegrityStatus meta={releaseMeta} />
-      <div className="db-summary">
-        <span>原始年份 {meta.years[0]}-{meta.years.at(-1)}</span>
-        <span>{meta.countries.includes("ROW") ? meta.countries.length - 1 : meta.countries.length} 个具名经济体 + ROW 剩余地区账户</span>
-        <span>{meta.sectors.length} 个行业</span>
-        <span>{meta.n_rows.toLocaleString("zh-CN")} 行 × {meta.n_columns.toLocaleString("zh-CN")} 列</span>
-        {selectedFile && <span>{selectedFile.file}</span>}
-      </div>
-
       <FullscreenPanel
         title={`步骤 1 · ${activeTable.label}原始数据表`}
         variant="table"
@@ -739,7 +730,6 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
             </button>
           ))}
         </div>
-        <span className="muted">{activeTable.hint}</span>
       </div>
 
       <div className="controls">
@@ -779,9 +769,9 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
             </LabeledControl>
           </>
         )}
-        <span className="muted" role="status">
-          {slice ? `本切片 ${slice.total} 个供给行业行` : sliceStatus === "error" ? "加载失败" : "加载中…"}
-        </span>
+        {!slice && (
+          <span className="muted" role="status">{sliceStatus === "error" ? "加载失败" : "加载中…"}</span>
+        )}
       </div>
 
       {sliceError && (
@@ -790,24 +780,31 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
           <button type="button" className="secondary" onClick={retrySlice}>重试</button>
         </div>
       )}
-      <div className="tipbox db-fullscreen-note" style={{ marginBottom: 10 }}>
-        <b>怎么读这张表：</b>{HOW_TO_READ[table]}
-      </div>
-      <div className="tipbox db-fullscreen-note" style={{ marginBottom: 10 }}>
-        <b>记录一个观察值：</b>所有数值单位均为 <b>Million USD（百万美元）</b>。点击数值单元格即记录该值{table === "accounts" ? "" : "并自动进入全屏查看，便于核对行列方向"}。系统只在明确激活时保存该格的行、列与数值。切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格；记录另一个单元格才会覆盖。
-      </div>
-      <div className="tipbox db-fullscreen-note" style={{ marginBottom: 10 }}>
-        <b>账户与符号图例（始终适用）：</b> {STEP1_ACCOUNT_LEGEND}
-      </div>
-      <div className="observation-strip" aria-live="polite">
-        <b>已选原始数据点</b>
+      <div className="observation-strip db-observation" aria-live="polite">
+        <b>已记录的观察值</b>
         {selectedObservation ? (
           <span>
             {/* 观察值跨表页签保留；读法必须用记录时的表类型,不能用当前页签的。 */}
             {dbObservationSentence((selectedObservation.table as DbTableKind | undefined) ?? table, selectedObservation.row, selectedObservation.column)} = {fmtDb(selectedObservation.value)} Million USD（百万美元）
             {observationSource ? `（${observationSource}）` : ""}
           </span>
-        ) : <span>尚未选择</span>}
+        ) : <span className="empty">尚未记录</span>}
+      </div>
+      {/* One action line; the reading rules, legend and identities live in a single fold-out. */}
+      <div className="db-reading db-fullscreen-note">
+        <span>
+          点击任一数值即可记录{table === "accounts" ? "" : "（并全屏核对方向）"}：
+          {table === "accounts" ? "行是国家×行业，列是账户项" : `行是供给方，列是${table === "y" ? "最终需求" : "使用方"}`}；单位均为百万美元。
+        </span>
+        <details className="db-reading-notes">
+          <summary>读表说明</summary>
+          <ul>
+            <li><b>怎么读：</b>{HOW_TO_READ[table]}</li>
+            <li><b>记录规则：</b>只有点击数值才会保存该格的行、列与数值；切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格，记录另一个单元格才会覆盖。</li>
+            <li><b>账户与符号：</b>{STEP1_ACCOUNT_LEGEND}</li>
+            {table !== "accounts" && <li><b>恒等式：</b>{STEP1_OUT_IDENTITY_GUIDE} 差额来自未展示的国家、行业或最终需求列。</li>}
+          </ul>
+        </details>
       </div>
       <DbSliceTable
         slice={slice}
@@ -828,11 +825,6 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
           setCellExpandSignal((value) => value + 1);
         }}
       />
-      {table !== "accounts" && slice && (
-        <div className="tipbox db-fullscreen-note" style={{ marginTop: 12 }}>
-          两条完整口径恒等式：<b>{STEP1_OUT_IDENTITY_GUIDE}</b> 差额来自未展示的国家、行业或最终需求列。
-        </div>
-      )}
       <div style={{ marginTop: 12 }}>
         <Pager page={page} pages={pages} total={slice?.total} onChange={setPage} />
       </div>
@@ -841,6 +833,11 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
       {/* 单层折叠：早前这里是“外层 details 套一个内层 details”，学生要点击两次才能看到正文。 */}
       <details className="card accent concept-card db-structure-details">
         <summary className="kicker">进一步理解 ICIO 表结构与账户项</summary>
+        {/* Dataset facts and the integrity check need no student action, so they sit here, not above the table. */}
+        <ReleaseIntegrityStatus meta={releaseMeta} />
+        <p className="muted db-facts">
+          原始年份 {meta.years[0]}–{meta.years.at(-1)} · {meta.countries.includes("ROW") ? meta.countries.length - 1 : meta.countries.length} 个具名经济体 + ROW 剩余地区账户 · {meta.sectors.length} 个行业 · {meta.n_rows.toLocaleString("zh-CN")} 行 × {meta.n_columns.toLocaleString("zh-CN")} 列{selectedFile ? ` · 当前文件 ${selectedFile.file}` : ""}
+        </p>
         <DatabaseGuide meta={meta} releaseMeta={releaseMeta} />
       </details>
     </div>
