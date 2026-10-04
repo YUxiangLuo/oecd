@@ -236,7 +236,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             {
                 "step": 1,
                 "title": _STEP_TITLES.get(1, ""),
-                "missing": ["请在 ICIO 表中点击并记录一个具体单元格"],
+                "missing": ["请打开本步并等待表格加载，系统会自动记录一个单元格（也可点击其他单元格替换）"],
             }
         )
 

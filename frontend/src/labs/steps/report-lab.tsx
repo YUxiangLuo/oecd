@@ -30,11 +30,13 @@ const REFLECTION_FIELDS: {
   key: keyof Pick<ReportReflectionState, "research_question" | "evidence_interpretation" | "limitations">;
   label: string;
   prompt: string;
+  /** Sentence starter shown only as placeholder text; never written into the report. */
+  starter: string;
   min: number;
 }[] = [
-  { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请区分真实ICIO比较和模拟关税回归。", min: 12 },
-  { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间。比较四项回归结果；无法推断时写明原因，不要写成“没有效应”。", min: 40 },
-  { key: "limitations", label: "局限与反思", prompt: "模拟关税X与结果Y不能证明真实政策效果。我的比较还有哪些限制？哪些结论不能推出？下一步需要什么数据或检验？", min: 30 },
+  { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请区分真实ICIO比较和模拟关税回归。", starter: "句式参考：本实验比较了……和……的……指标，想了解……；并用模拟关税数据练习读回归结果。", min: 12 },
+  { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间。比较四项回归结果；无法推断时写明原因，不要写成“没有效应”。", starter: "句式参考：步骤……显示，……在……年的……为……；步骤 11 的回归估计 X 每增加 1 个百分点，Y 平均……，95% 区间为……。", min: 40 },
+  { key: "limitations", label: "局限与反思", prompt: "模拟关税X与结果Y不能证明真实政策效果。我的比较还有哪些限制？哪些结论不能推出？下一步需要什么数据或检验？", starter: "句式参考：X 与 Y 都是教学模拟数据，因此……；我的比较只覆盖……；若要进一步验证，需要……。", min: 30 },
 ];
 
 export const REPORT_REFLECTION_TITLE_ID = "report-reflection-title";
@@ -395,7 +397,7 @@ export function ReportLab({
                   value={value}
                   rows={field.key === "research_question" ? 2 : 4}
                   maxLength={REFLECTION_MAX_LENGTH}
-                  placeholder="在这里写下你的分析，输入后自动保存…"
+                  placeholder={`${field.starter}\n（输入后自动保存）`}
                   data-report-reflection-incomplete={length < field.min ? "true" : undefined}
                   disabled={busy}
                   onChange={(event) => state.save({ [field.key]: event.target.value })}

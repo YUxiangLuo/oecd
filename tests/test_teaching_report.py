@@ -648,7 +648,7 @@ def test_production_share_report_copy_forbids_scale_overstatement():
 def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     blocked = check_gate(empty_session())
     assert set(GATE_STEPS) <= {item["step"] for item in blocked}
-    assert any(item["step"] == 1 and "具体单元格" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 1 and "自动记录一个单元格" in "".join(item["missing"]) for item in blocked)
     # Steps 2–5 record automatically from the country being viewed; no save button is named.
     assert all(
         any(item["step"] == step and "自动记录" in "".join(item["missing"]) for item in blocked) for step in range(2, 6)
@@ -669,7 +669,7 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     assert len(blocked) == len({item["step"] for item in blocked})
     by_step = {item["step"]: item for item in blocked}
     assert "理解检查" in "".join(by_step[1]["missing"])
-    assert "具体单元格" in "".join(by_step[1]["missing"])
+    assert "自动记录一个单元格" in "".join(by_step[1]["missing"])
     assert "理解检查" in "".join(by_step[6]["missing"])
     assert "恰好两个国家" in "".join(by_step[6]["missing"])
     assert "理解检查" in "".join(by_step[12]["missing"])
@@ -1374,7 +1374,7 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
     assert "×" not in report.markdown.split("记录的单元格")[1].split("\n")[0]
     assert "年份=2020" in report.markdown
     assert "表=z" in report.markdown
-    assert "主动比较：CHN、USA" in report.markdown
+    assert "比较对象：CHN、USA" in report.markdown
     assert "| CHN | 2020 | 复杂 GVC 生产份额 | 比例 | 0.12 |" in report.markdown
     assert "仅用于探索定位，不限定下游回归样本" in report.markdown
     assert "按所选冲击类型汇总该类型全部已编码事件" in report.markdown
@@ -1448,6 +1448,30 @@ def test_report_binds_step1_cell_to_the_slice_it_was_captured_from(tmp_path, mon
     assert "表=z" in markdown
     assert "表=y" not in markdown.split("### 步骤 1")[1].split("###")[0]
     assert "年份=2019" not in markdown.split("### 步骤 1")[1].split("###")[0]
+
+
+def test_report_says_when_the_step1_cell_was_recorded_by_default(tmp_path, monkeypatch):
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    observation = {
+        "row": "CHN_D01T02",
+        "column": "USA_D01T02",
+        "value": 228.0672,
+        "year": 2020,
+        "table": "z",
+        "row_country": "CHN",
+        "col_country": "USA",
+    }
+    session["steps"]["1"]["data"]["observation"] = {**observation, "auto": True}
+    step1 = build(session, "同学").markdown
+    assert "- 记录的单元格（系统默认记录，学生未另选）：CHN_D01T02(行·供给方)" in step1
+    assert all(item["step"] != 1 for item in check_material_gate(session))
+
+    session["steps"]["1"]["data"]["observation"] = observation
+    step1 = build(session, "同学").markdown
+    assert "- 记录的单元格：CHN_D01T02(行·供给方)" in step1
+    assert "系统默认记录" not in step1
 
 
 def test_report_observation_reading_states_supply_direction_per_table():

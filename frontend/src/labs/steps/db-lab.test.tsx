@@ -91,14 +91,25 @@ describe("step 1 cell activation", () => {
 
     const cell = await screen.findByTitle(/ → .+ 百万美元 · 点击记录这个观察值$/);
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(saved).toHaveLength(0);
+    // Without any click, the largest positive cell is recorded by default and marked as such.
+    await waitFor(() => expect(saved).toHaveLength(1));
+    const automatic = saved[0] as { observation?: { auto?: boolean; value?: number } };
+    expect(automatic.observation?.auto).toBe(true);
+    const values = SLICE.rows.flatMap((row) => SLICE.columns.map((column) => row[column]))
+      .filter((value): value is number => typeof value === "number" && value > 0);
+    expect(automatic.observation?.value).toBe(Math.max(...values));
+    expect(screen.queryByRole("dialog")).toBeNull();
 
     await act(async () => { fireEvent.click(cell); });
 
-    // The observation is still recorded ...
-    const recorded = saved.filter((patch) => (patch as { observation?: unknown }).observation);
+    // A click replaces the default with the student's own cell ...
+    const recorded = saved.filter((patch) => {
+      const observation = (patch as { observation?: { auto?: boolean } }).observation;
+      return observation && !observation.auto;
+    });
     expect(recorded).toHaveLength(1);
-    const patch = recorded[0] as { observation?: { row?: string; column?: string; value?: number } };
+    const patch = recorded[0] as { observation?: { row?: string; column?: string; value?: number; auto?: boolean } };
+    expect(patch.observation?.auto).toBeUndefined();
     expect(patch.observation?.row).toBe("CHN_D01T02");
     expect(patch.observation?.column).toBe("USA_D01T02");
     expect(patch.observation?.value).toBeCloseTo(228.0672, 6);
@@ -139,7 +150,10 @@ describe("step 1 cell activation", () => {
 
     await act(async () => { fireEvent.click(cell); });
 
-    const csaved = saved.filter((patch) => (patch as { observation?: unknown }).observation);
+    const csaved = saved.filter((patch) => {
+      const observation = (patch as { observation?: { auto?: boolean } }).observation;
+      return observation && !observation.auto;
+    });
     expect(csaved).toHaveLength(1);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.querySelector(".fullscreen-panel--expanded")).toBeNull();

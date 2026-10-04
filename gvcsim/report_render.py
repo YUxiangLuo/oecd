@@ -34,7 +34,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
     lines = [
         "## 保存的实验快照",
         "",
-        "本节只记录学生实际保存的操作和结果，不记录默认视图。",
+        "本节列出各步记录的材料：多数由系统按学生实际查看的页面自动记录，学生另选或运行的结果以学生操作为准；系统默认的项目已注明。",
         "",
     ]
     captured = False
@@ -69,7 +69,8 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             )
             lines.append(f"- 保存的切片：{selection or '—'}")
         if observation:
-            lines.append(f"- 记录的单元格：{_observation_reading(observation)}")
+            label = "记录的单元格（系统默认记录，学生未另选）" if observation.get("auto") is True else "记录的单元格"
+            lines.append(f"- {label}：{_observation_reading(observation)}")
         lines.append("")
 
     for step in range(2, 10):
@@ -105,7 +106,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             automatic = bool(observations) and all(
                 item.get("source") == "auto-indicator-comparison" for item in observations
             )
-            compared_label = "系统自动记录的比较" if automatic else "主动比较"
+            compared_label = "系统自动记录的比较" if automatic else "比较对象"
             lines.append(f"- {compared_label}：{'、'.join(_safe(item) for item in compared)}")
         if observations:
             if step in (6, 7, 8, 9) and any(item.get("year") == 2020 for item in observations):

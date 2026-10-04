@@ -230,7 +230,7 @@ export function StudentWorkspace({
                     <div className="comparison-carry" role="note">
                       <div>
                         <b>保持同一组比较对象</b>
-                        <span>{carriedFromStep === step.n - 1 ? "上一步" : `步骤 ${carriedFromStep} `}使用了 {carriedComparison.join(" / ")}；本步可沿用，也可更换比较对象。沿用只设定比较对象，仍需在下方报告材料卡保存本步材料。</span>
+                        <span>{carriedFromStep === step.n - 1 ? "上一步" : `步骤 ${carriedFromStep} `}使用了 {carriedComparison.join(" / ")}；本步可沿用，也可更换比较对象。沿用后，本步图表会自动记录为报告材料。</span>
                       </div>
                       <button
                         type="button"

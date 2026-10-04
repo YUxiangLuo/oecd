@@ -145,6 +145,8 @@ export interface DbStepState extends QuizCompletionState, Record<string, unknown
     col_country?: string;
     row_sector?: string;
     col_sector?: string;
+    /** True when the system recorded this cell by default; a student click replaces it. */
+    auto?: boolean;
   };
 }
 
@@ -247,6 +249,13 @@ export interface DbCellCoordinate {
 const dbCellKey = (rowIndex: number, columnIndex: number) => `${rowIndex}:${columnIndex}`;
 
 /** Page-local finite cells in visual row/column order. */
+/** The default cell recorded without a click: the largest positive flow in the loaded slice. */
+export function defaultDbCell(slice: Pick<DbSlice, "rows" | "columns">): DbCellCoordinate | null {
+  return finiteDbCells(slice.rows, slice.columns)
+    .filter((cell) => cell.value > 0)
+    .reduce<DbCellCoordinate | null>((best, cell) => (best == null || cell.value > best.value ? cell : best), null);
+}
+
 export function finiteDbCells(
   rows: DbSlice["rows"],
   columns: string[],
@@ -690,6 +699,21 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slice, year, table, rowCountry, colCountry, pickedSlice]);
 
+  // 无感记录：还没有观察值时，默认记录当前切片中最大的一格（标记为系统默认）；点击其他数值即替换。
+  // The app renders labs only after the session has loaded, so this never overwrites a saved cell.
+  const hasObservation = Boolean(state.data?.observation);
+  useEffect(() => {
+    if (!slice || hasObservation) return;
+    const cell = defaultDbCell(slice);
+    if (!cell) return;
+    const patch = captureDbObservation(
+      { year: slice.year, table: slice.table, rowCountry, colCountry, rowSector, colSector },
+      { row: cell.row, column: cell.column, value: cell.value },
+    );
+    state.save({ observation: { ...patch.observation!, auto: true } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slice, hasObservation]);
+
   if (metaError) {
     return (
       <div className="error-box async-error" role="alert">
@@ -814,6 +838,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
             {/* 观察值跨表页签保留；读法必须用记录时的表类型,不能用当前页签的。 */}
             {dbObservationSentence((selectedObservation.table as DbTableKind | undefined) ?? table, selectedObservation.row, selectedObservation.column)} = {fmtDb(selectedObservation.value)} Million USD（百万美元）
             {observationSource ? `（${observationSource}）` : ""}
+            {selectedObservation.auto ? "。系统已默认记录这一格，点击其他数值即可替换。" : ""}
           </span>
         ) : <span className="empty">尚未记录</span>}
       </div>
@@ -827,7 +852,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
           <summary>读表说明</summary>
           <ul>
             <li><b>怎么读：</b>{HOW_TO_READ[table]}</li>
-            <li><b>记录规则：</b>只有点击数值才会保存该格的行、列与数值；切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格，记录另一个单元格才会覆盖。</li>
+            <li><b>记录规则：</b>系统会先默认记录当前表中最大的一格；点击数值会改为保存你选的格子的行、列与数值；切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格，记录另一个单元格才会覆盖。</li>
             <li><b>账户与符号：</b>{STEP1_ACCOUNT_LEGEND}</li>
             {table !== "accounts" && <li><b>恒等式：</b>{STEP1_OUT_IDENTITY_GUIDE} 差额来自未展示的国家、行业或最终需求列。</li>}
           </ul>
