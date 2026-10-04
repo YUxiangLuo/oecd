@@ -120,14 +120,15 @@ describe("indicator explorer with automatic report material", () => {
       "",
     );
     expect(await view.findByLabelText("两国趋势结论")).toBeTruthy();
-    expect(view.getByLabelText("2020 年数据解释边界")).toBeTruthy();
+    expect(view.queryByText(/含 2020 年/)).toBeNull();
     const chart = view.getByRole("img");
     const supplementary = view.getByRole("group", { name: "补充图表" });
     const materials = view.getByRole("region", { name: "报告材料" });
     // Supplementary charts sit under the main chart and open in a modal; they never replace it.
     expect(chart.compareDocumentPosition(supplementary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(supplementary.compareDocumentPosition(materials) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect((view.getByText("指标口径").closest("details") as HTMLDetailsElement).open).toBe(false);
+    // Caveats live in the task card and the report; the chart area keeps only a one-line metric definition.
+    expect(view.queryByText("指标口径")).toBeNull();
     expect(view.getByText(/两国差距/)).toBeTruthy();
     expect(view.getByText(/差距缩小 .* 个百分点/)).toBeTruthy();
     await waitFor(() => expect(view.saves).toHaveLength(1));
@@ -151,7 +152,6 @@ describe("indicator explorer with automatic report material", () => {
     expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("当前图表已自动记录");
     expect(view.saves).toHaveLength(1);
     fireEvent.click(view.getByRole("button", { name: "同年差异" }));
-    expect(view.queryByLabelText("2020 年数据解释边界")).toBeNull();
     await waitFor(() => expect(view.saves).toHaveLength(2));
     expect(
       view.saves[1].observations!.every(

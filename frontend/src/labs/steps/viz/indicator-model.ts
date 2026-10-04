@@ -5,7 +5,6 @@ export interface IndicatorTopic {
   defaultMetric: string;
   defaultView?: IndicatorView;
   question: string;
-  note: string;
   metrics: {
     key: string;
     label: string;

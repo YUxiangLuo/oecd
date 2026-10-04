@@ -8,7 +8,6 @@ export const LENGTH_TOPIC: IndicatorTopic = {
   defaultMetric: "PLv_GVC",
   defaultView: "directions",
   question: "生产链长度与相对位置怎样变化？",
-  note: "长度是累计总产出／关联增加值，VA为正时表示增加值加权平均生产阶段数；不是跨境次数、经过国家数或网络边数。存在负VA时是有符号账户比值，不裁剪异常值。国家结果按分子分母汇总计算，不能平均行业长度。",
   metrics: [
     ...[
       ["PLv_GVC", "前向GVC段长度"],

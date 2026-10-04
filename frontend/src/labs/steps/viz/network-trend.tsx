@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { IcioYearNote } from "./icio-year-note";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { IndicatorSchema, Meta } from "../../../types";
@@ -134,9 +133,7 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
     </div>
     <p ref={scopeRef} tabIndex={-1} aria-label="当前比较口径"><strong>
       {selected.map(countryLabel).join("与")} · {view === "trend" ? sectorLabel(industry) : "行业排名"} · {view === "trend" ? `${years[0]}–${years.at(-1)}` : year} · {label}
-    </strong>
-      {(view === "trend" ? years.includes(2020) : year === 2020) && <span className="viz-scope-caveat">含 2020 年：现价与疫情期外推，见下方“指标口径”</span>}
-    </p>
+    </strong></p>
     <p className="muted">单位：{unit}</p>
     {query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : <>
       {view === "ranking" ? ranked.length ? <NetworkRanking rows={ranked} countries={selected} unit={unit} onIndustry={(next) => { setIndustry(next); setView("trend"); setFocusScope(true); }} /> : <p role="status">该年份没有可用的行业排名，请更换指标或国家。</p> : <>
@@ -177,12 +174,7 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
       </details>
       </>}
     </>}
-    <details className="technical-details"><summary>指标口径</summary>
-      <p>{schema?.fields[metric]?.desc}</p>
-      <p>缺失不补零；网络指标不等于经济重要性，不能直接推断因果。两国使用同一指标、同一刻度。{view === "trend" ? "横轴为年份；缺失值留空，不跨缺失年份连线。" : "排名按国家 A 排序，不等于综合重要性。"}</p>
-      <IcioYearNote years={view === "trend" ? years : [year]} />
-      <p>与步骤 5 同源：每年在完整全球国家×行业中间品网络上计算，包含国内联系与正自环。加权流量使用当年价格；拓扑指标未做边阈值敏感性分析。</p>
-    </details>
+    {schema?.fields[metric]?.desc && <p className="muted viz-metric-desc">{label}：{schema.fields[metric].desc}</p>}
     <section className="qualified-run-card" aria-label="步骤9报告材料">
       <h3>报告材料 · {observations.length ? `已自动记录（${observations.length} 条读数）` : "尚未记录"}</h3>
       <p role="status">{!canRecord

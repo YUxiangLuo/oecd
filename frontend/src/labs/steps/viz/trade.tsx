@@ -8,7 +8,6 @@ export const TRADE_TOPIC: IndicatorTopic = {
   key: "trade",
   defaultMetric: "FVA_share",
   question: "出口的价值来源怎样变化？两国差在哪里？",
-  note: "金额为当年价格（百万美元），不等于实际增长。FVA 是外国增加值这一分项，不含 FDC，不能当作官方 TiVA 外国含量。TLS 是税收减补贴，不是步骤10的模拟关税。",
   metrics: [
     {
       key: "FVA_share",

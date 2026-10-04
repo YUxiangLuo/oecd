@@ -8,7 +8,6 @@ export const PRODUCTION_TOPIC: IndicatorTopic = {
   key: "production",
   defaultMetric: "3b_VA_GVC_C_share",
   question: "生产活动如何参与跨境分工？两国的变化一致吗？",
-  note: "前向从增加值来源端核算，后向从最终品端回溯，两种分母不能混用。复杂GVC表示至少两次跨境，不自动等于技术先进。金额为当年价格，国家份额不是行业份额的简单平均。",
   metrics: [
     {
       key: "3b_VA_GVC_C_share",

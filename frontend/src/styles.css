@@ -902,11 +902,8 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   .report-md .data-table tr { break-inside: avoid; }
 }
 
-/* 图表口径行末尾的 2020 年提醒：可见但不再单独占一个黄框。 */
-.viz-scope-caveat {
-  display: inline-block; margin-left: 10px; padding: 1px 8px; border-radius: 999px;
-  background: #fff4e5; color: #8a5a1f; font-size: 11px; font-weight: 600; vertical-align: 1px;
-}
+/* 图表下方的当前指标一句话定义。 */
+.viz-metric-desc { margin: 8px 0 0; font-size: 12px; line-height: 1.6; }
 /* ChartStory：图上只留“看什么”，怎么读、试着观察与口径提醒收进同一个折叠。 */
 .chart-story-guide > summary { cursor: pointer; color: #4b47e0; font-size: 12px; font-weight: 600; }
 /* 第 10–14 步：参考性说明（税率设定、区间读法、样本与限制）统一收进一个折叠。 */

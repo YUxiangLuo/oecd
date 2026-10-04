@@ -10,7 +10,6 @@ import {
   countryLabel,
   sectorLabel,
 } from "../../../viz";
-import { IcioYearNote } from "./icio-year-note";
 import { AsyncStateMessage, useAsync } from "../../shared";
 import {
   currentReleaseId,
@@ -491,10 +490,7 @@ export function IndicatorExplorer({
       </div>
       <p aria-label="当前比较口径"><strong>
         {selected.map(countryLabel).join("与")} · {view === "industry" ? "行业排名" : industry ? sectorLabel(industry) : "国家整体"} · {timeView ? `${start}–${end}` : year} · {composition ? "构成分析" : view === "directions" ? "前后向GVC段长度与位置" : label(metric)}
-      </strong>
-        {/* The 2020 caveat stays visible as a short pointer; its full text lives in “指标口径”. */}
-        {chartYears.includes(2020) && <span className="viz-scope-caveat">含 2020 年：现价与疫情期外推，见下方“指标口径”</span>}
-      </p>
+      </strong></p>
       <div className="viz-chart">
       {!validYears ? <div className="error-box" role="alert">
         <p>保存记录中的年份范围无效，请重新选择年份。原有报告材料未更改。</p>
@@ -626,6 +622,11 @@ export function IndicatorExplorer({
         </>
       )}
       </div>
+      {/* One-line definition of the metric being read; caveats live in the step's task card and the report. */}
+      {!composition && view !== "directions" && schema.data?.fields[metric]?.desc && <p className="muted viz-metric-desc">
+        {label(metric)}：{schema.data?.fields[metric]?.desc}
+        {field(metric)?.denominator && ` 分母：${label(field(metric)!.denominator!)}；分母不为正时份额不显示。`}
+      </p>}
       <SupplementaryCharts>
         <ChartModalButton
           label={industry ? "两国同行业定位图" : "全部国家定位图与排名"}
@@ -681,16 +682,6 @@ export function IndicatorExplorer({
           )}
         </ChartModalButton>
       </SupplementaryCharts>
-      <details className="technical-details">
-        <summary>指标口径</summary>
-        <p className="muted">{topic.key === "length" ? "长度是生产阶段的账户比值，不是跨境次数；国家结果不能用行业均值代替。" : "金额为当年价格，跨年变化不等于实际增长；国家份额不是行业份额的简单平均。"}</p>
-        <p className="muted">{topic.note}</p>
-        {!composition && view !== "directions" && <p className="muted">
-          {schema.data?.fields[metric]?.desc}
-          {field(metric)?.denominator && ` 分母：${label(field(metric)!.denominator!)}；分母不为正时份额不显示。`}
-        </p>}
-        <IcioYearNote years={chartYears} />
-      </details>
       <section className="qualified-run-card" aria-label="报告材料">
         <h3>报告材料 · {saved.length ? `已自动记录（${saved.length} 条读数）` : "尚未记录"}</h3>
         <p role="status">
