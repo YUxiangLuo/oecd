@@ -663,8 +663,8 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     assert any(item["step"] == 9 and "两国行业比较" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 9 and "自动记录" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 6 and "恰好两个国家" in "".join(item["missing"]) for item in blocked)
-    assert any(item["step"] == 11 and "运行并保存" in "".join(item["missing"]) for item in blocked)
-    assert any(item["step"] == 14 and "运行并保存" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 11 and "运行回归" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 14 and "运行回归" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 15 and "原创" in item["title"] for item in blocked)
     assert len(blocked) == len({item["step"] for item in blocked})
     by_step = {item["step"]: item for item in blocked}
@@ -673,13 +673,13 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     assert "理解检查" in "".join(by_step[6]["missing"])
     assert "恰好两个国家" in "".join(by_step[6]["missing"])
     assert "理解检查" in "".join(by_step[12]["missing"])
-    assert "运行并保存" in "".join(by_step[12]["missing"])
-    assert TEACHING_VERSION in "".join(by_step[10]["missing"])
+    assert "运行回归" in "".join(by_step[12]["missing"])
+    assert "模拟关税面板" in "".join(by_step[10]["missing"])
     assert check_gate(_complete()) == []
     missing_one = _complete()
     del missing_one["steps"]["14"]["data"]["run"]
     blocked_one = check_gate(missing_one)
-    assert any(item["step"] == 14 and "运行并保存" in "".join(item["missing"]) for item in blocked_one)
+    assert any(item["step"] == 14 and "运行回归" in "".join(item["missing"]) for item in blocked_one)
     with pytest.raises(ReportGateError):
         build(empty_session(), "同学")
 
@@ -1019,7 +1019,7 @@ def test_material_gate_requires_complete_current_teaching_panel_snapshot():
 
     assert len(blocked) == 1
     assert blocked[0]["step"] == 10
-    assert TEACHING_VERSION in "".join(blocked[0]["missing"])
+    assert "模拟关税面板" in "".join(blocked[0]["missing"])
 
 
 def test_material_gate_rejects_legacy_teaching_panel_version():
@@ -1027,7 +1027,8 @@ def test_material_gate_rejects_legacy_teaching_panel_version():
     session["steps"]["10"]["data"]["teaching_panel_version"] = "legacy-shock-catalog"
     blocked = next(item for item in check_material_gate(session) if item["step"] == 10)
     message = "".join(blocked["missing"])
-    assert TEACHING_VERSION in message
+    # Reopening the step re-records the current version; the student never sees the version id.
+    assert "模拟关税面板" in message and TEACHING_VERSION not in message
 
 
 def test_material_gate_rejects_an_unverifiable_teaching_exposure():
@@ -1170,7 +1171,7 @@ def test_malformed_only_saved_run_blocks_report(tmp_path, monkeypatch):
     session = _complete()
     session["steps"]["11"]["data"]["run"] = {"design": {"outcome": "trade"}, "result": "forged"}
     blocked = check_gate(session)
-    assert any(item["step"] == 11 and "运行并保存" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 11 and "运行回归" in "".join(item["missing"]) for item in blocked)
     with pytest.raises(ReportGateError):
         build(session, "同学")
 
@@ -1205,7 +1206,7 @@ def test_non_inferential_saved_run_does_not_satisfy_valid_regression_gate(status
 
     blocked = check_gate(session)
 
-    assert any(item["step"] == 11 and "运行并保存" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 11 and "运行回归" in "".join(item["missing"]) for item in blocked)
 
 
 def test_qualified_run_on_same_step_still_satisfies_gate_after_insufficient_latest(tmp_path, monkeypatch):

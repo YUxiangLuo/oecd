@@ -315,7 +315,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             {
                 "step": 10,
                 "title": _STEP_TITLES.get(10, ""),
-                "missing": [f"请查看并保存版本 {TEACHING_VERSION} 的模拟关税面板"],
+                "missing": ["请打开本步并等待模拟关税面板加载，系统会自动记录所选例子"],
             }
         )
 
@@ -327,7 +327,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             {
                 "step": step,
                 "title": _STEP_TITLES.get(step, ""),
-                "missing": ["请运行并保存回归结果；若无法推断，请保存诊断结果"],
+                "missing": ["请点击“运行回归”，结果会自动保存；无法推断时也会保存诊断结果"],
             }
         )
 

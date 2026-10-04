@@ -79,7 +79,7 @@ const DECOMP: Record<number, DecompCfg> = {
     ],
     note: (_r, values) =>
       `3_VA_GVC = 3a + 3b = ${fmt(values[2] + values[3], "amount")};` +
-      `另有对称的后向分解 FGY 系列(按最终产品完成地记账),见上方指标表。`,
+      `另有对称的后向分解 FGY 系列（按最终产品完成地记账），可在步骤 7 选择“（后向）”指标查看。`,
   },
   6: {
     total: "PLv",
