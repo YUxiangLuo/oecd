@@ -14,8 +14,6 @@
   color: #7e431f; font-size: 12px; line-height: 1.6;
 }
 .reg-sparse-control-warning { margin-top: 10px; border: 1px solid #f0c7ac; }
-.reg-question-main h3 { margin: 10px 0 6px; font-size: 16px; line-height: 1.4; }
-.reg-question-main p { margin: 4px 0; line-height: 1.65; }
 .reg-section-step { color: #4b47e0; font-size: 11px; font-weight: 800; letter-spacing: .04em; }
 .qualified-run-card {
   min-width: 0; padding: 12px 14px; border: 1px solid #b9dacb; border-left: 4px solid #18745f;
@@ -57,7 +55,6 @@
 .reg-inline-status { display: inline-block; margin-left: 10px; }
 .metric-facts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .metric-facts span { display: inline-flex; gap: 5px; padding: 5px 8px; background: #fff; border: 1px solid #e3e4ee; border-radius: 7px; font-size: 11.5px; }
-.reg-variable-story h3 { margin: 5px 0 10px; font-size: 18px; }
 .reg-variable-plain-grid {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 10px 0;
 }
@@ -67,20 +64,6 @@
 }
 .reg-variable-plain-grid b { color: #35328d; font-size: 12px; }
 .reg-variable-plain-grid span { color: #4f586a; font-size: 11.5px; line-height: 1.55; }
-.reg-learning-focus { padding: 9px 11px; border-left: 3px solid #6e68cf; background: #f8f8ff; color: #394258; line-height: 1.65; }
-.reg-interval-exercise p { line-height: 1.65; }
-.reg-interval-exercise fieldset { min-width: 0; margin: 12px 0; padding: 10px 12px; border: 1px solid #dcdff0; border-radius: 9px; }
-.reg-interval-exercise legend { font-weight: 700; }
-.reg-interval-exercise label { display: flex; align-items: center; gap: 8px; padding: 8px 0; cursor: pointer; }
-.reg-interval-exercise input { width: auto; flex: 0 0 auto; margin: 0; }
-.reg-optional-variable {
-  display: grid; grid-template-columns: minmax(230px, 1fr) minmax(230px, .8fr);
-  align-items: center; gap: 14px; margin-top: 12px; padding: 10px 12px;
-  border: 1px dashed #cfd3e7; border-radius: 9px; background: #fbfcff;
-}
-.reg-optional-variable > span { display: grid; gap: 2px; }
-.reg-optional-variable small { color: #687183; font-size: 10.5px; line-height: 1.45; }
-.reg-optional-variable select { width: 100%; min-width: 0; }
 .comparison-summary {
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 0 18px;
 }
@@ -92,8 +75,7 @@
 .comparison-facets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .comparison-facet { min-width: 0; padding: 11px; border: 1px solid #e1e5ee; border-radius: 10px; background: #fbfcff; }
 .comparison-facet h4 { margin: 0 0 8px; }
-.lesson-details { margin-top: 9px; border-top: 1px dashed #d9dbea; padding-top: 8px; font-size: 12px; }
-.lesson-details summary, .technical-details > summary { cursor: pointer; color: #4b47e0; font-weight: 700; }
+.technical-details > summary { cursor: pointer; color: #4b47e0; font-weight: 700; }
 .reg-run-card { box-shadow: 0 5px 18px rgba(35,39,60,.06); }
 .reg-run-card h3 { margin: 5px 0 8px; font-size: 18px; line-height: 1.45; }
 .reg-run-card .run-btn { min-width: 240px; min-height: 42px; font-size: 14px; }
@@ -107,23 +89,17 @@
   display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
 }
 .reg-evidence-matrix-head h3 { margin: 4px 0 0; font-size: 17px; }
-.reg-evidence-support { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
-.reg-evidence-support > div { padding: 7px 9px; border: 1px solid #e0e4ea; border-radius: 8px; background: #fff; }
-.reg-evidence-support dt { color: #687183; font-size: 10.5px; }
-.reg-evidence-support dd { margin: 2px 0 0; color: #303747; font-size: 11.5px; font-weight: 650; }
 .verdict-card { border: 1px solid #cbc9f4; border-left: 5px solid #4b47e0; border-radius: 12px; background: #f8f8ff; padding: 16px 18px; }
 .verdict-card h3 { margin: 5px 0 10px; font-size: 21px; }
 .verdict-kicker { color: #4b47e0; font-weight: 800; font-size: 11px; letter-spacing: .04em; }
 .verdict-insufficient, .verdict-suppressed { border-left-color: #b27b18; background: #fffaf0; }
 .verdict-negative, .verdict-positive { border-left-color: #4b47e0; }
-.verdict-metrics { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; margin: 10px 0; }
-.verdict-metrics > div { background: #fff; border: 1px solid #e4e4ef; border-radius: 8px; padding: 9px 11px; }
-.verdict-metrics span { display: block; color: #596173; font-size: 11px; }
-.verdict-metrics b { display: block; margin-top: 3px; font-size: 14px; color: #303747; }
 .verdict-card p { margin: 6px 0; line-height: 1.6; }
 .reg-plain-verdict { padding: 9px 11px; border-radius: 8px; background: #fff; color: #303747; }
-.reg-plain-verdict b { margin-left: 4px; color: #35328d; }
-.verdict-boundary { color: #8a6b2a; font-size: 11.5px; }
+.verdict-card h3.reg-plain-verdict { font-size: 17px; }
+.reg-result-points { margin: 10px 0 0; padding-left: 18px; color: #394258; font-size: 12.5px; line-height: 1.7; }
+.reg-result-points li + li { margin-top: 3px; }
+.verdict-card .coef-plot { margin: 4px 0 2px; }
 .stale-result { margin: 8px 0; padding: 7px 9px; border-radius: 7px; background: #fff0db; color: #8b4f00; font-weight: 700; font-size: 11.5px; }
 .reg-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .reg-section-heading h3 { margin: 4px 0; }
@@ -132,7 +108,6 @@
 .exploration-status.done { border-color: #b8dfcc; background: #f2faf6; color: #18745f; }
 .trust-item { margin-top: 10px; padding: 10px 12px; background: #f8f9fc; border-radius: 8px; }
 .trust-item p { margin: 5px 0; line-height: 1.6; }
-.reg-writing-hint { border-top: 1px solid #dce2ed; padding-top: 8px; }
 .reg-evidence-matrix { margin-bottom: 14px; background: #f8fbff; }
 .reg-evidence-matrix-head { margin-bottom: 11px; }
 .reg-evidence-matrix-head p { max-width: 360px; margin: 0; color: #5d6575; font-size: 11.5px; line-height: 1.5; text-align: right; }
@@ -149,7 +124,6 @@
 .reg-evidence-table th:nth-child(6), .reg-evidence-table td:nth-child(6) { width: 17%; }
 .reg-evidence-table th:nth-child(7), .reg-evidence-table td:nth-child(7) { width: 22%; }
 .reg-evidence-table td span { display: block; margin-top: 3px; color: #646d7d; font-size: 10.5px; }
-.reg-evidence-table tr.current { background: #f1f1ff; }
 .technical-details { margin-top: 2px; }
 .technical-details[open] > summary { margin-bottom: 12px; }
 .technical-details h3 { margin: 16px 0 7px; }

@@ -10,7 +10,6 @@ import {
 } from "./app-state";
 import { AppBootSkeleton, TeacherWorkspace } from "./app-shell";
 import { AUTH_TOKEN_KEY, api, getActiveAuthToken, isApiErrorStatus, setActiveAuthToken } from "./api";
-import type { RegressionHistory } from "./regression";
 import { LoginPage } from "./login";
 import { resetStepScroller } from "./step-navigation";
 import { StudentWorkspace } from "./student-workspace";
@@ -40,7 +39,6 @@ export default function App() {
     user?.role === "student",
     user?.role === "student" ? user.username : undefined,
   );
-  const [regressionHistory, setRegressionHistory] = useState<RegressionHistory>({});
 
   const completedSteps = new Set(session.completion?.completed ?? []);
   const currentCompletion = session.completion?.steps.find((item) => item.step === current);
@@ -234,8 +232,6 @@ export default function App() {
       session={session}
       stepState={stepState}
       completedSteps={completedSteps}
-      regressionHistory={regressionHistory}
-      onRegressionHistoryChange={setRegressionHistory}
       showIntro={showIntro}
       showPasswordChange={showPasswordChange}
       contentRef={contentRef}

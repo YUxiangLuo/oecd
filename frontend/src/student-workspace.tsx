@@ -2,10 +2,8 @@ import {
   useRef,
   useMemo,
   useState,
-  type Dispatch,
   type MouseEvent,
   type RefObject,
-  type SetStateAction,
 } from "react";
 import { AccountPasswordModal } from "./account-password";
 import {
@@ -16,7 +14,6 @@ import {
 } from "./app-shell";
 import { IntroOverlay } from "./intro";
 import { LabRouter } from "./lab-router";
-import type { RegressionHistory } from "./regression";
 import { QuizPanel, type QuizDraftStore } from "./step-quiz";
 import {
   focusStepPrimaryAction,
@@ -70,8 +67,6 @@ interface StudentWorkspaceProps {
   session: SessionApi;
   stepState: StepStateApi;
   completedSteps: Set<number>;
-  regressionHistory: RegressionHistory;
-  onRegressionHistoryChange: Dispatch<SetStateAction<RegressionHistory>>;
   showIntro: boolean;
   showPasswordChange: boolean;
   contentRef: RefObject<HTMLElement | null>;
@@ -94,8 +89,6 @@ export function StudentWorkspace({
   session,
   stepState,
   completedSteps,
-  regressionHistory,
-  onRegressionHistoryChange,
   showIntro,
   showPasswordChange,
   contentRef,
@@ -271,8 +264,6 @@ export function StudentWorkspace({
                       sessionSyncing={session.syncing}
                       onFlushSession={session.syncNow}
                       onReportChanged={session.applyReportMutation}
-                      regressionHistory={regressionHistory}
-                      onRegressionHistoryChange={onRegressionHistoryChange}
                       onNavigateStep={onNavigateStep}
                       getStep={session.getStep}
                       getConfirmedStep={session.getConfirmedStep}

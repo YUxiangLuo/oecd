@@ -34,23 +34,20 @@ function response(outcome: RegressionOutcome, coef: CoefStat): RegressionRespons
 }
 
 describe("familyVerdict", () => {
-  test("prefers the chosen session over leftover in-memory history, including legacy runs", () => {
-    const live = response("trade", coefficient(-0.02, -0.03, -0.01));
+  test("reads the step's own saved run", () => {
     const saved = response("trade", coefficient(0.02, 0.01, 0.03));
     const verdict = familyVerdict(
       "trade",
-      { trade: [{ response: live }] },
-      (step) => step === 11 ? { run: { design: saved.design, result: saved.result } } : undefined,
+      (step: number) => step === 11 ? { run: { design: saved.design, result: saved.result } } : undefined,
     );
     expect(verdict?.state).toBe("positive");
   });
 
   for (const outcome of ["trade", "production", "length", "network"] as const) {
-    test(`${outcome}: an empty chosen session does not invent a family result from discarded history`, () => {
-      const history = { [outcome]: [{ response: response(outcome, coefficient(-0.02, -0.03, -0.01)) }] };
-      expect(familyVerdict(outcome, history, () => undefined)).toBeNull();
-      expect(familyVerdict(outcome, history, () => ({}))).toBeNull();
-      expect(familyVerdict(outcome, history)?.state).toBe("negative");
+    test(`${outcome}: an empty step has no result`, () => {
+      expect(familyVerdict(outcome, () => undefined)).toBeNull();
+      expect(familyVerdict(outcome, () => ({}))).toBeNull();
+      expect(familyVerdict(outcome)).toBeNull();
     });
   }
 
@@ -69,8 +66,7 @@ describe("familyVerdict", () => {
     }];
     const verdict = familyVerdict(
       "trade",
-      { trade: [{ response: latest }] },
-      (step) => step === 11 ? { run: { design: latest.design, result: latest.result }, qualified_run: { design: qualified.design, result: qualified.result } } : undefined,
+      (step: number) => step === 11 ? { run: { design: latest.design, result: latest.result }, qualified_run: { design: qualified.design, result: qualified.result } } : undefined,
     );
     expect(verdict?.state).toBe("negative");
   });
@@ -79,8 +75,7 @@ describe("familyVerdict", () => {
     const saved = response("production", coefficient(0.01, -0.02, 0.04));
     const verdict = familyVerdict(
       "production",
-      {},
-      (step) => step === 12 ? { qualified_run: { design: saved.design, result: saved.result } } : undefined,
+      (step: number) => step === 12 ? { qualified_run: { design: saved.design, result: saved.result } } : undefined,
     );
     expect(verdict?.state).toBe("insufficient");
   });

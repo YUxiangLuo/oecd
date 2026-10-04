@@ -21,7 +21,7 @@ describe("fixed regression forest chart", () => {
     }));
     expect(markup).toContain("整体设计门禁已抑制统计推断");
     expect(markup).toContain("<circle");
-    expect(markup).not.toContain('stroke="#aaa7eb"');
+    expect(markup).not.toContain('class="coef-ci"');
     expect(markup).not.toContain("91.234");
     expect(markup).not.toContain("***");
   });
@@ -31,7 +31,8 @@ describe("fixed regression forest chart", () => {
       coefs: [{ name: "x", coef: -0.2, ci_low: -0.3, ci_high: -0.1, p: 0.001, stars: "***" }],
       globalStatus: "ok",
     }));
-    expect(markup).toContain("点 = 估计值 · 横线 = 标称 95% 的近似聚类区间");
-    expect(markup).toContain('stroke="#aaa7eb"');
+    expect(markup).toContain("横线 = 标称 95% 的近似聚类区间");
+    expect(markup).toContain('class="coef-ci"');
+    expect(markup).toContain('fill="#2f6fd0"');
   });
 });
