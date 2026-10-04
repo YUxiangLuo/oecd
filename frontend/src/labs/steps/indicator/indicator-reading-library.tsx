@@ -161,7 +161,8 @@ export const INDICATOR_READINGS: Record<IndicatorReadingTopic, IndicatorReading[
 
 export function IndicatorReadingLibrary({ topic }: { topic: IndicatorReadingTopic }) {
   const readings = INDICATOR_READINGS[topic];
-  const [expanded, setExpanded] = useState(false);
+  // Open by default: the documents are part of the step's method explanation.
+  const [expanded, setExpanded] = useState(true);
   const [selectedId, setSelectedId] = useState(readings[0].id);
   const selected = readings.find((reading) => reading.id === selectedId) ?? readings[0];
   const selectedUrl = readingAssetUrl(selected.file);
@@ -169,6 +170,7 @@ export function IndicatorReadingLibrary({ topic }: { topic: IndicatorReadingTopi
   return (
     <details
       className="indicator-reading-library"
+      open={expanded}
       onToggle={(event) => setExpanded(event.currentTarget.open)}
     >
       <summary>

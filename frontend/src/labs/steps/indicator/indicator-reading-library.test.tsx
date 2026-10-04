@@ -23,10 +23,16 @@ describe("indicator PDF reading library", () => {
     }
   });
 
-  test("does not load the embedded PDF until opened, then switches one preview without removing open-PDF access", () => {
+  test("opens by default with one preview, unloads it when collapsed, and switches one preview without removing open-PDF access", () => {
     const view = render(<IndicatorReadingLibrary topic="trade" />);
     const details = view.container.querySelector("details") as HTMLDetailsElement;
     expect(details).toBeTruthy();
+    expect(details.open).toBe(true);
+    expect(view.getByLabelText("总贸易流分解指标说明（课程校订版） PDF 预览")).toBeTruthy();
+    act(() => {
+      details.open = false;
+      fireEvent(details, new Event("toggle"));
+    });
     expect(view.queryByLabelText(/PDF 预览/)).toBeNull();
     expect(view.getByText("4 篇 PDF · 课程说明、原始方法资料与论文")).toBeTruthy();
     expect(view.getByText(/当前 OECD ICIO 2023 edition（2016–2020）/)).toBeTruthy();
