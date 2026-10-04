@@ -1,54 +1,47 @@
 # 学生实验手册维护说明
 
-- 成品：[实验手册.pdf](../../实验手册.pdf)，学生操作版 1.9，A4，28 页，18 张实际操作截图。
+- 成品：[实验手册.pdf](../../实验手册.pdf)，学生操作版 2.0，A4，28 页，19 张实际操作截图。
 - 可编辑正文：[实验手册.md](../../实验手册.md)，`<!-- page -->` 为显式分页点。
-- 截图：[screenshots](screenshots/)，由 agent-browser 从独立示例课堂取得。
+- 截图：[screenshots](screenshots/)，由 `frontend/scripts/capture-student-manual.ts` 用本机无头 Chrome 从独立示例课堂取得。
 - 来源记录：[screenshots.json](screenshots.json)，包含代码、数据版本、截图尺寸及 SHA-256。
-- 排版与导出脚本位于 `frontend/scripts/`，使用已有前端依赖，不修改业务页面。
+- 排版、截图与导出脚本位于 `frontend/scripts/`，使用已有前端依赖和本机 Chrome（可用 `CHROME_PATH` 指定），不修改业务页面。
 
 学生登录后，可通过左侧“课程大纲”下方的“实验手册 PDF”入口在新标签页阅读、下载或打印。前端直接引用仓库根目录的 PDF，Vite 会将它作为带内容指纹的静态资源打入生产和演示构建。构建环境需要保留这份源 PDF；更新手册后重新构建前端即可发布新版本。
 
 ## 重新生成
 
-需要 Bun、前端锁定依赖、agent-browser／Chrome，以及中文字体（本次制作使用 Noto Sans CJK SC）。从仓库根目录执行：
+需要 Bun、前端锁定依赖、Chrome，以及中文字体（Linux 用 Noto Sans CJK SC，Windows 用 Noto Sans SC）。
+
+1. 在独立的本地课堂（Vite 开发服务器加 API）准备两个测试学生：一个完成步骤 1–14 且尚未生成报告（可用 `scripts/seed_full_journey.py`），另一个只做了一部分且未运行步骤 12。截图会为第一个学生生成、提交报告并由教师评分。
+2. 截图（账号只通过环境变量传入，不写进仓库）：
 
 ```bash
-bun install --cwd frontend --frozen-lockfile
+MANUAL_STUDENT=<完整学生> MANUAL_STUDENT_PASSWORD=<口令> \
+MANUAL_GATE_STUDENT=<未完成学生> MANUAL_GATE_STUDENT_PASSWORD=<口令> \
+MANUAL_TEACHER=<教师> MANUAL_TEACHER_PASSWORD=<口令> \
+  bun run frontend/scripts/capture-student-manual.ts
+```
+
+3. 排版并导出 A4 PDF。导出前会逐页检查正文是否超出 A4 版心，超出时报错并给出页码与超出像素：
+
+```bash
 bun run frontend/scripts/build-student-manual.ts
+bun run frontend/scripts/export-student-manual.ts
 ```
 
-另开终端，仅提供生成文档所在目录：
-
-```bash
-python3 -m http.server 4191 --bind 127.0.0.1 \
-  --directory dogfood-output/student-manual/render
-```
-
-回到仓库根目录导出：
-
-```bash
-bun run frontend/scripts/export-student-manual.ts \
-  'http://127.0.0.1:4191/实验手册.html'
-```
-
-导出器使用 agent-browser 建立文档会话，并在同一会话中执行明确指定 CSS 页面尺寸的 PDF 打印命令。这样保留 A4、背景、文字标签及书签，不使用 CLI 通用 PDF 命令的默认 Letter 纸张。
+截图脚本会在 `dogfood-output/student-manual/capture.json` 输出每张图的尺寸与 SHA-256，用于更新 `screenshots.json`。
 
 ## 更新时核对
 
-1. 在独立 PostgreSQL 实例和数据副本中验证实际学生流程，再用 agent-browser 截图。若使用 `agent_browser_full_journey.sh`，须明确记录它通过公开 API 预填学习记录、再由浏览器完成报告和教师流程，不能称为纯 UI 旅程。截图只使用独立测试账号，不包含密码、真实学生信息或后台凭证。
+1. 截图只使用独立测试账号，不包含密码、真实学生信息或后台凭证。用公开 API 预填学习记录时须在来源记录中写明，不能称为纯 UI 旅程。
 2. 同步正文中的按钮名、条件、截图说明和数据口径；不要以新说明解释不匹配的旧截图。
 3. 若增减页面，更新正文导航表页码和本说明中的总页数。
-4. 更新截图清单，核对 PDF 中的分页、字体、图像、正文和报告状态。顶层 `baseline_commit`、`code_state`、`data_release` 记录共同来源；逐图记录文件 SHA-256 与 `data_sources`。工作区有未提交修改时，必须在 `code_state` 中说明，不能声称截图只对应该提交。
+4. 更新截图清单。顶层 `baseline_commit`、`code_state`、`data_release` 记录共同来源；逐图记录文件 SHA-256 与 `data_sources`。工作区有未提交修改时，必须在 `code_state` 中说明。
 5. 文档截图中的报告评分仅用于说明流程；它不构成正式评分标准。
 
-可用以下工具复核导出文件：
+## 2.0 版更新（2026-10-05）
 
-```bash
-pdfinfo 实验手册.pdf
-pdffonts 实验手册.pdf
-qpdf --check 实验手册.pdf
-pdftotext -layout 实验手册.pdf /tmp/gvcsim-student-manual.txt
-```
+按当前界面重写操作说明并重拍全部 19 张图（新增“运行回归前的两组对比”）：报告材料改为自动记录（步骤 1 默认记录一格，步骤 2–10 打开页面即记录，步骤 11–14 运行回归即保存）；步骤 2–5 的计算方法与讲义；步骤 6–9 的补充图表弹窗；步骤 10 的跟随例子与样本说明；步骤 11–14 的两组对比图、系数图与换算到例子；步骤 15 的句式参考；任务卡的“注意”。截图与导出改用本机无头 Chrome，不再依赖 agent-browser，导出时自动检查页面溢出。截图来自独立本地课堂与 release `01b87b87c05c4d8386440706adafe04d`，完整课程学生的学习记录先由公开 API 准备，再在浏览器中打开各页截图。
 
 ## 1.9 版更新（2026-09-28）
 

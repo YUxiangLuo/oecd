@@ -46,7 +46,7 @@ const html = `<!doctype html>
 @page { size: A4; margin: 0; }
 * { box-sizing: border-box; }
 html { background: #dce3e8; color: #243748; }
-body { margin: 0; font-family: "Source Han Sans CN", "Noto Sans CJK SC", sans-serif; font-size: 9.3pt; line-height: 1.62; }
+body { margin: 0; font-family: "Source Han Sans CN", "Noto Sans CJK SC", "Noto Sans SC", sans-serif; font-size: 9.3pt; line-height: 1.62; }
 .sheet { position: relative; width: 210mm; height: 297mm; margin: 7mm auto; padding: 13mm 17mm 17mm; background: white; break-after: page; page-break-after: always; box-shadow: 0 2mm 8mm #19304320; }
 .sheet:last-child { break-after: auto; page-break-after: auto; }
 header { height: 9mm; display: flex; justify-content: space-between; border-bottom: .35mm solid #29475b; color: #526777; font-size: 7.5pt; letter-spacing: .04em; }
