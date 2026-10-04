@@ -17,10 +17,10 @@ import type { AuthUser, Meta, StepsResponse } from "./types";
 const SCENE_NAMES = ["认识实验", "数据与设定", "实验路线", "分析示例", "完成规则"];
 const N_SCENES = SCENE_NAMES.length;
 const STAGE_OUTPUTS: Record<number, string> = {
-  1: "认识投入产出表，记录观察对象。",
-  2: "计算并保存不同对象的价值链指标。",
+  1: "认识投入产出表，读懂一格数据的含义。",
+  2: "了解指标怎样由投入产出表算出，并拆解两国读数。",
   3: "比较两个国家的时间趋势，形成图表证据。",
-  4: "比较两国五年 X/Y 变化，汇总四项模拟回归证据。",
+  4: "认识模拟关税暴露 X，用全部样本对四个模拟 Y 运行回归。",
   5: "整合材料，完成原创分析与报告。",
 };
 
@@ -285,8 +285,8 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
     /* ---- 4 分析示例 ---- */
     <div key={3} className="intro-scene">
       <div className="intro-scene-kicker">分析示例</div>
-      <h2 className="intro-h2">先比较趋势，再读 X 与 Y 的关系</h2>
-      <p className="intro-lede">选择两个国家和一个行业查看示例趋势；正式回归使用完整国家×行业面板，不限于所选两国。</p>
+      <h2 className="intro-h2">先看加税前后的差距，再用回归量化</h2>
+      <p className="intro-lede">选一个例子跟着走：两个国家和一个行业（默认是加拿大与墨西哥的汽车行业）。正式回归使用完整国家×行业面板，不限于所选两国；结果会换算回你的例子。</p>
       <div className="intro-preview-selection" role="group" aria-label="分析对象示意">
         <span><small>国家 A</small>由你选择</span>
         <span><small>国家 B</small>由你选择</span>
@@ -294,34 +294,34 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       </div>
       <div className="intro-evidence-preview">
         <div className="intro-trend-card">
-          <div className="intro-preview-heading"><b>01 · 比较五年模拟关税暴露（X）</b><span><i className="country-a" />国家 A <i className="country-b" />国家 B</span></div>
+          <div className="intro-preview-heading"><b>01 · 你的例子：X 只在加税后出现</b><span><i className="country-a" />国家 A（模拟加税） <i className="country-b" />国家 B（未加税）</span></div>
           <svg viewBox="0 0 520 180" role="img" aria-label="国家 A 与国家 B 的五年模拟关税暴露 X 趋势界面示意，线条不代表真实数值">
             <path className="grid" d="M42 30H500M42 75H500M42 120H500" />
             <path className="country-a" d="M50 120L160 120L270 40L380 40L490 40" />
-            <path className="country-b" d="M50 120L160 120L270 80L380 80L490 80" />
+            <path className="country-b" d="M50 120L160 120L270 120L380 120L490 120" />
             <text x="42" y="18">X 示意强弱</text>
             <text x="28" y="124">0</text>
             {[50, 160, 270, 380, 490].map((x, index) => (
               <g key={x}>
                 <circle className="country-a" cx={x} cy={[120, 120, 40, 40, 40][index]} r="4" />
-                <circle className="country-b" cx={x} cy={[120, 120, 80, 80, 80][index]} r="4" />
+                <circle className="country-b" cx={x} cy={120} r="4" />
                 <text x={x} y="158" textAnchor="middle">{previewYears[index]}</text>
               </g>
             ))}
           </svg>
         </div>
         <div className="intro-xy-card">
-          <b>02 · 用固定方法读关系</b>
+          <b>02 · 用回归把差距量化</b>
           <div className="intro-xy-item"><strong>X</strong><span><b>模拟关税暴露</b><small>解释变量：用于比较的变量</small></span></div>
-          <div className="intro-xy-link" aria-hidden>↓ 与什么一起变化？</div>
+          <div className="intro-xy-link" aria-hidden>↓ X 每增加 1 个百分点，Y 平均变化多少？</div>
           <div className="intro-xy-item"><strong>Y</strong><span><b>模拟指标结果</b><small>结果变量：要观察的变量</small></span></div>
         </div>
       </div>
       <div className="intro-four-results" role="group" aria-label="四项结果都要汇总">
-        <b>03 · 四项结果一起报告</b>
+        <b>03 · 四步各估一项，报告中汇总</b>
         <span>出口构成</span><span>复杂生产</span><span>链条长度</span><span>网络位置</span>
       </div>
-      <p className="intro-note intro-preview-note">图示为两个正暴露对象：前两年 X 为零，之后按共同税率路径变化；也可能有全期零暴露对象。线条不是实际读数。X 与 Y 均为教学模拟；关系不显著或无法推断也要如实报告，不能解释为真实政策效果。</p>
+      <p className="intro-note intro-preview-note">图示：国家 A 被模拟加税，前两年 X 为零、之后为正；国家 B 未加税，X 始终为零。线条不是实际读数。X 与 Y 均为教学模拟；关系不显著或无法推断也要如实报告，不能解释为真实政策效果。</p>
     </div>,
 
     /* ---- 5 就绪 ---- */
@@ -333,12 +333,12 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       </div>
       <h2 className="intro-h2">实验台已就绪</h2>
       <p className="intro-lede">
-        当前身份：<b>{roleName}</b>。按实验台中的任务提示完成操作并回答理解题，系统会整理材料，最后由你完成原创分析。
+        当前身份：<b>{roleName}</b>。按实验台中的任务提示操作并回答理解题，报告材料由系统自动记录，最后由你完成原创分析。
       </p>
       {/* 进入前讲清完成规则，避免把浏览位置误认为学习进度。 */}
       <div className="intro-ready-rules">
         <div><b>理解进度</b><p>答对本步理解题后，步骤显示“✓”。浏览过步骤，不等于已经完成。</p></div>
-        <div><b>报告材料</b><p>第 2–9 步须主动保存两国比较；其他步骤按提示记录或计算。等待同步成功，再核对材料是否齐全。</p></div>
+        <div><b>报告材料</b><p>第 1–10 步打开页面即自动记录；第 11–14 步点“运行回归”后自动保存；第 15 步写三段分析。每步顶部显示材料是否齐全（同步成功后更新）。</p></div>
         <div><b>报告提交</b><p>生成草稿不等于提交。复核后提交给老师，确认“等待教师评阅”；完成进度不能代替提交状态。</p></div>
       </div>
       <div className="intro-cta-row">

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { IntroOverlay } from "./intro";
 
-test("mechanism preview follows the actual two-country five-year X/Y evidence chain", () => {
+test("mechanism preview follows the example, the group gap and the regression", () => {
   try {
     const view = render(<IntroOverlay
       user={{ username: "student", name: "学生", role: "student" }}
@@ -11,20 +11,20 @@ test("mechanism preview follows the actual two-country five-year X/Y evidence ch
       onDone={() => {}}
     />);
     fireEvent.click(view.getByRole("button", { name: "介绍页 4" }));
-    expect(view.getByRole("heading", { name: "先比较趋势，再读 X 与 Y 的关系" })).toBeTruthy();
+    expect(view.getByRole("heading", { name: "先看加税前后的差距，再用回归量化" })).toBeTruthy();
     expect(view.getAllByText("由你选择")).toHaveLength(3);
     expect(view.queryByText(/中国|美国|计算机电子光学/)).toBeNull();
-    expect(view.getByText("01 · 比较五年模拟关税暴露（X）")).toBeTruthy();
+    expect(view.getByText("01 · 你的例子：X 只在加税后出现")).toBeTruthy();
     const chart = view.getByRole("img", { name: /五年模拟关税暴露 X 趋势界面示意/ });
     expect(chart.textContent).toContain("2016");
     expect(chart.textContent).toContain("2020");
     expect(chart.textContent).toContain("X 示意强弱");
-    expect(view.getByText(/正式回归使用完整国家×行业面板，不限于所选两国/)).toBeTruthy();
-    // Two pre-policy years, followed by three equal positive tariff rates.
-    for (const [series, amplitude] of [["a", 80], ["b", 40]] as const) {
+    expect(view.getByText(/正式回归使用完整国家×行业面板，不限于所选两国；结果会换算回你的例子/)).toBeTruthy();
+    // Country A is taxed (zero for two years, then positive); country B is untaxed (always zero).
+    for (const [series, expected] of [["a", [0, 0, 1, 1, 1]], ["b", [0, 0, 0, 0, 0]]] as const) {
       const circles = [...chart.querySelectorAll(`circle.country-${series}`)];
       const ys = circles.map((circle) => Number(circle.getAttribute("cy")));
-      expect(ys.map((y) => (120 - y) / amplitude)).toEqual([0, 0, 1, 1, 1]);
+      expect(ys.map((y) => (120 - y) / 80)).toEqual([...expected]);
       const path = circles.map((circle, index) => `${index ? "L" : "M"}${circle.getAttribute("cx")} ${circle.getAttribute("cy")}`).join("");
       expect(chart.querySelector(`path.country-${series}`)?.getAttribute("d")).toBe(path);
     }
@@ -35,9 +35,10 @@ test("mechanism preview follows the actual two-country five-year X/Y evidence ch
     expect(view.queryByRole("slider")).toBeNull();
     expect(view.queryByText(/贸易转移|跨境收缩|替代性扩张/)).toBeNull();
     fireEvent.click(view.getByRole("button", { name: "介绍页 5" }));
-    expect(view.getByText(/第 2–9 步须主动保存两国比较/)).toBeTruthy();
+    expect(view.getByText(/第 1–10 步打开页面即自动记录；第 11–14 步点“运行回归”后自动保存/)).toBeTruthy();
+    expect(view.queryByText(/主动保存/)).toBeNull();
     expect(view.getByText(/生成草稿不等于提交/)).toBeTruthy();
-    expect(view.getByText(/等待同步成功/)).toBeTruthy();
+    expect(view.getByText(/同步成功后更新/)).toBeTruthy();
   } finally {
     cleanup();
   }

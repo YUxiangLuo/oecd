@@ -52,6 +52,6 @@ test("coverage follows actual ROW membership and available route stages", () => 
     expect(stats()).toEqual(["2 + ROW", "1", "2020–2020"]);
     fireEvent.click(view.getByRole("button", { name: "介绍页 3" }));
     expect(view.getByRole("button", { name: "2. 指标计算" }).getAttribute("aria-pressed")).toBe("true");
-    expect(view.getByText(/计算并保存不同对象的价值链指标/).textContent).toBeTruthy();
+    expect(view.getByText(/了解指标怎样由投入产出表算出/).textContent).toBeTruthy();
   } finally { cleanup(); request.mockRestore(); }
 });

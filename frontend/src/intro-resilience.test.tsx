@@ -29,7 +29,7 @@ test("scene headings receive focus and local controls never trigger global arrow
     fireEvent.keyDown(view.getByRole("button", { name: /教学模拟关税/ }), { key: "ArrowRight" });
     expect(heading().textContent).toBe("数据来源与教学设定");
     fireEvent.click(view.getByRole("button", { name: "介绍页 4" }));
-    expect(heading().textContent).toBe("先比较趋势，再读 X 与 Y 的关系");
+    expect(heading().textContent).toBe("先看加税前后的差距，再用回归量化");
     fireEvent.click(view.getByRole("button", { name: "下一页" }));
     expect(heading().textContent).toBe("实验台已就绪");
   } finally { cleanup(); }
