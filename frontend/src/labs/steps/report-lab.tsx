@@ -363,7 +363,7 @@ export function ReportLab({
         <span className="reg-section-step">最后一步 · 完成报告</span>
         <h2>检查材料，写出分析并提交</h2>
         <ol>
-          <li><b>1 · 检查实验材料</b><span>{state.syncError ? "保存失败，请先重试保存" : reportGate == null || sessionStatus !== "ready" ? "正在核对服务器记录" : sessionUnsynced || sessionSyncing ? "保存后将重新核对材料" : materialMissing.length ? `${materialMissing.length} 个步骤或条件待补齐，见下方入口` : "已保存材料与理解题已齐"}</span></li>
+          <li><b>1 · 检查实验材料</b><span>{state.syncError ? "保存失败，请先重试保存" : reportGate == null || sessionStatus !== "ready" ? "正在核对服务器记录" : sessionUnsynced || sessionSyncing ? "保存后将重新核对材料" : materialMissing.length ? `第 1–14 步中有 ${materialMissing.length} 处待补齐，见下方入口` : "已保存材料与理解题已齐"}</span></li>
           <li><b>2 · 写下自己的分析</b><span>{writtenCount} / 3 段达到最低字数 · 内容仍需自己核对</span></li>
           <li><b>3 · 提交给老师</b><span>{report?.state === "pending" ? "已提交，等待评阅" : report?.state === "graded" ? "已评阅，可查看反馈" : report ? "已有草稿，尚未提交" : "生成报告不等于提交"}</span></li>
         </ol>

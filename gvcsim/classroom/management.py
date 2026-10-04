@@ -162,6 +162,21 @@ def set_student_enrollment(
         return _student_enrollments(c, account_id)
 
 
+class StudentNumberTaken(ValueError):
+    """A non-empty 学号 already belongs to another student (学号 identifies one student)."""
+
+
+def _ensure_student_no_free(c: Any, student_no: str, exclude_id: int | None = None) -> None:
+    if not student_no.strip():
+        return
+    owner = c.execute(
+        "SELECT username FROM accounts WHERE role='student' AND student_no=%s AND id IS DISTINCT FROM %s LIMIT 1",
+        (student_no, exclude_id),
+    ).fetchone()
+    if owner is not None:
+        raise StudentNumberTaken(f"学号 {student_no} 已被学生 {owner['username']} 使用")
+
+
 def create_student(
     username: str,
     display_name: str,
@@ -175,6 +190,7 @@ def create_student(
     with database.conn() as c:
         if teacher_username and not _teacher_exists(c, teacher_username):
             raise PermissionError("教师账号无效")
+        _ensure_student_no_free(c, student_no)
         row = database._required(
             c.execute(
                 "INSERT INTO accounts(username,display_name,role,student_no,pw_salt,pw_hash)"
@@ -216,11 +232,16 @@ def create_student_batch(
         ).fetchone()
         if group is None or not group["is_active"] or not group["term_is_active"]:
             raise ValueError("请选择未归档的学期和班级")
+        # Each roster 学号 becomes both the username and the 学号, so it conflicts with an
+        # existing username or with another student's 学号.
+        names = [student["username"] for student in students]
         existing = c.execute(
-            "SELECT username FROM accounts WHERE username=ANY(%s)",
-            ([student["username"] for student in students],),
+            "SELECT username,student_no FROM accounts"
+            " WHERE username=ANY(%s) OR (role='student' AND student_no=ANY(%s))",
+            (names, names),
         ).fetchall()
-        conflicts = [row["username"] for row in existing]
+        taken = {row["username"] for row in existing} | {row["student_no"] for row in existing}
+        conflicts = [name for name in names if name in taken]
         if preview:
             return {"existing": conflicts, "created": 0}
         if conflicts:
@@ -274,6 +295,8 @@ def update_student(
         ).fetchone()
         if target is None:
             return None
+        if "student_no" in fields:
+            _ensure_student_no_free(c, fields["student_no"], account_id)
         if fields.get("password") and config.DEMO_MODE and demo_accounts.is_demo_student_username(target["username"]):
             raise demo_accounts.DemoSeedPasswordProtected(
                 "演示种子学生使用固定轮换口令，不能由教师重置；请新建普通学生账号演示改密"

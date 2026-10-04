@@ -97,7 +97,14 @@ export default function App() {
   const logout = useCallback(() => {
     void session.syncNow().catch(() => {
       if (user?.role === "student") session.stashAuthRecovery(user.username);
-    }).finally(() => reloadLoggedOut());
+    }).finally(() => {
+      // On a shared computer the next person must start from their own progress, not this
+      // user's last step; an expired session (reloadLoggedOut alone) keeps the step for re-login.
+      const url = new URL(window.location.href);
+      url.searchParams.delete("step");
+      window.history.replaceState(window.history.state, "", url);
+      reloadLoggedOut();
+    });
   }, [reloadLoggedOut, session, user]);
 
   useEffect(() => {

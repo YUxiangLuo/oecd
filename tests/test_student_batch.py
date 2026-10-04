@@ -142,3 +142,32 @@ def test_invalid_row_prevents_entire_batch(batch, field, value):
     body["students"][1][field] = value
     assert client.post("/api/classroom/students/batch", json=body).status_code in (400, 422)
     assert db.find_account("00123") is None
+
+
+def test_student_number_identifies_one_student_across_create_update_and_batch(batch):
+    client, body, _ = batch
+    first = client.post(
+        "/api/classroom/students",
+        json={"username": "alpha", "display_name": "甲", "password": "initial-pass-one", "student_no": "2026900"},
+    )
+    assert first.status_code == 200
+    taken = client.post(
+        "/api/classroom/students",
+        json={"username": "beta", "display_name": "乙", "password": "initial-pass-two", "student_no": "2026900"},
+    )
+    assert taken.status_code == 409
+    assert "学号 2026900 已被学生 alpha 使用" in taken.json()["detail"]
+    blank = client.post(
+        "/api/classroom/students",
+        json={"username": "gamma", "display_name": "丙", "password": "initial-pass-three"},
+    )
+    assert blank.status_code == 200
+    gamma = blank.json()["id"]
+    assert client.post(f"/api/classroom/students/{gamma}", json={"student_no": "2026900"}).status_code == 409
+    # Keeping one's own 学号 and clearing it are both allowed.
+    alpha = first.json()["id"]
+    assert client.post(f"/api/classroom/students/{alpha}", json={"student_no": "2026900"}).status_code == 200
+    assert client.post(f"/api/classroom/students/{gamma}", json={"student_no": ""}).status_code == 200
+    # A roster 学号 becomes username and 学号, so another student's 学号 is a conflict too.
+    body["students"][0]["username"] = "2026900"
+    assert client.post("/api/classroom/students/batch", json=body).json()["existing"] == ["2026900"]

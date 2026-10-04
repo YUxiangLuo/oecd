@@ -22,11 +22,19 @@ export function Modal({
 }) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
-  useDialogFocus({ containerRef: dialogRef, initialFocusRef, returnFocusRef, onClose });
+  // Form dialogs open with the first field focused, not the close button; dialogs without fields keep the default.
+  const firstFieldRef = useRef<HTMLElement | null>(null);
+  const attachDialog = (node: HTMLDivElement | null) => {
+    dialogRef.current = node;
+    firstFieldRef.current = node?.querySelector<HTMLElement>(
+      ".modal-body input:not([type=hidden]):not([disabled]), .modal-body select:not([disabled]), .modal-body textarea:not([disabled])",
+    ) ?? null;
+  };
+  useDialogFocus({ containerRef: dialogRef, initialFocusRef: initialFocusRef ?? firstFieldRef, returnFocusRef, onClose });
   return (
     <div className="modal-scrim" onMouseDown={onClose}>
       <div
-        ref={dialogRef}
+        ref={attachDialog}
         className="modal-card"
         style={{ width }}
         role="dialog"

@@ -375,6 +375,8 @@ def create_student(req: StudentCreateRequest, user: dict = Depends(require_teach
         )
     except psycopg.errors.UniqueViolation as error:
         raise HTTPException(status_code=409, detail=f"用户名 {req.username} 已存在") from error
+    except management.StudentNumberTaken as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
     except (PermissionError, ValueError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
@@ -429,7 +431,7 @@ def update_student(account_id: int, req: StudentUpdateRequest, user: dict = Depe
         raise HTTPException(status_code=400, detail="没有需要更新的字段")
     try:
         row = db.update_student(account_id, fields, user["sub"])
-    except demo_accounts.DemoSeedPasswordProtected as error:
+    except (demo_accounts.DemoSeedPasswordProtected, management.StudentNumberTaken) as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

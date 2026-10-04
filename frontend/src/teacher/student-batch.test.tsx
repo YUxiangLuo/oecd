@@ -74,3 +74,10 @@ test("download precedes creation and response-loss retry preserves the same cred
     HTMLAnchorElement.prototype.click = originalClick;
   }
 });
+
+test("reports every problem with line numbers as pasted, header included", () => {
+  const roster = "学号\t姓名\n0261001\t王小明\n0261002\t李华\n0261002\t重复\n0261003\t\n";
+  expect(() => parseRoster(roster)).toThrow("第 4 行：学号 0261002 与第 3 行重复\n第 5 行：请保留学号、姓名两列，姓名为 1–60 字");
+  const many = Array.from({ length: 12 }, (_, i) => `坏学号${i}\t姓名`).join("\n");
+  expect(() => parseRoster(many)).toThrow(/第 10 行[^\n]*\n另有 2 处问题$/);
+});

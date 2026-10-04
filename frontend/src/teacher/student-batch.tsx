@@ -4,22 +4,39 @@ import { api } from "../api";
 import type { AcademicSemester } from "../types";
 import { Modal } from "./ui";
 
+/**
+ * Parse a pasted two-column roster. Line numbers refer to the text as pasted (header and blank
+ * lines included), and every problem is reported at once so the teacher can fix them in one pass.
+ */
 export function parseRoster(text: string) {
-  const lines = text.replace(/^\uFEFF/, "").split(/\r?\n/).filter((line) => line.trim());
-  if (lines[0]?.trim() === "学号\t姓名") lines.shift();
-  if (!lines.length || lines.length > 200) throw new Error("每次请粘贴 1–200 名学生");
-  const seen = new Set<string>();
-  return lines.map((line, index) => {
+  const rows = text.replace(/^﻿/, "").split(/\r?\n/)
+    .map((line, index) => ({ line, number: index + 1 }))
+    .filter(({ line }) => line.trim());
+  if (rows[0]?.line.trim() === "学号\t姓名") rows.shift();
+  if (!rows.length || rows.length > 200) throw new Error("每次请粘贴 1–200 名学生");
+  const seen = new Map<string, number>();
+  const errors: string[] = [];
+  const accounts: { username: string; display_name: string }[] = [];
+  for (const { line, number } of rows) {
     const cells = line.split("\t").map((cell) => cell.trim());
     const [username, display_name] = cells;
-    if (cells.length !== 2 || !display_name || display_name.length > 60)
-      throw new Error(`第 ${index + 1} 行：请保留学号、姓名两列，姓名为 1–60 字`);
-    if (!/^[a-zA-Z0-9_.-]{2,40}$/.test(username))
-      throw new Error(`第 ${index + 1} 行：学号须为 2–40 位字母、数字、下划线、点或连字符`);
-    if (seen.has(username)) throw new Error(`第 ${index + 1} 行：学号 ${username} 重复`);
-    seen.add(username);
-    return { username, display_name };
-  });
+    if (cells.length !== 2 || !display_name || display_name.length > 60) {
+      errors.push(`第 ${number} 行：请保留学号、姓名两列，姓名为 1–60 字`);
+    } else if (!/^[a-zA-Z0-9_.-]{2,40}$/.test(username)) {
+      errors.push(`第 ${number} 行：学号须为 2–40 位字母、数字、下划线、点或连字符`);
+    } else if (seen.has(username)) {
+      errors.push(`第 ${number} 行：学号 ${username} 与第 ${seen.get(username)} 行重复`);
+    } else {
+      seen.set(username, number);
+      accounts.push({ username, display_name });
+    }
+  }
+  if (errors.length) {
+    const shown = errors.slice(0, 10);
+    if (errors.length > 10) shown.push(`另有 ${errors.length - 10} 处问题`);
+    throw new Error(shown.join("\n"));
+  }
+  return accounts;
 }
 
 type Account = ReturnType<typeof parseRoster>[number] & { password: string };
@@ -91,7 +108,7 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
           <button disabled={busy} onClick={download}>下载账号清单</button>
           {downloaded && !done && <p>请确认文件已保存，再创建账号。</p>}</>}
       </>}
-      {error && <div className="error-box" role="alert">{error}</div>}
+      {error && <div className="error-box" role="alert" style={{ whiteSpace: "pre-line" }}>{error}</div>}
       <div className="modal-actions">
         <button disabled={busy} onClick={close}>{done ? "完成" : "取消"}</button>
         {accounts && !done && !attempted && <button disabled={busy} onClick={() => { setAccounts(null); setError(""); }}>返回修改</button>}
