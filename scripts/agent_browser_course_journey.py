@@ -148,8 +148,8 @@ def main():
                 student.run("wait", "--fn", 'document.querySelectorAll(".bounded-data-table tbody tr").length === 10')
                 wait_saved(step, lambda row: bool(row.get("teaching_observation")))
             else:
-                student.button("计算两者的关系")
-                student.run("wait", "--text", "重新计算")
+                student.run("find", "role", "button", "click", "--name", "运行回归")
+                student.run("wait", "--text", "重新运行回归")
                 wait_saved(step, lambda row: bool(row.get("run")), timeout=30)
             names = json.loads(
                 student.run(

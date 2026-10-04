@@ -55,7 +55,7 @@ describe("simple regression workbench", () => {
     expect(figure.getAttribute("aria-label")).toContain("2018 年起模拟加税");
     expect(figure.textContent).toContain("加税国家组");
     expect(figure.textContent).toContain("未加税国家组");
-    await waitFor(() => expect(screen.getByRole("button", { name: "用全部 16,220 条记录估计这个差距" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("button", { name: "运行回归（使用全部 16,220 条记录）" })).toBeTruthy());
     expect(api.teachingSeries).toHaveBeenCalledWith(["CAN", "MEX"], "C29");
   });
 

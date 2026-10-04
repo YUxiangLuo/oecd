@@ -421,7 +421,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
           onClick={run}
           disabled={running || designQuery.status !== "success" || !design}
         >
-          {running ? "估计中…" : result ? "重新计算" : groups ? `用全部 ${groups.sample.rows.toLocaleString("zh-CN")} 条记录估计这个差距` : "计算两者的关系"}
+          {running ? "回归运行中…" : result ? "重新运行回归" : groups ? `运行回归（使用全部 ${groups.sample.rows.toLocaleString("zh-CN")} 条记录）` : "运行回归"}
         </button>
         {running && (
           <span className="muted reg-inline-status" role="status" aria-live="polite" aria-busy="true">正在估计…</span>
