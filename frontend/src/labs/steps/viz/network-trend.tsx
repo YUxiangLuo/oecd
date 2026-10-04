@@ -24,10 +24,12 @@ export function networkTrendPoints(rows: Row[], years: number[], countries: stri
   }));
 }
 
-export function NetworkTrend({ meta, schema, initialCountry, observations = [], syncing = false, syncError = null, onRetrySync, onRecord }: {
+export function NetworkTrend({ meta, schema, initialCountry, initialCountries = [], observations = [], syncing = false, syncError = null, onRetrySync, onRecord }: {
   meta: Meta;
   schema?: IndicatorSchema | null;
   initialCountry: string;
+  /** The saved (or carried-over) comparison pair, used when no readings are recorded yet. */
+  initialCountries?: string[];
   observations?: VizObservation[];
   syncing?: boolean;
   syncError?: string | null;
@@ -38,7 +40,7 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
   const years = [...meta.years].sort((a, b) => a - b);
   const restored = observations.filter((item) => (item.source === "explicit-network-trend" || item.source === "explicit-network-ranking") && item.release === currentReleaseId(meta));
   const restoredCountries = [...new Set(restored.map((item) => item.country))].filter((country) => countries.includes(country));
-  const [defaultFirst, defaultSecond] = defaultComparison(countries, restoredCountries.length ? restoredCountries : [initialCountry]);
+  const [defaultFirst, defaultSecond] = defaultComparison(countries, restoredCountries.length ? restoredCountries : initialCountries.length >= 2 ? initialCountries : [initialCountry]);
   const [first, setFirst] = useState(defaultFirst);
   const [second, setSecond] = useState(defaultSecond);
   const [industry, setIndustry] = useState(meta.sectors.includes(restored[0]?.industry ?? "") ? restored[0].industry! : meta.sectors.includes("C26") ? "C26" : meta.sectors[0] ?? "");

@@ -306,7 +306,8 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
     if len(selected_industries) == 1:
         scope += f"{sector_label(selected_industries[0])} · "
     metric_label = _STUDENT_METRIC_LABELS.get(available_metrics[0], available_metrics[0])
-    if source == "explicit-network-ranking" and single_metric and countries:
+    # Bars spanning several industries are the "定位行业" ranking, ordered by country A (steps 6–9).
+    if (source == "explicit-network-ranking" or by_industry) and single_metric and countries:
         name = f"{scope}{metric_label}行业排名（按 {country_label(countries[0])} 降序）"
     elif single_metric:
         name = f"{scope}{metric_label}同口径国家比较"

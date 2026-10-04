@@ -6,7 +6,7 @@ import { isDemoStudentUsername } from "./login";
 import { TeacherDashboard } from "./teacher";
 import { TeacherReviewGuardProvider, useTeacherReviewGuard } from "./teacher/review-guard";
 import { ToastHost } from "./toast";
-import { materialStatusForStep } from "./step-task-card";
+import { materialStatusForStep, reportStatusLabel } from "./step-task-card";
 import { revealOutlineStep } from "./step-navigation";
 import type {
   AuthUser,
@@ -191,9 +191,11 @@ interface CourseSidebarProps {
   completion: CompletionSummary | null;
   materialGate: ReportGateItem[] | null;
   onNavigate: (step: number) => void;
+  /** Whether a report has been generated, even if it no longer matches the saved records. */
+  reportExists?: boolean;
 }
 
-export function CourseSidebar({ stepsData, current, completion, materialGate, onNavigate }: CourseSidebarProps) {
+export function CourseSidebar({ stepsData, current, completion, materialGate, onNavigate, reportExists = false }: CourseSidebarProps) {
   const steps = stepsData.steps;
   const outlineRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => { revealOutlineStep(outlineRef.current); }, [current, steps]);
@@ -250,7 +252,7 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
                 ? "报告材料检查中"
                 : materialStatus === "ready" ? "报告材料已齐" : "报告材料未齐";
               const state = done ? "done" : step.n === current ? "cur" : "future";
-              const completionLabel = step.lab === "rep" ? (done ? "报告已生成" : "报告未生成") : (done ? "理解已完成" : "理解未完成");
+              const completionLabel = step.lab === "rep" ? `报告${reportStatusLabel(done, reportExists)}` : (done ? "理解已完成" : "理解未完成");
               const accessibleName = [
                 `第 ${step.n} 步：${step.title}`,
                 step.n === current ? "当前步骤" : null,

@@ -80,7 +80,7 @@ export function useAutoComparison({ topic, meta, state, country, partner, year, 
   return { first: pair[0], second: pair[1], current, loadFailed: countryQuery.status === "error" };
 }
 
-export function AutoMaterialStatus({ meta, state, schema, first, second, current, onSecond, loadFailed, where }: {
+export function AutoMaterialStatus({ meta, state, schema, first, second, current, onSecond, loadFailed, where, note }: {
   meta: Meta;
   state: StepStateApi<IndicatorStepState>;
   schema: IndicatorSchema | null | undefined;
@@ -92,6 +92,8 @@ export function AutoMaterialStatus({ meta, state, schema, first, second, current
   loadFailed: boolean;
   /** Where the first country is chosen, e.g. “上方所选国家”. */
   where: string;
+  /** Extra reading caveat for this step's indicator. */
+  note?: string;
 }) {
   const recorded = current ? state.data?.observations ?? [] : [];
   return (
@@ -105,7 +107,7 @@ export function AutoMaterialStatus({ meta, state, schema, first, second, current
           {meta.countries.filter((code) => code !== first).map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
         </select>
       </label>
-      <small>记录{where}和对比国家在同一年的本步代表指标（国家级），换国家或年份后自动更新，无需另外保存。</small>
+      <small>记录{where}和对比国家在同一年的本步代表指标（国家级），换国家或年份后自动更新，无需另外保存。{note ? ` ${note}` : ""}</small>
     </div>
   );
 }

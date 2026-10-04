@@ -371,7 +371,7 @@ export function ReportLab({
       {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} />}
       <details className="report-reference"><summary>查看已保存的四项回归结果</summary>
         <RegressionEvidenceMatrix getStep={getStep} />
-        <p className="muted">图表的具体数值可回到步骤 6–9 核对。这里只列出已保存的结果，结论需要你自己写。</p>
+        <p className="muted">系数图和换算到例子可回到步骤 11–14 查看；步骤 6–9 的图表读数会自动写进报告。这里只列出已保存的结果，结论需要你自己写。</p>
       </details>
       <section className="report-reflection" aria-labelledby={REPORT_REFLECTION_TITLE_ID}>
         <div>

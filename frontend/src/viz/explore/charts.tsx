@@ -135,6 +135,39 @@ const median = (arr: number[]) => {
   return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
 };
 
+type LabelBox = { x0: number; x1: number; y0: number; y1: number };
+const boxesOverlap = (a: LabelBox, b: LabelBox) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+
+/**
+ * Place point labels without collisions: highest priority first (selected, then key economies), trying
+ * right, left, above and below the point; a label also avoids the highlighted dots. If nothing fits it
+ * keeps the right-hand position, as before.
+ */
+export function placeScatterLabels(
+  labels: { id: string; text: string; x: number; y: number; priority: number }[],
+  avoid: { x: number; y: number }[],
+  bounds: { left: number; right: number; top: number; bottom: number },
+) {
+  const placed: LabelBox[] = [];
+  const dots = avoid.map((dot) => ({ x0: dot.x - 7, x1: dot.x + 7, y0: dot.y - 7, y1: dot.y + 7 }));
+  return [...labels].sort((a, b) => b.priority - a.priority).map((label) => {
+    const width = label.text.length * 6.2;
+    const candidates = [
+      { x: label.x + 7, y: label.y + 3.5, anchor: "start" as const, box: { x0: label.x + 7, x1: label.x + 7 + width, y0: label.y - 5, y1: label.y + 5 } },
+      { x: label.x - 7, y: label.y + 3.5, anchor: "end" as const, box: { x0: label.x - 7 - width, x1: label.x - 7, y0: label.y - 5, y1: label.y + 5 } },
+      { x: label.x, y: label.y - 9, anchor: "middle" as const, box: { x0: label.x - width / 2, x1: label.x + width / 2, y0: label.y - 18, y1: label.y - 8 } },
+      { x: label.x, y: label.y + 17, anchor: "middle" as const, box: { x0: label.x - width / 2, x1: label.x + width / 2, y0: label.y + 8, y1: label.y + 18 } },
+    ];
+    const inside = (box: LabelBox) => box.x0 >= bounds.left && box.x1 <= bounds.right && box.y0 >= bounds.top && box.y1 <= bounds.bottom;
+    const free = (box: LabelBox) => inside(box)
+      && !placed.some((other) => boxesOverlap(box, other))
+      && !dots.some((dot) => boxesOverlap(box, dot) && !(Math.abs((dot.x0 + dot.x1) / 2 - label.x) < 0.5 && Math.abs((dot.y0 + dot.y1) / 2 - label.y) < 0.5));
+    const choice = candidates.find((candidate) => free(candidate.box)) ?? candidates[0];
+    placed.push(choice.box);
+    return { id: label.id, text: label.text, x: choice.x, y: choice.y, anchor: choice.anchor };
+  });
+}
+
 /** 象限散点图:两条参考线(默认中位数)把平面切成四象限,四角标注角色。
  *  步6「定位图」(外国增加值项占比×跨境生产占比)等双指标比较。 */
 export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabel, xFormat, yFormat, highlight, refMode = "median", quadrantLabels, equalityLine = false }: {
@@ -197,31 +230,42 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
             </line>
           ) : null;
         })()}
-        {/* 四角角色标签 */}
-        {quadrantLabels?.map((lab, i) => (
-          <text key={i} x={corners[i].x} y={corners[i].y} textAnchor={corners[i].anchor}
-            fontSize="10.5" fill="#5f6677" fontWeight={600}>{lab}</text>
-        ))}
         {/* 轴标题 */}
         <text x={(m.l + W - m.r) / 2} y={H - 6} textAnchor="middle" fontSize="11.5" fill="#5a6070">{xLabel}</text>
         <text x={14} y={(m.t + H - m.b) / 2} textAnchor="middle" fontSize="11.5" fill="#5a6070"
           transform={`rotate(-90 14 ${(m.t + H - m.b) / 2})`}>{yLabel}</text>
-        {pts.map((p) => {
+        {/* Highlighted points are drawn last so ordinary points never cover them. */}
+        {[...pts].sort((a, b) => Number(highlight?.has(a.c) ?? false) - Number(highlight?.has(b.c) ?? false)).map((p) => {
           const hi = highlight?.has(p.c);
-          const key = KEY_ECONOMIES.has(p.tag);
           return (
             <g key={p.c}
               onMouseMove={(e) => show(e, [["", p.label], [xLabel, fmtVal(p.x, xFormat)], [yLabel, fmtVal(p.y, yFormat)]])}
               onMouseLeave={hide} style={{ cursor: "pointer" }}>
               <circle cx={px(p.x)} cy={py(p.y)} r={hi ? 6 : 4.5}
                 fill={hi ? CAT[5] : CAT[0]} fillOpacity={hi ? 0.95 : 0.62} stroke="#fff" strokeWidth={1} />
-              {(showLabels || hi || key) && (
-                <text x={px(p.x) + 7} y={py(p.y) + 3.5} fontSize="10" fill={hi ? RANK_HIGHLIGHT_TEXT : key ? "#3a4050" : "#5f6677"}
-                  fontWeight={hi || key ? 700 : 400}>{p.tag}</text>
-              )}
             </g>
           );
         })}
+        {placeScatterLabels(
+          pts.filter((p) => showLabels || highlight?.has(p.c) || KEY_ECONOMIES.has(p.tag))
+            .map((p) => ({ id: p.c, text: p.tag, x: px(p.x), y: py(p.y), priority: highlight?.has(p.c) ? 2 : KEY_ECONOMIES.has(p.tag) ? 1 : 0 })),
+          pts.filter((p) => highlight?.has(p.c)).map((p) => ({ x: px(p.x), y: py(p.y) })),
+          { left: m.l, right: W - m.r, top: m.t, bottom: H - m.b },
+        ).map((label) => {
+          const hi = highlight?.has(label.id);
+          const key = KEY_ECONOMIES.has(label.text);
+          return (
+            <text key={`label-${label.id}`} x={label.x} y={label.y} textAnchor={label.anchor} fontSize="10" pointerEvents="none"
+              stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke"
+              fill={hi ? RANK_HIGHLIGHT_TEXT : key ? "#3a4050" : "#5f6677"} fontWeight={hi || key ? 700 : 400}>{label.text}</text>
+          );
+        })}
+        {/* 四角角色标签：画在点之上，白色描边保证可读 */}
+        {quadrantLabels?.map((lab, i) => (
+          <text key={i} x={corners[i].x} y={corners[i].y} textAnchor={corners[i].anchor} pointerEvents="none"
+            stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke"
+            fontSize="10.5" fill="#5f6677" fontWeight={600}>{lab}</text>
+        ))}
       </svg>
       )}
       {equalityLine && pts.length > 0 && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}><span style={{ color: "var(--text-warning)", fontWeight: 700 }}>橙色虚线 y=x</span>：线上方 PLv_GVC &gt; PLy_GVC（GVCPs &gt; 1，更偏上游）；线下方更偏下游。灰色中位数线只表示相对高低。</div>}

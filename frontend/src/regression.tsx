@@ -146,7 +146,8 @@ export function RegressionResultCard({ outcome, response, examples = [] }: {
               ? <>{example.label}（X = {(example.x * 100).toFixed(2)} 个百分点）Y 约{coef * example.x < 0 ? "下降" : "上升"} <b>{exampleEffect(outcome, coef, example.x)}</b></>
               : <>{example.label}未被模拟加税（X = 0），按估计不变</>;
             return <span key={example.label}>{index ? "；" : ""}{text}</span>;
-          })}{verdict.state === "insufficient" ? "；但区间跨过 0，这个方向本身并不确定" : ""}。</li>
+          })}{verdict.state === "insufficient" ? "；但区间跨过 0，这个方向本身并不确定" : ""}。
+            {examples.every((example) => example.x <= 0) && "两个例子都未被模拟加税，所以换算结果都是不变；回步骤 10 把其中一个换成模拟加税的国家（如加拿大），就能看到换算。"}</li>
         )}
         <li>{verdict.evidence}</li>
         <li><b>解释限制：</b>{lesson.dontClaim}</li>
@@ -445,6 +446,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
             <DesignEquation design={result.design} />
             <RegressionCoefficientTable response={result} />
             <p className="muted">极小 p 值以 &lt;0.0001 展示，不能读作概率为零。</p>
+            <p className="muted">表中系数按 X 的原始单位计（X 是份额，0.01 即 1 个百分点）：上方“X 每增加 1 个百分点”的读数 = 系数 × 0.01{outcome === "trade" || outcome === "production" ? "，Y 也是份额，再乘 100 换成百分点，所以数值与系数相同" : ""}。</p>
             <p className="muted">N={result.result.n_obs.toLocaleString("zh-CN")} · {result.result.n_entities.toLocaleString("zh-CN")} 个体 × {result.result.n_times} 年 · {result.result.n_clusters} 个聚类 · {result.result.r2_within == null ? "本次 TWFE 结果未提供组内 R²" : `组内 R²=${result.result.r2_within.toFixed(4)}`}</p>
           </details>
         </div>

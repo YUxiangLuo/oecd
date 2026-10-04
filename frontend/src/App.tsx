@@ -173,7 +173,8 @@ export default function App() {
     initialStepChosen.current = true;
     if (explicitStep.current != null) return;
     const completed = new Set(session.completion?.completed ?? []);
-    const firstIncomplete = stepsData.steps.find((step) => !completed.has(step.n))?.n ?? stepsData.steps[0]?.n ?? 1;
+    // With everything done, open the report step: that is where the receipt and teacher feedback are.
+    const firstIncomplete = stepsData.steps.find((step) => !completed.has(step.n))?.n ?? stepsData.steps.at(-1)?.n ?? 1;
     selectStep(firstIncomplete, "replace");
   }, [selectStep, session.completion, session.status, stepsData]);
 

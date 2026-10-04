@@ -45,7 +45,8 @@ export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta;
           year={controls.year} country={controls.country} page={controls.page} interacted={controls.interacted}
           onYear={controls.setYear} onCountry={controls.setCountry} onPage={controls.setPage}
         />
-        <AutoMaterialStatus meta={meta} state={state} schema={schema.data} {...auto} onSecond={controls.setPartner} where="上方表格所选国家" />
+        <AutoMaterialStatus meta={meta} state={state} schema={schema.data} {...auto} onSecond={controls.setPartner} where="上方表格所选国家"
+          note="国家级加权总度只含国家之间的贸易（不含国内流量），不能与上表含国内流量的行业数值直接比较。" />
       </section>
     </div>
   );

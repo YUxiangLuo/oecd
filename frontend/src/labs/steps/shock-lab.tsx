@@ -139,6 +139,15 @@ export function ShockLab({ meta, step: _step, state }: {
           </li>;
         })}
       </ul>
+      {(() => {
+        // The example only shows the before/after gap when one country is taxed and the other is not.
+        const taxed = selectedCountries.map((country) => rows.find((item) => item.country === country && item.year === years.at(-1)))
+          .filter((row) => row != null).map((row) => row!.teaching_tariff_rate_tau > 0);
+        if (taxed.length !== 2 || taxed[0] !== taxed[1]) return null;
+        return <p className="teaching-example-hint" role="note">{taxed[0]
+          ? "两个国家都被模拟加税，缺少未加税的对照；可以把其中一个换成未加税的国家（如墨西哥）。"
+          : "两个国家都未被模拟加税，X 一直为 0，看不到加税前后的差距；可以把其中一个换成模拟加税的国家（如加拿大）。"}</p>;
+      })()}
       <section className="reg-section-card">
         <span className="reg-section-step">五年趋势 · 两国使用同一刻度</span>
         <IndicatorTrendChart

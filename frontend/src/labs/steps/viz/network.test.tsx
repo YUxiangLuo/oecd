@@ -27,13 +27,13 @@ test("step 9 records the main comparison automatically; supplementary charts ope
   render(<NetworkVizStep meta={meta} step={step} state={{ data, save, syncing: false, syncError: null, syncNow: () => {}, complete: false }} />);
   await screen.findByRole("img");
   // Legacy observations without a release do not restore the trend selection;
-  // the last compared country (USA) supplies the initial drill-down instead.
-  expect(screen.getByLabelText("当前比较口径").textContent).toContain("USA 美国与CHN 中国 · C26");
+  // the saved comparison pair (CHN, USA) supplies the initial comparison instead.
+  expect(screen.getByLabelText("当前比较口径").textContent).toContain("CHN 中国与USA 美国 · C26");
   expect(screen.queryByRole("button", { name: "保存为报告材料" })).toBeNull();
   // The complete main chart replaces the legacy record automatically.
   await waitFor(() => expect(save.mock.calls.some(([patch]) => "observations" in patch)).toBe(true));
   const recorded = save.mock.calls.map(([patch]) => patch).filter((patch) => "observations" in patch).at(-1)!;
-  expect(recorded.compared).toEqual(["USA", "CHN"]);
+  expect(recorded.compared).toEqual(["CHN", "USA"]);
   expect(recorded.observations!.every((item) => item.release === meta.dataset!.release_id && item.source === "explicit-network-trend")).toBe(true);
 
   // Supplementary charts are buttons that open a modal; the main chart stays mounted.

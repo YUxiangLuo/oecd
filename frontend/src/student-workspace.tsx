@@ -1,7 +1,6 @@
 import {
   useRef,
   useMemo,
-  useState,
   type MouseEvent,
   type RefObject,
 } from "react";
@@ -106,7 +105,6 @@ export function StudentWorkspace({
   const totalSteps = steps.length;
   const stepIndex = steps.findIndex((item) => item.n === current);
   const passwordTriggerRef = useRef<HTMLButtonElement>(null);
-  const [comparisonCarryGeneration, setComparisonCarryGeneration] = useState(0);
   if (stepIndex < 0) {
     return <div style={{ padding: 40 }} className="error-box">步骤不存在，请从课程大纲重新选择。</div>;
   }
@@ -120,18 +118,29 @@ export function StudentWorkspace({
   const materialStatus = materialStatusForStep(step.n, session.materialGate,
     session.unsynced || session.syncing, Boolean(session.syncError));
   const currentComparison = session.getStep<{ compared?: string[] }>(step.n)?.compared ?? [];
+  // Steps 3–9 record their comparison as soon as they open, so a step visited for the first time starts
+  // from the pair used in the latest earlier step instead of the default CHN/USA. Once the step saves its
+  // own comparison, that one is used.
   let carriedComparison: string[] = [];
-  let carriedFromStep = 0;
   if (step.n >= 3 && step.n <= 9 && currentComparison.length < 2) {
     for (let prior = step.n - 1; prior >= 2; prior -= 1) {
       const candidates = session.getStep<{ compared?: string[] }>(prior)?.compared;
       if (Array.isArray(candidates) && candidates.length >= 2) {
         carriedComparison = candidates.slice(-2);
-        carriedFromStep = prior;
         break;
       }
     }
   }
+  const labState: typeof stepState = carriedComparison.length >= 2
+    ? {
+      ...stepState,
+      data: {
+        ...(stepState.data ?? {}),
+        compared: carriedComparison,
+        country: typeof stepState.data?.country === "string" ? stepState.data.country : carriedComparison[0],
+      },
+    }
+    : stepState;
 
   return (
     <>
@@ -154,6 +163,7 @@ export function StudentWorkspace({
             completion={presentationCompletion}
             materialGate={session.materialGate}
             onNavigate={onNavigateStep}
+            reportExists={session.report != null}
           />
 
           <div className="workarea">
@@ -225,25 +235,8 @@ export function StudentWorkspace({
                     step={step}
                     complete={presentationCompletedSteps.has(step.n)}
                     materialStatus={materialStatus}
+                    reportExists={session.report != null}
                   />
-                  {carriedComparison.length >= 2 && (
-                    <div className="comparison-carry" role="note">
-                      <div>
-                        <b>保持同一组比较对象</b>
-                        <span>{carriedFromStep === step.n - 1 ? "上一步" : `步骤 ${carriedFromStep} `}使用了 {carriedComparison.join(" / ")}；本步可沿用，也可更换比较对象。沿用后，本步图表会自动记录为报告材料。</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => {
-                          stepState.save({ compared: carriedComparison });
-                          setComparisonCarryGeneration((value) => value + 1);
-                        }}
-                      >
-                        沿用这组比较对象
-                      </button>
-                    </div>
-                  )}
                   <div
                     id={STEP_PRIMARY_ACTION_ID}
                     tabIndex={-1}
@@ -252,10 +245,10 @@ export function StudentWorkspace({
                     aria-label={stepPrimaryActionLabel(step)}
                   >
                     <LabRouter
-                      key={`lab:${step.n}:${session.workspaceGeneration}:${comparisonCarryGeneration}`}
+                      key={`lab:${step.n}:${session.workspaceGeneration}`}
                       step={step}
                       meta={meta}
-                      state={stepState}
+                      state={labState}
                       report={session.report}
                       sessionUpdatedAt={session.updatedAt}
                       reportGate={session.reportGate}

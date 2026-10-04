@@ -143,6 +143,10 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                 lines.append(
                     f"- 记录的代表指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}"
                 )
+                if step == 5 and metric_label == "weighted degree":
+                    lines.append(
+                        "- 国家级加权总度只含国家之间的贸易（不含国内流量），不能与含国内流量的行业级数值直接比较。"
+                    )
             lines.extend(("", "| 实体 | 年份 | 指标 | 单位 | 数值 |", "|---|---:|---|---|---:|"))
             for item in observations:
                 observation_value = item.get("value", "—")
@@ -494,6 +498,8 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
         "",
         "以下结果来自会话中保存的服务端运行，不在报告生成时重新估计。同一步可能有最近一次探索和一份可报告快照。表格数值为便于阅读做了四位有效数字的显示舍入；完整原始值仍保留在报告溯源数据中。",
         "极小 p 值以 <0.0001 展示，不能读作概率为零。",
+        "表中系数按 X 的原始单位计（X 是份额，0.01 即 1 个百分点）：正文“冲击强度每增加 1 个百分点”的读数 = 系数 × 0.01；"
+        "贸易流和生产两项的 Y 也是份额，再乘 100 换成百分点，所以数值与系数相同。",
         "",
     ]
     grouped: dict[int, list[dict[str, Any]]] = {step: [] for step in _STEP_OUTCOMES}

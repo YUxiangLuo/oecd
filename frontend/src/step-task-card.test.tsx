@@ -124,6 +124,12 @@ describe("shared step task card", () => {
     expect(generated).toContain("报告：已生成");
     expect(generated).not.toContain("已完成");
     expect(generated).not.toContain("已提交");
+    // A report that no longer matches the saved records (e.g. after browsing on) needs updating, not generating.
+    const outdated = renderToStaticMarkup(<StepTaskCard
+      step={reportStep} complete={false} materialStatus="ready" reportExists
+    />);
+    expect(outdated).toContain("报告：需更新");
+    expect(outdated).not.toContain("未生成");
   });
 
   test("focuses the real workbench and scrolls only its nested course container", () => {

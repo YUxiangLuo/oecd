@@ -29,7 +29,7 @@ _STUDENT_METRIC_LABELS = {
     "1_VA_D_share": "纯国内生产份额（1_VA_D/SVA）",
     "2_VA_RT_share": "传统贸易份额（2_VA_RT/SVA）",
     "3a_VA_GVC_S_share": "简单 GVC 份额（3a_VA_GVC_S/SVA）",
-    "GVCPs": "GVC 相对位置（GVCPs）",
+    "GVCPs": "GVC 位置指数（GVCPs）",
     # Match the label the step itself shows; without this the report printed the
     # raw field key for step 5's network metric.
     "weighted degree": "加权总度(入+出；自环双计)",

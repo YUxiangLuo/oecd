@@ -315,15 +315,6 @@
 .country-picker-row input { accent-color: #4b47e0; }
 .country-picker-row b { font-family: "Space Grotesk", sans-serif; font-weight: 600; color: #3a4050; }
 
-.comparison-carry {
-  display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  margin-bottom: 14px; padding: 10px 12px; border: 1px solid #dcdaf8;
-  border-radius: 10px; background: #f7f7ff; color: #3a4050;
-}
-.comparison-carry > div { display: grid; gap: 3px; }
-.comparison-carry b { font-size: 12.5px; }
-.comparison-carry span { font-size: 11.5px; line-height: 1.5; color: #606879; }
-.comparison-carry button { flex: none; }
 .network-demo-bridge {
   margin: 0 0 16px; padding: 14px 16px; border: 1px solid #e1e4ec;
   border-radius: 11px; background: #fafbfc;

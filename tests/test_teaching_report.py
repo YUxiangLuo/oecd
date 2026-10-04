@@ -840,6 +840,8 @@ def test_report_ranking_extrema_use_all_saved_industries(step):
     chart = json.loads(section.split("```gvcsim-chart\n", 1)[1].split("\n```", 1)[0])
     assert len(chart["items"]) == 18
     assert {item["group"] for item in chart["items"]} == {"CHN 中国", "USA 美国"}
+    # The 定位行业 view is a ranking ordered by country A, not a two-country comparison.
+    assert "行业排名（按 CHN 中国 降序）" in chart["title"]
 
 
 def test_report_directions_retains_both_length_metrics_and_their_readouts():

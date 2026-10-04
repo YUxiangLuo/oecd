@@ -60,7 +60,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     definition: "真实指标衡量增加值经过多次跨境生产后被最终吸收的比例；本步 Y 只是对应这一概念的模拟值。",
     downMeaning: "模拟 Y 的数值下降。若真实同定义指标下降，才表示 SVA 中复杂 GVC 的构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
     upMeaning: "模拟 Y 的数值上升。若真实同定义指标上升，才表示复杂 GVC 份额提高；本实验没有重算生产分解。",
-    dontClaim: "不要把区间过 0 写成「冲击没有影响」。",
+    dontClaim: "不要写成「复杂 GVC 生产规模缩小」。这一项是占总增加值的份额，份额下降不代表复杂 GVC 生产的绝对量减少。",
   },
   length: {
     outcome: "length",
