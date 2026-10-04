@@ -149,7 +149,8 @@ export interface IndicatorObservation {
   unit: string;
   release: string;
   scope: "country";
-  source: "explicit-indicator-table-comparison";
+  /** Steps 2–4 record automatically; step 5 still saves explicitly. */
+  source: "explicit-indicator-table-comparison" | "auto-indicator-comparison";
 }
 
 const CORE_METRIC: Record<IndicatorGroupKey, string> = {
@@ -181,6 +182,7 @@ export function countryObservation(
   metric: string,
   unit: string,
   release: string,
+  source: IndicatorObservation["source"] = "explicit-indicator-table-comparison",
 ) {
   const matches = rows.filter((item) => item.country === country);
   const row = matches.find((item) => item.industry == null || item.industry === "") ?? matches[0];
@@ -196,7 +198,7 @@ export function countryObservation(
     unit,
     release,
     scope: "country" as const,
-    source: "explicit-indicator-table-comparison" as const,
+    source,
   };
 }
 
@@ -208,10 +210,11 @@ export function indicatorComparisonPatch(
   metric: string,
   unit: string,
   release: string,
+  source: IndicatorObservation["source"] = "explicit-indicator-table-comparison",
 ): Pick<IndicatorStepState, "year" | "country" | "compared" | "metric" | "observations"> | null {
   if (countries.length !== 2 || new Set(countries).size !== 2 || !release) return null;
   const observations = countries.map((country) =>
-    countryObservation(rows, country, year, metric, unit, release),
+    countryObservation(rows, country, year, metric, unit, release, source),
   );
   if (observations.some((item) => item === null)) return null;
   return {

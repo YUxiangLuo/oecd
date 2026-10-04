@@ -649,10 +649,11 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     blocked = check_gate(empty_session())
     assert set(GATE_STEPS) <= {item["step"] for item in blocked}
     assert any(item["step"] == 1 and "具体单元格" in "".join(item["missing"]) for item in blocked)
+    # Steps 2–4 record automatically from “动手拆解”; step 5 keeps its explicit save button.
     assert all(
-        any(item["step"] == step and "保存两国同年比较" in "".join(item["missing"]) for item in blocked)
-        for step in range(2, 6)
+        any(item["step"] == step and "动手拆解" in "".join(item["missing"]) for item in blocked) for step in range(2, 5)
     )
+    assert any(item["step"] == 5 and "保存两国同年比较" in "".join(item["missing"]) for item in blocked)
     assert all(
         any(item["step"] == step and "恰好两个国家" in "".join(item["missing"]) for item in blocked)
         for step in range(6, 9)
@@ -865,6 +866,29 @@ def test_material_gate_is_independent_of_unfinished_quizzes():
 
     assert check_material_gate(session) == []
     assert {item["step"] for item in check_gate(session)} == set(range(1, 15))
+
+
+def test_steps_two_to_four_accept_automatic_comparisons_but_step_five_stays_explicit():
+    """Steps 2–4 record the two-country comparison automatically; step 5 still needs its save button."""
+    from gvcsim.report_render import _experiment_sections
+
+    session = _complete()
+    for step in (2, 3, 4, 5):
+        for item in session["steps"][str(step)]["data"]["observations"]:
+            item["source"] = "auto-indicator-comparison"
+    blocked = {item["step"]: "".join(item["missing"]) for item in check_material_gate(session)}
+    assert set(blocked) == {5}
+    assert "保存两国同年比较" in blocked[5]
+
+    # The report states honestly that the comparison was recorded by the system.
+    snapshot = "\n".join(_experiment_sections(session))
+    assert "系统自动记录的比较：CHN、USA" in snapshot
+
+    missing = _complete()
+    missing["steps"]["2"]["data"]["observations"] = []
+    message = "".join(next(item["missing"] for item in check_material_gate(missing) if item["step"] == 2))
+    assert "动手拆解" in message
+    assert "保存两国同年比较" not in message
 
 
 def test_step_nine_requires_both_a_comparison_and_an_industry_observation():

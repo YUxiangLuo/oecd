@@ -86,12 +86,6 @@ export function StepTaskCard({
         >
           开始本步 ↓
         </button>
-        {step.n >= 2 && step.n <= 4 && <button
-          type="button"
-          className="step-task-link"
-          aria-controls={STEP_MATERIAL_ACTION_ID}
-          onClick={() => focusStepPrimaryAction(contentRef.current, STEP_MATERIAL_ACTION_ID)}
-        >记录实验结果 ↓</button>}
         <details className="step-task-context">
           <summary>为什么做这一步</summary>
           <p>{step.concept}</p>

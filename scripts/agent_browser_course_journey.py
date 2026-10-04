@@ -88,9 +88,18 @@ def main():
                 student.run("click", "tbody tr:first-child td:first-of-type button")
                 student.run("wait", '[role="dialog"]')
                 student.run("press", "Escape")
-            elif 2 <= step <= 5:
-                if step <= 4:
-                    student.run("click", ".indicator-full-data > summary")
+            elif 2 <= step <= 4:
+                # The comparison is recorded automatically once the decomposition data loads.
+                wait_saved(
+                    step,
+                    lambda row: (
+                        {"CHN", "USA"}.issubset(row.get("compared", []))
+                        and all(
+                            item.get("source") == "auto-indicator-comparison" for item in row.get("observations", [])
+                        )
+                    ),
+                )
+            elif step == 5:
                 student.run(
                     "wait",
                     "--fn",

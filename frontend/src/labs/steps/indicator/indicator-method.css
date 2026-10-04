@@ -35,7 +35,13 @@
 .indicator-real-heading { margin-top: 28px; }
 .indicator-real-heading h2 { font-size: 21px; margin: 8px 0; }
 .indicator-real-heading p { color: #59647a; font-size: 13px; line-height: 1.8; }
-.indicator-real-heading summary, .indicator-full-data > summary { cursor: pointer; font-weight: 600; padding: 12px 0; font-size: 14px; }
+.indicator-real-heading summary { cursor: pointer; font-weight: 600; padding: 12px 0; font-size: 14px; }
 .indicator-real-controls { display: flex; flex-wrap: wrap; gap: 14px; margin: 16px 0; }
 .indicator-real-controls label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.indicator-full-data { margin-top: 20px; border-top: 1px solid #dfe3ed; }
+/* 步骤 2–4 的报告材料按动手拆解所选国家自动记录，只留一行状态。 */
+.auto-material {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 14px 0 0; padding: 10px 14px;
+  border: 1px solid #cfe9dc; border-radius: 9px; background: #f2fbf6; color: #2f5b48; font-size: 12.5px;
+}
+.auto-material b { color: #116b50; }
+.auto-material small { flex-basis: 100%; color: #5b7468; font-size: 11.5px; }

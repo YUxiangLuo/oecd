@@ -102,7 +102,11 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         if context:
             lines.append(f"- 保存的视图：{'；'.join(context)}")
         if compared:
-            lines.append(f"- 主动比较：{'、'.join(_safe(item) for item in compared)}")
+            automatic = bool(observations) and all(
+                item.get("source") == "auto-indicator-comparison" for item in observations
+            )
+            compared_label = "系统自动记录的比较" if automatic else "主动比较"
+            lines.append(f"- {compared_label}：{'、'.join(_safe(item) for item in compared)}")
         if observations:
             if step in (6, 7, 8, 9) and any(item.get("year") == 2020 for item in observations):
                 lines.append(

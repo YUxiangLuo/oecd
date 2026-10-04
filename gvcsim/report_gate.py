@@ -140,8 +140,14 @@ def _indicator_material_complete(data: dict[str, Any], step: int) -> bool:
     )
 
 
-def _table_comparison_complete(data: dict[str, Any]) -> bool:
+# Steps 2–4 record the comparison automatically from the “动手拆解” country; step 5 still saves it explicitly.
+AUTO_COMPARISON_SOURCE = "auto-indicator-comparison"
+EXPLICIT_COMPARISON_SOURCE = "explicit-indicator-table-comparison"
+
+
+def _table_comparison_complete(data: dict[str, Any], *, allow_auto: bool = False) -> bool:
     """Steps 2–5 require one finite, same-year reading for each of two countries."""
+    sources = {EXPLICIT_COMPARISON_SOURCE, AUTO_COMPARISON_SOURCE} if allow_auto else {EXPLICIT_COMPARISON_SOURCE}
     compared = [str(item) for item in _list_values(data.get("compared")) if str(item).strip()]
     observations = [item for item in _list_values(data.get("observations")) if isinstance(item, dict)]
     if len(compared) != 2 or len(set(compared)) != 2 or len(observations) != 2:
@@ -157,7 +163,7 @@ def _table_comparison_complete(data: dict[str, Any]) -> bool:
         or not math.isfinite(float(item["value"]))
         or str(item.get("entity")) != str(item.get("country"))
         or item.get("scope") != "country"
-        or item.get("source") != "explicit-indicator-table-comparison"
+        or item.get("source") not in sources
         for item in observations
     ):
         return False
@@ -237,12 +243,16 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
     for step in range(2, 10):
         data = _step_data(session, step)
         if step in (2, 3, 4, 5):
-            if not _table_comparison_complete(data):
+            if not _table_comparison_complete(data, allow_auto=step != 5):
                 blocked.append(
                     {
                         "step": step,
                         "title": _STEP_TITLES.get(step, ""),
-                        "missing": ["请点击一次“保存两国同年比较”，由系统自动记录两国、指标、单位与数值"],
+                        "missing": [
+                            "请打开本步“动手拆解”并等待数据加载，系统会自动记录两国同年的代表指标"
+                            if step != 5
+                            else "请点击一次“保存两国同年比较”，由系统自动记录两国、指标、单位与数值"
+                        ],
                     }
                 )
             continue
