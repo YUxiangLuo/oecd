@@ -159,4 +159,44 @@ describe("parseReportChart", () => {
     expect(html).toContain("USA");
     expect(html.match(/<polyline/g)).toHaveLength(2);
   });
+
+  test("colours grouped bars by country with a legend and one label per industry", () => {
+    const chart = JSON.stringify({
+      version: 1,
+      type: "bar",
+      title: "行业排名",
+      items: [
+        { label: "G 批发零售", group: "CHN 中国", value: 4320 },
+        { label: "G 批发零售", group: "USA 美国", value: 4493 },
+        { label: "C20 化学品", group: "CHN 中国", value: 4150 },
+        { label: "C20 化学品", group: "USA 美国", value: 3337 },
+      ],
+    });
+    expect(parseReportChart(chart)).toMatchObject({ type: "bar" });
+    expect(parseReportChart(JSON.stringify({ version: 1, type: "bar", items: [{ label: "A", value: 1, group: 3 }] }))).toBeNull();
+    const html = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: `\`\`\`gvcsim-chart\n${chart}\n\`\`\`` }));
+    // Legend once per country, industry label once per pair of bars.
+    expect(html.match(/>CHN 中国</g)).toHaveLength(1);
+    expect(html.match(/>G 批发零售</g)).toHaveLength(1);
+    expect(new Set(html.match(/fill="#(4b47e0|e0812e)"/g))).toEqual(new Set(['fill="#4b47e0"', 'fill="#e0812e"']));
+  });
+
+  test("accepts and renders the regression coefficient chart with its interval", () => {
+    const chart = JSON.stringify({
+      version: 1,
+      type: "coefficient",
+      title: "步骤 11 · X 每增加 1 个百分点时 Y 的平均变化",
+      x_label: "个百分点",
+      items: [{ label: "外国增加值项占比", value: -0.5516, ci_low: -0.6073, ci_high: -0.4959 }],
+    });
+    expect(parseReportChart(chart)).toMatchObject({ type: "coefficient" });
+    // The interval must contain the estimate; a lone endpoint is rejected.
+    expect(parseReportChart(JSON.stringify({ version: 1, type: "coefficient", items: [{ label: "Y", value: 1, ci_low: 2, ci_high: 3 }] }))).toBeNull();
+    expect(parseReportChart(JSON.stringify({ version: 1, type: "coefficient", items: [{ label: "Y", value: 1, ci_low: 0 }] }))).toBeNull();
+    const html = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: `\`\`\`gvcsim-chart\n${chart}\n\`\`\`` }));
+    expect(html).toContain("外国增加值项占比");
+    expect(html).toContain("-0.55");
+    expect(html).toContain("[-0.61, -0.50]");
+    expect(html).toContain("横线 = 标称 95% 近似区间");
+  });
 });

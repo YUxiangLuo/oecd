@@ -764,12 +764,18 @@ def test_composition_requires_all_trade_components_and_reports_each_reading():
     assert "| 出口中的税收减补贴 | 百万美元 | -2 |" in text
     chart = teaching_report._observed_chart(data, 6, data["observations"])
     assert len(chart["items"]) == 12
-    assert {item["label"] for item in chart["items"]} == {
-        f"{country} · {teaching_report._STUDENT_METRIC_LABELS[metric]}"
-        for country in ("CHN", "USA")
+    # Like the page, the single-year composition shows each part as a share of gross exports.
+    assert {(item["group"], item["label"]) for item in chart["items"]} == {
+        (label, teaching_report._STUDENT_METRIC_LABELS[metric])
+        for label in ("CHN 中国", "USA 美国")
         for metric in components
         if metric != "gross_exports"
     }
+    assert {item["value"] for item in chart["items"]} == {
+        value / 80 * 100 for metric, value in components.items() if metric != "gross_exports"
+    }
+    assert chart["y_label"] == "占总出口的百分比（%）"
+    assert "总出口构成（各项占比）" in chart["title"]
     # Omitting the same component for both countries is paired, but incomplete.
     data["observations"] = [item for item in data["observations"] if item["metric"] != "taxsub"]
     assert any(item["step"] == 6 for item in check_material_gate(session))
@@ -796,12 +802,16 @@ def test_composition_evolution_generates_each_component_as_a_two_country_trend()
 
     charts = teaching_report._observed_charts(data, 6, data["observations"])
 
+    # One chart per part (total excluded); lines are that part's share of gross exports, as on the page.
     assert len(charts) == 6
     assert all(chart["type"] == "line" and len(chart["series"]) == 2 for chart in charts)
-    assert all({series["label"] for series in chart["series"]} == {"CHN", "USA"} for chart in charts)
-    assert all("构成演变" in chart["title"] for chart in charts)
-    assert all("总出口" not in chart["title"] for chart in charts)
-    assert any("出口中的外国增加值" in chart["title"] for chart in charts)
+    assert all({series["label"] for series in chart["series"]} == {"CHN 中国", "USA 美国"} for chart in charts)
+    assert all("构成演变" in chart["title"] and chart["y_label"] == "占总出口的百分比（%）" for chart in charts)
+    fva = next(chart for chart in charts if "出口中的外国增加值占总出口比重" in chart["title"])
+    assert fva["series"][0]["points"] == [
+        {"label": "2019", "value": 20 / 80 * 100},
+        {"label": "2020", "value": 21 / 81 * 100},
+    ]
 
 
 @pytest.mark.parametrize("step", [6, 9])
@@ -823,11 +833,13 @@ def test_report_ranking_extrema_use_all_saved_industries(step):
     assert not any(item["step"] == step for item in check_material_gate(session))
     section = "\n".join(report_observed._observed_evidence_section(session)).split(f"### 步骤 {step}", 1)[1]
     section = section.split("### 步骤", 1)[0]
-    assert "最高为 USA · S7（99）" in section
-    assert "最低为 CHN · S8、USA · S8（0）" in section
-    assert "12 / 18 条读数" in section
+    assert "最高为 USA 美国 · S7（99%）" in section
+    assert "最低为 CHN 中国 · S8、USA 美国 · S8（0%）" in section
+    # All 18 readings fit; bars are coloured by country and grouped under one industry label.
+    assert "条读数" not in section.split("```gvcsim-chart", 1)[0]
     chart = json.loads(section.split("```gvcsim-chart\n", 1)[1].split("\n```", 1)[0])
-    assert len(chart["items"]) == 12
+    assert len(chart["items"]) == 18
+    assert {item["group"] for item in chart["items"]} == {"CHN 中国", "USA 美国"}
 
 
 def test_report_directions_retains_both_length_metrics_and_their_readouts():
@@ -972,8 +984,10 @@ def test_report_preserves_two_country_industry_trend_years(tmp_path, monkeypatch
     assert f"记录的代表指标：{label}" in markdown
     assert f"记录方式：历年趋势；单位：{unit}" in markdown
     assert '"type":"line"' in markdown
-    assert '"label":"CHN","points":[{"label":"2016","value":31.0},{"label":"2020","value":44.0}]' in markdown
-    assert "CHN 从 2016 年 31 变为 2020 年 44（变化 +13.000）" in markdown
+    assert '"label":"CHN 中国","points":[{"label":"2016","value":31.0},{"label":"2020","value":44.0}]' in markdown
+    assert "C26 计算机电子光学" in section
+    change = "+13 百万美元" if unit == "百万美元" else "+13.00"
+    assert f"CHN 中国 从 2016 年 31 变为 2020 年 44（{change}）" in markdown
     for expected in (
         f"| CHN·C26 | 2016 | {label}",
         f"| CHN·C26 | 2020 | {label}",
@@ -1029,10 +1043,20 @@ def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
 
     markdown = build(_complete(), "同学").markdown
 
-    assert "自动保存的代表行：CHN · s1 · 2019" in markdown
-    assert "w=20%；τ=10%；X=w×τ=0.02" in markdown
+    assert "自动保存的代表行：CHN 中国 · s1 · 2019" in markdown
+    assert "w=20%；τ=10%；X=w×τ=2 个百分点" in markdown
     assert markdown.index("## 真实指标比较") < markdown.index("## 关键证据摘要")
-    assert markdown.count("```gvcsim-chart") == 4
+    charts = [json.loads(block.split("\n```", 1)[0]) for block in markdown.split("```gvcsim-chart\n")[1:]]
+    assert [chart["type"] for chart in charts].count("coefficient") == 4
+    assert len(charts) == 8
+    # Each regression step gets the page's coefficient plot: one row, per 1-pp increase in X, with its interval.
+    summary = markdown.split("## 关键证据摘要", 1)[1].split("## 理解检查摘要", 1)[0]
+    assert summary.count('"type":"coefficient"') == 4
+    for chart in charts:
+        if chart["type"] == "coefficient":
+            assert chart["title"].endswith("X 每增加 1 个百分点时 Y 的平均变化")
+            (item,) = chart["items"]
+            assert item["ci_low"] <= item["value"] <= item["ci_high"]
 
 
 def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatch):

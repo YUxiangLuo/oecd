@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from gvcsim.regression.validity import CLUSTER_INTERVAL_NOTE
@@ -25,6 +26,7 @@ from gvcsim.report_common import (
     _summary_design_limit,
 )
 from gvcsim.report_gate import _indicator_material_complete, _step_data, _valid_indicator_observations
+from gvcsim.report_labels import country_label, sector_label
 from gvcsim.report_observed import _viewed_shock_event_sources
 from gvcsim.report_saved_run import _result_is_reportable, _result_is_qualified
 
@@ -165,8 +167,8 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                 "### 步骤 10 · 模拟关税数据",
                 "",
                 (
-                    f"- 两国趋势示例：{'、'.join(_safe(value) for value in shock.get('compared', []))} · "
-                    f"{_safe(shock.get('teaching_industry'))} · 全部可用年份"
+                    f"- 两国趋势示例：{'、'.join(_safe(country_label(str(value))) for value in shock.get('compared', []))} · "
+                    f"{_safe(sector_label(str(shock.get('teaching_industry'))))} · 全部可用年份"
                     if isinstance(shock.get("compared"), list) and len(shock["compared"]) == 2
                     else f"- 查看对象：{_safe(shock.get('teaching_country'))} · {_safe(shock.get('teaching_year'))}"
                 ),
@@ -178,11 +180,12 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         if isinstance(teaching_observation, dict):
             lines.extend(
                 (
-                    f"- 自动保存的代表行：{_safe(teaching_observation.get('country'))} · "
-                    f"{_safe(teaching_observation.get('industry'))} · {_safe(teaching_observation.get('year'))}",
+                    f"- 自动保存的代表行：{_safe(country_label(str(teaching_observation.get('country'))))} · "
+                    f"{_safe(sector_label(str(teaching_observation.get('industry'))))} · {_safe(teaching_observation.get('year'))}",
+                    # X is read in percentage points throughout steps 10–14, so print it the same way here.
                     f"- w={_number(float(teaching_observation['teaching_export_share_w']) * 100)}%；"
                     f"τ={_number(float(teaching_observation['teaching_tariff_rate_tau']) * 100)}%；"
-                    f"X=w×τ={_number(float(teaching_observation['teaching_tariff_exposure']))}",
+                    f"X=w×τ={_number(round(float(teaching_observation['teaching_tariff_exposure']) * 100, 2))} 个百分点",
                 )
             )
         lines.append("")
@@ -277,6 +280,39 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
+# Same row labels and units as the coefficient plot on the step 11–14 pages.
+_COEFFICIENT_ROW_LABELS = {
+    "trade": "外国增加值项占比",
+    "production": "复杂 GVC 份额",
+    "length": "跨境生产长度",
+    "network": "全正边二值介数",
+}
+_COEFFICIENT_UNITS = {"trade": "个百分点", "production": "个百分点", "length": "长度单位", "network": "中心性原始单位"}
+
+
+def _coefficient_chart(step: int, outcome: str, coefficient: dict[str, Any], suppressed: bool) -> list[str]:
+    """Estimate per 1-percentage-point increase in X, with its interval, as on the step's own page."""
+    # Shares: β × 0.01 × 100 percentage points; lengths and centrality: β × 0.01 raw units.
+    scale = 1.0 if outcome in {"trade", "production"} else 0.01
+
+    # Display precision, like the tables; full values stay in the provenance.
+    def shown(value: Any) -> float:
+        return float(f"{float(value) * scale:.4g}")
+
+    item: dict[str, Any] = {"label": _COEFFICIENT_ROW_LABELS.get(outcome, outcome), "value": shown(coefficient["coef"])}
+    ci_low, ci_high = coefficient.get("ci_low"), coefficient.get("ci_high")
+    if not suppressed and isinstance(ci_low, (int, float)) and isinstance(ci_high, (int, float)):
+        item["ci_low"], item["ci_high"] = shown(ci_low), shown(ci_high)
+    chart = {
+        "version": 1,
+        "type": "coefficient",
+        "title": f"步骤 {step} · X 每增加 1 个百分点时 Y 的平均变化",
+        "x_label": _COEFFICIENT_UNITS.get(outcome, "原始单位"),
+        "items": [item],
+    }
+    return ["```gvcsim-chart", json.dumps(chart, ensure_ascii=False, separators=(",", ":")), "```", ""]
+
+
 def _teaching_sample_lines(source_filter: dict[str, Any] | None) -> list[str]:
     if source_filter is None:
         return []
@@ -338,6 +374,7 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
             for key in ("shock_type", "method", "granularity", "control_mode", "scenario")
             if design.get(key) not in (None, "")
         )
+        lines.extend(_coefficient_chart(step, outcome, coefficient, suppressed))
         lines.extend(
             (
                 "| 项目 | 结果 |",

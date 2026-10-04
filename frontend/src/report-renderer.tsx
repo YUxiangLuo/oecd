@@ -6,7 +6,10 @@ import { ScrollableRegion } from "./a11y";
 import { niceDomain } from "./viz/nice-ticks";
 
 type ChartItem = { label: string; value: number };
+/** A bar may name the series it belongs to (e.g. a country); bars of one group share a colour. */
+type BarItem = ChartItem & { group?: string };
 type ChartPoint = ChartItem & { se?: number; ci_low?: number; ci_high?: number };
+type CoefficientItem = ChartItem & { ci_low?: number; ci_high?: number };
 type LineSeries = { label: string; points: ChartItem[] };
 
 type ReportChart =
@@ -16,7 +19,15 @@ type ReportChart =
       title?: string;
       x_label?: string;
       y_label?: string;
-      items: ChartItem[];
+      items: BarItem[];
+    }
+  | {
+      version: 1;
+      type: "coefficient";
+      title?: string;
+      x_label?: string;
+      y_label?: string;
+      items: CoefficientItem[];
     }
   | {
       version: 1;
@@ -54,6 +65,27 @@ function isItem(value: unknown): value is ChartItem {
     && isLabel(item.label)
     && typeof item.value === "number"
     && Number.isFinite(item.value);
+}
+
+function isBarItem(value: unknown): value is BarItem {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  return hasOnlyKeys(item, ["label", "value", "group"])
+    && isLabel(item.label)
+    && (item.group == null || isLabel(item.group))
+    && typeof item.value === "number"
+    && Number.isFinite(item.value);
+}
+
+function isCoefficientItem(value: unknown): value is CoefficientItem {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  if (!hasOnlyKeys(item, ["label", "value", "ci_low", "ci_high"])) return false;
+  if (!isLabel(item.label) || typeof item.value !== "number" || !Number.isFinite(item.value)) return false;
+  if (item.ci_low == null && item.ci_high == null) return true;
+  return typeof item.ci_low === "number" && Number.isFinite(item.ci_low)
+    && typeof item.ci_high === "number" && Number.isFinite(item.ci_high)
+    && item.ci_low <= item.value && item.value <= item.ci_high;
 }
 
 function isPoint(value: unknown): value is ChartPoint {
@@ -100,7 +132,13 @@ export function parseReportChart(source: string): ReportChart | null {
   if (value.type === "bar") {
     if (!hasOnlyKeys(value, ["version", "type", "title", "x_label", "y_label", "items"])) return null;
     if (!Array.isArray(value.items) || value.items.length === 0 || value.items.length > MAX_POINTS) return null;
-    if (!value.items.every(isItem)) return null;
+    if (!value.items.every(isBarItem)) return null;
+    return value as ReportChart;
+  }
+  if (value.type === "coefficient") {
+    if (!hasOnlyKeys(value, ["version", "type", "title", "x_label", "y_label", "items"])) return null;
+    if (!Array.isArray(value.items) || value.items.length === 0 || value.items.length > 8) return null;
+    if (!value.items.every(isCoefficientItem)) return null;
     return value as ReportChart;
   }
   if (value.type === "event-study") {
@@ -127,11 +165,47 @@ const fmt = (value: number) => {
   return value.toFixed(3).replace(/\.0+$|(?<=\.[0-9]*)0+$/, "");
 };
 
+const GROUP_COLORS = ["#4b47e0", "#e0812e", "#198a78", "#7b4ab5"];
+
+/** Approximate SVG text width: CJK glyphs take about one em, Latin about 0.6 em. */
+function textWidth(text: string, size: number) {
+  return [...text].reduce((width, char) => width + (/[⺀-￿]/.test(char) ? size : size * 0.6), 0);
+}
+
+/** Lay legend entries left to right, wrapping to a new row when the next entry would not fit. */
+function legendLayout(labels: string[], left: number, right: number, size = 11) {
+  let x = left;
+  let row = 0;
+  const positions = labels.map((label) => {
+    const width = 24 + textWidth(label, size) + 18;
+    if (x + width > right && x > left) {
+      x = left;
+      row += 1;
+    }
+    const position = { x, row };
+    x += width;
+    return position;
+  });
+  return { positions, rows: labels.length ? row + 1 : 0 };
+}
+
 function BarChart({ chart }: { chart: Extract<ReportChart, { type: "bar" }> }) {
   const W = 720;
-  const rowH = 34;
-  const m = { l: 220, r: 62, t: 20, b: 36 };
-  const H = m.t + chart.items.length * rowH + m.b;
+  const barH = 18;
+  const groups = [...new Set(chart.items.flatMap((item) => (item.group ? [item.group] : [])))];
+  const grouped = groups.length > 0;
+  const legend = legendLayout(groups, 220, W - 20);
+  const m = { l: 220, r: 62, t: 14 + legend.rows * 20, b: 36 };
+  // Grouped bars that share a label (e.g. one industry, two countries) sit together under one label.
+  const rows: { y: number; first: boolean }[] = [];
+  let cursor = m.t;
+  chart.items.forEach((item, index) => {
+    const first = index === 0 || !grouped || item.label !== chart.items[index - 1].label;
+    if (index > 0) cursor += first ? (grouped ? 14 : 16) : 4;
+    rows.push({ y: cursor, first });
+    cursor += barH;
+  });
+  const H = cursor + m.b;
   const values = chart.items.map((item) => item.value);
   const min = Math.min(0, ...values);
   const max = Math.max(0, ...values);
@@ -139,25 +213,120 @@ function BarChart({ chart }: { chart: Extract<ReportChart, { type: "bar" }> }) {
   const plotW = W - m.l - m.r;
   const x = (value: number) => m.l + ((value - min) / span) * plotW;
   const zero = x(0);
+  const fill = (item: BarItem) =>
+    item.group ? GROUP_COLORS[groups.indexOf(item.group) % GROUP_COLORS.length] : item.value < 0 ? "#d95f45" : "#4b47e0";
+  const runEnd = (index: number) => {
+    let end = index;
+    while (end + 1 < rows.length && !rows[end + 1].first) end += 1;
+    return end;
+  };
 
   return (
     <ReportFigure title={chart.title ?? "指标 Top 5"}>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "指标条形图"} style={{ width: "100%", height: "auto" }}>
+        {groups.map((group, index) => {
+          const position = legend.positions[index];
+          const y = 6 + position.row * 20;
+          return (
+            <g key={group}>
+              <rect x={position.x} y={y} width={16} height={10} rx={2} fill={GROUP_COLORS[index % GROUP_COLORS.length]} fillOpacity={0.82} />
+              <text x={position.x + 22} y={y + 9} fontSize={11} fill="#4b5563">{group}</text>
+            </g>
+          );
+        })}
         <line x1={zero} x2={zero} y1={m.t - 5} y2={H - m.b} stroke="#cfd3dd" />
         {chart.items.map((item, i) => {
-          const y = m.t + i * rowH + 7;
+          const { y, first } = rows[i];
           const end = x(item.value);
           const left = Math.min(zero, end);
           const width = Math.max(1, Math.abs(end - zero));
+          const labelY = first ? (y + rows[runEnd(i)].y + barH) / 2 + 4 : 0;
           return (
-            <g key={`${item.label}-${i}`}>
-              <text x={m.l - 10} y={y + 12} textAnchor="end" fontSize={12} fill="#4b5563">{item.label}</text>
-              <rect x={left} y={y} width={width} height={18} rx={4} fill={item.value < 0 ? "#d95f45" : "#4b47e0"} fillOpacity={0.82} />
-              <text x={item.value < 0 ? left - 6 : left + width + 6} y={y + 12} textAnchor={item.value < 0 ? "end" : "start"} fontSize={11} fill="#596173">{fmt(item.value)}</text>
+            <g key={`${item.group ?? ""}-${item.label}-${i}`}>
+              {first && <text x={m.l - 10} y={labelY} textAnchor="end" fontSize={12} fill="#4b5563">{item.label}</text>}
+              <rect x={left} y={y} width={width} height={barH} rx={4} fill={fill(item)} fillOpacity={0.82}>
+                {item.group && <title>{`${item.group} · ${item.label}：${fmt(item.value)}`}</title>}
+              </rect>
+              <text x={item.value < 0 ? left - 6 : left + width + 6} y={y + 13} textAnchor={item.value < 0 ? "end" : "start"} fontSize={11} fill="#596173">{fmt(item.value)}</text>
             </g>
           );
         })}
         {(chart.y_label || chart.x_label) && <text x={m.l + plotW / 2} y={H - 8} textAnchor="middle" fontSize={11} fill="#5f6677">{chart.y_label ?? chart.x_label}</text>}
+      </svg>
+    </ReportFigure>
+  );
+}
+
+/** Symmetric "nice" ticks around 0, as on the step 11–14 coefficient plot. */
+function symmetricTicks(maxAbs: number): number[] {
+  const raw = maxAbs / 2;
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((multiple) => multiple * magnitude).find((candidate) => candidate >= raw) ?? raw;
+  const count = Math.max(1, Math.ceil(maxAbs / step));
+  return Array.from({ length: 2 * count + 1 }, (_, index) => (index - count) * step);
+}
+
+/** One row per estimate: a bar from 0 (red positive, blue negative) and the 95% interval as a capped whisker. */
+function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coefficient" }> }) {
+  const W = 720;
+  const rowH = 64;
+  const m = { l: 170, r: 30, t: 16, b: 46 };
+  const H = m.t + chart.items.length * rowH + m.b;
+  const plotW = W - m.l - m.r;
+  const hasCi = chart.items.some((item) => item.ci_low != null && item.ci_high != null);
+  const maxAbs = Math.max(
+    ...chart.items.map((item) => Math.max(Math.abs(item.ci_low ?? item.value), Math.abs(item.ci_high ?? item.value))),
+    1e-6,
+  ) * 1.08;
+  const ticks = symmetricTicks(maxAbs);
+  const extent = ticks.at(-1)!;
+  const x = (value: number) => m.l + ((value + extent) / (2 * extent)) * plotW;
+  const y = (index: number) => m.t + (index + 0.5) * rowH;
+  const decimals = Math.max(0, Math.min(4, 1 - Math.floor(Math.log10(extent / 2))));
+  const tick = (value: number) => (value === 0 ? "0" : value.toFixed(decimals));
+  const value = (number: number) => number.toFixed(Math.max(2, decimals));
+
+  return (
+    <ReportFigure title={chart.title ?? "系数图"}>
+      <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
+        {hasCi
+          ? "条形 = 点估计（红为正、蓝为负） · 横线 = 标称 95% 近似区间 · 竖线 = 0；区间跨过 0 时方向不确定"
+          : "统计推断已抑制，只显示描述性点估计，不能据此判断方向"}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "系数图"} style={{ width: "100%", height: "auto" }}>
+        {ticks.map((tickValue) => (
+          <g key={tickValue}>
+            {tickValue !== 0 && <line x1={x(tickValue)} x2={x(tickValue)} y1={m.t} y2={H - m.b} stroke="#eef0f4" />}
+            <text x={x(tickValue)} y={H - m.b + 16} textAnchor="middle" fontSize={11} fill="#5f6677">{tick(tickValue)}</text>
+          </g>
+        ))}
+        <line x1={m.l} x2={W - m.r} y1={H - m.b} y2={H - m.b} stroke="#d7dae2" />
+        {chart.x_label && <text x={m.l + plotW / 2} y={H - 8} textAnchor="middle" fontSize={11} fill="#5f6677">{chart.x_label}</text>}
+        {chart.items.map((item, index) => {
+          const color = !hasCi ? "#b6bac6" : item.value >= 0 ? "#d64545" : "#2f6fd0";
+          const barX = Math.min(x(0), x(item.value));
+          const barW = Math.max(1, Math.abs(x(item.value) - x(0)));
+          const labelAt = Math.min(Math.max(x(item.value), m.l + 24), W - m.r - 24);
+          return (
+            <g key={`${item.label}-${index}`}>
+              <text x={m.l - 12} y={y(index) + 4} textAnchor="end" fontSize={12} fill="#3a4050">{item.label}</text>
+              <rect x={barX} y={y(index) - 11} width={barW} height={22} rx={2} fill={color} fillOpacity={0.85} />
+              {item.ci_low != null && item.ci_high != null && (
+                <g stroke="#2a2f3a" strokeWidth={1.6}>
+                  <line x1={x(item.ci_low)} x2={x(item.ci_high)} y1={y(index)} y2={y(index)} />
+                  <line x1={x(item.ci_low)} x2={x(item.ci_low)} y1={y(index) - 7} y2={y(index) + 7} />
+                  <line x1={x(item.ci_high)} x2={x(item.ci_high)} y1={y(index) - 7} y2={y(index) + 7} />
+                </g>
+              )}
+              <circle cx={x(item.value)} cy={y(index)} r={4} fill="#fff" stroke="#2a2f3a" strokeWidth={1.6} />
+              <text x={labelAt} y={y(index) - 21} textAnchor="middle" fontSize={11.5} fontWeight={700} fill="#2a2f3a">
+                {value(item.value)}
+                {item.ci_low != null && item.ci_high != null ? `  [${value(item.ci_low)}, ${value(item.ci_high)}]` : ""}
+              </text>
+            </g>
+          );
+        })}
+        <line x1={x(0)} x2={x(0)} y1={m.t - 6} y2={H - m.b} stroke="#1f2430" strokeWidth={1.8} />
       </svg>
     </ReportFigure>
   );
@@ -203,8 +372,9 @@ function EventChart({ chart }: { chart: Extract<ReportChart, { type: "event-stud
 
 function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> }) {
   const W = 720;
-  const H = 310;
-  const m = { l: 68, r: 26, t: 42, b: 48 };
+  const legend = legendLayout(chart.series.map((series) => series.label), 68, W - 26);
+  const m = { l: 68, r: 26, t: 24 + legend.rows * 18, b: 48 };
+  const H = 292 + legend.rows * 18;
   const colors = ["#4b47e0", "#d95f45", "#198a78", "#b36b00", "#7b4ab5", "#3274a1", "#657000", "#a44078"];
   const labels = [...new Set(chart.series.flatMap((series) => series.points.map((point) => point.label)))];
   const values = chart.series.flatMap((series) => series.points.map((point) => point.value));
@@ -242,8 +412,8 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
                 strokeLinejoin="round"
               />
               {series.points.map((point) => <circle key={point.label} cx={x(point.label)} cy={y(point.value)} r={4} fill={color} stroke="#fff" strokeWidth={1.5} />)}
-              <line x1={m.l + seriesIndex * 112} x2={m.l + 18 + seriesIndex * 112} y1={18} y2={18} stroke={color} strokeWidth={3} />
-              <text x={m.l + 24 + seriesIndex * 112} y={22} fontSize={11} fill="#4b5563">{series.label}</text>
+              <line x1={legend.positions[seriesIndex].x} x2={legend.positions[seriesIndex].x + 18} y1={14 + legend.positions[seriesIndex].row * 18} y2={14 + legend.positions[seriesIndex].row * 18} stroke={color} strokeWidth={3} />
+              <text x={legend.positions[seriesIndex].x + 24} y={18 + legend.positions[seriesIndex].row * 18} fontSize={11} fill="#4b5563">{series.label}</text>
             </g>
           );
         })}
@@ -269,6 +439,7 @@ function ReportCode({ className, children, ...props }: ComponentPropsWithoutRef<
   if (className?.split(" ").includes("language-gvcsim-chart")) {
     const chart = parseReportChart(source);
     if (chart?.type === "bar") return <BarChart chart={chart} />;
+    if (chart?.type === "coefficient") return <CoefficientChart chart={chart} />;
     if (chart?.type === "event-study") return <EventChart chart={chart} />;
     if (chart?.type === "line") return <LineChart chart={chart} />;
   }
@@ -286,6 +457,7 @@ function ReportPre({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
     if (className?.split(" ").includes("language-gvcsim-chart")) {
       const chart = parseReportChart(String(children.props.children ?? "").replace(/\n$/, ""));
       if (chart?.type === "bar") return <BarChart chart={chart} />;
+    if (chart?.type === "coefficient") return <CoefficientChart chart={chart} />;
       if (chart?.type === "event-study") return <EventChart chart={chart} />;
       if (chart?.type === "line") return <LineChart chart={chart} />;
     }
