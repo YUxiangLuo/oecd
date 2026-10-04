@@ -1,9 +1,9 @@
 /**
  * 步骤 2–5 路由。
  *
- * 步骤2–4：教学ICIO计算小实验 → 真实数据动手拆解 → 完整数据与记录。
+ * 步骤2–4：计算方法（含课程说明与文献）→ 真实数据动手拆解 → 完整数据与记录。
  * 步骤5：小网络建直觉 → 真实中心性表。
- * 教学账户只用于解释算法；报告材料仍来自真实指标表。
+ * 报告材料来自真实指标表。
  */
 import type { Meta, Step, StepStateApi } from "../../types";
 import type { IndicatorStepState } from "./indicator/indicator-table";

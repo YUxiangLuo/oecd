@@ -5,9 +5,9 @@ import { STEP_MATERIAL_ACTION_ID } from "../../../step-task-card";
 import type { Meta, Step, StepStateApi } from "../../../types";
 import { countryLabel } from "../../../viz";
 import { useAsync } from "../../shared";
-import { IcioExperiment, type IndicatorTopic } from "./icio-experiment";
-import { IndicatorReadingLibrary } from "./indicator-reading-library";
+import { IndicatorMethodIntro, type MethodTopic } from "./indicator-method-intro";
 import { IndicatorTable, type IndicatorStepState, useIndicatorControls } from "./indicator-table";
+import "./indicator-method.css";
 
 export interface CalculationStepProps { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }
 const content = {
@@ -16,12 +16,12 @@ const content = {
   length: { demo: 6, title: "哪些生产活动拉长了价值链？", hint: "每段对总长度的贡献 = 增加值份额 × 该段长度。最长的一段，不一定贡献最大。", note: "前向从价值来源出发，后向从最终产品回溯。位置指数比较两者的GVC段，大于1只表示该口径下相对上游；存在负增加值时是有符号加权，不保证总长度介于各段极值之间。" },
 };
 
-export function CalculationStep({ topic, meta, state }: CalculationStepProps & { topic: IndicatorTopic }) {
+export function CalculationStep({ topic, meta, state }: CalculationStepProps & { topic: MethodTopic }) {
   const controls = useIndicatorControls(meta, state);
   const schema = useAsync(() => api.indicatorSchema(), []);
   const cfg = content[topic];
   return <div>
-    <IcioExperiment topic={topic} />
+    <IndicatorMethodIntro topic={topic} />
     <section className="indicator-real-heading" aria-label="真实数据动手拆解">
       <span className="icio-kicker">02 / 动手拆解 · 真实ICIO数据</span>
       <h2>{cfg.title}</h2><p>{cfg.hint} 时间趋势与国家比较在步骤 {topic === "trade" ? 6 : topic === "production" ? 7 : 8}。</p>
@@ -35,11 +35,10 @@ export function CalculationStep({ topic, meta, state }: CalculationStepProps & {
       <details><summary>如何准确理解这次拆解？</summary><p>{cfg.note}</p></details>
     </section>
     <details id={STEP_MATERIAL_ACTION_ID} tabIndex={-1} className="indicator-full-data"><summary>03 / 查看完整真实数据与记录实验结果</summary>
-      <p className="muted">教学小实验不会写入报告。这里保留真实数据明细、列定义与实验结果记录。</p>
+      <p className="muted">这里保留真实数据明细、列定义与实验结果记录。</p>
       <IndicatorTable meta={meta} groupKey={topic} schema={schema.data} state={state}
         year={controls.year} country={controls.country} page={controls.page} interacted={controls.interacted}
         onYear={controls.setYear} onCountry={controls.setCountry} onPage={controls.setPage} />
     </details>
-    <IndicatorReadingLibrary topic={topic} />
   </div>;
 }

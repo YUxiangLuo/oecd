@@ -14,7 +14,7 @@ type IndicatorReading = {
   sourceUrl?: string;
 };
 
-const readingAssetUrl = (file: string) => `${import.meta.env.BASE_URL}readings/${file}`;
+export const readingAssetUrl = (file: string) => `${import.meta.env.BASE_URL}readings/${file}`;
 const citation = (reading: IndicatorReading) =>
   `${reading.authors} · ${reading.year ?? "年份未标注"} · ${reading.publication}`;
 

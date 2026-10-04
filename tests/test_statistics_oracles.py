@@ -179,16 +179,41 @@ def test_currency_unit_scales_amounts_but_preserves_lengths_and_shares(scale):
     np.testing.assert_allclose(t.FVA / tradeflow.gross_exports(t), ts.FVA / tradeflow.gross_exports(ts), rtol=1e-12)
 
 
+def _complex_chain_arrays():
+    """Two-sector chain: A's primary good (VA 40) feeds B's processor (VA 60), which sells 100 to C."""
+    regions = ["A", "B", "C"]
+    index = pd.MultiIndex.from_product([regions, ["primary", "processing"]], names=["region", "sector"])
+    n = len(index)
+    z = np.zeros((n, n))
+    y = np.zeros((n, len(regions)))
+    origin = index.get_loc(("A", "primary"))
+    processor = index.get_loc(("B", "processing"))
+    z[origin, processor] = 40.0
+    y[processor, regions.index("C")] = 100.0
+    x = z.sum(axis=1) + y.sum(axis=1)
+    va = x - z.sum(axis=0)
+    a = np.divide(z, x, out=np.zeros_like(z), where=x > 0)
+
+    class _IO:
+        Z = pd.DataFrame(z, index=index, columns=index)
+        Y = pd.DataFrame(y, index=index, columns=pd.MultiIndex.from_product([regions, ["final"]]))
+        A = pd.DataFrame(a, index=index, columns=index)
+        L = pd.DataFrame(np.linalg.inv(np.eye(n) - a), index=index, columns=index)
+
+        class factor_inputs:
+            F = pd.DataFrame([np.zeros(n), va], index=["TLS", "VA"], columns=index)
+
+    _IO.x = pd.DataFrame({"indout": x}, index=index)
+    return build_arrays(_IO()), origin, processor
+
+
 def test_no_final_demand_has_no_observed_backward_length():
     # A creates 40 of intermediate value; B adds 60, then sells 100 to C.
     # No final product is completed in A, so its observed backward length is
     # undefined. The hypothetical unit-product ratio is a different quantity.
-    from gvcsim.teaching_icio import teaching_icio_payload
-
-    scenario = next(s for s in teaching_icio_payload()["scenarios"] if s["id"] == "complex-gvc")
-    origin = scenario["nodes"].index("甲国·初级品")
-    processor = scenario["nodes"].index("乙国·加工品")
-    assert sum(scenario["Y"][origin]) == 0
-    assert scenario["length"][origin]["PLv"] == pytest.approx(2)
-    assert scenario["length"][origin]["PLy"] is None
-    assert scenario["length"][processor]["PLy"] == pytest.approx((40 * 2 + 60) / 100)
+    arr, origin, processor = _complex_chain_arrays()
+    lengths = length.sector_length(arr)
+    assert arr.Yd[origin].sum() == 0
+    assert lengths.iloc[origin]["PLv"] == pytest.approx(2)
+    assert not np.isfinite(lengths.iloc[origin]["PLy"])
+    assert lengths.iloc[processor]["PLy"] == pytest.approx((40 * 2 + 60) / 100)
