@@ -4,7 +4,7 @@ import { api } from "./api";
 import { useAsync } from "./labs";
 import { lessonQuestion, REGRESSION_LESSONS } from "./regression-lessons";
 import { nextRegressionSave } from "./regression-save";
-import { CLUSTER_INTERVAL_LABEL, formatPValue } from "./regression-statistics";
+import { formatPValue } from "./regression-statistics";
 import {
   buildRegressionVerdict,
   chartDisplayScale,
@@ -137,7 +137,7 @@ export function RegressionResultCard({ outcome, response, examples = [] }: {
       )}
       <ul className="reg-result-points">
         {!suppressed && verdict.coefficient && (
-          <li>模拟关税暴露（X）每增加 1 个百分点，模拟{lesson.shortMetric}（Y）<b>{plainResult}</b>；{CLUSTER_INTERVAL_LABEL}为 {verdict.interval}。</li>
+          <li>模拟关税暴露（X）每增加 1 个百分点，模拟{lesson.shortMetric}（Y）<b>{plainResult}</b>；95% 区间为 {verdict.interval}。</li>
         )}
         {!suppressed && verdict.coefficient && examples.length > 0 && (
           <li className="reg-example-effect">换算到你在步骤 10 选的例子：{examples.map((example, index) => {

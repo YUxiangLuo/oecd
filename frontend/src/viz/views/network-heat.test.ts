@@ -115,7 +115,7 @@ describe("read-only network heat visibility", () => {
     expect(markup).not.toContain("记录拓扑基准");
     expect(markup).not.toContain("报告证据");
     expect(markup).toContain("指标定义");
-    expect(markup).toContain("排序、切换范围、渲染、悬停和聚焦都不会改变报告材料");
+    expect(markup).toContain("这张表上的操作不会改变报告材料");
     expect(markup).not.toContain("<button><tr");
   });
 });

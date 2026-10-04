@@ -95,7 +95,7 @@ export function CoefForestChart({
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
         {!inferenceAllowed
           ? suppressionCopy
-          : `条形 = 点估计（红为正、蓝为负） · ${hasCi ? `横线 = ${CLUSTER_INTERVAL_LABEL} · ` : ""}竖线 = 0；区间跨过 0 时方向不确定`}
+          : `条形 = 点估计（红为正、蓝为负） · ${hasCi ? "横线 = 95% 区间 · " : ""}竖线 = 0；区间跨过 0 时方向不确定`}
       </div>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={description} style={{ display: "block", width: "100%", maxWidth: 760, height: "auto" }}>
         <title>{hasCi ? `${description}；完整数值见系数表` : description}</title>

@@ -1088,8 +1088,9 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert report.provenance["network_algorithm"] == "gephi-compatible-directed-unweighted-positive-v1"
     assert report.provenance["indicator_data_source"]["kind"] == "observed-indicator-input"
     assert report.provenance["simulated_macro_controls"]["kind"] == "deterministic-teaching-mock"
-    assert "模型标签：模拟宏观控制" in report.markdown
-    assert "Not WDI data and not IMF observations" in report.markdown
+    assert "模拟宏观控制：按固定规则生成的教学数据" in report.markdown
+    assert "不是 WDI 或 IMF 的观测数据" in report.markdown
+    assert "Not WDI data" not in report.markdown
 
 
 def test_report_preserves_the_full_accepted_research_question(tmp_path, monkeypatch):
@@ -1250,7 +1251,7 @@ def test_comparison_table_keeps_fixed_shock_and_estimand_label(tmp_path, monkeyp
     markdown = build(session, "同学").markdown
 
     assert X_COLUMN in markdown
-    assert "twfe_intensity" in markdown
+    assert "连续强度双向固定效应（TWFE）" in markdown
 
 
 def test_report_carries_release_qc_disclosures(tmp_path, monkeypatch):
@@ -1557,7 +1558,8 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
     assert "模拟关税暴露" in markdown
     assert "总增加值规模(log, ICIO GVA proxy)" not in markdown
     assert "0.0013729825631389496" not in markdown
-    assert "country_industry × tariff × twfe_intensity × 无控制 × 无交互 × clean" in markdown
+    assert "国家×行业层面的连续强度双向固定效应（TWFE），不加控制变量和交互项" in markdown
+    assert "twfe_intensity ×" not in markdown
     assert "icio_derived" not in markdown
 
 

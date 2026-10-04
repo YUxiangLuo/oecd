@@ -350,7 +350,7 @@ export function IndicatorExplorer({
               value={second}
               onChange={(e) => select({ second: e.target.value })}
             >
-              <option value="">暂不对比（不能保存报告材料）</option>
+              <option value="">暂不对比（不记录报告材料）</option>
               {countries
                 .filter((country) => country !== first)
                 .map((country) => (

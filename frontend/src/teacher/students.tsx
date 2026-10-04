@@ -68,7 +68,7 @@ export function StudentRowMenu({
         <button aria-label={`修改姓名：${who}`} onClick={() => onPick("name", student)}>修改姓名</button>
         <button aria-label={`修改学号：${who}`} onClick={() => onPick("student_no", student)}>修改学号</button>
         <button aria-label={`调整班级：${who}`} onClick={() => onPick("enrollment", student)}>调整班级</button>
-        <span title={student.demo_seed ? "固定轮换凭证由系统维护；请新建普通学生账号演示改密" : undefined}>
+        <span title={student.demo_seed ? "演示账号的密码由系统统一管理；如需演示改密，请新建普通学生账号" : undefined}>
           <button
             disabled={student.demo_seed}
             aria-label={`${passwordLabel}：${who}`}

@@ -130,7 +130,7 @@ INDICATOR_SCHEMA = {
 
 _INDICATOR_DESCRIPTIONS = {
     "gross_exports": "五类 WWZ 聚合项与 OECD TLS（产品税减补贴）扩展项之和；这是 VA+TLS 账户闭合口径，不表示 taxsub 就是关税，也不是 WWZ 原文分解项。",
-    "FVA_share": "WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 总出口的比重；不是总出口全部外国增加值含量。同一纯 VA 口径下全部外国含量为 FVA+FDC；OECD TiVA 另将相关 TLS 计入 VA，所以本字段不能当作官方 EXGR_FVASH。",
+    "FVA_share": "WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 总出口的比重；不是总出口全部外国增加值含量。同一纯 VA 口径下全部外国含量为 FVA+FDC；OECD TiVA 另将相关 TLS 计入 VA，所以本指标不能当作官方 EXGR_FVASH。",
     "DVAex_share": "被国外最终吸收的国内增加值占 VA+TLS 账户闭合总出口的比重；越高表示出口中由本国创造且最终被国外吸收的价值构成更高。",
     "3_VA_GVC_share": "通过中间品跨境参与 GVC 的增加值占总增加值 SVA 的比重。",
     "3b_VA_GVC_C_share": "至少经历两次跨境的复杂 GVC 增加值占总增加值 SVA 的比重。",
@@ -166,7 +166,7 @@ _INDICATOR_DESCRIPTIONS = {
     "degree": "与该节点直接相连的入边和出边数量。",
     "indegree": "指向该节点的直接供应链连接数量。",
     "outdegree": "由该节点指向其他节点的直接供应链连接数量。",
-    "weighted degree": "加权入度与加权出度之和；正自环同时属于入向和出向，因而在本字段计两次。它不是去重后的贸易额或外部联系总额。国家级图只含国家间中间品与最终品贸易、不含国内边，因而没有自环：国家级数值等于该国对其他国家的出口加进口，不能与含国内流量的行业级数值直接比较。",
+    "weighted degree": "加权入度与加权出度之和；正自环同时属于入向和出向，因而在本指标中计两次。它不是去重后的贸易额或外部联系总额。国家级图只含国家间中间品与最终品贸易、不含国内边，因而没有自环：国家级数值等于该国对其他国家的出口加进口，不能与含国内流量的行业级数值直接比较。",
     "weighted indegree": "流入该节点的网络边流量之和。",
     "weighted outdegree": "由该节点流出的网络边流量之和。",
     "Eccentricity": "该节点到所有可达节点的最远最短路径距离。",

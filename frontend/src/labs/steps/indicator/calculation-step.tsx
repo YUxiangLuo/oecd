@@ -11,7 +11,7 @@ import "./indicator-method.css";
 
 export interface CalculationStepProps { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }
 const content = {
-  trade: { demo: 4, title: "这笔出口的钱来自哪里？", hint: "选一个真实国家与行业，点看分项金额与含义。加总核对只检查账户一致性，不等于独立证明算法正确。" },
+  trade: { demo: 4, title: "这笔出口的钱来自哪里？", hint: "选一个真实国家与行业，点击各分项查看金额与含义。" },
   production: { demo: 5, title: "本国增加值走了哪几条路？", hint: "把真实增加值分成纯国内、传统贸易、简单GVC和复杂GVC。这里追踪价值去向，与上一步从出口看价值来源不同。" },
   length: { demo: 6, title: "哪些生产活动拉长了价值链？", hint: "每段对总长度的贡献 = 增加值份额 × 该段长度。最长的一段，不一定贡献最大。" },
 };

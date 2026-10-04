@@ -110,7 +110,7 @@ export function networkMetricDisplay(
 }
 
 export function networkThresholdAriaValueText(threshold: number): string {
-  return `${(threshold * 100).toFixed(0)}%，相对当前已发布 Top 边最大流量`;
+  return `${(threshold * 100).toFixed(0)}%，相对最大边流量`;
 }
 
 function seqColor(value: number, max: number) {
@@ -410,7 +410,7 @@ export function NetworkViz({
             </select>
           )}
         </LabeledControl>
-        <LabeledControl label="显示截止（当前发布 Top 边最大流量的百分比）">
+        <LabeledControl label="显示比例（相对最大边流量）">
           {(id) => (
             <input
               id={id}
@@ -639,11 +639,11 @@ export function NetworkViz({
       )}
       <div className="network-caption">
         {expanded ? "大图模式 · 使用“退出大图”返回" : "推荐读图顺序：选一个国家 → 读主要流入/流出 → 再选第二个国家比较"}<br />
-        节点位置 = 预设地理区域布局（不是社区检测）；用于观察预设区域内 / 区域间流向<br />
+        节点位置 = 按预设地理区域摆放（不是算法聚类），便于比较区域内和区域间的流向<br />
         节点大小 = {metricMeta[sizeMetric].label} · 节点颜色 = {colorMode === "region" ? "预设地理区域" : metricMeta[colorMode].label}<br />
         {hasUnavailableContext && <>所选指标不可用节点 = 灰色虚线、固定最小尺寸（仅保留网络上下文）<br /></>}
-        显示条件：边流量 ÷ 当前发布 Top 边中的最大流量 ≥ {(edgeThreshold * 100).toFixed(0)}%；显示 {visibleEdges.length}/{thresholdModel.publishedEdges.length} 条已发布 Top 边；默认 15% 是读图筛选，不是计算阈值；箭头表示出口流向：source（出口方）→ target（进口方）<br />
-        截止比例只影响边的显示、伙伴高亮与详情；完整图上的中心性指标保持不变
+        显示条件：边流量不低于最大边流量的 {(edgeThreshold * 100).toFixed(0)}%，当前显示 {visibleEdges.length}/{thresholdModel.publishedEdges.length} 条主要贸易边；默认 15% 只为读图清晰，不影响计算；箭头从出口方指向进口方<br />
+        显示比例只影响画出哪些边和伙伴高亮，完整网络上的中心性不变
       </div>
       {Tip}
     </div>

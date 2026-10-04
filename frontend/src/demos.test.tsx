@@ -223,7 +223,7 @@ describe("semantic decomposition and path tables", () => {
     expect(html).toContain('<thead class="sr-only">');
     expect(html.match(/scope="col"/g)).toHaveLength(4);
     expect(html.match(/scope="row"/g)).toHaveLength(2);
-    expect(html).toContain("有符号构成占比");
+    expect(html).toContain("占比（可为负）");
     expect(html).toContain("-12");
     expect(html).toContain("-25.0%");
     expect(html).toContain('<td class="dt-val">—</td>');
@@ -382,7 +382,7 @@ describe("single-entity decomposition scope", () => {
     const html = renderToStaticMarkup(
       <DecompositionDemo step={4} meta={meta} primaryYear={2020} primaryCountry={null} />,
     );
-    expect(html).toContain("尚未选择具体国家");
+    expect(html).toContain("还没有选择具体国家");
     expect(html).toContain("选择真实国家");
     expect(html).not.toContain("加载实体 A");
     expect(html).not.toContain("decomp-formula");
@@ -392,8 +392,8 @@ describe("single-entity decomposition scope", () => {
     const html = renderToStaticMarkup(
       <DecompositionDemo step={4} meta={meta} primaryYear={2020} primaryCountry="CHN" />,
     );
-    expect(html).not.toContain("尚未选择具体国家");
-    expect(html).toContain("加载实体 A");
+    expect(html).not.toContain("还没有选择具体国家");
+    expect(html).toContain("加载对象 A");
     expect(html).toContain("decomp-formula");
   });
 });

@@ -443,8 +443,8 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
           </LabeledControl>
           <span className="muted" role="note">
             {country
-              ? "当前国家的完整行业结果在浏览器内排序；排序只改变显示顺序，不改变指标证据或请求页。"
-              : "全球范围按服务端分页顺序显示；请先选择国家，再对该国完整行业结果排序。"}
+              ? "排序只改变显示顺序，不改变指标数值。"
+              : "选择“全部”时按默认顺序分页显示；选择一个国家后可对它的全部行业排序。"}
           </span>
         </div>
       )}

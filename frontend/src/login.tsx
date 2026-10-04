@@ -188,7 +188,7 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
       <div className="login-panel">
         <form className="login-card" onSubmit={submit}>
           <h2>进入实验平台</h2>
-          <p className="login-card-sub">使用教师分配的个人账号登录；角色与课程权限由服务器确认。</p>
+          <p className="login-card-sub">使用教师分配的个人账号登录。</p>
           {notice && <div className="success-box login-notice" role="status">{notice}</div>}
 
           {demoMode && <div className="login-roles" role="group" aria-label="开发演示快捷账号">

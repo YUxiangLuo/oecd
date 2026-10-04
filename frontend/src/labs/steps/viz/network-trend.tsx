@@ -121,7 +121,7 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
         if (event.target.value === second) setSecond(first !== event.target.value ? first : "");
       }}>{countries.map((country) => <option key={country} value={country}>{countryLabel(country)}</option>)}</select>}</LabeledControl>
       <LabeledControl label="对比国家 B">{(id) => <select id={id} name="network-country-b" value={second} onChange={(event) => setSecond(event.target.value)}>
-        <option value="">暂不对比（不能保存报告材料）</option>
+        <option value="">暂不对比（不记录报告材料）</option>
         {countries.filter((country) => country !== first).map((country) => <option key={country} value={country}>{countryLabel(country)}</option>)}
       </select>}</LabeledControl>
       {view === "trend" ? <LabeledControl label="行业">{(id) => <select id={id} value={industry} onChange={(event) => setIndustry(event.target.value)}>

@@ -35,7 +35,7 @@ describe("teacher student modal submission", () => {
     const source = await Bun.file(new URL("./students.tsx", import.meta.url)).text();
     expect(source).toContain("disabled={student.demo_seed}");
     expect(source).toContain("固定演示口令");
-    expect(source).toContain("请新建普通学生账号演示改密");
+    expect(source).toContain("如需演示改密，请新建普通学生账号");
   });
 
   test("allows clearing an optional student number but not a display name", () => {

@@ -230,7 +230,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
           </button>
           <ul className="intro-card-facts">
             <li>关税路径与暴露值全部由课程生成。</li>
-            <li>X 使用首年美国目的地出口份额与模拟税率构造。</li>
+            <li>X 由首年销往美国的出口份额和模拟税率算出。</li>
             <li>Y 也是模拟结果，仅用于练习读回归。</li>
           </ul>
           {openCards.shock && (

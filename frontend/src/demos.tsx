@@ -72,10 +72,10 @@ const DECOMP: Record<number, DecompCfg> = {
     totalLabel: "总增加值 SVA",
     unit: "amount",
     parts: [
-      { key: "1_VA_D", label: "1_VA_D 纯国内生产", color: "#4b47e0", desc: "增加值只服务本国最终需求,完全不跨境。" },
-      { key: "2_VA_RT", label: "2_VA_RT 传统贸易生产", color: "#159a86", desc: "增加值随最终产品直接出口,货物只过一次国境。" },
+      { key: "1_VA_D", label: "1_VA_D 纯国内生产", color: "#4b47e0", desc: "增加值只服务本国最终需求，完全不跨境。" },
+      { key: "2_VA_RT", label: "2_VA_RT 传统贸易生产", color: "#159a86", desc: "增加值随最终产品直接出口，只跨境一次。" },
       { key: "3a_VA_GVC_S", label: "3a 简单 GVC 生产", color: "#e0982a", desc: "增加值随中间品跨境一次后在国外被吸收。" },
-      { key: "3b_VA_GVC_C", label: "3b 复杂 GVC 生产", color: "#f4693b", desc: "增加值至少两次跨越国境并进入复杂跨境生产；是否对特定政策更敏感需另行检验。" },
+      { key: "3b_VA_GVC_C", label: "3b 复杂 GVC 生产", color: "#f4693b", desc: "增加值至少两次跨越国境。" },
     ],
     note: (_r, values) =>
       `3_VA_GVC = 3a + 3b = ${fmt(values[2] + values[3], "amount")};` +
@@ -87,15 +87,15 @@ const DECOMP: Record<number, DecompCfg> = {
     unit: "number",
     weightTotal: "SVA",
     parts: [
-      { key: "PLv_D", label: "纯国内加权贡献", color: "#4b47e0", desc: "纯国内生产活动的平均长度,按 1_VA_D/SVA 份额加权计入总长度。", weightKey: "1_VA_D" },
-      { key: "PLv_RT", label: "传统贸易加权贡献", color: "#159a86", desc: "传统贸易生产活动的平均长度,按 2_VA_RT/SVA 份额加权计入。", weightKey: "2_VA_RT" },
+      { key: "PLv_D", label: "纯国内加权贡献", color: "#4b47e0", desc: "纯国内生产活动的平均长度，按 1_VA_D/SVA 份额加权计入总长度。", weightKey: "1_VA_D" },
+      { key: "PLv_RT", label: "传统贸易加权贡献", color: "#159a86", desc: "传统贸易生产活动的平均长度，按 2_VA_RT/SVA 份额加权计入。", weightKey: "2_VA_RT" },
       { key: "PLv_GVC", label: "GVC 加权贡献", color: "#f4693b", desc: "GVC 生产活动的段长度，按 3_VA_GVC/SVA 份额加权计入；段长度与加权贡献不是同一个数。", weightKey: "3_VA_GVC" },
     ],
     note: (r) => {
       const lengths = [finiteNumber(r.PLv_D), finiteNumber(r.PLv_RT), finiteNumber(r.PLv_GVC)];
       const position = finiteNumber(r.GVCPs);
-      return `各分项显示的是"VA 份额 × 段长度"的贡献值(WWYZ 2017b:总长度是段长度的增加值加权平均);` +
-        `段长度本身:PLv_D=${lengths[0]?.toFixed(2) ?? "—"}、PLv_RT=${lengths[1]?.toFixed(2) ?? "—"}、PLv_GVC=${lengths[2]?.toFixed(2) ?? "—"};` +
+      return `各分项是“增加值份额 × 段长度”的加权贡献（总长度是各段长度的增加值加权平均，见 WWYZ 2017b）。` +
+        `段长度本身：PLv_D=${lengths[0]?.toFixed(2) ?? "—"}、PLv_RT=${lengths[1]?.toFixed(2) ?? "—"}、PLv_GVC=${lengths[2]?.toFixed(2) ?? "—"}；` +
         `GVC 位置指数 GVCPs = PLv_GVC / PLy_GVC = ${position?.toFixed(3) ?? "—（未定义）"}。`;
     },
   },
@@ -188,8 +188,8 @@ export function DecompositionDetailTable({
       <thead className="sr-only">
         <tr>
           <th scope="col">分解组成</th>
-          <th scope="col">分项值或加权贡献</th>
-          <th scope="col">有符号构成占比</th>
+          <th scope="col">分项数值</th>
+          <th scope="col">占比（可为负）</th>
           <th scope="col">组成含义</th>
         </tr>
       </thead>
@@ -423,7 +423,7 @@ export function DecompositionDemo({
     const sectors = side === "A" ? sectorsA : sectorsB;
     return (
       <div className="demo-controls" style={{ marginBottom: 10 }}>
-        <b>{compare ? `实体 ${side}` : "分析实体"}</b>
+        <b>{compare ? `对象 ${side}` : "分析对象"}</b>
         <LabeledControl label="国家">
           {(id) => (
             <select id={id} value={country} onChange={(event) => {
@@ -460,7 +460,7 @@ export function DecompositionDemo({
         <div style={{ minWidth: 0 }}>
           {entityPicker(side)}
           <DecompositionRequestMessage
-            label={`实体 ${side}`}
+            label={`对象 ${side}`}
             status={query.status}
             error={query.error}
             empty={query.status === "success" && !row}
@@ -496,7 +496,7 @@ export function DecompositionDemo({
             <div>缺失或未定义的值显示为“—”，不会按 0 参与加总或闭合判断。</div>
           </div>
           <DecompositionDetailTable
-            caption={`实体 ${side}：${year} 年 ${countryLabel(country)} · ${gran === "sector" ? sectorLabel(sector) : "国家级"} · ${cfg.totalLabel}分解明细`}
+            caption={`对象 ${side}：${year} 年 ${countryLabel(country)} · ${gran === "sector" ? sectorLabel(sector) : "国家级"} · ${cfg.totalLabel}分解明细`}
             parts={cfg.parts}
             values={model.contributions}
             shares={null}
@@ -540,7 +540,7 @@ export function DecompositionDemo({
         </div>
         {model.closure != null ? (
           <div className={`decomp-identity ${model.closure ? "ok" : "bad"}`}>
-            {model.closure ? "✓" : "✗"} {cfg.parts.length} 项加总 = {fmt(model.sum, cfg.unit)} · 与 {cfg.totalLabel} 的误差 {model.error.toExponential(1)}
+            {model.closure ? "✓" : "✗"} {cfg.parts.length} 项加总 = {fmt(model.sum, cfg.unit)} · 与 {cfg.totalLabel} 一致{model.error < 1e-6 ? "" : `（差 ${model.error.toPrecision(2)}）`}
           </div>
         ) : (
           <div className="decomp-identity neutral" role="status">
@@ -552,7 +552,7 @@ export function DecompositionDemo({
           zeroTotalHint ?? `${cfg.totalLabel}占本国行业合计不足 0.01%，建议换一个活跃行业。`
         }</div>}
         <DecompositionDetailTable
-          caption={`实体 ${side}：${year} 年 ${countryLabel(country)} · ${gran === "sector" ? sectorLabel(sector) : "国家级"} · ${cfg.totalLabel}分解明细`}
+          caption={`对象 ${side}：${year} 年 ${countryLabel(country)} · ${gran === "sector" ? sectorLabel(sector) : "国家级"} · ${cfg.totalLabel}分解明细`}
           parts={cfg.parts}
           values={model.values}
           shares={model.shares}
@@ -561,7 +561,7 @@ export function DecompositionDemo({
           onHover={setHover}
         />
         {step === 6 && <MiniBackwardBar row={row} />}
-        {cfg.note && sharesAvailable && <div className="decomp-note">📌 {cfg.note(row, model.values)}</div>}
+        {cfg.note && sharesAvailable && <div className="decomp-note">{cfg.note(row, model.values)}</div>}
       </div>
     );
   };
@@ -569,9 +569,9 @@ export function DecompositionDemo({
   if (!demoAvailable) {
     return (
       <div className="demo-card">
-        <div className="demo-title">🧮 动手拆解 · 需要一个明确实体</div>
+        <div className="demo-title">动手拆解 · 请先选择国家</div>
         <div className="decomp-unavailable" role="status">
-          <b>尚未选择具体国家，单实体分解已暂停。</b>
+          <b>还没有选择具体国家。</b>
           <div>请在“选择真实国家”中选择一个国家，再查看行业的分项。</div>
         </div>
       </div>
@@ -580,13 +580,13 @@ export function DecompositionDemo({
 
   return (
     <div className="demo-card">
-      <div className="demo-title">🧮 动手拆解 · 点看每一项的含义与贡献</div>
+      <div className="demo-title">动手拆解 · 点击各项查看含义与贡献</div>
       <div className="demo-controls">
         <div className="pill-group">
           <button className={gran === "sector" ? "on" : ""} onClick={() => setGran("sector")}>国家–行业级</button>
           <button className={gran === "country" ? "on" : ""} onClick={() => setGran("country")}>国家级</button>
         </div>
-        <LabeledControl label="共享年份">
+        <LabeledControl label="年份">
           {(id) => (
             <select id={id} value={year} onChange={(event) => {
               onPrimaryChange?.(Number(event.target.value), countryA);
@@ -594,7 +594,7 @@ export function DecompositionDemo({
           )}
         </LabeledControl>
         <label style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <input type="checkbox" checked={compare} onChange={(event) => setCompare(event.target.checked)} /> 双实体并排对比
+          <input type="checkbox" checked={compare} onChange={(event) => setCompare(event.target.checked)} /> 并排对比两个对象
         </label>
       </div>
       <div className="decomp-formula">

@@ -8,8 +8,10 @@ export function fmtField(v: string | number | null, key: string, schema?: Indica
   return formatMetric(v, schema?.fields[key]?.format);
 }
 
+const IDENTIFIER_LABELS: Record<string, string> = { country: "国家", industry: "行业", year: "年份" };
+
 export function fieldLabel(key: string, schema?: IndicatorSchema | null) {
-  return schema?.fields[key]?.label ?? key;
+  return schema?.fields[key]?.label ?? IDENTIFIER_LABELS[key] ?? key;
 }
 
 export const fmtDb = (v: string | number | null) => {

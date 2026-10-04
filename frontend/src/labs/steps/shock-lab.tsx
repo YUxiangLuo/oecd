@@ -91,12 +91,12 @@ export function ShockLab({ meta, step: _step, state }: {
       {/* The tariff schedule and the two worked examples are reference material, folded under one summary. */}
       <details className="reg-fold">
         <summary>X 是怎么构造的：税率设定与两个小算例</summary>
-        <p>本版设定：前两年税率为 0；模拟加税国家在后三年统一为 10%，未加税国家仍为 0。同一国家、行业的出口份额固定，所以政策后三年的 X 保持不变，Y 仍会因扰动而变化。</p>
+        <p>设定：前两年税率为 0；模拟加税国家在后三年统一为 10%，未加税国家仍为 0。同一国家、行业的出口份额固定，所以政策后三年的 X 保持不变，Y 仍会因扰动而变化。</p>
         <div className="reg-variable-plain-grid" role="group" aria-label="理解 X 的独立算例">
           <div><b>算一次：税率不等于暴露</b><span>假设出口份额为 25%，模拟税率为 20%，X = 0.25 × 0.20 = 0.05，即 5%。同样税率下，出口依赖程度不同，暴露也不同。</span></div>
           <div><b>读一次：什么是 1 个百分点？</b><span>X 从 5% 变为 6%，增加的是 1 个百分点，不是相对增加 1%。后四步都按“X 增加 1 个百分点”读结果。</span></div>
         </div>
-        <p className="muted">以上是独立算例，不是下方所选国家的实际读数。同一条模拟税率路径下，冲击前出口份额 w 不同，会形成不同的暴露 X；下方趋势只帮助理解数据结构，回归使用完整国家×行业面板。</p>
+        <p className="muted">以上是独立算例，不是下方所选国家的实际读数。税率相同时，冲击前出口份额 w 不同，暴露 X 也不同。</p>
       </details>
       <p>选一个例子跟着走：选择两个国家和一个行业。默认是加拿大和墨西哥的汽车行业，两国出口都高度依赖美国，但只有加拿大在模拟中被加税。步骤 11–14 会把回归结果换算到你选的例子上。</p>
       {sample && <p className="muted" role="note">

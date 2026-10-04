@@ -41,9 +41,9 @@ function columnAxisBand(table: DbTableKind, colCountry: string): string {
  *  因为"行"虽然横向延伸,它的标签却竖排在最左侧。读法一律锚定标签的视觉位置
  *  (左侧竖排/上方横排),不再依赖"行/列"抽象词的二次换算。 */
 const HOW_TO_READ: Record<DbTableKind, string> = {
-  z: "每个数值 = 它左侧竖排标签(行:供给国×行业) 向 它上方横排标签(列:使用国×行业) 供给的中间投入。注意:行的标签虽然竖排在最左,它仍然是「行」。单位:Million USD(百万美元)。",
-  y: "每个数值 = 它左侧竖排标签(行:供给国×行业) 被 它上方横排标签(列:目的国×需求类别) 吸收的最终需求金额。注意:行的标签虽然竖排在最左,它仍然是「行」。单位:Million USD(百万美元)。",
-  accounts: "每一行是一个「国家×行业」,列是该行业的账户项(TLS / VA / OUT);此表没有列方向的国家维度。单位:Million USD(百万美元)。",
+  z: "每个数值表示左侧这一行（供给国×行业）向上方这一列（使用国×行业）提供的中间投入。行标签竖排在最左侧，表示的仍然是行。单位：百万美元。",
+  y: "每个数值表示左侧这一行（供给国×行业）的产品被上方这一列（目的国×需求类别）作为最终需求吸收的金额。行标签竖排在最左侧，表示的仍然是行。单位：百万美元。",
+  accounts: "每一行是一个国家×行业，列是该行业的账户项（TLS / VA / OUT）；这张表的列没有国家之分。单位：百万美元。",
 };
 
 const ACCOUNT_HELP: Record<string, string> = {
@@ -91,7 +91,7 @@ export function DatabaseGuide({ meta, releaseMeta }: { meta: DbMeta; releaseMeta
     <div className="db-guide">
       <h3 className="kicker">全球投入产出数据库一览</h3>
       <p style={{ maxWidth: 820 }}>
-        研究全球价值链,需要一张“谁向谁供货”的<b>跨国投入产出表</b>。主流数据库各有侧重——下表是截至 2026-08 的课程比较快照，不是实时目录；覆盖范围、行业/产品口径与更新节奏都不同:
+        研究全球价值链，需要一张“谁向谁供货”的<b>跨国投入产出表</b>。下表比较几个常用数据库（截至 2026 年 8 月的课程整理，不是实时目录），它们的覆盖范围、行业或产品分类和更新频率各不相同：
       </p>
       <ScrollableRegion className="table-wrap" label="全球投入产出数据库对比表，可横向滚动" style={{ marginTop: 10 }}>
         <table className="data-table db-guide-table">
@@ -118,7 +118,7 @@ export function DatabaseGuide({ meta, releaseMeta }: { meta: DbMeta; releaseMeta
       </ScrollableRegion>
       <p className="muted" style={{ maxWidth: 820, marginTop: 10 }}>
         当前载入：<b>{icioDatasetName(releaseMeta)}</b>，{icioCoverage}。上表介绍数据库类型，不替代当前数据的来源说明。
-        政策冲击和模拟宏观控制是另行构造的教学材料。切换到其他数据库需要替换原始表与解析器；各库分类口径不同，覆盖数字不能直接横向比较。
+        各数据库的分类方式不同，覆盖数字不能直接横向比较。
       </p>
     </div>
   );
@@ -595,8 +595,8 @@ export function ReleaseIntegrityStatus({ meta }: { meta: Meta | null }) {
   if (meta?.dataset?.integrity?.status !== "passed") return null;
   return (
     <div className="integrity-status" role="status">
-      <b>当前数据已通过系统自动完整性验证</b>
-      <span>文件哈希、表结构、键覆盖与来源绑定均已验证；数值、经济含义与研究设计诊断由系统保留并在报告中披露，无需学生另做校验。</span>
+      <b>数据已通过系统完整性检查</b>
+      <span>文件、表结构和数据来源都已核对，无需你另外校验；数据中的异常和限制会在报告里注明。</span>
     </div>
   );
 }

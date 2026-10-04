@@ -31,7 +31,7 @@ describe("fixed regression forest chart", () => {
       coefs: [{ name: "x", coef: -0.2, ci_low: -0.3, ci_high: -0.1, p: 0.001, stars: "***" }],
       globalStatus: "ok",
     }));
-    expect(markup).toContain("横线 = 标称 95% 的近似聚类区间");
+    expect(markup).toContain("横线 = 95% 区间");
     expect(markup).toContain('class="coef-ci"');
     expect(markup).toContain('fill="#2f6fd0"');
     // Significance stars are not shown; the interval already tells the direction.

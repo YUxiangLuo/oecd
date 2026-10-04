@@ -82,13 +82,14 @@ describe("network threshold semantics", () => {
         edges: [{ source: "CHN", target: "USA", flow: 100 }],
       },
     }));
-    expect(html).toContain("预设地理区域布局（不是社区检测）");
-    expect(html).toContain("区域内 / 区域间流向");
-    expect(html).toContain("边流量 ÷ 当前发布 Top 边中的最大流量 ≥ 15%");
-    expect(html).toContain("显示 1/1 条已发布 Top 边");
+    expect(html).toContain("按预设地理区域摆放（不是算法聚类）");
+    expect(html).toContain("区域内和区域间的流向");
+    expect(html).toContain("边流量不低于最大边流量的 15%");
+    expect(html).toContain("当前显示 1/1 条主要贸易边");
+    expect(html).not.toMatch(/source|target|Top 边/);
     expect(html).toContain("显示全部 1 条");
     expect(DEFAULT_NETWORK_EDGE_THRESHOLD).toBe(0.15);
-    expect(html).toContain("完整图上的中心性指标保持不变");
+    expect(html).toContain("完整网络上的中心性不变");
     expect(html).toContain("节点位置采用预设地理区域布局，不是社区检测结果");
   });
 
@@ -143,7 +144,7 @@ describe("network threshold semantics", () => {
   });
 
   test("announces the displayed integer cutoff and its max-published-edge meaning", () => {
-    expect(networkThresholdAriaValueText(0.25)).toBe("25%，相对当前已发布 Top 边最大流量");
+    expect(networkThresholdAriaValueText(0.25)).toBe("25%，相对最大边流量");
     const html = renderToStaticMarkup(createElement(NetworkViz, {
       data: {
         nodes: [{ country: "CHN", gvc_production_share: 0.4, "weighted degree": 150, gross_exports: 100 }],
@@ -154,7 +155,7 @@ describe("network threshold semantics", () => {
     expect(html).toContain('min="0"');
     expect(html).toContain('max="0.5"');
     expect(html).toContain('step="0.01"');
-    expect(html).toContain('aria-valuetext="15%，相对当前已发布 Top 边最大流量"');
+    expect(html).toContain('aria-valuetext="15%，相对最大边流量"');
   });
 });
 

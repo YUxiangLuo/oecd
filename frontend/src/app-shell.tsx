@@ -174,7 +174,7 @@ export function StudentTopbar({
         <button
           ref={passwordTriggerRef}
           disabled={fixedDemoPassword}
-          title={fixedDemoPassword ? "固定轮换凭证由系统维护" : undefined}
+          title={fixedDemoPassword ? "演示账号的密码由系统统一管理，不能修改" : undefined}
           onClick={onRequestPasswordChange}
         >
           {fixedDemoPassword ? "固定演示口令" : "修改密码"}

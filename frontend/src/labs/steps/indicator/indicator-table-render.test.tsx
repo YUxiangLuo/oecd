@@ -137,7 +137,7 @@ describe("network table sort scope", () => {
     );
     expect(html).toContain("行业排序（仅单国完整结果）");
     expect(html).toMatch(/<select[^>]*disabled=""[^>]*>/);
-    expect(html).toContain("全球范围按服务端分页顺序显示");
+    expect(html).toContain("选择“全部”时按默认顺序分页显示");
     expect(html).not.toContain("全球排名第");
     expect(html).toContain("国家");
     expect(html).toContain("年份");
@@ -165,7 +165,7 @@ describe("network table sort scope", () => {
     expect(html).toContain("单国行业排序");
     expect(html).toContain("全正边二值介数（降序）");
     expect(html).toContain("加权总度（入+出；自环双计）");
-    expect(html).toContain("完整行业结果在浏览器内排序");
+    expect(html).toContain("排序只改变显示顺序，不改变指标数值");
     expect(html).not.toContain("行业排序（仅单国完整结果）");
   });
 

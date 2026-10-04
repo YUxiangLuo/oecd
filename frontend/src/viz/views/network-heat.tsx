@@ -140,7 +140,7 @@ export function HeatTableViz({
       >
         <caption style={{ textAlign: "left", padding: "12px 16px", color: "#3a4050", lineHeight: 1.6 }}>
           {shownCountry}行业节点中心性；在完整全球国家×行业图上计算，按{sortLabel}降序显示{coverageLabel}。
-          本表仅供查数。报告材料请在上方行业图表的材料卡中统一保存。
+          本表仅供查数，不记录报告材料。
         </caption>
         <thead>
           <tr>
@@ -172,7 +172,7 @@ export function HeatTableViz({
           <span key={column.key}> {schema?.fields[column.key]?.label ?? column.name}：{schema?.fields[column.key]?.desc ?? column.desc}</span>
         ))}
         <div>
-          颜色深浅表示该列当前可见行内的相对大小（每列独立归一化）。排序、切换范围、渲染、悬停和聚焦都不会改变报告材料。
+          颜色深浅表示该列可见行中的相对大小（每列单独计算）。这张表上的操作不会改变报告材料。
         </div>
       </div>
     </ScrollableRegion>

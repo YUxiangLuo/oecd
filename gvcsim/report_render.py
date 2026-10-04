@@ -296,7 +296,7 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
     lines = [
         "## 关键证据摘要",
         "",
-        "本节按课堂单位说明估计结果。完整方程和诊断见技术附录。",
+        "本节用课堂上的读数单位说明估计结果；完整方程和诊断见技术附录。",
         "",
         *_teaching_sample_lines(source_filter),
         "区间口径：如提供区间，均为**标称 95% 的近似聚类区间**。" + CLUSTER_INTERVAL_NOTE,
@@ -316,9 +316,9 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
         suppressed = _global_inference_suppressed(result)
         used_in_table = qualified.get(step) is run
         marker = (
-            "（对照表采用）"
+            "（汇总表采用此结果）"
             if used_in_table
-            else ("（探索结果，未列入对照表）" if not _result_is_qualified(result, design) else "")
+            else ("（探索结果，未列入汇总表）" if not _result_is_qualified(result, design) else "")
         )
         coefficient = primary
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}{marker}", ""))
@@ -340,7 +340,7 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
         )
         lines.extend(
             (
-                "| 项目 | 学生可读结果 |",
+                "| 项目 | 结果 |",
                 "|---|---|",
                 f"| 研究对象 | {_safe(design.get('depvar_label', outcome))} |",
                 f"| 保存的模型 | {setting or '—'} |",
@@ -565,8 +565,8 @@ def _qc_disclosure_section(summary: dict[str, Any], integrity: Any) -> list[str]
     lines = [
         "## 数据完整性与诊断披露",
         "",
-        f"- 自动完整性验证：{'通过' if status == 'passed' else '状态未知'}。文件哈希、结构、键覆盖和来源绑定属于发布门槛。",
-        "- 发布政策：完整性、逆矩阵有效性及计算恒等式失败阻断发布；经济账户异常、范围诊断和回归设计限制仍完整保留并在此披露。",
+        f"- 自动完整性验证：{'通过' if status == 'passed' else '状态未知'}。文件、表结构和数据来源都已核对。",
+        "- 检查规则：完整性、逆矩阵或计算恒等式不通过时，数据不会发布；经济账户异常、取值范围和回归设计限制会保留，并在下面列出。",
     ]
     for key, label in (("fatal", "非阻断诊断发现"), ("warning", "警告"), ("disclosure", "补充披露")):
         if summary[key]:

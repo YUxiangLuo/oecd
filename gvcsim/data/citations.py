@@ -149,10 +149,8 @@ def report_source_disclosures(data_sources: dict[str, Any] | None) -> list[str]:
     controls = sources["simulated_macro_controls"]
     lines.extend(
         [
-            "- 模拟宏观控制（模型标签：模拟宏观控制）：确定性教学 mock，production_data=false；"
-            f"生成器 {controls['generator']}@{controls['generator_version']}。",
-            f"- 模拟宏观控制的 ICIO 尺度输入：{controls['scale_input']['description']}",
-            f"- 模拟宏观控制披露：{controls['observations_disclosure']}",
+            "- 模拟宏观控制：按固定规则生成的教学数据，不是 WDI 或 IMF 的观测数据，不得当作真实宏观统计；"
+            f"本实验的回归没有使用它们（生成器 {controls['generator']}@{controls['generator_version']}）。",
         ]
     )
     return lines
