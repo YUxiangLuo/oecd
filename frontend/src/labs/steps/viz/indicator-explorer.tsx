@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
-import { focusStepPrimaryAction } from "../../../step-task-card";
+import { ChartModalButton, SupplementaryCharts } from "./chart-modal";
 import type { Meta, Step, StepStateApi } from "../../../types";
 import {
   CompositionBar,
@@ -96,8 +96,10 @@ export function IndicatorExplorer({
     touched.current = true;
     setSelection((old) => ({ ...old, ...patch }));
   };
-  const { first, second, industry, metric, start, end, year, view, limit } =
+  const { first, second, industry, metric, start, end, year, limit } =
     selection;
+  // “进一步探索” used to replace the main chart; it is now a modal, so an old saved view falls back.
+  const view: IndicatorView = selection.view === "explore" ? topic.defaultView ?? "trend" : selection.view;
   const selected = second ? [first, second] : [first];
   const range = years.filter((value) => value >= start && value <= end);
   const timeView =
@@ -207,16 +209,15 @@ export function IndicatorExplorer({
           (row[topic.composition!.total] as number) > 0,
       ));
   const canSave =
-    view !== "explore" &&
     query.status === "success" &&
     completeComposition &&
     materialComplete(pending, selected, metrics, timeView);
   // Name the actual reason the material cannot be saved instead of one catch-all sentence.
   const blockedReason =
     selected.length < 2
-      ? "请选择两个不同国家后再保存。"
+      ? "请选择两个不同国家。"
       : query.status === "error"
-        ? "当前比较的数据加载失败，请重试后再保存。"
+        ? "当前比较的数据加载失败，请重试。"
         : query.status !== "success"
           ? "正在加载当前比较的数据，请稍候。"
           : timeView && chartYears.length < 2
@@ -232,14 +233,19 @@ export function IndicatorExplorer({
         state.data?.indicator_selection?.[key as keyof IndicatorSelection] ===
         value,
     );
-  const save = () => {
+  const pendingKey = canSave ? `${materialKey(pending)}|${JSON.stringify({ ...selection, view })}` : "";
+  // Report material follows the chart the student is looking at: every complete chart is recorded
+  // automatically, replacing the previous one. Incomplete charts never overwrite a complete record.
+  useEffect(() => {
     if (!canSave || matches || state.syncing) return;
     state.save({
       compared: selected,
       observations: pending,
-      indicator_selection: selection,
+      indicator_selection: { ...selection, view },
     });
-  };
+    // state/selection objects change every render; pendingKey captures every meaningful change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingKey, matches, state.syncing]);
   const lenses: { key: IndicatorView; label: string }[] = [
     { key: "trend", label: "比较变化" },
     { key: "comparison", label: "同年差异" },
@@ -294,9 +300,10 @@ export function IndicatorExplorer({
       </table>
     </ScrollableRegion>
   );
+  const exploreYear = chartYears.includes(year) ? year : chartYears.at(-1) ?? year;
   const exploreRows = rows.filter(
     (row) =>
-      row.year === year &&
+      row.year === exploreYear &&
       (industry ? row.industry === industry : !row.industry),
   );
   // Scatter primitives identify industry rows by industry; these points represent
@@ -483,7 +490,7 @@ export function IndicatorExplorer({
         )}
       </div>
       <p aria-label="当前比较口径"><strong>
-        {selected.map(countryLabel).join("与")} · {view === "industry" ? "行业排名" : industry ? sectorLabel(industry) : "国家整体"} · {timeView ? `${start}–${end}` : year} · {composition ? "构成分析" : view === "directions" ? "前后向GVC段长度与位置" : view === "explore" ? `${label(topic.axes.x)} / ${label(topic.axes.y)}` : label(metric)}
+        {selected.map(countryLabel).join("与")} · {view === "industry" ? "行业排名" : industry ? sectorLabel(industry) : "国家整体"} · {timeView ? `${start}–${end}` : year} · {composition ? "构成分析" : view === "directions" ? "前后向GVC段长度与位置" : label(metric)}
       </strong>
         {/* The 2020 caveat stays visible as a short pointer; its full text lives in “指标口径”. */}
         {chartYears.includes(2020) && <span className="viz-scope-caveat">含 2020 年：现价与疫情期外推，见下方“指标口径”</span>}
@@ -610,7 +617,21 @@ export function IndicatorExplorer({
               </ScrollableRegion>
             </>
           )}
-          {view === "explore" && (
+          <details className="technical-details">
+            <summary>
+              核对当前图表读数 · {pending.length} 条（缺失不补零）
+            </summary>
+            {table(pending)}
+          </details>
+        </>
+      )}
+      </div>
+      <SupplementaryCharts>
+        <ChartModalButton
+          label={industry ? "两国同行业定位图" : "全部国家定位图与排名"}
+          title={`步骤 ${step.n} · ${industry ? `${sectorLabel(industry)} · ` : ""}${exploreYear} 年定位图`}
+        >
+          {() => (
             <>
               <h4>定位图 · {industry ? "所选两国同一行业" : "当年国家样本"}</h4>
               <p>
@@ -656,19 +677,10 @@ export function IndicatorExplorer({
                   />
                 </>
               )}
-            </>
+                        </>
           )}
-          {view !== "explore" && (
-            <details className="technical-details">
-              <summary>
-                核对当前图表读数 · {pending.length} 条（缺失不补零）
-              </summary>
-              {table(pending)}
-            </details>
-          )}
-        </>
-      )}
-      </div>
+        </ChartModalButton>
+      </SupplementaryCharts>
       <details className="technical-details">
         <summary>指标口径</summary>
         <p className="muted">{topic.key === "length" ? "长度是生产阶段的账户比值，不是跨境次数；国家结果不能用行业均值代替。" : "金额为当年价格，跨年变化不等于实际增长；国家份额不是行业份额的简单平均。"}</p>
@@ -680,20 +692,11 @@ export function IndicatorExplorer({
         <IcioYearNote years={chartYears} />
       </details>
       <section className="qualified-run-card" aria-label="报告材料">
-        <h3>报告材料 · {saved.length ? `已保存一份比较（${saved.length} 条读数）` : "尚未保存"}</h3>
-        <p>
-          当前图表：{composition ? "保存全部构成分项及总量，金额单位：百万美元" : metrics.map((key) => `${label(key)}（${unit(key)}）`).join("、")}
-          {" "}· {pending.length} 条有效读数{pending.length < expectedCount ? `，缺少 ${expectedCount - pending.length} 条` : ""}
-        </p>
-        <button className="primary" disabled={!canSave || matches || state.syncing} onClick={save}>
-          {matches ? "当前比较已记录" : saved.length ? "更新报告材料" : "保存为报告材料"}
-        </button>
+        <h3>报告材料 · {saved.length ? `已自动记录（${saved.length} 条读数）` : "尚未记录"}</h3>
         <p role="status">
-          {view === "explore"
-            ? "补充图表仅供探索；请回到主要图表保存材料。"
-            : !validYears ? "请先修正年份范围，再保存当前比较。" : !canSave
-              ? blockedReason
-              : matches ? "当前图表与已记录材料一致。" : "保存将替换本步已有材料；浏览和切换图表不会修改已保存内容。"}
+          {!validYears ? "请先修正年份范围，当前图表才能被记录。" : !canSave
+            ? `当前图表暂不能记录：${blockedReason}${saved.length ? "已记录的材料保持不变。" : ""}`
+            : matches ? "当前图表已自动记录为本步报告材料；换视角、国家或年份后会自动更新为最后查看的完整图表。" : "正在记录当前图表…"}
         </p>
         {saved.length > 0 && <details>
           <summary>核对已保存材料 · {saved.length} 条读数</summary>
@@ -706,13 +709,6 @@ export function IndicatorExplorer({
         {state.syncError ? <p role="alert">材料尚未同步成功。<button className="secondary" onClick={state.syncNow}>重试同步</button></p>
           : state.syncing && <p className="muted">正在同步实验记录…</p>}
       </section>
-      <details className="technical-details" key={view === "explore" ? "explore" : "main"} open={view === "explore"}>
-        <summary>补充图表</summary>
-        <LensNav lenses={[{ key: "explore", label: "进一步探索" }]} active={view} onPick={(view) => {
-          select({ view });
-          requestAnimationFrame(() => focusStepPrimaryAction(document.querySelector(".content")));
-        }} />
-      </details>
     </section>
   );
 }

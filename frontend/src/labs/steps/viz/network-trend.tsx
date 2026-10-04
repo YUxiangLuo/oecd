@@ -93,10 +93,14 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
   const savedYears = [...new Set(observations.map((item) => item.year))].sort((a, b) => a - b);
   const savedCountries = [...new Set(observations.map((item) => item.country))];
   const savedIndustries = [...new Set(observations.map((item) => item.industry).filter(Boolean))];
-  const record = () => {
-    if (!canRecord || !release || matchesSaved) return;
+  const pendingKey = canRecord && release ? `${selected.join(",")}|${materialKey(pendingObservations)}` : "";
+  // Report material follows the chart the student is looking at; incomplete charts never overwrite it.
+  useEffect(() => {
+    if (!pendingKey || matchesSaved || syncing) return;
     onRecord(selected, pendingObservations);
-  };
+    // pendingKey captures every meaningful change of the pending comparison.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingKey, matchesSaved, syncing]);
   const axis = niceDomain(0, Math.max(0, ...finite.map((point) => point.value!)) || 1);
   const max = axis.hi;
   const x = (year: number) => 95 + (year - years[0]) / Math.max(1, years.at(-1)! - years[0]) * 650;
@@ -180,15 +184,16 @@ export function NetworkTrend({ meta, schema, initialCountry, observations = [], 
       <p>与步骤 5 同源：每年在完整全球国家×行业中间品网络上计算，包含国内联系与正自环。加权流量使用当年价格；拓扑指标未做边阈值敏感性分析。</p>
     </details>
     <section className="qualified-run-card" aria-label="步骤9报告材料">
-      <h3>报告材料 · {observations.length ? `已保存一份比较（${observations.length} 条读数）` : "尚未保存，保存一份两国比较即可"}</h3>
-      <p><b>本次准备保存：</b>{selected.map(countryLabel).join(" 与 ")} · {label}（{unit}）</p>
-      <p>{view === "trend" ? `${sectorLabel(industry)} · ${years[0]}–${years.at(-1)} 年趋势` : `${year} 年行业排名 · ${limit === 10 ? "Top 10" : "全部行业"} · 按国家 A 排序`} · {query.status === "success" ? `${pendingObservations.length} 条有效读数` : "等待数据加载"}</p>
-      <div className="controls"><button className="primary" disabled={!canRecord || matchesSaved || syncing} onClick={record}>{matchesSaved ? "当前比较已记录" : observations.length ? "更新报告材料" : "保存为报告材料"}</button></div>
-      <p role="status">{!canRecord ? view === "trend" ? "尚不能保存：请选择两个不同国家，且两国至少有两个共同有效年份。" : "尚不能保存：请选择两个不同国家，且至少一个展示行业有两国有效读数。" : matchesSaved ? "当前图表与本步材料一致，无需重复记录。" : observations.length ? "当前图表尚未替换已有材料；点击更新后，以本次比较替换下面的记录。" : "点击保存，一次记录比较对象和全部读数。"}</p>
+      <h3>报告材料 · {observations.length ? `已自动记录（${observations.length} 条读数）` : "尚未记录"}</h3>
+      <p role="status">{!canRecord
+        ? `当前图表暂不能记录：${view === "trend" ? "请选择两个不同国家，且两国至少有两个共同有效年份。" : "请选择两个不同国家，且至少一个展示行业有两国有效读数。"}${observations.length ? "已记录的材料保持不变。" : ""}`
+        : matchesSaved
+          ? `当前图表已自动记录：${selected.map(countryLabel).join(" 与 ")} · ${view === "trend" ? `${sectorLabel(industry)} · ${years[0]}–${years.at(-1)} 年趋势` : `${year} 年行业排名`} · ${label}。换视角、国家或指标后会自动更新。`
+          : "正在记录当前图表…"}</p>
       {observations.length ? <details>
         <summary>核对已记录读数 · {observations.length} 条</summary>
         <p>{savedCountries.map(countryLabel).join(" 与 ")} · {schema?.fields[observations[0].metric ?? ""]?.label ?? observations[0].metric} · {observations[0].unit}</p>
-        <p>{savedYears[0]}{savedYears.length > 1 ? `–${savedYears.at(-1)}` : ""} 年 · {savedIndustries.length === 1 ? sectorLabel(savedIndustries[0]!) : `${savedIndustries.length} 个行业`} · {observations.length} 条读数。浏览、排序和切换视角不会清空它。</p>
+        <p>{savedYears[0]}{savedYears.length > 1 ? `–${savedYears.at(-1)}` : ""} 年 · {savedIndustries.length === 1 ? sectorLabel(savedIndustries[0]!) : `${savedIndustries.length} 个行业`} · {observations.length} 条读数。</p>
         <ScrollableRegion className="table-wrap bounded-data-table" label="已记录报告材料读数"><table className="data-table">
           <thead><tr><th>国家与行业</th><th>年份</th><th>数值</th></tr></thead>
           <tbody>{observations.map((item, index) => <tr key={index}><td>{countryLabel(item.country)} · {sectorLabel(item.industry ?? "")}</td><td>{item.year}</td><td>{fmtDb(item.value)}</td></tr>)}</tbody>

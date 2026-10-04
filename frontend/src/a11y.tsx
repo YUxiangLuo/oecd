@@ -115,6 +115,8 @@ export function useDialogFocus({
     initial.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
+      // A nested dialog opened on top marks this one inert; only the topmost dialog reacts.
+      if (container.closest("[inert]")) return;
       if (event.key === "Escape") {
         event.preventDefault();
         closeRef.current();

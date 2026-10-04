@@ -132,7 +132,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     "- 行业指标来自完整国家×行业中间品网络，不对应国家贸易概览的位置；加权流量为当年价格，拓扑指标不等同经济重要性。"
                 )
             if step in (6, 7, 8):
-                lines.append("- 记录的显式图表材料（指标与单位逐行列示）：")
+                lines.append("- 记录的图表材料（系统按学生最后查看的完整图表自动记录；指标与单位逐行列示）：")
                 lines.append(
                     f"- 数据版本：{_safe(observations[0]['release'])}。金额为当年价格；份额以百分数列示，变化按百分点解释。"
                 )

@@ -63,7 +63,7 @@ function setup(Component = TradeVizStep, data?: VizStepState) {
   };
 }
 
-describe("explicit indicator explorer", () => {
+describe("indicator explorer with automatic report material", () => {
   for (const delayed of [false, true]) {
     for (const invalid of [
       { view: "trend" as const, start: 2021, end: 2019, year: 2021 },
@@ -85,15 +85,14 @@ describe("explicit indicator explorer", () => {
           if (delayed) view.rerender(<TradeVizStep meta={meta} step={step} state={state(data)} />);
           expect((await view.findByRole("alert")).textContent).toContain("年份范围无效");
           expect(view.queryByText("正在加载所选年份的指标…")).toBeNull();
-          expect((view.getByRole("button", { name: "更新报告材料" }) as HTMLButtonElement).disabled).toBe(true);
+          expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("请先修正年份范围");
           if (!delayed) expect(rows).not.toHaveBeenCalled();
-          fireEvent.click(view.getByRole("button", { name: "重置年份" }));
-          await waitFor(() => expect((view.getByRole("button", { name: "更新报告材料" }) as HTMLButtonElement).disabled).toBe(false));
-          expect(view.queryByRole("alert")).toBeNull();
+          // An invalid range is never recorded and never overwrites the saved material.
           expect(saves).toHaveLength(0);
           expect(JSON.stringify(data)).toBe(original);
-          fireEvent.click(view.getByRole("button", { name: "更新报告材料" }));
-          expect(saves).toHaveLength(1);
+          fireEvent.click(view.getByRole("button", { name: "重置年份" }));
+          await waitFor(() => expect(saves).toHaveLength(1));
+          expect(view.queryByRole("alert")).toBeNull();
           expect(saves[0].indicator_selection).toMatchObject({ start: 2019, end: 2021, year: 2021 });
           expect(rows.mock.calls.every(([year]) => meta.years.includes(year))).toBe(true);
         } finally { rows.mockRestore(); schema.mockRestore(); }
@@ -101,7 +100,7 @@ describe("explicit indicator explorer", () => {
     }
   }
 
-  test("starts with a two-country trend without saving; report capture and update remain explicit", async () => {
+  test("records the default two-country trend automatically and follows the chart the student switches to", async () => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(
       async (year) => countryRows(year),
     );
@@ -120,25 +119,19 @@ describe("explicit indicator explorer", () => {
     expect((view.getByLabelText("比较范围") as HTMLSelectElement).value).toBe(
       "",
     );
-    expect(view.saves).toHaveLength(0);
     expect(await view.findByLabelText("两国趋势结论")).toBeTruthy();
     expect(view.getByLabelText("2020 年数据解释边界")).toBeTruthy();
     const chart = view.getByRole("img");
+    const supplementary = view.getByRole("group", { name: "补充图表" });
     const materials = view.getByRole("region", { name: "报告材料" });
-    expect(chart.compareDocumentPosition(materials) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(materials.compareDocumentPosition(view.getByText("补充图表")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Supplementary charts sit under the main chart and open in a modal; they never replace it.
+    expect(chart.compareDocumentPosition(supplementary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(supplementary.compareDocumentPosition(materials) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect((view.getByText("指标口径").closest("details") as HTMLDetailsElement).open).toBe(false);
     expect(view.getByText(/两国差距/)).toBeTruthy();
     expect(view.getByText(/差距缩小 .* 个百分点/)).toBeTruthy();
-    await waitFor(() =>
-      expect(
-        view
-          .getByRole("button", { name: "保存为报告材料" })
-          .hasAttribute("disabled"),
-      ).toBeFalse(),
-    );
-    fireEvent.click(view.getByRole("button", { name: "保存为报告材料" }));
-    expect(view.saves).toHaveLength(1);
+    await waitFor(() => expect(view.saves).toHaveLength(1));
+    expect(view.queryByRole("button", { name: "保存为报告材料" })).toBeNull();
     expect(view.saves[0].indicator_selection).toMatchObject({
       first: "CHN",
       second: "USA",
@@ -155,23 +148,11 @@ describe("explicit indicator explorer", () => {
       release,
     });
     view.accept(); // parent owns persistence; only its rerender marks the selection saved
-    expect(
-      view
-        .getByRole("button", { name: "当前比较已记录" })
-        .hasAttribute("disabled"),
-    ).toBeTrue();
+    expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("当前图表已自动记录");
+    expect(view.saves).toHaveLength(1);
     fireEvent.click(view.getByRole("button", { name: "同年差异" }));
     expect(view.queryByLabelText("2020 年数据解释边界")).toBeNull();
-    expect(view.saves).toHaveLength(1);
-    await waitFor(() =>
-      expect(
-        view
-          .getByRole("button", { name: "更新报告材料" })
-          .hasAttribute("disabled"),
-      ).toBeFalse(),
-    );
-    fireEvent.click(view.getByRole("button", { name: "更新报告材料" }));
-    expect(view.saves).toHaveLength(2);
+    await waitFor(() => expect(view.saves).toHaveLength(2));
     expect(
       view.saves[1].observations!.every(
         (x) => x.year === 2021 && x.source === "explicit-indicator-comparison",
@@ -200,7 +181,8 @@ describe("explicit indicator explorer", () => {
     expect(
       (legacy.getByLabelText("对比国家 B") as HTMLSelectElement).value,
     ).toBe("CHN");
-    expect(legacy.getByText(/尚未保存/)).toBeTruthy();
+    await waitFor(() => expect(legacy.saves).toHaveLength(1));
+    expect(legacy.saves[0].observations!.every((item) => item.source === "explicit-indicator-trend")).toBeTrue();
     cleanup();
     const selection = {
       first: "USA",
@@ -229,7 +211,7 @@ describe("explicit indicator explorer", () => {
         },
       ],
     });
-    await modern.findByText(/已保存一份比较/);
+    await modern.findByText(/已自动记录/);
     expect((modern.getByLabelText("国家 A") as HTMLSelectElement).value).toBe(
       "USA",
     );
@@ -240,7 +222,7 @@ describe("explicit indicator explorer", () => {
     schema.mockRestore();
   });
 
-  test("a superseded async country request cannot enable saving stale data", async () => {
+  test("a superseded async country request is never recorded", async () => {
     let resolveOld!: (rows: ReturnType<typeof countryRows>) => void;
     const old = new Promise<ReturnType<typeof countryRows>>((resolve) => {
       resolveOld = resolve;
@@ -259,16 +241,17 @@ describe("explicit indicator explorer", () => {
     fireEvent.change(view.getByLabelText("对比国家 B"), {
       target: { value: "USA" },
     });
-    await waitFor(() => expect(view.getByText(/4 条有效读数/)).toBeTruthy());
+    await waitFor(() => expect(view.saves.length).toBeGreaterThan(0));
     resolveOld(countryRows(2019));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    fireEvent.click(view.getByRole("button", { name: "保存为报告材料" }));
-    expect(view.saves[0].observations!.every((x) => x.year >= 2020)).toBeTrue();
+    // The late 2019 response belongs to a superseded request and must never reach the record.
+    expect(view.saves.every((save) => save.observations!.every((x) => x.year >= 2020))).toBeTrue();
+    expect(view.saves.at(-1)!.observations).toHaveLength(4);
     request.mockRestore();
     schema.mockRestore();
   });
 
-  test("trade composition saves total and all six components, including negative TLS", async () => {
+  test("trade composition records the total and all six components, including negative TLS", async () => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(
       async (year) => countryRows(year),
     );
@@ -278,12 +261,11 @@ describe("explicit indicator explorer", () => {
     });
     const view = setup();
     await view.findByRole("heading", { name: /外国增加值项占比/ });
-    expect((view.getByText("补充图表").closest("details") as HTMLDetailsElement).open).toBe(false);
+    expect(view.getByRole("group", { name: "补充图表" })).toBeTruthy();
     expect(view.getByLabelText("当前比较口径").textContent).toContain("CHN 中国与USA 美国 · 国家整体 · 2019–2021");
     fireEvent.click(view.getByRole("button", { name: "构成分析" }));
-    await waitFor(() => expect(view.getByText(/14 条有效读数/)).toBeTruthy());
-    fireEvent.click(view.getByRole("button", { name: "保存为报告材料" }));
-    expect(new Set(view.saves[0].observations!.map((x) => x.metric))).toEqual(
+    await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("composition"));
+    expect(new Set(view.saves.at(-1)!.observations!.map((x) => x.metric))).toEqual(
       new Set([
         "DVAex",
         "DVArt",
@@ -295,15 +277,13 @@ describe("explicit indicator explorer", () => {
       ]),
     );
     expect(
-      view.saves[0].observations!.some(
+      view.saves.at(-1)!.observations!.some(
         (x) => x.metric === "taxsub" && x.value < 0,
       ),
     ).toBeTrue();
     fireEvent.click(view.getByRole("button", { name: "历年" }));
-    await waitFor(() => expect(view.getByText(/42 条有效读数/)).toBeTruthy());
+    await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("evolution"));
     expect(view.getByRole("button", { name: "构成分析" }).getAttribute("aria-pressed")).toBe("true");
-    fireEvent.click(view.getByRole("button", { name: "保存为报告材料" }));
-    expect(view.saves.at(-1)?.indicator_selection?.view).toBe("evolution");
     expect(new Set(view.saves.at(-1)?.observations?.map((item) => item.year))).toEqual(new Set([2019, 2020, 2021]));
     view.accept();
     expect(view.getByRole("button", { name: "历年" }).getAttribute("aria-pressed")).toBe("true");

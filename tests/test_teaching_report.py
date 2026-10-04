@@ -661,7 +661,7 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     # Step 9 requires a country comparison *and* an industry observation, so its
     # message names both actions instead of the steps 6-8 wording.
     assert any(item["step"] == 9 and "两国行业比较" in "".join(item["missing"]) for item in blocked)
-    assert any(item["step"] == 9 and "保存为报告材料" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 9 and "自动记录" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 6 and "恰好两个国家" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 11 and "运行并保存" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 14 and "运行并保存" in "".join(item["missing"]) for item in blocked)
@@ -898,8 +898,8 @@ def test_step_nine_requires_both_a_comparison_and_an_industry_observation():
     comparison_only["steps"]["9"]["data"]["observations"] = []
     blocked = [item for item in check_material_gate(comparison_only) if item["step"] == 9]
     assert len(blocked) == 1
-    # The message must name the control the student actually sees.
-    assert "保存为报告材料" in "".join(blocked[0]["missing"])
+    # The message must describe what the student actually does (no save button any more).
+    assert "自动记录" in "".join(blocked[0]["missing"])
     assert any(item["step"] == 9 for item in check_gate(comparison_only))
 
     # The comparison is still required alongside the observation.
@@ -907,7 +907,7 @@ def test_step_nine_requires_both_a_comparison_and_an_industry_observation():
     observation_only["steps"]["9"]["data"]["compared"] = []
     message = "".join(next(item["missing"] for item in check_material_gate(observation_only) if item["step"] == 9))
     assert "两国行业比较" in message
-    assert "报告材料卡" in message
+    assert "趋势或行业排名" in message
     assert "网络图中的节点" not in message
 
 

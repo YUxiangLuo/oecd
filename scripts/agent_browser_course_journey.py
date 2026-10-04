@@ -101,12 +101,7 @@ def main():
                 )
             elif 6 <= step <= 8:
                 student.button("沿用这组比较对象")
-                student.run(
-                    "wait",
-                    "--fn",
-                    'Array.from(document.querySelectorAll("button")).some(e=>e.textContent.trim()==="保存为报告材料"&&!e.disabled)',
-                )
-                student.button("保存为报告材料")
+                # The current complete chart is recorded automatically.
                 wait_saved(
                     step,
                     lambda row: (
@@ -114,16 +109,18 @@ def main():
                     ),
                 )
             elif step == 9:
-                student.run("find", "text", "补充图表", "click", "--exact")
-                student.button("贸易联系概览")
+                # Supplementary charts open in a modal; the main comparison is recorded automatically.
+                student.button("贸易联系概览（国家间网络图）")
                 for country in ("CHN", "USA"):
                     selector = f'.network-node[aria-label^="{country} "]'
                     student.run("wait", selector)
                     student.run("focus", selector)
                     student.run("press", "Enter")
-                    student.run("wait", '[role="dialog"]')
+                    student.run("wait", ".network-fullscreen-scrim")
                     student.run("press", "Escape")
-                student.button("两国行业比较")
+                    student.run("wait", "--fn", '!document.querySelector(".network-fullscreen-scrim")')
+                student.button("关闭")
+                student.run("wait", "--fn", '!document.querySelector(".chart-modal-scrim")')
                 student.run(
                     "select",
                     'section[aria-label="行业网络指标趋势"] select[name="network-country-a"]',
@@ -139,14 +136,13 @@ def main():
                     'section[aria-label="行业网络指标趋势"] select[name="network-metric"]',
                     "betweenesscentrality",
                 )
-                student.run(
-                    "wait",
-                    "--fn",
-                    'Array.from(document.querySelectorAll("button")).some(e=>e.textContent.trim()==="保存为报告材料"&&!e.disabled)',
+                wait_saved(
+                    step,
+                    lambda row: (
+                        {"CHN", "USA"}.issubset(row.get("compared", []))
+                        and any(o.get("metric") == "betweenesscentrality" for o in row.get("observations", []))
+                    ),
                 )
-                student.button("保存为报告材料")
-                student.run("wait", "--text", "当前比较已记录")
-                wait_saved(step, lambda row: any(o.get("industry") for o in row.get("observations", [])))
             elif step == 10:
                 student.run("wait", ".bounded-data-table tbody tr")
                 student.run("wait", "--fn", 'document.querySelectorAll(".bounded-data-table tbody tr").length === 10')
