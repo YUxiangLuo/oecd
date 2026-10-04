@@ -346,6 +346,34 @@ function columnHeaderHelp(column: string): string | undefined {
   return columnHelp(column) ?? rowColumnCodeHelp(column);
 }
 
+const ACCOUNT_SHORT: Record<string, string> = { TLS: "产品税减补贴", VA: "增加值", OUT: "总产出" };
+
+/** "CHN 中国" → "中国"; the code already appears in the table headers. */
+function countryName(code: string): string {
+  return countryLabel(code).replace(/^[A-Z0-9]{2,4}\s+/, "");
+}
+
+/** "CHN_C10T12" → "中国 · C10T12 食品饮料烟草" (keeps the code so it matches the headers). */
+function nodeLabel(code: string): string {
+  const { country, rest } = splitRowColumnCode(code);
+  return country && rest ? `${countryName(country)} · ${sectorLabel(rest)}` : code;
+}
+
+/** Two-line hover text for a value cell: who → whom with industry names, then value and action. */
+export function dbCellTooltip(table: DbTableKind, row: string, column: string, value: number): string {
+  let pair: string;
+  if (table === "accounts") {
+    pair = `${nodeLabel(row)} 的 ${ACCOUNT_SHORT[column] ?? column}`;
+  } else if (table === "y") {
+    const sep = column.lastIndexOf("_");
+    const demand = sep > 0 ? FD_HELP[column.slice(sep + 1)]?.split("；")[0] : undefined;
+    pair = `${nodeLabel(row)} → ${demand ? `${countryName(column.slice(0, sep))} · ${demand}` : column}`;
+  } else {
+    pair = `${nodeLabel(row)} → ${nodeLabel(column)}`;
+  }
+  return `${pair}\n${fmtDb(value)} 百万美元 · 点击记录这个观察值`;
+}
+
 /** 观察值方向句:把 "A × B = v" 改写成 "A(行·供给方) → B(列·使用方) = v" 的完整读法,
  *  让学生在记录现场就地校验行列方向。 */
 export function dbObservationSentence(table: DbTableKind, row: string, column: string): string {
@@ -367,7 +395,6 @@ export function DbSliceTable({
   selection,
   selectedObservation,
   onCapture,
-  expandOnCapture = false,
 }: {
   slice: DbSlice | null;
   table: DbTableKind;
@@ -379,7 +406,6 @@ export function DbSliceTable({
    * 只是文案开关：激活单元格是否还会进入全屏。账户项页签不提供全屏，因此不能向学生
    * 宣称它会展开。实际展开由父组件的 autoExpandSignal 控制。
    */
-  expandOnCapture?: boolean;
 }) {
   const [roving, setRoving] = useState<{ scope: string; key: string } | null>(null);
   const buttonRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -496,7 +522,8 @@ export function DbSliceTable({
                 return (
                   <td
                     key={column}
-                    title={columnHeaderHelp(column) ?? (numericValue != null ? `${column}: ${fmtDb(numericValue)}` : undefined)}
+                    // A value cell's button carries the tooltip; the cell itself only explains empty/non-numeric values.
+                    title={cell && numericValue != null ? undefined : columnHeaderHelp(column)}
                     style={intensity > 0
                       ? { background: numericValue != null && numericValue < 0 ? `rgba(227,73,72,${0.06 + intensity * 0.24})` : `rgba(42,120,214,${0.05 + intensity * 0.25})` }
                       : undefined}
@@ -512,7 +539,7 @@ export function DbSliceTable({
                         tabIndex={activeCell?.key === cell.key ? 0 : -1}
                         aria-pressed={selected}
                         aria-label={dbCellAccessibleName(table, cell, selected)}
-                        title={`${dbObservationSentence(table, rowLabel, column)} = ${fmtDb(numericValue)} Million USD（百万美元）；点击记录这个观察值${expandOnCapture ? "并进入全屏查看" : ""}`}
+                        title={dbCellTooltip(table, rowLabel, column, numericValue)}
                         onFocus={() => setRoving({ scope: focusScopeKey, key: cell.key })}
                         onKeyDown={(event) => {
                           if (!(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"] as string[]).includes(event.key)) return;
@@ -819,7 +846,6 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
           colSector,
         }}
         selectedObservation={selectedObservation}
-        expandOnCapture={table !== "accounts"}
         onCapture={(patch) => {
           state.save(patch);
           setCellExpandSignal((value) => value + 1);

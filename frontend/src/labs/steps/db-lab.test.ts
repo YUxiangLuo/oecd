@@ -6,6 +6,7 @@ import { fmtDb } from "../shared";
 import {
   captureDbObservation,
   dbCellAccessibleName,
+  dbCellTooltip,
   dbObservationSentence,
   dbColumnCountryForTable,
   DbSliceTable,
@@ -318,4 +319,13 @@ describe("Step 1 bounded roving cell focus", () => {
       .toBe("CHN 中国·A01_02(行·供给方) → USA 居民最终消费支出(列·最终需求)");
     expect(dbObservationSentence("accounts", "CHN_A01_02", "VA")).toBe("CHN_A01_02 的 VA");
   });
+});
+
+test("Step 1 cell tooltips name both industries in two short lines", () => {
+  expect(dbCellTooltip("z", "CHN_C10T12", "USA_C10T12", 742.09))
+    .toBe("中国 · C10T12 食品饮料烟草 → 美国 · C10T12 食品饮料烟草\n742.09 百万美元 · 点击记录这个观察值");
+  expect(dbCellTooltip("y", "CHN_A01_02", "USA_INVNT", -1.5).split("\n")[0])
+    .toBe("中国 · A01_02 农林牧业 → 美国 · 存货变化（有符号调整）");
+  expect(dbCellTooltip("accounts", "CHN_A01_02", "VA", 12.5).split("\n")[0])
+    .toBe("中国 · A01_02 农林牧业 的 增加值");
 });

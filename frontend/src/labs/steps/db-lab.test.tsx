@@ -89,7 +89,7 @@ describe("step 1 cell activation", () => {
 
     render(<DbLab state={state} releaseMeta={null as Meta | null} />);
 
-    const cell = await screen.findByTitle(/点击记录这个观察值并进入全屏查看/);
+    const cell = await screen.findByTitle(/ → .+ 百万美元 · 点击记录这个观察值$/);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(saved).toHaveLength(0);
 
