@@ -130,3 +130,14 @@ def test_backup_units_and_script_keep_their_safety_invariants():
     assert "retention_removed" in backup_script
     assert '"$backup_dir" != /* || "$backup_dir" == / || -L "$backup_dir"' in backup_script
     assert '! -L "$old_checksum"' in backup_script and '! -L "$old_dump"' in backup_script
+
+
+def test_nginx_lets_course_readings_embed_and_revalidates_index():
+    nginx = (ROOT / "deploy" / "nginx-gvcsim.conf").read_text()
+    readings = nginx.split("location ^~ /readings/ {", 1)[1].split("}", 1)[0]
+    # The reading library previews PDFs with <object>; frame-ancestors 'none' would blank them.
+    assert "frame-ancestors 'self'" in readings
+    spa = nginx.split("location / {", 1)[1].split("}", 1)[0]
+    assert 'add_header Cache-Control "no-cache" always;' in spa
+    # A location-level add_header drops server-level headers, so the page CSP must be repeated.
+    assert "frame-ancestors 'none'" in spa and "Strict-Transport-Security" in spa
