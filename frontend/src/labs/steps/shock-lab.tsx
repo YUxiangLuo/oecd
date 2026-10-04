@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api";
 import { ScrollableRegion } from "../../a11y";
 import { userFacingRequestError } from "../../user-facing-error";
-import type { Meta, QuizCompletionState, Step, StepStateApi, TeachingPanelResponse } from "../../types";
+import type { Meta, QuizCompletionState, Step, StepStateApi, TeachingGroupsResponse, TeachingPanelResponse } from "../../types";
+import { teachingExample } from "../../teaching-example";
 import { countryLabel, sectorLabel } from "../../viz";
 import { useAsync } from "../shared";
 import { IndicatorTrendChart } from "./viz/indicator-charts";
@@ -31,18 +32,13 @@ export function ShockLab({ meta, step: _step, state }: {
   step: Step;
   state: StepStateApi<ShockStepState>;
 }) {
-  const countries = meta.countries.filter((code) => code !== "ROW");
-  const savedCompared = state.data?.compared?.filter((code) => countries.includes(code)) ?? [];
-  const defaultFirst = savedCompared[0] ?? (countries.includes("CAN") ? "CAN" : countries[0] ?? "");
-  const defaultSecond = savedCompared.find((code) => code !== defaultFirst)
-    ?? (defaultFirst !== "KOR" && countries.includes("KOR") ? "KOR" : countries.find((code) => code !== defaultFirst) ?? "");
-  const [first, setFirst] = useState(defaultFirst);
-  const [second, setSecond] = useState(defaultSecond);
-  const [industry, setIndustry] = useState(
-    state.data?.teaching_industry && meta.sectors.includes(state.data.teaching_industry)
-      ? state.data.teaching_industry
-      : meta.sectors.includes("C29") ? "C29" : meta.sectors[0] ?? "",
-  );
+  const example = teachingExample(meta, state.data);
+  const countries = example.countries;
+  const [first, setFirst] = useState(example.first);
+  const [second, setSecond] = useState(example.second);
+  const [industry, setIndustry] = useState(example.industry);
+  const groups = useAsync<TeachingGroupsResponse>(() => api.teachingGroups(), ["teaching-groups"]);
+  const sample = groups.status === "success" ? groups.data?.sample : undefined;
   const selectedCountries = [first, second].filter(Boolean);
   const years = [...meta.years].sort((a, b) => a - b);
   const requestKey = `teaching-series:${selectedCountries.join(",")}:${industry}`;
@@ -102,7 +98,10 @@ export function ShockLab({ meta, step: _step, state }: {
         </div>
         <p className="muted">以上是独立算例，不是下方所选国家的实际读数。同一条模拟税率路径下，冲击前出口份额 w 不同，会形成不同的暴露 X；下方趋势只帮助理解数据结构，回归使用完整国家×行业面板。</p>
       </details>
-      <p>选择两个国家和一个行业，查看五年变化；后续四步会沿用这组对象帮助读图。</p>
+      <p>选一个例子跟着走：选择两个国家和一个行业。默认是加拿大和墨西哥的汽车行业，两国出口都高度依赖美国，但只有加拿大在模拟中被加税。步骤 11–14 会把回归结果换算到你选的例子上。</p>
+      {sample && <p className="muted" role="note">
+        后续回归使用全部 {sample.entities.toLocaleString("zh-CN")} 个国家×行业单元 × 5 年 = {sample.rows.toLocaleString("zh-CN")} 条记录，覆盖 {sample.countries} 个国家（{sample.taxed_countries} 国模拟加税、{sample.untaxed_countries} 国未加税）；你选的两个例子只是其中两行。
+      </p>}
       <div className="controls">
         <label className="model-control"><span className="model-control-label">国家 A</span>
           <select value={first} onChange={(event) => setFirst(event.target.value)}>
@@ -129,6 +128,17 @@ export function ShockLab({ meta, step: _step, state }: {
     {query.status === "loading" && <div className="shock-panel-state shock-workbench-loading" role="status">正在读取教学关税面板…</div>}
     {query.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(query.error, "教学关税面板读取失败")} <button className="secondary" onClick={query.retry}>重试</button></div>}
     {panel && <>
+      <ul className="teaching-example-summary" aria-label="两个例子的模拟关税暴露">
+        {selectedCountries.map((country) => {
+          const row = rows.find((item) => item.country === country && item.year === years.at(-1));
+          if (!row) return null;
+          const taxed = row.teaching_tariff_rate_tau > 0;
+          return <li key={country}>
+            <b>{countryLabel(country)} · {sectorLabel(industry)}</b>
+            {taxed ? "模拟加税" : "未加税"}：w = {(row.teaching_export_share_w * 100).toFixed(1)}%，{years.at(-1)} 年 X = {(row.teaching_tariff_exposure * 100).toFixed(2)} 个百分点
+          </li>;
+        })}
+      </ul>
       <section className="reg-section-card">
         <span className="reg-section-step">五年趋势 · 两国使用同一刻度</span>
         <IndicatorTrendChart

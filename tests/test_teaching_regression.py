@@ -250,3 +250,38 @@ def test_sample_flow_reconciles_exclusions_and_overlapping_missing_values(has_tr
         *([{"code": "missing", "field": design.treated_col, "rows": 1}] if has_treated else []),
     ]
     assert sum(reason["rows"] for reason in flow["dropped_by_reason"]) == flow["dropped_rows_total"]
+
+
+def test_group_trends_compare_taxed_and_untaxed_changes_against_their_own_pre_policy_mean(monkeypatch):
+    import asyncio
+    from gvcsim import regression_routes
+    from gvcsim.regression.teaching import group_trends
+
+    panel = build_teaching_panel(_source(("AAA", "BBB", "CCC", "DDD", "EEE", "FFF")), _exposure(_source()))
+    result = group_trends(panel)
+    taxed = panel.groupby("country").teaching_tariff_rate_tau.max().gt(0)
+    assert result["policy_year"] == 2018
+    assert result["years"] == [2016, 2017, 2018, 2019, 2020]
+    assert result["sample"] == {
+        "rows": len(panel),
+        "entities": panel.entity_id.nunique(),
+        "countries": panel.country.nunique(),
+        "industries": 3,
+        "taxed_countries": int(taxed.sum()),
+        "untaxed_countries": int((~taxed).sum()),
+    }
+    for outcome, column in Y_COLUMNS.items():
+        for name, members in (("taxed", taxed[taxed].index), ("untaxed", taxed[~taxed].index)):
+            series = result["outcomes"][outcome][name]
+            if not len(members):
+                assert series == []
+                continue
+            means = panel.loc[panel.country.isin(members)].groupby("year")[column].mean()
+            pre = means.loc[[2016, 2017]].mean()
+            assert [point["year"] for point in series] == result["years"]
+            assert [point["change"] for point in series] == pytest.approx(list(means - pre))
+            # Each line is centred on its own pre-policy mean.
+            assert series[0]["change"] + series[1]["change"] == pytest.approx(0)
+
+    monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: panel)
+    assert asyncio.run(regression_routes.teaching_groups()) == result

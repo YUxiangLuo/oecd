@@ -50,7 +50,9 @@ export function LabRouter({
       <RegressionRunLab
         key={step.regression_outcome}
         step={step}
+        meta={meta}
         state={state}
+        getStep={getStep}
       />
     ) : null;
   }

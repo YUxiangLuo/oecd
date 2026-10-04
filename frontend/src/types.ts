@@ -259,6 +259,24 @@ export interface TeachingPanelResponse {
   years: number[];
 }
 
+export interface TeachingGroupPoint { year: number; change: number }
+
+/** Taxed vs untaxed mean change of each simulated Y, relative to each group's pre-policy mean. */
+export interface TeachingGroupsResponse {
+  version: string;
+  years: number[];
+  policy_year: number;
+  sample: {
+    rows: number;
+    entities: number;
+    countries: number;
+    industries: number;
+    taxed_countries: number;
+    untaxed_countries: number;
+  };
+  outcomes: Record<RegressionOutcome, { taxed: TeachingGroupPoint[]; untaxed: TeachingGroupPoint[] }>;
+}
+
 export interface QcCheck {
   name: string;
   kind: string;

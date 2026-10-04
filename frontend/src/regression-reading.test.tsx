@@ -77,6 +77,24 @@ describe("fixed teaching regression reading", () => {
     expect(container.textContent).not.toContain("平均变化为 —");
   });
 
+  test("converts the estimate to the two step-10 examples, including an untaxed one", () => {
+    const data = response();
+    Object.assign(data.result.coefs[0], { coef: -0.55, ci_low: -0.61, ci_high: -0.5 });
+    const { container } = render(<RegressionResultCard outcome="trade" response={data} examples={[
+      { label: "CAN 加拿大·C29", x: 0.0932 },
+      { label: "MEX 墨西哥·C29", x: 0 },
+    ]} />);
+    const sentence = container.querySelector(".reg-example-effect")!.textContent;
+    expect(sentence).toBe("换算到你在步骤 10 选的例子：CAN 加拿大·C29（X = 9.32 个百分点）Y 约下降 5.13 个百分点；MEX 墨西哥·C29未被模拟加税（X = 0），按估计不变。");
+    // An uncertain direction is flagged; suppressed inference and missing examples show no conversion.
+    Object.assign(data.result.coefs[0], { ci_low: -1, ci_high: 0.2 });
+    const uncertain = render(<RegressionResultCard outcome="trade" response={data} examples={[{ label: "例子", x: 0.05 }]} />);
+    expect(uncertain.container.querySelector(".reg-example-effect")!.textContent).toContain("区间跨过 0，这个方向本身并不确定");
+    data.result.status = "invalid_design";
+    const suppressed = render(<RegressionResultCard outcome="trade" response={data} examples={[{ label: "例子", x: 0.05 }]} />);
+    expect(suppressed.container.querySelector(".reg-example-effect")).toBeNull();
+  });
+
   test("allowed estimates still disclose design warnings", () => {
     const data = response();
     data.result.status = "warning";

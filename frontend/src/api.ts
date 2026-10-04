@@ -230,6 +230,7 @@ export const api = {
     get<import("./types").TeachingPanelResponse>(
       withQuery("/api/regression/teaching-panel", { country, year, limit }),
     ),
+  teachingGroups: () => get<import("./types").TeachingGroupsResponse>("/api/regression/teaching-groups"),
   teachingSeries: (countries: string[], industry: string) =>
     get<import("./types").TeachingPanelResponse>(
       withQuery("/api/regression/teaching-panel", {

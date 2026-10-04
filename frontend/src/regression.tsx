@@ -12,15 +12,19 @@ import {
 } from "./regression-verdict";
 import { splitPolicyCoefficients } from "./regteach";
 import type {
+  Meta,
   QuizCompletionState,
   RegressionDesignInfo,
   RegressionOutcome,
   RegressionResponse,
   Step,
   StepStateApi,
+  TeachingGroupsResponse,
+  TeachingPanelResponse,
 } from "./types";
+import { teachingExample, type TeachingExampleSelection } from "./teaching-example";
 import { userFacingRequestError } from "./user-facing-error";
-import { CoefForestChart } from "./viz";
+import { CoefForestChart, countryLabel, GroupChangeChart, sectorLabel } from "./viz";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
 export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v2";
@@ -89,10 +93,22 @@ function DesignEquation({ design }: { design: RegressionDesignInfo }) {
   );
 }
 
-/** The result is a coefficient plot plus three short sentences: what changed, how sure, what not to claim. */
-export function RegressionResultCard({ outcome, response }: {
+/** One step-10 example unit: its label and its final-year exposure X (a proportion). */
+export interface RegressionExample { label: string; x: number }
+
+/** Y change implied by the estimate for an example's X, in the step's display units. */
+export function exampleEffect(outcome: RegressionOutcome, coef: number, x: number): string {
+  const change = coef * x;
+  if (outcome === "trade" || outcome === "production") return `${Math.abs(change * 100).toFixed(2)} 个百分点`;
+  if (outcome === "length") return `${Math.abs(change).toFixed(3)} 个长度单位`;
+  return `${Math.abs(change).toFixed(1)} 个中心性原始单位`;
+}
+
+/** The result is a coefficient plot plus short sentences: what changed, for the student's example, how sure, what not to claim. */
+export function RegressionResultCard({ outcome, response, examples = [] }: {
   outcome: RegressionOutcome;
   response: RegressionResponse;
+  examples?: RegressionExample[];
 }) {
   const verdict = buildRegressionVerdict(outcome, response);
   const lesson = REGRESSION_LESSONS[outcome];
@@ -122,6 +138,15 @@ export function RegressionResultCard({ outcome, response }: {
       <ul className="reg-result-points">
         {!suppressed && verdict.coefficient && (
           <li>模拟关税暴露（X）每增加 1 个百分点，模拟{lesson.shortMetric}（Y）<b>{plainResult}</b>；{CLUSTER_INTERVAL_LABEL}为 {verdict.interval}。</li>
+        )}
+        {!suppressed && verdict.coefficient && examples.length > 0 && (
+          <li className="reg-example-effect">换算到你在步骤 10 选的例子：{examples.map((example, index) => {
+            const coef = verdict.coefficient!.coef;
+            const text = example.x > 0
+              ? <>{example.label}（X = {(example.x * 100).toFixed(2)} 个百分点）Y 约{coef * example.x < 0 ? "下降" : "上升"} <b>{exampleEffect(outcome, coef, example.x)}</b></>
+              : <>{example.label}未被模拟加税（X = 0），按估计不变</>;
+            return <span key={example.label}>{index ? "；" : ""}{text}</span>;
+          })}{verdict.state === "insufficient" ? "；但区间跨过 0，这个方向本身并不确定" : ""}。</li>
         )}
         <li>{verdict.evidence}</li>
         <li><b>解释限制：</b>{lesson.dontClaim}</li>
@@ -244,9 +269,12 @@ export function RegressionRequestError({ label, error, onRetry }: {
  * One regression step (11–14). Each step is self-contained: it reads only its own saved run,
  * never another step's state, and shows one chart with a short reading after the run.
  */
-export function RegressionRunLab({ step, state }: {
+export function RegressionRunLab({ step, meta, state, getStep }: {
   step: Step;
+  meta: Pick<Meta, "countries" | "sectors">;
   state: StepStateApi<RegressionStepState>;
+  /** Read-only: the example the student chose in step 10. */
+  getStep?: <T>(step: number) => T | undefined;
 }) {
   const outcome = step.regression_outcome;
   if (!outcome) return <div className="error-box">当前回归步骤缺少 regression_outcome 配置。</div>;
@@ -267,6 +295,28 @@ export function RegressionRunLab({ step, state }: {
     { requestKey: designRequestKey },
   );
   const design = designQuery.status === "success" ? designQuery.data : null;
+
+  // Before the run: the taxed vs untaxed comparison that the regression then quantifies.
+  const groupsQuery = useAsync<TeachingGroupsResponse>(() => api.teachingGroups(), ["teaching-groups"]);
+  const groups = groupsQuery.status === "success" ? groupsQuery.data : null;
+  const groupSeries = groups?.outcomes[outcome];
+
+  // After the run: the estimate converted to the two examples followed from step 10.
+  const example = teachingExample(meta, getStep?.<TeachingExampleSelection>(10));
+  const exampleCountries = [example.first, example.second].filter(Boolean);
+  const exampleKey = `teaching-example:${exampleCountries.join(",")}:${example.industry}`;
+  const exampleQuery = useAsync<TeachingPanelResponse>(
+    () => api.teachingSeries(exampleCountries, example.industry),
+    [exampleKey],
+    { requestKey: exampleKey, enabled: exampleCountries.length === 2 && Boolean(example.industry) },
+  );
+  const lastYear = exampleQuery.data?.years.at(-1);
+  const examples: RegressionExample[] = exampleQuery.status === "success" && exampleQuery.data
+    ? exampleCountries.flatMap((country) => {
+      const row = exampleQuery.data!.rows.find((item) => item.country === country && item.year === lastYear);
+      return row ? [{ label: `${countryLabel(country)}·${sectorLabel(example.industry)}`, x: row.teaching_tariff_exposure }] : [];
+    })
+    : [];
 
   useEffect(() => {
     mountedRef.current = true;
@@ -339,12 +389,29 @@ export function RegressionRunLab({ step, state }: {
       <section className="reg-run-card">
         <span className="reg-section-step">本步回归 · 固定计算</span>
         <h3>{lessonQuestion(outcome)}</h3>
+        {outcome !== "trade" && <p className="muted">方法与步骤 11 相同，这次 Y 换成{lesson.shortMetric}。</p>}
+        <p className="reg-step-focus"><b>本步重点</b>{lesson.learnThis}</p>
         <div className="metric-facts">
           <span><b>解释变量（X）</b>模拟关税暴露强度</span>
           <span><b>结果变量（Y）</b>教学模拟：{lesson.shortMetric}</span>
           <span><b>读数单位</b>{lesson.unit}</span>
         </div>
         <div className="reg-boundary">X 与 Y 都是教学模拟数据，不代表现实政策或 OECD 观测结果。</div>
+        {groups && groupSeries && <div className="reg-group-figure">
+          <GroupChangeChart
+            years={groups.years}
+            policyYear={groups.policy_year}
+            taxed={groupSeries.taxed}
+            untaxed={groupSeries.untaxed}
+            scale={outcome === "trade" || outcome === "production" ? 100 : 1}
+            unit={outcome === "trade" || outcome === "production" ? "百分点" : outcome === "length" ? "长度单位" : "中心性原始单位"}
+            title={`加税前后：两组${lesson.shortMetric}的平均变化`}
+          />
+          <p className="muted">每条线是该组全部国家×行业的平均值，减去自身 {groups.years[0]}–{groups.policy_year - 1} 年的平均水平。{groups.policy_year} 年后两条线之间的距离，就是回归要量化的差距；回归还会考虑每个单元暴露强度 X 的大小，并给出不确定性区间。</p>
+        </div>}
+        {groupsQuery.status === "error" && groupsQuery.error && (
+          <RegressionRequestError label="分组对比图" error={groupsQuery.error} onRetry={groupsQuery.retry} />
+        )}
         <RegressionRequestLoading designLoading={designQuery.status === "loading"} />
         {designQuery.status === "error" && designQuery.error && (
           <RegressionRequestError label="当前模型设计" error={designQuery.error} onRetry={designQuery.retry} />
@@ -354,7 +421,7 @@ export function RegressionRunLab({ step, state }: {
           onClick={run}
           disabled={running || designQuery.status !== "success" || !design}
         >
-          {running ? "估计中…" : result ? "重新计算" : "计算两者的关系"}
+          {running ? "估计中…" : result ? "重新计算" : groups ? `用全部 ${groups.sample.rows.toLocaleString("zh-CN")} 条记录估计这个差距` : "计算两者的关系"}
         </button>
         {running && (
           <span className="muted reg-inline-status" role="status" aria-live="polite" aria-busy="true">正在估计…</span>
@@ -371,7 +438,7 @@ export function RegressionRunLab({ step, state }: {
       {result && (
         <div className="reg-results">
           <div ref={verdictAnchorRef} className="verdict-anchor">
-            <RegressionResultCard outcome={outcome} response={result} />
+            <RegressionResultCard outcome={outcome} response={result} examples={examples} />
           </div>
           <details className="technical-details">
             <summary>回归方程与系数表（可选）</summary>

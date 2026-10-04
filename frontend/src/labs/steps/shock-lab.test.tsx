@@ -22,7 +22,8 @@ test("step 10 uses the dedicated teaching tariff panel independently of the old 
   expect(html).toContain("解释变量（X）");
   expect(html).toContain("国家 A");
   expect(html).toContain("国家 B");
-  expect(html).toContain("五年变化");
+  expect(html).toContain("选一个例子跟着走");
+  expect(html).toContain("步骤 11–14 会把回归结果换算到你选的例子上");
   expect(html).toContain("正在读取教学关税面板");
   expect(html).not.toContain("政策事件");
   expect(html).toContain("0.25 × 0.20 = 0.05，即 5%");
@@ -36,7 +37,7 @@ test("step 10 uses the dedicated teaching tariff panel independently of the old 
 test("step 10 prefers the configured two-country industry example", () => {
   const meta: Meta = {
     years: [2016, 2017, 2018, 2019, 2020],
-    countries: ["CAN", "CHN", "KOR", "USA"],
+    countries: ["CAN", "CHN", "KOR", "MEX", "USA"],
     sectors: ["C26", "C29"],
   };
   const html = renderToStaticMarkup(<ShockLab meta={meta} step={step} state={{
@@ -44,6 +45,6 @@ test("step 10 prefers the configured two-country industry example", () => {
     syncError: null, syncNow: () => {},
   }} />);
   expect(html).toContain('<option value="CAN" selected="">CAN 加拿大</option>');
-  expect(html).toContain('<option value="KOR" selected="">KOR 韩国</option>');
+  expect(html).toContain('<option value="MEX" selected="">MEX 墨西哥</option>');
   expect(html).toContain('<option value="C29" selected="">C29 汽车及零部件</option>');
 });

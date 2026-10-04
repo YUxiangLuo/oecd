@@ -138,3 +138,49 @@ def model_snapshot(outcome: str) -> dict:
         "calibration": CALIBRATION[outcome],
         "disclaimer": DISCLAIMER,
     }
+
+
+def group_trends(panel: pd.DataFrame) -> dict:
+    """Mean change of each simulated Y for taxed vs untaxed countries, relative to the pre-policy years.
+
+    This is the descriptive comparison behind the TWFE estimate: after the fictional tariff
+    starts, does the taxed group's Y move away from the untaxed group's Y? Countries are grouped by
+    whether their simulated tariff is ever positive; each group's line is its yearly mean minus its
+    own pre-policy mean, so different baseline levels do not hide the post-policy gap.
+    """
+    years = sorted(int(year) for year in panel["year"].unique())
+    rates = panel.groupby("year")["teaching_tariff_rate_tau"].max()
+    policy_years = [year for year in years if rates.get(year, 0) > 0]
+    if not policy_years:
+        raise ValueError("教学面板没有模拟加税年份")
+    policy_year = policy_years[0]
+    pre_years = [year for year in years if year < policy_year]
+    taxed_country = panel.groupby("country")["teaching_tariff_rate_tau"].transform("max").gt(0)
+    group = np.where(taxed_country, "taxed", "untaxed")
+    outcomes: dict[str, dict[str, list[dict[str, float | int]]]] = {}
+    for outcome, column in Y_COLUMNS.items():
+        means = panel.groupby([group, "year"])[column].mean()
+        series: dict[str, list[dict[str, float | int]]] = {}
+        for name in ("taxed", "untaxed"):
+            if name not in means.index.get_level_values(0):
+                series[name] = []
+                continue
+            values = means.loc[name]
+            baseline = float(values.loc[pre_years].mean())
+            series[name] = [{"year": int(year), "change": float(values.loc[year] - baseline)} for year in years]
+        outcomes[outcome] = series
+    countries = panel.loc[taxed_country, "country"].nunique(), panel.loc[~taxed_country, "country"].nunique()
+    return {
+        "version": VERSION,
+        "years": years,
+        "policy_year": policy_year,
+        "sample": {
+            "rows": int(len(panel)),
+            "entities": int(panel["entity_id"].nunique()),
+            "countries": int(panel["country"].nunique()),
+            "industries": int(panel["industry"].nunique()),
+            "taxed_countries": int(countries[0]),
+            "untaxed_countries": int(countries[1]),
+        },
+        "outcomes": outcomes,
+    }

@@ -19,7 +19,14 @@ from gvcsim.regression.design import (
     RegressionDesign,
 )
 from gvcsim.regression.panel import run_design_with_benchmark
-from gvcsim.regression.teaching import DISCLAIMER, VERSION, Y_COLUMNS, model_snapshot, variable_catalog
+from gvcsim.regression.teaching import (
+    DISCLAIMER,
+    VERSION,
+    Y_COLUMNS,
+    group_trends,
+    model_snapshot,
+    variable_catalog,
+)
 from gvcsim.rate_limit import RateLimitExceeded, SlidingWindowRateLimiter
 from gvcsim.singleflight import AsyncSingleFlightCache
 from gvcsim.steps import STEPS
@@ -167,6 +174,19 @@ async def teaching_panel(
             "total": len(panel),
             "rows": panel.sort_values(["country", "industry", "year"])[columns].head(limit).to_dict("records"),
         }
+
+    return await concurrency.run_sync(read)
+
+
+@router.get("/api/regression/teaching-groups")
+async def teaching_groups():
+    """Taxed vs untaxed mean change of each simulated Y: what steps 11–14 show before the run."""
+
+    def read() -> dict:
+        try:
+            return group_trends(_read_csv("panel_teaching.csv"))
+        except ValueError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
 
     return await concurrency.run_sync(read)
 

@@ -34,5 +34,7 @@ describe("fixed regression forest chart", () => {
     expect(markup).toContain("横线 = 标称 95% 的近似聚类区间");
     expect(markup).toContain('class="coef-ci"');
     expect(markup).toContain('fill="#2f6fd0"');
+    // Significance stars are not shown; the interval already tells the direction.
+    expect(markup).not.toContain("***");
   });
 });

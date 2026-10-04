@@ -62,7 +62,6 @@ export function CoefForestChart({
     ...coefficient,
     displayName: labels?.[coefficient.name] ?? coefficient.name,
     p: inferenceAllowed ? coefficient.p : null,
-    stars: inferenceAllowed ? coefficient.stars : "",
     lo: inferenceAllowed ? coefficient.ci_low : null,
     hi: inferenceAllowed ? coefficient.ci_high : null,
   }));
@@ -83,7 +82,7 @@ export function CoefForestChart({
   const valueLabel = (value: number) => (Math.abs(value) < 0.01 && scale === 1 ? value.toFixed(4) : value.toFixed(Math.max(2, decimals)));
   const tip = (point: (typeof pts)[number]): [string, string][] => inferenceAllowed ? [
     ["", point.displayName],
-    ["系数", `${valueLabel(point.coef)}${point.stars}`],
+    ["系数", valueLabel(point.coef)],
     ["标称 95% CI", point.lo != null && point.hi != null ? `[${valueLabel(point.lo)}, ${valueLabel(point.hi)}]` : "不可评估"],
     ["p 值", formatPValue(point.p, "不可评估")],
   ] : [["", point.displayName], ["描述性点估计", valueLabel(point.coef)], ["显示状态", suppressionCopy]];
@@ -113,8 +112,8 @@ export function CoefForestChart({
           const fill = !inferenceAllowed ? NEUTRAL : point.coef >= 0 ? POSITIVE : NEGATIVE;
           const barX = Math.min(x(0), x(point.coef));
           const barW = Math.max(1, Math.abs(x(point.coef) - x(0)));
-          const labelRight = point.coef >= 0;
-          const labelAt = labelRight ? Math.max(x(point.coef), x(point.hi ?? point.coef)) + 6 : Math.min(x(point.coef), x(point.lo ?? point.coef)) - 6;
+          // The value sits just above the estimate, kept inside the plot so it never meets the row label or whisker.
+          const labelAt = Math.min(Math.max(x(point.coef), labelW + 24), width - padR - 24);
           return (
             <g key={point.name} onMouseEnter={(event) => show(event, tip(point))} onMouseMove={(event) => show(event, tip(point))} onMouseLeave={hide}>
               <text x={labelW - 12} y={y(index) - (parts.length > 1 ? 5 : 0)} dominantBaseline="middle" textAnchor="end" fontSize={11.5} fill="#3a4050">
@@ -129,8 +128,8 @@ export function CoefForestChart({
                 </g>
               )}
               <circle cx={x(point.coef)} cy={y(index)} r={4} fill="#fff" stroke="#2a2f3a" strokeWidth={1.6} />
-              <text x={labelAt} y={y(index)} dominantBaseline="middle" textAnchor={labelRight ? "start" : "end"} fontSize={11.5} fontWeight={700} fill="#2a2f3a">
-                {valueLabel(point.coef)}{point.stars}
+              <text x={labelAt} y={y(index) - 21} textAnchor="middle" fontSize={11.5} fontWeight={700} fill="#2a2f3a">
+                {valueLabel(point.coef)}
               </text>
             </g>
           );
@@ -138,6 +137,77 @@ export function CoefForestChart({
         <line x1={x(0)} x2={x(0)} y1={padT - 6} y2={height - padB} stroke="#1f2430" strokeWidth={1.8} />
       </svg>
       {Tip}
+    </div>
+  );
+}
+
+const TAXED = "#d6731f";
+const UNTAXED = "#6b7487";
+
+/**
+ * Two lines: taxed vs untaxed countries, each group's mean Y minus its own pre-policy mean.
+ * A dashed line marks when the simulated tariff starts; the gap that opens after it is what the
+ * regression then quantifies.
+ */
+export function GroupChangeChart({
+  years, policyYear, taxed, untaxed, scale = 1, unit, title,
+}: {
+  years: number[];
+  policyYear: number;
+  taxed: { year: number; change: number }[];
+  untaxed: { year: number; change: number }[];
+  /** Multiplier from stored Y units to displayed units (e.g. 100 for shares shown in percentage points). */
+  scale?: number;
+  unit: string;
+  title: string;
+}) {
+  const width = 640, height = 250, padL = 64, padR = 112, padT = 22, padB = 34;
+  const values = [...taxed, ...untaxed].map((point) => point.change * scale);
+  const maxAbs = Math.max(...values.map(Math.abs), 1e-9) * 1.1;
+  const ticks = niceSymmetricTicks(maxAbs);
+  const extent = ticks.at(-1)!;
+  const decimals = Math.max(0, Math.min(4, 1 - Math.floor(Math.log10(extent / 2))));
+  const x = (year: number) => padL + ((year - years[0]) / Math.max(1, years.at(-1)! - years[0])) * (width - padL - padR);
+  const y = (value: number) => padT + ((extent - value) / (2 * extent)) * (height - padT - padB);
+  const path = (series: { year: number; change: number }[]) => series
+    .map((point, index) => `${index ? "L" : "M"}${x(point.year)},${y(point.change * scale)}`).join(" ");
+  const policyX = (x(policyYear - 1) + x(policyYear)) / 2;
+  const label = (series: { year: number; change: number }[], text: string, color: string, dy: number) => {
+    const last = series.at(-1);
+    return last && <text x={x(last.year) + 8} y={y(last.change * scale) + dy} dominantBaseline="middle" fontSize={11.5} fontWeight={700} fill={color}>{text}</text>;
+  };
+  const lastTaxed = taxed.at(-1)?.change ?? 0, lastUntaxed = untaxed.at(-1)?.change ?? 0;
+  const description = `${title}：加税组与未加税组相对加税前平均水平的变化，${policyYear} 年起模拟加税`;
+  return (
+    <div className="group-change-chart" style={{ ...cardStyle, flex: "1 1 320px", minWidth: 280 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3a4050" }}>{title}</div>
+      <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
+        纵轴：相对 {years[0]}–{policyYear - 1} 年平均水平的变化（{unit}）
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={description} style={{ display: "block", width: "100%", maxWidth: 760, height: "auto" }}>
+        <title>{description}</title>
+        {ticks.map((value) => (
+          <g key={value}>
+            <line x1={padL} x2={width - padR} y1={y(value)} y2={y(value)} stroke={value === 0 ? "#9aa0ad" : "#eef0f4"} strokeWidth={1} />
+            <text x={padL - 8} y={y(value)} dominantBaseline="middle" textAnchor="end" fontSize={11} fill="#5f6677">{value === 0 ? "0" : value.toFixed(decimals)}</text>
+          </g>
+        ))}
+        {years.map((year) => <text key={year} x={x(year)} y={height - 12} textAnchor="middle" fontSize={11} fill="#5f6677">{year}</text>)}
+        <line x1={policyX} x2={policyX} y1={padT - 8} y2={height - padB} stroke="#3a4050" strokeWidth={1.2} strokeDasharray="4 4" />
+        <text x={policyX + 6} y={padT - 6} fontSize={11} fill="#3a4050">{policyYear} 年起模拟加税</text>
+        {([[untaxed, UNTAXED], [taxed, TAXED]] as const).map(([series, color]) => (
+          <g key={color}>
+            <path d={path(series)} fill="none" stroke={color} strokeWidth={2.4} />
+            {series.map((point) => (
+              <circle key={point.year} cx={x(point.year)} cy={y(point.change * scale)} r={3.5} fill={color}>
+                <title>{`${point.year} 年：${(point.change * scale).toFixed(decimals + 1)} ${unit}`}</title>
+              </circle>
+            ))}
+          </g>
+        ))}
+        {label(taxed, "加税国家组", TAXED, lastTaxed < lastUntaxed ? 8 : -8)}
+        {label(untaxed, "未加税国家组", UNTAXED, lastTaxed < lastUntaxed ? -8 : 8)}
+      </svg>
     </div>
   );
 }
