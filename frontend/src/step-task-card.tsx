@@ -1,4 +1,3 @@
-import type { RefObject } from "react";
 import type { Step } from "./types";
 
 export const STEP_PRIMARY_ACTION_ID = "step-primary-action";
@@ -48,12 +47,10 @@ export function StepTaskCard({
   step,
   complete,
   materialStatus,
-  contentRef,
 }: {
   step: Step;
   complete: boolean;
   materialStatus: StepMaterialStatus;
-  contentRef: RefObject<HTMLElement | null>;
 }) {
   const materialLabel = MATERIAL_STATUS_LABELS[materialStatus];
   const completionLabel = step.lab === "rep" ? "报告" : "理解题";
@@ -73,33 +70,12 @@ export function StepTaskCard({
         </div>
       </div>
       {!compact && <>
-      {/* Tasks read as one light flow line; jump links and the rationale share the row's end. */}
-      <div className="step-task-row">
-        <ol className="step-task-list">
-          {step.tasks.map((task) => <li key={task}>{task}</li>)}
-        </ol>
-        <button
-          type="button"
-          className="step-task-link"
-          aria-controls={STEP_PRIMARY_ACTION_ID}
-          onClick={() => focusStepPrimaryAction(contentRef.current)}
-        >
-          开始本步 ↓
-        </button>
-        <details className="step-task-context">
-          <summary>为什么做这一步</summary>
-          <p>{step.concept}</p>
-          <div className="step-task-flow">
-            <span><b>输入</b>{step.handoff.input}</span>
-            <span><b>动作</b>{step.handoff.action}</span>
-            <span><b>输出</b>{step.handoff.output}</span>
-          </div>
-          <p className="step-task-tip"><b>注意：</b>{step.tip}</p>
-          <div className="rail-chips" role="group" aria-label="关联数据与依赖">
-            {step.deps.map((dependency) => <span key={dependency} className="rail-chip">{dependency}</span>)}
-          </div>
-        </details>
-      </div>
+      {/* Tasks read as one light flow line; the step's reading caveat stays visible underneath.
+          The concept is taught on the page itself (table guide, method intro, metric definitions). */}
+      <ol className="step-task-list">
+        {step.tasks.map((task) => <li key={task}>{task}</li>)}
+      </ol>
+      {step.tip && <p className="step-task-tip"><b>注意：</b>{step.tip}</p>}
       </>}
     </section>
   );

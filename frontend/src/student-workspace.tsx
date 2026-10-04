@@ -232,7 +232,6 @@ export function StudentWorkspace({
                     step={step}
                     complete={presentationCompletedSteps.has(step.n)}
                     materialStatus={materialStatus}
-                    contentRef={contentRef}
                   />
                   {carriedComparison.length >= 2 && (
                     <div className="comparison-carry" role="note">

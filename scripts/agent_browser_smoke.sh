@@ -117,9 +117,8 @@ for step in $(seq 1 15); do
   # sr-only 缺坐标、超高未裁剪元素都曾在这里突破布局，逐步断言防回归。
   "${ab[@]}" eval '(() => { const d = document.documentElement; if (d.scrollHeight > d.clientHeight + 1) throw new Error(`document scrolls: ${d.scrollHeight} > ${d.clientHeight}`); return true; })()' >/dev/null
   if [[ "$step" -eq 9 ]]; then
-    # 步骤 9 的镜头（贸易联系概览 / 两国行业比较）会被保存到会话，历史状态可能是 heat；
-    # 先显式选中网络图，断言才不依赖账号上次留下的镜头。
-    "${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="贸易联系概览")?.click()' >/dev/null || true
+    # 步骤 9 的国家网络图在“贸易联系概览”补充图表弹窗里。
+    "${ab[@]}" eval 'Array.from(document.querySelectorAll("main button.chart-modal-trigger")).find(b=>/贸易联系概览/.test(b.textContent))?.click()' >/dev/null
     "${ab[@]}" wait --load networkidle
     # The network uses one portalled dialog instance: node activation expands it,
     # Escape closes it, and focus/selection return to the invoking SVG node.
@@ -127,21 +126,22 @@ for step in $(seq 1 15); do
     "${ab[@]}" wait --load networkidle
     "${ab[@]}" focus '.network-node[aria-label^="USA "]'
     "${ab[@]}" press Enter
-    "${ab[@]}" wait '[role="dialog"][aria-modal="true"]'
-    "${ab[@]}" eval '(() => { const d=document.querySelector("[role=dialog][aria-modal=true]"); if(document.querySelectorAll(".network-card").length!==1) throw new Error("network dialog duplicated the graph"); if(document.activeElement?.textContent?.trim()!=="退出大图") throw new Error("network dialog did not receive focus"); return true; })()'
+    "${ab[@]}" wait '.network-fullscreen-scrim [role="dialog"]'
+    "${ab[@]}" eval '(() => { if(document.querySelectorAll(".network-card").length!==1) throw new Error("network dialog duplicated the graph"); if(document.activeElement?.textContent?.trim()!=="退出大图") throw new Error("network dialog did not receive focus"); return true; })()'
+    # Escape closes only the topmost layer; the chart modal underneath stays open.
+    "${ab[@]}" press Escape
+    "${ab[@]}" wait --fn '!document.querySelector(".network-fullscreen-scrim") && Boolean(document.querySelector(".chart-modal-scrim"))'
+    "${ab[@]}" eval '(() => { const n=document.activeElement; if(!n?.classList.contains("network-node") || n.getAttribute("aria-pressed")!=="true") throw new Error("network dialog did not restore its node focus and selection"); return true; })()'
     "${ab[@]}" press Escape
     "${ab[@]}" wait --fn '!document.querySelector("[role=dialog]")'
-    "${ab[@]}" eval '(() => { const n=document.activeElement; if(!n?.classList.contains("network-node") || n.getAttribute("aria-pressed")!=="true") throw new Error("network dialog did not restore its node focus and selection"); return true; })()'
   fi
 done
 
 # ---------------------------------------------------------------- 表格对齐门禁
 # 覆盖本次修过的三处：步骤 1 三个页签的数值列、步骤 5 最短路径明细的行标签、
-# 步骤 9 行业热力表（普通 + 全屏，全屏列最宽、偏移最容易暴露）。
+# 步骤 9 行业热力表（在补充图表弹窗中）。
 "${ab[@]}" open "$GVCSIM_BASE_URL/?step=1"
 "${ab[@]}" wait --load networkidle
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="开始本步 ↓")?.click()' >/dev/null
-sleep 1
 for table_tab in "账户项" "中间投入 Z" "最终需求 Y"; do
   "${ab[@]}" eval "(() => { Array.from(document.querySelectorAll('main button')).find(b=>b.textContent.trim()==='${table_tab}')?.click(); return true; })()" >/dev/null
   "${ab[@]}" wait --load networkidle
@@ -151,8 +151,8 @@ done
 
 "${ab[@]}" open "$GVCSIM_BASE_URL/?step=5"
 "${ab[@]}" wait --load networkidle
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="开始本步 ↓")?.click()' >/dev/null
-sleep 1
+# 小网络演示默认折叠，先展开
+"${ab[@]}" eval '(() => { const d=document.querySelector("details.method-demo"); if (d) d.open = true; return true; })()' >/dev/null
 "${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>/显示接近中心性/.test(b.getAttribute("aria-label")||""))?.click()' >/dev/null
 sleep 1
 "${ab[@]}" eval 'document.querySelector(".net-demo-node")?.dispatchEvent(new MouseEvent("click",{bubbles:true}))' >/dev/null
@@ -163,21 +163,14 @@ assert_table_alignment
 
 "${ab[@]}" open "$GVCSIM_BASE_URL/?step=9"
 "${ab[@]}" wait --load networkidle
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="开始本步 ↓")?.click()' >/dev/null
-sleep 1
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="两国行业比较")?.click()' >/dev/null
+# 行业热力表在“补充图表”弹窗里（弹窗挂在 body 上，不在 main 内）
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button.chart-modal-trigger")).find(b=>/单国行业热力表/.test(b.textContent))?.click()' >/dev/null
 "${ab[@]}" wait --load networkidle
 require_table 'table.heat-table-grid'
 assert_table_alignment
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>/全屏查看/.test(b.getAttribute("aria-label")||""))?.click()' >/dev/null
-sleep 2
-"${ab[@]}" wait --fn 'Boolean(document.querySelector(".fullscreen-panel--heat.fullscreen-panel--expanded"))'
-require_table 'table.heat-table-grid'
-assert_table_alignment
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>/退出步骤|退出全屏/.test((b.getAttribute("aria-label")||"")+b.textContent))?.click()' >/dev/null
-# 收尾：把步骤 9 镜头切回网络图，避免本门禁给下一次运行留下 heat 状态（镜头会被保存进会话）
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main button")).find(b=>b.textContent.trim()==="贸易联系概览")?.click()' >/dev/null
-"${ab[@]}" wait --load networkidle
+# 收尾：关闭弹窗
+"${ab[@]}" eval 'document.querySelector(".chart-modal-close")?.click()' >/dev/null
+"${ab[@]}" wait --fn '!document.querySelector(".chart-modal-scrim")'
 
 # 最终截图、HAR 与 WCAG 审计属于步骤 15；上面的几何门禁最后停在步骤 9，
 # 必须显式返回报告页，不能让文件名和实际覆盖页面不一致。

@@ -51,25 +51,30 @@ describe("shared step task card", () => {
       handoff: { input: "冲击", action: "估计", output: "证据" },
     };
     const html = renderToStaticMarkup(
-      <StepTaskCard step={step} complete materialStatus="missing" contentRef={{ current: null }} />,
+      <StepTaskCard step={step} complete materialStatus="missing" />,
     );
     expect(html).toContain("先运行，再判断。");
     expect(html.match(/<li>/g)).toHaveLength(3);
     expect(html).toContain("理解题：已完成");
     expect(html).toContain("报告材料：尚未齐全");
-    expect(html).toContain("为什么做这一步");
-    expect(html).toContain(`aria-controls="step-primary-action"`);
+    // The caveat is visible in the card; no jump button, no rationale fold, no concept/handoff/deps.
+    expect(html).toContain("<b>注意：</b>区间跨零就是看不出。");
+    expect(html).not.toContain("为什么做这一步");
+    expect(html).not.toContain("开始本步");
+    expect(html).not.toContain("<button");
+    expect(html).not.toContain("<details");
+    expect(html).not.toContain("同一问题只换指标。");
+    expect(html).not.toContain("rail-chips");
     expect(html).toContain(`id="${stepTaskTitleId(step.n)}" tabindex="-1"`);
-    expect(html).toContain('class="rail-chips" role="group" aria-label="关联数据与依赖"');
     expect(stepPrimaryActionLabel(step)).toBe("贸易流回归 · 操作区");
 
     const saving = renderToStaticMarkup(
-      <StepTaskCard step={step} complete materialStatus="saving" contentRef={{ current: null }} />,
+      <StepTaskCard step={step} complete materialStatus="saving" />,
     );
     expect(saving).toContain('class="saving"');
     expect(saving).toContain("报告材料：正在保存");
     const failed = renderToStaticMarkup(
-      <StepTaskCard step={step} complete materialStatus="unsynced" contentRef={{ current: null }} />,
+      <StepTaskCard step={step} complete materialStatus="unsynced" />,
     );
     expect(failed).toContain("报告材料：尚未保存");
     expect(failed).not.toContain("正在保存");
@@ -85,7 +90,7 @@ describe("shared step task card", () => {
       for (const [status, label] of [
         ["checking", "正在检查"], ["saving", "正在保存"], ["unsynced", "尚未保存"], ["ready", "已齐全"], ["missing", "尚未齐全"],
       ] as const) {
-        const html = renderToStaticMarkup(<StepTaskCard step={step} complete={false} materialStatus={status} contentRef={{ current: null }} />);
+        const html = renderToStaticMarkup(<StepTaskCard step={step} complete={false} materialStatus={status} />);
         const dom = new DOMParser().parseFromString(html, "text/html");
         expect(dom.querySelector(".step-task-card.compact")).not.toBeNull();
         expect(dom.querySelector("button, details, ol")).toBeNull();
@@ -109,12 +114,12 @@ describe("shared step task card", () => {
       step={reportStep}
       complete={false}
       materialStatus="missing"
-      contentRef={{ current: null }}
+     
     />);
     expect(html).toContain("报告：未生成");
     expect(html).not.toContain("理解题：未完成");
     const generated = renderToStaticMarkup(<StepTaskCard
-      step={reportStep} complete materialStatus="ready" contentRef={{ current: null }}
+      step={reportStep} complete materialStatus="ready"
     />);
     expect(generated).toContain("报告：已生成");
     expect(generated).not.toContain("已完成");
