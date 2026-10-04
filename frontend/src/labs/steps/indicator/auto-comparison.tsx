@@ -1,10 +1,11 @@
 /**
  * Steps 2–5 record their report material automatically: the country the student is looking at plus a
- * fixed partner (USA, or CHN when the student picks USA), same year, the step's country-level headline
- * indicator. No button, no extra table; a one-line status shows what was recorded.
+ * comparison country the student can see and change (default USA, or CHN when the first country is USA),
+ * same year, the step's country-level headline indicator. A one-line status shows what was recorded.
  */
 import { useEffect } from "react";
 import { api } from "../../../api";
+import { sameJsonValue } from "../../../session-store";
 import { STEP_MATERIAL_ACTION_ID } from "../../../step-task-card";
 import type { IndicatorSchema, Meta, StepStateApi } from "../../../types";
 import { countryLabel } from "../../../viz";
@@ -16,14 +17,24 @@ import {
   indicatorComparisonPatch,
 } from "./indicator-table";
 
-/** The country being viewed plus a fixed partner (USA, or CHN when the student picks USA). */
-export function autoComparisonCountries(meta: Meta, selected: string): [string, string] {
+/** The country being viewed plus the comparison country; an invalid or identical choice falls back to USA (CHN for USA). */
+export function autoComparisonCountries(meta: Meta, selected: string, partner = ""): [string, string] {
   const first = selected || (meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "");
+  if (partner && partner !== first && meta.countries.includes(partner)) return [first, partner];
   const preferred = first === "USA" ? "CHN" : "USA";
-  const partner = preferred !== first && meta.countries.includes(preferred)
+  const fallback = preferred !== first && meta.countries.includes(preferred)
     ? preferred
     : meta.countries.find((code) => code !== first && code !== "ROW") ?? "";
-  return [first, partner];
+  return [first, fallback];
+}
+
+/** Whether the saved material already records this comparison. Saved state comes back from the server
+ * with its object keys reordered, so compare by value rather than by serialised string. */
+export function materialMatches(
+  patch: Pick<IndicatorStepState, "compared" | "observations"> | null,
+  saved: IndicatorStepState | undefined,
+): boolean {
+  return patch != null && sameJsonValue([patch.compared, patch.observations], [saved?.compared, saved?.observations]);
 }
 
 function comparisonUnit(metric: string, schema: IndicatorSchema | null | undefined): string {
@@ -33,15 +44,16 @@ function comparisonUnit(metric: string, schema: IndicatorSchema | null | undefin
   return "无量纲";
 }
 
-export function useAutoComparison({ topic, meta, state, country, year, schema }: {
+export function useAutoComparison({ topic, meta, state, country, partner, year, schema }: {
   topic: IndicatorGroupKey;
   meta: Meta;
   state: StepStateApi<IndicatorStepState>;
   country: string;
+  partner: string;
   year: number;
   schema: { status: string; data: IndicatorSchema | null | undefined };
 }) {
-  const pair = autoComparisonCountries(meta, country);
+  const pair = autoComparisonCountries(meta, country, partner);
   const metric = COUNTRY_METRIC[topic];
   const release = meta.dataset?.release_id ?? "";
   const requestKey = JSON.stringify(["auto-comparison", year]);
@@ -55,34 +67,45 @@ export function useAutoComparison({ topic, meta, state, country, year, schema }:
     ? indicatorComparisonPatch(rows, pair, year, metric, comparisonUnit(metric, schema.data), release, "auto-indicator-comparison")
     : null;
   const patchKey = patch ? JSON.stringify([patch.compared, patch.observations]) : "";
-  const savedKey = JSON.stringify([state.data?.compared, state.data?.observations]);
+  const current = materialMatches(patch, state.data);
 
   // Report material follows what the student is looking at: no extra button or table to open.
   useEffect(() => {
-    if (!patch || patchKey === savedKey) return;
+    if (!patch || current) return;
     state.save(patch);
-    // state is a new object each render; the keys capture every meaningful change.
+    // state is a new object each render; the key and match flag capture every meaningful change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patchKey, savedKey]);
+  }, [patchKey, current]);
 
-  return { first: pair[0], loadFailed: countryQuery.status === "error" };
+  return { first: pair[0], second: pair[1], current, loadFailed: countryQuery.status === "error" };
 }
 
-export function AutoMaterialStatus({ state, schema, loadFailed, where }: {
+export function AutoMaterialStatus({ meta, state, schema, first, second, current, onSecond, loadFailed, where }: {
+  meta: Meta;
   state: StepStateApi<IndicatorStepState>;
   schema: IndicatorSchema | null | undefined;
+  first: string;
+  second: string;
+  /** Whether the saved observations match the current selection. */
+  current: boolean;
+  onSecond: (country: string) => void;
   loadFailed: boolean;
-  /** Where the country is chosen, e.g. “上方所选国家”. */
+  /** Where the first country is chosen, e.g. “上方所选国家”. */
   where: string;
 }) {
-  const recorded = state.data?.observations ?? [];
+  const recorded = current ? state.data?.observations ?? [] : [];
   return (
-    <p id={STEP_MATERIAL_ACTION_ID} tabIndex={-1} className="auto-material" role="status">
+    <div id={STEP_MATERIAL_ACTION_ID} tabIndex={-1} className="auto-material">
       <b>报告材料 · 自动记录</b>
       {recorded.length === 2
-        ? <span>{recorded[0].year} 年 · {recorded.map((item) => `${countryLabel(item.country)} ${fmtField(item.value, item.metric, schema)}`).join("；")} · {fieldLabel(recorded[0].metric, schema)}</span>
-        : <span>{loadFailed ? "国家级数据加载失败，请刷新后重试。" : `正在根据${where}自动记录…`}</span>}
-      <small>按{where}与美国（选美国时改为中国）在同一年的本步代表指标自动记录，无需另外保存。</small>
-    </p>
+        ? <span role="status">{recorded[0].year} 年 · {recorded.map((item) => `${countryLabel(item.country)} ${fmtField(item.value, item.metric, schema)}`).join("；")} · {fieldLabel(recorded[0].metric, schema)}</span>
+        : <span role="status">{loadFailed ? "国家级数据加载失败，请刷新后重试。" : "正在记录当前选择…"}</span>}
+      <label className="auto-material-partner">对比国家
+        <select value={second} onChange={(event) => onSecond(event.target.value)}>
+          {meta.countries.filter((code) => code !== first).map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
+        </select>
+      </label>
+      <small>记录{where}和对比国家在同一年的本步代表指标（国家级），换国家或年份后自动更新，无需另外保存。</small>
+    </div>
   );
 }

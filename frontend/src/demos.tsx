@@ -353,6 +353,8 @@ export function DecompositionDemo({
   primaryYear,
   primaryCountry,
   onPrimaryChange,
+  secondaryCountry,
+  onSecondaryChange,
 }: {
   step: number;
   meta: Meta;
@@ -360,6 +362,9 @@ export function DecompositionDemo({
   primaryYear: number;
   primaryCountry: string | null;
   onPrimaryChange?: (year: number, country: string) => void;
+  /** Object B when comparing; pass it to keep B in step with the report-material comparison country. */
+  secondaryCountry?: string;
+  onSecondaryChange?: (country: string) => void;
 }) {
   const cfg = DECOMP[step];
   const defaultA = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
@@ -368,7 +373,9 @@ export function DecompositionDemo({
   const year = meta.years.includes(primaryYear) ? primaryYear : meta.years.at(-1)!;
   const [compare, setCompare] = useState(false);
   const countryA = explicitDemoCountry(meta.countries, primaryCountry) ?? "";
-  const [countryB, setCountryB] = useState(defaultB);
+  const [localB, setLocalB] = useState(defaultB);
+  const countryB = secondaryCountry ?? localB;
+  const setCountryB = onSecondaryChange ?? setLocalB;
   const [sectorA, setSectorA] = useState("");
   const [sectorB, setSectorB] = useState("");
   const [hover, setHover] = useState<string | null>(null);

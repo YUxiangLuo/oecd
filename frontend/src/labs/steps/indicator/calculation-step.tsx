@@ -21,9 +21,10 @@ export function CalculationStep({ topic, meta, state }: CalculationStepProps & {
   const schema = useAsync(() => api.indicatorSchema(), []);
   const cfg = content[topic];
   const year = controls.year;
-  const { first, loadFailed } = useAutoComparison({
+  const auto = useAutoComparison({
     topic, meta, state, year, schema,
     country: explicitDemoCountry(meta.countries, controls.country) ?? "",
+    partner: controls.partner,
   });
   return <div>
     <IndicatorMethodIntro topic={topic} />
@@ -31,13 +32,14 @@ export function CalculationStep({ topic, meta, state }: CalculationStepProps & {
       <span className="icio-kicker">02 / 动手拆解 · 真实ICIO数据</span>
       <h2>{cfg.title}</h2><p>{cfg.hint} 时间趋势与国家比较在步骤 {topic === "trade" ? 6 : topic === "production" ? 7 : 8}。</p>
       <div className="indicator-real-controls">
-        <label>选择真实国家<select value={first} onChange={(event) => controls.setCountry(event.target.value)}>
+        <label>选择真实国家<select value={auto.first} onChange={(event) => controls.setCountry(event.target.value)}>
           {meta.countries.map((country) => <option key={country} value={country}>{countryLabel(country)}</option>)}
         </select></label>
       </div>
       <DecompositionDemo step={cfg.demo} meta={meta} primaryYear={year}
-        primaryCountry={first} onPrimaryChange={controls.setPrimary} />
-      <AutoMaterialStatus state={state} schema={schema.data} loadFailed={loadFailed} where="上方所选国家" />
+        primaryCountry={auto.first} onPrimaryChange={controls.setPrimary}
+        secondaryCountry={auto.second} onSecondaryChange={controls.setPartner} />
+      <AutoMaterialStatus meta={meta} state={state} schema={schema.data} {...auto} onSecond={controls.setPartner} where="上方所选国家" />
     </section>
   </div>;
 }

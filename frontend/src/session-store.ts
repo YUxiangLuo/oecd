@@ -19,7 +19,7 @@ export function isValidSession(value: unknown): value is ExperimentSession {
 }
 
 /** Compare JSON-shaped snapshots without treating object-key order as an edit. */
-function sameJsonValue(first: unknown, second: unknown): boolean {
+export function sameJsonValue(first: unknown, second: unknown): boolean {
   if (first === second) return true;
   if (Array.isArray(first) || Array.isArray(second)) {
     return Array.isArray(first) && Array.isArray(second)

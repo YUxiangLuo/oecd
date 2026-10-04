@@ -241,11 +241,18 @@ export function restoreIndicatorSelection(meta: Meta, saved?: IndicatorStepState
   };
 }
 
+/** The comparison country recorded last time (second entry of `compared`), if still in the data. */
+export function restoreComparisonPartner(meta: Meta, saved?: IndicatorStepState): string {
+  const partner = saved?.compared?.[1];
+  return typeof partner === "string" && meta.countries.includes(partner) ? partner : "";
+}
+
 /** 指标表与分解演示共享一套选择，并只把学生真实交互后的变化写回会话。 */
 export function useIndicatorControls(meta: Meta, state: StepStateApi<IndicatorStepState>) {
   const initial = restoreIndicatorSelection(meta, state.data);
   const [year, setYearValue] = useState(initial.year);
   const [country, setCountryValue] = useState(initial.country);
+  const [partner, setPartnerValue] = useState(() => restoreComparisonPartner(meta, state.data));
   const [page, setPageValue] = useState(1);
   const [interacted, setInteracted] = useState(false);
   const restored = useRef(state.data !== undefined);
@@ -255,6 +262,7 @@ export function useIndicatorControls(meta: Meta, state: StepStateApi<IndicatorSt
     const next = restoreIndicatorSelection(meta, state.data);
     setYearValue(next.year);
     setCountryValue(next.country);
+    setPartnerValue(restoreComparisonPartner(meta, state.data));
     setPageValue(1);
     restored.current = true;
   }, [interacted, meta, state.data]);
@@ -280,7 +288,12 @@ export function useIndicatorControls(meta: Meta, state: StepStateApi<IndicatorSt
     setPageValue(1);
   };
 
-  return { year, country, page, interacted, setYear, setCountry, setPage, setPrimary };
+  const setPartner = (next: string) => {
+    setInteracted(true);
+    setPartnerValue(next);
+  };
+
+  return { year, country, partner, page, interacted, setYear, setCountry, setPartner, setPage, setPrimary };
 }
 
 export function indicatorRowHeaderLabel(row: Record<string, string | number | null>): string {

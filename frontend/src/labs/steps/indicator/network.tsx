@@ -14,9 +14,10 @@ import "./indicator-method.css";
 export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta; step: Step; state: StepStateApi<IndicatorStepState> }) {
   const controls = useIndicatorControls(meta, state);
   const schema = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
-  const { loadFailed } = useAutoComparison({
+  const auto = useAutoComparison({
     topic: "network", meta, state, year: controls.year, schema,
     country: meta.countries.includes(controls.country) ? controls.country : "",
+    partner: controls.partner,
   });
 
   return (
@@ -44,7 +45,7 @@ export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta;
           year={controls.year} country={controls.country} page={controls.page} interacted={controls.interacted}
           onYear={controls.setYear} onCountry={controls.setCountry} onPage={controls.setPage}
         />
-        <AutoMaterialStatus state={state} schema={schema.data} loadFailed={loadFailed} where="上方表格所选国家" />
+        <AutoMaterialStatus meta={meta} state={state} schema={schema.data} {...auto} onSecond={controls.setPartner} where="上方表格所选国家" />
       </section>
     </div>
   );
