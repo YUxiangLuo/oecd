@@ -1,8 +1,6 @@
 # 远程部署
 
-示例代码目录为 `/opt/gvcsim/current`，共享状态根目录为 `/opt/gvcsim/shared`，环境配置为 `/etc/gvcsim.env`。正式账号只能通过 HTTPS 登录。
-
-**地址约定**：本文档不绑定任何固定 IP 或主机名。凡涉及主机位置一律使用占位符——`<课程域名>` 表示站点对外域名，`<数据库主机>` 表示 PostgreSQL 地址，`<api主机>` 表示 API 进程地址；实际值只写入 `/etc/gvcsim.env` 或部署当次的环境变量。各节健康检查统一用 `GVCSIM_BASE_URL` 指定站点地址，脚本与文档任何位置都不写死 IP。
+示例代码目录为 `/opt/gvcsim/current`，共享状态根目录为 `/opt/gvcsim/shared`，环境配置为 `/etc/gvcsim.env`。正式账号只能通过 HTTPS 登录。`<课程域名>`、`<数据库主机>` 等占位符按实际环境替换，实际值只写入 `/etc/gvcsim.env` 或当次环境变量；健康检查统一用 `GVCSIM_BASE_URL` 指定站点地址。
 
 部署分为三个互不绑定的生命周期：
 
@@ -10,11 +8,7 @@
 2. **数据发布**：执行 `compute` 并原子切换 release，不清空教学库；会话和报告按 `release_id` 自动隔离。
 3. **新学期重置**：仅在明确清场时执行 `classroom-init --reset`，会删除全部账号、会话、报告和评分。
 
-**v15 不是普通代码更新：** 新契约要求来源绑定的 `panel_teaching.csv`，并校验 `step10-tariff-teaching-v1`、seed `20260913`、生成参数和源文件哈希；seed 不能替代 release 来源绑定。v14 产物不满足该契约。先在独立 `GVCSIM_DATA_DIR` 用新代码完整重算并验收新的 release，再安排代码与数据协调切换；不得向旧 release 补文件或改版本号，也不得执行教学库重置。当前部署在新 release 验收前保持原样；本文不表示部署已经完成。旧代码与旧 release 成对保留供回滚，原会话／报告继续绑定原 release。参见 [README 的 v15 升级要求](README.md#数据发布)。
-
 ## 一次性主机 bootstrap
-
-**模拟 v2 同样需要新 release：** 当前代码校验 `step10-tariff-teaching-v2`（统一政策后 10% 税率、半幅噪声、原 seed 与随机序列）。即使已有 v15 产物，其 v1 教学面板也不能与新代码混用。按下述数据发布流程在独立目录构建并验收，保留旧代码和旧数据成对回滚，不迁移或重置历史会话／报告。评估与升级说明见 README 的“模拟 v2 升级”。
 
 先由系统管理员安装 Python 3.13、uv、Bun、PostgreSQL、Nginx、OpenSSL 和所用 ACME/TLS 客户端。确认以下命令都可用：
 
@@ -97,7 +91,7 @@ runuser -u gvcsim --preserve-environment -- /bin/sh -c '
   set -a; . /etc/gvcsim.env; set +a
   cd /opt/gvcsim/current
   .venv/bin/gvcsim compute
-  .venv/bin/gvcsim classroom-init --reset --teacher-username teacher --teacher-name 老师
+  .venv/bin/gvcsim classroom-init --teacher-username teacher --teacher-name 老师
   .venv/bin/gvcsim preflight
 '
 unset GVCSIM_INITIAL_TEACHER_PASSWORD
@@ -107,15 +101,15 @@ GVCSIM_BASE_URL='https://<课程域名>'   # 替换为站点实际对外地址
 curl -fsS "$GVCSIM_BASE_URL/health"
 ```
 
-首次登录后立即轮换教师口令。
+空库初始化不需要 `--reset`。首次登录后立即轮换教师口令。
 
 ## 普通代码部署
 
 普通代码部署不运行 `compute`，更不能运行 `classroom-init --reset`。新代码若要求更高的 artifact contract，应改走下一节的数据发布流程。
 
-文件缓存修复不改变 artifact contract 或数据库 schema，无需重算数据或重建教学库。更新 API 代码并重启即可使用默认的 `GVCSIM_FILE_CACHE_MODE=hash`。只读本地课堂部署还应安装新版 `deploy/gvcsim-api.service` 并执行 `systemctl daemon-reload`：模板显式设置 `notify`，避免热请求反复扫描全部大表；仅支持 ext 系列、tmpfs、XFS、Btrfs 的普通文件写入／替换通知，其他文件系统及监听失败自动回退哈希。API 运行期间，外部维护程序也不得改写 active release 或原始输入；尤其不能依赖 inotify 发现 mmap／原始块设备写入。不满足不可变数据前提时，在 `/etc/gvcsim.env` 显式设置 `GVCSIM_FILE_CACHE_MODE=hash` 覆盖模板，接受额外的哈希 I/O 和解析快照内存开销。修改变量后需重启进程。完整边界与验证见[文件缓存修复](docs/file-cache-identity-fixes-20260908.md)。
+`deploy/` 下的 systemd 或 Nginx 模板有变化时，只更新代码不会改变已安装的旧模板：保留实际域名、证书和 upstream 地址重新安装，执行 `nginx -t`、`systemctl daemon-reload` 并重载 Nginx。容量参数（单 API worker、16 个普通线程、4 个计算名额、512 个连接）须配套使用，见[运行容量](技术手册.md#112-运行容量)。
 
-更新课堂并发修复时，还需安装本仓库的新 systemd 与 Nginx 模板：Uvicorn 连接限制为 512，upstream 每个 Nginx worker 保留 8 个空闲连接、2 秒回收。保留实际域名、证书和 upstream 地址，执行 `nginx -t`、`systemctl daemon-reload` 并重载 Nginx；只更新代码不会改变已经安装的旧模板。单 API worker、16 个普通线程和 4 个计算名额保持配套使用，详见[运行容量](技术手册.md#112-运行容量)。
+服务模板设置 `GVCSIM_FILE_CACHE_MODE=notify`，前提是 API 运行期间 active release 和原始输入不被改写（inotify 不覆盖 mmap／原始块设备写入；不支持的文件系统自动回退哈希）。不满足该前提时在 `/etc/gvcsim.env` 设为 `hash` 并重启。
 
 ```bash
 set -euo pipefail
