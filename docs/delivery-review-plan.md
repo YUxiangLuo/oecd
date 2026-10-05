@@ -149,7 +149,8 @@ cd frontend && bunx tsc --noEmit -p . && bun run test:unit && bun run build && b
 - [x] 标签 `v1.0.0` 打在 `acf691a`（注释标签，未推送）；`git archive v1.0.0` 源码包与从标签树构建的普通生产前端产物已生成。
 - [x] 交付包 `dogfood-output/delivery-v1.0.0/`（忽略目录）：`gvcsim-v1.0.0-src.tar.gz`、`gvcsim-v1.0.0-frontend-dist.tar.gz`、`docs/`（两本手册、DEPLOY、README、LICENSE、交付说明、评审记录、deploy 模板）、`data/`（原始 CSV SHA-256、开发机 release 01b87b87 的 dataset 与 QC JSON）、`evidence/`（最终 local_ci、统计复核、第 3／4／6 天脚本结果、演练主机日志与备份校验文件，不含数据库转储）、`SHA256SUMS`。账号与口令不在包内。
 - [x] 演练主机按 DEPLOY.md"普通代码部署"块升级到 `v1.0.0`：备份、`uv sync --frozen`、前端构建、preflight、启动后 5 s 健康，首页 200，教师接口 200。
-- [ ] 更新演示站 101.201.151.30 到 `v1.0.0`：按你此前约定只在明确要求时部署，待指示。
+- [x] 已推送 `cc` 分支（c955e79..b2e50b7）与标签 `v1.0.0` 到 origin。
+- [x] 演示站 101.201.151.30 于 2026-10-06 05:44（服务器时间）更新到 `v1.0.0`（acf691a，演示构建）：API 重启后 11 s 健康。随后首页与静态资源 500 约 1 分钟：我的发布包以 mktemp 目录为根打包，解包时把 `/opt/gvcsim/app` 自身改成 0700，nginx 无法穿过；`chmod 0755` 后恢复，首页、手册 PDF、讲义 PDF、前端包、演示学生登录、会话与切片均正常。教训与 D-017 同源：发布后必须检查首页而不只是 `/health`。
 
 ## 8. 分工建议
 
