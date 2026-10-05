@@ -161,22 +161,23 @@ cd frontend && bunx tsc --noEmit -p . && bun run test:unit && bun run build && b
 | 10-06 | 324d3e6..HEAD | 代码评审（/code-review high，8 个角度） | 8 项发现 | D-007（P1）、D-008～D-010（P2）、D-011（整洁）、D-012（覆盖） |
 | 10-06 | HEAD | 安全评审（认证、角色、限流、CORS、输入、代理、Markdown、nginx/systemd） | 未发现高／中危 | 令牌 HMAC-SHA256 绑定账号／auth_version／release 并带过期；口令 PBKDF2-HMAC-SHA256 10 万轮加盐，常量时间比较，未知用户也做哑哈希；教师／学生路由各自 Depends 鉴权；生产禁用 demo 与占位密钥；uvicorn `proxy_headers` 只信任 127.0.0.1；react-markdown `skipHtml`；nginx CSP/HSTS，/docs 拒绝；systemd 沙箱。待交付环境核对项见 D-013 |
 | 10-06 | release 01b87b87 | `scripts/review_statistics.py --replications 2000` | 四项回归 PanelOLS 对照全部通过（系数差 ≤1.8e-12，n=16220，76 簇，support ok）；覆盖率实验 0.9395（MC 95% 区间 0.928–0.949，标称 0.95） | `dogfood-output/statistics-review-20261006/`（已忽略目录）；覆盖率略低于标称属该教学 DGP 的已知特征，报告文案已标注"标称 95% 近似区间" |
+| 10-06 | 1663120 | 快速门禁复跑（ruff、mypy、pytest --cov、tsc、bun test） | 808 后端通过（覆盖率 90.36%），478 前端通过 | D-007～D-010 修复后 |
 | 10-06 | c955e79+D-001…D-006 | `scripts/local_ci.sh` 全量门禁 | **全部通过**，522 s | WSL + Docker 临时 PostgreSQL 17 + 合成 release；Gephi 逐字节一致；807 后端、475 前端；学生 smoke（15 步无浏览器／API 错误、无 WCAG A/AA 违规）、完整提交评阅流程（含 PDF 七列）、纯界面 15 步课程、教师 smoke 均通过。证据 `dogfood-output/local-ci/20261005T192922Z-679/` |
 
 ## 问题清单
 
 | 编号 | 发现日期 | 分级 | 位置 | 复现步骤 | 修复提交 | 验证 |
 | --- | --- | --- | --- | --- | --- | --- |
-| D-001 | 10-06 | P1（门禁失败） | `gvcsim/report_observed.py` 步骤 6–9 图表小节 | `uv run mypy`：`context` 变量先存文案字符串，后复用存图表上下文字典，6 处类型错误 | 待提交（文案变量改名 `scope`） | mypy 通过；报告测试 109 通过 |
+| D-001 | 10-06 | P1（门禁失败） | `gvcsim/report_observed.py` 步骤 6–9 图表小节 | `uv run mypy`：`context` 变量先存文案字符串，后复用存图表上下文字典，6 处类型错误 | 638ec8c（文案变量改名 `scope`） | mypy 通过；报告测试 109 通过 |
 | D-002 | 10-06 | P2 | 前端单测 `NetworkTrend` | `bun run test:unit` 输出一条未包裹 act() 的状态更新警告，不影响通过 | 未修 | — |
-| D-003 | 10-06 | P1（门禁失败） | `scripts/gephi_golden/pom.xml` | Ubuntu 24.04 自带 Maven 3.8.7 + JDK 17 下编译报 "Source option 5 is no longer supported"：pom 未声明源级别 | 待提交（加 `maven.compiler.source/target=11`） | Gephi 基准逐字节一致 |
-| D-004 | 10-06 | P1（门禁失败） | `.gitattributes` / `tests/fixtures/*.csv` | Windows 检出（autocrlf）把 Gephi fixture 转成 CRLF，与 Linux 工具的 LF 输出逐字节比较失败；数值本身一致 | 待提交（fixtures 固定 `eol=lf`） | 同上 |
-| D-005 | 10-06 | P1（门禁失败） | `scripts/agent_browser_course_journey.py` 步骤 6–8 | 脚本仍点击 096211a 已删除的"沿用这组比较对象"按钮；界面已改为首次打开自动沿用并自动记录。说明 096211a 之后未跑过 local_ci | 待提交（改为等待自动记录） | 纯界面课程 15 步通过 |
-| D-006 | 10-06 | P2（环境） | WSL 验收环境 / `scripts/local_ci.sh` | 无中文字体时 Chrome 打印 PDF 丢字（"步骤"→"骤"、"教学"→"教 "），PDF 七列校验假失败 | 装 `fonts-noto-cjk`；local_ci.sh 增加中文字体前置检查（待提交） | 全量门禁通过 |
-| D-007 | 10-06 | P1 | `gvcsim/classroom/records.py:43` 报告指纹 | `_VIEW_ONLY_KEYS` 排除了 slice/year/country/chart/drill，但 `report_render.py:45`（步骤 1 无 year/table 时回退打印 slice）和 `:95`（has_snapshot 用 year/chart/drill 决定是否出现小节）仍读取这些键：报告内容可变而状态仍显示"当前" | 待修：渲染器不再读取视图键，或指纹只排除渲染器真正不用的键 | 代码评审（high） |
-| D-008 | 10-06 | P2 | `frontend/src/labs/steps/report-lab.tsx:290` | `generate()` 先 `await askRegenerate()` 再置 busy，已评阅报告上双击"重新生成"会覆盖第一个 resolver，首个 Promise 永久挂起 | 待修：进入确认前先置 `operationRef`/busy | 代码评审 |
-| D-009 | 10-06 | P2 | `frontend/src/labs/steps/shock-lab.tsx:696` | `complete` 只要求每国有任意一行，但 `recordExample` 需要末年行；缺末年时会把已保存的例子覆盖成无 `teaching_observation` 的记录 | 待修：`complete` 检查末年行 | 代码评审 |
-| D-010 | 10-06 | P2 | `frontend/src/labs/steps/db-lab.tsx:290` | `codePlainName` 对无中文名的行业代码返回代码本身，表头下方重复显示代码 | 待修 | 代码评审 |
+| D-003 | 10-06 | P1（门禁失败） | `scripts/gephi_golden/pom.xml` | Ubuntu 24.04 自带 Maven 3.8.7 + JDK 17 下编译报 "Source option 5 is no longer supported"：pom 未声明源级别 | 638ec8c（加 `maven.compiler.source/target=11`） | Gephi 基准逐字节一致 |
+| D-004 | 10-06 | P1（门禁失败） | `.gitattributes` / `tests/fixtures/*.csv` | Windows 检出（autocrlf）把 Gephi fixture 转成 CRLF，与 Linux 工具的 LF 输出逐字节比较失败；数值本身一致 | 638ec8c（fixtures 固定 `eol=lf`） | 同上 |
+| D-005 | 10-06 | P1（门禁失败） | `scripts/agent_browser_course_journey.py` 步骤 6–8 | 脚本仍点击 096211a 已删除的"沿用这组比较对象"按钮；界面已改为首次打开自动沿用并自动记录。说明 096211a 之后未跑过 local_ci | 638ec8c（改为等待自动记录） | 纯界面课程 15 步通过 |
+| D-006 | 10-06 | P2（环境） | WSL 验收环境 / `scripts/local_ci.sh` | 无中文字体时 Chrome 打印 PDF 丢字（"步骤"→"骤"、"教学"→"教 "），PDF 七列校验假失败 | 装 `fonts-noto-cjk`；local_ci.sh 增加中文字体前置检查（638ec8c） | 全量门禁通过 |
+| D-007 | 10-06 | P1 | `gvcsim/classroom/records.py:43` 报告指纹 | `_VIEW_ONLY_KEYS` 排除了 slice/year/country/chart/drill，但 `report_render.py:45`（步骤 1 无 year/table 时回退打印 slice）和 `:95`（has_snapshot 用 year/chart/drill 决定是否出现小节）仍读取这些键：报告内容可变而状态仍显示"当前" | 1663120：渲染器只打印记录材料，不再读取 slice 与视图键；新增测试断言视图键变化不改变报告文本 | 代码评审（high）；后端 808 通过，覆盖率 90.36% |
+| D-008 | 10-06 | P2 | `frontend/src/labs/steps/report-lab.tsx:290` | `generate()` 先 `await askRegenerate()` 再置 busy，已评阅报告上双击"重新生成"会覆盖第一个 resolver，首个 Promise 永久挂起 | 1663120：确认框打开期间持有 `operationRef`，取消时释放；新增双击测试 | 代码评审；前端 478 通过 |
+| D-009 | 10-06 | P2 | `frontend/src/labs/steps/shock-lab.tsx:696` | `complete` 只要求每国有任意一行，但 `recordExample` 需要末年行；缺末年时会把已保存的例子覆盖成无 `teaching_observation` 的记录 | 1663120：`complete` 要求两国都有末年行；新增缺末年测试 | 代码评审；前端 478 通过 |
+| D-010 | 10-06 | P2 | `frontend/src/labs/steps/db-lab.tsx:290` | `codePlainName` 对无中文名的行业代码返回代码本身，表头下方重复显示代码 | 1663120：无名称时返回 undefined；新增测试 | 代码评审；前端 478 通过 |
 | D-011 | 10-06 | P3（整洁） | `db-lab.tsx:856`、`auto-comparison.tsx:117` | 用 `.replace("浏览", …)` 改写共享文案常量；`login.tsx:197` 用 `notice.includes("失效")` 决定样式；`network-ranking.tsx:58` 同一 `rankText` 调三次 | 交付后处理 | 代码评审 |
 | D-013 | 10-06 | P2（部署） | `gvcsim/cli.py:113` | `forwarded_allow_ips` 写死为 `127.0.0.1`。DEPLOY.md 允许 Nginx 与 API 分机部署，此时所有学生的来源 IP 都变成 Nginx 的地址，登录来源限流（默认 120 次/分）会把全班当作一个来源，课堂集中登录时可能整体 429 | 交付环境若同机部署则无影响；分机部署需改为可配置或在 DEPLOY.md 写明 | 安全评审 |
 | D-012 | 10-06 | P2（覆盖） | `scripts/dogfood_token_expiry.py`、`dogfood_self_password_recovery.py`、`dogfood_workspace_interleavings.py` | 自动恢复草稿改版后，这三条真实过期／改密／换号脚本不在 local_ci 内，合并恢复路径只有 mock API 单测 | 第 3 天专项场景手工跑一遍 | 代码评审 |
