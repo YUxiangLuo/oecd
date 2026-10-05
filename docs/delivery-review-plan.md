@@ -76,20 +76,27 @@ cd frontend && bunx tsc --noEmit -p . && bun run test:unit && bun run build && b
 
 ### 3.1 15 步逐步检查表（每步都过）
 
-- [ ] 页面挂载无控制台错误、无 4xx/5xx 请求。
-- [ ] 默认国家／行业／年份与手册一致；切换后图表、表格、文案同步。
-- [ ] 报告材料按手册所述自动记录，侧栏进度与保存状态正确。
-- [ ] 理解题：正确／错误反馈、重复提交、刷新后保留。
-- [ ] 刷新、后退、直接用 `?step=N` 进入、从步骤 15 跳回修改再回到 15。
-- [ ] 文案：中文标点、单位、年份范围、无占位符或英文残留。
+10-06 用演示账号 student38 在本地课堂（WSL API 真实 release + Vite 演示构建，内置浏览器 1440×1000）走完 15 步并提交、更新、再提交报告。
+
+- [x] 页面挂载无控制台错误、无 4xx/5xx 请求（唯一的 409 是空反思时点生成报告的预期门禁响应）。开发模式下 `/api/auth/me`、`/api/meta`、`/api/steps` 各请求两次，是 React 严格模式的双重 effect，生产构建不会。
+- [x] 默认国家／行业／年份与手册一致（步骤 1 默认记录 CHN·C27→USA·F 2020 Z 表；2–9 默认 CHN 对 USA；10 默认 CAN/MEX·C29）；步骤 6 切换对比国家后图表口径、材料与保存同步。
+- [x] 报告材料自动记录：1–10 打开即齐全，11–14 运行回归后齐全；侧栏 15 行状态与任务卡一致。
+- [x] 理解题：答错显示提示而不泄露答案，按钮保持可用且焦点留在按钮；答对显示解释并标记完成；刷新后保留。
+- [x] 直接用 `?step=N` 进入每一步均正常；从 15 回到 6 改材料再回 15 显示"需更新"。
+- [x] 介绍 5 页、15 步任务卡、回归三句话、报告正文抽读未见占位符、英文残留或错别字。
+- [ ] 后退键、90%/110% 缩放未测（内置浏览器面板隐藏时无法截图），留给第 5 天在真实 Chrome 上补。
 
 ### 3.2 专项场景
 
-- [ ] 步骤 10–14：运行回归、切换 Y、重复运行、同账号两标签页同时运行（预期 503 `account_work_inflight` 的友好提示）、限流触发提示。
-- [ ] 步骤 15：材料不足时的门禁文案；生成→修改反思→再生成→提交→查看评分；提交后再生成的确认与评分清除；打印 PDF 版式（A4、表格换行、无提交遮罩）。
-- [ ] 会话与认证：令牌过期后恢复草稿（`dogfood_token_expiry.py`）；自行改密后旧令牌失效（`dogfood_self_password_recovery.py`）；三标签页交错（`dogfood_workspace_interleavings.py`）；断网 30 秒后恢复。
-- [ ] 浏览器矩阵：Chrome、Edge、Firefox 最新版，1200 px 最小宽度与 1920 px；缩放 90%/110%。
-- [ ] 全新学生账号从零走完 15 步计时，记录每步耗时，作为课堂时长参考。
+- [x] 步骤 10–14：四项回归各运行一次，结果页三句话读数与报告汇总表一致（11：-0.55 pp；12：-0.34 pp；13：-0.018；14：-58.87，均"支持负向关联"）；并发与限流见下一条。
+- [x] 同账号并发回归与限流：对已算过的结果，3 个并行请求和随后 12 个连续请求全部 200（199 ms 内返回），说明命中结果缓存的请求不计入单飞与限流；503 `account_work_inflight` 与 429 只在冷算时出现，由 `tests/test_rate_limit.py`、`tests/test_singleflight.py`、`tests/test_concurrency.py` 覆盖，演示站实测也确认过 503 行为。
+- [x] 步骤 15：空反思时门禁"1 个步骤还有 3 项待补齐"且生成被 409 拦下；填三段后生成草稿→提交→回执对话框（焦点进入标题，关闭后回到触发按钮）→状态"待评阅"；提交后步骤 6 浏览不再改材料，点"改用当前图表"后 15 显示"需更新"、导出 PDF 禁用；"更新报告并提交"后报告写"学生选定的比较：CHN、KOR"。已评阅后的再生成确认由单测与第 4 天教师评分后再验。
+- [ ] 打印 PDF 版式：local_ci 的 PDF 七列校验已通过；A4 纸张与分页需在真实 Chrome 上目视确认（第 5 天）。
+- [x] 会话与认证脚本（10-06，真实 release，Linux 副本 `~/gvcsim/e2e/repo` + `gvclab_e2e`）：令牌过期恢复草稿、自行改密恢复草稿、三标签页冲突／撤销请求／换号全部通过（见 D-012）。
+- [ ] 断网 30 秒后恢复（手工）。
+- [x] 1200 px 最小宽度：步骤 1、6、14、15 页面无横向溢出（步骤 1 的宽表在自身滚动区内，符合设计）。
+- [ ] Chrome、Edge、Firefox 最新版与 1920 px、缩放 90%/110%：需在你的机器上做（内置浏览器只能代表 Chromium 内核）。注意：内置浏览器里步骤 2–5 的指标说明 PDF 显示"当前浏览器无法内嵌显示这份 PDF"，是该面板没有 PDF 插件所致，真实 Chrome/Edge/Firefox 需各确认一次内嵌是否正常。
+- [ ] 全新学生账号从零走完 15 步计时，记录每步耗时，作为课堂时长参考（建议由一位真实学生完成）。
 
 ## 4. 第 4 天（10-09）：教师端、并发与容量
 
@@ -161,6 +168,8 @@ cd frontend && bunx tsc --noEmit -p . && bun run test:unit && bun run build && b
 | 10-06 | 324d3e6..HEAD | 代码评审（/code-review high，8 个角度） | 8 项发现 | D-007（P1）、D-008～D-010（P2）、D-011（整洁）、D-012（覆盖） |
 | 10-06 | HEAD | 安全评审（认证、角色、限流、CORS、输入、代理、Markdown、nginx/systemd） | 未发现高／中危 | 令牌 HMAC-SHA256 绑定账号／auth_version／release 并带过期；口令 PBKDF2-HMAC-SHA256 10 万轮加盐，常量时间比较，未知用户也做哑哈希；教师／学生路由各自 Depends 鉴权；生产禁用 demo 与占位密钥；uvicorn `proxy_headers` 只信任 127.0.0.1；react-markdown `skipHtml`；nginx CSP/HSTS，/docs 拒绝；systemd 沙箱。待交付环境核对项见 D-013 |
 | 10-06 | release 01b87b87 | `scripts/review_statistics.py --replications 2000` | 四项回归 PanelOLS 对照全部通过（系数差 ≤1.8e-12，n=16220，76 簇，support ok）；覆盖率实验 0.9395（MC 95% 区间 0.928–0.949，标称 0.95） | `dogfood-output/statistics-review-20261006/`（已忽略目录）；覆盖率略低于标称属该教学 DGP 的已知特征，报告文案已标注"标称 95% 近似区间" |
+| 10-06 | 1663120 | 第 3 天专项脚本（令牌过期、本人改密、三标签页交错） | 全部通过 | `dogfood-output/day3-recovery/`，`gvclab_e2e` |
+| 10-06 | 1663120 | 学生端 15 步手工探索（student38，本地课堂） | 通过；无控制台错误；无新缺陷 | 详见 3.1/3.2 勾选项；未覆盖：真实浏览器矩阵、缩放、打印目视、断网 |
 | 10-06 | 1663120 | 快速门禁复跑（ruff、mypy、pytest --cov、tsc、bun test） | 808 后端通过（覆盖率 90.36%），478 前端通过 | D-007～D-010 修复后 |
 | 10-06 | c955e79+D-001…D-006 | `scripts/local_ci.sh` 全量门禁 | **全部通过**，522 s | WSL + Docker 临时 PostgreSQL 17 + 合成 release；Gephi 逐字节一致；807 后端、475 前端；学生 smoke（15 步无浏览器／API 错误、无 WCAG A/AA 违规）、完整提交评阅流程（含 PDF 七列）、纯界面 15 步课程、教师 smoke 均通过。证据 `dogfood-output/local-ci/20261005T192922Z-679/` |
 
@@ -180,4 +189,4 @@ cd frontend && bunx tsc --noEmit -p . && bun run test:unit && bun run build && b
 | D-010 | 10-06 | P2 | `frontend/src/labs/steps/db-lab.tsx:290` | `codePlainName` 对无中文名的行业代码返回代码本身，表头下方重复显示代码 | 1663120：无名称时返回 undefined；新增测试 | 代码评审；前端 478 通过 |
 | D-011 | 10-06 | P3（整洁） | `db-lab.tsx:856`、`auto-comparison.tsx:117` | 用 `.replace("浏览", …)` 改写共享文案常量；`login.tsx:197` 用 `notice.includes("失效")` 决定样式；`network-ranking.tsx:58` 同一 `rankText` 调三次 | 交付后处理 | 代码评审 |
 | D-013 | 10-06 | P2（部署） | `gvcsim/cli.py:113` | `forwarded_allow_ips` 写死为 `127.0.0.1`。DEPLOY.md 允许 Nginx 与 API 分机部署，此时所有学生的来源 IP 都变成 Nginx 的地址，登录来源限流（默认 120 次/分）会把全班当作一个来源，课堂集中登录时可能整体 429 | 交付环境若同机部署则无影响；分机部署需改为可配置或在 DEPLOY.md 写明 | 安全评审 |
-| D-012 | 10-06 | P2（覆盖） | `scripts/dogfood_token_expiry.py`、`dogfood_self_password_recovery.py`、`dogfood_workspace_interleavings.py` | 自动恢复草稿改版后，这三条真实过期／改密／换号脚本不在 local_ci 内，合并恢复路径只有 mock API 单测 | 第 3 天专项场景手工跑一遍 | 代码评审 |
+| D-012 | 10-06 | P2（覆盖） | `scripts/dogfood_token_expiry.py`、`dogfood_self_password_recovery.py`、`dogfood_workspace_interleavings.py` | 自动恢复草稿改版后，这三条真实过期／改密／换号脚本不在 local_ci 内，合并恢复路径只有 mock API 单测 | 10-06 在 WSL 对 `gvclab_e2e` 全部跑通：令牌 10 s 自然过期 2 次恢复、本人改密 2 次恢复、三标签页冲突＋撤销请求＋换号 2 轮通过；证据 `dogfood-output/day3-recovery/` | 已关闭 |
