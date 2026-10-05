@@ -914,6 +914,13 @@ def test_steps_two_to_five_accept_automatic_comparisons():
     assert "动手拆解" in message
     assert "保存两国同年比较" not in message
 
+    # ROW is the rest-of-world remainder, not an economy: a comparison with it is not material.
+    with_row = _complete()
+    data = with_row["steps"]["5"]["data"]
+    data["compared"] = ["ROW", data["compared"][1]]
+    data["observations"][0].update(entity="ROW", country="ROW")
+    assert [item["step"] for item in check_material_gate(with_row)] == [5]
+
 
 def test_step_nine_requires_both_a_comparison_and_an_industry_observation():
     """Step 9 asks for a country comparison *and* an industry betweenness observation."""
@@ -1820,3 +1827,25 @@ def test_step9_long_ranking_is_cut_at_an_industry_and_counts_only_saved_readings
     assert len(chart["items"]) == 39
     assert chart["items"][-1]["group"].startswith("全球中位数")
     assert "前 26 / 30 条读数" in section
+
+
+def test_rank_reading_marks_ties_and_skips_a_ranking_everyone_shares():
+    def ref(ranks, ties, n=76):
+        return {"n": n, "ranks": ranks, "ties": ties}
+
+    tied = {"references": {"2016": ref({"CHN": 21}, {"CHN": 56}), "2020": ref({"CHN": 11}, {"CHN": 66})}}
+    assert (
+        report_observed._rank_reading(tied, ["CHN"])
+        == "在 76 个经济体中（从高到低），CHN 中国从并列第 21 位变为并列第 11 位"
+    )
+    plain = {"references": {"2020": ref({"CHN": 54}, {"CHN": 1})}}
+    assert report_observed._rank_reading(plain, ["CHN"]) == "在 76 个经济体中（从高到低），CHN 中国第 54 位"
+    everyone = {
+        "references": {"2016": ref({"CHN": 1}, {"CHN": 76}), "2020": ref({"CHN": 1}, {"CHN": 76})},
+        "scope": "的同一行业",
+    }
+    assert report_observed._rank_reading(everyone, ["CHN"]) == "全部 76 个经济体的同一行业数值相同，排名不作比较"
+    one_end = {"references": {"2016": ref({"CHN": 1}, {"CHN": 76}), "2020": ref({"CHN": 3}, {"CHN": 1})}}
+    assert report_observed._rank_reading(one_end, ["CHN"]) == (
+        "在 76 个经济体中（从高到低），CHN 中国从不分名次变为第 3 位（不分名次：该年全部经济体数值相同）"
+    )

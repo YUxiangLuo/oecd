@@ -174,7 +174,7 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
 
   return (
     <div>
-      <NetworkTrend meta={meta} schema={schema} initialCountry={drill} initialCountries={state.data?.compared ?? []} observations={observations} syncing={state.syncing} syncError={state.syncError} onRetrySync={state.syncNow} onRecord={(countries, records) => {
+      <NetworkTrend meta={meta} schema={schema} initialCountry={drill} initialCountries={state.data?.compared ?? []} observations={observations} syncing={state.syncing} syncError={state.syncError} onRetrySync={state.syncNow} locked={state.materialLocked} onRecord={(countries, records) => {
         pickCountries(countries);
         state.save({ compared: countries, metric: records[0]?.metric, observations: records });
       }} />

@@ -5,6 +5,7 @@
  * 步骤5：小网络建直觉 → 真实中心性表。
  * 报告材料来自真实指标表。
  */
+import { useMemo } from "react";
 import type { Meta, Step, StepStateApi } from "../../types";
 import type { IndicatorStepState } from "./indicator/indicator-table";
 import { LengthIndicatorStep } from "./indicator/length";
@@ -17,6 +18,9 @@ export function IndicatorLab({ meta, step, state }: {
   step: Step;
   state: StepStateApi<IndicatorStepState>;
 }) {
+  // ROW is the rest-of-world accounting remainder, not an economy: steps 2–5 compare economies only, like
+  // steps 6–9. A saved ROW selection then falls back to the default country and is re-recorded.
+  meta = useMemo(() => ({ ...meta, countries: meta.countries.filter((country) => country !== "ROW") }), [meta]);
   // 按主题路由,不依赖步号(步号可能因课程重排而变)。
   if (step.topic === "production") return <ProductionIndicatorStep meta={meta} step={step} state={state} />;
   if (step.topic === "length") return <LengthIndicatorStep meta={meta} step={step} state={state} />;

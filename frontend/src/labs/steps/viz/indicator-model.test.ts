@@ -8,6 +8,7 @@ import {
   indicatorMaterial,
   indicatorRows,
   materialComplete,
+  rankText,
 } from "./indicator-model";
 import { LENGTH_TOPIC } from "./length";
 import { PRODUCTION_TOPIC } from "./production";
@@ -185,6 +186,7 @@ describe("global reference for steps 6–8", () => {
     expect(entry.p25).toBeCloseTo(0.2);
     expect(entry.p75).toBeCloseTo(0.4);
     expect(entry.ranks).toEqual({ E: 1, D: 2, B: 3, C: 3, A: 5 });
+    expect(entry.ties).toEqual({ E: 1, D: 1, B: 2, C: 2, A: 1 });
     expect(countryDistribution(rows as Row[], "FVA_share", [2019])).toEqual([]);
   });
 
@@ -232,5 +234,34 @@ describe("global reference for steps 6–8", () => {
     // Same reading near the right edge: two rows, and the lower leader does not cross the upper label.
     const [x, y] = layoutStripLabels([{ px: 780, text }, { px: 780, text }]);
     expect(x.row + y.row).toBe(1);
+  });
+});
+
+describe("tied ranks", () => {
+  test("a shared reading is 并列, and a reading every economy shares has no rank", () => {
+    expect(rankText(3, 1, 76)).toBe("第 3 位");
+    expect(rankText(11, 66, 76)).toBe("并列第 11 位");
+    expect(rankText(1, 76, 76)).toBeNull();
+  });
+
+  test("the trend card says 并列 for ties and drops the ranking when every economy is equal", () => {
+    const render = (values: Record<string, number>[]) => {
+      const rows = [2016, 2020].flatMap((year, i) => Object.entries(values[i]).map(([country, value]) => ({ country, year, v: value })));
+      return renderToStaticMarkup(createElement(IndicatorTrendChart, {
+        rows, countries: ["CHN", "USA"], years: [2016, 2020], metric: "v", label: "离心率", unit: "路径长度",
+        distribution: countryDistribution(rows as Row[], "v", [2016, 2020]), mode: "context",
+      }));
+    };
+    const tied = render([{ CHN: 2, USA: 2, DEU: 3, JPN: 2 }, { CHN: 2, USA: 3, DEU: 3, JPN: 2 }]);
+    expect(tied).toContain("并列第 2 位 → 并列第 3 位");
+    expect(tied).toContain("并列表示数值相同");
+    const flat = render([{ CHN: 0, USA: 0, DEU: 0 }, { CHN: 0, USA: 0, DEU: 0 }]);
+    expect(flat).toContain("全部经济体数值相同");
+    expect(flat).not.toContain("第 1");
+    // Only the first year is all equal: worded as in the report, not as a tie for first place.
+    const oneEnd = render([{ CHN: 0, USA: 0, DEU: 0 }, { CHN: 2, USA: 3, DEU: 1 }]);
+    expect(oneEnd).toContain("不分名次 → 第 2 位");
+    expect(oneEnd).toContain("不分名次：该年全部经济体数值相同");
+    expect(oneEnd).not.toContain("并列");
   });
 });

@@ -266,3 +266,16 @@ describe("no-op session patches", () => {
     } finally { await finish(hook); get.mockRestore(); save.mockRestore(); }
   });
 });
+
+test("the recovery notice names the steps whose kept content differs from the server", async () => {
+  const server = patchSessionStep(emptySession(), 2, { year: 2020 });
+  const kept = patchSessionStep(patchSessionStep(server, 15, { research_question: "unsaved" }), 6, { metric: "FVA_share" });
+  saveAuthSessionRecovery(sessionStorage, "student", kept, STAMP, RELEASE);
+  const get = spyOn(api.classroom, "session").mockResolvedValue(response(server, STAMP));
+  const hook = renderHook(() => useSession(true, "student"));
+  try {
+    await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+    expect(hook.result.current.authRecoveryAvailable).toBe(true);
+    expect(hook.result.current.authRecoverySteps).toEqual([6, 15]);
+  } finally { await finish(hook); get.mockRestore(); }
+});

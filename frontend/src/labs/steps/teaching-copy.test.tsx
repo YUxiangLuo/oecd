@@ -33,3 +33,14 @@ describe("student-facing chart copy", () => {
     expect(html).not.toContain("该发现");
   });
 });
+
+test("steps 2–5 compare economies only: ROW is not offered and a saved ROW falls back", async () => {
+  const { IndicatorLab } = await import("./indicator-lab");
+  const withRow: Meta = { ...meta, countries: ["CHN", "ROW", "USA"] };
+  const saved: StepStateApi<IndicatorStepState> = { ...state, data: { country: "ROW", compared: ["ROW", "USA"] } as IndicatorStepState };
+  for (const topic of ["trade", "network"] as const) {
+    const html = renderToStaticMarkup(<IndicatorLab meta={withRow} step={{ ...step, topic }} state={saved} />);
+    expect(html).not.toContain('value="ROW"');
+    expect(html).not.toContain("ROW 世界其他地区");
+  }
+});

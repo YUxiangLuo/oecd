@@ -77,6 +77,8 @@ def country_reference(metric: str, year: int, *, share_of: tuple[str, str] | Non
         "median": float(series.quantile(0.5)),
         "p75": float(series.quantile(0.75)),
         "ranks": {country: 1 + int((series > value).sum()) for country, value in readings.items()},
+        # How many economies share each reading (1 = no tie); a rank shared by all of them means nothing.
+        "ties": {country: int((series == value).sum()) for country, value in readings.items()},
     }
 
 
@@ -120,6 +122,11 @@ def industry_reference(
                 "p75": float(values.quantile(0.75)),
                 "ranks": {
                     country: 1 + int((values > by_country[country]).sum())
+                    for country in countries
+                    if country in by_country
+                },
+                "ties": {
+                    country: int((values == by_country[country]).sum())
                     for country in countries
                     if country in by_country
                 },

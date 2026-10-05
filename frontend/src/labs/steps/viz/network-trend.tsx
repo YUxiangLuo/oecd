@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE } from "../../../step-task-card";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { IndicatorSchema, Meta } from "../../../types";
@@ -22,7 +23,7 @@ export function networkTrendPoints(rows: Row[], years: number[], countries: stri
   }));
 }
 
-export function NetworkTrend({ meta, schema, initialCountry, initialCountries = [], observations = [], syncing = false, syncError = null, onRetrySync, onRecord }: {
+export function NetworkTrend({ meta, schema, initialCountry, initialCountries = [], observations = [], syncing = false, syncError = null, onRetrySync, onRecord, locked = false }: {
   meta: Meta;
   schema?: IndicatorSchema | null;
   initialCountry: string;
@@ -33,6 +34,8 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   syncError?: string | null;
   onRetrySync?: () => void;
   onRecord: (countries: string[], observations: VizObservation[]) => void;
+  /** The report is submitted: record only when the student asks (see StepStateApi.materialLocked). */
+  locked?: boolean;
 }) {
   const countries = meta.countries.filter((country) => country !== "ROW");
   const years = [...meta.years].sort((a, b) => a - b);
@@ -75,7 +78,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     { requestKey: trendReferenceKey, enabled: Boolean(release && view === "trend" && industry && first) },
   );
   const distribution: YearDistribution[] = trendReference.status === "success"
-    ? (trendReference.data ?? []).map(({ year, n, p25, median, p75, ranks }) => ({ year, n, p25, median, p75, ranks }))
+    ? (trendReference.data ?? []).map(({ year, n, p25, median, p75, ranks, ties }) => ({ year, n, p25, median, p75, ranks, ties }))
     : [];
   const rankingReferenceKey = `${release}:network-ranking-reference:${metric}:${year}:${first}`;
   const rankingReference = useAsync(
@@ -85,7 +88,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   );
   const industryReference = new Map(
     rankingReference.status === "success"
-      ? (rankingReference.data ?? []).map((row) => [row.industry, { median: row.median, n: row.n, rank: row.ranks[first] }] as const)
+      ? (rankingReference.data ?? []).map((row) => [row.industry, { median: row.median, n: row.n, rank: row.ranks[first], tie: row.ties?.[first] }] as const)
       : [],
   );
   const points = networkTrendPoints(query.data ?? [], years, selected, industry, metric);
@@ -116,7 +119,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const pendingKey = canRecord && release ? `${selected.join(",")}|${materialKey(pendingObservations)}` : "";
   // Report material follows the chart the student is looking at; incomplete charts never overwrite it.
   useEffect(() => {
-    if (!pendingKey || matchesSaved || syncing) return;
+    if (!pendingKey || matchesSaved || syncing || locked) return;
     onRecord(selected, pendingObservations);
     // pendingKey captures every meaningful change of the pending comparison.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -177,9 +180,14 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       <h3>报告材料 · {observations.length ? `已自动记录（${observations.length} 条读数）` : "尚未记录"}</h3>
       <p role="status">{!canRecord
         ? `当前图表暂不能记录：${selected.length < 2 ? "报告材料需要一个对比国家；现在只看全球参照，不会记录。" : view === "trend" ? "两国至少需要两个共同有效年份。" : "至少一个展示行业需要两国都有有效读数。"}${observations.length ? "已记录的材料保持不变。" : ""}`
+        : locked
+          ? `${MATERIAL_LOCKED_NOTE}${matchesSaved ? "当前图表就是已记录的材料。" : ""}`
         : matchesSaved
           ? `当前图表已自动记录：${selected.map(countryLabel).join(" 与 ")} · ${view === "trend" ? `${sectorLabel(industry)} · ${years[0]}–${years.at(-1)} 年趋势` : `${year} 年行业排名`} · ${label}。换视角、国家或指标后会自动更新。`
           : "正在记录当前图表…"}</p>
+      {locked && canRecord && !matchesSaved && (
+        <button type="button" className="secondary" onClick={() => onRecord(selected, pendingObservations)}>{MATERIAL_LOCKED_ACTION}</button>
+      )}
       {observations.length ? <details>
         <summary>核对已记录读数 · {observations.length} 条</summary>
         <p>{savedCountries.map(countryLabel).join(" 与 ")} · {schema?.fields[observations[0].metric ?? ""]?.label ?? observations[0].metric} · {observations[0].unit}</p>

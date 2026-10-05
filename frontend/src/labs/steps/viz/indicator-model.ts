@@ -198,6 +198,22 @@ export interface YearDistribution {
   p75: number;
   /** Rank from highest to lowest (1 = highest); ties share the better rank. */
   ranks: Record<string, number>;
+  /** How many economies share each reading (1 = no tie). */
+  ties?: Record<string, number>;
+}
+
+/** Shown for a year in which every economy has the same reading; the report uses the same words. */
+export const NO_RANK = "不分名次";
+export const NO_RANK_NOTE = "不分名次：该年全部经济体数值相同";
+
+/**
+ * “第 3 位”, or “并列第 3 位” when other economies have the same reading; null when every economy has
+ * the same reading (e.g. an industry with no flows anywhere), where a rank says nothing (show NO_RANK).
+ */
+export function rankText(rank: number, tie: number | undefined, n: number): string | null {
+  const shared = tie ?? 1;
+  if (shared >= n) return null;
+  return `${shared > 1 ? "并列" : ""}第 ${rank} 位`;
 }
 
 /** Linear-interpolated quantile, the same rule pandas uses, so the page and the report agree. */
@@ -217,7 +233,11 @@ export function countryDistribution(rows: Row[], metric: string, years: number[]
     if (readings.length < 2) return [];
     const sorted = readings.map((item) => item.value).sort((a, b) => a - b);
     const ranks: Record<string, number> = {};
-    for (const item of readings) ranks[item.country] = 1 + readings.filter((other) => other.value > item.value).length;
+    const ties: Record<string, number> = {};
+    for (const item of readings) {
+      ranks[item.country] = 1 + readings.filter((other) => other.value > item.value).length;
+      ties[item.country] = readings.filter((other) => other.value === item.value).length;
+    }
     return [{
       year,
       n: readings.length,
@@ -225,6 +245,7 @@ export function countryDistribution(rows: Row[], metric: string, years: number[]
       median: quantile(sorted, 0.5),
       p75: quantile(sorted, 0.75),
       ranks,
+      ties,
     }];
   });
 }

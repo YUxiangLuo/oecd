@@ -284,10 +284,10 @@ describe("Step 1 bounded roving cell focus", () => {
     expect(html).toContain('role="region" tabindex="-1"');
     // 界面不展示任何键盘操作说明（caption 只保留表名与单位）
     const caption = html.match(/<caption>([^<]*)<\/caption>/)?.[1] ?? "";
-    expect(caption).toContain("单位：Million USD（百万美元）");
+    expect(caption).toContain("单位：百万美元");
     expect(caption).not.toMatch(/Tab|方向键|Enter|空格/);
     expect(html).toContain('<th scope="row"');
-    expect(html).toContain("R1(行·供给方) → C1(列·使用方)，值 0 Million USD（百万美元），未记录");
+    expect(html).toContain("R1(行·供给方) → C1(列·使用方)，值 0 百万美元，未记录");
     expect(html).not.toContain("按 Enter");
   });
 
@@ -309,7 +309,7 @@ describe("Step 1 bounded roving cell focus", () => {
     expect(html.match(/tabindex="0"/g)).toHaveLength(1);
     expect(html).toContain('role="region" tabindex="0"');
     expect(dbCellAccessibleName("y", { row: "CHN_A01_02", column: "USA_HFCE", value: 2.5 }, true))
-      .toContain("USA 居民最终消费支出(列·最终需求)，值 2.5 Million USD（百万美元），已记录");
+      .toContain("USA 居民最终消费支出(列·最终需求)，值 2.5 百万美元，已记录");
   });
 
   test("observation sentence states the supply direction in one full reading", () => {

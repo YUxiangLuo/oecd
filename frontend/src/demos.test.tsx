@@ -110,7 +110,7 @@ describe("indicator calculation disclosure", () => {
       <IndicatorCalculationDisclosure step={6} row={{ PLv_GVC: 2.4, PLy_GVC: 1.6, PLv: 9, PLy: 3 }} />,
     );
     expect(html).toContain("GVCPs = PLv_GVC / PLy_GVC");
-    expect(html).toContain("= 2.4 / 1.6 = <b>1.500</b>");
+    expect(html).toContain("= 2.400 / 1.600 = <b>1.500</b>");
     expect(html).not.toContain("= 9 / 3");
   });
 
@@ -118,14 +118,14 @@ describe("indicator calculation disclosure", () => {
     const html = renderToStaticMarkup(
       <IndicatorCalculationDisclosure step={6} row={{ PLv_GVC: 2.4, PLy_GVC: -1.6 }} />,
     );
-    expect(html).toContain("= 2.4 / -1.6 = <b>-1.500</b>");
+    expect(html).toContain("= 2.400 / -1.600 = <b>-1.500</b>");
   });
 
   test("does not display a rounded negative zero for a tiny signed position ratio", () => {
     const html = renderToStaticMarkup(
       <IndicatorCalculationDisclosure step={6} row={{ PLv_GVC: -0.0001, PLy_GVC: 1 }} />,
     );
-    expect(html).toContain("= -0.0001 / 1 = <b>0.000</b>");
+    expect(html).toContain("= -0.0001 / 1.000 = <b>0.000</b>");
     expect(html).not.toContain("<b>-0.000</b>");
   });
 
@@ -160,7 +160,7 @@ describe("indicator calculation disclosure", () => {
       );
       await waitFor(() => expect(view.getByText("当前分解不可用")).toBeTruthy());
       const disclosure = view.getByLabelText("GVC 位置指数计算公示");
-      expect(disclosure.textContent).toContain("3.3238 / 3.5454 = 0.937");
+      expect(disclosure.textContent).toContain("3.324 / 3.545 = 0.937");
     } finally {
       countryRequest.mockRestore();
       industryRequest.mockRestore();
@@ -383,7 +383,9 @@ describe("single-entity decomposition scope", () => {
       <DecompositionDemo step={4} meta={meta} primaryYear={2020} primaryCountry={null} />,
     );
     expect(html).toContain("还没有选择具体国家");
-    expect(html).toContain("选择真实国家");
+    // The unavailable state carries its own country selector (there is no other one on the page).
+    expect(html).toContain("选择国家");
+    expect(html).toContain("<option value=\"\" disabled=\"\" selected=\"\">请选择</option>");
     expect(html).not.toContain("加载实体 A");
     expect(html).not.toContain("decomp-formula");
   });

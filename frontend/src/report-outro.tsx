@@ -17,6 +17,7 @@ export function ReportOutro({ report, onClose, onExport, exportDisabled = false,
   const headingRef = useRef<HTMLHeadingElement>(null);
   useDialogFocus({ containerRef, initialFocusRef: headingRef, onClose });
   return createPortal(<div ref={containerRef} className="intro-overlay report-outro" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+    <button type="button" className="intro-skip" aria-label="关闭回执" title="关闭" onClick={onClose}><span aria-hidden="true">×</span></button>
     <div className="intro-scene">
       <div className="intro-logo"><LogoMark size={64} /></div>
       <span className="intro-scene-kicker">GVC SIMULATION LAB · 实验回顾</span>

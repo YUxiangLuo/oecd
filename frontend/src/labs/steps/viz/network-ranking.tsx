@@ -2,6 +2,7 @@ import { countryLabel, sectorLabel } from "../../../viz";
 import { CAT } from "../../../viz/shared";
 import { ScrollableRegion } from "../../../a11y";
 import { fmtDb } from "../../shared";
+import { NO_RANK, rankText } from "./indicator-model";
 import type { Row } from "./scaffold";
 
 export interface NetworkRankRow { industry: string; values: (number | null)[] }
@@ -21,7 +22,7 @@ export function networkRanking(rows: Row[], year: number, countries: string[], m
 }
 
 /** Each industry's global median across all economies, and country A's rank there. */
-export type IndustryReference = ReadonlyMap<string, { median: number; n: number; rank?: number }>;
+export type IndustryReference = ReadonlyMap<string, { median: number; n: number; rank?: number; tie?: number }>;
 
 export function NetworkRanking({ rows, countries, unit, onIndustry, reference = new Map() }: {
   rows: NetworkRankRow[]; countries: string[]; unit: string; onIndustry: (industry: string) => void;
@@ -54,7 +55,7 @@ export function NetworkRanking({ rows, countries, unit, onIndustry, reference = 
           </div>
           <span style={{ textAlign: "right", fontSize: 12, fontVariantNumeric: "tabular-nums" }}>
             {value === null ? "缺失" : fmtDb(value)}
-            {index === 0 && global?.rank != null && <small style={{ display: "block", color: "#596173" }}>全球第 {global.rank} 位 / {global.n}</small>}
+            {index === 0 && global?.rank != null && <small style={{ display: "block", color: "#596173" }}>{rankText(global.rank, global.tie, global.n) ? `全球${rankText(global.rank, global.tie, global.n)} / ${global.n}` : `全球${NO_RANK}（数值全部相同）`}</small>}
           </span>
         </div>)}</div>
         {global && <span className="sr-only">{sectorLabel(row.industry)} 全球中位数 {fmtDb(global.median)}</span>}

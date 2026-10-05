@@ -49,7 +49,7 @@ def _reflection_section(session: dict[str, Any]) -> list[str]:
         "",
         _reflection_value(reflection.get("evidence_interpretation")),
         "",
-        "### 局限",
+        "### 我的局限与反思",
         "",
         _reflection_value(reflection.get("limitations")),
         "",
@@ -327,19 +327,34 @@ def _rank_reading(context: dict[str, Any], countries: list[str]) -> str:
     references = context["references"]
     years = sorted(references, key=int)
     first, last = references[years[0]], references[years[-1]]
+
+    unranked = False
+
+    def rank(reference: dict[str, Any], country: str) -> str:
+        nonlocal unranked
+        tie = reference.get("ties", {}).get(country, 1)
+        # Same wording as the page (rankText): a year in which every economy has the same reading has no rank.
+        if tie >= reference["n"]:
+            unranked = True
+            return "不分名次"
+        return f"{'并列' if tie > 1 else ''}第 {reference['ranks'][country]} 位"
+
+    # When every economy has the same reading (e.g. an industry with no flows anywhere), a rank says nothing.
+    if all(reference.get("ties") and min(reference["ties"].values()) >= reference["n"] for reference in (first, last)):
+        return f"全部 {last['n']} 个经济体{context.get('scope', '')}数值相同，排名不作比较"
     parts = []
     for country in countries:
-        start, end = first["ranks"].get(country), last["ranks"].get(country)
-        if start is None or end is None:
+        if country not in first["ranks"] or country not in last["ranks"]:
             continue
         parts.append(
-            f"{country_label(country)}第 {end} 位"
+            f"{country_label(country)}{rank(last, country)}"
             if years[0] == years[-1]
-            else f"{country_label(country)}从第 {start} 位变为第 {end} 位"
+            else f"{country_label(country)}从{rank(first, country)}变为{rank(last, country)}"
         )
     if not parts:
         return ""
-    return f"在 {last['n']} 个经济体{context.get('scope', '')}中（从高到低），{'；'.join(parts)}"
+    note = "（不分名次：该年全部经济体数值相同）" if unranked else ""
+    return f"在 {last['n']} 个经济体{context.get('scope', '')}中（从高到低），{'；'.join(parts)}{note}"
 
 
 def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str, Any]]) -> dict[str, Any]:

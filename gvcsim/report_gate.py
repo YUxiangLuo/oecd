@@ -150,7 +150,8 @@ def _table_comparison_complete(data: dict[str, Any], *, allow_auto: bool = False
     sources = {EXPLICIT_COMPARISON_SOURCE, AUTO_COMPARISON_SOURCE} if allow_auto else {EXPLICIT_COMPARISON_SOURCE}
     compared = [str(item) for item in _list_values(data.get("compared")) if str(item).strip()]
     observations = [item for item in _list_values(data.get("observations")) if isinstance(item, dict)]
-    if len(compared) != 2 or len(set(compared)) != 2 or len(observations) != 2:
+    # ROW is the rest-of-world accounting remainder, not an economy to compare.
+    if len(compared) != 2 or len(set(compared)) != 2 or "ROW" in compared or len(observations) != 2:
         return False
     required = ("entity", "country", "year", "value", "metric", "unit", "release", "scope", "source")
     if any(any(item.get(key) in (None, "") for key in required) for item in observations):

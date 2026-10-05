@@ -30,6 +30,9 @@ export default function App() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authChecked, setAuthChecked] = useState(() => !sessionStorage.getItem(AUTH_TOKEN_KEY));
   const [authNotice, setAuthNotice] = useState<string | null>(null);
+  // Who was signed in when the session ended, so the login form returns to that account.
+  // Read before the first render: the login form takes its initial value from it.
+  const [authUsername] = useState<string | null>(() => sessionStorage.getItem("gvcsim_auth_username"));
   const [authCheckError, setAuthCheckError] = useState<string | null>(null);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [showIntro, setShowIntro] = useState(() => sessionStorage.getItem("gvcsim_show_intro") === "1");
@@ -49,6 +52,7 @@ export default function App() {
     syncing: session.syncing,
     syncError: session.syncError,
     syncNow: () => { void session.syncNow().catch(() => {}); },
+    materialLocked: session.report?.state === "pending" || session.report?.state === "graded",
   };
 
   const resolveStep = useCallback((next: number) => {
@@ -85,12 +89,15 @@ export default function App() {
     return () => window.removeEventListener("popstate", restoreHistoryStep);
   }, [resolveStep]);
 
-  const reloadLoggedOut = useCallback((notice?: string) => {
+  const reloadLoggedOut = useCallback((notice?: string, username?: string) => {
     const activeToken = getActiveAuthToken();
     setActiveAuthToken(null);
     if (activeToken !== null) clearAuthenticationIfCurrent(sessionStorage, activeToken);
     else if (sessionStorage.getItem(AUTH_TOKEN_KEY) === null) clearAuthentication(sessionStorage);
     if (notice) sessionStorage.setItem("gvcsim_auth_notice", notice);
+    // During startup the user is not known yet; fall back to the account signed in on this tab.
+    const returning = username ?? sessionStorage.getItem("gvcsim_signed_in_username");
+    if (notice && returning) sessionStorage.setItem("gvcsim_auth_username", returning);
     window.location.reload();
   }, []);
 
@@ -113,6 +120,7 @@ export default function App() {
       sessionStorage.removeItem("gvcsim_auth_notice");
       setAuthNotice(notice);
     }
+    sessionStorage.removeItem("gvcsim_auth_username");
     if (sessionStorage.getItem("gvcsim_show_intro") === "1") {
       sessionStorage.removeItem("gvcsim_show_intro");
     }
@@ -139,7 +147,7 @@ export default function App() {
     };
     const expired = () => {
       preserveUnsyncedStudentWork();
-      reloadLoggedOut("登录已失效，请重新登录。");
+      reloadLoggedOut("登录已失效，请重新登录。", user?.username);
     };
     window.addEventListener("gvcsim-auth-expired", expired);
     return () => window.removeEventListener("gvcsim-auth-expired", expired);
@@ -193,10 +201,13 @@ export default function App() {
   }
   if (!user) {
     return (
-      <LoginPage notice={authNotice} onLogin={(response) => {
+      <LoginPage notice={authNotice} username={authUsername} onLogin={(response) => {
         storeAuthentication(sessionStorage, response.token);
-        // 每次学生登录都重新展示系统介绍（不按账号记忆已读）。
-        if (shouldAutoShowIntro(response.user.role)) {
+        // Lets an expired session (even one found on reload) return the login form to this account.
+        sessionStorage.setItem("gvcsim_signed_in_username", response.user.username);
+        // 每次学生登录都重新展示系统介绍（不按账号记忆已读）；登录失效或改密后的重新登录是在实验中途，
+        // 不再打断（authNotice 说明了为何回到登录页）。
+        if (shouldAutoShowIntro(response.user.role) && !authNotice) {
           sessionStorage.setItem("gvcsim_show_intro", "1");
         }
         window.location.reload();
@@ -206,7 +217,7 @@ export default function App() {
 
   const passwordChanged = () => {
     if (user.role === "student") session.stashAuthRecovery(user.username);
-    reloadLoggedOut("密码已修改。请使用新密码重新登录。");
+    reloadLoggedOut("密码已修改。请使用新密码重新登录。", user.username);
   };
   if (user.role === "teacher") {
     return (

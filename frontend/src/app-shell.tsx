@@ -6,7 +6,7 @@ import { isDemoStudentUsername } from "./login";
 import { TeacherDashboard } from "./teacher";
 import { TeacherReviewGuardProvider, useTeacherReviewGuard } from "./teacher/review-guard";
 import { ToastHost } from "./toast";
-import { materialStatusForStep, reportStatusLabel } from "./step-task-card";
+import { materialStatusForStep, reportStatusLabel, stepShowsDone } from "./step-task-card";
 import { revealOutlineStep } from "./step-navigation";
 import type {
   AuthUser,
@@ -193,9 +193,12 @@ interface CourseSidebarProps {
   onNavigate: (step: number) => void;
   /** Whether a report has been generated, even if it no longer matches the saved records. */
   reportExists?: boolean;
+  reportState?: "draft" | "pending" | "graded" | null;
+  /** The current step's material status as its task card shows it (includes unsaved/saving). */
+  currentMaterialStatus?: ReturnType<typeof materialStatusForStep>;
 }
 
-export function CourseSidebar({ stepsData, current, completion, materialGate, onNavigate, reportExists = false }: CourseSidebarProps) {
+export function CourseSidebar({ stepsData, current, completion, materialGate, onNavigate, reportExists = false, reportState, currentMaterialStatus }: CourseSidebarProps) {
   const steps = stepsData.steps;
   const outlineRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => { revealOutlineStep(outlineRef.current); }, [current, steps]);
@@ -247,12 +250,18 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
             </div>
             {steps.filter((step) => step.stage === stage).map((step) => {
               const done = completedSteps.has(step.n);
-              const materialStatus = materialStatusForStep(step.n, materialGate);
-              const materialLabel = materialStatus === "checking"
-                ? "报告材料检查中"
-                : materialStatus === "ready" ? "报告材料已齐" : "报告材料未齐";
-              const state = done ? "done" : step.n === current ? "cur" : "future";
-              const completionLabel = step.lab === "rep" ? `报告${reportStatusLabel(done, reportExists)}` : (done ? "理解已完成" : "理解未完成");
+              const materialStatus = step.n === current && currentMaterialStatus
+                ? currentMaterialStatus
+                : materialStatusForStep(step.n, materialGate);
+              const materialText = materialStatus === "checking" ? "检查中"
+                : materialStatus === "saving" ? "保存中"
+                : materialStatus === "unsynced" ? "未保存"
+                : materialStatus === "ready" ? "已齐全" : "未齐全";
+              const materialLabel = `报告材料${materialText}`;
+              // The badge agrees with the task card: a draft report is not yet a finished step.
+              const shownDone = stepShowsDone(step, done, reportState);
+              const state = shownDone ? "done" : step.n === current ? "cur" : "future";
+              const completionLabel = step.lab === "rep" ? `报告${reportStatusLabel(done, reportExists, reportState)}` : (done ? "理解已完成" : "理解未完成");
               const accessibleName = [
                 `第 ${step.n} 步：${step.title}`,
                 step.n === current ? "当前步骤" : null,
@@ -269,11 +278,11 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
                   onClick={() => onNavigate(step.n)}
                   title={`第 ${step.n} 步：${step.title}（${completionLabel}）`}
                 >
-                  <span className={`step-badge ${state}`} aria-hidden="true">{done ? "✓" : step.n}</span>
+                  <span className={`step-badge ${state}`} aria-hidden="true">{shownDone ? "✓" : step.n}</span>
                   <span className="step-row-copy" aria-hidden="true">
                     <span className="step-row-title">{step.title}</span>
                     <span className="step-row-status">
-                      {completionLabel} · 材料{materialStatus === "checking" ? "检查中" : materialStatus === "ready" ? "已齐全" : "未齐全"}
+                      {completionLabel} · 材料{materialText}
                     </span>
                   </span>
                 </button>

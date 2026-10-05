@@ -82,6 +82,7 @@ describe("step 15 report states", () => {
         onReportChanged={(response) => changed.push(response)}
       />);
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: "保存失败，请先重试" })); });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "确定重新生成" })); });
       expect((await screen.findByRole("alert")).textContent).toContain("保存失败");
       expect(generate).not.toHaveBeenCalled();
       expect(changed).toEqual([]);
@@ -138,7 +139,7 @@ describe("step 15 report states", () => {
       onReportChanged={() => {}}
     />);
     expect(html).toContain(">根据实验记录生成报告<");
-    const generateButton = html.match(/<button class="secondary"[^>]*>根据实验记录生成报告<\/button>/)?.[0];
+    const generateButton = html.match(/<button[^>]*class="secondary"[^>]*>根据实验记录生成报告<\/button>/)?.[0];
     expect(generateButton).toBeDefined();
     expect(generateButton).not.toContain("aria-label=");
   });
@@ -289,7 +290,8 @@ test("blocks stale snapshot export and submission after edits, saves and reloads
   view.rerender(<ReportLab {...props} sessionUnsynced />);
   expect(screen.getByText("报告尚未包含最新修改")).toBeDefined();
   expect(disabled("导出 PDF")).toBe(true);
-  expect((view.container.querySelectorAll(".report-actions button")[1] as HTMLButtonElement).disabled).toBe(true);
+  // A stale draft offers “更新报告并提交给老师” instead of submitting the outdated snapshot.
+  expect([...view.container.querySelectorAll(".report-actions button")].some((button) => button.textContent === "提交报告给老师")).toBe(false);
   view.unmount();
   const saved = { ...props, sessionUpdatedAt: "2026-08-13T00:05:00Z" };
   const restored = render(<ReportLab {...saved} report={{ ...original, updated_at: "2026-08-13T00:10:00Z" }} />);
@@ -398,29 +400,32 @@ for (const button of ["重新生成并提交", "更新报告并提交给老师"]
   test(`graded report requires confirmation through ${button}, and cancelling does not mutate it`, async () => {
     const generate = spyOn(api.classroom, "generateReport").mockResolvedValue(mutation("pending"));
     const submit = spyOn(api.classroom, "submitReport");
-    const confirm = spyOn(window, "confirm").mockReturnValue(false);
     let flushes = 0;
     let mutations = 0;
     const gradedReport = { ...report("graded"), updated_at: "2026-08-13T00:02:00.123456Z" };
     try {
+      // “更新…” is offered for an outdated report, “重新生成并提交” only for a current one.
       render(<ReportLab {...finishProps} report={gradedReport}
-        sessionUpdatedAt="2026-08-14T00:00:00Z"
+        sessionUpdatedAt={button === "更新报告并提交给老师" ? "2026-08-14T00:00:00Z" : "2026-08-12T00:00:00Z"}
         onFlushSession={async () => { flushes++; }} onReportChanged={() => { mutations++; }} />);
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: button })); });
-      expect(confirm.mock.calls[0]?.[0]).toContain("清除现有评分和评语");
+      const dialog = screen.getByRole("dialog", { name: "重新生成已评阅的报告？" });
+      expect(dialog.textContent).toContain("清除现有评分和评语");
+      await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: "取消" })); });
+      expect(screen.queryByRole("dialog", { name: "重新生成已评阅的报告？" })).toBeNull();
       expect(generate).not.toHaveBeenCalled();
       expect(flushes).toBe(0);
       expect(mutations).toBe(0);
       expect(screen.getByText(/已评阅 · 93 分/)).toBeTruthy();
-      confirm.mockReturnValue(true);
       await act(async () => { fireEvent.click(screen.getByRole("button", { name: button })); });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "确定重新生成" })); });
       expect(generate).toHaveBeenCalledTimes(1);
       expect(generate).toHaveBeenCalledWith(gradedReport.updated_at);
       expect(flushes).toBe(1);
       expect(mutations).toBe(1);
       expect(submit).not.toHaveBeenCalled();
       expect(screen.getByRole("dialog", { name: "报告已提交" })).toBeTruthy();
-    } finally { generate.mockRestore(); submit.mockRestore(); confirm.mockRestore(); }
+    } finally { generate.mockRestore(); submit.mockRestore(); }
   });
 }
 
@@ -485,4 +490,18 @@ test("receipt distinguishes busy export from outdated content and preserves pend
   rerender(<ReportOutro {...props} />);
   expect(screen.getByText(/你可以离开页面/)).toBeTruthy();
   expect((screen.getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+test("each report state shows one action group in the submit panel, without duplicate update buttons", () => {
+  const names = (view: ReturnType<typeof render>) =>
+    [...view.container.querySelectorAll(".report-submit-panel .report-actions button")].map((button) => button.textContent);
+  const none = render(<ReportLab {...finishProps} />);
+  expect(names(none)).toEqual(["生成并提交报告", "根据实验记录生成报告"]);
+  none.unmount();
+  const outdated = render(<ReportLab {...finishProps} report={report("graded")} sessionUpdatedAt="2026-08-14T00:00:00Z" />);
+  expect(names(outdated)).toEqual(["更新报告并提交给老师", "查看提交回执与实验总结", "导出 PDF"]);
+  outdated.unmount();
+  const current = render(<ReportLab {...finishProps} report={report("graded")} sessionUpdatedAt="2026-08-12T00:00:00Z" />);
+  expect(names(current)).toEqual(["查看提交回执与实验总结", "导出 PDF", "重新生成并提交"]);
+  current.unmount();
 });

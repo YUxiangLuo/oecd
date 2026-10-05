@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { sameJsonValue } from "../../session-store";
+import { MATERIAL_LOCKED_NOTE } from "../../step-task-card";
 import { LabeledControl, ScrollableRegion } from "../../a11y";
 import { api } from "../../api";
 import { icioDatasetName } from "../../dataset-label";
@@ -329,10 +331,10 @@ export function dbCellAccessibleName(
 ): string {
   const column = table === "y" ? formatYColumnHeader(cell.column) : cell.column;
   if (table === "accounts") {
-    return `${cell.row}，${column}，值 ${fmtDb(cell.value)} Million USD（百万美元），${recorded ? "已记录" : "未记录"}`;
+    return `${cell.row}，${column}，值 ${fmtDb(cell.value)} 百万美元，${recorded ? "已记录" : "未记录"}`;
   }
   const colRole = table === "y" ? "列·最终需求" : "列·使用方";
-  return `${cell.row}(行·供给方) → ${column}(${colRole})，值 ${fmtDb(cell.value)} Million USD（百万美元），${recorded ? "已记录" : "未记录"}`;
+  return `${cell.row}(行·供给方) → ${column}(${colRole})，值 ${fmtDb(cell.value)} 百万美元，${recorded ? "已记录" : "未记录"}`;
 }
 
 /** 行/列代码("CHN_A01_02")拆成国家 + 余部,给方向句提供带中文名的可读标签。 */
@@ -347,6 +349,14 @@ function rowColumnCodeHelp(code: string): string | undefined {
   const { country, rest } = splitRowColumnCode(code);
   if (!country || !rest) return undefined;
   return `${countryLabel(country)}·${sectorLabel(rest)}`;
+}
+
+/** Plain-language name shown under a code header: "USA_C10T12" → "食品饮料烟草", "TLS" → "产品税减补贴". */
+function codePlainName(code: string): string | undefined {
+  if (ACCOUNT_SHORT[code]) return ACCOUNT_SHORT[code];
+  const { country, rest } = splitRowColumnCode(code);
+  if (!country || !rest) return undefined;
+  return sectorLabel(rest).replace(/^\S+\s+/, "");
 }
 
 /** 列表头悬停说明:Y 表需求类别与账户项查表,Z 表退回国家×行业中文名。 */
@@ -402,6 +412,7 @@ export function DbSliceTable({
   focusScopeKey,
   selection,
   selectedObservation,
+  pickedObservation,
   onCapture,
 }: {
   slice: DbSlice | null;
@@ -409,6 +420,8 @@ export function DbSliceTable({
   focusScopeKey: string;
   selection: DbSliceSelection;
   selectedObservation?: DbStepState["observation"];
+  /** A cell clicked after the report was submitted: marked in the table, but not yet the recorded material. */
+  pickedObservation?: DbStepState["observation"];
   onCapture: (patch: Pick<DbStepState, "slice" | "observation">) => void;
   /**
    * 只是文案开关：激活单元格是否还会进入全屏。账户项页签不提供全屏，因此不能向学生
@@ -457,7 +470,7 @@ export function DbSliceTable({
     >
       <table className="data-table db-table">
         <caption>
-          {`${activeTable.label}数据表 · 单位：Million USD（百万美元）。`}
+          {`${activeTable.label}数据表 · 单位：百万美元。`}
         </caption>
         <thead>
           <tr className="db-axis-row">
@@ -486,9 +499,10 @@ export function DbSliceTable({
                 key={column}
                 scope="col"
                 title={columnHeaderHelp(column)}
-                aria-label={table === "y" ? formatYColumnHeader(column) : (rowColumnCodeHelp(column) ?? column)}
+                aria-label={table === "y" ? formatYColumnHeader(column) : (rowColumnCodeHelp(column) ?? (codePlainName(column) ? `${column} ${codePlainName(column)}` : column))}
               >
                 {`${table === "y" ? formatYColumnHeader(column) : column}${columnHeaderHelp(column) ? " ⓘ" : ""}`}
+                {table !== "y" && codePlainName(column) && <small className="db-code-name">{codePlainName(column)}</small>}
               </th>
             ))}
             {showSummaries && <th scope="col" title="当前筛选列在该行的合计">切片合计</th>}
@@ -511,16 +525,13 @@ export function DbSliceTable({
                       style={{ position: "sticky", left: 0, zIndex: 2, textAlign: "left" }}
                     >
                       {String(value ?? "—")}
+                      {codePlainName(rowLabel) && <small className="db-code-name">{codePlainName(rowLabel)}</small>}
                     </th>
                   );
                 }
-                const selected = isCapturedDbCell(selectedObservation, {
-                  year: slice?.year ?? selection.year,
-                  table,
-                  row: rowLabel,
-                  column,
-                  value: numericValue,
-                });
+                const cellIdentity = { year: slice?.year ?? selection.year, table, row: rowLabel, column, value: numericValue };
+                const selected = isCapturedDbCell(selectedObservation, cellIdentity);
+                const picked = !selected && isCapturedDbCell(pickedObservation, cellIdentity);
                 const intensity = numericValue == null || rowHeatMax[rowIndex] === 0
                   ? 0
                   : Math.min(1, Math.abs(numericValue) / rowHeatMax[rowIndex]);
@@ -543,10 +554,10 @@ export function DbSliceTable({
                           else buttonRefs.current.delete(cell.key);
                         }}
                         type="button"
-                        className={`db-observation-cell${selected ? " selected" : ""}`}
+                        className={`db-observation-cell${selected ? " selected" : picked ? " picked" : ""}`}
                         tabIndex={activeCell?.key === cell.key ? 0 : -1}
                         aria-pressed={selected}
-                        aria-label={dbCellAccessibleName(table, cell, selected)}
+                        aria-label={`${dbCellAccessibleName(table, cell, selected)}${picked ? "，已选中，尚未改为报告材料" : ""}`}
                         title={dbCellTooltip(table, rowLabel, column, numericValue)}
                         onFocus={() => setRoving({ scope: focusScopeKey, key: cell.key })}
                         onKeyDown={(event) => {
@@ -616,6 +627,8 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
   const [page, setPage] = useState(1);
   // 点击单元格记录观测时，把同一棵表格子树切到全屏，便于就地核对行列方向。
   const [cellExpandSignal, setCellExpandSignal] = useState(0);
+  // After the report is submitted, a clicked cell is only selected; it replaces the material on request.
+  const [pickedCell, setPickedCell] = useState<Pick<DbStepState, "slice" | "observation"> | null>(null);
 
   useEffect(() => {
     if (!meta || !meta.default_year) return;
@@ -835,11 +848,18 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
         {selectedObservation ? (
           <span>
             {/* 观察值跨表页签保留；读法必须用记录时的表类型,不能用当前页签的。 */}
-            {dbObservationSentence((selectedObservation.table as DbTableKind | undefined) ?? table, selectedObservation.row, selectedObservation.column)} = {fmtDb(selectedObservation.value)} Million USD（百万美元）
+            {dbObservationSentence((selectedObservation.table as DbTableKind | undefined) ?? table, selectedObservation.row, selectedObservation.column)} = {fmtDb(selectedObservation.value)} 百万美元
             {observationSource ? `（${observationSource}）` : ""}
-            {selectedObservation.auto ? "。系统已默认记录这一格，点击其他数值即可替换。" : ""}
+            {selectedObservation.auto && !state.materialLocked ? "。系统已默认记录这一格，点击其他数值即可替换。" : ""}
           </span>
         ) : <span className="empty">尚未记录</span>}
+        {state.materialLocked && <span className="muted">{MATERIAL_LOCKED_NOTE.replace("浏览", "点击单元格")}</span>}
+        {state.materialLocked && pickedCell?.observation && !sameJsonValue(pickedCell.observation, selectedObservation) && (
+          <span className="db-picked">
+            你选中的：{dbObservationSentence((pickedCell.observation.table as DbTableKind | undefined) ?? table, pickedCell.observation.row, pickedCell.observation.column)} = {fmtDb(pickedCell.observation.value)} 百万美元
+            <button type="button" className="secondary" onClick={() => { state.save(pickedCell); setPickedCell(null); }}>改为记录这一格（之后需在步骤 15 更新报告）</button>
+          </span>
+        )}
       </div>
       {/* One action line; the reading rules, legend and identities live in a single fold-out. */}
       <div className="db-reading db-fullscreen-note">
@@ -870,8 +890,10 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
           colSector,
         }}
         selectedObservation={selectedObservation}
+        pickedObservation={state.materialLocked ? pickedCell?.observation : undefined}
         onCapture={(patch) => {
-          state.save(patch);
+          if (state.materialLocked) setPickedCell(patch);
+          else state.save(patch);
           setCellExpandSignal((value) => value + 1);
         }}
       />

@@ -154,3 +154,16 @@ test("the record follows the current chart, waits while a sync is in flight, and
   expect(updated.map((item) => item.value)).toEqual([7, 7, 7, 3, 3, 3]);
   expect(updated.every((item) => item.metric === "betweenesscentrality")).toBe(true);
 });
+
+test("after the report is submitted, step 9 records only when the student asks", async () => {
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([row(country, year, (country === "CHN" ? 10 : 70) + year - 2018)]));
+  mockReference();
+  const save = mock(() => {});
+  render(<NetworkTrend meta={meta} initialCountry="CHN" initialCountries={["CHN", "USA"]} onRecord={save} locked />);
+  fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
+  const record = await screen.findByRole("button", { name: /改用当前图表作为报告材料/ });
+  expect(screen.getByText(/报告已提交：浏览不再自动改动报告材料/)).toBeTruthy();
+  expect(save).not.toHaveBeenCalled();
+  fireEvent.click(record);
+  expect(save).toHaveBeenCalledTimes(1);
+});

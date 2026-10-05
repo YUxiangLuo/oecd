@@ -98,12 +98,6 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             continue
         captured = True
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}", ""))
-        context = []
-        for key, label in (("year", "年份"), ("country", "国家"), ("chart", "图表视角"), ("drill", "下钻")):
-            if step not in (6, 7, 8, 9) and data.get(key) not in (None, ""):
-                context.append(f"{label}={_safe(data[key])}")
-        if context:
-            lines.append(f"- 保存的视图：{'；'.join(context)}")
         if compared:
             automatic = bool(observations) and all(
                 item.get("source") == "auto-indicator-comparison" for item in observations

@@ -130,6 +130,13 @@ describe("shared step task card", () => {
     />);
     expect(outdated).toContain("报告：需更新");
     expect(outdated).not.toContain("未生成");
+    // A current report says where it stands with the teacher: generating is not submitting.
+    const label = (reportState: "draft" | "pending" | "graded") => renderToStaticMarkup(<StepTaskCard
+      step={reportStep} complete materialStatus="ready" reportExists reportState={reportState}
+    />);
+    expect(label("draft")).toContain('class="todo">报告：草稿未提交');
+    expect(label("pending")).toContain('class="done">报告：待评阅');
+    expect(label("graded")).toContain('class="done">报告：已评阅');
   });
 
   test("focuses the real workbench and scrolls only its nested course container", () => {

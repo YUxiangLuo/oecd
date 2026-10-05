@@ -1,0 +1,47 @@
+import copy
+
+from gvcsim.classroom import records
+
+
+def _session():
+    return {
+        "version": "experiment-session-simple-v3",
+        "steps": {
+            "1": {"data": {"slice": {"year": 2020}, "observation": {"row": "CHN_A01_02", "value": 1.0}}},
+            "2": {"data": {"year": 2020, "country": "CHN", "compared": ["CHN", "USA"], "observations": [{"value": 1}]}},
+            "9": {"data": {"chart": "heat", "drill": "CHN", "heat_sort": "degree", "observations": [{"value": 2}]}},
+        },
+        "shared": {},
+    }
+
+
+def _report_for(session):
+    return {
+        "provenance": {
+            "session_fingerprint": records._session_fingerprint(session),
+            "report_fingerprint": records.report_fingerprint(session),
+        }
+    }
+
+
+def test_browsing_view_settings_does_not_outdate_a_report_but_changing_material_does():
+    session = _session()
+    report = _report_for(session)
+    browsed = copy.deepcopy(session)
+    browsed["steps"]["1"]["data"]["slice"] = {"year": 2016}
+    browsed["steps"]["2"]["data"].update(year=2017, country="KOR")
+    browsed["steps"]["9"]["data"].update(chart="network", drill="USA", heat_sort="betweenness", heat_coverage="all")
+    assert records.report_matches_session(browsed, report)
+
+    changed = copy.deepcopy(session)
+    changed["steps"]["2"]["data"]["compared"] = ["KOR", "USA"]
+    assert not records.report_matches_session(changed, report)
+
+
+def test_reports_saved_before_the_view_exclusion_keep_the_full_session_check():
+    session = _session()
+    legacy = {"provenance": {"session_fingerprint": records._session_fingerprint(session)}}
+    assert records.report_matches_session(session, legacy)
+    browsed = copy.deepcopy(session)
+    browsed["steps"]["2"]["data"]["year"] = 2017
+    assert not records.report_matches_session(browsed, legacy)

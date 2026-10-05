@@ -1,6 +1,6 @@
 import { countryLabel } from "../../../viz";
 import { CAT } from "../../../viz/shared";
-import { changeReading, finiteValue, readingDigits, type YearDistribution } from "./indicator-model";
+import { changeReading, finiteValue, NO_RANK, NO_RANK_NOTE, rankText, readingDigits, type YearDistribution } from "./indicator-model";
 import { niceDomain } from "../../../viz/nice-ticks";
 import type { Row } from "./scaffold";
 
@@ -91,13 +91,23 @@ export function TrendSummary({
         <b>{changeReading(start, end, unit)}</b>
         <small>{indicatorNumber(start, unit)} → {indicatorNumber(end, unit)}</small>
       </div>
-      {startRank != null && endRank != null && endRef && (
-        <div>
-          <span>{sameIndustry ? "在全部经济体的同一行业中" : "在全部经济体中"}（从高到低）</span>
-          <b>第 {startRank} → {endRank} 位</b>
-          <small>共 {endRef.n} 个经济体；排名只表示相对高低</small>
-        </div>
-      )}
+      {startRank != null && endRank != null && startRef && endRef && (() => {
+        const from = rankText(startRank, startRef.ties?.[first], startRef.n);
+        const to = rankText(endRank, endRef.ties?.[first], endRef.n);
+        // 并列 only when some, not all, economies share the reading; an all-equal year has no rank at all.
+        const tied = [from, to].some((text) => text?.startsWith("并列"));
+        return (
+          <div>
+            <span>{sameIndustry ? "在全部经济体的同一行业中" : "在全部经济体中"}（从高到低）</span>
+            <b>{!from && !to ? "全部经济体数值相同"
+              : from && to && !tied ? `第 ${startRank} → ${endRank} 位`
+              : `${from ?? NO_RANK} → ${to ?? NO_RANK}`}</b>
+            <small>{from || to
+              ? `共 ${endRef.n} 个经济体；排名只表示相对高低${tied ? "；并列表示数值相同" : ""}${from && to ? "" : `；${NO_RANK_NOTE}`}`
+              : "所有经济体数值相同，排名没有比较意义"}</small>
+          </div>
+        );
+      })()}
       {startRef && endRef && (
         <div>
           <span>{sameIndustry ? "同行业全球中位数" : "全球中位数"} · {firstYear}→{lastYear}</span>
@@ -436,7 +446,7 @@ export function DistributionStrip({
   const cy = (lane: number) => base - 8 - lane * 9;
   const marked = layoutStripLabels(highlight.flatMap((country, index) => {
     const point = placed.find((item) => item.country === country);
-    return point ? [{ ...point, index, text: `${countryLabel(country)} ${reading(point.value)} · 第 ${distribution.ranks[country]} 位` }] : [];
+    return point ? [{ ...point, index, text: `${countryLabel(country)} ${reading(point.value)} · ${rankText(distribution.ranks[country], distribution.ties?.[country], distribution.n) ?? NO_RANK}` }] : [];
   }));
   return (
     <section aria-label={`${year} 年${label}全球分布`}>
@@ -444,7 +454,7 @@ export function DistributionStrip({
       <svg
         viewBox={`0 0 800 ${height}`}
         role="img"
-        aria-label={`${year} 年${label}的全部 ${distribution.n} 个经济体分布；${marked.map((item) => `${countryLabel(item.country)} ${reading(item.value)}，第 ${distribution.ranks[item.country]} 位`).join("；")}；全球中位数 ${reading(distribution.median)}`}
+        aria-label={`${year} 年${label}的全部 ${distribution.n} 个经济体分布；${marked.map((item) => `${countryLabel(item.country)} ${reading(item.value)}，${rankText(distribution.ranks[item.country], distribution.ties?.[item.country], distribution.n) ?? `${NO_RANK}（全部经济体数值相同）`}`).join("；")}；全球中位数 ${reading(distribution.median)}`}
         style={{ width: "100%", display: "block" }}
       >
         <rect x={x(distribution.p25)} y={30} width={Math.max(1, x(distribution.p75) - x(distribution.p25))} height={base - 30} fill={REFERENCE_FILL} fillOpacity={0.2} />

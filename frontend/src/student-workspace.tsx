@@ -164,13 +164,17 @@ export function StudentWorkspace({
             materialGate={session.materialGate}
             onNavigate={onNavigateStep}
             reportExists={session.report != null}
+            reportState={session.report?.state}
+            currentMaterialStatus={materialStatus}
           />
 
           <div className="workarea">
             {session.authRecoveryAvailable && (
-              <div className="warnbox persistent-qc-warning" role="alert">
-                <b>找到上次刷新、离开或登录失效前尚未确认保存的本地内容。</b>
-                <p>只会使用当前已校验的账号与数据版本。你可以显式恢复并保存，或放弃本地内容；恢复仍需核对服务器记录版本，不会自动覆盖更新。</p>
+              <div className="tipbox persistent-qc-warning" role="alert">
+                <b>{session.authRecoverySteps.length
+                  ? `有尚未保存到服务器的修改：步骤 ${session.authRecoverySteps.join("、")}`
+                  : "本页保留了一份上次未确认保存的记录（内容与服务器相同）"}</b>
+                <p>上次刷新、离开或登录失效时，这些修改还没有确认保存。“恢复”会把它们保存到服务器；“放弃”则保留服务器上的记录。</p>
                 <div className="button-row">
                   <button
                     type="button"
@@ -193,12 +197,11 @@ export function StudentWorkspace({
             )}
             {session.syncError && (
               <div className="error-box persistent-qc-warning" role="alert">
-                <b>实验记录尚未同步到服务器。</b>
+                <b>{session.syncConflict ? "另一个页面已经保存了更新的记录" : "实验记录尚未保存到服务器"}</b>
                 <p>
-                  {session.syncError}{" "}
                   {session.syncConflict
-                    ? "本页未保存内容仍在当前画面中；载入服务器版本后，请重新执行本页操作。"
-                    : "本地记录仍在，可以直接重试。刷新会尝试在本标签页保留草稿，关闭标签页仍可能丢失。"}
+                    ? "为避免互相覆盖，本页的修改没有保存。请载入服务器版本，核对后再重新操作；需要保留的文字请先复制。"
+                    : `${session.syncError} 本页内容还在，可以直接重试；关闭标签页可能丢失未保存的修改。`}
                 </p>
                 <button
                   type="button"
@@ -236,6 +239,7 @@ export function StudentWorkspace({
                     complete={presentationCompletedSteps.has(step.n)}
                     materialStatus={materialStatus}
                     reportExists={session.report != null}
+                    reportState={session.report?.state}
                   />
                   <div
                     id={STEP_PRIMARY_ACTION_ID}

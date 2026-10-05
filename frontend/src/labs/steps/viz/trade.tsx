@@ -40,7 +40,8 @@ export const TRADE_TOPIC: IndicatorTopic = {
       { key: "DDC", name: "国内重复计算", color: CAT[2] },
       { key: "FVA", name: "外国增加值", color: CAT[3] },
       { key: "FDC", name: "外国重复计算", color: CAT[4] },
-      { key: "taxsub", name: "税收减补贴", color: CAT[5] },
+      // Grey as in step 2; red is reserved for negative parts (left of zero).
+      { key: "taxsub", name: "税收减补贴", color: "#98a0b3" },
     ],
     note: "每条为六项之和的构成，分母为 VA+TLS 账户闭合总出口。负分项以红色放在零轴左侧，不改变其国内、外国或TLS来源归类；负值不能按普通100%条形图解释。",
   },

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import { MATERIAL_STATUS_LABELS, STEP_MATERIAL_ACTION_ID, type StepMaterialStatus } from "./step-task-card";
 import type { QuizCompletionState, Step, StepStateApi } from "./types";
@@ -58,6 +58,7 @@ export function QuizPanel({
     setFeedback((current) => current.filter((item) => item.question_id !== questionId));
     setError(null);
   };
+  const submitButtonRef = useRef<HTMLButtonElement>(null);
   const submit = async () => {
     if (!answeredAll || submitting) return;
     setSubmitting(true);
@@ -87,6 +88,10 @@ export function QuizPanel({
       setError(userFacingRequestError(cause, "答案提交失败，选择已保留，可重试"));
     } finally {
       setSubmitting(false);
+      // The button is disabled while grading, which drops keyboard focus to <body>; give it back.
+      requestAnimationFrame(() => {
+        if (document.activeElement === document.body) submitButtonRef.current?.focus();
+      });
     }
   };
   const feedbackByQuestion = new Map(feedback.map((item) => [item.question_id, item]));
@@ -150,6 +155,7 @@ export function QuizPanel({
       </div>
       <div className="quiz-submit-row">
         <button
+          ref={submitButtonRef}
           type="button"
           className="primary"
           disabled={!answeredAll || submitting || awaitingSave}

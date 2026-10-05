@@ -108,6 +108,16 @@ describe("demo-mode login UI source behavior", () => {
       expect(second.password).not.toBe(first.password);
     });
   });
+
+  test("after an expired session the form returns to that account, not another demo credential", async () => {
+    await withDemoEnv("1", async () => {
+      render(<LoginPage notice="登录已失效，请重新登录。" username="dogfood_r5" onLogin={() => {}} />);
+      expect(inputValue("login-user")).toBe("dogfood_r5");
+      expect(inputValue("login-pass")).toBe("");
+      // An expiry is a warning, not a success.
+      expect(screen.getByRole("status").className).toContain("tipbox");
+    });
+  });
 });
 
 describe("login failure presentation", () => {

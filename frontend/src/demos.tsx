@@ -115,6 +115,12 @@ function disclosureAmount(value: number | null): string {
   return stripNegativeZero(value.toLocaleString("zh-CN", options));
 }
 
+/** Lengths are read to three decimals everywhere (e.g. PLv = 2.216); a tiny signed value keeps its sign. */
+function disclosureLength(value: number | null): string {
+  if (value == null) return "—";
+  return value !== 0 && Math.abs(value) < 0.001 ? value.toPrecision(1) : stripNegativeZero(value.toFixed(3));
+}
+
 function disclosureRatio(numerator: number | null, denominator: number | null): number | null {
   return numerator != null && denominator != null && denominator > 0
     ? numerator / denominator
@@ -156,7 +162,7 @@ export function IndicatorCalculationDisclosure({ step, row }: { step: number; ro
       <div className="icd-title">GVC 位置指数 GVCPs</div>
       <div className="icd-formula">GVCPs = PLv_GVC / PLy_GVC</div>
       <div className="icd-calc">
-        = {disclosureAmount(forward)} / {disclosureAmount(backward)} = <b>{position == null ? "—（分母为零或数据缺失）" : stripNegativeZero(position.toFixed(3))}</b>
+        = {disclosureLength(forward)} / {disclosureLength(backward)} = <b>{position == null ? "—（分母为零或数据缺失）" : stripNegativeZero(position.toFixed(3))}</b>
       </div>
       <p>这里比较前向与后向的 GVC 段长度。上方 PLv 恒等式中的每一项是“增加值份额 × 段长度”的加权贡献，不是段长度本身。</p>
     </section>
@@ -302,7 +308,7 @@ function MiniBackwardBar({ row }: { row: Row }) {
         ))}
       </div>
       <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>
-        PLy = Σ(FGY 分项份额 × 对应段长度) = {fmt(model.sum, "number")}；与总量误差 {model.error.toExponential(1)}。
+        PLy = Σ(FGY 分项份额 × 对应段长度) = {fmt(model.sum, "number")}；{model.error < 1e-6 ? "与总量一致" : `与总量相差 ${model.error.toPrecision(2)}`}。
         GVCPs = PLv_GVC / PLy_GVC = {position?.toFixed(3) ?? "—（未定义）"}。
       </div>
     </div>
@@ -369,7 +375,8 @@ export function DecompositionDemo({
   const cfg = DECOMP[step];
   const defaultA = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
   const defaultB = meta.countries.includes("USA") ? "USA" : meta.countries[1] ?? defaultA;
-  const [gran, setGran] = useState<"country" | "sector">("sector");
+  // Country level first: the same figures the report material records; industries are one click away.
+  const [gran, setGran] = useState<"country" | "sector">("country");
   const year = meta.years.includes(primaryYear) ? primaryYear : meta.years.at(-1)!;
   const [compare, setCompare] = useState(false);
   const countryA = explicitDemoCountry(meta.countries, primaryCountry) ?? "";
@@ -579,7 +586,14 @@ export function DecompositionDemo({
         <div className="demo-title">动手拆解 · 请先选择国家</div>
         <div className="decomp-unavailable" role="status">
           <b>还没有选择具体国家。</b>
-          <div>请在“选择真实国家”中选择一个国家，再查看行业的分项。</div>
+          <LabeledControl label="选择国家">
+            {(id) => (
+              <select id={id} value="" onChange={(event) => onPrimaryChange?.(year, event.target.value)}>
+                <option value="" disabled>请选择</option>
+                {meta.countries.map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
+              </select>
+            )}
+          </LabeledControl>
         </div>
       </div>
     );
@@ -587,7 +601,7 @@ export function DecompositionDemo({
 
   return (
     <div className="demo-card">
-      <div className="demo-title">动手拆解 · 点击各项查看含义与贡献</div>
+      <div className="demo-title">动手拆解 · 各分项的金额、占比与含义</div>
       <div className="demo-controls">
         <div className="pill-group">
           <button className={gran === "sector" ? "on" : ""} onClick={() => setGran("sector")}>国家–行业级</button>

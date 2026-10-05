@@ -5,6 +5,7 @@ import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-laz
 import { ReportOutro } from "../../report-outro";
 import { clearToasts, showToast } from "../../toast";
 import { stepTaskTitleId } from "../../step-task-card";
+import { ConfirmModal } from "../../teacher/ui";
 import type { ClassroomReport, ReportGateItem, ReportMutationResponse, StepStateApi } from "../../types";
 import type { SessionStatus } from "../../use-session";
 import { userFacingRequestError } from "../../user-facing-error";
@@ -241,6 +242,9 @@ export function ReportLab({
   const [printing, setPrinting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outro, setOutro] = useState<ClassroomReport | null>(null);
+  // An in-page confirmation (not window.confirm) before a graded report is replaced; resolves with the answer.
+  const [confirmRegenerate, setConfirmRegenerate] = useState<((ok: boolean) => void) | null>(null);
+  const askRegenerate = () => new Promise<boolean>((resolve) => setConfirmRegenerate(() => resolve));
   const operationRef = useRef(false);
   const visibleBlocked = blocked.length > 0 ? blocked : reportGate ?? [];
 
@@ -283,9 +287,7 @@ export function ReportLab({
 
   const generate = async (submitAfter = false) => {
     if (busy || operationRef.current) return;
-    if (report?.state === "graded" && !window.confirm(
-      "此报告已经评阅。重新生成会替换报告、清除现有评分和评语，并重新提交给老师。确定继续吗？",
-    )) return;
+    if (report?.state === "graded" && !(await askRegenerate())) return;
     operationRef.current = true;
     setGenerating(true);
     setError(null);
@@ -420,30 +422,38 @@ export function ReportLab({
         <h3>{report && report.state !== "draft" ? "报告已交给老师" : "核对完毕后，完成提交"}</h3>
         <p>提交前会先保存文字并检查材料；导出 PDF 仅供个人留存，不能代替提交。
           {report?.state === "graded" && "重新生成并提交会替换已评阅报告并清除原评分。"}</p>
-        {(!report || reportOutdated) && <button type="button" className="primary" disabled={busy} onClick={() => { void generate(true); }}>
-          {submitting ? "正在提交报告…" : generating ? "正在整理报告…" : report ? "更新报告并提交给老师" : "生成并提交报告"}
-        </button>}
-        {report && report.state !== "draft" && <button type="button" className="secondary" disabled={busy} onClick={() => setOutro(report)}>查看提交回执与实验总结</button>}
+        {/* One action group per state: the primary action first, never two buttons doing the same thing. */}
+        <div className="report-actions">
+          {(!report || reportOutdated) && <button type="button" className="primary" disabled={busy} onClick={() => { void generate(true); }}>
+            {submitting ? "正在提交报告…" : generating ? "正在整理报告…"
+              : reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, state.syncError) ?? (report ? "更新报告并提交给老师" : "生成并提交报告")}
+          </button>}
+          {report?.state === "draft" && !reportOutdated && (
+            <button type="button" className="primary" disabled={busy} onClick={() => { void submit(); }}>
+              {submitting ? "提交中…" : reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, state.syncError) ?? "提交报告给老师"}
+            </button>
+          )}
+          {/* Draft only (no report, or a draft): a submitted report is updated by the primary action above, or
+              regenerated here only when it is current (e.g. to pick up a newer report layout). */}
+          {(!report || report.state === "draft") && (
+            <button type="button" className="secondary" disabled={busy} onClick={() => { void generate(); }}>
+              {reportGenerateButtonLabel(report, generating, sessionStatus, sessionUnsynced, sessionSyncing, state.syncError)}
+            </button>
+          )}
+          {report && report.state !== "draft" && <button type="button" className="secondary" disabled={busy} onClick={() => setOutro(report)}>查看提交回执与实验总结</button>}
+          {report && (
+            <button type="button" className="secondary" disabled={busy || reportOutdated} onClick={() => { void printReport(); }}>
+              {printing ? "正在准备 PDF…" : "导出 PDF"}
+            </button>
+          )}
+          {/* Regenerating a current submitted report clears any grade, so it comes last. */}
+          {(report && report.state !== "draft" && !reportOutdated) && (
+            <button type="button" className="secondary" disabled={busy} onClick={() => { void generate(); }}>
+              {reportGenerateButtonLabel(report, generating, sessionStatus, sessionUnsynced, sessionSyncing, state.syncError)}
+            </button>
+          )}
+        </div>
       </section>
-      <div className="report-actions">
-        <button
-          className="secondary"
-          disabled={busy}
-          onClick={() => { void generate(); }}
-        >
-          {reportGenerateButtonLabel(report, generating, sessionStatus, sessionUnsynced, sessionSyncing, state.syncError)}
-        </button>
-        {report?.state === "draft" && (
-          <button className="primary" disabled={busy || reportOutdated} onClick={() => { void submit(); }}>
-            {submitting ? "提交中…" : reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, state.syncError) ?? "提交报告给老师"}
-          </button>
-        )}
-        {report && (
-          <button className="secondary" disabled={busy || reportOutdated} onClick={() => { void printReport(); }}>
-            {printing ? "正在准备 PDF…" : "导出 PDF"}
-          </button>
-        )}
-      </div>
 
       {error && <div className="error-box" role="alert">{error}</div>}
 
@@ -454,6 +464,16 @@ export function ReportLab({
         </>
       ) : (
         <p className="muted">也可以先生成草稿预览再提交；不显著或无法推断的诊断同样可以写进报告。</p>
+      )}
+      {confirmRegenerate && (
+        <ConfirmModal
+          title="重新生成已评阅的报告？"
+          message="此报告已经评阅。重新生成会替换报告、清除现有评分和评语，并重新提交给老师。需要留档时请先导出原报告。"
+          confirmLabel="确定重新生成"
+          danger
+          onConfirm={() => confirmRegenerate(true)}
+          onClose={() => { confirmRegenerate(false); setConfirmRegenerate(null); }}
+        />
       )}
       {outro && <ReportOutro report={outro} reportOutdated={reportOutdated} exportDisabled={busy} onClose={() => {
         setOutro(null);

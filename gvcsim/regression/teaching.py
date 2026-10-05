@@ -182,5 +182,7 @@ def group_trends(panel: pd.DataFrame) -> dict:
             "taxed_countries": int(countries[0]),
             "untaxed_countries": int(countries[1]),
         },
+        # Industries with at least one retained unit: step 10 offers only these as examples.
+        "industries": sorted(str(code) for code in panel["industry"].unique()),
         "outcomes": outcomes,
     }

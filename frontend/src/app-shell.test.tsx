@@ -47,3 +47,19 @@ test("navigation reveals the active outline row but saving progress does not und
   expect(first.getAttribute("aria-current")).toBe("step");
   expect(document.activeElement).toBe(next);
 });
+
+test("a draft report is not shown as a finished step 15, a submitted one is", () => {
+  const steps = { ...stepsData, steps: stepsData.steps.map((step) => step.n === 15 ? { ...step, lab: "rep" as const } : step) };
+  const completed = Array.from({ length: 15 }, (_, index) => index + 1);
+  const view = (reportState: "draft" | "pending") => <CourseSidebar stepsData={steps} current={1}
+    completion={{ steps: [], completed, completed_count: 15, total: 15 }}
+    materialGate={null} onNavigate={() => {}} reportExists reportState={reportState} />;
+  const { container, rerender } = render(view("draft"));
+  const badge = () => container.querySelector('[aria-label^="第 15 步"] .step-badge')!;
+  expect(badge().textContent).toBe("15");
+  expect(badge().className).not.toContain("done");
+  expect(container.querySelector('[aria-label^="第 15 步"]')!.getAttribute("aria-label")).toContain("报告草稿未提交");
+  rerender(view("pending"));
+  expect(badge().textContent).toBe("✓");
+  expect(badge().className).toContain("done");
+});

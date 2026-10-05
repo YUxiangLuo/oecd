@@ -43,9 +43,24 @@ export function focusStepPrimaryAction(content: HTMLElement | null, targetId = S
   return true;
 }
 
-/** Step 15 status: a report that no longer matches the saved records needs updating, not generating. */
-export function reportStatusLabel(complete: boolean, reportExists: boolean): string {
-  return complete ? "已生成" : reportExists ? "需更新" : "未生成";
+/** Shown on material cards once the report is submitted (steps that record automatically). */
+export const MATERIAL_LOCKED_NOTE = "报告已提交：浏览不再自动改动报告材料。";
+export const MATERIAL_LOCKED_ACTION = "改用当前图表作为报告材料（之后需在步骤 15 更新报告）";
+
+type ReportState = "draft" | "pending" | "graded";
+
+/**
+ * Step 15 status: a report that no longer matches the saved records needs updating, not generating;
+ * a current report says where it stands with the teacher (生成 alone is not 提交).
+ */
+export function reportStatusLabel(complete: boolean, reportExists: boolean, reportState?: ReportState | null): string {
+  if (!complete) return reportExists ? "需更新" : "未生成";
+  return reportState === "graded" ? "已评阅" : reportState === "pending" ? "待评阅" : reportState === "draft" ? "草稿未提交" : "已生成";
+}
+
+/** Whether a step shows as done: a draft report is generated but not yet with the teacher, so it is still to do. */
+export function stepShowsDone(step: Pick<Step, "lab">, complete: boolean, reportState?: ReportState | null): boolean {
+  return complete && !(step.lab === "rep" && reportState === "draft");
 }
 
 export function StepTaskCard({
@@ -53,12 +68,15 @@ export function StepTaskCard({
   complete,
   materialStatus,
   reportExists = false,
+  reportState,
 }: {
   step: Step;
   complete: boolean;
   materialStatus: StepMaterialStatus;
   reportExists?: boolean;
+  reportState?: ReportState | null;
 }) {
+  const done = stepShowsDone(step, complete, reportState);
   const materialLabel = MATERIAL_STATUS_LABELS[materialStatus];
   const completionLabel = step.lab === "rep" ? "报告" : "理解题";
   const compact = step.n >= 11 && step.n <= 14 && Boolean(step.regression_outcome);
@@ -70,7 +88,7 @@ export function StepTaskCard({
           <h3 id={stepTaskTitleId(step.n)} tabIndex={-1}>{step.goal}</h3>
         </div>
         <div className="step-task-statuses" role="group" aria-label="本步状态">
-          <span className={complete ? "done" : "todo"}>{completionLabel}：{step.lab === "rep" ? reportStatusLabel(complete, reportExists) : (complete ? "已完成" : "未完成")}</span>
+          <span className={done ? "done" : "todo"}>{completionLabel}：{step.lab === "rep" ? reportStatusLabel(complete, reportExists, reportState) : (complete ? "已完成" : "未完成")}</span>
           <span className={materialStatus === "ready" ? "done" : materialStatus === "missing" || materialStatus === "unsynced" ? "todo" : materialStatus}>
             报告材料：{materialLabel}
           </span>

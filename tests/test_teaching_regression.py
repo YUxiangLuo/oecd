@@ -270,6 +270,7 @@ def test_group_trends_compare_taxed_and_untaxed_changes_against_their_own_pre_po
         "taxed_countries": int(taxed.sum()),
         "untaxed_countries": int((~taxed).sum()),
     }
+    assert result["industries"] == sorted(panel.industry.unique())
     for outcome, column in Y_COLUMNS.items():
         for name, members in (("taxed", taxed[taxed].index), ("untaxed", taxed[~taxed].index)):
             series = result["outcomes"][outcome][name]

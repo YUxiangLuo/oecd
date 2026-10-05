@@ -274,6 +274,8 @@ export interface TeachingGroupsResponse {
     taxed_countries: number;
     untaxed_countries: number;
   };
+  /** Industries with at least one unit in the teaching panel (older servers omit it). */
+  industries?: string[];
   outcomes: Record<RegressionOutcome, { taxed: TeachingGroupPoint[]; untaxed: TeachingGroupPoint[] }>;
 }
 
@@ -385,6 +387,8 @@ export interface IndustryDistributionRow {
   p75: number;
   /** Ranks (1 = highest) of the requested countries only. */
   ranks: Record<string, number>;
+  /** How many economies share each requested country's reading (1 = no tie). */
+  ties?: Record<string, number>;
 }
 
 export type IndustryPage = PagedRows;
@@ -420,6 +424,11 @@ export interface StepStateApi<T = Record<string, unknown>> {
   syncing: boolean;
   syncError: string | null;
   syncNow: () => void;
+  /**
+   * The report has been submitted (or graded): browsing must no longer rewrite report material
+   * automatically; a step records its current view only when the student explicitly asks.
+   */
+  materialLocked?: boolean;
 }
 
 /** 单步完成判定。由服务端从会话重算，客户端不参与判定。 */

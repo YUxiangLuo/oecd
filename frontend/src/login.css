@@ -204,7 +204,9 @@
 .intro-xy-link { color: #cbd3e8; font-size: 12px; text-align: center; }
 .intro-four-results { display: grid; grid-template-columns: 1.5fr repeat(4, 1fr); align-items: center; gap: 8px; max-width: 860px; margin: 12px auto 0; text-align: left; }
 .intro-four-results b { font-size: 13px; }
-.intro-four-results span { padding: 9px 6px; border: 1px solid rgba(79, 210, 170, .3); border-radius: 8px; background: rgba(79, 210, 170, .08); color: #d8f5eb; font-size: 12px; text-align: center; }
+/* Labels, not controls: no button-like border. */
+.intro-four-results span { padding: 6px 0; color: #d8f5eb; font-size: 12.5px; text-align: center; }
+.intro-four-results span::before { content: "● "; color: rgba(79, 210, 170, .8); font-size: 9px; vertical-align: 2px; }
 .intro-note { font-size: 14px; color: #c7cee4; max-width: 680px; margin: 18px auto 0; line-height: 1.8; text-align: center; }
 .intro-note.intro-preview-note { max-width: 860px; margin-top: 12px; font-size: 12.5px; text-align: center; }
 .intro-ready-rules {
@@ -276,6 +278,9 @@
 .intro-overlay :focus-visible,
 .login-role:focus-visible,
 .login-btn:focus-visible { outline: 2px solid #8d83ff; outline-offset: 2px; }
+/* Slide headings take focus only so screen readers announce the new slide; they are not controls. */
+.intro-overlay .intro-scene h1:focus-visible,
+.intro-overlay .intro-scene h2:focus-visible { outline: none; }
 @media (max-height: 850px) {
   .intro-overlay { padding-top: 36px; }
   .intro-h2 { font-size: 34px; }

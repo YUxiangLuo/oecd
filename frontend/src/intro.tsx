@@ -186,7 +186,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
             <CardIcon kind="icio" />
             <span>
               <span className="intro-card-title">{datasetName}</span>
-              <span className="intro-card-sub">展开或收起数据结构说明</span>
+              <span className="intro-card-sub">数据结构与覆盖范围</span>
             </span>
             <span className="intro-card-toggle" aria-hidden>{openCards.icio ? "−" : "+"}</span>
           </span>
@@ -222,7 +222,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
             <CardIcon kind="shock" />
             <span>
               <span className="intro-card-title">教学模拟关税</span>
-              <span className="intro-card-sub">展开或收起模拟规则</span>
+              <span className="intro-card-sub">课程生成的模拟数据</span>
             </span>
             <span className="intro-card-toggle" aria-hidden>{openCards.shock ? "−" : "+"}</span>
           </span>

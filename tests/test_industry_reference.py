@@ -17,6 +17,10 @@ def _industry_csv(path, year=2020):
         ("USA", "C27", 3.0),
         ("DEU", "C27", 2.0),
         ("JPN", "C27", None),
+        # An industry with no flows anywhere: every economy ties at 0.
+        ("CHN", "T", 0.0),
+        ("USA", "T", 0.0),
+        ("DEU", "T", 0.0),
     ]
     pd.DataFrame(rows, columns=["country", "industry", "weighted degree"]).to_csv(
         path / f"indicators_industry_{year}.csv", index=False
@@ -32,6 +36,10 @@ def test_industry_reference_compares_the_same_industry_across_economies(tmp_path
     assert rows["C26"]["median"] == pytest.approx(35.0)
     assert rows["C26"]["ranks"] == {"CHN": 1, "USA": 2}
     assert rows["C27"]["ranks"] == {"CHN": 3, "USA": 1}
+    assert rows["C26"]["ties"] == {"CHN": 1, "USA": 1}
+    assert (
+        rows["T"]["ranks"] == {"CHN": 1, "USA": 1} and rows["T"]["ties"] == {"CHN": 3, "USA": 3} and rows["T"]["n"] == 3
+    )
     (only,) = industry_reference("weighted degree", 2020, industry="C27")
     assert only["industry"] == "C27" and only["ranks"] == {}
     # An industry or metric with no readings, or a missing year, gives no reference instead of failing.
@@ -58,6 +66,7 @@ def test_industry_distribution_endpoint_validates_years_and_countries(tmp_path, 
             "median": pytest.approx(35.0),
             "p75": pytest.approx(42.5),
             "ranks": {"CHN": 1, "USA": 2},
+            "ties": {"CHN": 1, "USA": 1},
         }
     ]
     for kwargs, detail in (

@@ -298,6 +298,32 @@ def public_quiz(step: int) -> dict[str, Any] | None:
     }
 
 
+# Shown after a wrong answer: where to look or what to tell apart, without naming the right option
+# (retries are unlimited, so an explanation that states the answer would make the check meaningless).
+# The full explanation is shown once the answer is correct.
+HINTS: dict[str, str] = {
+    "s01-z-cell": "提示：Z 表的行和列分别代表谁？回到表格，看行头、列头上的方向标注。",
+    "s02-fva": "提示：这个指标的分子和分母各是什么？它描述的是出口价值的构成，还是跨境次数？",
+    "s03-complex": "提示：复杂 GVC 要同时满足两点：有中间品跨境，且最终使用前累计跨境至少两次。逐一核对每条路径。",
+    "s04-position": "提示：这是前向长度与后向长度之比。想想前向长度从哪一端开始追踪，比值大于 1 意味着哪一端更长。",
+    "s05-between": "提示：介数统计的是贸易金额、直接伙伴，还是最短路径？回看本步“在一个小网络上看度与介数怎么数”。",
+    "s06-trade-viz": "提示：一张构成图能告诉你“比例是多少”，能否告诉你“为什么”？",
+    "s07-prod-viz": "提示：国家整体值是怎样汇总出来的？用“定位行业”看看各行业是否一样。",
+    "s08-length-viz": "提示：回忆步骤 4：前向长度 ÷ 后向长度大于 1 时，在本课程口径下表示什么位置？",
+    "s09-network-viz": "提示：中心性是在哪张网络上计算的？选择国家改变的是计算，还是屏幕上显示的范围？",
+    "s10-x-definition-v8": "提示：X 由哪两个量相乘？对照本步逐年表中的“w × τ = X”。",
+    "s10-unit-v8": "提示：先算 0.25 × 0.20；再想想这个数说明的是模拟暴露的强弱，还是真实政策的效果。",
+    "s11-metric": "提示：看本步标题和“结果变量（Y）”标签。",
+    "s11-reading-v9": "提示：分清“个百分点”和“%”；再想想模拟数据中的关系能证明什么。",
+    "s12-metric": "提示：复杂 GVC 份额的分子是哪类生产活动？回看步骤 3 的四类生产活动。",
+    "s12-compare": "提示：区间跨过 0 时，正负两个方向都在区间内。这能说明“没有影响”吗？",
+    "s13-metric": "提示：回看步骤 4：生产长度由累计总产出除以关联增加值得到，它是什么的平均数？",
+    "s13-compare": "提示：两个系数的单位分别是什么？单位不同的数能直接比大小吗？",
+    "s14-metric": "提示：回看步骤 5 的小网络示例：介数统计的是最短路径，还是金额？",
+    "s14-compare": "提示：只挑一部分结果会让结论产生什么偏差？回看步骤 15 的写作要求。",
+}
+
+
 def grade(step: int, version: str, answers: Any) -> tuple[bool, dict[str, str], list[dict[str, Any]]]:
     """校验一整步的答案，返回是否全对、稳定化答案和逐题反馈。"""
     questions = STEP_QUIZZES.get(step)
@@ -330,7 +356,7 @@ def grade(step: int, version: str, answers: Any) -> tuple[bool, dict[str, str], 
             {
                 "question_id": question_id,
                 "correct": answer == question["correct"],
-                "explanation": question["explanation"],
+                "explanation": question["explanation"] if answer == question["correct"] else HINTS[question_id],
             }
         )
     return all(result["correct"] for result in results), normalized, results
@@ -384,6 +410,8 @@ def validate_bank() -> None:
                 raise RuntimeError(f"题目 {question['id']} 必须有三个不同选项")
             if question["correct"] not in option_ids:
                 raise RuntimeError(f"题目 {question['id']} 的正确答案不属于选项")
+            if not HINTS.get(str(question["id"])):
+                raise RuntimeError(f"题目 {question['id']} 缺少答错时的提示")
 
 
 validate_bank()

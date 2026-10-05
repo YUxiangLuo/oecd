@@ -32,7 +32,7 @@ const countryRows = (year: number) =>
 
 afterEach(() => cleanup());
 
-function setup(Component = TradeVizStep, data?: VizStepState) {
+function setup(Component = TradeVizStep, data?: VizStepState, materialLocked = false) {
   const saves: VizStepState[] = [];
   let current = data;
   const state = (): StepStateApi<VizStepState> => ({
@@ -42,6 +42,7 @@ function setup(Component = TradeVizStep, data?: VizStepState) {
     syncing: false,
     syncError: null,
     syncNow: () => {},
+    materialLocked,
   });
   const view = render(<Component meta={meta} step={step} state={state()} />);
   return {
@@ -64,6 +65,22 @@ function setup(Component = TradeVizStep, data?: VizStepState) {
 }
 
 describe("indicator explorer with automatic report material", () => {
+  test("after the report is submitted, browsing never rewrites the material; the student can record on request", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    const view = setup(TradeVizStep, undefined, true);
+    expect(await view.findByLabelText("趋势读数")).toBeTruthy();
+    const record = await view.findByRole("button", { name: /改用当前图表作为报告材料/ });
+    expect(view.getByText(/报告已提交：浏览不再自动改动报告材料/)).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(view.saves).toHaveLength(0);
+    fireEvent.click(record);
+    expect(view.saves).toHaveLength(1);
+    expect(view.saves[0].indicator_selection).toMatchObject({ first: "CHN", second: "USA" });
+    rows.mockRestore();
+    schema.mockRestore();
+  });
+
   for (const delayed of [false, true]) {
     for (const invalid of [
       { view: "trend" as const, start: 2021, end: 2019, year: 2021 },

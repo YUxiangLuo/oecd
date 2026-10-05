@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, isApiErrorStatus } from "./api";
-import { emptySession, isValidSession, patchStep as patchStoredStep, readShared, readStep, sameSessionContent, writeShared } from "./session-store";
+import { emptySession, isValidSession, patchStep as patchStoredStep, readShared, readStep, sameJsonValue, sameSessionContent, writeShared } from "./session-store";
 import type {
   ClassroomReport,
   CompletionSummary,
@@ -89,6 +89,8 @@ export interface SessionApi {
   syncConflict: boolean;
   unsynced: boolean;
   authRecoveryAvailable: boolean;
+  /** Steps whose locally kept content differs from the server copy (what “恢复” would bring back). */
+  authRecoverySteps: number[];
   completion: CompletionSummary | null;
   /** Combined quiz and material gate used by report generation. */
   reportGate: ReportGateItem[] | null;
@@ -445,9 +447,18 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     setMaterialGate(response.material_gate);
   }, []);
 
+  const authRecoverySteps = authRecovery
+    ? [...new Set([...Object.keys(authRecovery.session.steps), ...Object.keys(confirmedSession.steps)])]
+      .filter((step) => !sameJsonValue(authRecovery.session.steps[step], confirmedSession.steps[step]))
+      .map(Number)
+      .sort((a, b) => a - b)
+    : [];
+
   return {
     status, session, report, updatedAt, syncing, syncError, syncConflict, unsynced,
+    // Even a copy identical in content must be resolved explicitly: it may rest on an older revision.
     authRecoveryAvailable: authRecovery !== null,
+    authRecoverySteps,
     completion, reportGate, materialGate, workspaceGeneration,
     getStep: useCallback(<T,>(step: number) => readStep<T>(session, step), [session]),
     getConfirmedStep: useCallback(<T,>(step: number) => readStep<T>(confirmedSession, step), [confirmedSession]),

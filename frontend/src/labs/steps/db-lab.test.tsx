@@ -159,3 +159,40 @@ describe("step 1 cell activation", () => {
     expect(document.querySelector(".fullscreen-panel--expanded")).toBeNull();
   });
 });
+
+describe("step 1 after the report is submitted", () => {
+  test("a click only marks the cell; the material changes when the student asks", async () => {
+    spyOn(api, "dbMeta").mockResolvedValue(DB_META);
+    spyOn(api, "dbSlice").mockResolvedValue({
+      ...SLICE,
+      columns: ["USA_D01T02", "CHN_D01T02"],
+      rows: [{ row: "CHN_D01T02", USA_D01T02: 228.0672, CHN_D01T02: 10 }],
+    });
+    const recorded = { row: "CHN_D01T02", column: "USA_D01T02", value: 228.0672, year: 2020, table: "z", row_country: "CHN", col_country: "USA" };
+    const saved: unknown[] = [];
+    const state = {
+      data: { observation: recorded },
+      save: (patch: unknown) => { saved.push(patch); },
+      complete: true,
+      syncing: false,
+      syncError: null,
+      syncNow: () => {},
+      materialLocked: true,
+    };
+
+    render(<DbLab state={state} releaseMeta={null as Meta | null} />);
+    const other = await screen.findByRole("button", { name: /→ CHN_D01T02\(列·使用方\)，值 10 百万美元，未记录$/ });
+    await act(async () => { fireEvent.click(other); });
+
+    // Nothing is saved; the clicked cell is marked as chosen and the recorded one keeps its tick.
+    expect(saved.filter((patch) => (patch as { observation?: unknown }).observation)).toHaveLength(0);
+    expect(other.className).toContain("picked");
+    expect(other.getAttribute("aria-label")).toContain("已选中，尚未改为报告材料");
+    expect(screen.getByRole("button", { name: /→ USA_D01T02\(列·使用方\).*已记录$/ }).className).toContain("selected");
+
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^改为记录这一格/ })); });
+    const replaced = saved.find((patch) => (patch as { observation?: unknown }).observation) as { observation: { column: string; value: number } };
+    expect(replaced.observation.column).toBe("CHN_D01T02");
+    expect(replaced.observation.value).toBe(10);
+  });
+});

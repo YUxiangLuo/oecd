@@ -86,14 +86,19 @@ function NetBackdrop() {
   );
 }
 
-export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin: (r: LoginResponse) => void }) {
+export function LoginPage({ notice, username: returningUsername, onLogin }: {
+  notice?: string | null;
+  /** The account whose session just ended: prefilled instead of a demo credential, without a password. */
+  username?: string | null;
+  onLogin: (r: LoginResponse) => void;
+}) {
   const demoMode = import.meta.env.VITE_DEMO_MODE === "1";
   // 放在组件的编译期 demo 分支内：Bun 单测可按渲染切换环境，Vite production
   // 又能连同基础口令和整组凭证一起消除。
   const demoPassword = demoMode ? import.meta.env.VITE_DEMO_PASSWORD || "gvclab2026" : "";
   const demoStudents = demoMode ? demoStudentCredentials(demoPassword) : [];
   const [initialDemoSelection] = useState(() => {
-    if (!demoMode) return null;
+    if (!demoMode || returningUsername) return null;
     let seen: string[] = [];
     try {
       const stored = JSON.parse(sessionStorage.getItem(SEEN_DEMO_STUDENTS_KEY) ?? "[]");
@@ -105,7 +110,7 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
   });
   const initialDemoStudent = initialDemoSelection?.student ?? null;
   // 演示构建从 50 组学生凭证中选一组;非演示构建仍是空表单。
-  const [username, setUsername] = useState(initialDemoStudent?.username ?? "");
+  const [username, setUsername] = useState(returningUsername || initialDemoStudent?.username || "");
   const [password, setPassword] = useState(initialDemoStudent?.password ?? "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -188,7 +193,8 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
         <form className="login-card" onSubmit={submit}>
           <h2>进入实验平台</h2>
           <p className="login-card-sub">使用教师分配的个人账号登录。</p>
-          {notice && <div className="success-box login-notice" role="status">{notice}</div>}
+          {/* An expired session is a warning, not a success; a password change is confirmed in green. */}
+          {notice && <div className={`${notice.includes("失效") ? "tipbox" : "success-box"} login-notice`} role="status">{notice}</div>}
 
           {demoMode && <div className="login-roles" role="group" aria-label="开发演示快捷账号">
             {demoAccounts.map((a) => (
@@ -222,7 +228,7 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
             {busy ? "正在登录…" : "登录"}
           </button>
           <div className="login-hint">
-            {demoMode && <>当前预填的是 {DEMO_STUDENT_COUNT} 个种子学生中的一组；同一标签页刷新会无重复轮换账号和口令，轮完后再开启下一轮。上方可一键切换学生 / 教师身份。<br /></>}
+            {demoMode && !returningUsername && <>当前预填的是 {DEMO_STUDENT_COUNT} 个种子学生中的一组；同一标签页刷新会无重复轮换账号和口令，轮完后再开启下一轮。上方可一键切换学生 / 教师身份。<br /></>}
             登录用于区分每位同学的实验记录。刷新可继续实验；退出只影响当前标签页。
           </div>
         </form>

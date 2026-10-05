@@ -37,12 +37,40 @@ def _session_fingerprint(session: dict[str, Any]) -> str:
     return hashlib.sha256(json.dumps(session, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12]
 
 
+# What the student was looking at rather than what the report uses: changing these must not make a
+# submitted report look out of date (the report prints recorded material, never these view settings).
+_VIEW_ONLY_KEYS = frozenset({"slice", "year", "country", "chart", "drill", "heat_sort", "heat_coverage"})
+
+
+def report_fingerprint(session: dict[str, Any]) -> str:
+    """Fingerprint of the session parts a report is built from (view-only settings excluded)."""
+    steps = session.get("steps")
+    if not isinstance(steps, dict):
+        return _session_fingerprint(session)
+    projected_steps = {
+        key: (
+            {**value, "data": {k: v for k, v in value["data"].items() if k not in _VIEW_ONLY_KEYS}}
+            if isinstance(value, dict) and isinstance(value.get("data"), dict)
+            else value
+        )
+        for key, value in steps.items()
+    }
+    return _session_fingerprint({**session, "steps": projected_steps})
+
+
 def report_matches_session(session: dict[str, Any], report: dict[str, Any] | None) -> bool:
-    """Return whether a report was generated from this exact session snapshot."""
+    """Return whether a report was generated from this session's report inputs.
+
+    Reports saved before the view-only exclusion carry only the full-session fingerprint.
+    """
     if report is None:
         return False
     provenance = report.get("provenance")
-    return isinstance(provenance, dict) and provenance.get("session_fingerprint") == _session_fingerprint(session)
+    if not isinstance(provenance, dict):
+        return False
+    if "report_fingerprint" in provenance:
+        return provenance["report_fingerprint"] == report_fingerprint(session)
+    return provenance.get("session_fingerprint") == _session_fingerprint(session)
 
 
 def _student(c: psycopg.Connection[dict[str, Any]], username: str) -> dict[str, Any] | None:
@@ -158,7 +186,11 @@ def save_generated_report(
         ).fetchone()
         if (current_report["updated_at"] if current_report else None) != expected_report_updated_at:
             raise ReportChanged("报告或评分已更新，请刷新页面核对后再确认重新生成")
-        stored_provenance = {**provenance, "session_fingerprint": _session_fingerprint(current_session["session"])}
+        stored_provenance = {
+            **provenance,
+            "session_fingerprint": _session_fingerprint(current_session["session"]),
+            "report_fingerprint": report_fingerprint(current_session["session"]),
+        }
         return c.execute(
             "INSERT INTO reports(account_id,release_id,markdown,provenance,state,generated_at,updated_at)"
             " VALUES (%s,%s,%s,%s,'draft',now(),now())"
@@ -191,10 +223,7 @@ def submit_report(username: str) -> dict[str, Any] | None:
         if not row:
             return None
         if row["state"] == "draft":
-            provenance = row["provenance"] if isinstance(row["provenance"], dict) else {}
-            if current_session is None or provenance.get("session_fingerprint") != _session_fingerprint(
-                current_session["session"]
-            ):
+            if current_session is None or not report_matches_session(current_session["session"], row):
                 raise ReportChanged("实验记录已更新，请重新生成报告")
             c.execute(
                 "UPDATE reports SET state='pending',submitted_at=now(),updated_at=now()"

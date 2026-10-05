@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE } from "../../../step-task-card";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import { ChartModalButton, SupplementaryCharts } from "./chart-modal";
@@ -243,15 +244,17 @@ export function IndicatorExplorer({
         value,
     );
   const pendingKey = canSave ? `${materialKey(pending)}|${JSON.stringify({ ...selection, view })}` : "";
+  const recordCurrent = () => state.save({
+    compared: selected,
+    observations: pending,
+    indicator_selection: { ...selection, view },
+  });
   // Report material follows the chart the student is looking at: every complete chart is recorded
   // automatically, replacing the previous one. Incomplete charts never overwrite a complete record.
+  // Once the report is submitted, browsing leaves the material alone unless the student asks.
   useEffect(() => {
-    if (!canSave || matches || state.syncing) return;
-    state.save({
-      compared: selected,
-      observations: pending,
-      indicator_selection: { ...selection, view },
-    });
+    if (!canSave || matches || state.syncing || state.materialLocked) return;
+    recordCurrent();
     // state/selection objects change every render; pendingKey captures every meaningful change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingKey, matches, state.syncing]);
@@ -720,8 +723,13 @@ export function IndicatorExplorer({
         <p role="status">
           {!validYears ? "请先修正年份范围，当前图表才能被记录。" : !canSave
             ? `当前图表暂不能记录：${blockedReason}${saved.length ? "已记录的材料保持不变。" : ""}`
-            : matches ? "当前图表已自动记录为本步报告材料；换视角、国家或年份后会自动更新为最后查看的完整图表。" : "正在记录当前图表…"}
+            : state.materialLocked
+              ? `${MATERIAL_LOCKED_NOTE}${matches ? "当前图表就是已记录的材料。" : ""}`
+              : matches ? "当前图表已自动记录为本步报告材料；换视角、国家或年份后会自动更新为最后查看的完整图表。" : "正在记录当前图表…"}
         </p>
+        {state.materialLocked && canSave && !matches && (
+          <button type="button" className="secondary" onClick={recordCurrent}>{MATERIAL_LOCKED_ACTION}</button>
+        )}
         {saved.length > 0 && <details>
           <summary>核对已保存材料 · {saved.length} 条读数</summary>
           <p>

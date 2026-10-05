@@ -6,7 +6,7 @@
 import { useEffect } from "react";
 import { api } from "../../../api";
 import { sameJsonValue } from "../../../session-store";
-import { STEP_MATERIAL_ACTION_ID } from "../../../step-task-card";
+import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE, STEP_MATERIAL_ACTION_ID } from "../../../step-task-card";
 import type { IndicatorSchema, Meta, StepStateApi } from "../../../types";
 import { countryLabel } from "../../../viz";
 import { fieldLabel, fmtField, useAsync } from "../../shared";
@@ -70,17 +70,19 @@ export function useAutoComparison({ topic, meta, state, country, partner, year, 
   const current = materialMatches(patch, state.data);
 
   // Report material follows what the student is looking at: no extra button or table to open.
+  // Once the report is submitted, browsing leaves the material alone (see `record`).
   useEffect(() => {
-    if (!patch || current) return;
+    if (!patch || current || state.materialLocked) return;
     state.save(patch);
     // state is a new object each render; the key and match flag capture every meaningful change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patchKey, current]);
 
-  return { first: pair[0], second: pair[1], current, loadFailed: countryQuery.status === "error" };
+  const record = patch && !current ? () => state.save(patch) : undefined;
+  return { first: pair[0], second: pair[1], current, record, loadFailed: countryQuery.status === "error" };
 }
 
-export function AutoMaterialStatus({ meta, state, schema, first, second, current, onSecond, loadFailed, where, note }: {
+export function AutoMaterialStatus({ meta, state, schema, first, second, current, record, onSecond, loadFailed, where, note }: {
   meta: Meta;
   state: StepStateApi<IndicatorStepState>;
   schema: IndicatorSchema | null | undefined;
@@ -88,6 +90,8 @@ export function AutoMaterialStatus({ meta, state, schema, first, second, current
   second: string;
   /** Whether the saved observations match the current selection. */
   current: boolean;
+  /** Records the current selection explicitly (offered once the material is locked). */
+  record?: () => void;
   onSecond: (country: string) => void;
   loadFailed: boolean;
   /** Where the first country is chosen, e.g. “上方所选国家”. */
@@ -95,10 +99,11 @@ export function AutoMaterialStatus({ meta, state, schema, first, second, current
   /** Extra reading caveat for this step's indicator. */
   note?: string;
 }) {
-  const recorded = current ? state.data?.observations ?? [] : [];
+  // Locked material is shown as saved even when the student browses something else.
+  const recorded = current || state.materialLocked ? state.data?.observations ?? [] : [];
   return (
     <div id={STEP_MATERIAL_ACTION_ID} tabIndex={-1} className="auto-material">
-      <b>报告材料 · 自动记录</b>
+      <b>报告材料 · {state.materialLocked ? "已记录" : "自动记录"}</b>
       {recorded.length === 2
         ? <span role="status">{recorded[0].year} 年 · {recorded.map((item) => `${countryLabel(item.country)} ${fmtField(item.value, item.metric, schema)}`).join("；")} · {fieldLabel(recorded[0].metric, schema)}</span>
         : <span role="status">{loadFailed ? "国家级数据加载失败，请刷新后重试。" : "正在记录当前选择…"}</span>}
@@ -107,7 +112,9 @@ export function AutoMaterialStatus({ meta, state, schema, first, second, current
           {meta.countries.filter((code) => code !== first).map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
         </select>
       </label>
-      <small>记录{where}和对比国家在同一年的本步代表指标（国家级），换国家或年份后自动更新，无需另外保存。{note ? ` ${note}` : ""}</small>
+      {state.materialLocked
+        ? <small>{MATERIAL_LOCKED_NOTE}{record && <button type="button" className="secondary" onClick={record}>{MATERIAL_LOCKED_ACTION.replace("图表", "选择")}</button>}</small>
+        : <small>记录{where}和对比国家在同一年的本步代表指标（国家级），换国家或年份后自动更新，无需另外保存。{note ? ` ${note}` : ""}</small>}
     </div>
   );
 }
