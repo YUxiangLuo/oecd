@@ -1,0 +1,3 @@
+# Shell scripts run under bash (WSL, the Linux servers, CI). A CRLF checkout (core.autocrlf on Windows)
+# breaks the shebang: /usr/bin/env looks for "bash\r".
+*.sh text eol=lf
