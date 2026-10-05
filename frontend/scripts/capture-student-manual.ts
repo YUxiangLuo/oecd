@@ -67,14 +67,23 @@ async function signedIn(token: string | null) {
   await page.addInitScript(helpers(token));
   return page;
 }
+/** Automatic material recording saves shortly after a page mounts (later still when its data is
+ *  slow to load); wait for the outline to settle so no figure shows a transient "材料保存中" or
+ *  "材料未保存" badge. */
+async function settled(page: Page) {
+  await Bun.sleep(1200);
+  await page.waitFor(`![...document.querySelectorAll(".step-row-status")].some((el) => /保存中|未保存/.test(el.innerText))`, 20_000);
+  await Bun.sleep(400);
+}
 async function open(page: Page, step: number | null, ready: string) {
   await page.goto(step == null ? `${base}/` : `${base}/?step=${step}`);
   await page.waitFor(ready, 45_000);
-  await Bun.sleep(1200);
+  await settled(page);
 }
 async function scrollTo(page: Page, finder: string, offset = 12) {
   await page.eval(`(() => { const el = ${finder}; if (!el) throw new Error("not found: " + ${JSON.stringify(finder)}); window.__scroll(el, ${offset}); return true; })()`);
   await Bun.sleep(600);
+  await settled(page);
 }
 async function clipOf(page: Page, finder: string, pad = 12) {
   return page.eval<{ x: number; y: number; width: number; height: number }>(`(() => {

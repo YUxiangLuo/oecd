@@ -109,7 +109,9 @@ curl -fsS "$GVCSIM_BASE_URL/health"
 
 `deploy/` 下的 systemd 或 Nginx 模板有变化时，只更新代码不会改变已安装的旧模板：保留实际域名、证书和 upstream 地址重新安装，执行 `nginx -t`、`systemctl daemon-reload` 并重载 Nginx。容量参数（单 API worker、16 个普通线程、4 个计算名额、512 个连接）须配套使用，见[运行容量](技术手册.md#112-运行容量)。
 
-服务模板设置 `GVCSIM_FILE_CACHE_MODE=notify`，前提是 API 运行期间 active release 和原始输入不被改写（inotify 不覆盖 mmap／原始块设备写入；不支持的文件系统自动回退哈希）。不满足该前提时在 `/etc/gvcsim.env` 设为 `hash` 并重启。
+服务模板设置 `GVCSIM_FILE_CACHE_MODE=notify`，前提是 API 运行期间 active release 和原始输入不被改写（inotify 不覆盖 mmap／原始块设备写入；不支持的文件系统自动回退哈希）。不满足该前提时在 `/etc/gvcsim.env` 设为 `hash` 并重启。注意性能差异：`hash` 模式每次原始切片请求都重算原始 CSV 的 SHA-256，实测单次约 420 ms，50 名学生同时打开步骤 1 时排队超过 10 s；`notify` 模式单次约 13 ms。因此 `GVCSIM_DATA_DIR` 与 `GVCSIM_RAW_DATA_DIR` 必须放在本地 ext4／XFS／Btrfs 文件系统上，NFS、SMB、9p 等网络或虚拟文件系统会静默回退到 `hash`。部署后可用 `journalctl -u gvcsim-api` 与一次切片请求的耗时确认。
+
+Nginx 与 API 分机部署时还要注意：API 只信任来自 `127.0.0.1` 的 `X-Forwarded-For`（uvicorn `forwarded_allow_ips`），分机时所有学生的来源 IP 都会被记成 Nginx 的地址，登录来源限流（默认每分钟 120 次）会把全班当作一个来源。同机部署无此问题；分机部署需相应调高 `GVCSIM_LOGIN_SOURCE_ATTEMPTS_PER_MINUTE`，或在 API 侧另行信任该代理地址。
 
 ```bash
 set -euo pipefail

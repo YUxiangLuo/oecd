@@ -58,7 +58,7 @@ uv run pytest -q                       # 指向测试库
 cd frontend && bunx tsc --noEmit -p . && bun run test:unit
 ```
 
-完整本地检查 `scripts/local_ci.sh` 在临时目录复制源码、生成合成 OECD release，并启动一次性 PostgreSQL 容器，依次运行 Gephi 基准、后端静态检查与覆盖率测试、前端构建与单测、学生／教师浏览器验收（agent-browser）。需要 Docker、uv、Bun、JDK 17+、Maven、agent-browser 和 `pdftotext`；产物留在忽略目录 `dogfood-output/local-ci/`。仓库没有 GitHub Actions，发布前手动运行。
+完整本地检查 `scripts/local_ci.sh` 在临时目录复制源码、生成合成 OECD release，并启动一次性 PostgreSQL 容器，依次运行 Gephi 基准、后端静态检查与覆盖率测试、前端构建与单测、学生／教师浏览器验收（agent-browser）。需要 Docker、uv、Bun、Node（agent-browser 的运行时）、JDK 17+、Maven、agent-browser、`pdftotext` 和一套中文字体（如 `fonts-noto-cjk`）；产物留在忽略目录 `dogfood-output/local-ci/`。仓库没有 GitHub Actions，发布前手动运行。
 
 ## 数据与许可
 
