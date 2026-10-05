@@ -42,7 +42,14 @@ for tool in git rsync docker uv bun mvn java agent-browser pdftotext curl python
   command -v "$tool" >/dev/null || { echo "Missing local CI dependency: $tool" >&2; exit 2; }
 done
 docker info >/dev/null 2>&1 || { echo "Docker daemon is unavailable" >&2; exit 2; }
-agent-browser doctor >/dev/null
+# `agent-browser doctor` also probes the Chrome-for-Testing CDN and optional cloud providers; only the
+# local headless launch matters here, so an offline or firewalled host with Chrome installed still passes.
+doctor_report="$(agent-browser doctor 2>&1 || true)"
+grep -q "pass  Headless launch" <<<"$doctor_report" || {
+  echo "agent-browser cannot launch a headless browser (run 'agent-browser install'):" >&2
+  printf '%s\n' "$doctor_report" >&2
+  exit 2
+}
 # Without a CJK font the headless browser drops Chinese glyphs it cannot shape, and the printed
 # report then fails the PDF column check for an environmental reason (e.g. "步骤" -> "骤").
 fc-list :lang=zh 2>/dev/null | grep -q . || { echo "No Chinese font installed (e.g. fonts-noto-cjk)" >&2; exit 2; }
