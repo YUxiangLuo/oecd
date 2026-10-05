@@ -1,6 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+import { createElement } from "react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { api } from "../../../api";
 import type { Meta } from "../../../types";
-import { autoComparisonCountries, materialMatches } from "./auto-comparison";
+import { autoComparisonCountries, materialMatches, useAutoComparison } from "./auto-comparison";
 import { indicatorComparisonPatch } from "./indicator-table";
 
 const meta = { countries: ["ARG", "CHN", "DEU", "ROW", "USA"] } as unknown as Meta;
@@ -75,5 +78,48 @@ describe("automatic material status line", () => {
     const stale = renderToStaticMarkup(createElement(AutoMaterialStatus, { ...props, current: false }));
     expect(stale).not.toContain("2020 年 · CHN 中国");
     expect(stale).toContain("正在记录当前选择");
+  });
+});
+
+describe("recording under the report lock", () => {
+  test("automatic saves clear the choice marker; a save on request after submission sets it", async () => {
+    const rows = spyOn(api, "countryIndicators").mockResolvedValue([
+      { country: "CHN", FVA_share: 0.1173 },
+      { country: "USA", FVA_share: 0.0551 },
+    ] as never);
+    const metaWithRelease = { countries: ["CHN", "USA"], dataset: { release_id: "rel-1" } } as unknown as Meta;
+    const run = async (materialLocked: boolean) => {
+      const saves: Record<string, unknown>[] = [];
+      let record: (() => void) | undefined;
+      const Probe = () => {
+        const auto = useAutoComparison({
+          topic: "trade", meta: metaWithRelease, country: "CHN", partner: "", year: 2020,
+          schema: { status: "success", data: { groups: [], fields: { FVA_share: { format: "pct" } } } as never },
+          state: { data: undefined, save: (patch: Record<string, unknown>) => { saves.push(patch); }, complete: false, syncing: false, syncError: null, syncNow: () => {}, materialLocked } as never,
+        });
+        record = auto.record;
+        return null;
+      };
+      render(createElement(Probe));
+      await waitFor(() => expect(record).toBeDefined());
+      return { saves, record: () => act(() => record!()) };
+    };
+    try {
+      const open = await run(false);
+      await waitFor(() => expect(open.saves).toHaveLength(1));
+      expect("material_chosen" in open.saves[0] && open.saves[0].material_chosen === undefined).toBe(true);
+      cleanup();
+
+      const locked = await run(true);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(locked.saves).toHaveLength(0);
+      await locked.record();
+      expect(locked.saves).toHaveLength(1);
+      expect(locked.saves[0].material_chosen).toBe(true);
+      expect(locked.saves[0].compared).toEqual(["CHN", "USA"]);
+    } finally {
+      cleanup();
+      rows.mockRestore();
+    }
   });
 });

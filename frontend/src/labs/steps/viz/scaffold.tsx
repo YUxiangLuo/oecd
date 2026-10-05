@@ -70,6 +70,8 @@ export interface VizStepState extends QuizCompletionState, Record<string, unknow
   heat_sort?: string;
   heat_coverage?: string;
   observations?: VizObservation[];
+  /** The student recorded this material explicitly after submitting the report (automatic saves clear it). */
+  material_chosen?: boolean;
 }
 
 interface RestoredVizState {

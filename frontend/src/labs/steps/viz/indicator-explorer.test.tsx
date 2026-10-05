@@ -77,6 +77,8 @@ describe("indicator explorer with automatic report material", () => {
     fireEvent.click(record);
     expect(view.saves).toHaveLength(1);
     expect(view.saves[0].indicator_selection).toMatchObject({ first: "CHN", second: "USA" });
+    // The report must not call the student's own choice an automatic record.
+    expect(view.saves[0].material_chosen).toBe(true);
     rows.mockRestore();
     schema.mockRestore();
   });

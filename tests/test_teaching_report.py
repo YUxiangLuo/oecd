@@ -908,6 +908,18 @@ def test_steps_two_to_five_accept_automatic_comparisons():
     snapshot = "\n".join(_experiment_sections(session))
     assert "系统自动记录的比较：CHN、USA" in snapshot
 
+    # Material the student recorded on request after submitting is their choice, not an automatic record;
+    # the same holds for the chart material of steps 6-8.
+    for step in (3, 6):
+        session["steps"][str(step)]["data"]["material_chosen"] = True
+    sections = "\n".join(_experiment_sections(session)).split("### 步骤 ")
+    step_three = next(part for part in sections if part.startswith("3 "))
+    assert "学生选定的比较：CHN、USA" in step_three and "系统自动记录" not in step_three
+    step_six = next(part for part in sections if part.startswith("6 "))
+    assert "记录的图表材料（学生选定的完整图表" in step_six and "自动记录" not in step_six
+    step_seven = next(part for part in sections if part.startswith("7 "))
+    assert "系统按学生最后查看的完整图表自动记录" in step_seven
+
     missing = _complete()
     missing["steps"]["2"]["data"]["observations"] = []
     message = "".join(next(item["missing"] for item in check_material_gate(missing) if item["step"] == 2))

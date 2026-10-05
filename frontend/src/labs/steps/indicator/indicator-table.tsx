@@ -137,6 +137,8 @@ export interface IndicatorStepState extends QuizCompletionState, Record<string, 
   compared?: string[];
   metric?: string;
   observations?: IndicatorObservation[];
+  /** The student recorded this material explicitly after submitting the report (automatic saves clear it). */
+  material_chosen?: boolean;
 }
 
 export interface IndicatorObservation {

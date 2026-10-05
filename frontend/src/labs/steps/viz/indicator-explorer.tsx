@@ -244,10 +244,12 @@ export function IndicatorExplorer({
         value,
     );
   const pendingKey = canSave ? `${materialKey(pending)}|${JSON.stringify({ ...selection, view })}` : "";
-  const recordCurrent = () => state.save({
+  // `chosen`: recorded on the student's request after submission, so the report does not call it automatic.
+  const recordCurrent = (chosen = false) => state.save({
     compared: selected,
     observations: pending,
     indicator_selection: { ...selection, view },
+    material_chosen: chosen || undefined,
   });
   // Report material follows the chart the student is looking at: every complete chart is recorded
   // automatically, replacing the previous one. Incomplete charts never overwrite a complete record.
@@ -719,7 +721,7 @@ export function IndicatorExplorer({
         </ChartModalButton>
       </SupplementaryCharts>
       <section className="qualified-run-card" aria-label="报告材料">
-        <h3>报告材料 · {saved.length ? `已自动记录（${saved.length} 条读数）` : "尚未记录"}</h3>
+        <h3>报告材料 · {saved.length ? `已${state.materialLocked ? "" : "自动"}记录（${saved.length} 条读数）` : "尚未记录"}</h3>
         <p role="status">
           {!validYears ? "请先修正年份范围，当前图表才能被记录。" : !canSave
             ? `当前图表暂不能记录：${blockedReason}${saved.length ? "已记录的材料保持不变。" : ""}`
@@ -728,7 +730,7 @@ export function IndicatorExplorer({
               : matches ? "当前图表已自动记录为本步报告材料；换视角、国家或年份后会自动更新为最后查看的完整图表。" : "正在记录当前图表…"}
         </p>
         {state.materialLocked && canSave && !matches && (
-          <button type="button" className="secondary" onClick={recordCurrent}>{MATERIAL_LOCKED_ACTION}</button>
+          <button type="button" className="secondary" onClick={() => recordCurrent(true)}>{MATERIAL_LOCKED_ACTION}</button>
         )}
         {saved.length > 0 && <details>
           <summary>核对已保存材料 · {saved.length} 条读数</summary>

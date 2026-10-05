@@ -98,11 +98,13 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             continue
         captured = True
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}", ""))
+        # Set when the student recorded this material explicitly after submitting the report.
+        chosen = data.get("material_chosen") is True
         if compared:
             automatic = bool(observations) and all(
                 item.get("source") == "auto-indicator-comparison" for item in observations
             )
-            compared_label = "系统自动记录的比较" if automatic else "比较对象"
+            compared_label = "学生选定的比较" if chosen else "系统自动记录的比较" if automatic else "比较对象"
             lines.append(f"- {compared_label}：{'、'.join(_safe(item) for item in compared)}")
         if observations:
             if step in (6, 7, 8, 9) and any(item.get("year") == 2020 for item in observations):
@@ -129,7 +131,11 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     "- 行业指标来自完整国家×行业中间品网络，不对应国家贸易概览的位置；加权流量为当年价格，拓扑指标不等同经济重要性。"
                 )
             if step in (6, 7, 8):
-                lines.append("- 记录的图表材料（系统按学生最后查看的完整图表自动记录；指标与单位逐行列示）：")
+                lines.append(
+                    "- 记录的图表材料（学生选定的完整图表；指标与单位逐行列示）："
+                    if chosen
+                    else "- 记录的图表材料（系统按学生最后查看的完整图表自动记录；指标与单位逐行列示）："
+                )
                 lines.append(
                     f"- 数据版本：{_safe(observations[0]['release'])}。金额为当年价格；份额以百分数列示，变化按百分点解释。"
                 )

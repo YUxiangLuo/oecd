@@ -177,7 +177,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     </>}
     {schema?.fields[metric]?.desc && <p className="muted viz-metric-desc">{label}：{schema.fields[metric].desc}</p>}
     <section className="qualified-run-card" aria-label="步骤9报告材料">
-      <h3>报告材料 · {observations.length ? `已自动记录（${observations.length} 条读数）` : "尚未记录"}</h3>
+      <h3>报告材料 · {observations.length ? `已${locked ? "" : "自动"}记录（${observations.length} 条读数）` : "尚未记录"}</h3>
       <p role="status">{!canRecord
         ? `当前图表暂不能记录：${selected.length < 2 ? "报告材料需要一个对比国家；现在只看全球参照，不会记录。" : view === "trend" ? "两国至少需要两个共同有效年份。" : "至少一个展示行业需要两国都有有效读数。"}${observations.length ? "已记录的材料保持不变。" : ""}`
         : locked

@@ -73,12 +73,13 @@ export function useAutoComparison({ topic, meta, state, country, partner, year, 
   // Once the report is submitted, browsing leaves the material alone (see `record`).
   useEffect(() => {
     if (!patch || current || state.materialLocked) return;
-    state.save(patch);
+    state.save({ ...patch, material_chosen: undefined });
     // state is a new object each render; the key and match flag capture every meaningful change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patchKey, current]);
 
-  const record = patch && !current ? () => state.save(patch) : undefined;
+  // Marked as the student's choice, so the report does not call it an automatic record.
+  const record = patch && !current ? () => state.save({ ...patch, material_chosen: true }) : undefined;
   return { first: pair[0], second: pair[1], current, record, loadFailed: countryQuery.status === "error" };
 }
 
