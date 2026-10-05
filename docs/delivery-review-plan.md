@@ -146,9 +146,10 @@ cd frontend && bunx tsc --noEmit -p . && bun run test:unit && bun run build && b
 - [x] P0/P1 全部关闭：D-001、D-003、D-004、D-005（638ec8c）、D-007（1663120）、D-017（0ad6d45）；已知问题（D-002、D-011、D-013、D-014、D-018）与未验收项整理在 [docs/delivery-v1.0.0.md](delivery-v1.0.0.md)。
 - [x] 最终一次 `scripts/local_ci.sh`（10-06，含 ruff／mypy／覆盖率／前端／Gephi）：首轮因 D-020 在 11 s 中止，修复门禁脚本后全部通过：808 后端、478 前端、学生 smoke、完整提交评阅、15 步纯界面课程、教师 smoke；证据 `dogfood-output/local-ci/20261005T212652Z-4799/`。
 - [x] 第 5 天之后业务代码未变（只有 `scripts/local_ci.sh` 与文档），截图无需重拍；技术手册代码基线改为标签 `v1.0.0`。
-- [ ] 打 tag（如 `v1.0.0`），导出 `git archive`，附锁文件与普通生产构建产物。
-- [ ] 按技术手册 16.2 组装交付包：源码与构建产物；两本手册、部署手册、环境配置项说明；原始输入哈希、release manifest、QC 与来源说明；教师初始化与账号交接记录（口令走受限渠道）；自动化测试结果、浏览器截图、性能记录；备份文件、校验文件、恢复演练记录、回滚资料。
-- [ ] 更新演示站到交付提交（如约定），记录部署时间与提交号。
+- [x] 标签 `v1.0.0` 打在 `acf691a`（注释标签，未推送）；`git archive v1.0.0` 源码包与从标签树构建的普通生产前端产物已生成。
+- [x] 交付包 `dogfood-output/delivery-v1.0.0/`（忽略目录）：`gvcsim-v1.0.0-src.tar.gz`、`gvcsim-v1.0.0-frontend-dist.tar.gz`、`docs/`（两本手册、DEPLOY、README、LICENSE、交付说明、评审记录、deploy 模板）、`data/`（原始 CSV SHA-256、开发机 release 01b87b87 的 dataset 与 QC JSON）、`evidence/`（最终 local_ci、统计复核、第 3／4／6 天脚本结果、演练主机日志与备份校验文件，不含数据库转储）、`SHA256SUMS`。账号与口令不在包内。
+- [x] 演练主机按 DEPLOY.md"普通代码部署"块升级到 `v1.0.0`：备份、`uv sync --frozen`、前端构建、preflight、启动后 5 s 健康，首页 200，教师接口 200。
+- [ ] 更新演示站 101.201.151.30 到 `v1.0.0`：按你此前约定只在明确要求时部署，待指示。
 
 ## 8. 分工建议
 
