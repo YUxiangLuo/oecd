@@ -19,6 +19,9 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- 显式声明源级别：旧版 Maven 默认绑定的编译插件会退回 source 5，JDK 17+ 直接拒绝。 -->
+    <maven.compiler.source>11</maven.compiler.source>
+    <maven.compiler.target>11</maven.compiler.target>
     <!-- 与 fixture 文件名及根 README 的基准版本一致；升级时须重新运行 generate.sh 的 check 模式并提交新 fixture。 -->
     <gephi.toolkit.version>0.10.1</gephi.toolkit.version>
     <exec.mainClass>GephiGoldenExport</exec.mainClass>

@@ -1,3 +1,5 @@
 # Shell scripts run under bash (WSL, the Linux servers, CI). A CRLF checkout (core.autocrlf on Windows)
 # breaks the shebang: /usr/bin/env looks for "bash\r".
 *.sh text eol=lf
+# Byte-for-byte oracle fixtures are compared against LF output from Linux tools (Gephi golden check).
+tests/fixtures/* text eol=lf

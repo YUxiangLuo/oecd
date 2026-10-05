@@ -43,6 +43,9 @@ for tool in git rsync docker uv bun mvn java agent-browser pdftotext curl python
 done
 docker info >/dev/null 2>&1 || { echo "Docker daemon is unavailable" >&2; exit 2; }
 agent-browser doctor >/dev/null
+# Without a CJK font the headless browser drops Chinese glyphs it cannot shape, and the printed
+# report then fails the PDF column check for an environmental reason (e.g. "步骤" -> "骤").
+fc-list :lang=zh 2>/dev/null | grep -q . || { echo "No Chinese font installed (e.g. fonts-noto-cjk)" >&2; exit 2; }
 
 mkdir -p "$output_dir"
 temporary_dir="$(mktemp -d)"

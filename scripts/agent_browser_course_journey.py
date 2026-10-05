@@ -100,8 +100,8 @@ def main():
                     ),
                 )
             elif 6 <= step <= 8:
-                student.button("沿用这组比较对象")
-                # The current complete chart is recorded automatically.
+                # The first visit carries the comparison pair over from the previous step and
+                # records the current complete chart automatically; there is no button to press.
                 wait_saved(
                     step,
                     lambda row: (
