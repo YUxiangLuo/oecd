@@ -733,6 +733,13 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   padding: 30px 36px; white-space: pre-wrap; font-size: 13px; line-height: 1.8;
   font-family: inherit; overflow-x: auto;
 }
+/* Report tables hold sentences as well as numbers: cells wrap and text reads from the left, so the
+   regression summary fits the page instead of hiding its results to the right. Numeric columns keep
+   the right alignment their Markdown column markers set inline. */
+.report-md .data-table th,
+.report-md .data-table td { text-align: left; white-space: normal; vertical-align: top; }
+/* Short column names wrap only between words (“步骤” stays on one line). */
+.report-md .data-table th { word-break: keep-all; }
 .error-box {
   background: #fff5f2; border: 1px solid #f6cabf; border-radius: 12px;
   padding: 14px 18px; color: #b3341f; font-size: 13px;
