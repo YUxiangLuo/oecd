@@ -102,17 +102,22 @@ cd frontend && bunx tsc --noEmit -p . && bun run test:unit && bun run build && b
 
 ### 4.1 教师端
 
-- [ ] 学期／班级：创建、改名、归档、归档后禁止新增与接收学生，恢复后放开。
-- [ ] 学生：单个创建、名单批量创建（重复学号、空行、非法字符、超长、CSV 编码）、改姓名学号、重置密码、调整归属。
-- [ ] 评阅：按分组筛选、打开报告、评分与反馈草稿保护（刷新、切换学生、过期）、两位教师同时评同一份报告的版本冲突、学生再生成报告后评分清除的提示。
-- [ ] 教师改密后旧会话失效；教师不能访问学生接口以外的数据。
+10-06 以演示教师在本地课堂（tab 2）操作，学生端（tab 1，student38）配合验证。
+
+- [x] 学期／班级：新建"D4 测试学期"，重名被 409 拦下且对话框保留输入；添加班级、重命名班级生效；归档后卡片只剩"重命名／恢复"，班级操作与导入入口隐藏；恢复后全部放开。归档无二次确认（可恢复，接受）。
+- [x] 学生：单个创建时重复用户名、非法字符、短密码分别给出明确提示且对话框保留输入，焦点落到提示；成功创建后列表立即出现并带班级。名单批量创建：空行跳过，列表内重复学号、非法学号、缺列逐行报错；干净名单预览后必须先"下载账号清单"（含初始密码，本次拦截为内存读取，未落盘）才能"确认创建"，创建后班级人数即时更新。改姓名、改学号（重复学号被 409 拦下并指出占用者）、调班（可跨学期保留多条归属）、重置密码（短密码拦下）均通过。
+- [x] 评阅：待评阅／已评阅／全部筛选与计数正确；未保存草稿离开触发 `window.confirm` 保护（刷新由 beforeunload 保护，脚本已验证）；另一位教师先通过接口评分后，本页提交被 409 拦下，提示"报告内容已更新，请重新加载后评阅"并保留草稿，"加载最新报告"后显示对方的分数与评语，再"更新评阅"成功，列表显示已评阅 93。学生再生成后评分清除见下一条。
+- [x] 学生再生成已评阅报告：页内确认框写明会清除评分，确认后重新提交，学生端变"待评阅"，教师列表计数 2→3、得分清空。
+- [x] 教师改密后旧会话失效由 local_ci 的教师 smoke 覆盖（改密＋旧密码失效，10-06 通过）；路由层教师／学生各自 `Depends` 鉴权已在安全评审核对。
 
 ### 4.2 并发与容量（在目标主机或演示站）
 
-- [ ] `scripts/benchmark_shock_panel_v9.py` 针对待交付 release 跑冷启动、顺序、8 并发 warm p95，记录写入 `benchmarks/`。
-- [ ] `scripts/dogfood_http_edges.py` 用一次性账号探测部署站的 HTTP 边界。
-- [ ] 50 个学生账号脚本化同时登录、浏览 5 个年份原始表、各运行一次回归，观察 API 内存（演示站上限 1.4 GiB，已知浏览全部年份后驻留 800–900 MB）、PostgreSQL 连接数、nginx 错误日志。
-- [ ] 重启 API 后首个请求的 preflight 时间与 `/health` 恢复时间。
+10-06 在 WSL（12 逻辑核）对真实 release 执行；目标主机未定，演示站（2 vCPU／1.6 GiB）未做停机基准。
+
+- [x] `scripts/benchmark_shock_panel_v9.py`（本机，release 01b87b87，contract v15）：冷建索引 467 ms（预算 500）、8 并发冷 p95 906 ms（预算 1500）、warm 顺序 p95 107 ms（预算 500）、8 并发 warm p95 740 ms（预算 1500），全部通过；结果在 `dogfood-output/day4-capacity/shock_panel_benchmark.json`，未覆盖 `benchmarks/` 内的正式记录。目标主机确定后须按 DEPLOY.md 在该主机重跑。
+- [x] `scripts/dogfood_http_edges.py --dev-server`（本机 e2e 栈）：登录限流第 9 次 429、超大非法体 422、静态回退、边界后 /health 均通过。
+- [x] 50 学生并发（本机开发 API，hash 模式）：50 人同时登录、读会话、各取 5 个年份原始切片、各跑 4 项回归，650 个请求全部 200，无 5xx／503；API 驻留内存 960 MB 稳定。登录中位 1.2 s（PBKDF2 10 万轮×50 并发，CPU 受限，可接受）；回归中位 100 ms（命中缓存）；原始切片中位 11.5 s——根因是开发默认的 `hash` 文件身份模式每次请求都对原始 CSV 做 SHA-256（单次 420 ms），生产 systemd 模板与演示站均用 `notify` 模式（单次 13 ms），见 D-014。
+- [x] 冷启动（本机，真实 release）：`preflight` 3.3 s；`serve` 启动到 `/health` 200 共 4.3 s；首次读取一个年份的原始表 1.4–2.1 s，此后同年切片 30 ms（notify）／520 ms（hash）。演示站 2 vCPU 上按经验约为 2–3 倍。
 
 ## 5. 第 5 天（10-10）：文档与交付物一致性
 
@@ -170,6 +175,8 @@ cd frontend && bunx tsc --noEmit -p . && bun run test:unit && bun run build && b
 | 10-06 | release 01b87b87 | `scripts/review_statistics.py --replications 2000` | 四项回归 PanelOLS 对照全部通过（系数差 ≤1.8e-12，n=16220，76 簇，support ok）；覆盖率实验 0.9395（MC 95% 区间 0.928–0.949，标称 0.95） | `dogfood-output/statistics-review-20261006/`（已忽略目录）；覆盖率略低于标称属该教学 DGP 的已知特征，报告文案已标注"标称 95% 近似区间" |
 | 10-06 | 1663120 | 第 3 天专项脚本（令牌过期、本人改密、三标签页交错） | 全部通过 | `dogfood-output/day3-recovery/`，`gvclab_e2e` |
 | 10-06 | 1663120 | 学生端 15 步手工探索（student38，本地课堂） | 通过；无控制台错误；无新缺陷 | 详见 3.1/3.2 勾选项；未覆盖：真实浏览器矩阵、缩放、打印目视、断网 |
+| 10-06 | 1663120 | 教师端手工走查（学期／班级／学生／批量建号／评阅／冲突／评分清除） | 通过；无新缺陷 | 详见 4.1 勾选项 |
+| 10-06 | 1663120 | 容量：冲击面板基准、HTTP 边界、50 人并发、冷启动 | 基准四项全部在预算内；650 请求无错误；RSS 960 MB 稳定 | `dogfood-output/day4-capacity/`；发现 hash 模式切片慢，记 D-014（部署核对项） |
 | 10-06 | 1663120 | 快速门禁复跑（ruff、mypy、pytest --cov、tsc、bun test） | 808 后端通过（覆盖率 90.36%），478 前端通过 | D-007～D-010 修复后 |
 | 10-06 | c955e79+D-001…D-006 | `scripts/local_ci.sh` 全量门禁 | **全部通过**，522 s | WSL + Docker 临时 PostgreSQL 17 + 合成 release；Gephi 逐字节一致；807 后端、475 前端；学生 smoke（15 步无浏览器／API 错误、无 WCAG A/AA 违规）、完整提交评阅流程（含 PDF 七列）、纯界面 15 步课程、教师 smoke 均通过。证据 `dogfood-output/local-ci/20261005T192922Z-679/` |
 
@@ -189,4 +196,5 @@ cd frontend && bunx tsc --noEmit -p . && bun run test:unit && bun run build && b
 | D-010 | 10-06 | P2 | `frontend/src/labs/steps/db-lab.tsx:290` | `codePlainName` 对无中文名的行业代码返回代码本身，表头下方重复显示代码 | 1663120：无名称时返回 undefined；新增测试 | 代码评审；前端 478 通过 |
 | D-011 | 10-06 | P3（整洁） | `db-lab.tsx:856`、`auto-comparison.tsx:117` | 用 `.replace("浏览", …)` 改写共享文案常量；`login.tsx:197` 用 `notice.includes("失效")` 决定样式；`network-ranking.tsx:58` 同一 `rankText` 调三次 | 交付后处理 | 代码评审 |
 | D-013 | 10-06 | P2（部署） | `gvcsim/cli.py:113` | `forwarded_allow_ips` 写死为 `127.0.0.1`。DEPLOY.md 允许 Nginx 与 API 分机部署，此时所有学生的来源 IP 都变成 Nginx 的地址，登录来源限流（默认 120 次/分）会把全班当作一个来源，课堂集中登录时可能整体 429 | 交付环境若同机部署则无影响；分机部署需改为可配置或在 DEPLOY.md 写明 | 安全评审 |
+| D-014 | 10-06 | P2（部署核对） | `GVCSIM_FILE_CACHE_MODE` | 原始切片在默认 `hash` 模式下每请求重算原始 CSV 的 SHA-256（420 ms/次，50 人并发时中位 11.5 s），`notify` 模式 13 ms/次。模板与演示站已设 notify，但 notify 只在本地 ext4/XFS/Btrfs/tmpfs 生效，NFS、9p 等会静默回退到 hash | 交付主机核对：数据目录在本地文件系统且环境文件含 `GVCSIM_FILE_CACHE_MODE=notify`；写进 DEPLOY.md 的检查项（第 6 天） | 第 4 天容量测试 |
 | D-012 | 10-06 | P2（覆盖） | `scripts/dogfood_token_expiry.py`、`dogfood_self_password_recovery.py`、`dogfood_workspace_interleavings.py` | 自动恢复草稿改版后，这三条真实过期／改密／换号脚本不在 local_ci 内，合并恢复路径只有 mock API 单测 | 10-06 在 WSL 对 `gvclab_e2e` 全部跑通：令牌 10 s 自然过期 2 次恢复、本人改密 2 次恢复、三标签页冲突＋撤销请求＋换号 2 轮通过；证据 `dogfood-output/day3-recovery/` | 已关闭 |
