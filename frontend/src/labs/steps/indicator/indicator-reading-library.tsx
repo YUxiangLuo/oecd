@@ -181,9 +181,7 @@ export function IndicatorReadingLibrary({ topic }: { topic: IndicatorReadingTopi
         <span className="indicator-reading-badge">课程资料</span>
       </summary>
       <div className="indicator-reading-intro">
-        本页汇总课程指标说明、原始方法说明与相关论文。课程说明已按当前 OECD ICIO 2023 edition（2016–2020）
-        的计算口径校订；历史资料中的年份不代表本系统的数据范围。原始资料沿用原文件编号，与课程步骤编号不同，
-        本页已按指标主题对应。建议先读课程校订版，再对照原始说明和方法论文。
+        本页汇总课程指标说明、原始方法说明与相关论文。课程说明已按当前 OECD ICIO 2023 edition（2016–2020）的计算口径校订；历史资料中的年份不代表本系统的数据范围。原始资料沿用原文件编号，与课程步骤编号不同，本页已按指标主题对应。建议先读课程校订版，再对照原始说明和方法论文。
       </div>
       <div className="indicator-reading-workspace">
         <div className="indicator-reading-list" aria-label="选择指标相关文章">

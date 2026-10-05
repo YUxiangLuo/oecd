@@ -184,6 +184,7 @@ def _composition_share_bar(
                     "label": _STUDENT_METRIC_LABELS.get(metric, metric),
                     "group": f"全球中位数（{reference['n']} 个经济体）",
                     "value": reference["median"] * 100,
+                    "reference": True,
                 }
             )
     scope = f"{year} 年 · " + (f"{sector_label(industry)} · " if industry else "")
@@ -310,6 +311,7 @@ def _with_industry_medians(
                     "label": item["label"],
                     "group": f"全球中位数（同行业，{reference['n']} 个经济体）",
                     "value": reference["median"] * scale,
+                    "reference": True,
                 }
             )
     return result
@@ -317,9 +319,7 @@ def _with_industry_medians(
 
 def _is_reference_item(item: dict[str, Any]) -> bool:
     """Global-median bars are a reference for the saved readings, not readings themselves."""
-    return str(item.get("group") or "").startswith("全球中位数") or str(item.get("label") or "").startswith(
-        "全球中位数"
-    )
+    return item.get("reference") is True
 
 
 def _rank_reading(context: dict[str, Any], countries: list[str]) -> str:
@@ -472,6 +472,7 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
             {
                 "label": f"全球中位数（{same_year_reference['n']} 个经济体）",
                 "value": same_year_reference["median"] * scale,
+                "reference": True,
             }
         )
         return {

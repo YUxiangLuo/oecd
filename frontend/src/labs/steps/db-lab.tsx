@@ -117,8 +117,7 @@ export function DatabaseGuide({ meta, releaseMeta }: { meta: DbMeta; releaseMeta
         </table>
       </ScrollableRegion>
       <p className="muted" style={{ maxWidth: 820, marginTop: 10 }}>
-        当前载入：<b>{icioDatasetName(releaseMeta)}</b>，{icioCoverage}。上表介绍数据库类型，不替代当前数据的来源说明。
-        各数据库的分类方式不同，覆盖数字不能直接横向比较。
+        当前载入：<b>{icioDatasetName(releaseMeta)}</b>，{icioCoverage}。上表介绍数据库类型，不替代当前数据的来源说明。各数据库的分类方式不同，覆盖数字不能直接横向比较。
       </p>
     </div>
   );

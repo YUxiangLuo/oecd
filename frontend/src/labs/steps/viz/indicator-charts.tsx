@@ -1,13 +1,19 @@
 import { countryLabel } from "../../../viz";
 import { CAT } from "../../../viz/shared";
-import { changeReading, finiteValue, type YearDistribution } from "./indicator-model";
+import { changeReading, finiteValue, readingDigits, type YearDistribution } from "./indicator-model";
 import { niceDomain } from "../../../viz/nice-ticks";
 import type { Row } from "./scaffold";
 
 export const indicatorNumber = (value: number | null, unit: string) =>
   value === null
     ? "缺失"
-    : `${(unit === "%" ? value * 100 : value).toLocaleString("zh-CN", { maximumFractionDigits: 3 })}${unit === "%" ? "%" : ""}`;
+    : `${(unit === "%" ? value * 100 : value).toLocaleString("zh-CN", { maximumFractionDigits: readingDigits(value, unit) })}${unit === "%" ? "%" : ""}`;
+
+/** Size of a gap or its change as displayed, or null when it rounds to zero (so it never reads “差距扩大 0”). */
+const magnitudeReading = (value: number, unit: string) => {
+  const reading = changeReading(0, Math.abs(value), unit).replace("+", "");
+  return /^0( |$)/.test(reading) ? null : reading;
+};
 
 const REFERENCE_FILL = "#9aa3b5";
 const REFERENCE_LINE = "#6b7385";
@@ -60,13 +66,12 @@ export function TrendSummary({
     const startGap = start - value(second, firstYear)!;
     const endGap = end - value(second, lastYear)!;
     const gapChange = Math.abs(endGap) - Math.abs(startGap);
-    const gapMagnitude = unit === "%"
-      ? `${(Math.abs(gapChange) * 100).toLocaleString("zh-CN", { maximumFractionDigits: 3 })} 个百分点`
-      : indicatorNumber(Math.abs(gapChange), unit);
+    const gapMagnitude = magnitudeReading(gapChange, unit);
+    const endMagnitude = magnitudeReading(endGap, unit);
     const reversed = startGap !== 0 && endGap !== 0 && Math.sign(startGap) !== Math.sign(endGap);
     const gapStory = reversed
       ? "领先方反转"
-      : Math.abs(gapChange) < 1e-12
+      : gapMagnitude === null
         ? "差距基本不变"
         : gapChange > 0
           ? `差距扩大 ${gapMagnitude}`
@@ -74,7 +79,7 @@ export function TrendSummary({
     gapCard = (
       <div>
         <span>与对比国家 {countryLabel(second)}</span>
-        <b>{lastYear} 年 {countryLabel(first)} {endGap === 0 ? "与它持平" : `比它${endGap > 0 ? "高" : "低"} ${changeReading(0, Math.abs(endGap), unit).replace("+", "")}`}</b>
+        <b>{lastYear} 年 {countryLabel(first)} {endGap === 0 ? "与它持平" : endMagnitude === null ? "与它基本持平" : `比它${endGap > 0 ? "高" : "低"} ${endMagnitude}`}</b>
         <small>{firstYear}→{lastYear} {gapStory}；比较的是差距绝对值，不代表因果关系</small>
       </div>
     );
@@ -138,13 +143,11 @@ export function ComparisonSummary({
   const startGap = starts[0] - starts[1];
   const endGap = ends[0] - ends[1];
   const gapChange = Math.abs(endGap) - Math.abs(startGap);
-  const gapMagnitude = unit === "%"
-    ? `${(Math.abs(gapChange) * 100).toLocaleString("zh-CN", { maximumFractionDigits: 3 })} 个百分点`
-    : indicatorNumber(Math.abs(gapChange), unit);
+  const gapMagnitude = magnitudeReading(gapChange, unit);
   const reversed = startGap !== 0 && endGap !== 0 && Math.sign(startGap) !== Math.sign(endGap);
   const gapStory = reversed
     ? "领先方反转"
-    : Math.abs(gapChange) < 1e-12
+    : gapMagnitude === null
       ? "差距基本不变"
       : gapChange > 0
         ? `差距扩大 ${gapMagnitude}`
@@ -301,9 +304,12 @@ export function IndicatorTrendChart({
         )}
         {(metric === "GVCPs" || metric === "Pos_TPL") && (
           <g>
-            <line x1={110} x2={730} y1={y(1)} y2={y(1)} stroke="#966500" strokeDasharray="6 4" />
-            <text x={730} y={y(1) - 5} textAnchor="end" fontSize={11}>
-              位置基准 = 1
+            <line x1={110} x2={730} y1={y(1)} y2={y(1)} stroke="#966500" strokeDasharray="6 4">
+              <title>位置基准 = 1</title>
+            </line>
+            {/* Ratios hover around 1, so a label on the line would cover the data; it sits in the right margin. */}
+            <text x={737} y={y(1) + 4} fontSize={11} fill="#966500">
+              基准 1
             </text>
           </g>
         )}
@@ -350,6 +356,34 @@ export function IndicatorTrendChart({
   );
 }
 
+/** Rough width of a 12px bold label: CJK characters are square, Latin digits and letters about half. */
+const stripLabelWidth = (text: string) => [...text].reduce((width, ch) => width + (ch.charCodeAt(0) >= 0x2e80 ? 12 : 7), 0);
+
+/**
+ * Place each highlighted country's label under its own dot without a leader line landing on the other
+ * label: centred when they are apart, otherwise the left label ends at its dot and the right one starts
+ * at its dot on the same row; only when even that collides do they go on two rows.
+ */
+export function layoutStripLabels<T extends { px: number; text: string }>(points: T[]) {
+  const clamp = (left: number, width: number) => Math.min(796 - width, Math.max(4, left));
+  const laid = points.map((point) => {
+    const width = stripLabelWidth(point.text);
+    return { ...point, width, labelX: clamp(point.px - width / 2, width), row: 0 };
+  });
+  if (laid.length !== 2) return laid.map((point, row) => ({ ...point, row }));
+  const [left, right] = [...laid].sort((a, b) => a.px - b.px);
+  const gap = 10;
+  if (left.labelX + left.width + gap <= right.labelX) return laid;
+  left.labelX = clamp(left.px - left.width, left.width);
+  right.labelX = clamp(right.px, right.width);
+  if (left.labelX + left.width + gap <= right.labelX) return laid;
+  // Two rows: the lower label's leader must pass the upper label, so drop whichever one's dot lies outside it.
+  const crosses = (dot: number, label: { labelX: number; width: number }) => dot >= label.labelX - 2 && dot <= label.labelX + label.width + 2;
+  if (crosses(right.px, left) && !crosses(left.px, right)) left.row = 1;
+  else right.row = 1;
+  return laid;
+}
+
 /**
  * Every economy as a dot for one year, so the observed and comparison countries are read against the
  * whole sample: the shaded band is the middle 50%, the dashed line the median. Overlapping dots stack.
@@ -375,8 +409,7 @@ export function DistributionStrip({
     .filter((row) => row.year === year && !row.industry && row.country !== "ROW" && finiteValue(row[metric]))
     .map((row) => ({ country: String(row.country), value: row[metric] as number }))
     .sort((a, b) => a.value - b.value);
-  // Amounts are millions of USD; whole millions read better on a dot label than three decimals.
-  const reading = (value: number) => unit === "百万美元" ? Math.round(value).toLocaleString("zh-CN") : indicatorNumber(value, unit);
+  const reading = (value: number) => indicatorNumber(value, unit);
   const zeroBased = unit === "%" || unit === "百万美元";
   const valuesOnAxis = points.map((point) => point.value);
   const axis = niceDomain(
@@ -401,10 +434,10 @@ export function DistributionStrip({
   const base = 70 + lanes * 9;
   const height = base + 60;
   const cy = (lane: number) => base - 8 - lane * 9;
-  const marked = highlight.flatMap((country, index) => {
+  const marked = layoutStripLabels(highlight.flatMap((country, index) => {
     const point = placed.find((item) => item.country === country);
-    return point ? [{ ...point, index }] : [];
-  });
+    return point ? [{ ...point, index, text: `${countryLabel(country)} ${reading(point.value)} · 第 ${distribution.ranks[country]} 位` }] : [];
+  }));
   return (
     <section aria-label={`${year} 年${label}全球分布`}>
       <h4>{year} 年 · {label}在全部经济体中的位置</h4>
@@ -430,12 +463,12 @@ export function DistributionStrip({
         ))}
         {marked.map((point) => (
           <g key={point.country}>
-            <line x1={point.px} x2={point.px} y1={cy(point.lane)} y2={base + 26 + point.index * 14} stroke={CAT[point.index]} strokeWidth={1} />
+            <line x1={point.px} x2={point.px} y1={cy(point.lane)} y2={base + 26 + point.row * 14} stroke={CAT[point.index]} strokeWidth={1} />
             <circle cx={point.px} cy={cy(point.lane)} r={6} fill={CAT[point.index]} stroke="#fff" strokeWidth={1.5} />
             <text
-              x={Math.min(740, Math.max(60, point.px))}
-              y={base + 38 + point.index * 14}
-              textAnchor={point.px > 600 ? "end" : point.px < 160 ? "start" : "middle"}
+              x={point.labelX}
+              y={base + 38 + point.row * 14}
+              textAnchor="start"
               fontSize={12}
               fontWeight={700}
               fill={CAT[point.index]}
@@ -443,7 +476,7 @@ export function DistributionStrip({
               strokeWidth={3}
               paintOrder="stroke"
             >
-              {countryLabel(point.country)} {reading(point.value)} · 第 {distribution.ranks[point.country]} 位
+              {point.text}
             </text>
           </g>
         ))}
@@ -478,7 +511,12 @@ export function LengthPositionTrajectory({
     points.flatMap((point) => [point.x, point.y]),
   );
   if (!values.length) return null;
-  const axis = niceDomain(Math.min(0, ...values), Math.max(0, ...values));
+  // Lengths cluster around 2–5 stages and move by hundredths a year: a zero-based axis collapses every
+  // trajectory into one dot. Both axes share one range fitted to the data, so the 45° line keeps its meaning.
+  const low = Math.min(...values);
+  const high = Math.max(...values);
+  const pad = Math.max((high - low) * 0.15, 0.02);
+  const axis = niceDomain(low - pad, high + pad);
   const lo = axis.lo;
   const extent = axis.hi - lo || 1;
   const scale = (value: number) => ((value - lo) / extent) * 540;
@@ -498,7 +536,7 @@ export function LengthPositionTrajectory({
       >
         <defs>
           {countries.map((country, index) => (
-            <marker key={country} id={`length-arrow-${index}`} markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto" viewBox="0 0 12 8">
+            <marker key={country} id={`length-arrow-${index}`} markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto" viewBox="0 0 12 8">
               <path d="M0,0 L8,4 L0,8 z" fill={CAT[index]} />
             </marker>
           ))}

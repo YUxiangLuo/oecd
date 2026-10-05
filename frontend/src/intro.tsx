@@ -143,8 +143,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       <h1 className="intro-title">供应链仿真系统</h1>
       <div className="intro-kicker">GVC SIMULATION LAB</div>
       <p className="intro-lede">
-        从全球生产联系，理解价值链变化。利用投入产出数据计算指标，看它们的五年变化和全球位置，
-        再用教学模拟练习读取回归，完成有依据的实验报告。
+        从全球生产联系，理解价值链变化。利用投入产出数据计算指标，看它们的五年变化和全球位置，再用教学模拟练习读取回归，完成有依据的实验报告。
       </p>
       <p className="intro-boundary">{datasetName} · 教学情景 · 不作真实政策效果预测</p>
       <div className="intro-pipeline">

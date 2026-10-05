@@ -202,6 +202,26 @@ describe("parseReportChart", () => {
     expect(new Set(html.match(/fill="#(4b47e0|e0812e)"/g))).toEqual(new Set(['fill="#4b47e0"', 'fill="#e0812e"']));
   });
 
+  test("draws the global-median bars grey, so they never read as a third country", () => {
+    const chart = JSON.stringify({
+      version: 1,
+      type: "bar",
+      items: [
+        { label: "国内增加值出口", group: "CHN 中国", value: 76.8 },
+        { label: "国内增加值出口", group: "USA 美国", value: 85.3 },
+        { label: "国内增加值出口", group: "全球中位数（76 个经济体）", value: 73.2, reference: true },
+      ],
+    });
+    expect(parseReportChart(chart)).toMatchObject({ type: "bar" });
+    expect(parseReportChart(chart.replace('"reference":true', '"reference":1'))).toBeNull();
+    const html = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: `\`\`\`gvcsim-chart\n${chart}\n\`\`\`` }));
+    // Countries keep the first two colours; the median (bar and legend) is the reference grey.
+    expect(new Set(html.match(/fill="#[0-9a-f]{6}" fill-opacity/g))).toEqual(new Set([
+      'fill="#4b47e0" fill-opacity', 'fill="#e0812e" fill-opacity', 'fill="#8a8f9c" fill-opacity',
+    ]));
+    expect(html).not.toContain("#198a78");
+  });
+
   test("accepts and renders the regression coefficient chart with its interval", () => {
     const chart = JSON.stringify({
       version: 1,

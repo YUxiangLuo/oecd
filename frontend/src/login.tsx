@@ -169,8 +169,7 @@ export function LoginPage({ notice, onLogin }: { notice?: string | null; onLogin
             亲手分析全球价值链变化。
           </h1>
           <p className="login-desc">
-            使用跨国投入产出表，计算价值链指标、比较经济体，
-            再用教学模拟练习回归分析，判断结果及其不确定性，最后完成实验报告。
+            使用跨国投入产出表，计算价值链指标、比较经济体，再用教学模拟练习回归分析，判断结果及其不确定性，最后完成实验报告。
           </p>
           <div className="login-flow">
             {LOGIN_FLOW.map((p, i) => (

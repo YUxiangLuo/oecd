@@ -176,13 +176,17 @@ export const materialKey = (rows: VizObservation[]) =>
     ),
   );
 
+/** Amounts are millions of USD: whole millions read better than three decimals, as in the report. */
+export const readingDigits = (value: number, unit: string) =>
+  unit === "百万美元" && Math.abs(value) >= 1 ? 0 : 3;
+
 export function changeReading(
   start: number,
   end: number,
   unit: string,
 ): string {
   const difference = (end - start) * (unit === "%" ? 100 : 1);
-  return `${difference > 0 ? "+" : ""}${difference.toLocaleString("zh-CN", { maximumFractionDigits: 3 })} ${unit === "%" ? "个百分点" : unit}`;
+  return `${difference > 0 ? "+" : ""}${difference.toLocaleString("zh-CN", { maximumFractionDigits: readingDigits(difference, unit) })}${unit === "%" ? " 个百分点" : unit === "无量纲" ? "" : ` ${unit}`}`;
 }
 
 /** One year's spread of a country-level metric across all economies (ROW excluded). */

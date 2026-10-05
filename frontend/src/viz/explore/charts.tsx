@@ -372,7 +372,7 @@ export function CompositionBar({ rows, segments, sortKey, sortDirection = "desce
       </div>
       )}
       <ChartDataDisclosure
-        label={`${sortLabel ?? "分段"} 构成`}
+        label={`${sortLabel ?? "分段"}构成`}
         columns={[
           { key: "entity", label: "对象" },
           ...segments.map((segment) => ({ key: segment.key, label: segment.name })),

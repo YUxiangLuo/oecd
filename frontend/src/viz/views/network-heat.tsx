@@ -139,8 +139,7 @@ export function HeatTableViz({
         aria-describedby={definitionsId}
       >
         <caption style={{ textAlign: "left", padding: "12px 16px", color: "#3a4050", lineHeight: 1.6 }}>
-          {shownCountry}行业节点中心性；在完整全球国家×行业图上计算，按{sortLabel}降序显示{coverageLabel}。
-          本表仅供查数，不记录报告材料。
+          {shownCountry}行业节点中心性；在完整全球国家×行业图上计算，按{sortLabel}降序显示{coverageLabel}。本表仅供查数，不记录报告材料。
         </caption>
         <thead>
           <tr>

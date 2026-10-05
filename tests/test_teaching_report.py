@@ -764,7 +764,10 @@ def test_composition_requires_all_trade_components_and_reports_each_reading():
     assert "| 出口中的税收减补贴 | 百万美元 | -2 |" in text
     chart = teaching_report._observed_chart(data, 6, data["observations"])
     # Global-median bars are added when country data is available; the saved countries' bars are fixed.
-    chart = {**chart, "items": [item for item in chart["items"] if not item["group"].startswith("全球中位数")]}
+    # Median bars are flagged as references so the report draws them grey, not as a third country.
+    assert any(item.get("reference") for item in chart["items"])
+    assert all(bool(item.get("reference")) == item["group"].startswith("全球中位数") for item in chart["items"])
+    chart = {**chart, "items": [item for item in chart["items"] if not item.get("reference")]}
     assert len(chart["items"]) == 12
     # Like the page, the single-year composition shows each part as a share of gross exports.
     assert {(item["group"], item["label"]) for item in chart["items"]} == {
@@ -1701,6 +1704,7 @@ def test_country_level_trend_and_same_year_charts_show_the_global_median(tmp_pat
     (bar,) = teaching_report._observed_charts(data, 8, data["observations"])
     assert [item["label"] for item in bar["items"]][-1] == "全球中位数（5 个经济体）"
     assert bar["items"][-1]["value"] == pytest.approx(4.4)
+    assert bar["items"][-1]["reference"] is True and not any(item.get("reference") for item in bar["items"][:-1])
     section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 8", 1)[1]
     assert "全球中位数 4.4" in section and "CHN 中国第 3 位" in section
 
@@ -1772,6 +1776,7 @@ def test_step9_report_reads_the_industry_against_the_same_industry_worldwide(tmp
         ("C26 计算机电子光学", "全球中位数（同行业，4 个经济体）"),
     ]
     assert ranking["items"][2]["value"] == pytest.approx(139.0)
+    assert [bool(item.get("reference")) for item in ranking["items"]] == [False, False, True] * 2
     section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 9", 1)[1]
     # Extremes are read among the saved countries only, never the median bars.
     assert (

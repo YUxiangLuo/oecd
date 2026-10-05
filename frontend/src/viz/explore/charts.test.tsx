@@ -77,7 +77,7 @@ describe("Steps 6-9 chart semantic data equivalents", () => {
         valueFormat="amount"
       />,
     );
-    expect(html).toContain("查看排序总量 构成图表数据表");
+    expect(html).toContain("查看排序总量构成图表数据表");
     expect(html).toContain("<th scope=\"col\">国内段</th>");
     expect(html).toContain("<th scope=\"col\">外国段</th>");
     expect(html).toContain("<th scope=\"col\">排序总量</th>");

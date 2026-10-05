@@ -141,6 +141,14 @@ export function IndicatorExplorer({
   const label = (key: string) =>
     field(key)?.label ?? schema.data?.fields[key]?.label ?? key;
   const unit = (key: string) => field(key)?.unit ?? "百万美元";
+  // Shares derived on the page (e.g. 纯国内份额) have no schema text: describe them by their numerator.
+  const description = (key: string) => {
+    const own = schema.data?.fields[key]?.desc;
+    const { numerator, denominator } = field(key) ?? {};
+    const numeratorDesc = numerator && schema.data?.fields[numerator]?.desc;
+    if (own || !numerator || !denominator || !numeratorDesc) return own;
+    return `${label(numerator)}占${label(denominator)}的比重。${label(numerator)}：${numeratorDesc}`;
+  };
   const composition = view === "composition" || view === "evolution";
   const metrics =
     composition && topic.composition
@@ -305,9 +313,12 @@ export function IndicatorExplorer({
   // selected countries, so they have none.
   const referenceFor = (key: string) => (industry || industryQuery ? [] : countryDistribution(rows, key, chartYears));
   const exploreYear = chartYears.includes(year) ? year : chartYears.at(-1) ?? year;
+  // ROW is an accounting remainder, not an economy: the modal's median and ranking use the same
+  // economies as the page's global reference.
   const exploreRows = rows.filter(
     (row) =>
       row.year === exploreYear &&
+      row.country !== "ROW" &&
       (industry ? row.industry === industry : !row.industry),
   );
   // Scatter primitives identify industry rows by industry; these points represent
@@ -570,10 +581,11 @@ export function IndicatorExplorer({
           {composition && topic.composition && (
             <>
               <p>
-                {topic.composition.note}{" "}
+                {topic.composition.note}
                 {view === "evolution"
                   ? "两国分面使用相同分项颜色和年份顺序，先比较各自变化，再比较国家差异。"
                   : "两国使用相同分项颜色和共同刻度；金额和份额不能混读。"}
+                条形右侧的数字是{label(topic.composition.total)}（{unit(topic.composition.total)}）。
               </p>
               <div className={view === "evolution" ? "comparison-facets" : undefined}>
                 {(view === "evolution" ? selected.map((country) => [country]) : [selected]).map((facetCountries) => (
@@ -644,9 +656,9 @@ export function IndicatorExplorer({
       )}
       </div>
       {/* One-line definition of the metric being read; caveats live in the step's task card and the report. */}
-      {!composition && view !== "directions" && schema.data?.fields[metric]?.desc && <p className="muted viz-metric-desc">
-        {label(metric)}：{schema.data?.fields[metric]?.desc}
-        {field(metric)?.denominator && ` 分母：${label(field(metric)!.denominator!)}；分母不为正时份额不显示。`}
+      {!composition && view !== "directions" && description(metric) && <p className="muted viz-metric-desc">
+        {label(metric)}：{description(metric)}
+        {field(metric)?.denominator && `分母：${label(field(metric)!.denominator!)}；分母不为正时份额不显示。`}
       </p>}
       <SupplementaryCharts>
         <ChartModalButton

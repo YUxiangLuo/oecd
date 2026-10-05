@@ -46,7 +46,9 @@ test("step 9 records the main comparison automatically; supplementary charts ope
   const dialog = await screen.findByRole("dialog");
   expect(within(dialog).getByText(/本表仅供查数/, { selector: "caption" })).toBeTruthy();
   const callsBefore = save.mock.calls.length;
-  fireEvent.change(within(dialog).getByLabelText("下钻国家"), { target: { value: "CHN" } });
+  // The heat table opens on country A of the comparison, not on the comparison country B.
+  expect((within(dialog).getByLabelText("下钻国家") as HTMLSelectElement).value).toBe("CHN");
+  fireEvent.change(within(dialog).getByLabelText("下钻国家"), { target: { value: "USA" } });
   fireEvent.change(within(dialog).getByLabelText("排序指标"), { target: { value: "weighted degree" } });
   // Browsing inside the modal never touches the report material.
   await waitFor(() => expect(save.mock.calls.length).toBeGreaterThan(callsBefore));

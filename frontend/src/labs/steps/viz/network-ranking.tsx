@@ -37,7 +37,7 @@ export function NetworkRanking({ rows, countries, unit, onIndustry, reference = 
   return <>
     <p className="muted">
       按 {countryLabel(countries[0])} 降序，两国使用同一组行业、同一顺序和零起点刻度。条长与数值成比例，单位：{unit}。缺失值不补零。点击行业查看历年变化。
-      {withReference && " 灰色竖线是该行业在全部经济体中的中位数；“全球第 N 位”是该国这一行业在全部经济体同一行业中的排名（从高到低）。"}
+      {withReference && "灰色竖线是该行业在全部经济体中的中位数；“全球第 N 位”是该国这一行业在全部经济体同一行业中的排名（从高到低）。"}
     </p>
     <ScrollableRegion label="行业排名条形图" className="bounded-data-table" style={{ padding: 12 }}>
       {rows.map((row, rank) => {

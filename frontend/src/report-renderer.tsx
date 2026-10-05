@@ -6,8 +6,9 @@ import { ScrollableRegion } from "./a11y";
 import { niceDomain } from "./viz/nice-ticks";
 
 type ChartItem = { label: string; value: number };
-/** A bar may name the series it belongs to (e.g. a country); bars of one group share a colour. */
-type BarItem = ChartItem & { group?: string };
+/** A bar may name the series it belongs to (e.g. a country); bars of one group share a colour.
+ *  A reference bar (e.g. the global median) is grey, like a reference line, so it never reads as a country. */
+type BarItem = ChartItem & { group?: string; reference?: boolean };
 type ChartPoint = ChartItem & { se?: number; ci_low?: number; ci_high?: number };
 type CoefficientItem = ChartItem & { ci_low?: number; ci_high?: number };
 /** A reference series (e.g. the global median) is drawn as a grey dashed line, not as a country. */
@@ -71,9 +72,10 @@ function isItem(value: unknown): value is ChartItem {
 function isBarItem(value: unknown): value is BarItem {
   if (!value || typeof value !== "object") return false;
   const item = value as Record<string, unknown>;
-  return hasOnlyKeys(item, ["label", "value", "group"])
+  return hasOnlyKeys(item, ["label", "value", "group", "reference"])
     && isLabel(item.label)
     && (item.group == null || isLabel(item.group))
+    && (item.reference == null || typeof item.reference === "boolean")
     && typeof item.value === "number"
     && Number.isFinite(item.value);
 }
@@ -168,6 +170,7 @@ const fmt = (value: number) => {
 };
 
 const GROUP_COLORS = ["#4b47e0", "#e0812e", "#198a78", "#7b4ab5"];
+const REFERENCE_COLOR = "#8a8f9c";
 
 /** Approximate SVG text width: CJK glyphs take about one em, Latin about 0.6 em. */
 function textWidth(text: string, size: number) {
@@ -215,8 +218,12 @@ function BarChart({ chart }: { chart: Extract<ReportChart, { type: "bar" }> }) {
   const plotW = W - m.l - m.r;
   const x = (value: number) => m.l + ((value - min) / span) * plotW;
   const zero = x(0);
+  const referenceGroups = new Set(chart.items.flatMap((item) => (item.reference && item.group ? [item.group] : [])));
+  const groupColor = (group: string) => referenceGroups.has(group)
+    ? REFERENCE_COLOR
+    : GROUP_COLORS[groups.filter((item) => !referenceGroups.has(item)).indexOf(group) % GROUP_COLORS.length];
   const fill = (item: BarItem) =>
-    item.group ? GROUP_COLORS[groups.indexOf(item.group) % GROUP_COLORS.length] : item.value < 0 ? "#d95f45" : "#4b47e0";
+    item.reference ? REFERENCE_COLOR : item.group ? groupColor(item.group) : item.value < 0 ? "#d95f45" : "#4b47e0";
   const runEnd = (index: number) => {
     let end = index;
     while (end + 1 < rows.length && !rows[end + 1].first) end += 1;
@@ -231,7 +238,7 @@ function BarChart({ chart }: { chart: Extract<ReportChart, { type: "bar" }> }) {
           const y = 6 + position.row * 20;
           return (
             <g key={group}>
-              <rect x={position.x} y={y} width={16} height={10} rx={2} fill={GROUP_COLORS[index % GROUP_COLORS.length]} fillOpacity={0.82} />
+              <rect x={position.x} y={y} width={16} height={10} rx={2} fill={groupColor(group)} fillOpacity={0.82} />
               <text x={position.x + 22} y={y + 9} fontSize={11} fill="#4b5563">{group}</text>
             </g>
           );
@@ -405,7 +412,7 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
         {chart.series.map((series, seriesIndex) => {
           const reference = series.reference === true;
           const color = reference
-            ? "#8a8f9c"
+            ? REFERENCE_COLOR
             : colors[chart.series.slice(0, seriesIndex).filter((item) => item.reference !== true).length];
           return (
             <g key={series.label}>

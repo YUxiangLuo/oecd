@@ -141,14 +141,15 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
   const { year, pickCountries, schema } = useVizLab(meta, step, state, STEP10_DEFAULT_LENS, STEP10_LENS_KEYS);
   const observations = (state.data?.observations ?? []).filter((item) => item.source === "explicit-network-trend" || item.source === "explicit-network-ranking");
   const fallbackDrill = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
-  const [drill, setDrill] = useState(state.data?.drill ?? state.data?.compared?.at(-1) ?? fallbackDrill);
+  // The heat table follows country A ([A, B] in compared) unless the student picked a country in a modal.
+  const [pickedDrill, setDrill] = useState<string | undefined>(state.data?.drill);
+  const drill = [pickedDrill, state.data?.compared?.[0], fallbackDrill].find((country) => country && meta.countries.includes(country)) ?? "";
   const [heatSort, setHeatSort] = useState<HeatSortMetric>(normalizeHeatSortMetric(state.data?.heat_sort));
   const [heatCoverage, setHeatCoverage] = useState<HeatCoverage>(normalizeHeatCoverage(state.data?.heat_coverage));
   const drillTouched = useRef(Boolean(state.data));
   useEffect(() => {
     if (drillTouched.current || !state.data) return;
-    const saved = state.data.drill ?? state.data.compared?.at(-1);
-    if (saved && meta.countries.includes(saved)) setDrill(saved);
+    if (state.data.drill) setDrill(state.data.drill);
     setHeatSort(normalizeHeatSortMetric(state.data.heat_sort));
     setHeatCoverage(normalizeHeatCoverage(state.data.heat_coverage));
     drillTouched.current = true;
