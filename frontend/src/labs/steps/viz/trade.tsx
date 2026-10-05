@@ -7,7 +7,10 @@ import type { VizStepState } from "./scaffold";
 export const TRADE_TOPIC: IndicatorTopic = {
   key: "trade",
   defaultMetric: "FVA_share",
+  defaultView: "composition",
   question: "出口的价值来源怎样随时间变化？在全部经济体中处于什么位置？",
+  themeLabel: "出口构成",
+  themeHint: "出口额由六项构成：先看哪一项占大头、税收减补贴是否为负，再看对比国家的构成是否不同；切到“历年变化”看占比怎样变。",
   metrics: [
     {
       key: "FVA_share",

@@ -1,10 +1,10 @@
 /**
  * 步骤 9 · 网络可视化 —— 故事:「流量规模与二值拓扑会讲同一个故事吗?」
  *
- * 主图:行业的历年变化与排名,以全部经济体同一行业为参照,再与对比国家比较;按学生最后查看的完整图表自动记录报告材料。
- * 补充图表(弹窗,不替换主图):
- *   贸易联系概览  国家间双边贸易流的有向网络,悬停看某国的伙伴与区域集群
- *   单国行业热力表  一个国家全部行业节点的多项网络指标,可排序
+ * 记录视角:行业的历年变化与排名,以全部经济体同一行业为参照,再与对比国家比较;按学生最后查看的完整图表自动记录报告材料。
+ * 探索视角(同一视角栏,不记录材料):
+ *   全部指标表  一个国家全部行业节点的多项网络指标,可排序
+ *   贸易联系    国家间双边贸易流的有向网络,悬停看某国的伙伴与区域集群
  *
  * 口径:国家级贸易图是完全图 → 无权中心性(度 / 介数 …)恒为常数、无区分度,
  * 因此二值拓扑比较只在国家–行业级做(见 country_degenerate 处理与回归 network 粒度)。
@@ -26,7 +26,6 @@ import {
   type HeatSortMetric,
 } from "../../../viz/views/network-heat";
 import { AsyncStateMessage, useAsync } from "../../shared";
-import { ChartModalButton, SupplementaryCharts } from "./chart-modal";
 import { NetworkTrend } from "./network-trend";
 import {
   ChartStory,
@@ -174,23 +173,30 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
 
   return (
     <div>
-      <NetworkTrend meta={meta} schema={schema} initialCountry={drill} initialCountries={state.data?.compared ?? []} observations={observations} syncing={state.syncing} syncError={state.syncError} onRetrySync={state.syncNow} locked={state.materialLocked} onRecord={(countries, records) => {
-        pickCountries(countries);
-        state.save({ compared: countries, metric: records[0]?.metric, observations: records });
-      }} />
-      <SupplementaryCharts>
-        <ChartModalButton label="贸易联系概览（国家间网络图）" title={`步骤 ${step.n} · 国家间贸易联系概览`}>
-          {() => <TradeNetworkOverview meta={meta} initialYear={year} onInspectCountry={inspectCountry} />}
-        </ChartModalButton>
-        <ChartModalButton label="单国行业热力表" title={`步骤 ${step.n} · ${countryLabel(drill)} 行业网络指标`}>
-          {() => (
+      <NetworkTrend
+        meta={meta}
+        schema={schema}
+        initialCountry={drill}
+        initialCountries={state.data?.compared ?? []}
+        observations={observations}
+        syncing={state.syncing}
+        syncError={state.syncError}
+        onRetrySync={state.syncNow}
+        locked={state.materialLocked}
+        onRecord={(countries, records) => {
+          pickCountries(countries);
+          state.save({ compared: countries, metric: records[0]?.metric, observations: records });
+        }}
+        extraLenses={[{ key: "heat", label: "全部指标表" }, { key: "links", label: "贸易联系" }]}
+        renderExtra={(key) => key === "heat"
+          ? (
             <IndustryHeatTable
               meta={meta} initialYear={year} drill={drill} heatSort={heatSort} heatCoverage={heatCoverage}
               onDrill={inspectCountry} onSort={changeHeatSort} onCoverage={changeHeatCoverage}
             />
-          )}
-        </ChartModalButton>
-      </SupplementaryCharts>
+          )
+          : <TradeNetworkOverview meta={meta} initialYear={year} onInspectCountry={inspectCountry} />}
+      />
     </div>
   );
 }

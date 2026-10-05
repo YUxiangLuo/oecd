@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE } from "../../../step-task-card";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
-import { ChartModalButton, SupplementaryCharts } from "./chart-modal";
 import type { Meta, Step, StepStateApi } from "../../../types";
 import {
   CompositionBar,
@@ -219,13 +218,16 @@ export function IndicatorExplorer({
           (row[topic.composition!.total] as number) > 0,
       ));
   const canSave =
+    view !== "positioning" &&
     query.status === "success" &&
     completeComposition &&
     materialComplete(pending, selected, metrics, timeView);
   // Name the actual reason the material cannot be saved instead of one catch-all sentence.
   const blockedReason =
-    selected.length < 2
-      ? "报告材料需要一个对比国家；现在只看全球参照，不会记录。"
+    view === "positioning"
+      ? "定位图只作探索，不记录材料。"
+      : selected.length < 2
+      ? "只看一个国家时不记录材料；添加对比国家后会自动记录完整图表。"
       : query.status === "error"
         ? "当前比较的数据加载失败，请重试。"
         : query.status !== "success"
@@ -260,16 +262,18 @@ export function IndicatorExplorer({
     // state/selection objects change every render; pendingKey captures every meaningful change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingKey, matches, state.syncing]);
+  // View bar: the step's theme first (default entry), then the two views every step must offer.
+  const themeLens = topic.composition
+    ? { key: "composition" as const, label: topic.themeLabel }
+    : { key: "directions" as const, label: topic.themeLabel };
   const lenses: { key: IndicatorView; label: string }[] = [
+    themeLens,
     { key: "trend", label: "历年变化" },
-    { key: "comparison", label: "全球分布" },
-    ...(topic.composition
-      ? [
-          { key: "composition" as const, label: "构成分析" },
-        ]
-      : [{ key: "directions" as const, label: "前后向与位置" }]),
+    { key: "comparison", label: "国家对比" },
+    { key: "positioning", label: "定位图" },
     { key: "industry", label: "定位行业" },
   ];
+  const themeActive = composition || view === "directions";
   const valuesFor = (key: string, sector = industry) =>
     selected.map((country) => {
       const value = rows.find(
@@ -337,12 +341,7 @@ export function IndicatorExplorer({
       aria-label={`步骤${step.n}比较工作台`}
     >
       <h3>{topic.question}</h3>
-      <LensNav
-        lenses={lenses}
-        active={composition ? "composition" : view}
-        onPick={(next) => select({ view: next === "composition" && composition ? view : next })}
-      />
-      <div className="controls">
+      <div className="controls" role="group" aria-label="比较对象">
         <LabeledControl label="国家 A">
           {(id) => (
             <select
@@ -371,7 +370,7 @@ export function IndicatorExplorer({
               value={second}
               onChange={(e) => select({ second: e.target.value })}
             >
-              <option value="">暂不选择（报告材料需要对比国家）</option>
+              <option value="">不选对比国家</option>
               {countries
                 .filter((country) => country !== first)
                 .map((country) => (
@@ -382,6 +381,15 @@ export function IndicatorExplorer({
             </select>
           )}
         </LabeledControl>
+      </div>
+      <LensNav
+        lenses={lenses}
+        active={composition ? "composition" : view}
+        onPick={(next) => select({ view: next === "composition" && composition ? view : next })}
+      />
+      {themeActive && <p className="muted lens-hint">{topic.themeHint}</p>}
+      {view === "positioning" && <p className="muted lens-hint">定位图把全部经济体放在两项指标上，所选国家高亮；只作探索，不记录材料。</p>}
+      <div className="controls">
         {view !== "industry" && (
           <LabeledControl label="比较范围">
             {(id) => (
@@ -434,8 +442,8 @@ export function IndicatorExplorer({
             )}
           </LabeledControl>
         )}
-      </div>
-      {composition && <div className="controls" role="group" aria-label="构成分析时间范围">
+            </div>
+      {composition && <div className="controls" role="group" aria-label={`${topic.themeLabel}时间范围`}>
         <button className={view === "composition" ? "primary" : "secondary"} aria-pressed={view === "composition"} onClick={() => select({ view: "composition" })}>单年</button>
         <button className={view === "evolution" ? "primary" : "secondary"} aria-pressed={view === "evolution"} onClick={() => select({ view: "evolution" })}>历年</button>
       </div>}
@@ -510,7 +518,7 @@ export function IndicatorExplorer({
         )}
       </div>
       <p aria-label="当前比较口径"><strong>
-        {selected.map(countryLabel).join("与")} · {view === "industry" ? "行业排名" : industry ? sectorLabel(industry) : "国家整体"} · {timeView ? `${start}–${end}` : year} · {composition ? "构成分析" : view === "directions" ? "前后向GVC段长度与位置" : label(metric)}
+        {selected.map(countryLabel).join("与")} · {view === "industry" ? "行业排名" : industry ? sectorLabel(industry) : "国家整体"} · {timeView ? `${start}–${end}` : year} · {composition ? topic.themeLabel : view === "directions" ? "前后向GVC段长度与位置" : view === "positioning" ? `定位图（${label(topic.axes.x)} × ${label(topic.axes.y)}）` : label(metric)}
       </strong></p>
       <div className="viz-chart">
       {!validYears ? <div className="error-box" role="alert">
@@ -559,15 +567,49 @@ export function IndicatorExplorer({
               />
             </>}
           {view === "comparison" && !industry && referenceFor(metric)[0] && (
-            <DistributionStrip
-              rows={rows}
-              metric={metric}
-              unit={unit(metric)}
-              label={label(metric)}
-              year={year}
-              highlight={selected}
-              distribution={referenceFor(metric)[0]}
-            />
+            <>
+              <DistributionStrip
+                rows={rows}
+                metric={metric}
+                unit={unit(metric)}
+                label={label(metric)}
+                year={year}
+                highlight={selected}
+                distribution={referenceFor(metric)[0]}
+              />
+              <h4>{label(metric)}排名 · 前 20 与所选国家</h4>
+              <RankBarChart
+                rows={finiteBy(exploreRows, metric)
+                  .sort((a, b) => (b[metric] as number) - (a[metric] as number))
+                  .filter((row, index) => index < 20 || selected.includes(String(row.country)))}
+                metricKey={metric}
+                label={label(metric)}
+                format={unit(metric) === "%" ? "pct" : unit(metric) === "百万美元" ? "amount" : "number"}
+                highlight={new Set(selected)}
+              />
+            </>
+          )}
+          {view === "positioning" && (
+            <>
+              <h4>定位图 · {industry ? `${sectorLabel(industry)} · 所选国家` : `${exploreYear} 年全部经济体`}</h4>
+              <p className="muted">
+                虚线中位数只表示当前展示样本的相对高低，不代表好坏或因果关系。
+                {topic.axes.equality && "等长线以上前向GVC段更长；总长度与GVC段不能混用。"}
+              </p>
+              <QuadrantScatter
+                rows={reference}
+                referenceRows={reference}
+                xKey={topic.axes.x}
+                yKey={topic.axes.y}
+                xLabel={label(topic.axes.x)}
+                yLabel={label(topic.axes.y)}
+                xFormat={topic.key === "length" ? "number" : "pct"}
+                yFormat={topic.key === "length" ? "number" : "pct"}
+                equalityLine={topic.axes.equality}
+                quadrantLabels={topic.axes.labels}
+                highlight={new Set(selected)}
+              />
+            </>
           )}
           {view === "comparison" && industry && <p className="muted">全球分布按国家整体比较；选择了行业时只显示所选国家的同行业读数。</p>}
           {view === "comparison" && (industry || !referenceFor(metric)[0]) && (
@@ -665,61 +707,6 @@ export function IndicatorExplorer({
         {label(metric)}：{description(metric)}
         {field(metric)?.denominator && `分母：${label(field(metric)!.denominator!)}；分母不为正时份额不显示。`}
       </p>}
-      <SupplementaryCharts>
-        <ChartModalButton
-          label={industry ? "两国同行业定位图" : "全部国家定位图与排名"}
-          title={`步骤 ${step.n} · ${industry ? `${sectorLabel(industry)} · ` : ""}${exploreYear} 年定位图`}
-        >
-          {() => (
-            <>
-              <h4>定位图 · {industry ? "所选两国同一行业" : "当年国家样本"}</h4>
-              <p>
-                虚线中位数只表示当前展示样本的相对高低，不代表好坏或因果关系。
-                {topic.axes.equality &&
-                  "等长线以上前向GVC段更长；总长度与GVC段不能混用。"}
-              </p>
-              <QuadrantScatter
-                rows={reference}
-                referenceRows={reference}
-                xKey={topic.axes.x}
-                yKey={topic.axes.y}
-                xLabel={label(topic.axes.x)}
-                yLabel={label(topic.axes.y)}
-                xFormat={topic.key === "length" ? "number" : "pct"}
-                yFormat={topic.key === "length" ? "number" : "pct"}
-                equalityLine={topic.axes.equality}
-                quadrantLabels={topic.axes.labels}
-                highlight={new Set(selected)}
-              />
-              {!industry && (
-                <>
-                  <h4>{label(metric)}排名 · 前20与所选国家</h4>
-                  <RankBarChart
-                    rows={finiteBy(exploreRows, metric)
-                      .sort(
-                        (a, b) => (b[metric] as number) - (a[metric] as number),
-                      )
-                      .filter(
-                        (row, index) =>
-                          index < 20 || selected.includes(String(row.country)),
-                      )}
-                    metricKey={metric}
-                    label={label(metric)}
-                    format={
-                      unit(metric) === "%"
-                        ? "pct"
-                        : unit(metric) === "百万美元"
-                          ? "amount"
-                          : "number"
-                    }
-                    highlight={new Set(selected)}
-                  />
-                </>
-              )}
-                        </>
-          )}
-        </ChartModalButton>
-      </SupplementaryCharts>
       <section className="qualified-run-card" aria-label="报告材料">
         <h3>报告材料 · {saved.length ? `已${state.materialLocked ? "" : "自动"}记录（${saved.length} 条读数）` : "尚未记录"}</h3>
         <p role="status">

@@ -5,6 +5,10 @@ export interface IndicatorTopic {
   defaultMetric: string;
   defaultView?: IndicatorView;
   question: string;
+  /** Name of the step's theme view (first in the view bar, the default entry). */
+  themeLabel: string;
+  /** One line under the view bar while the theme view is open: what to look at. */
+  themeHint: string;
   metrics: {
     key: string;
     label: string;
@@ -27,6 +31,7 @@ export interface IndicatorTopic {
 export type IndicatorView =
   | "trend"
   | "comparison"
+  | "positioning"
   | "composition"
   | "evolution"
   | "directions"

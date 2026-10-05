@@ -7,7 +7,10 @@ import type { VizStepState } from "./scaffold";
 export const PRODUCTION_TOPIC: IndicatorTopic = {
   key: "production",
   defaultMetric: "3b_VA_GVC_C_share",
+  defaultView: "composition",
   question: "生产活动参与跨境分工的程度怎样变化？在全部经济体中处于什么位置？",
+  themeLabel: "四类生产活动",
+  themeHint: "四类前向生产活动的份额加总为 100%：先看复杂 GVC 占多少、与对比国家差在哪一类，再切到“历年变化”和“国家对比”看变化与全球位置。",
   metrics: [
     {
       key: "3b_VA_GVC_C_share",

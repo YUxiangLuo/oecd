@@ -109,8 +109,8 @@ def main():
                     ),
                 )
             elif step == 9:
-                # Supplementary charts open in a modal; the main comparison is recorded automatically.
-                student.button("贸易联系概览（国家间网络图）")
+                # The trade network is an exploration view in the view bar; the main comparison records automatically.
+                student.button("贸易联系")
                 for country in ("CHN", "USA"):
                     selector = f'.network-node[aria-label^="{country} "]'
                     student.run("wait", selector)
@@ -119,8 +119,8 @@ def main():
                     student.run("wait", ".network-fullscreen-scrim")
                     student.run("press", "Escape")
                     student.run("wait", "--fn", '!document.querySelector(".network-fullscreen-scrim")')
-                student.button("关闭")
-                student.run("wait", "--fn", '!document.querySelector(".chart-modal-scrim")')
+                student.button("历年变化")
+                student.run("wait", 'select[name="network-metric"]')
                 student.run(
                     "select",
                     'section[aria-label="行业网络指标趋势"] select[name="network-country-a"]',

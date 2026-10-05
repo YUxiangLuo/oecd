@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE } from "../../../step-task-card";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
@@ -6,7 +6,7 @@ import type { IndicatorSchema, Meta } from "../../../types";
 import { countryLabel, sectorLabel } from "../../../viz";
 import { HEAT_EVIDENCE_METRIC } from "../../../viz/views/network-heat";
 import { AsyncStateMessage, fmtDb, useAsync } from "../../shared";
-import { currentReleaseId, type Row, type VizObservation } from "./scaffold";
+import { currentReleaseId, LensNav, type Row, type VizObservation } from "./scaffold";
 import { IndicatorTrendChart } from "./indicator-charts";
 import { defaultComparison, type YearDistribution } from "./indicator-model";
 import { NetworkRanking, networkRanking } from "./network-ranking";
@@ -23,7 +23,7 @@ export function networkTrendPoints(rows: Row[], years: number[], countries: stri
   }));
 }
 
-export function NetworkTrend({ meta, schema, initialCountry, initialCountries = [], observations = [], syncing = false, syncError = null, onRetrySync, onRecord, locked = false }: {
+export function NetworkTrend({ meta, schema, initialCountry, initialCountries = [], observations = [], syncing = false, syncError = null, onRetrySync, onRecord, locked = false, extraLenses = [], renderExtra }: {
   meta: Meta;
   schema?: IndicatorSchema | null;
   initialCountry: string;
@@ -36,6 +36,9 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   onRecord: (countries: string[], observations: VizObservation[]) => void;
   /** The report is submitted: record only when the student asks (see StepStateApi.materialLocked). */
   locked?: boolean;
+  /** Step-specific views that live beside the two recording views (they never record material). */
+  extraLenses?: { key: string; label: string }[];
+  renderExtra?: (key: string) => ReactNode;
 }) {
   const countries = meta.countries.filter((country) => country !== "ROW");
   const years = [...meta.years].sort((a, b) => a - b);
@@ -46,7 +49,9 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const [second, setSecond] = useState(defaultSecond);
   const [industry, setIndustry] = useState(meta.sectors.includes(restored[0]?.industry ?? "") ? restored[0].industry! : meta.sectors.includes("C26") ? "C26" : meta.sectors[0] ?? "");
   const [metric, setMetric] = useState(restored[0]?.metric ?? "weighted degree");
-  const [view, setView] = useState<"trend" | "ranking">(restored[0]?.source === "explicit-network-ranking" ? "ranking" : "trend");
+  const [view, setView] = useState<string>(restored[0]?.source === "explicit-network-ranking" ? "ranking" : "trend");
+  // Only the two comparison views record material; the extra views are exploration.
+  const recordable = view === "trend" || view === "ranking";
   // Picking an industry in the ranking unmounts the clicked button; move focus to the new scope line.
   const scopeRef = useRef<HTMLParagraphElement>(null);
   const [focusScope, setFocusScope] = useState(false);
@@ -99,7 +104,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       points.some((point) => point.country === country && point.year === candidate && point.value !== null),
     ),
   );
-  const canRecord = query.status === "success" && selected.length === 2
+  const canRecord = recordable && query.status === "success" && selected.length === 2
     && (view === "trend" ? commonYears.length >= 2
       : ranked.some((row) => row.values.every((value) => value !== null)));
   const readings = view === "trend" ? finite.filter((point) => commonYears.includes(point.year)).map((point) => ({ ...point, industry }))
@@ -126,23 +131,26 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   }, [pendingKey, matchesSaved, syncing]);
   return <section className="reg-section-card" aria-label="行业网络指标趋势">
     <h3>行业的网络位置怎样变化？在全部经济体的同一行业中处于什么位置？</h3>
-    <div className="controls" aria-label="行业图表视角">
-      <button className={view === "trend" ? "primary" : "secondary"} aria-pressed={view === "trend"} onClick={() => setView("trend")}>历年变化</button>
-      <button className={view === "ranking" ? "primary" : "secondary"} aria-pressed={view === "ranking"} onClick={() => setView("ranking")}>定位行业</button>
-    </div>
-    <div className="controls">
-      <LabeledControl label="网络指标">{(id) => <select id={id} name="network-metric" value={metric} onChange={(event) => setMetric(event.target.value)}>
-        <optgroup label="常用指标">{COMMON_METRICS.filter((key) => metrics.includes(key)).map((key) => <option key={key} value={key}>{schema?.fields[key]?.label ?? key}</option>)}</optgroup>
-        <optgroup label="更多指标">{metrics.filter((key) => !COMMON_METRICS.includes(key)).map((key) => <option key={key} value={key}>{schema?.fields[key]?.label ?? key}</option>)}</optgroup>
-      </select>}</LabeledControl>
+    <div className="controls" role="group" aria-label="比较对象">
       <LabeledControl label="国家 A">{(id) => <select id={id} name="network-country-a" value={first} onChange={(event) => {
         setFirst(event.target.value);
         // Choosing B's country as A swaps the pair rather than dropping the comparison.
         if (event.target.value === second) setSecond(first !== event.target.value ? first : "");
       }}>{countries.map((country) => <option key={country} value={country}>{countryLabel(country)}</option>)}</select>}</LabeledControl>
       <LabeledControl label="对比国家 B">{(id) => <select id={id} name="network-country-b" value={second} onChange={(event) => setSecond(event.target.value)}>
-        <option value="">暂不选择（报告材料需要对比国家）</option>
+        <option value="">不选对比国家</option>
         {countries.filter((country) => country !== first).map((country) => <option key={country} value={country}>{countryLabel(country)}</option>)}
+      </select>}</LabeledControl>
+    </div>
+    <LensNav
+      lenses={[{ key: "trend", label: "历年变化" }, { key: "ranking", label: "定位行业" }, ...extraLenses]}
+      active={view}
+      onPick={setView}
+    />
+    {recordable && <div className="controls">
+      <LabeledControl label="网络指标">{(id) => <select id={id} name="network-metric" value={metric} onChange={(event) => setMetric(event.target.value)}>
+        <optgroup label="常用指标">{COMMON_METRICS.filter((key) => metrics.includes(key)).map((key) => <option key={key} value={key}>{schema?.fields[key]?.label ?? key}</option>)}</optgroup>
+        <optgroup label="更多指标">{metrics.filter((key) => !COMMON_METRICS.includes(key)).map((key) => <option key={key} value={key}>{schema?.fields[key]?.label ?? key}</option>)}</optgroup>
       </select>}</LabeledControl>
       {view === "trend" ? <LabeledControl label="行业">{(id) => <select id={id} value={industry} onChange={(event) => setIndustry(event.target.value)}>
         {meta.sectors.map((sector) => <option key={sector} value={sector}>{sectorLabel(sector)}</option>)}
@@ -150,11 +158,13 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         <LabeledControl label="排名年份">{(id) => <select id={id} value={year} onChange={(event) => setYear(Number(event.target.value))}>{years.map((value) => <option key={value} value={value}>{value}</option>)}</select>}</LabeledControl>
         <LabeledControl label="显示行业">{(id) => <select id={id} value={limit} onChange={(event) => setLimit(Number(event.target.value))}><option value={10}>Top 10</option><option value={200}>全部行业</option></select>}</LabeledControl>
       </>}
-    </div>
+        </div>}
     <p ref={scopeRef} tabIndex={-1} aria-label="当前比较口径"><strong>
-      {selected.map(countryLabel).join("与")} · {view === "trend" ? sectorLabel(industry) : "行业排名"} · {view === "trend" ? `${years[0]}–${years.at(-1)}` : year} · {label}
+      {recordable
+        ? <>{selected.map(countryLabel).join("与")} · {view === "trend" ? sectorLabel(industry) : "行业排名"} · {view === "trend" ? `${years[0]}–${years.at(-1)}` : year} · {label}</>
+        : <>{extraLenses.find((lens) => lens.key === view)?.label ?? view} · 探索视角，不记录材料</>}
     </strong></p>
-    {query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : <>
+    {!recordable ? renderExtra?.(view) : query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : <>
       {view === "ranking" ? ranked.length ? <NetworkRanking rows={ranked} countries={selected} unit={unit} reference={industryReference} onIndustry={(next) => { setIndustry(next); setView("trend"); setFocusScope(true); }} /> : <p role="status">该年份没有可用的行业排名，请更换指标或国家。</p> : <>
       {finite.length ? <IndicatorTrendChart
         rows={(query.data ?? []).filter((row) => row.industry === industry)}
@@ -175,11 +185,11 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       </details>
       </>}
     </>}
-    {schema?.fields[metric]?.desc && <p className="muted viz-metric-desc">{label}：{schema.fields[metric].desc}</p>}
+    {recordable && schema?.fields[metric]?.desc && <p className="muted viz-metric-desc">{label}：{schema.fields[metric].desc}</p>}
     <section className="qualified-run-card" aria-label="步骤9报告材料">
       <h3>报告材料 · {observations.length ? `已${locked ? "" : "自动"}记录（${observations.length} 条读数）` : "尚未记录"}</h3>
       <p role="status">{!canRecord
-        ? `当前图表暂不能记录：${selected.length < 2 ? "报告材料需要一个对比国家；现在只看全球参照，不会记录。" : view === "trend" ? "两国至少需要两个共同有效年份。" : "至少一个展示行业需要两国都有有效读数。"}${observations.length ? "已记录的材料保持不变。" : ""}`
+        ? `当前图表暂不能记录：${!recordable ? "探索视角不记录材料。" : selected.length < 2 ? "只看一个国家时不记录材料；添加对比国家后会自动记录。" : view === "trend" ? "两国至少需要两个共同有效年份。" : "至少一个展示行业需要两国都有有效读数。"}${observations.length ? "已记录的材料保持不变。" : ""}`
         : locked
           ? `${MATERIAL_LOCKED_NOTE}${matchesSaved ? "当前图表就是已记录的材料。" : ""}`
         : matchesSaved
