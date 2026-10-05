@@ -351,12 +351,16 @@ function rowColumnCodeHelp(code: string): string | undefined {
   return `${countryLabel(country)}·${sectorLabel(rest)}`;
 }
 
-/** Plain-language name shown under a code header: "USA_C10T12" → "食品饮料烟草", "TLS" → "产品税减补贴". */
-function codePlainName(code: string): string | undefined {
+/**
+ * Plain-language name shown under a code header: "USA_C10T12" → "食品饮料烟草", "TLS" → "产品税减补贴".
+ * Undefined when the sector has no name, so the header never repeats its own code.
+ */
+export function codePlainName(code: string): string | undefined {
   if (ACCOUNT_SHORT[code]) return ACCOUNT_SHORT[code];
   const { country, rest } = splitRowColumnCode(code);
   if (!country || !rest) return undefined;
-  return sectorLabel(rest).replace(/^\S+\s+/, "");
+  const name = sectorLabel(rest).replace(/^\S+\s+/, "");
+  return name && name !== rest ? name : undefined;
 }
 
 /** 列表头悬停说明:Y 表需求类别与账户项查表,Z 表退回国家×行业中文名。 */

@@ -82,3 +82,32 @@ test("step 10 keeps the saved example when the chosen unit is not in the teachin
   series.mockRestore();
   cleanup();
 });
+
+test("step 10 keeps the saved example when a chosen unit has no row in the representative year", async () => {
+  const meta: Meta = { years: [2016, 2017, 2018, 2019, 2020], countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
+  const groups = spyOn(api, "teachingGroups").mockResolvedValue({
+    version: "step10-tariff-teaching-v2", years: meta.years, policy_year: 2018,
+    sample: { rows: 10, entities: 2, countries: 2, industries: 1, taxed_countries: 1, untaxed_countries: 1 },
+    industries: ["C29"],
+    outcomes: {} as never,
+  });
+  const row = (country: string, year: number) => ({
+    country, industry: "C29", year, teaching_export_share_w: 0.5, teaching_tariff_rate_tau: 0, teaching_tariff_exposure: 0,
+  });
+  // CAN has rows, but not for 2020, the year the example reads; MEX is complete.
+  const series = spyOn(api, "teachingSeries").mockResolvedValue({
+    version: "step10-tariff-teaching-v2", disclaimer: "", total: 9, years: meta.years,
+    rows: [...meta.years.filter((year) => year < 2020).map((year) => row("CAN", year)), ...meta.years.map((year) => row("MEX", year))],
+  } as never);
+  const save = mock(() => {});
+  const saved = {
+    compared: ["CAN", "MEX"], teaching_industry: "C29",
+    teaching_observation: { country: "CAN", industry: "C29", year: 2020, teaching_export_share_w: 0.9, teaching_tariff_rate_tau: 0.1, teaching_tariff_exposure: 0.09, version: "step10-tariff-teaching-v2" },
+  };
+  render(<ShockLab meta={meta} step={step} state={{ data: saved, save, complete: false, syncing: false, syncError: null, syncNow: () => {} }} />);
+  await waitFor(() => expect(screen.getByText(/CAN 加拿大 · C29 汽车及零部件 不在教学样本中/)).toBeTruthy());
+  expect(save).not.toHaveBeenCalled();
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+});

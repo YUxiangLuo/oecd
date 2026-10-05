@@ -41,9 +41,10 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
     ]
     captured = False
 
+    # Only recorded material is printed. The browsed slice (`slice`) and the other view-only keys are
+    # excluded from the report fingerprint, so reading them here would let a report drift from its
+    # records without ever showing "需更新"; the recorded cell carries the slice it was captured from.
     db = _step_data(session, 1)
-    raw_slice = db.get("slice")
-    browse_slice: dict[str, Any] | None = raw_slice if isinstance(raw_slice, dict) else None
     raw_observation = db.get("observation")
     observation: dict[str, Any] | None = raw_observation if isinstance(raw_observation, dict) else None
     source_slice = (
@@ -51,9 +52,9 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         if observation is not None
         and observation.get("year") not in (None, "")
         and observation.get("table") not in (None, "")
-        else browse_slice
+        else None
     )
-    if source_slice or observation:
+    if observation:
         captured = True
         lines.extend(("### 步骤 1 · OECD ICIO 数据浏览", ""))
         if source_slice:
@@ -91,10 +92,8 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             ]
             if not observations:
                 continue
-        has_snapshot = any(
-            data.get(key) not in (None, "", []) for key in ("year", "country", "chart", "drill", "metric")
-        ) or bool(compared or observations)
-        if not has_snapshot:
+        # A section needs recorded material; browsing state alone (year/country/chart/drill) is not printed.
+        if not (compared or observations):
             continue
         captured = True
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}", ""))

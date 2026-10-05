@@ -287,8 +287,13 @@ export function ReportLab({
 
   const generate = async (submitAfter = false) => {
     if (busy || operationRef.current) return;
-    if (report?.state === "graded" && !(await askRegenerate())) return;
+    // Hold the guard while the confirmation is open, so a second click cannot start another run
+    // (which would replace the pending resolver and leave this call suspended).
     operationRef.current = true;
+    if (report?.state === "graded" && !(await askRegenerate())) {
+      operationRef.current = false;
+      return;
+    }
     setGenerating(true);
     setError(null);
     setBlocked([]);

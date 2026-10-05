@@ -70,6 +70,41 @@ describe("step 15 report states", () => {
     }
   });
 
+  test("a second click while the regenerate confirmation is open neither opens another nor strands the first", async () => {
+    const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new Error("服务不可用"));
+    const props = {
+      state: { data: {}, save: () => {}, complete: true, syncing: false, syncError: null, syncNow: () => {} },
+      report: report("graded"),
+      reportGate: [],
+      sessionStatus: "ready" as const,
+      sessionUnsynced: false,
+      sessionSyncing: false,
+      onFlushSession: async () => {},
+      onNavigateStep: () => {},
+      onReportChanged: () => {},
+    };
+    try {
+      render(<ReportLab {...props} />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" }));
+        fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" }));
+      });
+      expect(screen.getAllByRole("button", { name: "确定重新生成" })).toHaveLength(1);
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "确定重新生成" })); });
+      expect(generate).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("button", { name: "确定重新生成" })).toBeNull();
+      // The guard is released again: cancelling and retrying still reaches the server.
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" })); });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "取消" })); });
+      expect(generate).toHaveBeenCalledTimes(1);
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" })); });
+      await act(async () => { fireEvent.click(screen.getByRole("button", { name: "确定重新生成" })); });
+      expect(generate).toHaveBeenCalledTimes(2);
+    } finally {
+      generate.mockRestore();
+    }
+  });
+
   test("does not generate or replace an existing report when flushing session edits fails", async () => {
     const generate = spyOn(api.classroom, "generateReport");
     const confirm = spyOn(window, "confirm").mockReturnValue(true);

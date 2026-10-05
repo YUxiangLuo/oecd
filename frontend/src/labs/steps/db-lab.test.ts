@@ -5,6 +5,7 @@ import type { DbMeta, DbSlice, Meta } from "../../types";
 import { fmtDb } from "../shared";
 import {
   captureDbObservation,
+  codePlainName,
   dbCellAccessibleName,
   dbCellTooltip,
   dbObservationSentence,
@@ -328,4 +329,11 @@ test("Step 1 cell tooltips name both industries in two short lines", () => {
     .toBe("中国 · A01_02 农林牧业 → 美国 · 存货变化（有符号调整）");
   expect(dbCellTooltip("accounts", "CHN_A01_02", "VA", 12.5).split("\n")[0])
     .toBe("中国 · A01_02 农林牧业 的 增加值");
+});
+
+test("Step 1 header plain names never repeat a code that has no name", () => {
+  expect(codePlainName("USA_C10T12")).toBe("食品饮料烟草");
+  expect(codePlainName("TLS")).toBe("产品税减补贴");
+  expect(codePlainName("USA_X99")).toBeUndefined();
+  expect(codePlainName("X99")).toBeUndefined();
 });

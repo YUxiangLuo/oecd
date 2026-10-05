@@ -51,8 +51,12 @@ export function ShockLab({ meta, step: _step, state }: {
   );
   const panel = query.status === "success" ? query.data : null;
   // Units whose first-year data fail the sample rules are not in the teaching panel; an example must
-  // have rows for both countries, otherwise the saved example is kept rather than replaced by a gap.
-  const missing = panel ? selectedCountries.filter((country) => !panel.rows.some((row) => row.country === country)) : [];
+  // have both countries in the representative (last) year, otherwise the saved example is kept rather
+  // than replaced by a record without an observation.
+  const lastYear = years.at(-1);
+  const missing = panel
+    ? selectedCountries.filter((country) => !panel.rows.some((row) => row.country === country && row.year === lastYear))
+    : [];
   const complete = Boolean(panel) && selectedCountries.length === 2 && missing.length === 0;
   const sampleIndustries = groups.status === "success" ? groups.data?.industries : undefined;
   const industryOptions = meta.sectors.filter((code) => !sampleIndustries || sampleIndustries.includes(code) || code === industry);

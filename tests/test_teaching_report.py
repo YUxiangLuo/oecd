@@ -1,3 +1,4 @@
+import copy
 import json
 import re
 from pathlib import Path
@@ -1861,3 +1862,28 @@ def test_rank_reading_marks_ties_and_skips_a_ranking_everyone_shares():
     assert report_observed._rank_reading(one_end, ["CHN"]) == (
         "在 76 个经济体中（从高到低），CHN 中国从不分名次变为第 3 位（不分名次：该年全部经济体数值相同）"
     )
+
+
+def test_view_only_keys_never_change_the_experiment_sections():
+    """Keys excluded from the report fingerprint must not reach the printed report either.
+
+    Otherwise browsing could change the report text while step 15 still shows it as current.
+    """
+    from gvcsim.classroom import records
+
+    session = _complete()
+    before = teaching_report._experiment_sections(session)
+    browsed = copy.deepcopy(session)
+    browsed["steps"]["1"]["data"]["slice"] = {"year": 2016, "table": "y", "row_country": "DEU", "col_country": "FRA"}
+    browsed["steps"]["2"]["data"].update(year=2017, country="KOR")
+    browsed["steps"]["6"]["data"].update(year=1999, chart="unrelated-browse")
+    browsed["steps"]["9"]["data"].update(chart="network", drill="DEU", heat_sort="betweenness", heat_coverage="all")
+    assert records.report_fingerprint(browsed) == records.report_fingerprint(session)
+    assert teaching_report._experiment_sections(browsed) == before
+    # A step 1 record without its capture context prints the cell but never the browsed slice.
+    partial = copy.deepcopy(session)
+    partial["steps"]["1"]["data"]["observation"] = {"row": "CHN_D01T02", "column": "USA_D01T02", "value": 228.0672}
+    partial["steps"]["1"]["data"]["slice"] = {"year": 2016, "table": "y"}
+    text = "\n".join(teaching_report._experiment_sections(partial))
+    assert "保存的切片" not in text
+    assert "记录的单元格" in text
