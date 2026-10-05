@@ -19,7 +19,7 @@ const N_SCENES = SCENE_NAMES.length;
 const STAGE_OUTPUTS: Record<number, string> = {
   1: "认识投入产出表，读懂一格数据的含义。",
   2: "了解指标怎样由投入产出表算出，并拆解两国读数。",
-  3: "比较两个国家的时间趋势，形成图表证据。",
+  3: "看指标的历年变化和在全部经济体中的位置，再与对比国家比较，形成图表证据。",
   4: "认识模拟关税暴露 X，用全部样本对四个模拟 Y 运行回归。",
   5: "整合材料，完成原创分析与报告。",
 };
@@ -143,7 +143,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       <h1 className="intro-title">供应链仿真系统</h1>
       <div className="intro-kicker">GVC SIMULATION LAB</div>
       <p className="intro-lede">
-        从全球生产联系，理解价值链变化。利用投入产出数据计算指标，比较两个国家的五年趋势，
+        从全球生产联系，理解价值链变化。利用投入产出数据计算指标，看它们的五年变化和全球位置，
         再用教学模拟练习读取回归，完成有依据的实验报告。
       </p>
       <p className="intro-boundary">{datasetName} · 教学情景 · 不作真实政策效果预测</p>

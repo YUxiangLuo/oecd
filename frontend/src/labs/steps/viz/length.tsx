@@ -7,7 +7,7 @@ export const LENGTH_TOPIC: IndicatorTopic = {
   key: "length",
   defaultMetric: "PLv_GVC",
   defaultView: "directions",
-  question: "生产链长度与相对位置怎样变化？",
+  question: "生产链长度与相对位置怎样变化？在全部经济体中处于什么位置？",
   metrics: [
     ...[
       ["PLv_GVC", "前向GVC段长度"],

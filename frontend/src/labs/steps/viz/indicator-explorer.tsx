@@ -20,6 +20,7 @@ import {
   type VizStepState,
 } from "./scaffold";
 import {
+  countryDistribution,
   defaultComparison,
   finiteValue,
   indicatorMaterial,
@@ -31,6 +32,7 @@ import {
   type IndicatorView,
 } from "./indicator-model";
 import {
+  DistributionStrip,
   IndicatorPairBars,
   IndicatorTrendChart,
   LengthPositionTrajectory,
@@ -214,7 +216,7 @@ export function IndicatorExplorer({
   // Name the actual reason the material cannot be saved instead of one catch-all sentence.
   const blockedReason =
     selected.length < 2
-      ? "请选择两个不同国家。"
+      ? "报告材料需要一个对比国家；现在只看全球参照，不会记录。"
       : query.status === "error"
         ? "当前比较的数据加载失败，请重试。"
         : query.status !== "success"
@@ -246,8 +248,8 @@ export function IndicatorExplorer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingKey, matches, state.syncing]);
   const lenses: { key: IndicatorView; label: string }[] = [
-    { key: "trend", label: "比较变化" },
-    { key: "comparison", label: "同年差异" },
+    { key: "trend", label: "历年变化" },
+    { key: "comparison", label: "全球分布" },
     ...(topic.composition
       ? [
           { key: "composition" as const, label: "构成分析" },
@@ -299,6 +301,9 @@ export function IndicatorExplorer({
       </table>
     </ScrollableRegion>
   );
+  // Every economy's country-level reading gives the global reference; industry views load only the
+  // selected countries, so they have none.
+  const referenceFor = (key: string) => (industry || industryQuery ? [] : countryDistribution(rows, key, chartYears));
   const exploreYear = chartYears.includes(year) ? year : chartYears.at(-1) ?? year;
   const exploreRows = rows.filter(
     (row) =>
@@ -350,7 +355,7 @@ export function IndicatorExplorer({
               value={second}
               onChange={(e) => select({ second: e.target.value })}
             >
-              <option value="">暂不对比（不记录报告材料）</option>
+              <option value="">暂不选择（报告材料需要对比国家）</option>
               {countries
                 .filter((country) => country !== first)
                 .map((country) => (
@@ -512,6 +517,8 @@ export function IndicatorExplorer({
               metric={metric}
               label={label(metric)}
               unit={unit(metric)}
+              distribution={referenceFor(metric)}
+              mode="context"
             />
           )}
           {view === "directions" &&
@@ -525,6 +532,8 @@ export function IndicatorExplorer({
                   metric={key}
                   label={label(key)}
                   unit={unit(key)}
+                  distribution={referenceFor(key)}
+                  mode="context"
                 />
               ))}
               <LengthPositionTrajectory
@@ -533,7 +542,19 @@ export function IndicatorExplorer({
                 years={chartYears}
               />
             </>}
-          {view === "comparison" && (
+          {view === "comparison" && !industry && referenceFor(metric)[0] && (
+            <DistributionStrip
+              rows={rows}
+              metric={metric}
+              unit={unit(metric)}
+              label={label(metric)}
+              year={year}
+              highlight={selected}
+              distribution={referenceFor(metric)[0]}
+            />
+          )}
+          {view === "comparison" && industry && <p className="muted">全球分布按国家整体比较；选择了行业时只显示所选国家的同行业读数。</p>}
+          {view === "comparison" && (industry || !referenceFor(metric)[0]) && (
             <IndicatorPairBars
               countries={selected}
               unit={unit(metric)}

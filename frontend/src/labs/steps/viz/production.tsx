@@ -7,7 +7,7 @@ import type { VizStepState } from "./scaffold";
 export const PRODUCTION_TOPIC: IndicatorTopic = {
   key: "production",
   defaultMetric: "3b_VA_GVC_C_share",
-  question: "生产活动如何参与跨境分工？两国的变化一致吗？",
+  question: "生产活动参与跨境分工的程度怎样变化？在全部经济体中处于什么位置？",
   metrics: [
     {
       key: "3b_VA_GVC_C_share",

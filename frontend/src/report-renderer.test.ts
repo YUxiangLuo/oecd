@@ -160,6 +160,27 @@ describe("parseReportChart", () => {
     expect(html.match(/<polyline/g)).toHaveLength(2);
   });
 
+  test("draws a reference series (global median) as a grey dashed line after the countries", () => {
+    const chart = JSON.stringify({
+      version: 1,
+      type: "line",
+      title: "历年趋势（含全球中位数）",
+      series: [
+        { label: "CHN 中国", points: [{ label: "2019", value: 11.9 }, { label: "2020", value: 11.7 }] },
+        { label: "USA 美国", points: [{ label: "2019", value: 5.8 }, { label: "2020", value: 5.5 }] },
+        { label: "全球中位数（76 个经济体）", reference: true, points: [{ label: "2019", value: 17.6 }, { label: "2020", value: 17.3 }] },
+      ],
+    });
+    expect(parseReportChart(chart)).toMatchObject({ type: "line" });
+    expect(parseReportChart(chart.replace("\"reference\":true", "\"reference\":\"yes\""))).toBeNull();
+    const html = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: `\`\`\`gvcsim-chart\n${chart}\n\`\`\`` }));
+    expect(html).toContain("全球中位数（76 个经济体）");
+    expect(html.match(/stroke-dasharray="6 4"/g)).toHaveLength(1);
+    // Countries keep the first two palette colours even though the reference series comes last.
+    expect(html).toContain('stroke="#4b47e0"');
+    expect(html).toContain('stroke="#d95f45"');
+  });
+
   test("colours grouped bars by country with a legend and one label per industry", () => {
     const chart = JSON.stringify({
       version: 1,

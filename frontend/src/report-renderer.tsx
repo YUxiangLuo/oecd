@@ -10,7 +10,8 @@ type ChartItem = { label: string; value: number };
 type BarItem = ChartItem & { group?: string };
 type ChartPoint = ChartItem & { se?: number; ci_low?: number; ci_high?: number };
 type CoefficientItem = ChartItem & { ci_low?: number; ci_high?: number };
-type LineSeries = { label: string; points: ChartItem[] };
+/** A reference series (e.g. the global median) is drawn as a grey dashed line, not as a country. */
+type LineSeries = { label: string; points: ChartItem[]; reference?: boolean };
 
 type ReportChart =
   | {
@@ -107,7 +108,8 @@ function isPoint(value: unknown): value is ChartPoint {
 function isLineSeries(value: unknown): value is LineSeries {
   if (!value || typeof value !== "object") return false;
   const series = value as Record<string, unknown>;
-  return hasOnlyKeys(series, ["label", "points"])
+  return hasOnlyKeys(series, ["label", "points", "reference"])
+    && (series.reference == null || typeof series.reference === "boolean")
     && isLabel(series.label)
     && Array.isArray(series.points)
     && series.points.length > 0
@@ -401,18 +403,22 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
           </g>
         ))}
         {chart.series.map((series, seriesIndex) => {
-          const color = colors[seriesIndex];
+          const reference = series.reference === true;
+          const color = reference
+            ? "#8a8f9c"
+            : colors[chart.series.slice(0, seriesIndex).filter((item) => item.reference !== true).length];
           return (
             <g key={series.label}>
               <polyline
                 points={series.points.map((point) => `${x(point.label)},${y(point.value)}`).join(" ")}
                 fill="none"
                 stroke={color}
-                strokeWidth={2.5}
+                strokeWidth={reference ? 1.8 : 2.5}
+                strokeDasharray={reference ? "6 4" : undefined}
                 strokeLinejoin="round"
               />
-              {series.points.map((point) => <circle key={point.label} cx={x(point.label)} cy={y(point.value)} r={4} fill={color} stroke="#fff" strokeWidth={1.5} />)}
-              <line x1={legend.positions[seriesIndex].x} x2={legend.positions[seriesIndex].x + 18} y1={14 + legend.positions[seriesIndex].row * 18} y2={14 + legend.positions[seriesIndex].row * 18} stroke={color} strokeWidth={3} />
+              {series.points.map((point) => <circle key={point.label} cx={x(point.label)} cy={y(point.value)} r={reference ? 2.5 : 4} fill={color} stroke="#fff" strokeWidth={1.5} />)}
+              <line x1={legend.positions[seriesIndex].x} x2={legend.positions[seriesIndex].x + 18} y1={14 + legend.positions[seriesIndex].row * 18} y2={14 + legend.positions[seriesIndex].row * 18} stroke={color} strokeWidth={reference ? 2 : 3} strokeDasharray={reference ? "5 3" : undefined} />
               <text x={legend.positions[seriesIndex].x + 24} y={18 + legend.positions[seriesIndex].row * 18} fontSize={11} fill="#4b5563">{series.label}</text>
             </g>
           );

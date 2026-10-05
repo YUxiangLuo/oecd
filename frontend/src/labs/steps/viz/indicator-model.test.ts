@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { IndicatorTrendChart } from "./indicator-charts";
+import { DistributionStrip, IndicatorTrendChart } from "./indicator-charts";
 import {
   changeReading,
+  countryDistribution,
   indicatorMaterial,
   indicatorRows,
   materialComplete,
@@ -11,6 +12,7 @@ import {
 import { LENGTH_TOPIC } from "./length";
 import { PRODUCTION_TOPIC } from "./production";
 import { TRADE_TOPIC } from "./trade";
+import type { Row } from "./scaffold";
 
 describe("indicator data contract", () => {
   test("derives each share from its declared numerator and denominator", () => {
@@ -146,5 +148,52 @@ describe("trend rendering", () => {
       }),
     );
     expect(html).toContain('class="comparison-summary" role="group" aria-label="两国趋势结论"');
+  });
+});
+
+describe("global reference for steps 6–8", () => {
+  test("uses every economy except ROW and industry rows, with pandas-style quantiles and tied ranks", () => {
+    const rows = [
+      ...[["A", 0.1], ["B", 0.2], ["C", 0.2], ["D", 0.4], ["E", 0.5]].map(([country, value]) => ({ country, year: 2020, FVA_share: value })),
+      { country: "ROW", year: 2020, FVA_share: 0.9 },
+      { country: "A", industry: "C26", year: 2020, FVA_share: 0.95 },
+      { country: "F", year: 2020, FVA_share: null },
+    ];
+    const [entry] = countryDistribution(rows as Row[], "FVA_share", [2020]);
+    expect(entry.n).toBe(5);
+    expect(entry.median).toBeCloseTo(0.2);
+    expect(entry.p25).toBeCloseTo(0.2);
+    expect(entry.p75).toBeCloseTo(0.4);
+    expect(entry.ranks).toEqual({ E: 1, D: 2, B: 3, C: 3, A: 5 });
+    expect(countryDistribution(rows as Row[], "FVA_share", [2019])).toEqual([]);
+  });
+
+  test("the context trend draws the median and puts the comparison country last", () => {
+    const rows = [2019, 2020].flatMap((year) => [["CHN", 0.12], ["USA", 0.06], ["DEU", 0.17], ["JPN", 0.1]].map(([country, value]) => ({ country, year, FVA_share: (value as number) + (year - 2019) / 100 })));
+    const html = renderToStaticMarkup(createElement(IndicatorTrendChart, {
+      rows, countries: ["CHN", "USA"], years: [2019, 2020], metric: "FVA_share", label: "外国增加值项占比", unit: "%",
+      distribution: countryDistribution(rows, "FVA_share", [2019, 2020]), mode: "context",
+    }));
+    expect(html).toContain(`data-series="global-median"`);
+    expect(html).toContain("全球中位数");
+    expect(html).toContain("USA 美国（对比）");
+    expect(html.indexOf("全部经济体中")).toBeLessThan(html.indexOf("与对比国家"));
+  });
+
+  test("the distribution strip stays short for skewed amounts and labels both countries with their ranks", () => {
+    // 60 economies crowded near zero and one giant: without a lane cap this stacked 60 dots high.
+    const rows = [
+      ...Array.from({ length: 60 }, (_, i) => ({ country: `C${i}`, year: 2020, SVA: 100 + i })),
+      { country: "CHN", year: 2020, SVA: 15_000_000 },
+      { country: "USA", year: 2020, SVA: 300 },
+    ] as Row[];
+    const [distribution] = countryDistribution(rows, "SVA", [2020]);
+    const html = renderToStaticMarkup(createElement(DistributionStrip, {
+      rows, metric: "SVA", unit: "百万美元", label: "总增加值", year: 2020, highlight: ["CHN", "USA"], distribution,
+    }));
+    const height = Number(/viewBox="0 0 800 ([0-9]+)"/.exec(html)?.[1]);
+    expect(height).toBeLessThanOrEqual(70 + 8 * 9 + 60);
+    expect(html).toContain("第 1 位");
+    expect(html).toContain("USA 美国");
   });
 });

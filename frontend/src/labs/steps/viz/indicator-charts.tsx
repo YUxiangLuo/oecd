@@ -1,6 +1,6 @@
 import { countryLabel } from "../../../viz";
 import { CAT } from "../../../viz/shared";
-import { changeReading, finiteValue } from "./indicator-model";
+import { changeReading, finiteValue, type YearDistribution } from "./indicator-model";
 import { niceDomain } from "../../../viz/nice-ticks";
 import type { Row } from "./scaffold";
 
@@ -9,10 +9,97 @@ export const indicatorNumber = (value: number | null, unit: string) =>
     ? "缺失"
     : `${(unit === "%" ? value * 100 : value).toLocaleString("zh-CN", { maximumFractionDigits: 3 })}${unit === "%" ? "%" : ""}`;
 
+const REFERENCE_FILL = "#9aa3b5";
+const REFERENCE_LINE = "#6b7385";
+
 interface ComparisonReading {
   country: string;
   year: number;
   value: number | null;
+}
+
+/**
+ * Reading order for a trend: the observed country's own change, where it sits among all economies,
+ * how the global median moved, and only then the gap to the comparison country.
+ */
+export function TrendSummary({
+  readings,
+  countries,
+  years,
+  unit,
+  distribution = [],
+}: {
+  readings: ComparisonReading[];
+  countries: string[];
+  years: number[];
+  unit: string;
+  distribution?: YearDistribution[];
+}) {
+  const value = (country: string, year: number) =>
+    readings.find((item) => item.country === country && item.year === year)?.value ?? null;
+  const [first, second] = countries;
+  const own = years.filter((year) => value(first, year) !== null);
+  if (own.length < 2) {
+    return <p className="muted">有效年份不足，暂不能读出期间变化。</p>;
+  }
+  const firstYear = own[0];
+  const lastYear = own.at(-1)!;
+  const start = value(first, firstYear)!;
+  const end = value(first, lastYear)!;
+  const startRef = distribution.find((item) => item.year === firstYear);
+  const endRef = distribution.find((item) => item.year === lastYear);
+  const startRank = startRef?.ranks[first];
+  const endRank = endRef?.ranks[first];
+  const pair = second != null
+    && value(second, firstYear) !== null && value(second, lastYear) !== null;
+  let gapCard = null;
+  if (pair) {
+    const startGap = start - value(second, firstYear)!;
+    const endGap = end - value(second, lastYear)!;
+    const gapChange = Math.abs(endGap) - Math.abs(startGap);
+    const gapMagnitude = unit === "%"
+      ? `${(Math.abs(gapChange) * 100).toLocaleString("zh-CN", { maximumFractionDigits: 3 })} 个百分点`
+      : indicatorNumber(Math.abs(gapChange), unit);
+    const reversed = startGap !== 0 && endGap !== 0 && Math.sign(startGap) !== Math.sign(endGap);
+    const gapStory = reversed
+      ? "领先方反转"
+      : Math.abs(gapChange) < 1e-12
+        ? "差距基本不变"
+        : gapChange > 0
+          ? `差距扩大 ${gapMagnitude}`
+          : `差距缩小 ${gapMagnitude}`;
+    gapCard = (
+      <div>
+        <span>与对比国家 {countryLabel(second)}</span>
+        <b>{lastYear} 年 {countryLabel(first)} {endGap === 0 ? "与它持平" : `比它${endGap > 0 ? "高" : "低"} ${changeReading(0, Math.abs(endGap), unit).replace("+", "")}`}</b>
+        <small>{firstYear}→{lastYear} {gapStory}；比较的是差距绝对值，不代表因果关系</small>
+      </div>
+    );
+  }
+  return (
+    <div className="comparison-summary" role="group" aria-label="趋势读数">
+      <div>
+        <span>{countryLabel(first)} · {firstYear}→{lastYear}</span>
+        <b>{changeReading(start, end, unit)}</b>
+        <small>{indicatorNumber(start, unit)} → {indicatorNumber(end, unit)}</small>
+      </div>
+      {startRank != null && endRank != null && endRef && (
+        <div>
+          <span>在全部经济体中（从高到低）</span>
+          <b>第 {startRank} → {endRank} 位</b>
+          <small>共 {endRef.n} 个经济体；排名只表示相对高低</small>
+        </div>
+      )}
+      {startRef && endRef && (
+        <div>
+          <span>全球中位数 · {firstYear}→{lastYear}</span>
+          <b>{changeReading(startRef.median, endRef.median, unit)}</b>
+          <small>{indicatorNumber(startRef.median, unit)} → {indicatorNumber(endRef.median, unit)}</small>
+        </div>
+      )}
+      {gapCard}
+    </div>
+  );
 }
 
 export function ComparisonSummary({
@@ -82,7 +169,10 @@ export function ComparisonSummary({
   );
 }
 
-/** Include zero and negative values; both countries always share the same scale. */
+/**
+ * One country's trend in global context: the median and middle 50% of all economies sit behind the
+ * observed country's line; the comparison country is a thinner dashed line. Zero and negatives included.
+ */
 export function IndicatorTrendChart({
   rows,
   countries,
@@ -90,6 +180,8 @@ export function IndicatorTrendChart({
   metric,
   label,
   unit,
+  distribution = [],
+  mode = "pair",
 }: {
   rows: Row[];
   countries: string[];
@@ -97,7 +189,13 @@ export function IndicatorTrendChart({
   metric: string;
   label: string;
   unit: string;
+  /** Country-level spread across all economies; empty for industry-level views. */
+  distribution?: YearDistribution[];
+  /** "context": observed country first, global reference, comparison country last (steps 6–8).
+   *  "pair": two equal partners with the original two-country cards (step 10). */
+  mode?: "context" | "pair";
 }) {
+  const context = mode === "context";
   const series = countries.map((country) =>
     years.map((year) => {
       const value = rows.find(
@@ -106,26 +204,53 @@ export function IndicatorTrendChart({
       return { year, value: finiteValue(value) ? value : null };
     }),
   );
-  const values = series.flatMap((points) =>
-    points.flatMap((point) => (point.value === null ? [] : [point.value])),
-  );
-  if (!values.length)
+  const band = !context ? [] : years.flatMap((year) => {
+    const item = distribution.find((entry) => entry.year === year);
+    return item ? [item] : [];
+  });
+  const values = [
+    ...series.flatMap((points) =>
+      points.flatMap((point) => (point.value === null ? [] : [point.value])),
+    ),
+    ...band.flatMap((item) => [item.p25, item.p75]),
+  ];
+  if (!series.some((points) => points.some((point) => point.value !== null)))
     return <p role="status">该指标没有有效读数，请更换国家、行业或年份。</p>;
+  // Shares and amounts keep a zero baseline; lengths (always ≥ 1) and position ratios fit their range,
+  // otherwise a band around 4 production stages collapses into a sliver. Position ratios keep 1 in view.
+  const positionRatio = metric === "GVCPs" || metric === "Pos_TPL";
+  const zeroBased = unit === "%" || unit === "百万美元";
   const axis = niceDomain(
-    Math.min(0, ...values),
-    Math.max(0, ...values, metric === "GVCPs" || metric === "Pos_TPL" ? 1 : 0),
+    zeroBased ? Math.min(0, ...values) : Math.min(...values, positionRatio ? 1 : Infinity),
+    zeroBased ? Math.max(0, ...values) : Math.max(...values, positionRatio ? 1 : -Infinity),
   );
   const lo = axis.lo;
   const extent = axis.hi - lo || 1;
   const y = (value: number) => 250 - ((value - lo) / extent) * 210;
   const x = (year: number) =>
     110 + ((year - years[0]) / Math.max(1, years.at(-1)! - years[0])) * 620;
-  const common = years.filter((_, i) =>
-    series.every((points) => points[i].value !== null),
-  );
   const readings = countries.flatMap((country, index) =>
     series[index].map((point) => ({ country, ...point })),
   );
+  const bandPath = band.length >= 2
+    ? `M${band.map((item) => `${x(item.year)},${y(item.p75)}`).join(" L")} L${[...band].reverse().map((item) => `${x(item.year)},${y(item.p25)}`).join(" L")} Z`
+    : "";
+  const legend = [
+    ...(band.length ? [
+      { key: "band", label: "中间 50% 经济体", draw: <rect x={0} y={-6} width={24} height={12} fill={REFERENCE_FILL} fillOpacity={0.3} /> },
+      { key: "median", label: `全球中位数（${band.at(-1)!.n} 个）`, draw: <line x1={0} x2={24} y1={0} y2={0} stroke={REFERENCE_LINE} strokeWidth={1.5} strokeDasharray="4 3" /> },
+    ] : []),
+    ...countries.map((country, index) => ({
+      key: country,
+      label: index && context ? `${countryLabel(country)}（对比）` : countryLabel(country),
+      draw: <>
+        <line x1={0} x2={24} y1={0} y2={0} stroke={CAT[index]} strokeWidth={context && index ? 2 : context ? 3 : 2.5} strokeDasharray={index ? "7 4" : undefined} />
+        <circle cx={12} cy={0} r={context && index ? 3.5 : 4} fill={CAT[index]} />
+      </>,
+    })),
+  ];
+  // Steps 6–8 read left to right from the reference; step 10's two equal partners keep the legend on the right.
+  let legendX = context ? 110 : 455;
   return (
     <section aria-label={`${label}趋势图`}>
       <h4>
@@ -134,85 +259,71 @@ export function IndicatorTrendChart({
       <svg
         viewBox="0 0 780 295"
         role="img"
-        aria-label={`${label}历年变化；缺失不补零，详细读数见下方`}
+        aria-label={`${label}历年变化${band.length ? "，含全部经济体的中位数与中间 50% 范围" : ""}；缺失不补零，详细读数见下方`}
         style={{ width: "100%", display: "block" }}
       >
-        {countries.map((country, index) => (
-          <g key={`legend-${country}`} transform={`translate(${455 + index * 145} 16)`}>
-            <line x1={0} x2={24} y1={0} y2={0} stroke={CAT[index]} strokeWidth={2.5} strokeDasharray={index ? "7 4" : undefined} />
-            <circle cx={12} cy={0} r={4} fill={CAT[index]} />
-            <text x={31} y={4} fontSize={12} fill="#374151">{countryLabel(country)}</text>
-          </g>
-        ))}
+        {legend.map((item) => {
+          const at = legendX;
+          legendX += 40 + item.label.length * 12;
+          return (
+            <g key={`legend-${item.key}`} transform={`translate(${at} 14)`}>
+              {item.draw}
+              <text x={31} y={4} fontSize={12} fill="#374151">{item.label}</text>
+            </g>
+          );
+        })}
         {axis.ticks.map((tick) => (
           <g key={tick}>
-            <line
-              x1={110}
-              x2={730}
-              y1={y(tick)}
-              y2={y(tick)}
-              stroke="#e2e5ee"
-            />
-            <text
-              x={100}
-              y={y(tick) + 4}
-              textAnchor="end"
-              fontSize={12}
-              fill="#596173"
-            >
+            <line x1={110} x2={730} y1={y(tick)} y2={y(tick)} stroke="#e2e5ee" />
+            <text x={100} y={y(tick) + 4} textAnchor="end" fontSize={12} fill="#596173">
               {indicatorNumber(tick, unit)}
             </text>
           </g>
         ))}
+        {bandPath && <path d={bandPath} fill={REFERENCE_FILL} fillOpacity={0.22} stroke="none" />}
+        {band.length >= 2 && (
+          <polyline
+            data-series="global-median"
+            points={band.map((item) => `${x(item.year)},${y(item.median)}`).join(" ")}
+            fill="none"
+            stroke={REFERENCE_LINE}
+            strokeWidth={1.5}
+            strokeDasharray="4 3"
+          >
+            <title>{band.map((item) => `${item.year} 年全球中位数 ${indicatorNumber(item.median, unit)}`).join("；")}</title>
+          </polyline>
+        )}
         {(metric === "GVCPs" || metric === "Pos_TPL") && (
           <g>
-            <line
-              x1={110}
-              x2={730}
-              y1={y(1)}
-              y2={y(1)}
-              stroke="#966500"
-              strokeDasharray="6 4"
-            />
+            <line x1={110} x2={730} y1={y(1)} y2={y(1)} stroke="#966500" strokeDasharray="6 4" />
             <text x={730} y={y(1) - 5} textAnchor="end" fontSize={11}>
               位置基准 = 1
             </text>
           </g>
         )}
         {years.map((year) => (
-          <text
-            key={year}
-            x={x(year)}
-            y={278}
-            textAnchor="middle"
-            fontSize={12}
-          >
+          <text key={year} x={x(year)} y={278} textAnchor="middle" fontSize={12}>
             {year}
           </text>
         ))}
-        {series.map((points, index) => (
+        {[...series.keys()].reverse().map((index) => (
           <g key={countries[index]}>
-            {points.map((point, i) =>
+            {series[index].map((point, i) =>
               point.value === null ? null : (
                 <g key={point.year}>
-                  {i > 0 && points[i - 1].value !== null && (
+                  {i > 0 && series[index][i - 1].value !== null && (
                     <line
                       data-series={countries[index]}
-                      x1={x(points[i - 1].year)}
-                      y1={y(points[i - 1].value!)}
+                      x1={x(series[index][i - 1].year)}
+                      y1={y(series[index][i - 1].value!)}
                       x2={x(point.year)}
                       y2={y(point.value)}
                       stroke={CAT[index]}
-                      strokeWidth={2.5}
+                      strokeWidth={context && index ? 2 : context ? 3 : 2.5}
                       strokeDasharray={index ? "7 4" : undefined}
                     />
                   )}
-                  <circle
-                    cx={x(point.year)}
-                    cy={y(point.value)}
-                    r={4}
-                    fill={CAT[index]}
-                  >
+                  <circle cx={x(point.year)} cy={y(point.value)} r={context && index ? 3.5 : context ? 4.5 : 4} fill={CAT[index]}>
                     <title>{`${countryLabel(countries[index])} · ${point.year}：${indicatorNumber(point.value, unit)}`}</title>
                   </circle>
                 </g>
@@ -221,7 +332,119 @@ export function IndicatorTrendChart({
           </g>
         ))}
       </svg>
-      <ComparisonSummary readings={readings} countries={countries} years={common} unit={unit} />
+      {context
+        ? <TrendSummary readings={readings} countries={countries} years={years} unit={unit} distribution={band} />
+        : <ComparisonSummary
+          readings={readings}
+          countries={countries}
+          years={years.filter((_, i) => series.every((points) => points[i].value !== null))}
+          unit={unit}
+        />}
+    </section>
+  );
+}
+
+/**
+ * Every economy as a dot for one year, so the observed and comparison countries are read against the
+ * whole sample: the shaded band is the middle 50%, the dashed line the median. Overlapping dots stack.
+ */
+export function DistributionStrip({
+  rows,
+  metric,
+  unit,
+  label,
+  year,
+  highlight,
+  distribution,
+}: {
+  rows: Row[];
+  metric: string;
+  unit: string;
+  label: string;
+  year: number;
+  highlight: string[];
+  distribution: YearDistribution;
+}) {
+  const points = rows
+    .filter((row) => row.year === year && !row.industry && row.country !== "ROW" && finiteValue(row[metric]))
+    .map((row) => ({ country: String(row.country), value: row[metric] as number }))
+    .sort((a, b) => a.value - b.value);
+  // Amounts are millions of USD; whole millions read better on a dot label than three decimals.
+  const reading = (value: number) => unit === "百万美元" ? Math.round(value).toLocaleString("zh-CN") : indicatorNumber(value, unit);
+  const zeroBased = unit === "%" || unit === "百万美元";
+  const valuesOnAxis = points.map((point) => point.value);
+  const axis = niceDomain(
+    zeroBased ? Math.min(0, ...valuesOnAxis) : Math.min(...valuesOnAxis),
+    zeroBased ? Math.max(0, ...valuesOnAxis) : Math.max(...valuesOnAxis),
+  );
+  const extent = axis.hi - axis.lo || 1;
+  const x = (value: number) => 60 + ((value - axis.lo) / extent) * 680;
+  // Stack dots that would overlap into lanes above the axis. Skewed amounts (most economies near zero)
+  // would otherwise grow a column dozens of dots tall, so lanes are capped and extra dots overlap.
+  const MAX_LANES = 8;
+  const laneEnds: number[] = [];
+  const placed = points.map((point) => {
+    const px = x(point.value);
+    let lane = laneEnds.findIndex((end) => end < px - 9);
+    if (lane < 0 && laneEnds.length < MAX_LANES) lane = laneEnds.push(px) - 1;
+    else if (lane < 0) lane = laneEnds.indexOf(Math.min(...laneEnds));
+    laneEnds[lane] = px;
+    return { ...point, px, lane };
+  });
+  const lanes = Math.max(1, laneEnds.length);
+  const base = 70 + lanes * 9;
+  const height = base + 60;
+  const cy = (lane: number) => base - 8 - lane * 9;
+  const marked = highlight.flatMap((country, index) => {
+    const point = placed.find((item) => item.country === country);
+    return point ? [{ ...point, index }] : [];
+  });
+  return (
+    <section aria-label={`${year} 年${label}全球分布`}>
+      <h4>{year} 年 · {label}在全部经济体中的位置</h4>
+      <svg
+        viewBox={`0 0 800 ${height}`}
+        role="img"
+        aria-label={`${year} 年${label}的全部 ${distribution.n} 个经济体分布；${marked.map((item) => `${countryLabel(item.country)} ${reading(item.value)}，第 ${distribution.ranks[item.country]} 位`).join("；")}；全球中位数 ${reading(distribution.median)}`}
+        style={{ width: "100%", display: "block" }}
+      >
+        <rect x={x(distribution.p25)} y={30} width={Math.max(1, x(distribution.p75) - x(distribution.p25))} height={base - 30} fill={REFERENCE_FILL} fillOpacity={0.2} />
+        <line x1={x(distribution.median)} x2={x(distribution.median)} y1={24} y2={base} stroke={REFERENCE_LINE} strokeWidth={1.5} strokeDasharray="4 3" />
+        <text x={x(distribution.median)} y={18} textAnchor="middle" fontSize={11} fill={REFERENCE_LINE}>
+          中位数 {reading(distribution.median)}
+        </text>
+        <line x1={60} x2={740} y1={base} y2={base} stroke="#c7ccd8" />
+        {axis.ticks.map((tick) => (
+          <text key={tick} x={x(tick)} y={base + 18} textAnchor="middle" fontSize={11} fill="#596173">{indicatorNumber(tick, unit)}</text>
+        ))}
+        {placed.map((point) => highlight.includes(point.country) ? null : (
+          <circle key={point.country} cx={point.px} cy={cy(point.lane)} r={3.6} fill="#8b93a6" fillOpacity={0.55}>
+            <title>{`${countryLabel(point.country)}：${reading(point.value)}`}</title>
+          </circle>
+        ))}
+        {marked.map((point) => (
+          <g key={point.country}>
+            <line x1={point.px} x2={point.px} y1={cy(point.lane)} y2={base + 26 + point.index * 14} stroke={CAT[point.index]} strokeWidth={1} />
+            <circle cx={point.px} cy={cy(point.lane)} r={6} fill={CAT[point.index]} stroke="#fff" strokeWidth={1.5} />
+            <text
+              x={Math.min(740, Math.max(60, point.px))}
+              y={base + 38 + point.index * 14}
+              textAnchor={point.px > 600 ? "end" : point.px < 160 ? "start" : "middle"}
+              fontSize={12}
+              fontWeight={700}
+              fill={CAT[point.index]}
+              stroke="#fff"
+              strokeWidth={3}
+              paintOrder="stroke"
+            >
+              {countryLabel(point.country)} {reading(point.value)} · 第 {distribution.ranks[point.country]} 位
+            </text>
+          </g>
+        ))}
+      </svg>
+      <p className="muted">
+        每个点是一个经济体（共 {distribution.n} 个），灰色带是中间 50% 的经济体，虚线是中位数；排名从高到低，只表示相对高低。
+      </p>
     </section>
   );
 }

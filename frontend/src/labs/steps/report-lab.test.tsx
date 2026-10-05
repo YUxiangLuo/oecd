@@ -324,7 +324,7 @@ test("one-click finish flushes then generates then submits; outro appears only a
     const dialog = screen.getByRole("dialog", { name: "报告已提交" });
     expect(within(dialog).getByText("提交成功 · 等待教师评阅")).toBeTruthy();
     expect(within(dialog).getByText("计算并理解指标")).toBeTruthy();
-    expect(within(dialog).getByText("比较两个国家")).toBeTruthy();
+    expect(within(dialog).getByText("看变化与全球位置")).toBeTruthy();
     expect(within(dialog).getByText("汇总四项回归结果")).toBeTruthy();
     expect(within(dialog).queryByText("比较与验证")).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();

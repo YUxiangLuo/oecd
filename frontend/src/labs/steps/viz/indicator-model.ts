@@ -184,3 +184,43 @@ export function changeReading(
   const difference = (end - start) * (unit === "%" ? 100 : 1);
   return `${difference > 0 ? "+" : ""}${difference.toLocaleString("zh-CN", { maximumFractionDigits: 3 })} ${unit === "%" ? "个百分点" : unit}`;
 }
+
+/** One year's spread of a country-level metric across all economies (ROW excluded). */
+export interface YearDistribution {
+  year: number;
+  n: number;
+  p25: number;
+  median: number;
+  p75: number;
+  /** Rank from highest to lowest (1 = highest); ties share the better rank. */
+  ranks: Record<string, number>;
+}
+
+/** Linear-interpolated quantile, the same rule pandas uses, so the page and the report agree. */
+export function quantile(sorted: number[], p: number): number {
+  const index = (sorted.length - 1) * p;
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  return sorted[lower] + (sorted[upper] - sorted[lower]) * (index - lower);
+}
+
+/** Global reference for the trend and distribution views: every economy's country-level reading per year. */
+export function countryDistribution(rows: Row[], metric: string, years: number[]): YearDistribution[] {
+  return years.flatMap((year) => {
+    const readings = rows
+      .filter((row) => row.year === year && !row.industry && row.country !== "ROW" && finiteValue(row[metric]))
+      .map((row) => ({ country: String(row.country), value: row[metric] as number }));
+    if (readings.length < 2) return [];
+    const sorted = readings.map((item) => item.value).sort((a, b) => a - b);
+    const ranks: Record<string, number> = {};
+    for (const item of readings) ranks[item.country] = 1 + readings.filter((other) => other.value > item.value).length;
+    return [{
+      year,
+      n: readings.length,
+      p25: quantile(sorted, 0.25),
+      median: quantile(sorted, 0.5),
+      p75: quantile(sorted, 0.75),
+      ranks,
+    }];
+  });
+}

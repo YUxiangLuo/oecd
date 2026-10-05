@@ -7,7 +7,7 @@ import type { VizStepState } from "./scaffold";
 export const TRADE_TOPIC: IndicatorTopic = {
   key: "trade",
   defaultMetric: "FVA_share",
-  question: "出口的价值来源怎样变化？两国差在哪里？",
+  question: "出口的价值来源怎样随时间变化？在全部经济体中处于什么位置？",
   metrics: [
     {
       key: "FVA_share",

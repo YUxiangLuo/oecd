@@ -119,7 +119,7 @@ describe("indicator explorer with automatic report material", () => {
     expect((view.getByLabelText("比较范围") as HTMLSelectElement).value).toBe(
       "",
     );
-    expect(await view.findByLabelText("两国趋势结论")).toBeTruthy();
+    expect(await view.findByLabelText("趋势读数")).toBeTruthy();
     expect(view.queryByText(/含 2020 年/)).toBeNull();
     const chart = view.getByRole("img");
     const supplementary = view.getByRole("group", { name: "补充图表" });
@@ -129,8 +129,14 @@ describe("indicator explorer with automatic report material", () => {
     expect(supplementary.compareDocumentPosition(materials) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Caveats live in the task card and the report; the chart area keeps only a one-line metric definition.
     expect(view.queryByText("指标口径")).toBeNull();
-    expect(view.getByText(/两国差距/)).toBeTruthy();
+    // Reading order: the observed country, its rank and the global median, then the comparison country.
+    const cards = [...view.getByLabelText("趋势读数").children].map((card) => card.textContent ?? "");
+    expect(cards[0]).toContain("CHN 中国");
+    expect(cards[1]).toContain("在全部经济体中");
+    expect(cards[2]).toContain("全球中位数");
+    expect(cards[3]).toContain("与对比国家 USA 美国");
     expect(view.getByText(/差距缩小 .* 个百分点/)).toBeTruthy();
+    expect(chart.querySelector('[data-series="global-median"]')).not.toBeNull();
     await waitFor(() => expect(view.saves).toHaveLength(1));
     expect(view.queryByRole("button", { name: "保存为报告材料" })).toBeNull();
     expect(view.saves[0].indicator_selection).toMatchObject({
@@ -151,8 +157,11 @@ describe("indicator explorer with automatic report material", () => {
     view.accept(); // parent owns persistence; only its rerender marks the selection saved
     expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("当前图表已自动记录");
     expect(view.saves).toHaveLength(1);
-    fireEvent.click(view.getByRole("button", { name: "同年差异" }));
+    fireEvent.click(view.getByRole("button", { name: "全球分布" }));
     await waitFor(() => expect(view.saves).toHaveLength(2));
+    // The same-year view shows every economy, with the two countries highlighted and ranked.
+    expect(view.getByRole("region", { name: /全球分布/ })).toBeTruthy();
+    expect(view.getByRole("img", { name: /CHN 中国 .*第 [0-9]+ 位/ })).toBeTruthy();
     expect(
       view.saves[1].observations!.every(
         (x) => x.year === 2021 && x.source === "explicit-indicator-comparison",

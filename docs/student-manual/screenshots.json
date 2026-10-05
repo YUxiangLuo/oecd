@@ -215,14 +215,14 @@
       "file": "screenshots/06-visualization.png",
       "width": 1280,
       "height": 960,
-      "sha256": "8b1d99814d31134e17515f3db20fffca922021ddeb2a7d0f111ac69fb6b4d3d7",
+      "sha256": "4a1a4ba20c56be7ba96b4579bde14df8a9059704a85ac6493b1ba8e2a01d4833",
       "captured_on": "2026-10-05",
       "capture_url": "http://127.0.0.1:5173",
       "capture_tool": "headless-chrome-cdp",
       "journey": "api-seeded-then-browser",
       "account": "test-student-complete",
-      "capture_note": "Step 6 trend with automatic material.",
-      "baseline_commit": "49d019e6ba31512c875a3b958f10b021066ed01f",
+      "capture_note": "Step 6 trend with the global median and middle-50% band; comparison country dashed.",
+      "baseline_commit": "bd4ee4f385289e88baa01fa443b60570f9fe99b9",
       "data_release": "01b87b87c05c4d8386440706adafe04d",
       "simulation_contract": "step10-tariff-teaching-v2",
       "data_sources": [
@@ -231,20 +231,21 @@
           "production_data": true,
           "release_id": "01b87b87c05c4d8386440706adafe04d"
         }
-      ]
+      ],
+      "code_state": "baseline commit plus uncommitted steps 6-8 global-context changes"
     },
     {
       "file": "screenshots/07-visualization.png",
       "width": 1280,
       "height": 960,
-      "sha256": "3d5034f2cb8fa7cccc86ce35cce58d90b40a078cfd97e9c9364924298ae73d66",
+      "sha256": "2fb6f4ea4d8c5d2e97412b4df3ea93b8882b2fed8562e71b1e389c889084093b",
       "captured_on": "2026-10-05",
       "capture_url": "http://127.0.0.1:5173",
       "capture_tool": "headless-chrome-cdp",
       "journey": "api-seeded-then-browser",
       "account": "test-student-complete",
-      "capture_note": "Step 7 production chart.",
-      "baseline_commit": "49d019e6ba31512c875a3b958f10b021066ed01f",
+      "capture_note": "Step 7 complex GVC share trend with global reference and reading cards.",
+      "baseline_commit": "bd4ee4f385289e88baa01fa443b60570f9fe99b9",
       "data_release": "01b87b87c05c4d8386440706adafe04d",
       "simulation_contract": "step10-tariff-teaching-v2",
       "data_sources": [
@@ -253,20 +254,21 @@
           "production_data": true,
           "release_id": "01b87b87c05c4d8386440706adafe04d"
         }
-      ]
+      ],
+      "code_state": "baseline commit plus uncommitted steps 6-8 global-context changes"
     },
     {
       "file": "screenshots/08-visualization.png",
       "width": 1280,
       "height": 960,
-      "sha256": "f810522dcfb4c4ffd8bbb1bddabff192b456746c5979e0eaba577f5bab9836a8",
+      "sha256": "0292c6d282697adb58bffb17aec54848723b5fdfb272ccc89f32ba3a68594742",
       "captured_on": "2026-10-05",
       "capture_url": "http://127.0.0.1:5173",
       "capture_tool": "headless-chrome-cdp",
       "journey": "api-seeded-then-browser",
       "account": "test-student-complete",
-      "capture_note": "Step 8 forward/backward lengths.",
-      "baseline_commit": "49d019e6ba31512c875a3b958f10b021066ed01f",
+      "capture_note": "Step 8 forward/backward GVC lengths with global median.",
+      "baseline_commit": "bd4ee4f385289e88baa01fa443b60570f9fe99b9",
       "data_release": "01b87b87c05c4d8386440706adafe04d",
       "simulation_contract": "step10-tariff-teaching-v2",
       "data_sources": [
@@ -275,7 +277,8 @@
           "production_data": true,
           "release_id": "01b87b87c05c4d8386440706adafe04d"
         }
-      ]
+      ],
+      "code_state": "baseline commit plus uncommitted steps 6-8 global-context changes"
     },
     {
       "file": "screenshots/09-network.png",

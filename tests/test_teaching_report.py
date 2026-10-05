@@ -763,6 +763,8 @@ def test_composition_requires_all_trade_components_and_reports_each_reading():
     text = "\n".join(teaching_report._experiment_sections(session))
     assert "| 出口中的税收减补贴 | 百万美元 | -2 |" in text
     chart = teaching_report._observed_chart(data, 6, data["observations"])
+    # Global-median bars are added when country data is available; the saved countries' bars are fixed.
+    chart = {**chart, "items": [item for item in chart["items"] if not item["group"].startswith("全球中位数")]}
     assert len(chart["items"]) == 12
     # Like the page, the single-year composition shows each part as a share of gross exports.
     assert {(item["group"], item["label"]) for item in chart["items"]} == {
@@ -804,8 +806,11 @@ def test_composition_evolution_generates_each_component_as_a_two_country_trend()
 
     # One chart per part (total excluded); lines are that part's share of gross exports, as on the page.
     assert len(charts) == 6
-    assert all(chart["type"] == "line" and len(chart["series"]) == 2 for chart in charts)
-    assert all({series["label"] for series in chart["series"]} == {"CHN 中国", "USA 美国"} for chart in charts)
+    countries = [[series for series in chart["series"] if not series.get("reference")] for chart in charts]
+    assert all(chart["type"] == "line" for chart in charts)
+    assert all(
+        {series["label"] for series in chart_countries} == {"CHN 中国", "USA 美国"} for chart_countries in countries
+    )
     assert all("构成演变" in chart["title"] and chart["y_label"] == "占总出口的百分比（%）" for chart in charts)
     fva = next(chart for chart in charts if "出口中的外国增加值占总出口比重" in chart["title"])
     assert fva["series"][0]["points"] == [
@@ -864,7 +869,11 @@ def test_report_directions_retains_both_length_metrics_and_their_readouts():
     assert not any(item["step"] == 8 for item in check_material_gate(session))
     charts = teaching_report._observed_charts(data, 8, data["observations"])
     assert len(charts) == 2
-    assert sum(len(series["points"]) for chart in charts for series in chart["series"]) == 20
+    # Country series only; a global-median series is added when country data is available.
+    assert (
+        sum(len(series["points"]) for chart in charts for series in chart["series"] if not series.get("reference"))
+        == 20
+    )
     section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 8", 1)[1]
     section = section.split("### 步骤 9", 1)[0]
     assert "前向 GVC 段长度" in section and "后向 GVC 段长度" in section
@@ -1620,3 +1629,77 @@ def test_complete_stopped_diagnosis_satisfies_report_gate_without_hiding_it(
     data.pop("qualified_run", None)
     result["coefs"][0]["p"] = 0.001
     assert any(item["step"] == 11 for item in check_gate(session))
+
+
+def _country_reference_csvs(path: Path, values: dict[str, float]) -> None:
+    """Country CSVs where PLv_GVC rises by 0.1 a year from the given 2016 values."""
+    for year in range(2016, 2021):
+        pd.DataFrame(
+            {"country": list(values), "PLv_GVC": [value + (year - 2016) / 10 for value in values.values()]}
+        ).to_csv(path / f"indicators_country_{year}.csv", index=False)
+
+
+def test_country_reference_matches_the_page_rule(tmp_path, monkeypatch):
+    from gvcsim.report_reference import country_reference
+
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    _country_reference_csvs(tmp_path, {"CHN": 1.0, "USA": 2.0, "DEU": 2.0, "JPN": 4.0, "KOR": 5.0, "ROW": 9.0})
+    reference = country_reference("PLv_GVC", 2016)
+    assert reference is not None
+    # ROW excluded; linear quartiles as pandas/numpy; ties share the better rank.
+    assert reference["n"] == 5
+    assert reference["median"] == pytest.approx(2.0)
+    assert reference["p25"] == pytest.approx(2.0)
+    assert reference["p75"] == pytest.approx(4.0)
+    assert reference["ranks"] == {"KOR": 1, "JPN": 2, "USA": 3, "DEU": 3, "CHN": 5}
+    assert country_reference("PLv_GVC", 2030) is None
+    assert country_reference("no_such_metric", 2016) is None
+    # Integer-typed columns (numpy ints) are read like floats rather than silently dropped.
+    pd.DataFrame({"country": ["CHN", "USA", "DEU"], "degree": [3, 1, 2]}).to_csv(
+        tmp_path / "indicators_country_2016.csv", index=False
+    )
+    counts = country_reference("degree", 2016)
+    assert counts is not None and counts["median"] == 2 and counts["ranks"] == {"CHN": 1, "DEU": 2, "USA": 3}
+
+
+def test_country_level_trend_and_same_year_charts_show_the_global_median(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    _country_reference_csvs(tmp_path, {"CHN": 4.0, "USA": 5.0, "DEU": 3.0, "JPN": 3.5, "KOR": 6.0})
+    session = _complete()
+    data = session["steps"]["8"]["data"]
+    data["compared"] = ["CHN", "USA"]
+    data["indicator_selection"] = {"view": "trend", "metric": "PLv_GVC"}
+    data["observations"] = [
+        dict(
+            item,
+            metric="PLv_GVC",
+            value=value + (year - 2016) / 10,
+            year=year,
+            unit="生产阶段（账户比值）",
+            source="explicit-indicator-trend",
+        )
+        for item, value in zip(data["observations"], (4.0, 5.0))
+        for year in range(2016, 2021)
+    ]
+    (chart,) = teaching_report._observed_charts(data, 8, data["observations"])
+    median = next(series for series in chart["series"] if series.get("reference"))
+    assert median["label"] == "全球中位数（5 个经济体）"
+    assert [point["value"] for point in median["points"]] == pytest.approx([4.0, 4.1, 4.2, 4.3, 4.4])
+    assert "两国" not in chart["title"] and "全球中位数" in chart["title"]
+    section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 8", 1)[1]
+    section = section.split("### 步骤 9", 1)[0]
+    assert "在 5 个经济体中（从高到低），CHN 中国从第 3 位变为第 3 位；USA 美国从第 2 位变为第 2 位" in section
+    assert '"_context"' not in section and '"reference":true' in section
+
+    # Same-year comparison: the two countries plus a median bar, read with their ranks.
+    data["indicator_selection"] = {"view": "comparison", "metric": "PLv_GVC"}
+    data["observations"] = [
+        dict(item, year=2020, source="explicit-indicator-comparison")
+        for item in data["observations"]
+        if item["year"] == 2016
+    ]
+    (bar,) = teaching_report._observed_charts(data, 8, data["observations"])
+    assert [item["label"] for item in bar["items"]][-1] == "全球中位数（5 个经济体）"
+    assert bar["items"][-1]["value"] == pytest.approx(4.4)
+    section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 8", 1)[1]
+    assert "全球中位数 4.4" in section and "CHN 中国第 3 位" in section
