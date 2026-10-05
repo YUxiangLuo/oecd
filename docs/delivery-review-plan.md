@@ -129,15 +129,17 @@ cd frontend && bunx tsc --noEmit -p . && bun run test:unit && bun run build && b
 
 ## 6. 第 6 天（10-11）：部署演练与数据生命周期
 
-在一台干净 Linux 虚拟机（或清空的演示站镜像）上，只依据 DEPLOY.md 操作：
+10-06 在 WSL 新建的干净 Ubuntu 24.04.5 发行版 `gvcsim-deploy`（Docker `ubuntu:24.04` 根文件系统导入，systemd 启用，root 操作）上，只依据 DEPLOY.md 逐块执行。WSL 特有干扰：两个发行版共享网络命名空间，演练库 PostgreSQL 落在 5433 端口，连接串按此调整；WSL 会在无会话时自动关停发行版并重生成 /etc/hosts，用常驻会话和 `generateHosts=false` 处理。这两点与真实主机无关。
 
-- [ ] 主机 bootstrap → `uv sync --frozen` → 前端 `bun run build`（普通构建，不含演示凭证）→ 环境文件 → nginx + TLS → systemd 服务与备份定时器。
-- [ ] 真实原始文件 `compute` 全程计时与峰值内存（本地记录约 10 分钟、1.9 GB），`preflight` 通过，首位教师创建。
-- [ ] 数据换版：`scripts/dogfood_release_roundtrip.py` A→B→A，确认会话与报告按 `release_id` 隔离、旧令牌失效、回滚可用。
-- [ ] 发布中断：`scripts/dogfood_publication_faults.py`，确认不会留下半成品 release。
-- [ ] 备份与恢复：触发一次 `gvcsim-backup.service`，在隔离库恢复并核对校验文件；记录恢复耗时。
-- [ ] 新学期 `classroom-init --reset` 只在测试库演练，确认备份先行的提示与结果。
-- [ ] 非 Chrome 浏览器通过 HTTPS 登录；`GVCSIM_ALLOWED_ORIGINS` 配错时的表现。
+- [x] 主机 bootstrap：apt 装 PostgreSQL 16、Nginx 1.24、OpenSSL；uv 0.12 与受管 Python 3.13（apt 无 3.13，记 D-016）；bun 1.4.2。服务账号（nologin 路径错误，记 D-015）、持久目录、角色与库、`git clone` 到 `/opt/gvcsim/current`、`uv sync --frozen`、普通前端构建、环境文件（随机 DSN 口令与 32 字节密钥）、原始 CSV 0640、自签 TLS 代替 ACME、Nginx 模板替换域名后 `nginx -t` 通过、systemd 单元与备份定时器全部按文档完成。**首页 500**：`useradd` 建的 `/opt/gvcsim` 为 0750，www-data 无法读取 dist（D-017，P1，文档已补 `chmod 0751`）。
+- [x] 首次发布：`compute` 真实 5 年数据 13.3 分钟（12 核 WSL，峰值 RSS 约 930 MB），发布门禁全部通过，release `857c70d6`；`classroom-init` 建首位教师；`preflight` 通过；`systemctl start` 后 5 s 内 `/health` 就绪；HTTPS 健康、HTTP→HTTPS 301、`/docs` 403、HSTS/CSP/nosniff 响应头齐全；教师经 HTTPS 登录并建号；原始切片首次 0.96 s、随后 26 ms（notify 模式生效，ext4）；回归 0.39 s。注意：单元启用后主机重启会在首个 release 之前拉起 API，preflight 失败 5 次后进入 start-limit，首次发布后 `systemctl start` 前可能需要 `systemctl reset-failed`。
+- [x] 数据换版（10-06，开发库 WSL，`gvclab_e2e`）：`scripts/dogfood_release_roundtrip.py` 以真实 release 01b87b87 为 A、合成 release e0f456b5 为 B 做 A→B→A 两轮，均通过：两版数据确实不同、账号保留、两个 release 上的报告评分各自保留（41／42）、换回 A 后原令牌重新有效。证据 `dogfood-output/day6-roundtrip-*/`。
+- [x] 发布中断（开发库 WSL，合成 release，`CI=true GVCSIM_CI_SYNTHETIC=1`）：`dogfood_publication_faults.py` 的 artifact、manifest、fsync、promote、before_switch、after_switch、cleanup、cleanup_denied、readonly、diskfull、concurrent 11 个阶段各 1–2 次全部通过：切换前中断保留旧 release、切换后中断保留新 release、锁均释放、旧 release 始终可校验。注意 cleanup_denied 一类用权限模拟的阶段必须在 ext4 上跑，放在 Windows 盘（DrvFs）会假失败。证据 `dogfood-output/day6-publication-faults*/`。
+- [x] 备份与恢复（演练库）：`systemctl start gvcsim-backup.service` 产出 dump + sha256（0600，属主 gvcsim），`sha256sum -c` 与 `pg_restore --list` 通过；隔离库 `gvcsim_restore_drill` 恢复 1 s 内完成，`schema_meta` 为 `gvcsim-teaching-db-v12`，账号数与源库一致。文档的演练块以应用角色 `createdb` 会被拒（D-019，已改为 postgres 建库并指定属主）。
+- [x] 普通代码部署块、release 回滚块（对当前 release 自身执行：校验、符号链接原子替换、preflight、启动、健康）均按文档原样通过。
+- [x] 新学期重置（演练库）：先备份再 `classroom-init --reset`，重置后旧学生 401、新教师 200；备份目录累计 3 组 dump+sha256。
+- [x] `GVCSIM_ALLOWED_ORIGINS`：配置来源的预检 200 并带 `access-control-allow-origin`；陌生来源预检 400 且不带该头；简单请求不带 CORS 头。
+- [ ] 非 Chrome 浏览器通过 HTTPS 登录：需你在真实浏览器上做（自签证书的演练站或交付站）。
 
 ## 7. 第 7 天（10-12）：收尾与打包
 
@@ -175,6 +177,8 @@ cd frontend && bunx tsc --noEmit -p . && bun run test:unit && bun run build && b
 | 10-06 | release 01b87b87 | `scripts/review_statistics.py --replications 2000` | 四项回归 PanelOLS 对照全部通过（系数差 ≤1.8e-12，n=16220，76 簇，support ok）；覆盖率实验 0.9395（MC 95% 区间 0.928–0.949，标称 0.95） | `dogfood-output/statistics-review-20261006/`（已忽略目录）；覆盖率略低于标称属该教学 DGP 的已知特征，报告文案已标注"标称 95% 近似区间" |
 | 10-06 | 1663120 | 第 3 天专项脚本（令牌过期、本人改密、三标签页交错） | 全部通过 | `dogfood-output/day3-recovery/`，`gvclab_e2e` |
 | 10-06 | 1663120 | 学生端 15 步手工探索（student38，本地课堂） | 通过；无控制台错误；无新缺陷 | 详见 3.1/3.2 勾选项；未覆盖：真实浏览器矩阵、缩放、打印目视、断网 |
+| 10-06 | f0745d6 | 第 6 天干净主机部署演练（WSL `gvcsim-deploy`，Ubuntu 24.04.5） | bootstrap、首次发布、代码部署、回滚、备份恢复、重置、CORS 全部按 DEPLOY.md 跑通；发现文档缺陷 D-015、D-016、D-017（P1）、D-019 | release 857c70d6；演练库保留在 WSL 中供第 7 天复验 |
+| 10-06 | f0745d6 | 数据换版往返、发布中断 11 阶段（开发库 WSL） | 全部通过 | `dogfood-output/day6-roundtrip-*/`、`day6-publication-faults*/` |
 | 10-06 | f97c285 | 实验手册 2.3 重拍 19 图、重排导出；技术手册 1.3；README／DEPLOY 增补 | `tests/test_steps.py` 6 通过；PDF 28 页 A4 无溢出 | 截图脚本新增侧栏保存等待 |
 | 10-06 | 1663120 | 教师端手工走查（学期／班级／学生／批量建号／评阅／冲突／评分清除） | 通过；无新缺陷 | 详见 4.1 勾选项 |
 | 10-06 | 1663120 | 容量：冲击面板基准、HTTP 边界、50 人并发、冷启动 | 基准四项全部在预算内；650 请求无错误；RSS 960 MB 稳定 | `dogfood-output/day4-capacity/`；发现 hash 模式切片慢，记 D-014（部署核对项） |
@@ -198,4 +202,9 @@ cd frontend && bunx tsc --noEmit -p . && bun run test:unit && bun run build && b
 | D-011 | 10-06 | P3（整洁） | `db-lab.tsx:856`、`auto-comparison.tsx:117` | 用 `.replace("浏览", …)` 改写共享文案常量；`login.tsx:197` 用 `notice.includes("失效")` 决定样式；`network-ranking.tsx:58` 同一 `rankText` 调三次 | 交付后处理 | 代码评审 |
 | D-013 | 10-06 | P2（部署） | `gvcsim/cli.py:113` | `forwarded_allow_ips` 写死为 `127.0.0.1`。DEPLOY.md 允许 Nginx 与 API 分机部署，此时所有学生的来源 IP 都变成 Nginx 的地址，登录来源限流（默认 120 次/分）会把全班当作一个来源，课堂集中登录时可能整体 429 | 交付环境若同机部署则无影响；分机部署需改为可配置或在 DEPLOY.md 写明 | 安全评审 |
 | D-014 | 10-06 | P2（部署核对） | `GVCSIM_FILE_CACHE_MODE` | 原始切片在默认 `hash` 模式下每请求重算原始 CSV 的 SHA-256（420 ms/次，50 人并发时中位 11.5 s），`notify` 模式 13 ms/次。模板与演示站已设 notify，但 notify 只在本地 ext4/XFS/Btrfs/tmpfs 生效，NFS、9p 等会静默回退到 hash | 交付主机核对：数据目录在本地文件系统且环境文件含 `GVCSIM_FILE_CACHE_MODE=notify`；写进 DEPLOY.md 的检查项（第 6 天） | 第 4 天容量测试 |
+| D-017 | 10-06 | **P1（文档／部署）** | `DEPLOY.md` bootstrap | 在干净 Ubuntu 24.04 上照抄文档部署后首页 500：`useradd --create-home` 把 `/opt/gvcsim` 建成 0750，Nginx 的 www-data 无法穿过该目录读取 `frontend/dist`（error.log：`stat() ... Permission denied` 并进入 try_files 重定向循环）；`/health`、`/api` 不受影响，容易漏测 | 文档增加 `chmod 0751 /opt/gvcsim`（待提交）；演练库已修复并验证首页、资源、讲义 PDF 均 200 | 第 6 天干净主机演练 |
+| D-018 | 10-06 | P3（噪音） | `deploy/gvcsim-api.service`、DEPLOY.md 的 `runuser --preserve-environment` 块 | 服务以 `ProtectSystem=strict` 运行且 HOME=/opt/gvcsim 只读，matplotlib 每次启动报 "created a temporary cache directory"；运维命令块保留 root 的 HOME，libpq 还会提示 `/root/.postgresql/postgresql.crt: Permission denied` | 交付后处理：单元加 `Environment=MPLCONFIGDIR=/tmp/gvcsim-mpl`，命令块用 `env HOME=/opt/gvcsim` | 第 6 天 |
+| D-019 | 10-06 | P2（文档） | `DEPLOY.md` 备份与恢复演练 | 演练块以 `PGUSER=gvcsim` 执行 `createdb gvcsim_restore_drill`，但按文档创建的应用角色没有 CREATEDB 权限，照抄即 `permission denied to create database` | 文档改为由 `postgres` 超级用户 `createdb --owner=gvcsim`（待提交） | 第 6 天 |
+| D-015 | 10-06 | P2（文档） | `DEPLOY.md` bootstrap | `useradd --shell /usr/bin/nologin`：Ubuntu 24.04 的 nologin 在 `/usr/sbin/nologin`，照抄会得到 shell 不存在的告警 | 已改为 `/usr/sbin/nologin`（待提交） | 第 6 天干净主机演练 |
+| D-016 | 10-06 | P2（文档） | `DEPLOY.md` bootstrap | 只写"安装 Python 3.13"，但 Ubuntu 24.04 apt 没有 3.13；演示站与演练都用 uv 受管解释器 | 已补充 uv 安装方式与 `UV_PYTHON_INSTALL_DIR` 约定（待提交） | 第 6 天 |
 | D-012 | 10-06 | P2（覆盖） | `scripts/dogfood_token_expiry.py`、`dogfood_self_password_recovery.py`、`dogfood_workspace_interleavings.py` | 自动恢复草稿改版后，这三条真实过期／改密／换号脚本不在 local_ci 内，合并恢复路径只有 mock API 单测 | 10-06 在 WSL 对 `gvclab_e2e` 全部跑通：令牌 10 s 自然过期 2 次恢复、本人改密 2 次恢复、三标签页冲突＋撤销请求＋换号 2 轮通过；证据 `dogfood-output/day3-recovery/` | 已关闭 |

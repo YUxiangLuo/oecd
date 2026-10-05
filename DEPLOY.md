@@ -10,7 +10,7 @@
 
 ## 一次性主机 bootstrap
 
-先由系统管理员安装 Python 3.13、uv、Bun、PostgreSQL、Nginx、OpenSSL 和所用 ACME/TLS 客户端。确认以下命令都可用：
+先由系统管理员安装 Python 3.13、uv、Bun、PostgreSQL、Nginx、OpenSSL 和所用 ACME/TLS 客户端。Ubuntu 24.04 的 apt 仓库只有 Python 3.12，可用 uv 安装受管解释器并放在代码目录之外，例如 `UV_PYTHON_INSTALL_DIR=/opt/uv-python uv python install 3.13`，再把 `uv python find 3.13` 给出的路径链接为 `/usr/local/bin/python3.13`；后文所有 `uv sync` 命令沿用同一个 `UV_PYTHON_INSTALL_DIR`。确认以下命令都可用：
 
 ```bash
 python3.13 --version
@@ -24,7 +24,10 @@ openssl version
 创建不可登录的服务账号和持久目录：
 
 ```bash
-useradd --system --home-dir /opt/gvcsim --create-home --shell /usr/bin/nologin gvcsim
+useradd --system --home-dir /opt/gvcsim --create-home --shell /usr/sbin/nologin gvcsim
+# Ubuntu 21.04+ 的 useradd 把家目录建成 0750；Nginx 的 www-data 必须能穿过它读取
+# /opt/gvcsim/current/frontend/dist，否则首页返回 500（stat() Permission denied）。
+chmod 0751 /opt/gvcsim
 install -d -o gvcsim -g gvcsim -m 0750 /opt/gvcsim/shared/data
 install -d -o gvcsim -g gvcsim -m 0750 /opt/gvcsim/shared/OECD_ICIO
 install -d -o gvcsim -g gvcsim -m 0700 /opt/gvcsim/shared/backups
@@ -227,12 +230,13 @@ GVCSIM_BACKUP_DIR=/opt/gvcsim/shared/backups scripts/backup_classroom.sh
 cd /opt/gvcsim/shared/backups
 sha256sum -c classroom-YYYYmmddTHHMMSSZ.dump.sha256
 pg_restore --list classroom-YYYYmmddTHHMMSSZ.dump >/dev/null
-# 演练库所在主机按实际环境填写（可与生产库同机，也可以是隔离主机）
+# 演练库所在主机按实际环境填写（可与生产库同机，也可以是隔离主机）。
+# 应用角色 gvcsim 没有 CREATEDB 权限，演练库须由数据库管理员在数据库主机上创建并指定属主：
+sudo -u postgres createdb --owner=gvcsim gvcsim_restore_drill
 export PGHOST=<数据库主机> PGPORT=5432 PGUSER=gvcsim
 read -rsp 'PostgreSQL 口令: ' PGPASSWORD
 echo
 export PGPASSWORD
-createdb --maintenance-db=postgres gvcsim_restore_drill
 pg_restore --single-transaction --no-owner --no-acl --dbname=gvcsim_restore_drill classroom-YYYYmmddTHHMMSSZ.dump
 psql --dbname=gvcsim_restore_drill -Atc "select version from schema_meta where singleton"
 unset PGPASSWORD
