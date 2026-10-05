@@ -3,18 +3,18 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import App from "./App";
 import { api, AUTH_TOKEN_KEY, getActiveAuthToken, setActiveAuthToken } from "./api";
 import { emptySession } from "./session-store";
-import { AUTH_RECOVERY_KEY } from "./use-session";
+import { KEPT_EDITS_KEY } from "./use-session";
 
 test("self-service password change preserves the failed-save draft before logout", async () => {
   const token = sessionStorage.getItem(AUTH_TOKEN_KEY);
   const active = getActiveAuthToken();
   const href = window.location.href;
-  const recovery = sessionStorage.getItem(AUTH_RECOVERY_KEY);
+  const recovery = sessionStorage.getItem(KEPT_EDITS_KEY);
   const intro = sessionStorage.getItem("gvcsim_show_intro");
   const releaseId = "a".repeat(32);
   sessionStorage.setItem(AUTH_TOKEN_KEY, "valid-session");
   setActiveAuthToken("valid-session");
-  sessionStorage.removeItem(AUTH_RECOVERY_KEY);
+  sessionStorage.removeItem(KEPT_EDITS_KEY);
   sessionStorage.removeItem("gvcsim_show_intro");
   window.history.replaceState(null, "", "/?step=15");
   const me = spyOn(api, "me").mockResolvedValue({ username: "draft-student", name: "学生", role: "student", account_id: 42 });
@@ -40,7 +40,8 @@ test("self-service password change preserves the failed-save draft before logout
     fireEvent.change(document.querySelector("#account-confirm-password")!, { target: { value: "new-password-2026" } });
     fireEvent.click(screen.getByRole("button", { name: "修改并重新登录" }));
     await waitFor(() => expect(reload).toHaveBeenCalled());
-    const draft = JSON.parse(sessionStorage.getItem(AUTH_RECOVERY_KEY)!);
+    const draft = JSON.parse(sessionStorage.getItem(KEPT_EDITS_KEY)!);
+    expect(draft.version).toBe(3);
     expect(draft.release_id).toBe(releaseId);
     expect(draft.username).toBe("draft-student");
     expect(draft.session.steps["15"].data.research_question).toBe("未保存的研究问题，改密后必须保留。");
@@ -50,7 +51,7 @@ test("self-service password change preserves the failed-save draft before logout
     for (const mock of [reload, password, save, session, steps, meta, me]) mock.mockRestore();
     if (token == null) sessionStorage.removeItem(AUTH_TOKEN_KEY); else sessionStorage.setItem(AUTH_TOKEN_KEY, token);
     setActiveAuthToken(active);
-    if (recovery == null) sessionStorage.removeItem(AUTH_RECOVERY_KEY); else sessionStorage.setItem(AUTH_RECOVERY_KEY, recovery);
+    if (recovery == null) sessionStorage.removeItem(KEPT_EDITS_KEY); else sessionStorage.setItem(KEPT_EDITS_KEY, recovery);
     if (intro == null) sessionStorage.removeItem("gvcsim_show_intro"); else sessionStorage.setItem("gvcsim_show_intro", intro);
     window.history.replaceState(null, "", href);
   }

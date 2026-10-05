@@ -4,12 +4,13 @@ import { api } from "./api";
 import { emptySession, readShared, readStep } from "./session-store";
 import type { ExperimentSession, SessionResponse, SessionSaveResponse } from "./types";
 import {
-  AUTH_RECOVERY_KEY,
+  KEPT_EDITS_KEY,
   SessionSaveQueue,
-  clearAuthSessionRecovery,
+  clearKeptEdits,
+  keepEdits,
+  mergeKeptEdits,
   patchSessionStep,
-  readAuthSessionRecovery,
-  saveAuthSessionRecovery,
+  readKeptEdits,
   updateSessionShared,
   useSession,
 } from "./use-session";
@@ -45,7 +46,9 @@ describe("session conflict recovery", () => {
     const conflict = await api.classroom.saveSession({ session: emptySession(), base_updated_at: null }).catch((error) => error);
     fetchMock.mockRestore();
     const latest = patchSessionStep(emptySession(), 15, { research_question: "server version" });
-    const get = spyOn(api.classroom, "session").mockResolvedValue({ ...response(latest), report: null });
+    // The page starts from an empty record; meanwhile another page saved the same field.
+    const get = spyOn(api.classroom, "session").mockResolvedValueOnce({ ...response(), report: null })
+      .mockResolvedValue({ ...response(latest), report: null });
     const request = deferred<SessionSaveResponse>();
     const save = spyOn(api.classroom, "saveSession").mockImplementationOnce(() => request.promise).mockRejectedValue(conflict);
     try {
@@ -77,26 +80,24 @@ describe("session conflict recovery", () => {
 });
 
 describe("session helpers", () => {
-  test("stores an unsynced recovery only for the same reauthenticated account", () => {
+  test("keeps edits only for the same account and data release", () => {
     const values = new Map<string, string>();
     const storage = {
       getItem: (key: string) => values.get(key) ?? null,
       setItem: (key: string, value: string) => { values.set(key, value); },
       removeItem: (key: string) => { values.delete(key); },
     };
-    const draft = patchSessionStep(emptySession(), 15, { research_question: "未保存问题" });
+    const base = patchSessionStep(emptySession(), 15, { research_question: "已保存问题" });
+    const draft = patchSessionStep(base, 15, { research_question: "未保存问题" });
 
-    saveAuthSessionRecovery(storage, "student-a", draft, "2026-08-12T00:00:00Z", RELEASE_A);
-    expect(readAuthSessionRecovery(storage, "student-a", RELEASE_A)).toEqual({
-      version: 2,
-      release_id: RELEASE_A,
-      username: "student-a",
-      session: draft,
-      base_updated_at: "2026-08-12T00:00:00Z",
+    expect(keepEdits(storage, { username: "student-a", release_id: RELEASE_A, base, session: draft })).toBe(true);
+    expect(readKeptEdits(storage, "student-a", RELEASE_A)).toEqual({
+      version: 3, username: "student-a", release_id: RELEASE_A, base, session: draft,
     });
-    expect(readAuthSessionRecovery(storage, "student-b", RELEASE_A)).toBeNull();
-    clearAuthSessionRecovery(storage);
-    expect(values.has(AUTH_RECOVERY_KEY)).toBe(false);
+    expect(readKeptEdits(storage, "student-b", RELEASE_A)).toBeNull();
+    expect(readKeptEdits(storage, "student-a", RELEASE_B)).toBeNull();
+    clearKeptEdits(storage);
+    expect(values.has(KEPT_EDITS_KEY)).toBe(false);
   });
 
   test("a storage quota failure cannot block fail-closed authentication handling", () => {
@@ -105,16 +106,39 @@ describe("session helpers", () => {
       setItem: () => { throw new DOMException("quota", "QuotaExceededError"); },
       removeItem: () => {},
     };
-    expect(saveAuthSessionRecovery(storage, "student", emptySession(), null, RELEASE_A)).toBe(false);
+    expect(keepEdits(storage, { username: "student", release_id: RELEASE_A, base: emptySession(), session: emptySession() })).toBe(false);
   });
 
-  test("rejects malformed auth recovery instead of mounting it as a session", () => {
-    const storage = {
-      getItem: () => JSON.stringify({ version: 1, username: "student", session: { version: "forged" }, base_updated_at: null }),
-      setItem: () => {},
-      removeItem: () => {},
-    };
-    expect(readAuthSessionRecovery(storage, "student", RELEASE_A)).toBeNull();
+  test("rejects malformed or older copies instead of mounting them as a session", () => {
+    for (const value of [
+      { version: 3, username: "student", release_id: RELEASE_A, base: emptySession(), session: { version: "forged" } },
+      { version: 2, username: "student", release_id: RELEASE_A, session: emptySession(), base_updated_at: null },
+    ]) {
+      const storage = { getItem: () => JSON.stringify(value), setItem: () => {}, removeItem: () => {} };
+      expect(readKeptEdits(storage, "student", RELEASE_A)).toBeNull();
+    }
+  });
+
+  test("puts back only what the copy changed since its base, unless the server changed it too", () => {
+    let base = patchSessionStep(emptySession(), 2, { country: "CHN" });
+    base = patchSessionStep(base, 6, { metric: "A" });
+    base = patchSessionStep(base, 9, { year: 2020 });
+    base = updateSessionShared(base, "regression_settings", () => ({ trade: 1 }));
+    let local = patchSessionStep(base, 2, { country: "JPN" });      // edited here only
+    local = patchSessionStep(local, 6, { metric: "B" });            // edited here and in another tab
+    local = patchSessionStep(local, 15, { research_question: "new" }); // a step the base did not have
+    local = updateSessionShared(local, "regression_settings", () => ({ trade: 2 }));
+    let server = patchSessionStep(base, 6, { metric: "C" });
+    server = patchSessionStep(server, 9, { year: 2016 });           // changed elsewhere, untouched here
+    const merged = mergeKeptEdits(server, { base, session: local });
+    expect(readStep<Record<string, unknown>>(merged, 2)).toEqual({ country: "JPN" });
+    expect(readStep<Record<string, unknown>>(merged, 6)).toEqual({ metric: "C" });
+    expect(readStep<Record<string, unknown>>(merged, 9)).toEqual({ year: 2016 });
+    expect(readStep<Record<string, unknown>>(merged, 15)).toEqual({ research_question: "new" });
+    expect(readShared<Record<string, number>>(merged, "regression_settings")).toEqual({ trade: 2 });
+    // A step the copy removed is removed, when the server still has the base version.
+    const removed = { ...local, steps: Object.fromEntries(Object.entries(local.steps).filter(([key]) => key !== "9")) };
+    expect(readStep(mergeKeptEdits(base, { base, session: removed }), 9)).toBeUndefined();
   });
 
   test("composes step and shared patches", () => {
@@ -223,53 +247,24 @@ describe("session helpers", () => {
 });
 
 
-describe("release-bound recovery", () => {
-  test("a never-saved draft cannot cross a data release but remains available on its original release", () => {
-    const values = new Map<string, string>();
-    const storage = {
-      getItem: (key: string) => values.get(key) ?? null,
-      setItem: (key: string, value: string) => { values.set(key, value); },
-      removeItem: (key: string) => { values.delete(key); },
-    };
-    const draft = patchSessionStep(emptySession(), 15, { research_question: "release A only" });
-    expect(saveAuthSessionRecovery(storage, "student", draft, null, RELEASE_A)).toBe(true);
-    expect(readAuthSessionRecovery(storage, "student", RELEASE_B)).toBeNull();
-    expect(readAuthSessionRecovery(storage, "another", RELEASE_A)).toBeNull();
-    expect(readAuthSessionRecovery(storage, "student", RELEASE_A)?.session).toEqual(draft);
-    expect(readAuthSessionRecovery(storage, "student", RELEASE_A)?.base_updated_at).toBeNull();
+describe("kept edits across data releases", () => {
+  test("a copy from another data release is never applied", async () => {
+    const draft = patchSessionStep(emptySession(), 15, { research_question: "old release evidence" });
+    keepEdits(sessionStorage, { username: "student", release_id: RELEASE_A, base: emptySession(), session: draft });
+    const get = spyOn(api.classroom, "session").mockResolvedValue({ ...response(), release_id: RELEASE_B, report: null });
+    const save = spyOn(api.classroom, "saveSession").mockResolvedValue(response());
+    try {
+      const { result } = renderHook(() => useSession(true, "student"));
+      await waitFor(() => expect(result.current.status).toBe("ready"));
+      expect(save).not.toHaveBeenCalled();
+      expect(result.current.getStep(15)).toBeUndefined();
+      expect(readKeptEdits(sessionStorage, "student", RELEASE_A)?.session).toEqual(draft);
+    } finally {
+      get.mockRestore();
+      save.mockRestore();
+      clearKeptEdits(sessionStorage);
+    }
   });
-
-  test("legacy drafts without a verifiable release are never offered for restore", () => {
-    const storage = {
-      getItem: () => JSON.stringify({ version: 1, username: "student", session: emptySession(), base_updated_at: null }),
-      setItem: () => {}, removeItem: () => {},
-    };
-    expect(readAuthSessionRecovery(storage, "student", RELEASE_A)).toBeNull();
-  });
-});
-
-describe("workspace recovery integration", () => {
-  for (const baseUpdatedAt of [null, "2026-09-07T00:00:00Z"]) {
-    test(`a different release cannot restore a draft with base ${baseUpdatedAt}`, async () => {
-      const draft = patchSessionStep(emptySession(), 15, { research_question: "old release evidence" });
-      saveAuthSessionRecovery(sessionStorage, "student", draft, baseUpdatedAt, RELEASE_A);
-      const get = spyOn(api.classroom, "session").mockResolvedValue({ ...response(), release_id: RELEASE_B, report: null });
-      const save = spyOn(api.classroom, "saveSession").mockResolvedValue(response());
-      try {
-        const { result } = renderHook(() => useSession(true, "student"));
-        await waitFor(() => expect(result.current.status).toBe("ready"));
-        expect(result.current.authRecoveryAvailable).toBe(false);
-        await act(async () => { await result.current.restoreAuthRecovery(); });
-        expect(save).not.toHaveBeenCalled();
-        expect(result.current.getStep(15)).toBeUndefined();
-        expect(readAuthSessionRecovery(sessionStorage, "student", RELEASE_A)?.session).toEqual(draft);
-      } finally {
-        get.mockRestore();
-        save.mockRestore();
-        clearAuthSessionRecovery(sessionStorage);
-      }
-    });
-  }
 });
 
 describe("edits during conflict reload", () => {

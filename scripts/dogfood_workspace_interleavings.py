@@ -140,8 +140,7 @@ def main():
             browser.run("wait", "textarea")
             # Dismiss the per-login intro before any accessibility-tree lookup.
             browser.dismiss_intro()
-            browser.run("wait", "--text", "恢复未保存内容")
-            browser.button("恢复未保存内容")
+            # Kept edits are put back and saved automatically after login.
             wait_stored(first, "pending old account")
             assert stored(second) == "new account evidence"
             browser.run("screenshot", str(output / f"account-restored-{attempt}.png"))

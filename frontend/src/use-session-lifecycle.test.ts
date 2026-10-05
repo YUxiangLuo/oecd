@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { api } from "./api";
-import { emptySession } from "./session-store";
+import { emptySession, readStep } from "./session-store";
 import type { ExperimentSession, SessionResponse, SessionSaveResponse } from "./types";
 import {
-  AUTH_RECOVERY_KEY, clearAuthSessionRecovery, patchSessionStep,
-  readAuthSessionRecovery, saveAuthSessionRecovery, updateSessionShared,
+  KEPT_EDITS_KEY, clearKeptEdits, keepEdits, mergeKeptEdits, patchSessionStep,
+  readKeptEdits, updateSessionShared,
   useSession, type SessionApi,
 } from "./use-session";
 
@@ -21,10 +21,10 @@ async function finish(hook: Hook) {
   await act(async () => { await hook.result.current.syncNow().catch(() => {}); });
   hook.unmount();
 }
-afterEach(() => { cleanup(); clearAuthSessionRecovery(sessionStorage); });
+afterEach(() => { cleanup(); clearKeptEdits(sessionStorage); });
 
-describe("page lifecycle draft recovery", () => {
-  test("beforeunload captures the latest edit even before React renders unsynced state", async () => {
+describe("keeping and restoring unconfirmed edits", () => {
+  test("beforeunload keeps the latest edit and the last confirmed record, even before React renders", async () => {
     const get = spyOn(api.classroom, "session").mockResolvedValue(response());
     const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => response(session));
     const hook = renderHook(() => useSession(true, "student"));
@@ -34,15 +34,15 @@ describe("page lifecycle draft recovery", () => {
         hook.result.current.patchStep(15, { research_question: "just typed before reload" });
         window.dispatchEvent(new Event("beforeunload", { cancelable: true }));
       });
-      expect(readAuthSessionRecovery(sessionStorage, "student", RELEASE)).toEqual({
-        version: 2, username: "student", release_id: RELEASE, base_updated_at: STAMP,
+      expect(readKeptEdits(sessionStorage, "student", RELEASE)).toEqual({
+        version: 3, username: "student", release_id: RELEASE, base: emptySession(),
         session: patchSessionStep(emptySession(), 15, { research_question: "just typed before reload" }),
       });
       expect(save).not.toHaveBeenCalled();
     } finally { await finish(hook); get.mockRestore(); save.mockRestore(); }
   });
 
-  test("a failed save survives pagehide and a remount, but is restored only by explicit choice", async () => {
+  test("a failed save survives pagehide and a remount and comes back without asking", async () => {
     const server = patchSessionStep(emptySession(), 15, { research_question: "server baseline" });
     const draft = patchSessionStep(server, 15, { research_question: "offline latest" });
     const get = spyOn(api.classroom, "session").mockResolvedValue(response(server));
@@ -56,63 +56,53 @@ describe("page lifecycle draft recovery", () => {
         await first.result.current.syncNow().catch(() => {});
       });
       act(() => { window.dispatchEvent(new Event("pagehide")); });
-      expect(readAuthSessionRecovery(sessionStorage, "student", RELEASE)?.session).toEqual(draft);
-      expect(readAuthSessionRecovery(sessionStorage, "other", RELEASE)).toBeNull();
-      expect(readAuthSessionRecovery(sessionStorage, "student", "b".repeat(32))).toBeNull();
+      expect(readKeptEdits(sessionStorage, "student", RELEASE)?.session).toEqual(draft);
+      expect(readKeptEdits(sessionStorage, "other", RELEASE)).toBeNull();
+      expect(readKeptEdits(sessionStorage, "student", "b".repeat(32))).toBeNull();
       first.unmount();
       save.mockImplementation(async ({ session }) => response(session, NEWER));
       second = renderHook(() => useSession(true, "student"));
-      await waitFor(() => expect(second!.result.current.status).toBe("ready"));
-      expect(second.result.current.authRecoveryAvailable).toBe(true);
-      expect(second.result.current.session).toEqual(server);
-      expect(save).toHaveBeenCalledTimes(1);
-      await act(async () => { await second!.result.current.restoreAuthRecovery(); });
+      await waitFor(() => expect(second!.result.current.updatedAt).toBe(NEWER));
+      // Saved against the server's current revision, not an old one: no conflict to resolve.
       expect(save).toHaveBeenLastCalledWith({ session: draft, base_updated_at: STAMP });
       expect(second.result.current.session).toEqual(draft);
-      expect(second.result.current.authRecoveryAvailable).toBe(false);
-      expect(sessionStorage.getItem(AUTH_RECOVERY_KEY)).toBeNull();
+      expect(second.result.current.unsynced).toBe(false);
+      expect(sessionStorage.getItem(KEPT_EDITS_KEY)).toBeNull();
     } finally { first.unmount(); if (second) await finish(second); get.mockRestore(); save.mockRestore(); }
   });
 
-  test("refresh recovery never silently rebases an old draft onto a newer server revision", async () => {
-    const original = response();
-    const get = spyOn(api.classroom, "session").mockResolvedValue(original);
-    const save = spyOn(api.classroom, "saveSession").mockRejectedValue(new Error("not committed"));
-    const first = renderHook(() => useSession(true, "student"));
-    let second: Hook | undefined;
-    try {
-      await waitFor(() => expect(first.result.current.status).toBe("ready"));
-      await act(async () => {
-        first.result.current.patchStep(15, { research_question: "older base" });
-        await first.result.current.syncNow().catch(() => {});
-        window.dispatchEvent(new Event("pagehide"));
-      });
-      first.unmount();
-      get.mockResolvedValue(response(patchSessionStep(emptySession(), 15, { research_question: "another writer" }), NEWER));
-      second = renderHook(() => useSession(true, "student"));
-      await waitFor(() => expect(second!.result.current.status).toBe("ready"));
-      expect(second.result.current.authRecoveryAvailable).toBe(true);
-      await act(async () => { await second!.result.current.restoreAuthRecovery().catch(() => {}); });
-      expect(save.mock.calls.at(-1)?.[0].base_updated_at).toBe(STAMP);
-      expect(readAuthSessionRecovery(sessionStorage, "student", RELEASE)?.base_updated_at).toBe(STAMP);
-    } finally { first.unmount(); if (second) await finish(second); get.mockRestore(); save.mockRestore(); }
-  });
-
-  test("even an identical reload snapshot cannot silently acknowledge recovery from an older revision", async () => {
-    const draft = patchSessionStep(emptySession(), 15, { research_question: "possibly committed before disconnect" });
-    saveAuthSessionRecovery(sessionStorage, "student", draft, STAMP, RELEASE);
+  test("edits that reached the server before the page was left are not saved again", async () => {
+    const draft = patchSessionStep(emptySession(), 15, { research_question: "committed before the reload" });
+    keepEdits(sessionStorage, { username: "student", release_id: RELEASE, base: emptySession(), session: draft });
     const get = spyOn(api.classroom, "session").mockResolvedValue(response(draft, NEWER));
-    const save = spyOn(api.classroom, "saveSession").mockRejectedValue(new Error("conflict"));
+    const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => response(session, NEWER));
     const hook = renderHook(() => useSession(true, "student"));
     try {
       await waitFor(() => expect(hook.result.current.status).toBe("ready"));
-      await act(async () => { await hook.result.current.restoreAuthRecovery().catch(() => {}); });
-      expect(save).toHaveBeenCalledWith({ session: draft, base_updated_at: STAMP });
-      expect(hook.result.current.authRecoveryAvailable).toBe(true);
+      expect(hook.result.current.session).toEqual(draft);
+      expect(save).not.toHaveBeenCalled();
+      expect(sessionStorage.getItem(KEPT_EDITS_KEY)).toBeNull();
     } finally { await finish(hook); get.mockRestore(); save.mockRestore(); }
   });
 
-  test("an in-flight save preserves its original base and the newer queued text", async () => {
+  test("a step another tab changed since keeps the server version; the other kept steps come back", async () => {
+    const base = patchSessionStep(patchSessionStep(emptySession(), 15, { research_question: "base" }), 6, { metric: "A" });
+    const local = patchSessionStep(patchSessionStep(base, 15, { research_question: "this tab" }), 6, { metric: "B" });
+    const server = patchSessionStep(base, 15, { research_question: "another tab" });
+    keepEdits(sessionStorage, { username: "student", release_id: RELEASE, base, session: local });
+    const get = spyOn(api.classroom, "session").mockResolvedValue(response(server, NEWER));
+    const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => response(session, NEWER));
+    const hook = renderHook(() => useSession(true, "student"));
+    try {
+      await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+      const merged = patchSessionStep(server, 6, { metric: "B" });
+      expect(save).toHaveBeenCalledWith({ session: merged, base_updated_at: NEWER });
+      expect(hook.result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("another tab");
+      expect(hook.result.current.getStep<{ metric: string }>(6)?.metric).toBe("B");
+    } finally { await finish(hook); get.mockRestore(); save.mockRestore(); }
+  });
+
+  test("an in-flight save keeps the base it started from and the newer queued text", async () => {
     let resolve!: (value: SessionSaveResponse) => void;
     const pending = new Promise<SessionSaveResponse>((done) => { resolve = done; });
     const get = spyOn(api.classroom, "session").mockResolvedValue(response());
@@ -128,9 +118,9 @@ describe("page lifecycle draft recovery", () => {
         hook.result.current.patchStep(15, { research_question: "newest" });
         window.dispatchEvent(new Event("beforeunload", { cancelable: true }));
       });
-      const recovered = readAuthSessionRecovery(sessionStorage, "student", RELEASE);
-      expect(recovered?.base_updated_at).toBe(STAMP);
-      expect(recovered?.session).toEqual(patchSessionStep(emptySession(), 15, { research_question: "newest" }));
+      const kept = readKeptEdits(sessionStorage, "student", RELEASE);
+      expect(kept?.base).toEqual(emptySession());
+      expect(kept?.session).toEqual(patchSessionStep(emptySession(), 15, { research_question: "newest" }));
     } finally {
       resolve(response(patchSessionStep(emptySession(), 15, { research_question: "in flight" }), NEWER));
       await act(async () => { await saving; });
@@ -138,17 +128,17 @@ describe("page lifecycle draft recovery", () => {
     }
   });
 
-  test("clean navigation neither writes a recovery nor erases another account's draft", async () => {
+  test("clean navigation neither keeps edits nor erases another account's copy", async () => {
     const foreign = patchSessionStep(emptySession(), 15, { research_question: "another account" });
-    saveAuthSessionRecovery(sessionStorage, "other", foreign, null, RELEASE);
+    keepEdits(sessionStorage, { username: "other", release_id: RELEASE, base: emptySession(), session: foreign });
     const get = spyOn(api.classroom, "session").mockResolvedValue(response());
     const save = spyOn(api.classroom, "saveSession").mockResolvedValue(response());
     const hook = renderHook(() => useSession(true, "student"));
     try {
       await waitFor(() => expect(hook.result.current.status).toBe("ready"));
       act(() => { window.dispatchEvent(new Event("beforeunload")); window.dispatchEvent(new Event("pagehide")); });
-      expect(readAuthSessionRecovery(sessionStorage, "other", RELEASE)?.session).toEqual(foreign);
-      expect(readAuthSessionRecovery(sessionStorage, "student", RELEASE)).toBeNull();
+      expect(readKeptEdits(sessionStorage, "other", RELEASE)?.session).toEqual(foreign);
+      expect(readKeptEdits(sessionStorage, "student", RELEASE)).toBeNull();
       expect(save).not.toHaveBeenCalled();
     } finally { await finish(hook); get.mockRestore(); save.mockRestore(); }
   });
@@ -267,15 +257,78 @@ describe("no-op session patches", () => {
   });
 });
 
-test("the recovery notice names the steps whose kept content differs from the server", async () => {
-  const server = patchSessionStep(emptySession(), 2, { year: 2020 });
-  const kept = patchSessionStep(patchSessionStep(server, 15, { research_question: "unsaved" }), 6, { metric: "FVA_share" });
-  saveAuthSessionRecovery(sessionStorage, "student", kept, STAMP, RELEASE);
-  const get = spyOn(api.classroom, "session").mockResolvedValue(response(server, STAMP));
-  const hook = renderHook(() => useSession(true, "student"));
-  try {
-    await waitFor(() => expect(hook.result.current.status).toBe("ready"));
-    expect(hook.result.current.authRecoveryAvailable).toBe(true);
-    expect(hook.result.current.authRecoverySteps).toEqual([6, 15]);
-  } finally { await finish(hook); get.mockRestore(); }
+describe("review findings", () => {
+  const transition = (type: "pagehide" | "pageshow", persisted: boolean) => {
+    const event = new Event(type);
+    Object.defineProperty(event, "persisted", { value: persisted });
+    return event;
+  };
+
+  test("a copy left by a page restored from the back/forward cache is dropped, so later changes stand", async () => {
+    const server = patchSessionStep(emptySession(), 15, { research_question: "original" });
+    const get = spyOn(api.classroom, "session").mockResolvedValue(response(server));
+    const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => response(session, NEWER));
+    const first = renderHook(() => useSession(true, "student"));
+    let second: Hook | undefined;
+    try {
+      await waitFor(() => expect(first.result.current.status).toBe("ready"));
+      act(() => {
+        first.result.current.patchStep(15, { research_question: "temporary" });
+        window.dispatchEvent(transition("pagehide", true));
+      });
+      expect(readKeptEdits(sessionStorage, "student", RELEASE)).not.toBeNull();
+      // Back from the cache: the same page goes on, and the student changes the text back.
+      act(() => { window.dispatchEvent(transition("pageshow", true)); });
+      expect(readKeptEdits(sessionStorage, "student", RELEASE)).toBeNull();
+      await act(async () => {
+        first.result.current.patchStep(15, { research_question: "original" });
+        await first.result.current.syncNow();
+      });
+      first.unmount();
+      second = renderHook(() => useSession(true, "student"));
+      await waitFor(() => expect(second!.result.current.status).toBe("ready"));
+      expect(second.result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("original");
+    } finally { first.unmount(); if (second) await finish(second); get.mockRestore(); save.mockRestore(); }
+  });
+
+  test("loading the newer record after a conflict keeps this page's edits the other page did not touch", async () => {
+    const fetchMock = spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ detail: "conflict" }), { status: 409 }));
+    const conflict = await api.classroom.saveSession({ session: emptySession(), base_updated_at: null }).catch((error) => error);
+    fetchMock.mockRestore();
+    const other = patchSessionStep(emptySession(), 15, { research_question: "other tab" });
+    const get = spyOn(api.classroom, "session").mockResolvedValueOnce(response()).mockResolvedValue(response(other, NEWER));
+    const save = spyOn(api.classroom, "saveSession").mockRejectedValueOnce(conflict)
+      .mockImplementation(async ({ session }) => response(session, NEWER));
+    const hook = renderHook(() => useSession(true, "student"));
+    try {
+      await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+      await act(async () => {
+        hook.result.current.patchStep(2, { country: "FRA" });
+        hook.result.current.patchStep(15, { limitations: "mine" });
+        await hook.result.current.syncNow().catch(() => {});
+      });
+      expect(hook.result.current.syncConflict).toBe(true);
+      await act(async () => { await hook.result.current.resolveSyncConflict(); });
+      await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+      const merged = patchSessionStep(patchSessionStep(other, 2, { country: "FRA" }), 15, { limitations: "mine" });
+      expect(save).toHaveBeenLastCalledWith({ session: merged, base_updated_at: NEWER });
+      expect(hook.result.current.session).toEqual(merged);
+      expect(hook.result.current.syncConflict).toBe(false);
+    } finally { await finish(hook); get.mockRestore(); save.mockRestore(); }
+  });
+
+  test("two pages changing different fields of one step are combined; any shared field keeps the server's step", () => {
+    const base = patchSessionStep(emptySession(), 8, { compared: ["CHN", "USA"], observations: [1], indicator_selection: { view: "trend" } });
+    // This page re-recorded the chart; the other page only changed the selection: not combinable.
+    const local = patchSessionStep(base, 8, { compared: ["CHN", "DEU"], observations: [2], indicator_selection: { view: "comparison" } });
+    const server = patchSessionStep(base, 8, { indicator_selection: { view: "composition" } });
+    expect(mergeKeptEdits(server, { base, session: local })).toEqual(server);
+    // Different text fields of step 15: both edits survive.
+    const textBase = patchSessionStep(emptySession(), 15, { research_question: "q" });
+    const textLocal = patchSessionStep(textBase, 15, { limitations: "mine" });
+    const textServer = patchSessionStep(textBase, 15, { research_question: "other tab" });
+    expect(readStep<Record<string, unknown>>(mergeKeptEdits(textServer, { base: textBase, session: textLocal }), 15)).toEqual({
+      research_question: "other tab", limitations: "mine",
+    });
+  });
 });

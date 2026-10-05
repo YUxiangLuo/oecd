@@ -14,35 +14,28 @@ import type {
 import { userFacingRequestError } from "./user-facing-error";
 
 const SYNC_DEBOUNCE_MS = 800;
-export const AUTH_RECOVERY_KEY = "gvcsim_unsynced_session_recovery_v1";
+/** This tab's copy of edits the server had not confirmed when the page was left. */
+export const KEPT_EDITS_KEY = "gvcsim_kept_edits_v3";
 
-type RecoveryStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+type KeptStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
-export interface AuthSessionRecovery {
-  version: 2;
+/**
+ * Edits the server had not confirmed when the page was left (refresh, navigation, expired login,
+ * logout or password change). `base` is the last record the server confirmed, so the next load can
+ * tell which steps were edited and put back only those, without asking the student.
+ */
+export interface KeptEdits {
+  version: 3;
   username: string;
   release_id: string;
+  base: ExperimentSession;
   session: ExperimentSession;
-  base_updated_at: string | null;
 }
 
-export function saveAuthSessionRecovery(
-  storage: RecoveryStorage,
-  username: string,
-  session: ExperimentSession,
-  baseUpdatedAt: string | null,
-  releaseId: string,
-): boolean {
-  if (!/^[0-9a-f]{32}$/.test(releaseId)) return false;
-  const recovery: AuthSessionRecovery = {
-    version: 2,
-    username,
-    release_id: releaseId,
-    session,
-    base_updated_at: baseUpdatedAt,
-  };
+export function keepEdits(storage: KeptStorage, kept: Omit<KeptEdits, "version">): boolean {
+  if (!/^[0-9a-f]{32}$/.test(kept.release_id)) return false;
   try {
-    storage.setItem(AUTH_RECOVERY_KEY, JSON.stringify(recovery));
+    storage.setItem(KEPT_EDITS_KEY, JSON.stringify({ version: 3, ...kept }));
     return true;
   } catch {
     // Storage quota/privacy failures must never prevent fail-closed logout.
@@ -50,31 +43,62 @@ export function saveAuthSessionRecovery(
   }
 }
 
-export function readAuthSessionRecovery(
-  storage: RecoveryStorage,
-  username: string,
-  releaseId: string,
-): AuthSessionRecovery | null {
-  const raw = storage.getItem(AUTH_RECOVERY_KEY);
-  if (!raw) return null;
+export function readKeptEdits(storage: KeptStorage, username: string, releaseId: string): KeptEdits | null {
   try {
-    const value = JSON.parse(raw) as Partial<AuthSessionRecovery>;
+    const value = JSON.parse(storage.getItem(KEPT_EDITS_KEY) ?? "null") as Partial<KeptEdits> | null;
     if (
-      value.version !== 2
+      value?.version !== 3
       || value.username !== username
-      || !/^[0-9a-f]{32}$/.test(releaseId)
       || value.release_id !== releaseId
+      || !isValidSession(value.base)
       || !isValidSession(value.session)
-      || (value.base_updated_at !== null && typeof value.base_updated_at !== "string")
     ) return null;
-    return value as AuthSessionRecovery;
+    return value as KeptEdits;
   } catch {
     return null;
   }
 }
 
-export function clearAuthSessionRecovery(storage: RecoveryStorage): void {
-  storage.removeItem(AUTH_RECOVERY_KEY);
+export function clearKeptEdits(storage: KeptStorage): void {
+  storage.removeItem(KEPT_EDITS_KEY);
+}
+
+/**
+ * Put this page's edits back on the server's current record. Each step (or shared entry) the copy
+ * changed since its base is applied when the server did not change it too. When both changed it,
+ * the two are combined only if they changed different fields; a field changed on both sides keeps
+ * the server's whole step, since fields recorded together (e.g. a chart's countries and readings)
+ * must not be mixed.
+ */
+export function mergeKeptEdits(server: ExperimentSession, kept: Pick<KeptEdits, "base" | "session">): ExperimentSession {
+  const changed = (from: Record<string, unknown>, to: Record<string, unknown>) =>
+    [...new Set([...Object.keys(from), ...Object.keys(to)])].filter((key) => !sameJsonValue(from[key], to[key]));
+  const put = <T,>(out: Record<string, T>, key: string, value: T | undefined) => {
+    if (value === undefined) delete out[key];
+    else out[key] = value;
+  };
+  const data = (record: unknown) => ((record as { data?: Record<string, unknown> } | undefined)?.data ?? {});
+  const merge = <T,>(current: Record<string, T>, base: Record<string, T>, local: Record<string, T>) => {
+    const out = { ...current };
+    for (const key of changed(base, local)) {
+      if (sameJsonValue(current[key], base[key])) {
+        put(out, key, local[key]);
+        continue;
+      }
+      const mine = changed(data(base[key]), data(local[key]));
+      const theirs = new Set(changed(data(base[key]), data(current[key])));
+      if (current[key] === undefined || local[key] === undefined || mine.some((field) => theirs.has(field))) continue;
+      const combined = { ...data(current[key]) };
+      for (const field of mine) put(combined, field, data(local[key])[field]);
+      out[key] = { ...current[key], data: combined };
+    }
+    return out;
+  };
+  return {
+    ...server,
+    steps: merge(server.steps, kept.base.steps, kept.session.steps),
+    shared: merge(server.shared, kept.base.shared, kept.session.shared),
+  };
 }
 
 export type SessionStatus = "loading" | "ready" | "unavailable";
@@ -88,9 +112,6 @@ export interface SessionApi {
   syncError: string | null;
   syncConflict: boolean;
   unsynced: boolean;
-  authRecoveryAvailable: boolean;
-  /** Steps whose locally kept content differs from the server copy (what “恢复” would bring back). */
-  authRecoverySteps: number[];
   completion: CompletionSummary | null;
   /** Combined quiz and material gate used by report generation. */
   reportGate: ReportGateItem[] | null;
@@ -104,9 +125,8 @@ export interface SessionApi {
   getShared: <T>(key: SharedSessionKey) => T | undefined;
   updateShared: <T>(key: SharedSessionKey, apply: (current: T | undefined) => T) => void;
   syncNow: () => Promise<void>;
-  stashAuthRecovery: (username: string) => boolean;
-  restoreAuthRecovery: () => Promise<void>;
-  discardAuthRecovery: () => void;
+  /** Keep unconfirmed edits in this tab before leaving on purpose (logout, expired login, password change); the next load puts them back. */
+  keepUnsavedEdits: () => boolean;
   resolveSyncConflict: () => Promise<void>;
   applyReportMutation: (response: ReportMutationResponse) => void;
 }
@@ -140,9 +160,6 @@ export class SessionSaveQueue {
 
   setBaseUpdatedAt(value: string | null) {
     this.baseUpdatedAt = value;
-    // A revision alone does not acknowledge any snapshot. Explicit recovery
-    // must still check its original base, even if a fresh GET looks identical.
-    this.outcomeUncertain = true;
   }
 
   setConfirmedSession(session: ExperimentSession) {
@@ -150,8 +167,9 @@ export class SessionSaveQueue {
     this.outcomeUncertain = false;
   }
 
-  getBaseUpdatedAt(): string | null {
-    return this.baseUpdatedAt;
+  /** The last snapshot the server confirmed. */
+  getConfirmedSession(): ExperimentSession | null {
+    return this.confirmed;
   }
 
   hasUnsynced(): boolean {
@@ -241,8 +259,6 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const syncConflictRef = useRef(false);
   const resolvingConflictRef = useRef(false);
   const [unsynced, setUnsynced] = useState(false);
-  const [authRecovery, setAuthRecovery] = useState<AuthSessionRecovery | null>(null);
-  const authRecoveryRef = useRef<AuthSessionRecovery | null>(null);
   const timer = useRef<number | null>(null);
   const queue = useRef<SessionSaveQueue | null>(null);
   if (queue.current === null) {
@@ -299,7 +315,11 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         releaseIdRef.current = response.release_id;
         queue.current?.setBaseUpdatedAt(response.updated_at ?? null);
         queue.current?.setConfirmedSession(response.session);
-        replace(response.session);
+        // Edits kept when this tab was last left go back on top of the server's record, step by step.
+        const kept = username ? readKeptEdits(sessionStorage, username, response.release_id) : null;
+        if (kept) clearKeptEdits(sessionStorage);
+        const restored = kept ? mergeKeptEdits(response.session, kept) : response.session;
+        replace(restored);
         setConfirmedSession(response.session);
         setUpdatedAt(response.updated_at ?? null);
         setCompletion(response.completion);
@@ -309,10 +329,11 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         setSyncError(null);
         syncConflictRef.current = false;
         setSyncConflict(false);
-        const recovery = username ? readAuthSessionRecovery(sessionStorage, username, response.release_id) : null;
-        authRecoveryRef.current = recovery;
-        setAuthRecovery(recovery);
         setStatus("ready");
+        if (!sameSessionContent(restored, response.session)) {
+          queue.current?.enqueue(restored);
+          void queue.current?.drain().catch(() => {});
+        }
       },
       (cause) => {
         if (!live) return;
@@ -347,79 +368,69 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     if (timer.current != null) window.clearTimeout(timer.current);
     timer.current = null;
     if (status !== "ready") throw new Error("当前无法连接教学服务，不能确认实验记录已保存");
-    if (syncConflictRef.current) throw new Error("请先载入服务器版本，再重新操作本页更改");
+    if (syncConflictRef.current) throw new Error("另一个页面已保存了更新的记录，请先点“载入服务器版本”");
     await drain();
   }, [drain, status]);
 
-  const stashAuthRecovery = useCallback((accountUsername: string) => {
-    if (!enabled || !queue.current?.hasUnsynced() || !releaseIdRef.current) return false;
-    return saveAuthSessionRecovery(
-      sessionStorage,
-      accountUsername,
-      sessionRef.current,
-      queue.current?.getBaseUpdatedAt() ?? null,
-      releaseIdRef.current,
-    );
-  }, [enabled]);
+  const keepUnsavedEdits = useCallback(() => {
+    if (!enabled || !username || !queue.current?.hasUnsynced() || !releaseIdRef.current) return false;
+    return keepEdits(sessionStorage, {
+      username,
+      release_id: releaseIdRef.current,
+      base: queue.current.getConfirmedSession() ?? emptySession(),
+      session: sessionRef.current,
+    });
+  }, [enabled, username]);
 
   useEffect(() => {
     if (!enabled || !username) return;
     const preserveBeforeLeaving = (event: Event) => {
       if (!queue.current?.hasUnsynced()) return;
-      const saved = stashAuthRecovery(username);
+      const saved = keepUnsavedEdits();
       if (!saved && event.type === "beforeunload") {
         // Quota/privacy failures must not turn a refresh into silent data loss.
         event.preventDefault();
         (event as BeforeUnloadEvent).returnValue = "";
       }
     };
+    // Back from the back/forward cache: this same page still holds the edits and saves them itself.
+    // The copy kept on leaving would otherwise put them back later, even after they were changed again.
+    const forgetAfterReturn = (event: Event) => {
+      const release = releaseIdRef.current;
+      if ((event as PageTransitionEvent).persisted && release && readKeptEdits(sessionStorage, username, release)) {
+        clearKeptEdits(sessionStorage);
+      }
+    };
     window.addEventListener("beforeunload", preserveBeforeLeaving);
     window.addEventListener("pagehide", preserveBeforeLeaving);
+    window.addEventListener("pageshow", forgetAfterReturn);
     return () => {
       window.removeEventListener("beforeunload", preserveBeforeLeaving);
       window.removeEventListener("pagehide", preserveBeforeLeaving);
+      window.removeEventListener("pageshow", forgetAfterReturn);
     };
-  }, [enabled, username, stashAuthRecovery]);
-
-  const restoreAuthRecovery = useCallback(async () => {
-    const recovery = authRecoveryRef.current;
-    if (!recovery || recovery.username !== username || recovery.release_id !== releaseIdRef.current) return;
-    replace(recovery.session);
-    setWorkspaceGeneration((value) => value + 1);
-    queue.current?.setBaseUpdatedAt(recovery.base_updated_at);
-    queue.current?.enqueue(recovery.session);
-    try {
-      await drain();
-      clearAuthSessionRecovery(sessionStorage);
-      authRecoveryRef.current = null;
-      setAuthRecovery(null);
-    } catch (cause) {
-      setSyncError(userFacingRequestError(cause, "保存失败"));
-      throw cause;
-    }
-  }, [drain, replace, username]);
-
-  const discardAuthRecovery = useCallback(() => {
-    clearAuthSessionRecovery(sessionStorage);
-    authRecoveryRef.current = null;
-    setAuthRecovery(null);
-  }, []);
+  }, [enabled, username, keepUnsavedEdits]);
 
   const resolveSyncConflict = useCallback(async () => {
     if (!syncConflictRef.current || resolvingConflictRef.current) return;
     resolvingConflictRef.current = true;
     const localSnapshot = sessionRef.current;
+    let toSave: ExperimentSession | null = null;
     setSyncing(true);
     try {
       const response = await api.classroom.session();
       if (sessionRef.current !== localSnapshot) {
-        setSyncError("载入期间又有本地修改，已保留这些内容。请确认后再次载入服务器版本。");
+        setSyncError("载入期间又有本地修改，已保留这些内容。请确认后再次点“载入并合并”。");
         return;
       }
+      // Keep this page's edits the other page did not touch: the same rule as edits kept on leaving.
+      const sameRelease = response.release_id === releaseIdRef.current;
+      const base = queue.current?.getConfirmedSession() ?? emptySession();
+      const merged = sameRelease ? mergeKeptEdits(response.session, { base, session: localSnapshot }) : response.session;
       releaseIdRef.current = response.release_id;
       queue.current?.discardPending(response.updated_at ?? null);
       queue.current?.setConfirmedSession(response.session);
-      replace(response.session);
+      replace(merged);
       setConfirmedSession(response.session);
       setUpdatedAt(response.updated_at ?? null);
       setCompletion(response.completion);
@@ -431,12 +442,17 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       setSyncConflict(false);
       setWorkspaceGeneration((value) => value + 1);
       setStatus("ready");
+      if (!sameSessionContent(merged, response.session)) toSave = merged;
     } catch (cause) {
       setSyncError(userFacingRequestError(cause, "保存失败"));
       throw cause;
     } finally {
       resolvingConflictRef.current = false;
       setSyncing(false);
+    }
+    if (toSave) {
+      queue.current?.enqueue(toSave);
+      await queue.current?.drain().catch(() => {});
     }
   }, [replace]);
 
@@ -447,18 +463,8 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     setMaterialGate(response.material_gate);
   }, []);
 
-  const authRecoverySteps = authRecovery
-    ? [...new Set([...Object.keys(authRecovery.session.steps), ...Object.keys(confirmedSession.steps)])]
-      .filter((step) => !sameJsonValue(authRecovery.session.steps[step], confirmedSession.steps[step]))
-      .map(Number)
-      .sort((a, b) => a - b)
-    : [];
-
   return {
     status, session, report, updatedAt, syncing, syncError, syncConflict, unsynced,
-    // Even a copy identical in content must be resolved explicitly: it may rest on an older revision.
-    authRecoveryAvailable: authRecovery !== null,
-    authRecoverySteps,
     completion, reportGate, materialGate, workspaceGeneration,
     getStep: useCallback(<T,>(step: number) => readStep<T>(session, step), [session]),
     getConfirmedStep: useCallback(<T,>(step: number) => readStep<T>(confirmedSession, step), [confirmedSession]),
@@ -466,9 +472,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     getShared: useCallback(<T,>(key: SharedSessionKey) => readShared<T>(session, key), [session]),
     updateShared: useCallback(<T,>(key: SharedSessionKey, apply: (current: T | undefined) => T) => update((value) => updateSessionShared(value, key, apply)), [update]),
     syncNow,
-    stashAuthRecovery,
-    restoreAuthRecovery,
-    discardAuthRecovery,
+    keepUnsavedEdits,
     resolveSyncConflict,
     applyReportMutation,
   };

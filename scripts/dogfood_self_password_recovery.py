@@ -55,14 +55,8 @@ def main():
             # The intro is shown on every student login and its modal makes the
             # workspace inert for accessibility-based lookups.
             browser.dismiss_intro()
-            offered = json.loads(
-                browser.run(
-                    "eval", 'Array.from(document.querySelectorAll("button")).some(e=>e.textContent==="恢复未保存内容")'
-                )
-            )
-            if offered:
-                browser.button("恢复未保存内容")
-                browser.run("wait", "--load", "networkidle")
+            # Kept edits are put back and saved automatically after login.
+            browser.run("wait", "--load", "networkidle")
             with psycopg.connect(os.environ["GVCSIM_PG_DSN"]) as connection:
                 row = connection.execute(
                     "SELECT session FROM experiment_sessions s JOIN accounts a ON a.id=s.account_id WHERE username=%s",
@@ -73,7 +67,6 @@ def main():
                 {
                     "case": "AUTH-01-self-password-unsaved",
                     "attempt": attempt,
-                    "offered": offered,
                     "recovered": recovered,
                 }
             )
@@ -82,7 +75,7 @@ def main():
         finally:
             browser.run("close")
             (out / "results.json").write_text(json.dumps(results, indent=2))
-    assert all(result["offered"] and result["recovered"] for result in results)
+    assert all(result["recovered"] for result in results)
 
 
 if __name__ == "__main__":

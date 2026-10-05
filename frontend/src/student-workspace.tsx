@@ -169,38 +169,12 @@ export function StudentWorkspace({
           />
 
           <div className="workarea">
-            {session.authRecoveryAvailable && (
-              <div className="tipbox persistent-qc-warning" role="alert">
-                <b>{session.authRecoverySteps.length
-                  ? `有尚未保存到服务器的修改：步骤 ${session.authRecoverySteps.join("、")}`
-                  : "本页保留了一份上次未确认保存的记录（内容与服务器相同）"}</b>
-                <p>上次刷新、离开或登录失效时，这些修改还没有确认保存。“恢复”会把它们保存到服务器；“放弃”则保留服务器上的记录。</p>
-                <div className="button-row">
-                  <button
-                    type="button"
-                    className="primary"
-                    disabled={session.syncing}
-                    onClick={() => { void session.restoreAuthRecovery().catch(() => {}); }}
-                  >
-                    {session.syncing ? "正在恢复并保存…" : "恢复未保存内容"}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary"
-                    disabled={session.syncing}
-                    onClick={session.discardAuthRecovery}
-                  >
-                    放弃本地内容
-                  </button>
-                </div>
-              </div>
-            )}
             {session.syncError && (
               <div className="error-box persistent-qc-warning" role="alert">
                 <b>{session.syncConflict ? "另一个页面已经保存了更新的记录" : "实验记录尚未保存到服务器"}</b>
                 <p>
                   {session.syncConflict
-                    ? "为避免互相覆盖，本页的修改没有保存。请载入服务器版本，核对后再重新操作；需要保留的文字请先复制。"
+                    ? "为避免互相覆盖，本页的修改暂未保存。载入后，另一个页面改过的内容以它为准，本页的其他修改会自动保留并保存；两边在同一步改了同一项时，本页这一步的修改会被替换，需要的文字请先复制。"
                     : `${session.syncError} 本页内容还在，可以直接重试；关闭标签页可能丢失未保存的修改。`}
                 </p>
                 <button

@@ -108,8 +108,7 @@ def main():
                     browser.run("click", 'button[type="submit"]')
                     # Dismiss the per-login intro before the accessibility-based button click.
                     browser.dismiss_intro()
-                    browser.run("wait", "--text", "恢复未保存内容")
-                    browser.button("恢复未保存内容")
+                    # Kept edits are put back and saved automatically after login.
                     browser.run("wait", "--load", "networkidle")
                     with psycopg.connect(os.environ["GVCSIM_PG_DSN"]) as connection:
                         session = connection.execute(

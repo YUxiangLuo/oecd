@@ -103,7 +103,8 @@ export default function App() {
 
   const logout = useCallback(() => {
     void session.syncNow().catch(() => {
-      if (user?.role === "student") session.stashAuthRecovery(user.username);
+      // The next login in this tab puts the edits back.
+      if (user?.role === "student") session.keepUnsavedEdits();
     }).finally(() => {
       // On a shared computer the next person must start from their own progress, not this
       // user's last step; an expired session (reloadLoggedOut alone) keeps the step for re-login.
@@ -142,11 +143,8 @@ export default function App() {
   }, [reloadLoggedOut]);
 
   useEffect(() => {
-    const preserveUnsyncedStudentWork = () => {
-      if (user?.role === "student") session.stashAuthRecovery(user.username);
-    };
     const expired = () => {
-      preserveUnsyncedStudentWork();
+      if (user?.role === "student") session.keepUnsavedEdits();
       reloadLoggedOut("登录已失效，请重新登录。", user?.username);
     };
     window.addEventListener("gvcsim-auth-expired", expired);
@@ -216,7 +214,7 @@ export default function App() {
   }
 
   const passwordChanged = () => {
-    if (user.role === "student") session.stashAuthRecovery(user.username);
+    if (user.role === "student") session.keepUnsavedEdits();
     reloadLoggedOut("密码已修改。请使用新密码重新登录。", user.username);
   };
   if (user.role === "teacher") {
