@@ -28,6 +28,7 @@ from gvcsim.data.raw_icio import validate_raw_source_bindings
 from gvcsim.file_identity import FileSource, FileState, file_state as file_cache_state, verified_source
 from gvcsim.indicator_schema import INDICATOR_SCHEMA
 from gvcsim.indicators import tradeflow
+from gvcsim.report_reference import industry_reference
 from gvcsim.shocks import SHOCK_TARIFF
 from gvcsim.steps import STAGE_NAMES, STEPS
 
@@ -278,6 +279,37 @@ def indicators_industry(
     page_size: int = Query(25, ge=1, le=200),
 ):
     return _indicators_industry_page(year, country, industry, page, page_size)
+
+
+@router.get("/api/indicators/industry-distribution")
+def indicators_industry_distribution(
+    metric: str,
+    years: str = "",
+    industry: str | None = None,
+    countries: str = "",
+):
+    """Step 9 global reference: each industry's spread of ``metric`` across all economies, per year.
+
+    ``countries`` (comma separated) asks for those economies' ranks; ``industry`` narrows to one industry.
+    """
+    available = processed_years()
+    try:
+        requested = [int(value) for value in years.split(",") if value.strip()] if years.strip() else available
+    except ValueError:
+        raise HTTPException(status_code=422, detail="年份格式无效") from None
+    if any(year not in available for year in requested):
+        raise HTTPException(status_code=422, detail="年份不在当前数据范围内")
+    wanted = tuple(value.strip() for value in countries.split(",") if value.strip())
+    if len(wanted) > 2:
+        raise HTTPException(status_code=422, detail="最多查询两个国家的排名")
+    rows = [
+        {"year": year, **row}
+        for year in requested
+        for row in industry_reference(metric, year, industry=industry or None, countries=wanted)
+    ]
+    if not rows:
+        raise HTTPException(status_code=422, detail="当前数据没有该指标的行业分布")
+    return {"metric": metric, "rows": rows}
 
 
 @router.get("/api/viz/network/{year}")

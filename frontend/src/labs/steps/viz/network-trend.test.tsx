@@ -6,6 +6,14 @@ import { NetworkTrend, networkTrendPoints } from "./network-trend";
 import type { VizObservation } from "./scaffold";
 
 afterEach(() => { cleanup(); mock.restore(); });
+/** The same industry across all economies: median 50, CHN ranked 3rd, USA 1st, DEU 2nd in every year. */
+const mockReference = () => spyOn(api, "industryDistribution").mockImplementation(async (metric, options = {}) => ({
+  metric,
+  rows: (options.years ?? [2018, 2019, 2020]).flatMap((year) => (options.industry ? [options.industry] : ["C26", "C27"]).map((industry) => ({
+    year, industry, n: 76, p25: 20, median: 50, p75: 80,
+    ranks: Object.fromEntries((options.countries ?? []).map((country) => [country, { CHN: 3, USA: 1, DEU: 2 }[country] ?? 40])),
+  }))),
+}));
 const meta: Meta = { countries: ["CHN", "USA", "DEU"], sectors: ["C26", "C27"], years: [2020, 2018, 2019], dataset: { release_id: "a".repeat(32), years: [2018, 2019, 2020] } };
 const row = (country: string, year: number, value: number | null, industry = "C26") => ({ country, year, industry, betweenesscentrality: value });
 const page = (rows: ReturnType<typeof row>[]): IndustryPage => ({ rows, total: rows.length, page: 1, page_size: 200 });
@@ -32,11 +40,12 @@ test("requires at least two years that are valid for both countries before anyth
       ),
     ]),
   );
+  mockReference();
   const save = mock(() => {});
   render(<NetworkTrend meta={meta} initialCountry="CHN" onRecord={save} />);
   fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
   await screen.findByRole("img");
-  await waitFor(() => expect(screen.getByText(/至少有两个共同有效年份/)).toBeTruthy());
+  await waitFor(() => expect(screen.getByText(/至少需要两个共同有效年份/)).toBeTruthy());
   expect(screen.queryByRole("button", { name: "保存为报告材料" })).toBeNull();
   expect(save).not.toHaveBeenCalled();
 });
@@ -47,11 +56,15 @@ test("renders gaps without joining them, records the complete two-country view a
     if (country === "DEU" && year === 2020) return new Promise((resolve) => { resolveGerman = resolve; });
     return page([row(country, year, year === 2019 && country === "CHN" ? null : (country === "CHN" ? 10 : 70) + year - 2018)]);
   });
+  mockReference();
   const save = mock(() => {});
   render(<NetworkTrend meta={meta} initialCountry="CHN" onRecord={save} />);
   fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
   await screen.findByRole("img");
-  expect(document.querySelectorAll('[aria-label="趋势图图例"]')).toHaveLength(1);
+  // The same industry in every economy sits behind the two countries: median line and rank card.
+  await waitFor(() => expect(document.querySelector('[data-series="global-median"]')).not.toBeNull());
+  expect(screen.getByLabelText("趋势读数").textContent).toContain("在全部经济体的同一行业中");
+  expect(screen.getByLabelText("趋势读数").textContent).toContain("同行业全球中位数");
   // Two isolated observations must not be connected over the missing 2019 value.
   expect(document.querySelectorAll('svg line[data-series="CHN"]').length).toBe(0);
   await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
@@ -85,10 +98,14 @@ test("ranking records the selected metric and displayed industries, then drills 
       { ...row(country, year, 888, "C27"), "weighted degree": country === "CHN" ? 50 : 3 },
     ],
   }));
+  mockReference();
   const save = mock(() => {});
   render(<NetworkTrend meta={meta} initialCountry="CHN" onRecord={save} />);
   fireEvent.click(screen.getByRole("button", { name: "定位行业" }));
   await screen.findByRole("region", { name: "行业排名条形图" });
+  // Each industry shows its global median on both bars, and country A's rank in that industry worldwide.
+  await waitFor(() => expect(document.querySelectorAll("[data-global-median]")).toHaveLength(4));
+  expect(screen.getAllByText("全球第 3 位 / 76")).toHaveLength(2);
   const rankingCall = () => (save.mock.calls as unknown as Array<[string[], Array<Record<string, unknown>>]>)
     .find(([, observations]) => observations[0]?.source === "explicit-network-ranking");
   await waitFor(() => expect(rankingCall()).toBeTruthy());

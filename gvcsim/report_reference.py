@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from gvcsim import config
@@ -77,3 +78,51 @@ def country_reference(metric: str, year: int, *, share_of: tuple[str, str] | Non
         "p75": float(series.quantile(0.75)),
         "ranks": {country: 1 + int((series > value).sum()) for country, value in readings.items()},
     }
+
+
+def industry_reference(
+    metric: str, year: int, *, industry: str | None = None, countries: tuple[str, ...] = ()
+) -> list[dict[str, Any]]:
+    """Per industry: median, quartiles and the given countries' ranks of ``metric`` across all economies.
+
+    Step 9 reads one country's industry against the same industry in every other economy (ROW excluded);
+    network metrics are computed on the full global graph, so each economy's industry row is comparable.
+    Returns an empty list when the artifact or the metric is unavailable.
+    """
+    path = config.PROCESSED_DIR / f"indicators_industry_{year}.csv"
+    if not path.exists():
+        return []
+    try:
+        df = read_csv_artifact(path)
+    except (OSError, ValueError):
+        return []
+    # The key columns are not metrics; selecting them twice would also duplicate columns.
+    if metric in {"country", "industry"} or not {"country", "industry", metric} <= set(df.columns):
+        return []
+    frame = df.loc[df["country"].astype(str) != "ROW", ["country", "industry", metric]].copy()
+    if industry is not None:
+        frame = frame[frame["industry"].astype(str) == industry]
+    frame[metric] = pd.to_numeric(frame[metric], errors="coerce").astype(float)
+    # A boolean mask, so an empty selection stays a row filter (an empty object Series would select columns).
+    frame = frame.loc[np.isfinite(frame[metric].to_numpy())]
+    rows = []
+    for name, group in frame.groupby(frame["industry"].astype(str), sort=True):
+        if len(group) < 2:
+            continue
+        values = group[metric]
+        by_country = dict(zip(group["country"].astype(str), values))
+        rows.append(
+            {
+                "industry": str(name),
+                "n": len(group),
+                "p25": float(values.quantile(0.25)),
+                "median": float(values.quantile(0.5)),
+                "p75": float(values.quantile(0.75)),
+                "ranks": {
+                    country: 1 + int((values > by_country[country]).sum())
+                    for country in countries
+                    if country in by_country
+                },
+            }
+        )
+    return rows

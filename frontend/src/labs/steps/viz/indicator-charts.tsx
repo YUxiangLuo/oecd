@@ -28,12 +28,15 @@ export function TrendSummary({
   years,
   unit,
   distribution = [],
+  sameIndustry = false,
 }: {
   readings: ComparisonReading[];
   countries: string[];
   years: number[];
   unit: string;
   distribution?: YearDistribution[];
+  /** Step 9: the reference is the same industry in every economy. */
+  sameIndustry?: boolean;
 }) {
   const value = (country: string, year: number) =>
     readings.find((item) => item.country === country && item.year === year)?.value ?? null;
@@ -85,14 +88,14 @@ export function TrendSummary({
       </div>
       {startRank != null && endRank != null && endRef && (
         <div>
-          <span>在全部经济体中（从高到低）</span>
+          <span>{sameIndustry ? "在全部经济体的同一行业中" : "在全部经济体中"}（从高到低）</span>
           <b>第 {startRank} → {endRank} 位</b>
           <small>共 {endRef.n} 个经济体；排名只表示相对高低</small>
         </div>
       )}
       {startRef && endRef && (
         <div>
-          <span>全球中位数 · {firstYear}→{lastYear}</span>
+          <span>{sameIndustry ? "同行业全球中位数" : "全球中位数"} · {firstYear}→{lastYear}</span>
           <b>{changeReading(startRef.median, endRef.median, unit)}</b>
           <small>{indicatorNumber(startRef.median, unit)} → {indicatorNumber(endRef.median, unit)}</small>
         </div>
@@ -182,6 +185,7 @@ export function IndicatorTrendChart({
   unit,
   distribution = [],
   mode = "pair",
+  sameIndustry = false,
 }: {
   rows: Row[];
   countries: string[];
@@ -194,6 +198,8 @@ export function IndicatorTrendChart({
   /** "context": observed country first, global reference, comparison country last (steps 6–8).
    *  "pair": two equal partners with the original two-country cards (step 10). */
   mode?: "context" | "pair";
+  /** Step 9: the reference is the same industry in every economy. */
+  sameIndustry?: boolean;
 }) {
   const context = mode === "context";
   const series = countries.map((country) =>
@@ -238,7 +244,7 @@ export function IndicatorTrendChart({
   const legend = [
     ...(band.length ? [
       { key: "band", label: "中间 50% 经济体", draw: <rect x={0} y={-6} width={24} height={12} fill={REFERENCE_FILL} fillOpacity={0.3} /> },
-      { key: "median", label: `全球中位数（${band.at(-1)!.n} 个）`, draw: <line x1={0} x2={24} y1={0} y2={0} stroke={REFERENCE_LINE} strokeWidth={1.5} strokeDasharray="4 3" /> },
+      { key: "median", label: `${sameIndustry ? "同行业全球中位数" : "全球中位数"}（${band.at(-1)!.n} 个）`, draw: <line x1={0} x2={24} y1={0} y2={0} stroke={REFERENCE_LINE} strokeWidth={1.5} strokeDasharray="4 3" /> },
     ] : []),
     ...countries.map((country, index) => ({
       key: country,
@@ -333,7 +339,7 @@ export function IndicatorTrendChart({
         ))}
       </svg>
       {context
-        ? <TrendSummary readings={readings} countries={countries} years={years} unit={unit} distribution={band} />
+        ? <TrendSummary readings={readings} countries={countries} years={years} unit={unit} distribution={band} sameIndustry={sameIndustry} />
         : <ComparisonSummary
           readings={readings}
           countries={countries}

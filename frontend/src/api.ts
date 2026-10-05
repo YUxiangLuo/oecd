@@ -223,6 +223,16 @@ export const api = {
       withQuery(`/api/indicators/industry/${year}`, { page: 1, page_size: 200, country }),
     );
   },
+  /** Each industry's spread of a network metric across all economies (step 9 global reference). */
+  industryDistribution: (metric: string, options: { years?: number[]; industry?: string; countries?: string[] } = {}) =>
+    get<{ metric: string; rows: import("./types").IndustryDistributionRow[] }>(
+      withQuery("/api/indicators/industry-distribution", {
+        metric,
+        years: options.years?.join(","),
+        industry: options.industry,
+        countries: options.countries?.join(","),
+      }),
+    ),
   network: (year: number) => get<import("./types").NetworkData>(`/api/viz/network/${year}`),
   shockEvents: () =>
     get<{ events: import("./types").ShockEvent[]; disclaimer: string; source_disclosure: string }>("/api/shocks/events"),

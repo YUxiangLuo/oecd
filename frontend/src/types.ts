@@ -375,6 +375,18 @@ export interface PagedRows {
   disclaimer?: string;
 }
 
+/** Step 9 global reference: one industry's spread of a metric across all economies in one year. */
+export interface IndustryDistributionRow {
+  year: number;
+  industry: string;
+  n: number;
+  p25: number;
+  median: number;
+  p75: number;
+  /** Ranks (1 = highest) of the requested countries only. */
+  ranks: Record<string, number>;
+}
+
 export type IndustryPage = PagedRows;
 
 /** 实验会话:逐步实验状态的可恢复模型(契约见 gvcsim/session.py)。 */

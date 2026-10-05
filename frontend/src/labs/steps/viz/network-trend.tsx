@@ -3,13 +3,11 @@ import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { IndicatorSchema, Meta } from "../../../types";
 import { countryLabel, sectorLabel } from "../../../viz";
-import { CAT } from "../../../viz/shared";
 import { HEAT_EVIDENCE_METRIC } from "../../../viz/views/network-heat";
 import { AsyncStateMessage, fmtDb, useAsync } from "../../shared";
-import { niceDomain } from "../../../viz/nice-ticks";
 import { currentReleaseId, type Row, type VizObservation } from "./scaffold";
-import { ComparisonSummary } from "./indicator-charts";
-import { defaultComparison } from "./indicator-model";
+import { IndicatorTrendChart } from "./indicator-charts";
+import { defaultComparison, type YearDistribution } from "./indicator-model";
 import { NetworkRanking, networkRanking } from "./network-ranking";
 
 const COMMON_METRICS = ["weighted degree", "weighted indegree", "weighted outdegree", HEAT_EVIDENCE_METRIC];
@@ -69,6 +67,27 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     })));
     return pages.flat();
   }, [requestKey], { requestKey, enabled: Boolean(first && release) });
+  // Global reference: the same industry in every economy (computed on the server from the full data).
+  const trendReferenceKey = `${release}:network-reference:${metric}:${industry}:${selected.join(",")}`;
+  const trendReference = useAsync(
+    async () => (await api.industryDistribution(metric, { years, industry, countries: selected })).rows,
+    [trendReferenceKey],
+    { requestKey: trendReferenceKey, enabled: Boolean(release && view === "trend" && industry && first) },
+  );
+  const distribution: YearDistribution[] = trendReference.status === "success"
+    ? (trendReference.data ?? []).map(({ year, n, p25, median, p75, ranks }) => ({ year, n, p25, median, p75, ranks }))
+    : [];
+  const rankingReferenceKey = `${release}:network-ranking-reference:${metric}:${year}:${first}`;
+  const rankingReference = useAsync(
+    async () => (await api.industryDistribution(metric, { years: [year], countries: [first] })).rows,
+    [rankingReferenceKey],
+    { requestKey: rankingReferenceKey, enabled: Boolean(release && view === "ranking" && first) },
+  );
+  const industryReference = new Map(
+    rankingReference.status === "success"
+      ? (rankingReference.data ?? []).map((row) => [row.industry, { median: row.median, n: row.n, rank: row.ranks[first] }] as const)
+      : [],
+  );
   const points = networkTrendPoints(query.data ?? [], years, selected, industry, metric);
   const ranked = networkRanking(query.data ?? [], year, selected, metric, limit);
   const finite = points.filter((point) => point.value !== null);
@@ -102,14 +121,10 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     // pendingKey captures every meaningful change of the pending comparison.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingKey, matchesSaved, syncing]);
-  const axis = niceDomain(0, Math.max(0, ...finite.map((point) => point.value!)) || 1);
-  const max = axis.hi;
-  const x = (year: number) => 95 + (year - years[0]) / Math.max(1, years.at(-1)! - years[0]) * 650;
-  const y = (value: number) => 280 - value / max * 235;
-
   return <section className="reg-section-card" aria-label="行业网络指标趋势">
+    <h3>行业的网络位置怎样变化？在全部经济体的同一行业中处于什么位置？</h3>
     <div className="controls" aria-label="行业图表视角">
-      <button className={view === "trend" ? "primary" : "secondary"} aria-pressed={view === "trend"} onClick={() => setView("trend")}>比较变化</button>
+      <button className={view === "trend" ? "primary" : "secondary"} aria-pressed={view === "trend"} onClick={() => setView("trend")}>历年变化</button>
       <button className={view === "ranking" ? "primary" : "secondary"} aria-pressed={view === "ranking"} onClick={() => setView("ranking")}>定位行业</button>
     </div>
     <div className="controls">
@@ -123,7 +138,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         if (event.target.value === second) setSecond(first !== event.target.value ? first : "");
       }}>{countries.map((country) => <option key={country} value={country}>{countryLabel(country)}</option>)}</select>}</LabeledControl>
       <LabeledControl label="对比国家 B">{(id) => <select id={id} name="network-country-b" value={second} onChange={(event) => setSecond(event.target.value)}>
-        <option value="">暂不对比（不记录报告材料）</option>
+        <option value="">暂不选择（报告材料需要对比国家）</option>
         {countries.filter((country) => country !== first).map((country) => <option key={country} value={country}>{countryLabel(country)}</option>)}
       </select>}</LabeledControl>
       {view === "trend" ? <LabeledControl label="行业">{(id) => <select id={id} value={industry} onChange={(event) => setIndustry(event.target.value)}>
@@ -136,38 +151,19 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     <p ref={scopeRef} tabIndex={-1} aria-label="当前比较口径"><strong>
       {selected.map(countryLabel).join("与")} · {view === "trend" ? sectorLabel(industry) : "行业排名"} · {view === "trend" ? `${years[0]}–${years.at(-1)}` : year} · {label}
     </strong></p>
-    <p className="muted">单位：{unit}</p>
     {query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : <>
-      {view === "ranking" ? ranked.length ? <NetworkRanking rows={ranked} countries={selected} unit={unit} onIndustry={(next) => { setIndustry(next); setView("trend"); setFocusScope(true); }} /> : <p role="status">该年份没有可用的行业排名，请更换指标或国家。</p> : <>
-      {finite.length ? <svg viewBox="0 0 800 335" role="img" aria-label={`${sectorLabel(industry)}历年${label}趋势，${selected.map(countryLabel).join("与")}；详细读数见下方表格`} style={{ width: "100%", display: "block" }}>
-        <g aria-label="趋势图图例">
-          {selected.map((country, index) => <g key={`legend-${country}`} transform={`translate(${470 + index * 145} 18)`}>
-            <line x1={0} x2={24} y1={0} y2={0} stroke={CAT[index]} strokeWidth={2.5} strokeDasharray={index ? "7 4" : undefined} />
-            {index ? <rect x={8} y={-4} width={8} height={8} fill={CAT[index]} /> : <circle cx={12} cy={0} r={4} fill={CAT[index]} />}
-            <text x={31} y={4} fontSize={12} fill="#374151">{countryLabel(country)}</text>
-          </g>)}
-        </g>
-        {axis.ticks.map((tick) => <g key={tick}>
-          <line x1={95} x2={745} y1={y(tick)} y2={y(tick)} stroke="#e5e7ef" />
-          <text x={85} y={y(tick) + 4} textAnchor="end" fontSize={12} fill="#596173">{fmtDb(tick)}</text>
-        </g>)}
-        <text x={95} y={20} fontSize={12} fill="#596173">{unit}</text>
-        {years.map((year) => <text key={year} x={x(year)} y={307} textAnchor="middle" fontSize={13} fill="#596173">{year}</text>)}
-        {selected.map((country, index) => {
-          const series = points.filter((point) => point.country === country);
-          return <g key={country}>
-            {series.map((point, i) => {
-              const previous = series[i - 1];
-              return point.value === null ? null : <g key={point.year}>
-                {previous?.value != null && <line data-series={country} x1={x(previous.year)} y1={y(previous.value)} x2={x(point.year)} y2={y(point.value)} stroke={CAT[index]} strokeWidth={2.5} strokeDasharray={index ? "7 4" : undefined} />}
-                {index ? <rect x={x(point.year) - 4} y={y(point.value) - 4} width={8} height={8} fill={CAT[index]} /> : <circle cx={x(point.year)} cy={y(point.value)} r={4} fill={CAT[index]} />}
-                <title>{countryLabel(country)} · {point.year}：{fmtDb(point.value)}</title>
-              </g>;
-            })}
-          </g>;
-        })}
-      </svg> : <p role="status">该行业没有可用的指标观测，请更换行业、指标或国家。</p>}
-      <ComparisonSummary readings={points} countries={selected} years={commonYears} unit={unit} />
+      {view === "ranking" ? ranked.length ? <NetworkRanking rows={ranked} countries={selected} unit={unit} reference={industryReference} onIndustry={(next) => { setIndustry(next); setView("trend"); setFocusScope(true); }} /> : <p role="status">该年份没有可用的行业排名，请更换指标或国家。</p> : <>
+      {finite.length ? <IndicatorTrendChart
+        rows={(query.data ?? []).filter((row) => row.industry === industry)}
+        countries={selected}
+        years={years}
+        metric={metric}
+        label={label}
+        unit={unit}
+        distribution={distribution}
+        mode="context"
+        sameIndustry
+      /> : <p role="status">该行业没有可用的指标观测，请更换行业、指标或国家。</p>}
       <details className="technical-details"><summary>查看趋势图逐年读数</summary>
         <ScrollableRegion className="table-wrap" label="行业趋势逐年读数"><table className="data-table">
           <thead><tr><th>年份</th>{selected.map((country) => <th key={country}>{countryLabel(country)}</th>)}</tr></thead>
@@ -180,7 +176,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     <section className="qualified-run-card" aria-label="步骤9报告材料">
       <h3>报告材料 · {observations.length ? `已自动记录（${observations.length} 条读数）` : "尚未记录"}</h3>
       <p role="status">{!canRecord
-        ? `当前图表暂不能记录：${view === "trend" ? "请选择两个不同国家，且两国至少有两个共同有效年份。" : "请选择两个不同国家，且至少一个展示行业有两国有效读数。"}${observations.length ? "已记录的材料保持不变。" : ""}`
+        ? `当前图表暂不能记录：${selected.length < 2 ? "报告材料需要一个对比国家；现在只看全球参照，不会记录。" : view === "trend" ? "两国至少需要两个共同有效年份。" : "至少一个展示行业需要两国都有有效读数。"}${observations.length ? "已记录的材料保持不变。" : ""}`
         : matchesSaved
           ? `当前图表已自动记录：${selected.map(countryLabel).join(" 与 ")} · ${view === "trend" ? `${sectorLabel(industry)} · ${years[0]}–${years.at(-1)} 年趋势` : `${year} 年行业排名`} · ${label}。换视角、国家或指标后会自动更新。`
           : "正在记录当前图表…"}</p>

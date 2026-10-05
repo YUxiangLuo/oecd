@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 from gvcsim import quizzes
 from gvcsim.report_common import (
@@ -23,7 +23,7 @@ from gvcsim.report_gate import (
     _valid_indicator_observations,
 )
 from gvcsim.report_labels import country_label, sector_label
-from gvcsim.report_reference import country_reference
+from gvcsim.report_reference import country_reference, industry_reference
 from gvcsim.shocks import events_metadata
 
 
@@ -258,24 +258,68 @@ def _composition_share_lines(
     return charts
 
 
+def _industry_lookup(industry: str, countries: list[str]) -> Callable[[str, int], dict[str, Any] | None]:
+    """Step 9: the same industry in every economy, with the saved countries' ranks."""
+
+    def lookup(metric: str, year: int) -> dict[str, Any] | None:
+        rows = industry_reference(metric, year, industry=industry, countries=tuple(countries))
+        return rows[0] if rows else None
+
+    return lookup
+
+
 def _trend_reference(
-    metric: str, series: list[dict[str, Any]], unit: str
+    metric: str,
+    series: list[dict[str, Any]],
+    unit: str,
+    lookup: Callable[[str, int], dict[str, Any] | None] = country_reference,
+    scope: str = "",
 ) -> tuple[dict[str, Any], dict[str, dict[str, Any]]] | None:
     """Global median per saved year, or None when any year lacks a reference."""
     years = sorted({int(point["label"]) for item in series for point in item["points"]})
-    references = {year: country_reference(metric, year) for year in years}
+    references = {year: lookup(metric, year) for year in years}
     if not years or any(reference is None for reference in references.values()):
         return None
     scale = 100 if unit == "%" else 1
     last = cast(dict[str, Any], references[years[-1]])
     median_series = {
-        "label": f"全球中位数（{last['n']} 个经济体）",
+        "label": f"全球中位数（{scope}{last['n']} 个经济体）",
         "points": [
             {"label": str(year), "value": cast(dict[str, Any], references[year])["median"] * scale} for year in years
         ],
         "reference": True,
     }
     return median_series, {str(year): cast(dict[str, Any], reference) for year, reference in references.items()}
+
+
+def _with_industry_medians(
+    items: list[dict[str, Any]], selected: list[dict[str, Any]], metric: str, year: int, unit: str
+) -> list[dict[str, Any]]:
+    """Step 9 ranking: after each industry's bars, that industry's median across all economies."""
+    medians = {row["industry"]: row for row in industry_reference(metric, year)}
+    scale = 100 if unit == "%" else 1
+    result: list[dict[str, Any]] = []
+    for index, (item, source) in enumerate(zip(items, selected)):
+        result.append(item)
+        industry = str(source.get("industry") or "")
+        following = selected[index + 1] if index + 1 < len(selected) else None
+        if industry in medians and (following is None or str(following.get("industry") or "") != industry):
+            reference = medians[industry]
+            result.append(
+                {
+                    "label": item["label"],
+                    "group": f"全球中位数（同行业，{reference['n']} 个经济体）",
+                    "value": reference["median"] * scale,
+                }
+            )
+    return result
+
+
+def _is_reference_item(item: dict[str, Any]) -> bool:
+    """Global-median bars are a reference for the saved readings, not readings themselves."""
+    return str(item.get("group") or "").startswith("全球中位数") or str(item.get("label") or "").startswith(
+        "全球中位数"
+    )
 
 
 def _rank_reading(context: dict[str, Any], countries: list[str]) -> str:
@@ -295,7 +339,7 @@ def _rank_reading(context: dict[str, Any], countries: list[str]) -> str:
         )
     if not parts:
         return ""
-    return f"在 {last['n']} 个经济体中（从高到低），{'；'.join(parts)}"
+    return f"在 {last['n']} 个经济体{context.get('scope', '')}中（从高到低），{'；'.join(parts)}"
 
 
 def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str, Any]]) -> dict[str, Any]:
@@ -332,11 +376,18 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
                 series.append({"label": country_label(country), "points": points})
         metric_label = _STUDENT_METRIC_LABELS.get(metric, metric)
         # Country-level trends in steps 6–8 also show where the saved countries sit among all economies.
-        reference = (
-            _trend_reference(metric, series, unit)
-            if source == "explicit-indicator-trend" and not industries and series and countries
-            else None
-        )
+        if source == "explicit-indicator-trend" and not industries and series and countries:
+            reference = _trend_reference(metric, series, unit)
+            rank_scope = ""
+        elif source == "explicit-network-trend" and len(industries) == 1 and series and countries:
+            # Step 9: the saved industry against the same industry in every economy.
+            reference = _trend_reference(
+                metric, series, unit, _industry_lookup(industries[0], countries), scope="同行业，"
+            )
+            rank_scope = "的同一行业"
+        else:
+            reference = None
+            rank_scope = ""
         if reference is None:
             return {
                 "version": 1,
@@ -354,7 +405,7 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
             "x_label": "年份",
             "y_label": y_label,
             "series": [*series, median_series],
-            "_context": {"references": references},
+            "_context": {"references": references, "scope": rank_scope},
         }
     if source == "explicit-indicator-composition":
         shares = _composition_share_bar(data, step, observations)
@@ -399,6 +450,8 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
         return {"label": label, "group": country_label(str(item["country"])), "value": _chart_value(item)}
 
     items = [item_for(item) for item in selected]
+    if source == "explicit-network-ranking" and by_industry and single_metric and len(selected_years) == 1:
+        items = _with_industry_medians(items, selected, available_metrics[0], selected_years[0], unit)
     # A same-year, country-level comparison also places the two countries among all economies.
     same_year_reference = (
         country_reference(available_metrics[0], selected_years[0])
@@ -469,7 +522,7 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
     lines = [
         "## 真实指标比较",
         "",
-        "> 图表使用步骤 6–9 保存的同口径读数；国家整体的图表另画出全部经济体的中位数，用于定位。完整数值见“保存的实验快照”。",
+        "> 图表使用步骤 6–9 保存的同口径读数；国家整体的图表另画出全部经济体的中位数，步骤 9 的行业图表另画出全部经济体同一行业的中位数，用于定位。完整数值见“保存的实验快照”。",
         "",
     ]
     for step in range(6, 10):
@@ -501,10 +554,20 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
             chart = {key: value for key, value in chart.items() if not key.startswith("_")}
             display_chart = chart
             if chart["type"] == "bar" and len(chart["items"]) > _BAR_DISPLAY_LIMIT:
-                display_chart = {**chart, "items": chart["items"][:_BAR_DISPLAY_LIMIT]}
+                # Cut at a group boundary so an industry never loses one of its bars, and count only the
+                # saved readings (global-median bars are reference, not readings).
+                cut = _BAR_DISPLAY_LIMIT
+                while (
+                    0 < cut < len(chart["items"]) and chart["items"][cut]["label"] == chart["items"][cut - 1]["label"]
+                ):
+                    cut -= 1
+                shown = chart["items"][: cut or _BAR_DISPLAY_LIMIT]
+                display_chart = {**chart, "items": shown}
+                saved_total = sum(1 for item in chart["items"] if not _is_reference_item(item))
+                saved_shown = sum(1 for item in shown if not _is_reference_item(item))
                 lines.extend(
                     (
-                        f"> 主图按保存顺序展示前 {_BAR_DISPLAY_LIMIT} / {len(chart['items'])} 条读数；"
+                        f"> 主图按保存顺序展示前 {saved_shown} / {saved_total} 条读数；"
                         "下方极值使用全部保存读数。完整数值表见后文“保存的实验快照”。",
                         "",
                     )
@@ -539,9 +602,7 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
                 )
             else:
                 # Extremes are read among the saved countries; global-median bars are reference only.
-                saved_items = [
-                    item for item in chart["items"] if not str(item.get("group") or "").startswith("全球中位数")
-                ]
+                saved_items = [item for item in chart["items"] if not _is_reference_item(item)]
                 largest = max(saved_items, key=lambda item: item["value"])
                 smallest = min(saved_items, key=lambda item: item["value"])
                 largest_labels = "、".join(

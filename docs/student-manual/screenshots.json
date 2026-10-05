@@ -284,14 +284,14 @@
       "file": "screenshots/09-network.png",
       "width": 1280,
       "height": 960,
-      "sha256": "6400fca088d896698cd13d97c8b94c4956952fc88e8a331f1e29d7b64f7565bb",
+      "sha256": "975721a8c3ebf3875533b441ab83dc32b602ea4c0cf168b5f86c1b9c6e4cdbba",
       "captured_on": "2026-10-05",
       "capture_url": "http://127.0.0.1:5173",
       "capture_tool": "headless-chrome-cdp",
       "journey": "api-seeded-then-browser",
       "account": "test-student-complete",
-      "capture_note": "Step 9 two-country industry comparison.",
-      "baseline_commit": "49d019e6ba31512c875a3b958f10b021066ed01f",
+      "capture_note": "Step 9 industry trend with the same-industry global median and band; comparison country dashed.",
+      "baseline_commit": "43d21dcbd51205d743dd77a6ced09f563f2bf6cc",
       "data_release": "01b87b87c05c4d8386440706adafe04d",
       "simulation_contract": "step10-tariff-teaching-v2",
       "data_sources": [
@@ -300,7 +300,8 @@
           "production_data": true,
           "release_id": "01b87b87c05c4d8386440706adafe04d"
         }
-      ]
+      ],
+      "code_state": "baseline commit plus uncommitted step 9 global-context changes"
     },
     {
       "file": "screenshots/10-shocks.png",

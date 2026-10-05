@@ -655,14 +655,14 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     )
     assert not any("保存两国同年比较" in "".join(item["missing"]) for item in blocked)
     assert all(
-        any(item["step"] == step and "恰好两个国家" in "".join(item["missing"]) for item in blocked)
+        any(item["step"] == step and "选好对比国家" in "".join(item["missing"]) for item in blocked)
         for step in range(6, 9)
     )
     # Step 9 requires a country comparison *and* an industry observation, so its
     # message names both actions instead of the steps 6-8 wording.
-    assert any(item["step"] == 9 and "两国行业比较" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 9 and "选好对比国家" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 9 and "自动记录" in "".join(item["missing"]) for item in blocked)
-    assert any(item["step"] == 6 and "恰好两个国家" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 6 and "选好对比国家" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 11 and "运行回归" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 14 and "运行回归" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 15 and "原创" in item["title"] for item in blocked)
@@ -671,7 +671,7 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     assert "理解检查" in "".join(by_step[1]["missing"])
     assert "自动记录一个单元格" in "".join(by_step[1]["missing"])
     assert "理解检查" in "".join(by_step[6]["missing"])
-    assert "恰好两个国家" in "".join(by_step[6]["missing"])
+    assert "选好对比国家" in "".join(by_step[6]["missing"])
     assert "理解检查" in "".join(by_step[12]["missing"])
     assert "运行回归" in "".join(by_step[12]["missing"])
     assert "模拟关税面板" in "".join(by_step[10]["missing"])
@@ -929,8 +929,8 @@ def test_step_nine_requires_both_a_comparison_and_an_industry_observation():
     observation_only = _complete()
     observation_only["steps"]["9"]["data"]["compared"] = []
     message = "".join(next(item["missing"] for item in check_material_gate(observation_only) if item["step"] == 9))
-    assert "两国行业比较" in message
-    assert "趋势或行业排名" in message
+    assert "选好对比国家" in message
+    assert "历年变化或行业排名" in message
     assert "网络图中的节点" not in message
 
 
@@ -1703,3 +1703,115 @@ def test_country_level_trend_and_same_year_charts_show_the_global_median(tmp_pat
     assert bar["items"][-1]["value"] == pytest.approx(4.4)
     section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 8", 1)[1]
     assert "全球中位数 4.4" in section and "CHN 中国第 3 位" in section
+
+
+def test_step9_report_reads_the_industry_against_the_same_industry_worldwide(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    for year in (2016, 2020):
+        pd.DataFrame(
+            [
+                (country, industry, value + (year - 2016) + (0 if industry == "C26" else 100))
+                for country, value in (("CHN", 50.0), ("USA", 40.0), ("DEU", 30.0), ("JPN", 10.0), ("ROW", 999.0))
+                for industry in ("C26", "C27")
+            ],
+            columns=["country", "industry", "betweenesscentrality"],
+        ).to_csv(tmp_path / f"indicators_industry_{year}.csv", index=False)
+    session = _complete()
+    data = session["steps"]["9"]["data"]
+    data["compared"] = ["CHN", "USA"]
+    base = {
+        "metric": "betweenesscentrality",
+        "unit": "未归一化介数",
+        "release": "ICIO-2023",
+        "scope": "country-industry",
+    }
+    data["observations"] = [
+        {
+            **base,
+            "entity": f"{country}·C26",
+            "country": country,
+            "industry": "C26",
+            "year": year,
+            "value": value + (year - 2016),
+            "source": "explicit-network-trend",
+        }
+        for country, value in (("CHN", 50.0), ("USA", 40.0))
+        for year in (2016, 2020)
+    ]
+    (trend,) = teaching_report._observed_charts(data, 9, data["observations"])
+    median = next(series for series in trend["series"] if series.get("reference"))
+    assert median["label"] == "全球中位数（同行业，4 个经济体）"
+    assert [point["value"] for point in median["points"]] == pytest.approx([35.0, 39.0])
+    assert "全球中位数" in trend["title"]
+    section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 9", 1)[1]
+    assert (
+        "在 4 个经济体的同一行业中（从高到低），CHN 中国从第 1 位变为第 1 位；USA 美国从第 2 位变为第 2 位" in section
+    )
+
+    # Ranking: each industry's pair of bars is followed by that industry's global median.
+    data["observations"] = [
+        {
+            **base,
+            "entity": f"{country}·{industry}",
+            "country": country,
+            "industry": industry,
+            "year": 2020,
+            "value": value,
+            "source": "explicit-network-ranking",
+        }
+        for industry, values in (("C27", (154.0, 144.0)), ("C26", (54.0, 44.0)))
+        for country, value in zip(("CHN", "USA"), values)
+    ]
+    (ranking,) = teaching_report._observed_charts(data, 9, data["observations"])
+    assert [(item["label"], item.get("group")) for item in ranking["items"]] == [
+        ("C27 电气设备", "CHN 中国"),
+        ("C27 电气设备", "USA 美国"),
+        ("C27 电气设备", "全球中位数（同行业，4 个经济体）"),
+        ("C26 计算机电子光学", "CHN 中国"),
+        ("C26 计算机电子光学", "USA 美国"),
+        ("C26 计算机电子光学", "全球中位数（同行业，4 个经济体）"),
+    ]
+    assert ranking["items"][2]["value"] == pytest.approx(139.0)
+    section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 9", 1)[1]
+    # Extremes are read among the saved countries only, never the median bars.
+    assert (
+        "最高为 CHN 中国 · C27 电气设备（154）" in section and "最低为 USA 美国 · C26 计算机电子光学（44）" in section
+    )
+
+
+def test_step9_long_ranking_is_cut_at_an_industry_and_counts_only_saved_readings(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    industries = [f"S{index:02d}" for index in range(15)]
+    pd.DataFrame(
+        [
+            (country, industry, value)
+            for country, value in (("CHN", 9.0), ("USA", 5.0), ("DEU", 3.0))
+            for industry in industries
+        ],
+        columns=["country", "industry", "betweenesscentrality"],
+    ).to_csv(tmp_path / "indicators_industry_2020.csv", index=False)
+    session = _complete()
+    data = session["steps"]["9"]["data"]
+    data["compared"] = ["CHN", "USA"]
+    data["observations"] = [
+        {
+            "entity": f"{country}·{industry}",
+            "country": country,
+            "industry": industry,
+            "year": 2020,
+            "value": value - index / 100,
+            "metric": "betweenesscentrality",
+            "unit": "未归一化介数",
+            "release": "ICIO-2023",
+            "scope": "country-industry",
+            "source": "explicit-network-ranking",
+        }
+        for index, industry in enumerate(industries)
+        for country, value in (("CHN", 9.0), ("USA", 5.0))
+    ]
+    section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 9", 1)[1]
+    chart = json.loads(section.split("```gvcsim-chart\n", 1)[1].split("\n```", 1)[0])
+    # 15 industries x (2 countries + median) = 45 bars; cut after 13 whole industries.
+    assert len(chart["items"]) == 39
+    assert chart["items"][-1]["group"].startswith("全球中位数")
+    assert "前 26 / 30 条读数" in section
