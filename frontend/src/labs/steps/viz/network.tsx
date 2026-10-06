@@ -1,10 +1,12 @@
 /**
  * 步骤 9 · 网络可视化 —— 故事:「流量规模与二值拓扑会讲同一个故事吗?」
  *
- * 主图:行业的历年变化与排名,以全部经济体同一行业为参照,再与对比国家比较;按学生最后查看的完整图表自动记录报告材料。
- * 补充图表(弹窗,不替换主图):
- *   贸易联系概览  国家间双边贸易流的有向网络,悬停看某国的伙伴与区域集群
- *   单国行业热力表  一个国家全部行业节点的多项网络指标,可排序
+ * 记录视角:行业的历年变化与排名,以全部经济体同一行业为参照,再与对比国家比较;按学生最后查看的完整图表自动记录报告材料。
+ * 探索视角(同一视角栏,不记录材料):
+ *   流量与拓扑  一国各行业的加权总度(对数)×二值介数散点(主题视角,默认进入)
+ *   买入与卖出  一国各行业的加权入度与出度蝴蝶图
+ *   贸易伙伴    国家级贸易网络读成自我中心图、伙伴榜、区域流向矩阵与伙伴集中度
+ *   全部指标表  折叠在"国家对比"视角里,一个国家全部行业节点的多项网络指标,可排序
  *
  * 口径:国家级贸易图是完全图 → 无权中心性(度 / 介数 …)恒为常数、无区分度,
  * 因此二值拓扑比较只在国家–行业级做(见 country_degenerate 处理与回归 network 粒度)。
@@ -12,8 +14,8 @@
 import { useEffect, useRef, useState } from "react";
 import { LabeledControl } from "../../../a11y";
 import { api } from "../../../api";
-import type { IndustryPage, Meta, NetworkData, Step, StepStateApi } from "../../../types";
-import { HeatTableViz, NetworkViz, countryLabel } from "../../../viz";
+import type { IndustryPage, Meta, Step, StepStateApi } from "../../../types";
+import { HeatTableViz, countryLabel } from "../../../viz";
 import {
   HEAT_COVERAGE_OPTIONS,
   HEAT_SORT_OPTIONS,
@@ -26,8 +28,8 @@ import {
   type HeatSortMetric,
 } from "../../../viz/views/network-heat";
 import { AsyncStateMessage, useAsync } from "../../shared";
-import { ChartModalButton, SupplementaryCharts } from "./chart-modal";
 import { NetworkTrend } from "./network-trend";
+import { TradePartners } from "./trade-partners";
 import {
   ChartStory,
   observationRequestKey,
@@ -42,38 +44,6 @@ type Lens = "heat" | "network";
 /** The step's main chart is the two-country industry comparison; the network overview is a modal. */
 export const STEP10_DEFAULT_LENS: Lens = "heat";
 const STEP10_LENS_KEYS: Lens[] = ["heat", "network"];
-
-function TradeNetworkOverview({ meta, initialYear, onInspectCountry }: {
-  meta: Meta;
-  initialYear: number;
-  onInspectCountry: (country: string) => void;
-}) {
-  const [year, setYear] = useState(initialYear);
-  const networkQuery = useAsync<NetworkData>(() => api.network(year), [year]);
-  const net = networkQuery.data;
-  return (
-    <ChartStory
-      eyebrow="双边贸易网络"
-      title="国家间生产贸易网络（有向，按地理区域摆放）"
-      what={<>节点是经济体，有向边是跨国的中间品和最终品贸易流（不含国内）；点越大、边越粗，流量越大。节点按预设地理区域摆放，不是算法聚类的结果。</>}
-      read={<>比较区域内和区域之间的流向。悬停一个国家会高亮它当前显示的贸易伙伴，点击可查看流入、流出伙伴表。箭头方向表示“卖给谁”。</>}
-      find={<>比较中国、美国、德国的主要贸易伙伴。国家之间几乎两两相连，所以在国家层面，介数这类不看流量的中心性区分不出差别。</>}
-      note="这张图和主图不能直接对应：这里以国家为节点，只看跨国贸易；主图与步骤 5 相同，在国家×行业网络上计算，包含国内联系。不要用这里的节点位置解释某个行业的中心性。调整显示比例只影响画出哪些边，不改变中心性。"
-    >
-      <div className="controls" style={{ marginBottom: 12 }}>
-        <YearSelect years={meta.years} year={year} onChange={setYear} />
-      </div>
-      {networkQuery.status === "loading" || networkQuery.status === "error" ? (
-        <AsyncStateMessage
-          status={networkQuery.status}
-          error={networkQuery.error}
-          loadingLabel={`加载 ${year} 年贸易网络中…`}
-          onRetry={networkQuery.retry}
-        />
-      ) : net ? <NetworkViz data={net} onInspectCountry={onInspectCountry} /> : <p className="muted">该年份暂无网络数据。</p>}
-    </ChartStory>
-  );
-}
 
 function IndustryHeatTable({ meta, initialYear, drill, heatSort, heatCoverage, onDrill, onSort, onCoverage }: {
   meta: Meta;
@@ -138,7 +108,7 @@ function IndustryHeatTable({ meta, initialYear, drill, heatSort, heatCoverage, o
 }
 
 export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; state: StepStateApi<VizStepState> }) {
-  const { year, pickCountries, schema } = useVizLab(meta, step, state, STEP10_DEFAULT_LENS, STEP10_LENS_KEYS);
+  const { year, setYear, pickCountries, schema } = useVizLab(meta, step, state, STEP10_DEFAULT_LENS, STEP10_LENS_KEYS);
   const observations = (state.data?.observations ?? []).filter((item) => item.source === "explicit-network-trend" || item.source === "explicit-network-ranking");
   const fallbackDrill = meta.countries.includes("CHN") ? "CHN" : meta.countries[0] ?? "";
   // The heat table follows country A ([A, B] in compared) unless the student picked a country in a modal.
@@ -174,23 +144,29 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
 
   return (
     <div>
-      <NetworkTrend meta={meta} schema={schema} initialCountry={drill} initialCountries={state.data?.compared ?? []} observations={observations} syncing={state.syncing} syncError={state.syncError} onRetrySync={state.syncNow} locked={state.materialLocked} onRecord={(countries, records) => {
-        pickCountries(countries);
-        state.save({ compared: countries, metric: records[0]?.metric, observations: records });
-      }} />
-      <SupplementaryCharts>
-        <ChartModalButton label="贸易联系概览（国家间网络图）" title={`步骤 ${step.n} · 国家间贸易联系概览`}>
-          {() => <TradeNetworkOverview meta={meta} initialYear={year} onInspectCountry={inspectCountry} />}
-        </ChartModalButton>
-        <ChartModalButton label="单国行业热力表" title={`步骤 ${step.n} · ${countryLabel(drill)} 行业网络指标`}>
-          {() => (
-            <IndustryHeatTable
-              meta={meta} initialYear={year} drill={drill} heatSort={heatSort} heatCoverage={heatCoverage}
-              onDrill={inspectCountry} onSort={changeHeatSort} onCoverage={changeHeatCoverage}
-            />
-          )}
-        </ChartModalButton>
-      </SupplementaryCharts>
+      <NetworkTrend
+        meta={meta}
+        schema={schema}
+        initialCountry={drill}
+        initialCountries={state.data?.compared ?? []}
+        observations={observations}
+        syncing={state.syncing}
+        syncError={state.syncError}
+        onRetrySync={state.syncNow}
+        locked={state.materialLocked}
+        onRecord={(countries, records) => {
+          pickCountries(countries);
+          state.save({ compared: countries, metric: records[0]?.metric, observations: records });
+        }}
+        extraLenses={[{ key: "partners", label: "贸易伙伴" }]}
+        renderExtra={(_key, countries) => <TradePartners meta={meta} countries={countries} year={year} onYear={setYear} />}
+        renderTable={() => (
+          <IndustryHeatTable
+            meta={meta} initialYear={year} drill={drill} heatSort={heatSort} heatCoverage={heatCoverage}
+            onDrill={inspectCountry} onSort={changeHeatSort} onCoverage={changeHeatCoverage}
+          />
+        )}
+      />
     </div>
   );
 }

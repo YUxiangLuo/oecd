@@ -21,9 +21,12 @@ const need = (name: string) => {
   if (!value) throw new Error(`Missing ${name}`);
   return value;
 };
+/** MANUAL_ONLY_VIZ=1 re-shoots only the step 6–9 figures (06–09) for MANUAL_STUDENT: no gate student,
+ *  no teacher, no report generated. For releases where only the visualization steps changed. */
+const onlyViz = process.env.MANUAL_ONLY_VIZ === "1";
 const student = { username: need("MANUAL_STUDENT"), password: need("MANUAL_STUDENT_PASSWORD") };
-const gate = { username: need("MANUAL_GATE_STUDENT"), password: need("MANUAL_GATE_STUDENT_PASSWORD") };
-const teacher = { username: need("MANUAL_TEACHER"), password: need("MANUAL_TEACHER_PASSWORD") };
+const gate = onlyViz ? student : { username: need("MANUAL_GATE_STUDENT"), password: need("MANUAL_GATE_STUDENT_PASSWORD") };
+const teacher = onlyViz ? student : { username: need("MANUAL_TEACHER"), password: need("MANUAL_TEACHER_PASSWORD") };
 
 async function api(method: string, path: string, token?: string, body?: unknown) {
   const response = await fetch(`${base}${path}`, {
@@ -98,10 +101,11 @@ await mkdir(outDir, { recursive: true });
 const chrome = await launchChrome();
 try {
   const studentToken = await login(student);
-  const gateToken = await login(gate);
+  const gateToken = onlyViz ? "" : await login(gate);
 
   // Login page: public, nothing typed.
   let page = await signedIn(null);
+  if (!onlyViz) {
   await open(page, null, `window.__find("进入实验平台")`);
   await save("00-login.png", await page.screenshot(), "none", "Public login page; demo prefill only in demo builds.");
   await page.close();
@@ -114,10 +118,12 @@ try {
   await open(page, 12, `document.querySelector(".group-change-chart svg") && document.querySelector(".reg-run-card .run-btn")`);
   await scrollTo(page, `document.querySelector(".reg-run-card")`, 12);
   await save("11-regression-setup.png", await page.screenshot(), gate.username, "Step 12 before running: taxed vs untaxed group chart and run button.");
+  }
   await page.close();
 
   // Complete student: one image per step.
   page = await signedIn(studentToken);
+  if (!onlyViz) {
   await open(page, 1, `window.__find("已记录的观察值") && document.querySelector("button.db-observation-cell")`);
   await scrollTo(page, `window.__find("已记录的观察值")`, 150);
   await save("01-icio.png", await page.screenshot(), student.username, "Step 1 recorded cell.");
@@ -136,18 +142,33 @@ try {
   await scrollTo(page, `window.__find("02 / 动手查看")`, 8);
   await save("05-indicators.png", await page.screenshot(), student.username, "Step 5 centrality table.");
 
-  await open(page, 6, `document.querySelector('[aria-label="报告材料"]') && document.querySelector("main svg[role=img]")`);
+  }
+
+  // Steps 6 and 7 open on their theme view (出口构成 / 四类生产活动); figures 9 and 10 show the 历年变化 view.
+  const trendView = `[...document.querySelectorAll('[role=group][aria-label="图表视角"] button')].find((b) => b.textContent === "历年变化")`;
+  await open(page, 6, `document.querySelector('[aria-label="报告材料"]') && ${trendView}`);
+  await page.eval(`(() => { ${trendView}.click(); return true; })()`);
+  await page.waitFor(`document.querySelector("main svg[role=img]") && document.querySelector('[aria-label="趋势读数"]')`, 45_000);
+  await settled(page);
   await save("06-visualization.png", await page.screenshot(), student.username, "Step 6 trend with automatic material.");
-  await open(page, 7, `document.querySelector('[aria-label="报告材料"]') && document.querySelector("main svg[role=img]")`);
+  await open(page, 7, `document.querySelector('[aria-label="报告材料"]') && ${trendView}`);
+  await page.eval(`(() => { ${trendView}.click(); return true; })()`);
+  await page.waitFor(`document.querySelector("main svg[role=img]") && document.querySelector('[aria-label="趋势读数"]')`, 45_000);
+  await settled(page);
   await scrollTo(page, `window.__find("当前比较口径") || document.querySelector('[aria-label="当前比较口径"]')`, 140);
   await save("07-visualization.png", await page.screenshot(), student.username, "Step 7 production chart.");
   await open(page, 8, `document.querySelector('[aria-label="报告材料"]') && document.querySelector("main svg[role=img]")`);
   await scrollTo(page, `document.querySelector('[aria-label="当前比较口径"]')`, 140);
   await save("08-visualization.png", await page.screenshot(), student.username, "Step 8 forward/backward lengths.");
-  await open(page, 9, `document.querySelector('section[aria-label="行业网络指标趋势"]')?.querySelector('svg, table')`);
+  // Figure 12 shows the 历年变化 view even when the student last saved the 定位行业 view.
+  await open(page, 9, `document.querySelector('section[aria-label="行业网络指标趋势"]') && ${trendView}`);
+  await page.eval(`(() => { ${trendView}.click(); return true; })()`);
+  await page.waitFor(`document.querySelector('section[aria-label="行业网络指标趋势"] svg[role=img]')`, 45_000);
+  await settled(page);
   await scrollTo(page, `document.querySelector('section[aria-label="行业网络指标趋势"]')`, 8);
   await save("09-network.png", await page.screenshot(), student.username, "Step 9 two-country industry comparison.");
 
+  if (!onlyViz) {
   await open(page, 10, `document.querySelectorAll(".shock-workbench select").length >= 3`);
   await page.eval(`(() => { const s = document.querySelectorAll(".shock-workbench select");
     window.__select(s[0], "CAN"); window.__select(s[1], "MEX"); window.__select(s[2], "C29"); return true; })()`);
@@ -183,6 +204,7 @@ try {
   await open(page, 15, `window.__find("教师评语")`);
   const graded = await clipOf(page, `[...document.querySelectorAll("main *")].filter((el) => /已评阅 · \\d+ 分/.test(el.innerText || "") && (el.innerText || "").includes("教师评语")).sort((a, b) => a.innerText.length - b.innerText.length)[0]`);
   await save("15-graded.png", await page.screenshot(graded), student.username, "Graded status with feedback.");
+  }
   await page.close();
 } finally {
   await chrome.close();

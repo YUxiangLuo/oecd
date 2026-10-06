@@ -84,6 +84,16 @@ def main():
             student.run("open", f"{base}/?step={step}")
             student.run("wait", ".quiz-question")
             student.run("wait", "--load", "networkidle")
+            if 6 <= step <= 9:
+                # Hard requirements: a time-series view and a country-comparison view on every chart step.
+                views = json.loads(
+                    student.run(
+                        "eval",
+                        'Array.from(document.querySelectorAll(\'[role="group"][aria-label="图表视角"] button\')).map(e=>e.textContent)',
+                    )
+                )
+                assert "历年变化" in views, (step, views)
+                assert "国家对比" in views, (step, views)
             if step == 1:
                 student.run("click", "tbody tr:first-child td:first-of-type button")
                 student.run("wait", '[role="dialog"]')
@@ -109,18 +119,12 @@ def main():
                     ),
                 )
             elif step == 9:
-                # Supplementary charts open in a modal; the main comparison is recorded automatically.
-                student.button("贸易联系概览（国家间网络图）")
-                for country in ("CHN", "USA"):
-                    selector = f'.network-node[aria-label^="{country} "]'
-                    student.run("wait", selector)
-                    student.run("focus", selector)
-                    student.run("press", "Enter")
-                    student.run("wait", ".network-fullscreen-scrim")
-                    student.run("press", "Escape")
-                    student.run("wait", "--fn", '!document.querySelector(".network-fullscreen-scrim")')
-                student.button("关闭")
-                student.run("wait", "--fn", '!document.querySelector(".chart-modal-scrim")')
+                # 贸易伙伴 is an exploration view in the view bar (ego network, partner table, region matrix).
+                student.button("贸易伙伴")
+                student.run("wait", "table.region-matrix")
+                student.run("wait", "[data-partner]")
+                student.button("历年变化")
+                student.run("wait", 'select[name="network-metric"]')
                 student.run(
                     "select",
                     'section[aria-label="行业网络指标趋势"] select[name="network-country-a"]',

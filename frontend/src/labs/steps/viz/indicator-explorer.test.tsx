@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor, within } from "@testing-library/react";
 import { api } from "../../../api";
 import type { Meta, Step, StepStateApi } from "../../../types";
 import type { VizStepState } from "./scaffold";
@@ -69,6 +69,8 @@ describe("indicator explorer with automatic report material", () => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
     const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
     const view = setup(TradeVizStep, undefined, true);
+    await view.findByRole("button", { name: "出口构成" });
+    fireEvent.click(view.getByRole("button", { name: "历年变化" }));
     expect(await view.findByLabelText("趋势读数")).toBeTruthy();
     const record = await view.findByRole("button", { name: /改用当前图表作为报告材料/ });
     expect(view.getByText(/报告已提交：浏览不再自动改动报告材料/)).toBeTruthy();
@@ -119,7 +121,7 @@ describe("indicator explorer with automatic report material", () => {
     }
   }
 
-  test("records the default two-country trend automatically and follows the chart the student switches to", async () => {
+  test("opens on the theme view, records it automatically and follows the chart the student switches to", async () => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(
       async (year) => countryRows(year),
     );
@@ -128,7 +130,7 @@ describe("indicator explorer with automatic report material", () => {
       fields: {},
     });
     const view = setup();
-    await view.findByRole("heading", { name: /外国增加值项占比/ });
+    await view.findByRole("button", { name: "出口构成" });
     expect((view.getByLabelText("国家 A") as HTMLSelectElement).value).toBe(
       "CHN",
     );
@@ -138,14 +140,17 @@ describe("indicator explorer with automatic report material", () => {
     expect((view.getByLabelText("比较范围") as HTMLSelectElement).value).toBe(
       "",
     );
+    // The view bar: the step's theme first and open by default, then the two views every step offers.
+    expect(within(view.getByRole("group", { name: "图表视角" })).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "出口构成", "历年变化", "国家对比", "定位图", "行业结构",
+    ]);
+    expect(view.getByRole("button", { name: "出口构成" }).getAttribute("aria-pressed")).toBe("true");
+    expect(view.queryByRole("group", { name: "补充图表" })).toBeNull();
+    await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("composition"));
+    fireEvent.click(view.getByRole("button", { name: "历年变化" }));
     expect(await view.findByLabelText("趋势读数")).toBeTruthy();
     expect(view.queryByText(/含 2020 年/)).toBeNull();
     const chart = view.getByRole("img");
-    const supplementary = view.getByRole("group", { name: "补充图表" });
-    const materials = view.getByRole("region", { name: "报告材料" });
-    // Supplementary charts sit under the main chart and open in a modal; they never replace it.
-    expect(chart.compareDocumentPosition(supplementary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(supplementary.compareDocumentPosition(materials) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Caveats live in the task card and the report; the chart area keeps only a one-line metric definition.
     expect(view.queryByText("指标口径")).toBeNull();
     // Reading order: the observed country, its rank and the global median, then the comparison country.
@@ -156,8 +161,9 @@ describe("indicator explorer with automatic report material", () => {
     expect(cards[3]).toContain("与对比国家 USA 美国");
     expect(view.getByText(/差距缩小 .* 个百分点/)).toBeTruthy();
     expect(chart.querySelector('[data-series="global-median"]')).not.toBeNull();
-    await waitFor(() => expect(view.saves).toHaveLength(1));
+    await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("trend"));
     expect(view.queryByRole("button", { name: "保存为报告材料" })).toBeNull();
+    view.saves.splice(0, view.saves.length - 1); // keep only the trend record for the checks below
     expect(view.saves[0].indicator_selection).toMatchObject({
       first: "CHN",
       second: "USA",
@@ -176,10 +182,11 @@ describe("indicator explorer with automatic report material", () => {
     view.accept(); // parent owns persistence; only its rerender marks the selection saved
     expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("当前图表已自动记录");
     expect(view.saves).toHaveLength(1);
-    fireEvent.click(view.getByRole("button", { name: "全球分布" }));
+    fireEvent.click(view.getByRole("button", { name: "国家对比" }));
     await waitFor(() => expect(view.saves).toHaveLength(2));
-    // The same-year view shows every economy, with the two countries highlighted and ranked.
+    // The same-year view shows every economy with the two countries highlighted and ranked, then the ranking bars.
     expect(view.getByRole("region", { name: /全球分布/ })).toBeTruthy();
+    expect(view.getByText(/排名 · 前 20 与所选国家/)).toBeTruthy();
     expect(view.getByRole("img", { name: /CHN 中国 .*第 [0-9]+ 位/ })).toBeTruthy();
     expect(
       view.saves[1].observations!.every(
@@ -202,7 +209,7 @@ describe("indicator explorer with automatic report material", () => {
       compared: ["USA", "CHN"],
       observations: [{ entity: "USA", country: "USA", year: 2020, value: 9 }],
     });
-    await legacy.findByRole("heading", { name: /外国增加值项占比/ });
+    await legacy.findByRole("button", { name: "出口构成" });
     expect((legacy.getByLabelText("国家 A") as HTMLSelectElement).value).toBe(
       "USA",
     );
@@ -210,7 +217,7 @@ describe("indicator explorer with automatic report material", () => {
       (legacy.getByLabelText("对比国家 B") as HTMLSelectElement).value,
     ).toBe("CHN");
     await waitFor(() => expect(legacy.saves).toHaveLength(1));
-    expect(legacy.saves[0].observations!.every((item) => item.source === "explicit-indicator-trend")).toBeTrue();
+    expect(legacy.saves[0].observations!.every((item) => item.source === "explicit-indicator-composition")).toBeTrue();
     cleanup();
     const selection = {
       first: "USA",
@@ -263,6 +270,8 @@ describe("indicator explorer with automatic report material", () => {
       fields: {},
     });
     const view = setup();
+    await view.findByRole("button", { name: "出口构成" });
+    fireEvent.click(view.getByRole("button", { name: "历年变化" }));
     fireEvent.change(view.getByLabelText("起始年份"), {
       target: { value: "2020" },
     });
@@ -288,10 +297,11 @@ describe("indicator explorer with automatic report material", () => {
       fields: {},
     });
     const view = setup();
-    await view.findByRole("heading", { name: /外国增加值项占比/ });
-    expect(view.getByRole("group", { name: "补充图表" })).toBeTruthy();
-    expect(view.getByLabelText("当前比较口径").textContent).toContain("CHN 中国与USA 美国 · 国家整体 · 2019–2021");
-    fireEvent.click(view.getByRole("button", { name: "构成分析" }));
+    await view.findByRole("button", { name: "出口构成" });
+    fireEvent.click(view.getByRole("button", { name: "历年变化" }));
+    const scope = view.getByLabelText("当前比较口径").textContent ?? "";
+    for (const part of ["CHN 中国与USA 美国", "国家整体", "2019–2021", "外国增加值项占比"]) expect(scope).toContain(part);
+    fireEvent.click(view.getByRole("button", { name: "出口构成" }));
     await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("composition"));
     expect(new Set(view.saves.at(-1)!.observations!.map((x) => x.metric))).toEqual(
       new Set([
@@ -311,17 +321,33 @@ describe("indicator explorer with automatic report material", () => {
     ).toBeTrue();
     fireEvent.click(view.getByRole("button", { name: "历年" }));
     await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("evolution"));
-    expect(view.getByRole("button", { name: "构成分析" }).getAttribute("aria-pressed")).toBe("true");
+    expect(view.getByRole("button", { name: "出口构成" }).getAttribute("aria-pressed")).toBe("true");
     expect(new Set(view.saves.at(-1)?.observations?.map((item) => item.year))).toEqual(new Set([2019, 2020, 2021]));
     view.accept();
     expect(view.getByRole("button", { name: "历年" }).getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(view.getByRole("button", { name: "单年" }));
-    expect(view.getByLabelText("当前比较口径").textContent).toContain("2021 · 构成分析");
+    expect(view.getByLabelText("当前比较口径").textContent).toMatch(/2021.*出口构成/);
     view.unmount();
     const restored = setup(TradeVizStep, view.saves.at(-1));
-    expect(restored.getByRole("button", { name: "构成分析" }).getAttribute("aria-pressed")).toBe("true");
+    expect(restored.getByRole("button", { name: "出口构成" }).getAttribute("aria-pressed")).toBe("true");
     expect(restored.getByRole("button", { name: "历年" }).getAttribute("aria-pressed")).toBe("true");
     expect(restored.saves).toHaveLength(0);
+    rows.mockRestore();
+    schema.mockRestore();
+  });
+
+  test("the positioning view is exploration only: it never records material and keeps the saved record", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    const view = setup();
+    await view.findByRole("button", { name: "出口构成" });
+    await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("composition"));
+    const before = view.saves.length;
+    fireEvent.click(view.getByRole("button", { name: "定位图" }));
+    expect(view.getByLabelText("当前比较口径").textContent).toContain("定位图");
+    expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("定位图只作探索，不记录材料");
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+    expect(view.saves).toHaveLength(before);
     rows.mockRestore();
     schema.mockRestore();
   });
@@ -349,6 +375,31 @@ describe("indicator explorer with automatic report material", () => {
     schema.mockRestore();
   });
 
+  test("length 段长度对照 records the six segment lengths for one year and reads the longest segment", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) =>
+      countryRows(year).map((row, i) => ({ ...row, PLv_D: 1.2 + i / 10, PLy_D: 1.1, PLv_RT: 0.4, PLy_RT: 0.5 + i / 10 })),
+    );
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    const view = setup(LengthVizStep);
+    await view.findByRole("button", { name: "前后向位置" });
+    expect(within(view.getByRole("group", { name: "图表视角" })).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "前后向位置", "历年变化", "国家对比", "段长度对照", "定位图", "行业结构", "定位行业",
+    ]);
+    fireEvent.click(view.getByRole("button", { name: "段长度对照" }));
+    await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("segments"));
+    const saved = view.saves.at(-1)!;
+    expect(saved.compared).toEqual(["CHN", "USA"]);
+    expect(new Set(saved.observations!.map((item) => item.metric))).toEqual(new Set(["PLv_D", "PLy_D", "PLv_RT", "PLy_RT", "PLv_GVC", "PLy_GVC"]));
+    expect(saved.observations!.every((item) => item.source === "explicit-indicator-comparison" && item.year === 2021)).toBe(true);
+    expect(view.getAllByRole("region", { name: /段长度对照/ })).toHaveLength(2);
+    const cards = view.getByRole("group", { name: "段长度读数" }).textContent ?? "";
+    expect(cards).toContain("最长的一段");
+    expect(cards).toContain("GVC 段 · 前向对后向");
+    expect(cards).toContain("与对比国家 USA 美国");
+    rows.mockRestore();
+    schema.mockRestore();
+  });
+
   test("length trajectory does not bridge a missing middle year", () => {
     const rows = [
       { country: "CHN", year: 2019, PLv_GVC: 2, PLy_GVC: 3 },
@@ -362,5 +413,62 @@ describe("indicator explorer with automatic report material", () => {
       />,
     );
     expect(document.querySelectorAll('line[data-series="CHN"]')).toHaveLength(0);
+  });
+});
+
+describe("material of one to five economies (design doc 4.1)", () => {
+  const meta3: Meta = { ...meta, countries: ["CHN", "USA", "DEU"] };
+  const rows3 = (year: number) =>
+    ["CHN", "USA", "DEU"].map((country, i) => ({
+      country, gross_exports: 100 + i * 100, FVA: 10 + i * 30 + year - 2019, DVAex: 55 + i, DVArt: 8, DDC: 4, FDC: 2, taxsub: -1,
+    }));
+  function mount(data?: VizStepState) {
+    const saves: VizStepState[] = [];
+    const state: StepStateApi<VizStepState> = { data, save: (value) => saves.push(value), complete: false, syncing: false, syncError: null, syncNow: () => {} };
+    return { saves, ...render(<TradeVizStep meta={meta3} step={step} state={state} />) };
+  }
+
+  test("one economy at country scope is recorded against the global reference; at industry scope it is not", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => rows3(year));
+    const industry = spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => ({
+      rows: rows3(year).filter((row) => row.country === country).map((row) => ({ ...row, industry: "A" })), total: 1, page: 1, page_size: 200,
+    }));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = mount({ compared: ["CHN"] });
+      await view.findByRole("button", { name: "出口构成" });
+      // The carried-over single entity opens alone: no comparison select is filled, the add control is offered.
+      expect((view.getByLabelText("对比国家 B") as HTMLSelectElement).value).toBe("");
+      await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["CHN"]));
+      expect(view.saves.at(-1)!.observations!.every((item) => item.country === "CHN")).toBe(true);
+      // An industry has no global reference, so one economy alone is exploration there.
+      const before = view.saves.length;
+      fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
+      await view.findByText(/需用国家整体口径/);
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+      expect(view.saves.slice(before).every((save) => !("observations" in save))).toBe(true);
+    } finally { rows.mockRestore(); industry.mockRestore(); schema.mockRestore(); }
+  });
+
+  test("a third country joins the same chart: one series per economy, all recorded together", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => rows3(year));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = mount();
+      await view.findByRole("button", { name: "出口构成" });
+      fireEvent.click(view.getByRole("button", { name: "历年变化" }));
+      await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["CHN", "USA"]));
+      fireEvent.change(view.getByLabelText("再加一个对比国家"), { target: { value: "DEU" } });
+      await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["CHN", "USA", "DEU"]));
+      expect(view.getByLabelText("对比国家 C")).toBeTruthy();
+      expect(view.container.querySelectorAll("[data-series-group]")).toHaveLength(3);
+      expect(view.saves.at(-1)!.indicator_selection).toMatchObject({ first: "CHN", second: "USA", others: ["USA", "DEU"] });
+      expect(new Set(view.saves.at(-1)!.observations!.map((item) => item.country))).toEqual(new Set(["CHN", "USA", "DEU"]));
+      // Every comparison country gets its own gap card.
+      expect(view.getAllByText(/与对比国家/)).toHaveLength(2);
+      // Choosing a comparison country as A swaps it with the old A instead of dropping it.
+      fireEvent.change(view.getByLabelText("国家 A"), { target: { value: "DEU" } });
+      await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["DEU", "USA", "CHN"]));
+    } finally { rows.mockRestore(); schema.mockRestore(); }
   });
 });

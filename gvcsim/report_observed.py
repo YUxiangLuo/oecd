@@ -7,8 +7,8 @@ from typing import Any, Callable, cast
 from gvcsim import quizzes
 from gvcsim.report_common import (
     GATE_STEPS,
-    _COMPOSITION_COMPONENT_METRICS,
-    _COMPOSITION_TOTAL_METRICS,
+    _COMPOSITION_TOTAL_SHORT,
+    composition_set,
     _STEP_TITLES,
     _STUDENT_METRIC_LABELS,
     _list_values,
@@ -100,7 +100,6 @@ def _viewed_shock_event_sources(session: dict[str, Any]) -> list[dict[str, Any]]
 
 
 _BAR_DISPLAY_LIMIT = 40
-_COMPOSITION_TOTAL_SHORT = {6: "总出口", 7: "总增加值"}
 
 
 def _chart_value(observation: dict[str, Any]) -> float:
@@ -147,9 +146,9 @@ def _find_value(
 
 
 def _share_of_total(
-    observations: list[dict[str, Any]], step: int, country: str, industry: str, year: int, metric: str
+    observations: list[dict[str, Any]], total_metric: str, country: str, industry: str, year: int, metric: str
 ) -> float | None:
-    total = _find_value(observations, country, industry, year, _COMPOSITION_TOTAL_METRICS[step])
+    total = _find_value(observations, country, industry, year, total_metric)
     part = _find_value(observations, country, industry, year, metric)
     if total is None or part is None or total <= 0:
         return None
@@ -161,23 +160,23 @@ def _composition_share_bar(
 ) -> dict[str, Any] | None:
     """Single-year composition as the page shows it: each part as a share of the total, per country."""
     countries = [str(item) for item in _list_values(data.get("compared"))]
+    chosen = composition_set(step, (str(item["metric"]) for item in observations))
+    if chosen is None:
+        return None
+    components, total_metric = chosen
     industry = str(observations[0].get("industry") or "")
     year = int(observations[0]["year"])
     items = []
-    for metric in _COMPOSITION_COMPONENT_METRICS.get(step, ()):
+    for metric in components:
         for country in countries:
-            share = _share_of_total(observations, step, country, industry, year, metric)
+            share = _share_of_total(observations, total_metric, country, industry, year, metric)
             if share is None:
                 return None
             items.append(
                 {"label": _STUDENT_METRIC_LABELS.get(metric, metric), "group": country_label(country), "value": share}
             )
         # Country-level composition also shows each part's global median share, as a third bar.
-        reference = (
-            country_reference(metric, year, share_of=(metric, _COMPOSITION_TOTAL_METRICS[step]))
-            if not industry
-            else None
-        )
+        reference = country_reference(metric, year, share_of=(metric, total_metric)) if not industry else None
         if reference is not None:
             items.append(
                 {
@@ -188,7 +187,7 @@ def _composition_share_bar(
                 }
             )
     scope = f"{year} 年 · " + (f"{sector_label(industry)} · " if industry else "")
-    total = _COMPOSITION_TOTAL_SHORT[step]
+    total = _COMPOSITION_TOTAL_SHORT.get(total_metric, total_metric)
     return {
         "version": 1,
         "type": "bar",
@@ -204,18 +203,22 @@ def _composition_share_lines(
     """Composition over the years as shares of the total, like the page; one chart per part so small parts
     are not flattened by the largest one, with both countries on the same scale."""
     countries = [str(item) for item in _list_values(data.get("compared"))]
+    chosen = composition_set(step, (str(item["metric"]) for item in observations))
+    if chosen is None:
+        return []
+    components, total_metric = chosen
     industry = next((str(item.get("industry") or "") for item in observations), "")
     years = sorted({int(item["year"]) for item in observations})
-    total = _COMPOSITION_TOTAL_SHORT[step]
+    total = _COMPOSITION_TOTAL_SHORT.get(total_metric, total_metric)
     scope = f"{sector_label(industry)} · " if industry else ""
     charts = []
-    for metric in _COMPOSITION_COMPONENT_METRICS.get(step, ()):
+    for metric in components:
         series = []
         for country in countries:
             points = [
                 {"label": str(year), "value": share}
                 for year in years
-                if (share := _share_of_total(observations, step, country, industry, year, metric)) is not None
+                if (share := _share_of_total(observations, total_metric, country, industry, year, metric)) is not None
             ]
             if not points:
                 return []
@@ -231,10 +234,7 @@ def _composition_share_lines(
         }
         # Country-level parts also show the global median share, as the trend charts do.
         references = (
-            {
-                year: country_reference(metric, year, share_of=(metric, _COMPOSITION_TOTAL_METRICS[step]))
-                for year in years
-            }
+            {year: country_reference(metric, year, share_of=(metric, total_metric)) for year in years}
             if not industry
             else {}
         )
@@ -407,7 +407,7 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
             return {
                 "version": 1,
                 "type": "line",
-                "title": f"{title}：{context}{metric_label}两国历年趋势",
+                "title": f"{title}：{context}{metric_label}历年趋势",
                 "x_label": "年份",
                 "y_label": y_label,
                 "series": series,
@@ -432,7 +432,8 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
     if source == "explicit-indicator-composition":
         industry = str(observations[0].get("industry") or "")
         year = int(observations[0]["year"])
-        identities = [(industry, year, metric) for metric in _COMPOSITION_COMPONENT_METRICS.get(step, ())]
+        chosen = composition_set(step, available_metrics)
+        identities = [(industry, year, metric) for metric in (chosen[0] if chosen else ())]
     else:
         identities = list(
             dict.fromkeys(
@@ -513,7 +514,8 @@ def _observed_charts(data: dict[str, Any], step: int, observations: list[dict[st
     selection = data.get("indicator_selection")
     is_evolution = isinstance(selection, dict) and selection.get("view") == "evolution"
     source = str(observations[0]["source"])
-    components = _COMPOSITION_COMPONENT_METRICS.get(step)
+    chosen = composition_set(step, {str(item["metric"]) for item in observations})
+    components = chosen[0] if chosen else None
     if source not in {"explicit-indicator-trend", "explicit-network-trend"}:
         return [_observed_chart(data, step, observations)]
     if is_evolution and components:
@@ -558,11 +560,11 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
             view = selection.get("view") if isinstance(selection, dict) else None
             if view == "evolution":
                 lines.extend(
-                    ("> 构成演变按分项拆成多张两国趋势图，纵轴是该项占总量的比重；金额读数见“保存的实验快照”。", "")
+                    ("> 构成演变按分项拆成多张趋势图，纵轴是该项占总量的比重；金额读数见“保存的实验快照”。", "")
                 )
             else:
                 scope = "前后向指标" if view == "directions" else "已保存指标"
-                lines.extend((f"> {scope}按指标拆成多张两国同口径趋势图，保留每项读数与变化。", ""))
+                lines.extend((f"> {scope}按指标拆成多张同口径趋势图，保留每项读数与变化。", ""))
         countries_saved = [str(item) for item in _list_values(data.get("compared"))]
         for chart in charts:
             unit = _chart_unit(chart)

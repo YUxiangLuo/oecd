@@ -66,6 +66,16 @@ function spreadDomain(arr: number[]): readonly [number, number] {
   return [lo >= 0 ? Math.max(0, lo - pad) : lo - pad, hi + pad] as const;
 }
 
+/** Domain of log10(x) with one tick per power of ten (at least two ticks). */
+function logDomain(values: number[]): { lo: number; hi: number; ticks: number[] } {
+  const logs = values.filter((value) => value > 0).map((value) => Math.log10(value));
+  if (!logs.length) return { lo: 0, hi: 1, ticks: [0, 1] };
+  const lo = Math.floor(Math.min(...logs)), hi = Math.max(Math.ceil(Math.max(...logs)), lo + 1);
+  const ticks: number[] = [];
+  for (let tick = lo; tick <= hi; tick += 1) ticks.push(tick);
+  return { lo, hi, ticks };
+}
+
 /** White-background selected-row text; 5.14:1 contrast at small text size. */
 export const RANK_HIGHLIGHT_TEXT = "#c43d3d";
 
@@ -170,32 +180,43 @@ export function placeScatterLabels(
 
 /** 象限散点图:两条参考线(默认中位数)把平面切成四象限,四角标注角色。
  *  步6「定位图」(外国增加值项占比×跨境生产占比)等双指标比较。 */
-export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabel, xFormat, yFormat, highlight, refMode = "median", quadrantLabels, equalityLine = false }: {
+/** A highlighted economy's path through the years on the scatter (phase 2 定位图 轨迹). */
+export interface ScatterTrail { id: string; label: string; color: string; points: { year: number; x: number; y: number }[] }
+
+export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabel, xFormat, yFormat, highlight, refMode = "median", quadrantLabels, equalityLine = false, xScale = "linear", trails = [] }: {
   rows: Row[]; xKey: string; yKey: string; xLabel: string; yLabel: string;
   referenceRows?: Row[];
   xFormat?: string; yFormat?: string; highlight?: Set<string>;
   refMode?: "median" | "mean"; quadrantLabels?: [string, string, string, string];
   /** Draw y=x when both axes share a unit (e.g. forward vs backward length). */
   equalityLine?: boolean;
+  /** Log scale for size-like x metrics (amounts); points with x ≤ 0 are left out. */
+  xScale?: "linear" | "log";
+  trails?: ScatterTrail[];
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const W = 660, H = 400, m = { l: 62, r: 18, t: 14, b: 46 };
-  const pts = rows.filter((row) => finite(row[xKey]) && finite(row[yKey])).map((r) => ({
+  const log = xScale === "log";
+  const usable = (row: Row) => finite(row[xKey]) && finite(row[yKey]) && (!log || num(row[xKey]) > 0);
+  const pts = rows.filter(usable).map((r) => ({
     c: rowName(r), label: rowLabel(r), tag: r.industry != null ? String(r.industry) : String(r.country),
     x: num(r[xKey]), y: num(r[yKey]),
   }));
   const requestedReferencePts = (referenceRows ?? rows)
-    .filter((row) => finite(row[xKey]) && finite(row[yKey]))
+    .filter(usable)
     .map((r) => ({ x: num(r[xKey]), y: num(r[yKey]) }));
   const referencePts = requestedReferencePts.length ? requestedReferencePts : pts;
-  const xs = referencePts.map((p) => p.x), ys = referencePts.map((p) => p.y);
+  const trailPts = trails.flatMap((trail) => trail.points.filter((point) => !log || point.x > 0));
+  const xs = [...referencePts.map((p) => p.x), ...trailPts.map((p) => p.x)], ys = [...referencePts.map((p) => p.y), ...trailPts.map((p) => p.y)];
   const avg = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / (arr.length || 1);
-  const xAxis = niceDomain(...spreadDomain(xs)), yAxis = niceDomain(...spreadDomain(ys));
+  const tx = (x: number) => (log ? Math.log10(x) : x);
+  const xAxis = log ? logDomain(xs) : niceDomain(...spreadDomain(xs)), yAxis = niceDomain(...spreadDomain(ys));
   const [x0, x1] = [xAxis.lo, xAxis.hi], [y0, y1] = [yAxis.lo, yAxis.hi];
-  const px = (x: number) => m.l + ((x - x0) / (x1 - x0 || 1)) * (W - m.l - m.r);
+  const px = (x: number) => m.l + ((tx(x) - x0) / (x1 - x0 || 1)) * (W - m.l - m.r);
   const py = (y: number) => H - m.b - ((y - y0) / (y1 - y0 || 1)) * (H - m.t - m.b);
-  const xRef = refMode === "mean" ? avg(xs) : median(xs);
-  const yRef = refMode === "mean" ? avg(ys) : median(ys);
+  const referenceXs = referencePts.map((p) => p.x);
+  const xRef = refMode === "mean" ? avg(referenceXs) : median(referenceXs);
+  const yRef = refMode === "mean" ? avg(referencePts.map((p) => p.y)) : median(referencePts.map((p) => p.y));
   const showLabels = pts.length <= 24;
   // 四角标签坐标:[右上, 左上, 左下, 右下]
   const corners: { x: number; y: number; anchor: "start" | "end" }[] = [
@@ -216,12 +237,12 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
           </g>
         ))}
         {xAxis.ticks.map((t, i) => (
-          <text key={`x${i}`} x={px(t)} y={H - m.b + 18} textAnchor="middle" fontSize="10.5" fill="#5f6677">{fmtAxis(t, xFormat)}</text>
+          <text key={`x${i}`} x={log ? px(10 ** t) : px(t)} y={H - m.b + 18} textAnchor="middle" fontSize="10.5" fill="#5f6677">{fmtAxis(log ? 10 ** t : t, xFormat)}</text>
         ))}
         {/* 象限参考线(中位数) */}
         <line x1={px(xRef)} y1={m.t} x2={px(xRef)} y2={H - m.b} stroke="#c8ccd6" strokeWidth={1} strokeDasharray="4 4" />
         <line x1={m.l} y1={py(yRef)} x2={W - m.r} y2={py(yRef)} stroke="#c8ccd6" strokeWidth={1} strokeDasharray="4 4" />
-        {equalityLine && (() => {
+        {equalityLine && !log && (() => {
           const lo = Math.max(x0, y0);
           const hi = Math.min(x1, y1);
           return lo < hi ? (
@@ -243,6 +264,22 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
               onMouseLeave={hide} style={{ cursor: "pointer" }}>
               <circle cx={px(p.x)} cy={py(p.y)} r={hi ? 6 : 4.5}
                 fill={hi ? CAT[5] : CAT[0]} fillOpacity={hi ? 0.95 : 0.62} stroke="#fff" strokeWidth={1} />
+            </g>
+          );
+        })}
+        {trails.map((trail) => {
+          const points = trail.points.filter((point) => !log || point.x > 0);
+          if (points.length < 2) return null;
+          const last = points[points.length - 1];
+          return (
+            <g key={`trail-${trail.id}`} data-trail={trail.id}>
+              <polyline points={points.map((point) => `${px(point.x)},${py(point.y)}`).join(" ")} fill="none" stroke={trail.color} strokeWidth={2} strokeLinejoin="round" strokeOpacity={0.9} />
+              {points.map((point, index) => (
+                <g key={point.year} onMouseMove={(e) => show(e, [["", `${trail.label} · ${point.year}`], [xLabel, fmtVal(point.x, xFormat)], [yLabel, fmtVal(point.y, yFormat)]])} onMouseLeave={hide}>
+                  <circle cx={px(point.x)} cy={py(point.y)} r={index === 0 || index === points.length - 1 ? 4 : 2.5} fill={index === 0 ? "#fff" : trail.color} stroke={trail.color} strokeWidth={1.5} />
+                </g>
+              ))}
+              <text x={px(last.x) + 7} y={py(last.y) - 7} fontSize="9.5" fill={trail.color} stroke="#fff" strokeWidth={3} paintOrder="stroke" pointerEvents="none">{points[0].year}→{last.year}</text>
             </g>
           );
         })}

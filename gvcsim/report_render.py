@@ -103,7 +103,11 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
             automatic = bool(observations) and all(
                 item.get("source") == "auto-indicator-comparison" for item in observations
             )
-            compared_label = "学生选定的比较" if chosen else "系统自动记录的比较" if automatic else "比较对象"
+            # One saved economy is read against the global reference; two or more are a comparison.
+            if len(compared) == 1:
+                compared_label = "学生选定的国家" if chosen else "系统自动记录的国家" if automatic else "所看国家"
+            else:
+                compared_label = "学生选定的比较" if chosen else "系统自动记录的比较" if automatic else "比较对象"
             lines.append(f"- {compared_label}：{'、'.join(_safe(item) for item in compared)}")
         if observations:
             if step in (6, 7, 8, 9) and any(item.get("year") == 2020 for item in observations):

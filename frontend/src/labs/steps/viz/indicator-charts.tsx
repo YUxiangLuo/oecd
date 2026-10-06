@@ -1,4 +1,6 @@
+import { useState, type KeyboardEvent } from "react";
 import { countryLabel } from "../../../viz";
+import { useHoverTip, type TipLine } from "../../../viz/hover";
 import { CAT } from "../../../viz/shared";
 import { changeReading, finiteValue, NO_RANK, NO_RANK_NOTE, rankText, readingDigits, type YearDistribution } from "./indicator-model";
 import { niceDomain } from "../../../viz/nice-ticks";
@@ -46,7 +48,7 @@ export function TrendSummary({
 }) {
   const value = (country: string, year: number) =>
     readings.find((item) => item.country === country && item.year === year)?.value ?? null;
-  const [first, second] = countries;
+  const [first, ...others] = countries;
   const own = years.filter((year) => value(first, year) !== null);
   if (own.length < 2) {
     return <p className="muted">有效年份不足，暂不能读出期间变化。</p>;
@@ -59,10 +61,16 @@ export function TrendSummary({
   const endRef = distribution.find((item) => item.year === lastYear);
   const startRank = startRef?.ranks[first];
   const endRank = endRef?.ranks[first];
-  const pair = second != null
-    && value(second, firstYear) !== null && value(second, lastYear) !== null;
-  let gapCard = null;
-  if (pair) {
+  const gapCards = others.map((second) => {
+    if (value(second, firstYear) === null || value(second, lastYear) === null) {
+      return (
+        <div key={second}>
+          <span>与对比国家 {countryLabel(second)}</span>
+          <b>期间读数不完整</b>
+          <small>{firstYear} 或 {lastYear} 年缺失，暂不比较差距（缺失不补零）</small>
+        </div>
+      );
+    }
     const startGap = start - value(second, firstYear)!;
     const endGap = end - value(second, lastYear)!;
     const gapChange = Math.abs(endGap) - Math.abs(startGap);
@@ -76,14 +84,14 @@ export function TrendSummary({
         : gapChange > 0
           ? `差距扩大 ${gapMagnitude}`
           : `差距缩小 ${gapMagnitude}`;
-    gapCard = (
-      <div>
+    return (
+      <div key={second}>
         <span>与对比国家 {countryLabel(second)}</span>
         <b>{lastYear} 年 {countryLabel(first)} {endGap === 0 ? "与它持平" : endMagnitude === null ? "与它基本持平" : `比它${endGap > 0 ? "高" : "低"} ${endMagnitude}`}</b>
         <small>{firstYear}→{lastYear} {gapStory}；比较的是差距绝对值，不代表因果关系</small>
       </div>
     );
-  }
+  });
   return (
     <div className="comparison-summary" role="group" aria-label="趋势读数">
       <div>
@@ -115,7 +123,7 @@ export function TrendSummary({
           <small>{indicatorNumber(startRef.median, unit)} → {indicatorNumber(endRef.median, unit)}</small>
         </div>
       )}
-      {gapCard}
+      {gapCards}
     </div>
   );
 }
@@ -215,6 +223,9 @@ export function IndicatorTrendChart({
   sameIndustry?: boolean;
 }) {
   const context = mode === "context";
+  const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
+  const [activeYear, setActiveYear] = useState<number | null>(null);
+  const [focusSeries, setFocusSeries] = useState<string | null>(null);
   const series = countries.map((country) =>
     years.map((year) => {
       const value = rows.find(
@@ -254,43 +265,91 @@ export function IndicatorTrendChart({
   const bandPath = band.length >= 2
     ? `M${band.map((item) => `${x(item.year)},${y(item.p75)}`).join(" L")} L${[...band].reverse().map((item) => `${x(item.year)},${y(item.p25)}`).join(" L")} Z`
     : "";
-  const legend = [
+  // The legend is HTML so five economies plus the reference wrap instead of running off the svg.
+  const legend: { key: string; label: string; draw: React.ReactNode; country?: string }[] = [
     ...(band.length ? [
-      { key: "band", label: "中间 50% 经济体", draw: <rect x={0} y={-6} width={24} height={12} fill={REFERENCE_FILL} fillOpacity={0.3} /> },
-      { key: "median", label: `${sameIndustry ? "同行业全球中位数" : "全球中位数"}（${band.at(-1)!.n} 个）`, draw: <line x1={0} x2={24} y1={0} y2={0} stroke={REFERENCE_LINE} strokeWidth={1.5} strokeDasharray="4 3" /> },
+      { key: "band", label: "中间 50% 经济体", draw: <svg width={24} height={12} aria-hidden="true"><rect x={0} y={0} width={24} height={12} fill={REFERENCE_FILL} fillOpacity={0.3} /></svg> },
+      { key: "median", label: `${sameIndustry ? "同行业全球中位数" : "全球中位数"}（${band.at(-1)!.n} 个）`, draw: <svg width={24} height={12} aria-hidden="true"><line x1={0} x2={24} y1={6} y2={6} stroke={REFERENCE_LINE} strokeWidth={1.5} strokeDasharray="4 3" /></svg> },
     ] : []),
     ...countries.map((country, index) => ({
       key: country,
+      country,
       label: index && context ? `${countryLabel(country)}（对比）` : countryLabel(country),
-      draw: <>
-        <line x1={0} x2={24} y1={0} y2={0} stroke={CAT[index]} strokeWidth={context && index ? 2 : context ? 3 : 2.5} strokeDasharray={index ? "7 4" : undefined} />
-        <circle cx={12} cy={0} r={context && index ? 3.5 : 4} fill={CAT[index]} />
-      </>,
+      draw: <svg width={24} height={12} aria-hidden="true">
+        <line x1={0} x2={24} y1={6} y2={6} stroke={CAT[index]} strokeWidth={context && index ? 2 : context ? 3 : 2.5} strokeDasharray={index ? "7 4" : undefined} />
+        <circle cx={12} cy={6} r={context && index ? 3.5 : 4} fill={CAT[index]} />
+      </svg>,
     })),
   ];
-  // Steps 6–8 read left to right from the reference; step 10's two equal partners keep the legend on the right.
-  let legendX = context ? 110 : 455;
+  const referenceLabel = sameIndustry ? "同行业全球中位数" : "全球中位数";
+  /** One readout for every series at a year: values lead, the series name follows. */
+  const linesFor = (year: number): TipLine[] => {
+    const reference = band.find((entry) => entry.year === year);
+    return [
+      ["", `${year} 年`],
+      ...countries.map((country, index): TipLine => [
+        index && context ? `${countryLabel(country)}（对比）` : countryLabel(country),
+        indicatorNumber(series[index].find((point) => point.year === year)?.value ?? null, unit),
+        CAT[index],
+      ]),
+      ...(reference ? [[referenceLabel, indicatorNumber(reference.median, unit), REFERENCE_LINE] as TipLine] : []),
+    ];
+  };
+  const clearActive = () => { setActiveYear(null); hide(); };
+  // The crosshair snaps to the nearest year: each year owns the horizontal band between its neighbours.
+  const hitBounds = (index: number): [number, number] => [
+    index === 0 ? 110 : (x(years[index - 1]) + x(years[index])) / 2,
+    index === years.length - 1 ? 730 : (x(years[index]) + x(years[index + 1])) / 2,
+  ];
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const index = activeYear === null ? -1 : years.indexOf(activeYear);
+    let next: number | undefined;
+    if (event.key === "ArrowRight") next = years[Math.min(years.length - 1, index + 1)];
+    else if (event.key === "ArrowLeft") next = years[index < 0 ? years.length - 1 : Math.max(0, index - 1)];
+    else if (event.key === "Home") next = years[0];
+    else if (event.key === "End") next = years[years.length - 1];
+    else if (event.key === "Escape") { clearActive(); return; }
+    if (next === undefined) return;
+    event.preventDefault();
+    setActiveYear(next);
+    showFor(event.currentTarget, linesFor(next));
+  };
+  const dim = (country: string) => (focusSeries && focusSeries !== country ? 0.25 : 1);
   return (
     <section aria-label={`${label}趋势图`}>
       <h4>
         {label} · {unit}
       </h4>
+      <div className="trend-legend" style={{ justifyContent: context ? "flex-start" : "flex-end" }}>
+        {legend.map((item) => (
+          <span
+            key={`legend-${item.key}`}
+            data-legend={item.country}
+            style={item.country ? { cursor: "pointer" } : undefined}
+            onMouseEnter={item.country ? () => setFocusSeries(item.country!) : undefined}
+            onMouseLeave={item.country ? () => setFocusSeries(null) : undefined}
+          >
+            {item.draw}
+            {item.label}
+          </span>
+        ))}
+      </div>
+      <div
+        ref={wrapRef}
+        className="hover-wrap chart-focus"
+        role="group"
+        tabIndex={0}
+        aria-label={`${label}历年变化图；按左右方向键逐年读数，Esc 关闭`}
+        onKeyDown={onKeyDown}
+        onBlur={clearActive}
+        onMouseLeave={clearActive}
+      >
       <svg
-        viewBox="0 0 780 295"
+        viewBox="0 30 780 265"
         role="img"
         aria-label={`${label}历年变化${band.length ? "，含全部经济体的中位数与中间 50% 范围" : ""}；缺失不补零，详细读数见下方`}
         style={{ width: "100%", display: "block" }}
       >
-        {legend.map((item) => {
-          const at = legendX;
-          legendX += 40 + item.label.length * 12;
-          return (
-            <g key={`legend-${item.key}`} transform={`translate(${at} 14)`}>
-              {item.draw}
-              <text x={31} y={4} fontSize={12} fill="#374151">{item.label}</text>
-            </g>
-          );
-        })}
         {axis.ticks.map((tick) => (
           <g key={tick}>
             <line x1={110} x2={730} y1={y(tick)} y2={y(tick)} stroke="#e2e5ee" />
@@ -308,9 +367,7 @@ export function IndicatorTrendChart({
             stroke={REFERENCE_LINE}
             strokeWidth={1.5}
             strokeDasharray="4 3"
-          >
-            <title>{band.map((item) => `${item.year} 年全球中位数 ${indicatorNumber(item.median, unit)}`).join("；")}</title>
-          </polyline>
+          />
         )}
         {(metric === "GVCPs" || metric === "Pos_TPL") && (
           <g>
@@ -329,7 +386,13 @@ export function IndicatorTrendChart({
           </text>
         ))}
         {[...series.keys()].reverse().map((index) => (
-          <g key={countries[index]}>
+          <g
+            key={countries[index]}
+            data-series-group={countries[index]}
+            opacity={dim(countries[index])}
+            onMouseEnter={() => setFocusSeries(countries[index])}
+            onMouseLeave={() => setFocusSeries(null)}
+          >
             {series[index].map((point, i) =>
               point.value === null ? null : (
                 <g key={point.year}>
@@ -345,15 +408,40 @@ export function IndicatorTrendChart({
                       strokeDasharray={index ? "7 4" : undefined}
                     />
                   )}
-                  <circle cx={x(point.year)} cy={y(point.value)} r={context && index ? 3.5 : context ? 4.5 : 4} fill={CAT[index]}>
-                    <title>{`${countryLabel(countries[index])} · ${point.year}：${indicatorNumber(point.value, unit)}`}</title>
-                  </circle>
+                  <circle
+                    cx={x(point.year)}
+                    cy={y(point.value)}
+                    r={(context && index ? 3.5 : context ? 4.5 : 4) + (point.year === activeYear ? 2.5 : 0)}
+                    fill={CAT[index]}
+                    stroke={point.year === activeYear ? "#fff" : undefined}
+                    strokeWidth={point.year === activeYear ? 2 : undefined}
+                  />
                 </g>
               ),
             )}
           </g>
         ))}
+        {activeYear !== null && (
+          <line data-crosshair x1={x(activeYear)} x2={x(activeYear)} y1={40} y2={252} stroke="#1b1f2b" strokeDasharray="3 3" pointerEvents="none" />
+        )}
+        {years.map((year, index) => {
+          const [left, right] = hitBounds(index);
+          return (
+            <rect
+              key={`hit-${year}`}
+              data-year={year}
+              x={left}
+              y={40}
+              width={Math.max(1, right - left)}
+              height={215}
+              fill="transparent"
+              onMouseMove={(event) => { setActiveYear(year); show(event, linesFor(year)); }}
+            />
+          );
+        })}
       </svg>
+      {Tip}
+      </div>
       {context
         ? <TrendSummary readings={readings} countries={countries} years={years} unit={unit} distribution={band} sameIndustry={sameIndustry} />
         : <ComparisonSummary
@@ -415,6 +503,8 @@ export function DistributionStrip({
   highlight: string[];
   distribution: YearDistribution;
 }) {
+  const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
+  const [hovered, setHovered] = useState<string | null>(null);
   const points = rows
     .filter((row) => row.year === year && !row.industry && row.country !== "ROW" && finiteValue(row[metric]))
     .map((row) => ({ country: String(row.country), value: row[metric] as number }))
@@ -448,9 +538,15 @@ export function DistributionStrip({
     const point = placed.find((item) => item.country === country);
     return point ? [{ ...point, index, text: `${countryLabel(country)} ${reading(point.value)} · ${rankText(distribution.ranks[country], distribution.ties?.[country], distribution.n) ?? NO_RANK}` }] : [];
   }));
+  const linesFor = (country: string, value: number): TipLine[] => [
+    ["", countryLabel(country)],
+    [label, reading(value)],
+    ["名次（从高到低）", rankText(distribution.ranks[country], distribution.ties?.[country], distribution.n) ?? NO_RANK],
+  ];
   return (
     <section aria-label={`${year} 年${label}全球分布`}>
       <h4>{year} 年 · {label}在全部经济体中的位置</h4>
+      <div ref={wrapRef} className="hover-wrap" onMouseLeave={() => { setHovered(null); hide(); }}>
       <svg
         viewBox={`0 0 800 ${height}`}
         role="img"
@@ -467,14 +563,39 @@ export function DistributionStrip({
           <text key={tick} x={x(tick)} y={base + 18} textAnchor="middle" fontSize={11} fill="#596173">{indicatorNumber(tick, unit)}</text>
         ))}
         {placed.map((point) => highlight.includes(point.country) ? null : (
-          <circle key={point.country} cx={point.px} cy={cy(point.lane)} r={3.6} fill="#8b93a6" fillOpacity={0.55}>
-            <title>{`${countryLabel(point.country)}：${reading(point.value)}`}</title>
-          </circle>
+          <g
+            key={point.country}
+            data-hit={point.country}
+            onMouseMove={(event) => { setHovered(point.country); show(event, linesFor(point.country, point.value)); }}
+          >
+            {/* The hit area is larger than the dot, so a reader only has to be close. */}
+            <circle cx={point.px} cy={cy(point.lane)} r={9} fill="transparent" />
+            <circle
+              cx={point.px}
+              cy={cy(point.lane)}
+              r={hovered === point.country ? 5.5 : 3.6}
+              fill={hovered === point.country ? "#4b5263" : "#8b93a6"}
+              fillOpacity={hovered === point.country ? 1 : 0.55}
+              stroke={hovered === point.country ? "#fff" : "none"}
+              strokeWidth={1.5}
+              pointerEvents="none"
+            />
+          </g>
         ))}
         {marked.map((point) => (
-          <g key={point.country}>
+          <g
+            key={point.country}
+            data-hit={point.country}
+            tabIndex={0}
+            role="graphics-symbol"
+            aria-label={point.text}
+            onMouseMove={(event) => { setHovered(point.country); show(event, linesFor(point.country, point.value)); }}
+            onFocus={(event) => showFor(event.currentTarget, linesFor(point.country, point.value))}
+            onBlur={hide}
+          >
+            <circle cx={point.px} cy={cy(point.lane)} r={11} fill="transparent" />
             <line x1={point.px} x2={point.px} y1={cy(point.lane)} y2={base + 26 + point.row * 14} stroke={CAT[point.index]} strokeWidth={1} />
-            <circle cx={point.px} cy={cy(point.lane)} r={6} fill={CAT[point.index]} stroke="#fff" strokeWidth={1.5} />
+            <circle cx={point.px} cy={cy(point.lane)} r={hovered === point.country ? 7.5 : 6} fill={CAT[point.index]} stroke="#fff" strokeWidth={1.5} />
             <text
               x={point.labelX}
               y={base + 38 + point.row * 14}
@@ -491,6 +612,8 @@ export function DistributionStrip({
           </g>
         ))}
       </svg>
+      {Tip}
+      </div>
       <p className="muted">
         每个点是一个经济体（共 {distribution.n} 个），灰色带是中间 50% 的经济体，虚线是中位数；排名从高到低，只表示相对高低。
       </p>
@@ -502,11 +625,19 @@ export function LengthPositionTrajectory({
   rows,
   countries,
   years,
+  cloud = [],
+  cloudYear,
 }: {
   rows: Row[];
   countries: string[];
   years: number[];
+  /** Every economy's country-level lengths in `cloudYear`, drawn as grey points behind the trajectories. */
+  cloud?: Row[];
+  cloudYear?: number;
 }) {
+  const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
+  const [active, setActive] = useState<string | null>(null);
+  const [focusSeries, setFocusSeries] = useState<string | null>(null);
   const series = countries.map((country) =>
     years.flatMap((year, yearIndex) => {
       const row = rows.find(
@@ -517,10 +648,14 @@ export function LengthPositionTrajectory({
         : [];
     }),
   );
-  const values = series.flatMap((points) =>
-    points.flatMap((point) => [point.x, point.y]),
-  );
-  if (!values.length) return null;
+  const cloudPoints = cloud
+    .filter((row) => !row.industry && row.country !== "ROW" && !countries.includes(String(row.country)) && finiteValue(row.PLy_GVC) && finiteValue(row.PLv_GVC))
+    .map((row) => ({ country: String(row.country), x: row.PLy_GVC as number, y: row.PLv_GVC as number }));
+  const values = [
+    ...series.flatMap((points) => points.flatMap((point) => [point.x, point.y])),
+    ...cloudPoints.flatMap((point) => [point.x, point.y]),
+  ];
+  if (!series.some((points) => points.length)) return null;
   // Lengths cluster around 2–5 stages and move by hundredths a year: a zero-based axis collapses every
   // trajectory into one dot. Both axes share one range fitted to the data, so the 45° line keeps its meaning.
   const low = Math.min(...values);
@@ -532,12 +667,21 @@ export function LengthPositionTrajectory({
   const scale = (value: number) => ((value - lo) / extent) * 540;
   const x = (value: number) => 120 + scale(value);
   const y = (value: number) => 590 - scale(value);
+  const stage = (value: number) => indicatorNumber(value, "生产阶段");
+  const linesFor = (country: string, point: { year: number; x: number; y: number }): TipLine[] => [
+    ["", `${countryLabel(country)} · ${point.year}`],
+    ["后向 GVC 段长度", stage(point.x)],
+    ["前向 GVC 段长度", stage(point.y)],
+    ["前向／后向", (point.y / point.x).toLocaleString("zh-CN", { maximumFractionDigits: 3 })],
+  ];
+  const dim = (country: string) => (focusSeries && focusSeries !== country ? 0.25 : 1);
   return (
     <section aria-label="前后向生产长度位置轨迹">
       <h4>前向—后向位置轨迹 · 时间与国家对照</h4>
       <p className="muted">
         横轴是后向 GVC 段长度，纵轴是前向 GVC 段长度；箭头从较早年份指向较晚年份。等长线上方表示前向段相对更长。
       </p>
+      <div ref={wrapRef} className="hover-wrap" onMouseLeave={() => { setActive(null); hide(); }}>
       <svg
         viewBox="0 0 720 650"
         role="img"
@@ -552,7 +696,14 @@ export function LengthPositionTrajectory({
           ))}
         </defs>
         {series.map((points, index) => (
-          <g key={`legend-${countries[index]}`} transform={`translate(125 ${18 + index * 24})`}>
+          <g
+            key={`legend-${countries[index]}`}
+            transform={`translate(125 ${18 + index * 24})`}
+            data-legend={countries[index]}
+            style={{ cursor: "pointer" }}
+            onMouseEnter={() => setFocusSeries(countries[index])}
+            onMouseLeave={() => setFocusSeries(null)}
+          >
             <line x1={0} x2={28} y1={0} y2={0} stroke={CAT[index]} strokeWidth={2.5} markerEnd={`url(#length-arrow-${index})`} />
             <text x={38} y={4} fontSize={12} fill="#374151">
               {countryLabel(countries[index])}{points.length ? ` · ${points[0].year}→${points.at(-1)!.year}` : ""}
@@ -573,33 +724,66 @@ export function LengthPositionTrajectory({
             <text x={x(tickValue)} y={615} textAnchor="middle" fontSize={12}>{indicatorNumber(tickValue, "生产阶段")}</text>
           </g>;
         })}
+        {cloudPoints.map((point) => (
+          <g key={`cloud-${point.country}`} data-cloud={point.country}
+            onMouseMove={(event) => { setActive(null); show(event, [["", `${countryLabel(point.country)} · ${cloudYear ?? ""}`], ["后向 GVC 段长度", stage(point.x)], ["前向 GVC 段长度", stage(point.y)]]); }}
+            onMouseLeave={hide}>
+            <circle cx={x(point.x)} cy={y(point.y)} r={7} fill="transparent" />
+            <circle cx={x(point.x)} cy={y(point.y)} r={3} fill="#9aa3b5" fillOpacity={0.55} />
+          </g>
+        ))}
+        {cloudPoints.length > 0 && (
+          <g transform="translate(560 18)">
+            <circle cx={0} cy={0} r={3} fill="#9aa3b5" fillOpacity={0.55} />
+            <text x={8} y={4} fontSize={11} fill="#596173">{cloudYear} 年全部经济体</text>
+          </g>
+        )}
         <line x1={x(lo)} y1={y(lo)} x2={x(axis.hi)} y2={y(axis.hi)} stroke="#8a6415" strokeDasharray="6 4" />
         <text x={650} y={y(axis.hi) + 18} textAnchor="end" fontSize={11}>前向 = 后向</text>
         <text x={390} y={642} textAnchor="middle" fontSize={12}>后向 GVC 段长度</text>
         <text x={18} y={320} textAnchor="middle" fontSize={12} transform="rotate(-90 18 320)">前向 GVC 段长度</text>
         {series.map((points, countryIndex) => (
-          <g key={countries[countryIndex]}>
+          <g
+            key={countries[countryIndex]}
+            data-series-group={countries[countryIndex]}
+            opacity={dim(countries[countryIndex])}
+            onMouseEnter={() => setFocusSeries(countries[countryIndex])}
+            onMouseLeave={() => setFocusSeries(null)}
+          >
             {points.map((point, index) => {
               const next = points[index + 1];
               const connectsToNext = next?.yearIndex === point.yearIndex + 1;
               const endpoint = index === 0 || index === points.length - 1;
+              const key = `${countries[countryIndex]}:${point.year}`;
+              const lines = linesFor(countries[countryIndex], point);
               return <g key={point.year}>
                 {connectsToNext && <line data-series={countries[countryIndex]} x1={x(point.x)} y1={y(point.y)} x2={x(next.x)} y2={y(next.y)} stroke={CAT[countryIndex]} strokeWidth={2.5} markerEnd={index === points.length - 2 ? `url(#length-arrow-${countryIndex})` : undefined} />}
-                <circle
-                  cx={x(point.x)}
-                  cy={y(point.y)}
-                  r={endpoint ? 5 : 3.5}
-                  fill={index === 0 ? "white" : CAT[countryIndex]}
-                  stroke={CAT[countryIndex]}
-                  strokeWidth={index === 0 ? 2.5 : 1}
+                <g
+                  data-hit={key}
+                  tabIndex={endpoint ? 0 : undefined}
+                  role={endpoint ? "graphics-symbol" : undefined}
+                  aria-label={endpoint ? `${lines[0][1]}：后向 ${stage(point.x)}，前向 ${stage(point.y)}` : undefined}
+                  onMouseMove={(event) => { setActive(key); show(event, lines); }}
+                  onFocus={endpoint ? (event) => { setActive(key); showFor(event.currentTarget, lines); } : undefined}
+                  onBlur={endpoint ? () => { setActive(null); hide(); } : undefined}
                 >
-                  <title>{`${countryLabel(countries[countryIndex])} · ${point.year}：后向 ${indicatorNumber(point.x, "生产阶段")}；前向 ${indicatorNumber(point.y, "生产阶段")}`}</title>
-                </circle>
+                  <circle cx={x(point.x)} cy={y(point.y)} r={12} fill="transparent" />
+                  <circle
+                    cx={x(point.x)}
+                    cy={y(point.y)}
+                    r={(endpoint ? 5 : 3.5) + (active === key ? 2.5 : 0)}
+                    fill={index === 0 ? "white" : CAT[countryIndex]}
+                    stroke={active === key ? "#1b1f2b" : CAT[countryIndex]}
+                    strokeWidth={index === 0 || active === key ? 2.5 : 1}
+                  />
+                </g>
               </g>;
             })}
           </g>
         ))}
       </svg>
+      {Tip}
+      </div>
     </section>
   );
 }
@@ -615,17 +799,31 @@ export function IndicatorPairBars({
   unit: string;
   onPick?: (key: string) => void;
 }) {
+  const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
+  const [hovered, setHovered] = useState<string | null>(null);
+  const linesFor = (group: { label: string; values: (number | null)[] }): TipLine[] => [
+    ["", group.label],
+    ...group.values.map((value, index): TipLine => [countryLabel(countries[index]), indicatorNumber(value, unit), CAT[index]]),
+  ];
   const values = groups.flatMap((group) => group.values.filter(finiteValue));
   const lo = Math.min(0, ...values),
     hi = Math.max(0, ...values),
     extent = hi - lo || 1;
   const zero = (-lo / extent) * 100;
   return (
-    <div aria-label="同刻度比较条形图" role="region">
+    <div aria-label="同刻度比较条形图" role="region" className="hover-wrap" ref={wrapRef}>
       {groups.map((group) => (
         <div
           key={group.key}
-          style={{ padding: "12px 0", borderBottom: "1px solid #e3e7ee" }}
+          className="pair-bar-group"
+          data-hovered={hovered === group.key ? "true" : undefined}
+          tabIndex={0}
+          role="group"
+          aria-label={group.label}
+          onMouseMove={(event) => { setHovered(group.key); show(event, linesFor(group)); }}
+          onMouseLeave={() => { setHovered(null); hide(); }}
+          onFocus={(event) => { setHovered(group.key); showFor(event.currentTarget, linesFor(group)); }}
+          onBlur={() => { setHovered(null); hide(); }}
         >
           {onPick ? (
             <button className="secondary" onClick={() => onPick(group.key)}>
@@ -688,6 +886,7 @@ export function IndicatorPairBars({
         </div>
       ))}
       <p className="muted">单位：{unit}；共同零轴，负值向左，缺失值不补零。</p>
+      {Tip}
     </div>
   );
 }
