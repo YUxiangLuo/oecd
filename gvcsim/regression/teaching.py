@@ -86,10 +86,10 @@ BASELINES: dict[str, tuple[Baseline, ...]] = {
     ),
     "production": (
         Baseline("3b_VA_GVC_C_share", "复杂 GVC 生产份额", "share", -0.40, (0.20, 0.25, 0.005)),
-        Baseline("3_VA_GVC_share", "全部 GVC 生产份额（前向）", "share", -0.50, (0.35, 0.30, 0.006)),
+        Baseline("3_VA_GVC_share", "前向 GVC 生产总份额", "share", -0.50, (0.35, 0.30, 0.006)),
         Baseline(
             "3_FGY_GVC_share",
-            "全部 GVC 生产份额（后向）",
+            "后向 GVC 生产总份额",
             "share",
             -0.45,
             (0.30, 0.30, 0.006),

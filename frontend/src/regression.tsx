@@ -105,7 +105,10 @@ export function exampleEffect(outcome: RegressionOutcome, coef: number, x: numbe
   if (kind === "share") return `${Math.abs(change * 100).toFixed(2)} 个百分点`;
   if (kind === "length") return `${Math.abs(change).toFixed(3)} 个长度单位`;
   if (kind === "position") return `${Math.abs(change).toFixed(4)} 个位置指数单位`;
-  return `${Math.abs(change).toFixed(1)} 个中心性原始单位`;
+  const size = Math.abs(change);
+  // Network units span closeness (~0.5) to weighted degree (thousands): keep about three significant figures.
+  const digits = size >= 100 ? 0 : size >= 10 ? 1 : size >= 1 ? 2 : size >= 0.1 ? 3 : 4;
+  return `${size.toFixed(digits)} 个中心性原始单位`;
 }
 
 /** The result is a coefficient plot plus short sentences: what changed, for the student's example, how sure, what not to claim. */

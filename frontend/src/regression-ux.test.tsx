@@ -171,7 +171,10 @@ describe("simple regression workbench", () => {
   test("converts the estimate to the example's X in each step's own units", () => {
     expect(exampleEffect("trade", -0.55, 0.0932)).toBe("5.13 个百分点");
     expect(exampleEffect("length", -1.8, 0.0932)).toBe("0.168 个长度单位");
-    expect(exampleEffect("network", -4000, 0.0932)).toBe("372.8 个中心性原始单位");
+    expect(exampleEffect("network", -4000, 0.0932)).toBe("373 个中心性原始单位");
+    expect(exampleEffect("network", -2000, 0.0932)).toBe("186 个中心性原始单位");
+    expect(exampleEffect("network", -0.5, 0.1693)).toBe("0.0847 个中心性原始单位");
+    expect(exampleEffect("network", -60, 0.1)).toBe("6.00 个中心性原始单位");
     // With a chosen baseline the design says how Y is read.
     expect(exampleEffect("length", -0.4, 0.0932, { depvar_kind: "position" })).toBe("0.0373 个位置指数单位");
     expect(exampleEffect("trade", 0.55, 0.0932, { depvar_kind: "share" })).toBe("5.13 个百分点");

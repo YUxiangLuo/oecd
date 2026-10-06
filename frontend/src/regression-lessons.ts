@@ -98,6 +98,8 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
 export interface BaselineLesson {
   shortMetric: string;
   unit: string;
+  /** Overrides the family focus line when the alternative reads differently (e.g. a position index). */
+  learnThis?: string;
   definition: string;
   downMeaning: string;
   upMeaning: string;
@@ -114,7 +116,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     dontClaim: "不要写成「已经证明生产回流」。国内增加值出口占比上升，不能告诉我们企业是否把生产搬回国内。",
   },
   "3_VA_GVC_share": {
-    shortMetric: "GVC 生产总份额",
+    shortMetric: "前向 GVC 生产总份额",
     unit: "百分点",
     definition: "增加值经过至少一次跨境后被最终吸收的比例（简单加复杂）。",
     downMeaning: "GVC 生产份额下降：SVA 中与跨境生产相关的部分占比变小。",
@@ -130,7 +132,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     dontClaim: "不要写成「简单 GVC 生产规模缩小」。这一项是占总增加值的份额，份额下降不代表绝对量减少。",
   },
   "3_FGY_GVC_share": {
-    shortMetric: "全部 GVC 份额（后向）",
+    shortMetric: "后向 GVC 生产总份额",
     unit: "百分点",
     definition: "从最终产品端衡量 GVC 相关生产占最终品生产的比例。",
     downMeaning: "后向 GVC 份额下降：最终品生产中与跨境生产相关的部分占比变小。",
@@ -163,6 +165,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
   },
   GVCPs: {
     shortMetric: "GVC 位置指数",
+    learnThis: "读单位：位置指数单位不是百分点，也不是长度；指数大于 1 偏上游，不与长度或份额的系数比大小。",
     unit: "位置指数单位",
     definition: "前向与后向 GVC 长度之比的位置指数，>1 表示在该口径下相对更上游。",
     downMeaning: "位置指数下降：在该口径下相对更靠下游。",

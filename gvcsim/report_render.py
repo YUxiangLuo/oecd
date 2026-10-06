@@ -378,7 +378,7 @@ def _teaching_sample_lines(source_filter: dict[str, Any] | None) -> list[str]:
         f"- 首年排除 ROW 后有 {_count(source_filter.get('source_baseline_rows'))} 个候选国家×行业单元；"
         f"生成面板时剔除 {_count(source_filter.get('excluded_source_baseline_rows'))} 个，"
         f"保留 {_count(source_filter.get('published_entities'))} 个供四项回归共同使用。",
-        "- 共同规则：首年四类指标及销往美国的出口份额均有效；两类份额和出口份额在 0–1 内，长度大于 0，介数不小于 0。",
+        "- 共同规则：首年四类默认指标及销往美国的出口份额均有效；两类份额和出口份额在 0–1 内，长度大于 0，加权总度不小于 0。",
         "- 这些单元构成四项回归共用的样本。下列回归记录数以年度行计，与筛选阶段的单元数区分。",
         "",
     ]
