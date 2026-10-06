@@ -199,6 +199,7 @@ export function IndicatorTrendChart({
   distribution = [],
   mode = "pair",
   sameIndustry = false,
+  markYear,
 }: {
   rows: Row[];
   countries: string[];
@@ -213,6 +214,8 @@ export function IndicatorTrendChart({
   mode?: "context" | "pair";
   /** Step 9: the reference is the same industry in every economy. */
   sameIndustry?: boolean;
+  /** Step 10: a dashed line just before this year, e.g. the year the simulated tariff starts. */
+  markYear?: { year: number; label: string };
 }) {
   const context = mode === "context";
   const series = countries.map((country) =>
@@ -299,6 +302,12 @@ export function IndicatorTrendChart({
             </text>
           </g>
         ))}
+        {markYear && years.includes(markYear.year) && markYear.year > years[0] && (
+          <g data-mark-year={markYear.year}>
+            <line x1={x(markYear.year - 0.5)} x2={x(markYear.year - 0.5)} y1={34} y2={250} stroke="#4b5563" strokeDasharray="5 4" />
+            <text x={x(markYear.year - 0.5) + 6} y={46} fontSize={12} fill="#374151">{markYear.label}</text>
+          </g>
+        )}
         {bandPath && <path d={bandPath} fill={REFERENCE_FILL} fillOpacity={0.22} stroke="none" />}
         {band.length >= 2 && (
           <polyline

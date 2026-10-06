@@ -173,6 +173,7 @@ export function ShockLab({ meta, step: _step, state }: {
           metric="teaching_tariff_exposure"
           label="模拟关税暴露 X"
           unit="%"
+          markYear={groups.status === "success" && groups.data ? { year: groups.data.policy_year, label: `${groups.data.policy_year} 年起模拟加税` } : undefined}
         />
         {exampleRow && (
           <div className="reg-variable-plain-grid" role="group" aria-label="用所选例子算一次 X">

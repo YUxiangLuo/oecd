@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ScrollableRegion } from "./a11y";
 import { api } from "./api";
 import { useAsync } from "./labs";
-import { lessonFor, lessonQuestion, REGRESSION_FAMILIES } from "./regression-lessons";
+import { lessonFor, lessonQuestion } from "./regression-lessons";
 import { nextRegressionSave } from "./regression-save";
 import { formatPValue } from "./regression-statistics";
 import {
@@ -26,7 +26,7 @@ import type {
 import { teachingExample, type TeachingExampleSelection } from "./teaching-example";
 import { userFacingRequestError } from "./user-facing-error";
 import { BinScatterChart, CoefForestChart, countryLabel, GroupChangeChart, sectorLabel } from "./viz";
-import { RegressionEvidenceMatrix } from "./regression-teach";
+import { RegressionEvidenceMatrix, RegressionFamilyPanels } from "./regression-teach";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
 export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v4";
@@ -543,25 +543,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
           <span className="reg-section-step">四步收尾</span>
           <h3>四个 Y 的估计并排看：方向、区间、单位</h3>
           <p className="muted">单位不同的系数不能比大小，所以每张图各用自己的轴。</p>
-          <div className="reg-family-panels">
-            {REGRESSION_FAMILIES.map((family) => {
-              const run = getStep<RegressionStepState>(family.step)?.qualified_run ?? getStep<RegressionStepState>(family.step)?.run;
-              const coefficient = run?.result.coefs[0];
-              const display = chartDisplayScale(family.outcome, run?.design);
-              return coefficient ? (
-                <CoefForestChart
-                  key={family.outcome}
-                  coefs={[coefficient]}
-                  globalStatus={run!.result.status}
-                  globalSupport={run!.result.support}
-                  scale={display.scale}
-                  unit={display.unit}
-                  labels={{ teaching_tariff_exposure: lessonFor(family.outcome, run?.design?.baseline).shortMetric }}
-                  title={`步骤 ${family.step} · ${family.family}`}
-                />
-              ) : <div key={family.outcome} className="muted reg-family-missing">步骤 {family.step} · {family.family}：还没有可用结果</div>;
-            })}
-          </div>
+          <RegressionFamilyPanels getStep={getStep} />
           <RegressionEvidenceMatrix getStep={getStep} />
         </section>
       )}

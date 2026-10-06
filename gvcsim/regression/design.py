@@ -180,27 +180,27 @@ class RegressionDesign:
             {
                 "text": f"{self.depvar}_{unit}",
                 "term": "dependent",
-                "description": self.depvar_label,
+                "description": f"Y：结果变量，本步看的指标（{self.depvar_label}）。",
                 "meta_key": "depvar",
             },
             {"text": " = "},
             {
                 "text": f"β·{self.shock_col}_{unit}",
                 "term": "policy",
-                "description": "连续关税冲击强度的描述性 TWFE 主效应。",
+                "description": "β·X：X 是关税暴露 = 冲击前出口份额 w × 模拟税率 τ；β 是要估的数，即 X 每增加 1 个百分点，Y 平均变化多少。",
                 "meta_key": "policy",
             },
             {"text": " + "},
             {
                 "text": f"α_{ent}",
                 "term": "fixed-effect",
-                "description": f"{self.entity} 个体固定效应。",
+                "description": f"α：每个{self.granularity_label if self.granularity != GRANULARITY_COUNTRY_INDUSTRY else '国家×行业'}自己的起点，扣掉。",
                 "meta_key": "entity",
             },
             {"text": " + "},
-            {"text": "λ_t", "term": "fixed-effect", "description": "年份固定效应。", "meta_key": "entity"},
+            {"text": "λ_t", "term": "fixed-effect", "description": "λ：所有单位共同的年份变化，扣掉。", "meta_key": "entity"},
             {"text": " + "},
-            {"text": f"ε_{unit}", "term": "error", "description": "标准误按 country 聚类。", "meta_key": "cluster"},
+            {"text": f"ε_{unit}", "term": "error", "description": "ε：剩下的扰动；标准误按国家聚类。", "meta_key": "cluster"},
         ]
 
     def equation(self) -> str:

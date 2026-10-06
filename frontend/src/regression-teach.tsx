@@ -4,8 +4,9 @@ import {
   lessonFor,
   REGRESSION_FAMILIES,
 } from "./regression-lessons";
-import { buildRegressionVerdict } from "./regression-verdict";
+import { buildRegressionVerdict, chartDisplayScale } from "./regression-verdict";
 import type { RegressionOutcome, RegressionResponse } from "./types";
+import { CoefForestChart } from "./viz";
 
 interface SavedRegression {
   design?: RegressionResponse["design"];
@@ -49,6 +50,31 @@ export function familyVerdict(
   getStep?: (step: number) => SiblingStepData | undefined,
 ) {
   return verdictFromSaved(outcome, familyRun(outcome, getStep));
+}
+
+/** The four saved estimates side by side, each on its own axis because their units differ. */
+export function RegressionFamilyPanels({ getStep }: { getStep?: (step: number) => SiblingStepData | undefined }) {
+  return (
+    <div className="reg-family-panels">
+      {REGRESSION_FAMILIES.map((family) => {
+        const run = familyRun(family.outcome, getStep);
+        const coefficient = run?.result?.coefs[0];
+        const display = chartDisplayScale(family.outcome, run?.design);
+        return run?.result && coefficient ? (
+          <CoefForestChart
+            key={family.outcome}
+            coefs={[coefficient]}
+            globalStatus={run.result.status}
+            globalSupport={run.result.support}
+            scale={display.scale}
+            unit={display.unit}
+            labels={{ teaching_tariff_exposure: lessonFor(family.outcome, run.design?.baseline).shortMetric }}
+            title={`步骤 ${family.step} · ${family.family}`}
+          />
+        ) : <div key={family.outcome} className="muted reg-family-missing">步骤 {family.step} · {family.family}：还没有可用结果</div>;
+      })}
+    </div>
+  );
 }
 
 /** Report-page summary of the four saved regression steps. */
