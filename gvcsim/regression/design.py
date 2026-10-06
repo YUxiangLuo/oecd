@@ -198,9 +198,19 @@ class RegressionDesign:
                 "meta_key": "entity",
             },
             {"text": " + "},
-            {"text": "λ_t", "term": "fixed-effect", "description": "λ：所有单位共同的年份变化，扣掉。", "meta_key": "entity"},
+            {
+                "text": "λ_t",
+                "term": "fixed-effect",
+                "description": "λ：所有单位共同的年份变化，扣掉。",
+                "meta_key": "entity",
+            },
             {"text": " + "},
-            {"text": f"ε_{unit}", "term": "error", "description": "ε：剩下的扰动；标准误按国家聚类。", "meta_key": "cluster"},
+            {
+                "text": f"ε_{unit}",
+                "term": "error",
+                "description": "ε：剩下的扰动；标准误按国家聚类。",
+                "meta_key": "cluster",
+            },
         ]
 
     def equation(self) -> str:
