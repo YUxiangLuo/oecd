@@ -117,23 +117,17 @@ for step in $(seq 1 15); do
   # sr-only 缺坐标、超高未裁剪元素都曾在这里突破布局，逐步断言防回归。
   "${ab[@]}" eval '(() => { const d = document.documentElement; if (d.scrollHeight > d.clientHeight + 1) throw new Error(`document scrolls: ${d.scrollHeight} > ${d.clientHeight}`); return true; })()' >/dev/null
   if [[ "$step" -eq 9 ]]; then
-    # 步骤 9 的国家网络图是视角栏里的“贸易联系”探索视角。
-    "${ab[@]}" eval 'Array.from(document.querySelectorAll("main [aria-label=\"图表视角\"] button")).find(b=>b.textContent.trim()==="贸易联系")?.click()' >/dev/null
+    # 步骤 9 的国家级贸易网络是视角栏里的“贸易伙伴”探索视角：自我中心图、伙伴榜、区域流向矩阵。
+    "${ab[@]}" wait --fn 'Array.from(document.querySelectorAll("main [aria-label=\"图表视角\"] button")).some(b=>b.textContent.trim()==="贸易伙伴")'
+    "${ab[@]}" eval 'Array.from(document.querySelectorAll("main [aria-label=\"图表视角\"] button")).find(b=>b.textContent.trim()==="贸易伙伴")?.click()' >/dev/null
+    "${ab[@]}" wait 'table.region-matrix'
+    "${ab[@]}" wait '[data-partner]'
     "${ab[@]}" wait --load networkidle
-    # The network uses one portalled dialog instance: node activation expands it,
-    # Escape closes it, and focus/selection return to the invoking SVG node.
-    "${ab[@]}" wait '.network-node[aria-label^="USA "]'
-    "${ab[@]}" wait --load networkidle
-    "${ab[@]}" focus '.network-node[aria-label^="USA "]'
-    "${ab[@]}" press Enter
-    "${ab[@]}" wait '.network-fullscreen-scrim [role="dialog"]'
-    "${ab[@]}" eval '(() => { if(document.querySelectorAll(".network-card").length!==1) throw new Error("network dialog duplicated the graph"); if(document.activeElement?.textContent?.trim()!=="退出大图") throw new Error("network dialog did not receive focus"); return true; })()'
-    # Escape closes the network's own fullscreen layer and returns to the view.
-    "${ab[@]}" press Escape
-    "${ab[@]}" wait --fn '!document.querySelector(".network-fullscreen-scrim")'
-    "${ab[@]}" eval '(() => { const n=document.activeElement; if(!n?.classList.contains("network-node") || n.getAttribute("aria-pressed")!=="true") throw new Error("network dialog did not restore its node focus and selection"); return true; })()'
-    "${ab[@]}" press Escape
-    "${ab[@]}" wait --fn '!document.querySelector("[role=dialog]")'
+    # Partner nodes are keyboard targets with a spoken reading; nothing opens a dialog any more.
+    "${ab[@]}" focus '[data-partner]'
+    "${ab[@]}" eval '(() => { const n=document.activeElement; if(!n?.hasAttribute("data-partner") || !/伙伴 .*流出 .*流入/.test(n.getAttribute("aria-label")||"")) throw new Error("partner node is not focusable with a reading"); if(document.querySelector("[role=dialog]")) throw new Error("partner view must not open a dialog"); return true; })()'
+    "${ab[@]}" eval 'Array.from(document.querySelectorAll("main [aria-label=\"图表视角\"] button")).find(b=>b.textContent.trim()==="历年变化")?.click()' >/dev/null
+    "${ab[@]}" wait 'select[name="network-metric"]'
   fi
 done
 
@@ -164,6 +158,7 @@ assert_table_alignment
 "${ab[@]}" open "$GVCSIM_BASE_URL/?step=9"
 "${ab[@]}" wait --load networkidle
 # 行业热力表折叠在“国家对比”视角的“全部指标表”里，与主图同页，没有弹窗
+"${ab[@]}" wait --fn 'Array.from(document.querySelectorAll("main [role=\"group\"][aria-label=\"图表视角\"] button")).some(b=>b.textContent.trim()==="国家对比")'
 "${ab[@]}" eval 'Array.from(document.querySelectorAll("main [role=\"group\"][aria-label=\"图表视角\"] button")).find(b=>b.textContent.trim()==="国家对比")?.click()' >/dev/null
 "${ab[@]}" wait --fn 'Array.from(document.querySelectorAll("main details > summary")).some(s=>/全部指标表/.test(s.textContent))'
 "${ab[@]}" eval '(() => { const d = Array.from(document.querySelectorAll("main details")).find(d=>/全部指标表/.test(d.querySelector("summary")?.textContent||"")); if (d) d.open = true; return true; })()' >/dev/null
