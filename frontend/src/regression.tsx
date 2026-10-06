@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ScrollableRegion } from "./a11y";
 import { api } from "./api";
 import { useAsync } from "./labs";
+import { ReadingCards } from "./labs/steps/viz/reading-cards";
 import { lessonFor, lessonQuestion } from "./regression-lessons";
 import { nextRegressionSave } from "./regression-save";
 import { formatPValue } from "./regression-statistics";
@@ -95,21 +96,6 @@ function DesignEquation({ design }: { design: RegressionDesignInfo }) {
   );
 }
 
-/** Three short reading cards under the group chart (same card style as the steps 6–9 readouts). */
-function ReadingCards({ label, cards }: { label: string; cards: { eyebrow: string; big: string; small?: string }[] }) {
-  return (
-    <div className="comparison-summary" role="group" aria-label={label}>
-      {cards.map((card, index) => (
-        <div key={index}>
-          <span>{card.eyebrow}</span>
-          <b>{card.big}</b>
-          {card.small && <small>{card.small}</small>}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /** One step-10 example unit: its label and its final-year exposure X (a proportion). */
 export interface RegressionExample { label: string; x: number }
 
@@ -177,7 +163,9 @@ export function RegressionResultCard({ outcome, response, examples = [] }: {
               : <>{example.label}未被模拟加税（X = 0），按估计不变</>;
             return <span key={example.label}>{index ? "；" : ""}{text}</span>;
           })}{verdict.state === "insufficient" ? "；但区间跨过 0，这个方向本身并不确定" : ""}。
-            {examples.every((example) => example.x <= 0) && "两个例子都未被模拟加税，所以换算结果都是不变；回步骤 10 把其中一个换成模拟加税的国家（如加拿大），就能看到换算。"}</li>
+            {examples.every((example) => example.x <= 0) && (examples.length === 1
+              ? "你选的例子未被模拟加税，所以换算结果是不变；回步骤 10 换成模拟加税的国家（如加拿大），或再选一个加税的对比国家，就能看到换算。"
+              : "两个例子都未被模拟加税，所以换算结果都是不变；回步骤 10 把其中一个换成模拟加税的国家（如加拿大），就能看到换算。")}</li>
         )}
         <li>{verdict.evidence}</li>
         <li><b>解释限制：</b>{lesson.dontClaim}</li>
@@ -349,14 +337,14 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   }, [baselineOffered]);
   const groupSeries = usesDefault ? groups?.outcomes[outcome] : groups?.series?.[outcome]?.[baseline];
 
-  // After the run: the estimate converted to the two examples followed from step 10.
+  // After the run: the estimate converted to the example(s) followed from step 10 (one country or two).
   const example = teachingExample(meta, getStep?.<TeachingExampleSelection>(10));
   const exampleCountries = [example.first, example.second].filter(Boolean);
   const exampleKey = `teaching-example:${exampleCountries.join(",")}:${example.industry}`;
   const exampleQuery = useAsync<TeachingPanelResponse>(
     () => api.teachingSeries(exampleCountries, example.industry),
     [exampleKey],
-    { requestKey: exampleKey, enabled: exampleCountries.length === 2 && Boolean(example.industry) },
+    { requestKey: exampleKey, enabled: exampleCountries.length >= 1 && Boolean(example.industry) },
   );
   const lastYear = exampleQuery.data?.years.at(-1);
   const examples: RegressionExample[] = exampleQuery.status === "success" && exampleQuery.data

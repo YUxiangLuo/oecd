@@ -24,7 +24,8 @@ test("step 10 uses the dedicated teaching tariff panel independently of the old 
   // One screen: the question, the two selectors and the loading chart; no separate variable primer.
   expect(html).toContain("模拟关税暴露 X 怎样随年份变化");
   expect(html).toContain("国家 A");
-  expect(html).toContain("国家 B");
+  expect(html).toContain("对比国家 B");
+  expect(html).toContain("不选对比国家");
   expect(html).toContain("步骤 11–14 会把回归结果换算到你选的例子上");
   expect(html).toContain("正在读取教学关税面板");
   expect(html).not.toContain("政策事件");
@@ -108,3 +109,33 @@ test("step 10 keeps the saved example when a chosen unit has no row in the repre
   series.mockRestore();
   cleanup();
 });
+
+test("step 10 can follow a single taxed country and records it alone", async () => {
+  const meta: Meta = { years: [2016, 2017, 2018, 2019, 2020], countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
+  const groups = spyOn(api, "teachingGroups").mockResolvedValue({
+    version: "step10-tariff-teaching-v4", years: meta.years, policy_year: 2018,
+    sample: { rows: 10, entities: 2, countries: 2, industries: 1, taxed_countries: 1, untaxed_countries: 1 },
+    industries: ["C29"],
+    outcomes: {} as never,
+  });
+  const series = spyOn(api, "teachingSeries").mockResolvedValue({
+    version: "step10-tariff-teaching-v4", disclaimer: "", total: 5, years: meta.years,
+    rows: meta.years.map((year) => ({
+      country: "CAN", industry: "C29", year, teaching_export_share_w: 0.9,
+      teaching_tariff_rate_tau: year >= 2018 ? 0.25 : 0, teaching_tariff_exposure: year >= 2018 ? 0.225 : 0,
+    })),
+  } as never);
+  const save = mock(() => {});
+  render(<ShockLab meta={meta} step={step} state={{ data: { compared: ["CAN"], teaching_industry: "C29" }, save, complete: false, syncing: false, syncError: null, syncNow: () => {} }} />);
+  await waitFor(() => expect(screen.getByText(/只看一个加税国家时/)).toBeTruthy());
+  expect(series).toHaveBeenCalledWith(["CAN"], "C29");
+  expect((screen.getByRole("combobox", { name: "对比国家 B" }) as HTMLSelectElement).value).toBe("");
+  expect(document.querySelectorAll(".teaching-example-summary li")).toHaveLength(1);
+  expect(screen.getByText(/所以 X = 90\.00% × 25% =/)).toBeTruthy();
+  await waitFor(() => expect(save).toHaveBeenCalled());
+  expect((save.mock.calls[0] as unknown[])[0]).toMatchObject({ compared: ["CAN"], teaching_country: "CAN", teaching_year: 2020 });
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+});
+
