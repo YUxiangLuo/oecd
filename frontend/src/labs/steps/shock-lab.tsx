@@ -37,7 +37,10 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
   getStep?: <T>(step: number) => T | undefined;
 }) {
   const priorNetwork = getStep?.<{ observations?: { industry?: string }[] }>(9);
-  const example = teachingExample(meta, state.data, priorNetwork?.observations?.[0]?.industry);
+  // Only a material about one industry (a trend) seeds the example; a ranking covers many industries,
+  // and its first row would be an arbitrary choice the student never made.
+  const priorIndustries = new Set((priorNetwork?.observations ?? []).map((item) => item.industry).filter(Boolean));
+  const example = teachingExample(meta, state.data, priorIndustries.size === 1 ? [...priorIndustries][0] : undefined);
   const countries = example.countries;
   const [first, setFirst] = useState(example.first);
   const [second, setSecond] = useState(example.second);
@@ -189,6 +192,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
           label="关税暴露 X"
           unit="%"
           markYear={groups.status === "success" && groups.data ? { year: groups.data.policy_year, label: `${groups.data.policy_year} 年起加税` } : undefined}
+          gapNote="两国的差距就是加税那年起的 X：未加税国家始终为 0"
         />
         {exampleRow && (
           <div className="reg-variable-plain-grid" role="group" aria-label="用所选例子算一次 X">

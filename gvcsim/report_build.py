@@ -39,6 +39,8 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         raise ReportGateError([{"step": 0, "title": "数据不可用", "missing": ["尚未生成固定数据产物"]}])
     runs = _saved_runs(session)
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    # The pages show server-local wall-clock time (PostgreSQL now()); the report says the same.
+    generated_local = datetime.now().astimezone().isoformat(timespec="minutes").replace("T", " ")
     fingerprint = hashlib.sha256(json.dumps(session, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12]
     try:
         validate_release_cached()
@@ -126,7 +128,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "- 多结果与显著性：四项结果必须完整报告；95% 区间为逐项区间，不是四结果族的同时置信带；p 值不是因果结论开关。",
         "- 不加控制变量的原因：同期的 ICIO 派生指标和宏观变量可能本身受处理影响，放进回归反而会造成偏误。",
         "- 回归结果来自学生会话中保存的服务端运行，不在报告生成时复算。",
-        f"- 生成时间：{generated_at}；会话摘要：`{fingerprint}`。",
+        f"- 生成时间：{generated_local}；会话摘要：`{fingerprint}`。",
         "",
         "## 方法参考文献",
         "",

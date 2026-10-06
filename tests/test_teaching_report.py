@@ -979,8 +979,8 @@ def test_report_ranking_extrema_use_all_saved_industries(step):
     assert not any(item["step"] == step for item in check_material_gate(session))
     section = "\n".join(report_observed._observed_evidence_section(session)).split(f"### 步骤 {step}", 1)[1]
     section = section.split("### 步骤", 1)[0]
-    assert "最高为 USA 美国 · S7（99%）" in section
-    assert "最低为 CHN 中国 · S8、USA 美国 · S8（0%）" in section
+    assert "最高为 USA 美国 · S7（99.000%）" in section
+    assert "最低为 CHN 中国 · S8、USA 美国 · S8（0.000%）" in section
     # All 18 readings fit; bars are coloured by country and grouped under one industry label.
     assert "条读数" not in section.split("```gvcsim-chart", 1)[0]
     chart = json.loads(section.split("```gvcsim-chart\n", 1)[1].split("\n```", 1)[0])
@@ -1000,7 +1000,7 @@ def test_report_directions_retains_both_length_metrics_and_their_readouts():
             metric=metric,
             value=value + (year - 2016) / 10,
             year=year,
-            unit="生产阶段（账户比值）",
+            unit="长度单位",
             source="explicit-indicator-trend",
         )
         for item in data["observations"]
@@ -1020,7 +1020,7 @@ def test_report_directions_retains_both_length_metrics_and_their_readouts():
     assert "前向 GVC 段长度" in section and "后向 GVC 段长度" in section
     assert "前后向" in section and "构成演变" not in section
     assert section.count("自动读图") == 2
-    assert "2016 年 5 变为 2020 年 5.4" in section
+    assert "2016 年 5.000 变为 2020 年 5.400" in section
 
 
 def test_material_gate_is_independent_of_unfinished_quizzes():
@@ -1112,14 +1112,14 @@ def test_report_labels_step_nine_observation_without_a_step_level_metric(tmp_pat
 
     report = build(session, "同学")
 
-    assert "全正边二值介数（探索性拓扑基准）" in report.markdown
+    assert "网络介数（全正边二值）" in report.markdown
     assert "记录的代表指标：—" not in report.markdown
 
 
 @pytest.mark.parametrize(
     ("metric", "unit", "label"),
     [
-        ("betweenesscentrality", "未归一化介数", "全正边二值介数"),
+        ("betweenesscentrality", "未归一化介数", "网络介数（全正边二值）"),
         ("weighted indegree", "百万美元", "加权入度"),
         ("closnesscentrality", "无量纲", "接近中心性"),
     ],
@@ -1157,8 +1157,9 @@ def test_report_preserves_two_country_industry_trend_years(tmp_path, monkeypatch
     assert '"type":"line"' in markdown
     assert '"label":"CHN 中国","points":[{"label":"2016","value":31.0},{"label":"2020","value":44.0}]' in markdown
     assert "C26 计算机电子光学" in section
-    change = "+13 百万美元" if unit == "百万美元" else "+13.00"
-    assert f"CHN 中国 从 2016 年 31 变为 2020 年 44（{change}）" in markdown
+    change = "+13 百万美元" if unit == "百万美元" else "+13.000"
+    start, end = ("31", "44") if unit == "百万美元" else ("31.000", "44.000")
+    assert f"CHN 中国 从 2016 年 {start} 变为 2020 年 {end}（{change}）" in markdown
     for expected in (
         f"| CHN·C26 | 2016 | {label}",
         f"| CHN·C26 | 2020 | {label}",
@@ -1253,7 +1254,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert report.provenance["release_id"] == "2" * 32
     assert report.provenance["quiz_version"] == quizzes.QUIZ_VERSION
     assert report.provenance["quiz_versions"] == {
-        str(step): "course-quiz-v9" if step == 11 else "course-quiz-v8" for step in range(1, 15)
+        str(step): "course-quiz-v9" if step in (11, 14) else "course-quiz-v8" for step in range(1, 15)
     }
     assert report.provenance["course_release"] == config.COURSE_RELEASE
     assert report.provenance["runs"][0]["step"] == 11
@@ -1837,7 +1838,7 @@ def test_country_level_trend_and_same_year_charts_show_the_global_median(tmp_pat
             metric="PLv_GVC",
             value=value + (year - 2016) / 10,
             year=year,
-            unit="生产阶段（账户比值）",
+            unit="长度单位",
             source="explicit-indicator-trend",
         )
         for item, value in zip(data["observations"], (4.0, 5.0))
@@ -1865,7 +1866,7 @@ def test_country_level_trend_and_same_year_charts_show_the_global_median(tmp_pat
     assert bar["items"][-1]["value"] == pytest.approx(4.4)
     assert bar["items"][-1]["reference"] is True and not any(item.get("reference") for item in bar["items"][:-1])
     section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 8", 1)[1]
-    assert "全球中位数 4.4" in section and "CHN 中国第 3 位" in section
+    assert "全球中位数 4.400" in section and "CHN 中国第 3 位" in section
 
 
 def test_step9_report_reads_the_industry_against_the_same_industry_worldwide(tmp_path, monkeypatch):
@@ -1939,7 +1940,7 @@ def test_step9_report_reads_the_industry_against_the_same_industry_worldwide(tmp
     section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 9", 1)[1]
     # Extremes are read among the saved countries only, never the median bars.
     assert (
-        "最高为 CHN 中国 · C27 电气设备（154）" in section and "最低为 USA 美国 · C26 计算机电子光学（44）" in section
+        "最高为 CHN 中国 · C27 电气设备（154.000）" in section and "最低为 USA 美国 · C26 计算机电子光学（44.000）" in section
     )
 
 

@@ -406,7 +406,7 @@ def test_group_trends_list_the_baselines_a_panel_carries_with_their_series():
     )
     assert trends["baselines"]["network"][3] == {
         "key": "betweenesscentrality",
-        "label": "全正边二值介数",
+        "label": "网络介数（全正边二值）",
         "kind": "network",
         "unit": "中心性单位",
         "default": False,

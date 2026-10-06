@@ -250,7 +250,8 @@ export function changeReading(
   unit: string,
 ): string {
   const difference = (end - start) * (unit === "%" ? 100 : 1);
-  return `${difference > 0 ? "+" : ""}${difference.toLocaleString("zh-CN", { maximumFractionDigits: readingDigits(difference, unit) })}${unit === "%" ? " 个百分点" : unit === "无量纲" ? "" : ` ${unit}`}`;
+  const digits = readingDigits(difference, unit);
+  return `${difference > 0 ? "+" : ""}${difference.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits })}${unit === "%" ? " 个百分点" : unit === "无量纲" ? "" : ` ${unit}`}`;
 }
 
 /** One year's spread of a country-level metric across all economies (ROW excluded). */

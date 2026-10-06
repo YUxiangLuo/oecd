@@ -14,7 +14,7 @@ def test_bank_covers_steps_1_through_14_with_19_questions():
 def test_public_quiz_never_exposes_answers_or_feedback():
     for step in range(1, 15):
         public = quizzes.public_quiz(step)
-        assert public and public["version"] == ("course-quiz-v9" if step == 11 else "course-quiz-v8")
+        assert public and public["version"] == ("course-quiz-v9" if step in (11, 14) else "course-quiz-v8")
         assert all("correct" not in question and "explanation" not in question for question in public["questions"])
     assert quizzes.public_quiz(15) is None
 

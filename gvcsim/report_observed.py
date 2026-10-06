@@ -12,7 +12,6 @@ from gvcsim.report_common import (
     _STEP_TITLES,
     _STUDENT_METRIC_LABELS,
     _list_values,
-    _number,
     _safe,
     _signed,
 )
@@ -114,17 +113,20 @@ def _chart_unit(chart: dict[str, Any]) -> str:
 
 
 def _reading(value: float, unit: str) -> str:
-    return f"{_number(value)}%" if unit == "%" else _number(value)
+    """A chart reading in the page's fixed precision: whole millions for amounts, three decimals otherwise."""
+    if unit == "百万美元" and abs(value) >= 1:
+        return f"{value:,.0f}"
+    return f"{value:,.3f}%" if unit == "%" else f"{value:,.3f}"
 
 
 def _change(delta: float, unit: str) -> str:
     """A change in the chart's own unit: percentage points for shares, grouped amounts in 百万美元."""
+    # Same precision as the page's reading cards: whole millions for amounts, three decimals otherwise.
     if unit == "%":
-        return f"{_signed(delta, 2)} 个百分点"
-    magnitude = abs(delta)
+        return f"{_signed(delta, 3)} 个百分点"
     if unit == "百万美元":
-        return f"{_signed(delta, 0 if magnitude >= 1 else 2)} 百万美元"
-    return _signed(delta, 0 if magnitude >= 100 else 2 if magnitude >= 1 else 3)
+        return f"{_signed(delta, 0 if abs(delta) >= 1 else 3)} 百万美元"
+    return _signed(delta, 3)
 
 
 def _item_label(item: dict[str, Any]) -> str:

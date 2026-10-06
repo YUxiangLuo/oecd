@@ -84,7 +84,7 @@ INDICATOR_SCHEMA = {
         "FVA_share": {"label": "外国增加值项占比", "format": "pct"},
         "DVAex_share": {"label": "DVAex 份额(DVAex/VA+TLS 账户闭合总出口)", "format": "pct"},
         "3_VA_GVC_share": {"label": "GVC 生产份额(3_VA_GVC/SVA)", "format": "pct"},
-        "3b_VA_GVC_C_share": {"label": "复杂GVC生产份额(3b/SVA)", "format": "pct"},
+        "3b_VA_GVC_C_share": {"label": "复杂 GVC 生产份额（3b/SVA）", "format": "pct"},
         "DVAex": {"label": "国内增加值出口(被国外吸收)", "format": "amount"},
         "DVArt": {"label": "出口后返回的国内增加值", "format": "amount"},
         "DDC": {"label": "国内重复计算", "format": "amount"},
@@ -123,7 +123,7 @@ INDICATOR_SCHEMA = {
         "Eccentricity": {"label": "离心率", "format": "number"},
         "closnesscentrality": {"label": "接近中心性", "format": "number"},
         "harmonicclosnesscentrality": {"label": "调和中心性", "format": "number"},
-        "betweenesscentrality": {"label": "全正边二值介数(拓扑基准)", "format": "number"},
+        "betweenesscentrality": {"label": "网络介数（全正边二值）", "format": "number"},
         "eigencentrality": {"label": "Gephi 0.10.1 兼容入边分数", "format": "number"},
     },
 }

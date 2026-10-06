@@ -11,10 +11,16 @@ export const indicatorNumber = (value: number | null, unit: string) =>
     ? "缺失"
     : `${(unit === "%" ? value * 100 : value).toLocaleString("zh-CN", { maximumFractionDigits: readingDigits(value, unit) })}${unit === "%" ? "%" : ""}`;
 
+/** Card readings keep the same decimals on both ends ("11.556% → 11.730%"); hover readouts stay trimmed. */
+export const fixedIndicatorNumber = (value: number | null, unit: string) =>
+  value === null
+    ? "缺失"
+    : `${(unit === "%" ? value * 100 : value).toLocaleString("zh-CN", { minimumFractionDigits: readingDigits(value, unit), maximumFractionDigits: readingDigits(value, unit) })}${unit === "%" ? "%" : ""}`;
+
 /** Size of a gap or its change as displayed, or null when it rounds to zero (so it never reads “差距扩大 0”). */
 const magnitudeReading = (value: number, unit: string) => {
   const reading = changeReading(0, Math.abs(value), unit).replace("+", "");
-  return /^0( |$)/.test(reading) ? null : reading;
+  return /^0(\.0+)?( |$)/.test(reading) ? null : reading;
 };
 
 const REFERENCE_FILL = "#9aa3b5";
@@ -97,7 +103,7 @@ export function TrendSummary({
       <div>
         <span>{countryLabel(first)} · {firstYear}→{lastYear}</span>
         <b>{changeReading(start, end, unit)}</b>
-        <small>{indicatorNumber(start, unit)} → {indicatorNumber(end, unit)}</small>
+        <small>{fixedIndicatorNumber(start, unit)} → {fixedIndicatorNumber(end, unit)}</small>
       </div>
       {startRank != null && endRank != null && startRef && endRef && (() => {
         const from = rankText(startRank, startRef.ties?.[first], startRef.n);
@@ -120,7 +126,7 @@ export function TrendSummary({
         <div>
           <span>{sameIndustry ? "同行业全球中位数" : "全球中位数"} · {firstYear}→{lastYear}</span>
           <b>{changeReading(startRef.median, endRef.median, unit)}</b>
-          <small>{indicatorNumber(startRef.median, unit)} → {indicatorNumber(endRef.median, unit)}</small>
+          <small>{fixedIndicatorNumber(startRef.median, unit)} → {fixedIndicatorNumber(endRef.median, unit)}</small>
         </div>
       )}
       {gapCards}
@@ -133,11 +139,14 @@ export function ComparisonSummary({
   countries,
   years,
   unit,
+  gapNote = "比较差距绝对值，不代表因果关系",
 }: {
   readings: ComparisonReading[];
   countries: string[];
   years: number[];
   unit: string;
+  /** Caption under the gap card; the tariff chart on step 10 explains the gap instead of hedging it. */
+  gapNote?: string;
 }) {
   if (countries.length !== 2) return null;
   const common = years.filter((year) =>
@@ -176,7 +185,7 @@ export function ComparisonSummary({
         <div key={country}>
           <span>{countryLabel(country)} · {firstYear}→{lastYear}</span>
           <b>{changeReading(starts[index], ends[index], unit)}</b>
-          <small>{indicatorNumber(starts[index], unit)} → {indicatorNumber(ends[index], unit)}</small>
+          <small>{fixedIndicatorNumber(starts[index], unit)} → {fixedIndicatorNumber(ends[index], unit)}</small>
         </div>
       ))}
       <div>
@@ -187,7 +196,7 @@ export function ComparisonSummary({
       <div>
         <span>{firstYear}→{lastYear} 两国差距</span>
         <b>{gapStory}</b>
-        <small>比较差距绝对值，不代表因果关系</small>
+        <small>{gapNote}</small>
       </div>
     </div>
   );
@@ -208,6 +217,7 @@ export function IndicatorTrendChart({
   mode = "pair",
   sameIndustry = false,
   markYear,
+  gapNote,
 }: {
   rows: Row[];
   countries: string[];
@@ -224,6 +234,8 @@ export function IndicatorTrendChart({
   sameIndustry?: boolean;
   /** Step 10: a dashed line just before this year, e.g. the year the simulated tariff starts. */
   markYear?: { year: number; label: string };
+  /** Pair mode only: caption under the gap card. */
+  gapNote?: string;
 }) {
   const context = mode === "context";
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
@@ -458,6 +470,7 @@ export function IndicatorTrendChart({
           countries={countries}
           years={years.filter((_, i) => series.every((points) => points[i].value !== null))}
           unit={unit}
+          gapNote={gapNote}
         />}
     </section>
   );

@@ -65,10 +65,10 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
   length: {
     outcome: "length",
     step: 13,
-    shortMetric: "跨境生产长度",
+    shortMetric: "生产链长度",
     family: "长度",
     measure: "生产链变长还是变短了？",
-    unit: "生产环节长度单位",
+    unit: "长度单位",
     priorStep: 4,
     priorLabel: "GVC 长度分解指标",
     learnThis: "读单位：长度单位不是百分点，不能与前两步的份额系数直接比大小。",
@@ -156,8 +156,8 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     dontClaim: "不要写成「生产已经回流国内」。纯国内生产份额上升，不代表国内生产的绝对量增加。",
   },
   PLy_GVC: {
-    shortMetric: "后向跨境生产长度",
-    unit: "生产环节长度单位",
+    shortMetric: "后向生产链长度",
+    unit: "长度单位",
     definition: "从最终产品端回溯 GVC 活动的初始增加值所经过的生产长度。",
     downMeaning: "后向生产长度缩短：从最终品回溯的 GVC 生产环节减少。",
     upMeaning: "后向生产长度延长：从最终品回溯的 GVC 生产环节增加。",
@@ -189,7 +189,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     dontClaim: "不要写成卖出已经减少或脱钩，也不要拿它当「政策总效应」。",
   },
   betweenesscentrality: {
-    shortMetric: "全正边二值介数",
+    shortMetric: "网络介数",
     unit: "中心性原始单位（另附标准差换算）",
     definition: "全球国家×行业图上的最短路径介数（全正边、二值、未归一化）。",
     downMeaning: "介数下降：在二值拓扑最短路径上的中介位置减弱。",

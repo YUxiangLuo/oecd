@@ -20,7 +20,7 @@ export const LENGTH_TOPIC: IndicatorTopic = {
       ["PLv_RT", "前向传统贸易段长度"],
       ["PLy_D", "后向纯国内段长度"],
       ["PLy_RT", "后向传统贸易段长度"],
-    ].map(([key, label]) => ({ key, label, unit: "生产阶段（账户比值）" })),
+    ].map(([key, label]) => ({ key, label, unit: "长度单位" })),
     { key: "GVCPs", label: "GVC位置指数（前向GVC／后向GVC）", unit: "无量纲" },
     {
       key: "Pos_TPL",

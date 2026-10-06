@@ -181,7 +181,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       active={view}
       onPick={setView}
     />
-    {view === "topology" && <p className="muted lens-hint">流量与拓扑：所选国家的每个行业是一个点，横轴是加权总度（对数，流量规模），纵轴是全正边二值介数（拓扑位置）。两者讲的是同一个故事吗？多国为分面。只作探索，不记录材料。</p>}
+    {view === "topology" && <p className="muted lens-hint">流量与拓扑：所选国家的每个行业是一个点，横轴是加权总度（对数，流量规模），纵轴是网络介数（全正边二值，拓扑位置）。两者讲的是同一个故事吗？多国为分面。只作探索，不记录材料。</p>}
     {view === "flows" && <p className="muted lens-hint">买入与卖出：每行一个行业，左为加权入度（买入），右为加权出度（卖出），按加权总度排序；更多在左是需求方，更多在右是供给方。只作探索，不记录材料。</p>}
     {(view === "topology" || view === "flows") && <div className="controls">
       <LabeledControl label="年份">{(id) => <select id={id} value={year} onChange={(event) => setYear(Number(event.target.value))}>{years.map((value) => <option key={value} value={value}>{value}</option>)}</select>}</LabeledControl>
@@ -223,7 +223,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
               xKey="weighted degree"
               yKey={HEAT_EVIDENCE_METRIC}
               xLabel="加权总度（百万美元，对数）"
-              yLabel="全正边二值介数"
+              yLabel="网络介数（全正边二值）"
               xFormat="amount"
               yFormat="number"
               xScale="log"

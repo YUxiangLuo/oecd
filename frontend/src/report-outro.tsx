@@ -25,7 +25,7 @@ export function ReportOutro({ report, onClose, onExport, exportDisabled = false,
       <p className="intro-lede">报告包含已保存的数据、图表、回归结果和你的分析。</p>
       <section className="outro-receipt" aria-label="报告提交回执">
         <b>{report.state === "graded" ? `已评阅 · ${report.score ?? "—"} 分` : "提交成功 · 等待教师评阅"}</b>
-        <span>提交时间：{report.submitted_at ? new Date(report.submitted_at).toLocaleString("zh-CN", { hour12: false }) : "—"}</span>
+        <span>提交时间：{report.submitted_at ? report.submitted_at.slice(0, 16).replace("T", " ") : "—"}</span>
         {report.state === "graded" && report.feedback && <p>教师评语：{report.feedback}</p>}
         {reportOutdated ? <div role="status">
           <p>已提交版本已保存；后续修改尚未纳入这份报告。请返回第15步确认修改已保存，再更新报告。</p>

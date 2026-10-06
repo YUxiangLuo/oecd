@@ -27,8 +27,8 @@ def test_labels_keep_the_code_and_fall_back_to_it():
 def test_chart_readings_state_changes_in_the_chart_unit():
     from gvcsim.report_observed import _change, _reading
 
-    assert _change(0.174, "%") == "+0.17 个百分点"
-    assert _reading(11.73, "%") == "11.73%"
+    assert _change(0.174, "%") == "+0.174 个百分点"
+    assert _reading(11.73, "%") == "11.730%"
     assert _change(2807184.244, "百万美元") == "+2,807,184 百万美元"
-    assert _change(-0.108, "生产阶段（账户比值）") == "-0.108"
-    assert _change(-267.931, "未归一化介数") == "-268"
+    assert _change(-0.108, "长度单位") == "-0.108"
+    assert _change(-267.931, "未归一化介数") == "-267.931"

@@ -119,7 +119,7 @@ BASELINES: dict[str, tuple[Baseline, ...]] = {
         Baseline(
             "weighted_outdegree", "加权出度", "network", -2000.0, (500.0, 1500.0, 20.0), source="weighted outdegree"
         ),
-        Baseline("betweenesscentrality", "全正边二值介数", "network", -6000.0, (2000.0, 2000.0, 60.0)),
+        Baseline("betweenesscentrality", "网络介数（全正边二值）", "network", -6000.0, (2000.0, 2000.0, 60.0)),
         Baseline("closnesscentrality", "接近中心性", "network", -0.50, (0.30, 0.40, 0.005)),
     ),
 }

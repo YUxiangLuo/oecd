@@ -42,7 +42,7 @@ export const INDICATOR_TABLE_DISPLAY = {
 export const INDICATOR_IDENTIFIER_COLUMNS = ["country", "industry", "year"] as const;
 
 export const NETWORK_TABLE_SORT_OPTIONS: ReadonlyArray<{ value: NetworkTableSortMetric; label: string }> = [
-  { value: "betweenesscentrality", label: "全正边二值介数（降序）" },
+  { value: "betweenesscentrality", label: "网络介数（全正边二值，降序）" },
   { value: "weighted degree", label: "加权总度（入+出；自环双计）" },
 ];
 

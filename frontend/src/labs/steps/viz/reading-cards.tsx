@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { countryLabel, sectorLabel } from "../../../viz";
 import { finiteValue, NO_RANK, NO_RANK_NOTE, rankText, type CompositionSpec, type YearDistribution } from "./indicator-model";
-import { indicatorNumber } from "./indicator-charts";
+import { fixedIndicatorNumber, indicatorNumber } from "./indicator-charts";
 import type { Row } from "./scaffold";
 
 /* Reading cards (design doc 4.5): every view ends with the same three-sentence frame under its chart:
@@ -35,7 +35,7 @@ export function gapReading(first: number, other: number, unit: string): string {
   if (difference === 0) return "与它持平";
   const magnitude = Math.abs(difference) * (unit === "%" ? 100 : 1);
   const digits = unit === "百万美元" && magnitude >= 1 ? 0 : 3;
-  const text = magnitude.toLocaleString("zh-CN", { maximumFractionDigits: digits });
+  const text = magnitude.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
   if (text === "0") return "与它基本持平";
   const suffix = unit === "%" ? " 个百分点" : unit === "无量纲" ? "" : ` ${unit}`;
   return `比它${difference > 0 ? "高" : "低"} ${text}${suffix}`;
@@ -122,7 +122,7 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
     cards.push({
       eyebrow: `与对比国家 ${countryLabel(other)} · ${focusName}`,
       big: value === null ? "对比国家构成不完整" : `${countryLabel(first)} ${gapReading(ownFocus, value, "%")}`,
-      small: value === null ? "该国分项或总量缺失" : `${countryLabel(other)} ${indicatorNumber(value, "%")}；比较的是份额，不是金额`,
+      small: value === null ? "该国分项或总量缺失" : `${countryLabel(other)} ${fixedIndicatorNumber(value, "%")}；比较的是份额，不是金额`,
     });
   }
   return cards;
@@ -164,7 +164,7 @@ export function segmentCards({ rows, countries, year, industry, segments }: {
   rows: Row[]; countries: string[]; year: number; industry: string;
   segments: { key: string; label: string; forward: string; backward: string }[];
 }): ReadingCard[] {
-  const unit = "生产阶段（账户比值）";
+  const unit = "长度单位";
   const [first, ...others] = countries;
   const read = (country: string, key: string) => valueOf(rows, country, year, key, industry);
   const own = segments.map((segment) => ({ segment, forward: read(first, segment.forward), backward: read(first, segment.backward) }));

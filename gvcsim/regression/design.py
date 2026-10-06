@@ -7,8 +7,8 @@ from gvcsim.regression.teaching import X_COLUMN
 
 OUTCOME_DEPVARS = {
     "trade": ("FVA_share", "外国增加值项占比"),
-    "production": ("3b_VA_GVC_C_share", "复杂GVC生产份额(3b_VA_GVC_C / SVA,WWYZ)"),
-    "length": ("PLv_GVC", "前向 GVC 生产长度(WWYZ)"),
+    "production": ("3b_VA_GVC_C_share", "复杂 GVC 生产份额"),
+    "length": ("PLv_GVC", "前向 GVC 生产长度"),
     "network": ("weighted degree", "加权总度(入+出；自环双计)"),
 }
 OUTCOMES = list(OUTCOME_DEPVARS)

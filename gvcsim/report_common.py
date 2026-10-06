@@ -20,7 +20,7 @@ _STEP_OUTCOMES = {
 _OUTCOME_UNITS = {
     "trade": "份额原始单位（乘以 100 后按百分点解释）",
     "production": "份额原始单位（乘以 100 后按百分点解释）",
-    "length": "生产环节长度单位",
+    "length": "长度单位",
     "network": "中心性原始单位；跨指标比较时另参考样本标准差单位",
 }
 _STUDENT_METRIC_LABELS = {
@@ -35,7 +35,7 @@ _STUDENT_METRIC_LABELS = {
     # raw field key for step 5's network metric.
     "weighted degree": "加权总度(入+出；自环双计)",
     # Keep the legacy schema key in provenance, but never teach its misspelling.
-    "betweenesscentrality": "全正边二值介数（探索性拓扑基准）",
+    "betweenesscentrality": "网络介数（全正边二值）",
 }
 _SHOCK_SOURCE_STATUS_LABELS = {
     "official_event_source_complete": "官方事件/日期来源完整",
@@ -295,7 +295,7 @@ def _natural_effect(
         and isinstance(ci_high, (int, float))
         else None
     )
-    effect_label = "冲击强度每增加 1 个百分点"
+    effect_label = "关税暴露 X 每增加 1 个百分点"
     kind = _depvar_kind(outcome, design)
     if kind == "share":
         effect_text = f"{_signed(effect * 100, 2)} 个百分点"

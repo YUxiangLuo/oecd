@@ -12,7 +12,7 @@ from typing import Any
 from gvcsim.indicator_schema import PRODUCTION_LENGTH_OPERATIONAL_DEFINITION
 
 QUIZ_VERSION = "course-quiz-v8"
-STEP_QUIZ_VERSIONS = {11: "course-quiz-v9"}
+STEP_QUIZ_VERSIONS = {11: "course-quiz-v9", 14: "course-quiz-v9"}
 
 
 def quiz_version(step: int) -> str:
@@ -185,7 +185,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
     11: [
         _question(
             "s11-metric",
-            "步骤 11 观察的结果是什么？",
+            "步骤 11 默认的结果变量 Y 是什么？",
             [
                 _option("a", "网络中的最短路径"),
                 _option("b", "出口中的外国增加值项占比"),
@@ -212,7 +212,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
     12: [
         _question(
             "s12-metric",
-            "步骤 12 的复杂 GVC 份额表示什么？",
+            "步骤 12 默认的 Y——复杂 GVC 份额——表示什么？",
             [
                 _option("a", "出口中外国增加值的比例"),
                 _option("b", "多次跨境生产活动所占的比例"),
@@ -236,7 +236,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
     13: [
         _question(
             "s13-metric",
-            "步骤 13 的生产长度主要表示什么？",
+            "步骤 13 默认的 Y——生产长度——主要表示什么？",
             [
                 _option("a", "生产过程平均经历多少阶段"),
                 _option("b", "出口中外国增加值的比例"),
@@ -259,15 +259,15 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
     ],
     14: [
         _question(
-            "s14-metric",
-            "步骤 14 的网络介数主要表示什么？",
+            "s14-metric-v9",
+            "步骤 14 默认的 Y——加权总度——表示什么？",
             [
-                _option("a", "较多最短路径是否经过该节点"),
-                _option("b", "该国出口额占世界出口的比例"),
-                _option("c", "复杂 GVC 活动所占的比例"),
+                _option("a", "节点买入与卖出的流量之和（自环双计）"),
+                _option("b", "较多最短路径是否经过该节点"),
+                _option("c", "该国出口额占世界出口的比例"),
             ],
             "a",
-            "网络介数反映节点在最短路径中的中介位置，不等于出口规模。",
+            "加权总度 = 加权入度 + 加权出度，量的是节点买入与卖出的流量规模；最短路径是介数看的东西，出口占比不是网络指标。",
         ),
         _question(
             "s14-compare",
@@ -319,7 +319,7 @@ HINTS: dict[str, str] = {
     "s12-compare": "提示：区间跨过 0 时，正负两个方向都在区间内。这能说明“没有影响”吗？",
     "s13-metric": "提示：回看步骤 4：生产长度由累计总产出除以关联增加值得到，它是什么的平均数？",
     "s13-compare": "提示：两个系数的单位分别是什么？单位不同的数能直接比大小吗？",
-    "s14-metric": "提示：回看步骤 5 的小网络示例：介数统计的是最短路径，还是金额？",
+    "s14-metric-v9": "提示：回看步骤 5：加权总度把哪两个方向的流量加在一起？它量的是金额还是路径？",
     "s14-compare": "提示：只挑一部分结果会让结论产生什么偏差？回看步骤 15 的写作要求。",
 }
 

@@ -179,7 +179,7 @@ def prepare_design_model(df: pd.DataFrame, design) -> PreparedModel:
         entity=design.entity,
         time="year",
         cluster=design.cluster,
-        notes=["连续冲击强度直接进方程(强度法)"],
+        notes=["关税暴露 X 以连续强度直接进入方程，不分组、不设阈值"],
         support=support,
         sample_flow=flow,
     )

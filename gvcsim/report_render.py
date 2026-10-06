@@ -282,7 +282,7 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
     if len({item for item in designs}) > 1:
         lines.extend(
             (
-                "- **注意：** 各行设定不同，不能直接比较系数。",
+                "- 各行设定不同，不能直接比较系数。",
                 "",
             )
         )
@@ -293,7 +293,7 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
 _COEFFICIENT_ROW_LABELS = {
     "trade": "外国增加值项占比",
     "production": "复杂 GVC 份额",
-    "length": "跨境生产长度",
+    "length": "生产链长度",
     "network": "加权总度",
 }
 _COEFFICIENT_UNITS = {"trade": "个百分点", "production": "个百分点", "length": "长度单位", "network": "中心性原始单位"}
@@ -540,7 +540,7 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
         "",
         "以下结果来自会话中保存的服务端运行，不在报告生成时重新估计。同一步可能有最近一次探索和一份可报告快照。表格数值为便于阅读做了四位有效数字的显示舍入；完整原始值仍保留在报告溯源数据中。",
         "极小 p 值以 <0.0001 展示，不能读作概率为零。",
-        "表中系数按 X 的原始单位计（X 是份额，0.01 即 1 个百分点）：正文“冲击强度每增加 1 个百分点”的读数 = 系数 × 0.01；"
+        "表中系数按 X 的原始单位计（X 是份额，0.01 即 1 个百分点）：正文“关税暴露 X 每增加 1 个百分点”的读数 = 系数 × 0.01；"
         "贸易流和生产两项的 Y 也是份额，再乘 100 换成百分点，所以数值与系数相同。",
         "",
     ]

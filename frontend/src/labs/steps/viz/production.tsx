@@ -14,21 +14,21 @@ export const PRODUCTION_TOPIC: IndicatorTopic = {
   metrics: [
     {
       key: "3b_VA_GVC_C_share",
-      label: "复杂GVC生产份额（前向）",
+      label: "复杂 GVC 生产份额（前向）",
       unit: "%",
       numerator: "3b_VA_GVC_C",
       denominator: "SVA",
     },
     {
       key: "3_VA_GVC_share",
-      label: "全部GVC生产份额（前向）",
+      label: "前向 GVC 生产总份额",
       unit: "%",
       numerator: "3_VA_GVC",
       denominator: "SVA",
     },
     {
       key: "3_FGY_GVC_share",
-      label: "全部GVC生产份额（后向）",
+      label: "后向 GVC 生产总份额",
       unit: "%",
       numerator: "3_FGY_GVC",
       denominator: "FGY",

@@ -122,7 +122,7 @@ export function buildRegressionVerdict(
     ...(response.result.status_reasons ?? []), ...(support?.reasons ?? []),
   ].filter((reason) => typeof reason === "string" && reason.trim()))];
   const base = {
-    effectLabel: "冲击强度每增加 1 个百分点",
+    effectLabel: "关税暴露 X 每增加 1 个百分点",
     warnings: reasons,
   };
   if (!coefficient) {

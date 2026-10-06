@@ -98,10 +98,10 @@ describe("indicator data contract", () => {
   });
 
   test("share changes are percentage-point differences", () => {
-    expect(changeReading(0.12, 0.2, "%")).toBe("+8 个百分点");
+    expect(changeReading(0.12, 0.2, "%")).toBe("+8.000 个百分点");
     // Amounts read in whole millions; a dimensionless ratio carries no unit word.
     expect(changeReading(1_968_964.539, 2_496_175.368, "百万美元")).toBe("+527,211 百万美元");
-    expect(changeReading(0.4, 0.75, "百万美元")).toBe("+0.35 百万美元");
+    expect(changeReading(0.4, 0.75, "百万美元")).toBe("+0.350 百万美元");
     expect(changeReading(1.029, 1.023, "无量纲")).toBe("-0.006");
   });
 });
@@ -118,7 +118,7 @@ describe("trend rendering", () => {
         years: [2019, 2020, 2021],
         metric: "PLv_GVC",
         label: "前向",
-        unit: "生产阶段（账户比值）",
+        unit: "长度单位",
       }),
     );
     expect(html).toContain("-1");

@@ -842,7 +842,7 @@ export function IndicatorExplorer({
                     <h4>{countryLabel(country)} · {year}{industry ? ` · ${sectorLabel(industry)}` : ""}</h4>
                     <Dumbbell
                       title={`${countryLabel(country)} 段长度对照`}
-                      unit="生产阶段（账户比值）"
+                      unit="长度单位"
                       leftLabel="前向段长度"
                       rightLabel="后向段长度"
                       rows={LENGTH_SEGMENTS.map((segment) => ({

@@ -317,7 +317,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       </div>
       <div className="intro-four-results" role="group" aria-label="四项结果都要汇总">
         <b>03 · 四步各估一项，报告中汇总</b>
-        <span>出口构成</span><span>复杂生产</span><span>链条长度</span><span>网络位置</span>
+        <span>出口构成</span><span>复杂生产</span><span>链条长度</span><span>网络指标</span>
       </div>
       <p className="intro-note intro-preview-note">图示：国家 A 被加税，前两年 X 为零、之后为正；国家 B 未加税，X 始终为零。线条不是实际读数。关系不显著或无法推断也要如实报告。</p>
     </div>,
