@@ -212,7 +212,7 @@ A 不改报告契约的语义（只升快照版本），可单独交付；B 需�
 | 契约与路由 | `RegressionRequest.baseline`（可选）；`RegressionDesign.baseline` 规范化为键，跨家族或在观测面板上用派生份额都报错；设计响应多 `baseline`、`baseline_label`、`depvar_kind`、`depvar_unit`；`teaching-groups` 多 `baselines`（当前发布可用的选项）与 `series`（每个基线的两组趋势）；发布缺该列时 run 返回 409。 |
 | 报告 | `report_saved_run` 校验 `design.baseline` 属于该步家族且 `model_snapshot`/`variable_catalog` 与 `(outcome, baseline)` 一致；渲染按 `depvar_kind` 换算单位、按基线标签命名系数图与分箱散点、按基线给方向解释句（`_BASELINE_INTERPRETATIONS`）。 |
 | 前端 | 步骤 11–14 运行卡上"结果指标 Y"下拉（选项来自 `teaching-groups.baselines`）；换 Y 重新取设计与分组趋势并清掉旧结果，刷新时从已保存运行的基线恢复；`lessonFor(outcome, baseline)` 提供每个基线的短名、单位与方向句；`chartDisplayScale`/`depvarKind` 按设计的 kind 换算；步骤 14 四面板与证据矩阵按各步实际的 Y 标注。前端接受的模型版本升到 v4。 |
-| 基准 | `benchmark_teaching_design.py` 新增 `evaluate_baselines`：200 配对种子下每个基线的偏差、RMSE、覆盖率、功效与零效应误报率，写入 `teaching_design_v4.json` 的 `baselines`。 |
+| 基准 | `benchmark_teaching_design.py` 新增 `evaluate_baselines`：200 配对种子下每个基线的偏差、RMSE、覆盖率、功效与零效应误报率，写入 `teaching_design_v4.json` 的 `baselines`。结果：13 个基线都在全部 3,244 个单元上可估计，RMSE 约为 |β| 的 1%–4%，覆盖率 92%–97%，零效应误报率 3%–8%，显著率 100%；默认基线与 v3 数字相同。 |
 | 测试 | 后端：可选基线生成且默认 Y 逐值不变、越界只缺该列、`group_trends` 列出可用基线、换基线回归恢复其预设方向、路由只接受同家族基线与 409、报告保留换 Y 的运行并用其标签与解释。前端：下拉选项、换 Y 后重取设计与趋势、换算单位。 |
 
 未做：课程验收脚本（浏览器全程）仍只跑默认 Y；换 Y 的可运行性与报告记录由后端与前端单元测试覆盖。
