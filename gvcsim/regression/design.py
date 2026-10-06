@@ -2,7 +2,8 @@
 
 from dataclasses import dataclass
 
-from gvcsim.regression.teaching import X_COLUMN, Y_COLUMNS
+from gvcsim.regression import teaching as teaching_module
+from gvcsim.regression.teaching import X_COLUMN
 
 OUTCOME_DEPVARS = {
     "trade": ("FVA_share", "外国增加值项占比"),
@@ -43,10 +44,15 @@ class RegressionDesign:
     granularity: str = GRANULARITY_COUNTRY_INDUSTRY
     method: str = METHOD_TWFE_INTENSITY
     teaching: bool = False
+    # Which same-family indicator calibrates the simulated Y; None means the family's fixed default.
+    baseline: str | None = None
 
     def __post_init__(self) -> None:
         if self.outcome not in OUTCOMES:
             raise ValueError(f"outcome 必须是 {OUTCOMES}")
+        self.baseline = teaching_module.baseline(self.outcome, self.baseline).key
+        if not self.teaching and self._baseline.derived is not None:
+            raise ValueError("观测面板没有派生份额列，只有教学面板可以选择该基线")
         if self.method != METHOD_TWFE_INTENSITY:
             raise ValueError("仅支持 twfe_intensity")
         if self.granularity not in _ESTIMATOR_GRANULARITIES:
@@ -55,12 +61,32 @@ class RegressionDesign:
             raise ValueError("全正边二值网络介数回归仅支持国家–行业级；国家级介数中心性恒为 0")
 
     @property
+    def _baseline(self) -> teaching_module.Baseline:
+        return teaching_module.baseline(self.outcome, self.baseline)
+
+    @property
+    def is_default_baseline(self) -> bool:
+        return self._baseline is teaching_module.default_baseline(self.outcome)
+
+    @property
     def depvar(self) -> str:
-        return Y_COLUMNS[self.outcome] if self.teaching else OUTCOME_DEPVARS[self.outcome][0]
+        return teaching_module.y_column(self.outcome, self.baseline) if self.teaching else self._baseline.column
+
+    @property
+    def baseline_label(self) -> str:
+        return OUTCOME_DEPVARS[self.outcome][1] if self.is_default_baseline else self._baseline.label
 
     @property
     def depvar_label(self) -> str:
-        return ("教学模拟：" if self.teaching else "") + OUTCOME_DEPVARS[self.outcome][1]
+        return ("教学模拟：" if self.teaching else "") + self.baseline_label
+
+    @property
+    def depvar_kind(self) -> str:
+        return self._baseline.kind
+
+    @property
+    def depvar_unit(self) -> str:
+        return self._baseline.unit
 
     @property
     def panel_file(self) -> str:

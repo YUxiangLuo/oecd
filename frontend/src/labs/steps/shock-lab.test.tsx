@@ -51,7 +51,7 @@ test("step 10 prefers the configured two-country industry example", () => {
 test("step 10 keeps the saved example when the chosen unit is not in the teaching sample, and only offers sampled industries", async () => {
   const meta: Meta = { years: [2016, 2017, 2018, 2019, 2020], countries: ["CAN", "MEX", "USA"], sectors: ["C29", "T"] };
   const groups = spyOn(api, "teachingGroups").mockResolvedValue({
-    version: "step10-tariff-teaching-v3", years: meta.years, policy_year: 2018,
+    version: "step10-tariff-teaching-v4", years: meta.years, policy_year: 2018,
     sample: { rows: 10, entities: 2, countries: 2, industries: 1, taxed_countries: 1, untaxed_countries: 1 },
     industries: ["C29"],
     outcomes: {} as never,
@@ -61,13 +61,13 @@ test("step 10 keeps the saved example when the chosen unit is not in the teachin
   });
   // Only CAN has rows: MEX·C29 is not in the sample.
   const series = spyOn(api, "teachingSeries").mockResolvedValue({
-    version: "step10-tariff-teaching-v3", disclaimer: "", total: 5, years: meta.years,
+    version: "step10-tariff-teaching-v4", disclaimer: "", total: 5, years: meta.years,
     rows: meta.years.map((year) => row("CAN", year)),
   } as never);
   const save = mock(() => {});
   const saved = {
     compared: ["CAN", "MEX"], teaching_industry: "C29",
-    teaching_observation: { country: "CAN", industry: "C29", year: 2020, teaching_export_share_w: 0.9, teaching_tariff_rate_tau: 0.25, teaching_tariff_exposure: 0.225, version: "step10-tariff-teaching-v3" },
+    teaching_observation: { country: "CAN", industry: "C29", year: 2020, teaching_export_share_w: 0.9, teaching_tariff_rate_tau: 0.25, teaching_tariff_exposure: 0.225, version: "step10-tariff-teaching-v4" },
   };
   render(<ShockLab meta={meta} step={step} state={{ data: saved, save, complete: false, syncing: false, syncError: null, syncNow: () => {} }} />);
   await waitFor(() => expect(screen.getByText(/不在教学样本中/)).toBeTruthy());
@@ -83,7 +83,7 @@ test("step 10 keeps the saved example when the chosen unit is not in the teachin
 test("step 10 keeps the saved example when a chosen unit has no row in the representative year", async () => {
   const meta: Meta = { years: [2016, 2017, 2018, 2019, 2020], countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
   const groups = spyOn(api, "teachingGroups").mockResolvedValue({
-    version: "step10-tariff-teaching-v3", years: meta.years, policy_year: 2018,
+    version: "step10-tariff-teaching-v4", years: meta.years, policy_year: 2018,
     sample: { rows: 10, entities: 2, countries: 2, industries: 1, taxed_countries: 1, untaxed_countries: 1 },
     industries: ["C29"],
     outcomes: {} as never,
@@ -93,13 +93,13 @@ test("step 10 keeps the saved example when a chosen unit has no row in the repre
   });
   // CAN has rows, but not for 2020, the year the example reads; MEX is complete.
   const series = spyOn(api, "teachingSeries").mockResolvedValue({
-    version: "step10-tariff-teaching-v3", disclaimer: "", total: 9, years: meta.years,
+    version: "step10-tariff-teaching-v4", disclaimer: "", total: 9, years: meta.years,
     rows: [...meta.years.filter((year) => year < 2020).map((year) => row("CAN", year)), ...meta.years.map((year) => row("MEX", year))],
   } as never);
   const save = mock(() => {});
   const saved = {
     compared: ["CAN", "MEX"], teaching_industry: "C29",
-    teaching_observation: { country: "CAN", industry: "C29", year: 2020, teaching_export_share_w: 0.9, teaching_tariff_rate_tau: 0.25, teaching_tariff_exposure: 0.225, version: "step10-tariff-teaching-v3" },
+    teaching_observation: { country: "CAN", industry: "C29", year: 2020, teaching_export_share_w: 0.9, teaching_tariff_rate_tau: 0.25, teaching_tariff_exposure: 0.225, version: "step10-tariff-teaching-v4" },
   };
   render(<ShockLab meta={meta} step={step} state={{ data: saved, save, complete: false, syncing: false, syncError: null, syncNow: () => {} }} />);
   await waitFor(() => expect(screen.getByText(/CAN 加拿大 · C29 汽车及零部件 不在教学样本中/)).toBeTruthy());

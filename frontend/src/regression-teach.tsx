@@ -1,8 +1,8 @@
 import {
   FAMILY_STEPS,
   familyDirectionLabel,
+  lessonFor,
   REGRESSION_FAMILIES,
-  REGRESSION_LESSONS,
 } from "./regression-lessons";
 import { buildRegressionVerdict } from "./regression-verdict";
 import type { RegressionOutcome, RegressionResponse } from "./types";
@@ -74,8 +74,8 @@ export function RegressionEvidenceMatrix({
           <tbody>
             {REGRESSION_FAMILIES.map((item) => {
               const verdict = familyVerdict(item.outcome, getStep);
-              const lesson = REGRESSION_LESSONS[item.outcome];
               const design = familyRun(item.outcome, getStep)?.design;
+              const lesson = lessonFor(item.outcome, design?.baseline);
               return (
                 <tr key={item.outcome}>
                   <th scope="row">{item.step}</th>

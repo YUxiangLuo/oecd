@@ -618,8 +618,13 @@ def validate_release(processed_dir: Path | None = None, *, verify_integrity: boo
         "tariff_path": list(teaching.TARIFF_PATH),
         "betas": teaching.BETAS,
         "calibration": {name: list(values) for name, values in teaching.CALIBRATION.items()},
+        "baselines": teaching.baseline_parameters(),
     }
     expected_snapshots = {name: teaching.model_snapshot(name) for name in teaching.BETAS}
+    expected_baseline_snapshots = teaching.baseline_snapshots(teaching.model_snapshot)
+    for snapshot in expected_baseline_snapshots.values():
+        snapshot["calibration"] = list(snapshot["calibration"])
+    expected_baseline_catalogs = teaching.baseline_snapshots(teaching.variable_catalog)
     # JSON persistence converts calibration tuples in snapshots to arrays.
     for snapshot in expected_snapshots.values():
         snapshot["calibration"] = list(snapshot["calibration"])
@@ -633,6 +638,8 @@ def validate_release(processed_dir: Path | None = None, *, verify_integrity: boo
         or simulation.get("parameters") != expected_parameters
         or simulation.get("model_snapshots") != expected_snapshots
         or simulation.get("variable_catalogs") != expected_catalogs
+        or simulation.get("baseline_model_snapshots") != expected_baseline_snapshots
+        or simulation.get("baseline_variable_catalogs") != expected_baseline_catalogs
         or simulation.get("disclaimer") != teaching.DISCLAIMER
         or not isinstance(disclosure, dict)
         or any(

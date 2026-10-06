@@ -94,6 +94,98 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
   },
 };
 
+/** Same-family alternatives a step may use as Y (keys match teaching.BASELINES on the server). */
+export interface BaselineLesson {
+  shortMetric: string;
+  unit: string;
+  definition: string;
+  downMeaning: string;
+  upMeaning: string;
+  dontClaim: string;
+}
+
+export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
+  DVAex_share: {
+    shortMetric: "国内增加值出口占比",
+    unit: "百分点",
+    definition: "真实指标中，它是被国外最终吸收的国内增加值占 VA+TLS 账户闭合总出口的比重；这一定义只说明模拟 Y 所对应的概念。",
+    downMeaning: "模拟 Y 的数值下降。若真实同定义指标下降，才表示出口中国内增加值的占比降低；本实验没有重算出口分解。",
+    upMeaning: "模拟 Y 的数值上升。若真实同定义指标上升，才表示出口中国内增加值的占比提高，仍不能单独证明生产回流。",
+    dontClaim: "不要写成「已经证明生产回流」。国内增加值出口占比上升，不能告诉我们企业是否把生产搬回国内。",
+  },
+  FDC_share: {
+    shortMetric: "外国重复计算项占比",
+    unit: "百分点",
+    definition: "真实指标中，它是 WWZ 分解的外国重复计算项（FDC）占总出口的比重；这一定义只说明模拟 Y 所对应的概念。",
+    downMeaning: "模拟 Y 的数值下降。若真实同定义指标下降，才表示外国重复计算项占比降低，不能据此判断往返加工的规模。",
+    upMeaning: "模拟 Y 的数值上升。若真实同定义指标上升，才表示外国重复计算项占比提高；本实验没有重算出口分解。",
+    dontClaim: "不要写成「往返加工已经消失」。这一项只是重复计算的部分，不能告诉我们加工贸易的规模。",
+  },
+  "3_VA_GVC_share": {
+    shortMetric: "GVC 生产总份额",
+    unit: "百分点",
+    definition: "真实指标衡量增加值经过至少一次跨境后被最终吸收的比例（简单加复杂）；本步 Y 只是对应这一概念的模拟值。",
+    downMeaning: "模拟 Y 的数值下降。若真实同定义指标下降，才表示 SVA 中 GVC 相关生产的占比降低，不能单凭比例判断生产规模。",
+    upMeaning: "模拟 Y 的数值上升。若真实同定义指标上升，才表示 GVC 生产总份额提高；本实验没有重算生产分解。",
+    dontClaim: "不要写成「GVC 生产规模缩小」。这一项是占总增加值的份额，份额下降不代表 GVC 相关生产的绝对量减少。",
+  },
+  "3a_VA_GVC_S_share": {
+    shortMetric: "简单 GVC 份额",
+    unit: "百分点",
+    definition: "真实指标衡量增加值只跨境一次就被吸收的比例；本步 Y 只是对应这一概念的模拟值。",
+    downMeaning: "模拟 Y 的数值下降。若真实同定义指标下降，才表示 SVA 中简单 GVC 的占比降低，不能单凭比例判断生产规模。",
+    upMeaning: "模拟 Y 的数值上升。若真实同定义指标上升，才表示简单 GVC 份额提高；本实验没有重算生产分解。",
+    dontClaim: "不要写成「简单 GVC 生产规模缩小」。这一项是占总增加值的份额，份额下降不代表绝对量减少。",
+  },
+  "1_VA_D_share": {
+    shortMetric: "纯国内生产份额",
+    unit: "百分点",
+    definition: "真实指标衡量增加值不经出口、在国内被最终吸收的比例；本步 Y 只是对应这一概念的模拟值。",
+    downMeaning: "模拟 Y 的数值下降。若真实同定义指标下降，才表示纯国内生产占比降低；本实验没有重算生产分解。",
+    upMeaning: "模拟 Y 的数值上升。若真实同定义指标上升，才表示纯国内生产占比提高，仍不能单独证明生产回流。",
+    dontClaim: "不要写成「生产已经回流国内」。纯国内生产份额上升，不代表国内生产的绝对量增加。",
+  },
+  PLy_GVC: {
+    shortMetric: "后向跨境生产长度",
+    unit: "生产环节长度单位",
+    definition: "真实指标从最终产品端回溯 GVC 活动的初始增加值；本步 Y 是对应这一概念的模拟值，不是机械计算出的真实生产长度。",
+    downMeaning: "模拟 Y 的数值下降。若真实同定义后向长度下降，才可能与进口端生产链缩短一致；本实验没有生成冲击后的投入产出表。",
+    upMeaning: "模拟 Y 的数值上升。若真实同定义后向长度上升，才可能与进口端生产链延长一致，仍不能单靠一个系数判断企业策略。",
+    dontClaim: "不要写成「比贸易流效应更大 / 更小」，也不要把后向长度与前向长度的系数相减。",
+  },
+  GVCPs: {
+    shortMetric: "GVC 位置指数",
+    unit: "位置指数单位",
+    definition: "真实指标是前向与后向 GVC 长度之比的位置指数，>1 表示在该口径下相对更上游；本步 Y 是对应这一概念的模拟值。",
+    downMeaning: "模拟 Y 的数值下降。若真实位置指数下降，才表示在该口径下相对更靠下游；本实验没有生成冲击后的投入产出表。",
+    upMeaning: "模拟 Y 的数值上升。若真实位置指数上升，才表示在该口径下相对更上游，仍不能单靠一个系数判断分工位置。",
+    dontClaim: "不要写成「已经变得更上游 / 更下游」。位置指数是模拟值，也不能与长度系数比大小。",
+  },
+  weighted_degree: {
+    shortMetric: "加权总度",
+    unit: "中心性原始单位（另附标准差换算）",
+    definition: "真实指标是全球国家×行业图上一个节点的加权入度加出度；本步 Y 只是对应这一概念的模拟值，不是由现实网络机械计算出的度。",
+    downMeaning: "模拟 Y 的数值下降。本实验没有生成对应的新网络，不能称为连接强度下降；只有重新计算真实网络的加权度后，才能讨论其变化。",
+    upMeaning: "模拟 Y 的数值上升。本实验没有生成对应的新网络，不能称为连接强度增强，也不能据此判断经济重要性。",
+    dontClaim: "不要挑绝对值最大的系数当「政策总效应」，也不要写成连接已经减少或脱钩。",
+  },
+  closnesscentrality: {
+    shortMetric: "接近中心性",
+    unit: "中心性原始单位（另附标准差换算）",
+    definition: "真实指标是全球国家×行业图上到其他节点最短路径距离的倒数；本步 Y 只是对应这一概念的模拟值。",
+    downMeaning: "模拟 Y 的数值下降。本实验没有生成对应的新网络，不能称为网络距离变远；只有重新计算真实网络的接近中心性后，才能讨论其变化。",
+    upMeaning: "模拟 Y 的数值上升。本实验没有生成对应的新网络，不能称为网络位置更靠近中心，也不能据此判断经济重要性。",
+    dontClaim: "不要挑绝对值最大的系数当「政策总效应」，也不要写成网络位置已经边缘化。",
+  },
+};
+
+/** The step's lesson with the wording of the chosen same-family baseline (the family's own wording by default). */
+export function lessonFor(outcome: RegressionOutcome, baseline?: string | null): RegressionLesson {
+  const base = REGRESSION_LESSONS[outcome];
+  const alternative = baseline ? BASELINE_LESSONS[baseline] : undefined;
+  return alternative ? { ...base, ...alternative } : base;
+}
+
 export const REGRESSION_FAMILIES = (["trade", "production", "length", "network"] as const).map((outcome) => ({
   outcome,
   step: FAMILY_STEPS[outcome],
@@ -101,8 +193,8 @@ export const REGRESSION_FAMILIES = (["trade", "production", "length", "network"]
   measure: REGRESSION_LESSONS[outcome].measure,
 }));
 
-export function lessonQuestion(outcome: RegressionOutcome): string {
-  const lesson = REGRESSION_LESSONS[outcome];
+export function lessonQuestion(outcome: RegressionOutcome, baseline?: string | null): string {
+  const lesson = lessonFor(outcome, baseline);
   return `模拟关税暴露（X）增加 1 个百分点时，模拟 Y（${lesson.shortMetric}）如何变化？`;
 }
 

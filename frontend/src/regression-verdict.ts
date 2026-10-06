@@ -1,5 +1,5 @@
 import type {
-  CoefStat, RegressionOutcome, RegressionResponse, RegressionStatus, TreatmentSupport,
+  CoefStat, DepvarKind, RegressionOutcome, RegressionResponse, RegressionStatus, TreatmentSupport,
 } from "./types";
 
 export type EvidenceState = "negative" | "positive" | "insufficient" | "suppressed";
@@ -49,14 +49,26 @@ const signed = (value: number, digits = 3) => {
   return `${value >= 0 ? "+" : ""}${text}`;
 };
 
-export function chartDisplayScale(outcome: RegressionOutcome): { scale: number; unit?: string } {
-  if (outcome === "trade" || outcome === "production") return { scale: 1, unit: "个百分点" };
-  return { scale: 0.01, unit: outcome === "length" ? "长度单位" : "中心性原始单位" };
+const DEFAULT_KINDS: Record<RegressionOutcome, DepvarKind> = { trade: "share", production: "share", length: "length", network: "network" };
+const KIND_UNITS: Record<DepvarKind, string> = { share: "个百分点", length: "长度单位", position: "位置指数单位", network: "中心性原始单位" };
+
+/** How the saved Y is read: its family default, or the kind the design carries for a chosen baseline. */
+export function depvarKind(outcome: RegressionOutcome, design?: { depvar_kind?: string } | null): DepvarKind {
+  const kind = design?.depvar_kind;
+  return kind === "share" || kind === "length" || kind === "position" || kind === "network" ? kind : DEFAULT_KINDS[outcome];
 }
 
-export function teachingEffect(outcome: RegressionOutcome, beta: number): string {
-  const { scale, unit } = chartDisplayScale(outcome);
-  return `${signed(beta * scale, outcome === "length" ? 3 : 2)} ${scale === 1 ? unit : `个${unit}`}`;
+/** Multiplier and unit that turn β into "per 1 percentage point of X" in the shown unit (shares: ×1, pp). */
+export function chartDisplayScale(outcome: RegressionOutcome, design?: { depvar_kind?: string } | null): { scale: number; unit?: string } {
+  const kind = depvarKind(outcome, design);
+  if (kind === "share") return { scale: 1, unit: KIND_UNITS.share };
+  return { scale: 0.01, unit: KIND_UNITS[kind] };
+}
+
+export function teachingEffect(outcome: RegressionOutcome, beta: number, design?: { depvar_kind?: string } | null): string {
+  const kind = depvarKind(outcome, design);
+  const { scale, unit } = chartDisplayScale(outcome, design);
+  return `${signed(beta * scale, kind === "position" ? 4 : kind === "length" ? 3 : 2)} ${scale === 1 ? unit : `个${unit}`}`;
 }
 
 function naturalScale(
@@ -68,13 +80,14 @@ function naturalScale(
   const hasCi = hasValidInterval(coefficient);
   const ciLow = (coefficient.ci_low ?? 0) * 0.01;
   const ciHigh = (coefficient.ci_high ?? 0) * 0.01;
-  if (outcome === "trade" || outcome === "production") {
+  const kind = depvarKind(outcome, response.design);
+  if (kind === "share") {
     return {
       effect: `${signed(effect * 100, 2)} 个百分点`,
       interval: hasCi ? `[${signed(ciLow * 100, 2)}, ${signed(ciHigh * 100, 2)}] 个百分点` : "—",
     };
   }
-  if (outcome === "network") {
+  if (kind === "network") {
     const sd = response.result.depvar_std;
     const standardized = typeof sd === "number" && Number.isFinite(sd) && sd > 0 ? effect / sd : null;
     const standardizedInterval = typeof sd === "number" && Number.isFinite(sd) && sd > 0
@@ -86,11 +99,14 @@ function naturalScale(
     };
   }
   const mean = response.result.depvar_mean;
-  const relative = typeof mean === "number" && Number.isFinite(mean) && Math.abs(mean) > 1e-12
+  // A position index is centred near zero, so "relative to the sample mean" would mislead; lengths keep it.
+  const relative = kind === "length" && typeof mean === "number" && Number.isFinite(mean) && Math.abs(mean) > 1e-12
     ? (effect / Math.abs(mean)) * 100 : null;
+  const unit = KIND_UNITS[kind];
+  const digits = kind === "position" ? 4 : 3;
   return {
-    effect: `${signed(effect, 3)} 个长度单位${relative == null ? "" : `（约为样本均值的 ${signed(relative, 2)}%）`}`,
-    interval: hasCi ? `[${signed(ciLow, 3)}, ${signed(ciHigh, 3)}] 个长度单位` : "—",
+    effect: `${signed(effect, digits)} 个${unit}${relative == null ? "" : `（约为样本均值的 ${signed(relative, 2)}%）`}`,
+    interval: hasCi ? `[${signed(ciLow, digits)}, ${signed(ciHigh, digits)}] 个${unit}` : "—",
   };
 }
 

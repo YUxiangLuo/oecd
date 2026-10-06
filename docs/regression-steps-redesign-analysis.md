@@ -201,3 +201,19 @@ A 不改报告契约的语义（只升快照版本），可单独交付；B 需�
 实现中发现并修正的问题：两组对比图与读图卡展示的是 Y 的水平，份额型 Y 需要 ×100 才是百分点；系数展示用的换算系数（每 1 个百分点 X）对份额型 Y 恰好是 1，两者不能混用。现在图、卡和虚线括号统一用水平换算（份额 ×100，长度与中心性 ×1）；步骤 11 的读数是"加税后两组相差约 1.6 个百分点，回归估计 −1.62 个百分点"。页面上的分箱散点同样按水平换算画 Y、按每 1 个百分点 X 标斜率（步骤 11 为 −0.55），与报告里的图一致；系数图在区间很窄时只在中间标一次 "[下限, 上限]"，避免两端标签重叠。手册 2.4 只重拍了图 13–15（`MANUAL_ONLY_REG=1`）。
 
 未做（留到阶段 B 或不做）：换 Y 下拉（3.5）；理解题题库未改（题目不涉及 τ 的具体值）。
+
+### 7.2 阶段 B（2026-10-06，分支 `reg-simplify`）
+
+同家族换 Y，按 3.5 实施；跨家族不允许（雇主决定）。
+
+| 项 | 实现 |
+| --- | --- |
+| 生成器 | `teaching.BASELINES`：每个家族一组 `Baseline`（键、标签、kind、β、校准三元组、源列或派生份额），首个是该步固定的 Y。`build_teaching_panel` 对每个可用基线各生成一列 `teaching_y_<outcome>_<key>`（默认列名与数值不变），扰动盐值按基线独立；样本资格仍只看默认基线，可选基线源值越界的单元只缺该列。版本升到 `step10-tariff-teaching-v4`（v3 的 Y 逐值相同），release 需重算；`pipeline` 要求 release 含全部基线列，但生成器对缺列的测试面板只生成默认 Y。 |
+| 契约与路由 | `RegressionRequest.baseline`（可选）；`RegressionDesign.baseline` 规范化为键，跨家族或在观测面板上用派生份额都报错；设计响应多 `baseline`、`baseline_label`、`depvar_kind`、`depvar_unit`；`teaching-groups` 多 `baselines`（当前发布可用的选项）与 `series`（每个基线的两组趋势）；发布缺该列时 run 返回 409。 |
+| 报告 | `report_saved_run` 校验 `design.baseline` 属于该步家族且 `model_snapshot`/`variable_catalog` 与 `(outcome, baseline)` 一致；渲染按 `depvar_kind` 换算单位、按基线标签命名系数图与分箱散点、按基线给方向解释句（`_BASELINE_INTERPRETATIONS`）。 |
+| 前端 | 步骤 11–14 运行卡上"结果指标 Y"下拉（选项来自 `teaching-groups.baselines`）；换 Y 重新取设计与分组趋势并清掉旧结果，刷新时从已保存运行的基线恢复；`lessonFor(outcome, baseline)` 提供每个基线的短名、单位与方向句；`chartDisplayScale`/`depvarKind` 按设计的 kind 换算；步骤 14 四面板与证据矩阵按各步实际的 Y 标注。前端接受的模型版本升到 v4。 |
+| 基准 | `benchmark_teaching_design.py` 新增 `evaluate_baselines`：200 配对种子下每个基线的偏差、RMSE、覆盖率、功效与零效应误报率，写入 `teaching_design_v4.json` 的 `baselines`。 |
+| 测试 | 后端：可选基线生成且默认 Y 逐值不变、越界只缺该列、`group_trends` 列出可用基线、换基线回归恢复其预设方向、路由只接受同家族基线与 409、报告保留换 Y 的运行并用其标签与解释。前端：下拉选项、换 Y 后重取设计与趋势、换算单位。 |
+
+未做：课程验收脚本（浏览器全程）仍只跑默认 Y；换 Y 的可运行性与报告记录由后端与前端单元测试覆盖。
+

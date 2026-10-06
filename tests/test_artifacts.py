@@ -198,9 +198,12 @@ def _release_metadata(
                 "tariff_path": list(teaching.TARIFF_PATH),
                 "betas": teaching.BETAS,
                 "calibration": teaching.CALIBRATION,
+                "baselines": teaching.baseline_parameters(),
             },
             "model_snapshots": {name: teaching.model_snapshot(name) for name in teaching.BETAS},
             "variable_catalogs": {name: teaching.variable_catalog(name) for name in teaching.BETAS},
+            "baseline_model_snapshots": teaching.baseline_snapshots(teaching.model_snapshot),
+            "baseline_variable_catalogs": teaching.baseline_snapshots(teaching.variable_catalog),
             "source_bindings": {
                 "release_panel": {"path": "panel_industry.csv", "sha256": digest("panel_industry.csv")},
                 "exposure_files": [

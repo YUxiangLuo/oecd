@@ -295,3 +295,7 @@
 .reg-family-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 10px 0 14px; }
 .reg-family-missing { padding: 14px; border: 1px dashed #d7dae2; border-radius: 12px; font-size: 12px; }
 .reg-equation { margin-top: 12px; }
+
+/* Steps 11–14: same-family Y choice above the group chart. */
+.reg-baseline-select { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 6px 0 10px; }
+.reg-baseline-select .muted { font-size: 12px; }

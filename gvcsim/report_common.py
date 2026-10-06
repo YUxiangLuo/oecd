@@ -48,6 +48,46 @@ _STATUS_LABELS = {
     "invalid_design": "设计无效",
     "unknown": "未记录设计状态",
 }
+# Same-family alternative baselines (teaching.BASELINES): what a direction would mean if the real
+# indicator of the same definition moved that way.
+_BASELINE_INTERPRETATIONS = {
+    "DVAex_share": {
+        "negative": "模拟 Y 的数值下降。若真实同定义指标下降，才表示出口中国内增加值的占比降低；本实验没有重算出口分解。",
+        "positive": "模拟 Y 的数值上升。若真实同定义指标上升，才表示出口中国内增加值的占比提高，仍不能单独证明生产回流。",
+    },
+    "FDC_share": {
+        "negative": "模拟 Y 的数值下降。若真实同定义指标下降，才表示外国重复计算项占比降低，不能据此判断往返加工的规模。",
+        "positive": "模拟 Y 的数值上升。若真实同定义指标上升，才表示外国重复计算项占比提高；本实验没有重算出口分解。",
+    },
+    "3_VA_GVC_share": {
+        "negative": "模拟 Y 的数值下降。若真实同定义指标下降，才表示 SVA 中 GVC 相关生产的占比降低，不能单凭比例判断生产规模。",
+        "positive": "模拟 Y 的数值上升。若真实同定义指标上升，才表示 GVC 生产总份额提高；本实验没有重算生产分解。",
+    },
+    "3a_VA_GVC_S_share": {
+        "negative": "模拟 Y 的数值下降。若真实同定义指标下降，才表示 SVA 中简单 GVC 的占比降低，不能单凭比例判断生产规模。",
+        "positive": "模拟 Y 的数值上升。若真实同定义指标上升，才表示简单 GVC 份额提高；本实验没有重算生产分解。",
+    },
+    "1_VA_D_share": {
+        "negative": "模拟 Y 的数值下降。若真实同定义指标下降，才表示纯国内生产占比降低；本实验没有重算生产分解。",
+        "positive": "模拟 Y 的数值上升。若真实同定义指标上升，才表示纯国内生产占比提高，仍不能单独证明生产回流。",
+    },
+    "PLy_GVC": {
+        "negative": "模拟 Y 的数值下降。若真实同定义后向长度下降，才可能与进口端生产链缩短一致；本实验没有生成冲击后的投入产出表。",
+        "positive": "模拟 Y 的数值上升。若真实同定义后向长度上升，才可能与进口端生产链延长一致，仍不能单靠一个系数判断企业策略。",
+    },
+    "GVCPs": {
+        "negative": "模拟 Y 的数值下降。若真实位置指数下降，才表示在该口径下相对更靠下游；本实验没有生成冲击后的投入产出表。",
+        "positive": "模拟 Y 的数值上升。若真实位置指数上升，才表示在该口径下相对更上游，仍不能单靠一个系数判断分工位置。",
+    },
+    "weighted_degree": {
+        "negative": "模拟 Y 的数值下降。本实验没有生成对应的新网络，不能称为连接强度下降；只有重新计算真实网络的加权度后，才能讨论其变化。",
+        "positive": "模拟 Y 的数值上升。本实验没有生成对应的新网络，不能称为连接强度增强，也不能据此判断经济重要性。",
+    },
+    "closnesscentrality": {
+        "negative": "模拟 Y 的数值下降。本实验没有生成对应的新网络，不能称为网络距离变远；只有重新计算真实网络的接近中心性后，才能讨论其变化。",
+        "positive": "模拟 Y 的数值上升。本实验没有生成对应的新网络，不能称为网络位置更靠近中心，也不能据此判断经济重要性。",
+    },
+}
 _OUTCOME_INTERPRETATIONS = {
     "trade": {
         "negative": "模拟 Y 的数值下降。若真实同定义指标下降，才表示外国增加值项占比降低，仍不能单独证明生产回流。",
@@ -191,6 +231,26 @@ def _global_inference_suppressed(result: dict[str, Any]) -> bool:
     return support.get("suppress_inference") is True or _effective_status(result) in {"insufficient", "invalid_design"}
 
 
+_DEFAULT_KINDS = {"trade": "share", "production": "share", "length": "length", "network": "network"}
+
+
+def _depvar_kind(outcome: str, design: dict[str, Any]) -> str:
+    """How the saved Y is read: shares in percentage points, the rest in their own units."""
+    kind = design.get("depvar_kind") if isinstance(design, dict) else None
+    return (
+        kind
+        if isinstance(kind, str) and kind in {"share", "length", "position", "network"}
+        else _DEFAULT_KINDS.get(outcome, "length")
+    )
+
+
+def _is_default_baseline(outcome: str, design: dict[str, Any]) -> bool:
+    from gvcsim.regression.teaching import default_baseline
+
+    key = design.get("baseline") if isinstance(design, dict) else None
+    return key is None or (outcome in _DEFAULT_KINDS and key == default_baseline(outcome).key)
+
+
 def _natural_effect(
     outcome: str, design: dict[str, Any], result: dict[str, Any], coefficient: dict[str, Any]
 ) -> tuple[str, str, str]:
@@ -205,12 +265,13 @@ def _natural_effect(
         else None
     )
     effect_label = "冲击强度每增加 1 个百分点"
-    if outcome in {"trade", "production"}:
+    kind = _depvar_kind(outcome, design)
+    if kind == "share":
         effect_text = f"{_signed(effect * 100, 2)} 个百分点"
         interval = (
             f"[{_signed(ci[0] * increment * 100, 2)}, {_signed(ci[1] * increment * 100, 2)}] 个百分点" if ci else "—"
         )
-    elif outcome == "network":
+    elif kind == "network":
         sd = result.get("depvar_std")
         relative = effect / float(sd) if isinstance(sd, (int, float)) and float(sd) > 0 else None
         effect_text = f"{_signed(effect, 2)} 个中心性原始单位"
@@ -218,21 +279,35 @@ def _natural_effect(
             effect_text += f"（约 {_signed(relative, 2)} 个样本标准差）"
         interval = f"[{_signed(ci[0] * increment, 2)}, {_signed(ci[1] * increment, 2)}] 个原始单位" if ci else "—"
     else:
-        effect_text = f"{_signed(effect, 3)} 个长度单位"
-        interval = f"[{_signed(ci[0] * increment, 3)}, {_signed(ci[1] * increment, 3)}] 个长度单位" if ci else "—"
+        unit = "位置指数单位" if kind == "position" else "长度单位"
+        digits = 4 if kind == "position" else 3
+        effect_text = f"{_signed(effect, digits)} 个{unit}"
+        interval = (
+            f"[{_signed(ci[0] * increment, digits)}, {_signed(ci[1] * increment, digits)}] 个{unit}" if ci else "—"
+        )
     return effect_label, effect_text, interval
 
 
-def _evidence_reading(outcome: str, coefficient: dict[str, Any], suppressed: bool) -> tuple[str, str]:
+def _interpretations(outcome: str, design: dict[str, Any] | None) -> dict[str, str]:
+    """Direction sentences for the saved Y: the family's fixed indicator or the chosen same-family baseline."""
+    key = design.get("baseline") if isinstance(design, dict) else None
+    if isinstance(key, str) and key in _BASELINE_INTERPRETATIONS and not _is_default_baseline(outcome, design or {}):
+        return _BASELINE_INTERPRETATIONS[key]
+    return _OUTCOME_INTERPRETATIONS[outcome]
+
+
+def _evidence_reading(
+    outcome: str, coefficient: dict[str, Any], suppressed: bool, design: dict[str, Any] | None = None
+) -> tuple[str, str]:
     if suppressed:
         return "不可作方向判断", "统计推断已被抑制；点估计只是计算输出，不能据此判断上升或下降。"
     ci_low, ci_high = coefficient.get("ci_low"), coefficient.get("ci_high")
     if not isinstance(ci_low, (int, float)) or not isinstance(ci_high, (int, float)):
         return "证据不足", "置信区间未记录，不能确定估计方向。"
     if ci_high < 0:
-        return "本次模拟样本支持负向关联", _OUTCOME_INTERPRETATIONS[outcome]["negative"]
+        return "本次模拟样本支持负向关联", _interpretations(outcome, design)["negative"]
     if ci_low > 0:
-        return "本次模拟样本支持正向关联", _OUTCOME_INTERPRETATIONS[outcome]["positive"]
+        return "本次模拟样本支持正向关联", _interpretations(outcome, design)["positive"]
     return (
         "证据不足，无法判断方向",
         "95% 置信区间包含 0（跨过或触及）；这不等于“没有效应”，而是当前证据不足以确定方向。",

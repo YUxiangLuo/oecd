@@ -90,7 +90,7 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
             )
         np.testing.assert_allclose(panel[Y_COLUMNS[outcome]], expected, rtol=1e-12, atol=1e-12)
     snapshot = model_snapshot("trade")
-    assert snapshot["version"] == "step10-tariff-teaching-v3"
+    assert snapshot["version"] == "step10-tariff-teaching-v4"
     assert snapshot["randomization_version"] == "step10-tariff-teaching-v1"
     assert snapshot["tariff_path"] == [0, 0, 0.25, 0.25, 0.25]
     assert teaching.SEED == 20260913
@@ -321,3 +321,116 @@ def test_group_trends_report_the_mean_exposure_of_taxed_units():
     policy = panel.loc[panel.country.map(taxed) & panel.year.ge(trends["policy_year"]), X_COLUMN]
     assert trends["mean_exposure_taxed"] == pytest.approx(float(policy.mean()))
     assert trends["mean_exposure_taxed"] > 0
+
+
+def _full_source(countries=("AAA", "BBB", "CCC", "DDD")) -> pd.DataFrame:
+    """The minimal source panel plus every column an alternative baseline is calibrated from."""
+    frame = _source(countries)
+    index = frame.industry.map({"s1": 1, "s2": 2, "s3": 3})
+    frame["DVAex"] = frame.gross_exports * (0.5 + index / 20)
+    frame["FDC"] = frame.gross_exports * (0.02 + index / 100)
+    frame["SVA"] = 100 + index
+    frame["3_VA_GVC_share"] = 0.2 + index / 100
+    frame["3a_VA_GVC_S"] = 10 + index
+    frame["1_VA_D"] = 50 + index
+    frame["PLy_GVC"] = 2.5 + index / 10
+    frame["GVCPs"] = -0.2 + index / 10
+    frame["weighted degree"] = 1000 + 10 * index
+    frame["closnesscentrality"] = 0.3 + index / 50
+    return frame
+
+
+def test_alternative_baselines_add_their_own_y_without_changing_the_family_defaults():
+    from gvcsim.regression.teaching import BASELINES, variable_catalog, y_column
+
+    source, full = _source(), _full_source()
+    thin = build_teaching_panel(source, _exposure(source))
+    panel = build_teaching_panel(full, _exposure(full))
+    # The fixed Y of every family is bit-for-bit the v3 generation.
+    for column in Y_COLUMNS.values():
+        np.testing.assert_array_equal(thin[column], panel[column])
+    assert set(thin.columns) < set(panel.columns)
+    for outcome, items in BASELINES.items():
+        assert y_column(outcome, items[0].key) == Y_COLUMNS[outcome]
+        for item in items[1:]:
+            column = y_column(outcome, item.key)
+            assert column not in thin.columns and column in panel.columns
+            assert np.isfinite(panel[column]).all()
+            # Independent draws: the alternative is not the default shifted by a constant.
+            assert (panel[column] - panel[Y_COLUMNS[outcome]]).std() > 0
+    snapshot = model_snapshot("trade", "DVAex_share")
+    assert snapshot["baseline"] == "DVAex_share"
+    assert snapshot["beta"] == 0.55 and snapshot["y_column"] == "teaching_y_trade_DVAex_share"
+    assert snapshot["baseline_kind"] == "share" and snapshot["version"] == "step10-tariff-teaching-v4"
+    assert model_snapshot("trade")["baseline"] == "FVA_share"
+    with pytest.raises(ValueError):
+        model_snapshot("trade", "PLy_GVC")  # a length baseline is not in the trade family
+    catalog = variable_catalog("length", "GVCPs")
+    assert catalog[1]["baseline"] == "GVCPs" and "位置" in catalog[1]["unit"]
+    assert variable_catalog("length")[1]["baseline"] == "PLv_GVC"
+
+
+def test_out_of_domain_alternative_source_leaves_only_that_y_missing_for_that_unit():
+    full = _full_source()
+    full.loc[full.entity_id.eq("AAA_s1"), "closnesscentrality"] = -1.0
+    full.loc[full.entity_id.eq("BBB_s2"), "DVAex"] = np.nan
+    panel = build_teaching_panel(full, _exposure(full))
+    assert panel.entity_id.nunique() == 12
+    closeness = "teaching_y_network_closnesscentrality"
+    assert panel.loc[panel.entity_id.eq("AAA_s1"), closeness].isna().all()
+    assert panel.loc[panel.entity_id.ne("AAA_s1"), closeness].notna().all()
+    assert panel.loc[panel.entity_id.eq("BBB_s2"), "teaching_y_trade_DVAex_share"].isna().all()
+    assert panel.loc[panel.entity_id.ne("BBB_s2"), "teaching_y_trade_DVAex_share"].notna().all()
+    assert panel[list(Y_COLUMNS.values())].notna().all().all()
+
+
+def test_group_trends_list_the_baselines_a_panel_carries_with_their_series():
+    from gvcsim.regression.teaching import group_trends
+
+    countries = ("AAA", "BBB", "CCC", "DDD", "EEE", "FFF")
+    full = _full_source(countries)
+    trends = group_trends(build_teaching_panel(full, _exposure(full)))
+    assert [option["key"] for option in trends["baselines"]["trade"]] == ["FVA_share", "DVAex_share", "FDC_share"]
+    assert trends["baselines"]["trade"][0]["default"] is True and trends["baselines"]["trade"][1]["default"] is False
+    assert trends["baselines"]["network"][1] == {
+        "key": "weighted_degree",
+        "label": "加权总度",
+        "kind": "network",
+        "unit": "中心性单位",
+        "default": False,
+        "column": "teaching_y_network_weighted_degree",
+        "source": "weighted degree",
+    }
+    assert trends["series"]["trade"]["FVA_share"] == trends["outcomes"]["trade"]
+    assert set(trends["series"]["length"]) == {"PLv_GVC", "PLy_GVC", "GVCPs"}
+    assert trends["series"]["length"]["GVCPs"]["taxed"][0]["year"] == 2016
+    source = _source(countries)
+    thin = group_trends(build_teaching_panel(source, _exposure(source)))
+    assert [option["key"] for option in thin["baselines"]["trade"]] == ["FVA_share"]
+    assert list(thin["series"]["production"]) == ["3b_VA_GVC_C_share"]
+
+
+def test_design_with_an_alternative_baseline_runs_and_recovers_its_own_relation():
+    from gvcsim.regression.design import RegressionDesign
+    from gvcsim.regression.panel import run_design_with_benchmark
+
+    full = _full_source(tuple(f"C{i:02}" for i in range(30)))
+    panel = build_teaching_panel(full, _exposure(full), seed=29)
+    design = RegressionDesign("production", teaching=True, baseline="1_VA_D_share")
+    assert design.depvar == "teaching_y_production_1_VA_D_share"
+    assert design.depvar_kind == "share" and design.baseline_label == "纯国内生产份额"
+    assert design.depvar_label == "教学模拟：纯国内生产份额"
+    assert "teaching_y_production_1_VA_D_share_ijt" in design.equation()
+    result, benchmark = run_design_with_benchmark(panel, design)
+    assert benchmark["benchmark_passed"]
+    coefficient = result.coefs[0]
+    assert coefficient.ci_low is not None and coefficient.ci_low > 0  # the preset relation is positive
+    assert abs(coefficient.coef - 0.50) < 0.1
+    assert result.binscatter is not None and result.binscatter["slope"] == coefficient.coef
+    # The default design is untouched and a cross-family or observed-panel choice is refused.
+    assert RegressionDesign("production", teaching=True).baseline == "3b_VA_GVC_C_share"
+    with pytest.raises(ValueError):
+        RegressionDesign("production", teaching=True, baseline="FVA_share")
+    with pytest.raises(ValueError):
+        RegressionDesign("trade", baseline="DVAex_share")
+    assert RegressionDesign("length", baseline="PLy_GVC").depvar == "PLy_GVC"

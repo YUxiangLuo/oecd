@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
 import {
@@ -61,10 +61,49 @@ describe("simple regression workbench", () => {
     expect(api.teachingSeries).toHaveBeenCalledWith(["CAN", "MEX"], "C29");
   });
 
+  test("offers the same-family Y choices and re-requests the design and group series for the chosen one", async () => {
+    const withBaselines: TeachingGroupsResponse = {
+      ...groups,
+      baselines: {
+        trade: [
+          { key: "FVA_share", label: "外国增加值项占比", kind: "share", unit: "比例（展示为百分点）", default: true, column: "teaching_y_trade", source: "FVA_share" },
+          { key: "DVAex_share", label: "国内增加值出口占比", kind: "share", unit: "比例（展示为百分点）", default: false, column: "teaching_y_trade_DVAex_share", source: "DVAex_share" },
+        ],
+        production: [], length: [], network: [],
+      },
+      series: {
+        trade: {
+          FVA_share: groups.outcomes.trade,
+          DVAex_share: { taxed: series(0.004), untaxed: series(-0.003) },
+        },
+        production: {}, length: {}, network: {},
+      },
+    };
+    const design = spyOn(api, "regressionDesign").mockResolvedValue({} as RegressionDesignInfo);
+    spyOn(api, "teachingGroups").mockResolvedValue(withBaselines);
+    spyOn(api, "teachingSeries").mockResolvedValue({ version: "v", disclaimer: "", rows: [], total: 0, years: [] } as TeachingPanelResponse);
+    render(<RegressionRunLab step={step} meta={meta} state={state} />);
+    const select = await screen.findByRole("combobox", { name: "结果指标 Y" }) as HTMLSelectElement;
+    expect([...select.options].map((option) => option.textContent)).toEqual(["外国增加值项占比（本步默认）", "国内增加值出口占比"]);
+    expect(select.value).toBe("FVA_share");
+    await waitFor(() => expect(design).toHaveBeenCalledWith("trade", null));
+    // The reading cards use the chosen series: the taxed group now ends above the untaxed one.
+    await screen.findByText(/加税组比未加税组 低 0\.70 个百分点/);
+    fireEvent.change(select, { target: { value: "DVAex_share" } });
+    await waitFor(() => expect(design).toHaveBeenCalledWith("trade", "DVAex_share"));
+    await screen.findByText(/加税组比未加税组 高 0\.70 个百分点/);
+    expect(screen.getByRole("heading", { name: /模拟 Y（国内增加值出口占比）/ })).toBeTruthy();
+    fireEvent.change(select, { target: { value: "FVA_share" } });
+    await waitFor(() => expect(screen.getByRole("heading", { name: /模拟 Y（外国增加值项占比）/ })).toBeTruthy());
+  });
+
   test("converts the estimate to the example's X in each step's own units", () => {
     expect(exampleEffect("trade", -0.55, 0.0932)).toBe("5.13 个百分点");
     expect(exampleEffect("length", -1.8, 0.0932)).toBe("0.168 个长度单位");
     expect(exampleEffect("network", -6000, 0.0932)).toBe("559.2 个中心性原始单位");
+    // With a chosen baseline the design says how Y is read.
+    expect(exampleEffect("length", -0.4, 0.0932, { depvar_kind: "position" })).toBe("0.0373 个位置指数单位");
+    expect(exampleEffect("trade", 0.55, 0.0932, { depvar_kind: "share" })).toBe("5.13 个百分点");
   });
 
   test("keeps request states accessible", () => {

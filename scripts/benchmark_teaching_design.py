@@ -31,6 +31,83 @@ CANDIDATES = {
 LEGACY_NOISE = np.array([0.012, 0.010, 0.060, 120.0])
 
 
+def evaluate_baselines(root: Path, seeds: range) -> dict:
+    """Paired-seed evaluation of the deployed design for every baseline of every family.
+
+    Each simulated Y is regenerated with the production generator per seed and estimated with the
+    same within transformation and country-clustered CR1 as the candidates above; units whose
+    alternative source is out of domain are dropped as whole entities so the panel stays balanced.
+    """
+    source = pd.read_csv(root / "panel_industry.csv")
+    years = sorted(source.year.unique())
+    exposure = pd.read_csv(root / f"export_exposure_{years[0]}.csv")
+    pairs = [(outcome, item) for outcome, items in teaching.BASELINES.items() for item in items]
+    records: dict[str, list[dict]] = {f"{outcome}:{item.key}": [] for outcome, item in pairs}
+    sizes: dict[str, int] = {}
+    for seed in seeds:
+        panel = teaching.build_teaching_panel(source, exposure, seed=seed)
+        for outcome, item in pairs:
+            name = f"{outcome}:{item.key}"
+            column = teaching.y_column(outcome, item.key)
+            complete = panel.groupby("entity_id")[column].transform(lambda values: values.notna().all())
+            frame = panel.loc[complete].sort_values(["entity_id", "year"])
+            entities = frame.entity_id.nunique()
+            assert len(frame) == entities * 5
+            sizes[name] = entities
+            codes, countries = pd.factorize(frame.country)
+            groups = len(countries)
+            cube_x = frame[teaching.X_COLUMN].to_numpy().reshape(entities, 5)
+            cube_y = frame[column].to_numpy().reshape(entities, 5)
+
+            def within(cube):
+                return (
+                    cube - cube.mean(axis=1, keepdims=True) - cube.mean(axis=0, keepdims=True) + cube.mean()
+                ).ravel()
+
+            xw, yw = within(cube_x), within(cube_y)
+            xx = xw @ xw
+            estimate = xw @ yw / xx
+            residual = yw - xw * estimate
+            scores = np.zeros(groups)
+            np.add.at(scores, codes, xw * residual)
+            correction = groups / (groups - 1) * (len(frame) - 1) / (len(frame) - entities - 5)
+            se = np.sqrt(correction * (scores**2).sum()) / xx
+            critical = stats.t.ppf(0.975, groups - 1)
+            records[name].append(
+                {
+                    "estimate": float(estimate),
+                    "se": float(se),
+                    "covered": bool(abs(estimate - item.beta) <= critical * se),
+                    "significant": bool(abs(estimate) > critical * se),
+                    "null_rejected": bool(abs(estimate - item.beta) > critical * se),
+                }
+            )
+            if seed == seeds.start:
+                design = RegressionDesign(outcome, teaching=True, baseline=item.key)
+                result, reference = run_design_with_benchmark(frame, design)
+                assert reference["benchmark_passed"]
+                np.testing.assert_allclose(
+                    [result.coefs[0].coef, result.coefs[0].se], [estimate, se], rtol=1e-8, atol=1e-9
+                )
+        if (seed - seeds.start + 1) % 25 == 0:
+            print(f"Baselines: evaluated {seed - seeds.start + 1}/{len(seeds)} paired seeds", flush=True)
+    summary = {}
+    for name, rows in records.items():
+        outcome, key = name.split(":", 1)
+        beta = teaching.baseline(outcome, key).beta
+        estimates = np.array([row["estimate"] for row in rows])
+        summary[name] = {
+            "beta": beta,
+            "entities": sizes[name],
+            "mean_bias": float((estimates - beta).mean()),
+            "rmse": float(np.sqrt(((estimates - beta) ** 2).mean())),
+            "coverage_95": float(np.mean([row["covered"] for row in rows])),
+            "power": float(np.mean([row["significant"] for row in rows])),
+            "null_false_positive_rate": float(np.mean([row["null_rejected"] for row in rows])),
+        }
+    return summary
+
+
 def evaluate(root: Path, seeds: range) -> dict:
     # Parse and fingerprint the same bytes, including the independently supplied
     # exposure weights. A panel hash alone cannot identify this experiment.
@@ -152,6 +229,7 @@ def evaluate(root: Path, seeds: range) -> dict:
             for name, (rate, multiplier) in CANDIDATES.items()
         },
         "summary": summary,
+        "baselines": evaluate_baselines(root, seeds),
         "domain_failures": domain_failures,
         "independent_benchmark_checks": benchmark_checks,
         "notes": "Paired noise draws; fixed beta; country-clustered CR1 and t(G-1). Null uses the same residuals with beta=0. Coverage is empirical, not a guarantee.",

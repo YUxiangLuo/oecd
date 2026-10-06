@@ -435,9 +435,12 @@ def _artifacts(path: Path, *, disclosure: bool = False):
                 "tariff_path": list(teaching.TARIFF_PATH),
                 "betas": teaching.BETAS,
                 "calibration": teaching.CALIBRATION,
+                "baselines": teaching.baseline_parameters(),
             },
             "model_snapshots": {name: teaching.model_snapshot(name) for name in teaching.BETAS},
             "variable_catalogs": {name: teaching.variable_catalog(name) for name in teaching.BETAS},
+            "baseline_model_snapshots": teaching.baseline_snapshots(teaching.model_snapshot),
+            "baseline_variable_catalogs": teaching.baseline_snapshots(teaching.variable_catalog),
             "source_bindings": {
                 "release_panel": {"path": "panel_industry.csv", "sha256": digest("panel_industry.csv")},
                 "exposure_files": [
@@ -471,9 +474,10 @@ def _sign_run(run: dict) -> dict:
     from gvcsim.regression_routes import _design_info
 
     outcome = run["design"]["outcome"]
-    run["design"] = _design_info(RegressionDesign(outcome, teaching=True))
-    run["model_snapshot"] = model_snapshot(outcome)
-    run["variable_catalog"] = variable_catalog(outcome)
+    baseline = run["design"].get("baseline")
+    run["design"] = _design_info(RegressionDesign(outcome, teaching=True, baseline=baseline))
+    run["model_snapshot"] = model_snapshot(outcome, baseline)
+    run["variable_catalog"] = variable_catalog(outcome, baseline)
     coefs = run.get("result", {}).get("coefs")
     if (
         isinstance(coefs, list)
@@ -1939,3 +1943,52 @@ def test_report_draws_the_binned_scatter_behind_each_saved_estimate(tmp_path, mo
     ]
     run["result"]["support"]["suppress_inference"] = False
     assert [chart for chart in charts_of(chr(10).join(_evidence_summary(evidence))) if chart["type"] == "binscatter"]
+
+
+def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(tmp_path, monkeypatch):
+    """A step that was run with another indicator of its family reports that indicator, not the default."""
+    from gvcsim.report_saved_run import _parse_saved_run, _saved_runs
+
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    run = session["steps"]["13"]["data"]["run"]
+    run["design"]["baseline"] = "GVCPs"
+    run["result"]["coefs"][0]["coef"] = -0.4
+    run["result"]["coefs"][0]["se"] = 0.01  # two clusters: a wide t(1) interval would otherwise cross 0
+    run["result"]["binscatter"] = {
+        "bins": [{"x": -0.02, "y": 0.008, "n": 10}, {"x": 0.02, "y": -0.008, "n": 10}],
+        "slope": -0.4,
+        "transform": "twoway_demeaned",
+    }
+    _sign_run(run)
+    assert run["design"]["depvar"] == "teaching_y_length_GVCPs"
+    assert run["model_snapshot"]["baseline"] == "GVCPs"
+    assert _parse_saved_run(run, "length") is not None
+    assert [item["outcome"] for item in _saved_runs(session) if item["step"] == 13] == ["length"]
+
+    markdown = build(session, "同学").markdown
+    assert "教学模拟：GVC 位置指数" in markdown
+    assert "个位置指数单位" in markdown
+    assert "相对更靠下游" in markdown
+    charts = [
+        json.loads(block)
+        for block in re.findall("```gvcsim-chart" + chr(10) + "(.*?)" + chr(10) + "```", markdown, re.S)
+    ]
+    coefficient = next(
+        chart for chart in charts if chart["type"] == "coefficient" and chart["title"].startswith("步骤 13")
+    )
+    assert coefficient["items"][0]["label"] == "GVC 位置指数" and coefficient["x_label"] == "位置指数单位"
+    assert coefficient["items"][0]["value"] == pytest.approx(-0.004)
+    scatter = next(chart for chart in charts if chart["type"] == "binscatter" and chart["title"].startswith("步骤 13"))
+    assert scatter["y_label"] == "GVC 位置指数（位置指数单位）"
+    assert [point["y"] for point in scatter["points"]] == [0.008, -0.008]
+    assert scatter["slope"] == pytest.approx(-0.004)
+
+    # A baseline from another family, or one the snapshot does not match, is not a reportable run.
+    forged = copy.deepcopy(run)
+    forged["design"]["baseline"] = "FVA_share"
+    assert _parse_saved_run(forged, "length") is None
+    stale = copy.deepcopy(run)
+    stale["model_snapshot"]["baseline"] = "PLv_GVC"
+    assert _parse_saved_run(stale, "length") is None

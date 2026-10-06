@@ -15,7 +15,9 @@ from gvcsim.report_common import (
     _count,
     _effective_status,
     _evidence_reading,
+    _depvar_kind,
     _global_inference_suppressed,
+    _is_default_baseline,
     _list_values,
     _natural_effect,
     _number,
@@ -266,7 +268,7 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
             continue
         effect_label, effect, interval = _natural_effect(outcome, design, result, coefficient)
         suppressed = _global_inference_suppressed(result)
-        evidence, _interpretation = _evidence_reading(outcome, coefficient, suppressed)
+        evidence, _interpretation = _evidence_reading(outcome, coefficient, suppressed, design)
         lines.append(
             f"| {step} | {_safe(design.get('depvar_label', outcome))} | "
             f"{_setting_value('shock_type', design.get('shock_type'))} | "
@@ -291,18 +293,32 @@ _COEFFICIENT_ROW_LABELS = {
     "network": "全正边二值介数",
 }
 _COEFFICIENT_UNITS = {"trade": "个百分点", "production": "个百分点", "length": "长度单位", "network": "中心性原始单位"}
+_KIND_UNITS = {"share": "个百分点", "length": "长度单位", "position": "位置指数单位", "network": "中心性原始单位"}
 
 
-def _coefficient_chart(step: int, outcome: str, coefficient: dict[str, Any], suppressed: bool) -> list[str]:
+def _chart_row(outcome: str, design: dict[str, Any]) -> tuple[str, str, float]:
+    """Row label, unit and Y level scale of a saved run: the family's fixed Y or its chosen baseline."""
+    kind = _depvar_kind(outcome, design)
+    y_scale = 100.0 if kind == "share" else 1.0
+    if _is_default_baseline(outcome, design):
+        return _COEFFICIENT_ROW_LABELS.get(outcome, outcome), _COEFFICIENT_UNITS.get(outcome, "原始单位"), y_scale
+    label = design.get("baseline_label")
+    return (label if isinstance(label, str) and label else outcome), _KIND_UNITS.get(kind, "原始单位"), y_scale
+
+
+def _coefficient_chart(
+    step: int, outcome: str, coefficient: dict[str, Any], suppressed: bool, design: dict[str, Any] | None = None
+) -> list[str]:
     """Estimate per 1-percentage-point increase in X, with its interval, as on the step's own page."""
+    label, unit, y_scale = _chart_row(outcome, design or {})
     # Shares: β × 0.01 × 100 percentage points; lengths and centrality: β × 0.01 raw units.
-    scale = 1.0 if outcome in {"trade", "production"} else 0.01
+    scale = y_scale / 100
 
     # Display precision, like the tables; full values stay in the provenance.
     def shown(value: Any) -> float:
         return float(f"{float(value) * scale:.4g}")
 
-    item: dict[str, Any] = {"label": _COEFFICIENT_ROW_LABELS.get(outcome, outcome), "value": shown(coefficient["coef"])}
+    item: dict[str, Any] = {"label": label, "value": shown(coefficient["coef"])}
     ci_low, ci_high = coefficient.get("ci_low"), coefficient.get("ci_high")
     if not suppressed and isinstance(ci_low, (int, float)) and isinstance(ci_high, (int, float)):
         item["ci_low"], item["ci_high"] = shown(ci_low), shown(ci_high)
@@ -310,21 +326,23 @@ def _coefficient_chart(step: int, outcome: str, coefficient: dict[str, Any], sup
         "version": 1,
         "type": "coefficient",
         "title": f"步骤 {step} · X 每增加 1 个百分点时 Y 的平均变化",
-        "x_label": _COEFFICIENT_UNITS.get(outcome, "原始单位"),
+        "x_label": unit,
         "items": [item],
     }
     return ["```gvcsim-chart", json.dumps(chart, ensure_ascii=False, separators=(",", ":")), "```", ""]
 
 
-def _binscatter_chart(step: int, outcome: str, result: dict[str, Any]) -> list[str]:
+def _binscatter_chart(
+    step: int, outcome: str, result: dict[str, Any], design: dict[str, Any] | None = None
+) -> list[str]:
     """The binned scatter behind the estimate, in the same display units as the coefficient chart."""
+    label, unit, y_scale = _chart_row(outcome, design or {})
     binscatter = result.get("binscatter")
     if not isinstance(binscatter, dict):
         return []
     bins, slope = binscatter.get("bins"), binscatter.get("slope")
     if not isinstance(bins, list) or len(bins) < 2 or not isinstance(slope, (int, float)) or isinstance(slope, bool):
         return []
-    y_scale = 100.0 if outcome in {"trade", "production"} else 1.0
     points = []
     for item in bins:
         if not isinstance(item, dict):
@@ -339,7 +357,7 @@ def _binscatter_chart(step: int, outcome: str, result: dict[str, Any]) -> list[s
         "type": "binscatter",
         "title": f"步骤 {step} · 回归在量什么：X 越大，Y 平均怎样变",
         "x_label": "关税暴露 X（个百分点，已扣除固定效应）",
-        "y_label": f"{_COEFFICIENT_ROW_LABELS.get(outcome, outcome)}（{_COEFFICIENT_UNITS.get(outcome, '原始单位')}）",
+        "y_label": f"{label}（{unit}）",
         "points": points,
         # Slope in display units: β per 1 percentage point of X, in the outcome's shown unit.
         "slope": float(f"{float(slope) * y_scale / 100:.4g}"),
@@ -402,15 +420,15 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
             )
             continue
         effect_label, effect, interval = _natural_effect(outcome, design, result, coefficient)
-        evidence, interpretation = _evidence_reading(outcome, coefficient, suppressed)
+        evidence, interpretation = _evidence_reading(outcome, coefficient, suppressed, design)
         setting = " · ".join(
             _setting_value(key, design.get(key))
             for key in ("shock_type", "method", "granularity", "control_mode", "scenario")
             if design.get(key) not in (None, "")
         )
-        lines.extend(_coefficient_chart(step, outcome, coefficient, suppressed))
+        lines.extend(_coefficient_chart(step, outcome, coefficient, suppressed, design))
         if not suppressed:
-            lines.extend(_binscatter_chart(step, outcome, result))
+            lines.extend(_binscatter_chart(step, outcome, result, design))
         lines.extend(
             (
                 "| 项目 | 结果 |",
