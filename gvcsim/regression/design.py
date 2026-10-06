@@ -9,7 +9,7 @@ OUTCOME_DEPVARS = {
     "trade": ("FVA_share", "外国增加值项占比"),
     "production": ("3b_VA_GVC_C_share", "复杂GVC生产份额(3b_VA_GVC_C / SVA,WWYZ)"),
     "length": ("PLv_GVC", "前向 GVC 生产长度(WWYZ)"),
-    "network": ("betweenesscentrality", "全正边二值网络介数(探索性拓扑基准)"),
+    "network": ("weighted degree", "加权总度(入+出；自环双计)"),
 }
 OUTCOMES = list(OUTCOME_DEPVARS)
 GRANULARITY_COUNTRY_INDUSTRY = "country_industry"
@@ -58,7 +58,7 @@ class RegressionDesign:
         if self.granularity not in _ESTIMATOR_GRANULARITIES:
             raise ValueError(f"granularity 必须是 {list(_ESTIMATOR_GRANULARITIES)}")
         if self.outcome == "network" and self.granularity == "country":
-            raise ValueError("全正边二值网络介数回归仅支持国家–行业级；国家级介数中心性恒为 0")
+            raise ValueError("网络指标回归仅支持国家–行业级；国家级网络指标不是按国家×行业节点定义的")
 
     @property
     def _baseline(self) -> teaching_module.Baseline:
@@ -78,7 +78,7 @@ class RegressionDesign:
 
     @property
     def depvar_label(self) -> str:
-        return ("教学模拟：" if self.teaching else "") + self.baseline_label
+        return self.baseline_label
 
     @property
     def depvar_kind(self) -> str:
@@ -187,7 +187,7 @@ class RegressionDesign:
             {
                 "text": f"β·{self.shock_col}_{unit}",
                 "term": "policy",
-                "description": "β·X：X 是关税暴露 = 冲击前出口份额 w × 模拟税率 τ；β 是要估的数，即 X 每增加 1 个百分点，Y 平均变化多少。",
+                "description": "β·X：X 是关税暴露 = 冲击前出口份额 w × 税率 τ；β 是要估的数，即 X 每增加 1 个百分点，Y 平均变化多少。",
                 "meta_key": "policy",
             },
             {"text": " + "},

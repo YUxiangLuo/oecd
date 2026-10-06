@@ -271,7 +271,7 @@ describe("step 15 report states", () => {
     expect(overview.summary).toBe("4 个步骤还有 5 项待补齐");
     expect(overview.next?.step).toBe(1);
     expect(overview.groups.map((group) => group.label)).toEqual([
-      "数据接入", "指标计算", "模拟回归", "实验报告",
+      "数据接入", "指标计算", "关税回归", "实验报告",
     ]);
   });
 

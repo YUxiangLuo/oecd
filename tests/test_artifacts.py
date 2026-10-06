@@ -744,6 +744,7 @@ def _regression_qc_frame(*, granularity: str, treated_country: str = "BBB") -> p
                 "3b_VA_GVC_C_share": 0.2 + 0.02 * country_index + 0.015 * year_index,
                 "PLv_GVC": 1.0 + 0.1 * country_index + 0.02 * year_index,
                 "betweenesscentrality": 0.05 * country_index + 0.01 * year_index,
+                "weighted degree": 100.0 + 10 * country_index + year_index,
             }
             for shock, treatment in shock_module.SHOCK_SPECS.values():
                 row[shock] = 0.02 * treated

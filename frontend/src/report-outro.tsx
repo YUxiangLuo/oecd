@@ -35,9 +35,8 @@ export function ReportOutro({ report, onClose, onExport, exportDisabled = false,
       <div className="outro-journey">
         <article><span>01</span><b>计算并理解指标</b><p>从 ICIO 账户理解生产联系与价值来源。</p></article>
         <article><span>02</span><b>看变化与全球位置</b><p>看指标的历年变化、在全部经济体中的位置，再与对比国家比较。</p></article>
-        <article><span>03</span><b>汇总四项回归结果</b><p>解释模拟 X/Y 关系、不确定性和局限。</p></article>
+        <article><span>03</span><b>汇总四项回归结果</b><p>解释 X 与 Y 的关系、不确定性和局限。</p></article>
       </div>
-      <p className="intro-note">教学模拟仅用于练习方法，不代表真实关税的政策效果。</p>
       <div className="intro-cta-row">
         <button type="button" className="intro-cta" onClick={onClose}>查看已提交报告</button>
         <button type="button" className="outro-export" disabled={exportDisabled || reportOutdated} onClick={onExport}>导出 PDF 留存</button>

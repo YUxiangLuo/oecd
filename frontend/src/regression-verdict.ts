@@ -38,7 +38,6 @@ interface RegressionVerdict {
   effect: string;
   interval: string;
   evidence: string;
-  boundary: string;
   coefficient: CoefStat | null;
   warnings: string[];
 }
@@ -124,7 +123,6 @@ export function buildRegressionVerdict(
   ].filter((reason) => typeof reason === "string" && reason.trim()))];
   const base = {
     effectLabel: "冲击强度每增加 1 个百分点",
-    boundary: response.disclaimer,
     warnings: reasons,
   };
   if (!coefficient) {
@@ -165,15 +163,15 @@ export function buildRegressionVerdict(
   return {
     ...base,
     state,
-    title: state === "negative" ? "本次模拟样本支持负向关联"
-      : state === "positive" ? "本次模拟样本支持正向关联" : "本次模拟样本不足以判断方向",
+    title: state === "negative" ? "本次样本支持负向关联"
+      : state === "positive" ? "本次样本支持正向关联" : "本次样本不足以判断方向",
     effect: scaled.effect,
     interval: scaled.interval,
     evidence: !validInterval
       ? "置信区间缺失或不合法，不能判断关联方向；请重新运行回归，不能将其解释为区间包含 0。"
       : state === "insufficient"
       ? "95% 置信区间包含 0（跨过或触及）；这不等于“没有效应”，而是当前证据不足以确定方向。"
-      : "95% 置信区间完全位于 0 的一侧，支持本次模拟样本中的关联方向；不能作为现实政策证据。",
+      : "95% 置信区间完全位于 0 的一侧，支持本次样本中的关联方向。",
     coefficient,
   };
 }

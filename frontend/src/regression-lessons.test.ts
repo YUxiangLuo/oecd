@@ -28,7 +28,8 @@ describe("regression lessons", () => {
       REGRESSION_LESSONS.production.downMeaning,
       REGRESSION_LESSONS.production.upMeaning,
     ].join(" ");
-    expect(productionCopy).toContain("构成占比变化");
+    expect(productionCopy).toContain("占比变小");
+    expect(productionCopy).not.toContain("模拟");
     expect(productionCopy).not.toMatch(/与.*(?:扩张|收缩)一致/);
   });
 
@@ -45,7 +46,8 @@ describe("regression lessons", () => {
 
   test("research question stays on the fixed teaching X", () => {
     const network = lessonQuestion("network");
-    expect(network).toContain("模拟关税暴露（X）增加 1 个百分点");
+    expect(network).toContain("关税暴露（X）增加 1 个百分点");
+    expect(network).not.toContain("模拟");
     expect(lessonQuestion("trade")).not.toMatch(/cohort|处理组|对照组/);
   });
 });

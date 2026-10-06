@@ -12,9 +12,10 @@ test("intro uses the self-contained teaching simulation and never requests shock
   try {
     const view = open();
     fireEvent.click(view.getByRole("button", { name: "介绍页 2" }));
-    fireEvent.click(view.getByRole("button", { name: /教学模拟关税/ }));
-    expect(view.getByText(/关税路径与暴露值全部由课程生成/)).toBeTruthy();
-    expect(view.getByText(/没有真实事件、现实税率或现实政策效果/)).toBeTruthy();
+    fireEvent.click(view.getByRole("button", { name: /关税数据/ }));
+    expect(view.getByText(/前两年税率为 0，加税国家后三年为 25%/)).toBeTruthy();
+    expect(view.getByText(/暴露强度 X 等于首年销往美国的出口份额乘以税率/)).toBeTruthy();
+    expect(view.getByRole("dialog").textContent).not.toContain("模拟");
     expect(request).not.toHaveBeenCalled();
   } finally { cleanup(); request.mockRestore(); }
 });
@@ -26,7 +27,7 @@ test("scene headings receive focus and local controls never trigger global arrow
     const heading = () => document.activeElement as HTMLElement;
     fireEvent.keyDown(heading(), { key: "ArrowRight" });
     await waitFor(() => expect(heading().textContent).toBe("数据来源与教学设定"));
-    fireEvent.keyDown(view.getByRole("button", { name: /教学模拟关税/ }), { key: "ArrowRight" });
+    fireEvent.keyDown(view.getByRole("button", { name: /关税数据/ }), { key: "ArrowRight" });
     expect(heading().textContent).toBe("数据来源与教学设定");
     fireEvent.click(view.getByRole("button", { name: "介绍页 4" }));
     expect(heading().textContent).toBe("先看加税前后的差距，再用回归量化");

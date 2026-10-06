@@ -3,7 +3,7 @@ import { ScrollableRegion } from "./a11y";
 import { api } from "./api";
 import { useAsync } from "./labs";
 import { ReadingCards } from "./labs/steps/viz/reading-cards";
-import { lessonFor, lessonQuestion } from "./regression-lessons";
+import { baselineKeyOf, lessonFor, lessonQuestion, VIZ_STEPS } from "./regression-lessons";
 import { nextRegressionSave } from "./regression-save";
 import { formatPValue } from "./regression-statistics";
 import {
@@ -27,10 +27,9 @@ import type {
 import { teachingExample, type TeachingExampleSelection } from "./teaching-example";
 import { userFacingRequestError } from "./user-facing-error";
 import { BinScatterChart, CoefForestChart, countryLabel, GroupChangeChart, sectorLabel } from "./viz";
-import { RegressionEvidenceMatrix, RegressionFamilyPanels } from "./regression-teach";
 
 const ENTITY_LABEL: Record<string, string> = { entity_id: "国家×行业", country: "国家" };
-export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v4";
+export const TEACHING_MODEL_VERSION = "step10-tariff-teaching-v5";
 
 /**
  * Keep the fixed application shell anchored to the viewport while revealing a
@@ -55,7 +54,7 @@ function DesignMeta({ design }: { design: RegressionDesignInfo }) {
   return (
     <div className="design-meta">
       <span>结果指标：{design.depvar_label}</span>
-      <span>解释变量：模拟关税暴露强度</span>
+      <span>解释变量：关税暴露强度</span>
       <span>面板：{design.panel_file}</span>
       <span>观察个体：{ENTITY_LABEL[design.entity] ?? design.entity}</span>
       <span>标准误按{ENTITY_LABEL[design.cluster] ?? design.cluster}聚类</span>
@@ -127,7 +126,7 @@ export function RegressionResultCard({ outcome, response, examples = [] }: {
       : `平均变化为 ${verdict.effect}`;
   return (
     <section className={`verdict-card verdict-${verdict.state}`} aria-labelledby="reg-result-title" aria-live="polite">
-      <div className="verdict-kicker">教学模拟 · 回归结果</div>
+      <div className="verdict-kicker">回归结果</div>
       <h3 id="reg-result-title" className="reg-plain-verdict">方向判断：{verdict.title}</h3>
       {verdict.coefficient && response.result.binscatter && response.result.binscatter.bins.length >= 2 && (
         <BinScatterChart
@@ -153,24 +152,23 @@ export function RegressionResultCard({ outcome, response, examples = [] }: {
       )}
       <ul className="reg-result-points">
         {!suppressed && verdict.coefficient && (
-          <li>模拟关税暴露（X）每增加 1 个百分点，模拟{lesson.shortMetric}（Y）<b>{plainResult}</b>；95% 区间为 {verdict.interval}。</li>
+          <li>关税暴露（X）每增加 1 个百分点，{lesson.shortMetric}（Y）<b>{plainResult}</b>；95% 区间为 {verdict.interval}。</li>
         )}
         {!suppressed && verdict.coefficient && examples.length > 0 && (
           <li className="reg-example-effect">换算到你在步骤 10 选的例子：{examples.map((example, index) => {
             const coef = verdict.coefficient!.coef;
             const text = example.x > 0
               ? <>{example.label}（X = {(example.x * 100).toFixed(2)} 个百分点）Y 约{coef * example.x < 0 ? "下降" : "上升"} <b>{exampleEffect(outcome, coef, example.x, response.design)}</b></>
-              : <>{example.label}未被模拟加税（X = 0），按估计不变</>;
+              : <>{example.label}未被加税（X = 0），按估计不变</>;
             return <span key={example.label}>{index ? "；" : ""}{text}</span>;
           })}{verdict.state === "insufficient" ? "；但区间跨过 0，这个方向本身并不确定" : ""}。
             {examples.every((example) => example.x <= 0) && (examples.length === 1
-              ? "你选的例子未被模拟加税，所以换算结果是不变；回步骤 10 换成模拟加税的国家（如加拿大），或再选一个加税的对比国家，就能看到换算。"
-              : "两个例子都未被模拟加税，所以换算结果都是不变；回步骤 10 把其中一个换成模拟加税的国家（如加拿大），就能看到换算。")}</li>
+              ? "你选的例子未被加税，所以换算结果是不变；回步骤 10 换成加税的国家（如加拿大），或再选一个加税的对比国家，就能看到换算。"
+              : "两个例子都未被加税，所以换算结果都是不变；回步骤 10 把其中一个换成加税的国家（如加拿大），就能看到换算。")}</li>
         )}
         <li>{verdict.evidence}</li>
         <li><b>解释限制：</b>{lesson.dontClaim}</li>
       </ul>
-      {verdict.boundary && <p className="muted reg-result-boundary">{verdict.boundary}</p>}
       {verdict.warnings.length > 0 && (!suppressed || !verdict.coefficient) && (
         <ul aria-label="本次计算的限制">{verdict.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
       )}
@@ -331,7 +329,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   const baselineOffered = baseline == null || baselineOptions.length === 0 || baselineOptions.some((option) => option.key === baseline);
   useEffect(() => {
     if (baselineOffered) return;
-    setBaselineNotice(`上次算的 Y（${lesson.shortMetric}）在当前数据发布里没有，已换回本步默认指标，请重新计算。`);
+    setBaselineNotice(`上次算的 Y（${savedRun?.design?.baseline_label ?? lesson.shortMetric}）在当前数据发布里没有，已换回本步默认指标，请重新计算。`);
     setBaseline(null);
     setResult(null);
   }, [baselineOffered]);
@@ -370,6 +368,14 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
     if (baselineChosen.current || savedRun?.model_snapshot?.version !== TEACHING_MODEL_VERSION || !savedBaseline) return;
     setBaseline((current) => current ?? savedBaseline);
   }, [savedBaseline, savedRunIdentity]);
+  // Without a saved run, Y starts as the indicator the student recorded in the matching step 6-9, when
+  // this family offers it; so steps 11-14 follow steps 6-9 one to one.
+  const priorData = getStep?.<{ metric?: string; indicator_selection?: { metric?: string } }>(VIZ_STEPS[outcome]);
+  const priorKey = baselineKeyOf(priorData?.indicator_selection?.metric ?? priorData?.metric);
+  useEffect(() => {
+    if (baselineChosen.current || savedRun || !priorKey || !baselineOptions.length) return;
+    if (baselineOptions.some((option) => option.key === priorKey)) setBaseline((current) => current ?? (priorKey === defaultBaseline ? null : priorKey));
+  }, [priorKey, baselineOptions.length, defaultBaseline, savedRunIdentity]);
   useEffect(() => {
     if (
       running || runningRef.current || result
@@ -455,7 +461,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
                 ))}
               </select>
             </label>
-            <span className="muted">只能换成同一类的另一个指标；X、样本和模型都不变，Y 仍是按该指标首年排名校准的模拟值。</span>
+            <span className="muted">只能换成同一类的另一个指标；X、样本和模型都不变。</span>
           </div>
         )}
         {groups && groupSeries && (() => {
@@ -539,15 +545,6 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
             <p className="muted">N={result.result.n_obs.toLocaleString("zh-CN")} · {result.result.n_entities.toLocaleString("zh-CN")} 个体 × {result.result.n_times} 年 · {result.result.n_clusters} 个聚类 · {result.result.r2_within == null ? "本次 TWFE 结果未提供组内 R²" : `组内 R²=${result.result.r2_within.toFixed(4)}`}</p>
           </details>
         </div>
-      )}
-      {outcome === "network" && getStep && (
-        <section className="reg-run-card" aria-label="四步结果并排">
-          <span className="reg-section-step">四步收尾</span>
-          <h3>四个 Y 的估计并排看：方向、区间、单位</h3>
-          <p className="muted">单位不同的系数不能比大小，所以每张图各用自己的轴。</p>
-          <RegressionFamilyPanels getStep={getStep} />
-          <RegressionEvidenceMatrix getStep={getStep} />
-        </section>
       )}
     </div>
   );

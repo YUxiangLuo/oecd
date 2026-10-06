@@ -115,9 +115,9 @@ def _regression_preflight(result: dict[str, Any]) -> dict[str, Any]:
     add(
         "source_calibration",
         "disclosure",
-        "Y 基准按首年指标排名校准，不是 OECD 真实水平；网络 Y 未重新构造贸易网络。",
+        "Y 基准按首年指标排名校准；网络 Y 未重新构造贸易网络。",
     )
-    add("fixed_exposure", "disclosure", "X 使用首年销往美国的出口份额乘虚构税率；不代表美国真实政策。")
+    add("fixed_exposure", "disclosure", "X 使用首年销往美国的出口份额乘课程税率路径。")
     return {
         "status": result.get("status") or "ok",
         "can_infer": result.get("status") in {"ok", "warning"} and not bool(support.get("suppress_inference")),
@@ -224,7 +224,7 @@ async def regression_run(req: RegressionRequest, request: Request):
     async def compute() -> dict[str, Any]:
         panel = await concurrency.run_sync(_read_csv, "panel_teaching.csv")
         if not design.is_default_baseline and design.depvar not in panel.columns:
-            raise HTTPException(status_code=409, detail="当前数据发布没有这个生成基线的模拟 Y，请换回默认指标")
+            raise HTTPException(status_code=409, detail="当前数据发布没有这个指标对应的 Y，请换回默认指标")
         result, benchmark = await concurrency.run_cpu_bound(run_design_with_benchmark, panel, design)
         result_info = result.to_dict()
         return {

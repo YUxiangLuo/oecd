@@ -28,13 +28,16 @@ export interface ShockStepState extends QuizCompletionState, Record<string, unkn
   };
 }
 
-/** 步骤 10 只介绍四个后续回归共同使用的虚构关税暴露 X。 */
-export function ShockLab({ meta, step: _step, state }: {
+/** 步骤 10 只介绍四个后续回归共同使用的关税暴露 X。 */
+export function ShockLab({ meta, step: _step, state, getStep }: {
   meta: Meta;
   step: Step;
   state: StepStateApi<ShockStepState>;
+  /** Read-only: step 9's recorded industry seeds the example's industry. */
+  getStep?: <T>(step: number) => T | undefined;
 }) {
-  const example = teachingExample(meta, state.data);
+  const priorNetwork = getStep?.<{ observations?: { industry?: string }[] }>(9);
+  const example = teachingExample(meta, state.data, priorNetwork?.observations?.[0]?.industry);
   const countries = example.countries;
   const [first, setFirst] = useState(example.first);
   const [second, setSecond] = useState(example.second);
@@ -108,8 +111,8 @@ export function ShockLab({ meta, step: _step, state }: {
   return <div className="shock-workbench">
     <section className="reg-run-card">
       <span className="reg-section-step">先看一个例子</span>
-      <h3>模拟关税暴露 X 怎样随年份变化？</h3>
-      <p>选一个国家和一个行业；再选一个对比国家，就能看到加税与未加税的差别。默认是加拿大和墨西哥的汽车行业：两国出口都高度依赖美国，但只有加拿大在模拟中被加税。步骤 11–14 会把回归结果换算到你选的例子上。</p>
+      <h3>关税暴露 X 怎样随年份变化？</h3>
+      <p>选一个国家和一个行业；再选一个对比国家，就能看到加税与未加税的差别。默认是加拿大和墨西哥的汽车行业：两国出口都高度依赖美国，但只有加拿大被加税。步骤 11–14 会把回归结果换算到你选的例子上。</p>
       <div className="controls" role="group" aria-label="跟随的例子">
         <label className="model-control"><span className="model-control-label">国家 A</span>
           <select value={first} onChange={(event) => {
@@ -135,15 +138,15 @@ export function ShockLab({ meta, step: _step, state }: {
       </div>
       {selectedCountries.includes("USA") && (
         <p className="reg-boundary" role="note">
-          美国本身就是模拟加税的市场：w 是“销往美国的出口份额”，美国不会向自己出口，所以美国各年的 w、τ 和 X 都是 0。这不是数据缺失；它在回归中始终是未受模拟加税影响的单元。
+          美国本身就是加税的市场：w 是“销往美国的出口份额”，美国不会向自己出口，所以美国各年的 w、τ 和 X 都是 0。这不是数据缺失；它在回归中始终是未受加税影响的单元。
         </p>
       )}
     </section>
-    {query.status === "loading" && <div className="shock-panel-state shock-workbench-loading" role="status">正在读取教学关税面板…</div>}
-    {query.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(query.error, "教学关税面板读取失败")} <button className="secondary" onClick={query.retry}>重试</button></div>}
+    {query.status === "loading" && <div className="shock-panel-state shock-workbench-loading" role="status">正在读取关税面板…</div>}
+    {query.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(query.error, "关税面板读取失败")} <button className="secondary" onClick={query.retry}>重试</button></div>}
     {panel && !complete && (
       <div className="reg-boundary" role="status">
-        {missing.map(countryLabel).join("、")} · {sectorLabel(industry)} 不在教学样本中：该国家×行业单元的首年数据不满足样本条件，没有进入回归面板。请换一个国家或行业{state.data?.teaching_observation ? "；已记录的例子保持不变" : ""}。
+        {missing.map(countryLabel).join("、")} · {sectorLabel(industry)} 不在回归样本中：该国家×行业单元的首年数据不满足样本条件，没有进入回归面板。请换一个国家或行业{state.data?.teaching_observation ? "；已记录的例子保持不变" : ""}。
       </div>
     )}
     {panel && complete && state.materialLocked && !savedExample && (
@@ -155,12 +158,12 @@ export function ShockLab({ meta, step: _step, state }: {
     {panel && complete && <>
       <section className="reg-section-card">
         <span className="reg-section-step">五年趋势{selectedCountries.length === 2 ? " · 两国使用同一刻度" : ""}</span>
-        <ul className="teaching-example-summary" aria-label="所选例子的模拟关税暴露">
+        <ul className="teaching-example-summary" aria-label="所选例子的关税暴露">
           {lastRows.map((row) => {
             const taxed = row.teaching_tariff_rate_tau > 0;
             return <li key={row.country}>
               <b>{countryLabel(row.country)} · {sectorLabel(industry)}</b>
-              {taxed ? "模拟加税" : "未加税"}：w = {pct(row.teaching_export_share_w)}，{years.at(-1)} 年 X = {(row.teaching_tariff_exposure * 100).toFixed(2)} 个百分点
+              {taxed ? "加税" : "未加税"}：w = {pct(row.teaching_export_share_w)}，{years.at(-1)} 年 X = {(row.teaching_tariff_exposure * 100).toFixed(2)} 个百分点
             </li>;
           })}
         </ul>
@@ -170,11 +173,11 @@ export function ShockLab({ meta, step: _step, state }: {
           const hint = taxed.length === 1
             ? (taxed[0]
               ? "只看一个加税国家时，图上是它自己的 X 跳起来；再选一个未加税的对比国家（如墨西哥），就能看到两者的差距。"
-              : "这个国家未被模拟加税，X 一直为 0；换成模拟加税的国家（如加拿大），或再选一个加税的对比国家，才能看到差距。")
+              : "这个国家未被加税，X 一直为 0；换成加税的国家（如加拿大），或再选一个加税的对比国家，才能看到差距。")
             : taxed.length === 2 && taxed[0] === taxed[1]
               ? (taxed[0]
-                ? "两个国家都被模拟加税，缺少未加税的对照；可以把其中一个换成未加税的国家（如墨西哥）。"
-                : "两个国家都未被模拟加税，X 一直为 0，看不到加税前后的差距；可以把其中一个换成模拟加税的国家（如加拿大）。")
+                ? "两个国家都被加税，缺少未加税的对照；可以把其中一个换成未加税的国家（如墨西哥）。"
+                : "两个国家都未被加税，X 一直为 0，看不到加税前后的差距；可以把其中一个换成加税的国家（如加拿大）。")
               : null;
           return hint && <p className="teaching-example-hint" role="note">{hint}</p>;
         })()}
@@ -183,18 +186,18 @@ export function ShockLab({ meta, step: _step, state }: {
           countries={selectedCountries}
           years={years}
           metric="teaching_tariff_exposure"
-          label="模拟关税暴露 X"
+          label="关税暴露 X"
           unit="%"
-          markYear={groups.status === "success" && groups.data ? { year: groups.data.policy_year, label: `${groups.data.policy_year} 年起模拟加税` } : undefined}
+          markYear={groups.status === "success" && groups.data ? { year: groups.data.policy_year, label: `${groups.data.policy_year} 年起加税` } : undefined}
         />
         {exampleRow && (
           <div className="reg-variable-plain-grid" role="group" aria-label="用所选例子算一次 X">
             <div>
               <b>算一次：X = w × τ</b>
               <span>
-                {countryLabel(exampleRow.country)} · {sectorLabel(industry)} · {exampleRow.year} 年：出口份额 w = {pct(exampleRow.teaching_export_share_w, 2)}，模拟税率 τ = {pct(exampleRow.teaching_tariff_rate_tau, 0)}，
+                {countryLabel(exampleRow.country)} · {sectorLabel(industry)} · {exampleRow.year} 年：出口份额 w = {pct(exampleRow.teaching_export_share_w, 2)}，税率 τ = {pct(exampleRow.teaching_tariff_rate_tau, 0)}，
                 所以 X = {pct(exampleRow.teaching_export_share_w, 2)} × {pct(exampleRow.teaching_tariff_rate_tau, 0)} = <b>{(exampleRow.teaching_tariff_exposure * 100).toFixed(2)} 个百分点</b>。
-                {exampleRow.teaching_tariff_rate_tau > 0 ? "税率相同时，出口依赖程度不同，暴露也不同。" : "这个国家未被模拟加税，所以 X 一直是 0。"}
+                {exampleRow.teaching_tariff_rate_tau > 0 ? "税率相同时，出口依赖程度不同，暴露也不同。" : "这个国家未被加税，所以 X 一直是 0。"}
               </span>
             </div>
             <div>
@@ -204,16 +207,16 @@ export function ShockLab({ meta, step: _step, state }: {
           </div>
         )}
         <p className="reg-boundary" role="note">
-          设定：前两年税率为 0；模拟加税国家在后三年统一为 25%，未加税国家仍为 0。税率路径及生成值仅为教学模拟，不是现实政策，也不能据此作因果结论。
+          设定：前两年税率为 0；加税国家在后三年统一为 25%，未加税国家仍为 0。
         </p>
         {sample && <p className="muted" role="note">
-          后续回归使用全部 {sample.entities.toLocaleString("zh-CN")} 个国家×行业单元 × 5 年 = {sample.rows.toLocaleString("zh-CN")} 条记录，覆盖 {sample.countries} 个国家（{sample.taxed_countries} 国模拟加税、{sample.untaxed_countries} 国未加税）；你选的{selectedCountries.length === 2 ? "两个例子只是其中两行" : "例子只是其中一行"}。
+          后续回归使用全部 {sample.entities.toLocaleString("zh-CN")} 个国家×行业单元 × 5 年 = {sample.rows.toLocaleString("zh-CN")} 条记录，覆盖 {sample.countries} 个国家（{sample.taxed_countries} 国加税、{sample.untaxed_countries} 国未加税）；你选的{selectedCountries.length === 2 ? "两个例子只是其中两行" : "例子只是其中一行"}。
         </p>}
       </section>
       <details className="technical-details">
         <summary>逐年读数 · {rows.length} 条</summary>
-        <ScrollableRegion className="table-wrap bounded-data-table" label="所选例子的五年教学关税暴露表">
-          <table className="data-table"><thead><tr><th>国家</th><th>行业</th><th>年份</th><th>冲击前出口份额 w</th><th>模拟税率 τ</th><th>关税暴露 X = w × τ</th></tr></thead>
+        <ScrollableRegion className="table-wrap bounded-data-table" label="所选例子的五年关税暴露表">
+          <table className="data-table"><thead><tr><th>国家</th><th>行业</th><th>年份</th><th>冲击前出口份额 w</th><th>税率 τ</th><th>关税暴露 X = w × τ</th></tr></thead>
             <tbody>{rows.map((row) => <tr key={`${row.country}-${row.industry}-${row.year}`}><td>{countryLabel(row.country)}</td><td>{sectorLabel(row.industry)}</td><td>{row.year}</td><td>{(row.teaching_export_share_w * 100).toFixed(2)}%</td><td>{(row.teaching_tariff_rate_tau * 100).toFixed(2)}%</td><td><b>{(row.teaching_export_share_w * 100).toFixed(2)}% × {(row.teaching_tariff_rate_tau * 100).toFixed(2)}% = {(row.teaching_tariff_exposure * 100).toFixed(3)} 个百分点</b></td></tr>)}</tbody>
           </table>
         </ScrollableRegion>

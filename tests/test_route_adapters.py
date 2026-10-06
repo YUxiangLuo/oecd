@@ -1114,7 +1114,7 @@ def test_regression_design_and_run_accept_only_a_same_family_baseline(teaching_d
     monkeypatch.setattr(regression_routes, "_read_csv", lambda name: panel)
     missing = client.post("/api/regression/run", json={"outcome": "trade", "baseline": "DVAex_share"})
     assert missing.status_code == 409
-    assert "生成基线" in missing.json()["detail"]
+    assert "没有这个指标对应的 Y" in missing.json()["detail"]
 
     panel["teaching_y_trade_DVAex_share"] = [0.6]
 

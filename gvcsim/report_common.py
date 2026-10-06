@@ -21,7 +21,7 @@ _OUTCOME_UNITS = {
     "trade": "份额原始单位（乘以 100 后按百分点解释）",
     "production": "份额原始单位（乘以 100 后按百分点解释）",
     "length": "生产环节长度单位",
-    "network": "模拟中心性原始单位；跨指标比较时另参考样本标准差单位",
+    "network": "中心性原始单位；跨指标比较时另参考样本标准差单位",
 }
 _STUDENT_METRIC_LABELS = {
     **{key: value["label"] for key, value in cast(dict[str, dict[str, Any]], INDICATOR_SCHEMA["fields"]).items()},
@@ -53,58 +53,70 @@ _STATUS_LABELS = {
 # indicator of the same definition moved that way.
 _BASELINE_INTERPRETATIONS = {
     "DVAex_share": {
-        "negative": "模拟 Y 的数值下降。若真实同定义指标下降，才表示出口中国内增加值的占比降低；本实验没有重算出口分解。",
-        "positive": "模拟 Y 的数值上升。若真实同定义指标上升，才表示出口中国内增加值的占比提高，仍不能单独证明生产回流。",
-    },
-    "FDC_share": {
-        "negative": "模拟 Y 的数值下降。若真实同定义指标下降，才表示外国重复计算项占比降低，不能据此判断往返加工的规模。",
-        "positive": "模拟 Y 的数值上升。若真实同定义指标上升，才表示外国重复计算项占比提高；本实验没有重算出口分解。",
+        "negative": "国内增加值出口占比下降：出口价值中由本国创造的部分变小。",
+        "positive": "国内增加值出口占比上升：出口价值中由本国创造的部分变大。",
     },
     "3_VA_GVC_share": {
-        "negative": "模拟 Y 的数值下降。若真实同定义指标下降，才表示 SVA 中 GVC 相关生产的占比降低，不能单凭比例判断生产规模。",
-        "positive": "模拟 Y 的数值上升。若真实同定义指标上升，才表示 GVC 生产总份额提高；本实验没有重算生产分解。",
+        "negative": "GVC 生产份额下降：SVA 中与跨境生产相关的部分占比变小。",
+        "positive": "GVC 生产份额上升：SVA 中与跨境生产相关的部分占比变大。",
     },
     "3a_VA_GVC_S_share": {
-        "negative": "模拟 Y 的数值下降。若真实同定义指标下降，才表示 SVA 中简单 GVC 的占比降低，不能单凭比例判断生产规模。",
-        "positive": "模拟 Y 的数值上升。若真实同定义指标上升，才表示简单 GVC 份额提高；本实验没有重算生产分解。",
+        "negative": "简单 GVC 份额下降：只跨境一次就被吸收的增加值占比变小。",
+        "positive": "简单 GVC 份额上升：只跨境一次就被吸收的增加值占比变大。",
+    },
+    "3_FGY_GVC_share": {
+        "negative": "后向 GVC 份额下降：最终品生产中与跨境生产相关的部分占比变小。",
+        "positive": "后向 GVC 份额上升：最终品生产中与跨境生产相关的部分占比变大。",
+    },
+    "2_VA_RT_share": {
+        "negative": "传统贸易份额下降：经一次出口直接被进口国吸收的增加值占比变小。",
+        "positive": "传统贸易份额上升：经一次出口直接被进口国吸收的增加值占比变大。",
     },
     "1_VA_D_share": {
-        "negative": "模拟 Y 的数值下降。若真实同定义指标下降，才表示纯国内生产占比降低；本实验没有重算生产分解。",
-        "positive": "模拟 Y 的数值上升。若真实同定义指标上升，才表示纯国内生产占比提高，仍不能单独证明生产回流。",
+        "negative": "纯国内生产份额下降：不经出口、在国内被吸收的增加值占比变小。",
+        "positive": "纯国内生产份额上升：不经出口、在国内被吸收的增加值占比变大。",
     },
     "PLy_GVC": {
-        "negative": "模拟 Y 的数值下降。若真实同定义后向长度下降，才可能与进口端生产链缩短一致；本实验没有生成冲击后的投入产出表。",
-        "positive": "模拟 Y 的数值上升。若真实同定义后向长度上升，才可能与进口端生产链延长一致，仍不能单靠一个系数判断企业策略。",
+        "negative": "后向生产长度缩短：从最终品回溯的 GVC 生产环节减少。",
+        "positive": "后向生产长度延长：从最终品回溯的 GVC 生产环节增加。",
     },
     "GVCPs": {
-        "negative": "模拟 Y 的数值下降。若真实位置指数下降，才表示在该口径下相对更靠下游；本实验没有生成冲击后的投入产出表。",
-        "positive": "模拟 Y 的数值上升。若真实位置指数上升，才表示在该口径下相对更上游，仍不能单靠一个系数判断分工位置。",
+        "negative": "位置指数下降：在该口径下相对更靠下游。",
+        "positive": "位置指数上升：在该口径下相对更上游。",
     },
-    "weighted_degree": {
-        "negative": "模拟 Y 的数值下降。本实验没有生成对应的新网络，不能称为连接强度下降；只有重新计算真实网络的加权度后，才能讨论其变化。",
-        "positive": "模拟 Y 的数值上升。本实验没有生成对应的新网络，不能称为连接强度增强，也不能据此判断经济重要性。",
+    "weighted_indegree": {
+        "negative": "加权入度下降：买入侧的流量规模变小。",
+        "positive": "加权入度上升：买入侧的流量规模变大。",
+    },
+    "weighted_outdegree": {
+        "negative": "加权出度下降：卖出侧的流量规模变小。",
+        "positive": "加权出度上升：卖出侧的流量规模变大。",
+    },
+    "betweenesscentrality": {
+        "negative": "介数下降：在二值拓扑最短路径上的中介位置减弱。",
+        "positive": "介数上升：在二值拓扑最短路径上的中介位置增强。",
     },
     "closnesscentrality": {
-        "negative": "模拟 Y 的数值下降。本实验没有生成对应的新网络，不能称为网络距离变远；只有重新计算真实网络的接近中心性后，才能讨论其变化。",
-        "positive": "模拟 Y 的数值上升。本实验没有生成对应的新网络，不能称为网络位置更靠近中心，也不能据此判断经济重要性。",
+        "negative": "接近中心性下降：到其他节点的网络距离变远。",
+        "positive": "接近中心性上升：到其他节点的网络距离变近。",
     },
 }
 _OUTCOME_INTERPRETATIONS = {
     "trade": {
-        "negative": "模拟 Y 的数值下降。若真实同定义指标下降，才表示外国增加值项占比降低，仍不能单独证明生产回流。",
-        "positive": "模拟 Y 的数值上升。若真实同定义指标上升，才表示外国增加值项占比提高；本实验没有重算出口分解。",
+        "negative": "外国增加值项占比下降：出口价值中来自国外投入的部分变小。",
+        "positive": "外国增加值项占比上升：出口价值中来自国外投入的部分变大。",
     },
     "production": {
-        "negative": "模拟 Y 的数值下降。若真实同定义指标下降，才表示 SVA 中复杂 GVC 的构成占比变化，不能单凭该比例判断生产规模扩张/收缩。",
-        "positive": "模拟 Y 的数值上升。若真实同定义指标上升，才表示复杂 GVC 份额提高；本实验没有重算生产分解。",
+        "negative": "复杂 GVC 份额下降：SVA 中经多次跨境生产的部分占比变小。",
+        "positive": "复杂 GVC 份额上升：SVA 中经多次跨境生产的部分占比变大。",
     },
     "length": {
-        "negative": "模拟 Y 的数值下降。若真实同定义长度下降，才可能与生产链缩短一致；本实验没有生成冲击后的投入产出表。",
-        "positive": "模拟 Y 的数值上升。若真实同定义长度上升，才可能与生产链延长一致，仍不能单靠一个系数判断企业策略。",
+        "negative": "前向生产长度缩短：增加值到最终吸收经过的生产环节减少。",
+        "positive": "前向生产长度延长：增加值到最终吸收经过的生产环节增加。",
     },
     "network": {
-        "negative": "模拟 Y 的数值下降。本实验没有生成对应的新网络，不能称为拓扑位置下降；只有重新计算真实网络的同定义介数后，才能讨论其拓扑变化。",
-        "positive": "模拟 Y 的数值上升。本实验没有生成对应的新网络，不能称为拓扑位置增强，也不能据此判断经济重要性。",
+        "negative": "加权总度下降：节点买入与卖出的总流量规模变小。",
+        "positive": "加权总度上升：节点买入与卖出的总流量规模变大。",
     },
 }
 _REFLECTION_MIN_LENGTHS = {
@@ -222,7 +234,7 @@ def _setting_value(key: str, value: Any) -> str:
 def _coefficient_label(name: Any, design: dict[str, Any]) -> str:
     raw = str(name)
     if raw == X_COLUMN:
-        return "模拟关税暴露强度"
+        return "关税暴露强度"
     return _safe(raw)
 
 
@@ -324,9 +336,9 @@ def _evidence_reading(
     if not isinstance(ci_low, (int, float)) or not isinstance(ci_high, (int, float)):
         return "证据不足", "置信区间未记录，不能确定估计方向。"
     if ci_high < 0:
-        return "本次模拟样本支持负向关联", _interpretations(outcome, design)["negative"]
+        return "本次样本支持负向关联", _interpretations(outcome, design)["negative"]
     if ci_low > 0:
-        return "本次模拟样本支持正向关联", _interpretations(outcome, design)["positive"]
+        return "本次样本支持正向关联", _interpretations(outcome, design)["positive"]
     return (
         "证据不足，无法判断方向",
         "95% 置信区间包含 0（跨过或触及）；这不等于“没有效应”，而是当前证据不足以确定方向。",

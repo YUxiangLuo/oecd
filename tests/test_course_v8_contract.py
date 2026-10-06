@@ -120,7 +120,7 @@ def test_regression_stage_task_goals_match_the_beginner_workflow():
     assert "对比国家" in by_number[10]["tasks"][0]
     assert "年份" not in by_number[10]["tasks"][0]
     assert "跨境生产长度" in by_number[13]["goal"]
-    assert "模拟网络指标" in by_number[14]["goal"]
+    assert "网络指标" in by_number[14]["goal"]
     for step in (13, 14):
         assert "Y₃" not in by_number[step]["goal"]
         assert "Y₄" not in by_number[step]["goal"]

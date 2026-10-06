@@ -57,8 +57,9 @@ describe("shared step task card", () => {
     expect(html.match(/<li>/g)).toHaveLength(3);
     expect(html).toContain("理解题：已完成");
     expect(html).toContain("报告材料：尚未齐全");
-    // The caveat is visible in the card; no jump button, no rationale fold, no concept/handoff/deps.
-    expect(html).toContain("<b>注意：</b>区间跨零就是看不出。");
+    // No caveat line, jump button, rationale fold, concept, handoff or deps: only goal, tasks and status.
+    expect(html).not.toContain("注意：");
+    expect(html).not.toContain("区间跨零就是看不出。");
     expect(html).not.toContain("为什么做这一步");
     expect(html).not.toContain("开始本步");
     expect(html).not.toContain("<button");

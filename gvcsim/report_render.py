@@ -173,7 +173,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
         captured = True
         lines.extend(
             (
-                "### 步骤 10 · 模拟关税数据",
+                "### 步骤 10 · 关税数据",
                 "",
                 (
                     f"- 两国趋势示例：{'、'.join(_safe(country_label(str(value))) for value in shock.get('compared', []))} · "
@@ -181,8 +181,8 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     if isinstance(shock.get("compared"), list) and len(shock["compared"]) == 2
                     else f"- 查看对象：{_safe(shock.get('teaching_country'))} · {_safe(shock.get('teaching_year'))}"
                 ),
-                f"- 模拟版本：{_safe(shock.get('teaching_panel_version'))}",
-                "- X = 首年销往美国的出口份额 × 虚构税率；并非美国真实政策。",
+                f"- 数据版本：{_safe(shock.get('teaching_panel_version'))}",
+                "- X = 首年销往美国的出口份额 × 税率。",
             )
         )
         teaching_observation = shock.get("teaching_observation")
@@ -249,7 +249,7 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
         "",
         "这四步分别估计贸易流、生产、长度和网络；四项结果必须完整报告，不能只挑区间未跨 0 的结果。"
         "下表列出各步实际保存的可报告结果；系数因量纲和估计对象不同不能比大小，"
-        "网络 Y 是人工生成的标量，没有对应的新图，不能解释为拓扑已经变化。",
+        "网络 Y 的单位与份额、长度不同，不能与前三步的系数比大小。",
         "",
         "| 步骤 | 指标 | 冲击 | 比较方式 | 估计对象与相对变化 | 标称 95% 近似区间 | 证据判断 |",
         "|---|---|---|---|---|---|---|",
@@ -294,7 +294,7 @@ _COEFFICIENT_ROW_LABELS = {
     "trade": "外国增加值项占比",
     "production": "复杂 GVC 份额",
     "length": "跨境生产长度",
-    "network": "全正边二值介数",
+    "network": "加权总度",
 }
 _COEFFICIENT_UNITS = {"trade": "个百分点", "production": "个百分点", "length": "长度单位", "network": "中心性原始单位"}
 _KIND_UNITS = {"share": "个百分点", "length": "长度单位", "position": "位置指数单位", "network": "中心性原始单位"}
@@ -379,7 +379,7 @@ def _teaching_sample_lines(source_filter: dict[str, Any] | None) -> list[str]:
         f"生成面板时剔除 {_count(source_filter.get('excluded_source_baseline_rows'))} 个，"
         f"保留 {_count(source_filter.get('published_entities'))} 个供四项回归共同使用。",
         "- 共同规则：首年四类指标及销往美国的出口份额均有效；两类份额和出口份额在 0–1 内，长度大于 0，介数不小于 0。",
-        "- 这些单元用于构造模拟样本，不能据此概括全部国家—行业的现实变化。下列回归记录数以年度行计，与生成阶段的单元数区分。",
+        "- 这些单元构成四项回归共用的样本。下列回归记录数以年度行计，与筛选阶段的单元数区分。",
         "",
     ]
 
@@ -445,20 +445,8 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
                 f"| 设计状态 | {_STATUS_LABELS.get(status, _STATUS_LABELS['unknown'])} |",
                 "",
                 f"- **可以支持的表述：** {interpretation}",
-                "- **不能支持的表述：** 本结果不能证明真实关税导致了 GVC 变化。",
             )
         )
-        snapshot = run.get("model_snapshot", {})
-        beta = snapshot.get("beta")
-        if not suppressed and isinstance(beta, (int, float)):
-            preset = _natural_effect(outcome, design, {}, {"coef": beta})[1]
-            estimate = _natural_effect(outcome, design, {}, coefficient)[1]
-            difference = _natural_effect(outcome, design, {}, {"coef": coefficient["coef"] - beta})[1]
-            lines.append(
-                f"- **预设模拟关系的估计**（同按 X 增加 1 个百分点换算）：预设 {preset}；"
-                f"估计 {estimate}；差值（估计 − 预设）{difference}。"
-                "扰动使估计与预设不必相同；单次 95% 区间也不保证包含预设值。"
-            )
         lines.append(
             f"- 使用的年度记录：{_count(result.get('n_obs'))}；"
             f"国家×行业单元：{_count(result.get('n_entities'))}；国家聚类：{_count(result.get('n_clusters'))}。"
@@ -466,7 +454,7 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
         flow = result.get("sample_flow")
         if isinstance(flow, dict):
             lines.append(
-                f"- 回归阶段：输入 {_count(flow.get('input_rows'))} 行模拟年度记录，"
+                f"- 回归阶段：输入 {_count(flow.get('input_rows'))} 行年度记录，"
                 f"另剔除 {_count(flow.get('dropped_rows_total'))} 行。"
             )
         reasons = [*_list_values(result.get("status_reasons")), *_list_values(support.get("reasons"))]

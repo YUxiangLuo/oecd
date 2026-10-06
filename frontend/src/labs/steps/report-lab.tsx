@@ -35,9 +35,9 @@ const REFLECTION_FIELDS: {
   starter: string;
   min: number;
 }[] = [
-  { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请区分真实ICIO比较和模拟关税回归。", starter: "句式参考：本实验比较了……和……的……指标，想了解……；并用模拟关税数据练习读回归结果。", min: 12 },
+  { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请区分指标比较和关税回归。", starter: "句式参考：本实验比较了……和……的……指标，想了解……；并用关税数据读回归结果。", min: 12 },
   { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间。比较四项回归结果；无法推断时写明原因，不要写成“没有效应”。", starter: "句式参考：步骤……显示，……在……年的……为……；步骤 11 的回归估计 X 每增加 1 个百分点，Y 平均……，95% 区间为……。", min: 40 },
-  { key: "limitations", label: "局限与反思", prompt: "模拟关税X与结果Y不能证明真实政策效果。我的比较还有哪些限制？哪些结论不能推出？下一步需要什么数据或检验？", starter: "句式参考：X 与 Y 都是教学模拟数据，因此……；我的比较只覆盖……；若要进一步验证，需要……。", min: 30 },
+  { key: "limitations", label: "局限与反思", prompt: "我的比较还有哪些限制？哪些结论不能推出？下一步需要什么数据或检验？", starter: "句式参考：回归只描述 X 与 Y 的关联，因此……；我的比较只覆盖……；若要进一步验证，需要……。", min: 30 },
 ];
 
 export const REPORT_REFLECTION_TITLE_ID = "report-reflection-title";
@@ -87,7 +87,7 @@ const REPORT_GATE_STAGES = [
   { label: "数据接入", first: 1, last: 1 },
   { label: "指标计算", first: 2, last: 5 },
   { label: "图表比较", first: 6, last: 9 },
-  { label: "模拟回归", first: 10, last: 14 },
+  { label: "关税回归", first: 10, last: 14 },
   { label: "实验报告", first: 15, last: 15 },
 ] as const;
 

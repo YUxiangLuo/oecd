@@ -95,12 +95,11 @@ export function StepTaskCard({
         </div>
       </div>
       {!compact && <>
-      {/* Tasks read as one light flow line; the step's reading caveat stays visible underneath.
-          The concept is taught on the page itself (table guide, method intro, metric definitions). */}
+      {/* Tasks read as one light flow line. The step's reading caveat (step.tip) is deliberately not
+          shown: it distracted students. The concept is taught on the page itself. */}
       <ol className="step-task-list">
         {step.tasks.map((task) => <li key={task}>{task}</li>)}
       </ol>
-      {step.tip && <p className="step-task-tip"><b>注意：</b>{step.tip}</p>}
       </>}
     </section>
   );

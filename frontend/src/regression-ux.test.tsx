@@ -38,10 +38,11 @@ describe("simple regression workbench", () => {
       const dom = new DOMParser().parseFromString(html, "text/html");
       expect(dom.querySelectorAll(".reg-run-card > button")).toHaveLength(1);
       // X and Y are named in the question line and the step focus; no raw column names leak into the page.
-      expect(dom.querySelector(".reg-run-card h3")?.textContent).toContain("模拟关税暴露（X）");
+      expect(dom.querySelector(".reg-run-card h3")?.textContent).toContain("关税暴露（X）");
+      expect(dom.body.textContent).not.toContain("模拟");
       expect(dom.querySelector(".reg-step-focus")).not.toBeNull();
       expect(dom.body.textContent).not.toContain("teaching_tariff_exposure");
-      expect(dom.querySelector(".reg-step-focus")?.textContent).toMatch(/^本步重点(读数|读区间|读单位|比单位)：/);
+      expect(dom.querySelector(".reg-step-focus")?.textContent).toMatch(/^本步重点(读数|读区间|读单位|读网络 Y)：/);
       expect(html.includes("方法与步骤 11 相同")).toBe(outcome !== "trade");
       expect(dom.querySelectorAll("select, details, table")).toHaveLength(0);
       expect(html).not.toMatch(/五年示例|可选趋势对照|可选小练习|四步结果汇总|计算方法说明|先用眼睛看/);
@@ -54,7 +55,7 @@ describe("simple regression workbench", () => {
     spyOn(api, "teachingSeries").mockResolvedValue({ version: "v", disclaimer: "", rows: [], total: 0, years: [] } as TeachingPanelResponse);
     render(<RegressionRunLab step={step} meta={meta} state={state} />);
     const figure = await screen.findByRole("img", { name: /加税前后：两组外国增加值项占比的平均变化/ });
-    expect(figure.getAttribute("aria-label")).toContain("2018 年起模拟加税");
+    expect(figure.getAttribute("aria-label")).toContain("2018 年起加税");
     expect(figure.textContent).toContain("加税国家组");
     expect(figure.textContent).toContain("未加税国家组");
     await waitFor(() => expect(screen.getByRole("button", { name: "算出这个差距（用全部 16,220 条记录）" })).toBeTruthy());
@@ -92,9 +93,9 @@ describe("simple regression workbench", () => {
     fireEvent.change(select, { target: { value: "DVAex_share" } });
     await waitFor(() => expect(design).toHaveBeenCalledWith("trade", "DVAex_share"));
     await screen.findByText(/加税组比未加税组 高 0\.70 个百分点/);
-    expect(screen.getByRole("heading", { name: /模拟 Y（国内增加值出口占比）/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /国内增加值出口占比（Y）/ })).toBeTruthy();
     fireEvent.change(select, { target: { value: "FVA_share" } });
-    await waitFor(() => expect(screen.getByRole("heading", { name: /模拟 Y（外国增加值项占比）/ })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("heading", { name: /外国增加值项占比（Y）/ })).toBeTruthy());
   });
 
   const savedRun = (baseline: string, label: string) => ({
@@ -136,9 +137,10 @@ describe("simple regression workbench", () => {
     const select = await screen.findByRole("combobox", { name: "结果指标 Y" }) as HTMLSelectElement;
     await waitFor(() => expect(select.value).toBe("DVAex_share"));
     await waitFor(() => expect(design).toHaveBeenCalledWith("trade", "DVAex_share"));
-    // The saved result is shown for that Y, with the server's disclaimer under the sentences.
-    await waitFor(() => expect(document.querySelector(".reg-result-points")?.textContent).toContain("模拟国内增加值出口占比（Y）平均上升 0.50 个百分点"));
-    expect(screen.getByText("教学模拟", { selector: ".reg-result-boundary" })).toBeTruthy();
+    // The saved result is shown for that Y; the server's disclaimer is not shown to students.
+    await waitFor(() => expect(document.querySelector(".reg-result-points")?.textContent).toContain("国内增加值出口占比（Y）平均上升 0.50 个百分点"));
+    expect(document.querySelector(".reg-result-boundary")).toBeNull();
+    expect(document.body.textContent).not.toContain("教学模拟");
   });
 
   test("falls back to the default Y when the saved baseline is not offered by the release", async () => {
@@ -154,10 +156,22 @@ describe("simple regression workbench", () => {
     expect(document.querySelector(".reg-result-points")).toBeNull();
   });
 
+  test("starts Y from the indicator recorded in the matching step 6-9 when the family offers it", async () => {
+    const design = spyOn(api, "regressionDesign").mockResolvedValue({} as RegressionDesignInfo);
+    spyOn(api, "teachingGroups").mockResolvedValue(groupsWithBaselines);
+    spyOn(api, "teachingSeries").mockResolvedValue({ version: "v", disclaimer: "", rows: [], total: 0, years: [] } as TeachingPanelResponse);
+    const getStep = ((n: number) => n === 6 ? { compared: ["CHN", "USA"], indicator_selection: { metric: "DVAex_share" } } : undefined) as <T>(step: number) => T | undefined;
+    render(<RegressionRunLab step={step} meta={meta} state={state} getStep={getStep} />);
+    const select = await screen.findByRole("combobox", { name: "结果指标 Y" }) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe("DVAex_share"));
+    await waitFor(() => expect(design).toHaveBeenLastCalledWith("trade", "DVAex_share"));
+    expect(screen.getByRole("heading", { name: /国内增加值出口占比（Y）/ })).toBeTruthy();
+  });
+
   test("converts the estimate to the example's X in each step's own units", () => {
     expect(exampleEffect("trade", -0.55, 0.0932)).toBe("5.13 个百分点");
     expect(exampleEffect("length", -1.8, 0.0932)).toBe("0.168 个长度单位");
-    expect(exampleEffect("network", -6000, 0.0932)).toBe("559.2 个中心性原始单位");
+    expect(exampleEffect("network", -4000, 0.0932)).toBe("372.8 个中心性原始单位");
     // With a chosen baseline the design says how Y is read.
     expect(exampleEffect("length", -0.4, 0.0932, { depvar_kind: "position" })).toBe("0.0373 个位置指数单位");
     expect(exampleEffect("trade", 0.55, 0.0932, { depvar_kind: "share" })).toBe("5.13 个百分点");

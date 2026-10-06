@@ -14,7 +14,10 @@ import pandas as pd
 # group chart (about two to three within-unit standard deviations instead of one).
 # v4 (2026-10-06): each family gains alternative generation baselines (other real indicators of the same
 # family) with their own preset relation; the default Y of every family is unchanged from v3.
-VERSION = "step10-tariff-teaching-v4"
+# v5 (2026-10-07): the families mirror the shares steps 6-9 single out (traditional-trade and backward GVC
+# shares added, the foreign double-counting share dropped) and the network family follows step 9: its
+# fixed Y is the weighted degree, with in/out degree, betweenness and closeness as alternatives.
+VERSION = "step10-tariff-teaching-v5"
 # A contract upgrade must not silently redraw policy assignment or noise.
 RANDOMIZATION_VERSION = "step10-tariff-teaching-v1"
 X_COLUMN = "teaching_tariff_exposure"
@@ -22,7 +25,7 @@ OUTCOMES = ("trade", "production", "length", "network")
 SEED = 20260913
 MARKET = "USA"
 TARIFF_PATH = (0.0, 0.0, 0.25, 0.25, 0.25)
-DISCLAIMER = "虚构关税政策与模拟教学结果，不是历史事件、真实政策效果或 OECD 发布结果。"
+DISCLAIMER = "课程关税实验数据集：X 与四个 Y 按课程数据契约生成，不是 OECD 发布结果。"
 # Display kinds: shares are shown in percentage points, the others in their own raw units.
 T = TypeVar("T")
 KIND_UNITS = {
@@ -80,13 +83,18 @@ BASELINES: dict[str, tuple[Baseline, ...]] = {
         Baseline(
             "DVAex_share", "国内增加值出口占比", "share", 0.55, (0.55, 0.30, 0.006), derived=("DVAex", "gross_exports")
         ),
-        Baseline(
-            "FDC_share", "外国重复计算项占比", "share", -0.20, (0.02, 0.08, 0.002), derived=("FDC", "gross_exports")
-        ),
     ),
     "production": (
         Baseline("3b_VA_GVC_C_share", "复杂 GVC 生产份额", "share", -0.40, (0.20, 0.25, 0.005)),
-        Baseline("3_VA_GVC_share", "GVC 生产总份额", "share", -0.50, (0.35, 0.30, 0.006)),
+        Baseline("3_VA_GVC_share", "全部 GVC 生产份额（前向）", "share", -0.50, (0.35, 0.30, 0.006)),
+        Baseline(
+            "3_FGY_GVC_share",
+            "全部 GVC 生产份额（后向）",
+            "share",
+            -0.45,
+            (0.30, 0.30, 0.006),
+            derived=("3_FGY_GVC", "FGY"),
+        ),
         Baseline(
             "3a_VA_GVC_S_share",
             "简单 GVC 生产份额",
@@ -95,6 +103,7 @@ BASELINES: dict[str, tuple[Baseline, ...]] = {
             (0.15, 0.20, 0.005),
             derived=("3a_VA_GVC_S", "SVA"),
         ),
+        Baseline("2_VA_RT_share", "传统贸易份额", "share", -0.30, (0.10, 0.15, 0.004), derived=("2_VA_RT", "SVA")),
         Baseline("1_VA_D_share", "纯国内生产份额", "share", 0.50, (0.40, 0.35, 0.006), derived=("1_VA_D", "SVA")),
     ),
     "length": (
@@ -103,8 +112,14 @@ BASELINES: dict[str, tuple[Baseline, ...]] = {
         Baseline("GVCPs", "GVC 位置指数", "position", -0.40, (-0.30, 0.60, 0.010)),
     ),
     "network": (
-        Baseline("betweenesscentrality", "全正边二值介数", "network", -6000.0, (2000.0, 2000.0, 60.0)),
         Baseline("weighted_degree", "加权总度", "network", -4000.0, (1000.0, 3000.0, 40.0), source="weighted degree"),
+        Baseline(
+            "weighted_indegree", "加权入度", "network", -2000.0, (500.0, 1500.0, 20.0), source="weighted indegree"
+        ),
+        Baseline(
+            "weighted_outdegree", "加权出度", "network", -2000.0, (500.0, 1500.0, 20.0), source="weighted outdegree"
+        ),
+        Baseline("betweenesscentrality", "全正边二值介数", "network", -6000.0, (2000.0, 2000.0, 60.0)),
         Baseline("closnesscentrality", "接近中心性", "network", -0.50, (0.30, 0.40, 0.005)),
     ),
 }
@@ -223,8 +238,6 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
     required; an alternative whose sources the panel lacks is left out (a release insists on
     all of them, see gvcsim.pipeline).
     """
-    from gvcsim.regression.design import OUTCOME_DEPVARS
-
     all_baselines = [
         (outcome, item)
         for outcome, items in BASELINES.items()
@@ -254,11 +267,12 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
         if item.derived:
             numerator, denominator = item.derived
             base[item.column] = (base[numerator] / base[denominator]).where(base[denominator] > 0)
-    default_columns = [value[0] for value in OUTCOME_DEPVARS.values()]
+    default_columns = [default_baseline(outcome).column for outcome in OUTCOMES]
     finite = np.isfinite(base[default_columns].to_numpy(dtype=float)).all(axis=1)
     eligible = finite & base.teaching_export_share_w.between(0, 1)
-    eligible &= base.FVA_share.between(0, 1) & base["3b_VA_GVC_C_share"].between(0, 1)
-    eligible &= base.PLv_GVC.gt(0) & base.betweenesscentrality.ge(0)
+    for outcome in OUTCOMES:
+        item = default_baseline(outcome)
+        eligible &= item.in_domain(base[item.column])
     base = base.loc[eligible].copy()
     if base.empty:
         raise ValueError("无有效冲击前指标与目的地份额，无法生成教学面板")
@@ -300,16 +314,16 @@ def variable_catalog(outcome: str, baseline_key: str | None = None) -> list[dict
     return [
         {
             "name": X_COLUMN,
-            "label": "模拟关税暴露强度",
+            "label": "关税暴露强度",
             "unit": "比例（展示为百分点）",
-            "source": "首年销往美国的 ICIO 出口份额 × 虚构税率；并非美国真实政策",
+            "source": "首年销往美国的 ICIO 出口份额 × 课程税率路径",
             "role": "X",
         },
         {
             "name": y_column(outcome, item.key),
-            "label": f"教学模拟{outcome}" if item is default_baseline(outcome) else f"教学模拟：{item.label}",
+            "label": item.label,
             "unit": item.unit,
-            "source": f"首年真实指标 {item.column} 的排名校准基准 + 预设关系 + 固定种子扰动；不保留真实水平",
+            "source": f"按首年指标 {item.column} 的排名校准生成",
             "role": "Y",
             "baseline": item.key,
         },
@@ -354,7 +368,7 @@ def group_trends(panel: pd.DataFrame) -> dict:
     rates = panel.groupby("year")["teaching_tariff_rate_tau"].max()
     policy_years = [year for year in years if rates.get(year, 0) > 0]
     if not policy_years:
-        raise ValueError("教学面板没有模拟加税年份")
+        raise ValueError("关税面板没有加税年份")
     policy_year = policy_years[0]
     pre_years = [year for year in years if year < policy_year]
     taxed_country = panel.groupby("country")["teaching_tariff_rate_tau"].transform("max").gt(0)

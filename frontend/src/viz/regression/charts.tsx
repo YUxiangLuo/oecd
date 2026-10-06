@@ -256,7 +256,7 @@ export function GroupChangeChart({
     return last && <text x={x(last.year) + 8} y={y(last.change * scale) + dy} dominantBaseline="middle" fontSize={11.5} fontWeight={700} fill={color}>{text}</text>;
   };
   const lastTaxed = taxed.at(-1)?.change ?? 0, lastUntaxed = untaxed.at(-1)?.change ?? 0;
-  const description = `${title}：加税组与未加税组相对加税前平均水平的变化，${policyYear} 年起模拟加税`;
+  const description = `${title}：加税组与未加税组相对加税前平均水平的变化，${policyYear} 年起加税`;
   return (
     <div className="group-change-chart" style={{ ...cardStyle, flex: "1 1 320px", minWidth: 280 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3a4050" }}>{title}</div>
@@ -286,7 +286,7 @@ export function GroupChangeChart({
           );
         })()}
         <line x1={policyX} x2={policyX} y1={padT - 8} y2={height - padB} stroke="#3a4050" strokeWidth={1.2} strokeDasharray="4 4" />
-        <text x={policyX + 6} y={padT - 6} fontSize={11} fill="#3a4050">{policyYear} 年起模拟加税</text>
+        <text x={policyX + 6} y={padT - 6} fontSize={11} fill="#3a4050">{policyYear} 年起加税</text>
         {([[untaxed, UNTAXED], [taxed, TAXED]] as const).map(([series, color]) => (
           <g key={color}>
             <path d={path(series)} fill="none" stroke={color} strokeWidth={2.4} />

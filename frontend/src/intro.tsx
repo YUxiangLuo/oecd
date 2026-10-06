@@ -3,7 +3,7 @@
  *   1 开场:闭环管线动画 + 真实规模计数(经济体/行业/年份)
  *   2 数据底座：两张可独立展开的数据卡（真实数据 / 教学设定）
  *   3 十五步旅程：五阶段可点击展开（内容来自 /api/steps 真实元数据）
- *   4 证据预演：两国五年趋势 → 模拟 X/Y → 四项结果
+ *   4 证据预演：两国五年趋势 → X/Y → 四项结果
  *   5 就绪:说明当前身份与完成规则，关闭介绍后返回实验台
  * 覆盖范围与目录来自课程元数据；趋势图仅为界面示意，不生成估计数值。
  */
@@ -20,7 +20,7 @@ const STAGE_OUTPUTS: Record<number, string> = {
   1: "认识投入产出表，读懂一格数据的含义。",
   2: "了解指标怎样由投入产出表算出，并拆解两国读数。",
   3: "看指标的历年变化和在全部经济体中的位置，再与对比国家比较，形成图表证据。",
-  4: "认识模拟关税暴露 X，用全部样本对四个模拟 Y 运行回归。",
+  4: "认识关税暴露 X，用全部样本对四个结果指标 Y 运行回归。",
   5: "整合材料，完成原创分析与报告。",
 };
 
@@ -143,9 +143,9 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       <h1 className="intro-title">供应链仿真系统</h1>
       <div className="intro-kicker">GVC SIMULATION LAB</div>
       <p className="intro-lede">
-        从全球生产联系，理解价值链变化。利用投入产出数据计算指标，看它们的五年变化和全球位置，再用教学模拟练习读取回归，完成有依据的实验报告。
+        从全球生产联系，理解价值链变化。利用投入产出数据计算指标，看它们的五年变化和全球位置，再用关税数据练习读取回归，完成有依据的实验报告。
       </p>
-      <p className="intro-boundary">{datasetName} · 教学情景 · 不作真实政策效果预测</p>
+      <p className="intro-boundary">{datasetName}</p>
       <div className="intro-pipeline">
         {/* 五阶段名称与 /api/steps、侧栏保持一致:学生接触到的旅程只有一套说法。 */}
         {stages.map((st, i) => (
@@ -170,7 +170,7 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
     <div key={1} className="intro-scene">
       <div className="intro-scene-kicker">数据来源</div>
       <h2 className="intro-h2">数据来源与教学设定</h2>
-      <p className="intro-lede">真实投入产出表用于讲解指标概念；回归练习中的关税 X 与结果 Y 均为教学模拟。</p>
+      <p className="intro-lede">投入产出表用于讲解指标概念；回归练习使用课程的关税数据。</p>
       <div className="intro-cards">
         <div
           className={`intro-card${openCards.icio ? " open" : ""}`}
@@ -221,21 +221,20 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
           <span className="intro-card-head">
             <CardIcon kind="shock" />
             <span>
-              <span className="intro-card-title">教学模拟关税</span>
-              <span className="intro-card-sub">课程生成的模拟数据</span>
+              <span className="intro-card-title">关税数据</span>
+              <span className="intro-card-sub">课程的关税实验数据</span>
             </span>
             <span className="intro-card-toggle" aria-hidden>{openCards.shock ? "−" : "+"}</span>
           </span>
           </button>
           <ul className="intro-card-facts">
-            <li>关税路径与暴露值全部由课程生成。</li>
-            <li>X 由首年销往美国的出口份额和模拟税率算出。</li>
-            <li>Y 也是模拟结果，仅用于练习读回归。</li>
+            <li>X 由首年销往美国的出口份额和税率算出。</li>
+            <li>前两年税率为 0，加税国家后三年为 25%。</li>
+            <li>Y 是贸易、生产、长度、网络四类结果指标。</li>
           </ul>
           {openCards.shock && (
             <div className="intro-card-body" id={shockPanelId}>
-              <p>前两年税率为 0，受影响国家后三年为 10%，其余国家为 0。暴露强度等于首年销往美国的出口份额乘以模拟税率。</p>
-              <p><b>注意：</b>这里没有真实事件、现实税率或现实政策效果。模拟 Y 参考首年真实指标的排序生成，但不保留真实指标值。</p>
+              <p>暴露强度 X 等于首年销往美国的出口份额乘以税率；未加税国家的 X 始终为 0。步骤 11–14 用同一个 X 对四个结果指标 Y 做回归。</p>
             </div>
           )}
         </div>
@@ -293,8 +292,8 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
       </div>
       <div className="intro-evidence-preview">
         <div className="intro-trend-card">
-          <div className="intro-preview-heading"><b>01 · 你的例子：X 只在加税后出现</b><span><i className="country-a" />国家 A（模拟加税） <i className="country-b" />国家 B（未加税）</span></div>
-          <svg viewBox="0 0 520 180" role="img" aria-label="国家 A 与国家 B 的五年模拟关税暴露 X 趋势界面示意，线条不代表真实数值">
+          <div className="intro-preview-heading"><b>01 · 你的例子：X 只在加税后出现</b><span><i className="country-a" />国家 A（加税） <i className="country-b" />国家 B（未加税）</span></div>
+          <svg viewBox="0 0 520 180" role="img" aria-label="国家 A 与国家 B 的五年关税暴露 X 趋势界面示意，线条不代表实际读数">
             <path className="grid" d="M42 30H500M42 75H500M42 120H500" />
             <path className="country-a" d="M50 120L160 120L270 40L380 40L490 40" />
             <path className="country-b" d="M50 120L160 120L270 120L380 120L490 120" />
@@ -311,16 +310,16 @@ export function IntroOverlay({ user, meta, stepsData, onDone, returnFocusRef }: 
         </div>
         <div className="intro-xy-card">
           <b>02 · 用回归把差距量化</b>
-          <div className="intro-xy-item"><strong>X</strong><span><b>模拟关税暴露</b><small>解释变量：用于比较的变量</small></span></div>
+          <div className="intro-xy-item"><strong>X</strong><span><b>关税暴露</b><small>解释变量：用于比较的变量</small></span></div>
           <div className="intro-xy-link" aria-hidden>↓ X 每增加 1 个百分点，Y 平均变化多少？</div>
-          <div className="intro-xy-item"><strong>Y</strong><span><b>模拟指标结果</b><small>结果变量：要观察的变量</small></span></div>
+          <div className="intro-xy-item"><strong>Y</strong><span><b>指标结果</b><small>结果变量：要观察的变量</small></span></div>
         </div>
       </div>
       <div className="intro-four-results" role="group" aria-label="四项结果都要汇总">
         <b>03 · 四步各估一项，报告中汇总</b>
         <span>出口构成</span><span>复杂生产</span><span>链条长度</span><span>网络位置</span>
       </div>
-      <p className="intro-note intro-preview-note">图示：国家 A 被模拟加税，前两年 X 为零、之后为正；国家 B 未加税，X 始终为零。线条不是实际读数。X 与 Y 均为教学模拟；关系不显著或无法推断也要如实报告，不能解释为真实政策效果。</p>
+      <p className="intro-note intro-preview-note">图示：国家 A 被加税，前两年 X 为零、之后为正；国家 B 未加税，X 始终为零。线条不是实际读数。关系不显著或无法推断也要如实报告。</p>
     </div>,
 
     /* ---- 5 就绪 ---- */

@@ -1,16 +1,16 @@
 {
-  "captured_on": "2026-10-06",
+  "captured_on": "2026-10-07",
   "viewport": {
     "width": 1280,
     "height": 960
   },
-  "baseline_commit": "f6f54f4",
+  "baseline_commit": "7f48f21",
   "code_state": "Business code, manual text and manual scripts all at the baseline commit.",
   "code_sources_hash_rule": "SHA-256 of sorted sha256sum output for frontend/src and gvcsim .ts/.tsx/.css/.py files (computed on a Windows checkout; line endings may differ from Linux).",
-  "code_sources_sha256": "66cfed2158b07956250c95190b5498a9797a1f281443062d16a3e6740b0fb070",
+  "code_sources_sha256": "2c2f13b83103a7ada5683ccb9d5b4abbb75ec25d3ea61325f90cce3faa80527e",
   "data_release": "01b87b87c05c4d8386440706adafe04d",
-  "simulation_contract": "step10-tariff-teaching-v4",
-  "source": "Manual 2.4 re-captured figures 10-shocks, 11-regression-setup and 11-regression-result (steps 10–14 reworked, simulation contract step10-tariff-teaching-v3) with headless Chrome driven by frontend/scripts/capture-student-manual.ts (MANUAL_ONLY_REG=1) at 1280x960; the other 16 PNG files are the manual 2.3 captures, whose pages did not change. The submitted and graded images are element captures. Passwords are not visible.",
+  "simulation_contract": "step10-tariff-teaching-v5",
+  "source": "Manual 2.7 re-captured figures 10-shocks, 11-regression-setup and 11-regression-result (steps 10–15 without simulation wording, task cards without the caveat line, step 14 defaulting to weighted degree, simulation contract step10-tariff-teaching-v5) with headless Chrome driven by frontend/scripts/capture-student-manual.ts (MANUAL_ONLY_REG=1) at 1280x960; the other 16 PNG files are the manual 2.3–2.5 captures, whose pages did not change. The submitted and graded images are element captures. Passwords are not visible.",
   "provenance_scope": "Single capture run against an independent local classroom. The complete-course account's learning records were prepared through public APIs (scripts/seed_full_journey.py), then every page was opened in the browser; Step 10's example was selected in the page. Not a pure UI journey.",
   "screenshots": [
     {
@@ -61,21 +61,21 @@
       "file": "screenshots/11-regression-setup.png",
       "width": 1280,
       "height": 960,
-      "sha256": "9d8cf3bdf4e42fe2732691adcd61a3e56541fdc8bce6e08118b5c42c4a2e5001",
-      "captured_on": "2026-10-06",
+      "sha256": "3a703a48b7bc4cc734ae8a14b68f867cf1f07349daf6e3950a087202c02edad9",
+      "captured_on": "2026-10-07",
       "capture_url": "http://127.0.0.1:5173",
       "capture_tool": "headless-chrome-cdp",
       "journey": "partial-course-browser",
       "account": "test-student-incomplete",
       "capture_note": "Step 12 before running: taxed vs untaxed group chart and run button.",
-      "baseline_commit": "f6f54f4",
-      "data_release": "6a6776d78e2847b48902be12e253682a",
-      "simulation_contract": "step10-tariff-teaching-v4",
+      "baseline_commit": "7f48f21",
+      "data_release": "b8c865847b9042469fd1594eea231094",
+      "simulation_contract": "step10-tariff-teaching-v5",
       "data_sources": [
         {
           "name": "OECD ICIO 2023 observed classroom release",
           "production_data": true,
-          "release_id": "6a6776d78e2847b48902be12e253682a"
+          "release_id": "b8c865847b9042469fd1594eea231094"
         }
       ]
     },
@@ -307,21 +307,21 @@
       "file": "screenshots/10-shocks.png",
       "width": 1280,
       "height": 960,
-      "sha256": "5070ae5fa28fd2568cc24b132740325cfffcb61dce3a89a0403ef9ae9bb767d1",
-      "captured_on": "2026-10-06",
+      "sha256": "920d04e6c4e745d735099bfbe5ea3a9b24168d2c0f1bf96fa7760cb22ef2dc82",
+      "captured_on": "2026-10-07",
       "capture_url": "http://127.0.0.1:5173",
       "capture_tool": "headless-chrome-cdp",
       "journey": "api-seeded-then-browser",
       "account": "test-student-complete",
       "capture_note": "Step 10 followed example (Canada vs Mexico, motor vehicles).",
-      "baseline_commit": "f6f54f4",
-      "data_release": "6a6776d78e2847b48902be12e253682a",
-      "simulation_contract": "step10-tariff-teaching-v4",
+      "baseline_commit": "7f48f21",
+      "data_release": "b8c865847b9042469fd1594eea231094",
+      "simulation_contract": "step10-tariff-teaching-v5",
       "data_sources": [
         {
           "name": "OECD ICIO 2023 observed classroom release",
           "production_data": true,
-          "release_id": "6a6776d78e2847b48902be12e253682a"
+          "release_id": "b8c865847b9042469fd1594eea231094"
         }
       ]
     },
@@ -329,21 +329,21 @@
       "file": "screenshots/11-regression-result.png",
       "width": 1280,
       "height": 960,
-      "sha256": "4fcabc4060d46af5c99bf53c582dd481b4c60bf28ba0c8f5fec9a1ddfa5d928b",
-      "captured_on": "2026-10-06",
+      "sha256": "71508170f8733b001d4a0476f09a2202eb80cf7e1c8832dd1a5ce8a298ffa521",
+      "captured_on": "2026-10-07",
       "capture_url": "http://127.0.0.1:5173",
       "capture_tool": "headless-chrome-cdp",
       "journey": "api-seeded-then-browser",
       "account": "test-student-complete",
       "capture_note": "Step 11 binned scatter, coefficient plot and reading.",
-      "baseline_commit": "f6f54f4",
-      "data_release": "6a6776d78e2847b48902be12e253682a",
-      "simulation_contract": "step10-tariff-teaching-v4",
+      "baseline_commit": "7f48f21",
+      "data_release": "b8c865847b9042469fd1594eea231094",
+      "simulation_contract": "step10-tariff-teaching-v5",
       "data_sources": [
         {
           "name": "OECD ICIO 2023 observed classroom release",
           "production_data": true,
-          "release_id": "6a6776d78e2847b48902be12e253682a"
+          "release_id": "b8c865847b9042469fd1594eea231094"
         }
       ]
     },

@@ -22,7 +22,8 @@ describe("fixed teaching regression reading", () => {
     const html = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={response()} />);
     const dom = new DOMParser().parseFromString(html, "text/html");
     expect(html).toContain("回归结果");
-    expect(html).toContain("方向判断：本次模拟样本支持正向关联");
+    expect(html).toContain("方向判断：本次样本支持正向关联");
+    expect(html).not.toContain("模拟");
     // One coefficient plot: zero line plus one dot (one colour, no bar) with its interval.
     expect(dom.querySelectorAll("svg[role=img]")).toHaveLength(1);
     expect(dom.querySelectorAll("svg rect")).toHaveLength(0);
@@ -62,9 +63,9 @@ describe("fixed teaching regression reading", () => {
   });
 
   test.each([
-    [-0.8, -0.2, "本次模拟样本支持负向关联", true],
-    [-0.9, 0.1, "本次模拟样本不足以判断方向", false],
-    [-0.8, 0, "本次模拟样本不足以判断方向", false],
+    [-0.8, -0.2, "本次样本支持负向关联", true],
+    [-0.9, 0.1, "本次样本不足以判断方向", false],
+    [-0.8, 0, "本次样本不足以判断方向", false],
   ])("negative point estimate with interval [%s, %s] is interpreted using the interval", (low, high, title, negative) => {
     const data = response();
     Object.assign(data.result.coefs[0], { coef: -0.4, ci_low: low, ci_high: high });
@@ -108,7 +109,7 @@ describe("fixed teaching regression reading", () => {
       { label: "MEX 墨西哥·C29", x: 0 },
     ]} />);
     const sentence = container.querySelector(".reg-example-effect")!.textContent;
-    expect(sentence).toBe("换算到你在步骤 10 选的例子：CAN 加拿大·C29（X = 9.32 个百分点）Y 约下降 5.13 个百分点；MEX 墨西哥·C29未被模拟加税（X = 0），按估计不变。");
+    expect(sentence).toBe("换算到你在步骤 10 选的例子：CAN 加拿大·C29（X = 9.32 个百分点）Y 约下降 5.13 个百分点；MEX 墨西哥·C29未被加税（X = 0），按估计不变。");
     // An uncertain direction is flagged; suppressed inference and missing examples show no conversion.
     Object.assign(data.result.coefs[0], { ci_low: -1, ci_high: 0.2 });
     const uncertain = render(<RegressionResultCard outcome="trade" response={data} examples={[{ label: "例子", x: 0.05 }]} />);

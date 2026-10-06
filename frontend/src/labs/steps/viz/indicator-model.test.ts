@@ -134,9 +134,9 @@ describe("trend rendering", () => {
       label: "X",
       unit: "%",
     };
-    const marked = renderToStaticMarkup(createElement(IndicatorTrendChart, { ...props, markYear: { year: 2018, label: "2018 年起模拟加税" } }));
+    const marked = renderToStaticMarkup(createElement(IndicatorTrendChart, { ...props, markYear: { year: 2018, label: "2018 年起加税" } }));
     expect(marked).toContain('data-mark-year="2018"');
-    expect(marked).toContain("2018 年起模拟加税");
+    expect(marked).toContain("2018 年起加税");
     const outside = renderToStaticMarkup(createElement(IndicatorTrendChart, { ...props, markYear: { year: 2016, label: "起始年" } }));
     expect(outside).not.toContain("data-mark-year");
     expect(renderToStaticMarkup(createElement(IndicatorTrendChart, props))).not.toContain("data-mark-year");

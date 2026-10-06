@@ -312,7 +312,7 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
             {
                 "step": 10,
                 "title": _STEP_TITLES.get(10, ""),
-                "missing": ["请打开本步并等待模拟关税面板加载，系统会自动记录所选例子"],
+                "missing": ["请打开本步并等待关税面板加载，系统会自动记录所选例子"],
             }
         )
 

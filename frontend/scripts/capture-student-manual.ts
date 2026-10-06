@@ -203,8 +203,8 @@ try {
 
   // Generate → report; submit → submitted; teacher grades → graded.
   await api("POST", "/api/classroom/report/generate", studentToken, {});
-  await open(page, 15, `window.__find("GVC 指标与模拟关税实验报告")`);
-  await scrollTo(page, `window.__find("GVC 指标与模拟关税实验报告")`, 12);
+  await open(page, 15, `window.__find("GVC 指标与关税实验报告")`);
+  await scrollTo(page, `window.__find("GVC 指标与关税实验报告")`, 12);
   await save("15-report.png", await page.screenshot(), student.username, "Generated report (draft).");
   await api("POST", "/api/classroom/report/submit", studentToken);
   await open(page, 15, `window.__find("等待教师评阅")`);

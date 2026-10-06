@@ -15,7 +15,7 @@ test("mechanism preview follows the example, the group gap and the regression", 
     expect(view.getAllByText("由你选择")).toHaveLength(3);
     expect(view.queryByText(/中国|美国|计算机电子光学/)).toBeNull();
     expect(view.getByText("01 · 你的例子：X 只在加税后出现")).toBeTruthy();
-    const chart = view.getByRole("img", { name: /五年模拟关税暴露 X 趋势界面示意/ });
+    const chart = view.getByRole("img", { name: /五年关税暴露 X 趋势界面示意/ });
     expect(chart.textContent).toContain("2016");
     expect(chart.textContent).toContain("2020");
     expect(chart.textContent).toContain("X 示意强弱");
@@ -28,8 +28,9 @@ test("mechanism preview follows the example, the group gap and the regression", 
       const path = circles.map((circle, index) => `${index ? "L" : "M"}${circle.getAttribute("cx")} ${circle.getAttribute("cy")}`).join("");
       expect(chart.querySelector(`path.country-${series}`)?.getAttribute("d")).toBe(path);
     }
-    expect(view.getByText("模拟关税暴露")).toBeTruthy();
-    expect(view.getByText("模拟指标结果")).toBeTruthy();
+    expect(view.getByText("关税暴露")).toBeTruthy();
+    expect(view.getByText("指标结果")).toBeTruthy();
+    expect(view.getByRole("dialog").textContent).not.toContain("模拟");
     expect(view.getByLabelText("四项结果都要汇总").querySelectorAll("span")).toHaveLength(4);
     expect(view.getByText(/关系不显著或无法推断也要如实报告/)).toBeTruthy();
     expect(view.queryByRole("slider")).toBeNull();

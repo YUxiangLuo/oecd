@@ -12,7 +12,12 @@ export interface TeachingExampleSelection {
  * the simulated tariff group, so the pair shows that X comes from the tariff, not from export dependence
  * alone. A saved selection with one country stays a single example (second is "").
  */
-export function teachingExample(meta: Pick<Meta, "countries" | "sectors">, saved?: TeachingExampleSelection) {
+export function teachingExample(
+  meta: Pick<Meta, "countries" | "sectors">,
+  saved?: TeachingExampleSelection,
+  /** The industry followed in step 9, used when step 10 has not recorded its own yet. */
+  priorIndustry?: string | null,
+) {
   const countries = meta.countries.filter((code) => code !== "ROW");
   const carried = saved?.compared?.filter((code) => countries.includes(code)) ?? [];
   const first = carried[0] ?? (countries.includes("CAN") ? "CAN" : countries[0] ?? "");
@@ -22,6 +27,8 @@ export function teachingExample(meta: Pick<Meta, "countries" | "sectors">, saved
       ?? countries.find((code) => code !== first) ?? "";
   const industry = saved?.teaching_industry && meta.sectors.includes(saved.teaching_industry)
     ? saved.teaching_industry
-    : meta.sectors.includes("C29") ? "C29" : meta.sectors[0] ?? "";
+    : priorIndustry && meta.sectors.includes(priorIndustry)
+      ? priorIndustry
+      : meta.sectors.includes("C29") ? "C29" : meta.sectors[0] ?? "";
   return { countries, first, second, industry };
 }
