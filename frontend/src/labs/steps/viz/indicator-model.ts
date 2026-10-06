@@ -19,6 +19,8 @@ export interface IndicatorTopic {
   composition?: {
     total: string;
     segments: { key: string; name: string; color: string }[];
+    /** The part the step reads first (reading cards, report); defaults to the last segment. */
+    focus?: string;
     note: string;
   };
   axes: {

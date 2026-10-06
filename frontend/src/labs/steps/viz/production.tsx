@@ -60,6 +60,7 @@ export const PRODUCTION_TOPIC: IndicatorTopic = {
       { key: "3a_VA_GVC_S", name: "简单GVC", color: CAT[2] },
       { key: "3b_VA_GVC_C", name: "复杂GVC", color: CAT[3] },
     ],
+    focus: "3b_VA_GVC_C",
     note: "四类前向生产活动占总增加值SVA的份额：纯国内不跨境，传统贸易随最终品跨境，简单GVC经历一次中间品跨境，复杂GVC累计至少两次跨境。负分项以红色显示在零轴左侧。",
   },
   axes: {

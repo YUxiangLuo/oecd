@@ -48,7 +48,7 @@ export function TrendSummary({
 }) {
   const value = (country: string, year: number) =>
     readings.find((item) => item.country === country && item.year === year)?.value ?? null;
-  const [first, second] = countries;
+  const [first, ...others] = countries;
   const own = years.filter((year) => value(first, year) !== null);
   if (own.length < 2) {
     return <p className="muted">有效年份不足，暂不能读出期间变化。</p>;
@@ -61,10 +61,16 @@ export function TrendSummary({
   const endRef = distribution.find((item) => item.year === lastYear);
   const startRank = startRef?.ranks[first];
   const endRank = endRef?.ranks[first];
-  const pair = second != null
-    && value(second, firstYear) !== null && value(second, lastYear) !== null;
-  let gapCard = null;
-  if (pair) {
+  const gapCards = others.map((second) => {
+    if (value(second, firstYear) === null || value(second, lastYear) === null) {
+      return (
+        <div key={second}>
+          <span>与对比国家 {countryLabel(second)}</span>
+          <b>期间读数不完整</b>
+          <small>{firstYear} 或 {lastYear} 年缺失，暂不比较差距（缺失不补零）</small>
+        </div>
+      );
+    }
     const startGap = start - value(second, firstYear)!;
     const endGap = end - value(second, lastYear)!;
     const gapChange = Math.abs(endGap) - Math.abs(startGap);
@@ -78,14 +84,14 @@ export function TrendSummary({
         : gapChange > 0
           ? `差距扩大 ${gapMagnitude}`
           : `差距缩小 ${gapMagnitude}`;
-    gapCard = (
-      <div>
+    return (
+      <div key={second}>
         <span>与对比国家 {countryLabel(second)}</span>
         <b>{lastYear} 年 {countryLabel(first)} {endGap === 0 ? "与它持平" : endMagnitude === null ? "与它基本持平" : `比它${endGap > 0 ? "高" : "低"} ${endMagnitude}`}</b>
         <small>{firstYear}→{lastYear} {gapStory}；比较的是差距绝对值，不代表因果关系</small>
       </div>
     );
-  }
+  });
   return (
     <div className="comparison-summary" role="group" aria-label="趋势读数">
       <div>
@@ -117,7 +123,7 @@ export function TrendSummary({
           <small>{indicatorNumber(startRef.median, unit)} → {indicatorNumber(endRef.median, unit)}</small>
         </div>
       )}
-      {gapCard}
+      {gapCards}
     </div>
   );
 }

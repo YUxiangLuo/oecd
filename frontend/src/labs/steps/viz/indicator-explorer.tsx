@@ -36,8 +36,11 @@ import {
   IndicatorPairBars,
   IndicatorTrendChart,
   LengthPositionTrajectory,
+  TrendSummary,
   indicatorNumber,
 } from "./indicator-charts";
+import { ScopeCard } from "./scope-card";
+import { comparisonCards, compositionCards, industryCards, positioningCards, ReadingCards } from "./reading-cards";
 
 /** "2020" for a single-year material (composition / same-year), "2016–2020" for a range. */
 /** Design doc 4.7 pilot: `?pilot=recharts` renders the Recharts trend chart under the hand-written one for comparison. */
@@ -103,6 +106,15 @@ export function IndicatorExplorer({
   const select = (patch: Partial<IndicatorSelection>) => {
     touched.current = true;
     setSelection((old) => ({ ...old, ...patch }));
+  };
+  // The sticky scope card jumps to the control that changes each part of the scope.
+  const entityRef = useRef<HTMLSelectElement>(null);
+  const rangeRef = useRef<HTMLSelectElement>(null);
+  const metricRef = useRef<HTMLSelectElement>(null);
+  const yearRef = useRef<HTMLSelectElement>(null);
+  const jump = (ref: { current: HTMLSelectElement | null }) => () => {
+    ref.current?.scrollIntoView?.({ block: "center" });
+    ref.current?.focus();
   };
   const { first, second, industry, metric, start, end, year, limit } =
     selection;
@@ -353,6 +365,7 @@ export function IndicatorExplorer({
           {(id) => (
             <select
               id={id}
+              ref={entityRef}
               value={first}
               onChange={(e) =>
                 select({
@@ -402,6 +415,7 @@ export function IndicatorExplorer({
             {(id) => (
               <select
                 id={id}
+                ref={rangeRef}
                 value={industry}
                 onChange={(e) => select({ industry: e.target.value })}
               >
@@ -420,6 +434,7 @@ export function IndicatorExplorer({
             {(id) => (
               <select
                 id={id}
+                ref={metricRef}
                 value={metric}
                 onChange={(e) => select({ metric: e.target.value })}
               >
@@ -461,6 +476,7 @@ export function IndicatorExplorer({
               {(id) => (
                 <select
                   id={id}
+                  ref={yearRef}
                   value={start}
                   onChange={(e) =>
                     select({
@@ -499,6 +515,7 @@ export function IndicatorExplorer({
             {(id) => (
               <select
                 id={id}
+                ref={yearRef}
                 value={year}
                 onChange={(e) => select({ year: +e.target.value })}
               >
@@ -524,9 +541,22 @@ export function IndicatorExplorer({
           </LabeledControl>
         )}
       </div>
-      <p aria-label="当前比较口径"><strong>
-        {selected.map(countryLabel).join("与")} · {view === "industry" ? "行业排名" : industry ? sectorLabel(industry) : "国家整体"} · {timeView ? `${start}–${end}` : year} · {composition ? topic.themeLabel : view === "directions" ? "前后向GVC段长度与位置" : view === "positioning" ? `定位图（${label(topic.axes.x)} × ${label(topic.axes.y)}）` : label(metric)}
-      </strong></p>
+      <ScopeCard
+        items={[
+          { label: "比较对象", value: selected.map(countryLabel).join("与"), onJump: jump(entityRef) },
+          {
+            label: "范围",
+            value: view === "industry" ? "行业排名" : industry ? sectorLabel(industry) : "国家整体",
+            onJump: view === "industry" ? undefined : jump(rangeRef),
+          },
+          { label: "年份", value: timeView ? `${start}–${end}` : String(year), onJump: jump(yearRef) },
+          {
+            label: "指标",
+            value: composition ? topic.themeLabel : view === "directions" ? "前后向GVC段长度与位置" : view === "positioning" ? `定位图（${label(topic.axes.x)} × ${label(topic.axes.y)}）` : label(metric),
+            onJump: composition || view === "directions" || view === "positioning" ? undefined : jump(metricRef),
+          },
+        ]}
+      />
       <div className="viz-chart">
       {!validYears ? <div className="error-box" role="alert">
         <p>保存记录中的年份范围无效，请重新选择年份。原有报告材料未更改。</p>
@@ -607,6 +637,7 @@ export function IndicatorExplorer({
                 format={unit(metric) === "%" ? "pct" : unit(metric) === "百万美元" ? "amount" : "number"}
                 highlight={new Set(selected)}
               />
+              <ReadingCards label="对比读数" cards={comparisonCards({ rows: scoped, countries: selected, metric, label: label(metric), unit: unit(metric), year, industry, distribution: referenceFor(metric).find((item) => item.year === year) })} />
             </>
           )}
           {view === "positioning" && (
@@ -629,6 +660,7 @@ export function IndicatorExplorer({
                 quadrantLabels={topic.axes.labels}
                 highlight={new Set(selected)}
               />
+              <ReadingCards label="定位读数" cards={positioningCards({ reference, countries: selected, xKey: topic.axes.x, yKey: topic.axes.y, xLabel: label(topic.axes.x), yLabel: label(topic.axes.y), xFormat: topic.key === "length" ? "number" : "pct", yFormat: topic.key === "length" ? "number" : "pct" })} />
             </>
           )}
           {view === "comparison" && industry && <p className="muted">全球分布按国家整体比较；选择了行业时只显示所选国家的同行业读数。</p>}
@@ -644,6 +676,9 @@ export function IndicatorExplorer({
                 },
               ]}
             />
+          )}
+          {view === "comparison" && (industry || !referenceFor(metric)[0]) && (
+            <ReadingCards label="对比读数" cards={comparisonCards({ rows: scoped, countries: selected, metric, label: label(metric), unit: unit(metric), year, industry })} />
           )}
           {composition && topic.composition && (
             <>
@@ -691,6 +726,18 @@ export function IndicatorExplorer({
                   </section>
                 ))}
               </div>
+              {view === "composition"
+                ? <ReadingCards label="构成读数" cards={compositionCards({ rows: scoped, countries: selected, topic, year, industry })} />
+                : (() => {
+                    const focus = topic.composition!.focus ?? topic.composition!.segments.at(-1)!.key;
+                    const readings = selected.flatMap((country) => chartYears.map((value) => {
+                      const row = scoped.find((item) => item.country === country && item.year === value);
+                      const total = row?.[topic.composition!.total];
+                      const part = row?.[focus];
+                      return { country, year: value, value: finiteValue(total) && total > 0 && finiteValue(part) ? part / total : null };
+                    }));
+                    return <TrendSummary readings={readings} countries={selected} years={chartYears} unit="%" />;
+                  })()}
             </>
           )}
           {view === "industry" && (
@@ -711,6 +758,7 @@ export function IndicatorExplorer({
                   onPick={(industry) => select({ industry, view: "trend" })}
                 />
               </ScrollableRegion>
+              <ReadingCards label="行业读数" cards={industryCards({ groups: ranked.map((row) => ({ key: String(row.industry), label: sectorLabel(String(row.industry)), values: valuesFor(metric, String(row.industry)) })), countries: selected, label: label(metric), unit: unit(metric) })} />
             </>
           )}
           <details className="technical-details">

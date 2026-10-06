@@ -46,6 +46,7 @@ export const TRADE_TOPIC: IndicatorTopic = {
       // Grey as in step 2; red is reserved for negative parts (left of zero).
       { key: "taxsub", name: "税收减补贴", color: "#98a0b3" },
     ],
+    focus: "FVA",
     note: "每条为六项之和的构成，分母为 VA+TLS 账户闭合总出口。负分项以红色放在零轴左侧，不改变其国内、外国或TLS来源归类；负值不能按普通100%条形图解释。",
   },
   axes: {
