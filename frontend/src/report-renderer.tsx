@@ -298,27 +298,25 @@ function symmetricTicks(maxAbs: number): number[] {
 function BinscatterChart({ chart }: { chart: Extract<ReportChart, { type: "binscatter" }> }) {
   const W = 720, H = 320, m = { l: 70, r: 24, t: 18, b: 50 };
   const xs = chart.points.map((point) => point.x), ys = chart.points.map((point) => point.y);
-  const xLo = Math.min(0, ...xs), xHi = Math.max(0, ...xs);
-  const fitted = [xLo * chart.slope, xHi * chart.slope];
-  const yLo = Math.min(0, ...ys, ...fitted), yHi = Math.max(0, ...ys, ...fitted);
-  const pad = (lo: number, hi: number) => { const span = hi - lo || 1; return [lo - span * 0.06, hi + span * 0.06] as const; };
-  const [x0, x1] = pad(xLo, xHi), [y0, y1] = pad(yLo, yHi);
-  const x = (value: number) => m.l + ((value - x0) / (x1 - x0)) * (W - m.l - m.r);
-  const y = (value: number) => H - m.b - ((value - y0) / (y1 - y0)) * (H - m.t - m.b);
-  const ticks = (lo: number, hi: number) => { const step = (hi - lo) / 4; return Array.from({ length: 5 }, (_, index) => lo + step * index); };
+  // Round axis bounds and ticks, as on the step pages, so the labels read as plain numbers.
+  const xAxis = niceDomain(Math.min(0, ...xs), Math.max(0, ...xs));
+  const fitted = [xAxis.lo * chart.slope, xAxis.hi * chart.slope];
+  const yAxis = niceDomain(Math.min(0, ...ys, ...fitted), Math.max(0, ...ys, ...fitted));
+  const x = (value: number) => m.l + ((value - xAxis.lo) / (xAxis.hi - xAxis.lo || 1)) * (W - m.l - m.r);
+  const y = (value: number) => H - m.b - ((value - yAxis.lo) / (yAxis.hi - yAxis.lo || 1)) * (H - m.t - m.b);
   const digits = (lo: number, hi: number) => Math.max(0, Math.min(4, 2 - Math.floor(Math.log10(Math.max(hi - lo, 1e-9) / 4))));
-  const fx = (value: number) => value.toFixed(digits(x0, x1)), fy = (value: number) => value.toFixed(digits(y0, y1));
+  const fx = (value: number) => value.toFixed(digits(xAxis.lo, xAxis.hi)), fy = (value: number) => value.toFixed(digits(yAxis.lo, yAxis.hi));
   return (
     <ReportFigure title={chart.title ?? "分箱散点图"}>
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>每个点是 X 相近的一箱单元的平均（X、Y 都已扣掉固定效应）；直线斜率为估计的 β</div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "分箱散点图"} style={{ width: "100%", height: "auto" }}>
-        {ticks(y0, y1).map((tick) => <g key={`y${tick}`}><line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke="#eef0f4" /><text x={m.l - 8} y={y(tick) + 4} textAnchor="end" fontSize={11} fill="#5f6677">{fy(tick)}</text></g>)}
-        {ticks(x0, x1).map((tick) => <g key={`x${tick}`}><line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke="#eef0f4" /><text x={x(tick)} y={H - m.b + 16} textAnchor="middle" fontSize={11} fill="#5f6677">{fx(tick)}</text></g>)}
+        {yAxis.ticks.map((tick) => <g key={`y${tick}`}><line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke="#eef0f4" /><text x={m.l - 8} y={y(tick) + 4} textAnchor="end" fontSize={11} fill="#5f6677">{fy(tick)}</text></g>)}
+        {xAxis.ticks.map((tick) => <g key={`x${tick}`}><line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke="#eef0f4" /><text x={x(tick)} y={H - m.b + 16} textAnchor="middle" fontSize={11} fill="#5f6677">{fx(tick)}</text></g>)}
         <line x1={x(0)} x2={x(0)} y1={m.t} y2={H - m.b} stroke="#9aa3b5" strokeDasharray="4 3" />
         <line x1={m.l} x2={W - m.r} y1={y(0)} y2={y(0)} stroke="#9aa3b5" strokeDasharray="4 3" />
         {chart.x_label && <text x={m.l + (W - m.l - m.r) / 2} y={H - 8} textAnchor="middle" fontSize={11} fill="#5f6677">{chart.x_label}</text>}
         {chart.y_label && <text x={14} y={(m.t + H - m.b) / 2} textAnchor="middle" fontSize={11} fill="#5f6677" transform={`rotate(-90 14 ${(m.t + H - m.b) / 2})`}>{chart.y_label}</text>}
-        <line x1={x(xLo)} y1={y(fitted[0])} x2={x(xHi)} y2={y(fitted[1])} stroke="#2a2f3a" strokeWidth={2.2} />
+        <line x1={x(xAxis.lo)} y1={y(fitted[0])} x2={x(xAxis.hi)} y2={y(fitted[1])} stroke="#2a2f3a" strokeWidth={2.2} />
         {chart.points.map((point, index) => <circle key={index} cx={x(point.x)} cy={y(point.y)} r={5} fill="#216cc0" stroke="#fff" strokeWidth={1.5} />)}
       </svg>
     </ReportFigure>

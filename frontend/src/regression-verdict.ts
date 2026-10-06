@@ -90,8 +90,10 @@ function naturalScale(
   if (kind === "network") {
     const sd = response.result.depvar_std;
     const standardized = typeof sd === "number" && Number.isFinite(sd) && sd > 0 ? effect / sd : null;
+    // A narrow interval whose ends round to the same two decimals is shown with three, so it is not read as a point.
+    const sdDigits = typeof sd === "number" && sd > 0 && signed(ciLow / sd, 2) === signed(ciHigh / sd, 2) ? 3 : 2;
     const standardizedInterval = typeof sd === "number" && Number.isFinite(sd) && sd > 0
-      ? `；约 [${signed(ciLow / sd, 2)}, ${signed(ciHigh / sd, 2)}] 个样本标准差`
+      ? `；约 [${signed(ciLow / sd, sdDigits)}, ${signed(ciHigh / sd, sdDigits)}] 个样本标准差`
       : "";
     return {
       effect: `${signed(effect, 2)} 个中心性原始单位${standardized == null ? "" : `（约 ${signed(standardized, 2)} 个样本标准差）`}`,
