@@ -160,7 +160,11 @@ try {
   await open(page, 8, `document.querySelector('[aria-label="报告材料"]') && document.querySelector("main svg[role=img]")`);
   await scrollTo(page, `document.querySelector('[aria-label="当前比较口径"]')`, 140);
   await save("08-visualization.png", await page.screenshot(), student.username, "Step 8 forward/backward lengths.");
-  await open(page, 9, `document.querySelector('section[aria-label="行业网络指标趋势"]')?.querySelector('svg, table')`);
+  // Figure 12 shows the 历年变化 view even when the student last saved the 定位行业 view.
+  await open(page, 9, `document.querySelector('section[aria-label="行业网络指标趋势"]') && ${trendView}`);
+  await page.eval(`(() => { ${trendView}.click(); return true; })()`);
+  await page.waitFor(`document.querySelector('section[aria-label="行业网络指标趋势"] svg[role=img]')`, 45_000);
+  await settled(page);
   await scrollTo(page, `document.querySelector('section[aria-label="行业网络指标趋势"]')`, 8);
   await save("09-network.png", await page.screenshot(), student.username, "Step 9 two-country industry comparison.");
 
