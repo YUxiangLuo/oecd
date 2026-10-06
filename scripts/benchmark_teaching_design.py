@@ -20,7 +20,14 @@ from gvcsim.regression.design import OUTCOME_DEPVARS, RegressionDesign
 from gvcsim.regression.panel import run_design_with_benchmark
 
 
-CANDIDATES = {"legacy": 1.0, "flat_10pct": 1.0, "flat_half_noise": 0.5, "flat_quarter_noise": 0.25}
+# name -> (flat tariff rate from the third year, noise multiplier); "legacy" keeps the v1 rate schedule.
+CANDIDATES = {
+    "legacy": (None, 1.0),
+    "flat_10pct": (0.10, 1.0),
+    "flat_half_noise": (0.10, 0.5),
+    "flat_quarter_noise": (0.10, 0.25),
+    "flat_25pct_half_noise": (0.25, 0.5),
+}
 LEGACY_NOISE = np.array([0.012, 0.010, 0.060, 120.0])
 
 
@@ -74,11 +81,11 @@ def evaluate(root: Path, seeds: range) -> dict:
                 + cube.mean(axis=(0, 1), keepdims=True)
             ).reshape(n, -1)
 
-        for name, multiplier in CANDIDATES.items():
+        for name, (rate, multiplier) in CANDIDATES.items():
             tau = (
                 legacy_rate.to_numpy() * legacy_path.to_numpy()
-                if name == "legacy"
-                else 0.10 * panel.year.ge(years[2]).to_numpy()
+                if rate is None
+                else rate * panel.year.ge(years[2]).to_numpy()
             ) * treated
             x = weights * tau
             y = baseline + x[:, None] * beta + noise * LEGACY_NOISE * multiplier
@@ -140,7 +147,10 @@ def evaluate(root: Path, seeds: range) -> dict:
             "benchmark": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "generator": hashlib.sha256(Path(teaching.__file__).read_bytes()).hexdigest(),
         },
-        "candidates": CANDIDATES,
+        "candidates": {
+            name: {"tariff_rate": rate, "noise_multiplier": multiplier}
+            for name, (rate, multiplier) in CANDIDATES.items()
+        },
         "summary": summary,
         "domain_failures": domain_failures,
         "independent_benchmark_checks": benchmark_checks,

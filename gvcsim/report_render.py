@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, cast
 
 from gvcsim.regression.validity import CLUSTER_INTERVAL_NOTE
 from gvcsim.report_common import (
@@ -316,6 +316,37 @@ def _coefficient_chart(step: int, outcome: str, coefficient: dict[str, Any], sup
     return ["```gvcsim-chart", json.dumps(chart, ensure_ascii=False, separators=(",", ":")), "```", ""]
 
 
+def _binscatter_chart(step: int, outcome: str, result: dict[str, Any]) -> list[str]:
+    """The binned scatter behind the estimate, in the same display units as the coefficient chart."""
+    binscatter = result.get("binscatter")
+    if not isinstance(binscatter, dict):
+        return []
+    bins, slope = binscatter.get("bins"), binscatter.get("slope")
+    if not isinstance(bins, list) or len(bins) < 2 or not isinstance(slope, (int, float)) or isinstance(slope, bool):
+        return []
+    y_scale = 100.0 if outcome in {"trade", "production"} else 1.0
+    points = []
+    for item in bins:
+        if not isinstance(item, dict):
+            return []
+        values = [item.get("x"), item.get("y"), item.get("n")]
+        if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in values):
+            return []
+        x, y, n = (float(value) for value in cast(list[int | float], values))
+        points.append({"x": float(f"{x * 100:.4g}"), "y": float(f"{y * y_scale:.4g}"), "n": int(n)})
+    chart = {
+        "version": 1,
+        "type": "binscatter",
+        "title": f"步骤 {step} · 回归在量什么：X 越大，Y 平均怎样变",
+        "x_label": "关税暴露 X（个百分点，已扣除固定效应）",
+        "y_label": f"{_COEFFICIENT_ROW_LABELS.get(outcome, outcome)}（{_COEFFICIENT_UNITS.get(outcome, '原始单位')}）",
+        "points": points,
+        # Slope in display units: β per 1 percentage point of X, in the outcome's shown unit.
+        "slope": float(f"{float(slope) * y_scale / 100:.4g}"),
+    }
+    return ["```gvcsim-chart", json.dumps(chart, ensure_ascii=False, separators=(",", ":")), "```", ""]
+
+
 def _teaching_sample_lines(source_filter: dict[str, Any] | None) -> list[str]:
     if source_filter is None:
         return []
@@ -378,6 +409,8 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
             if design.get(key) not in (None, "")
         )
         lines.extend(_coefficient_chart(step, outcome, coefficient, suppressed))
+        if not suppressed:
+            lines.extend(_binscatter_chart(step, outcome, result))
         lines.extend(
             (
                 "| 项目 | 结果 |",

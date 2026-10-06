@@ -23,10 +23,10 @@ describe("fixed teaching regression reading", () => {
     const dom = new DOMParser().parseFromString(html, "text/html");
     expect(html).toContain("回归结果");
     expect(html).toContain("方向判断：本次模拟样本支持正向关联");
-    // One coefficient plot: zero line plus one red (positive) bar with its interval.
+    // One coefficient plot: zero line plus one dot (one colour, no bar) with its interval.
     expect(dom.querySelectorAll("svg[role=img]")).toHaveLength(1);
-    expect(dom.querySelectorAll("svg rect")).toHaveLength(1);
-    expect(dom.querySelector("svg rect")?.getAttribute("fill")).toBe("#d64545");
+    expect(dom.querySelectorAll("svg rect")).toHaveLength(0);
+    expect(dom.querySelector('svg circle[r="6.5"]')?.getAttribute("fill")).toBe("#2a2f3a");
     expect(dom.querySelector(".coef-ci")).not.toBeNull();
     // Three short sentences, no folds.
     expect(dom.querySelectorAll(".reg-result-points > li")).toHaveLength(3);
@@ -49,8 +49,8 @@ describe("fixed teaching regression reading", () => {
     expect(container.querySelector(".reg-plain-verdict")?.textContent).toBe(`方向判断：${title}`);
     expect(container.textContent?.includes("平均下降")).toBe(negative);
     expect(container.querySelector(".reg-result-points")?.textContent).toMatch(negative ? /平均下降 0.40 个百分点/ : /平均变化为 -0.40 个百分点/);
-    // Negative estimates are drawn in blue to the left of the zero line.
-    expect(container.querySelector("svg rect")?.getAttribute("fill")).toBe("#2f6fd0");
+    // The estimate dot keeps one colour whatever its sign; the sign is read from its position.
+    expect(container.querySelector('svg circle[r="6.5"]')?.getAttribute("fill")).toBe("#2a2f3a");
   });
 
   test("suppressed inference takes priority even over an apparently positive interval", () => {
@@ -61,8 +61,8 @@ describe("fixed teaching regression reading", () => {
     expect(screen.getByText(/方向判断：这个设计不能用于统计推断/)).toBeTruthy();
     expect(screen.getByText(/无法推断：可用于比较的国家太少/)).toBeTruthy();
     expect(container.textContent).not.toMatch(/平均上升|平均下降|区间未跨过/);
-    // The chart keeps only a grey descriptive bar: no colour, no interval.
-    expect(container.querySelector("svg rect")?.getAttribute("fill")).toBe("#b6bac6");
+    // The chart keeps only a grey descriptive dot: no colour, no interval.
+    expect(container.querySelector('svg circle[r="6.5"]')?.getAttribute("fill")).toBe("#b6bac6");
     expect(container.querySelector(".coef-ci")).toBeNull();
     expect(container.textContent).toContain("仅显示描述性点估计");
     expect(container.textContent).not.toContain("[+1.00, +3.00]");

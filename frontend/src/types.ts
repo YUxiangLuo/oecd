@@ -276,6 +276,8 @@ export interface TeachingGroupsResponse {
   };
   /** Industries with at least one unit in the teaching panel (older servers omit it). */
   industries?: string[];
+  /** Mean X of taxed-country units in the policy years (a proportion); β × it is the implied group gap. */
+  mean_exposure_taxed?: number;
   outcomes: Record<RegressionOutcome, { taxed: TeachingGroupPoint[]; untaxed: TeachingGroupPoint[] }>;
 }
 
@@ -626,6 +628,8 @@ export interface RegressionResponse {
     status_reasons: string[];
     support: TreatmentSupport | null;
     sample_flow?: RegressionSampleFlow | null;
+    /** Binned scatter of the within-transformed Y against X; absent on older saved runs. */
+    binscatter?: { bins: { x: number; y: number; n: number }[]; slope: number; transform: string } | null;
   };
   benchmark: {
     backend: string;

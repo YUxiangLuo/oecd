@@ -7,7 +7,9 @@ import hashlib
 import numpy as np
 import pandas as pd
 
-VERSION = "step10-tariff-teaching-v2"
+# v3 (2026-10-06): the simulated tariff rises from 10% to 25% so the taxed/untaxed gap is visible on the
+# group chart (about two to three within-unit standard deviations instead of one); nothing else changes.
+VERSION = "step10-tariff-teaching-v3"
 # A contract upgrade must not silently redraw policy assignment or noise.
 RANDOMIZATION_VERSION = "step10-tariff-teaching-v1"
 X_COLUMN = "teaching_tariff_exposure"
@@ -15,7 +17,7 @@ Y_COLUMNS = {outcome: f"teaching_y_{outcome}" for outcome in ("trade", "producti
 BETAS = {"trade": -0.55, "production": -0.40, "length": -1.8, "network": -6000.0}
 SEED = 20260913
 MARKET = "USA"
-TARIFF_PATH = (0.0, 0.0, 0.10, 0.10, 0.10)
+TARIFF_PATH = (0.0, 0.0, 0.25, 0.25, 0.25)
 DISCLAIMER = "虚构关税政策与模拟教学结果，不是历史事件、真实政策效果或 OECD 发布结果。"
 # Rank calibration preserves ordering, not observed levels or accounting identities.
 # These ranges ensure valid simulated domains without clipping generated outcomes.
@@ -170,6 +172,10 @@ def group_trends(panel: pd.DataFrame) -> dict:
             series[name] = [{"year": int(year), "change": float(values.loc[year] - baseline)} for year in years]
         outcomes[outcome] = series
     countries = panel.loc[taxed_country, "country"].nunique(), panel.loc[~taxed_country, "country"].nunique()
+    # Mean exposure of taxed-country units in the policy years: β × this is the gap the regression implies
+    # between the two group lines, which the page draws back onto the chart after the run.
+    policy_rows = panel.loc[taxed_country & panel["year"].isin(policy_years), X_COLUMN]
+    mean_exposure_taxed = float(policy_rows.mean()) if len(policy_rows) else 0.0
     return {
         "version": VERSION,
         "years": years,
@@ -184,5 +190,6 @@ def group_trends(panel: pd.DataFrame) -> dict:
         },
         # Industries with at least one retained unit: step 10 offers only these as examples.
         "industries": sorted(str(code) for code in panel["industry"].unique()),
+        "mean_exposure_taxed": mean_exposure_taxed,
         "outcomes": outcomes,
     }

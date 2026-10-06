@@ -1887,3 +1887,55 @@ def test_view_only_keys_never_change_the_experiment_sections():
     text = "\n".join(teaching_report._experiment_sections(partial))
     assert "保存的切片" not in text
     assert "记录的单元格" in text
+
+
+def test_report_draws_the_binned_scatter_behind_each_saved_estimate(tmp_path, monkeypatch):
+    """Steps 11–14 carry the binned scatter after the coefficient plot, in display units."""
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    run = session["steps"]["11"]["data"]["run"]
+    run["result"]["coefs"][0]["coef"] = -0.55
+    run["result"]["binscatter"] = {
+        "bins": [{"x": -0.02, "y": 0.011, "n": 10}, {"x": 0.0, "y": 0.0, "n": 10}, {"x": 0.02, "y": -0.011, "n": 10}],
+        "slope": -0.55,
+        "transform": "twoway_demeaned",
+    }
+    _sign_run(run)
+
+    def charts_of(markdown: str) -> list[dict]:
+        pattern = "```gvcsim-chart" + chr(10) + "(.*?)" + chr(10) + "```"
+        return [json.loads(block) for block in re.findall(pattern, markdown, re.S)]
+
+    markdown = build(session, "同学").markdown
+    charts = charts_of(markdown)
+    binscatters = [chart for chart in charts if chart["type"] == "binscatter"]
+    assert len(binscatters) == 1
+    chart = binscatters[0]
+    assert chart["title"].startswith("步骤 11")
+    # X in percentage points, Y of a share outcome in percentage points; slope per 1 pp of X.
+    assert [point["x"] for point in chart["points"]] == [-2.0, 0.0, 2.0]
+    assert [point["y"] for point in chart["points"]] == [1.1, 0.0, -1.1]
+    assert chart["slope"] == pytest.approx(-0.55)
+    # The scatter follows the coefficient chart of the same step.
+    assert markdown.index('"type":"coefficient"') < markdown.index('"type":"binscatter"')
+    # A malformed scatter is left out rather than breaking the report.
+    run["result"]["binscatter"] = {"bins": "no", "slope": 1}
+    _sign_run(run)
+    assert not [chart for chart in charts_of(build(session, "同学").markdown) if chart["type"] == "binscatter"]
+    # Suppressed inference draws no scatter either (the evidence section is rendered directly here,
+    # because a run without inference is not a complete material for the report gate).
+    from gvcsim.report_render import _evidence_summary
+
+    run["result"]["binscatter"] = {
+        "bins": [{"x": -0.02, "y": 0.011, "n": 10}, {"x": 0.02, "y": -0.011, "n": 10}],
+        "slope": -0.55,
+    }
+    run["result"]["support"] = {"status": "ok", "suppress_inference": True, "reasons": ["测试诊断"]}
+    _sign_run(run)
+    evidence = [{"step": 11, "outcome": "trade", "design": run["design"], "result": run["result"]}]
+    assert not [
+        chart for chart in charts_of(chr(10).join(_evidence_summary(evidence))) if chart["type"] == "binscatter"
+    ]
+    run["result"]["support"]["suppress_inference"] = False
+    assert [chart for chart in charts_of(chr(10).join(_evidence_summary(evidence))) if chart["type"] == "binscatter"]

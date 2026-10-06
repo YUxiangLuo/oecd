@@ -6,6 +6,7 @@
  *   MANUAL_GATE_STUDENT / _PASSWORD  a student with an incomplete course (material-gate image),
  *                                    whose Step 12 regression has not been run (pre-run image)
  *   MANUAL_TEACHER / _PASSWORD  grades the report for the "graded" image
+ *   MANUAL_ONLY_REG=1           re-shoot only figures 10–14 (steps 10–14); the report images are kept
  * The script generates and submits MANUAL_STUDENT's report and grades it, so use a test account.
  */
 import { createHash } from "node:crypto";
@@ -23,7 +24,8 @@ const need = (name: string) => {
 };
 const student = { username: need("MANUAL_STUDENT"), password: need("MANUAL_STUDENT_PASSWORD") };
 const gate = { username: need("MANUAL_GATE_STUDENT"), password: need("MANUAL_GATE_STUDENT_PASSWORD") };
-const teacher = { username: need("MANUAL_TEACHER"), password: need("MANUAL_TEACHER_PASSWORD") };
+const onlyReg = process.env.MANUAL_ONLY_REG === "1";
+const teacher = onlyReg ? null : { username: need("MANUAL_TEACHER"), password: need("MANUAL_TEACHER_PASSWORD") };
 
 async function api(method: string, path: string, token?: string, body?: unknown) {
   const response = await fetch(`${base}${path}`, {
@@ -54,6 +56,8 @@ const helpers = (token: string | null) => `
     el.dispatchEvent(new Event("change", { bubbles: true }));
   };
 `;
+
+class DoneEarly extends Error {}
 
 const shots: { file: string; account: string; note: string }[] = [];
 async function save(file: string, png: Buffer, account: string, note: string) {
@@ -102,15 +106,19 @@ try {
 
   // Login page: public, nothing typed.
   let page = await signedIn(null);
+  if (!onlyReg) {
   await open(page, null, `window.__find("进入实验平台")`);
   await save("00-login.png", await page.screenshot(), "none", "Public login page; demo prefill only in demo builds.");
+  }
   await page.close();
 
   // Incomplete student: material gate and the pre-run regression view.
   page = await signedIn(gateToken);
+  if (!onlyReg) {
   await open(page, 15, `window.__find("还不能生成报告")`);
   await scrollTo(page, `window.__find("1 · 检查实验材料")`, 60);
   await save("15-material-gate.png", await page.screenshot(), gate.username, "Incomplete course: checklist and missing-item entry points.");
+  }
   await open(page, 12, `document.querySelector(".group-change-chart svg") && document.querySelector(".reg-run-card .run-btn")`);
   await scrollTo(page, `document.querySelector(".reg-run-card")`, 12);
   await save("11-regression-setup.png", await page.screenshot(), gate.username, "Step 12 before running: taxed vs untaxed group chart and run button.");
@@ -118,6 +126,7 @@ try {
 
   // Complete student: one image per step.
   page = await signedIn(studentToken);
+  if (!onlyReg) {
   await open(page, 1, `window.__find("已记录的观察值") && document.querySelector("button.db-observation-cell")`);
   await scrollTo(page, `window.__find("已记录的观察值")`, 150);
   await save("01-icio.png", await page.screenshot(), student.username, "Step 1 recorded cell.");
@@ -147,18 +156,23 @@ try {
   await open(page, 9, `document.querySelector('section[aria-label="行业网络指标趋势"]')?.querySelector('svg, table')`);
   await scrollTo(page, `document.querySelector('section[aria-label="行业网络指标趋势"]')`, 8);
   await save("09-network.png", await page.screenshot(), student.username, "Step 9 two-country industry comparison.");
+  }
 
   await open(page, 10, `document.querySelectorAll(".shock-workbench select").length >= 3`);
   await page.eval(`(() => { const s = document.querySelectorAll(".shock-workbench select");
     window.__select(s[0], "CAN"); window.__select(s[1], "MEX"); window.__select(s[2], "C29"); return true; })()`);
   await page.waitFor(`window.__find("MEX 墨西哥 · C29") && document.querySelector(".teaching-example-summary")`);
   await Bun.sleep(2500);
-  await scrollTo(page, `window.__find("选一个例子跟着走")`, 8);
+  await scrollTo(page, `window.__find("先看一个例子")`, 8);
   await save("10-shocks.png", await page.screenshot(), student.username, "Step 10 followed example (Canada vs Mexico, motor vehicles).");
 
   await open(page, 11, `document.querySelector(".verdict-card .coef-plot svg") && document.querySelector(".reg-example-effect")`);
   await scrollTo(page, `document.querySelector(".verdict-card")`, 12);
-  await save("11-regression-result.png", await page.screenshot(), student.username, "Step 11 coefficient plot and reading.");
+  await save("11-regression-result.png", await page.screenshot(), student.username, "Step 11 binned scatter, coefficient plot and reading.");
+  if (onlyReg) {
+    await page.close();
+    throw new DoneEarly();
+  }
 
   await open(page, 15, `window.__find("你的分析 · 自动保存")`);
   await scrollTo(page, `window.__find("你的分析 · 自动保存")`, 8);
@@ -173,7 +187,7 @@ try {
   await open(page, 15, `window.__find("等待教师评阅")`);
   const submitted = await clipOf(page, `[...document.querySelectorAll("main *")].filter((el) => /提交于 .*等待教师评阅/.test(el.innerText || "")).sort((a, b) => a.innerText.length - b.innerText.length)[0]`);
   await save("15-submitted.png", await page.screenshot(submitted), student.username, "Submitted status line.");
-  const teacherToken = await login(teacher);
+  const teacherToken = await login(teacher!);
   const list = await api("GET", "/api/classroom/reports", teacherToken);
   const row = (list.reports ?? list).find((item: { username: string }) => item.username === student.username);
   const detail = await api("GET", `/api/classroom/reports/${row.account_id}`, teacherToken);
@@ -184,6 +198,8 @@ try {
   const graded = await clipOf(page, `[...document.querySelectorAll("main *")].filter((el) => /已评阅 · \\d+ 分/.test(el.innerText || "") && (el.innerText || "").includes("教师评语")).sort((a, b) => a.innerText.length - b.innerText.length)[0]`);
   await save("15-graded.png", await page.screenshot(graded), student.username, "Graded status with feedback.");
   await page.close();
+} catch (error) {
+  if (!(error instanceof DoneEarly)) throw error;
 } finally {
   await chrome.close();
 }

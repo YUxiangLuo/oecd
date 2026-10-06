@@ -37,8 +37,10 @@ describe("simple regression workbench", () => {
       const html = renderToStaticMarkup(<RegressionRunLab step={{ ...step, regression_outcome: outcome }} meta={meta} state={state} />);
       const dom = new DOMParser().parseFromString(html, "text/html");
       expect(dom.querySelectorAll(".reg-run-card > button")).toHaveLength(1);
-      expect(dom.querySelector(".metric-facts")?.textContent).toContain("解释变量（X）模拟关税暴露强度");
-      expect(dom.querySelector(".metric-facts")?.textContent).not.toContain("teaching_tariff_exposure");
+      // X and Y are named in the question line and the step focus; no raw column names leak into the page.
+      expect(dom.querySelector(".reg-run-card h3")?.textContent).toContain("模拟关税暴露（X）");
+      expect(dom.querySelector(".reg-step-focus")).not.toBeNull();
+      expect(dom.body.textContent).not.toContain("teaching_tariff_exposure");
       expect(dom.querySelector(".reg-step-focus")?.textContent).toMatch(/^本步重点(读数|读区间|读单位|比单位)：/);
       expect(html.includes("方法与步骤 11 相同")).toBe(outcome !== "trade");
       expect(dom.querySelectorAll("select, details, table")).toHaveLength(0);
@@ -55,7 +57,7 @@ describe("simple regression workbench", () => {
     expect(figure.getAttribute("aria-label")).toContain("2018 年起模拟加税");
     expect(figure.textContent).toContain("加税国家组");
     expect(figure.textContent).toContain("未加税国家组");
-    await waitFor(() => expect(screen.getByRole("button", { name: "运行回归（使用全部 16,220 条记录）" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("button", { name: "算出这个差距（用全部 16,220 条记录）" })).toBeTruthy());
     expect(api.teachingSeries).toHaveBeenCalledWith(["CAN", "MEX"], "C29");
   });
 

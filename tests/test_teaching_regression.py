@@ -44,7 +44,7 @@ def test_teaching_panel_is_separate_reproducible_and_has_transparent_tariff_path
     pd.testing.assert_frame_equal(first, second)
     assert set(Y_COLUMNS.values()).isdisjoint(source.columns)
     assert first.loc[first.year.isin([2016, 2017]), X_COLUMN].eq(0).all()
-    assert set(first.teaching_tariff_rate_tau.unique()) == {0.0, 0.1}
+    assert set(first.teaching_tariff_rate_tau.unique()) == {0.0, 0.25}
     post = first.loc[first.year.ge(2018)]
     assert post.groupby("entity_id")[X_COLUMN].nunique().eq(1).all()
     assert post.groupby("country").teaching_tariff_rate_tau.nunique().eq(1).all()
@@ -90,9 +90,9 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
             )
         np.testing.assert_allclose(panel[Y_COLUMNS[outcome]], expected, rtol=1e-12, atol=1e-12)
     snapshot = model_snapshot("trade")
-    assert snapshot["version"] == "step10-tariff-teaching-v2"
+    assert snapshot["version"] == "step10-tariff-teaching-v3"
     assert snapshot["randomization_version"] == "step10-tariff-teaching-v1"
-    assert snapshot["tariff_path"] == [0, 0, 0.1, 0.1, 0.1]
+    assert snapshot["tariff_path"] == [0, 0, 0.25, 0.25, 0.25]
     assert teaching.SEED == 20260913
 
 
@@ -286,3 +286,38 @@ def test_group_trends_compare_taxed_and_untaxed_changes_against_their_own_pre_po
 
     monkeypatch.setattr(regression_routes, "_read_csv", lambda _name: panel)
     assert asyncio.run(regression_routes.teaching_groups()) == result
+
+
+def test_run_returns_a_binned_scatter_whose_bins_follow_the_estimate():
+    """The binned scatter is the regression's own picture: 20 equal-count bins of the within-transformed X."""
+    from gvcsim.regression.design import RegressionDesign
+    from gvcsim.regression.panel import run_design_with_benchmark
+
+    source = _source(tuple(f"C{i:02}" for i in range(30)))
+    panel = build_teaching_panel(source, _exposure(source), seed=29)
+    result, _benchmark = run_design_with_benchmark(panel, RegressionDesign("trade", teaching=True))
+    binscatter = result.binscatter
+    assert binscatter is not None
+    assert binscatter["transform"] == "twoway_demeaned"
+    assert binscatter["slope"] == result.coefs[0].coef
+    bins = binscatter["bins"]
+    assert len(bins) == 20
+    assert sum(point["n"] for point in bins) == result.n_obs
+    xs = [point["x"] for point in bins]
+    assert xs == sorted(xs)
+    # Within-transformed X and Y both average to zero across the sample.
+    assert abs(sum(point["x"] * point["n"] for point in bins)) < 1e-9
+    assert abs(sum(point["y"] * point["n"] for point in bins)) < 1e-9
+    assert all("binscatter" in result.to_dict() for _ in [0])
+
+
+def test_group_trends_report_the_mean_exposure_of_taxed_units():
+    from gvcsim.regression.teaching import group_trends
+
+    source = _source(tuple(f"C{i:02}" for i in range(30)))
+    panel = build_teaching_panel(source, _exposure(source))
+    trends = group_trends(panel)
+    taxed = panel.groupby("country").teaching_tariff_rate_tau.max().gt(0)
+    policy = panel.loc[panel.country.map(taxed) & panel.year.ge(trends["policy_year"]), X_COLUMN]
+    assert trends["mean_exposure_taxed"] == pytest.approx(float(policy.mean()))
+    assert trends["mean_exposure_taxed"] > 0
