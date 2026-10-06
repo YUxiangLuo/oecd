@@ -656,14 +656,14 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     )
     assert not any("保存两国同年比较" in "".join(item["missing"]) for item in blocked)
     assert all(
-        any(item["step"] == step and "选好对比国家" in "".join(item["missing"]) for item in blocked)
+        any(item["step"] == step and "读数完整的图表" in "".join(item["missing"]) for item in blocked)
         for step in range(6, 9)
     )
     # Step 9 requires a country comparison *and* an industry observation, so its
     # message names both actions instead of the steps 6-8 wording.
-    assert any(item["step"] == 9 and "选好对比国家" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 9 and "行业历年变化或行业排名" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 9 and "自动记录" in "".join(item["missing"]) for item in blocked)
-    assert any(item["step"] == 6 and "选好对比国家" in "".join(item["missing"]) for item in blocked)
+    assert any(item["step"] == 6 and "对比国家" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 11 and "运行回归" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 14 and "运行回归" in "".join(item["missing"]) for item in blocked)
     assert any(item["step"] == 15 and "原创" in item["title"] for item in blocked)
@@ -672,7 +672,7 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     assert "理解检查" in "".join(by_step[1]["missing"])
     assert "自动记录一个单元格" in "".join(by_step[1]["missing"])
     assert "理解检查" in "".join(by_step[6]["missing"])
-    assert "选好对比国家" in "".join(by_step[6]["missing"])
+    assert "对比国家" in "".join(by_step[6]["missing"])
     assert "理解检查" in "".join(by_step[12]["missing"])
     assert "运行回归" in "".join(by_step[12]["missing"])
     assert "模拟关税面板" in "".join(by_step[10]["missing"])
@@ -683,6 +683,109 @@ def test_gate_requires_quizzes_key_operations_run_and_reflection(monkeypatch):
     assert any(item["step"] == 14 and "运行回归" in "".join(item["missing"]) for item in blocked_one)
     with pytest.raises(ReportGateError):
         build(empty_session(), "同学")
+
+
+def _economy_readings(
+    countries, *, metric="FVA_share", years=(2020,), industry="", source="explicit-indicator-comparison"
+):
+    return [
+        {
+            "entity": f"{country}·{industry}" if industry else country,
+            "country": country,
+            **({"industry": industry} if industry else {}),
+            "year": year,
+            "value": 0.1 * (index + 1) + (year - 2019) / 100,
+            "metric": metric,
+            "unit": "%",
+            "release": "ICIO-2023",
+            "scope": "country-industry" if industry else "country",
+            "source": source,
+        }
+        for index, country in enumerate(countries)
+        for year in years
+    ]
+
+
+@pytest.mark.parametrize("countries", [["CHN"], ["CHN", "USA", "DEU"], ["CHN", "USA", "DEU", "JPN", "KOR"]])
+def test_steps_six_to_eight_accept_one_to_five_economies(countries):
+    """Material is one reproducible chart: a single economy with the global reference, or up to five."""
+    session = _complete()
+    data = session["steps"]["6"]["data"]
+    data["compared"] = countries
+    data["observations"] = _economy_readings(countries)
+    assert not any(item["step"] == 6 for item in check_material_gate(session))
+    data["observations"] = _economy_readings(countries, years=(2019, 2020), source="explicit-indicator-trend")
+    assert not any(item["step"] == 6 for item in check_material_gate(session))
+    # Every economy must carry the same years: dropping one year for the last economy breaks the chart.
+    data["observations"] = [
+        item for item in data["observations"] if not (item["country"] == countries[-1] and item["year"] == 2019)
+    ]
+    assert any(item["step"] == 6 for item in check_material_gate(session))
+
+
+@pytest.mark.parametrize(
+    "countries",
+    [[], ["CHN", "CHN"], ["CHN", "ROW"], ["CHN", "USA", "DEU", "JPN", "KOR", "FRA"]],
+)
+def test_steps_six_to_eight_reject_invalid_entity_lists(countries):
+    session = _complete()
+    data = session["steps"]["6"]["data"]
+    data["compared"] = countries
+    data["observations"] = _economy_readings(list(dict.fromkeys(countries)))
+    assert any(item["step"] == 6 for item in check_material_gate(session))
+
+
+def test_single_economy_material_needs_the_global_reference():
+    """One economy alone is only a chart when the global reference exists, i.e. at country scope."""
+    session = _complete()
+    data = session["steps"]["6"]["data"]
+    data["compared"] = ["CHN"]
+    data["observations"] = _economy_readings(["CHN"], industry="C26")
+    assert any(item["step"] == 6 for item in check_material_gate(session))
+    data["compared"] = ["CHN", "USA"]
+    data["observations"] = _economy_readings(["CHN", "USA"], industry="C26")
+    assert not any(item["step"] == 6 for item in check_material_gate(session))
+
+
+@pytest.mark.parametrize("countries", [["CHN"], ["CHN", "USA", "DEU"]])
+def test_step_nine_accepts_one_to_five_economies(countries):
+    session = _complete()
+    data = session["steps"]["9"]["data"]
+    data["compared"] = countries
+    data["observations"] = [
+        dict(item, country=country, entity=f"{country}·C26", value=float(index + 1))
+        for index, country in enumerate(countries)
+        for item in data["observations"][:1]
+    ]
+    assert not any(item["step"] == 9 for item in check_material_gate(session))
+    text = "\n".join(teaching_report._experiment_sections(session))
+    section = text.split("### 步骤 9", 1)[1]
+    assert all(f"{country}·C26" in section for country in countries)
+
+
+def test_report_draws_one_series_per_saved_economy():
+    session = _complete()
+    data = session["steps"]["6"]["data"]
+    data["compared"] = ["CHN", "USA", "DEU"]
+    data["observations"] = _economy_readings(
+        ["CHN", "USA", "DEU"], years=(2019, 2020), source="explicit-indicator-trend"
+    )
+    from gvcsim import report_observed
+
+    text = "\n".join(report_observed._observed_evidence_section(session))
+    section = text.split("### 步骤 6", 1)[1].split("### 步骤 7", 1)[0]
+    chart = json.loads(section.split("```gvcsim-chart\n", 1)[1].split("\n```", 1)[0])
+    assert [series["label"] for series in chart["series"] if not series.get("reference")] == [
+        "CHN 中国",
+        "USA 美国",
+        "DEU 德国",
+    ]
+    assert "两国" not in section
+    assert "比较对象：CHN、USA、DEU" in "\n".join(teaching_report._experiment_sections(session))
+    data["compared"] = ["CHN"]
+    data["observations"] = _economy_readings(["CHN"], years=(2019, 2020), source="explicit-indicator-trend")
+    text = "\n".join(teaching_report._experiment_sections(session))
+    assert "所看国家：CHN" in text
 
 
 def test_steps_six_to_eight_require_explicit_complete_material():
@@ -952,7 +1055,7 @@ def test_step_nine_requires_both_a_comparison_and_an_industry_observation():
     observation_only = _complete()
     observation_only["steps"]["9"]["data"]["compared"] = []
     message = "".join(next(item["missing"] for item in check_material_gate(observation_only) if item["step"] == 9))
-    assert "选好对比国家" in message
+    assert "自动记录" in message
     assert "历年变化或行业排名" in message
     assert "网络图中的节点" not in message
 

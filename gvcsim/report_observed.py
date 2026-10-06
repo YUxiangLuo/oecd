@@ -407,7 +407,7 @@ def _observed_chart(data: dict[str, Any], step: int, observations: list[dict[str
             return {
                 "version": 1,
                 "type": "line",
-                "title": f"{title}：{context}{metric_label}两国历年趋势",
+                "title": f"{title}：{context}{metric_label}历年趋势",
                 "x_label": "年份",
                 "y_label": y_label,
                 "series": series,
@@ -558,11 +558,11 @@ def _observed_evidence_section(session: dict[str, Any]) -> list[str]:
             view = selection.get("view") if isinstance(selection, dict) else None
             if view == "evolution":
                 lines.extend(
-                    ("> 构成演变按分项拆成多张两国趋势图，纵轴是该项占总量的比重；金额读数见“保存的实验快照”。", "")
+                    ("> 构成演变按分项拆成多张趋势图，纵轴是该项占总量的比重；金额读数见“保存的实验快照”。", "")
                 )
             else:
                 scope = "前后向指标" if view == "directions" else "已保存指标"
-                lines.extend((f"> {scope}按指标拆成多张两国同口径趋势图，保留每项读数与变化。", ""))
+                lines.extend((f"> {scope}按指标拆成多张同口径趋势图，保留每项读数与变化。", ""))
         countries_saved = [str(item) for item in _list_values(data.get("compared"))]
         for chart in charts:
             unit = _chart_unit(chart)

@@ -64,9 +64,18 @@ def _valid_indicator_observations(data: dict[str, Any]) -> list[dict[str, Any]]:
     return result
 
 
+# Steps 6–9 material: one economy read against the global reference, or a comparison of up to five.
+MAX_COMPARED = 5
+
+
+def _valid_entities(compared: list[str]) -> bool:
+    """1–5 distinct economies; ROW is an accounting remainder, never an entity."""
+    return 1 <= len(compared) <= MAX_COMPARED and len(set(compared)) == len(compared) and "ROW" not in compared
+
+
 def _indicator_material_complete(data: dict[str, Any], step: int) -> bool:
     compared = [str(item) for item in _list_values(data.get("compared")) if str(item).strip()]
-    if len(compared) != 2 or len(set(compared)) != 2:
+    if not _valid_entities(compared):
         return False
     observations = _valid_indicator_observations(data)
     if not observations or {str(item["country"]) for item in observations} != set(compared):
@@ -83,6 +92,9 @@ def _indicator_material_complete(data: dict[str, Any], step: int) -> bool:
     if len(sources) != 1:
         return False
     source = next(iter(sources))
+    # A single economy is read against the global reference, which exists only for country-level readings.
+    if len(compared) == 1 and next(iter({str(item["scope"]) for item in observations})) != "country":
+        return False
     if source == "explicit-indicator-composition":
         components = _COMPOSITION_COMPONENT_METRICS.get(step)
         total = _COMPOSITION_TOTAL_METRICS.get(step)
@@ -99,38 +111,20 @@ def _indicator_material_complete(data: dict[str, Any], step: int) -> bool:
     }
     if source == "explicit-indicator-trend":
         series = {(str(item["metric"]), str(item.get("industry", ""))) for item in observations}
-        return (
-            bool(series)
-            and all(
-                len(
-                    {
-                        year
-                        for metric_name, industry, year in keys_by_country[country]
-                        if (metric_name, industry) == item
-                    }
-                )
-                >= 2
-                for country in compared
-                for item in series
-            )
-            and all(
-                {
-                    year
-                    for metric_name, industry, year in keys_by_country[compared[0]]
-                    if (metric_name, industry) == item
-                }
-                == {
-                    year
-                    for metric_name, industry, year in keys_by_country[compared[1]]
-                    if (metric_name, industry) == item
-                }
-                for item in series
-            )
+
+        def years_of(country: str, item: tuple[str, str]) -> set[int]:
+            return {year for metric_name, industry, year in keys_by_country[country] if (metric_name, industry) == item}
+
+        # Every economy has at least two years for every series, over the same years as the first economy.
+        return bool(series) and all(
+            len(years_of(country, item)) >= 2 and years_of(country, item) == years_of(compared[0], item)
+            for country in compared
+            for item in series
         )
-    # Same-year comparisons and compositions must be pairwise complete.  A
-    # composition contains multiple components; all saved components survive.
+    # Same-year comparisons and compositions must be complete for every economy (the same keys as the
+    # first one).  A composition contains multiple components; all saved components survive.
     return (
-        keys_by_country[compared[0]] == keys_by_country[compared[1]]
+        all(keys_by_country[country] == keys_by_country[compared[0]] for country in compared)
         and bool(keys_by_country[compared[0]])
         and len({year for _metric, _industry, year in keys_by_country[compared[0]]}) == 1
         and (
@@ -181,7 +175,8 @@ def _table_comparison_complete(data: dict[str, Any], *, allow_auto: bool = False
 def _network_material_complete(data: dict[str, Any]) -> bool:
     compared = [str(item) for item in _list_values(data.get("compared")) if str(item).strip()]
     observations = [item for item in _list_values(data.get("observations")) if isinstance(item, dict)]
-    if len(compared) != 2 or len(set(compared)) != 2 or not observations:
+    # Step 9 readings are always industry-level, where the same-industry reference exists for one economy too.
+    if not _valid_entities(compared) or not observations:
         return False
     required = ("entity", "country", "industry", "year", "value", "metric", "unit", "release", "scope", "source")
     if any(any(item.get(key) in (None, "") for key in required) for item in observations):
@@ -215,7 +210,7 @@ def _network_material_complete(data: dict[str, Any]) -> bool:
         country: {(str(item["industry"]), int(item["year"])) for item in observations if item["country"] == country}
         for country in compared
     }
-    if keys[compared[0]] != keys[compared[1]] or not keys[compared[0]]:
+    if not keys[compared[0]] or any(keys[country] != keys[compared[0]] for country in compared):
         return False
     years = {year for _industry, year in keys[compared[0]]}
     return len(years) >= 2 if sources == {"explicit-network-trend"} else len(years) == 1
@@ -263,7 +258,10 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
                     {
                         "step": step,
                         "title": _STEP_TITLES.get(step, ""),
-                        "missing": ["请选好对比国家并查看一张读数完整的图表，系统会自动记录为本步报告材料"],
+                        "missing": [
+                            "请查看一张读数完整的图表（只看一个国家时用国家整体口径，或加入 1–4 个对比国家），"
+                            "系统会自动记录为本步报告材料"
+                        ],
                     }
                 )
             continue
@@ -274,7 +272,8 @@ def check_material_gate(session: dict[str, Any], **_unused: Any) -> list[dict[st
                         "step": step,
                         "title": _STEP_TITLES.get(step, ""),
                         "missing": [
-                            "请选好对比国家，并查看一张读数完整的行业历年变化或行业排名，系统会自动记录为本步报告材料"
+                            "请查看一张读数完整的行业历年变化或行业排名（可加入 1–4 个对比国家），"
+                            "系统会自动记录为本步报告材料"
                         ],
                     }
                 )
