@@ -123,8 +123,12 @@ export function CoefForestChart({
                   <line x1={x(point.lo)} x2={x(point.hi)} y1={y(index)} y2={y(index)} />
                   <line x1={x(point.lo)} x2={x(point.lo)} y1={y(index) - 8} y2={y(index) + 8} />
                   <line x1={x(point.hi)} x2={x(point.hi)} y1={y(index) - 8} y2={y(index) + 8} />
-                  <text x={x(point.lo)} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">{valueLabel(point.lo)}</text>
-                  <text x={x(point.hi)} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">{valueLabel(point.hi)}</text>
+                  {x(point.hi) - x(point.lo) < 64
+                    ? <text x={(x(point.lo) + x(point.hi)) / 2} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">[{valueLabel(point.lo)}, {valueLabel(point.hi)}]</text>
+                    : <>
+                      <text x={x(point.lo)} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">{valueLabel(point.lo)}</text>
+                      <text x={x(point.hi)} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">{valueLabel(point.hi)}</text>
+                    </>}
                 </g>
               )}
               <circle cx={x(point.coef)} cy={y(index)} r={6.5} fill={fill} stroke="#fff" strokeWidth={2} />

@@ -38,6 +38,29 @@ describe("fixed teaching regression reading", () => {
     expect(html).not.toMatch(/处理组|对照组|处理聚类|同时置信带|与生成时的预设关系|使用的年度记录/);
   });
 
+  test("draws the binned scatter in display units: shares in percentage points, slope per 1 pp of X", () => {
+    const withBins = response();
+    withBins.result.coefs[0].coef = -0.55;
+    withBins.result.coefs[0].ci_low = -0.57;
+    withBins.result.coefs[0].ci_high = -0.53;
+    withBins.result.binscatter = {
+      bins: [{ x: -0.02, y: 0.011, n: 10 }, { x: 0, y: 0, n: 10 }, { x: 0.02, y: -0.011, n: 10 }],
+      slope: -0.55,
+      transform: "twoway_demeaned",
+    };
+    const html = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={withBins} />);
+    const dom = new DOMParser().parseFromString(html, "text/html");
+    expect(dom.querySelectorAll("svg[role=img]")).toHaveLength(2);
+    // β for a share outcome is already "percentage points of Y per percentage point of X".
+    expect(html).toContain("斜率 β = -0.550");
+    // Bin means are shown in percentage points (×100), so the Y axis spans about ±1.1, not ±0.011.
+    const texts = [...dom.querySelectorAll("svg text")].map((node) => node.textContent ?? "");
+    expect(texts.some((text) => /^-?1\.[0-9]+$/.test(text))).toBe(true);
+    expect(texts.some((text) => text === "0.0100" || text === "-0.0100")).toBe(false);
+    // A narrow interval is labelled once, in the middle, instead of two colliding end labels.
+    expect(html).toContain("[-0.57, -0.53]");
+  });
+
   test.each([
     [-0.8, -0.2, "本次模拟样本支持负向关联", true],
     [-0.9, 0.1, "本次模拟样本不足以判断方向", false],

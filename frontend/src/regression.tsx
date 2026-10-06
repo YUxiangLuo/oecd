@@ -143,11 +143,11 @@ export function RegressionResultCard({ outcome, response, examples = [] }: {
       {verdict.coefficient && response.result.binscatter && response.result.binscatter.bins.length >= 2 && (
         <BinScatterChart
           bins={response.result.binscatter.bins}
-          slope={response.result.binscatter.slope * (display.scale / 100)}
+          slope={response.result.binscatter.slope * display.scale}
           xLabel="关税暴露 X（个百分点）"
           yLabel={`${lesson.shortMetric}（${display.unit}）`}
           xScale={100}
-          yScale={display.scale}
+          yScale={display.scale * 100}
           title="回归在量什么：X 越大，Y 平均怎样变"
         />
       )}
