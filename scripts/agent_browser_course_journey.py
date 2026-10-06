@@ -173,7 +173,7 @@ def main():
             student.button("提交答案")
             student.run("wait", ".quiz-complete")
             row = saved()["steps"][str(step)]["data"]
-            assert row["quiz"]["version"] == ("course-quiz-v9" if step == 11 else "course-quiz-v8")
+            assert row["quiz"]["version"] == ("course-quiz-v9" if step in (11, 14) else "course-quiz-v8")
             if step == 1:
                 assert row["observation"]["row"].startswith("CHN_")
             elif step <= 9:
