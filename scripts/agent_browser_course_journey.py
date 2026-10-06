@@ -144,12 +144,14 @@ def main():
                     ),
                 )
             elif step == 10:
-                student.run("wait", ".bounded-data-table tbody tr")
+                # The two example rows are visible; the yearly table sits in a folded <details>, so it is checked in the DOM.
+                student.run("wait", ".teaching-example-summary li")
+                student.run("wait", "--fn", 'document.querySelectorAll(".teaching-example-summary li").length === 2')
                 student.run("wait", "--fn", 'document.querySelectorAll(".bounded-data-table tbody tr").length === 10')
                 wait_saved(step, lambda row: bool(row.get("teaching_observation")))
             else:
-                student.run("find", "role", "button", "click", "--name", "运行回归")
-                student.run("wait", "--text", "重新运行回归")
+                student.run("find", "role", "button", "click", "--name", "算出这个差距")
+                student.run("wait", "--text", "重新算一次")
                 wait_saved(step, lambda row: bool(row.get("run")), timeout=30)
             names = json.loads(
                 student.run(
