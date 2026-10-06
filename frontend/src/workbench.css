@@ -72,7 +72,7 @@
 }
 .comparison-summary span, .comparison-summary small { display: block; color: #616b7d; font-size: 10.5px; line-height: 1.4; }
 .comparison-summary b { display: block; margin: 4px 0 3px; color: #293342; font-size: 13px; line-height: 1.35; }
-.comparison-facets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.comparison-facets { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
 .comparison-facet { min-width: 0; padding: 11px; border: 1px solid #e1e5ee; border-radius: 10px; background: #fbfcff; }
 .comparison-facet h4 { margin: 0 0 8px; }
 .technical-details > summary { cursor: pointer; color: #4b47e0; font-weight: 700; }

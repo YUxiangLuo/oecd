@@ -28,7 +28,7 @@ test("step 9 records the main comparison automatically; the exploration views si
   await screen.findByRole("img");
   // Legacy observations without a release do not restore the trend selection;
   // the saved comparison pair (CHN, USA) supplies the initial comparison instead.
-  expect(screen.getByLabelText("当前比较口径").textContent).toContain("CHN 中国与USA 美国 · C26");
+  expect(screen.getByLabelText("当前比较口径").textContent).toMatch(/CHN 中国与USA 美国.*C26/);
   expect(screen.queryByRole("button", { name: "保存为报告材料" })).toBeNull();
   // The complete main chart replaces the legacy record automatically.
   await waitFor(() => expect(save.mock.calls.some(([patch]) => "observations" in patch)).toBe(true));

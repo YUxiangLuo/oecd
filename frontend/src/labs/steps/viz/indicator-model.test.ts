@@ -5,10 +5,13 @@ import { DistributionStrip, IndicatorTrendChart, layoutStripLabels } from "./ind
 import {
   changeReading,
   countryDistribution,
+  defaultEntities,
   indicatorMaterial,
   indicatorRows,
   materialComplete,
+  normalizeSelection,
   rankText,
+  selectionEntities,
 } from "./indicator-model";
 import { LENGTH_TOPIC } from "./length";
 import { PRODUCTION_TOPIC } from "./production";
@@ -263,5 +266,31 @@ describe("tied ranks", () => {
     expect(oneEnd).toContain("不分名次 → 第 2 位");
     expect(oneEnd).toContain("不分名次：该年全部经济体数值相同");
     expect(oneEnd).not.toContain("并列");
+  });
+});
+
+describe("material of one to five economies", () => {
+  const five = ["CHN", "USA", "DEU", "JPN", "KOR"];
+  const rows: Row[] = five.flatMap((country, i) => [2020, 2021].map((year) => ({ country, year, FVA_share: 0.1 * (i + 1) + (year - 2020) / 100 })));
+  const material = (countries: string[]) =>
+    indicatorMaterial(rows, countries, [2020, 2021], ["FVA_share"], TRADE_TOPIC, "", "explicit-indicator-trend", "release");
+
+  test("one economy is material only with the global reference; up to five share one chart", () => {
+    expect(materialComplete(material(["CHN"]), ["CHN"], ["FVA_share"], true)).toBeFalse();
+    expect(materialComplete(material(["CHN"]), ["CHN"], ["FVA_share"], true, true)).toBeTrue();
+    expect(materialComplete(material(five), five, ["FVA_share"], true)).toBeTrue();
+    expect(materialComplete(material(five), [...five, "FRA"], ["FVA_share"], true)).toBeFalse();
+    expect(materialComplete(material(five), ["CHN", "CHN"], ["FVA_share"], true)).toBeFalse();
+    // Every economy must carry the same years as the first one.
+    const uneven = material(["CHN", "USA", "DEU"]).filter((item) => !(item.country === "DEU" && item.year === 2021));
+    expect(materialComplete(uneven, ["CHN", "USA", "DEU"], ["FVA_share"], true)).toBeFalse();
+  });
+
+  test("selection entities and defaults", () => {
+    expect(selectionEntities({ first: "CHN", second: "USA" })).toEqual(["CHN", "USA"]);
+    expect(selectionEntities({ first: "CHN", second: "", others: ["USA", "DEU", "CHN"] })).toEqual(["CHN", "USA", "DEU"]);
+    expect(normalizeSelection({ first: "CHN", second: "DEU", others: ["USA"], industry: "", metric: "m", start: 2020, end: 2021, year: 2021, view: "trend", limit: 10 }).second).toBe("USA");
+    expect(defaultEntities(["CHN", "USA", "DEU"], ["DEU", "DEU", "XXX"])).toEqual(["DEU"]);
+    expect(defaultEntities(["CHN", "USA", "DEU"])).toEqual(["CHN", "USA"]);
   });
 });

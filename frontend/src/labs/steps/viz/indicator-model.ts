@@ -39,9 +39,16 @@ export type IndicatorView =
   | "directions"
   | "industry"
   | "explore";
+/** Material is one chart of 1–5 economies (design doc 4.1). */
+export const MAX_ENTITIES = 5;
+export const COMPARISON_LETTERS = ["B", "C", "D", "E"] as const;
+
 export interface IndicatorSelection {
   first: string;
+  /** The first comparison country (kept for saved selections); `others` holds all of them. */
   second: string;
+  /** Comparison countries in order (0–4); when absent, derived from `second`. */
+  others?: string[];
   industry: string;
   metric: string;
   start: number;
@@ -49,6 +56,26 @@ export interface IndicatorSelection {
   year: number;
   view: IndicatorView;
   limit: number;
+}
+
+/** The entities a selection shows: the observed country first, then its comparison countries. */
+export function selectionEntities(selection: Pick<IndicatorSelection, "first" | "second" | "others">): string[] {
+  const others = selection.others ?? (selection.second ? [selection.second] : []);
+  return [selection.first, ...others].filter((country, index, all) => country && all.indexOf(country) === index).slice(0, MAX_ENTITIES);
+}
+
+/** Normalise a saved selection: `others` always present and consistent with `second`. */
+export function normalizeSelection(selection: IndicatorSelection): IndicatorSelection {
+  const [, ...others] = selectionEntities(selection);
+  return { ...selection, second: others[0] ?? "", others };
+}
+
+/** Carry a saved entity list over (first + up to four comparisons), defaulting to CHN vs USA. */
+export function defaultEntities(countries: string[], compared: string[] = []): string[] {
+  const carried = compared.filter((country, index) => countries.includes(country) && compared.indexOf(country) === index);
+  if (carried.length) return carried.slice(0, MAX_ENTITIES);
+  const [first, second] = defaultComparison(countries, []);
+  return second ? [first, second] : [first];
 }
 
 export function defaultComparison(
@@ -133,26 +160,34 @@ export function indicatorMaterial(
   );
 }
 
+/**
+ * One reproducible chart: 1–5 distinct economies with identical (industry, metric, year) keys. A single
+ * economy is only material when it is read against the global reference (`singleAllowed`: country scope).
+ */
 export function materialComplete(
   observations: VizObservation[],
   countries: string[],
   metrics: string[],
   trend: boolean,
+  singleAllowed = false,
 ): boolean {
   if (
-    countries.length !== 2 ||
-    countries[0] === countries[1] ||
+    countries.length < 1 ||
+    countries.length > MAX_ENTITIES ||
+    new Set(countries).size !== countries.length ||
+    (countries.length === 1 && !singleAllowed) ||
     !observations.length
   )
     return false;
   const identities = countries.map((country) =>
-    observations
-      .filter((item) => item.country === country)
-      .map((item) => `${item.industry ?? ""}:${item.metric}:${item.year}`)
-      .sort(),
+    JSON.stringify(
+      observations
+        .filter((item) => item.country === country)
+        .map((item) => `${item.industry ?? ""}:${item.metric}:${item.year}`)
+        .sort(),
+    ),
   );
-  if (JSON.stringify(identities[0]) !== JSON.stringify(identities[1]))
-    return false;
+  if (identities.some((identity) => identity !== identities[0])) return false;
   return metrics.every((metric) =>
     countries.every(
       (country) =>

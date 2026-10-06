@@ -99,7 +99,17 @@ def main():
                         )
                     ),
                 )
-            elif 6 <= step <= 8:
+            if 6 <= step <= 9:
+                # Hard requirements: a time-series view and a country-comparison view on every chart step.
+                views = json.loads(
+                    student.run(
+                        "eval",
+                        'Array.from(document.querySelectorAll(\'[role="group"][aria-label="图表视角"] button\')).map(e=>e.textContent)',
+                    )
+                )
+                assert "历年变化" in views, (step, views)
+                assert ("国家对比" if step <= 8 else "定位行业") in views, (step, views)
+            if 6 <= step <= 8:
                 # The first visit carries the comparison pair over from the previous step and
                 # records the current complete chart automatically; there is no button to press.
                 wait_saved(

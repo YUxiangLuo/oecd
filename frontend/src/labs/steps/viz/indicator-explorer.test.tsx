@@ -390,3 +390,60 @@ describe("indicator explorer with automatic report material", () => {
     expect(document.querySelectorAll('line[data-series="CHN"]')).toHaveLength(0);
   });
 });
+
+describe("material of one to five economies (design doc 4.1)", () => {
+  const meta3: Meta = { ...meta, countries: ["CHN", "USA", "DEU"] };
+  const rows3 = (year: number) =>
+    ["CHN", "USA", "DEU"].map((country, i) => ({
+      country, gross_exports: 100 + i * 100, FVA: 10 + i * 30 + year - 2019, DVAex: 55 + i, DVArt: 8, DDC: 4, FDC: 2, taxsub: -1,
+    }));
+  function mount(data?: VizStepState) {
+    const saves: VizStepState[] = [];
+    const state: StepStateApi<VizStepState> = { data, save: (value) => saves.push(value), complete: false, syncing: false, syncError: null, syncNow: () => {} };
+    return { saves, ...render(<TradeVizStep meta={meta3} step={step} state={state} />) };
+  }
+
+  test("one economy at country scope is recorded against the global reference; at industry scope it is not", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => rows3(year));
+    const industry = spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => ({
+      rows: rows3(year).filter((row) => row.country === country).map((row) => ({ ...row, industry: "A" })), total: 1, page: 1, page_size: 200,
+    }));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = mount({ compared: ["CHN"] });
+      await view.findByRole("button", { name: "出口构成" });
+      // The carried-over single entity opens alone: no comparison select is filled, the add control is offered.
+      expect((view.getByLabelText("对比国家 B") as HTMLSelectElement).value).toBe("");
+      await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["CHN"]));
+      expect(view.saves.at(-1)!.observations!.every((item) => item.country === "CHN")).toBe(true);
+      // An industry has no global reference, so one economy alone is exploration there.
+      const before = view.saves.length;
+      fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
+      await view.findByText(/需用国家整体口径/);
+      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 20)); });
+      expect(view.saves.slice(before).every((save) => !("observations" in save))).toBe(true);
+    } finally { rows.mockRestore(); industry.mockRestore(); schema.mockRestore(); }
+  });
+
+  test("a third country joins the same chart: one series per economy, all recorded together", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => rows3(year));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = mount();
+      await view.findByRole("button", { name: "出口构成" });
+      fireEvent.click(view.getByRole("button", { name: "历年变化" }));
+      await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["CHN", "USA"]));
+      fireEvent.change(view.getByLabelText("再加一个对比国家"), { target: { value: "DEU" } });
+      await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["CHN", "USA", "DEU"]));
+      expect(view.getByLabelText("对比国家 C")).toBeTruthy();
+      expect(view.container.querySelectorAll("[data-series-group]")).toHaveLength(3);
+      expect(view.saves.at(-1)!.indicator_selection).toMatchObject({ first: "CHN", second: "USA", others: ["USA", "DEU"] });
+      expect(new Set(view.saves.at(-1)!.observations!.map((item) => item.country))).toEqual(new Set(["CHN", "USA", "DEU"]));
+      // Every comparison country gets its own gap card.
+      expect(view.getAllByText(/与对比国家/)).toHaveLength(2);
+      // Choosing a comparison country as A swaps it with the old A instead of dropping it.
+      fireEvent.change(view.getByLabelText("国家 A"), { target: { value: "DEU" } });
+      await waitFor(() => expect(view.saves.at(-1)?.compared).toEqual(["DEU", "USA", "CHN"]));
+    } finally { rows.mockRestore(); schema.mockRestore(); }
+  });
+});

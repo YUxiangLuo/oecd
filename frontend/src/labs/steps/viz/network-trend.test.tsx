@@ -167,3 +167,20 @@ test("after the report is submitted, step 9 records only when the student asks",
   fireEvent.click(record);
   expect(save).toHaveBeenCalledTimes(1);
 });
+
+test("one economy alone records against the same-industry reference", async () => {
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => page([row(country, year, (country === "CHN" ? 10 : 70) + year - 2018)]));
+  mockReference();
+  const save = mock((_countries: string[], _observations: VizObservation[]) => {});
+  render(<NetworkTrend meta={meta} initialCountry="CHN" onRecord={save} />);
+  fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
+  await waitFor(() => expect(save).toHaveBeenCalled());
+  fireEvent.change(screen.getByLabelText("对比国家 B"), { target: { value: "" } });
+  await waitFor(() => expect(save.mock.calls.at(-1)![0]).toEqual(["CHN"]));
+  expect(save.mock.calls.at(-1)![1].every((item) => item.country === "CHN")).toBe(true);
+  // A second comparison country can be added; the scope card lists all three.
+  fireEvent.change(screen.getByLabelText("对比国家 B"), { target: { value: "USA" } });
+  fireEvent.change(screen.getByLabelText("再加一个对比国家"), { target: { value: "DEU" } });
+  await waitFor(() => expect(save.mock.calls.at(-1)![0]).toEqual(["CHN", "USA", "DEU"]));
+  expect(screen.getByLabelText("当前比较口径").textContent).toContain("CHN 中国与USA 美国与DEU 德国");
+});

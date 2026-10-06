@@ -20,13 +20,17 @@ import {
   type VizStepState,
 } from "./scaffold";
 import {
+  COMPARISON_LETTERS,
   countryDistribution,
-  defaultComparison,
+  defaultEntities,
   finiteValue,
   indicatorMaterial,
   indicatorRows,
   materialComplete,
   materialKey,
+  MAX_ENTITIES,
+  normalizeSelection,
+  selectionEntities,
   type IndicatorSelection,
   type IndicatorTopic,
   type IndicatorView,
@@ -75,13 +79,11 @@ export function IndicatorExplorer({
       item.source?.startsWith("explicit-indicator-") &&
       item.release === release,
   );
-  const [defaultFirst, defaultSecond] = defaultComparison(
-    countries,
-    state.data?.compared,
-  );
+  const [defaultFirst, ...defaultOthers] = defaultEntities(countries, state.data?.compared);
   const defaults: IndicatorSelection = {
     first: defaultFirst,
-    second: defaultSecond,
+    second: defaultOthers[0] ?? "",
+    others: defaultOthers,
     industry: "",
     metric: topic.defaultMetric,
     start: years[0],
@@ -92,7 +94,7 @@ export function IndicatorExplorer({
   };
   const [selection, setSelection] = useState<IndicatorSelection>(
     saved.length && state.data?.indicator_selection
-      ? state.data.indicator_selection
+      ? normalizeSelection(state.data.indicator_selection)
       : defaults,
   );
   const touched = useRef(false);
@@ -100,13 +102,15 @@ export function IndicatorExplorer({
   useEffect(() => {
     if (hydrated.current || touched.current || !state.data) return;
     if (saved.length && state.data.indicator_selection)
-      setSelection(state.data.indicator_selection);
+      setSelection(normalizeSelection(state.data.indicator_selection));
     hydrated.current = true;
   }, [state.data, saved.length]);
   const select = (patch: Partial<IndicatorSelection>) => {
     touched.current = true;
-    setSelection((old) => ({ ...old, ...patch }));
+    setSelection((old) => normalizeSelection({ ...old, ...patch }));
   };
+  /** Replace the comparison list (0–4 countries); `second` follows for saved selections. */
+  const selectOthers = (others: string[]) => select({ others, second: others[0] ?? "" });
   // The sticky scope card jumps to the control that changes each part of the scope.
   const entityRef = useRef<HTMLSelectElement>(null);
   const rangeRef = useRef<HTMLSelectElement>(null);
@@ -116,11 +120,11 @@ export function IndicatorExplorer({
     ref.current?.scrollIntoView?.({ block: "center" });
     ref.current?.focus();
   };
-  const { first, second, industry, metric, start, end, year, limit } =
-    selection;
+  const { first, industry, metric, start, end, year, limit } = selection;
+  const others = selection.others ?? [];
   // “进一步探索” used to replace the main chart; it is now a modal, so an old saved view falls back.
   const view: IndicatorView = selection.view === "explore" ? topic.defaultView ?? "trend" : selection.view;
-  const selected = second ? [first, second] : [first];
+  const selected = selectionEntities(selection);
   const range = years.filter((value) => value >= start && value <= end);
   const timeView =
     view === "trend" || view === "evolution" || view === "directions";
@@ -236,17 +240,20 @@ export function IndicatorExplorer({
           finiteValue(row[topic.composition!.total]) &&
           (row[topic.composition!.total] as number) > 0,
       ));
+  // One economy alone is material only with the global reference, i.e. at country scope (not an industry,
+  // not the industry ranking); the report gate applies the same rule.
+  const singleAllowed = !industry && view !== "industry";
   const canSave =
     view !== "positioning" &&
     query.status === "success" &&
     completeComposition &&
-    materialComplete(pending, selected, metrics, timeView);
+    materialComplete(pending, selected, metrics, timeView, singleAllowed);
   // Name the actual reason the material cannot be saved instead of one catch-all sentence.
   const blockedReason =
     view === "positioning"
       ? "定位图只作探索，不记录材料。"
-      : selected.length < 2
-      ? "只看一个国家时不记录材料；添加对比国家后会自动记录完整图表。"
+      : selected.length < 2 && !singleAllowed
+      ? "只看一个国家时需用国家整体口径（带全球参照）才记录材料；选择了行业时请加入对比国家。"
       : query.status === "error"
         ? "当前比较的数据加载失败，请重试。"
         : query.status !== "success"
@@ -255,14 +262,14 @@ export function IndicatorExplorer({
             ? "趋势至少需要两个年份；请把起始年份和结束年份设为不同年份。"
             : !completeComposition
               ? "构成图需要所有分项及正总量齐全；请更换国家、行业或年份。"
-              : "两国在所选范围内的读数不完整或不能配对（缺失不补零）；请调整年份范围或更换比较对象。";
+              : "所选国家在该范围内的读数不完整或不能配对（缺失不补零）；请调整年份范围或更换比较对象。";
   const matches =
     canSave &&
     materialKey(saved) === materialKey(pending) &&
+    // `others` is an array, so compare by value rather than by reference.
     Object.entries(selection).every(
       ([key, value]) =>
-        state.data?.indicator_selection?.[key as keyof IndicatorSelection] ===
-        value,
+        JSON.stringify(state.data?.indicator_selection?.[key as keyof IndicatorSelection]) === JSON.stringify(value),
     );
   const pendingKey = canSave ? `${materialKey(pending)}|${JSON.stringify({ ...selection, view })}` : "";
   // `chosen`: recorded on the student's request after submission, so the report does not call it automatic.
@@ -367,13 +374,12 @@ export function IndicatorExplorer({
               id={id}
               ref={entityRef}
               value={first}
-              onChange={(e) =>
-                select({
-                  first: e.target.value,
-                  // Choosing B's country as A swaps the pair rather than dropping the comparison.
-                  second: e.target.value === second ? (first !== e.target.value ? first : "") : second,
-                })
-              }
+              onChange={(e) => {
+                // Choosing a comparison country as A swaps it with the old A rather than dropping it.
+                const next = e.target.value;
+                const swapped = others.includes(next) ? others.map((item) => (item === next ? first : item)) : others;
+                select({ first: next, others: swapped, second: swapped[0] ?? "" });
+              }}
             >
               {countries.map((country) => (
                 <option key={country} value={country}>
@@ -383,24 +389,50 @@ export function IndicatorExplorer({
             </select>
           )}
         </LabeledControl>
-        <LabeledControl label="对比国家 B">
-          {(id) => (
-            <select
-              id={id}
-              value={second}
-              onChange={(e) => select({ second: e.target.value })}
-            >
-              <option value="">不选对比国家</option>
-              {countries
-                .filter((country) => country !== first)
-                .map((country) => (
-                  <option key={country} value={country}>
-                    {countryLabel(country)}
-                  </option>
-                ))}
-            </select>
-          )}
-        </LabeledControl>
+        {others.map((country, index) => (
+          <LabeledControl key={index} label={`对比国家 ${COMPARISON_LETTERS[index]}`}>
+            {(id) => (
+              <select
+                id={id}
+                value={country}
+                onChange={(e) => selectOthers(
+                  e.target.value
+                    ? others.map((item, at) => (at === index ? e.target.value : item))
+                    : others.filter((_, at) => at !== index),
+                )}
+              >
+                <option value="">{index ? "移除" : "不选对比国家"}</option>
+                {countries
+                  .filter((candidate) => candidate === country || !selected.includes(candidate))
+                  .map((candidate) => (
+                    <option key={candidate} value={candidate}>
+                      {countryLabel(candidate)}
+                    </option>
+                  ))}
+              </select>
+            )}
+          </LabeledControl>
+        ))}
+        {selected.length < MAX_ENTITIES && (
+          <LabeledControl label={others.length ? "再加一个对比国家" : "对比国家 B"}>
+            {(id) => (
+              <select
+                id={id}
+                value=""
+                onChange={(e) => e.target.value && selectOthers([...others, e.target.value])}
+              >
+                <option value="">{others.length ? "添加…" : "不选对比国家"}</option>
+                {countries
+                  .filter((candidate) => !selected.includes(candidate))
+                  .map((candidate) => (
+                    <option key={candidate} value={candidate}>
+                      {countryLabel(candidate)}
+                    </option>
+                  ))}
+              </select>
+            )}
+          </LabeledControl>
+        )}
       </div>
       <LensNav
         lenses={lenses}
