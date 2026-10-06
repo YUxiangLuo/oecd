@@ -110,11 +110,13 @@ describe("parseReportChart", () => {
       type: "bar",
       items: [{ label: "A", value: 1, color: "red" }],
     }))).toBeNull();
+    // One saved economy without a reference is still a valid single-series chart.
     expect(parseReportChart(JSON.stringify({
       version: 1,
       type: "line",
       series: [{ label: "CHN", points: [{ label: "2020", value: 1 }] }],
-    }))).toBeNull();
+    }))).not.toBeNull();
+    expect(parseReportChart(JSON.stringify({ version: 1, type: "line", series: [] }))).toBeNull();
     expect(parseReportChart(JSON.stringify({
       version: 1,
       type: "line",

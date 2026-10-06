@@ -14,11 +14,12 @@ const edges = [
 describe("trade partners data layer", () => {
   test("partners per year are sorted by two-way flow and the concentration is the top partners' share", () => {
     const [year] = partnerYears([{ year: 2020, data: { nodes: [], edges } }]);
-    expect(year.partners.CHN.map((partner) => partner.c)).toEqual(["ROW", "USA", "JPN", "DEU"]);
-    expect(year.partners.CHN[1]).toMatchObject({ inflow: 40, outflow: 100, total: 140 });
-    // Top-5 share of a four-partner list is 100%; the top-2 share is (500 + 140) / 690.
+    // ROW is left out before partners are ranked.
+    expect(year.partners.CHN.map((partner) => partner.c)).toEqual(["USA", "JPN", "DEU"]);
+    expect(year.partners.CHN[0]).toMatchObject({ inflow: 40, outflow: 100, total: 140 });
+    // Top-5 share of a three-partner list is 100%; the top-2 share is (140 + 30) / 190.
     expect(partnerConcentration(year.partners.CHN)).toBe(1);
-    expect(partnerConcentration(year.partners.CHN, 2)).toBeCloseTo(640 / 690, 6);
+    expect(partnerConcentration(year.partners.CHN, 2)).toBeCloseTo(170 / 190, 6);
     expect(partnerConcentration(undefined)).toBeNull();
     expect(partnerConcentration([])).toBeNull();
   });

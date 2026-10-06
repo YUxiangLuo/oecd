@@ -41,7 +41,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   locked?: boolean;
   /** Step-specific views that live beside the two recording views (they never record material). */
   extraLenses?: { key: string; label: string }[];
-  renderExtra?: (key: string) => ReactNode;
+  renderExtra?: (key: string, countries: string[]) => ReactNode;
   /** The full-indicator table, folded into the 国家对比 view. */
   renderTable?: () => ReactNode;
 }) {
@@ -213,7 +213,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         { label: "材料", value: "探索视角，不记录材料" },
       ]}
     />
-    {!recordable && view !== "topology" && view !== "flows" ? renderExtra?.(view) : query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : view === "topology" ? (
+    {!recordable && view !== "topology" && view !== "flows" ? renderExtra?.(view, selected) : query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : view === "topology" ? (
       <div className="comparison-facets">
         {selected.map((country) => (
           <section key={country} className="comparison-facet">

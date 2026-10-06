@@ -159,7 +159,7 @@ export function NetworkVizStep({ meta, step, state }: { meta: Meta; step: Step; 
           state.save({ compared: countries, metric: records[0]?.metric, observations: records });
         }}
         extraLenses={[{ key: "partners", label: "贸易伙伴" }]}
-        renderExtra={() => <TradePartners meta={meta} countries={state.data?.compared?.length ? state.data.compared : [drill]} year={year} onYear={setYear} />}
+        renderExtra={(_key, countries) => <TradePartners meta={meta} countries={countries} year={year} onYear={setYear} />}
         renderTable={() => (
           <IndustryHeatTable
             meta={meta} initialYear={year} drill={drill} heatSort={heatSort} heatCoverage={heatCoverage}

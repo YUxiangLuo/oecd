@@ -265,23 +265,22 @@ export function IndicatorTrendChart({
   const bandPath = band.length >= 2
     ? `M${band.map((item) => `${x(item.year)},${y(item.p75)}`).join(" L")} L${[...band].reverse().map((item) => `${x(item.year)},${y(item.p25)}`).join(" L")} Z`
     : "";
+  // The legend is HTML so five economies plus the reference wrap instead of running off the svg.
   const legend: { key: string; label: string; draw: React.ReactNode; country?: string }[] = [
     ...(band.length ? [
-      { key: "band", label: "中间 50% 经济体", draw: <rect x={0} y={-6} width={24} height={12} fill={REFERENCE_FILL} fillOpacity={0.3} /> },
-      { key: "median", label: `${sameIndustry ? "同行业全球中位数" : "全球中位数"}（${band.at(-1)!.n} 个）`, draw: <line x1={0} x2={24} y1={0} y2={0} stroke={REFERENCE_LINE} strokeWidth={1.5} strokeDasharray="4 3" /> },
+      { key: "band", label: "中间 50% 经济体", draw: <svg width={24} height={12} aria-hidden="true"><rect x={0} y={0} width={24} height={12} fill={REFERENCE_FILL} fillOpacity={0.3} /></svg> },
+      { key: "median", label: `${sameIndustry ? "同行业全球中位数" : "全球中位数"}（${band.at(-1)!.n} 个）`, draw: <svg width={24} height={12} aria-hidden="true"><line x1={0} x2={24} y1={6} y2={6} stroke={REFERENCE_LINE} strokeWidth={1.5} strokeDasharray="4 3" /></svg> },
     ] : []),
     ...countries.map((country, index) => ({
       key: country,
       country,
       label: index && context ? `${countryLabel(country)}（对比）` : countryLabel(country),
-      draw: <>
-        <line x1={0} x2={24} y1={0} y2={0} stroke={CAT[index]} strokeWidth={context && index ? 2 : context ? 3 : 2.5} strokeDasharray={index ? "7 4" : undefined} />
-        <circle cx={12} cy={0} r={context && index ? 3.5 : 4} fill={CAT[index]} />
-      </>,
+      draw: <svg width={24} height={12} aria-hidden="true">
+        <line x1={0} x2={24} y1={6} y2={6} stroke={CAT[index]} strokeWidth={context && index ? 2 : context ? 3 : 2.5} strokeDasharray={index ? "7 4" : undefined} />
+        <circle cx={12} cy={6} r={context && index ? 3.5 : 4} fill={CAT[index]} />
+      </svg>,
     })),
   ];
-  // Steps 6–8 read left to right from the reference; step 10's two equal partners keep the legend on the right.
-  let legendX = context ? 110 : 455;
   const referenceLabel = sameIndustry ? "同行业全球中位数" : "全球中位数";
   /** One readout for every series at a year: values lead, the series name follows. */
   const linesFor = (year: number): TipLine[] => {
@@ -321,6 +320,20 @@ export function IndicatorTrendChart({
       <h4>
         {label} · {unit}
       </h4>
+      <div className="trend-legend" style={{ justifyContent: context ? "flex-start" : "flex-end" }}>
+        {legend.map((item) => (
+          <span
+            key={`legend-${item.key}`}
+            data-legend={item.country}
+            style={item.country ? { cursor: "pointer" } : undefined}
+            onMouseEnter={item.country ? () => setFocusSeries(item.country!) : undefined}
+            onMouseLeave={item.country ? () => setFocusSeries(null) : undefined}
+          >
+            {item.draw}
+            {item.label}
+          </span>
+        ))}
+      </div>
       <div
         ref={wrapRef}
         className="hover-wrap chart-focus"
@@ -332,28 +345,11 @@ export function IndicatorTrendChart({
         onMouseLeave={clearActive}
       >
       <svg
-        viewBox="0 0 780 295"
+        viewBox="0 30 780 265"
         role="img"
         aria-label={`${label}历年变化${band.length ? "，含全部经济体的中位数与中间 50% 范围" : ""}；缺失不补零，详细读数见下方`}
         style={{ width: "100%", display: "block" }}
       >
-        {legend.map((item) => {
-          const at = legendX;
-          legendX += 40 + item.label.length * 12;
-          return (
-            <g
-              key={`legend-${item.key}`}
-              transform={`translate(${at} 14)`}
-              data-legend={item.country}
-              style={item.country ? { cursor: "pointer" } : undefined}
-              onMouseEnter={item.country ? () => setFocusSeries(item.country!) : undefined}
-              onMouseLeave={item.country ? () => setFocusSeries(null) : undefined}
-            >
-              {item.draw}
-              <text x={31} y={4} fontSize={12} fill="#374151">{item.label}</text>
-            </g>
-          );
-        })}
         {axis.ticks.map((tick) => (
           <g key={tick}>
             <line x1={110} x2={730} y1={y(tick)} y2={y(tick)} stroke="#e2e5ee" />

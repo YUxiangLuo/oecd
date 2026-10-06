@@ -153,7 +153,7 @@ export function parseReportChart(source: string): ReportChart | null {
   }
   if (value.type === "line") {
     if (!hasOnlyKeys(value, ["version", "type", "title", "x_label", "y_label", "series"])) return null;
-    if (!Array.isArray(value.series) || value.series.length < 2 || value.series.length > 8) return null;
+    if (!Array.isArray(value.series) || value.series.length < 1 || value.series.length > 8) return null;
     if (!value.series.every(isLineSeries)) return null;
     if (new Set(value.series.map((series) => series.label)).size !== value.series.length) return null;
     if (value.series.reduce((count, series) => count + series.points.length, 0) > MAX_POINTS) return null;
@@ -401,8 +401,8 @@ function LineChart({ chart }: { chart: Extract<ReportChart, { type: "line" }> })
   const ticks = axis.ticks;
 
   return (
-    <ReportFigure title={chart.title ?? "两国历年趋势"}>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "两国历年趋势折线图"} style={{ width: "100%", height: "auto" }}>
+    <ReportFigure title={chart.title ?? "历年趋势"}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "历年趋势折线图"} style={{ width: "100%", height: "auto" }}>
         {ticks.map((tick) => (
           <g key={tick}>
             <line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke="#e5e7ed" />

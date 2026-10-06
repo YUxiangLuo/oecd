@@ -24,7 +24,7 @@ export interface PartnerYear { year: number; partners: Record<string, NetworkPar
 /** Every partner list for every selected economy in every year; edges are kept for the region matrix. */
 export function partnerYears(byYear: { year: number; data: NetworkData }[]): PartnerYear[] {
   return byYear.map(({ year, data }) => {
-    const model = thresholdedNetworkModel(data.edges, 0);
+    const model = thresholdedNetworkModel(data.edges.filter((edge) => edge.source !== "ROW" && edge.target !== "ROW"), 0);
     return { year, partners: model.neighbors, edges: data.edges };
   });
 }
@@ -51,7 +51,7 @@ export function regionMatrix(edges: NetworkData["edges"]): number[][] {
 
 function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: string; partners: NetworkPartner[]; colorIndex: number; scaleMax: number }) {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
-  const top = partners.filter((partner) => partner.c !== "ROW").slice(0, TOP_PARTNERS).sort((a, b) => (REGION_OF[a.c] ?? 5) - (REGION_OF[b.c] ?? 5) || b.total - a.total);
+  const top = [...partners].slice(0, TOP_PARTNERS).sort((a, b) => (REGION_OF[a.c] ?? 5) - (REGION_OF[b.c] ?? 5) || b.total - a.total);
   const W = 420, H = 320, cx = W / 2, cy = H / 2 + 6, R = 118;
   const width = (value: number) => 1 + (value / (scaleMax || 1)) * 9;
   const linesFor = (partner: NetworkPartner): TipLine[] => [
@@ -187,7 +187,7 @@ export function TradePartners({ meta, countries, year, onYear }: {
                 unit="百万美元"
                 leftLabel="从它买入（进口来源）"
                 rightLabel="卖给它（出口去向）"
-                rows={partners.filter((partner) => partner.c !== "ROW").slice(0, limit).map((partner) => ({ key: partner.c, label: countryLabel(partner.c), left: partner.inflow, right: partner.outflow }))}
+                rows={partners.slice(0, limit).map((partner) => ({ key: partner.c, label: countryLabel(partner.c), left: partner.inflow, right: partner.outflow }))}
               />
             </section>
           );

@@ -121,7 +121,8 @@ export function IndicatorExplorer({
   const activeComposition = side === "alternate" ? topic.composition!.alternate! : topic.composition;
   const axesChoices = topic.axesOptions ?? [topic.axes];
   const axes = axesChoices.find((option) => option.key === selection.axes) ?? axesChoices[0];
-  const trail = Boolean(selection.trail);
+  // Trails need country-level rows, so an industry scope turns them off.
+  const trail = Boolean(selection.trail) && !industry;
   const [amountMode, setAmountMode] = useState(false);
   // Step 8 段长度对照: the three segments, forward (PLv) against backward (PLy).
   const LENGTH_SEGMENTS = [
@@ -570,10 +571,10 @@ export function IndicatorExplorer({
             )}
           </LabeledControl>
         )}
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        {!industry && <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
           <input type="checkbox" checked={trail} onChange={(e) => select({ trail: e.target.checked })} />
           显示 {years[0]}→{years.at(-1)} 轨迹
-        </label>
+        </label>}
       </div>}
       <div className="controls">
         {timeView ? (
