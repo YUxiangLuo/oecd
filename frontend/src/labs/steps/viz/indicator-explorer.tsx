@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE } from "../../../step-task-card";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
@@ -47,13 +47,6 @@ import { ScopeCard } from "./scope-card";
 import { comparisonCards, compositionCards, industryCards, positioningCards, ReadingCards } from "./reading-cards";
 
 /** "2020" for a single-year material (composition / same-year), "2016–2020" for a range. */
-/** Design doc 4.7 pilot: `?pilot=recharts` renders the Recharts trend chart under the hand-written one for comparison. */
-const RECHARTS_PILOT =
-  typeof window !== "undefined" && new URLSearchParams(window.location.search).get("pilot") === "recharts";
-const RechartsTrendPilot = lazy(() =>
-  import("./indicator-trend-recharts").then((module) => ({ default: module.IndicatorTrendChartRecharts })),
-);
-
 function savedYearSpan(years: number[]): string {
   const first = Math.min(...years);
   const last = Math.max(...years);
@@ -613,19 +606,6 @@ export function IndicatorExplorer({
               distribution={referenceFor(metric)}
               mode="context"
             />
-          )}
-          {view === "trend" && RECHARTS_PILOT && (
-            <Suspense fallback={<p className="muted">正在加载 Recharts 试点图…</p>}>
-              <RechartsTrendPilot
-                rows={scoped}
-                countries={selected}
-                years={chartYears}
-                metric={metric}
-                label={label(metric)}
-                unit={unit(metric)}
-                distribution={referenceFor(metric)}
-              />
-            </Suspense>
           )}
           {view === "directions" &&
             <>
