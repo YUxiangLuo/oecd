@@ -159,6 +159,43 @@ export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLa
   });
 }
 
+/** 段长度对照: which segment and side is longer for the observed economy; GVC-segment gap per comparison. */
+export function segmentCards({ rows, countries, year, industry, segments }: {
+  rows: Row[]; countries: string[]; year: number; industry: string;
+  segments: { key: string; label: string; forward: string; backward: string }[];
+}): ReadingCard[] {
+  const unit = "生产阶段（账户比值）";
+  const [first, ...others] = countries;
+  const read = (country: string, key: string) => valueOf(rows, country, year, key, industry);
+  const own = segments.map((segment) => ({ segment, forward: read(first, segment.forward), backward: read(first, segment.backward) }));
+  if (own.every((item) => item.forward === null && item.backward === null)) return [];
+  const longest = own.filter((item) => item.forward !== null || item.backward !== null)
+    .reduce((best, item) => (Math.max(item.forward ?? -Infinity, item.backward ?? -Infinity) > Math.max(best.forward ?? -Infinity, best.backward ?? -Infinity) ? item : best));
+  const longestSide = (longest.forward ?? -Infinity) >= (longest.backward ?? -Infinity) ? "前向" : "后向";
+  const gvc = own.find((item) => item.segment.key === "gvc") ?? own[own.length - 1];
+  const cards: ReadingCard[] = [
+    {
+      eyebrow: `${countryLabel(first)} · ${year} · 最长的一段`,
+      big: `${longest.segment.label} · ${longestSide}`,
+      small: `${indicatorNumber(longestSide === "前向" ? longest.forward : longest.backward, unit)}；段长度不可相加，总长度是份额加权平均`,
+    },
+    {
+      eyebrow: `${countryLabel(first)} · ${gvc.segment.label} · 前向对后向`,
+      big: gvc.forward === null || gvc.backward === null ? "缺失" : gvc.forward > gvc.backward ? "前向更长（更偏上游）" : gvc.forward < gvc.backward ? "后向更长（更偏下游）" : "前后向相等",
+      small: gvc.forward === null || gvc.backward === null ? "缺失不补零" : `${indicatorNumber(gvc.forward, unit)} 对 ${indicatorNumber(gvc.backward, unit)}`,
+    },
+  ];
+  for (const other of others) {
+    const value = read(other, gvc.segment.forward);
+    cards.push({
+      eyebrow: `与对比国家 ${countryLabel(other)} · ${gvc.segment.label}前向`,
+      big: gvc.forward === null || value === null ? "对比国家缺失" : `${countryLabel(first)} ${gapReading(gvc.forward, value, unit)}`,
+      small: value === null ? "该国在该年没有有效读数" : `${countryLabel(other)} ${indicatorNumber(value, unit)}；差距不代表因果关系`,
+    });
+  }
+  return cards;
+}
+
 /** 定位行业: the observed country's top industry and, per comparison country, the industry with the widest gap. */
 export function industryCards({ groups, countries, label, unit }: {
   groups: { key: string; label: string; values: (number | null)[] }[]; countries: string[]; label: string; unit: string;

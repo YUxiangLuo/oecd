@@ -375,6 +375,31 @@ describe("indicator explorer with automatic report material", () => {
     schema.mockRestore();
   });
 
+  test("length 段长度对照 records the six segment lengths for one year and reads the longest segment", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) =>
+      countryRows(year).map((row, i) => ({ ...row, PLv_D: 1.2 + i / 10, PLy_D: 1.1, PLv_RT: 0.4, PLy_RT: 0.5 + i / 10 })),
+    );
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    const view = setup(LengthVizStep);
+    await view.findByRole("button", { name: "前后向位置" });
+    expect(within(view.getByRole("group", { name: "图表视角" })).getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "前后向位置", "历年变化", "国家对比", "段长度对照", "定位图", "行业结构", "定位行业",
+    ]);
+    fireEvent.click(view.getByRole("button", { name: "段长度对照" }));
+    await waitFor(() => expect(view.saves.at(-1)?.indicator_selection?.view).toBe("segments"));
+    const saved = view.saves.at(-1)!;
+    expect(saved.compared).toEqual(["CHN", "USA"]);
+    expect(new Set(saved.observations!.map((item) => item.metric))).toEqual(new Set(["PLv_D", "PLy_D", "PLv_RT", "PLy_RT", "PLv_GVC", "PLy_GVC"]));
+    expect(saved.observations!.every((item) => item.source === "explicit-indicator-comparison" && item.year === 2021)).toBe(true);
+    expect(view.getAllByRole("region", { name: /段长度对照/ })).toHaveLength(2);
+    const cards = view.getByRole("group", { name: "段长度读数" }).textContent ?? "";
+    expect(cards).toContain("最长的一段");
+    expect(cards).toContain("GVC 段 · 前向对后向");
+    expect(cards).toContain("与对比国家 USA 美国");
+    rows.mockRestore();
+    schema.mockRestore();
+  });
+
   test("length trajectory does not bridge a missing middle year", () => {
     const rows = [
       { country: "CHN", year: 2019, PLv_GVC: 2, PLy_GVC: 3 },

@@ -44,8 +44,8 @@ import {
   indicatorNumber,
 } from "./indicator-charts";
 import { ScopeCard } from "./scope-card";
-import { comparisonCards, compositionCards, industryCards, positioningCards, ReadingCards } from "./reading-cards";
-import { IndustryDotPlot, StackedAreaFacets } from "./theme-charts";
+import { comparisonCards, compositionCards, industryCards, positioningCards, ReadingCards, segmentCards } from "./reading-cards";
+import { Dumbbell, IndustryDotPlot, StackedAreaFacets } from "./theme-charts";
 import { CAT } from "../../../viz/shared";
 
 /** "2020" for a single-year material (composition / same-year), "2016–2020" for a range. */
@@ -123,6 +123,12 @@ export function IndicatorExplorer({
   const axes = axesChoices.find((option) => option.key === selection.axes) ?? axesChoices[0];
   const trail = Boolean(selection.trail);
   const [amountMode, setAmountMode] = useState(false);
+  // Step 8 段长度对照: the three segments, forward (PLv) against backward (PLy).
+  const LENGTH_SEGMENTS = [
+    { key: "domestic", label: "纯国内段", forward: "PLv_D", backward: "PLy_D" },
+    { key: "traditional", label: "传统贸易段", forward: "PLv_RT", backward: "PLy_RT" },
+    { key: "gvc", label: "GVC 段", forward: "PLv_GVC", backward: "PLy_GVC" },
+  ];
   const formatOf = (key: string): "pct" | "amount" | "number" =>
     unit(key) === "%" ? "pct" : unit(key) === "百万美元" ? "amount" : "number";
   const others = selection.others ?? [];
@@ -188,7 +194,9 @@ export function IndicatorExplorer({
         ]
       : view === "directions"
         ? ["PLv_GVC", "PLy_GVC"]
-        : [metric];
+        : view === "segments"
+          ? LENGTH_SEGMENTS.flatMap((segment) => [segment.forward, segment.backward])
+          : [metric];
   const source: VizObservation["source"] = timeView
     ? "explicit-indicator-trend"
     : composition
@@ -306,6 +314,7 @@ export function IndicatorExplorer({
     themeLens,
     { key: "trend", label: "历年变化" },
     { key: "comparison", label: "国家对比" },
+    ...(topic.key === "length" ? [{ key: "segments" as const, label: "段长度对照" }] : []),
     { key: "positioning", label: "定位图" },
     // Step 6 reads its industries as a dot plot (行业结构, recorded); steps 7–8 keep the paired ranking
     // (定位行业, recorded) and add an exploration-only 行业结构 view.
@@ -475,6 +484,7 @@ export function IndicatorExplorer({
       />
       {themeActive && <p className="muted lens-hint">{side === "alternate" ? activeComposition!.note : topic.themeHint}</p>}
       {view === "positioning" && <p className="muted lens-hint">定位图把全部经济体放在两项指标上，所选国家高亮，可叠加 {years[0]}→{years.at(-1)} 的轨迹；只作探索，不记录材料。</p>}
+      {view === "segments" && <p className="muted lens-hint">段长度对照：每行一段（纯国内、传统贸易、GVC），前向点与后向点用线相连，一眼看出哪一段、哪个方向更长；多国为分面。三段长度不可相加。</p>}
       {view === "structure" && <p className="muted lens-hint">{topic.key === "production" ? "行业结构：所选国家每个行业的四类生产活动份额，按复杂 GVC 份额排序；多国为分面。只作探索，不记录材料。" : "行业结构：所选国家每个行业的前向与后向 GVC 段长度，等长线上方更偏上游；多国为分面。只作探索，不记录材料。"}</p>}
       <div className="controls">
         {view !== "industry" && view !== "structure" && (
@@ -496,7 +506,7 @@ export function IndicatorExplorer({
             )}
           </LabeledControl>
         )}
-        {!composition && view !== "directions" && view !== "structure" && (
+        {!composition && view !== "directions" && view !== "structure" && view !== "segments" && (
           <LabeledControl label="指标">
             {(id) => (
               <select
@@ -648,8 +658,8 @@ export function IndicatorExplorer({
           { label: "年份", value: timeView ? `${start}–${end}` : String(year), onJump: jump(yearRef) },
           {
             label: "指标",
-            value: composition ? `${topic.themeLabel}${side === "alternate" ? `（${activeComposition!.note ? topic.composition!.alternate!.label : ""}）` : ""}` : view === "directions" ? "前后向GVC段长度与位置" : view === "positioning" ? `定位图（${label(axes.x)} × ${label(axes.y)}）` : view === "structure" ? (topic.key === "production" ? "四类生产活动 · 行业" : "前向 × 后向 GVC 段长度 · 行业") : label(metric),
-            onJump: composition || view === "directions" || view === "positioning" || view === "structure" ? undefined : jump(metricRef),
+            value: composition ? `${topic.themeLabel}${side === "alternate" ? `（${activeComposition!.note ? topic.composition!.alternate!.label : ""}）` : ""}` : view === "directions" ? "前后向GVC段长度与位置" : view === "positioning" ? `定位图（${label(axes.x)} × ${label(axes.y)}）` : view === "structure" ? (topic.key === "production" ? "四类生产活动 · 行业" : "前向 × 后向 GVC 段长度 · 行业") : view === "segments" ? "前后向三段长度" : label(metric),
+            onJump: composition || view === "directions" || view === "positioning" || view === "structure" || view === "segments" ? undefined : jump(metricRef),
           },
         ]}
       />
@@ -680,6 +690,13 @@ export function IndicatorExplorer({
           )}
           {view === "directions" &&
             <>
+              <LengthPositionTrajectory
+                rows={scoped}
+                countries={selected}
+                cloud={industry ? [] : rows.filter((row) => row.year === chartYears.at(-1))}
+                cloudYear={chartYears.at(-1)}
+                years={chartYears}
+              />
               {metrics.map((key) => (
                 <IndicatorTrendChart
                   key={key}
@@ -693,11 +710,6 @@ export function IndicatorExplorer({
                   mode="context"
                 />
               ))}
-              <LengthPositionTrajectory
-                rows={scoped}
-                countries={selected}
-                years={chartYears}
-              />
             </>}
           {view === "comparison" && !industry && referenceFor(metric)[0] && (
             <>
@@ -819,6 +831,30 @@ export function IndicatorExplorer({
                     }));
                     return <TrendSummary readings={readings} countries={selected} years={chartYears} unit="%" />;
                   })()}
+            </>
+          )}
+          {view === "segments" && (
+            <>
+              <div className="comparison-facets">
+                {selected.map((country) => (
+                  <section key={country} className="comparison-facet">
+                    <h4>{countryLabel(country)} · {year}{industry ? ` · ${sectorLabel(industry)}` : ""}</h4>
+                    <Dumbbell
+                      title={`${countryLabel(country)} 段长度对照`}
+                      unit="生产阶段（账户比值）"
+                      leftLabel="前向段长度"
+                      rightLabel="后向段长度"
+                      rows={LENGTH_SEGMENTS.map((segment) => ({
+                        key: segment.key,
+                        label: segment.label,
+                        left: valuesFor(segment.forward).at(selected.indexOf(country)) ?? null,
+                        right: valuesFor(segment.backward).at(selected.indexOf(country)) ?? null,
+                      }))}
+                    />
+                  </section>
+                ))}
+              </div>
+              <ReadingCards label="段长度读数" cards={segmentCards({ rows: scoped, countries: selected, year, industry, segments: LENGTH_SEGMENTS })} />
             </>
           )}
           {view === "structure" && (

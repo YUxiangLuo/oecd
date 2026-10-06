@@ -53,6 +53,8 @@ export type IndicatorView =
   | "industry"
   /** 行业结构 (steps 7–8): one economy's industries, exploration only. */
   | "structure"
+  /** 段长度对照 (step 8): forward vs backward length per segment, one year, recorded. */
+  | "segments"
   | "explore";
 /** Material is one chart of 1–5 economies (design doc 4.1). */
 export const MAX_ENTITIES = 5;

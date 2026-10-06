@@ -629,10 +629,15 @@ export function LengthPositionTrajectory({
   rows,
   countries,
   years,
+  cloud = [],
+  cloudYear,
 }: {
   rows: Row[];
   countries: string[];
   years: number[];
+  /** Every economy's country-level lengths in `cloudYear`, drawn as grey points behind the trajectories. */
+  cloud?: Row[];
+  cloudYear?: number;
 }) {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   const [active, setActive] = useState<string | null>(null);
@@ -647,10 +652,14 @@ export function LengthPositionTrajectory({
         : [];
     }),
   );
-  const values = series.flatMap((points) =>
-    points.flatMap((point) => [point.x, point.y]),
-  );
-  if (!values.length) return null;
+  const cloudPoints = cloud
+    .filter((row) => !row.industry && row.country !== "ROW" && !countries.includes(String(row.country)) && finiteValue(row.PLy_GVC) && finiteValue(row.PLv_GVC))
+    .map((row) => ({ country: String(row.country), x: row.PLy_GVC as number, y: row.PLv_GVC as number }));
+  const values = [
+    ...series.flatMap((points) => points.flatMap((point) => [point.x, point.y])),
+    ...cloudPoints.flatMap((point) => [point.x, point.y]),
+  ];
+  if (!series.some((points) => points.length)) return null;
   // Lengths cluster around 2–5 stages and move by hundredths a year: a zero-based axis collapses every
   // trajectory into one dot. Both axes share one range fitted to the data, so the 45° line keeps its meaning.
   const low = Math.min(...values);
@@ -719,6 +728,20 @@ export function LengthPositionTrajectory({
             <text x={x(tickValue)} y={615} textAnchor="middle" fontSize={12}>{indicatorNumber(tickValue, "生产阶段")}</text>
           </g>;
         })}
+        {cloudPoints.map((point) => (
+          <g key={`cloud-${point.country}`} data-cloud={point.country}
+            onMouseMove={(event) => { setActive(null); show(event, [["", `${countryLabel(point.country)} · ${cloudYear ?? ""}`], ["后向 GVC 段长度", stage(point.x)], ["前向 GVC 段长度", stage(point.y)]]); }}
+            onMouseLeave={hide}>
+            <circle cx={x(point.x)} cy={y(point.y)} r={7} fill="transparent" />
+            <circle cx={x(point.x)} cy={y(point.y)} r={3} fill="#9aa3b5" fillOpacity={0.55} />
+          </g>
+        ))}
+        {cloudPoints.length > 0 && (
+          <g transform="translate(560 18)">
+            <circle cx={0} cy={0} r={3} fill="#9aa3b5" fillOpacity={0.55} />
+            <text x={8} y={4} fontSize={11} fill="#596173">{cloudYear} 年全部经济体</text>
+          </g>
+        )}
         <line x1={x(lo)} y1={y(lo)} x2={x(axis.hi)} y2={y(axis.hi)} stroke="#8a6415" strokeDasharray="6 4" />
         <text x={650} y={y(axis.hi) + 18} textAnchor="end" fontSize={11}>前向 = 后向</text>
         <text x={390} y={642} textAnchor="middle" fontSize={12}>后向 GVC 段长度</text>
