@@ -47,7 +47,9 @@ def test_reading_question_upgrade_invalidates_only_step_11():
     }
     for step in range(1, 15):
         # Step 14 was re-questioned for v5 (its default Y is 加权总度), so it carries v9 as well.
-        assert session["steps"][str(step)]["data"]["quiz"]["version"] == ("course-quiz-v9" if step == 14 else "course-quiz-v8")
+        assert session["steps"][str(step)]["data"]["quiz"]["version"] == (
+            "course-quiz-v9" if step == 14 else "course-quiz-v8"
+        )
     assert evidence.completion_summary(session)["completed"] == [step for step in range(1, 15) if step != 11]
     session["steps"]["11"]["data"]["quiz"] = {
         "version": "course-quiz-v9",
