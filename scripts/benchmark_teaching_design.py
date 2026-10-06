@@ -49,6 +49,9 @@ def evaluate_baselines(root: Path, seeds: range) -> dict:
         for outcome, item in pairs:
             name = f"{outcome}:{item.key}"
             column = teaching.y_column(outcome, item.key)
+            if column not in panel.columns:
+                # A source panel without this baseline's columns (test fixtures) skips it.
+                continue
             complete = panel.groupby("entity_id")[column].transform(lambda values: values.notna().all())
             frame = panel.loc[complete].sort_values(["entity_id", "year"])
             entities = frame.entity_id.nunique()
@@ -93,6 +96,8 @@ def evaluate_baselines(root: Path, seeds: range) -> dict:
             print(f"Baselines: evaluated {seed - seeds.start + 1}/{len(seeds)} paired seeds", flush=True)
     summary = {}
     for name, rows in records.items():
+        if not rows:
+            continue
         outcome, key = name.split(":", 1)
         beta = teaching.baseline(outcome, key).beta
         estimates = np.array([row["estimate"] for row in rows])
