@@ -14,7 +14,7 @@ from typing import Any, cast
 from scipy import stats
 
 from gvcsim.regression.design import RegressionDesign
-from gvcsim.regression.teaching import X_COLUMN, Y_COLUMNS, model_snapshot, variable_catalog
+from gvcsim.regression.teaching import BASELINES, X_COLUMN, Y_COLUMNS, model_snapshot, variable_catalog
 from gvcsim.steps import STEPS
 
 _STEP_OUTCOMES = {
@@ -39,16 +39,23 @@ def _parse_saved_run(raw: Any, outcome: str) -> tuple[dict[str, Any], dict[str, 
         return None
     if any(design.get(key) != value for key, value in _FIXED_DESIGN.items()):
         return None
+    baseline = design.get("baseline")
+    if not isinstance(baseline, str) or baseline not in {item.key for item in BASELINES[outcome]}:
+        return None
     # JSON persistence changes calibration tuples to lists. Compare the complete
     # published model, not just its version and variable names.
-    if json.loads(json.dumps(snapshot)) != json.loads(json.dumps(model_snapshot(outcome))):
+    if json.loads(json.dumps(snapshot)) != json.loads(json.dumps(model_snapshot(outcome, baseline))):
         return None
-    if catalog != variable_catalog(outcome):
+    if catalog != variable_catalog(outcome, baseline):
         return None
-    canonical = RegressionDesign(outcome, teaching=True)
+    canonical = RegressionDesign(outcome, teaching=True, baseline=baseline)
     fields = (
+        "baseline",
+        "baseline_label",
         "depvar",
         "depvar_label",
+        "depvar_kind",
+        "depvar_unit",
         "shock_col",
         "treated_col",
         "entity",

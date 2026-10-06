@@ -276,7 +276,23 @@ export interface TeachingGroupsResponse {
   };
   /** Industries with at least one unit in the teaching panel (older servers omit it). */
   industries?: string[];
+  /** Mean X of taxed-country units in the policy years (a proportion); β × it is the implied group gap. */
+  mean_exposure_taxed?: number;
   outcomes: Record<RegressionOutcome, { taxed: TeachingGroupPoint[]; untaxed: TeachingGroupPoint[] }>;
+  /** Same-family Y choices per step (the default first); older servers omit it. */
+  baselines?: Record<RegressionOutcome, TeachingBaselineOption[]>;
+  /** Group trends of every baseline's Y, keyed by outcome then baseline key. */
+  series?: Record<RegressionOutcome, Record<string, { taxed: TeachingGroupPoint[]; untaxed: TeachingGroupPoint[] }>>;
+}
+
+export interface TeachingBaselineOption {
+  key: string;
+  label: string;
+  kind: DepvarKind;
+  unit: string;
+  default: boolean;
+  column: string;
+  source: string;
 }
 
 export interface QcCheck {
@@ -547,10 +563,18 @@ export interface TreatmentSupport {
   suppress_inference: boolean;
 }
 
+export type DepvarKind = "share" | "length" | "position" | "network";
+
 export interface RegressionDesignInfo {
   outcome: RegressionOutcome;
+  /** Same-family generation baseline of Y (absent on runs saved before v4, which the pages reject anyway). */
+  baseline?: string;
+  baseline_label?: string;
   depvar: string;
   depvar_label: string;
+  /** How Y is read: shares in percentage points, the others in their own units. */
+  depvar_kind?: DepvarKind;
+  depvar_unit?: string;
   granularity: string;
   shock_type: string;
   shock_col: string;
@@ -626,6 +650,8 @@ export interface RegressionResponse {
     status_reasons: string[];
     support: TreatmentSupport | null;
     sample_flow?: RegressionSampleFlow | null;
+    /** Binned scatter of the within-transformed Y against X; absent on older saved runs. */
+    binscatter?: { bins: { x: number; y: number; n: number }[]; slope: number; transform: string } | null;
   };
   benchmark: {
     backend: string;
@@ -662,6 +688,10 @@ export interface RegressionResponse {
     beta: number;
     tariff_path: number[];
     disclaimer: string;
+    baseline?: string;
+    baseline_label?: string;
+    baseline_source?: string;
+    baseline_kind?: DepvarKind;
   };
   /** Missing only on a restored legacy session snapshot; every current API response includes it. */
   preflight?: RegressionPreflight;

@@ -266,17 +266,20 @@ export const api = {
       year, shock_type: shockType, filter, sort, page, country, sector,
     }),
   ),
-  regressionDesign: (outcome: import("./types").RegressionOutcome) => {
+  regressionDesign: (outcome: import("./types").RegressionOutcome, baseline?: string | null) => {
     return get<import("./types").RegressionDesignInfo>(withQuery("/api/regression/design", {
       outcome,
+      ...(baseline ? { baseline } : {}),
     }));
   },
   runRegression: async (
     outcome: import("./types").RegressionOutcome,
     signal?: AbortSignal,
+    baseline?: string | null,
   ) => {
     return post<import("./types").CurrentRegressionResponse>("/api/regression/run", {
       outcome,
+      ...(baseline ? { baseline } : {}),
     }, "POST", signal);
   },
   classroom: {

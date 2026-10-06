@@ -11,6 +11,8 @@ class StrictContract(BaseModel):
 
 class RegressionRequest(StrictContract):
     outcome: str
+    # Same-family generation baseline for Y; omitted means the family's fixed default.
+    baseline: str | None = None
 
 
 class EquationPart(StrictContract):
@@ -22,8 +24,12 @@ class EquationPart(StrictContract):
 
 class RegressionDesignResponse(StrictContract):
     outcome: str
+    baseline: str
+    baseline_label: str
     depvar: str
     depvar_label: str
+    depvar_kind: str
+    depvar_unit: str
     granularity: str
     granularity_label: str
     shock_type: str

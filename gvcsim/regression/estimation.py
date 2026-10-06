@@ -90,6 +90,26 @@ def demean_and_prune(model: PreparedModel):
     return transformed[:, 0], X, names, dropped
 
 
+BINSCATTER_BINS = 20
+
+
+def binned_scatter(x: np.ndarray, y: np.ndarray, slope: float, bins: int = BINSCATTER_BINS) -> dict:
+    """Equal-count bins of the within-transformed regressor with the mean response in each bin.
+
+    This is the standard binned scatter plot: the fitted line through the origin with the estimated
+    slope is what the regression draws through those means. Ties at the bin edges stay together.
+    """
+    order = np.argsort(x, kind="stable")
+    count = max(1, min(bins, len(order)))
+    points = []
+    for chunk in np.array_split(order, count):
+        if not len(chunk):
+            continue
+        points.append({"x": float(x[chunk].mean()), "y": float(y[chunk].mean()), "n": int(len(chunk))})
+    require_finite("分箱散点", [point["x"] for point in points], [point["y"] for point in points])
+    return {"bins": points, "slope": float(slope), "transform": "twoway_demeaned"}
+
+
 def within_ols(model: PreparedModel, prepared=None) -> RegressionResult:
     y, X, names, dropped = prepared or demean_and_prune(model)
     beta = np.linalg.lstsq(X, y, rcond=None)[0]
@@ -159,4 +179,5 @@ def within_ols(model: PreparedModel, prepared=None) -> RegressionResult:
         status_reasons=list(support.reasons) if support else [],
         support=support.to_dict() if support else None,
         sample_flow=model.sample_flow,
+        binscatter=binned_scatter(X[:, 0], y, float(beta[0])) if names and names[0] in model.policy_xcols else None,
     )

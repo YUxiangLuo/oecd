@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   RegressionEvidenceMatrix,
+  RegressionFamilyPanels,
   familyVerdict,
 } from "./regression-teach";
 import type { CoefStat, RegressionOutcome, RegressionResponse } from "./types";
@@ -99,4 +100,29 @@ describe("student-first regression reading", () => {
     expect(html).not.toContain("</b><span>百分点</span>");
   });
 
+});
+
+describe("RegressionFamilyPanels", () => {
+  test("draws one coefficient panel per saved step, named after the Y that step ran", () => {
+    const trade = response("trade", coefficient(0.5, 0.4, 0.6));
+    trade.design.baseline = "DVAex_share";
+    trade.design.baseline_label = "国内增加值出口占比";
+    trade.design.depvar_kind = "share";
+    const length = response("length", coefficient(-0.4, -0.5, -0.3));
+    length.design.baseline = "GVCPs";
+    length.design.baseline_label = "GVC 位置指数";
+    length.design.depvar_kind = "position";
+    const html = renderToStaticMarkup(createElement(RegressionFamilyPanels, {
+      getStep: (step: number) => step === 11 ? { run: { design: trade.design, result: trade.result } }
+        : step === 13 ? { run: { design: length.design, result: length.result } } : undefined,
+    }));
+    const dom = new DOMParser().parseFromString(html, "text/html");
+    expect(dom.querySelectorAll(".coef-plot")).toHaveLength(2);
+    expect(dom.querySelectorAll(".reg-family-missing")).toHaveLength(2);
+    expect(html).toContain("步骤 11 · 贸易流（个百分点）");
+    expect(html).toContain("国内增加值出口占比");
+    expect(html).toContain("步骤 13 · 长度（位置指数单位）");
+    expect(html).toContain("GVC 位置指数");
+    expect(html).toContain("步骤 12 · 生产：还没有可用结果");
+  });
 });

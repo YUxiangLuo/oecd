@@ -51,10 +51,14 @@ from gvcsim.regression.teaching import (
     MARKET as TEACHING_MARKET,
     SEED as TEACHING_SEED,
     TARIFF_PATH as TEACHING_TARIFF_PATH,
+    BASELINES as TEACHING_BASELINES,
     VERSION as TEACHING_VERSION,
+    baseline_parameters as teaching_baseline_parameters,
+    baseline_snapshots as teaching_baseline_snapshots,
     build_teaching_panel,
     model_snapshot,
     variable_catalog,
+    y_column as teaching_y_column,
 )
 
 
@@ -265,6 +269,15 @@ def build_panel(
         ignore_index=True,
     )
     teaching = build_teaching_panel(sector, exposure, seed=TEACHING_SEED)
+    # A release carries every same-family baseline; a missing one means the ICIO panel lost a column.
+    missing_baselines = [
+        f"{outcome}:{item.key}"
+        for outcome, items in TEACHING_BASELINES.items()
+        for item in items
+        if teaching_y_column(outcome, item.key) not in teaching.columns
+    ]
+    if missing_baselines:
+        raise ValueError("教学面板缺少可选基线的 Y 列：" + "、".join(missing_baselines))
     teaching.to_csv(PROCESSED_DIR / "panel_teaching.csv", index=False)
 
     # ---- 国家级:主口径使用首次处理前固定行业出口权重 ----
@@ -375,9 +388,12 @@ def finalize_release(staging: Path, selected_years: list[int], *, release_id: st
                         "tariff_path": list(TEACHING_TARIFF_PATH),
                         "betas": TEACHING_BETAS,
                         "calibration": TEACHING_CALIBRATION,
+                        "baselines": teaching_baseline_parameters(),
                     },
                     "model_snapshots": {name: model_snapshot(name) for name in TEACHING_BETAS},
                     "variable_catalogs": {name: variable_catalog(name) for name in TEACHING_BETAS},
+                    "baseline_model_snapshots": teaching_baseline_snapshots(model_snapshot),
+                    "baseline_variable_catalogs": teaching_baseline_snapshots(variable_catalog),
                     "source_bindings": {
                         "release_panel": {"path": "panel_industry.csv", "sha256": digest("panel_industry.csv")},
                         "exposure_files": [

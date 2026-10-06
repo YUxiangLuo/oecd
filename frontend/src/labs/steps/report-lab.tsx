@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
-import { RegressionEvidenceMatrix, type SiblingStepData } from "../../regression-teach";
+import { RegressionEvidenceMatrix, RegressionFamilyPanels, type SiblingStepData } from "../../regression-teach";
 import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
 import { ReportOutro } from "../../report-outro";
 import { clearToasts, showToast } from "../../toast";
@@ -377,6 +377,8 @@ export function ReportLab({
       </section>
       {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} />}
       <details className="report-reference"><summary>查看已保存的四项回归结果</summary>
+        <p className="muted">四个 Y 的单位不同，每张图各用自己的轴；只比较方向和区间是否跨 0。</p>
+        <RegressionFamilyPanels getStep={getStep} />
         <RegressionEvidenceMatrix getStep={getStep} />
         <p className="muted">系数图和换算到例子可回到步骤 11–14 查看；步骤 6–9 的图表读数会自动写进报告。这里只列出已保存的结果，结论需要你自己写。</p>
       </details>

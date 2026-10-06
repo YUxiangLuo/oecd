@@ -2,6 +2,7 @@ import { globalInferenceIsSuppressed } from "../../regression-verdict";
 import { CLUSTER_INTERVAL_LABEL, formatPValue } from "../../regression-statistics";
 import type { RegressionStatus, TreatmentSupport } from "../../types";
 import { cardStyle, useTip } from "../shared";
+import { niceDomain } from "../nice-ticks";
 
 export function scaleForestCoefs<T extends { coef: number; ci_low: number | null; ci_high: number | null }>(
   coefs: T[],
@@ -36,13 +37,13 @@ function niceSymmetricTicks(maxAbs: number): number[] {
   return Array.from({ length: 2 * count + 1 }, (_, index) => (index - count) * step);
 }
 
-const POSITIVE = "#d64545";
-const NEGATIVE = "#2f6fd0";
+const ESTIMATE = "#2a2f3a";
 const NEUTRAL = "#b6bac6";
 
 /**
- * Coefficient plot: a vertical zero line, one row per coefficient, a bar from 0 to the estimate
- * (red = positive, blue = negative) and the confidence interval as a capped whisker.
+ * Coefficient plot in the usual dot-and-whisker form: a vertical zero line, one row per coefficient,
+ * the point estimate as a dot and the 95% interval as a capped whisker with its ends labelled.
+ * One colour; the sign is read from the position relative to zero.
  */
 export function CoefForestChart({
   coefs, globalStatus, globalSupport, scale = 1, unit, labels, title = "系数图",
@@ -95,7 +96,7 @@ export function CoefForestChart({
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
         {!inferenceAllowed
           ? suppressionCopy
-          : `条形 = 点估计（红为正、蓝为负） · ${hasCi ? "横线 = 95% 区间 · " : ""}竖线 = 0；区间跨过 0 时方向不确定`}
+          : `点 = 估计值${hasCi ? " · 横线 = 95% 区间" : ""} · 竖线 = 0（无效应）；区间跨过 0 时方向不确定`}
       </div>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={description} style={{ display: "block", width: "100%", maxWidth: 760, height: "auto" }}>
         <title>{hasCi ? `${description}；完整数值见系数表` : description}</title>
@@ -109,9 +110,7 @@ export function CoefForestChart({
         {unit && <text x={labelW + plotW / 2} y={height - 8} textAnchor="middle" fontSize={11} fill="#5f6677">{unit}</text>}
         {pts.map((point, index) => {
           const parts = splitCoefName(point.displayName);
-          const fill = !inferenceAllowed ? NEUTRAL : point.coef >= 0 ? POSITIVE : NEGATIVE;
-          const barX = Math.min(x(0), x(point.coef));
-          const barW = Math.max(1, Math.abs(x(point.coef) - x(0)));
+          const fill = !inferenceAllowed ? NEUTRAL : ESTIMATE;
           // The value sits just above the estimate, kept inside the plot so it never meets the row label or whisker.
           const labelAt = Math.min(Math.max(x(point.coef), labelW + 24), width - padR - 24);
           return (
@@ -119,15 +118,20 @@ export function CoefForestChart({
               <text x={labelW - 12} y={y(index) - (parts.length > 1 ? 5 : 0)} dominantBaseline="middle" textAnchor="end" fontSize={11.5} fill="#3a4050">
                 {parts.map((part, partIndex) => <tspan key={part} x={labelW - 12} dy={partIndex === 0 ? 0 : 13}>{part}</tspan>)}
               </text>
-              <rect x={barX} y={y(index) - 11} width={barW} height={22} rx={2} fill={fill} fillOpacity={0.85} />
               {point.lo != null && point.hi != null && (
-                <g className="coef-ci" stroke="#2a2f3a" strokeWidth={1.6}>
+                <g className="coef-ci" stroke={fill} strokeWidth={1.8}>
                   <line x1={x(point.lo)} x2={x(point.hi)} y1={y(index)} y2={y(index)} />
-                  <line x1={x(point.lo)} x2={x(point.lo)} y1={y(index) - 7} y2={y(index) + 7} />
-                  <line x1={x(point.hi)} x2={x(point.hi)} y1={y(index) - 7} y2={y(index) + 7} />
+                  <line x1={x(point.lo)} x2={x(point.lo)} y1={y(index) - 8} y2={y(index) + 8} />
+                  <line x1={x(point.hi)} x2={x(point.hi)} y1={y(index) - 8} y2={y(index) + 8} />
+                  {x(point.hi) - x(point.lo) < 64
+                    ? <text x={(x(point.lo) + x(point.hi)) / 2} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">[{valueLabel(point.lo)}, {valueLabel(point.hi)}]</text>
+                    : <>
+                      <text x={x(point.lo)} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">{valueLabel(point.lo)}</text>
+                      <text x={x(point.hi)} y={y(index) + 22} textAnchor="middle" fontSize={10.5} fill="#5f6677" stroke="none">{valueLabel(point.hi)}</text>
+                    </>}
                 </g>
               )}
-              <circle cx={x(point.coef)} cy={y(index)} r={4} fill="#fff" stroke="#2a2f3a" strokeWidth={1.6} />
+              <circle cx={x(point.coef)} cy={y(index)} r={6.5} fill={fill} stroke="#fff" strokeWidth={2} />
               <text x={labelAt} y={y(index) - 21} textAnchor="middle" fontSize={11.5} fontWeight={700} fill="#2a2f3a">
                 {valueLabel(point.coef)}
               </text>
@@ -135,6 +139,77 @@ export function CoefForestChart({
           );
         })}
         <line x1={x(0)} x2={x(0)} y1={padT - 6} y2={height - padB} stroke="#1f2430" strokeWidth={1.8} />
+        <text x={x(0) + 5} y={padT + 4} fontSize={10.5} fill="#5f6677">0 = 无效应</text>
+      </svg>
+      {Tip}
+    </div>
+  );
+}
+
+const BIN = "#216cc0";
+
+/**
+ * Binned scatter: the within-transformed regressor on x, the mean within-transformed outcome in each of
+ * ~20 equal-count bins on y, and the fitted line through the origin with the estimated slope β. This is
+ * what the regression "sees" after the fixed effects are taken out.
+ */
+export function BinScatterChart({ bins, slope, xLabel, yLabel, xScale = 100, yScale = 1, title = "回归在量什么" }: {
+  bins: { x: number; y: number; n: number }[];
+  slope: number;
+  xLabel: string;
+  yLabel: string;
+  /** Display scales: shares are stored as fractions and shown in percentage points. */
+  xScale?: number;
+  yScale?: number;
+  title?: string;
+}) {
+  const { wrapRef, Tip, show, hide } = useTip();
+  const pts = bins.map((bin) => ({ x: bin.x * xScale, y: bin.y * yScale, n: bin.n }));
+  const lineSlope = slope * (yScale / xScale);
+  const W = 640, H = 300, m = { l: 64, r: 20, t: 18, b: 48 };
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+  const xAxis = niceDomain(Math.min(0, ...xs), Math.max(0, ...xs));
+  const fitted = [xAxis.lo, xAxis.hi].map((value) => value * lineSlope);
+  const yAxis = niceDomain(Math.min(0, ...ys, ...fitted), Math.max(0, ...ys, ...fitted));
+  const x = (value: number) => m.l + ((value - xAxis.lo) / (xAxis.hi - xAxis.lo || 1)) * (W - m.l - m.r);
+  const y = (value: number) => H - m.b - ((value - yAxis.lo) / (yAxis.hi - yAxis.lo || 1)) * (H - m.t - m.b);
+  const digits = (axis: { hi: number; lo: number }) => Math.max(0, Math.min(4, 2 - Math.floor(Math.log10(Math.max(axis.hi - axis.lo, 1e-9) / 4))));
+  const fx = (value: number) => value.toFixed(digits(xAxis));
+  const fy = (value: number) => value.toFixed(digits(yAxis));
+  const description = `分箱散点图：横轴为扣除固定效应后的 X，纵轴为各箱 Y 的平均；直线斜率为估计的 β`;
+  return (
+    <div ref={wrapRef} className="binscatter-plot" style={{ ...cardStyle, flex: "1 1 320px", minWidth: 280 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3a4050" }}>{title}</div>
+      <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
+        每个点是 X 相近的 1/{bins.length} 单元的平均（X、Y 都已扣掉各自起点和共同年份变化）；直线斜率就是 β
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={description} style={{ display: "block", width: "100%", maxWidth: 760, height: "auto" }}>
+        <title>{description}</title>
+        {yAxis.ticks.map((tick) => (
+          <g key={`y${tick}`}>
+            <line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke={tick === 0 ? "#9aa3b5" : "#eef0f4"} strokeDasharray={tick === 0 ? "4 3" : undefined} />
+            <text x={m.l - 8} y={y(tick) + 4} textAnchor="end" fontSize={11} fill="#5f6677">{fy(tick)}</text>
+          </g>
+        ))}
+        {xAxis.ticks.map((tick) => (
+          <g key={`x${tick}`}>
+            <line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke={tick === 0 ? "#9aa3b5" : "#eef0f4"} strokeDasharray={tick === 0 ? "4 3" : undefined} />
+            <text x={x(tick)} y={H - m.b + 16} textAnchor="middle" fontSize={11} fill="#5f6677">{fx(tick)}</text>
+          </g>
+        ))}
+        <text x={m.l + (W - m.l - m.r) / 2} y={H - 8} textAnchor="middle" fontSize={11} fill="#5f6677">{xLabel}</text>
+        <text x={14} y={(m.t + H - m.b) / 2} textAnchor="middle" fontSize={11} fill="#5f6677" transform={`rotate(-90 14 ${(m.t + H - m.b) / 2})`}>{yLabel}</text>
+        <line data-fit x1={x(xAxis.lo)} y1={y(fitted[0])} x2={x(xAxis.hi)} y2={y(fitted[1])} stroke={ESTIMATE} strokeWidth={2.2} />
+        {pts.map((point, index) => (
+          <g key={index} data-bin={index}
+            onMouseEnter={(event) => show(event, [["", `第 ${index + 1}/${pts.length} 箱 · ${point.n.toLocaleString("zh-CN")} 条记录`], [`X（${xLabel}）`, fx(point.x)], [`Y（${yLabel}）`, fy(point.y)]])}
+            onMouseMove={(event) => show(event, [["", `第 ${index + 1}/${pts.length} 箱 · ${point.n.toLocaleString("zh-CN")} 条记录`], [`X（${xLabel}）`, fx(point.x)], [`Y（${yLabel}）`, fy(point.y)]])}
+            onMouseLeave={hide}>
+            <circle cx={x(point.x)} cy={y(point.y)} r={9} fill="transparent" />
+            <circle cx={x(point.x)} cy={y(point.y)} r={5} fill={BIN} fillOpacity={0.9} stroke="#fff" strokeWidth={1.5} />
+          </g>
+        ))}
+        <text x={x(xAxis.hi) - 6} y={y(fitted[1]) + (lineSlope < 0 ? 16 : -8)} textAnchor="end" fontSize={11} fontWeight={700} fill={ESTIMATE}>斜率 β = {slope.toFixed(Math.abs(slope) >= 100 ? 0 : Math.abs(slope) >= 1 ? 2 : 3)}</text>
       </svg>
       {Tip}
     </div>
@@ -150,7 +225,7 @@ const UNTAXED = "#6b7487";
  * regression then quantifies.
  */
 export function GroupChangeChart({
-  years, policyYear, taxed, untaxed, scale = 1, unit, title,
+  years, policyYear, taxed, untaxed, scale = 1, unit, title, estimate,
 }: {
   years: number[];
   policyYear: number;
@@ -160,9 +235,13 @@ export function GroupChangeChart({
   scale?: number;
   unit: string;
   title: string;
+  /** After the run: the gap the estimate implies (β × mean exposure), in stored Y units, drawn at the last year. */
+  estimate?: { gap: number; label: string } | null;
 }) {
   const width = 640, height = 250, padL = 64, padR = 112, padT = 22, padB = 34;
   const values = [...taxed, ...untaxed].map((point) => point.change * scale);
+  const estimateEnd = estimate ? (untaxed.at(-1)?.change ?? 0) + estimate.gap : null;
+  if (estimateEnd != null) values.push(estimateEnd * scale);
   const maxAbs = Math.max(...values.map(Math.abs), 1e-9) * 1.1;
   const ticks = niceSymmetricTicks(maxAbs);
   const extent = ticks.at(-1)!;
@@ -193,6 +272,19 @@ export function GroupChangeChart({
           </g>
         ))}
         {years.map((year) => <text key={year} x={x(year)} y={height - 12} textAnchor="middle" fontSize={11} fill="#5f6677">{year}</text>)}
+        {estimate && estimateEnd != null && (() => {
+          const lastYear = years.at(-1)!;
+          const bx = x(lastYear) + 3;
+          const y0 = y((untaxed.at(-1)?.change ?? 0) * scale), y1 = y(estimateEnd * scale);
+          return (
+            <g data-estimate stroke="#2a2f3a" strokeWidth={1.6}>
+              <line x1={bx} x2={bx} y1={y0} y2={y1} strokeDasharray="3 3" />
+              <line x1={bx - 4} x2={bx + 4} y1={y0} y2={y0} />
+              <line x1={bx - 4} x2={bx + 4} y1={y1} y2={y1} />
+              <text x={bx + 7} y={(y0 + y1) / 2 + 4} fontSize={10.5} fill="#2a2f3a" stroke="none">{estimate.label}</text>
+            </g>
+          );
+        })()}
         <line x1={policyX} x2={policyX} y1={padT - 8} y2={height - padB} stroke="#3a4050" strokeWidth={1.2} strokeDasharray="4 4" />
         <text x={policyX + 6} y={padT - 6} fontSize={11} fill="#3a4050">{policyYear} 年起模拟加税</text>
         {([[untaxed, UNTAXED], [taxed, TAXED]] as const).map(([series, color]) => (

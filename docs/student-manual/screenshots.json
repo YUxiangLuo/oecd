@@ -4,13 +4,13 @@
     "width": 1280,
     "height": 960
   },
-  "baseline_commit": "f97c2852ca600523b35a749aeebc21ae8cf770ca",
-  "code_state": "Figures 06-09 re-shot at commit 44d3613 (steps 6-9 view bar rework, viz-phase0); all other figures, manual text and manual scripts at the baseline commit.",
+  "baseline_commit": "0a44d71",
+  "code_state": "Business code, manual text and manual scripts all at the baseline commit.",
   "code_sources_hash_rule": "SHA-256 of sorted sha256sum output for frontend/src and gvcsim .ts/.tsx/.css/.py files (computed on a Windows checkout; line endings may differ from Linux).",
-  "code_sources_sha256": "6eebf7c55d142535cf410561e95826a6f090e280f9e6473b1db07d96caa2bde2",
+  "code_sources_sha256": "e614c396afa7ad9eb555721e6c830e494c6f788dc71bc8a2a76132e629b9f9fd",
   "data_release": "01b87b87c05c4d8386440706adafe04d",
-  "simulation_contract": "step10-tariff-teaching-v2",
-  "source": "All 19 PNG files were freshly captured for manual 2.3 with headless Chrome driven by frontend/scripts/capture-student-manual.ts at 1280x960; the script now waits for the outline to finish saving before every shot. The submitted and graded images are element captures. Passwords are not visible. Figures 06-09 were re-shot on 2026-10-06 for the steps 6-9 view-bar rework with the same script (MANUAL_ONLY_VIZ=1) for a fresh complete test student whose records were prepared through public APIs; steps 6, 7 and 9 are shown on the 历年变化 view. Figures 06-09 were re-shot on 2026-10-06 for the steps 6-9 view-bar rework with the same script (MANUAL_ONLY_VIZ=1) for a fresh complete test student whose records were prepared through public APIs; steps 6, 7 and 9 are shown on the 历年变化 view.",
+  "simulation_contract": "step10-tariff-teaching-v4",
+  "source": "Manual 2.4 re-captured figures 10-shocks, 11-regression-setup and 11-regression-result (steps 10–14 reworked, simulation contract step10-tariff-teaching-v3) with headless Chrome driven by frontend/scripts/capture-student-manual.ts (MANUAL_ONLY_REG=1) at 1280x960; the other 16 PNG files are the manual 2.3 captures, whose pages did not change. The submitted and graded images are element captures. Passwords are not visible.",
   "provenance_scope": "Single capture run against an independent local classroom. The complete-course account's learning records were prepared through public APIs (scripts/seed_full_journey.py), then every page was opened in the browser; Step 10's example was selected in the page. Not a pure UI journey.",
   "screenshots": [
     {
@@ -61,21 +61,21 @@
       "file": "screenshots/11-regression-setup.png",
       "width": 1280,
       "height": 960,
-      "sha256": "6b2db4fddcc818b376610ed8dc6d79415223f960052579fec8bc91b4d3fc2ad2",
+      "sha256": "9d8cf3bdf4e42fe2732691adcd61a3e56541fdc8bce6e08118b5c42c4a2e5001",
       "captured_on": "2026-10-06",
       "capture_url": "http://127.0.0.1:5173",
       "capture_tool": "headless-chrome-cdp",
       "journey": "partial-course-browser",
       "account": "test-student-incomplete",
       "capture_note": "Step 12 before running: taxed vs untaxed group chart and run button.",
-      "baseline_commit": "f97c2852ca600523b35a749aeebc21ae8cf770ca",
-      "data_release": "01b87b87c05c4d8386440706adafe04d",
-      "simulation_contract": "step10-tariff-teaching-v2",
+      "baseline_commit": "0a44d71",
+      "data_release": "6a6776d78e2847b48902be12e253682a",
+      "simulation_contract": "step10-tariff-teaching-v4",
       "data_sources": [
         {
           "name": "OECD ICIO 2023 observed classroom release",
           "production_data": true,
-          "release_id": "01b87b87c05c4d8386440706adafe04d"
+          "release_id": "6a6776d78e2847b48902be12e253682a"
         }
       ]
     },
@@ -307,21 +307,21 @@
       "file": "screenshots/10-shocks.png",
       "width": 1280,
       "height": 960,
-      "sha256": "1272f324ff3c11c1509dab3c9f1f37c1eb5b2665e54896a780314bca0133fc88",
+      "sha256": "1a37385a5b057dcdb887d316bf5fd842df42853b85baa1114b9d054e5710ad90",
       "captured_on": "2026-10-06",
       "capture_url": "http://127.0.0.1:5173",
       "capture_tool": "headless-chrome-cdp",
       "journey": "api-seeded-then-browser",
       "account": "test-student-complete",
       "capture_note": "Step 10 followed example (Canada vs Mexico, motor vehicles).",
-      "baseline_commit": "f97c2852ca600523b35a749aeebc21ae8cf770ca",
-      "data_release": "01b87b87c05c4d8386440706adafe04d",
-      "simulation_contract": "step10-tariff-teaching-v2",
+      "baseline_commit": "0a44d71",
+      "data_release": "6a6776d78e2847b48902be12e253682a",
+      "simulation_contract": "step10-tariff-teaching-v4",
       "data_sources": [
         {
           "name": "OECD ICIO 2023 observed classroom release",
           "production_data": true,
-          "release_id": "01b87b87c05c4d8386440706adafe04d"
+          "release_id": "6a6776d78e2847b48902be12e253682a"
         }
       ]
     },
@@ -329,21 +329,21 @@
       "file": "screenshots/11-regression-result.png",
       "width": 1280,
       "height": 960,
-      "sha256": "8c0ac2fcd74d011ecd2b55d7304b9593de9cca0ec6477a830f00585b6d5bf20e",
+      "sha256": "4fcabc4060d46af5c99bf53c582dd481b4c60bf28ba0c8f5fec9a1ddfa5d928b",
       "captured_on": "2026-10-06",
       "capture_url": "http://127.0.0.1:5173",
       "capture_tool": "headless-chrome-cdp",
       "journey": "api-seeded-then-browser",
       "account": "test-student-complete",
-      "capture_note": "Step 11 coefficient plot and reading.",
-      "baseline_commit": "f97c2852ca600523b35a749aeebc21ae8cf770ca",
-      "data_release": "01b87b87c05c4d8386440706adafe04d",
-      "simulation_contract": "step10-tariff-teaching-v2",
+      "capture_note": "Step 11 binned scatter, coefficient plot and reading.",
+      "baseline_commit": "0a44d71",
+      "data_release": "6a6776d78e2847b48902be12e253682a",
+      "simulation_contract": "step10-tariff-teaching-v4",
       "data_sources": [
         {
           "name": "OECD ICIO 2023 observed classroom release",
           "production_data": true,
-          "release_id": "01b87b87c05c4d8386440706adafe04d"
+          "release_id": "6a6776d78e2847b48902be12e253682a"
         }
       ]
     },

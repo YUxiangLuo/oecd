@@ -23,10 +23,10 @@ describe("fixed teaching regression reading", () => {
     const dom = new DOMParser().parseFromString(html, "text/html");
     expect(html).toContain("回归结果");
     expect(html).toContain("方向判断：本次模拟样本支持正向关联");
-    // One coefficient plot: zero line plus one red (positive) bar with its interval.
+    // One coefficient plot: zero line plus one dot (one colour, no bar) with its interval.
     expect(dom.querySelectorAll("svg[role=img]")).toHaveLength(1);
-    expect(dom.querySelectorAll("svg rect")).toHaveLength(1);
-    expect(dom.querySelector("svg rect")?.getAttribute("fill")).toBe("#d64545");
+    expect(dom.querySelectorAll("svg rect")).toHaveLength(0);
+    expect(dom.querySelector('svg circle[r="6.5"]')?.getAttribute("fill")).toBe("#2a2f3a");
     expect(dom.querySelector(".coef-ci")).not.toBeNull();
     // Three short sentences, no folds.
     expect(dom.querySelectorAll(".reg-result-points > li")).toHaveLength(3);
@@ -36,6 +36,29 @@ describe("fixed teaching regression reading", () => {
     expect(html).toContain("标称 95% 的近似聚类区间");
     expect(html).toContain("不要写成「已经证明生产回流」");
     expect(html).not.toMatch(/处理组|对照组|处理聚类|同时置信带|与生成时的预设关系|使用的年度记录/);
+  });
+
+  test("draws the binned scatter in display units: shares in percentage points, slope per 1 pp of X", () => {
+    const withBins = response();
+    withBins.result.coefs[0].coef = -0.55;
+    withBins.result.coefs[0].ci_low = -0.57;
+    withBins.result.coefs[0].ci_high = -0.53;
+    withBins.result.binscatter = {
+      bins: [{ x: -0.02, y: 0.011, n: 10 }, { x: 0, y: 0, n: 10 }, { x: 0.02, y: -0.011, n: 10 }],
+      slope: -0.55,
+      transform: "twoway_demeaned",
+    };
+    const html = renderToStaticMarkup(<RegressionResultCard outcome="trade" response={withBins} />);
+    const dom = new DOMParser().parseFromString(html, "text/html");
+    expect(dom.querySelectorAll("svg[role=img]")).toHaveLength(2);
+    // β for a share outcome is already "percentage points of Y per percentage point of X".
+    expect(html).toContain("斜率 β = -0.550");
+    // Bin means are shown in percentage points (×100), so the Y axis spans about ±1.1, not ±0.011.
+    const texts = [...dom.querySelectorAll("svg text")].map((node) => node.textContent ?? "");
+    expect(texts.some((text) => /^-?1\.[0-9]+$/.test(text))).toBe(true);
+    expect(texts.some((text) => text === "0.0100" || text === "-0.0100")).toBe(false);
+    // A narrow interval is labelled once, in the middle, instead of two colliding end labels.
+    expect(html).toContain("[-0.57, -0.53]");
   });
 
   test.each([
@@ -49,8 +72,8 @@ describe("fixed teaching regression reading", () => {
     expect(container.querySelector(".reg-plain-verdict")?.textContent).toBe(`方向判断：${title}`);
     expect(container.textContent?.includes("平均下降")).toBe(negative);
     expect(container.querySelector(".reg-result-points")?.textContent).toMatch(negative ? /平均下降 0.40 个百分点/ : /平均变化为 -0.40 个百分点/);
-    // Negative estimates are drawn in blue to the left of the zero line.
-    expect(container.querySelector("svg rect")?.getAttribute("fill")).toBe("#2f6fd0");
+    // The estimate dot keeps one colour whatever its sign; the sign is read from its position.
+    expect(container.querySelector('svg circle[r="6.5"]')?.getAttribute("fill")).toBe("#2a2f3a");
   });
 
   test("suppressed inference takes priority even over an apparently positive interval", () => {
@@ -61,8 +84,8 @@ describe("fixed teaching regression reading", () => {
     expect(screen.getByText(/方向判断：这个设计不能用于统计推断/)).toBeTruthy();
     expect(screen.getByText(/无法推断：可用于比较的国家太少/)).toBeTruthy();
     expect(container.textContent).not.toMatch(/平均上升|平均下降|区间未跨过/);
-    // The chart keeps only a grey descriptive bar: no colour, no interval.
-    expect(container.querySelector("svg rect")?.getAttribute("fill")).toBe("#b6bac6");
+    // The chart keeps only a grey descriptive dot: no colour, no interval.
+    expect(container.querySelector('svg circle[r="6.5"]')?.getAttribute("fill")).toBe("#b6bac6");
     expect(container.querySelector(".coef-ci")).toBeNull();
     expect(container.textContent).toContain("仅显示描述性点估计");
     expect(container.textContent).not.toContain("[+1.00, +3.00]");

@@ -33,6 +33,15 @@ type ReportChart =
     }
   | {
       version: 1;
+      type: "binscatter";
+      title?: string;
+      x_label?: string;
+      y_label?: string;
+      points: { x: number; y: number; n: number }[];
+      slope: number;
+    }
+  | {
+      version: 1;
       type: "event-study";
       title?: string;
       x_label?: string;
@@ -143,6 +152,16 @@ export function parseReportChart(source: string): ReportChart | null {
     if (!hasOnlyKeys(value, ["version", "type", "title", "x_label", "y_label", "items"])) return null;
     if (!Array.isArray(value.items) || value.items.length === 0 || value.items.length > 8) return null;
     if (!value.items.every(isCoefficientItem)) return null;
+    return value as ReportChart;
+  }
+  if (value.type === "binscatter") {
+    if (!hasOnlyKeys(value, ["version", "type", "title", "x_label", "y_label", "points", "slope"])) return null;
+    if (typeof value.slope !== "number" || !Number.isFinite(value.slope)) return null;
+    if (!Array.isArray(value.points) || value.points.length < 2 || value.points.length > MAX_POINTS) return null;
+    const finite = (item: unknown): item is { x: number; y: number; n: number } =>
+      typeof item === "object" && item !== null && hasOnlyKeys(item as Record<string, unknown>, ["x", "y", "n"])
+      && ["x", "y", "n"].every((key) => typeof (item as Record<string, unknown>)[key] === "number" && Number.isFinite((item as Record<string, number>)[key]));
+    if (!value.points.every(finite)) return null;
     return value as ReportChart;
   }
   if (value.type === "event-study") {
@@ -275,7 +294,38 @@ function symmetricTicks(maxAbs: number): number[] {
   return Array.from({ length: 2 * count + 1 }, (_, index) => (index - count) * step);
 }
 
-/** One row per estimate: a bar from 0 (red positive, blue negative) and the 95% interval as a capped whisker. */
+/** Binned scatter as on the step pages: bin means of the within-transformed Y against X and the fitted line. */
+function BinscatterChart({ chart }: { chart: Extract<ReportChart, { type: "binscatter" }> }) {
+  const W = 720, H = 320, m = { l: 70, r: 24, t: 18, b: 50 };
+  const xs = chart.points.map((point) => point.x), ys = chart.points.map((point) => point.y);
+  const xLo = Math.min(0, ...xs), xHi = Math.max(0, ...xs);
+  const fitted = [xLo * chart.slope, xHi * chart.slope];
+  const yLo = Math.min(0, ...ys, ...fitted), yHi = Math.max(0, ...ys, ...fitted);
+  const pad = (lo: number, hi: number) => { const span = hi - lo || 1; return [lo - span * 0.06, hi + span * 0.06] as const; };
+  const [x0, x1] = pad(xLo, xHi), [y0, y1] = pad(yLo, yHi);
+  const x = (value: number) => m.l + ((value - x0) / (x1 - x0)) * (W - m.l - m.r);
+  const y = (value: number) => H - m.b - ((value - y0) / (y1 - y0)) * (H - m.t - m.b);
+  const ticks = (lo: number, hi: number) => { const step = (hi - lo) / 4; return Array.from({ length: 5 }, (_, index) => lo + step * index); };
+  const digits = (lo: number, hi: number) => Math.max(0, Math.min(4, 2 - Math.floor(Math.log10(Math.max(hi - lo, 1e-9) / 4))));
+  const fx = (value: number) => value.toFixed(digits(x0, x1)), fy = (value: number) => value.toFixed(digits(y0, y1));
+  return (
+    <ReportFigure title={chart.title ?? "分箱散点图"}>
+      <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>每个点是 X 相近的一箱单元的平均（X、Y 都已扣掉固定效应）；直线斜率为估计的 β</div>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "分箱散点图"} style={{ width: "100%", height: "auto" }}>
+        {ticks(y0, y1).map((tick) => <g key={`y${tick}`}><line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke="#eef0f4" /><text x={m.l - 8} y={y(tick) + 4} textAnchor="end" fontSize={11} fill="#5f6677">{fy(tick)}</text></g>)}
+        {ticks(x0, x1).map((tick) => <g key={`x${tick}`}><line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke="#eef0f4" /><text x={x(tick)} y={H - m.b + 16} textAnchor="middle" fontSize={11} fill="#5f6677">{fx(tick)}</text></g>)}
+        <line x1={x(0)} x2={x(0)} y1={m.t} y2={H - m.b} stroke="#9aa3b5" strokeDasharray="4 3" />
+        <line x1={m.l} x2={W - m.r} y1={y(0)} y2={y(0)} stroke="#9aa3b5" strokeDasharray="4 3" />
+        {chart.x_label && <text x={m.l + (W - m.l - m.r) / 2} y={H - 8} textAnchor="middle" fontSize={11} fill="#5f6677">{chart.x_label}</text>}
+        {chart.y_label && <text x={14} y={(m.t + H - m.b) / 2} textAnchor="middle" fontSize={11} fill="#5f6677" transform={`rotate(-90 14 ${(m.t + H - m.b) / 2})`}>{chart.y_label}</text>}
+        <line x1={x(xLo)} y1={y(fitted[0])} x2={x(xHi)} y2={y(fitted[1])} stroke="#2a2f3a" strokeWidth={2.2} />
+        {chart.points.map((point, index) => <circle key={index} cx={x(point.x)} cy={y(point.y)} r={5} fill="#216cc0" stroke="#fff" strokeWidth={1.5} />)}
+      </svg>
+    </ReportFigure>
+  );
+}
+
+/** One row per estimate: the point estimate as a dot and the 95% interval as a capped whisker (one colour). */
 function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coefficient" }> }) {
   const W = 720;
   const rowH = 64;
@@ -299,7 +349,7 @@ function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coef
     <ReportFigure title={chart.title ?? "系数图"}>
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
         {hasCi
-          ? "条形 = 点估计（红为正、蓝为负） · 横线 = 标称 95% 近似区间 · 竖线 = 0；区间跨过 0 时方向不确定"
+          ? "点 = 估计值 · 横线 = 标称 95% 近似区间 · 竖线 = 0（无效应）；区间跨过 0 时方向不确定"
           : "统计推断已抑制，只显示描述性点估计，不能据此判断方向"}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "系数图"} style={{ width: "100%", height: "auto" }}>
@@ -312,22 +362,19 @@ function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coef
         <line x1={m.l} x2={W - m.r} y1={H - m.b} y2={H - m.b} stroke="#d7dae2" />
         {chart.x_label && <text x={m.l + plotW / 2} y={H - 8} textAnchor="middle" fontSize={11} fill="#5f6677">{chart.x_label}</text>}
         {chart.items.map((item, index) => {
-          const color = !hasCi ? "#b6bac6" : item.value >= 0 ? "#d64545" : "#2f6fd0";
-          const barX = Math.min(x(0), x(item.value));
-          const barW = Math.max(1, Math.abs(x(item.value) - x(0)));
+          const color = !hasCi ? "#b6bac6" : "#2a2f3a";
           const labelAt = Math.min(Math.max(x(item.value), m.l + 24), W - m.r - 24);
           return (
             <g key={`${item.label}-${index}`}>
               <text x={m.l - 12} y={y(index) + 4} textAnchor="end" fontSize={12} fill="#3a4050">{item.label}</text>
-              <rect x={barX} y={y(index) - 11} width={barW} height={22} rx={2} fill={color} fillOpacity={0.85} />
               {item.ci_low != null && item.ci_high != null && (
-                <g stroke="#2a2f3a" strokeWidth={1.6}>
+                <g stroke={color} strokeWidth={1.8}>
                   <line x1={x(item.ci_low)} x2={x(item.ci_high)} y1={y(index)} y2={y(index)} />
                   <line x1={x(item.ci_low)} x2={x(item.ci_low)} y1={y(index) - 7} y2={y(index) + 7} />
                   <line x1={x(item.ci_high)} x2={x(item.ci_high)} y1={y(index) - 7} y2={y(index) + 7} />
                 </g>
               )}
-              <circle cx={x(item.value)} cy={y(index)} r={4} fill="#fff" stroke="#2a2f3a" strokeWidth={1.6} />
+              <circle cx={x(item.value)} cy={y(index)} r={6.5} fill={color} stroke="#fff" strokeWidth={2} />
               <text x={labelAt} y={y(index) - 21} textAnchor="middle" fontSize={11.5} fontWeight={700} fill="#2a2f3a">
                 {value(item.value)}
                 {item.ci_low != null && item.ci_high != null ? `  [${value(item.ci_low)}, ${value(item.ci_high)}]` : ""}
@@ -453,6 +500,7 @@ function ReportCode({ className, children, ...props }: ComponentPropsWithoutRef<
     const chart = parseReportChart(source);
     if (chart?.type === "bar") return <BarChart chart={chart} />;
     if (chart?.type === "coefficient") return <CoefficientChart chart={chart} />;
+    if (chart?.type === "binscatter") return <BinscatterChart chart={chart} />;
     if (chart?.type === "event-study") return <EventChart chart={chart} />;
     if (chart?.type === "line") return <LineChart chart={chart} />;
   }
@@ -471,6 +519,7 @@ function ReportPre({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
       const chart = parseReportChart(String(children.props.children ?? "").replace(/\n$/, ""));
       if (chart?.type === "bar") return <BarChart chart={chart} />;
     if (chart?.type === "coefficient") return <CoefficientChart chart={chart} />;
+    if (chart?.type === "binscatter") return <BinscatterChart chart={chart} />;
       if (chart?.type === "event-study") return <EventChart chart={chart} />;
       if (chart?.type === "line") return <LineChart chart={chart} />;
     }

@@ -47,6 +47,8 @@ class RegressionResult:
     status_reasons: list[str] = field(default_factory=list)
     support: dict | None = None
     sample_flow: dict | None = None
+    # Binned scatter of the within-transformed Y against X (steps 11–14 result chart); None when not computed.
+    binscatter: dict | None = None
 
     def to_dict(self) -> dict:
         return {**self.__dict__, "coefs": [{**c.__dict__, "stars": c.stars} for c in self.coefs]}

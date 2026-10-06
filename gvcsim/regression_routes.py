@@ -56,17 +56,24 @@ def _limit_expensive_request(limiter: SlidingWindowRateLimiter, account_id: int,
         ) from error
 
 
-def _validate_design(outcome: str) -> RegressionDesign:
+def _validate_design(outcome: str, baseline: str | None = None) -> RegressionDesign:
     if outcome not in OUTCOMES:
         raise HTTPException(status_code=400, detail=f"outcome 必须是 {OUTCOMES}")
-    return RegressionDesign(outcome, teaching=True)
+    try:
+        return RegressionDesign(outcome, teaching=True, baseline=baseline)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 def _design_info(design: RegressionDesign, weight_mode: str = shocks.EXPOSURE_MODE_FIXED_PRETREATMENT) -> dict:
     return {
         "outcome": design.outcome,
+        "baseline": design.baseline,
+        "baseline_label": design.baseline_label,
         "depvar": design.depvar,
         "depvar_label": design.depvar_label,
+        "depvar_kind": design.depvar_kind,
+        "depvar_unit": design.depvar_unit,
         "granularity": design.granularity,
         "granularity_label": design.granularity_label,
         "shock_type": design.shock_type,
@@ -195,24 +202,29 @@ async def teaching_groups():
 def regression_design(
     request: Request,
     outcome: str,
+    baseline: str | None = None,
 ):
     """返回指定 outcome 的方程与面板/个体/聚类等设计信息，不执行估计。"""
     if "step" in request.query_params:
         raise HTTPException(status_code=422, detail="旧 step 参数已删除，请使用 outcome")
-    unsupported = sorted(set(request.query_params) - {"outcome"})
+    unsupported = sorted(set(request.query_params) - {"outcome", "baseline"})
     if unsupported:
         raise HTTPException(status_code=400, detail=f"不支持的回归设计参数：{'、'.join(unsupported)}")
-    design = _validate_design(outcome)
+    design = _validate_design(outcome, baseline)
     return _design_info(design)
 
 
 async def regression_run(req: RegressionRequest, request: Request):
     account_id = _require_regression_student(request)
-    design = _validate_design(req.outcome)
-    key = (artifacts.release_identity(), "run", req.model_dump_json())
+    design = _validate_design(req.outcome, req.baseline)
+    # baseline=None and the explicit default key are the same design; cache them as one.
+    canonical = RegressionRequest(outcome=design.outcome, baseline=design.baseline)
+    key = (artifacts.release_identity(), "run", canonical.model_dump_json())
 
     async def compute() -> dict[str, Any]:
         panel = await concurrency.run_sync(_read_csv, "panel_teaching.csv")
+        if not design.is_default_baseline and design.depvar not in panel.columns:
+            raise HTTPException(status_code=409, detail="当前数据发布没有这个生成基线的模拟 Y，请换回默认指标")
         result, benchmark = await concurrency.run_cpu_bound(run_design_with_benchmark, panel, design)
         result_info = result.to_dict()
         return {
@@ -221,8 +233,8 @@ async def regression_run(req: RegressionRequest, request: Request):
             "preflight": _regression_preflight(result_info),
             "benchmark": benchmark,
             "disclaimer": DISCLAIMER,
-            "variable_catalog": variable_catalog(req.outcome),
-            "model_snapshot": model_snapshot(req.outcome),
+            "variable_catalog": variable_catalog(req.outcome, design.baseline),
+            "model_snapshot": model_snapshot(req.outcome, design.baseline),
         }
 
     try:

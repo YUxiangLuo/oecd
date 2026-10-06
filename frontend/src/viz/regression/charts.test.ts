@@ -33,7 +33,7 @@ describe("fixed regression forest chart", () => {
     }));
     expect(markup).toContain("横线 = 95% 区间");
     expect(markup).toContain('class="coef-ci"');
-    expect(markup).toContain('fill="#2f6fd0"');
+    expect(markup).toContain('<circle cx="265.5" cy="48" r="6.5" fill="#2a2f3a"');
     // Significance stars are not shown; the interval already tells the direction.
     expect(markup).not.toContain("***");
   });

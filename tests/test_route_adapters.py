@@ -1095,3 +1095,45 @@ def test_regression_route_maps_numerical_failure_to_chinese_400(teaching_db, mon
 def test_regression_rejects_teacher(teaching_db):
     teacher = _authenticated_client(teaching_db, "teacher")
     assert teacher.post("/api/regression/run", json={"outcome": "trade"}).status_code == 403
+
+
+def test_regression_design_and_run_accept_only_a_same_family_baseline(teaching_db, monkeypatch):
+    client = _authenticated_client(teaching_db)
+    design = client.get("/api/regression/design", params={"outcome": "trade", "baseline": "DVAex_share"})
+    assert design.status_code == 200
+    body = design.json()
+    assert body["baseline"] == "DVAex_share" and body["baseline_label"] == "国内增加值出口占比"
+    assert body["depvar"] == "teaching_y_trade_DVAex_share" and body["depvar_kind"] == "share"
+    default = client.get("/api/regression/design", params={"outcome": "trade"}).json()
+    assert default["baseline"] == "FVA_share" and default["depvar"] == "teaching_y_trade"
+    assert client.get("/api/regression/design", params={"outcome": "trade", "baseline": "PLy_GVC"}).status_code == 400
+    assert client.post("/api/regression/run", json={"outcome": "trade", "baseline": "PLy_GVC"}).status_code == 400
+
+    # A release whose teaching panel lacks the chosen baseline's Y says so instead of estimating.
+    panel = pd.DataFrame({"country": ["AAA"], "entity_id": ["AAA-s1"], "teaching_y_trade": [0.2]})
+    monkeypatch.setattr(regression_routes, "_read_csv", lambda name: panel)
+    missing = client.post("/api/regression/run", json={"outcome": "trade", "baseline": "DVAex_share"})
+    assert missing.status_code == 409
+    assert "生成基线" in missing.json()["detail"]
+
+    panel["teaching_y_trade_DVAex_share"] = [0.6]
+
+    class Result:
+        def to_dict(self):
+            return {
+                "status": "ok",
+                "support": {"suppress_inference": False, "status": "ok", "reasons": []},
+                "coefs": [{"name": "teaching_tariff_exposure", "coef": 0.5}],
+            }
+
+    async def fake_cpu(func, *args, **kwargs):
+        assert args[1].baseline == "DVAex_share"
+        return Result(), {"method": "benchmark"}
+
+    monkeypatch.setattr(regression_routes.concurrency, "run_cpu_bound", fake_cpu)
+    run = client.post("/api/regression/run", json={"outcome": "trade", "baseline": "DVAex_share"})
+    assert run.status_code == 200
+    body = run.json()
+    assert body["design"]["baseline"] == "DVAex_share"
+    assert body["model_snapshot"]["baseline"] == "DVAex_share" and body["model_snapshot"]["beta"] == 0.55
+    assert body["variable_catalog"][1]["name"] == "teaching_y_trade_DVAex_share"

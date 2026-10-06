@@ -435,9 +435,12 @@ def _artifacts(path: Path, *, disclosure: bool = False):
                 "tariff_path": list(teaching.TARIFF_PATH),
                 "betas": teaching.BETAS,
                 "calibration": teaching.CALIBRATION,
+                "baselines": teaching.baseline_parameters(),
             },
             "model_snapshots": {name: teaching.model_snapshot(name) for name in teaching.BETAS},
             "variable_catalogs": {name: teaching.variable_catalog(name) for name in teaching.BETAS},
+            "baseline_model_snapshots": teaching.baseline_snapshots(teaching.model_snapshot),
+            "baseline_variable_catalogs": teaching.baseline_snapshots(teaching.variable_catalog),
             "source_bindings": {
                 "release_panel": {"path": "panel_industry.csv", "sha256": digest("panel_industry.csv")},
                 "exposure_files": [
@@ -471,9 +474,10 @@ def _sign_run(run: dict) -> dict:
     from gvcsim.regression_routes import _design_info
 
     outcome = run["design"]["outcome"]
-    run["design"] = _design_info(RegressionDesign(outcome, teaching=True))
-    run["model_snapshot"] = model_snapshot(outcome)
-    run["variable_catalog"] = variable_catalog(outcome)
+    baseline = run["design"].get("baseline")
+    run["design"] = _design_info(RegressionDesign(outcome, teaching=True, baseline=baseline))
+    run["model_snapshot"] = model_snapshot(outcome, baseline)
+    run["variable_catalog"] = variable_catalog(outcome, baseline)
     coefs = run.get("result", {}).get("coefs")
     if (
         isinstance(coefs, list)
@@ -2020,3 +2024,104 @@ def test_view_only_keys_never_change_the_experiment_sections():
     text = "\n".join(teaching_report._experiment_sections(partial))
     assert "保存的切片" not in text
     assert "记录的单元格" in text
+
+
+def test_report_draws_the_binned_scatter_behind_each_saved_estimate(tmp_path, monkeypatch):
+    """Steps 11–14 carry the binned scatter after the coefficient plot, in display units."""
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    run = session["steps"]["11"]["data"]["run"]
+    run["result"]["coefs"][0]["coef"] = -0.55
+    run["result"]["binscatter"] = {
+        "bins": [{"x": -0.02, "y": 0.011, "n": 10}, {"x": 0.0, "y": 0.0, "n": 10}, {"x": 0.02, "y": -0.011, "n": 10}],
+        "slope": -0.55,
+        "transform": "twoway_demeaned",
+    }
+    _sign_run(run)
+
+    def charts_of(markdown: str) -> list[dict]:
+        pattern = "```gvcsim-chart" + chr(10) + "(.*?)" + chr(10) + "```"
+        return [json.loads(block) for block in re.findall(pattern, markdown, re.S)]
+
+    markdown = build(session, "同学").markdown
+    charts = charts_of(markdown)
+    binscatters = [chart for chart in charts if chart["type"] == "binscatter"]
+    assert len(binscatters) == 1
+    chart = binscatters[0]
+    assert chart["title"].startswith("步骤 11")
+    # X in percentage points, Y of a share outcome in percentage points; slope per 1 pp of X.
+    assert [point["x"] for point in chart["points"]] == [-2.0, 0.0, 2.0]
+    assert [point["y"] for point in chart["points"]] == [1.1, 0.0, -1.1]
+    assert chart["slope"] == pytest.approx(-0.55)
+    # The scatter follows the coefficient chart of the same step.
+    assert markdown.index('"type":"coefficient"') < markdown.index('"type":"binscatter"')
+    # A malformed scatter is left out rather than breaking the report.
+    run["result"]["binscatter"] = {"bins": "no", "slope": 1}
+    _sign_run(run)
+    assert not [chart for chart in charts_of(build(session, "同学").markdown) if chart["type"] == "binscatter"]
+    # Suppressed inference draws no scatter either (the evidence section is rendered directly here,
+    # because a run without inference is not a complete material for the report gate).
+    from gvcsim.report_render import _evidence_summary
+
+    run["result"]["binscatter"] = {
+        "bins": [{"x": -0.02, "y": 0.011, "n": 10}, {"x": 0.02, "y": -0.011, "n": 10}],
+        "slope": -0.55,
+    }
+    run["result"]["support"] = {"status": "ok", "suppress_inference": True, "reasons": ["测试诊断"]}
+    _sign_run(run)
+    evidence = [{"step": 11, "outcome": "trade", "design": run["design"], "result": run["result"]}]
+    assert not [
+        chart for chart in charts_of(chr(10).join(_evidence_summary(evidence))) if chart["type"] == "binscatter"
+    ]
+    run["result"]["support"]["suppress_inference"] = False
+    assert [chart for chart in charts_of(chr(10).join(_evidence_summary(evidence))) if chart["type"] == "binscatter"]
+
+
+def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(tmp_path, monkeypatch):
+    """A step that was run with another indicator of its family reports that indicator, not the default."""
+    from gvcsim.report_saved_run import _parse_saved_run, _saved_runs
+
+    _artifacts(tmp_path)
+    monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    session = _complete()
+    run = session["steps"]["13"]["data"]["run"]
+    run["design"]["baseline"] = "GVCPs"
+    run["result"]["coefs"][0]["coef"] = -0.4
+    run["result"]["coefs"][0]["se"] = 0.01  # two clusters: a wide t(1) interval would otherwise cross 0
+    run["result"]["binscatter"] = {
+        "bins": [{"x": -0.02, "y": 0.008, "n": 10}, {"x": 0.02, "y": -0.008, "n": 10}],
+        "slope": -0.4,
+        "transform": "twoway_demeaned",
+    }
+    _sign_run(run)
+    assert run["design"]["depvar"] == "teaching_y_length_GVCPs"
+    assert run["model_snapshot"]["baseline"] == "GVCPs"
+    assert _parse_saved_run(run, "length") is not None
+    assert [item["outcome"] for item in _saved_runs(session) if item["step"] == 13] == ["length"]
+
+    markdown = build(session, "同学").markdown
+    assert "教学模拟：GVC 位置指数" in markdown
+    assert "个位置指数单位" in markdown
+    assert "相对更靠下游" in markdown
+    charts = [
+        json.loads(block)
+        for block in re.findall("```gvcsim-chart" + chr(10) + "(.*?)" + chr(10) + "```", markdown, re.S)
+    ]
+    coefficient = next(
+        chart for chart in charts if chart["type"] == "coefficient" and chart["title"].startswith("步骤 13")
+    )
+    assert coefficient["items"][0]["label"] == "GVC 位置指数" and coefficient["x_label"] == "位置指数单位"
+    assert coefficient["items"][0]["value"] == pytest.approx(-0.004)
+    scatter = next(chart for chart in charts if chart["type"] == "binscatter" and chart["title"].startswith("步骤 13"))
+    assert scatter["y_label"] == "GVC 位置指数（位置指数单位）"
+    assert [point["y"] for point in scatter["points"]] == [0.008, -0.008]
+    assert scatter["slope"] == pytest.approx(-0.004)
+
+    # A baseline from another family, or one the snapshot does not match, is not a reportable run.
+    forged = copy.deepcopy(run)
+    forged["design"]["baseline"] = "FVA_share"
+    assert _parse_saved_run(forged, "length") is None
+    stale = copy.deepcopy(run)
+    stale["model_snapshot"]["baseline"] = "PLv_GVC"
+    assert _parse_saved_run(stale, "length") is None
