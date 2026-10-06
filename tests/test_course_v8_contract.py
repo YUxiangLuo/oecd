@@ -116,7 +116,8 @@ def test_step10_gate_requires_complete_current_panel_state():
 
 def test_regression_stage_task_goals_match_the_beginner_workflow():
     by_number = {step["n"]: step for step in STEPS}
-    assert "两个国家和一个行业" in by_number[10]["tasks"][0]
+    assert "一个国家和一个行业" in by_number[10]["tasks"][0]
+    assert "对比国家" in by_number[10]["tasks"][0]
     assert "年份" not in by_number[10]["tasks"][0]
     assert "跨境生产长度" in by_number[13]["goal"]
     assert "模拟网络指标" in by_number[14]["goal"]
