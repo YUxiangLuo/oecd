@@ -163,8 +163,10 @@ assert_table_alignment
 
 "${ab[@]}" open "$GVCSIM_BASE_URL/?step=9"
 "${ab[@]}" wait --load networkidle
-# 行业热力表是视角栏里的“全部指标表”视图，与主图同页切换，没有弹窗
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main [role=\"group\"][aria-label=\"图表视角\"] button")).find(b=>b.textContent.trim()==="全部指标表")?.click()' >/dev/null
+# 行业热力表折叠在“国家对比”视角的“全部指标表”里，与主图同页，没有弹窗
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main [role=\"group\"][aria-label=\"图表视角\"] button")).find(b=>b.textContent.trim()==="国家对比")?.click()' >/dev/null
+"${ab[@]}" wait --fn 'Array.from(document.querySelectorAll("main details > summary")).some(s=>/全部指标表/.test(s.textContent))'
+"${ab[@]}" eval '(() => { const d = Array.from(document.querySelectorAll("main details")).find(d=>/全部指标表/.test(d.querySelector("summary")?.textContent||"")); if (d) d.open = true; return true; })()' >/dev/null
 "${ab[@]}" wait --load networkidle
 require_table 'table.heat-table-grid'
 assert_table_alignment

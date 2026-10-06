@@ -101,7 +101,7 @@ test("ranking records the selected metric and displayed industries, then drills 
   mockReference();
   const save = mock(() => {});
   render(<NetworkTrend meta={meta} initialCountry="CHN" onRecord={save} />);
-  fireEvent.click(screen.getByRole("button", { name: "定位行业" }));
+  fireEvent.click(screen.getByRole("button", { name: "国家对比" }));
   await screen.findByRole("region", { name: "行业排名条形图" });
   // Each industry shows its global median on both bars, and country A's rank in that industry worldwide.
   await waitFor(() => expect(document.querySelectorAll("[data-global-median]")).toHaveLength(4));

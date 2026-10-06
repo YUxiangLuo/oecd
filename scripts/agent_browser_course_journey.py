@@ -108,7 +108,7 @@ def main():
                     )
                 )
                 assert "历年变化" in views, (step, views)
-                assert ("国家对比" if step <= 8 else "定位行业") in views, (step, views)
+                assert "国家对比" in views, (step, views)
             if 6 <= step <= 8:
                 # The first visit carries the comparison pair over from the previous step and
                 # records the current complete chart automatically; there is no button to press.
@@ -119,16 +119,10 @@ def main():
                     ),
                 )
             elif step == 9:
-                # The trade network is an exploration view in the view bar; the main comparison records automatically.
-                student.button("贸易联系")
-                for country in ("CHN", "USA"):
-                    selector = f'.network-node[aria-label^="{country} "]'
-                    student.run("wait", selector)
-                    student.run("focus", selector)
-                    student.run("press", "Enter")
-                    student.run("wait", ".network-fullscreen-scrim")
-                    student.run("press", "Escape")
-                    student.run("wait", "--fn", '!document.querySelector(".network-fullscreen-scrim")')
+                # 贸易伙伴 is an exploration view in the view bar (ego network, partner table, region matrix).
+                student.button("贸易伙伴")
+                student.run("wait", "table.region-matrix")
+                student.run("wait", "[data-partner]")
                 student.button("历年变化")
                 student.run("wait", 'select[name="network-metric"]')
                 student.run(
