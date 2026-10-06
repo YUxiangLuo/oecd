@@ -8,13 +8,12 @@ from gvcsim.regression.teaching import VERSION as TEACHING_VERSION
 from gvcsim.report_common import (
     GATE_STEPS,
     REFLECTION_TEXT_LIMIT,
-    _COMPOSITION_COMPONENT_METRICS,
-    _COMPOSITION_TOTAL_METRICS,
     _INDICATOR_SOURCES,
     _REFLECTION_MIN_LENGTHS,
     _STEP_OUTCOMES,
     _STEP_TITLES,
     _list_values,
+    composition_set,
 )
 from gvcsim.report_saved_run import _gate_qualified_runs
 
@@ -96,10 +95,8 @@ def _indicator_material_complete(data: dict[str, Any], step: int) -> bool:
     if len(compared) == 1 and next(iter({str(item["scope"]) for item in observations})) != "country":
         return False
     if source == "explicit-indicator-composition":
-        components = _COMPOSITION_COMPONENT_METRICS.get(step)
-        total = _COMPOSITION_TOTAL_METRICS.get(step)
-        required_components = set(components) | {total} if components is not None and total is not None else None
-        if required_components is None or {item["metric"] for item in observations} != required_components:
+        # The saved parts must be exactly one of the step's composition sets (step 7: forward or backward).
+        if composition_set(step, (str(item["metric"]) for item in observations)) is None:
             return False
     keys_by_country: dict[str, set[tuple[str, str, int]]] = {
         country: {

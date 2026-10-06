@@ -29,6 +29,8 @@ export const LENGTH_TOPIC: IndicatorTopic = {
     },
   ],
   axes: {
+    key: "position",
+    label: "前后向位置：后向 GVC 段长度 × 前向 GVC 段长度",
     x: "PLy_GVC",
     y: "PLv_GVC",
     equality: true,

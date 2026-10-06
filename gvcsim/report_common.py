@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from collections.abc import Iterable
 from typing import Any, cast
 
 from gvcsim import evidence
@@ -81,6 +82,24 @@ _COMPOSITION_COMPONENT_METRICS = {
     7: ("1_VA_D", "2_VA_RT", "3a_VA_GVC_S", "3b_VA_GVC_C"),
 }
 _COMPOSITION_TOTAL_METRICS = {6: "gross_exports", 7: "SVA"}
+# Step 7 can also be read from the final-goods (backward) side; each set is (components, total).
+_COMPOSITION_SETS: dict[int, tuple[tuple[tuple[str, ...], str], ...]] = {
+    6: ((_COMPOSITION_COMPONENT_METRICS[6], "gross_exports"),),
+    7: (
+        (_COMPOSITION_COMPONENT_METRICS[7], "SVA"),
+        (("1_FGY_D", "2_FGY_RT", "3a_FGY_GVC_S", "3b_FGY_GVC_C"), "FGY"),
+    ),
+}
+_COMPOSITION_TOTAL_SHORT = {"gross_exports": "总出口", "SVA": "总增加值", "FGY": "最终品生产"}
+
+
+def composition_set(step: int, metrics: Iterable[str]) -> tuple[tuple[str, ...], str] | None:
+    """The (components, total) set a saved composition uses, or None when the metrics match no set."""
+    saved = set(metrics)
+    for components, total in _COMPOSITION_SETS.get(step, ()):
+        if saved == set(components) | {total}:
+            return components, total
+    return None
 
 
 class ReportGateError(RuntimeError):

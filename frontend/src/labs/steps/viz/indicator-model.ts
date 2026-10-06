@@ -16,19 +16,32 @@ export interface IndicatorTopic {
     denominator?: string;
     numerator?: string;
   }[];
-  composition?: {
-    total: string;
-    segments: { key: string; name: string; color: string }[];
+  composition?: CompositionSpec & {
+    /** A second way to read the same step (step 7: the final-goods / backward side). */
+    alternate?: CompositionSpec & { key: string; label: string; primaryLabel: string };
+  };
+  /** The default positioning axes; `axesOptions` lists every pair the 定位图 can switch between. */
+  axes: AxesOption;
+  axesOptions?: AxesOption[];
+}
+
+export interface CompositionSpec {
+  total: string;
+  segments: { key: string; name: string; color: string }[];
     /** The part the step reads first (reading cards, report); defaults to the last segment. */
     focus?: string;
     note: string;
-  };
-  axes: {
-    x: string;
-    y: string;
-    labels: [string, string, string, string];
-    equality?: boolean;
-  };
+}
+
+export interface AxesOption {
+  key: string;
+  label: string;
+  x: string;
+  y: string;
+  labels: [string, string, string, string];
+  equality?: boolean;
+  /** Log scale for size-like x metrics (amounts). */
+  xScale?: "linear" | "log";
 }
 export type IndicatorView =
   | "trend"
@@ -38,6 +51,8 @@ export type IndicatorView =
   | "evolution"
   | "directions"
   | "industry"
+  /** 行业结构 (steps 7–8): one economy's industries, exploration only. */
+  | "structure"
   | "explore";
 /** Material is one chart of 1–5 economies (design doc 4.1). */
 export const MAX_ENTITIES = 5;
@@ -56,6 +71,11 @@ export interface IndicatorSelection {
   year: number;
   view: IndicatorView;
   limit: number;
+  /** Step 7: read the composition from the forward (SVA) or backward (FGY) side. */
+  composition_side?: "primary" | "alternate";
+  /** 定位图: which axes pair, and whether the 2016→2020 trail is drawn. */
+  axes?: string;
+  trail?: boolean;
 }
 
 /** The entities a selection shows: the observed country first, then its comparison countries. */

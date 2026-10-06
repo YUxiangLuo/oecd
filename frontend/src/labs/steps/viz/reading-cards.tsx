@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { countryLabel, sectorLabel } from "../../../viz";
-import { finiteValue, NO_RANK, NO_RANK_NOTE, rankText, type IndicatorTopic, type YearDistribution } from "./indicator-model";
+import { finiteValue, NO_RANK, NO_RANK_NOTE, rankText, type CompositionSpec, type YearDistribution } from "./indicator-model";
 import { indicatorNumber } from "./indicator-charts";
 import type { Row } from "./scaffold";
 
@@ -87,11 +87,9 @@ export function comparisonCards({ rows, countries, metric, label, unit, year, in
 }
 
 /** Composition views: the observed country's largest part and its focus part, and the focus-part gap to each comparison. */
-export function compositionCards({ rows, countries, topic, year, industry }: {
-  rows: Row[]; countries: string[]; topic: IndicatorTopic; year: number; industry: string;
+export function compositionCards({ rows, countries, composition, totalLabel, year, industry }: {
+  rows: Row[]; countries: string[]; composition: CompositionSpec; totalLabel: string; year: number; industry: string;
 }): ReadingCard[] {
-  const composition = topic.composition;
-  if (!composition) return [];
   const [first, ...others] = countries;
   const share = (country: string, key: string) => {
     const total = valueOf(rows, country, year, composition.total, industry);
@@ -111,7 +109,7 @@ export function compositionCards({ rows, countries, topic, year, industry }: {
     {
       eyebrow: `${countryLabel(first)} · ${year} · 最大分项`,
       big: `${largest.segment.name} ${indicatorNumber(largest.share!, "%")}`,
-      small: `占${topic.metrics.find((item) => item.key === composition.total)?.label ?? "总量"}的比重`,
+      small: `占${totalLabel}的比重`,
     },
     {
       eyebrow: `${countryLabel(first)} · ${focusName}`,
@@ -136,7 +134,7 @@ const side = (value: number, median: number, high: string, low: string) =>
 /** 定位图: where each selected country sits relative to the two medians of the shown economies. */
 export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLabel, xFormat, yFormat }: {
   reference: Row[]; countries: string[]; xKey: string; yKey: string; xLabel: string; yLabel: string;
-  xFormat: "pct" | "number"; yFormat: "pct" | "number";
+  xFormat: "pct" | "number" | "amount"; yFormat: "pct" | "number" | "amount";
 }): ReadingCard[] {
   const points = reference
     .filter((row) => finiteValue(row[xKey]) && finiteValue(row[yKey]))
@@ -149,7 +147,7 @@ export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLa
   };
   const xMedian = median(points.map((point) => point.x));
   const yMedian = median(points.map((point) => point.y));
-  const unitOf = (format: string) => (format === "pct" ? "%" : "无量纲");
+  const unitOf = (format: string) => (format === "pct" ? "%" : format === "amount" ? "百万美元" : "无量纲");
   return countries.map((country, index) => {
     const point = points.find((item) => item.country === country);
     if (!point) return { eyebrow: countryLabel(country), big: "不在图上", small: "该国缺少其中一项指标的读数" };

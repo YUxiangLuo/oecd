@@ -142,7 +142,7 @@ describe("indicator explorer with automatic report material", () => {
     );
     // The view bar: the step's theme first and open by default, then the two views every step offers.
     expect(within(view.getByRole("group", { name: "图表视角" })).getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "出口构成", "历年变化", "国家对比", "定位图", "定位行业",
+      "出口构成", "历年变化", "国家对比", "定位图", "行业结构",
     ]);
     expect(view.getByRole("button", { name: "出口构成" }).getAttribute("aria-pressed")).toBe("true");
     expect(view.queryByRole("group", { name: "补充图表" })).toBeNull();

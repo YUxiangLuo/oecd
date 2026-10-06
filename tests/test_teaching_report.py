@@ -788,6 +788,36 @@ def test_report_draws_one_series_per_saved_economy():
     assert "所看国家：CHN" in text
 
 
+def test_step_seven_accepts_the_backward_composition_set():
+    """Step 7 reads the four production activities from the SVA side or the FGY side."""
+    from gvcsim import report_observed
+
+    session = _complete()
+    data = session["steps"]["7"]["data"]
+    parts = {"1_FGY_D": 40, "2_FGY_RT": 30, "3a_FGY_GVC_S": 20, "3b_FGY_GVC_C": 10, "FGY": 100}
+    data["observations"] = [
+        {
+            "entity": country,
+            "country": country,
+            "year": 2020,
+            "value": float(value) * (index + 1),
+            "metric": metric,
+            "unit": "百万美元",
+            "release": "ICIO-2023",
+            "scope": "country",
+            "source": "explicit-indicator-composition",
+        }
+        for index, country in enumerate(("CHN", "USA"))
+        for metric, value in parts.items()
+    ]
+    assert not any(item["step"] == 7 for item in check_material_gate(session))
+    section = "\n".join(report_observed._observed_evidence_section(session)).split("### 步骤 7", 1)[1]
+    assert "最终品生产构成" in section
+    # Mixing the two sides is not a composition the page can draw.
+    data["observations"][0]["metric"] = "1_VA_D"
+    assert any(item["step"] == 7 for item in check_material_gate(session))
+
+
 def test_steps_six_to_eight_require_explicit_complete_material():
     session = _complete()
     for source in (None, "automatic-representative"):

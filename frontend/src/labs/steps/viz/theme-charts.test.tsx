@@ -48,7 +48,7 @@ describe("stacked area facets", () => {
 
 describe("industry dot plot", () => {
   test("rows are focusable groups that read every economy and show the national line", () => {
-    const view = render(
+    render(
       <IndustryDotPlot
         groups={[{ key: "C26", label: "C26 计算机电子光学", values: [0.3, 0.1] }, { key: "C20", label: "C20 化学品", values: [0.2, null] }]}
         countries={["CHN", "USA"]}

@@ -50,15 +50,30 @@ export const TRADE_TOPIC: IndicatorTopic = {
     note: "每条为六项之和的构成，分母为 VA+TLS 账户闭合总出口。负分项以红色放在零轴左侧，不改变其国内、外国或TLS来源归类；负值不能按普通100%条形图解释。",
   },
   axes: {
-    x: "FVA_share",
-    y: "3_VA_GVC_share",
-    labels: [
-      "两项份额均较高",
-      "跨境生产较高",
-      "两项份额均较低",
-      "外国增加值项较高",
-    ],
+    key: "source",
+    label: "来源定位：总出口 × 外国增加值项占比",
+    x: "gross_exports",
+    y: "FVA_share",
+    xScale: "log",
+    labels: ["出口大 · 外国含量高", "出口小 · 外国含量高", "出口小 · 外国含量低", "出口大 · 外国含量低"],
   },
+  axesOptions: [
+    {
+      key: "source",
+      label: "来源定位：总出口 × 外国增加值项占比",
+      x: "gross_exports",
+      y: "FVA_share",
+      xScale: "log",
+      labels: ["出口大 · 外国含量高", "出口小 · 外国含量高", "出口小 · 外国含量低", "出口大 · 外国含量低"],
+    },
+    {
+      key: "gvc",
+      label: "跨境生产：外国增加值项占比 × GVC 生产份额",
+      x: "FVA_share",
+      y: "3_VA_GVC_share",
+      labels: ["两项份额均较高", "跨境生产较高", "两项份额均较低", "外国增加值项较高"],
+    },
+  ],
 };
 
 export function TradeVizStep(props: {
