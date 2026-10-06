@@ -180,10 +180,21 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
 };
 
 /** The step's lesson with the wording of the chosen same-family baseline (the family's own wording by default). */
-export function lessonFor(outcome: RegressionOutcome, baseline?: string | null): RegressionLesson {
+/** The fixed Y of each step (teaching.BASELINES[outcome][0] on the server). */
+export const DEFAULT_BASELINES: Record<RegressionOutcome, string> = {
+  trade: "FVA_share",
+  production: "3b_VA_GVC_C_share",
+  length: "PLv_GVC",
+  network: "betweenesscentrality",
+};
+
+export function lessonFor(outcome: RegressionOutcome, baseline?: string | null, label?: string | null): RegressionLesson {
   const base = REGRESSION_LESSONS[outcome];
-  const alternative = baseline ? BASELINE_LESSONS[baseline] : undefined;
-  return alternative ? { ...base, ...alternative } : base;
+  if (!baseline || baseline === DEFAULT_BASELINES[outcome]) return base;
+  const alternative = BASELINE_LESSONS[baseline];
+  if (alternative) return { ...base, ...alternative };
+  // A baseline the lexicon does not know yet: at least name it the way the server does.
+  return label ? { ...base, shortMetric: label } : base;
 }
 
 export const REGRESSION_FAMILIES = (["trade", "production", "length", "network"] as const).map((outcome) => ({

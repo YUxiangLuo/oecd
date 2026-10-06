@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
 import {
   exampleEffect, RegressionRequestError, RegressionRequestLoading,
-  RegressionRunLab, scrollRegressionVerdict,
+  RegressionRunLab, scrollRegressionVerdict, TEACHING_MODEL_VERSION,
 } from "./regression";
 import type { RegressionDesignInfo, RegressionOutcome, Step, StepStateApi, TeachingGroupsResponse, TeachingPanelResponse } from "./types";
 
@@ -95,6 +95,63 @@ describe("simple regression workbench", () => {
     expect(screen.getByRole("heading", { name: /模拟 Y（国内增加值出口占比）/ })).toBeTruthy();
     fireEvent.change(select, { target: { value: "FVA_share" } });
     await waitFor(() => expect(screen.getByRole("heading", { name: /模拟 Y（外国增加值项占比）/ })).toBeTruthy());
+  });
+
+  const savedRun = (baseline: string, label: string) => ({
+    design: {
+      outcome: "trade", baseline, baseline_label: label, depvar: `teaching_y_trade_${baseline}`, depvar_label: `教学模拟：${label}`,
+      depvar_kind: "share", depvar_unit: "比例（展示为百分点）", granularity: "country_industry", shock_type: "tariff",
+      shock_col: "teaching_tariff_exposure", treated_col: "teaching_treated", method: "twfe_intensity", control_mode: "none",
+      interaction: false, price_mode: "nominal", scenario: "clean", scenario_label: "基准", sample_filter: "排除 ROW",
+      exclude_row: true, controls: [], control_labels: {}, equation: "y = x", equation_parts: [], panel_file: "panel_teaching.csv",
+      entity: "entity_id", cluster: "country",
+    },
+    result: {
+      depvar: `teaching_y_trade_${baseline}`, n_obs: 100, n_entities: 20, n_times: 5, n_clusters: 10, r2_within: 0.2,
+      depvar_mean: 0.3, depvar_std: 0.1, diagnostics: { study_contract: "economics-v2" }, notes: [], status: "ok", status_reasons: [],
+      coefs: [{ name: "teaching_tariff_exposure", coef: 0.5, se: 0.05, t: 10, p: 0.001, stars: "***", ci_low: 0.4, ci_high: 0.6 }],
+      support: { treated_clusters: 10, untreated_clusters: 0, treated_entities: 20, untreated_entities: 0, total_entities: 20, reversal_entities: [], reversal_share: 0, absorbing: true, status: "ok", reasons: [], min_treated_clusters: 5, max_reversal_share: 0, suppress_inference: false },
+    },
+    disclaimer: "教学模拟",
+    model_snapshot: { version: TEACHING_MODEL_VERSION, x_columns: ["teaching_tariff_exposure"], y_column: `teaching_y_trade_${baseline}`, baseline, entity: "entity_id", time: "year", fixed_effects: ["entity_id", "year"], controls: [], interactions: [], seed: 1, beta: 0.55, tariff_path: [], disclaimer: "教学" },
+    variable_catalog: [],
+  });
+  const groupsWithBaselines: TeachingGroupsResponse = {
+    ...groups,
+    baselines: {
+      trade: [
+        { key: "FVA_share", label: "外国增加值项占比", kind: "share", unit: "比例（展示为百分点）", default: true, column: "teaching_y_trade", source: "FVA_share" },
+        { key: "DVAex_share", label: "国内增加值出口占比", kind: "share", unit: "比例（展示为百分点）", default: false, column: "teaching_y_trade_DVAex_share", source: "DVAex_share" },
+      ],
+      production: [], length: [], network: [],
+    },
+    series: { trade: { FVA_share: groups.outcomes.trade, DVAex_share: { taxed: series(0.004), untaxed: series(-0.003) } }, production: {}, length: {}, network: {} },
+  };
+
+  test("restores the saved run's baseline on refresh and shows that run", async () => {
+    const design = spyOn(api, "regressionDesign").mockResolvedValue({} as RegressionDesignInfo);
+    spyOn(api, "teachingGroups").mockResolvedValue(groupsWithBaselines);
+    spyOn(api, "teachingSeries").mockResolvedValue({ version: "v", disclaimer: "", rows: [], total: 0, years: [] } as TeachingPanelResponse);
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: savedRun("DVAex_share", "国内增加值出口占比") } as never }} />);
+    const select = await screen.findByRole("combobox", { name: "结果指标 Y" }) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe("DVAex_share"));
+    await waitFor(() => expect(design).toHaveBeenCalledWith("trade", "DVAex_share"));
+    // The saved result is shown for that Y, with the server's disclaimer under the sentences.
+    await waitFor(() => expect(document.querySelector(".reg-result-points")?.textContent).toContain("模拟国内增加值出口占比（Y）平均上升 0.50 个百分点"));
+    expect(screen.getByText("教学模拟", { selector: ".reg-result-boundary" })).toBeTruthy();
+  });
+
+  test("falls back to the default Y when the saved baseline is not offered by the release", async () => {
+    const design = spyOn(api, "regressionDesign").mockResolvedValue({} as RegressionDesignInfo);
+    spyOn(api, "teachingGroups").mockResolvedValue(groupsWithBaselines);
+    spyOn(api, "teachingSeries").mockResolvedValue({ version: "v", disclaimer: "", rows: [], total: 0, years: [] } as TeachingPanelResponse);
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: savedRun("FDC_share", "外国重复计算项占比") } as never }} />);
+    const select = await screen.findByRole("combobox", { name: "结果指标 Y" }) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe("FVA_share"));
+    expect(screen.getByText(/上次算的 Y（外国重复计算项占比）在当前数据发布里没有/)).toBeTruthy();
+    await waitFor(() => expect(design).toHaveBeenLastCalledWith("trade", null));
+    // The saved run for the missing Y is not shown as if it were the default's result.
+    expect(document.querySelector(".reg-result-points")).toBeNull();
   });
 
   test("converts the estimate to the example's X in each step's own units", () => {

@@ -122,6 +122,23 @@ describe("trend rendering", () => {
     expect(html).not.toContain("data-series=");
   });
 
+  test("marks the year a simulated policy starts, only when that year is inside the series", () => {
+    const props = {
+      rows: [2016, 2017, 2018].map((year) => ({ country: "CAN", year, teaching_tariff_exposure: year >= 2018 ? 0.2 : 0 })),
+      countries: ["CAN"],
+      years: [2016, 2017, 2018],
+      metric: "teaching_tariff_exposure",
+      label: "X",
+      unit: "%",
+    };
+    const marked = renderToStaticMarkup(createElement(IndicatorTrendChart, { ...props, markYear: { year: 2018, label: "2018 年起模拟加税" } }));
+    expect(marked).toContain('data-mark-year="2018"');
+    expect(marked).toContain("2018 年起模拟加税");
+    const outside = renderToStaticMarkup(createElement(IndicatorTrendChart, { ...props, markYear: { year: 2016, label: "起始年" } }));
+    expect(outside).not.toContain("data-mark-year");
+    expect(renderToStaticMarkup(createElement(IndicatorTrendChart, props))).not.toContain("data-mark-year");
+  });
+
   test("length position draws the GVCPs=1 baseline", () => {
     const html = renderToStaticMarkup(
       createElement(IndicatorTrendChart, {

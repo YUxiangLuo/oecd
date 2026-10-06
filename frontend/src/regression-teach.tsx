@@ -68,7 +68,7 @@ export function RegressionFamilyPanels({ getStep }: { getStep?: (step: number) =
             globalSupport={run.result.support}
             scale={display.scale}
             unit={display.unit}
-            labels={{ teaching_tariff_exposure: lessonFor(family.outcome, run.design?.baseline).shortMetric }}
+            labels={{ teaching_tariff_exposure: lessonFor(family.outcome, run.design?.baseline, run.design?.baseline_label).shortMetric }}
             title={`步骤 ${family.step} · ${family.family}`}
           />
         ) : <div key={family.outcome} className="muted reg-family-missing">步骤 {family.step} · {family.family}：还没有可用结果</div>;
@@ -101,7 +101,7 @@ export function RegressionEvidenceMatrix({
             {REGRESSION_FAMILIES.map((item) => {
               const verdict = familyVerdict(item.outcome, getStep);
               const design = familyRun(item.outcome, getStep)?.design;
-              const lesson = lessonFor(item.outcome, design?.baseline);
+              const lesson = lessonFor(item.outcome, design?.baseline, design?.baseline_label);
               return (
                 <tr key={item.outcome}>
                   <th scope="row">{item.step}</th>

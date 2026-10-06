@@ -130,7 +130,7 @@ export function RegressionResultCard({ outcome, response, examples = [] }: {
   examples?: RegressionExample[];
 }) {
   const verdict = buildRegressionVerdict(outcome, response);
-  const lesson = lessonFor(outcome, response.design.baseline);
+  const lesson = lessonFor(outcome, response.design.baseline, response.design.baseline_label);
   const suppressed = verdict.state === "suppressed";
   const display = chartDisplayScale(outcome, response.design);
   const unsignedEffect = verdict.effect.replace(/^[+−-]/, "");
@@ -182,6 +182,7 @@ export function RegressionResultCard({ outcome, response, examples = [] }: {
         <li>{verdict.evidence}</li>
         <li><b>解释限制：</b>{lesson.dontClaim}</li>
       </ul>
+      {verdict.boundary && <p className="muted reg-result-boundary">{verdict.boundary}</p>}
       {verdict.warnings.length > 0 && (!suppressed || !verdict.coefficient) && (
         <ul aria-label="本次计算的限制">{verdict.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
       )}
@@ -313,7 +314,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   // run (so a refresh shows the Y the student last ran) until the student picks another one.
   const [baseline, setBaseline] = useState<string | null>(null);
   const baselineChosen = useRef(false);
-  const lesson = lessonFor(outcome, baseline);
+  const [baselineNotice, setBaselineNotice] = useState<string | null>(null);
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -336,7 +337,16 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   const groups = groupsQuery.status === "success" ? groupsQuery.data : null;
   const baselineOptions = groups?.baselines?.[outcome] ?? [];
   const defaultBaseline = baselineOptions.find((option) => option.default)?.key ?? null;
+  const lesson = lessonFor(outcome, baseline, baselineOptions.find((option) => option.key === baseline)?.label);
   const usesDefault = baseline == null || baseline === defaultBaseline;
+  // A saved baseline the current release does not offer falls back to the fixed Y, with a note.
+  const baselineOffered = baseline == null || baselineOptions.length === 0 || baselineOptions.some((option) => option.key === baseline);
+  useEffect(() => {
+    if (baselineOffered) return;
+    setBaselineNotice(`上次算的 Y（${lesson.shortMetric}）在当前数据发布里没有，已换回本步默认指标，请重新计算。`);
+    setBaseline(null);
+    setResult(null);
+  }, [baselineOffered]);
   const groupSeries = usesDefault ? groups?.outcomes[outcome] : groups?.series?.[outcome]?.[baseline];
 
   // After the run: the estimate converted to the two examples followed from step 10.
@@ -435,6 +445,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         <h3>{lessonQuestion(outcome, baseline)}</h3>
         {outcome !== "trade" && <p className="muted">方法与步骤 11 相同，这次 Y 换成{lesson.shortMetric}。</p>}
         <p className="reg-step-focus"><b>本步重点</b>{lesson.learnThis}</p>
+        {baselineNotice && <p className="reg-boundary" role="status">{baselineNotice}</p>}
         {baselineOptions.length > 1 && (
           <div className="reg-baseline-select">
             <label className="model-control"><span className="model-control-label">结果指标 Y</span>
@@ -444,6 +455,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
                 disabled={running}
                 onChange={(event) => {
                   baselineChosen.current = true;
+                  setBaselineNotice(null);
                   const next = event.target.value;
                   setBaseline(next === defaultBaseline ? null : next);
                   setResult(null);
@@ -474,7 +486,9 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
           const preGap = preGaps.length ? preGaps.reduce((sum, value) => sum + value, 0) / preGaps.length : null;
           const postGap = gapAt(lastYear);
           const kind = depvarKind(outcome, design);
-          const fmt = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(kind === "network" ? 0 : kind === "position" ? 4 : kind === "length" ? 3 : 2)} ${display.unit}`;
+          const digits = kind === "network" ? 0 : kind === "position" ? 4 : kind === "length" ? 3 : 2;
+          const tiny = 0.5 * 10 ** -digits;
+          const fmt = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(digits)} ${display.unit}`;
           const coefficient = result?.result.coefs[0]?.coef;
           const estimate = result && coefficient != null && groups.mean_exposure_taxed != null && !globalInferenceIsSuppressed(result.result.status, result.result.support)
             ? { gap: coefficient * groups.mean_exposure_taxed, label: `回归估计的差距 ${fmt(coefficient * groups.mean_exposure_taxed * levelScale)}` }
@@ -491,7 +505,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
               estimate={estimate}
             />
             <ReadingCards label="两组读图" cards={[
-              { eyebrow: `加税前（${groups.years[0]}–${groups.policy_year - 1}）`, big: preGap == null ? "缺失" : Math.abs(preGap) < 0.005 ? "两组差不多" : `两组相差 ${fmt(preGap)}`, small: "每条线都减去了本组加税前的平均水平，所以起点都接近 0" },
+              { eyebrow: `加税前（${groups.years[0]}–${groups.policy_year - 1}）`, big: preGap == null ? "缺失" : Math.abs(preGap) < tiny ? "两组差不多" : `两组相差 ${fmt(preGap)}`, small: "每条线都减去了本组加税前的平均水平，所以起点都接近 0" },
               { eyebrow: `加税后（${lastYear}）`, big: postGap == null ? "缺失" : `加税组比未加税组 ${postGap < 0 ? "低" : "高"} ${fmt(Math.abs(postGap)).replace(/^\+/, "")}`, small: `${groups.sample.taxed_countries} 国加税、${groups.sample.untaxed_countries} 国未加税的平均值` },
               { eyebrow: "回归要算的", big: estimate ? `估计的差距 ${fmt(estimate.gap * levelScale)}` : "两条线分开的距离", small: estimate ? "= β × 加税组的平均暴露 X；图上虚线括号" : "β 按每个单元的暴露 X 把这段距离换算成每 1 个百分点的变化" },
             ]} />

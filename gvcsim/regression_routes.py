@@ -217,7 +217,9 @@ def regression_design(
 async def regression_run(req: RegressionRequest, request: Request):
     account_id = _require_regression_student(request)
     design = _validate_design(req.outcome, req.baseline)
-    key = (artifacts.release_identity(), "run", req.model_dump_json())
+    # baseline=None and the explicit default key are the same design; cache them as one.
+    canonical = RegressionRequest(outcome=design.outcome, baseline=design.baseline)
+    key = (artifacts.release_identity(), "run", canonical.model_dump_json())
 
     async def compute() -> dict[str, Any]:
         panel = await concurrency.run_sync(_read_csv, "panel_teaching.csv")
