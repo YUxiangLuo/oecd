@@ -343,12 +343,22 @@ def update_class(class_id: int, req: AcademicUpdateRequest, user: dict = Depends
     return row
 
 
+STUDENT_NO_MAX_LENGTH = 40
+
+
+def _strip_text(value: Any) -> Any:
+    return value.strip() if isinstance(value, str) else value
+
+
 class StudentCreateRequest(TextRequest):
     username: str = Field(min_length=2, max_length=40)
     display_name: str = Field(min_length=1, max_length=60)
     password: str = Field(min_length=12, max_length=256)
-    student_no: str = ""
+    student_no: str = Field(default="", max_length=STUDENT_NO_MAX_LENGTH)
     class_id: int | None = Field(default=None, gt=0)
+
+    # Uniqueness of 学号 and login both compare exact text, so surrounding spaces must not survive.
+    _strip_identifiers = field_validator("username", "student_no", mode="before")(_strip_text)
 
     @field_validator("display_name")
     @classmethod
@@ -408,7 +418,7 @@ class StudentUpdateRequest(TextRequest):
     model_config = ConfigDict(extra="forbid")
 
     display_name: str | None = Field(default=None, min_length=1, max_length=60)
-    student_no: str | None = None
+    student_no: str | None = Field(default=None, max_length=STUDENT_NO_MAX_LENGTH)
     password: str | None = Field(default=None, min_length=12, max_length=256)
 
     @field_validator("display_name", "student_no", "password", mode="before")
@@ -417,6 +427,8 @@ class StudentUpdateRequest(TextRequest):
         if value is None:
             raise ValueError("更新字段不能为 null；不修改请省略该字段，清空学号请使用空字符串")
         return value
+
+    _strip_student_no = field_validator("student_no", mode="before")(_strip_text)
 
     @field_validator("display_name")
     @classmethod

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { EnrollmentModal, FieldModal, StudentModal, StudentRowMenu, settleModalSubmission, studentFieldError } from "./students";
+import { EnrollmentModal, FieldModal, StudentModal, StudentRowMenu, newStudentError, settleModalSubmission, studentFieldError } from "./students";
 import type { AcademicSemester, StudentRow } from "../types";
 
 describe("teacher student modal submission", () => {
@@ -42,6 +42,13 @@ describe("teacher student modal submission", () => {
     expect(studentFieldError("", { label: "学号", required: false })).toBeNull();
     expect(studentFieldError("  ", { label: "姓名" })).toBe("姓名不能为空");
     expect(studentFieldError("short", { label: "新密码", password: true })).toBe("密码至少 12 位");
+    expect(studentFieldError(" ".repeat(12), { label: "新密码", password: true })).toBe("密码不能全是空格");
+    expect(studentFieldError("9".repeat(41), { label: "学号", required: false, maxLength: 40 })).toBe("学号不能超过 40 个字符");
+    const student = { username: "df-a", display_name: "学生", password: "long-password-1", student_no: "" };
+    expect(newStudentError(student)).toBeNull();
+    expect(newStudentError({ ...student, username: "a" })).toContain("2–40 位");
+    expect(newStudentError({ ...student, display_name: "名".repeat(61) })).toBe("姓名不能超过 60 个字符");
+    expect(newStudentError({ ...student, student_no: "9".repeat(300) })).toBe("学号不能超过 40 个字符");
   });
 
   test("closes only after a successful request", async () => {

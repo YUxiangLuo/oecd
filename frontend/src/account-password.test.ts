@@ -5,6 +5,7 @@ describe("account password change", () => {
   test("requires the current password and a distinct 12-character replacement", () => {
     expect(validatePasswordChange("", "long-new-password", "long-new-password")).toBe("请输入当前密码");
     expect(validatePasswordChange("old-password", "too-short", "too-short")).toBe("新密码至少需要 12 个字符");
+    expect(validatePasswordChange("old-password", " ".repeat(12), " ".repeat(12))).toBe("新密码不能全是空格");
     expect(validatePasswordChange("same-password", "same-password", "same-password")).toBe("新密码不能与当前密码相同");
   });
 

@@ -29,13 +29,28 @@ export async function settleModalSubmission(
   }
 }
 
+export const STUDENT_NAME_MAX_LENGTH = 60;
+export const STUDENT_NO_MAX_LENGTH = 40;
+
 export function studentFieldError(
   value: string,
-  { label, password = false, required = true }: { label: string; password?: boolean; required?: boolean },
+  { label, password = false, required = true, maxLength }: { label: string; password?: boolean; required?: boolean; maxLength?: number },
 ) {
   if (password && value.length < 12) return "密码至少 12 位";
+  if (password && !value.trim()) return "密码不能全是空格";
   if (!password && required && !value.trim()) return `${label}不能为空`;
+  if (!password && maxLength != null && value.trim().length > maxLength) return `${label}不能超过 ${maxLength} 个字符`;
   return null;
+}
+
+type NewStudent = { username: string; display_name: string; password: string; student_no: string; class_id?: number };
+
+/** The create form's first problem, checked as the server will (usernames and 学号 are compared exactly, so trimmed). */
+export function newStudentError(student: NewStudent): string | null {
+  if (!/^[a-zA-Z0-9_.-]{2,40}$/.test(student.username)) return "用户名须为 2–40 位字母、数字、下划线、点或连字符";
+  return studentFieldError(student.display_name, { label: "姓名", maxLength: STUDENT_NAME_MAX_LENGTH })
+    ?? studentFieldError(student.student_no, { label: "学号", required: false, maxLength: STUDENT_NO_MAX_LENGTH })
+    ?? studentFieldError(student.password, { label: "初始密码", password: true });
 }
 
 type ModalState = null | { type: "student" } | { type: "name" | "student_no" | "password" | "enrollment"; student: StudentRow };
@@ -136,7 +151,7 @@ export function StudentsTab() {
               <tr key={student.id}>
                 <td>{student.display_name}</td>
                 <td className="mono">{student.username}</td>
-                <td>{student.student_no || "—"}</td>
+                <td className="student-no-cell" title={student.student_no || undefined}>{student.student_no || "—"}</td>
                 <td className="class-memberships">{student.enrollments.length
                   ? student.enrollments.map((item) => <span key={item.term_id}>{item.term_name} · {item.class_name}</span>)
                   : "未分班"}</td>
@@ -180,6 +195,7 @@ export function StudentsTab() {
           initial={modal.type === "name" ? modal.student.display_name : modal.type === "student_no" ? modal.student.student_no : ""}
           password={modal.type === "password"}
           required={modal.type !== "student_no"}
+          maxLength={modal.type === "name" ? STUDENT_NAME_MAX_LENGTH : modal.type === "student_no" ? STUDENT_NO_MAX_LENGTH : undefined}
           onClose={() => setModal(null)}
           onSubmit={(value) => run(api.classroom.updateStudent(modal.student.id, { [modal.type === "name" ? "display_name" : modal.type]: value }))}
         />
@@ -195,15 +211,17 @@ export function StudentModal({ semesters = [], onClose, onSubmit }: { semesters?
   const errorRef = useModalErrorFocus(error);
   const close = () => { if (!saving) onClose(); };
   const submit = async () => {
-    if (!form.username.trim() || !form.display_name.trim() || form.password.length < 12) {
-      setError("请填写用户名、姓名和至少 12 位的密码");
+    const body = { ...form, username: form.username.trim(), display_name: form.display_name.trim(), student_no: form.student_no.trim() };
+    const problem = newStudentError(body);
+    if (problem) {
+      setError(problem);
       return;
     }
-    await settleModalSubmission(() => onSubmit(form), onClose, setError, setSaving);
+    await settleModalSubmission(() => onSubmit(body), onClose, setError, setSaving);
   };
   return (
     <Modal title="添加学生账号" onClose={close}><form className="modal-form" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
-      <LabeledControl label="用户名（登录用）">{(id) => <input id={id} name="student-username" disabled={saving} value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} />}</LabeledControl>
+      <LabeledControl label="用户名（登录用，2–40 位字母、数字、_ . -）">{(id) => <input id={id} name="student-username" disabled={saving} value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value })} />}</LabeledControl>
       <LabeledControl label="姓名">{(id) => <input id={id} name="student-display-name" disabled={saving} value={form.display_name} onChange={(event) => setForm({ ...form, display_name: event.target.value })} />}</LabeledControl>
       <LabeledControl label="学号（可空）">{(id) => <input id={id} name="student-number" disabled={saving} value={form.student_no} onChange={(event) => setForm({ ...form, student_no: event.target.value })} />}</LabeledControl>
       <LabeledControl label="初始班级（可空）">{(id) => <select id={id} disabled={saving} value={form.class_id ?? ""} onChange={(event) => setForm({ ...form, class_id: event.target.value ? Number(event.target.value) : undefined })}>
@@ -271,14 +289,14 @@ export function EnrollmentModal({ student, semesters, onClose, onSubmit }: {
   );
 }
 
-export function FieldModal({ title, label, initial, password = false, required = true, onClose, onSubmit }: { title: string; label: string; initial: string; password?: boolean; required?: boolean; onClose: () => void; onSubmit: (value: string) => Promise<void> }) {
+export function FieldModal({ title, label, initial, password = false, required = true, maxLength, onClose, onSubmit }: { title: string; label: string; initial: string; password?: boolean; required?: boolean; maxLength?: number; onClose: () => void; onSubmit: (value: string) => Promise<void> }) {
   const [value, setValue] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const errorRef = useModalErrorFocus(error);
   const close = () => { if (!saving) onClose(); };
   const submit = async () => {
-    const validationError = studentFieldError(value, { label, password, required });
+    const validationError = studentFieldError(value, { label, password, required, maxLength });
     if (validationError) return setError(validationError);
     await settleModalSubmission(
       () => onSubmit(password ? value : value.trim()),

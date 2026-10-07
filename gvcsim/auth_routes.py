@@ -1,7 +1,9 @@
 """Authentication and self-service password routes."""
 
 from fastapi import APIRouter, Header, HTTPException, Request
-from pydantic import Field
+from typing import Any
+
+from pydantic import Field, field_validator
 
 from gvcsim import auth, config
 from gvcsim.classroom import db
@@ -34,6 +36,12 @@ def _limit_login(request: Request, username: str) -> None:
 class LoginRequest(TextRequest):
     username: str = Field(min_length=1, max_length=128)
     password: str = Field(min_length=1, max_length=256)
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def trimmed_username(cls, value: Any) -> Any:
+        # Usernames cannot contain whitespace; a name pasted from a roster often carries some around it.
+        return value.strip() if isinstance(value, str) else value
 
 
 class PasswordChangeRequest(TextRequest):

@@ -139,3 +139,39 @@ def test_invalid_unicode_validation_location_is_serializable(teaching_db):
     )
     assert response.status_code == 422, response.text
     assert response.json()["detail"][0]["type"] == "string_unicode"
+
+
+def test_student_number_is_trimmed_bounded_and_unique_after_trimming(teaching_db):
+    client = client_for("teacher")
+    body = {"username": "sno-owner", "display_name": "甲", "password": "valid-password-2026", "student_no": "2026023"}
+    assert client.post("/api/classroom/students", json=body).status_code == 200
+    padded = {**body, "username": "sno-padded", "student_no": " 2026023 "}
+    response = client.post("/api/classroom/students", json=padded)
+    assert response.status_code == 409, response.text
+    assert db.find_account("sno-padded") is None
+    too_long = {**body, "username": "sno-long", "student_no": "9" * 41}
+    assert client.post("/api/classroom/students", json=too_long).status_code == 422
+    assert db.find_account("sno-long") is None
+    account = db.find_account("sno-owner")
+    response = client.post(f"/api/classroom/students/{account['id']}", json={"student_no": "9" * 300})
+    assert response.status_code == 422, response.text
+    response = client.post(f"/api/classroom/students/{account['id']}", json={"student_no": " 2026024 "})
+    assert response.status_code == 200, response.text
+    assert response.json()["student_no"] == "2026024"
+
+
+def test_whitespace_only_password_is_rejected(teaching_db):
+    client = client_for("teacher")
+    body = {"username": "blank-pass", "display_name": "乙", "password": " " * 12}
+    assert client.post("/api/classroom/students", json=body).status_code == 400
+    assert db.find_account("blank-pass") is None
+    body["password"] = "valid-password-2026"
+    account = client.post("/api/classroom/students", json=body).json()
+    response = client.post(f"/api/classroom/students/{account['id']}", json={"password": "\t" * 12})
+    assert response.status_code == 400, response.text
+
+
+def test_login_ignores_spaces_around_the_username(teaching_db):
+    response = TestClient(app).post("/api/auth/login", json={"username": "  student \t", "password": "gvclab2026"})
+    assert response.status_code == 200, response.text
+    assert response.json()["user"]["username"] == "student"

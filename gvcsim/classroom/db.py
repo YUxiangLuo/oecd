@@ -44,6 +44,8 @@ def hash_password(password: str, salt_hex: str) -> str:
 def _validate_managed_password(password: str) -> None:
     if not 12 <= len(password) <= 256:
         raise ValueError("口令必须为 12..256 个字符")
+    if not password.strip():
+        raise ValueError("口令不能全是空白字符")
 
 
 def _required(row: dict[str, Any] | None, operation: str) -> dict[str, Any]:
