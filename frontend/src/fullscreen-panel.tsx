@@ -63,7 +63,7 @@ function FullscreenDialogBehavior({
   returnFocusRef: RefObject<HTMLElement | null>;
   onClose: () => void;
 }) {
-  useDialogFocus({ containerRef, initialFocusRef, returnFocusRef, onClose });
+  useDialogFocus({ containerRef, initialFocusRef, returnFocusRef, onClose, keepFocusInside: true });
 
   useEffect(() => {
     const courseScroller = containerRef.current?.closest<HTMLElement>(".content") ?? null;

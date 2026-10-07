@@ -18,6 +18,8 @@ import type { AuthUser, Meta, StepsResponse, StepStateApi } from "./types";
 import { useSession } from "./use-session";
 import { userFacingRequestError } from "./user-facing-error";
 
+const APP_TITLE = "供应链仿真系统 · GVC Simulation Lab";
+
 export default function App() {
   const [stepsData, setStepsData] = useState<StepsResponse | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
@@ -195,6 +197,12 @@ export default function App() {
     const firstIncomplete = stepsData.steps.find((step) => !completed.has(step.n))?.n ?? stepsData.steps.at(-1)?.n ?? 1;
     selectStep(firstIncomplete, "replace");
   }, [selectStep, session.completion, session.status, stepsData]);
+
+  // Each step gets its own tab title, so history entries and assistive tech can tell steps apart.
+  const currentTitle = user?.role === "student" ? stepsData?.steps.find((item) => item.n === current)?.title : undefined;
+  useEffect(() => {
+    document.title = currentTitle ? `步骤 ${current} · ${currentTitle} · ${APP_TITLE}` : APP_TITLE;
+  }, [current, currentTitle]);
 
   if (!authChecked) return <AppBootSkeleton />;
   if (authCheckError) {

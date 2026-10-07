@@ -91,3 +91,21 @@ describe("FullscreenPanel save problems", () => {
     expect(retried).toBe(1);
   });
 });
+
+describe("FullscreenPanel keyboard place", () => {
+  afterEach(cleanup);
+
+  test("opening from a cell keeps focus on it, and Escape returns to the cell the reader is on", async () => {
+    const cells = <table><tbody><tr><td><button>格 A</button></td><td><button>格 B</button></td></tr></tbody></table>;
+    const view = render(<FullscreenPanel title="中间投入 Z" autoExpandSignal={0}>{cells}</FullscreenPanel>);
+    screen.getByRole("button", { name: "格 A" }).focus();
+    view.rerender(<FullscreenPanel title="中间投入 Z" autoExpandSignal={1}>{cells}</FullscreenPanel>);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect(document.activeElement?.textContent).toBe("格 A");
+    screen.getByRole("button", { name: "格 B" }).focus();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await Promise.resolve();
+    expect(document.activeElement?.textContent).toBe("格 B");
+  });
+});

@@ -59,6 +59,7 @@ export function QuizPanel({
     setError(null);
   };
   const submitButtonRef = useRef<HTMLButtonElement>(null);
+  const refocusSubmit = useRef(false);
   const submit = async () => {
     if (!answeredAll || submitting) return;
     setSubmitting(true);
@@ -88,12 +89,17 @@ export function QuizPanel({
       setError(userFacingRequestError(cause, "答案提交失败，选择已保留，可重试"));
     } finally {
       setSubmitting(false);
-      // The button is disabled while grading, which drops keyboard focus to <body>; give it back.
-      requestAnimationFrame(() => {
-        if (document.activeElement === document.body) submitButtonRef.current?.focus();
-      });
+      refocusSubmit.current = true;
     }
   };
+  // The button is disabled while grading and, after a correct answer, while completion saves; that drops
+  // keyboard focus to <body>. Give it back once the button is usable again, not one frame after grading.
+  const submitDisabled = !answeredAll || submitting || awaitingSave;
+  useEffect(() => {
+    if (!refocusSubmit.current || submitDisabled) return;
+    refocusSubmit.current = false;
+    if (document.activeElement == null || document.activeElement === document.body) submitButtonRef.current?.focus();
+  }, [submitDisabled]);
   const feedbackByQuestion = new Map(feedback.map((item) => [item.question_id, item]));
   const submitLabel = submitting
     ? "正在判定…"
@@ -158,7 +164,7 @@ export function QuizPanel({
           ref={submitButtonRef}
           type="button"
           className="primary"
-          disabled={!answeredAll || submitting || awaitingSave}
+          disabled={submitDisabled}
           onClick={submit}
         >
           {submitLabel}

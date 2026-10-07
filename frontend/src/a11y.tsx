@@ -88,11 +88,17 @@ export function useDialogFocus({
   initialFocusRef,
   returnFocusRef,
   onClose,
+  keepFocusInside = false,
 }: {
   containerRef: RefObject<HTMLElement | null>;
   initialFocusRef?: RefObject<DialogFocusTarget | null>;
   returnFocusRef?: RefObject<DialogFocusTarget | null>;
   onClose: () => void;
+  /**
+   * For a dialog that is the same subtree expanded in place (fullscreen panels): when focus is already
+   * inside it, leave it there on open and return to it on close, so a keyboard user keeps their place.
+   */
+  keepFocusInside?: boolean;
 }) {
   const closeRef = useRef(onClose);
   const focusCycleRef = useRef(0);
@@ -108,7 +114,11 @@ export function useDialogFocus({
       restoreTargetRef.current = previouslyFocused;
     }
 
-    const initial = initialFocusRef?.current
+    const keptInside = keepFocusInside && previouslyFocused != null && previouslyFocused !== container && container.contains(previouslyFocused)
+      ? previouslyFocused
+      : null;
+    const initial = keptInside
+      ?? initialFocusRef?.current
       ?? container.querySelector<HTMLElement>("[autofocus]")
       ?? focusableWithin(container)[0]
       ?? container;
@@ -146,16 +156,21 @@ export function useDialogFocus({
     return () => {
       document.removeEventListener("keydown", onKeyDown, true);
       const fallbackTarget = restoreTargetRef.current ?? previouslyFocused;
+      // In-place dialogs return to where the reader is now (e.g. the cell moved to with the arrow keys).
+      const current = document.activeElement;
+      const stayInside = keepFocusInside && isDialogFocusTarget(current) && current !== container && container.contains(current)
+        ? current
+        : keptInside;
       queueMicrotask(() => {
         // Portalled dialogs can replace their trigger DOM node while closing. Read
         // an explicit return ref after that commit so SVG controls can restore focus
         // to the newly mounted counterpart rather than a disconnected old node.
-        const explicitTarget = returnFocusRef?.current;
+        const explicitTarget = stayInside?.isConnected ? stayInside : returnFocusRef?.current;
         const target = explicitTarget?.isConnected ? explicitTarget : fallbackTarget;
         // React Strict Mode immediately runs setup again after its development-only
         // cleanup. Do not let that stale cleanup pull focus back behind the dialog.
         if (focusCycleRef.current === focusCycle && target?.isConnected) target.focus();
       });
     };
-  }, [containerRef, initialFocusRef, returnFocusRef]);
+  }, [containerRef, initialFocusRef, keepFocusInside, returnFocusRef]);
 }

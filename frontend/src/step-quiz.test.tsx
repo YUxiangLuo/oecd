@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { useState } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api } from "./api";
@@ -182,4 +183,34 @@ test("keeps unsubmitted choices across step remounts without marking completion 
   expect((screen.getByLabelText("始终") as HTMLInputElement).checked).toBe(false);
   second.rerender(<QuizPanel step={step} state={empty} draftStore={new Map()} />);
   expect((screen.getByLabelText("始终") as HTMLInputElement).checked).toBe(false);
+});
+
+test("after a correct answer, focus returns to the submit button once completion has saved", async () => {
+  const original = api.classroom.submitQuiz;
+  const pending = pendingGrade();
+  api.classroom.submitQuiz = async () => pending.promise;
+  let finishSave = () => {};
+  // Like the workspace: saving the quiz starts a sync in the same update, so the button stays disabled.
+  function Harness() {
+    const [data, setData] = useState<Record<string, unknown>>({});
+    const [syncing, setSyncing] = useState(false);
+    const [complete, setComplete] = useState(false);
+    finishSave = () => { setSyncing(false); setComplete(true); };
+    return <QuizPanel step={step} state={{ ...state, data, syncing, complete, save: (patch) => setData(patch), syncNow: () => setSyncing(true) }} />;
+  }
+  try {
+    render(<Harness />);
+    fireEvent.click(screen.getByLabelText("通过后"));
+    // In a browser the clicked button drops focus to <body> once it is disabled for grading; the test DOM
+    // keeps focus on disabled elements, so the click starts from <body> instead.
+    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
+    await act(async () => { pending.resolve(passed); });
+    expect((screen.getByRole("button", { name: "正在保存…" }) as HTMLButtonElement).disabled).toBe(true);
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    // Focus is not pushed onto the still-disabled button (browsers would drop it again)…
+    expect(document.activeElement).toBe(document.body);
+    // …but returns as soon as the save finishes and the button is usable.
+    act(() => finishSave());
+    expect(document.activeElement?.textContent).toBe("重新检查答案");
+  } finally { api.classroom.submitQuiz = original; }
 });
