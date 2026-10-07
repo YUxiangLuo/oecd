@@ -147,7 +147,7 @@ async def liveness() -> dict[str, str]:
     return {"status": "ok"}
 
 
-PUBLIC_API_PATHS = {"/api/auth/login", "/api/auth/me"}
+PUBLIC_API_PATHS = {"/api/auth/login", "/api/auth/me", "/api/auth/demo-student"}
 
 
 @app.middleware("http")

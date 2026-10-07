@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { api } from "./api";
 import {
@@ -107,6 +107,33 @@ describe("demo-mode login UI source behavior", () => {
       expect(second.username).not.toBe(first.username);
       expect(second.password).not.toBe(first.password);
     });
+  });
+
+  test("the server's least-used demo account replaces the local random pick", async () => {
+    const suggestion = spyOn(api, "demoStudent").mockResolvedValue({ username: "student07" });
+    try {
+      await withDemoEnv("1", async () => {
+        render(<LoginPage onLogin={() => {}} />);
+        await waitFor(() => expect(inputValue("login-user")).toBe("student07"));
+        expect(inputValue("login-pass")).toBe("gvclab2026-07");
+      });
+    } finally { suggestion.mockRestore(); }
+  });
+
+  test("after 退出 the tab gets back the demo account it used, without asking the server", async () => {
+    const suggestion = spyOn(api, "demoStudent").mockResolvedValue({ username: "student07" });
+    sessionStorage.setItem("gvcsim_signed_in_username", "student12");
+    try {
+      await withDemoEnv("1", async () => {
+        render(<LoginPage onLogin={() => {}} />);
+        expect(inputValue("login-user")).toBe("student12");
+        expect(inputValue("login-pass")).toBe("gvclab2026-12");
+        expect(suggestion).not.toHaveBeenCalled();
+      });
+    } finally {
+      suggestion.mockRestore();
+      sessionStorage.removeItem("gvcsim_signed_in_username");
+    }
   });
 
   test("after an expired session the form returns to that account, not another demo credential", async () => {

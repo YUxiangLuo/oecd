@@ -234,3 +234,33 @@ def test_malformed_metadata_is_dependency_failure_not_invalid_token(teaching_db,
     headers = {"Authorization": f"Bearer {login['token']}"}
     assert client.get("/api/auth/me", headers=headers).status_code == 503
     assert client.post("/api/auth/login", json=credentials).status_code == 503
+
+
+def test_demo_student_suggestion_prefers_unused_accounts_and_spreads_concurrent_loads(teaching_db, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from gvcsim import auth_routes
+    from gvcsim.api import app
+
+    monkeypatch.setattr(auth_routes, "_recent_demo_suggestions", {})
+    for username in ("student02", "student03"):
+        teaching_db.create_student(username, username, "valid-password-2026", "", "teacher")
+    client = TestClient(app)
+    # "student" has logged in, so the two never-used accounts come first, one per page load.
+    assert client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).status_code == 200
+    first = client.get("/api/auth/demo-student").json()["username"]
+    second = client.get("/api/auth/demo-student").json()["username"]
+    assert {first, second} == {"student02", "student03"}
+    # With every account just suggested, the oldest suggestion comes back instead of failing.
+    assert client.get("/api/auth/demo-student").json()["username"] == "student"
+    assert client.get("/api/auth/demo-student").json()["username"] == first
+
+
+def test_demo_student_suggestion_does_not_exist_outside_demo_mode(teaching_db, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from gvcsim import config
+    from gvcsim.api import app
+
+    monkeypatch.setattr(config, "DEMO_MODE", False)
+    assert TestClient(app).get("/api/auth/demo-student").status_code == 404

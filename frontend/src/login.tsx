@@ -97,8 +97,15 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
   // 又能连同基础口令和整组凭证一起消除。
   const demoPassword = demoMode ? import.meta.env.VITE_DEMO_PASSWORD || "gvclab2026" : "";
   const demoStudents = demoMode ? demoStudentCredentials(demoPassword) : [];
-  const [initialDemoSelection] = useState(() => {
+  // The demo student this tab used last: after 退出, the same person gets the same account back instead of
+  // the next one in the rotation (which someone else may be using).
+  const [previousDemoStudent] = useState(() => {
     if (!demoMode || returningUsername) return null;
+    const previous = sessionStorage.getItem("gvcsim_signed_in_username");
+    return demoStudents.find((student) => student.username === previous) ?? null;
+  });
+  const [initialDemoSelection] = useState(() => {
+    if (!demoMode || returningUsername || previousDemoStudent) return null;
     let seen: string[] = [];
     try {
       const stored = JSON.parse(sessionStorage.getItem(SEEN_DEMO_STUDENTS_KEY) ?? "[]");
@@ -108,10 +115,11 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
     }
     return chooseDemoStudent(demoStudents, seen);
   });
-  const initialDemoStudent = initialDemoSelection?.student ?? null;
   // 演示构建从 50 组学生凭证中选一组;非演示构建仍是空表单。
-  const [username, setUsername] = useState(returningUsername || initialDemoStudent?.username || "");
-  const [password, setPassword] = useState(initialDemoStudent?.password ?? "");
+  const [demoStudent, setDemoStudent] = useState(previousDemoStudent ?? initialDemoSelection?.student ?? null);
+  const [username, setUsername] = useState(returningUsername || demoStudent?.username || "");
+  const [password, setPassword] = useState(demoStudent?.password ?? "");
+  const edited = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submitRef = useRef<HTMLButtonElement>(null);
@@ -119,6 +127,22 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
   useEffect(() => {
     if (error) submitRef.current?.focus();
   }, [error]);
+
+  // A random pick per tab collides across a classroom; the server knows which demo accounts are idle and
+  // spreads simultaneous page loads. Its suggestion replaces the local pick unless the user already typed.
+  useEffect(() => {
+    if (!demoMode || !initialDemoSelection) return;
+    let live = true;
+    api.demoStudent().then(({ username: suggested }) => {
+      const student = demoStudents.find((item) => item.username === suggested);
+      if (!live || !student || edited.current) return;
+      setDemoStudent(student);
+      setUsername((current) => (current === initialDemoSelection.student.username ? student.username : current));
+      setPassword((current) => (current === initialDemoSelection.student.password ? student.password : current));
+    }, () => {});
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demoMode, initialDemoSelection]);
 
   useEffect(() => {
     if (!demoMode || !initialDemoSelection) return;
@@ -129,11 +153,11 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
     }
   }, [demoMode, initialDemoSelection]);
 
-  const demoAccounts = initialDemoStudent ? [
+  const demoAccounts = demoStudent ? [
     {
-      ...initialDemoStudent,
+      ...demoStudent,
       label: "学生身份",
-      note: `${DEMO_STUDENT_COUNT} 个种子学生 · 刷新无重复轮换`,
+      note: `${DEMO_STUDENT_COUNT} 个种子学生 · 优先分配空闲账号`,
     },
     {
       username: "teacher",
@@ -216,12 +240,12 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
           <label className="login-label" htmlFor="login-user">用户名</label>
           <input
             id="login-user" className="login-input" value={username} autoComplete="username" required
-            onChange={(e) => { setUsername(e.target.value); setError(null); }}
+            onChange={(e) => { edited.current = true; setUsername(e.target.value); setError(null); }}
           />
           <label className="login-label" htmlFor="login-pass">密码</label>
           <input
             id="login-pass" className="login-input" type="password" value={password} required
-            autoComplete="current-password" onChange={(e) => { setPassword(e.target.value); setError(null); }}
+            autoComplete="current-password" onChange={(e) => { edited.current = true; setPassword(e.target.value); setError(null); }}
           />
           {error && <div className="error-box" role="alert" style={{ marginTop: 14, padding: "10px 14px" }}>{error}</div>}
           <button ref={submitRef} className="login-btn" type="submit" disabled={busy}>

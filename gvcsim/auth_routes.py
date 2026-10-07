@@ -1,6 +1,8 @@
 """Authentication and self-service password routes."""
 
 from fastapi import APIRouter, Header, HTTPException, Request
+import threading
+import time
 from typing import Any
 
 from pydantic import Field, field_validator
@@ -70,6 +72,37 @@ def login(req: LoginRequest, request: Request):
             "account_id": user["account_id"],
         },
     }
+
+
+_DEMO_SUGGESTION_HOLD_SECONDS = 600.0
+_recent_demo_suggestions: dict[str, float] = {}
+_demo_suggestion_lock = threading.Lock()
+
+
+@router.get("/demo-student")
+def demo_student_suggestion():
+    """Demo builds only: the demo student least recently used, so two people rarely share an account.
+
+    Accounts suggested in the last ten minutes are skipped (two page loads at the same moment get
+    different ones); only when every account was just suggested does the oldest suggestion come back.
+    """
+    if not config.DEMO_MODE:
+        raise HTTPException(status_code=404, detail="Not Found")
+    try:
+        candidates = db.demo_students_by_activity()
+    except Exception as error:  # noqa: BLE001 - the login page falls back to its own rotation
+        raise HTTPException(status_code=503, detail="暂时无法分配演示账号") from error
+    if not candidates:
+        raise HTTPException(status_code=404, detail="没有可用的演示账号")
+    now = time.monotonic()
+    with _demo_suggestion_lock:
+        for username, at in list(_recent_demo_suggestions.items()):
+            if now - at > _DEMO_SUGGESTION_HOLD_SECONDS:
+                del _recent_demo_suggestions[username]
+        fresh = [username for username in candidates if username not in _recent_demo_suggestions]
+        chosen = fresh[0] if fresh else min(candidates, key=lambda username: _recent_demo_suggestions[username])
+        _recent_demo_suggestions[chosen] = now
+    return {"username": chosen}
 
 
 @router.get("/me")
