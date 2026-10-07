@@ -7,7 +7,7 @@ import type { Row } from "./scaffold";
 
 export interface NetworkRankRow { industry: string; values: (number | null)[] }
 
-/** Rank only country A; B is matched by industry, never independently ranked. */
+/** Industries ordered by country A; the other countries are matched by industry (each still gets its global rank). */
 export function networkRanking(rows: Row[], year: number, countries: string[], metric: string, limit: number): NetworkRankRow[] {
   return rows.filter((row) => row.year === year && row.country === countries[0]
     && typeof row[metric] === "number" && Number.isFinite(row[metric]))
@@ -21,8 +21,8 @@ export function networkRanking(rows: Row[], year: number, countries: string[], m
     }));
 }
 
-/** Each industry's global median across all economies, and country A's rank there. */
-export type IndustryReference = ReadonlyMap<string, { median: number; n: number; rank?: number; tie?: number }>;
+/** Each industry's global median across all economies, and every selected country's rank there. */
+export type IndustryReference = ReadonlyMap<string, { median: number; n: number; ranks?: Record<string, number>; ties?: Record<string, number> }>;
 
 export function NetworkRanking({ rows, countries, unit, onIndustry, reference = new Map() }: {
   rows: NetworkRankRow[]; countries: string[]; unit: string; onIndustry: (industry: string) => void;
@@ -38,7 +38,7 @@ export function NetworkRanking({ rows, countries, unit, onIndustry, reference = 
   return <>
     <p className="muted">
       按 {countryLabel(countries[0])} 降序，所选国家使用同一组行业、同一顺序和零起点刻度。条长与数值成比例，单位：{unit}。缺失值不补零。点击行业查看历年变化。
-      {withReference && "灰色竖线是该行业在全部经济体中的中位数；“全球第 N 位”是该国这一行业在全部经济体同一行业中的排名（从高到低）。"}
+      {withReference && "灰色竖线是该行业在全部经济体中的中位数；“全球第 N 位”是每个国家这一行业在全部经济体同一行业中的排名（从高到低）。"}
     </p>
     <ScrollableRegion label="行业排名条形图" className="bounded-data-table" style={{ padding: 12 }}>
       {rows.map((row, rank) => {
@@ -55,7 +55,12 @@ export function NetworkRanking({ rows, countries, unit, onIndustry, reference = 
           </div>
           <span style={{ textAlign: "right", fontSize: 12, fontVariantNumeric: "tabular-nums" }}>
             {value === null ? "缺失" : fmtDb(value)}
-            {index === 0 && global?.rank != null && <small style={{ display: "block", color: "#596173" }}>{rankText(global.rank, global.tie, global.n) ? `全球${rankText(global.rank, global.tie, global.n)} / ${global.n}` : `全球${NO_RANK}（数值全部相同）`}</small>}
+            {(() => {
+              const countryRank = global?.ranks?.[countries[index]];
+              if (!global || countryRank == null) return null;
+              const text = rankText(countryRank, global.ties?.[countries[index]], global.n);
+              return <small style={{ display: "block", color: "#596173" }}>{text ? `全球${text} / ${global.n}` : `全球${NO_RANK}（数值全部相同）`}</small>;
+            })()}
           </span>
         </div>)}</div>
         {global && <span className="sr-only">{sectorLabel(row.industry)} 全球中位数 {fmtDb(global.median)}</span>}

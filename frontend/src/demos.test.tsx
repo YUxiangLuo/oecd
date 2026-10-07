@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
 import { buildDecompositionModel, type DecompositionSpec } from "./decomposition-model";
@@ -397,5 +397,33 @@ describe("single-entity decomposition scope", () => {
     expect(html).not.toContain("还没有选择具体国家");
     expect(html).toContain("加载对象 A");
     expect(html).toContain("decomp-formula");
+  });
+});
+
+describe("object B country", () => {
+  test("B may take A's country only at country–industry level, without changing the recorded comparison", async () => {
+    const row = (country: string, industry = "") => ({ country, industry, year: 2020, SVA: 10, "1_VA_D": 4, "2_VA_RT": 2, "3_VA_GVC": 4, "3a_VA_GVC_S": 1, "3b_VA_GVC_C": 3 });
+    const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockImplementation(async (_year, country) => [row(country)]);
+    const industryRequest = spyOn(api, "industryIndicatorsAll").mockImplementation(async (_year, country) => ({
+      total: 2, page: 1, page_size: 200, rows: [row(country as string, "C26"), row(country as string, "C29")],
+    }));
+    const partners: string[] = [];
+    try {
+      const view = render(
+        <DecompositionDemo step={5} meta={{ years: [2020], countries: ["CHN", "USA"], sectors: ["C26", "C29"], dataset: null }}
+          primaryYear={2020} primaryCountry="CHN" secondaryCountry="USA" onSecondaryChange={(value) => partners.push(value)} />,
+      );
+      fireEvent.click(view.getByLabelText(/并排对比两个对象/));
+      const countryOptions = () => [...view.getAllByLabelText("国家")[1].querySelectorAll("option")].map((option) => option.getAttribute("value"));
+      expect(countryOptions()).toEqual(["USA"]);
+      fireEvent.click(view.getByRole("button", { name: "国家–行业级" }));
+      expect(countryOptions()).toEqual(["CHN", "USA"]);
+      fireEvent.change(view.getAllByLabelText("国家")[1], { target: { value: "CHN" } });
+      expect((view.getAllByLabelText("国家")[1] as HTMLSelectElement).value).toBe("CHN");
+      expect(partners).toEqual([]);
+    } finally {
+      countryRequest.mockRestore();
+      industryRequest.mockRestore();
+    }
   });
 });

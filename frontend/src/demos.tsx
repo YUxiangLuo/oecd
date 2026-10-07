@@ -381,8 +381,19 @@ export function DecompositionDemo({
   const [compare, setCompare] = useState(false);
   const countryA = explicitDemoCountry(meta.countries, primaryCountry) ?? "";
   const [localB, setLocalB] = useState(defaultB);
-  const countryB = secondaryCountry ?? localB;
-  const setCountryB = onSecondaryChange ?? setLocalB;
+  // At country–industry level B may be A's own country, to compare two of its industries. That choice stays
+  // in this view: the report material's comparison country (secondaryCountry) must differ from A.
+  const [bSameAsA, setBSameAsA] = useState(false);
+  const sameCountryB = bSameAsA && gran === "sector";
+  const countryB = sameCountryB ? countryA : secondaryCountry ?? localB;
+  const setCountryB = (value: string) => {
+    if (value === countryA) {
+      setBSameAsA(true);
+      return;
+    }
+    setBSameAsA(false);
+    (onSecondaryChange ?? setLocalB)(value);
+  };
   const [sectorA, setSectorA] = useState("");
   const [sectorB, setSectorB] = useState("");
   const [hover, setHover] = useState<string | null>(null);
@@ -444,9 +455,9 @@ export function DecompositionDemo({
               if (side === "A") onPrimaryChange?.(year, event.target.value);
               else setCountryB(event.target.value);
             }}>
-              {/* B is the comparison country of the recorded material, which must differ from A: offering A's
-                  country here made the choice silently snap back. */}
-              {meta.countries.filter((code) => side === "A" || code !== countryA).map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
+              {/* At country level B is the recorded comparison country and must differ from A (offering A made the
+                  choice snap back); at industry level A's country is allowed for a within-country comparison. */}
+              {meta.countries.filter((code) => side === "A" || gran === "sector" || code !== countryA).map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
             </select>
           )}
         </LabeledControl>

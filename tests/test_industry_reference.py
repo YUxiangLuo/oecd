@@ -71,7 +71,7 @@ def test_industry_distribution_endpoint_validates_years_and_countries(tmp_path, 
     ]
     for kwargs, detail in (
         ({"years": "2019"}, "年份不在当前数据范围内"),
-        ({"countries": "CHN,USA,DEU"}, "最多查询两个国家的排名"),
+        ({"countries": "CHN,USA,DEU,JPN,KOR,FRA"}, "最多查询五个国家的排名"),
         ({"industry": "A01_02"}, "当前数据没有该指标的行业分布"),
         ({"years": "abc"}, "年份格式无效"),
     ):

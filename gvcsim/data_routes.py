@@ -300,8 +300,9 @@ def indicators_industry_distribution(
     if any(year not in available for year in requested):
         raise HTTPException(status_code=422, detail="年份不在当前数据范围内")
     wanted = tuple(value.strip() for value in countries.split(",") if value.strip())
-    if len(wanted) > 2:
-        raise HTTPException(status_code=422, detail="最多查询两个国家的排名")
+    # Steps 6-9 compare up to five economies, and each gets its own global rank.
+    if len(wanted) > 5:
+        raise HTTPException(status_code=422, detail="最多查询五个国家的排名")
     rows = [
         {"year": year, **row}
         for year in requested
