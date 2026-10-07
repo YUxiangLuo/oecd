@@ -291,6 +291,17 @@ def test_student_list_uses_verified_completion_and_report_state(teaching_db):
     assert 15 not in db.list_students("teacher")[0]["verified_completed_steps"]
 
 
+def test_grading_does_not_count_as_student_activity(teaching_db):
+    db.save_session("student", empty_session())
+    _save_report("draft", {"years": [2020], "runs": []})
+    submitted = db.submit_report("student")
+    before = db.list_students("teacher")[0]["last_valid_activity"]
+    assert before == submitted["submitted_at"]
+    account_id = db.find_account("student")["id"]
+    assert db.grade_report(account_id, 88, "好", "teacher", submitted["updated_at"]) is not None
+    assert db.list_students("teacher")[0]["last_valid_activity"] == before
+
+
 def test_academic_terms_classes_and_enrollments_group_students_without_changing_work(teaching_db):
     term = db.create_term("2026 秋", "teacher")
     first_class = db.create_class_group(term["id"], "国际商务 1 班", "teacher")

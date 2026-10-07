@@ -322,7 +322,16 @@ def _learning_status(
         session_payload,
         report_exists=records.report_matches_session(session_payload, report),
     )
-    timestamps = [row["updated_at"] for row in (session, report) if row]
+    # Only the student's own actions count; grading also bumps reports.updated_at.
+    timestamps = [
+        value
+        for value in (
+            session and session["updated_at"],
+            report and report["generated_at"],
+            report and report["submitted_at"],
+        )
+        if value
+    ]
     return {
         "verified_completed_count": len(summary["completed"]),
         "verified_total_steps": summary["total"],
