@@ -215,6 +215,8 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     />
     {!recordable && view !== "topology" && view !== "flows" ? renderExtra?.(view, selected) : query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : view === "topology" ? (
       // One scatter per row: in two columns the 660-wide chart shrank its axis text to about 7px.
+      <>
+      {selected.length > 1 && <p className="muted">每个国家的散点按本国行业取坐标范围：点的位置只在同一国家内比较，跨国比较请看数值。</p>}
       <div className="comparison-facets comparison-facets--stacked">
         {selected.map((country) => (
           <section key={country} className="comparison-facet">
@@ -233,6 +235,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
           </section>
         ))}
       </div>
+      </>
     ) : view === "flows" ? (
       <>
       {selected.length > 1 && <p className="muted">每个国家的条长按本国最大的行业缩放：条长只在同一国家内比较，跨国比较请看数值。</p>}

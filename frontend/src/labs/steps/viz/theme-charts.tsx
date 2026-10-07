@@ -131,7 +131,7 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
                 {axis.ticks.map((tick) => (
                   <g key={tick}>
                     <line x1={left} x2={W - right} y1={y(tick)} y2={y(tick)} stroke={tick === 0 ? "#4b5263" : "#e2e5ee"} />
-                    <text x={left - 6} y={y(tick) + 4} textAnchor="end" fontSize={11} fill="#596173">{pct(tick)}</text>
+                    <text x={left - 6} y={y(tick) + 4} textAnchor="end" fontSize={11} fill="#596173">{indicatorTick(tick, "%")}</text>
                   </g>
                 ))}
                 {areas(facet).map(({ segment, paths, negative }) => paths.map((d, at) => (
@@ -262,7 +262,7 @@ export function Dumbbell({ rows, leftLabel, rightLabel, unit, title, domain }: {
         <span><i className="dot" style={{ background: CAT[1] }} />{rightLabel}</span>
       </div>
       <div className="dot-plot-axis" aria-hidden="true">
-        {axis.ticks.map((tick) => <span key={tick} style={{ left: `${px(tick)}%` }}>{reading(tick)}</span>)}
+        {axis.ticks.map((tick) => <span key={tick} style={{ left: `${px(tick)}%` }}>{indicatorTick(tick, unit)}</span>)}
       </div>
       {rows.map((row) => (
         <div

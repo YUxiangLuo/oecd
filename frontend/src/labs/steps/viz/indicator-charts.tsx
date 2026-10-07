@@ -4,13 +4,14 @@ import { useHoverTip, type TipLine } from "../../../viz/hover";
 import { CAT } from "../../../viz/shared";
 import { changeReading, finiteValue, NO_RANK, NO_RANK_NOTE, rankText, readingDigits, type YearDistribution } from "./indicator-model";
 import { niceDomain } from "../../../viz/nice-ticks";
+import { stripNegativeZero } from "../../../format";
 import type { Row } from "./scaffold";
 
 /** Axis ticks: round values, trailing zeros trimmed ("10%", "1.5"). */
 export const indicatorTick = (value: number | null, unit: string) =>
   value === null
     ? "缺失"
-    : `${(unit === "%" ? value * 100 : value).toLocaleString("zh-CN", { maximumFractionDigits: readingDigits(value, unit) })}${unit === "%" ? "%" : ""}`;
+    : stripNegativeZero(`${(unit === "%" ? value * 100 : value).toLocaleString("zh-CN", { maximumFractionDigits: readingDigits(value, unit) })}${unit === "%" ? "%" : ""}`);
 
 /** Readings in labels, tables and tooltips keep fixed decimals, so values side by side line up
  * ("11.730%" next to "15.613%", not "11.73%"); an exact zero reads "0". */
@@ -21,7 +22,8 @@ export const indicatorNumber = (value: number | null, unit: string) =>
 export const fixedIndicatorNumber = (value: number | null, unit: string) =>
   value === null
     ? "缺失"
-    : `${(unit === "%" ? value * 100 : value).toLocaleString("zh-CN", { minimumFractionDigits: readingDigits(value, unit), maximumFractionDigits: readingDigits(value, unit) })}${unit === "%" ? "%" : ""}`;
+    // A tiny negative that rounds to zero reads "0.000", not "-0.000".
+    : stripNegativeZero(`${(unit === "%" ? value * 100 : value).toLocaleString("zh-CN", { minimumFractionDigits: readingDigits(value, unit), maximumFractionDigits: readingDigits(value, unit) })}${unit === "%" ? "%" : ""}`);
 
 /** Size of a gap or its change as displayed, or null when it rounds to zero (so it never reads “差距扩大 0”). */
 const magnitudeReading = (value: number, unit: string) => {

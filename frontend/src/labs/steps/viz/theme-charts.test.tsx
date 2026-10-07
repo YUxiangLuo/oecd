@@ -27,6 +27,10 @@ describe("stacked area facets", () => {
       />,
     );
     expect(screen.getAllByRole("img")).toHaveLength(2);
+    // Axis ticks are round numbers and stay trimmed ("25%"), unlike fixed-decimal readings.
+    const ticks = [...view.container.querySelectorAll("section")[0].querySelectorAll("svg text")].map((node) => node.textContent);
+    expect(ticks.some((text) => /^\d+%$/.test(text ?? ""))).toBeTrue();
+    expect(ticks.some((text) => /\.000%$/.test(text ?? ""))).toBeFalse();
     // CHN: taxsub is negative in 2019 only, so the tax area is split into pieces and marked red.
     const chn = view.container.querySelectorAll("section")[0];
     expect(chn.querySelectorAll('[data-area="taxsub"]').length).toBeGreaterThanOrEqual(1);
@@ -89,5 +93,6 @@ test("side-by-side dumbbells given one domain draw the same axis", () => {
   const usa = render(<Dumbbell rows={[{ key: "g", label: "GVC 段", left: 1.2, right: 3.8 }]} leftLabel="前向" rightLabel="后向" unit="长度单位" title="USA" domain={[1.2, 4.9]} />);
   const deu = render(<Dumbbell rows={[{ key: "g", label: "GVC 段", left: 2.1, right: 4.9 }]} leftLabel="前向" rightLabel="后向" unit="长度单位" title="DEU" domain={[1.2, 4.9]} />);
   expect(ticks(usa.container).length).toBeGreaterThan(1);
+  expect(ticks(usa.container).every((text) => !/\.000$/.test(text ?? ""))).toBeTrue();
   expect(ticks(usa.container)).toEqual(ticks(deu.container));
 });

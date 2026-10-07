@@ -844,7 +844,8 @@ export function IndicatorExplorer({
           {view === "segments" && (
             <>
               {selected.length > 1 && <p className="muted">各国使用同一坐标范围，点的位置可以跨国比较。</p>}
-              <div className="comparison-facets">
+              {/* Two dumbbells fit side by side; three or more squeezed each plot to ~45px. */}
+              <div className={`comparison-facets${selected.length > 2 ? " comparison-facets--stacked" : ""}`}>
                 {selected.map((country) => (
                   <section key={country} className="comparison-facet">
                     <h4>{countryLabel(country)} · {year}{industry ? ` · ${sectorLabel(industry)}` : ""}</h4>
@@ -868,7 +869,10 @@ export function IndicatorExplorer({
             </>
           )}
           {view === "structure" && (
-            <div className="comparison-facets">
+            <>
+            {topic.key !== "production" && selected.length > 1 && <p className="muted">每个国家的散点按本国行业取坐标范围：点的位置只在同一国家内比较，跨国比较请看数值。</p>}
+            {/* The length scatter is 660 wide: two columns shrank its text to ~7px, so it stacks. */}
+            <div className={`comparison-facets${topic.key !== "production" ? " comparison-facets--stacked" : ""}`}>
               {selected.map((country) => (
                 <section key={country} className="comparison-facet">
                   <h4>{countryLabel(country)} · {year} · 行业结构</h4>
@@ -898,6 +902,7 @@ export function IndicatorExplorer({
                 </section>
               ))}
             </div>
+            </>
           )}
           {view === "industry" && (
             <>

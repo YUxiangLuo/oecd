@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { DistributionStrip, IndicatorTrendChart, layoutStripLabels } from "./indicator-charts";
+import { DistributionStrip, IndicatorTrendChart, indicatorNumber, indicatorTick, layoutStripLabels } from "./indicator-charts";
 import {
   changeReading,
   countryDistribution,
@@ -351,4 +351,12 @@ describe("material of one to five economies", () => {
     expect(defaultEntities(["CHN", "USA", "DEU"], ["DEU", "DEU", "XXX"])).toEqual(["DEU"]);
     expect(defaultEntities(["CHN", "USA", "DEU"])).toEqual(["CHN", "USA"]);
   });
+});
+
+test("readings keep fixed decimals without a negative zero; ticks are trimmed", () => {
+  expect(indicatorNumber(0.1173, "%")).toBe("11.730%");
+  expect(indicatorNumber(-4e-7, "%")).toBe("0.000%");
+  expect(indicatorNumber(-0.0004, "长度单位")).toBe("0.000");
+  expect(indicatorTick(0.25, "%")).toBe("25%");
+  expect(indicatorTick(2, "长度单位")).toBe("2");
 });

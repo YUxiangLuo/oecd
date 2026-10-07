@@ -1,6 +1,6 @@
 import { ScrollableRegion } from "../../a11y";
 import { niceDomain } from "../nice-ticks";
-import { formatMetric } from "../../format";
+import { formatMetric, stripNegativeZero } from "../../format";
 import { CAT, KEY_ECONOMIES, Legend, type Row, cardStyle, num, rowLabel, rowName, useTip } from "../shared";
 import { signedDomain, signedStack } from "../signed-layout";
 
@@ -53,7 +53,9 @@ export function ChartDataDisclosure({ label, columns, rows }: {
 
 /** 轴刻度专用:大数用「万/亿」缩写,避免出现 4,857,813 这类挤满轴的原始值 */
 function fmtAxis(v: number, format?: string): string {
-  if (format === "pct" || Math.abs(v) < 1e4) return fmtVal(v, format);
+  // Ticks are round numbers: trim trailing zeros ("20%", "6", "1.5"), unlike readings, which keep fixed decimals.
+  if (format === "pct") return `${stripNegativeZero((v * 100).toLocaleString("zh-CN", { maximumFractionDigits: 2 }))}%`;
+  if (Math.abs(v) < 1e4) return stripNegativeZero(v.toLocaleString("zh-CN", { maximumFractionDigits: 3 }));
   if (Math.abs(v) >= 1e8) return `${(v / 1e8).toLocaleString("zh-CN", { maximumFractionDigits: 1 })}亿`;
   return `${(v / 1e4).toLocaleString("zh-CN", { maximumFractionDigits: 0 })}万`;
 }
