@@ -181,14 +181,14 @@ describe("step 1 after the report is submitted", () => {
     };
 
     render(<DbLab state={state} releaseMeta={null as Meta | null} />);
-    const other = await screen.findByRole("button", { name: /→ CHN_D01T02\(列·使用方\)，值 10 百万美元，未记录$/ });
+    const other = await screen.findByRole("button", { name: /→ CHN 中国·D01T02[^(]*\(列·使用方\)，值 10 百万美元，未记录$/ });
     await act(async () => { fireEvent.click(other); });
 
     // Nothing is saved; the clicked cell is marked as chosen and the recorded one keeps its tick.
     expect(saved.filter((patch) => (patch as { observation?: unknown }).observation)).toHaveLength(0);
     expect(other.className).toContain("picked");
     expect(other.getAttribute("aria-label")).toContain("已选中，尚未改为报告材料");
-    expect(screen.getByRole("button", { name: /→ USA_D01T02\(列·使用方\).*已记录$/ }).className).toContain("selected");
+    expect(screen.getByRole("button", { name: /→ USA 美国·D01T02[^(]*\(列·使用方\).*已记录$/ }).className).toContain("selected");
 
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: /^改为记录这一格/ })); });
     const replaced = saved.find((patch) => (patch as { observation?: unknown }).observation) as { observation: { column: string; value: number } };

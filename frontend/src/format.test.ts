@@ -4,7 +4,9 @@ import { formatMetric } from "./format";
 describe("formatMetric", () => {
   test("uses one precision contract for percentages, amounts and scalar metrics", () => {
     expect(formatMetric(0.12345, "pct")).toBe("12.35%");
-    expect(formatMetric(1234.567, "amount")).toBe("1,234.57");
+    // Million-USD amounts: whole numbers from 1,000 up, two fixed decimals below.
+    expect(formatMetric(1234.567, "amount")).toBe("1,235");
+    expect(formatMetric(62.4, "amount")).toBe("62.40");
     expect(formatMetric(1.2, "number")).toBe("1.200");
   });
 
@@ -28,6 +30,6 @@ describe("formatMetric", () => {
     expect(formatMetric(-1e-9, "pct")).toBe("0.00%");
     expect(formatMetric(-1e-9, "number")).toBe("0.000");
     // 真正的负数不受影响
-    expect(formatMetric(-0.5, "amount")).toBe("-0.5");
+    expect(formatMetric(-0.5, "amount")).toBe("-0.50");
   });
 });

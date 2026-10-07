@@ -53,7 +53,7 @@ describe("fixed teaching regression reading", () => {
     const dom = new DOMParser().parseFromString(html, "text/html");
     expect(dom.querySelectorAll("svg[role=img]")).toHaveLength(2);
     // β for a share outcome is already "percentage points of Y per percentage point of X".
-    expect(html).toContain("斜率 β = -0.550");
+    expect(html).toContain("斜率 β = -0.55");
     // Bin means are shown in percentage points (×100), so the Y axis spans about ±1.1, not ±0.011.
     const texts = [...dom.querySelectorAll("svg text")].map((node) => node.textContent ?? "");
     expect(texts.some((text) => /^-?1\.[0-9]+$/.test(text))).toBe(true);

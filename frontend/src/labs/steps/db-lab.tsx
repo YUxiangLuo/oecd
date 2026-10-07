@@ -333,12 +333,9 @@ export function dbCellAccessibleName(
   cell: Pick<DbCellCoordinate, "row" | "column" | "value">,
   recorded: boolean,
 ): string {
-  const column = table === "y" ? formatYColumnHeader(cell.column) : cell.column;
-  if (table === "accounts") {
-    return `${cell.row}，${column}，值 ${fmtDb(cell.value)} 百万美元，${recorded ? "已记录" : "未记录"}`;
-  }
-  const colRole = table === "y" ? "列·最终需求" : "列·使用方";
-  return `${cell.row}(行·供给方) → ${column}(${colRole})，值 ${fmtDb(cell.value)} 百万美元，${recorded ? "已记录" : "未记录"}`;
+  // Same reading as the recorded sentence (industry names, not bare codes such as "F", which read like
+  // final demand), followed by the value and whether it is recorded.
+  return `${dbObservationSentence(table, cell.row, cell.column)}，值 ${fmtDb(cell.value)} 百万美元，${recorded ? "已记录" : "未记录"}`;
 }
 
 /** 行/列代码("CHN_A01_02")拆成国家 + 余部,给方向句提供带中文名的可读标签。 */

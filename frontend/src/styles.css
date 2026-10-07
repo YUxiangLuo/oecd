@@ -939,3 +939,5 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .sync-problem--compact button { flex: none; }
 /* Teacher feedback keeps its paragraphs and list lines on the step 15 status line too. */
 .report-feedback { white-space: pre-wrap; }
+/* The step 1 caption sits at the table's left edge, not centred over a table thousands of pixels wide. */
+.db-table caption { text-align: left; position: sticky; left: 0; }

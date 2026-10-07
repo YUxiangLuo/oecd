@@ -212,8 +212,8 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
             <div>
               <b>算一次：X = w × τ</b>
               <span>
-                {countryLabel(exampleRow.country)} · {sectorLabel(industry)} · {exampleRow.year} 年：出口份额 w = {pct(exampleRow.teaching_export_share_w, 2)}，税率 τ = {pct(exampleRow.teaching_tariff_rate_tau, 0)}，
-                所以 X = {pct(exampleRow.teaching_export_share_w, 2)} × {pct(exampleRow.teaching_tariff_rate_tau, 0)} = <b>{(exampleRow.teaching_tariff_exposure * 100).toFixed(2)} 个百分点</b>。
+                {countryLabel(exampleRow.country)} · {sectorLabel(industry)} · {exampleRow.year} 年：出口份额 w = {pct(exampleRow.teaching_export_share_w, 2)}，税率 τ = {pct(exampleRow.teaching_tariff_rate_tau, 0)}，所以{" "}
+                X = {pct(exampleRow.teaching_export_share_w, 2)} × {pct(exampleRow.teaching_tariff_rate_tau, 0)} = <b>{(exampleRow.teaching_tariff_exposure * 100).toFixed(2)} 个百分点</b>。
                 {exampleRow.teaching_tariff_rate_tau > 0 ? "税率相同时，出口依赖程度不同，暴露也不同。" : "这个国家未被加税，所以 X 一直是 0。"}
               </span>
             </div>

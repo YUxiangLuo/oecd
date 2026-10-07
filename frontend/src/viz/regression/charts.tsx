@@ -176,6 +176,12 @@ export function BinScatterChart({ bins, slope, xLabel, yLabel, xScale = 100, ySc
   const digits = (axis: { hi: number; lo: number }) => Math.max(0, Math.min(4, 2 - Math.floor(Math.log10(Math.max(axis.hi - axis.lo, 1e-9) / 4))));
   const fx = (value: number) => value.toFixed(digits(xAxis));
   const fy = (value: number) => value.toFixed(digits(yAxis));
+  // The slope label sits just off the line's right end: below a falling line, above a rising one. When that
+  // side has no room (the line ends in a corner) it goes to the other side instead of onto the line.
+  const lineEnd = y(fitted[1]);
+  const [preferred, other] = slope < 0 ? [lineEnd + 16, lineEnd - 8] : [lineEnd - 8, lineEnd + 16];
+  const fits = (value: number) => value >= m.t + 12 && value <= H - m.b - 4;
+  const slopeLabelY = Math.min(H - m.b - 4, Math.max(m.t + 12, fits(preferred) ? preferred : other));
   const description = `分箱散点图：横轴为扣除固定效应后的 X，纵轴为各箱 Y 的平均；直线斜率为估计的 β`;
   return (
     <div ref={wrapRef} className="binscatter-plot" style={{ ...cardStyle, flex: "1 1 320px", minWidth: 280 }}>
@@ -211,7 +217,7 @@ export function BinScatterChart({ bins, slope, xLabel, yLabel, xScale = 100, ySc
         ))}
         {/* Kept inside the plot (a line ending at the bottom put it on the x tick labels); small slopes keep
             two significant figures so they match the coefficient chart (-0.0049, not -0.005). */}
-        <text x={x(xAxis.hi) - 6} y={Math.min(H - m.b - 4, Math.max(m.t + 12, y(fitted[1]) + (slope < 0 ? 16 : -8)))} textAnchor="end" fontSize={11} fontWeight={700} fill={ESTIMATE}>斜率 β = {Math.abs(slope) >= 100 ? slope.toFixed(0) : Math.abs(slope) >= 1 ? slope.toFixed(2) : Math.abs(slope) >= 0.1 ? slope.toFixed(3) : slope.toPrecision(2)}</text>
+        <text x={x(xAxis.hi) - 6} y={slopeLabelY} textAnchor="end" fontSize={11} fontWeight={700} fill={ESTIMATE}>斜率 β = {Math.abs(slope) >= 100 ? slope.toFixed(0) : Math.abs(slope) >= 0.1 ? slope.toFixed(2) : slope.toPrecision(2)}</text>
       </svg>
       {Tip}
     </div>

@@ -10,7 +10,11 @@ export function formatMetric(value: number, format?: string): string {
   // An exact zero (e.g. a node with no edges) is a count of nothing, not "0.000".
   if (value === 0) return "0";
   if (format === "amount") {
-    return stripNegativeZero(value.toLocaleString("zh-CN", { maximumFractionDigits: 2 }));
+    // Million-USD amounts: whole numbers from 1,000 up (as the report prints them), two fixed decimals below,
+    // so a column never mixes "62,876.4" with "312,083.83".
+    if (Math.abs(value) < 0.005) return "0";
+    const digits = Math.abs(value) >= 1000 || Number.isInteger(value) ? 0 : 2;
+    return stripNegativeZero(value.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits }));
   }
   // 无量纲大数(如介数中心性可达数万)保留三位小数只会拉宽表格,改用千分位整数。
   if (Math.abs(value) >= 100) return stripNegativeZero(value.toLocaleString("zh-CN", { maximumFractionDigits: 0 }));

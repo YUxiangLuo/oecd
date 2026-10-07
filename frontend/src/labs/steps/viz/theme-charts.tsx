@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useState, type CSSProperties, type KeyboardEvent } from "react";
 import { countryLabel } from "../../../viz";
 import { useHoverTip, type TipLine } from "../../../viz/hover";
 import { CAT } from "../../../viz/shared";
@@ -186,7 +186,8 @@ export function IndustryDotPlot({ groups, countries, unit, nationals = [], label
     ...group.values.map((value, index): TipLine => [countryLabel(countries[index]), indicatorNumber(value, unit), CAT[index]]),
   ];
   return (
-    <div ref={wrapRef} className="hover-wrap dot-plot" role="region" aria-label={`${label}行业点图`}>
+    // The value column fits every compared economy's reading (five did not fit the fixed 110px column).
+    <div ref={wrapRef} className="hover-wrap dot-plot" role="region" aria-label={`${label}行业点图`} style={{ "--dot-values": `${Math.max(110, countries.length * 62)}px` } as CSSProperties}>
       <div className="dot-plot-legend" aria-hidden="true">
         {countries.map((country, index) => (
           <span key={country}><i className="dot" style={{ background: CAT[index] }} />{countryLabel(country)}</span>

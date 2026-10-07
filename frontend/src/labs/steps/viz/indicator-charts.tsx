@@ -280,8 +280,10 @@ export function IndicatorTrendChart({
   const lo = axis.lo;
   const extent = axis.hi - lo || 1;
   const y = (value: number) => 250 - ((value - lo) / extent) * 210;
-  const x = (year: number) =>
-    110 + ((year - years[0]) / Math.max(1, years.at(-1)! - years[0])) * 620;
+  // A single year sits in the middle of the plot instead of at its left edge.
+  const x = (year: number) => years.length < 2
+    ? 110 + 310
+    : 110 + ((year - years[0]) / Math.max(1, years.at(-1)! - years[0])) * 620;
   const readings = countries.flatMap((country, index) =>
     series[index].map((point) => ({ country, ...point })),
   );
@@ -775,15 +777,39 @@ export function LengthPositionTrajectory({
     ["", `${countryLabel(country)} · ${point.year}`],
     ["后向 GVC 段长度", stage(point.x)],
     ["前向 GVC 段长度", stage(point.y)],
-    ["前向／后向", (point.y / point.x).toLocaleString("zh-CN", { maximumFractionDigits: 3 })],
+    ["GVC 位置指数（前向／后向）", (point.y / point.x).toLocaleString("zh-CN", { maximumFractionDigits: 3 })],
   ];
   const dim = (country: string) => (focusSeries && focusSeries !== country ? 0.25 : 1);
   return (
-    <section aria-label="前后向生产长度位置轨迹">
+    <section aria-label="前后向 GVC 段长度位置轨迹">
       <h4>前向—后向位置轨迹 · 时间与国家对照</h4>
       <p className="muted">
         横轴是后向 GVC 段长度，纵轴是前向 GVC 段长度；箭头从较早年份指向较晚年份。等长线上方表示前向段相对更长。
       </p>
+      {/* The legend sits above the plot in HTML: drawn inside the SVG, its third and later rows ran into the plot. */}
+      <div className="trajectory-legend" style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px", fontSize: 12, color: "#374151", margin: "4px 0 6px" }}>
+        {series.map((points, index) => (
+          <span
+            key={`legend-${countries[index]}`}
+            data-legend={countries[index]}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", opacity: dim(countries[index]) }}
+            onMouseEnter={() => setFocusSeries(countries[index])}
+            onMouseLeave={() => setFocusSeries(null)}
+          >
+            <svg width={30} height={10} aria-hidden="true"><line x1={0} x2={20} y1={5} y2={5} stroke={CAT[index]} strokeWidth={2.5} /><path d="M20,1 L28,5 L20,9 z" fill={CAT[index]} /></svg>
+            {countryLabel(countries[index])}{points.length ? ` · ${points[0].year}→${points.at(-1)!.year}` : ""}
+          </span>
+        ))}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#596173" }}>
+          <svg width={12} height={12} aria-hidden="true"><circle cx={6} cy={6} r={4.5} fill="white" stroke="#596173" strokeWidth={2} /></svg>起点
+          <svg width={12} height={12} aria-hidden="true"><circle cx={6} cy={6} r={4.5} fill="#596173" /></svg>终点
+        </span>
+        {shownCloud.length > 0 && (
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#596173" }}>
+            <svg width={8} height={8} aria-hidden="true"><circle cx={4} cy={4} r={3} fill="#9aa3b5" fillOpacity={0.55} /></svg>{cloudYear} 年落在坐标范围内的其他经济体
+          </span>
+        )}
+      </div>
       <div ref={wrapRef} className="hover-wrap" onMouseLeave={() => { setActive(null); hide(); }}>
       <svg
         viewBox="0 0 720 650"
@@ -798,27 +824,6 @@ export function LengthPositionTrajectory({
             </marker>
           ))}
         </defs>
-        {series.map((points, index) => (
-          <g
-            key={`legend-${countries[index]}`}
-            transform={`translate(125 ${18 + index * 24})`}
-            data-legend={countries[index]}
-            style={{ cursor: "pointer" }}
-            onMouseEnter={() => setFocusSeries(countries[index])}
-            onMouseLeave={() => setFocusSeries(null)}
-          >
-            <line x1={0} x2={28} y1={0} y2={0} stroke={CAT[index]} strokeWidth={2.5} markerEnd={`url(#length-arrow-${index})`} />
-            <text x={38} y={4} fontSize={12} fill="#374151">
-              {countryLabel(countries[index])}{points.length ? ` · ${points[0].year}→${points.at(-1)!.year}` : ""}
-            </text>
-          </g>
-        ))}
-        <g transform="translate(430 18)">
-          <circle cx={0} cy={0} r={5} fill="white" stroke="#596173" strokeWidth={2} />
-          <text x={10} y={4} fontSize={11} fill="#596173">起点</text>
-          <circle cx={58} cy={0} r={5} fill="#596173" />
-          <text x={68} y={4} fontSize={11} fill="#596173">终点</text>
-        </g>
         {axis.ticks.map((tickValue) => {
           return <g key={tickValue}>
             <line x1={120} x2={660} y1={y(tickValue)} y2={y(tickValue)} stroke="#e2e5ee" />
@@ -835,12 +840,6 @@ export function LengthPositionTrajectory({
             <circle cx={x(point.x)} cy={y(point.y)} r={3} fill="#9aa3b5" fillOpacity={0.55} />
           </g>
         ))}
-        {shownCloud.length > 0 && (
-          <g transform="translate(560 18)">
-            <circle cx={0} cy={0} r={3} fill="#9aa3b5" fillOpacity={0.55} />
-            <text x={8} y={4} fontSize={11} fill="#596173">{cloudYear} 年范围内的其他经济体</text>
-          </g>
-        )}
         <line x1={x(lo)} y1={y(lo)} x2={x(axis.hi)} y2={y(axis.hi)} stroke="#8a6415" strokeDasharray="6 4" />
         <text x={650} y={y(axis.hi) + 18} textAnchor="end" fontSize={11}>前向 = 后向</text>
         <text x={390} y={642} textAnchor="middle" fontSize={12}>后向 GVC 段长度</text>
