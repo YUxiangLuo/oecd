@@ -3,7 +3,9 @@ import {
   clearAuthentication,
   clearAuthenticationIfCurrent,
   dropStepFromHistory,
+  LOGGED_OUT_HERE_KEY,
   shouldAutoShowIntro,
+  shouldDropStepOnLogin,
   stepFromSearch,
   storeAuthentication,
   writeStepHistory,
@@ -112,6 +114,7 @@ export default function App() {
       // On a shared computer the next person must start from their own progress, not this
       // user's last step; an expired session (reloadLoggedOut alone) keeps the step for re-login.
       dropStepFromHistory(window.history, window.location.href);
+      sessionStorage.setItem(LOGGED_OUT_HERE_KEY, "1");
       reloadLoggedOut();
     });
   }, [reloadLoggedOut, session, user]);
@@ -221,6 +224,12 @@ export default function App() {
     return (
       <LoginPage notice={authNotice} username={authUsername} onLogin={(response) => {
         storeAuthentication(sessionStorage, response.token);
+        const dropStep = shouldDropStepOnLogin(
+          sessionStorage.getItem(LOGGED_OUT_HERE_KEY) === "1",
+          sessionStorage.getItem("gvcsim_signed_in_username"),
+          response.user.username,
+        );
+        sessionStorage.removeItem(LOGGED_OUT_HERE_KEY);
         // Lets an expired session (even one found on reload) return the login form to this account.
         sessionStorage.setItem("gvcsim_signed_in_username", response.user.username);
         // 每次学生登录都重新展示系统介绍（不按账号记忆已读）；登录失效或改密后的重新登录是在实验中途，
@@ -228,9 +237,9 @@ export default function App() {
         if (shouldAutoShowIntro(response.user.role) && !authNotice) {
           sessionStorage.setItem("gvcsim_show_intro", "1");
         }
-        // A step in the URL left by the previous user (Back after logout) must not decide where this
-        // login opens; only a re-login after an expired session returns to the step it left.
-        if (!authNotice) dropStepFromHistory(window.history, window.location.href);
+        // A step left by the previous user (Back after logout, or another account after an expiry) must not
+        // decide where this login opens; a deep link in a fresh tab and a same-user re-login keep it.
+        if (dropStep) dropStepFromHistory(window.history, window.location.href);
         window.location.reload();
       }} />
     );

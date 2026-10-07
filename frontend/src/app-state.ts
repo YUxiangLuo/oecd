@@ -41,6 +41,18 @@ export function urlWithStep(href: string, step: number): string {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
+export const LOGGED_OUT_HERE_KEY = "gvcsim_logged_out_here";
+
+/**
+ * Whether a login should ignore the step in the URL. A link opened in a fresh tab (`/?step=15`) is a real
+ * destination and is kept, as is the step a user returns to after an expired session. It is dropped when
+ * this tab logged out before (Back after logout restores the previous user's step) or when a different
+ * account signs in than the one the step belonged to.
+ */
+export function shouldDropStepOnLogin(loggedOutHere: boolean, previousUser: string | null, nextUser: string): boolean {
+  return loggedOutHere || (previousUser != null && previousUser !== nextUser);
+}
+
 /** Forget the step in the current history entry, so the next login starts from the account's own progress. */
 export function dropStepFromHistory(history: StepHistoryWriter, href: string): void {
   const url = new URL(href);

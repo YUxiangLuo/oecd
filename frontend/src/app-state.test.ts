@@ -4,6 +4,7 @@ import {
   clearAuthentication,
   clearAuthenticationIfCurrent,
   dropStepFromHistory,
+  shouldDropStepOnLogin,
   stepFromSearch,
   shouldAutoShowIntro,
   storeAuthentication,
@@ -58,6 +59,13 @@ describe("application URL state", () => {
     };
     dropStepFromHistory(history, "https://example.test/lab?mode=demo&step=7#chart");
     expect(calls).toEqual(["replace:/lab?mode=demo#chart"]);
+  });
+
+  test("a login keeps a deep link and a same-user return, but not a step left by someone else", () => {
+    expect(shouldDropStepOnLogin(false, null, "s1")).toBe(false); // fresh tab opened /?step=15
+    expect(shouldDropStepOnLogin(false, "s1", "s1")).toBe(false); // same user after an expired session
+    expect(shouldDropStepOnLogin(false, "s1", "s2")).toBe(true); // another account at the same tab
+    expect(shouldDropStepOnLogin(true, "s1", "s1")).toBe(true); // Back after logout in this tab
   });
 });
 
