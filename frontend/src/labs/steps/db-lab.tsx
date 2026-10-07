@@ -8,6 +8,7 @@ import { FullscreenPanel } from "../../fullscreen-panel";
 import type { DbMeta, DbSlice, DbTableKind, Meta, QuizCompletionState, StepStateApi } from "../../types";
 import { userFacingRequestError } from "../../user-facing-error";
 import { countryLabel, sectorLabel } from "../../viz";
+import { cjkJoin } from "../../format";
 import { fmtDb, Pager, useAsync } from "../shared";
 
 const DB_TABLES: { key: DbTableKind; label: string; hint: string }[] = [
@@ -66,6 +67,9 @@ const FD_HELP: Record<string, string> = {
   INVNT: "存货变化（有符号调整）；负值表示存货减少，不是缺失值",
   DPABR: "居民境外直接购买(出境旅行等消费)",
 };
+/** Short names for headers, options and recorded sentences; the full help stays in the tooltip. */
+const FD_NAMES: Record<string, string> = { ...FD_HELP, INVNT: "存货变化" };
+const ACCOUNT_NAMES: Record<string, string> = { TLS: "产品税减补贴", VA: "增加值", OUT: "总产出" };
 
 /** 列头悬停说明:账户项直接查表;Y 表列拆成「目的国 + 需求类别」组合解释 */
 function columnHelp(column: string): string | undefined {
@@ -206,8 +210,8 @@ export function isCapturedDbCell(
 export function formatYColumnHeader(column: string): string {
   const sep = column.lastIndexOf("_");
   if (sep <= 0) return column;
-  const help = FD_HELP[column.slice(sep + 1)];
-  return help ? `${column.slice(0, sep)} ${help}` : column;
+  const name = FD_NAMES[column.slice(sep + 1)];
+  return name ? `${column.slice(0, sep)} ${name}` : column;
 }
 
 export function restoreDbSlice(meta: DbMeta, saved?: DbStepState["slice"]) {
@@ -399,14 +403,13 @@ export function dbCellTooltip(table: DbTableKind, row: string, column: string, v
 /** 观察值方向句:把 "A × B = v" 改写成 "A(行·供给方) → B(列·使用方) = v" 的完整读法,
  *  让学生在记录现场就地校验行列方向。 */
 export function dbObservationSentence(table: DbTableKind, row: string, column: string): string {
-  if (table === "accounts") return `${row} 的 ${column}`;
-  const rowPart = splitRowColumnCode(row);
-  const rowLabel = rowPart.country ? `${countryLabel(rowPart.country)}·${rowPart.rest}` : row;
+  // Industry names, not bare codes: "USA 美国·F" read like final demand (F) instead of construction.
+  const rowLabel = rowColumnCodeHelp(row) ?? row;
+  if (table === "accounts") return `${rowLabel} 的 ${column}${ACCOUNT_NAMES[column] ? `（${ACCOUNT_NAMES[column]}）` : ""}`;
   if (table === "y") {
     return `${rowLabel}(行·供给方) → ${formatYColumnHeader(column)}(列·最终需求)`;
   }
-  const colPart = splitRowColumnCode(column);
-  const colLabel = colPart.country ? `${countryLabel(colPart.country)}·${colPart.rest}` : column;
+  const colLabel = rowColumnCodeHelp(column) ?? column;
   return `${rowLabel}(行·供给方) → ${colLabel}(列·使用方)`;
 }
 
@@ -469,12 +472,12 @@ export function DbSliceTable({
   return (
     <ScrollableRegion
       className="table-wrap bounded-data-table"
-      label={`${activeTable.label}数据表，可横向滚动`}
+      label={`${cjkJoin(activeTable.label, "数据表")}，可横向滚动`}
       focusable={activeCell == null}
     >
       <table className="data-table db-table">
         <caption>
-          {`${activeTable.label}数据表 · 单位：百万美元。`}
+          {`${cjkJoin(activeTable.label, "数据表")} · 单位：百万美元。`}
         </caption>
         <thead>
           <tr className="db-axis-row">
@@ -829,7 +832,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
                 <select id={id} value={colSector} onChange={(e) => pickColSector(e.target.value)}>
                   <option value="">全部</option>
                   {colOptions.map((s) => (
-                    <option key={s} value={s}>{table === "y" ? (FD_HELP[s] ? `${s} ${FD_HELP[s]}` : s) : sectorLabel(s)}</option>
+                    <option key={s} value={s}>{table === "y" ? (FD_NAMES[s] ? `${s} ${FD_NAMES[s]}` : s) : sectorLabel(s)}</option>
                   ))}
                 </select>
               )}
@@ -875,7 +878,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
           <summary>读表说明</summary>
           <ul>
             <li><b>怎么读：</b>{HOW_TO_READ[table]}</li>
-            <li><b>记录规则：</b>系统会先默认记录当前表中最大的一格；点击数值会改为保存你选的格子的行、列与数值；切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格，记录另一个单元格才会覆盖。</li>
+            <li><b>记录规则：</b>系统会先默认记录当前这一页中最大的一格；点击数值会改为保存你选的格子的行、列与数值；切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格，记录另一个单元格才会覆盖。</li>
             <li><b>账户与符号：</b>{STEP1_ACCOUNT_LEGEND}</li>
             {table !== "accounts" && <li><b>恒等式：</b>{STEP1_OUT_IDENTITY_GUIDE} 差额来自未展示的国家、行业或最终需求列。</li>}
           </ul>

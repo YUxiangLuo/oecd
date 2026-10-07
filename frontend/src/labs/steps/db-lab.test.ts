@@ -315,10 +315,12 @@ describe("Step 1 bounded roving cell focus", () => {
 
   test("observation sentence states the supply direction in one full reading", () => {
     expect(dbObservationSentence("z", "CHN_A01_02", "USA_C10T12"))
-      .toBe("CHN 中国·A01_02(行·供给方) → USA 美国·C10T12(列·使用方)");
+      .toBe("CHN 中国·A01_02 农林牧业(行·供给方) → USA 美国·C10T12 食品饮料烟草(列·使用方)");
     expect(dbObservationSentence("y", "CHN_A01_02", "USA_HFCE"))
-      .toBe("CHN 中国·A01_02(行·供给方) → USA 居民最终消费支出(列·最终需求)");
-    expect(dbObservationSentence("accounts", "CHN_A01_02", "VA")).toBe("CHN_A01_02 的 VA");
+      .toBe("CHN 中国·A01_02 农林牧业(行·供给方) → USA 居民最终消费支出(列·最终需求)");
+    expect(dbObservationSentence("accounts", "CHN_A01_02", "VA")).toBe("CHN 中国·A01_02 农林牧业 的 VA（增加值）");
+    // Inventory changes: a short name in the sentence, the signed-adjustment caveat stays in the tooltip.
+    expect(dbObservationSentence("y", "CHN_A01_02", "USA_INVNT")).toBe("CHN 中国·A01_02 农林牧业(行·供给方) → USA 存货变化(列·最终需求)");
   });
 });
 

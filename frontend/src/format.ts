@@ -14,3 +14,8 @@ export function formatMetric(value: number, format?: string): string {
   if (Math.abs(value) >= 100) return stripNegativeZero(value.toLocaleString("zh-CN", { maximumFractionDigits: 0 }));
   return stripNegativeZero(value.toFixed(3));
 }
+
+/** Join a label and a Chinese suffix with a space when the label ends in Latin text ("中间投入 Z 数据表"). */
+export function cjkJoin(head: string, tail: string): string {
+  return /[A-Za-z0-9)]$/.test(head) && /^[⺀-鿿]/.test(tail) ? `${head} ${tail}` : `${head}${tail}`;
+}

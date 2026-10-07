@@ -21,7 +21,7 @@ import {
   finiteNumber,
   type DecompositionModel,
 } from "./decomposition-model";
-import { stripNegativeZero } from "./format";
+import { cjkJoin, stripNegativeZero } from "./format";
 import { api } from "./api";
 import { AsyncStateMessage, type AsyncStatus, useAsync } from "./labs/shared";
 import { userFacingRequestError } from "./user-facing-error";
@@ -512,7 +512,7 @@ export function DecompositionDemo({
             <div>缺失或未定义的值显示为“—”，不会按 0 参与加总或闭合判断。</div>
           </div>
           <DecompositionDetailTable
-            caption={`对象 ${side}：${year} 年 ${countryLabel(country)} · ${gran === "sector" ? sectorLabel(sector) : "国家级"} · ${cfg.totalLabel}分解明细`}
+            caption={`对象 ${side}：${year} 年 ${countryLabel(country)} · ${gran === "sector" ? sectorLabel(sector) : "国家级"} · ${cjkJoin(cfg.totalLabel, "分解明细")}`}
             parts={cfg.parts}
             values={model.contributions}
             shares={null}
@@ -568,7 +568,7 @@ export function DecompositionDemo({
           zeroTotalHint ?? `${cfg.totalLabel}占本国行业合计不足 0.01%，建议换一个活跃行业。`
         }</div>}
         <DecompositionDetailTable
-          caption={`对象 ${side}：${year} 年 ${countryLabel(country)} · ${gran === "sector" ? sectorLabel(sector) : "国家级"} · ${cfg.totalLabel}分解明细`}
+          caption={`对象 ${side}：${year} 年 ${countryLabel(country)} · ${gran === "sector" ? sectorLabel(sector) : "国家级"} · ${cjkJoin(cfg.totalLabel, "分解明细")}`}
           parts={cfg.parts}
           values={model.values}
           shares={model.shares}
