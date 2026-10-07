@@ -95,7 +95,8 @@ function naturalScale(
       ? `；约 [${signed(ciLow / sd, sdDigits)}, ${signed(ciHigh / sd, sdDigits)}] 个样本标准差`
       : "";
     return {
-      effect: `${signed(effect, 2)} 个中心性原始单位${standardized == null ? "" : `（约 ${signed(standardized, 2)} 个样本标准差）`}`,
+      // Point and interval in standard deviations use the same decimals (the interval may need three).
+      effect: `${signed(effect, 2)} 个中心性原始单位${standardized == null ? "" : `（约 ${signed(standardized, sdDigits)} 个样本标准差）`}`,
       interval: hasCi ? `[${signed(ciLow, 2)}, ${signed(ciHigh, 2)}] 个原始单位${standardizedInterval}` : "—",
     };
   }

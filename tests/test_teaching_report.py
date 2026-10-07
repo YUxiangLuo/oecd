@@ -2150,3 +2150,9 @@ def test_technical_appendix_states_the_chosen_y_unit_not_the_family_unit():
     assert "- 结果量纲：位置指数单位" in lines
     default = {**run, "design": {"depvar_label": "前向生产长度", "equation": "Y = βX + FE"}}
     assert "- 结果量纲：长度单位" in _run_sections([default])
+
+
+def test_tiny_signed_values_keep_two_significant_figures_like_the_result_card():
+    # The page shows toPrecision(2): "-0.0050"; Python's "g" format dropped the trailing zero.
+    assert teaching_report._signed(-0.00498, 2) == "-0.0050"
+    assert teaching_report._signed(0.000305694, 3) == "+0.00031"
