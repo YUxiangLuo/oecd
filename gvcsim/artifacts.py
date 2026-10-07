@@ -18,7 +18,7 @@ from gvcsim.file_identity import FileState, file_state, open_text, verified_sour
 
 # v15: publishes a source-bound, independently simulated tariff teaching panel.
 # v13 panels may persist false zero-valued observations from cancellation noise.
-ARTIFACT_CONTRACT_VERSION = 15
+ARTIFACT_CONTRACT_VERSION = 16
 ARTIFACT_MANIFEST_ALGORITHM = "sha256"
 ARTIFACT_MANIFEST_NAME = "artifact_manifest"
 METADATA_DIGEST_NAME = "metadata_sha256"

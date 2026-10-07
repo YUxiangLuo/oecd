@@ -10,7 +10,7 @@
   qc_regression_inputs.json       发布前回归输入质检(独立 contract)
   indicators_country_<year>.csv   国家级指标汇总(步骤2–5，并供步骤6–9可视化)
   indicators_industry_<year>.csv  国家-行业级指标(步骤2–5，并供步骤6–9可视化)
-  network_edges_<year>.csv        双边贸易流 top 边(步骤9 网络图)
+  network_edges_<year>.csv        全部正的国家间双边流量(步骤9 贸易伙伴)
 跨年:
   panel_industry.csv              国家×行业×年份长面板 + 行业异质冲击(四类 outcome 默认回归样本)
   panel_country.csv               国家×年份长面板(冲击按行业出口额加权聚合)

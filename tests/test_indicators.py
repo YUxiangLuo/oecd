@@ -390,8 +390,9 @@ def test_network_edges_keeps_current_real_positive_values(fake_io):
         for target, value in flow.loc[source].items()
         if source != target and np.isfinite(value) and value > 0
     )
-    got = network.network_edges(arr, 120)
+    got = network.network_edges(arr)
     assert sorted(got["flow"].tolist()) == pytest.approx(expected)
+    assert len(network.network_edges(arr, 1)) == 1
     assert np.isfinite(got["flow"]).all()
     assert (got["flow"] > 0).all()
 

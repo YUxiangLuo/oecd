@@ -193,9 +193,15 @@ def sector_network(arr: IcioArrays) -> pd.DataFrame:
     return result
 
 
-def network_edges(arr: IcioArrays, top_n: int = 120) -> pd.DataFrame:
-    """取有限正流量最大的 ``top_n`` 条国家间边供前端网络图渲染。"""
-    if isinstance(top_n, (bool, np.bool_)) or not isinstance(top_n, (int, np.integer)) or top_n <= 0:
+def network_edges(arr: IcioArrays, top_n: int | None = None) -> pd.DataFrame:
+    """全部有限正流量的国家间边（按流量降序）；``top_n`` 只取最大的若干条。
+
+    步骤 9“贸易伙伴”的全部伙伴榜、伙伴集中度和区域流向矩阵都按这张边表求和，
+    发布产物必须是完整边表：截断到前若干条会漏掉中小伙伴，使集中度偏高、区域矩阵出现空行。
+    """
+    if top_n is not None and (
+        isinstance(top_n, (bool, np.bool_)) or not isinstance(top_n, (int, np.integer)) or top_n <= 0
+    ):
         raise ValueError("top_n 必须是正整数")
 
     flow = country_flow_matrix(arr)
@@ -216,6 +222,6 @@ def network_edges(arr: IcioArrays, top_n: int = 120) -> pd.DataFrame:
             ascending=[False, True, True],
             kind="mergesort",
         )
-        .head(int(top_n))
+        .head(len(edges) if top_n is None else int(top_n))
         .reset_index(drop=True)
     )
