@@ -372,6 +372,19 @@ def test_network_edges_filters_nonpositive_and_nonfinite_flows_with_deterministi
     ]
 
 
+def test_network_edges_default_keeps_every_positive_bilateral_flow(monkeypatch):
+    # 16 economies give 240 off-diagonal flows, more than the old top-120 cut that reversed step 9's
+    # concentration ranking; the default must keep them all.
+    codes = [f"C{i:02d}" for i in range(16)]
+    flow = pd.DataFrame(
+        [[0.0 if i == j else float(1 + i * 16 + j) for j in range(16)] for i in range(16)], index=codes, columns=codes
+    )
+    monkeypatch.setattr(network, "country_flow_matrix", lambda _arr: flow)
+    got = network.network_edges(object())  # type: ignore[arg-type]
+    assert len(got) == 240
+    assert got["flow"].sum() == pytest.approx(flow.to_numpy().sum())
+
+
 def test_network_edges_empty_result_preserves_schema(monkeypatch):
     flow = pd.DataFrame([[0.0, np.nan], [-2.0, 0.0]], index=["A", "B"], columns=["A", "B"])
     monkeypatch.setattr(network, "country_flow_matrix", lambda _arr: flow)

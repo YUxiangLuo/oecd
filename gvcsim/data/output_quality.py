@@ -651,11 +651,26 @@ def _network_edges(frames: dict[str, pd.DataFrame], year: int) -> dict:
     violations += int((~edges["target"].astype(str).isin(endpoints)).sum())
     violations += int(edges["source"].astype(str).eq(edges["target"].astype(str)).sum())
     violations += int(edges.duplicated(["year", "source", "target"]).sum())
+    # Completeness: step 9 sums this table as every bilateral flow, so each source's edges must add up to
+    # its country weighted outdegree and number its outdegree (a top-N cut once reversed a ranking).
+    country = frames["country"]
+    incomplete = 0
+    if {"country", "weighted outdegree", "outdegree"} <= set(country.columns):
+        by_source = edges.assign(flow=flow).groupby(edges["source"].astype(str))["flow"].agg(["sum", "count"])
+        expected = country.set_index(country["country"].astype(str))
+        observed = by_source.reindex(expected.index).fillna(0.0)
+        incomplete = int(
+            (~_close(observed["sum"], expected["weighted outdegree"])).sum()
+            + (~_close(observed["count"], expected["outdegree"])).sum()
+        )
+    else:
+        incomplete = 1
+    violations += incomplete
     return _check(
         "network_edges",
         violations == 0,
         f"year={year}; edges={len(edges)}; violations={violations}; flow_domain=(0,finite); "
-        f"self_loops={OUTPUT_QC_SELF_LOOP_POLICY}",
+        f"self_loops={OUTPUT_QC_SELF_LOOP_POLICY}; complete_vs_outdegree_violations={incomplete}",
     )
 
 

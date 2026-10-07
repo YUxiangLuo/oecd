@@ -320,6 +320,9 @@ def _write_semantic_outputs(directory: Path, year: int = 2020) -> dict[str, dict
         [
             {"year": year, "source": "AAA", "target": "BBB", "flow": 4.0},
             {"year": year, "source": "BBB", "target": "AAA", "flow": 3.0},
+            # Complete edge table: every source's flows add up to its weighted outdegree.
+            {"year": year, "source": "USA", "target": "ROW", "flow": 2.0},
+            {"year": year, "source": "ROW", "target": "USA", "flow": 2.0},
         ]
     ).to_csv(directory / f"network_edges_{year}.csv", index=False)
     pd.DataFrame(
