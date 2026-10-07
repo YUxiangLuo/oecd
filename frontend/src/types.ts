@@ -439,6 +439,8 @@ export interface StepStateApi<T = Record<string, unknown>> {
   complete: boolean;
   syncing: boolean;
   syncError: string | null;
+  /** Another tab saved a newer record: retrying cannot help until the server version is loaded. */
+  syncConflict?: boolean;
   syncNow: () => void;
   /**
    * The report has been submitted (or graded): browsing must no longer rewrite report material

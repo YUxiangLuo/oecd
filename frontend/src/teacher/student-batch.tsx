@@ -98,10 +98,10 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
         <p>从 Excel 复制“学号、姓名”两列粘贴到下方，每次最多 200 人。学号用作登录用户名，请保留前导零。</p>
         <LabeledControl label="学生名单">{(id) => <textarea id={id} rows={8} disabled={busy} value={text} onChange={(e) => setText(e.target.value)} placeholder={"学号\t姓名\n2026001\t张三\n2026002\t李四"} />}</LabeledControl>
       </> : <>
-        <p role="status">{done ? `已添加 ${accounts.length} 名学生。请分别发放账号，并提醒学生登录后修改密码。` : `共 ${accounts.length} 人${existing.length ? `，${existing.length} 个账号已存在，请返回修改名单` : "，可以创建"}。已有账号不会被修改或重新分班。`}</p>
+        <p role="status">{done ? `已添加 ${accounts.length} 名学生。请分别发放账号，并提醒学生登录后修改密码。` : `共 ${accounts.length} 人${existing.length ? `，${existing.length} 个学号已被使用（作为账号或其他学生的学号），请返回修改名单` : "，可以创建"}。已有账号不会被修改或重新分班。`}</p>
         <ScrollableRegion label="学生名单预览" className="table-wrap" style={{ maxHeight: 240, flexShrink: 0 }}>
           <table className="data-table"><thead><tr><th>学号 / 用户名</th><th>姓名</th><th>状态</th></tr></thead>
-            <tbody>{accounts.map((row) => <tr key={row.username}><td>{row.username}</td><td>{row.display_name}</td><td>{done ? "已创建" : existing.includes(row.username) ? "账号已存在" : "待创建"}</td></tr>)}</tbody>
+            <tbody>{accounts.map((row) => <tr key={row.username}><td>{row.username}</td><td>{row.display_name}</td><td>{done ? "已创建" : existing.includes(row.username) ? "学号已被使用" : "待创建"}</td></tr>)}</tbody>
           </table>
         </ScrollableRegion>
         {!existing.length && <><p>清单含初始密码，请先下载保存。逐人发放账号，不要将整份清单发到群里。</p>

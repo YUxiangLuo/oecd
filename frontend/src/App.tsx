@@ -56,6 +56,7 @@ export default function App() {
     complete: currentCompletion?.complete ?? false,
     syncing: session.syncing,
     syncError: session.syncError,
+    syncConflict: session.syncConflict,
     syncNow: () => { void session.syncNow().catch(() => {}); },
     materialLocked: session.report?.state === "pending" || session.report?.state === "graded",
   };
@@ -277,7 +278,7 @@ export default function App() {
 
   if (fatal) return (
     <main className="app-boot" style={{ padding: 40 }}>
-      <div className="error-box" role="alert">课程加载失败：{fatal}</div>
+      <div className="error-box" role="alert">{fatal}</div>
       <p>登录信息已保留，可以重试加载课程。</p>
       <div style={{ display: "flex", gap: 8 }}>
         <button className="primary" onClick={() => { setFatal(null); setBootAttempt((value) => value + 1); }}>重试加载课程</button>

@@ -663,7 +663,7 @@ export function IndicatorExplorer({
             value: view === "industry" ? "行业排名" : view === "structure" ? "所选国家全部行业" : industry ? sectorLabel(industry) : "国家整体",
             onJump: view === "industry" || view === "structure" ? undefined : jump(rangeRef),
           },
-          { label: "年份", value: timeView ? `${start}–${end}` : String(year), onJump: jump(yearRef) },
+          { label: "年份", value: timeView && start !== end ? `${start}–${end}` : String(timeView ? start : year), onJump: jump(yearRef) },
           {
             label: "指标",
             value: composition ? `${topic.themeLabel}${side === "alternate" ? `（${activeComposition!.note ? topic.composition!.alternate!.label : ""}）` : ""}` : view === "directions" ? "前后向 GVC 段长度与位置" : view === "positioning" ? `定位图（横轴 ${label(axes.x)} · 纵轴 ${label(axes.y)}）` : view === "structure" ? (topic.key === "production" ? "四类生产活动 · 行业" : "前向 × 后向 GVC 段长度 · 行业") : view === "segments" ? "前后向三段长度" : label(metric),

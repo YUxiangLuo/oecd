@@ -109,7 +109,7 @@ function RegionMatrix({ matrix, year }: { matrix: number[][]; year: number }) {
   const max = Math.max(1, ...matrix.flat());
   return (
     <table className="region-matrix data-table" aria-describedby="region-matrix-note">
-      <caption style={{ textAlign: "left", padding: "6px 0", color: "#3a4050" }}>{year} 年区域间贸易流（行为卖方区域，列为买方区域；百万美元，不含 ROW）</caption>
+      <caption style={{ textAlign: "left", padding: "6px 0", color: "#3a4050" }}>{year} 年区域间贸易流（每行是卖方区域，每列是买方区域；百万美元，不含 ROW）</caption>
       <thead>
         <tr><th scope="col">卖方 ＼ 买方</th>{REGIONS.map((region) => <th key={region} scope="col">{region}</th>)}</tr>
       </thead>

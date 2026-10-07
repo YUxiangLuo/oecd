@@ -222,8 +222,8 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
         ) : <div className="progress-track" />}
         <div className="sidebar-sub">
           {completion
-            ? `理解进度 ${completion.completed_count}/${totalSteps} · 数据→指标→回归→报告`
-            : "正在读取理解进度…"}
+            ? `完成进度 ${completion.completed_count}/${totalSteps} · 数据→指标→回归→报告`
+            : "正在读取完成进度…"}
         </div>
         <a
           className="student-manual-link"

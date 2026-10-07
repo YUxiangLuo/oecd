@@ -28,9 +28,9 @@ export function ReportOutro({ report, onClose, onExport, exportDisabled = false,
         <span>提交时间：{report.submitted_at ? report.submitted_at.slice(0, 16).replace("T", " ") : "—"}</span>
         {report.state === "graded" && report.feedback && <p>教师评语：{report.feedback}</p>}
         {reportOutdated ? <div role="status">
-          <p>已提交版本已保存；后续修改尚未纳入这份报告。请返回第15步确认修改已保存，再更新报告。</p>
+          <p>已提交版本已保存；后续修改尚未纳入这份报告。请返回第 15 步确认修改已保存，再更新报告。</p>
           {report.state === "graded" && <p>重新生成会清除当前评分与评语，并重新提交给老师；操作前会要求确认。取消确认将保留原报告。</p>}
-        </div> : <small>报告已保存到服务器。你可以离开页面，之后回到第15步查看报告与教师反馈。</small>}
+        </div> : <small>报告已保存到服务器。你可以离开页面，之后回到第 15 步查看报告与教师反馈。</small>}
       </section>
       <div className="outro-journey">
         <article><span>01</span><b>计算并理解指标</b><p>从 ICIO 账户理解生产联系与价值来源。</p></article>

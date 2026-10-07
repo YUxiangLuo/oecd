@@ -191,7 +191,9 @@ export function GradeView({ data, grader, onBack, onReload }: {
           </details>
           <label className="grade-field">分数（0-100）<input type="number" min={0} max={100} disabled={saving} value={score} onChange={(event) => { const next = event.target.value; setScore(next); reviewGuard.publish({ dirty: next !== initialScore || feedback !== data.feedback, saving: false }); setSaveError(null); }} /></label>
           <label className="grade-field">评语（可空）<textarea disabled={saving} value={feedback} onChange={(event) => { const next = event.target.value; setFeedback(next); reviewGuard.publish({ dirty: score !== initialScore || next !== data.feedback, saving: false }); setSaveError(null); }} rows={8} maxLength={4000} /></label>
-          <span className="muted grade-count" aria-live="polite">评语 {feedback.length} / 4000 字{feedback.length >= 4000 ? "，已达上限，超出部分不会保存" : ""}</span>
+          {/* Not a live region: announcing the count on every keystroke drowned out typing; only the limit is announced. */}
+          <span className="muted grade-count">评语 {feedback.length} / 4000 字</span>
+          {feedback.length >= 4000 && <span className="muted" role="status">已达 4000 字上限，多出的内容没有输入进来。</span>}
           {saveError && <div className="error-box" role="alert">{saveError}</div>}
           {stale && <button className="secondary block" disabled={saving} onClick={() => attemptLocalLeave(onReload)}>加载最新报告</button>}
           <button className="primary block" disabled={saving || stale} onClick={submit}>{saving ? "保存中…" : data.state === "graded" ? "更新评阅" : "提交评阅"}</button>

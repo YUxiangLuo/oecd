@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { api } from "../../api";
+import { api, ApiError } from "../../api";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ToastHost } from "../../toast";
 import { ReportOutro } from "../../report-outro";
@@ -370,6 +370,21 @@ test("one-click finish flushes then generates then submits; outro appears only a
     fireEvent.keyDown(dialog, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
   } finally { generate.mockRestore(); submit.mockRestore(); }
+});
+
+test("a 409 because the teacher just graded shows the current report, not a phantom draft", async () => {
+  const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告或评分已更新，请刷新页面核对后再确认重新生成", "Conflict"));
+  const latest = mutation("graded");
+  const session = spyOn(api.classroom, "session").mockResolvedValue({ release_id: "a".repeat(32), session: { version: "experiment-session-simple-v3", steps: {}, shared: {} }, updated_at: null, ...latest });
+  const changed: string[] = [];
+  try {
+    render(<ReportLab {...finishProps} report={report("pending")} onReportChanged={(r) => changed.push(r.report.state)} />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: /重新生成|更新报告/ })); });
+    expect(changed).toEqual(["graded"]);
+    const alert = screen.getByRole("alert").textContent ?? "";
+    expect(alert).toContain("刚刚有了新的评阅");
+    expect(alert).not.toContain("草稿会保留");
+  } finally { generate.mockRestore(); session.mockRestore(); }
 });
 
 test("draft generation keeps toast feedback when no outro is shown", async () => {

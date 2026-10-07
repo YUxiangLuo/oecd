@@ -17,7 +17,7 @@ export function getActiveAuthToken(): string | null {
   return activeAuthToken;
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number;
   /** 结构化 detail(如第 15 步门槛的 blocked 列表);普通字符串 detail 时为 undefined。 */
   blocked?: import("./types").ReportGateItem[];

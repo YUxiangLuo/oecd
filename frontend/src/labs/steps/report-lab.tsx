@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "../../api";
+import { api, isApiErrorStatus } from "../../api";
 import { RegressionEvidenceMatrix, RegressionFamilyPanels, type SiblingStepData } from "../../regression-teach";
 import { ReportMarkdown, preloadReportRenderer } from "../../report-renderer-lazy";
 import { ReportOutro } from "../../report-outro";
@@ -267,7 +267,9 @@ export function ReportLab({
 
   const reflection = (state.data ?? {}) as ReportReflectionState;
   const writtenCount = REFLECTION_FIELDS.filter((field) => String(reflection[field.key] ?? "").trim().replace(/\s+/g, " ").length >= field.min).length;
-  const materialMissing = visibleBlocked.filter((item) => item.step !== 15);
+  // Same split as the gate summary below: steps 1–14, plus global conditions (step 0) counted apart.
+  const materialMissing = visibleBlocked.filter((item) => item.step > 0 && item.step < 15);
+  const globalMissing = visibleBlocked.filter((item) => item.step <= 0).length;
   const busy = generating || submitting || printing;
   const reportOutdated = Boolean(report && (sessionUnsynced || sessionSyncing
     || (sessionUpdatedAt && Date.parse(sessionUpdatedAt) > Date.parse(report.generated_at))));
@@ -307,11 +309,13 @@ export function ReportLab({
     setGenerating(true);
     setError(null);
     setBlocked([]);
+    let generated = false;
     try {
       await waitUntilReady();
       await flushRef.current();
       // Bind replacement to the report the student saw (and, if graded, confirmed).
       const response = await api.classroom.generateReport(report?.updated_at ?? null);
+      generated = true;
       onReportChanged(response);
       let finalReport = response.report;
       if (submitAfter && response.report.state === "draft") {
@@ -328,7 +332,13 @@ export function ReportLab({
     } catch (cause) {
       const requestError = cause as Error & { blocked?: ReportGateItem[] };
       if (requestError.blocked) setBlocked(requestError.blocked);
-      else setError(userFacingRequestError(cause, submitAfter ? "报告生成或提交失败；已生成的草稿会保留，请核对状态后重试" : "报告生成失败"));
+      else if (!generated && isApiErrorStatus(cause, 409)) {
+        // The report changed under us (typically the teacher just graded it): show the current state
+        // instead of a stale page and a message about a draft that was never generated.
+        const latest = await api.classroom.session().catch(() => null);
+        if (latest?.report) onReportChanged({ report: latest.report, completion: latest.completion, report_gate: latest.report_gate, material_gate: latest.material_gate });
+        setError("这份报告刚刚有了新的评阅或更新，页面已显示最新状态。请先查看评分与评语，再决定是否重新生成。");
+      } else setError(userFacingRequestError(cause, generated ? "报告已生成为草稿，但提交给老师失败，请重试提交" : "报告生成失败"));
     } finally {
       setGenerating(false);
       setSubmitting(false);
@@ -380,9 +390,9 @@ export function ReportLab({
         <span className="reg-section-step">最后一步 · 完成报告</span>
         <h2>检查材料，写出分析并提交</h2>
         <ol>
-          <li><b>1 · 检查实验材料</b><span>{state.syncError ? "保存失败，请先重试保存" : reportGate == null || sessionStatus !== "ready" ? "正在核对服务器记录" : sessionUnsynced || sessionSyncing ? "保存后将重新核对材料" : materialMissing.length ? `第 1–14 步中 ${materialMissing.length} 个步骤还有 ${materialMissing.reduce((count, item) => count + item.missing.length, 0)} 项待补齐，见下方入口` : "已保存材料与理解题已齐"}</span></li>
+          <li><b>1 · 检查实验材料</b><span>{state.syncError ? "保存失败，请先重试保存" : reportGate == null || sessionStatus !== "ready" ? "正在核对服务器记录" : sessionUnsynced || sessionSyncing ? "保存后将重新核对材料" : materialMissing.length || globalMissing ? `${[materialMissing.length ? `第 1–14 步中 ${materialMissing.length} 个步骤还有 ${materialMissing.reduce((count, item) => count + item.missing.length, 0)} 项待补齐` : null, globalMissing ? `${globalMissing} 项全局条件未满足` : null].filter(Boolean).join("，")}，见下方入口` : "已保存材料与理解题已齐"}</span></li>
           <li><b>2 · 写下自己的分析</b><span>{writtenCount} / 3 段达到最低字数 · 内容仍需自己核对</span></li>
-          <li><b>3 · 提交给老师</b><span>{report?.state === "pending" ? "已提交，等待评阅" : report?.state === "graded" ? "已评阅，可查看反馈" : report ? "已有草稿，尚未提交" : "生成报告不等于提交"}</span></li>
+          <li><b>3 · 提交给老师</b><span>{report && report.state !== "draft" && reportOutdated ? "报告需更新：之后的修改还没交给老师，请重新生成并提交" : report?.state === "pending" ? "已提交，等待评阅" : report?.state === "graded" ? "已评阅，可查看反馈" : report ? "已有草稿，尚未提交" : "生成报告不等于提交"}</span></li>
         </ol>
       </section>
       {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} />}
@@ -436,7 +446,7 @@ export function ReportLab({
         </div>
       )}
       <section className="report-submit-panel" aria-label="提交报告">
-        <h3>{report && report.state !== "draft" ? "报告已交给老师" : "核对完毕后，完成提交"}</h3>
+        <h3>{report && report.state !== "draft" ? (reportOutdated ? "报告需更新后重新提交" : "报告已交给老师") : "核对完毕后，完成提交"}</h3>
         <p>提交前会先保存文字并检查材料；导出 PDF 仅供个人留存，不能代替提交。
           {report?.state === "graded" && "重新生成并提交会替换已评阅报告并清除原评分。"}</p>
         {/* One action group per state: the primary action first, never two buttons doing the same thing. */}

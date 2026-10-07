@@ -29,7 +29,7 @@ test("existing accounts prevent creation and editing invalidates preview", async
     render(<StudentBatchModal semesters={[]} initialClassId={1} onClose={() => {}} onCreated={() => {}} />);
     fireEvent.change(screen.getByLabelText("学生名单"), { target: { value: "0012\t张三" } });
     fireEvent.click(screen.getByText("预览名单"));
-    await waitFor(() => expect(screen.getByText("账号已存在")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("学号已被使用")).toBeTruthy());
     expect((screen.getByText("确认创建") as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByText("下载账号清单")).toBeNull();
     fireEvent.click(screen.getByText("返回修改"));
