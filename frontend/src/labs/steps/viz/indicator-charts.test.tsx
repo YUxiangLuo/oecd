@@ -34,9 +34,9 @@ describe("trend chart hover layer", () => {
     const readout = screen.getByRole("status");
     expect(readout.textContent).toContain("2019 年");
     expect(readout.textContent).toContain("CHN 中国");
-    expect(readout.textContent).toContain("11%");
+    expect(readout.textContent).toContain("11.000%");
     expect(readout.textContent).toContain("USA 美国（对比）");
-    expect(readout.textContent).toContain("6%");
+    expect(readout.textContent).toContain("6.000%");
     expect(readout.textContent).toContain("全球中位数");
     expect(view.container.querySelector("[data-crosshair]")).not.toBeNull();
     // Leaving the chart clears the crosshair and the readout.
@@ -106,7 +106,7 @@ describe("mark-level hover layers", () => {
     const group = screen.getByRole("group", { name: "C26 计算机电子光学" });
     fireEvent.focus(group);
     expect(group.getAttribute("data-hovered")).toBe("true");
-    expect(screen.getByRole("status").textContent).toContain("30%");
+    expect(screen.getByRole("status").textContent).toContain("30.000%");
     expect(screen.getByRole("status").textContent).toContain("USA 美国");
     fireEvent.blur(group);
     expect(group.getAttribute("data-hovered")).toBeNull();

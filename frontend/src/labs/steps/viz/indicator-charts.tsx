@@ -6,10 +6,16 @@ import { changeReading, finiteValue, NO_RANK, NO_RANK_NOTE, rankText, readingDig
 import { niceDomain } from "../../../viz/nice-ticks";
 import type { Row } from "./scaffold";
 
-export const indicatorNumber = (value: number | null, unit: string) =>
+/** Axis ticks: round values, trailing zeros trimmed ("10%", "1.5"). */
+export const indicatorTick = (value: number | null, unit: string) =>
   value === null
     ? "缺失"
     : `${(unit === "%" ? value * 100 : value).toLocaleString("zh-CN", { maximumFractionDigits: readingDigits(value, unit) })}${unit === "%" ? "%" : ""}`;
+
+/** Readings in labels, tables and tooltips keep fixed decimals, so values side by side line up
+ * ("11.730%" next to "15.613%", not "11.73%"); an exact zero reads "0". */
+export const indicatorNumber = (value: number | null, unit: string) =>
+  value === 0 ? `0${unit === "%" ? "%" : ""}` : fixedIndicatorNumber(value, unit);
 
 /** Card readings keep the same decimals on both ends ("11.556% → 11.730%"); hover readouts stay trimmed. */
 export const fixedIndicatorNumber = (value: number | null, unit: string) =>
@@ -282,7 +288,7 @@ export function IndicatorTrendChart({
     : "";
   // The legend is HTML so five economies plus the reference wrap instead of running off the svg.
   const legend: { key: string; label: string; draw: React.ReactNode; country?: string }[] = [
-    ...(band.length ? [
+    ...(band.length >= 2 ? [
       { key: "band", label: "中间 50% 经济体", draw: <svg width={24} height={12} aria-hidden="true"><rect x={0} y={0} width={24} height={12} fill={REFERENCE_FILL} fillOpacity={0.3} /></svg> },
       { key: "median", label: `${sameIndustry ? "同行业全球中位数" : "全球中位数"}（${band.at(-1)!.n} 个）`, draw: <svg width={24} height={12} aria-hidden="true"><line x1={0} x2={24} y1={6} y2={6} stroke={REFERENCE_LINE} strokeWidth={1.5} strokeDasharray="4 3" /></svg> },
     ] : []),
@@ -362,14 +368,14 @@ export function IndicatorTrendChart({
       <svg
         viewBox="0 30 780 265"
         role="img"
-        aria-label={`${label}历年变化${band.length ? "，含全部经济体的中位数与中间 50% 范围" : ""}；缺失不补零，详细读数见下方`}
+        aria-label={`${label}历年变化${band.length >= 2 ? "，含全部经济体的中位数与中间 50% 范围" : ""}；缺失不补零，详细读数见下方`}
         style={{ width: "100%", display: "block" }}
       >
         {axis.ticks.map((tick) => (
           <g key={tick}>
             <line x1={110} x2={730} y1={y(tick)} y2={y(tick)} stroke="#e2e5ee" />
             <text x={100} y={y(tick) + 4} textAnchor="end" fontSize={12} fill="#596173">
-              {indicatorNumber(tick, unit)}
+              {indicatorTick(tick, unit)}
             </text>
           </g>
         ))}
@@ -654,7 +660,7 @@ export function DistributionStrip({
         </text>
         <line x1={60} x2={740} y1={base} y2={base} stroke="#c7ccd8" />
         {axis.ticks.map((tick) => (
-          <text key={tick} x={x(tick)} y={base + 18} textAnchor="middle" fontSize={11} fill="#596173">{indicatorNumber(tick, unit)}</text>
+          <text key={tick} x={x(tick)} y={base + 18} textAnchor="middle" fontSize={11} fill="#596173">{indicatorTick(tick, unit)}</text>
         ))}
         {placed.map((point) => highlight.includes(point.country) ? null : (
           <g
@@ -814,8 +820,8 @@ export function LengthPositionTrajectory({
           return <g key={tickValue}>
             <line x1={120} x2={660} y1={y(tickValue)} y2={y(tickValue)} stroke="#e2e5ee" />
             <line x1={x(tickValue)} x2={x(tickValue)} y1={50} y2={590} stroke="#e2e5ee" />
-            <text x={110} y={y(tickValue) + 4} textAnchor="end" fontSize={12}>{indicatorNumber(tickValue, "生产阶段")}</text>
-            <text x={x(tickValue)} y={615} textAnchor="middle" fontSize={12}>{indicatorNumber(tickValue, "生产阶段")}</text>
+            <text x={110} y={y(tickValue) + 4} textAnchor="end" fontSize={12}>{indicatorTick(tickValue, "生产阶段")}</text>
+            <text x={x(tickValue)} y={615} textAnchor="middle" fontSize={12}>{indicatorTick(tickValue, "生产阶段")}</text>
           </g>;
         })}
         {cloudPoints.map((point) => (

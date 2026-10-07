@@ -227,8 +227,8 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
   ];
   return (
     <div style={cardStyle} ref={wrapRef}>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>{yLabel} × {xLabel} <span style={{ fontSize: 10.5, color: "#5f6677", fontWeight: 400 }}>（参考线基于完整有效样本 n={referencePts.length}）</span></div>
-      {pts.length === 0 ? <p className="muted" role="status">{yLabel} × {xLabel} 当前没有可显示的有效数据。</p> : (
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>横轴 {xLabel} · 纵轴 {yLabel} <span style={{ fontSize: 10.5, color: "#5f6677", fontWeight: 400 }}>（参考线基于完整有效样本 n={referencePts.length}）</span></div>
+      {pts.length === 0 ? <p className="muted" role="status">横轴 {xLabel} · 纵轴 {yLabel} 当前没有可显示的有效数据。</p> : (
       <svg viewBox={`0 0 ${W} ${H}`} width="100%">
         {yAxis.ticks.map((t, i) => (
           <g key={`y${i}`}>

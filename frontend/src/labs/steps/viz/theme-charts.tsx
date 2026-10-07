@@ -4,7 +4,7 @@ import { useHoverTip, type TipLine } from "../../../viz/hover";
 import { CAT } from "../../../viz/shared";
 import { niceDomain } from "../../../viz/nice-ticks";
 import { finiteValue } from "./indicator-model";
-import { indicatorNumber } from "./indicator-charts";
+import { indicatorNumber, indicatorTick } from "./indicator-charts";
 import type { Row } from "./scaffold";
 
 /* Phase 2 theme charts (design doc 4.3): small, hand-written SVG components on the shared hover layer.
@@ -194,7 +194,7 @@ export function IndustryDotPlot({ groups, countries, unit, nationals = [], label
         {nationals.some(finiteValue) && <span><i className="bar" />竖线：该国国家整体值</span>}
       </div>
       <div className="dot-plot-axis" aria-hidden="true">
-        {axis.ticks.map((tick) => <span key={tick} style={{ left: `${px(tick)}%` }}>{indicatorNumber(tick, unit)}</span>)}
+        {axis.ticks.map((tick) => <span key={tick} style={{ left: `${px(tick)}%` }}>{indicatorTick(tick, unit)}</span>)}
       </div>
       {groups.map((group) => (
         <div

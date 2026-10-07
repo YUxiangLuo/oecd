@@ -175,6 +175,8 @@ export function IndicatorExplorer({
   );
   const rows = indicatorRows(query.data ?? [], topic);
   const field = (key: string) => topic.metrics.find((item) => item.key === key);
+  // "总出口（VA+TLS）" + unit → "总出口（VA+TLS；百万美元，对数）", not two bracket pairs.
+  const withUnitNote = (text: string, note: string) => text.endsWith("）") ? `${text.slice(0, -1)}；${note}）` : `${text}（${note}）`;
   const label = (key: string) =>
     field(key)?.label ?? schema.data?.fields[key]?.label ?? key;
   const unit = (key: string) => field(key)?.unit ?? "百万美元";
@@ -659,7 +661,7 @@ export function IndicatorExplorer({
           { label: "年份", value: timeView ? `${start}–${end}` : String(year), onJump: jump(yearRef) },
           {
             label: "指标",
-            value: composition ? `${topic.themeLabel}${side === "alternate" ? `（${activeComposition!.note ? topic.composition!.alternate!.label : ""}）` : ""}` : view === "directions" ? "前后向GVC段长度与位置" : view === "positioning" ? `定位图（${label(axes.x)} × ${label(axes.y)}）` : view === "structure" ? (topic.key === "production" ? "四类生产活动 · 行业" : "前向 × 后向 GVC 段长度 · 行业") : view === "segments" ? "前后向三段长度" : label(metric),
+            value: composition ? `${topic.themeLabel}${side === "alternate" ? `（${activeComposition!.note ? topic.composition!.alternate!.label : ""}）` : ""}` : view === "directions" ? "前后向GVC段长度与位置" : view === "positioning" ? `定位图（横轴 ${label(axes.x)} · 纵轴 ${label(axes.y)}）` : view === "structure" ? (topic.key === "production" ? "四类生产活动 · 行业" : "前向 × 后向 GVC 段长度 · 行业") : view === "segments" ? "前后向三段长度" : label(metric),
             onJump: composition || view === "directions" || view === "positioning" || view === "structure" || view === "segments" ? undefined : jump(metricRef),
           },
         ]}
@@ -750,7 +752,7 @@ export function IndicatorExplorer({
                 referenceRows={reference}
                 xKey={axes.x}
                 yKey={axes.y}
-                xLabel={label(axes.x)}
+                xLabel={unit(axes.x) === "百万美元" ? withUnitNote(label(axes.x), `百万美元${axes.xScale === "log" ? "，对数" : ""}`) : label(axes.x)}
                 yLabel={label(axes.y)}
                 xFormat={formatOf(axes.x)}
                 yFormat={formatOf(axes.y)}

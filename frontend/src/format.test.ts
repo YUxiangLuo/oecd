@@ -12,6 +12,9 @@ describe("formatMetric", () => {
     expect(formatMetric(48123.4, "number")).toBe("48,123");
     expect(formatMetric(-48123.4, "number")).toBe("-48,123");
     expect(formatMetric(99.9, "number")).toBe("99.900");
+    // A node without edges has degree and betweenness exactly 0.
+    expect(formatMetric(0, "number")).toBe("0");
+    expect(formatMetric(0)).toBe("0");
   });
 
   test("does not leak non-finite values into labels", () => {

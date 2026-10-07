@@ -7,6 +7,8 @@ export function stripNegativeZero(formatted: string): string {
 export function formatMetric(value: number, format?: string): string {
   if (!Number.isFinite(value)) return "—";
   if (format === "pct") return stripNegativeZero(`${(value * 100).toFixed(2)}%`);
+  // An exact zero (e.g. a node with no edges) is a count of nothing, not "0.000".
+  if (value === 0) return "0";
   if (format === "amount") {
     return stripNegativeZero(value.toLocaleString("zh-CN", { maximumFractionDigits: 2 }));
   }

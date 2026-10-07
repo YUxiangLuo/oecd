@@ -37,8 +37,8 @@ describe("stacked area facets", () => {
     const readout = screen.getByRole("status");
     expect(readout.textContent).toContain("CHN 中国 · 2019");
     expect(readout.textContent).toContain("外国增加值");
-    expect(readout.textContent).toContain("25%");
-    expect(readout.textContent).toContain("-3%");
+    expect(readout.textContent).toContain("25.000%");
+    expect(readout.textContent).toContain("-3.000%");
     // Keyboard parity on the facet.
     const group = screen.getByRole("group", { name: /USA 美国历年构成/ });
     fireEvent.keyDown(group, { key: "End" });
@@ -57,9 +57,9 @@ describe("industry dot plot", () => {
         label="外国增加值项占比"
       />,
     );
-    const row = screen.getByRole("group", { name: /C26 计算机电子光学：CHN 中国 30%，USA 美国 10%/ });
+    const row = screen.getByRole("group", { name: /C26 计算机电子光学：CHN 中国 30.000%，USA 美国 10.000%/ });
     fireEvent.focus(row);
-    expect(screen.getByRole("status").textContent).toContain("30%");
+    expect(screen.getByRole("status").textContent).toContain("30.000%");
     expect(row.querySelectorAll(".national")).toHaveLength(2);
     // Missing readings leave no dot.
     expect(screen.getByRole("group", { name: /C20 化学品/ }).querySelectorAll("i.dot")).toHaveLength(1);
@@ -80,6 +80,6 @@ describe("dumbbell and butterfly", () => {
     const row = screen.getByRole("group", { name: /C26/ });
     fireEvent.focus(row);
     expect(screen.getByRole("status").textContent).toContain("卖出占比");
-    expect(screen.getByRole("status").textContent).toContain("25%");
+    expect(screen.getByRole("status").textContent).toContain("25.000%");
   });
 });
