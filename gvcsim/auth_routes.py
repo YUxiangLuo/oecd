@@ -28,7 +28,7 @@ def _limit_login(request: Request, username: str) -> None:
     except RateLimitExceeded as error:
         raise HTTPException(
             status_code=429,
-            detail="登录尝试过于频繁，请稍后重试",
+            detail=f"登录尝试过于频繁，请约 {error.retry_after_header} 秒后重试",
             headers={"Retry-After": error.retry_after_header},
         ) from error
 

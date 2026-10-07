@@ -196,7 +196,7 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
           {/* An expired session is a warning, not a success; a password change is confirmed in green. */}
           {notice && <div className={`${notice.includes("失效") ? "tipbox" : "success-box"} login-notice`} role="status">{notice}</div>}
 
-          {demoMode && <div className="login-roles" role="group" aria-label="开发演示快捷账号">
+          {demoMode && demoAccounts.length > 0 && <div className="login-roles" role="group" aria-label="开发演示快捷账号">
             {demoAccounts.map((a) => (
               <button
                 key={a.username}
@@ -216,12 +216,12 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
           <label className="login-label" htmlFor="login-user">用户名</label>
           <input
             id="login-user" className="login-input" value={username} autoComplete="username" required
-            onChange={(e) => setUsername(e.target.value)}
+            onChange={(e) => { setUsername(e.target.value); setError(null); }}
           />
           <label className="login-label" htmlFor="login-pass">密码</label>
           <input
             id="login-pass" className="login-input" type="password" value={password} required
-            autoComplete="current-password" onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password" onChange={(e) => { setPassword(e.target.value); setError(null); }}
           />
           {error && <div className="error-box" role="alert" style={{ marginTop: 14, padding: "10px 14px" }}>{error}</div>}
           <button ref={submitRef} className="login-btn" type="submit" disabled={busy}>

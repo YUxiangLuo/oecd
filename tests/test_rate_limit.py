@@ -63,7 +63,7 @@ def test_login_limit_is_scoped_by_source_and_username(teaching_db, monkeypatch):
 
     assert limited.status_code == 429
     assert limited.headers["retry-after"] == "60"
-    assert "过于频繁" in limited.json()["detail"]
+    assert limited.json()["detail"] == "登录尝试过于频繁，请约 60 秒后重试"
     assert client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).status_code == 200
 
 

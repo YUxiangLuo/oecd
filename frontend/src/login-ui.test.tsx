@@ -116,6 +116,8 @@ describe("demo-mode login UI source behavior", () => {
       expect(inputValue("login-pass")).toBe("");
       // An expiry is a warning, not a success.
       expect(screen.getByRole("status").className).toContain("tipbox");
+      // No quick-login buttons are offered here, so their (empty) group is not rendered either.
+      expect(screen.queryByRole("group", { name: "开发演示快捷账号" })).toBeNull();
     });
   });
 });
