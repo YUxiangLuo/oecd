@@ -490,7 +490,8 @@ export function layoutStripLabels<T extends { px: number; text: string }>(points
     const width = stripLabelWidth(point.text);
     return { ...point, width, labelX: clamp(point.px - width / 2, width), row: 0 };
   });
-  if (laid.length !== 2) return laid.map((point, row) => ({ ...point, row }));
+  if (laid.length > 2) return layoutManyStripLabels(laid, clamp);
+  if (laid.length !== 2) return laid;
   const [left, right] = [...laid].sort((a, b) => a.px - b.px);
   const gap = 10;
   if (left.labelX + left.width + gap <= right.labelX) return laid;
@@ -501,6 +502,49 @@ export function layoutStripLabels<T extends { px: number; text: string }>(points
   const crosses = (dot: number, label: { labelX: number; width: number }) => dot >= label.labelX - 2 && dot <= label.labelX + label.width + 2;
   if (crosses(right.px, left) && !crosses(left.px, right)) left.row = 1;
   else right.row = 1;
+  return laid;
+}
+
+/**
+ * Three or more labels, placed from the outermost dots inwards. A label may cover another country's dot
+ * only when that country's label sits on a row above (its leader ends before reaching this row), and its
+ * own leader must pass no label above it. Each label tries the lowest row first: centred under its dot,
+ * then ending at the dot (left half) or starting at it (right half). The strip's height follows the rows.
+ */
+function layoutManyStripLabels<T extends { px: number; width: number; labelX: number; row: number }>(
+  laid: T[],
+  clamp: (left: number, width: number) => number,
+) {
+  const gap = 10;
+  const covers = (label: { labelX: number; width: number }, dot: number) => dot >= label.labelX - 2 && dot <= label.labelX + label.width + 2;
+  const sorted = [...laid].sort((a, b) => a.px - b.px);
+  const order: T[] = [];
+  for (let lo = 0, hi = sorted.length - 1; lo <= hi; lo += 1, hi -= 1) {
+    order.push(sorted[lo]);
+    if (hi !== lo) order.push(sorted[hi]);
+  }
+  const placed = new Set<T>();
+  for (const point of order) {
+    const leftHalf = sorted.indexOf(point) < sorted.length / 2;
+    const centred = point.px - point.width / 2;
+    const [inner, outer] = leftHalf ? [point.px - point.width, point.px] : [point.px, point.px - point.width];
+    const candidates = [centred, inner, outer].map((left) => clamp(left, point.width));
+    let chosen: { row: number; labelX: number } | null = null;
+    for (let row = 0; chosen == null && row < laid.length; row += 1) {
+      for (const labelX of candidates) {
+        const span = { labelX, width: point.width };
+        const fits = laid.every((other) => {
+          if (other === point) return true;
+          if (!placed.has(other)) return !covers(span, other.px);
+          if (other.row === row) return labelX + point.width + gap <= other.labelX || other.labelX + other.width + gap <= labelX;
+          return other.row < row ? !covers(other, point.px) : !covers(span, other.px);
+        });
+        if (fits) { chosen = { row, labelX }; break; }
+      }
+    }
+    Object.assign(point, chosen ?? { row: Math.max(0, ...[...placed].map((other) => other.row)) + 1, labelX: candidates[0] });
+    placed.add(point);
+  }
   return laid;
 }
 
@@ -554,12 +598,13 @@ export function DistributionStrip({
   });
   const lanes = Math.max(1, laneEnds.length);
   const base = 70 + lanes * 9;
-  const height = base + 60;
   const cy = (lane: number) => base - 8 - lane * 9;
   const marked = layoutStripLabels(highlight.flatMap((country, index) => {
     const point = placed.find((item) => item.country === country);
     return point ? [{ ...point, index, text: `${countryLabel(country)} ${reading(point.value)} · ${rankText(distribution.ranks[country], distribution.ties?.[country], distribution.n) ?? NO_RANK}` }] : [];
   }));
+  // Room for two label rows as before; more rows (three or more countries) extend the strip.
+  const height = base + 60 + Math.max(0, Math.max(0, ...marked.map((point) => point.row)) - 1) * 14;
   const linesFor = (country: string, value: number): TipLine[] => [
     ["", countryLabel(country)],
     [label, reading(value)],

@@ -255,6 +255,35 @@ describe("global reference for steps 6–8", () => {
     const [x, y] = layoutStripLabels([{ px: 780, text }, { px: 780, text }]);
     expect(x.row + y.row).toBe(1);
   });
+
+  test("three to five countries get as many rows as they need, with no label clipped or crossed", () => {
+    const text = "DEU 德国 1.234 · 第 12 位";
+    const laid = layoutStripLabels([300, 320, 340, 360, 380].map((px) => ({ px, text })));
+    const crosses = (dot: number, label: { labelX: number; width: number }) => dot >= label.labelX - 2 && dot <= label.labelX + label.width + 2;
+    for (const p of laid) {
+      for (const q of laid) {
+        if (p === q) continue;
+        if (p.row === q.row) expect(p.labelX + p.width <= q.labelX || q.labelX + q.width <= p.labelX).toBeTrue();
+        if (q.row < p.row) expect(crosses(p.px, q)).toBeFalse();
+      }
+    }
+    // The strip grows with the rows, so even the lowest label sits inside the SVG.
+    const rows = Math.max(...laid.map((p) => p.row));
+    expect(rows).toBeGreaterThan(1);
+    // Spread out, three labels share the first row, each centred under its dot.
+    expect(layoutStripLabels([100, 400, 700].map((px) => ({ px, text }))).map((p) => [p.row, p.labelX + p.width / 2])).toEqual([[0, 100], [0, 400], [0, 700]]);
+    const data = ["DEU", "CHN", "USA", "JPN", "KOR", ...Array.from({ length: 30 }, (_, i) => `C${i}`)]
+      .map((country, i) => ({ country, year: 2020, FVA_share: i < 5 ? 0.2 + i / 1000 : i / 100 })) as Row[];
+    const [distribution] = countryDistribution(data, "FVA_share", [2020]);
+    const html = renderToStaticMarkup(createElement(DistributionStrip, {
+      rows: data, metric: "FVA_share", unit: "%", label: "外国增加值项占比", year: 2020,
+      highlight: ["DEU", "CHN", "USA", "JPN", "KOR"], distribution,
+    }));
+    const height = Number(/viewBox="0 0 800 ([0-9]+)"/.exec(html)?.[1]);
+    const labelYs = [...html.matchAll(/<text x="[0-9.]+" y="([0-9.]+)" text-anchor="start"/g)].map((m) => Number(m[1]));
+    expect(labelYs).toHaveLength(5);
+    expect(Math.max(...labelYs) + 4).toBeLessThanOrEqual(height);
+  });
 });
 
 describe("tied ranks", () => {
