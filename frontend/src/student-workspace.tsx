@@ -147,7 +147,17 @@ export function StudentWorkspace({
     error: session.syncError,
     conflict: session.syncConflict,
     syncing: session.syncing,
-    act: () => { void (session.syncConflict ? session.resolveSyncConflict() : session.syncNow()).catch(() => {}); },
+    act: () => {
+      if (!session.syncConflict) {
+        void session.syncNow().catch(() => {});
+        return;
+      }
+      // Loading the server version remounts the step (a fullscreen panel closes with it), so the button
+      // that had focus is gone: move focus to the step's main content instead of leaving it on <body>.
+      void session.resolveSyncConflict().catch(() => {}).finally(() => {
+        window.requestAnimationFrame(() => contentRef.current?.focus());
+      });
+    },
   };
 
   return (

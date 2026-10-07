@@ -62,7 +62,7 @@ export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () =
   const [query, setQuery] = useState("");
   const [semesterId, setSemesterId] = useState<number | null>(null);
   const [classId, setClassId] = useState<number | null>(null);
-  const { data, error } = useAsync<{ reports: TeacherReport[] }>(() => api.classroom.reports(), [refresh], { keepPreviousData: true });
+  const { data, error, status } = useAsync<{ reports: TeacherReport[] }>(() => api.classroom.reports(), [refresh], { keepPreviousData: true });
   const { data: academic, error: academicError } = useAsync(() => api.classroom.semesters(), [refresh], { keepPreviousData: true });
   if (error || academicError) return <div className="error-box" role="alert">{error ?? academicError}</div>;
   if (openAccountId != null) {
@@ -105,6 +105,7 @@ export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () =
         />
         <SearchInput value={query} onChange={setQuery} placeholder="搜索学生 / 用户名 / 学号" />
       </Toolbar>
+      <p className="muted list-refreshing" role="status">{data && status === "loading" ? "正在刷新列表…" : ""}</p>
       <ScrollableRegion className="table-wrap" label="报告提交列表，可横向滚动">
         <table className="data-table"><thead><tr><th>学生</th><th>用户名</th><th>学号</th><th>班级</th><th>提交时间</th><th>状态</th><th>得分</th><th><span className="sr-only">操作</span></th></tr></thead><tbody>
           {shown.map((report) => <tr key={report.account_id}>

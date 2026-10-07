@@ -162,6 +162,9 @@ export function FullscreenPanel({
             </button>
           </div>
         )}
+        {/* Focus stays where it was when the panel expands in place, so the dialog itself is not announced;
+            a status line says the view changed. */}
+        {expanded && <span className="sr-only" role="status">已进入{title}全屏工作区，按 Esc 退出。</span>}
         {expanded && <FullscreenSyncProblem />}
         <div className="fullscreen-panel-content">{children}</div>
       </div>

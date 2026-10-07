@@ -6,7 +6,7 @@
  * 未开启时下面这段快捷账号 UI 与口令常量会被一起摇掉,不进产物。
  */
 import { useEffect, useRef, useState } from "react";
-import { api } from "./api";
+import { api, isApiErrorStatus } from "./api";
 import { LogoMark } from "./brand";
 import type { LoginResponse } from "./types";
 import { userFacingRequestError } from "./user-facing-error";
@@ -121,6 +121,9 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
   const [password, setPassword] = useState(demoStudent?.password ?? "");
   const edited = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  // A rate-limit message carries the wait time; typing must not hide it (a retry would only hit 429 again).
+  const keepError = useRef(false);
+  const clearError = () => { if (!keepError.current) setError(null); };
   const [busy, setBusy] = useState(false);
   const submitRef = useRef<HTMLButtonElement>(null);
 
@@ -172,8 +175,10 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
     setBusy(true);
     setError(null);
     try {
+      keepError.current = false;
       onLogin(await api.login(username, password));
     } catch (err) {
+      keepError.current = isApiErrorStatus(err, 429);
       setError(userFacingRequestError(err, "登录失败"));
       setBusy(false);
     }
@@ -240,12 +245,12 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
           <label className="login-label" htmlFor="login-user">用户名</label>
           <input
             id="login-user" className="login-input" value={username} autoComplete="username" required
-            onChange={(e) => { edited.current = true; setUsername(e.target.value); setError(null); }}
+            onChange={(e) => { edited.current = true; setUsername(e.target.value); clearError(); }}
           />
           <label className="login-label" htmlFor="login-pass">密码</label>
           <input
             id="login-pass" className="login-input" type="password" value={password} required
-            autoComplete="current-password" onChange={(e) => { edited.current = true; setPassword(e.target.value); setError(null); }}
+            autoComplete="current-password" onChange={(e) => { edited.current = true; setPassword(e.target.value); clearError(); }}
           />
           {error && <div className="error-box" role="alert" style={{ marginTop: 14, padding: "10px 14px" }}>{error}</div>}
           <button ref={submitRef} className="login-btn" type="submit" disabled={busy}>

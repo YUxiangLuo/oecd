@@ -137,7 +137,7 @@ export function StudentsTab() {
   const [classId, setClassId] = useState<number | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
   // Keep the table while it reloads after an edit: clearing it flashed "暂无学生" and lost the scroll position.
-  const { data, error } = useAsync<{ students: StudentRow[] }>(() => api.classroom.students(), [refresh], { keepPreviousData: true });
+  const { data, error, status } = useAsync<{ students: StudentRow[] }>(() => api.classroom.students(), [refresh], { keepPreviousData: true });
   const { data: academic, error: academicError } = useAsync(() => api.classroom.semesters(), [refresh], { keepPreviousData: true });
 
   const run = async (operation: Promise<unknown>) => {
@@ -169,6 +169,8 @@ export function StudentsTab() {
           <button className="primary" onClick={() => setModal({ type: "student" })}>+ 添加学生</button>
         </div>
       </Toolbar>
+      {/* The previous rows stay while a refresh loads; say so, since they may be a moment out of date. */}
+      <p className="muted list-refreshing" role="status">{data && status === "loading" ? "正在刷新列表…" : ""}</p>
       <ScrollableRegion className="table-wrap student-table-scroll" label="学生进度表，可横向及纵向滚动">
         <table className="data-table">
           <thead><tr><th>姓名</th><th>用户名</th><th>学号</th><th>班级</th><th>完成步骤</th><th>报告</th><th>得分</th><th>有效活动</th><th>最近登录</th><th>操作</th></tr></thead>

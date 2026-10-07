@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, isApiErrorStatus } from "./api";
+import { api, AUTH_TOKEN_KEY, getActiveAuthToken, isApiErrorStatus } from "./api";
 import { emptySession, isValidSession, patchStep as patchStoredStep, readShared, readStep, sameJsonValue, sameSessionContent, writeShared } from "./session-store";
 import type {
   ClassroomReport,
@@ -127,6 +127,8 @@ export interface SessionApi {
   syncNow: () => Promise<void>;
   /** Read the saved record again after the first read failed (status "unavailable"). */
   retryLoad: () => void;
+  /** How many times the read has been retried in this page (shown after a failed retry). */
+  loadAttempts: number;
   /** Keep unconfirmed edits in this tab before leaving on purpose (logout, expired login, password change); the next load puts them back. */
   keepUnsavedEdits: () => boolean;
   resolveSyncConflict: () => Promise<void>;
@@ -400,7 +402,11 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     // The copy kept on leaving would otherwise put them back later, even after they were changed again.
     const forgetAfterReturn = (event: Event) => {
       const release = releaseIdRef.current;
-      if ((event as PageTransitionEvent).persisted && release && readKeptEdits(sessionStorage, username, release)) {
+      // A page restored from the back/forward cache keeps its edits in memory, so the kept copy is dropped —
+      // unless the tab has logged out meanwhile: App then reloads to the login page and the next login in
+      // this tab needs the kept copy.
+      const stillSignedIn = sessionStorage.getItem(AUTH_TOKEN_KEY) === getActiveAuthToken();
+      if ((event as PageTransitionEvent).persisted && stillSignedIn && release && readKeptEdits(sessionStorage, username, release)) {
         clearKeptEdits(sessionStorage);
       }
     };
@@ -413,6 +419,14 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       window.removeEventListener("pageshow", forgetAfterReturn);
     };
   }, [enabled, username, keepUnsavedEdits]);
+
+  // An unreadable record is read again as soon as the browser reports the network back.
+  useEffect(() => {
+    if (!enabled || status !== "unavailable") return;
+    const online = () => setLoadAttempt((value) => value + 1);
+    window.addEventListener("online", online);
+    return () => window.removeEventListener("online", online);
+  }, [enabled, status]);
 
   // A failed save waits for the next edit or a click on 重试保存; when the browser reports the network back,
   // retry on its own (never through a conflict, which needs the student's decision).
@@ -487,6 +501,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     updateShared: useCallback(<T,>(key: SharedSessionKey, apply: (current: T | undefined) => T) => update((value) => updateSessionShared(value, key, apply)), [update]),
     syncNow,
     retryLoad: useCallback(() => setLoadAttempt((value) => value + 1), []),
+    loadAttempts: loadAttempt,
     keepUnsavedEdits,
     resolveSyncConflict,
     applyReportMutation,

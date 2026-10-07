@@ -279,9 +279,10 @@ export default function App() {
   if (fatal) return (
     <main className="app-boot" style={{ padding: 40 }}>
       <div className="error-box" role="alert">{fatal}</div>
-      <p>登录信息已保留，可以重试加载课程。</p>
+      <p>登录信息已保留，可以重试加载课程。{bootAttempt > 0 ? `已重试 ${bootAttempt} 次，仍未成功。` : ""}</p>
       <div style={{ display: "flex", gap: 8 }}>
-        <button className="primary" onClick={() => { setFatal(null); setBootAttempt((value) => value + 1); }}>重试加载课程</button>
+        {/* Focus lands here after each failed retry, so a keyboard user is not left on <body>. */}
+        <button className="primary" autoFocus onClick={() => { setFatal(null); setBootAttempt((value) => value + 1); }}>重试加载课程</button>
         <button className="secondary" onClick={logout}>退出登录</button>
       </div>
     </main>
@@ -292,9 +293,9 @@ export default function App() {
   if (session.status === "unavailable") return (
     <main className="app-boot" style={{ padding: 40 }}>
       <div className="error-box" role="alert">{session.syncError ?? "读取实验记录失败：暂时无法连接教学服务"}</div>
-      <p>你的实验记录保存在服务器上，没有丢失。读取成功后才能继续操作。</p>
+      <p>你的实验记录保存在服务器上，没有丢失。读取成功后才能继续操作；网络恢复时会自动重新读取。{session.loadAttempts > 0 ? `已重试 ${session.loadAttempts} 次，仍未成功。` : ""}</p>
       <div style={{ display: "flex", gap: 8 }}>
-        <button className="primary" onClick={session.retryLoad}>重新读取实验记录</button>
+        <button className="primary" autoFocus onClick={session.retryLoad}>重新读取实验记录</button>
         <button className="secondary" onClick={logout}>退出登录</button>
       </div>
     </main>

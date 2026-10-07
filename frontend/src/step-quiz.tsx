@@ -12,21 +12,28 @@ interface QuizFeedback {
   explanation: string;
 }
 
-/** 步骤 1–14 的唯一完成条件：答对本步全部固定单选题。 */
-export function QuizPanel({
-  step,
-  state,
-  draftStore,
-  materialStatus,
-  onRecordMaterials,
-}: {
+interface QuizPanelProps {
   step: Step;
   draftStore?: QuizDraftStore;
   materialStatus?: StepMaterialStatus;
   onRecordMaterials?: () => void;
   state: StepStateApi<Record<string, unknown>>;
-}) {
-  const quiz = step.quiz;
+}
+
+/** 步骤 1–14 的唯一完成条件：答对本步全部固定单选题。 */
+export function QuizPanel(props: QuizPanelProps) {
+  // A step without a quiz renders nothing; the body's hooks then never run conditionally.
+  return props.step.quiz ? <QuizPanelBody {...props} quiz={props.step.quiz} /> : null;
+}
+
+function QuizPanelBody({
+  step,
+  quiz,
+  state,
+  draftStore,
+  materialStatus,
+  onRecordMaterials,
+}: QuizPanelProps & { quiz: NonNullable<Step["quiz"]> }) {
   const data = state.data as (QuizCompletionState & Record<string, unknown>) | undefined;
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<QuizFeedback[]>([]);
@@ -41,8 +48,7 @@ export function QuizPanel({
   useEffect(() => {
     setDraftAnswers(draftStore && quiz && draftStore.get(step.n)?.version === quiz.version
       ? draftStore.get(step.n)!.answers : savedAnswers);
-  }, [step.n, quiz?.version, savedAnswers, draftStore]);
-  if (!quiz) return null;
+  }, [step.n, quiz.version, savedAnswers, draftStore]);
 
   const answeredAll = quiz.questions.every((question) => Boolean(draftAnswers[question.id]));
   const locallyPassed = data?.quiz?.version === quiz.version;

@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useMemo, useState, type KeyboardEvent } from "react";
 import { countryLabel } from "../../../viz";
 import { useHoverTip, type TipLine } from "../../../viz/hover";
 import { CAT } from "../../../viz/shared";
@@ -555,6 +555,9 @@ function layoutManyStripLabels<T extends { px: number; width: number; labelX: nu
     }
     return false;
   };
+  // The exact search is exponential in the number of labels; the steps allow five countries. Beyond that
+  // (never in the course) the staircase keeps the layout instant.
+  if (order.length > 5) return staircaseStripLabels(laid, sorted, clamp);
   for (let rows = 1; rows <= order.length; rows += 1) {
     chosen.length = 0;
     if (search(0, rows)) {
@@ -636,10 +639,13 @@ export function DistributionStrip({
   const lanes = Math.max(1, laneEnds.length);
   const base = 70 + lanes * 9;
   const cy = (lane: number) => base - 8 - lane * 9;
-  const marked = layoutStripLabels(highlight.flatMap((country, index) => {
+  // Laid out once per data change, not on every hover (the label search re-ran on each mouse move).
+  const marked = useMemo(() => layoutStripLabels(highlight.flatMap((country, index) => {
     const point = placed.find((item) => item.country === country);
     return point ? [{ ...point, index, text: `${countryLabel(country)} ${reading(point.value)} · ${rankText(distribution.ranks[country], distribution.ties?.[country], distribution.n) ?? NO_RANK}` }] : [];
-  }));
+  })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, metric, year, unit, highlight.join(","), distribution]);
   // Room for two label rows as before; more rows (three or more countries) extend the strip.
   const height = base + 60 + Math.max(0, Math.max(0, ...marked.map((point) => point.row)) - 1) * 14;
   const linesFor = (country: string, value: number): TipLine[] => [

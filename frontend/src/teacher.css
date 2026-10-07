@@ -274,3 +274,7 @@
 .grade-rubric li b, .grade-rubric li span { display: block; }
 .grade-rubric li b { color: #3b4352; margin-bottom: 2px; }
 .grade-field input:focus, .grade-field textarea:focus { outline: none; border-color: #4b47e0; }
+
+/* Reserve no space when idle: the refresh note appears only while a reload is in flight. */
+.list-refreshing { margin: 0 0 4px; font-size: 11.5px; min-height: 0; }
+.list-refreshing:empty { display: none; }
