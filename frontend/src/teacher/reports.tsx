@@ -12,6 +12,14 @@ import { LEAVE_MESSAGE, useTeacherReviewGuard } from "./review-guard";
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
 type Filter = "pending" | "graded" | "all";
 
+/** Empty list copy: "no match" only when a search or class filter is active, not when all pending work is done. */
+export function reportsEmptyState(total: number, filter: Filter, narrowed: boolean): { title: string; hint: string } {
+  if (!total) return { title: "还没有学生提交报告", hint: "学生提交报告后会出现在这里" };
+  if (narrowed) return { title: "没有匹配的报告", hint: "换个筛选或关键词试试" };
+  if (filter === "pending") return { title: "暂无待评阅报告", hint: "已提交的报告都评阅完了；新的提交会出现在这里" };
+  return { title: "暂无已评阅报告", hint: "评阅后的报告会出现在这里" };
+}
+
 export const REPORT_FILTER_LABELS: Record<Filter, string> = {
   pending: "待评阅",
   graded: "已评阅",
@@ -54,8 +62,8 @@ export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () =
   const [query, setQuery] = useState("");
   const [semesterId, setSemesterId] = useState<number | null>(null);
   const [classId, setClassId] = useState<number | null>(null);
-  const { data, error } = useAsync<{ reports: TeacherReport[] }>(() => api.classroom.reports(), [refresh]);
-  const { data: academic, error: academicError } = useAsync(() => api.classroom.semesters(), [refresh]);
+  const { data, error } = useAsync<{ reports: TeacherReport[] }>(() => api.classroom.reports(), [refresh], { keepPreviousData: true });
+  const { data: academic, error: academicError } = useAsync(() => api.classroom.semesters(), [refresh], { keepPreviousData: true });
   if (error || academicError) return <div className="error-box" role="alert">{error ?? academicError}</div>;
   if (openAccountId != null) {
     return <ReportView accountId={openAccountId} grader={user.username} onBack={(changed) => {
@@ -108,7 +116,7 @@ export function ReportsTab({ user, onGraded }: { user: AuthUser; onGraded?: () =
             <td><ReportRowAction report={report} onOpen={() => setOpenAccountId(report.account_id)} /></td>
           </tr>)}
         </tbody></table>
-        {shown.length === 0 && <EmptyState icon="📝" title={reports.length ? "没有匹配的报告" : "还没有学生提交报告"} hint={reports.length ? "换个筛选或关键词试试" : "学生提交报告后会出现在这里"} />}
+        {data && shown.length === 0 && <EmptyState icon="📝" {...reportsEmptyState(reports.length, filter, Boolean(needle) || semesterId != null)} />}
       </ScrollableRegion>
     </div>
   );
@@ -183,6 +191,7 @@ export function GradeView({ data, grader, onBack, onReload }: {
           </details>
           <label className="grade-field">分数（0-100）<input type="number" min={0} max={100} disabled={saving} value={score} onChange={(event) => { const next = event.target.value; setScore(next); reviewGuard.publish({ dirty: next !== initialScore || feedback !== data.feedback, saving: false }); setSaveError(null); }} /></label>
           <label className="grade-field">评语（可空）<textarea disabled={saving} value={feedback} onChange={(event) => { const next = event.target.value; setFeedback(next); reviewGuard.publish({ dirty: score !== initialScore || next !== data.feedback, saving: false }); setSaveError(null); }} rows={8} maxLength={4000} /></label>
+          <span className="muted grade-count" aria-live="polite">评语 {feedback.length} / 4000 字{feedback.length >= 4000 ? "，已达上限，超出部分不会保存" : ""}</span>
           {saveError && <div className="error-box" role="alert">{saveError}</div>}
           {stale && <button className="secondary block" disabled={saving} onClick={() => attemptLocalLeave(onReload)}>加载最新报告</button>}
           <button className="primary block" disabled={saving || stale} onClick={submit}>{saving ? "保存中…" : data.state === "graded" ? "更新评阅" : "提交评阅"}</button>

@@ -18,7 +18,7 @@ export function SemestersTab() {
   const [refresh, setRefresh] = useState(0);
   const [editor, setEditor] = useState<Editor>(null);
   const [batchClassId, setBatchClassId] = useState<number | null>(null);
-  const { data, error } = useAsync(() => api.classroom.semesters(), [refresh]);
+  const { data, error } = useAsync(() => api.classroom.semesters(), [refresh], { keepPreviousData: true });
   const semesters = data?.semesters ?? [];
   const mutate = async (operation: Promise<unknown>) => {
     await operation;
@@ -80,7 +80,7 @@ export function SemestersTab() {
           </section>
         ))}
       </div>
-      {semesters.length === 0 && (
+      {data && semesters.length === 0 && (
         <EmptyState icon="🗓️" title="还没有学期" hint="先创建学期，再在学期下添加班级并给学生分班。" />
       )}
       {batchClassId !== null && <StudentBatchModal semesters={semesters} initialClassId={batchClassId}

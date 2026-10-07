@@ -111,8 +111,9 @@ export function StudentsTab() {
   const [semesterId, setSemesterId] = useState<number | null>(null);
   const [classId, setClassId] = useState<number | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
-  const { data, error } = useAsync<{ students: StudentRow[] }>(() => api.classroom.students(), [refresh]);
-  const { data: academic, error: academicError } = useAsync(() => api.classroom.semesters(), [refresh]);
+  // Keep the table while it reloads after an edit: clearing it flashed "暂无学生" and lost the scroll position.
+  const { data, error } = useAsync<{ students: StudentRow[] }>(() => api.classroom.students(), [refresh], { keepPreviousData: true });
+  const { data: academic, error: academicError } = useAsync(() => api.classroom.semesters(), [refresh], { keepPreviousData: true });
 
   const run = async (operation: Promise<unknown>) => {
     await operation;
@@ -169,7 +170,7 @@ export function StudentsTab() {
             ))}
           </tbody>
         </table>
-        {students.length === 0 && <EmptyState
+        {data && students.length === 0 && <EmptyState
           icon="👥"
           title={all.length ? "没有匹配的学生" : "暂无学生"}
           hint={all.length

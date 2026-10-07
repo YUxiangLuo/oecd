@@ -4,7 +4,7 @@ import { api } from "../api";
 import { TeacherWorkspace } from "../app-shell";
 import type { TeacherReport } from "../types";
 import { renderToStaticMarkup } from "react-dom/server";
-import { GradeView, REPORT_FILTER_LABELS, ReportRowAction, reportRowAction } from "./reports";
+import { GradeView, REPORT_FILTER_LABELS, ReportRowAction, reportRowAction, reportsEmptyState } from "./reports";
 
 afterEach(cleanup);
 
@@ -204,4 +204,10 @@ describe("stale teacher report recovery", () => {
       globalThis.fetch = originalFetch;
     }
   });
+});
+
+test("an emptied 待评阅 list says the work is done instead of asking to change the filter", () => {
+  expect(reportsEmptyState(0, "pending", false).title).toBe("还没有学生提交报告");
+  expect(reportsEmptyState(3, "pending", false).title).toBe("暂无待评阅报告");
+  expect(reportsEmptyState(3, "pending", true).title).toBe("没有匹配的报告");
 });
