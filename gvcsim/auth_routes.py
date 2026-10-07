@@ -43,12 +43,19 @@ class LoginRequest(TextRequest):
     @classmethod
     def trimmed_username(cls, value: Any) -> Any:
         # Usernames cannot contain whitespace; a name pasted from a roster often carries some around it.
-        return value.strip() if isinstance(value, str) else value
+        return value.strip().strip("\ufeff\u200b\u200c\u200d\u2060").strip() if isinstance(value, str) else value
 
 
 class PasswordChangeRequest(TextRequest):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=12, max_length=256)
+
+    @field_validator("new_password")
+    @classmethod
+    def nonblank_new_password(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("口令不能全是空白字符")
+        return value
 
 
 @router.post("/login")

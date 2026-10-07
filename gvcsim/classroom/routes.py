@@ -346,8 +346,18 @@ def update_class(class_id: int, req: AcademicUpdateRequest, user: dict = Depends
 STUDENT_NO_MAX_LENGTH = 40
 
 
+# Python's str.strip() keeps a byte-order mark and zero-width spaces that a pasted roster often carries.
+_INVISIBLE_EDGES = "\ufeff\u200b\u200c\u200d\u2060"
+
+
 def _strip_text(value: Any) -> Any:
-    return value.strip() if isinstance(value, str) else value
+    return value.strip().strip(_INVISIBLE_EDGES).strip() if isinstance(value, str) else value
+
+
+def _nonblank_password(value: Any) -> Any:
+    if isinstance(value, str) and not value.strip():
+        raise ValueError("口令不能全是空白字符")
+    return value
 
 
 class StudentCreateRequest(TextRequest):
@@ -359,6 +369,8 @@ class StudentCreateRequest(TextRequest):
 
     # Uniqueness of 学号 and login both compare exact text, so surrounding spaces must not survive.
     _strip_identifiers = field_validator("username", "student_no", mode="before")(_strip_text)
+    # Reject a blank password as a field error (422) up front, also in the batch preview.
+    _password_not_blank = field_validator("password")(_nonblank_password)
 
     @field_validator("display_name")
     @classmethod
@@ -429,6 +441,7 @@ class StudentUpdateRequest(TextRequest):
         return value
 
     _strip_student_no = field_validator("student_no", mode="before")(_strip_text)
+    _password_not_blank = field_validator("password")(_nonblank_password)
 
     @field_validator("display_name")
     @classmethod

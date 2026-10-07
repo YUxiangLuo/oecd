@@ -67,3 +67,25 @@ def test_classroom_init_requires_an_explicit_database_dsn(monkeypatch):
     monkeypatch.setattr(config, "PG_DSN", "")
     with pytest.raises(SystemExit, match="缺少 GVCSIM_PG_DSN"):
         main()
+
+
+@pytest.mark.parametrize(
+    ("username", "password", "message"),
+    [
+        ("bad name", "valid-password-2026", "教师用户名须为"),
+        ("teacher2", " " * 12, "不全是空白"),
+    ],
+)
+def test_first_teacher_follows_the_app_account_rules(teaching_db, monkeypatch, username, password, message):
+    monkeypatch.setattr(sys, "argv", ["gvcsim", "classroom-init", "--teacher-username", username])
+    monkeypatch.setenv("GVCSIM_INITIAL_TEACHER_PASSWORD", password)
+    with pytest.raises(SystemExit, match=message):
+        main()
+    assert teaching_db.find_account(username.strip()) is None
+
+
+def test_first_teacher_username_is_trimmed_so_it_can_log_in(teaching_db, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["gvcsim", "classroom-init", "--teacher-username", "  teacher2  "])
+    monkeypatch.setenv("GVCSIM_INITIAL_TEACHER_PASSWORD", "valid-password-2026")
+    main()
+    assert teaching_db.find_account("teacher2") is not None

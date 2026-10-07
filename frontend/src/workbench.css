@@ -320,8 +320,6 @@
   border: 1px solid #dfe4ee; border-radius: 10px; box-shadow: 0 2px 10px rgba(35, 39, 60, .05);
 }
 .scope-card:focus { outline: none; box-shadow: 0 0 0 2px #4b47e0; }
-/* Inside an expanded fullscreen panel the scroller has no top padding to absorb. */
-.fullscreen-panel--expanded .scope-card { top: 0; }
 .scope-item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .scope-sep { font-style: normal; color: #9aa3b5; }
 .scope-chip {

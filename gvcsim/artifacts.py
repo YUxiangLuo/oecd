@@ -16,6 +16,7 @@ import pandas as pd
 from gvcsim.file_identity import FileState, file_state, open_text, verified_source
 
 
+# v16: network_edges holds every positive bilateral flow (step 9 sums it; a top-120 cut reversed rankings).
 # v15: publishes a source-bound, independently simulated tariff teaching panel.
 # v13 panels may persist false zero-valued observations from cancellation noise.
 ARTIFACT_CONTRACT_VERSION = 16

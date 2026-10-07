@@ -67,9 +67,9 @@ const FD_HELP: Record<string, string> = {
   INVNT: "存货变化（有符号调整）；负值表示存货减少，不是缺失值",
   DPABR: "居民境外直接购买(出境旅行等消费)",
 };
+const ACCOUNT_SHORT: Record<string, string> = { TLS: "产品税减补贴", VA: "增加值", OUT: "总产出" };
 /** Short names for headers, options and recorded sentences; the full help stays in the tooltip. */
 const FD_NAMES: Record<string, string> = { ...FD_HELP, INVNT: "存货变化" };
-const ACCOUNT_NAMES: Record<string, string> = { TLS: "产品税减补贴", VA: "增加值", OUT: "总产出" };
 
 /** 列头悬停说明:账户项直接查表;Y 表列拆成「目的国 + 需求类别」组合解释 */
 function columnHelp(column: string): string | undefined {
@@ -369,7 +369,6 @@ function columnHeaderHelp(column: string): string | undefined {
   return columnHelp(column) ?? rowColumnCodeHelp(column);
 }
 
-const ACCOUNT_SHORT: Record<string, string> = { TLS: "产品税减补贴", VA: "增加值", OUT: "总产出" };
 
 /** "CHN 中国" → "中国"; the code already appears in the table headers. */
 function countryName(code: string): string {
@@ -402,7 +401,7 @@ export function dbCellTooltip(table: DbTableKind, row: string, column: string, v
 export function dbObservationSentence(table: DbTableKind, row: string, column: string): string {
   // Industry names, not bare codes: "USA 美国·F" read like final demand (F) instead of construction.
   const rowLabel = rowColumnCodeHelp(row) ?? row;
-  if (table === "accounts") return `${rowLabel} 的 ${column}${ACCOUNT_NAMES[column] ? `（${ACCOUNT_NAMES[column]}）` : ""}`;
+  if (table === "accounts") return `${rowLabel} 的 ${column}${ACCOUNT_SHORT[column] ? `（${ACCOUNT_SHORT[column]}）` : ""}`;
   if (table === "y") {
     return `${rowLabel}(行·供给方) → ${formatYColumnHeader(column)}(列·最终需求)`;
   }

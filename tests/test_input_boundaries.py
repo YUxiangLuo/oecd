@@ -163,15 +163,48 @@ def test_student_number_is_trimmed_bounded_and_unique_after_trimming(teaching_db
 def test_whitespace_only_password_is_rejected(teaching_db):
     client = client_for("teacher")
     body = {"username": "blank-pass", "display_name": "乙", "password": " " * 12}
-    assert client.post("/api/classroom/students", json=body).status_code == 400
+    assert client.post("/api/classroom/students", json=body).status_code == 422
     assert db.find_account("blank-pass") is None
     body["password"] = "valid-password-2026"
     account = client.post("/api/classroom/students", json=body).json()
     response = client.post(f"/api/classroom/students/{account['id']}", json={"password": "\t" * 12})
-    assert response.status_code == 400, response.text
+    assert response.status_code == 422, response.text
 
 
 def test_login_ignores_spaces_around_the_username(teaching_db):
     response = TestClient(app).post("/api/auth/login", json={"username": "  student \t", "password": "gvclab2026"})
     assert response.status_code == 200, response.text
     assert response.json()["user"]["username"] == "student"
+
+
+def test_student_number_matches_legacy_padded_values_and_strips_invisible_characters(teaching_db):
+    client = client_for("teacher")
+    owner = client.post(
+        "/api/classroom/students",
+        json={"username": "legacy-owner", "display_name": "甲", "password": "valid-password-2026"},
+    ).json()
+    # A 学号 stored with spaces before inputs were trimmed.
+    with db.conn() as connection:
+        connection.execute("UPDATE accounts SET student_no=' 2026999 ' WHERE id=%s", (owner["id"],))
+    body = {"username": "legacy-new", "display_name": "乙", "password": "valid-password-2026", "student_no": "2026999"}
+    assert client.post("/api/classroom/students", json=body).status_code == 409
+    bom = {**body, "username": "\ufeffbom-user\u200b", "student_no": "\ufeff2026998"}
+    created = client.post("/api/classroom/students", json=bom)
+    assert created.status_code == 200, created.text
+    assert created.json()["username"] == "bom-user"
+    assert created.json()["student_no"] == "2026998"
+
+
+def test_blank_password_is_a_field_error_in_batch_preview_and_self_service(teaching_db):
+    teacher = client_for("teacher")
+    term = db.create_term("2026 秋", "teacher")
+    group = db.create_class_group(term["id"], "一班", "teacher")
+    roster = {
+        "class_id": group["id"],
+        "preview": True,
+        "students": [{"username": "b-1", "display_name": "甲", "password": " " * 12}],
+    }
+    assert teacher.post("/api/classroom/students/batch", json=roster).status_code == 422
+    student = client_for("student")
+    response = student.post("/api/auth/password", json={"current_password": "gvclab2026", "new_password": " " * 12})
+    assert response.status_code == 422

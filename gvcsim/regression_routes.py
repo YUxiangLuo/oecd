@@ -51,7 +51,7 @@ def _limit_expensive_request(limiter: SlidingWindowRateLimiter, account_id: int,
     except RateLimitExceeded as error:
         raise HTTPException(
             status_code=429,
-            detail=f"{label}请求过于频繁，请稍后重试",
+            detail=f"{label}请求过于频繁，请约 {error.retry_after_header} 秒后重试",
             headers={"Retry-After": error.retry_after_header},
         ) from error
 

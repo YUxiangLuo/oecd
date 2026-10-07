@@ -10,6 +10,7 @@ classroom-init  初始化教学数据库(建库/建表/播种演示数据)
 
 import argparse
 import os
+import re
 
 
 def main() -> None:
@@ -167,13 +168,21 @@ def main() -> None:
         else:
             print(f"教学库 schema 已是当前版本({classroom_db.TEACHING_DB_VERSION})")
         if args.teacher_username:
+            # Same rules as accounts created in the app: login trims the username, so a padded one could
+            # never sign in.
+            username = args.teacher_username.strip()
+            if not re.fullmatch(r"[a-zA-Z0-9_.-]{2,40}", username):
+                raise SystemExit("教师用户名须为 2–40 位字母、数字、下划线、点或连字符")
             password = os.environ.get("GVCSIM_INITIAL_TEACHER_PASSWORD", "")
-            if len(password) < 12:
-                raise SystemExit("请通过 GVCSIM_INITIAL_TEACHER_PASSWORD 提供至少 12 位的初始教师口令")
-            if classroom_db.find_account(args.teacher_username):
-                raise SystemExit(f"账号 {args.teacher_username} 已存在，未修改其口令")
-            classroom_db.provision_teacher(args.teacher_username, args.teacher_name, password)
-            print(f"已创建首位教师:{args.teacher_username}（请登录后立即轮换初始口令）")
+            if len(password) < 12 or not password.strip():
+                raise SystemExit("请通过 GVCSIM_INITIAL_TEACHER_PASSWORD 提供至少 12 位、不全是空白的初始教师口令")
+            if classroom_db.find_account(username):
+                raise SystemExit(f"账号 {username} 已存在，未修改其口令")
+            try:
+                classroom_db.provision_teacher(username, args.teacher_name, password)
+            except ValueError as error:
+                raise SystemExit(f"未创建教师：{error}") from error
+            print(f"已创建首位教师:{username}（请登录后立即轮换初始口令）")
         print(f"教学数据库就绪:{dbname}(schema {classroom_db.TEACHING_DB_VERSION})")
 
 

@@ -170,7 +170,8 @@ def _ensure_student_no_free(c: Any, student_no: str, exclude_id: int | None = No
     if not student_no.strip():
         return
     owner = c.execute(
-        "SELECT username FROM accounts WHERE role='student' AND student_no=%s AND id IS DISTINCT FROM %s LIMIT 1",
+        # btrim: a 学号 saved with surrounding spaces before inputs were trimmed still counts as the same.
+        "SELECT username FROM accounts WHERE role='student' AND btrim(student_no)=%s AND id IS DISTINCT FROM %s LIMIT 1",
         (student_no, exclude_id),
     ).fetchone()
     if owner is not None:
@@ -236,8 +237,8 @@ def create_student_batch(
         # existing username or with another student's 学号.
         names = [student["username"] for student in students]
         existing = c.execute(
-            "SELECT username,student_no FROM accounts"
-            " WHERE username=ANY(%s) OR (role='student' AND student_no=ANY(%s))",
+            "SELECT username,btrim(student_no) AS student_no FROM accounts"
+            " WHERE username=ANY(%s) OR (role='student' AND btrim(student_no)=ANY(%s))",
             (names, names),
         ).fetchall()
         taken = {row["username"] for row in existing} | {row["student_no"] for row in existing}
