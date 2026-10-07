@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { api } from "../../api";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Meta, Step } from "../../types";
-import { ShockLab } from "./shock-lab";
+import { ShockLab, stepTenGapNote } from "./shock-lab";
 import { SHOCK_ARTIFACT_CONTRACT_VERSION } from "./shock/shock-contract";
 
 const step: Step = {
@@ -140,3 +140,10 @@ test("step 10 can follow a single taxed country and records it alone", async () 
   cleanup();
 });
 
+
+test("the step 10 gap note matches whether the two countries were taxed", () => {
+  expect(stepTenGapNote([true, false])).toContain("就是加税那年起的 X");
+  expect(stepTenGapNote([true, true])).toContain("差距来自出口依赖 w 的不同");
+  expect(stepTenGapNote([false, false])).toContain("没有差距");
+  expect(stepTenGapNote([true])).toBeUndefined();
+});

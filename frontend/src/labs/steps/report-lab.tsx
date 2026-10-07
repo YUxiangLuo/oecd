@@ -485,7 +485,7 @@ export function ReportLab({
       {confirmRegenerate && (
         <ConfirmModal
           title="重新生成已评阅的报告？"
-          message="此报告已经评阅。重新生成会替换报告、清除现有评分和评语，并重新提交给老师。需要留档时请先导出原报告。"
+          message="此报告已经评阅。重新生成会替换报告、清除现有评分和评语，并重新提交给老师。需要留档时，请先在“查看提交回执与实验总结”里记下评分与评语。"
           confirmLabel="确定重新生成"
           danger
           onConfirm={() => confirmRegenerate(true)}

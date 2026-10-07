@@ -29,6 +29,19 @@ export interface ShockStepState extends QuizCompletionState, Record<string, unkn
 }
 
 /** 步骤 10 只介绍四个后续回归共同使用的关税暴露 X。 */
+/**
+ * What the two-country gap in step 10 means. X = w × τ is 0 before the tariff for everyone, so after it:
+ * one taxed and one untaxed → the gap is the taxed country's X; both taxed → the gap comes from their
+ * different export dependence w under the same tariff; both untaxed → there is no gap.
+ */
+export function stepTenGapNote(taxed: boolean[]): string | undefined {
+  if (taxed.length !== 2) return undefined;
+  if (taxed[0] !== taxed[1]) return "两国的差距就是加税那年起的 X：未加税国家始终为 0";
+  return taxed[0]
+    ? "两国都被加税（税率相同）：差距来自出口依赖 w 的不同，缺少未加税的对照"
+    : "两国都未加税：X 一直为 0，没有差距";
+}
+
 export function ShockLab({ meta, step: _step, state, getStep }: {
   meta: Meta;
   step: Step;
@@ -192,9 +205,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
           label="关税暴露 X"
           unit="%"
           markYear={groups.status === "success" && groups.data ? { year: groups.data.policy_year, label: `${groups.data.policy_year} 年起加税` } : undefined}
-          gapNote={lastRows.length === 2 && (lastRows[0].teaching_tariff_rate_tau > 0) !== (lastRows[1].teaching_tariff_rate_tau > 0)
-            ? "两国的差距就是加税那年起的 X：未加税国家始终为 0"
-            : "两国加税状态相同，这个差距不来自加税；换成一国加税、一国未加税才能看到加税带来的差距"}
+          gapNote={stepTenGapNote(lastRows.map((row) => row.teaching_tariff_rate_tau > 0))}
         />
         {exampleRow && (
           <div className="reg-variable-plain-grid" role="group" aria-label="用所选例子算一次 X">

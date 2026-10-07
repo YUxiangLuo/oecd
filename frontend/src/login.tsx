@@ -194,7 +194,7 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
           <h2>进入实验平台</h2>
           <p className="login-card-sub">使用教师分配的个人账号登录。</p>
           {/* An expired session is a warning, not a success; a password change is confirmed in green. */}
-          {notice && <div className={`${notice.includes("失效") ? "tipbox" : "success-box"} login-notice`} role="status">{notice}</div>}
+          {notice && <div className={`${notice.includes("失效") || notice.includes("网络不可用") ? "tipbox" : "success-box"} login-notice`} role="status">{notice}</div>}
 
           {demoMode && demoAccounts.length > 0 && <div className="login-roles" role="group" aria-label="开发演示快捷账号">
             {demoAccounts.map((a) => (

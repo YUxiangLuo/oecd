@@ -68,15 +68,25 @@ export function StudentRowMenu({
 }) {
   const who = `${student.display_name}（${student.username}）`;
   const passwordLabel = student.demo_seed ? "固定演示口令" : "重置密码";
-  // Close the menu on a pick; otherwise it stayed open behind the modal and after saving.
+  // Close the menu on a pick; otherwise it stayed open behind the modal and after saving. Focus moves to
+  // the menu's ⋯ first, so the modal returns focus there (the picked item is hidden once the menu closes).
   const pick = (event: React.MouseEvent<HTMLElement>, type: "name" | "student_no" | "password" | "enrollment") => {
-    event.currentTarget.closest("details")?.removeAttribute("open");
+    const menu = event.currentTarget.closest("details");
+    menu?.removeAttribute("open");
+    menu?.querySelector("summary")?.focus();
     onPick(type, student);
   };
   return (
-    <details className="row-menu" onToggle={(event) => {
+    <details className="row-menu" onKeyDown={(event) => {
+      // Escape closes the menu and returns to its ⋯, like other menus.
+      if (event.key !== "Escape" || !event.currentTarget.open) return;
+      event.currentTarget.removeAttribute("open");
+      event.currentTarget.querySelector("summary")?.focus();
+    }} onToggle={(event) => {
       const menu = event.currentTarget;
       if (!menu.open) return;
+      // One menu at a time: opening this one closes the others.
+      document.querySelectorAll<HTMLDetailsElement>(".row-menu[open]").forEach((other) => { if (other !== menu) other.open = false; });
       const region = menu.closest<HTMLElement>(".student-table-scroll");
       const popup = menu.querySelector<HTMLElement>(".row-menu-pop");
       if (!region || !popup) return;
@@ -112,6 +122,16 @@ function useModalErrorFocus(error: string | null) {
 
 export function StudentsTab() {
   const [refresh, setRefresh] = useState(0);
+  // A click outside an open row menu closes it (native <details> stays open otherwise).
+  useEffect(() => {
+    const close = (event: PointerEvent) => {
+      document.querySelectorAll<HTMLDetailsElement>(".row-menu[open]").forEach((menu) => {
+        if (!menu.contains(event.target as Node)) menu.open = false;
+      });
+    };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, []);
   const [query, setQuery] = useState("");
   const [semesterId, setSemesterId] = useState<number | null>(null);
   const [classId, setClassId] = useState<number | null>(null);

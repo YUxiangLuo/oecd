@@ -107,15 +107,27 @@ export default function App() {
   }, []);
 
   const logout = useCallback(() => {
+    let kept = false;
     void session.syncNow().catch(() => {
       // The next login in this tab puts the edits back.
-      if (user?.role === "student") session.keepUnsavedEdits();
+      if (user?.role === "student") kept = session.keepUnsavedEdits();
     }).finally(() => {
       // On a shared computer the next person must start from their own progress, not this
       // user's last step; an expired session (reloadLoggedOut alone) keeps the step for re-login.
       dropStepFromHistory(window.history, window.location.href);
       sessionStorage.setItem(LOGGED_OUT_HERE_KEY, "1");
-      reloadLoggedOut();
+      if (navigator.onLine) {
+        reloadLoggedOut();
+        return;
+      }
+      // Offline a reload lands on the browser's own error page; show the login form in place instead.
+      const activeToken = getActiveAuthToken();
+      setActiveAuthToken(null);
+      if (activeToken !== null) clearAuthenticationIfCurrent(sessionStorage, activeToken);
+      setAuthNotice(kept
+        ? "已退出登录。当前网络不可用：未保存的修改保留在本标签页，网络恢复后在这里重新登录即可自动保存。"
+        : "已退出登录。当前网络不可用，网络恢复后才能重新登录。");
+      setUser(null);
     });
   }, [reloadLoggedOut, session, user]);
 

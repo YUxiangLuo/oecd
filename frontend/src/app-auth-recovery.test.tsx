@@ -96,6 +96,28 @@ describe("authentication dependency recovery", () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
+  test("logging out offline shows the login form in place instead of reloading onto the browser's error page", async () => {
+    const reload = retainedLogin();
+    const releaseId = "c".repeat(32);
+    const me = spyOn(api, "me").mockResolvedValue({ username: "offline-student", name: "学生", role: "student" });
+    const meta = spyOn(api, "meta").mockResolvedValue({ years: [2020], countries: ["CHN"], sectors: ["C26"], dataset: { years: [2020], release_id: releaseId } });
+    const steps = spyOn(api, "steps").mockResolvedValue({ stages: { "5": "实验闭环" }, steps: [{
+      n: 15, stage: 5, lab: "rep", status: "demo", title: "生成实验报告", goal: "汇总实验", tasks: ["记录", "比较", "报告"],
+      concept: "实验", tip: "保存", deps: [], handoff: { input: "记录", action: "汇总", output: "报告" },
+    }] });
+    const session = spyOn(api.classroom, "session").mockResolvedValue({ release_id: releaseId, session: emptySession(), updated_at: null, report: null,
+      completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_gate: [], material_gate: [],
+    });
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+    restorers.push(...[me, meta, steps, session].map((mock) => () => mock.mockRestore()), () => { delete (navigator as { onLine?: boolean }).onLine; });
+    render(<App />);
+    fireEvent.click(await screen.findByRole("button", { name: "退出" }));
+    expect((await screen.findByRole("status")).textContent).toContain("当前网络不可用");
+    expect(screen.getByLabelText("用户名")).toBeTruthy();
+    expect(reload).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();
+  });
+
   for (const status of [500, 503]) {
     test(`a ${status} during boot retains authentication and offers retry`, async () => {
       const reload = retainedLogin();
