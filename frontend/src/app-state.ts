@@ -41,6 +41,13 @@ export function urlWithStep(href: string, step: number): string {
   return `${url.pathname}${url.search}${url.hash}`;
 }
 
+/** Forget the step in the current history entry, so the next login starts from the account's own progress. */
+export function dropStepFromHistory(history: StepHistoryWriter, href: string): void {
+  const url = new URL(href);
+  url.searchParams.delete("step");
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 /** Write a real history entry for a user navigation, but never duplicate the current URL. */
 export function writeStepHistory(
   history: StepHistoryWriter,

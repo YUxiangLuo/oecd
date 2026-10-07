@@ -3,6 +3,7 @@ import { AUTH_TOKEN_KEY } from "./api";
 import {
   clearAuthentication,
   clearAuthenticationIfCurrent,
+  dropStepFromHistory,
   stepFromSearch,
   shouldAutoShowIntro,
   storeAuthentication,
@@ -47,6 +48,16 @@ describe("application URL state", () => {
       "push:/lab?mode=demo&step=3",
       "replace:/lab?mode=demo&step=7",
     ]);
+  });
+
+  test("drops only the step from the current entry when the account changes", () => {
+    const calls: string[] = [];
+    const history = {
+      pushState: () => calls.push("push"),
+      replaceState: (_data: unknown, _unused: string, url?: string | URL | null) => calls.push(`replace:${String(url)}`),
+    };
+    dropStepFromHistory(history, "https://example.test/lab?mode=demo&step=7#chart");
+    expect(calls).toEqual(["replace:/lab?mode=demo#chart"]);
   });
 });
 

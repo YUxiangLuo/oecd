@@ -69,6 +69,33 @@ describe("authentication dependency recovery", () => {
     expect(sessionStorage.getItem(AUTH_TOKEN_KEY)).toBe("valid-session");
   });
 
+  test("a failed read of the saved record blocks the workspace until a retry reads it", async () => {
+    const reload = retainedLogin();
+    const releaseId = "b".repeat(32);
+    const me = spyOn(api, "me").mockResolvedValue({ username: "retry-student", name: "学生", role: "student" });
+    const meta = spyOn(api, "meta").mockResolvedValue({ years: [2020], countries: ["CHN"], sectors: ["C26"], dataset: { years: [2020], release_id: releaseId } });
+    const steps = spyOn(api, "steps").mockResolvedValue({ stages: { "5": "实验闭环" }, steps: [{
+      n: 15, stage: 5, lab: "rep", status: "demo", title: "生成实验报告", goal: "汇总实验", tasks: ["记录", "比较", "报告"],
+      concept: "实验", tip: "保存", deps: [], handoff: { input: "记录", action: "汇总", output: "报告" },
+    }] });
+    const saved = emptySession();
+    saved.steps["15"] = { data: { research_question: "服务器上的研究问题" } };
+    const session = spyOn(api.classroom, "session").mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue({ release_id: releaseId, session: saved, updated_at: null, report: null,
+        completion: { completed: [], completed_count: 0, total: 15, steps: [] }, report_gate: [], material_gate: [],
+      });
+    restorers.push(...[me, meta, steps, session].map((mock) => () => mock.mockRestore()));
+    render(<App />);
+    const retry = await screen.findByRole("button", { name: "重新读取实验记录" });
+    // No editable workspace while the record is unknown: typed text would be silently dropped.
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.getByRole("alert").textContent).not.toContain("Failed to fetch");
+    fireEvent.click(retry);
+    await waitFor(() => expect(screen.getByDisplayValue("服务器上的研究问题")).toBeTruthy());
+    expect(session).toHaveBeenCalledTimes(2);
+    expect(reload).not.toHaveBeenCalled();
+  });
+
   for (const status of [500, 503]) {
     test(`a ${status} during boot retains authentication and offers retry`, async () => {
       const reload = retainedLogin();

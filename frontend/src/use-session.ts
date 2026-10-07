@@ -125,6 +125,8 @@ export interface SessionApi {
   getShared: <T>(key: SharedSessionKey) => T | undefined;
   updateShared: <T>(key: SharedSessionKey, apply: (current: T | undefined) => T) => void;
   syncNow: () => Promise<void>;
+  /** Read the saved record again after the first read failed (status "unavailable"). */
+  retryLoad: () => void;
   /** Keep unconfirmed edits in this tab before leaving on purpose (logout, expired login, password change); the next load puts them back. */
   keepUnsavedEdits: () => boolean;
   resolveSyncConflict: () => Promise<void>;
@@ -243,6 +245,7 @@ export function updateSessionShared<T>(session: ExperimentSession, key: SharedSe
 
 export function useSession(enabled: boolean, username?: string): SessionApi {
   const [status, setStatus] = useState<SessionStatus>(enabled ? "loading" : "unavailable");
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [session, setSession] = useState<ExperimentSession>(emptySession);
   const sessionRef = useRef(session);
   const releaseIdRef = useRef<string | null>(null);
@@ -342,7 +345,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       },
     );
     return () => { live = false; };
-  }, [enabled, replace, username]);
+  }, [enabled, loadAttempt, replace, username]);
 
   const drain = useCallback(async () => {
     await queue.current?.drain();
@@ -472,6 +475,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     getShared: useCallback(<T,>(key: SharedSessionKey) => readShared<T>(session, key), [session]),
     updateShared: useCallback(<T,>(key: SharedSessionKey, apply: (current: T | undefined) => T) => update((value) => updateSessionShared(value, key, apply)), [update]),
     syncNow,
+    retryLoad: useCallback(() => setLoadAttempt((value) => value + 1), []),
     keepUnsavedEdits,
     resolveSyncConflict,
     applyReportMutation,

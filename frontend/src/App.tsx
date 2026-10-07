@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   clearAuthentication,
   clearAuthenticationIfCurrent,
+  dropStepFromHistory,
   shouldAutoShowIntro,
   stepFromSearch,
   storeAuthentication,
@@ -108,9 +109,7 @@ export default function App() {
     }).finally(() => {
       // On a shared computer the next person must start from their own progress, not this
       // user's last step; an expired session (reloadLoggedOut alone) keeps the step for re-login.
-      const url = new URL(window.location.href);
-      url.searchParams.delete("step");
-      window.history.replaceState(window.history.state, "", url);
+      dropStepFromHistory(window.history, window.location.href);
       reloadLoggedOut();
     });
   }, [reloadLoggedOut, session, user]);
@@ -143,6 +142,19 @@ export default function App() {
   }, [reloadLoggedOut]);
 
   useEffect(() => {
+    // Back after logout can restore a signed-in page from the back/forward cache with its token
+    // still in memory; the tab's stored token is the truth, so reload when it is gone.
+    const restored = (event: PageTransitionEvent) => {
+      if (event.persisted && getActiveAuthToken() !== null && sessionStorage.getItem(AUTH_TOKEN_KEY) !== getActiveAuthToken()) {
+        setActiveAuthToken(null);
+        window.location.reload();
+      }
+    };
+    window.addEventListener("pageshow", restored);
+    return () => window.removeEventListener("pageshow", restored);
+  }, []);
+
+  useEffect(() => {
     const expired = () => {
       if (user?.role === "student") session.keepUnsavedEdits();
       reloadLoggedOut("登录已失效，请重新登录。", user?.username);
@@ -162,13 +174,13 @@ export default function App() {
       setMetaReady(true);
     }, (error) => {
       if (!live) return;
-      setFatal(String(error.message ?? error));
+      setFatal(userFacingRequestError(error, "读取课程数据失败"));
       setMetaReady(true);
     });
     if (user.role === "student") {
       api.steps().then(
         (value) => { if (live) setStepsData(value); },
-        (error) => { if (live) setFatal(String(error.message ?? error)); },
+        (error) => { if (live) setFatal(userFacingRequestError(error, "读取课程步骤失败")); },
       );
     }
     return () => { live = false; };
@@ -208,6 +220,9 @@ export default function App() {
         if (shouldAutoShowIntro(response.user.role) && !authNotice) {
           sessionStorage.setItem("gvcsim_show_intro", "1");
         }
+        // A step in the URL left by the previous user (Back after logout) must not decide where this
+        // login opens; only a re-login after an expired session returns to the step it left.
+        if (!authNotice) dropStepFromHistory(window.history, window.location.href);
         window.location.reload();
       }} />
     );
@@ -235,10 +250,25 @@ export default function App() {
     <main className="app-boot" style={{ padding: 40 }}>
       <div className="error-box" role="alert">课程加载失败：{fatal}</div>
       <p>登录信息已保留，可以重试加载课程。</p>
-      <button className="primary" onClick={() => { setFatal(null); setBootAttempt((value) => value + 1); }}>重试加载课程</button>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button className="primary" onClick={() => { setFatal(null); setBootAttempt((value) => value + 1); }}>重试加载课程</button>
+        <button className="secondary" onClick={logout}>退出登录</button>
+      </div>
     </main>
   );
   if (!stepsData || !metaReady || session.status === "loading") return <AppBootSkeleton />;
+  // Without the saved record every edit would be dropped (nothing can be merged or saved), so the
+  // workspace must not look usable: block it until the record is read.
+  if (session.status === "unavailable") return (
+    <main className="app-boot" style={{ padding: 40 }}>
+      <div className="error-box" role="alert">读取实验记录失败：{session.syncError ?? "暂时无法连接教学服务"}</div>
+      <p>你的实验记录保存在服务器上，没有丢失。读取成功后才能继续操作。</p>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button className="primary" onClick={session.retryLoad}>重新读取实验记录</button>
+        <button className="secondary" onClick={logout}>退出登录</button>
+      </div>
+    </main>
+  );
 
   return (
     <StudentWorkspace
