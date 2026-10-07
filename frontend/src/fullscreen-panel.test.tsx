@@ -1,6 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { FullscreenPanel, lockFullscreenScroll } from "./fullscreen-panel";
+import { SyncProblemContext } from "./sync-problem";
 
 function scrollTarget(overflow = "", overflowY = "") {
   return { style: { overflow, overflowY } };
@@ -67,5 +69,25 @@ describe("FullscreenPanel inline state", () => {
     expect(html).toContain("已恢复的对比");
     expect(html).not.toContain("fullscreen-panel--expanded");
     expect(html).not.toContain('role="dialog"');
+  });
+});
+
+describe("FullscreenPanel save problems", () => {
+  afterEach(cleanup);
+
+  test("an expanded panel repeats the unsaved-record warning the page banner can no longer show", () => {
+    let retried = 0;
+    const problem = { error: "网络连接中断", conflict: false, syncing: false, act: () => { retried += 1; } };
+    render(
+      <SyncProblemContext.Provider value={problem}>
+        <FullscreenPanel title="中间投入 Z" buttonLabel="全屏查看"><p>表格</p></FullscreenPanel>
+      </SyncProblemContext.Provider>,
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "全屏查看：中间投入 Z" }));
+    const alert = screen.getByRole("dialog").querySelector("[role=alert]");
+    expect(alert?.textContent).toContain("实验记录尚未保存到服务器");
+    fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
+    expect(retried).toBe(1);
   });
 });

@@ -22,6 +22,7 @@ import {
   STEP_PRIMARY_ACTION_ID,
   StepTaskCard,
 } from "./step-task-card";
+import { SyncProblemBanner, SyncProblemContext, type SyncProblem } from "./sync-problem";
 import { ToastHost } from "./toast";
 import type { AuthUser, Meta, StepsResponse, StepStateApi } from "./types";
 import type { SessionApi } from "./use-session";
@@ -142,8 +143,15 @@ export function StudentWorkspace({
     }
     : stepState;
 
+  const syncProblem: SyncProblem = {
+    error: session.syncError,
+    conflict: session.syncConflict,
+    syncing: session.syncing,
+    act: () => { void (session.syncConflict ? session.resolveSyncConflict() : session.syncNow()).catch(() => {}); },
+  };
+
   return (
-    <>
+    <SyncProblemContext.Provider value={syncProblem}>
       <div className="layout" inert={showIntro ? true : undefined}>
         <StudentWorkspaceSkipLink targetId={mainContentId} targetRef={contentRef} />
         <StudentTopbar
@@ -169,28 +177,7 @@ export function StudentWorkspace({
           />
 
           <div className="workarea">
-            {session.syncError && (
-              <div className="error-box persistent-qc-warning" role="alert">
-                <b>{session.syncConflict ? "另一个页面已经保存了更新的记录" : "实验记录尚未保存到服务器"}</b>
-                <p>
-                  {session.syncConflict
-                    ? "为避免互相覆盖，本页的修改暂未保存。载入后，另一个页面改过的内容以它为准，本页的其他修改会自动保留并保存；两边在同一步改了同一项时，本页这一步的修改会被替换，需要的文字请先复制。"
-                    : `${session.syncError} 本页内容还在，可以直接重试；关闭标签页可能丢失未保存的修改。`}
-                </p>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={session.syncing}
-                  onClick={() => {
-                    void (session.syncConflict ? session.resolveSyncConflict() : session.syncNow()).catch(() => {});
-                  }}
-                >
-                  {session.syncing
-                    ? session.syncConflict ? "正在载入…" : "正在重试…"
-                    : session.syncConflict ? "载入服务器版本" : "重试保存"}
-                </button>
-              </div>
-            )}
+            <SyncProblemBanner problem={syncProblem} />
             <StepHeader
               step={step}
               previous={prevStep}
@@ -285,6 +272,6 @@ export function StudentWorkspace({
           returnFocusRef={passwordTriggerRef}
         />
       )}
-    </>
+    </SyncProblemContext.Provider>
   );
 }

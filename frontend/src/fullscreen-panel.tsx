@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useDialogFocus } from "./a11y";
+import { FullscreenSyncProblem } from "./sync-problem";
 
 type FullscreenVariant = "table" | "workbench" | "shock" | "heat";
 
@@ -161,6 +162,7 @@ export function FullscreenPanel({
             </button>
           </div>
         )}
+        {expanded && <FullscreenSyncProblem />}
         <div className="fullscreen-panel-content">{children}</div>
       </div>
     </section>
