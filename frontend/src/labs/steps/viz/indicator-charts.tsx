@@ -506,10 +506,10 @@ export function layoutStripLabels<T extends { px: number; text: string }>(points
 }
 
 /**
- * Three or more labels, placed from the outermost dots inwards. A label may cover another country's dot
- * only when that country's label sits on a row above (its leader ends before reaching this row), and its
- * own leader must pass no label above it. Each label tries the lowest row first: centred under its dot,
- * then ending at the dot (left half) or starting at it (right half). The strip's height follows the rows.
+ * Three or more labels (at most five countries): an exact search for the fewest rows. Each label sits
+ * centred under its dot, ending at it or starting at it; on one row labels may not overlap, and no
+ * label may lie across another country's leader line (a leader runs from its dot down to its own row,
+ * so it passes every row above that). Rows grow as needed; the strip's height follows the last row.
  */
 function layoutManyStripLabels<T extends { px: number; width: number; labelX: number; row: number }>(
   laid: T[],
@@ -518,33 +518,60 @@ function layoutManyStripLabels<T extends { px: number; width: number; labelX: nu
   const gap = 10;
   const covers = (label: { labelX: number; width: number }, dot: number) => dot >= label.labelX - 2 && dot <= label.labelX + label.width + 2;
   const sorted = [...laid].sort((a, b) => a.px - b.px);
+  // Outermost first: they constrain the most and anchor the search.
   const order: T[] = [];
   for (let lo = 0, hi = sorted.length - 1; lo <= hi; lo += 1, hi -= 1) {
     order.push(sorted[lo]);
     if (hi !== lo) order.push(sorted[hi]);
   }
-  const placed = new Set<T>();
-  for (const point of order) {
-    const leftHalf = sorted.indexOf(point) < sorted.length / 2;
-    const centred = point.px - point.width / 2;
-    const [inner, outer] = leftHalf ? [point.px - point.width, point.px] : [point.px, point.px - point.width];
-    const candidates = [centred, inner, outer].map((left) => clamp(left, point.width));
-    let chosen: { row: number; labelX: number } | null = null;
-    for (let row = 0; chosen == null && row < laid.length; row += 1) {
-      for (const labelX of candidates) {
-        const span = { labelX, width: point.width };
-        const fits = laid.every((other) => {
-          if (other === point) return true;
-          if (!placed.has(other)) return !covers(span, other.px);
-          if (other.row === row) return labelX + point.width + gap <= other.labelX || other.labelX + other.width + gap <= labelX;
-          return other.row < row ? !covers(other, point.px) : !covers(span, other.px);
-        });
-        if (fits) { chosen = { row, labelX }; break; }
+  const candidates = order.map((point) => [...new Set([point.px - point.width / 2, point.px - point.width, point.px]
+    .map((left) => clamp(left, point.width)))]);
+  type Slot = { row: number; labelX: number; width: number; px: number };
+  const compatible = (a: Slot, b: Slot) => a.row === b.row
+    ? a.labelX + a.width + gap <= b.labelX || b.labelX + b.width + gap <= a.labelX
+    : a.row < b.row ? !covers(a, b.px) : !covers(b, a.px);
+  const chosen: Slot[] = [];
+  const search = (index: number, rows: number): boolean => {
+    if (index === order.length) return true;
+    const point = order[index];
+    for (let row = 0; row < rows; row += 1) {
+      for (const labelX of candidates[index]) {
+        const slot = { row, labelX, width: point.width, px: point.px };
+        if (!chosen.every((other) => compatible(slot, other))) continue;
+        chosen.push(slot);
+        if (search(index + 1, rows)) return true;
+        chosen.pop();
       }
     }
-    Object.assign(point, chosen ?? { row: Math.max(0, ...[...placed].map((other) => other.row)) + 1, labelX: candidates[0] });
-    placed.add(point);
+    return false;
+  };
+  for (let rows = 1; rows <= order.length; rows += 1) {
+    chosen.length = 0;
+    if (search(0, rows)) {
+      order.forEach((point, index) => { point.row = chosen[index].row; point.labelX = chosen[index].labelX; });
+      return laid;
+    }
   }
+  // Only dots a few pixels apart can make every layout touch a leader; a staircase keeps it readable.
+  return staircaseStripLabels(laid, sorted, clamp);
+}
+
+/**
+ * Fallback when crowded dots leave no free slot: a staircase. Left-half labels end at their dot and
+ * right-half labels start at theirs; the outermost dots take row 0 and each step inwards takes the next
+ * row, so an inner leader always ends below the outer labels it passes and never crosses them.
+ */
+function staircaseStripLabels<T extends { px: number; width: number; labelX: number; row: number }>(
+  laid: T[],
+  sorted: T[],
+  clamp: (left: number, width: number) => number,
+) {
+  const half = Math.floor(sorted.length / 2);
+  sorted.forEach((point, index) => {
+    const fromLeft = index < half || (index === half && sorted.length % 2 === 1);
+    point.row = fromLeft ? index : sorted.length - 1 - index;
+    point.labelX = clamp(fromLeft ? point.px - point.width : point.px, point.width);
+  });
   return laid;
 }
 

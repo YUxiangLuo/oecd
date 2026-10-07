@@ -270,6 +270,18 @@ describe("global reference for steps 6–8", () => {
     // The strip grows with the rows, so even the lowest label sits inside the SVG.
     const rows = Math.max(...laid.map((p) => p.row));
     expect(rows).toBeGreaterThan(1);
+    // Dots near the chart edge force clamped labels; the old greedy layout then dropped a label onto a
+    // row where another country's leader crossed it.
+    for (const dots of [[67, 229, 112], [300, 350, 400, 450, 500], [600, 650, 700, 730, 760]]) {
+      const edge = layoutStripLabels(dots.map((px, i) => ({ px, text: `C${i} 中国 15.613% · 第 40 位` })));
+      for (const p of edge) {
+        for (const q of edge) {
+          if (p === q) continue;
+          if (p.row === q.row) expect(p.labelX + p.width <= q.labelX || q.labelX + q.width <= p.labelX).toBeTrue();
+          if (q.row < p.row) expect(crosses(p.px, q)).toBeFalse();
+        }
+      }
+    }
     // Spread out, three labels share the first row, each centred under its dot.
     expect(layoutStripLabels([100, 400, 700].map((px) => ({ px, text }))).map((p) => [p.row, p.labelX + p.width / 2])).toEqual([[0, 100], [0, 400], [0, 700]]);
     const data = ["DEU", "CHN", "USA", "JPN", "KOR", ...Array.from({ length: 30 }, (_, i) => `C${i}`)]
