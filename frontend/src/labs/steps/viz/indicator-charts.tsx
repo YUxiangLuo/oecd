@@ -751,10 +751,9 @@ export function LengthPositionTrajectory({
   const cloudPoints = cloud
     .filter((row) => !row.industry && row.country !== "ROW" && !countries.includes(String(row.country)) && finiteValue(row.PLy_GVC) && finiteValue(row.PLv_GVC))
     .map((row) => ({ country: String(row.country), x: row.PLy_GVC as number, y: row.PLv_GVC as number }));
-  const values = [
-    ...series.flatMap((points) => points.flatMap((point) => [point.x, point.y])),
-    ...cloudPoints.flatMap((point) => [point.x, point.y]),
-  ];
+  // The axes fit the selected trajectories, not the whole cloud: fitted to every economy, the selected
+  // paths (which move by hundredths) collapsed into one corner. Cloud points outside the range are left out.
+  const values = series.flatMap((points) => points.flatMap((point) => [point.x, point.y]));
   if (!series.some((points) => points.length)) return null;
   // Lengths cluster around 2–5 stages and move by hundredths a year: a zero-based axis collapses every
   // trajectory into one dot. Both axes share one range fitted to the data, so the 45° line keeps its meaning.
@@ -767,6 +766,8 @@ export function LengthPositionTrajectory({
   const scale = (value: number) => ((value - lo) / extent) * 540;
   const x = (value: number) => 120 + scale(value);
   const y = (value: number) => 590 - scale(value);
+  const inRange = (value: number) => value >= lo && value <= axis.hi;
+  const shownCloud = cloudPoints.filter((point) => inRange(point.x) && inRange(point.y));
   const stage = (value: number) => indicatorNumber(value, "生产阶段");
   const linesFor = (country: string, point: { year: number; x: number; y: number }): TipLine[] => [
     ["", `${countryLabel(country)} · ${point.year}`],
@@ -786,7 +787,7 @@ export function LengthPositionTrajectory({
         viewBox="0 0 720 650"
         role="img"
         aria-label={`前向与后向GVC段长度历年轨迹，${countries.map(countryLabel).join("与")}`}
-        style={{ width: "100%", maxHeight: 520, display: "block" }}
+        style={{ width: "100%", maxWidth: 680, display: "block", margin: "0 auto" }}
       >
         <defs>
           {countries.map((country, index) => (
@@ -824,7 +825,7 @@ export function LengthPositionTrajectory({
             <text x={x(tickValue)} y={615} textAnchor="middle" fontSize={12}>{indicatorTick(tickValue, "生产阶段")}</text>
           </g>;
         })}
-        {cloudPoints.map((point) => (
+        {shownCloud.map((point) => (
           <g key={`cloud-${point.country}`} data-cloud={point.country}
             onMouseMove={(event) => { setActive(null); show(event, [["", `${countryLabel(point.country)} · ${cloudYear ?? ""}`], ["后向 GVC 段长度", stage(point.x)], ["前向 GVC 段长度", stage(point.y)]]); }}
             onMouseLeave={hide}>
@@ -832,10 +833,10 @@ export function LengthPositionTrajectory({
             <circle cx={x(point.x)} cy={y(point.y)} r={3} fill="#9aa3b5" fillOpacity={0.55} />
           </g>
         ))}
-        {cloudPoints.length > 0 && (
+        {shownCloud.length > 0 && (
           <g transform="translate(560 18)">
             <circle cx={0} cy={0} r={3} fill="#9aa3b5" fillOpacity={0.55} />
-            <text x={8} y={4} fontSize={11} fill="#596173">{cloudYear} 年全部经济体</text>
+            <text x={8} y={4} fontSize={11} fill="#596173">{cloudYear} 年范围内的其他经济体</text>
           </g>
         )}
         <line x1={x(lo)} y1={y(lo)} x2={x(axis.hi)} y2={y(axis.hi)} stroke="#8a6415" strokeDasharray="6 4" />

@@ -270,7 +270,6 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
         {trails.map((trail) => {
           const points = trail.points.filter((point) => !log || point.x > 0);
           if (points.length < 2) return null;
-          const last = points[points.length - 1];
           return (
             <g key={`trail-${trail.id}`} data-trail={trail.id}>
               <polyline points={points.map((point) => `${px(point.x)},${py(point.y)}`).join(" ")} fill="none" stroke={trail.color} strokeWidth={2} strokeLinejoin="round" strokeOpacity={0.9} />
@@ -279,7 +278,8 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
                   <circle cx={px(point.x)} cy={py(point.y)} r={index === 0 || index === points.length - 1 ? 4 : 2.5} fill={index === 0 ? "#fff" : trail.color} stroke={trail.color} strokeWidth={1.5} />
                 </g>
               ))}
-              <text x={px(last.x) + 7} y={py(last.y) - 7} fontSize="9.5" fill={trail.color} stroke="#fff" strokeWidth={3} paintOrder="stroke" pointerEvents="none">{points[0].year}→{last.year}</text>
+              {/* No per-trail "2016→2020" text: placed outside the label layout it overlapped the country labels.
+                  The note above the chart explains hollow start / solid end, and each point's tooltip names its year. */}
             </g>
           );
         })}
