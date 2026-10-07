@@ -335,6 +335,11 @@ export function IndicatorExplorer({
       )?.[key];
       return finiteValue(value) ? value : null;
     });
+  // 段长度对照 draws one dumbbell per economy; a shared range keeps their axes comparable.
+  const segmentValues = view === "segments"
+    ? LENGTH_SEGMENTS.flatMap((segment) => [...valuesFor(segment.forward), ...valuesFor(segment.backward)]).filter((value): value is number => value !== null)
+    : [];
+  const segmentDomain = segmentValues.length ? [Math.min(...segmentValues), Math.max(...segmentValues)] as const : undefined;
   const table = (observations: VizObservation[]) => (
     <ScrollableRegion
       className="table-wrap bounded-data-table"
@@ -838,6 +843,7 @@ export function IndicatorExplorer({
           )}
           {view === "segments" && (
             <>
+              {selected.length > 1 && <p className="muted">各国使用同一坐标范围，点的位置可以跨国比较。</p>}
               <div className="comparison-facets">
                 {selected.map((country) => (
                   <section key={country} className="comparison-facet">
@@ -847,6 +853,7 @@ export function IndicatorExplorer({
                       unit="长度单位"
                       leftLabel="前向段长度"
                       rightLabel="后向段长度"
+                      domain={segmentDomain}
                       rows={LENGTH_SEGMENTS.map((segment) => ({
                         key: segment.key,
                         label: segment.label,

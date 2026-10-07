@@ -233,6 +233,8 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         ))}
       </div>
     ) : view === "flows" ? (
+      <>
+      {selected.length > 1 && <p className="muted">每个国家的条长按本国最大的行业缩放：条长只在同一国家内比较，跨国比较请看数值。</p>}
       <div className="comparison-facets">
         {selected.map((country) => {
           const rows = industriesOf(country)
@@ -259,6 +261,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
           );
         })}
       </div>
+      </>
     ) : <>
       {view === "ranking" ? ranked.length ? <>
         <NetworkRanking rows={ranked} countries={selected} unit={unit} reference={industryReference} onIndustry={(next) => { setIndustry(next); setView("trend"); setFocusScope(true); }} />

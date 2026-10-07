@@ -83,3 +83,11 @@ describe("dumbbell and butterfly", () => {
     expect(screen.getByRole("status").textContent).toContain("25.000%");
   });
 });
+
+test("side-by-side dumbbells given one domain draw the same axis", () => {
+  const ticks = (container: HTMLElement) => [...container.querySelectorAll(".dot-plot-axis span")].map((node) => node.textContent);
+  const usa = render(<Dumbbell rows={[{ key: "g", label: "GVC 段", left: 1.2, right: 3.8 }]} leftLabel="前向" rightLabel="后向" unit="长度单位" title="USA" domain={[1.2, 4.9]} />);
+  const deu = render(<Dumbbell rows={[{ key: "g", label: "GVC 段", left: 2.1, right: 4.9 }]} leftLabel="前向" rightLabel="后向" unit="长度单位" title="DEU" domain={[1.2, 4.9]} />);
+  expect(ticks(usa.container).length).toBeGreaterThan(1);
+  expect(ticks(usa.container)).toEqual(ticks(deu.container));
+});

@@ -231,18 +231,20 @@ export function IndustryDotPlot({ groups, countries, unit, nationals = [], label
 
 /* ----------------------------------------------------------------- dumbbell */
 
-export function Dumbbell({ rows, leftLabel, rightLabel, unit, title }: {
+export function Dumbbell({ rows, leftLabel, rightLabel, unit, title, domain }: {
   rows: { key: string; label: string; left: number | null; right: number | null }[];
   leftLabel: string;
   rightLabel: string;
   unit: string;
   title: string;
+  /** Shared value range when several economies are drawn side by side, so their axes match. */
+  domain?: readonly [number, number];
 }) {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   const [hovered, setHovered] = useState<string | null>(null);
   const values = rows.flatMap((row) => [row.left, row.right]).filter(finiteValue);
   if (!values.length) return <p role="status">{title}没有有效读数（缺失不补零）。</p>;
-  const axis = niceDomain(Math.min(...values), Math.max(...values));
+  const axis = niceDomain(Math.min(...values, ...(domain ? [domain[0]] : [])), Math.max(...values, ...(domain ? [domain[1]] : [])));
   const px = (value: number) => ((value - axis.lo) / (axis.hi - axis.lo || 1)) * 100;
   const reading = (value: number | null) => indicatorNumber(value, unit);
   const linesFor = (row: typeof rows[number]): TipLine[] => [
