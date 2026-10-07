@@ -34,7 +34,7 @@ _STUDENT_METRIC_LABELS = {
     "GVCPs": "GVC 位置指数（GVCPs）",
     # Match the label the step itself shows; without this the report printed the
     # raw field key for step 5's network metric.
-    "weighted degree": "加权总度(入+出；自环双计)",
+    "weighted degree": "加权总度（入+出）",
     # Keep the legacy schema key in provenance, but never teach its misspelling.
     "betweenesscentrality": "网络介数（全正边二值）",
 }
@@ -58,8 +58,8 @@ _BASELINE_INTERPRETATIONS = {
         "positive": "国内增加值出口占比上升：出口价值中由本国创造的部分变大。",
     },
     "3_VA_GVC_share": {
-        "negative": "GVC 生产份额下降：SVA 中与跨境生产相关的部分占比变小。",
-        "positive": "GVC 生产份额上升：SVA 中与跨境生产相关的部分占比变大。",
+        "negative": "前向 GVC 生产总份额下降：SVA 中与跨境生产相关的部分占比变小。",
+        "positive": "前向 GVC 生产总份额上升：SVA 中与跨境生产相关的部分占比变大。",
     },
     "3a_VA_GVC_S_share": {
         "negative": "简单 GVC 生产份额下降：只跨境一次就被吸收的增加值占比变小。",

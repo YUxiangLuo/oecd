@@ -164,7 +164,7 @@ describe("network table sort scope", () => {
     );
     expect(html).toContain("单国行业排序");
     expect(html).toContain("网络介数（全正边二值，降序）");
-    expect(html).toContain("加权总度（入+出；自环双计）");
+    expect(html).toContain("加权总度（入+出）");
     expect(html).toContain("排序只改变显示顺序，不改变指标数值");
     expect(html).not.toContain("行业排序（仅单国完整结果）");
   });

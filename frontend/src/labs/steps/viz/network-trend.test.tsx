@@ -182,5 +182,5 @@ test("one economy alone records against the same-industry reference", async () =
   fireEvent.change(screen.getByLabelText("对比国家 B"), { target: { value: "USA" } });
   fireEvent.change(screen.getByLabelText("再加一个对比国家"), { target: { value: "DEU" } });
   await waitFor(() => expect(save.mock.calls.at(-1)![0]).toEqual(["CHN", "USA", "DEU"]));
-  expect(screen.getByLabelText("当前比较口径").textContent).toContain("CHN 中国与USA 美国与DEU 德国");
+  expect(screen.getByLabelText("当前比较口径").textContent).toContain("CHN 中国、USA 美国、DEU 德国");
 });

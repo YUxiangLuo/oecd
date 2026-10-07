@@ -32,7 +32,7 @@ export const TRADE_TOPIC: IndicatorTopic = {
     { key: "DDC", label: "国内重复计算", unit: "百万美元" },
     { key: "FVA", label: "外国增加值", unit: "百万美元" },
     { key: "FDC", label: "外国重复计算", unit: "百万美元" },
-    { key: "taxsub", label: "税收减补贴（TLS扩展）", unit: "百万美元" },
+    { key: "taxsub", label: "税收减补贴（TLS 扩展）", unit: "百万美元" },
     { key: "EXDVA", label: "出口国内增加值合计", unit: "百万美元" },
   ],
   composition: {
@@ -47,7 +47,7 @@ export const TRADE_TOPIC: IndicatorTopic = {
       { key: "taxsub", name: "税收减补贴", color: "#98a0b3" },
     ],
     focus: "FVA",
-    note: "每条为六项之和的构成，分母为 VA+TLS 账户闭合总出口。负分项以红色放在零轴左侧，不改变其国内、外国或TLS来源归类；负值不能按普通100%条形图解释。",
+    note: "每条为六项之和的构成，分母为 VA+TLS 账户闭合总出口。负分项以红色放在零轴左侧，不改变其国内、外国或 TLS 来源归类；负值不能按普通 100% 条形图解释。",
   },
   axes: {
     key: "source",
@@ -55,7 +55,7 @@ export const TRADE_TOPIC: IndicatorTopic = {
     x: "gross_exports",
     y: "FVA_share",
     xScale: "log",
-    labels: ["出口大 · 外国含量高", "出口小 · 外国含量高", "出口小 · 外国含量低", "出口大 · 外国含量低"],
+    labels: ["出口大 · 外国增加值项占比高", "出口小 · 外国增加值项占比高", "出口小 · 外国增加值项占比低", "出口大 · 外国增加值项占比低"],
   },
   axesOptions: [
     {
@@ -64,7 +64,7 @@ export const TRADE_TOPIC: IndicatorTopic = {
       x: "gross_exports",
       y: "FVA_share",
       xScale: "log",
-      labels: ["出口大 · 外国含量高", "出口小 · 外国含量高", "出口小 · 外国含量低", "出口大 · 外国含量低"],
+      labels: ["出口大 · 外国增加值项占比高", "出口小 · 外国增加值项占比高", "出口小 · 外国增加值项占比低", "出口大 · 外国增加值项占比低"],
     },
     {
       key: "gvc",

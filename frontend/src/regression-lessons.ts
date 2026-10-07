@@ -119,8 +119,8 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
     shortMetric: "前向 GVC 生产总份额",
     unit: "百分点",
     definition: "增加值经过至少一次跨境后被最终吸收的比例（简单加复杂）。",
-    downMeaning: "GVC 生产份额下降：SVA 中与跨境生产相关的部分占比变小。",
-    upMeaning: "GVC 生产份额上升：SVA 中与跨境生产相关的部分占比变大。",
+    downMeaning: "前向 GVC 生产总份额下降：SVA 中与跨境生产相关的部分占比变小。",
+    upMeaning: "前向 GVC 生产总份额上升：SVA 中与跨境生产相关的部分占比变大。",
     dontClaim: "不要写成「GVC 生产规模缩小」。这一项是占总增加值的份额，份额下降不代表 GVC 相关生产的绝对量减少。",
   },
   "3a_VA_GVC_S_share": {

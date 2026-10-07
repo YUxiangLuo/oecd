@@ -514,7 +514,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
               untaxed={groupSeries.untaxed}
               scale={levelScale}
               unit={display.unit ?? lesson.unit}
-              title={`加税前后：两组${lesson.shortMetric}的平均变化`}
+              title={`加税前后：两组${/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}${lesson.shortMetric}的平均变化`}
               estimate={estimate}
             />
             <ReadingCards label="两组读图" cards={[

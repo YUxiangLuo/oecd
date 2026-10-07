@@ -131,6 +131,9 @@ export const KEY_ECONOMIES = new Set(["CHN", "USA", "DEU", "JPN"]);
 /** 图元实体键:行业行显示中文名,国家行显示代码(用于高亮/选中匹配,须与 picked 里的码一致) */
 export const rowName = (r: Row) => (r.industry != null ? sectorLabel(String(r.industry)) : String(r.country));
 /** 图元实体展示名:行业与国家都带中文名(仅用于标签/tooltip 展示,不用于匹配) */
+/** "CHN 中国与USA 美国" for two; "、" between three or more reads better than a chain of 与. */
+export const joinCountries = (codes: readonly string[]) => codes.map(countryLabel).join(codes.length > 2 ? "、" : "与");
+
 export const rowLabel = (r: Row) => (r.industry != null ? sectorLabel(String(r.industry)) : countryLabel(String(r.country)));
 
 /** 暗色悬浮 tooltip(增强通道;全部数值同时可在表格视图获得) */

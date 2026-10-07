@@ -3,7 +3,7 @@ import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE } from "../../../step-task
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { IndicatorSchema, Meta } from "../../../types";
-import { countryLabel, sectorLabel } from "../../../viz";
+import { countryLabel, joinCountries, sectorLabel } from "../../../viz";
 import { HEAT_EVIDENCE_METRIC } from "../../../viz/views/network-heat";
 import { AsyncStateMessage, fmtDb, useAsync } from "../../shared";
 import { currentReleaseId, LensNav, type Row, type VizObservation } from "./scaffold";
@@ -73,7 +73,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const [year, setYear] = useState(restored[0]?.source === "explicit-network-ranking" && years.includes(restored[0].year) ? restored[0].year : years.at(-1)!);
   const [limit, setLimit] = useState(new Set(restored.map((item) => item.industry)).size > 10 ? 200 : 10);
   const metrics = schema?.groups.find((group) => group.key === "network")?.fields ?? COMMON_METRICS;
-  const label = schema?.fields[metric]?.label ?? (metric === "weighted degree" ? "加权总度（入+出；自环双计）" : metric);
+  const label = schema?.fields[metric]?.label ?? (metric === "weighted degree" ? "加权总度（入+出）" : metric);
   const unit = metric.startsWith("weighted ") ? "百万美元" : metric === HEAT_EVIDENCE_METRIC ? "未归一化介数" : ["degree", "indegree", "outdegree"].includes(metric) ? "连接数" : metric === "Eccentricity" ? "路径长度" : "无量纲";
   const selected = [first, ...others.filter((country, index, all) => country !== first && all.indexOf(country) === index)].slice(0, MAX_ENTITIES);
   const release = currentReleaseId(meta);
@@ -202,12 +202,12 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     <ScopeCard
       ref={scopeRef}
       items={recordable ? [
-        { label: "比较对象", value: selected.map(countryLabel).join("与") },
+        { label: "比较对象", value: joinCountries(selected) },
         { label: "范围", value: view === "trend" ? sectorLabel(industry) : "行业排名" },
         { label: "年份", value: view === "trend" ? `${years[0]}–${years.at(-1)}` : String(year) },
         { label: "指标", value: label },
       ] : [
-        { label: "比较对象", value: selected.map(countryLabel).join("与") },
+        { label: "比较对象", value: joinCountries(selected) },
         { label: "年份", value: String(year) },
         { label: "视角", value: view === "topology" ? "流量与拓扑" : view === "flows" ? "买入与卖出" : extraLenses.find((lens) => lens.key === view)?.label ?? view },
         { label: "材料", value: "探索视角，不记录材料" },

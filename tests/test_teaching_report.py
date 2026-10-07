@@ -284,6 +284,9 @@ def _write_output_artifacts(path: Path, years: list[int]) -> dict[str, dict]:
             [
                 {"year": year, "source": "AAA", "target": "BBB", "flow": 4.0},
                 {"year": year, "source": "BBB", "target": "AAA", "flow": 3.0},
+                # Complete edge table: each source's flows add up to its weighted outdegree.
+                {"year": year, "source": "USA", "target": "ROW", "flow": 2.0},
+                {"year": year, "source": "ROW", "target": "USA", "flow": 2.0},
             ]
         ).to_csv(path / f"network_edges_{year}.csv", index=False)
         pd.DataFrame(
@@ -1177,7 +1180,7 @@ def test_report_labels_step_five_network_metric_like_the_step_does(tmp_path, mon
 
     report = build(session, "同学")
 
-    assert "加权总度(入+出；自环双计)" in report.markdown
+    assert "加权总度（入+出）" in report.markdown
     assert "记录的代表指标：weighted degree" not in report.markdown
 
 

@@ -7,7 +7,7 @@ import {
   CompositionBar,
   QuadrantScatter,
   RankBarChart,
-  countryLabel,
+  countryLabel, joinCountries,
   sectorLabel,
 } from "../../../viz";
 import { AsyncStateMessage, useAsync } from "../../shared";
@@ -657,7 +657,7 @@ export function IndicatorExplorer({
       </div>
       <ScopeCard
         items={[
-          { label: "比较对象", value: selected.map(countryLabel).join("与"), onJump: jump(entityRef) },
+          { label: "比较对象", value: joinCountries(selected), onJump: jump(entityRef) },
           {
             label: "范围",
             value: view === "industry" ? "行业排名" : view === "structure" ? "所选国家全部行业" : industry ? sectorLabel(industry) : "国家整体",
@@ -749,7 +749,7 @@ export function IndicatorExplorer({
               <p className="muted">
                 虚线中位数只表示当前展示样本的相对高低，不代表好坏或因果关系。
                 {axes.xScale === "log" && "横轴为对数刻度，只画出口为正的经济体。"}
-                {axes.equality && "等长线以上前向 GVC 段更长；总长度与GVC段不能混用。"}
+                {axes.equality && "等长线以上前向 GVC 段更长；总长度与 GVC 段不能混用。"}
                 {trail && "轨迹从较早年份（空心）指向最近年份（实心），灰点是当年全部经济体。"}
               </p>
               <QuadrantScatter

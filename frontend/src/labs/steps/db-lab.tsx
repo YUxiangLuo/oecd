@@ -769,7 +769,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
   return (
     <div>
       <FullscreenPanel
-        title={`步骤 1 · ${activeTable.label}原始数据表`}
+        title={`步骤 1 · ${cjkJoin(activeTable.label, "原始数据表")}`}
         variant="table"
         buttonLabel="全屏查看"
         enabled={table !== "accounts"}

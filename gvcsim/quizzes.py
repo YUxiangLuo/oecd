@@ -83,7 +83,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
     4: [
         _question(
             "s04-position",
-            "前向 GVC 长度大于后向 GVC 长度时，通常表示什么？",
+            "前向 GVC 段长度大于后向 GVC 段长度时，通常表示什么？",
             [
                 _option("a", "在这个指标下相对更上游"),
                 _option("b", "所有行业都是原材料行业"),
@@ -135,7 +135,7 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
     8: [
         _question(
             "s08-length-viz",
-            "当前向 GVC 长度大于后向 GVC 长度时，该经济体相对处于哪里？",
+            "当前向 GVC 段长度大于后向 GVC 段长度时，该经济体相对处于哪里？",
             [
                 _option("a", "相对更上游"),
                 _option("b", "相对更下游"),
@@ -243,15 +243,15 @@ STEP_QUIZZES: dict[int, list[dict[str, Any]]] = {
                 _option("c", "一个国家参加了多少贸易协议"),
             ],
             "a",
-            f"{PRODUCTION_LENGTH_OPERATIONAL_DEFINITION}它也不是外国增加值占比。",
+            f"{PRODUCTION_LENGTH_OPERATIONAL_DEFINITION}它也不是外国增加值项占比。",
         ),
         _question(
             "s13-compare",
-            "为什么不能直接比较 GVC 段长度系数和外国增加值占比系数的大小？",
+            "为什么不能直接比较 GVC 段长度系数和外国增加值项占比系数的大小？",
             [
                 _option("a", "两者单位不同，表示的内容也不同"),
                 _option("b", "GVC 段长度系数一定更大"),
-                _option("c", "外国增加值占比没有单位"),
+                _option("c", "外国增加值项占比没有单位"),
             ],
             "a",
             "单位和含义不同的系数不能直接比大小，也不应直接相加减。",

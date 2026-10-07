@@ -9,7 +9,7 @@ OUTCOME_DEPVARS = {
     "trade": ("FVA_share", "外国增加值项占比"),
     "production": ("3b_VA_GVC_C_share", "复杂 GVC 生产份额"),
     "length": ("PLv_GVC", "前向 GVC 段长度"),
-    "network": ("weighted degree", "加权总度(入+出；自环双计)"),
+    "network": ("weighted degree", "加权总度（入+出）"),
 }
 OUTCOMES = list(OUTCOME_DEPVARS)
 GRANULARITY_COUNTRY_INDUSTRY = "country_industry"

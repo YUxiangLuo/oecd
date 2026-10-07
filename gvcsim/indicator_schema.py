@@ -117,7 +117,7 @@ INDICATOR_SCHEMA = {
         "degree": {"label": "度", "format": "number"},
         "indegree": {"label": "入度", "format": "number"},
         "outdegree": {"label": "出度", "format": "number"},
-        "weighted degree": {"label": "加权总度(入+出；自环双计)", "format": "amount"},
+        "weighted degree": {"label": "加权总度（入+出）", "format": "amount"},
         "weighted indegree": {"label": "加权入度", "format": "amount"},
         "weighted outdegree": {"label": "加权出度", "format": "amount"},
         "Eccentricity": {"label": "离心率", "format": "number"},
