@@ -5,7 +5,7 @@ from typing import Any, cast
 
 from gvcsim.regression.validity import CLUSTER_INTERVAL_NOTE
 from gvcsim.report_common import (
-    _OUTCOME_UNITS,
+    _KIND_DIMENSIONS,
     _SHOCK_SOURCE_STATUS_LABELS,
     _STATUS_LABELS,
     _STEP_OUTCOMES,
@@ -568,7 +568,7 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
                     heading,
                     "",
                     f"- 因变量：{_safe(design.get('depvar_label', run['outcome']))}",
-                    f"- 结果量纲：{_OUTCOME_UNITS.get(run['outcome'], '原始单位')}",
+                    f"- 结果量纲：{_KIND_DIMENSIONS.get(_depvar_kind(run['outcome'], design), '原始单位')}",
                     f"- 方程：`{_safe(design.get('equation', '—'))}`",
                     f"- 设计状态：{_STATUS_LABELS.get(str(status), _STATUS_LABELS['unknown'])}；观测数：{_count(result.get('n_obs'))}",
                 )

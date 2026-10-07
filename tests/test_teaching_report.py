@@ -2129,3 +2129,18 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
     stale = copy.deepcopy(run)
     stale["model_snapshot"]["baseline"] = "PLv_GVC"
     assert _parse_saved_run(stale, "length") is None
+
+
+def test_technical_appendix_states_the_chosen_y_unit_not_the_family_unit():
+    from gvcsim.report_render import _run_sections
+
+    run = {
+        "step": 13,
+        "outcome": "length",
+        "design": {"depvar_label": "GVC 位置指数", "depvar_kind": "position", "equation": "Y = βX + FE"},
+        "result": {"status": "ok", "coefs": []},
+    }
+    lines = _run_sections([run])
+    assert "- 结果量纲：位置指数单位" in lines
+    default = {**run, "design": {"depvar_label": "前向生产长度", "equation": "Y = βX + FE"}}
+    assert "- 结果量纲：长度单位" in _run_sections([default])

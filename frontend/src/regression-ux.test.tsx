@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api";
 import {
-  exampleEffect, RegressionRequestError, RegressionRequestLoading,
+  exampleEffect, networkDigits, RegressionRequestError, RegressionRequestLoading,
   RegressionRunLab, scrollRegressionVerdict, TEACHING_MODEL_VERSION,
 } from "./regression";
 import type { RegressionDesignInfo, RegressionOutcome, Step, StepStateApi, TeachingGroupsResponse, TeachingPanelResponse } from "./types";
@@ -175,6 +175,10 @@ describe("simple regression workbench", () => {
     expect(exampleEffect("network", -2000, 0.0932)).toBe("186 个中心性原始单位");
     expect(exampleEffect("network", -0.5, 0.1693)).toBe("0.0847 个中心性原始单位");
     expect(exampleEffect("network", -60, 0.1)).toBe("6.00 个中心性原始单位");
+    // Closeness gaps (~0.005) need decimals; a fixed 0 printed "低 0" and "估计的差距 −0".
+    expect(networkDigits(0.0049)).toBe(5);
+    expect(networkDigits(0.012)).toBe(4);
+    expect(networkDigits(59)).toBe(1);
     // With a chosen baseline the design says how Y is read.
     expect(exampleEffect("length", -0.4, 0.0932, { depvar_kind: "position" })).toBe("0.0373 个位置指数单位");
     expect(exampleEffect("trade", 0.55, 0.0932, { depvar_kind: "share" })).toBe("5.13 个百分点");

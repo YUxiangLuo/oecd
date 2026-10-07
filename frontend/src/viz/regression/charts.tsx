@@ -238,7 +238,7 @@ export function GroupChangeChart({
   /** After the run: the gap the estimate implies (β × mean exposure), in stored Y units, drawn at the last year. */
   estimate?: { gap: number; label: string } | null;
 }) {
-  const width = 640, height = 250, padL = 64, padR = 112, padT = 22, padB = 34;
+  const width = 640, height = 250, padL = 64, padR = 140, padT = 22, padB = 34;
   const values = [...taxed, ...untaxed].map((point) => point.change * scale);
   const estimateEnd = estimate ? (untaxed.at(-1)?.change ?? 0) + estimate.gap : null;
   if (estimateEnd != null) values.push(estimateEnd * scale);
@@ -256,6 +256,8 @@ export function GroupChangeChart({
     return last && <text x={x(last.year) + 8} y={y(last.change * scale) + dy} dominantBaseline="middle" fontSize={11.5} fontWeight={700} fill={color}>{text}</text>;
   };
   const lastTaxed = taxed.at(-1)?.change ?? 0, lastUntaxed = untaxed.at(-1)?.change ?? 0;
+  const [estimateHead, ...estimateRest] = (estimate?.label ?? "").split(" ");
+  const estimateValue = estimateRest.join(" ");
   const description = `${title}：加税组与未加税组相对加税前平均水平的变化，${policyYear} 年起加税`;
   return (
     <div className="group-change-chart" style={{ ...cardStyle, flex: "1 1 320px", minWidth: 280 }}>
@@ -281,7 +283,11 @@ export function GroupChangeChart({
               <line x1={bx} x2={bx} y1={y0} y2={y1} strokeDasharray="3 3" />
               <line x1={bx - 4} x2={bx + 4} y1={y0} y2={y0} />
               <line x1={bx - 4} x2={bx + 4} y1={y1} y2={y1} />
-              <text x={bx + 7} y={(y0 + y1) / 2 + 4} fontSize={10.5} fill="#2a2f3a" stroke="none">{estimate.label}</text>
+              {/* Two lines ("回归估计的差距" / value and unit): on one line a unit such as 中心性原始单位 ran off the chart. */}
+              <text x={bx + 7} y={(y0 + y1) / 2 + 4} fontSize={10.5} fill="#2a2f3a" stroke="none">
+                <tspan x={bx + 7} dy="-0.6em">{estimateHead}</tspan>
+                <tspan x={bx + 7} dy="1.2em">{estimateValue}</tspan>
+              </text>
             </g>
           );
         })()}

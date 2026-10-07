@@ -98,6 +98,11 @@ function DesignEquation({ design }: { design: RegressionDesignInfo }) {
 /** One step-10 example unit: its label and its final-year exposure X (a proportion). */
 export interface RegressionExample { label: string; x: number }
 
+/** Network units span closeness (~0.01) to weighted degree (thousands): keep about three significant figures. */
+export function networkDigits(size: number): number {
+  return size >= 100 ? 0 : size >= 10 ? 1 : size >= 1 ? 2 : size >= 0.1 ? 3 : size >= 0.01 ? 4 : 5;
+}
+
 /** Y change implied by the estimate for an example's X, in the step's display units. */
 export function exampleEffect(outcome: RegressionOutcome, coef: number, x: number, design?: { depvar_kind?: string } | null): string {
   const change = coef * x;
@@ -106,9 +111,7 @@ export function exampleEffect(outcome: RegressionOutcome, coef: number, x: numbe
   if (kind === "length") return `${Math.abs(change).toFixed(3)} 个长度单位`;
   if (kind === "position") return `${Math.abs(change).toFixed(4)} 个位置指数单位`;
   const size = Math.abs(change);
-  // Network units span closeness (~0.5) to weighted degree (thousands): keep about three significant figures.
-  const digits = size >= 100 ? 0 : size >= 10 ? 1 : size >= 1 ? 2 : size >= 0.1 ? 3 : 4;
-  return `${size.toFixed(digits)} 个中心性原始单位`;
+  return `${size.toFixed(networkDigits(size))} 个中心性原始单位`;
 }
 
 /** The result is a coefficient plot plus short sentences: what changed, for the student's example, how sure, what not to claim. */
@@ -482,11 +485,15 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
           const preGaps = preYears.map(gapAt).filter((value): value is number => value != null);
           const preGap = preGaps.length ? preGaps.reduce((sum, value) => sum + value, 0) / preGaps.length : null;
           const postGap = gapAt(lastYear);
+          const coefficient = result?.result.coefs[0]?.coef;
+          const estimate0 = coefficient != null && groups.mean_exposure_taxed != null ? coefficient * groups.mean_exposure_taxed : null;
           const kind = depvarKind(outcome, design);
-          const digits = kind === "network" ? 0 : kind === "position" ? 4 : kind === "length" ? 3 : 2;
+          // Network Y ranges from closeness (~0.01) to weighted degree (thousands), so its decimals follow
+          // the largest gap shown; a fixed 0 decimals printed closeness gaps as "0".
+          const shown = [preGap, postGap, estimate0 == null ? null : estimate0 * levelScale].filter((value): value is number => value != null && Number.isFinite(value));
+          const digits = kind === "network" ? networkDigits(Math.max(0, ...shown.map(Math.abs))) : kind === "position" ? 4 : kind === "length" ? 3 : 2;
           const tiny = 0.5 * 10 ** -digits;
           const fmt = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(digits)} ${display.unit}`;
-          const coefficient = result?.result.coefs[0]?.coef;
           const estimate = result && coefficient != null && groups.mean_exposure_taxed != null && !globalInferenceIsSuppressed(result.result.status, result.result.support)
             ? { gap: coefficient * groups.mean_exposure_taxed, label: `回归估计的差距 ${fmt(coefficient * groups.mean_exposure_taxed * levelScale)}` }
             : null;

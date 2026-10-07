@@ -17,10 +17,11 @@ _STEP_TITLES = {cast(int, item["n"]): cast(str, item["title"]) for item in STEPS
 _STEP_OUTCOMES = {
     cast(int, item["n"]): cast(str, item["regression_outcome"]) for item in STEPS if item.get("regression_outcome")
 }
-_OUTCOME_UNITS = {
-    "trade": "份额原始单位（乘以 100 后按百分点解释）",
-    "production": "份额原始单位（乘以 100 后按百分点解释）",
+# Keyed by the saved Y's kind, not its family: step 13 can use the GVC position index instead of a length.
+_KIND_DIMENSIONS = {
+    "share": "份额原始单位（乘以 100 后按百分点解释）",
     "length": "长度单位",
+    "position": "位置指数单位",
     "network": "中心性原始单位；跨指标比较时另参考样本标准差单位",
 }
 _STUDENT_METRIC_LABELS = {

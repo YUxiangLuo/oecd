@@ -56,7 +56,7 @@ export const REGRESSION_LESSONS: Record<RegressionOutcome, RegressionLesson> = {
     unit: "百分点",
     priorStep: 3,
     priorLabel: "GVC 生产分解指标",
-    learnThis: "读区间：估计值为负，不一定有足够证据判断下降；还要看区间是否包含 0。",
+    learnThis: "读区间：估计值有正有负，单看正负不一定有足够证据判断上升或下降；还要看区间是否包含 0。",
     definition: "增加值经过多次跨境生产后被最终吸收的比例。",
     downMeaning: "复杂 GVC 份额下降：SVA 中经多次跨境生产的部分占比变小。",
     upMeaning: "复杂 GVC 份额上升：SVA 中经多次跨境生产的部分占比变大。",
