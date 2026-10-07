@@ -196,7 +196,12 @@ def _observation_reading(observation: dict[str, Any]) -> str:
     row = _safe(observation.get("row", "—"))
     column = _safe(observation.get("column", "—"))
     raw_value = observation.get("value", "—")
-    value = _number(raw_value) if isinstance(raw_value, (int, float)) else _safe(raw_value)
+    # Every ICIO cell (Z, Y and the VA/TLS/OUT accounts) is in million USD, as the step 1 table says.
+    value = (
+        f"{_number(raw_value)} 百万美元"
+        if isinstance(raw_value, (int, float)) and not isinstance(raw_value, bool)
+        else _safe(raw_value)
+    )
     table = str(observation.get("table") or "z")
     if table == "y":
         return f"{row}(行·供给方) → {column}(列·最终需求) = {value}"

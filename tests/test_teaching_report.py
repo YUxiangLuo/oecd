@@ -1570,7 +1570,7 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
 
     report = build(session, "同学")
 
-    assert "CHN_D01T02(行·供给方) → USA_D01T02(列·使用方) = 228.1" in report.markdown
+    assert "CHN_D01T02(行·供给方) → USA_D01T02(列·使用方) = 228.1 百万美元" in report.markdown
     assert "×" not in report.markdown.split("记录的单元格")[1].split("\n")[0]
     assert "年份=2020" in report.markdown
     assert "表=z" in report.markdown
@@ -1679,11 +1679,11 @@ def test_report_observation_reading_states_supply_direction_per_table():
     y_obs = {"row": "CHN_D01T02", "column": "USA_HFCE", "value": 1.5, "table": "y"}
     accounts_obs = {"row": "CHN_D01T02", "column": "VA", "value": 1.5, "table": "accounts"}
     legacy_obs = {"row": "CHN_D01T02", "column": "USA_C10T12", "value": 1.5}
-    assert teaching_report._observation_reading(z_obs) == "CHN_D01T02(行·供给方) → USA_C10T12(列·使用方) = 1.5"
-    assert teaching_report._observation_reading(y_obs) == "CHN_D01T02(行·供给方) → USA_HFCE(列·最终需求) = 1.5"
-    assert teaching_report._observation_reading(accounts_obs) == "CHN_D01T02 的 VA = 1.5"
+    assert teaching_report._observation_reading(z_obs) == "CHN_D01T02(行·供给方) → USA_C10T12(列·使用方) = 1.5 百万美元"
+    assert teaching_report._observation_reading(y_obs) == "CHN_D01T02(行·供给方) → USA_HFCE(列·最终需求) = 1.5 百万美元"
+    assert teaching_report._observation_reading(accounts_obs) == "CHN_D01T02 的 VA = 1.5 百万美元"
     # 旧会话里没有 table 字段时按中间投入 Z 的读法兜底。
-    assert teaching_report._observation_reading(legacy_obs) == "CHN_D01T02(行·供给方) → USA_C10T12(列·使用方) = 1.5"
+    assert teaching_report._observation_reading(legacy_obs) == "CHN_D01T02(行·供给方) → USA_C10T12(列·使用方) = 1.5 百万美元"
 
 
 def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):

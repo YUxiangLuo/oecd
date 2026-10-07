@@ -50,7 +50,7 @@ export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta;
           onYear={controls.setYear} onCountry={controls.setCountry} onPage={controls.setPage}
         />
         <AutoMaterialStatus meta={meta} state={state} schema={schema.data} {...auto} onSecond={controls.setPartner} where="上方表格所选国家"
-          note="国家级加权总度只含国家之间的贸易（不含国内流量），不能与上表含国内流量的行业数值直接比较。" />
+          note="国家级加权总度 = 该国对其他国家的出口 + 进口（中间品和最终品都算，不含国内流量，因而没有自环）；上表的行业数值只算中间品流量且含国内流量，两者不能直接比较。" />
       </section>
     </div>
   );

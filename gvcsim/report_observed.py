@@ -61,7 +61,10 @@ def _quiz_sections(session: dict[str, Any]) -> list[str]:
         selected = quizzes.selected_answers(step, _step_data(session, step).get("quiz"))
         lines.extend((f"### 步骤 {step} · {_STEP_TITLES.get(step, '')}", ""))
         for item in selected:
-            lines.append(f"- {_safe(item['question'])}：{_safe(item['answer'])}")
+            question = _safe(item["question"])
+            # Questions end with "？"; a colon after it printed "？：".
+            joiner = " " if question.endswith(("？", "?")) else "："
+            lines.append(f"- {question}{joiner}{_safe(item['answer'])}")
         lines.append("")
     return lines
 

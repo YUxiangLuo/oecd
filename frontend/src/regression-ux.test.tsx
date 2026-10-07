@@ -89,10 +89,10 @@ describe("simple regression workbench", () => {
     expect(select.value).toBe("FVA_share");
     await waitFor(() => expect(design).toHaveBeenCalledWith("trade", null));
     // The reading cards use the chosen series: the taxed group now ends above the untaxed one.
-    await screen.findByText(/加税组比未加税组 低 0\.70 个百分点/);
+    await screen.findByText(/加税组比未加税组低 0\.70 个百分点/);
     fireEvent.change(select, { target: { value: "DVAex_share" } });
     await waitFor(() => expect(design).toHaveBeenCalledWith("trade", "DVAex_share"));
-    await screen.findByText(/加税组比未加税组 高 0\.70 个百分点/);
+    await screen.findByText(/加税组比未加税组高 0\.70 个百分点/);
     expect(screen.getByRole("heading", { name: /国内增加值出口占比（Y）/ })).toBeTruthy();
     fireEvent.change(select, { target: { value: "FVA_share" } });
     await waitFor(() => expect(screen.getByRole("heading", { name: /外国增加值项占比（Y）/ })).toBeTruthy());

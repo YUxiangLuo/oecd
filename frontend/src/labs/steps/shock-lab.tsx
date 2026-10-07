@@ -115,7 +115,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
     <section className="reg-run-card">
       <span className="reg-section-step">先看一个例子</span>
       <h3>关税暴露 X 怎样随年份变化？</h3>
-      <p>选一个国家和一个行业；再选一个对比国家，就能看到加税与未加税的差别。默认是加拿大和墨西哥的汽车行业：两国出口都高度依赖美国，但只有加拿大被加税。步骤 11–14 会把回归结果换算到你选的例子上。</p>
+      <p>选一个国家和一个行业；再选一个对比国家，就能看到加税与未加税的差别。默认是加拿大和墨西哥的汽车行业（步骤 9 只看过一个行业时，沿用那个行业）：两国出口都高度依赖美国，但只有加拿大被加税。步骤 11–14 会把回归结果换算到你选的例子上。</p>
       <div className="controls" role="group" aria-label="跟随的例子">
         <label className="model-control"><span className="model-control-label">国家 A</span>
           <select value={first} onChange={(event) => {
@@ -192,7 +192,9 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
           label="关税暴露 X"
           unit="%"
           markYear={groups.status === "success" && groups.data ? { year: groups.data.policy_year, label: `${groups.data.policy_year} 年起加税` } : undefined}
-          gapNote="两国的差距就是加税那年起的 X：未加税国家始终为 0"
+          gapNote={lastRows.length === 2 && (lastRows[0].teaching_tariff_rate_tau > 0) !== (lastRows[1].teaching_tariff_rate_tau > 0)
+            ? "两国的差距就是加税那年起的 X：未加税国家始终为 0"
+            : "两国加税状态相同，这个差距不来自加税；换成一国加税、一国未加税才能看到加税带来的差距"}
         />
         {exampleRow && (
           <div className="reg-variable-plain-grid" role="group" aria-label="用所选例子算一次 X">

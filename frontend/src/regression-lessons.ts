@@ -165,7 +165,7 @@ export const BASELINE_LESSONS: Record<string, BaselineLesson> = {
   },
   GVCPs: {
     shortMetric: "GVC 位置指数",
-    learnThis: "读单位：位置指数单位不是百分点，也不是长度；指数大于 1 偏上游，不与长度或份额的系数比大小。",
+    learnThis: "读单位：位置指数单位不是百分点，也不是长度；回归读的是指数的变化，上升表示相对更偏上游，不与长度或份额的系数比大小。",
     unit: "位置指数单位",
     definition: "前向与后向 GVC 长度之比的位置指数，>1 表示在该口径下相对更上游。",
     downMeaning: "位置指数下降：在该口径下相对更靠下游。",
