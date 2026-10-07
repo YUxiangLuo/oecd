@@ -1683,7 +1683,10 @@ def test_report_observation_reading_states_supply_direction_per_table():
     assert teaching_report._observation_reading(y_obs) == "CHN_D01T02(行·供给方) → USA_HFCE(列·最终需求) = 1.5 百万美元"
     assert teaching_report._observation_reading(accounts_obs) == "CHN_D01T02 的 VA = 1.5 百万美元"
     # 旧会话里没有 table 字段时按中间投入 Z 的读法兜底。
-    assert teaching_report._observation_reading(legacy_obs) == "CHN_D01T02(行·供给方) → USA_C10T12(列·使用方) = 1.5 百万美元"
+    assert (
+        teaching_report._observation_reading(legacy_obs)
+        == "CHN_D01T02(行·供给方) → USA_C10T12(列·使用方) = 1.5 百万美元"
+    )
 
 
 def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
