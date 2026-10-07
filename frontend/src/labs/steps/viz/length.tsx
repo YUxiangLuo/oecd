@@ -12,8 +12,8 @@ export const LENGTH_TOPIC: IndicatorTopic = {
   themeHint: "前向与后向 GVC 段长度分别看走势，再看轨迹图：等长线上方前向段更长（更偏上游）；切到“历年变化”看位置指数。",
   metrics: [
     ...[
-      ["PLv_GVC", "前向GVC段长度"],
-      ["PLy_GVC", "后向GVC段长度"],
+      ["PLv_GVC", "前向 GVC 段长度"],
+      ["PLy_GVC", "后向 GVC 段长度"],
       ["PLv", "前向总生产长度"],
       ["PLy", "后向总生产长度"],
       ["PLv_D", "前向纯国内段长度"],
@@ -21,7 +21,7 @@ export const LENGTH_TOPIC: IndicatorTopic = {
       ["PLy_D", "后向纯国内段长度"],
       ["PLy_RT", "后向传统贸易段长度"],
     ].map(([key, label]) => ({ key, label, unit: "长度单位" })),
-    { key: "GVCPs", label: "GVC位置指数（前向GVC／后向GVC）", unit: "无量纲" },
+    { key: "GVCPs", label: "GVC 位置指数（前向 GVC 段／后向 GVC 段）", unit: "无量纲" },
     {
       key: "Pos_TPL",
       label: "总长度位置指数（前向总长／后向总长）",

@@ -29,8 +29,8 @@ _STUDENT_METRIC_LABELS = {
     "FVA_share": "外国增加值项占比",
     "3b_VA_GVC_C_share": "复杂 GVC 生产份额",
     "1_VA_D_share": "纯国内生产份额（1_VA_D/SVA）",
-    "2_VA_RT_share": "传统贸易份额（2_VA_RT/SVA）",
-    "3a_VA_GVC_S_share": "简单 GVC 份额（3a_VA_GVC_S/SVA）",
+    "2_VA_RT_share": "传统贸易生产份额（2_VA_RT/SVA）",
+    "3a_VA_GVC_S_share": "简单 GVC 生产份额（3a_VA_GVC_S/SVA）",
     "GVCPs": "GVC 位置指数（GVCPs）",
     # Match the label the step itself shows; without this the report printed the
     # raw field key for step 5's network metric.
@@ -62,24 +62,24 @@ _BASELINE_INTERPRETATIONS = {
         "positive": "GVC 生产份额上升：SVA 中与跨境生产相关的部分占比变大。",
     },
     "3a_VA_GVC_S_share": {
-        "negative": "简单 GVC 份额下降：只跨境一次就被吸收的增加值占比变小。",
-        "positive": "简单 GVC 份额上升：只跨境一次就被吸收的增加值占比变大。",
+        "negative": "简单 GVC 生产份额下降：只跨境一次就被吸收的增加值占比变小。",
+        "positive": "简单 GVC 生产份额上升：只跨境一次就被吸收的增加值占比变大。",
     },
     "3_FGY_GVC_share": {
-        "negative": "后向 GVC 份额下降：最终品生产中与跨境生产相关的部分占比变小。",
-        "positive": "后向 GVC 份额上升：最终品生产中与跨境生产相关的部分占比变大。",
+        "negative": "后向 GVC 生产总份额下降：最终品生产中与跨境生产相关的部分占比变小。",
+        "positive": "后向 GVC 生产总份额上升：最终品生产中与跨境生产相关的部分占比变大。",
     },
     "2_VA_RT_share": {
-        "negative": "传统贸易份额下降：经一次出口直接被进口国吸收的增加值占比变小。",
-        "positive": "传统贸易份额上升：经一次出口直接被进口国吸收的增加值占比变大。",
+        "negative": "传统贸易生产份额下降：经一次出口直接被进口国吸收的增加值占比变小。",
+        "positive": "传统贸易生产份额上升：经一次出口直接被进口国吸收的增加值占比变大。",
     },
     "1_VA_D_share": {
         "negative": "纯国内生产份额下降：不经出口、在国内被吸收的增加值占比变小。",
         "positive": "纯国内生产份额上升：不经出口、在国内被吸收的增加值占比变大。",
     },
     "PLy_GVC": {
-        "negative": "后向生产长度缩短：从最终品回溯的 GVC 生产环节减少。",
-        "positive": "后向生产长度延长：从最终品回溯的 GVC 生产环节增加。",
+        "negative": "后向 GVC 段长度缩短：从最终品回溯的 GVC 生产环节减少。",
+        "positive": "后向 GVC 段长度延长：从最终品回溯的 GVC 生产环节增加。",
     },
     "GVCPs": {
         "negative": "位置指数下降：在该口径下相对更靠下游。",
@@ -108,12 +108,12 @@ _OUTCOME_INTERPRETATIONS = {
         "positive": "外国增加值项占比上升：出口价值中来自国外投入的部分变大。",
     },
     "production": {
-        "negative": "复杂 GVC 份额下降：SVA 中经多次跨境生产的部分占比变小。",
-        "positive": "复杂 GVC 份额上升：SVA 中经多次跨境生产的部分占比变大。",
+        "negative": "复杂 GVC 生产份额下降：SVA 中经多次跨境生产的部分占比变小。",
+        "positive": "复杂 GVC 生产份额上升：SVA 中经多次跨境生产的部分占比变大。",
     },
     "length": {
-        "negative": "前向生产长度缩短：增加值到最终吸收经过的生产环节减少。",
-        "positive": "前向生产长度延长：增加值到最终吸收经过的生产环节增加。",
+        "negative": "前向 GVC 段长度缩短：增加值到最终吸收经过的生产环节减少。",
+        "positive": "前向 GVC 段长度延长：增加值到最终吸收经过的生产环节增加。",
     },
     "network": {
         "negative": "加权总度下降：节点买入与卖出的总流量规模变小。",

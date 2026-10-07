@@ -103,12 +103,12 @@ BASELINES: dict[str, tuple[Baseline, ...]] = {
             (0.15, 0.20, 0.005),
             derived=("3a_VA_GVC_S", "SVA"),
         ),
-        Baseline("2_VA_RT_share", "传统贸易份额", "share", -0.30, (0.10, 0.15, 0.004), derived=("2_VA_RT", "SVA")),
+        Baseline("2_VA_RT_share", "传统贸易生产份额", "share", -0.30, (0.10, 0.15, 0.004), derived=("2_VA_RT", "SVA")),
         Baseline("1_VA_D_share", "纯国内生产份额", "share", 0.50, (0.40, 0.35, 0.006), derived=("1_VA_D", "SVA")),
     ),
     "length": (
-        Baseline("PLv_GVC", "前向 GVC 生产长度", "length", -1.8, (3.0, 2.0, 0.030)),
-        Baseline("PLy_GVC", "后向 GVC 生产长度", "length", -1.5, (3.0, 2.0, 0.030)),
+        Baseline("PLv_GVC", "前向 GVC 段长度", "length", -1.8, (3.0, 2.0, 0.030)),
+        Baseline("PLy_GVC", "后向 GVC 段长度", "length", -1.5, (3.0, 2.0, 0.030)),
         Baseline("GVCPs", "GVC 位置指数", "position", -0.40, (-0.30, 0.60, 0.010)),
     ),
     "network": (

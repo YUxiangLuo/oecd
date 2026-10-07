@@ -493,7 +493,7 @@ export function IndicatorExplorer({
       {themeActive && <p className="muted lens-hint">{side === "alternate" ? activeComposition!.note : topic.themeHint}</p>}
       {view === "positioning" && <p className="muted lens-hint">定位图把全部经济体放在两项指标上，所选国家高亮，可叠加 {years[0]}→{years.at(-1)} 的轨迹；只作探索，不记录材料。</p>}
       {view === "segments" && <p className="muted lens-hint">段长度对照：每行一段（纯国内、传统贸易、GVC），前向点与后向点用线相连，一眼看出哪一段、哪个方向更长；多国为分面。三段长度不可相加。</p>}
-      {view === "structure" && <p className="muted lens-hint">{topic.key === "production" ? "行业结构：所选国家每个行业的四类生产活动份额，按复杂 GVC 份额排序；多国为分面。只作探索，不记录材料。" : "行业结构：所选国家每个行业的前向与后向 GVC 段长度，等长线上方更偏上游；多国为分面。只作探索，不记录材料。"}</p>}
+      {view === "structure" && <p className="muted lens-hint">{topic.key === "production" ? "行业结构：所选国家每个行业的四类生产活动份额，按复杂 GVC 生产份额排序；多国为分面。只作探索，不记录材料。" : "行业结构：所选国家每个行业的前向与后向 GVC 段长度，等长线上方更偏上游；多国为分面。只作探索，不记录材料。"}</p>}
       <div className="controls">
         {view !== "industry" && view !== "structure" && (
           <LabeledControl label="比较范围">
@@ -666,7 +666,7 @@ export function IndicatorExplorer({
           { label: "年份", value: timeView ? `${start}–${end}` : String(year), onJump: jump(yearRef) },
           {
             label: "指标",
-            value: composition ? `${topic.themeLabel}${side === "alternate" ? `（${activeComposition!.note ? topic.composition!.alternate!.label : ""}）` : ""}` : view === "directions" ? "前后向GVC段长度与位置" : view === "positioning" ? `定位图（横轴 ${label(axes.x)} · 纵轴 ${label(axes.y)}）` : view === "structure" ? (topic.key === "production" ? "四类生产活动 · 行业" : "前向 × 后向 GVC 段长度 · 行业") : view === "segments" ? "前后向三段长度" : label(metric),
+            value: composition ? `${topic.themeLabel}${side === "alternate" ? `（${activeComposition!.note ? topic.composition!.alternate!.label : ""}）` : ""}` : view === "directions" ? "前后向 GVC 段长度与位置" : view === "positioning" ? `定位图（横轴 ${label(axes.x)} · 纵轴 ${label(axes.y)}）` : view === "structure" ? (topic.key === "production" ? "四类生产活动 · 行业" : "前向 × 后向 GVC 段长度 · 行业") : view === "segments" ? "前后向三段长度" : label(metric),
             onJump: composition || view === "directions" || view === "positioning" || view === "structure" || view === "segments" ? undefined : jump(metricRef),
           },
         ]}
@@ -749,7 +749,7 @@ export function IndicatorExplorer({
               <p className="muted">
                 虚线中位数只表示当前展示样本的相对高低，不代表好坏或因果关系。
                 {axes.xScale === "log" && "横轴为对数刻度，只画出口为正的经济体。"}
-                {axes.equality && "等长线以上前向GVC段更长；总长度与GVC段不能混用。"}
+                {axes.equality && "等长线以上前向 GVC 段更长；总长度与GVC段不能混用。"}
                 {trail && "轨迹从较早年份（空心）指向最近年份（实心），灰点是当年全部经济体。"}
               </p>
               <QuadrantScatter

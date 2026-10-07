@@ -361,15 +361,15 @@ describe("indicator explorer with automatic report material", () => {
       fields: {},
     });
     const view = setup(LengthVizStep);
-    await view.findByRole("heading", { name: /前向GVC段长度/ });
+    await view.findByRole("heading", { name: /前向 GVC 段长度/ });
     expect(
-      await view.findByRole("img", { name: /前向GVC段长度历年变化/ }),
+      await view.findByRole("img", { name: /前向 GVC 段长度历年变化/ }),
     ).toBeTruthy();
     expect(
-      view.getByRole("img", { name: /后向GVC段长度历年变化/ }),
+      view.getByRole("img", { name: /后向 GVC 段长度历年变化/ }),
     ).toBeTruthy();
     expect(
-      view.getByRole("img", { name: /前向与后向GVC段长度历年轨迹/ }),
+      view.getByRole("img", { name: /前向与后向 GVC 段长度历年轨迹/ }),
     ).toBeTruthy();
     rows.mockRestore();
     schema.mockRestore();

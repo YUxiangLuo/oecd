@@ -531,8 +531,8 @@ def _ok_run(outcome: str, **design):
         "method": "twfe_intensity",
         "depvar_label": {
             "trade": "出口中外国增加值份额",
-            "production": "复杂GVC生产份额",
-            "length": "前向 GVC 生产长度",
+            "production": "复杂 GVC生产份额",
+            "length": "前向 GVC 段长度",
             "network": "生产网络介数中心性",
         }.get(outcome, outcome),
     }
@@ -643,8 +643,8 @@ def _complete():
 
 def test_production_share_report_copy_forbids_scale_overstatement():
     copy = teaching_report._OUTCOME_INTERPRETATIONS["production"]
-    assert copy["negative"].startswith("复杂 GVC 份额下降")
-    assert copy["positive"].startswith("复杂 GVC 份额上升")
+    assert copy["negative"].startswith("复杂 GVC 生产份额下降")
+    assert copy["positive"].startswith("复杂 GVC 生产份额上升")
     assert "占比变小" in copy["negative"]
     assert "模拟" not in copy["negative"] and "真实" not in copy["negative"]
     assert re.search(r"与.*(?:扩张|收缩)一致", " ".join(copy.values())) is None

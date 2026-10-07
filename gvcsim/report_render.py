@@ -292,8 +292,8 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
 # Same row labels and units as the coefficient plot on the step 11–14 pages.
 _COEFFICIENT_ROW_LABELS = {
     "trade": "外国增加值项占比",
-    "production": "复杂 GVC 份额",
-    "length": "生产链长度",
+    "production": "复杂 GVC 生产份额",
+    "length": "前向 GVC 段长度",
     "network": "加权总度",
 }
 _COEFFICIENT_UNITS = {"trade": "个百分点", "production": "个百分点", "length": "长度单位", "network": "中心性原始单位"}

@@ -78,7 +78,7 @@ const METHOD: Record<MethodTopic, MethodContent> = {
       },
     ],
     formula: "SVA = 1_VA_D + 2_VA_RT + 3a + 3b；复杂 GVC 生产份额 = 3b_VA_GVC_C ÷ SVA",
-    caveat: "后向 FGY 系列按最终产品完成地对称分解；复杂 GVC 份额描述活动构成，不直接代表技术水平或收益。",
+    caveat: "后向 FGY 系列按最终产品完成地对称分解；复杂 GVC 生产份额描述活动构成，不直接代表技术水平或收益。",
   },
   length: {
     label: "生产长度与位置（WWYZ）",

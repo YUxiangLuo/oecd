@@ -786,7 +786,7 @@ export function LengthPositionTrajectory({
       <svg
         viewBox="0 0 720 650"
         role="img"
-        aria-label={`前向与后向GVC段长度历年轨迹，${countries.map(countryLabel).join("与")}`}
+        aria-label={`前向与后向 GVC 段长度历年轨迹，${countries.map(countryLabel).join("与")}`}
         style={{ width: "100%", maxWidth: 680, display: "block", margin: "0 auto" }}
       >
         <defs>

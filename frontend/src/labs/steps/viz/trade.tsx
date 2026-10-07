@@ -21,7 +21,7 @@ export const TRADE_TOPIC: IndicatorTopic = {
     },
     {
       key: "DVAex_share",
-      label: "国内增加值出口份额",
+      label: "国内增加值出口占比",
       unit: "%",
       numerator: "DVAex",
       denominator: "gross_exports",
