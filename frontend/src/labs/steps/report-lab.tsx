@@ -175,7 +175,7 @@ export function ReportStatus({ report }: { report: ClassroomReport }) {
   return (
     <div>
       <span className="muted">已评阅 · {report.score} 分 · {fmtTime(report.graded_at)}</span>
-      {report.feedback && <p className="muted">教师评语：{report.feedback}</p>}
+      {report.feedback && <p className="muted report-feedback">教师评语：{report.feedback}</p>}
     </div>
   );
 }

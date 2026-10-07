@@ -392,6 +392,15 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
     setResult(savedRegressionResponse(savedRun));
   }, [result, running, savedRunIdentity, baseline, defaultBaseline]);
 
+  // The Y of the run the report uses, so switching Y without running again says so (the card would just vanish).
+  const savedRunY = savedRun?.model_snapshot?.version === TEACHING_MODEL_VERSION
+    ? (() => {
+      const key = savedBaseline ?? defaultBaseline;
+      const label = savedRun.design?.baseline_label ?? baselineOptions.find((option) => option.key === key)?.label ?? lessonFor(outcome, null).shortMetric;
+      return { key, label };
+    })()
+    : null;
+
   const run = async () => {
     if (runningRef.current || !design) return;
     runningRef.current = true;
@@ -532,6 +541,14 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         </button>
         {running && (
           <span className="muted reg-inline-status" role="status" aria-live="polite" aria-busy="true">正在估计…</span>
+        )}
+        {!running && !baselineNotice && savedRunY && savedRunY.key !== (baseline ?? defaultBaseline) && (
+          <p className="reg-boundary" role="status">
+            报告材料里保存的仍是上次算出的 Y（{savedRunY.label}）；按上面的按钮算一次，才会换成{lesson.shortMetric}。
+          </p>
+        )}
+        {!running && savedRun && state.materialLocked && (
+          <p className="muted">报告已提交：重新计算会替换报告材料里保存的结果，之后需在步骤 15 更新报告并重新提交。</p>
         )}
       </section>
 

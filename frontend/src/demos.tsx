@@ -444,7 +444,9 @@ export function DecompositionDemo({
               if (side === "A") onPrimaryChange?.(year, event.target.value);
               else setCountryB(event.target.value);
             }}>
-              {meta.countries.map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
+              {/* B is the comparison country of the recorded material, which must differ from A: offering A's
+                  country here made the choice silently snap back. */}
+              {meta.countries.filter((code) => side === "A" || code !== countryA).map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}
             </select>
           )}
         </LabeledControl>

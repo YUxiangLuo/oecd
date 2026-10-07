@@ -143,6 +143,20 @@ describe("simple regression workbench", () => {
     expect(document.body.textContent).not.toContain("教学模拟");
   });
 
+  test("switching Y without running again says the report still holds the last run's Y", async () => {
+    spyOn(api, "regressionDesign").mockResolvedValue({} as RegressionDesignInfo);
+    spyOn(api, "teachingGroups").mockResolvedValue(groupsWithBaselines);
+    spyOn(api, "teachingSeries").mockResolvedValue({ version: "v", disclaimer: "", rows: [], total: 0, years: [] } as TeachingPanelResponse);
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: savedRun("DVAex_share", "国内增加值出口占比") } as never }} />);
+    const select = await screen.findByRole("combobox", { name: "结果指标 Y" }) as HTMLSelectElement;
+    await waitFor(() => expect(select.value).toBe("DVAex_share"));
+    expect(screen.queryByText(/报告材料里保存的仍是/)).toBeNull();
+    fireEvent.change(select, { target: { value: "FVA_share" } });
+    expect(screen.getByText(/报告材料里保存的仍是上次算出的 Y（国内增加值出口占比）/)).toBeTruthy();
+    fireEvent.change(select, { target: { value: "DVAex_share" } });
+    expect(screen.queryByText(/报告材料里保存的仍是/)).toBeNull();
+  });
+
   test("falls back to the default Y when the saved baseline is not offered by the release", async () => {
     const design = spyOn(api, "regressionDesign").mockResolvedValue({} as RegressionDesignInfo);
     spyOn(api, "teachingGroups").mockResolvedValue(groupsWithBaselines);

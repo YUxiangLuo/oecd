@@ -16,7 +16,11 @@ export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta;
   const schema = useAsync<IndicatorSchema>(() => api.indicatorSchema(), []);
   const auto = useAutoComparison({
     topic: "network", meta, state, year: controls.year, schema,
-    country: meta.countries.includes(controls.country) ? controls.country : "",
+    // “全部” pages the global table without picking a country; keep the recorded pair instead of
+    // replacing it with the CHN–USA default the student never chose.
+    country: meta.countries.includes(controls.country)
+      ? controls.country
+      : state.data?.compared?.find((code) => meta.countries.includes(code)) ?? "",
     partner: controls.partner,
   });
 
