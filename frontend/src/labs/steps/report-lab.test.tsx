@@ -268,7 +268,7 @@ describe("step 15 report states", () => {
       { step: 15, title: "原创分析", missing: ["填写研究问题"] },
       { step: 2, title: "贸易流指标", missing: ["记录两个国家"] },
     ]);
-    expect(overview.summary).toBe("4 个步骤还有 5 项待补齐");
+    expect(overview.summary).toBe("第 1–14 步中 3 个步骤还有 4 项待补齐；本步还有 1 项待完成");
     expect(overview.next?.step).toBe(1);
     expect(overview.groups.map((group) => group.label)).toEqual([
       "数据接入", "指标计算", "关税回归", "实验报告",

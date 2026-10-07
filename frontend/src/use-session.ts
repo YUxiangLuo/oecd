@@ -414,6 +414,17 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     };
   }, [enabled, username, keepUnsavedEdits]);
 
+  // A failed save waits for the next edit or a click on 重试保存; when the browser reports the network back,
+  // retry on its own (never through a conflict, which needs the student's decision).
+  useEffect(() => {
+    if (!enabled || status !== "ready" || !unsynced) return;
+    const online = () => {
+      if (!syncConflictRef.current) void drain().catch(() => {});
+    };
+    window.addEventListener("online", online);
+    return () => window.removeEventListener("online", online);
+  }, [drain, enabled, status, unsynced]);
+
   const resolveSyncConflict = useCallback(async () => {
     if (!syncConflictRef.current || resolvingConflictRef.current) return;
     resolvingConflictRef.current = true;

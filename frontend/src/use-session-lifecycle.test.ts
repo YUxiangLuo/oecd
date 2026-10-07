@@ -332,3 +332,23 @@ describe("review findings", () => {
     });
   });
 });
+
+describe("reconnecting", () => {
+  test("a save that failed offline is retried when the browser comes back online", async () => {
+    const get = spyOn(api.classroom, "session").mockResolvedValue(response());
+    const save = spyOn(api.classroom, "saveSession").mockRejectedValue(new TypeError("Failed to fetch"));
+    const hook = renderHook(() => useSession(true, "student"));
+    try {
+      await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+      await act(async () => {
+        hook.result.current.patchStep(15, { research_question: "typed offline" });
+        await hook.result.current.syncNow().catch(() => {});
+      });
+      expect(hook.result.current.unsynced).toBe(true);
+      save.mockImplementation(async ({ session }) => response(session, NEWER));
+      await act(async () => { window.dispatchEvent(new Event("online")); });
+      await waitFor(() => expect(hook.result.current.unsynced).toBe(false));
+      expect(hook.result.current.syncError).toBeNull();
+    } finally { await finish(hook); get.mockRestore(); save.mockRestore(); }
+  });
+});

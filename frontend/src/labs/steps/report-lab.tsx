@@ -104,18 +104,28 @@ export function summarizeReportGate(blocked: ReportGateItem[]) {
   const groups = [...REPORT_GATE_STAGES.map(({ label }) => label), "其他条件"]
     .map((label) => ({ label, items: ordered.filter((item) => reportGateStage(item.step) === label) }))
     .filter((group) => group.items.length > 0);
-  const stepCount = new Set(blocked.filter((item) => item.step > 0).map((item) => item.step)).size;
+  // Steps 1–14 (materials and quizzes) are counted apart from step 15's own analysis, the same split as the
+  // roadmap above the gate; one combined count next to the roadmap's read as a contradiction.
+  const earlier = blocked.filter((item) => item.step > 0 && item.step < 15);
+  const stepCount = new Set(earlier.map((item) => item.step)).size;
   const globalCount = blocked.filter((item) => item.step <= 0).length;
-  const missingCount = blocked.reduce((total, item) => total + item.missing.length, 0);
+  const count = (items: ReportGateItem[]) => items.reduce((total, item) => total + item.missing.length, 0);
+  const missingCount = count(blocked);
+  const ownCount = count(blocked.filter((item) => item.step >= 15));
   const scope = [
-    stepCount > 0 ? `${stepCount} 个步骤` : null,
+    stepCount > 0 ? `第 1–14 步中 ${stepCount} 个步骤` : null,
     globalCount > 0 ? `${globalCount} 项全局条件` : null,
   ].filter(Boolean).join("、");
+  const earlierCount = missingCount - ownCount;
+  const parts = [
+    earlierCount > 0 ? `${scope || "当前记录"}还有 ${earlierCount} 项待补齐` : null,
+    ownCount > 0 ? `本步还有 ${ownCount} 项待完成` : null,
+  ].filter(Boolean);
   return {
     groups,
     missingCount,
     next: ordered[0] ?? null,
-    summary: `${scope || "当前记录"}还有 ${missingCount} 项待补齐`,
+    summary: parts.join("；") || "当前记录还有 0 项待补齐",
   };
 }
 
