@@ -155,6 +155,7 @@ const BIN = "#216cc0";
  */
 export function BinScatterChart({ bins, slope, xLabel, yLabel, xScale = 100, yScale = 1, title = "回归在量什么" }: {
   bins: { x: number; y: number; n: number }[];
+  /** β already in display units: shown Y units per one shown X unit (what the label prints). */
   slope: number;
   xLabel: string;
   yLabel: string;
@@ -165,11 +166,10 @@ export function BinScatterChart({ bins, slope, xLabel, yLabel, xScale = 100, ySc
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const pts = bins.map((bin) => ({ x: bin.x * xScale, y: bin.y * yScale, n: bin.n }));
-  const lineSlope = slope * (yScale / xScale);
   const W = 640, H = 300, m = { l: 64, r: 20, t: 18, b: 48 };
   const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
   const xAxis = niceDomain(Math.min(0, ...xs), Math.max(0, ...xs));
-  const fitted = [xAxis.lo, xAxis.hi].map((value) => value * lineSlope);
+  const fitted = [xAxis.lo, xAxis.hi].map((value) => value * slope);
   const yAxis = niceDomain(Math.min(0, ...ys, ...fitted), Math.max(0, ...ys, ...fitted));
   const x = (value: number) => m.l + ((value - xAxis.lo) / (xAxis.hi - xAxis.lo || 1)) * (W - m.l - m.r);
   const y = (value: number) => H - m.b - ((value - yAxis.lo) / (yAxis.hi - yAxis.lo || 1)) * (H - m.t - m.b);
@@ -209,7 +209,7 @@ export function BinScatterChart({ bins, slope, xLabel, yLabel, xScale = 100, ySc
             <circle cx={x(point.x)} cy={y(point.y)} r={5} fill={BIN} fillOpacity={0.9} stroke="#fff" strokeWidth={1.5} />
           </g>
         ))}
-        <text x={x(xAxis.hi) - 6} y={y(fitted[1]) + (lineSlope < 0 ? 16 : -8)} textAnchor="end" fontSize={11} fontWeight={700} fill={ESTIMATE}>斜率 β = {slope.toFixed(Math.abs(slope) >= 100 ? 0 : Math.abs(slope) >= 1 ? 2 : 3)}</text>
+        <text x={x(xAxis.hi) - 6} y={y(fitted[1]) + (slope < 0 ? 16 : -8)} textAnchor="end" fontSize={11} fontWeight={700} fill={ESTIMATE}>斜率 β = {slope.toFixed(Math.abs(slope) >= 100 ? 0 : Math.abs(slope) >= 1 ? 2 : 3)}</text>
       </svg>
       {Tip}
     </div>

@@ -62,6 +62,25 @@ describe("fixed teaching regression reading", () => {
     expect(html).toContain("[-0.57, -0.53]");
   });
 
+  test("a non-share Y draws its fitted line through the bins, not 100× flatter", () => {
+    const withBins = response();
+    withBins.design.depvar_kind = "network";
+    withBins.result.coefs[0] = { ...withBins.result.coefs[0], coef: -2000, ci_low: -2100, ci_high: -1900 };
+    // Raw units: X as a fraction, Y in centrality units; β = −2000 means −20 per percentage point of X.
+    withBins.result.binscatter = {
+      bins: [{ x: -0.04, y: 80, n: 10 }, { x: 0, y: 0, n: 10 }, { x: 0.04, y: -80, n: 10 }],
+      slope: -2000,
+      transform: "twoway_demeaned",
+    };
+    const { container } = render(<RegressionResultCard outcome="network" response={withBins} />);
+    const svg = container.querySelector(".binscatter-plot svg")!;
+    const line = svg.querySelector("line[data-fit]")!;
+    const [x1, y1, x2, y2] = ["x1", "y1", "x2", "y2"].map((name) => Number(line.getAttribute(name)));
+    const centres = [...svg.querySelectorAll("[data-bin] circle[r=\"5\"]")].map((dot) => [Number(dot.getAttribute("cx")), Number(dot.getAttribute("cy"))]);
+    for (const [cx, cy] of centres) expect(Math.abs(y1 + ((cx - x1) / (x2 - x1)) * (y2 - y1) - cy)).toBeLessThan(0.5);
+    expect(svg.textContent).toContain("斜率 β = -20.00");
+  });
+
   test.each([
     [-0.8, -0.2, "本次样本支持负向关联", true],
     [-0.9, 0.1, "本次样本不足以判断方向", false],
