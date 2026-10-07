@@ -452,7 +452,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
       <section className="reg-run-card">
         <span className="reg-section-step">本步回归 · 固定计算</span>
         <h3>{lessonQuestion(outcome, baseline)}</h3>
-        {outcome !== "trade" && <p className="muted">方法与步骤 11 相同，这次 Y 换成{lesson.shortMetric}。</p>}
+        {outcome !== "trade" && <p className="muted">方法与步骤 11 相同，这次 Y 换成{/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}{lesson.shortMetric}。</p>}
         <p className="reg-step-focus"><b>本步重点</b>{lesson.learnThis}</p>
         {baselineNotice && <p className="reg-boundary" role="status">{baselineNotice}</p>}
         {baselineOptions.length > 1 && (
@@ -544,7 +544,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         )}
         {!running && !baselineNotice && savedRunY && savedRunY.key !== (baseline ?? defaultBaseline) && (
           <p className="reg-boundary" role="status">
-            报告材料里保存的仍是上次算出的 Y（{savedRunY.label}）；按上面的按钮算一次，才会换成{lesson.shortMetric}。
+            报告材料里保存的仍是上次算出的 Y（{savedRunY.label}）；按上面的按钮算一次，才会换成{/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}{lesson.shortMetric}。
           </p>
         )}
         {!running && savedRun && state.materialLocked && (

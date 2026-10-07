@@ -68,6 +68,11 @@ export function StudentRowMenu({
 }) {
   const who = `${student.display_name}（${student.username}）`;
   const passwordLabel = student.demo_seed ? "固定演示口令" : "重置密码";
+  // Close the menu on a pick; otherwise it stayed open behind the modal and after saving.
+  const pick = (event: React.MouseEvent<HTMLElement>, type: "name" | "student_no" | "password" | "enrollment") => {
+    event.currentTarget.closest("details")?.removeAttribute("open");
+    onPick(type, student);
+  };
   return (
     <details className="row-menu" onToggle={(event) => {
       const menu = event.currentTarget;
@@ -80,14 +85,14 @@ export function StudentRowMenu({
     }}>
       <summary aria-label={`操作：${who}`}>⋯</summary>
       <div className="row-menu-pop">
-        <button aria-label={`修改姓名：${who}`} onClick={() => onPick("name", student)}>修改姓名</button>
-        <button aria-label={`修改学号：${who}`} onClick={() => onPick("student_no", student)}>修改学号</button>
-        <button aria-label={`调整班级：${who}`} onClick={() => onPick("enrollment", student)}>调整班级</button>
+        <button aria-label={`修改姓名：${who}`} onClick={(event) => pick(event, "name")}>修改姓名</button>
+        <button aria-label={`修改学号：${who}`} onClick={(event) => pick(event, "student_no")}>修改学号</button>
+        <button aria-label={`调整班级：${who}`} onClick={(event) => pick(event, "enrollment")}>调整班级</button>
         <span title={student.demo_seed ? "演示账号的密码由系统统一管理；如需演示改密，请新建普通学生账号" : undefined}>
           <button
             disabled={student.demo_seed}
             aria-label={`${passwordLabel}：${who}`}
-            onClick={() => onPick("password", student)}
+            onClick={(event) => pick(event, "password")}
           >
             {passwordLabel}
           </button>

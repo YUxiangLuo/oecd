@@ -209,7 +209,9 @@ export function BinScatterChart({ bins, slope, xLabel, yLabel, xScale = 100, ySc
             <circle cx={x(point.x)} cy={y(point.y)} r={5} fill={BIN} fillOpacity={0.9} stroke="#fff" strokeWidth={1.5} />
           </g>
         ))}
-        <text x={x(xAxis.hi) - 6} y={y(fitted[1]) + (slope < 0 ? 16 : -8)} textAnchor="end" fontSize={11} fontWeight={700} fill={ESTIMATE}>斜率 β = {slope.toFixed(Math.abs(slope) >= 100 ? 0 : Math.abs(slope) >= 1 ? 2 : 3)}</text>
+        {/* Kept inside the plot (a line ending at the bottom put it on the x tick labels); small slopes keep
+            two significant figures so they match the coefficient chart (-0.0049, not -0.005). */}
+        <text x={x(xAxis.hi) - 6} y={Math.min(H - m.b - 4, Math.max(m.t + 12, y(fitted[1]) + (slope < 0 ? 16 : -8)))} textAnchor="end" fontSize={11} fontWeight={700} fill={ESTIMATE}>斜率 β = {Math.abs(slope) >= 100 ? slope.toFixed(0) : Math.abs(slope) >= 1 ? slope.toFixed(2) : Math.abs(slope) >= 0.1 ? slope.toFixed(3) : slope.toPrecision(2)}</text>
       </svg>
       {Tip}
     </div>

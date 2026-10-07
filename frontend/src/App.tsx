@@ -269,7 +269,7 @@ export default function App() {
   // workspace must not look usable: block it until the record is read.
   if (session.status === "unavailable") return (
     <main className="app-boot" style={{ padding: 40 }}>
-      <div className="error-box" role="alert">读取实验记录失败：{session.syncError ?? "暂时无法连接教学服务"}</div>
+      <div className="error-box" role="alert">{session.syncError ?? "读取实验记录失败：暂时无法连接教学服务"}</div>
       <p>你的实验记录保存在服务器上，没有丢失。读取成功后才能继续操作。</p>
       <div style={{ display: "flex", gap: 8 }}>
         <button className="primary" onClick={session.retryLoad}>重新读取实验记录</button>
