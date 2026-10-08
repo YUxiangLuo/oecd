@@ -88,6 +88,8 @@ button.footer-next:hover { text-decoration: underline; }
 .fdot.past { background: #d7dae3; }
 .fdot.done { background: #12a150; }
 .fdot.on { width: 22px; background: #4b47e0; }
+/* The state rules above use the background shorthand, which resets the clip: keep the 7px look. */
+.fdot, .fdot.on, .fdot.done, .fdot.past { background-clip: content-box; }
 
 .step-row:focus-visible, .fdot:focus-visible,
 .funnel-point:focus-visible {
