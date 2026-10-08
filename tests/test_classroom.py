@@ -208,7 +208,7 @@ def test_stale_teacher_view_cannot_grade_a_regenerated_report(teaching_db):
     account_id = db.find_account("student")["id"]
     _save_report("replacement", provenance)
 
-    with pytest.raises(db.ReportChanged, match="重新加载"):
+    with pytest.raises(db.ReportChanged, match="学生刚重新提交了报告"):
         db.grade_report(account_id, 70, "based on first", "teacher", viewed["updated_at"])
     current = db.get_report(account_id, "teacher")
     assert current["markdown"] == "replacement"

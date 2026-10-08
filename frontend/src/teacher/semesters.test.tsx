@@ -19,8 +19,8 @@ test("class import selects its class and is unavailable for archived groups", as
   try {
     render(<SemestersTab />);
     await screen.findByText("3班");
-    expect(screen.getAllByRole("button", { name: /^导入学生：/ })).toHaveLength(2);
-    fireEvent.click(screen.getByRole("button", { name: "导入学生：秋季 · 3班" }));
+    expect(screen.getAllByRole("button", { name: /^批量导入学生：/ })).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "批量导入学生：秋季 · 3班" }));
     expect((screen.getByLabelText("所属班级") as HTMLSelectElement).value).toBe("3");
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -45,13 +45,13 @@ for (const target of ["semester", "class"] as const) {
         await screen.findByText("测试班级");
         const scope = within(container.querySelector(target === "semester" ? ".semester-card-head" : ".class-row") as HTMLElement);
         const button = scope.getByRole("button", { name: active ? /^归档/ : /^恢复/ }) as HTMLButtonElement;
-        // Archiving a semester asks first; restoring and class changes do not.
-        const asks = target === "semester" && active;
+        // Archiving a semester or a class asks first; restoring does not.
+        const asks = active;
         const press = () => {
           fireEvent.click(button);
           if (!asks) return;
           const dialog = screen.getByRole("dialog");
-          expect(dialog.textContent).toContain("已有的分班归属和学生的实验记录都会保留");
+          expect(dialog.textContent).toContain("实验记录都会保留，随时可以恢复");
           fireEvent.click(within(dialog).getByRole("button", { name: "归档" }));
         };
         press();
@@ -105,6 +105,59 @@ test("an archived semester shows no class archive buttons", async () => {
   } finally { list.mockRestore(); }
 });
 
+test("archived semesters sit in a 历史学期 section after the active ones, closed while others are in use", async () => {
+  const make = (id: number, name: string, isActive: boolean): AcademicSemester => ({
+    id, name, is_active: isActive, student_count: 0, created_at: "2026-09-24", classes: [],
+  });
+  const list = spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [
+    make(1, "旧学期甲", false), make(2, "2026 秋", true), make(3, "旧学期乙", false),
+  ] });
+  try {
+    const { container } = render(<SemestersTab />);
+    await screen.findByText("2026 秋");
+    const history = container.querySelector("details.semester-history") as HTMLDetailsElement;
+    expect(history.open).toBe(false);
+    expect(history.querySelector("summary")?.textContent).toBe("历史学期（2）");
+    expect([...container.querySelectorAll("h3")].map((heading) => heading.textContent)).toEqual(["2026 秋", "旧学期甲", "旧学期乙"]);
+    expect(history.contains(screen.getByText("2026 秋"))).toBe(false);
+    expect(screen.getByText("旧学期甲").getAttribute("title")).toBe("旧学期甲");
+  } finally { list.mockRestore(); }
+});
+
+test("creating, renaming, archiving and restoring each say so in a toast", async () => {
+  const semester: AcademicSemester = {
+    id: 1, name: "秋季", is_active: true, student_count: 0, created_at: "2026-09-24",
+    classes: [{ id: 2, term_id: 1, name: "一班", is_active: true, student_count: 0, created_at: "2026-09-24" }],
+  };
+  const list = spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [semester] });
+  const spies = [
+    spyOn(api.classroom, "createSemester").mockResolvedValue({ id: 3, name: "春季", is_active: true, created_at: "2026-09-24" }),
+    spyOn(api.classroom, "updateClass").mockResolvedValue(semester.classes[0]),
+  ];
+  const toasts: string[] = [];
+  const listener = (event: Event) => toasts.push(String((event as CustomEvent).detail));
+  window.addEventListener("gvcsim-toast", listener);
+  try {
+    render(<SemestersTab />);
+    await screen.findByText("一班");
+    fireEvent.click(screen.getByRole("button", { name: "+ 新建学期" }));
+    fireEvent.change(screen.getByLabelText("学期名称"), { target: { value: "春季" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "保存" })); });
+    fireEvent.click(screen.getByRole("button", { name: "重命名班级：秋季 · 一班" }));
+    fireEvent.change(screen.getByLabelText("班级名称"), { target: { value: "二班" } });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "保存" })); });
+    fireEvent.click(screen.getByRole("button", { name: "归档班级：秋季 · 一班" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.textContent).toContain("归档班级“一班”？");
+    await act(async () => { fireEvent.click(within(dialog).getByRole("button", { name: "归档" })); });
+    expect(toasts).toEqual(["已新建学期“春季”", "已把班级重命名为“二班”", "已归档班级“一班”（可随时恢复）"]);
+  } finally {
+    window.removeEventListener("gvcsim-toast", listener);
+    spies.forEach((spy) => spy.mockRestore());
+    list.mockRestore();
+  }
+});
+
 test("the name dialog normalizes the name, focuses its error and returns focus to its opener", async () => {
   const list = spyOn(api.classroom, "semesters").mockResolvedValue({ semesters: [] });
   const create = spyOn(api.classroom, "createSemester")
@@ -123,7 +176,9 @@ test("the name dialog normalizes the name, focuses its error and returns focus t
     expect(create).toHaveBeenLastCalledWith("2026 秋");
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toBe("保存失败：学期 2026 秋 已存在");
-    expect(document.activeElement).toBe(alert);
+    expect(document.activeElement).toBe(input);
+    expect(input.getAttribute("aria-describedby")).toBe(alert.id);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
     await act(async () => {});
     expect(document.activeElement).toBe(opener);

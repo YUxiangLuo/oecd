@@ -15,7 +15,7 @@ const row: StudentRow = {
   last_valid_activity: null, enrollments: [],
 };
 
-test("each teacher tab titles the window, and the students table explains 有效活动", async () => {
+test("each teacher tab titles the window, and the students table explains 最近操作", async () => {
   const spies = [
     spyOn(api.classroom, "reports").mockResolvedValue({ reports: [] }),
     spyOn(api.classroom, "students").mockResolvedValue({ students: [row] }),
@@ -27,7 +27,7 @@ test("each teacher tab titles the window, and the students table explains 有效
     expect(document.title).toBe("学生与进度 · 教师工作台 · 供应链仿真系统 · GVC Simulation Lab");
     expect(screen.getByText("创建账号、分配班级并查看学生已完成的步骤")).toBeTruthy();
 
-    const header = screen.getByRole("columnheader", { name: "有效活动" });
+    const header = screen.getByRole("columnheader", { name: "最近操作" });
     expect(header.getAttribute("title")).toBe(VALID_ACTIVITY_HINT);
     expect(document.getElementById(header.getAttribute("aria-describedby")!)?.textContent).toContain(VALID_ACTIVITY_HINT);
     expect((await screen.findByText(row.display_name)).className).toContain("student-name-cell");

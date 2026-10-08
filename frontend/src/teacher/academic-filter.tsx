@@ -46,7 +46,7 @@ export function AcademicFilters({
           onClassChange(null);
         }}
       >
-        <option value="">全部学期与未分班</option>
+        <option value="">全部学生</option>
         {semesters.map((item) => <option key={item.id} value={item.id}>{item.name}{item.is_active ? "" : "（已归档）"}</option>)}
       </select>
       {semester && (

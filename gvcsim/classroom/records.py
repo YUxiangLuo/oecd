@@ -285,9 +285,21 @@ def grade_report(
         if updated is not None:
             return updated
         current = c.execute(
-            "SELECT 1 FROM reports WHERE account_id=%s AND release_id=%s AND state IN ('pending','graded')",
+            "SELECT r.state,r.score,r.graded_by,a.display_name AS grader_name FROM reports r"
+            " LEFT JOIN accounts a ON a.username=r.graded_by"
+            " WHERE r.account_id=%s AND r.release_id=%s AND r.state IN ('pending','graded')",
             (account_id, release_id),
         ).fetchone()
         if current is not None:
-            raise ReportChanged("报告内容已更新，请重新加载后评阅")
+            raise ReportChanged(_grade_conflict_message(current, graded_by))
         return None
+
+
+def _grade_conflict_message(current: dict[str, Any], teacher_username: str) -> str:
+    """Why a grade was refused as stale: the teacher sees who changed the report, not just that it changed."""
+    if current["state"] == "graded" and current["score"] is not None:
+        if current["graded_by"] == teacher_username:
+            return f"你在另一个窗口已把这份报告评为 {current['score']} 分"
+        grader = current["grader_name"] or current["graded_by"] or "其他老师"
+        return f"{grader}刚把这份报告评为 {current['score']} 分"
+    return "学生刚重新提交了报告"
