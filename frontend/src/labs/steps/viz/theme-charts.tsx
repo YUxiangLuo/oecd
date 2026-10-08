@@ -45,7 +45,7 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
     const negative = point.shares.filter((share) => share < 0).reduce((sum, share) => sum + share, 0);
     return [positive, negative];
   }));
-  if (!extremes.length) return <p role="status">没有可画出的历年构成，请更换国家、行业或年份（缺失不补零）。</p>;
+  if (!extremes.length) return <p role="status">没有可画出的历年构成，请更换国家、行业或年份（缺少的数据留空，不当作 0）。</p>;
   const axis = niceDomain(Math.min(0, ...extremes), Math.max(0, ...extremes));
   const W = 420, H = 230, left = 56, right = 14, top = 14, bottom = 30;
   const x = (year: number) => left + ((year - years[0]) / Math.max(1, years.at(-1)! - years[0])) * (W - left - right);
@@ -192,7 +192,7 @@ export function IndustryDotPlot({ groups, countries, unit, nationals = [], label
         {countries.map((country, index) => (
           <span key={country}><i className="dot" style={{ background: CAT[index] }} />{countryLabel(country)}</span>
         ))}
-        {nationals.some(finiteValue) && <span><i className="bar" />竖线：该国国家整体值</span>}
+        {nationals.some(finiteValue) && <span><i className="bar" />竖线：各国的国家整体值（颜色同点）</span>}
       </div>
       <div className="dot-plot-axis" aria-hidden="true">
         {axis.ticks.map((tick) => <span key={tick} style={{ left: `${px(tick)}%` }}>{indicatorTick(tick, unit)}</span>)}
@@ -245,7 +245,7 @@ export function Dumbbell({ rows, leftLabel, rightLabel, unit, title, domain }: {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   const [hovered, setHovered] = useState<string | null>(null);
   const values = rows.flatMap((row) => [row.left, row.right]).filter(finiteValue);
-  if (!values.length) return <p role="status">{title}没有有效读数（缺失不补零）。</p>;
+  if (!values.length) return <p role="status">{title}没有有效读数（缺失留空）。</p>;
   const axis = niceDomain(Math.min(...values, ...(domain ? [domain[0]] : [])), Math.max(...values, ...(domain ? [domain[1]] : [])));
   const px = (value: number) => ((value - axis.lo) / (axis.hi - axis.lo || 1)) * 100;
   const reading = (value: number | null) => indicatorNumber(value, unit);
@@ -316,7 +316,7 @@ export function Butterfly({ rows, leftLabel, rightLabel, unit, title, onPick }: 
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   const [hovered, setHovered] = useState<string | null>(null);
   const values = rows.flatMap((row) => [row.left, row.right]).filter(finiteValue);
-  if (!values.length) return <p role="status">{title}没有有效读数（缺失不补零）。</p>;
+  if (!values.length) return <p role="status">{title}没有有效读数（缺失留空）。</p>;
   const max = Math.max(...values.map(Math.abs)) || 1;
   const width = (value: number | null) => (finiteValue(value) ? (Math.abs(value) / max) * 100 : 0);
   const reading = (value: number | null) => indicatorNumber(value, unit);

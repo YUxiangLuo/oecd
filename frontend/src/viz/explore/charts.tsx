@@ -55,7 +55,8 @@ export function ChartDataDisclosure({ label, columns, rows }: {
 function fmtAxis(v: number, format?: string): string {
   // Ticks are round numbers: trim trailing zeros ("20%", "6", "1.5"), unlike readings, which keep fixed decimals.
   if (format === "pct") return `${stripNegativeZero((v * 100).toLocaleString("zh-CN", { maximumFractionDigits: 2 }))}%`;
-  if (Math.abs(v) < 1e4) return stripNegativeZero(v.toLocaleString("zh-CN", { maximumFractionDigits: 3 }));
+  // Amounts are in 百万美元: "5万" there meant 5 万个百万美元 and was read as 5 万美元, so they keep full digits.
+  if (format === "amount" || Math.abs(v) < 1e4) return stripNegativeZero(v.toLocaleString("zh-CN", { maximumFractionDigits: 3 }));
   if (Math.abs(v) >= 1e8) return `${(v / 1e8).toLocaleString("zh-CN", { maximumFractionDigits: 1 })}亿`;
   return `${(v / 1e4).toLocaleString("zh-CN", { maximumFractionDigits: 0 })}万`;
 }
@@ -244,9 +245,10 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
   ];
   return (
     <div style={cardStyle} ref={wrapRef}>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>横轴 {xLabel} · 纵轴 {yLabel} <span style={{ fontSize: 10.5, color: "#5f6677", fontWeight: 400 }}>（参考线基于完整有效样本 n={referencePts.length}）</span></div>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>横轴 {xLabel} · 纵轴 {yLabel}</div>
+      {/* The plot is capped like the trend chart: drawn much wider than 660 units, its 10.5-unit labels grew past the page text. */}
       {pts.length === 0 ? <p className="muted" role="status">横轴 {xLabel} · 纵轴 {yLabel} 当前没有可显示的有效数据。</p> : (
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%">
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: "block", maxWidth: 780, margin: "0 auto" }}>
         {yAxis.ticks.map((t, i) => (
           <g key={`y${i}`}>
             <line x1={m.l} y1={py(t)} x2={W - m.r} y2={py(t)} stroke="#eef0f5" strokeWidth={1} />
@@ -264,7 +266,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
           const hi = Math.min(x1, y1);
           return lo < hi ? (
             <line x1={px(lo)} y1={py(lo)} x2={px(hi)} y2={py(hi)} stroke="#e0982a" strokeWidth={1.5} strokeDasharray="7 4">
-              <title>PLv_GVC = PLy_GVC；线上方更偏上游，线下方更偏下游</title>
+              <title>等长线（前向 = 后向）；线上方更偏上游，线下方更偏下游</title>
             </line>
           ) : null;
         })()}
@@ -322,7 +324,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
         ))}
       </svg>
       )}
-      {equalityLine && pts.length > 0 && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}><span style={{ color: "var(--text-warning)", fontWeight: 700 }}>橙色虚线 y=x</span>：线上方 PLv_GVC &gt; PLy_GVC（GVCPs &gt; 1，更偏上游）；线下方更偏下游。灰色中位数线只表示相对高低。</div>}
+      {equalityLine && pts.length > 0 && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}><span style={{ color: "var(--text-warning)", fontWeight: 700 }}>橙色虚线是等长线（前向 = 后向）</span>：线上方前向 GVC 段更长（GVC 位置指数 &gt; 1，更偏上游）；线下方更偏下游。灰色虚线是中位数，只表示相对高低。</div>}
       <ChartDataDisclosure
         label={`${yLabel}与${xLabel}散点`}
         columns={[{ key: "entity", label: "对象" }, { key: "x", label: xLabel }, { key: "y", label: yLabel }]}

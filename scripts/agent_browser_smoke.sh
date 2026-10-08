@@ -133,7 +133,7 @@ done
 
 # ---------------------------------------------------------------- 表格对齐门禁
 # 覆盖本次修过的三处：步骤 1 三个页签的数值列、步骤 5 最短路径明细的行标签、
-# 步骤 9 行业热力表（折叠在“国家对比”视角里的“全部指标表”）。
+# 步骤 9 行业热力表（折叠在“行业排名”视角里的“全部指标表”）。
 "${ab[@]}" open "$GVCSIM_BASE_URL/?step=1"
 "${ab[@]}" wait --load networkidle
 for table_tab in "账户项" "中间投入 Z" "最终需求 Y"; do
@@ -157,9 +157,9 @@ assert_table_alignment
 
 "${ab[@]}" open "$GVCSIM_BASE_URL/?step=9"
 "${ab[@]}" wait --load networkidle
-# 行业热力表折叠在“国家对比”视角的“全部指标表”里，与主图同页，没有弹窗
-"${ab[@]}" wait --fn 'Array.from(document.querySelectorAll("main [role=\"group\"][aria-label=\"图表视角\"] button")).some(b=>b.textContent.trim()==="国家对比")'
-"${ab[@]}" eval 'Array.from(document.querySelectorAll("main [role=\"group\"][aria-label=\"图表视角\"] button")).find(b=>b.textContent.trim()==="国家对比")?.click()' >/dev/null
+# 行业热力表折叠在“行业排名”视角的“全部指标表”里，与主图同页，没有弹窗
+"${ab[@]}" wait --fn 'Array.from(document.querySelectorAll("main [role=\"group\"][aria-label=\"图表视角\"] button")).some(b=>b.textContent.trim()==="行业排名")'
+"${ab[@]}" eval 'Array.from(document.querySelectorAll("main [role=\"group\"][aria-label=\"图表视角\"] button")).find(b=>b.textContent.trim()==="行业排名")?.click()' >/dev/null
 "${ab[@]}" wait --fn 'Array.from(document.querySelectorAll("main details > summary")).some(s=>/全部指标表/.test(s.textContent))'
 "${ab[@]}" eval '(() => { const d = Array.from(document.querySelectorAll("main details")).find(d=>/全部指标表/.test(d.querySelector("summary")?.textContent||"")); if (d) d.open = true; return true; })()' >/dev/null
 "${ab[@]}" wait --load networkidle

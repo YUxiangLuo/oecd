@@ -94,7 +94,7 @@ export function TrendSummary({
         <div key={second}>
           <span>与对比国家 {countryLabel(second)}</span>
           <b>期间读数不完整</b>
-          <small>{firstYear} 或 {lastYear} 年缺失，暂不比较差距（缺失不补零）</small>
+          <small>{firstYear} 或 {lastYear} 年缺失，暂不比较差距（缺失留空）</small>
         </div>
       );
     }
@@ -105,7 +105,7 @@ export function TrendSummary({
     const endMagnitude = magnitudeReading(endGap, unit, digits);
     const reversed = startGap !== 0 && endGap !== 0 && Math.sign(startGap) !== Math.sign(endGap);
     const gapStory = reversed
-      ? "领先方反转"
+      ? "高低位置互换"
       : gapMagnitude === null
         ? "差距基本不变"
         : gapChange > 0
@@ -197,7 +197,7 @@ export function ComparisonSummary({
   const gapMagnitude = magnitudeReading(gapChange, unit, digits);
   const reversed = startGap !== 0 && endGap !== 0 && Math.sign(startGap) !== Math.sign(endGap);
   const gapStory = reversed
-    ? "领先方反转"
+    ? "高低位置互换"
     : gapMagnitude === null
       ? "差距基本不变"
       : gapChange > 0
@@ -313,7 +313,7 @@ export function IndicatorTrendChart({
   const legend: { key: string; label: string; draw: React.ReactNode; country?: string }[] = [
     ...(band.length >= 2 ? [
       { key: "band", label: "中间 50% 经济体", draw: <svg width={24} height={12} aria-hidden="true"><rect x={0} y={0} width={24} height={12} fill={REFERENCE_FILL} fillOpacity={0.3} /></svg> },
-      { key: "median", label: `${sameIndustry ? "同行业全球中位数" : "全球中位数"}（${band.at(-1)!.n} 个）`, draw: <svg width={24} height={12} aria-hidden="true"><line x1={0} x2={24} y1={6} y2={6} stroke={REFERENCE_LINE} strokeWidth={1.5} strokeDasharray="4 3" /></svg> },
+      { key: "median", label: `${sameIndustry ? "同行业全球中位数" : "全球中位数"}（${band.at(-1)!.n} 个经济体）`, draw: <svg width={24} height={12} aria-hidden="true"><line x1={0} x2={24} y1={6} y2={6} stroke={REFERENCE_LINE} strokeWidth={1.5} strokeDasharray="4 3" /></svg> },
     ] : []),
     ...countries.map((country, index) => ({
       key: country,
@@ -335,8 +335,13 @@ export function IndicatorTrendChart({
         index && context ? `${countryLabel(country)}（对比）` : countryLabel(country),
         indicatorNumber(series[index].find((point) => point.year === year)?.value ?? null, unit, digits),
         CAT[index],
+        // Keys match the drawn lines: comparison countries and the median are dashed.
+        index > 0,
       ]),
-      ...(reference ? [[referenceLabel, indicatorNumber(reference.median, unit), REFERENCE_LINE] as TipLine] : []),
+      ...(reference ? [
+        [referenceLabel, indicatorNumber(reference.median, unit), REFERENCE_LINE, true] as TipLine,
+        ["中间 50%", `${indicatorNumber(reference.p25, unit)}–${indicatorNumber(reference.p75, unit)}`] as TipLine,
+      ] : []),
     ];
   };
   const clearActive = () => { setActiveYear(null); hide(); };
@@ -391,8 +396,10 @@ export function IndicatorTrendChart({
       <svg
         viewBox="0 30 780 265"
         role="img"
-        aria-label={`${label}历年变化${band.length >= 2 ? "，含全部经济体的中位数与中间 50% 范围" : ""}；缺失不补零，详细读数见下方`}
-        style={{ width: "100%", display: "block" }}
+        aria-label={`${label}历年变化${band.length >= 2 ? "，含全部经济体的中位数与中间 50% 范围" : ""}；缺少的数据留空，详细读数见下方`}
+        // Capped so the 780-unit viewBox is not blown up on wide screens: past ~880px its 12-unit tick text
+        // rendered larger than the page text (about 23px at 1066px wide).
+        style={{ width: "100%", maxWidth: 880, display: "block" }}
       >
         {axis.ticks.map((tick) => (
           <g key={tick}>
@@ -422,11 +429,11 @@ export function IndicatorTrendChart({
         {(metric === "GVCPs" || metric === "Pos_TPL") && (
           <g>
             <line x1={110} x2={730} y1={y(1)} y2={y(1)} stroke="#966500" strokeDasharray="6 4">
-              <title>位置基准 = 1</title>
+              <title>等于 1：前向与后向一样长</title>
             </line>
             {/* Ratios hover around 1, so a label on the line would cover the data; it sits in the right margin. */}
             <text x={737} y={y(1) + 4} fontSize={11} fill="#966500">
-              基准 1
+              等长
             </text>
           </g>
         )}
@@ -824,7 +831,7 @@ export function LengthPositionTrajectory({
   const dim = (country: string) => (focusSeries && focusSeries !== country ? 0.25 : 1);
   return (
     <section aria-label="前后向 GVC 段长度位置轨迹">
-      <h4>前向—后向位置轨迹 · 时间与国家对照</h4>
+      <h4>前向与后向 GVC 段长度的历年轨迹</h4>
       <p className="muted">
         横轴是后向 GVC 段长度，纵轴是前向 GVC 段长度；箭头从较早年份指向较晚年份。等长线上方表示前向段相对更长。
       </p>
@@ -883,9 +890,9 @@ export function LengthPositionTrajectory({
           </g>
         ))}
         <line x1={x(lo)} y1={y(lo)} x2={x(axis.hi)} y2={y(axis.hi)} stroke="#8a6415" strokeDasharray="6 4" />
-        <text x={650} y={y(axis.hi) + 18} textAnchor="end" fontSize={11}>前向 = 后向</text>
+        <text x={650} y={y(axis.hi) + 18} textAnchor="end" fontSize={11}>等长线（前向 = 后向）</text>
         <text x={390} y={642} textAnchor="middle" fontSize={12}>后向 GVC 段长度</text>
-        <text x={18} y={320} textAnchor="middle" fontSize={12} transform="rotate(-90 18 320)">前向 GVC 段长度</text>
+        <text x={66} y={320} textAnchor="middle" fontSize={12} transform="rotate(-90 66 320)">前向 GVC 段长度</text>
         {/* Country A is drawn last (SVG paints in document order), so the comparison trails never hide it. */}
         {series.map((points, countryIndex) => ({ points, countryIndex })).reverse().map(({ points, countryIndex }) => (
           <g
@@ -1030,7 +1037,7 @@ export function IndicatorPairBars({
           ))}
         </div>
       ))}
-      <p className="muted">单位：{unit}；共同零轴，负值向左，缺失值不补零。</p>
+      <p className="muted">单位：{unit}。各国从同一个 0 起画，负值画在左边，缺少的数据留空。</p>
       {Tip}
     </div>
   );

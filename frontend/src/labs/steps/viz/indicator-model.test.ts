@@ -153,7 +153,7 @@ describe("trend rendering", () => {
         unit: "无量纲",
       }),
     );
-    expect(html).toContain("位置基准 = 1");
+    expect(html).toContain("等于 1：前向与后向一样长");
   });
 
   test("names the two-country trend conclusion as a semantic group", () => {

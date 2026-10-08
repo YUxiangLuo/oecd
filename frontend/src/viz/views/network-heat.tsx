@@ -21,12 +21,12 @@ export const DEFAULT_HEAT_VIEW: HeatViewOptions = {
 };
 
 export const HEAT_SORT_OPTIONS: { key: HeatSortMetric; label: string }[] = [
-  { key: HEAT_EVIDENCE_METRIC, label: "网络介数（全正边二值）" },
-  { key: HEAT_WEIGHTED_DEGREE_METRIC, label: "加权总度（自环双计）" },
+  { key: HEAT_EVIDENCE_METRIC, label: "介数" },
+  { key: HEAT_WEIGHTED_DEGREE_METRIC, label: "加权总度" },
 ];
 export const HEAT_COVERAGE_OPTIONS: { key: HeatCoverage; label: string }[] = [
-  { key: "top15", label: "Top 15" },
-  { key: "all", label: "全部有限行业" },
+  { key: "top15", label: "前 15 个" },
+  { key: "all", label: "全部行业" },
 ];
 
 export function normalizeHeatSortMetric(value: unknown): HeatSortMetric {
@@ -38,19 +38,19 @@ export function normalizeHeatCoverage(value: unknown): HeatCoverage {
 }
 
 export function heatSortLabel(metric: HeatSortMetric): string {
-  return HEAT_SORT_OPTIONS.find((option) => option.key === metric)?.label ?? "网络介数（全正边二值）";
+  return HEAT_SORT_OPTIONS.find((option) => option.key === metric)?.label ?? "介数";
 }
 
 export function heatCoverageLabel(coverage: HeatCoverage): string {
-  return HEAT_COVERAGE_OPTIONS.find((option) => option.key === coverage)?.label ?? "Top 15";
+  return HEAT_COVERAGE_OPTIONS.find((option) => option.key === coverage)?.label ?? "前 15 个";
 }
 
 const HEAT_COLS = [
-  { key: HEAT_WEIGHTED_DEGREE_METRIC, name: "加权总度", fmt: "amount", desc: "加权入度+加权出度(百万美元)；正自环在两个方向各计一次，不是去重贸易额。" },
-  { key: HEAT_EVIDENCE_METRIC, name: "网络介数（全正边二值）", fmt: "raw", desc: "微小正边与大额边等长时，各有序节点对最短路径经过该节点的份额之和；未归一化、未做边阈值敏感性。" },
+  { key: HEAT_WEIGHTED_DEGREE_METRIC, name: "加权总度", fmt: "amount", desc: "买入 + 卖出的金额（百万美元）；自环（行业卖给自己的部分）在两边各算一次。" },
+  { key: HEAT_EVIDENCE_METRIC, name: "介数", fmt: "raw", desc: "只看连接、不看金额：其他节点之间的最短路线有多少经过这个行业。" },
   { key: "closnesscentrality", name: "接近中心性", fmt: "num", desc: "沿出边可达节点数除以到这些节点的最短距离之和。" },
   { key: "harmonicclosnesscentrality", name: "调和中心性", fmt: "num", desc: "沿出边到可达节点的距离倒数平均值。" },
-  { key: "eigencentrality", name: "Gephi 0.10.1 兼容入边分数", fmt: "num", desc: "复现 Gephi 0.10.1 的累计入边迭代；不同于标准 Perron 特征向量幂迭代。" },
+  { key: "eigencentrality", name: "特征向量中心性（软件近似）", fmt: "num", desc: "被重要节点连接的节点得分更高；按 Gephi 网络软件的算法近似计算，只作参考。" },
 ] as const;
 
 const fmtVal = (v: number, fmt: string) => formatMetric(v, fmt === "amount" ? "amount" : "number");

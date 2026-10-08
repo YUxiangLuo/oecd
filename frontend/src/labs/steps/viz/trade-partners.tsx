@@ -66,7 +66,7 @@ function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: stri
   if (!top.length) return <p role="status">{countryLabel(country)} 在该年没有贸易伙伴数据。</p>;
   return (
     <div ref={wrapRef} className="hover-wrap">
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${countryLabel(country)}的前 ${top.length} 个贸易伙伴自我中心图；线宽表示双向流量，箭头指向买方`} style={{ width: "100%", display: "block" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${countryLabel(country)}与前 ${top.length} 个贸易伙伴的关系图；线宽表示双向流量，箭头指向买方`} style={{ width: "100%", display: "block" }}>
         <defs>
           <marker id={`ego-out-${country}`} markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto" viewBox="0 0 10 8">
             <path d="M0,0 L10,4 L0,8 z" fill={CAT[0]} />
@@ -75,7 +75,7 @@ function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: stri
             <path d="M0,0 L10,4 L0,8 z" fill={CAT[1]} />
           </marker>
         </defs>
-        <text x={12} y={16} fontSize={11} fill="#596173">线宽 = 双向流量；蓝箭头 = {country} 卖出，绿箭头 = {country} 买入；伙伴按地理区域分组</text>
+        <text x={12} y={16} fontSize={11} fill="#596173">线宽 = 双向流量；蓝箭头 = {countryLabel(country)} 卖出，绿箭头 = {countryLabel(country)} 买入；伙伴按地理区域分组</text>
         {top.map((partner, index) => {
           const angle = -Math.PI / 2 + (index / top.length) * Math.PI * 2;
           const x = cx + Math.cos(angle) * R, y = cy + Math.sin(angle) * R;
@@ -118,7 +118,7 @@ function RegionMatrix({ matrix, year }: { matrix: number[][]; year: number }) {
   const max = Math.max(1, ...matrix.flat());
   return (
     <table className="region-matrix data-table" aria-describedby="region-matrix-note">
-      <caption style={{ textAlign: "left", padding: "6px 0", color: "#3a4050" }}>{year} 年区域间贸易流（每行是卖方区域，每列是买方区域；百万美元，不含 ROW）</caption>
+      <caption style={{ textAlign: "left", padding: "6px 0", color: "#3a4050" }}>{year} 年区域间贸易流（每行是卖方区域，每列是买方区域；百万美元，不含“世界其他地区”）</caption>
       <thead>
         <tr><th scope="col">卖方 ＼ 买方</th>{REGIONS.map((region) => <th key={region} scope="col">{region}</th>)}</tr>
       </thead>
@@ -182,7 +182,7 @@ export function TradePartners({ meta, countries, year, onYear }: {
         </LabeledControl>
       </div>
       <p className="muted" id="region-matrix-note">
-        国家级贸易网络接近完全图：几乎每两个经济体之间都有贸易，所以介数这类不看流量的中心性在国家层面没有区分度；本步的网络指标因此在国家×行业网络上计算。这里只看三样可读的信息：主要伙伴、买卖方向、区域内与区域间的流向。
+        几乎每两个国家之间都有贸易，所以“介数”这类只看连接的指标在国家层面都差不多；本步的网络指标改在“国家×行业”层面计算。这里只看：主要伙伴、买卖方向、各区域之间的流向。
       </p>
       <div className={`comparison-facets${countries.length > 2 ? " comparison-facets--stacked" : ""}`}>
         {countries.map((country, index) => {
@@ -194,8 +194,8 @@ export function TradePartners({ meta, countries, year, onYear }: {
               <Butterfly
                 title={`${countryLabel(country)} 伙伴榜`}
                 unit="百万美元"
-                leftLabel="从它买入（进口来源）"
-                rightLabel="卖给它（出口去向）"
+                leftLabel="进口（从该伙伴买入）"
+                rightLabel="出口（卖给该伙伴）"
                 rows={partners.slice(0, limit).map((partner) => ({ key: partner.c, label: countryLabel(partner.c), left: partner.inflow, right: partner.outflow }))}
               />
             </section>

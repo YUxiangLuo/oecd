@@ -10,7 +10,7 @@ export interface ScopeItem {
 
 /**
  * Sticky scope summary (design doc 4.5): what the chart below shows, as chips the student can click to
- * jump to the matching control. The group keeps the aria-label "当前比较口径" that tests and the manual
+ * jump to the matching control. The group keeps the aria-label "当前图表范围" that tests and the manual
  * capture script rely on; the chips read as "label value" one after another.
  */
 export const ScopeCard = forwardRef<HTMLDivElement, { items: ScopeItem[]; note?: ReactNode }>(function ScopeCard(
@@ -18,7 +18,7 @@ export const ScopeCard = forwardRef<HTMLDivElement, { items: ScopeItem[]; note?:
   ref,
 ) {
   return (
-    <div ref={ref} tabIndex={-1} className="scope-card" role="group" aria-label="当前比较口径">
+    <div ref={ref} tabIndex={-1} className="scope-card" role="group" aria-label="当前图表范围">
       {items.map((item, index) => {
         const body = (
           <>

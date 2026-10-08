@@ -9,8 +9,9 @@
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-/** `[label, value, seriesColor?]`; a line with an empty label is the heading. */
-export type TipLine = [string, string, string?];
+/** `[label, value, seriesColor?, dashed?]`; a line with an empty label is the heading. `dashed` draws the key
+ * like a dashed series line, so the readout matches the chart. */
+export type TipLine = [string, string, string?, boolean?];
 
 const TIP_WIDTH = 250;
 
@@ -49,12 +50,12 @@ export function useHoverTip() {
       aria-live="polite"
       style={tip ? { left: tip.x, top: tip.y } : { visibility: "hidden" }}
     >
-      {tip?.lines.map(([label, value, color], index) =>
+      {tip?.lines.map(([label, value, color, dashed], index) =>
         index === 0 && label === "" ? (
           <div key={index} className="hover-tip-head">{value}</div>
         ) : (
           <div key={index}>
-            {color && <i className="hover-tip-key" style={{ background: color }} aria-hidden="true" />}
+            {color && <i className="hover-tip-key" style={{ background: dashed ? `repeating-linear-gradient(90deg, ${color} 0 4px, transparent 4px 7px)` : color }} aria-hidden="true" />}
             <span>{label}</span>
             <b>{value}</b>
           </div>

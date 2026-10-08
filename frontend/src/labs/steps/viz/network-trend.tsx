@@ -44,7 +44,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   extraLenses?: { key: string; label: string }[];
   /** Exploration views share this component's year, so every view and the scope line agree. */
   renderExtra?: (key: string, countries: string[], year: number, onYear: (year: number) => void) => ReactNode;
-  /** The full-indicator table, folded into the 国家对比 view. */
+  /** The full-indicator table, folded into the 行业排名 view. */
   renderTable?: (year: number, onYear: (year: number) => void) => ReactNode;
 }) {
   const countries = meta.countries.filter((country) => country !== "ROW");
@@ -76,10 +76,10 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   }, [focusScope]);
   const [year, setYear] = useState(restored[0]?.source === "explicit-network-ranking" && years.includes(restored[0].year) ? restored[0].year : years.at(-1)!);
   const [limit, setLimit] = useState(new Set(restored.map((item) => item.industry)).size > 10 ? 200 : 10);
-  // 买入与卖出 has its own length (Top 15), separate from the ranking's Top 10.
+  // 买入与卖出 has its own length (前 15 个), separate from the ranking's 前 10 个.
   const [flowsLimit, setFlowsLimit] = useState(15);
   const metrics = schema?.groups.find((group) => group.key === "network")?.fields ?? COMMON_METRICS;
-  const label = schema?.fields[metric]?.label ?? (metric === "weighted degree" ? "加权总度（入+出）" : metric);
+  const label = schema?.fields[metric]?.label ?? (metric === "weighted degree" ? "加权总度" : metric);
   const unit = metric.startsWith("weighted ") ? "百万美元" : metric === HEAT_EVIDENCE_METRIC ? "未归一化介数" : ["degree", "indegree", "outdegree"].includes(metric) ? "连接数" : metric === "Eccentricity" ? "路径长度" : "无量纲";
   const selected = [first, ...others.filter((country, index, all) => country !== first && all.indexOf(country) === index)].slice(0, MAX_ENTITIES);
   const release = currentReleaseId(meta);
@@ -141,9 +141,17 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const savedCountries = [...new Set(observations.map((item) => item.country))];
   const savedIndustries = [...new Set(observations.map((item) => item.industry).filter(Boolean))];
   const pendingKey = canRecord && release ? `${selected.join(",")}|${materialKey(pendingObservations)}` : "";
+  // A replacement made without a click is announced next to the scope line and fades after a few seconds.
+  const [flash, setFlash] = useState("");
+  useEffect(() => {
+    if (!flash) return;
+    const timer = window.setTimeout(() => setFlash(""), 6000);
+    return () => window.clearTimeout(timer);
+  }, [flash]);
   // Report material follows the chart the student is looking at; incomplete charts never overwrite it.
   useEffect(() => {
     if (!pendingKey || matchesSaved || syncing || locked) return;
+    if (observations.length) setFlash(`报告材料已更新为：${view === "trend" ? "历年变化" : "行业排名"} · ${pendingObservations.length} 条读数`);
     onRecord(selected, pendingObservations);
     // pendingKey captures every meaningful change of the pending comparison.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -174,8 +182,8 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       {selected.length < MAX_ENTITIES && (
         <AddCountryControl
           ref={addRef}
-          label={others.length ? "再加一个对比国家" : "对比国家 B"}
-          emptyLabel={others.length ? "选择国家…" : "不选对比国家"}
+          label={others.length ? "再加一个对比国家" : "加一个对比国家（可选）"}
+          emptyLabel="选择国家…"
           name={others.length ? undefined : "network-country-b"}
           candidates={countries.filter((candidate) => !selected.includes(candidate))}
           onAdd={(country) => setOthers([...others, country])}
@@ -183,22 +191,23 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         />
       )}
     </div>
+    {/* The two recording views lead, in the task card's order (① 历年变化, ② 行业排名); exploration follows. */}
     <LensNav
       lenses={[
-        { key: "topology", label: "流量与拓扑" },
         { key: "trend", label: "历年变化" },
-        { key: "ranking", label: "国家对比" },
+        { key: "ranking", label: "行业排名" },
+        { key: "topology", label: "流量与路径" },
         { key: "flows", label: "买入与卖出" },
         ...extraLenses,
       ]}
       active={view}
       onPick={setView}
     />
-    {view === "topology" && <p className="muted lens-hint">流量与拓扑：所选国家的每个行业是一个点，横轴是加权总度（对数，流量规模），纵轴是网络介数（全正边二值，拓扑位置）。两者讲的是同一个故事吗？多国为分面。只作探索，不记录材料。</p>}
-    {view === "flows" && <p className="muted lens-hint">买入与卖出：每行一个行业，左为加权入度（买入），右为加权出度（卖出），按加权总度排序；更多在左是需求方，更多在右是供给方。只作探索，不记录材料。</p>}
+    {view === "topology" && <p className="muted lens-hint">流量与路径：每个点是一个行业。横轴是买卖总金额（加权总度，对数刻度），纵轴是有多少最短路线经过它（介数）。两种排法一致吗？选了多个国家时每国一张。只供探索，不记录材料。</p>}
+    {view === "flows" && <p className="muted lens-hint">买入与卖出：每行一个行业，左边是加权入度（买入），右边是加权出度（卖出），按加权总度排序；左边条长的行业主要是买方，右边条长的主要是卖方。只供探索，不记录材料。</p>}
     {(view === "topology" || view === "flows") && <div className="controls">
       <LabeledControl label="年份">{(id) => <select id={id} value={year} onChange={(event) => setYear(Number(event.target.value))}>{years.map((value) => <option key={value} value={value}>{value}</option>)}</select>}</LabeledControl>
-      {view === "flows" && <LabeledControl label="显示行业">{(id) => <select id={id} value={flowsLimit} onChange={(event) => setFlowsLimit(Number(event.target.value))}><option value={15}>Top 15</option><option value={200}>全部行业</option></select>}</LabeledControl>}
+      {view === "flows" && <LabeledControl label="显示行业">{(id) => <select id={id} value={flowsLimit} onChange={(event) => setFlowsLimit(Number(event.target.value))}><option value={15}>前 15 个</option><option value={200}>全部行业</option></select>}</LabeledControl>}
     </div>}
     {recordable && <div className="controls">
       <LabeledControl label="网络指标">{(id) => <select id={id} name="network-metric" value={metric} onChange={(event) => setMetric(event.target.value)}>
@@ -208,8 +217,8 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       {view === "trend" ? <LabeledControl label="行业">{(id) => <select id={id} value={industry} onChange={(event) => setIndustry(event.target.value)}>
         {meta.sectors.map((sector) => <option key={sector} value={sector}>{sectorLabel(sector)}</option>)}
       </select>}</LabeledControl> : <>
-        <LabeledControl label="排名年份">{(id) => <select id={id} value={year} onChange={(event) => setYear(Number(event.target.value))}>{years.map((value) => <option key={value} value={value}>{value}</option>)}</select>}</LabeledControl>
-        <LabeledControl label="显示行业">{(id) => <select id={id} value={limit} onChange={(event) => setLimit(Number(event.target.value))}><option value={10}>Top 10</option><option value={200}>全部行业</option></select>}</LabeledControl>
+        <LabeledControl label="年份">{(id) => <select id={id} value={year} onChange={(event) => setYear(Number(event.target.value))}>{years.map((value) => <option key={value} value={value}>{value}</option>)}</select>}</LabeledControl>
+        <LabeledControl label="显示行业">{(id) => <select id={id} value={limit} onChange={(event) => setLimit(Number(event.target.value))}><option value={10}>前 10 个</option><option value={200}>全部行业</option></select>}</LabeledControl>
       </>}
         </div>}
     <ScopeCard
@@ -222,9 +231,10 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       ] : [
         { label: "比较对象", value: joinCountries(selected) },
         { label: "年份", value: String(year) },
-        { label: "视角", value: view === "topology" ? "流量与拓扑" : view === "flows" ? "买入与卖出" : extraLenses.find((lens) => lens.key === view)?.label ?? view },
+        { label: "视角", value: view === "topology" ? "流量与路径" : view === "flows" ? "买入与卖出" : extraLenses.find((lens) => lens.key === view)?.label ?? view },
         { label: "材料", value: "探索视角，不记录材料" },
       ]}
+      note={flash ? <span className="scope-flash">✓ {flash}</span> : undefined}
     />
     {!recordable && view !== "topology" && view !== "flows" ? renderExtra?.(view, selected, year, setYear) : query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : view === "topology" ? (
       // One scatter per row: in two columns the 660-wide chart shrank its axis text to about 7px.
@@ -233,17 +243,17 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       <div className="comparison-facets comparison-facets--stacked">
         {selected.map((country) => (
           <section key={country} className="comparison-facet">
-            <h4>{countryLabel(country)} · {year} · 行业的流量与拓扑</h4>
+            <h4>{countryLabel(country)} · {year} · 行业的流量与路径</h4>
             <QuadrantScatter
               rows={industriesOf(country)}
               xKey="weighted degree"
               yKey={HEAT_EVIDENCE_METRIC}
               xLabel="加权总度（百万美元，对数）"
-              yLabel="网络介数（全正边二值）"
+              yLabel="介数（只看连接、不看金额）"
               xFormat="amount"
               yFormat="number"
               xScale="log"
-              quadrantLabels={["流量大 · 拓扑位置高", "流量小 · 拓扑位置高", "流量小 · 拓扑位置低", "流量大 · 拓扑位置低"]}
+              quadrantLabels={["流量大 · 经过的路线多", "流量小 · 经过的路线多", "流量小 · 经过的路线少", "流量大 · 经过的路线少"]}
             />
           </section>
         ))}
@@ -284,7 +294,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       {view === "ranking" ? ranked.length ? <>
         <NetworkRanking rows={ranked} countries={selected} unit={unit} reference={industryReference} onIndustry={(next) => { setIndustry(next); setView("trend"); setFocusScope(true); }} />
         {renderTable && <details className="technical-details" style={{ marginTop: 12 }}>
-          <summary>全部指标表（本国全部行业 × 多指标，可排序；只供查数）</summary>
+          <summary>全部指标表（一个国家各行业的多项网络指标，可排序，只供查阅）</summary>
           {renderTable(year, setYear)}
         </details>}
       </> : <p role="status">该年份没有可用的行业排名，请更换指标或国家。</p> : <>
@@ -298,7 +308,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         distribution={distribution}
         mode="context"
         sameIndustry
-      /> : <p role="status">该行业没有可用的指标观测，请更换行业、指标或国家。</p>}
+      /> : <p role="status">该行业没有数据，请更换行业、指标或国家。</p>}
       <details className="technical-details"><summary>查看趋势图逐年读数</summary>
         <ScrollableRegion className="table-wrap" label="行业趋势逐年读数"><table className="data-table">
           <thead><tr><th>年份</th>{selected.map((country) => <th key={country}>{countryLabel(country)}</th>)}</tr></thead>
@@ -311,7 +321,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
     <section className="qualified-run-card" aria-label="步骤9报告材料">
       <h3>报告材料 · {observations.length ? `已${locked ? "" : "自动"}记录（${observations.length} 条读数）` : "尚未记录"}</h3>
       <p role="status">{!canRecord
-        ? `当前图表暂不能记录：${!recordable ? "探索视角不记录材料。" : view === "trend" ? "所选国家至少需要两个共同有效年份。" : "至少一个展示行业需要所选国家都有有效读数。"}${observations.length ? "已记录的材料保持不变。" : ""}`
+        ? `当前图表暂不能记录：${!recordable ? "探索视角不记录材料。" : view === "trend" ? "所选国家至少需要两个共同有效年份。" : "显示的行业里，至少要有一个行业所有所选国家都有数据。"}${observations.length ? "已记录的材料保持不变。" : ""}`
         : locked
           ? `${MATERIAL_LOCKED_NOTE}${matchesSaved ? "当前图表就是已记录的材料。" : ""}`
         : matchesSaved
@@ -321,7 +331,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         <button type="button" className="secondary" onClick={() => onRecord(selected, pendingObservations)}>{MATERIAL_LOCKED_ACTION}</button>
       )}
       {observations.length ? <details>
-        <summary>核对已记录读数 · {observations.length} 条</summary>
+        <summary>核对已记录的材料 · {observations.length} 条读数</summary>
         <p>{joinCountries(savedCountries)} · {schema?.fields[observations[0].metric ?? ""]?.label ?? observations[0].metric} · {observations[0].unit}</p>
         <p>{savedYears[0]}{savedYears.length > 1 ? `–${savedYears.at(-1)}` : ""} 年 · {savedIndustries.length === 1 ? sectorLabel(savedIndustries[0]!) : `${savedIndustries.length} 个行业`} · {observations.length} 条读数。</p>
         <ScrollableRegion className="table-wrap bounded-data-table" label="已记录报告材料读数"><table className="data-table">
@@ -329,7 +339,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
           <tbody>{observations.map((item, index) => <tr key={index}><td>{countryLabel(item.country)} · {sectorLabel(item.industry ?? "")}</td><td>{item.year}</td><td>{indicatorNumber(item.value, item.unit ?? unit)}</td></tr>)}</tbody>
         </table></ScrollableRegion>
       </details> : null}
-      {syncError ? <div role="alert">材料尚未成功同步，请重试。{onRetrySync && <button className="secondary" onClick={onRetrySync}>重试同步</button>}</div> : syncing && <p className="muted" role="status">正在同步实验记录…</p>}
+      {syncError ? <div role="alert">材料还没保存成功，请重试。{onRetrySync && <button className="secondary" onClick={onRetrySync}>重试同步</button>}</div> : syncing && <p className="muted" role="status">正在同步实验记录…</p>}
     </section>
   </section>;
 }

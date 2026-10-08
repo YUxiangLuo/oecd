@@ -9,7 +9,7 @@ export const LENGTH_TOPIC: IndicatorTopic = {
   defaultView: "directions",
   question: "生产链长度与相对位置怎样变化？在全部经济体中处于什么位置？",
   themeLabel: "前后向位置",
-  themeHint: "前向与后向 GVC 段长度分别看走势，再看轨迹图：等长线上方前向段更长（更偏上游）；切到“历年变化”看位置指数。",
+  themeHint: "先看轨迹图：等长线（前向 = 后向）上方前向段更长（更偏上游）；下面两张图分别是前向、后向的走势。想看位置指数，切到“历年变化”，在“指标”里选“GVC 位置指数”。",
   metrics: [
     ...[
       ["PLv_GVC", "前向 GVC 段长度"],
@@ -30,7 +30,7 @@ export const LENGTH_TOPIC: IndicatorTopic = {
   ],
   axes: {
     key: "position",
-    label: "前后向位置：后向 GVC 段长度 × 前向 GVC 段长度",
+    label: "后向（横）与前向（纵）GVC 段长度",
     x: "PLy_GVC",
     y: "PLv_GVC",
     equality: true,
