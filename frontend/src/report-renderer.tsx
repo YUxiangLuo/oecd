@@ -355,7 +355,7 @@ function BinscatterChart({ chart }: { chart: Extract<ReportChart, { type: "binsc
   const y = (value: number) => H - m.b - ((value - yAxis.lo) / (yAxis.hi - yAxis.lo || 1)) * (H - m.t - m.b);
   return (
     <ReportFigure title={chart.title ?? "分箱散点图"}>
-      <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>把全部记录按 X 从小到大分成 {chart.points.length} 组，每个点是一组的平均值。X 和 Y 都先扣掉了每个国家×行业自己的平均水平和每年的共同变化。直线的斜率就是估计值（X 每增加 1 个百分点时 Y 的平均变化）。</div>
+      <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>把全部记录按 X 从小到大最多分成 {chart.points.length} 组，每个点是一组的平均值；很多记录的 X 相同时，几组的点会重合，看到的点会少一些。X 和 Y 都先扣掉了每个国家×行业自己的平均水平和每年的共同变化。直线的斜率就是估计值（X 每高 1 个百分点，Y 平均相差多少）。</div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "分箱散点图"} style={{ width: "100%", height: "auto" }}>
         {yAxis.ticks.map((tick) => <g key={`y${tick}`}><line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke="#eef0f4" /><text x={m.l - 8} y={y(tick) + 5} textAnchor="end" fontSize={AXIS_FONT} fill="#5f6677">{fy(tick)}</text></g>)}
         {xAxis.ticks.map((tick) => <g key={`x${tick}`}><line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke="#eef0f4" /><text x={x(tick)} y={H - m.b + 18} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{fx(tick)}</text></g>)}
@@ -395,7 +395,7 @@ function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coef
     <ReportFigure title={chart.title ?? "系数图"}>
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
         {hasCi
-          ? "点 = 估计值 · 横线 = 95% 区间（估计值可能落在的范围） · 竖线 = 0（Y 不随 X 变化）；区间包含 0 时方向不确定"
+          ? "点 = 估计值 · 横线 = 95% 区间（真实系数的合理取值范围） · 竖线 = 0（Y 不随 X 变化）；区间包含 0 时方向不确定"
           : "这次的数据不够判断方向，只显示估计值，不显示 95% 区间"}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "系数图"} style={{ width: "100%", height: "auto" }}>

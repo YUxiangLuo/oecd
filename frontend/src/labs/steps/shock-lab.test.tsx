@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { api } from "../../api";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Meta, Step } from "../../types";
-import { ShockLab, stepTenGapNote } from "./shock-lab";
+import { exampleWasChosen, representativeRow, ShockLab, stepTenGapNote } from "./shock-lab";
 import { SHOCK_ARTIFACT_CONTRACT_VERSION } from "./shock/shock-contract";
 
 const step: Step = {
@@ -165,4 +165,141 @@ test("the step 10 gap note matches whether the two countries were taxed", () => 
   expect(stepTenGapNote([true, true])).toContain("差距来自对美出口份额 w 的不同");
   expect(stepTenGapNote([false, false])).toContain("没有差距");
   expect(stepTenGapNote([true])).toBeUndefined();
+});
+
+const tenYears = [2016, 2017, 2018, 2019, 2020];
+const tenGroups = () => spyOn(api, "teachingGroups").mockResolvedValue({
+  version: "step10-tariff-teaching-v5", years: tenYears, policy_year: 2018,
+  sample: { rows: 10, entities: 2, countries: 2, industries: 1, taxed_countries: 1, untaxed_countries: 1 },
+  industries: ["B05_06", "C26", "C29", "C30", "O"],
+  outcomes: {} as never,
+});
+/** Five years of one country×industry: τ from 2018 when taxed, X = w × τ. */
+const tenRows = (country: string, industry: string, w: number, taxed: boolean) => tenYears.map((year) => {
+  const tau = taxed && year >= 2018 ? 0.25 : 0;
+  return { country, industry, year, teaching_export_share_w: w, teaching_tariff_rate_tau: tau, teaching_tariff_exposure: w * tau };
+});
+const tenSeries = (rows: (countries: string[], industry: string) => ReturnType<typeof tenRows>) =>
+  spyOn(api, "teachingSeries").mockImplementation(async (countries: string[], industry: string) => ({
+    version: "step10-tariff-teaching-v5", disclaimer: "", total: 0, years: tenYears, rows: rows(countries, industry),
+  }) as never);
+const tenState = (data: Record<string, unknown> | undefined, save = mock(() => {}), materialLocked = false) =>
+  ({ data, save, complete: false, syncing: false, syncError: null, syncNow: () => {}, materialLocked });
+
+test("the worked example prefers the exposed row: taxed with X > 0 before a taxed w = 0 one", () => {
+  const rows = [...tenRows("CHE", "B05_06", 0, true), ...tenRows("CAN", "B05_06", 0.93, true)];
+  expect(representativeRow(rows, ["CHE", "CAN"], 2020)?.country).toBe("CAN");
+  // Without an exposed row the taxed one comes first, then the first chosen.
+  expect(representativeRow([...tenRows("MEX", "C29", 0.8, false), ...tenRows("CHE", "C29", 0, true)], ["MEX", "CHE"], 2020)?.country).toBe("CHE");
+  expect(representativeRow(tenRows("MEX", "C29", 0.8, false), ["MEX"], 2020)?.country).toBe("MEX");
+});
+
+test("only an example the student picked counts as chosen; an older default save does not", () => {
+  const defaults = { first: "CAN", second: "MEX", industry: "C29" };
+  expect(exampleWasChosen(undefined, defaults)).toBe(false);
+  expect(exampleWasChosen({ compared: ["CAN", "MEX"], teaching_industry: "C29" }, defaults)).toBe(false);
+  expect(exampleWasChosen({ compared: ["CAN", "MEX"], teaching_industry: "C26" }, defaults)).toBe(true);
+  expect(exampleWasChosen({ compared: ["CAN", "MEX"], teaching_industry: "C29", teaching_example_chosen: true }, defaults)).toBe(true);
+  expect(exampleWasChosen({ compared: ["CHE"], teaching_industry: "C26", teaching_example_chosen: false }, defaults)).toBe(false);
+});
+
+test("a step 10 that was only flashed still follows a later one-industry step 9 choice", async () => {
+  const meta: Meta = { years: tenYears, countries: ["CAN", "MEX", "USA"], sectors: ["C26", "C29"] };
+  const groups = tenGroups();
+  const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, 0.5, country === "CAN")));
+  const save = mock(() => {});
+  // The default example, auto-saved when step 10 was clicked through (never picked).
+  const flashed = {
+    compared: ["CAN", "MEX"], teaching_industry: "C29", teaching_example_chosen: false,
+    teaching_observation: { country: "CAN", industry: "C29", year: 2020, teaching_export_share_w: 0.5, teaching_tariff_rate_tau: 0.25, teaching_tariff_exposure: 0.125, version: "step10-tariff-teaching-v5" },
+  };
+  const stepNine = { observations: [{ industry: "C26" }, { industry: "C26" }] };
+  const getStep = (<T,>(n: number) => (n === 9 ? stepNine : undefined) as T | undefined);
+  render(<ShockLab meta={meta} step={step} state={tenState(flashed, save)} getStep={getStep} />);
+  await waitFor(() => expect(series).toHaveBeenCalledWith(["CAN", "MEX"], "C26"));
+  expect((screen.getByRole("combobox", { name: "行业" }) as HTMLSelectElement).value).toBe("C26");
+  await waitFor(() => expect(save).toHaveBeenCalled());
+  expect((save.mock.calls.at(-1) as unknown[])[0]).toMatchObject({ teaching_industry: "C26", teaching_example_chosen: false });
+  cleanup();
+  // An example the student picked here keeps leading.
+  const kept = mock(() => {});
+  render(<ShockLab meta={meta} step={step} state={tenState({ ...flashed, teaching_example_chosen: true }, kept)} getStep={getStep} />);
+  await waitFor(() => expect(screen.getByText(/算一次/)).toBeTruthy());
+  expect((screen.getByRole("combobox", { name: "行业" }) as HTMLSelectElement).value).toBe("C29");
+  expect(kept).not.toHaveBeenCalled();
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+});
+
+test("a step 9 industry that the example pair lacks falls back to the default, and says why", async () => {
+  const meta: Meta = { years: tenYears, countries: ["CAN", "MEX", "USA"], sectors: ["C29", "O"] };
+  const groups = tenGroups();
+  // MEX·O is not in the regression sample.
+  const series = tenSeries((countries, industry) => countries
+    .filter((country) => industry !== "O" || country !== "MEX")
+    .flatMap((country) => tenRows(country, industry, 0.5, country === "CAN")));
+  const getStep = (<T,>(n: number) => (n === 9 ? { observations: [{ industry: "O" }] } : undefined) as T | undefined);
+  render(<ShockLab meta={meta} step={step} state={tenState(undefined)} getStep={getStep} />);
+  await waitFor(() => expect(document.querySelector(".teaching-fallback-note")).not.toBeNull());
+  expect(document.querySelector(".teaching-fallback-note")!.textContent).toBe(
+    "步骤 9 看的是 O 公共管理与国防，但 MEX 墨西哥 的这个行业不在回归样本里，所以这里先用默认的 C29 汽车及零部件；也可以在下面换行业或国家。",
+  );
+  expect((screen.getByRole("combobox", { name: "行业" }) as HTMLSelectElement).value).toBe("C29");
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+});
+
+test("both taxed, one with w = 0: the exposed country is worked through and nobody is told to switch", async () => {
+  const meta: Meta = { years: tenYears, countries: ["CAN", "CHE", "MEX"], sectors: ["B05_06"] };
+  const groups = tenGroups();
+  const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, country === "CAN" ? 0.93 : 0, true)));
+  const save = mock(() => {});
+  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["CHE", "CAN"], teaching_industry: "B05_06", teaching_example_chosen: true }, save)} />);
+  await waitFor(() => expect(screen.getByText(/算一次/)).toBeTruthy());
+  const worked = document.querySelector('[aria-label="用所选例子算一次 X"]')!.textContent!;
+  expect(worked).toContain("CAN 加拿大 · B05_06");
+  expect(worked).toContain("X = 93.00% × 25% = 23.25 个百分点");
+  // Both taxed at the same rate: the tail sentence fits here.
+  expect(worked).toContain("税率相同时，对美出口份额 w 不同，X 也不同。");
+  const hint = document.querySelector(".teaching-example-hint")!.textContent!;
+  expect(hint).toContain("图上 CAN 加拿大 的 X 就是加税带来的暴露");
+  expect(hint).not.toContain("换一个行业或国家");
+  await waitFor(() => expect(save).toHaveBeenCalled());
+  expect((save.mock.calls.at(-1) as unknown[])[0]).toMatchObject({ teaching_country: "CAN" });
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+});
+
+test("one taxed and one untaxed: no 税率相同 sentence; a tiny w keeps significant digits", async () => {
+  const meta: Meta = { years: tenYears, countries: ["BRN", "CAN", "MEX"], sectors: ["C30"] };
+  const groups = tenGroups();
+  const series = tenSeries((countries, industry) => countries.flatMap((country) => tenRows(country, industry, country === "BRN" ? 0.000033 : 0.4, country === "BRN")));
+  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["BRN", "MEX"], teaching_industry: "C30", teaching_example_chosen: true })} />);
+  await waitFor(() => expect(screen.getByText(/算一次/)).toBeTruthy());
+  const worked = document.querySelector('[aria-label="用所选例子算一次 X"]')!.textContent!;
+  expect(worked).toContain("w = 0.0033%");
+  expect(worked).toContain("X = 0.0033% × 25% = 0.00083 个百分点");
+  expect(worked).not.toContain("税率相同时");
+  expect(document.body.textContent).not.toContain("不到");
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+});
+
+test("the USA is named as the imposing country, never as an unaffected one", async () => {
+  const meta: Meta = { years: tenYears, countries: ["CAN", "MEX", "USA"], sectors: ["C29"] };
+  const groups = tenGroups();
+  // After the sample change the USA has no rows in the teaching data.
+  const series = tenSeries((countries, industry) => countries.filter((country) => country !== "USA").flatMap((country) => tenRows(country, industry, 0.5, true)));
+  render(<ShockLab meta={meta} step={step} state={tenState({ compared: ["USA", "CAN"], teaching_industry: "C29", teaching_example_chosen: true })} />);
+  await waitFor(() => expect(screen.getByText(/不能作为例子/)).toBeTruthy());
+  expect(document.body.textContent).toContain("美国是加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义");
+  expect(document.body.textContent).not.toMatch(/没受加税影响|首年（2016 年）缺少必要数据/);
+  groups.mockRestore();
+  series.mockRestore();
+  cleanup();
+  expect(stepTenGapNote([false, true], [false, true], [true, false])).toContain("美国的 X 记为 0 只是定义");
 });

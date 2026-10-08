@@ -99,6 +99,27 @@ describe("student-first regression reading", () => {
     expect(html).not.toMatch(/TWFE|处理前|标称/);
     expect(html).toContain("-0.02 个百分点");
     expect(html).not.toContain("</b><span>百分点</span>");
+    // The column names the association, as the step pages do.
+    expect(html).toContain("<th>X 每高 1 个百分点，Y 平均相差</th>");
+  });
+
+  test("a weak Y whose interval includes 0 reads 方向不确定 with its signed estimate and interval", () => {
+    // Like a production Y generated with no relation to X: the interval spans 0.
+    const weak = response("production", coefficient(0.3, -1.2, 1.8));
+    weak.design.baseline = "3b_FGY_GVC_C_share";
+    weak.design.baseline_label = "后向复杂 GVC 生产份额";
+    weak.design.depvar_kind = "share";
+    const html = renderToStaticMarkup(createElement(RegressionEvidenceMatrix, {
+      getStep: (step: number) => step === 12 ? { run: { design: weak.design, result: weak.result } } : undefined,
+    }));
+    const dom = new DOMParser().parseFromString(html, "text/html");
+    const row = [...dom.querySelectorAll("tbody tr")].find((item) => item.querySelector("th")?.textContent === "12")!;
+    const cells = [...row.querySelectorAll("td")].map((cell) => cell.textContent);
+    expect(cells[0]).toContain("后向复杂 GVC 生产份额");
+    expect(cells[1]).toBe("方向不确定");
+    expect(cells[2]).toBe("+0.30 个百分点");
+    expect(cells[3]).toBe("[-1.20, +1.80] 个百分点");
+    expect(html).not.toMatch(/方向明确|平均高|平均低/);
   });
 
 });

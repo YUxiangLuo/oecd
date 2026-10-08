@@ -39,10 +39,11 @@ export function cjkSpace(head: string, tail: string): string {
   return cjkThenLatin || latinThenCjk ? `${head} ${tail}` : `${head}${tail}`;
 }
 
-/** A share (0.2330) in percentage points to two decimals ("23.30"); a positive value too small to show reads
- * "不到 0.01" rather than "0.00", and the same for shares in percent ("w"). */
+/** A share (0.2330) in percentage points to two decimals ("23.30"), and the same for shares in percent ("w").
+ * A positive value too small for two decimals keeps two significant digits ("0.0033"), so "w × τ = X" can
+ * still be checked by hand (a "不到 0.01" chain could not). */
 export function percentagePoints(share: number): string {
   const points = share * 100;
-  if (points > 0 && points < 0.005) return "不到 0.01";
+  if (points > 0 && points < 0.005) return points.toFixed(Math.min(10, Math.ceil(-Math.log10(points)) + 1));
   return stripNegativeZero(points.toFixed(2));
 }

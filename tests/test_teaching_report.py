@@ -1268,7 +1268,7 @@ def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
     assert summary.count('"type":"coefficient"') == 4
     for chart in charts:
         if chart["type"] == "coefficient":
-            assert chart["title"].endswith("X 每增加 1 个百分点时 Y 的平均变化")
+            assert chart["title"].endswith("X 每高 1 个百分点，Y 平均相差多少")
             (item,) = chart["items"]
             assert item["ci_low"] <= item["value"] <= item["ci_high"]
 
@@ -1308,7 +1308,8 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert "## 技术附录：保存的回归结果" in report.markdown
     # The raw coefficient states its scale, next to the per-percentage-point reading used in the body.
     assert (
-        "| 变量 | 系数（X 按份额计） | X 每增加 1 个百分点 | 标准误 | 95% 区间（按系数计） | p 值 |" in report.markdown
+        "| 变量 | 系数（X 按份额计） | X 每高 1 个百分点，Y 平均相差 | 标准误 | 95% 区间（按系数计） | p 值 |"
+        in report.markdown
     )
     assert "| 关税暴露 X | 1.2 | +1.20 个百分点 | 0.3 | [0.5721, 1.828] | 0.0007662 |" in report.markdown
     # Versions, the session digest and the unused macro controls are listed only under "报告溯源", at the end.
@@ -1335,6 +1336,19 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert "不能证明真实关税" not in report.markdown
     assert "95% 区间按国家计算（按国家聚类），是近似值" in report.markdown
     assert "区间可能偏窄" in report.markdown
+    # The interval is named for what it is, once, where the results start.
+    assert "区间说明：95% 区间是真实系数的合理取值范围，包含 0 时方向不确定。" in report.markdown
+    assert "估计值可能落在" not in report.markdown
+    # The sample-building exclusion and each run's own check are two different stages.
+    assert "和上面不是同一批，也不重复计算" in report.markdown
+    # Step 14's unit is explained next to its number, not only in the appendix.
+    body = report.markdown.split("## 关键证据摘要", 1)[1].split("## 技术附录", 1)[0]
+    step_14 = body.split("### 步骤 14", 1)[1]
+    assert "- **单位**：中心性原始单位。这一步的 Y 是课程按真实网络指标的排名校准生成的" in step_14
+    assert "不是步骤 5、9 里以百万美元计的加权总度" in step_14
+    # The appendix note on coefficient units, in plain steps.
+    assert "两次换算抵消" not in report.markdown
+    assert "一除一乘，两栏数字相同" in report.markdown
     assert "标称" not in report.markdown
     assert "Goodman-Bacon" not in report.markdown
 

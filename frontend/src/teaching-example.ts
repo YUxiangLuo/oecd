@@ -1,9 +1,20 @@
 import type { Meta } from "./types";
 
+/**
+ * The country that imposes the simulated tariff. Its w ("share of exports to the US") is 0 by definition, so its
+ * X is 0 only by definition; by design it is not in the regression sample (it is neither taxed nor a control).
+ */
+export const TARIFF_IMPOSER = "USA";
+
 /** What step 10 saves about the example the student follows through steps 11–14. */
 export interface TeachingExampleSelection {
   compared?: string[];
   teaching_industry?: string;
+  /**
+   * True once the student picked the example on step 10 themselves. An example saved only because the page
+   * was shown (the default, or the industry followed from step 9) is false, so a later step 9 choice still leads.
+   */
+  teaching_example_chosen?: boolean;
 }
 
 /**

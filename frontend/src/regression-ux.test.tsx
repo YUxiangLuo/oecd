@@ -7,6 +7,7 @@ import {
   RegressionRunLab, scrollRegressionVerdict, TEACHING_MODEL_VERSION,
 } from "./regression";
 import type { RegressionDesignInfo, RegressionOutcome, Step, StepStateApi, TeachingGroupsResponse, TeachingPanelResponse } from "./types";
+import { GENERATED_DATA_NOTE } from "./regression-lessons";
 
 afterEach(() => { cleanup(); mock.restore(); });
 
@@ -138,7 +139,7 @@ describe("simple regression workbench", () => {
     await waitFor(() => expect(select.value).toBe("DVAex_share"));
     await waitFor(() => expect(design).toHaveBeenCalledWith("trade", "DVAex_share"));
     // The saved result is shown for that Y; the server's disclaimer is not shown to students.
-    await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均上升 0.50 个百分点"));
+    await waitFor(() => expect(document.querySelector(".reg-plain-verdict")?.textContent).toContain("国内增加值出口占比平均高 0.50 个百分点"));
     // A switched Y is said next to the question, with a way back to the step's default.
     expect(document.querySelector(".reg-y-pill")?.textContent).toContain("当前 Y：国内增加值出口占比（不是本步默认）");
     expect(screen.getByRole("button", { name: "恢复默认（外国增加值项占比）" })).toBeTruthy();
@@ -180,6 +181,31 @@ describe("simple regression workbench", () => {
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
     expect(document.querySelector(".reg-stale-note")?.textContent).toBe("这次计算没有成功；下面仍是上次保存的结果。");
     expect(document.querySelector(".reg-results-stale .reg-plain-verdict")).not.toBeNull();
+  });
+
+  test("after a submitted report, a recalculation says the material has already been replaced", async () => {
+    spyOn(api, "regressionDesign").mockResolvedValue({} as RegressionDesignInfo);
+    spyOn(api, "teachingGroups").mockResolvedValue(groupsWithBaselines);
+    spyOn(api, "teachingSeries").mockResolvedValue({ version: "v", disclaimer: "", rows: [], total: 0, years: [] } as TeachingPanelResponse);
+    const fresh = savedRun("FVA_share", "外国增加值项占比");
+    spyOn(api, "runRegression").mockResolvedValue({ ...fresh, benchmark: { backend: "x", policy_coefs: [], max_abs_coef_diff: 0, max_abs_se_diff: 0, coef_check_passed: true, se_check_mode: "x", notes: [] } } as never);
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, materialLocked: true, data: { run: fresh } as never }} />);
+    const rerun = await screen.findByRole("button", { name: "重新计算贸易流回归" });
+    expect(document.querySelector(".reg-rerun-warning")?.textContent).toContain("重新计算会替换报告材料里保存的结果");
+    await waitFor(() => expect(rerun.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(rerun);
+    await waitFor(() => expect(document.querySelector(".reg-rerun-warning")?.textContent).toContain("报告材料里保存的结果已换成这次算出的结果；请到步骤 15 更新报告"));
+    expect(document.querySelector(".reg-rerun-warning")?.textContent).not.toContain("重新计算会替换");
+  });
+
+  test("the generated-data note is shown before the run as well", async () => {
+    spyOn(api, "regressionDesign").mockResolvedValue({} as RegressionDesignInfo);
+    spyOn(api, "teachingGroups").mockResolvedValue(groupsWithBaselines);
+    spyOn(api, "teachingSeries").mockResolvedValue({ version: "v", disclaimer: "", rows: [], total: 0, years: [] } as TeachingPanelResponse);
+    render(<RegressionRunLab step={step} meta={meta} state={state} />);
+    await screen.findByRole("combobox", { name: "结果指标 Y" });
+    expect(document.querySelector(".reg-result-points")).toBeNull();
+    expect(document.querySelector(".reg-data-note-before")?.textContent).toBe(GENERATED_DATA_NOTE);
   });
 
   test("falls back to the default Y when the saved baseline is not offered by the release", async () => {

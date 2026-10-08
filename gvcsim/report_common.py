@@ -293,7 +293,8 @@ def _natural_effect(
         and isinstance(ci_high, (int, float))
         else None
     )
-    effect_label = "关税暴露 X 每增加 1 个百分点"
+    # An association across country×industry records, as on the step pages ("X 每高 1 个百分点的国家×行业…").
+    effect_label = "关税暴露 X 每高 1 个百分点，Y 平均相差"
     kind = _depvar_kind(outcome, design)
     if kind == "share":
         effect_text = f"{_signed(effect * 100, 2)} 个百分点"

@@ -10,6 +10,8 @@ import { nextRegressionSave } from "./regression-save";
 import { formatPValue } from "./regression-statistics";
 import {
   buildRegressionVerdict,
+  differenceWords,
+  INTERVAL_FIRST_MENTION,
   teachingEffect,
   chartDisplayScale,
   countUnit,
@@ -28,7 +30,7 @@ import type {
   TeachingGroupsResponse,
   TeachingPanelResponse,
 } from "./types";
-import { teachingExample, type TeachingExampleSelection } from "./teaching-example";
+import { TARIFF_IMPOSER, teachingExample, type TeachingExampleSelection } from "./teaching-example";
 import { userFacingRequestError } from "./user-facing-error";
 import { BinScatterChart, CoefForestChart, countryLabel, GroupChangeChart, sectorLabel } from "./viz";
 
@@ -101,7 +103,13 @@ function DesignEquation({ design }: { design: RegressionDesignInfo }) {
 
 /** One step-10 example unit: its label and its final-year exposure X (a proportion). */
 /** An example followed from step 10: its X in the last year and whether it was taxed at all (τ > 0). */
-export interface RegressionExample { label: string; x: number; tau?: number }
+export interface RegressionExample {
+  label: string;
+  x: number;
+  tau?: number;
+  /** The country that imposes the tariff (the USA): X = 0 by definition, and it is not in the regression sample. */
+  imposer?: boolean;
+}
 
 /** Network units span closeness (~0.01) to weighted degree (thousands): keep about three significant figures. */
 export function networkDigits(size: number): number {
@@ -136,15 +144,18 @@ export function RegressionResultCard({ outcome, response, examples = [], example
   const lesson = lessonFor(outcome, response.design.baseline, response.design.baseline_label);
   const suppressed = verdict.state === "suppressed";
   const display = chartDisplayScale(outcome, response.design);
-  // "平均下降 0.018 个长度单位（幅度约为样本均值的 0.46%）": once the verb says the direction, the number drops
-  // its sign (it read as a double negative); the parenthetical sizes are unsigned already, as in the report.
+  const kind = depvarKind(outcome, response.design);
+  const words = differenceWords(kind);
+  const directional = verdict.state === "negative" || verdict.state === "positive";
+  // An association across country×industry records, not a change over time: "X 每高 1 个百分点的国家×行业，
+  // 外国增加值项占比平均低 0.55 个百分点". Once the word says the direction, the number drops its sign (the
+  // parenthetical sizes are unsigned already, as in the report). With an interval that includes 0 (or none
+  // shown) the sign is not settled, so the signed estimate is given without 高/低.
   const unsignedEffect = verdict.effect.replace(/^[+−-]/, "");
-  const plainResult = verdict.state === "negative"
-    ? `平均下降 ${unsignedEffect}`
-    : verdict.state === "positive"
-      ? `平均上升 ${unsignedEffect}`
-      : `平均变化为 ${verdict.effect}`;
-  // "外国增加值项占比平均下降", but "GVC 位置指数 平均…" keeps a space after a Latin name.
+  const plainResult = directional
+    ? `平均${verdict.state === "negative" ? words.lower : words.higher} ${unsignedEffect}`
+    : `平均相差 ${verdict.effect}，但高低方向不确定`;
+  // "外国增加值项占比平均低", but "GVC 位置指数 平均…" keeps a space after a Latin name.
   const metricGap = /[A-Za-z]$/.test(lesson.shortMetric) ? " " : "";
   return (
     <section className={`verdict-card verdict-${verdict.state}`} aria-labelledby="reg-result-title">
@@ -153,8 +164,8 @@ export function RegressionResultCard({ outcome, response, examples = [], example
       <h3 id="reg-result-title" tabIndex={-1} className="reg-plain-verdict">
         {verdict.coefficient
           ? <>
-            <span className="reg-headline-main">关税暴露 X 每增加 1 个百分点 → {lesson.shortMetric}{metricGap}<b>{plainResult}</b></span>
-            <span className="reg-headline-interval">{suppressed ? "这次不显示 95% 区间" : `95% 区间（估计值可能落在的范围）：${verdict.intervalShort}`}</span>
+            <span className="reg-headline-main">关税暴露 X 每高 1 个百分点的国家×行业，{lesson.shortMetric}{metricGap}<b>{plainResult}</b></span>
+            <span className="reg-headline-interval">{suppressed ? "这次不显示 95% 区间" : `${INTERVAL_FIRST_MENTION}：${verdict.intervalShort}`}</span>
           </>
           : "没算出 X 的估计值"}
       </h3>
@@ -164,7 +175,8 @@ export function RegressionResultCard({ outcome, response, examples = [], example
         <BinScatterChart
           bins={response.result.binscatter.bins}
           slope={response.result.binscatter.slope * display.scale}
-          slopeUnit={countUnit(depvarKind(outcome, response.design))}
+          slopeUnit={countUnit(kind)}
+          slopeWords={directional ? words : undefined}
           xLabel="X 扣掉平均水平后的高低（个百分点）"
           yLabel={`${lesson.shortMetric}（${display.unit}）`}
           xScale={100}
@@ -180,7 +192,7 @@ export function RegressionResultCard({ outcome, response, examples = [], example
           scale={display.scale}
           unit={display.unit}
           labels={{ teaching_tariff_exposure: lesson.shortMetric }}
-          title="X 每增加 1 个百分点时 Y 的平均变化"
+          title="X 每高 1 个百分点，Y 平均相差多少"
         />
       )}
       <ul className="reg-result-points">
@@ -188,25 +200,27 @@ export function RegressionResultCard({ outcome, response, examples = [], example
         {!suppressed && verdict.coefficient && examples.length > 0 && (
           <li className="reg-example-effect">{exampleSaved ? "按你在步骤 10 选的例子" : "按默认例子（步骤 10 还没有保存你的例子）"}换算{exampleYear ? `（用 ${exampleYear} 年的 X）` : ""}：{examples.map((example, index) => {
             const coef = verdict.coefficient!.coef;
-            // An association, not a tariff effect: the example's Y compared with X = 0. With X = 0 the estimate
-            // implies no X-related difference (Y still moves with the shared yearly changes).
-            const text = example.x > 0
+            // An association, not a tariff effect: the difference in Y that goes with the example's X. With X = 0
+            // the estimate implies no X-related difference (Y still moves with the shared yearly changes).
+            const text = example.imposer
+              ? <>{example.label} 属于加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义，不做换算</>
+              : example.x > 0
               ? (() => {
                 const effect = exampleEffect(outcome, coef, example.x, response.design);
                 const lower = coef * example.x < 0;
-                const word = depvarKind(outcome, response.design) === "length" ? (lower ? "短" : "长") : (lower ? "低" : "高");
                 const tiny = effect.startsWith("不到");
-                // "Y 约比 X 为 0 时低 12.83"; a change below the shown precision reads "Y 比 X 为 0 时低不到 0.01".
-                return <>{example.label} 的 X 为 {percentagePoints(example.x)} 个百分点，按估计 Y {tiny ? "" : "约"}比 X 为 0 时{word}{tiny ? "" : " "}<b>{effect}</b></>;
+                // "与 X 相关的差异约为 -12.83 个百分点（Y 偏低）"; below the shown precision it reads "不到 0.01 个百分点".
+                // With an interval that includes 0 the sign is not settled, so 偏低/偏高 is left out.
+                return <>{example.label} 的 X 为 {percentagePoints(example.x)} 个百分点，按估计与 X 相关的差异{tiny ? "" : "约为 "}<b>{tiny ? effect : `${lower ? "-" : "+"}${effect}`}</b>{directional ? `（Y 偏${lower ? words.lower : words.higher}）` : ""}</>;
               })()
               : (example.tau ?? 0) > 0
                 ? <>{example.label} 被加税但首年不向美国出口（w = 0），X = 0，按估计没有与 X 相关的差异</>
                 : <>{example.label} 未被加税，X = 0，按估计没有与 X 相关的差异</>;
             return <span key={example.label}>{index ? "；" : ""}{text}</span>;
-          })}{verdict.state === "insufficient" ? "；但区间包含 0，这个方向本身并不确定" : ""}。
+          })}{verdict.state === "insufficient" ? "；但区间包含 0，差异的高低方向并不确定" : ""}。
             {examples.every((example) => example.x <= 0 && !((example.tau ?? 0) > 0)) && (examples.length === 1
-              ? "你选的例子没被加税，X = 0，换算不出与 X 相关的差异。想看换算，回步骤 10 换成加税的国家（如加拿大），或再选一个加税的对比国家。"
-              : "两个例子都没被加税，X = 0，换算不出与 X 相关的差异。想看换算，回步骤 10 选一个加税的国家（如加拿大）。")}</li>
+              ? "你选的例子 X = 0，换算不出与 X 相关的差异。想看换算，回步骤 10 换成加税的国家（如加拿大），或再选一个加税的对比国家。"
+              : "两个例子的 X 都是 0，换算不出与 X 相关的差异。想看换算，回步骤 10 选一个加税的国家（如加拿大）。")}</li>
         )}
       </ul>
       {verdict.warnings.length > 0 && (!suppressed || !verdict.coefficient) && (
@@ -233,7 +247,7 @@ export function RegressionCoefficientTable({ response }: { response: RegressionR
       <table className="data-table">
         <thead><tr>
           <th>变量</th>
-          <th>X 每增加 1 个百分点（{display.unit}）</th>
+          <th>X 每高 1 个百分点，Y 平均相差（{display.unit}）</th>
           <th>系数（X 按份额计）</th>
           <th>95% 区间（按系数计）</th>
           <th>标准误（按国家计算）</th>
@@ -367,6 +381,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   const [result, setResult] = useState<RegressionResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [replacedAfterSubmit, setReplacedAfterSubmit] = useState(false);
   // A 429 carries Retry-After: the retry button waits it out with a visible countdown.
   const [retryAt, setRetryAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -425,9 +440,11 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   );
   const lastYear = exampleQuery.data?.years.at(-1);
   const examples: RegressionExample[] = exampleQuery.status === "success" && exampleQuery.data
-    ? exampleCountries.flatMap((country) => {
+    ? exampleCountries.flatMap((country): RegressionExample[] => {
       const row = exampleQuery.data!.rows.find((item) => item.country === country && item.year === lastYear);
-      return row ? [{ label: `${countryLabel(country)}·${sectorLabel(example.industry)}`, x: row.teaching_tariff_exposure, tau: row.teaching_tariff_rate_tau }] : [];
+      const label = `${countryLabel(country)}·${sectorLabel(example.industry)}`;
+      if (country === TARIFF_IMPOSER) return [{ label, x: 0, imposer: true }];
+      return row ? [{ label, x: row.teaching_tariff_exposure, tau: row.teaching_tariff_rate_tau }] : [];
     })
     : [];
 
@@ -497,6 +514,8 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         ...(saved.qualified_run ? { qualified_run: saved.qualified_run } : {}),
       });
       scrollToVerdictAfterRun.current = true;
+      // After the report was submitted, this run has already replaced the saved material: the notice says so.
+      if (state.materialLocked) setReplacedAfterSubmit(true);
       setResult(response);
     } catch (cause) {
       if (mountedRef.current) {
@@ -548,6 +567,8 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         )}
         {outcome !== "trade" && <p className="muted">方法与步骤 11 相同，这次 Y 换成{/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}{lesson.shortMetric}。</p>}
         <p className="reg-step-focus"><b>本步重点</b> · {lesson.learnThis}</p>
+        {/* Said before the run as well (the result card repeats it), so the Y is never read as OECD data first. */}
+        {!result && <p className="muted reg-data-note reg-data-note-before" role="note">{GENERATED_DATA_NOTE}</p>}
         {depvarKind(outcome, design) === "network" && (
           <p className="muted" role="note">这里的 Y 是按真实网络指标的排名校准生成的教学数据，单位是“中心性原始单位”，不是步骤 5、9 的百万美元，不能和那两步的数值直接比较。</p>
         )}
@@ -659,7 +680,9 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         )}
         {!running && savedRun && state.materialLocked && (
           <p className="reg-rerun-warning" role="note">
-            <b>报告已提交</b>重新计算会替换报告材料里保存的结果；之后要到步骤 15 更新报告，并重新提交给老师。
+            <b>报告已提交</b>{replacedAfterSubmit
+              ? "报告材料里保存的结果已换成这次算出的结果；请到步骤 15 更新报告，并重新提交给老师。"
+              : "重新计算会替换报告材料里保存的结果；之后要到步骤 15 更新报告，并重新提交给老师。"}
           </p>
         )}
       </section>
@@ -677,7 +700,9 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
             <summary>详细数字（可选）</summary>
             <RegressionCoefficientTable response={result} />
             <p className="muted">很小的 p 值显示为 &lt;0.0001，不是说概率为零。</p>
-            <p className="muted">系数按“X 从 0 增加到 1（100 个百分点）”计：X 存的是份额，0.01 即 1 个百分点。所以页面上“X 每增加 1 个百分点”的数 = 系数 × 0.01{depvarKind(outcome, result.design) === "share" ? "；Y 也是份额，再乘 100 换成百分点，两次换算抵消，所以两列数字相同" : "，两列相差 100 倍"}。</p>
+            <p className="muted">表里的“系数”是 X 从 0 增加到 1（即 100 个百分点）时 Y 的变化。{depvarKind(outcome, result.design) === "share"
+              ? "这一步的 Y 是份额，页面也按百分点读，X 和 Y 都换成百分点后倍数正好抵消，所以两列数字相同。"
+              : "除以 100，就是页面上“X 每高 1 个百分点”时的数。"}</p>
             <p className="muted">共 {result.result.n_obs.toLocaleString("zh-CN")} 条记录 = {result.result.n_entities.toLocaleString("zh-CN")} 个国家×行业 × {result.result.n_times} 年；95% 区间按 {result.result.n_clusters} 个国家计算；{result.result.r2_within == null ? "这次结果没有组内 R²" : `组内 R² = ${result.result.r2_within.toFixed(3)}（扣掉各国家×行业的平均水平和每年共同变化后，模型能解释的那部分变动所占比例）`}。</p>
           </details>
         </div>
