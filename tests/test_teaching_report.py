@@ -1294,8 +1294,8 @@ def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
     summary = markdown.split("## 关键证据摘要", 1)[1].split("## 理解题答题记录", 1)[0]
     assert summary.count('"type":"diverging-bar"') == 5
     regression = [chart for chart in charts if chart["type"] == "diverging-bar"]
-    assert regression[0]["title"] == "四步保存的结果，都换成个标准差"
-    assert [item["sub"] for item in regression[0]["items"]] == ["步骤 11", "步骤 12", "步骤 13", "步骤 14"]
+    assert regression[0]["title"] == "四步保存的结果（都换算成标准差）"
+    assert [item["sub"] for item in regression[0]["items"]] == ["步骤 11 · 贸易流", "步骤 12 · 生产", "步骤 13 · 长度", "步骤 14 · 网络"]
     for step, chart in zip(range(11, 15), regression[1:]):
         assert chart["title"] == f"步骤 {step} · 你保存的 Y：X 每高 1 个百分点，Y 平均相差多少"
         (item,) = chart["items"]
@@ -2269,8 +2269,8 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
     assert saved["value"] == pytest.approx(-0.004 / 0.17, rel=1e-3)
     assert saved["text"] == "-0.0040（0.024 个标准差）"
     assert "| 关税暴露 X 每高 1 个百分点，Y 平均相差 | **-0.0040 个位置指数单位** |" in markdown
-    assert "（长度单位、位置指数单位）" in length["note"]
-    summary = next(chart for chart in charts if chart["title"] == "四步保存的结果，都换成个标准差")
+    assert [item["sub"] for item in length["items"]] == ["长度单位", "长度单位", "位置指数单位"]
+    summary = next(chart for chart in charts if chart["title"] == "四步保存的结果（都换算成标准差）")
     assert summary["items"][2]["text"] == "-0.0040 个位置指数单位（0.024 个标准差）"
 
     # A baseline from another family, or one the snapshot does not match, is not a reportable run.

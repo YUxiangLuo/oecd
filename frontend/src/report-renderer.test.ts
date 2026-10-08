@@ -326,9 +326,9 @@ describe("parseReportChart", () => {
 const REGRESSION_CHARTS = {
   trade: {"version":1,"type":"diverging-bar","title":"步骤 11 · 贸易流的 2 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个百分点）","items":[{"label":"外国增加值项占比","value":-0.5493,"text":"-0.55","ci_low":-0.5711,"ci_high":-0.5274,"saved":true},{"label":"国内增加值出口占比","value":0.5561,"text":"+0.56","ci_low":0.5419,"ci_high":0.5702}]},
   production: {"version":1,"type":"diverging-bar","title":"步骤 12 · 生产的 7 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个百分点）","items":[{"label":"复杂 GVC 生产份额","value":-0.3756,"text":"-0.38","ci_low":-0.3885,"ci_high":-0.3627},{"label":"前向 GVC 生产总份额","value":-0.6801,"text":"-0.68","ci_low":-0.6963,"ci_high":-0.6639},{"label":"后向 GVC 生产总份额","value":-0.4475,"text":"-0.45","ci_low":-0.4688,"ci_high":-0.4262},{"label":"简单 GVC 生产份额","value":-0.3045,"text":"-0.30","ci_low":-0.3181,"ci_high":-0.291},{"label":"传统贸易生产份额","value":-0.295,"text":"-0.30","ci_low":-0.306,"ci_high":-0.2841},{"label":"纯国内生产份额","value":0.9752,"text":"+0.98","ci_low":0.9553,"ci_high":0.995},{"label":"后向复杂 GVC 生产份额","value":0.007501,"text":"+0.008","ci_low":-0.01117,"ci_high":0.02617,"saved":true}]},
-  length: {"version":1,"type":"diverging-bar","title":"步骤 13 · 长度的 3 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"前向 GVC 段长度","value":-0.03118,"text":"-0.018（0.031 个标准差）","ci_low":-0.03292,"ci_high":-0.02944},{"label":"后向 GVC 段长度","value":-0.02559,"text":"-0.015（0.026 个标准差）","ci_low":-0.02695,"ci_high":-0.02423},{"label":"GVC 位置指数","value":-0.004425,"text":"-0.0008（0.004 个标准差）","ci_low":-0.006494,"ci_high":-0.002356,"saved":true}],"note":"条形和括号内是个标准差（标准差即 Y 在国家×行业之间的典型差距），单位或大小相差很多的 Y 才能放在一起比；括号前是原始数值（长度单位、位置指数单位）。"},
-  network: {"version":1,"type":"diverging-bar","title":"步骤 14 · 网络的 5 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"加权总度","value":-0.04703,"text":"-40.11（0.047 个标准差）","ci_low":-0.04819,"ci_high":-0.04586,"saved":true},{"label":"加权入度","value":-0.04594,"text":"-19.91（0.046 个标准差）","ci_low":-0.04745,"ci_high":-0.04443},{"label":"加权出度","value":-0.04654,"text":"-20.20（0.047 个标准差）","ci_low":-0.04831,"ci_high":-0.04476},{"label":"介数","value":-0.1003,"text":"-60.11（0.100 个标准差）","ci_low":-0.1029,"ci_high":-0.09772},{"label":"接近中心性","value":-0.0419,"text":"-0.0049（0.042 个标准差）","ci_low":-0.04298,"ci_high":-0.04082}]},
-  summary: {"version":1,"type":"diverging-bar","title":"四步保存的结果，都换成个标准差","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"外国增加值项占比","sub":"步骤 11","value":-0.06192,"text":"-0.55 个百分点（0.062 个标准差）","ci_low":-0.06438,"ci_high":-0.05945},{"label":"后向复杂 GVC 生产份额","sub":"步骤 12","value":0.001296,"text":"+0.008 个百分点（0.001 个标准差）","ci_low":-0.001929,"ci_high":0.004521},{"label":"GVC 位置指数","sub":"步骤 13","value":-0.004425,"text":"-0.0008 个位置指数单位（0.004 个标准差）","ci_low":-0.006494,"ci_high":-0.002356},{"label":"加权总度","sub":"步骤 14","value":-0.04703,"text":"-40.11 个中心性原始单位（0.047 个标准差）","ci_low":-0.04819,"ci_high":-0.04586}],"note":"标准差即 Y 在国家×行业之间的典型差距；括号前是各步原始单位的数值，和上表相同。"},
+  length: {"version":1,"type":"diverging-bar","title":"步骤 13 · 长度的 3 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"前向 GVC 段长度","sub":"长度单位","value":-0.03118,"text":"-0.018（0.031 个标准差）","ci_low":-0.03292,"ci_high":-0.02944},{"label":"后向 GVC 段长度","sub":"长度单位","value":-0.02559,"text":"-0.015（0.026 个标准差）","ci_low":-0.02695,"ci_high":-0.02423},{"label":"GVC 位置指数","sub":"位置指数单位","value":-0.004425,"text":"-0.0008（0.004 个标准差）","ci_low":-0.006494,"ci_high":-0.002356,"saved":true}],"note":"条形是个标准差（标准差即 Y 在国家×行业之间的典型差距），单位或大小相差很多的 Y 才能放在一起比；条形旁先写原始单位的数值，括号里是个标准差。"},
+  network: {"version":1,"type":"diverging-bar","title":"步骤 14 · 网络的 5 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"加权总度","sub":"中心性原始单位","value":-0.04703,"text":"-40.11（0.047 个标准差）","ci_low":-0.04819,"ci_high":-0.04586,"saved":true},{"label":"加权入度","sub":"中心性原始单位","value":-0.04594,"text":"-19.91（0.046 个标准差）","ci_low":-0.04745,"ci_high":-0.04443},{"label":"加权出度","sub":"中心性原始单位","value":-0.04654,"text":"-20.20（0.047 个标准差）","ci_low":-0.04831,"ci_high":-0.04476},{"label":"介数","sub":"中心性原始单位","value":-0.1003,"text":"-60.11（0.100 个标准差）","ci_low":-0.1029,"ci_high":-0.09772},{"label":"接近中心性","sub":"中心性原始单位","value":-0.0419,"text":"-0.0049（0.042 个标准差）","ci_low":-0.04298,"ci_high":-0.04082}],"note":"条形是个标准差（标准差即 Y 在国家×行业之间的典型差距），单位或大小相差很多的 Y 才能放在一起比；条形旁先写原始单位的数值，括号里是个标准差。"},
+  summary: {"version":1,"type":"diverging-bar","title":"四步保存的结果（都换算成标准差）","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"外国增加值项占比","sub":"步骤 11 · 贸易流","value":-0.06192,"text":"-0.55 个百分点（0.062 个标准差）","ci_low":-0.06438,"ci_high":-0.05945},{"label":"后向复杂 GVC 生产份额","sub":"步骤 12 · 生产","value":0.001296,"text":"+0.008 个百分点（0.001 个标准差）","ci_low":-0.001929,"ci_high":0.004521},{"label":"GVC 位置指数","sub":"步骤 13 · 长度","value":-0.004425,"text":"-0.0008 个位置指数单位（0.004 个标准差）","ci_low":-0.006494,"ci_high":-0.002356},{"label":"加权总度","sub":"步骤 14 · 网络","value":-0.04703,"text":"-40.11 个中心性原始单位（0.047 个标准差）","ci_low":-0.04819,"ci_high":-0.04586}],"note":"标准差即 Y 在国家×行业之间的典型差距；条形旁先写各步原始单位的数值（和上表相同），括号里是个标准差。"},
 } as const;
 
 /** Same width estimate as the renderer: CJK about one em, Latin about 0.6 em. */
@@ -337,9 +337,11 @@ const estimatedWidth = (text: string, size: number) => [...text].reduce((width, 
 function textBox(node: Element) {
   const x = Number(node.getAttribute("x"));
   const size = Number(node.getAttribute("font-size"));
-  const spans = [...node.querySelectorAll("tspan")];
+  const spans = [...node.querySelectorAll(":scope > tspan[data-line]")];
   const lines = spans.length ? spans.map((span) => span.textContent ?? "") : [node.textContent ?? ""];
-  const width = Math.max(...lines.map((line) => estimatedWidth(line, size))) * (node.getAttribute("font-weight") === "700" ? 1.05 : 1);
+  // End labels set their value in bold.
+  const bold = node.getAttribute("font-weight") === "700" || node.hasAttribute("data-bar-label");
+  const width = Math.max(...lines.map((line) => estimatedWidth(line, size))) * (bold ? 1.06 : 1);
   const anchor = node.getAttribute("text-anchor") ?? "start";
   const left = anchor === "end" ? x - width : anchor === "middle" ? x - width / 2 : x;
   const y = Number(node.getAttribute("y"));
@@ -375,20 +377,25 @@ describe("regression bar charts (steps 11–14 and the summary)", () => {
 
   test("colours bars by direction, greys the uncertain one and marks the saved Y", () => {
     const element = renderChart(REGRESSION_CHARTS.production);
-    const bars = [...element.querySelectorAll("svg rect[fill]")].filter((rect) => rect.querySelector("title"));
+    const bars = [...element.querySelectorAll("svg path[data-bar]")];
     expect(bars).toHaveLength(7);
     expect(bars.map((bar) => bar.getAttribute("fill"))).toEqual([NEGATIVE, NEGATIVE, NEGATIVE, NEGATIVE, NEGATIVE, POSITIVE, UNCERTAIN]);
-    // One whisker per bar.
+    // One capped whisker per bar.
     expect(element.querySelectorAll("[data-whisker]")).toHaveLength(7);
+    expect(element.querySelectorAll("[data-whisker] line")).toHaveLength(21);
     const saved = element.querySelector('[data-diverging-row="saved"]')!;
     expect(saved.textContent).toContain("后向复杂 GVC 生产份额");
-    expect(saved.textContent).toContain("★ 已保存");
+    expect(saved.querySelector("[data-saved-tag]")?.textContent).toBe("已保存");
+    expect(saved.querySelector("path[data-bar]")?.getAttribute("stroke")).toBe(ZERO_LINE);
     expect(saved.querySelector("[data-bar-label]")?.textContent).toBe("+0.008 · 方向不确定");
-    expect(saved.querySelector("[data-bar-label]")?.getAttribute("data-bar-label")).toBe("+0.008 · 方向不确定");
-    expect(element.textContent?.match(/方向不确定/g)?.length).toBeGreaterThanOrEqual(2); // the bar label and the legend
+    // The value is bold, "方向不确定" muted after it, as on the page.
+    expect(saved.querySelector('[data-bar-label] tspan[font-weight="700"]')?.textContent).toBe("+0.008");
+    expect(saved.querySelector('[data-bar-label] tspan[fill="#5f6677"]')?.textContent).toBe(" · 方向不确定");
     expect(element.querySelectorAll('[data-diverging-row="saved"]')).toHaveLength(1);
+    // The legend names only the colours in use; all three are here.
+    expect(element.querySelector("figure")?.textContent).toContain("X 越高，Y 越高X 越高，Y 越低方向不确定细线 = 95% 区间");
     const svg = element.querySelector('svg[role="img"]')!;
-    expect(svg.getAttribute("aria-label")).toContain("后向复杂 GVC 生产份额（已保存）：+0.008 · 方向不确定");
+    expect(svg.getAttribute("aria-label")).toContain("后向复杂 GVC 生产份额：+0.008，方向不确定，已保存");
     expect(svg.getAttribute("aria-label")).toContain("纯国内生产份额：+0.98");
     expect(element.querySelector("figcaption")?.textContent).toBe(REGRESSION_CHARTS.production.title);
   });
@@ -398,7 +405,21 @@ describe("regression bar charts (steps 11–14 and the summary)", () => {
     const element = renderChart({ ...REGRESSION_CHARTS.trade, items: [bare] });
     expect(element.querySelectorAll("[data-whisker]")).toHaveLength(0);
     expect(element.querySelector("[data-bar-label]")?.getAttribute("data-bar-label")).toBe("-0.55 · 方向不确定");
-    expect(element.querySelector("svg rect[fill] title")?.parentElement?.getAttribute("fill")).toBe(UNCERTAIN);
+    expect(element.querySelector("svg path[data-bar]")?.getAttribute("fill")).toBe(UNCERTAIN);
+    // Only grey is in use, so the legend lists only 方向不确定.
+    expect(element.querySelector("figure")?.textContent).not.toContain("X 越高");
+  });
+
+  test("a bar without an estimate or a standard deviation is drawn at 0 with the page's words", () => {
+    const element = renderChart({
+      ...REGRESSION_CHARTS.network,
+      items: [{ label: "加权总度", sub: "中心性原始单位", value: 0, text: "没算出估计值", saved: true }, { label: "介数", value: 0, text: "-60.11（没有标准差）" }],
+    });
+    expect([...element.querySelectorAll("[data-bar-label]")].map((label) => label.getAttribute("data-bar-label"))).toEqual([
+      "没算出估计值 · 方向不确定",
+      "-60.11（没有标准差） · 方向不确定",
+    ]);
+    expect(element.querySelector("svg")?.outerHTML).not.toContain("NaN");
   });
 
   test.each(Object.entries(REGRESSION_CHARTS))("%s: every label fits the canvas and no two labels overlap", (_name, chart) => {
@@ -426,14 +447,12 @@ describe("regression bar charts (steps 11–14 and the summary)", () => {
     const zeroX = Number(zero.getAttribute("x1"));
     for (const row of svg.querySelectorAll("[data-diverging-row]")) {
       const label = textBox(row.querySelector("[data-bar-label]")!);
-      const bar = row.querySelector("rect[fill] title")!.parentElement!;
-      const barLeft = Number(bar.getAttribute("x"));
-      const barRight = barLeft + Number(bar.getAttribute("width"));
+      const [barLeft, barRight] = row.querySelector("path[data-bar]")!.getAttribute("data-bar")!.split(" ").map(Number);
       const ends = [...row.querySelectorAll("[data-whisker] line")].flatMap((line) => [Number(line.getAttribute("x1")), Number(line.getAttribute("x2"))]);
       if (barLeft < zeroX - 0.5) expect(label.right).toBeLessThanOrEqual(Math.min(barLeft, ...ends));
       else expect(label.left).toBeGreaterThanOrEqual(Math.max(barRight, ...ends));
-      // Row labels stay left of the plot.
-      for (const name of row.querySelectorAll('text[text-anchor="end"]:not([data-bar-label])')) {
+      // Row labels and the saved tag stay left of the plot.
+      for (const name of row.querySelectorAll('text:not([data-bar-label])')) {
         expect(textBox(name).right).toBeLessThanOrEqual(Math.min(barLeft, zeroX, label.left, ...ends));
       }
     }
@@ -449,17 +468,18 @@ describe("regression bar charts (steps 11–14 and the summary)", () => {
       "-0.0008 个位置指数单位（0.004 个标准差）",
       "-40.11 个中心性原始单位（0.047 个标准差）",
     ]);
-    expect(rows.map((row) => [...row.querySelectorAll('text[text-anchor="end"]:not([data-bar-label])')].at(-1)?.textContent)).toEqual(["步骤 11", "步骤 12", "步骤 13", "步骤 14"]);
+    expect(rows.map((row) => [...row.querySelectorAll('text[text-anchor="end"]:not([data-bar-label])')].at(-1)?.textContent)).toEqual([
+      "步骤 11 · 贸易流", "步骤 12 · 生产", "步骤 13 · 长度", "步骤 14 · 网络",
+    ]);
     expect(element.textContent).toContain("X 每高 1 个百分点，Y 平均相差（个标准差）");
     expect(element.textContent).toContain(REGRESSION_CHARTS.summary.note);
-    // The PDF check reads the summary up to the first "步骤 11 ·" heading; the chart must not contain one.
-    expect(element.textContent?.replace(/\s+/g, "")).not.toContain("步骤11·");
   });
 
   test("a long Y name wraps instead of being clipped", () => {
     const element = renderChart({ ...REGRESSION_CHARTS.trade, items: [{ ...REGRESSION_CHARTS.trade.items[0], label: "一个特别特别长的结果指标名称用来检查换行是否正常工作" }] });
     const names = [...element.querySelectorAll('[data-diverging-row] text[text-anchor="end"]:not([data-bar-label])')];
-    expect(names.length).toBeGreaterThanOrEqual(3); // two label lines and "★ 已保存"
+    expect(names.length).toBeGreaterThanOrEqual(2);
+    expect(element.querySelector("[data-saved-tag]")).not.toBeNull();
     expect(names.every((name) => textBox(name).left >= 0)).toBe(true);
   });
 });

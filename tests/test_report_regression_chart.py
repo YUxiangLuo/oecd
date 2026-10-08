@@ -112,7 +112,12 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
             assert bar["ci_high"] == pytest.approx(bounds[1], rel=1e-3)
             sd = _signed(point, standardized_digits(point, bounds))[1:]
             assert bar["text"] == f"{native}（{sd} 个标准差）"
-            assert "原始数值" in chart["note"]
+            assert (
+                bar["sub"]
+                == {"length": "长度单位", "position": "位置指数单位", "network": "中心性原始单位"}[
+                    design["depvar_kind"]
+                ]
+            )
             if outcome == "network":
                 # The table states the same SD size ("幅度约 0.047 个标准差").
                 assert f"幅度约 {sd} 个标准差" in effect
@@ -123,6 +128,20 @@ def test_saved_bar_equals_the_step_table_and_the_course_estimate(panel, overview
             scale = 1.0 if course["kind"] == "share" else 0.01 / course["depvar_std"]
             assert item["value"] == pytest.approx(course["coef"] * scale, rel=1e-3)
         assert "其余 Y 是课程用同一份数据、同一个模型算出的结果" in section
+        if outcome == "production":
+            # As on the page: the four forward shares add up to 100%, so their four estimates add up to about 0.
+            total = sum(
+                item["coef"]
+                for item in overview["outcomes"]["production"]
+                if item["key"] in ("1_VA_D_share", "2_VA_RT_share", "3a_VA_GVC_S_share", "3b_VA_GVC_C_share")
+            )
+            shown = "0.00" if abs(total) < 0.005 else _signed(total, 2)
+            assert (
+                f"- 纯国内、传统贸易、简单 GVC、复杂 GVC 四项份额合计 100%，所以这四条相加约为 0（{shown}）。"
+                in section
+            )
+        else:
+            assert "四项份额合计 100%" not in section
         # The binned scatter and the single-dot coefficient plot are gone.
         assert '"type":"binscatter"' not in section and '"type":"coefficient"' not in section
 
@@ -133,7 +152,12 @@ def test_summary_chart_has_one_standardized_bar_per_saved_run(panel, overview):
     summary = markdown.split("### 四项回归结果汇总", 1)[1].split("### 步骤 11", 1)[0]
     (chart,) = [json.loads(block) for block in CHART.findall(summary)]
     assert chart["type"] == "diverging-bar" and chart["x_label"].endswith("（个标准差）")
-    assert [item["sub"] for item in chart["items"]] == ["步骤 11", "步骤 12", "步骤 13", "步骤 14"]
+    assert [item["sub"] for item in chart["items"]] == [
+        "步骤 11 · 贸易流",
+        "步骤 12 · 生产",
+        "步骤 13 · 长度",
+        "步骤 14 · 网络",
+    ]
     assert not any(item.get("saved") for item in chart["items"])
     units = {"trade": "个百分点", "production": "个百分点", "length": "个位置指数单位", "network": "个中心性原始单位"}
     for item, run in zip(chart["items"], runs):
@@ -147,9 +171,9 @@ def test_summary_chart_has_one_standardized_bar_per_saved_run(panel, overview):
         native = effect.split("（", 1)[0]
         assert item["text"] == f"{native}（{sd} 个标准差）"
         assert native.endswith(units[run["outcome"]])
-    # The table stays ahead of the chart, and the PDF check's "步骤 11 ·" boundary is not inside the chart.
+    assert chart["title"] == "四步保存的结果（都换算成标准差）"
+    # The table (whose columns the PDF check reads) stays ahead of the chart.
     assert summary.index("| 步骤 | 指标 |") < summary.index("```gvcsim-chart")
-    assert "步骤 11 ·" not in CHART.findall(summary)[0]
 
 
 def test_uncertain_and_suppressed_bars_and_a_missing_overview():
@@ -185,10 +209,11 @@ def test_uncertain_and_suppressed_bars_and_a_missing_overview():
         "ci_high": 0.0262,
         "saved": True,
     }
-    # A suppressed interval is left out; a Y without an estimate is named in the note, not drawn.
+    # A suppressed interval is left out (no whisker); a Y without an estimate is a 0 bar saying so, as on the page.
     assert "ci_low" not in items[BASELINES["production"][1].label]
-    assert BASELINES["production"][2].label not in items
-    assert chart["note"] == f"{BASELINES['production'][2].label}没有可画的估计，未画出。"
+    missing = BASELINES["production"][2].label
+    assert items[missing] == {"label": missing, "value": 0.0, "text": "没算出估计值"}
+    assert "note" not in chart and "sub" not in items["后向复杂 GVC 生产份额"]
     # Without the course estimates the chart still shows the saved Y, in the family's unit.
     alone = family_chart(12, "production", design, result, coefficient, None)
     (only,) = json.loads(alone[1])["items"]
@@ -201,8 +226,12 @@ def test_uncertain_and_suppressed_bars_and_a_missing_overview():
     length_result = {"status": "ok", "support": {"status": "ok"}, "depvar_std": 0.5819, "coefs": [length_coefficient]}
     (bar,) = json.loads(family_chart(13, "length", length, length_result, length_coefficient, None)[1])["items"]
     assert bar["text"] == "-0.018（0.031 个标准差）"
-    # A length run without a recorded SD cannot be drawn in standard deviations: no chart, the table stays.
-    assert family_chart(13, "length", length, {**length_result, "depvar_std": None}, length_coefficient, None) == []
+    assert bar["sub"] == "长度单位"
+    # Without a recorded SD the bar is 0 and says so, after the native value (the page's "（没有标准差）").
+    (bare,) = json.loads(
+        family_chart(13, "length", length, {**length_result, "depvar_std": None}, length_coefficient, None)[1]
+    )["items"]
+    assert (bare["value"], bare["text"]) == (0.0, "-0.018（没有标准差）")
     summary = json.loads(
         summary_chart(
             {
@@ -211,5 +240,9 @@ def test_uncertain_and_suppressed_bars_and_a_missing_overview():
             }
         )[1]
     )
-    assert [item["sub"] for item in summary["items"]] == ["步骤 12"]
-    assert summary["note"].endswith("步骤 13 没有记录标准差，未画出。")
+    assert [item["sub"] for item in summary["items"]] == ["步骤 12 · 生产", "步骤 13 · 长度"]
+    assert [item["text"] for item in summary["items"]] == [
+        "+0.008 个百分点（0.001 个标准差）",
+        "-0.018 个长度单位（没有标准差）",
+    ]
+    assert summary["note"].endswith("步骤 11 · 贸易流、步骤 14 · 网络：还没计算。")

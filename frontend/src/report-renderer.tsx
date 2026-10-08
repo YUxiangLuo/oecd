@@ -530,11 +530,32 @@ function endLabelLines(item: DivergingItem, layout: number): string[] {
   return [native, standardized, uncertain].filter(Boolean);
 }
 
+const SAVED_TAG = "已保存";
+const TAG_FONT = 14;
+const TAG_WIDTH = textWidth(SAVED_TAG, TAG_FONT) + 16;
+
+/** A horizontal bar from the zero line, square there and rounded at its data end (as on the pages). */
+function divergingBarPath(x0: number, x1: number, top: number, height: number, towardRight: boolean): string {
+  const bottom = top + height;
+  const r = Math.min(4, (x1 - x0) / 2);
+  if (r <= 0) return `M${x0},${top}H${x1}V${bottom}H${x0}Z`;
+  return towardRight
+    ? `M${x0},${top}H${x1 - r}Q${x1},${top} ${x1},${top + r}V${bottom - r}Q${x1},${bottom} ${x1 - r},${bottom}H${x0}Z`
+    : `M${x1},${top}H${x0 + r}Q${x0},${top} ${x0},${top + r}V${bottom - r}Q${x0},${bottom} ${x0 + r},${bottom}H${x1}Z`;
+}
+
+/** One end-label line: the value in bold, "方向不确定" in muted grey after it, as on the pages. */
+function EndLabelLine({ line }: { line: string }) {
+  const muted = line === "方向不确定" ? 0 : line.endsWith(" · 方向不确定") ? line.length - " · 方向不确定".length : -1;
+  if (muted < 0) return <tspan fontWeight={700}>{line}</tspan>;
+  return <>{muted > 0 && <tspan fontWeight={700}>{line.slice(0, muted)}</tspan>}<tspan fill="#5f6677">{line.slice(muted)}</tspan></>;
+}
+
 /**
- * One bar per Y, as on the step 11–15 pages: a vertical zero line, positive bars to the right in red, negative to
- * the left in blue, a bar whose 95% interval (the whisker) includes 0 in light grey with "方向不确定". The saved Y
- * is outlined and marked "★ 已保存". The scale is the largest one at which every bar, whisker and end label fits
- * inside the 720-unit canvas, so no label is clipped or overlaps another row.
+ * One bar per Y, as on the step 11–15 pages (viz/regression/diverging-bars): a vertical zero line, positive bars to
+ * the right in red, negative to the left in blue, a bar whose 95% interval (the whisker) includes 0 in light grey
+ * with "方向不确定". The saved Y is outlined and tagged "已保存". The scale is the largest one at which every bar,
+ * whisker and end label fits inside the 720-unit canvas, so no label is clipped or overlaps another row.
  */
 function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "diverging-bar" }> }) {
   const W = 720;
@@ -543,12 +564,12 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
   const GAP = 8;
   const rows = chart.items.map((item) => {
     const lines = wrapLabel(item.label, LABEL_FONT, 200);
-    const sub = [item.sub, item.saved ? "★ 已保存" : null].filter(Boolean).join(" · ");
-    return { item, lines, sub, label: endLabel(item) };
+    return { item, lines, sub: item.sub ?? "", label: endLabel(item) };
   });
+  const secondLine = (row: (typeof rows)[number]) => Boolean(row.sub) || row.item.saved === true;
   const widest = Math.max(...rows.flatMap((row) => [
     ...row.lines.map((line) => textWidth(line, LABEL_FONT) * (row.item.saved ? 1.05 : 1)),
-    textWidth(row.sub, SUB_FONT) * 1.05,
+    (row.sub ? textWidth(row.sub, SUB_FONT) + (row.item.saved ? 8 : 0) : 0) + (row.item.saved ? TAG_WIDTH : 0),
   ]));
   const m = { l: Math.ceil(Math.min(214, widest) + 22), r: 12, t: 12, b: 56 };
   const plotLeft = m.l + 8;
@@ -557,8 +578,9 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
 
   // Room needed left and right of the zero line at `scale` units per axis unit: each bar side's far end (bar or
   // whisker) plus its label; the whisker of an uncertain bar also crosses to the other side.
+  // The value is bold: about 6% wider than the plain estimate.
   const labelWidth = (row: (typeof rows)[number], layout: number) =>
-    Math.max(...endLabelLines(row.item, layout).map((line) => textWidth(line, AXIS_FONT))) * (row.item.saved ? 1.08 : 1.03);
+    Math.max(...endLabelLines(row.item, layout).map((line) => textWidth(line, AXIS_FONT))) * 1.08;
   const need = (scale: number, layout: number) => rows.reduce((acc, row) => {
     const { value, ci_low: low = value, ci_high: high = value } = row.item;
     const left = scale * Math.max(0, -Math.min(value, low));
@@ -588,7 +610,7 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
   const x = (value: number) => zero + value * scale;
 
   const endLines = rows.map((row) => endLabelLines(row.item, layout));
-  const heights = rows.map((row, index) => Math.max(36, (row.lines.length + (row.sub ? 1 : 0)) * LINE + 14, endLines[index].length * LINE + 14));
+  const heights = rows.map((row, index) => Math.max(36, (row.lines.length + (secondLine(row) ? 1 : 0)) * LINE + 14, endLines[index].length * LINE + 14));
   const tops = heights.map((_, index) => m.t + heights.slice(0, index).reduce((sum, height) => sum + height, 0));
   const H = m.t + heights.reduce((sum, height) => sum + height, 0) + m.b;
 
@@ -600,18 +622,21 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
   const tickDigits = Math.min(6, (String(Number(stepSize.toPrecision(6))).split(".")[1] ?? "").length);
   const tickText = (value: number) => (value === 0 ? "0" : String(Number(value.toFixed(tickDigits))));
 
-  const summary = rows.map((row) => `${row.item.sub ? `${row.item.sub} ` : ""}${row.item.label}${row.item.saved ? "（已保存）" : ""}：${row.label}`).join("；");
-  const legend: [string, string][] = [[POSITIVE, "正：X 高的 Y 平均更高"], [NEGATIVE, "负：X 高的 Y 平均更低"], [UNCERTAIN, "灰：95% 区间包含 0，方向不确定"]];
+  const summary = rows.map((row) => `${row.item.label}${row.item.sub ? `（${row.item.sub}）` : ""}：${row.label.replace(" · ", "，")}${row.item.saved ? `，${SAVED_TAG}` : ""}`).join("；");
+  // The page's legend: only the colours the chart uses.
+  const present = new Set(chart.items.map(divergingFill));
+  const legend = ([[POSITIVE, "X 越高，Y 越高"], [NEGATIVE, "X 越高，Y 越低"], [UNCERTAIN, "方向不确定"]] as const).filter(([color]) => present.has(color));
   return (
     <ReportFigure title={chart.title ?? "回归结果条形图"}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", fontSize: 11, color: "#4b5563", marginBottom: 6 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", fontSize: 11, color: "#5a6070", marginBottom: 6, printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}>
         {legend.map(([color, text]) => (
           <span key={text} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <span aria-hidden="true" style={{ width: 12, height: 10, borderRadius: 2, background: color, printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }} />{text}
+            <span aria-hidden="true" style={{ width: 11, height: 11, borderRadius: 3, background: color }} />{text}
           </span>
         ))}
-        <span>细线 = 95% 区间</span>
-        {chart.items.some((item) => item.saved) && <span>★ 已保存 = 你保存的 Y</span>}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <span aria-hidden="true" style={{ width: 14, height: 0, borderTop: `1.5px solid ${ZERO_LINE}` }} />细线 = 95% 区间
+        </span>
       </div>
       {chart.note && <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>{chart.note}</div>}
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${chart.title ?? "回归结果条形图"}。${summary}`} style={{ width: "100%", height: "auto" }}>
@@ -626,32 +651,37 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
           const { item } = row;
           const top = tops[index];
           const middle = top + heights[index] / 2;
-          const textLines = row.lines.length + (row.sub ? 1 : 0);
+          const textLines = row.lines.length + (secondLine(row) ? 1 : 0);
           const firstBaseline = middle - ((textLines - 1) * LINE) / 2 + 5;
+          const subBaseline = firstBaseline + row.lines.length * LINE;
+          const tagX = m.l - 10 - TAG_WIDTH;
           const end = x(item.value);
           const hasCi = item.ci_low != null && item.ci_high != null;
           const far = item.value < 0 ? Math.min(end, hasCi ? x(item.ci_low!) : end) : Math.max(end, hasCi ? x(item.ci_high!) : end);
           return (
             <g key={`${item.label}-${index}`} data-diverging-row={item.saved ? "saved" : "other"}>
-              {item.saved && <rect x={4} y={top + 2} width={W - 8} height={heights[index] - 4} rx={6} fill="#f3f5f9" />}
+              {item.saved && <rect x={4} y={top + 2} width={W - 8} height={heights[index] - 4} rx={8} fill="#f3f4fa" />}
               {row.lines.map((line, lineIndex) => (
-                <text key={lineIndex} x={m.l - 10} y={firstBaseline + lineIndex * LINE} textAnchor="end" fontSize={LABEL_FONT} fontWeight={item.saved ? 700 : 400} fill="#2a2f3a">{line}</text>
+                <text key={lineIndex} x={m.l - 10} y={firstBaseline + lineIndex * LINE} textAnchor="end" fontSize={LABEL_FONT} fontWeight={item.saved ? 700 : 500} fill="#2a2f3a">{line}</text>
               ))}
-              {row.sub && <text x={m.l - 10} y={firstBaseline + row.lines.length * LINE} textAnchor="end" fontSize={SUB_FONT} fontWeight={item.saved ? 700 : 400} fill={item.saved ? ZERO_LINE : "#5f6677"}>{row.sub}</text>}
-              <rect
-                x={Math.min(zero, end)}
-                y={middle - 10}
-                width={Math.max(1.5, Math.abs(end - zero))}
-                height={20}
-                rx={3}
+              {row.sub && <text x={item.saved ? tagX - 8 : m.l - 10} y={subBaseline} textAnchor="end" fontSize={SUB_FONT} fill="#5f6677">{row.sub}</text>}
+              {item.saved && (
+                <g data-saved-tag>
+                  <rect x={tagX} y={subBaseline - 14} width={TAG_WIDTH} height={18} rx={9} fill={ZERO_LINE} />
+                  <text x={tagX + TAG_WIDTH / 2} y={subBaseline} textAnchor="middle" fontSize={TAG_FONT} fontWeight={700} fill="#fff">{SAVED_TAG}</text>
+                </g>
+              )}
+              <path
+                d={divergingBarPath(Math.min(zero, end), Math.max(zero, end, Math.min(zero, end) + 1.5), middle - 10, 20, item.value >= 0)}
                 fill={divergingFill(item)}
                 stroke={item.saved ? ZERO_LINE : "none"}
                 strokeWidth={item.saved ? 2 : 0}
+                data-bar={`${Math.min(zero, end)} ${Math.max(zero, end)}`}
               >
                 <title>{`${item.label}：${row.label}`}</title>
-              </rect>
+              </path>
               {hasCi && (
-                <g stroke={ZERO_LINE} strokeWidth={1.5} data-whisker>
+                <g stroke="#3a4050" strokeWidth={1.4} data-whisker>
                   <line x1={x(item.ci_low!)} x2={x(item.ci_high!)} y1={middle} y2={middle} />
                   <line x1={x(item.ci_low!)} x2={x(item.ci_low!)} y1={middle - 6} y2={middle + 6} />
                   <line x1={x(item.ci_high!)} x2={x(item.ci_high!)} y1={middle - 6} y2={middle + 6} />
@@ -663,13 +693,12 @@ function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "div
                 y={middle + 5 - ((endLines[index].length - 1) * LINE) / 2}
                 textAnchor={item.value < 0 ? "end" : "start"}
                 fontSize={AXIS_FONT}
-                fontWeight={item.saved ? 700 : 400}
                 fill="#2a2f3a"
               >
                 {endLines[index].length === 1
-                  ? endLines[index][0]
+                  ? <EndLabelLine line={endLines[index][0]} />
                   : endLines[index].map((line, lineIndex) => (
-                    <tspan key={lineIndex} x={item.value < 0 ? far - GAP : far + GAP} dy={lineIndex === 0 ? 0 : LINE}>{line}</tspan>
+                    <tspan key={lineIndex} data-line x={item.value < 0 ? far - GAP : far + GAP} dy={lineIndex === 0 ? 0 : LINE}><EndLabelLine line={line} /></tspan>
                   ))}
               </text>
             </g>
