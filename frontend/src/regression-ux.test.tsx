@@ -152,7 +152,8 @@ describe("simple regression workbench", () => {
     await waitFor(() => expect(select.value).toBe("DVAex_share"));
     expect(screen.queryByText(/报告材料里保存的仍是/)).toBeNull();
     fireEvent.change(select, { target: { value: "FVA_share" } });
-    expect(screen.getByText(/报告材料里保存的仍是上次算出的 Y（国内增加值出口占比）/)).toBeTruthy();
+    expect(screen.getByText(/报告材料里保存的仍是上次算出的 Y（国内增加值出口占比）；点上面的“计算贸易流回归”后/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^计算贸易流回归/ })).toBeTruthy();
     fireEvent.change(select, { target: { value: "DVAex_share" } });
     expect(screen.queryByText(/报告材料里保存的仍是/)).toBeNull();
   });

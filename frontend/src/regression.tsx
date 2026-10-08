@@ -597,7 +597,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         <span className={running ? "muted reg-inline-status" : "sr-only"} role="status" aria-live="polite">{running ? "正在估计…" : ""}</span>
         {!running && !baselineNotice && savedRunY && savedRunY.key !== (baseline ?? defaultBaseline) && (
           <p className="reg-boundary" role="status">
-            报告材料里保存的仍是上次算出的 Y（{savedRunY.label}）；按上面的按钮算一次，才会换成{/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}{lesson.shortMetric}。
+            报告材料里保存的仍是上次算出的 Y（{savedRunY.label}）；点上面的“计算{runName}”后，才会换成{/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}{lesson.shortMetric}。
           </p>
         )}
         {!running && savedRun && state.materialLocked && (
