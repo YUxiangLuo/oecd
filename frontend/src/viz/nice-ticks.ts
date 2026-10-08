@@ -35,3 +35,19 @@ export function niceDomain(lo: number, hi: number, intervals = 4): { lo: number;
   const ticks = Array.from({ length: chosen.count + 1 }, (_, index) => Number((chosen.lo + index * chosen.step).toPrecision(12)));
   return { lo: ticks[0], hi: ticks[ticks.length - 1], ticks };
 }
+
+/**
+ * Whole-number metrics (link counts, path lengths): ticks only on integers. A narrow range would otherwise get
+ * quarter steps that read "2, 2, 3, 3, 3" once rounded, and 0–10 would get 2.5 steps that read "0, 3, 5, 8, 10".
+ */
+export function integerDomain(lo: number, hi: number, intervals = 4): { lo: number; hi: number; ticks: number[] } {
+  const nice = niceDomain(lo, hi, intervals);
+  if (nice.ticks.every((tick) => Number.isInteger(tick)) || !Number.isFinite(lo) || !Number.isFinite(hi)) return nice;
+  if (hi < lo) [lo, hi] = [hi, lo];
+  // The smallest whole step that keeps the tick count readable.
+  const step = [1, 2, 5, 10].find((candidate) => Math.ceil(hi / candidate) - Math.floor(lo / candidate) <= intervals + 3) ?? 10;
+  const niceLo = Math.floor(lo / step) * step;
+  const niceHi = Math.max(Math.ceil(hi / step) * step, niceLo + step);
+  const ticks = Array.from({ length: Math.round((niceHi - niceLo) / step) + 1 }, (_, index) => niceLo + index * step);
+  return { lo: niceLo, hi: niceHi, ticks };
+}

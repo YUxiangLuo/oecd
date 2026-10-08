@@ -587,8 +587,9 @@ export function DecompositionDemo({
       return finiteNumber(acc + Math.abs(value));
     }, 0);
     const zeroTotalHint = zeroTotalDecompositionHint(model, cfg.totalLabel);
+    // A negative total is not "too small": the identity line already explains it (总量为负，无法算比重).
     const negligible = model.total != null && gran === "sector" && (
-      model.total === 0 || (countryTotal != null && countryTotal > 0 && Math.abs(model.total) / countryTotal < 1e-4)
+      model.total === 0 || (model.total > 0 && countryTotal != null && countryTotal > 0 && model.total / countryTotal < 1e-4)
     );
 
     if (!model.values || model.total == null || model.sum == null || model.error == null) {

@@ -66,6 +66,23 @@ describe("Steps 6-9 chart semantic data equivalents", () => {
     expect(html).not.toMatch(/<g[^>]*tabindex=/);
   });
 
+  test("scatter medians and quadrants need five distinct points, not just five economies", () => {
+    const quadrants: [string, string, string, string] = ["右上", "左上", "左下", "右下"];
+    const scatter = (points: { country: string; x: number; y: number }[]) => renderToStaticMarkup(
+      <QuadrantScatter rows={points} xKey="x" yKey="y" xLabel="横轴指标" yLabel="纵轴指标" quadrantLabels={quadrants} />,
+    );
+    const economies = ["AAA", "BBB", "CCC", "DDD", "EEE", "FFF"];
+    // Step 7 with T: every economy at 0%, 0%.
+    const same = scatter(economies.map((country) => ({ country, x: 0, y: 0 })));
+    expect(same).not.toContain('stroke-dasharray="4 4"');
+    expect(same).not.toContain("右上");
+    expect(same).toContain("图上 6 个点的读数相同，不画中位数和象限。");
+    const spread = scatter(economies.map((country, i) => ({ country, x: i, y: i * 2 })));
+    expect(spread).toContain('stroke-dasharray="4 4"');
+    expect(spread).toContain("右上");
+    expect(spread).not.toContain("不画中位数");
+  });
+
   test("composition table exposes signed segments and a distinct sort metric", () => {
     const html = renderToStaticMarkup(
       <CompositionBar

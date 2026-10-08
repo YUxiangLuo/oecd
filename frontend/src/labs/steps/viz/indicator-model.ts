@@ -17,6 +17,9 @@ export interface IndicatorTopic {
     numerator?: string;
     /** Only a 定位图 axis here (label, unit and derivation), not offered in the step's metric list. */
     axisOnly?: boolean;
+    /** A length whose segment has no activity is undefined, not missing: when one of these columns is exactly 0
+     *  (a negative weight still has a length), its `reason` says why ("没有 GVC 生产（GVC 增加值为 0）"). */
+    zeroOf?: { column: string; reason: string }[];
   }[];
   composition?: CompositionSpec & {
     /** A second way to read the same step (step 7: the final-goods / backward side). */

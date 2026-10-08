@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { cjkJoin } from "../../../format";
-import { countryLabel, sectorLabel } from "../../../viz";
+import { countryLabel, medianSkipReason, sectorLabel } from "../../../viz";
 import { finiteValue, NO_RANK, NO_RANK_NOTE, rankText, type CompositionSpec, type YearDistribution } from "./indicator-model";
 import { fixedIndicatorNumber, indicatorNumber } from "./indicator-charts";
 import type { Row } from "./scaffold";
@@ -94,8 +94,10 @@ export function comparisonCards({ rows, countries, metric, label, unit, year, in
 }
 
 /** Composition views: the observed country's largest part and its focus part, and the focus-part gap to each comparison. */
-export function compositionCards({ rows, countries, composition, totalLabel, year, industry }: {
+export function compositionCards({ rows, countries, composition, totalLabel, year, industry, amountShown = false }: {
   rows: Row[]; countries: string[]; composition: CompositionSpec; totalLabel: string; year: number; industry: string;
+  /** The bars already show amounts: a negative total does not send the student to the 金额 view they are in. */
+  amountShown?: boolean;
 }): ReadingCard[] {
   const [first, ...others] = countries;
   const share = (country: string, key: string) => {
@@ -115,7 +117,7 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
     const total = valueOf(rows, country, year, composition.total, industry);
     const prefix = comparison ? `与对比国家 ${countryLabel(country)} · ${focusLabel}` : `${countryLabel(country)} · ${year}`;
     if (total === 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为 0`, small: "没有可分解的总量，构成份额无定义；可换一个行业或国家" };
-    if (total !== null && total < 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为负`, small: `总量为负（${indicatorNumber(total, "百万美元")} 百万美元），无法算比重；切到“金额”可看各分项` };
+    if (total !== null && total < 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为负`, small: `总量为负（${indicatorNumber(total, "百万美元")} 百万美元），无法算比重${amountShown ? "" : "；切到“金额”可看各分项"}` };
     return null;
   };
   if (ownShares.some((item) => item.share === null)) {
@@ -152,11 +154,9 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
   return cards;
 }
 
-/** Fewer economies than this on a 定位图 and its medians and quadrants are not drawn or read. */
-export const MIN_MEDIAN_POINTS = 5;
-
-const side = (value: number, median: number, high: string, low: string) =>
-  value === median ? "等于中位数" : value > median ? high : low;
+/** "高于" / "低于" / "等于"; the card appends "中位数". */
+const side = (value: number, median: number) =>
+  value === median ? "等于" : value > median ? "高于" : "低于";
 
 /** 定位图: where each selected country sits relative to the two medians of the shown economies. */
 export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLabel, xFormat, yFormat, xScale = "linear", reasonFor }: {
@@ -181,15 +181,17 @@ export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLa
       small: reason ? `${reason}（不是缺少数据）` : zeroOnLog ? `${xLabel}为 0 或负，对数横轴上画不出` : "该国缺少其中一项指标的读数",
     };
   };
-  // With only a few economies on the chart a median says nothing (one of two points is always "above").
-  if (points.length < MIN_MEDIAN_POINTS) {
+  // With only a few economies on the chart a median says nothing (one of two points is always "above"), nor
+  // when they all sit in one place; the scatter leaves its medians out by the same rule.
+  const skipMedian = medianSkipReason(points, "经济体");
+  if (skipMedian !== null) {
     return countries.map((country, index) => {
       const point = points.find((item) => item.country === country);
       if (!point) return absent(country);
       return {
         eyebrow: `${index ? "对比国家 " : ""}${countryLabel(country)}`,
         big: `横轴 ${indicatorNumber(point.x, unitOf(xFormat))}，纵轴 ${indicatorNumber(point.y, unitOf(yFormat))}`,
-        small: `图上只有 ${points.length} 个经济体，不比较中位数`,
+        small: `${skipMedian}，不比较中位数`,
       };
     });
   }
@@ -205,7 +207,7 @@ export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLa
     if (!point) return absent(country);
     return {
       eyebrow: `${index ? "对比国家 " : ""}${countryLabel(country)}`,
-      big: `${xLabel}${side(point.x, xMedian, "高于", "低于")}中位数，${yLabel}${side(point.y, yMedian, "高于", "低于")}中位数`,
+      big: `${xLabel}${side(point.x, xMedian)}中位数，${yLabel}${side(point.y, yMedian)}中位数`,
       small: `横轴 ${indicatorNumber(point.x, unitOf(xFormat))}，纵轴 ${indicatorNumber(point.y, unitOf(yFormat))}；中位数按图上 ${points.length} 个经济体计算`,
     };
   });

@@ -138,6 +138,10 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       : ranked.some((row) => row.values.every((value) => value !== null)))
     && flatValue === null;
   const undefinedPoints = view === "trend" ? points.filter((point) => point.undefined) : [];
+  // Economies whose industry has no outgoing links in every year: their metric is undefined throughout, so the
+  // blocked note names them instead of saying "有的年份".
+  const undefinedThroughout = [...new Set(undefinedPoints.map((point) => point.country))]
+    .filter((country) => undefinedPoints.filter((point) => point.country === country).length === years.length);
   const undefinedNote = undefinedPoints.length
     ? `${[...new Set(undefinedPoints.map((point) => point.country))].map((country) => {
         const at = undefinedPoints.filter((point) => point.country === country).map((point) => point.year);
@@ -357,7 +361,8 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       <p role="status">{!canRecord
         ? `当前图表暂不能记录：${!recordable ? "探索视角不记录材料。"
           : flatValue !== null && query.status === "success" ? `图上${view === "trend" ? `所选国家历年的${label}` : `显示的行业的${label}`}全部${flatValue === 0 ? "为 0（例如没有生产或连接）" : `相同（都是 ${indicatorNumber(flatValue, unit)}）`}，没有可比较的差别，不记录为报告材料；请换一个${view === "trend" ? "行业" : "年份"}或指标。`
-          : view === "trend" ? (undefinedPoints.length ? `有的年份该行业${PATH_UNDEFINED_NOTE}，${label}无法定义；所选国家至少需要两个共同有效年份，请换一个行业、指标或国家。` : "所选国家至少需要两个共同有效年份。") : "显示的行业里，至少要有一个行业所有所选国家都有数据。"}${observations.length ? "已记录的材料保持不变。" : ""}`
+          : view === "trend" ? (undefinedThroughout.length ? `${joinCountries(undefinedThroughout)}的该行业在所选年份都${PATH_UNDEFINED_NOTE}，${label}都无法定义；请换一个行业、指标或国家。`
+            : undefinedPoints.length ? `有的年份该行业${PATH_UNDEFINED_NOTE}，${label}无法定义；所选国家至少需要两个共同有效年份，请换一个行业、指标或国家。` : "所选国家至少需要两个共同有效年份。") : "显示的行业里，至少要有一个行业所有所选国家都有数据。"}${observations.length ? "已记录的材料保持不变。" : ""}`
         : locked
           ? `${MATERIAL_LOCKED_NOTE}${matchesSaved ? "当前图表就是已记录的材料。" : ""}`
         : matchesSaved

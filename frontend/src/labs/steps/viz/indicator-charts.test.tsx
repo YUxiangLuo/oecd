@@ -126,3 +126,29 @@ describe("mark-level hover layers", () => {
     expect(screen.getAllByRole("graphics-symbol")).toHaveLength(2);
   });
 });
+
+describe("trend chart axis and empty state", () => {
+  test("a whole-number metric ticks on integers without repeating a label (step 9 离心率)", () => {
+    const rows: Row[] = [2018, 2019, 2020].flatMap((year) => [
+      { country: "KHM", year, Eccentricity: 2 },
+      { country: "USA", year, Eccentricity: year === 2020 ? 3 : 2 },
+    ]);
+    const view = render(
+      <IndicatorTrendChart rows={rows} countries={["KHM", "USA"]} years={[2018, 2019, 2020]} metric="Eccentricity" label="离心率" unit="路径长度" mode="context" />,
+    );
+    const ticks = [...view.container.querySelectorAll('svg text[x="100"]')].map((node) => node.textContent);
+    expect(ticks.length).toBeGreaterThan(1);
+    expect(new Set(ticks).size).toBe(ticks.length);
+    expect(ticks.every((tick) => /^\d+$/.test(tick ?? ""))).toBe(true);
+  });
+
+  test("an undefined series says why in place of the missing-data message", () => {
+    const rows: Row[] = [{ country: "CHN", year: 2020, PLv_GVC: null }];
+    const view = render(
+      <IndicatorTrendChart rows={rows} countries={["CHN"]} years={[2020]} metric="PLv_GVC" label="前向 GVC 段长度" unit="长度单位" mode="context"
+        emptyStatus="CHN 中国在所选年份该行业没有 GVC 生产（GVC 增加值为 0），前向 GVC 段长度无法计算（不是缺少数据）；请换一个行业或国家。" />,
+    );
+    expect(view.getByRole("status").textContent).toContain("没有 GVC 生产");
+    expect(view.container.textContent).not.toContain("没有有效读数");
+  });
+});

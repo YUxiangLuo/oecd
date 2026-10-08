@@ -259,3 +259,21 @@ test("path metrics of an industry that reaches no other industry are undefined, 
     { industry: "C27", values: [0.3, null], undefinedAt: [false, true] },
   ]);
 });
+
+test("a path metric undefined in every year names the economy instead of saying 有的年份", async () => {
+  // KHM B05_06: no outgoing links in any year, so 离心率 is undefined throughout; USA has readings.
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) =>
+    page([{ country, year, industry: "C26", Eccentricity: country === "CHN" ? 0 : year === 2020 ? 3 : 2 } as unknown as ReturnType<typeof row>]),
+  );
+  mockReference();
+  const schema = {
+    groups: [{ key: "network", label: "生产网络指标", fields: ["weighted degree", "Eccentricity"] }],
+    fields: { Eccentricity: { label: "离心率", format: "count" as const, desc: "" } },
+  };
+  render(<NetworkTrend meta={meta} schema={schema} initialCountry="CHN" onRecord={mock(() => {})} />);
+  fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "Eccentricity" } });
+  const note = await screen.findByText(/离心率都无法定义/);
+  expect(note.textContent).toContain("CHN 中国的该行业在所选年份都");
+  expect(note.textContent).not.toContain("有的年份");
+  expect(note.textContent).not.toContain("至少需要两个共同有效年份");
+});

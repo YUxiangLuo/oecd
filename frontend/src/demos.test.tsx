@@ -608,6 +608,31 @@ describe("small amounts read with the precision of the table rows (round 10)", (
     expect(html).toContain('<td class="dt-val">1,235</td>');
   });
 
+  test("a negative industry total is explained as negative, not as too small", async () => {
+    // MLT H51 2020: value added −1.268 against a country total in the thousands.
+    const row = (industry: string, scale: number) => ({
+      country: "MLT", industry, year: 2020,
+      SVA: -1.2681 * scale, "1_VA_D": -0.4 * scale, "2_VA_RT": -0.2739 * scale, "3_VA_GVC": -0.5942 * scale,
+      "3a_VA_GVC_S": -0.3972 * scale, "3b_VA_GVC_C": -0.197 * scale,
+    });
+    const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockResolvedValue([{ ...row("", -10_000), industry: null }]);
+    const industryRequest = spyOn(api, "industryIndicatorsAll").mockResolvedValue({
+      total: 2, page: 1, page_size: 200, rows: [row("H51", 1), row("C26", -10_000)],
+    });
+    try {
+      const view = render(
+        <DecompositionDemo step={5} meta={{ years: [2020], countries: ["MLT"], sectors: ["H51", "C26"], dataset: null }}
+          primaryYear={2020} primaryCountry="MLT" />,
+      );
+      fireEvent.click(view.getByRole("button", { name: "单个行业" }));
+      await waitFor(() => expect(view.container.textContent).toContain("总量为负，无法算比重"));
+      expect(view.container.textContent).not.toContain("数值太小");
+    } finally {
+      countryRequest.mockRestore();
+      industryRequest.mockRestore();
+    }
+  });
+
   test("a small total, its parts and the sum line agree in the rendered decomposition", async () => {
     const row = {
       country: "BRN", industry: "C10T12", year: 2020,

@@ -3,7 +3,7 @@ import { countryLabel, joinCountries } from "../../../viz";
 import { useHoverTip, type TipLine } from "../../../viz/hover";
 import { CAT } from "../../../viz/shared";
 import { changeReading, finiteValue, NO_RANK, NO_RANK_NOTE, rankText, readingDigits, type YearDistribution } from "./indicator-model";
-import { niceDomain } from "../../../viz/nice-ticks";
+import { integerDomain, niceDomain } from "../../../viz/nice-ticks";
 import { stripNegativeZero } from "../../../format";
 import type { Row } from "./scaffold";
 
@@ -250,9 +250,12 @@ export function IndicatorTrendChart({
   gapNote,
   digits,
   emptyReading,
+  emptyStatus,
 }: {
   /** Replaces "缺失" in the readout where a value is undefined rather than missing (step 9: no outgoing links). */
   emptyReading?: (country: string, year: number) => string | null;
+  /** Replaces the "no valid readings" message when every value is undefined rather than missing (and says why). */
+  emptyStatus?: string;
   rows: Row[];
   countries: string[];
   years: number[];
@@ -299,7 +302,7 @@ export function IndicatorTrendChart({
     ...band.flatMap((item) => [item.p25, item.p75]),
   ];
   if (!series.some((points) => points.some((point) => point.value !== null)))
-    return <p role="status">该指标没有有效读数，请更换国家、行业或年份。</p>;
+    return <p role="status">{emptyStatus ?? "该指标没有有效读数，请更换国家、行业或年份。"}</p>;
   // Shares and amounts keep a zero baseline; lengths (always ≥ 1) and position ratios fit their range,
   // otherwise a band around 4 production stages collapses into a sliver. Position ratios keep 1 in view.
   const positionRatio = metric === "GVCPs" || metric === "Pos_TPL";
@@ -309,7 +312,9 @@ export function IndicatorTrendChart({
   const rawLow = zeroBased ? Math.min(0, ...values) : Math.min(...values, positionRatio ? 1 : Infinity);
   // An all-zero share series (e.g. an untaxed country's X) gets a small 0–1% axis, not 0–100%.
   const allZero = rawLow === 0 && rawHigh === 0;
-  const axis = niceDomain(rawLow, allZero && unit === "%" ? 0.01 : allZero && unit === "个百分点" ? 1 : rawHigh);
+  // Link counts and path lengths (step 9) read as whole numbers, so their ticks sit on integers only.
+  const domain = unit === "连接数" || unit === "路径长度" ? integerDomain : niceDomain;
+  const axis = domain(rawLow, allZero && unit === "%" ? 0.01 : allZero && unit === "个百分点" ? 1 : rawHigh);
   const lo = axis.lo;
   const extent = axis.hi - lo || 1;
   const y = (value: number) => 250 - ((value - lo) / extent) * 210;

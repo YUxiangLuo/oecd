@@ -154,6 +154,21 @@ const median = (arr: number[]) => {
   return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
 };
 
+/** Fewer distinct points than this on a quadrant scatter and its medians and quadrants are not drawn or read. */
+export const MIN_MEDIAN_POINTS = 5;
+
+/**
+ * Why a scatter's medians say nothing, or null when they are drawn: too few points, or too few distinct ones
+ * (66 economies all at 0%, 0% are one position, and every one of them "equals the median"). `noun` counts the
+ * points ("点", or "经济体" on the reading cards).
+ */
+export function medianSkipReason(points: { x: number; y: number }[], noun = "点"): string | null {
+  const distinct = new Set(points.map((point) => `${point.x},${point.y}`)).size;
+  if (distinct >= MIN_MEDIAN_POINTS) return null;
+  if (points.length < MIN_MEDIAN_POINTS) return `图上只有 ${points.length} 个${noun}`;
+  return distinct === 1 ? `图上 ${points.length} 个${noun}的读数相同` : `图上 ${points.length} 个${noun}只有 ${distinct} 个不同位置`;
+}
+
 type LabelBox = { x0: number; x1: number; y0: number; y1: number };
 const boxesOverlap = (a: LabelBox, b: LabelBox) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
@@ -246,9 +261,10 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
   const [x0, x1] = [xAxis.lo, xAxis.hi], [y0, y1] = [yAxis.lo, yAxis.hi];
   const px = (x: number) => m.l + ((tx(x) - x0) / (x1 - x0 || 1)) * (W - m.l - m.r);
   const py = (y: number) => H - m.b - ((y - y0) / (y1 - y0 || 1)) * (H - m.t - m.b);
-  // Medians of a handful of points carry no information (of two points one is always "above"): with fewer
-  // than five economies the reference lines and quadrant labels are left out.
-  const showReference = referencePts.length >= 5;
+  // Medians of a handful of points carry no information (of two points one is always "above"), nor do medians
+  // of points that all sit in one place: then the reference lines and quadrant labels are left out.
+  const skipReference = medianSkipReason(referencePts);
+  const showReference = skipReference === null;
   // The axis title says the x axis is logarithmic; a reading is a plain amount.
   const xTipLabel = xLabel.replace(/，对数）$/, "）").replace(/（对数）$/, "");
   const referenceXs = referencePts.map((p) => p.x);
@@ -346,7 +362,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
       </svg>
       )}
       {equalityLine && pts.length > 0 && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}><span style={{ color: "var(--text-warning)", fontWeight: 700 }}>橙色虚线是等长线（前向 = 后向）</span>：线上方前向 GVC 段更长（GVC 位置指数 &gt; 1，更偏上游）；线下方更偏下游。{showReference && "灰色虚线是中位数，只表示相对高低。"}</div>}
-      {pts.length > 0 && !showReference && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>图上只有 {referencePts.length} 个点，不画中位数和象限。</div>}
+      {pts.length > 0 && !showReference && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>{skipReference}，不画中位数和象限。</div>}
       <ChartDataDisclosure
         label={`${dataLabel ? `${dataLabel} · ` : ""}${yLabel}与${xLabel}散点`}
         columns={[{ key: "entity", label: "对象" }, { key: "x", label: xLabel }, { key: "y", label: yLabel }]}

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { niceDomain } from "./nice-ticks";
+import { integerDomain, niceDomain } from "./nice-ticks";
 
 describe("niceDomain", () => {
   test("rounds a share axis to readable steps instead of max ÷ 4", () => {
@@ -27,5 +27,23 @@ describe("niceDomain", () => {
     expect(niceDomain(-0.37, -0.3).ticks.every((tick) => tick <= 0)).toBe(true);
     expect(niceDomain(3, 3).ticks.length).toBeGreaterThan(1);
     expect(niceDomain(Number.NaN, 1)).toEqual({ lo: 0, hi: 1, ticks: [0, 0.25, 0.5, 0.75, 1] });
+  });
+});
+
+describe("integerDomain", () => {
+  test("whole-number metrics get integer ticks only, never repeated once rounded", () => {
+    // 离心率 between 2 and 3 used to tick at 2, 2.25, 2.5, 2.75, 3 ("2, 2, 3, 3, 3").
+    expect(integerDomain(2, 3).ticks).toEqual([2, 3]);
+    expect(integerDomain(2, 2.5).ticks).toEqual([2, 3]);
+    expect(integerDomain(0, 10).ticks).toEqual([0, 2, 4, 6, 8, 10]);
+    expect(integerDomain(4, 4).ticks.every((tick) => Number.isInteger(tick))).toBe(true);
+  });
+
+  test("keeps the ordinary steps when they are already whole", () => {
+    expect(integerDomain(0, 54).ticks).toEqual(niceDomain(0, 54).ticks);
+    expect(integerDomain(1, 7).ticks.every((tick) => Number.isInteger(tick))).toBe(true);
+    const wide = integerDomain(0, 230);
+    expect(wide.ticks.every((tick) => Number.isInteger(tick))).toBe(true);
+    expect(wide.hi).toBeGreaterThanOrEqual(230);
   });
 });

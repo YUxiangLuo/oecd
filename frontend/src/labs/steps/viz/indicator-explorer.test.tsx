@@ -564,6 +564,97 @@ describe("readouts and update notes follow the chart on screen (round 10)", () =
       expect(cards.textContent).not.toContain("对比国家构成不完整");
       expect(view.getByText(/构成份额无法计算，占比图里不画/)).toBeTruthy();
       expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("为负，构成份额无法计算（不是缺少数据）");
+      // In the 金额 view the card does not send the student to the view they are already in.
+      expect(cards.textContent).toContain("切到“金额”可看各分项");
+      fireEvent.click(view.getByRole("button", { name: "金额" }));
+      await waitFor(() => expect(view.getByLabelText("构成读数").textContent).not.toContain("切到“金额”"));
+      expect(view.getByLabelText("构成读数").textContent).toContain("无法算比重");
     } finally { rows.mockRestore(); schema.mockRestore(); }
+  });
+});
+
+describe("undefined lengths and medians that say nothing (round 11)", () => {
+  // Household production (T): no GVC production in either direction, so every GVC length is undefined.
+  const idleRow = (country: string, year: number, industry = "A") => ({
+    country, industry, year, PLv_GVC: null, PLy_GVC: null, GVCPs: null, "3_VA_GVC": 0, "3_FGY_GVC": 0,
+  });
+
+  test("step 8 names the missing GVC production instead of calling the lengths missing data", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
+    const perCountry = spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => ({
+      rows: [idleRow(country, year)], total: 1, page: 1, page_size: 200,
+    }));
+    const sector = spyOn(api, "industryIndicatorsForIndustry").mockImplementation(async (year, industry) => {
+      const sectorRows = ["CHN", "USA", "DEU", "JPN", "KOR", "FRA"].map((country) => idleRow(country, year, industry));
+      return { rows: sectorRows, total: sectorRows.length, page: 1, page_size: 200 };
+    });
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = setup(LengthVizStep);
+      await view.findByRole("button", { name: "前后向位置" });
+      fireEvent.click(view.getByRole("button", { name: "历年变化" }));
+      fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
+      const material = view.getByRole("region", { name: "报告材料" });
+      await waitFor(() => expect(material.textContent).toContain("该行业没有 GVC 生产（GVC 增加值为 0），前向 GVC 段长度无法计算（不是缺少数据）"));
+      expect(material.textContent).not.toContain("缺少数据（缺少的数据留空");
+      // The empty chart says why in its place; the readings summary does not call the gaps missing.
+      const chartStatus = view.getAllByRole("status").find((node) => node.textContent?.includes("没有 GVC 生产") && !material.contains(node));
+      expect(chartStatus?.textContent).toContain("（不是缺少数据）；请换一个行业或国家。");
+      expect(view.container.textContent).not.toContain("该指标没有有效读数");
+      expect(view.getByText(/核对当前图表读数 · 0 条/).textContent).toContain("无法计算的读数留空");
+
+      // 定位图 of the same industry: no economy has a point, the cards say why, and no median is named.
+      fireEvent.click(view.getByRole("button", { name: "定位图" }));
+      const cards = await view.findByLabelText("定位读数");
+      await waitFor(() => expect(cards.textContent).toContain("该行业没有 GVC 生产（GVC 增加值为 0），前向 GVC 段长度无法计算（不是缺少数据）"));
+      expect(cards.textContent).toContain("没有后向 GVC 生产（最终品中的 GVC 增加值为 0），后向 GVC 段长度无法计算");
+      expect(cards.textContent).not.toContain("缺少其中一项");
+      expect(view.container.textContent).not.toContain("灰色虚线是图上各经济体的中位数");
+    } finally { rows.mockRestore(); perCountry.mockRestore(); sector.mockRestore(); schema.mockRestore(); }
+  });
+
+  test("定位图 names a backward GVC length that is undefined while the forward one is not (MLT B09)", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
+    const sector = spyOn(api, "industryIndicatorsForIndustry").mockImplementation(async (year, industry) => {
+      const sectorRows = ["CHN", "USA", "DEU", "JPN", "KOR", "FRA"].map((country, i) => (country === "CHN"
+        ? { country, industry, year, PLv_GVC: 5.6, PLy_GVC: null, GVCPs: null, "3_VA_GVC": 1.67, "3_FGY_GVC": 0 }
+        : { country, industry, year, PLv_GVC: 3 + i / 10, PLy_GVC: 3.5 - i / 10, GVCPs: (3 + i / 10) / (3.5 - i / 10), "3_VA_GVC": 10, "3_FGY_GVC": 8 }));
+      return { rows: sectorRows, total: sectorRows.length, page: 1, page_size: 200 };
+    });
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = setup(LengthVizStep);
+      await view.findByRole("button", { name: "前后向位置" });
+      fireEvent.click(view.getByRole("button", { name: "定位图" }));
+      await view.findByLabelText("定位读数");
+      fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
+      await waitFor(() => expect(view.getByLabelText("定位读数").textContent).toContain("该行业没有后向 GVC 生产（最终品中的 GVC 增加值为 0），后向 GVC 段长度无法计算（不是缺少数据）"));
+      const cards = view.getByLabelText("定位读数").textContent ?? "";
+      expect(cards).not.toContain("前向 GVC 段长度无法计算");
+      expect(cards).not.toContain("缺少其中一项");
+    } finally { rows.mockRestore(); sector.mockRestore(); schema.mockRestore(); }
+  });
+
+  test("定位图 where every economy sits at the same point draws and reads no medians", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
+    const sector = spyOn(api, "industryIndicatorsForIndustry").mockImplementation(async (year, industry) => {
+      const sectorRows = ["CHN", "USA", "DEU", "JPN", "KOR", "FRA"].map((country) => ({ country, industry, year, PLv_GVC: 2, PLy_GVC: 2, "3_VA_GVC": 1, "3_FGY_GVC": 1 }));
+      return { rows: sectorRows, total: sectorRows.length, page: 1, page_size: 200 };
+    });
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = setup(LengthVizStep);
+      await view.findByRole("button", { name: "前后向位置" });
+      fireEvent.click(view.getByRole("button", { name: "定位图" }));
+      await view.findByLabelText("定位读数");
+      // At country scope the two economies are too few for a median.
+      expect(view.getByLabelText("定位读数").textContent).toContain("图上只有 2 个经济体，不比较中位数");
+      fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
+      await waitFor(() => expect(view.getByLabelText("定位读数").textContent).toContain("图上 6 个经济体的读数相同，不比较中位数"));
+      expect(view.getByLabelText("定位读数").textContent).not.toContain("等于中位数");
+      expect(view.getByText(/图上 6 个点的读数相同，不画中位数和象限。/)).toBeTruthy();
+      expect(view.container.textContent).not.toContain("前后向均较高");
+      expect(view.container.textContent).not.toContain("灰色虚线是图上各经济体的中位数");
+    } finally { rows.mockRestore(); sector.mockRestore(); schema.mockRestore(); }
   });
 });
