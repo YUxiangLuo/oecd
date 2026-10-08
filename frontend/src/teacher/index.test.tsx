@@ -30,7 +30,7 @@ test("each teacher tab titles the window, and the students table explains 最近
     const header = screen.getByRole("columnheader", { name: "最近操作" });
     expect(header.getAttribute("title")).toBe(VALID_ACTIVITY_HINT);
     expect(document.getElementById(header.getAttribute("aria-describedby")!)?.textContent).toContain(VALID_ACTIVITY_HINT);
-    expect((await screen.findByText(row.display_name)).className).toContain("student-name-cell");
+    expect((await screen.findByText(row.display_name)).closest("td")?.className).toContain("student-name-cell");
 
     fireEvent.click(screen.getByRole("button", { name: /学期与班级/ }));
     expect(document.title).toBe("学期与班级 · 教师工作台 · 供应链仿真系统 · GVC Simulation Lab");

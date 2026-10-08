@@ -8,7 +8,7 @@ import { Modal, StatusPill, useModalErrorFocus } from "./ui";
 
 export const ROSTER_MAX_ROWS = 200;
 
-export type RosterSeparator = "tab" | "comma" | "spaces";
+export type RosterSeparator = "tab" | "comma" | "spaces" | "space";
 
 const SEPARATOR_PATTERNS: Record<RosterSeparator, RegExp> = {
   tab: /\t/,
@@ -16,17 +16,22 @@ const SEPARATOR_PATTERNS: Record<RosterSeparator, RegExp> = {
   comma: /[,，]/,
   // Two or more spaces between the columns; a single space may sit inside a name.
   spaces: /[ 　]{2,}/,
+  // A single space, only when every line is exactly two words ("0012 张三").
+  space: /[ 　]+/,
 };
 
 /**
  * The column separator of a pasted roster, decided once for the whole text: tab (copied from Excel), then
- * comma (CSV, half- or full-width), then two or more spaces. Null when no line has any of them.
+ * comma (CSV, half- or full-width), then two or more spaces, then a single space when every line is exactly
+ * two words. Null otherwise.
  */
 export function detectRosterSeparator(lines: readonly string[]): RosterSeparator | null {
   const trimmed = lines.map(stripInvisibleEdges);
   if (trimmed.some((line) => line.includes("\t"))) return "tab";
   if (trimmed.some((line) => SEPARATOR_PATTERNS.comma.test(line))) return "comma";
   if (trimmed.some((line) => /\S[ 　]{2,}\S/.test(line))) return "spaces";
+  const filled = trimmed.filter(Boolean);
+  if (filled.length && filled.every((line) => /^\S+[ 　]+\S+$/.test(line))) return "space";
   return null;
 }
 

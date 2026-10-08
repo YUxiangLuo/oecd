@@ -262,7 +262,9 @@ export function StudentRowMenu({
 /** Mark the table region while columns are hidden under the sticky 操作 column, so it can cast a shadow. */
 function markHiddenColumns(region: HTMLElement | null | undefined) {
   if (!region) return;
-  region.dataset.moreRight = region.scrollLeft + region.clientWidth < region.scrollWidth - 1 ? "true" : "false";
+  // The scrollbar gutter can count toward scrollWidth without being reachable by scrolling; leave it out.
+  const gutter = Math.max(0, region.offsetWidth - region.clientWidth);
+  region.dataset.moreRight = region.scrollLeft + region.clientWidth < region.scrollWidth - 1 - gutter ? "true" : "false";
 }
 
 export function StudentsTab({ onOpenReport }: {
@@ -356,7 +358,7 @@ export function StudentsTab({ onOpenReport }: {
             <tbody>
               {students.map((student) => (
                 <tr key={student.id}>
-                  <td className="student-name-cell">{student.display_name}</td>
+                  <td className="student-name-cell" title={student.display_name}><span className="clamp-2">{student.display_name}</span></td>
                   <td className="mono">{student.username}</td>
                   <td className="student-no-cell" title={student.student_no || undefined}>{student.student_no || "—"}</td>
                   <td className="class-memberships">{student.enrollments.length

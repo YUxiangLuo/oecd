@@ -15,7 +15,7 @@ test("Excel roster preserves leading zeros, Unicode and spaces within names", ()
 });
 
 test("rejects duplicates, missing cells, extra columns and oversized rosters", () => {
-  for (const input of ["", "12\t张三\n12\t李四", "12\t", "\t李四", "12 张三", "12\t张三\t第三列", "非法\t姓名"])
+  for (const input of ["", "12\t张三\n12\t李四", "12\t", "\t李四", "12 张 三", "12\t张三\t第三列", "非法\t姓名"])
     expect(() => parseRoster(input)).toThrow();
   expect(parseRoster(Array.from({ length: 200 }, (_, i) => `s${i}\t姓名`).join("\n"))).toHaveLength(200);
   expect(() => parseRoster(Array.from({ length: 201 }, (_, i) => `s${i}\t姓名`).join("\n"))).toThrow();
@@ -130,12 +130,17 @@ test("a refused creation can be edited again; preview and back-to-edit move focu
   }
 });
 
-test("detects tab, comma, full-width comma and two-or-more-space separators", () => {
+test("detects tab, comma, full-width comma and space separators", () => {
   expect(detectRosterSeparator(["0012\t张三"])).toBe("tab");
   expect(detectRosterSeparator(["0012,张三"])).toBe("comma");
   expect(detectRosterSeparator(["0012，张三"])).toBe("comma");
   expect(detectRosterSeparator(["0012   张三"])).toBe("spaces");
-  expect(detectRosterSeparator(["0012 张三"])).toBeNull();
+  // A single space counts only when every line is exactly two words; otherwise a name may hold the space.
+  expect(detectRosterSeparator(["0012 张三", "0013 李四"])).toBe("space");
+  expect(detectRosterSeparator(["0012 张三", "0013 Li Si"])).toBeNull();
+  expect(parseRoster("学号 姓名\n0012 张三\n0013 李四")).toEqual([
+    { username: "0012", display_name: "张三" }, { username: "0013", display_name: "李四" },
+  ]);
   // A tab anywhere wins: names with commas or spaces stay whole.
   expect(detectRosterSeparator(["0012\t张 三", "0013\t李,四"])).toBe("tab");
   const expected = [{ username: "0012", display_name: "张三" }, { username: "0013", display_name: "李 四" }];
@@ -154,7 +159,7 @@ test("any line naming 学号 and 姓名 is a header, and 姓名 first swaps the 
 });
 
 test("one message when every line lacks its two columns, line numbers otherwise", () => {
-  expect(() => parseRoster("学号 姓名\n0012 张三\n0013 李四\n0014 王五")).toThrow(new Error(ROSTER_COLUMNS_MISSING));
+  expect(() => parseRoster("学号 姓名\n0012 张 三\n0013 李 四\n0014 王 五")).toThrow(new Error(ROSTER_COLUMNS_MISSING));
   expect(() => parseRoster("0012\t张三\n0013 李四")).toThrow(new Error("第 2 行：需要学号和姓名两列"));
   expect(() => parseRoster(`0012\t${"名".repeat(61)}`)).toThrow(new Error("第 1 行：姓名不能超过 60 字"));
 });

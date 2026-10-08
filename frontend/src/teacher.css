@@ -298,6 +298,7 @@
 .batch-preview { max-height: 240px; flex-shrink: 0; }
 .batch-preview .batch-name-cell { max-width: 16em; overflow: hidden; text-overflow: ellipsis; }
 .batch-preview tr.batch-row-conflict td { background: #fdf6e7; }
+.batch-preview tr.batch-row-conflict .status-pill { border: 1px solid #e3b35b; }
 .field-hint { margin: -8px 0 13px; font-size: 11.5px; line-height: 1.5; color: var(--text-muted); }
 .enrollment-rule { margin-top: -4px; }
 
@@ -313,7 +314,8 @@
 .grade-side { position: sticky; top: calc(var(--dash-header-h, 88px) + 8px); }
 .grade-side .grade-panel {
   display: flex; flex-direction: column; padding: 0; overflow: hidden;
-  max-height: calc(var(--teacher-pane-h, calc(100vh - 56px)) - var(--dash-header-h, 88px) - 24px);
+  /* Also leave room for the review top bar above it, so the card's foot is inside the window before it sticks. */
+  max-height: calc(var(--teacher-pane-h, calc(100vh - 56px)) - var(--dash-header-h, 88px) - 24px - 52px);
 }
 .grade-panel-head { flex: none; padding: 14px 18px 10px; border-bottom: 1px solid #eef0f5; }
 .grade-panel-head h3.panel-head { margin-bottom: 4px; }
