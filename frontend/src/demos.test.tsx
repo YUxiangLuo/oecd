@@ -221,6 +221,29 @@ describe("the unavailable step 4 split names undefined parts as such (round 12)"
     expect(unavailableTotalNote(model("missing-fields", 2), cfg)).toBeNull();
   });
 
+  test("LUX B09 2020: FGY = 0 is structural, so the PLy heading reads 无法拆分, not 暂时无法拆分 (round 13)", async () => {
+    const row = {
+      country: "LUX", industry: "B09", year: 2020,
+      SVA: 0, FGY: 0, PLv: null, PLy: null, "1_VA_D": 0, "2_VA_RT": 0, "3_VA_GVC": 0,
+      "1_FGY_D": 0, "2_FGY_RT": 0, "3_FGY_GVC": 0, PLv_D: null, PLv_RT: null, PLv_GVC: null,
+      PLy_D: null, PLy_RT: null, PLy_GVC: null, GVCPs: null,
+    };
+    const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockResolvedValue([{ ...row, industry: null }]);
+    const industryRequest = spyOn(api, "industryIndicatorsAll").mockResolvedValue({ total: 1, page: 1, page_size: 200, rows: [row] });
+    try {
+      const view = render(
+        <DecompositionDemo step={6} meta={{ years: [2020], countries: ["LUX"], sectors: ["B09"], dataset: null }}
+          primaryYear={2020} primaryCountry="LUX" />,
+      );
+      await waitFor(() => expect(view.container.textContent).toContain("后向 PLy · 无法拆分"));
+      expect(view.container.textContent).not.toContain("暂时无法拆分");
+      expect(view.container.textContent).toContain("FGY 为 0（没有这类活动）");
+    } finally {
+      countryRequest.mockRestore();
+      industryRequest.mockRestore();
+    }
+  });
+
   test("MLT H51: a negative SVA leaves PLv defined and says so", () => {
     expect(unavailableTotalNote(model("negative-weight-denominator", 2.1310588), cfg)).toBe(
       "前向总生产长度 PLv = 2.131 仍有定义：总长度由投入产出关系直接算出，不需要份额；无法计算的只是按 SVA 份额加权的各段贡献，所以这里只是拆不开。",

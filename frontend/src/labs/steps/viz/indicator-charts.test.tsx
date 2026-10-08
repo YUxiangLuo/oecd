@@ -154,6 +154,19 @@ describe("trend chart axis and empty state", () => {
     expect(ticks.every((tick) => /^\d+$/.test(tick ?? ""))).toBe(true);
   });
 
+  test("an all-zero amount series (step 9 加权总度 of T) reads a single 0 tick, not 0.25 / 0.5 / 0.75", () => {
+    const rows: Row[] = [2018, 2019, 2020].flatMap((year) => [
+      { country: "CHN", year, "weighted degree": 0 },
+      { country: "USA", year, "weighted degree": 0 },
+    ]);
+    const view = render(
+      <IndicatorTrendChart rows={rows} countries={["CHN", "USA"]} years={[2018, 2019, 2020]} metric="weighted degree" label="加权总度"
+        unit="百万美元" mode="context" distribution={countryDistribution(rows, "weighted degree", [2018, 2019, 2020])} />,
+    );
+    const ticks = [...view.container.querySelectorAll('svg text[x="100"]')].map((node) => node.textContent);
+    expect(ticks).toEqual(["0"]);
+  });
+
   test("an undefined series says why in place of the missing-data message", () => {
     const rows: Row[] = [{ country: "CHN", year: 2020, PLv_GVC: null }];
     const view = render(

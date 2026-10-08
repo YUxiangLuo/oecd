@@ -405,13 +405,19 @@ export function unavailableTotalNote(model: DecompositionModel, cfg: Pick<Decomp
   return `${cfg.totalLabel} = ${fmt(model.total, cfg.unit)} 仍有定义：总长度由投入产出关系直接算出，不需要份额；无法计算的只是按 ${cfg.weightTotal} 份额加权的各段贡献，所以这里只是拆不开。`;
 }
 
+/** Only missing data can change later ("暂时无法拆分"); a weight of 0 or below (LUX B09: FGY = 0, no final goods) is
+ * structural, so its heading reads plain 无法拆分. */
+function missingDataReason(model: DecompositionModel): boolean {
+  return model.reason === "missing-fields" || model.reason === "nonfinite-calculation";
+}
+
 function MiniBackwardBar({ row }: { row: Row }) {
   const model = buildDecompositionModel(row, PLY_DECOMP);
   const position = finiteNumber(row.GVCPs);
   if (model.status !== "valid" || !model.values || model.total == null || model.sum == null || model.error == null) {
     return (
       <div className="decomp-unavailable" role="status" style={{ marginTop: 14 }}>
-        <b>后向 PLy · 暂时无法拆分</b>
+        <b>后向 PLy · {missingDataReason(model) ? "暂时无法拆分" : "无法拆分"}</b>
         <div>{decompositionModelReason(model, "FGY")}</div>
         <div>PLy = {model.total == null ? "—（无法计算）" : fmt(model.total, "number")}；GVCPs = {position?.toFixed(3) ?? "—（无法计算）"}</div>
         <div>{PLY_DECOMP.parts.map((part, index) => (

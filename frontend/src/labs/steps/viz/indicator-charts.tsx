@@ -358,7 +358,11 @@ export function IndicatorTrendChart({
   const allZero = rawLow === 0 && rawHigh === 0;
   // Link counts and path lengths (step 9) read as whole numbers, so their ticks sit on integers only.
   const domain = unit === "连接数" || unit === "路径长度" ? integerDomain : niceDomain;
-  const axis = domain(rawLow, allZero && unit === "%" ? 0.01 : allZero && unit === "个百分点" ? 1 : rawHigh);
+  // Any other all-zero series (step 9 加权总度 of T, an industry with no flows) reads a single 0 tick: quarter ticks
+  // (0.25, 0.5…) would suggest amounts the data never take.
+  const axis = allZero && unit !== "%" && unit !== "个百分点"
+    ? { lo: 0, hi: 1, ticks: [0] }
+    : domain(rawLow, allZero && unit === "%" ? 0.01 : allZero && unit === "个百分点" ? 1 : rawHigh);
   const lo = axis.lo;
   const extent = axis.hi - lo || 1;
   const y = (value: number) => 250 - ((value - lo) / extent) * 210;

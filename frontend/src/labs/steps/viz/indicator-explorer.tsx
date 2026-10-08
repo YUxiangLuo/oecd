@@ -282,13 +282,41 @@ export function IndicatorExplorer({
   const rankGapsUndefined = rankGaps.every((gap) => gap.empty.every((item) => item.reason));
   // "O 公共管理与国防：KHM 柬埔寨 与 BRN 文莱该行业总出口为 0，国内增加值出口占比无法计算（不是缺少数据）"; a long list
   // (全部行业) names the first three.
-  const rankGapText = rankGaps.slice(0, 3).map((gap) => {
+  const rankGapItems = rankGaps.map((gap) => {
     const reasons = [...new Set(gap.empty.map((item) => item.reason))];
     return `${sectorLabel(gap.sector)}：${reasons.map((reason) => {
       const countries = joinCountries(gap.empty.filter((item) => item.reason === reason).map((item) => item.country));
       return reason ? `${countries}${reason}，${label(metric)}无法计算（不是缺少数据）` : `${countries}缺少数据`;
     }).join("；")}`;
-  }).join("；") + (rankGaps.length > 3 ? `等 ${rankGaps.length} 个行业` : "");
+  });
+  const rankGapText = rankGapItems.slice(0, 3).join("；") + (rankGaps.length > 3 ? `等 ${rankGaps.length} 个行业` : "");
+  // The short text names three; the full list stays one click away.
+  const rankGapList = rankGaps.length > 3 && (
+    <details className="rank-gap-list">
+      <summary>查看全部 {rankGaps.length} 个行业</summary>
+      <ul>{rankGapItems.map((item) => <li key={item}>{item}</li>)}</ul>
+    </details>
+  );
+  // Industries where country A itself has no reading cannot be placed in A's order, so the ranking leaves them out
+  // (LUX: A03, B05_06, B09, C19 and T export nothing). With the whole list on screen, name them and say why, as
+  // 行业结构 does; in 前 10 个 they would not have made the list anyway.
+  const rankHidden = view === "industry"
+    ? rows.filter((row) => row.country === first && row.year === year && row.industry != null && !finiteValue(row[metric]))
+        .map((row) => String(row.industry))
+    : [];
+  const rankHiddenNote = (() => {
+    const rankable = rows.filter((row) => row.country === first && row.year === year && row.industry != null && finiteValue(row[metric])).length;
+    if (!rankHidden.length || rankable > limit) return null;
+    const groups = new Map<string, string[]>();
+    for (const sector of rankHidden) {
+      const reason = undefinedReason(first, metric, year, sector)?.replace(/^该行业/, "") ?? "";
+      groups.set(reason, [...(groups.get(reason) ?? []), sector]);
+    }
+    const clauses = [...groups].map(([reason, sectors]) => reason
+      ? `${sectors.join("、")} ${reason}，${label(metric)}无法计算（不是缺少数据）`
+      : `${sectors.join("、")} 缺少数据`);
+    return `另有 ${rankHidden.length} 个行业没有画出：国家 A（${countryLabel(first)}）在这些行业没有读数，无法排序。${clauses.join("；")}。`;
+  })();
   const pending =
     view === "industry"
       ? rankComplete.flatMap((row) =>
@@ -474,12 +502,19 @@ export function IndicatorExplorer({
   const chartKey = [view, industry, metric, axes.key, side, start, end, year, limit, trail, amountMode, selected.join(",")].join("|");
   // Notes for values that cannot be computed (zero exports, no GVC production), shown under the trend,
   // comparison and 前后向位置 charts.
-  const notesFor = (key: string) => selected.flatMap((country) => {
-    const at = (timeView ? chartYears : [year]).filter((value) => undefinedReason(country, key, value));
-    if (!at.length) return [];
-    const when = timeView ? (at.length === chartYears.length ? "在所选年份" : ` ${at.join("、")} 年`) : "";
-    return [`${countryLabel(country)}${when}${undefinedReason(country, key, at[0])}，${label(key)}无法计算`];
-  });
+  // Economies sharing the same years and reason share one sentence ("BRN 文莱、KHM 柬埔寨…在所选年份该行业…"), so
+  // step 8 with T and five economies does not repeat the same sentence five times.
+  const notesFor = (key: string) => {
+    const groups = new Map<string, string[]>();
+    for (const country of selected) {
+      const at = (timeView ? chartYears : [year]).filter((value) => undefinedReason(country, key, value));
+      if (!at.length) continue;
+      const when = timeView ? (at.length === chartYears.length ? "在所选年份" : ` ${at.join("、")} 年`) : "";
+      const clause = `${when}${undefinedReason(country, key, at[0])}，${label(key)}无法计算`;
+      groups.set(clause, [...(groups.get(clause) ?? []), country]);
+    }
+    return [...groups].map(([clause, countries]) => `${joinCountries(countries)}${clause}`);
+  };
   // A trend with no economy computable in any year draws nothing: the chart says why in its place, so the note
   // below is not repeated.
   const allUndefined = (key: string) => timeView && selected.every((country) => chartYears.every((at) => undefinedReason(country, key, at)));
@@ -1184,8 +1219,12 @@ export function IndicatorExplorer({
                   />
                 )}
               </ScrollableRegion>
+              {rankHiddenNote && <p className="muted">{rankHiddenNote}</p>}
               {rankGaps.length > 0 && rankComplete.length > 0 && (
+                <>
                 <p className="muted">{rankGapText}。这些行业照常显示，但不记入报告材料：报告材料只记所有所选国家都有读数的 {rankComplete.length} 个行业。</p>
+                {rankGapList}
+                </>
               )}
               <ReadingCards label="行业读数" cards={industryCards({ groups: rankGroups, countries: selected, label: label(metric), unit: unit(metric) })} />
             </>
@@ -1196,9 +1235,10 @@ export function IndicatorExplorer({
           {view !== "positioning" && view !== "structure" && <details className="technical-details">
             <summary>
               {/* Readings that are undefined (zero exports, no GVC production) are not missing data. */}
-              核对当前图表读数 · {pending.length} 条（{rankGaps.length
-                ? rankGapsUndefined ? "有国家无法计算的行业不记入" : "有国家缺少或无法计算读数的行业不记入"
-                : missingOnlyUndefined ? "无法计算的读数留空" : "缺失留空"}）
+              {/* The suffix only when some reading is actually blank; a complete chart reads just its count. */}
+              核对当前图表读数 · {pending.length} 条{rankGaps.length
+                ? `（${rankGapsUndefined ? "有国家无法计算的行业不记入" : "有国家缺少或无法计算读数的行业不记入"}）`
+                : pending.length < expectedCount ? `（${missingOnlyUndefined ? "无法计算的读数留空" : "缺失留空"}）` : ""}
             </summary>
             {table(pending)}
           </details>}
@@ -1223,6 +1263,7 @@ export function IndicatorExplorer({
               ? `${MATERIAL_LOCKED_NOTE}${matches ? "当前图表就是已记录的材料。" : ""}`
               : matches ? "当前图表已自动记录为本步报告材料；换视角、国家或年份后会自动更新为最后查看的完整图表。" : "正在记录当前图表…"}
         </p>
+        {validYears && !canSave && view === "industry" && !rankComplete.length && rankGapList}
         {state.materialLocked && canSave && !matches && (
           <button type="button" className="secondary" onClick={() => recordCurrent(true)}>{MATERIAL_LOCKED_ACTION}</button>
         )}

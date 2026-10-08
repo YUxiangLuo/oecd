@@ -574,17 +574,31 @@ describe("readouts and update notes follow the chart on screen (round 10)", () =
   });
 });
 
+test("a complete chart's readings summary has no blank-reading suffix (round 13)", async () => {
+  const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
+  const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+  try {
+    const view = setup();
+    await view.findByRole("button", { name: "出口构成" });
+    fireEvent.click(view.getByRole("button", { name: "历年变化" }));
+    const summary = await view.findByText(/核对当前图表读数 · \d+ 条/);
+    await waitFor(() => expect(summary.textContent).toMatch(/核对当前图表读数 · [1-9]\d* 条$/));
+    expect(summary.textContent).not.toContain("留空");
+  } finally { rows.mockRestore(); schema.mockRestore(); }
+});
+
 describe("行业排名 with an industry that exports nothing (round 12)", () => {
   // USA plays KHM: its O exports are 0, so its O shares are undefined, not missing.
-  const industryRows = (country: string, year: number, industries: string[]) => industries.map((industry) => (
-    country === "USA" && industry === "O"
+  const usaO = (country: string, industry: string) => country === "USA" && industry === "O";
+  const industryRows = (country: string, year: number, industries: string[], zero = usaO) => industries.map((industry) => (
+    zero(country, industry)
       ? { country, industry, year, gross_exports: 0, FVA: 0, DVAex: 0, DVArt: 0, DDC: 0, FDC: 0, taxsub: 0 }
       : { country, industry, year, gross_exports: 100, FVA: industry === "A" ? 20 : 10, DVAex: industry === "A" ? 70 : 80, DVArt: 2, DDC: 2, FDC: 4, taxsub: 2 }));
 
-  const open = async (industries: string[]) => {
+  const open = async (industries: string[], zero = usaO) => {
     const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
     const perCountry = spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => {
-      const page = industryRows(country as string, year, industries);
+      const page = industryRows(country as string, year, industries, zero);
       return { rows: page, total: page.length, page: 1, page_size: 200 };
     });
     const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
@@ -606,6 +620,28 @@ describe("行业排名 with an industry that exports nothing (round 12)", () => 
       const recorded = view.saves.at(-1)!.observations ?? [];
       expect(recorded.map((item) => [item.country, item.industry])).toEqual([["CHN", "A"], ["USA", "A"]]);
       expect(view.getByRole("region", { name: "报告材料" }).textContent).not.toContain("暂不能记录");
+    } finally { restore(); }
+  });
+
+  test("country A's own undefined rows are named under the ranking instead of vanishing (round 13)", async () => {
+    // CHN plays LUX / CHN: its O exports are 0, so O cannot be placed in A's order.
+    const { view, restore } = await open(["A", "O"], (country, industry) => country === "CHN" && industry === "O");
+    try {
+      const plot = await view.findByRole("region", { name: "国内增加值出口占比行业点图" });
+      await waitFor(() => expect(plot.textContent).toContain("A →"));
+      expect(plot.textContent).not.toContain("O ");
+      expect(view.getByText("另有 1 个行业没有画出：国家 A（CHN 中国）在这些行业没有读数，无法排序。O 总出口为 0，国内增加值出口占比无法计算（不是缺少数据）。")).toBeTruthy();
+    } finally { restore(); }
+  });
+
+  test("more than three unrecorded rows: the note names three, the full list opens below it (round 13)", async () => {
+    const { view, restore } = await open(["A", "B", "C", "D", "E"], (country, industry) => country === "USA" && industry !== "A");
+    try {
+      await view.findByRole("region", { name: "国内增加值出口占比行业点图" });
+      await waitFor(() => expect(view.getByText(/等 4 个行业。这些行业照常显示/)).toBeTruthy());
+      const list = view.getByText("查看全部 4 个行业").closest("details")!;
+      expect(list.querySelectorAll("li")).toHaveLength(4);
+      expect(list.textContent).toContain("E ");
     } finally { restore(); }
   });
 
@@ -682,6 +718,25 @@ describe("undefined lengths and medians that say nothing (round 11)", () => {
       expect(cards.textContent).not.toContain("缺少其中一项");
       expect(view.container.textContent).not.toContain("灰色虚线是图上各经济体的中位数");
     } finally { rows.mockRestore(); perCountry.mockRestore(); sector.mockRestore(); schema.mockRestore(); }
+  });
+
+  test("step 8 with T: economies sharing one reason share one sentence (round 13)", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
+    const perCountry = spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => ({
+      rows: [idleRow(country as string, year)], total: 1, page: 1, page_size: 200,
+    }));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = setup(LengthVizStep);
+      await view.findByRole("button", { name: "前后向位置" });
+      fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
+      const material = view.getByRole("region", { name: "报告材料" });
+      await waitFor(() => expect(material.textContent).toContain("没有 GVC 生产"));
+      const charts = view.getAllByRole("status").filter((node) => !material.contains(node) && node.textContent?.includes("无法计算"));
+      const text = charts.map((node) => node.textContent).join("\n");
+      expect(text).toContain("CHN 中国 与 USA 美国在所选年份该行业没有 GVC 生产（GVC 增加值为 0），前向 GVC 段长度无法计算（不是缺少数据）");
+      expect(text).not.toContain("；USA 美国在所选年份");
+    } finally { rows.mockRestore(); perCountry.mockRestore(); schema.mockRestore(); }
   });
 
   test("定位图 names a backward GVC length that is undefined while the forward one is not (MLT B09)", async () => {

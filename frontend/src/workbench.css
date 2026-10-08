@@ -83,6 +83,10 @@
 .comparison-facet { min-width: 0; padding: 11px; border: 1px solid #e1e5ee; border-radius: 10px; background: #fbfcff; }
 .comparison-facet h4 { margin: 0 0 8px; }
 .technical-details > summary { cursor: pointer; color: #4b47e0; font-weight: 700; }
+/* 行业排名: the full list behind "…等 N 个行业". */
+.rank-gap-list { margin: -4px 0 8px; color: var(--text-muted); font-size: 12px; }
+.rank-gap-list > summary { cursor: pointer; color: #4b47e0; }
+.rank-gap-list ul { margin: 6px 0 0; padding-left: 18px; }
 .reg-run-card { box-shadow: 0 5px 18px rgba(35,39,60,.06); }
 .reg-run-card h3 { margin: 5px 0 8px; font-size: 18px; line-height: 1.45; }
 .reg-run-card .run-btn { min-width: 240px; min-height: 42px; font-size: 14px; }
