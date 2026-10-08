@@ -35,9 +35,8 @@ describe("indicator PDF reading library", () => {
     });
     expect(view.queryByLabelText(/PDF 预览/)).toBeNull();
     expect(view.getByText("4 篇 PDF · 课程说明、原始方法资料与论文")).toBeTruthy();
-    expect(view.getByText(/当前 OECD ICIO 2023 edition（2016–2020）/)).toBeTruthy();
-    expect(view.getByText(/历史资料中的年份不代表本系统的数据范围/)).toBeTruthy();
-    expect(view.getByText(/原始资料沿用原文件编号，与课程步骤编号不同/)).toBeTruthy();
+    expect(view.getByText(/OECD ICIO 2023 版，2016–2020 年/)).toBeTruthy();
+    expect(view.getByText(/原始资料里的年份和编号与本课程不同/)).toBeTruthy();
 
     act(() => {
       details.open = true;

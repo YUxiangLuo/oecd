@@ -23,7 +23,7 @@ describe("student-facing chart copy", () => {
     const html = renderToStaticMarkup(<NetworkIndicatorStep meta={meta} step={step} state={state} />);
     expect(html).toContain("当前数据网络");
     expect(html).toContain("该国全部行业");
-    expect(html).toContain("未做边阈值敏感性分析");
+    expect(html).toContain("介数把很小和很大的流量一视同仁");
     expect(html).not.toMatch(/真实全球图|真实图|45 个行业|原生排序选择器/);
   });
 

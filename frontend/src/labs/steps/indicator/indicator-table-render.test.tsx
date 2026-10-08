@@ -93,7 +93,7 @@ describe("indicator table semantics", () => {
     expect(html.match(/scope="col"/g)).toHaveLength(4);
     expect(html.match(/scope="row"/g)).toHaveLength(1);
     expect(html).toContain('aria-label="国家 CHN 中国；行业 A');
-    expect(html).toMatch(/<th[^>]*scope="row"[^>]*style="position:sticky;left:0;z-index:2;background:#fff"[^>]*>CHN<\/th>/);
+    expect(html).toMatch(/<th[^>]*scope="row"[^>]*style="position:sticky;left:0;z-index:2;background:#fff"[^>]*>CHN 中国<\/th>/);
     expect(html).toContain("-13");
     expect(html).toContain("外国增加值 ⓘ");
   });
@@ -135,7 +135,7 @@ describe("network table sort scope", () => {
         onPage={noop}
       />,
     );
-    expect(html).toContain("行业排序（仅单国完整结果）");
+    expect(html).toContain("行业排序（先选一个国家）");
     expect(html).toMatch(/<select[^>]*disabled=""[^>]*>/);
     expect(html).toContain("选择“全部”时按默认顺序分页显示");
     expect(html).not.toContain("全球排名第");
@@ -163,10 +163,10 @@ describe("network table sort scope", () => {
       />,
     );
     expect(html).toContain("单国行业排序");
-    expect(html).toContain("介数降序（全正边二值网络）");
-    expect(html).toContain("加权度降序（加权总度，入+出）");
+    expect(html).toContain("按介数从高到低");
+    expect(html).toContain("按加权总度从高到低");
     expect(html).toContain("排序只改变显示顺序，不改变指标数值");
-    expect(html).not.toContain("行业排序（仅单国完整结果）");
+    expect(html).not.toContain("行业排序（先选一个国家）");
   });
 
 });

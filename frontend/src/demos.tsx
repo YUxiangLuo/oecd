@@ -21,7 +21,7 @@ import {
   finiteNumber,
   type DecompositionModel,
 } from "./decomposition-model";
-import { cjkJoin, formatMetric, stripNegativeZero } from "./format";
+import { cjkJoin, cjkSpace, formatMetric, stripNegativeZero } from "./format";
 import { api } from "./api";
 import { AsyncStateMessage, type AsyncStatus, useAsync } from "./labs/shared";
 import { userFacingRequestError } from "./user-facing-error";
@@ -37,10 +37,14 @@ type Part = {
   label: string;
   color: string;
   desc: string;
+  /** Plain name for the formula line; without it the line shows the code (the label's first word). */
+  short?: string;
   /** 加权模式:分项贡献 = row[key] × row[weightKey] / row[weightTotal](见步骤4) */
   weightKey?: string;
 };
 type DecompCfg = {
+  /** Heading of the hands-on card. */
+  title: string;
   total: string;
   totalLabel: string;
   unit: "amount" | "number";
@@ -52,44 +56,47 @@ type DecompCfg = {
 
 const DECOMP: Record<number, DecompCfg> = {
   4: {
+    title: "各分项的金额、占比与含义",
     total: "gross_exports",
     totalLabel: "总出口",
     unit: "amount",
     parts: [
-      { key: "DVAex", label: "DVAex 国内增加值出口", color: "#4b47e0", desc: "出口中由本国创造、并被国外最终吸收的增加值；占比越高表示这类国内增加值构成越高。" },
-      { key: "DVArt", label: "DVArt 返回国内", color: "#7a6bff", desc: "先随出口离境、绕一圈又回到本国被吸收的国内增加值。" },
-      { key: "DDC", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "本国增加值在跨境往返中被海关多次统计的部分。" },
-      { key: "FVA", label: "FVA 外国增加值", color: "#159a86", desc: "WWZ 分解中的外国增加值项，不含外国重复计算 FDC。在不含 TLS 的口径下，总出口中的全部外国含量 = FVA（外国增加值）+ FDC（外国重复计算，不是增加值）。" },
-      { key: "FDC", label: "FDC 外国重复计算", color: "#e0982a", desc: "外国增加值在跨境中被重复统计的部分。" },
-      { key: "taxsub", label: "taxsub 税收减补贴", color: "#98a0b3", desc: "出口直接及间接所含的产品税减补贴（TLS），由 ICIO TLS 账户沿投入产出链计算。" },
+      { key: "DVAex", label: "DVAex 国内增加值出口", color: "#4b47e0", desc: "出口中由本国创造、在国外被最终使用的增加值。" },
+      { key: "DVArt", label: "DVArt 返回国内的增加值", color: "#7a6bff", desc: "先随出口离境、绕一圈又回到本国被最终使用的国内增加值。" },
+      { key: "DDC", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "本国增加值在出口统计中被重复计入的部分（中间品多次跨境造成）。" },
+      { key: "FVA", label: "FVA 外国增加值", color: "#159a86", desc: "出口中由其他国家创造的增加值（例如进口零部件的价值），不包括外国重复计算 FDC。" },
+      { key: "FDC", label: "FDC 外国重复计算", color: "#e0982a", desc: "外国增加值在出口统计中被重复计入的部分。" },
+      { key: "taxsub", label: "taxsub 产品税减补贴", color: "#98a0b3", desc: "出口中直接和间接包含的产品税减补贴（来自 ICIO 的 TLS 账户）。可为负，表示净补贴。" },
     ],
     note: (_r, values) =>
-      `EXDVA 出口国内增加值合计 = DVAex + DVArt = ${sumText(values[0], values[1])}` +
-      `（WWZ 16 个明细项归并为 DVAex / DVArt / DDC / FVA / FDC 五类；taxsub 是本系统基于 OECD ICIO TLS 账户加入的扩展项，不属于 WWZ 原文分类。）`,
+      `出口中的国内增加值合计（EXDVA）= DVAex + DVArt = ${sumText(values[0], values[1])}。` +
+      `taxsub 是本系统另加的一项，不属于 WWZ 原方法。`,
   },
   5: {
+    title: "各分项的金额、占比与含义",
     total: "SVA",
     totalLabel: "总增加值 SVA",
     unit: "amount",
     parts: [
-      { key: "1_VA_D", label: "1_VA_D 纯国内生产", color: "#4b47e0", desc: "增加值只服务本国最终需求，完全不跨境。" },
-      { key: "2_VA_RT", label: "2_VA_RT 传统贸易生产", color: "#159a86", desc: "增加值随最终产品直接出口，只跨境一次。" },
-      { key: "3a_VA_GVC_S", label: "3a 简单 GVC 生产", color: "#e0982a", desc: "增加值随中间品跨境一次后在国外被吸收。" },
-      { key: "3b_VA_GVC_C", label: "3b 复杂 GVC 生产", color: "#f4693b", desc: "增加值至少两次跨越国境。" },
+      { key: "1_VA_D", label: "1_VA_D 纯国内增加值", short: "纯国内", color: "#4b47e0", desc: "增加值只服务本国最终需求，完全不跨境。" },
+      { key: "2_VA_RT", label: "2_VA_RT 传统贸易增加值", short: "传统贸易", color: "#159a86", desc: "增加值随最终产品直接出口，只跨境一次。" },
+      { key: "3a_VA_GVC_S", label: "3a_VA_GVC_S 简单 GVC 增加值", short: "简单 GVC", color: "#e0982a", desc: "增加值随中间品跨境一次后，在国外被最终使用。" },
+      { key: "3b_VA_GVC_C", label: "3b_VA_GVC_C 复杂 GVC 增加值", short: "复杂 GVC", color: "#f4693b", desc: "增加值至少两次跨越国境。" },
     ],
     note: (_r, values) =>
-      `3_VA_GVC = 3a + 3b = ${sumText(values[2], values[3])}；` +
-      `另有对称的后向分解 FGY 系列（按最终产品完成地记账），可在步骤 7 选择“（后向）”指标查看。`,
+      `GVC 合计（3_VA_GVC）= 简单 GVC + 复杂 GVC = ${sumText(values[2], values[3])}。` +
+      `也可以反过来，从最终产品在哪国完成来拆分（后向分解，代码 FGY），在步骤 7 选带“（后向）”的指标查看。`,
   },
   6: {
+    title: "各段对总长度的贡献",
     total: "PLv",
     totalLabel: "前向总生产长度 PLv",
     unit: "number",
     weightTotal: "SVA",
     parts: [
-      { key: "PLv_D", label: "纯国内加权贡献", color: "#4b47e0", desc: "纯国内生产活动的平均长度，按 1_VA_D/SVA 份额加权计入总长度。", weightKey: "1_VA_D" },
-      { key: "PLv_RT", label: "传统贸易加权贡献", color: "#159a86", desc: "传统贸易生产活动的平均长度，按 2_VA_RT/SVA 份额加权计入。", weightKey: "2_VA_RT" },
-      { key: "PLv_GVC", label: "GVC 加权贡献", color: "#f4693b", desc: "GVC 生产活动的段长度，按 3_VA_GVC/SVA 份额加权计入；段长度与加权贡献不是同一个数。", weightKey: "3_VA_GVC" },
+      { key: "PLv_D", label: "纯国内加权贡献", short: "纯国内", color: "#4b47e0", desc: "纯国内这一段的长度 × 它的增加值份额，就是这一段对总长度的贡献。", weightKey: "1_VA_D" },
+      { key: "PLv_RT", label: "传统贸易加权贡献", short: "传统贸易", color: "#159a86", desc: "传统贸易这一段的长度 × 它的增加值份额，就是这一段对总长度的贡献。", weightKey: "2_VA_RT" },
+      { key: "PLv_GVC", label: "GVC 加权贡献", short: "GVC", color: "#f4693b", desc: "GVC 这一段的长度 × 它的增加值份额，就是这一段对总长度的贡献；段长度和贡献不是同一个数。", weightKey: "3_VA_GVC" },
     ],
     note: (r) => {
       const segment = (lengthKey: string, weightKey: string) => {
@@ -97,10 +104,8 @@ const DECOMP: Record<number, DecompCfg> = {
         if (length != null) return length.toFixed(3);
         return finiteNumber(r[weightKey]) === 0 ? "—（无此类活动）" : "—";
       };
-      const position = finiteNumber(r.GVCPs);
-      return `各分项是“增加值份额 × 段长度”的加权贡献（总长度是各段长度的增加值加权平均，见 WWYZ 2017b）。` +
-        `段长度本身：PLv_D=${segment("PLv_D", "1_VA_D")}、PLv_RT=${segment("PLv_RT", "2_VA_RT")}、PLv_GVC=${segment("PLv_GVC", "3_VA_GVC")}；` +
-        `GVC 位置指数 GVCPs = PLv_GVC / PLy_GVC = ${position?.toFixed(3) ?? "—（未定义）"}。`;
+      return `各段长度：纯国内 ${segment("PLv_D", "1_VA_D")}、传统贸易 ${segment("PLv_RT", "2_VA_RT")}、GVC ${segment("PLv_GVC", "3_VA_GVC")}` +
+        `（上表是这些长度乘以增加值份额后的贡献）。`;
     },
   },
 };
@@ -169,15 +174,15 @@ export function IndicatorCalculationDisclosure({ step, row }: { step: number; ro
     const denominatorLabel = step === 4 ? "总出口" : "总增加值 SVA";
     return (
       <section className="indicator-calculation-disclosure" aria-label={`${title}计算公示`}>
-        <div className="icd-kicker">指标计算公示</div>
+        <div className="icd-kicker">这个指标怎么算</div>
         <div className="icd-title">{title}</div>
         <div className="icd-formula">{title} = {numeratorKey} / {denominatorLabel}</div>
         <div className="icd-calc">
-          = {disclosureAmount(numerator)} / {disclosureAmount(denominator)} = <b>{ratio == null ? "—（分母非正或数据缺失）" : percentText(ratio * 100)}</b>
+          = {disclosureAmount(numerator)} / {disclosureAmount(denominator)} = <b>{ratio == null ? "—（总量为 0 或缺数据，无法计算）" : percentText(ratio * 100)}</b>
         </div>
         <p>{step === 4
-          ? "FVA 不含外国重复计算 FDC；分母是六项加总得到的 VA+TLS 账户口径总出口（gross exports），不是 OECD 官方 EXGR_FVASH 口径。"
-          : "3b 只统计增加值至少两次跨境的复杂 GVC 路径；该份额反映生产活动构成，不直接代表技术水平或收益。"}</p>
+          ? "FVA 不包括外国重复计算 FDC。分母是下面六项相加得到的总出口，所以这个比例和 OECD TiVA 公布的“出口中外国增加值占比”不完全相同。"
+          : "复杂 GVC 只算至少跨境两次的增加值；这个份额反映生产活动的构成，不直接代表技术水平或收益。"}</p>
       </section>
     );
   }
@@ -189,11 +194,11 @@ export function IndicatorCalculationDisclosure({ step, row }: { step: number; ro
     : null;
   return (
     <section className="indicator-calculation-disclosure" aria-label="GVC 位置指数计算公示">
-      <div className="icd-kicker">指标计算公示</div>
+      <div className="icd-kicker">这个指标怎么算</div>
       <div className="icd-title">GVC 位置指数 GVCPs</div>
       <div className="icd-formula">GVCPs = PLv_GVC / PLy_GVC</div>
       <div className="icd-calc">
-        = {disclosureLength(forward)} / {disclosureLength(backward)} = <b>{position == null ? "—（分母为零或数据缺失）" : stripNegativeZero(position.toFixed(3))}</b>
+        = {disclosureLength(forward)} / {disclosureLength(backward)} = <b>{position == null ? "—（缺数据，无法计算）" : stripNegativeZero(position.toFixed(3))}</b>
       </div>
       <p>这里比较前向与后向的 GVC 段长度。上方 PLv 恒等式中的每一项是“增加值份额 × 段长度”的加权贡献，不是段长度本身。</p>
     </section>
@@ -222,16 +227,18 @@ export function DecompositionDetailTable({
   /** Side by side: the meaning goes under the name instead of a squeezed fourth column. */
   compact?: boolean;
 }) {
+  const hasNegative = !unavailable && values.some((value) => value != null && value < 0);
   return (
+    <>
     <table className={`decomp-table${compact ? " decomp-table--compact" : ""}`}>
       <caption className="sr-only">{caption}</caption>
       {/* Visible column names: a value and a share side by side are otherwise unlabelled. */}
       <thead className="decomp-table-head">
         <tr>
-          <th scope="col">分解组成</th>
-          <th scope="col">分项数值</th>
-          <th scope="col">占比（可为负）</th>
-          {!compact && <th scope="col">组成含义</th>}
+          <th scope="col">分项</th>
+          <th scope="col">数值</th>
+          <th scope="col">占总量比重</th>
+          {!compact && <th scope="col">含义</th>}
         </tr>
       </thead>
       <tbody>{parts.map((part, index) => {
@@ -250,16 +257,19 @@ export function DecompositionDetailTable({
               {compact && <span className="dt-desc dt-desc--below">{part.desc}</span>}
             </th>
             <td className="dt-val">{value == null ? "—" : fmt(value, unit)}</td>
-            <td className="dt-share">{unavailable ? "—" : share == null ? "—（分母非正）" : percentText(share)}</td>
+            <td className="dt-share">{unavailable ? "—" : share == null ? "—（无法计算）" : percentText(share)}</td>
             {!compact && <td className="dt-desc">{part.desc}</td>}
           </tr>
         );
       })}</tbody>
     </table>
+    {hasNegative && <p className="decomp-table-note">负值表示抵减项（例如净补贴），所以其他分项的比重之和可能超过 100%。</p>}
+    </>
   );
 }
 
 const PLY_DECOMP: DecompCfg = {
+  title: "后向总生产长度 PLy",
   total: "PLy",
   totalLabel: "后向总生产长度 PLy",
   unit: "number",
@@ -274,42 +284,43 @@ const PLY_DECOMP: DecompCfg = {
 export function zeroTotalDecompositionHint(model: DecompositionModel, totalLabel: string): string | null {
   const kind = directZeroTotalKind(model);
   if (kind === "all-zero") {
-    return "完整零总量行，所有分项均为 0；可能没有活动或为结构零，但当前数据没有原因元数据。";
+    return "所有分项都是 0，这一年可能没有相关活动，请换一个行业。";
   }
   if (kind === "signed-offset") {
-    return `${totalLabel}=0，因为正负有符号分项相互抵消；构成占比未定义。`;
+    return `${cjkJoin(totalLabel, "为 0：")}正负分项相互抵消，无法算比重。`;
   }
   if (kind === "nonclosing") {
-    return `${totalLabel}=0，但非零有符号分项未闭合到总量；构成占比未定义。`;
+    return `${cjkJoin(totalLabel, "为 0，")}但各分项加起来不等于 0，无法算比重。`;
   }
   return null;
 }
 
 export function decompositionModelReason(model: DecompositionModel, weightLabel?: string): string {
+  const weight = weightLabel ?? "权重";
   if (model.reason === "zero-weight-denominator") {
-    return `${weightLabel ?? "权重分母"}=0（结构零），加权生产长度未定义。`;
+    return cjkJoin(weight, "为 0（没有这类活动），无法算加权长度。");
   }
   if (model.reason === "negative-weight-denominator") {
-    return `${weightLabel ?? "权重分母"}<0，不满足正权重平均的定义域。`;
+    return cjkJoin(weight, "小于 0，无法按份额加权平均。");
   }
   if (model.reason === "missing-fields") {
-    return `分解数据不完整或未定义${model.missingFields.length ? `（${model.missingFields.join("、")}）` : ""}。`;
+    return `分解数据不完整${model.missingFields.length ? `（缺 ${model.missingFields.join("、")}）` : ""}，暂时无法拆分。`;
   }
-  if (model.reason === "nonfinite-calculation") return "分解计算产生非有限值，不能用于图形、份额或闭合判断。";
+  if (model.reason === "nonfinite-calculation") return "数据不完整，暂时无法拆分。";
   if (model.reason === "zero-total") {
     const kind = directZeroTotalKind(model);
     if (kind === "all-zero") {
-      return "完整零总量行：所有分项均为 0，可能为结构零，但当前数据没有原因元数据；普通构成占比未定义。";
+      return "所有分项都是 0，这一年可能没有相关活动；无法算比重。";
     }
     if (kind === "signed-offset") {
-      return "总量为 0，因为正负有符号分项相互抵消；普通构成占比未定义。";
+      return "总量为 0：正负分项相互抵消，无法算比重。";
     }
     if (kind === "nonclosing") {
-      return "总量为 0，但非零有符号分项加总不等于总量；普通构成占比未定义。";
+      return "总量为 0，但各分项加起来不等于 0，无法算比重。";
     }
-    return "总量为 0；普通构成占比未定义。";
+    return "总量为 0，无法算比重。";
   }
-  return "总量为负，普通构成占比未定义。";
+  return "总量为负，无法算比重。";
 }
 
 function MiniBackwardBar({ row }: { row: Row }) {
@@ -318,12 +329,12 @@ function MiniBackwardBar({ row }: { row: Row }) {
   if (model.status !== "valid" || !model.values || model.total == null || model.sum == null || model.error == null) {
     return (
       <div className="decomp-unavailable" role="status" style={{ marginTop: 14 }}>
-        <b>后向 PLy · 暂不可分解</b>
+        <b>后向 PLy · 暂时无法拆分</b>
         <div>{decompositionModelReason(model, "FGY")}</div>
-        <div>PLy = {model.total == null ? "—（未定义）" : fmt(model.total, "number")}；GVCPs = {position?.toFixed(3) ?? "—（未定义）"}</div>
+        <div>PLy = {model.total == null ? "—（无法计算）" : fmt(model.total, "number")}；GVCPs = {position?.toFixed(3) ?? "—（无法计算）"}</div>
         <div>{PLY_DECOMP.parts.map((part, index) => (
           <span key={part.key} style={{ marginRight: 10 }}>
-            {part.label}: {model.contributions[index] == null ? "—" : fmt(model.contributions[index]!, "number")}
+            {part.label}：{model.contributions[index] == null ? "—" : fmt(model.contributions[index]!, "number")}
           </span>
         ))}</div>
       </div>
@@ -334,17 +345,17 @@ function MiniBackwardBar({ row }: { row: Row }) {
   return (
     <div style={{ marginTop: 14, padding: 12, borderRadius: 10, background: "#f8f9fc" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 11.5, marginBottom: 7 }}>
-        <b>后向 PLy · 最终品回溯到初始投入端</b>
+        <b>后向总生产长度 PLy（从最终产品往回数）</b>
         <span>{fmt(model.total, "number")}</span>
       </div>
       <div style={{ position: "relative", height: 12, background: "#eceef4", borderRadius: 5, overflow: "hidden" }}>
         {PLY_DECOMP.parts.map((part, index) => (
-          <span key={part.key} title={`${part.label}: ${fmt(model.values![index], "number")}`}
+          <span key={part.key} title={`${part.label}：${fmt(model.values![index], "number")}`}
             style={{ position: "absolute", top: 0, bottom: 0, left: `${layout.segments[index].leftPct}%`, width: `${layout.segments[index].widthPct}%`, background: layout.segments[index].negative ? negativeFill(part.color) : part.color }} />
         ))}
       </div>
       <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>
-        PLy = Σ（FGY 分项份额 × 对应段长度） = {fmt(model.sum, "number")}；{model.error < 1e-6 ? "与总量一致" : `与总量相差 ${model.error.toPrecision(2)}`}。
+        PLy = 各段（最终产品中的份额 × 段长度）之和 = {fmt(model.sum, "number")}；{model.error < 1e-6 ? "与总量一致" : `与总量相差 ${model.error.toPrecision(2)}`}。
       </div>
     </div>
   );
@@ -368,7 +379,7 @@ export function DecompositionRequestMessage({
       <AsyncStateMessage
         status={status}
         error={null}
-        loadingLabel={`加载${label}的分解数据中…`}
+        loadingLabel={`正在加载${cjkJoin(label, "的分解数据…")}`}
         onRetry={onRetry}
       />
     );
@@ -383,7 +394,7 @@ export function DecompositionRequestMessage({
     );
   }
   if (empty) {
-    return <p className="muted async-empty" role="status">{label} 在当前国家与年份下没有可用分解数据。</p>;
+    return <p className="muted async-empty" role="status">当前国家和年份没有可用的分解数据。</p>;
   }
   return null;
 }
@@ -476,14 +487,20 @@ export function DecompositionDemo({
     domainRows.map((item) => item.total),
   );
 
+  // Plain names for the two sides: what is shown, or which column when two are side by side.
+  const sideLabel = (side: "A" | "B") => compare
+    ? side === "A" ? "左栏" : "右栏"
+    : gran === "country" ? "所选国家" : "所选行业";
+  const levelLabel = (sector: string) => gran === "sector" ? sectorLabel(sector) : "国家整体";
+
   const entityPicker = (side: "A" | "B") => {
     const country = side === "A" ? countryA : countryB;
     const sector = side === "A" ? effSectorA : effSectorB;
     const setSector = side === "A" ? setSectorA : setSectorB;
     const sectors = side === "A" ? sectorsA : sectorsB;
     return (
-      <div className="demo-controls" style={{ marginBottom: 10 }} role="group" aria-label={compare ? `对象 ${side}` : "分析对象"}>
-        <b aria-hidden="true">{compare ? `对象 ${side}` : "分析对象"}</b>
+      <div className="demo-controls" style={{ marginBottom: 10 }} role="group" aria-label={sideLabel(side)}>
+        <b aria-hidden="true">{sideLabel(side)}</b>
         <LabeledControl label="国家">
           {(id) => (
             <select id={id} value={country} onChange={(event) => {
@@ -522,7 +539,7 @@ export function DecompositionDemo({
         <div style={{ minWidth: 0 }}>
           {entityPicker(side)}
           <DecompositionRequestMessage
-            label={`对象 ${side}`}
+            label={sideLabel(side)}
             status={query.status}
             error={query.error}
             empty={query.status === "success" && !row}
@@ -555,10 +572,10 @@ export function DecompositionDemo({
           <div className="decomp-unavailable" role="status">
             <b>当前分解不可用</b>
             <div>{decompositionModelReason(model, cfg.weightTotal)}</div>
-            <div>缺失或未定义的值显示为“—”，不会按 0 参与加总或闭合判断。</div>
+            <div>“—”表示没有数据，不按 0 计算。</div>
           </div>
           <DecompositionDetailTable
-            caption={`对象 ${side}：${year} 年 ${countryLabel(country)} · ${gran === "sector" ? sectorLabel(sector) : "国家级"} · ${cjkJoin(cfg.totalLabel, "分解明细")}`}
+            caption={`${sideLabel(side)}：${year} 年 ${countryLabel(country)} · ${levelLabel(sector)} · ${cjkJoin(cfg.totalLabel, "分解明细")}`}
             parts={cfg.parts}
             values={model.contributions}
             shares={null}
@@ -593,7 +610,7 @@ export function DecompositionDemo({
             const value = model.values![index];
             const share = model.shares?.[index];
             const segment = layout.segments[index];
-            const shareText = share == null ? "构成占比未定义" : `有符号占比 ${percentText(share)}`;
+            const shareText = share == null ? "无法算比重" : `占总量比重 ${percentText(share)}`;
             return <span key={part.key}
               className={`decomp-seg${hover && hover !== part.key ? " dim" : ""}`}
               style={{ position: "absolute", top: 0, bottom: 0, left: `${segment.leftPct}%`, width: `${segment.widthPct}%`, background: segment.negative ? negativeFill(part.color) : part.color }}
@@ -603,20 +620,20 @@ export function DecompositionDemo({
         </div>
         {model.closure != null ? (
           <div className={`decomp-identity ${model.closure ? "ok" : "bad"}`}>
-            {model.closure ? "✓" : "✗"} {cfg.parts.length} 项加总 = {fmt(model.sum, cfg.unit)} · 与 {cfg.totalLabel} 一致{model.error < 1e-6 ? "" : `（差 ${model.error.toPrecision(2)}）`}
+            {model.closure ? "✓" : "✗"} {cfg.parts.length} 项相加 = {fmt(model.sum, cfg.unit)}，{model.closure ? "等于" : "不等于"}{cfg.totalLabel}{model.error < 1e-6 ? "" : `（差 ${model.error.toPrecision(2)}）`}
           </div>
         ) : negligible && zeroTotalHint ? null : (
           // A zero total is explained once, by the specific hint below.
           <div className="decomp-identity neutral" role="status">
             ℹ {decompositionModelReason(model, cfg.weightTotal)}
-            {model.amountCloses != null && ` ${cfg.parts.length} 项金额数学加总${model.amountCloses ? "相等" : "不相等"}，但不作为构成占比闭合认证。`}
+            {model.amountCloses != null && ` ${cfg.parts.length} 项金额相加${model.amountCloses ? "等于" : "不等于"}总量。`}
           </div>
         )}
-        {negligible && <div className="decomp-hint">⚠️ {country} · {sectorLabel(sector)}：{
-          zeroTotalHint ?? `${cfg.totalLabel}占本国行业合计不足 0.01%，建议换一个活跃行业。`
+        {negligible && <div className="decomp-hint">⚠️ {countryLabel(country)} · {sectorLabel(sector)}：{
+          zeroTotalHint ?? "这个行业的数值太小（不到本国各行业合计的 0.01%），建议换一个行业。"
         }</div>}
         <DecompositionDetailTable
-          caption={`对象 ${side}：${year} 年 ${countryLabel(country)} · ${gran === "sector" ? sectorLabel(sector) : "国家级"} · ${cjkJoin(cfg.totalLabel, "分解明细")}`}
+          caption={`${sideLabel(side)}：${year} 年 ${countryLabel(country)} · ${levelLabel(sector)} · ${cjkJoin(cfg.totalLabel, "分解明细")}`}
           parts={cfg.parts}
           values={model.values}
           shares={model.shares}
@@ -634,7 +651,7 @@ export function DecompositionDemo({
   if (!demoAvailable) {
     return (
       <div className="demo-card">
-        <div className="demo-title">动手拆解 · 请先选择国家</div>
+        <div className="demo-title">请先选择国家</div>
         <div className="decomp-unavailable" role="status">
           <b>还没有选择具体国家。</b>
           <LabeledControl label="选择国家">
@@ -652,11 +669,12 @@ export function DecompositionDemo({
 
   return (
     <div className="demo-card">
-      <div className="demo-title">动手拆解 · 各分项的金额、占比与含义</div>
+      <div className="demo-title">{cfg.title}</div>
       <div className="demo-controls">
+        {/* The default first: the country as a whole is what the report material records. */}
         <div className="pill-group" role="group" aria-label="分析层级">
-          <button type="button" className={gran === "sector" ? "on" : ""} aria-pressed={gran === "sector"} onClick={() => setGran("sector")}>国家–行业级</button>
-          <button type="button" className={gran === "country" ? "on" : ""} aria-pressed={gran === "country"} onClick={() => setGran("country")}>国家级</button>
+          <button type="button" className={gran === "country" ? "on" : ""} aria-pressed={gran === "country"} onClick={() => setGran("country")}>国家整体</button>
+          <button type="button" className={gran === "sector" ? "on" : ""} aria-pressed={gran === "sector"} onClick={() => setGran("sector")}>单个行业</button>
         </div>
         <LabeledControl label="年份">
           {(id) => (
@@ -666,7 +684,7 @@ export function DecompositionDemo({
           )}
         </LabeledControl>
         <label style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-          <input type="checkbox" checked={compare} onChange={(event) => setCompare(event.target.checked)} /> 并排对比两个对象
+          <input type="checkbox" checked={compare} onChange={(event) => setCompare(event.target.checked)} /> 并排比较另一个国家或行业
         </label>
       </div>
       <div className="decomp-formula">
@@ -678,9 +696,9 @@ export function DecompositionDemo({
               className={`df-term${hover === part.key ? " on" : ""}`}
               style={hover === part.key ? { color: part.color, borderColor: part.color } : undefined}
               onMouseEnter={() => setHover(part.key)} onMouseLeave={() => setHover(null)}
-            >{cfg.weightTotal && part.weightKey
-                ? `(${part.weightKey}/${cfg.weightTotal}) × ${part.key}`
-                : part.label.split(" ")[0]}</span>
+            >{cfg.weightTotal && part.short
+                ? `${cjkSpace(part.short, "份额")} × ${cjkSpace(part.short, "段长度")}`
+                : part.short ?? part.label.split(" ")[0]}</span>
           </span>
         ))}
       </div>
@@ -698,8 +716,8 @@ type Node = { id: string; x: number; y: number; label: string };
 export type NetworkDemoMode = "degree" | "betweenness" | "closeness";
 
 const NETWORK_DEMO_MODE_LABELS: Record<NetworkDemoMode, string> = {
-  degree: "度中心性",
-  betweenness: "介数中心性",
+  degree: "度",
+  betweenness: "介数",
   closeness: "接近中心性",
 };
 
@@ -979,7 +997,7 @@ export function NetworkCentralityDemo() {
               type="button"
               className={mode === metric ? "on" : ""}
               aria-pressed={mode === metric}
-              aria-label={`显示${NETWORK_DEMO_MODE_LABELS[metric]}`}
+              aria-label={`查看${NETWORK_DEMO_MODE_LABELS[metric]}的算法`}
               onClick={() => setMode(metric)}
             >
               {NETWORK_DEMO_MODE_LABELS[metric]}
@@ -1086,19 +1104,19 @@ export function NetworkCentralityDemo() {
                 = {C.indeg[sel]} + {C.outdeg[sel]} = <b>{C.deg[sel]}</b>
               </div>
               <p className="ndp-note">
-                高亮的是全部入边和出边。Gephi 中自环会分别计入一次入度和一次出度，因此总度计两次。
+                高亮的是全部入边和出边。（真实数据里还有自环，即行业卖给自己的部分，它在入度和出度中各算一次。）
               </p>
             </>
           ) : mode === "betweenness" ? (
             <>
-              <div className="ndp-formula">介数中心性 = Σ σₛₜ(v) / σₛₜ（有向；未按节点对数归一化）</div>
+              <div className="ndp-formula">介数 = Σ σₛₜ(v) / σₛₜ（σₛₜ：s 到 t 的最短路线条数；σₛₜ(v)：其中经过 v 的条数）</div>
               <div className="ndp-calc">= <b>{networkDemoMetricText(C.bet[sel], "betweenness")}</b></div>
               <p className="ndp-note">
                 {pathNodes.length >= 3
-                  ? <>例如 {pathNodes[0]} → {pathNodes[pathNodes.length - 1]} 的无权最短路要穿过 {sel}（已高亮）。越多这类路径对经过它，拓扑介数越高；这不自动说明它是经济瓶颈。</>
+                  ? <>例如 {pathNodes[0]} → {pathNodes[pathNodes.length - 1]} 的最短路线要经过 {sel}（已高亮）。经过它的最短路线越多，介数越高；但这不说明它是经济瓶颈。</>
                   : C.bet[sel] === 0
-                    ? <>{selNode.label}（{sel}）不在任何其他节点对的最短路径上，介数为 0。</>
-                    : <>{selNode.label}（{sel}）很少落在别人的最短路径上，介数中心性低。</>}
+                    ? <>{selNode.label}（{sel}）不在其他节点之间的任何最短路线上，介数为 0。</>
+                    : <>{selNode.label}（{sel}）很少落在其他节点之间的最短路线上，介数低。</>}
               </p>
             </>
           ) : (
@@ -1107,9 +1125,9 @@ export function NetworkCentralityDemo() {
               <div className="ndp-calc">
                 {reachablePaths.length > 0
                   ? <>= {reachablePaths.length} / {distanceSum} = <b>{C.closeness[sel].toFixed(3)}</b></>
-                  : <>无可达节点；按 Gephi 约定记为 <b>0</b></>}
+                  : <>沿箭头到不了任何节点，记为 <b>0</b></>}
               </div>
-              <p className="ndp-note">高亮边组成从 {sel} 沿箭头出发的最短路径树；不可达节点不进入分子和分母。</p>
+              <p className="ndp-note">高亮的是从 {sel} 沿箭头出发的最短路线；到不了的节点不计入分子和分母。</p>
               <ScrollableRegion
                 label={`从节点 ${sel} 出发的最短路径明细，可滚动`}
                 style={{ maxHeight: 150, overflow: "auto", marginBottom: 10 }}
@@ -1140,7 +1158,7 @@ export function NetworkCentralityDemo() {
             </table>
           </ScrollableRegion>
           <div className="ndp-disclaim">
-            这是一个 7 节点的有向演示网络。真实系统保留全部正流量边和正自环，在完整的全球“国家×行业”生产网络上按同一 Gephi 口径计算。
+            这是一个 7 节点的有向演示网络。真实数据保留全部正流量和自环（行业卖给自己的部分），在完整的全球“国家×行业”生产网络上用同样的方法计算。
           </div>
         </div>
       </div>

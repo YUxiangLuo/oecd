@@ -27,69 +27,69 @@ interface MethodContent {
 
 const METHOD: Record<MethodTopic, MethodContent> = {
   trade: {
-    label: "总贸易流分解（WWZ）",
-    question: "出口额怎样拆成国内价值、外国价值与重复计算？",
-    lead: "出口额不全是本国创造的价值。WWZ 方法沿 ICIO 的投入产出链，追踪每一元出口的价值来源和最终吸收地。",
+    label: "总出口分解（WWZ 法）",
+    question: "出口额怎样拆成国内增加值、外国增加值与重复计算？",
+    lead: "出口额不全是本国创造的价值。WWZ 法（王直、魏尚进、祝坤福提出的总出口分解方法）沿 ICIO 的投入产出链，追踪每一元出口的价值从哪国来、最后在哪国被最终使用。",
     steps: [
       {
         title: "从 ICIO 表取账户",
-        body: "中间投入 Z、最终需求 Y、增加值 VA 与总产出 x；算出投入系数 A = Z / x 和增加值系数 v = VA / x。",
+        body: "中间投入 Z、最终需求 Y、增加值 VA 与总产出 x（即步骤 1 的 OUT）；投入系数 A = 每列的 Z ÷ 该列行业的总产出，增加值率 v = VA ÷ 总产出。",
         source: "trade-guide",
-        sourceLabel: "课程校订版说明",
+        sourceLabel: "课程说明",
       },
       {
         title: "累计全部生产环节",
-        body: "里昂惕夫逆矩阵 B = (I − A)⁻¹ 把直接和间接投入累计起来，可以追溯出口中每一元价值来自哪个国家–行业。",
+        body: "里昂惕夫逆矩阵 B = (I − A)⁻¹ 像一个“放大器”，把直接投入和层层间接投入全部加起来，可以追溯出口中每一元价值来自哪个国家×行业。",
         source: "trade-paper-cn",
         sourceLabel: "王直等（2015）",
       },
       {
-        title: "按来源和吸收地归类",
-        body: "WWZ 把双边总出口分解为 16 项，按“国内或国外价值 × 在哪里被最终吸收 × 是否重复计算”归并为 DVAex、DVArt、DDC、FVA、FDC 五类；本系统另加 taxsub（产品税减补贴，来自 TLS 账户）。",
+        title: "按来源和使用地归类",
+        body: "WWZ 把双边总出口分解为 16 项，按“国内还是外国增加值 × 在哪里被最终使用 × 是否重复计算”归并为五类：被国外最终使用的国内增加值（DVAex）、返回国内的增加值（DVArt）、国内重复计算（DDC）、外国增加值（FVA）、外国重复计算（FDC）；本系统另加产品税减补贴（taxsub，来自 TLS 账户）。",
         source: "trade-paper-en",
         sourceLabel: "Wang, Wei & Zhu（2018）",
       },
     ],
     formula: "总出口 = DVAex + DVArt + DDC + FVA + FDC + taxsub；外国增加值项占比 = FVA ÷ 总出口",
-    caveat: "FVA 不含外国重复计算 FDC；分母是六项加总的总出口，不是 OECD 官方 EXGR_FVASH 口径。",
+    caveat: "FVA 不包括外国重复计算 FDC。分母是六项相加得到的总出口，所以这个比例和 OECD TiVA 公布的“出口中外国增加值占比”不完全相同。",
   },
   production: {
-    label: "生产活动分解（WWYZ）",
+    label: "生产活动分解（WWYZ 法）",
     question: "本国创造的增加值，最终通过什么路径被使用？",
-    lead: "上一步问出口价值从哪里来，这一步从增加值的创造端出发，看它沿哪条生产路径被最终使用。",
+    lead: "上一步问出口价值从哪里来，这一步从增加值的创造端出发，看它沿哪条生产路径被最终使用。WWYZ 法由王直、魏尚进、余心玎、祝坤福提出。",
     steps: [
       {
         title: "求出增加值的完整去向",
-        body: "同样由 ICIO 求出 v 和 B；增加值 v̂·B·Y 给出每个国家–行业创造的增加值最终被哪里的最终需求吸收。",
+        body: "用上一步的 v 和 B，可以算出每个国家×行业创造的增加值最后被哪国的消费或投资用掉（公式 v̂BY，v̂ 是把 v 放在对角线上的矩阵）。",
         source: "production-guide",
-        sourceLabel: "课程校订版说明",
+        sourceLabel: "课程说明",
       },
       {
         title: "区分国内与跨境环节",
-        body: "把投入系数拆成国内块与跨境块，用国内逆矩阵区分增加值是否离开本国、以中间品还是最终品形式跨境。",
+        body: "把投入分成“本国内部的投入”和“跨境投入”两部分分别计算，就能看出增加值有没有出国，是随中间品还是随最终品出国。",
         source: "source-production-note",
         sourceLabel: "原始方法说明",
       },
       {
         title: "归入四类生产活动",
-        body: "纯国内（1_VA_D，不跨境）、传统贸易（2_VA_RT，随最终品出口）、简单 GVC（3a，随中间品跨境一次后被吸收）、复杂 GVC（3b，至少两次跨境）。四类加总等于总增加值 SVA。",
+        body: "纯国内（1_VA_D，不跨境）、传统贸易（2_VA_RT，随最终品出口）、简单 GVC（3a_VA_GVC_S，随中间品跨境一次后被最终使用）、复杂 GVC（3b_VA_GVC_C，至少两次跨境）。四类相加等于总增加值 SVA。",
         source: "production-paper",
         sourceLabel: "Wang 等（2017a）",
       },
     ],
-    formula: "SVA = 1_VA_D + 2_VA_RT + 3a + 3b；复杂 GVC 生产份额 = 3b_VA_GVC_C ÷ SVA",
-    caveat: "后向 FGY 系列按最终产品完成地对称分解；复杂 GVC 生产份额描述活动构成，不直接代表技术水平或收益。",
+    formula: "总增加值 SVA = 纯国内 + 传统贸易 + 简单 GVC + 复杂 GVC；复杂 GVC 生产份额 = 3b_VA_GVC_C ÷ SVA",
+    caveat: "也可以反过来，从最终产品在哪国完成来拆分（后向分解，代码 FGY），在步骤 7 选带“（后向）”的指标查看。复杂 GVC 生产份额描述活动构成，不直接代表技术水平或收益。",
   },
   length: {
-    label: "生产长度与位置（WWYZ）",
+    label: "生产长度与位置（WWYZ 法）",
     question: "一笔增加值在被最终使用前，平均经过几道生产环节？",
     lead: "生产长度是增加值在生产中被计入总产出的平均次数。它衡量生产环节的多少，不是跨境次数。",
     steps: [
       {
         title: "前向与后向两个方向",
-        body: "前向 PLv = (Bx)ᵢ / xᵢ，从价值来源出发追踪到最终产品；后向 PLy = (v′BB)ⱼ / (v′B)ⱼ，从最终产品回溯到初始投入。",
+        body: "前向：从增加值的来源往下游数；后向：从最终产品往上游数。公式：前向 PLv = (Bx)ᵢ / xᵢ，后向 PLy = (v′BB)ⱼ / (v′B)ⱼ，其中 x 是总产出（步骤 1 的 OUT）。",
         source: "length-guide",
-        sourceLabel: "课程校订版说明",
+        sourceLabel: "课程说明",
       },
       {
         title: "按生产活动加权",
@@ -99,40 +99,40 @@ const METHOD: Record<MethodTopic, MethodContent> = {
       },
       {
         title: "比较前后向得到位置",
-        body: "GVC 位置指数 GVCPs = PLv_GVC ÷ PLy_GVC，大于 1 表示在该口径下相对上游；国家级先加总分子分母，不能简单平均行业比值。",
+        body: "GVC 位置指数 GVCPs = PLv_GVC ÷ PLy_GVC，大于 1 表示相对更上游（更靠近原料、零部件这一端）；国家整体的数值先把分子、分母分别加总再相除，不是各行业比值的简单平均。",
         source: "source-length-note",
         sourceLabel: "原始方法说明",
       },
     ],
     formula: "PLv = Σ（增加值份额 × 段长度）；GVCPs = PLv_GVC ÷ PLy_GVC",
-    caveat: "长度不是跨境次数：增加国内加工也能拉长生产链。存在负增加值时是有符号加权。",
+    caveat: "长度不是跨境次数：增加国内加工也能拉长生产链。少数行业增加值为负时，长度可能超出常规范围。",
   },
   network: {
-    label: "全球生产网络（Gephi 口径）",
-    question: "把投入产出表看成网络，哪些国家–行业处在中心位置？",
-    lead: "ICIO 记录了谁向谁提供中间投入，可以直接看成一张有向网络。中心性从流量规模和路径位置两个角度描述节点。",
+    label: "全球生产网络（按 Gephi 网络软件的算法）",
+    question: "把投入产出表看成网络，哪些国家×行业处在中心位置？",
+    lead: "ICIO 记录了谁向谁提供中间投入，可以直接看成一张“谁向谁供货”的网络（有方向：从供给方指向使用方）。中心性从流量规模和路径位置两个角度描述节点。",
     steps: [
       {
         title: "把 ICIO 表变成有向网络",
-        body: "节点是国家×行业；每一笔正的中间品流量 Z 是一条从供给方指向使用方的边。国内联系与正自环都保留，在完整全球图上计算。",
+        body: "节点是国家×行业；每一笔金额为正的中间品流量 Z 是一条从供给方指向使用方的边。国内联系和自环（行业卖给自己的部分，即 Z 表对角线上的单元格）都保留，在完整的全球网络上计算。",
         source: "network-guide",
-        sourceLabel: "课程校订版说明",
+        sourceLabel: "课程说明",
       },
       {
-        title: "流量规模：加权度",
-        body: "加权总度 = 加权入度 + 加权出度，即流入与流出的中间品金额之和；正自环在入向和出向各计一次。它衡量规模，不是去重后的贸易额。",
+        title: "流量规模：加权总度",
+        body: "加权总度（买入 + 卖出）= 加权入度 + 加权出度，即流入与流出的中间品金额之和；自环在买入和卖出各算一次。它衡量规模，不是去重后的贸易额。",
         source: "source-network-note",
         sourceLabel: "原始方法说明",
       },
       {
         title: "路径位置：介数",
-        body: "所有正边按等长处理，统计各有序节点对的最短路径中经过该节点的份额之和（精确、未归一化的 Brandes 算法）。它描述拓扑中介位置，不看流量大小。",
+        body: "介数（只看连接、不看金额）：把每条连接都当成一样长，数一数其他节点之间的最短路线有多少要经过这个节点（用 Brandes 算法精确计算）。",
         source: "brandes-paper",
         sourceLabel: "Brandes（2001）",
       },
     ],
-    formula: "加权总度 = 加权入度 + 加权出度；介数 = Σ σₛₜ(v) ÷ σₛₜ",
-    caveat: "介数未做边阈值敏感性分析，只是探索性拓扑基准；国家级网络是完全图、介数恒为 0。中心性高不等于经济枢纽或瓶颈。",
+    formula: "加权总度 = 加权入度 + 加权出度；介数 = Σ σₛₜ(v) ÷ σₛₜ（σₛₜ 是 s 到 t 的最短路线条数，σₛₜ(v) 是其中经过 v 的条数）",
+    caveat: "介数把很小和很大的流量一视同仁，只能作参考；每两国之间都有贸易，所以国家层面的介数都是 0。中心性高不等于经济枢纽或瓶颈。",
   },
 };
 
@@ -161,7 +161,7 @@ export function IndicatorMethodIntro({ topic, children }: { topic: MethodTopic; 
         })}
       </ol>
       <div className="method-formula" role="note">
-        <span>本步代表指标</span>
+        <span>本步核心公式</span>
         <b>{content.formula}</b>
         <small>{content.caveat}</small>
       </div>

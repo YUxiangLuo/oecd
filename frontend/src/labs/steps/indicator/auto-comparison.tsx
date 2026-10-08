@@ -85,19 +85,21 @@ export function useAutoComparison({ topic, meta, state, country, partner, year, 
   // Marked as the student's choice, so the report does not call it an automatic record.
   const record = patch && !current ? () => state.save({ ...patch, material_chosen: true }) : undefined;
   return {
-    first: pair[0], second: pair[1], current, record,
+    first: pair[0], second: pair[1], metric, current, record,
     loadFailed: countryQuery.status === "error",
     loadError: countryQuery.error,
     onRetryLoad: countryQuery.retry,
   };
 }
 
-export function AutoMaterialStatus({ meta, state, schema, first, second, current, record, onSecond, loadFailed, loadError = null, onRetryLoad, where, note }: {
+export function AutoMaterialStatus({ meta, state, schema, first, second, metric, current, record, onSecond, loadFailed, loadError = null, onRetryLoad, where, note }: {
   meta: Meta;
   state: StepStateApi<IndicatorStepState>;
   schema: IndicatorSchema | null | undefined;
   first: string;
   second: string;
+  /** The step's country-level indicator, named in the explanation line. */
+  metric?: string;
   /** Whether the saved observations match the current selection. */
   current: boolean;
   /** Records the current selection explicitly (offered once the material is locked). */
@@ -117,9 +119,9 @@ export function AutoMaterialStatus({ meta, state, schema, first, second, current
     <div id={STEP_MATERIAL_ACTION_ID} tabIndex={-1} className={`auto-material${loadFailed && recorded.length !== 2 ? " auto-material--failed" : ""}`}>
       <b>报告材料 · {state.materialLocked ? "已记录" : "自动记录"}</b>
       {recorded.length === 2
-        ? <span role="status">{recorded[0].year} 年 · {recorded.map((item) => `${countryLabel(item.country)} ${fmtField(item.value, item.metric, schema)}`).join("；")} · {fieldLabel(recorded[0].metric, schema)}</span>
+        ? <span role="status">{recorded[0].year} 年{fieldLabel(recorded[0].metric, schema)}：{recorded.map((item) => `${countryLabel(item.country)} ${fmtField(item.value, item.metric, schema)}${item.unit === "百万美元" ? " 百万美元" : ""}`).join("；")}</span>
         : <span role="status">
-          {loadFailed ? userFacingRequestError(loadError, "国家级数据加载失败") : "正在记录当前选择…"}
+          {loadFailed ? userFacingRequestError(loadError, "国家整体数据加载失败") : "正在记录当前选择…"}
           {loadFailed && onRetryLoad && <button type="button" className="secondary" onClick={(event) => { const button = event.currentTarget; onRetryLoad(); keepFocusNear(button); }}>重试</button>}
         </span>}
       <label className="auto-material-partner">对比国家
@@ -129,7 +131,7 @@ export function AutoMaterialStatus({ meta, state, schema, first, second, current
       </label>
       {state.materialLocked
         ? <small>{MATERIAL_LOCKED_NOTE}{record && <button type="button" className="secondary" onClick={record}>{MATERIAL_LOCKED_ACTION.replace("图表", "选择")}</button>}</small>
-        : <small>记录{where}和对比国家在同一年的本步代表指标（国家级），换国家或年份后自动更新，无需另外保存。{note ? ` ${note}` : ""}</small>}
+        : <small>记录{where}和对比国家同一年的{metric ? fieldLabel(metric, schema) : "本步指标"}（国家整体），换国家或年份后自动更新，无需另外保存。{note ? ` ${note}` : ""}</small>}
     </div>
   );
 }
