@@ -84,7 +84,7 @@ function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: stri
           return (
             <g key={partner.c} data-partner={partner.c}
               role="graphics-symbol" tabIndex={0}
-              aria-label={`伙伴 ${countryLabel(partner.c)}：流出 ${amount(partner.outflow)}，流入 ${amount(partner.inflow)}`}
+              aria-label={`伙伴 ${countryLabel(partner.c)}（${REGIONS[REGION_OF[partner.c] ?? 5]}）：流出 ${amount(partner.outflow)}，流入 ${amount(partner.inflow)}`}
               onMouseMove={(event) => show(event, linesFor(partner))}
               onMouseLeave={hide}
               onFocus={(event) => showFor(event.currentTarget, linesFor(partner))}
@@ -100,6 +100,12 @@ function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: stri
         <circle cx={cx} cy={cy} r={24} fill={CAT[colorIndex]} />
         <text x={cx} y={cy + 4} textAnchor="middle" fontSize={12} fontWeight={700} fill="#fff">{country}</text>
       </svg>
+      {/* The partner circles' outline colour is the partner's region. */}
+      <div className="partner-region-legend" aria-label="伙伴圆圈边框颜色表示地理区域">
+        {[...new Set(top.map((partner) => REGION_OF[partner.c] ?? 5))].sort((a, b) => a - b).map((region) => (
+          <span key={region}><i style={{ borderColor: CAT[region] }} aria-hidden="true" />{REGIONS[region]}</span>
+        ))}
+      </div>
       {Tip}
     </div>
   );

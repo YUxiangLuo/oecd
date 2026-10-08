@@ -368,7 +368,8 @@ button.dot-plot-label:hover, button.dot-plot-label:focus-visible { text-decorati
 .butterfly-track.right i { left: 0; border-radius: 0 3px 3px 0; }
 .butterfly-label { font-size: 12px; text-align: center; color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button.butterfly-label { background: none; border: 0; color: #35328d; cursor: pointer; font: inherit; font-size: 12px; }
-button.butterfly-label:hover, button.butterfly-label:focus-visible { text-decoration: underline; outline: none; }
+button.butterfly-label:hover { text-decoration: underline; }
+button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text-decoration: underline; outline: 2px solid #4b47e0; outline-offset: 2px; border-radius: 4px; }
 .butterfly-value { font-size: 11.5px; font-variant-numeric: tabular-nums; color: #374151; }
 .controls-sep { color: #9aa3b5; margin: 0 2px; }
 /* Each panel is a 640-wide chart: below ~420px its 11px text shrank to ~8px, so narrow rows take one panel. */
@@ -379,3 +380,8 @@ button.butterfly-label:hover, button.butterfly-label:focus-visible { text-decora
 /* Steps 11–14: same-family Y choice above the group chart. */
 .reg-baseline-select { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 6px 0 10px; }
 .reg-baseline-select .muted { font-size: 12px; }
+
+/* 贸易伙伴: region legend for the partner circles' outline colour. */
+.partner-region-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0 8px; font-size: 11.5px; color: #596173; }
+.partner-region-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.partner-region-legend i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid; background: #fff; }

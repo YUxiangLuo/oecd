@@ -342,3 +342,15 @@ def test_invalid_cache_mode_is_not_silently_accepted(monkeypatch):
     monkeypatch.setenv("GVCSIM_FILE_CACHE_MODE", "typo")
     with pytest.raises(ValueError, match="GVCSIM_FILE_CACHE_MODE"):
         file_identity._new_monitor()
+
+
+def test_hash_mode_produces_a_startup_warning(monkeypatch):
+    from gvcsim import file_identity
+
+    monkeypatch.setenv("GVCSIM_FILE_CACHE_MODE", "hash")
+    assert "GVCSIM_FILE_CACHE_MODE=notify" in (file_identity.cache_mode_warning() or "")
+    monkeypatch.setenv("GVCSIM_FILE_CACHE_MODE", "notify")
+    monkeypatch.setattr(file_identity, "_monitor", object())
+    assert file_identity.cache_mode_warning() is None
+    monkeypatch.setattr(file_identity, "_monitor", None)
+    assert "inotify 不可用" in (file_identity.cache_mode_warning() or "")

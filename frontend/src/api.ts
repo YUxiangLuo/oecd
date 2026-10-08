@@ -167,6 +167,22 @@ async function post<T>(url: string, body?: unknown, method = "POST", callerSigna
   }, callerSignal);
 }
 
+// Data that does not change within a data release (indicator schema, teaching groups, the yearly trade
+// network) is fetched once per tab instead of on every step mount. A failed request is not kept.
+const releaseConstant = new Map<string, Promise<unknown>>();
+function getOnce<T>(url: string): Promise<T> {
+  const cached = releaseConstant.get(url);
+  if (cached) return cached as Promise<T>;
+  const request = get<T>(url);
+  releaseConstant.set(url, request);
+  request.catch(() => { if (releaseConstant.get(url) === request) releaseConstant.delete(url); });
+  return request;
+}
+/** Tests and a release change start from an empty cache. */
+export function clearReleaseConstantCache(): void {
+  releaseConstant.clear();
+}
+
 export const api = {
   login: (username: string, password: string) =>
     withRequestTimeout("/api/auth/login", GET_TIMEOUT_MS, async (signal) => {
@@ -195,7 +211,7 @@ export const api = {
     }),
   steps: () => get<import("./types").StepsResponse>("/api/steps"),
   meta: () => get<import("./types").Meta>("/api/meta"),
-  indicatorSchema: () => get<import("./types").IndicatorSchema>("/api/indicators/schema"),
+  indicatorSchema: () => getOnce<import("./types").IndicatorSchema>("/api/indicators/schema"),
   dbMeta: (signal?: AbortSignal) => get<import("./types").DbMeta>("/api/db/meta", signal),
   dbSlice: (params: {
     year: number;
@@ -250,14 +266,14 @@ export const api = {
         countries: options.countries?.join(","),
       }),
     ),
-  network: (year: number) => get<import("./types").NetworkData>(`/api/viz/network/${year}`),
+  network: (year: number) => getOnce<import("./types").NetworkData>(`/api/viz/network/${year}`),
   shockEvents: () =>
     get<{ events: import("./types").ShockEvent[]; disclaimer: string; source_disclosure: string }>("/api/shocks/events"),
   teachingPanel: (country: string, year: number, limit = 200) =>
     get<import("./types").TeachingPanelResponse>(
       withQuery("/api/regression/teaching-panel", { country, year, limit }),
     ),
-  teachingGroups: () => get<import("./types").TeachingGroupsResponse>("/api/regression/teaching-groups"),
+  teachingGroups: () => getOnce<import("./types").TeachingGroupsResponse>("/api/regression/teaching-groups"),
   teachingSeries: (countries: string[], industry: string) =>
     get<import("./types").TeachingPanelResponse>(
       withQuery("/api/regression/teaching-panel", {

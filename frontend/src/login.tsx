@@ -120,7 +120,13 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
   // 演示构建从 50 组学生凭证中选一组;非演示构建仍是空表单。
   const [demoStudent, setDemoStudent] = useState(previousDemoStudent ?? initialDemoSelection?.student ?? null);
   const [username, setUsername] = useState(returningUsername || demoStudent?.username || "");
-  const [password, setPassword] = useState(demoStudent?.password ?? "");
+  // After an expiry a demo account comes back with its (public, built-in) demo password, so a quick re-login
+  // does not need it typed; real accounts never get a prefilled password.
+  const returningDemoPassword = demoMode && returningUsername
+    ? demoStudents.find((student) => student.username === returningUsername)?.password
+      ?? (returningUsername === "teacher" ? demoPassword : "")
+    : "";
+  const [password, setPassword] = useState(returningDemoPassword || (demoStudent?.password ?? ""));
   const edited = useRef(false);
   // Every demo student is in use (the server had none idle): the form is not prefilled with someone's account.
   const [noIdleDemoStudent, setNoIdleDemoStudent] = useState(false);
@@ -265,11 +271,14 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
           <label className="login-label" htmlFor="login-user">用户名</label>
           <input
             id="login-user" className="login-input" value={username} autoComplete="username" required
+            // Start where typing is needed: the user name, or the password when the name is already filled in.
+            autoFocus={!username}
             onChange={(e) => { edited.current = true; setUsername(e.target.value); clearError(); }}
           />
           <label className="login-label" htmlFor="login-pass">密码</label>
           <input
             id="login-pass" className="login-input" type="password" value={password} required
+            autoFocus={Boolean(username) && !password}
             autoComplete="current-password" onChange={(e) => { edited.current = true; setPassword(e.target.value); clearError(); }}
           />
           {error && <div className="error-box" role="alert" style={{ marginTop: 14, padding: "10px 14px" }}>{error}</div>}

@@ -10,6 +10,7 @@ import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE, STEP_MATERIAL_ACTION_ID }
 import type { IndicatorSchema, Meta, StepStateApi } from "../../../types";
 import { countryLabel } from "../../../viz";
 import { fieldLabel, fmtField, useAsync } from "../../shared";
+import { userFacingRequestError } from "../../../user-facing-error";
 import {
   COUNTRY_METRIC,
   type IndicatorGroupKey,
@@ -82,10 +83,15 @@ export function useAutoComparison({ topic, meta, state, country, partner, year, 
 
   // Marked as the student's choice, so the report does not call it an automatic record.
   const record = patch && !current ? () => state.save({ ...patch, material_chosen: true }) : undefined;
-  return { first: pair[0], second: pair[1], current, record, loadFailed: countryQuery.status === "error" };
+  return {
+    first: pair[0], second: pair[1], current, record,
+    loadFailed: countryQuery.status === "error",
+    loadError: countryQuery.error,
+    onRetryLoad: countryQuery.retry,
+  };
 }
 
-export function AutoMaterialStatus({ meta, state, schema, first, second, current, record, onSecond, loadFailed, where, note }: {
+export function AutoMaterialStatus({ meta, state, schema, first, second, current, record, onSecond, loadFailed, loadError = null, onRetryLoad, where, note }: {
   meta: Meta;
   state: StepStateApi<IndicatorStepState>;
   schema: IndicatorSchema | null | undefined;
@@ -97,6 +103,8 @@ export function AutoMaterialStatus({ meta, state, schema, first, second, current
   record?: () => void;
   onSecond: (country: string) => void;
   loadFailed: boolean;
+  loadError?: string | null;
+  onRetryLoad?: () => void;
   /** Where the first country is chosen, e.g. “上方所选国家”. */
   where: string;
   /** Extra reading caveat for this step's indicator. */
@@ -109,7 +117,10 @@ export function AutoMaterialStatus({ meta, state, schema, first, second, current
       <b>报告材料 · {state.materialLocked ? "已记录" : "自动记录"}</b>
       {recorded.length === 2
         ? <span role="status">{recorded[0].year} 年 · {recorded.map((item) => `${countryLabel(item.country)} ${fmtField(item.value, item.metric, schema)}`).join("；")} · {fieldLabel(recorded[0].metric, schema)}</span>
-        : <span role="status">{loadFailed ? "国家级数据加载失败，请刷新后重试。" : "正在记录当前选择…"}</span>}
+        : <span role="status">
+          {loadFailed ? userFacingRequestError(loadError, "国家级数据加载失败") : "正在记录当前选择…"}
+          {loadFailed && onRetryLoad && <button type="button" className="secondary" onClick={onRetryLoad}>重试</button>}
+        </span>}
       <label className="auto-material-partner">对比国家
         <select value={second} onChange={(event) => onSecond(event.target.value)}>
           {meta.countries.filter((code) => code !== first).map((code) => <option key={code} value={code}>{countryLabel(code)}</option>)}

@@ -11,6 +11,7 @@ classroom-init  初始化教学数据库(建库/建表/播种演示数据)
 import argparse
 import os
 import re
+import sys
 
 
 def main() -> None:
@@ -101,6 +102,11 @@ def main() -> None:
 
         if args.limit_concurrency <= 0 or args.backlog <= 0 or args.graceful_timeout <= 0:
             raise SystemExit("limit-concurrency、backlog、graceful-timeout 必须为正数")
+        from gvcsim import file_identity
+
+        cache_warning = file_identity.cache_mode_warning()
+        if cache_warning:
+            print(f"⚠ {cache_warning}", file=sys.stderr)
         uvicorn.run(
             "gvcsim.api:app",
             host=args.host,
@@ -128,6 +134,8 @@ def main() -> None:
             f"年份={','.join(str(year) for year in preflight_report['years'])}，"
             f"schema={preflight_report['database']['schema_version']}"
         )
+        for warning in preflight_report.get("warnings", []):
+            print(f"⚠ {warning}")
 
     elif args.command == "classroom-init":
         import psycopg

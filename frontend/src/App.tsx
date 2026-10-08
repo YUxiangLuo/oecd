@@ -22,6 +22,30 @@ import { userFacingRequestError } from "./user-facing-error";
 
 const APP_TITLE = "供应链仿真系统 · GVC Simulation Lab";
 
+/** One layout for the three start-up failures: a heading, what failed, what is kept, and the actions. */
+function BootFailure({ title, message, note, primary, secondary }: {
+  title: string;
+  message: string;
+  note: string;
+  primary: { label: string; onClick: () => void };
+  secondary?: { label: string; onClick: () => void };
+}) {
+  return (
+    <main className="layout app-boot boot-failure">
+      <section className="panel" aria-labelledby="boot-failure-title">
+        <h1 id="boot-failure-title">{title}</h1>
+        <div className="error-box" role="alert">{message}</div>
+        <p>{note}</p>
+        <div className="boot-failure-actions">
+          {/* Focus lands here after each failed retry, so a keyboard user is not left on <body>. */}
+          <button className="primary" autoFocus onClick={primary.onClick}>{primary.label}</button>
+          {secondary && <button className="secondary" onClick={secondary.onClick}>{secondary.label}</button>}
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export default function App() {
   const [stepsData, setStepsData] = useState<StepsResponse | null>(null);
   const [meta, setMeta] = useState<Meta | null>(null);
@@ -39,9 +63,14 @@ export default function App() {
   // Read before the first render: the login form takes its initial value from it.
   const [authUsername] = useState<string | null>(() => sessionStorage.getItem("gvcsim_auth_username"));
   const [authCheckError, setAuthCheckError] = useState<string | null>(null);
+  const [authAttempt, setAuthAttempt] = useState(0);
+  // After a successful retry the failure page (and its focused button) is gone: put focus on the content.
+  const recoverFocus = useRef(false);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [showIntro, setShowIntro] = useState(() => sessionStorage.getItem("gvcsim_show_intro") === "1");
   const introTriggerRef = useRef<HTMLButtonElement>(null);
+  // Shown by itself after login (not from the 系统介绍 button): closing it continues on the step content.
+  const [introAuto, setIntroAuto] = useState(showIntro);
 
   const session = useSession(
     user?.role === "student",
@@ -133,6 +162,7 @@ export default function App() {
   }, [reloadLoggedOut, session, user]);
 
   useEffect(() => {
+    if (authAttempt > 0) setAuthCheckError(null);
     const notice = sessionStorage.getItem("gvcsim_auth_notice");
     if (notice) {
       sessionStorage.removeItem("gvcsim_auth_notice");
@@ -157,7 +187,25 @@ export default function App() {
         else setAuthCheckError(userFacingRequestError(error, "暂时无法校验登录"));
       },
     ).finally(() => setAuthChecked(true));
-  }, [reloadLoggedOut]);
+  }, [reloadLoggedOut, authAttempt]);
+
+  // Both failure pages retry by themselves when the network comes back (the session page already does).
+  const retryAuthCheck = useCallback(() => {
+    recoverFocus.current = true;
+    setAuthChecked(false);
+    setAuthAttempt((value) => value + 1);
+  }, []);
+  const retryCourse = useCallback(() => {
+    recoverFocus.current = true;
+    setFatal(null);
+    setBootAttempt((value) => value + 1);
+  }, []);
+  useEffect(() => {
+    if (!authCheckError && !fatal) return;
+    const online = () => (authCheckError ? retryAuthCheck() : retryCourse());
+    window.addEventListener("online", online);
+    return () => window.removeEventListener("online", online);
+  }, [authCheckError, fatal, retryAuthCheck, retryCourse]);
 
   useEffect(() => {
     // Back after logout can restore a signed-in page from the back/forward cache with its token
@@ -207,7 +255,11 @@ export default function App() {
   useEffect(() => {
     if (!stepsData || session.status !== "ready" || initialStepChosen.current) return;
     initialStepChosen.current = true;
-    if (explicitStep.current != null) return;
+    if (explicitStep.current != null) {
+      // A deep link keeps its step; the history entry is rewritten for it (as every other step change is).
+      selectStep(explicitStep.current, "replace");
+      return;
+    }
     const completed = new Set(session.completion?.completed ?? []);
     // With everything done, open the report step: that is where the receipt and teacher feedback are.
     const firstIncomplete = stepsData.steps.find((step) => !completed.has(step.n))?.n ?? stepsData.steps.at(-1)?.n ?? 1;
@@ -223,17 +275,26 @@ export default function App() {
     document.title = currentTitle ? `步骤 ${current} · ${currentTitle} · ${APP_TITLE}` : APP_TITLE;
   }, [current, currentTitle, isTeacher]);
 
+  // After a failure page's retry succeeds, its focused button is gone; continue from the step content.
+  const workspaceReady = Boolean(user?.role === "student" && stepsData && metaReady && session.status === "ready");
+  useEffect(() => {
+    if (!workspaceReady || !recoverFocus.current) return;
+    recoverFocus.current = false;
+    const frame = window.requestAnimationFrame(() => {
+      if (document.activeElement == null || document.activeElement === document.body) contentRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [workspaceReady]);
+
   if (!authChecked) return <AppBootSkeleton />;
   if (authCheckError) {
     return (
-      <main className="layout app-boot" style={{ display: "grid", placeItems: "center", padding: 32 }}>
-        <section className="panel" role="alert" style={{ maxWidth: 560 }}>
-          <h1>暂时无法连接教学服务</h1>
-          <p>{authCheckError}</p>
-          <p>登录信息已保留。服务恢复后可重试连接。</p>
-          <button className="primary" onClick={() => window.location.reload()}>重试连接</button>
-        </section>
-      </main>
+      <BootFailure
+        title="暂时无法连接教学服务"
+        message={authCheckError}
+        note={`登录信息已保留。服务或网络恢复后会自动重试，也可以手动重试。${authAttempt > 0 ? `已重试 ${authAttempt} 次，仍未成功。` : ""}`}
+        primary={{ label: "重试连接", onClick: retryAuthCheck }}
+      />
     );
   }
   if (!user) {
@@ -250,7 +311,7 @@ export default function App() {
         sessionStorage.setItem("gvcsim_signed_in_username", response.user.username);
         // 每次学生登录都重新展示系统介绍（不按账号记忆已读）；登录失效或改密后的重新登录是在实验中途，
         // 不再打断（authNotice 说明了为何回到登录页）。
-        if (shouldAutoShowIntro(response.user.role) && !authNotice) {
+        if (shouldAutoShowIntro(response.user.role) && (!authNotice || response.user.username !== authUsername)) {
           sessionStorage.setItem("gvcsim_show_intro", "1");
         }
         // A step left by the previous user (Back after logout, or another account after an expiry) must not
@@ -280,28 +341,25 @@ export default function App() {
   }
 
   if (fatal) return (
-    <main className="app-boot" style={{ padding: 40 }}>
-      <div className="error-box" role="alert">{fatal}</div>
-      <p>登录信息已保留，可以重试加载课程。{bootAttempt > 0 ? `已重试 ${bootAttempt} 次，仍未成功。` : ""}</p>
-      <div style={{ display: "flex", gap: 8 }}>
-        {/* Focus lands here after each failed retry, so a keyboard user is not left on <body>. */}
-        <button className="primary" autoFocus onClick={() => { setFatal(null); setBootAttempt((value) => value + 1); }}>重试加载课程</button>
-        <button className="secondary" onClick={logout}>退出登录</button>
-      </div>
-    </main>
+    <BootFailure
+      title="课程加载失败"
+      message={fatal}
+      note={`登录信息已保留。网络恢复后会自动重试，也可以手动重试加载课程。${bootAttempt > 0 ? `已重试 ${bootAttempt} 次，仍未成功。` : ""}`}
+      primary={{ label: "重试加载课程", onClick: retryCourse }}
+      secondary={{ label: "退出登录", onClick: logout }}
+    />
   );
   if (!stepsData || !metaReady || session.status === "loading") return <AppBootSkeleton />;
   // Without the saved record every edit would be dropped (nothing can be merged or saved), so the
   // workspace must not look usable: block it until the record is read.
   if (session.status === "unavailable") return (
-    <main className="app-boot" style={{ padding: 40 }}>
-      <div className="error-box" role="alert">{session.syncError ?? "读取实验记录失败：暂时无法连接教学服务"}</div>
-      <p>你的实验记录保存在服务器上，没有丢失。读取成功后才能继续操作；网络恢复时会自动重新读取。{session.loadAttempts > 0 ? `已重试 ${session.loadAttempts} 次，仍未成功。` : ""}</p>
-      <div style={{ display: "flex", gap: 8 }}>
-        <button className="primary" autoFocus onClick={session.retryLoad}>重新读取实验记录</button>
-        <button className="secondary" onClick={logout}>退出登录</button>
-      </div>
-    </main>
+    <BootFailure
+      title="暂时无法读取实验记录"
+      message={session.syncError ?? "读取实验记录失败：暂时无法连接教学服务"}
+      note={`你的实验记录保存在服务器上，没有丢失。读取成功后才能继续操作；网络恢复时会自动重新读取。${session.loadAttempts > 0 ? `已重试 ${session.loadAttempts} 次，仍未成功。` : ""}`}
+      primary={{ label: "重新读取实验记录", onClick: () => { recoverFocus.current = true; session.retryLoad(); } }}
+      secondary={{ label: "退出登录", onClick: logout }}
+    />
   );
 
   return (
@@ -318,7 +376,8 @@ export default function App() {
       contentRef={contentRef}
       introTriggerRef={introTriggerRef}
       onNavigateStep={navigateStep}
-      onShowIntro={() => setShowIntro(true)}
+      introAuto={introAuto}
+      onShowIntro={() => { setIntroAuto(false); setShowIntro(true); }}
       onCloseIntro={() => {
         setShowIntro(false);
       }}

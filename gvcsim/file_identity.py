@@ -168,6 +168,24 @@ def _new_monitor() -> _Inotify | None:
 
 _monitor = _new_monitor()
 
+HASH_MODE_WARNING = (
+    "GVCSIM_FILE_CACHE_MODE 为 hash：每个已登录请求都会重新计算全部数据产物的 SHA-256（约 80 ms/请求，"
+    "15 人同时上课时请求可达 2–5 秒）。课堂或演示请设 GVCSIM_FILE_CACHE_MODE=notify（数据目录须在本地 ext4/XFS/Btrfs）。"
+)
+
+
+def cache_mode_warning() -> str | None:
+    """A start-up warning when release files are re-hashed per request (hash mode, or notify unavailable)."""
+    mode = os.environ.get("GVCSIM_FILE_CACHE_MODE", "hash")
+    if mode == "notify" and _monitor is not None:
+        return None
+    if mode == "notify":
+        return (
+            "GVCSIM_FILE_CACHE_MODE=notify 但 inotify 不可用（非 Linux 或已达监视上限），已退回逐请求哈希；"
+            + HASH_MODE_WARNING
+        )
+    return HASH_MODE_WARNING
+
 
 def file_state(path: Path) -> FileState:
     """Return a metadata + change/content key; never use metadata alone."""

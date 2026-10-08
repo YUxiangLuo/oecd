@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LabeledControl } from "../a11y";
 import { formatMetric, stripNegativeZero } from "../format";
 import type { IndicatorSchema } from "../types";
@@ -170,7 +170,9 @@ export function YearPicker({ years, year, onChange }: { years: number[]; year: n
 
 export const pct = (v: number) => `${(v * 100).toFixed(2)}%`;
 
-/** 统一分页器：支持首尾页、逐页与直接跳转，输入在失焦/回车时收敛到有效范围。 */
+/** 统一分页器：支持首尾页、逐页与直接跳转，输入在失焦/回车时收敛到有效范围。
+ *  Buttons use aria-disabled (not disabled) and focus is put back after the page changes, so a keyboard user
+ *  who pressed 下一页 is not dropped onto the page; the new page is announced. */
 export function Pager({ page, pages, total, onChange }: {
   page: number;
   pages: number;
@@ -180,36 +182,56 @@ export function Pager({ page, pages, total, onChange }: {
   const safePages = Math.max(1, pages);
   const [draft, setDraft] = useState(String(page));
   useEffect(() => setDraft(String(page)), [page]);
+  const pagerRef = useRef<HTMLDivElement>(null);
+  const lastAction = useRef<string | null>(null);
+  useEffect(() => {
+    const action = lastAction.current;
+    if (!action) return;
+    const frame = window.requestAnimationFrame(() => {
+      if (document.activeElement && document.activeElement !== document.body) return;
+      pagerRef.current?.querySelector<HTMLElement>(`[data-pager="${action}"]`)?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [page, pages]);
+  const go = (action: string, next: number, enabled: boolean) => () => {
+    if (!enabled) return;
+    lastAction.current = action;
+    onChange(next);
+  };
   const commit = () => {
     const parsed = Number.parseInt(draft, 10);
     const next = Number.isFinite(parsed) ? Math.min(safePages, Math.max(1, parsed)) : page;
     setDraft(String(next));
-    if (next !== page) onChange(next);
+    if (next !== page) {
+      lastAction.current = "input";
+      onChange(next);
+    }
   };
+  const atStart = page <= 1;
+  const atEnd = page >= safePages;
   return (
-    <div className="pager">
-      <button disabled={page <= 1} onClick={() => onChange(1)} title="首页">« 首页</button>
-      <button disabled={page <= 1} onClick={() => onChange(page - 1)}>← 上一页</button>
+    <div className="pager" ref={pagerRef}>
+      <button data-pager="first" aria-disabled={atStart || undefined} onClick={go("first", 1, !atStart)} title="首页">« 首页</button>
+      <button data-pager="prev" aria-disabled={atStart || undefined} onClick={go("prev", page - 1, !atStart)}>← 上一页</button>
       <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
         第
         <input
+          data-pager="input"
           aria-label="跳转页码"
           inputMode="numeric"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commit}
           onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              commit();
-              event.currentTarget.blur();
-            }
+            if (event.key === "Enter") commit();
           }}
           style={{ width: 48, textAlign: "center" }}
         />
         / {safePages} 页{total != null ? ` · 共 ${total} 条` : ""}
       </span>
-      <button disabled={page >= safePages} onClick={() => onChange(page + 1)}>下一页 →</button>
-      <button disabled={page >= safePages} onClick={() => onChange(safePages)} title="末页">末页 »</button>
+      <button data-pager="next" aria-disabled={atEnd || undefined} onClick={go("next", page + 1, !atEnd)}>下一页 →</button>
+      <button data-pager="last" aria-disabled={atEnd || undefined} onClick={go("last", safePages, !atEnd)} title="末页">末页 »</button>
+      <span className="sr-only" role="status" aria-live="polite">第 {page} / {safePages} 页</span>
     </div>
   );
 }

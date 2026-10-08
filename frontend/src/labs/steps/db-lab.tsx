@@ -632,6 +632,7 @@ export function ReleaseIntegrityStatus({ meta }: { meta: Meta | null }) {
 }
 
 export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>; releaseMeta: Meta | null }) {
+  const lastPages = useRef(1);
   const {
     data: meta,
     error: metaError,
@@ -763,7 +764,10 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
   }
 
   const selectedFile = meta.files.find((f) => f.year === year);
-  const pages = slice ? Math.max(1, Math.ceil(slice.total / slice.page_size)) : 1;
+  // While the next page loads there is no slice; keep the last page count so the pager does not collapse to
+  // "1 / 1" (which disabled the button that had focus).
+  const pages = slice ? Math.max(1, Math.ceil(slice.total / slice.page_size)) : lastPages.current;
+  lastPages.current = pages;
   const colOptions = table === "y" ? meta.final_demand_categories : meta.sectors;
   const activeTable = DB_TABLES.find((t) => t.key === table)!;
   const selectedObservation = state.data?.observation;
@@ -796,11 +800,13 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
             </select>
           )}
         </LabeledControl>
-        <div className="seg db-table-seg">
+        <div className="seg db-table-seg" role="group" aria-label="选择数据表">
           {DB_TABLES.map((item) => (
             <button
               key={item.key}
+              type="button"
               className={table === item.key ? "on" : ""}
+              aria-pressed={table === item.key}
               onClick={() => {
                 setTable(item.key);
                 setColCountry((current) => dbColumnCountryForTable(meta, current, item.key));

@@ -159,7 +159,7 @@ function QuizPanelBody({
                 ))}
               </div>
               {result && (
-                <p className="quiz-feedback" role="status">
+                <p className="quiz-feedback">
                   <b>{result.correct ? "回答正确。" : "这项还不对。"}</b>{result.explanation}
                 </p>
               )}
@@ -179,6 +179,13 @@ function QuizPanelBody({
         </button>
         <span className={complete ? "quiz-complete" : "muted"}>{completionMessage}</span>
       </div>
+      {/* One region, mounted before any result, so screen readers announce each grading (regions created
+          together with their text are often skipped). The per-question feedback is read in place. */}
+      <span className="sr-only" role="status" aria-live="polite">
+        {feedback.length
+          ? `判定结果：${feedback.filter((item) => item.correct).length} / ${quiz.questions.length} 题正确。${completionMessage}`
+          : ""}
+      </span>
       {/* Ready materials are already shown in the task card; only a gap needs a prompt here. */}
       {materialStatus && materialStatus !== "ready" && <div className="quiz-submit-row">
         <span className="muted">报告材料：{MATERIAL_STATUS_LABELS[materialStatus]}。理解题与报告材料分别记录。</span>

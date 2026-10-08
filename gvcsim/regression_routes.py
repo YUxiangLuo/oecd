@@ -1,5 +1,6 @@
 """Routes for the fixed teaching TWFE regression."""
 
+import threading
 from typing import Any, cast
 
 import numpy as np
@@ -185,15 +186,28 @@ async def teaching_panel(
     return await concurrency.run_sync(read)
 
 
+# The artifact cache returns the same DataFrame object until the file changes, so the trends computed from
+# it are reused instead of recomputed on every step 11–14 mount.
+_GROUP_TRENDS_CACHE: list[tuple[Any, dict]] = []
+_GROUP_TRENDS_LOCK = threading.Lock()
+
+
 @router.get("/api/regression/teaching-groups")
 async def teaching_groups():
     """Taxed vs untaxed mean change of each simulated Y: what steps 11–14 show before the run."""
 
     def read() -> dict:
+        panel = _read_csv("panel_teaching.csv")
+        with _GROUP_TRENDS_LOCK:
+            if _GROUP_TRENDS_CACHE and _GROUP_TRENDS_CACHE[0][0] is panel:
+                return _GROUP_TRENDS_CACHE[0][1]
         try:
-            return group_trends(_read_csv("panel_teaching.csv"))
+            trends = group_trends(panel)
         except ValueError as error:
             raise HTTPException(status_code=409, detail=str(error)) from error
+        with _GROUP_TRENDS_LOCK:
+            _GROUP_TRENDS_CACHE[:] = [(panel, trends)]
+        return trends
 
     return await concurrency.run_sync(read)
 

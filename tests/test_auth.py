@@ -64,9 +64,9 @@ def test_token_issue_and_verification_require_release_identity(teaching_db, monk
         raise artifacts.ArtifactContractError("dataset metadata checksum mismatch")
 
     monkeypatch.setattr(artifacts, "release_identity", invalid_release)
-    with pytest.raises(auth.AuthenticationUnavailable, match="数据发布"):
+    with pytest.raises(auth.AuthenticationUnavailable, match="教学服务暂时不可用"):
         auth.issue_token(user)
-    with pytest.raises(auth.AuthenticationUnavailable, match="数据发布"):
+    with pytest.raises(auth.AuthenticationUnavailable, match="教学服务暂时不可用"):
         auth.verify_token(token)
 
 
@@ -86,7 +86,7 @@ def test_missing_release_identity_blocks_login_and_protected_api(teaching_db, mo
         headers={"Authorization": f"Bearer {login.json()['token']}"},
     )
     assert denied_api.status_code == 503
-    assert "数据发布" in denied_api.json()["detail"]
+    assert denied_api.json()["detail"] == auth.SERVICE_UNAVAILABLE_MESSAGE  # operator detail goes to the log
 
 
 def test_password_change_updates_credentials_and_revokes_existing_token(teaching_db):

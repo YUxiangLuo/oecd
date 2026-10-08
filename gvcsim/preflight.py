@@ -30,4 +30,7 @@ def run() -> dict[str, Any]:
         database = db.readiness()
     finally:
         db.shutdown()
-    return {"status": "ok", "years": years, "artifacts": release, "database": database}
+    from gvcsim import file_identity
+
+    warnings = [warning for warning in (file_identity.cache_mode_warning(),) if warning]
+    return {"status": "ok", "years": years, "artifacts": release, "database": database, "warnings": warnings}

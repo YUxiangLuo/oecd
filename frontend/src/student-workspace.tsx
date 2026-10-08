@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useRef,
   useMemo,
   type MouseEvent,
@@ -71,6 +72,8 @@ interface StudentWorkspaceProps {
   showPasswordChange: boolean;
   contentRef: RefObject<HTMLElement | null>;
   introTriggerRef: RefObject<HTMLButtonElement | null>;
+  /** The intro opened by itself after login; closing it returns focus to the step content. */
+  introAuto?: boolean;
   onNavigateStep: (step: number) => void;
   onShowIntro: () => void;
   onCloseIntro: () => void;
@@ -111,6 +114,7 @@ export function StudentWorkspace({
   showPasswordChange,
   contentRef,
   introTriggerRef,
+  introAuto = false,
   onNavigateStep,
   onShowIntro,
   onCloseIntro,
@@ -124,6 +128,16 @@ export function StudentWorkspace({
   const totalSteps = steps.length;
   const stepIndex = steps.findIndex((item) => item.n === current);
   const passwordTriggerRef = useRef<HTMLButtonElement>(null);
+  // A save problem that clears (retry, automatic resave when back online) unmounts its banner and the
+  // button that had focus; continue from the step content instead of <body>.
+  const hadSyncError = useRef(false);
+  useEffect(() => {
+    const failing = Boolean(session.syncError);
+    if (hadSyncError.current && !failing && (document.activeElement == null || document.activeElement === document.body)) {
+      contentRef.current?.focus();
+    }
+    hadSyncError.current = failing;
+  }, [session.syncError, contentRef]);
   if (stepIndex < 0) {
     return <div style={{ padding: 40 }} className="error-box">步骤不存在，请从课程大纲重新选择。</div>;
   }
@@ -174,6 +188,8 @@ export function StudentWorkspace({
     <SyncProblemContext.Provider value={syncProblem}>
       <div className="layout" inert={showIntro ? true : undefined}>
         <StudentWorkspaceSkipLink targetId={mainContentId} targetRef={contentRef} />
+        {/* Always mounted, so a step change is announced even though focus stays in the sidebar. */}
+        <span className="sr-only" role="status" aria-live="polite">已进入步骤 {step.n}：{step.title}</span>
         <StudentTopbar
           user={user}
           meta={meta}
@@ -282,7 +298,7 @@ export function StudentWorkspace({
           user={user}
           meta={meta}
           stepsData={stepsData}
-          returnFocusRef={introTriggerRef}
+          returnFocusRef={introAuto ? contentRef : introTriggerRef}
           onDone={onCloseIntro}
         />
       )}

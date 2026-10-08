@@ -171,14 +171,17 @@ export function StudentTopbar({
         </span>
         <span className="role-chip" title={`${user.name} · 学生账号 · ${user.username}`}><span>{user.name}</span></span>
         <button ref={introTriggerRef} onClick={onShowIntro}>ⓘ 系统介绍</button>
+        {/* aria-disabled (not disabled) keeps the explanation reachable by keyboard and screen readers. */}
         <button
           ref={passwordTriggerRef}
-          disabled={fixedDemoPassword}
+          aria-disabled={fixedDemoPassword || undefined}
+          aria-describedby={fixedDemoPassword ? "fixed-demo-password-note" : undefined}
           title={fixedDemoPassword ? "演示账号的密码由系统统一管理，不能修改" : undefined}
-          onClick={onRequestPasswordChange}
+          onClick={fixedDemoPassword ? undefined : onRequestPasswordChange}
         >
           {fixedDemoPassword ? "固定演示口令" : "修改密码"}
         </button>
+        {fixedDemoPassword && <span id="fixed-demo-password-note" className="sr-only">演示账号的密码由系统统一管理，不能修改</span>}
         <button onClick={onLogout}>退出</button>
       </div>
     </header>

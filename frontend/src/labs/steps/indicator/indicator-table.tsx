@@ -407,7 +407,9 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
   const displayRows = groupKey === "network" && country && data
     ? sortNetworkRows(data.rows, networkSort)
     : (data?.rows ?? []);
-  const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : 1;
+  const knownPages = useRef(1);
+  const pages = data ? Math.max(1, Math.ceil(data.total / data.page_size)) : knownPages.current;
+  knownPages.current = pages;
   const defaultMetricCount = indicatorMetricColumns(groupKey, group?.fields ?? [], data?.rows[0]).length;
   const allMetricCount = indicatorMetricColumns(groupKey, group?.fields ?? [], data?.rows[0], true).length;
   const toggleAllFields = () => {
@@ -500,8 +502,9 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
               page={page}
             />
           </ScrollableRegion>
-          <Pager page={page} pages={pages} total={data?.total} onChange={onPage} />
       </IndicatorRequestBoundary>
+      {/* Outside the loading boundary: the pager stays mounted (and keeps focus) while the next page loads. */}
+      {(data || knownPages.current > 1) && <Pager page={page} pages={pages} total={data?.total} onChange={onPage} />}
     </FullscreenPanel>
   );
 }

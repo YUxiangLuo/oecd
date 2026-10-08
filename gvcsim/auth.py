@@ -6,12 +6,17 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import time
 from pathlib import Path
 
 from gvcsim import artifacts, config
+
+_LOG = logging.getLogger(__name__)
+# What a student sees when the service cannot authenticate; operator details go to the server log.
+SERVICE_UNAVAILABLE_MESSAGE = "教学服务暂时不可用，请稍后重试；若持续失败，请联系老师。"
 
 SECRET_FILE = config.DATA_DIR / ".auth_secret"
 
@@ -81,7 +86,8 @@ def issue_token(user: dict) -> tuple[str, int]:
         release_id = artifacts.release_identity()
         artifacts.validate_release_cached()
     except (artifacts.ArtifactContractError, OSError) as error:
-        raise AuthenticationUnavailable("当前数据发布不可用") from error
+        _LOG.error("登录签发失败：当前数据发布不可用（%s）", error)
+        raise AuthenticationUnavailable(SERVICE_UNAVAILABLE_MESSAGE) from error
     body = {
         "sub": user["username"],
         "role": user["role"],
@@ -137,7 +143,8 @@ def verify_token(token: str) -> dict | None:
             # the immutable account id/username/role/auth_version claims above.
             payload["name"] = subject["display_name"]
         except (artifacts.ArtifactContractError, OSError, db.Unavailable, db.SchemaVersionMismatch) as error:
-            raise AuthenticationUnavailable("认证依赖的数据发布或数据库不可用") from error
+            _LOG.error("令牌校验失败：认证依赖的数据发布或数据库不可用（%s）", error)
+            raise AuthenticationUnavailable(SERVICE_UNAVAILABLE_MESSAGE) from error
         return payload
     except AuthenticationUnavailable:
         raise

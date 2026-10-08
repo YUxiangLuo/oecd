@@ -202,7 +202,8 @@ export function IndustryDotPlot({ groups, countries, unit, nationals = [], label
           key={group.key}
           className="dot-plot-row"
           data-hovered={hovered === group.key || undefined}
-          tabIndex={0}
+          // One Tab stop per row: the industry button when the row can be picked, the row itself otherwise.
+          tabIndex={onPick ? -1 : 0}
           role="group"
           aria-label={`${group.label}：${group.values.map((value, index) => `${countryLabel(countries[index])} ${indicatorNumber(value, unit)}`).join("，")}`}
           onMouseMove={(event) => { setHovered(group.key); show(event, linesFor(group)); }}
@@ -335,7 +336,7 @@ export function Butterfly({ rows, leftLabel, rightLabel, unit, title, onPick }: 
           key={row.key}
           className="butterfly-row"
           data-hovered={hovered === row.key || undefined}
-          tabIndex={0}
+          tabIndex={onPick ? -1 : 0}
           role="group"
           aria-label={`${row.label}：${leftLabel} ${reading(row.left)}，${rightLabel} ${reading(row.right)}`}
           onMouseMove={(event) => { setHovered(row.key); show(event, linesFor(row)); }}

@@ -112,7 +112,7 @@ describe("authentication dependency recovery", () => {
     restorers.push(...[me, meta, steps, session].map((mock) => () => mock.mockRestore()), () => { delete (navigator as { onLine?: boolean }).onLine; });
     render(<App />);
     fireEvent.click(await screen.findByRole("button", { name: "退出" }));
-    expect((await screen.findByRole("status")).textContent).toContain("当前网络不可用");
+    expect((await screen.findByText(/当前网络不可用/)).getAttribute("role")).toBe("status");
     expect(screen.getByLabelText("用户名")).toBeTruthy();
     expect(reload).not.toHaveBeenCalled();
     expect(sessionStorage.getItem(AUTH_TOKEN_KEY)).toBeNull();

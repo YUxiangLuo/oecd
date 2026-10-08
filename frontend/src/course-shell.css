@@ -14,6 +14,7 @@
   padding: 6px 12px; border-radius: 8px; border: 1px solid #e0e3ea; background: #fff;
   font-size: 12px; color: #5a6070;
 }
+.topbar-user button[aria-disabled="true"] { opacity: 0.6; cursor: default; }
 .progress-pill {
   display: flex; align-items: center; gap: 7px; padding: 6px 12px;
   background: #f4f5f8; border-radius: 9px; font-size: 12px; color: var(--text-muted);
@@ -358,4 +359,9 @@
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Users who ask for less motion get results and toasts without the slide/fade. */
+@media (prefers-reduced-motion: reduce) {
+  .reg-results, .toast-item { animation: none; }
 }

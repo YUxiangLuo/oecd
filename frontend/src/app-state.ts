@@ -17,8 +17,9 @@ interface StepHistoryWriter {
 export type StepHistoryMode = "push" | "replace";
 
 export function stepFromSearch(search: string): number | null {
-  const n = Number(new URLSearchParams(search).get("step"));
-  return Number.isInteger(n) && n >= 1 && n <= 15 ? n : null;
+  // Only a plain step number: Number() would also accept "1e1", "0x5" or " 7 ".
+  const raw = new URLSearchParams(search).get("step");
+  return raw != null && /^(?:[1-9]|1[0-5])$/.test(raw) ? Number(raw) : null;
 }
 
 export function storeAuthentication(storage: StorageWriter, token: string): void {

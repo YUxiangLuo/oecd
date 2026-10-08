@@ -7,7 +7,7 @@
  * polite live region so a keyboard reader hears the same values a mouse user sees. Every value
  * shown here is also in the chart's reading table; the tooltip enhances, it never gates.
  */
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 /** `[label, value, seriesColor?]`; a line with an empty label is the heading. */
 export type TipLine = [string, string, string?];
@@ -34,6 +34,14 @@ export function useHoverTip() {
     place(rect ? rect.left + rect.width / 2 : 0, rect ? rect.bottom : 0, lines);
   }, [place]);
   const hide = useCallback(() => setTip(null), []);
+  // Escape dismisses a readout that covers content (WCAG 1.4.13), on every chart that uses this hook.
+  const shown = tip !== null;
+  useEffect(() => {
+    if (!shown) return;
+    const dismiss = (event: KeyboardEvent) => { if (event.key === "Escape") setTip(null); };
+    document.addEventListener("keydown", dismiss);
+    return () => document.removeEventListener("keydown", dismiss);
+  }, [shown]);
   const Tip: ReactNode = (
     <div
       className="hover-tip"

@@ -25,7 +25,7 @@ describe("application URL state", () => {
     expect(stepFromSearch("?step=1")).toBe(1);
     expect(stepFromSearch("?step=15")).toBe(15);
     expect(stepFromSearch("?step=16")).toBeNull();
-    for (const search of ["", "?step=0", "?step=17", "?step=1.5", "?step=bad"]) {
+    for (const search of ["", "?step=0", "?step=17", "?step=1.5", "?step=bad", "?step=1e1", "?step=0x5", "?step=%207%20", "?step=07"]) {
       expect(stepFromSearch(search)).toBeNull();
     }
   });

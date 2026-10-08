@@ -8,6 +8,7 @@
 
 from contextlib import asynccontextmanager
 import json
+import logging
 
 import anyio
 from fastapi import FastAPI
@@ -16,7 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse, Response
 
-from gvcsim import auth, auth_routes, concurrency, data_routes, regression_routes
+from gvcsim import auth, auth_routes, concurrency, data_routes, file_identity, regression_routes
+from gvcsim.auth import SERVICE_UNAVAILABLE_MESSAGE
 from gvcsim import config as app_config
 from gvcsim.artifacts import ArtifactContractError, dataset_metadata, validate_release_cached
 from gvcsim.classroom import db as classroom_db
@@ -24,6 +26,8 @@ from gvcsim.classroom import routes as classroom_routes
 from gvcsim.config import PROCESSED_DIR, RAW_DATA_DIR, processed_years
 from gvcsim.data import icio_browser
 from gvcsim.data.raw_icio import validate_raw_source_bindings
+
+_LOG = logging.getLogger(__name__)
 
 if app_config.IS_PRODUCTION:
     app_config.validate_security_config()
@@ -52,6 +56,10 @@ def validate_startup_data() -> None:
 async def lifespan(_app: FastAPI):
     """每个 worker 先验证数据并建立连接池，再开始接单。"""
     app_config.validate_capacity_config()
+    # Also when started as `uvicorn gvcsim.api:app` (systemd) rather than `gvcsim serve`.
+    cache_warning = file_identity.cache_mode_warning()
+    if cache_warning:
+        _LOG.warning(cache_warning)
     anyio.to_thread.current_default_thread_limiter().total_tokens = app_config.THREAD_TOKENS
     await anyio.to_thread.run_sync(classroom_db.startup)
     try:
@@ -186,10 +194,9 @@ async def artifact_contract_error(request: Request, exc: ArtifactContractError):
 
 @app.exception_handler(classroom_db.Unavailable)
 async def classroom_db_unavailable(request: Request, exc: classroom_db.Unavailable):
-    return JSONResponse(
-        status_code=503,
-        content={"detail": "教学数据库不可用,请先启动 PostgreSQL 并运行 `uv run gvcsim classroom-init`"},
-    )
+    # Students see a plain message; the operator's next step goes to the server log.
+    _LOG.error("教学数据库不可用：请先启动 PostgreSQL 并运行 `uv run gvcsim classroom-init`（%s）", exc)
+    return JSONResponse(status_code=503, content={"detail": SERVICE_UNAVAILABLE_MESSAGE})
 
 
 @app.exception_handler(classroom_db.OperationFailed)

@@ -66,6 +66,8 @@
   background: #fff; color: #4540ad; font-size: 11px; font-weight: 650; text-decoration: none;
 }
 .indicator-reading-viewer object { width: 100%; flex: 1; min-height: 410px; border: 0; background: #eef1f6; }
+/* The embedded PDF takes a Tab stop; show where focus is. */
+.indicator-reading-viewer object:focus-visible { outline: 3px solid #8272c4; outline-offset: -3px; }
 .indicator-reading-pdf-fallback {
   display: grid; place-content: center; gap: 10px; min-height: 410px; padding: 24px;
   color: #50596d; text-align: center;
