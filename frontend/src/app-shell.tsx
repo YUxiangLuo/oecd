@@ -136,7 +136,7 @@ function TeacherWorkspaceContent({
             aria-disabled={fixedDemoPassword || undefined}
             aria-describedby={fixedDemoPassword ? "fixed-demo-password-note" : undefined}
             title={fixedDemoPassword ? DEMO_PASSWORD_NOTE : undefined}
-            onClick={fixedDemoPassword ? () => showToast(DEMO_PASSWORD_NOTE) : () => reviewGuard.attempt(onRequestPasswordChange)}
+            onClick={fixedDemoPassword ? () => showToast(DEMO_PASSWORD_NOTE, "info") : () => reviewGuard.attempt(onRequestPasswordChange)}
           >
             修改密码
           </button>
@@ -197,7 +197,7 @@ export function StudentTopbar({
           aria-disabled={fixedDemoPassword || undefined}
           aria-describedby={fixedDemoPassword ? "fixed-demo-password-note" : undefined}
           title={fixedDemoPassword ? DEMO_PASSWORD_NOTE : undefined}
-          onClick={fixedDemoPassword ? () => showToast(DEMO_PASSWORD_NOTE) : onRequestPasswordChange}
+          onClick={fixedDemoPassword ? () => showToast(DEMO_PASSWORD_NOTE, "info") : onRequestPasswordChange}
         >
           修改密码
         </button>

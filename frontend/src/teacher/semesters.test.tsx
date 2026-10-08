@@ -135,7 +135,7 @@ test("creating, renaming, archiving and restoring each say so in a toast", async
     spyOn(api.classroom, "updateClass").mockResolvedValue(semester.classes[0]),
   ];
   const toasts: string[] = [];
-  const listener = (event: Event) => toasts.push(String((event as CustomEvent).detail));
+  const listener = (event: Event) => toasts.push(String((event as CustomEvent<{ message: string }>).detail.message));
   window.addEventListener("gvcsim-toast", listener);
   try {
     render(<SemestersTab />);

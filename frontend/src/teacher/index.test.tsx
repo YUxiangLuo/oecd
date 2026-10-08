@@ -74,7 +74,7 @@ test("调整班级 confirms the move in a toast; the first-step hint is gone onc
     spyOn(api.classroom, "setEnrollment").mockResolvedValue(undefined as never),
   ];
   const toasts: string[] = [];
-  const listener = (event: Event) => toasts.push(String((event as CustomEvent).detail));
+  const listener = (event: Event) => toasts.push(String((event as CustomEvent<{ message: string }>).detail.message));
   window.addEventListener("gvcsim-toast", listener);
   try {
     render(<TeacherReviewGuardProvider><TeacherDashboard user={teacher} /></TeacherReviewGuardProvider>);

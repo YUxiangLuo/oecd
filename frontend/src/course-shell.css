@@ -407,3 +407,5 @@ button.footer-next:hover { text-decoration: underline; }
   }
   .layout { height: calc(100vh - 32px); }
 }
+/* An info toast explains why nothing happened; it must not read as a success. */
+.toast-item--info { background: #3d4458; }

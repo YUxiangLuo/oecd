@@ -7,8 +7,11 @@ import { useEffect, useState } from "react";
 const TOAST_EVENT = "gvcsim-toast";
 const CLEAR_TOASTS_EVENT = "gvcsim-clear-toasts";
 
-export function showToast(message: string) {
-  window.dispatchEvent(new CustomEvent(TOAST_EVENT, { detail: message }));
+/** "success" confirms a finished action (✓); "info" explains why nothing happened (ⓘ), so a refusal never looks like success. */
+export type ToastTone = "success" | "info";
+
+export function showToast(message: string, tone: ToastTone = "success") {
+  window.dispatchEvent(new CustomEvent(TOAST_EVENT, { detail: { message, tone } }));
 }
 
 export function clearToasts() {
@@ -18,6 +21,7 @@ export function clearToasts() {
 interface ToastItem {
   id: number;
   message: string;
+  tone: ToastTone;
 }
 
 let nextId = 1;
@@ -26,10 +30,11 @@ export function ToastHost() {
   const [items, setItems] = useState<ToastItem[]>([]);
   useEffect(() => {
     const onToast = (e: Event) => {
-      const message = String((e as CustomEvent).detail ?? "");
+      const detail = (e as CustomEvent<{ message?: string; tone?: ToastTone }>).detail ?? {};
+      const message = String(detail.message ?? "");
       if (!message) return;
       const id = nextId++;
-      setItems((current) => [...current, { id, message }]);
+      setItems((current) => [...current, { id, message, tone: detail.tone === "info" ? "info" : "success" }]);
       window.setTimeout(() => {
         setItems((current) => current.filter((item) => item.id !== id));
       }, 2600);
@@ -46,7 +51,9 @@ export function ToastHost() {
   return (
     <div className="toast-host" role="status" aria-live="polite">
       {items.map((item) => (
-        <div key={item.id} className="toast-item">✓ {item.message}</div>
+        <div key={item.id} className={`toast-item${item.tone === "info" ? " toast-item--info" : ""}`}>
+          {item.tone === "info" ? "ⓘ" : "✓"} {item.message}
+        </div>
       ))}
     </div>
   );

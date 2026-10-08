@@ -262,7 +262,7 @@ export function StudentRowMenu({
           onClick={(event) => {
             if (!student.demo_seed) { pick(event, "password"); return; }
             event.currentTarget.closest("details")?.removeAttribute("open");
-            showToast(DEMO_PASSWORD_HINT);
+            showToast(DEMO_PASSWORD_HINT, "info");
           }}
         >
           重置密码
@@ -435,7 +435,8 @@ export function StudentsTab({ onOpenReport, onGoToSemesters }: {
           title={modal.type === "name" ? `修改 ${modal.student.display_name} 的姓名`
             : modal.type === "student_no" ? `修改 ${modal.student.display_name} 的学号` : `重置 ${modal.student.display_name} 的密码`}
           label={modal.type === "name" ? "姓名" : modal.type === "student_no" ? "学号" : "新密码（至少 12 个字符）"}
-          note={modal.type === "password" ? RESET_PASSWORD_NOTE : undefined}
+          note={modal.type === "password" ? RESET_PASSWORD_NOTE
+            : modal.type === "student_no" ? `只改学号，登录用户名仍是 ${modal.student.username}。` : undefined}
           initial={modal.type === "name" ? modal.student.display_name : modal.type === "student_no" ? modal.student.student_no : ""}
           password={modal.type === "password"}
           required={modal.type !== "student_no"}

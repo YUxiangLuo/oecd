@@ -222,8 +222,8 @@ function textWidth(text: string, size: number) {
 }
 
 // The charts are drawn 720 units wide and shown at the report column's width (about 0.75× on screen and in
-// print), so text sizes are chosen to render at 10px or more: axis text 14 units, row labels 15 units.
-const AXIS_FONT = 14;
+// print; about 0.71× at a 1024px window), so text is 15 units to render at 10px or more.
+const AXIS_FONT = 15;
 const LABEL_FONT = 15;
 /** Centre of the rotated y-axis unit ("百万美元"), left of the tick labels. */
 const Y_UNIT_X = 12;
