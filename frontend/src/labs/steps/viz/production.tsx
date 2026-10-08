@@ -83,7 +83,7 @@ export const PRODUCTION_TOPIC: IndicatorTopic = {
         { key: "3b_FGY_GVC_C", name: "复杂 GVC", color: CAT[3] },
       ],
       focus: "3b_FGY_GVC_C",
-      note: "四类后向生产活动占最终品生产FGY的份额：从最终品回溯其增加值经历的跨境次数。前向与后向的分母不同，两侧份额不能相互比较。",
+      note: "四类后向生产活动占最终品生产 FGY 的份额：从最终品回溯其增加值经历的跨境次数。前向与后向的分母不同，两侧份额不能相互比较。",
     },
   },
   axes: {

@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LabeledControl } from "../../../a11y";
 import { api } from "../../../api";
+import { cjkSpace } from "../../../format";
 import type { IndustryPage, Meta, Step, StepStateApi } from "../../../types";
 import { HeatTableViz, countryLabel } from "../../../viz";
 import {
@@ -63,7 +64,7 @@ function IndustryHeatTable({ meta, year, onYear, drill, heatSort, heatCoverage, 
   return (
     <ChartStory
       eyebrow="国家×行业网络"
-      title={`${countryLabel(drill)} 的行业网络指标（在全球网络上计算，按${heatSortLabel(heatSort)}显示${heatCoverageLabel(heatCoverage)}）`}
+      title={`${countryLabel(drill)} 的行业网络指标（在全球网络上计算，按${heatSortLabel(heatSort)}${cjkSpace("显示", heatCoverageLabel(heatCoverage))}）`}
       what={<>选一个国家，每行是一个行业。加权总度是流入加流出的金额（正自环计两次）；介数把小额和大额的边一视同仁。可切换排序，查看前 15 个或全部行业。</>}
       read={<>介数高只说明在不计流量的网络中，更多最短路径经过这个行业；它不能证明流量大，也不能说明是经济枢纽或瓶颈。对比加权总度和介数两种排序，看它们是否一致。</>}
       find={<>本表仅供查数，不记录报告材料；报告材料由主图自动记录。</>}

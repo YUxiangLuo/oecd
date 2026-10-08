@@ -114,7 +114,7 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
     {
       eyebrow: `${countryLabel(first)} · ${focusName}`,
       big: indicatorNumber(ownFocus, "%"),
-      small: "本步重点分项占总量的比重",
+      small: `本步重点分项占${totalLabel}的比重`,
     },
   ];
   for (const other of others) {

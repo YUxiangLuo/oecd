@@ -134,7 +134,7 @@ function CrosswalkContent({ selectedShockType }: { selectedShockType: string }) 
             <div id="crosswalk-panel-icio" role="tabpanel" tabIndex={0} aria-labelledby="crosswalk-tab-icio" className="table-wrap scrollable-region">
               <table className="data-table crosswalk-table">
                 <thead>
-                  <tr><th>ICIO行业</th><th>本篮子行业平均税率</th><th>映射贸易权重</th><th>受影响权重</th><th style={{ textAlign: "left" }}>HS6商品（含未加税项）</th></tr>
+                  <tr><th>ICIO 行业</th><th>本篮子行业平均税率</th><th>映射贸易权重</th><th>受影响权重</th><th style={{ textAlign: "left" }}>HS6 商品（含未加税项）</th></tr>
                 </thead>
                 <tbody>
                   {mappedRows.map((row) => (

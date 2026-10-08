@@ -27,3 +27,10 @@ export function formatMetric(value: number, format?: string): string {
 export function cjkJoin(head: string, tail: string): string {
   return /[A-Za-z0-9)]$/.test(head) && /^[⺀-鿿]/.test(tail) ? `${head} ${tail}` : `${head}${tail}`;
 }
+
+/** Join two pieces with a space wherever Chinese meets Latin letters or digits ("显示 Top 15", "查看 GVC 位置指数"). */
+export function cjkSpace(head: string, tail: string): string {
+  const cjkThenLatin = /[⺀-鿿）]$/.test(head) && /^[A-Za-z0-9]/.test(tail);
+  const latinThenCjk = /[A-Za-z0-9)]$/.test(head) && /^[⺀-鿿]/.test(tail);
+  return cjkThenLatin || latinThenCjk ? `${head} ${tail}` : `${head}${tail}`;
+}

@@ -1,6 +1,6 @@
 import { ScrollableRegion } from "../../a11y";
 import { niceDomain } from "../nice-ticks";
-import { formatMetric, stripNegativeZero } from "../../format";
+import { cjkSpace, formatMetric, stripNegativeZero } from "../../format";
 import { CAT, KEY_ECONOMIES, Legend, type Row, cardStyle, num, rowLabel, rowName, useTip } from "../shared";
 import { signedDomain, signedStack } from "../signed-layout";
 
@@ -25,11 +25,11 @@ export function ChartDataDisclosure({ label, columns, rows }: {
 }) {
   return (
     <details className="chart-data-disclosure">
-      <summary>查看{label}图表数据表</summary>
+      <summary>{cjkSpace(cjkSpace("查看", label), "图表数据表")}</summary>
       {rows.length === 0 ? (
         <p className="muted" role="status">{label}当前没有可显示的有效数据。</p>
       ) : (
-        <ScrollableRegion className="table-wrap chart-data-table-wrap" label={`${label}图表数据表，可横向滚动`}>
+        <ScrollableRegion className="table-wrap chart-data-table-wrap" label={`${cjkSpace(label, "图表数据表")}，可横向滚动`}>
           <table className="data-table chart-data-table">
             <caption>{label}图表所绘制的完整数据</caption>
             <thead>
