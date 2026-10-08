@@ -402,7 +402,9 @@ test("step 10 leads with the whole sample: four tiles from the overview, then th
   await waitFor(() => expect(document.querySelector(".teaching-tiles")).not.toBeNull());
   const tiles = [...document.querySelectorAll(".teaching-tiles li")].map((tile) => tile.textContent);
   // Counts, the imposer, the rate and the year all come from the response.
-  expect(tiles).toEqual(["3 国加税", "2 国未加税（X 始终为 0）", "USA 美国加征关税的一方（不在样本中）", "25%2018 年起的税率（此前为 0）"]);
+  expect(tiles).toEqual(["3 国被美国加税", "2 国未被加税（X 始终为 0）", "USA 美国加征关税的一方（不在样本中）", "25%2018 年起的税率（此前为 0）"]);
+  // The scenario is named as US-centred before any number.
+  expect(document.querySelector(".teaching-scenario")?.textContent).toMatch(/^情景以美国为中心：USA 美国从 2018 年起对 3 个国家的商品加征 25% 关税，其余 2 个国家未被加税。/);
   // The sample sentence is one line: countries, country×industry units and records (rows from teaching-groups).
   expect(document.querySelector(".teaching-one-line")!.textContent).toBe("回归样本：5 国的 210 个国家×行业 × 5 年 = 10 条记录。下图是每个国家 2020 年各行业的平均 X。");
   // The generated-data note stays as one line at the top.

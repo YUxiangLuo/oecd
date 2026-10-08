@@ -256,9 +256,13 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
       {overviewQuery.status === "loading" && <div className="reg-request-state" role="status">正在读取全部国家的关税暴露…</div>}
       {overviewQuery.status === "error" && <div className="error-box" role="alert">{userFacingRequestError(overviewQuery.error, "全部国家的关税暴露读取失败")} <button className="secondary" onClick={overviewQuery.retry}>重试</button></div>}
       {overview && <>
+        {/* The whole scenario is centred on one market: say so before any number or example. */}
+        <p className="teaching-scenario">
+          <b>情景以美国为中心：</b>{countryLabel(overview.market)}{overview.policy_year ? `从 ${overview.policy_year} 年起` : ""}对 {overview.taxed_countries} 个国家的商品加征 {rate(overview.tariff_rate)} 关税，其余 {overview.untaxed_countries} 个国家未被加税。关税暴露 X 衡量一个国家×行业的出口有多依赖美国市场：X = 首年对美出口份额 w × 加征税率 τ。
+        </p>
         <ul className="teaching-tiles" aria-label="全部样本的加税设定">
-          <li className="taxed"><b>{overview.taxed_countries} 国</b><span>加税</span></li>
-          <li className="untaxed"><b>{overview.untaxed_countries} 国</b><span>未加税（X 始终为 0）</span></li>
+          <li className="taxed"><b>{overview.taxed_countries} 国</b><span>被美国加税</span></li>
+          <li className="untaxed"><b>{overview.untaxed_countries} 国</b><span>未被加税（X 始终为 0）</span></li>
           <li className="imposer"><b>{countryLabel(overview.market)}</b><span>加征关税的一方（不在样本中）</span></li>
           <li><b>{rate(overview.tariff_rate)}</b><span>{overview.policy_year ? `${overview.policy_year} 年起的税率（此前为 0）` : "加征税率"}</span></li>
         </ul>
