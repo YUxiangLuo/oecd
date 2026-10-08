@@ -9,6 +9,7 @@ import { stepTaskTitleId } from "../../step-task-card";
 import { ConfirmModal } from "../../teacher/ui";
 import type { ClassroomReport, ReportGateItem, ReportMutationResponse, StepStateApi } from "../../types";
 import type { SessionStatus } from "../../use-session";
+import { readStep } from "../../session-store";
 import { userFacingRequestError } from "../../user-facing-error";
 
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
@@ -21,9 +22,12 @@ interface ReportReflectionState extends Record<string, unknown> {
 
 export const REFLECTION_MAX_LENGTH = 2400;
 
-/** `atLimit`: the field is full by the server's count (code points), which a few emoji can reach before the
- * shown count does. */
+/** `atLimit`: the field is full by the server's count (code points, every space and line break included), which
+ * emoji or blank lines can reach before the shown count does. The limit is not moved to the shown count: the
+ * server's report gate counts code points and would then refuse the text. Instead, a field full before the shown
+ * count reaches the limit says why, rather than "已写 2380 / 2400 字 · 已达上限". */
 export function reflectionCountLabel(length: number, min: number, max = REFLECTION_MAX_LENGTH, atLimit = false): string {
+  if (atLimit && length < max) return `已写 ${length} 字 · 已达 ${max} 字上限（空格、换行和表情符号按实际字符计，可能占多个字）`;
   if (length >= max || atLimit) return `已写 ${Math.min(length, max)} / ${max} 字 · 已达上限`;
   return length >= min
     ? `已写 ${length} / ${max} 字 · 已达最低 ${min} 字`
@@ -38,10 +42,19 @@ const REFLECTION_FIELDS: {
   starter: string;
   min: number;
 }[] = [
-  { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请区分指标比较和关税回归。", starter: "句式参考：本实验比较了……和……的……指标，想了解……；再用关税回归看这些指标怎样随关税暴露 X 变化。", min: 12 },
-  { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间。比较四项回归结果；方向不确定或没算出估计值时写明原因，不要写成“没有影响”。", starter: "句式参考：步骤……显示，……在……年的……为……；步骤 11 的回归估计关税暴露 X 每增加 1 个百分点，Y 平均……，95% 区间为……。", min: 40 },
+  { key: "research_question", label: "研究问题", prompt: "我比较了哪些国家、行业和年份？我想了解哪项指标的变化？请区分指标比较和关税回归。", starter: "句式参考：本实验比较了……和……的……指标，想了解……；再用关税回归看关税暴露 X 较高的国家×行业，这些指标平均高还是低。", min: 12 },
+  { key: "evidence_interpretation", label: "结果解释", prompt: "引用保存的数字，注明对象、年份、指标、方向和区间。比较四项回归结果；方向不确定或没算出估计值时写明原因，不要写成“没有影响”。", starter: "句式参考：步骤……显示，……在……年的……为……；步骤 11 的回归估计关税暴露 X 每高 1 个百分点的国家×行业，Y 平均高（或低）……，95% 区间为……。", min: 40 },
   { key: "limitations", label: "局限与反思", prompt: "我的比较还有哪些限制？哪些结论不能推出？下一步需要什么数据或检验？", starter: "句式参考：回归只描述 X 与 Y 的关联，因此……；我的比较只覆盖……；若要进一步验证，需要……。", min: 30 },
 ];
+
+type ReflectionAnswers = Pick<ReportReflectionState, "research_question" | "evidence_interpretation" | "limitations">;
+
+/** The server's three answers when any differs from this page's, else null (nothing to load). */
+export function newerServerAnswers(page: ReportReflectionState, server: ReportReflectionState | undefined): ReflectionAnswers | null {
+  if (!server) return null;
+  const answers = Object.fromEntries(REFLECTION_FIELDS.map((field) => [field.key, String(server[field.key] ?? "")])) as ReflectionAnswers;
+  return REFLECTION_FIELDS.some((field) => answers[field.key] !== String(page[field.key] ?? "")) ? answers : null;
+}
 
 export const REPORT_REFLECTION_TITLE_ID = "report-reflection-title";
 export const REPORT_REFLECTION_INCOMPLETE_SELECTOR = "textarea[data-report-reflection-incomplete='true']:not(:disabled)";
@@ -223,6 +236,19 @@ export function reportPrintTitle(report: ClassroomReport): string {
 }
 
 export const REPORT_GENERATE_FIRST_LABEL = "只生成草稿（不提交）";
+
+/**
+ * What to do when the report misses later edits. A draft can be regenerated on its own. A submitted report cannot:
+ * regenerating replaces the one report the server keeps and submits it again (a graded one loses its grade), so
+ * the teacher keeps the submitted version until the student updates it.
+ */
+export function reportOutdatedAdvice(state: ClassroomReport["state"]): string {
+  if (state === "draft") return "修改后请先点“重新生成草稿”，再提交或导出。";
+  const kept = `在你更新之前，老师那里仍是已${state === "graded" ? "评阅" : "提交"}的版本。`;
+  return state === "graded"
+    ? `${kept}点“更新报告并提交给老师”会按最新记录重新生成并再次提交，同时清除原评分和评语；需要留档时，可先导出已评阅版本的 PDF（含评分与评语）。`
+    : `${kept}点“更新报告并提交给老师”会按最新记录重新生成并再次提交（已提交的报告不能只生成草稿）；更新后才能导出 PDF。`;
+}
 
 export function reportGenerateLabel(report: ClassroomReport | null) {
   if (!report) return REPORT_GENERATE_FIRST_LABEL;
@@ -472,6 +498,10 @@ export function ReportLab({
     field.setSelectionRange(pending.caret, pending.caret);
   });
   const [attemptedIncomplete, setAttemptedIncomplete] = useState(false);
+  // Newer answers found on the server after a refused generation (another tab wrote them); shown until loaded or
+  // until the fields match them.
+  const [serverAnswers, setServerAnswers] = useState<ReflectionAnswers | null>(null);
+  const answersOutdated = serverAnswers != null && newerServerAnswers(reflection, serverAnswers) != null;
   // Same split as the gate summary below: steps 1–14, plus global conditions (step 0) counted apart.
   const materialMissing = visibleBlocked.filter((item) => item.step > 0 && item.step < 15);
   const globalMissing = visibleBlocked.filter((item) => item.step <= 0).length;
@@ -567,6 +597,9 @@ export function ReportLab({
         // tab. Show the current state instead of a stale page, and say which of these happened.
         const latest = await api.classroom.session().catch(() => null);
         if (latest?.report) onReportChanged({ report: latest.report, completion: latest.completion, report_gate: latest.report_gate, material_gate: latest.material_gate });
+        // The server's record may also hold newer answers (written in that other tab): the preview now shows them,
+        // so the fields here must not keep the old text unnoticed.
+        setServerAnswers(latest ? newerServerAnswers(reflection, readStep<ReportReflectionState>(latest.session, 15)) : null);
         setError(reportConflictMessage(report, latest?.report ?? null) ?? userFacingRequestError(cause, "报告生成失败"));
       } else setError(userFacingRequestError(cause, generated ? "报告已生成为草稿，但提交给老师失败，请重试提交" : "报告生成失败"));
     } finally {
@@ -653,11 +686,23 @@ export function ReportLab({
       <section className="report-reflection" aria-labelledby={REPORT_REFLECTION_TITLE_ID}>
         <div>
           <span className="reg-section-step">你的分析 · 自动保存</span>
-          {autosave && <small className={`report-autosave${autosave === "未保存" ? " failed" : ""}`}>{autosave}</small>}
+          {answersOutdated
+            ? <small className="report-autosave failed">不是最新版本</small>
+            : autosave && <small className={`report-autosave${autosave === "未保存" ? " failed" : ""}`}>{autosave}</small>}
           <h3 id={REPORT_REFLECTION_TITLE_ID} tabIndex={-1}>回答三个问题</h3>
           <p>写清研究对象、主要结果和仍不能确定的内容。引用具体数字，并说明结论限制。文字按原样写进报告，“#”“**”等符号不会变成标题或粗体。</p>
         </div>
         <div className="report-reflection-fields" ref={reflectionRoot}>
+          {answersOutdated && (
+            <div className="report-version-notice outdated report-answers-outdated" role="status">
+              <b>这三段是本页的旧文字</b>
+              <p>你在别处（另一个标签页或设备）改过这三段：服务器上保存的是较新的文字，报告也按服务器上的记录生成。点“载入服务器版本”，让这里的文字与服务器一致。</p>
+              <button type="button" className="secondary" disabled={busy} onClick={() => {
+                if (serverAnswers) state.save({ ...serverAnswers });
+                setServerAnswers(null);
+              }}>载入服务器版本</button>
+            </div>
+          )}
           <div className="report-writing-checklist" role="note">
             <b>写作自检（字数达标不等于论证完整）</b>
             <span>① 点名比较对象　② 引用具体数字　③ 解释方向与区间　④ 说明不能推出什么</span>
@@ -711,8 +756,9 @@ export function ReportLab({
       {report && reportOutdated && (
         <div className="report-version-notice outdated" role="status">
           <b>报告尚未包含最新修改</b>
-          <p>生成时间：{fmtTime(report.generated_at)}。实验记录自动保存不会更新报告；修改后请先重新生成，再提交或导出。
-            {report.state === "graded" && "重新生成会重新提交报告，并清除原评分；需要留档时，可先导出已评阅版本的 PDF（含评分与评语）。"}</p>
+          {/* The server keeps one report: regenerating a submitted one replaces it and submits it again in the same
+              step (records.save_generated_report), so there is no draft-only update once it is submitted. */}
+          <p>生成时间：{fmtTime(report.generated_at)}。实验记录自动保存不会更新报告。{reportOutdatedAdvice(report.state)}</p>
         </div>
       )}
       {report && <section className="submit-card" id="report-status-card" ref={statusCardRef} tabIndex={-1} aria-label="报告状态"><ReportStatus report={report} /></section>}

@@ -186,6 +186,18 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
     recordExample();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panel, complete, savedExample, savedFlagCurrent, first, second, industry]);
+  const recordStripRef = useRef<HTMLDivElement>(null);
+  // The recorded example as saved (not the current selects): "CAN 加拿大 · C29 汽车（对比 MEX 墨西哥）".
+  const savedCompared = state.data?.teaching_observation ? state.data.compared ?? [] : [];
+  const recordedExample = savedCompared.length && state.data?.teaching_industry
+    ? `${countryLabel(savedCompared[0])} · ${sectorLabel(state.data.teaching_industry)}${savedCompared[1] ? `（对比 ${countryLabel(savedCompared[1])}）` : ""}`
+    : null;
+  // Worded as steps 6–9 word their recorded chart.
+  const recordStatus = state.materialLocked
+    ? `${MATERIAL_LOCKED_NOTE}${panel && complete && savedExample ? "当前例子就是已记录的材料。" : ""}`
+    : panel && complete
+      ? savedExample ? "当前例子已自动记录；换国家或行业后会自动更新。" : "正在记录当前例子…"
+      : null;
 
   const rows = useMemo(() => panel?.rows ?? [], [panel]);
   // The chart reads X in percentage points like the rest of steps 10–14 (the rows store it as a share).
@@ -198,6 +210,8 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
   const exampleRow = representativeRow(rows, selectedCountries, years.at(-1));
   // Shares and X in percentage points with two decimals everywhere on this step; the tariff rate as set.
   const pct = (value: number) => `${percentagePoints(value)}%`;
+  // X in percentage points; an exact zero (untaxed, or w = 0) reads "0", not "0.00".
+  const xPoints = (value: number) => (value === 0 ? "0" : percentagePoints(value));
   const rate = (value: number) => `${Number((value * 100).toFixed(2))}%`;
   // A tiny X (w of a few thousandths of a percent) keeps two significant digits on the chart cards, so they
   // read "0.00083" rather than "不到 0.01"; normal values keep two decimals.
@@ -240,6 +254,20 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
           </select>
         </label>
       </div>
+      {/* What the report material holds, as step 1 shows its recorded cell; it follows the selection until the
+          report is submitted, then changes only through the button. */}
+      <div className="observation-strip teaching-example-record" ref={recordStripRef} tabIndex={-1} aria-live="polite">
+        <b>已记录的例子</b>
+        {recordedExample ? <span>{recordedExample}</span> : <span className="empty">尚未记录</span>}
+        {recordStatus && <span className="muted">{recordStatus}</span>}
+        {state.materialLocked && panel && complete && !savedExample && (
+          <button type="button" className="secondary" onClick={() => {
+            // The button removes itself: focus the strip (it stays mounted), which then confirms the switch.
+            recordStripRef.current?.focus({ preventScroll: true });
+            recordExample();
+          }}>改用当前例子作为报告材料（之后需在步骤 15 更新报告）</button>
+        )}
+      </div>
       {fallbackNote && <p className="reg-boundary teaching-fallback-note" role="status">{fallbackNote}</p>}
       {selectedCountries.some(isImposer) && (
         <p className="reg-boundary" role="note">
@@ -257,12 +285,6 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
         {state.data?.teaching_observation ? "；已记录的例子保持不变" : ""}。
       </div>
     )}
-    {panel && complete && state.materialLocked && !savedExample && (
-      <div className="reg-boundary" role="status">
-        {MATERIAL_LOCKED_NOTE}
-        <button type="button" className="secondary" onClick={recordExample}>改用当前例子（之后到步骤 15 更新报告）</button>
-      </div>
-    )}
     {panel && complete && <>
       <section className="reg-section-card">
         <span className="reg-section-step">五年趋势{selectedCountries.length === 2 ? " · 两国使用同一刻度" : ""}</span>
@@ -271,7 +293,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
             const taxed = row.teaching_tariff_rate_tau > 0;
             return <li key={row.country}>
               <b>{countryLabel(row.country)} · {sectorLabel(industry)}</b>
-              {isImposer(row.country) ? "加征关税的一方（不在回归样本中）" : taxed ? "加税" : "未加税"}：w = {pct(row.teaching_export_share_w)}，{years.at(-1)} 年 X = {percentagePoints(row.teaching_tariff_exposure)} 个百分点{taxed && row.teaching_tariff_exposure === 0 ? "（不向美国出口：w = 0，所以 X = 0）" : ""}
+              {isImposer(row.country) ? "加征关税的一方（不在回归样本中）" : taxed ? "加税" : "未加税"}：w = {pct(row.teaching_export_share_w)}，{years.at(-1)} 年 X = {xPoints(row.teaching_tariff_exposure)} 个百分点{taxed && row.teaching_tariff_exposure === 0 ? "（不向美国出口：w = 0，所以 X = 0）" : ""}
             </li>;
           })}
         </ul>
@@ -324,7 +346,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
               <b>算一次：X = w × τ</b>
               <span>
                 {countryLabel(exampleRow.country)} · {sectorLabel(industry)} · {exampleRow.year} 年：首年对美出口份额 w = {pct(exampleRow.teaching_export_share_w)}，加征税率 τ = {rate(exampleRow.teaching_tariff_rate_tau)}，所以{" "}
-                X = {pct(exampleRow.teaching_export_share_w)} × {rate(exampleRow.teaching_tariff_rate_tau)} = <b>{percentagePoints(exampleRow.teaching_tariff_exposure)} 个百分点</b>。
+                X = {pct(exampleRow.teaching_export_share_w)} × {rate(exampleRow.teaching_tariff_rate_tau)} = <b>{xPoints(exampleRow.teaching_tariff_exposure)} 个百分点</b>。
                 {isImposer(exampleRow.country)
                   ? "美国是加征关税的一方，X 记为 0 只是定义。"
                   : exampleRow.teaching_tariff_rate_tau > 0
@@ -336,7 +358,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
             </div>
             <div>
               <b>后面四步用它做什么</b>
-              <span>用每个国家×行业的 X 去对照贸易、生产、长度、网络四个指标（Y），看 Y 怎样随 X 变化；结果都按“X 每增加 1 个百分点”来读。</span>
+              <span>用每个国家×行业的 X 去对照贸易、生产、长度、网络四个指标（Y），看 X 较高的国家×行业 Y 平均高还是低；结果都按“X 每高 1 个百分点，Y 平均相差多少”来读。</span>
             </div>
           </div>
         )}
@@ -353,7 +375,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
         <summary>逐年读数 · {rows.length} 条</summary>
         <ScrollableRegion className="table-wrap bounded-data-table" label="所选例子的五年关税暴露表">
           <table className="data-table"><thead><tr><th>国家</th><th>行业</th><th>年份</th><th>首年对美出口份额 w</th><th>加征税率 τ</th><th>关税暴露 X = w × τ</th></tr></thead>
-            <tbody>{rows.map((row) => <tr key={`${row.country}-${row.industry}-${row.year}`}><td>{countryLabel(row.country)}</td><td>{sectorLabel(row.industry)}</td><td>{row.year}</td><td>{pct(row.teaching_export_share_w)}</td><td>{rate(row.teaching_tariff_rate_tau)}</td><td><b>{pct(row.teaching_export_share_w)} × {rate(row.teaching_tariff_rate_tau)} = {percentagePoints(row.teaching_tariff_exposure)} 个百分点</b></td></tr>)}</tbody>
+            <tbody>{rows.map((row) => <tr key={`${row.country}-${row.industry}-${row.year}`}><td>{countryLabel(row.country)}</td><td>{sectorLabel(row.industry)}</td><td>{row.year}</td><td>{pct(row.teaching_export_share_w)}</td><td>{rate(row.teaching_tariff_rate_tau)}</td><td><b>{pct(row.teaching_export_share_w)} × {rate(row.teaching_tariff_rate_tau)} = {xPoints(row.teaching_tariff_exposure)} 个百分点</b></td></tr>)}</tbody>
           </table>
         </ScrollableRegion>
       </details>

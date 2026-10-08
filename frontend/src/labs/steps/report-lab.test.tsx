@@ -22,6 +22,8 @@ import {
   codePointLength,
   REFLECTION_MAX_LENGTH,
   reportConflictMessage,
+  reportOutdatedAdvice,
+  newerServerAnswers,
 } from "./report-lab";
 import { useState } from "react";
 
@@ -162,6 +164,24 @@ describe("step 15 report states", () => {
     expect(reflectionCountLabel(30, 40)).toBe("已写 30 / 2400 字 · 最低 40 字");
     expect(reflectionCountLabel(83, 40)).toBe("已写 83 / 2400 字 · 已达最低 40 字");
     expect(reflectionCountLabel(2400, 40)).toBe("已写 2400 / 2400 字 · 已达上限");
+    // Full by the server's code points while emoji and line breaks count less on screen: say why, not "2380 / 2400".
+    expect(reflectionCountLabel(2380, 40, 2400, true)).toBe("已写 2380 字 · 已达 2400 字上限（空格、换行和表情符号按实际字符计，可能占多个字）");
+  });
+
+  test("an outdated report says what updating does in each state", () => {
+    expect(reportOutdatedAdvice("draft")).toBe("修改后请先点“重新生成草稿”，再提交或导出。");
+    // A submitted report has no draft-only update: regenerating resubmits, and the teacher keeps the old one until then.
+    expect(reportOutdatedAdvice("pending")).toContain("在你更新之前，老师那里仍是已提交的版本。点“更新报告并提交给老师”会按最新记录重新生成并再次提交");
+    expect(reportOutdatedAdvice("pending")).not.toContain("请先重新生成");
+    expect(reportOutdatedAdvice("graded")).toContain("老师那里仍是已评阅的版本");
+    expect(reportOutdatedAdvice("graded")).toContain("清除原评分和评语");
+  });
+
+  test("server answers are offered only when they differ from the page's", () => {
+    const page = { research_question: "旧问题", evidence_interpretation: "旧解释", limitations: "旧局限" };
+    expect(newerServerAnswers(page, undefined)).toBeNull();
+    expect(newerServerAnswers(page, { ...page })).toBeNull();
+    expect(newerServerAnswers(page, { ...page, limitations: "新局限" })).toEqual({ ...page, limitations: "新局限" });
   });
 
   test("uses resubmission semantics after submission or grading", () => {
@@ -439,6 +459,33 @@ test("a 409 because the report was submitted in another tab says so, not that it
     const alert = screen.getByRole("alert").textContent ?? "";
     expect(alert).toContain("已在别处提交给老师");
     expect(alert).not.toContain("评分与评语");
+  } finally { generate.mockRestore(); session.mockRestore(); }
+});
+
+test("a stale tab whose answers were changed elsewhere says so and loads the server's answers on request", async () => {
+  const generate = spyOn(api.classroom, "generateReport").mockRejectedValue(new ApiError(409, "报告或评分已更新，请刷新页面核对后再确认重新生成", "Conflict"));
+  const latest = mutation("pending");
+  const newer = { research_question: "新的研究问题", evidence_interpretation: "新的结果解释", limitations: "新的局限" };
+  const session = spyOn(api.classroom, "session").mockResolvedValue({
+    release_id: "a".repeat(32), updated_at: null, ...latest,
+    session: { version: "experiment-session-simple-v3", steps: { "15": { data: newer } }, shared: {} } as never,
+  });
+  const saved: Record<string, unknown>[] = [];
+  function Harness() {
+    const [data, setData] = useState<Record<string, unknown>>({ research_question: "旧的研究问题", evidence_interpretation: "旧的结果解释", limitations: "旧的局限" });
+    return <ReportLab {...finishProps} state={{ ...finishProps.state, data, save: (patch) => { saved.push(patch); setData((value) => ({ ...value, ...patch })); } }} />;
+  }
+  try {
+    render(<Harness />);
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "只生成草稿（不提交）" })); });
+    expect(screen.getByRole("alert").textContent).toContain("已在别处提交给老师");
+    expect(screen.getByText("这三段是本页的旧文字")).toBeTruthy();
+    // The autosave mark no longer says 已保存 next to text that is not the server's.
+    expect(screen.getByText("不是最新版本")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "载入服务器版本" }));
+    expect(saved.at(-1)).toEqual(newer);
+    expect((screen.getByRole("textbox", { name: "局限与反思" }) as HTMLTextAreaElement).value).toBe("新的局限");
+    expect(screen.queryByText("这三段是本页的旧文字")).toBeNull();
   } finally { generate.mockRestore(); session.mockRestore(); }
 });
 

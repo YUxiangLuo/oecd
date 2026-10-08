@@ -120,6 +120,38 @@ test("locks choices only while grading or confirming completion and retains choi
   } finally { api.classroom.submitQuiz = original; }
 });
 
+test("two clicks before the page re-renders send one submission", async () => {
+  const original = api.classroom.submitQuiz;
+  const pending = pendingGrade();
+  const requests: unknown[] = [];
+  api.classroom.submitQuiz = async (request) => { requests.push(request); return pending.promise; };
+  try {
+    render(<QuizPanel step={step} state={{ ...state, data: {} }} />);
+    fireEvent.click(screen.getByLabelText("通过后"));
+    const button = screen.getByRole("button", { name: "提交答案" });
+    act(() => { button.click(); button.click(); });
+    expect(requests).toHaveLength(1);
+    await act(async () => { pending.resolve({ passed: false, version: "v1", results: [{ question_id: "q1", correct: false, explanation: "提示：再看看" }] }); });
+  } finally { api.classroom.submitQuiz = original; }
+});
+
+test("wrong-answer feedback is tied to its question and the announcement does not repeat the helper text", async () => {
+  const original = api.classroom.submitQuiz;
+  api.classroom.submitQuiz = async () => ({ passed: false, version: "v1", results: [{ question_id: "q1", correct: false, explanation: "提示：再看看" }] });
+  try {
+    const { container } = render(<QuizPanel step={step} state={{ ...state, data: {} }} />);
+    fireEvent.click(screen.getByLabelText("通过后"));
+    fireEvent.click(screen.getByRole("button", { name: "提交答案" }));
+    const feedback = (await screen.findByText(/提示：再看看/)).closest(".quiz-feedback")!;
+    for (const radio of container.querySelectorAll('input[name="quiz-2-q1"]')) {
+      expect(radio.getAttribute("aria-describedby")).toBe(feedback.id);
+    }
+    const status = container.querySelector(".sr-only[role='status']")!.textContent;
+    expect(status).toBe("判定结果：0 / 1 题正确。");
+    expect(status).not.toContain("提交后立即显示逐题反馈");
+  } finally { api.classroom.submitQuiz = original; }
+});
+
 test("editing one answer retains feedback for the unedited question", async () => {
   const original = api.classroom.submitQuiz;
   const two = { ...step, quiz: { ...step.quiz!, questions: [...step.quiz!.questions, { ...step.quiz!.questions[0], id: "q2" }] } };

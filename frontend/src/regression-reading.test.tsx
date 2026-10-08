@@ -148,7 +148,7 @@ describe("fixed teaching regression reading", () => {
     Object.assign(data.result.coefs[0], { ci_low: -1, ci_high: 0.2 });
     const uncertain = render(<RegressionResultCard outcome="trade" response={data} examples={[{ label: "例子", x: 0.05 }]} />);
     const uncertainText = uncertain.container.querySelector(".reg-example-effect")!.textContent;
-    expect(uncertainText).toContain("按估计与 X 相关的差异约为 -2.75 个百分点；但区间包含 0，差异的高低方向并不确定");
+    expect(uncertainText).toContain("按估计与 X 相关的差异约为 -2.75 个百分点，但区间包含 0，差异的高低方向并不确定。");
     expect(uncertainText).not.toContain("偏低");
     data.result.status = "invalid_design";
     const suppressed = render(<RegressionResultCard outcome="trade" response={data} examples={[{ label: "例子", x: 0.05 }]} />);
@@ -181,12 +181,37 @@ describe("fixed teaching regression reading", () => {
       "95% 区间（真实系数的合理取值范围）为 [-0.30, +0.54] 个百分点，包含 0：不能说“没有关联”，只能说方向还不确定。",
     );
     expect(container.querySelector(".reg-example-effect")?.textContent).toBe(
-      "按你在步骤 10 选的例子换算：CAN 加拿大·C29 的 X 为 23.25 个百分点，按估计与 X 相关的差异约为 +2.79 个百分点；"
-      + "USA 美国·C29 属于加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义，不做换算；但区间包含 0，差异的高低方向并不确定。",
+      "按你在步骤 10 选的例子换算：CAN 加拿大·C29 的 X 为 23.25 个百分点，按估计与 X 相关的差异约为 +2.79 个百分点，但区间包含 0，差异的高低方向并不确定；"
+      + "USA 美国·C29 属于加征关税的一方，按设计不在回归样本中，X 记为 0 只是定义，不做换算。",
     );
     // The slope label gives the signed gap, not 高/低, when the direction is open.
     expect(container.querySelector("[data-slope-label]")?.textContent).toBe("斜率：X 每高 1 个百分点，Y 平均相差 0.12 个百分点");
     expect(container.textContent).not.toMatch(/平均高|平均低|偏高|偏低|没受加税影响/);
+  });
+
+  test("examples with X = 0 say so once, without the interval's uncertainty, for untaxed and w = 0 pairs alike", () => {
+    const data = response();
+    Object.assign(data.result.coefs[0], { coef: 0.12, ci_low: -0.3, ci_high: 0.54, p: 0.6 });
+    const sentence = (examples: { label: string; x: number; tau?: number }[]) => {
+      const { container, unmount } = render(<RegressionResultCard outcome="production" response={data} examples={examples} />);
+      const text = container.querySelector(".reg-example-effect")!.textContent!;
+      unmount();
+      return text;
+    };
+    const untaxed = sentence([{ label: "GBR 英国·C29", x: 0, tau: 0 }, { label: "FRA 法国·C29", x: 0, tau: 0 }]);
+    expect(untaxed).toBe("按你在步骤 10 选的例子换算：GBR 英国·C29 未被加税；FRA 法国·C29 未被加税。"
+      + "两个例子的 X 都是 0，换算不出与 X 相关的差异。想看换算，回步骤 10 选一个加税的国家（如加拿大）。");
+    const unexposed = sentence([{ label: "BRN 文莱·C22", x: 0, tau: 0.25 }, { label: "MEX 墨西哥·C22", x: 0, tau: 0 }]);
+    expect(unexposed).toContain("BRN 文莱·C22 被加税但首年不向美国出口（w = 0）；MEX 墨西哥·C22 未被加税。两个例子的 X 都是 0");
+    expect(unexposed).toContain("换一个向美国出口的加税国家或行业");
+    const single = sentence([{ label: "GBR 英国·C29", x: 0, tau: 0 }]);
+    expect(single).toBe("按你在步骤 10 选的例子换算：GBR 英国·C29 未被加税。"
+      + "这个例子的 X = 0，换算不出与 X 相关的差异。想看换算，回步骤 10 换成加税的国家（如加拿大），或再选一个加税的对比国家。");
+    for (const text of [untaxed, unexposed, single]) {
+      expect(text).not.toContain("区间包含 0");
+      expect(text).not.toContain("按估计没有与 X 相关的差异");
+      expect(text.match(/X = 0|X 都是 0/g)).toHaveLength(1);
+    }
   });
 
   test("a length reading gives its size against the mean without a sign, as the report does", () => {

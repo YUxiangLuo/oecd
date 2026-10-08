@@ -71,8 +71,11 @@ function QuizPanelBody({
   };
   const submitButtonRef = useRef<HTMLButtonElement>(null);
   const refocusSubmit = useRef(false);
+  // A ref, not the state: two clicks before the next render would both see submitting === false and post twice.
+  const submittingRef = useRef(false);
   const submit = async () => {
-    if (!answeredAll || submitting) return;
+    if (!answeredAll || submitting || submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -99,6 +102,7 @@ function QuizPanelBody({
     } catch (cause) {
       setError(userFacingRequestError(cause, "答案提交失败，选择已保留，可重试"));
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
       refocusSubmit.current = true;
     }
@@ -112,6 +116,7 @@ function QuizPanelBody({
     if (document.activeElement == null || document.activeElement === document.body) submitButtonRef.current?.focus();
   }, [submitDisabled]);
   const feedbackByQuestion = new Map(feedback.map((item) => [item.question_id, item]));
+  const feedbackId = (questionId: string) => `quiz-feedback-${step.n}-${questionId}`;
   const submitLabel = submitting
     ? "正在判定…"
     : complete
@@ -157,6 +162,8 @@ function QuizPanelBody({
                       name={`quiz-${step.n}-${question.id}`}
                       value={option.id}
                       checked={draftAnswers[question.id] === option.id}
+                      // The feedback below is read with the choice, so a wrong answer's hint is not missed.
+                      aria-describedby={result ? feedbackId(question.id) : undefined}
                       onChange={() => choose(question.id, option.id)}
                     />
                     <span>{option.label}</span>
@@ -164,7 +171,7 @@ function QuizPanelBody({
                 ))}
               </div>
               {result && (
-                <p className="quiz-feedback">
+                <p className="quiz-feedback" id={feedbackId(question.id)}>
                   <b>{result.correct ? "回答正确。" : "这项还不对。"}</b>{result.explanation}
                 </p>
               )}
@@ -194,7 +201,8 @@ function QuizPanelBody({
           together with their text are often skipped). The per-question feedback is read in place. */}
       <span className="sr-only" role="status" aria-live="polite">
         {feedback.length
-          ? `判定结果：${feedback.filter((item) => item.correct).length} / ${quiz.questions.length} 题正确。${completionMessage}`
+          // The helper next to the button ("提交后立即显示逐题反馈") is not repeated; a saving or done state is.
+          ? `判定结果：${feedback.filter((item) => item.correct).length} / ${quiz.questions.length} 题正确。${locallyPassed || complete ? completionMessage : ""}`
           : ""}
       </span>
       {/* Ready materials are already shown in the task card; only a gap needs a prompt here. */}

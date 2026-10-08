@@ -59,15 +59,25 @@ def test_step_11_reads_percentage_points_without_claiming_real_causation(answer,
     assert passed is expected
     assert feedback[1]["correct"] is expected
     if expected:
-        assert "平均下降 1.20 个百分点" in feedback[1]["explanation"]
-        assert "不是相对下降 1.20%" in feedback[1]["explanation"]
-        assert "不是平均变化" in feedback[1]["explanation"]
+        assert "Y 平均低 1.20 个百分点" in feedback[1]["explanation"]
+        assert "不是相对低 1.20%" in feedback[1]["explanation"]
+        assert "不是平均差异" in feedback[1]["explanation"]
         assert "模拟" not in feedback[1]["explanation"]
     else:
         # A wrong answer gets a hint, not the answer.
         assert feedback[1]["explanation"] == quizzes.HINTS["s11-reading-v9"]
-        assert "平均下降 1.20 个百分点" not in feedback[1]["explanation"]
+        assert "平均低 1.20 个百分点" not in feedback[1]["explanation"]
     assert len(quizzes.public_quiz(11)["questions"]) == 2
+
+
+def test_regression_quizzes_read_an_association_not_a_change_over_time():
+    for step in range(10, 15):
+        for question in quizzes.STEP_QUIZZES[step]:
+            text = " ".join(
+                [question["prompt"], question["explanation"], quizzes.HINTS[question["id"]], *(o["label"] for o in question["options"])]
+            )
+            for phrase in ("每增加", "平均下降", "平均上升", "上升还是下降", "平均变化"):
+                assert phrase not in text, (question["id"], phrase)
 
 
 def test_wrong_answer_hints_never_state_the_correct_option():

@@ -147,6 +147,39 @@ describe("simple regression workbench", () => {
     expect(document.body.textContent).not.toContain("教学模拟");
   });
 
+  test("恢复默认 keeps keyboard focus on the Y select instead of dropping it to the page", async () => {
+    spyOn(api, "regressionDesign").mockResolvedValue({} as RegressionDesignInfo);
+    spyOn(api, "teachingGroups").mockResolvedValue(groupsWithBaselines);
+    spyOn(api, "teachingSeries").mockResolvedValue({ version: "v", disclaimer: "", rows: [], total: 0, years: [] } as TeachingPanelResponse);
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: savedRun("DVAex_share", "国内增加值出口占比") } as never }} />);
+    const restore = await screen.findByRole("button", { name: "恢复默认（外国增加值项占比）" });
+    restore.focus();
+    fireEvent.click(restore);
+    const select = screen.getByRole("combobox", { name: "结果指标 Y" }) as HTMLSelectElement;
+    expect(select.value).toBe("FVA_share");
+    expect(screen.queryByRole("button", { name: /^恢复默认/ })).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(select));
+  });
+
+  test("the detailed-numbers notes match the table: no <0.0001 note without such a p, and rounding is named", async () => {
+    spyOn(api, "regressionDesign").mockResolvedValue({} as RegressionDesignInfo);
+    spyOn(api, "teachingGroups").mockResolvedValue(groupsWithBaselines);
+    spyOn(api, "teachingSeries").mockResolvedValue({ version: "v", disclaimer: "", rows: [], total: 0, years: [] } as TeachingPanelResponse);
+    const run = savedRun("DVAex_share", "国内增加值出口占比");
+    const { unmount } = render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run } as never }} />);
+    await waitFor(() => expect(document.querySelector(".technical-details")).not.toBeNull());
+    const details = () => document.querySelector(".technical-details")!.textContent ?? "";
+    // p = 0.001 is shown as is: the note about "<0.0001" would not fit it.
+    expect(details()).not.toContain("很小的 p 值");
+    expect(details()).toContain("两列是同一个数，左列按页面精度四舍五入");
+    expect(details()).not.toContain("两列数字相同");
+    unmount();
+    const tiny = { ...run, result: { ...run.result, coefs: [{ ...run.result.coefs[0], p: 0.00001 }] } };
+    render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: tiny } as never }} />);
+    await waitFor(() => expect(document.querySelector(".technical-details")).not.toBeNull());
+    expect(details()).toContain("很小的 p 值显示为 <0.0001");
+  });
+
   test("switching Y without running again says the report still holds the last run's Y", async () => {
     spyOn(api, "regressionDesign").mockResolvedValue({} as RegressionDesignInfo);
     spyOn(api, "teachingGroups").mockResolvedValue(groupsWithBaselines);
