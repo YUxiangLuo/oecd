@@ -274,7 +274,9 @@ describe("edits during conflict reload", () => {
     fetch.mockRestore();
     const reload = deferred<SessionResponse>();
     const latest = patchSessionStep(emptySession(), 15, { research_question: "server" });
-    const get = spyOn(api.classroom, "session").mockResolvedValueOnce({ ...response(), report: null }).mockImplementationOnce(() => reload.promise).mockResolvedValue({ ...response(latest), report: null });
+    // Reads: the first load; the check after the 409 (the server holds other content, so it stays a conflict);
+    // the held reload; then the latest record.
+    const get = spyOn(api.classroom, "session").mockResolvedValueOnce({ ...response(), report: null }).mockResolvedValueOnce({ ...response(latest), report: null }).mockImplementationOnce(() => reload.promise).mockResolvedValue({ ...response(latest), report: null });
     const save = spyOn(api.classroom, "saveSession").mockRejectedValue(conflict);
     try {
       const { result } = renderHook(() => useSession(true, "student"));
@@ -291,7 +293,7 @@ describe("edits during conflict reload", () => {
         reload.resolve({ ...response(latest), report: null });
         await loading;
       });
-      expect(get).toHaveBeenCalledTimes(2);
+      expect(get).toHaveBeenCalledTimes(3);
       expect(result.current.getStep<{ research_question: string }>(15)?.research_question).toBe("typed during reload");
       expect(result.current.syncConflict).toBe(true);
       expect(result.current.unsynced).toBe(true);
