@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-import json
 import math
 import re
-from typing import Any, cast
+from typing import Any
 
 from gvcsim.regression.estimation import two_way_note
 from gvcsim.regression.teaching import MARKET
@@ -21,7 +20,6 @@ from gvcsim.report_common import (
     _evidence_reading,
     _depvar_kind,
     _global_inference_suppressed,
-    _is_default_baseline,
     _list_values,
     _model_summary,
     _natural_effect,
@@ -38,6 +36,7 @@ from gvcsim.report_common import (
 from gvcsim.report_gate import _indicator_material_complete, _step_data, _valid_indicator_observations
 from gvcsim.report_labels import DB_TABLE_NAMES, FINAL_DEMAND_NAMES, country_label, sector_label
 from gvcsim.report_observed import _viewed_shock_event_sources
+from gvcsim.report_regression_chart import family_chart, summary_chart
 from gvcsim.report_saved_run import _result_is_reportable, _result_is_qualified
 
 
@@ -357,7 +356,8 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
     lines = [
         "### 四项回归结果汇总",
         "",
-        "下表列出四步保存的结果（贸易流、生产、长度、网络）。四个 Y 的单位不同，只比较方向和区间是否包含 0，不比数字大小。",
+        "下表列出四步保存的结果（贸易流、生产、长度、网络），各用自己的单位，表中数字不能互相比大小；"
+        "表后的图把它们都换成个标准差，才能放在一起看。",
         "",
         "| 步骤 | 指标 | X 每高 1 个百分点，Y 平均相差 | 95% 区间 | 方向 |",
         "|---|---|---|---|---|",
@@ -384,6 +384,7 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
             f"| {step} | {_safe(_depvar_display(design.get('depvar_label', outcome)))} | {effect} | {interval} | {evidence} |"
         )
     lines.append("")
+    lines.extend(summary_chart(qualified))
     if len({item for item in designs}) > 1:
         lines.extend(
             (
@@ -392,86 +393,6 @@ def _comparison_table(runs: list[dict[str, Any]]) -> list[str]:
             )
         )
     return lines
-
-
-# Same row labels and units as the coefficient plot on the step 11–14 pages.
-_COEFFICIENT_ROW_LABELS = {
-    "trade": "外国增加值项占比",
-    "production": "复杂 GVC 生产份额",
-    "length": "前向 GVC 段长度",
-    "network": "加权总度",
-}
-_COEFFICIENT_UNITS = {"trade": "个百分点", "production": "个百分点", "length": "长度单位", "network": "中心性原始单位"}
-_KIND_UNITS = {"share": "个百分点", "length": "长度单位", "position": "位置指数单位", "network": "中心性原始单位"}
-
-
-def _chart_row(outcome: str, design: dict[str, Any]) -> tuple[str, str, float]:
-    """Row label, unit and Y level scale of a saved run: the family's fixed Y or its chosen baseline."""
-    kind = _depvar_kind(outcome, design)
-    y_scale = 100.0 if kind == "share" else 1.0
-    if _is_default_baseline(outcome, design):
-        return _COEFFICIENT_ROW_LABELS.get(outcome, outcome), _COEFFICIENT_UNITS.get(outcome, "原始单位"), y_scale
-    label = design.get("baseline_label")
-    return (label if isinstance(label, str) and label else outcome), _KIND_UNITS.get(kind, "原始单位"), y_scale
-
-
-def _coefficient_chart(
-    step: int, outcome: str, coefficient: dict[str, Any], suppressed: bool, design: dict[str, Any] | None = None
-) -> list[str]:
-    """Estimate per 1-percentage-point increase in X, with its interval, as on the step's own page."""
-    label, unit, y_scale = _chart_row(outcome, design or {})
-    # Shares: β × 0.01 × 100 percentage points; lengths and centrality: β × 0.01 raw units.
-    scale = y_scale / 100
-
-    # Display precision, like the tables; full values stay in the provenance.
-    def shown(value: Any) -> float:
-        return float(f"{float(value) * scale:.4g}")
-
-    item: dict[str, Any] = {"label": label, "value": shown(coefficient["coef"])}
-    ci_low, ci_high = coefficient.get("ci_low"), coefficient.get("ci_high")
-    if not suppressed and isinstance(ci_low, (int, float)) and isinstance(ci_high, (int, float)):
-        item["ci_low"], item["ci_high"] = shown(ci_low), shown(ci_high)
-    chart = {
-        "version": 1,
-        "type": "coefficient",
-        "title": f"步骤 {step} · X 每高 1 个百分点，Y 平均相差多少",
-        "x_label": unit,
-        "items": [item],
-    }
-    return ["```gvcsim-chart", json.dumps(chart, ensure_ascii=False, separators=(",", ":")), "```", ""]
-
-
-def _binscatter_chart(
-    step: int, outcome: str, result: dict[str, Any], design: dict[str, Any] | None = None
-) -> list[str]:
-    """The binned scatter behind the estimate, in the same display units as the coefficient chart."""
-    label, unit, y_scale = _chart_row(outcome, design or {})
-    binscatter = result.get("binscatter")
-    if not isinstance(binscatter, dict):
-        return []
-    bins, slope = binscatter.get("bins"), binscatter.get("slope")
-    if not isinstance(bins, list) or len(bins) < 2 or not isinstance(slope, (int, float)) or isinstance(slope, bool):
-        return []
-    points = []
-    for item in bins:
-        if not isinstance(item, dict):
-            return []
-        values = [item.get("x"), item.get("y"), item.get("n")]
-        if any(isinstance(value, bool) or not isinstance(value, (int, float)) for value in values):
-            return []
-        x, y, n = (float(value) for value in cast(list[int | float], values))
-        points.append({"x": float(f"{x * 100:.4g}"), "y": float(f"{y * y_scale:.4g}"), "n": int(n)})
-    chart = {
-        "version": 1,
-        "type": "binscatter",
-        "title": f"步骤 {step} · 回归在量什么：X 高低不同的国家×行业，Y 平均相差多少",
-        "x_label": "X 扣掉平均水平后的高低（个百分点）",
-        "y_label": f"{label}（{unit}）",
-        "points": points,
-        # Slope in display units: β per 1 percentage point of X, in the outcome's shown unit.
-        "slope": float(f"{float(slope) * y_scale / 100:.4g}"),
-    }
-    return ["```gvcsim-chart", json.dumps(chart, ensure_ascii=False, separators=(",", ":")), "```", ""]
 
 
 def _teaching_sample_lines(source_filter: dict[str, Any] | None) -> list[str]:
@@ -554,7 +475,10 @@ def _evidence_summary(
     runs: list[dict[str, Any]],
     source_filter: dict[str, Any] | None = None,
     teaching_observation: Any = None,
+    overview: dict[str, Any] | None = None,
 ) -> list[str]:
+    """``overview`` is the course's estimate of every Y (``_estimate_overview``) for the per-step bar charts;
+    without it each chart shows the saved Y alone."""
     lines = [
         "## 关键证据摘要",
         "",
@@ -602,16 +526,13 @@ def _evidence_summary(
         effect_label, effect, interval = _natural_effect(outcome, design, result, coefficient)
         evidence, interpretation = _evidence_reading(outcome, coefficient, suppressed, design)
         directional = evidence.startswith("方向明确")
-        setting = _model_summary(design)
-        lines.extend(_coefficient_chart(step, outcome, coefficient, suppressed, design))
-        if not suppressed:
-            lines.extend(_binscatter_chart(step, outcome, result, design))
+        lines.extend(family_chart(step, outcome, design, result, coefficient, overview))
         lines.extend(
             (
                 "| 项目 | 结果 |",
                 "|---|---|",
                 f"| 结果指标 Y | {_safe(_y_label(outcome, design))} |",
-                f"| 模型 | {setting or '—'} |",
+                f"| 模型 | {_model_summary(design) or '—'} |",
                 f"| {effect_label} | **{effect}** |",
                 f"| 95% 区间 | {interval} |",
                 f"| 方向 | **{evidence}** |",

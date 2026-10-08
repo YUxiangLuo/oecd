@@ -6,6 +6,7 @@ import { ScrollableRegion } from "./a11y";
 import { niceDomain } from "./viz/nice-ticks";
 import { stripNegativeZero } from "./format";
 import { CAT } from "./viz/shared";
+import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./viz/regression/palette";
 
 type ChartItem = { label: string; value: number };
 /** A bar may name the series it belongs to (e.g. a country); bars of one group share a colour.
@@ -13,6 +14,9 @@ type ChartItem = { label: string; value: number };
 type BarItem = ChartItem & { group?: string; reference?: boolean };
 type ChartPoint = ChartItem & { se?: number; ci_low?: number; ci_high?: number };
 type CoefficientItem = ChartItem & { ci_low?: number; ci_high?: number };
+/** One Y of a regression bar chart: `value` in the axis unit, `text` the end label as the result table prints it
+ *  ("-0.55", "-40.11（0.047 个标准差）"), `saved` the student's saved Y, `sub` a second label line ("步骤 11"). */
+type DivergingItem = CoefficientItem & { text: string; saved?: boolean; sub?: string };
 /** A reference series (e.g. the global median) is drawn as a grey dashed line, not as a country. */
 type LineSeries = { label: string; points: ChartItem[]; reference?: boolean };
 
@@ -26,6 +30,16 @@ type ReportChart =
       items: BarItem[];
     }
   | {
+      version: 1;
+      type: "diverging-bar";
+      title?: string;
+      x_label?: string;
+      note?: string;
+      items: DivergingItem[];
+    }
+  | {
+      // Legacy: reports generated before the bar-chart redesign (still stored and graded) carry the coefficient
+      // and binned-scatter charts; new reports draw "diverging-bar" instead.
       version: 1;
       type: "coefficient";
       title?: string;
@@ -102,6 +116,17 @@ function isCoefficientItem(value: unknown): value is CoefficientItem {
     && item.ci_low <= item.value && item.value <= item.ci_high;
 }
 
+function isDivergingItem(value: unknown): value is DivergingItem {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  if (!hasOnlyKeys(item, ["label", "value", "ci_low", "ci_high", "text", "saved", "sub"])) return false;
+  const { text, saved, sub, ...coefficient } = item;
+  return isCoefficientItem(coefficient)
+    && isLabel(text) && text.length > 0
+    && (saved == null || typeof saved === "boolean")
+    && (sub == null || isLabel(sub));
+}
+
 function isPoint(value: unknown): value is ChartPoint {
   if (!value || typeof value !== "object") return false;
   const point = value as Record<string, unknown>;
@@ -148,6 +173,15 @@ export function parseReportChart(source: string): ReportChart | null {
     if (!hasOnlyKeys(value, ["version", "type", "title", "x_label", "y_label", "items"])) return null;
     if (!Array.isArray(value.items) || value.items.length === 0 || value.items.length > MAX_POINTS) return null;
     if (!value.items.every(isBarItem)) return null;
+    return value as ReportChart;
+  }
+  if (value.type === "diverging-bar") {
+    if (!hasOnlyKeys(value, ["version", "type", "title", "x_label", "note", "items"])) return null;
+    if (value.note != null && (typeof value.note !== "string" || value.note.length > 2 * MAX_LABEL_LENGTH)) return null;
+    // Step 12 has the most Ys (7); at most one bar is the saved one.
+    if (!Array.isArray(value.items) || value.items.length === 0 || value.items.length > 8) return null;
+    if (!value.items.every(isDivergingItem)) return null;
+    if (value.items.filter((item) => item.saved === true).length > 1) return null;
     return value as ReportChart;
   }
   if (value.type === "coefficient") {
@@ -338,7 +372,8 @@ function symmetricTicks(maxAbs: number): number[] {
   return Array.from({ length: 2 * count + 1 }, (_, index) => (index - count) * step);
 }
 
-/** Binned scatter as on the step pages: bin means of the within-transformed Y against X and the fitted line. */
+/** Legacy (reports generated before the bar-chart redesign): bin means of the within-transformed Y against X and
+ *  the fitted line. */
 function BinscatterChart({ chart }: { chart: Extract<ReportChart, { type: "binscatter" }> }) {
   const W = 720, H = 330;
   const xs = chart.points.map((point) => point.x), ys = chart.points.map((point) => point.y);
@@ -370,7 +405,8 @@ function BinscatterChart({ chart }: { chart: Extract<ReportChart, { type: "binsc
   );
 }
 
-/** One row per estimate: the point estimate as a dot and the 95% interval as a capped whisker (one colour). */
+/** Legacy (reports generated before the bar-chart redesign): one row per estimate, the point estimate as a dot and
+ *  the 95% interval as a capped whisker (one colour). */
 function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coefficient" }> }) {
   const W = 720;
   const rowH = 64;
@@ -458,6 +494,189 @@ function CoefficientChart({ chart }: { chart: Extract<ReportChart, { type: "coef
           );
         })}
         <line x1={x(0)} x2={x(0)} y1={m.t - 6} y2={H - m.b} stroke="#1f2430" strokeWidth={1.8} />
+      </svg>
+    </ReportFigure>
+  );
+}
+
+/** Wrap a row label into lines of at most `max` units (the long Chinese Y names never get clipped). */
+function wrapLabel(text: string, size: number, max: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const char of text) {
+    if (line && textWidth(line + char, size) > max) {
+      lines.push(line.trimEnd());
+      line = char === " " ? "" : char;
+    } else line += char;
+  }
+  return line ? [...lines, line] : lines;
+}
+
+/** A bar's 95% interval includes 0 (or was not shown): the direction is uncertain, as in the result table. */
+const isUncertain = (item: CoefficientItem) => item.ci_low == null || item.ci_high == null || (item.ci_low <= 0 && item.ci_high >= 0);
+const divergingFill = (item: CoefficientItem) => (isUncertain(item) ? UNCERTAIN : item.value >= 0 ? POSITIVE : NEGATIVE);
+const endLabel = (item: DivergingItem) => (isUncertain(item) ? `${item.text} · 方向不确定` : item.text);
+/** A bar's end label on one, two or three lines (layout 0–2): "-40.11 个中心性原始单位" / "（0.047 个标准差）" /
+ *  "方向不确定". Long labels on both sides of the zero line are stacked so the bars keep a readable length. */
+function endLabelLines(item: DivergingItem, layout: number): string[] {
+  if (layout === 0) return [endLabel(item)];
+  const bracket = item.text.indexOf("（");
+  const [native, standardized] = bracket > 0 ? [item.text.slice(0, bracket).trimEnd(), item.text.slice(bracket)] : [item.text, ""];
+  const uncertain = isUncertain(item) ? "方向不确定" : "";
+  if (layout === 1) {
+    const second = [standardized, uncertain].filter(Boolean).join(" · ");
+    return second ? [native, second] : [native];
+  }
+  return [native, standardized, uncertain].filter(Boolean);
+}
+
+/**
+ * One bar per Y, as on the step 11–15 pages: a vertical zero line, positive bars to the right in red, negative to
+ * the left in blue, a bar whose 95% interval (the whisker) includes 0 in light grey with "方向不确定". The saved Y
+ * is outlined and marked "★ 已保存". The scale is the largest one at which every bar, whisker and end label fits
+ * inside the 720-unit canvas, so no label is clipped or overlaps another row.
+ */
+function DivergingBarChart({ chart }: { chart: Extract<ReportChart, { type: "diverging-bar" }> }) {
+  const W = 720;
+  const SUB_FONT = 14;
+  const LINE = 19;
+  const GAP = 8;
+  const rows = chart.items.map((item) => {
+    const lines = wrapLabel(item.label, LABEL_FONT, 200);
+    const sub = [item.sub, item.saved ? "★ 已保存" : null].filter(Boolean).join(" · ");
+    return { item, lines, sub, label: endLabel(item) };
+  });
+  const widest = Math.max(...rows.flatMap((row) => [
+    ...row.lines.map((line) => textWidth(line, LABEL_FONT) * (row.item.saved ? 1.05 : 1)),
+    textWidth(row.sub, SUB_FONT) * 1.05,
+  ]));
+  const m = { l: Math.ceil(Math.min(214, widest) + 22), r: 12, t: 12, b: 56 };
+  const plotLeft = m.l + 8;
+  const plotRight = W - m.r;
+  const plotW = plotRight - plotLeft;
+
+  // Room needed left and right of the zero line at `scale` units per axis unit: each bar side's far end (bar or
+  // whisker) plus its label; the whisker of an uncertain bar also crosses to the other side.
+  const labelWidth = (row: (typeof rows)[number], layout: number) =>
+    Math.max(...endLabelLines(row.item, layout).map((line) => textWidth(line, AXIS_FONT))) * (row.item.saved ? 1.08 : 1.03);
+  const need = (scale: number, layout: number) => rows.reduce((acc, row) => {
+    const { value, ci_low: low = value, ci_high: high = value } = row.item;
+    const left = scale * Math.max(0, -Math.min(value, low));
+    const right = scale * Math.max(0, value, high);
+    return value < 0
+      ? { left: Math.max(acc.left, left + GAP + labelWidth(row, layout)), right: Math.max(acc.right, right) }
+      : { left: Math.max(acc.left, left), right: Math.max(acc.right, right + GAP + labelWidth(row, layout)) };
+  }, { left: 0, right: 0 });
+  const extent = Math.max(...chart.items.flatMap((item) => [Math.abs(item.value), Math.abs(item.ci_low ?? 0), Math.abs(item.ci_high ?? 0)]));
+  const fit = (layout: number) => {
+    if (!(extent > 0)) return need(0, layout).left + need(0, layout).right <= plotW ? 1 : 0;
+    let lo = 0, hi = plotW / extent;
+    for (let iteration = 0; iteration < 40; iteration++) {
+      const mid = (lo + hi) / 2;
+      const room = need(mid, layout);
+      if (room.left + room.right <= plotW) lo = mid; else hi = mid;
+    }
+    return lo;
+  };
+  // One-line labels unless that leaves the longest bar shorter than a third of the plot; then stack them.
+  const scales = [0, 1, 2].map(fit);
+  const chosen = scales.findIndex((candidate) => candidate * Math.max(extent, 1e-12) >= plotW / 3);
+  const layout = chosen >= 0 ? chosen : scales.indexOf(Math.max(...scales));
+  const scale = extent > 0 ? Math.max(scales[layout], 1e-9) : 1;
+  const room = need(scale, layout);
+  const zero = plotLeft + room.left + Math.max(0, plotW - room.left - room.right) / 2;
+  const x = (value: number) => zero + value * scale;
+
+  const endLines = rows.map((row) => endLabelLines(row.item, layout));
+  const heights = rows.map((row, index) => Math.max(36, (row.lines.length + (row.sub ? 1 : 0)) * LINE + 14, endLines[index].length * LINE + 14));
+  const tops = heights.map((_, index) => m.t + heights.slice(0, index).reduce((sum, height) => sum + height, 0));
+  const H = m.t + heights.reduce((sum, height) => sum + height, 0) + m.b;
+
+  // Round ticks over the visible range only.
+  const visible = niceDomain((plotLeft - zero) / scale, (plotRight - zero) / scale, 4);
+  const ticks = visible.ticks.filter((tick) => x(tick) >= plotLeft - 0.5 && x(tick) <= plotRight + 0.5);
+  const stepSize = visible.ticks.length > 1 ? visible.ticks[1] - visible.ticks[0] : 1;
+  // As many decimals as the step has ("0.025" → 3), so a tick never prints rounded (-0.125, not -0.13).
+  const tickDigits = Math.min(6, (String(Number(stepSize.toPrecision(6))).split(".")[1] ?? "").length);
+  const tickText = (value: number) => (value === 0 ? "0" : String(Number(value.toFixed(tickDigits))));
+
+  const summary = rows.map((row) => `${row.item.sub ? `${row.item.sub} ` : ""}${row.item.label}${row.item.saved ? "（已保存）" : ""}：${row.label}`).join("；");
+  const legend: [string, string][] = [[POSITIVE, "正：X 高的 Y 平均更高"], [NEGATIVE, "负：X 高的 Y 平均更低"], [UNCERTAIN, "灰：95% 区间包含 0，方向不确定"]];
+  return (
+    <ReportFigure title={chart.title ?? "回归结果条形图"}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 14px", fontSize: 11, color: "#4b5563", marginBottom: 6 }}>
+        {legend.map(([color, text]) => (
+          <span key={text} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <span aria-hidden="true" style={{ width: 12, height: 10, borderRadius: 2, background: color, printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }} />{text}
+          </span>
+        ))}
+        <span>细线 = 95% 区间</span>
+        {chart.items.some((item) => item.saved) && <span>★ 已保存 = 你保存的 Y</span>}
+      </div>
+      {chart.note && <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>{chart.note}</div>}
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${chart.title ?? "回归结果条形图"}。${summary}`} style={{ width: "100%", height: "auto" }}>
+        {ticks.map((tick) => (
+          <g key={tick}>
+            {tick !== 0 && <line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke="#eef0f4" />}
+            <text x={x(tick)} y={H - m.b + 19} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{tickText(tick)}</text>
+          </g>
+        ))}
+        <line x1={plotLeft} x2={plotRight} y1={H - m.b} y2={H - m.b} stroke="#d7dae2" />
+        {rows.map((row, index) => {
+          const { item } = row;
+          const top = tops[index];
+          const middle = top + heights[index] / 2;
+          const textLines = row.lines.length + (row.sub ? 1 : 0);
+          const firstBaseline = middle - ((textLines - 1) * LINE) / 2 + 5;
+          const end = x(item.value);
+          const hasCi = item.ci_low != null && item.ci_high != null;
+          const far = item.value < 0 ? Math.min(end, hasCi ? x(item.ci_low!) : end) : Math.max(end, hasCi ? x(item.ci_high!) : end);
+          return (
+            <g key={`${item.label}-${index}`} data-diverging-row={item.saved ? "saved" : "other"}>
+              {item.saved && <rect x={4} y={top + 2} width={W - 8} height={heights[index] - 4} rx={6} fill="#f3f5f9" />}
+              {row.lines.map((line, lineIndex) => (
+                <text key={lineIndex} x={m.l - 10} y={firstBaseline + lineIndex * LINE} textAnchor="end" fontSize={LABEL_FONT} fontWeight={item.saved ? 700 : 400} fill="#2a2f3a">{line}</text>
+              ))}
+              {row.sub && <text x={m.l - 10} y={firstBaseline + row.lines.length * LINE} textAnchor="end" fontSize={SUB_FONT} fontWeight={item.saved ? 700 : 400} fill={item.saved ? ZERO_LINE : "#5f6677"}>{row.sub}</text>}
+              <rect
+                x={Math.min(zero, end)}
+                y={middle - 10}
+                width={Math.max(1.5, Math.abs(end - zero))}
+                height={20}
+                rx={3}
+                fill={divergingFill(item)}
+                stroke={item.saved ? ZERO_LINE : "none"}
+                strokeWidth={item.saved ? 2 : 0}
+              >
+                <title>{`${item.label}：${row.label}`}</title>
+              </rect>
+              {hasCi && (
+                <g stroke={ZERO_LINE} strokeWidth={1.5} data-whisker>
+                  <line x1={x(item.ci_low!)} x2={x(item.ci_high!)} y1={middle} y2={middle} />
+                  <line x1={x(item.ci_low!)} x2={x(item.ci_low!)} y1={middle - 6} y2={middle + 6} />
+                  <line x1={x(item.ci_high!)} x2={x(item.ci_high!)} y1={middle - 6} y2={middle + 6} />
+                </g>
+              )}
+              <text
+                data-bar-label={row.label}
+                x={item.value < 0 ? far - GAP : far + GAP}
+                y={middle + 5 - ((endLines[index].length - 1) * LINE) / 2}
+                textAnchor={item.value < 0 ? "end" : "start"}
+                fontSize={AXIS_FONT}
+                fontWeight={item.saved ? 700 : 400}
+                fill="#2a2f3a"
+              >
+                {endLines[index].length === 1
+                  ? endLines[index][0]
+                  : endLines[index].map((line, lineIndex) => (
+                    <tspan key={lineIndex} x={item.value < 0 ? far - GAP : far + GAP} dy={lineIndex === 0 ? 0 : LINE}>{line}</tspan>
+                  ))}
+              </text>
+            </g>
+          );
+        })}
+        <line x1={zero} x2={zero} y1={m.t} y2={H - m.b} stroke={ZERO_LINE} strokeWidth={1.5} />
+        {chart.x_label && <text x={plotLeft + plotW / 2} y={H - 10} textAnchor="middle" fontSize={AXIS_FONT} fill="#5f6677">{chart.x_label}</text>}
       </svg>
     </ReportFigure>
   );
@@ -574,15 +793,22 @@ function ReportFigure({ title, children }: { title: string; children: ReactNode 
   );
 }
 
+function ReportChartView({ chart }: { chart: ReportChart }) {
+  switch (chart.type) {
+    case "bar": return <BarChart chart={chart} />;
+    case "diverging-bar": return <DivergingBarChart chart={chart} />;
+    case "coefficient": return <CoefficientChart chart={chart} />;
+    case "binscatter": return <BinscatterChart chart={chart} />;
+    case "event-study": return <EventChart chart={chart} />;
+    case "line": return <LineChart chart={chart} />;
+  }
+}
+
 function ReportCode({ className, children, ...props }: ComponentPropsWithoutRef<"code">) {
   const source = String(children ?? "").replace(/\n$/, "");
   if (className?.split(" ").includes("language-gvcsim-chart")) {
     const chart = parseReportChart(source);
-    if (chart?.type === "bar") return <BarChart chart={chart} />;
-    if (chart?.type === "coefficient") return <CoefficientChart chart={chart} />;
-    if (chart?.type === "binscatter") return <BinscatterChart chart={chart} />;
-    if (chart?.type === "event-study") return <EventChart chart={chart} />;
-    if (chart?.type === "line") return <LineChart chart={chart} />;
+    if (chart) return <ReportChartView chart={chart} />;
   }
   // react-markdown passes its HAST `node`; it must not reach the DOM as node="[object Object]".
   const { node: _node, ...domProps } = props as typeof props & { node?: unknown };
@@ -599,11 +825,7 @@ function ReportPre({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
     }
     if (className?.split(" ").includes("language-gvcsim-chart")) {
       const chart = parseReportChart(String(children.props.children ?? "").replace(/\n$/, ""));
-      if (chart?.type === "bar") return <BarChart chart={chart} />;
-    if (chart?.type === "coefficient") return <CoefficientChart chart={chart} />;
-    if (chart?.type === "binscatter") return <BinscatterChart chart={chart} />;
-      if (chart?.type === "event-study") return <EventChart chart={chart} />;
-      if (chart?.type === "line") return <LineChart chart={chart} />;
+      if (chart) return <ReportChartView chart={chart} />;
     }
   }
   const { node: _node, ...domProps } = props as typeof props & { node?: unknown };

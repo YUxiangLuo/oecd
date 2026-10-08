@@ -7,8 +7,16 @@ from datetime import datetime, timezone
 
 from typing import Any
 
-from gvcsim import quizzes
-from gvcsim.artifacts import NETWORK_ALGORITHM, ArtifactContractError, dataset_metadata, validate_release_cached
+import numpy as np
+
+from gvcsim import config, quizzes
+from gvcsim.artifacts import (
+    NETWORK_ALGORITHM,
+    ArtifactContractError,
+    dataset_metadata,
+    read_csv_artifact,
+    validate_release_cached,
+)
 from gvcsim.config import COURSE_RELEASE, processed_years
 from gvcsim.data.citations import (
     is_ci_synthetic_source,
@@ -34,6 +42,21 @@ from gvcsim.report_render import (
     _run_sections,
 )
 from gvcsim.report_saved_run import _saved_runs
+
+
+def _regression_overview() -> dict[str, Any] | None:
+    """The course's estimate of every Y (the step 11–14 bars), from the release's teaching panel and computed once
+    per release: the same cached panel and result the teaching-overview endpoint serves. A failure leaves each
+    chart with the saved Y alone instead of blocking the report."""
+    from gvcsim.regression_routes import _ESTIMATE_OVERVIEW_CACHE, _cached_on_panel, _estimate_overview
+
+    try:
+        # Resolved at call time (not data_routes' import-time PROCESSED_DIR); the artifact cache returns the same
+        # DataFrame object for the same file, so the overview cache is shared with the endpoint.
+        panel = read_csv_artifact(config.PROCESSED_DIR / "panel_teaching.csv")
+        return _cached_on_panel(_ESTIMATE_OVERVIEW_CACHE, panel, _estimate_overview)
+    except (ArtifactContractError, OSError, ValueError, KeyError, np.linalg.LinAlgError, FloatingPointError, OverflowError):
+        return None
 
 
 def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: Any) -> TeachingReport:
@@ -130,7 +153,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         f"> **关税回归部分（步骤 10–14）**：{GENERATED_DATA_NOTE}X = 首年对美出口份额 w × 加征税率 τ（单位：个百分点）。",
         "",
         "> 步骤 11–14 用同一个模型：扣掉每个国家×行业自己的平均水平和每年的共同变化后，比较 X 高低不同的国家×行业，Y 平均相差多少"
-        "（双向固定效应，TWFE），不加控制变量。估计值和区间描述的是 X 与 Y 的关联；四个 Y 单位不同，数字不能互相比大小。",
+        "（双向固定效应，TWFE），不加控制变量。估计值和区间描述的是 X 与 Y 的关联；四个 Y 单位不同，原始数字不能互相比大小，汇总图把它们换成个标准差后再放在一起。",
         "",
         *_reflection_section(session),
         *_observed_evidence_section(session),
@@ -138,6 +161,7 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
             runs,
             metadata["simulation_contract"]["source_filter_disclosure"],
             _step_data(session, 10).get("teaching_observation"),
+            _regression_overview() if runs else None,
         ),
         *_quiz_sections(session),
         *_experiment_sections(session),
@@ -155,7 +179,8 @@ def build(session: dict[str, Any], student: str, *_unused: Any, **_unused_kw: An
         "- 关税回归：X 和四个 Y 各自独立；模型固定扣掉每个国家×行业和每年的平均水平，不加控制变量和交互项。",
         "- 多个结果：每个 95% 区间只针对它自己那一项；p 值小也不代表因果关系。",
         "- 不加控制变量的原因：同一时期的其他指标本身也可能受关税影响，放进回归反而会让结果有偏差。",
-        "- 回归结果来自你在步骤 11–14 保存的计算，生成报告时不会重算。",
+        "- 回归结果来自你在步骤 11–14 保存的计算，生成报告时不会重算；各步图中其余 Y 的条形是课程用同一份数据、"
+        "同一个模型算出的结果。",
         f"- 生成时间：{generated_local}。",
         "",
         "## 方法参考文献",

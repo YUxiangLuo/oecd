@@ -576,7 +576,9 @@ def _ok_run(outcome: str, **design):
         }.get(outcome, outcome),
     }
     payload.update(design)
-    result = {"status": "ok", "n_obs": 4, "coefs": [{"name": X_COLUMN, "coef": 0.0}]}
+    # Every run records Y's standard deviation (the step 13–15 bars are in standard deviations).
+    depvar_std = {"trade": 0.09, "production": 0.05, "length": 0.58, "network": 853.0}.get(outcome, 1.0)
+    result = {"status": "ok", "n_obs": 4, "depvar_std": depvar_std, "coefs": [{"name": X_COLUMN, "coef": 0.0}]}
     return _sign_run({"design": payload, "result": result})
 
 
@@ -1284,16 +1286,22 @@ def test_report_prints_automatically_saved_teaching_row(tmp_path, monkeypatch):
     assert TEACHING_VERSION not in step_ten
     assert markdown.index("## 真实指标比较") < markdown.index("## 关键证据摘要")
     charts = [json.loads(block.split("\n```", 1)[0]) for block in markdown.split("```gvcsim-chart\n")[1:]]
-    assert [chart["type"] for chart in charts].count("coefficient") == 4
-    assert len(charts) == 8
-    # Each regression step gets the page's coefficient plot: one row, per 1-pp increase in X, with its interval.
+    assert [chart["type"] for chart in charts].count("diverging-bar") == 5
+    assert len(charts) == 9
+    assert not {"coefficient", "binscatter"} & {chart["type"] for chart in charts}
+    # The summary's bar chart in standard deviations, then each regression step's bars of its family's Ys (here the
+    # fixture panel is too small for the course estimates, so each shows the saved Y alone), per 1-pp increase in X.
     summary = markdown.split("## 关键证据摘要", 1)[1].split("## 理解题答题记录", 1)[0]
-    assert summary.count('"type":"coefficient"') == 4
-    for chart in charts:
-        if chart["type"] == "coefficient":
-            assert chart["title"].endswith("X 每高 1 个百分点，Y 平均相差多少")
-            (item,) = chart["items"]
-            assert item["ci_low"] <= item["value"] <= item["ci_high"]
+    assert summary.count('"type":"diverging-bar"') == 5
+    regression = [chart for chart in charts if chart["type"] == "diverging-bar"]
+    assert regression[0]["title"] == "四步保存的结果，都换成个标准差"
+    assert [item["sub"] for item in regression[0]["items"]] == ["步骤 11", "步骤 12", "步骤 13", "步骤 14"]
+    for step, chart in zip(range(11, 15), regression[1:]):
+        assert chart["title"] == f"步骤 {step} · 你保存的 Y：X 每高 1 个百分点，Y 平均相差多少"
+        (item,) = chart["items"]
+        assert item["saved"] is True
+        assert item["ci_low"] <= item["value"] <= item["ci_high"]
+        assert chart["x_label"].endswith("（个百分点）" if step < 13 else "（个标准差）")
 
 
 def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatch):
@@ -2156,56 +2164,70 @@ def test_view_only_keys_never_change_the_experiment_sections():
     assert "记录的单元格" in text
 
 
-def test_report_draws_the_binned_scatter_behind_each_saved_estimate(tmp_path, monkeypatch):
-    """Steps 11–14 carry the binned scatter after the coefficient plot, in display units."""
+def _course_overview(**coefs: float) -> dict:
+    """A stand-in for the course estimate of every Y (``_estimate_overview``): the fixture panel is too small to fit."""
+    defaults = {"share": -0.3, "length": -1.5, "position": -0.08, "network": -2000.0}
+    stds = {"share": 0.05, "length": 0.58, "position": 0.17, "network": 500.0}
+    return {
+        "outcomes": {
+            outcome: [
+                {
+                    "key": item.key,
+                    "label": item.label,
+                    "kind": item.kind,
+                    "default": index == 0,
+                    "coef": coefs.get(item.key, defaults[item.kind]),
+                    "ci_low": coefs.get(item.key, defaults[item.kind]) - abs(coefs.get(item.key, defaults[item.kind])) / 10,
+                    "ci_high": coefs.get(item.key, defaults[item.kind]) + abs(coefs.get(item.key, defaults[item.kind])) / 10,
+                    "status": "ok",
+                    "suppress_inference": False,
+                    "depvar_std": stds[item.kind],
+                }
+                for index, item in enumerate(items)
+            ]
+            for outcome, items in teaching.BASELINES.items()
+        }
+    }
+
+
+def test_report_draws_every_y_of_each_family_with_the_saved_one_marked(tmp_path, monkeypatch):
+    """Steps 11–14 carry one bar per Y of the family (the course estimates), the saved Y's bar from the saved run;
+    a saved run's binned scatter is no longer drawn."""
+    from gvcsim import report_build
+
     _artifacts(tmp_path)
     monkeypatch.setattr(config, "PROCESSED_DIR", tmp_path)
+    monkeypatch.setattr(report_build, "_regression_overview", lambda: _course_overview(DVAex_share=0.55))
     session = _complete()
     run = session["steps"]["11"]["data"]["run"]
     run["result"]["coefs"][0]["coef"] = -0.55
-    run["result"]["binscatter"] = {
-        "bins": [{"x": -0.02, "y": 0.011, "n": 10}, {"x": 0.0, "y": 0.0, "n": 10}, {"x": 0.02, "y": -0.011, "n": 10}],
-        "slope": -0.55,
-        "transform": "twoway_demeaned",
-    }
+    run["result"]["coefs"][0]["se"] = 0.001
+    run["result"]["binscatter"] = {"bins": [{"x": -0.02, "y": 0.011, "n": 10}, {"x": 0.02, "y": -0.011, "n": 10}], "slope": -0.55}
     _sign_run(run)
-
-    def charts_of(markdown: str) -> list[dict]:
-        pattern = "```gvcsim-chart" + chr(10) + "(.*?)" + chr(10) + "```"
-        return [json.loads(block) for block in re.findall(pattern, markdown, re.S)]
 
     markdown = build(session, "同学").markdown
-    charts = charts_of(markdown)
-    binscatters = [chart for chart in charts if chart["type"] == "binscatter"]
-    assert len(binscatters) == 1
-    chart = binscatters[0]
-    assert chart["title"].startswith("步骤 11")
-    # X in percentage points, Y of a share outcome in percentage points; slope per 1 pp of X.
-    assert [point["x"] for point in chart["points"]] == [-2.0, 0.0, 2.0]
-    assert [point["y"] for point in chart["points"]] == [1.1, 0.0, -1.1]
-    assert chart["slope"] == pytest.approx(-0.55)
-    # The scatter follows the coefficient chart of the same step.
-    assert markdown.index('"type":"coefficient"') < markdown.index('"type":"binscatter"')
-    # A malformed scatter is left out rather than breaking the report.
-    run["result"]["binscatter"] = {"bins": "no", "slope": 1}
-    _sign_run(run)
-    assert not [chart for chart in charts_of(build(session, "同学").markdown) if chart["type"] == "binscatter"]
-    # Suppressed inference draws no scatter either (the evidence section is rendered directly here,
-    # because a run without inference is not a complete material for the report gate).
-    from gvcsim.report_render import _evidence_summary
-
-    run["result"]["binscatter"] = {
-        "bins": [{"x": -0.02, "y": 0.011, "n": 10}, {"x": 0.02, "y": -0.011, "n": 10}],
-        "slope": -0.55,
-    }
-    run["result"]["support"] = {"status": "ok", "suppress_inference": True, "reasons": ["测试诊断"]}
-    _sign_run(run)
-    evidence = [{"step": 11, "outcome": "trade", "design": run["design"], "result": run["result"]}]
-    assert not [
-        chart for chart in charts_of(chr(10).join(_evidence_summary(evidence))) if chart["type"] == "binscatter"
+    charts = [
+        json.loads(block)
+        for block in re.findall("```gvcsim-chart" + chr(10) + "(.*?)" + chr(10) + "```", markdown, re.S)
     ]
-    run["result"]["support"]["suppress_inference"] = False
-    assert [chart for chart in charts_of(chr(10).join(_evidence_summary(evidence))) if chart["type"] == "binscatter"]
+    assert not {"binscatter", "coefficient"} & {chart["type"] for chart in charts}
+    trade = next(chart for chart in charts if chart["title"].startswith("步骤 11"))
+    assert trade["title"] == "步骤 11 · 贸易流的 2 个 Y：X 每高 1 个百分点，Y 平均相差多少"
+    assert trade["items"] == [
+        {"label": "外国增加值项占比", "value": -0.55, "text": "-0.55", "ci_low": pytest.approx(-0.5627, abs=1e-4),
+         "ci_high": pytest.approx(-0.5373, abs=1e-4), "saved": True},
+        {"label": "国内增加值出口占比", "value": 0.55, "text": "+0.55", "ci_low": 0.495, "ci_high": 0.605},
+    ]
+    step_11 = markdown.split("### 步骤 11 · 贸易流回归", 1)[1].split("### ", 1)[0]
+    assert "| 关税暴露 X 每高 1 个百分点，Y 平均相差 | **-0.55 个百分点** |" in step_11
+    assert "- 图中标“已保存”的是你保存的 Y，下表是它的详细数字" in step_11
+    # Steps 13 and 14 mix units, so their bars are in standard deviations with the native value first.
+    network = next(chart for chart in charts if chart["title"].startswith("步骤 14"))
+    assert len(network["items"]) == len(teaching.BASELINES["network"])
+    assert network["x_label"] == "X 每高 1 个百分点，Y 平均相差（个标准差）"
+    assert network["items"][1]["text"] == "-20.00（0.040 个标准差）"
+    assert "介数" in [item["label"] for item in network["items"]]
+    assert "生成报告时不会重算" in markdown and "其余 Y 的条形是课程用同一份数据、同一个模型算出的结果" in markdown
 
 
 def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(tmp_path, monkeypatch):
@@ -2219,12 +2241,11 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
     run["design"]["baseline"] = "GVCPs"
     run["result"]["coefs"][0]["coef"] = -0.4
     run["result"]["coefs"][0]["se"] = 0.01  # two clusters: a wide t(1) interval would otherwise cross 0
-    run["result"]["binscatter"] = {
-        "bins": [{"x": -0.02, "y": 0.008, "n": 10}, {"x": 0.02, "y": -0.008, "n": 10}],
-        "slope": -0.4,
-        "transform": "twoway_demeaned",
-    }
+    run["result"]["depvar_std"] = 0.17
     _sign_run(run)
+    from gvcsim import report_build
+
+    monkeypatch.setattr(report_build, "_regression_overview", _course_overview)
     assert run["design"]["depvar"] == "teaching_y_length_GVCPs"
     assert run["model_snapshot"]["baseline"] == "GVCPs"
     assert _parse_saved_run(run, "length") is not None
@@ -2238,15 +2259,19 @@ def test_report_keeps_a_same_family_baseline_run_with_its_own_label_and_reading(
         json.loads(block)
         for block in re.findall("```gvcsim-chart" + chr(10) + "(.*?)" + chr(10) + "```", markdown, re.S)
     ]
-    coefficient = next(
-        chart for chart in charts if chart["type"] == "coefficient" and chart["title"].startswith("步骤 13")
-    )
-    assert coefficient["items"][0]["label"] == "GVC 位置指数" and coefficient["x_label"] == "位置指数单位"
-    assert coefficient["items"][0]["value"] == pytest.approx(-0.004)
-    scatter = next(chart for chart in charts if chart["type"] == "binscatter" and chart["title"].startswith("步骤 13"))
-    assert scatter["y_label"] == "GVC 位置指数（位置指数单位）"
-    assert [point["y"] for point in scatter["points"]] == [0.008, -0.008]
-    assert scatter["slope"] == pytest.approx(-0.004)
+    # Step 13's bars: both lengths and the position index in standard deviations, the saved GVC 位置指数 marked,
+    # its native value as the table prints it.
+    length = next(chart for chart in charts if chart["title"].startswith("步骤 13"))
+    assert [item["label"] for item in length["items"]] == ["前向 GVC 段长度", "后向 GVC 段长度", "GVC 位置指数"]
+    assert [item.get("saved", False) for item in length["items"]] == [False, False, True]
+    assert length["x_label"] == "X 每高 1 个百分点，Y 平均相差（个标准差）"
+    saved = length["items"][2]
+    assert saved["value"] == pytest.approx(-0.004 / 0.17, rel=1e-3)
+    assert saved["text"] == "-0.0040（0.024 个标准差）"
+    assert "| 关税暴露 X 每高 1 个百分点，Y 平均相差 | **-0.0040 个位置指数单位** |" in markdown
+    assert "（长度单位、位置指数单位）" in length["note"]
+    summary = next(chart for chart in charts if chart["title"] == "四步保存的结果，都换成个标准差")
+    assert summary["items"][2]["text"] == "-0.0040 个位置指数单位（0.024 个标准差）"
 
     # A baseline from another family, or one the snapshot does not match, is not a reportable run.
     forged = copy.deepcopy(run)

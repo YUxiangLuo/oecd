@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { cleanup, render as renderDom } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { closeBoldBeforeCjkPunctuation, parseReportChart, ReportMarkdown } from "./report-renderer";
+import { NEGATIVE, POSITIVE, UNCERTAIN, ZERO_LINE } from "./viz/regression/palette";
 
 describe("report tables", () => {
   test("isolates literal reflection text from following report headings, tables and charts", () => {
@@ -317,6 +318,149 @@ describe("parseReportChart", () => {
       expect(label.getAttribute("text-anchor")).toBe("start");
       expect(Number(label.getAttribute("x"))).toBeGreaterThan(Number(zero.getAttribute("x1")));
     }
+  });
+});
+
+// The report's step 11–14 and summary charts as gvcsim/report_regression_chart.py writes them for the course release
+// (FVA saved in step 11, the weak Y saved in step 12, GVC 位置指数 in step 13, 加权总度 in step 14).
+const REGRESSION_CHARTS = {
+  trade: {"version":1,"type":"diverging-bar","title":"步骤 11 · 贸易流的 2 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个百分点）","items":[{"label":"外国增加值项占比","value":-0.5493,"text":"-0.55","ci_low":-0.5711,"ci_high":-0.5274,"saved":true},{"label":"国内增加值出口占比","value":0.5561,"text":"+0.56","ci_low":0.5419,"ci_high":0.5702}]},
+  production: {"version":1,"type":"diverging-bar","title":"步骤 12 · 生产的 7 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个百分点）","items":[{"label":"复杂 GVC 生产份额","value":-0.3756,"text":"-0.38","ci_low":-0.3885,"ci_high":-0.3627},{"label":"前向 GVC 生产总份额","value":-0.6801,"text":"-0.68","ci_low":-0.6963,"ci_high":-0.6639},{"label":"后向 GVC 生产总份额","value":-0.4475,"text":"-0.45","ci_low":-0.4688,"ci_high":-0.4262},{"label":"简单 GVC 生产份额","value":-0.3045,"text":"-0.30","ci_low":-0.3181,"ci_high":-0.291},{"label":"传统贸易生产份额","value":-0.295,"text":"-0.30","ci_low":-0.306,"ci_high":-0.2841},{"label":"纯国内生产份额","value":0.9752,"text":"+0.98","ci_low":0.9553,"ci_high":0.995},{"label":"后向复杂 GVC 生产份额","value":0.007501,"text":"+0.008","ci_low":-0.01117,"ci_high":0.02617,"saved":true}]},
+  length: {"version":1,"type":"diverging-bar","title":"步骤 13 · 长度的 3 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"前向 GVC 段长度","value":-0.03118,"text":"-0.018（0.031 个标准差）","ci_low":-0.03292,"ci_high":-0.02944},{"label":"后向 GVC 段长度","value":-0.02559,"text":"-0.015（0.026 个标准差）","ci_low":-0.02695,"ci_high":-0.02423},{"label":"GVC 位置指数","value":-0.004425,"text":"-0.0008（0.004 个标准差）","ci_low":-0.006494,"ci_high":-0.002356,"saved":true}],"note":"条形和括号内是个标准差（标准差即 Y 在国家×行业之间的典型差距），单位或大小相差很多的 Y 才能放在一起比；括号前是原始数值（长度单位、位置指数单位）。"},
+  network: {"version":1,"type":"diverging-bar","title":"步骤 14 · 网络的 5 个 Y：X 每高 1 个百分点，Y 平均相差多少","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"加权总度","value":-0.04703,"text":"-40.11（0.047 个标准差）","ci_low":-0.04819,"ci_high":-0.04586,"saved":true},{"label":"加权入度","value":-0.04594,"text":"-19.91（0.046 个标准差）","ci_low":-0.04745,"ci_high":-0.04443},{"label":"加权出度","value":-0.04654,"text":"-20.20（0.047 个标准差）","ci_low":-0.04831,"ci_high":-0.04476},{"label":"介数","value":-0.1003,"text":"-60.11（0.100 个标准差）","ci_low":-0.1029,"ci_high":-0.09772},{"label":"接近中心性","value":-0.0419,"text":"-0.0049（0.042 个标准差）","ci_low":-0.04298,"ci_high":-0.04082}]},
+  summary: {"version":1,"type":"diverging-bar","title":"四步保存的结果，都换成个标准差","x_label":"X 每高 1 个百分点，Y 平均相差（个标准差）","items":[{"label":"外国增加值项占比","sub":"步骤 11","value":-0.06192,"text":"-0.55 个百分点（0.062 个标准差）","ci_low":-0.06438,"ci_high":-0.05945},{"label":"后向复杂 GVC 生产份额","sub":"步骤 12","value":0.001296,"text":"+0.008 个百分点（0.001 个标准差）","ci_low":-0.001929,"ci_high":0.004521},{"label":"GVC 位置指数","sub":"步骤 13","value":-0.004425,"text":"-0.0008 个位置指数单位（0.004 个标准差）","ci_low":-0.006494,"ci_high":-0.002356},{"label":"加权总度","sub":"步骤 14","value":-0.04703,"text":"-40.11 个中心性原始单位（0.047 个标准差）","ci_low":-0.04819,"ci_high":-0.04586}],"note":"标准差即 Y 在国家×行业之间的典型差距；括号前是各步原始单位的数值，和上表相同。"},
+} as const;
+
+/** Same width estimate as the renderer: CJK about one em, Latin about 0.6 em. */
+const estimatedWidth = (text: string, size: number) => [...text].reduce((width, char) => width + (/[⺀-￿]/.test(char) ? size : size * 0.6), 0);
+/** A text's box; a stacked end label (tspans) is as wide as its longest line and as tall as all of them. */
+function textBox(node: Element) {
+  const x = Number(node.getAttribute("x"));
+  const size = Number(node.getAttribute("font-size"));
+  const spans = [...node.querySelectorAll("tspan")];
+  const lines = spans.length ? spans.map((span) => span.textContent ?? "") : [node.textContent ?? ""];
+  const width = Math.max(...lines.map((line) => estimatedWidth(line, size))) * (node.getAttribute("font-weight") === "700" ? 1.05 : 1);
+  const anchor = node.getAttribute("text-anchor") ?? "start";
+  const left = anchor === "end" ? x - width : anchor === "middle" ? x - width / 2 : x;
+  const y = Number(node.getAttribute("y"));
+  const below = spans.reduce((sum, span) => sum + Number(span.getAttribute("dy") ?? 0), 0);
+  return { left, right: left + width, top: y - size, bottom: y + below + 3 };
+}
+
+describe("regression bar charts (steps 11–14 and the summary)", () => {
+  const renderChart = (chart: unknown) => {
+    const element = document.createElement("div");
+    element.innerHTML = renderToStaticMarkup(createElement(ReportMarkdown, { markdown: `\`\`\`gvcsim-chart\n${JSON.stringify(chart)}\n\`\`\`` }));
+    return element;
+  };
+
+  test("accepts only the strict diverging-bar schema", () => {
+    const valid = REGRESSION_CHARTS.trade;
+    expect(parseReportChart(JSON.stringify(valid))).toMatchObject({ type: "diverging-bar" });
+    const withItem = (patch: Record<string, unknown>) => JSON.stringify({ ...valid, items: [{ ...valid.items[0], ...patch }] });
+    expect(parseReportChart(withItem({ colour: "red" }))).toBeNull(); // unknown item key
+    expect(parseReportChart(withItem({ text: "" }))).toBeNull();
+    expect(parseReportChart(withItem({ saved: "yes" }))).toBeNull();
+    expect(parseReportChart(withItem({ ci_low: -0.5 }))).toBeNull(); // the interval must contain the estimate
+    expect(parseReportChart(withItem({ ci_high: undefined }))).toBeNull(); // a lone endpoint
+    expect(parseReportChart(withItem({ value: Number.NaN }))).toBeNull();
+    expect(parseReportChart(JSON.stringify({ ...valid, extra: 1 }))).toBeNull();
+    expect(parseReportChart(JSON.stringify({ ...valid, note: "说".repeat(241) }))).toBeNull();
+    expect(parseReportChart(JSON.stringify({ ...valid, items: valid.items.map((item) => ({ ...item, saved: true })) }))).toBeNull();
+    expect(parseReportChart(JSON.stringify({ ...valid, items: Array.from({ length: 9 }, () => valid.items[1]) }))).toBeNull();
+    // A suppressed interval is allowed (no whisker, grey bar).
+    const { ci_low: _low, ci_high: _high, ...bare } = valid.items[0];
+    expect(parseReportChart(JSON.stringify({ ...valid, items: [bare] }))).toMatchObject({ type: "diverging-bar" });
+  });
+
+  test("colours bars by direction, greys the uncertain one and marks the saved Y", () => {
+    const element = renderChart(REGRESSION_CHARTS.production);
+    const bars = [...element.querySelectorAll("svg rect[fill]")].filter((rect) => rect.querySelector("title"));
+    expect(bars).toHaveLength(7);
+    expect(bars.map((bar) => bar.getAttribute("fill"))).toEqual([NEGATIVE, NEGATIVE, NEGATIVE, NEGATIVE, NEGATIVE, POSITIVE, UNCERTAIN]);
+    // One whisker per bar.
+    expect(element.querySelectorAll("[data-whisker]")).toHaveLength(7);
+    const saved = element.querySelector('[data-diverging-row="saved"]')!;
+    expect(saved.textContent).toContain("后向复杂 GVC 生产份额");
+    expect(saved.textContent).toContain("★ 已保存");
+    expect(saved.querySelector("[data-bar-label]")?.textContent).toBe("+0.008 · 方向不确定");
+    expect(saved.querySelector("[data-bar-label]")?.getAttribute("data-bar-label")).toBe("+0.008 · 方向不确定");
+    expect(element.textContent?.match(/方向不确定/g)?.length).toBeGreaterThanOrEqual(2); // the bar label and the legend
+    expect(element.querySelectorAll('[data-diverging-row="saved"]')).toHaveLength(1);
+    const svg = element.querySelector('svg[role="img"]')!;
+    expect(svg.getAttribute("aria-label")).toContain("后向复杂 GVC 生产份额（已保存）：+0.008 · 方向不确定");
+    expect(svg.getAttribute("aria-label")).toContain("纯国内生产份额：+0.98");
+    expect(element.querySelector("figcaption")?.textContent).toBe(REGRESSION_CHARTS.production.title);
+  });
+
+  test("a suppressed interval draws no whisker and reads 方向不确定", () => {
+    const { ci_low: _low, ci_high: _high, ...bare } = REGRESSION_CHARTS.trade.items[0];
+    const element = renderChart({ ...REGRESSION_CHARTS.trade, items: [bare] });
+    expect(element.querySelectorAll("[data-whisker]")).toHaveLength(0);
+    expect(element.querySelector("[data-bar-label]")?.getAttribute("data-bar-label")).toBe("-0.55 · 方向不确定");
+    expect(element.querySelector("svg rect[fill] title")?.parentElement?.getAttribute("fill")).toBe(UNCERTAIN);
+  });
+
+  test.each(Object.entries(REGRESSION_CHARTS))("%s: every label fits the canvas and no two labels overlap", (_name, chart) => {
+    const element = renderChart(chart);
+    const svg = element.querySelector("svg")!;
+    const [, , width, height] = svg.getAttribute("viewBox")!.split(" ").map(Number);
+    const texts = [...svg.querySelectorAll("text")];
+    expect(texts.every((node) => Number(node.getAttribute("font-size")) >= 14)).toBe(true);
+    expect(svg.outerHTML).not.toContain("NaN");
+    const boxes = texts.map((node) => ({ text: node.textContent, ...textBox(node) }));
+    for (const box of boxes) {
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(width);
+      expect(box.bottom).toBeLessThanOrEqual(height);
+    }
+    for (let i = 0; i < boxes.length; i++) {
+      for (let j = i + 1; j < boxes.length; j++) {
+        const [a, b] = [boxes[i], boxes[j]];
+        const overlaps = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+        if (overlaps) throw new Error(`labels overlap: "${a.text}" and "${b.text}"`);
+      }
+    }
+    // Each end label sits beyond its bar and whisker, on the bar's side of the zero line.
+    const zero = [...svg.querySelectorAll("line")].find((line) => line.getAttribute("stroke") === ZERO_LINE && line.getAttribute("x1") === line.getAttribute("x2") && !line.closest("[data-whisker]"))!;
+    const zeroX = Number(zero.getAttribute("x1"));
+    for (const row of svg.querySelectorAll("[data-diverging-row]")) {
+      const label = textBox(row.querySelector("[data-bar-label]")!);
+      const bar = row.querySelector("rect[fill] title")!.parentElement!;
+      const barLeft = Number(bar.getAttribute("x"));
+      const barRight = barLeft + Number(bar.getAttribute("width"));
+      const ends = [...row.querySelectorAll("[data-whisker] line")].flatMap((line) => [Number(line.getAttribute("x1")), Number(line.getAttribute("x2"))]);
+      if (barLeft < zeroX - 0.5) expect(label.right).toBeLessThanOrEqual(Math.min(barLeft, ...ends));
+      else expect(label.left).toBeGreaterThanOrEqual(Math.max(barRight, ...ends));
+      // Row labels stay left of the plot.
+      for (const name of row.querySelectorAll('text[text-anchor="end"]:not([data-bar-label])')) {
+        expect(textBox(name).right).toBeLessThanOrEqual(Math.min(barLeft, zeroX, label.left, ...ends));
+      }
+    }
+  });
+
+  test("the summary labels each bar with its step and native value in standard deviations", () => {
+    const element = renderChart(REGRESSION_CHARTS.summary);
+    expect(element.querySelectorAll('[data-diverging-row="saved"]')).toHaveLength(0);
+    const rows = [...element.querySelectorAll("[data-diverging-row]")];
+    expect(rows.map((row) => row.querySelector("[data-bar-label]")?.getAttribute("data-bar-label"))).toEqual([
+      "-0.55 个百分点（0.062 个标准差）",
+      "+0.008 个百分点（0.001 个标准差） · 方向不确定",
+      "-0.0008 个位置指数单位（0.004 个标准差）",
+      "-40.11 个中心性原始单位（0.047 个标准差）",
+    ]);
+    expect(rows.map((row) => [...row.querySelectorAll('text[text-anchor="end"]:not([data-bar-label])')].at(-1)?.textContent)).toEqual(["步骤 11", "步骤 12", "步骤 13", "步骤 14"]);
+    expect(element.textContent).toContain("X 每高 1 个百分点，Y 平均相差（个标准差）");
+    expect(element.textContent).toContain(REGRESSION_CHARTS.summary.note);
+    // The PDF check reads the summary up to the first "步骤 11 ·" heading; the chart must not contain one.
+    expect(element.textContent?.replace(/\s+/g, "")).not.toContain("步骤11·");
+  });
+
+  test("a long Y name wraps instead of being clipped", () => {
+    const element = renderChart({ ...REGRESSION_CHARTS.trade, items: [{ ...REGRESSION_CHARTS.trade.items[0], label: "一个特别特别长的结果指标名称用来检查换行是否正常工作" }] });
+    const names = [...element.querySelectorAll('[data-diverging-row] text[text-anchor="end"]:not([data-bar-label])')];
+    expect(names.length).toBeGreaterThanOrEqual(3); // two label lines and "★ 已保存"
+    expect(names.every((name) => textBox(name).left >= 0)).toBe(true);
   });
 });
 
