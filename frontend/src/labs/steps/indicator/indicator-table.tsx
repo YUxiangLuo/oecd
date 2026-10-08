@@ -7,7 +7,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
-import { FullscreenPanel } from "../../../fullscreen-panel";
+import { FullscreenPanel, FullscreenTriggerSlot } from "../../../fullscreen-panel";
+import { ColumnInfo, useMeasuredWidth } from "../../../table-aids";
 import type { IndicatorSchema, IndustryPage, Meta, QuizCompletionState, StepStateApi } from "../../../types";
 import { userFacingRequestError } from "../../../user-facing-error";
 import { countryLabel, sectorLabel } from "../../../viz";
@@ -329,22 +330,34 @@ export function IndicatorDataTable({
 }) {
   // A group label may already end in “指标” (e.g. “生产网络指标”); do not say it twice.
   const captionLabel = groupLabel.endsWith("指标") ? `${groupLabel}数据` : `${groupLabel}指标数据`;
+  // 国家 and 行业 both stay in view while the extended indicators scroll by; 行业 sits right after the measured
+  // 国家 column (country names differ in length).
+  const [measureFirst, firstWidth] = useMeasuredWidth<HTMLTableCellElement>();
+  const stickyIndustry = columns[0] === "country" && columns[1] === "industry";
+  const stickyLeft = (index: number) => index === 0 ? 0 : stickyIndustry && index === 1 ? firstWidth : null;
   return (
     <table className="data-table">
       <caption className="sr-only">{captionLabel} · {year} 年 · {country ? countryLabel(country) : "全部国家"}{totalPages > 1 ? ` · 第 ${page} 页` : ""}</caption>
       <thead>
         <tr>
-          {columns.map((column, index) => (
-            <th
-              key={column}
-              scope="col"
-              title={schema?.fields[column]?.desc ?? BASE_DESC[column]}
-              className={TEXT_COLUMNS.has(column) ? "text-col" : undefined}
-              style={index === 0 ? { position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" } : undefined}
-            >
-              {fieldLabel(column, schema)}{schema?.fields[column]?.desc ? " ⓘ" : ""}
-            </th>
-          ))}
+          {columns.map((column, index) => {
+            const desc = schema?.fields[column]?.desc;
+            const left = stickyLeft(index);
+            return (
+              <th
+                key={column}
+                ref={index === 0 ? measureFirst : undefined}
+                scope="col"
+                // An indicator's definition is a focusable ⓘ; the identifier columns keep a hover hint.
+                title={desc ? undefined : BASE_DESC[column]}
+                className={TEXT_COLUMNS.has(column) ? "text-col" : undefined}
+                style={left != null ? { position: "sticky", left, zIndex: index === 0 ? 5 : 4, background: "#fafbfd" } : undefined}
+              >
+                {fieldLabel(column, schema)}
+                {desc && <ColumnInfo label={fieldLabel(column, schema)} text={desc} />}
+              </th>
+            );
+          })}
         </tr>
       </thead>
       <tbody>
@@ -356,8 +369,13 @@ export function IndicatorDataTable({
                 : column === "country" ? row.country != null ? countryLabel(String(row.country)) : "—"
                 : column === "year" ? String(row.year ?? "—")
                   : fmtField(row[column], column, schema);
-              const stickyStyle = index === 0
-                ? { position: "sticky" as const, left: 0, zIndex: 2, background: "#fff" }
+              const left = stickyLeft(index);
+              const stickyStyle = left != null
+                ? {
+                  position: "sticky" as const, left, zIndex: 2, background: "#fff",
+                  // The last sticky column casts an edge so scrolled values visibly pass under it.
+                  ...(index === (stickyIndustry ? 1 : 0) ? { boxShadow: "inset -1px 0 #e8eaf0" } : {}),
+                }
                 : undefined;
               return index === 0 ? (
                 <th key={column} className="indicator-row-header" scope="row" aria-label={indicatorRowHeaderLabel(row)} style={stickyStyle}>
@@ -431,6 +449,7 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
       variant="table"
       buttonLabel="全屏查看"
       autoExpandSignal={autoExpandSignal}
+      triggerInContent
     >
       <div className="controls">
         <LabeledControl label="国家">
@@ -450,6 +469,7 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
         </LabeledControl>
         <span className="muted">{countLabel}</span>
         {!country && <span className="muted">“全部”也包括世界其他地区（ROW，是一个汇总项，不能单独选）。</span>}
+        <FullscreenTriggerSlot />
       </div>
 
       {groupKey === "network" && (

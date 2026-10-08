@@ -10,11 +10,15 @@ import {
   DecompositionRequestMessage,
   IndicatorCalculationDisclosure,
   NetworkCentralityDemo,
+  betweennessExamplePair,
+  betweennessExampleSentence,
   decompositionModelReason,
+  formulaAmount,
   networkDemoKeyTransition,
   networkDemoNodeAccessibleName,
   nextNetworkDemoNode,
   sumText,
+  teachingBetweennessPairs,
   teachingNetworkCentralitySnapshot,
   teachingNetworkEdgesForNode,
   zeroTotalDecompositionHint,
@@ -133,8 +137,31 @@ describe("indicator calculation disclosure", () => {
     const html = renderToStaticMarkup(
       <IndicatorCalculationDisclosure step={4} row={{ FVA: 2, gross_exports: 0 }} />,
     );
-    expect(html).toContain("—（总量为 0 或缺数据，无法计算）");
+    expect(html).toContain("—（总量为 0，无法计算比重）");
     expect(html).not.toContain("Infinity");
+  });
+
+  test("names a negative total and missing data as such (MLT H51 has SVA -1.268)", () => {
+    const negative = renderToStaticMarkup(
+      <IndicatorCalculationDisclosure step={5} row={{ "3b_VA_GVC_C": -0.197, SVA: -1.268 }} />,
+    );
+    expect(negative).toContain("= -0.197 / -1.268 = <b>—（总量为负，无法计算比重）</b>");
+    const missing = renderToStaticMarkup(
+      <IndicatorCalculationDisclosure step={5} row={{ "3b_VA_GVC_C": null, SVA: 4 }} />,
+    );
+    expect(missing).toContain("—（缺数据，无法计算）");
+  });
+
+  test("a GVC position with no GVC activity says so instead of missing data (BRN T)", () => {
+    const inactive = renderToStaticMarkup(
+      <IndicatorCalculationDisclosure step={6} row={{ PLv_GVC: null, PLy_GVC: null, "3_VA_GVC": 0, "3_FGY_GVC": 0 }} />,
+    );
+    expect(inactive).toContain("—（无此类活动，无法计算）");
+    expect(inactive).not.toContain("缺数据");
+    const missing = renderToStaticMarkup(
+      <IndicatorCalculationDisclosure step={6} row={{ PLv_GVC: null, PLy_GVC: 2 }} />,
+    );
+    expect(missing).toContain("—（缺数据，无法计算）");
   });
 
   test("keeps a valid Step 4 position calculation visible when negative SVA blocks only the PLv decomposition", async () => {
@@ -335,6 +362,43 @@ describe("Step 5 teaching network accessibility", () => {
   });
 });
 
+describe("Step 5 betweenness example (round 10)", () => {
+  test("the per-pair contributions add up to each node's betweenness", () => {
+    const { betweenness } = teachingNetworkCentralitySnapshot();
+    for (const [node, value] of Object.entries(betweenness)) {
+      const sum = teachingBetweennessPairs(node).reduce((total, pair) => total + pair.through / pair.total, 0);
+      expect(sum).toBeCloseTo(value);
+    }
+  });
+
+  test("JPN's example is a pair whose every shortest route passes JPN", () => {
+    const pair = betweennessExamplePair(teachingBetweennessPairs("JPN"))!;
+    expect(pair).toMatchObject({ source: "USA", target: "VNM", through: 1, total: 1 });
+    expect(betweennessExampleSentence(pair, "JPN")).toBe("例如 USA → VNM 只有一条最短路线，它要经过 JPN（已高亮），这一对计 1。");
+  });
+
+  test("CHN lies on only one of two USA → KOR routes, and the example says so", () => {
+    const pairs = teachingBetweennessPairs("CHN");
+    expect(pairs.every((pair) => pair.through < pair.total)).toBe(true);
+    const pair = betweennessExamplePair(pairs)!;
+    expect(pair).toMatchObject({ source: "USA", target: "KOR", through: 1, total: 2 });
+    const sentence = betweennessExampleSentence(pair, "CHN");
+    expect(sentence).toBe("例如 USA → KOR 有 2 条最短路线，其中 1 条经过 CHN（已高亮），这一对计 1/2 = 0.5。");
+    expect(sentence).not.toContain("要经过");
+  });
+
+  test("the demo shows the sum behind the value and the pair table", () => {
+    const view = render(<NetworkCentralityDemo />);
+    fireEvent.click(view.getByRole("button", { name: "查看介数的算法" }));
+    fireEvent.click(view.getByRole("button", { name: /^中（CHN）/ }));
+    const text = view.container.textContent ?? "";
+    expect(text).toContain("= 0.5 + 0.5 + 0.5 = 1.5");
+    expect(text).toContain("其中 1 条经过 CHN");
+    expect(text).not.toContain("最短路线要经过 CHN");
+    expect(view.getByRole("table", { name: "节点 CHN 的介数：每一对起点和终点计入的份额" })).toBeTruthy();
+  });
+});
+
 describe("independent decomposition request states", () => {
   test("a side B failure cannot replace or hide valid side A content", () => {
     const html = renderToStaticMarkup(
@@ -434,13 +498,138 @@ describe("object B country", () => {
       industryRequest.mockRestore();
     }
   });
+
+  test("within one country B cannot show A's own industry, and moves on when A takes B's", async () => {
+    const row = (country: string, industry = "") => ({ country, industry, year: 2020, SVA: 10, "1_VA_D": 4, "2_VA_RT": 2, "3_VA_GVC": 4, "3a_VA_GVC_S": 1, "3b_VA_GVC_C": 3 });
+    const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockImplementation(async (_year, country) => [row(country)]);
+    const industryRequest = spyOn(api, "industryIndicatorsAll").mockImplementation(async (_year, country) => ({
+      total: 3, page: 1, page_size: 200, rows: ["C26", "C29", "H51"].map((code) => row(country as string, code)),
+    }));
+    try {
+      const view = render(
+        <DecompositionDemo step={5} meta={{ years: [2020], countries: ["CHN", "USA"], sectors: ["C26", "C29", "H51"], dataset: null }}
+          primaryYear={2020} primaryCountry="CHN" secondaryCountry="USA" />,
+      );
+      fireEvent.click(view.getByLabelText(/并排比较另一个国家或行业/));
+      fireEvent.click(view.getByRole("button", { name: "单个行业" }));
+      await waitFor(() => expect(view.getAllByLabelText("行业")).toHaveLength(2));
+      const sectorA = () => view.getAllByLabelText("行业")[0] as HTMLSelectElement;
+      const sectorB = () => view.getAllByLabelText("行业")[1] as HTMLSelectElement;
+      const optionsB = () => [...sectorB().querySelectorAll("option")].map((option) => option.getAttribute("value"));
+      // Another country: every industry, including A's.
+      expect(optionsB()).toEqual(["C26", "C29", "H51"]);
+      fireEvent.change(view.getAllByLabelText("国家")[1], { target: { value: "CHN" } });
+      await waitFor(() => expect(optionsB()).toEqual(["C29", "H51"]));
+      expect(sectorA().value).toBe("C26");
+      expect(sectorB().value).toBe("C29");
+      fireEvent.change(sectorA(), { target: { value: "C29" } });
+      expect(sectorA().value).toBe("C29");
+      expect(optionsB()).toEqual(["C26", "H51"]);
+      expect(sectorB().value).not.toBe("C29");
+    } finally {
+      countryRequest.mockRestore();
+      industryRequest.mockRestore();
+    }
+  });
 });
 
-test("a merged two-part sum adds up as shown when a part is below 1", () => {
+test("the negative-part note only appears beside shares it explains, in the step's own words", () => {
+  const parts = [
+    { key: "a", label: "纯国内", color: "#123456", desc: "" },
+    { key: "b", label: "传统贸易", color: "#654321", desc: "" },
+  ];
+  const withoutShares = renderToStaticMarkup(
+    <DecompositionDetailTable caption="MLT · H51" parts={parts} values={[-0.04, -0.634]} shares={null} unit="amount" />,
+  );
+  expect(withoutShares).not.toContain("decomp-table-note");
+  const ownWords = renderToStaticMarkup(
+    <DecompositionDetailTable caption="X" parts={parts} values={[5, -1]} shares={[125, -25]} unit="amount"
+      negativeNote="负值表示这部分增加值为负（例如行业亏损），所以其他分项的比重之和可能超过 100%。" />,
+  );
+  expect(ownWords).toContain("负值表示这部分增加值为负");
+  expect(ownWords).not.toContain("净补贴");
+});
+
+test("a merged two-part sum adds up as shown when a part is below 10, at the table's three decimals", () => {
   expect(sumText(0.817, 0.468)).toBe("0.817 + 0.468 = 1.285");
-  expect(sumText(2.4771, 0.8669)).toBe("2.477 + 0.8669 = 3.344");
+  expect(sumText(2.4771, 0.8669)).toBe("2.477 + 0.867 = 3.344");
   expect(sumText(0.00021, 0.00012)).toBe("0.00021 + 0.00012 = 0.00033");
-  expect(sumText(0, 0.25)).toBe("0 + 0.25 = 0.25");
-  expect(sumText(12_345.6, 0.4)).toBe("12,346 + 0.4 = 12,346");
-  expect(sumText(5.4, 3.3)).toBe("9");
+  expect(sumText(0, 0.25)).toBe("0 + 0.250 = 0.250");
+  expect(sumText(12_345.6, 0.4)).toBe("12,346 + 0.400 = 12,346");
+  // Was "9": two parts read "5" and "3" in the table could not add up to it.
+  expect(sumText(5.4, 3.3)).toBe("5.400 + 3.300 = 8.700");
+  // Round 10: the EXDVA line mixed "0.9979" with the table's "0.998".
+  expect(sumText(5298.2, 0.9979)).toBe("5,298 + 0.998 = 5,299");
+  expect(sumText(120, 30)).toBe("150");
+});
+
+describe("small amounts read with the precision of the table rows (round 10)", () => {
+  test("formula operands below 10 keep three decimals, tiny ones three significant digits", () => {
+    expect(formulaAmount(1.3787)).toBe("1.379");
+    expect(formulaAmount(0.56)).toBe("0.560");
+    expect(formulaAmount(0.0603)).toBe("0.0603");
+    expect(formulaAmount(0.06)).toBe("0.060");
+    expect(formulaAmount(-1.2679)).toBe("-1.268");
+    expect(formulaAmount(24.4)).toBe("24");
+    expect(formulaAmount(6424.4)).toBe("6,424");
+  });
+
+  test("BRN C10T12: the FVA share formula substitutes the total the share was computed from", () => {
+    const html = renderToStaticMarkup(
+      <IndicatorCalculationDisclosure step={4} row={{ FVA: 0.5598, gross_exports: 1.3783 }} />,
+    );
+    expect(html).toContain("= 0.560 / 1.378 = <b>40.615%</b>");
+    expect(html).not.toContain("/ 1 =");
+  });
+
+  test("MLT C16: the complex-GVC formula keeps the small total's decimals", () => {
+    const html = renderToStaticMarkup(
+      <IndicatorCalculationDisclosure step={5} row={{ "3b_VA_GVC_C": 0.166, SVA: 2.291 }} />,
+    );
+    expect(html).toContain("= 0.166 / 2.291 = <b>7.246%</b>");
+  });
+
+  test("table rows below 10 read three decimals, so a part never reads \"1\" beside \"0.563\"", () => {
+    const html = renderToStaticMarkup(
+      <DecompositionDetailTable
+        caption="MLT · C16"
+        parts={[
+          { key: "a", label: "纯国内", color: "#123456", desc: "" },
+          { key: "b", label: "传统贸易", color: "#654321", desc: "" },
+          { key: "c", label: "大额", color: "#654321", desc: "" },
+        ]}
+        values={[1.274, 0.563, 1234.5]}
+        shares={[55.61, 24.529, 1]}
+        unit="amount"
+      />,
+    );
+    expect(html).toContain('<td class="dt-val">1.274</td>');
+    expect(html).toContain('<td class="dt-val">0.563</td>');
+    expect(html).toContain('<td class="dt-val">1,235</td>');
+  });
+
+  test("a small total, its parts and the sum line agree in the rendered decomposition", async () => {
+    const row = {
+      country: "BRN", industry: "C10T12", year: 2020,
+      gross_exports: 1.3783, DVAex: 0.7551, DVArt: 0.0002, DDC: 0.0001, FVA: 0.5598, FDC: 0.0601, taxsub: 0.003,
+    };
+    const countryRequest = spyOn(api, "countryIndicatorsForCountry").mockResolvedValue([{ ...row, industry: null }]);
+    const industryRequest = spyOn(api, "industryIndicatorsAll").mockResolvedValue({
+      total: 1, page: 1, page_size: 200, rows: [row],
+    });
+    try {
+      const view = render(
+        <DecompositionDemo step={4} meta={{ years: [2020], countries: ["BRN"], sectors: ["C10T12"], dataset: null }}
+          primaryYear={2020} primaryCountry="BRN" />,
+      );
+      await waitFor(() => expect(view.container.textContent).toContain("总出口 = 1.378"));
+      const text = view.container.textContent ?? "";
+      expect(text).toContain("6 项相加 = 1.378");
+      expect(text).toContain("= 0.560 / 1.378 = 40.615%");
+      expect(text).not.toContain("总出口 = 1（");
+    } finally {
+      countryRequest.mockRestore();
+      industryRequest.mockRestore();
+    }
+  });
 });

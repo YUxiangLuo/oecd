@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { FullscreenPanel, lockFullscreenScroll } from "./fullscreen-panel";
+import { FullscreenPanel, FullscreenTriggerSlot, lockFullscreenScroll } from "./fullscreen-panel";
 import { SyncProblemContext } from "./sync-problem";
 
 function scrollTarget(overflow = "", overflowY = "") {
@@ -107,5 +107,37 @@ describe("FullscreenPanel keyboard place", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
     await Promise.resolve();
     expect(document.activeElement?.textContent).toBe("格 B");
+  });
+
+  test("Escape brings the control that keeps focus back into view (it may sit above the restored scroll)", async () => {
+    const controls = <label>年份<select defaultValue="2020"><option>2020</option></select></label>;
+    const view = render(<FullscreenPanel title="中间投入 Z" autoExpandSignal={0}>{controls}</FullscreenPanel>);
+    view.rerender(<FullscreenPanel title="中间投入 Z" autoExpandSignal={1}>{controls}</FullscreenPanel>);
+    const select = screen.getByRole("combobox");
+    select.focus();
+    const scrolled: unknown[] = [];
+    select.scrollIntoView = (options?: boolean | ScrollIntoViewOptions) => { scrolled.push(options); };
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await Promise.resolve();
+    expect(document.activeElement).toBe(select);
+    expect(scrolled).toEqual([{ block: "nearest", inline: "nearest" }]);
+  });
+
+  test("a panel can place its entry button in its own control row, after the controls before it", () => {
+    render(
+      <FullscreenPanel title="中间投入 Z" buttonLabel="全屏查看" variant="table" triggerInContent>
+        <div className="controls"><select aria-label="年份"><option>2020</option></select><FullscreenTriggerSlot /></div>
+      </FullscreenPanel>,
+    );
+    const year = screen.getByRole("combobox", { name: "年份" });
+    const trigger = screen.getByRole("button", { name: "全屏查看：中间投入 Z" });
+    expect(trigger.closest(".controls")).toBe(year.closest(".controls"));
+    expect(year.compareDocumentPosition(trigger) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(document.querySelector(".fullscreen-panel-bar")).toBeNull();
+    fireEvent.click(trigger);
+    // Expanded, the slot is empty and the bar carries the exit button.
+    expect(screen.queryByRole("button", { name: "全屏查看：中间投入 Z" })).toBeNull();
+    expect(screen.getByRole("button", { name: "退出中间投入 Z全屏工作区" })).toBeTruthy();
   });
 });
