@@ -101,7 +101,11 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
   const focusName = segments.find((segment) => segment.key === focus)?.name ?? focus;
   const ownShares = segments.map((segment) => ({ segment, share: share(first, segment.key) }));
   if (ownShares.some((item) => item.share === null)) {
-    return [{ eyebrow: `${countryLabel(first)} · ${year}`, big: "构成不完整", small: "分项或总量缺失，暂不能读出构成（缺失不补零）" }];
+    // A total of exactly zero (an industry that does not export at all) is not missing data: say so.
+    const zeroTotal = valueOf(rows, first, year, composition.total, industry) === 0;
+    return [zeroTotal
+      ? { eyebrow: `${countryLabel(first)} · ${year}`, big: `${totalLabel}为 0`, small: "没有可分解的总量，构成份额无定义；可换一个行业或国家" }
+      : { eyebrow: `${countryLabel(first)} · ${year}`, big: "构成不完整", small: "分项或总量缺失，暂不能读出构成（缺失不补零）" }];
   }
   const largest = ownShares.reduce((best, item) => (item.share! > best.share! ? item : best));
   const ownFocus = share(first, focus)!;

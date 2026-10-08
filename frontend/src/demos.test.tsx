@@ -65,7 +65,7 @@ describe("indicator calculation disclosure", () => {
       <IndicatorCalculationDisclosure step={4} row={{ FVA: 20, gross_exports: 80 }} />,
     );
     expect(html).toContain("外国增加值项占比 = FVA / 总出口");
-    expect(html).toContain("= 20 / 80 = <b>25.0%</b>");
+    expect(html).toContain("= 20 / 80 = <b>25.000%</b>");
     expect(html).toContain("FVA 不含外国重复计算 FDC");
   });
 
@@ -73,7 +73,7 @@ describe("indicator calculation disclosure", () => {
     const html = renderToStaticMarkup(
       <IndicatorCalculationDisclosure step={4} row={{ FVA: 88206.5, gross_exports: 1067093.2 }} />,
     );
-    expect(html).toContain("= 88,206.5 / 1,067,093 = <b>8.3%</b>");
+    expect(html).toContain("= 88,207 / 1,067,093 = <b>8.266%</b>");
   });
 
   test("shows the Step 3 complex-GVC share rather than the total GVC share", () => {
@@ -81,7 +81,7 @@ describe("indicator calculation disclosure", () => {
       <IndicatorCalculationDisclosure step={5} row={{ "3b_VA_GVC_C": 15, "3_VA_GVC": 40, SVA: 60 }} />,
     );
     expect(html).toContain("复杂 GVC 生产份额 = 3b_VA_GVC_C / 总增加值 SVA");
-    expect(html).toContain("= 15 / 60 = <b>25.0%</b>");
+    expect(html).toContain("= 15 / 60 = <b>25.000%</b>");
     expect(html).not.toContain("40 / 60");
   });
 
@@ -92,7 +92,7 @@ describe("indicator calculation disclosure", () => {
         row={{ FVA: 1.180410305310168e-5, gross_exports: 9.999997853224356e-5 }}
       />,
     );
-    expect(step2).toContain("= 0.0000118041 / 0.0001 = <b>11.8%</b>");
+    expect(step2).toContain("= 0.0000118 / 0.0001 = <b>11.804%</b>");
     expect(step2).not.toContain("= 0 / 0");
 
     const step3 = renderToStaticMarkup(
@@ -101,7 +101,7 @@ describe("indicator calculation disclosure", () => {
         row={{ "3b_VA_GVC_C": 0.0002487161528365, SVA: 0.0117999999999999 }}
       />,
     );
-    expect(step3).toContain("= 0.000248716 / 0.0118 = <b>2.1%</b>");
+    expect(step3).toContain("= 0.000249 / 0.0118 = <b>2.108%</b>");
     expect(step3).not.toContain("= 0 / 0.01");
   });
 
@@ -220,12 +220,12 @@ describe("semantic decomposition and path tables", () => {
     );
 
     expect(html).toContain('<caption class="sr-only">实体 A：2020 年 CHN 中国 · 制造业 · 总出口分解明细</caption>');
-    expect(html).toContain('<thead class="sr-only">');
+    expect(html).toContain('<thead class="decomp-table-head">');
     expect(html.match(/scope="col"/g)).toHaveLength(4);
     expect(html.match(/scope="row"/g)).toHaveLength(2);
     expect(html).toContain("占比（可为负）");
     expect(html).toContain("-12");
-    expect(html).toContain("-25.0%");
+    expect(html).toContain("-25.000%");
     expect(html).toContain('<td class="dt-val">—</td>');
     expect(html).toContain("—（分母非正）");
   });
@@ -352,7 +352,7 @@ describe("independent decomposition request states", () => {
     );
     expect(html).toContain("实体 A 有效分解");
     expect(html).toContain("四项加总 = SVA");
-    expect(html).toContain("实体 B的分解加载失败：网络连接中断，请检查连接后重试。");
+    expect(html).toContain("实体 B 的分解加载失败：网络连接中断，请检查连接后重试。");
     expect(html).toContain("重试");
     expect(html).toContain('role="alert"');
   });
@@ -372,7 +372,7 @@ describe("independent decomposition request states", () => {
     expect(empty).toContain("没有可用分解数据");
     expect(empty).toContain('role="status"');
     expect(empty).not.toContain("加载实体 A");
-    expect(error).toContain("实体 A的分解加载失败：boom");
+    expect(error).toContain("实体 A 的分解加载失败：boom");
     expect(error).toContain("重试");
   });
 });

@@ -134,7 +134,12 @@ export function StudentWorkspace({
   useEffect(() => {
     const failing = Boolean(session.syncError);
     if (hadSyncError.current && !failing && (document.activeElement == null || document.activeElement === document.body)) {
-      contentRef.current?.focus();
+      // An open fullscreen panel is a dialog: keep focus inside it rather than behind it.
+      const panel = document.querySelector<HTMLElement>(".fullscreen-panel--expanded .fullscreen-panel-surface");
+      if (panel) {
+        if (!panel.hasAttribute("tabindex")) panel.setAttribute("tabindex", "-1");
+        panel.focus({ preventScroll: true });
+      } else contentRef.current?.focus();
     }
     hadSyncError.current = failing;
   }, [session.syncError, contentRef]);

@@ -115,7 +115,7 @@ test("ranking records the selected metric and displayed industries, then drills 
     ["CHN", "C27", 2020, 50], ["USA", "C27", 2020, 3], ["CHN", "C26", 2020, 20], ["USA", "C26", 2020, 90],
   ]);
   expect(observations.every((item) => item.metric === "weighted degree" && item.unit === "百万美元")).toBe(true);
-  fireEvent.click(screen.getByRole("button", { name: /查看C27.*历年变化/ }));
+  fireEvent.click(screen.getByRole("button", { name: /查看 C27.*历年变化/ }));
   expect((screen.getByLabelText("行业") as HTMLSelectElement).value).toBe("C27");
   expect((screen.getByLabelText("网络指标") as HTMLSelectElement).value).toBe("weighted degree");
   expect((screen.getByLabelText("对比国家 B") as HTMLSelectElement).value).toBe("USA");

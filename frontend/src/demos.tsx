@@ -21,7 +21,7 @@ import {
   finiteNumber,
   type DecompositionModel,
 } from "./decomposition-model";
-import { cjkJoin, stripNegativeZero } from "./format";
+import { cjkJoin, formatMetric, stripNegativeZero } from "./format";
 import { api } from "./api";
 import { AsyncStateMessage, type AsyncStatus, useAsync } from "./labs/shared";
 import { userFacingRequestError } from "./user-facing-error";
@@ -94,7 +94,7 @@ const DECOMP: Record<number, DecompCfg> = {
     note: (r) => {
       const segment = (lengthKey: string, weightKey: string) => {
         const length = finiteNumber(r[lengthKey]);
-        if (length != null) return length.toFixed(2);
+        if (length != null) return length.toFixed(3);
         return finiteNumber(r[weightKey]) === 0 ? "—（无此类活动）" : "—";
       };
       const position = finiteNumber(r.GVCPs);
@@ -110,18 +110,26 @@ export function negativeFill(color: string): string {
   return `repeating-linear-gradient(135deg, ${color} 0 5px, #e34948 5px 8px)`;
 }
 
+/** Same reading rule as the step 5 table and the report material line: amounts whole from 1 up and to three
+ * decimals below (small flows are not shown as "0"), lengths to three decimals, an exact zero as "0". */
 function fmt(v: number, unit: "amount" | "number"): string {
-  return stripNegativeZero(unit === "amount"
-    ? v.toLocaleString("zh-CN", { maximumFractionDigits: 0 })
-    : v.toFixed(3));
+  if (v === 0) return "0";
+  return unit === "amount" ? formatMetric(v, "amount") : stripNegativeZero(v.toFixed(3));
+}
+
+/** A share already in percent, to three decimals as everywhere else ("11.730%"); an exact zero is "0%". */
+function percentText(percent: number): string {
+  return percent === 0 ? "0%" : `${stripNegativeZero(percent.toFixed(3))}%`;
 }
 
 function disclosureAmount(value: number | null): string {
   if (value == null) return "—";
-  // Six significant digits would round 1,067,093 to 1,067,090 and contradict the total shown
-  // above (formatted as a whole number), so large amounts keep every integer digit.
-  const options = Math.abs(value) >= 1e5 ? { maximumFractionDigits: 0 } : { maximumSignificantDigits: 6 };
-  return stripNegativeZero(value.toLocaleString("zh-CN", options));
+  // The same digits as the decomposition table beside it for amounts from 1 up; a small operand keeps three
+  // significant digits so the substituted formula never reads "0 / 0".
+  if (value === 0) return "0";
+  return Math.abs(value) >= 1
+    ? formatMetric(value, "amount")
+    : stripNegativeZero(value.toLocaleString("zh-CN", { maximumSignificantDigits: 3 }));
 }
 
 /** Lengths are read to three decimals everywhere (e.g. PLv = 2.216); a tiny signed value keeps its sign. */
@@ -151,7 +159,7 @@ export function IndicatorCalculationDisclosure({ step, row }: { step: number; ro
         <div className="icd-title">{title}</div>
         <div className="icd-formula">{title} = {numeratorKey} / {denominatorLabel}</div>
         <div className="icd-calc">
-          = {disclosureAmount(numerator)} / {disclosureAmount(denominator)} = <b>{ratio == null ? "—（分母非正或数据缺失）" : `${stripNegativeZero((ratio * 100).toFixed(1))}%`}</b>
+          = {disclosureAmount(numerator)} / {disclosureAmount(denominator)} = <b>{ratio == null ? "—（分母非正或数据缺失）" : percentText(ratio * 100)}</b>
         </div>
         <p>{step === 4
           ? "FVA 不含外国重复计算 FDC；分母是六项加总得到的 VA+TLS 账户口径总出口（gross exports），不是 OECD 官方 EXGR_FVASH 口径。"
@@ -203,7 +211,8 @@ export function DecompositionDetailTable({
   return (
     <table className={`decomp-table${compact ? " decomp-table--compact" : ""}`}>
       <caption className="sr-only">{caption}</caption>
-      <thead className="sr-only">
+      {/* Visible column names: a value and a share side by side are otherwise unlabelled. */}
+      <thead className="decomp-table-head">
         <tr>
           <th scope="col">分解组成</th>
           <th scope="col">分项数值</th>
@@ -227,7 +236,7 @@ export function DecompositionDetailTable({
               {compact && <span className="dt-desc dt-desc--below">{part.desc}</span>}
             </th>
             <td className="dt-val">{value == null ? "—" : fmt(value, unit)}</td>
-            <td className="dt-share">{unavailable ? "—" : share == null ? "—（分母非正）" : `${share.toFixed(1)}%`}</td>
+            <td className="dt-share">{unavailable ? "—" : share == null ? "—（分母非正）" : percentText(share)}</td>
             {!compact && <td className="dt-desc">{part.desc}</td>}
           </tr>
         );
@@ -354,7 +363,7 @@ export function DecompositionRequestMessage({
     return (
       <AsyncStateMessage
         status="error"
-        error={userFacingRequestError(error, `${label}的分解加载失败`)}
+        error={userFacingRequestError(error, cjkJoin(label, "的分解加载失败"))}
         onRetry={onRetry}
       />
     );
@@ -526,7 +535,7 @@ export function DecompositionDemo({
           {entityPicker(side)}
           <div className="decomp-total-line">
             {cfg.totalLabel} = <b>{model.total == null ? "—（未定义）" : fmt(model.total, cfg.unit)}</b>
-            {cfg.unit === "amount" && model.total != null && <span className="muted"> (百万美元)</span>}
+            {cfg.unit === "amount" && model.total != null && <span className="muted">（百万美元）</span>}
           </div>
           <IndicatorCalculationDisclosure step={step} row={row} />
           <div className="decomp-unavailable" role="status">
@@ -561,7 +570,7 @@ export function DecompositionDemo({
       <div style={{ minWidth: 0 }}>
         {entityPicker(side)}
         <div className="decomp-total-line">
-          {cfg.totalLabel} = <b>{fmt(model.total, cfg.unit)}</b>{cfg.unit === "amount" && <span className="muted"> (百万美元)</span>}
+          {cfg.totalLabel} = <b>{fmt(model.total, cfg.unit)}</b>{cfg.unit === "amount" && <span className="muted">（百万美元）</span>}
         </div>
         <IndicatorCalculationDisclosure step={step} row={row} />
         <div className="decomp-bar" style={{ position: "relative", display: "block", overflow: "hidden" }}>
@@ -570,7 +579,7 @@ export function DecompositionDemo({
             const value = model.values![index];
             const share = model.shares?.[index];
             const segment = layout.segments[index];
-            const shareText = share == null ? "构成占比未定义" : `有符号占比 ${share.toFixed(1)}%`;
+            const shareText = share == null ? "构成占比未定义" : `有符号占比 ${percentText(share)}`;
             return <span key={part.key}
               className={`decomp-seg${hover && hover !== part.key ? " dim" : ""}`}
               style={{ position: "absolute", top: 0, bottom: 0, left: `${segment.leftPct}%`, width: `${segment.widthPct}%`, background: segment.negative ? negativeFill(part.color) : part.color }}
@@ -582,7 +591,8 @@ export function DecompositionDemo({
           <div className={`decomp-identity ${model.closure ? "ok" : "bad"}`}>
             {model.closure ? "✓" : "✗"} {cfg.parts.length} 项加总 = {fmt(model.sum, cfg.unit)} · 与 {cfg.totalLabel} 一致{model.error < 1e-6 ? "" : `（差 ${model.error.toPrecision(2)}）`}
           </div>
-        ) : (
+        ) : negligible && zeroTotalHint ? null : (
+          // A zero total is explained once, by the specific hint below.
           <div className="decomp-identity neutral" role="status">
             ℹ {decompositionModelReason(model, cfg.weightTotal)}
             {model.amountCloses != null && ` ${cfg.parts.length} 项金额数学加总${model.amountCloses ? "相等" : "不相等"}，但不作为构成占比闭合认证。`}
@@ -1073,8 +1083,8 @@ export function NetworkCentralityDemo() {
                 {pathNodes.length >= 3
                   ? <>例如 {pathNodes[0]} → {pathNodes[pathNodes.length - 1]} 的无权最短路要穿过 {sel}（已高亮）。越多这类路径对经过它，拓扑介数越高；这不自动说明它是经济瓶颈。</>
                   : C.bet[sel] === 0
-                    ? <>{selNode.label} 不在任何其他节点对的最短路径上，介数为 0。</>
-                    : <>{selNode.label} 很少落在别人的最短路径上，介数中心性低。</>}
+                    ? <>{selNode.label}不在任何其他节点对的最短路径上，介数为 0。</>
+                    : <>{selNode.label}很少落在别人的最短路径上，介数中心性低。</>}
               </p>
             </>
           ) : (

@@ -130,6 +130,13 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
   const edited = useRef(false);
   // Every demo student is in use (the server had none idle): the form is not prefilled with someone's account.
   const [noIdleDemoStudent, setNoIdleDemoStudent] = useState(false);
+  // Whether the prefilled student was confirmed idle by the server. Until then (or when the request fails) the
+  // prefill is only a local random pick and must not be presented as idle.
+  const [suggestion, setSuggestion] = useState<"pending" | "confirmed" | "failed">(
+    demoMode && initialDemoSelection ? "pending" : "confirmed",
+  );
+  const [suggestionAttempt, setSuggestionAttempt] = useState(0);
+  const userRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   // A rate-limit message carries the wait time; typing must not hide it (a retry would only hit 429 again).
   const keepError = useRef(false);
@@ -141,6 +148,29 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
     if (error) submitRef.current?.focus();
   }, [error]);
 
+  // "当前网络不可用" notices and network errors are stale once the connection is back.
+  const [online, setOnline] = useState(true);
+  useEffect(() => {
+    const back = () => {
+      setOnline(true);
+      setError((current) => (current && current.includes("网络连接中断") ? null : current));
+    };
+    const lost = () => setOnline(false);
+    window.addEventListener("online", back);
+    window.addEventListener("offline", lost);
+    return () => {
+      window.removeEventListener("online", back);
+      window.removeEventListener("offline", lost);
+    };
+  }, []);
+  const [noticeCleared, setNoticeCleared] = useState(false);
+  useEffect(() => {
+    if (online && notice?.includes("网络不可用") && navigator.onLine) setNoticeCleared(true);
+  }, [online, notice]);
+  const shownNotice = notice && !(noticeCleared && notice.includes("网络不可用"))
+    ? notice
+    : noticeCleared ? "网络已恢复，可以重新登录。" : null;
+
   // A random pick per tab collides across a classroom; the server knows which demo accounts are idle and
   // spreads simultaneous page loads. Its suggestion replaces the local pick unless the user already typed.
   useEffect(() => {
@@ -148,9 +178,11 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
     let live = true;
     let keep: string | null = null;
     try { keep = sessionStorage.getItem(DEMO_SUGGESTION_KEY); } catch { /* no earlier suggestion to keep */ }
+    setSuggestion("pending");
     api.demoStudent(keep).then(({ username: suggested }) => {
       if (!live) return;
       const student = demoStudents.find((item) => item.username === suggested) ?? null;
+      setSuggestion("confirmed");
       try {
         if (student) sessionStorage.setItem(DEMO_SUGGESTION_KEY, student.username);
         else sessionStorage.removeItem(DEMO_SUGGESTION_KEY);
@@ -164,10 +196,20 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
       const local = initialDemoSelection.student;
       setUsername((current) => (current === local.username ? student?.username ?? "" : current));
       setPassword((current) => (current === local.password ? student?.password ?? "" : current));
-    }, () => {});
+      // Nothing left to sign in with: start at the user name.
+      if (!student) window.requestAnimationFrame(() => userRef.current?.focus());
+    }, () => { if (live) setSuggestion("failed"); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [demoMode, initialDemoSelection]);
+  }, [demoMode, initialDemoSelection, suggestionAttempt]);
+
+  // A failed suggestion (offline, server busy) is asked again when the connection comes back.
+  useEffect(() => {
+    if (suggestion !== "failed") return;
+    const retry = () => setSuggestionAttempt((value) => value + 1);
+    window.addEventListener("online", retry);
+    return () => window.removeEventListener("online", retry);
+  }, [suggestion]);
 
   useEffect(() => {
     if (!demoMode || !initialDemoSelection) return;
@@ -178,11 +220,16 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
     }
   }, [demoMode, initialDemoSelection]);
 
+  // Signing in with the unconfirmed local pick could land on a classmate's account: wait for the server first.
+  const awaitingSuggestion = suggestion === "pending" && !edited.current && demoStudent != null && username === demoStudent.username;
+
   const demoAccounts = demoStudent || noIdleDemoStudent ? [
     ...(demoStudent ? [{
       ...demoStudent,
       label: "学生身份",
-      note: `${DEMO_STUDENT_COUNT} 个种子学生 · 分配近 1 小时无人使用的账号`,
+      note: suggestion === "confirmed"
+        ? `${DEMO_STUDENT_COUNT} 个种子学生 · 分配近 1 小时无人使用的账号`
+        : suggestion === "pending" ? "正在分配空闲账号…" : "未能确认空闲账号，可能有同学在用",
     }] : []),
     {
       username: "teacher",
@@ -245,7 +292,7 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
           <h2>进入实验平台</h2>
           <p className="login-card-sub">使用教师分配的个人账号登录。</p>
           {/* An expired session is a warning, not a success; a password change is confirmed in green. */}
-          {notice && <div className={`${notice.includes("失效") || notice.includes("网络不可用") ? "tipbox" : "success-box"} login-notice`} role="status">{notice}</div>}
+          {shownNotice && <div className={`${shownNotice.includes("失效") || shownNotice.includes("网络不可用") ? "tipbox" : "success-box"} login-notice`} role="status">{shownNotice}</div>}
 
           {demoMode && demoAccounts.length > 0 && <div className="login-roles" role="group" aria-label="开发演示快捷账号">
             {demoAccounts.map((a) => (
@@ -270,6 +317,7 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
 
           <label className="login-label" htmlFor="login-user">用户名</label>
           <input
+            ref={userRef}
             id="login-user" className="login-input" value={username} autoComplete="username" required
             // Start where typing is needed: the user name, or the password when the name is already filled in.
             autoFocus={!username}
@@ -283,13 +331,17 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
           />
           {error && <div className="error-box" role="alert" style={{ marginTop: 14, padding: "10px 14px" }}>{error}</div>}
           {/* With both fields prefilled (demo accounts), start on the button: Enter signs in. */}
-          <button ref={submitRef} className="login-btn" type="submit" disabled={busy} autoFocus={Boolean(username && password)}>
-            {busy ? "正在登录…" : "登录"}
+          <button ref={submitRef} className="login-btn" type="submit" disabled={busy || awaitingSuggestion} autoFocus={Boolean(username && password)}>
+            {busy ? "正在登录…" : awaitingSuggestion ? "正在分配空闲账号…" : "登录"}
           </button>
           <div className="login-hint">
             {demoMode && !returningUsername && (noIdleDemoStudent
               ? <>{DEMO_STUDENT_COUNT} 个种子学生账号近 1 小时都有人在用，暂无空闲演示账号；请向老师索取账号，或稍后刷新页面。<br /></>
-              : <>当前预填的是一个近 1 小时无人使用的种子学生账号；退出后本标签页回到原账号。上方可一键切换学生 / 教师身份。<br /></>)}
+              : suggestion === "failed"
+                ? <>暂时无法确认空闲账号（网络或服务繁忙）：当前预填的是随机挑选的种子学生账号，可能有同学正在使用；网络恢复后会自动重新分配，也可以向老师索取账号。<br /></>
+                : suggestion === "pending"
+                  ? <>正在为你分配一个近 1 小时无人使用的种子学生账号…<br /></>
+                  : <>当前预填的是一个近 1 小时无人使用的种子学生账号；退出后本标签页回到原账号。上方可一键切换学生 / 教师身份。<br /></>)}
             登录用于区分每位同学的实验记录。刷新可继续实验；退出只影响当前标签页。
           </div>
         </form>

@@ -292,7 +292,7 @@ export default function App() {
       <BootFailure
         title="暂时无法连接教学服务"
         message={authCheckError}
-        note={`登录信息已保留。服务或网络恢复后会自动重试，也可以手动重试。${authAttempt > 0 ? `已重试 ${authAttempt} 次，仍未成功。` : ""}`}
+        note={`登录信息已保留。网络恢复后会自动重试；服务器繁忙时请稍后手动重试。${authAttempt > 0 ? `已重试 ${authAttempt} 次，仍未成功。` : ""}`}
         primary={{ label: "重试连接", onClick: retryAuthCheck }}
       />
     );
@@ -344,7 +344,7 @@ export default function App() {
     <BootFailure
       title="课程加载失败"
       message={fatal}
-      note={`登录信息已保留。网络恢复后会自动重试，也可以手动重试加载课程。${bootAttempt > 0 ? `已重试 ${bootAttempt} 次，仍未成功。` : ""}`}
+      note={`登录信息已保留。网络恢复后会自动重试；服务器繁忙时请稍后手动重试加载课程。${bootAttempt > 0 ? `已重试 ${bootAttempt} 次，仍未成功。` : ""}`}
       primary={{ label: "重试加载课程", onClick: retryCourse }}
       secondary={{ label: "退出登录", onClick: logout }}
     />

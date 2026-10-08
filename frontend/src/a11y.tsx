@@ -174,3 +174,36 @@ export function useDialogFocus({
     };
   }, [containerRef, initialFocusRef, keepFocusInside, returnFocusRef]);
 }
+
+/**
+ * After a retry button starts a reload, the button (and the error box around it) usually unmounts when the
+ * request succeeds, which drops keyboard focus onto <body>. Keep it nearby: once focus is lost, move it to the
+ * closest ancestor of the button that is still on the page (made programmatically focusable). Stops when the
+ * user moves focus elsewhere or after a few seconds.
+ */
+export function keepFocusNear(button: HTMLElement | null, timeoutMs = 5000): void {
+  if (!button) return;
+  const ancestors: HTMLElement[] = [];
+  for (let node = button.parentElement?.parentElement; node && node !== document.body && ancestors.length < 6; node = node.parentElement) {
+    ancestors.push(node);
+  }
+  const start = performance.now();
+  const tick = () => {
+    if (performance.now() - start > timeoutMs) return;
+    const active = document.activeElement;
+    if (active == null || active === document.body) {
+      const target = ancestors.find((node) => node.isConnected);
+      if (target) {
+        if (!target.hasAttribute("tabindex")) {
+          target.setAttribute("tabindex", "-1");
+          target.dataset.focusAnchor = "";
+        }
+        target.focus({ preventScroll: true });
+      }
+      return;
+    }
+    if (active !== button && !ancestors.some((node) => node.contains(active))) return;
+    window.requestAnimationFrame(tick);
+  };
+  window.requestAnimationFrame(tick);
+}

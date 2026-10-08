@@ -44,7 +44,7 @@ export function NetworkRanking({ rows, countries, unit, onIndustry, reference = 
       {rows.map((row, rank) => {
         const global = reference.get(row.industry);
         return <div key={row.industry} style={{ display: "grid", gridTemplateColumns: "minmax(140px, 28%) minmax(0, 1fr)", gap: 12, padding: "10px 0", borderBottom: "1px solid #e7e9ef" }}>
-        <button className="secondary" style={{ textAlign: "left", alignSelf: "center" }} onClick={() => onIndustry(row.industry)} aria-label={`查看${sectorLabel(row.industry)}历年变化`}>
+        <button className="secondary" style={{ textAlign: "left", alignSelf: "center" }} onClick={() => onIndustry(row.industry)} aria-label={`查看 ${sectorLabel(row.industry)} 的历年变化`}>
           {rank + 1}. {sectorLabel(row.industry)} →
         </button>
         <div>{row.values.map((value, index) => <div key={countries[index]} style={{ display: "grid", gridTemplateColumns: "42px minmax(0, 1fr) 110px", alignItems: "center", gap: 8, minHeight: 26 }}>

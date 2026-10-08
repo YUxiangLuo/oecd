@@ -382,11 +382,13 @@ export function CompositionBar({ rows, segments, sortKey, sortDirection = "desce
   const data = sortCompositionRows(eligible, skey, sortDirection);
   const domain = signedDomain(data.map((row) => segments.map((segment) => num(row[segment.key]))), normalize, normalizationKey ? data.map((row) => num(row[normalizationKey])) : undefined);
   const hasNegative = data.some((row) => segments.some((segment) => num(row[segment.key]) < 0));
+  // Amounts carry their unit in the readout (shares already end in "%").
+  const withUnit = (text: string, format?: string) => (format === "amount" ? `${text} 百万美元` : text);
   const tipLines = (r: Row): [string, string][] => [
     ["", rowLabel(r)],
-    ...segments.map((s) => [s.name, fmtVal(num(r[s.key]), valueFormat)] as [string, string]),
+    ...segments.map((s) => [s.name, withUnit(fmtVal(num(r[s.key]), valueFormat), valueFormat)] as [string, string]),
     // 排序指标若不在分段里(如按总出口/总量排序),额外单列,用它自己的格式
-    ...(sortLabel && !segKeys.has(skey) ? [[sortLabel, fmtVal(num(r[skey]), sortFormat)] as [string, string]] : []),
+    ...(sortLabel && !segKeys.has(skey) ? [[sortLabel, withUnit(fmtVal(num(r[skey]), sortFormat), sortFormat)] as [string, string]] : []),
   ];
   return (
     <div ref={wrapRef} style={cardStyle}>

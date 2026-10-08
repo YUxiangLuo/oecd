@@ -238,7 +238,7 @@ async def regression_run(req: RegressionRequest, request: Request):
     async def compute() -> dict[str, Any]:
         panel = await concurrency.run_sync(_read_csv, "panel_teaching.csv")
         if not design.is_default_baseline and design.depvar not in panel.columns:
-            raise HTTPException(status_code=409, detail="当前数据发布没有这个指标对应的 Y，请换回默认指标")
+            raise HTTPException(status_code=409, detail="当前课程数据没有这个指标对应的 Y，请换回本步默认指标")
         result, benchmark = await concurrency.run_cpu_bound(run_design_with_benchmark, panel, design)
         result_info = result.to_dict()
         return {

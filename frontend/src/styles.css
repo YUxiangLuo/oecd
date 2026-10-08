@@ -957,10 +957,12 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 /* Teacher feedback keeps its paragraphs and list lines on the step 15 status line too. */
 .report-feedback { white-space: pre-wrap; }
 /* The step 1 caption sits at the table's left edge, not centred over a table thousands of pixels wide. */
-.db-table caption { text-align: left; position: sticky; left: 0; }
+.db-table caption { text-align: left; position: sticky; left: 0; padding: 8px 12px; }
 
 /* Start-up failure pages (connection, course data, saved record): one centred card with a heading. */
 .boot-failure { display: grid; place-items: center; min-height: 100vh; padding: 32px; background: var(--bg, #f5f6fa); }
 .boot-failure .panel { max-width: 560px; width: 100%; background: #fff; border: 1px solid #e7e9f0; border-radius: 14px; padding: 20px 22px; }
 .boot-failure h1 { font-size: 20px; margin: 0 0 12px; }
 .boot-failure-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+[data-focus-anchor]:focus { outline: none; }
+.fullscreen-panel-surface:focus { outline: none; }

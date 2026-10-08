@@ -10,6 +10,7 @@ import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE, STEP_MATERIAL_ACTION_ID }
 import type { IndicatorSchema, Meta, StepStateApi } from "../../../types";
 import { countryLabel } from "../../../viz";
 import { fieldLabel, fmtField, useAsync } from "../../shared";
+import { keepFocusNear } from "../../../a11y";
 import { userFacingRequestError } from "../../../user-facing-error";
 import {
   COUNTRY_METRIC,
@@ -113,13 +114,13 @@ export function AutoMaterialStatus({ meta, state, schema, first, second, current
   // Locked material is shown as saved even when the student browses something else.
   const recorded = current || state.materialLocked ? state.data?.observations ?? [] : [];
   return (
-    <div id={STEP_MATERIAL_ACTION_ID} tabIndex={-1} className="auto-material">
+    <div id={STEP_MATERIAL_ACTION_ID} tabIndex={-1} className={`auto-material${loadFailed && recorded.length !== 2 ? " auto-material--failed" : ""}`}>
       <b>报告材料 · {state.materialLocked ? "已记录" : "自动记录"}</b>
       {recorded.length === 2
         ? <span role="status">{recorded[0].year} 年 · {recorded.map((item) => `${countryLabel(item.country)} ${fmtField(item.value, item.metric, schema)}`).join("；")} · {fieldLabel(recorded[0].metric, schema)}</span>
         : <span role="status">
           {loadFailed ? userFacingRequestError(loadError, "国家级数据加载失败") : "正在记录当前选择…"}
-          {loadFailed && onRetryLoad && <button type="button" className="secondary" onClick={onRetryLoad}>重试</button>}
+          {loadFailed && onRetryLoad && <button type="button" className="secondary" onClick={(event) => { const button = event.currentTarget; onRetryLoad(); keepFocusNear(button); }}>重试</button>}
         </span>}
       <label className="auto-material-partner">对比国家
         <select value={second} onChange={(event) => onSecond(event.target.value)}>

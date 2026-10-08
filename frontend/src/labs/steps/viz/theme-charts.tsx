@@ -212,7 +212,7 @@ export function IndustryDotPlot({ groups, countries, unit, nationals = [], label
           onBlur={() => { setHovered(null); hide(); }}
         >
           {onPick
-            ? <button type="button" className="dot-plot-label" onClick={() => onPick(group.key)} aria-label={`查看${group.label}历年变化`}>{group.label} →</button>
+            ? <button type="button" className="dot-plot-label" onClick={() => onPick(group.key)} aria-label={`查看 ${group.label} 的历年变化`}>{group.label} →</button>
             : <span className="dot-plot-label">{group.label}</span>}
           <div className="dot-plot-track">
             {axis.ticks.map((tick) => <i key={tick} className="tick" style={{ left: `${px(tick)}%`, borderLeftColor: tick === 0 ? "#4b5263" : "#e2e5ee" }} />)}
@@ -350,7 +350,7 @@ export function Butterfly({ rows, leftLabel, rightLabel, unit, title, onPick }: 
           <span className="butterfly-value" style={{ textAlign: "right" }}>{reading(row.left)}</span>
           <div className="butterfly-track left"><i style={{ width: `${width(row.left)}%`, background: CAT[1] }} /></div>
           {onPick
-            ? <button type="button" className="butterfly-label" onClick={() => onPick(row.key)} aria-label={`查看${row.label}历年变化`}>{row.label}</button>
+            ? <button type="button" className="butterfly-label" onClick={() => onPick(row.key)} aria-label={`查看 ${row.label} 的历年变化`}>{row.label}</button>
             : <span className="butterfly-label">{row.label}</span>}
           <div className="butterfly-track right"><i style={{ width: `${width(row.right)}%`, background: CAT[0] }} /></div>
           <span className="butterfly-value">{reading(row.right)}</span>

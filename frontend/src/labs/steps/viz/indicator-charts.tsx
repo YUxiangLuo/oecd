@@ -1,5 +1,5 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
-import { countryLabel } from "../../../viz";
+import { countryLabel, joinCountries } from "../../../viz";
 import { useHoverTip, type TipLine } from "../../../viz/hover";
 import { CAT } from "../../../viz/shared";
 import { changeReading, finiteValue, NO_RANK, NO_RANK_NOTE, rankText, readingDigits, type YearDistribution } from "./indicator-model";
@@ -632,12 +632,14 @@ export function DistributionStrip({
   const reading = (value: number) => `${indicatorNumber(value, unit)}${unit === "百万美元" ? " 百万美元" : ""}`;
   const zeroBased = unit === "%" || unit === "百万美元";
   const valuesOnAxis = points.map((point) => point.value);
-  const axis = niceDomain(
-    zeroBased ? Math.min(0, ...valuesOnAxis) : Math.min(...valuesOnAxis),
-    zeroBased ? Math.max(0, ...valuesOnAxis) : Math.max(...valuesOnAxis),
-  );
+  const low = zeroBased ? Math.min(0, ...valuesOnAxis) : Math.min(...valuesOnAxis);
+  const high = zeroBased ? Math.max(0, ...valuesOnAxis) : Math.max(...valuesOnAxis);
+  // A negative value within 2% of the range (e.g. −0.8 against millions) would otherwise cost a whole tick
+  // step below zero; it is drawn at the zero edge instead (its reading still shows the true value).
+  const tinyNegative = zeroBased && low < 0 && high > 0 && -low < 0.02 * high;
+  const axis = niceDomain(tinyNegative ? 0 : low, high);
   const extent = axis.hi - axis.lo || 1;
-  const x = (value: number) => 60 + ((value - axis.lo) / extent) * 680;
+  const x = (value: number) => 60 + ((Math.min(axis.hi, Math.max(axis.lo, value)) - axis.lo) / extent) * 680;
   // Stack dots that would overlap into lanes above the axis. Skewed amounts (most economies near zero)
   // would otherwise grow a column dozens of dots tall, so lanes are capped and extra dots overlap.
   const MAX_LANES = 8;
@@ -834,7 +836,7 @@ export function LengthPositionTrajectory({
       <svg
         viewBox="0 0 720 650"
         role="img"
-        aria-label={`前向与后向 GVC 段长度历年轨迹，${countries.map(countryLabel).join("与")}`}
+        aria-label={`前向与后向 GVC 段长度历年轨迹，${joinCountries(countries)}`}
         style={{ width: "100%", maxWidth: 680, display: "block", margin: "0 auto" }}
       >
         <defs>

@@ -65,7 +65,7 @@ export function inspectShockContract(
     };
   }
   if (!contract) {
-    return { valid: false, reason: "发布数据缺少 shock contract，不能读取或解释冲击面板。", exposureSource: null, officialExposure: false };
+    return { valid: false, reason: "课程数据缺少冲击数据说明，不能读取或解释冲击面板。", exposureSource: null, officialExposure: false };
   }
   const expected = canonical({
     version: SHOCK_CONTRACT_VERSION,
@@ -77,7 +77,7 @@ export function inspectShockContract(
   if (canonical(contract) !== expected) {
     return {
       valid: false,
-      reason: `不支持或不完整的 shock contract；当前仅支持版本 ${SHOCK_CONTRACT_VERSION} 的精确字段/来源集合。`,
+      reason: `冲击数据说明的版本或字段不完整（需要版本 ${SHOCK_CONTRACT_VERSION}），不能读取冲击面板。`,
       exposureSource: null,
       officialExposure: false,
     };

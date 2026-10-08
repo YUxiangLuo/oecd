@@ -201,7 +201,7 @@ describe("database slice restoration", () => {
 
   test("Y column headers show the demand category in Chinese", () => {
     expect(formatYColumnHeader("USA_HFCE")).toBe("USA 居民最终消费支出");
-    expect(formatYColumnHeader("CHN_GFCF")).toBe("CHN 固定资本形成总额(投资)");
+    expect(formatYColumnHeader("CHN_GFCF")).toBe("CHN 固定资本形成总额（投资）");
     expect(formatYColumnHeader("USA_A01_02")).toBe("USA_A01_02");
     expect(formatYColumnHeader("row")).toBe("row");
   });

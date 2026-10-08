@@ -189,7 +189,16 @@ app.include_router(classroom_routes.router)
 
 @app.exception_handler(ArtifactContractError)
 async def artifact_contract_error(request: Request, exc: ArtifactContractError):
-    return JSONResponse(status_code=409, content={"detail": str(exc)})
+    # The contract detail (file paths, versions) is for the operator: log it, show students plain copy.
+    _LOG.error("数据产物契约校验失败：%s", exc)
+    return JSONResponse(
+        status_code=409,
+        content={
+            "detail": "课程数据版本校验未通过，暂时不能读取这部分数据；请稍后重试，若持续出现请联系老师。",
+            # Kept for operators and API clients; the pages show only `detail`.
+            "reason": str(exc),
+        },
+    )
 
 
 @app.exception_handler(classroom_db.Unavailable)
@@ -212,4 +221,5 @@ async def classroom_db_operation_failed(request: Request, exc: classroom_db.Oper
 
 @app.exception_handler(classroom_db.SchemaVersionMismatch)
 async def classroom_schema_unavailable(request: Request, exc: classroom_db.SchemaVersionMismatch):
-    return JSONResponse(status_code=503, content={"detail": "教学数据库 schema 未就绪；请先完成兼容迁移"})
+    _LOG.error("教学数据库 schema 未就绪；请先完成兼容迁移（%s）", exc)
+    return JSONResponse(status_code=503, content={"detail": SERVICE_UNAVAILABLE_MESSAGE})

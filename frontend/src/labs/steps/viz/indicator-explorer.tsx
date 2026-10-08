@@ -281,8 +281,10 @@ export function IndicatorExplorer({
     query.status === "success" &&
     completeComposition &&
     materialComplete(pending, selected, metrics, timeView, singleAllowed);
-  // Economies with no complete reading in the current scope (named in the blocked message).
-  const missingCountries = selected.filter((country) => !pending.some((item) => item.country === country));
+  // Economies with fewer readings than the chart needs (none at all, or some years / parts missing), named in
+  // the blocked message.
+  const perCountry = selected.length ? expectedCount / selected.length : 0;
+  const missingCountries = selected.filter((country) => pending.filter((item) => item.country === country).length < perCountry);
   // Name the actual reason the material cannot be saved instead of one catch-all sentence.
   const blockedReason =
     view === "positioning"
@@ -997,7 +999,7 @@ export function IndicatorExplorer({
         {saved.length > 0 && <details>
           <summary>核对已保存材料 · {saved.length} 条读数</summary>
           <p>
-            {[...new Set(saved.map((item) => item.country))].map(countryLabel).join(" 与 ")} · {savedYearSpan(saved.map((item) => item.year))}
+            {joinCountries([...new Set(saved.map((item) => item.country))])} · {savedYearSpan(saved.map((item) => item.year))}
             {" "}· {[...new Set(saved.map((item) => item.industry ?? ""))].map((industry) => industry ? sectorLabel(industry) : "国家整体").join("、")}
           </p>
           {table(saved)}

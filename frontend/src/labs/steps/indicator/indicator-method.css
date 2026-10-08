@@ -44,6 +44,9 @@
   border: 1px solid #cfe9dc; border-radius: 9px; background: #f2fbf6; color: #2f5b48; font-size: 12.5px;
 }
 .auto-material b { color: #116b50; }
+/* A failed load is not a recorded success: warning colours instead of the green "自动记录" box. */
+.auto-material.auto-material--failed { background: #fff7e6; border-color: #f0c98a; }
+.auto-material.auto-material--failed b { color: #8a5a00; }
 .auto-material small { flex-basis: 100%; color: #5b7468; font-size: 11.5px; }
 .auto-material-partner { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: #2f5b48; }
 .auto-material-partner select {

@@ -164,7 +164,7 @@ describe("simple regression workbench", () => {
     render(<RegressionRunLab step={step} meta={meta} state={{ ...state, data: { run: savedRun("FDC_share", "外国重复计算项占比") } as never }} />);
     const select = await screen.findByRole("combobox", { name: "结果指标 Y" }) as HTMLSelectElement;
     await waitFor(() => expect(select.value).toBe("FVA_share"));
-    expect(screen.getByText(/上次算的 Y（外国重复计算项占比）在当前数据发布里没有/)).toBeTruthy();
+    expect(screen.getByText(/上次算的 Y（外国重复计算项占比）在当前课程数据里没有/)).toBeTruthy();
     await waitFor(() => expect(design).toHaveBeenLastCalledWith("trade", null));
     // The saved run for the missing Y is not shown as if it were the default's result.
     expect(document.querySelector(".reg-result-points")).toBeNull();

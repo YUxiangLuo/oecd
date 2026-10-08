@@ -362,7 +362,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
   const baselineOffered = baseline == null || baselineOptions.length === 0 || baselineOptions.some((option) => option.key === baseline);
   useEffect(() => {
     if (baselineOffered) return;
-    setBaselineNotice(`上次算的 Y（${savedRun?.design?.baseline_label ?? lesson.shortMetric}）在当前数据发布里没有，已换回本步默认指标，请重新计算。`);
+    setBaselineNotice(`上次算的 Y（${savedRun?.design?.baseline_label ?? lesson.shortMetric}）在当前课程数据里没有，已换回本步默认指标，请重新计算。`);
     setBaseline(null);
     setResult(null);
   }, [baselineOffered]);

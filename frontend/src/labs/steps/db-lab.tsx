@@ -63,9 +63,9 @@ const FD_HELP: Record<string, string> = {
   HFCE: "居民最终消费支出",
   NPISH: "为居民服务的非营利机构消费",
   GGFC: "政府最终消费支出",
-  GFCF: "固定资本形成总额(投资)",
+  GFCF: "固定资本形成总额（投资）",
   INVNT: "存货变化（有符号调整）；负值表示存货减少，不是缺失值",
-  DPABR: "居民境外直接购买(出境旅行等消费)",
+  DPABR: "居民境外直接购买（出境旅行等消费）",
 };
 const ACCOUNT_SHORT: Record<string, string> = { TLS: "产品税减补贴", VA: "增加值", OUT: "总产出" };
 /** Short names for headers, options and recorded sentences; the full help stays in the tooltip. */

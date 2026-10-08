@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { LabeledControl } from "../a11y";
+import { keepFocusNear, LabeledControl } from "../a11y";
 import { formatMetric, stripNegativeZero } from "../format";
 import type { IndicatorSchema } from "../types";
 
@@ -148,8 +148,9 @@ export function AsyncStateMessage({
   if (status !== "error") return null;
   return (
     <div className="error-box async-error" role="alert">
-      <span>数据加载失败：{error ?? "未知错误"}</span>
-      <button type="button" className="secondary" onClick={onRetry}>重试</button>
+      {/* Messages that already say what failed ("对象 A 的分解加载失败：…") are not prefixed again. */}
+      <span>{error && error.includes("失败") ? error : `数据加载失败：${error ?? "未知错误"}`}</span>
+      <button type="button" className="secondary" onClick={(event) => { const button = event.currentTarget; onRetry(); keepFocusNear(button); }}>重试</button>
     </div>
   );
 }

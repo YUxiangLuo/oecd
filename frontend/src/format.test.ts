@@ -11,6 +11,7 @@ describe("formatMetric", () => {
     expect(formatMetric(1.2, "number")).toBe("1.200");
     // Whole counts (degree, eccentricity) carry no decimals.
     expect(formatMetric(43, "number")).toBe("43");
+    expect(formatMetric(98.105, "count")).toBe("98");
   });
 
   test("shows large dimensionless metrics as grouped integers instead of x.000", () => {

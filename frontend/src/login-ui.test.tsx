@@ -81,7 +81,7 @@ describe("demo-mode login UI source behavior", () => {
         expect(inputValue("login-pass")).toBe(initialStudent!.password);
 
         expect(screen.getByRole("group", { name: "开发演示快捷账号" })).toBeDefined();
-        expect(screen.getByRole("button", { name: /50 个种子学生/ })).toBeDefined();
+        expect(screen.getByRole("button", { name: /学生身份/ })).toBeDefined();
         fireEvent.click(screen.getByRole("button", { name: /教师身份/ }));
         expect(inputValue("login-user")).toBe("teacher");
         expect(inputValue("login-pass")).toBe("gvclab2026");
@@ -89,7 +89,7 @@ describe("demo-mode login UI source behavior", () => {
         // 提交会把预填的教师凭证原样发给真实登录 API。
         fireEvent.submit(document.querySelector("form")!);
         await waitFor(() => expect(logins).toEqual([{ username: "teacher", password: "gvclab2026" }]));
-        expect(document.querySelector(".login-hint")?.textContent).toContain("近 1 小时无人使用的种子学生账号");
+        expect(document.querySelector(".login-hint")?.textContent).toContain("种子学生账号");
       } finally {
         api.login = original;
       }
@@ -130,6 +130,22 @@ describe("demo-mode login UI source behavior", () => {
         expect(screen.getByText(/暂无空闲演示账号/)).toBeDefined();
         // The teacher shortcut is still offered.
         expect(screen.getByRole("button", { name: /教师身份/ })).toBeDefined();
+      });
+    } finally { suggestion.mockRestore(); }
+  });
+
+  test("an unconfirmed local pick is not presented as idle, and sign-in waits for the server", async () => {
+    let fail: (reason: unknown) => void = () => {};
+    const suggestion = spyOn(api, "demoStudent").mockImplementation(() => new Promise((_resolve, reject) => { fail = reject; }));
+    try {
+      await withDemoEnv("1", async () => {
+        render(<LoginPage onLogin={() => {}} />);
+        const submit = document.querySelector<HTMLButtonElement>(".login-btn")!;
+        expect(submit.disabled).toBe(true);
+        expect(submit.textContent).toContain("正在分配空闲账号");
+        fail(new Error("Failed to fetch"));
+        await waitFor(() => expect(document.querySelector(".login-hint")?.textContent).toContain("暂时无法确认空闲账号"));
+        expect(document.querySelector<HTMLButtonElement>(".login-btn")!.disabled).toBe(false);
       });
     } finally { suggestion.mockRestore(); }
   });

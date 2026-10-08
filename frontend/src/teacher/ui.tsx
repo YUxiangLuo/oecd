@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
-import { useDialogFocus } from "../a11y";
+import { keepFocusNear, useDialogFocus } from "../a11y";
 import { userFacingRequestError } from "../user-facing-error";
 
 /** 教师面板共用的轻量 UI 原语:模态框 / 工具条 / 搜索框 / 状态徽标 / 空态。
@@ -105,7 +105,7 @@ export function LoadFailure({ what, error, onRetry }: { what: string; error: str
   return (
     <div className="error-box async-error" role="alert">
       <span>{userFacingRequestError(error, `${what}加载失败`)}</span>
-      <button type="button" className="secondary" onClick={onRetry}>重试</button>
+      <button type="button" className="secondary" onClick={(event) => { const button = event.currentTarget; onRetry(); keepFocusNear(button); }}>重试</button>
     </div>
   );
 }

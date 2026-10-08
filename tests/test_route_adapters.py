@@ -880,7 +880,7 @@ def test_oecd_page_enrichment_contract_error_is_controlled_by_app(teaching_db, m
     )
 
     assert response.status_code == 409
-    assert "缺少请求年份键" in response.json()["detail"]
+    assert "缺少请求年份键" in response.json()["reason"]
 
 
 def test_malformed_qc_api_uses_controlled_artifact_error(teaching_db, tmp_path, monkeypatch):
@@ -895,7 +895,7 @@ def test_malformed_qc_api_uses_controlled_artifact_error(teaching_db, tmp_path, 
     response = _authenticated_client(teaching_db).get("/api/qc/2020")
 
     assert response.status_code == 409
-    assert "QC" in response.json()["detail"]
+    assert "QC" in response.json()["reason"]
 
 
 def test_regression_design_and_validation(teaching_db):
