@@ -1,5 +1,6 @@
 """Routes for the fixed teaching TWFE regression."""
 
+import logging
 import threading
 from typing import Any, cast
 
@@ -33,6 +34,7 @@ from gvcsim.singleflight import AsyncSingleFlightCache
 from gvcsim.steps import STEPS
 
 router = APIRouter()
+_LOG = logging.getLogger(__name__)
 _RESULT_CACHE: AsyncSingleFlightCache[tuple[str, str, str], dict[str, Any]] = AsyncSingleFlightCache(maxsize=64)
 _RUN_LIMITER = SlidingWindowRateLimiter(app_config.REGRESSION_RUNS_PER_MINUTE)
 
@@ -50,9 +52,10 @@ def _limit_expensive_request(limiter: SlidingWindowRateLimiter, account_id: int,
     try:
         limiter.check(account_id)
     except RateLimitExceeded as error:
+        # The page already prefixes the action ("回归运行失败："), so the label names only what was counted.
         raise HTTPException(
             status_code=429,
-            detail=f"{label}请求过于频繁，请约 {error.retry_after_header} 秒后重试",
+            detail=f"{label}次数过多，请约 {error.retry_after_header} 秒后再试。",
             headers={"Retry-After": error.retry_after_header},
         ) from error
 
@@ -136,7 +139,7 @@ def _require_regression_student(request: Request) -> int:
         raise HTTPException(status_code=403, detail="回归学习事件只对当前学生签发")
     account_id = user.get("aid")
     if isinstance(account_id, bool) or not isinstance(account_id, int):
-        raise HTTPException(status_code=401, detail="令牌缺少稳定账号标识")
+        raise HTTPException(status_code=401, detail="登录已失效，请重新登录。")
     return account_id
 
 
@@ -256,10 +259,14 @@ async def regression_run(req: RegressionRequest, request: Request):
             key,
             compute,
             owner=account_id,
-            admit=lambda: _limit_expensive_request(_RUN_LIMITER, account_id, "回归计算"),
+            admit=lambda: _limit_expensive_request(_RUN_LIMITER, account_id, "计算"),
         )
     except (np.linalg.LinAlgError, FloatingPointError, OverflowError) as e:
-        raise HTTPException(status_code=400, detail="回归线性代数计算失败；请检查样本方差、重复键与设计自由度") from e
+        _LOG.warning("回归线性代数计算失败（%s）：%s", req.outcome, e)
+        raise HTTPException(
+            status_code=400,
+            detail="这次回归没能算出结果。请换一个指标或稍后重试；若持续出现，请告诉老师。",
+        ) from e
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

@@ -16,7 +16,7 @@ from gvcsim import artifacts, config
 
 _LOG = logging.getLogger(__name__)
 # What a student sees when the service cannot authenticate; operator details go to the server log.
-SERVICE_UNAVAILABLE_MESSAGE = "教学服务暂时不可用，请稍后重试；若持续失败，请联系老师。"
+SERVICE_UNAVAILABLE_MESSAGE = "教学服务暂时不可用，请稍后重试；若持续失败，请联系老师或管理员。"
 
 SECRET_FILE = config.DATA_DIR / ".auth_secret"
 
@@ -29,7 +29,9 @@ def _persistent_secret(configured: str, path: Path) -> bytes:
     if configured:
         key = configured.encode()
         if len(key) < 32:
-            raise AuthenticationUnavailable("GVCSIM_AUTH_SECRET 至少需要 32 字节")
+            # The variable name is for the operator's log; the page shows the plain service message.
+            _LOG.error("GVCSIM_AUTH_SECRET 至少需要 32 字节")
+            raise AuthenticationUnavailable(SERVICE_UNAVAILABLE_MESSAGE)
         return key
     if path.exists():
         return path.read_bytes()
@@ -76,7 +78,8 @@ def authenticate(username: str, password: str) -> dict | None:
             "auth_version": account["auth_version"],
         }
     except (db.Unavailable, db.SchemaVersionMismatch) as error:
-        raise AuthenticationUnavailable("认证数据库不可用或未就绪") from error
+        _LOG.error("认证数据库不可用或未就绪（%s）", error)
+        raise AuthenticationUnavailable(SERVICE_UNAVAILABLE_MESSAGE) from error
 
 
 def issue_token(user: dict) -> tuple[str, int]:

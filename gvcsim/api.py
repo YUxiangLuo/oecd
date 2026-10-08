@@ -168,16 +168,16 @@ async def require_api_bearer(request: Request, call_next):
 
     authorization = request.headers.get("authorization")
     if not authorization or not authorization.startswith("Bearer "):
-        return JSONResponse(status_code=401, content={"detail": "缺少 Bearer 令牌"})
+        return JSONResponse(status_code=401, content={"detail": "登录已失效，请重新登录。"})
     try:
         payload = await anyio.to_thread.run_sync(
             auth.verify_token,
             authorization.removeprefix("Bearer "),
         )
-    except auth.AuthenticationUnavailable as error:
-        return JSONResponse(status_code=503, content={"detail": str(error)})
+    except auth.AuthenticationUnavailable:
+        return JSONResponse(status_code=503, content={"detail": SERVICE_UNAVAILABLE_MESSAGE})
     if payload is None:
-        return JSONResponse(status_code=401, content={"detail": "令牌无效或已过期"})
+        return JSONResponse(status_code=401, content={"detail": "登录已失效，请重新登录。"})
     request.state.user = payload  # 下游(/api/classroom)按角色鉴权用
     return await call_next(request)
 
@@ -194,7 +194,7 @@ async def artifact_contract_error(request: Request, exc: ArtifactContractError):
     return JSONResponse(
         status_code=409,
         content={
-            "detail": "课程数据版本校验未通过，暂时不能读取这部分数据；请稍后重试，若持续出现请联系老师。",
+            "detail": "课程数据暂时无法读取，请稍后重试；若持续出现，请联系老师或管理员。",
             # Kept for operators and API clients; the pages show only `detail`.
             "reason": str(exc),
         },
@@ -213,7 +213,7 @@ async def classroom_db_operation_failed(request: Request, exc: classroom_db.Oper
     return JSONResponse(
         status_code=503,
         content={
-            "detail": "教学数据库操作失败，请稍后重试",
+            "detail": "操作没有完成，请稍后重试。",
             "code": f"database_{exc.reason}",
         },
     )
