@@ -33,7 +33,9 @@ test("existing accounts prevent creation and editing invalidates preview", async
     fireEvent.change(screen.getByLabelText("学生名单"), { target: { value: "0012\t张三" } });
     fireEvent.click(screen.getByText("预览名单"));
     await waitFor(() => expect(screen.getByText("学号已被使用")).toBeTruthy());
-    expect((screen.getByText("创建 1 个账号") as HTMLButtonElement).disabled).toBe(true);
+    // Nothing can be created: the disabled button says why instead of promising an account.
+    expect((screen.getByText("1 个学号已被使用，无法创建") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText("创建 1 个账号")).toBeNull();
     expect(screen.queryByText("下载账号清单")).toBeNull();
     fireEvent.click(screen.getByText("返回修改"));
     expect((screen.getByLabelText("学生名单") as HTMLTextAreaElement).value).toBe("0012\t张三");
@@ -121,6 +123,7 @@ test("a refused creation can be edited again; preview and back-to-edit move focu
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toBe("创建失败：部分学号已有账号，本次没有创建任何学生。\n刚下载的清单已作废。请点“返回修改”，重新预览后再下载新清单。");
     expect(document.activeElement).toBe(alert);
+    expect((screen.getByText("没有创建，请返回修改") as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByText("返回修改"));
     expect(document.activeElement).toBe(screen.getByLabelText("学生名单"));
   } finally {

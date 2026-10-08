@@ -8,10 +8,17 @@ import { StudentsTab } from "./students";
 import { useTeacherReviewGuard } from "./review-guard";
 import { useRefetchOnVisible } from "./ui";
 
+/** Line icons drawn like the student sidebar's (24-unit box, 1.6 stroke in the text colour), not emoji. */
+const NAV_ICONS = {
+  semesters: <><rect x="3.5" y="5" width="17" height="15" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4" /></>,
+  students: <><circle cx="9" cy="8.5" r="3.2" /><path d="M3.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5" /><circle cx="16.5" cy="9.5" r="2.5" /><path d="M16 14.2c2.3.1 3.9 1.7 4.5 4.3" /></>,
+  reports: <><path d="M6.5 3.5h8l4 4v13h-12z" /><path d="M14.5 3.5v4h4M9.5 12.5h6M9.5 16h4" /></>,
+} as const;
+
 const NAV = [
-  { key: "semesters", icon: "🗓️", label: "学期与班级", sub: "建学期、分班" },
-  { key: "students", icon: "👥", label: "学生与进度", sub: "账号与进度" },
-  { key: "reports", icon: "📝", label: "报告评阅", sub: "评阅与打分" },
+  { key: "semesters", label: "学期与班级", sub: "建学期、分班" },
+  { key: "students", label: "学生与进度", sub: "账号与进度" },
+  { key: "reports", label: "报告评阅", sub: "评阅与打分" },
 ] as const;
 
 type TabKey = (typeof NAV)[number]["key"];
@@ -75,7 +82,9 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
             title={item.label}
             onClick={() => item.key === tab || reviewGuard.attempt(() => { setReportRequest(null); setTab(item.key); })}
           >
-            <span className="teacher-nav-ic" aria-hidden="true">{item.icon}</span>
+            <span className="teacher-nav-ic" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{NAV_ICONS[item.key]}</svg>
+            </span>
             <span className="teacher-nav-text">
               <span className="teacher-nav-label">{item.label}</span>
               <span className="teacher-nav-sub">{item.sub}</span>
@@ -95,7 +104,8 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
         </div>
         <div className="teacher-content">
           {tab === "semesters" ? <SemestersTab /> : tab === "students" ? (
-            <StudentsTab onOpenReport={(accountId, queue) => { setReportRequest({ accountId, queue }); setTab("reports"); }} />
+            <StudentsTab onOpenReport={(accountId, queue) => { setReportRequest({ accountId, queue }); setTab("reports"); }}
+              onGoToSemesters={() => setTab("semesters")} />
           ) : (
             <ReportsTab user={user} initialReview={reportRequest ?? undefined}
               onGraded={() => setReviewBump((value) => value + 1)}
