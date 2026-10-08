@@ -251,7 +251,7 @@ export function ratioOperands(numerator: number, denominator: number, decimals?:
 export function sumText(a: number, b: number, decimals?: number): string {
   if (decimals != null) {
     // At the panel's decimals, as in the table: "0.75549 + 0.00015 = 0.75564". When the shown parts do not add up
-    // to the shown sum, the line says what they add to; a part below the last digit counts as 0 and is named.
+    // to the shown sum the line reads "≈"; a part below the last digit counts as 0 and is named.
     const parts = [amountAt(a, decimals), amountAt(b, decimals)];
     const sum = amountAt(a + b, decimals);
     const line = `${parts[0]} + ${parts[1]} = ${sum}`;
@@ -260,7 +260,8 @@ export function sumText(a: number, b: number, decimals?: number): string {
     const shown = parts.map(parsedAmount);
     const added = shown.reduce((acc, value) => acc + (Number.isNaN(value) ? 0 : value), 0);
     const addsUp = Math.abs(added - shownSum) < 10 ** -decimals / 2;
-    if (!addsUp) return `${line}（按显示值相加为 ${amountText(added, decimals)}，差别来自四舍五入）`;
+    // About one panel in four rounds this way; "≈" says so without a sentence on every such line.
+    if (!addsUp) return `${parts[0]} + ${parts[1]} ≈ ${sum}`;
     return shown.some(Number.isNaN) ? `${line}（不到 ${amountText(10 ** -decimals, decimals)} 的一项按 0 相加）` : line;
   }
   const whole = (v: number) => v === 0 || amountDecimals(v) === 0;

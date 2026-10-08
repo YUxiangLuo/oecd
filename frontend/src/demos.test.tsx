@@ -829,7 +829,7 @@ describe("steps 2–3: every table row checks by hand, not only the formula (rou
     for (const cell of cells) expect(byHand(cell.amount, total)).toBe(cell.share);
     expect(text).toContain("= 15.354 / 99.602 = 15.415%");
     // The GVC line keeps the table's digits; its shown parts add to 46.490, and it says so.
-    expect(text).toContain("简单 GVC + 复杂 GVC = 31.136 + 15.354 = 46.489（按显示值相加为 46.490，差别来自四舍五入）");
+    expect(text).toContain("简单 GVC + 复杂 GVC = 31.136 + 15.354 ≈ 46.489");
   });
 
   test("a panel the digit cap cannot settle keeps its rows and says so under the table (ARG C26 2016)", async () => {
@@ -858,7 +858,7 @@ describe("steps 2–3: every table row checks by hand, not only the formula (rou
 
   test("a sum line at the panel's precision adds up as shown, or says what the shown parts add to", () => {
     expect(sumText(0.7554879510593011, 0.00015061881428423774, 5)).toBe("0.75549 + 0.00015 = 0.75564");
-    expect(sumText(31.135543981055907, 15.353631712234272, 3)).toBe("31.136 + 15.354 = 46.489（按显示值相加为 46.490，差别来自四舍五入）");
+    expect(sumText(31.135543981055907, 15.353631712234272, 3)).toBe("31.136 + 15.354 ≈ 46.489");
     expect(sumText(2.5, 0.000004, 5)).toBe("2.50000 + <0.00001 = 2.50000（不到 0.00001 的一项按 0 相加）");
     expect(displayedSumNote([0.75549, 0.00015], 0.75564, 5)).toBeNull();
     // Within one last digit the six-part line needs no note; four rows each rounded down by 0.0004 add 0.002 short.
