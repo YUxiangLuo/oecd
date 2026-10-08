@@ -273,7 +273,8 @@ export function Dumbbell({ rows, leftLabel, rightLabel, unit, title, domain }: {
           data-hovered={hovered === row.key || undefined}
           tabIndex={0}
           role="group"
-          aria-label={`${row.label}：${leftLabel} ${reading(row.left)}，${rightLabel} ${reading(row.right)}`}
+          // The facet title names the economy, so five facets do not read identically.
+          aria-label={`${title} · ${row.label}：${leftLabel} ${reading(row.left)}，${rightLabel} ${reading(row.right)}`}
           onMouseMove={(event) => { setHovered(row.key); show(event, linesFor(row)); }}
           onMouseLeave={() => { setHovered(null); hide(); }}
           onFocus={(event) => { setHovered(row.key); showFor(event.currentTarget, linesFor(row)); }}
@@ -319,10 +320,12 @@ export function Butterfly({ rows, leftLabel, rightLabel, unit, title, onPick }: 
   const max = Math.max(...values.map(Math.abs)) || 1;
   const width = (value: number | null) => (finiteValue(value) ? (Math.abs(value) / max) * 100 : 0);
   const reading = (value: number | null) => indicatorNumber(value, unit);
+  // The readout names the unit; the row values beside the bars stay bare numbers.
+  const withUnit = (value: number | null) => (value === null || unit === "%" ? reading(value) : `${reading(value)} ${unit}`);
   const linesFor = (row: typeof rows[number]): TipLine[] => [
     ["", row.label],
-    [leftLabel, reading(row.left), CAT[1]],
-    [rightLabel, reading(row.right), CAT[0]],
+    [leftLabel, withUnit(row.left), CAT[1]],
+    [rightLabel, withUnit(row.right), CAT[0]],
     ...(finiteValue(row.left) && finiteValue(row.right) && row.left + row.right > 0
       ? [["卖出占比", pct(row.right / (row.left + row.right))] as TipLine]
       : []),

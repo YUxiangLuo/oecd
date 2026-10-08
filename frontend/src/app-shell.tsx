@@ -366,7 +366,10 @@ export function StepFooter({
           />
         ))}
       </div>
-      <div className="footer-next">{next ? `下一步 · ${next.title}` : "已到最后一步"}</div>
+      {/* It reads like a link, so it is one: a button to the next step. */}
+      {next
+        ? <button type="button" className="footer-next" onClick={() => onNavigate(next.n)}>下一步 · {next.title}</button>
+        : <div className="footer-next">已到最后一步</div>}
     </footer>
   );
 }

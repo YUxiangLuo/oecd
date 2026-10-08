@@ -17,7 +17,10 @@ import type { Row } from "./scaffold";
  * region-to-region flow matrix — plus the partner-concentration time series. Exploration only. */
 
 const amount = (value: number) => formatMetric(value, "amount");
-const TOP_PARTNERS = 8;
+// The diagram shows as many partners as the list beside it starts with (前 10 个伙伴).
+const TOP_PARTNERS = 10;
+// Region outlines use their own colours, not the blue/teal of the selling and buying arrows.
+const REGION_COLORS = ["#8e44ad", "#d35400", "#b7950b", "#2c3e50", "#c2417a", "#6b7385"];
 
 export interface PartnerYear { year: number; partners: Record<string, NetworkPartner[]>; edges: NetworkData["edges"] }
 
@@ -92,7 +95,7 @@ function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: stri
               style={{ cursor: "pointer" }}>
               <line x1={sx + nx} y1={sy + ny} x2={ex + nx} y2={ey + ny} stroke={CAT[0]} strokeWidth={width(partner.outflow)} strokeOpacity={0.8} markerEnd={`url(#ego-out-${country})`} />
               <line x1={ex - nx} y1={ey - ny} x2={sx - nx} y2={sy - ny} stroke={CAT[1]} strokeWidth={width(partner.inflow)} strokeOpacity={0.8} markerEnd={`url(#ego-in-${country})`} />
-              <circle cx={x} cy={y} r={17} fill="#fff" stroke={CAT[(REGION_OF[partner.c] ?? 5)]} strokeWidth={2} />
+              <circle cx={x} cy={y} r={17} fill="#fff" stroke={REGION_COLORS[REGION_OF[partner.c] ?? 5]} strokeWidth={2} />
               <text x={x} y={y + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#1b1f2b">{partner.c}</text>
             </g>
           );
@@ -103,7 +106,7 @@ function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: stri
       {/* The partner circles' outline colour is the partner's region. */}
       <div className="partner-region-legend" aria-label="伙伴圆圈边框颜色表示地理区域">
         {[...new Set(top.map((partner) => REGION_OF[partner.c] ?? 5))].sort((a, b) => a - b).map((region) => (
-          <span key={region}><i style={{ borderColor: CAT[region] }} aria-hidden="true" />{REGIONS[region]}</span>
+          <span key={region}><i style={{ borderColor: REGION_COLORS[region] }} aria-hidden="true" />{REGIONS[region]}</span>
         ))}
       </div>
       {Tip}

@@ -208,6 +208,7 @@ export function GradeView({ data, grader, onBack, onReload, initialDraft }: {
   const initialScore = data.score == null ? "" : String(data.score);
   const [score, setScore] = useState(initialDraft?.score ?? initialScore);
   const [feedback, setFeedback] = useState(initialDraft?.feedback ?? data.feedback);
+  const [feedbackCut, setFeedbackCut] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [scoreError, setScoreError] = useState<string | null>(null);
@@ -290,10 +291,19 @@ export function GradeView({ data, grader, onBack, onReload, initialDraft }: {
             aria-invalid={scoreError ? true : undefined} aria-describedby={scoreError ? scoreErrorId : undefined}
             onChange={(event) => { const next = event.target.value; setScore(next); reviewGuard.publish({ dirty: next !== initialScore || feedback !== data.feedback, saving: false }); setSaveError(null); setScoreError(null); }} /></label>
           {scoreError && <div id={scoreErrorId} className="error-box grade-score-error" role="alert">{scoreError}</div>}
-          <label className="grade-field">评语（可空）<textarea disabled={saving} value={feedback} onChange={(event) => { const next = event.target.value; setFeedback(next); reviewGuard.publish({ dirty: score !== initialScore || next !== data.feedback, saving: false }); setSaveError(null); }} rows={8} maxLength={4000} /></label>
+          <label className="grade-field">评语（可空）<textarea disabled={saving} value={feedback} onChange={(event) => {
+            // 4000 characters as the server counts them (an emoji is one); only text beyond that is cut, and said so.
+            const characters = [...event.target.value];
+            const cut = characters.length > 4000;
+            const next = cut ? characters.slice(0, 4000).join("") : event.target.value;
+            setFeedbackCut(cut);
+            setFeedback(next);
+            reviewGuard.publish({ dirty: score !== initialScore || next !== data.feedback, saving: false });
+            setSaveError(null);
+          }} rows={8} /></label>
           {/* Not a live region: announcing the count on every keystroke drowned out typing; only the limit is announced. */}
-          <span className="muted grade-count">评语 {feedback.length} / 4000 字</span>
-          {feedback.length >= 4000 && <span className="muted" role="status">已达 4000 字上限，多出的内容没有输入进来。</span>}
+          <span className="muted grade-count">评语 {[...feedback].length} / 4000 字</span>
+          {feedbackCut && <span className="muted" role="status">超过 4000 字上限，多出的内容没有保留。</span>}
           {saveError && <div ref={saveErrorRef} className="error-box" role="alert" tabIndex={-1}>{saveError}</div>}
           {stale && <p id={staleHintId} className="muted grade-note">{STALE_REVIEW_HINT}</p>}
           {/* Nothing typed is lost on reload, so no leave confirmation here. */}

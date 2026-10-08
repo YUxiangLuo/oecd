@@ -879,7 +879,8 @@ export function LengthPositionTrajectory({
         <text x={650} y={y(axis.hi) + 18} textAnchor="end" fontSize={11}>前向 = 后向</text>
         <text x={390} y={642} textAnchor="middle" fontSize={12}>后向 GVC 段长度</text>
         <text x={18} y={320} textAnchor="middle" fontSize={12} transform="rotate(-90 18 320)">前向 GVC 段长度</text>
-        {series.map((points, countryIndex) => (
+        {/* Country A is drawn last (SVG paints in document order), so the comparison trails never hide it. */}
+        {series.map((points, countryIndex) => ({ points, countryIndex })).reverse().map(({ points, countryIndex }) => (
           <g
             key={countries[countryIndex]}
             data-series-group={countries[countryIndex]}

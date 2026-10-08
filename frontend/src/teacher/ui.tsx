@@ -72,11 +72,13 @@ export function ConfirmModal({
   onConfirm: () => void;
   onClose: () => void;
 }) {
+  // Open on 取消, the safe choice (not the × in the corner).
+  const cancelRef = useRef<HTMLButtonElement>(null);
   return (
-    <Modal title={title} onClose={onClose} width={380}>
+    <Modal title={title} onClose={onClose} width={380} initialFocusRef={cancelRef}>
       <p className="modal-msg">{message}</p>
       <div className="modal-actions">
-        <button onClick={onClose}>取消</button>
+        <button ref={cancelRef} onClick={onClose}>取消</button>
         <button
           className={danger ? "danger" : "primary"}
           onClick={() => {

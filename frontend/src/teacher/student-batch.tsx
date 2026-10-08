@@ -136,7 +136,8 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
     }
     finally { setBusy(false); }
   };
-  return <Modal title="批量添加学生" width={620} onClose={close}>
+  // With the class already chosen (opened from a class row), start where the roster is pasted.
+  return <Modal title="批量添加学生" width={620} onClose={close} initialFocusRef={initialClassId ? textRef : undefined}>
     <div className="modal-form" style={{ maxHeight: "calc(100vh - 160px)", overflowY: "auto" }}>
       <LabeledControl label="所属班级">{(id) => <select id={id} disabled={busy || !!accounts} value={classId} onChange={(e) => setClassId(Number(e.target.value) || "")}>
         <option value="">请选择班级</option>
