@@ -558,7 +558,7 @@ export function RegressionRunLab({ step, meta, state, getStep }: {
         {outcome !== "trade" && <p className="muted">方法与步骤 11 相同，这次 Y 换成{/^[A-Za-z]/.test(lesson.shortMetric) ? " " : ""}{lesson.shortMetric}。</p>}
         <p className="reg-step-focus"><b>本步重点</b> · {lesson.learnThis}</p>
         {depvarKind(outcome, design) === "network" && (
-          <p className="muted" role="note">这里 Y 的单位是“中心性原始单位”，不是步骤 5、9 的百万美元，不能和那两步的数值直接比较。</p>
+          <p className="muted" role="note">这里的 Y 是按真实网络指标的排名校准生成的教学数据，单位是“中心性原始单位”，不是步骤 5、9 的百万美元，不能和那两步的数值直接比较。</p>
         )}
         {baselineNotice && <p className="reg-boundary" role="status">{baselineNotice}</p>}
         {baselineOptions.length > 1 && (

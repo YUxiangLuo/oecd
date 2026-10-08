@@ -23,7 +23,7 @@ _KIND_DIMENSIONS = {
     "share": "份额（×100 = 百分点）",
     "length": "长度单位（1 个长度单位约等于平均多经过 1 个生产环节）",
     "position": "位置指数单位",
-    "network": "中心性原始单位（不是步骤 5、9 的百万美元）；另附标准差换算（标准差即 Y 的典型差距）",
+    "network": "中心性原始单位（按真实网络指标的排名校准生成，不是步骤 5、9 的百万美元）；另附标准差换算（标准差即 Y 的典型差距）",
 }
 _STUDENT_METRIC_LABELS = {
     **{key: value["label"] for key, value in cast(dict[str, dict[str, Any]], INDICATOR_SCHEMA["fields"]).items()},
