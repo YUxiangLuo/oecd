@@ -192,6 +192,13 @@ def create_student(
         if teacher_username and not _teacher_exists(c, teacher_username):
             raise PermissionError("教师账号无效")
         _ensure_student_no_free(c, student_no)
+        # Same rule as the batch import: a username must not be another student's 学号 either.
+        owner = c.execute(
+            "SELECT username FROM accounts WHERE role='student' AND btrim(student_no)=%s LIMIT 1",
+            (username,),
+        ).fetchone()
+        if owner is not None:
+            raise StudentNumberTaken(f"用户名 {username} 已是学生 {owner['username']} 的学号，请换一个用户名")
         row = database._required(
             c.execute(
                 "INSERT INTO accounts(username,display_name,role,student_no,pw_salt,pw_hash)"

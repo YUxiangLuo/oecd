@@ -4,9 +4,18 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from gvcsim.api import app
 from gvcsim.classroom import db
+from gvcsim.classroom.routes import (
+    AcademicNameRequest,
+    AcademicUpdateRequest,
+    GradeRequest,
+    StudentCreateRequest,
+    StudentUpdateRequest,
+    normalize_label,
+)
 from gvcsim.session import empty_session
 
 
@@ -208,3 +217,136 @@ def test_blank_password_is_a_field_error_in_batch_preview_and_self_service(teach
     student = client_for("student")
     response = student.post("/api/auth/password", json={"current_password": "gvclab2026", "new_password": " " * 12})
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("2026　秋", "2026 秋"),
+        ("2026  秋", "2026 秋"),
+        ("2026​秋", "2026秋"),
+        ("﻿ ２０２６秋 ⁠", "2026秋"),
+        ("Ａ班\t\n二组", "A班 二组"),
+    ],
+)
+def test_normalize_label_folds_lookalike_text(raw, expected):
+    assert normalize_label(raw) == expected
+    assert normalize_label(None) is None
+    assert normalize_label(3) == 3
+
+
+def test_label_length_is_checked_after_normalization():
+    # 61 characters as typed, 60 after collapsing the double space: accepted.
+    name = "名" + "  " + "字" * 58
+    assert len(StudentCreateRequest(username="ab", display_name=name, password="x" * 12).display_name) == 60
+    # Only zero-width characters: blank after normalization, so rejected.
+    with pytest.raises(ValidationError):
+        StudentCreateRequest(username="ab", display_name="​‌", password="x" * 12)
+    with pytest.raises(ValidationError):
+        StudentUpdateRequest(display_name="﻿ ​")
+    with pytest.raises(ValidationError):
+        AcademicNameRequest(name="​")
+    with pytest.raises(ValidationError):
+        AcademicUpdateRequest(name=None)
+    assert AcademicUpdateRequest(name=" 一班　 ").name == "一班"
+    assert StudentUpdateRequest(student_no="２０２６ ００１").student_no == "2026 001"
+
+
+def test_usernames_keep_edge_stripping_only():
+    request = StudentCreateRequest(username="﻿ab​ ", display_name="x", password="x" * 12)
+    assert request.username == "ab"
+    # Internal whitespace is not collapsed away: the route still rejects it.
+    assert StudentCreateRequest(username="a b", display_name="x", password="x" * 12).username == "a b"
+
+
+def test_whitespace_only_feedback_is_no_feedback():
+    request = GradeRequest(score=80, feedback=" \n\t　", expected_updated_at="2026-09-07T00:00:00Z")
+    assert request.feedback == ""
+    assert GradeRequest(score=80, feedback="  好  ", expected_updated_at="2026-09-07T00:00:00Z").feedback == "好"
+
+
+def test_lookalike_semester_and_class_names_collide(teaching_db):
+    client = client_for("teacher")
+    created = client.post("/api/classroom/semesters", json={"name": "2026  秋"})
+    assert created.status_code == 200, created.text
+    assert created.json()["name"] == "2026 秋"
+    for lookalike in ["2026　秋", "２０２６ 秋", "2026 ​秋", " 2026 秋 "]:
+        response = client.post("/api/classroom/semesters", json={"name": lookalike})
+        assert response.status_code == 409, (lookalike, response.text)
+    term_id = created.json()["id"]
+    first = client.post("/api/classroom/classes", json={"term_id": term_id, "name": "一班"})
+    assert first.status_code == 200, first.text
+    duplicate = client.post("/api/classroom/classes", json={"term_id": term_id, "name": "一​班"})
+    assert duplicate.status_code == 409, duplicate.text
+    other = client.post("/api/classroom/semesters", json={"name": "2027 春"})
+    rename = client.post(f"/api/classroom/semesters/{other.json()['id']}", json={"name": "2026\t秋"})
+    assert rename.status_code == 409, rename.text
+
+
+def test_student_name_and_number_are_normalized(teaching_db):
+    client = client_for("teacher")
+    invisible = client.post(
+        "/api/classroom/students",
+        json={"username": "invisible-name", "display_name": "​‍", "password": "valid-password-2026"},
+    )
+    assert invisible.status_code == 422, invisible.text
+    assert db.find_account("invisible-name") is None
+    created = client.post(
+        "/api/classroom/students",
+        json={
+            "username": "fullwidth-no",
+            "display_name": " 张　　三 ",
+            "password": "valid-password-2026",
+            "student_no": "２０２６７７７",
+        },
+    )
+    assert created.status_code == 200, created.text
+    assert created.json()["display_name"] == "张 三"
+    assert created.json()["student_no"] == "2026777"
+    duplicate = client.post(
+        "/api/classroom/students",
+        json={
+            "username": "fullwidth-dup",
+            "display_name": "李四",
+            "password": "valid-password-2026",
+            "student_no": "2026777",
+        },
+    )
+    assert duplicate.status_code == 409, duplicate.text
+
+
+def test_single_create_rejects_a_username_that_is_another_students_number(teaching_db):
+    client = client_for("teacher")
+    owner = client.post(
+        "/api/classroom/students",
+        json={
+            "username": "number-owner",
+            "display_name": "甲",
+            "password": "valid-password-2026",
+            "student_no": "2026555",
+        },
+    )
+    assert owner.status_code == 200, owner.text
+    clash = client.post(
+        "/api/classroom/students",
+        json={"username": "2026555", "display_name": "乙", "password": "valid-password-2026"},
+    )
+    assert clash.status_code == 409, clash.text
+    assert "2026555" in clash.json()["detail"]
+    assert db.find_account("2026555") is None
+
+
+def test_whitespace_only_feedback_is_saved_empty(teaching_db):
+    session = db.save_session("student", empty_session())
+    assert session is not None
+    db.save_generated_report("student", "report", {"years": [2020], "runs": []}, session["updated_at"])
+    submitted = db.submit_report("student")
+    assert submitted is not None
+    account_id = db.find_account("student")["id"]
+    client = client_for("teacher")
+    response = client.post(
+        f"/api/classroom/reports/{account_id}/grade",
+        json={"score": 75, "feedback": "  \n\t ", "expected_updated_at": submitted["updated_at"].isoformat()},
+    )
+    assert response.status_code == 200, response.text
+    assert db.get_report(account_id, "teacher")["feedback"] == ""

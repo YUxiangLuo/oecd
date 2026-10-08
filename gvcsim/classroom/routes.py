@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from datetime import datetime
 from typing import Any
 
@@ -255,8 +256,27 @@ def students(user: dict = Depends(require_teacher)):
     return {"students": db.list_students(user["sub"])}
 
 
+_ZERO_WIDTH = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
+_WHITESPACE_RUN = re.compile(r"\s+")
+
+
+def normalize_label(value: Any) -> Any:
+    """Canonical form of a teacher-typed label (semester/class name, 姓名, 学号).
+
+    NFKC folds full-width letters and digits, zero-width characters are dropped everywhere, and any run
+    of whitespace becomes one space, so names that look the same are stored the same (and collide on the
+    unique indexes). Runs as a ``mode="before"`` validator: length limits apply to the normalized text.
+    """
+    if not isinstance(value, str):
+        return value
+    value = _ZERO_WIDTH.sub("", unicodedata.normalize("NFKC", value))
+    return _WHITESPACE_RUN.sub(" ", value).strip()
+
+
 class AcademicNameRequest(TextRequest):
     name: str = Field(min_length=1, max_length=80)
+
+    _normalize_name = field_validator("name", mode="before")(normalize_label)
 
     @field_validator("name")
     @classmethod
@@ -278,6 +298,8 @@ class AcademicUpdateRequest(TextRequest):
         if value is None:
             raise ValueError("更新字段不能为 null；不修改请省略该字段")
         return value
+
+    _normalize_name = field_validator("name", mode="before")(normalize_label)
 
     @field_validator("name")
     @classmethod
@@ -367,8 +389,10 @@ class StudentCreateRequest(TextRequest):
     student_no: str = Field(default="", max_length=STUDENT_NO_MAX_LENGTH)
     class_id: int | None = Field(default=None, gt=0)
 
-    # Uniqueness of 学号 and login both compare exact text, so surrounding spaces must not survive.
-    _strip_identifiers = field_validator("username", "student_no", mode="before")(_strip_text)
+    # Uniqueness of 学号 and login both compare exact text, so surrounding spaces must not survive. Usernames
+    # keep the plain edge strip (internal spaces stay an error); 学号 and 姓名 are normalized like labels.
+    _strip_username = field_validator("username", mode="before")(_strip_text)
+    _normalize_labels = field_validator("display_name", "student_no", mode="before")(normalize_label)
     # Reject a blank password as a field error (422) up front, also in the batch preview.
     _password_not_blank = field_validator("password")(_nonblank_password)
 
@@ -440,7 +464,7 @@ class StudentUpdateRequest(TextRequest):
             raise ValueError("更新字段不能为 null；不修改请省略该字段，清空学号请使用空字符串")
         return value
 
-    _strip_student_no = field_validator("student_no", mode="before")(_strip_text)
+    _normalize_labels = field_validator("display_name", "student_no", mode="before")(normalize_label)
     _password_not_blank = field_validator("password")(_nonblank_password)
 
     @field_validator("display_name")
@@ -502,6 +526,12 @@ class GradeRequest(TextRequest):
     score: int = Field(ge=0, le=100)
     feedback: str = Field(default="", max_length=4000)
     expected_updated_at: datetime
+
+    # Whitespace-only feedback is no feedback; otherwise students saw an empty "教师评语".
+    @field_validator("feedback", mode="before")
+    @classmethod
+    def strip_feedback(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
 
 
 @router.post("/reports/{account_id}/grade")
