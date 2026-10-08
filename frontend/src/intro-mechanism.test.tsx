@@ -25,7 +25,10 @@ test("mechanism preview follows the example, the group gap and the regression", 
       const circles = [...chart.querySelectorAll(`circle.country-${series}`)];
       const ys = circles.map((circle) => Number(circle.getAttribute("cy")));
       expect(ys.map((y) => (120 - y) / 80)).toEqual([...expected]);
-      const path = circles.map((circle, index) => `${index ? "L" : "M"}${circle.getAttribute("cx")} ${circle.getAttribute("cy")}`).join("");
+      // Annual data drawn as a step, as on step 10: A stays at 0 through 2017 and jumps in 2018.
+      const path = series === "a"
+        ? "M50 120L270 120L270 40L490 40"
+        : circles.map((circle, index) => `${index ? "L" : "M"}${circle.getAttribute("cx")} ${circle.getAttribute("cy")}`).join("");
       expect(chart.querySelector(`path.country-${series}`)?.getAttribute("d")).toBe(path);
     }
     expect(view.getByText("关税暴露")).toBeTruthy();

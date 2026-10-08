@@ -309,3 +309,7 @@
   .intro-overlay *, .intro-overlay *::after, .login-brand *, .login-card, .login-card * { animation: none !important; transition: none !important; }
   .login-flow-item { opacity: 1; }
 }
+/* Short centred or boxed labels: balance their lines instead of leaving one or two characters on the last. */
+.intro-h2, .intro-lede, .intro-preview-heading b, .intro-xy-item small, .intro-xy-link,
+.intro-four-results b, .login-role-note { text-wrap: balance; }
+.intro-legend-item { white-space: nowrap; }
