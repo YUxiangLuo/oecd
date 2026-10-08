@@ -7,6 +7,7 @@ import { userFacingRequestError } from "../user-facing-error";
 import { AcademicFilters, matchesAcademicFilter, enrollmentLabel, UNASSIGNED_CLASS } from "./academic-filter";
 import { batchClassOptions, StudentBatchModal } from "./student-batch";
 import { normalizeLabel, stripInvisibleEdges } from "./text";
+import { showToast } from "../toast";
 import { EmptyState, LoadFailure, Modal, SearchInput, StatusPill, Toolbar, useFieldErrorFocus, useModalErrorFocus, useRefetchOnVisible } from "./ui";
 
 const fmtTime = (value: string | null | undefined) => value ? value.slice(0, 16).replace("T", " ") : "—";
@@ -245,15 +246,19 @@ export function StudentRowMenu({
         <button aria-label={`修改姓名：${who}`} onClick={(event) => pick(event, "name")}>修改姓名</button>
         <button aria-label={`修改学号：${who}`} onClick={(event) => pick(event, "student_no")}>修改学号</button>
         <button aria-label={`调整班级：${who}`} onClick={(event) => pick(event, "enrollment")}>调整班级</button>
-        <span title={student.demo_seed ? DEMO_PASSWORD_HINT : undefined}>
-          <button
-            disabled={student.demo_seed}
-            aria-label={`重置密码：${who}`}
-            onClick={(event) => pick(event, "password")}
-          >
-            重置密码
-          </button>
-        </span>
+        {/* aria-disabled keeps the reason reachable: a click on a demo account says why instead of doing nothing. */}
+        <button
+          aria-disabled={student.demo_seed || undefined}
+          title={student.demo_seed ? DEMO_PASSWORD_HINT : undefined}
+          aria-label={`重置密码：${who}`}
+          onClick={(event) => {
+            if (!student.demo_seed) { pick(event, "password"); return; }
+            event.currentTarget.closest("details")?.removeAttribute("open");
+            showToast(DEMO_PASSWORD_HINT);
+          }}
+        >
+          重置密码
+        </button>
       </div>
     </details>
   );

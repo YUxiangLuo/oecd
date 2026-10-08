@@ -884,6 +884,8 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
   body { color: #111827; font-size: 11pt; }
   .topbar,
   .sidebar,
+  /* A printed page is narrower than 1000px, so the narrow-window notice would match its media query. */
+  .narrow-window-notice,
   .step-header-bar,
   .stepfooter,
   .announce-banner,

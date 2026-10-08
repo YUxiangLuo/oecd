@@ -38,7 +38,9 @@ describe("teacher student modal submission", () => {
 
   test("keeps fixed demo-pool passwords out of the editable password modal", async () => {
     const source = await Bun.file(new URL("./students.tsx", import.meta.url)).text();
-    expect(source).toContain("disabled={student.demo_seed}");
+    // aria-disabled, not disabled: a click explains why instead of doing nothing.
+    expect(source).toContain("aria-disabled={student.demo_seed || undefined}");
+    expect(source).toContain("if (!student.demo_seed) { pick(event, \"password\"); return; }");
     expect(source).toContain("title={student.demo_seed ? DEMO_PASSWORD_HINT : undefined}");
     expect(DEMO_PASSWORD_HINT).toBe("演示账号不能修改密码。要演示改密码，请新建一个学生账号。");
   });
@@ -199,7 +201,7 @@ describe("teacher student row menu accessible names", () => {
     const html = renderToStaticMarkup(createElement(StudentRowMenu, { student: seeded, onPick: () => {} }));
 
     expect(html).toContain('aria-label="重置密码：演示学生 08（student08）"');
-    expect(html).toMatch(/<button disabled=""[^>]*>重置密码</);
+    expect(html).toMatch(/<button aria-disabled="true"[^>]*>重置密码</);
     expect(html).toContain(`title="${DEMO_PASSWORD_HINT}"`);
     expect(html).toContain('title="更多操作"');
   });

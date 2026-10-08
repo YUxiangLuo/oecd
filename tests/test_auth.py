@@ -89,7 +89,9 @@ def test_missing_release_identity_blocks_login_and_protected_api(teaching_db, mo
     assert denied_api.json()["detail"] == auth.SERVICE_UNAVAILABLE_MESSAGE  # operator detail goes to the log
 
 
-def test_password_change_updates_credentials_and_revokes_existing_token(teaching_db):
+def test_password_change_updates_credentials_and_revokes_existing_token(teaching_db, monkeypatch):
+    # A real deployment: outside demo mode the teacher may change their own password.
+    monkeypatch.setattr("gvcsim.config.DEMO_MODE", False)
     client = TestClient(app)
     login = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
     headers = {"Authorization": f"Bearer {login['token']}"}
@@ -152,6 +154,20 @@ def test_demo_seed_student_cannot_change_own_password(teaching_db):
     assert response.status_code == 400
     assert "演示账号不能修改密码" in response.json()["detail"]
     assert client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).status_code == 200
+
+
+def test_demo_teacher_cannot_change_own_password(teaching_db):
+    # The login page's 教师身份 chip fills in this password; changing it would lock everyone out of the demo.
+    client = TestClient(app)
+    login = client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).json()
+    response = client.post(
+        "/api/auth/password",
+        headers={"Authorization": f"Bearer {login['token']}"},
+        json={"current_password": "gvclab2026", "new_password": "teacher-new-private-password"},
+    )
+    assert response.status_code == 400
+    assert "演示账号不能修改密码" in response.json()["detail"]
+    assert client.post("/api/auth/login", json={"username": "teacher", "password": "gvclab2026"}).status_code == 200
 
 
 def test_existing_token_uses_current_display_name_after_teacher_rename(teaching_db):

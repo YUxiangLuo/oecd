@@ -5,7 +5,7 @@ import { oecdIcioDatasetLabel } from "./dataset-label";
 import { isDemoStudentUsername } from "./login";
 import { TeacherDashboard } from "./teacher";
 import { TeacherReviewGuardProvider, useTeacherReviewGuard } from "./teacher/review-guard";
-import { ToastHost } from "./toast";
+import { showToast, ToastHost } from "./toast";
 import { MATERIAL_STATUS_LABELS, materialStatusForStep, reportStatusLabel, stepShowsDone } from "./step-task-card";
 import { revealOutlineStep } from "./step-navigation";
 import type {
@@ -116,6 +116,8 @@ function TeacherWorkspaceContent({
 }: TeacherWorkspaceProps) {
   const passwordTriggerRef = useRef<HTMLButtonElement>(null);
   const reviewGuard = useTeacherReviewGuard();
+  // The demo teacher's password is what the login page's 教师身份 chip fills in; changing it would lock the demo.
+  const fixedDemoPassword = import.meta.env.VITE_DEMO_MODE === "1" && user.username === "teacher";
   return (
     <div className="layout">
       <header className="topbar">
@@ -129,7 +131,16 @@ function TeacherWorkspaceContent({
             数据：{oecdIcioDatasetLabel(meta)}
           </span>
           <span className="role-chip" title={`${user.name} · 教师账号 · ${user.username}`}><span>{user.name}</span></span>
-          <button ref={passwordTriggerRef} onClick={() => reviewGuard.attempt(onRequestPasswordChange)}>修改密码</button>
+          <button
+            ref={passwordTriggerRef}
+            aria-disabled={fixedDemoPassword || undefined}
+            aria-describedby={fixedDemoPassword ? "fixed-demo-password-note" : undefined}
+            title={fixedDemoPassword ? DEMO_PASSWORD_NOTE : undefined}
+            onClick={fixedDemoPassword ? () => showToast(DEMO_PASSWORD_NOTE) : () => reviewGuard.attempt(onRequestPasswordChange)}
+          >
+            修改密码
+          </button>
+          {fixedDemoPassword && <span id="fixed-demo-password-note" className="sr-only">{DEMO_PASSWORD_NOTE}</span>}
           <button onClick={() => reviewGuard.attempt(() => { reviewGuard.clear(); onLogout(); })}>退出登录</button>
         </div>
       </header>
@@ -186,7 +197,7 @@ export function StudentTopbar({
           aria-disabled={fixedDemoPassword || undefined}
           aria-describedby={fixedDemoPassword ? "fixed-demo-password-note" : undefined}
           title={fixedDemoPassword ? DEMO_PASSWORD_NOTE : undefined}
-          onClick={fixedDemoPassword ? undefined : onRequestPasswordChange}
+          onClick={fixedDemoPassword ? () => showToast(DEMO_PASSWORD_NOTE) : onRequestPasswordChange}
         >
           修改密码
         </button>

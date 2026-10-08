@@ -42,3 +42,12 @@ def demo_student_credentials(base_password: str) -> list[DemoStudentCredential]:
 
 def is_demo_student_username(username: str) -> bool:
     return username in DEMO_STUDENT_USERNAMES
+
+
+# The demo teacher's password is the one the login page's 教师身份 chip pre-fills; changing it would lock
+# everyone (the demo's owner included) out of the teacher side.
+DEMO_TEACHER_USERNAME = "teacher"
+
+
+def is_demo_account_username(username: str) -> bool:
+    return username == DEMO_TEACHER_USERNAME or is_demo_student_username(username)
