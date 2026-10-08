@@ -22,6 +22,8 @@ def _source(countries=("AAA", "BBB", "CCC", "DDD")) -> pd.DataFrame:
                         "PLv_GVC": 3 + industry_index / 10,
                         "betweenesscentrality": 100 + industry_index,
                         "weighted degree": 1000 + 10 * industry_index,
+                        "weighted indegree": 400 + 5 * industry_index,
+                        "weighted outdegree": 600 + 5 * industry_index,
                     }
                 )
     return pd.DataFrame(rows)
@@ -73,9 +75,8 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
     # Independent fixed acceptance values, not expectations read from CALIBRATION.
     for outcome, low, span, beta, scale in (
         ("trade", 0.25, 0.30, -0.55, 0.006),
-        ("production", 0.20, 0.25, -0.40, 0.005),
+        ("production", 0.14, 0.16, -0.40, 0.005),
         ("length", 3.0, 2.0, -1.8, 0.030),
-        ("network", 1000.0, 3000.0, -4000.0, 40.0),
     ):
         baseline = panel.loc[panel.year.eq(2016)].set_index("entity_id")[OUTCOME_DEPVARS[outcome][0]].rank(pct=True)
         expected = []
@@ -90,8 +91,16 @@ def test_v2_preserves_randomization_and_halves_noise_without_changing_effects():
                 + scale * (noise + (row.year - 2018) * 0.2)
             )
         np.testing.assert_allclose(panel[Y_COLUMNS[outcome]], expected, rtol=1e-12, atol=1e-12)
+    # v6: the network family's fixed Y is weighted in-degree + out-degree, row by row.
+    np.testing.assert_allclose(
+        panel[Y_COLUMNS["network"]],
+        panel[teaching.y_column("network", "weighted_indegree")]
+        + panel[teaching.y_column("network", "weighted_outdegree")],
+        rtol=1e-12,
+        atol=1e-9,
+    )
     snapshot = model_snapshot("trade")
-    assert snapshot["version"] == "step10-tariff-teaching-v5"
+    assert snapshot["version"] == "step10-tariff-teaching-v6"
     assert snapshot["randomization_version"] == "step10-tariff-teaching-v1"
     assert snapshot["tariff_path"] == [0, 0, 0.25, 0.25, 0.25]
     assert teaching.SEED == 20260913
@@ -341,6 +350,7 @@ def _full_source(countries=("AAA", "BBB", "CCC", "DDD")) -> pd.DataFrame:
     frame["2_VA_RT"] = 20 + index
     frame["FGY"] = 120 + index
     frame["3_FGY_GVC"] = 30 + index
+    frame["3b_FGY_GVC_C"] = 15 + index
     frame["closnesscentrality"] = 0.3 + index / 50
     return frame
 
@@ -370,7 +380,7 @@ def test_alternative_baselines_add_their_own_y_without_changing_the_family_defau
     snapshot = model_snapshot("trade", "DVAex_share")
     assert snapshot["baseline"] == "DVAex_share"
     assert snapshot["beta"] == 0.55 and snapshot["y_column"] == "teaching_y_trade_DVAex_share"
-    assert snapshot["baseline_kind"] == "share" and snapshot["version"] == "step10-tariff-teaching-v5"
+    assert snapshot["baseline_kind"] == "share" and snapshot["version"] == "step10-tariff-teaching-v6"
     assert model_snapshot("trade")["baseline"] == "FVA_share"
     with pytest.raises(ValueError):
         model_snapshot("trade", "PLy_GVC")  # a length baseline is not in the trade family
@@ -436,8 +446,9 @@ def test_design_with_an_alternative_baseline_runs_and_recovers_its_own_relation(
     result, benchmark = run_design_with_benchmark(panel, design)
     assert benchmark["benchmark_passed"]
     coefficient = result.coefs[0]
-    assert coefficient.ci_low is not None and coefficient.ci_low > 0  # the preset relation is positive
-    assert abs(coefficient.coef - 0.50) < 0.1
+    assert coefficient.ci_low is not None and coefficient.ci_low > 0  # the implied relation is positive
+    # v6: 纯国内 = 1 − 简单 GVC − 复杂 GVC − 传统贸易, so its relation is −(−0.30 − 0.40 − 0.30) = 1.0.
+    assert abs(coefficient.coef - 1.00) < 0.1
     assert result.binscatter is not None and result.binscatter["slope"] == coefficient.coef
     # The default design is untouched and a cross-family or observed-panel choice is refused.
     assert RegressionDesign("production", teaching=True).baseline == "3b_VA_GVC_C_share"

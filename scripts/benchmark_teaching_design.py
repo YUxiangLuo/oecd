@@ -122,8 +122,11 @@ def evaluate(root: Path, seeds: range) -> dict:
     exposure_path = f"export_exposure_{years[0]}.csv"
     exposure_bytes = (root / exposure_path).read_bytes()
     exposure = pd.read_csv(BytesIO(exposure_bytes))
-    outcomes = list(teaching.Y_COLUMNS)
-    ys = list(teaching.Y_COLUMNS.values())
+    # The tariff-design candidates re-simulate each drawn default Y; a default computed from other Ys (v6: the
+    # network family's in + out degree) has no draw of its own and is covered by the per-baseline evaluation.
+    outcomes = [name for name in teaching.Y_COLUMNS if teaching.default_baseline(name).combine is None]
+    ys = [teaching.Y_COLUMNS[name] for name in outcomes]
+    legacy_noise = np.array([LEGACY_NOISE[list(teaching.Y_COLUMNS).index(name)] for name in outcomes])
     beta = np.array([teaching.BETAS[name] for name in outcomes])
     records = {name: [] for name in CANDIDATES}
     domain_failures = dict.fromkeys(CANDIDATES, 0)
@@ -170,13 +173,13 @@ def evaluate(root: Path, seeds: range) -> dict:
                 else rate * panel.year.ge(years[2]).to_numpy()
             ) * treated
             x = weights * tau
-            y = baseline + x[:, None] * beta + noise * LEGACY_NOISE * multiplier
+            y = baseline + x[:, None] * beta + noise * legacy_noise * multiplier
             domain_failures[name] += int(np.any((y[:, :2] < 0) | (y[:, :2] > 1)) or np.any(y[:, 2:] <= 0))
             xw, yw = within(x).ravel(), within(y)
             xx = xw @ xw
             estimate = xw @ yw / xx
             residual = yw - xw[:, None] * estimate
-            scores = np.zeros((groups, 4))
+            scores = np.zeros((groups, len(outcomes)))
             np.add.at(scores, codes, xw[:, None] * residual)
             correction = groups / (groups - 1) * (n - 1) / (n - entities - 5)
             se = np.sqrt(correction * (scores**2).sum(axis=0)) / xx
@@ -224,7 +227,7 @@ def evaluate(root: Path, seeds: range) -> dict:
         "source_panel_sha256": hashlib.sha256(source_bytes).hexdigest(),
         "source_exposure": {"path": exposure_path, "sha256": hashlib.sha256(exposure_bytes).hexdigest()},
         "generator_snapshots": {name: teaching.model_snapshot(name) for name in outcomes},
-        "legacy_noise_scales": dict(zip(outcomes, LEGACY_NOISE.tolist(), strict=True)),
+        "legacy_noise_scales": dict(zip(outcomes, legacy_noise.tolist(), strict=True)),
         "implementation_sha256": {
             "benchmark": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "generator": hashlib.sha256(Path(teaching.__file__).read_bytes()).hexdigest(),

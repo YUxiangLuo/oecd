@@ -17,7 +17,11 @@ import pandas as pd
 # v5 (2026-10-07): the families mirror the shares steps 6-9 single out (traditional-trade and backward GVC
 # shares added, the foreign double-counting share dropped) and the network family follows step 9: its
 # fixed Y is the weighted degree, with in/out degree, betweenness and closeness as alternatives.
-VERSION = "step10-tariff-teaching-v5"
+# v6 (2026-10-09): accounting identities hold across a family's Ys (the forward production shares add up to 1,
+# the GVC total is simple + complex, weighted degree is in + out), so their estimates add up exactly; the GVC
+# position index sits near 1; a backward complex-GVC share with no preset relation (β = 0) shows an interval that
+# can include 0; and the imposing market (USA) is left out of the regression sample.
+VERSION = "step10-tariff-teaching-v6"
 # A contract upgrade must not silently redraw policy assignment or noise.
 RANDOMIZATION_VERSION = "step10-tariff-teaching-v1"
 X_COLUMN = "teaching_tariff_exposure"
@@ -47,8 +51,12 @@ class Baseline:
     """A real first-year indicator whose ranking calibrates one simulated Y of a family.
 
     ``calibration`` is (low, span, noise scale): the simulated level is low + span × percentile rank,
-    so ordering is preserved but observed levels and accounting identities are not. ``derived`` names
-    (numerator, denominator) release columns for a share the release panel does not carry itself.
+    so ordering is preserved but observed levels are not. ``derived`` names (numerator, denominator)
+    release columns for a share the release panel does not carry itself.
+
+    ``combine`` makes the Y an exact linear combination of other Ys of the same family,
+    constant + Σ coefficient × Y[key], instead of a drawn one, so an accounting identity holds row by row and
+    the estimates add up exactly; ``beta`` is then the implied relation and ``calibration`` is unused.
     """
 
     key: str
@@ -58,6 +66,7 @@ class Baseline:
     calibration: tuple[float, float, float]
     source: str | None = None
     derived: tuple[str, str] | None = None
+    combine: tuple[float, tuple[tuple[str, float], ...]] | None = None
 
     @property
     def column(self) -> str:
@@ -90,9 +99,19 @@ BASELINES: dict[str, tuple[Baseline, ...]] = {
             "DVAex_share", "国内增加值出口占比", "share", 0.55, (0.55, 0.30, 0.006), derived=("DVAex", "gross_exports")
         ),
     ),
+    # Forward shares: 3a, 3b and RT are drawn; the GVC total and the pure-domestic share follow from them, so
+    # 纯国内 + 传统贸易 + 简单 GVC + 复杂 GVC = 1 and GVC = 简单 + 复杂 in every row (levels chosen so 纯国内 stays
+    # inside (0, 1) at the largest exposure).
     "production": (
-        Baseline("3b_VA_GVC_C_share", "复杂 GVC 生产份额", "share", -0.40, (0.20, 0.25, 0.005)),
-        Baseline("3_VA_GVC_share", "前向 GVC 生产总份额", "share", -0.50, (0.35, 0.30, 0.006)),
+        Baseline("3b_VA_GVC_C_share", "复杂 GVC 生产份额", "share", -0.40, (0.14, 0.16, 0.005)),
+        Baseline(
+            "3_VA_GVC_share",
+            "前向 GVC 生产总份额",
+            "share",
+            -0.70,
+            (0.0, 0.0, 0.0),
+            combine=(0.0, (("3a_VA_GVC_S_share", 1.0), ("3b_VA_GVC_C_share", 1.0))),
+        ),
         Baseline(
             "3_FGY_GVC_share",
             "后向 GVC 生产总份额",
@@ -106,19 +125,46 @@ BASELINES: dict[str, tuple[Baseline, ...]] = {
             "简单 GVC 生产份额",
             "share",
             -0.30,
-            (0.15, 0.20, 0.005),
+            (0.12, 0.14, 0.005),
             derived=("3a_VA_GVC_S", "SVA"),
         ),
-        Baseline("2_VA_RT_share", "传统贸易生产份额", "share", -0.30, (0.10, 0.15, 0.004), derived=("2_VA_RT", "SVA")),
-        Baseline("1_VA_D_share", "纯国内生产份额", "share", 0.50, (0.40, 0.35, 0.006), derived=("1_VA_D", "SVA")),
+        Baseline("2_VA_RT_share", "传统贸易生产份额", "share", -0.30, (0.10, 0.12, 0.004), derived=("2_VA_RT", "SVA")),
+        Baseline(
+            "1_VA_D_share",
+            "纯国内生产份额",
+            "share",
+            1.00,
+            (0.0, 0.0, 0.0),
+            derived=("1_VA_D", "SVA"),
+            combine=(1.0, (("3a_VA_GVC_S_share", -1.0), ("3b_VA_GVC_C_share", -1.0), ("2_VA_RT_share", -1.0))),
+        ),
+        # No preset relation: its 95% interval can include 0 (the reading steps 11–14 teach).
+        Baseline(
+            "3b_FGY_GVC_C_share",
+            "后向复杂 GVC 生产份额",
+            "share",
+            0.0,
+            (0.10, 0.20, 0.006),
+            derived=("3b_FGY_GVC_C", "FGY"),
+        ),
     ),
     "length": (
         Baseline("PLv_GVC", "前向 GVC 段长度", "length", -1.8, (3.0, 2.0, 0.030)),
         Baseline("PLy_GVC", "后向 GVC 段长度", "length", -1.5, (3.0, 2.0, 0.030)),
-        Baseline("GVCPs", "GVC 位置指数", "position", -0.40, (-0.30, 0.60, 0.010)),
+        # Forward ÷ backward length, so it sits near 1; β is what the two lengths' relations imply at typical levels.
+        Baseline("GVCPs", "GVC 位置指数", "position", -0.08, (0.70, 0.60, 0.010)),
     ),
+    # Weighted degree is in-degree + out-degree in every row.
     "network": (
-        Baseline("weighted_degree", "加权总度", "network", -4000.0, (1000.0, 3000.0, 40.0), source="weighted degree"),
+        Baseline(
+            "weighted_degree",
+            "加权总度",
+            "network",
+            -4000.0,
+            (0.0, 0.0, 0.0),
+            source="weighted degree",
+            combine=(0.0, (("weighted_indegree", 1.0), ("weighted_outdegree", 1.0))),
+        ),
         Baseline(
             "weighted_indegree", "加权入度", "network", -2000.0, (500.0, 1500.0, 20.0), source="weighted indegree"
         ),
@@ -196,6 +242,11 @@ def baseline_parameters() -> dict[str, list[dict[str, object]]]:
                 "derived": list(item.derived) if item.derived else None,
                 "beta": item.beta,
                 "calibration": list(item.calibration),
+                "combine": (
+                    {"constant": item.combine[0], "terms": [[key, coef] for key, coef in item.combine[1]]}
+                    if item.combine
+                    else None
+                ),
             }
             for item in items
         ]
@@ -244,11 +295,26 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
     required; an alternative whose sources the panel lacks is left out (a release insists on
     all of them, see gvcsim.pipeline).
     """
+    # A default Y computed from others (network: in + out) makes those parts required too.
+    required_parts = {
+        (outcome, key)
+        for outcome in OUTCOMES
+        if (item := default_baseline(outcome)).combine
+        for key, _ in item.combine[1]
+    }
+    drawn = {
+        (outcome, item.key)
+        for outcome, items in BASELINES.items()
+        for item in items
+        if item.combine is None
+        and (item is items[0] or (outcome, item.key) in required_parts or sources_present(item, release_panel.columns))
+    }
     all_baselines = [
         (outcome, item)
         for outcome, items in BASELINES.items()
         for item in items
-        if item is items[0] or sources_present(item, release_panel.columns)
+        if (outcome, item.key) in drawn
+        or (item.combine is not None and all((outcome, key) in drawn for key, _ in item.combine[1]))
     ]
     source_columns = sorted({item.column for _, item in all_baselines if item.derived is None})
     required = {"country", "industry", "year", "entity_id", *source_columns}
@@ -267,7 +333,11 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
     ].rename(columns={"sector": "industry", "export_exposure": "teaching_export_share_w"})
     if weights.duplicated(["country", "industry"]).any():
         raise ValueError("目的地出口份额包含重复键")
-    base = release_panel.loc[release_panel.year.eq(years[0]) & release_panel.country.ne("ROW")].copy()
+    # ROW is not a country; the imposing market exports nothing to itself, so its X would be 0 by construction
+    # and it would wrongly serve as an "untaxed" comparison. Both stay out of the sample.
+    base = release_panel.loc[
+        release_panel.year.eq(years[0]) & release_panel.country.ne("ROW") & release_panel.country.ne(MARKET)
+    ].copy()
     base = base.merge(weights, on=["country", "industry"], how="inner", validate="one_to_one")
     for _, item in all_baselines:
         if item.derived:
@@ -279,11 +349,17 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
     for outcome in OUTCOMES:
         item = default_baseline(outcome)
         eligible &= item.in_domain(base[item.column])
+    # A default computed from parts needs every part valid, or the default Y would be missing for that unit.
+    for outcome, key in required_parts:
+        part = baseline(outcome, key)
+        eligible &= part.in_domain(base[part.column])
     base = base.loc[eligible].copy()
     if base.empty:
         raise ValueError("无有效冲击前指标与目的地份额，无法生成教学面板")
     baseline_columns = []
     for outcome, item in all_baselines:
+        if item.combine is not None:
+            continue
         low, span, _ = item.calibration
         values = base[item.column].where(item.in_domain(base[item.column]))
         # Percentile ranks among the units whose source value is valid; invalid units stay missing.
@@ -304,15 +380,45 @@ def build_teaching_panel(release_panel: pd.DataFrame, exposure: pd.DataFrame, *,
     individual = entities + "|" + out.year.astype(str)
     cluster = out.country.astype(str) + "|" + out.year.astype(str)
     trend = out.year.map(dict(zip(years, (-0.4, -0.2, 0.0, 0.2, 0.4), strict=True)))
+    generated: dict[str, pd.Series] = {}
     for outcome, item in all_baselines:
+        if item.combine is not None:
+            continue
         salt = _noise_salt(outcome, item)
         noise_scale = item.calibration[2]
         # Include country-year noise so clustered uncertainty is meaningful.
         noise = individual.map(lambda value, salt=salt: 2 * _unit_number(value, salt, seed) - 1)
         noise += cluster.map(lambda value, salt=salt: 2 * _unit_number(value, f"cluster-{salt}", seed) - 1)
         target = y_column(outcome, item.key)
-        out[target] = out[_baseline_column(outcome, item)] + item.beta * out[X_COLUMN] + noise_scale * (noise + trend)
-    return out.drop(columns=baseline_columns)
+        generated[target] = (
+            out[_baseline_column(outcome, item)] + item.beta * out[X_COLUMN] + noise_scale * (noise + trend)
+        )
+    # Identity Ys are computed from the drawn ones, row by row (missing when any part is missing).
+    for outcome, item in all_baselines:
+        if item.combine is None:
+            continue
+        constant, terms = item.combine
+        combined = pd.Series(constant, index=out.index, dtype=float)
+        for key, coefficient in terms:
+            combined = combined + coefficient * generated[y_column(outcome, key)]
+        generated[y_column(outcome, item.key)] = combined
+    # Added in one step (not column by column) and in BASELINES order, so the panel's columns stay stable.
+    ordered = [y_column(outcome, item.key) for outcome, item in all_baselines]
+    return pd.concat(
+        [out.drop(columns=baseline_columns), pd.DataFrame({name: generated[name] for name in ordered})], axis=1
+    )
+
+
+def _combine_text(outcome: str, item: Baseline) -> str:
+    """ "1 − 简单 GVC 生产份额 − 复杂 GVC 生产份额 − 传统贸易生产份额" for a Y computed from others."""
+    assert item.combine is not None
+    constant, terms = item.combine
+    parts = [f"{constant:g}"] if constant else []
+    for key, coefficient in terms:
+        label = baseline(outcome, key).label
+        sign = "+" if coefficient > 0 else "−"
+        parts.append(f"{sign} {label}" if parts else (label if coefficient > 0 else f"−{label}"))
+    return " ".join(parts)
 
 
 def variable_catalog(outcome: str, baseline_key: str | None = None) -> list[dict[str, str]]:
@@ -329,7 +435,11 @@ def variable_catalog(outcome: str, baseline_key: str | None = None) -> list[dict
             "name": y_column(outcome, item.key),
             "label": item.label,
             "unit": item.unit,
-            "source": f"按首年指标 {item.column} 的排名校准生成",
+            "source": (
+                "由同家族其他 Y 按核算恒等式算出：" + _combine_text(outcome, item)
+                if item.combine
+                else f"按首年指标 {item.column} 的排名校准生成"
+            ),
             "role": "Y",
             "baseline": item.key,
         },
