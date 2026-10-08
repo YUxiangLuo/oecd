@@ -87,8 +87,10 @@ const RANK_HIGHLIGHT_FILL = CAT[2];
 const REFERENCE_POINT = "#9aa3b5";
 
 /** 任意指标的排序条形图(学生自选指标 + 对象后驱动) */
-export function RankBarChart({ rows, metricKey, label, format, highlight }: {
+export function RankBarChart({ rows, metricKey, label, format, highlight, highlightColors }: {
   rows: Row[]; metricKey: string; label: string; format?: string; highlight?: Set<string>;
+  /** Each selected economy's series colour, so its bar matches the dot strip and the other charts. */
+  highlightColors?: Record<string, string>;
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const data = rows
@@ -118,14 +120,14 @@ export function RankBarChart({ rows, metricKey, label, format, highlight }: {
               onMouseMove={(e) => show(e, [["", display], [label, fmtVal(v, format)]])}
               onMouseLeave={hide}>
               <span title={display} style={{ width: 132, flexShrink: 0, fontSize: 11.5,
-                color: hi ? RANK_HIGHLIGHT_TEXT : "#5a6070", fontWeight: hi ? 700 : 400,
+                color: hi ? (highlightColors ? "#1b1f2b" : RANK_HIGHLIGHT_TEXT) : "#5a6070", fontWeight: hi ? 700 : 400,
                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{display}</span>
               <div style={{ flex: 1, position: "relative", height: 16, background: "#f2f3f7", borderRadius: 5, overflow: "hidden" }}>
                 {domain.negative > 0 && <span aria-hidden style={{ position: "absolute", zIndex: 2, insetBlock: 0, left: `${layout.zeroPct}%`, borderLeft: "1.5px solid #4b5263" }} />}
                 <div style={{
                   position: "absolute", top: 0, bottom: 0,
                   left: `${leftPct}%`, width: `${widthPct}%`,
-                  background: segment.negative ? "#e34948" : hi ? RANK_HIGHLIGHT_FILL : CAT[0],
+                  background: segment.negative ? "#e34948" : hi ? highlightColors?.[entity] ?? RANK_HIGHLIGHT_FILL : highlightColors ? REFERENCE_POINT : CAT[0],
                   transition: "width .4s, left .4s",
                 }} />
               </div>
@@ -209,8 +211,10 @@ export function xTickAnchor(x: number, text: string, width: number): "start" | "
 /** A highlighted economy's path through the years on the scatter (phase 2 定位图 轨迹). */
 export interface ScatterTrail { id: string; label: string; color: string; points: { year: number; x: number; y: number }[] }
 
-export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabel, xFormat, yFormat, highlight, highlightColors, refMode = "median", quadrantLabels, equalityLine = false, xScale = "linear", trails = [] }: {
+export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabel, xFormat, yFormat, highlight, highlightColors, refMode = "median", quadrantLabels, equalityLine = false, xScale = "linear", trails = [], dataLabel }: {
   rows: Row[]; xKey: string; yKey: string; xLabel: string; yLabel: string;
+  /** Names the data table when one page draws several of these (one per country), so their names differ. */
+  dataLabel?: string;
   referenceRows?: Row[];
   xFormat?: string; yFormat?: string; highlight?: Set<string>;
   /** Each selected economy's series colour, so its dot matches its trail and the other charts. */
@@ -242,6 +246,11 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
   const [x0, x1] = [xAxis.lo, xAxis.hi], [y0, y1] = [yAxis.lo, yAxis.hi];
   const px = (x: number) => m.l + ((tx(x) - x0) / (x1 - x0 || 1)) * (W - m.l - m.r);
   const py = (y: number) => H - m.b - ((y - y0) / (y1 - y0 || 1)) * (H - m.t - m.b);
+  // Medians of a handful of points carry no information (of two points one is always "above"): with fewer
+  // than five economies the reference lines and quadrant labels are left out.
+  const showReference = referencePts.length >= 5;
+  // The axis title says the x axis is logarithmic; a reading is a plain amount.
+  const xTipLabel = xLabel.replace(/，对数）$/, "）").replace(/（对数）$/, "");
   const referenceXs = referencePts.map((p) => p.x);
   const xRef = refMode === "mean" ? avg(referenceXs) : median(referenceXs);
   const yRef = refMode === "mean" ? avg(referencePts.map((p) => p.y)) : median(referencePts.map((p) => p.y));
@@ -271,8 +280,8 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
           return <text key={`x${i}`} x={x} y={H - m.b + 18} textAnchor={xTickAnchor(x, text, W)} fontSize="10.5" fill="#5f6677">{text}</text>;
         })}
         {/* 象限参考线(中位数) */}
-        <line x1={px(xRef)} y1={m.t} x2={px(xRef)} y2={H - m.b} stroke="#c8ccd6" strokeWidth={1} strokeDasharray="4 4" />
-        <line x1={m.l} y1={py(yRef)} x2={W - m.r} y2={py(yRef)} stroke="#c8ccd6" strokeWidth={1} strokeDasharray="4 4" />
+        {showReference && <line x1={px(xRef)} y1={m.t} x2={px(xRef)} y2={H - m.b} stroke="#c8ccd6" strokeWidth={1} strokeDasharray="4 4" />}
+        {showReference && <line x1={m.l} y1={py(yRef)} x2={W - m.r} y2={py(yRef)} stroke="#c8ccd6" strokeWidth={1} strokeDasharray="4 4" />}
         {equalityLine && !log && (() => {
           const lo = Math.max(x0, y0);
           const hi = Math.min(x1, y1);
@@ -291,7 +300,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
           const hi = highlight?.has(p.c);
           return (
             <g key={p.c}
-              onMouseMove={(e) => show(e, [["", p.label], [xLabel, fmtVal(p.x, xFormat)], [yLabel, fmtVal(p.y, yFormat)]])}
+              onMouseMove={(e) => show(e, [["", p.label], [xTipLabel, fmtVal(p.x, xFormat)], [yLabel, fmtVal(p.y, yFormat)]])}
               onMouseLeave={hide} style={{ cursor: "pointer" }}>
               <circle cx={px(p.x)} cy={py(p.y)} r={hi ? 6 : 4.5}
                 fill={hi ? highlightColors?.[p.c] ?? RANK_HIGHLIGHT_FILL : REFERENCE_POINT} fillOpacity={hi ? 0.95 : 0.7} stroke="#fff" strokeWidth={1} />
@@ -305,7 +314,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
             <g key={`trail-${trail.id}`} data-trail={trail.id}>
               <polyline points={points.map((point) => `${px(point.x)},${py(point.y)}`).join(" ")} fill="none" stroke={trail.color} strokeWidth={2} strokeLinejoin="round" strokeOpacity={0.9} />
               {points.map((point, index) => (
-                <g key={point.year} onMouseMove={(e) => show(e, [["", `${trail.label} · ${point.year}`], [xLabel, fmtVal(point.x, xFormat)], [yLabel, fmtVal(point.y, yFormat)]])} onMouseLeave={hide}>
+                <g key={point.year} onMouseMove={(e) => show(e, [["", `${trail.label} · ${point.year}`], [xTipLabel, fmtVal(point.x, xFormat)], [yLabel, fmtVal(point.y, yFormat)]])} onMouseLeave={hide}>
                   <circle cx={px(point.x)} cy={py(point.y)} r={index === 0 || index === points.length - 1 ? 4 : 2.5} fill={index === 0 ? "#fff" : trail.color} stroke={trail.color} strokeWidth={1.5} />
                 </g>
               ))}
@@ -329,16 +338,17 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
           );
         })}
         {/* 四角角色标签：画在点之上，白色描边保证可读 */}
-        {quadrantLabels?.map((lab, i) => (
+        {showReference && quadrantLabels?.map((lab, i) => (
           <text key={i} x={corners[i].x} y={corners[i].y} textAnchor={corners[i].anchor} pointerEvents="none"
             stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke"
             fontSize="10.5" fill="#5f6677" fontWeight={600}>{lab}</text>
         ))}
       </svg>
       )}
-      {equalityLine && pts.length > 0 && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}><span style={{ color: "var(--text-warning)", fontWeight: 700 }}>橙色虚线是等长线（前向 = 后向）</span>：线上方前向 GVC 段更长（GVC 位置指数 &gt; 1，更偏上游）；线下方更偏下游。灰色虚线是中位数，只表示相对高低。</div>}
+      {equalityLine && pts.length > 0 && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}><span style={{ color: "var(--text-warning)", fontWeight: 700 }}>橙色虚线是等长线（前向 = 后向）</span>：线上方前向 GVC 段更长（GVC 位置指数 &gt; 1，更偏上游）；线下方更偏下游。{showReference && "灰色虚线是中位数，只表示相对高低。"}</div>}
+      {pts.length > 0 && !showReference && <div className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>图上只有 {referencePts.length} 个点，不画中位数和象限。</div>}
       <ChartDataDisclosure
-        label={`${yLabel}与${xLabel}散点`}
+        label={`${dataLabel ? `${dataLabel} · ` : ""}${yLabel}与${xLabel}散点`}
         columns={[{ key: "entity", label: "对象" }, { key: "x", label: xLabel }, { key: "y", label: yLabel }]}
         rows={pts.map((point) => ({ entity: point.label, x: fmtVal(point.x, xFormat), y: fmtVal(point.y, yFormat) }))}
       />
@@ -383,16 +393,19 @@ export function sortCompositionRows(
   return [...rows].sort((first, second) => sign * (num(first[sortKey]) - num(second[sortKey])));
 }
 
-export function CompositionBar({ rows, segments, sortKey, sortDirection = "descending", sortLabel, sortFormat, normalize = true, normalizationKey, valueFormat = "pct", highlight }: {
+export function CompositionBar({ rows, segments, sortKey, sortDirection = "descending", sortLabel, sortFormat, normalize = true, normalizationKey, valueFormat = "pct", highlight, dataLabel }: {
   rows: Row[]; segments: readonly CompositionSegment[]; sortKey?: string;
   sortDirection?: CompositionSortDirection; sortLabel?: string; sortFormat?: string;
   normalize?: boolean; normalizationKey?: string; valueFormat?: string; highlight?: Set<string>;
+  /** Names the data table when one page draws several of these (one per country), so their names differ. */
+  dataLabel?: string;
 }) {
   const { wrapRef, Tip, show, hide } = useTip();
   const skey = sortKey ?? segments[segments.length - 1]?.key ?? "";
   const segKeys = new Set(segments.map((s) => s.key));
   const total = (r: Row) => segments.reduce((s, seg) => s + num(r[seg.key]), 0);
-  const eligible = rows.filter((row) => finite(row[skey]) && (!normalizationKey || (finite(row[normalizationKey]) && num(row[normalizationKey]) > 0)) && segments.every((segment) => finite(row[segment.key])));
+  // Shares need a positive total; amounts are drawn whatever the total's sign (negative parts left of zero).
+  const eligible = rows.filter((row) => finite(row[skey]) && (!normalizationKey || (finite(row[normalizationKey]) && (!normalize || num(row[normalizationKey]) > 0))) && segments.every((segment) => finite(row[segment.key])));
   const data = sortCompositionRows(eligible, skey, sortDirection);
   const domain = signedDomain(data.map((row) => segments.map((segment) => num(row[segment.key]))), normalize, normalizationKey ? data.map((row) => num(row[normalizationKey])) : undefined);
   const hasNegative = data.some((row) => segments.some((segment) => num(row[segment.key]) < 0));
@@ -442,7 +455,7 @@ export function CompositionBar({ rows, segments, sortKey, sortDirection = "desce
       </div>
       )}
       <ChartDataDisclosure
-        label={`${sortLabel ?? "分段"}构成`}
+        label={`${dataLabel ? `${dataLabel} · ` : ""}${sortLabel ?? "分段"}构成`}
         columns={[
           { key: "entity", label: "对象" },
           ...segments.map((segment) => ({ key: segment.key, label: segment.name })),

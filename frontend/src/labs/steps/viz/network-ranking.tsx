@@ -4,21 +4,28 @@ import { ScrollableRegion } from "../../../a11y";
 import { indicatorNumber } from "./indicator-charts";
 import { rankText } from "./indicator-model";
 import type { Row } from "./scaffold";
+import { PATH_UNDEFINED_LABEL, pathMetricUndefined } from "../../../viz/views/network-heat";
 
-export interface NetworkRankRow { industry: string; values: (number | null)[] }
+/** `undefinedAt[i]`: country i's value is not missing but undefined (an industry with no outgoing links). */
+export interface NetworkRankRow { industry: string; values: (number | null)[]; undefinedAt?: boolean[] }
+
+/** A reading that can be compared: finite and, for path metrics, defined (a node that reaches nothing is not 0). */
+export const networkValue = (value: unknown, metric: string): number | null =>
+  typeof value === "number" && Number.isFinite(value) && !pathMetricUndefined(metric, value) ? value : null;
 
 /** Industries ordered by country A; the other countries are matched by industry (each still gets its global rank). */
 export function networkRanking(rows: Row[], year: number, countries: string[], metric: string, limit: number): NetworkRankRow[] {
-  return rows.filter((row) => row.year === year && row.country === countries[0]
-    && typeof row[metric] === "number" && Number.isFinite(row[metric]))
+  return rows.filter((row) => row.year === year && row.country === countries[0] && networkValue(row[metric], metric) !== null)
     .sort((a, b) => (b[metric] as number) - (a[metric] as number) || String(a.industry).localeCompare(String(b.industry)))
-    .slice(0, limit).map((row) => ({
-      industry: String(row.industry),
-      values: countries.map((country) => {
-        const value = rows.find((item) => item.year === year && item.country === country && item.industry === row.industry)?.[metric];
-        return typeof value === "number" && Number.isFinite(value) ? value : null;
-      }),
-    }));
+    .slice(0, limit).map((row) => {
+      const raw = countries.map((country) => rows.find((item) => item.year === year && item.country === country && item.industry === row.industry)?.[metric]);
+      const undefinedAt = raw.map((value) => pathMetricUndefined(metric, value));
+      return {
+        industry: String(row.industry),
+        values: raw.map((value) => networkValue(value, metric)),
+        ...(undefinedAt.some(Boolean) ? { undefinedAt } : {}),
+      };
+    });
 }
 
 /** Each industry's global median across all economies, and every selected country's rank there. */
@@ -56,7 +63,7 @@ export function NetworkRanking({ rows, countries, unit, onIndustry, reference = 
           </div>
           {/* One line per country, level with its bar: the value, then its global rank. */}
           <span className="rank-value">
-            <b>{indicatorNumber(value, unit)}</b>
+            <b>{value === null && row.undefinedAt?.[index] ? PATH_UNDEFINED_LABEL : indicatorNumber(value, unit)}</b>
             {(() => {
               const countryRank = global?.ranks?.[countries[index]];
               if (!global || countryRank == null) return null;

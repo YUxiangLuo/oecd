@@ -473,3 +473,97 @@ describe("material of one to five economies (design doc 4.1)", () => {
     } finally { rows.mockRestore(); schema.mockRestore(); }
   });
 });
+
+describe("readouts and update notes follow the chart on screen (round 10)", () => {
+  test("a hover readout left open does not survive a change of indicator while the pointer stays on the chart", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = setup();
+      await view.findByRole("button", { name: "出口构成" });
+      fireEvent.click(view.getByRole("button", { name: "历年变化" }));
+      await view.findByLabelText("趋势读数");
+      fireEvent.mouseMove(view.container.querySelector('rect[data-year="2020"]')!, { clientX: 300, clientY: 120 });
+      expect(view.container.querySelector(".hover-tip")!.textContent).toContain("2020 年");
+      expect(view.container.querySelector("[data-crosshair]")).not.toBeNull();
+      // No mouseleave: the student changes the indicator with the keyboard while the pointer rests on the chart.
+      fireEvent.change(view.getByLabelText("指标"), { target: { value: "FVA" } });
+      expect(view.getByRole("group", { name: /^外国增加值历年变化图/ })).toBeTruthy();
+      expect(view.container.querySelector(".hover-tip")?.textContent ?? "").toBe("");
+      expect(view.container.querySelector("[data-crosshair]")).toBeNull();
+      // The same for a keyboard readout followed by a change of years.
+      fireEvent.keyDown(view.getByRole("group", { name: /按左右方向键逐年读数/ }), { key: "ArrowRight" });
+      expect(view.container.querySelector(".hover-tip")!.textContent).toContain("2019 年");
+      fireEvent.change(view.getByLabelText("起始年份"), { target: { value: "2020" } });
+      await view.findByLabelText("趋势读数");
+      expect(view.container.querySelector(".hover-tip")?.textContent ?? "").toBe("");
+      expect(view.container.querySelector("[data-crosshair]")).toBeNull();
+    } finally { rows.mockRestore(); schema.mockRestore(); }
+  });
+
+  test("the update note names the indicator, follows each update and goes once the chart cannot be recorded", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = setup();
+      await view.findByRole("button", { name: "出口构成" });
+      await waitFor(() => expect(view.saves).toHaveLength(1));
+      view.accept();
+      fireEvent.click(view.getByRole("button", { name: "历年变化" }));
+      await waitFor(() => expect(view.saves).toHaveLength(2));
+      expect(view.container.querySelector(".scope-flash")?.textContent).toContain("报告材料已更新为：历年变化 · 外国增加值项占比 · ");
+      view.accept();
+      // A second update with another indicator says so (the words used to be identical between indicators).
+      fireEvent.change(view.getByLabelText("指标"), { target: { value: "FVA" } });
+      await waitFor(() => expect(view.saves).toHaveLength(3));
+      expect(view.container.querySelector(".scope-flash")?.textContent).toContain("历年变化 · 外国增加值 · ");
+      view.accept();
+      // 定位图 records nothing: the note about the previous chart must not stay beside it.
+      fireEvent.click(view.getByRole("button", { name: "定位图" }));
+      await view.findByText(/定位图只供探索，不记录材料。/, { selector: "[role=status]" });
+      expect(view.container.querySelector(".scope-flash")).toBeNull();
+      // Back on the recorded chart nothing was replaced, so no note comes back.
+      fireEvent.click(view.getByRole("button", { name: "历年变化" }));
+      await view.findByLabelText("趋势读数");
+      expect(view.container.querySelector(".scope-flash")).toBeNull();
+      expect(view.saves).toHaveLength(3);
+    } finally { rows.mockRestore(); schema.mockRestore(); }
+  });
+
+  test("定位图 with an industry reads that industry in every economy, not only the selected two", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) => countryRows(year));
+    const sector = spyOn(api, "industryIndicatorsForIndustry").mockImplementation(async (year, industry) => {
+      const sectorRows = ["CHN", "USA", "DEU", "JPN", "KOR", "FRA"].map((country, i) => ({ country, industry, year, gross_exports: 10 + i, FVA: 1 + i }));
+      return { rows: sectorRows, total: sectorRows.length, page: 1, page_size: 200 };
+    });
+    const perCountry = spyOn(api, "industryIndicatorsAll");
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = setup();
+      await view.findByRole("button", { name: "出口构成" });
+      fireEvent.click(view.getByRole("button", { name: "定位图" }));
+      await view.findByLabelText("定位读数");
+      fireEvent.change(view.getByLabelText("比较范围"), { target: { value: "A" } });
+      await waitFor(() => expect(view.getByLabelText("定位读数").textContent).toContain("中位数按图上 6 个经济体计算"));
+      expect(sector).toHaveBeenCalled();
+      expect(perCountry).not.toHaveBeenCalled();
+      expect(view.getByRole("heading", { name: /定位图 · 2021 年全部经济体 · A/ })).toBeTruthy();
+      expect(view.getByText(/轨迹只在“国家整体”下提供/)).toBeTruthy();
+    } finally { rows.mockRestore(); sector.mockRestore(); perCountry.mockRestore(); schema.mockRestore(); }
+  });
+
+  test("a negative total is named on the composition cards instead of being called missing", async () => {
+    const rows = spyOn(api, "countryIndicators").mockImplementation(async (year) =>
+      countryRows(year).map((row) => (row.country === "USA" ? { ...row, gross_exports: -5, FVA: -1, DVAex: -4, DVArt: 0, DDC: 0, FDC: 0, taxsub: 0 } : row)));
+    const schema = spyOn(api, "indicatorSchema").mockResolvedValue({ groups: [], fields: {} });
+    try {
+      const view = setup();
+      await view.findByRole("button", { name: "出口构成" });
+      const cards = await view.findByLabelText("构成读数");
+      expect(cards.textContent).toContain("为负");
+      expect(cards.textContent).not.toContain("对比国家构成不完整");
+      expect(view.getByText(/构成份额无法计算，占比图里不画/)).toBeTruthy();
+      expect(view.getByRole("region", { name: "报告材料" }).textContent).toContain("为负，构成份额无法计算（不是缺少数据）");
+    } finally { rows.mockRestore(); schema.mockRestore(); }
+  });
+});

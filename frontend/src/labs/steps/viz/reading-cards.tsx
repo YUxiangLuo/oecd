@@ -50,13 +50,18 @@ const valueOf = (rows: Row[], country: string, year: number, metric: string, ind
 };
 
 /** 国家对比 view: the observed country's reading and rank, the global median, the gap to each comparison. */
-export function comparisonCards({ rows, countries, metric, label, unit, year, industry, distribution }: {
+export function comparisonCards({ rows, countries, metric, label, unit, year, industry, distribution, reasonFor }: {
   rows: Row[]; countries: string[]; metric: string; label: string; unit: string; year: number;
   industry: string; distribution?: YearDistribution;
+  /** Why a share cannot be computed for a country (its exports are 0), when that is the reason it is empty. */
+  reasonFor?: (country: string) => string | null;
 }): ReadingCard[] {
   const [first, ...others] = countries;
   const own = valueOf(rows, first, year, metric, industry);
-  if (own === null) return [{ eyebrow: `${countryLabel(first)} · ${year}`, big: "缺失", small: `${label}在该年没有有效读数（缺少的数据留空，不当作 0）` }];
+  const ownReason = own === null ? reasonFor?.(first) : null;
+  if (own === null) return [ownReason
+    ? { eyebrow: `${countryLabel(first)} · ${year}${industry ? ` · ${sectorLabel(industry)}` : ""}`, big: "无法计算", small: `${label}：${ownReason}` }
+    : { eyebrow: `${countryLabel(first)} · ${year}`, big: "缺失", small: `${label}在该年没有有效读数（缺少的数据留空，不当作 0）` }];
   const cards: ReadingCard[] = [{
     eyebrow: `${countryLabel(first)} · ${year}${industry ? ` · ${sectorLabel(industry)}` : ""}`,
     big: indicatorNumber(own, unit),
@@ -78,10 +83,11 @@ export function comparisonCards({ rows, countries, metric, label, unit, year, in
   }
   for (const other of others) {
     const value = valueOf(rows, other, year, metric, industry);
+    const reason = value === null ? reasonFor?.(other) : null;
     cards.push({
       eyebrow: `与对比国家 ${countryLabel(other)}`,
-      big: value === null ? "对比国家缺失" : `${year} 年 ${countryLabel(first)} ${gapReading(own, value, unit)}`,
-      small: value === null ? "该国在该年没有有效读数" : `${countryLabel(other)} ${indicatorNumber(value, unit)}；差距不代表因果关系`,
+      big: value === null ? (reason ? "对比国家无法计算" : "对比国家缺失") : `${year} 年 ${countryLabel(first)} ${gapReading(own, value, unit)}`,
+      small: value === null ? reason ?? "该国在该年没有有效读数" : `${countryLabel(other)} ${indicatorNumber(value, unit)}；差距不代表因果关系`,
     });
   }
   return cards;
@@ -103,12 +109,18 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
   // The cards show the focus part's share, so they carry the indicator's name, not the part's.
   const focusLabel = composition.focusLabel ?? focusName;
   const ownShares = segments.map((segment) => ({ segment, share: share(first, segment.key) }));
+  // A total of zero (an industry that does not export at all) or below (negative value added) is not missing
+  // data: the shares are undefined, and the card says why.
+  const totalCard = (country: string, comparison: boolean): ReadingCard | null => {
+    const total = valueOf(rows, country, year, composition.total, industry);
+    const prefix = comparison ? `与对比国家 ${countryLabel(country)} · ${focusLabel}` : `${countryLabel(country)} · ${year}`;
+    if (total === 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为 0`, small: "没有可分解的总量，构成份额无定义；可换一个行业或国家" };
+    if (total !== null && total < 0) return { eyebrow: prefix, big: `${comparison ? `${countryLabel(country)} ` : ""}${totalLabel}为负`, small: `总量为负（${indicatorNumber(total, "百万美元")} 百万美元），无法算比重；切到“金额”可看各分项` };
+    return null;
+  };
   if (ownShares.some((item) => item.share === null)) {
-    // A total of exactly zero (an industry that does not export at all) is not missing data: say so.
-    const zeroTotal = valueOf(rows, first, year, composition.total, industry) === 0;
-    return [zeroTotal
-      ? { eyebrow: `${countryLabel(first)} · ${year}`, big: `${totalLabel}为 0`, small: "没有可分解的总量，构成份额无定义；可换一个行业或国家" }
-      : { eyebrow: `${countryLabel(first)} · ${year}`, big: "构成不完整", small: "分项或总量缺失，暂不能读出构成（缺少的数据留空，不当作 0）" }];
+    return [totalCard(first, false)
+      ?? { eyebrow: `${countryLabel(first)} · ${year}`, big: "构成不完整", small: "分项或总量缺失，暂不能读出构成（缺少的数据留空，不当作 0）" }];
   }
   const largest = ownShares.reduce((best, item) => (item.share! > best.share! ? item : best));
   const ownFocus = share(first, focus)!;
@@ -126,6 +138,11 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
   ];
   for (const other of others) {
     const value = share(other, focus);
+    const undefinedTotal = value === null ? totalCard(other, true) : null;
+    if (undefinedTotal) {
+      cards.push(undefinedTotal);
+      continue;
+    }
     cards.push({
       eyebrow: `与对比国家 ${countryLabel(other)} · ${focusLabel}`,
       big: value === null ? "对比国家构成不完整" : `${countryLabel(first)} ${gapReading(ownFocus, value, "%")}`,
@@ -135,18 +152,47 @@ export function compositionCards({ rows, countries, composition, totalLabel, yea
   return cards;
 }
 
+/** Fewer economies than this on a 定位图 and its medians and quadrants are not drawn or read. */
+export const MIN_MEDIAN_POINTS = 5;
+
 const side = (value: number, median: number, high: string, low: string) =>
   value === median ? "等于中位数" : value > median ? high : low;
 
 /** 定位图: where each selected country sits relative to the two medians of the shown economies. */
-export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLabel, xFormat, yFormat }: {
+export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLabel, xFormat, yFormat, xScale = "linear", reasonFor }: {
   reference: Row[]; countries: string[]; xKey: string; yKey: string; xLabel: string; yLabel: string;
   xFormat: "pct" | "number" | "amount"; yFormat: "pct" | "number" | "amount";
+  /** A log x axis leaves out economies whose x is 0 or below, as the scatter does. */
+  xScale?: "linear" | "log";
+  /** Why a country has no point when a share cannot be computed (its exports are 0). */
+  reasonFor?: (country: string) => string | null;
 }): ReadingCard[] {
-  const points = reference
+  const all = reference
     .filter((row) => finiteValue(row[xKey]) && finiteValue(row[yKey]))
     .map((row) => ({ country: String(row.country), x: row[xKey] as number, y: row[yKey] as number }));
-  if (points.length < 2) return [];
+  const points = xScale === "log" ? all.filter((point) => point.x > 0) : all;
+  const unitOf = (format: string) => (format === "pct" ? "%" : format === "amount" ? "百万美元" : "无量纲");
+  const absent = (country: string): ReadingCard => {
+    const reason = reasonFor?.(country);
+    const zeroOnLog = all.some((point) => point.country === country && point.x <= 0);
+    return {
+      eyebrow: countryLabel(country),
+      big: "不在图上",
+      small: reason ? `${reason}（不是缺少数据）` : zeroOnLog ? `${xLabel}为 0 或负，对数横轴上画不出` : "该国缺少其中一项指标的读数",
+    };
+  };
+  // With only a few economies on the chart a median says nothing (one of two points is always "above").
+  if (points.length < MIN_MEDIAN_POINTS) {
+    return countries.map((country, index) => {
+      const point = points.find((item) => item.country === country);
+      if (!point) return absent(country);
+      return {
+        eyebrow: `${index ? "对比国家 " : ""}${countryLabel(country)}`,
+        big: `横轴 ${indicatorNumber(point.x, unitOf(xFormat))}，纵轴 ${indicatorNumber(point.y, unitOf(yFormat))}`,
+        small: `图上只有 ${points.length} 个经济体，不比较中位数`,
+      };
+    });
+  }
   const median = (values: number[]) => {
     const sorted = [...values].sort((a, b) => a - b);
     const middle = Math.floor(sorted.length / 2);
@@ -154,10 +200,9 @@ export function positioningCards({ reference, countries, xKey, yKey, xLabel, yLa
   };
   const xMedian = median(points.map((point) => point.x));
   const yMedian = median(points.map((point) => point.y));
-  const unitOf = (format: string) => (format === "pct" ? "%" : format === "amount" ? "百万美元" : "无量纲");
   return countries.map((country, index) => {
     const point = points.find((item) => item.country === country);
-    if (!point) return { eyebrow: countryLabel(country), big: "不在图上", small: "该国缺少其中一项指标的读数" };
+    if (!point) return absent(country);
     return {
       eyebrow: `${index ? "对比国家 " : ""}${countryLabel(country)}`,
       big: `${xLabel}${side(point.x, xMedian, "高于", "低于")}中位数，${yLabel}${side(point.y, yMedian, "高于", "低于")}中位数`,

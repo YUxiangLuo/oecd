@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import { LabeledControl } from "../../../a11y";
 import { api } from "../../../api";
 import type { Meta, NetworkData } from "../../../types";
@@ -54,6 +54,9 @@ export function regionMatrix(edges: NetworkData["edges"]): number[][] {
 
 function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: string; partners: NetworkPartner[]; colorIndex: number; scaleMax: number }) {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
+  // One Tab stop for the whole diagram (roving tabindex): the arrow keys move between partners.
+  const [activeIndex, setActiveIndex] = useState(0);
+  const nodeRefs = useRef<(SVGGElement | null)[]>([]);
   const top = [...partners].slice(0, TOP_PARTNERS).sort((a, b) => (REGION_OF[a.c] ?? 5) - (REGION_OF[b.c] ?? 5) || b.total - a.total);
   const W = 420, H = 320, cx = W / 2, cy = H / 2, R = 118;
   const width = (value: number) => 1 + (value / (scaleMax || 1)) * 9;
@@ -64,6 +67,18 @@ function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: stri
     ["双向合计", amount(partner.total)],
   ];
   if (!top.length) return <p role="status">{countryLabel(country)} 在该年没有贸易伙伴数据。</p>;
+  const current = Math.min(activeIndex, top.length - 1);
+  const onKeyDown = (event: KeyboardEvent<SVGGElement>, index: number) => {
+    let next: number | undefined;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % top.length;
+    else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + top.length) % top.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = top.length - 1;
+    if (next === undefined) return;
+    event.preventDefault();
+    setActiveIndex(next);
+    nodeRefs.current[next]?.focus();
+  };
   return (
     <div ref={wrapRef} className="hover-wrap">
       {/* The key is page text: as one SVG line it ran past the diagram's right edge. */}
@@ -88,11 +103,13 @@ function EgoNetwork({ country, partners, colorIndex, scaleMax }: { country: stri
           const ex = x - Math.cos(angle) * trim, ey = y - Math.sin(angle) * trim;
           return (
             <g key={partner.c} data-partner={partner.c}
-              role="graphics-symbol" tabIndex={0}
-              aria-label={`伙伴 ${countryLabel(partner.c)}（${REGIONS[REGION_OF[partner.c] ?? 5]}）：流出 ${amount(partner.outflow)}，流入 ${amount(partner.inflow)}`}
+              ref={(node) => { nodeRefs.current[index] = node; }}
+              role="graphics-symbol" tabIndex={index === current ? 0 : -1}
+              aria-label={`${countryLabel(country)}的伙伴 ${index + 1}/${top.length}：${countryLabel(partner.c)}（${REGIONS[REGION_OF[partner.c] ?? 5]}）：流出 ${amount(partner.outflow)}，流入 ${amount(partner.inflow)}；方向键切换伙伴`}
               onMouseMove={(event) => show(event, linesFor(partner))}
               onMouseLeave={hide}
-              onFocus={(event) => showFor(event.currentTarget, linesFor(partner))}
+              onKeyDown={(event) => onKeyDown(event, index)}
+              onFocus={(event) => { setActiveIndex(index); showFor(event.currentTarget, linesFor(partner)); }}
               onBlur={hide}
               style={{ cursor: "pointer" }}>
               <line x1={sx + nx} y1={sy + ny} x2={ex + nx} y2={ey + ny} stroke={CAT[0]} strokeWidth={width(partner.outflow)} strokeOpacity={0.8} markerEnd={`url(#ego-out-${country})`} />
@@ -192,8 +209,10 @@ export function TradePartners({ meta, countries, year, onYear }: {
           return (
             <section key={country} className="comparison-facet">
               <h4>{countryLabel(country)} · {current.year} · 主要贸易伙伴</h4>
-              <EgoNetwork country={country} partners={partners} colorIndex={index} scaleMax={scaleMax} />
+              {/* Keyed by year: a readout left open must not show last year's flows. */}
+              <EgoNetwork key={current.year} country={country} partners={partners} colorIndex={index} scaleMax={scaleMax} />
               <Butterfly
+                key={`${current.year}:${limit}`}
                 title={`${countryLabel(country)} 伙伴榜`}
                 unit="百万美元"
                 leftLabel="进口（从该伙伴买入）"

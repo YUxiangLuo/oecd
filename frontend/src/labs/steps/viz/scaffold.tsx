@@ -329,3 +329,9 @@ export function YearSelect({ years, year, onChange }: { years: number[]; year: n
     </span>
   );
 }
+
+/** Steps 6–9: one muted line under any chart that reads 2020; the report carries the full caveat. */
+export const YEAR_2020_NOTE = "2020 年为现价且受疫情期外推影响，跨年比较请谨慎。";
+export function Year2020Note() {
+  return <p className="muted viz-year-note">{YEAR_2020_NOTE}</p>;
+}

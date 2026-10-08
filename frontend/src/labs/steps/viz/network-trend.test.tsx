@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { api } from "../../../api";
 import type { IndustryPage, Meta } from "../../../types";
 import { NetworkTrend, networkTrendPoints } from "./network-trend";
+import { networkRanking } from "./network-ranking";
 import type { VizObservation } from "./scaffold";
 
 afterEach(() => { cleanup(); mock.restore(); });
@@ -190,4 +191,71 @@ test("one economy alone records against the same-industry reference", async () =
   fireEvent.click(screen.getByRole("button", { name: "添加" }));
   await waitFor(() => expect(save.mock.calls.at(-1)![0]).toEqual(["CHN", "USA", "DEU"]));
   expect(screen.getByLabelText("当前图表范围").textContent).toContain("CHN 中国、USA 美国、DEU 德国");
+});
+
+test("an all-zero trend (an industry with no output) is refused with a reason and keeps the earlier material", async () => {
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => ({
+    ...page([]), rows: [
+      { ...row(country, year, 5), "weighted degree": country === "CHN" ? 80 + year : 15 + year },
+      { ...row(country, year, 0, "C27"), "weighted degree": 0 },
+    ],
+  }));
+  mockReference();
+  const save = mock((_countries: string[], _observations: VizObservation[]) => {});
+  const props = { meta, initialCountry: "CHN", onRecord: save };
+  const { rerender } = render(<NetworkTrend {...props} />);
+  await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+  const useful = save.mock.calls[0][1];
+  rerender(<NetworkTrend {...props} observations={useful} />);
+  fireEvent.change(screen.getByLabelText("行业"), { target: { value: "C27" } });
+  const material = screen.getByRole("region", { name: "步骤9报告材料" });
+  await waitFor(() => expect(material.textContent).toContain("全部为 0"));
+  expect(material.textContent).toContain("没有可比较的差别");
+  expect(material.textContent).toContain("已记录的材料保持不变");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(save).toHaveBeenCalledTimes(1);
+  // Every value equal but not zero is refused as well.
+  fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
+  fireEvent.change(screen.getByLabelText("行业"), { target: { value: "C26" } });
+  await waitFor(() => expect(material.textContent).toContain("相同（都是 5）"));
+  expect(save).toHaveBeenCalledTimes(1);
+});
+
+test("the update note names the indicator and goes when the chart can no longer be recorded", async () => {
+  spyOn(api, "industryIndicatorsAll").mockImplementation(async (year, country) => ({
+    ...page([]), rows: [{ ...row(country, year, country === "CHN" ? 7 : 3), "weighted degree": country === "CHN" ? 80 + year : 15 + year }],
+  }));
+  mockReference();
+  const save = mock((_countries: string[], _observations: VizObservation[]) => {});
+  const props = { meta, initialCountry: "CHN", onRecord: save };
+  const { rerender } = render(<NetworkTrend {...props} />);
+  await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+  rerender(<NetworkTrend {...props} observations={save.mock.calls[0][1]} />);
+  expect(document.querySelector(".scope-flash")).toBeNull();
+  fireEvent.change(screen.getByLabelText("网络指标"), { target: { value: "betweenesscentrality" } });
+  await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+  rerender(<NetworkTrend {...props} observations={save.mock.calls[1][1]} />);
+  expect(document.querySelector(".scope-flash")?.textContent).toContain("报告材料已更新为：历年变化 · C26 计算机电子光学 · betweenesscentrality · 6 条读数");
+  // An exploration view records nothing: the note about the trend must not stay beside it.
+  fireEvent.click(screen.getByRole("button", { name: "流量与路径" }));
+  expect(document.querySelector(".scope-flash")).toBeNull();
+});
+
+test("path metrics of an industry that reaches no other industry are undefined, not 0", async () => {
+  const rows = [
+    { country: "CHN", year: 2020, industry: "C26", Eccentricity: 0, closnesscentrality: 0, betweenesscentrality: 0 },
+    { country: "USA", year: 2020, industry: "C26", Eccentricity: 2, closnesscentrality: 0.4, betweenesscentrality: 0 },
+    { country: "CHN", year: 2020, industry: "C27", Eccentricity: 3, closnesscentrality: 0.3, betweenesscentrality: 0 },
+    { country: "USA", year: 2020, industry: "C27", Eccentricity: 0, closnesscentrality: 0, betweenesscentrality: 0 },
+  ];
+  expect(networkTrendPoints(rows, [2020], ["CHN", "USA"], "C26", "Eccentricity")).toEqual([
+    { country: "CHN", year: 2020, value: null, undefined: true },
+    { country: "USA", year: 2020, value: 2 },
+  ]);
+  // Betweenness 0 is a real zero.
+  expect(networkTrendPoints(rows, [2020], ["CHN"], "C26")).toEqual([{ country: "CHN", year: 2020, value: 0 }]);
+  // Country A's undefined industry is not ranked; a comparison country's undefined value is marked.
+  expect(networkRanking(rows, 2020, ["CHN", "USA"], "closnesscentrality", 10)).toEqual([
+    { industry: "C27", values: [0.3, null], undefinedAt: [false, true] },
+  ]);
 });

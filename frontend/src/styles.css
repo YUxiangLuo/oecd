@@ -964,6 +964,9 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
 
 /* 图表下方的当前指标一句话定义。 */
 .viz-metric-desc { margin: 8px 0 0; font-size: 12px; line-height: 1.6; }
+/* Steps 6–9: the short 2020 caveat under a chart that reads 2020; the 5-country limit beside the country controls. */
+.viz-year-note { margin: 8px 0 0; font-size: 12px; line-height: 1.6; }
+.add-country-limit { font-size: 12px; white-space: normal; }
 /* ChartStory：图上只留“看什么”，怎么读、试着观察与口径提醒收进同一个折叠。 */
 .chart-story-guide > summary { cursor: pointer; color: #4b47e0; font-size: 12px; font-weight: 600; }
 /* 第 10–14 步：参考性说明（税率设定、区间读法、样本与限制）统一收进一个折叠。 */

@@ -86,6 +86,20 @@ describe("dumbbell and butterfly", () => {
     expect(screen.getByRole("status").textContent).toContain("卖出占比");
     expect(screen.getByRole("status").textContent).toContain("25.000%");
   });
+
+  test("butterfly rows without pick buttons are one Tab stop; the arrow keys move between rows", () => {
+    const rows = ["JPN", "USA", "DEU"].map((key, i) => ({ key, label: key, left: 10 + i, right: 20 + i }));
+    render(<Butterfly rows={rows} leftLabel="进口" rightLabel="出口" unit="百万美元" title="CHN 伙伴榜" />);
+    const groups = screen.getAllByRole("group");
+    expect(groups.map((group) => group.tabIndex)).toEqual([0, -1, -1]);
+    fireEvent.keyDown(groups[0], { key: "ArrowDown" });
+    expect(document.activeElement).toBe(groups[1]);
+    expect(groups.map((group) => group.tabIndex)).toEqual([-1, 0, -1]);
+    fireEvent.keyDown(groups[1], { key: "End" });
+    expect(document.activeElement).toBe(groups[2]);
+    // Each row names its panel, so two countries' rows do not read the same.
+    expect(groups[2].getAttribute("aria-label")).toContain("CHN 伙伴榜 · DEU");
+  });
 });
 
 test("side-by-side dumbbells given one domain draw the same axis", () => {

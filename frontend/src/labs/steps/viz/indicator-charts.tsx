@@ -62,6 +62,7 @@ export function TrendSummary({
   distribution = [],
   sameIndustry = false,
   digits,
+  metricLabel,
 }: {
   readings: ComparisonReading[];
   countries: string[];
@@ -72,13 +73,17 @@ export function TrendSummary({
   distribution?: YearDistribution[];
   /** Step 9: the reference is the same industry in every economy. */
   sameIndustry?: boolean;
+  /** The indicator the cards read, where no chart title names it (历年构成: 外国增加值项占比, 后向复杂 GVC 生产份额). */
+  metricLabel?: string;
 }) {
   const value = (country: string, year: number) =>
     readings.find((item) => item.country === country && item.year === year)?.value ?? null;
   const [first, ...others] = countries;
   const own = years.filter((year) => value(first, year) !== null);
   if (own.length < 2) {
-    return <p className="muted">有效年份不足，暂不能读出期间变化。</p>;
+    return <p className="muted">{own.length
+      ? `${countryLabel(first)}在所选年份只有 ${own[0]} 年有读数，暂不能读出期间变化。`
+      : `${countryLabel(first)}在所选年份没有读数，暂不能读出期间变化。`}</p>;
   }
   const firstYear = own[0];
   const lastYear = own.at(-1)!;
@@ -122,7 +127,7 @@ export function TrendSummary({
   return (
     <div className="comparison-summary" role="group" aria-label="趋势读数">
       <div>
-        <span>{countryLabel(first)} · {firstYear}→{lastYear}</span>
+        <span>{countryLabel(first)} · {metricLabel ? `${metricLabel} · ` : ""}{firstYear}→{lastYear}</span>
         <b>{changeReading(start, end, unit, digits)}</b>
         <small>{fixedIndicatorNumber(start, unit, digits)} → {fixedIndicatorNumber(end, unit, digits)}</small>
       </div>
@@ -244,7 +249,10 @@ export function IndicatorTrendChart({
   stepped = false,
   gapNote,
   digits,
+  emptyReading,
 }: {
+  /** Replaces "缺失" in the readout where a value is undefined rather than missing (step 9: no outgoing links). */
+  emptyReading?: (country: string, year: number) => string | null;
   rows: Row[];
   countries: string[];
   years: number[];
@@ -269,7 +277,7 @@ export function IndicatorTrendChart({
   digits?: number;
 }) {
   const context = mode === "context";
-  const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
+  const { wrapRef, Tip, show, showNear, hide } = useHoverTip();
   const [activeYear, setActiveYear] = useState<number | null>(null);
   const [focusSeries, setFocusSeries] = useState<string | null>(null);
   const series = countries.map((country) =>
@@ -339,7 +347,10 @@ export function IndicatorTrendChart({
       ["", `${year} 年`],
       ...countries.map((country, index): TipLine => [
         index && context ? `${countryLabel(country)}（对比）` : countryLabel(country),
-        indicatorNumber(series[index].find((point) => point.year === year)?.value ?? null, unit, digits),
+        (() => {
+          const value = series[index].find((point) => point.year === year)?.value ?? null;
+          return value === null ? emptyReading?.(country, year) ?? indicatorNumber(null, unit) : indicatorNumber(value, unit, digits);
+        })(),
         CAT[index],
         // Keys match the drawn lines: comparison countries and the median are dashed.
         index > 0,
@@ -367,7 +378,8 @@ export function IndicatorTrendChart({
     if (next === undefined) return;
     event.preventDefault();
     setActiveYear(next);
-    showFor(event.currentTarget, linesFor(next));
+    // Beside the year being read, not under the whole chart (where the fixed step footer could cover it).
+    showNear(event.currentTarget.querySelector(`rect[data-year="${next}"]`) ?? event.currentTarget, linesFor(next));
   };
   const dim = (country: string) => (focusSeries && focusSeries !== country ? 0.25 : 1);
   return (
@@ -851,7 +863,7 @@ export function LengthPositionTrajectory({
     <section aria-label="前后向 GVC 段长度位置轨迹">
       <h4>前向与后向 GVC 段长度的历年轨迹</h4>
       <p className="muted">
-        横轴是后向 GVC 段长度，纵轴是前向 GVC 段长度；箭头从较早年份指向较晚年份。等长线上方表示前向段相对更长。
+        横轴是后向 GVC 段长度，纵轴是前向 GVC 段长度；每条线从较早年份（空心点）连到较晚年份（实心点）。等长线上方表示前向段相对更长。
       </p>
       {/* The legend sits above the plot in HTML: drawn inside the SVG, its third and later rows ran into the plot. */}
       <div className="trajectory-legend" style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px", fontSize: 12, color: "#374151", margin: "4px 0 6px" }}>
@@ -863,7 +875,7 @@ export function LengthPositionTrajectory({
             onMouseEnter={() => setFocusSeries(countries[index])}
             onMouseLeave={() => setFocusSeries(null)}
           >
-            <svg width={30} height={10} aria-hidden="true"><line x1={0} x2={20} y1={5} y2={5} stroke={CAT[index]} strokeWidth={2.5} /><path d="M20,1 L28,5 L20,9 z" fill={CAT[index]} /></svg>
+            <svg width={30} height={10} aria-hidden="true"><line x1={0} x2={24} y1={5} y2={5} stroke={CAT[index]} strokeWidth={2.5} /><circle cx={25} cy={5} r={4} fill={CAT[index]} /></svg>
             {countryLabel(countries[index])}{points.length ? ` · ${points[0].year}→${points.at(-1)!.year}` : ""}
           </span>
         ))}
@@ -884,13 +896,6 @@ export function LengthPositionTrajectory({
         aria-label={`前向与后向 GVC 段长度历年轨迹，${joinCountries(countries)}`}
         style={{ width: "100%", maxWidth: 680, display: "block", margin: "0 auto" }}
       >
-        <defs>
-          {countries.map((country, index) => (
-            <marker key={country} id={`length-arrow-${index}`} markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="8" refX="11" refY="4" orient="auto" viewBox="0 0 12 8">
-              <path d="M0,0 L8,4 L0,8 z" fill={CAT[index]} />
-            </marker>
-          ))}
-        </defs>
         {axis.ticks.map((tickValue) => {
           return <g key={tickValue}>
             <line x1={120} x2={660} y1={y(tickValue)} y2={y(tickValue)} stroke="#e2e5ee" />
@@ -901,7 +906,7 @@ export function LengthPositionTrajectory({
         })}
         {shownCloud.map((point) => (
           <g key={`cloud-${point.country}`} data-cloud={point.country}
-            onMouseMove={(event) => { setActive(null); show(event, [["", `${countryLabel(point.country)} · ${cloudYear ?? ""}`], ["后向 GVC 段长度", stage(point.x)], ["前向 GVC 段长度", stage(point.y)]]); }}
+            onMouseMove={(event) => { setActive(null); show(event, linesFor(point.country, { year: cloudYear ?? 0, x: point.x, y: point.y }).map((line, at) => (at === 0 && cloudYear == null ? ["", countryLabel(point.country)] : line))); }}
             onMouseLeave={hide}>
             <circle cx={x(point.x)} cy={y(point.y)} r={7} fill="transparent" />
             <circle cx={x(point.x)} cy={y(point.y)} r={3} fill="#9aa3b5" fillOpacity={0.55} />
@@ -927,7 +932,7 @@ export function LengthPositionTrajectory({
               const key = `${countries[countryIndex]}:${point.year}`;
               const lines = linesFor(countries[countryIndex], point);
               return <g key={point.year}>
-                {connectsToNext && <line data-series={countries[countryIndex]} x1={x(point.x)} y1={y(point.y)} x2={x(next.x)} y2={y(next.y)} stroke={CAT[countryIndex]} strokeWidth={2.5} markerEnd={index === points.length - 2 ? `url(#length-arrow-${countryIndex})` : undefined} />}
+                {connectsToNext && <line data-series={countries[countryIndex]} x1={x(point.x)} y1={y(point.y)} x2={x(next.x)} y2={y(next.y)} stroke={CAT[countryIndex]} strokeWidth={2.5} />}
                 <g
                   data-hit={key}
                   tabIndex={endpoint ? 0 : undefined}
@@ -964,16 +969,19 @@ export function IndicatorPairBars({
   unit,
   onPick,
 }: {
-  groups: { key: string; label: string; values: (number | null)[] }[];
+  /** `reasons[i]` replaces "缺失" for a value that is undefined rather than missing ("无法计算"). */
+  groups: { key: string; label: string; values: (number | null)[]; reasons?: (string | null)[] }[];
   countries: string[];
   unit: string;
   onPick?: (key: string) => void;
 }) {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   const [hovered, setHovered] = useState<string | null>(null);
-  const linesFor = (group: { label: string; values: (number | null)[] }): TipLine[] => [
+  const reading = (group: { values: (number | null)[]; reasons?: (string | null)[] }, index: number) =>
+    group.values[index] === null && group.reasons?.[index] ? group.reasons[index]! : indicatorNumber(group.values[index], unit);
+  const linesFor = (group: { label: string; values: (number | null)[]; reasons?: (string | null)[] }): TipLine[] => [
     ["", group.label],
-    ...group.values.map((value, index): TipLine => [countryLabel(countries[index]), indicatorNumber(value, unit), CAT[index]]),
+    ...group.values.map((_, index): TipLine => [countryLabel(countries[index]), reading(group, index), CAT[index]]),
   ];
   const values = groups.flatMap((group) => group.values.filter(finiteValue));
   const lo = Math.min(0, ...values),
@@ -1049,7 +1057,7 @@ export function IndicatorPairBars({
                   fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {indicatorNumber(value, unit)}
+                {reading(group, i)}
               </span>
             </div>
           ))}
