@@ -40,10 +40,12 @@ export const INDICATOR_TABLE_DISPLAY = {
 } as const satisfies Readonly<Record<IndicatorGroupKey, readonly string[]>>;
 
 export const INDICATOR_IDENTIFIER_COLUMNS = ["country", "industry", "year"] as const;
+/** Identifier columns read as text: left-aligned, unlike the numeric indicator columns. */
+const TEXT_COLUMNS = new Set<string>(INDICATOR_IDENTIFIER_COLUMNS);
 
 export const NETWORK_TABLE_SORT_OPTIONS: ReadonlyArray<{ value: NetworkTableSortMetric; label: string }> = [
-  { value: "betweenesscentrality", label: "网络介数（全正边二值，降序）" },
-  { value: "weighted degree", label: "加权总度（入+出）" },
+  { value: "weighted degree", label: "加权度降序（加权总度，入+出）" },
+  { value: "betweenesscentrality", label: "介数降序（全正边二值网络）" },
 ];
 
 export function indicatorRequestKey(year: number, country: string, page: number): string {
@@ -59,9 +61,10 @@ export function indicatorMetricColumns(
   if (!row) return [];
   const rowKeys = new Set(Object.keys(row));
   const available = groupFields.filter((field) => rowKeys.has(field));
-  if (expanded) return available;
   const availableSet = new Set(available);
-  return INDICATOR_TABLE_DISPLAY[groupKey].filter((field) => availableSet.has(field));
+  const core: string[] = INDICATOR_TABLE_DISPLAY[groupKey].filter((field) => availableSet.has(field));
+  // Expanding appends the extra indicators after the core ones, so the core columns keep their places.
+  return expanded ? [...core, ...available.filter((field) => !core.includes(field))] : core;
 }
 
 export function indicatorTableColumns(
@@ -332,6 +335,7 @@ export function IndicatorDataTable({
               key={column}
               scope="col"
               title={schema?.fields[column]?.desc ?? BASE_DESC[column]}
+              className={TEXT_COLUMNS.has(column) ? "text-col" : undefined}
               style={index === 0 ? { position: "sticky", left: 0, zIndex: 3, background: "#fafbfd" } : undefined}
             >
               {fieldLabel(column, schema)}{schema?.fields[column]?.desc ? " ⓘ" : ""}
@@ -355,7 +359,7 @@ export function IndicatorDataTable({
                   {content}
                 </th>
               ) : (
-                <td key={column} style={stickyStyle}>{content}</td>
+                <td key={column} className={TEXT_COLUMNS.has(column) ? "text-col" : undefined} style={stickyStyle}>{content}</td>
               );
             })}
           </tr>
@@ -438,6 +442,7 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
           )}
         </LabeledControl>
         <span className="muted">{countLabel}</span>
+        {!country && <span className="muted">“全部”含世界其他地区 ROW（会计余项，不能单独选择）。</span>}
       </div>
 
       {groupKey === "network" && (
@@ -473,9 +478,11 @@ export function IndicatorTable({ meta, groupKey, schema, state, year, country, p
       >
           {allMetricCount > defaultMetricCount && (
             <div className="table-priority-tools">
-              <span className="muted">默认显示本任务要求的 {defaultMetricCount} 个核心指标。</span>
-              <button type="button" className="secondary" onClick={toggleAllFields}>
-                {showAllFields ? "收起扩展指标" : `展开 ${allMetricCount - defaultMetricCount} 个扩展指标`}
+              <span className="muted">{showAllFields
+                ? `已展开全部 ${allMetricCount} 个指标（前 ${defaultMetricCount} 个为本任务要求的核心指标）。`
+                : `默认显示本任务要求的 ${defaultMetricCount} 个核心指标。`}</span>
+              <button type="button" className="secondary" aria-expanded={showAllFields} onClick={toggleAllFields}>
+                {showAllFields ? "收起扩展指标" : `展开 ${allMetricCount - defaultMetricCount} 个扩展指标（全屏查看）`}
               </button>
             </div>
           )}

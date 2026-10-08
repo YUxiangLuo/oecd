@@ -131,7 +131,7 @@ INDICATOR_SCHEMA = {
 
 _INDICATOR_DESCRIPTIONS = {
     "gross_exports": "五类 WWZ 聚合项与 OECD TLS（产品税减补贴）扩展项之和；这是 VA+TLS 账户闭合口径，不表示 taxsub 就是关税，也不是 WWZ 原文分解项。",
-    "FVA_share": "WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 总出口的比重；不是总出口全部外国增加值含量。同一纯 VA 口径下全部外国含量为 FVA+FDC；OECD TiVA 另将相关 TLS 计入 VA，所以本指标不能当作官方 EXGR_FVASH。",
+    "FVA_share": "WWZ 分解的 FVA（不含外国重复计算 FDC）占 VA+TLS 总出口的比重；不是总出口的全部外国含量。在不含 TLS 的口径下，全部外国含量 = FVA（外国增加值）+ FDC（外国重复计算，不是增加值）；OECD TiVA 另将相关 TLS 计入 VA，所以本指标不能当作官方 EXGR_FVASH。",
     "DVAex_share": "被国外最终吸收的国内增加值占 VA+TLS 账户闭合总出口的比重；越高表示出口中由本国创造且最终被国外吸收的价值构成更高。",
     "3_VA_GVC_share": "通过中间品跨境参与 GVC 的增加值占总增加值 SVA 的比重。",
     "3_FGY_GVC_share": "最终品生产 FGY 中经中间品跨境（GVC）的增加值所占比重，即从最终品回溯的后向 GVC 参与度。",
@@ -139,7 +139,7 @@ _INDICATOR_DESCRIPTIONS = {
     "DVAex": "由本国创造、随出口离境并最终被国外吸收的增加值。",
     "DVArt": "随出口离境后又返回本国并在本国最终吸收的国内增加值。",
     "DDC": "本国增加值在跨境生产链中多次计入毛流量形成的国内重复计算。",
-    "FVA": "WWZ 第 11–14 项聚合的外国增加值，不含第 15–16 项外国纯重复计算 FDC。总出口的外国纯 VA 总含量为 FVA+FDC；OECD TiVA 的 VA 还含相关 TLS，因此不可与 EXGR_FVA 混称。",
+    "FVA": "WWZ 第 11–14 项聚合的外国增加值，不含第 15–16 项外国纯重复计算 FDC。在不含 TLS 的口径下，总出口的全部外国含量 = FVA + FDC（FDC 是重复计算，不是增加值）；OECD TiVA 的 VA 还含相关 TLS，因此不可与 EXGR_FVA 混称。",
     "FDC": "外国增加值在跨境生产链中多次计入毛流量形成的重复计算。",
     "taxsub": "由 OECD ICIO 的 TLS 账户沿投入产出链计算的出口税收减补贴含量；这是本系统为匹配 OECD 账户口径加入的扩展项，不是 WWZ 原文分解项。负值表示沿供应链累计后呈净补贴。",
     "EXDVA": "WWZ 不含国内纯重复计算 DDC 的国内增加值合计，等于 DVAex+DVArt；不要混称为 OECD 总出口国内 VA 总含量。",

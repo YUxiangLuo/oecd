@@ -491,6 +491,7 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
   font-weight: 600; font-size: 11.5px; border-bottom: 1px solid #eef0f5; white-space: nowrap;
 }
 .data-table th:first-child, .data-table td:first-child { text-align: left; }
+.data-table th.text-col, .data-table td.text-col { text-align: left; }
 .data-table td {
   text-align: right; padding: 9px 12px; border-bottom: 1px solid #f4f5f8;
   font-variant-numeric: tabular-nums; white-space: nowrap;
@@ -586,11 +587,12 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 .fullscreen-panel--table.fullscreen-panel--expanded .bounded-data-table {
   flex: 1 1 240px; min-height: 180px; max-height: none;
 }
-.fullscreen-panel--table.fullscreen-panel--expanded .data-table thead th {
+/* 有界滚动表（全屏与否）都固定列名：表在自己的 540px 滚动盒里滚动，列名滚走就读不出数。 */
+.bounded-data-table .data-table thead th {
   position: sticky; top: 0; z-index: 3; background: #fafbfd;
   box-shadow: inset 0 -1px #e8eaf0;
 }
-.fullscreen-panel--table.fullscreen-panel--expanded .data-table thead th:first-child { z-index: 5 !important; }
+.bounded-data-table .data-table thead th:first-child { z-index: 5 !important; }
 .fullscreen-panel--table.fullscreen-panel--expanded .db-fullscreen-note { display: none; }
 
 /* 可视化大图保留镜头、年份和国家选择器；两栏占满扣除工具栏后的高度。 */
@@ -786,8 +788,10 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
 
 /* 表头方向标注：角标双行写全行/列角色，列数据区上方横跨带声明列轴（角色+当前列国家），
    让两个轴在表内自我声明，不再依赖角标归属推断。行轴用供给绿、列轴用使用蓝紫做色彩分区。 */
-.db-table { --db-axis-row-h: 40px; }
-.db-table thead tr.db-axis-row th { height: var(--db-axis-row-h); }
+/* separate + 0 间距：第一层表头的实际高度正好等于 --db-axis-row-h，第二层贴在它下面不留缝
+   （collapse 下边框折叠使第一层矮约 5px，滚动时数字会从缝里透出）。 */
+.db-table { --db-axis-row-h: 40px; border-collapse: separate; border-spacing: 0; }
+.db-table thead tr.db-axis-row th { height: var(--db-axis-row-h); box-sizing: border-box; }
 .db-axis-corner { line-height: 1.3; padding: 5px 10px !important; }
 .db-axis-corner-row, .db-axis-corner-col { display: block; font-size: 11px; white-space: nowrap; font-weight: 700; }
 .db-axis-corner-row { color: #116b5a; }
@@ -803,11 +807,11 @@ button.primary:disabled, button.secondary:disabled { opacity: 0.45; cursor: defa
    .data-table th:first-child 的左对齐——那是给角标与行标签的，列名必须跟它自己的数字同锚点。 */
 .db-table thead tr:last-child th:first-child { text-align: right; }
 .db-table tbody th[scope="row"] { background: #f2f8f7; }
-/* 全屏时两层表头各自 sticky：第一层贴顶，第二层偏移一个层高，避免互相覆盖。 */
-.fullscreen-panel--table.fullscreen-panel--expanded .db-table thead tr:nth-child(2) th {
+/* 两层表头各自 sticky：第一层贴顶，第二层偏移一个层高，避免互相覆盖。 */
+.bounded-data-table .db-table thead tr:nth-child(2) th {
   top: var(--db-axis-row-h);
 }
-.fullscreen-panel--table.fullscreen-panel--expanded .db-table thead tr.db-axis-row th:first-child {
+.bounded-data-table .db-table thead tr.db-axis-row th:first-child {
   z-index: 6 !important;
 }
 .db-observation-cell {

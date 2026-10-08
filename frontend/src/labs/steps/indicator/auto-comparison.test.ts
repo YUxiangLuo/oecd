@@ -123,3 +123,31 @@ describe("recording under the report lock", () => {
     }
   });
 });
+
+describe("step 5 “全部” browsing", () => {
+  test("recording keeps the table's own country instead of replacing “全部” with the recorded one", async () => {
+    const rows = spyOn(api, "countryIndicators").mockResolvedValue([
+      { country: "CHN", "weighted degree": 12 },
+      { country: "USA", "weighted degree": 9 },
+    ] as never);
+    const metaWithRelease = { countries: ["CHN", "USA"], dataset: { release_id: "rel-1" } } as unknown as Meta;
+    const saves: Record<string, unknown>[] = [];
+    const Probe = () => {
+      useAutoComparison({
+        topic: "network", meta: metaWithRelease, country: "CHN", partner: "", year: 2020, browseCountry: "",
+        schema: { status: "success", data: { groups: [], fields: { "weighted degree": { format: "amount" } } } as never },
+        state: { data: undefined, save: (patch: Record<string, unknown>) => { saves.push(patch); }, complete: false, syncing: false, syncError: null, syncNow: () => {} } as never,
+      });
+      return null;
+    };
+    try {
+      render(createElement(Probe));
+      await waitFor(() => expect(saves).toHaveLength(1));
+      expect(saves[0].country).toBe("");
+      expect(saves[0].compared).toEqual(["CHN", "USA"]);
+    } finally {
+      cleanup();
+      rows.mockRestore();
+    }
+  });
+});

@@ -12,16 +12,16 @@ import { cjkJoin } from "../../format";
 import { fmtDb, Pager, useAsync } from "../shared";
 
 const DB_TABLES: { key: DbTableKind; label: string; hint: string }[] = [
-  { key: "z", label: "中间投入 Z", hint: "供给国-行业(行) × 使用国-行业(列)" },
-  { key: "y", label: "最终需求 Y", hint: "供给国-行业(行) × 目的国需求类别(列)" },
+  { key: "z", label: "中间投入 Z", hint: "供给国-行业（行） × 使用国-行业（列）" },
+  { key: "y", label: "最终需求 Y", hint: "供给国-行业（行） × 目的国需求类别（列）" },
   { key: "accounts", label: "账户项", hint: "TLS / VA / OUT 转置为国家-行业行" },
 ];
 
 /** 首列表头。后端返回的列名就是字面的 "row",直接显示对学生没有信息量。 */
 const ROW_HEADER: Record<DbTableKind, { label: string; title: string }> = {
-  z: { label: "供给国×行业(行)", title: "每一行是提供中间投入的一方:某国某行业" },
-  y: { label: "供给国×行业(行)", title: "每一行是提供最终产品的一方:某国某行业" },
-  accounts: { label: "国家×行业(行)", title: "每一行是一个国家×行业;列为该行业的账户项" },
+  z: { label: "供给国×行业（行）", title: "每一行是提供中间投入的一方：某国某行业" },
+  y: { label: "供给国×行业（行）", title: "每一行是提供最终产品的一方：某国某行业" },
+  accounts: { label: "国家×行业（行）", title: "每一行是一个国家×行业；列为该行业的账户项" },
 };
 
 /** 角标:行/列两个方向就地写全,代替容易被贴错轴的单一句子。
@@ -35,9 +35,9 @@ const AXIS_CORNER: Record<DbTableKind, { row: string; col: string }> = {
 /** 列数据区上方的横跨带:角色 + 方向 + 当前选中的列国家,让列轴自我声明。 */
 function columnAxisBand(table: DbTableKind, colCountry: string): string {
   const country = colCountry ? countryLabel(colCountry) : "";
-  if (table === "z") return `使用国×行业(列)→ ${country}`;
-  if (table === "y") return `目的国×最终需求(列)→ ${country}`;
-  return "账户项(列)";
+  if (table === "z") return `使用国×行业（列）→ ${country}`;
+  if (table === "y") return `目的国×最终需求（列）→ ${country}`;
+  return "账户项（列）";
 }
 
 /** 表格怎么读:行是供给方、列是使用方——这是投入产出表最容易被看反的一点,
@@ -50,8 +50,8 @@ const HOW_TO_READ: Record<DbTableKind, string> = {
 };
 
 const ACCOUNT_HELP: Record<string, string> = {
-  TLS: "产品税减补贴。为负表示该账户合计为净补贴；步骤2 的 taxsub 是其沿投入产出链传导后的出口含量。",
-  VA: "增加值：劳动报酬、资本回报等本地创造的价值，是步骤3生产活动分解的总来源。",
+  TLS: "产品税减补贴。为负表示该账户合计为净补贴；步骤 2 的 taxsub 是其沿投入产出链传导后的出口含量。",
+  VA: "增加值：劳动报酬、资本回报等本地创造的价值，是步骤 3 的生产活动分解的总来源。",
   OUT: "总产出。两种完整恒等式为：按行 OUT = Z 行和 + Y 行和；按列 OUT = Z 列和 + VA + TLS。系统发布前已自动校验这些会计恒等式并披露诊断。",
 };
 
@@ -214,6 +214,14 @@ export function formatYColumnHeader(column: string): string {
   return name ? `${column.slice(0, sep)} ${name}` : column;
 }
 
+/** A Y column in a sentence: the destination country by name, e.g. "USA 美国·存货变化". */
+export function yColumnSentenceLabel(column: string): string {
+  const sep = column.lastIndexOf("_");
+  if (sep <= 0) return column;
+  const name = FD_NAMES[column.slice(sep + 1)];
+  return name ? `${countryLabel(column.slice(0, sep))}·${name}` : column;
+}
+
 export function restoreDbSlice(meta: DbMeta, saved?: DbStepState["slice"]) {
   if (!saved || !meta.years.includes(saved.year)) return null;
   const table = DB_TABLES.some((item) => item.key === saved.table)
@@ -298,7 +306,9 @@ export function normalizeDbActiveCell(
   return recorded || cells[0] || null;
 }
 
-export type DbCellNavigationKey = "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | "Home" | "End";
+export type DbCellNavigationKey = "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" | "Home" | "End" | "PageUp" | "PageDown";
+export const DB_CELL_NAVIGATION_KEYS: readonly string[] = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"];
+const DB_PAGE_ROWS = 10;
 
 /** Resolve one roving-focus movement without wrapping across row boundaries. */
 export function moveDbCell(
@@ -321,11 +331,14 @@ export function moveDbCell(
     const index = row.findIndex((cell) => cell.key === current.key);
     return row[index + (key === "ArrowLeft" ? -1 : 1)] || current;
   }
+  const up = key === "ArrowUp" || key === "PageUp";
   const candidates = cells.filter((cell) => (
     cell.columnIndex === current.columnIndex
-    && (key === "ArrowUp" ? cell.rowIndex < current.rowIndex : cell.rowIndex > current.rowIndex)
+    && (up ? cell.rowIndex < current.rowIndex : cell.rowIndex > current.rowIndex)
   ));
-  return (key === "ArrowUp" ? candidates.at(-1) : candidates[0]) || current;
+  if (key === "PageUp") return candidates.at(-DB_PAGE_ROWS) || candidates[0] || current;
+  if (key === "PageDown") return candidates[DB_PAGE_ROWS - 1] || candidates.at(-1) || current;
+  return (up ? candidates.at(-1) : candidates[0]) || current;
 }
 
 export function dbCellAccessibleName(
@@ -403,10 +416,10 @@ export function dbObservationSentence(table: DbTableKind, row: string, column: s
   const rowLabel = rowColumnCodeHelp(row) ?? row;
   if (table === "accounts") return `${rowLabel} 的 ${column}${ACCOUNT_SHORT[column] ? `（${ACCOUNT_SHORT[column]}）` : ""}`;
   if (table === "y") {
-    return `${rowLabel}(行·供给方) → ${formatYColumnHeader(column)}(列·最终需求)`;
+    return `${rowLabel}（行·供给方） → ${yColumnSentenceLabel(column)}（列·最终需求）`;
   }
   const colLabel = rowColumnCodeHelp(column) ?? column;
-  return `${rowLabel}(行·供给方) → ${colLabel}(列·使用方)`;
+  return `${rowLabel}（行·供给方） → ${colLabel}（列·使用方）`;
 }
 
 export function DbSliceTable({
@@ -444,8 +457,12 @@ export function DbSliceTable({
     : undefined;
   const activeCell = normalizeDbActiveCell(cells, requestedKey, capturedForSlice);
   const dataColumns = columns.filter((column) => column !== "row");
+  const absValue = (row: (typeof rows)[number], column: string) => Math.abs(typeof row[column] === "number" ? row[column] : 0);
+  // Shading compares cells within a row; a one-column slice has nothing to compare along the row, so its
+  // cells are shaded against the column instead (otherwise every cell is its own row's maximum).
+  const columnHeatMax = Math.max(...rows.flatMap((row) => dataColumns.map((column) => absValue(row, column))), 0);
   const rowHeatMax = rows.map((row) => (
-    Math.max(...dataColumns.map((column) => Math.abs(typeof row[column] === "number" ? row[column] : 0)), 0)
+    dataColumns.length < 2 ? columnHeatMax : Math.max(...dataColumns.map((column) => absValue(row, column)), 0)
   ));
   const columnTotals = Object.fromEntries(dataColumns.map((column) => [
     column,
@@ -564,7 +581,7 @@ export function DbSliceTable({
                         title={dbCellTooltip(table, rowLabel, column, numericValue)}
                         onFocus={() => setRoving({ scope: focusScopeKey, key: cell.key })}
                         onKeyDown={(event) => {
-                          if (!(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"] as string[]).includes(event.key)) return;
+                          if (!DB_CELL_NAVIGATION_KEYS.includes(event.key)) return;
                           event.preventDefault();
                           const next = moveDbCell(cells, cell.key, event.key as DbCellNavigationKey, event.ctrlKey);
                           if (next) focusCell(next);
@@ -799,14 +816,14 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
       </div>
 
       <div className="controls">
-        <LabeledControl label="供给国(行)">
+        <LabeledControl label={table === "accounts" ? "国家（行）" : "供给国（行）"}>
           {(id) => (
             <select id={id} value={rowCountry} onChange={(e) => pickRowCountry(e.target.value)}>
               {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
             </select>
           )}
         </LabeledControl>
-        <LabeledControl label="供给行业(行)">
+        <LabeledControl label={table === "accounts" ? "行业（行）" : "供给行业（行）"}>
           {(id) => (
             <select id={id} value={rowSector} onChange={(e) => pickRowSector(e.target.value)}>
               <option value="">全部</option>
@@ -816,14 +833,14 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
         </LabeledControl>
         {table !== "accounts" && (
           <>
-            <LabeledControl label={table === "y" ? "需求国(列)" : "使用国(列)"}>
+            <LabeledControl label={table === "y" ? "需求国（列）" : "使用国（列）"}>
               {(id) => (
                 <select id={id} value={colCountry} onChange={(e) => pickColCountry(e.target.value)}>
                   {meta.countries.map((c) => <option key={c} value={c}>{countryLabel(c)}</option>)}
                 </select>
               )}
             </LabeledControl>
-            <LabeledControl label={table === "y" ? "最终需求(列)" : "使用行业(列)"}>
+            <LabeledControl label={table === "y" ? "最终需求（列）" : "使用行业（列）"}>
               {(id) => (
                 <select id={id} value={colSector} onChange={(e) => pickColSector(e.target.value)}>
                   <option value="">全部</option>
@@ -859,7 +876,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
         {state.materialLocked && <span className="muted">{MATERIAL_LOCKED_NOTE.replace("浏览", "点击单元格")}</span>}
         {state.materialLocked && pickedCell?.observation && !sameJsonValue(pickedCell.observation, selectedObservation) && (
           <span className="db-picked">
-            你选中的：{dbObservationSentence((pickedCell.observation.table as DbTableKind | undefined) ?? table, pickedCell.observation.row, pickedCell.observation.column)} = {fmtDb(pickedCell.observation.value)} 百万美元
+            你选中的：{dbObservationSentence((pickedCell.observation.table as DbTableKind | undefined) ?? table, pickedCell.observation.row, pickedCell.observation.column)} = {fmtDb(pickedCell.observation.value)} 百万美元{observationSourceLabel(pickedCell.observation) ? `（${observationSourceLabel(pickedCell.observation)}）` : ""}
             <button type="button" className="secondary" onClick={() => { state.save(pickedCell); setPickedCell(null); }}>改为记录这一格（之后需在步骤 15 更新报告）</button>
           </span>
         )}
@@ -867,7 +884,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
       {/* One action line; the reading rules, legend and identities live in a single fold-out. */}
       <div className="db-reading db-fullscreen-note">
         <span>
-          点击任一数值即可记录{table === "accounts" ? "" : "（并全屏核对方向）"}：
+          {state.materialLocked ? "报告已提交：点击数值只会选中，确认后才改为报告材料" : "点击任一数值即可记录"}{table === "accounts" ? "" : "（并全屏核对方向）"}：
           {table === "accounts" ? "行是国家×行业，列是账户项" : `行是供给方，列是${table === "y" ? "最终需求" : "使用方"}`}；单位均为百万美元。
         </span>
         <details className="db-reading-notes">
@@ -876,7 +893,8 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
             <li><b>怎么读：</b>{HOW_TO_READ[table]}</li>
             <li><b>记录规则：</b>系统会先默认记录当前这一页中最大的一格；点击数值会改为保存你选的格子的行、列与数值；切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格，记录另一个单元格才会覆盖。</li>
             <li><b>账户与符号：</b>{STEP1_ACCOUNT_LEGEND}</li>
-            {table !== "accounts" && <li><b>恒等式：</b>{STEP1_OUT_IDENTITY_GUIDE} 差额来自未展示的国家、行业或最终需求列。</li>}
+            {table !== "accounts" && <li><b>恒等式：</b>{STEP1_OUT_IDENTITY_GUIDE}差额来自未展示的国家、行业或最终需求列。</li>}
+            <li><b>键盘：</b>Tab 进入表格后，方向键逐格移动，Home／End 到行首／行尾，Ctrl+Home／Ctrl+End 到表首／表尾，PageUp／PageDown 上下跳 10 行；Enter 或空格记录当前格。</li>
           </ul>
         </details>
       </div>

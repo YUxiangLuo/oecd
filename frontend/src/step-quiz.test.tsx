@@ -146,7 +146,7 @@ test("a late passing response saves the submitted answers without deleting a new
     expect(drafts.get(step.n)?.answers).toEqual({ q1: "b" });
     second.rerender(<QuizPanel step={step} state={{ ...state, data: saved, complete: true }} draftStore={drafts} />);
     expect((screen.getByLabelText("始终") as HTMLInputElement).checked).toBe(true);
-    expect(screen.getByText(/已保存答案已通过；当前修改尚未提交/)).not.toBeNull();
+    expect(screen.getByText(/理解题已完成；新的选择只用于自查/)).not.toBeNull();
     second.unmount();
     render(<QuizPanel step={step} state={{ ...state, data: saved, complete: true }} draftStore={drafts} />);
     expect((screen.getByLabelText("始终") as HTMLInputElement).checked).toBe(true);

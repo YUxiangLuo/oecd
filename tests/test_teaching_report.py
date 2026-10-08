@@ -788,11 +788,11 @@ def test_report_draws_one_series_per_saved_economy():
         "DEU 德国",
     ]
     assert "两国" not in section
-    assert "比较对象：CHN、USA、DEU" in "\n".join(teaching_report._experiment_sections(session))
+    assert "比较对象：CHN 中国、USA 美国、DEU 德国" in "\n".join(teaching_report._experiment_sections(session))
     data["compared"] = ["CHN"]
     data["observations"] = _economy_readings(["CHN"], years=(2019, 2020), source="explicit-indicator-trend")
     text = "\n".join(teaching_report._experiment_sections(session))
-    assert "所看国家：CHN" in text
+    assert "所看国家：CHN 中国" in text
 
 
 def test_step_seven_accepts_the_backward_composition_set():
@@ -1047,7 +1047,13 @@ def test_steps_two_to_five_accept_automatic_comparisons():
 
     # The report states honestly that the comparison was recorded by the system.
     snapshot = "\n".join(_experiment_sections(session))
-    assert "系统自动记录的比较：CHN、USA" in snapshot
+    assert "系统自动记录的比较（默认对比国家）：CHN 中国、USA 美国" in snapshot
+    assert "数值为国家级代表指标" in snapshot
+    # A comparison country the student changed is their choice, even though the page recorded it.
+    changed = json.loads(json.dumps(session))
+    changed["steps"]["2"]["data"]["compared"] = ["CHN", "DEU"]
+    step_two = "\n".join(_experiment_sections(changed)).split("### 步骤 ")[2]
+    assert "学生选定的比较（页面自动记录）：CHN 中国、DEU 德国" in step_two
 
     # Material the student recorded on request after submitting is their choice, not an automatic record;
     # the same holds for the chart material of steps 6-8.
@@ -1055,7 +1061,7 @@ def test_steps_two_to_five_accept_automatic_comparisons():
         session["steps"][str(step)]["data"]["material_chosen"] = True
     sections = "\n".join(_experiment_sections(session)).split("### 步骤 ")
     step_three = next(part for part in sections if part.startswith("3 "))
-    assert "学生选定的比较：CHN、USA" in step_three and "系统自动记录" not in step_three
+    assert "学生选定的比较：CHN 中国、USA 美国" in step_three and "系统自动记录" not in step_three
     step_six = next(part for part in sections if part.startswith("6 "))
     assert "记录的图表材料（学生选定的完整图表" in step_six and "自动记录" not in step_six
     step_seven = next(part for part in sections if part.startswith("7 "))
@@ -1577,7 +1583,7 @@ def test_report_includes_saved_experiment_snapshots_and_event_scope(tmp_path, mo
     assert "×" not in report.markdown.split("记录的单元格")[1].split("\n")[0]
     assert "年份=2020" in report.markdown
     assert "表=z" in report.markdown
-    assert "比较对象：CHN、USA" in report.markdown
+    assert "比较对象：CHN 中国、USA 美国" in report.markdown
     assert "| CHN | 2020 | 复杂 GVC 生产份额 | 比例 | 0.12 |" in report.markdown
     assert "仅用于探索定位，不限定下游回归样本" in report.markdown
     assert "按所选冲击类型汇总该类型全部已编码事件" in report.markdown

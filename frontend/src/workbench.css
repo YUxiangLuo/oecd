@@ -234,6 +234,8 @@
 .session-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
 .table-priority-tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; }
 .table-priority-tools button { white-space: nowrap; }
+/* LabeledControl is display:contents; keep its label beside its select instead of spreading them apart. */
+.table-priority-tools > .labeled-control { display: inline-flex; align-items: center; gap: 6px; }
 .bounded-data-table { max-height: 540px; overflow: auto; border: 1px solid #e7e9ef; border-radius: 9px; }
 .bounded-data-table table { margin: 0; }
 .legacy-session-warning { margin: 12px 18px 0; }

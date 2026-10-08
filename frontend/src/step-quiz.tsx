@@ -119,11 +119,11 @@ function QuizPanelBody({
   let completionMessage = answeredAll ? "提交后立即显示逐题反馈" : "请先回答全部题目";
   if (locallyPassed) completionMessage = "服务器尚未确认完成，请重新提交答案";
   if (locallyPassed && state.syncError) completionMessage = state.syncConflict
-    ? "完成状态尚未保存：另一个页面已更新记录，请先点页面顶部的“载入服务器版本”"
+    ? "完成状态尚未保存：另一个页面或另一台设备（同一账号）已更新记录，请先点页面顶部的“载入服务器版本”"
     : "完成状态尚未保存，可在页面顶部重试或重新提交答案";
   if (awaitingSave) completionMessage = "答案正确，正在保存完成状态…";
   if (complete) completionMessage = draftChanged
-    ? "✓ 已保存答案已通过；当前修改尚未提交"
+    ? "✓ 理解题已完成；新的选择只用于自查，不影响完成状态（可点“重新检查答案”看反馈）"
     : "✓ 理解题已完成";
 
   return (

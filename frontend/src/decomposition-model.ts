@@ -159,6 +159,9 @@ export function buildDecompositionModel(row: DecompositionRow, spec: Decompositi
     const contributions = spec.parts.map((part) => {
       const length = finiteNumber(row[part.key]);
       const weight = part.weightKey ? finiteNumber(row[part.weightKey]) : null;
+      // No activity of this kind (e.g. a purely domestic industry has no trade or GVC value added): its
+      // segment length is undefined, but a zero weight contributes exactly zero to the average length.
+      if (length == null && weight === 0) return 0;
       if (length == null) missingFields.push(part.key);
       if (!part.weightKey || weight == null) missingFields.push(part.weightKey ?? `${part.key}:weight`);
       if (length == null || weight == null) return null;

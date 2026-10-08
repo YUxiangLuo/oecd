@@ -259,6 +259,15 @@ describe("Step 1 bounded roving cell focus", () => {
     expect(moveDbCell(navigationCells, "1:2", "End", true)?.key).toBe("2:2");
   });
 
+  test("PageUp/PageDown jump ten rows in the same column, clamping at the ends", () => {
+    const tall = finiteDbCells(Array.from({ length: 25 }, (_, index) => ({ row: `R${index}`, C1: index + 1 })), ["row", "C1"]);
+    expect(moveDbCell(tall, "0:1", "PageDown")?.key).toBe("10:1");
+    expect(moveDbCell(tall, "20:1", "PageDown")?.key).toBe("24:1");
+    expect(moveDbCell(tall, "15:1", "PageUp")?.key).toBe("5:1");
+    expect(moveDbCell(tall, "3:1", "PageUp")?.key).toBe("0:1");
+    expect(moveDbCell(tall, "0:1", "PageUp")?.key).toBe("0:1");
+  });
+
   test("renders 1,125 finite buttons with exactly one sequential cell stop", () => {
     const columns = ["row", ...Array.from({ length: 45 }, (_, index) => `C${index + 1}`)];
     const rows = Array.from({ length: 25 }, (_, rowIndex) => Object.fromEntries([
@@ -288,7 +297,7 @@ describe("Step 1 bounded roving cell focus", () => {
     expect(caption).toContain("单位：百万美元");
     expect(caption).not.toMatch(/Tab|方向键|Enter|空格/);
     expect(html).toContain('<th scope="row"');
-    expect(html).toContain("R1(行·供给方) → C1(列·使用方)，值 0 百万美元，未记录");
+    expect(html).toContain("R1（行·供给方） → C1（列·使用方），值 0 百万美元，未记录");
     expect(html).not.toContain("按 Enter");
   });
 
@@ -310,17 +319,17 @@ describe("Step 1 bounded roving cell focus", () => {
     expect(html.match(/tabindex="0"/g)).toHaveLength(1);
     expect(html).toContain('role="region" tabindex="0"');
     expect(dbCellAccessibleName("y", { row: "CHN_A01_02", column: "USA_HFCE", value: 2.5 }, true))
-      .toContain("USA 居民最终消费支出(列·最终需求)，值 2.5 百万美元，已记录");
+      .toContain("USA 美国·居民最终消费支出（列·最终需求），值 2.5 百万美元，已记录");
   });
 
   test("observation sentence states the supply direction in one full reading", () => {
     expect(dbObservationSentence("z", "CHN_A01_02", "USA_C10T12"))
-      .toBe("CHN 中国·A01_02 农林牧业(行·供给方) → USA 美国·C10T12 食品饮料烟草(列·使用方)");
+      .toBe("CHN 中国·A01_02 农林牧业（行·供给方） → USA 美国·C10T12 食品饮料烟草（列·使用方）");
     expect(dbObservationSentence("y", "CHN_A01_02", "USA_HFCE"))
-      .toBe("CHN 中国·A01_02 农林牧业(行·供给方) → USA 居民最终消费支出(列·最终需求)");
+      .toBe("CHN 中国·A01_02 农林牧业（行·供给方） → USA 美国·居民最终消费支出（列·最终需求）");
     expect(dbObservationSentence("accounts", "CHN_A01_02", "VA")).toBe("CHN 中国·A01_02 农林牧业 的 VA（增加值）");
     // Inventory changes: a short name in the sentence, the signed-adjustment caveat stays in the tooltip.
-    expect(dbObservationSentence("y", "CHN_A01_02", "USA_INVNT")).toBe("CHN 中国·A01_02 农林牧业(行·供给方) → USA 存货变化(列·最终需求)");
+    expect(dbObservationSentence("y", "CHN_A01_02", "USA_INVNT")).toBe("CHN 中国·A01_02 农林牧业（行·供给方） → USA 美国·存货变化（列·最终需求）");
   });
 });
 

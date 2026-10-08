@@ -44,7 +44,7 @@ function comparisonUnit(metric: string, schema: IndicatorSchema | null | undefin
   return "无量纲";
 }
 
-export function useAutoComparison({ topic, meta, state, country, partner, year, schema }: {
+export function useAutoComparison({ topic, meta, state, country, partner, year, schema, browseCountry }: {
   topic: IndicatorGroupKey;
   meta: Meta;
   state: StepStateApi<IndicatorStepState>;
@@ -52,6 +52,8 @@ export function useAutoComparison({ topic, meta, state, country, partner, year, 
   partner: string;
   year: number;
   schema: { status: string; data: IndicatorSchema | null | undefined };
+  /** The table's own country when it differs from the recorded one (step 5 “全部” is ""): saved as the view. */
+  browseCountry?: string;
 }) {
   const pair = autoComparisonCountries(meta, country, partner);
   const metric = COUNTRY_METRIC[topic];
@@ -73,7 +75,7 @@ export function useAutoComparison({ topic, meta, state, country, partner, year, 
   // Once the report is submitted, browsing leaves the material alone (see `record`).
   useEffect(() => {
     if (!patch || current || state.materialLocked) return;
-    state.save({ ...patch, material_chosen: undefined });
+    state.save({ ...patch, country: browseCountry ?? patch.country, material_chosen: undefined });
     // state is a new object each render; the key and match flag capture every meaningful change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patchKey, current]);

@@ -40,7 +40,7 @@ def test_outcome_labels_match_the_indicator_schema():
 
     assert OUTCOME_DEPVARS["trade"] == ("FVA_share", "外国增加值项占比")
     assert INDICATOR_SCHEMA["fields"]["FVA_share"]["label"] == "外国增加值项占比"
-    assert "FVA+FDC" in INDICATOR_SCHEMA["fields"]["FVA_share"]["desc"]
+    assert "FVA（外国增加值）+ FDC" in INDICATOR_SCHEMA["fields"]["FVA_share"]["desc"]
 
 
 def _student_copy() -> str:

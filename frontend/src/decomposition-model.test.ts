@@ -171,6 +171,15 @@ describe("decomposition domain model", () => {
     expect(partial.closure).toBeNull();
   });
 
+  test("a purely domestic industry (no trade or GVC activity, undefined lengths) still decomposes", () => {
+    const domestic = buildDecompositionModel({
+      PLv: 1.5, SVA: 10, PLv_D: 1.5, "1_VA_D": 10, PLv_RT: null, "2_VA_RT": 0, PLv_GVC: null, "3_VA_GVC": 0,
+    }, forward);
+    expect(domestic.status).toBe("valid");
+    expect(domestic.contributions).toEqual([1.5, 0, 0]);
+    expect(domestic.closure).toBe(true);
+  });
+
   test("rejects overflow in contributions, sums, errors, and shares", () => {
     const contributionOverflow = buildDecompositionModel({
       ...normalForward,

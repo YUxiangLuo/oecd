@@ -46,7 +46,7 @@ def test_selected_answers_renders_only_a_fully_correct_current_quiz():
     assert selected == [
         {
             "question": "Z 表的一格表示什么？",
-            "answer": "行方向列方提供的中间投入",
+            "answer": "行方（供给方）为列方（使用方）提供的中间投入",
         }
     ]
     assert quizzes.selected_answers(1, {"version": "old", "answers": {}}) == []

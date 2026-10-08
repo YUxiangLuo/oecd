@@ -22,6 +22,8 @@ export function NetworkIndicatorStep({ meta, step: _step, state }: { meta: Meta;
       ? controls.country
       : state.data?.compared?.find((code) => meta.countries.includes(code)) ?? "",
     partner: controls.partner,
+    // Recording must not replace the “全部” browsing choice with the recorded country.
+    browseCountry: controls.country,
   });
 
   return (

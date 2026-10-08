@@ -373,7 +373,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     if (timer.current != null) window.clearTimeout(timer.current);
     timer.current = null;
     if (status !== "ready") throw new Error("当前无法连接教学服务，不能确认实验记录已保存");
-    if (syncConflictRef.current) throw new Error("另一个页面已保存了更新的记录，请先点“载入服务器版本”");
+    if (syncConflictRef.current) throw new Error("另一个页面或另一台设备（同一账号）已保存了更新的记录，请先点“载入服务器版本”");
     await drain();
   }, [drain, status]);
 

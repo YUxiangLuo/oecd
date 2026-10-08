@@ -18,11 +18,11 @@ export function SyncProblemBanner({ problem, compact = false }: { problem: SyncP
   if (!problem.error) return null;
   return (
     <div className={`error-box persistent-qc-warning${compact ? " sync-problem--compact" : ""}`} role="alert">
-      <b>{problem.conflict ? "另一个页面已经保存了更新的记录" : "实验记录尚未保存到服务器"}</b>
+      <b>{problem.conflict ? "另一个页面或另一台设备（同一账号）已经保存了更新的记录" : "实验记录尚未保存到服务器"}</b>
       {!compact && (
         <p>
           {problem.conflict
-            ? "为避免互相覆盖，本页的修改（包括自动记录的报告材料）暂未保存。载入后，另一个页面改过的内容以它为准，本页的其他修改会自动保留并保存；两边在同一步改了同一项时，本页这一步的修改会被替换，需要的文字请先复制。"
+            ? "为避免互相覆盖，本页的修改（包括自动记录的报告材料）暂未保存。载入后，另一处改过的内容以它为准，本页的其他修改会自动保留并保存；两边在同一步改了同一项时，本页这一步的修改会被替换，需要的文字请先复制。"
             : `${problem.error} 本页内容还在，可以直接重试；关闭标签页可能丢失未保存的修改。`}
         </p>
       )}

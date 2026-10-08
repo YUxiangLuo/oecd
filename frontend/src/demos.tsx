@@ -59,9 +59,9 @@ const DECOMP: Record<number, DecompCfg> = {
       { key: "DVAex", label: "DVAex 国内增加值出口", color: "#4b47e0", desc: "出口中由本国创造、并被国外最终吸收的增加值；占比越高表示这类国内增加值构成越高。" },
       { key: "DVArt", label: "DVArt 返回国内", color: "#7a6bff", desc: "先随出口离境、绕一圈又回到本国被吸收的国内增加值。" },
       { key: "DDC", label: "DDC 国内重复计算", color: "#b6b1f2", desc: "本国增加值在跨境往返中被海关多次统计的部分。" },
-      { key: "FVA", label: "FVA 外国增加值", color: "#159a86", desc: "WWZ 分解中的外国增加值项，不含外国重复计算 FDC。总出口中全部外国纯 VA 含量为 FVA+FDC。" },
+      { key: "FVA", label: "FVA 外国增加值", color: "#159a86", desc: "WWZ 分解中的外国增加值项，不含外国重复计算 FDC。在不含 TLS 的口径下，总出口中的全部外国含量 = FVA（外国增加值）+ FDC（外国重复计算，不是增加值）。" },
       { key: "FDC", label: "FDC 外国重复计算", color: "#e0982a", desc: "外国增加值在跨境中被重复统计的部分。" },
-      { key: "taxsub", label: "taxsub 税收减补贴", color: "#98a0b3", desc: "出口直接及间接所含的产品税减补贴(TLS)，由 ICIO TLS 账户沿投入产出链计算。" },
+      { key: "taxsub", label: "taxsub 税收减补贴", color: "#98a0b3", desc: "出口直接及间接所含的产品税减补贴（TLS），由 ICIO TLS 账户沿投入产出链计算。" },
     ],
     note: (_r, values) =>
       `EXDVA 出口国内增加值合计 = DVAex + DVArt = ${fmt(values[0] + values[1], "amount")}` +
@@ -78,7 +78,7 @@ const DECOMP: Record<number, DecompCfg> = {
       { key: "3b_VA_GVC_C", label: "3b 复杂 GVC 生产", color: "#f4693b", desc: "增加值至少两次跨越国境。" },
     ],
     note: (_r, values) =>
-      `3_VA_GVC = 3a + 3b = ${fmt(values[2] + values[3], "amount")};` +
+      `3_VA_GVC = 3a + 3b = ${fmt(values[2] + values[3], "amount")}；` +
       `另有对称的后向分解 FGY 系列（按最终产品完成地记账），可在步骤 7 选择“（后向）”指标查看。`,
   },
   6: {
@@ -92,14 +92,23 @@ const DECOMP: Record<number, DecompCfg> = {
       { key: "PLv_GVC", label: "GVC 加权贡献", color: "#f4693b", desc: "GVC 生产活动的段长度，按 3_VA_GVC/SVA 份额加权计入；段长度与加权贡献不是同一个数。", weightKey: "3_VA_GVC" },
     ],
     note: (r) => {
-      const lengths = [finiteNumber(r.PLv_D), finiteNumber(r.PLv_RT), finiteNumber(r.PLv_GVC)];
+      const segment = (lengthKey: string, weightKey: string) => {
+        const length = finiteNumber(r[lengthKey]);
+        if (length != null) return length.toFixed(2);
+        return finiteNumber(r[weightKey]) === 0 ? "—（无此类活动）" : "—";
+      };
       const position = finiteNumber(r.GVCPs);
       return `各分项是“增加值份额 × 段长度”的加权贡献（总长度是各段长度的增加值加权平均，见 WWYZ 2017b）。` +
-        `段长度本身：PLv_D=${lengths[0]?.toFixed(2) ?? "—"}、PLv_RT=${lengths[1]?.toFixed(2) ?? "—"}、PLv_GVC=${lengths[2]?.toFixed(2) ?? "—"}；` +
+        `段长度本身：PLv_D=${segment("PLv_D", "1_VA_D")}、PLv_RT=${segment("PLv_RT", "2_VA_RT")}、PLv_GVC=${segment("PLv_GVC", "3_VA_GVC")}；` +
         `GVC 位置指数 GVCPs = PLv_GVC / PLy_GVC = ${position?.toFixed(3) ?? "—（未定义）"}。`;
     },
   },
 };
+
+/** A negative part keeps its own colour (so parts stay distinguishable) striped with the negative red. */
+export function negativeFill(color: string): string {
+  return `repeating-linear-gradient(135deg, ${color} 0 5px, #e34948 5px 8px)`;
+}
 
 function fmt(v: number, unit: "amount" | "number"): string {
   return stripNegativeZero(unit === "amount"
@@ -178,6 +187,7 @@ export function DecompositionDetailTable({
   unavailable = false,
   hover = null,
   onHover,
+  compact = false,
 }: {
   caption: string;
   parts: readonly Part[];
@@ -187,16 +197,18 @@ export function DecompositionDetailTable({
   unavailable?: boolean;
   hover?: string | null;
   onHover?: (key: string | null) => void;
+  /** Side by side: the meaning goes under the name instead of a squeezed fourth column. */
+  compact?: boolean;
 }) {
   return (
-    <table className="decomp-table">
+    <table className={`decomp-table${compact ? " decomp-table--compact" : ""}`}>
       <caption className="sr-only">{caption}</caption>
       <thead className="sr-only">
         <tr>
           <th scope="col">分解组成</th>
           <th scope="col">分项数值</th>
           <th scope="col">占比（可为负）</th>
-          <th scope="col">组成含义</th>
+          {!compact && <th scope="col">组成含义</th>}
         </tr>
       </thead>
       <tbody>{parts.map((part, index) => {
@@ -210,12 +222,13 @@ export function DecompositionDetailTable({
             onMouseLeave={onHover ? () => onHover(null) : undefined}
           >
             <th scope="row" className="dt-name">
-              <span className="dt-swatch" style={{ background: value != null && value < 0 ? "#e34948" : part.color }} />
+              <span className="dt-swatch" style={{ background: value != null && value < 0 ? negativeFill(part.color) : part.color }} />
               {part.label}
+              {compact && <span className="dt-desc dt-desc--below">{part.desc}</span>}
             </th>
             <td className="dt-val">{value == null ? "—" : fmt(value, unit)}</td>
             <td className="dt-share">{unavailable ? "—" : share == null ? "—（分母非正）" : `${share.toFixed(1)}%`}</td>
-            <td className="dt-desc">{part.desc}</td>
+            {!compact && <td className="dt-desc">{part.desc}</td>}
           </tr>
         );
       })}</tbody>
@@ -304,12 +317,11 @@ function MiniBackwardBar({ row }: { row: Row }) {
       <div style={{ position: "relative", height: 12, background: "#eceef4", borderRadius: 5, overflow: "hidden" }}>
         {PLY_DECOMP.parts.map((part, index) => (
           <span key={part.key} title={`${part.label}: ${fmt(model.values![index], "number")}`}
-            style={{ position: "absolute", top: 0, bottom: 0, left: `${layout.segments[index].leftPct}%`, width: `${layout.segments[index].widthPct}%`, background: layout.segments[index].negative ? "#e34948" : part.color }} />
+            style={{ position: "absolute", top: 0, bottom: 0, left: `${layout.segments[index].leftPct}%`, width: `${layout.segments[index].widthPct}%`, background: layout.segments[index].negative ? negativeFill(part.color) : part.color }} />
         ))}
       </div>
       <div className="muted" style={{ marginTop: 6, fontSize: 11 }}>
-        PLy = Σ(FGY 分项份额 × 对应段长度) = {fmt(model.sum, "number")}；{model.error < 1e-6 ? "与总量一致" : `与总量相差 ${model.error.toPrecision(2)}`}。
-        GVCPs = PLv_GVC / PLy_GVC = {position?.toFixed(3) ?? "—（未定义）"}。
+        PLy = Σ（FGY 分项份额 × 对应段长度） = {fmt(model.sum, "number")}；{model.error < 1e-6 ? "与总量一致" : `与总量相差 ${model.error.toPrecision(2)}`}。
       </div>
     </div>
   );
@@ -447,8 +459,8 @@ export function DecompositionDemo({
     const setSector = side === "A" ? setSectorA : setSectorB;
     const sectors = side === "A" ? sectorsA : sectorsB;
     return (
-      <div className="demo-controls" style={{ marginBottom: 10 }}>
-        <b>{compare ? `对象 ${side}` : "分析对象"}</b>
+      <div className="demo-controls" style={{ marginBottom: 10 }} role="group" aria-label={compare ? `对象 ${side}` : "分析对象"}>
+        <b aria-hidden="true">{compare ? `对象 ${side}` : "分析对象"}</b>
         <LabeledControl label="国家">
           {(id) => (
             <select id={id} value={country} onChange={(event) => {
@@ -529,6 +541,7 @@ export function DecompositionDemo({
             shares={null}
             unit={cfg.unit}
             unavailable
+            compact={compare}
           />
           {step === 6 && <MiniBackwardBar row={row} />}
         </div>
@@ -560,7 +573,7 @@ export function DecompositionDemo({
             const shareText = share == null ? "构成占比未定义" : `有符号占比 ${share.toFixed(1)}%`;
             return <span key={part.key}
               className={`decomp-seg${hover && hover !== part.key ? " dim" : ""}`}
-              style={{ position: "absolute", top: 0, bottom: 0, left: `${segment.leftPct}%`, width: `${segment.widthPct}%`, background: segment.negative ? "#e34948" : part.color }}
+              style={{ position: "absolute", top: 0, bottom: 0, left: `${segment.leftPct}%`, width: `${segment.widthPct}%`, background: segment.negative ? negativeFill(part.color) : part.color }}
               onMouseEnter={() => setHover(part.key)} onMouseLeave={() => setHover(null)}
               title={`${part.label} · 当前值 ${fmt(value, cfg.unit)} · ${shareText}${segment.negative ? "（负值，位于零轴左侧）" : ""}`} />;
           })}
@@ -586,6 +599,7 @@ export function DecompositionDemo({
           unit={cfg.unit}
           hover={hover}
           onHover={setHover}
+          compact={compare}
         />
         {step === 6 && <MiniBackwardBar row={row} />}
         {cfg.note && sharesAvailable && <div className="decomp-note">{cfg.note(row, model.values)}</div>}
@@ -616,9 +630,9 @@ export function DecompositionDemo({
     <div className="demo-card">
       <div className="demo-title">动手拆解 · 各分项的金额、占比与含义</div>
       <div className="demo-controls">
-        <div className="pill-group">
-          <button className={gran === "sector" ? "on" : ""} onClick={() => setGran("sector")}>国家–行业级</button>
-          <button className={gran === "country" ? "on" : ""} onClick={() => setGran("country")}>国家级</button>
+        <div className="pill-group" role="group" aria-label="分析层级">
+          <button type="button" className={gran === "sector" ? "on" : ""} aria-pressed={gran === "sector"} onClick={() => setGran("sector")}>国家–行业级</button>
+          <button type="button" className={gran === "country" ? "on" : ""} aria-pressed={gran === "country"} onClick={() => setGran("country")}>国家级</button>
         </div>
         <LabeledControl label="年份">
           {(id) => (
@@ -808,7 +822,8 @@ function networkDemoMetricValue(
 }
 
 function networkDemoMetricText(value: number, mode: NetworkDemoMode): string {
-  return mode === "degree" ? String(value) : value.toFixed(3);
+  // Path counts are whole numbers in this small network; only closeness is a ratio.
+  return mode === "closeness" ? value.toFixed(3) : String(Number(value.toFixed(3)));
 }
 
 export function networkDemoNodeAccessibleName(
@@ -1053,11 +1068,13 @@ export function NetworkCentralityDemo() {
           ) : mode === "betweenness" ? (
             <>
               <div className="ndp-formula">介数中心性 = Σ σₛₜ(v) / σₛₜ（有向；未按节点对数归一化）</div>
-              <div className="ndp-calc">= <b>{C.bet[sel].toFixed(3)}</b></div>
+              <div className="ndp-calc">= <b>{networkDemoMetricText(C.bet[sel], "betweenness")}</b></div>
               <p className="ndp-note">
                 {pathNodes.length >= 3
-                  ? <>例如 {pathNodes[0]} → {pathNodes[pathNodes.length - 1]} 的无权最短路要穿过 {sel}(已高亮)。越多这类路径对经过它，拓扑介数越高；这不自动说明它是经济瓶颈。</>
-                  : <>{selNode.label} 很少落在别人的最短路径上,介数中心性低。</>}
+                  ? <>例如 {pathNodes[0]} → {pathNodes[pathNodes.length - 1]} 的无权最短路要穿过 {sel}（已高亮）。越多这类路径对经过它，拓扑介数越高；这不自动说明它是经济瓶颈。</>
+                  : C.bet[sel] === 0
+                    ? <>{selNode.label} 不在任何其他节点对的最短路径上，介数为 0。</>
+                    : <>{selNode.label} 很少落在别人的最短路径上，介数中心性低。</>}
               </p>
             </>
           ) : (
@@ -1066,7 +1083,7 @@ export function NetworkCentralityDemo() {
               <div className="ndp-calc">
                 {reachablePaths.length > 0
                   ? <>= {reachablePaths.length} / {distanceSum} = <b>{C.closeness[sel].toFixed(3)}</b></>
-                  : <>无可达节点；按 Gephi 约定记为 <b>0.000</b></>}
+                  : <>无可达节点；按 Gephi 约定记为 <b>0</b></>}
               </div>
               <p className="ndp-note">高亮边组成从 {sel} 沿箭头出发的最短路径树；不可达节点不进入分子和分母。</p>
               <ScrollableRegion

@@ -320,7 +320,7 @@ describe("Step 5 teaching network accessibility", () => {
     expect(metrics.betweenness).toEqual({ USA: 0, MEX: 0, DEU: 8, CHN: 1.5, JPN: 4.5, KOR: 1, VNM: 0 });
     expect(metrics.closeness.DEU).toBeCloseTo(2 / 3);
     expect(networkDemoNodeAccessibleName({ id: "DEU", label: "德" }, "betweenness", 8, false))
-      .toBe("德（DEU），介数中心性 8.000，未选择");
+      .toBe("德（DEU），介数中心性 8，未选择");
 
     const html = renderToStaticMarkup(<NetworkCentralityDemo />);
     expect(html).toContain("节点 DEU 的全部直接入边与出边；演示网络每条边权重均为 1");

@@ -106,15 +106,29 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                 item.get("source") == "auto-indicator-comparison" for item in observations
             )
             # One saved economy is read against the global reference; two or more are a comparison.
+            # Steps 2-5 record the viewed country with a comparison country defaulting to USA (CHN for USA);
+            # a partner the student changed is their choice even though the page recorded it automatically.
+            default_partner = "CHN" if compared and compared[0] == "USA" else "USA"
+            partner_changed = automatic and len(compared) == 2 and compared[1] != default_partner
             if len(compared) == 1:
                 compared_label = "学生选定的国家" if chosen else "系统自动记录的国家" if automatic else "所看国家"
+            elif chosen:
+                compared_label = "学生选定的比较"
+            elif partner_changed:
+                compared_label = "学生选定的比较（页面自动记录）"
             else:
-                compared_label = "学生选定的比较" if chosen else "系统自动记录的比较" if automatic else "比较对象"
-            lines.append(f"- {compared_label}：{'、'.join(_safe(item) for item in compared)}")
+                compared_label = "系统自动记录的比较（默认对比国家）" if automatic else "比较对象"
+            lines.append(f"- {compared_label}：{'、'.join(_safe(country_label(str(item))) for item in compared)}")
         if observations:
+            has_amounts = any(item.get("unit") == "百万美元" for item in observations)
             if step in (6, 7, 8, 9) and any(item.get("year") == 2020 for item in observations):
+                price_note = (
+                    "金额按当年价格计，变化可能包含价格因素。"
+                    if has_amounts
+                    else "本节为份额、长度或指数，不直接受价格水平影响，但仍受下述结构外推影响。"
+                )
                 lines.append(
-                    "- **2020 年：现价与疫情期外推限制。** 金额按当年价格计，变化可能包含价格因素。"
+                    f"- **2020 年：现价与疫情期外推限制。** {price_note}"
                     "OECD 2023 版中部分国家的投入产出结构由此前基准表外推，疫情对行业的冲击并不均匀；"
                     "请区分价格、统计编制与实际数量或结构变化，不能仅凭该年转折判断生产调整。"
                     "参见 [OECD TiVA 2023 指南第 42 页]"
@@ -142,12 +156,18 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     else "- 记录的图表材料（系统按学生最后查看的完整图表自动记录；指标与单位逐行列示）："
                 )
                 lines.append(
-                    f"- 数据版本：{_safe(observations[0]['release'])}。金额为当年价格；份额以百分数列示，变化按百分点解释。"
+                    f"- 数据版本：{_safe(observations[0]['release'])}。"
+                    + ("金额为当年价格；" if has_amounts else "")
+                    + "份额以百分数列示，变化按百分点解释。"
                 )
             else:
                 lines.append(
                     f"- 记录的代表指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}"
                 )
+                if step in (2, 3, 4) and automatic:
+                    lines.append(
+                        "- 数值为国家级代表指标：页面可按国家–行业浏览，报告材料统一按国家级记录。"
+                    )
                 if step == 5 and metric_label == "weighted degree":
                     lines.append(
                         "- 国家级加权总度只含国家之间的贸易（不含国内流量），不能与含国内流量的行业级数值直接比较。"

@@ -155,7 +155,11 @@ describe("indicator table request and display contracts", () => {
   test("expansion preserves all schema fields after the task-first default", () => {
     const fields = ["SVA", "1_VA_D", "2_VA_RT", "3_VA_GVC", "3b_VA_GVC_C_share"];
     const row = Object.fromEntries(fields.map((field) => [field, 1]));
-    expect(indicatorMetricColumns("production", fields, row, true)).toEqual(fields);
+    const expanded = indicatorMetricColumns("production", fields, row, true);
+    const core = indicatorMetricColumns("production", fields, row);
+    expect([...expanded].sort()).toEqual([...fields].sort());
+    // The core columns keep their places; the extra ones follow.
+    expect(expanded.slice(0, core.length)).toEqual(core);
   });
 
   test("sorts a complete country response by either metric with stable ties", () => {
