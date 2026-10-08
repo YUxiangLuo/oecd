@@ -86,3 +86,22 @@ describe("request-bound async snapshots", () => {
     })).toEqual({ data: null, error: null, status: "idle" });
   });
 });
+
+describe("loads after the network comes back", () => {
+  test("a failed load is tried again on the online event, a successful one is not", async () => {
+    let calls = 0;
+    const load = async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("Failed to fetch");
+      return calls;
+    };
+    const view = renderHook(() => useAsync(load, []));
+    await waitFor(() => expect(view.result.current.status).toBe("error"));
+    await act(async () => { window.dispatchEvent(new Event("online")); });
+    await waitFor(() => expect(view.result.current.status).toBe("success"));
+    expect(view.result.current.data).toBe(2);
+    await act(async () => { window.dispatchEvent(new Event("online")); });
+    expect(calls).toBe(2);
+    view.unmount();
+  });
+});

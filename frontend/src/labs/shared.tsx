@@ -126,6 +126,13 @@ export function useAsync<T>(
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, enabled, keepPreviousData, requestIdentity, revision]);
+  // A failed load (typically offline) is tried again on its own when the browser reports the network back,
+  // as the saved record already is; the 重试 button stays for other failures.
+  useEffect(() => {
+    if (!enabled || status !== "error") return;
+    window.addEventListener("online", retry);
+    return () => window.removeEventListener("online", retry);
+  }, [enabled, status, retry]);
   const snapshot = currentAsyncSnapshot({
     enabled, requestIdentity, settledIdentity, data, error, status,
   });

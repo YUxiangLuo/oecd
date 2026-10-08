@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, AUTH_TOKEN_KEY, getActiveAuthToken, isApiErrorStatus } from "./api";
+import { api, AUTH_TOKEN_KEY, fitsKeepalive, getActiveAuthToken, isApiErrorStatus } from "./api";
 import { emptySession, isValidSession, patchStep as patchStoredStep, readShared, readStep, sameJsonValue, sameSessionContent, writeShared } from "./session-store";
 import type {
   ClassroomReport,
@@ -58,6 +58,22 @@ export function readKeptEdits(storage: KeptStorage, username: string, releaseId:
   } catch {
     return null;
   }
+}
+
+/** Whether this tab holds edits kept on leaving (for any account; the next login restores its own). */
+export function hasKeptEdits(storage: Pick<Storage, "getItem">): boolean {
+  try {
+    return storage.getItem(KEPT_EDITS_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** The login page's notice after an expired login; it says so when unsaved edits were kept in this tab. */
+export function expiredLoginNotice(editsKept: boolean): string {
+  return editsKept
+    ? "登录已失效，请重新登录。未保存的修改已在本页保留，用同一账号重新登录后会自动恢复。"
+    : "登录已失效，请重新登录。";
 }
 
 export function clearKeptEdits(storage: KeptStorage): void {
@@ -266,13 +282,42 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
   const resolvingConflictRef = useRef(false);
   const [unsynced, setUnsynced] = useState(false);
   const timer = useRef<number | null>(null);
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  // The page is being left (pagehide until it is shown again): saves are sent so that they outlive it.
+  const leavingRef = useRef(false);
+  // The last save failed (offline, server error): a save sent while leaving cannot be counted on.
+  const saveFailedRef = useRef(false);
+  // App keeps the edits on purpose before its own reload (logout, expired login): no leave prompt then.
+  const leavingOnPurposeRef = useRef(false);
   const queue = useRef<SessionSaveQueue | null>(null);
   if (queue.current === null) {
     queue.current = new SessionSaveQueue(
-      (value, baseUpdatedAt) => api.classroom.saveSession({
-        session: value,
-        base_updated_at: baseUpdatedAt,
-      }),
+      async (value, baseUpdatedAt) => {
+        const body = { session: value, base_updated_at: baseUpdatedAt };
+        // While the tab is hidden or closing, the same request (same token, body and base) goes with keepalive,
+        // so closing the tab right after typing still saves the edit.
+        const outlivePage = leavingRef.current || (typeof document !== "undefined" && document.visibilityState === "hidden");
+        try {
+          return await (outlivePage ? api.classroom.saveSession(body, { keepalive: true }) : api.classroom.saveSession(body));
+        } catch (cause) {
+          if (!isApiErrorStatus(cause, 409)) throw cause;
+          // The record changed since this page's base. When it already holds exactly this content (the save
+          // sent while the previous page was being left landed first, or a response was lost), that is this
+          // save, not a conflict: carry on from the server's version.
+          const latest = await api.classroom.session().catch(() => null);
+          if (latest?.updated_at && latest.release_id === releaseIdRef.current && sameSessionContent(latest.session, value)) {
+            return {
+              session: latest.session,
+              updated_at: latest.updated_at,
+              completion: latest.completion,
+              report_gate: latest.report_gate,
+              material_gate: latest.material_gate,
+            };
+          }
+          throw cause;
+        }
+      },
       {
         onSaved: (response, savedSnapshot, hasNewerPending) => {
           // Track every acknowledged snapshot, but only reconcile the optimistic
@@ -287,10 +332,12 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
           setReportGate(response.report_gate);
           setMaterialGate(response.material_gate);
           setSyncError(null);
+          saveFailedRef.current = false;
           syncConflictRef.current = false;
           setSyncConflict(false);
         },
         onError: (cause) => {
+          saveFailedRef.current = true;
           const conflict = isApiErrorStatus(cause, 409);
           syncConflictRef.current = conflict;
           if (conflict && timer.current != null) {
@@ -333,6 +380,8 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
         setMaterialGate(response.material_gate);
         setReport(response.report);
         setSyncError(null);
+        saveFailedRef.current = false;
+        leavingOnPurposeRef.current = false;
         syncConflictRef.current = false;
         setSyncConflict(false);
         setStatus("ready");
@@ -378,7 +427,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     await drain();
   }, [drain, status]);
 
-  const keepUnsavedEdits = useCallback(() => {
+  const keepCopy = useCallback(() => {
     if (!enabled || !username || !queue.current?.hasUnsynced() || !releaseIdRef.current) return false;
     return keepEdits(sessionStorage, {
       username,
@@ -388,20 +437,58 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     });
   }, [enabled, username]);
 
+  const keepUnsavedEdits = useCallback(() => {
+    const kept = keepCopy();
+    // App reloads right after keeping the edits on purpose; the kept copy restores them, so no prompt.
+    if (kept) leavingOnPurposeRef.current = true;
+    return kept;
+  }, [keepCopy]);
+
   useEffect(() => {
     if (!enabled || !username) return;
+    // Send unsaved edits now, without waiting for the autosave delay: the tab is being hidden or closed.
+    const flushBeforeLeaving = () => {
+      if (!queue.current?.hasUnsynced() || syncConflictRef.current || statusRef.current !== "ready") return;
+      if (timer.current != null) {
+        window.clearTimeout(timer.current);
+        timer.current = null;
+      }
+      void queue.current.drain().catch(() => {});
+    };
+    // Whether a save sent now is likely to go through: online, the last save did not fail, no conflict.
+    const canSaveNow = () => navigator.onLine !== false
+      && !saveFailedRef.current
+      && !syncConflictRef.current
+      && statusRef.current === "ready";
     const preserveBeforeLeaving = (event: Event) => {
       if (!queue.current?.hasUnsynced()) return;
-      const saved = keepUnsavedEdits();
-      if (!saved && event.type === "beforeunload") {
-        // Quota/privacy failures must not turn a refresh into silent data loss.
+      // A refresh puts the kept copy back; a closed tab loses it (sessionStorage belongs to the tab).
+      const saved = keepCopy();
+      if (event.type === "pagehide") {
+        leavingRef.current = true;
+        flushBeforeLeaving();
+        return;
+      }
+      // beforeunload: ask before leaving when the edits can neither be kept here (storage failure) nor be
+      // saved on the way out (offline, a failed save, a conflict, or a record too large to be sent with
+      // keepalive, which a finished record with a long analysis can be).
+      const canSave = canSaveNow();
+      const fits = fitsKeepalive({ session: sessionRef.current, base_updated_at: null });
+      // Too large for keepalive: start the normal save now, so it is already on its way while the browser asks.
+      if (canSave && !fits) flushBeforeLeaving();
+      if (!saved || (!leavingOnPurposeRef.current && !(canSave && fits))) {
         event.preventDefault();
         (event as BeforeUnloadEvent).returnValue = "";
       }
     };
+    const visibilityChanged = () => {
+      if (document.visibilityState === "hidden") flushBeforeLeaving();
+      else leavingRef.current = false;
+    };
     // Back from the back/forward cache: this same page still holds the edits and saves them itself.
     // The copy kept on leaving would otherwise put them back later, even after they were changed again.
     const forgetAfterReturn = (event: Event) => {
+      leavingRef.current = false;
       const release = releaseIdRef.current;
       // A page restored from the back/forward cache keeps its edits in memory, so the kept copy is dropped —
       // unless the tab has logged out meanwhile: App then reloads to the login page and the next login in
@@ -414,12 +501,14 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
     window.addEventListener("beforeunload", preserveBeforeLeaving);
     window.addEventListener("pagehide", preserveBeforeLeaving);
     window.addEventListener("pageshow", forgetAfterReturn);
+    document.addEventListener("visibilitychange", visibilityChanged);
     return () => {
       window.removeEventListener("beforeunload", preserveBeforeLeaving);
       window.removeEventListener("pagehide", preserveBeforeLeaving);
       window.removeEventListener("pageshow", forgetAfterReturn);
+      document.removeEventListener("visibilitychange", visibilityChanged);
     };
-  }, [enabled, username, keepUnsavedEdits]);
+  }, [enabled, username, keepCopy]);
 
   // An unreadable record is read again as soon as the browser reports the network back.
   useEffect(() => {
@@ -467,6 +556,7 @@ export function useSession(enabled: boolean, username?: string): SessionApi {
       setMaterialGate(response.material_gate);
       setReport(response.report);
       setSyncError(null);
+      saveFailedRef.current = false;
       syncConflictRef.current = false;
       setSyncConflict(false);
       setWorkspaceGeneration((value) => value + 1);

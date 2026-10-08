@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { api } from "./api";
+import { api, ApiError } from "./api";
 import { emptySession, readStep } from "./session-store";
 import type { ExperimentSession, SessionResponse, SessionSaveResponse } from "./types";
 import {
@@ -350,5 +350,149 @@ describe("reconnecting", () => {
       await waitFor(() => expect(hook.result.current.unsynced).toBe(false));
       expect(hook.result.current.syncError).toBeNull();
     } finally { await finish(hook); get.mockRestore(); save.mockRestore(); }
+  });
+});
+
+describe("saving when the tab is hidden or closed", () => {
+  const setVisibility = (value: "hidden" | "visible") => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => value });
+    document.dispatchEvent(new Event("visibilitychange"));
+  };
+  afterEach(() => { delete (document as { visibilityState?: unknown }).visibilityState; });
+
+  test("closing the tab right after typing sends the edit at once, with keepalive and the page's base", async () => {
+    const get = spyOn(api.classroom, "session").mockResolvedValue(response());
+    const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => response(session, NEWER));
+    const hook = renderHook(() => useSession(true, "student"));
+    try {
+      await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+      act(() => {
+        hook.result.current.patchStep(15, { research_question: "typed just before closing" });
+        window.dispatchEvent(new Event("pagehide"));
+      });
+      // Not after the 800 ms autosave delay: the page may be gone by then.
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(save.mock.calls[0]).toEqual([
+        { session: patchSessionStep(emptySession(), 15, { research_question: "typed just before closing" }), base_updated_at: STAMP },
+        { keepalive: true },
+      ]);
+    } finally { await finish(hook); get.mockRestore(); save.mockRestore(); }
+  });
+
+  test("a save sent when the tab was hidden moves the base on, so the next normal save does not conflict", async () => {
+    const get = spyOn(api.classroom, "session").mockResolvedValue(response());
+    const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => response(session, NEWER));
+    const hook = renderHook(() => useSession(true, "student"));
+    try {
+      await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+      await act(async () => {
+        hook.result.current.patchStep(15, { research_question: "before switching tabs" });
+        setVisibility("hidden");
+      });
+      await waitFor(() => expect(hook.result.current.unsynced).toBe(false));
+      expect(save.mock.calls[0]?.[0].base_updated_at).toBe(STAMP);
+      expect(save.mock.calls[0]?.[1]).toEqual({ keepalive: true });
+      await act(async () => {
+        setVisibility("visible");
+        hook.result.current.patchStep(15, { research_question: "back on the tab" });
+        await hook.result.current.syncNow();
+      });
+      expect(save).toHaveBeenCalledTimes(2);
+      expect(save.mock.calls[1]).toEqual([
+        { session: patchSessionStep(emptySession(), 15, { research_question: "back on the tab" }), base_updated_at: NEWER },
+      ]);
+      expect(hook.result.current.syncConflict).toBe(false);
+    } finally { await finish(hook); get.mockRestore(); save.mockRestore(); }
+  });
+
+  test("after a refresh, a 409 because the save sent on leaving already stored this content is not a conflict", async () => {
+    const edited = patchSessionStep(emptySession(), 15, { research_question: "sent while leaving" });
+    keepEdits(sessionStorage, { username: "student", release_id: RELEASE, base: emptySession(), session: edited });
+    // The new page read the record just before the flush from the old page landed.
+    const get = spyOn(api.classroom, "session")
+      .mockResolvedValueOnce(response())
+      .mockResolvedValue(response(edited, NEWER));
+    const conflict = new ApiError(409, { message: "changed", code: "session_changed" }, "conflict");
+    const save = spyOn(api.classroom, "saveSession").mockRejectedValueOnce(conflict)
+      .mockImplementation(async ({ session }) => response(session, "2026-09-10T00:02:00Z"));
+    const hook = renderHook(() => useSession(true, "student"));
+    try {
+      await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+      await waitFor(() => expect(hook.result.current.unsynced).toBe(false));
+      expect(hook.result.current.syncConflict).toBe(false);
+      expect(hook.result.current.syncError).toBeNull();
+      expect(hook.result.current.updatedAt).toBe(NEWER);
+      await act(async () => {
+        hook.result.current.patchStep(15, { research_question: "next edit" });
+        await hook.result.current.syncNow();
+      });
+      expect(save.mock.calls[1]?.[0].base_updated_at).toBe(NEWER);
+    } finally { await finish(hook); get.mockRestore(); save.mockRestore(); }
+  });
+
+  test("a 409 for content the server does not hold is still a conflict", async () => {
+    const get = spyOn(api.classroom, "session").mockResolvedValueOnce(response())
+      .mockResolvedValue(response(patchSessionStep(emptySession(), 15, { research_question: "other tab" }), NEWER));
+    const save = spyOn(api.classroom, "saveSession").mockRejectedValue(new ApiError(409, { message: "changed" }, "conflict"));
+    const hook = renderHook(() => useSession(true, "student"));
+    try {
+      await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+      await act(async () => {
+        hook.result.current.patchStep(15, { research_question: "this tab" });
+        await hook.result.current.syncNow().catch(() => {});
+      });
+      expect(hook.result.current.syncConflict).toBe(true);
+    } finally { hook.unmount(); get.mockRestore(); save.mockRestore(); }
+  });
+
+  test("leaving asks first when the edit cannot be saved on the way out (offline or after a failed save)", async () => {
+    const get = spyOn(api.classroom, "session").mockResolvedValue(response());
+    const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => response(session, NEWER));
+    const online = Object.getOwnPropertyDescriptor(navigator, "onLine");
+    const hook = renderHook(() => useSession(true, "student"));
+    const leave = () => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    try {
+      await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+      act(() => { hook.result.current.patchStep(15, { research_question: "online edit" }); });
+      // Online, nothing failed: the edit is sent on pagehide, no prompt.
+      expect(leave()).toBe(false);
+      Object.defineProperty(navigator, "onLine", { configurable: true, get: () => false });
+      expect(leave()).toBe(true);
+      Object.defineProperty(navigator, "onLine", { configurable: true, get: () => true });
+      save.mockRejectedValue(new Error("教学服务暂时不可用"));
+      await act(async () => { await hook.result.current.syncNow().catch(() => {}); });
+      expect(leave()).toBe(true);
+      // App keeps the edits on purpose before its own reload (logout, expired login): no prompt then.
+      act(() => { expect(hook.result.current.keepUnsavedEdits()).toBe(true); });
+      expect(leave()).toBe(false);
+    } finally {
+      if (online) Object.defineProperty(navigator, "onLine", online);
+      else delete (navigator as { onLine?: unknown }).onLine;
+      hook.unmount(); get.mockRestore(); save.mockRestore();
+    }
+  });
+
+  test("a record too large for keepalive starts saving at once and asks before leaving", async () => {
+    // A finished record (four regression runs, long analysis) can pass the 64 KiB keepalive limit.
+    const large = patchSessionStep(emptySession(), 11, { notes: "长".repeat(22_000) });
+    const get = spyOn(api.classroom, "session").mockResolvedValue(response(large));
+    const save = spyOn(api.classroom, "saveSession").mockImplementation(async ({ session }) => response(session, NEWER));
+    const hook = renderHook(() => useSession(true, "student"));
+    try {
+      await waitFor(() => expect(hook.result.current.status).toBe("ready"));
+      const leaving = new Event("beforeunload", { cancelable: true });
+      act(() => {
+        hook.result.current.patchStep(15, { research_question: "typed on a large record" });
+        window.dispatchEvent(leaving);
+      });
+      expect(leaving.defaultPrevented).toBe(true);
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(save.mock.calls[0]).toHaveLength(1);
+      await waitFor(() => expect(hook.result.current.unsynced).toBe(false));
+    } finally { hook.unmount(); get.mockRestore(); save.mockRestore(); }
   });
 });

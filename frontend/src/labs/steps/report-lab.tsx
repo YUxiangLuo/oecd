@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, isApiErrorStatus } from "../../api";
 import { RegressionEvidenceMatrix, RegressionFamilyPanels, type SiblingStepData } from "../../regression-teach";
 import { scrollIntoCourseContent } from "../../content-scroll";
@@ -21,8 +21,10 @@ interface ReportReflectionState extends Record<string, unknown> {
 
 export const REFLECTION_MAX_LENGTH = 2400;
 
-export function reflectionCountLabel(length: number, min: number, max = REFLECTION_MAX_LENGTH): string {
-  if (length >= max) return `已写 ${max} / ${max} 字 · 已达上限`;
+/** `atLimit`: the field is full by the server's count (code points), which a few emoji can reach before the
+ * shown count does. */
+export function reflectionCountLabel(length: number, min: number, max = REFLECTION_MAX_LENGTH, atLimit = false): string {
+  if (length >= max || atLimit) return `已写 ${Math.min(length, max)} / ${max} 字 · 已达上限`;
   return length >= min
     ? `已写 ${length} / ${max} 字 · 已达最低 ${min} 字`
     : `已写 ${length} / ${max} 字 · 最低 ${min} 字`;
@@ -201,6 +203,25 @@ export function ReportStatus({ report }: { report: ClassroomReport }) {
   );
 }
 
+/** The grade as it is printed above the report: the PDF a student keeps carries the score and feedback,
+ * which regenerating the report would clear. Hidden on screen, where the status card shows them. */
+export function ReportPrintGrade({ report }: { report: ClassroomReport }) {
+  if (report.state !== "graded") return null;
+  return (
+    <section className="report-print-grade" aria-hidden="true">
+      <b>教师评阅 · {report.score} 分</b>
+      <span>评阅时间：{fmtTime(report.graded_at)}　提交时间：{fmtTime(report.submitted_at)}</span>
+      {report.feedback?.trim() ? <p><b>教师评语：</b>{report.feedback}</p> : <p>老师没有写评语。</p>}
+    </section>
+  );
+}
+
+/** The window title while printing: browsers name the PDF after it (实验报告 · 学生 · 日期). */
+export function reportPrintTitle(report: ClassroomReport): string {
+  const student = /^学生：(.+)$/m.exec(report.markdown)?.[1]?.trim();
+  return ["实验报告", student, report.generated_at?.slice(0, 10)].filter(Boolean).join(" · ");
+}
+
 export const REPORT_GENERATE_FIRST_LABEL = "只生成草稿（不提交）";
 
 export function reportGenerateLabel(report: ClassroomReport | null) {
@@ -208,10 +229,99 @@ export function reportGenerateLabel(report: ClassroomReport | null) {
   return report.state === "pending" || report.state === "graded" ? "重新生成并提交" : "重新生成草稿";
 }
 
-/** Characters as the server counts them (Python ``len`` of the whitespace-collapsed text): code points, so an
- * emoji is one character, not two UTF-16 units. */
+const graphemeSegmenter = typeof Intl !== "undefined" && typeof Intl.Segmenter === "function"
+  ? new Intl.Segmenter("zh", { granularity: "grapheme" })
+  : null;
+
+/** What a reader sees as one character: a family emoji or a letter with an accent is one (code points where
+ * the browser has no Intl.Segmenter). */
+export function graphemes(text: string): string[] {
+  return graphemeSegmenter ? Array.from(graphemeSegmenter.segment(text), (part) => part.segment) : [...text];
+}
+
+/** Code points: what the server's 2,400 limit counts (Python ``len``). */
+export function codePointLength(text: string): number {
+  let count = 0;
+  for (const _ of text) count += 1;
+  return count;
+}
+
+/** The written length shown and checked against the minimum: whitespace runs count as one space, and each
+ * visible character (a family emoji included) counts as one. The server counts code points, which is never
+ * fewer, so a field the page counts as long enough is long enough on the server too. */
 export function reflectionLength(text: string): number {
-  return [...text.trim().split(/\s+/).join(" ")].length;
+  return graphemes(text.trim().split(/\s+/).join(" ")).length;
+}
+
+const isLowSurrogate = (code: number) => code >= 0xdc00 && code <= 0xdfff;
+
+/**
+ * Keep a change within the limit without touching the student's own text: when the new value is too long,
+ * only the newly inserted part (at the caret) is shortened, at whole characters, and the text before and after
+ * it stays as it was. `caret` is the textarea's caret right after the change (the end of the insertion).
+ */
+export function limitInsertion(
+  previous: string,
+  next: string,
+  caret: number | null,
+  max = REFLECTION_MAX_LENGTH,
+): { value: string; caret: number; cut: boolean } {
+  const end = caret ?? next.length;
+  if (codePointLength(next) <= max) return { value: next, caret: end, cut: false };
+  // Split the new value into unchanged head, insertion and unchanged tail, for a given tail length.
+  const split = (tail: number) => {
+    const oldHead = previous.slice(0, previous.length - tail);
+    const newHead = next.slice(0, next.length - tail);
+    let head = 0;
+    while (head < oldHead.length && head < newHead.length && oldHead[head] === newHead[head]) head += 1;
+    return { prefix: head, suffix: tail, removed: previous.length - head - tail };
+  };
+  // The longest common tail; with repeated characters the caret (the end of the insertion) places the
+  // insertion more exactly, unless it implies replacing more of the old text (a caret the browser moved).
+  let common = 0;
+  while (common < previous.length && common < next.length
+    && previous[previous.length - 1 - common] === next[next.length - 1 - common]) common += 1;
+  let chosen = split(common);
+  if (caret != null && caret >= 0 && caret <= next.length && next.length - caret <= common) {
+    const byCaret = split(next.length - caret);
+    if (byCaret.removed <= chosen.removed) chosen = byCaret;
+  }
+  let { prefix, suffix } = chosen;
+  // Never split a surrogate pair between the kept text and the insertion.
+  while (prefix > 0 && isLowSurrogate(next.charCodeAt(prefix))) prefix -= 1;
+  while (suffix > 0 && isLowSurrogate(next.charCodeAt(next.length - suffix))) suffix -= 1;
+  const before = next.slice(0, prefix);
+  const after = next.slice(next.length - suffix);
+  const inserted = next.slice(prefix, next.length - suffix);
+  let room = max - codePointLength(before) - codePointLength(after);
+  let kept = "";
+  for (const part of graphemes(inserted)) {
+    const size = codePointLength(part);
+    if (size > room) break;
+    kept += part;
+    room -= size;
+  }
+  // A field already over the limit (saved elsewhere) may still lose characters: that is not a cut.
+  return { value: before + kept + after, caret: before.length + kept.length, cut: kept.length !== inserted.length };
+}
+
+/**
+ * Why regenerating was refused (409), from the report this page showed and the one the server now has:
+ * a new grade, a submission from another tab, or another update. Null when the server's report is unknown
+ * or unchanged (the server's own message is shown then).
+ */
+export function reportConflictMessage(seen: ClassroomReport | null, latest: ClassroomReport | null): string | null {
+  if (!latest) return null;
+  if (latest.state === "graded" && (seen?.state !== "graded" || seen.graded_at !== latest.graded_at)) {
+    return "老师刚刚评阅了这份报告，页面已显示最新状态。请先查看评分与评语，再决定是否重新生成。";
+  }
+  if (latest.state === "pending" && seen?.state !== "pending") {
+    return "这份报告已在别处提交给老师，页面已显示最新状态。请核对后再决定是否重新生成。";
+  }
+  if (seen?.updated_at !== latest.updated_at || seen?.state !== latest.state) {
+    return "这份报告已在别处更新，页面已显示最新状态。请核对后再决定是否重新生成。";
+  }
+  return null;
 }
 
 export function reportWaitLabel(
@@ -239,7 +349,25 @@ export function reportGenerateButtonLabel(
   syncConflict = false,
 ): string {
   if (generating) return "正在生成报告…";
+  // The primary button beside this one already says the save failed; this one keeps its own action in the
+  // label, so the two never read the same.
+  const action = !report ? "生成草稿" : report.state === "draft" ? "重新生成草稿" : "重新生成";
+  if (syncConflict) return `载入服务器版本后才能${action}`;
+  if (syncError) return `重试保存后才能${action}`;
   return reportWaitLabel(sessionStatus, sessionUnsynced, sessionSyncing, syncError, syncConflict) ?? reportGenerateLabel(report);
+}
+
+/** The autosave state shown next to the writing area. */
+export function reportAutosaveLabel(
+  sessionStatus: SessionStatus,
+  sessionUnsynced: boolean,
+  sessionSyncing: boolean,
+  syncError: string | null = null,
+  syncConflict = false,
+): string | null {
+  if (syncConflict || syncError) return "未保存";
+  if (sessionStatus !== "ready") return null;
+  return sessionSyncing || sessionUnsynced ? "保存中…" : "已保存";
 }
 
 export function ReportLab({
@@ -331,6 +459,18 @@ export function ReportLab({
   const writtenCount = REFLECTION_FIELDS.filter((field) => reflectionLength(String(reflection[field.key] ?? "")) >= field.min).length;
   // A paste beyond the limit is cut by the browser; say so instead of losing the end silently.
   const [pasteCut, setPasteCut] = useState<string | null>(null);
+  // A shortened insertion re-renders the field with a value the browser did not type, which puts the caret at
+  // the end; put it back right after the kept part of the insertion.
+  const caretAfterCut = useRef<{ key: string; value: string; caret: number } | null>(null);
+  const reflectionRoot = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const pending = caretAfterCut.current;
+    if (!pending) return;
+    const field = reflectionRoot.current?.querySelector<HTMLTextAreaElement>(`textarea[data-report-field="${pending.key}"]`);
+    if (!field || field.value !== pending.value) return;
+    caretAfterCut.current = null;
+    field.setSelectionRange(pending.caret, pending.caret);
+  });
   const [attemptedIncomplete, setAttemptedIncomplete] = useState(false);
   // Same split as the gate summary below: steps 1–14, plus global conditions (step 0) counted apart.
   const materialMissing = visibleBlocked.filter((item) => item.step > 0 && item.step < 15);
@@ -340,8 +480,11 @@ export function ReportLab({
   // to the list instead (while the session is saving, the list may be out of date and the click goes through).
   const gated = visibleBlocked.length > 0 && sessionStatus === "ready" && !sessionUnsynced && !sessionSyncing;
   const gatedCount = visibleBlocked.reduce((count, item) => count + item.missing.length, 0);
+  const autosave = reportAutosaveLabel(sessionStatus, sessionUnsynced, sessionSyncing, state.syncError, Boolean(state.syncConflict));
   const generateOrShowGate = (submitAfter = false) => {
     if (gated) {
+      // Short analysis fields are marked for assistive technology at once, not only after a server refusal.
+      if (writtenCount < REFLECTION_FIELDS.length) setAttemptedIncomplete(true);
       showGate();
       return;
     }
@@ -420,11 +563,11 @@ export function ReportLab({
         if (requestError.blocked.some((item) => item.step === 15)) setAttemptedIncomplete(true);
       }
       else if (!generated && isApiErrorStatus(cause, 409)) {
-        // The report changed under us (typically the teacher just graded it): show the current state
-        // instead of a stale page and a message about a draft that was never generated.
+        // The report changed under us: the teacher graded it, or it was submitted or regenerated in another
+        // tab. Show the current state instead of a stale page, and say which of these happened.
         const latest = await api.classroom.session().catch(() => null);
         if (latest?.report) onReportChanged({ report: latest.report, completion: latest.completion, report_gate: latest.report_gate, material_gate: latest.material_gate });
-        setError("这份报告刚刚有了新的评阅或更新，页面已显示最新状态。请先查看评分与评语，再决定是否重新生成。");
+        setError(reportConflictMessage(report, latest?.report ?? null) ?? userFacingRequestError(cause, "报告生成失败"));
       } else setError(userFacingRequestError(cause, generated ? "报告已生成为草稿，但提交给老师失败，请重试提交" : "报告生成失败"));
     } finally {
       setGenerating(false);
@@ -456,17 +599,35 @@ export function ReportLab({
     }
   };
 
+  // A graded report can be exported even when later edits are not in it yet: the PDF is the graded version,
+  // with its score and feedback, which regenerating would clear.
+  const exportable = Boolean(report && (!reportOutdated || report.state === "graded"));
   const printReport = async () => {
-    if (busy || reportOutdated) return;
+    if (busy || !exportable || !report) return;
     setPrinting(true);
     setError(null);
+    const pageTitle = document.title;
+    let restored = false;
+    const printTitle = reportPrintTitle(report);
+    const restoreTitle = () => {
+      if (restored) return;
+      restored = true;
+      // Unless the page has set its own title since (another step).
+      if (document.title === printTitle) document.title = pageTitle;
+      window.removeEventListener("afterprint", restoreTitle);
+    };
     try {
       await preloadReportRenderer();
       await new Promise<void>((resolve) => globalThis.requestAnimationFrame(() => resolve()));
+      document.title = printTitle;
+      window.addEventListener("afterprint", restoreTitle);
       globalThis.print();
     } catch (cause) {
+      restoreTitle();
       setError(userFacingRequestError(cause, "PDF 导出失败"));
     } finally {
+      // print() blocks until the dialog closes in most browsers; where it does not, afterprint restores it.
+      window.setTimeout(restoreTitle, 30_000);
       setPrinting(false);
     }
   };
@@ -492,10 +653,11 @@ export function ReportLab({
       <section className="report-reflection" aria-labelledby={REPORT_REFLECTION_TITLE_ID}>
         <div>
           <span className="reg-section-step">你的分析 · 自动保存</span>
+          {autosave && <small className={`report-autosave${autosave === "未保存" ? " failed" : ""}`}>{autosave}</small>}
           <h3 id={REPORT_REFLECTION_TITLE_ID} tabIndex={-1}>回答三个问题</h3>
-          <p>写清研究对象、主要结果和仍不能确定的内容。引用具体数字，并说明结论限制。</p>
+          <p>写清研究对象、主要结果和仍不能确定的内容。引用具体数字，并说明结论限制。文字按原样写进报告，“#”“**”等符号不会变成标题或粗体。</p>
         </div>
-        <div className="report-reflection-fields">
+        <div className="report-reflection-fields" ref={reflectionRoot}>
           <div className="report-writing-checklist" role="note">
             <b>写作自检（字数达标不等于论证完整）</b>
             <span>① 点名比较对象　② 引用具体数字　③ 解释方向与区间　④ 说明不能推出什么</span>
@@ -507,10 +669,11 @@ export function ReportLab({
             const short = length < field.min;
             return (
               <label key={field.key}>
-                <span><b>{index + 1}. {field.label}</b><small id={countId}>{reflectionCountLabel(length, field.min)}</small></span>
+                <span><b>{index + 1}. {field.label}</b><small id={countId}>{reflectionCountLabel(length, field.min, REFLECTION_MAX_LENGTH, codePointLength(value) >= REFLECTION_MAX_LENGTH)}</small></span>
                 <small id={`report-hint-${field.key}`} className="report-writing-hint">{field.prompt}</small>
                 <textarea
                   aria-label={field.label}
+                  data-report-field={field.key}
                   aria-describedby={`report-hint-${field.key} ${countId}${pasteCut === field.key ? ` report-paste-${field.key}` : ""}`}
                   aria-invalid={attemptedIncomplete && short ? true : undefined}
                   value={value}
@@ -519,11 +682,13 @@ export function ReportLab({
                   data-report-reflection-incomplete={length < field.min ? "true" : undefined}
                   disabled={busy}
                   onChange={(event) => {
-                    // The limit counts characters as the server and the counter do (an emoji is one), which a
-                    // maxLength attribute (UTF-16 units) would not; text beyond it is cut and the cut is said.
-                    const characters = [...event.target.value];
-                    if (characters.length > REFLECTION_MAX_LENGTH) {
-                      state.save({ [field.key]: characters.slice(0, REFLECTION_MAX_LENGTH).join("") });
+                    // The limit counts code points as the server does, which a maxLength attribute (UTF-16
+                    // units) would not. Only the newly pasted or typed part is shortened, at the caret; the
+                    // student's existing text is never cut, and the cut is said.
+                    const limited = limitInsertion(value, event.target.value, event.target.selectionEnd);
+                    if (limited.cut) {
+                      caretAfterCut.current = { key: field.key, value: limited.value, caret: limited.caret };
+                      state.save({ [field.key]: limited.value });
                       setPasteCut(field.key);
                       return;
                     }
@@ -533,7 +698,7 @@ export function ReportLab({
                 />
                 {pasteCut === field.key && (
                   <small id={`report-paste-${field.key}`} className="report-writing-hint" role="status">
-                    内容超过 {REFLECTION_MAX_LENGTH} 字上限，超出的部分没有保留；请精简后再补充。
+                    超过 {REFLECTION_MAX_LENGTH} 字上限：刚粘贴或输入的文字有一部分没有保留，原有文字没有改动。请精简后再补充。
                   </small>
                 )}
               </label>
@@ -547,7 +712,7 @@ export function ReportLab({
         <div className="report-version-notice outdated" role="status">
           <b>报告尚未包含最新修改</b>
           <p>生成时间：{fmtTime(report.generated_at)}。实验记录自动保存不会更新报告；修改后请先重新生成，再提交或导出。
-            {report.state === "graded" && "重新生成会重新提交报告，并清除原评分。"}</p>
+            {report.state === "graded" && "重新生成会重新提交报告，并清除原评分；需要留档时，可先导出已评阅版本的 PDF（含评分与评语）。"}</p>
         </div>
       )}
       {report && <section className="submit-card" id="report-status-card" ref={statusCardRef} tabIndex={-1} aria-label="报告状态"><ReportStatus report={report} /></section>}
@@ -576,8 +741,8 @@ export function ReportLab({
           )}
           {report && report.state !== "draft" && <button type="button" className="secondary" disabled={busy} onClick={() => setOutro(report)}>查看提交回执与实验总结</button>}
           {report && (
-            <button type="button" className="secondary" disabled={busy || reportOutdated} onClick={() => { void printReport(); }}>
-              {printing ? "正在准备 PDF…" : "导出 PDF"}
+            <button type="button" className="secondary" disabled={busy || !exportable} onClick={() => { void printReport(); }}>
+              {printing ? "正在准备 PDF…" : reportOutdated && report.state === "graded" ? "导出已评阅版本 PDF" : "导出 PDF"}
             </button>
           )}
           {/* Regenerating a current submitted report clears any grade, so it comes last. */}
@@ -593,14 +758,14 @@ export function ReportLab({
       {error && <div className="error-box" role="alert">{error}</div>}
 
       {report ? (
-        <div className="report-body" ref={previewRef} tabIndex={-1} aria-label="报告正文"><ReportMarkdown markdown={report.markdown} /></div>
+        <div className="report-body" ref={previewRef} tabIndex={-1} aria-label="报告正文"><ReportPrintGrade report={report} /><ReportMarkdown markdown={report.markdown} /></div>
       ) : (
-        <p className="muted">可以先只生成草稿看看，再提交。区间包含 0、或者没算出估计值的结果，也要写进报告。</p>
+        <p className="muted">{gated ? "补齐上方清单中的缺项后，可以先只生成草稿看看，再提交。" : "可以先只生成草稿看看，再提交。"}区间包含 0、或者没算出估计值的结果，也要写进报告。</p>
       )}
       {confirmRegenerate && (
         <ConfirmModal
           title="重新生成已评阅的报告？"
-          message="此报告已经评阅。重新生成会替换报告、清除现有评分和评语，并重新提交给老师。需要留档时，请先在“查看提交回执与实验总结”里记下评分与评语。"
+          message="此报告已经评阅。重新生成会替换报告、清除现有评分和评语，并重新提交给老师。需要留档时，请先取消并导出 PDF：导出的 PDF 含评分与评语。"
           confirmLabel="确定重新生成"
           danger
           onConfirm={() => confirmRegenerate(true)}

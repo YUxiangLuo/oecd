@@ -6,7 +6,7 @@ import { isDemoStudentUsername } from "./login";
 import { TeacherDashboard } from "./teacher";
 import { TeacherReviewGuardProvider, useTeacherReviewGuard } from "./teacher/review-guard";
 import { showToast, ToastHost } from "./toast";
-import { MATERIAL_STATUS_LABELS, materialStatusForStep, reportStatusLabel, stepShowsDone } from "./step-task-card";
+import { materialStatusForStep, reportStatusLabel, stepMaterialStatusText, stepShowsDone } from "./step-task-card";
 import { revealOutlineStep } from "./step-navigation";
 import type {
   AuthUser,
@@ -280,8 +280,10 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
               const materialStatus = step.n === current && currentMaterialStatus
                 ? currentMaterialStatus
                 : materialStatusForStep(step.n, materialGate);
-              // One vocabulary with the task card: 检查中 / 保存中 / 未保存 / 已齐全 / 未齐全.
-              const materialLabel = `报告材料${MATERIAL_STATUS_LABELS[materialStatus]}`;
+              // One vocabulary with the task card: 检查中 / 保存中 / 未保存 / 已齐全 / 未齐全, and for step 15
+              // 你的分析 已完成 / 未完成 (it counts the analysis answers, not report material).
+              const material = stepMaterialStatusText(step, materialStatus);
+              const materialLabel = `${material.name}${material.value}`;
               // The badge agrees with the task card: a draft report is not yet a finished step.
               const shownDone = stepShowsDone(step, done, reportState);
               const state = shownDone ? "done" : step.n === current ? "cur" : "future";
