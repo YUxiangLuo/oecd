@@ -11,10 +11,11 @@ import { countryLabel, sectorLabel } from "../../viz";
 import { cjkJoin } from "../../format";
 import { fmtDb, Pager, useAsync } from "../shared";
 
-const DB_TABLES: { key: DbTableKind; label: string; hint: string }[] = [
-  { key: "z", label: "中间投入 Z", hint: "供给国-行业（行） × 使用国-行业（列）" },
-  { key: "y", label: "最终需求 Y", hint: "供给国-行业（行） × 目的国需求类别（列）" },
-  { key: "accounts", label: "账户项", hint: "TLS / VA / OUT 转置为国家-行业行" },
+/** `detail` is shown on the tab only; `label` also names the table in titles and the recorded source. */
+const DB_TABLES: { key: DbTableKind; label: string; detail?: string }[] = [
+  { key: "z", label: "中间投入 Z" },
+  { key: "y", label: "最终需求 Y" },
+  { key: "accounts", label: "账户项", detail: "税 / 增加值 / 总产出" },
 ];
 
 /** 首列表头。后端返回的列名就是字面的 "row",直接显示对学生没有信息量。 */
@@ -36,7 +37,7 @@ const AXIS_CORNER: Record<DbTableKind, { row: string; col: string }> = {
 function columnAxisBand(table: DbTableKind, colCountry: string): string {
   const country = colCountry ? countryLabel(colCountry) : "";
   if (table === "z") return `使用国×行业（列）→ ${country}`;
-  if (table === "y") return `目的国×最终需求（列）→ ${country}`;
+  if (table === "y") return `需求国×需求类别（列）→ ${country}`;
   return "账户项（列）";
 }
 
@@ -44,27 +45,27 @@ function columnAxisBand(table: DbTableKind, colCountry: string): string {
  *  因为"行"虽然横向延伸,它的标签却竖排在最左侧。读法一律锚定标签的视觉位置
  *  (左侧竖排/上方横排),不再依赖"行/列"抽象词的二次换算。 */
 const HOW_TO_READ: Record<DbTableKind, string> = {
-  z: "每个数值表示左侧这一行（供给国×行业）向上方这一列（使用国×行业）提供的中间投入。行标签竖排在最左侧，表示的仍然是行。单位：百万美元。",
-  y: "每个数值表示左侧这一行（供给国×行业）的产品被上方这一列（目的国×需求类别）作为最终需求吸收的金额。行标签竖排在最左侧，表示的仍然是行。单位：百万美元。",
+  z: "每个数值表示左侧这一行（供给国×行业）向上方这一列（使用国×行业）提供的中间投入。最左边一列的标签是行名：每个标签对应它右边的一整行。单位：百万美元。",
+  y: "每个数值表示左侧这一行（供给国×行业）的产品被上方这一列（需求国×需求类别）最终使用的金额。最左边一列的标签是行名：每个标签对应它右边的一整行。单位：百万美元。",
   accounts: "每一行是一个国家×行业，列是该行业的账户项（TLS / VA / OUT）；这张表的列没有国家之分。单位：百万美元。",
 };
 
 const ACCOUNT_HELP: Record<string, string> = {
-  TLS: "产品税减补贴。为负表示该账户合计为净补贴；步骤 2 的 taxsub 是其沿投入产出链传导后的出口含量。",
+  TLS: "产品税减补贴。为负表示净补贴；步骤 2 的 taxsub 是出口中直接和间接包含的这部分产品税减补贴。",
   VA: "增加值：劳动报酬、资本回报等本地创造的价值，是步骤 3 的生产活动分解的总来源。",
-  OUT: "总产出。两种完整恒等式为：按行 OUT = Z 行和 + Y 行和；按列 OUT = Z 列和 + VA + TLS。系统发布前已自动校验这些会计恒等式并披露诊断。",
+  OUT: "总产出。两个等式：按行 OUT = Z 行和 + Y 行和；按列 OUT = Z 列和 + VA + TLS。系统已自动核对这两个等式。",
 };
 
 /** OECD ICIO 最终需求类别缩写 → 中文名(Y 表列名形如 USA_HFCE:目的国_需求类别) */
-export const STEP1_ACCOUNT_LEGEND = "TLS = 产品税减补贴（负 TLS 表示净补贴，不是缺失）；VA = 增加值；OUT = 总产出；INVNT = 存货变化（负 INVNT 表示有符号的存货减少调整，不是缺失）。";
-export const STEP1_OUT_IDENTITY_GUIDE = "按行 OUT = Z 行和 + Y 行和；按列 OUT = Z 列和 + VA + TLS。筛选后的切片合计与本页列合计都只是完整和的一部分。";
+export const STEP1_ACCOUNT_LEGEND = "TLS = 产品税减补贴（负 TLS 表示净补贴，不是缺失）；VA = 增加值；OUT = 总产出；INVNT = 存货变化（负 INVNT 表示存货减少，不是缺数据）。";
+export const STEP1_OUT_IDENTITY_GUIDE = "按行 OUT = Z 行和 + Y 行和；按列 OUT = Z 列和 + VA + TLS。本页只显示部分国家和行业，所以这里的合计小于 OUT；差额来自没有显示的国家、行业或需求类别。";
 
 const FD_HELP: Record<string, string> = {
   HFCE: "居民最终消费支出",
   NPISH: "为居民服务的非营利机构消费",
   GGFC: "政府最终消费支出",
   GFCF: "固定资本形成总额（投资）",
-  INVNT: "存货变化（有符号调整）；负值表示存货减少，不是缺失值",
+  INVNT: "存货变化；为负表示存货减少，不是缺数据",
   DPABR: "居民境外直接购买（出境旅行等消费）",
 };
 const ACCOUNT_SHORT: Record<string, string> = { TLS: "产品税减补贴", VA: "增加值", OUT: "总产出" };
@@ -83,16 +84,16 @@ function columnHelp(column: string): string | undefined {
 /** 主流全球投入产出 / 多区域投入产出(MRIO)数据库速览。覆盖数字随各库版本更新、
  *  且行业/产品分类口径不同,不能直接横向相减;这里给学生一个"还有哪些选择"的地图。 */
 const OTHER_DATABASES: { name: string; org: string; coverage: string; focus: string }[] = [
-  { name: "WIOD 2016 release", org: "格罗宁根大学", coverage: "43 国 + ROW · 56 行业 · 2000–2014", focus: "课程对比快照；含社会经济与环境账户，当前表不代表实时版本" },
-  { name: "Eora26（课程快照）", org: "悉尼大学", coverage: "约 190 经济体 · 26 行业", focus: "覆盖较广 + 环境卫星账户；具体年份和地区数应以所下载版本元数据为准" },
-  { name: "EXIOBASE 3（课程快照）", org: "多机构联合", coverage: "约 49 区域 · 约 200 产品", focus: "环境扩展较细；具体覆盖随 3.x release 变化" },
-  { name: "ADB MRIO（课程快照）", org: "亚洲开发银行", coverage: "60+ 经济体 · 35 行业", focus: "亚太侧重；具体覆盖应以下载版本为准" },
+  { name: "WIOD（2016 年版）", org: "格罗宁根大学", coverage: "43 国 + ROW · 56 行业 · 2000–2014", focus: "含社会经济与环境数据" },
+  { name: "Eora26", org: "悉尼大学", coverage: "约 190 经济体 · 26 行业", focus: "覆盖经济体多，附环境数据；具体年份和地区数以所下载的版本为准" },
+  { name: "EXIOBASE 3", org: "多机构联合", coverage: "约 49 区域 · 约 200 产品", focus: "环境数据较细；具体覆盖以所下载的版本为准" },
+  { name: "ADB MRIO", org: "亚洲开发银行", coverage: "60+ 经济体 · 35 行业", focus: "侧重亚太；具体覆盖以所下载的版本为准" },
 ];
 
 /** 区分数据库目录与当前载入来源，不能把合成表的覆盖范围归给 OECD。 */
 export function DatabaseGuide({ meta, releaseMeta }: { meta: DbMeta; releaseMeta: Meta | null }) {
   const namedEconomies = meta.countries.includes("ROW") ? meta.countries.length - 1 : meta.countries.length;
-  const icioCoverage = `${namedEconomies} 个具名经济体${meta.countries.includes("ROW") ? " + ROW" : ""} · ${meta.sectors.length} 行业 · ${meta.years[0]}–${meta.years.at(-1)}`;
+  const icioCoverage = `${namedEconomies} 个经济体${meta.countries.includes("ROW") ? " + 世界其他地区（ROW）" : ""} · ${meta.sectors.length} 行业 · ${meta.years[0]}–${meta.years.at(-1)}`;
   return (
     <div className="db-guide">
       <h3 className="kicker">全球投入产出数据库一览</h3>
@@ -108,7 +109,7 @@ export function DatabaseGuide({ meta, releaseMeta }: { meta: DbMeta; releaseMeta
             <tr className="db-guide-default">
               <td><b>OECD ICIO</b></td>
               <td>OECD</td>
-              <td>以所用发行版本为准</td>
+              <td>见下方“当前载入”</td>
               <td>以各国国民账户为基础，适合分析增加值贸易和全球价值链。</td>
             </tr>
             {OTHER_DATABASES.map((db) => (
@@ -395,7 +396,7 @@ function nodeLabel(code: string): string {
 }
 
 /** Two-line hover text for a value cell: who → whom with industry names, then value and action. */
-export function dbCellTooltip(table: DbTableKind, row: string, column: string, value: number): string {
+export function dbCellTooltip(table: DbTableKind, row: string, column: string, value: number, locked = false): string {
   let pair: string;
   if (table === "accounts") {
     pair = `${nodeLabel(row)} 的 ${ACCOUNT_SHORT[column] ?? column}`;
@@ -406,7 +407,8 @@ export function dbCellTooltip(table: DbTableKind, row: string, column: string, v
   } else {
     pair = `${nodeLabel(row)} → ${nodeLabel(column)}`;
   }
-  return `${pair}\n${fmtDb(value)} 百万美元 · 点击记录这个观察值`;
+  // After the report is submitted a click only selects the cell, so the hint must not promise a record.
+  return `${pair}\n${fmtDb(value)} 百万美元 · ${locked ? "点击选中这个单元格" : "点击记录这个单元格"}`;
 }
 
 /** 观察值方向句:把 "A × B = v" 改写成 "A(行·供给方) → B(列·使用方) = v" 的完整读法,
@@ -429,6 +431,7 @@ export function DbSliceTable({
   selection,
   selectedObservation,
   pickedObservation,
+  locked = false,
   onCapture,
 }: {
   slice: DbSlice | null;
@@ -438,6 +441,8 @@ export function DbSliceTable({
   selectedObservation?: DbStepState["observation"];
   /** A cell clicked after the report was submitted: marked in the table, but not yet the recorded material. */
   pickedObservation?: DbStepState["observation"];
+  /** The report is submitted: a click selects a cell instead of recording it. */
+  locked?: boolean;
   onCapture: (patch: Pick<DbStepState, "slice" | "observation">) => void;
   /**
    * 只是文案开关：激活单元格是否还会进入全屏。账户项页签不提供全屏，因此不能向学生
@@ -508,8 +513,8 @@ export function DbSliceTable({
               {columnAxisBand(table, selection.colCountry)}
             </th>
             {showSummaries && (
-              <th colSpan={2} className="db-axis-cols" scope="colgroup" title="当前筛选口径下的切片合计与对应 OUT">
-                本页切片口径
+              <th colSpan={2} className="db-axis-cols" scope="colgroup" title="本行在当前所选列上的合计，以及该行业的总产出（OUT）">
+                本行合计对照
               </th>
             )}
           </tr>
@@ -525,8 +530,8 @@ export function DbSliceTable({
                 {table !== "y" && codePlainName(column) && <small className="db-code-name">{codePlainName(column)}</small>}
               </th>
             ))}
-            {showSummaries && <th scope="col" title="当前筛选列在该行的合计">切片合计</th>}
-            {showSummaries && <th scope="col" title={ACCOUNT_HELP.OUT}>对应 OUT ⓘ</th>}
+            {showSummaries && <th scope="col" title="本行在当前所选列上的合计">所选列之和</th>}
+            {showSummaries && <th scope="col" title={ACCOUNT_HELP.OUT}>该行总产出 OUT ⓘ</th>}
           </tr>
         </thead>
         <tbody>
@@ -578,7 +583,7 @@ export function DbSliceTable({
                         tabIndex={activeCell?.key === cell.key ? 0 : -1}
                         aria-pressed={selected}
                         aria-label={`${dbCellAccessibleName(table, cell, selected)}${picked ? "，已选中，尚未改为报告材料" : ""}`}
-                        title={dbCellTooltip(table, rowLabel, column, numericValue)}
+                        title={dbCellTooltip(table, rowLabel, column, numericValue, locked)}
                         onFocus={() => setRoving({ scope: focusScopeKey, key: cell.key })}
                         onKeyDown={(event) => {
                           if (!DB_CELL_NAVIGATION_KEYS.includes(event.key)) return;
@@ -603,7 +608,7 @@ export function DbSliceTable({
             </tr>
           ))}
           {slice && rows.length === 0 && (
-            <tr><td colSpan={slice.columns.length || 1}>无匹配记录</td></tr>
+            <tr><td colSpan={slice.columns.length || 1}>当前筛选下没有数据，请换一个国家或行业。</td></tr>
           )}
         </tbody>
         {slice && rows.length > 0 && (
@@ -626,7 +631,7 @@ export function ReleaseIntegrityStatus({ meta }: { meta: Meta | null }) {
   return (
     <div className="integrity-status" role="status">
       <b>数据已通过系统完整性检查</b>
-      <span>文件、表结构和数据来源都已核对，无需你另外校验；数据中的异常和限制会在报告里注明。</span>
+      <span>文件和数据来源都已核对，你不用再检查；数据的局限会写进报告。</span>
     </div>
   );
 }
@@ -750,20 +755,19 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
   if (metaError) {
     return (
       <div className="error-box async-error" role="alert">
-        <span>{userFacingRequestError(metaError, "OECD ICIO 原始文件索引读取失败")}</span>
-        <button type="button" className="secondary" onClick={retryMeta}>重新验证并重试</button>
+        <span>{userFacingRequestError(metaError, "OECD ICIO 数据读取失败")}</span>
+        <button type="button" className="secondary" onClick={retryMeta}>重试</button>
       </div>
     );
   }
   if (!meta) {
     return (
       <p className="muted" role="status" aria-live="polite" aria-busy={metaStatus === "loading"}>
-        正在验证 OECD ICIO 2023 版原始文件并读取索引；全新部署首次启动会先完成完整性校验…
+        正在载入 OECD ICIO 2023 版数据，第一次打开可能要稍等…
       </p>
     );
   }
 
-  const selectedFile = meta.files.find((f) => f.year === year);
   // While the next page loads there is no slice; keep the last page count so the pager does not collapse to
   // "1 / 1" (which disabled the button that had focus).
   const pages = slice ? Math.max(1, Math.ceil(slice.total / slice.page_size)) : lastPages.current;
@@ -777,7 +781,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
     return (
       <div>
         <div className="warnbox">
-          未找到本地 OECD ICIO 原始 CSV。请将 ICIO2023_YYYY.csv 放入 OECD_ICIO/ 后刷新本页。
+          暂时没有可用的 ICIO 数据，请联系老师。
         </div>
       </div>
     );
@@ -816,6 +820,8 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
               }}
             >
               {item.label}
+              {/* Hidden from the accessible name, which stays the table's short label. */}
+              {item.detail && <small className="db-table-seg-detail" aria-hidden="true">（{item.detail}）</small>}
             </button>
           ))}
         </div>
@@ -846,7 +852,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
                 </select>
               )}
             </LabeledControl>
-            <LabeledControl label={table === "y" ? "最终需求（列）" : "使用行业（列）"}>
+            <LabeledControl label={table === "y" ? "需求类别（列）" : "使用行业（列）"}>
               {(id) => (
                 <select id={id} value={colSector} onChange={(e) => pickColSector(e.target.value)}>
                   <option value="">全部</option>
@@ -865,42 +871,45 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
 
       {sliceError && (
         <div className="error-box async-error" role="alert" style={{ marginBottom: 14 }}>
-          <span>{userFacingRequestError(sliceError, "数据切片加载失败")}</span>
+          <span>{userFacingRequestError(sliceError, "表格数据加载失败")}</span>
           <button type="button" className="secondary" onClick={retrySlice}>重试</button>
         </div>
       )}
       <div className="observation-strip db-observation" aria-live="polite">
-        <b>已记录的观察值</b>
+        <b>已记录的单元格</b>
         {selectedObservation ? (
           <span>
             {/* 观察值跨表页签保留；读法必须用记录时的表类型,不能用当前页签的。 */}
             {dbObservationSentence((selectedObservation.table as DbTableKind | undefined) ?? table, selectedObservation.row, selectedObservation.column)} = {fmtDb(selectedObservation.value)} 百万美元
             {observationSource ? `（${observationSource}）` : ""}
-            {selectedObservation.auto && !state.materialLocked ? "。系统已默认记录这一格，点击其他数值即可替换。" : ""}
+            {selectedObservation.auto && !state.materialLocked ? "。系统已先记录这个单元格，点击其他数值即可替换。" : ""}
           </span>
         ) : <span className="empty">尚未记录</span>}
         {state.materialLocked && <span className="muted">{MATERIAL_LOCKED_NOTE.replace("浏览", "点击单元格")}</span>}
         {state.materialLocked && pickedCell?.observation && !sameJsonValue(pickedCell.observation, selectedObservation) && (
           <span className="db-picked">
             你选中的：{dbObservationSentence((pickedCell.observation.table as DbTableKind | undefined) ?? table, pickedCell.observation.row, pickedCell.observation.column)} = {fmtDb(pickedCell.observation.value)} 百万美元{observationSourceLabel(pickedCell.observation) ? `（${observationSourceLabel(pickedCell.observation)}）` : ""}
-            <button type="button" className="secondary" onClick={() => { state.save(pickedCell); setPickedCell(null); }}>改为记录这一格（之后需在步骤 15 更新报告）</button>
+            <button type="button" className="secondary" onClick={() => { state.save(pickedCell); setPickedCell(null); }}>改为记录这个单元格（之后需在步骤 15 更新报告）</button>
           </span>
         )}
       </div>
       {/* One action line; the reading rules, legend and identities live in a single fold-out. */}
       <div className="db-reading db-fullscreen-note">
         <span>
-          {state.materialLocked ? "报告已提交：点击数值只会选中，确认后才改为报告材料" : "点击任一数值即可记录"}{table === "accounts" ? "" : "（并全屏核对方向）"}：
-          {table === "accounts" ? "行是国家×行业，列是账户项" : `行是供给方，列是${table === "y" ? "最终需求" : "使用方"}`}；单位均为百万美元。
+          {/* The locked notice is already in the strip above; this line only says what a click does. */}
+          {state.materialLocked
+            ? `点击数值只会选中这个单元格${table === "accounts" ? "" : "（表格会放大到全屏）"}；要换成报告材料，请再点上方出现的确认按钮。`
+            : `点击任一数值即可记录这个单元格${table === "accounts" ? "" : "，表格会放大到全屏，方便核对方向"}。`}
+          {table === "accounts" ? "行是国家×行业，列是账户项" : `行是供给方，列是${table === "y" ? "最终需求" : "使用方"}`}；单位：百万美元。
         </span>
         <details className="db-reading-notes">
           <summary>读表说明</summary>
           <ul>
             <li><b>怎么读：</b>{HOW_TO_READ[table]}</li>
-            <li><b>记录规则：</b>系统会先默认记录当前这一页中最大的一格；点击数值会改为保存你选的格子的行、列与数值；切换 Z / Y / 账户项或筛选不会丢掉已记录的单元格，记录另一个单元格才会覆盖。</li>
+            <li><b>记录规则：</b>系统先自动记录本页数值最大的单元格。你点击别的单元格，就改为记录它。换表或换筛选不会丢掉已记录的单元格。</li>
             <li><b>账户与符号：</b>{STEP1_ACCOUNT_LEGEND}</li>
-            {table !== "accounts" && <li><b>恒等式：</b>{STEP1_OUT_IDENTITY_GUIDE}差额来自未展示的国家、行业或最终需求列。</li>}
-            <li><b>键盘：</b>Tab 进入表格后，方向键逐格移动，Home／End 到行首／行尾，Ctrl+Home／Ctrl+End 到表首／表尾，PageUp／PageDown 上下跳 10 行；Enter 或空格记录当前格。</li>
+            {table !== "accounts" && <li><b>恒等式：</b>{STEP1_OUT_IDENTITY_GUIDE}</li>}
+            <li><b>键盘：</b>Tab 进入表格后，方向键逐格移动，Home / End 到行首 / 行尾，Ctrl+Home / Ctrl+End 到表首 / 表尾，PageUp / PageDown 上下跳 10 行；Enter 或空格记录当前单元格。</li>
           </ul>
         </details>
       </div>
@@ -918,6 +927,7 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
         }}
         selectedObservation={selectedObservation}
         pickedObservation={state.materialLocked ? pickedCell?.observation : undefined}
+        locked={state.materialLocked}
         onCapture={(patch) => {
           if (state.materialLocked) setPickedCell(patch);
           else state.save(patch);
@@ -931,11 +941,11 @@ export function DbLab({ state, releaseMeta }: { state: StepStateApi<DbStepState>
 
       {/* 单层折叠：早前这里是“外层 details 套一个内层 details”，学生要点击两次才能看到正文。 */}
       <details className="card accent concept-card db-structure-details">
-        <summary className="kicker">进一步理解 ICIO 表结构与账户项</summary>
+        <summary className="kicker">数据来源与其他投入产出数据库</summary>
         {/* Dataset facts and the integrity check need no student action, so they sit here, not above the table. */}
         <ReleaseIntegrityStatus meta={releaseMeta} />
         <p className="muted db-facts">
-          原始年份 {meta.years[0]}–{meta.years.at(-1)} · {meta.countries.includes("ROW") ? meta.countries.length - 1 : meta.countries.length} 个具名经济体 + ROW 剩余地区账户 · {meta.sectors.length} 个行业 · {meta.n_rows.toLocaleString("zh-CN")} 行 × {meta.n_columns.toLocaleString("zh-CN")} 列{selectedFile ? ` · 当前文件 ${selectedFile.file}` : ""}
+          原始年份 {meta.years[0]}–{meta.years.at(-1)} · {meta.countries.includes("ROW") ? meta.countries.length - 1 : meta.countries.length} 个经济体{meta.countries.includes("ROW") ? " + 世界其他地区（ROW）" : ""} · {meta.sectors.length} 个行业
         </p>
         <DatabaseGuide meta={meta} releaseMeta={releaseMeta} />
       </details>

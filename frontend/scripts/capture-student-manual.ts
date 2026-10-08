@@ -134,8 +134,8 @@ try {
   // Complete student: one image per step.
   page = await signedIn(studentToken);
   if (!onlyViz && !onlyReg) {
-  await open(page, 1, `window.__find("已记录的观察值") && document.querySelector("button.db-observation-cell")`);
-  await scrollTo(page, `window.__find("已记录的观察值")`, 150);
+  await open(page, 1, `window.__find("已记录的单元格") && document.querySelector("button.db-observation-cell")`);
+  await scrollTo(page, `window.__find("已记录的单元格")`, 150);
   await save("01-icio.png", await page.screenshot(), student.username, "Step 1 recorded cell.");
   await scrollTo(page, `document.querySelector(".quiz-question")?.closest("section") || document.querySelector(".quiz-question")`, 20);
   await save("01-quiz.png", await page.screenshot(), student.username, "Understanding check (completed).");
