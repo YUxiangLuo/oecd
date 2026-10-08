@@ -7,7 +7,7 @@
  * polite live region so a keyboard reader hears the same values a mouse user sees. Every value
  * shown here is also in the chart's reading table; the tooltip enhances, it never gates.
  */
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 /** `[label, value, seriesColor?, dashed?]`; a line with an empty label is the heading. `dashed` draws the key
  * like a dashed series line, so the readout matches the chart. */
@@ -15,8 +15,17 @@ export type TipLine = [string, string, string?, boolean?];
 
 const TIP_WIDTH = 250;
 
+/** The visible part of the page: the scrolling step content (the fixed step footer sits below it), else the window. */
+function visibleBounds(element: Element | null): { top: number; bottom: number } {
+  const viewport = { top: 0, bottom: window.innerHeight || Infinity };
+  const scroller = element?.closest(".content")?.getBoundingClientRect();
+  if (!scroller || !scroller.height) return viewport;
+  return { top: Math.max(viewport.top, scroller.top), bottom: Math.min(viewport.bottom, scroller.bottom) };
+}
+
 export function useHoverTip() {
   const wrapRef = useRef<HTMLDivElement | null>(null);
+  const tipRef = useRef<HTMLDivElement | null>(null);
   const [tip, setTip] = useState<{ x: number; y: number; lines: TipLine[] } | null>(null);
   const place = useCallback((clientX: number, clientY: number, lines: TipLine[]) => {
     const rect = wrapRef.current?.getBoundingClientRect() ?? { left: 0, top: 0, width: 0 };
@@ -34,7 +43,25 @@ export function useHoverTip() {
     const rect = element?.getBoundingClientRect();
     place(rect ? rect.left + rect.width / 2 : 0, rect ? rect.bottom : 0, lines);
   }, [place]);
+  /** Keyboard reading inside a large chart (a year on the trend chart): the readout sits beside that mark,
+   * near its top, instead of under the whole chart. */
+  const showNear = useCallback((element: Element | null, lines: TipLine[]) => {
+    const rect = element?.getBoundingClientRect();
+    place(rect ? rect.left + rect.width / 2 : 0, rect ? rect.top : 0, lines);
+  }, [place]);
   const hide = useCallback(() => setTip(null), []);
+  // Keep the readout inside the visible area: one placed below the fold (or under the fixed step footer) moves up.
+  useLayoutEffect(() => {
+    const box = tipRef.current;
+    if (!tip || !box) return;
+    const rect = box.getBoundingClientRect();
+    if (!rect.height) return;
+    const bounds = visibleBounds(wrapRef.current);
+    const overflow = rect.bottom - (bounds.bottom - 4);
+    if (overflow <= 0) return;
+    const room = rect.top - (bounds.top + 4);
+    box.style.top = `${tip.y - Math.max(0, Math.min(overflow, room))}px`;
+  }, [tip]);
   // Escape dismisses a readout that covers content (WCAG 1.4.13), on every chart that uses this hook.
   const shown = tip !== null;
   useEffect(() => {
@@ -45,6 +72,7 @@ export function useHoverTip() {
   }, [shown]);
   const Tip: ReactNode = (
     <div
+      ref={tipRef}
       className="hover-tip"
       role="status"
       aria-live="polite"
@@ -63,5 +91,5 @@ export function useHoverTip() {
       )}
     </div>
   );
-  return { wrapRef, Tip, show, showFor, hide };
+  return { wrapRef, Tip, show, showFor, showNear, hide };
 }

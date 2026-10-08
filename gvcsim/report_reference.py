@@ -17,6 +17,9 @@ from gvcsim import config
 from gvcsim.artifacts import read_csv_artifact
 from gvcsim.indicators import tradeflow
 
+# Network path metrics (step 9): along out-edges to the reachable nodes; 0 means none is reachable (undefined).
+PATH_METRICS = frozenset({"Eccentricity", "closnesscentrality", "harmonicclosnesscentrality"})
+
 # Share metrics the pages derive from a numerator and a denominator (trade and production topics).
 _SHARES: dict[str, tuple[str, str]] = {
     "FVA_share": ("FVA", "gross_exports"),
@@ -107,7 +110,13 @@ def industry_reference(
         frame = frame[frame["industry"].astype(str) == industry]
     frame[metric] = pd.to_numeric(frame[metric], errors="coerce").astype(float)
     # A boolean mask, so an empty selection stays a row filter (an empty object Series would select columns).
-    frame = frame.loc[np.isfinite(frame[metric].to_numpy())]
+    readings = frame[metric].to_numpy()
+    keep = np.isfinite(readings)
+    if metric in PATH_METRICS:
+        # A node that reaches no other node (no output, or no sales to other industries) gets 0 from the network
+        # pipeline, but its path metrics are undefined: left out of the median and the ranks, as on the page.
+        keep &= readings != 0
+    frame = frame.loc[keep]
     rows = []
     for name, group in frame.groupby(frame["industry"].astype(str), sort=True):
         if len(group) < 2:

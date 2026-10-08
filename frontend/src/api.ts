@@ -287,6 +287,13 @@ export const api = {
       withQuery(`/api/indicators/industry/${year}`, { page: 1, page_size: 200, country }),
     );
   },
+  /** One industry in every economy (steps 6–8 定位图 with an industry scope: the medians need all economies). */
+  industryIndicatorsForIndustry: (year: number, industry: string) => {
+    if (!industry) return Promise.reject(new Error("单行业指标请求必须指定行业"));
+    return get<import("./types").IndustryPage>(
+      withQuery(`/api/indicators/industry/${year}`, { page: 1, page_size: 200, industry }),
+    );
+  },
   /** Each industry's spread of a network metric across all economies (step 9 global reference). */
   industryDistribution: (metric: string, options: { years?: number[]; industry?: string; countries?: string[] } = {}) =>
     get<{ metric: string; rows: import("./types").IndustryDistributionRow[] }>(

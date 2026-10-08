@@ -45,3 +45,8 @@ export const AddCountryControl = forwardRef<HTMLSelectElement, {
     </LabeledControl>
   );
 });
+
+/** Shown where the add control was once five economies are selected, so the limit is said, not discovered. */
+export function MaxCountriesNote() {
+  return <span className="muted add-country-limit">最多 5 个国家（国家 A 加 4 个对比国家）；要换一个，请先移除一个对比国家。</span>;
+}

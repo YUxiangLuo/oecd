@@ -1,29 +1,30 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { MATERIAL_LOCKED_ACTION, MATERIAL_LOCKED_NOTE } from "../../../step-task-card";
 import { LabeledControl, ScrollableRegion } from "../../../a11y";
 import { api } from "../../../api";
 import type { IndicatorSchema, Meta } from "../../../types";
 import { countryLabel, joinCountries, sectorLabel } from "../../../viz";
-import { HEAT_EVIDENCE_METRIC } from "../../../viz/views/network-heat";
+import { HEAT_EVIDENCE_METRIC, PATH_UNDEFINED_LABEL, PATH_UNDEFINED_NOTE, pathMetricUndefined } from "../../../viz/views/network-heat";
 import { AsyncStateMessage, useAsync } from "../../shared";
-import { currentReleaseId, LensNav, type Row, type VizObservation } from "./scaffold";
+import { currentReleaseId, LensNav, Year2020Note, type Row, type VizObservation } from "./scaffold";
 import { IndicatorTrendChart, indicatorNumber } from "./indicator-charts";
-import { AddCountryControl } from "./add-country";
+import { AddCountryControl, MaxCountriesNote } from "./add-country";
 import { QuadrantScatter } from "../../../viz";
 import { Butterfly } from "./theme-charts";
 import { COMPARISON_LETTERS, defaultComparison, defaultEntities, MAX_ENTITIES, type YearDistribution } from "./indicator-model";
 import { ScopeCard } from "./scope-card";
-import { NetworkRanking, networkRanking } from "./network-ranking";
+import { NetworkRanking, networkRanking, networkValue } from "./network-ranking";
 
 const COMMON_METRICS = ["weighted degree", "weighted indegree", "weighted outdegree", HEAT_EVIDENCE_METRIC];
 
-export interface NetworkTrendPoint { country: string; year: number; value: number | null }
+/** `undefined`: the value is not missing but undefined (a path metric of an industry with no outgoing links). */
+export interface NetworkTrendPoint { country: string; year: number; value: number | null; undefined?: true }
 
-/** Missing observations remain gaps; neither zero-fill nor connect across them. */
+/** Missing observations remain gaps; neither zero-fill nor connect across them. Undefined path metrics are gaps too. */
 export function networkTrendPoints(rows: Row[], years: number[], countries: string[], industry: string, metric: string = HEAT_EVIDENCE_METRIC): NetworkTrendPoint[] {
   return countries.flatMap((country) => [...years].sort((a, b) => a - b).map((year) => {
     const value = rows.find((row) => row.country === country && row.year === year && row.industry === industry)?.[metric];
-    return { country, year, value: typeof value === "number" && Number.isFinite(value) ? value : null };
+    return { country, year, value: networkValue(value, metric), ...(pathMetricUndefined(metric, value) ? { undefined: true as const } : {}) };
   }));
 }
 
@@ -115,6 +116,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       : [],
   );
   const points = networkTrendPoints(query.data ?? [], years, selected, industry, metric);
+  const chartKey = [view, industry, metric, year, limit, flowsLimit, selected.join(",")].join("|");
   const ranked = networkRanking(query.data ?? [], year, selected, metric, limit);
   const finite = points.filter((point) => point.value !== null);
   const commonYears = years.filter((candidate) =>
@@ -122,13 +124,26 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       points.some((point) => point.country === country && point.year === candidate && point.value !== null),
     ),
   );
-  // One economy alone is a chart here too: the reference is the same industry in every economy.
-  const canRecord = recordable && query.status === "success" && selected.length >= 1
-    && (view === "trend" ? commonYears.length >= 2
-      : ranked.some((row) => row.values.every((value) => value !== null)));
   const readings = view === "trend" ? finite.filter((point) => commonYears.includes(point.year)).map((point) => ({ ...point, industry }))
     : ranked.filter((row) => row.values.every((value) => value !== null))
       .flatMap((row) => row.values.map((value, index) => ({ country: selected[index], industry: row.industry, year, value: value! })));
+  // A trend where every reading is the same (an industry with no output: all 0) shows no difference to write
+  // about; it must not replace useful material. A ranking is refused only when it is all 0 (whole-number
+  // metrics such as 离心率 can tie across the top industries and still be worth reading against the ranks).
+  const allSame = readings.length > 0 && readings.every((point) => point.value === readings[0].value);
+  const flatValue = allSame && (view === "trend" || readings[0].value === 0) ? readings[0].value : null;
+  // One economy alone is a chart here too: the reference is the same industry in every economy.
+  const canRecord = recordable && query.status === "success" && selected.length >= 1
+    && (view === "trend" ? commonYears.length >= 2
+      : ranked.some((row) => row.values.every((value) => value !== null)))
+    && flatValue === null;
+  const undefinedPoints = view === "trend" ? points.filter((point) => point.undefined) : [];
+  const undefinedNote = undefinedPoints.length
+    ? `${[...new Set(undefinedPoints.map((point) => point.country))].map((country) => {
+        const at = undefinedPoints.filter((point) => point.country === country).map((point) => point.year);
+        return `${countryLabel(country)}${at.length === years.length ? "历年" : ` ${at.join("、")} 年`}`;
+      }).join("、")}的 ${sectorLabel(industry)}${PATH_UNDEFINED_NOTE}，${label}无法定义（不是 0，不参与排名和中位数，图上留空）。`
+    : "";
   const pendingObservations: VizObservation[] = readings.map((point) => ({
       entity: `${point.country}·${point.industry}`, country: point.country, industry: point.industry,
       year: point.year, value: point.value!, metric, unit,
@@ -141,21 +156,28 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   const savedCountries = [...new Set(observations.map((item) => item.country))];
   const savedIndustries = [...new Set(observations.map((item) => item.industry).filter(Boolean))];
   const pendingKey = canRecord && release ? `${selected.join(",")}|${materialKey(pendingObservations)}` : "";
-  // A replacement made without a click is announced next to the scope line and fades after a few seconds.
-  const [flash, setFlash] = useState("");
+  // A replacement made without a click is announced next to the scope line and fades after a few seconds. It
+  // names the indicator, restarts on every update (`id`) and goes as soon as the chart on screen is another one.
+  const [flash, setFlash] = useState<{ text: string; key: string; id: number } | null>(null);
   useEffect(() => {
     if (!flash) return;
-    const timer = window.setTimeout(() => setFlash(""), 6000);
+    const timer = window.setTimeout(() => setFlash(null), 6000);
     return () => window.clearTimeout(timer);
   }, [flash]);
+  useEffect(() => {
+    setFlash((old) => (old && old.key !== pendingKey ? null : old));
+  }, [pendingKey]);
   // The task card says 报告材料：未保存 while a save fails or conflicts; the green note must not contradict it.
   useEffect(() => {
-    if (syncError) setFlash("");
+    if (syncError) setFlash(null);
   }, [syncError]);
   // Report material follows the chart the student is looking at; incomplete charts never overwrite it.
   useEffect(() => {
     if (!pendingKey || matchesSaved || syncing || locked) return;
-    if (observations.length) setFlash(`报告材料已更新为：${view === "trend" ? "历年变化" : "行业排名"} · ${pendingObservations.length} 条读数`);
+    if (observations.length) {
+      const text = `报告材料已更新为：${view === "trend" ? `历年变化 · ${sectorLabel(industry)}` : `行业排名 · ${year} 年`} · ${label} · ${pendingObservations.length} 条读数`;
+      setFlash((old) => ({ text, key: pendingKey, id: (old?.id ?? 0) + 1 }));
+    }
     onRecord(selected, pendingObservations);
     // pendingKey captures every meaningful change of the pending comparison.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -194,6 +216,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
           focusAfterAdd={() => (addRef.current ?? firstRef.current)?.focus()}
         />
       )}
+      {selected.length >= MAX_ENTITIES && <MaxCountriesNote />}
     </div>
     {/* The two recording views lead, in the task card's order (① 历年变化, ② 行业排名); exploration follows. */}
     <LensNav
@@ -229,7 +252,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
       ref={scopeRef}
       items={recordable ? [
         { label: "所选国家", value: joinCountries(selected) },
-        { label: "范围", value: view === "trend" ? sectorLabel(industry) : "行业排名" },
+        { label: "范围", value: view === "trend" ? sectorLabel(industry) : "所选国家各行业" },
         { label: "年份", value: view === "trend" ? `${years[0]}–${years.at(-1)}` : String(year) },
         { label: "指标", value: label },
       ] : [
@@ -238,11 +261,11 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         { label: "视角", value: view === "topology" ? "流量与路径" : view === "flows" ? "买入与卖出" : extraLenses.find((lens) => lens.key === view)?.label ?? view },
         { label: "材料", value: "探索视角，不记录材料" },
       ]}
-      note={flash && !syncError ? <span className="scope-flash">✓ {flash}</span> : undefined}
+      note={flash && flash.key === pendingKey && !syncError ? <span key={flash.id} className="scope-flash">✓ {flash.text}</span> : undefined}
     />
     {!recordable && view !== "topology" && view !== "flows" ? renderExtra?.(view, selected, year, setYear) : query.status !== "success" ? <AsyncStateMessage status={query.status} error={query.error} loadingLabel="正在加载历年行业指标…" onRetry={query.retry} /> : view === "topology" ? (
       // One scatter per row: in two columns the 660-wide chart shrank its axis text to about 7px.
-      <>
+      <Fragment key={chartKey}>
       {selected.length > 1 && <p className="muted">每个国家的散点按本国行业取坐标范围：点的位置只在同一国家内比较，跨国比较请看数值。</p>}
       <div className="comparison-facets comparison-facets--stacked">
         {selected.map((country) => (
@@ -258,13 +281,14 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
               yFormat="number"
               xScale="log"
               quadrantLabels={["流量大 · 经过的路线多", "流量小 · 经过的路线多", "流量小 · 经过的路线少", "流量大 · 经过的路线少"]}
+              dataLabel={`${countryLabel(country)} 流量与路径`}
             />
           </section>
         ))}
       </div>
-      </>
+      </Fragment>
     ) : view === "flows" ? (
-      <>
+      <Fragment key={chartKey}>
       {selected.length > 1 && <p className="muted">每个国家的条长按本国最大的行业缩放：条长只在同一国家内比较，跨国比较请看数值。</p>}
       {/* The butterfly needs about 440px for readable bars: two panels share a row only when each gets that. */}
       <div className={`comparison-facets ${selected.length > 2 ? "comparison-facets--stacked" : "comparison-facets--roomy"}`}>
@@ -293,7 +317,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
           );
         })}
       </div>
-      </>
+      </Fragment>
     ) : <>
       {view === "ranking" ? ranked.length ? <>
         <NetworkRanking rows={ranked} countries={selected} unit={unit} reference={industryReference} onIndustry={(next) => { setIndustry(next); setView("trend"); setFocusScope(true); }} />
@@ -301,9 +325,10 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
           <summary>全部指标表（一个国家各行业的多项网络指标，可排序，只供查阅）</summary>
           {renderTable(year, setYear)}
         </details>}
-      </> : <p role="status">该年份没有可用的行业排名，请更换指标或国家。</p> : <>
+      </> : <p role="status">该年份没有可用的行业排名，请更换指标或国家。</p> : <Fragment key={chartKey}>
       {finite.length ? <IndicatorTrendChart
-        rows={(query.data ?? []).filter((row) => row.industry === industry)}
+        rows={(query.data ?? []).filter((row) => row.industry === industry).map((row) => ({ ...row, [metric]: networkValue(row[metric], metric) }))}
+        emptyReading={(country, at) => (points.some((point) => point.country === country && point.year === at && point.undefined) ? PATH_UNDEFINED_LABEL : null)}
         countries={selected}
         years={years}
         metric={metric}
@@ -312,20 +337,27 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
         distribution={distribution}
         mode="context"
         sameIndustry
-      /> : <p role="status">该行业没有数据，请更换行业、指标或国家。</p>}
+      /> : <p role="status">{undefinedPoints.length ? `所选国家的该行业${PATH_UNDEFINED_NOTE}，${label}无法定义；请更换行业、指标或国家。` : "该行业没有数据，请更换行业、指标或国家。"}</p>}
+      {undefinedNote && <p className="muted">{undefinedNote}</p>}
       <details className="technical-details"><summary>查看趋势图逐年读数</summary>
         <ScrollableRegion className="table-wrap" label="行业趋势逐年读数"><table className="data-table">
           <thead><tr><th>年份</th>{selected.map((country) => <th key={country}>{countryLabel(country)}</th>)}</tr></thead>
-          <tbody>{years.map((year) => <tr key={year}><td>{year}</td>{selected.map((country) => <td key={country}>{indicatorNumber(points.find((point) => point.year === year && point.country === country)?.value ?? null, unit)}</td>)}</tr>)}</tbody>
+          <tbody>{years.map((year) => <tr key={year}><td>{year}</td>{selected.map((country) => {
+            const point = points.find((item) => item.year === year && item.country === country);
+            return <td key={country}>{point?.undefined ? PATH_UNDEFINED_LABEL : indicatorNumber(point?.value ?? null, unit)}</td>;
+          })}</tr>)}</tbody>
         </table></ScrollableRegion>
       </details>
-      </>}
+      </Fragment>}
     </>}
+    {(view === "trend" || view === "partners" ? years.includes(2020) : year === 2020) && <Year2020Note />}
     {recordable && schema?.fields[metric]?.desc && <p className="muted viz-metric-desc">{label}：{schema.fields[metric].desc}</p>}
     <section className="qualified-run-card" aria-label="步骤9报告材料">
       <h3>报告材料 · {observations.length ? `已${locked ? "" : "自动"}记录（${observations.length} 条读数）` : "尚未记录"}</h3>
       <p role="status">{!canRecord
-        ? `当前图表暂不能记录：${!recordable ? "探索视角不记录材料。" : view === "trend" ? "所选国家至少需要两个共同有效年份。" : "显示的行业里，至少要有一个行业所有所选国家都有数据。"}${observations.length ? "已记录的材料保持不变。" : ""}`
+        ? `当前图表暂不能记录：${!recordable ? "探索视角不记录材料。"
+          : flatValue !== null && query.status === "success" ? `图上${view === "trend" ? `所选国家历年的${label}` : `显示的行业的${label}`}全部${flatValue === 0 ? "为 0（例如没有生产或连接）" : `相同（都是 ${indicatorNumber(flatValue, unit)}）`}，没有可比较的差别，不记录为报告材料；请换一个${view === "trend" ? "行业" : "年份"}或指标。`
+          : view === "trend" ? (undefinedPoints.length ? `有的年份该行业${PATH_UNDEFINED_NOTE}，${label}无法定义；所选国家至少需要两个共同有效年份，请换一个行业、指标或国家。` : "所选国家至少需要两个共同有效年份。") : "显示的行业里，至少要有一个行业所有所选国家都有数据。"}${observations.length ? "已记录的材料保持不变。" : ""}`
         : locked
           ? `${MATERIAL_LOCKED_NOTE}${matchesSaved ? "当前图表就是已记录的材料。" : ""}`
         : matchesSaved

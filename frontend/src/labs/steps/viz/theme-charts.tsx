@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { countryLabel } from "../../../viz";
 import { useHoverTip, type TipLine } from "../../../viz/hover";
 import { CAT } from "../../../viz/shared";
@@ -27,7 +27,7 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
   total: string;
   totalLabel: string;
 }) {
-  const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
+  const { wrapRef, Tip, show, showNear, hide } = useHoverTip();
   const [active, setActive] = useState<string | null>(null);
   // Shares of the total per year; negative parts stack downwards from zero, like the signed bars.
   const facetData = facets.map((facet) => ({
@@ -72,7 +72,7 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
     if (next === undefined) return;
     event.preventDefault();
     setActive(`${facet.key}:${next}`);
-    showFor(event.currentTarget, linesFor(facet, next));
+    showNear(event.currentTarget.querySelector(`rect[data-year="${next}"]`) ?? event.currentTarget, linesFor(facet, next));
   };
   // Band paths: for each segment, the area between the running sums before and after it, per sign.
   const areas = (facet: typeof facetData[number]) => {
@@ -315,8 +315,24 @@ export function Butterfly({ rows, leftLabel, rightLabel, unit, title, onPick }: 
 }) {
   const { wrapRef, Tip, show, showFor, hide } = useHoverTip();
   const [hovered, setHovered] = useState<string | null>(null);
+  // Without pick buttons the rows themselves are read by keyboard: one Tab stop, arrow keys between rows.
+  const [activeIndex, setActiveIndex] = useState(0);
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const values = rows.flatMap((row) => [row.left, row.right]).filter(finiteValue);
   if (!values.length) return <p role="status">{title}没有有效读数（缺失留空）。</p>;
+  const current = Math.min(activeIndex, rows.length - 1);
+  const onRowKey = (event: KeyboardEvent<HTMLDivElement>, index: number) => {
+    if (onPick) return;
+    let next: number | undefined;
+    if (event.key === "ArrowDown" || event.key === "ArrowRight") next = Math.min(rows.length - 1, index + 1);
+    else if (event.key === "ArrowUp" || event.key === "ArrowLeft") next = Math.max(0, index - 1);
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = rows.length - 1;
+    if (next === undefined) return;
+    event.preventDefault();
+    setActiveIndex(next);
+    rowRefs.current[next]?.focus();
+  };
   const max = Math.max(...values.map(Math.abs)) || 1;
   const width = (value: number | null) => (finiteValue(value) ? (Math.abs(value) / max) * 100 : 0);
   const reading = (value: number | null) => indicatorNumber(value, unit);
@@ -337,24 +353,26 @@ export function Butterfly({ rows, leftLabel, rightLabel, unit, title, onPick }: 
         <span />
         <span style={{ color: CAT[0] }}>{rightLabel} ▶</span>
       </div>
-      {rows.map((row) => (
+      {rows.map((row, index) => (
         <div
           key={row.key}
+          ref={(node) => { rowRefs.current[index] = node; }}
           className="butterfly-row"
           data-hovered={hovered === row.key || undefined}
-          tabIndex={onPick ? -1 : 0}
+          tabIndex={onPick || index !== current ? -1 : 0}
           role="group"
-          aria-label={`${row.label}：${leftLabel} ${reading(row.left)}，${rightLabel} ${reading(row.right)}`}
+          aria-label={`${title} · ${row.label}：${leftLabel} ${reading(row.left)}，${rightLabel} ${reading(row.right)}${onPick ? "" : `（第 ${index + 1}/${rows.length} 行，上下方向键换行）`}`}
           onMouseMove={(event) => { setHovered(row.key); show(event, linesFor(row)); }}
           onMouseLeave={() => { setHovered(null); hide(); }}
-          onFocus={(event) => { setHovered(row.key); showFor(event.currentTarget, linesFor(row)); }}
+          onKeyDown={(event) => onRowKey(event, index)}
+          onFocus={(event) => { if (!onPick) setActiveIndex(index); setHovered(row.key); showFor(event.currentTarget, linesFor(row)); }}
           onBlur={() => { setHovered(null); hide(); }}
         >
           <span className="butterfly-value" style={{ textAlign: "right" }}>{reading(row.left)}</span>
           <div className="butterfly-track left"><i style={{ width: `${width(row.left)}%`, background: CAT[1] }} /></div>
           {onPick
-            ? <button type="button" className="butterfly-label" onClick={() => onPick(row.key)} aria-label={`查看 ${row.label} 的历年变化`}>{row.label}</button>
-            : <span className="butterfly-label">{row.label}</span>}
+            ? <button type="button" className="butterfly-label" onClick={() => onPick(row.key)} aria-label={`查看 ${row.label} 的历年变化`} title={row.label}>{row.label}</button>
+            : <span className="butterfly-label" title={row.label}>{row.label}</span>}
           <div className="butterfly-track right"><i style={{ width: `${width(row.right)}%`, background: CAT[0] }} /></div>
           <span className="butterfly-value">{reading(row.right)}</span>
         </div>

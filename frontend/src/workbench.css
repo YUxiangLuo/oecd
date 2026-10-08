@@ -444,7 +444,8 @@ button.dot-plot-label:hover, button.dot-plot-label:focus-visible { text-decorati
 .butterfly-track i { position: absolute; top: 0; bottom: 0; }
 .butterfly-track.left i { right: 0; border-radius: 3px 0 0 3px; }
 .butterfly-track.right i { left: 0; border-radius: 0 3px 3px 0; }
-.butterfly-label { font-size: 12px; text-align: center; color: #374151; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Long industry names ("C31T33 家具及其他制造") wrap onto a second line instead of being cut off. */
+.butterfly-label { font-size: 12px; line-height: 1.25; text-align: center; color: #374151; overflow: hidden; white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 button.butterfly-label { background: none; border: 0; color: #35328d; cursor: pointer; font: inherit; font-size: 12px; }
 button.butterfly-label:hover { text-decoration: underline; }
 button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text-decoration: underline; outline: 2px solid #4b47e0; outline-offset: 2px; border-radius: 4px; }

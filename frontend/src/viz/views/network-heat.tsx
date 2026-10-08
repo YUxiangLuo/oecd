@@ -7,6 +7,18 @@ import { type Row, SEQ, cardStyle, rowLabel } from "../shared";
 /* ----------------------------- 步骤9:热力表 ----------------------------- */
 
 export const HEAT_EVIDENCE_METRIC = "betweenesscentrality" as const;
+
+/**
+ * Path metrics follow a node's out-edges to the nodes it can reach. A node that reaches none (an industry with
+ * no output, or one that sells to no other industry) gets 0 from the pipeline, but the value is undefined:
+ * it is not "very close" or "very central". Betweenness and the degrees of such a node are real zeros.
+ */
+export const PATH_METRICS: ReadonlySet<string> = new Set(["Eccentricity", "closnesscentrality", "harmonicclosnesscentrality"]);
+export const PATH_UNDEFINED_LABEL = "无连接，无法定义";
+export const PATH_UNDEFINED_NOTE = "没有向其他行业供货的连接，到其他行业的距离无从谈起";
+export function pathMetricUndefined(metric: string, value: unknown): boolean {
+  return PATH_METRICS.has(metric) && value === 0;
+}
 export const HEAT_WEIGHTED_DEGREE_METRIC = "weighted degree" as const;
 export type HeatSortMetric = typeof HEAT_EVIDENCE_METRIC | typeof HEAT_WEIGHTED_DEGREE_METRIC;
 export type HeatCoverage = "top15" | "all";
@@ -47,13 +59,15 @@ export function heatCoverageLabel(coverage: HeatCoverage): string {
 
 const HEAT_COLS = [
   { key: HEAT_WEIGHTED_DEGREE_METRIC, name: "加权总度", fmt: "amount", desc: "买入 + 卖出的金额（百万美元）；自环（行业卖给自己的部分）在两边各算一次。" },
-  { key: HEAT_EVIDENCE_METRIC, name: "介数", fmt: "raw", desc: "只看连接、不看金额：其他节点之间的最短路线有多少经过这个行业。" },
+  { key: HEAT_EVIDENCE_METRIC, name: "介数", fmt: "count", desc: "只看连接、不看金额：其他节点之间的最短路线有多少经过这个行业。" },
   { key: "closnesscentrality", name: "接近中心性", fmt: "num", desc: "沿出边可达节点数除以到这些节点的最短距离之和。" },
   { key: "harmonicclosnesscentrality", name: "调和中心性", fmt: "num", desc: "沿出边到可达节点的距离倒数平均值。" },
   { key: "eigencentrality", name: "特征向量中心性（软件近似）", fmt: "num", desc: "被重要节点连接的节点得分更高；按 Gephi 网络软件的算法近似计算，只作参考。" },
 ] as const;
 
-const fmtVal = (v: number, fmt: string) => formatMetric(v, fmt === "amount" ? "amount" : "number");
+// Unnormalised betweenness counts paths: whole numbers from 1 up ("13", not "13.188" beside "4,769"), as in the
+// step 9 charts and the report.
+const fmtVal = (v: number, fmt: string) => formatMetric(v, fmt === "amount" ? "amount" : fmt === "count" && Math.abs(v) >= 1 ? "count" : "number");
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
 export const heatTextColor = (colorIndex: number) => colorIndex >= 4 ? "#fff" : "#1b1f2b";
@@ -96,11 +110,23 @@ export function HeatTableViz({
   const visible = visibleHeatRows(rows, sortMetric, coverage);
   const maxOf: Record<string, number> = {};
   HEAT_COLS.forEach((column) => {
-    const values = visible.map((row) => row[column.key]).filter(finite);
+    const values = visible.map((row) => row[column.key]).filter(finite).filter((value) => !pathMetricUndefined(column.key, value));
     maxOf[column.key] = Math.max(...values, 1e-9);
   });
   const cell = (row: Row, key: string, fmt: string, name: string) => {
     const raw = row[key];
+    if (pathMetricUndefined(key, raw)) {
+      return (
+        <span
+          data-metric-undefined="true"
+          title={`${name}：${PATH_UNDEFINED_NOTE}`}
+          style={{
+            display: "inline-block", minWidth: 92, padding: "5px 6px", borderRadius: 7, textAlign: "center",
+            background: "#f2f3f7", color: "#5f6677", fontSize: 12,
+          }}
+        >{PATH_UNDEFINED_LABEL}</span>
+      );
+    }
     if (!finite(raw)) {
       return (
         <span
@@ -171,7 +197,7 @@ export function HeatTableViz({
           <span key={column.key}> {schema?.fields[column.key]?.label ?? column.name}：{schema?.fields[column.key]?.desc ?? column.desc}</span>
         ))}
         <div>
-          颜色深浅表示该列可见行中的相对大小（每列单独计算）。这张表上的操作不会改变报告材料。
+          颜色深浅表示该列可见行中的相对大小（每列单独计算）。“{PATH_UNDEFINED_LABEL}”：该行业{PATH_UNDEFINED_NOTE}，接近中心性与调和中心性没有定义（不是 0）。这张表上的操作不会改变报告材料。
         </div>
       </div>
     </ScrollableRegion>
