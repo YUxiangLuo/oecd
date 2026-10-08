@@ -89,7 +89,7 @@ describe("demo-mode login UI source behavior", () => {
         // 提交会把预填的教师凭证原样发给真实登录 API。
         fireEvent.submit(document.querySelector("form")!);
         await waitFor(() => expect(logins).toEqual([{ username: "teacher", password: "gvclab2026" }]));
-        expect(document.querySelector(".login-hint")?.textContent).toContain("同一标签页刷新会无重复轮换账号和口令");
+        expect(document.querySelector(".login-hint")?.textContent).toContain("近 1 小时无人使用的种子学生账号");
       } finally {
         api.login = original;
       }
@@ -116,6 +116,51 @@ describe("demo-mode login UI source behavior", () => {
         render(<LoginPage onLogin={() => {}} />);
         await waitFor(() => expect(inputValue("login-user")).toBe("student07"));
         expect(inputValue("login-pass")).toBe("gvclab2026-07");
+      });
+    } finally { suggestion.mockRestore(); }
+  });
+
+  test("with every demo student in use the form is not prefilled with someone else's account", async () => {
+    const suggestion = spyOn(api, "demoStudent").mockResolvedValue({ username: null });
+    try {
+      await withDemoEnv("1", async () => {
+        render(<LoginPage onLogin={() => {}} />);
+        await waitFor(() => expect(inputValue("login-user")).toBe(""));
+        expect(inputValue("login-pass")).toBe("");
+        expect(screen.getByText(/暂无空闲演示账号/)).toBeDefined();
+        // The teacher shortcut is still offered.
+        expect(screen.getByRole("button", { name: /教师身份/ })).toBeDefined();
+      });
+    } finally { suggestion.mockRestore(); }
+  });
+
+  test("a reload asks the server for the tab's earlier suggestion back", async () => {
+    sessionStorage.setItem("gvcsim_demo_suggestion", "student09");
+    const suggestion = spyOn(api, "demoStudent").mockResolvedValue({ username: "student09" });
+    try {
+      await withDemoEnv("1", async () => {
+        render(<LoginPage onLogin={() => {}} />);
+        await waitFor(() => expect(inputValue("login-user")).toBe("student09"));
+        expect(suggestion).toHaveBeenCalledWith("student09");
+      });
+    } finally {
+      suggestion.mockRestore();
+      sessionStorage.removeItem("gvcsim_demo_suggestion");
+    }
+  });
+
+  test("choosing the teacher identity before the suggestion arrives keeps the teacher credentials", async () => {
+    let resolve: (value: { username: string | null }) => void = () => {};
+    const suggestion = spyOn(api, "demoStudent").mockImplementation(() => new Promise((done) => { resolve = done; }));
+    try {
+      await withDemoEnv("1", async () => {
+        render(<LoginPage onLogin={() => {}} />);
+        const teacher = screen.getByRole("button", { name: /教师身份/ });
+        fireEvent.click(teacher);
+        expect(teacher.getAttribute("aria-pressed")).toBe("true");
+        resolve({ username: "student07" });
+        await new Promise((done) => setTimeout(done, 0));
+        expect(inputValue("login-user")).toBe("teacher");
       });
     } finally { suggestion.mockRestore(); }
   });

@@ -243,17 +243,53 @@ def test_demo_student_suggestion_prefers_unused_accounts_and_spreads_concurrent_
     from gvcsim.api import app
 
     monkeypatch.setattr(auth_routes, "_recent_demo_suggestions", {})
-    for username in ("student02", "student03"):
+    for username in ("student02", "student03", "student04"):
         teaching_db.create_student(username, username, "valid-password-2026", "", "teacher")
     client = TestClient(app)
-    # "student" has logged in, so the two never-used accounts come first, one per page load.
+    # "student" has just logged in, so it is in use and never suggested; the idle accounts go one per page load.
     assert client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).status_code == 200
     first = client.get("/api/auth/demo-student").json()["username"]
     second = client.get("/api/auth/demo-student").json()["username"]
-    assert {first, second} == {"student02", "student03"}
-    # With every account just suggested, the oldest suggestion comes back instead of failing.
-    assert client.get("/api/auth/demo-student").json()["username"] == "student"
-    assert client.get("/api/auth/demo-student").json()["username"] == first
+    assert {first, second} <= {"student02", "student03", "student04"} and first != second
+    # A reload of the first tab gets its account back instead of holding another one.
+    assert client.get("/api/auth/demo-student", params={"keep": first}).json()["username"] == first
+    third = client.get("/api/auth/demo-student").json()["username"]
+    assert third not in {first, second, "student"}
+    # With every idle account just suggested, the oldest suggestion nobody logged into comes back (the reload
+    # renewed the first tab's hold, so that is the second one).
+    assert client.get("/api/auth/demo-student").json()["username"] == second
+    # Once it is logged into, it is in use and is no longer handed out, not even to the tab that kept it.
+    assert (
+        client.post("/api/auth/login", json={"username": second, "password": "valid-password-2026"}).status_code == 200
+    )
+    assert client.get("/api/auth/demo-student", params={"keep": second}).json()["username"] == first
+
+
+def test_demo_student_suggestion_is_empty_when_every_account_is_in_use(teaching_db, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from gvcsim import auth_routes
+    from gvcsim.api import app
+
+    monkeypatch.setattr(auth_routes, "_recent_demo_suggestions", {})
+    client = TestClient(app)
+    assert client.post("/api/auth/login", json={"username": "student", "password": "gvclab2026"}).status_code == 200
+    assert client.get("/api/auth/demo-student").json() == {"username": None}
+
+
+def test_demo_student_suggestion_is_rate_limited_per_source(teaching_db, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from gvcsim import auth_routes
+    from gvcsim.api import app
+    from gvcsim.rate_limit import SlidingWindowRateLimiter
+
+    monkeypatch.setattr(auth_routes, "_DEMO_SUGGESTION_LIMITER", SlidingWindowRateLimiter(2))
+    client = TestClient(app)
+    assert client.get("/api/auth/demo-student").status_code == 200
+    assert client.get("/api/auth/demo-student").status_code == 200
+    limited = client.get("/api/auth/demo-student")
+    assert limited.status_code == 429 and "Retry-After" in limited.headers
 
 
 def test_demo_student_suggestion_does_not_exist_outside_demo_mode(teaching_db, monkeypatch):

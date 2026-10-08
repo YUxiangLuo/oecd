@@ -285,21 +285,23 @@ def current_auth_subject(
         ).fetchone()
 
 
-def demo_students_by_activity() -> list[str]:
-    """Demo student usernames, least recently active first (never-used accounts lead).
+def demo_students_by_activity(in_use_seconds: float) -> list[tuple[str, bool]]:
+    """Demo student usernames, least recently active first (never-used accounts lead), each with whether it
+    is in use: active within ``in_use_seconds``.
 
     Activity is the later of the last login and the last saved session in any release, so an account a
     student is still working in is not handed to someone else just because the login was long ago.
     """
     with conn() as c:
         rows = c.execute(
-            "SELECT a.username, GREATEST(a.last_login_at, MAX(s.updated_at)) AS active_at FROM accounts a"
+            "SELECT username, active_at IS NOT NULL AND active_at > now() - make_interval(secs => %s) AS in_use"
+            " FROM (SELECT a.username, GREATEST(a.last_login_at, MAX(s.updated_at)) AS active_at FROM accounts a"
             " LEFT JOIN experiment_sessions s ON s.account_id=a.id"
             " WHERE a.role='student' AND a.username = ANY(%s)"
-            " GROUP BY a.id ORDER BY active_at ASC NULLS FIRST, a.username",
-            (sorted(demo_accounts.DEMO_STUDENT_USERNAMES),),
+            " GROUP BY a.id) activity ORDER BY active_at ASC NULLS FIRST, username",
+            (in_use_seconds, sorted(demo_accounts.DEMO_STUDENT_USERNAMES)),
         ).fetchall()
-    return [row["username"] for row in rows]
+    return [(row["username"], bool(row["in_use"])) for row in rows]
 
 
 def touch_login(username: str) -> None:

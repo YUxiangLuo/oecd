@@ -81,6 +81,24 @@ interface StudentWorkspaceProps {
 }
 
 /** Loaded student course shell. Data loading and all state ownership stay in App. */
+/** Country A stays first: steps 3–5 compare a pair (A, B); steps 6–9 take up to five economies. */
+export function carriedComparisonFor(
+  step: number,
+  current: readonly string[],
+  savedComparison: (prior: number) => unknown,
+): string[] {
+  if (step < 3 || step > 9 || current.length >= 2) return [];
+  for (let prior = step - 1; prior >= 2; prior -= 1) {
+    const candidates = savedComparison(prior);
+    if (Array.isArray(candidates) && candidates.length >= 2) {
+      const unique = candidates.filter((code, index): code is string =>
+        typeof code === "string" && candidates.indexOf(code) === index);
+      if (unique.length >= 2) return unique.slice(0, step <= 5 ? 2 : 5);
+    }
+  }
+  return [];
+}
+
 export function StudentWorkspace({
   user,
   meta,
@@ -120,18 +138,10 @@ export function StudentWorkspace({
     session.unsynced || session.syncing, Boolean(session.syncError));
   const currentComparison = session.getStep<{ compared?: string[] }>(step.n)?.compared ?? [];
   // Steps 3–9 record their comparison as soon as they open, so a step visited for the first time starts
-  // from the pair used in the latest earlier step instead of the default CHN/USA. Once the step saves its
-  // own comparison, that one is used.
-  let carriedComparison: string[] = [];
-  if (step.n >= 3 && step.n <= 9 && currentComparison.length < 2) {
-    for (let prior = step.n - 1; prior >= 2; prior -= 1) {
-      const candidates = session.getStep<{ compared?: string[] }>(prior)?.compared;
-      if (Array.isArray(candidates) && candidates.length >= 2) {
-        carriedComparison = candidates.slice(-2);
-        break;
-      }
-    }
-  }
+  // from the comparison used in the latest earlier step instead of the default CHN/USA. Once the step saves
+  // its own comparison, that one is used.
+  const carriedComparison = carriedComparisonFor(step.n, currentComparison,
+    (prior) => session.getStep<{ compared?: string[] }>(prior)?.compared);
   const labState: typeof stepState = carriedComparison.length >= 2
     ? {
       ...stepState,
@@ -226,6 +236,7 @@ export function StudentWorkspace({
                       state={labState}
                       report={session.report}
                       sessionUpdatedAt={session.updatedAt}
+                      reportCurrent={session.completion?.steps.find((item) => item.step === 15)?.complete ?? null}
                       reportGate={session.reportGate}
                       sessionStatus={session.status}
                       sessionUnsynced={session.unsynced}

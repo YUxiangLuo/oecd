@@ -16,6 +16,8 @@ export const LOGIN_DATA_LABEL = "数据来源与范围以登录后的课程数�
 
 export const DEMO_STUDENT_COUNT = 50;
 const SEEN_DEMO_STUDENTS_KEY = "gvcsim_seen_demo_students";
+// The account the server last suggested to this tab: a reload asks for it back instead of holding another.
+const DEMO_SUGGESTION_KEY = "gvcsim_demo_suggestion";
 
 export interface DemoStudentCredential {
   username: string;
@@ -120,6 +122,8 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
   const [username, setUsername] = useState(returningUsername || demoStudent?.username || "");
   const [password, setPassword] = useState(demoStudent?.password ?? "");
   const edited = useRef(false);
+  // Every demo student is in use (the server had none idle): the form is not prefilled with someone's account.
+  const [noIdleDemoStudent, setNoIdleDemoStudent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // A rate-limit message carries the wait time; typing must not hide it (a retry would only hit 429 again).
   const keepError = useRef(false);
@@ -136,12 +140,24 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
   useEffect(() => {
     if (!demoMode || !initialDemoSelection) return;
     let live = true;
-    api.demoStudent().then(({ username: suggested }) => {
-      const student = demoStudents.find((item) => item.username === suggested);
-      if (!live || !student || edited.current) return;
+    let keep: string | null = null;
+    try { keep = sessionStorage.getItem(DEMO_SUGGESTION_KEY); } catch { /* no earlier suggestion to keep */ }
+    api.demoStudent(keep).then(({ username: suggested }) => {
+      if (!live) return;
+      const student = demoStudents.find((item) => item.username === suggested) ?? null;
+      try {
+        if (student) sessionStorage.setItem(DEMO_SUGGESTION_KEY, student.username);
+        else sessionStorage.removeItem(DEMO_SUGGESTION_KEY);
+      } catch {
+        // A reload then simply asks for a new suggestion.
+      }
+      if (edited.current) return;
+      if (!student && suggested !== null) return;
       setDemoStudent(student);
-      setUsername((current) => (current === initialDemoSelection.student.username ? student.username : current));
-      setPassword((current) => (current === initialDemoSelection.student.password ? student.password : current));
+      setNoIdleDemoStudent(!student);
+      const local = initialDemoSelection.student;
+      setUsername((current) => (current === local.username ? student?.username ?? "" : current));
+      setPassword((current) => (current === local.password ? student?.password ?? "" : current));
     }, () => {});
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,12 +172,12 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
     }
   }, [demoMode, initialDemoSelection]);
 
-  const demoAccounts = demoStudent ? [
-    {
+  const demoAccounts = demoStudent || noIdleDemoStudent ? [
+    ...(demoStudent ? [{
       ...demoStudent,
       label: "学生身份",
-      note: `${DEMO_STUDENT_COUNT} 个种子学生 · 优先分配空闲账号`,
-    },
+      note: `${DEMO_STUDENT_COUNT} 个种子学生 · 分配近 1 小时无人使用的账号`,
+    }] : []),
     {
       username: "teacher",
       password: demoPassword,
@@ -231,9 +247,13 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
                 key={a.username}
                 type="button"
                 className={`login-role${username === a.username ? " on" : ""}`}
+                aria-pressed={username === a.username}
                 onClick={() => {
+                  // A choice made here wins over a server suggestion that arrives later.
+                  edited.current = true;
                   setUsername(a.username);
                   setPassword(a.password);
+                  clearError();
                 }}
               >
                 <span className="login-role-label">{a.label}</span>
@@ -257,7 +277,9 @@ export function LoginPage({ notice, username: returningUsername, onLogin }: {
             {busy ? "正在登录…" : "登录"}
           </button>
           <div className="login-hint">
-            {demoMode && !returningUsername && <>当前预填的是 {DEMO_STUDENT_COUNT} 个种子学生中的一组；同一标签页刷新会无重复轮换账号和口令，轮完后再开启下一轮。上方可一键切换学生 / 教师身份。<br /></>}
+            {demoMode && !returningUsername && (noIdleDemoStudent
+              ? <>{DEMO_STUDENT_COUNT} 个种子学生账号近 1 小时都有人在用，暂无空闲演示账号；请向老师索取账号，或稍后刷新页面。<br /></>
+              : <>当前预填的是一个近 1 小时无人使用的种子学生账号；退出后本标签页回到原账号。上方可一键切换学生 / 教师身份。<br /></>)}
             登录用于区分每位同学的实验记录。刷新可继续实验；退出只影响当前标签页。
           </div>
         </form>

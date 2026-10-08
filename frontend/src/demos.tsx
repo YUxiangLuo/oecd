@@ -382,16 +382,16 @@ export function DecompositionDemo({
   const countryA = explicitDemoCountry(meta.countries, primaryCountry) ?? "";
   const [localB, setLocalB] = useState(defaultB);
   // At country–industry level B may be A's own country, to compare two of its industries. That choice stays
-  // in this view: the report material's comparison country (secondaryCountry) must differ from A.
-  const [bSameAsA, setBSameAsA] = useState(false);
-  const sameCountryB = bSameAsA && gran === "sector";
-  const countryB = sameCountryB ? countryA : secondaryCountry ?? localB;
+  // in this view: the report material's comparison country (secondaryCountry) must differ from A. The chosen
+  // country is stored itself, so changing A afterwards leaves B where the student put it.
+  const [viewOnlyB, setViewOnlyB] = useState<string | null>(null);
+  const countryB = viewOnlyB && gran === "sector" ? viewOnlyB : secondaryCountry ?? localB;
   const setCountryB = (value: string) => {
     if (value === countryA) {
-      setBSameAsA(true);
+      setViewOnlyB(value);
       return;
     }
-    setBSameAsA(false);
+    setViewOnlyB(null);
     (onSecondaryChange ?? setLocalB)(value);
   };
   const [sectorA, setSectorA] = useState("");

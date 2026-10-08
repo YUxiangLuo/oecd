@@ -170,7 +170,10 @@ export const api = {
       return await resp.json() as import("./types").LoginResponse;
     }),
   /** Demo builds only: the least recently used demo student, so classmates rarely land on one account. */
-  demoStudent: () => getWithToken<{ username: string }>("/api/auth/demo-student", null, "暂时无法分配演示账号"),
+  /** Demo builds: an idle demo student (null when all are in use); `keep` asks for this tab's earlier one back. */
+  demoStudent: (keep?: string | null) => getWithToken<{ username: string | null }>(
+    keep ? `/api/auth/demo-student?keep=${encodeURIComponent(keep)}` : "/api/auth/demo-student",
+    null, "暂时无法分配演示账号"),
   me: (token: string) =>
     getWithToken<import("./types").AuthUser>("/api/auth/me", token, "令牌无效或已过期"),
   changePassword: (currentPassword: string, newPassword: string) =>

@@ -20,6 +20,7 @@ _LOGIN_SOURCE_LIMITER = SlidingWindowRateLimiter(config.LOGIN_SOURCE_ATTEMPTS_PE
 def clear_rate_limits() -> None:
     _LOGIN_ACCOUNT_LIMITER.clear()
     _LOGIN_SOURCE_LIMITER.clear()
+    _DEMO_SUGGESTION_LIMITER.clear()
 
 
 def _limit_login(request: Request, username: str) -> None:
@@ -82,33 +83,54 @@ def login(req: LoginRequest, request: Request):
 
 
 _DEMO_SUGGESTION_HOLD_SECONDS = 600.0
+# An account logged into or saved within the last hour is someone's: it is never suggested to another person.
+_DEMO_IN_USE_SECONDS = 3600.0
 _recent_demo_suggestions: dict[str, float] = {}
 _demo_suggestion_lock = threading.Lock()
+_DEMO_SUGGESTION_LIMITER = SlidingWindowRateLimiter(config.LOGIN_SOURCE_ATTEMPTS_PER_MINUTE)
 
 
 @router.get("/demo-student")
-def demo_student_suggestion():
-    """Demo builds only: the demo student least recently used, so two people rarely share an account.
+def demo_student_suggestion(request: Request, keep: str | None = None):
+    """Demo builds only: an idle demo student, so two people rarely share an account.
 
-    Accounts suggested in the last ten minutes are skipped (two page loads at the same moment get
-    different ones); only when every account was just suggested does the oldest suggestion come back.
+    Accounts active in the last hour are never suggested. Accounts suggested in the last ten minutes are
+    skipped (two page loads at the same moment get different ones), except ``keep``: the account this tab
+    was given before, which a reload gets back instead of holding another one. When every idle account is
+    held, the oldest suggestion nobody has logged into comes back; when none is idle, ``username`` is null.
     """
     if not config.DEMO_MODE:
         raise HTTPException(status_code=404, detail="Not Found")
+    source = request.client.host if request.client is not None else "unknown"
     try:
-        candidates = db.demo_students_by_activity()
-    except Exception as error:  # noqa: BLE001 - the login page falls back to its own rotation
+        _DEMO_SUGGESTION_LIMITER.check(source)
+    except RateLimitExceeded as error:
+        raise HTTPException(
+            status_code=429,
+            detail=f"请求过于频繁，请约 {error.retry_after_header} 秒后重试",
+            headers={"Retry-After": error.retry_after_header},
+        ) from error
+    try:
+        candidates = db.demo_students_by_activity(_DEMO_IN_USE_SECONDS)
+    except Exception as error:  # noqa: BLE001 - the login page falls back to its own pick
         raise HTTPException(status_code=503, detail="暂时无法分配演示账号") from error
     if not candidates:
         raise HTTPException(status_code=404, detail="没有可用的演示账号")
+    idle = [username for username, in_use in candidates if not in_use]
     now = time.monotonic()
     with _demo_suggestion_lock:
         for username, at in list(_recent_demo_suggestions.items()):
             if now - at > _DEMO_SUGGESTION_HOLD_SECONDS:
                 del _recent_demo_suggestions[username]
-        fresh = [username for username in candidates if username not in _recent_demo_suggestions]
-        chosen = fresh[0] if fresh else min(candidates, key=lambda username: _recent_demo_suggestions[username])
-        _recent_demo_suggestions[chosen] = now
+        if keep in idle:
+            chosen: str | None = keep
+        else:
+            fresh = [username for username in idle if username not in _recent_demo_suggestions]
+            chosen = (
+                fresh[0] if fresh else min(idle, key=lambda username: _recent_demo_suggestions[username], default=None)
+            )
+        if chosen is not None:
+            _recent_demo_suggestions[chosen] = now
     return {"username": chosen}
 
 

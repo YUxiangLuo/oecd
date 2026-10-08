@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
+  carriedComparisonFor,
   StudentWorkspaceSkipLink,
   focusStepMainContent,
   stepMainContentId,
@@ -42,4 +43,15 @@ describe("student workspace skip link", () => {
     expect({ prevented, focused, scrolled }).toEqual({ prevented: 1, focused: 1, scrolled: 1 });
     expect(stepMainContentId(12)).not.toBe(stepMainContentId(13));
   });
+});
+
+test("a carried comparison keeps country A first: a pair for steps 3–5, up to five economies for steps 6–9", () => {
+  const saved: Record<number, unknown> = { 6: ["DEU", "CHN", "USA", "MEX", "IRL"] };
+  const read = (prior: number) => saved[prior];
+  expect(carriedComparisonFor(7, [], read)).toEqual(["DEU", "CHN", "USA", "MEX", "IRL"]);
+  expect(carriedComparisonFor(9, ["DEU"], read)).toEqual(["DEU", "CHN", "USA", "MEX", "IRL"]);
+  expect(carriedComparisonFor(5, [], (prior) => (prior === 4 ? ["JPN", "KOR", "VNM"] : undefined))).toEqual(["JPN", "KOR"]);
+  // The step's own comparison wins once it has one.
+  expect(carriedComparisonFor(7, ["CHN", "USA"], read)).toEqual([]);
+  expect(carriedComparisonFor(10, [], read)).toEqual([]);
 });

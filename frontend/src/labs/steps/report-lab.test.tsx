@@ -336,6 +336,22 @@ test("blocks stale snapshot export and submission after edits, saves and reloads
   expect(disabled("提交报告给老师")).toBe(false);
 });
 
+test("the server's report-current verdict wins over a newer session save time", () => {
+  const props = {
+    state: { data: {}, save: () => {}, complete: true, syncing: false, syncError: null, syncNow: () => {} },
+    report: report("graded"), reportGate: [], sessionStatus: "ready" as const,
+    sessionUnsynced: false, sessionSyncing: false, sessionUpdatedAt: "2026-08-14T00:00:00Z",
+    onFlushSession: async () => {}, onNavigateStep: () => {}, onReportChanged: () => {},
+  };
+  // Typing a character and deleting it saves the session again but leaves the report inputs unchanged.
+  const current = render(<ReportLab {...props} reportCurrent />);
+  expect(screen.queryByText("报告需更新后重新提交")).toBeNull();
+  expect((screen.getByRole("button", { name: "导出 PDF" }) as HTMLButtonElement).disabled).toBe(false);
+  current.unmount();
+  render(<ReportLab {...props} sessionUpdatedAt="2026-08-01T00:00:00Z" reportCurrent={false} />);
+  expect(screen.getByText("报告需更新后重新提交")).toBeDefined();
+});
+
 const mutation = (state: ClassroomReport["state"]): ReportMutationResponse => ({
   report: report(state), report_gate: [], material_gate: [],
   completion: { steps: [], completed: [], completed_count: 0, total: 15 },

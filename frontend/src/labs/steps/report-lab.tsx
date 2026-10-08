@@ -225,6 +225,7 @@ export function ReportLab({
   state,
   report,
   sessionUpdatedAt,
+  reportCurrent,
   reportGate,
   sessionStatus,
   sessionUnsynced,
@@ -237,6 +238,8 @@ export function ReportLab({
   state: StepStateApi;
   report: ClassroomReport | null;
   sessionUpdatedAt?: string | null;
+  /** Server verdict (step 15 completion): the report was built from the session's current report inputs. */
+  reportCurrent?: boolean | null;
   reportGate: ReportGateItem[] | null;
   sessionStatus: SessionStatus;
   sessionUnsynced: boolean;
@@ -271,8 +274,12 @@ export function ReportLab({
   const materialMissing = visibleBlocked.filter((item) => item.step > 0 && item.step < 15);
   const globalMissing = visibleBlocked.filter((item) => item.step <= 0).length;
   const busy = generating || submitting || printing;
+  // The server compares content fingerprints, so typing and deleting a character (or changing a view-only
+  // setting) leaves the report current; the timestamp is only a fallback before the server has answered.
   const reportOutdated = Boolean(report && (sessionUnsynced || sessionSyncing
-    || (sessionUpdatedAt && Date.parse(sessionUpdatedAt) > Date.parse(report.generated_at))));
+    || (typeof reportCurrent === "boolean"
+      ? !reportCurrent
+      : sessionUpdatedAt && Date.parse(sessionUpdatedAt) > Date.parse(report.generated_at))));
   const readyRef = useRef(sessionStatus === "ready");
   readyRef.current = sessionStatus === "ready";
   const flushRef = useRef(onFlushSession);

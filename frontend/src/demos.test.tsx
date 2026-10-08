@@ -421,6 +421,13 @@ describe("object B country", () => {
       fireEvent.change(view.getAllByLabelText("国家")[1], { target: { value: "CHN" } });
       expect((view.getAllByLabelText("国家")[1] as HTMLSelectElement).value).toBe("CHN");
       expect(partners).toEqual([]);
+      // Changing A afterwards leaves B on the country the student chose, rather than following A.
+      view.rerender(
+        <DecompositionDemo step={5} meta={{ years: [2020], countries: ["CHN", "USA"], sectors: ["C26", "C29"], dataset: null }}
+          primaryYear={2020} primaryCountry="USA" secondaryCountry="CHN" onSecondaryChange={(value) => partners.push(value)} />,
+      );
+      expect((view.getAllByLabelText("国家")[0] as HTMLSelectElement).value).toBe("USA");
+      expect((view.getAllByLabelText("国家")[1] as HTMLSelectElement).value).toBe("CHN");
     } finally {
       countryRequest.mockRestore();
       industryRequest.mockRestore();
