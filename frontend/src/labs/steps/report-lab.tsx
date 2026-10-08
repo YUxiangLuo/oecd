@@ -673,7 +673,7 @@ export function ReportLab({
         <ol>
           <li><b>1 · 检查实验材料</b><span>{state.syncConflict ? "另一处已更新记录，请先点页面顶部的“载入服务器版本”" : state.syncError ? "保存失败，请先重试保存" : reportGate == null || sessionStatus !== "ready" ? "正在核对服务器记录" : sessionUnsynced || sessionSyncing ? "保存后将重新核对材料" : materialMissing.length || globalMissing ? `${[materialMissing.length ? `步骤 1–14 中 ${materialMissing.length} 个步骤还有 ${materialMissing.reduce((count, item) => count + item.missing.length, 0)} 项待补齐` : null, globalMissing ? `${globalMissing} 项其他条件未满足` : null].filter(Boolean).join("，")}，见下方入口` : "材料和理解题都已齐全"}</span></li>
           <li><b>2 · 写你的分析</b><span>{writtenCount} / 3 段达到最低字数 · 内容仍需自己核对</span></li>
-          <li><b>3 · 提交给老师</b><span>{report && report.state !== "draft" && reportOutdated ? "报告需更新：之后的修改还没交给老师，请重新生成并提交" : report?.state === "pending" ? "已提交，等待评阅" : report?.state === "graded" ? <a href="#report-status-card" onClick={(event) => { event.preventDefault(); statusCardRef.current?.scrollIntoView?.({ block: "center" }); statusCardRef.current?.focus({ preventScroll: true }); }}>{report.feedback?.trim() ? "已评阅，查看分数与评语" : "已评阅，查看分数"}</a> : report ? "已有草稿，尚未提交" : "生成报告不等于提交"}</span></li>
+          <li><b>3 · 提交给老师</b><span>{report && report.state !== "draft" && reportOutdated ? "报告需更新：之后的修改还没交给老师，请点“更新报告并提交给老师”" : report?.state === "pending" ? "已提交，等待评阅" : report?.state === "graded" ? <a href="#report-status-card" onClick={(event) => { event.preventDefault(); statusCardRef.current?.scrollIntoView?.({ block: "center" }); statusCardRef.current?.focus({ preventScroll: true }); }}>{report.feedback?.trim() ? "已评阅，查看分数与评语" : "已评阅，查看分数"}</a> : report ? "已有草稿，尚未提交" : "生成报告不等于提交"}</span></li>
         </ol>
       </section>
       {visibleBlocked.length > 0 && <GateCard blocked={visibleBlocked} onNavigateStep={onNavigateStep} flash={gateFlash} />}
@@ -766,7 +766,7 @@ export function ReportLab({
         <h3>{report && report.state !== "draft" ? (reportOutdated ? "报告需更新后重新提交" : "报告已交给老师") : "核对完毕后，完成提交"}</h3>
         <p>提交前会先保存文字并检查材料；导出 PDF 仅供个人留存，不能代替提交。</p>
         {/* Same amber callout as the re-run warning on steps 11–14: this action clears the teacher's grade. */}
-        {report?.state === "graded" && <p className="reg-rerun-warning" role="note"><b>注意</b>重新生成并提交会替换已评阅报告，并清除原评分和评语。</p>}
+        {report?.state === "graded" && <p className="reg-rerun-warning" role="note"><b>注意</b>再次生成并提交（“更新报告并提交给老师”或“重新生成并提交”）会替换已评阅报告，并清除原评分和评语。</p>}
         {/* One action group per state: the primary action first, never two buttons doing the same thing. */}
         <div className="report-actions">
           {(!report || reportOutdated) && <button type="button" className="primary" disabled={busy} aria-disabled={gated || undefined} aria-describedby={gated ? "report-gated-reason" : undefined} onClick={() => generateOrShowGate(true)}>
