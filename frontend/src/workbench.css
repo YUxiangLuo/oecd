@@ -106,21 +106,13 @@
 .reg-plain-verdict .reg-headline-main b { color: #2b2f9e; }
 .reg-plain-verdict .reg-headline-interval { display: block; margin-top: 3px; color: #4f586b; font-size: 13px; font-weight: 600; }
 .verdict-card p.reg-verdict-direction { margin: -4px 0 10px; color: #3a4050; font-size: 13px; font-weight: 700; }
-.verdict-card p.reg-caveat {
+.verdict-card .reg-caveat {
   margin: 12px 0 0; padding: 9px 12px; border: 1px solid #ecd9a9; border-left: 4px solid #d99a2b;
   border-radius: 8px; background: #fff8e8; color: #5c4618; font-size: 12.5px;
 }
 .reg-caveat b { margin-right: 8px; color: #8a5b12; }
 .model-eq sub { font-size: .72em; }
 .model-eq-terms { display: grid; gap: 3px; margin: 0 0 8px; padding-left: 18px; color: #394258; font-size: 12px; line-height: 1.6; }
-.reg-y-pill {
-  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 8px; padding: 4px 6px 4px 12px;
-  border: 1px solid #e8c77b; border-radius: 999px; background: #fff8e8; color: #6b450b; font-size: 12px; font-weight: 600;
-}
-.reg-y-pill button {
-  border: 0; background: transparent; padding: 2px 6px; font: inherit; color: #4b47e0; cursor: pointer; text-decoration: underline;
-}
-.reg-y-pill button:disabled { opacity: .5; cursor: default; }
 .reg-rerun-warning {
   margin: 10px 0 0; padding: 8px 11px; border: 1px solid #e8c77b; border-left: 4px solid #d99a2b;
   border-radius: 8px; background: #fff8e8; color: #6b450b; font-size: 12px; line-height: 1.6;
@@ -128,7 +120,6 @@
 .reg-rerun-warning b { margin-right: 8px; }
 .reg-stale-note { margin: 0 0 8px; padding: 7px 10px; border-radius: 7px; background: #fff0db; color: #8b4f00; font-size: 12px; font-weight: 700; }
 .reg-results-stale .verdict-anchor { opacity: .62; }
-.verdict-card .coef-plot { margin: 4px 0 2px; }
 .stale-result { margin: 8px 0; padding: 7px 9px; border-radius: 7px; background: #fff0db; color: #8b4f00; font-weight: 700; font-size: 11.5px; }
 .reg-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .reg-section-heading h3 { margin: 4px 0; }
@@ -370,10 +361,7 @@
 .teaching-x-card > p { margin: 4px 0 0; color: #3f4759; font-size: 12.5px; line-height: 1.6; }
 .teaching-x-card .teaching-x-formula { font-size: 15px; color: #1b1f2b; font-variant-numeric: tabular-nums; }
 @media (max-width: 900px) { .teaching-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.reg-step-focus { margin: 4px 0 8px; color: #394258; font-size: 12.5px; line-height: 1.65; }
-.reg-step-focus b { margin-right: 6px; color: #4b47e0; }
 .reg-group-figure { margin: 10px 0 12px; }
-.reg-group-figure > p { margin: 6px 0 0; font-size: 11.5px; line-height: 1.6; }
 
 /* ---- 图表悬停读数层（viz/hover.tsx）：所有数值同时在图下读数表可得，提示只做增强 ---- */
 .hover-wrap { position: relative; }
@@ -485,13 +473,9 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .butterfly-value { font-size: 11.5px; font-variant-numeric: tabular-nums; color: #374151; }
 .controls-sep { color: #9aa3b5; margin: 0 2px; }
 /* Each panel is a 640-wide chart: narrower than ~620px its 11px text shrinks below 10px, so two panels share a row only on very wide screens. */
-.reg-family-panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(620px, 100%), 1fr)); gap: 12px; margin: 10px 0 14px; }
 .reg-family-missing { padding: 14px; border: 1px dashed #d7dae2; border-radius: 12px; font-size: 12px; }
-.reg-equation { margin-top: 12px; }
 
 /* Steps 11–14: same-family Y choice above the group chart. */
-.reg-baseline-select { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 6px 0 10px; }
-.reg-baseline-select .muted { font-size: 12px; }
 
 /* 贸易伙伴: the diagram's key above it, and the region legend for the partner circles' outline colour. */
 .ego-network-key { margin: 0 0 4px; color: #596173; font-size: 11.5px; line-height: 1.5; }
@@ -504,3 +488,8 @@ button.butterfly-label:focus-visible, button.dot-plot-label:focus-visible { text
 .add-country button[aria-disabled="true"] { opacity: .5; cursor: default; }
 /* Ranked industry rows bleed 8px into their row padding; keep them inside the bordered box. */
 .industry-ranking-box { padding: 4px 12px; }
+
+/* Steps 11–15 result bars (diverging-bars.tsx) and the lines around them. */
+.reg-family-bars, .reg-summary-bars { margin: 10px 0 6px; }
+.reg-identity-note { margin: 2px 0 10px; font-size: 12px; line-height: 1.6; }
+.verdict-card p.reg-verdict-direction .reg-interval-words { color: #4f586b; font-weight: 500; font-size: 12.5px; }
