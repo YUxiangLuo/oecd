@@ -127,7 +127,9 @@ export function StudentBatchModal({ semesters, initialClassId, onClose, onCreate
         // The server answered: nothing was created, so the roster can be fixed and previewed again.
         setAttempted(false);
         setRefused(true);
-        setError(`${userFacingRequestError(cause, "创建失败")}\n刚才下载的账号清单作废；返回修改后重新预览会生成新的初始密码，请重新下载。`);
+        const message = userFacingRequestError(cause, "创建失败");
+        const end = /[。！？.!?]$/.test(message) ? "" : "。";
+        setError(`${message}${end}\n刚才下载的账号清单作废；返回修改后重新预览会标出冲突的学号，并生成新的初始密码，请重新下载。`);
       } else {
         const message = userFacingRequestError(cause, "创建失败");
         const end = /[。！？.!?]$/.test(message) ? "" : "。";

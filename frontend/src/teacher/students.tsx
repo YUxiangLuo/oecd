@@ -4,7 +4,7 @@ import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import type { AcademicSemester, StudentRow } from "../types";
 import { userFacingRequestError } from "../user-facing-error";
-import { AcademicFilters, matchesAcademicFilter } from "./academic-filter";
+import { AcademicFilters, matchesAcademicFilter, enrollmentLabel } from "./academic-filter";
 import { normalizeLabel, stripInvisibleEdges } from "./text";
 import { EmptyState, LoadFailure, Modal, SearchInput, StatusPill, Toolbar, useModalErrorFocus, useRefetchOnVisible } from "./ui";
 
@@ -211,7 +211,7 @@ export function StudentsTab() {
                 <td className="mono">{student.username}</td>
                 <td className="student-no-cell" title={student.student_no || undefined}>{student.student_no || "—"}</td>
                 <td className="class-memberships">{student.enrollments.length
-                  ? student.enrollments.map((item) => <span key={item.term_id}>{item.term_name} · {item.class_name}</span>)
+                  ? student.enrollments.map((item) => <span key={item.term_id}>{enrollmentLabel(item, semesters)}</span>)
                   : "未分班"}</td>
                 <td title={`已完成步骤：${student.verified_completed_steps.join("、") || "无"}`}>
                   <span className="step-cell"><span className="mini-track verified"><span className="mini-bar" style={{ width: `${student.verified_completed_count / student.verified_total_steps * 100}%` }} /></span>{student.verified_completed_count}/{student.verified_total_steps}</span>

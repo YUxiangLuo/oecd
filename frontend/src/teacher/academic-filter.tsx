@@ -2,6 +2,14 @@ import type { AcademicSemester, ClassEnrollment } from "../types";
 
 export const UNASSIGNED_CLASS = -1;
 
+/** "2026 秋 · 一班", with "（已归档）" when the class or its semester is archived (as the filter lists them). */
+export function enrollmentLabel(item: ClassEnrollment, semesters: readonly AcademicSemester[]): string {
+  const semester = semesters.find((candidate) => candidate.id === item.term_id);
+  const group = semester?.classes.find((candidate) => candidate.id === item.class_id);
+  const archived = semester != null && (!semester.is_active || group?.is_active === false);
+  return `${item.term_name} · ${item.class_name}${archived ? "（已归档）" : ""}`;
+}
+
 export function matchesAcademicFilter(
   enrollments: ClassEnrollment[],
   semesterId: number | null,

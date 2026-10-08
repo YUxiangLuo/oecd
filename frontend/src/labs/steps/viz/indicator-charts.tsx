@@ -29,6 +29,9 @@ export const indicatorNumber = (value: number | null, unit: string, digits?: num
 export const fixedIndicatorNumber = (value: number | null, unit: string, digits?: number) =>
   value === null
     ? "缺失"
+    // With a page-specific precision, a positive value too small to show reads "不到 0.01", not "0.00".
+    : digits != null && value > 0 && Math.abs(unit === "%" ? value * 100 : value) < 0.5 * 10 ** -digits
+      ? `不到 ${(10 ** -digits).toFixed(digits)}${unit === "%" ? "%" : ""}`
     // A tiny negative that rounds to zero reads "0.000", not "-0.000".
     : stripNegativeZero(`${(unit === "%" ? value * 100 : value).toLocaleString("zh-CN", { minimumFractionDigits: digits ?? readingDigits(value, unit), maximumFractionDigits: digits ?? readingDigits(value, unit) })}${unit === "%" ? "%" : ""}`);
 
@@ -158,6 +161,7 @@ export function ComparisonSummary({
   years,
   unit,
   gapNote = "比较差距绝对值，不代表因果关系",
+  digits,
 }: {
   readings: ComparisonReading[];
   countries: string[];
@@ -165,6 +169,8 @@ export function ComparisonSummary({
   unit: string;
   /** Caption under the gap card; the tariff chart on step 10 explains the gap instead of hedging it. */
   gapNote?: string;
+  /** Overrides the shared reading precision (step 10: X to two decimals of a percentage point). */
+  digits?: number;
 }) {
   if (countries.length !== 2) return null;
   const common = years.filter((year) =>
@@ -188,7 +194,7 @@ export function ComparisonSummary({
   const startGap = starts[0] - starts[1];
   const endGap = ends[0] - ends[1];
   const gapChange = Math.abs(endGap) - Math.abs(startGap);
-  const gapMagnitude = magnitudeReading(gapChange, unit);
+  const gapMagnitude = magnitudeReading(gapChange, unit, digits);
   const reversed = startGap !== 0 && endGap !== 0 && Math.sign(startGap) !== Math.sign(endGap);
   const gapStory = reversed
     ? "领先方反转"
@@ -202,13 +208,13 @@ export function ComparisonSummary({
       {countries.map((country, index) => (
         <div key={country}>
           <span>{countryLabel(country)} · {firstYear}→{lastYear}</span>
-          <b>{changeReading(starts[index], ends[index], unit)}</b>
-          <small>{fixedIndicatorNumber(starts[index], unit)} → {fixedIndicatorNumber(ends[index], unit)}</small>
+          <b>{changeReading(starts[index], ends[index], unit, digits)}</b>
+          <small>{fixedIndicatorNumber(starts[index], unit, digits)} → {fixedIndicatorNumber(ends[index], unit, digits)}</small>
         </div>
       ))}
       <div>
         <span>{lastYear} 年 A−B</span>
-        <b>{changeReading(ends[1], ends[0], unit)}</b>
+        <b>{changeReading(ends[1], ends[0], unit, digits)}</b>
         <small>{countryLabel(countries[0])} 相对 {countryLabel(countries[1])}</small>
       </div>
       <div>
@@ -494,6 +500,7 @@ export function IndicatorTrendChart({
           years={years.filter((_, i) => series.every((points) => points[i].value !== null))}
           unit={unit}
           gapNote={gapNote}
+          digits={digits}
         />}
     </section>
   );

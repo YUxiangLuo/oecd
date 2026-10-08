@@ -192,7 +192,7 @@ export function BinScatterChart({ bins, slope, xLabel, yLabel, xScale = 100, ySc
     <div ref={wrapRef} className="binscatter-plot" style={{ ...cardStyle, flex: "1 1 320px", minWidth: 280 }}>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: "#3a4050" }}>{title}</div>
       <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>
-        每个点是 X 相近的 1/{bins.length} 单元的平均（X、Y 都已扣掉各自起点和共同年份变化）；直线斜率就是 β
+        每个点是 X 相近的一组单元的平均（全部单元按 X 分成 {bins.length} 组；X、Y 都已扣掉各自起点和共同年份变化）；直线斜率就是 β
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={description} style={{ display: "block", width: "100%", maxWidth: 760, height: "auto" }}>
         <title>{description}</title>

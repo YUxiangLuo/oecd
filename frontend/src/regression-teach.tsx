@@ -107,7 +107,7 @@ export function RegressionEvidenceMatrix({
                   <th scope="row">{item.step}</th>
                   <td><b>{item.family}</b><span>{lesson.shortMetric}</span></td>
                   <td>{design ? <>
-                    关税暴露强度
+                    关税暴露 X
                     <span>连续强度 TWFE</span>
                     <span>国家×行业</span>
                     <span>固定处理前权重</span>

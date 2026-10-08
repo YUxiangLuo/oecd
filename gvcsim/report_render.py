@@ -169,7 +169,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     else "本节为份额、长度或指数，不直接受价格水平影响，但仍受下述结构外推影响。"
                 )
                 lines.append(
-                    f"- **2020 年：现价与疫情期外推限制。**{price_note}"
+                    f"- **2020 年：现价与疫情期外推限制**。{price_note}"
                     "OECD 2023 版中部分国家的投入产出结构由此前基准表外推，疫情对行业的冲击并不均匀；"
                     "请区分价格、统计编制与实际数量或结构变化，不能仅凭该年转折判断生产调整。"
                     "参见 [OECD TiVA 2023 指南第 42 页]"
@@ -528,7 +528,7 @@ def _evidence_summary(runs: list[dict[str, Any]], source_filter: dict[str, Any] 
         reasons = [*_list_values(result.get("status_reasons")), *_list_values(support.get("reasons"))]
         design_limit = _summary_design_limit(status, support, reasons)
         if design_limit:
-            lines.append(f"- **最重要的设计限制：** {design_limit}")
+            lines.append(f"- **最重要的设计限制**：{design_limit}")
         lines.append("")
     return lines
 
@@ -606,8 +606,11 @@ def _run_sections(runs: list[dict[str, Any]]) -> list[str]:
     lines = [
         "## 技术附录：保存的回归结果",
         "",
-        "以下结果来自会话中保存的服务端运行，不在报告生成时重新估计。同一步可能有最近一次探索和一份可报告快照。表格数值为便于阅读做了四位有效数字的显示舍入；完整原始值仍保留在报告溯源数据中。",
-        "极小 p 值以 <0.0001 展示，不能读作概率为零。",
+        # One source line per paragraph: Markdown joins consecutive lines with a space, which would show
+        # after each "。".
+        "以下结果来自会话中保存的服务端运行，不在报告生成时重新估计。同一步可能有最近一次探索和一份可报告快照。"
+        "表格数值为便于阅读做了四位有效数字的显示舍入；完整原始值仍保留在报告溯源数据中。"
+        "极小 p 值以 <0.0001 展示，不能读作概率为零。"
         "表中系数按 X 的原始单位计（X 是份额，0.01 即 1 个百分点）：正文“关税暴露 X 每增加 1 个百分点”的读数 = 系数 × 0.01；"
         "贸易流和生产两项的 Y 也是份额，再乘 100 换成百分点，所以数值与系数相同。",
         "",

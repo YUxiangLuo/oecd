@@ -57,7 +57,7 @@ function DesignMeta({ design }: { design: RegressionDesignInfo }) {
     <div className="design-meta">
       {/* Same name as the Y list and the report ("加权总度"); the schema label's "（入+出）" is a step 5 detail. */}
       <span>结果指标：{design.depvar_label?.replace(/（入\+出）$/, "")}</span>
-      <span>解释变量：关税暴露强度</span>
+      <span>解释变量：关税暴露 X</span>
       <span>面板：教学关税面板（国家×行业×年份）</span>
       <span>观察个体：{ENTITY_LABEL[design.entity] ?? design.entity}</span>
       <span>标准误按{ENTITY_LABEL[design.cluster] ?? design.cluster}聚类</span>

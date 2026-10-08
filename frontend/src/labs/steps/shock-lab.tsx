@@ -272,7 +272,7 @@ export function ShockLab({ meta, step: _step, state, getStep }: {
         <summary>逐年读数 · {rows.length} 条</summary>
         <ScrollableRegion className="table-wrap bounded-data-table" label="所选例子的五年关税暴露表">
           <table className="data-table"><thead><tr><th>国家</th><th>行业</th><th>年份</th><th>冲击前出口份额 w</th><th>税率 τ</th><th>关税暴露 X = w × τ</th></tr></thead>
-            <tbody>{rows.map((row) => <tr key={`${row.country}-${row.industry}-${row.year}`}><td>{countryLabel(row.country)}</td><td>{sectorLabel(row.industry)}</td><td>{row.year}</td><td>{(row.teaching_export_share_w * 100).toFixed(2)}%</td><td>{rate(row.teaching_tariff_rate_tau)}</td><td><b>{pct(row.teaching_export_share_w)} × {rate(row.teaching_tariff_rate_tau)} = {percentagePoints(row.teaching_tariff_exposure)} 个百分点</b></td></tr>)}</tbody>
+            <tbody>{rows.map((row) => <tr key={`${row.country}-${row.industry}-${row.year}`}><td>{countryLabel(row.country)}</td><td>{sectorLabel(row.industry)}</td><td>{row.year}</td><td>{pct(row.teaching_export_share_w)}</td><td>{rate(row.teaching_tariff_rate_tau)}</td><td><b>{pct(row.teaching_export_share_w)} × {rate(row.teaching_tariff_rate_tau)} = {percentagePoints(row.teaching_tariff_exposure)} 个百分点</b></td></tr>)}</tbody>
           </table>
         </ScrollableRegion>
       </details>

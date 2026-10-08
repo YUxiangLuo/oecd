@@ -261,6 +261,10 @@ export function changeReading(
 ): string {
   const difference = (end - start) * (unit === "%" ? 100 : 1);
   const digits = fixedDigits ?? readingDigits(difference, unit);
+  // With a page-specific precision, a change too small to show is said so ("+不到 0.01 个百分点").
+  if (fixedDigits != null && difference !== 0 && Math.abs(difference) < 0.5 * 10 ** -fixedDigits) {
+    return `${difference > 0 ? "+" : "-"}不到 ${(10 ** -fixedDigits).toFixed(fixedDigits)}${unit === "%" ? " 个百分点" : unit === "无量纲" ? "" : ` ${unit}`}`;
+  }
   return `${difference > 0 ? "+" : ""}${difference.toLocaleString("zh-CN", { minimumFractionDigits: digits, maximumFractionDigits: digits })}${unit === "%" ? " 个百分点" : unit === "无量纲" ? "" : ` ${unit}`}`;
 }
 

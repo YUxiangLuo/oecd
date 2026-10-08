@@ -7,7 +7,7 @@ import { ReportMarkdown } from "../report-renderer-lazy";
 import { showToast } from "../toast";
 import type { AuthUser, TeacherReport } from "../types";
 import { userFacingRequestError } from "../user-facing-error";
-import { AcademicFilters, matchesAcademicFilter } from "./academic-filter";
+import { AcademicFilters, matchesAcademicFilter, enrollmentLabel } from "./academic-filter";
 import { EmptyState, LoadFailure, SearchInput, StatusPill, Toolbar, useModalErrorFocus, useRefetchOnVisible } from "./ui";
 import { LEAVE_MESSAGE, useTeacherReviewGuard } from "./review-guard";
 
@@ -156,7 +156,7 @@ export function ReportsTab({ user, onGraded, onRefresh }: { user: AuthUser; onGr
           {shown.map((report) => <tr key={report.account_id} data-account-id={report.account_id}>
             <td className="student-name-cell">{report.display_name}</td><td className="mono">{report.username}</td><td>{report.student_no || "—"}</td>
             <td className="class-memberships">{report.enrollments.length
-              ? report.enrollments.map((item) => <span key={item.term_id}>{item.term_name} · {item.class_name}</span>)
+              ? report.enrollments.map((item) => <span key={item.term_id}>{enrollmentLabel(item, semesters)}</span>)
               : "未分班"}</td><td>{fmtTime(report.submitted_at)}</td>
             <td>{report.state === "graded" ? <StatusPill tone="ok">已评阅</StatusPill> : <StatusPill tone="warn">待评阅</StatusPill>}</td><td>{report.score ?? "—"}</td>
             <td><ReportRowAction report={report} onOpen={() => setOpenAccountId(report.account_id)} /></td>
@@ -303,7 +303,7 @@ export function GradeView({ data, grader, onBack, onReload, initialDraft }: {
           }} rows={8} /></label>
           {/* Not a live region: announcing the count on every keystroke drowned out typing; only the limit is announced. */}
           <span className="muted grade-count">评语 {[...feedback].length} / 4000 字</span>
-          {feedbackCut && <span className="muted" role="status">超过 4000 字上限，多出的内容没有保留。</span>}
+          {feedbackCut && <span className="muted grade-cut" role="status">超过 4000 字上限，多出的内容没有保留。</span>}
           {saveError && <div ref={saveErrorRef} className="error-box" role="alert" tabIndex={-1}>{saveError}</div>}
           {stale && <p id={staleHintId} className="muted grade-note">{STALE_REVIEW_HINT}</p>}
           {/* Nothing typed is lost on reload, so no leave confirmation here. */}

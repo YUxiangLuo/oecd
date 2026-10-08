@@ -276,7 +276,8 @@ def _setting_value(key: str, value: Any) -> str:
 def _coefficient_label(name: Any, design: dict[str, Any]) -> str:
     raw = str(name)
     if raw == X_COLUMN:
-        return "关税暴露强度"
+        # The page's name for X (steps 10–14 and their coefficient tables).
+        return "关税暴露 X"
     return _safe(raw)
 
 

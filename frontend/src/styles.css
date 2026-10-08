@@ -980,3 +980,7 @@ main.content:focus, .report-body:focus, h2[tabindex="-1"]:focus, h3[tabindex="-1
 .report-grade { color: #1b7a4a; font-size: 14px; }
 .submit-card:focus { outline: none; }
 .submit-card:focus-visible { box-shadow: 0 0 0 2px #4b47e0; }
+
+/* Error boxes receive focus so the reason is read out; a soft ring instead of the heavy browser outline. */
+.error-box:focus { outline: none; }
+.error-box:focus-visible { box-shadow: 0 0 0 2px #e8a3a3; }

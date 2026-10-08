@@ -336,7 +336,7 @@ function BinscatterChart({ chart }: { chart: Extract<ReportChart, { type: "binsc
   const fx = (value: number) => trimmed(value, digits(xAxis.lo, xAxis.hi)), fy = (value: number) => trimmed(value, digits(yAxis.lo, yAxis.hi));
   return (
     <ReportFigure title={chart.title ?? "分箱散点图"}>
-      <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>每个点是 X 相近的一组单元的平均（X、Y 都已扣掉各自起点和共同年份变化）；直线斜率就是 β</div>
+      <div style={{ fontSize: 11, color: "#5f6677", marginBottom: 6 }}>每个点是 X 相近的一组单元的平均（全部单元按 X 分成 {chart.points.length} 组；X、Y 都已扣掉各自起点和共同年份变化）；直线斜率就是 β</div>
       <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={chart.title ?? "分箱散点图"} style={{ width: "100%", height: "auto" }}>
         {yAxis.ticks.map((tick) => <g key={`y${tick}`}><line x1={m.l} x2={W - m.r} y1={y(tick)} y2={y(tick)} stroke="#eef0f4" /><text x={m.l - 8} y={y(tick) + 4} textAnchor="end" fontSize={11} fill="#5f6677">{fy(tick)}</text></g>)}
         {xAxis.ticks.map((tick) => <g key={`x${tick}`}><line x1={x(tick)} x2={x(tick)} y1={m.t} y2={H - m.b} stroke="#eef0f4" /><text x={x(tick)} y={H - m.b + 16} textAnchor="middle" fontSize={11} fill="#5f6677">{fx(tick)}</text></g>)}

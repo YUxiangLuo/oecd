@@ -116,7 +116,7 @@ test("a refused creation can be edited again; preview and back-to-edit move focu
     fireEvent.click(screen.getByText("下载账号清单"));
     fireEvent.click(screen.getByText("确认创建"));
     const alert = await screen.findByRole("alert");
-    expect(alert.textContent).toBe("创建失败：账号已存在，本次未添加任何学生；请返回修改名单并重新预览\n刚才下载的账号清单作废；返回修改后重新预览会生成新的初始密码，请重新下载。");
+    expect(alert.textContent).toBe("创建失败：账号已存在，本次未添加任何学生；请返回修改名单并重新预览。\n刚才下载的账号清单作废；返回修改后重新预览会标出冲突的学号，并生成新的初始密码，请重新下载。");
     expect(document.activeElement).toBe(alert);
     fireEvent.click(screen.getByText("返回修改"));
     expect(document.activeElement).toBe(screen.getByLabelText("学生名单"));

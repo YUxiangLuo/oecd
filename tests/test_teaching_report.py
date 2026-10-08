@@ -1279,7 +1279,7 @@ def test_report_uses_saved_result_without_calling_estimator(tmp_path, monkeypatc
     assert X_COLUMN in report.markdown
     assert "+1.20 个百分点" in report.markdown
     assert "## 技术附录：保存的回归结果" in report.markdown
-    assert "| 关税暴露强度 | 1.2 | 0.3 | [0.5721, 1.828] | 0.0007662 |" in report.markdown
+    assert "| 关税暴露 X | 1.2 | 0.3 | [0.5721, 1.828] | 0.0007662 |" in report.markdown
     assert report.provenance["runs"][0]["model_snapshot"] == model_snapshot("trade")
     assert report.provenance["runs"][0]["variable_catalog"] == variable_catalog("trade")
     assert "关税回归部分（步骤 10–14）" in report.markdown
@@ -1730,7 +1730,7 @@ def test_report_marks_suppressed_inference_and_reasons(tmp_path, monkeypatch):
 
     assert "统计推断已抑制" in report.markdown
     assert "处理聚类不足" in report.markdown
-    assert "| 关税暴露强度 | -0.2 | 0.1 | 已抑制 | 已抑制 |" in report.markdown
+    assert "| 关税暴露 X | -0.2 | 0.1 | 已抑制 | 已抑制 |" in report.markdown
 
 
 def test_report_translates_settings_controls_and_rounds_display_values(tmp_path, monkeypatch):
@@ -1777,7 +1777,7 @@ def test_report_translates_settings_controls_and_rounds_display_values(tmp_path,
     assert "+0.0014 个百分点" in markdown
     assert "[-0.0017, +0.0045] 个百分点" in markdown
     assert "证据不足，无法判断方向" in markdown
-    assert "关税暴露强度" in markdown
+    assert "关税暴露 X" in markdown
     assert "总增加值规模(log, ICIO GVA proxy)" not in markdown
     assert "0.0013729825631389496" not in markdown
     assert "国家×行业层面的连续强度双向固定效应（TWFE），不加控制变量和交互项" in markdown
@@ -2209,3 +2209,12 @@ def test_report_metric_labels_match_the_page_labels():
     assert {key: _STUDENT_METRIC_LABELS.get(key) for key in page_labels} == page_labels
     # Every share metric the pages derive has a global reference (median and rank) in the report.
     assert {key for key in page_labels if key.endswith("_share")} <= set(_SHARES)
+
+
+def test_bold_markup_closes_before_chinese_punctuation():
+    """CommonMark cannot close ** after "。" when a Chinese character follows; the report keeps punctuation outside."""
+    import re as _re
+
+    session = _complete()
+    text = "\n".join(teaching_report._experiment_sections(session))
+    assert not _re.search(r"[。：；，]\*\*[^\s*|]", text)
