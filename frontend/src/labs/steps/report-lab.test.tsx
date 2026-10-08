@@ -590,7 +590,7 @@ test("regenerating a submitted report uses server resubmission directly without 
   } finally { generate.mockRestore(); submit.mockRestore(); confirm.mockRestore(); }
 });
 
-test("restored graded receipt is available without submitting again; outdated export remains disabled", () => {
+test("restored graded receipt is available without submitting again; an outdated graded report still exports as graded", () => {
   const submit = spyOn(api.classroom, "submitReport");
   try {
     render(<ReportLab {...finishProps} report={report("graded")} sessionUnsynced />);
@@ -602,7 +602,9 @@ test("restored graded receipt is available without submitting again; outdated ex
     expect(within(receipt).getByText(/后续修改尚未纳入这份报告/)).toBeTruthy();
     expect(within(receipt).getByText(/重新生成会清除当前评分与评语/)).toBeTruthy();
     expect(within(dialog).queryByText(/你可以离开页面/)).toBeNull();
-    expect((within(dialog).getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(true);
+    // The PDF is the graded version with its score and feedback, the record regenerating would clear.
+    expect((within(dialog).getByRole("button", { name: "导出 PDF 留存" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(within(dialog).queryByText("报告需要先更新，才能导出。")).toBeNull();
     expect(submit).not.toHaveBeenCalled();
   } finally { submit.mockRestore(); }
 });
@@ -629,11 +631,46 @@ test("each report state shows one action group in the submit panel, without dupl
   expect(names(none)).toEqual(["生成并提交报告", "只生成草稿（不提交）"]);
   none.unmount();
   const outdated = render(<ReportLab {...finishProps} report={report("graded")} sessionUpdatedAt="2026-08-14T00:00:00Z" />);
-  expect(names(outdated)).toEqual(["更新报告并提交给老师", "查看提交回执与实验总结", "导出 PDF"]);
+  expect(names(outdated)).toEqual(["更新报告并提交给老师", "查看提交回执与实验总结", "导出已评阅版本 PDF"]);
   outdated.unmount();
   const current = render(<ReportLab {...finishProps} report={report("graded")} sessionUpdatedAt="2026-08-12T00:00:00Z" />);
   expect(names(current)).toEqual(["查看提交回执与实验总结", "导出 PDF", "重新生成并提交"]);
   current.unmount();
+});
+
+test("an exported graded report carries the score and feedback, and the PDF is named after the report", async () => {
+  const graded = { ...report("graded"), markdown: "# GVC 指标与关税实验报告\n\n学生：演示学生 05\n\n正文", generated_at: "2026-10-09T03:05:00" };
+  const view = render(<ReportLab {...finishProps} report={graded} sessionUpdatedAt="2026-08-12T00:00:00Z" />);
+  const block = view.container.querySelector(".report-body .report-print-grade");
+  expect(block?.textContent).toContain("教师评阅 · 93 分");
+  expect(block?.textContent).toContain("教师评语：证据链完整");
+  const css = await Bun.file(new URL("../../report-finish.css", import.meta.url)).text();
+  expect(css).toMatch(/\.report-print-grade \{ display: none; \}/);
+  expect(css.slice(css.indexOf("@media print"))).toMatch(/\.report-print-grade \{\s*display: block/);
+  // The regenerate warning points to the PDF instead of asking to copy the grade by hand.
+  fireEvent.click(screen.getByRole("button", { name: "重新生成并提交" }));
+  expect(screen.getByText(/请先取消并导出 PDF：导出的 PDF 含评分与评语/)).toBeTruthy();
+  expect(screen.queryByText(/记下评分与评语/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "取消" }));
+  const titles: string[] = [];
+  const print = spyOn(globalThis, "print").mockImplementation(() => { titles.push(document.title); });
+  document.title = "步骤 15 · 生成实验报告";
+  try {
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "导出 PDF" })); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
+    expect(print).toHaveBeenCalledTimes(1);
+    expect(titles).toEqual(["实验报告 · 演示学生 05 · 2026-10-09"]);
+    act(() => { window.dispatchEvent(new Event("afterprint")); });
+    expect(document.title).toBe("步骤 15 · 生成实验报告");
+  } finally { print.mockRestore(); }
+});
+
+test("a draft or pending report prints no grade block", () => {
+  for (const state of ["draft", "pending"] as const) {
+    const view = render(<ReportLab {...finishProps} report={report(state)} />);
+    expect(view.container.querySelector(".report-print-grade")).toBeNull();
+    view.unmount();
+  }
 });
 
 test("analysis length counts what a reader sees as one character: an emoji, even a family emoji, is one", () => {

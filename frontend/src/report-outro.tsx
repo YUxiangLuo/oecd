@@ -29,7 +29,7 @@ export function ReportOutro({ report, onClose, onExport, exportDisabled = false,
         {report.state === "graded" && report.feedback?.trim() && <div className="report-feedback" tabIndex={0} role="region" aria-label="教师评语"><b>教师评语：</b>{report.feedback}</div>}
         {reportOutdated ? <div role="status">
           <p>已提交版本已保存；后续修改尚未纳入这份报告。请返回步骤 15 确认修改已保存，再更新报告。</p>
-          {report.state === "graded" && <p>重新生成会清除当前评分与评语，并重新提交给老师；操作前会要求确认。取消确认将保留原报告。</p>}
+          {report.state === "graded" && <p>重新生成会清除当前评分与评语，并重新提交给老师；操作前会要求确认。取消确认将保留原报告。需要留档时，可先导出 PDF：导出的已评阅版本含评分与评语。</p>}
         </div> : <small>报告已保存到服务器。你可以离开页面，之后回到步骤 15 查看报告与老师的评阅。</small>}
       </section>
       <div className="outro-journey">
@@ -39,9 +39,10 @@ export function ReportOutro({ report, onClose, onExport, exportDisabled = false,
       </div>
       <div className="intro-cta-row">
         <button type="button" className="intro-cta" onClick={onClose}>查看已提交报告</button>
-        <button type="button" className="outro-export" disabled={exportDisabled || reportOutdated} onClick={onExport}>导出 PDF 留存</button>
+        {/* A graded report exports as graded, with its score and feedback, even when later edits are not in it. */}
+        <button type="button" className="outro-export" disabled={exportDisabled || (reportOutdated && report.state !== "graded")} onClick={onExport}>导出 PDF 留存</button>
       </div>
-      {reportOutdated && <p className="intro-note">报告需要先更新，才能导出。</p>}
+      {reportOutdated && report.state !== "graded" && <p className="intro-note">报告需要先更新，才能导出。</p>}
     </div>
   </div>, document.body);
 }

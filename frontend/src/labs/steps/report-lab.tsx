@@ -203,6 +203,25 @@ export function ReportStatus({ report }: { report: ClassroomReport }) {
   );
 }
 
+/** The grade as it is printed above the report: the PDF a student keeps carries the score and feedback,
+ * which regenerating the report would clear. Hidden on screen, where the status card shows them. */
+export function ReportPrintGrade({ report }: { report: ClassroomReport }) {
+  if (report.state !== "graded") return null;
+  return (
+    <section className="report-print-grade" aria-hidden="true">
+      <b>教师评阅 · {report.score} 分</b>
+      <span>评阅时间：{fmtTime(report.graded_at)}　提交时间：{fmtTime(report.submitted_at)}</span>
+      {report.feedback?.trim() ? <p><b>教师评语：</b>{report.feedback}</p> : <p>老师没有写评语。</p>}
+    </section>
+  );
+}
+
+/** The window title while printing: browsers name the PDF after it (实验报告 · 学生 · 日期). */
+export function reportPrintTitle(report: ClassroomReport): string {
+  const student = /^学生：(.+)$/m.exec(report.markdown)?.[1]?.trim();
+  return ["实验报告", student, report.generated_at?.slice(0, 10)].filter(Boolean).join(" · ");
+}
+
 export const REPORT_GENERATE_FIRST_LABEL = "只生成草稿（不提交）";
 
 export function reportGenerateLabel(report: ClassroomReport | null) {
@@ -558,17 +577,35 @@ export function ReportLab({
     }
   };
 
+  // A graded report can be exported even when later edits are not in it yet: the PDF is the graded version,
+  // with its score and feedback, which regenerating would clear.
+  const exportable = Boolean(report && (!reportOutdated || report.state === "graded"));
   const printReport = async () => {
-    if (busy || reportOutdated) return;
+    if (busy || !exportable || !report) return;
     setPrinting(true);
     setError(null);
+    const pageTitle = document.title;
+    let restored = false;
+    const printTitle = reportPrintTitle(report);
+    const restoreTitle = () => {
+      if (restored) return;
+      restored = true;
+      // Unless the page has set its own title since (another step).
+      if (document.title === printTitle) document.title = pageTitle;
+      window.removeEventListener("afterprint", restoreTitle);
+    };
     try {
       await preloadReportRenderer();
       await new Promise<void>((resolve) => globalThis.requestAnimationFrame(() => resolve()));
+      document.title = printTitle;
+      window.addEventListener("afterprint", restoreTitle);
       globalThis.print();
     } catch (cause) {
+      restoreTitle();
       setError(userFacingRequestError(cause, "PDF 导出失败"));
     } finally {
+      // print() blocks until the dialog closes in most browsers; where it does not, afterprint restores it.
+      window.setTimeout(restoreTitle, 30_000);
       setPrinting(false);
     }
   };
@@ -652,7 +689,7 @@ export function ReportLab({
         <div className="report-version-notice outdated" role="status">
           <b>报告尚未包含最新修改</b>
           <p>生成时间：{fmtTime(report.generated_at)}。实验记录自动保存不会更新报告；修改后请先重新生成，再提交或导出。
-            {report.state === "graded" && "重新生成会重新提交报告，并清除原评分。"}</p>
+            {report.state === "graded" && "重新生成会重新提交报告，并清除原评分；需要留档时，可先导出已评阅版本的 PDF（含评分与评语）。"}</p>
         </div>
       )}
       {report && <section className="submit-card" id="report-status-card" ref={statusCardRef} tabIndex={-1} aria-label="报告状态"><ReportStatus report={report} /></section>}
@@ -681,8 +718,8 @@ export function ReportLab({
           )}
           {report && report.state !== "draft" && <button type="button" className="secondary" disabled={busy} onClick={() => setOutro(report)}>查看提交回执与实验总结</button>}
           {report && (
-            <button type="button" className="secondary" disabled={busy || reportOutdated} onClick={() => { void printReport(); }}>
-              {printing ? "正在准备 PDF…" : "导出 PDF"}
+            <button type="button" className="secondary" disabled={busy || !exportable} onClick={() => { void printReport(); }}>
+              {printing ? "正在准备 PDF…" : reportOutdated && report.state === "graded" ? "导出已评阅版本 PDF" : "导出 PDF"}
             </button>
           )}
           {/* Regenerating a current submitted report clears any grade, so it comes last. */}
@@ -698,14 +735,14 @@ export function ReportLab({
       {error && <div className="error-box" role="alert">{error}</div>}
 
       {report ? (
-        <div className="report-body" ref={previewRef} tabIndex={-1} aria-label="报告正文"><ReportMarkdown markdown={report.markdown} /></div>
+        <div className="report-body" ref={previewRef} tabIndex={-1} aria-label="报告正文"><ReportPrintGrade report={report} /><ReportMarkdown markdown={report.markdown} /></div>
       ) : (
         <p className="muted">可以先只生成草稿看看，再提交。区间包含 0、或者没算出估计值的结果，也要写进报告。</p>
       )}
       {confirmRegenerate && (
         <ConfirmModal
           title="重新生成已评阅的报告？"
-          message="此报告已经评阅。重新生成会替换报告、清除现有评分和评语，并重新提交给老师。需要留档时，请先在“查看提交回执与实验总结”里记下评分与评语。"
+          message="此报告已经评阅。重新生成会替换报告、清除现有评分和评语，并重新提交给老师。需要留档时，请先取消并导出 PDF：导出的 PDF 含评分与评语。"
           confirmLabel="确定重新生成"
           danger
           onConfirm={() => confirmRegenerate(true)}
