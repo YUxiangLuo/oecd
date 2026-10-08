@@ -57,7 +57,7 @@ export function StackedAreaFacets({ facets, years, segments, total, totalLabel }
       ...(point?.shares
         ? segments.map((segment, index): TipLine => [segment.name, pct(point.shares![index]), point.shares![index] < 0 ? NEGATIVE : segment.color])
         : [["构成", "缺失", undefined] as TipLine]),
-      ...(point?.total != null ? [[totalLabel, indicatorNumber(point.total, "百万美元")] as TipLine] : []),
+      ...(point?.total != null ? [[totalLabel, `${indicatorNumber(point.total, "百万美元")} 百万美元`] as TipLine] : []),
     ];
   };
   const onKeyDown = (facet: typeof facetData[number]) => (event: KeyboardEvent<HTMLDivElement>) => {
@@ -285,8 +285,11 @@ export function Dumbbell({ rows, leftLabel, rightLabel, unit, title, domain }: {
             {finiteValue(row.left) && finiteValue(row.right) && (
               <i className="link" style={{ left: `${px(Math.min(row.left, row.right))}%`, width: `${Math.abs(px(row.left) - px(row.right))}%` }} />
             )}
+            {/* Equal values would draw one dot exactly over the other: the second becomes a ring around the first. */}
             {finiteValue(row.left) && <i className="dot" style={{ left: `${px(row.left)}%`, background: CAT[0] }} />}
-            {finiteValue(row.right) && <i className="dot" style={{ left: `${px(row.right)}%`, background: CAT[1] }} />}
+            {finiteValue(row.right) && (finiteValue(row.left) && Math.abs(px(row.left) - px(row.right)) < 1.2
+              ? <i className="dot dot--ring" style={{ left: `${px(row.right)}%`, borderColor: CAT[1] }} />
+              : <i className="dot" style={{ left: `${px(row.right)}%`, background: CAT[1] }} />)}
           </div>
           <span className="dot-plot-values">
             <b style={{ color: CAT[0] }}>{reading(row.left)}</b>

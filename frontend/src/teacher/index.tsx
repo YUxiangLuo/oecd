@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { useAsync } from "../labs/shared";
 import type { AuthUser, TeacherReport } from "../types";
@@ -32,6 +32,12 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
   // New submissions arrive while the teacher is elsewhere: recount the badge when they come back to this tab.
   useRefetchOnVisible(() => setReviewBump((value) => value + 1));
 
+  // After login the page reloads with nothing focused: start keyboard and screen-reader users at the heading.
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (document.activeElement == null || document.activeElement === document.body) headingRef.current?.focus();
+  }, []);
+
   // Each tab gets its own window title, so history entries and assistive tech can tell them apart.
   useEffect(() => {
     document.title = teacherDocumentTitle(tab);
@@ -61,7 +67,7 @@ export function TeacherDashboard({ user }: { user: AuthUser }) {
       <main className="teacher-main">
         <div className="dash-header">
           <div>
-            <h2>{tab === "semesters" ? "学期与班级" : tab === "students" ? "学生与进度" : "报告评阅"}</h2>
+            <h2 ref={headingRef} tabIndex={-1}>{tab === "semesters" ? "学期与班级" : tab === "students" ? "学生与进度" : "报告评阅"}</h2>
             <p>{tab === "semesters" ? "建立教学分组并管理使用中与历史班级"
               : tab === "students" ? "创建账号、分配班级并查看学生已完成的步骤"
                 : "按学期和班级筛选、批阅学生提交的步骤 15 实验报告"}</p>

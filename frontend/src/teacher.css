@@ -37,6 +37,8 @@
   padding: 20px 30px 14px; border-bottom: 1px solid #e4e6ee;
 }
 .dash-header h2 { margin: 0; font-size: 20px; font-weight: 700; }
+.dash-header h2:focus { outline: none; }
+.dash-header h2:focus-visible { outline: 2px solid #4b47e0; outline-offset: 3px; border-radius: 4px; }
 .dash-header p { margin: 4px 0 0; font-size: 12.5px; color: var(--text-muted); }
 .teacher-content { padding: 20px 30px 40px; }
 

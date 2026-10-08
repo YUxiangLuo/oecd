@@ -30,7 +30,7 @@ export GVCSIM_DEMO_MODE=1
 export GVCSIM_BOOTSTRAP_PASSWORD='your-local-password'
 uv run gvcsim classroom-init
 uv run gvcsim compute
-uv run gvcsim serve --port 8000
+GVCSIM_FILE_CACHE_MODE=notify uv run gvcsim serve --port 8000   # 多人使用时用 notify，见技术手册 11.2
 ```
 
 - 原始表放在 `OECD_ICIO/`，产物入口为 `data/processed`；生产环境用 `GVCSIM_RAW_DATA_DIR`、`GVCSIM_DATA_DIR` 指向代码目录外的持久目录。

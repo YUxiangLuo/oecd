@@ -64,14 +64,15 @@
 }
 .reg-variable-plain-grid b { color: #35328d; font-size: 12px; }
 .reg-variable-plain-grid span { color: #4f586a; font-size: 11.5px; line-height: 1.55; }
+/* Cards keep at least ~150px so a title or unit does not break mid-word ("位置指数单/位"). */
 .comparison-summary {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 0 18px;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 10px 0 18px;
 }
 .comparison-summary > div {
   min-width: 0; padding: 10px 11px; border: 1px solid #dfe4ee; border-radius: 9px; background: #f8faff;
 }
 .comparison-summary span, .comparison-summary small { display: block; color: #616b7d; font-size: 10.5px; line-height: 1.4; }
-.comparison-summary b { display: block; margin: 4px 0 3px; color: #293342; font-size: 13px; line-height: 1.35; }
+.comparison-summary b { display: block; margin: 4px 0 3px; color: #293342; font-size: 13px; line-height: 1.35; word-break: keep-all; overflow-wrap: anywhere; }
 .comparison-facets { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
 .comparison-facets--stacked { grid-template-columns: minmax(0, 760px); }
 .comparison-facet { min-width: 0; padding: 11px; border: 1px solid #e1e5ee; border-radius: 10px; background: #fbfcff; }
@@ -353,6 +354,7 @@ button.dot-plot-label:hover, button.dot-plot-label:focus-visible { text-decorati
 .dot-plot-track i.tick { top: 0; bottom: 0; border-left: 1px solid #e2e5ee; }
 .dot-plot-track i.national { top: 2px; bottom: 2px; border-left: 2px dashed; opacity: .75; }
 .dot-plot-track i.dot { width: 11px; height: 11px; margin-left: -5.5px; margin-top: -5.5px; border-radius: 50%; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.08); }
+.dot-plot-track i.dot.dot--ring { width: 17px; height: 17px; margin-left: -8.5px; margin-top: -8.5px; background: transparent; border-width: 2.5px; border-style: solid; box-shadow: none; }
 .dot-plot-track i.link { height: 3px; margin-top: -1.5px; background: #c8ccd6; border-radius: 2px; }
 .dot-plot-values { display: flex; justify-content: flex-end; gap: 8px; white-space: nowrap; font-size: 11.5px; font-variant-numeric: tabular-nums; padding-left: 8px; }
 .butterfly-head, .butterfly-row { display: grid; grid-template-columns: 72px minmax(0, 1fr) 150px minmax(0, 1fr) 72px; align-items: center; gap: 6px; }

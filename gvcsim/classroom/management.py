@@ -326,9 +326,13 @@ def _learning_status(
     from gvcsim import evidence
 
     session_payload = session["session"] if session else {"steps": {}}
+    # Step 15 counts once the report is handed in (and still current): a draft is not finished work, the same
+    # rule as the student's own progress count.
     summary = evidence.completion_summary(
         session_payload,
-        report_exists=records.report_matches_session(session_payload, report),
+        report_exists=records.report_matches_session(session_payload, report)
+        and report is not None
+        and report.get("state") != "draft",
     )
     # Only the student's own actions count; grading also bumps reports.updated_at.
     timestamps = [

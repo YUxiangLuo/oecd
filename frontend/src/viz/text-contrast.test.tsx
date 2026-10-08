@@ -42,6 +42,8 @@ test("selected scatter labels meet small-text contrast without changing point co
   const root = fragment(renderToStaticMarkup(<QuadrantScatter rows={rows} highlight={highlight} xKey="PLv" yKey="PLy" xLabel="前向" yLabel="后向" />));
   const label = Array.from(root.querySelectorAll("svg text")).find((node) => node.textContent === "CHN")!;
   expect(whiteContrast(label.getAttribute("fill")!)).toBeGreaterThanOrEqual(4.5);
-  // Labels sit in their own layer above the points; the selected point keeps its highlight colour.
-  expect(root.querySelector('svg circle[fill="#e34948"]')).not.toBeNull();
+  // Labels sit in their own layer above the points; the selected point keeps its highlight colour, which is
+  // not the negative-value red.
+  expect(root.querySelector('svg circle[fill="#eda100"]')).not.toBeNull();
+  expect(root.querySelector('svg circle[fill="#e34948"]')).toBeNull();
 });

@@ -360,3 +360,18 @@ test("readings keep fixed decimals without a negative zero; ticks are trimmed", 
   expect(indicatorTick(0.25, "%")).toBe("25%");
   expect(indicatorTick(2, "长度单位")).toBe("2");
 });
+
+test("crowded labels at the chart edge never lie across a lower label's leader", () => {
+  const text = "IRL 爱尔兰 12.345%";
+  // Dots at least 7px apart (closer ones are drawn as one spot on the 800px strip).
+  for (const pxs of [[5, 12, 19, 400, 790], [4, 11, 18], [775, 782, 789, 796, 10], [5, 12, 300, 307, 796]]) {
+    const laid = layoutStripLabels(pxs.map((px) => ({ px, text })));
+    for (const label of laid) {
+      for (const other of laid) {
+        if (other === label || other.row <= label.row) continue;
+        const covers = other.px >= label.labelX - 2 && other.px <= label.labelX + label.width + 2;
+        expect(covers).toBe(false);
+      }
+    }
+  }
+});

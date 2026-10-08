@@ -570,21 +570,34 @@ function layoutManyStripLabels<T extends { px: number; width: number; labelX: nu
 }
 
 /**
- * Fallback when crowded dots leave no free slot: a staircase. Left-half labels end at their dot and
- * right-half labels start at theirs; the outermost dots take row 0 and each step inwards takes the next
- * row, so an inner leader always ends below the outer labels it passes and never crosses them.
+ * Fallback when crowded dots leave no free slot: one label per row. A leader runs from its dot down to its
+ * own row, so a label must lie below every label whose dot it covers; the rows follow that order (labels
+ * stay centred under their dot where they fit). Only two labels that each cover the other's dot (dots a
+ * few pixels apart) can still touch a leader, and then the one further left goes lower.
  */
 function staircaseStripLabels<T extends { px: number; width: number; labelX: number; row: number }>(
   laid: T[],
   sorted: T[],
   clamp: (left: number, width: number) => number,
 ) {
-  const half = Math.floor(sorted.length / 2);
-  sorted.forEach((point, index) => {
-    const fromLeft = index < half || (index === half && sorted.length % 2 === 1);
-    point.row = fromLeft ? index : sorted.length - 1 - index;
-    point.labelX = clamp(fromLeft ? point.px - point.width : point.px, point.width);
-  });
+  const covers = (labelX: number, width: number, dot: number) => dot >= labelX - 2 && dot <= labelX + width + 2;
+  const remaining = [...sorted];
+  let row = 0;
+  while (remaining.length) {
+    // Next row: a label (centred, starting or ending at its dot) that covers no other remaining dot, whose
+    // leaders all end above it; failing that, the leftmost label centred.
+    let next: { point: T; labelX: number } | null = null;
+    for (const point of remaining) {
+      const spots = [point.px - point.width / 2, point.px, point.px - point.width].map((left) => clamp(left, point.width));
+      const free = spots.find((labelX) => !remaining.some((other) => other !== point && covers(labelX, point.width, other.px)));
+      if (free !== undefined) { next = { point, labelX: free }; break; }
+    }
+    next ??= { point: remaining[0], labelX: clamp(remaining[0].px - remaining[0].width / 2, remaining[0].width) };
+    next.point.row = row;
+    next.point.labelX = next.labelX;
+    row += 1;
+    remaining.splice(remaining.indexOf(next.point), 1);
+  }
   return laid;
 }
 
@@ -615,7 +628,8 @@ export function DistributionStrip({
     .filter((row) => row.year === year && !row.industry && row.country !== "ROW" && finiteValue(row[metric]))
     .map((row) => ({ country: String(row.country), value: row[metric] as number }))
     .sort((a, b) => a.value - b.value);
-  const reading = (value: number) => indicatorNumber(value, unit);
+  // Amounts carry their unit in every reading (shares show "%"; dimensionless values need none).
+  const reading = (value: number) => `${indicatorNumber(value, unit)}${unit === "百万美元" ? " 百万美元" : ""}`;
   const zeroBased = unit === "%" || unit === "百万美元";
   const valuesOnAxis = points.map((point) => point.value);
   const axis = niceDomain(

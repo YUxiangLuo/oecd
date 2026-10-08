@@ -282,8 +282,11 @@ def test_student_list_uses_verified_completion_and_report_state(teaching_db):
     _save_report("draft", {"years": [2020], "runs": []})
     row = db.list_students("teacher")[0]
     assert row["report_state"] == "draft"
-    assert 15 in row["verified_completed_steps"]
+    # A draft is not finished work; step 15 counts once the report is handed in.
+    assert 15 not in row["verified_completed_steps"]
     assert "verified_completed_count" in row and "last_valid_activity" in row
+    db.submit_report("student")
+    assert 15 in db.list_students("teacher")[0]["verified_completed_steps"]
 
     changed = empty_session()
     changed["steps"]["1"] = make_record({"value": "changed after report generation"})
@@ -362,3 +365,22 @@ def test_archived_academic_groups_keep_history_but_reject_new_activity(teaching_
         db.set_student_enrollment(account_id, term["id"], second_class["id"], "teacher")
     with pytest.raises(LookupError, match="学期不存在"):
         db.set_student_enrollment(account_id, 999_999, None, "teacher")
+
+
+def test_teacher_progress_counts_step_15_only_for_a_handed_in_report():
+    from gvcsim.classroom import management, records
+
+    empty = {"steps": {}}
+    report = {
+        "provenance": {"report_fingerprint": records.report_fingerprint(empty)},
+        "state": "draft",
+        "generated_at": None,
+        "submitted_at": None,
+        "score": None,
+        "graded_at": None,
+        "updated_at": None,
+    }
+    draft = management._learning_status(None, report)
+    assert 15 in draft["completion_missing"]
+    submitted = management._learning_status(None, {**report, "state": "pending"})
+    assert 15 not in submitted["completion_missing"]

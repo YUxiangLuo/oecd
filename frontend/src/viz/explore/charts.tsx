@@ -78,8 +78,12 @@ function logDomain(values: number[]): { lo: number; hi: number; ticks: number[] 
   return { lo, hi, ticks };
 }
 
-/** White-background selected-row text; 5.14:1 contrast at small text size. */
-export const RANK_HIGHLIGHT_TEXT = "#c43d3d";
+/** White-background selected-row text (dark amber, ~6:1 contrast); red is kept for negative values. */
+export const RANK_HIGHLIGHT_TEXT = "#8a5a00";
+/** Selected bars: amber, distinct from the ordinary blue bars and from the negative-value red. */
+const RANK_HIGHLIGHT_FILL = CAT[2];
+/** Context points on the scatter: every economy that is not selected. */
+const REFERENCE_POINT = "#9aa3b5";
 
 /** 任意指标的排序条形图(学生自选指标 + 对象后驱动) */
 export function RankBarChart({ rows, metricKey, label, format, highlight }: {
@@ -120,7 +124,7 @@ export function RankBarChart({ rows, metricKey, label, format, highlight }: {
                 <div style={{
                   position: "absolute", top: 0, bottom: 0,
                   left: `${leftPct}%`, width: `${widthPct}%`,
-                  background: segment.negative ? "#e34948" : hi ? CAT[5] : CAT[0],
+                  background: segment.negative ? "#e34948" : hi ? RANK_HIGHLIGHT_FILL : CAT[0],
                   transition: "width .4s, left .4s",
                 }} />
               </div>
@@ -152,8 +156,8 @@ const boxesOverlap = (a: LabelBox, b: LabelBox) => a.x0 < b.x1 && b.x0 < a.x1 &&
 
 /**
  * Place point labels without collisions: highest priority first (selected, then key economies), trying
- * right, left, above and below the point; a label also avoids the highlighted dots. If nothing fits it
- * keeps the right-hand position, as before.
+ * right, left, above, below and diagonally; a label also avoids the highlighted dots. If nothing fits, a
+ * selected or key economy keeps the right-hand position and an ordinary one is left unlabelled.
  */
 export function placeScatterLabels(
   labels: { id: string; text: string; x: number; y: number; priority: number }[],
@@ -169,15 +173,24 @@ export function placeScatterLabels(
       { x: label.x - 7, y: label.y + 3.5, anchor: "end" as const, box: { x0: label.x - 7 - width, x1: label.x - 7, y0: label.y - 5, y1: label.y + 5 } },
       { x: label.x, y: label.y - 9, anchor: "middle" as const, box: { x0: label.x - width / 2, x1: label.x + width / 2, y0: label.y - 18, y1: label.y - 8 } },
       { x: label.x, y: label.y + 17, anchor: "middle" as const, box: { x0: label.x - width / 2, x1: label.x + width / 2, y0: label.y + 8, y1: label.y + 18 } },
+      // Diagonals, for crowded clusters where the four sides are taken.
+      { x: label.x + 6, y: label.y - 7, anchor: "start" as const, box: { x0: label.x + 6, x1: label.x + 6 + width, y0: label.y - 16, y1: label.y - 6 } },
+      { x: label.x - 6, y: label.y - 7, anchor: "end" as const, box: { x0: label.x - 6 - width, x1: label.x - 6, y0: label.y - 16, y1: label.y - 6 } },
+      { x: label.x + 6, y: label.y + 15, anchor: "start" as const, box: { x0: label.x + 6, x1: label.x + 6 + width, y0: label.y + 6, y1: label.y + 16 } },
+      { x: label.x - 6, y: label.y + 15, anchor: "end" as const, box: { x0: label.x - 6 - width, x1: label.x - 6, y0: label.y + 6, y1: label.y + 16 } },
     ];
     const inside = (box: LabelBox) => box.x0 >= bounds.left && box.x1 <= bounds.right && box.y0 >= bounds.top && box.y1 <= bounds.bottom;
     const free = (box: LabelBox) => inside(box)
       && !placed.some((other) => boxesOverlap(box, other))
       && !dots.some((dot) => boxesOverlap(box, dot) && !(Math.abs((dot.x0 + dot.x1) / 2 - label.x) < 0.5 && Math.abs((dot.y0 + dot.y1) / 2 - label.y) < 0.5));
-    const choice = candidates.find((candidate) => free(candidate.box)) ?? candidates[0];
+    const fitting = candidates.find((candidate) => free(candidate.box));
+    // An ordinary economy's label is left out rather than drawn over another (its dot keeps its tooltip and
+    // the data table); selected and key economies always keep theirs.
+    if (!fitting && label.priority === 0) return null;
+    const choice = fitting ?? candidates[0];
     placed.push(choice.box);
     return { id: label.id, text: label.text, x: choice.x, y: choice.y, anchor: choice.anchor };
-  });
+  }).filter((label): label is NonNullable<typeof label> => label !== null);
 }
 
 /** 象限散点图:两条参考线(默认中位数)把平面切成四象限,四角标注角色。
@@ -185,10 +198,12 @@ export function placeScatterLabels(
 /** A highlighted economy's path through the years on the scatter (phase 2 定位图 轨迹). */
 export interface ScatterTrail { id: string; label: string; color: string; points: { year: number; x: number; y: number }[] }
 
-export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabel, xFormat, yFormat, highlight, refMode = "median", quadrantLabels, equalityLine = false, xScale = "linear", trails = [] }: {
+export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabel, xFormat, yFormat, highlight, highlightColors, refMode = "median", quadrantLabels, equalityLine = false, xScale = "linear", trails = [] }: {
   rows: Row[]; xKey: string; yKey: string; xLabel: string; yLabel: string;
   referenceRows?: Row[];
   xFormat?: string; yFormat?: string; highlight?: Set<string>;
+  /** Each selected economy's series colour, so its dot matches its trail and the other charts. */
+  highlightColors?: Record<string, string>;
   refMode?: "median" | "mean"; quadrantLabels?: [string, string, string, string];
   /** Draw y=x when both axes share a unit (e.g. forward vs backward length). */
   equalityLine?: boolean;
@@ -265,7 +280,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
               onMouseMove={(e) => show(e, [["", p.label], [xLabel, fmtVal(p.x, xFormat)], [yLabel, fmtVal(p.y, yFormat)]])}
               onMouseLeave={hide} style={{ cursor: "pointer" }}>
               <circle cx={px(p.x)} cy={py(p.y)} r={hi ? 6 : 4.5}
-                fill={hi ? CAT[5] : CAT[0]} fillOpacity={hi ? 0.95 : 0.62} stroke="#fff" strokeWidth={1} />
+                fill={hi ? highlightColors?.[p.c] ?? RANK_HIGHLIGHT_FILL : REFERENCE_POINT} fillOpacity={hi ? 0.95 : 0.7} stroke="#fff" strokeWidth={1} />
             </g>
           );
         })}
@@ -296,7 +311,7 @@ export function QuadrantScatter({ rows, referenceRows, xKey, yKey, xLabel, yLabe
           return (
             <text key={`label-${label.id}`} x={label.x} y={label.y} textAnchor={label.anchor} fontSize="10" pointerEvents="none"
               stroke="#fff" strokeWidth={3} strokeLinejoin="round" paintOrder="stroke"
-              fill={hi ? RANK_HIGHLIGHT_TEXT : key ? "#3a4050" : "#5f6677"} fontWeight={hi || key ? 700 : 400}>{label.text}</text>
+              fill={hi ? "#1b1f2b" : key ? "#3a4050" : "#5f6677"} fontWeight={hi || key ? 700 : 400}>{label.text}</text>
           );
         })}
         {/* 四角角色标签：画在点之上，白色描边保证可读 */}

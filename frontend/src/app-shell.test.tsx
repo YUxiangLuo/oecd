@@ -59,7 +59,10 @@ test("a draft report is not shown as a finished step 15, a submitted one is", ()
   expect(badge().textContent).toBe("15");
   expect(badge().className).not.toContain("done");
   expect(container.querySelector('[aria-label^="第 15 步"]')!.getAttribute("aria-label")).toContain("报告草稿未提交");
+  // The progress count agrees with the badge: a draft does not make 15/15.
+  expect(container.textContent).toContain("完成进度 14/15");
   rerender(view("pending"));
   expect(badge().textContent).toBe("✓");
   expect(badge().className).toContain("done");
+  expect(container.textContent).toContain("完成进度 15/15");
 });

@@ -774,7 +774,7 @@ export function IndicatorExplorer({
                 虚线中位数只表示当前展示样本的相对高低，不代表好坏或因果关系。
                 {axes.xScale === "log" && "横轴为对数刻度，只画出口为正的经济体。"}
                 {axes.equality && "等长线以上前向 GVC 段更长；总长度与 GVC 段不能混用。"}
-                {trail && "轨迹从较早年份（空心）指向最近年份（实心），浅蓝点是当年全部经济体。"}
+                {trail && "轨迹从较早年份（空心）指向最近年份（实心），灰点是当年全部经济体。"}
               </p>
               <QuadrantScatter
                 rows={reference}
@@ -789,6 +789,7 @@ export function IndicatorExplorer({
                 equalityLine={axes.equality}
                 quadrantLabels={axes.labels}
                 highlight={new Set(selected)}
+                highlightColors={Object.fromEntries(selected.map((country, index) => [country, CAT[index]]))}
                 trails={trails}
               />
               <ReadingCards label="定位读数" cards={positioningCards({ reference, countries: selected, xKey: axes.x, yKey: axes.y, xLabel: label(axes.x), yLabel: label(axes.y), xFormat: formatOf(axes.x), yFormat: formatOf(axes.y) })} />

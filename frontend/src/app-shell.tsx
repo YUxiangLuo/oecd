@@ -208,6 +208,10 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
   const totalSteps = steps.length;
   const stages = [...new Set(steps.map((step) => step.stage))];
   const completedSteps = new Set(completion?.completed ?? []);
+  // A draft report is not finished work: the count follows the step 15 badge (and the teacher's table).
+  const reportStep = steps.find((step) => step.lab === "rep")?.n;
+  const draftCounted = reportState === "draft" && reportStep != null && completedSteps.has(reportStep);
+  const doneCount = (completion?.completed_count ?? 0) - (draftCounted ? 1 : 0);
   return (
     <aside className="sidebar" aria-label="课程大纲">
       <div className="sidebar-head">
@@ -216,16 +220,16 @@ export function CourseSidebar({ stepsData, current, completion, materialGate, on
           <span className="sidebar-steps">{totalSteps} STEPS</span>
         </div>
         {completion ? (
-          <div className="progress-track" role="img" aria-label={`已完成 ${completion.completed_count} 步,共 ${totalSteps} 步`}>
+          <div className="progress-track" role="img" aria-label={`已完成 ${doneCount} 步，共 ${totalSteps} 步`}>
             <div
               className="progress-bar done"
-              style={{ width: `${Math.max(2, (completion.completed_count / totalSteps) * 100)}%` }}
+              style={{ width: `${Math.max(2, (doneCount / totalSteps) * 100)}%` }}
             />
           </div>
         ) : <div className="progress-track" />}
         <div className="sidebar-sub">
           {completion
-            ? `完成进度 ${completion.completed_count}/${totalSteps} · 数据→指标→回归→报告`
+            ? `完成进度 ${doneCount}/${totalSteps} · 数据→指标→回归→报告`
             : "正在读取完成进度…"}
         </div>
         <a
