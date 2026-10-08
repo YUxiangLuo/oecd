@@ -131,7 +131,7 @@ export function NetworkTrend({ meta, schema, initialCountry, initialCountries = 
   // about; it must not replace useful material. A ranking is refused only when it is all 0 (whole-number
   // metrics such as 离心率 can tie across the top industries and still be worth reading against the ranks).
   const allSame = readings.length > 0 && readings.every((point) => point.value === readings[0].value);
-  const flatValue = allSame && (view === "trend" || readings[0].value === 0) ? readings[0].value : null;
+  const flatValue = allSame && (view === "trend" ? commonYears.length >= 2 : readings[0].value === 0) ? readings[0].value : null;
   // One economy alone is a chart here too: the reference is the same industry in every economy.
   const canRecord = recordable && query.status === "success" && selected.length >= 1
     && (view === "trend" ? commonYears.length >= 2

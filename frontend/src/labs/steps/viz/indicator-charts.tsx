@@ -82,8 +82,8 @@ export function TrendSummary({
   const own = years.filter((year) => value(first, year) !== null);
   if (own.length < 2) {
     return <p className="muted">{own.length
-      ? `${countryLabel(first)} 在所选年份只有 ${own[0]} 年有读数，暂不能读出期间变化。`
-      : `${countryLabel(first)} 在所选年份没有读数，暂不能读出期间变化。`}</p>;
+      ? `${countryLabel(first)}在所选年份只有 ${own[0]} 年有读数，暂不能读出期间变化。`
+      : `${countryLabel(first)}在所选年份没有读数，暂不能读出期间变化。`}</p>;
   }
   const firstYear = own[0];
   const lastYear = own.at(-1)!;
