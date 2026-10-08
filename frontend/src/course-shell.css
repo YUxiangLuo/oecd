@@ -234,6 +234,7 @@ button.footer-next:hover { text-decoration: underline; }
 .decomp-table--compact .dt-name { white-space: normal; }
 .dt-desc--below { display: block; margin-top: 3px; font-weight: 400; font-size: 11.5px; }
 .dt-desc { color: var(--text-muted); line-height: 1.6; }
+.decomp-table-note { margin: 6px 8px 0; font-size: 11.5px; color: var(--text-muted); }
 .decomp-note {
   margin-top: 12px; font-size: 12px; color: #8a5a1f; background: #fffaf3;
   border: 1px solid #f2e2cd; border-radius: 10px; padding: 10px 13px; line-height: 1.6;

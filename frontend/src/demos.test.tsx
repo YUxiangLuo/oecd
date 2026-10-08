@@ -39,10 +39,10 @@ describe("zero-total decomposition copy", () => {
     const model = buildDecompositionModel({ total: 0, a: 0, b: 0 }, directAmount);
     const allZero = decompositionModelReason(model);
     const hint = zeroTotalDecompositionHint(model, "总出口");
-    expect(allZero).toContain("所有分项均为 0");
-    expect(allZero).toContain("可能为结构零");
-    expect(hint).toContain("所有分项均为 0");
-    expect(hint).toContain("可能没有活动或为结构零");
+    expect(allZero).toContain("所有分项都是 0");
+    expect(allZero).toContain("可能没有相关活动");
+    expect(hint).toContain("所有分项都是 0");
+    expect(hint).toContain("请换一个行业");
   });
 
   test("describes signed offsets without a false all-zero, structural, or inactive claim", () => {
@@ -51,12 +51,11 @@ describe("zero-total decomposition copy", () => {
       decompositionModelReason(model),
       zeroTotalDecompositionHint(model, "总出口"),
     ].join(" ");
-    expect(copy).toContain("正负有符号分项相互抵消");
-    expect(copy).toContain("构成占比未定义");
-    expect(copy).not.toContain("所有分项均为 0");
-    expect(copy).not.toContain("结构零");
-    expect(copy).not.toContain("没有活动");
-    expect(copy).not.toContain("活跃行业");
+    expect(copy).toContain("正负分项相互抵消");
+    expect(copy).toContain("无法算比重");
+    expect(copy).not.toContain("所有分项都是 0");
+    expect(copy).not.toContain("没有相关活动");
+    expect(copy).not.toContain("换一个行业");
   });
 });
 
@@ -67,7 +66,7 @@ describe("indicator calculation disclosure", () => {
     );
     expect(html).toContain("外国增加值项占比 = FVA / 总出口");
     expect(html).toContain("= 20 / 80 = <b>25.000%</b>");
-    expect(html).toContain("FVA 不含外国重复计算 FDC");
+    expect(html).toContain("FVA 不包括外国重复计算 FDC");
   });
 
   test("keeps every integer digit of large operands so they match the displayed total", () => {
@@ -134,7 +133,7 @@ describe("indicator calculation disclosure", () => {
     const html = renderToStaticMarkup(
       <IndicatorCalculationDisclosure step={4} row={{ FVA: 2, gross_exports: 0 }} />,
     );
-    expect(html).toContain("—（分母非正或数据缺失）");
+    expect(html).toContain("—（总量为 0 或缺数据，无法计算）");
     expect(html).not.toContain("Infinity");
   });
 
@@ -176,7 +175,7 @@ describe("production-length formula", () => {
     );
     const formula = html.match(/<div class="decomp-formula">.*?<\/div>/)?.[0];
     expect(formula).toBeDefined();
-    for (const term of ["(1_VA_D/SVA) × PLv_D", "(2_VA_RT/SVA) × PLv_RT", "(3_VA_GVC/SVA) × PLv_GVC"]) {
+    for (const term of ["纯国内份额 × 纯国内段长度", "传统贸易份额 × 传统贸易段长度", "GVC 份额 × GVC 段长度"]) {
       expect(formula).toContain(term);
     }
     const model = buildDecompositionModel(
@@ -224,16 +223,17 @@ describe("semantic decomposition and path tables", () => {
     expect(html).toContain('<thead class="decomp-table-head">');
     expect(html.match(/scope="col"/g)).toHaveLength(4);
     expect(html.match(/scope="row"/g)).toHaveLength(2);
-    expect(html).toContain("占比（可为负）");
+    expect(html).toContain("占总量比重");
+    expect(html).toContain("负值表示抵减项");
     expect(html).toContain("-12");
     expect(html).toContain("-25.000%");
     expect(html).toContain('<td class="dt-val">—</td>');
-    expect(html).toContain("—（分母非正）");
+    expect(html).toContain("—（无法计算）");
   });
 
   test("provides a native entity/decomposition caption for each decomposition teaching step", () => {
     for (const decomposition of ["总出口", "总增加值 SVA", "前向总生产长度 PLv"]) {
-      const caption = `实体 B：2019 年 USA 美国 · 国家级 · ${decomposition}分解明细`;
+      const caption = `实体 B：2019 年 USA 美国 · 国家整体 · ${decomposition}分解明细`;
       const html = renderToStaticMarkup(
         <DecompositionDetailTable
           caption={caption}
@@ -279,9 +279,9 @@ describe("Step 5 teaching network accessibility", () => {
     expect(html.match(/class="net-demo-node"/g)).toHaveLength(7);
     expect(html.match(/role="button" tabindex="0" aria-pressed="true"/g)).toHaveLength(1);
     expect(html.match(/role="button" tabindex="-1" aria-pressed="false"/g)).toHaveLength(6);
-    expect(html).toContain("德（DEU），度中心性 4，已选择");
-    expect(html).toContain('aria-pressed="true" aria-label="显示度中心性"');
-    expect(html).toContain('aria-pressed="false" aria-label="显示介数中心性"');
+    expect(html).toContain("德（DEU），度 4，已选择");
+    expect(html).toContain('aria-pressed="true" aria-label="查看度的算法"');
+    expect(html).toContain('aria-pressed="false" aria-label="查看介数的算法"');
     expect(html).toContain("选择节点后可查看它的指标值与相关边");
     expect(html).not.toMatch(/方向键|按 Tab|Enter|空格|点击/);
   });
@@ -321,7 +321,7 @@ describe("Step 5 teaching network accessibility", () => {
     expect(metrics.betweenness).toEqual({ USA: 0, MEX: 0, DEU: 8, CHN: 1.5, JPN: 4.5, KOR: 1, VNM: 0 });
     expect(metrics.closeness.DEU).toBeCloseTo(2 / 3);
     expect(networkDemoNodeAccessibleName({ id: "DEU", label: "德" }, "betweenness", 8, false))
-      .toBe("德（DEU），介数中心性 8，未选择");
+      .toBe("德（DEU），介数 8，未选择");
 
     const html = renderToStaticMarkup(<NetworkCentralityDemo />);
     expect(html).toContain("节点 DEU 的全部直接入边与出边；演示网络每条边权重均为 1");
@@ -368,9 +368,9 @@ describe("independent decomposition request states", () => {
     const error = renderToStaticMarkup(
       <DecompositionRequestMessage label="实体 A" status="error" error="boom" empty={false} onRetry={() => {}} />,
     );
-    expect(loading).toContain("加载实体 A的分解数据中");
+    expect(loading).toContain("正在加载实体 A 的分解数据");
     expect(loading).toContain('role="status"');
-    expect(empty).toContain("没有可用分解数据");
+    expect(empty).toContain("没有可用的分解数据");
     expect(empty).toContain('role="status"');
     expect(empty).not.toContain("加载实体 A");
     expect(error).toContain("实体 A 的分解加载失败：boom");
@@ -396,7 +396,7 @@ describe("single-entity decomposition scope", () => {
       <DecompositionDemo step={4} meta={meta} primaryYear={2020} primaryCountry="CHN" />,
     );
     expect(html).not.toContain("还没有选择具体国家");
-    expect(html).toContain("加载对象 A");
+    expect(html).toContain("正在加载所选国家的分解数据");
     expect(html).toContain("decomp-formula");
   });
 });
@@ -414,10 +414,10 @@ describe("object B country", () => {
         <DecompositionDemo step={5} meta={{ years: [2020], countries: ["CHN", "USA"], sectors: ["C26", "C29"], dataset: null }}
           primaryYear={2020} primaryCountry="CHN" secondaryCountry="USA" onSecondaryChange={(value) => partners.push(value)} />,
       );
-      fireEvent.click(view.getByLabelText(/并排对比两个对象/));
+      fireEvent.click(view.getByLabelText(/并排比较另一个国家或行业/));
       const countryOptions = () => [...view.getAllByLabelText("国家")[1].querySelectorAll("option")].map((option) => option.getAttribute("value"));
       expect(countryOptions()).toEqual(["USA"]);
-      fireEvent.click(view.getByRole("button", { name: "国家–行业级" }));
+      fireEvent.click(view.getByRole("button", { name: "单个行业" }));
       expect(countryOptions()).toEqual(["CHN", "USA"]);
       fireEvent.change(view.getAllByLabelText("国家")[1], { target: { value: "CHN" } });
       expect((view.getAllByLabelText("国家")[1] as HTMLSelectElement).value).toBe("CHN");

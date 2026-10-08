@@ -210,6 +210,8 @@ export function Pager({ page, pages, total, onChange }: {
   };
   const atStart = page <= 1;
   const atEnd = page >= safePages;
+  // One page: four disabled buttons only add noise. After the hooks, so their order never changes.
+  if (safePages <= 1 && page <= 1) return null;
   return (
     <div className="pager" ref={pagerRef}>
       <button data-pager="first" aria-disabled={atStart || undefined} onClick={go("first", 1, !atStart)} title="首页">« 首页</button>

@@ -26,7 +26,7 @@ export const INDICATOR_READINGS: Record<IndicatorReadingTopic, IndicatorReading[
       authors: "课程项目组",
       year: 2026,
       publication: "课程指标说明",
-      focus: "结合当前 OECD 2023 数据口径，逐项解释 DVAex、FVA、FDC、taxsub 和占比边界。",
+      focus: "按本系统的 OECD ICIO 2023 版数据，逐项解释 DVAex、FVA、FDC、taxsub 的含义和使用边界。",
       file: "trade-decomposition-guide.pdf",
     },
     {
@@ -35,7 +35,7 @@ export const INDICATOR_READINGS: Record<IndicatorReadingTopic, IndicatorReading[
       authors: "原始资料",
       year: null,
       publication: "方法说明（历史资料）",
-      focus: "原始指标表与简要定义；FVA 与 taxsub 的当前课程口径以校订版为准。",
+      focus: "原始指标表与简要定义；FVA 与 taxsub 的算法以课程说明为准。",
       file: "source-trade-decomposition-note.pdf",
     },
     {
@@ -65,7 +65,7 @@ export const INDICATOR_READINGS: Record<IndicatorReadingTopic, IndicatorReading[
       authors: "课程项目组",
       year: 2026,
       publication: "课程指标说明",
-      focus: "区分前向与后向账户，并纠正原始资料中重复的 3b_FGY_GVC_C 字段名。",
+      focus: "说明前向和后向两种分解，并更正原始资料里一个重复的指标代码。",
       file: "production-decomposition-guide.pdf",
     },
     {
@@ -125,7 +125,7 @@ export const INDICATOR_READINGS: Record<IndicatorReadingTopic, IndicatorReading[
       authors: "课程项目组",
       year: 2026,
       publication: "课程指标说明",
-      focus: "明确全部正边、有向无权路径、自环双计、未归一化 Brandes 等当前口径。",
+      focus: "说明本系统如何计算加权总度和介数，以及自环怎样计入。",
       file: "production-network-guide.pdf",
     },
     {
@@ -134,7 +134,7 @@ export const INDICATOR_READINGS: Record<IndicatorReadingTopic, IndicatorReading[
       authors: "原始资料",
       year: null,
       publication: "方法说明（历史资料）",
-      focus: "原始 Gephi 指标清单及中文定义；数据年份和精确算法口径以课程校订版为准。",
+      focus: "原始 Gephi 指标清单及中文定义；数据年份和具体算法以课程说明为准。",
       file: "source-production-network-note.pdf",
     },
     {
@@ -153,7 +153,7 @@ export const INDICATOR_READINGS: Record<IndicatorReadingTopic, IndicatorReading[
       authors: "李磊、陆林、孙小龙、虞虎",
       year: 2020,
       publication: "人文地理",
-      focus: "Gephi 网络指标的中文应用示例；用于帮助理解，不作为生产网络算法口径来源。",
+      focus: "Gephi 网络指标的中文应用示例，仅帮助理解，不是本系统的算法依据。",
       file: "li-et-al-tourism-network-cn.pdf",
     },
   ],
@@ -181,7 +181,7 @@ export function IndicatorReadingLibrary({ topic }: { topic: IndicatorReadingTopi
         <span className="indicator-reading-badge">课程资料</span>
       </summary>
       <div className="indicator-reading-intro">
-        本页汇总课程指标说明、原始方法说明与相关论文。课程说明已按当前 OECD ICIO 2023 edition（2016–2020）的计算口径校订；历史资料中的年份不代表本系统的数据范围。原始资料沿用原文件编号，与课程步骤编号不同，本页已按指标主题对应。建议先读课程校订版，再对照原始说明和方法论文。
+        本页汇总课程说明、原始方法说明与相关论文。建议先读“课程说明”，它已按本系统的数据（OECD ICIO 2023 版，2016–2020 年）更新；原始资料里的年份和编号与本课程不同，再对照原始说明和论文阅读即可。
       </div>
       <div className="indicator-reading-workspace">
         <div className="indicator-reading-list" aria-label="选择指标相关文章">
@@ -237,7 +237,7 @@ export function IndicatorReadingLibrary({ topic }: { topic: IndicatorReadingTopi
                 </div>
               </object>
               <div className="indicator-reading-preview-help">
-                如果预览空白或加载失败，请使用上方“新标签页打开 PDF”；仍无法打开时请联系教师检查文件。
+                如果预览空白或加载失败，请使用上方“新标签页打开 PDF”；仍无法打开时请联系老师。
               </div>
             </>
           )}

@@ -69,14 +69,13 @@ describe("automatic material status line", () => {
     };
     const html = renderToStaticMarkup(createElement(AutoMaterialStatus, { ...props, current: true }));
     expect(html).toContain("报告材料 · 自动记录");
-    expect(html).toContain("2020 年 · CHN 中国");
-    expect(html).toContain("USA 美国");
+    expect(html).toContain("2020 年weighted degree：CHN 中国 12 百万美元；USA 美国 9 百万美元");
     expect(html).toContain("对比国家");
     expect(html).toContain("记录上方表格所选国家和对比国家");
     expect(html).not.toContain("选美国时");
     // A saved record from an earlier selection is not shown as if it matched the current one.
     const stale = renderToStaticMarkup(createElement(AutoMaterialStatus, { ...props, current: false }));
-    expect(stale).not.toContain("2020 年 · CHN 中国");
+    expect(stale).not.toContain("CHN 中国 12");
     expect(stale).toContain("正在记录当前选择");
   });
 });
