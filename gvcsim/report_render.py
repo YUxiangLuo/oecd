@@ -165,9 +165,7 @@ def _experiment_sections(session: dict[str, Any]) -> list[str]:
                     f"- 记录的代表指标：{_STUDENT_METRIC_LABELS.get(str(metric_label), _safe(metric_label or '—'))}"
                 )
                 if step in (2, 3, 4) and automatic:
-                    lines.append(
-                        "- 数值为国家级代表指标：页面可按国家–行业浏览，报告材料统一按国家级记录。"
-                    )
+                    lines.append("- 数值为国家级代表指标：页面可按国家–行业浏览，报告材料统一按国家级记录。")
                 if step == 5 and metric_label == "weighted degree":
                     lines.append(
                         "- 国家级加权总度只含国家之间的贸易（不含国内流量），不能与含国内流量的行业级数值直接比较。"
